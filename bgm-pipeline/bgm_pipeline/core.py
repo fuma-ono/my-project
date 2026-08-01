@@ -48,16 +48,19 @@ def white_noise(seconds: float, sr: int = SAMPLE_RATE) -> np.ndarray:
 
 
 def pink_noise(seconds: float, sr: int = SAMPLE_RATE) -> np.ndarray:
-    """Voss-McCartney approximation of pink (1/f) noise."""
+    """Voss-McCartney approximation of pink (1/f) noise.
+
+    Accumulates one row at a time instead of building the full (n_rows, n)
+    matrix — for an hour-long track at 44.1kHz that matrix would be ~19GB.
+    """
     n = int(seconds * sr)
     n_rows = 16
-    array = np.zeros((n_rows, n))
+    pink = np.zeros(n)
     rng = np.random.default_rng()
     for row in range(n_rows):
         step = 2 ** row
         vals = rng.uniform(-1, 1, n // step + 1)
-        array[row] = np.repeat(vals, step)[:n]
-    pink = array.sum(axis=0)
+        pink += np.repeat(vals, step)[:n]
     return pink / np.max(np.abs(pink))
 
 
