@@ -2,6 +2,9 @@
 
 `docs/marketing/2026-08-market-research.md` の調査(C)、および `docs/marketing/2026-08-content-topics.md` のネタ調査に基づく方針。
 
+**投稿キュー(コピペ用ページ)**: https://claude.ai/code/artifact/4463f3ba-3008-4e37-bbff-c9b338cbcb87
+下書きが増えたら `note-articles/queue-page/template.html` に追記して `python3 note-articles/queue-page/build.py` → Artifact再公開。
+
 ## 方針
 
 1. **フォロワー0の間は無料記事+サポート機能のみ。** 単発有料記事はいきなり売れない。
