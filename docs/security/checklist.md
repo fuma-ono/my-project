@@ -24,6 +24,13 @@
 - YouTube Data API等でOAuthを使う場合、必要最小限のスコープのみ要求する
 - 発行したキーは用途ごとに分ける(BGM動画投稿用、アプリ分析用、などを一つのキーで使い回さない)
 
+## 実施済み: YouTube Data API連携(2026-08-01)
+
+- パスワードを一切預からない **Device Authorization flow** を採用(`bgm_pipeline/youtube_auth.py`)。ユーザーは自分のブラウザでコードを入力して許可するだけ
+- スコープは `youtube.upload` と `yt-analytics.readonly` の2つのみに限定(動画削除・チャンネル設定変更などの権限は要求しない)
+- 認証情報(`client_secret.json`、`youtube_token.json`)は `bgm-pipeline/credentials/` に保存し、`.gitignore` で確実にコミット対象外にしていることを確認済み
+- アップロード後、ローカルの音声/動画ファイルは自動削除(`publish.py`)。長時間の生成物を無期限にディスクへ残さない運用に統一
+
 ## 次回レビュー予定
 
 週次の定例レビューで `npm audit` / 依存パッケージの脆弱性を再確認し、ここに追記する。
