@@ -1,0 +1,7 @@
+# bgm-pipeline
+bgm-pipeline/.venv/
+bgm-pipeline/output/
+bgm-pipeline/__pycache__/
+bgm-pipeline/**/__pycache__/
+
+# app (Expo/React Native) has its own .gitignore
