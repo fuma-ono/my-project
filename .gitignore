@@ -5,3 +5,7 @@ bgm-pipeline/__pycache__/
 bgm-pipeline/**/__pycache__/
 
 # app (Expo/React Native) has its own .gitignore
+
+# dashboard build output (regenerate with docs/dashboard/build.py)
+docs/dashboard/dashboard.html
+docs/dashboard/fonts.py
