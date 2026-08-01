@@ -109,8 +109,57 @@ def make_banner(path: str, size: tuple[int, int] = (2560, 1440)) -> None:
     img.save(path)
 
 
+def make_app_icon(path: str, size: int = 1024) -> None:
+    """Opaque icon for iOS / the Expo `icon` field. iOS applies its own
+    rounded-corner mask, so this must fill the full square with no
+    transparency."""
+    img = vertical_gradient((size, size), BG_TOP, BG_BOTTOM)
+    draw_stars(
+        img,
+        [(size * 0.20, size * 0.18, 5), (size * 0.80, size * 0.16, 4), (size * 0.74, size * 0.30, 3)],
+        (255, 255, 255),
+    )
+    draw_crescent_moon(img, (size // 2, size // 2), int(size * 0.30), ACCENT)
+    img.save(path)
+
+
+def make_adaptive_icon_layers(fg_path: str, bg_path: str, size: int = 1024) -> None:
+    """Android adaptive icon: separate foreground (transparent, moon only,
+    kept inside the ~66% safe zone that survives circle/squircle/rounded-square
+    masks) and background (opaque fill) layers."""
+    bg = vertical_gradient((size, size), BG_TOP, BG_BOTTOM)
+    bg.save(bg_path)
+
+    fg = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw_crescent_moon(fg, (size // 2, size // 2), int(size * 0.22), ACCENT)
+    fg.save(fg_path)
+
+
+def make_monochrome_icon(path: str, size: int = 432) -> None:
+    """Android 13+ themed-icon silhouette: single opaque color on transparent,
+    the OS applies its own tint."""
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw_crescent_moon(img, (size // 2, size // 2), int(size * 0.30), (255, 255, 255))
+    img.save(path)
+
+
+def make_favicon(path: str, size: int = 48) -> None:
+    """Small and simple: no stars, just background + moon, for legibility at tiny sizes."""
+    img = vertical_gradient((size, size), BG_TOP, BG_BOTTOM)
+    draw_crescent_moon(img, (size // 2, size // 2), int(size * 0.34), ACCENT)
+    img.save(path)
+
+
+def make_splash_icon(path: str, size: int = 1024) -> None:
+    """Transparent moon mark meant to sit on the splash screen's own
+    background color, not a full gradient canvas."""
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw_crescent_moon(img, (size // 2, size // 2), int(size * 0.20), ACCENT)
+    img.save(path)
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Generate YouTube channel art.")
+    parser = argparse.ArgumentParser(description="Generate YouTube channel art and app icons.")
     parser.add_argument("--outdir", default="output/branding")
     args = parser.parse_args(argv)
 
@@ -123,6 +172,21 @@ def main(argv: list[str] | None = None) -> int:
     make_profile_icon(icon_path)
     print(f"wrote {banner_path}")
     print(f"wrote {icon_path}")
+
+    app_icon_path = f"{args.outdir}/app_icon_1024.png"
+    fg_path = f"{args.outdir}/android_icon_foreground_1024.png"
+    bg_path = f"{args.outdir}/android_icon_background_1024.png"
+    mono_path = f"{args.outdir}/android_icon_monochrome_432.png"
+    favicon_path = f"{args.outdir}/favicon_48.png"
+    splash_path = f"{args.outdir}/splash_icon_1024.png"
+
+    make_app_icon(app_icon_path)
+    make_adaptive_icon_layers(fg_path, bg_path)
+    make_monochrome_icon(mono_path)
+    make_favicon(favicon_path)
+    make_splash_icon(splash_path)
+    for p in (app_icon_path, fg_path, bg_path, mono_path, favicon_path, splash_path):
+        print(f"wrote {p}")
     return 0
 
 
