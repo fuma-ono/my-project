@@ -1,0 +1,274 @@
+<title>アカウント作成ガイド</title>
+<style>
+  @font-face { font-family: "Gloock"; src: url(data:font/ttf;base64,__GLOOCK__) format("truetype"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "Work Sans"; src: url(data:font/ttf;base64,__WORKSANS_REG__) format("truetype"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "Work Sans"; src: url(data:font/ttf;base64,__WORKSANS_BOLD__) format("truetype"); font-weight: 700; font-display: swap; }
+  @font-face { font-family: "IBM Plex Mono"; src: url(data:font/ttf;base64,__PLEXMONO_REG__) format("truetype"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "IBM Plex Mono"; src: url(data:font/ttf;base64,__PLEXMONO_BOLD__) format("truetype"); font-weight: 700; font-display: swap; }
+
+  :root {
+    --bg: #eef0f6; --surface: #ffffff; --surface-2: #f6f7fb; --border: #d9dcec;
+    --text: #171a2b; --text-dim: #5b6082; --text-faint: #8489a8;
+    --accent: #d9682f; --accent-soft: #f3ded0;
+    --good: #2f9e63; --good-soft: #dcf1e5;
+    --shadow: 0 1px 2px rgba(23,26,43,0.06), 0 8px 24px rgba(23,26,43,0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0e1a; --surface: #141a30; --surface-2: #1b2340; --border: #2a3157;
+      --text: #eef0fa; --text-dim: #9aa0c3; --text-faint: #6e739a;
+      --accent: #f0955c; --accent-soft: #3a2a20;
+      --good: #57cf8f; --good-soft: #17301f;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #eef0f6; --surface: #ffffff; --surface-2: #f6f7fb; --border: #d9dcec;
+    --text: #171a2b; --text-dim: #5b6082; --text-faint: #8489a8;
+    --accent: #d9682f; --accent-soft: #f3ded0;
+    --good: #2f9e63; --good-soft: #dcf1e5;
+    --shadow: 0 1px 2px rgba(23,26,43,0.06), 0 8px 24px rgba(23,26,43,0.05);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0e1a; --surface: #141a30; --surface-2: #1b2340; --border: #2a3157;
+    --text: #eef0fa; --text-dim: #9aa0c3; --text-faint: #6e739a;
+    --accent: #f0955c; --accent-soft: #3a2a20;
+    --good: #57cf8f; --good-soft: #17301f;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.35);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: "Work Sans", sans-serif; -webkit-font-smoothing: antialiased; }
+  body { padding: 0 0 72px; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 40px 24px 0; }
+
+  header.top { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 28px; }
+  .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); margin: 0 0 8px; }
+  h1.brand { font-family: "Gloock", serif; font-weight: 400; font-size: clamp(26px, 4vw, 34px); margin: 0 0 10px; text-wrap: balance; }
+  .lede { font-size: 14.5px; color: var(--text-dim); line-height: 1.8; max-width: 560px; }
+  .lede b { color: var(--text); }
+
+  .progress-bar { display: flex; gap: 4px; margin-top: 20px; }
+  .progress-seg { height: 4px; flex: 1; border-radius: 2px; background: var(--border); }
+
+  .prereq {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); padding: 16px 20px; margin-bottom: 36px; font-size: 13px; color: var(--text-dim);
+  }
+  .prereq b { color: var(--text); font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; display: block; margin-bottom: 8px; }
+  .prereq ul { margin: 0; padding-left: 18px; line-height: 1.8; }
+
+  .platform {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    box-shadow: var(--shadow); padding: 26px 26px 22px; margin-bottom: 22px;
+  }
+  .platform-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
+  .platform-num {
+    flex: none; width: 30px; height: 30px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent); font-family: "IBM Plex Mono", monospace;
+    font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center;
+  }
+  .platform-title { font-weight: 700; font-size: 17px; }
+  .platform-meta { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-faint); margin-top: 3px; }
+
+  .steps-list { margin: 0 0 14px; padding-left: 0; list-style: none; }
+  .steps-list li {
+    position: relative; padding: 8px 0 8px 28px; font-size: 13.5px; line-height: 1.7; color: var(--text-dim);
+    border-bottom: 1px dashed var(--border);
+  }
+  .steps-list li:last-child { border-bottom: none; }
+  .steps-list li::before {
+    content: attr(data-n); position: absolute; left: 0; top: 8px;
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-faint);
+  }
+  .steps-list li b { color: var(--text); }
+
+  .copybox {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; margin: 4px 0 2px; font-family: "IBM Plex Mono", monospace; font-size: 12px;
+    color: var(--text); white-space: pre-wrap; word-break: break-word; position: relative; cursor: pointer;
+  }
+  .copybox .copy-hint { position: absolute; top: 8px; right: 10px; font-size: 10px; color: var(--text-faint); font-family: "Work Sans", sans-serif; }
+  .copybox.copied { border-color: var(--good); }
+  .copy-label { font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin: 12px 0 4px; }
+
+  .after {
+    margin-top: 14px; font-size: 12.5px; background: var(--good-soft); color: var(--good);
+    border-radius: 8px; padding: 9px 12px;
+  }
+  .after b { font-weight: 700; }
+
+  footer { max-width: 760px; margin: 0 auto; padding: 0 24px; font-size: 11.5px; color: var(--text-faint); font-family: "IBM Plex Mono", monospace; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">Setup Guide · 6 platforms</p>
+    <h1 class="brand">アカウント作成ガイド</h1>
+    <p class="lede">上から順番にやればOKです。名前・説明文などは<b>そのままコピペで使える文面</b>を用意しました。作り終わったら「完了」とだけ教えてください、続きを進めます。所要時間の目安トータル: <b>60〜90分</b>(Apple/Googleの本人確認待ちは除く)。</p>
+  </header>
+
+  <div class="prereq">
+    <b>始める前に用意するもの</b>
+    <ul>
+      <li>事業用に使うメールアドレス(まとめて管理したいなら新しいGmailを1つ作るのがおすすめ)</li>
+      <li>SMS認証を受けられる電話番号</li>
+      <li>クレジットカード(Apple Developer $99/年、Google Play Console $25の支払いに必要)</li>
+      <li>本人確認書類(運転免許証・マイナンバーカードなど。Apple/Googleの登録で求められる場合があります)</li>
+    </ul>
+  </div>
+
+  <div class="platform">
+    <div class="platform-head">
+      <div class="platform-num">1</div>
+      <div>
+        <div class="platform-title">Google アカウント(YouTube・Google Playで共用)</div>
+        <div class="platform-meta">所要時間: 約5分</div>
+      </div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1"><a href="https://accounts.google.com/signup" target="_blank" rel="noopener">accounts.google.com/signup</a> を開く</li>
+      <li data-n="2">氏名・電話番号・生年月日を入力(事業用の本名でOK。決済や本人確認に使われます)</li>
+      <li data-n="3">SMSで届く確認コードを入力して完了</li>
+    </ol>
+    <div class="after"><b>これで完了。</b>このGoogleアカウントで次のYouTube・Google Play Consoleにログインします。</div>
+  </div>
+
+  <div class="platform">
+    <div class="platform-head">
+      <div class="platform-num">2</div>
+      <div>
+        <div class="platform-title">YouTube チャンネル作成</div>
+        <div class="platform-meta">所要時間: 約5分</div>
+      </div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1">手順1のGoogleアカウントで <a href="https://youtube.com" target="_blank" rel="noopener">youtube.com</a> にログイン</li>
+      <li data-n="2">右上のプロフィールアイコン →「チャンネルを作成」</li>
+      <li data-n="3">「個人名」ではなく「<b>カスタム名を使用</b>」を選び、下のチャンネル名を入力(ブランドアカウントとして分離されます)</li>
+      <li data-n="4">作成後、YouTube Studio →「設定」→「チャンネル」→「基本情報」の概要欄に下の説明文を貼り付け</li>
+    </ol>
+    <div class="copy-label">チャンネル名</div>
+    <div class="copybox" data-copy="Focus &amp; Sleep Sounds">Focus &amp; Sleep Sounds<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copy-label">概要欄</div>
+    <div class="copybox" data-copy="AIが生成した、著作権フリーのオリジナル睡眠用BGM・作業用Lo-Fi・集中用バイノーラルビートを配信しています。眠れない夜に、集中したい作業中に。毎週新しいトラックを追加予定です。">AIが生成した、著作権フリーのオリジナル睡眠用BGM・作業用Lo-Fi・集中用バイノーラルビートを配信しています。眠れない夜に、集中したい作業中に。毎週新しいトラックを追加予定です。<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copy-label">カテゴリ</div>
+    <div class="copybox" data-copy="音楽">音楽<span class="copy-hint">クリックでコピー</span></div>
+    <div class="after"><b>これで完了。</b>動画本体(MP4)はこちらで生成済み・生成可能です。チャンネルができたらアップロードの段取りを進めます。</div>
+  </div>
+
+  <div class="platform">
+    <div class="platform-head">
+      <div class="platform-num">3</div>
+      <div>
+        <div class="platform-title">Google Play Console(アプリ公開用)</div>
+        <div class="platform-meta">所要時間: 約15分 + 本人確認待ち(最大48時間)・$25</div>
+      </div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1"><a href="https://play.google.com/console/signup" target="_blank" rel="noopener">play.google.com/console/signup</a> を開く(手順1のGoogleアカウントでログイン)</li>
+      <li data-n="2">アカウントの種類は「<b>個人</b>」を選択(法人化していないため。組織より審査が速い)</li>
+      <li data-n="3">氏名・住所・電話番号を入力し、本人確認書類をアップロード</li>
+      <li data-n="4">登録料 $25 をクレジットカードで支払う(一度きり)</li>
+    </ol>
+    <div class="copy-label">アプリ名(登録時に使用)</div>
+    <div class="copybox" data-copy="Focus &amp; Sleep Sounds">Focus &amp; Sleep Sounds<span class="copy-hint">クリックでコピー</span></div>
+    <div class="after"><b>これで完了。</b>審査完了の連絡が来たら教えてください。アプリのビルド・ストア掲載情報の入力を進めます。</div>
+  </div>
+
+  <div class="platform">
+    <div class="platform-head">
+      <div class="platform-num">4</div>
+      <div>
+        <div class="platform-title">Apple Developer Program</div>
+        <div class="platform-meta">所要時間: 約20分 + 審査待ち(数時間〜48時間)・$99/年</div>
+      </div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1">Apple IDを持っていなければ <a href="https://appleid.apple.com" target="_blank" rel="noopener">appleid.apple.com</a> で作成</li>
+      <li data-n="2"><a href="https://developer.apple.com/programs/enroll/" target="_blank" rel="noopener">developer.apple.com/programs/enroll</a> を開く</li>
+      <li data-n="3">「<b>個人(Individual)</b>」で登録(組織登録はD-U-N-S番号が必要で時間がかかるため)</li>
+      <li data-n="4">本人確認 → 年会費 $99 を支払う</li>
+    </ol>
+    <div class="after"><b>Macは不要です。</b>Expo(このアプリの開発基盤)のクラウドビルド(EAS Build)を使うので、Xcodeやmacがなくてもこちらでビルド・提出できます。承認されたら教えてください。</div>
+  </div>
+
+  <div class="platform">
+    <div class="platform-head">
+      <div class="platform-num">5</div>
+      <div>
+        <div class="platform-title">Instagram</div>
+        <div class="platform-meta">所要時間: 約5分</div>
+      </div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1"><a href="https://instagram.com" target="_blank" rel="noopener">instagram.com</a> で新規アカウント作成</li>
+      <li data-n="2">ユーザーネームを下の候補で設定(空いていなければ近い名前で)</li>
+      <li data-n="3">設定 →「アカウントの種類とツール」→「<b>プロアカウントに切り替える</b>」→ カテゴリは「音楽」または「アプリ」を選択</li>
+    </ol>
+    <div class="copy-label">ユーザーネーム候補</div>
+    <div class="copybox" data-copy="focusandsleepsounds">focusandsleepsounds<span class="copy-hint">クリックでコピー</span></div>
+    <div class="after"><b>これで完了。</b>Reels用の縦動画(9:16)は生成済みなので、アカウントができ次第すぐ投稿できます。</div>
+  </div>
+
+  <div class="platform">
+    <div class="platform-head">
+      <div class="platform-num">6</div>
+      <div>
+        <div class="platform-title">TikTok</div>
+        <div class="platform-meta">所要時間: 約5分</div>
+      </div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1"><a href="https://www.tiktok.com/signup" target="_blank" rel="noopener">tiktok.com/signup</a> で新規アカウント作成</li>
+      <li data-n="2">ユーザーネームを下の候補で設定</li>
+      <li data-n="3">設定 →「アカウント管理」→「<b>ビジネスアカウントに切り替える</b>」</li>
+    </ol>
+    <div class="copy-label">ユーザーネーム候補</div>
+    <div class="copybox" data-copy="focusandsleepsounds">focusandsleepsounds<span class="copy-hint">クリックでコピー</span></div>
+  </div>
+
+  <div class="platform">
+    <div class="platform-head">
+      <div class="platform-num">7</div>
+      <div>
+        <div class="platform-title">note.com</div>
+        <div class="platform-meta">所要時間: 約3分・無料</div>
+      </div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1"><a href="https://note.com/signup" target="_blank" rel="noopener">note.com/signup</a> をメールアドレスで登録(支払い情報は不要)</li>
+      <li data-n="2">プロフィール名・アカウント名を下の候補で設定</li>
+    </ol>
+    <div class="copy-label">アカウント名候補</div>
+    <div class="copybox" data-copy="Focus &amp; Sleep Sounds">Focus &amp; Sleep Sounds<span class="copy-hint">クリックでコピー</span></div>
+    <div class="after"><b>これで完了。</b>下書き済みの記事2本をすぐ投稿できます。</div>
+  </div>
+
+  <div class="prereq" style="margin-top: 8px;">
+    <b>作り終わったら</b>
+    <ul>
+      <li>パスワードや秘密情報は共有不要です。「◯◯できた」とだけ教えてください</li>
+      <li>YouTube/Instagram/TikTokは、アップロード用のAPI連携(任意)を後で設定すると自動投稿もできます。まずは手動投稿からで大丈夫です</li>
+      <li>1つずつでも、まとめてでもOK。できたところから次の作業(アップロード・ストア申請)に進めます</li>
+    </ul>
+  </div>
+</div>
+
+<footer>社長発 · アカウント作成ガイド</footer>
+
+<script>
+  document.querySelectorAll(".copybox").forEach(function (box) {
+    box.addEventListener("click", function () {
+      var text = box.getAttribute("data-copy");
+      var done = function () {
+        box.classList.add("copied");
+        var hint = box.querySelector(".copy-hint");
+        if (hint) { var prev = hint.textContent; hint.textContent = "コピーしました"; setTimeout(function () { hint.textContent = prev; box.classList.remove("copied"); }, 1400); }
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function () {});
+      }
+    });
+  });
+</script>
