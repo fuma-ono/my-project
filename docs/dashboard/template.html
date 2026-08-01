@@ -201,11 +201,11 @@
   .org-hbar { width: 100%; max-width: 760px; height: 1px; background: var(--border); margin-bottom: 20px; }
   .org-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 12px;
     width: 100%;
   }
-  @media (max-width: 760px) { .org-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 640px) { .org-grid { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 420px) { .org-grid { grid-template-columns: 1fr; } }
   .dept-card {
     background: var(--surface);
@@ -454,7 +454,7 @@
   </p>
 
   <section>
-    <h2 class="section-title">体制図 <span class="count">社長 + 8部署</span></h2>
+    <h2 class="section-title">体制図 <span class="count">社長 + 9部署</span></h2>
     <div class="orgchart">
       <div class="org-node ceo">社長</div>
       <div class="org-connector-v"></div>
@@ -499,6 +499,11 @@
           <div class="dept-icon">💬</div>
           <div class="dept-name">カスタマーサポート部</div>
           <div class="dept-scope">レビュー・問い合わせ対応</div>
+        </div>
+        <div class="dept-card">
+          <div class="dept-icon">🔒</div>
+          <div class="dept-name">セキュリティ部</div>
+          <div class="dept-scope">シークレット管理・アカウント保護</div>
         </div>
       </div>
     </div>
@@ -723,6 +728,14 @@
       <div class="tl-row">
         <div class="tl-date">08-01</div>
         <div class="tl-body"><b>組織を8部署に拡張。</b>経理/財務・法務/コンプライアンス・クリエイティブ・データ分析・カスタマーサポートを新設(<code>docs/ORG.md</code>)。経理は収支台帳、法務は規約チェックリストの下書きも作成。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-01</div>
+        <div class="tl-body"><b>アカウント作成ガイドを公開。</b>6アカウントのコピペ用手順書を用意(<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4" target="_blank" rel="noopener">Artifact</a>)。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-01</div>
+        <div class="tl-body"><b>セキュリティ部を新設。</b>シークレット走査・依存脆弱性監査・コマンドインジェクション確認を実施し問題なし(<code>docs/security/checklist.md</code>)。npm auditのbuild-tooling起因のmoderate 10件は許容リスクとして記録。アカウント作成ガイドに2FA等の初期設定チェックリストを追加。</div>
       </div>
     </div>
   </section>
