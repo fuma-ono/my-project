@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { Track } from '../data/tracks';
 
 type Props = {
@@ -8,17 +8,51 @@ type Props = {
   onBack: () => void;
 };
 
+const TIMER_OPTIONS_MIN = [15, 30, 45, 60];
+
+function formatRemaining(seconds: number) {
+  const m = Math.floor(seconds / 60)
+    .toString()
+    .padStart(2, '0');
+  const s = Math.floor(seconds % 60)
+    .toString()
+    .padStart(2, '0');
+  return `${m}:${s}`;
+}
+
 export default function PlayerScreen({ track, onBack }: Props) {
   const player = useAudioPlayer(track.source);
   const status = useAudioPlayerStatus(player);
 
+  const [timerMinutes, setTimerMinutes] = useState<number | null>(null);
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      interruptionMode: 'doNotMix',
+    });
+
     player.loop = true;
     player.play();
+    player.setActiveForLockScreen(true, {
+      title: track.title,
+      artist: 'Focus & Sleep Sounds',
+    });
+
     return () => {
+      player.clearLockScreenControls();
       player.pause();
     };
   }, [player]);
+
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
 
   const togglePlay = () => {
     if (status.playing) {
@@ -26,6 +60,32 @@ export default function PlayerScreen({ track, onBack }: Props) {
     } else {
       player.play();
     }
+  };
+
+  const selectTimer = (minutes: number | null) => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    if (minutes === null) {
+      setTimerMinutes(null);
+      setRemainingSeconds(null);
+      return;
+    }
+    setTimerMinutes(minutes);
+    setRemainingSeconds(minutes * 60);
+    intervalRef.current = setInterval(() => {
+      setRemainingSeconds((prev) => {
+        if (prev === null || prev <= 1) {
+          if (intervalRef.current) clearInterval(intervalRef.current);
+          intervalRef.current = null;
+          player.pause();
+          setTimerMinutes(null);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
   };
 
   return (
@@ -42,7 +102,45 @@ export default function PlayerScreen({ track, onBack }: Props) {
           <Text style={styles.playButtonText}>{status.playing ? '⏸ 一時停止' : '▶ 再生'}</Text>
         </Pressable>
 
-        <Text style={styles.loopHint}>ループ再生中(タイマー機能は今後追加予定)</Text>
+        <Text style={styles.loopHint}>
+          ループ再生中・画面ロック中も再生継続
+          {remainingSeconds !== null ? ` ・あと${formatRemaining(remainingSeconds)}で自動停止` : ''}
+        </Text>
+
+        <View style={styles.timerRow}>
+          <Text style={styles.timerLabel}>スリープタイマー</Text>
+          <View style={styles.timerButtons}>
+            {TIMER_OPTIONS_MIN.map((min) => (
+              <Pressable
+                key={min}
+                style={[styles.timerButton, timerMinutes === min && styles.timerButtonActive]}
+                onPress={() => selectTimer(min)}
+              >
+                <Text
+                  style={[
+                    styles.timerButtonText,
+                    timerMinutes === min && styles.timerButtonTextActive,
+                  ]}
+                >
+                  {min}分
+                </Text>
+              </Pressable>
+            ))}
+            <Pressable
+              style={[styles.timerButton, timerMinutes === null && styles.timerButtonActive]}
+              onPress={() => selectTimer(null)}
+            >
+              <Text
+                style={[
+                  styles.timerButtonText,
+                  timerMinutes === null && styles.timerButtonTextActive,
+                ]}
+              >
+                オフ
+              </Text>
+            </Pressable>
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -62,5 +160,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   playButtonText: { color: 'white', fontSize: 18, fontWeight: '600' },
-  loopHint: { color: '#c8c8e0', fontSize: 12, marginTop: 24 },
+  loopHint: { color: '#c8c8e0', fontSize: 12, marginTop: 24, textAlign: 'center' },
+  timerRow: { marginTop: 36, alignItems: 'center' },
+  timerLabel: { color: '#c8c8e0', fontSize: 12, marginBottom: 10 },
+  timerButtons: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
+  timerButton: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  timerButtonActive: { backgroundColor: 'rgba(255,255,255,0.9)' },
+  timerButtonText: { color: '#e8e8f5', fontSize: 13, fontWeight: '600' },
+  timerButtonTextActive: { color: '#141413' },
 });
