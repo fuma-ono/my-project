@@ -185,57 +185,38 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0;
-    padding: 28px 10px 8px;
+    padding: 24px 0 4px;
   }
-  .org-node {
+  .org-node.ceo {
     font-family: "IBM Plex Mono", monospace;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
     border-radius: 10px;
-    padding: 9px 18px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    box-shadow: var(--shadow);
+    padding: 9px 22px;
+    background: var(--text);
+    color: var(--bg);
     white-space: nowrap;
   }
-  .org-node.ceo { background: var(--text); color: var(--bg); border-color: var(--text); font-size: 14px; }
-  .org-connector-v { width: 1px; height: 22px; background: var(--border); }
-  .org-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    position: relative;
+  .org-connector-v { width: 1px; height: 20px; background: var(--border); }
+  .org-hbar { width: 100%; max-width: 760px; height: 1px; background: var(--border); margin-bottom: 20px; }
+  .org-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
     width: 100%;
-    max-width: 640px;
   }
-  .org-branch {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    flex: 1;
-    position: relative;
-    padding-top: 22px;
+  @media (max-width: 760px) { .org-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 420px) { .org-grid { grid-template-columns: 1fr; } }
+  .dept-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
   }
-  .org-branch::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 50%;
-    width: 1px;
-    height: 22px;
-    background: var(--border);
-  }
-  .org-hbar {
-    position: absolute;
-    top: 0;
-    left: 16.666%;
-    right: 16.666%;
-    height: 1px;
-    background: var(--border);
-  }
-  .org-dept { font-size: 12px; color: var(--text-dim); margin-top: 10px; text-align: center; line-height: 1.5; max-width: 150px; }
-  .org-dept b { color: var(--text); font-weight: 700; display: block; font-family: "IBM Plex Mono", monospace; font-size: 12px; margin-bottom: 3px; }
+  .dept-icon { font-size: 18px; line-height: 1; }
+  .dept-name { font-weight: 700; font-size: 12.5px; margin-top: 8px; }
+  .dept-scope { font-size: 11px; color: var(--text-dim); margin-top: 4px; line-height: 1.55; }
 
   /* pipeline steppers */
   .pipelines { display: flex; flex-direction: column; gap: 22px; }
@@ -473,23 +454,51 @@
   </p>
 
   <section>
-    <h2 class="section-title">体制図</h2>
+    <h2 class="section-title">体制図 <span class="count">社長 + 8部署</span></h2>
     <div class="orgchart">
       <div class="org-node ceo">社長</div>
       <div class="org-connector-v"></div>
-      <div class="org-row">
-        <div class="org-hbar"></div>
-        <div class="org-branch">
-          <div class="org-node">開発部</div>
-          <div class="org-dept"><b>bgm-pipeline / app / note-articles</b>実装・コンテンツ制作</div>
+      <div class="org-hbar"></div>
+      <div class="org-grid">
+        <div class="dept-card">
+          <div class="dept-icon">🛠️</div>
+          <div class="dept-name">開発部</div>
+          <div class="dept-scope">bgm-pipeline / app の実装</div>
         </div>
-        <div class="org-branch">
-          <div class="org-node">マーケティング部</div>
-          <div class="org-dept"><b>docs/marketing/</b>チャネル調査・戦略立案</div>
+        <div class="dept-card">
+          <div class="dept-icon">🎨</div>
+          <div class="dept-name">クリエイティブ部</div>
+          <div class="dept-scope">音源企画・note執筆・UI文言</div>
         </div>
-        <div class="org-branch">
-          <div class="org-node">グロース部</div>
-          <div class="org-dept"><b>docs/dashboard.md</b>公開運用・KPI監視</div>
+        <div class="dept-card">
+          <div class="dept-icon">📊</div>
+          <div class="dept-name">マーケティング部</div>
+          <div class="dept-scope">外部チャネル・トレンド調査</div>
+        </div>
+        <div class="dept-card">
+          <div class="dept-icon">📈</div>
+          <div class="dept-name">データ分析部</div>
+          <div class="dept-scope">自社KPIのモニタリング</div>
+        </div>
+        <div class="dept-card">
+          <div class="dept-icon">🚀</div>
+          <div class="dept-name">グロース/運用部</div>
+          <div class="dept-scope">公開オペレーション・投稿管理</div>
+        </div>
+        <div class="dept-card">
+          <div class="dept-icon">💰</div>
+          <div class="dept-name">経理/財務部</div>
+          <div class="dept-scope">収支管理・値付け・採算</div>
+        </div>
+        <div class="dept-card">
+          <div class="dept-icon">⚖️</div>
+          <div class="dept-name">法務/コンプライアンス部</div>
+          <div class="dept-scope">規約・著作権・表記管理</div>
+        </div>
+        <div class="dept-card">
+          <div class="dept-icon">💬</div>
+          <div class="dept-name">カスタマーサポート部</div>
+          <div class="dept-scope">レビュー・問い合わせ対応</div>
         </div>
       </div>
     </div>
@@ -710,6 +719,10 @@
       <div class="tl-row">
         <div class="tl-date">08-01</div>
         <div class="tl-body"><b>ブロッカー解消。</b>GitHubへのpushが復旧、全コミットを反映済み。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-01</div>
+        <div class="tl-body"><b>組織を8部署に拡張。</b>経理/財務・法務/コンプライアンス・クリエイティブ・データ分析・カスタマーサポートを新設(<code>docs/ORG.md</code>)。経理は収支台帳、法務は規約チェックリストの下書きも作成。</div>
       </div>
     </div>
   </section>
