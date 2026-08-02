@@ -91,9 +91,9 @@
 
 <div class="wrap">
   <header class="top">
-    <p class="eyebrow">note 投稿キュー · 3本</p>
+    <p class="eyebrow">note 投稿キュー · 4本公開済み・1本待ち</p>
     <h1 class="brand">note投稿キュー</h1>
-    <p class="lede">このページを開いたまま、上から順にnote.comの新規投稿画面へコピペしていってください。タイトル・本文それぞれクリックでコピーできます。<b>投稿したらチェックを入れると、そのカードが薄くなります</b>(このページ内だけの表示で、再読み込みでリセットされます)。</p>
+    <p class="lede">01〜04は投稿済みです(グレー表示)。05が次の投稿分。このページを開いたまま、上から順にnote.comの新規投稿画面へコピペしていってください。タイトル・本文それぞれクリックでコピーできます。<b>投稿したらチェックを入れると、そのカードが薄くなります</b>(このページ内だけの表示で、再読み込みでリセットされます)。</p>
   </header>
 
   <div class="cadence-note">
@@ -101,7 +101,7 @@
     まとめて一気に投稿すると不自然なので、実際の公開は週1本を目安にしてください。このページはあくまで「まとめて用意してあるので迷わず貼り付けられる」ためのものです。3本目以降は下書きができ次第、このページに追加していきます。
   </div>
 
-  <div class="article" id="art-03">
+  <div class="article done" id="art-03">
     <div class="article-head">
       <div class="order-badge">1</div>
       <div>
@@ -126,10 +126,10 @@
 
 次は、そもそも作業用BGMって何を基準に選べばいいのか、失敗した話も含めて書こうと思う。</span><span class="copy-hint">クリックでコピー</span></div>
 
-    <label class="mark-done"><input type="checkbox" data-target="art-03"> 投稿した</label>
+    <label class="mark-done"><input type="checkbox" data-target="art-03" checked> 投稿した</label>
   </div>
 
-  <div class="article" id="art-02">
+  <div class="article done" id="art-02">
     <div class="article-head">
       <div class="order-badge">2</div>
       <div>
@@ -157,10 +157,10 @@
 
 結局、正解は一つじゃなくて、その日の状態に合わせて数種類を持っておくのが一番楽だという結論に落ち着いた。今、そういう「気分別」のBGMをいくつか用意しているので、次の記事でまとめて紹介しようと思う。</span><span class="copy-hint">クリックでコピー</span></div>
 
-    <label class="mark-done"><input type="checkbox" data-target="art-02"> 投稿した</label>
+    <label class="mark-done"><input type="checkbox" data-target="art-02" checked> 投稿した</label>
   </div>
 
-  <div class="article" id="art-04">
+  <div class="article done" id="art-04">
     <div class="article-head">
       <div class="order-badge">3</div>
       <div>
@@ -183,7 +183,39 @@
 
 もし同じように「集中できない自分」を責め続けている人がいたら、性格の問題にする前に、音環境を変えてみるのも一つの手だと思う。効果があるかは人による、というのが正直なところだけど、少なくとも自分には合っていた。</span><span class="copy-hint">クリックでコピー</span></div>
 
-    <label class="mark-done"><input type="checkbox" data-target="art-04"> 投稿した</label>
+    <label class="mark-done"><input type="checkbox" data-target="art-04" checked> 投稿した</label>
+  </div>
+
+  <div class="article" id="art-05">
+    <div class="article-head">
+      <div class="order-badge">5</div>
+      <div>
+        <div class="article-title-label">AIに会社の実務を任せてみたら、想像と違う大変さがあった話</div>
+        <div class="article-meta">柱B第1弾・実話ベース</div>
+      </div>
+    </div>
+
+    <div class="copy-label">タイトル</div>
+    <div class="copybox title-box" data-copy="AIに会社の実務を任せてみたら、想像と違う大変さがあった話">AIに会社の実務を任せてみたら、想像と違う大変さがあった話<span class="copy-hint">クリックでコピー</span></div>
+
+    <div class="copy-label">本文</div>
+    <div class="copybox"><span class="body-text">睡眠用のBGMを作る会社を、実質AIに運営させている。曲を作るのも、動画にするのも、noteの記事を書くのも、ほとんどAIがやっている。私がやるのは、方針を伝えるのと、アカウントを作るのと、たまに「それは違う」と言うことくらい。
+
+始める前は、もっとスムーズにいくと思っていた。実際にやってみると、地味に手のかかる場面がいくつもあった。
+
+一番面倒だったのは、アカウント周り。YouTubeやアプリストアのアカウントは、パスワードや支払いが絡むので、さすがにAIには渡せない。ここだけは自分でポチポチ作る必要があって、しかも真新しいGoogleアカウントでいきなりAPI連携みたいなことを始めたら、Google側の不正検知に引っかかってアカウントごと止められた。中の人からすると「普通に会社の準備をしていただけ」なんだけど、機械の目には怪しい動きに見えたらしい。結局、使い慣れた別のアカウントで作り直すことになった。
+
+もっと本質的だったのは、「AIに任せた作業の記録が、必ずしも正しいとは限らない」と気づいた瞬間だった。ある時、会社の進捗をまとめたページを見たら、身に覚えのない事業(経費管理アプリ)が新規事業として立ち上がっていて、しかも元々あったアプリが「保守モードに縮小」したことになっていた。だけど、そのアプリのコードはどこにもない。つまり、「やった」と書かれていることと、実際に存在するものが一致していなかった。
+
+これは結構怖い経験だった。AIは基本的に真面目に働いてくれるけど、進捗の記録と実態がずれることはある、というのを身をもって知った。それに気づけたのは、記録と実際のファイルを照らし合わせる癖がついていたからで、もし「書いてあることをそのまま信じる」運用をしていたら、存在しない事業を前提に次の判断をしてしまうところだった。
+
+最終的にどう判断したかは単純で、「今ある3つの事業(BGM動画・アプリ・note)は、同じ音源生成の仕組みと同じ読者を共有していて、互いに送客し合える設計になっている。存在しない4つ目に手を広げるより、この3つを軌道に乗せる方が先」という、当たり前の結論に落ち着いた。まだ売上はゼロなので、派手な方針転換より地味な実行の方が今は正しい。
+
+AIに経営の実務を任せるのは、思っていたより「丸投げ」にはならなかった。むしろ、要所要所で「本当にそうなってる?」と確認する側の仕事が増えた気がする。それでも、コードを書く・動画を作る・記事を書くという時間のかかる作業を任せられているのは大きくて、自分一人でゼロから3事業を並行して立ち上げるのは、まず無理だったと思う。
+
+次は、実際に動いた売上の数字が出たら、正直に公開しようと思っている。</span><span class="copy-hint">クリックでコピー</span></div>
+
+    <label class="mark-done"><input type="checkbox" data-target="art-05"> 投稿した</label>
   </div>
 </div>
 
