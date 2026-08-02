@@ -523,7 +523,7 @@
           <div class="step-line done"></div>
           <div class="step done"><div class="step-dot">✓</div><div class="step-label">戦略・調査</div></div>
           <div class="step-line done"></div>
-          <div class="step current"><div class="step-dot">●</div><div class="step-label">公開<span class="step-sub">初回動画レンダリング中</span></div></div>
+          <div class="step current"><div class="step-dot">●</div><div class="step-label">公開<span class="step-sub">アカウント再設定中</span></div></div>
           <div class="step-line todo"></div>
           <div class="step todo"><div class="step-dot"></div><div class="step-label">収益化</div></div>
         </div>
@@ -579,7 +579,7 @@
             <div class="unit-name">BGM動画</div>
             <div class="unit-tagline">YouTube / TikTok / Reels 広告収益</div>
           </div>
-          <span class="status-pill warn"><span class="dot"></span>初回動画準備中</span>
+          <span class="status-pill warn"><span class="dot"></span>アカウント再設定中</span>
         </div>
         <div class="unit-stats">
           <div class="stat"><div class="num">4</div><div class="label">音源プリセット</div></div>
@@ -587,11 +587,11 @@
           <div class="stat"><div class="num">0</div><div class="label">公開本数</div></div>
         </div>
         <ul class="unit-detail">
-          <li>睡眠ドローン・雨音・Lo-Fi・バイノーラルの4系統を実装、生成〜MP4書き出しまで動作確認済み</li>
-          <li>YouTubeチャンネル作成済み、バナー/アイコンも用意。初回の長尺動画(1時間・雨音)をレンダリング中</li>
+          <li>睡眠ドローン・雨音・Lo-Fi・バイノーラルの4系統を実装、生成〜MP4書き出しまで動作確認済み。アップロード自動化(<code>publish.py</code>)も実装済み</li>
+          <li>専用Googleアカウントが利用規約違反で停止(再審請求中)。別の使い慣れたアカウントでチャンネル・OAuth再設定中</li>
           <li>方針: 長尺(8h想定)週1本 + Shorts週3〜5本、全音源は自社生成でContent IDリスクなし</li>
         </ul>
-        <div class="unit-blocker"><b>依頼中</b>: TikTok/Instagramアカウント作成</div>
+        <div class="unit-blocker"><b>依頼中</b>: 別アカウントでのYouTube OAuthクライアント設定(<code>client_secret.json</code>待ち)・TikTok/Instagramアカウント作成</div>
       </div>
 
       <div class="unit-card">
@@ -624,11 +624,11 @@
         </div>
         <div class="unit-stats">
           <div class="stat"><div class="num">1</div><div class="label">公開本数</div></div>
-          <div class="stat"><div class="num">2</div><div class="label">下書き済み</div></div>
-          <div class="stat"><div class="num">15</div><div class="label">ネタ帳の在庫</div></div>
+          <div class="stat"><div class="num">3</div><div class="label">下書き済み(投稿待ち)</div></div>
+          <div class="stat"><div class="num">13</div><div class="label">ネタ帳の残り</div></div>
         </div>
         <ul class="unit-detail">
-          <li>1本目「AIで雨音を作ってみた話」公開済み。次点は失敗談・科学ネタを優先(<code>docs/marketing/2026-08-content-topics.md</code>)</li>
+          <li>1本目「AIで雨音を作ってみた話」公開済み。次の3本(1/fゆらぎ→BGM選び方→集中力の話)は<a href="https://claude.ai/code/artifact/4463f3ba-3008-4e37-bbff-c9b338cbcb87" target="_blank" rel="noopener">投稿キューページ</a>にまとめてコピペ待ち</li>
           <li>方針: 無料記事+サポート機能で開始→反応を見て週1更新の有料マガジンへ移行</li>
         </ul>
       </div>
@@ -756,6 +756,22 @@
       <div class="tl-row">
         <div class="tl-date">08-01</div>
         <div class="tl-body"><b>マーケティング強化。</b>「読者が食いつくネタ」を実調査し、3事業横断のコンテンツバックログ15本を作成(<code>docs/marketing/2026-08-content-topics.md</code>)。調査結果を反映した記事(雨音の科学)を1本追加執筆。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-01</div>
+        <div class="tl-body"><b>YouTube自動アップロード基盤を構築。</b>Device Flow OAuth・resumable upload・YouTube Analytics連携を実装(<code>bgm_pipeline/publish.py</code>)。アップロード成功後にローカルファイルを自動削除する運用に統一。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-01</div>
+        <div class="tl-body"><b>アプリアイコン一式を追加。</b>iOS用・Android adaptive icon・favicon・スプラッシュ画面を同じ三日月ブランドで生成し組み込み。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-02</div>
+        <div class="tl-body"><b>Googleアカウントが利用規約違反で停止。</b>新規作成した専用アカウントがGoogle側の不正検知で凍結、再審請求を提出中。別の使い慣れたアカウントでYouTube・OAuth設定を並行して再開。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-02</div>
+        <div class="tl-body"><b>note投稿キューページを公開。</b>下書き済みの3本(1/fゆらぎ→BGM選び方→集中力の話)をワンクリックコピー可能なページにまとめ、毎回チャットに貼る手間をなくした。</div>
       </div>
     </div>
   </section>
