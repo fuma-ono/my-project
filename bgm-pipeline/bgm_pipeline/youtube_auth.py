@@ -1,10 +1,14 @@
-"""OAuth for the YouTube Data API using the Device Authorization flow.
+"""OAuth for Google APIs (YouTube Data API + Cloud Storage) using the
+Device Authorization flow.
 
 This flow exists specifically for apps with no local browser to redirect
 back to (exactly this situation: an agent running in a headless
 environment). The user visits a URL on their own device and enters a code
 shown here — no password is ever seen or stored by this app, only a
-long-lived OAuth token scoped to YouTube uploads.
+long-lived OAuth token. The same token also covers Cloud Storage
+(used by gcs_temp_host.py to give Instagram's API a public URL to fetch
+video from — Instagram's Content Publishing API pulls from a URL rather
+than accepting a direct file upload).
 
 One-time setup required in Google Cloud Console (see bgm-pipeline/README.md):
 create an OAuth client of type "TVs and Limited Input devices", download
@@ -24,7 +28,11 @@ TOKEN_PATH = CREDENTIALS_DIR / "youtube_token.json"
 
 DEVICE_CODE_URL = "https://oauth2.googleapis.com/device/code"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
-SCOPE = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/yt-analytics.readonly"
+SCOPE = (
+    "https://www.googleapis.com/auth/youtube.upload "
+    "https://www.googleapis.com/auth/yt-analytics.readonly "
+    "https://www.googleapis.com/auth/devstorage.read_write"
+)
 
 
 def _load_client_secret() -> dict:

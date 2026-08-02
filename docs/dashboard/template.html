@@ -453,7 +453,7 @@
   </p>
 
   <section>
-    <h2 class="section-title">今すぐお願いしたいこと <span class="count">2 items 残</span></h2>
+    <h2 class="section-title">今すぐお願いしたいこと <span class="count">6 items 残</span></h2>
     <div class="actions">
       <div class="action-row">
         <div class="action-mark done">✓</div>
@@ -475,9 +475,9 @@
         <div class="action-mark done">✓</div>
         <div class="action-body">
           <div class="action-title">Instagramアカウント作成</div>
-          <div class="action-desc">作成完了。Reels投稿はYouTube側の準備が整い次第。</div>
+          <div class="action-desc">作成完了。自動投稿には「ビジネス」種別である必要があるので、プロアカウント設定で「クリエイター」ではなく「ビジネス」を選んでいるかだけ確認してください。</div>
         </div>
-        <div class="action-owner">完了</div>
+        <div class="action-owner">完了(要確認)</div>
       </div>
       <div class="action-row">
         <div class="action-mark pending">!</div>
@@ -486,6 +486,14 @@
           <div class="action-desc">専用アカウントが利用規約違反で停止(再審請求中)のため、使い慣れた別アカウントで再設定中。OAuthクライアントID作成でエラーが出た報告あり、状況が分かり次第エラー文言を教えてください。</div>
         </div>
         <div class="action-owner">進行中</div>
+      </div>
+      <div class="action-row">
+        <div class="action-mark pending">!</div>
+        <div class="action-body">
+          <div class="action-title">Instagram: Meta開発者アプリの作成・トークン共有</div>
+          <div class="action-desc">Facebookページ連携→Meta Developerアプリ作成→App ID/Secretと、Graph API Explorerで発行した短期トークンをこちらに共有してください。手順は<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4" target="_blank" rel="noopener">アカウント作成ガイド</a>のステップ5bに追加済み。Appレビュー(2〜4週間)が通るまでは手動投稿の橋渡しになります。</div>
+        </div>
+        <div class="action-owner">Owner</div>
       </div>
       <div class="action-row">
         <div class="action-mark pending">!</div>
@@ -536,6 +544,13 @@
         <div class="action-body">
           <div class="action-title">週次の自動レビュー</div>
           <div class="action-desc">毎週月曜、進捗確認・コンテンツ追加・ダッシュボード更新を自動で実施し、重要な変化があれば通知します。</div>
+        </div>
+      </div>
+      <div class="action-row">
+        <div class="action-mark working">●</div>
+        <div class="action-body">
+          <div class="action-title">Instagram自動投稿の基盤構築</div>
+          <div class="action-desc">Graph API連携のコードは実装済み。Meta開発者アプリの情報が届き次第、認証・Cloud Storage連携・投稿テストまで進めます。</div>
         </div>
       </div>
     </div>
@@ -823,6 +838,14 @@
       <div class="tl-row">
         <div class="tl-date">08-02</div>
         <div class="tl-body"><b>noteを柱A/柱B の2本柱に。</b>柱A(睡眠・集中サウンド)は継続、柱B(個人開発・AI経営の裏側)を新設。第1弾は架空の「4事業目」前提を排除した実話ベースの記事に差し替えて執筆(<code>docs/marketing/2026-08-note-content-pillars.md</code>)。Amazon/楽天アフィリエイトの導入方針も策定。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-02</div>
+        <div class="tl-body"><b>ダッシュボードを再構成。</b>「オーナーへの依頼」を最上部に移動し、「社長が今やっていること」を新設。逐一チャットで確認しなくても状況がわかるようにした。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-02</div>
+        <div class="tl-body"><b>Instagram自動投稿基盤を構築。</b>Meta Graph APIによるReels投稿を実装(<code>bgm_pipeline/instagram_auth.py</code>・<code>instagram_upload.py</code>・<code>publish_instagram.py</code>)。動画の一時公開ホスティングにはYouTube用と同じGoogle CloudプロジェクトのCloud Storageを再利用し、投稿後は即削除。Meta側にDevice Flow相当がないため、Graph API Explorerでの1回限りのトークン発行だけオーナー側にお願いしている。Appレビュー(2〜4週間)の申請準備も進行中。</div>
       </div>
     </div>
   </section>

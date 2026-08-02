@@ -4,13 +4,15 @@ bgm-pipeline/output/
 bgm-pipeline/__pycache__/
 bgm-pipeline/**/__pycache__/
 
-# secrets / credentials (API keys for YouTube Data API, EAS, RevenueCat, AdMob, etc.)
+# secrets / credentials (API keys for YouTube Data API, Meta Graph API, EAS, RevenueCat, AdMob, etc.)
 .env
 .env.*
 !.env.example
 *credentials*.json
 *token*.json
 client_secret*.json
+meta_app.json
+bgm-pipeline/credentials/
 *.pem
 *.p12
 *.key

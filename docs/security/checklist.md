@@ -31,6 +31,13 @@
 - 認証情報(`client_secret.json`、`youtube_token.json`)は `bgm-pipeline/credentials/` に保存し、`.gitignore` で確実にコミット対象外にしていることを確認済み
 - アップロード後、ローカルの音声/動画ファイルは自動削除(`publish.py`)。長時間の生成物を無期限にディスクへ残さない運用に統一
 
+## 実施済み: Instagram Graph API連携(2026-08-02)
+
+- Meta側にDevice Flow相当の仕組みがないため、Graph API Explorer(Meta公式ツール)で発行した短期トークンを**1回だけ**受け取り、以降は長期トークンへの交換・自動更新で運用(`bgm_pipeline/instagram_auth.py`)。パスワードは一切扱わない
+- 権限は `instagram_business_basic` / `instagram_business_content_publish` / `pages_show_list` の3つのみ
+- 認証情報(`meta_app.json`、`meta_token.json`)は `bgm-pipeline/credentials/` に保存。このディレクトリ自体を `.gitignore` で丸ごとブロックする方式に強化(個別ファイル名パターンだと新しい認証情報ファイルを追加するたびに漏れるリスクがあったため)
+- 投稿用に動画を一時的にGoogle Cloud Storageで公開ホスティングするが、公開後(Instagramが取得完了後)は即削除(`gcs_temp_host.py`)。同じGoogleアカウント/プロジェクトのOAuthトークンを再利用し、認証情報を増やさない設計
+
 ## 次回レビュー予定
 
 週次の定例レビューで `npm audit` / 依存パッケージの脆弱性を再確認し、ここに追記する。

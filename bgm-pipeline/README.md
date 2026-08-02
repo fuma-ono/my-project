@@ -83,10 +83,54 @@ device via a short code.
    approve. A refresh token is saved to `bgm-pipeline/credentials/youtube_token.json`
    (also gitignored) and reused for all future uploads, so this is a one-time step.
 
+## Automated Instagram Reels publishing
+
+`publish_instagram.py` generates a short (5-90s) vertical clip, hosts it
+temporarily on Cloud Storage (Instagram's Content Publishing API fetches
+from a public URL rather than accepting a direct upload), publishes it as
+a Reel, then **deletes the Cloud Storage object and local files**.
+
+```bash
+.venv/bin/python -m bgm_pipeline.publish_instagram --preset sleep_rain_focus --seconds 45 --bucket <your-bucket-name>
+```
+
+### One-time setup (needs a human)
+
+Unlike YouTube, Meta's Graph API has no device-authorization flow, so the
+one manual step happens in Meta's own official web tool instead of a
+password prompt:
+
+1. Instagram account must be a **Business** account (not Creator) linked
+   to a Facebook Page via [Meta Business Suite](https://business.facebook.com).
+2. Create a Meta Developer App at [developers.facebook.com/apps](https://developers.facebook.com/apps)
+   (type: Business). Save its App ID/App Secret as
+   `bgm-pipeline/credentials/meta_app.json`:
+   ```json
+   {"app_id": "...", "app_secret": "..."}
+   ```
+3. In [Graph API Explorer](https://developers.facebook.com/tools/explorer), select the app, add
+   permissions `instagram_business_basic`, `instagram_business_content_publish`,
+   `pages_show_list`, and generate a short-lived User Access Token.
+4. Exchange it for a long-lived token (auto-refreshed afterward, ~60 day validity):
+   ```bash
+   .venv/bin/python -m bgm_pipeline.instagram_auth import --token <token from step 3>
+   ```
+   This looks up the linked Instagram Business Account ID and saves everything
+   to `bgm-pipeline/credentials/meta_token.json` (gitignored).
+5. Submit `instagram_business_basic` and `instagram_business_content_publish`
+   for **App Review** in the Meta Developer dashboard — required before the
+   API works for a real (non-tester) account. Takes 2-4 weeks; post manually
+   until it's approved.
+6. In the same Google Cloud project used for YouTube, enable **Cloud
+   Storage**, create a bucket with **Fine-grained** access control (not
+   Uniform bucket-level access — that would block the per-object
+   `publicRead` ACL this uses), and pass its name as `--bucket`.
+
 ## What still needs a human
 
 - The one-time OAuth setup above (YouTube)
-- TikTok/Instagram uploads (no equivalent official upload API is wired up yet)
+- The one-time Meta/Instagram setup above, including the 2-4 week App Review wait
+- TikTok uploads (no equivalent official upload API wired up yet)
 - Enabling monetization (YouTube Partner Program, TikTok Creator
   Rewards, etc. — each has its own eligibility requirements)
 - Thumbnail/channel branding decisions

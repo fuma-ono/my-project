@@ -227,11 +227,31 @@
     <ol class="steps-list">
       <li data-n="1"><a href="https://instagram.com" target="_blank" rel="noopener">instagram.com</a> で新規アカウント作成</li>
       <li data-n="2">ユーザーネームを下の候補で設定(空いていなければ近い名前で)</li>
-      <li data-n="3">設定 →「アカウントの種類とツール」→「<b>プロアカウントに切り替える</b>」→ カテゴリは「音楽」または「アプリ」を選択</li>
+      <li data-n="3">設定 →「アカウントの種類とツール」→「<b>プロアカウントに切り替える</b>」→ 種類は必ず「<b>ビジネス</b>」を選択(「クリエイター」だと自動投稿APIが使えません)→ カテゴリは「音楽」または「アプリ」を選択</li>
     </ol>
     <div class="copy-label">ユーザーネーム候補</div>
     <div class="copybox" data-copy="focusandsleepsounds">focusandsleepsounds<span class="copy-hint">クリックでコピー</span></div>
     <div class="after"><b>これで完了。</b>Reels用の縦動画(9:16)は生成済みなので、アカウントができ次第すぐ投稿できます。</div>
+  </div>
+
+  <div class="platform">
+    <div class="platform-head">
+      <div class="platform-num">5b</div>
+      <div>
+        <div class="platform-title">Instagram 自動投稿の設定(Meta Graph API)</div>
+        <div class="platform-meta">所要時間: 約20分 + Appレビュー待ち2〜4週間・無料</div>
+      </div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1">Instagramのビジネスアカウントを、<a href="https://business.facebook.com" target="_blank" rel="noopener">Meta Business Suite</a>で自分のFacebookページに連携する(ページがなければ作成)</li>
+      <li data-n="2"><a href="https://developers.facebook.com/apps" target="_blank" rel="noopener">developers.facebook.com/apps</a> で新規アプリを作成(種類: 「Business」)</li>
+      <li data-n="3">アプリの設定画面から「アプリID」と「app secret」を確認し、内容をこのチャットに貼り付けてください(こちらで <code>bgm-pipeline/credentials/meta_app.json</code> として保存します)</li>
+      <li data-n="4"><a href="https://developers.facebook.com/tools/explorer" target="_blank" rel="noopener">Graph API Explorer</a> で、作成したアプリ・自分のユーザーを選択し、権限に <code>instagram_business_basic</code>・<code>instagram_business_content_publish</code>・<code>pages_show_list</code> を追加して「Generate Access Token」を押す</li>
+      <li data-n="5">生成されたトークン(文字列)をこのチャットに貼り付けてください。長期トークンへの変換・保存はこちらで行います</li>
+      <li data-n="6">アプリの「App Review」画面から、上記2つのInstagram権限のレビューを申請する(用途説明と簡単な操作動画が必要になるので、こちらで説明文案を用意します)</li>
+      <li data-n="7">YouTube用に作成したGoogle Cloudプロジェクトで、<a href="https://console.cloud.google.com/storage" target="_blank" rel="noopener">Cloud Storage</a> → 「バケットを作成」。アクセス制御は「<b>限定公開(均一)</b>」ではなく「<b>きめ細かい管理</b>」を選択(これを間違えると動画を一時公開できません)。バケット名をこちらに教えてください</li>
+    </ol>
+    <div class="after"><b>Appレビューが通るまでの間は手動投稿になります。</b>審査が通り次第、YouTubeと同じように生成→自動投稿に切り替わります。動画のホスティングにはYouTube用に作るのと同じGoogle Cloudプロジェクトを使うので、追加のアカウントは不要です。</div>
   </div>
 
   <div class="platform">
