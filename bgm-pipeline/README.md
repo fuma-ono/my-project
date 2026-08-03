@@ -59,6 +59,23 @@ nothing is kept on disk after a video ships.
 .venv/bin/python -m bgm_pipeline.publish --preset sleep_rain_focus --minutes 60 --privacy public
 ```
 
+### Required: verify the channel's phone number first
+
+YouTube caps unverified channels at **15-minute videos**. Since this
+project's whole point is long-form content (sleep/study BGM, often
+30-120+ minutes), skipping this means every real upload gets rejected
+during processing ("Processing aborted — video is too long") — this
+happened on the first real publish attempt (2026-08-03) before anyone
+noticed, because `publish.py` at the time declared success right after
+the upload API call instead of waiting to confirm processing succeeded
+(fixed now, see `wait_for_processing()` in `youtube_upload.py`).
+
+Go to [youtube.com/verify](https://www.youtube.com/verify) (or YouTube
+Studio → Settings → Channel → Feature eligibility) and verify with a
+real mobile number — takes ~2 minutes and raises the limit to 12
+hours / 256GB. Note: a phone number can reportedly only verify ~2
+channels per year, and virtual/VoIP numbers are often rejected.
+
 ### One-time OAuth setup (needs a human, ~5 minutes, free)
 
 This uses the [Device Authorization flow](https://developers.google.com/identity/protocols/oauth2/limited-input-device),

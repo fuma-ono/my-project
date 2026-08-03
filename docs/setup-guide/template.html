@@ -128,7 +128,7 @@
 
 <div class="wrap">
   <header class="top">
-    <p class="eyebrow">Setup Guide · 11 items</p>
+    <p class="eyebrow">Setup Guide · 12 items</p>
     <h1 class="brand">アカウント作成ガイド</h1>
     <p class="lede">上から順番にやればOKです。名前・説明文などは<b>そのままコピペで使える文面</b>を用意しました。各項目右上に<b>チェックボックス</b>があります。完了したらチェックしてください — <b>ブラウザに自動保存される</b>ので、閉じてもタブを変えても消えません(この端末のこのブラウザだけに保存されます)。</p>
     <div class="progress-bar" id="progress-bar"></div>
@@ -221,7 +221,26 @@
       <li data-n="7">表示されたURL(google.com/device)を開いてコードを入力すると、「Googleはこのアプリを確認していません」という警告が出ます(未審査アプリなので想定通り)。手順4のテストユーザー登録が正しければ、下に「<b>詳細</b>」というリンクが出るので押し、「<b>(プロジェクト名)に移動(安全ではありません)</b>」を選べば承認できます</li>
     </ol>
     <div class="decision-box"><span class="opt-label">既知の制限</span> テストモードのままだと、リフレッシュトークンが<b>約7日で失効する</b>可能性があります。1週間ほどしてアップロードが失敗するようになったら、再度ログインをやり直すだけで復旧します(パスワードの再入力は不要)。将来的に自動更新を安定させたい場合は、Googleの審査を受けて「本番環境」に切り替える選択肢もありますが、まずは動かすことを優先しています。</div>
-    <div class="after"><b>これが終われば、YouTube公開の最後のブロッカーが解消します。</b>本番サイズの動画は既に生成・検証済みなので、連携が済み次第すぐアップロードできます。</div>
+    <div class="after"><b>OAuth連携自体は完了。</b>ただし下の2cも必須です(そちらをやらないと長尺動画がアップロードできません)。</div>
+  </div>
+
+  <div class="platform" id="plat-youtube-verify">
+    <div class="platform-head">
+      <div class="platform-num">2c</div>
+      <div>
+        <div class="platform-title">YouTube 電話番号確認(長尺動画に必須)</div>
+        <div class="platform-meta">所要時間: 約2分・無料</div>
+      </div>
+      <div class="platform-check"><label><input type="checkbox" data-key="youtube-verify"> 完了</label></div>
+    </div>
+    <p style="font-size: 13.5px; color: var(--text-dim); line-height: 1.75; margin: 0 0 4px;">YouTubeは電話番号未確認のチャンネルだと、<b>動画の長さが15分までに制限されます</b>。実際に60分の動画をアップロードしたところ「処理を中止しました・動画が長すぎます」で弾かれたのを確認済みです。このアプリの睡眠用BGM(数十分〜数時間)は長尺が前提なので、これをやらないと事業として成立しません。</p>
+    <ol class="steps-list">
+      <li data-n="1"><a href="https://www.youtube.com/verify" target="_blank" rel="noopener">youtube.com/verify</a> を開く(またはYouTube Studio →「設定」→「チャンネル」→「機能の利用資格」)</li>
+      <li data-n="2"><b>普段使っている実際の携帯電話番号</b>を入力(仮想番号・IP電話は最近弾かれやすいそうです)</li>
+      <li data-n="3">SMSで届く確認コードを入力</li>
+    </ol>
+    <div class="decision-box"><span class="opt-label">注意</span> 同じ電話番号でのチャンネル確認は年2回までという制限があるようです。以前の(停止中の)専用アカウントで既にこの電話番号を使っていた場合、うまくいかない可能性があります。その場合は教えてください。</div>
+    <div class="after">確認できたら教えてください。今止まっている動画を削除して、あらためて公開し直します。</div>
   </div>
 
   <div class="platform" id="plat-play-console">
