@@ -4,6 +4,11 @@ bgm-pipeline/output/
 bgm-pipeline/__pycache__/
 bgm-pipeline/**/__pycache__/
 
+# note-articles/note_publish
+note-articles/note_publish/.venv/
+note-articles/note_publish/__pycache__/
+note-articles/note_publish/credentials/
+
 # secrets / credentials (API keys for YouTube Data API, Meta Graph API, EAS, RevenueCat, AdMob, etc.)
 .env
 .env.*

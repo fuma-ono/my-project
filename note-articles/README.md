@@ -26,9 +26,39 @@
 
 ## このディレクトリの中身
 
-- `drafts/` — 下書き記事(Markdown)。公開前にオーナーの確認を経て、実際の投稿はnote.com上で人間が行う。
+- `drafts/` — 下書き記事(Markdown)。
+- `queue-page/` — コピペ投稿用ページのソース(手動投稿する場合はこちら)。
+- `note_publish/` — Playwrightによる自動投稿ツール(下記参照)。
+
+## 自動投稿(note_publish/)
+
+note.comには公式APIも投稿用のOAuthも存在しないため(2026-08時点で再確認済み)、`bgm_pipeline`のYouTube/Instagram連携とは違う方式を取っている。ブラウザ自動操作(Playwright)でnote.comに実際にログインし、エディタに直接入力する。**「パスワードを一切預からない」という他の連携の原則からは外れる**ため、詳細は`docs/security/checklist.md`のnote.comセクションに記録している。
+
+### 一度だけ必要なセットアップ(オーナー自身のPCで実行)
+
+Claude Codeのクラウドセッションでは実行できない(ブラウザを見せる画面がない上、このコンテナのネットワークポリシーがnote.comへの直接接続自体をブロックしている)。**必ずオーナー自身の手元のPC**で:
+
+```bash
+cd note-articles/note_publish
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/playwright install chromium
+.venv/bin/python note_auth.py login
+```
+
+ブラウザが開いてnote.comのログイン画面が表示されるので、普段通りログインする(パスワードはこのスクリプトには渡らず、note.com自身のページに直接入力する)。ログイン後、ターミナルに戻ってEnterを押すとセッションが`credentials/note_state.json`(gitignore対象)に保存される。以後はこのファイルが再利用される。
+
+### 投稿
+
+```bash
+.venv/bin/python publish.py            # 下書きをエディタに入力するだけ(note側で自動下書き保存・未公開)
+.venv/bin/python publish.py --publish  # 実際に公開する
+.venv/bin/python publish.py --debug    # ブラウザを表示して動作確認
+```
+
+**未検証の注意**: このクラウドセッションはnote.comに接続できないため、`publish.py`内のセレクタ(ボタン名やフィールドの識別方法)は実際のログイン画面・エディタでは検証できていない。オーナーが初回実行時、`--debug`で挙動を確認し、必要ならセレクタを調整してほしい。
 
 ## 人間側でまだ必要な作業
 
-- 実際の記事投稿(note.comアカウントは作成済み)
+- `note_publish/`の初回ログイン(オーナー自身のPCで、上記手順)
 - マガジン設定・サポート機能・決済設定の有効化

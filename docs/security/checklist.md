@@ -38,6 +38,17 @@
 - 認証情報(`meta_app.json`、`meta_token.json`)は `bgm-pipeline/credentials/` に保存。このディレクトリ自体を `.gitignore` で丸ごとブロックする方式に強化(個別ファイル名パターンだと新しい認証情報ファイルを追加するたびに漏れるリスクがあったため)
 - 投稿用に動画を一時的にGoogle Cloud Storageで公開ホスティングするが、公開後(Instagramが取得完了後)は即削除(`gcs_temp_host.py`)。同じGoogleアカウント/プロジェクトのOAuthトークンを再利用し、認証情報を増やさない設計
 
+## 実施済み: note.com自動投稿(2026-08-03) — 他連携とは異なる例外的な方式
+
+YouTube(Device Authorization flow)・Instagram(Graph API Explorerの短期トークン)はどちらも「パスワードを一切預からない」方式だったが、note.comには公式APIもOAuth相当の仕組みも存在しない(2026-08時点で再調査し確認)。オーナーの承認のもと、この事業だけブラウザ自動操作(Playwright)でnote.comに実際にログインする方式を採用した(`note-articles/note_publish/`)。
+
+- **仕組み**: `note_auth.py login`がオーナー自身のPCで実ブラウザを開き、オーナー本人がnote.com自身のログイン画面に直接パスワードを入力する。このスクリプト自体はパスワードを受け取らず、ログイン後にnote.comが発行するセッションCookieだけを`credentials/note_state.json`に保存する
+- **リスクと軽減策**:
+  - セッションファイルはパスワードと同等の機密情報として扱う。`.gitignore`で`note-articles/note_publish/credentials/`を丸ごとブロック済み
+  - 漏洩を疑った場合は、note.comのアカウント設定から全セッションをログアウトすればこのファイルは無効化される
+  - 非公式・非サポートの操作のため、note側のUI変更で突然動かなくなるリスクがある。安全のため`publish.py`はデフォルトで実際の公開ボタンを押さず、`--publish`を明示した時のみ公開する
+- **実行環境の制約**: このリポジトリのクラウドセッション(Claude Code on the web)は、ネットワークポリシーによりnote.comへの直接接続がブロックされている(`gateway answered 403 to CONNECT`、ポリシー拒否と確認済み)。そのため`note_publish/`は必ずオーナー自身のPCで実行する必要があり、セレクタ類もこの環境では実地検証できていない(`note-articles/README.md`に明記)
+
 ## 週次レビュー履歴
 
 - **2026-08-03**: `app/` の `npm audit` を再実行。moderate 10件(`uuid`パッケージ、Expoビルドツールチェーン内部の間接依存)は前回(実施済みレビュー時点)から変化なし。新規の脆弱性なし。リポジトリ内のシークレットハードコードも引き続きなし(`bgm-pipeline/credentials/`は空・gitignore対象のまま)

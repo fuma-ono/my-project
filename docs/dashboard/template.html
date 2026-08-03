@@ -453,7 +453,7 @@
   </p>
 
   <section>
-    <h2 class="section-title">今すぐお願いしたいこと <span class="count">6 items 残</span></h2>
+    <h2 class="section-title">今すぐお願いしたいこと <span class="count">7 items 残</span></h2>
     <div class="actions">
       <div class="action-row">
         <div class="action-mark done">✓</div>
@@ -524,6 +524,14 @@
         <div class="action-body">
           <div class="action-title">プライバシーポリシー・利用規約の連絡先欄を記入</div>
           <div class="action-desc">ドラフトを<code>docs/legal/privacy-policy.md</code>・<code>docs/legal/terms-of-service.md</code>に用意済み。連絡先メール・事業者名・準拠法の空欄記入と最終確認をお願いします(ストア申請前に必要)。</div>
+        </div>
+        <div class="action-owner">Owner</div>
+      </div>
+      <div class="action-row">
+        <div class="action-mark pending">!</div>
+        <div class="action-body">
+          <div class="action-title">note自動投稿の初回ログイン(オーナー自身のPCで実行)</div>
+          <div class="action-desc">クラウドセッションでは実行不可(画面がない・note.comへの接続がネットワークポリシーでブロック済み)。手順は<code>note-articles/README.md</code>の「自動投稿」章を参照。<code>note_auth.py login</code>を実行し、開いたブラウザでいつも通りログインするだけです(パスワードはこのツールには渡りません)。</div>
         </div>
         <div class="action-owner">Owner</div>
       </div>
@@ -749,6 +757,7 @@
         </div>
         <ul class="unit-detail">
           <li>4本公開済み(雨音の話→1/fゆらぎ→BGM選び方→集中力の話)。柱B第1弾「AIに会社の実務を任せてみた話」・柱A新作「AI音楽の著作権を調べてみた話」の2本が<a href="https://claude.ai/code/artifact/4463f3ba-3008-4e37-bbff-c9b338cbcb87" target="_blank" rel="noopener">投稿キューページ</a>で投稿待ち</li>
+          <li>自動投稿ツール(<code>note-articles/note_publish/</code>)を追加。note.comに公式APIがないため、Playwrightでの実ログイン方式を採用(オーナー承認済み・<code>docs/security/checklist.md</code>に詳細)。初回セットアップはオーナー自身のPCで実行が必要</li>
           <li>方針: 柱A(睡眠・集中サウンド)+柱B(個人開発・AI経営の裏側)の2本柱。無料記事+サポート機能で開始→反応を見て週1更新の有料マガジンへ移行</li>
         </ul>
       </div>
@@ -878,6 +887,10 @@
       <div class="tl-row">
         <div class="tl-date">08-03</div>
         <div class="tl-body"><b>初の本番サイズBGM動画のレンダリングに成功。</b>60分・雨音+集中プリセット(<code>sleep_rain_focus</code>)で、音声生成→YouTube用16:9→Shorts用9:16の書き出しまでパイプライン全体をノーエラーで通しで検証。YouTube連携が済み次第、そのまま公開できる状態。検証用ファイルはディスク節約のため削除済み(公開時は<code>publish.py</code>が同じ内容を都度生成)。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-03</div>
+        <div class="tl-body"><b>note自動投稿を構築(オーナー承認のうえ、方針を一部例外化)。</b>note.comには公式APIが存在しないため、オーナーに選択肢を提示し、Playwrightでの実ブラウザログイン方式を承認いただいた。「パスワードを一切預からない」という他連携の原則からは外れるため、リスクと軽減策を<code>docs/security/checklist.md</code>に明記。初回ログインはオーナー自身のPCでのみ実行可能(クラウドセッションはnote.comへの接続がネットワークポリシーでブロックされていることを実地確認)。エディタのセレクタは実環境で未検証のため、初回実行は<code>--debug</code>での確認が必要。</div>
       </div>
     </div>
   </section>
