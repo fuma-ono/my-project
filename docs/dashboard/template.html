@@ -442,7 +442,7 @@
       <h1 class="brand">経営ダッシュボード</h1>
     </div>
     <div class="meta">
-      <div><span class="status-pill good"><span class="dot"></span>note記事4本・BGM動画1本、実際に再生確認済みで公開中</span></div>
+      <div><span class="status-pill warn"><span class="dot"></span>目標: 1週間以内に収益化(noteに集中)</span></div>
       <div>最終更新: 2026-08-03</div>
       <div>次回定例: 毎週月曜 09:00 JST</div>
     </div>
@@ -453,8 +453,24 @@
   </p>
 
   <section>
-    <h2 class="section-title">今すぐお願いしたいこと <span class="count">6 items 残</span></h2>
+    <h2 class="section-title">今すぐお願いしたいこと <span class="count">8 items 残</span></h2>
     <div class="actions">
+      <div class="action-row">
+        <div class="action-mark pending">!</div>
+        <div class="action-body">
+          <div class="action-title">【最優先・今週中】noteの「サポート機能」有効化・振込先登録</div>
+          <div class="action-desc">1週間以内に何らかの収益を出すという目標のもと、収益化の障壁がないnote.comに集中することにしました。ただし<b>note側で投げ銭(サポート)機能の有効化と、実際にお金を受け取るための振込先(銀行口座)登録は、オーナーにしかできません</b>。note.comの設定画面から有効化をお願いします。あわせて、note.comのプロフィールURL(YouTube動画からリンクを貼りたいので)も教えてください。</div>
+        </div>
+        <div class="action-owner">最優先・Owner</div>
+      </div>
+      <div class="action-row">
+        <div class="action-mark pending">!</div>
+        <div class="action-body">
+          <div class="action-title">【今週中】note投稿キューの05・06・07をまとめて投稿</div>
+          <div class="action-desc">3本とも下書き済み・投稿待ちです。通常は週1本ペースですが、今週は収益化プッシュのため<a href="https://claude.ai/code/artifact/4463f3ba-3008-4e37-bbff-c9b338cbcb87" target="_blank" rel="noopener">投稿キューページ</a>からまとめて投稿していただけると助かります(コピペで数分です)。</div>
+        </div>
+        <div class="action-owner">最優先・Owner</div>
+      </div>
       <div class="action-row">
         <div class="action-mark done">✓</div>
         <div class="action-body">
@@ -933,6 +949,10 @@
       <div class="tl-row">
         <div class="tl-date">08-03</div>
         <div class="tl-body"><b>YouTube投稿を完全自動化。</b>オーナーから「自動化が目的、社長としての自覚を持って各部署を連携させ会社を大きくしてほしい」という明確な指示を受け、Routine(定期実行)を新設した。長尺動画は毎週火曜0時(UTC)、Shortsは火・木・土の正午(UTC)に無人で生成→公開する。既存の週次経営レビュー・note下書きRoutine(共に月曜)と時間を分散させて設定。失敗時、特にYouTube側のOAuth再認証が必要なケース(テストモードでの約7日でのトークン失効)はPushNotificationでオーナーに知らせ、成功時は静かにダッシュボードとgitログに記録する運用とした。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-03</div>
+        <div class="tl-body"><b>「1週間以内に収益化」の目標を受け、noteに集中する方針を決定。</b>YouTube広告収益(登録者1,000人+年間4,000時間が条件)・アプリストア収益(未申請・課金未実装)は構造的に1週間では不可能と判断し、正直に報告した。プラットフォームの審査待ちがないnote.comに集中する方針に決定。実行したこと: (1) 公開済み動画のタイトル・概要欄・タグ・サムネイルを、SEO強化後の仕組みで作り直して差し替え(検索意図に直結するフレーズ「rain sounds for sleeping」を反映)、(2) 権限不足で動画の修正ができなかったため`youtube`フルスコープに拡張・再認証、(3) note記事を新たに1本執筆(「作業用BGM選びの悩み50件」、投稿キューに追加、YouTubeチャンネルへの導線付き)、(4) 投稿キューページを「今週中にまとめて投稿」を促す表示に変更。<b>オーナーへの依頼は2点のみ</b>: noteのサポート機能有効化+振込先登録、投稿キュー(05・06・07)の今週中の投稿。</div>
       </div>
     </div>
   </section>

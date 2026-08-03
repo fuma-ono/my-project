@@ -35,9 +35,13 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 # analytics access needs a normal authorization-code flow with a local
 # redirect instead, which (like note_publish/) would have to run on the
 # owner's own machine — not implemented yet, see youtube_analytics.py.
+# "youtube" (full manage scope, confirmed device-flow compatible) replaces
+# the narrower youtube.upload + youtube.readonly combo: videos.update
+# (fixing a title/description after the fact) needs it and upload/read
+# both still work under it too, so one scope covers everything this
+# project does short of Analytics.
 SCOPE = (
-    "https://www.googleapis.com/auth/youtube.upload "
-    "https://www.googleapis.com/auth/youtube.readonly "
+    "https://www.googleapis.com/auth/youtube "
     "https://www.googleapis.com/auth/devstorage.read_write"
 )
 
