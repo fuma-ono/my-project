@@ -56,6 +56,11 @@ def main(argv: list[str] | None = None) -> int:
         args.preset = rotation.next_preset("shorts")
         print(f"No --preset given, picked from rotation: {args.preset}")
 
+    if args.link_video_id is None:
+        args.link_video_id = rotation.get_last_long_form()
+        if args.link_video_id:
+            print(f"No --link-video-id given, linking to last long-form upload: {args.link_video_id}")
+
     minutes = args.seconds / 60
     meta = presets.PRESET_METADATA[args.preset]
     os.makedirs(args.workdir, exist_ok=True)

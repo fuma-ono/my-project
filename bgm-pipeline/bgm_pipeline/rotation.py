@@ -51,3 +51,18 @@ def peek_next_preset(kind: str) -> str:
     last = state.get(kind)
     next_index = (order.index(last) + 1) % len(order) if last in order else 0
     return order[next_index]
+
+
+def set_last_long_form(video_id: str) -> None:
+    """Records the most recently published long-form video, so
+    publish_shorts.py can default --link-video-id to it — the whole point
+    of doing Shorts here is pulling viewers into a specific long-form
+    video, not just posting into the void.
+    """
+    state = _load_state()
+    state["last_long_form_video_id"] = video_id
+    _save_state(state)
+
+
+def get_last_long_form() -> str | None:
+    return _load_state().get("last_long_form_video_id")

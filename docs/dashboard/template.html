@@ -724,9 +724,10 @@
           <li>睡眠ドローン・雨音・Lo-Fi・バイノーラルの4系統を実装。<code>publish.py</code>で生成→レンダリング→カスタムサムネイル生成→アップロード→処理完了確認→サムネイル設定→ローカル削除まで自動化済み</li>
           <li><b>1本目公開・再生確認済み: <a href="https://youtube.com/watch?v=cCFbFsWHX80" target="_blank" rel="noopener">Rain &amp; Soft Pad for Sleep(1時間)</a></b>。1回目の試みは電話番号未確認のため「動画が長すぎる」で処理拒否(<code>uploadStatus: rejected</code>)されていたが、オーナーが電話番号確認を完了後に再実行し成功。<code>uploadStatus: processed</code> / <code>processingStatus: succeeded</code> をAPIで直接確認済み</li>
           <li><b>SEO/マーケティングを強化(2026-08-03)</b>: 概要欄は「公開しただけ」の1行から、キーワード重視のフック+用途リスト+ハッシュタグ3〜5個の構成に拡充。ブランド統一されたカスタムサムネイル(長さバッジ付き)も自動生成するように(<code>docs/marketing/2026-08-youtube-seo.md</code>)。次回公開分から適用</li>
-          <li>方針: 長尺週1本 + Shorts週2〜3本(<code>docs/marketing/2026-08-content-calendar.md</code>で具体化)。プリセットのローテーション管理(<code>rotation.py</code>)を新設し、同じ内容の連投を防止。全音源は自社生成でContent IDリスクなし</li>
+          <li><b>投稿を完全自動化(2026-08-03)</b>: 長尺動画は毎週火曜、Shortsは火・木・土に無人で自動生成→公開するRoutineを設定済み。プリセットのローテーション管理(<code>rotation.py</code>)で同じ内容の連投を防止し、ShortsはRoutineが自動で直近の長尺動画にリンクする。失敗時(特にOAuth再認証が必要な場合)はPushNotificationでオーナーに通知(<code>docs/marketing/2026-08-content-calendar.md</code>)</li>
+          <li>方針: 長尺週1本 + Shorts週3本。全音源は自社生成でContent IDリスクなし</li>
         </ul>
-        <div class="unit-blocker"><b>依頼中</b>: TikTok/Meta(Instagram自動投稿)アカウント作業。投稿を定期実行(無人自動化)するかどうかはオーナー判断待ち(下記参照)</div>
+        <div class="unit-blocker"><b>依頼中</b>: TikTok/Meta(Instagram自動投稿)アカウント作業。YouTube投稿は完全自動化済み(下記参照)</div>
       </div>
 
       <div class="unit-card">
@@ -928,6 +929,10 @@
       <div class="tl-row">
         <div class="tl-date">08-03</div>
         <div class="tl-body"><b>投稿計画がなかった点を指摘され、策定。</b>「投稿計画があるのか、同じ動画を出し続けていないか、Shortsで登録者を増やす導線があるのか」という指摘を受け、実際に計画が存在しないこと(手動トリガーのみ、ローテーション管理なし、2本連続で同じプリセット、YouTube Shorts投稿の仕組み自体が未実装)を認めた。<code>rotation.py</code>(プリセットの自動ローテーション)・<code>publish_shorts.py</code>(YouTube Shorts自動投稿、長尺動画への誘導リンク付き)を新設し、投稿ペースの提案(長尺週1本・Shorts週2〜3本)を<code>docs/marketing/2026-08-content-calendar.md</code>にまとめた。定期実行(無人自動化)するかはオーナーに確認中。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-03</div>
+        <div class="tl-body"><b>YouTube投稿を完全自動化。</b>オーナーから「自動化が目的、社長としての自覚を持って各部署を連携させ会社を大きくしてほしい」という明確な指示を受け、Routine(定期実行)を新設した。長尺動画は毎週火曜0時(UTC)、Shortsは火・木・土の正午(UTC)に無人で生成→公開する。既存の週次経営レビュー・note下書きRoutine(共に月曜)と時間を分散させて設定。失敗時、特にYouTube側のOAuth再認証が必要なケース(テストモードでの約7日でのトークン失効)はPushNotificationでオーナーに知らせ、成功時は静かにダッシュボードとgitログに記録する運用とした。</div>
       </div>
     </div>
   </section>

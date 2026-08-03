@@ -80,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(f"Confirmed watchable: {watch_url}")
+    rotation.set_last_long_form(video_id)
 
     try:
         youtube_upload.set_thumbnail(video_id, thumb_path)
