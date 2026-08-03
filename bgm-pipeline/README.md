@@ -51,13 +51,23 @@ noise, filters, reverb) rather than writing new synthesis code inline.
 
 ## Automated YouTube publishing
 
-`publish.py` generates a track, renders it, uploads it via the YouTube Data
-API, and **deletes the local audio/video files once the upload succeeds** —
-nothing is kept on disk after a video ships.
+`publish.py` generates a track, renders it, generates a custom thumbnail,
+uploads it via the YouTube Data API with an SEO-oriented title/description/
+tags/hashtags (see `presets.PRESET_METADATA` and `presets.build_description`),
+waits for YouTube to confirm processing succeeded, sets the custom thumbnail,
+then **deletes the local audio/video/thumbnail files** — nothing is kept on
+disk after a video actually ships (not just uploads; see the "verify before
+declaring success" note below).
 
 ```bash
 .venv/bin/python -m bgm_pipeline.publish --preset sleep_rain_focus --minutes 60 --privacy public
 ```
+
+Thumbnails matter more for click-through than tags or hashtags do
+(`docs/marketing/2026-08-youtube-seo.md` has the research and rationale) —
+`thumbnail.py` generates one per preset reusing the channel's brand palette
+(`branding.py`) plus a duration badge, rather than relying on YouTube's
+auto-picked video frame.
 
 ### Required: verify the channel's phone number first
 

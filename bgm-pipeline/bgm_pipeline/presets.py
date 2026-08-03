@@ -148,21 +148,101 @@ PRESET_METADATA = {
     "sleep_deep_drone": {
         "title": "Deep Sleep Drone",
         "description": "Low, slow-moving ambient pad with a brown-noise bed for deep sleep.",
-        "tags": ["sleep music", "deep sleep", "ambient", "relaxing music"],
+        "hook": "A low, slow-moving ambient drone with a warm brown-noise bed — made to help you fall into deep sleep and stay there.",
+        "about": (
+            "No melody to follow, no sudden changes — just a steady, low-frequency wash of sound "
+            "designed to mask household noise and quiet a racing mind. The brown-noise layer sits "
+            "lower and warmer than white noise, which many people find gentler for all-night listening."
+        ),
+        "use_cases": ["Falling asleep and staying asleep", "Masking noisy neighbors, traffic, or a snoring partner", "Naps", "Newborn/baby white noise (played at a safe, low volume)"],
+        "tags": [
+            "sleep music", "deep sleep music", "brown noise", "sleep sounds", "ambient sleep music",
+            "insomnia relief", "relaxing sleep music", "sleep drone", "calming ambient", "8 hours sleep music",
+            "white noise for sleep", "background noise for sleeping",
+        ],
+        "hashtags": ["sleepmusic", "deepsleep", "brownnoise", "ambientmusic", "insomnia"],
     },
     "sleep_rain_focus": {
         "title": "Rain & Soft Pad for Sleep",
         "description": "Filtered rain texture layered with a gentle ambient pad.",
-        "tags": ["rain sounds", "sleep music", "relaxation", "ambient"],
+        "hook": "Continuous rain sounds layered with a soft ambient pad — steady, warm rainfall for sleep, studying, or just tuning out the world.",
+        "about": (
+            "A filtered rain texture (no thunder, no jump-scares) layered under a slow-moving pad. "
+            "Rain is one of the most requested sounds for sleep because it's a natural example of "
+            "1/f (\"pink\") noise — predictable enough to relax into, varied enough not to feel robotic."
+        ),
+        "use_cases": ["Falling asleep to rain", "Deep, uninterrupted focus while studying or working", "Meditation and unwinding after a long day", "Drowning out city or apartment noise"],
+        "tags": [
+            "rain sounds", "rain sounds for sleeping", "sleep music", "relaxing rain", "rain and ambient music",
+            "study music", "focus music", "relaxation music", "calming rain sounds", "rain for studying",
+            "ambient rain", "nature sounds for sleep",
+        ],
+        "hashtags": ["rainsounds", "sleepmusic", "relaxation", "ambientmusic", "focusmusic"],
     },
     "study_lofi_chill": {
         "title": "Lo-Fi Chill Beats to Study To",
         "description": "Warm lo-fi chords with vinyl texture and a laid-back pulse.",
-        "tags": ["lofi hip hop", "study music", "chill beats", "focus"],
+        "hook": "Warm lo-fi chords, vinyl crackle, and a laid-back beat — chill background music for studying, working, or just relaxing.",
+        "about": (
+            "A continuous, non-distracting lo-fi loop: warm jazzy chords, a soft backbeat, and a "
+            "little vinyl texture for warmth. No vocals, no sudden drops — built to sit in the "
+            "background while you actually get things done."
+        ),
+        "use_cases": ["Studying and reading", "Deep work / productivity sessions", "Coding and writing", "Cooking, chores, or a chill hangout playlist"],
+        "tags": [
+            "lofi hip hop", "lofi beats", "study music", "chill beats", "focus music", "lofi chill",
+            "study lofi", "vinyl lofi", "relaxing beats", "background music for studying", "lofi radio",
+            "productivity music",
+        ],
+        "hashtags": ["lofi", "lofihiphop", "studymusic", "chillbeats", "focusmusic"],
     },
     "study_focus_binaural": {
         "title": "Alpha Focus Binaural + Pad",
         "description": "10Hz alpha-range binaural beat under a soft pad for study focus.",
-        "tags": ["binaural beats", "study music", "focus music", "alpha waves"],
+        "hook": "A 10Hz alpha-range binaural beat under a soft ambient pad — background audio built for focused study and deep work (headphones recommended).",
+        "about": (
+            "Two very slightly different tones, one in each ear, create a perceived \"beat\" at 10Hz — "
+            "the alpha brainwave range associated with relaxed, focused alertness. Layered under a "
+            "gentle pad so it's pleasant to listen to, not just clinical. Best experienced with headphones."
+        ),
+        "use_cases": ["Studying and reading", "Focused work sessions", "Light meditation", "Pre-exam or pre-deadline focus sessions"],
+        "tags": [
+            "binaural beats", "binaural beats focus", "study music", "focus music", "alpha waves",
+            "10hz binaural beats", "concentration music", "brainwave music", "study binaural beats",
+            "deep focus music", "binaural beats study", "ambient focus music",
+        ],
+        "hashtags": ["binauralbeats", "focusmusic", "studymusic", "alphawaves", "concentration"],
     },
 }
+
+
+def duration_label(minutes: float) -> str:
+    if minutes >= 60:
+        hours = minutes / 60
+        return f"{hours:g} Hour" + ("s" if hours != 1 else "")
+    return f"{minutes:g} Min"
+
+
+def build_description(preset: str, minutes: float) -> str:
+    """Composes the full YouTube description: a keyword-rich hook (the first
+    ~150 chars are what shows before "Show more" and in search results),
+    an expanded blurb, a use-case list, an AI/royalty-free disclosure, and
+    a hashtag block (YouTube surfaces the first 3 above the title).
+    """
+    meta = PRESET_METADATA[preset]
+    hours = minutes / 60
+    duration_txt = (f"{hours:g} hour" + ("s" if hours != 1 else "")) if minutes >= 60 else f"{minutes:g} minutes"
+    use_cases = "\n".join(f"- {u}" for u in meta["use_cases"])
+    hashtags = " ".join(f"#{h}" for h in meta["hashtags"])
+
+    return (
+        f"{meta['hook']}\n\n"
+        f"{meta['about']}\n\n"
+        f"This video runs {duration_txt} continuously — fine to loop, leave playing overnight, "
+        "or use as background audio in another app.\n\n"
+        f"Good for:\n{use_cases}\n\n"
+        "100% AI-generated, royalty-free ambient audio — no samples or copyrighted material, "
+        "so it's safe for background listening, streams, or your own projects.\n\n"
+        "New tracks posted regularly — subscribe if this helped you relax, focus, or sleep.\n\n"
+        f"{hashtags}"
+    )

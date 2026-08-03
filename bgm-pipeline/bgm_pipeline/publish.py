@@ -16,9 +16,9 @@ import argparse
 import os
 import sys
 
-from . import presets, video, youtube_upload
+from . import presets, thumbnail, video, youtube_upload
 
-DEFAULT_TAGS = ["sleep music", "ambient", "relaxing music", "focus music", "study music"]
+DEFAULT_TAGS = ["ambient music", "background music", "AI generated music", "royalty free music"]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -35,26 +35,30 @@ def main(argv: list[str] | None = None) -> int:
 
     wav_path = os.path.join(args.workdir, f"{args.preset}.wav")
     mp4_path = os.path.join(args.workdir, f"{args.preset}.mp4")
+    thumb_path = os.path.join(args.workdir, f"{args.preset}_thumb.jpg")
 
-    print(f"[1/4] generating {args.minutes} min of audio ({args.preset})...")
+    print(f"[1/5] generating {args.minutes} min of audio ({args.preset})...")
     track = presets.PRESETS[args.preset](minutes=args.minutes)
     track.to_wav(wav_path)
 
-    print("[2/4] rendering video...")
+    print("[2/5] rendering video...")
     video.render(wav_path, mp4_path, meta["title"], args.preset, "landscape")
 
-    hours = args.minutes / 60
-    title = f"[{hours:g} Hour] {meta['title']} | AI Generated"
+    print("[3/5] generating custom thumbnail...")
+    thumbnail.make_thumbnail(thumb_path, args.preset, meta["title"], args.minutes)
+
+    title = f"[{presets.duration_label(args.minutes)}] {meta['title']}"
+    description = presets.build_description(args.preset, args.minutes)
     tags = DEFAULT_TAGS + meta["tags"]
 
-    print("[3/4] uploading to YouTube...")
+    print("[4/5] uploading to YouTube...")
     video_id = youtube_upload.upload_video(
-        mp4_path, title, meta["description"], tags, privacy_status=args.privacy
+        mp4_path, title, description, tags, privacy_status=args.privacy
     )
     watch_url = f"https://youtube.com/watch?v={video_id}"
     print(f"Uploaded: {watch_url}")
 
-    print("[4/4] waiting for YouTube to finish processing (this can take a while for long videos)...")
+    print("[5/5] waiting for YouTube to finish processing (this can take a while for long videos)...")
     try:
         youtube_upload.wait_for_processing(video_id)
     except youtube_upload.VideoProcessingFailed as exc:
@@ -68,10 +72,17 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"Confirmed watchable: {watch_url}")
 
+    try:
+        youtube_upload.set_thumbnail(video_id, thumb_path)
+        print("Custom thumbnail set.")
+    except Exception as exc:  # noqa: BLE001 — a bad thumbnail shouldn't undo a successful publish
+        print(f"Thumbnail upload failed (video is still published fine): {exc}")
+
     if not args.keep_local:
         os.remove(wav_path)
         os.remove(mp4_path)
-        print("Local audio/video files deleted.")
+        os.remove(thumb_path)
+        print("Local audio/video/thumbnail files deleted.")
 
     return 0
 

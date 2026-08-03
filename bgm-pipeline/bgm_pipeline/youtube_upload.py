@@ -16,6 +16,7 @@ from . import youtube_auth
 
 UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos"
 VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
+THUMBNAILS_URL = "https://www.googleapis.com/upload/youtube/v3/thumbnails/set"
 
 
 def upload_video(
@@ -64,6 +65,24 @@ def upload_video(
     put_resp.raise_for_status()
     video = put_resp.json()
     return video["id"]
+
+
+def set_thumbnail(video_id: str, image_path: str) -> None:
+    """Uploads a custom thumbnail — covered by the youtube.upload scope,
+    same as the video upload itself. Thumbnails matter far more for
+    click-through than tags/hashtags, so this isn't optional polish.
+    """
+    access_token = youtube_auth.get_access_token()
+    content_type = "image/png" if image_path.lower().endswith(".png") else "image/jpeg"
+    with open(image_path, "rb") as f:
+        resp = requests.post(
+            THUMBNAILS_URL,
+            params={"videoId": video_id},
+            headers={"Authorization": f"Bearer {access_token}", "Content-Type": content_type},
+            data=f,
+            timeout=60,
+        )
+    resp.raise_for_status()
 
 
 def get_video_status(video_id: str) -> dict:
