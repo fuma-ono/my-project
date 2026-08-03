@@ -71,6 +71,10 @@ device via a short code.
 3. Go to **APIs & Services → OAuth consent screen**. Choose **External**, fill in
    the required fields (app name, your email), and add your own Google account
    as a **test user** (this keeps it in "Testing" mode, which is fine — no Google review needed).
+   **The test user email must exactly match the Google account you'll use to approve
+   the login in step 6** — YouTube's upload scope is a restricted scope, so any
+   mismatch (e.g. approving with a different account than the one added as a test
+   user) shows a "Google hasn't verified this app" screen with no way past it.
 4. Go to **APIs & Services → Credentials → Create Credentials → OAuth client ID**.
    Application type: **TVs and Limited Input devices**.
 5. Download the resulting JSON and save it as `bgm-pipeline/credentials/client_secret.json`
@@ -80,8 +84,19 @@ device via a short code.
    .venv/bin/python -m bgm_pipeline.youtube_auth login
    ```
    It prints a URL and a short code — open the URL on any device, enter the code,
-   approve. A refresh token is saved to `bgm-pipeline/credentials/youtube_token.json`
-   (also gitignored) and reused for all future uploads, so this is a one-time step.
+   approve. You'll likely see the "Google hasn't verified this app" warning (expected
+   for an unpublished app) — click **Advanced → Go to [project name] (unsafe)** to
+   proceed; this is safe since it's our own project. A refresh token is saved to
+   `bgm-pipeline/credentials/youtube_token.json` (also gitignored).
+
+   **Known limitation**: while the OAuth consent screen stays in "Testing" publishing
+   status (the default, and the only option that avoids a Google review), refresh
+   tokens reportedly expire after **7 days** rather than lasting indefinitely. If
+   uploads start failing after about a week, re-run the login command above. Moving
+   to "In production" status removes this, but restricted scopes like `youtube.upload`
+   still require completing Google's verification process to actually work there for
+   real — not attempted yet, tracked as a follow-up if the 7-day expiry proves
+   disruptive to the weekly publish cadence.
 
 ## Automated Instagram Reels publishing
 

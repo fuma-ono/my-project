@@ -209,17 +209,18 @@
         <div class="platform-title">YouTube 再設定(別アカウント)+ OAuth連携</div>
         <div class="platform-meta">所要時間: 約15分・専用アカウントが停止中のため必要</div>
       </div>
-      <div class="platform-check"><label><input type="checkbox" data-key="youtube-resetup"> 完了</label></div>
+      <div class="platform-check"><label><input type="checkbox" data-key="youtube-resetup" checked> 完了</label></div>
     </div>
     <ol class="steps-list">
       <li data-n="1">手順1で作った専用アカウントは利用規約違反で停止中(再審請求は提出済み)。復旧を待たず、<b>普段お使いの別のGoogleアカウント</b>でチャンネルを作り直す(手順2と同じ要領。チャンネル名・概要欄は上のコピーボックスを流用可)</li>
       <li data-n="2"><a href="https://console.cloud.google.com/" target="_blank" rel="noopener">console.cloud.google.com</a> を開き、同じGoogleアカウントで新規プロジェクトを作成(名前は任意、例: <code>Focus Sleep Sounds</code>)</li>
       <li data-n="3">「APIとサービス」→「ライブラリ」で <b>YouTube Data API v3</b> を検索して有効化</li>
-      <li data-n="4">「APIとサービス」→「OAuth同意画面」で「<b>外部</b>」を選び、アプリ名・自分のメールアドレスを入力。テストユーザーに自分のGoogleアカウントを追加(「テスト」モードのままでOK。Googleの審査は不要)</li>
+      <li data-n="4">「APIとサービス」→「OAuth同意画面」で「<b>外部</b>」を選び、アプリ名・自分のメールアドレスを入力。「テストユーザー」に<b>手順1でチャンネルを作ったのと同じGoogleアカウントのメールアドレスを一字一句正確に</b>追加(「テスト」モードのままでOK、Googleの審査は不要)。<b>ここがずれていると、あとの承認画面で「Googleの審査プロセスが完了していません」から一切先に進めなくなります</b>(実際に一度ハマったポイントです)</li>
       <li data-n="5">「APIとサービス」→「認証情報」→「認証情報を作成」→「OAuthクライアントID」。アプリケーションの種類は必ず「<b>テレビと限定入力デバイス</b>」を選択(これ以外を選ぶとこの連携方式が使えません)</li>
-      <li data-n="6">作成されたJSONをダウンロードし、内容をこのチャットに貼り付けてください。こちらで <code>bgm-pipeline/credentials/client_secret.json</code> として保存し、ログインコードの発行まで進めます(あなたはブラウザで表示された短いコードを入力して承認するだけで、パスワードはこちらに渡りません)</li>
+      <li data-n="6">作成されたJSONをダウンロードし、内容をこのチャットに貼り付けてください。こちらで <code>bgm-pipeline/credentials/client_secret.json</code> として保存し、ログインコードの発行まで進めます</li>
+      <li data-n="7">表示されたURL(google.com/device)を開いてコードを入力すると、「Googleはこのアプリを確認していません」という警告が出ます(未審査アプリなので想定通り)。手順4のテストユーザー登録が正しければ、下に「<b>詳細</b>」というリンクが出るので押し、「<b>(プロジェクト名)に移動(安全ではありません)</b>」を選べば承認できます</li>
     </ol>
-    <div class="decision-box"><span class="opt-label">前回のエラー</span> 手順5の「OAuthクライアントID作成」でエラーが出たと聞いています。エラーメッセージ(文言のスクリーンショットでも可)を教えてもらえれば、そこだけピンポイントで解決します。</div>
+    <div class="decision-box"><span class="opt-label">既知の制限</span> テストモードのままだと、リフレッシュトークンが<b>約7日で失効する</b>可能性があります。1週間ほどしてアップロードが失敗するようになったら、再度ログインをやり直すだけで復旧します(パスワードの再入力は不要)。将来的に自動更新を安定させたい場合は、Googleの審査を受けて「本番環境」に切り替える選択肢もありますが、まずは動かすことを優先しています。</div>
     <div class="after"><b>これが終われば、YouTube公開の最後のブロッカーが解消します。</b>本番サイズの動画は既に生成・検証済みなので、連携が済み次第すぐアップロードできます。</div>
   </div>
 

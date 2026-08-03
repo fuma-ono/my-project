@@ -453,7 +453,7 @@
   </p>
 
   <section>
-    <h2 class="section-title">今すぐお願いしたいこと <span class="count">7 items 残</span></h2>
+    <h2 class="section-title">今すぐお願いしたいこと <span class="count">6 items 残</span></h2>
     <div class="actions">
       <div class="action-row">
         <div class="action-mark done">✓</div>
@@ -480,12 +480,12 @@
         <div class="action-owner">完了(要確認)</div>
       </div>
       <div class="action-row">
-        <div class="action-mark pending">!</div>
+        <div class="action-mark done">✓</div>
         <div class="action-body">
-          <div class="action-title">YouTube: デバイス承認をクリックするだけ</div>
-          <div class="action-desc"><code>client_secret.json</code>を受領しました。ログインコードを発行したところ、リクエストしていた3スコープのうち<code>yt-analytics.readonly</code>だけがGoogle側でデバイスフロー非対応と判明(アップロード自体には影響なし、コード側で修正済み)。<b>https://www.google.com/device</b> を開き、コード <b>JKB-VDB-YGKF</b> を入力して承認すれば、これでYouTube連携の最後のブロッカーが解消します。</div>
+          <div class="action-title">YouTube OAuth連携</div>
+          <div class="action-desc">完了。テストユーザーのメールアドレスが承認アカウントとズレていて「Googleの審査プロセスが完了していません」で一度詰まったが、テストユーザーを修正して解決。<code>youtube.upload</code>・<code>devstorage.read_write</code>スコープ付きのトークンを取得・検証済み。次回の動画からYouTubeへ実際にアップロードできる状態です。</div>
         </div>
-        <div class="action-owner">承認待ち</div>
+        <div class="action-owner">完了</div>
       </div>
       <div class="action-row">
         <div class="action-mark pending">!</div>
@@ -649,7 +649,7 @@
           <div class="step-line done"></div>
           <div class="step done"><div class="step-dot">✓</div><div class="step-label">戦略・調査</div></div>
           <div class="step-line done"></div>
-          <div class="step current"><div class="step-dot">●</div><div class="step-label">公開<span class="step-sub">アカウント再設定中</span></div></div>
+          <div class="step current"><div class="step-dot">●</div><div class="step-label">公開<span class="step-sub">YouTube連携済み・投稿はこれから</span></div></div>
           <div class="step-line todo"></div>
           <div class="step todo"><div class="step-dot"></div><div class="step-label">収益化</div></div>
         </div>
@@ -705,7 +705,7 @@
             <div class="unit-name">BGM動画</div>
             <div class="unit-tagline">YouTube / TikTok / Reels 広告収益</div>
           </div>
-          <span class="status-pill warn"><span class="dot"></span>アカウント再設定中</span>
+          <span class="status-pill good"><span class="dot"></span>YouTube連携完了・投稿準備OK</span>
         </div>
         <div class="unit-stats">
           <div class="stat"><div class="num">4</div><div class="label">音源プリセット</div></div>
@@ -714,10 +714,10 @@
         </div>
         <ul class="unit-detail">
           <li>睡眠ドローン・雨音・Lo-Fi・バイノーラルの4系統を実装。今週、60分の本番サイズ(<code>sleep_rain_focus</code>)で生成〜16:9/9:16書き出しまでノーエラーで通し検証済み。アップロード自動化(<code>publish.py</code>)も実装済み</li>
-          <li>専用Googleアカウントが利用規約違反で停止(再審請求中)。別の使い慣れたアカウントでチャンネル・OAuth再設定中</li>
+          <li>専用Googleアカウントの停止(再審請求中)を受け、別のアカウントでチャンネル・OAuth連携を再設定完了。<code>youtube.upload</code>スコープのトークンを取得・検証済みで、いつでもアップロードできる状態</li>
           <li>方針: 長尺(8h想定)週1本 + Shorts週3〜5本、全音源は自社生成でContent IDリスクなし</li>
         </ul>
-        <div class="unit-blocker"><b>依頼中</b>: 別アカウントでのYouTube OAuthクライアント設定(<code>client_secret.json</code>待ち)・TikTok/Instagramアカウント作成</div>
+        <div class="unit-blocker"><b>依頼中</b>: TikTok/Meta(Instagram自動投稿)アカウント作業。YouTubeは初回アップロードのタイミング・タイトル/概要欄の最終確認だけお願いする場合があります</div>
       </div>
 
       <div class="unit-card">
@@ -894,7 +894,11 @@
       </div>
       <div class="tl-row">
         <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>YouTube OAuthクライアントを受領、スコープ不具合を発見・修正。</b>オーナーから<code>client_secret.json</code>を受け取り保存。実際にデバイスフローをリクエストしたところ、3スコープのうち<code>yt-analytics.readonly</code>だけがGoogle側でデバイスフロー自体に非対応(<code>invalid_scope</code>)と判明し、丸ごと失敗していた。アップロードに必要な<code>youtube.upload</code>・<code>devstorage.read_write</code>だけに絞って<code>youtube_auth.py</code>を修正し、ログインコードの発行までこぎつけた。承認クリックのみオーナー待ち。アナリティクス取得は別フローが必要になったため新規タスク化(<code>bgm_pipeline/youtube_analytics.py</code>は現状動作しない旨を明記)。</div>
+        <div class="tl-body"><b>YouTube OAuthクライアントを受領、スコープ不具合を発見・修正。</b>オーナーから<code>client_secret.json</code>を受け取り保存。実際にデバイスフローをリクエストしたところ、3スコープのうち<code>yt-analytics.readonly</code>だけがGoogle側でデバイスフロー自体に非対応(<code>invalid_scope</code>)と判明し、丸ごと失敗していた。アップロードに必要な<code>youtube.upload</code>・<code>devstorage.read_write</code>だけに絞って<code>youtube_auth.py</code>を修正し、ログインコードの発行までこぎつけた。アナリティクス取得は別フローが必要になったため新規タスク化(<code>bgm_pipeline/youtube_analytics.py</code>は現状動作しない旨を明記)。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-03</div>
+        <div class="tl-body"><b>YouTube OAuth連携が完了。</b>承認時に「Googleの審査プロセスが完了していません」で一度ブロックされたが、原因はOAuth同意画面の「テストユーザー」が承認アカウントとメールアドレス不一致だったこと。テストユーザーを修正後、承認・トークン取得に成功し、実際のスコープ(<code>youtube.upload</code>・<code>devstorage.read_write</code>)も検証済み。テストモードだとリフレッシュトークンが約7日で失効する可能性がある点を <code>bgm-pipeline/README.md</code> に注意書きとして追加。これで動画公開の技術的なブロッカーはすべて解消。</div>
       </div>
     </div>
   </section>
