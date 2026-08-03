@@ -52,7 +52,6 @@
     background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
     box-shadow: var(--shadow); padding: 26px 26px 24px; margin-bottom: 26px;
   }
-  .article.done { opacity: 0.55; }
   .article-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
   .order-badge {
     flex: none; width: 30px; height: 30px; border-radius: 50%;
@@ -78,7 +77,6 @@
     font-size: 12.5px; color: var(--text-dim); cursor: pointer; user-select: none;
   }
   .mark-done input { accent-color: var(--good); width: 15px; height: 15px; }
-  .article.done .mark-done { color: var(--good); font-weight: 700; }
 
   .cadence-note {
     background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
@@ -91,99 +89,14 @@
 
 <div class="wrap">
   <header class="top">
-    <p class="eyebrow">note 投稿キュー · 4本公開済み・3本待ち</p>
+    <p class="eyebrow">note 投稿キュー · 4本公開済み(非表示)・3本待ち</p>
     <h1 class="brand">note投稿キュー</h1>
-    <p class="lede">01〜04は投稿済みです(グレー表示)。05・06・07が次の投稿分。このページを開いたまま、上から順にnote.comの新規投稿画面へコピペしていってください。タイトル・本文それぞれクリックでコピーできます。<b>投稿したらチェックを入れると、そのカードが薄くなります</b>(このページ内だけの表示で、再読み込みでリセットされます)。</p>
+    <p class="lede">01〜04は投稿済みのため、このページから削除済みです。05・06・07が次の投稿分。このページを開いたまま、上から順にnote.comの新規投稿画面へコピペしていってください。タイトル・本文それぞれクリックでコピーできます。<b>投稿したらチェックを入れると、そのカードがこのページから消えます</b>(ブラウザに保存されるので、再読み込みしても消えたままです)。</p>
   </header>
 
   <div class="cadence-note">
     <b>今週は収益化プッシュ中</b>
     1週間以内の成果を目標にしているため、通常の週1本ペースより早めに、今週中に05・06・07をまとめて投稿してもらえると助かります(3本とも読み切りで、連続投稿しても不自然な内容ではありません)。あわせて、note側の「サポート機能」の有効化・振込先の登録もお願いします — これをしないと読者が投げ銭してもお金を受け取れません。
-  </div>
-
-  <div class="article done" id="art-03">
-    <div class="article-head">
-      <div class="order-badge">1</div>
-      <div>
-        <div class="article-title-label">なぜ雨の音を聞くと眠くなるのか、1/fゆらぎの話</div>
-        <div class="article-meta">1本目(雨音を作った話)の直接の続編</div>
-      </div>
-    </div>
-
-    <div class="copy-label">タイトル</div>
-    <div class="copybox title-box" data-copy="なぜ雨の音を聞くと眠くなるのか、調べたら「1/fゆらぎ」の話だった">なぜ雨の音を聞くと眠くなるのか、調べたら「1/fゆらぎ」の話だった<span class="copy-hint">クリックでコピー</span></div>
-
-    <div class="copy-label">本文</div>
-    <div class="copybox"><span class="body-text">前回、AIで雨音を作った話を書いたら、思ったより「わかる」という反応をもらえた。それで気になったことがある。そもそも、なんで雨の音を聞くと眠くなるんだろう。
-
-なんとなく「単調だから」くらいに思っていたけど、調べてみたら「1/fゆらぎ」という言葉に行き着いた。音の強さが規則的すぎず、かといって完全にランダムでもない、ちょうどいい"ゆらぎ方"をしている音のことらしい。心臓の鼓動とか、ろうそくの炎の揺れとか、波の音とかにも同じ性質があるとされていて、人間はこの「予測できそうで、少しだけ外れる」パターンに心地よさを感じるように出来ているという説がある。
-
-もう一つ出てきたのが「θ(シータ)波」の話。脳がリラックスして、覚醒と睡眠の間くらいの状態にあるときに出る脳波らしい。単調な音を聞き続けていると、この状態に入りやすくなるとされている。真偽のほどを厳密に検証したわけじゃないけど、少なくとも「意味のある情報を処理しなくていい音」というのは、脳を休ませる方向に働きそうな感覚はわかる。テレビの話し声だと聞き取ろうとして逆に目が覚めるのに、雨音だと聞き流せるのは、たぶんこの違いだと思う。
-
-これを知ってから、BGMの作り方が少し変わった。完全に均一なノイズより、ほんの少しだけ強弱にゆらぎを持たせた方が、実際に「らしい」音になる。前回書いた通り、雨音の合成にはピンクノイズを使っているんだけど、そこに人が心地よく感じる"ゆらぎ"がもともと含まれているというのは、あとから知って腑に落ちた部分だった。理屈もわからず作っていたものが、あとから理屈と繋がる瞬間は地味に嬉しい。
-
-眠れない夜、無理に何も考えないようにするより、「今、脳がθ波に向かおうとしてるんだな」くらいに思いながら音を流す方が、案外うまくいく気がしている。
-
-次は、そもそも作業用BGMって何を基準に選べばいいのか、失敗した話も含めて書こうと思う。</span><span class="copy-hint">クリックでコピー</span></div>
-
-    <label class="mark-done"><input type="checkbox" data-target="art-03" checked> 投稿した</label>
-  </div>
-
-  <div class="article done" id="art-02">
-    <div class="article-head">
-      <div class="order-badge">2</div>
-      <div>
-        <div class="article-title-label">集中できない日のための、作業用BGMの選び方</div>
-        <div class="article-meta">1/fゆらぎ記事の最後で予告した内容</div>
-      </div>
-    </div>
-
-    <div class="copy-label">タイトル</div>
-    <div class="copybox title-box" data-copy="集中できない日のための、作業用BGMの選び方(たぶん5分で読める)">集中できない日のための、作業用BGMの選び方(たぶん5分で読める)<span class="copy-hint">クリックでコピー</span></div>
-
-    <div class="copy-label">本文</div>
-    <div class="copybox"><span class="body-text">作業に集中したいとき、とりあえず「Lo-Fi Hip Hop」の配信を流す人は多いと思う。あの、勉強してるアニメの女の子がずっと机に向かってるやつ。悪くないんだけど、正直「今日はちょっと違う」って日もある。
-
-自分なりに整理してみたら、BGMって気分によって向き不向きがある気がしている。
-
-とにかく眠くて集中どころじゃない日
-低い音のドローン系より、少しリズムのあるLo-Fiの方が良い。テンポがゆるやかでも、ビートがあると脳が「今は作業モード」って認識してくれる感覚がある。
-
-焦って空回りしてる日
-逆にビートは邪魔になる。何もない、ただ音が漂ってるだけのアンビエントの方が、気持ちが落ち着いてから作業に入れる。
-
-単純作業(データ入力とか)をひたすらやる日
-バイノーラルビート(左右の耳にわずかに違う周波数の音を流して、脳波っぽいものに働きかけるとされる音)を試している。効果の実感には個人差があると思うけど、少なくとも「単調な音に集中する」という行為自体が、雑念を減らしてくれる気はする。
-
-結局、正解は一つじゃなくて、その日の状態に合わせて数種類を持っておくのが一番楽だという結論に落ち着いた。今、そういう「気分別」のBGMをいくつか用意しているので、次の記事でまとめて紹介しようと思う。</span><span class="copy-hint">クリックでコピー</span></div>
-
-    <label class="mark-done"><input type="checkbox" data-target="art-02" checked> 投稿した</label>
-  </div>
-
-  <div class="article done" id="art-04">
-    <div class="article-head">
-      <div class="order-badge">3</div>
-      <div>
-        <div class="article-title-label">「集中できない」がただの気合い不足じゃなかった話</div>
-        <div class="article-meta">当事者体験談型・調査上もっとも反応が良いとされる型</div>
-      </div>
-    </div>
-
-    <div class="copy-label">タイトル</div>
-    <div class="copybox title-box" data-copy="「集中できない」がただの気合い不足じゃなかった話">「集中できない」がただの気合い不足じゃなかった話<span class="copy-hint">クリックでコピー</span></div>
-
-    <div class="copy-label">本文</div>
-    <div class="copybox"><span class="body-text">ずっと、集中力がないのは自分の性格の問題だと思っていた。デスクに向かっても5分でスマホを触ってしまうし、隣の部屋のテレビの音や、誰かのタイピング音が気になって作業が止まる。「甘えてるだけだ」と何度も自分を責めた。
-
-転機は、何気なくホワイトノイズを流しながら作業してみた日だった。特に期待してなかったんだけど、その日はやけに集中できた。次の日も試して、また同じことが起きた。偶然かと思って何度か試したけど、再現性があった。
-
-あとから知ったんだけど、音に対する敏感さには個人差が結構あるらしい。特にADHD傾向やそのグレーゾーンにいる人は、周囲の音を「無視する」フィルター機能が弱めで、些細な物音にも注意を持っていかれやすいという話を読んだ。診断がついているわけじゃないから、自分がそれに当てはまるかは分からない。ただ、「意味のある雑音(人の話し声、通知音)」が特に苦手で、「意味のない一定の音(ホワイトノイズ)」の方がむしろ他の音を覆い隠してくれて楽、という感覚にはすごく心当たりがあった。
-
-これに気づいてから、「集中できないのは甘え」という自分への評価を、一旦保留にすることにした。甘えかどうかを議論するより、「じゃあどういう環境なら集中できるか」を淡々と試す方が建設的だった。自分の場合はホワイトノイズよりもう少し低めの、換気扇のような音の方が合っていて、今作っている音源にもその感覚を反映させている。
-
-もし同じように「集中できない自分」を責め続けている人がいたら、性格の問題にする前に、音環境を変えてみるのも一つの手だと思う。効果があるかは人による、というのが正直なところだけど、少なくとも自分には合っていた。</span><span class="copy-hint">クリックでコピー</span></div>
-
-    <label class="mark-done"><input type="checkbox" data-target="art-04" checked> 投稿した</label>
   </div>
 
   <div class="article" id="art-05">
@@ -327,10 +240,28 @@ AIに経営の実務を任せるのは、思っていたより「丸投げ」に
       }
     });
   });
+  var STORAGE_KEY = "note-queue-posted-v1";
+  function loadPosted() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); } catch (e) { return []; }
+  }
+  function savePosted(ids) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(ids)); } catch (e) {}
+  }
+  function removeCard(id) {
+    var target = document.getElementById(id);
+    if (target) target.remove();
+  }
+
+  var posted = loadPosted();
+  posted.forEach(removeCard);
+
   document.querySelectorAll(".mark-done input").forEach(function (cb) {
     cb.addEventListener("change", function () {
-      var target = document.getElementById(cb.getAttribute("data-target"));
-      if (target) target.classList.toggle("done", cb.checked);
+      if (!cb.checked) return;
+      var id = cb.getAttribute("data-target");
+      var ids = loadPosted();
+      if (ids.indexOf(id) === -1) { ids.push(id); savePosted(ids); }
+      removeCard(id);
     });
   });
 </script>
