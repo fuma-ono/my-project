@@ -1,0 +1,115 @@
+<title>TikTok authorization — Quiet Hours</title>
+<style>
+  :root {
+    --bg: #eef0f6;
+    --surface: #ffffff;
+    --line: rgba(20, 26, 48, 0.10);
+    --text: #12162a;
+    --text-dim: #565f7e;
+    --accent: #c1602c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0e1a;
+      --surface: #141a30;
+      --line: rgba(255, 255, 255, 0.08);
+      --text: #eef0f6;
+      --text-dim: #9aa3c0;
+      --accent: #f0955c;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0e1a; --surface: #141a30; --line: rgba(255,255,255,0.08);
+    --text: #eef0f6; --text-dim: #9aa3c0; --accent: #f0955c;
+  }
+  :root[data-theme="light"] {
+    --bg: #eef0f6; --surface: #ffffff; --line: rgba(20,26,48,0.10);
+    --text: #12162a; --text-dim: #565f7e; --accent: #c1602c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Hiragino Sans", sans-serif;
+    padding: 1.5rem;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 2rem;
+    max-width: 30rem;
+    width: 100%;
+  }
+  h1 { font-size: 1.15rem; margin: 0 0 0.4rem; }
+  p { color: var(--text-dim); font-size: 0.92rem; line-height: 1.6; margin: 0 0 1.2rem; }
+  .field { margin-bottom: 1rem; }
+  .label { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.3rem; }
+  .value {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 0.88rem;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0.6rem 0.7rem;
+    word-break: break-all;
+    cursor: pointer;
+  }
+  .value.empty { color: var(--text-dim); cursor: default; }
+  button {
+    font: inherit;
+    font-size: 0.82rem;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 0.5rem 0.9rem;
+    cursor: pointer;
+    margin-top: 0.4rem;
+  }
+  .copied { color: var(--accent); font-size: 0.78rem; margin-left: 0.6rem; }
+</style>
+<div class="card">
+  <h1>TikTok authorization callback</h1>
+  <p>This page only reads the parameters TikTok appended to this URL after you approved access. Nothing is sent anywhere — copy the code below and paste it back into the terminal running <code>tiktok_auth.py</code>.</p>
+  <div class="field">
+    <div class="label">code</div>
+    <div class="value" id="code">(none in URL)</div>
+    <button id="copyCode" type="button">Copy code</button><span class="copied" id="copiedMsg" style="display:none;">Copied</span>
+  </div>
+  <div class="field">
+    <div class="label">state</div>
+    <div class="value" id="state">(none in URL)</div>
+  </div>
+  <div class="field" id="errorField" style="display:none;">
+    <div class="label">error</div>
+    <div class="value" id="error"></div>
+  </div>
+</div>
+<script>
+  var params = new URLSearchParams(window.location.search);
+  function show(id, val) {
+    var el = document.getElementById(id);
+    if (val) { el.textContent = val; el.classList.remove("empty"); }
+  }
+  show("code", params.get("code"));
+  show("state", params.get("state"));
+  var err = params.get("error") || params.get("error_description");
+  if (err) {
+    document.getElementById("errorField").style.display = "block";
+    document.getElementById("error").textContent = err;
+  }
+  document.getElementById("copyCode").addEventListener("click", function () {
+    var code = params.get("code") || "";
+    navigator.clipboard.writeText(code).then(function () {
+      var msg = document.getElementById("copiedMsg");
+      msg.style.display = "inline";
+      setTimeout(function () { msg.style.display = "none"; }, 1500);
+    });
+  });
+</script>

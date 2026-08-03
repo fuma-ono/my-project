@@ -187,11 +187,52 @@ password prompt:
    Uniform bucket-level access — that would block the per-object
    `publicRead` ACL this uses), and pass its name as `--bucket`.
 
+## TikTok authorization (posting not wired up yet)
+
+`tiktok_auth.py` handles login only — there is no `publish_tiktok.py` yet.
+The Content Posting API's exact publish-endpoint request/response shape
+wasn't verified against real docs (TikTok's developer docs 403 web
+fetches), so that part needs building and testing against a live app
+before it's trustworthy, the same way `note_publish/`'s selectors needed
+verification on a real login. Auth is safe to set up now regardless.
+
+### One-time setup (needs a human)
+
+TikTok has no device-authorization flow either, and unlike Meta, its
+redirect URI must be a static HTTPS URL — a local `http://localhost`
+redirect doesn't qualify. `tiktok_auth.py` points redirect_uri at a small
+published page that just displays the `code`/`state` TikTok appends, for
+copy-paste back into the terminal.
+
+1. Create an app at [developers.tiktok.com](https://developers.tiktok.com/apps) (this step needs an
+   interactive login — can't be automated). **Business Account
+   verification is not required for this**; a normal account is fine.
+2. Add the **Login Kit** and **Content Posting API** products to the app.
+3. Register this exact URL as the app's redirect URI:
+   `https://claude.ai/code/artifact/80d423ca-3bbb-4228-a3c9-be6be5a55f66`
+4. Save the app's Client Key/Secret as `bgm-pipeline/credentials/tiktok_app.json`:
+   ```json
+   {"client_key": "...", "client_secret": "..."}
+   ```
+5. Run the login flow:
+   ```bash
+   .venv/bin/python -m bgm_pipeline.tiktok_auth login
+   ```
+   Open the printed URL, approve access, then copy the `code`/`state` shown
+   on the callback page into:
+   ```bash
+   .venv/bin/python -m bgm_pipeline.tiktok_auth exchange --code <code> --state <state>
+   ```
+6. Until the app passes TikTok's **audit**, anything posted through the API
+   lands as private/self-only, not public — the same review-gate shape as
+   Meta's App Review. Submit for audit once posting is built and tested.
+
 ## What still needs a human
 
 - The one-time OAuth setup above (YouTube)
 - The one-time Meta/Instagram setup above, including the 2-4 week App Review wait
-- TikTok uploads (no equivalent official upload API wired up yet)
+- The one-time TikTok setup above (app creation + login), plus building and
+  testing the actual posting code, plus its own audit wait
 - Enabling monetization (YouTube Partner Program, TikTok Creator
   Rewards, etc. — each has its own eligibility requirements)
 - Thumbnail/channel branding decisions

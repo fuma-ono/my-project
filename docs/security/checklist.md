@@ -61,6 +61,14 @@ YouTube(Device Authorization flow)・Instagram(Graph API Explorerの短期トー
 - `youtube_auth.py`のスコープに`youtube.readonly`を追加(再ログインが必要になったため、オーナーに再度デバイスコード承認を依頼)
 - `youtube_upload.py`に`get_video_status()`・`wait_for_processing()`を追加。`publish.py`はアップロード後にYouTube側の処理完了を確認し、失敗・タイムアウト時はローカルファイルを削除せず終了コード1で終わるように修正(`docs/ORG.md`のグロース/運用部の役割にも明記)
 
+## 実施済み: TikTok OAuth連携(認証のみ、投稿は未実装)(2026-08-03)
+
+- TikTokにもDevice Flow相当の仕組みはなく、さらにMetaと違い**redirect_uriが静的なHTTPS URLである必要がある**(ローカルの`http://localhost`は不可)ため、`docs/site/tiktok-callback.html`という最小限のページを公開し、そこをredirect_uriに指定する方式にした。このページはURLのクエリパラメータ(`code`/`state`)を表示するだけで、どこにも送信しない(サーバーサイドの処理を持たない静的ページ)
+- パスワードは一切扱わない。認証情報(`tiktok_app.json`、`tiktok_token.json`)は`bgm-pipeline/credentials/`に保存(ディレクトリ丸ごとgitignore対象、既存パターンを踏襲)
+- CSRF対策として`state`パラメータをローカルに一時保存し、コールバック時に一致を検証してから削除
+- **投稿機能(Content Posting API)はまだ実装していない**。TikTokの開発者ドキュメントが直接のWebFetchを拒否(403)したため、認証まわりは検索結果の複数ソースで裏取りできたが、投稿エンドポイントの正確なリクエスト/レスポンス形式は未検証。実装前にnote_publish/と同様、実地検証が必要な旨をコード内コメントに明記
+- ビジネスアカウント認証(法人書類が必要)は今回不要と判断し、通常アカウントのまま開発者アプリ登録のみ実施する方針(オーナーとの合意事項)
+
 ## 週次レビュー履歴
 
 - **2026-08-03**: `app/` の `npm audit` を再実行。moderate 10件(`uuid`パッケージ、Expoビルドツールチェーン内部の間接依存)は前回(実施済みレビュー時点)から変化なし。新規の脆弱性なし。リポジトリ内のシークレットハードコードも引き続きなし(`bgm-pipeline/credentials/`は空・gitignore対象のまま)
