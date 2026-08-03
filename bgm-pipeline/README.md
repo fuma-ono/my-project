@@ -187,14 +187,27 @@ password prompt:
    Uniform bucket-level access — that would block the per-object
    `publicRead` ACL this uses), and pass its name as `--bucket`.
 
-## TikTok authorization (posting not wired up yet)
+## TikTok authorization (paused, 2026-08-03 — see below)
 
 `tiktok_auth.py` handles login only — there is no `publish_tiktok.py` yet.
 The Content Posting API's exact publish-endpoint request/response shape
 wasn't verified against real docs (TikTok's developer docs 403 web
 fetches), so that part needs building and testing against a live app
 before it's trustworthy, the same way `note_publish/`'s selectors needed
-verification on a real login. Auth is safe to set up now regardless.
+verification on a real login.
+
+**Blocked on domain ownership**: TikTok requires verifying ownership of
+the domain behind every URL in the app config (redirect URI, ToS,
+Privacy Policy, website) — not just reachability. The app's URLs currently
+point at `claude.ai` artifact pages, which isn't a domain we control, so
+verification can't pass (no DNS access, no root-level file placement).
+Fix: enable **GitHub Pages** on this repo (Settings → Pages, needs the
+repo owner — can't be done from this session) and re-host
+`docs/site/tiktok-callback.html`, `tiktok-terms.html`, and
+`tiktok-privacy.html` there instead of as Artifacts. Paused rather than
+worked around, since even once this is fixed, public posting still needs
+TikTok's own Audit — the same review-gate shape as Meta's App Review, so
+it structurally can't move this week's numbers either way.
 
 ### One-time setup (needs a human)
 
