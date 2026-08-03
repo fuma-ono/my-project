@@ -438,12 +438,12 @@
 <div class="wrap">
   <header class="top">
     <div>
-      <p class="eyebrow">Executive Report · 2026-08-02</p>
+      <p class="eyebrow">Executive Report · 2026-08-03</p>
       <h1 class="brand">経営ダッシュボード</h1>
     </div>
     <div class="meta">
       <div><span class="status-pill good"><span class="dot"></span>note記事4本公開・他2事業はアカウント待ち</span></div>
-      <div>最終更新: 2026-08-02</div>
+      <div>最終更新: 2026-08-03</div>
       <div>次回定例: 毎週月曜 09:00 JST</div>
     </div>
   </header>
@@ -491,9 +491,9 @@
         <div class="action-mark pending">!</div>
         <div class="action-body">
           <div class="action-title">Instagram: Meta開発者アプリの作成・トークン共有</div>
-          <div class="action-desc">Facebookページ連携→Meta Developerアプリ作成→App ID/Secretと、Graph API Explorerで発行した短期トークンをこちらに共有してください。手順は<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4" target="_blank" rel="noopener">アカウント作成ガイド</a>のステップ5bに追加済み。Appレビュー(2〜4週間)が通るまでは手動投稿の橋渡しになります。</div>
+          <div class="action-desc">今週、Meta for Developersのログイン〜アプリ作成〜Graph API Explorerでのトークン発行まで画面ごとに案内済み。App ID/Secret(<code>meta_app.json</code>)と、Graph API Explorerで発行した短期トークンをこちらに共有してください。共有後は<code>instagram_auth.py import --token</code>を実行するだけで長期トークンに交換します。Appレビュー(2〜4週間)が通るまでは手動投稿の橋渡しになります。</div>
         </div>
-        <div class="action-owner">Owner</div>
+        <div class="action-owner">進行中</div>
       </div>
       <div class="action-row">
         <div class="action-mark pending">!</div>
@@ -519,6 +519,14 @@
         </div>
         <div class="action-owner">要判断</div>
       </div>
+      <div class="action-row">
+        <div class="action-mark pending">!</div>
+        <div class="action-body">
+          <div class="action-title">プライバシーポリシー・利用規約の連絡先欄を記入</div>
+          <div class="action-desc">ドラフトを<code>docs/legal/privacy-policy.md</code>・<code>docs/legal/terms-of-service.md</code>に用意済み。連絡先メール・事業者名・準拠法の空欄記入と最終確認をお願いします(ストア申請前に必要)。</div>
+        </div>
+        <div class="action-owner">Owner</div>
+      </div>
     </div>
   </section>
 
@@ -528,15 +536,29 @@
       <div class="action-row">
         <div class="action-mark working">●</div>
         <div class="action-body">
-          <div class="action-title">YouTube再設定の完了待ち</div>
-          <div class="action-desc">OAuth連携が済み次第、1時間の長尺動画(睡眠用・雨音)を生成してすぐアップロードします。ローカルには残しません。</div>
+          <div class="action-title">初の本番BGM動画(1時間)をレンダリング中</div>
+          <div class="action-desc">アカウント再設定待ちの間に、実際の公開想定サイズ(60分・雨音+集中プリセット)でパイプライン全体を通しで検証。YouTube連携が済み次第すぐアップロードできる状態にします。</div>
         </div>
       </div>
       <div class="action-row">
         <div class="action-mark working">●</div>
         <div class="action-body">
-          <div class="action-title">note柱B記事の追加執筆</div>
-          <div class="action-desc">「AIに会社の実務を任せてみた話」に続く柱B(個人開発・AI経営の裏側)のネタを準備中。</div>
+          <div class="action-title">プライバシーポリシー・利用規約のドラフト作成</div>
+          <div class="action-desc">アプリのストア申請に必須な2文書を用意(<code>docs/legal/</code>)。現状のアプリが個人情報を一切収集しない実態に基づいて作成。連絡先欄の記入だけオーナーにお願いしています。</div>
+        </div>
+      </div>
+      <div class="action-row">
+        <div class="action-mark working">●</div>
+        <div class="action-body">
+          <div class="action-title">EAS Buildの設定を準備</div>
+          <div class="action-desc"><code>app/eas.json</code>を追加し、Expoアカウントでログインすればすぐ<code>eas build</code>できる状態に。</div>
+        </div>
+      </div>
+      <div class="action-row">
+        <div class="action-mark working">●</div>
+        <div class="action-body">
+          <div class="action-title">noteの次号を下書き</div>
+          <div class="action-desc">柱A「AIで作った音楽に著作権はあるのか」を書き上げ、<a href="https://claude.ai/code/artifact/4463f3ba-3008-4e37-bbff-c9b338cbcb87" target="_blank" rel="noopener">投稿キューページ</a>に追加(05・06が投稿待ち)。</div>
         </div>
       </div>
       <div class="action-row">
@@ -544,13 +566,6 @@
         <div class="action-body">
           <div class="action-title">週次の自動レビュー</div>
           <div class="action-desc">毎週月曜、進捗確認・コンテンツ追加・ダッシュボード更新を自動で実施し、重要な変化があれば通知します。</div>
-        </div>
-      </div>
-      <div class="action-row">
-        <div class="action-mark working">●</div>
-        <div class="action-body">
-          <div class="action-title">Instagram自動投稿の基盤構築</div>
-          <div class="action-desc">Graph API連携のコードは実装済み。Meta開発者アプリの情報が届き次第、認証・Cloud Storage連携・投稿テストまで進めます。</div>
         </div>
       </div>
     </div>
@@ -713,9 +728,10 @@
         <ul class="unit-detail">
           <li>Expo/React Native、型チェック・バンドル確認済み。BGM資産を音源に流用しコストゼロ</li>
           <li>スリープタイマー(15/30/45/60分で自動停止)を実装済み</li>
+          <li>EAS Build設定(<code>eas.json</code>)とプライバシーポリシー・利用規約のドラフトを用意済み。Expoアカウント作成後は<code>eas build</code>ですぐビルド可能</li>
           <li>方針: 「meditation」等の激戦語を避け、月額300〜500円の低価格ニッチで検証。4事業目への転換提案は却下し、本アプリに集中(<code>docs/marketing/2026-08-strategy-decision.md</code>)</li>
         </ul>
-        <div class="unit-blocker"><b>依頼中</b>: Apple Developer / Google Play Consoleアカウント</div>
+        <div class="unit-blocker"><b>依頼中</b>: Apple Developer / Google Play Consoleアカウント、Expoアカウント</div>
       </div>
 
       <div class="unit-card">
@@ -728,11 +744,11 @@
         </div>
         <div class="unit-stats">
           <div class="stat"><div class="num">4</div><div class="label">公開本数</div></div>
-          <div class="stat"><div class="num">1</div><div class="label">下書き済み(投稿待ち)</div></div>
-          <div class="stat"><div class="num">13</div><div class="label">ネタ帳の残り</div></div>
+          <div class="stat"><div class="num">2</div><div class="label">下書き済み(投稿待ち)</div></div>
+          <div class="stat"><div class="num">12</div><div class="label">ネタ帳の残り</div></div>
         </div>
         <ul class="unit-detail">
-          <li>4本公開済み(雨音の話→1/fゆらぎ→BGM選び方→集中力の話)。柱B第1弾「AIに会社の実務を任せてみた話」が<a href="https://claude.ai/code/artifact/4463f3ba-3008-4e37-bbff-c9b338cbcb87" target="_blank" rel="noopener">投稿キューページ</a>で投稿待ち</li>
+          <li>4本公開済み(雨音の話→1/fゆらぎ→BGM選び方→集中力の話)。柱B第1弾「AIに会社の実務を任せてみた話」・柱A新作「AI音楽の著作権を調べてみた話」の2本が<a href="https://claude.ai/code/artifact/4463f3ba-3008-4e37-bbff-c9b338cbcb87" target="_blank" rel="noopener">投稿キューページ</a>で投稿待ち</li>
           <li>方針: 柱A(睡眠・集中サウンド)+柱B(個人開発・AI経営の裏側)の2本柱。無料記事+サポート機能で開始→反応を見て週1更新の有料マガジンへ移行</li>
         </ul>
       </div>
@@ -750,7 +766,7 @@
         <tbody>
           <tr><td>BGM動画</td><td class="num awaiting">データなし</td><td class="num awaiting">未接続</td><td><span class="status-pill warn"><span class="dot"></span>公開前</span></td></tr>
           <tr><td>アプリ</td><td class="num awaiting">データなし</td><td class="num awaiting">未接続</td><td><span class="status-pill warn"><span class="dot"></span>公開前</span></td></tr>
-          <tr><td>note記事</td><td class="num">1本公開</td><td class="num awaiting">未接続</td><td><span class="status-pill good"><span class="dot"></span>公開中</span></td></tr>
+          <tr><td>note記事</td><td class="num">4本公開</td><td class="num awaiting">未接続</td><td><span class="status-pill good"><span class="dot"></span>公開中</span></td></tr>
         </tbody>
       </table>
     </div>
@@ -846,6 +862,22 @@
       <div class="tl-row">
         <div class="tl-date">08-02</div>
         <div class="tl-body"><b>Instagram自動投稿基盤を構築。</b>Meta Graph APIによるReels投稿を実装(<code>bgm_pipeline/instagram_auth.py</code>・<code>instagram_upload.py</code>・<code>publish_instagram.py</code>)。動画の一時公開ホスティングにはYouTube用と同じGoogle CloudプロジェクトのCloud Storageを再利用し、投稿後は即削除。Meta側にDevice Flow相当がないため、Graph API Explorerでの1回限りのトークン発行だけオーナー側にお願いしている。Appレビュー(2〜4週間)の申請準備も進行中。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-03</div>
+        <div class="tl-body"><b>週次定例レビューを実施。</b>GitHub pushに問題なし(全コミット反映済み)、依存脆弱性(npm audit)も前回から変化なしを確認。Meta for Developersのログイン〜アプリ作成〜Graph API Explorerでのトークン発行まで画面ごとにオーナーを案内。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-03</div>
+        <div class="tl-body"><b>アプリのストア申請ブロッカーを解消。</b>これまで未着手だったプライバシーポリシー・利用規約のドラフトを作成(<code>docs/legal/</code>)。EAS Build設定(<code>app/eas.json</code>)も追加し、Expoアカウントさえあればビルドできる状態に。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-03</div>
+        <div class="tl-body"><b>note柱A新作を下書き。</b>「AIで作った音楽に著作権はあるのか、個人開発者が実際に調べてみた話」を執筆し投稿キューに追加。あわせて古くなっていたネタ帳の消化状況・優先順位も実態に合わせて修正。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-03</div>
+        <div class="tl-body"><b>初の本番サイズBGM動画をレンダリング中。</b>60分・雨音+集中プリセットで、生成→動画書き出しまでのパイプライン全体を実サイズで検証(進行中)。</div>
       </div>
     </div>
   </section>

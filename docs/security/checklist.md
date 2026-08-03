@@ -38,6 +38,10 @@
 - 認証情報(`meta_app.json`、`meta_token.json`)は `bgm-pipeline/credentials/` に保存。このディレクトリ自体を `.gitignore` で丸ごとブロックする方式に強化(個別ファイル名パターンだと新しい認証情報ファイルを追加するたびに漏れるリスクがあったため)
 - 投稿用に動画を一時的にGoogle Cloud Storageで公開ホスティングするが、公開後(Instagramが取得完了後)は即削除(`gcs_temp_host.py`)。同じGoogleアカウント/プロジェクトのOAuthトークンを再利用し、認証情報を増やさない設計
 
+## 週次レビュー履歴
+
+- **2026-08-03**: `app/` の `npm audit` を再実行。moderate 10件(`uuid`パッケージ、Expoビルドツールチェーン内部の間接依存)は前回(実施済みレビュー時点)から変化なし。新規の脆弱性なし。リポジトリ内のシークレットハードコードも引き続きなし(`bgm-pipeline/credentials/`は空・gitignore対象のまま)
+
 ## 次回レビュー予定
 
 週次の定例レビューで `npm audit` / 依存パッケージの脆弱性を再確認し、ここに追記する。
