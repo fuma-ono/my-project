@@ -4,6 +4,8 @@
 
 アカウント作成の手順書(オーナー向け): https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4
 
+会社サイト(3事業をまとめた対外向けページ、`docs/site/`): https://claude.ai/code/artifact/3ace0d1f-bbd2-4522-bb2e-b9b0b834d5b4
+
 3事業(BGM動画/アプリ/note記事)の体制図・パイプライン進捗・オーナーへの依頼事項・経営ログをまとめたもの。定例レビュー(週次)のたびに内容を更新して同じURLに再公開する。
 
 ## 更新方法
