@@ -442,7 +442,7 @@
       <h1 class="brand">経営ダッシュボード</h1>
     </div>
     <div class="meta">
-      <div><span class="status-pill warn"><span class="dot"></span>note記事4本公開・BGM動画は電話番号確認待ちで処理停止中</span></div>
+      <div><span class="status-pill good"><span class="dot"></span>note記事4本・BGM動画1本、実際に再生確認済みで公開中</span></div>
       <div>最終更新: 2026-08-03</div>
       <div>次回定例: 毎週月曜 09:00 JST</div>
     </div>
@@ -453,7 +453,7 @@
   </p>
 
   <section>
-    <h2 class="section-title">今すぐお願いしたいこと <span class="count">8 items 残</span></h2>
+    <h2 class="section-title">今すぐお願いしたいこと <span class="count">6 items 残</span></h2>
     <div class="actions">
       <div class="action-row">
         <div class="action-mark done">✓</div>
@@ -488,20 +488,12 @@
         <div class="action-owner">完了</div>
       </div>
       <div class="action-row">
-        <div class="action-mark pending">!</div>
+        <div class="action-mark done">✓</div>
         <div class="action-body">
-          <div class="action-title">YouTube: 電話番号確認(最優先・長尺動画に必須)</div>
-          <div class="action-desc">初回公開した60分動画が「処理を中止しました・動画が長すぎます」で止まっていることが判明。電話番号未確認のチャンネルは動画の長さが15分までに制限される仕様で、このアプリの長尺BGM動画そのものが成立しない状態でした。<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4#plat-youtube-verify" target="_blank" rel="noopener">アカウント作成ガイド(2c)</a>の手順で電話番号を確認してください(2分程度)。確認後、止まっている動画を削除して公開し直します。</div>
+          <div class="action-title">YouTube: 電話番号確認・読み取り権限ログイン</div>
+          <div class="action-desc">両方完了。60分動画を再アップロードし、<code>uploadStatus: processed</code> / <code>processingStatus: succeeded</code> をAPIで直接確認済み。<a href="https://youtube.com/watch?v=cCFbFsWHX80" target="_blank" rel="noopener">実際に公開中</a>。</div>
         </div>
-        <div class="action-owner">最優先・Owner</div>
-      </div>
-      <div class="action-row">
-        <div class="action-mark pending">!</div>
-        <div class="action-body">
-          <div class="action-title">YouTube読み取り権限の追加ログイン</div>
-          <div class="action-desc">公開後に実際に再生できるか確認する権限(<code>youtube.readonly</code>)がなかったため追加。<b>https://www.google.com/device</b> でコード <b>PWP-CGP-WGDH</b> の承認をお願いしています(電話番号確認のついでにお願いできると助かります)。</div>
-        </div>
-        <div class="action-owner">承認待ち</div>
+        <div class="action-owner">完了</div>
       </div>
       <div class="action-row">
         <div class="action-mark pending">!</div>
@@ -665,9 +657,9 @@
           <div class="step-line done"></div>
           <div class="step done"><div class="step-dot">✓</div><div class="step-label">戦略・調査</div></div>
           <div class="step-line done"></div>
-          <div class="step current"><div class="step-dot">●</div><div class="step-label">公開<span class="step-sub">電話番号確認待ちで処理停止中</span></div></div>
+          <div class="step done"><div class="step-dot">✓</div><div class="step-label">公開<span class="step-sub">1本目・再生確認済み</span></div></div>
           <div class="step-line todo"></div>
-          <div class="step todo"><div class="step-dot"></div><div class="step-label">収益化</div></div>
+          <div class="step current"><div class="step-dot">●</div><div class="step-label">収益化<span class="step-sub">YouTubeパートナープログラム待ち</span></div></div>
         </div>
       </div>
 
@@ -721,19 +713,19 @@
             <div class="unit-name">BGM動画</div>
             <div class="unit-tagline">YouTube / TikTok / Reels 広告収益</div>
           </div>
-          <span class="status-pill warn"><span class="dot"></span>電話番号確認待ち</span>
+          <span class="status-pill good"><span class="dot"></span>YouTube公開中(再生確認済み)</span>
         </div>
         <div class="unit-stats">
           <div class="stat"><div class="num">4</div><div class="label">音源プリセット</div></div>
           <div class="stat"><div class="num">2</div><div class="label">出力比率(16:9/9:16)</div></div>
-          <div class="stat"><div class="num">0</div><div class="label">公開本数(実際に再生できる状態)</div></div>
+          <div class="stat"><div class="num">1</div><div class="label">公開本数(実際に再生できる状態)</div></div>
         </div>
         <ul class="unit-detail">
-          <li>睡眠ドローン・雨音・Lo-Fi・バイノーラルの4系統を実装。<code>publish.py</code>で生成→レンダリング→アップロード→ローカル削除まで自動化済み</li>
-          <li><b>1本目のアップロードは「処理を中止しました・動画が長すぎます」で停止中。</b>電話番号未確認のチャンネルは動画が15分までに制限される仕様と判明(<a href="https://youtube.com/watch?v=I4njOv9g8Is" target="_blank" rel="noopener">該当動画</a>、60分のため対象外)。アップロード成功の報告を急ぎすぎて、実際に再生できるかを確認していなかった点はオーナーからの指摘の通り。以後、<code>publish.py</code>は処理完了を確認してから公開完了と報告するよう修正済み</li>
+          <li>睡眠ドローン・雨音・Lo-Fi・バイノーラルの4系統を実装。<code>publish.py</code>で生成→レンダリング→アップロード→処理完了確認→ローカル削除まで自動化済み</li>
+          <li><b>1本目公開・再生確認済み: <a href="https://youtube.com/watch?v=cCFbFsWHX80" target="_blank" rel="noopener">Rain &amp; Soft Pad for Sleep(1時間)</a></b>。1回目の試みは電話番号未確認のため「動画が長すぎる」で処理拒否(<code>uploadStatus: rejected</code>)されていたが、オーナーが電話番号確認を完了後に再実行し成功。<code>uploadStatus: processed</code> / <code>processingStatus: succeeded</code> をAPIで直接確認済み</li>
           <li>方針: 長尺(8h想定)週1本 + Shorts週3〜5本、全音源は自社生成でContent IDリスクなし</li>
         </ul>
-        <div class="unit-blocker"><b>依頼中</b>: YouTubeの電話番号確認(最優先)、読み取り権限の追加ログイン承認、TikTok/Metaアカウント作業</div>
+        <div class="unit-blocker"><b>依頼中</b>: TikTok/Meta(Instagram自動投稿)アカウント作業。YouTubeは今後の投稿タイトル・概要欄・投稿ペースの方針を随時確認します</div>
       </div>
 
       <div class="unit-card">
@@ -789,7 +781,7 @@
           <tr><th>事業</th><th>今週の実績</th><th>収益</th><th>ステータス</th></tr>
         </thead>
         <tbody>
-          <tr><td>BGM動画</td><td class="num awaiting">処理停止中(0本)</td><td class="num awaiting">未接続</td><td><span class="status-pill warn"><span class="dot"></span>電話番号確認待ち</span></td></tr>
+          <tr><td>BGM動画</td><td class="num">1本公開(再生確認済み)</td><td class="num awaiting">パートナープログラム未達</td><td><span class="status-pill good"><span class="dot"></span>公開中</span></td></tr>
           <tr><td>アプリ</td><td class="num awaiting">データなし</td><td class="num awaiting">未接続</td><td><span class="status-pill warn"><span class="dot"></span>公開前</span></td></tr>
           <tr><td>note記事</td><td class="num">4本公開</td><td class="num awaiting">未接続</td><td><span class="status-pill good"><span class="dot"></span>公開中</span></td></tr>
         </tbody>
@@ -923,6 +915,10 @@
       <div class="tl-row">
         <div class="tl-date">08-03</div>
         <div class="tl-body"><b>公開確認の欠如を修正。根本原因は「動画が長すぎる」。</b>オーナーの指摘を受け調査したところ、(1) アップロード成功をそのまま「公開完了」と報告し、YouTube側の処理完了を確認していなかった、(2) そもそも状態を読み取る権限がなくチェックしようがなかった、の2点が判明。<code>youtube_upload.py</code>に処理完了の確認機構を追加し、<code>publish.py</code>は確認が取れるまでローカルファイルを消さないよう修正。読み取り権限(<code>youtube.readonly</code>)を追加し再ログイン依頼中。オーナーがYouTube Studioを直接確認したところ「処理を中止しました・動画が長すぎます」と判明 — 電話番号未確認のチャンネルは動画が15分までに制限される仕様で、60分動画のこのアプリの前提と衝突していた。電話番号確認を最優先のオーナー依頼事項に追加(<code>docs/ORG.md</code>のグロース/運用部の役割にも「公開完了は確認してから報告する」ことを明記)。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-03</div>
+        <div class="tl-body"><b>YouTube公開、今度は実際に確認して完了。</b>オーナーが電話番号確認・読み取り権限の再ログインを完了。動画を作り直して<code>publish.py</code>で再実行したところ、修正済みの処理完了確認(<code>wait_for_processing</code>)が正常に機能し、さらに念のためAPIで独立して<code>uploadStatus: processed</code> / <code>processingStatus: succeeded</code>を直接確認してから公開完了と報告した。<a href="https://youtube.com/watch?v=cCFbFsWHX80" target="_blank" rel="noopener">Rain &amp; Soft Pad for Sleep(1時間)</a>が実際に視聴可能な状態でYouTubeに公開されている。BGM動画・note記事の2事業が名実ともに公開済みに。</div>
       </div>
     </div>
   </section>
