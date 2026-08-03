@@ -146,7 +146,7 @@ PRESETS = {
 
 PRESET_METADATA = {
     "sleep_deep_drone": {
-        "title": "Deep Sleep Drone",
+        "title": "Deep Sleep Drone｜睡眠用BGM",
         "description": "Low, slow-moving ambient pad with a brown-noise bed for deep sleep.",
         "hook": "A low, slow-moving ambient drone with a warm brown-noise bed — made to help you fall into deep sleep and stay there.",
         "about": (
@@ -159,11 +159,12 @@ PRESET_METADATA = {
             "sleep music", "deep sleep music", "brown noise", "sleep sounds", "ambient sleep music",
             "insomnia relief", "relaxing sleep music", "sleep drone", "calming ambient", "8 hours sleep music",
             "white noise for sleep", "background noise for sleeping",
+            "睡眠用bgm", "睡眠導入", "作業用bgm",
         ],
         "hashtags": ["sleepmusic", "deepsleep", "brownnoise", "ambientmusic", "insomnia"],
     },
     "sleep_rain_focus": {
-        "title": "Rain & Soft Pad for Sleep",
+        "title": "Rain Sounds for Sleeping｜睡眠・作業用 雨音BGM",
         "description": "Filtered rain texture layered with a gentle ambient pad.",
         "hook": "Continuous rain sounds layered with a soft ambient pad — steady, warm rainfall for sleep, studying, or just tuning out the world.",
         "about": (
@@ -176,11 +177,12 @@ PRESET_METADATA = {
             "rain sounds", "rain sounds for sleeping", "sleep music", "relaxing rain", "rain and ambient music",
             "study music", "focus music", "relaxation music", "calming rain sounds", "rain for studying",
             "ambient rain", "nature sounds for sleep",
+            "雨音bgm", "作業用bgm", "睡眠用bgm",
         ],
         "hashtags": ["rainsounds", "sleepmusic", "relaxation", "ambientmusic", "focusmusic"],
     },
     "study_lofi_chill": {
-        "title": "Lo-Fi Chill Beats to Study To",
+        "title": "Lo-Fi Chill Beats to Study To｜勉強・作業用BGM",
         "description": "Warm lo-fi chords with vinyl texture and a laid-back pulse.",
         "hook": "Warm lo-fi chords, vinyl crackle, and a laid-back beat — chill background music for studying, working, or just relaxing.",
         "about": (
@@ -193,11 +195,12 @@ PRESET_METADATA = {
             "lofi hip hop", "lofi beats", "study music", "chill beats", "focus music", "lofi chill",
             "study lofi", "vinyl lofi", "relaxing beats", "background music for studying", "lofi radio",
             "productivity music",
+            "勉強用bgm", "作業用bgm", "集中用bgm",
         ],
         "hashtags": ["lofi", "lofihiphop", "studymusic", "chillbeats", "focusmusic"],
     },
     "study_focus_binaural": {
-        "title": "Alpha Focus Binaural + Pad",
+        "title": "Alpha Focus Binaural + Pad｜集中・勉強用BGM",
         "description": "10Hz alpha-range binaural beat under a soft pad for study focus.",
         "hook": "A 10Hz alpha-range binaural beat under a soft ambient pad — background audio built for focused study and deep work (headphones recommended).",
         "about": (
@@ -210,6 +213,7 @@ PRESET_METADATA = {
             "binaural beats", "binaural beats focus", "study music", "focus music", "alpha waves",
             "10hz binaural beats", "concentration music", "brainwave music", "study binaural beats",
             "deep focus music", "binaural beats study", "ambient focus music",
+            "集中用bgm", "勉強用bgm", "作業用bgm",
         ],
         "hashtags": ["binauralbeats", "focusmusic", "studymusic", "alphawaves", "concentration"],
     },
