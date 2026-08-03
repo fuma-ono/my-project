@@ -69,6 +69,25 @@ Thumbnails matter more for click-through than tags or hashtags do
 (`branding.py`) plus a duration badge, rather than relying on YouTube's
 auto-picked video frame.
 
+If `--preset` is omitted, the next preset in the rotation is picked
+automatically (`rotation.py`, state in `rotation_state.json`) instead of
+posting the same preset repeatedly.
+
+## Automated YouTube Shorts publishing
+
+`publish_shorts.py` is the same idea for a short (default 45s) vertical
+clip, uploaded as a YouTube Short with a link back to a matching
+long-form video in the description — the actual point of doing Shorts
+for this channel: get discovered short, pull viewers into the long-form
+video that earns real watch time.
+
+```bash
+.venv/bin/python -m bgm_pipeline.publish_shorts --seconds 45 --link-video-id <long-form video ID>
+```
+
+See `docs/marketing/2026-08-content-calendar.md` for the posting cadence
+this and `publish.py` are meant to follow.
+
 ### Required: verify the channel's phone number first
 
 YouTube caps unverified channels at **15-minute videos**. Since this

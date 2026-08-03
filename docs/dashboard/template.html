@@ -724,9 +724,9 @@
           <li>睡眠ドローン・雨音・Lo-Fi・バイノーラルの4系統を実装。<code>publish.py</code>で生成→レンダリング→カスタムサムネイル生成→アップロード→処理完了確認→サムネイル設定→ローカル削除まで自動化済み</li>
           <li><b>1本目公開・再生確認済み: <a href="https://youtube.com/watch?v=cCFbFsWHX80" target="_blank" rel="noopener">Rain &amp; Soft Pad for Sleep(1時間)</a></b>。1回目の試みは電話番号未確認のため「動画が長すぎる」で処理拒否(<code>uploadStatus: rejected</code>)されていたが、オーナーが電話番号確認を完了後に再実行し成功。<code>uploadStatus: processed</code> / <code>processingStatus: succeeded</code> をAPIで直接確認済み</li>
           <li><b>SEO/マーケティングを強化(2026-08-03)</b>: 概要欄は「公開しただけ」の1行から、キーワード重視のフック+用途リスト+ハッシュタグ3〜5個の構成に拡充。ブランド統一されたカスタムサムネイル(長さバッジ付き)も自動生成するように(<code>docs/marketing/2026-08-youtube-seo.md</code>)。次回公開分から適用</li>
-          <li>方針: 長尺(8h想定)週1本 + Shorts週3〜5本、全音源は自社生成でContent IDリスクなし</li>
+          <li>方針: 長尺週1本 + Shorts週2〜3本(<code>docs/marketing/2026-08-content-calendar.md</code>で具体化)。プリセットのローテーション管理(<code>rotation.py</code>)を新設し、同じ内容の連投を防止。全音源は自社生成でContent IDリスクなし</li>
         </ul>
-        <div class="unit-blocker"><b>依頼中</b>: TikTok/Meta(Instagram自動投稿)アカウント作業。YouTubeは今後の投稿タイトル・概要欄・投稿ペースの方針を随時確認します</div>
+        <div class="unit-blocker"><b>依頼中</b>: TikTok/Meta(Instagram自動投稿)アカウント作業。投稿を定期実行(無人自動化)するかどうかはオーナー判断待ち(下記参照)</div>
       </div>
 
       <div class="unit-card">
@@ -924,6 +924,10 @@
       <div class="tl-row">
         <div class="tl-date">08-03</div>
         <div class="tl-body"><b>YouTube SEO・マーケティングを強化。</b>「公開しただけで視聴数が伸びるわけがない」というオーナーの指摘を受け、サムネイル・概要欄・タグ・ハッシュタグを本格的に作り込んだ(<code>docs/marketing/2026-08-youtube-seo.md</code>に調査結果)。ブランドカラーと三日月モチーフを踏襲したカスタムサムネイル生成(<code>thumbnail.py</code>、長さバッジ付き)を新設し、<code>publish.py</code>がアップロード後に自動セットするようにした。各プリセットの概要欄をキーワード重視のフック・用途リスト・ハッシュタグ3〜5個を含む構成に拡充(<code>presets.py</code>)。次回公開分から適用。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-03</div>
+        <div class="tl-body"><b>投稿計画がなかった点を指摘され、策定。</b>「投稿計画があるのか、同じ動画を出し続けていないか、Shortsで登録者を増やす導線があるのか」という指摘を受け、実際に計画が存在しないこと(手動トリガーのみ、ローテーション管理なし、2本連続で同じプリセット、YouTube Shorts投稿の仕組み自体が未実装)を認めた。<code>rotation.py</code>(プリセットの自動ローテーション)・<code>publish_shorts.py</code>(YouTube Shorts自動投稿、長尺動画への誘導リンク付き)を新設し、投稿ペースの提案(長尺週1本・Shorts週2〜3本)を<code>docs/marketing/2026-08-content-calendar.md</code>にまとめた。定期実行(無人自動化)するかはオーナーに確認中。</div>
       </div>
     </div>
   </section>

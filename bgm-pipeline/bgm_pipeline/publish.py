@@ -8,7 +8,12 @@ the 2026-08-03 dashboard entry) after declaring a video published
 without ever checking whether it actually played.
 
 Usage:
+    python -m bgm_pipeline.publish --minutes 60 --privacy public
     python -m bgm_pipeline.publish --preset sleep_rain_focus --minutes 60 --privacy public
+
+If --preset is omitted, the next preset in the rotation is picked
+automatically (see rotation.py) so the channel doesn't post the same
+content repeatedly.
 """
 from __future__ import annotations
 
@@ -16,19 +21,23 @@ import argparse
 import os
 import sys
 
-from . import presets, thumbnail, video, youtube_upload
+from . import presets, rotation, thumbnail, video, youtube_upload
 
 DEFAULT_TAGS = ["ambient music", "background music", "AI generated music", "royalty free music"]
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate, render, upload, and clean up a BGM video.")
-    parser.add_argument("--preset", required=True, choices=sorted(presets.PRESETS.keys()))
+    parser.add_argument("--preset", choices=sorted(presets.PRESETS.keys()), help="omit to auto-pick from the rotation")
     parser.add_argument("--minutes", type=float, default=60.0)
     parser.add_argument("--privacy", default="public", choices=["public", "unlisted", "private"])
     parser.add_argument("--workdir", default="/tmp/bgm-publish")
     parser.add_argument("--keep-local", action="store_true", help="skip deleting local files after upload")
     args = parser.parse_args(argv)
+
+    if args.preset is None:
+        args.preset = rotation.next_preset("long")
+        print(f"No --preset given, picked from rotation: {args.preset}")
 
     meta = presets.PRESET_METADATA[args.preset]
     os.makedirs(args.workdir, exist_ok=True)
