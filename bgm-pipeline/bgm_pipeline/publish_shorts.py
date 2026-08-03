@@ -36,7 +36,7 @@ def _shorts_description(preset: str, link_video_id: str | None) -> str:
         f"\n\nFull length version: https://youtube.com/watch?v={link_video_id}"
         if link_video_id else ""
     )
-    return f"{meta['hook']}{link_line}\n\n{hashtags}"
+    return f"{meta['hook']}{link_line}\n\nMore writing: {presets.NOTE_URL}\n\n{hashtags}"
 
 
 def main(argv: list[str] | None = None) -> int:

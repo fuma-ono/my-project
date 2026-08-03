@@ -223,11 +223,16 @@ def duration_label(minutes: float) -> str:
     return f"{minutes:g} Min"
 
 
+NOTE_URL = "https://note.com/unique_condor276"
+
+
 def build_description(preset: str, minutes: float) -> str:
     """Composes the full YouTube description: a keyword-rich hook (the first
     ~150 chars are what shows before "Show more" and in search results),
-    an expanded blurb, a use-case list, an AI/royalty-free disclosure, and
-    a hashtag block (YouTube surfaces the first 3 above the title).
+    an expanded blurb, a use-case list, an AI/royalty-free disclosure, a
+    cross-promotion link to the note.com essays (the only channel with a
+    working, review-free monetization path right now), and a hashtag
+    block (YouTube surfaces the first 3 above the title).
     """
     meta = PRESET_METADATA[preset]
     hours = minutes / 60
@@ -243,6 +248,7 @@ def build_description(preset: str, minutes: float) -> str:
         f"Good for:\n{use_cases}\n\n"
         "100% AI-generated, royalty-free ambient audio — no samples or copyrighted material, "
         "so it's safe for background listening, streams, or your own projects.\n\n"
+        f"More writing on sleep, focus, and building this project: {NOTE_URL}\n\n"
         "New tracks posted regularly — subscribe if this helped you relax, focus, or sleep.\n\n"
         f"{hashtags}"
     )
