@@ -55,6 +55,12 @@ YouTube(Device Authorization flow)・Instagram(Graph API Explorerの短期トー
 - デバイスフローの実リクエストで、リクエストしていた3スコープのうち`yt-analytics.readonly`がGoogle側にデバイスフロー非対応として拒否されることが判明(`{"error": "invalid_scope"}`)。`youtube.upload`・`devstorage.read_write`の2つは問題なし
 - `bgm_pipeline/youtube_auth.py`のスコープから`yt-analytics.readonly`を除外し、アップロード連携をブロックしないよう修正。アナリティクス取得(`youtube_analytics.py`)は別途、オーナー自身のPCで実行する認可コードフロー(note_publish/と同様の構成)が必要になった旨をコード内に明記(未実装)
 
+## 実施済み: YouTube公開後の検証漏れを修正(2026-08-03)
+
+- 初のYouTube公開後、実際に再生できるか確認しないまま「公開完了」と報告してしまい、オーナーから指摘を受けた。原因は二重: (1) `publish.py`がアップロードAPIの応答だけで成功と判断し処理完了を待っていなかった、(2) そもそもトークンに動画の状態を読み取るスコープ(`youtube.readonly`)がなく、確認しようにも確認できない状態だった
+- `youtube_auth.py`のスコープに`youtube.readonly`を追加(再ログインが必要になったため、オーナーに再度デバイスコード承認を依頼)
+- `youtube_upload.py`に`get_video_status()`・`wait_for_processing()`を追加。`publish.py`はアップロード後にYouTube側の処理完了を確認し、失敗・タイムアウト時はローカルファイルを削除せず終了コード1で終わるように修正(`docs/ORG.md`のグロース/運用部の役割にも明記)
+
 ## 週次レビュー履歴
 
 - **2026-08-03**: `app/` の `npm audit` を再実行。moderate 10件(`uuid`パッケージ、Expoビルドツールチェーン内部の間接依存)は前回(実施済みレビュー時点)から変化なし。新規の脆弱性なし。リポジトリ内のシークレットハードコードも引き続きなし(`bgm-pipeline/credentials/`は空・gitignore対象のまま)

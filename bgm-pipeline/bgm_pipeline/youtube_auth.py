@@ -37,6 +37,7 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 # owner's own machine — not implemented yet, see youtube_analytics.py.
 SCOPE = (
     "https://www.googleapis.com/auth/youtube.upload "
+    "https://www.googleapis.com/auth/youtube.readonly "
     "https://www.googleapis.com/auth/devstorage.read_write"
 )
 
