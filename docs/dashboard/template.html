@@ -442,7 +442,7 @@
       <h1 class="brand">経営ダッシュボード</h1>
     </div>
     <div class="meta">
-      <div><span class="status-pill good"><span class="dot"></span>note記事4本公開・他2事業はアカウント待ち</span></div>
+      <div><span class="status-pill good"><span class="dot"></span>note記事4本・BGM動画1本公開、アプリはアカウント待ち</span></div>
       <div>最終更新: 2026-08-03</div>
       <div>次回定例: 毎週月曜 09:00 JST</div>
     </div>
@@ -649,9 +649,9 @@
           <div class="step-line done"></div>
           <div class="step done"><div class="step-dot">✓</div><div class="step-label">戦略・調査</div></div>
           <div class="step-line done"></div>
-          <div class="step current"><div class="step-dot">●</div><div class="step-label">公開<span class="step-sub">YouTube連携済み・投稿はこれから</span></div></div>
+          <div class="step done"><div class="step-dot">✓</div><div class="step-label">公開<span class="step-sub">1本目公開済み</span></div></div>
           <div class="step-line todo"></div>
-          <div class="step todo"><div class="step-dot"></div><div class="step-label">収益化</div></div>
+          <div class="step current"><div class="step-dot">●</div><div class="step-label">収益化<span class="step-sub">YouTubeパートナープログラム待ち</span></div></div>
         </div>
       </div>
 
@@ -705,19 +705,19 @@
             <div class="unit-name">BGM動画</div>
             <div class="unit-tagline">YouTube / TikTok / Reels 広告収益</div>
           </div>
-          <span class="status-pill good"><span class="dot"></span>YouTube連携完了・投稿準備OK</span>
+          <span class="status-pill good"><span class="dot"></span>YouTube公開中</span>
         </div>
         <div class="unit-stats">
           <div class="stat"><div class="num">4</div><div class="label">音源プリセット</div></div>
           <div class="stat"><div class="num">2</div><div class="label">出力比率(16:9/9:16)</div></div>
-          <div class="stat"><div class="num">0</div><div class="label">公開本数</div></div>
+          <div class="stat"><div class="num">1</div><div class="label">公開本数</div></div>
         </div>
         <ul class="unit-detail">
-          <li>睡眠ドローン・雨音・Lo-Fi・バイノーラルの4系統を実装。今週、60分の本番サイズ(<code>sleep_rain_focus</code>)で生成〜16:9/9:16書き出しまでノーエラーで通し検証済み。アップロード自動化(<code>publish.py</code>)も実装済み</li>
-          <li>専用Googleアカウントの停止(再審請求中)を受け、別のアカウントでチャンネル・OAuth連携を再設定完了。<code>youtube.upload</code>スコープのトークンを取得・検証済みで、いつでもアップロードできる状態</li>
+          <li>睡眠ドローン・雨音・Lo-Fi・バイノーラルの4系統を実装。<code>publish.py</code>で生成→レンダリング→アップロード→ローカル削除まで自動化済み</li>
+          <li><b>1本目公開: <a href="https://youtube.com/watch?v=I4njOv9g8Is" target="_blank" rel="noopener">Rain &amp; Soft Pad for Sleep(60分)</a></b>。3事業の中で初めてYouTubeに実際に公開された動画</li>
           <li>方針: 長尺(8h想定)週1本 + Shorts週3〜5本、全音源は自社生成でContent IDリスクなし</li>
         </ul>
-        <div class="unit-blocker"><b>依頼中</b>: TikTok/Meta(Instagram自動投稿)アカウント作業。YouTubeは初回アップロードのタイミング・タイトル/概要欄の最終確認だけお願いする場合があります</div>
+        <div class="unit-blocker"><b>依頼中</b>: TikTok/Meta(Instagram自動投稿)アカウント作業。今後の投稿タイトル・概要欄・投稿ペースの方針を随時確認します</div>
       </div>
 
       <div class="unit-card">
@@ -773,7 +773,7 @@
           <tr><th>事業</th><th>今週の実績</th><th>収益</th><th>ステータス</th></tr>
         </thead>
         <tbody>
-          <tr><td>BGM動画</td><td class="num awaiting">データなし</td><td class="num awaiting">未接続</td><td><span class="status-pill warn"><span class="dot"></span>公開前</span></td></tr>
+          <tr><td>BGM動画</td><td class="num">1本公開</td><td class="num awaiting">パートナープログラム未達</td><td><span class="status-pill good"><span class="dot"></span>公開中</span></td></tr>
           <tr><td>アプリ</td><td class="num awaiting">データなし</td><td class="num awaiting">未接続</td><td><span class="status-pill warn"><span class="dot"></span>公開前</span></td></tr>
           <tr><td>note記事</td><td class="num">4本公開</td><td class="num awaiting">未接続</td><td><span class="status-pill good"><span class="dot"></span>公開中</span></td></tr>
         </tbody>
@@ -899,6 +899,10 @@
       <div class="tl-row">
         <div class="tl-date">08-03</div>
         <div class="tl-body"><b>YouTube OAuth連携が完了。</b>承認時に「Googleの審査プロセスが完了していません」で一度ブロックされたが、原因はOAuth同意画面の「テストユーザー」が承認アカウントとメールアドレス不一致だったこと。テストユーザーを修正後、承認・トークン取得に成功し、実際のスコープ(<code>youtube.upload</code>・<code>devstorage.read_write</code>)も検証済み。テストモードだとリフレッシュトークンが約7日で失効する可能性がある点を <code>bgm-pipeline/README.md</code> に注意書きとして追加。これで動画公開の技術的なブロッカーはすべて解消。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-03</div>
+        <div class="tl-body"><b>3事業目、YouTubeで初公開。</b>「<a href="https://youtube.com/watch?v=I4njOv9g8Is" target="_blank" rel="noopener">Rain &amp; Soft Pad for Sleep</a>」(60分・雨音+ソフトパッド)を<code>publish.py</code>で生成→レンダリング→アップロード→ローカル削除まで自動実行し、公開まで完走。オーナーの承認のもと実行。BGM動画・note記事の2事業が公開済みになった。</div>
       </div>
     </div>
   </section>
