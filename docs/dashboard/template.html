@@ -180,6 +180,16 @@
   }
   .letter strong { color: var(--text); font-weight: 700; }
 
+  .quick-links { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 28px; }
+  .quick-links a {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+    padding: 7px 14px 7px 12px; font-size: 12.5px; font-weight: 700; color: var(--text);
+    text-decoration: none; box-shadow: var(--shadow);
+  }
+  .quick-links a .emoji { font-size: 13px; }
+  .quick-links a:hover { border-color: var(--accent); color: var(--accent); }
+
   /* org chart */
   .orgchart {
     display: flex;
@@ -447,6 +457,13 @@
       <div>次回定例: 毎週月曜 09:00 JST</div>
     </div>
   </header>
+
+  <div class="quick-links">
+    <a href="https://claude.ai/code/artifact/4463f3ba-3008-4e37-bbff-c9b338cbcb87" target="_blank" rel="noopener"><span class="emoji">📝</span> note投稿キュー</a>
+    <a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4" target="_blank" rel="noopener"><span class="emoji">✅</span> アカウント作成ガイド</a>
+    <a href="https://note.com/unique_condor276" target="_blank" rel="noopener"><span class="emoji">🖋️</span> noteプロフィール</a>
+    <a href="https://youtube.com/channel/UCj8ptbHu5Dfmt6M4wALODTA" target="_blank" rel="noopener"><span class="emoji">🎵</span> YouTubeチャンネル</a>
+  </div>
 
   <p class="letter">
     オーナーへ。このページの一番上に「今すぐお願いしたいこと」、その次に「社長が今やっていること」を置きました。逐一チャットで確認する代わりに、ここを見れば状況がわかるようにしています。各項目の「手順を見る」リンク先(<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4" target="_blank" rel="noopener">アカウント作成ガイド</a>)にチェックボックスを追加しました。完了したらチェックすればブラウザに自動保存されます(進捗バー付き)。詳しい事業ごとの進捗は下にスクロールしてください。
