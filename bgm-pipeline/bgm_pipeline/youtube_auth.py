@@ -28,9 +28,15 @@ TOKEN_PATH = CREDENTIALS_DIR / "youtube_token.json"
 
 DEVICE_CODE_URL = "https://oauth2.googleapis.com/device/code"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
+# yt-analytics.readonly is NOT usable here: confirmed live against Google's
+# device/code endpoint (2026-08), it rejects that scope outright for the
+# "TVs and Limited Input devices" flow ({"error": "invalid_scope"}) even
+# though youtube.upload and devstorage.read_write both work fine. Getting
+# analytics access needs a normal authorization-code flow with a local
+# redirect instead, which (like note_publish/) would have to run on the
+# owner's own machine — not implemented yet, see youtube_analytics.py.
 SCOPE = (
     "https://www.googleapis.com/auth/youtube.upload "
-    "https://www.googleapis.com/auth/yt-analytics.readonly "
     "https://www.googleapis.com/auth/devstorage.read_write"
 )
 

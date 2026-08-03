@@ -2,8 +2,15 @@
 weekly review can decide what to make next based on what's actually
 working instead of guessing.
 
-Uses the same OAuth token as youtube_upload.py (the yt-analytics.readonly
-scope requested in youtube_auth.py).
+NOT CURRENTLY FUNCTIONAL: this needs a yt-analytics.readonly-scoped
+token, but that scope is rejected outright by Google's device-flow
+endpoint (confirmed 2026-08 — see the comment in youtube_auth.py). The
+token from `youtube_auth.py login` only carries youtube.upload and
+devstorage.read_write, so calling channel_summary() will fail with an
+insufficient-scope error until a normal authorization-code flow (run
+locally by the owner, like note_publish/'s login) is built to grant this
+scope separately. Until then, basic view counts are still available via
+the plain YouTube Data API (videos.list) without this scope.
 """
 from __future__ import annotations
 

@@ -49,6 +49,12 @@ YouTube(Device Authorization flow)・Instagram(Graph API Explorerの短期トー
   - 非公式・非サポートの操作のため、note側のUI変更で突然動かなくなるリスクがある。安全のため`publish.py`はデフォルトで実際の公開ボタンを押さず、`--publish`を明示した時のみ公開する
 - **実行環境の制約**: このリポジトリのクラウドセッション(Claude Code on the web)は、ネットワークポリシーによりnote.comへの直接接続がブロックされている(`gateway answered 403 to CONNECT`、ポリシー拒否と確認済み)。そのため`note_publish/`は必ずオーナー自身のPCで実行する必要があり、セレクタ類もこの環境では実地検証できていない(`note-articles/README.md`に明記)
 
+## 実施済み: YouTube OAuthクライアント受領・スコープ修正(2026-08-03)
+
+- オーナーから`client_secret.json`(種類: デスクトップアプリ)を受領し、`bgm-pipeline/credentials/client_secret.json`に保存(gitignore対象を確認済み)
+- デバイスフローの実リクエストで、リクエストしていた3スコープのうち`yt-analytics.readonly`がGoogle側にデバイスフロー非対応として拒否されることが判明(`{"error": "invalid_scope"}`)。`youtube.upload`・`devstorage.read_write`の2つは問題なし
+- `bgm_pipeline/youtube_auth.py`のスコープから`yt-analytics.readonly`を除外し、アップロード連携をブロックしないよう修正。アナリティクス取得(`youtube_analytics.py`)は別途、オーナー自身のPCで実行する認可コードフロー(note_publish/と同様の構成)が必要になった旨をコード内に明記(未実装)
+
 ## 週次レビュー履歴
 
 - **2026-08-03**: `app/` の `npm audit` を再実行。moderate 10件(`uuid`パッケージ、Expoビルドツールチェーン内部の間接依存)は前回(実施済みレビュー時点)から変化なし。新規の脆弱性なし。リポジトリ内のシークレットハードコードも引き続きなし(`bgm-pipeline/credentials/`は空・gitignore対象のまま)

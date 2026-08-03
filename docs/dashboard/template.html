@@ -482,10 +482,10 @@
       <div class="action-row">
         <div class="action-mark pending">!</div>
         <div class="action-body">
-          <div class="action-title">YouTube: 別アカウントでのチャンネル・OAuth設定</div>
-          <div class="action-desc">専用アカウントが利用規約違反で停止(再審請求中)のため、使い慣れた別アカウントで再設定中。OAuthクライアントID作成でエラーが出た報告あり、状況が分かり次第エラー文言を教えてください。手順は<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4#plat-youtube-resetup" target="_blank" rel="noopener">アカウント作成ガイド(2b、チェックボックス付き)</a>に詳細を追加しました。</div>
+          <div class="action-title">YouTube: デバイス承認をクリックするだけ</div>
+          <div class="action-desc"><code>client_secret.json</code>を受領しました。ログインコードを発行したところ、リクエストしていた3スコープのうち<code>yt-analytics.readonly</code>だけがGoogle側でデバイスフロー非対応と判明(アップロード自体には影響なし、コード側で修正済み)。<b>https://www.google.com/device</b> を開き、コード <b>JKB-VDB-YGKF</b> を入力して承認すれば、これでYouTube連携の最後のブロッカーが解消します。</div>
         </div>
-        <div class="action-owner">進行中</div>
+        <div class="action-owner">承認待ち</div>
       </div>
       <div class="action-row">
         <div class="action-mark pending">!</div>
@@ -891,6 +891,10 @@
       <div class="tl-row">
         <div class="tl-date">08-03</div>
         <div class="tl-body"><b>note自動投稿を構築(オーナー承認のうえ、方針を一部例外化)。</b>note.comには公式APIが存在しないため、オーナーに選択肢を提示し、Playwrightでの実ブラウザログイン方式を承認いただいた。「パスワードを一切預からない」という他連携の原則からは外れるため、リスクと軽減策を<code>docs/security/checklist.md</code>に明記。初回ログインはオーナー自身のPCでのみ実行可能(クラウドセッションはnote.comへの接続がネットワークポリシーでブロックされていることを実地確認)。エディタのセレクタは実環境で未検証のため、初回実行は<code>--debug</code>での確認が必要。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-03</div>
+        <div class="tl-body"><b>YouTube OAuthクライアントを受領、スコープ不具合を発見・修正。</b>オーナーから<code>client_secret.json</code>を受け取り保存。実際にデバイスフローをリクエストしたところ、3スコープのうち<code>yt-analytics.readonly</code>だけがGoogle側でデバイスフロー自体に非対応(<code>invalid_scope</code>)と判明し、丸ごと失敗していた。アップロードに必要な<code>youtube.upload</code>・<code>devstorage.read_write</code>だけに絞って<code>youtube_auth.py</code>を修正し、ログインコードの発行までこぎつけた。承認クリックのみオーナー待ち。アナリティクス取得は別フローが必要になったため新規タスク化(<code>bgm_pipeline/youtube_analytics.py</code>は現状動作しない旨を明記)。</div>
       </div>
     </div>
   </section>
