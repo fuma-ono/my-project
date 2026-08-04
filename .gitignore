@@ -31,3 +31,8 @@ docs/setup-guide/setup-guide.html
 docs/setup-guide/fonts.py
 note-articles/queue-page/note-queue.html
 note-articles/queue-page/fonts.py
+
+# weekly report slide decks (regenerate with docs/reports/weekly/YYYY-MM-DD.js)
+docs/reports/weekly/*.pptx
+docs/reports/weekly/node_modules/
+docs/reports/weekly/package-lock.json

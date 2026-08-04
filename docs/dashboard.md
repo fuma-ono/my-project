@@ -6,6 +6,8 @@
 
 会社サイト(3事業をまとめた対外向けページ、`docs/site/`): https://claude.ai/code/artifact/3ace0d1f-bbd2-4522-bb2e-b9b0b834d5b4
 
+週次活動報告(スライド、`docs/reports/`): オーナーへSendUserFileで毎週送付。生成スクリプトは`docs/reports/weekly/`にコミットするが、`.pptx`本体はgitignore対象
+
 3事業(BGM動画/アプリ/note記事)の体制図・パイプライン進捗・オーナーへの依頼事項・経営ログをまとめたもの。定例レビュー(週次)のたびに内容を更新して同じURLに再公開する。
 
 ## 更新方法
