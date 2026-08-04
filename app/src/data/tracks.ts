@@ -25,7 +25,7 @@ export const CATEGORY_ICON: Record<Category, 'moon' | 'flash'> = {
 export const TRACKS: Track[] = [
   {
     id: 'sleep_deep_drone',
-    title: '深い眠りのドローン',
+    title: '深海',
     englishTitle: 'Deep Sleep Drone',
     category: 'sleep',
     description: '低く緩やかに続くアンビエントパッドに、温かみのあるブラウンノイズを重ねた1曲。呼吸を合わせるように、ゆっくり深い眠りへ。',
@@ -36,7 +36,7 @@ export const TRACKS: Track[] = [
   },
   {
     id: 'sleep_rain_focus',
-    title: '雨音とやわらかなパッド',
+    title: '夜雨',
     englishTitle: 'Rain & Soft Pad',
     category: 'sleep',
     description: 'こもった質感の雨音に、静かなアンビエントパッドをそっと重ねました。作業中の「ながら聴き」にも。',
@@ -47,7 +47,7 @@ export const TRACKS: Track[] = [
   },
   {
     id: 'study_lofi_chill',
-    title: 'Lo-Fiチルビート',
+    title: '喫茶',
     englishTitle: 'Lo-Fi Chill Beats',
     category: 'focus',
     description: '温かみのあるローファイコードに、ヴァイナルの質感をまとわせた力の抜けるビート。作業用BGMの定番スタイルで。',
@@ -58,7 +58,7 @@ export const TRACKS: Track[] = [
   },
   {
     id: 'study_focus_binaural',
-    title: 'アルファ集中バイノーラル',
+    title: '覚醒',
     englishTitle: 'Alpha Focus Binaural',
     category: 'focus',
     description: '10Hzのアルファ波バイノーラルビートを、穏やかなパッドの下に。ヘッドホン推奨、勉強・作業の集中セッション向け。',

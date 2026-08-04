@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
   },
   categoryPillText: { color: 'white', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
   duration: { color: 'rgba(255,255,255,0.55)', fontSize: 11 },
-  cardTitle: { color: 'white', fontSize: 16, fontWeight: '700' },
+  cardTitle: { color: 'white', fontSize: 20, fontWeight: '700', letterSpacing: 0.5 },
   cardDescription: { color: 'rgba(255,255,255,0.72)', fontSize: 12, marginTop: 4, lineHeight: 17 },
   lockWrap: {
     width: 30,
