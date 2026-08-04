@@ -85,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Uploaded: {watch_url}")
 
     try:
-        youtube_upload.wait_for_processing(video_id, timeout_seconds=300)
+        youtube_upload.wait_for_processing(video_id, timeout_seconds=600)
         print(f"Confirmed watchable: {watch_url}")
     except youtube_upload.VideoProcessingFailed as exc:
         print(f"UPLOAD FAILED PROCESSING: {exc}")

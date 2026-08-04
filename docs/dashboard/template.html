@@ -752,10 +752,12 @@
           <div class="stat"><div class="num">4</div><div class="label">音源プリセット</div></div>
           <div class="stat"><div class="num">2</div><div class="label">出力比率(16:9/9:16)</div></div>
           <div class="stat"><div class="num">2</div><div class="label">公開本数(実際に再生できる状態)</div></div>
+          <div class="stat"><div class="num">1</div><div class="label">Shorts公開数</div></div>
         </div>
         <ul class="unit-detail">
           <li>睡眠ドローン・雨音・Lo-Fi・バイノーラルの4系統を実装。<code>publish.py</code>で生成→レンダリング→カスタムサムネイル生成→アップロード→処理完了確認→サムネイル設定→ローカル削除まで自動化済み</li>
           <li><b>2本公開・再生確認済み</b>: <a href="https://youtube.com/watch?v=cCFbFsWHX80" target="_blank" rel="noopener">Rain Sounds for Sleeping(1時間)</a>、<a href="https://youtube.com/watch?v=qOTRrIYgdFQ" target="_blank" rel="noopener">Alpha Focus Binaural + Pad(1時間)</a>。2本目は週次Routineが自動生成・自動公開したもの(ローテーションが<code>study_focus_binaural</code>を選択、同じプリセットの連投なし)。両方とも<code>uploadStatus: processed</code> / <code>processingStatus: succeeded</code>をAPIで直接確認済み</li>
+          <li><b>Shorts第1弾を自動公開</b>: <a href="https://youtube.com/watch?v=s3EeKc1HQ8o" target="_blank" rel="noopener">45秒・sleep_deep_drone</a>、長尺動画(Alpha Focus Binaural)への自動リンク付き。処理に通常より時間がかかり(300秒のタイムアウトを超過)一度は要確認扱いになったが、追加でポーリングして再生可能な状態を確認済み</li>
           <li><b>タイトル・タグに日本語キーワードを追加(2026-08-04)</b>: 「作業用BGM」「勉強用BGM」「睡眠用BGM」「集中用BGM」等、日本語検索に直結するキーワードを全プリセットのタイトル・タグに追加。公開済みの動画にも遡って反映(<code>videos.update</code>)。1本目は過去に効果確認済みの完全一致フレーズ「rain sounds for sleeping」を上書きしてしまう事故が一度あったが、その場で気づいて両立する形に修正</li>
           <li><b>SEO/マーケティングを強化(2026-08-03)</b>: 概要欄は「公開しただけ」の1行から、キーワード重視のフック+用途リスト+ハッシュタグ3〜5個の構成に拡充。ブランド統一されたカスタムサムネイル(長さバッジ付き)も自動生成するように(<code>docs/marketing/2026-08-youtube-seo.md</code>)</li>
           <li><b>投稿を完全自動化(2026-08-03)</b>: 長尺動画は毎週火曜、Shortsは火・木・土に無人で自動生成→公開するRoutineを設定済み。プリセットのローテーション管理(<code>rotation.py</code>)で同じ内容の連投を防止し、ShortsはRoutineが自動で直近の長尺動画にリンクする。失敗時(特にOAuth再認証が必要な場合)はPushNotificationでオーナーに通知(<code>docs/marketing/2026-08-content-calendar.md</code>)</li>
