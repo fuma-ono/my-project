@@ -40,9 +40,9 @@ YouTube広告収益条件(登録者1,000人+年間視聴時間4,000時間)、ア
 
 **7/**
 経営ダッシュボードを公開しています。実際の進捗・売上(今のところ¥0)・失敗も含めて。
-→ (会社サイト・ダッシュボードのリンク)
+https://claude.ai/code/artifact/63b530f4-9d42-411d-aa8a-d013d4283c32
 
 BGM動画も置いています。
-→ (YouTubeチャンネルのリンク)
+https://youtube.com/channel/UCj8ptbHu5Dfmt6M4wALODTA
 
 続報はこのアカウントで。
