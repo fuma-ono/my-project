@@ -3,9 +3,18 @@
 Thumbnails matter far more for click-through than tags/hashtags do, so
 this exists as its own step rather than relying on YouTube's auto-picked
 video frame. Reuses the brand palette and PIL primitives from
-branding.py (same gradient/moon/star look as the channel art) plus a
-duration badge — a well-established convention for long-form sleep/study
-content that helps viewers self-select before clicking.
+branding.py (same gradient/moon/star look as the channel art).
+
+Rewritten 2026-08-04 after owner feedback on the live thumbnails:
+  - "文字化け" (mojibake): WORKSANS has no Japanese glyphs, and titles are
+    Japanese now — fixed by switching to branding.JP_FONT for all text.
+  - "サムネイルが引き付けられない" (not eye-catching): bigger/bolder short
+    hook text instead of the full SEO title crammed in, higher-contrast
+    panel, a concrete per-category icon instead of always the same moon.
+  - "勉強用ならノートや鉛筆などわかりやすいものに": sleep presets keep the
+    moon+stars motif, but focus/study presets now get a literal
+    notebook+pencil icon (branding.draw_notebook_pencil) — a recognizable
+    object beats another abstract shape for "this is for studying."
 """
 from __future__ import annotations
 
@@ -15,9 +24,8 @@ import sys
 from PIL import Image, ImageDraw, ImageFont
 
 from . import video
-from .branding import ACCENT, WORKSANS, draw_crescent_moon, draw_stars, vertical_gradient
+from .branding import ACCENT, JP_FONT, draw_crescent_moon, draw_notebook_pencil, draw_stars, vertical_gradient
 
-WORKSANS_BOLD = WORKSANS.replace("WorkSans-Regular.ttf", "WorkSans-Bold.ttf")
 SIZE = (1280, 720)
 
 
@@ -29,75 +37,80 @@ def _hex_to_rgb(hex_str: str) -> tuple[int, int, int]:
 def _duration_label(minutes: float) -> str:
     if minutes >= 60:
         hours = minutes / 60
-        return f"{hours:g} HOUR" + ("S" if hours != 1 else "")
-    return f"{minutes:g} MIN"
+        return f"{hours:g}時間" if hours != 1 else "1時間"
+    return f"{minutes:g}分"
 
 
-def _wrap_title(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
-    words = text.split()
+def _wrap_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
+    """Character-wrap (not word-wrap) since Japanese has no spaces between words."""
     lines: list[str] = []
     current = ""
-    for word in words:
-        candidate = f"{current} {word}".strip()
+    for ch in text:
+        candidate = current + ch
         if draw.textbbox((0, 0), candidate, font=font)[2] <= max_width:
             current = candidate
         else:
             if current:
                 lines.append(current)
-            current = word
+            current = ch
     if current:
         lines.append(current)
     return lines
 
 
-def make_thumbnail(path: str, preset: str, title: str, minutes: float) -> None:
-    colors = video.THEME_COLORS.get(preset, ["0x0b1026", "0x1a2a6c", "0x2d1b4e"])
+def make_thumbnail(path: str, preset: str, thumb_hook: str, icon_category: str, minutes: float) -> None:
+    colors = video.THEME_COLORS.get(preset, ["0x0b0e1a", "0x141a30", "0x1e2648"])
     top, bottom = _hex_to_rgb(colors[0]), _hex_to_rgb(colors[-1])
     base = vertical_gradient(SIZE, top, bottom)
 
     draw_stars(
         base,
-        [(SIZE[0] * 0.06, SIZE[1] * 0.12, 4), (SIZE[0] * 0.93, SIZE[1] * 0.10, 3),
-         (SIZE[0] * 0.87, SIZE[1] * 0.20, 2)],
+        [(SIZE[0] * 0.06, SIZE[1] * 0.10, 4), (SIZE[0] * 0.93, SIZE[1] * 0.08, 3),
+         (SIZE[0] * 0.88, SIZE[1] * 0.16, 2), (SIZE[0] * 0.10, SIZE[1] * 0.22, 2)],
         (255, 255, 255),
     )
-    draw_crescent_moon(base, (int(SIZE[0] * 0.90), int(SIZE[1] * 0.80)), 66, ACCENT)
+
+    icon_cx, icon_cy = int(SIZE[0] * 0.83), int(SIZE[1] * 0.30)
+    if icon_category == "focus":
+        draw_notebook_pencil(base, (icon_cx, icon_cy), 190, ACCENT)
+    else:
+        draw_crescent_moon(base, (icon_cx, icon_cy), 90, ACCENT)
 
     img = base.convert("RGBA")
     probe = ImageDraw.Draw(img)
 
-    title_font = ImageFont.truetype(WORKSANS_BOLD, 96)
-    lines = _wrap_title(probe, title.upper(), title_font, max_width=int(SIZE[0] * 0.80))
-    line_height = 108
+    # big, short hook text — this is what needs to read in under a second
+    # at thumbnail-grid size, not the full SEO title (that's what the
+    # video's actual `title` field is for)
+    hook_font = ImageFont.truetype(JP_FONT, 108)
+    lines = _wrap_text(probe, thumb_hook, hook_font, max_width=int(SIZE[0] * 0.62))
+    line_height = 122
     total_h = line_height * len(lines)
     top_y = (SIZE[1] - total_h) // 2
 
-    # translucent panel behind the title so it stays legible over any gradient
     overlay = Image.new("RGBA", SIZE, (0, 0, 0, 0))
     odraw = ImageDraw.Draw(overlay)
     odraw.rounded_rectangle(
-        [60, top_y - 28, SIZE[0] - 60, top_y + total_h - (line_height - 84) + 28],
-        radius=20, fill=(10, 10, 20, 130),
+        [56, top_y - 34, int(SIZE[0] * 0.70), top_y + total_h - (line_height - 96) + 34],
+        radius=22, fill=(6, 8, 16, 165),
     )
     img = Image.alpha_composite(img, overlay)
     draw = ImageDraw.Draw(img)
 
     y = top_y
     for line in lines:
-        bbox = draw.textbbox((0, 0), line, font=title_font)
-        x = (SIZE[0] - (bbox[2] - bbox[0])) // 2
-        draw.text((x, y), line, font=title_font, fill=(255, 255, 255, 255))
+        draw.text((90, y), line, font=hook_font, fill=(255, 255, 255, 255))
         y += line_height
 
-    badge_font = ImageFont.truetype(WORKSANS_BOLD, 46)
+    badge_font = ImageFont.truetype(JP_FONT, 50)
     badge_text = _duration_label(minutes)
     bbox = draw.textbbox((0, 0), badge_text, font=badge_font)
-    pad_x, pad_y = 28, 16
+    pad_x, pad_y = 30, 16
     badge_w = (bbox[2] - bbox[0]) + pad_x * 2
     badge_h = (bbox[3] - bbox[1]) + pad_y * 2
-    badge_x, badge_y = 40, 40
+    badge_x, badge_y = 56, 40
     draw.rounded_rectangle(
-        [badge_x, badge_y, badge_x + badge_w, badge_y + badge_h], radius=14, fill=(*ACCENT, 255)
+        [badge_x, badge_y, badge_x + badge_w, badge_y + badge_h], radius=16, fill=(*ACCENT, 255)
     )
     draw.text((badge_x + pad_x, badge_y + pad_y - bbox[1]), badge_text, font=badge_font, fill=(20, 14, 10, 255))
 
@@ -107,11 +120,12 @@ def make_thumbnail(path: str, preset: str, title: str, minutes: float) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate a custom YouTube thumbnail.")
     parser.add_argument("--preset", required=True, choices=sorted(video.THEME_COLORS.keys()))
-    parser.add_argument("--title", required=True)
+    parser.add_argument("--hook", required=True, help="short thumbnail hook text (not the full title)")
+    parser.add_argument("--icon-category", required=True, choices=["sleep", "focus"])
     parser.add_argument("--minutes", type=float, required=True)
     parser.add_argument("--out", required=True)
     args = parser.parse_args(argv)
-    make_thumbnail(args.out, args.preset, args.title, args.minutes)
+    make_thumbnail(args.out, args.preset, args.hook, args.icon_category, args.minutes)
     print(f"wrote {args.out}")
     return 0
 

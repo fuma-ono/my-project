@@ -73,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     track.to_wav(wav_path)
 
     print("[2/3] rendering vertical video...")
-    video.render(wav_path, mp4_path, meta["title"], args.preset, "vertical")
+    video.render(wav_path, mp4_path, meta["thumb_hook"], args.preset, "vertical")
 
     title = f"{meta['title']} #Shorts"
     description = _shorts_description(args.preset, args.link_video_id)

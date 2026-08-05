@@ -15,13 +15,25 @@ import subprocess
 import sys
 import wave
 
-FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+# DejaVu Sans has no Japanese glyphs — titles are Japanese now (2026-08-04
+# SEO pass), so this was silently drawing tofu boxes into every rendered
+# video's burned-in title text. WenQuanYi Zen Hei ships preinstalled in
+# this environment's base image (verified via `fc-list`) and covers
+# Japanese kana/kanji; see branding.JP_FONT for the same fix applied to
+# thumbnails.
+FONT_PATH = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
 
+# Unified brand palette (matches branding.py's BG_TOP/BG_BOTTOM + ACCENT,
+# used everywhere else — channel art, thumbnails, the app, the company
+# site) instead of a different, off-brand hue per preset (owner feedback
+# 2026-08-04: "色遣いが悪い。なんで紫なの？" about study_focus_binaural's
+# purple). Presets are now differentiated by icon and thumbnail text, not
+# by the channel's background color scheme.
 THEME_COLORS = {
-    "sleep_deep_drone": ["0x0b1026", "0x1a2a6c", "0x2d1b4e"],
-    "sleep_rain_focus": ["0x0f2027", "0x203a43", "0x2c5364"],
-    "study_lofi_chill": ["0x3a1c1c", "0x6f4e37", "0x2b1b17"],
-    "study_focus_binaural": ["0x1b1b3a", "0x3a1b5a", "0x0d0d2b"],
+    "sleep_deep_drone": ["0x0b0e1a", "0x141a30", "0x1e2648"],
+    "sleep_rain_focus": ["0x0b0e1a", "0x142230", "0x1e3648"],
+    "study_lofi_chill": ["0x0b0e1a", "0x1a1a30", "0x2a2040"],
+    "study_focus_binaural": ["0x0b0e1a", "0x141a30", "0x1e2648"],
 }
 
 

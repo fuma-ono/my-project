@@ -51,12 +51,12 @@ def main(argv: list[str] | None = None) -> int:
     track.to_wav(wav_path)
 
     print("[2/5] rendering video...")
-    video.render(wav_path, mp4_path, meta["title"], args.preset, "landscape")
+    video.render(wav_path, mp4_path, meta["thumb_hook"], args.preset, "landscape")
 
     print("[3/5] generating custom thumbnail...")
-    thumbnail.make_thumbnail(thumb_path, args.preset, meta["title"], args.minutes)
+    thumbnail.make_thumbnail(thumb_path, args.preset, meta["thumb_hook"], meta["icon_category"], args.minutes)
 
-    title = f"[{presets.duration_label(args.minutes)}] {meta['title']}"
+    title = meta["title"]
     description = presets.build_description(args.preset, args.minutes)
     tags = DEFAULT_TAGS + meta["tags"]
 

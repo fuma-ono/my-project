@@ -42,7 +42,10 @@
 ## 運用ルール
 
 - #1〜4相当のネタは `note-articles/drafts/01〜04` として消化済み。#6(AI音楽の著作権)は `drafts/06-ai-music-copyright.md` として2026-08-03に消化済み
-- #13(作業用BGM選びの悩み50件リサーチ)は`drafts/07-work-bgm-complaints-50.md`として2026-08-03に消化済み。次に消化するのは**#7(Why I built X型・フリーミアム疲れ)**。ただし#7は現行アプリがサブスク前提(¥480/月、`app/src/screens/PaywallScreen.tsx`)なので「買い切りにした」という原題のままは使わず、実態に合う切り口に書き換えてから使うこと(虚偽の経緯を書かない)
+- #13(作業用BGM選びの悩み50件リサーチ)は`drafts/07-work-bgm-complaints-50.md`として2026-08-03に消化済み
+- #7(Why I built X型・フリーミアム疲れ)は`drafts/08-app-pricing-decision.md`として2026-08-04に消化済み。「買い切りにした」という原題のままは使わず、実態(¥480/月のサブスク、`app/src/screens/PaywallScreen.tsx`)に合わせて「なぜサブスクで低価格ニッチを選んだか」という切り口に書き換えた
+- #15(収益公開・透明性コンテンツ)は`drafts/09-revenue-report.md`として2026-08-04に消化済み。X戦略(`docs/marketing/2026-08-04-x-strategy.md`)と同じ「AI経営の透明性」路線
+- 次に消化するのは#8・#9・#10・#11・#12・#14
 - 「Why I built X」型は3事業をまたぐ導線になるため、月1本は必ず入れる
 - 15個を使い切ったら、`docs/marketing/`に同様のリサーチを追加してバックログを補充する
 

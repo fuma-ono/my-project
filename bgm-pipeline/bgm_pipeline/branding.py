@@ -14,6 +14,14 @@ FONT_DIR = "/mnt/skills/examples/canvas-design/canvas-fonts"
 GLOOCK = f"{FONT_DIR}/Gloock-Regular.ttf"
 WORKSANS = f"{FONT_DIR}/WorkSans-Regular.ttf"
 
+# GLOOCK/WORKSANS have no CJK glyphs — rendering Japanese text with them
+# produces tofu boxes (this is what caused the 文字化け bug reported
+# 2026-08-04 on the live thumbnails). WenQuanYi Zen Hei ships preinstalled
+# in this environment's base image (verified via `fc-list`, no apt-get
+# needed at render time — important since Routines may run in a fresh
+# container) and covers Japanese kana/kanji.
+JP_FONT = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
+
 BG_TOP = (11, 14, 26)
 BG_BOTTOM = (30, 38, 72)
 ACCENT = (240, 149, 92)
@@ -57,6 +65,63 @@ def draw_stars(img: Image.Image, points: list[tuple[int, int, int]], color) -> N
     draw = ImageDraw.Draw(img)
     for x, y, r in points:
         draw.ellipse([x - r, y - r, x + r, y + r], fill=color)
+
+
+def draw_notebook_pencil(img: Image.Image, center: tuple[int, int], size: int, color) -> None:
+    """A literal, unambiguous "studying" icon (notebook + pencil) for the
+    focus/study presets — the moon motif reads as sleep, not study, and a
+    concrete recognizable object beats another abstract shape here
+    (owner feedback 2026-08-04: "勉強用ならノートや鉛筆などわかりやすいものに")."""
+    cx, cy = center
+    draw = ImageDraw.Draw(img, "RGBA")
+
+    # notebook: a slightly rotated rounded rectangle with ruled lines and a spine
+    nb_w, nb_h = int(size * 0.85), int(size * 1.05)
+    nb_left, nb_top = cx - nb_w // 2, cy - nb_h // 2
+    notebook = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    ndraw = ImageDraw.Draw(notebook)
+    ndraw.rounded_rectangle(
+        [nb_left, nb_top, nb_left + nb_w, nb_top + nb_h], radius=int(size * 0.08), fill=(*color, 255)
+    )
+    # spine
+    ndraw.rectangle([nb_left, nb_top, nb_left + int(nb_w * 0.12), nb_top + nb_h], fill=(*color, 255))
+    # ruled lines (cut out, lighter than fill so they read against any bg)
+    line_color = tuple(min(255, c + 40) for c in color) + (140,)
+    for i in range(4):
+        ly = nb_top + int(nb_h * 0.32) + i * int(nb_h * 0.16)
+        ndraw.line(
+            [nb_left + int(nb_w * 0.24), ly, nb_left + nb_w - int(nb_w * 0.14), ly],
+            fill=line_color, width=max(2, size // 40),
+        )
+    notebook = notebook.rotate(-6, resample=Image.BICUBIC, center=(cx, cy))
+    img.paste(notebook, (0, 0), notebook)
+
+    # pencil: a diagonal rounded rectangle body + triangular tip, laid across the notebook
+    pc_len, pc_w = int(size * 1.15), int(size * 0.16)
+    pencil = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    pdraw = ImageDraw.Draw(pencil)
+    px0 = cx - pc_len // 2
+    py0 = cy - pc_w // 2
+    body_len = int(pc_len * 0.8)
+    pdraw.rounded_rectangle(
+        [px0, py0, px0 + body_len, py0 + pc_w], radius=pc_w // 2, fill=(255, 255, 255, 255)
+    )
+    tip_color = (60, 40, 25, 255)
+    pdraw.polygon(
+        [(px0 + body_len, py0), (px0 + pc_len, py0 + pc_w // 2), (px0 + body_len, py0 + pc_w)],
+        fill=tip_color,
+    )
+    lead_len = int(pc_w * 0.35)
+    pdraw.polygon(
+        [
+            (px0 + body_len + (pc_len - body_len) - lead_len, py0 + pc_w * 0.32),
+            (px0 + pc_len, py0 + pc_w // 2),
+            (px0 + body_len + (pc_len - body_len) - lead_len, py0 + pc_w * 0.68),
+        ],
+        fill=(30, 30, 30, 255),
+    )
+    pencil = pencil.rotate(38, resample=Image.BICUBIC, center=(cx, cy))
+    img.paste(pencil, (0, 0), pencil)
 
 
 def make_profile_icon(path: str, size: int = 800) -> None:

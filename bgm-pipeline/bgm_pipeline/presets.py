@@ -144,78 +144,92 @@ PRESETS = {
     "study_focus_binaural": study_focus_binaural,
 }
 
+# title: JP-first, leads with a 【】bracket category tag — this is the
+# dominant convention among actual popular JP作業用BGM/勉強用BGM channels
+# (checked via web search 2026-08-04, e.g. "【集中したい時に聴く勉強用BGM】...",
+# "【作業用BGM】静かに集中モードへ..."), not something we were doing before.
+# icon_category: which thumbnail icon to draw — "sleep" (moon+stars) or
+# "focus" (notebook+pencil, per owner feedback that the moon doesn't read
+# as "study" — a literal recognizable object does).
+# thumb_hook: short punchy JP phrase for the thumbnail overlay. Distinct
+# from title: title is written for search, thumb_hook is written to be
+# read in under a second at thumbnail size.
 PRESET_METADATA = {
     "sleep_deep_drone": {
-        "title": "Deep Sleep Drone｜睡眠用BGM",
-        "description": "Low, slow-moving ambient pad with a brown-noise bed for deep sleep.",
-        "hook": "A low, slow-moving ambient drone with a warm brown-noise bed — made to help you fall into deep sleep and stay there.",
+        "title": "【睡眠用BGM】深い眠りへ誘う低音ドローン 1時間耐久",
+        "icon_category": "sleep",
+        "thumb_hook": "深い眠りへ",
+        "description": "低く緩やかなアンビエントパッドに、温かみのあるブラウンノイズを重ねた深い眠りのためのBGM。",
+        "hook": "低く緩やかに続くアンビエントドローンに、温かみのあるブラウンノイズを重ねた1曲。呼吸を合わせるように、深い眠りへ誘います。",
         "about": (
-            "No melody to follow, no sudden changes — just a steady, low-frequency wash of sound "
-            "designed to mask household noise and quiet a racing mind. The brown-noise layer sits "
-            "lower and warmer than white noise, which many people find gentler for all-night listening."
+            "追いかけるようなメロディも、急な展開もありません。生活音を和らげ、頭の中の雑音を鎮める、"
+            "低い周波数の音の層だけです。ブラウンノイズはホワイトノイズより低く温かみがあり、"
+            "一晩中流すのに向いていると感じる方が多い音です。"
         ),
-        "use_cases": ["Falling asleep and staying asleep", "Masking noisy neighbors, traffic, or a snoring partner", "Naps", "Newborn/baby white noise (played at a safe, low volume)"],
+        "use_cases": ["寝つき・夜通しの睡眠サポートに", "隣人・交通音・いびきなどの生活音マスキングに", "昼寝のお供に", "赤ちゃんのホワイトノイズに(音量は控えめに)"],
         "tags": [
+            "睡眠用bgm", "睡眠導入", "作業用bgm", "ブラウンノイズ", "熟睡",
             "sleep music", "deep sleep music", "brown noise", "sleep sounds", "ambient sleep music",
-            "insomnia relief", "relaxing sleep music", "sleep drone", "calming ambient", "8 hours sleep music",
-            "white noise for sleep", "background noise for sleeping",
-            "睡眠用bgm", "睡眠導入", "作業用bgm",
+            "insomnia relief", "relaxing sleep music", "sleep drone",
         ],
-        "hashtags": ["sleepmusic", "deepsleep", "brownnoise", "ambientmusic", "insomnia"],
+        "hashtags": ["睡眠用bgm", "熟睡", "ブラウンノイズ", "sleepmusic", "ambientmusic"],
     },
     "sleep_rain_focus": {
-        "title": "Rain Sounds for Sleeping｜睡眠・作業用 雨音BGM",
-        "description": "Filtered rain texture layered with a gentle ambient pad.",
-        "hook": "Continuous rain sounds layered with a soft ambient pad — steady, warm rainfall for sleep, studying, or just tuning out the world.",
+        "title": "【睡眠・作業用BGM】雨音とやわらかなパッドで眠れる 1時間",
+        "icon_category": "sleep",
+        "thumb_hook": "雨音で眠る",
+        "description": "こもった質感の雨音に、静かなアンビエントパッドを重ねた睡眠・作業両用のBGM。",
+        "hook": "こもった質感の雨音に、静かなアンビエントパッドをそっと重ねた1曲。眠りにも、作業中の「ながら聴き」にも。",
         "about": (
-            "A filtered rain texture (no thunder, no jump-scares) layered under a slow-moving pad. "
-            "Rain is one of the most requested sounds for sleep because it's a natural example of "
-            "1/f (\"pink\") noise — predictable enough to relax into, varied enough not to feel robotic."
+            "雷や急な音の変化がない、フィルターを通した雨音を、ゆっくり動くパッドの下に重ねています。"
+            "雨音が眠りに人気なのは、「1/fゆらぎ」と呼ばれる自然なリズムを持っているから — "
+            "予測できる安心感がありながら、単調すぎて機械的に感じることもありません。"
         ),
-        "use_cases": ["Falling asleep to rain", "Deep, uninterrupted focus while studying or working", "Meditation and unwinding after a long day", "Drowning out city or apartment noise"],
+        "use_cases": ["雨音を聴きながら眠りたいときに", "作業・勉強中の集中力を切らさないために", "1日の終わりの瞑想・リラックスに", "都市騒音・生活音を遮りたいときに"],
         "tags": [
-            "rain sounds", "rain sounds for sleeping", "sleep music", "relaxing rain", "rain and ambient music",
-            "study music", "focus music", "relaxation music", "calming rain sounds", "rain for studying",
-            "ambient rain", "nature sounds for sleep",
-            "雨音bgm", "作業用bgm", "睡眠用bgm",
+            "雨音bgm", "作業用bgm", "睡眠用bgm", "集中", "リラックス",
+            "rain sounds", "rain sounds for sleeping", "sleep music", "study music", "focus music",
+            "relaxing rain", "ambient rain",
         ],
-        "hashtags": ["rainsounds", "sleepmusic", "relaxation", "ambientmusic", "focusmusic"],
+        "hashtags": ["雨音bgm", "作業用bgm", "睡眠用bgm", "rainsounds", "relaxation"],
     },
     "study_lofi_chill": {
-        "title": "Lo-Fi Chill Beats to Study To｜勉強・作業用BGM",
-        "description": "Warm lo-fi chords with vinyl texture and a laid-back pulse.",
-        "hook": "Warm lo-fi chords, vinyl crackle, and a laid-back beat — chill background music for studying, working, or just relaxing.",
+        "title": "【作業用BGM】カフェ気分のLo-Fiチルビート 1時間｜勉強・仕事がはかどる",
+        "icon_category": "focus",
+        "thumb_hook": "はかどる作業用BGM",
+        "description": "温かみのあるローファイコードにヴァイナルの質感を重ねた、カフェのような作業用BGM。",
+        "hook": "温かみのあるローファイコードに、ヴァイナルの質感をまとわせた力の抜けるビート。カフェで作業しているような、集中しやすい空気感です。",
         "about": (
-            "A continuous, non-distracting lo-fi loop: warm jazzy chords, a soft backbeat, and a "
-            "little vinyl texture for warmth. No vocals, no sudden drops — built to sit in the "
-            "background while you actually get things done."
+            "耳障りにならない、ずっと流せるローファイループです。温かみのあるジャジーなコード、"
+            "柔らかいビート、少しのヴァイナルノイズで質感を出しています。ボーカルなし、急な展開なし — "
+            "作業の邪魔をしないことを一番に作っています。"
         ),
-        "use_cases": ["Studying and reading", "Deep work / productivity sessions", "Coding and writing", "Cooking, chores, or a chill hangout playlist"],
+        "use_cases": ["勉強・読書のお供に", "作業・仕事の集中セッションに", "コーディングや執筆に", "家事や作業用プレイリストに"],
         "tags": [
+            "作業用bgm", "勉強用bgm", "集中用bgm", "ローファイ", "カフェ音楽",
             "lofi hip hop", "lofi beats", "study music", "chill beats", "focus music", "lofi chill",
-            "study lofi", "vinyl lofi", "relaxing beats", "background music for studying", "lofi radio",
-            "productivity music",
-            "勉強用bgm", "作業用bgm", "集中用bgm",
+            "study lofi",
         ],
-        "hashtags": ["lofi", "lofihiphop", "studymusic", "chillbeats", "focusmusic"],
+        "hashtags": ["作業用bgm", "勉強用bgm", "ローファイ", "lofi", "studymusic"],
     },
     "study_focus_binaural": {
-        "title": "Alpha Focus Binaural + Pad｜集中・勉強用BGM",
-        "description": "10Hz alpha-range binaural beat under a soft pad for study focus.",
-        "hook": "A 10Hz alpha-range binaural beat under a soft ambient pad — background audio built for focused study and deep work (headphones recommended).",
+        "title": "【勉強用BGM】アルファ波バイノーラルビートで集中力アップ 1時間",
+        "icon_category": "focus",
+        "thumb_hook": "集中力アップ",
+        "description": "10Hzのアルファ波バイノーラルビートを、穏やかなパッドの下に重ねた勉強・集中用BGM(ヘッドホン推奨)。",
+        "hook": "10Hzのアルファ波バイノーラルビートを、穏やかなアンビエントパッドの下に。勉強・集中作業のためのBGMです(ヘッドホン推奨)。",
         "about": (
-            "Two very slightly different tones, one in each ear, create a perceived \"beat\" at 10Hz — "
-            "the alpha brainwave range associated with relaxed, focused alertness. Layered under a "
-            "gentle pad so it's pleasant to listen to, not just clinical. Best experienced with headphones."
+            "左右の耳にごくわずかに異なる周波数の音を届けると、脳内で10Hzの「うなり」が知覚されます — "
+            "リラックスしながらも集中している状態と関連づけられる、アルファ波の帯域です。"
+            "耳にやさしい柔らかなパッドを重ねているので、実験音のようにならず、心地よく聴けます。"
         ),
-        "use_cases": ["Studying and reading", "Focused work sessions", "Light meditation", "Pre-exam or pre-deadline focus sessions"],
+        "use_cases": ["勉強・読書に", "集中したい作業セッションに", "軽い瞑想に", "試験前・締切前の集中に"],
         "tags": [
+            "集中用bgm", "勉強用bgm", "作業用bgm", "バイノーラルビート", "アルファ波",
             "binaural beats", "binaural beats focus", "study music", "focus music", "alpha waves",
-            "10hz binaural beats", "concentration music", "brainwave music", "study binaural beats",
-            "deep focus music", "binaural beats study", "ambient focus music",
-            "集中用bgm", "勉強用bgm", "作業用bgm",
+            "10hz binaural beats", "concentration music",
         ],
-        "hashtags": ["binauralbeats", "focusmusic", "studymusic", "alphawaves", "concentration"],
+        "hashtags": ["集中用bgm", "勉強用bgm", "バイノーラルビート", "binauralbeats", "focusmusic"],
     },
 }
 
