@@ -36,3 +36,8 @@ note-articles/queue-page/fonts.py
 docs/reports/weekly/*.pptx
 docs/reports/weekly/node_modules/
 docs/reports/weekly/package-lock.json
+
+# x-account/x_publish
+x-account/x_publish/.venv/
+x-account/x_publish/__pycache__/
+x-account/x_publish/credentials/
