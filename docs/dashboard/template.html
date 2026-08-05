@@ -524,7 +524,7 @@
         <div class="action-mark done">✓</div>
         <div class="action-body">
           <div class="action-title">YouTube: 電話番号確認・読み取り権限ログイン</div>
-          <div class="action-desc">両方完了。60分動画を再アップロードし、<code>uploadStatus: processed</code> / <code>processingStatus: succeeded</code> をAPIで直接確認済み。<a href="https://youtube.com/watch?v=cCFbFsWHX80" target="_blank" rel="noopener">実際に公開中</a>。</div>
+          <div class="action-desc">両方完了。60分動画を再アップロードし、<code>uploadStatus: processed</code> / <code>processingStatus: succeeded</code> をAPIで直接確認済み。<a href="https://youtube.com/watch?v=xT472Ht5omk" target="_blank" rel="noopener">実際に公開中</a>。</div>
         </div>
         <div class="action-owner">完了</div>
       </div>
@@ -756,7 +756,7 @@
         </div>
         <ul class="unit-detail">
           <li>睡眠ドローン・雨音・Lo-Fi・バイノーラルの4系統を実装。<code>publish.py</code>で生成→レンダリング→カスタムサムネイル生成→アップロード→処理完了確認→サムネイル設定→ローカル削除まで自動化済み</li>
-          <li><b>2本公開・再生確認済み</b>: <a href="https://youtube.com/watch?v=cCFbFsWHX80" target="_blank" rel="noopener">Rain Sounds for Sleeping(1時間)</a>、<a href="https://youtube.com/watch?v=nf7yiIO2hB8" target="_blank" rel="noopener">Alpha Focus Binaural + Pad(1時間)</a>。2本目は週次Routineが自動生成・自動公開したもの(ローテーションが<code>study_focus_binaural</code>を選択、同じプリセットの連投なし)。両方とも<code>uploadStatus: processed</code> / <code>processingStatus: succeeded</code>をAPIで直接確認済み</li>
+          <li><b>2本公開・再生確認済み</b>: <a href="https://youtube.com/watch?v=xT472Ht5omk" target="_blank" rel="noopener">Rain Sounds for Sleeping(1時間)</a>、<a href="https://youtube.com/watch?v=nf7yiIO2hB8" target="_blank" rel="noopener">Alpha Focus Binaural + Pad(1時間)</a>。2本目は週次Routineが自動生成・自動公開したもの(ローテーションが<code>study_focus_binaural</code>を選択、同じプリセットの連投なし)。両方とも<code>uploadStatus: processed</code> / <code>processingStatus: succeeded</code>をAPIで直接確認済み</li>
           <li><b>Shorts第1弾を自動公開</b>: <a href="https://youtube.com/watch?v=s3EeKc1HQ8o" target="_blank" rel="noopener">45秒・sleep_deep_drone</a>、長尺動画(Alpha Focus Binaural)への自動リンク付き。処理に通常より時間がかかり(300秒のタイムアウトを超過)一度は要確認扱いになったが、追加でポーリングして再生可能な状態を確認済み</li>
           <li><b>タイトル・タグに日本語キーワードを追加(2026-08-04)</b>: 「作業用BGM」「勉強用BGM」「睡眠用BGM」「集中用BGM」等、日本語検索に直結するキーワードを全プリセットのタイトル・タグに追加。公開済みの動画にも遡って反映(<code>videos.update</code>)。1本目は過去に効果確認済みの完全一致フレーズ「rain sounds for sleeping」を上書きしてしまう事故が一度あったが、その場で気づいて両立する形に修正</li>
           <li><b>SEO/マーケティングを強化(2026-08-03)</b>: 概要欄は「公開しただけ」の1行から、キーワード重視のフック+用途リスト+ハッシュタグ3〜5個の構成に拡充。ブランド統一されたカスタムサムネイル(長さバッジ付き)も自動生成するように(<code>docs/marketing/2026-08-youtube-seo.md</code>)</li>
@@ -956,7 +956,7 @@
       </div>
       <div class="tl-row">
         <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>YouTube公開、今度は実際に確認して完了。</b>オーナーが電話番号確認・読み取り権限の再ログインを完了。動画を作り直して<code>publish.py</code>で再実行したところ、修正済みの処理完了確認(<code>wait_for_processing</code>)が正常に機能し、さらに念のためAPIで独立して<code>uploadStatus: processed</code> / <code>processingStatus: succeeded</code>を直接確認してから公開完了と報告した。<a href="https://youtube.com/watch?v=cCFbFsWHX80" target="_blank" rel="noopener">Rain &amp; Soft Pad for Sleep(1時間)</a>が実際に視聴可能な状態でYouTubeに公開されている。BGM動画・note記事の2事業が名実ともに公開済みに。</div>
+        <div class="tl-body"><b>YouTube公開、今度は実際に確認して完了。</b>オーナーが電話番号確認・読み取り権限の再ログインを完了。動画を作り直して<code>publish.py</code>で再実行したところ、修正済みの処理完了確認(<code>wait_for_processing</code>)が正常に機能し、さらに念のためAPIで独立して<code>uploadStatus: processed</code> / <code>processingStatus: succeeded</code>を直接確認してから公開完了と報告した。<a href="https://youtube.com/watch?v=xT472Ht5omk" target="_blank" rel="noopener">Rain &amp; Soft Pad for Sleep(1時間)</a>が実際に視聴可能な状態でYouTubeに公開されている。BGM動画・note記事の2事業が名実ともに公開済みに。</div>
       </div>
       <div class="tl-row">
         <div class="tl-date">08-03</div>
@@ -1009,6 +1009,10 @@
       <div class="tl-row">
         <div class="tl-date">08-05</div>
         <div class="tl-body"><b>公開済み動画を実際に見たオーナーから「文字化け」「サムネイルが引き付けられない」「概要欄が英語」「紫は何?」「勉強用ならノート・鉛筆のような分かりやすいものに」と具体的な指摘。</b>すべて実在するバグ・課題だった。原因調査の結果、サムネイル用フォント(WorkSans)と動画焼き込み文字用フォント(DejaVu Sans)がどちらも日本語グリフを持たず、日本語タイトル導入以降ずっと文字化けしていたことが判明(サムネイルだけでなく動画本体の焼き込み文字も)。日本語対応フォント(WenQuanYi Zen Hei、この環境にプリインストール済みで追加インストール不要)に差し替えて修正。あわせて、集中/勉強系プリセット用にノート+鉛筆の具体的なアイコンを新規作成(月モチーフのままでは"睡眠"にしか読めないという指摘への対応)、<code>study_focus_binaural</code>だけ紫だった背景色をブランド統一の紺+アンバーに修正、タイトル・概要欄を実際に伸びているJP作業用BGMチャンネルの傾向を調査した上で日本語主体に全面書き換え。動画本体の焼き込み文字はAPI経由で修正できないため、2本の長尺動画を修正版で再アップロードし、旧動画(<code>qOTRrIYgdFQ</code>)は非公開化して新動画(<code>nf7yiIO2hB8</code>)への案内を追記。あわせてnote下書きを2本追加(08: アプリ価格設定の裏側、09: 売上¥0の正直な報告)。</div>
+      </div>
+      <div class="tl-row">
+        <div class="tl-date">08-05</div>
+        <div class="tl-body"><b>2本目の差し替えも完了。</b><a href="https://youtube.com/watch?v=xT472Ht5omk" target="_blank" rel="noopener">雨音・睡眠用BGM(修正版)</a>を再アップロードし、APIで再生可能な状態を独立確認。旧動画(<code>cCFbFsWHX80</code>)は非公開化して案内を追記。Shorts側のリンクも新しい長尺動画IDに向け直し済み。公開中の2本とも文字化け・紫色の問題は解消。</div>
       </div>
     </div>
   </section>
