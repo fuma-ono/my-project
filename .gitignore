@@ -45,3 +45,4 @@ x-account/x_publish/credentials/
 # moyasuka
 moyasuka/__pycache__/
 moyasuka/.venv/
+moyasuka/channel_art/output/
