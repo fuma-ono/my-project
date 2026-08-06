@@ -125,6 +125,21 @@ def parse_chat_script(path: str) -> tuple[str, list[dict]]:
                 continue
             side = "self" if speaker == "私" else "other"
             items.append({"type": "msg", "speaker": speaker, "text": msg, "side": side})
+
+    # group consecutive messages from the same speaker: real LINE only
+    # shows the name/avatar once per burst, not on every bubble, and
+    # tightens the vertical gap within a burst — repeating them on every
+    # short message (found by rendering and looking at it, after
+    # compacting the script text per owner feedback 2026-08-06) read as
+    # noticeably less authentic than a real chat log.
+    prev_speaker = None
+    for item in items:
+        if item["type"] == "msg":
+            item["grouped"] = item["speaker"] == prev_speaker
+            prev_speaker = item["speaker"]
+        else:
+            prev_speaker = None
+
     return title, items
 
 
@@ -142,11 +157,17 @@ def estimate_arrivals(items: list[dict]) -> list[tuple[float, float, dict]]:
 class _Block:
     """A pre-rendered chat element (bubble or card) with its own RGBA image
     and stacking height, so the per-frame draw loop only has to paste
-    already-composed pieces rather than re-measuring text every frame."""
+    already-composed pieces rather than re-measuring text every frame.
 
-    def __init__(self, image: Image.Image):
+    `tight`: True when this block should stack close to the block before
+    it (a consecutive same-speaker message) rather than with the normal
+    gap — mirrors how real LINE tightens spacing within one sender's
+    "burst" of messages."""
+
+    def __init__(self, image: Image.Image, tight: bool = False):
         self.image = image
         self.height = image.height
+        self.tight = tight
 
 
 def _render_card(text: str) -> _Block:
@@ -168,7 +189,11 @@ def _render_card(text: str) -> _Block:
     return _Block(img)
 
 
-def _render_bubble(speaker: str, text: str, side: str) -> _Block:
+def _render_bubble(speaker: str, text: str, side: str, grouped: bool) -> _Block:
+    """`grouped`: True when this is a consecutive message from the same
+    speaker as the block before it — skips the name label/avatar (real
+    LINE only shows those once per burst) but still indents the bubble to
+    the same column so the burst reads as one visual group."""
     font = _font(BUBBLE_FONT_SIZE)
     name_font = _font(NAME_FONT_SIZE)
     lines = _wrap(text, font, BUBBLE_MAX_WIDTH - 40)
@@ -179,7 +204,8 @@ def _render_bubble(speaker: str, text: str, side: str) -> _Block:
     bw, bh = text_w + pad_x * 2, line_h * len(lines) + pad_y * 2
 
     avatar_d = 56
-    name_h = NAME_FONT_SIZE + 10 if side == "other" else 0
+    show_header = side == "other" and not grouped
+    name_h = NAME_FONT_SIZE + 10 if show_header else 0
     total_h = name_h + bh + 6
     img = Image.new("RGBA", (BG_W, total_h), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -192,39 +218,47 @@ def _render_bubble(speaker: str, text: str, side: str) -> _Block:
             tw = d.textbbox((0, 0), ln, font=font)[2]
             d.text((bx1 - pad_x - tw, pad_y + i * line_h), ln, font=font, fill=text_color)
     else:
-        avatar_color = AVATAR_COLORS[abs(hash(speaker)) % len(AVATAR_COLORS)]
         ax = PANEL_PAD_X
         bx0 = ax + avatar_d + 12
         bx1 = bx0 + bw
-        d.text((bx0, 0), speaker, font=name_font, fill=NAME_TEXT)
-        d.ellipse([ax, name_h, ax + avatar_d, name_h + avatar_d], fill=avatar_color)
-        d.text(
-            (ax + avatar_d / 2, name_h + avatar_d / 2), speaker[:1],
-            font=_font(24), fill=(255, 255, 255), anchor="mm",
-        )
+        if show_header:
+            avatar_color = AVATAR_COLORS[abs(hash(speaker)) % len(AVATAR_COLORS)]
+            d.text((bx0, 0), speaker, font=name_font, fill=NAME_TEXT)
+            d.ellipse([ax, name_h, ax + avatar_d, name_h + avatar_d], fill=avatar_color)
+            d.text(
+                (ax + avatar_d / 2, name_h + avatar_d / 2), speaker[:1],
+                font=_font(24), fill=(255, 255, 255), anchor="mm",
+            )
         d.rounded_rectangle([bx0, name_h, bx1, name_h + bh], radius=22, fill=OTHER_BUBBLE, outline=OTHER_BORDER, width=2)
         for i, ln in enumerate(lines):
             d.text((bx0 + pad_x, name_h + pad_y + i * line_h), ln, font=font, fill=OTHER_TEXT)
 
-    return _Block(img)
+    return _Block(img, tight=grouped)
 
 
 def render_block(item: dict) -> _Block:
     if item["type"] == "card":
         return _render_card(item["text"])
-    return _render_bubble(item["speaker"], item["text"], item["side"])
+    return _render_bubble(item["speaker"], item["text"], item["side"], item.get("grouped", False))
+
+
+TIGHT_GAP = 6  # vertical gap within a same-speaker burst (vs. GAP_BETWEEN_BLOCKS between senders)
 
 
 def compose_chat_overlay(blocks_with_state: list[_Block], panel_h: int) -> Image.Image:
     """Stacks already-visible blocks bottom-up inside the panel, scrolling
     older ones off the top once the log is taller than the panel — the
-    same "newest message pins to the bottom" behavior as a real chat app."""
-    total_h = sum(b.height for b in blocks_with_state) + GAP_BETWEEN_BLOCKS * max(0, len(blocks_with_state) - 1)
+    same "newest message pins to the bottom" behavior as a real chat app.
+    Gap before each block is tightened when it's `tight` (grouped with the
+    block above it)."""
+    gaps = [0] + [TIGHT_GAP if b.tight else GAP_BETWEEN_BLOCKS for b in blocks_with_state[1:]]
+    total_h = sum(b.height for b in blocks_with_state) + sum(gaps)
     canvas = Image.new("RGBA", (BG_W, max(total_h, panel_h)), (0, 0, 0, 0))
     y = canvas.height - total_h
-    for b in blocks_with_state:
+    for b, gap in zip(blocks_with_state, gaps):
+        y += gap
         canvas.alpha_composite(b.image, (0, y))
-        y += b.height + GAP_BETWEEN_BLOCKS
+        y += b.height
     # crop to just the bottom `panel_h` px so only the most recent log is kept
     top = max(0, canvas.height - panel_h)
     return canvas.crop((0, top, BG_W, top + panel_h))
