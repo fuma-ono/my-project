@@ -109,6 +109,18 @@ def parse_chat_script(path: str) -> tuple[str, list[dict]]:
       - a line `名前: メッセージ` is a chat message; speaker "私" renders as
         the protagonist's own (green, right) bubble, any other name as an
         incoming (white, left) bubble with that name shown above it
+      - a message of exactly `[image]` or `[image:ラベル1=値1,ラベル2=値2]`
+        renders as a self-generated "app screenshot" evidence chart
+        instead of a bubble with text
+      - a message of exactly `[sticker]` or `[sticker:困り顔]` renders as a
+        self-generated sticker graphic (no bubble/border, LINE-sticker
+        style) instead of a text bubble
+    (owner feedback 2026-08-06: "画像とかスタンプとかが文字表記になって
+    いるので変えて" — these used to just be bracketed placeholder text
+    inside an ordinary bubble, e.g. "[家事記録アプリの画面を送信]";  now
+    they render as actual graphics, self-generated the same way as every
+    other visual asset in this repo, not stock images.)
+
     Returns (group_title, items). group_title comes from the first `#
     タイトル:` style header line if present, else falls back to a generic
     label.
@@ -134,7 +146,14 @@ def parse_chat_script(path: str) -> tuple[str, list[dict]]:
             if not msg:
                 continue
             side = "self" if speaker == "私" else "other"
-            items.append({"type": "msg", "speaker": speaker, "text": msg, "side": side})
+            kind, payload, body_text = "text", None, msg
+            if msg.startswith("[") and msg.endswith("]"):
+                tag, _, rest = msg[1:-1].partition(":")
+                if tag == "image":
+                    kind, payload, body_text = "image", rest or None, ""
+                elif tag == "sticker":
+                    kind, payload, body_text = "sticker", rest or "困り顔", ""
+            items.append({"type": "msg", "speaker": speaker, "text": body_text, "side": side, "kind": kind, "payload": payload})
 
     # group consecutive messages from the same speaker: real LINE only
     # shows the name/avatar once per burst, not on every bubble, and
@@ -153,12 +172,21 @@ def parse_chat_script(path: str) -> tuple[str, list[dict]]:
     return title, items
 
 
+IMAGE_VIEW_SECONDS = 2.2   # dwell time for an [image] evidence chart (no text to time against)
+STICKER_VIEW_SECONDS = 1.6  # dwell time for a [sticker]
+
+
 def estimate_arrivals(items: list[dict]) -> list[tuple[float, float, dict]]:
     t = 0.5  # small lead-in before the first message
     out = []
     for item in items:
-        text = item["text"]
-        dur = max(MIN_BLOCK_SECONDS, len(text) / CHARS_PER_SECOND)
+        kind = item.get("kind", "text")
+        if kind == "image":
+            dur = IMAGE_VIEW_SECONDS
+        elif kind == "sticker":
+            dur = STICKER_VIEW_SECONDS
+        else:
+            dur = max(MIN_BLOCK_SECONDS, len(item["text"]) / CHARS_PER_SECOND)
         out.append((t, t + dur, item))
         t += dur + GAP_SECONDS
     return out
@@ -246,10 +274,134 @@ def _render_bubble(speaker: str, text: str, side: str, grouped: bool) -> _Block:
     return _Block(img, tight=grouped)
 
 
+def _wrap_media_block(speaker: str, side: str, grouped: bool, media: Image.Image) -> _Block:
+    """Positions a pre-rendered image/sticker graphic the same way
+    `_render_bubble` positions a text bubble (self→right edge, other→left
+    with name/avatar on first-of-burst), but with no bubble background —
+    the graphic's own transparent-canvas edges are the message."""
+    avatar_d = 56
+    show_header = side == "other" and not grouped
+    name_h = NAME_FONT_SIZE + 10 if show_header else 0
+    total_h = name_h + media.height + 6
+    img = Image.new("RGBA", (BG_W, total_h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+
+    if side == "self":
+        x0 = BG_W - PANEL_PAD_X - media.width
+        img.alpha_composite(media, (x0, 0))
+    else:
+        ax = PANEL_PAD_X
+        x0 = ax + avatar_d + 12
+        if show_header:
+            avatar_color = AVATAR_COLORS[abs(hash(speaker)) % len(AVATAR_COLORS)]
+            d.text((x0, 0), speaker, font=_font(NAME_FONT_SIZE), fill=NAME_TEXT)
+            d.ellipse([ax, name_h, ax + avatar_d, name_h + avatar_d], fill=avatar_color)
+            d.text(
+                (ax + avatar_d / 2, name_h + avatar_d / 2), speaker[:1],
+                font=_font(24), fill=(255, 255, 255), anchor="mm",
+            )
+        img.alpha_composite(media, (x0, name_h))
+
+    return _Block(img, tight=grouped)
+
+
+def _parse_evidence_payload(payload: str | None) -> tuple[str, list[tuple[str, str]]]:
+    """`[image:家事記録アプリ:掃除=613,洗濯=890]` → ("家事記録アプリ",
+    [("掃除","613"),("洗濯","890")]). The header segment is optional —
+    `[image:掃除=613,洗濯=890]` (no leading `見出し:`) falls back to a
+    generic header. Values that parse as int render as a labeled bar;
+    anything else (dates, etc.) renders as plain right-aligned text — see
+    _render_evidence_chart."""
+    header = "証拠"
+    rows_part = payload or ""
+    if payload and ":" in payload:
+        maybe_header, _, rest = payload.partition(":")
+        if "=" in rest:  # only treat the prefix as a header if `rest` still looks like row data
+            header, rows_part = maybe_header.strip(), rest
+
+    rows = []
+    for part in rows_part.split(","):
+        if "=" in part:
+            label, _, val = part.partition("=")
+            rows.append((label.strip(), val.strip()))
+    return header, (rows or [("記録", "1")])
+
+
+def _render_evidence_chart(header: str, data: list[tuple[str, str]], width: int = 300) -> Image.Image:
+    """The self-generated "app screenshot" graphic used for [image]
+    messages — a small bar chart (for numeric data) or a plain labeled
+    list (for text values like dates) mocked up to look like a phone
+    screenshot, standing in for the "証拠" (evidence) the story's
+    protagonist sends. Pure PIL, same policy as every other visual asset
+    in this repo (background_gen.py, channel_art.py): no stock images."""
+    row_h, pad, header_h = 54, 18, 44
+    height = header_h + pad + row_h * len(data) + pad
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([0, 0, width - 1, height - 1], radius=18, fill=(255, 255, 255, 255), outline=(224, 224, 230, 255), width=2)
+    d.text((pad, 12), header, font=_font(22), fill=(60, 60, 66))
+    d.line([(0, header_h), (width, header_h)], fill=(230, 230, 235), width=2)
+
+    lf = _font(20)
+    numeric = [int(v) for _, v in data if v.isdigit()]
+    max_val = max(numeric, default=1) or 1
+    bar_x0 = pad + 70
+    bar_max_w = width - bar_x0 - pad - 60
+    colors = [(255, 99, 132), (99, 180, 255), (255, 180, 80), (140, 200, 120)]
+    y = header_h + pad
+    for i, (label, val) in enumerate(data):
+        d.text((pad, y + 8), label, font=lf, fill=(80, 80, 90))
+        if val.isdigit():
+            n = int(val)
+            bw = max(int(bar_max_w * n / max_val), 6)
+            d.rounded_rectangle([bar_x0, y + 6, bar_x0 + bw, y + row_h - 14], radius=8, fill=colors[i % len(colors)])
+            d.text((bar_x0 + bw + 10, y + 8), f"{n}回", font=lf, fill=(60, 60, 66))
+        else:
+            tw = d.textbbox((0, 0), val, font=lf)[2]
+            d.text((width - pad - tw, y + 8), val, font=lf, fill=(60, 60, 66))
+        y += row_h
+    return img
+
+
+def _render_sticker_face(label: str, size: int = 170) -> Image.Image:
+    """A simple self-drawn emoji-style sticker face, standing in for a
+    real LINE sticker (which this repo can't legally bundle). Currently
+    supports a 困り顔/"troubled" expression — the one the shipped scripts
+    use — with room to add more by label if future scripts need them."""
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.ellipse([4, 4, size - 4, size - 4], fill=(255, 205, 112, 255), outline=(210, 160, 80, 255), width=3)
+
+    eb_y = size * 0.36
+    d.line([(size * 0.28, eb_y + 8), (size * 0.42, eb_y - 4)], fill=(90, 70, 40), width=6)
+    d.line([(size * 0.58, eb_y - 4), (size * 0.72, eb_y + 8)], fill=(90, 70, 40), width=6)
+
+    er = size * 0.045
+    for ex in (0.34, 0.66):
+        d.ellipse([size * ex - er, size * 0.46 - er, size * ex + er, size * 0.46 + er], fill=(70, 50, 30, 255))
+
+    mx0, mx1, my = size * 0.34, size * 0.66, size * 0.68
+    d.line(
+        [(mx0, my), (mx0 + (mx1 - mx0) * 0.33, my - 10), (mx0 + (mx1 - mx0) * 0.66, my + 10), (mx1, my)],
+        fill=(120, 80, 40), width=5, joint="curve",
+    )
+    d.ellipse([size * 0.78, size * 0.26, size * 0.78 + size * 0.09, size * 0.26 + size * 0.15], fill=(120, 200, 255, 255))
+    return img
+
+
 def render_block(item: dict) -> _Block:
     if item["type"] == "card":
         return _render_card(item["text"])
-    return _render_bubble(item["speaker"], item["text"], item["side"], item.get("grouped", False))
+    kind = item.get("kind", "text")
+    grouped = item.get("grouped", False)
+    if kind == "image":
+        header, data = _parse_evidence_payload(item.get("payload"))
+        chart = _render_evidence_chart(header, data)
+        return _wrap_media_block(item["speaker"], item["side"], grouped, chart)
+    if kind == "sticker":
+        face = _render_sticker_face(item.get("payload") or "困り顔")
+        return _wrap_media_block(item["speaker"], item["side"], grouped, face)
+    return _render_bubble(item["speaker"], item["text"], item["side"], grouped)
 
 
 TIGHT_GAP = 6  # vertical gap within a same-speaker burst (vs. GAP_BETWEEN_BLOCKS between senders)
