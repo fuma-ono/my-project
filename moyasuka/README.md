@@ -6,6 +6,7 @@ LINE風の会話ドラマをAI音声合成(VOICEVOX/COEIROINK)でナレーショ
 - **背景映像のデザイン決定の経緯**: `docs/projects/moyasuka/background.md`
 - **投稿方針(フォーマット・言語・頻度・時刻)**: `docs/projects/moyasuka/posting-policy.md`
 - **チャンネル名・ハンドル名の決定**: `docs/projects/moyasuka/naming.md`(チャンネル名「モヤスカ」・ハンドル`@moyasuka`で確定)
+- **チャンネル概要欄(コピペ用)**: `docs/projects/moyasuka/channel-description.md`
 
 ## 投稿方針(要点)
 

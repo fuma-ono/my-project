@@ -28,6 +28,8 @@
 - [x] 台本サンプル1本作成(スカッと系)
 - [x] 投稿方針の決定(Shorts中心・完全日本語・毎日20:00 JST固定、根拠は`docs/projects/moyasuka/posting-policy.md`)
 - [x] チャンネル名・ハンドルの決定(「モヤスカ」・`@moyasuka`、根拠は`docs/projects/moyasuka/naming.md`)
+- [x] チャンネルアイコン・バナーの作成(`moyasuka/channel_art.py`、明るい配色+吹き出し型ロゴ)
+- [x] チャンネル概要欄のコピペ用文面を作成(`docs/projects/moyasuka/channel-description.md`)
 - [ ] 背景映像パイプラインの本実装(`bgm-pipeline`と同様の構成でコード化)
 - [ ] 台本の量産・ネタ帳作成
 - [ ] VOICEVOXセットアップ(オーナー自身のPCで、note.com/Xと同じ理由・同じ方式が必要な見込み)
