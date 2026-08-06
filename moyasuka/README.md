@@ -24,10 +24,9 @@ LINE風の会話ドラマをAI音声合成(VOICEVOX/COEIROINK)でナレーショ
 - チャンネルアイコン・バナー: 生成済み(オーナーへ送付、チャンネル作成時にアップロード)
 - 台本: サンプル1本(`scripts/01-sample.md`)
 - 音声合成(VOICEVOX): エンジン本体がこのクラウド環境でダウンロードできないため未着手。note.com/Xの自動投稿と同じ理由で、**オーナー自身のPCでのセットアップが必要な見込み**
-- 新YouTubeチャンネル: 未作成(オーナー対応)
-- チャンネル名・ハンドル: **「モヤスカ」・`@moyasuka`で確定**(`docs/projects/moyasuka/naming.md`)
+- 新YouTubeチャンネル: **作成完了**(2026-08-06、オーナー対応)。[youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ](https://youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ)(`@moyasuka`)。APIで名称・ハンドル・概要欄・バナーが用意した内容と一致していることを確認済み
+- チャンネル名・ハンドル: **「モヤスカ」・`@moyasuka`で確定・反映済み**(`docs/projects/moyasuka/naming.md`)
 
 ## 人間側でまだ必要な作業
 
-- 新YouTubeチャンネルを「モヤスカ」名義・`@moyasuka`ハンドルで作成
 - VOICEVOXエンジンのセットアップ(手元PC)

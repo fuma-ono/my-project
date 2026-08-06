@@ -30,12 +30,11 @@
 - [x] チャンネル名・ハンドルの決定(「モヤスカ」・`@moyasuka`、根拠は`docs/projects/moyasuka/naming.md`)
 - [x] チャンネルアイコン・バナーの作成(`moyasuka/channel_art.py`、明るい配色+吹き出し型ロゴ)
 - [x] チャンネル概要欄のコピペ用文面を作成(`docs/projects/moyasuka/channel-description.md`)
+- [x] 新YouTubeチャンネル作成(2026-08-06、オーナー対応。[UCrbgwaQhPlDOcQGfUF29VFQ](https://youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ) / `@moyasuka`。名称・概要欄・バナーが用意した内容と一致していることをAPIで確認済み)
 - [ ] 背景映像パイプラインの本実装(`bgm-pipeline`と同様の構成でコード化)
 - [ ] 台本の量産・ネタ帳作成
 - [ ] VOICEVOXセットアップ(オーナー自身のPCで、note.com/Xと同じ理由・同じ方式が必要な見込み)
-- [ ] 新YouTubeチャンネル作成(オーナー対応)
 
 ## オーナーへの依頼
 
-- 新YouTubeチャンネルを「モヤスカ」名義・`@moyasuka`ハンドルで作成(取得不可の場合の代替案は`naming.md`参照)
 - VOICEVOXエンジンのセットアップ(オーナー自身のPC)

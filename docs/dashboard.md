@@ -8,7 +8,7 @@
 
 週次活動報告(スライド、`docs/reports/`): オーナーへSendUserFileで毎週送付。生成スクリプトは`docs/reports/weekly/`にコミットするが、`.pptx`本体はgitignore対象
 
-第4事業「モヤスカ」(`moyasuka/`): LINEドラマ×AI音声合成のYouTube Shortsチャンネル。チャンネル名・ハンドル(`@moyasuka`)確定済み(`docs/projects/moyasuka/naming.md`)、Shorts中心・完全日本語・毎日20:00 JST固定投稿の方針決定済み(`docs/projects/moyasuka/posting-policy.md`)。進捗は`docs/projects/moyasuka/team.md`
+第4事業「モヤスカ」(`moyasuka/`): LINEドラマ×AI音声合成のYouTube Shortsチャンネル。新チャンネル開設済み([@moyasuka](https://youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ)、2026-08-06)、名称・概要欄・バナーが用意した内容と一致していることをAPIで確認済み。Shorts中心・完全日本語・毎日20:00 JST固定投稿の方針決定済み(`docs/projects/moyasuka/posting-policy.md`)。残るブロッカーはVOICEVOXセットアップのみ。進捗は`docs/projects/moyasuka/team.md`
 
 3事業(BGM動画/アプリ/note記事)+新規1事業(モヤスカ)の体制図・パイプライン進捗・オーナーへの依頼事項・経営ログをまとめたもの。定例レビュー(週次)のたびに内容を更新して同じURLに再公開する。
 
