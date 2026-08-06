@@ -23,22 +23,38 @@ that: this whole genre's videos play a short notification "pop" on every
 single message bubble as it appears, not just one climax sting — that's
 the actual gap, not a wrong stinger. `generate_message_pop` below adds it.
 
-Both stingers below are pure ffmpeg lavfi synthesis, no samples:
-  - the "scratch" is pink noise run through a fast vibrato (wobbling
-    pitch), which is what a scratched record actually sounds like —
-    rapid pitch modulation on a noisy source
-  - the "de-de-de-de-DUN" is additive synthesis: each hit is a low sine
-    fundamental + a detuned harmonic, under a fast exponential-decay
-    envelope (`aevalsrc` evaluates the expression directly, sample by
-    sample) — that decay shape is what makes a synthesized tone read as
-    a "hit" instead of a held note. The five short hits share one decay
-    rate and a mild volume crescendo; the final hit uses a lower
-    fundamental and a much slower decay so it rings out instead of
-    cutting off.
+Owner request, round 4: pointed at a specific track — 効果音ラボ(sound
+effect-lab.info)'s 男衆「イヤッホー！」("men's crowd cheer") — and asked
+for that one specifically ("これがいい"). This session's network policy
+blocks soundeffect-lab.info the same way it blocks YouTube (confirmed via
+curl: 403 at the proxy), so it couldn't be fetched here either; the owner
+downloaded it on their own machine and attached it in chat instead. It now
+lives at moyasuka/assets/sfx/otoko_iyahho.mp3 — see NOTICE.md in that
+folder for the license terms and how it was obtained. This is the one
+exception to this module's "everything is synthesized" rule, and it's
+used only for the climax cue; `generate_message_pop` (the per-message
+notification) stays synthesized.
+
+The synthesized stingers below are pure ffmpeg lavfi synthesis, no
+samples:
+  - the "scratch" (superseded as the climax cue by otoko_iyahho.mp3, kept
+    here since it's still valid, reusable synthesis) is pink noise run
+    through a fast vibrato (wobbling pitch), which is what a scratched
+    record actually sounds like — rapid pitch modulation on a noisy source
+  - the "de-de-de-de-DUN" (also superseded as the climax cue) is additive
+    synthesis: each hit is a low sine fundamental + a detuned harmonic,
+    under a fast exponential-decay envelope (`aevalsrc` evaluates the
+    expression directly, sample by sample) — that decay shape is what
+    makes a synthesized tone read as a "hit" instead of a held note
+  - the message-arrival "pop" (still in active use) is the same
+    sine+harmonic+decay idea, just pitched high and short
 """
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
+
+ASSETS_DIR = Path(__file__).parent / "assets" / "sfx"
 
 
 def _hit_expr(freq: float, decay: float, amp: float) -> str:
@@ -88,7 +104,18 @@ def generate_message_pop(out_path: str) -> None:
     )
 
 
+def use_otoko_iyahho(out_path: str) -> None:
+    """Copies the licensed 効果音ラボ track (see assets/sfx/NOTICE.md for
+    source/license) to `out_path` as wav, so it fits the same pipeline as
+    the synthesized cues (_mix_audio expects a readable audio file, it
+    doesn't care whether ffmpeg generated it from scratch or transcoded
+    an existing one)."""
+    src = ASSETS_DIR / "otoko_iyahho.mp3"
+    subprocess.run(["ffmpeg", "-y", "-i", str(src), out_path], check=True, capture_output=True)
+
+
 SFX_GENERATORS = {
-    "scratch_dun": generate_scratch_dun,
+    "scratch_dun": generate_scratch_dun,  # superseded as the climax cue, kept as reusable synthesis
     "message_pop": generate_message_pop,
+    "otoko_iyahho": use_otoko_iyahho,  # current climax cue (licensed track, see round 4 above)
 }
