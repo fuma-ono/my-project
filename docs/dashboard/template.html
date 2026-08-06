@@ -118,7 +118,7 @@
   body { padding: 0 0 64px; }
 
   .wrap {
-    max-width: 1080px;
+    max-width: 1040px;
     margin: 0 auto;
     padding: 40px 24px 0;
   }
@@ -130,8 +130,8 @@
     align-items: flex-end;
     gap: 16px;
     border-bottom: 1px solid var(--border);
-    padding-bottom: 28px;
-    margin-bottom: 32px;
+    padding-bottom: 24px;
+    margin-bottom: 24px;
   }
   .eyebrow {
     font-family: "IBM Plex Mono", monospace;
@@ -144,14 +144,14 @@
   h1.brand {
     font-family: "Gloock", serif;
     font-weight: 400;
-    font-size: clamp(28px, 4vw, 40px);
+    font-size: clamp(26px, 4vw, 36px);
     margin: 0;
     text-wrap: balance;
   }
   .meta {
     text-align: right;
     font-family: "IBM Plex Mono", monospace;
-    font-size: 12px;
+    font-size: 11.5px;
     color: var(--text-dim);
     line-height: 1.7;
   }
@@ -172,177 +172,42 @@
   .status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
   .letter {
-    font-size: 15px;
-    line-height: 1.85;
+    font-size: 13.5px;
+    line-height: 1.75;
     color: var(--text-dim);
     max-width: 640px;
-    margin: 0 0 40px;
+    margin: 0 0 24px;
   }
   .letter strong { color: var(--text); font-weight: 700; }
 
-  .quick-links { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 28px; }
+  .quick-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 32px; }
   .quick-links a {
-    display: inline-flex; align-items: center; gap: 7px;
+    display: inline-flex; align-items: center; gap: 6px;
     background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
-    padding: 7px 14px 7px 12px; font-size: 12.5px; font-weight: 700; color: var(--text);
+    padding: 6px 13px 6px 11px; font-size: 12px; font-weight: 700; color: var(--text);
     text-decoration: none; box-shadow: var(--shadow);
   }
-  .quick-links a .emoji { font-size: 13px; }
+  .quick-links a .emoji { font-size: 12.5px; }
   .quick-links a:hover { border-color: var(--accent); color: var(--accent); }
 
-  /* org chart */
-  .orgchart {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 24px 0 4px;
-  }
-  .org-node.ceo {
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 14px;
-    font-weight: 700;
-    border-radius: 10px;
-    padding: 9px 22px;
-    background: var(--text);
-    color: var(--bg);
-    white-space: nowrap;
-  }
-  .org-connector-v { width: 1px; height: 20px; background: var(--border); }
-  .org-hbar { width: 100%; max-width: 760px; height: 1px; background: var(--border); margin-bottom: 20px; }
-  .org-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    width: 100%;
-  }
-  @media (max-width: 640px) { .org-grid { grid-template-columns: repeat(2, 1fr); } }
-  @media (max-width: 420px) { .org-grid { grid-template-columns: 1fr; } }
-  .dept-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 14px 16px;
-    box-shadow: var(--shadow);
-  }
-  .dept-icon { font-size: 18px; line-height: 1; }
-  .dept-name { font-weight: 700; font-size: 12.5px; margin-top: 8px; }
-  .dept-scope { font-size: 11px; color: var(--text-dim); margin-top: 4px; line-height: 1.55; }
-
-  /* pipeline steppers */
-  .pipelines { display: flex; flex-direction: column; gap: 22px; }
-  .pipeline-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 20px 24px;
-    box-shadow: var(--shadow);
-  }
-  .pipeline-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    margin-bottom: 18px;
-  }
-  .pipeline-name { font-weight: 700; font-size: 15px; }
-  .pipeline-eta { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-faint); }
-  .steps {
-    display: flex;
-    align-items: flex-start;
-  }
-  .step { display: flex; flex-direction: column; align-items: center; flex: none; width: 108px; }
-  .step-dot {
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 13px;
-    font-weight: 700;
-    flex: none;
-  }
-  .step.done .step-dot { background: var(--good); color: var(--surface); }
-  .step.current .step-dot { background: var(--warn-soft); color: var(--warn); border: 2px solid var(--warn); }
-  .step.todo .step-dot { background: var(--surface); color: var(--text-faint); border: 2px dashed var(--border); }
-  .step-label { font-size: 12px; margin-top: 8px; text-align: center; font-weight: 700; }
-  .step.todo .step-label { color: var(--text-faint); font-weight: 400; }
-  .step-sub { display: block; font-size: 10.5px; color: var(--text-faint); font-weight: 400; margin-top: 2px; }
-  .step-line { flex: 1 1 auto; height: 2px; margin-top: 13px; min-width: 8px; }
-  .step-line.done { background: var(--good); }
-  .step-line.todo { background: var(--border); }
-
-  .legend { display: flex; gap: 18px; margin-top: 18px; flex-wrap: wrap; }
-  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-dim); }
-  .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
-  .legend-dot.done { background: var(--good); }
-  .legend-dot.current { background: var(--warn); }
-  .legend-dot.todo { background: var(--border); }
-
-  section { margin-bottom: 48px; }
+  section { margin-bottom: 40px; }
   h2.section-title {
     font-family: "Gloock", serif;
     font-weight: 400;
-    font-size: 22px;
-    margin: 0 0 18px;
+    font-size: 19px;
+    margin: 0 0 14px;
     display: flex;
     align-items: baseline;
     gap: 10px;
   }
   h2.section-title .count {
     font-family: "IBM Plex Mono", monospace;
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-faint);
     font-weight: 400;
   }
 
-  .units {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 18px;
-  }
-  @media (max-width: 820px) {
-    .units { grid-template-columns: 1fr; }
-  }
-  .unit-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 22px;
-    box-shadow: var(--shadow);
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-  .unit-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-  .unit-name { font-weight: 700; font-size: 16px; }
-  .unit-tagline { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
-  .unit-stats {
-    display: flex;
-    gap: 20px;
-    padding: 14px 0;
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-  }
-  .stat .num {
-    font-family: "IBM Plex Mono", monospace;
-    font-variant-numeric: tabular-nums;
-    font-size: 22px;
-    font-weight: 700;
-    line-height: 1;
-  }
-  .stat .label { font-size: 11px; color: var(--text-faint); margin-top: 5px; }
-  .unit-detail { font-size: 12.5px; color: var(--text-dim); line-height: 1.7; margin: 0; }
-  .unit-detail li { margin-bottom: 3px; }
-  .unit-blocker {
-    font-size: 12px;
-    background: var(--surface-2);
-    border-radius: 8px;
-    padding: 8px 10px;
-    color: var(--text-dim);
-  }
-  .unit-blocker b { color: var(--critical); font-weight: 700; }
-
+  /* action rows (shared: owner asks + collapsed done + president working) */
   .actions {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -352,21 +217,21 @@
   }
   .action-row {
     display: flex;
-    gap: 14px;
+    gap: 12px;
     align-items: flex-start;
-    padding: 14px 20px;
+    padding: 12px 18px;
     border-bottom: 1px solid var(--border);
   }
   .action-row:last-child { border-bottom: none; }
   .action-mark {
     flex: none;
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 12px;
+    font-size: 11px;
     margin-top: 1px;
     font-family: "IBM Plex Mono", monospace;
     font-weight: 700;
@@ -374,13 +239,13 @@
   .action-mark.pending { border: 1.5px solid var(--critical); color: var(--critical); }
   .action-mark.done { background: var(--good); color: var(--surface); }
   .action-mark.working { border: 1.5px solid var(--accent); color: var(--accent); }
-  .action-body .action-title { font-weight: 700; font-size: 14px; }
-  .action-body .action-desc { font-size: 12.5px; color: var(--text-dim); margin-top: 3px; line-height: 1.6; }
+  .action-body .action-title { font-weight: 700; font-size: 13px; }
+  .action-body .action-desc { font-size: 12px; color: var(--text-dim); margin-top: 3px; line-height: 1.55; }
   .action-owner {
     margin-left: auto;
     flex: none;
     font-family: "IBM Plex Mono", monospace;
-    font-size: 10.5px;
+    font-size: 10px;
     letter-spacing: 0.04em;
     color: var(--text-faint);
     text-transform: uppercase;
@@ -388,58 +253,115 @@
     white-space: nowrap;
   }
 
-  table.revenue {
-    width: 100%;
-    border-collapse: collapse;
+  /* collapsible sections (native <details>) — used to hide done items / old log */
+  details.fold { margin-top: 10px; }
+  details.fold > summary {
+    cursor: pointer;
+    list-style: none;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px;
+    color: var(--text-faint);
+    padding: 8px 2px;
+    user-select: none;
+  }
+  details.fold > summary::-webkit-details-marker { display: none; }
+  details.fold > summary::before { content: "▸ "; }
+  details.fold[open] > summary::before { content: "▾ "; }
+  details.fold > summary:hover { color: var(--accent); }
+  details.fold .actions { margin-top: 8px; }
+
+  /* org chart — compact chip row instead of a big card grid */
+  .orgchart { display: flex; flex-direction: column; align-items: center; padding: 8px 0 2px; }
+  .org-node.ceo {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 10px;
+    padding: 7px 20px;
+    background: var(--text);
+    color: var(--bg);
+    white-space: nowrap;
+    margin-bottom: 14px;
+  }
+  .dept-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 780px; }
+  .dept-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+    padding: 6px 13px 6px 10px; font-size: 12px; font-weight: 700; color: var(--text);
+    box-shadow: var(--shadow); cursor: default;
+  }
+  .dept-chip .icon { font-size: 13px; }
+
+  /* business summary cards — merges what used to be 3 separate sections */
+  .units {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 720px) { .units { grid-template-columns: 1fr; } }
+  .unit-card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 14px;
-    overflow: hidden;
+    padding: 18px 20px;
     box-shadow: var(--shadow);
-    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
-  .table-scroll { overflow-x: auto; border-radius: 14px; }
-  table.revenue th, table.revenue td {
-    text-align: left;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border);
+  .unit-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .unit-name { font-weight: 700; font-size: 15px; }
+  .unit-tagline { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
+
+  .steps { display: flex; align-items: flex-start; }
+  .step { display: flex; flex-direction: column; align-items: center; flex: none; width: 62px; }
+  .step-dot {
+    width: 20px; height: 20px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; font-weight: 700; flex: none;
   }
-  table.revenue th {
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-faint);
-    font-weight: 400;
-    background: var(--surface-2);
-  }
-  table.revenue tr:last-child td { border-bottom: none; }
-  table.revenue td.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
-  .awaiting { color: var(--text-faint); font-style: italic; }
+  .step.done .step-dot { background: var(--good); color: var(--surface); }
+  .step.current .step-dot { background: var(--warn-soft); color: var(--warn); border: 2px solid var(--warn); }
+  .step.todo .step-dot { background: var(--surface); color: var(--text-faint); border: 2px dashed var(--border); }
+  .step-label { font-size: 9.5px; margin-top: 6px; text-align: center; font-weight: 700; }
+  .step.todo .step-label { color: var(--text-faint); font-weight: 400; }
+  .step-line { flex: 1 1 auto; height: 2px; margin-top: 10px; min-width: 6px; }
+  .step-line.done { background: var(--good); }
+  .step-line.todo { background: var(--border); }
+
+  .unit-stats { display: flex; gap: 18px; padding: 10px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .stat .num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 700; line-height: 1; }
+  .stat .label { font-size: 10px; color: var(--text-faint); margin-top: 4px; }
+  .unit-detail { font-size: 12px; color: var(--text-dim); line-height: 1.65; margin: 0; padding-left: 18px; }
+  .unit-detail li { margin-bottom: 3px; }
+  .unit-blocker { font-size: 11.5px; background: var(--surface-2); border-radius: 8px; padding: 7px 10px; color: var(--text-dim); }
+  .unit-blocker b { color: var(--critical); font-weight: 700; }
 
   .timeline { display: flex; flex-direction: column; }
   .tl-row {
     display: grid;
-    grid-template-columns: 96px 1fr;
-    gap: 16px;
-    padding: 10px 0;
+    grid-template-columns: 88px 1fr;
+    gap: 14px;
+    padding: 8px 0;
     border-bottom: 1px dashed var(--border);
   }
   .tl-row:last-child { border-bottom: none; }
-  .tl-date {
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 11.5px;
-    color: var(--text-faint);
-    padding-top: 2px;
-  }
-  .tl-body { font-size: 13.5px; color: var(--text-dim); line-height: 1.6; }
+  .tl-date { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-faint); padding-top: 1px; }
+  .tl-body { font-size: 12.5px; color: var(--text-dim); line-height: 1.6; }
   .tl-body b { color: var(--text); font-weight: 700; }
 
+  /* highlights strip — the "at a glance" recent log, full log lives in <details> below it */
+  .highlights { display: flex; flex-direction: column; }
+  .hl-row { display: flex; gap: 10px; padding: 6px 0; align-items: baseline; }
+  .hl-date { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-faint); flex: none; width: 48px; }
+  .hl-body { font-size: 12.5px; color: var(--text-dim); }
+  .hl-body b { color: var(--text); font-weight: 700; }
+
   footer {
-    max-width: 1080px;
+    max-width: 1040px;
     margin: 0 auto;
     padding: 0 24px;
-    font-size: 11.5px;
+    font-size: 11px;
     color: var(--text-faint);
     font-family: "IBM Plex Mono", monospace;
   }
@@ -448,12 +370,12 @@
 <div class="wrap">
   <header class="top">
     <div>
-      <p class="eyebrow">Executive Report · 2026-08-03</p>
+      <p class="eyebrow">Executive Report · 2026-08-06</p>
       <h1 class="brand">経営ダッシュボード</h1>
     </div>
     <div class="meta">
-      <div><span class="status-pill warn"><span class="dot"></span>目標: 1週間以内に収益化(noteに集中)</span></div>
-      <div>最終更新: 2026-08-03</div>
+      <div><span class="status-pill good"><span class="dot"></span>4事業運営中・note公開済み</span></div>
+      <div>最終更新: 2026-08-06</div>
       <div>次回定例: 毎週月曜 09:00 JST</div>
     </div>
   </header>
@@ -461,94 +383,63 @@
   <div class="quick-links">
     <a href="https://claude.ai/code/artifact/4463f3ba-3008-4e37-bbff-c9b338cbcb87" target="_blank" rel="noopener"><span class="emoji">📝</span> note投稿キュー</a>
     <a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4" target="_blank" rel="noopener"><span class="emoji">✅</span> アカウント作成ガイド</a>
-    <a href="https://note.com/unique_condor276" target="_blank" rel="noopener"><span class="emoji">🖋️</span> noteプロフィール</a>
-    <a href="https://youtube.com/channel/UCj8ptbHu5Dfmt6M4wALODTA" target="_blank" rel="noopener"><span class="emoji">🎵</span> YouTubeチャンネル</a>
+    <a href="https://youtube.com/channel/UCj8ptbHu5Dfmt6M4wALODTA" target="_blank" rel="noopener"><span class="emoji">🎵</span> YouTube</a>
+    <a href="https://x.com/QuietHoursceo" target="_blank" rel="noopener"><span class="emoji">🐦</span> X</a>
+    <a href="https://claude.ai/code/artifact/3ace0d1f-bbd2-4522-bb2e-b9b0b834d5b4" target="_blank" rel="noopener"><span class="emoji">🌐</span> 会社サイト</a>
   </div>
 
   <p class="letter">
-    オーナーへ。このページの一番上に「今すぐお願いしたいこと」、その次に「社長が今やっていること」を置きました。逐一チャットで確認する代わりに、ここを見れば状況がわかるようにしています。各項目の「手順を見る」リンク先(<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4" target="_blank" rel="noopener">アカウント作成ガイド</a>)にチェックボックスを追加しました。完了したらチェックすればブラウザに自動保存されます(進捗バー付き)。詳しい事業ごとの進捗は下にスクロールしてください。
+    オーナーへ。上から「今すぐお願いしたいこと」→「事業サマリー」→「体制図」→「経営ログ」の順に並べています。完了済みの項目や過去のログは折りたたんであるので、気になる時だけ開いてください(▸をクリック)。
   </p>
 
   <section>
-    <h2 class="section-title">今すぐお願いしたいこと <span class="count">7 items 残</span></h2>
+    <h2 class="section-title">今すぐお願いしたいこと <span class="count">8 items 残</span></h2>
     <div class="actions">
-      <div class="action-row">
-        <div class="action-mark done">✓</div>
-        <div class="action-body">
-          <div class="action-title">noteの「サポート機能」有効化・振込先登録</div>
-          <div class="action-desc">オーナーより「承認した」と報告あり。note.comのプロフィールURL(<a href="https://note.com/unique_condor276" target="_blank" rel="noopener">https://note.com/unique_condor276</a>)も共有いただき、YouTube動画の概要欄・今後の投稿すべてに自動でリンクするよう反映済み。</div>
-        </div>
-        <div class="action-owner">完了</div>
-      </div>
-      <div class="action-row">
-        <div class="action-mark pending">!</div>
-        <div class="action-body">
-          <div class="action-title">【今週中】note投稿キューの05・06・07をまとめて投稿</div>
-          <div class="action-desc">3本とも下書き済み・投稿待ちです。通常は週1本ペースですが、今週は収益化プッシュのため<a href="https://claude.ai/code/artifact/4463f3ba-3008-4e37-bbff-c9b338cbcb87" target="_blank" rel="noopener">投稿キューページ</a>からまとめて投稿していただけると助かります(コピペで数分です)。</div>
-        </div>
-        <div class="action-owner">最優先・Owner</div>
-      </div>
-      <div class="action-row">
-        <div class="action-mark done">✓</div>
-        <div class="action-body">
-          <div class="action-title">GitHub連携に書き込み権限を付与</div>
-          <div class="action-desc">解消済み。全コミットをリポジトリへpush済み。</div>
-        </div>
-        <div class="action-owner">完了</div>
-      </div>
-      <div class="action-row">
-        <div class="action-mark done">✓</div>
-        <div class="action-body">
-          <div class="action-title">note.comアカウント作成・記事公開</div>
-          <div class="action-desc">アカウント作成、4本の記事公開まで完了。</div>
-        </div>
-        <div class="action-owner">完了</div>
-      </div>
-      <div class="action-row">
-        <div class="action-mark done">✓</div>
-        <div class="action-body">
-          <div class="action-title">Instagramアカウント作成</div>
-          <div class="action-desc">作成完了。自動投稿には「ビジネス」種別である必要があるので、プロアカウント設定で「クリエイター」ではなく「ビジネス」を選んでいるかだけ確認してください。</div>
-        </div>
-        <div class="action-owner">完了(要確認)</div>
-      </div>
-      <div class="action-row">
-        <div class="action-mark done">✓</div>
-        <div class="action-body">
-          <div class="action-title">YouTube OAuth連携</div>
-          <div class="action-desc">完了。テストユーザーのメールアドレスが承認アカウントとズレていて「Googleの審査プロセスが完了していません」で一度詰まったが、テストユーザーを修正して解決。<code>youtube.upload</code>・<code>devstorage.read_write</code>スコープ付きのトークンを取得・検証済み。次回の動画からYouTubeへ実際にアップロードできる状態です。</div>
-        </div>
-        <div class="action-owner">完了</div>
-      </div>
-      <div class="action-row">
-        <div class="action-mark done">✓</div>
-        <div class="action-body">
-          <div class="action-title">YouTube: 電話番号確認・読み取り権限ログイン</div>
-          <div class="action-desc">両方完了。60分動画を再アップロードし、<code>uploadStatus: processed</code> / <code>processingStatus: succeeded</code> をAPIで直接確認済み。<a href="https://youtube.com/watch?v=xT472Ht5omk" target="_blank" rel="noopener">実際に公開中</a>。</div>
-        </div>
-        <div class="action-owner">完了</div>
-      </div>
       <div class="action-row">
         <div class="action-mark pending">!</div>
         <div class="action-body">
           <div class="action-title">Instagram: Meta開発者アプリの作成・トークン共有</div>
-          <div class="action-desc">今週、Meta for Developersのログイン〜アプリ作成〜Graph API Explorerでのトークン発行まで画面ごとに案内済み。App ID/Secret(<code>meta_app.json</code>)と、Graph API Explorerで発行した短期トークンをこちらに共有してください。共有後は<code>instagram_auth.py import --token</code>を実行するだけで長期トークンに交換します。Appレビュー(2〜4週間)が通るまでは手動投稿の橋渡しになります。手順は<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4#plat-meta" target="_blank" rel="noopener">アカウント作成ガイド(5b)</a>参照。</div>
+          <div class="action-desc">App ID/Secretと、Graph API Explorerで発行した短期トークンを共有してください。手順は<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4#plat-meta" target="_blank" rel="noopener">アカウント作成ガイド(5b)</a>。</div>
         </div>
         <div class="action-owner">進行中</div>
       </div>
       <div class="action-row">
         <div class="action-mark pending">!</div>
         <div class="action-body">
-          <div class="action-title">TikTokアカウント作成</div>
-          <div class="action-desc">Shorts用の投稿先。手順・ユーザーネーム案は<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4#plat-tiktok" target="_blank" rel="noopener">アカウント作成ガイド(6)</a>参照。</div>
+          <div class="action-title">note自動投稿の初回ログイン(オーナー自身のPC)</div>
+          <div class="action-desc"><code>note_auth.py login</code>を実行しブラウザでいつも通りログインするだけ。パスワードはツールに渡りません。<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4#plat-note-auto" target="_blank" rel="noopener">手順</a>。</div>
         </div>
         <div class="action-owner">Owner</div>
       </div>
       <div class="action-row">
         <div class="action-mark pending">!</div>
         <div class="action-body">
-          <div class="action-title">Apple Developer Program / Google Play Console登録</div>
-          <div class="action-desc">$99/年・$25(買い切り)。アプリ申請に必須。手順は<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4#plat-apple" target="_blank" rel="noopener">アカウント作成ガイド(3・4・4b)</a>参照(Expoアカウントもこの並びにまとめました)。</div>
+          <div class="action-title">X: 初回投稿スレッドの投稿+自動投稿の初回ログイン(オーナー自身のPC)</div>
+          <div class="action-desc">下書き済みの7ポストスレッドをまず手動投稿。その後<code>x_auth.py login</code>で自動投稿を有効化(note.comと同じ方式)。</div>
+        </div>
+        <div class="action-owner">Owner</div>
+      </div>
+      <div class="action-row">
+        <div class="action-mark pending">!</div>
+        <div class="action-body">
+          <div class="action-title">モヤスカ(第4事業)の立ち上げ準備 3点</div>
+          <div class="action-desc">①チャンネル名の最終決定(「モヤスカ」/「すかっと部屋」/「モヤスカ劇場」) ②新YouTubeチャンネルの作成 ③VOICEVOXエンジンのセットアップ(オーナー自身のPC)。詳細は<a href="https://claude.ai/code/artifact/63b530f4-9d42-411d-aa8a-d013d4283c32" target="_blank" rel="noopener">docs/projects/moyasuka/</a>。</div>
+        </div>
+        <div class="action-owner">Owner</div>
+      </div>
+      <div class="action-row">
+        <div class="action-mark pending">!</div>
+        <div class="action-body">
+          <div class="action-title">TikTokアカウント作成</div>
+          <div class="action-desc">Shorts用の投稿先。手順は<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4#plat-tiktok" target="_blank" rel="noopener">アカウント作成ガイド(6)</a>。</div>
+        </div>
+        <div class="action-owner">Owner</div>
+      </div>
+      <div class="action-row">
+        <div class="action-mark pending">!</div>
+        <div class="action-body">
+          <div class="action-title">Apple Developer / Google Play Console登録</div>
+          <div class="action-desc">$99/年・$25(買い切り)。アプリ申請に必須。手順は<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4#plat-apple" target="_blank" rel="noopener">アカウント作成ガイド(3・4・4b)</a>。</div>
         </div>
         <div class="action-owner">Owner</div>
       </div>
@@ -556,7 +447,7 @@
         <div class="action-mark pending">!</div>
         <div class="action-body">
           <div class="action-title">課金/広告SDKの方針決定</div>
-          <div class="action-desc">アプリのIAP(RevenueCat等)・広告(AdMob等)をどこまで自動化するか。選択肢の比較を<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4#plat-billing" target="_blank" rel="noopener">アカウント作成ガイド(8)</a>にまとめました。決めてもらえればすぐ実装に着手します。</div>
+          <div class="action-desc">IAP・広告をどこまで自動化するか。選択肢を<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4#plat-billing" target="_blank" rel="noopener">アカウント作成ガイド(8)</a>にまとめました。</div>
         </div>
         <div class="action-owner">要判断</div>
       </div>
@@ -564,19 +455,24 @@
         <div class="action-mark pending">!</div>
         <div class="action-body">
           <div class="action-title">プライバシーポリシー・利用規約の連絡先欄を記入</div>
-          <div class="action-desc">ドラフトを<code>docs/legal/privacy-policy.md</code>・<code>docs/legal/terms-of-service.md</code>に用意済み。連絡先メール・事業者名・準拠法の空欄記入と最終確認をお願いします(ストア申請前に必要)。記入箇所は<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4#plat-legal" target="_blank" rel="noopener">アカウント作成ガイド(9)</a>に一覧化しました。</div>
-        </div>
-        <div class="action-owner">Owner</div>
-      </div>
-      <div class="action-row">
-        <div class="action-mark pending">!</div>
-        <div class="action-body">
-          <div class="action-title">note自動投稿の初回ログイン(オーナー自身のPCで実行)</div>
-          <div class="action-desc">クラウドセッションでは実行不可(画面がない・note.comへの接続がネットワークポリシーでブロック済み)。コピペ用コマンド付きの手順を<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4#plat-note-auto" target="_blank" rel="noopener">アカウント作成ガイド(7b)</a>にまとめました。<code>note_auth.py login</code>を実行し、開いたブラウザでいつも通りログインするだけです(パスワードはこのツールには渡りません)。</div>
+          <div class="action-desc">ドラフト(<code>docs/legal/</code>)に連絡先メール・事業者名を記入。<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4#plat-legal" target="_blank" rel="noopener">記入箇所一覧</a>。</div>
         </div>
         <div class="action-owner">Owner</div>
       </div>
     </div>
+    <details class="fold">
+      <summary>完了済み(8件)</summary>
+      <div class="actions">
+        <div class="action-row"><div class="action-mark done">✓</div><div class="action-body"><div class="action-title">noteの「サポート機能」有効化・振込先登録</div><div class="action-desc">承認済み。プロフィール(<a href="https://note.com/unique_condor276" target="_blank" rel="noopener">note.com/unique_condor276</a>)もYouTube概要欄等に反映済み。</div></div></div>
+        <div class="action-row"><div class="action-mark done">✓</div><div class="action-body"><div class="action-title">note投稿キューの05・06・07を投稿</div><div class="action-desc">完了。note記事は7本すべて公開済みに。</div></div></div>
+        <div class="action-row"><div class="action-mark done">✓</div><div class="action-body"><div class="action-title">GitHub連携に書き込み権限を付与</div><div class="action-desc">解消済み。全コミットをリポジトリへpush済み。</div></div></div>
+        <div class="action-row"><div class="action-mark done">✓</div><div class="action-body"><div class="action-title">note.comアカウント作成・記事公開</div><div class="action-desc">アカウント作成、7本の記事公開まで完了。</div></div></div>
+        <div class="action-row"><div class="action-mark done">✓</div><div class="action-body"><div class="action-title">Instagramアカウント作成</div><div class="action-desc">作成完了。プロアカウント設定は「ビジネス」種別であることを要確認。</div></div></div>
+        <div class="action-row"><div class="action-mark done">✓</div><div class="action-body"><div class="action-title">YouTube OAuth連携</div><div class="action-desc">完了。<code>youtube.upload</code>等のスコープ付きトークンを取得・検証済み。</div></div></div>
+        <div class="action-row"><div class="action-mark done">✓</div><div class="action-body"><div class="action-title">YouTube: 電話番号確認・読み取り権限ログイン</div><div class="action-desc">両方完了。60分動画をAPIで再生可能な状態まで確認済み。</div></div></div>
+        <div class="action-row"><div class="action-mark done">✓</div><div class="action-body"><div class="action-title">Xアカウント作成</div><div class="action-desc"><a href="https://x.com/QuietHoursceo" target="_blank" rel="noopener">@QuietHoursceo</a>作成完了。会社サイト・本ダッシュボードにリンク追加済み。</div></div></div>
+      </div>
+    </details>
   </section>
 
   <section>
@@ -585,38 +481,155 @@
       <div class="action-row">
         <div class="action-mark working">●</div>
         <div class="action-body">
-          <div class="action-title">初の本番BGM動画(1時間)をレンダリング中</div>
-          <div class="action-desc">アカウント再設定待ちの間に、実際の公開想定サイズ(60分・雨音+集中プリセット)でパイプライン全体を通しで検証。YouTube連携が済み次第すぐアップロードできる状態にします。</div>
+          <div class="action-title">モヤスカ(第4事業)の投稿パイプライン構築</div>
+          <div class="action-desc">台本の量産・VOICEVOX音声合成連携・動画合成の自動化を実装中。背景映像は確定済み。</div>
         </div>
       </div>
       <div class="action-row">
         <div class="action-mark working">●</div>
         <div class="action-body">
-          <div class="action-title">プライバシーポリシー・利用規約のドラフト作成</div>
-          <div class="action-desc">アプリのストア申請に必須な2文書を用意(<code>docs/legal/</code>)。現状のアプリが個人情報を一切収集しない実態に基づいて作成。連絡先欄の記入だけオーナーにお願いしています。</div>
+          <div class="action-title">週次活動報告(スライド)の運用</div>
+          <div class="action-desc">毎週、進捗をまとめたスライド資料を生成しオーナーへ送付。</div>
         </div>
       </div>
       <div class="action-row">
         <div class="action-mark working">●</div>
         <div class="action-body">
-          <div class="action-title">EAS Buildの設定を準備</div>
-          <div class="action-desc"><code>app/eas.json</code>を追加し、Expoアカウントでログインすればすぐ<code>eas build</code>できる状態に。</div>
+          <div class="action-title">X運用の立ち上げ</div>
+          <div class="action-desc">「AI社長が実在の会社を経営している」ストーリーを軸に投稿設計・自動化基盤を構築。</div>
         </div>
       </div>
       <div class="action-row">
         <div class="action-mark working">●</div>
         <div class="action-body">
-          <div class="action-title">noteの次号を下書き</div>
-          <div class="action-desc">柱A「AIで作った音楽に著作権はあるのか」を書き上げ、<a href="https://claude.ai/code/artifact/4463f3ba-3008-4e37-bbff-c9b338cbcb87" target="_blank" rel="noopener">投稿キューページ</a>に追加(05・06が投稿待ち)。</div>
+          <div class="action-title">BGM/note/アプリの通常運用</div>
+          <div class="action-desc">YouTube長尺・Shortsは週次Routineで自動生成・公開。noteは下書き08・09が投稿キューで待機中。</div>
         </div>
       </div>
-      <div class="action-row">
-        <div class="action-mark working">●</div>
-        <div class="action-body">
-          <div class="action-title">週次の自動レビュー</div>
-          <div class="action-desc">毎週月曜、進捗確認・コンテンツ追加・ダッシュボード更新を自動で実施し、重要な変化があれば通知します。</div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="section-title">事業サマリー <span class="count">4 units</span></h2>
+    <div class="units">
+
+      <div class="unit-card">
+        <div class="unit-head">
+          <div>
+            <div class="unit-name">🎵 BGM動画</div>
+            <div class="unit-tagline">YouTube / TikTok / Reels 広告収益</div>
+          </div>
+          <span class="status-pill good"><span class="dot"></span>公開中</span>
         </div>
+        <div class="steps">
+          <div class="step done"><div class="step-dot">✓</div><div class="step-label">開発</div></div>
+          <div class="step-line done"></div>
+          <div class="step done"><div class="step-dot">✓</div><div class="step-label">調査</div></div>
+          <div class="step-line done"></div>
+          <div class="step done"><div class="step-dot">✓</div><div class="step-label">公開</div></div>
+          <div class="step-line todo"></div>
+          <div class="step current"><div class="step-dot">●</div><div class="step-label">収益化</div></div>
+        </div>
+        <div class="unit-stats">
+          <div class="stat"><div class="num">4</div><div class="label">プリセット</div></div>
+          <div class="stat"><div class="num">2</div><div class="label">長尺公開</div></div>
+          <div class="stat"><div class="num">1</div><div class="label">Shorts</div></div>
+          <div class="stat"><div class="num">¥0</div><div class="label">収益</div></div>
+        </div>
+        <ul class="unit-detail">
+          <li>生成→公開まで完全自動化(週次Routine)、日本語SEO対応済み</li>
+          <li>2026-08-05: 文字化け・配色バグを修正し2本を差し替え公開済み</li>
+        </ul>
+        <div class="unit-blocker"><b>保留</b>: 収益化はYouTubeパートナープログラム基準待ち。TikTok/Instagramは審査待ちで保留</div>
       </div>
+
+      <div class="unit-card">
+        <div class="unit-head">
+          <div>
+            <div class="unit-name">📱 アプリ</div>
+            <div class="unit-tagline">Focus &amp; Sleep Sounds(サブスク)</div>
+          </div>
+          <span class="status-pill warn"><span class="dot"></span>申請待ち</span>
+        </div>
+        <div class="steps">
+          <div class="step done"><div class="step-dot">✓</div><div class="step-label">開発</div></div>
+          <div class="step-line done"></div>
+          <div class="step done"><div class="step-dot">✓</div><div class="step-label">調査</div></div>
+          <div class="step-line todo"></div>
+          <div class="step current"><div class="step-dot">●</div><div class="step-label">公開</div></div>
+          <div class="step-line todo"></div>
+          <div class="step todo"><div class="step-dot"></div><div class="step-label">収益化</div></div>
+        </div>
+        <div class="unit-stats">
+          <div class="stat"><div class="num">4</div><div class="label">収録トラック</div></div>
+          <div class="stat"><div class="num">3</div><div class="label">画面</div></div>
+          <div class="stat"><div class="num">0</div><div class="label">ストア公開数</div></div>
+        </div>
+        <ul class="unit-detail">
+          <li>日本語UI・ブランド統一デザインに全面刷新、スリープタイマー実装済み</li>
+          <li>EAS Build設定・法務ドラフト準備済み、月額300〜500円の低価格ニッチで検証予定</li>
+        </ul>
+        <div class="unit-blocker"><b>依頼中</b>: Apple Developer / Google Play Console、Expoアカウント</div>
+      </div>
+
+      <div class="unit-card">
+        <div class="unit-head">
+          <div>
+            <div class="unit-name">📝 note記事</div>
+            <div class="unit-tagline">有料記事・定期購読マガジン</div>
+          </div>
+          <span class="status-pill good"><span class="dot"></span>公開中</span>
+        </div>
+        <div class="steps">
+          <div class="step done"><div class="step-dot">✓</div><div class="step-label">開発</div></div>
+          <div class="step-line done"></div>
+          <div class="step done"><div class="step-dot">✓</div><div class="step-label">調査</div></div>
+          <div class="step-line done"></div>
+          <div class="step done"><div class="step-dot">✓</div><div class="step-label">公開</div></div>
+          <div class="step-line todo"></div>
+          <div class="step current"><div class="step-dot">●</div><div class="step-label">収益化</div></div>
+        </div>
+        <div class="unit-stats">
+          <div class="stat"><div class="num">7</div><div class="label">公開本数</div></div>
+          <div class="stat"><div class="num">2</div><div class="label">下書き済み</div></div>
+          <div class="stat"><div class="num">¥0</div><div class="label">収益</div></div>
+        </div>
+        <ul class="unit-detail">
+          <li>柱A(睡眠・集中)+柱B(AI経営の裏側)の2本柱、7本すべて公開済み</li>
+          <li>自動投稿基盤(Playwright)構築済み、初回ログインはオーナー実行待ち</li>
+        </ul>
+        <div class="unit-blocker"><b>待ち</b>: サポート機能経由の実際の入金を待つフェーズ</div>
+      </div>
+
+      <div class="unit-card">
+        <div class="unit-head">
+          <div>
+            <div class="unit-name">💬 モヤスカ</div>
+            <div class="unit-tagline">LINEドラマ×AI音声合成のShorts(第4事業)</div>
+          </div>
+          <span class="status-pill warn"><span class="dot"></span>準備中</span>
+        </div>
+        <div class="steps">
+          <div class="step current"><div class="step-dot">●</div><div class="step-label">開発</div></div>
+          <div class="step-line todo"></div>
+          <div class="step done"><div class="step-dot">✓</div><div class="step-label">調査</div></div>
+          <div class="step-line todo"></div>
+          <div class="step todo"><div class="step-dot"></div><div class="step-label">公開</div></div>
+          <div class="step-line todo"></div>
+          <div class="step todo"><div class="step-dot"></div><div class="step-label">収益化</div></div>
+        </div>
+        <div class="unit-stats">
+          <div class="stat"><div class="num">v4</div><div class="label">背景映像</div></div>
+          <div class="stat"><div class="num">1</div><div class="label">台本サンプル</div></div>
+          <div class="stat"><div class="num">0</div><div class="label">公開本数</div></div>
+        </div>
+        <ul class="unit-detail">
+          <li>投稿方針決定: Shorts中心・完全日本語・毎日20:00 JST固定</li>
+          <li>背景映像は物理演算のボール増減アニメーションで確定</li>
+        </ul>
+        <div class="unit-blocker"><b>依頼中</b>: チャンネル名決定・新チャンネル作成・VOICEVOXセットアップ(オーナー)</div>
+      </div>
+
     </div>
   </section>
 
@@ -624,397 +637,219 @@
     <h2 class="section-title">体制図 <span class="count">社長 + 9部署</span></h2>
     <div class="orgchart">
       <div class="org-node ceo">社長</div>
-      <div class="org-connector-v"></div>
-      <div class="org-hbar"></div>
-      <div class="org-grid">
-        <div class="dept-card">
-          <div class="dept-icon">🛠️</div>
-          <div class="dept-name">開発部</div>
-          <div class="dept-scope">bgm-pipeline / app の実装</div>
-        </div>
-        <div class="dept-card">
-          <div class="dept-icon">🎨</div>
-          <div class="dept-name">クリエイティブ部</div>
-          <div class="dept-scope">音源企画・note執筆・UI文言</div>
-        </div>
-        <div class="dept-card">
-          <div class="dept-icon">📊</div>
-          <div class="dept-name">マーケティング部</div>
-          <div class="dept-scope">外部チャネル・トレンド調査</div>
-        </div>
-        <div class="dept-card">
-          <div class="dept-icon">📈</div>
-          <div class="dept-name">データ分析部</div>
-          <div class="dept-scope">自社KPIのモニタリング</div>
-        </div>
-        <div class="dept-card">
-          <div class="dept-icon">🚀</div>
-          <div class="dept-name">グロース/運用部</div>
-          <div class="dept-scope">公開オペレーション・投稿管理</div>
-        </div>
-        <div class="dept-card">
-          <div class="dept-icon">💰</div>
-          <div class="dept-name">経理/財務部</div>
-          <div class="dept-scope">収支管理・値付け・採算</div>
-        </div>
-        <div class="dept-card">
-          <div class="dept-icon">⚖️</div>
-          <div class="dept-name">法務/コンプライアンス部</div>
-          <div class="dept-scope">規約・著作権・表記管理</div>
-        </div>
-        <div class="dept-card">
-          <div class="dept-icon">💬</div>
-          <div class="dept-name">カスタマーサポート部</div>
-          <div class="dept-scope">レビュー・問い合わせ対応</div>
-        </div>
-        <div class="dept-card">
-          <div class="dept-icon">🔒</div>
-          <div class="dept-name">セキュリティ部</div>
-          <div class="dept-scope">シークレット管理・アカウント保護</div>
-        </div>
+      <div class="dept-chips">
+        <div class="dept-chip" title="bgm-pipeline / app の実装"><span class="icon">🛠️</span>開発部</div>
+        <div class="dept-chip" title="音源企画・note執筆・UI文言"><span class="icon">🎨</span>クリエイティブ部</div>
+        <div class="dept-chip" title="外部チャネル・トレンド調査"><span class="icon">📊</span>マーケティング部</div>
+        <div class="dept-chip" title="自社KPIのモニタリング"><span class="icon">📈</span>データ分析部</div>
+        <div class="dept-chip" title="公開オペレーション・投稿管理"><span class="icon">🚀</span>グロース/運用部</div>
+        <div class="dept-chip" title="収支管理・値付け・採算"><span class="icon">💰</span>経理/財務部</div>
+        <div class="dept-chip" title="規約・著作権・表記管理"><span class="icon">⚖️</span>法務/コンプライアンス部</div>
+        <div class="dept-chip" title="レビュー・問い合わせ対応"><span class="icon">💬</span>カスタマーサポート部</div>
+        <div class="dept-chip" title="シークレット管理・アカウント保護"><span class="icon">🔒</span>セキュリティ部</div>
       </div>
-    </div>
-  </section>
-
-  <section>
-    <h2 class="section-title">3事業のパイプライン</h2>
-    <div class="pipelines">
-
-      <div class="pipeline-card">
-        <div class="pipeline-head">
-          <div class="pipeline-name">🎵 BGM動画</div>
-          <div class="pipeline-eta">YouTube / TikTok / Reels</div>
-        </div>
-        <div class="steps">
-          <div class="step done"><div class="step-dot">✓</div><div class="step-label">開発</div></div>
-          <div class="step-line done"></div>
-          <div class="step done"><div class="step-dot">✓</div><div class="step-label">戦略・調査</div></div>
-          <div class="step-line done"></div>
-          <div class="step done"><div class="step-dot">✓</div><div class="step-label">公開<span class="step-sub">2本公開・自動化稼働中</span></div></div>
-          <div class="step-line todo"></div>
-          <div class="step current"><div class="step-dot">●</div><div class="step-label">収益化<span class="step-sub">YouTubeパートナープログラム待ち</span></div></div>
-        </div>
-      </div>
-
-      <div class="pipeline-card">
-        <div class="pipeline-head">
-          <div class="pipeline-name">📱 アプリ</div>
-          <div class="pipeline-eta">App Store / Google Play</div>
-        </div>
-        <div class="steps">
-          <div class="step done"><div class="step-dot">✓</div><div class="step-label">開発</div></div>
-          <div class="step-line done"></div>
-          <div class="step done"><div class="step-dot">✓</div><div class="step-label">戦略・調査</div></div>
-          <div class="step-line todo"></div>
-          <div class="step current"><div class="step-dot">●</div><div class="step-label">公開<span class="step-sub">開発者登録待ち</span></div></div>
-          <div class="step-line todo"></div>
-          <div class="step todo"><div class="step-dot"></div><div class="step-label">収益化</div></div>
-        </div>
-      </div>
-
-      <div class="pipeline-card">
-        <div class="pipeline-head">
-          <div class="pipeline-name">📝 note記事</div>
-          <div class="pipeline-eta">有料マガジン</div>
-        </div>
-        <div class="steps">
-          <div class="step done"><div class="step-dot">✓</div><div class="step-label">開発</div></div>
-          <div class="step-line done"></div>
-          <div class="step done"><div class="step-dot">✓</div><div class="step-label">戦略・調査</div></div>
-          <div class="step-line done"></div>
-          <div class="step done"><div class="step-dot">✓</div><div class="step-label">公開<span class="step-sub">7本公開済み</span></div></div>
-          <div class="step-line todo"></div>
-          <div class="step current"><div class="step-dot">●</div><div class="step-label">収益化<span class="step-sub">サポート機能待ち</span></div></div>
-        </div>
-      </div>
-
-    </div>
-    <div class="legend">
-      <div class="legend-item"><span class="legend-dot done"></span>完了</div>
-      <div class="legend-item"><span class="legend-dot current"></span>進行中・オーナー待ち</div>
-      <div class="legend-item"><span class="legend-dot todo"></span>未着手</div>
-    </div>
-  </section>
-
-  <section>
-    <h2 class="section-title">事業ユニット <span class="count">3 units</span></h2>
-    <div class="units">
-
-      <div class="unit-card">
-        <div class="unit-head">
-          <div>
-            <div class="unit-name">BGM動画</div>
-            <div class="unit-tagline">YouTube / TikTok / Reels 広告収益</div>
-          </div>
-          <span class="status-pill good"><span class="dot"></span>YouTube公開中(再生確認済み)</span>
-        </div>
-        <div class="unit-stats">
-          <div class="stat"><div class="num">4</div><div class="label">音源プリセット</div></div>
-          <div class="stat"><div class="num">2</div><div class="label">出力比率(16:9/9:16)</div></div>
-          <div class="stat"><div class="num">2</div><div class="label">公開本数(実際に再生できる状態)</div></div>
-          <div class="stat"><div class="num">1</div><div class="label">Shorts公開数</div></div>
-        </div>
-        <ul class="unit-detail">
-          <li>睡眠ドローン・雨音・Lo-Fi・バイノーラルの4系統を実装。<code>publish.py</code>で生成→レンダリング→カスタムサムネイル生成→アップロード→処理完了確認→サムネイル設定→ローカル削除まで自動化済み</li>
-          <li><b>2本公開・再生確認済み</b>: <a href="https://youtube.com/watch?v=xT472Ht5omk" target="_blank" rel="noopener">Rain Sounds for Sleeping(1時間)</a>、<a href="https://youtube.com/watch?v=nf7yiIO2hB8" target="_blank" rel="noopener">Alpha Focus Binaural + Pad(1時間)</a>。2本目は週次Routineが自動生成・自動公開したもの(ローテーションが<code>study_focus_binaural</code>を選択、同じプリセットの連投なし)。両方とも<code>uploadStatus: processed</code> / <code>processingStatus: succeeded</code>をAPIで直接確認済み</li>
-          <li><b>Shorts第1弾を自動公開</b>: <a href="https://youtube.com/watch?v=s3EeKc1HQ8o" target="_blank" rel="noopener">45秒・sleep_deep_drone</a>、長尺動画(Alpha Focus Binaural)への自動リンク付き。処理に通常より時間がかかり(300秒のタイムアウトを超過)一度は要確認扱いになったが、追加でポーリングして再生可能な状態を確認済み</li>
-          <li><b>タイトル・タグに日本語キーワードを追加(2026-08-04)</b>: 「作業用BGM」「勉強用BGM」「睡眠用BGM」「集中用BGM」等、日本語検索に直結するキーワードを全プリセットのタイトル・タグに追加。公開済みの動画にも遡って反映(<code>videos.update</code>)。1本目は過去に効果確認済みの完全一致フレーズ「rain sounds for sleeping」を上書きしてしまう事故が一度あったが、その場で気づいて両立する形に修正</li>
-          <li><b>SEO/マーケティングを強化(2026-08-03)</b>: 概要欄は「公開しただけ」の1行から、キーワード重視のフック+用途リスト+ハッシュタグ3〜5個の構成に拡充。ブランド統一されたカスタムサムネイル(長さバッジ付き)も自動生成するように(<code>docs/marketing/2026-08-youtube-seo.md</code>)</li>
-          <li><b>投稿を完全自動化(2026-08-03)</b>: 長尺動画は毎週火曜、Shortsは火・木・土に無人で自動生成→公開するRoutineを設定済み。プリセットのローテーション管理(<code>rotation.py</code>)で同じ内容の連投を防止し、ShortsはRoutineが自動で直近の長尺動画にリンクする。失敗時(特にOAuth再認証が必要な場合)はPushNotificationでオーナーに通知(<code>docs/marketing/2026-08-content-calendar.md</code>)</li>
-          <li>方針: 長尺週1本 + Shorts週3本。全音源は自社生成でContent IDリスクなし</li>
-        </ul>
-        <div class="unit-blocker"><b>保留中</b>: TikTok自動投稿はドメイン所有権の検証で行き詰まり一旦保留(GitHub Pages有効化待ち、詳細は経営ログ参照)。Meta/Instagram自動投稿はビジネス認証(Facebook Developer Console)待ち。YouTube投稿は完全自動化済み(下記参照)</div>
-      </div>
-
-      <div class="unit-card">
-        <div class="unit-head">
-          <div>
-            <div class="unit-name">アプリ</div>
-            <div class="unit-tagline">Focus &amp; Sleep Sounds(サブスク)</div>
-          </div>
-          <span class="status-pill warn"><span class="dot"></span>申請待ち</span>
-        </div>
-        <div class="unit-stats">
-          <div class="stat"><div class="num">3</div><div class="label">画面(一覧/再生/課金)</div></div>
-          <div class="stat"><div class="num">4</div><div class="label">収録トラック</div></div>
-          <div class="stat"><div class="num">0</div><div class="label">ストア公開数</div></div>
-        </div>
-        <ul class="unit-detail">
-          <li>Expo/React Native、型チェック・バンドル確認済み。BGM資産を音源に流用しコストゼロ</li>
-          <li>スリープタイマー(15/30/45/60分で自動停止)を実装済み</li>
-          <li>EAS Build設定(<code>eas.json</code>)とプライバシーポリシー・利用規約のドラフトを用意済み。Expoアカウント作成後は<code>eas build</code>ですぐビルド可能</li>
-          <li>方針: 「meditation」等の激戦語を避け、月額300〜500円の低価格ニッチで検証。4事業目への転換提案は却下し、本アプリに集中(<code>docs/marketing/2026-08-strategy-decision.md</code>)</li>
-        </ul>
-        <div class="unit-blocker"><b>依頼中</b>: Apple Developer / Google Play Consoleアカウント、Expoアカウント</div>
-      </div>
-
-      <div class="unit-card">
-        <div class="unit-head">
-          <div>
-            <div class="unit-name">note記事</div>
-            <div class="unit-tagline">有料記事・定期購読マガジン</div>
-          </div>
-          <span class="status-pill good"><span class="dot"></span>公開中</span>
-        </div>
-        <div class="unit-stats">
-          <div class="stat"><div class="num">7</div><div class="label">公開本数</div></div>
-          <div class="stat"><div class="num">0</div><div class="label">下書き済み(投稿待ち)</div></div>
-          <div class="stat"><div class="num">9</div><div class="label">ネタ帳の残り</div></div>
-        </div>
-        <ul class="unit-detail">
-          <li><b>7本公開済み(2026-08-04時点)</b>: 雨音の話→1/fゆらぎ→BGM選び方→集中力の話(柱A)、AIに会社の実務を任せた話(柱B第1弾)、AI音楽の著作権を調べた話、作業用BGM選びの悩み50件リサーチ。<a href="https://claude.ai/code/artifact/4463f3ba-3008-4e37-bbff-c9b338cbcb87" target="_blank" rel="noopener">投稿キューページ</a>は現在待ちなし、次の下書きが追加され次第反映</li>
-          <li>自動投稿ツール(<code>note-articles/note_publish/</code>)を追加。note.comに公式APIがないため、Playwrightでの実ログイン方式を採用(オーナー承認済み・<code>docs/security/checklist.md</code>に詳細)。初回セットアップはオーナー自身のPCで実行が必要</li>
-          <li>方針: 柱A(睡眠・集中サウンド)+柱B(個人開発・AI経営の裏側)の2本柱。無料記事+サポート機能で開始→反応を見て週1更新の有料マガジンへ移行</li>
-        </ul>
-      </div>
-
-    </div>
-  </section>
-
-  <section>
-    <h2 class="section-title">売上・実績</h2>
-    <div class="table-scroll">
-      <table class="revenue">
-        <thead>
-          <tr><th>事業</th><th>今週の実績</th><th>収益</th><th>ステータス</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>BGM動画</td><td class="num">2本公開(再生確認済み)</td><td class="num awaiting">パートナープログラム未達</td><td><span class="status-pill good"><span class="dot"></span>公開中</span></td></tr>
-          <tr><td>アプリ</td><td class="num awaiting">データなし</td><td class="num awaiting">未接続</td><td><span class="status-pill warn"><span class="dot"></span>公開前</span></td></tr>
-          <tr><td>note記事</td><td class="num">7本公開</td><td class="num awaiting">未接続</td><td><span class="status-pill good"><span class="dot"></span>公開中</span></td></tr>
-        </tbody>
-      </table>
     </div>
   </section>
 
   <section>
     <h2 class="section-title">経営ログ</h2>
-    <div class="timeline">
-      <div class="tl-row">
-        <div class="tl-date">08-01</div>
-        <div class="tl-body"><b>会社方針決定。</b>BGM動画・アプリ・note記事の3事業でゼロ予算スタートを決定。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-01</div>
-        <div class="tl-body"><b>BGM生成エンジン実装。</b>睡眠ドローン/雨音/Lo-Fi/バイノーラルの4プリセットを完全自前アルゴリズムで実装。動画書き出し(16:9/9:16)まで動作確認。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-01</div>
-        <div class="tl-body"><b>アプリ雛形実装。</b>Expo製「Focus &amp; Sleep Sounds」。型チェック・バンドル確認済み。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-01</div>
-        <div class="tl-body"><b>組織体制を整備。</b>開発部/マーケティング部/グロース部に役割分担。マーケティング部の初回調査を実施。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-01</div>
-        <div class="tl-body"><b>note事業を開始。</b>方針決定(無料記事→有料マガジン移行)、ゆる記事2本を下書き。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-01</div>
-        <div class="tl-body"><b>ブロッカー解消。</b>GitHubへのpushが復旧、全コミットを反映済み。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-01</div>
-        <div class="tl-body"><b>組織を8部署に拡張。</b>経理/財務・法務/コンプライアンス・クリエイティブ・データ分析・カスタマーサポートを新設(<code>docs/ORG.md</code>)。経理は収支台帳、法務は規約チェックリストの下書きも作成。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-01</div>
-        <div class="tl-body"><b>アカウント作成ガイドを公開。</b>6アカウントのコピペ用手順書を用意(<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4" target="_blank" rel="noopener">Artifact</a>)。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-01</div>
-        <div class="tl-body"><b>セキュリティ部を新設。</b>シークレット走査・依存脆弱性監査・コマンドインジェクション確認を実施し問題なし(<code>docs/security/checklist.md</code>)。npm auditのbuild-tooling起因のmoderate 10件は許容リスクとして記録。アカウント作成ガイドに2FA等の初期設定チェックリストを追加。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-01</div>
-        <div class="tl-body"><b>Googleアカウント・YouTubeチャンネル作成完了。</b>チャンネル用のバナー・プロフィール画像(三日月モチーフ、PILで完全生成)を用意。1時間の本番BGM動画をレンダリング中に<code>pink_noise()</code>のメモリバグ(19GB要求)を発見・修正。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-01</div>
-        <div class="tl-body"><b>note記事1本目を公開。</b>「AIで雨音を作ってみた話」が公開済みに。note.comには公式APIが存在しないため、自動投稿はせず引き続きコピペ運用と判断(<code>docs/marketing/</code>で検証済み)。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-01</div>
-        <div class="tl-body"><b>マーケティング強化。</b>「読者が食いつくネタ」を実調査し、3事業横断のコンテンツバックログ15本を作成(<code>docs/marketing/2026-08-content-topics.md</code>)。調査結果を反映した記事(雨音の科学)を1本追加執筆。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-01</div>
-        <div class="tl-body"><b>YouTube自動アップロード基盤を構築。</b>Device Flow OAuth・resumable upload・YouTube Analytics連携を実装(<code>bgm_pipeline/publish.py</code>)。アップロード成功後にローカルファイルを自動削除する運用に統一。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-01</div>
-        <div class="tl-body"><b>アプリアイコン一式を追加。</b>iOS用・Android adaptive icon・favicon・スプラッシュ画面を同じ三日月ブランドで生成し組み込み。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-02</div>
-        <div class="tl-body"><b>Googleアカウントが利用規約違反で停止。</b>新規作成した専用アカウントがGoogle側の不正検知で凍結、再審請求を提出中。別の使い慣れたアカウントでYouTube・OAuth設定を並行して再開。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-02</div>
-        <div class="tl-body"><b>note投稿キューページを公開。</b>下書き済みの3本(1/fゆらぎ→BGM選び方→集中力の話)をワンクリックコピー可能なページにまとめ、毎回チャットに貼る手間をなくした。以後この3本は投稿済みに。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-02</div>
-        <div class="tl-body"><b>別セッションによる不整合を検出・訂正。</b>ダッシュボードに「4事業目(経費管理アプリ)を新設しFocus &amp; Sleep Soundsは保守モードへ」という記述があったが、該当コードがリポジトリに一切存在しないことを確認。オーナーの判断により、この方針の是非も含めて社長の裁量に委ねられた。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-02</div>
-        <div class="tl-body"><b>経費アプリ転換を却下、3事業集中を継続。</b>既存資産(音源生成エンジン・ブランド・読者層)を活かせない、売上ゼロの段階で本命を保守モードにするのは早すぎる、という理由で却下(<code>docs/marketing/2026-08-strategy-decision.md</code>)。一方で実質的に良い提案(スリープタイマー、noteの2本柱化、アフィリエイト)は引き継いで実装した。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-02</div>
-        <div class="tl-body"><b>アプリにスリープタイマーを実装。</b>15/30/45/60分で自動停止する機能を追加、型チェック・バンドル確認済み。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-02</div>
-        <div class="tl-body"><b>noteを柱A/柱B の2本柱に。</b>柱A(睡眠・集中サウンド)は継続、柱B(個人開発・AI経営の裏側)を新設。第1弾は架空の「4事業目」前提を排除した実話ベースの記事に差し替えて執筆(<code>docs/marketing/2026-08-note-content-pillars.md</code>)。Amazon/楽天アフィリエイトの導入方針も策定。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-02</div>
-        <div class="tl-body"><b>ダッシュボードを再構成。</b>「オーナーへの依頼」を最上部に移動し、「社長が今やっていること」を新設。逐一チャットで確認しなくても状況がわかるようにした。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-02</div>
-        <div class="tl-body"><b>Instagram自動投稿基盤を構築。</b>Meta Graph APIによるReels投稿を実装(<code>bgm_pipeline/instagram_auth.py</code>・<code>instagram_upload.py</code>・<code>publish_instagram.py</code>)。動画の一時公開ホスティングにはYouTube用と同じGoogle CloudプロジェクトのCloud Storageを再利用し、投稿後は即削除。Meta側にDevice Flow相当がないため、Graph API Explorerでの1回限りのトークン発行だけオーナー側にお願いしている。Appレビュー(2〜4週間)の申請準備も進行中。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>週次定例レビューを実施。</b>GitHub pushに問題なし(全コミット反映済み)、依存脆弱性(npm audit)も前回から変化なしを確認。Meta for Developersのログイン〜アプリ作成〜Graph API Explorerでのトークン発行まで画面ごとにオーナーを案内。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>アプリのストア申請ブロッカーを解消。</b>これまで未着手だったプライバシーポリシー・利用規約のドラフトを作成(<code>docs/legal/</code>)。EAS Build設定(<code>app/eas.json</code>)も追加し、Expoアカウントさえあればビルドできる状態に。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>note柱A新作を下書き。</b>「AIで作った音楽に著作権はあるのか、個人開発者が実際に調べてみた話」を執筆し投稿キューに追加。あわせて古くなっていたネタ帳の消化状況・優先順位も実態に合わせて修正。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>初の本番サイズBGM動画のレンダリングに成功。</b>60分・雨音+集中プリセット(<code>sleep_rain_focus</code>)で、音声生成→YouTube用16:9→Shorts用9:16の書き出しまでパイプライン全体をノーエラーで通しで検証。YouTube連携が済み次第、そのまま公開できる状態。検証用ファイルはディスク節約のため削除済み(公開時は<code>publish.py</code>が同じ内容を都度生成)。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>note自動投稿を構築(オーナー承認のうえ、方針を一部例外化)。</b>note.comには公式APIが存在しないため、オーナーに選択肢を提示し、Playwrightでの実ブラウザログイン方式を承認いただいた。「パスワードを一切預からない」という他連携の原則からは外れるため、リスクと軽減策を<code>docs/security/checklist.md</code>に明記。初回ログインはオーナー自身のPCでのみ実行可能(クラウドセッションはnote.comへの接続がネットワークポリシーでブロックされていることを実地確認)。エディタのセレクタは実環境で未検証のため、初回実行は<code>--debug</code>での確認が必要。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>YouTube OAuthクライアントを受領、スコープ不具合を発見・修正。</b>オーナーから<code>client_secret.json</code>を受け取り保存。実際にデバイスフローをリクエストしたところ、3スコープのうち<code>yt-analytics.readonly</code>だけがGoogle側でデバイスフロー自体に非対応(<code>invalid_scope</code>)と判明し、丸ごと失敗していた。アップロードに必要な<code>youtube.upload</code>・<code>devstorage.read_write</code>だけに絞って<code>youtube_auth.py</code>を修正し、ログインコードの発行までこぎつけた。アナリティクス取得は別フローが必要になったため新規タスク化(<code>bgm_pipeline/youtube_analytics.py</code>は現状動作しない旨を明記)。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>YouTube OAuth連携が完了。</b>承認時に「Googleの審査プロセスが完了していません」で一度ブロックされたが、原因はOAuth同意画面の「テストユーザー」が承認アカウントとメールアドレス不一致だったこと。テストユーザーを修正後、承認・トークン取得に成功し、実際のスコープ(<code>youtube.upload</code>・<code>devstorage.read_write</code>)も検証済み。テストモードだとリフレッシュトークンが約7日で失効する可能性がある点を <code>bgm-pipeline/README.md</code> に注意書きとして追加。これで動画公開の技術的なブロッカーはすべて解消。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>初のYouTubeアップロードを実行(のち失敗と判明)。</b>「<a href="https://youtube.com/watch?v=I4njOv9g8Is" target="_blank" rel="noopener">Rain &amp; Soft Pad for Sleep</a>」(60分)を<code>publish.py</code>で生成→レンダリング→アップロードまで実行し、その時点でローカルファイルを削除して「公開完了」と報告した。<b>実際には再生できるか確認しておらず、これは誤りだった</b>(オーナーからの指摘で発覚)。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>公開確認の欠如を修正。根本原因は「動画が長すぎる」。</b>オーナーの指摘を受け調査したところ、(1) アップロード成功をそのまま「公開完了」と報告し、YouTube側の処理完了を確認していなかった、(2) そもそも状態を読み取る権限がなくチェックしようがなかった、の2点が判明。<code>youtube_upload.py</code>に処理完了の確認機構を追加し、<code>publish.py</code>は確認が取れるまでローカルファイルを消さないよう修正。読み取り権限(<code>youtube.readonly</code>)を追加し再ログイン依頼中。オーナーがYouTube Studioを直接確認したところ「処理を中止しました・動画が長すぎます」と判明 — 電話番号未確認のチャンネルは動画が15分までに制限される仕様で、60分動画のこのアプリの前提と衝突していた。電話番号確認を最優先のオーナー依頼事項に追加(<code>docs/ORG.md</code>のグロース/運用部の役割にも「公開完了は確認してから報告する」ことを明記)。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>YouTube公開、今度は実際に確認して完了。</b>オーナーが電話番号確認・読み取り権限の再ログインを完了。動画を作り直して<code>publish.py</code>で再実行したところ、修正済みの処理完了確認(<code>wait_for_processing</code>)が正常に機能し、さらに念のためAPIで独立して<code>uploadStatus: processed</code> / <code>processingStatus: succeeded</code>を直接確認してから公開完了と報告した。<a href="https://youtube.com/watch?v=xT472Ht5omk" target="_blank" rel="noopener">Rain &amp; Soft Pad for Sleep(1時間)</a>が実際に視聴可能な状態でYouTubeに公開されている。BGM動画・note記事の2事業が名実ともに公開済みに。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>YouTube SEO・マーケティングを強化。</b>「公開しただけで視聴数が伸びるわけがない」というオーナーの指摘を受け、サムネイル・概要欄・タグ・ハッシュタグを本格的に作り込んだ(<code>docs/marketing/2026-08-youtube-seo.md</code>に調査結果)。ブランドカラーと三日月モチーフを踏襲したカスタムサムネイル生成(<code>thumbnail.py</code>、長さバッジ付き)を新設し、<code>publish.py</code>がアップロード後に自動セットするようにした。各プリセットの概要欄をキーワード重視のフック・用途リスト・ハッシュタグ3〜5個を含む構成に拡充(<code>presets.py</code>)。次回公開分から適用。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>投稿計画がなかった点を指摘され、策定。</b>「投稿計画があるのか、同じ動画を出し続けていないか、Shortsで登録者を増やす導線があるのか」という指摘を受け、実際に計画が存在しないこと(手動トリガーのみ、ローテーション管理なし、2本連続で同じプリセット、YouTube Shorts投稿の仕組み自体が未実装)を認めた。<code>rotation.py</code>(プリセットの自動ローテーション)・<code>publish_shorts.py</code>(YouTube Shorts自動投稿、長尺動画への誘導リンク付き)を新設し、投稿ペースの提案(長尺週1本・Shorts週2〜3本)を<code>docs/marketing/2026-08-content-calendar.md</code>にまとめた。定期実行(無人自動化)するかはオーナーに確認中。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>YouTube投稿を完全自動化。</b>オーナーから「自動化が目的、社長としての自覚を持って各部署を連携させ会社を大きくしてほしい」という明確な指示を受け、Routine(定期実行)を新設した。長尺動画は毎週火曜0時(UTC)、Shortsは火・木・土の正午(UTC)に無人で生成→公開する。既存の週次経営レビュー・note下書きRoutine(共に月曜)と時間を分散させて設定。失敗時、特にYouTube側のOAuth再認証が必要なケース(テストモードでの約7日でのトークン失効)はPushNotificationでオーナーに知らせ、成功時は静かにダッシュボードとgitログに記録する運用とした。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>「1週間以内に収益化」の目標を受け、noteに集中する方針を決定。</b>YouTube広告収益(登録者1,000人+年間4,000時間が条件)・アプリストア収益(未申請・課金未実装)は構造的に1週間では不可能と判断し、正直に報告した。プラットフォームの審査待ちがないnote.comに集中する方針に決定。実行したこと: (1) 公開済み動画のタイトル・概要欄・タグ・サムネイルを、SEO強化後の仕組みで作り直して差し替え(検索意図に直結するフレーズ「rain sounds for sleeping」を反映)、(2) 権限不足で動画の修正ができなかったため`youtube`フルスコープに拡張・再認証、(3) note記事を新たに1本執筆(「作業用BGM選びの悩み50件」、投稿キューに追加、YouTubeチャンネルへの導線付き)、(4) 投稿キューページを「今週中にまとめて投稿」を促す表示に変更。<b>オーナーへの依頼は2点のみ</b>: noteのサポート機能有効化+振込先登録、投稿キュー(05・06・07)の今週中の投稿。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>noteのサポート機能を有効化、プロフィールURLを共有いただいた。</b>2つの依頼のうち1つ目が完了(<a href="https://note.com/unique_condor276" target="_blank" rel="noopener">https://note.com/unique_condor276</a>)。<code>bgm_pipeline/presets.py</code>に<code>NOTE_URL</code>として登録し、公開中のYouTube動画の概要欄を更新して実際にリンクを反映、今後の長尺動画・Shorts全てにも自動で入るようコード側を修正した。残るは投稿キュー(05・06・07)の投稿のみ。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-03</div>
-        <div class="tl-body"><b>組織図に役員・社員の役割を明記。</b>「社長の下に役員・社員がいるはず」というオーナーの指摘を受け、<code>docs/ORG.md</code>の9部署それぞれにCTO/CCO/CMO等の役員と具体的な社員の役割を追記、mermaidの組織図も追加した。ただし正直に書いた通り、実態は全役割を社長(このセッション)1人が担っており、別人格の社員が実在するわけではない旨を明記している。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-04</div>
-        <div class="tl-body"><b>会社サイト(Quiet Hours)を作成・公開。</b>TikTokビジネス認証の「企業のWebサイト」欄が必要になったことがきっかけで、3事業(YouTube/アプリ/note)を1つのブランドとしてまとめた対外向けページを新設(<a href="https://claude.ai/code/artifact/3ace0d1f-bbd2-4522-bb2e-b9b0b834d5b4" target="_blank" rel="noopener">公開URL</a>)。既存のBGM/アプリのビジュアル(紺色グラデーション・三日月モチーフ・Gloock+Work Sans)を踏襲(<code>docs/site/</code>)。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-04</div>
-        <div class="tl-body"><b>TikTok自動投稿を試みるも、ドメイン所有権の壁で一旦保留。</b>ビジネス認証は法人書類が必須と判明したためスキップし、開発者アプリ登録・OAuth(<code>tiktok_auth.py</code>)まで実装。しかしTikTokはリダイレクトURI・ToS・プライバシーポリシー等すべてのURLについて「到達可能か」ではなく「ドメインの所有権」を検証する仕組みで、使っていた<code>claude.ai</code>のArtifact URLは自分たちが所有するドメインではないため検証が原理的に通せないと判明。対策(GitHub Pagesの有効化、オーナー側の操作が必要)は<code>bgm-pipeline/README.md</code>に記録し保留にした。いずれにせよ実際の公開投稿にはTikTok側のAudit(審査)が別途必要で、Instagram同様「技術的に繋がっても公開は先」の構造のため、今週の収益目標には直結しないと判断。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-04</div>
-        <div class="tl-body"><b>2本目の長尺動画を自動公開。</b>週次Routineが無人で実行し、ローテーションが<code>study_focus_binaural</code>を選択(<a href="https://youtube.com/watch?v=nf7yiIO2hB8" target="_blank" rel="noopener">Alpha Focus Binaural + Pad(1時間)</a>)。処理完了・再生可能な状態をAPIで独立して確認済み。日本語キーワード追加後のタイトル・タグが最初から反映された1本目でもある。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-04</div>
-        <div class="tl-body"><b>投稿キュー(05・06・07)の消化完了、note記事7本公開に。</b>オーナーが今週中の投稿を完了。投稿キューページから該当3枚のカードを削除し、README進捗チェックリストも更新した。今週の収益目標に対して最重要だったアクションが完了。次はnote側のサポート機能経由での実際の入金を待つフェーズ。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-04</div>
-        <div class="tl-body"><b>「今のやり方の延長では売上は当面立たない」と正直に報告 → オーナーから「方向性を決めるのは社長の仕事だろう」と明確な指摘。</b>選択肢を並べて判断を委ねていたこと自体が指示に反していたと受け止め、社長として決定・実行(<code>docs/marketing/2026-08-04-x-strategy.md</code>)。<b>決定: X(旧Twitter)を新チャネルとして開設し、「AI社長が実在の会社を経営している」というストーリー自体をマーケティングの主軸に据える。</b>BGM・アプリは激戦区で質だけでは差別化にならないが、このプロセス自体はAI/エージェント界隈で関心の高い、際立ったコンテンツだと判断。プロフィール文案・初回投稿スレッド(<code>x-account/</code>)を用意済み。オーナーへの依頼はアカウント作成の1点のみ。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-04</div>
-        <div class="tl-body"><b>Xアカウント開設完了、自動投稿基盤も構築。</b><a href="https://x.com/QuietHoursceo" target="_blank" rel="noopener">@QuietHoursceo</a>。会社サイト・経営ダッシュボードにリンクを追加。あわせて、Xが2026年2月に無料APIプランを廃止し投稿ごとに課金される仕様になった(URL付き投稿は$0.20/件)ことが判明したため、note.comと同じ方式(ブラウザ自動操作、パスワードは預からない)で<code>x-account/x_publish/</code>を構築した。初回スレッド(7ポスト)はまず手動投稿を依頼し、以降の投稿から自動化に移行する。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-05</div>
-        <div class="tl-body"><b>公開済み動画を実際に見たオーナーから「文字化け」「サムネイルが引き付けられない」「概要欄が英語」「紫は何?」「勉強用ならノート・鉛筆のような分かりやすいものに」と具体的な指摘。</b>すべて実在するバグ・課題だった。原因調査の結果、サムネイル用フォント(WorkSans)と動画焼き込み文字用フォント(DejaVu Sans)がどちらも日本語グリフを持たず、日本語タイトル導入以降ずっと文字化けしていたことが判明(サムネイルだけでなく動画本体の焼き込み文字も)。日本語対応フォント(WenQuanYi Zen Hei、この環境にプリインストール済みで追加インストール不要)に差し替えて修正。あわせて、集中/勉強系プリセット用にノート+鉛筆の具体的なアイコンを新規作成(月モチーフのままでは"睡眠"にしか読めないという指摘への対応)、<code>study_focus_binaural</code>だけ紫だった背景色をブランド統一の紺+アンバーに修正、タイトル・概要欄を実際に伸びているJP作業用BGMチャンネルの傾向を調査した上で日本語主体に全面書き換え。動画本体の焼き込み文字はAPI経由で修正できないため、2本の長尺動画を修正版で再アップロードし、旧動画(<code>qOTRrIYgdFQ</code>)は非公開化して新動画(<code>nf7yiIO2hB8</code>)への案内を追記。あわせてnote下書きを2本追加(08: アプリ価格設定の裏側、09: 売上¥0の正直な報告)。</div>
-      </div>
-      <div class="tl-row">
-        <div class="tl-date">08-05</div>
-        <div class="tl-body"><b>2本目の差し替えも完了。</b><a href="https://youtube.com/watch?v=xT472Ht5omk" target="_blank" rel="noopener">雨音・睡眠用BGM(修正版)</a>を再アップロードし、APIで再生可能な状態を独立確認。旧動画(<code>cCFbFsWHX80</code>)は非公開化して案内を追記。Shorts側のリンクも新しい長尺動画IDに向け直し済み。公開中の2本とも文字化け・紫色の問題は解消。</div>
-      </div>
+    <div class="highlights">
+      <div class="hl-row"><div class="hl-date">08-06</div><div class="hl-body"><b>モヤスカの投稿方針を決定。</b>Shorts中心・完全日本語・毎日20:00 JST固定(根拠は<code>docs/projects/moyasuka/posting-policy.md</code>)。</div></div>
+      <div class="hl-row"><div class="hl-date">08-06</div><div class="hl-body"><b>第4事業「モヤスカ」着手。</b>背景映像はv4(ボール増減アニメーション)で確定、既存9部署からのPJチームを編成。</div></div>
+      <div class="hl-row"><div class="hl-date">08-05</div><div class="hl-body"><b>YouTube動画のバグを一括修正。</b>文字化け(日本語フォント未対応)・紫の配色・抽象アイコンを修正し、長尺2本を差し替え公開。</div></div>
+      <div class="hl-row"><div class="hl-date">08-04</div><div class="hl-body"><b>X(@QuietHoursceo)を新チャネルとして開設。</b>「AI社長が実在の会社を経営している」ストーリーを軸に自動投稿基盤も構築。</div></div>
+      <div class="hl-row"><div class="hl-date">08-04</div><div class="hl-body"><b>note投稿キュー(05〜07)の投稿完了。</b>note記事が7本すべて公開済みに。</div></div>
+      <div class="hl-row"><div class="hl-date">08-03</div><div class="hl-body"><b>YouTube投稿を完全自動化。</b>長尺は週1・Shortsは週3の無人Routineを新設。BGM動画・note記事が名実ともに公開済みに。</div></div>
     </div>
+    <details class="fold">
+      <summary>過去のログ全件を見る(2026-08-01〜08-03)</summary>
+      <div class="timeline">
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>会社方針決定。</b>BGM動画・アプリ・note記事の3事業でゼロ予算スタートを決定。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>BGM生成エンジン実装。</b>睡眠ドローン/雨音/Lo-Fi/バイノーラルの4プリセットを完全自前アルゴリズムで実装。動画書き出し(16:9/9:16)まで動作確認。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>アプリ雛形実装。</b>Expo製「Focus &amp; Sleep Sounds」。型チェック・バンドル確認済み。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>組織体制を整備。</b>開発部/マーケティング部/グロース部に役割分担。マーケティング部の初回調査を実施。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>note事業を開始。</b>方針決定(無料記事→有料マガジン移行)、ゆる記事2本を下書き。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>ブロッカー解消。</b>GitHubへのpushが復旧、全コミットを反映済み。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>組織を8部署に拡張。</b>経理/財務・法務/コンプライアンス・クリエイティブ・データ分析・カスタマーサポートを新設(<code>docs/ORG.md</code>)。経理は収支台帳、法務は規約チェックリストの下書きも作成。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>アカウント作成ガイドを公開。</b>6アカウントのコピペ用手順書を用意(<a href="https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4" target="_blank" rel="noopener">Artifact</a>)。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>セキュリティ部を新設。</b>シークレット走査・依存脆弱性監査・コマンドインジェクション確認を実施し問題なし(<code>docs/security/checklist.md</code>)。npm auditのbuild-tooling起因のmoderate 10件は許容リスクとして記録。アカウント作成ガイドに2FA等の初期設定チェックリストを追加。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>Googleアカウント・YouTubeチャンネル作成完了。</b>チャンネル用のバナー・プロフィール画像(三日月モチーフ、PILで完全生成)を用意。1時間の本番BGM動画をレンダリング中に<code>pink_noise()</code>のメモリバグ(19GB要求)を発見・修正。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>note記事1本目を公開。</b>「AIで雨音を作ってみた話」が公開済みに。note.comには公式APIが存在しないため、自動投稿はせず引き続きコピペ運用と判断(<code>docs/marketing/</code>で検証済み)。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>マーケティング強化。</b>「読者が食いつくネタ」を実調査し、3事業横断のコンテンツバックログ15本を作成(<code>docs/marketing/2026-08-content-topics.md</code>)。調査結果を反映した記事(雨音の科学)を1本追加執筆。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>YouTube自動アップロード基盤を構築。</b>Device Flow OAuth・resumable upload・YouTube Analytics連携を実装(<code>bgm_pipeline/publish.py</code>)。アップロード成功後にローカルファイルを自動削除する運用に統一。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>アプリアイコン一式を追加。</b>iOS用・Android adaptive icon・favicon・スプラッシュ画面を同じ三日月ブランドで生成し組み込み。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-02</div>
+          <div class="tl-body"><b>Googleアカウントが利用規約違反で停止。</b>新規作成した専用アカウントがGoogle側の不正検知で凍結、再審請求を提出中。別の使い慣れたアカウントでYouTube・OAuth設定を並行して再開。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-02</div>
+          <div class="tl-body"><b>note投稿キューページを公開。</b>下書き済みの3本(1/fゆらぎ→BGM選び方→集中力の話)をワンクリックコピー可能なページにまとめ、毎回チャットに貼る手間をなくした。以後この3本は投稿済みに。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-02</div>
+          <div class="tl-body"><b>別セッションによる不整合を検出・訂正。</b>ダッシュボードに「4事業目(経費管理アプリ)を新設しFocus &amp; Sleep Soundsは保守モードへ」という記述があったが、該当コードがリポジトリに一切存在しないことを確認。オーナーの判断により、この方針の是非も含めて社長の裁量に委ねられた。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-02</div>
+          <div class="tl-body"><b>経費アプリ転換を却下、3事業集中を継続。</b>既存資産(音源生成エンジン・ブランド・読者層)を活かせない、売上ゼロの段階で本命を保守モードにするのは早すぎる、という理由で却下(<code>docs/marketing/2026-08-strategy-decision.md</code>)。一方で実質的に良い提案(スリープタイマー、noteの2本柱化、アフィリエイト)は引き継いで実装した。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-02</div>
+          <div class="tl-body"><b>アプリにスリープタイマーを実装。</b>15/30/45/60分で自動停止する機能を追加、型チェック・バンドル確認済み。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-02</div>
+          <div class="tl-body"><b>noteを柱A/柱B の2本柱に。</b>柱A(睡眠・集中サウンド)は継続、柱B(個人開発・AI経営の裏側)を新設。第1弾は架空の「4事業目」前提を排除した実話ベースの記事に差し替えて執筆(<code>docs/marketing/2026-08-note-content-pillars.md</code>)。Amazon/楽天アフィリエイトの導入方針も策定。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-02</div>
+          <div class="tl-body"><b>ダッシュボードを再構成。</b>「オーナーへの依頼」を最上部に移動し、「社長が今やっていること」を新設。逐一チャットで確認しなくても状況がわかるようにした。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-02</div>
+          <div class="tl-body"><b>Instagram自動投稿基盤を構築。</b>Meta Graph APIによるReels投稿を実装(<code>bgm_pipeline/instagram_auth.py</code>・<code>instagram_upload.py</code>・<code>publish_instagram.py</code>)。動画の一時公開ホスティングにはYouTube用と同じGoogle CloudプロジェクトのCloud Storageを再利用し、投稿後は即削除。Meta側にDevice Flow相当がないため、Graph API Explorerでの1回限りのトークン発行だけオーナー側にお願いしている。Appレビュー(2〜4週間)の申請準備も進行中。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-03</div>
+          <div class="tl-body"><b>週次定例レビューを実施。</b>GitHub pushに問題なし(全コミット反映済み)、依存脆弱性(npm audit)も前回から変化なしを確認。Meta for Developersのログイン〜アプリ作成〜Graph API Explorerでのトークン発行まで画面ごとにオーナーを案内。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-03</div>
+          <div class="tl-body"><b>アプリのストア申請ブロッカーを解消。</b>これまで未着手だったプライバシーポリシー・利用規約のドラフトを作成(<code>docs/legal/</code>)。EAS Build設定(<code>app/eas.json</code>)も追加し、Expoアカウントさえあればビルドできる状態に。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-03</div>
+          <div class="tl-body"><b>note柱A新作を下書き。</b>「AIで作った音楽に著作権はあるのか、個人開発者が実際に調べてみた話」を執筆し投稿キューに追加。あわせて古くなっていたネタ帳の消化状況・優先順位も実態に合わせて修正。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-03</div>
+          <div class="tl-body"><b>初の本番サイズBGM動画のレンダリングに成功。</b>60分・雨音+集中プリセット(<code>sleep_rain_focus</code>)で、音声生成→YouTube用16:9→Shorts用9:16の書き出しまでパイプライン全体をノーエラーで通しで検証。YouTube連携が済み次第、そのまま公開できる状態。検証用ファイルはディスク節約のため削除済み(公開時は<code>publish.py</code>が同じ内容を都度生成)。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-03</div>
+          <div class="tl-body"><b>note自動投稿を構築(オーナー承認のうえ、方針を一部例外化)。</b>note.comには公式APIが存在しないため、オーナーに選択肢を提示し、Playwrightでの実ブラウザログイン方式を承認いただいた。「パスワードを一切預からない」という他連携の原則からは外れるため、リスクと軽減策を<code>docs/security/checklist.md</code>に明記。初回ログインはオーナー自身のPCでのみ実行可能(クラウドセッションはnote.comへの接続がネットワークポリシーでブロックされていることを実地確認)。エディタのセレクタは実環境で未検証のため、初回実行は<code>--debug</code>での確認が必要。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-03</div>
+          <div class="tl-body"><b>YouTube OAuthクライアントを受領、スコープ不具合を発見・修正。</b>オーナーから<code>client_secret.json</code>を受け取り保存。実際にデバイスフローをリクエストしたところ、3スコープのうち<code>yt-analytics.readonly</code>だけがGoogle側でデバイスフロー自体に非対応(<code>invalid_scope</code>)と判明し、丸ごと失敗していた。アップロードに必要な<code>youtube.upload</code>・<code>devstorage.read_write</code>だけに絞って<code>youtube_auth.py</code>を修正し、ログインコードの発行までこぎつけた。アナリティクス取得は別フローが必要になったため新規タスク化(<code>bgm_pipeline/youtube_analytics.py</code>は現状動作しない旨を明記)。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-03</div>
+          <div class="tl-body"><b>YouTube OAuth連携が完了。</b>承認時に「Googleの審査プロセスが完了していません」で一度ブロックされたが、原因はOAuth同意画面の「テストユーザー」が承認アカウントとメールアドレス不一致だったこと。テストユーザーを修正後、承認・トークン取得に成功し、実際のスコープ(<code>youtube.upload</code>・<code>devstorage.read_write</code>)も検証済み。テストモードだとリフレッシュトークンが約7日で失効する可能性がある点を <code>bgm-pipeline/README.md</code> に注意書きとして追加。これで動画公開の技術的なブロッカーはすべて解消。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-03</div>
+          <div class="tl-body"><b>初のYouTubeアップロードを実行(のち失敗と判明)。</b>「<a href="https://youtube.com/watch?v=I4njOv9g8Is" target="_blank" rel="noopener">Rain &amp; Soft Pad for Sleep</a>」(60分)を<code>publish.py</code>で生成→レンダリング→アップロードまで実行し、その時点でローカルファイルを削除して「公開完了」と報告した。<b>実際には再生できるか確認しておらず、これは誤りだった</b>(オーナーからの指摘で発覚)。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-03</div>
+          <div class="tl-body"><b>公開確認の欠如を修正。根本原因は「動画が長すぎる」。</b>オーナーの指摘を受け調査したところ、(1) アップロード成功をそのまま「公開完了」と報告し、YouTube側の処理完了を確認していなかった、(2) そもそも状態を読み取る権限がなくチェックしようがなかった、の2点が判明。<code>youtube_upload.py</code>に処理完了の確認機構を追加し、<code>publish.py</code>は確認が取れるまでローカルファイルを消さないよう修正。読み取り権限(<code>youtube.readonly</code>)を追加し再ログイン依頼中。オーナーがYouTube Studioを直接確認したところ「処理を中止しました・動画が長すぎます」と判明 — 電話番号未確認のチャンネルは動画が15分までに制限される仕様で、60分動画のこのアプリの前提と衝突していた。電話番号確認を最優先のオーナー依頼事項に追加(<code>docs/ORG.md</code>のグロース/運用部の役割にも「公開完了は確認してから報告する」ことを明記)。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-03</div>
+          <div class="tl-body"><b>YouTube公開、今度は実際に確認して完了。</b>オーナーが電話番号確認・読み取り権限の再ログインを完了。動画を作り直して<code>publish.py</code>で再実行したところ、修正済みの処理完了確認(<code>wait_for_processing</code>)が正常に機能し、さらに念のためAPIで独立して<code>uploadStatus: processed</code> / <code>processingStatus: succeeded</code>を直接確認してから公開完了と報告した。<a href="https://youtube.com/watch?v=xT472Ht5omk" target="_blank" rel="noopener">Rain &amp; Soft Pad for Sleep(1時間)</a>が実際に視聴可能な状態でYouTubeに公開されている。BGM動画・note記事の2事業が名実ともに公開済みに。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-03</div>
+          <div class="tl-body"><b>YouTube SEO・マーケティングを強化。</b>「公開しただけで視聴数が伸びるわけがない」というオーナーの指摘を受け、サムネイル・概要欄・タグ・ハッシュタグを本格的に作り込んだ(<code>docs/marketing/2026-08-youtube-seo.md</code>に調査結果)。ブランドカラーと三日月モチーフを踏襲したカスタムサムネイル生成(<code>thumbnail.py</code>、長さバッジ付き)を新設し、<code>publish.py</code>がアップロード後に自動セットするようにした。各プリセットの概要欄をキーワード重視のフック・用途リスト・ハッシュタグ3〜5個を含む構成に拡充(<code>presets.py</code>)。次回公開分から適用。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-03</div>
+          <div class="tl-body"><b>投稿計画がなかった点を指摘され、策定。</b>「投稿計画があるのか、同じ動画を出し続けていないか、Shortsで登録者を増やす導線があるのか」という指摘を受け、実際に計画が存在しないこと(手動トリガーのみ、ローテーション管理なし、2本連続で同じプリセット、YouTube Shorts投稿の仕組み自体が未実装)を認めた。<code>rotation.py</code>(プリセットの自動ローテーション)・<code>publish_shorts.py</code>(YouTube Shorts自動投稿、長尺動画への誘導リンク付き)を新設し、投稿ペースの提案(長尺週1本・Shorts週2〜3本)を<code>docs/marketing/2026-08-content-calendar.md</code>にまとめた。定期実行(無人自動化)するかはオーナーに確認中。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-03</div>
+          <div class="tl-body"><b>YouTube投稿を完全自動化。</b>オーナーから「自動化が目的、社長としての自覚を持って各部署を連携させ会社を大きくしてほしい」という明確な指示を受け、Routine(定期実行)を新設した。長尺動画は毎週火曜0時(UTC)、Shortsは火・木・土の正午(UTC)に無人で生成→公開する。既存の週次経営レビュー・note下書きRoutine(共に月曜)と時間を分散させて設定。失敗時、特にYouTube側のOAuth再認証が必要なケース(テストモードでの約7日でのトークン失効)はPushNotificationでオーナーに知らせ、成功時は静かにダッシュボードとgitログに記録する運用とした。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-03</div>
+          <div class="tl-body"><b>「1週間以内に収益化」の目標を受け、noteに集中する方針を決定。</b>YouTube広告収益(登録者1,000人+年間4,000時間が条件)・アプリストア収益(未申請・課金未実装)は構造的に1週間では不可能と判断し、正直に報告した。プラットフォームの審査待ちがないnote.comに集中する方針に決定。実行したこと: (1) 公開済み動画のタイトル・概要欄・タグ・サムネイルを、SEO強化後の仕組みで作り直して差し替え(検索意図に直結するフレーズ「rain sounds for sleeping」を反映)、(2) 権限不足で動画の修正ができなかったため`youtube`フルスコープに拡張・再認証、(3) note記事を新たに1本執筆(「作業用BGM選びの悩み50件」、投稿キューに追加、YouTubeチャンネルへの導線付き)、(4) 投稿キューページを「今週中にまとめて投稿」を促す表示に変更。<b>オーナーへの依頼は2点のみ</b>: noteのサポート機能有効化+振込先登録、投稿キュー(05・06・07)の今週中の投稿。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-03</div>
+          <div class="tl-body"><b>noteのサポート機能を有効化、プロフィールURLを共有いただいた。</b>2つの依頼のうち1つ目が完了(<a href="https://note.com/unique_condor276" target="_blank" rel="noopener">https://note.com/unique_condor276</a>)。<code>bgm_pipeline/presets.py</code>に<code>NOTE_URL</code>として登録し、公開中のYouTube動画の概要欄を更新して実際にリンクを反映、今後の長尺動画・Shorts全てにも自動で入るようコード側を修正した。残るは投稿キュー(05・06・07)の投稿のみ。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-03</div>
+          <div class="tl-body"><b>組織図に役員・社員の役割を明記。</b>「社長の下に役員・社員がいるはず」というオーナーの指摘を受け、<code>docs/ORG.md</code>の9部署それぞれにCTO/CCO/CMO等の役員と具体的な社員の役割を追記、mermaidの組織図も追加した。ただし正直に書いた通り、実態は全役割を社長(このセッション)1人が担っており、別人格の社員が実在するわけではない旨を明記している。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-04</div>
+          <div class="tl-body"><b>会社サイト(Quiet Hours)を作成・公開。</b>TikTokビジネス認証の「企業のWebサイト」欄が必要になったことがきっかけで、3事業(YouTube/アプリ/note)を1つのブランドとしてまとめた対外向けページを新設(<a href="https://claude.ai/code/artifact/3ace0d1f-bbd2-4522-bb2e-b9b0b834d5b4" target="_blank" rel="noopener">公開URL</a>)。既存のBGM/アプリのビジュアル(紺色グラデーション・三日月モチーフ・Gloock+Work Sans)を踏襲(<code>docs/site/</code>)。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-04</div>
+          <div class="tl-body"><b>TikTok自動投稿を試みるも、ドメイン所有権の壁で一旦保留。</b>ビジネス認証は法人書類が必須と判明したためスキップし、開発者アプリ登録・OAuth(<code>tiktok_auth.py</code>)まで実装。しかしTikTokはリダイレクトURI・ToS・プライバシーポリシー等すべてのURLについて「到達可能か」ではなく「ドメインの所有権」を検証する仕組みで、使っていた<code>claude.ai</code>のArtifact URLは自分たちが所有するドメインではないため検証が原理的に通せないと判明。対策(GitHub Pagesの有効化、オーナー側の操作が必要)は<code>bgm-pipeline/README.md</code>に記録し保留にした。いずれにせよ実際の公開投稿にはTikTok側のAudit(審査)が別途必要で、Instagram同様「技術的に繋がっても公開は先」の構造のため、今週の収益目標には直結しないと判断。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-04</div>
+          <div class="tl-body"><b>2本目の長尺動画を自動公開。</b>週次Routineが無人で実行し、ローテーションが<code>study_focus_binaural</code>を選択(<a href="https://youtube.com/watch?v=nf7yiIO2hB8" target="_blank" rel="noopener">Alpha Focus Binaural + Pad(1時間)</a>)。処理完了・再生可能な状態をAPIで独立して確認済み。日本語キーワード追加後のタイトル・タグが最初から反映された1本目でもある。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-04</div>
+          <div class="tl-body"><b>投稿キュー(05・06・07)の消化完了、note記事7本公開に。</b>オーナーが今週中の投稿を完了。投稿キューページから該当3枚のカードを削除し、README進捗チェックリストも更新した。今週の収益目標に対して最重要だったアクションが完了。次はnote側のサポート機能経由での実際の入金を待つフェーズ。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-04</div>
+          <div class="tl-body"><b>「今のやり方の延長では売上は当面立たない」と正直に報告 → オーナーから「方向性を決めるのは社長の仕事だろう」と明確な指摘。</b>選択肢を並べて判断を委ねていたこと自体が指示に反していたと受け止め、社長として決定・実行(<code>docs/marketing/2026-08-04-x-strategy.md</code>)。<b>決定: X(旧Twitter)を新チャネルとして開設し、「AI社長が実在の会社を経営している」というストーリー自体をマーケティングの主軸に据える。</b>BGM・アプリは激戦区で質だけでは差別化にならないが、このプロセス自体はAI/エージェント界隈で関心の高い、際立ったコンテンツだと判断。プロフィール文案・初回投稿スレッド(<code>x-account/</code>)を用意済み。オーナーへの依頼はアカウント作成の1点のみ。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-04</div>
+          <div class="tl-body"><b>Xアカウント開設完了、自動投稿基盤も構築。</b><a href="https://x.com/QuietHoursceo" target="_blank" rel="noopener">@QuietHoursceo</a>。会社サイト・経営ダッシュボードにリンクを追加。あわせて、Xが2026年2月に無料APIプランを廃止し投稿ごとに課金される仕様になった(URL付き投稿は$0.20/件)ことが判明したため、note.comと同じ方式(ブラウザ自動操作、パスワードは預からない)で<code>x-account/x_publish/</code>を構築した。初回スレッド(7ポスト)はまず手動投稿を依頼し、以降の投稿から自動化に移行する。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-05</div>
+          <div class="tl-body"><b>公開済み動画を実際に見たオーナーから「文字化け」「サムネイルが引き付けられない」「概要欄が英語」「紫は何?」「勉強用ならノート・鉛筆のような分かりやすいものに」と具体的な指摘。</b>すべて実在するバグ・課題だった。原因調査の結果、サムネイル用フォント(WorkSans)と動画焼き込み文字用フォント(DejaVu Sans)がどちらも日本語グリフを持たず、日本語タイトル導入以降ずっと文字化けしていたことが判明(サムネイルだけでなく動画本体の焼き込み文字も)。日本語対応フォント(WenQuanYi Zen Hei、この環境にプリインストール済みで追加インストール不要)に差し替えて修正。あわせて、集中/勉強系プリセット用にノート+鉛筆の具体的なアイコンを新規作成(月モチーフのままでは"睡眠"にしか読めないという指摘への対応)、<code>study_focus_binaural</code>だけ紫だった背景色をブランド統一の紺+アンバーに修正、タイトル・概要欄を実際に伸びているJP作業用BGMチャンネルの傾向を調査した上で日本語主体に全面書き換え。動画本体の焼き込み文字はAPI経由で修正できないため、2本の長尺動画を修正版で再アップロードし、旧動画(<code>qOTRrIYgdFQ</code>)は非公開化して新動画(<code>nf7yiIO2hB8</code>)への案内を追記。あわせてnote下書きを2本追加(08: アプリ価格設定の裏側、09: 売上¥0の正直な報告)。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-05</div>
+          <div class="tl-body"><b>2本目の差し替えも完了。</b><a href="https://youtube.com/watch?v=xT472Ht5omk" target="_blank" rel="noopener">雨音・睡眠用BGM(修正版)</a>を再アップロードし、APIで再生可能な状態を独立確認。旧動画(<code>cCFbFsWHX80</code>)は非公開化して案内を追記。Shorts側のリンクも新しい長尺動画IDに向け直し済み。公開中の2本とも文字化け・紫色の問題は解消。</div>
+        </div>
+      </div>
+    </details>
   </section>
 </div>
 
