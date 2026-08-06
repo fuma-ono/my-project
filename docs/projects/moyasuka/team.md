@@ -29,7 +29,7 @@
 - [x] 投稿方針の決定(Shorts中心・完全日本語・毎日20:00 JST固定、根拠は`docs/projects/moyasuka/posting-policy.md`)
 - [x] チャンネル名・ハンドルの決定(「モヤスカ」・`@moyasuka`、根拠は`docs/projects/moyasuka/naming.md`)
 - [x] チャンネルアイコン・バナーの作成(`moyasuka/channel_art.py`、明るい配色+吹き出し型ロゴ)
-- [x] チャンネル概要欄のコピペ用文面を作成(`docs/projects/moyasuka/channel-description.md`)
+- [x] チャンネル概要欄のコピペ用文面を作成(`docs/projects/moyasuka/channel-description.md`) → 2026-08-06、実際に伸びている同ジャンルチャンネル「笑うバナナLINE」(登録者15.3万人・総再生6.2億回)の概要欄構成をAPIで取得し、【使用音声】クレジット・【ネタ募集】導線を反映して改訂。台本のタイトル型(「〜ｗｗ」で締める)も同チャンネルに合わせて統一
 - [x] 新YouTubeチャンネル作成(2026-08-06、オーナー対応。[UCrbgwaQhPlDOcQGfUF29VFQ](https://youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ) / `@moyasuka`。名称・概要欄・バナーが用意した内容と一致していることをAPIで確認済み)
 - [x] 動画合成パイプラインの実装 → オーナー指示「ラインのようなやり取りにして」を受け、LINEチャットUI形式(`moyasuka/line_chat.py`)に全面刷新。追加フィードバック6ラウンド(メッセージのコンパクト化・連投グループ化/内容強化・1分尺化・ナレーションカード廃止・パネル縮小して上部配置/終わり方をスカッと感のある展開に/画像・スタンプの実グラフィック化+終わり方をさらに強化/スカッと瞬間への効果音追加/効果音を「デデデデデーン」に差し替え+控えめなBGM追加)も反映済み。各バージョンを実レンダリングしフレーム・音量を確認。経緯は`docs/projects/moyasuka/line-chat-ui.md`
 - [x] 台本の量産着手(3本すべてLINEチャット形式・ナレーションなし・約50〜58秒に書き直し済み、ネタ帳に残り7本。`docs/projects/moyasuka/content-backlog.md`)
