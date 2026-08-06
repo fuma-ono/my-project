@@ -46,3 +46,4 @@ x-account/x_publish/credentials/
 moyasuka/__pycache__/
 moyasuka/.venv/
 moyasuka/channel_art/output/
+moyasuka/output/
