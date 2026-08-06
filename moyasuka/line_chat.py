@@ -495,13 +495,16 @@ def _mix_audio(narration_path: str, total_seconds: float, sfx_cues: list[tuple[f
         "[1:a]aformat=sample_rates=44100:channel_layouts=mono[bgm]",
     ]
     mix_labels = ["[a0]", "[bgm]"]
+    generated: dict[str, str] = {}  # cue name -> rendered wav path, so a name used many times (message_pop) is synthesized once
     for i, (start, name) in enumerate(sfx_cues):
-        gen = SFX_GENERATORS.get(name)
-        if gen is None:
-            continue
-        sfx_path = f"{tmp}/sfx_{i}.wav"
-        gen(sfx_path)
-        inputs += ["-i", sfx_path]
+        if name not in generated:
+            gen = SFX_GENERATORS.get(name)
+            if gen is None:
+                continue
+            path = f"{tmp}/sfx_{name}.wav"
+            gen(path)
+            generated[name] = path
+        inputs += ["-i", generated[name]]
         delay_ms = max(int(start * 1000), 0)
         filter_parts.append(
             f"[{len(mix_labels)}:a]aformat=sample_rates=44100:channel_layouts=mono,adelay=delays={delay_ms}:all=1[sfx{i}]"
@@ -536,6 +539,13 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
     # out before building the chat overlay's block list
     sfx_cues = [(start, item["name"]) for (start, _end, item) in arrivals if item["type"] == "sfx"]
     visual_arrivals = [(start, end, item) for (start, end, item) in arrivals if item["type"] != "sfx"]
+
+    # every message bubble gets a short notification "pop" as it lands —
+    # not a one-off cue, this is the actual, constant soundscape of the
+    # genre (owner feedback 2026-08-06, round 3: the missing piece wasn't
+    # the climax stinger, it was this)
+    pop_cues = [(start, "message_pop") for (start, _end, item) in visual_arrivals if item["type"] == "msg"]
+    sfx_cues = sfx_cues + pop_cues
 
     # render each bubble/card once and reuse the image across every frame
     # instead of re-wrapping and re-drawing text per frame (see render_frame's
