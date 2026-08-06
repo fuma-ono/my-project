@@ -1,10 +1,11 @@
-# モヤスカ(仮称) — 第4事業
+# モヤスカ — 第4事業
 
 LINE風の会話ドラマをAI音声合成(VOICEVOX/COEIROINK)でナレーションし、自前生成の背景映像とあわせてYouTube Shortsに投稿する新チャンネル。オーナー指示(2026-08-05)により着手。
 
 - **チーム編成・進捗**: `docs/projects/moyasuka/team.md`
 - **背景映像のデザイン決定の経緯**: `docs/projects/moyasuka/background.md`
 - **投稿方針(フォーマット・言語・頻度・時刻)**: `docs/projects/moyasuka/posting-policy.md`
+- **チャンネル名・ハンドル名の決定**: `docs/projects/moyasuka/naming.md`(チャンネル名「モヤスカ」・ハンドル`@moyasuka`で確定)
 
 ## 投稿方針(要点)
 
@@ -21,10 +22,9 @@ LINE風の会話ドラマをAI音声合成(VOICEVOX/COEIROINK)でナレーショ
 - 台本: サンプル1本(`scripts/01-sample.md`)
 - 音声合成(VOICEVOX): エンジン本体がこのクラウド環境でダウンロードできないため未着手。note.com/Xの自動投稿と同じ理由で、**オーナー自身のPCでのセットアップが必要な見込み**
 - 新YouTubeチャンネル: 未作成(オーナー対応)
-- チャンネル名: 「モヤスカ」を仮称として使用中、正式決定はオーナー確認待ち
+- チャンネル名・ハンドル: **「モヤスカ」・`@moyasuka`で確定**(`docs/projects/moyasuka/naming.md`)
 
 ## 人間側でまだ必要な作業
 
-- チャンネル名の最終決定
-- 新YouTubeチャンネルの作成
+- 新YouTubeチャンネルを「モヤスカ」名義・`@moyasuka`ハンドルで作成
 - VOICEVOXエンジンのセットアップ(手元PC)
