@@ -41,3 +41,7 @@ docs/reports/weekly/package-lock.json
 x-account/x_publish/.venv/
 x-account/x_publish/__pycache__/
 x-account/x_publish/credentials/
+
+# moyasuka
+moyasuka/__pycache__/
+moyasuka/.venv/
