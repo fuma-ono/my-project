@@ -47,6 +47,7 @@ from moyasuka.background_gen import FPS
 from moyasuka.background_gen import H as BG_H
 from moyasuka.background_gen import W as BG_W
 from moyasuka.background_gen import iter_frames
+from moyasuka.bgm import render_bgm_loop
 from moyasuka.sfx import SFX_GENERATORS
 
 JP_FONT_PATH = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
@@ -472,18 +473,28 @@ def render_frame(base: Image.Image, title: str, all_blocks: list[_Block], arriva
     return frame.convert("RGB")
 
 
-def _mix_sfx_cues(audio_path: str, sfx_cues: list[tuple[float, str]], tmp: str) -> str:
-    """Layers each `!sfx:` cue's synthesized stinger onto the narration
-    track at its cue time (ffmpeg adelay + amix). `normalize=0` on amix is
-    deliberate: the default normalizes by dividing every input's volume by
-    the input count, which would make a placeholder silence track "quieter"
-    for no reason and mute short cue clips mixed against long narration —
-    with normalize off, tracks with nothing playing at a given moment
-    (silence, or narration between lines) contribute nothing and don't
-    dilute the cue's volume."""
-    inputs = ["-i", audio_path]
-    filter_parts = ["[0:a]aformat=sample_rates=44100:channel_layouts=mono[a0]"]
-    mix_labels = ["[a0]"]
+def _mix_audio(narration_path: str, total_seconds: float, sfx_cues: list[tuple[float, str]], tmp: str) -> str:
+    """Layers the BGM loop (always, quiet — owner request 2026-08-06:
+    "小さい音でいいからBGMは付けて") and each `!sfx:` cue's synthesized
+    stinger (at its cue time, via adelay) onto the narration track.
+
+    `normalize=0` on amix is deliberate: the default normalizes by
+    dividing every input's volume by the input count, which would make a
+    placeholder silence track (or the always-on BGM bed) "quieter" for no
+    reason and mute short cue clips mixed against long narration — with
+    normalize off, tracks with nothing playing at a given moment
+    contribute nothing and don't dilute the others' volume. BGM's own
+    quiet level is baked into bgm.render_bgm_loop's `amplitude`, not
+    handled here."""
+    bgm_path = f"{tmp}/bgm.wav"
+    render_bgm_loop(total_seconds, bgm_path)
+
+    inputs = ["-i", narration_path, "-i", bgm_path]
+    filter_parts = [
+        "[0:a]aformat=sample_rates=44100:channel_layouts=mono[a0]",
+        "[1:a]aformat=sample_rates=44100:channel_layouts=mono[bgm]",
+    ]
+    mix_labels = ["[a0]", "[bgm]"]
     for i, (start, name) in enumerate(sfx_cues):
         gen = SFX_GENERATORS.get(name)
         if gen is None:
@@ -496,9 +507,6 @@ def _mix_sfx_cues(audio_path: str, sfx_cues: list[tuple[float, str]], tmp: str) 
             f"[{len(mix_labels)}:a]aformat=sample_rates=44100:channel_layouts=mono,adelay=delays={delay_ms}:all=1[sfx{i}]"
         )
         mix_labels.append(f"[sfx{i}]")
-
-    if len(mix_labels) == 1:
-        return audio_path  # every cue name was unrecognized; nothing to mix
 
     filter_complex = ";".join(filter_parts) + f";{''.join(mix_labels)}amix=inputs={len(mix_labels)}:duration=first:dropout_transition=0:normalize=0[mixed]"
     mixed_path = f"{tmp}/mixed_audio.wav"
@@ -559,8 +567,7 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
                 check=True, capture_output=True,
             )
 
-        if sfx_cues:
-            audio_path = _mix_sfx_cues(audio_path, sfx_cues, tmp)
+        audio_path = _mix_audio(audio_path, total_seconds, sfx_cues, tmp)
 
         subprocess.run(
             ["ffmpeg", "-y", "-i", video_only, "-i", audio_path,
