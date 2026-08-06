@@ -7,13 +7,19 @@ module's own background_gen.py. The chat-bubble motif here is the same
 shape used in background_gen.py's _draw_ball, at logo scale, so the
 background video and the channel art read as the same show.
 
-Palette is deliberately its own sub-brand (pink/violet on dark
-violet-navy) rather than a reuse of Quiet Hours' navy+amber: モヤスカ is a
-different YouTube channel for a different audience (LINE-style スカッと
-drama, not ambient/sleep BGM), and distinct channels under the same
-company having their own look is normal practice — the two touchpoints
-that DO need to match are internal (this module's own background video
-and its own channel art), and they do.
+Palette is deliberately its own sub-brand (bright warm cream/coral, not
+Quiet Hours' navy+amber): モヤスカ is a different YouTube channel for a
+different audience (LINE-style スカッと drama, not ambient/sleep BGM), and
+distinct channels under the same company having their own look is normal
+practice — the two touchpoints that DO need to match are internal (this
+module's own background video and its own channel art), and they do.
+First pass used a dark navy background to match the background video's
+BG color; owner feedback (2026-08-06) was that it read as too dark/gloomy
+for a "スカッと" (refreshing, satisfying) mood, so this version flips to a
+bright warm gradient and darkens the text/accent colors accordingly for
+contrast. The background video itself is unaffected — its dark arena is a
+different, deliberate design (satisfying-video genre convention), not
+something the owner commented on.
 
 IMPORTANT: any Japanese text must use JP_FONT (wqy-zenhei). WorkSans/
 Gloock (used elsewhere in this repo for Latin text) have no CJK glyphs —
@@ -30,13 +36,13 @@ from PIL import Image, ImageDraw, ImageFont
 
 JP_FONT = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
 
-BG_TOP = (14, 11, 24)
-BG_BOTTOM = (36, 24, 58)
-BUBBLE_A = (255, 99, 132)   # pop pink — same swatch as background_gen.py PALETTE
-BUBBLE_B = (154, 138, 255)  # violet
-SPARK = (99, 220, 255)      # electric cyan
-TEXT = (240, 240, 250)
-TEXT_DIM = (176, 172, 205)
+BG_TOP = (255, 242, 217)    # warm cream
+BG_BOTTOM = (255, 158, 158) # bright coral
+BUBBLE_A = (255, 79, 129)   # hot pink — brighter cousin of background_gen.py's pop pink
+BUBBLE_B = (255, 205, 86)   # sunflower yellow, in place of the violet (reads better against a warm bg)
+SPARK = (0, 176, 176)       # teal — enough contrast against the cream/coral bg to still pop
+TEXT = (58, 24, 46)         # deep plum, dark enough for contrast on the light bg
+TEXT_DIM = (150, 92, 104)   # muted warm rose
 
 
 def vertical_gradient(size: tuple[int, int], top: tuple[int, int, int], bottom: tuple[int, int, int]) -> Image.Image:
