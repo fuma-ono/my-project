@@ -4,6 +4,11 @@ LINE風の会話ドラマをAI音声合成(VOICEVOX/COEIROINK)でナレーショ
 
 - **チーム編成・進捗**: `docs/projects/moyasuka/team.md`
 - **背景映像のデザイン決定の経緯**: `docs/projects/moyasuka/background.md`
+- **投稿方針(フォーマット・言語・頻度・時刻)**: `docs/projects/moyasuka/posting-policy.md`
+
+## 投稿方針(要点)
+
+オーナー指示(2026-08-06)により決定: **Shorts中心・完全日本語・毎日20:00 JST固定投稿**。根拠と運用体制は`docs/projects/moyasuka/posting-policy.md`参照。
 
 ## このディレクトリの中身
 
