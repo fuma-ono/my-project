@@ -16,13 +16,31 @@ LINE風の会話ドラマをAI音声合成(VOICEVOX/COEIROINK)でナレーショ
 
 - `background_gen.py` — 背景映像の自前生成(チャット吹き出し型のボールが円形アリーナ内で物理演算バウンド、数が増減する)。外部素材・実写映像は不使用
 - `channel_art.py` — チャンネルアイコン(800x800)・バナー(2560x1440)の自前生成。`background_gen.py`と同じ吹き出しモチーフ、完全自前(PIL)で外部素材不使用。`python3 moyasuka/channel_art.py --outdir <出力先>`で生成
+- `assemble_video.py` — 台本(`scripts/*.md`)+背景映像+ナレーション音声を合成し、日本語字幕を焼き込んだ最終動画を書き出すパイプライン。音声は未指定なら無音のプレースホルダーで代用(VOICEVOX未セットアップでもパイプライン自体はテスト・実行可能)。使い方は下記
 - `scripts/` — スカッと系/ほんわか系のストーリー台本
+
+## 動画を組み立てる
+
+```bash
+# 1. 背景映像(1本を使い回さないよう --seed を変える)
+python3 moyasuka/background_gen.py --seconds 60 --seed 3 --out /tmp/bg.mp4
+
+# 2. 台本+背景+(あれば)ナレーション音声を合成
+python3 moyasuka/assemble_video.py \
+  --script moyasuka/scripts/01-sample.md \
+  --background /tmp/bg.mp4 \
+  --audio /tmp/narration.wav \
+  --out /tmp/moyasuka-01.mp4
+```
+
+`--audio`を省略すると無音のプレースホルダー音声(台本の文字数から尺を概算)で合成される。VOICEVOXセットアップ前でもパイプラインの動作確認ができる。
 
 ## 現状
 
 - 背景映像: v4まで反復済み、方向性確定
-- チャンネルアイコン・バナー: 生成済み(オーナーへ送付、チャンネル作成時にアップロード)
-- 台本: サンプル1本(`scripts/01-sample.md`)
+- チャンネルアイコン・バナー: 生成済み・チャンネルに反映済み(APIで確認済み)
+- 動画合成パイプライン(`assemble_video.py`): 実装・動作確認済み(無音プレースホルダーで背景+字幕の合成をテスト、フレームを目視確認)。残るは実際のナレーション音声の差し込みのみ
+- 台本: 3本(`scripts/01-sample.md`〜`03-coworker.md`)、ネタ帳に残り7本(`docs/projects/moyasuka/content-backlog.md`)
 - 音声合成(VOICEVOX): エンジン本体がこのクラウド環境でダウンロードできないため未着手。note.com/Xの自動投稿と同じ理由で、**オーナー自身のPCでのセットアップが必要な見込み**
 - 新YouTubeチャンネル: **作成完了**(2026-08-06、オーナー対応)。[youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ](https://youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ)(`@moyasuka`)。APIで名称・ハンドル・概要欄・バナーが用意した内容と一致していることを確認済み
 - チャンネル名・ハンドル: **「モヤスカ」・`@moyasuka`で確定・反映済み**(`docs/projects/moyasuka/naming.md`)
