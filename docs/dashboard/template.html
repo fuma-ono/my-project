@@ -626,8 +626,8 @@
           <div class="stat"><div class="num">0</div><div class="label">公開本数</div></div>
         </div>
         <ul class="unit-detail">
-          <li>動画合成パイプライン実装済み(<code>assemble_video.py</code>、台本+背景+音声→字幕焼き込み)。無音プレースホルダーで動作確認済み</li>
-          <li>台本3本完成、ネタ帳に残り7本(<code>docs/projects/moyasuka/content-backlog.md</code>)</li>
+          <li>動画合成パイプラインをLINEチャットUIに刷新(<code>line_chat.py</code>、緑/白の吹き出し+スクロール)。台本01を実レンダリングしフレームを目視確認済み</li>
+          <li>台本3本をLINEチャット形式に書き直し済み、ネタ帳に残り7本(<code>docs/projects/moyasuka/content-backlog.md</code>)</li>
         </ul>
         <div class="unit-blocker"><b>依頼中</b>: VOICEVOXセットアップ(オーナー)のみ。これが完了すれば初回投稿が可能</div>
       </div>
@@ -656,7 +656,7 @@
   <section>
     <h2 class="section-title">経営ログ</h2>
     <div class="highlights">
-      <div class="hl-row"><div class="hl-date">08-06</div><div class="hl-body"><b>モヤスカの動画合成パイプラインを実装。</b><code>assemble_video.py</code>: 台本+背景映像+ナレーション音声→字幕焼き込み済み動画。無音プレースホルダーで合成をテストし、フレームを目視確認。台本も3本に。残るブロッカーはVOICEVOXのみ。</div></div>
+      <div class="hl-row"><div class="hl-date">08-06</div><div class="hl-body"><b>モヤスカの動画をLINEチャットUIに全面刷新。</b>「ラインのようなやり取りにして」との指摘を受け、字幕焼き込み方式から実際のLINE画面(緑/白の吹き出し・ヘッダーバー・スクロール)に作り直し(<code>line_chat.py</code>)。台本3本もLINEメッセージのやり取り形式に書き直し。台本01を実レンダリングしフレームを目視確認、オーナーへ送付。残るブロッカーはVOICEVOXのみ。</div></div>
       <div class="hl-row"><div class="hl-date">08-06</div><div class="hl-body"><b>モヤスカの新YouTubeチャンネルが開設され、稼働確認。</b><a href="https://youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ" target="_blank" rel="noopener">@moyasuka</a>。名称・ハンドル・概要欄・バナーが用意した内容と一致していることをAPIで直接確認済み。</div></div>
       <div class="hl-row"><div class="hl-date">08-06</div><div class="hl-body"><b>モヤスカのチャンネル概要欄を作成。</b>投稿ペース・声(VOICEVOX)のクレジット・フィクション表記を含むコピペ用文面(<code>docs/projects/moyasuka/channel-description.md</code>)。</div></div>
       <div class="hl-row"><div class="hl-date">08-06</div><div class="hl-body"><b>モヤスカのチャンネルアイコン・バナーを、オーナー指摘を受け2回改修。</b>暗い配色→明るいサンセット配色、円形→吹き出し型(タイピング3点入り)に変更。オーナーへ送付済み、チャンネル作成時にアップロードすればOK。</div></div>

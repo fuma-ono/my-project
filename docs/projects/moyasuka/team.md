@@ -31,8 +31,8 @@
 - [x] チャンネルアイコン・バナーの作成(`moyasuka/channel_art.py`、明るい配色+吹き出し型ロゴ)
 - [x] チャンネル概要欄のコピペ用文面を作成(`docs/projects/moyasuka/channel-description.md`)
 - [x] 新YouTubeチャンネル作成(2026-08-06、オーナー対応。[UCrbgwaQhPlDOcQGfUF29VFQ](https://youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ) / `@moyasuka`。名称・概要欄・バナーが用意した内容と一致していることをAPIで確認済み)
-- [x] 動画合成パイプラインの実装(`moyasuka/assemble_video.py`。台本+背景映像+ナレーション音声→字幕焼き込み済み最終動画。無音プレースホルダーでの動作確認済み、フレームを目視確認)
-- [x] 台本の量産着手(3本完成、ネタ帳に残り7本。`docs/projects/moyasuka/content-backlog.md`)
+- [x] 動画合成パイプラインの実装 → オーナー指示「ラインのようなやり取りにして」を受け、LINEチャットUI形式(`moyasuka/line_chat.py`)に全面刷新。台本01で実レンダリング済み(無音プレースホルダー、フレームを目視確認)。経緯は`docs/projects/moyasuka/line-chat-ui.md`
+- [x] 台本の量産着手(3本すべてLINEチャット形式に書き直し済み、ネタ帳に残り7本。`docs/projects/moyasuka/content-backlog.md`)
 - [ ] VOICEVOXセットアップ(オーナー自身のPCで、note.com/Xと同じ理由・同じ方式が必要な見込み) — これが完了すれば初回投稿が可能
 
 ## オーナーへの依頼

@@ -1,4 +1,17 @@
-"""Assembles a モヤスカ short: background video + narration audio + burned-in
+"""SUPERSEDED (2026-08-06): owner feedback was "ラインのようなやり取りにして"
+(make it look like a LINE exchange) — plain burned-in narration captions,
+which is what this module does, don't read as a LINE conversation.
+`moyasuka/line_chat.py` is the current pipeline (actual chat bubbles,
+turn-based script format) and is what publish tooling should call.
+
+This file is kept because its wrap/timing helpers are still correct and
+line_chat.py's caption sizing bug (see that file's write_ass docstring)
+was found and fixed here first — not because there are two supported
+output styles. Scripts under scripts/*.md are now written in
+line_chat.py's turn-based chat format, so running this module against
+them will not parse correctly (it expects prose paragraphs).
+
+Assembles a モヤスカ short: background video + narration audio + burned-in
 Japanese captions, synced by estimated per-line reading duration.
 
 Two things are deliberately left as placeholders here, both because

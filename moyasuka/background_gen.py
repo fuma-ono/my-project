@@ -143,10 +143,44 @@ def _draw_pop_flash(canvas: Image.Image, x: float, y: float, progress: float, co
     canvas.alpha_composite(layer)
 
 
-def render_frames(out_dir: str, seconds: float, seed: int) -> int:
-    import os
+def compose_frame(balls: list[_Ball], flashes: list[tuple[float, float, float, tuple[int, int, int]]], t: float) -> Image.Image:
+    """Renders one frame (arena + balls + flashes) at time `t` and returns it
+    as an RGB image, given the current ball/flash state. Pulled out of
+    `render_frames`'s loop so other pipelines (moyasuka/line_chat.py's LINE
+    mockup overlay) can composite on top of the same background without
+    round-tripping through PNG files on disk."""
+    img = Image.new("RGB", (W, H), BG)
+    glow = Image.new("RGB", (W, H), BG)
+    gd = ImageDraw.Draw(glow)
+    for b in balls:
+        s = b.scale(t)
+        if s <= 0.01:
+            continue
+        r = b.radius * s * 1.6
+        gd.ellipse([b.x - r, b.y - r, b.x + r, b.y + r], fill=b.color)
+    glow = glow.filter(ImageFilter.GaussianBlur(35))
+    img = Image.blend(img, glow, 0.5)
 
-    os.makedirs(out_dir, exist_ok=True)
+    base = img.convert("RGBA")
+    draw = ImageDraw.Draw(base)
+    draw.ellipse(
+        [ARENA_CX - ARENA_R, ARENA_CY - ARENA_R, ARENA_CX + ARENA_R, ARENA_CY + ARENA_R],
+        outline=(*RING_COLOR, 200), width=6,
+    )
+    for b in balls:
+        _draw_ball(base, b, b.scale(t))
+
+    for (fx, fy, event_t, color) in flashes:
+        _draw_pop_flash(base, fx, fy, (t - event_t) / 0.5, color)
+
+    return base.convert("RGB")
+
+
+def iter_frames(seconds: float, seed: int):
+    """Generator yielding (t, Image) for one full run of the ball
+    simulation — the state-update half of the old `render_frames` loop,
+    reusable by any caller that wants the raw frames instead of PNGs on
+    disk."""
     rng = np.random.default_rng(seed)
     n_frames = int(FPS * seconds)
 
@@ -158,7 +192,6 @@ def render_frames(out_dir: str, seconds: float, seed: int) -> int:
     for f in range(n_frames):
         t = f / FPS
 
-        # lifecycle event: spawn or despawn a ball
         if t >= next_event_t:
             alive = [b for b in balls if b.dying_at is None]
             spawn = len(alive) <= MIN_BALLS or (len(alive) < MAX_BALLS and rng.random() < 0.55)
@@ -178,34 +211,20 @@ def render_frames(out_dir: str, seconds: float, seed: int) -> int:
                 b.step()
         balls = [b for b in balls if not b.is_dead(t)]
 
-        img = Image.new("RGB", (W, H), BG)
-        glow = Image.new("RGB", (W, H), BG)
-        gd = ImageDraw.Draw(glow)
-        for b in balls:
-            s = b.scale(t)
-            if s <= 0.01:
-                continue
-            r = b.radius * s * 1.6
-            gd.ellipse([b.x - r, b.y - r, b.x + r, b.y + r], fill=b.color)
-        glow = glow.filter(ImageFilter.GaussianBlur(35))
-        img = Image.blend(img, glow, 0.5)
+        yield t, compose_frame(balls, flashes, t)
 
-        base = img.convert("RGBA")
-        draw = ImageDraw.Draw(base)
-        draw.ellipse(
-            [ARENA_CX - ARENA_R, ARENA_CY - ARENA_R, ARENA_CX + ARENA_R, ARENA_CY + ARENA_R],
-            outline=(*RING_COLOR, 200), width=6,
-        )
-        for b in balls:
-            _draw_ball(base, b, b.scale(t))
-
-        for (fx, fy, event_t, color) in flashes:
-            _draw_pop_flash(base, fx, fy, (t - event_t) / 0.5, color)
         flashes = [fl for fl in flashes if (t - fl[2]) < 0.5]
 
-        base.convert("RGB").save(f"{out_dir}/f{f:05d}.png")
 
-    return n_frames
+def render_frames(out_dir: str, seconds: float, seed: int) -> int:
+    import os
+
+    os.makedirs(out_dir, exist_ok=True)
+    n = 0
+    for f, (_t, img) in enumerate(iter_frames(seconds, seed)):
+        img.save(f"{out_dir}/f{f:05d}.png")
+        n = f + 1
+    return n
 
 
 def render_video(out_path: str, seconds: float, seed: int = 0) -> None:
