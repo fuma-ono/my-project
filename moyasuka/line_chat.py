@@ -1,7 +1,7 @@
 """Renders a script as an actual LINE-style chat exchange (rounded message
 bubbles, green for the protagonist's own messages / white for everyone
-else's, a group-chat header bar, system-notice cards for scene-setting
-narration) — owner feedback 2026-08-06: "ラインのようなやり取りにして".
+else's, a group-chat header bar) — owner feedback 2026-08-06: "ラインの
+ようなやり取りにして".
 
 Until now `assemble_video.py` burned the script's prose straight onto the
 screen as plain subtitle captions. That was never actually "LINE-style":
@@ -10,18 +10,27 @@ needed to become message turns, not narrated paragraphs read over a
 caption. See docs/projects/moyasuka/line-chat-ui.md for the full design
 note and the script-format convention this module expects.
 
-Layout (720x1280, matching background_gen.py):
-  - top ~PANEL_TOP px: the existing ball-bounce background stays fully
-    visible here, unobstructed — that's the "ボーっと見れる" ambient loop
-    the owner asked for (2026-08-05), and this feature is about the
-    conversation content, not a replacement for it.
-  - below that: an opaque white "bottom sheet" chat panel with a LINE-green
-    header bar, so the two design elements each get their own clear space
-    instead of competing for the same pixels.
+Layout (720x1280, matching background_gen.py) — revised 2026-08-06 after
+the first version made the ball background nearly invisible behind a
+bottom-sheet panel that covered most of the screen:
+  - a smaller, fixed-height chat panel floats near the TOP of the frame
+    (PANEL_TOP to PANEL_BOTTOM), rounded on all four corners like a card
+  - the ball-bounce background (background_gen.py, whose arena was moved
+    down to ARENA_CY≈0.77·H specifically for this layout) is clearly
+    visible in the larger space below the panel — that's the "ボーっと
+    見れる" ambient loop from 2026-08-05, which the first cut of this
+    feature accidentally buried
 
-Messages/cards reveal progressively and the log auto-scrolls (oldest
-content clips off the top of the panel) exactly like scrolling through a
-real chat, timed by the same character-count reading-speed heuristic
+No system-notice/narration cards: owner feedback 2026-08-06 ("心の声とか
+いらない") was that scene-setting narration text doesn't belong in a pure
+chat format — the story now has to be told entirely through what
+characters actually type, the same way real LINE-drama channels do it.
+`parse_chat_script` still recognizes `> ` lines for flexibility, but the
+shipped scripts no longer use them (see git history for the before/after).
+
+Messages reveal progressively and the log auto-scrolls (oldest content
+clips off the top of the panel) exactly like scrolling through a real
+chat, timed by the same character-count reading-speed heuristic
 `assemble_video.py` already uses (see that file's TODO about swapping this
 for VOICEVOX's real mora timings once it's set up).
 """
@@ -41,7 +50,8 @@ from moyasuka.background_gen import iter_frames
 
 JP_FONT_PATH = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
 
-PANEL_TOP = 360        # px from top where the chat "bottom sheet" starts
+PANEL_TOP = 50          # px from top where the floating chat card starts
+PANEL_BOTTOM = 700      # px where it ends — background_gen.py's arena (ARENA_CY≈986, ARENA_R=230, spans ~756-1216) sits fully below this
 HEADER_H = 92
 PANEL_BG = (247, 247, 250)
 HEADER_COLOR = (6, 199, 85)     # LINE brand green
@@ -265,11 +275,12 @@ def compose_chat_overlay(blocks_with_state: list[_Block], panel_h: int) -> Image
 
 
 def draw_panel_chrome(frame: Image.Image, title: str) -> None:
-    """Draws the opaque bottom-sheet panel + LINE-green header bar onto a
+    """Draws the opaque floating chat card (rounded on all four corners,
+    per the 2026-08-06 layout revision) + LINE-green header bar onto a
     background frame, in place."""
     draw = ImageDraw.Draw(frame, "RGBA")
     draw.rounded_rectangle(
-        [0, PANEL_TOP, BG_W, BG_H], radius=28, fill=(*PANEL_BG, 255), corners=(True, True, False, False)
+        [0, PANEL_TOP, BG_W, PANEL_BOTTOM], radius=28, fill=(*PANEL_BG, 255), corners=(True, True, True, True)
     )
     draw.rectangle([0, PANEL_TOP, BG_W, PANEL_TOP + HEADER_H], fill=HEADER_COLOR)
     # re-round just the top corners of the header so it matches the panel edge
@@ -290,7 +301,7 @@ def render_frame(base: Image.Image, title: str, all_blocks: list[_Block], arriva
     draw_panel_chrome(frame, title)
 
     visible = [b for b, start in zip(all_blocks, arrival_times) if start <= t]
-    panel_h = BG_H - PANEL_TOP - HEADER_H
+    panel_h = PANEL_BOTTOM - PANEL_TOP - HEADER_H
     overlay = compose_chat_overlay(visible, panel_h)
     frame.alpha_composite(overlay, (0, PANEL_TOP + HEADER_H))
     return frame.convert("RGB")

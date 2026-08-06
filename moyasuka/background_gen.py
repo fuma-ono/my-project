@@ -37,8 +37,14 @@ W, H = 720, 1280
 FPS = 24
 DT = 1.0 / FPS
 
-ARENA_CX, ARENA_CY = W / 2, H * 0.42
-ARENA_R = 300
+# Arena sits low in the frame (2026-08-06 owner feedback: the LINE chat
+# panel in line_chat.py covers most of the upper screen, and the balls
+# were invisible behind it at their old centered position). Kept as a
+# module constant rather than a line_chat.py-only parameter since
+# line_chat.py's iter_frames() shares this exact simulation — see that
+# module's PANEL_BOTTOM for the layout this position is tuned against.
+ARENA_CX, ARENA_CY = W / 2, H * 0.77
+ARENA_R = 230
 
 MIN_BALLS = 3
 MAX_BALLS = 9
@@ -64,11 +70,11 @@ class _Ball:
         r = rng.uniform(0, ARENA_R * 0.5)
         self.x = ARENA_CX + math.cos(angle) * r
         self.y = ARENA_CY + math.sin(angle) * r
-        speed = rng.uniform(220, 320)
+        speed = rng.uniform(170, 245)  # scaled down with ARENA_R so motion still feels proportionate in the smaller arena
         vang = rng.uniform(0, 2 * math.pi)
         self.vx = math.cos(vang) * speed
         self.vy = math.sin(vang) * speed
-        self.radius = rng.uniform(26, 38)
+        self.radius = rng.uniform(20, 30)
         self.color = PALETTE[i % len(PALETTE)]
         self.tail = "left" if rng.random() < 0.5 else "right"
         # lifecycle
