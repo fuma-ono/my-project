@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import argparse
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 JP_FONT = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
 
@@ -55,40 +55,48 @@ def vertical_gradient(size: tuple[int, int], top: tuple[int, int, int], bottom: 
     return img
 
 
-def draw_bubble(img: Image.Image, center: tuple[int, int], radius: int, tail: str = "left") -> None:
-    """The chat-bubble motif from background_gen.py's _draw_ball, at logo
-    scale: a pink-to-violet gradient bubble with a tail and a glossy
-    highlight, composited with alpha so it sits cleanly on the background
-    gradient.
+def draw_bubble(img: Image.Image, center: tuple[int, int], size: int, tail: str = "left") -> None:
+    """A proper chat-bubble mark: a rounded rectangle (not a circle — owner
+    feedback 2026-08-06: "アイコンの画像の○はいやかな", a plain circle just
+    reads as a ball, not a logo) with a tail and a three-dot "typing..."
+    indicator inside. The three dots are a deliberate, universally
+    recognizable nod to the LINE-chat content itself, the same way
+    bgm_pipeline's notebook+pencil icon replaced an abstract shape with a
+    concrete, unambiguous image (owner feedback 2026-08-04).
 
-    Drawing order matters here: the tail is drawn FIRST with its base deep
-    inside where the circle will land, then the circle (opaque) is drawn
-    on top — this fuses the two shapes with no seam, instead of the tail
-    reading as a disconnected triangle floating next to the circle. The
-    highlight is composited as its own alpha layer (not drawn directly
-    with an alpha fill onto the RGBA layer) because ImageDraw.ellipse
-    *replaces* pixels rather than blending them — drawing a translucent
-    white fill straight onto the gradient would show the layer's own
-    (transparent) background through it instead of blending with the
-    pink/violet underneath, which reads as a muddy grey smudge.
+    `size` is roughly the bubble's half-height (kept as the same argument
+    name/shape as the old circle-radius version so call sites read the
+    same way).
+
+    Drawing order matters: the tail is drawn FIRST with its base deep
+    inside where the rounded rect will land, then the rect (opaque) is
+    drawn on top — this fuses the two shapes with no seam. The highlight
+    and dots are each composited as their own alpha layer (not drawn
+    directly with an alpha fill onto the RGBA layer) because
+    ImageDraw.ellipse *replaces* pixels rather than blending them —
+    drawing a translucent fill straight onto the gradient would show the
+    layer's own (transparent) background through it instead of blending
+    with the pink/yellow underneath, which reads as a muddy grey smudge.
     """
     cx, cy = center
-    pad = int(radius * 0.65) + 10
-    d = radius * 2
-    lw, lh = d + pad * 2, d + pad * 2
+    w, h = int(size * 2.7), int(size * 2.0)
+    corner_r = int(h * 0.32)
+    pad = int(size * 0.9)
+    lw, lh = w + pad * 2, h + pad * 2
+    rect = [pad, pad, pad + w, pad + h]
 
+    tail_w = h * 0.24
+    tail_len = h * 0.34
     tail_layer = Image.new("RGBA", (lw, lh), (0, 0, 0, 0))
     td = ImageDraw.Draw(tail_layer)
-    tail_w = radius * 0.42
-    tail_len = radius * 0.55
-    ty = pad + d * 0.72
+    ty = rect[1] + h * 0.78
     if tail == "left":
-        base_x = pad + radius * 0.35  # inside the circle, so the body below covers it
-        tip_x = pad - tail_len
+        base_x = rect[0] + w * 0.16  # inside the rect, so the body below covers it
+        tip_x = rect[0] - tail_len
         td.polygon([(base_x, ty - tail_w / 2), (tip_x, ty), (base_x, ty + tail_w / 2)], fill=(*BUBBLE_A, 255))
     else:
-        base_x = pad + d - radius * 0.35
-        tip_x = pad + d + tail_len
+        base_x = rect[2] - w * 0.16
+        tip_x = rect[2] + tail_len
         td.polygon([(base_x, ty - tail_w / 2), (tip_x, ty), (base_x, ty + tail_w / 2)], fill=(*BUBBLE_B, 255))
 
     grad = Image.new("RGBA", (lw, lh), (0, 0, 0, 0))
@@ -97,16 +105,32 @@ def draw_bubble(img: Image.Image, center: tuple[int, int], radius: int, tail: st
         row = tuple(int(BUBBLE_A[i] + (BUBBLE_B[i] - BUBBLE_A[i]) * t) for i in range(3))
         ImageDraw.Draw(grad).line([(0, y), (lw, y)], fill=(*row, 255))
     mask = Image.new("L", (lw, lh), 0)
-    ImageDraw.Draw(mask).ellipse([pad, pad, pad + d, pad + d], fill=255)
+    ImageDraw.Draw(mask).rounded_rectangle(rect, radius=corner_r, fill=255)
     layer = Image.composite(grad, tail_layer, mask)
 
+    # highlight/dots are clipped to `mask` before compositing — otherwise
+    # they're alpha_composite'd over the *whole* transparent layer canvas,
+    # not just the bubble shape, and the highlight ends up floating above
+    # the bubble's rounded top edge as a stray circle instead of sitting
+    # inside it.
     highlight = Image.new("RGBA", (lw, lh), (0, 0, 0, 0))
-    hl_r = radius * 0.4
+    hl_r = h * 0.42
     ImageDraw.Draw(highlight).ellipse(
-        [pad + radius * 0.35, pad + radius * 0.28, pad + radius * 0.35 + hl_r, pad + radius * 0.28 + hl_r],
-        fill=(255, 255, 255, 130),
+        [rect[0] + w * 0.08, rect[1] - hl_r * 0.35, rect[0] + w * 0.08 + hl_r, rect[1] - hl_r * 0.35 + hl_r],
+        fill=(255, 255, 255, 90),
     )
+    highlight.putalpha(ImageChops.multiply(highlight.getchannel("A"), mask))
     layer = Image.alpha_composite(layer, highlight)
+
+    dots = Image.new("RGBA", (lw, lh), (0, 0, 0, 0))
+    dd = ImageDraw.Draw(dots)
+    dot_r = h * 0.09
+    gap = w * 0.145
+    dcx, dcy = (rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2 + h * 0.02
+    for dx in (-gap, 0, gap):
+        dd.ellipse([dcx + dx - dot_r, dcy - dot_r, dcx + dx + dot_r, dcy + dot_r], fill=(255, 255, 255, 235))
+    dots.putalpha(ImageChops.multiply(dots.getchannel("A"), mask))
+    layer = Image.alpha_composite(layer, dots)
 
     img.paste(layer, (int(cx - lw / 2), int(cy - lh / 2)), layer)
 
@@ -124,8 +148,8 @@ def draw_scatter_bubbles(img: Image.Image, points: list[tuple[float, float, floa
 def make_profile_icon(path: str, size: int = 800) -> None:
     img = vertical_gradient((size, size), BG_TOP, BG_BOTTOM)
     # displayed as a circle by YouTube — keep the bubble well inside the
-    # center so the tail/highlight never get clipped by the circular mask
-    draw_bubble(img, (size // 2, size // 2), int(size * 0.28), tail="right")
+    # center so the tail/highlight/dots never get clipped by the circular mask
+    draw_bubble(img, (size // 2, size // 2), int(size * 0.175), tail="right")
     img.save(path)
 
 
@@ -157,10 +181,10 @@ def make_banner(path: str, size: tuple[int, int] = (2560, 1440)) -> None:
         alpha=115,
     )
 
-    bubble_r = int(safe_h * 0.34)
-    bubble_cx = cx - safe_w // 2 + bubble_r + 30
+    bubble_size = int(safe_h * 0.21)
+    bubble_cx = cx - safe_w // 2 + bubble_size * 1.5 + 30
     bubble_cy = cy - 10
-    draw_bubble(img, (bubble_cx, bubble_cy), bubble_r, tail="left")
+    draw_bubble(img, (int(bubble_cx), bubble_cy), bubble_size, tail="left")
 
     title_font = ImageFont.truetype(JP_FONT, 100)
     tagline_font = ImageFont.truetype(JP_FONT, 34)
@@ -171,7 +195,7 @@ def make_banner(path: str, size: tuple[int, int] = (2560, 1440)) -> None:
     tagline = "LINEで見るスカッと系ショートドラマ"
     badge = "毎日20:00更新"
 
-    text_x = bubble_cx + bubble_r + 60
+    text_x = int(bubble_cx + bubble_size * 1.6 + 60)
 
     # wqy-zenhei ships one weight only — fake a bold title with a text
     # stroke rather than drawing it twice offset (cleaner edges at this size)
