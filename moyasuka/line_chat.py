@@ -47,6 +47,7 @@ from moyasuka.background_gen import FPS
 from moyasuka.background_gen import H as BG_H
 from moyasuka.background_gen import W as BG_W
 from moyasuka.background_gen import iter_frames
+from moyasuka.sfx import SFX_GENERATORS
 
 JP_FONT_PATH = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
 
@@ -115,6 +116,10 @@ def parse_chat_script(path: str) -> tuple[str, list[dict]]:
       - a message of exactly `[sticker]` or `[sticker:困り顔]` renders as a
         self-generated sticker graphic (no bubble/border, LINE-sticker
         style) instead of a text bubble
+      - a line `!sfx:名前` (e.g. `!sfx:scratch_hype`, see sfx.py) is a
+        zero-duration audio cue: no visual block, doesn't advance the
+        script's timeline, just marks the moment a sound effect should
+        land in the mixed audio track
     (owner feedback 2026-08-06: "画像とかスタンプとかが文字表記になって
     いるので変えて" — these used to just be bracketed placeholder text
     inside an ordinary bubble, e.g. "[家事記録アプリの画面を送信]";  now
@@ -138,6 +143,9 @@ def parse_chat_script(path: str) -> tuple[str, list[dict]]:
             continue
         if line.startswith("> "):
             items.append({"type": "card", "text": line[2:].strip()})
+            continue
+        if line.startswith("!sfx:"):
+            items.append({"type": "sfx", "name": line.split(":", 1)[1].strip()})
             continue
         if ":" in line or "：" in line:
             sep = ":" if ":" in line else "："
@@ -166,7 +174,7 @@ def parse_chat_script(path: str) -> tuple[str, list[dict]]:
         if item["type"] == "msg":
             item["grouped"] = item["speaker"] == prev_speaker
             prev_speaker = item["speaker"]
-        else:
+        elif item["type"] != "sfx":  # a card resets the burst; a zero-duration sfx cue doesn't
             prev_speaker = None
 
     return title, items
@@ -180,6 +188,11 @@ def estimate_arrivals(items: list[dict]) -> list[tuple[float, float, dict]]:
     t = 0.5  # small lead-in before the first message
     out = []
     for item in items:
+        if item["type"] == "sfx":
+            # zero-duration: stamps the current timeline position without
+            # pushing anything after it later, since it's just an audio cue
+            out.append((t, t, item))
+            continue
         kind = item.get("kind", "text")
         if kind == "image":
             dur = IMAGE_VIEW_SECONDS
@@ -459,6 +472,43 @@ def render_frame(base: Image.Image, title: str, all_blocks: list[_Block], arriva
     return frame.convert("RGB")
 
 
+def _mix_sfx_cues(audio_path: str, sfx_cues: list[tuple[float, str]], tmp: str) -> str:
+    """Layers each `!sfx:` cue's synthesized stinger onto the narration
+    track at its cue time (ffmpeg adelay + amix). `normalize=0` on amix is
+    deliberate: the default normalizes by dividing every input's volume by
+    the input count, which would make a placeholder silence track "quieter"
+    for no reason and mute short cue clips mixed against long narration —
+    with normalize off, tracks with nothing playing at a given moment
+    (silence, or narration between lines) contribute nothing and don't
+    dilute the cue's volume."""
+    inputs = ["-i", audio_path]
+    filter_parts = ["[0:a]aformat=sample_rates=44100:channel_layouts=mono[a0]"]
+    mix_labels = ["[a0]"]
+    for i, (start, name) in enumerate(sfx_cues):
+        gen = SFX_GENERATORS.get(name)
+        if gen is None:
+            continue
+        sfx_path = f"{tmp}/sfx_{i}.wav"
+        gen(sfx_path)
+        inputs += ["-i", sfx_path]
+        delay_ms = max(int(start * 1000), 0)
+        filter_parts.append(
+            f"[{len(mix_labels)}:a]aformat=sample_rates=44100:channel_layouts=mono,adelay=delays={delay_ms}:all=1[sfx{i}]"
+        )
+        mix_labels.append(f"[sfx{i}]")
+
+    if len(mix_labels) == 1:
+        return audio_path  # every cue name was unrecognized; nothing to mix
+
+    filter_complex = ";".join(filter_parts) + f";{''.join(mix_labels)}amix=inputs={len(mix_labels)}:duration=first:dropout_transition=0:normalize=0[mixed]"
+    mixed_path = f"{tmp}/mixed_audio.wav"
+    subprocess.run(
+        ["ffmpeg", "-y", *inputs, "-filter_complex", filter_complex, "-map", "[mixed]", mixed_path],
+        check=True, capture_output=True,
+    )
+    return mixed_path
+
+
 def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str | None = None) -> float:
     """Full pipeline: parse the chat script, render every frame (ball
     background from background_gen.iter_frames + the LINE chat overlay on
@@ -474,11 +524,16 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
     arrivals = estimate_arrivals(items)
     total_seconds = arrivals[-1][1] + 1.2
 
+    # sfx cues carry no visual block (see estimate_arrivals) — pull them
+    # out before building the chat overlay's block list
+    sfx_cues = [(start, item["name"]) for (start, _end, item) in arrivals if item["type"] == "sfx"]
+    visual_arrivals = [(start, end, item) for (start, end, item) in arrivals if item["type"] != "sfx"]
+
     # render each bubble/card once and reuse the image across every frame
     # instead of re-wrapping and re-drawing text per frame (see render_frame's
     # docstring for why that matters)
-    all_blocks = [render_block(item) for (_start, _end, item) in arrivals]
-    arrival_times = [start for (start, _end, _item) in arrivals]
+    all_blocks = [render_block(item) for (_start, _end, item) in visual_arrivals]
+    arrival_times = [start for (start, _end, _item) in visual_arrivals]
 
     with tempfile.TemporaryDirectory() as tmp:
         frame_dir = Path(tmp) / "frames"
@@ -503,6 +558,9 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
                  "-t", str(total_seconds), audio_path],
                 check=True, capture_output=True,
             )
+
+        if sfx_cues:
+            audio_path = _mix_sfx_cues(audio_path, sfx_cues, tmp)
 
         subprocess.run(
             ["ffmpeg", "-y", "-i", video_only, "-i", audio_path,
