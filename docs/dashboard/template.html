@@ -423,8 +423,8 @@
       <div class="action-row">
         <div class="action-mark pending">!</div>
         <div class="action-body">
-          <div class="action-title">モヤスカ: VOICEVOXエンジンのセットアップ(オーナー自身のPC)</div>
-          <div class="action-desc">新チャンネル作成は完了(<a href="https://youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ" target="_blank" rel="noopener">@moyasuka</a>)。残るブロッカーはこれのみ。note.com/Xの自動投稿と同じ理由でオーナー自身のPCでのセットアップが必要な見込み。</div>
+          <div class="action-title">モヤスカ: VOICEVOXエンジンの起動+コマンド2回(オーナー自身のPC)</div>
+          <div class="action-desc">新チャンネル作成は完了(<a href="https://youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ" target="_blank" rel="noopener">@moyasuka</a>)。音声合成・動画への同期コードは実装済みで、残るはエンジン起動のみ。手順は<code>docs/projects/moyasuka/voicevox-setup.md</code>。エンジンを起動しコマンドを2回打てば初回動画が完成する。</div>
         </div>
         <div class="action-owner">Owner</div>
       </div>
@@ -626,10 +626,11 @@
           <div class="stat"><div class="num">0</div><div class="label">公開本数</div></div>
         </div>
         <ul class="unit-detail">
-          <li>動画合成パイプラインをLINEチャットUIに刷新(<code>line_chat.py</code>)。オーナーの実映像フィードバックを2ラウンド反映(文章のコンパクト化・連投グループ化/内容強化・1分尺化・ナレーション廃止・パネル縮小して上部配置、下部でボール背景をフル表示)</li>
-          <li>台本3本(ナレーションなし・約50〜58秒)、ネタ帳に残り7本(<code>docs/projects/moyasuka/content-backlog.md</code>)</li>
+          <li>動画合成パイプラインをLINEチャットUIに全面刷新(<code>line_chat.py</code>)。オーナーの実映像フィードバックを9ラウンド反映(コンパクト化・1分尺化・パネル縮小/終わり方の強化2回/画像・スタンプの実グラフィック化/効果音3回・BGM追加/メッセージ通知音/クライマックス効果音を効果音ラボの実素材に差し替え)。すべて実レンダリングで確認済み</li>
+          <li>VOICEVOX実音声の合成コード(<code>voicevox_narrate.py</code>)・動画への同期(<code>line_chat.py --durations</code>)を実装完了。5声固定キャスト(<code>docs/projects/moyasuka/content-backlog.md</code>)、セットアップ手順は<code>docs/projects/moyasuka/voicevox-setup.md</code></li>
+          <li>台本3本(約53〜67秒)、ネタ帳に残り7本(<code>docs/projects/moyasuka/content-backlog.md</code>)</li>
         </ul>
-        <div class="unit-blocker"><b>依頼中</b>: VOICEVOXセットアップ(オーナー)のみ。これが完了すれば初回投稿が可能</div>
+        <div class="unit-blocker"><b>依頼中</b>: VOICEVOXエンジンをオーナー自身のPCで起動しコマンド2回を実行するのみ。コード側は準備完了、これが完了すれば初回投稿が可能</div>
       </div>
 
     </div>
@@ -656,6 +657,7 @@
   <section>
     <h2 class="section-title">経営ログ</h2>
     <div class="highlights">
+      <div class="hl-row"><div class="hl-date">08-06</div><div class="hl-body"><b>モヤスカのVOICEVOX実ナレーション連携を実装。</b>「あとは読み上げ機能だけ」との確認を受け、実音声合成コード(<code>voicevox_narrate.py</code>)と、動画側の表示タイミングを実音声の長さに正確に同期する仕組み(<code>line_chat.py --durations</code>)を実装。エンジン自体はこのクラウド環境から到達不可のため未テストだが、オーナーPCでエンジンを起動しコマンド2回打つだけで完成するところまで用意済み(<code>docs/projects/moyasuka/voicevox-setup.md</code>)。あわせて対人物witnessキャラの追加で声が被る問題を見つけ、5声固定キャストに拡張(<code>docs/projects/moyasuka/content-backlog.md</code>)。</div></div>
       <div class="hl-row"><div class="hl-date">08-06</div><div class="hl-body"><b>モヤスカのクライマックス効果音を効果音ラボの実素材に差し替え。</b>自前合成の「デデデデデーン」から、効果音ラボ「男衆「イヤッホー！」」に変更。サイト自体はサンドボックスから接続不可のためオーナーがダウンロードして提供、ライセンスは<code>moyasuka/assets/sfx/NOTICE.md</code>に明記。唯一の外部素材で、メッセージ通知音は引き続き自前合成。</div></div>
       <div class="hl-row"><div class="hl-date">08-06</div><div class="hl-body"><b>BGM動画Shorts第2弾を自動公開。</b>週次Routineが無人で実行、<a href="https://youtube.com/watch?v=Sf6hQb1-i6U" target="_blank" rel="noopener">sleep_rain_focus・45秒</a>。再生可能な状態を確認済み。</div></div>
       <div class="hl-row"><div class="hl-date">08-06</div><div class="hl-body"><b>モヤスカにメッセージ到着ごとの通知音を追加。</b>参考動画の実音声を直接取得しようとyt-dlpを試みたが、このサンドボックスからはYouTubeの動画/音声CDNがWebFetchと同じ理由で403ブロックされ取得不可と確認。代わりに、抜けていた本質(メッセージ1通ごとに通知音が鳴る)を特定して自前合成(<code>sfx.py</code>)で追加。音量解析で確認済み。</div></div>

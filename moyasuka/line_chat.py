@@ -37,6 +37,7 @@ for VOICEVOX's real mora timings once it's set up).
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import tempfile
 from pathlib import Path
@@ -185,22 +186,31 @@ IMAGE_VIEW_SECONDS = 2.2   # dwell time for an [image] evidence chart (no text t
 STICKER_VIEW_SECONDS = 1.6  # dwell time for a [sticker]
 
 
-def estimate_arrivals(items: list[dict]) -> list[tuple[float, float, dict]]:
+def estimate_arrivals(items: list[dict], durations: list[float] | None = None) -> list[tuple[float, float, dict]]:
+    """`durations`, when given, is a list of real clip lengths aligned 1:1
+    with `items` (one float per item, unused/0 for "sfx") — this is what
+    moyasuka/voicevox_narrate.py produces once real narration audio
+    exists, so bubbles/captions land exactly when each line is actually
+    spoken instead of the character-count guess below. Without it (no
+    VOICEVOX audio yet), the guess is all there is to time against."""
     t = 0.5  # small lead-in before the first message
     out = []
-    for item in items:
+    for i, item in enumerate(items):
         if item["type"] == "sfx":
             # zero-duration: stamps the current timeline position without
             # pushing anything after it later, since it's just an audio cue
             out.append((t, t, item))
             continue
-        kind = item.get("kind", "text")
-        if kind == "image":
-            dur = IMAGE_VIEW_SECONDS
-        elif kind == "sticker":
-            dur = STICKER_VIEW_SECONDS
+        if durations is not None:
+            dur = durations[i]
         else:
-            dur = max(MIN_BLOCK_SECONDS, len(item["text"]) / CHARS_PER_SECOND)
+            kind = item.get("kind", "text")
+            if kind == "image":
+                dur = IMAGE_VIEW_SECONDS
+            elif kind == "sticker":
+                dur = STICKER_VIEW_SECONDS
+            else:
+                dur = max(MIN_BLOCK_SECONDS, len(item["text"]) / CHARS_PER_SECOND)
         out.append((t, t + dur, item))
         t += dur + GAP_SECONDS
     return out
@@ -520,7 +530,7 @@ def _mix_audio(narration_path: str, total_seconds: float, sfx_cues: list[tuple[f
     return mixed_path
 
 
-def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str | None = None) -> float:
+def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str | None = None, durations_path: str | None = None) -> float:
     """Full pipeline: parse the chat script, render every frame (ball
     background from background_gen.iter_frames + the LINE chat overlay on
     top), encode, and mux with narration audio.
@@ -528,11 +538,21 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
     Mirrors assemble_video.py's placeholder-audio approach: with no
     --audio, a silent track is generated from the estimated total duration
     so this can be built/tested end-to-end before VOICEVOX is set up.
+
+    `durations_path`, once real narration exists, points at the
+    `<out>.durations.json` sidecar moyasuka/voicevox_narrate.py writes
+    alongside its audio — passing both --audio and --durations syncs
+    every bubble/caption to the real recorded speech instead of the
+    character-count guess.
     """
     title, items = parse_chat_script(script_path)
     if not items:
         raise ValueError(f"no chat items found in {script_path}")
-    arrivals = estimate_arrivals(items)
+    durations = None
+    if durations_path:
+        with open(durations_path, encoding="utf-8") as f:
+            durations = json.load(f)
+    arrivals = estimate_arrivals(items, durations)
     total_seconds = arrivals[-1][1] + 1.2
 
     # sfx cues carry no visual block (see estimate_arrivals) — pull them
@@ -594,9 +614,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--script", required=True, help="path to a scripts/*.md file in the turn-based chat format")
     parser.add_argument("--seed", type=int, default=0, help="background ball-simulation seed")
     parser.add_argument("--audio", default=None, help="narration audio; omit for a silent placeholder")
+    parser.add_argument("--durations", default=None, help="<out>.durations.json from voicevox_narrate.py — syncs bubbles to the real audio instead of estimating from character count")
     parser.add_argument("--out", required=True)
     args = parser.parse_args(argv)
-    total = render_video(args.script, args.out, args.seed, args.audio)
+    total = render_video(args.script, args.out, args.seed, args.audio, args.durations)
     print(f"wrote {args.out} ({total:.1f}s)")
     return 0
 
