@@ -423,8 +423,8 @@
       <div class="action-row">
         <div class="action-mark pending">!</div>
         <div class="action-body">
-          <div class="action-title">モヤスカ: VOICEVOXエンジンの起動+コマンド2回(オーナー自身のPC)</div>
-          <div class="action-desc">新チャンネル作成は完了(<a href="https://youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ" target="_blank" rel="noopener">@moyasuka</a>)。音声合成・動画への同期コードは実装済みで、残るはエンジン起動のみ。手順は<code>docs/projects/moyasuka/voicevox-setup.md</code>。エンジンを起動しコマンドを2回打てば初回動画が完成する。</div>
+          <div class="action-title">モヤスカ: iPhoneアプリでナレーション収録(20〜30行/本)</div>
+          <div class="action-desc">新チャンネル作成は完了(<a href="https://youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ" target="_blank" rel="noopener">@moyasuka</a>)。オーナーがPCなし・iPhoneのみと判明(VOICEVOXはiOS非対応、代替のホスト型APIもこの環境からブロック)したため、オーナー保有の「ずんだボイス」アプリで1行ずつ手動収録する方式に切り替え済み。収録チェックリストの作り方・組み立て方は<code>docs/projects/moyasuka/voicevox-setup.md</code>の方式A。組み立て→動画合成までの通し動作はダミー音声で確認済み。</div>
         </div>
         <div class="action-owner">Owner</div>
       </div>
@@ -627,10 +627,10 @@
         </div>
         <ul class="unit-detail">
           <li>動画合成パイプラインをLINEチャットUIに全面刷新(<code>line_chat.py</code>)。オーナーの実映像フィードバックを9ラウンド反映(コンパクト化・1分尺化・パネル縮小/終わり方の強化2回/画像・スタンプの実グラフィック化/効果音3回・BGM追加/メッセージ通知音/クライマックス効果音を効果音ラボの実素材に差し替え)。すべて実レンダリングで確認済み</li>
-          <li>VOICEVOX実音声の合成コード(<code>voicevox_narrate.py</code>)・動画への同期(<code>line_chat.py --durations</code>)を実装完了。5声固定キャスト(<code>docs/projects/moyasuka/content-backlog.md</code>)、セットアップ手順は<code>docs/projects/moyasuka/voicevox-setup.md</code></li>
+          <li>実ナレーション音声の合成・動画への同期(<code>line_chat.py --durations</code>)を実装完了。オーナーがiPhoneのみと判明したため、iPhoneアプリ「ずんだボイス」で手動収録したクリップを組み立てる方式(<code>manual_narration.py</code>)に切り替え、通し動作確認済み。5声固定キャスト(<code>docs/projects/moyasuka/content-backlog.md</code>)、手順は<code>docs/projects/moyasuka/voicevox-setup.md</code></li>
           <li>台本3本(約53〜67秒)、ネタ帳に残り7本(<code>docs/projects/moyasuka/content-backlog.md</code>)</li>
         </ul>
-        <div class="unit-blocker"><b>依頼中</b>: VOICEVOXエンジンをオーナー自身のPCで起動しコマンド2回を実行するのみ。コード側は準備完了、これが完了すれば初回投稿が可能</div>
+        <div class="unit-blocker"><b>依頼中</b>: iPhoneアプリでのナレーション収録(1本20〜30行)のみ。コード側は準備完了、これが完了すれば初回投稿が可能</div>
       </div>
 
     </div>
@@ -657,6 +657,7 @@
   <section>
     <h2 class="section-title">経営ログ</h2>
     <div class="highlights">
+      <div class="hl-row"><div class="hl-date">08-07</div><div class="hl-body"><b>モヤスカのナレーション方式を、オーナーがiPhoneのみと判明したため手動アプリ経由に切り替え。</b>VOICEVOXエンジンはiOS非対応、代替として試した<code>voicevox.su-shiki.com</code>・<code>ondoku3.com</code>もこのクラウド環境からは同じネットワークポリシーでブロックされ利用不可と確認。オーナーが実際に持っていたiPhoneアプリ「ずんだボイス」で1行ずつ手動収録したクリップを取り込んで組み立てる<code>manual_narration.py</code>を新規実装し、ダミー音声で組み立て→動画合成までの通し動作を確認済み(<code>voicevox_narrate.py</code>との共通処理は<code>audio_mix.py</code>に切り出し)。あわせて<code>voicevox_narrate.py</code>の未検証だった`main()`のバグ(global宣言の順序誤り)も発見・修正。手順は<code>docs/projects/moyasuka/voicevox-setup.md</code>に方式A/Bとして整理。Google Cloud TTSでの完全自動化案も選択肢として提示済み(オーナー未回答、保留)。</div></div>
       <div class="hl-row"><div class="hl-date">08-06</div><div class="hl-body"><b>モヤスカのVOICEVOX実ナレーション連携を実装。</b>「あとは読み上げ機能だけ」との確認を受け、実音声合成コード(<code>voicevox_narrate.py</code>)と、動画側の表示タイミングを実音声の長さに正確に同期する仕組み(<code>line_chat.py --durations</code>)を実装。エンジン自体はこのクラウド環境から到達不可のため未テストだが、オーナーPCでエンジンを起動しコマンド2回打つだけで完成するところまで用意済み(<code>docs/projects/moyasuka/voicevox-setup.md</code>)。あわせて対人物witnessキャラの追加で声が被る問題を見つけ、5声固定キャストに拡張(<code>docs/projects/moyasuka/content-backlog.md</code>)。</div></div>
       <div class="hl-row"><div class="hl-date">08-06</div><div class="hl-body"><b>モヤスカのクライマックス効果音を効果音ラボの実素材に差し替え。</b>自前合成の「デデデデデーン」から、効果音ラボ「男衆「イヤッホー！」」に変更。サイト自体はサンドボックスから接続不可のためオーナーがダウンロードして提供、ライセンスは<code>moyasuka/assets/sfx/NOTICE.md</code>に明記。唯一の外部素材で、メッセージ通知音は引き続き自前合成。</div></div>
       <div class="hl-row"><div class="hl-date">08-06</div><div class="hl-body"><b>BGM動画Shorts第2弾を自動公開。</b>週次Routineが無人で実行、<a href="https://youtube.com/watch?v=Sf6hQb1-i6U" target="_blank" rel="noopener">sleep_rain_focus・45秒</a>。再生可能な状態を確認済み。</div></div>

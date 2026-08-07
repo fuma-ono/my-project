@@ -1,12 +1,16 @@
 """Generates real VOICEVOX narration audio for a モヤスカ script.
 
-This is the one piece of the pipeline that has to run on the owner's own
-PC, not in the cloud sandbox that built everything else in this repo —
-VOICEVOX's engine binary can't be reached from here (see moyasuka/README.md:
-GitHub release-asset downloads, Docker, and a direct API fetch were all
-tried and confirmed blocked). Everything in *this file*, though, is just
-Python + the VOICEVOX HTTP API, so it's fully implemented and ready to run
-the moment the engine is up locally — there was no reason to leave the
+This is the one piece of the pipeline that has to run on a real PC, not
+in the cloud sandbox that built everything else in this repo — VOICEVOX's
+engine binary can't be reached from here (see moyasuka/README.md: GitHub
+release-asset downloads, Docker, and a direct API fetch were all tried
+and confirmed blocked), and it has no iOS app either, so it's unusable
+if the owner only has an iPhone (confirmed 2026-08-07). If that's the
+situation, use moyasuka/manual_narration.py instead — same two output
+files, sourced from clips exported by hand from a phone TTS app rather
+than a local VOICEVOX engine. Everything in *this file* is just Python +
+the VOICEVOX HTTP API, so it's fully implemented and ready to run the
+moment the engine is up on some PC — there was no reason to leave the
 actual narration code unwritten just because it can't be test-run here.
 
 Usage (with the VOICEVOX engine already running locally, default
@@ -50,7 +54,8 @@ import wave
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from moyasuka.line_chat import GAP_SECONDS, estimate_arrivals, parse_chat_script
+from moyasuka.audio_mix import mix_clips_at_times
+from moyasuka.line_chat import estimate_arrivals, parse_chat_script
 
 VOICEVOX_URL = "http://127.0.0.1:50021"
 
@@ -161,29 +166,7 @@ def build_narration(script_path: str, out_wav: str, out_durations_json: str) -> 
 
         arrivals = estimate_arrivals(items, durations)
         total_seconds = arrivals[-1][1] + 1.2
-
-        import subprocess
-
-        inputs = ["-f", "lavfi", "-i", f"anullsrc=r=44100:cl=mono:d={total_seconds}"]
-        filter_parts = ["[0:a]aformat=sample_rates=44100:channel_layouts=mono[a0]"]
-        mix_labels = ["[a0]"]
-        n = 1
-        for i, (start, _end, item) in enumerate(arrivals):
-            if i not in clip_paths:
-                continue
-            inputs += ["-i", clip_paths[i]]
-            delay_ms = max(int(start * 1000), 0)
-            filter_parts.append(
-                f"[{n}:a]aformat=sample_rates=44100:channel_layouts=mono,adelay=delays={delay_ms}:all=1[c{n}]"
-            )
-            mix_labels.append(f"[c{n}]")
-            n += 1
-
-        filter_complex = ";".join(filter_parts) + f";{''.join(mix_labels)}amix=inputs={len(mix_labels)}:duration=first:dropout_transition=0:normalize=0[out]"
-        subprocess.run(
-            ["ffmpeg", "-y", *inputs, "-filter_complex", filter_complex, "-map", "[out]", out_wav],
-            check=True, capture_output=True,
-        )
+        mix_clips_at_times(clip_paths, arrivals, total_seconds, out_wav)
 
     with open(out_durations_json, "w", encoding="utf-8") as f:
         json.dump(durations, f, ensure_ascii=False)
@@ -192,13 +175,13 @@ def build_narration(script_path: str, out_wav: str, out_durations_json: str) -> 
 
 
 def main(argv: list[str] | None = None) -> int:
+    global VOICEVOX_URL
     parser = argparse.ArgumentParser(description="Generate real VOICEVOX narration for a モヤスカ script.")
     parser.add_argument("--script", required=True, help="path to a scripts/*.md file")
     parser.add_argument("--out", required=True, help="output prefix — writes <out>.wav and <out>.durations.json")
     parser.add_argument("--voicevox-url", default=VOICEVOX_URL, help="override if the engine runs on a different host/port")
     args = parser.parse_args(argv)
 
-    global VOICEVOX_URL
     VOICEVOX_URL = args.voicevox_url
 
     total = build_narration(args.script, f"{args.out}.wav", f"{args.out}.durations.json")
