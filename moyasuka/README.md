@@ -19,7 +19,7 @@ LINE風の会話ドラマをAI音声合成(VOICEVOX/COEIROINK)でナレーショ
 - `channel_art.py` — チャンネルアイコン(800x800)・バナー(2560x1440)の自前生成。`background_gen.py`と同じ吹き出しモチーフ、完全自前(PIL)で外部素材不使用
 - `line_chat.py` — **現行の動画合成パイプライン**。台本(`scripts/*.md`)を実際のLINEチャット画面(緑/白の吹き出し、ヘッダーバー、スクロール)として描画し、背景映像・ナレーション音声・効果音(`!sfx:`キュー)と合成する。使い方は下記。詳細な経緯は`docs/projects/moyasuka/line-chat-ui.md`
 - `sfx.py` — 効果音。メッセージ到着ごとの通知ポップ音は自前合成。クライマックスの効果音は効果音ラボの「男衆「イヤッホー！」」(`assets/sfx/`、唯一の外部素材、ライセンスは`assets/sfx/NOTICE.md`参照)
-- `bgm.py` — 動画全体に控えめな音量で流すBGMループの自前合成(ペンタトニックのプラック音フレーズ)
+- `bgm.py` — 動画全体に控えめな音量で流すBGMループの自前合成(128BPMのキック/スネア/ハイハット+シンコペーションのペンタトニックメロディ、ポップな曲調)
 - `assemble_video.py` — 旧方式(地の文をそのまま字幕として焼き込む)。**2026-08-06のオーナー指示によりline_chat.pyに置き換え済み、現在は使用しない**(ファイル冒頭に理由を明記)
 - `voicevox_narrate.py` — 実ナレーション音声の生成(VOICEVOXエンジン経由・PCが使える場合)。台本の各セリフをVOICEVOXの実音声で合成し、`line_chat.py`と全く同じ`estimate_arrivals()`で配置した1本の音声ファイル(`.wav`)と、各セリフの実尺リスト(`.durations.json`)を書き出す。VOICEVOXエンジン(`http://127.0.0.1:50021`)への到達が前提のため、このクラウド環境では未実行・未検証(コード自体は完成)。**オーナーがiPhoneのみでPCを持っていないと2026-08-07に判明したため、現状は下記の`manual_narration.py`が主に使う方式**
 - `manual_narration.py` — **実ナレーション音声の生成(現在の主方式・手動アプリ経由)**。オーナーの持つiPhoneアプリ「ずんだボイス『ずんだもん読み上げアプリ』」で1行ずつ手動生成した音声クリップを取り込み、`voicevox_narrate.py`と全く同じ出力形式(`.wav`+`.durations.json`)に組み立てる。実際に合成した無音クリップで動作確認済み(assembleと`line_chat.py --audio --durations`の通し実行を確認)。手順は`docs/projects/moyasuka/voicevox-setup.md`
