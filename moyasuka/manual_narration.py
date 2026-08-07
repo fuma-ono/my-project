@@ -28,11 +28,32 @@ Workflow:
      narration (images, stickers, sfx cues) are skipped — nothing to
      record for those.
 
-  2. In the phone app, work through the checklist top to bottom: paste
-     each line's text, pick the character's voice, synthesize, save/share
-     the resulting file under exactly the name the checklist gives it.
-     Put them all in one folder, then upload that folder (zip is fine) to
-     the chat.
+     With --format json instead, writes a machine-readable array
+     ([{"index", "speaker_id", "speaker", "text"}, ...]) meant for the
+     iPad Shortcuts automation described in
+     docs/projects/moyasuka/voicevox-setup.md (方式A': Shortcuts自動化) —
+     that Shortcut loops over this file and calls the WEB版VOICEVOX API
+     (tts.quest / su-shiki.com) once per line, from the owner's iPad. This
+     module itself never calls that API — this sandbox can't reach it
+     either (see below) — it only produces the list the Shortcut consumes
+     and, same as always, assembles whatever clips come back.
+
+  2. Get each line synthesized and saved as {index:03d}.wav, either:
+
+     a) In the phone app, work through the text checklist top to bottom:
+        paste each line's text, pick the character's voice, synthesize,
+        save/share the resulting file under exactly the name the
+        checklist gives it. Put them all in one folder, then upload that
+        folder (zip is fine) to the chat. (Fully manual, ~20-30 taps per
+        video.)
+
+     b) Or run the Shortcut built from the json checklist above — it
+        loops through every line automatically via the WEB版VOICEVOX API
+        and saves each clip with the right filename, no per-line manual
+        work. See docs/projects/moyasuka/voicevox-setup.md for the setup
+        and the capacity-management rule that comes with it (one video's
+        clips must be uploaded before the next recording pass starts, or
+        the Shortcut's self-cleanup step wipes them).
 
   3. Once the files land on disk here, assemble them:
 
@@ -68,6 +89,7 @@ import argparse
 import json
 import shutil
 import subprocess
+import sys
 import wave
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -79,6 +101,7 @@ from moyasuka.line_chat import (
     estimate_arrivals,
     parse_chat_script,
 )
+from moyasuka.voicevox_narrate import CHARACTER_SPEAKER_IDS, DEFAULT_SPEAKER_ID
 
 SUPPORTED_EXTS = (".wav", ".mp3", ".m4a", ".aac", ".ogg")
 
@@ -92,9 +115,45 @@ def _narration_items(items: list[dict]) -> list[int]:
     ]
 
 
-def write_checklist(script_path: str, out_path: str) -> int:
+def _speaker_id_for(speaker_name: str) -> int:
+    speaker_id = CHARACTER_SPEAKER_IDS.get(speaker_name)
+    if speaker_id is None:
+        print(
+            f"警告: 話者「{speaker_name}」の音声IDが未設定です。"
+            f"ずんだもん(id={DEFAULT_SPEAKER_ID})で代用します。"
+            f"voicevox_narrate.pyのCHARACTER_SPEAKER_IDSに追加してください。",
+            file=sys.stderr,
+        )
+        return DEFAULT_SPEAKER_ID
+    return speaker_id
+
+
+def write_checklist(script_path: str, out_path: str, fmt: str = "text") -> int:
+    """Writes the recording checklist. fmt="text" is the human-readable
+    checklist for the phone-app manual workflow (default, unchanged from
+    before). fmt="json" writes a machine-readable array intended for the
+    iPad Shortcuts automation (docs/projects/moyasuka/voicevox-setup.md の
+    「方式A': Shortcuts自動化」) to loop over and feed to the WEB版VOICEVOX
+    API — each entry carries the resolved speaker_id so the Shortcut
+    doesn't need its own copy of the casting table."""
     title, items = parse_chat_script(script_path)
     indices = _narration_items(items)
+
+    if fmt == "json":
+        records = []
+        for i in indices:
+            item = items[i]
+            records.append({
+                "index": i,
+                "speaker_id": _speaker_id_for(item["speaker"]),
+                "speaker": item["speaker"],
+                "text": item["text"],
+            })
+        Path(out_path).write_text(
+            json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        return len(indices)
+
     lines = [f"台本: {title}", f"収録が必要なセリフ: {len(indices)}行", ""]
     for n, i in enumerate(indices, start=1):
         item = items[i]
@@ -184,6 +243,11 @@ def main(argv: list[str] | None = None) -> int:
     p_list = sub.add_parser("list", help="write the recording checklist for a script")
     p_list.add_argument("--script", required=True)
     p_list.add_argument("--out", required=True)
+    p_list.add_argument(
+        "--format", choices=["text", "json"], default="text",
+        help="text = human-readable checklist for the phone-app manual workflow (default); "
+             "json = machine-readable array for the iPad Shortcuts automation",
+    )
 
     p_asm = sub.add_parser("assemble", help="assemble uploaded clips into narration audio")
     p_asm.add_argument("--script", required=True)
@@ -193,8 +257,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.mode == "list":
-        n = write_checklist(args.script, args.out)
-        print(f"wrote {args.out} ({n}行)")
+        n = write_checklist(args.script, args.out, fmt=args.format)
+        print(f"wrote {args.out} ({n}行, format={args.format})")
         return 0
 
     total = assemble(args.script, args.clips_dir, f"{args.out}.wav", f"{args.out}.durations.json")

@@ -33,8 +33,10 @@
 - [x] 新YouTubeチャンネル作成(2026-08-06、オーナー対応。[UCrbgwaQhPlDOcQGfUF29VFQ](https://youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ) / `@moyasuka`。名称・概要欄・バナーが用意した内容と一致していることをAPIで確認済み)
 - [x] 動画合成パイプラインの実装 → オーナー指示「ラインのようなやり取りにして」を受け、LINEチャットUI形式(`moyasuka/line_chat.py`)に全面刷新。追加フィードバック6ラウンド(メッセージのコンパクト化・連投グループ化/内容強化・1分尺化・ナレーションカード廃止・パネル縮小して上部配置/終わり方をスカッと感のある展開に/画像・スタンプの実グラフィック化+終わり方をさらに強化/スカッと瞬間への効果音追加/効果音を「デデデデデーン」に差し替え+控えめなBGM追加)も反映済み。各バージョンを実レンダリングしフレーム・音量を確認。経緯は`docs/projects/moyasuka/line-chat-ui.md`
 - [x] 台本の量産着手(3本すべてLINEチャット形式・ナレーションなし・約50〜58秒に書き直し済み、ネタ帳に残り7本。`docs/projects/moyasuka/content-backlog.md`)
-- [ ] VOICEVOXセットアップ(オーナー自身のPCで、note.com/Xと同じ理由・同じ方式が必要な見込み) — これが完了すれば初回投稿が可能
+- [x] ナレーション音声の手動フロー実装(iPhoneアプリ「ずんだボイス」で1行ずつ収録→`manual_narration.py assemble`で組み立て。通し動作確認済み)
+- [x] ナレーション自動化(2026-08-07、開発部+グロース/運用部で対応): 1行ずつのコピペが手間という声を受け、`manual_narration.py list --format json`でShortcuts向けの機械可読チェックリスト(話者ID込み)を出力できるように拡張。オーナーのiPad上のShortcutsからWEB版VOICEVOX API(tts.quest/su-shiki.com)を自動ループ呼び出しする方式(方式A')としてドキュメント化。あわせて容量管理の運用ルール(1本収録→即アップロード→組み立て確認→次の収録、の順序厳守)も明記。手順は`docs/projects/moyasuka/voicevox-setup.md`
+- [ ] オーナーによるAPIキー取得・Shortcut構築・実機での動作確認 — これが完了すれば初回投稿が可能
 
 ## オーナーへの依頼
 
-- VOICEVOXエンジンのセットアップ(オーナー自身のPC)
+- WEB版VOICEVOX(su-shiki.com)のAPIキー取得、iPad Shortcutsアプリでの自動化Shortcut構築、実機での動作確認(手順は`docs/projects/moyasuka/voicevox-setup.md`の方式A'。私たちはiOS実機を持っておらず未検証のため、実際に組んで動くかの確認をお願いしたい。うまく動かなければ方式A(手動アプリ)にいつでも戻せる)
