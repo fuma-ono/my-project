@@ -163,10 +163,29 @@ def write_checklist(script_path: str, out_path: str, fmt: str = "text") -> int:
 
 
 def _find_clip(clips_dir: Path, index: int) -> Path | None:
+    # exact zero-padded match first (the convention used by the phone-app
+    # manual workflow's checklist, e.g. "005.wav")
     for ext in SUPPORTED_EXTS:
         p = clips_dir / f"{index:03d}{ext}"
         if p.exists():
             return p
+    # fall back to matching by numeric value regardless of zero-padding —
+    # the iPad Shortcuts automation (方式A') builds filenames by string
+    # concatenation inside the Shortcuts app, and Shortcuts has no built-in
+    # "pad number to N digits" action (confirmed 2026-08-09 while building
+    # it live with the owner — searched "文字"/"数字", nothing fit).
+    # Rather than fight that in the Shortcuts UI, accept whatever width the
+    # Shortcut actually produces ("5.wav", "05.wav", "005.wav", ...) as
+    # long as the number matches — the padding was only ever cosmetic for
+    # sort order, never load-bearing for correctness.
+    for p in sorted(clips_dir.iterdir()):
+        if not p.is_file() or p.suffix.lower() not in SUPPORTED_EXTS:
+            continue
+        try:
+            if int(p.stem) == index:
+                return p
+        except ValueError:
+            continue
     return None
 
 
