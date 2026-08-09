@@ -73,10 +73,11 @@ python3 -m moyasuka.line_chat \
 - チャンネルアイコン・バナー: 生成済み・チャンネルに反映済み(APIで確認済み)
 - **動画合成パイプラインをLINEチャットUIに全面刷新**(`line_chat.py`)。オーナーからの実映像フィードバックを8ラウンド反映済み(①メッセージのコンパクト化・連投グループ化 ②内容強化・1分尺化・ナレーションカード廃止・チャットパネル縮小して上部配置 ③終わり方をスカッと感のある展開に ④画像・スタンプを角括弧テキストから実グラフィックに、終わり方をさらに強化 ⑤スカッとする瞬間に効果音 ⑥効果音を「デデデデデーン」に差し替え、控えめなBGMを追加 ⑦メッセージ到着ごとの通知音を追加 ⑧クライマックス効果音を効果音ラボの実素材に差し替え)。各バージョンを実レンダリングし、フレーム・音量を確認済み。残るは実際のナレーション音声の差し込みのみ
 - 台本: 3本すべてLINEチャット形式(ナレーションなし、約53〜67秒)に書き直し済み(`scripts/01-sample.md`〜`03-coworker.md`)。証拠画像は自前生成の棒グラフ/リスト表示、対立相手の反応はスタンプで表現。主人公は相手を慰めず、複数の第三者が味方するスカッと重視の展開に統一。ネタ帳に残り7本(`docs/projects/moyasuka/content-backlog.md`)
-- 音声合成: **オーナーがiPhoneのみでPCを持っていないと2026-08-07に判明**(VOICEVOXは公式iOS版なし、代替のホスト型API(su-shiki.com/ondoku3.com)もこのクラウド環境からはネットワークポリシーでブロックされ利用不可)。オーナーが実際に持っていたiPhoneアプリ「ずんだボイス」を使う手動フロー(`manual_narration.py`)に切り替え、実際に組み立て→動画合成までの通し動作を確認済み。**同日、1行ずつのコピペが手間という声を受け、開発部+グロース/運用部でiPad Shortcuts自動化(方式A')を追加**——`manual_narration.py list --format json`が出力する機械可読チェックリストをオーナーのiPadのShortcutsから読み込み、WEB版VOICEVOX API(tts.quest/su-shiki.com。このクラウド環境からはブロックされているがiPad自体は制約対象外)を自動ループ呼び出しする設計。容量管理のため、実行のたびに出力フォルダを自動削除する自己クリーンアップ付き(運用ルールをドキュメントに明記)。iOS実機での動作は未検証、オーナーに実機確認をお願いしている。手順は`docs/projects/moyasuka/voicevox-setup.md`(将来PCが使えるようになった場合の`voicevox_narrate.py`経由の手順も同ページに残してある)
+- 音声合成: **2026-08-09、iPad Shortcuts自動化(方式A')の実機動作確認が完了し、初めての実音声入り動画(台本01、33秒)が完成した。** オーナーがiPhoneのみでPCを持っていないと2026-08-07に判明(VOICEVOXは公式iOS版なし)したため、`manual_narration.py list --format json`が出力するJSON配列をオーナーのiPad Shortcutsに直接テキストとして貼り付け、正しいAPI(`api.tts.quest/v3/voicevox/synthesis`、JSONでダウンロードURLを返す2段階方式)を自動ループ呼び出しする設計に落ち着いた。実際に組む過程で見つかった問題(iCloud経由のファイル参照が不安定/`/simple/`はボット判定される/連続呼び出しでレート制限/ゼロ埋めアクションが見当たらない)は全て解決済み——最後のゼロ埋め問題は`manual_narration.py`の`_find_clip`をゼロ埋みの有無を問わず一致するよう直すことで、iPad側の負担をなくす形で解消した。手順は`docs/projects/moyasuka/voicevox-setup.md`(方式A'、実機確認済みの正確なアクション名で記載)
 - 新YouTubeチャンネル: **作成完了**(2026-08-06、オーナー対応)。[youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ](https://youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ)(`@moyasuka`)。APIで名称・ハンドル・概要欄・バナーが用意した内容と一致していることを確認済み
 - チャンネル名・ハンドル: **「モヤスカ」・`@moyasuka`で確定・反映済み**(`docs/projects/moyasuka/naming.md`)
 
 ## 人間側でまだ必要な作業
 
-- WEB版VOICEVOXのAPIキー取得・iPad Shortcut構築・実機での動作確認(方式A'、`docs/projects/moyasuka/voicevox-setup.md`)。うまく動けば1行ずつのコピペ(20〜30回/本)が不要になる。動かない場合は方式A(iPhoneアプリ「ずんだボイス」経由の手動収録、同ページ)にフォールバック可能
+- 送付済みの実音声入り動画(台本01)のクオリティ確認。問題なければ初回投稿が可能
+- 台本02・03分のナレーションも、同じShortcutを使って(JSON部分だけ差し替えて)収録してほしい

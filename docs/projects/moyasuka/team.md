@@ -35,8 +35,14 @@
 - [x] 台本の量産着手(3本すべてLINEチャット形式・ナレーションなし・約50〜58秒に書き直し済み、ネタ帳に残り7本。`docs/projects/moyasuka/content-backlog.md`)
 - [x] ナレーション音声の手動フロー実装(iPhoneアプリ「ずんだボイス」で1行ずつ収録→`manual_narration.py assemble`で組み立て。通し動作確認済み)
 - [x] ナレーション自動化(2026-08-07、開発部+グロース/運用部で対応): 1行ずつのコピペが手間という声を受け、`manual_narration.py list --format json`でShortcuts向けの機械可読チェックリスト(話者ID込み)を出力できるように拡張。オーナーのiPad上のShortcutsからWEB版VOICEVOX API(tts.quest/su-shiki.com)を自動ループ呼び出しする方式(方式A')としてドキュメント化。あわせて容量管理の運用ルール(1本収録→即アップロード→組み立て確認→次の収録、の順序厳守)も明記。手順は`docs/projects/moyasuka/voicevox-setup.md`
-- [ ] オーナーによるAPIキー取得・Shortcut構築・実機での動作確認 — これが完了すれば初回投稿が可能
+- [x] **方式A'の実機動作確認・初回の実ナレーション動画が完成**(2026-08-09、オーナー実機で対応): オーナーと一緒にShortcutsを1アクションずつ組み、以下を実際に解決:
+  - JSONファイルの読み込みで`ファイル`アクションの参照が不安定 → iCloud経由をやめ、JSONをテキストとして直接Shortcutに埋め込む方式に変更して解消
+  - `voicevox.su-shiki.com/simple/`は人間のブラウザ操作専用でボット判定されることが判明 → 正しいAPI(`api.tts.quest/v3/voicevox/synthesis`)に切り替え。このAPIはJSONでダウンロードURLを返す2段階方式と判明し、Shortcut側もそれに合わせて修正
+  - 30行を間隔なしで連続呼び出しするとレート制限で一部失敗 → ループ内に2秒の待機を追加して解消
+  - ファイル名の3桁ゼロ埋めがShortcuts標準アクションでは組めなかった → 受け取り側の`manual_narration.py`の`_find_clip`をゼロ埋みの有無を問わず一致させるよう修正し、iPad側の作業をindexそのまま(`5.wav`等)で済むように簡略化
+  - オーナーが実際に30行全部を自動生成・アップロードし、`manual_narration.py assemble`+`line_chat.py`で組み立て→初めての「実音声入り」動画(台本01、33秒)が完成。オーナーへ送付し感想待ち
 
 ## オーナーへの依頼
 
-- WEB版VOICEVOX(su-shiki.com)のAPIキー取得、iPad Shortcutsアプリでの自動化Shortcut構築、実機での動作確認(手順は`docs/projects/moyasuka/voicevox-setup.md`の方式A'。私たちはiOS実機を持っておらず未検証のため、実際に組んで動くかの確認をお願いしたい。うまく動かなければ方式A(手動アプリ)にいつでも戻せる)
+- 送付した実音声入り動画(台本01)を聴いて、方向性が問題ないか確認してほしい。問題なければ初回投稿の準備が整う
+- 台本02・03分のナレーションも、同じShortcutを使って(JSON部分だけ差し替えて)収録してほしい
