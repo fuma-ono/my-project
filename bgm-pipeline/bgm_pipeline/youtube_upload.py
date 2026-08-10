@@ -1,6 +1,13 @@
 """Upload a video to YouTube via the Data API's resumable upload endpoint.
 
 No browser, no stored password — just the OAuth token from youtube_auth.py.
+
+2026-08-10: every function here now takes an optional `auth: YouTubeAuth`
+(default: this package's own channel, unchanged behavior for every
+existing call site) — moyasuka's channel is a separate YouTube channel
+under its own OAuth grant, so it passes its own YouTubeAuth instance
+(see moyasuka/youtube_auth.py) through the same upload/status/thumbnail
+code instead of duplicating this file.
 """
 from __future__ import annotations
 
@@ -13,6 +20,7 @@ import time
 import requests
 
 from . import youtube_auth
+from .youtube_auth import YouTubeAuth
 
 UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos"
 VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
@@ -26,9 +34,10 @@ def upload_video(
     tags: list[str],
     category_id: str = "10",  # Music
     privacy_status: str = "public",
+    auth: YouTubeAuth | None = None,
 ) -> str:
     """Uploads a video and returns its YouTube video ID."""
-    access_token = youtube_auth.get_access_token()
+    access_token = (auth or youtube_auth._default).get_access_token()
     file_size = os.path.getsize(file_path)
 
     metadata = {
@@ -67,12 +76,12 @@ def upload_video(
     return video["id"]
 
 
-def set_thumbnail(video_id: str, image_path: str) -> None:
+def set_thumbnail(video_id: str, image_path: str, auth: YouTubeAuth | None = None) -> None:
     """Uploads a custom thumbnail — covered by the youtube.upload scope,
     same as the video upload itself. Thumbnails matter far more for
     click-through than tags/hashtags, so this isn't optional polish.
     """
-    access_token = youtube_auth.get_access_token()
+    access_token = (auth or youtube_auth._default).get_access_token()
     content_type = "image/png" if image_path.lower().endswith(".png") else "image/jpeg"
     with open(image_path, "rb") as f:
         resp = requests.post(
@@ -85,9 +94,9 @@ def set_thumbnail(video_id: str, image_path: str) -> None:
     resp.raise_for_status()
 
 
-def get_video_status(video_id: str) -> dict:
+def get_video_status(video_id: str, auth: YouTubeAuth | None = None) -> dict:
     """Raw status+processingDetails for a video, for verification after upload."""
-    access_token = youtube_auth.get_access_token()
+    access_token = (auth or youtube_auth._default).get_access_token()
     resp = requests.get(
         VIDEOS_URL,
         params={"part": "status,processingDetails", "id": video_id},
@@ -105,7 +114,9 @@ class VideoProcessingFailed(RuntimeError):
     pass
 
 
-def wait_for_processing(video_id: str, timeout_seconds: int = 1800, poll_seconds: int = 20) -> dict:
+def wait_for_processing(
+    video_id: str, timeout_seconds: int = 1800, poll_seconds: int = 20, auth: YouTubeAuth | None = None
+) -> dict:
     """Poll until YouTube finishes processing the upload, so we only report
     success once the video is actually watchable — not just once the bytes
     were accepted. Raises VideoProcessingFailed on a failed/rejected upload,
@@ -114,7 +125,7 @@ def wait_for_processing(video_id: str, timeout_seconds: int = 1800, poll_seconds
     """
     deadline = time.monotonic() + timeout_seconds
     while True:
-        item = get_video_status(video_id)
+        item = get_video_status(video_id, auth=auth)
         upload_status = item["status"].get("uploadStatus")
         failure_reason = item["status"].get("failureReason")
         rejection_reason = item["status"].get("rejectionReason")

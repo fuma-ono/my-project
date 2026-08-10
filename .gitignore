@@ -18,6 +18,7 @@ note-articles/note_publish/credentials/
 client_secret*.json
 meta_app.json
 bgm-pipeline/credentials/
+moyasuka/credentials/
 *.pem
 *.p12
 *.key
