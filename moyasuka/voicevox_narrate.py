@@ -50,11 +50,10 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-import wave
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from moyasuka.audio_mix import mix_clips_at_times
+from moyasuka.audio_mix import mix_clips_at_times, wav_duration
 from moyasuka.line_chat import estimate_arrivals, parse_chat_script
 
 VOICEVOX_URL = "http://127.0.0.1:50021"
@@ -114,11 +113,6 @@ def synth_line(text: str, speaker_id: int) -> bytes:
         return resp2.read()
 
 
-def _wav_duration(path: str) -> float:
-    with wave.open(path, "rb") as wf:
-        return wf.getnframes() / wf.getframerate()
-
-
 def build_narration(script_path: str, out_wav: str, out_durations_json: str) -> float:
     _check_engine_reachable()
     title, items = parse_chat_script(script_path)
@@ -161,7 +155,7 @@ def build_narration(script_path: str, out_wav: str, out_durations_json: str) -> 
             wav_bytes = synth_line(item["text"], speaker_id)
             clip_path = f"{tmp}/clip_{i:03d}.wav"
             Path(clip_path).write_bytes(wav_bytes)
-            durations.append(_wav_duration(clip_path))
+            durations.append(wav_duration(clip_path))
             clip_paths[i] = clip_path
 
         arrivals = estimate_arrivals(items, durations)

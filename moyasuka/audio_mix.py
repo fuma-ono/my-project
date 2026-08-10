@@ -10,6 +10,16 @@ adelay/amix logic.
 from __future__ import annotations
 
 import subprocess
+import wave
+
+
+def wav_duration(path: str) -> float:
+    """Seconds of audio in a wav file — shared by voicevox_narrate.py and
+    manual_narration.py, which both need to know each clip's real length
+    to place the next one correctly (was duplicated identically in both
+    until 2026-08-09's tech-debt pass)."""
+    with wave.open(path, "rb") as wf:
+        return wf.getnframes() / wf.getframerate()
 
 
 def mix_clips_at_times(

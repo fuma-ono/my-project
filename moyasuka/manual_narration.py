@@ -90,11 +90,10 @@ import json
 import shutil
 import subprocess
 import sys
-import wave
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from moyasuka.audio_mix import mix_clips_at_times
+from moyasuka.audio_mix import mix_clips_at_times, wav_duration
 from moyasuka.line_chat import (
     IMAGE_VIEW_SECONDS,
     STICKER_VIEW_SECONDS,
@@ -196,11 +195,6 @@ def _to_wav(src: Path, dst: str) -> None:
     subprocess.run(["ffmpeg", "-y", "-i", str(src), dst], check=True, capture_output=True)
 
 
-def _wav_duration(path: str) -> float:
-    with wave.open(path, "rb") as wf:
-        return wf.getnframes() / wf.getframerate()
-
-
 def assemble(script_path: str, clips_dir: str, out_wav: str, out_durations_json: str) -> float:
     title, items = parse_chat_script(script_path)
     if not items:
@@ -234,7 +228,7 @@ def assemble(script_path: str, clips_dir: str, out_wav: str, out_durations_json:
                 continue
             wav_path = f"{tmp}/clip_{i:03d}.wav"
             _to_wav(src, wav_path)
-            durations.append(_wav_duration(wav_path))
+            durations.append(wav_duration(wav_path))
             clip_paths[i] = wav_path
 
         if missing:
