@@ -185,6 +185,28 @@ def parse_chat_script(path: str) -> tuple[str, list[dict]]:
 IMAGE_VIEW_SECONDS = 2.2   # dwell time for an [image] evidence chart (no text to time against)
 STICKER_VIEW_SECONDS = 1.6  # dwell time for a [sticker]
 
+# Owner request (2026-08-10): "ひどい言葉や衝撃的な言葉を言われた際に、
+# BGMとして驚きのような効果音入れて" — a harsh/shocking word landing in the
+# dialogue should trigger a surprise stinger (sfx.py's "surprise_hit")
+# automatically, not just the one manually-placed climax cue. Plain
+# substring match against each spoken line's text (Japanese doesn't need
+# word-boundary handling for this); deliberately a curated list rather
+# than sentiment analysis — false positives are cheap to fix by editing
+# this list, a missed subtle line is not worth chasing with NLP here.
+# Covers both direct insults/threats and the "someone did something
+# unforgivable" reveal words this genre's antagonists and twists use
+# (嘘つき already fires on 01-sample.md's reveal reaction line).
+HARSH_TRIGGER_WORDS = [
+    "死ね", "消えろ", "きもい", "うざい", "ばか", "アホ", "あほ",
+    "無能", "クビ", "離婚", "浮気", "借金", "泥棒", "盗ん",
+    "嘘つき", "裏切り", "ゴミ", "カス", "図々しい", "ずるい",
+    "才能ない", "向いてない", "許せない", "ありえない", "最悪",
+]
+
+
+def _has_harsh_word(text: str) -> bool:
+    return any(word in text for word in HARSH_TRIGGER_WORDS)
+
 
 def estimate_arrivals(items: list[dict], durations: list[float] | None = None) -> list[tuple[float, float, dict]]:
     """`durations`, when given, is a list of real clip lengths aligned 1:1
@@ -565,7 +587,18 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
     # genre (owner feedback 2026-08-06, round 3: the missing piece wasn't
     # the climax stinger, it was this)
     pop_cues = [(start, "message_pop") for (start, _end, item) in visual_arrivals if item["type"] == "msg"]
-    sfx_cues = sfx_cues + pop_cues
+
+    # content-triggered surprise stinger — see HARSH_TRIGGER_WORDS above.
+    # Deliberately layered on top of that same bubble's message_pop rather
+    # than replacing it: the pop is the constant per-message soundscape,
+    # the shock hit is the extra emphasis on top of it for this one line.
+    shock_cues = [
+        (start, "surprise_hit")
+        for (start, _end, item) in visual_arrivals
+        if item["type"] == "msg" and item.get("kind", "text") == "text" and _has_harsh_word(item["text"])
+    ]
+
+    sfx_cues = sfx_cues + pop_cues + shock_cues
 
     # render each bubble/card once and reuse the image across every frame
     # instead of re-wrapping and re-drawing text per frame (see render_frame's

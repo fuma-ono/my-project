@@ -104,6 +104,40 @@ def generate_message_pop(out_path: str) -> None:
     )
 
 
+def generate_surprise_hit(out_path: str) -> None:
+    """Writes a ~0.38s "shock reveal" stinger: a fast rising pitch sweep
+    (the classic anime/variety "ヒュン!" gasp) straight into a short low
+    thud — for the instant a harsh or shocking line lands mid-conversation.
+
+    Owner request (2026-08-10): "ひどい言葉や衝撃的な言葉を言われた際に、
+    BGMとして驚きのような効果音入れて" — a surprise cue triggered by what's
+    actually said, not just the one climax beat. line_chat.py scans every
+    spoken line against HARSH_TRIGGER_WORDS and fires this cue on a match,
+    so unlike otoko_iyahho/scratch_dun (exactly once, at the manually
+    placed !sfx: line) or message_pop (every bubble, same subtle chime
+    regardless of content), this one is content-triggered and can fire
+    zero, one, or several times per video depending on the dialogue.
+
+    Same additive-synthesis approach as the other stingers here: no
+    samples, just aevalsrc expressions. The sweep is a sine whose
+    instantaneous frequency climbs (300Hz→~2600Hz over the sweep) under a
+    fast decay so it reads as a quick intake-of-breath rather than a siren;
+    the thud reuses _hit_expr the same way generate_scratch_dun's hits do."""
+    sweep_dur = 0.16
+    thud_dur = 0.22
+    sweep_expr = "sin(2*PI*(300+13000*t)*t)*exp(-6*t)*0.6"
+    thud_expr = _hit_expr(90, 16, 1.0)
+    filter_complex = (
+        f"aevalsrc={sweep_expr}:d={sweep_dur}[sweep];"
+        f"aevalsrc={thud_expr}:d={thud_dur}[thud];"
+        "[sweep][thud]concat=n=2:v=0:a=1[out]"
+    )
+    subprocess.run(
+        ["ffmpeg", "-y", "-filter_complex", filter_complex, "-map", "[out]", out_path],
+        check=True, capture_output=True,
+    )
+
+
 def use_otoko_iyahho(out_path: str) -> None:
     """Copies the licensed 効果音ラボ track (see assets/sfx/NOTICE.md for
     source/license) to `out_path` as wav, so it fits the same pipeline as
@@ -118,4 +152,5 @@ SFX_GENERATORS = {
     "scratch_dun": generate_scratch_dun,  # superseded as the climax cue, kept as reusable synthesis
     "message_pop": generate_message_pop,
     "otoko_iyahho": use_otoko_iyahho,  # current climax cue (licensed track, see round 4 above)
+    "surprise_hit": generate_surprise_hit,  # content-triggered, see HARSH_TRIGGER_WORDS in line_chat.py
 }
