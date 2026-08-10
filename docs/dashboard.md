@@ -8,7 +8,7 @@
 
 週次活動報告(スライド、`docs/reports/`): オーナーへSendUserFileで毎週送付。生成スクリプトは`docs/reports/weekly/`にコミットするが、`.pptx`本体はgitignore対象
 
-第4事業「モヤスカ」(`moyasuka/`): LINEドラマ×AI音声合成のYouTube Shortsチャンネル。新チャンネル開設済み([@moyasuka](https://youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ)、2026-08-06)、名称・概要欄・バナーが用意した内容と一致していることをAPIで確認済み。Shorts中心・完全日本語・毎日20:00 JST固定投稿の方針決定済み(`docs/projects/moyasuka/posting-policy.md`)。残るブロッカーはVOICEVOXセットアップのみ。進捗は`docs/projects/moyasuka/team.md`
+第4事業「モヤスカ」(`moyasuka/`): LINEドラマ×AI音声合成のYouTube Shortsチャンネル。新チャンネル開設済み([@moyasuka](https://youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ)、2026-08-06)、名称・概要欄・バナーが用意した内容と一致していることをAPIで確認済み。Shorts中心・完全日本語・毎日20:00 JST固定投稿の方針決定済み(`docs/projects/moyasuka/posting-policy.md`)。2026-08-09、iPad Shortcuts自動化(方式A')の実機動作確認が完了し、初めての実音声入り動画(台本01)が完成・オーナーへ送付済み。台本02・03のナレーション収録が進行中。進捗は`docs/projects/moyasuka/team.md`
 
 3事業(BGM動画/アプリ/note記事)+新規1事業(モヤスカ)の体制図・パイプライン進捗・オーナーへの依頼事項・経営ログをまとめたもの。定例レビュー(週次)のたびに内容を更新して同じURLに再公開する。
 
@@ -18,4 +18,4 @@
 2. `python3 docs/dashboard/build.py` で `docs/dashboard/dashboard.html`(フォント埋め込み済み)を生成する
 3. Artifactツールで `docs/dashboard/dashboard.html` を上記URL宛に再公開する
 
-最終更新: 2026-08-01
+最終更新: 2026-08-09
