@@ -80,7 +80,11 @@ CHARACTER_SPEAKER_IDS: dict[str, int] = {
     "叔母": 8,         # 春日部つむぎ(ノーマル) — secondary female witness, 01
     "義姉": 8,         # 01
     "別のママ友": 8,     # 02
+    "同期": 8,         # 04
     "先輩": 12,        # 白上虎太郎(ノーマル) — secondary male witness, 03. Verify this ID specifically; less commonly cited than the others above.
+    "幹事": 2,         # 四国めたん — primary antagonist, 04 (friend-group setting instead of family/work, but same "年上の女性・主な敵役" slot per content-backlog.mdのキャスト運用)
+    "店員": 2,         # 05
+    "店長": 12,        # 05 — authority figure who rules in the protagonist's favor, same slot as 先輩's witness role in 03
 }
 DEFAULT_SPEAKER_ID = 3  # ずんだもん — used with a warning if a script introduces a new character name not listed above
 
