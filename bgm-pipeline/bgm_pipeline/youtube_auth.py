@@ -148,6 +148,32 @@ class YouTubeAuth:
         fresh = resp.json()
         return fresh["access_token"]
 
+    def days_until_refresh_expiry(self) -> float | None:
+        """Estimated days left before the refresh token itself dies (the
+        ~7-day test-mode limit, not the 1-hour access token) — none of
+        Google's endpoints expose an absolute expiry timestamp, so this
+        approximates from the token file's mtime (when login()/a prior
+        refresh last wrote it) + the `refresh_token_expires_in` seconds
+        Google returned at that time.
+
+        2026-08-10: added after a token expired with no advance warning —
+        the Shorts/long-form Routines only checked for expiry *after* a
+        publish attempt failed. This lets any Routine that touches YouTube
+        check proactively and warn the owner days before a run would
+        actually fail, regardless of which Routine happens to fire next.
+        Returns None if never authorized (no token file yet) or the stored
+        token predates this field being tracked.
+        """
+        if not self.token_path.exists():
+            return None
+        token = json.loads(self.token_path.read_text())
+        lifetime = token.get("refresh_token_expires_in")
+        if lifetime is None:
+            return None
+        issued_at = self.token_path.stat().st_mtime
+        remaining_seconds = (issued_at + lifetime) - time.time()
+        return remaining_seconds / 86400
+
 
 CREDENTIALS_DIR = Path(__file__).resolve().parent.parent / "credentials"
 CLIENT_SECRET_PATH = CREDENTIALS_DIR / "client_secret.json"
