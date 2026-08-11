@@ -1,0 +1,22 @@
+{
+  "id": "2026-08-11-moyasuka-continue-invest",
+  "date": "2026-08-11",
+  "category": "exit-or-invest",
+  "topic": "第4事業モヤスカを継続investすべきか、縮小/撤退すべきか",
+  "ceo_opinion": "代替TTSを含めて短期間で比較検証し、一定基準を満たさなければ現方式を捨てる。目標は100本連続自動生成できる信頼性。",
+  "partner_opinion": "現行方式(iPad Shortcuts経由の外部API)が依存するAPIは、実際に到達性をテストした結果、本環境から構造的に到達不能と確認(api.tts.quest/voicevox.su-shiki.comは接続不能、texttospeech.googleapis.comは到達可能)。これは『比較検証が必要な案件』ではなく『オーナーの10分の作業(GCP TTS API有効化+OAuth認可)で解決する意思決定』。14日以内に完了しなければ即座に保守モードへ縮小すべき。継続の理由は収益期待値(低い、YPP到達は困難)ではなく、完全自動化後は月30本を¥0コストで検証できる、この会社で唯一の需要検証装置になる点にある。",
+  "agreements": [
+    "現行のiPad依存方式のまま『毎日投稿』を目指すことには反対(恒久的な人的コストをゼロ売上事業に固定するため)",
+    "信頼性の数値目標(100本規模の連続成功)が必要という方向性"
+  ],
+  "disagreements": [
+    "CEO=比較検証を『短期間で実施』という期間の定性表現 / Partner=『14日以内、オーナー作業10分』という具体的な期限・完了条件を設定し、未達なら自動的に保守モードへ縮小すると明記",
+    "継続する理由(CEO=ナレーション自動化の完成そのもの / Partner=完全自動化後の『¥0コスト需要検証装置』としての戦略的価値)",
+    "撤退基準の有無(CEOレポートは必要性を指摘するのみで数値未提示、Partnerが具体的な数値基準を提示: Day14=投稿1本不成立で縮小、Day30=中央値100再生未満で撤退、Day90=登録者100人未満またはShorts総再生10万回未満で撤退、月間人的介入30分超過で即撤退)"
+  ],
+  "recommended": "Google Cloud TTSへの切替(既存GCPプロジェクト流用、実装0.5日以内、実費ほぼ¥0)を14日以内に実施。完了次第iPad方式は完全廃止し毎日投稿Routineを新設。未完了なら台本自動生成Routineを含め新規開発を即時停止し保守モードへ。",
+  "not_recommended": "現行iPad方式のまま毎日投稿を目指すこと。方式転換を試す前の完全撤退。",
+  "owner_decision_needed": "14日以内に(a)GCP Cloud Text-to-Speech APIの有効化、(b)@moyasuka専用OAuth認可(python3 -m moyasuka.youtube_auth login)を実施できるか",
+  "owner_decision": null,
+  "outcome_review_date": "2026-08-25"
+}

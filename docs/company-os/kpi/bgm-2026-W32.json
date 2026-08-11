@@ -1,0 +1,15 @@
+{
+  "business_id": "bgm",
+  "period": "2026-W32",
+  "collected_at": "2026-08-11",
+  "source": "YouTube Data API videos.list (既存OAuthトークン、追加スコープ不要)",
+  "note": "AI経営パートナーの指摘を受け、公開後初めて実測。company-os運用の最初の実データ",
+  "videos": [
+    {"id": "Dn-dWJOUZo8", "title": "study_lofi_chill 60分(長尺第3弾)", "type": "long", "views": 0, "likes": 0, "note": "本日公開のため未計測に近い"},
+    {"id": "Sf6hQb1-i6U", "title": "sleep_rain_focus(Shorts第2弾)", "type": "shorts", "views": 268, "likes": 0},
+    {"id": "nf7yiIO2hB8", "title": "study_focus_binaural(長尺)", "type": "long", "views": 14, "likes": 0},
+    {"id": "xT472Ht5omk", "title": "sleep_rain_focus(長尺)", "type": "long", "views": 17, "likes": 0}
+  ],
+  "observation": "Shortsが長尺の約15〜20倍の再生数。サンプルはまだ小さいが、Shorts優先の傾向を示唆。旧video_id I4njOv9g8Isはvideos.listで応答なし(差し替え済みの旧アップロードと推測)",
+  "not_yet_measured": ["note記事7本の閲覧数(note.comのAPI非公開、ブラウザ操作前提でこのサンドボックスから取得不可。オーナーのnote.comダッシュボードで手動確認が必要)"]
+}
