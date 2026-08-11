@@ -58,7 +58,7 @@ class YouTubeAuth:
     own instance — the token is tied to whichever Google account/channel
     approved that particular device-code prompt."""
 
-    def __init__(self, credentials_dir: Path, client_secret_path: Path | None = None):
+    def __init__(self, credentials_dir: Path, client_secret_path: Path | None = None, scope: str | None = None):
         self.credentials_dir = credentials_dir
         # client_secret_path defaults to living alongside the token, but can
         # point elsewhere — moyasuka reuses bgm-pipeline's client_secret.json
@@ -66,6 +66,13 @@ class YouTubeAuth:
         # second one just to authorize a second channel.
         self.client_secret_path = client_secret_path or (credentials_dir / "client_secret.json")
         self.token_path = credentials_dir / "youtube_token.json"
+        # 2026-08-11: made per-instance (was a hardcoded module constant) so
+        # moyasuka's instance can request an extended scope covering Cloud
+        # Text-to-Speech alongside YouTube upload, in the same single
+        # device-code approval — no separate credential/login flow needed
+        # for narration synthesis. Defaults to the original scope so every
+        # existing instance (this package's own) is unaffected.
+        self.scope = scope or SCOPE
 
     def _load_client_secret(self) -> dict:
         if not self.client_secret_path.exists():
@@ -85,7 +92,7 @@ class YouTubeAuth:
 
         resp = requests.post(
             DEVICE_CODE_URL,
-            data={"client_id": client_id, "scope": SCOPE},
+            data={"client_id": client_id, "scope": self.scope},
             timeout=30,
         )
         resp.raise_for_status()
