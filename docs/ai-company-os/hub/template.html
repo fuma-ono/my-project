@@ -1,0 +1,467 @@
+<title>AI COMPANY OS — Quiet Hours</title>
+<style>
+  @font-face {
+    font-family: "Gloock";
+    src: url(data:font/ttf;base64,__GLOOCK__) format("truetype");
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "Work Sans";
+    src: url(data:font/ttf;base64,__WORKSANS_REG__) format("truetype");
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "Work Sans";
+    src: url(data:font/ttf;base64,__WORKSANS_BOLD__) format("truetype");
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "IBM Plex Mono";
+    src: url(data:font/ttf;base64,__PLEXMONO_REG__) format("truetype");
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "IBM Plex Mono";
+    src: url(data:font/ttf;base64,__PLEXMONO_BOLD__) format("truetype");
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+
+  :root {
+    --bg: #eef0f6;
+    --surface: #ffffff;
+    --surface-2: #f6f7fb;
+    --border: #d9dcec;
+    --text: #171a2b;
+    --text-dim: #5b6082;
+    --text-faint: #8489a8;
+    --accent: #d9682f;
+    --accent-soft: #f3ded0;
+    --good: #2f9e63;
+    --good-soft: #dcf1e5;
+    --warn: #a5760a;
+    --warn-soft: #f6ecd2;
+    --critical: #c73d4c;
+    --critical-soft: #f8dde0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0e1a;
+      --surface: #141a30;
+      --surface-2: #101528;
+      --border: #2a3157;
+      --text: #eef0fa;
+      --text-dim: #9aa0c3;
+      --text-faint: #6e739a;
+      --accent: #f0955c;
+      --accent-soft: #3a2a20;
+      --good: #57cf8f;
+      --good-soft: #17301f;
+      --warn: #e8c34b;
+      --warn-soft: #332b12;
+      --critical: #f0707c;
+      --critical-soft: #331a1e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0e1a;
+    --surface: #141a30;
+    --surface-2: #101528;
+    --border: #2a3157;
+    --text: #eef0fa;
+    --text-dim: #9aa0c3;
+    --text-faint: #6e739a;
+    --accent: #f0955c;
+    --accent-soft: #3a2a20;
+    --good: #57cf8f;
+    --good-soft: #17301f;
+    --warn: #e8c34b;
+    --warn-soft: #332b12;
+    --critical: #f0707c;
+    --critical-soft: #331a1e;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Work Sans", sans-serif;
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+  a:focus-visible, button:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+
+  .wrap { max-width: 720px; margin: 0 auto; padding: 28px 18px 80px; }
+
+  /* ---------- header ---------- */
+  header.top {
+    display: flex; flex-direction: column; gap: 10px;
+    padding-bottom: 22px; margin-bottom: 22px;
+    border-bottom: 1px solid var(--border);
+  }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  h1 {
+    font-family: "Gloock", serif; font-weight: 400;
+    font-size: clamp(30px, 8vw, 40px); line-height: 1.12;
+    margin: 2px 0 0; text-wrap: balance;
+  }
+  .sub { color: var(--text-dim); font-size: 14.5px; margin-top: 2px; }
+  .phase-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  .phase-badge {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: var(--accent-soft); color: var(--accent);
+    border-radius: 999px; padding: 6px 13px 6px 11px;
+    font-family: "IBM Plex Mono", monospace; font-size: 12.5px; font-weight: 700;
+  }
+  .phase-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .updated { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--text-faint); }
+
+  /* ---------- stat strip ---------- */
+  .stats {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+    background: var(--border); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden; margin-bottom: 30px;
+  }
+  .stat { background: var(--surface); padding: 14px 10px; text-align: center; }
+  .stat .num {
+    font-family: "IBM Plex Mono", monospace; font-weight: 700;
+    font-size: clamp(18px, 5vw, 24px); font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .stat .num.accent { color: var(--accent); }
+  .stat .label { font-size: 11px; color: var(--text-faint); margin-top: 6px; }
+
+  /* ---------- section shell ---------- */
+  section { margin-bottom: 36px; }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+  h2 {
+    font-family: "Gloock", serif; font-weight: 400; font-size: 21px; margin: 0;
+  }
+  .section-note { font-size: 12.5px; color: var(--text-faint); }
+  p { margin: 0 0 12px; }
+  .lede { color: var(--text-dim); font-size: 15px; }
+
+  /* ---------- org chart ---------- */
+  .org {
+    display: flex; flex-direction: column; align-items: center; gap: 0;
+  }
+  .org-box {
+    border: 1px solid var(--border); background: var(--surface);
+    border-radius: 10px; padding: 10px 16px; text-align: center;
+    font-size: 13.5px; min-width: 140px;
+  }
+  .org-box.owner { font-weight: 700; }
+  .org-line { width: 1px; height: 18px; background: var(--border); }
+  .org-pair { display: flex; align-items: center; gap: 10px; }
+  .org-pair .org-box.partner { border-style: dashed; color: var(--text-dim); }
+  .org-connector {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    color: var(--text-faint); padding: 0 4px;
+  }
+  .org-depts {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 6px;
+    max-width: 480px; margin-top: 6px;
+  }
+  .org-depts span {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    color: var(--text-dim); background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px;
+  }
+
+  /* ---------- principles ---------- */
+  .principles { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--border); }
+  .principle {
+    display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border);
+  }
+  .principle .n {
+    font-family: "IBM Plex Mono", monospace; font-weight: 700; color: var(--accent);
+    font-size: 13px; flex: none; width: 20px; padding-top: 1px;
+  }
+  .principle .t { font-size: 14.5px; }
+  .principle .t b { font-weight: 700; }
+
+  /* ---------- business cards ---------- */
+  .biz-grid { display: flex; flex-direction: column; gap: 10px; }
+  .biz {
+    border: 1px solid var(--border); background: var(--surface);
+    border-radius: 12px; padding: 14px 16px;
+  }
+  .biz-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .biz-name { font-weight: 700; font-size: 15.5px; }
+  .tier {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 700;
+    letter-spacing: 0.04em; border-radius: 999px; padding: 3px 9px;
+  }
+  .tier.t1 { background: var(--good-soft); color: var(--good); }
+  .tier.t2 { background: var(--surface-2); color: var(--text-dim); border: 1px solid var(--border); }
+  .tier.t3 { background: var(--warn-soft); color: var(--warn); }
+  .biz-metrics {
+    display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px;
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--text-dim);
+  }
+  .biz-metrics b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .biz-note { font-size: 13px; color: var(--text-dim); margin-top: 8px; }
+
+  /* ---------- countdown / experiment cards ---------- */
+  .exp {
+    border: 1px solid var(--border); background: var(--surface);
+    border-radius: 12px; padding: 14px 16px; margin-bottom: 10px;
+  }
+  .exp-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .exp-name { font-weight: 700; font-size: 15px; }
+  .countdown {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 700;
+    color: var(--critical); background: var(--critical-soft);
+    border-radius: 999px; padding: 3px 10px;
+  }
+  .countdown.ok { color: var(--good); background: var(--good-soft); }
+  .exp-desc { font-size: 13.5px; color: var(--text-dim); margin-top: 8px; }
+  .exp-owner {
+    margin-top: 10px; font-size: 13px; padding: 9px 11px;
+    background: var(--accent-soft); color: var(--accent); border-radius: 8px;
+  }
+
+  /* ---------- decisions ---------- */
+  .decision {
+    border: 1px solid var(--border); background: var(--surface);
+    border-radius: 12px; padding: 14px 16px; margin-bottom: 10px;
+  }
+  .decision-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .decision-topic { font-weight: 700; font-size: 14.5px; }
+  .decision-date { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-faint); flex: none; }
+  .voice { display: flex; gap: 8px; margin-top: 10px; font-size: 13px; }
+  .voice .who {
+    flex: none; width: 74px; font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px; font-weight: 700; color: var(--text-faint); padding-top: 2px;
+  }
+  .voice .say { color: var(--text-dim); }
+  .verdict {
+    margin-top: 10px; display: inline-flex; align-items: center; gap: 6px;
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-weight: 700;
+    background: var(--good-soft); color: var(--good); border-radius: 999px; padding: 4px 10px;
+  }
+
+  /* ---------- owner asks ---------- */
+  .asks { display: flex; flex-direction: column; gap: 10px; }
+  .ask {
+    display: flex; gap: 12px; align-items: flex-start;
+    border: 1px solid var(--border); background: var(--surface);
+    border-radius: 12px; padding: 13px 15px;
+  }
+  .ask .box {
+    flex: none; width: 18px; height: 18px; margin-top: 2px;
+    border: 2px solid var(--accent); border-radius: 5px;
+  }
+  .ask-body b { font-size: 14px; }
+  .ask-body .meta { font-size: 12px; color: var(--text-faint); margin-top: 3px; font-family: "IBM Plex Mono", monospace; }
+
+  footer {
+    margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--text-faint);
+  }
+
+  @media (max-width: 460px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .voice { flex-direction: column; gap: 3px; }
+    .voice .who { width: auto; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="top">
+    <span class="eyebrow">Quiet Hours · AI Company OS</span>
+    <h1>経営状況ハブ</h1>
+    <p class="sub">AIが実際に経営している会社の、現在地。オーナーが数分で会社の状態を把握するための1ページ。</p>
+    <div class="phase-row">
+      <span class="phase-badge"><span class="dot"></span>0→1 売上検証フェーズ</span>
+      <span class="updated">最終更新 2026-08-11</span>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="num">¥0</div><div class="label">現金残高</div></div>
+    <div class="stat"><div class="num accent">0件</div><div class="label">実売上(北極星KPI)</div></div>
+    <div class="stat"><div class="num">11日</div><div class="label">稼働日数</div></div>
+    <div class="stat"><div class="num">4</div><div class="label">運営事業数</div></div>
+  </div>
+
+  <section id="org">
+    <div class="section-head"><h2>経営体制</h2></div>
+    <div class="org">
+      <div class="org-box owner">オーナー</div>
+      <div class="org-line"></div>
+      <div class="org-pair">
+        <div class="org-box partner">AI経営パートナー</div>
+        <div class="org-connector">⇄ 協議</div>
+        <div class="org-box">AI CEO(社長)</div>
+      </div>
+      <div class="org-line"></div>
+      <div class="org-depts">
+        <span>開発部</span><span>クリエイティブ部</span><span>マーケティング部</span>
+        <span>データ分析部</span><span>グロース/運用部</span><span>経理/財務部</span>
+        <span>法務部</span><span>CS部</span><span>セキュリティ部</span>
+      </div>
+    </div>
+    <p class="lede" style="margin-top:14px; font-size:13.5px;">
+      AI経営パートナーはAI CEOの部下でも上司でもない、独立した経営メンバー。
+      新規事業・大規模投資・撤退などの必須協議事項では、CEOの結論を伝えずに独立分析を行う。
+      人格は分けない(専用の別エージェント基盤は今は作らない)が、役割は分ける。
+    </p>
+  </section>
+
+  <section id="principles">
+    <div class="section-head">
+      <h2>経営原則 v2</h2>
+      <span class="section-note">2026-08-11 オーナー承認</span>
+    </div>
+    <div class="principles">
+      <div class="principle"><span class="n">01</span><span class="t"><b>自動化率より市場データを優先する。</b>完成度・コミット数ではなく、市場から得られた有効なデータで評価する</span></div>
+      <div class="principle"><span class="n">02</span><span class="t"><b>開発工数と市場検証のバランスを監視する。</b>工数が大きいのに市場データが少ない事業を警戒対象にする</span></div>
+      <div class="principle"><span class="n">03</span><span class="t"><b>モヤスカは「事業」ではなく「市場検証装置」。</b>完全自動化後は30日間の市場検証を実施する</span></div>
+      <div class="principle"><span class="n">04</span><span class="t"><b>モヤスカの14日ルール。</b>期限までに自動パイプラインが未完成なら現行方式を廃止し保守モードへ</span></div>
+      <div class="principle"><span class="n">05</span><span class="t"><b>Shortsを現時点の有力チャネルとして扱う。</b>ただし再生数だけで成功判断しない</span></div>
+      <div class="principle"><span class="n">06</span><span class="t"><b>新規事業の常設探索は停止。</b>既存資産限定・1回2時間までの収益化実験のみ許可</span></div>
+      <div class="principle"><span class="n">07</span><span class="t"><b>「売上0」を最重要警戒状態とする。</b>大規模な組織構築・重厚ガバナンスは原則後回し</span></div>
+      <div class="principle"><span class="n">08</span><span class="t"><b>「¥1売る」だけを目的にしない。</b>再現可能な収益モデルの証拠(誰が・何に・なぜ・いくら)を取得する</span></div>
+      <div class="principle"><span class="n">09</span><span class="t"><b>Build → Launch → Measure → Learn → Decide。</b>Buildに時間をかけすぎない</span></div>
+    </div>
+  </section>
+
+  <section id="businesses">
+    <div class="section-head"><h2>4事業の状況</h2></div>
+    <div class="biz-grid">
+
+      <div class="biz">
+        <div class="biz-top"><span class="biz-name">BGM</span><span class="tier t1">Tier 1</span></div>
+        <div class="biz-metrics">
+          <span>長尺 <b>3</b>本 / Shorts <b>2</b>本公開</span>
+          <span>Shorts実測 <b>268</b>再生</span>
+          <span>収益 <b>¥0</b></span>
+        </div>
+        <p class="biz-note">生成→投稿→再生確認まで完全自動。既存資産でのGumroad収益化実験を実施中。</p>
+      </div>
+
+      <div class="biz">
+        <div class="biz-top"><span class="biz-name">モヤスカ</span><span class="tier t1">Tier 1</span></div>
+        <div class="biz-metrics">
+          <span>投稿 <b>0</b>本</span>
+          <span>台本 <b>5</b>本ストック</span>
+          <span>収益 <b>¥0</b></span>
+        </div>
+        <p class="biz-note">背景・BGM・効果音・台本は完全自動。ナレーションをGoogle Cloud TTSへ切替中(14日ルール、下記)。</p>
+      </div>
+
+      <div class="biz">
+        <div class="biz-top"><span class="biz-name">note</span><span class="tier t2">Tier 2</span></div>
+        <div class="biz-metrics">
+          <span>公開 <b>7</b>本</span>
+          <span>投稿待ち <b>3</b>本</span>
+          <span>収益 <b>¥0</b></span>
+        </div>
+        <p class="biz-note">週次で下書き在庫を自動維持。決済設定はまだ未有効化。</p>
+      </div>
+
+      <div class="biz">
+        <div class="biz-top"><span class="biz-name">アプリ</span><span class="tier t3">Tier 3・市場検証待ち</span></div>
+        <div class="biz-metrics">
+          <span>実ユーザー <b>0</b>人</span>
+          <span>収益 <b>¥0</b></span>
+        </div>
+        <p class="biz-note">雛形・アイコン実装済み、ストア未申請。凍結ではなく、市場仮説が得られ次第再評価。</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="experiments">
+    <div class="section-head"><h2>進行中の実験</h2></div>
+
+    <div class="exp">
+      <div class="exp-top">
+        <span class="exp-name">モヤスカ: Google Cloud TTSへの切替</span>
+        <span class="countdown">期限まで 14日(〜2026-08-25)</span>
+      </div>
+      <p class="exp-desc">現行のiPad Shortcuts方式は依存APIがこの環境から到達不能と確認。コード側の切替実装は完了。期限までに完成しなければ保守モードへ移行。</p>
+      <div class="exp-owner">オーナー対応(約10分): GCP Cloud Text-to-Speech APIを有効化 → <code>python3 -m moyasuka.youtube_auth login</code> を再実行</div>
+    </div>
+
+    <div class="exp">
+      <div class="exp-top">
+        <span class="exp-name">BGM: 既存資産の収益チャネル(Gumroad)</span>
+        <span class="countdown ok">商品化完了・公開待ち</span>
+      </div>
+      <p class="exp-desc">主要ストック音楽マーケットプレイスは2026年にAI生成コンテンツを一斉禁止と判明。Gumroadを採用し、既存4プリセットを商品パッケージ化して送付済み。</p>
+      <div class="exp-owner">オーナー対応(約15分): Gumroadアカウント作成→決済連携→送付済みzipを公開</div>
+    </div>
+  </section>
+
+  <section id="decisions">
+    <div class="section-head">
+      <h2>意思決定ログ</h2>
+      <span class="section-note">CEO / AI経営パートナー 双方の意見つき</span>
+    </div>
+
+    <div class="decision">
+      <div class="decision-top"><span class="decision-topic">新規事業を今すぐ探索すべきか</span><span class="decision-date">08-11</span></div>
+      <div class="voice"><span class="who">CEO</span><span class="say">Day60-90まで全面凍結、1回のみ</span></div>
+      <div class="voice"><span class="who">パートナー</span><span class="say">全面凍結には反対。既存資産限定・1回2時間で今すぐ小さく試すべき</span></div>
+      <div class="verdict">承認 — 既存資産限定・1回2時間で実施</div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-top"><span class="decision-topic">モヤスカを継続investすべきか</span><span class="decision-date">08-11</span></div>
+      <div class="voice"><span class="who">CEO</span><span class="say">短期間で代替TTSを比較検証</span></div>
+      <div class="voice"><span class="who">パートナー</span><span class="say">API到達性を実測済み、14日以内・オーナー作業10分の意思決定に過ぎない</span></div>
+      <div class="verdict">承認 — 14日ルールで継続、事業ではなく市場検証装置と再定義</div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-top"><span class="decision-topic">BGM収益チャネル実験の結果評価</span><span class="decision-date">08-11</span></div>
+      <div class="voice"><span class="who">CEO</span><span class="say">目的達成、商品化・出品準備まで完了</span></div>
+      <div class="voice"><span class="who">パートナー</span><span class="say">(想定)商品完成は成功の証明にならない、Day30の実売上で判断すべき</span></div>
+      <div class="verdict">継続 — 公開待ち、Day30(09-10)に再評価</div>
+    </div>
+  </section>
+
+  <section id="asks">
+    <div class="section-head"><h2>オーナーへの依頼</h2></div>
+    <div class="asks">
+      <div class="ask">
+        <div class="box"></div>
+        <div class="ask-body">
+          <b>モヤスカ: GCP Cloud TTS APIの有効化+再ログイン</b>
+          <div class="meta">約10分・期限2026-08-25</div>
+        </div>
+      </div>
+      <div class="ask">
+        <div class="box"></div>
+        <div class="ask-body">
+          <b>BGM: Gumroadアカウント作成・決済連携・商品公開</b>
+          <div class="meta">約15分・送付済みzipと文面を使用</div>
+        </div>
+      </div>
+      <div class="ask">
+        <div class="box"></div>
+        <div class="ask-body">
+          <b>X: @moyasuka アカウントの新規作成</b>
+          <div class="meta">ネタ募集窓口の一本化のため</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    社長(Claude)発 · このページは <code>docs/company-os/</code> の構造化データと<code>docs/ai-company-os/</code>の意思決定記録から作成 · 詳細な経緯は各Decision/Experimentファイル参照
+  </footer>
+
+</div>

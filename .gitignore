@@ -28,6 +28,7 @@ moyasuka/credentials/
 # dashboard / guide build output (regenerate with each dir's build.py)
 docs/dashboard/dashboard.html
 docs/dashboard/fonts.py
+docs/ai-company-os/hub/hub.html
 docs/setup-guide/setup-guide.html
 docs/setup-guide/fonts.py
 note-articles/queue-page/note-queue.html

@@ -2,6 +2,8 @@
 
 最新版(常にこのURLを更新して再公開する): https://claude.ai/code/artifact/63b530f4-9d42-411d-aa8a-d013d4283c32
 
+**AI COMPANY OS 経営状況ハブ(2026-08-11新設)**: https://claude.ai/code/artifact/67417f9e-f9fd-482e-8ae7-d5742f24e1d5 — 経営体制・原則・4事業ステータス・進行中の実験・意思決定ログ・オーナーへの依頼を1ページに集約。**オーナーがiOSのみ(md/JSONファイルを直接読まない)のため、`docs/company-os/`や`docs/ai-company-os/`配下の記録を更新した際は、このハブも同じ内容で更新して再公開する。** ソースは`docs/ai-company-os/hub/template.html`、`python3 docs/ai-company-os/hub/build.py`でビルド
+
 アカウント作成の手順書(オーナー向け): https://claude.ai/code/artifact/94fb9449-78d7-409e-a9cc-588a66198bf4
 
 会社サイト(3事業をまとめた対外向けページ、`docs/site/`): https://claude.ai/code/artifact/3ace0d1f-bbd2-4522-bb2e-b9b0b834d5b4
