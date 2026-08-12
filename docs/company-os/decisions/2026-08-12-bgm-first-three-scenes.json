@@ -10,6 +10,6 @@
   "recommended": "01・08・09を標準フロー(Scene Definition→Demand Hypothesis→Audio Design→BGM Generation→Japanese QA→Metadata QA→Publish→Measure→Learn)に従って制作・公開する",
   "not_recommended": "10企画すべての同時制作。06・07への早期着手",
   "owner_decision_needed": "この3企画選定でよいか",
-  "owner_decision": null,
+  "owner_decision": "承認(2026-08-12)。01・08・09で進める。条件: ①成功基準は再生数単体でなくインプレッション/CTR/平均視聴時間/平均再生率/視聴維持率/リピーター/登録者増/コメント/収益貢献を複合評価し、3企画を再生数ランキングではなく『どの需要仮説に最も強い市場シグナルが出たか』で評価する ②赤ちゃん向けは『赤ちゃんの睡眠環境づくりに利用できるホワイトノイズ』という位置付けに限定し、必ず眠る/睡眠改善/医学的効果を断定する表現・過度な安全保証を禁止 ③3企画を同時に大規模開発せず、企画→最小実装→QA→1本公開→データ取得を1本ずつ進める。新しい音源生成システムや大規模アーキテクチャ変更は不要 ④市場投入後、3企画それぞれをExperimentとして記録し継続/改善/保留/撤退を判断、得られたデータを次のScene Definitionに反映する",
   "outcome_review_date": "2026-08-26"
 }
