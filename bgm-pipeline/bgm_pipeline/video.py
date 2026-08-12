@@ -78,6 +78,27 @@ def render(audio_path: str, out_path: str, title: str, preset: str,
     subprocess.run(cmd, check=True)
 
 
+def render_photo_background(audio_path: str, out_path: str, image_path: str,
+                             orientation: str = "landscape") -> None:
+    """Static photo as the entire visual — no animated gradient, no
+    burned-in text. Standard as of 2026-08-12 for presets on the
+    photo-thumbnail track (see thumbnail.make_photo_thumbnail()): the same
+    real image that carries the thumbnail also carries the video body, cover
+    -cropped to fill the frame and held static for the whole duration."""
+    w, h = (1920, 1080) if orientation == "landscape" else (1080, 1920)
+    cmd = [
+        "ffmpeg", "-y",
+        "-loop", "1", "-i", image_path,
+        "-i", audio_path,
+        "-vf", f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "192k",
+        "-shortest",
+        out_path,
+    ]
+    subprocess.run(cmd, check=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Render a BGM WAV to an upload-ready MP4.")
     parser.add_argument("--audio", required=True)

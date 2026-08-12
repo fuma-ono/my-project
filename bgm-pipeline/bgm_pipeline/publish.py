@@ -54,7 +54,11 @@ def main(argv: list[str] | None = None) -> int:
     track.to_wav(wav_path)
 
     print("[2/5] rendering video...")
-    video.render(wav_path, mp4_path, meta["thumb_hook"], args.preset, "landscape")
+    if meta.get("thumbnail_style") == "photo":
+        photo_source = os.path.join(PACKAGE_ROOT, meta["thumbnail_source"])
+        video.render_photo_background(wav_path, mp4_path, photo_source, "landscape")
+    else:
+        video.render(wav_path, mp4_path, meta["thumb_hook"], args.preset, "landscape")
 
     print("[3/5] generating custom thumbnail...")
     if meta.get("thumbnail_style") == "photo":
