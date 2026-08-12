@@ -24,9 +24,12 @@
     "allowed_positioning": "赤ちゃんの睡眠環境づくりに利用できるホワイトノイズ、という範囲のみ",
     "description_includes_explicit_disclaimer": true
   },
-  "video_id": "UOVyonlQhZ4",
-  "video_url": "https://youtube.com/watch?v=UOVyonlQhZ4",
-  "published_at": "2026-08-12T06:30:24Z",
+  "video_id": "QkeAOj3VN_E",
+  "video_url": "https://youtube.com/watch?v=QkeAOj3VN_E",
+  "published_at": "2026-08-12T10:46:57Z",
+  "video_history": [
+    {"video_id": "UOVyonlQhZ4", "published_at": "2026-08-12T06:30:24Z", "status": "private (superseded, same day)", "reason": "動画本体の背景をオーナー提供の実写画像に差し替え(YouTube APIは既存動画の中身を上書きできないため新規アップロードで対応)"}
+  ],
   "period": {"start": "2026-08-12", "end": "2026-08-26"},
   "cost_jpy": 0,
   "kpi_target": {
