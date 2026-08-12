@@ -1,0 +1,15 @@
+{
+  "id": "2026-08-12-bgm-first-three-scenes",
+  "date": "2026-08-12",
+  "category": "budget-change",
+  "topic": "BGM: シーン起点の10企画から最初に市場投入する3企画の選定",
+  "ceo_opinion": "01(深夜の不眠向け)・08(赤ちゃん寝かしつけ)・09(瞑想呼吸ガイド)を選定。市場規模が大きく、既存4本と客層が重ならず、既存コード資産(ブラウンノイズ・呼吸LFO)を流用できて実装リスクが低い。06(カフェ環境音)は自前合成方針との実現難度衝突、07(運転中)はYouTube発見導線とのミスマッチで保留",
+  "partner_opinion": "正式な独立評価は未実施(オーナーが今回は追加のAI経営会議は不要と判断、市場データが得られた段階で再評価する方針)",
+  "agreements": ["まず標準フローを運用し、市場データが出てから経営会議で再評価する"],
+  "disagreements": [],
+  "recommended": "01・08・09を標準フロー(Scene Definition→Demand Hypothesis→Audio Design→BGM Generation→Japanese QA→Metadata QA→Publish→Measure→Learn)に従って制作・公開する",
+  "not_recommended": "10企画すべての同時制作。06・07への早期着手",
+  "owner_decision_needed": "この3企画選定でよいか",
+  "owner_decision": null,
+  "outcome_review_date": "2026-08-26"
+}
