@@ -447,7 +447,7 @@ PRESET_METADATA = {
         "thumbnail_style": "photo",
         "thumbnail_source": "assets/thumbnails/breath_guide_coherent_source.png",
         "thumbnail_crop_top_px": 300,  # trims a UI artifact strip along the top of the source image
-        "thumb_hook": "4秒吸う、6秒吐く",
+        "thumb_hook": "心を落ち着かせるBGM",
         "description": "吸って4秒・吐いて6秒のリズムで、呼吸のペースを意識しやすくする音です。声によるガイドはなく、一つの持続音の強弱だけでリズムを示します。",
         "hook": "吸って4秒、吐いて6秒。声のガイドなしで、呼吸のペースを意識しやすくする音です。",
         "about": (
