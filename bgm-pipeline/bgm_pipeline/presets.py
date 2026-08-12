@@ -129,6 +129,61 @@ def sleep_insomnia_pulse(minutes: float = 3.0, include_pulse: bool = True) -> co
     return core.widen(mix, width=0.18, sr=sr)
 
 
+def _breath_envelope(seconds: float, inhale_s: float = 4.0, exhale_s: float = 6.0,
+                      floor: float = 0.35, sr: int = 44100) -> np.ndarray:
+    """One breath cycle (rise over `inhale_s`, fall over `exhale_s`) built as a
+    raised-cosine ease in/out, then tiled across the full duration — the same
+    "build one cycle, place it repeatedly" pattern as `_heartbeat_pulse`, just
+    with a longer, consciously-followable cycle instead of a short percussive
+    one. Deliberately asymmetric (exhale longer than inhale) and floor-limited
+    (never drops to silence) so the listener has something continuous to
+    track, not a pulse to react to."""
+    cycle_s = inhale_s + exhale_s
+    n_cycles = int(seconds / cycle_s) + 1
+    out = np.zeros(int(seconds * sr))
+    n_in = int(inhale_s * sr)
+    n_out = int(exhale_s * sr)
+    rise = floor + (1 - floor) * (1 - np.cos(np.linspace(0, np.pi, n_in))) / 2
+    fall = floor + (1 - floor) * (1 + np.cos(np.linspace(0, np.pi, n_out))) / 2
+    cycle = np.concatenate([rise, fall])
+    for c in range(n_cycles):
+        start = int(c * cycle_s * sr)
+        end = min(start + len(cycle), len(out))
+        if start >= len(out):
+            break
+        out[start:end] = cycle[: end - start]
+    return out
+
+
+def breath_guide_coherent(minutes: float = 15.0) -> core.StereoTrack:
+    """Scene: someone who wants to consciously settle their breathing for a
+    few minutes — between tasks, before a stressful moment, or winding down
+    before sleep (docs/ai-company-os/2026-08-12-bgm-scene03-definition.md,
+    scene 03 — third and final market test of the approved trio). Unlike
+    every other preset here, this one is meant to be actively followed, not
+    played passively in the background: a single sustained tone (one chord
+    from PADS_SLEEP, held rather than progressed, so nothing competes with
+    the breath cue) whose volume rises over 4 seconds and falls over 6 —
+    inhale/exhale, 6 breaths/minute. No new synthesis system: reuses
+    `detuned_stack`/`brown_noise`/`simple_reverb`/`fade_in_out`/`normalize`/
+    `widen`, plus the one small `_breath_envelope` helper above."""
+    seconds = minutes * 60
+    sr = core.SAMPLE_RATE
+    chord = PADS_SLEEP[0]
+    pad = np.zeros(int(seconds * sr))
+    for midi_note in chord:
+        pad = pad + core.detuned_stack(midi_to_freq(midi_note), seconds, voices=3, detune_cents=4, sr=sr)
+    pad /= len(chord)
+    pad = core.one_pole_lowpass(pad, cutoff_hz=900, sr=sr)
+    bed = core.brown_noise(seconds, sr) * 0.03
+    breath = _breath_envelope(seconds, inhale_s=4.0, exhale_s=6.0, floor=0.35, sr=sr)
+    mix = pad * breath + bed
+    mix = core.simple_reverb(mix, sr, room_seconds=2.6, mix=0.35)
+    mix = core.fade_in_out(mix, sr, fade_seconds=6.0)
+    mix = core.normalize(mix, peak=0.7)
+    return core.widen(mix, width=0.12, sr=sr)
+
+
 def baby_sleep_noise(minutes: float = 3.0) -> core.StereoTrack:
     """Scene: a parent building a calm sleep environment for an infant/
     toddler — at bedtime, during a night wake-up, or for a daytime nap
@@ -231,6 +286,7 @@ PRESETS = {
     "study_focus_binaural": study_focus_binaural,
     "sleep_insomnia_pulse": sleep_insomnia_pulse,
     "baby_sleep_noise": baby_sleep_noise,
+    "breath_guide_coherent": breath_guide_coherent,
 }
 
 # title: JP-first, leads with a 【】bracket category tag — this is the
@@ -368,6 +424,32 @@ PRESET_METADATA = {
             "white noise", "baby white noise", "white noise for babies", "baby sleep sounds", "newborn sleep",
         ],
         "hashtags": ["赤ちゃん", "ホワイトノイズ", "babysleep", "whitenoise", "newbornsleep"],
+    },
+    "breath_guide_coherent": {
+        # Scene 03 (docs/ai-company-os/2026-08-12-bgm-scene03-definition.md,
+        # 2026-08-12 approved third and final market test of the trio).
+        # Non-verbal, non-branded pace (no "4-7-8"/"コヒーレント呼吸法" name —
+        # avoids the therapeutic-technique framing those carry). Positioning
+        # stays experience-first per the owner's explicit ban on medical
+        # claims: no 自律神経を整える/不安を治す/睡眠を改善する/ストレスを治療する.
+        "title": "呼吸のペースを意識しやすくなる音、吸って4秒・吐いて6秒の呼吸ガイド 15分",
+        "icon_category": "sleep",
+        "thumb_hook": "吸う4秒 吐く6秒",
+        "description": "吸って4秒・吐いて6秒のリズムで、呼吸のペースを意識しやすくする音です。声によるガイドはなく、一つの持続音の強弱だけでリズムを示します。",
+        "hook": "吸って4秒、吐いて6秒。声のガイドなしで、呼吸のペースを意識しやすくする音です。",
+        "about": (
+            "音量がゆっくり満ちていくときに息を吸い、ゆっくり静まっていくときに息を吐く — それを繰り返すだけの"
+            "シンプルな作りです。ナレーションやベルの音は使わず、一つの持続音の強弱だけで呼吸のリズムを示しています。"
+            "自律神経を整える、不安を治すといった医学的な効果を示すものではありません。呼吸のペースを意識するための音として、"
+            "休憩時間やリラックスタイムにご活用ください。"
+        ),
+        "use_cases": ["仕事や勉強の合間の小休憩に", "就寝前のリラックスタイムに", "緊張する場面の前に", "声によるガイドが苦手な方の呼吸法の練習に"],
+        "tags": [
+            "呼吸ガイド", "呼吸法", "深呼吸", "リラックス",
+            "breathing exercise", "breathing guide", "guided breathing music", "box breathing music",
+            "breathing meditation", "calm breathing",
+        ],
+        "hashtags": ["呼吸ガイド", "深呼吸", "リラックス", "breathingexercise", "guidedbreathing"],
     },
 }
 
