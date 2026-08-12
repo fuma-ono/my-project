@@ -339,8 +339,12 @@ PRESET_METADATA = {
         "hashtags": ["雨音bgm", "作業用bgm", "睡眠用bgm", "rainsounds", "relaxation"],
     },
     "study_lofi_chill": {
-        "title": "【作業用BGM】カフェ気分のLo-Fiチルビート 1時間｜勉強・仕事がはかどる",
+        "title": "【作業用BGM】カフェ気分で集中できる1時間BGM ｜勉強・作業用",
         "icon_category": "focus",
+        # 2026-08-12: switched to the photo-thumbnail standard with an
+        # owner-supplied AI-generated image (see breath_guide_coherent's note).
+        "thumbnail_style": "photo",
+        "thumbnail_source": "assets/thumbnails/study_lofi_chill_source.jpeg",
         "thumb_hook": "はかどる作業用BGM",
         "description": "温かみのあるローファイコードにヴァイナルの質感を重ねた、カフェのような作業用BGM。",
         "hook": "温かみのあるローファイコードに、ヴァイナルの質感をまとわせた力の抜けるビート。カフェで作業しているような、集中しやすい空気感です。",
