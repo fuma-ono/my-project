@@ -8,7 +8,7 @@
   "hypothesis": "この記事テーマは読者の実際の悩み・検索意図に一致し、閲覧・スキ・フォロワー増につながる需要がある",
   "generated_at": "2026-08-10",
   "published_at": null,
-  "status": "draft",
+  "status": "published",
   "note_url": "https://note.com/unique_condor276",
   "metrics": {
     "views": null,
@@ -24,5 +24,6 @@
   "next_action": null,
   "verdict": "pending",
   "backfilled_at": "2026-08-12",
-  "backfill_note": "2026-08-12のnote週3本運用化に伴い、記事ごとのExperiment記録運用を新設。01〜10はこの時点でのバックフィル記録(公開日時はnote.com側のみ把握のためAI側では未取得)"
+  "backfill_note": "2026-08-12のnote週3本運用化に伴い、記事ごとのExperiment記録運用を新設。01〜10はこの時点でのバックフィル記録(公開日時はnote.com側のみ把握のためAI側では未取得) 2026-08-12、オーナーより投稿済みと確認。正確な公開日時はnote.com側のみ把握のためAI側では未取得。",
+  "published_confirmed_by_owner_at": "2026-08-12"
 }

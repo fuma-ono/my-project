@@ -9,8 +9,14 @@
     {"article_number": "05", "slug": "05-ai-runs-the-company", "theme_backlog_id": null, "pillar": "B", "generated_at": "2026-08-02", "status": "published", "note": "バックログ外の独自企画(柱B第1弾)"},
     {"article_number": "06", "slug": "06-ai-music-copyright", "theme_backlog_id": 6, "pillar": "A", "generated_at": "2026-08-03", "status": "published"},
     {"article_number": "07", "slug": "07-work-bgm-complaints-50", "theme_backlog_id": 13, "pillar": "A", "generated_at": "2026-08-03", "status": "published"},
-    {"article_number": "08", "slug": "08-app-pricing-decision", "theme_backlog_id": 7, "pillar": "B", "generated_at": "2026-08-05", "status": "draft"},
-    {"article_number": "09", "slug": "09-revenue-report", "theme_backlog_id": 15, "pillar": "B", "generated_at": "2026-08-05", "status": "draft"},
-    {"article_number": "10", "slug": "10-sound-sensitivity", "theme_backlog_id": 14, "pillar": "A", "generated_at": "2026-08-10", "status": "draft"}
+    {"article_number": "08", "slug": "08-app-pricing-decision", "theme_backlog_id": 7, "pillar": "B", "generated_at": "2026-08-05", "status": "published", "published_confirmed_by_owner_at": "2026-08-12"},
+    {"article_number": "09", "slug": "09-revenue-report", "theme_backlog_id": 15, "pillar": "B", "generated_at": "2026-08-05", "status": "published", "published_confirmed_by_owner_at": "2026-08-12"},
+    {"article_number": "10", "slug": "10-sound-sensitivity", "theme_backlog_id": 14, "pillar": "A", "generated_at": "2026-08-10", "status": "published", "published_confirmed_by_owner_at": "2026-08-12"},
+    {"article_number": "11", "slug": "11-note-year-one", "theme_backlog_id": 8, "pillar": "B", "generated_at": "2026-08-12", "status": "draft"},
+    {"article_number": "12", "slug": "12-family-noise-wfh", "theme_backlog_id": 16, "pillar": "A", "generated_at": "2026-08-12", "status": "draft"},
+    {"article_number": "13", "slug": "13-earplugs-vs-whitenoise", "theme_backlog_id": 17, "pillar": "A", "generated_at": "2026-08-12", "status": "draft"},
+    {"article_number": "14", "slug": "14-power-nap-sound", "theme_backlog_id": 18, "pillar": "A", "generated_at": "2026-08-12", "status": "draft"},
+    {"article_number": "15", "slug": "15-silence-vs-ambient", "theme_backlog_id": 19, "pillar": "A", "generated_at": "2026-08-12", "status": "draft"},
+    {"article_number": "16", "slug": "16-office-return-noise", "theme_backlog_id": 20, "pillar": "A", "generated_at": "2026-08-12", "status": "draft"}
   ]
 }
