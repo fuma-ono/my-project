@@ -487,16 +487,17 @@
     </div>
 
     <div class="pick-card">
-      <div class="pick-top"><span class="pick-rank">09</span><span class="pick-name">瞑想・呼吸法ガイド音</span></div>
+      <div class="pick-top"><span class="pick-rank">09</span><span class="pick-name">呼吸法ガイド音</span><span class="rank-pill pick">公開済み(08-12)</span></div>
+      <p style="font-size:12.5px; margin:6px 0 0;"><a href="https://youtube.com/watch?v=0JZ87lPX04E">breath_guide_coherent を見る</a> · データ取得期間 08-12〜08-26 · Experiment: <code>bgm-scene03-breath-guide</code></p>
       <div class="pick-fields">
-        <div class="pick-field"><span class="k">想定ユーザー</span><span class="v">ヨガ・マインドフルネス実践者</span></div>
-        <div class="pick-field"><span class="k">利用シーン</span><span class="v">朝または就寝前、呼吸のペースを整えたい能動的な瞑想</span></div>
-        <div class="pick-field"><span class="k">需要仮説</span><span class="v">瞑想・マインドフルネス市場は成長カテゴリ。受動的に聴くBGMではなく「呼吸を導く」能動的ガイドという新カテゴリで既存4本と差別化できる</span></div>
-        <div class="pick-field"><span class="k">差別化</span><span class="v"><b>高</b> — 受動的BGMでなく能動的ガイドという新カテゴリ</span></div>
-        <div class="pick-field"><span class="k">音響設計</span><span class="v">倍音豊かな単音(シンギングボウル的)+<code>sleep_deep_drone</code>の呼吸LFOコードを発展させ、呼吸ペースを明示的に導く</span></div>
-        <div class="pick-field"><span class="k">検証KPI</span><span class="v">平均視聴時間・完視聴率</span></div>
+        <div class="pick-field"><span class="k">想定ユーザー</span><span class="v">短時間で心を落ち着けたい人(仕事の合間・就寝前・緊張する場面の前など)。声によるガイド音声を求めていない人</span></div>
+        <div class="pick-field"><span class="k">利用シーン</span><span class="v">仕事・勉強の合間の小休憩、就寝前のリラックスタイム、緊張する場面の前。60分の受動的BGMとは異なる15分の能動的セッション</span></div>
+        <div class="pick-field"><span class="k">需要仮説</span><span class="v">受動的に聴くBGMではなく「呼吸を導く」能動的ガイドという新カテゴリで既存プリセットと差別化できる。実装確定: 実際には市場調査の結果、JP市場では「4-7-8呼吸法」等の療法名コンテンツが医学・治療文脈と強く結びつく一方、非言語の持続音ガイドという形式自体は未確立(ブルーオーシャン)と判明</span></div>
+        <div class="pick-field"><span class="k">差別化</span><span class="v"><b>高</b> — 受動的BGMでなく能動的ガイドという新カテゴリ。既存プリセット全てが使う和音進行を単一和音に留め、意識的に追従できる非対称エンベロープ(吸う4秒・吐く6秒)を新設</span></div>
+        <div class="pick-field"><span class="k">音響設計</span><span class="v">実装確定: PADS_SLEEPの単一和音(進行なし)+ブラウンノイズに、新規<code>_breath_envelope</code>で振幅変調。療法名は名乗らず「吸って4秒・吐いて6秒」という機能説明にとどめる</span></div>
+        <div class="pick-field"><span class="k">検証KPI</span><span class="v">再生数・インプレッション・CTR・平均視聴時間・平均再生率(特に15分を最後まで聴くかを重視)・視聴維持率・登録者増・コメント</span></div>
       </div>
-      <div class="success-line">目安: 平均視聴時間5分以上・完視聴率10%以上(単独の絶対値でなく複合評価)</div>
+      <div class="success-line">目安: 2週間で500再生・平均再生率が既存プリセット平均を上回る(単独の絶対値でなく複合評価。Scene 01・02とは「どの需要仮説が最も強いシグナルを得たか」で比較)</div>
     </div>
 
     <p style="font-size:13px; color:var(--text-dim); margin-top:4px;">
