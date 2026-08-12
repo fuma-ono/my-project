@@ -70,6 +70,57 @@ def sleep_deep_drone(minutes: float = 3.0) -> core.StereoTrack:
     return core.widen(mix, width=0.2, sr=sr)
 
 
+def _heartbeat_pulse(seconds: float, bpm: float = 52.0, sr: int = 44100) -> np.ndarray:
+    """A quiet, slow lub-dub pulse (two low thumps per beat, resting-heart-rate
+    tempo) — the one new element `sleep_insomnia_pulse` adds on top of
+    `sleep_deep_drone`'s existing pad+brown-noise bed. Deliberately built as
+    a small addition to an existing preset rather than a new system: reuses
+    `_chord_pad`'s envelope-and-place approach at a much simpler scale (two
+    fixed low tones instead of chords)."""
+    beat_len = 60.0 / bpm
+    n_beats = int(seconds / beat_len) + 1
+    out = np.zeros(int(seconds * sr))
+    lub_freq, dub_freq = 55.0, 46.0  # dub slightly lower, like a real second heart sound
+    for b in range(n_beats):
+        beat_start = b * beat_len
+        for offset, freq, amp in ((0.0, lub_freq, 1.0), (0.14, dub_freq, 0.7)):
+            t0 = beat_start + offset
+            if t0 >= seconds:
+                continue
+            dur = 0.09
+            n = int(dur * sr)
+            env = np.exp(-np.linspace(0, 14, n))
+            tone = np.sin(2 * np.pi * freq * np.linspace(0, dur, n)) * env * amp
+            start = int(t0 * sr)
+            end = min(start + n, len(out))
+            out[start:end] += tone[: end - start]
+    return out
+
+
+def sleep_insomnia_pulse(minutes: float = 3.0) -> core.StereoTrack:
+    """Scene: someone who can't fall asleep and is watching the clock,
+    2-3am, growing more anxious the longer it takes (docs/marketing/
+    bgm-content-audit/, scene 01 — 2026-08-12 approved first market test).
+    Deliberately the smallest possible delta on `sleep_deep_drone`: same
+    pad/noise bed, same PADS_SLEEP harmony (reused per the production
+    standard's rule 3 — differentiation doesn't require new harmonic
+    material when the scene doesn't call for it), plus one new element: a
+    barely-audible resting-heart-rate pulse underneath, aimed at the
+    specific anxious-wakefulness scene rather than sleep in general."""
+    seconds = minutes * 60
+    sr = core.SAMPLE_RATE
+    pad = _chord_pad(PADS_SLEEP, seconds, chord_seconds=28.0, sr=sr)
+    pad = core.one_pole_lowpass(pad, cutoff_hz=450, sr=sr)
+    bed = core.brown_noise(seconds, sr) * 0.05
+    pulse = _heartbeat_pulse(seconds, bpm=52.0, sr=sr) * 0.05
+    breathing = core.lfo(0.045, seconds, sr, depth=0.12, offset=0.88)
+    mix = (pad * 0.78 + bed + pulse) * breathing
+    mix = core.simple_reverb(mix, sr, room_seconds=3.2, mix=0.42)
+    mix = core.fade_in_out(mix, sr, fade_seconds=7.0)
+    mix = core.normalize(mix, peak=0.72)
+    return core.widen(mix, width=0.18, sr=sr)
+
+
 def sleep_rain_focus(minutes: float = 3.0) -> core.StereoTrack:
     seconds = minutes * 60
     sr = core.SAMPLE_RATE
@@ -142,6 +193,7 @@ PRESETS = {
     "sleep_rain_focus": sleep_rain_focus,
     "study_lofi_chill": study_lofi_chill,
     "study_focus_binaural": study_focus_binaural,
+    "sleep_insomnia_pulse": sleep_insomnia_pulse,
 }
 
 # title: JP-first, leads with a 【】bracket category tag — this is the
@@ -230,6 +282,29 @@ PRESET_METADATA = {
             "10hz binaural beats", "concentration music",
         ],
         "hashtags": ["集中用bgm", "勉強用bgm", "バイノーラルビート", "binauralbeats", "focusmusic"],
+    },
+    "sleep_insomnia_pulse": {
+        # Scene 01 (docs/marketing/bgm-content-audit/, 2026-08-12 approved
+        # first market test). use_cases/tags deliberately hold to sleep/
+        # insomnia only — no "作業用bgm" — per the audit's finding that
+        # every prior preset carried that tag regardless of fit.
+        "title": "眠れない夜、考えすぎた心と体をゆっくり静める音 1時間",
+        "icon_category": "sleep",
+        "thumb_hook": "眠れない夜に",
+        "description": "深夜、時計が気になって余計に眠れなくなる夜のための音。低いドローンに、ごく静かな心拍のような響きを重ねています。",
+        "hook": "時計を見るほど、余計に眠れなくなる夜に。低く続くドローンの奥に、ごく静かな心拍のような響きをそっと重ねました。",
+        "about": (
+            "焦って眠ろうとするほど眠れない、という経験がある方向けに作りました。"
+            "急に音が変わることも、目立つメロディもありません。ゆっくりとした低い響きの下に、"
+            "安静時の心拍に近いテンポの音をかすかに重ねているだけです。"
+        ),
+        "use_cases": ["寝つけない夜に", "焦りで眠れなくなったときに", "静かな寝室環境を作りたいときに"],
+        "tags": [
+            "睡眠用bgm", "不眠", "寝つけない", "安眠",
+            "sleep music", "insomnia", "can't sleep music", "deep sleep", "ambient sleep music",
+            "relaxing sleep music",
+        ],
+        "hashtags": ["睡眠用bgm", "不眠", "安眠", "sleepmusic", "insomnia"],
     },
 }
 
