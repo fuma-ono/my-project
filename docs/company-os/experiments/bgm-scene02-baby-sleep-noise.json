@@ -1,0 +1,43 @@
+{
+  "id": "bgm-scene02-baby-sleep-noise",
+  "business_id": "bgm",
+  "scene_id": "scene02_baby_sleep_environment",
+  "target_user": "乳幼児(赤ちゃん)の寝かしつけ・夜泣き対応・お昼寝時に静かな環境をつくりたい保護者",
+  "use_scene": "就寝時/夜泣き対応中/お昼寝時に、スマホやタブレットで長時間(1時間耐久)ループ再生する",
+  "hypothesis": "『赤ちゃんの睡眠環境づくり』という具体的な保護者向けシーンは、既存の睡眠系動画(成人向けの一般的な睡眠訴求)とは異なる独立した市場シグナルを得られる。ホワイトノイズは音楽的要素を持たない一定音である方が実際の利用ニーズに合致するという仮説のもと、既存プリセットとは音響設計そのものを変えた",
+  "differentiation": "既存4プリセットは全てコード進行(_chord_pad)を主軸にしているのに対し、本シーンはコード・メロディ・呼吸LFOの揺らぎを一切使わず、ブラウンノイズ80%+ピンクノイズ20%のみの一定音とした。左右の広がりも大幅に狭く(near-mono)。差別化は「新しい和音を作る」ことではなく、音響設計そのものをシーンの要求に合わせて変えたこと",
+  "action": "既存core.brown_noise/core.pink_noiseのみを流用し、baby_sleep_noiseプリセットを最小実装。新しい音源生成システムは追加していない。YouTube長尺として公開",
+  "video_spec": {
+    "preset": "baby_sleep_noise",
+    "duration_minutes": 60,
+    "audio_design": "brown_noise 0.8 + pink_noise 0.2 / lowpass 1800Hz / highpass 40Hz / fade 10秒 / near-mono(width 0.08) / コード・メロディ・LFO揺らぎなし"
+  },
+  "title": "赤ちゃんの睡眠環境づくりに使えるホワイトノイズ 1時間",
+  "use_cases": ["赤ちゃんの睡眠環境づくりに", "夜泣き対応中の生活音マスキングに", "お昼寝タイムに", "静かな寝室環境をつくりたいときに"],
+  "tags": [
+    "ホワイトノイズ", "赤ちゃん 寝かしつけ", "ベビー ホワイトノイズ", "夜泣き", "赤ちゃん 睡眠",
+    "white noise", "baby white noise", "white noise for babies", "baby sleep sounds", "newborn sleep"
+  ],
+  "positioning_constraints": {
+    "note": "docs/ai-company-os/2026-08-12-bgm-production-standard.md の表現規制に準拠",
+    "banned_claims": ["赤ちゃんを必ず眠らせる", "睡眠を改善する", "医学的効果がある", "安全性を保証する"],
+    "allowed_positioning": "赤ちゃんの睡眠環境づくりに利用できるホワイトノイズ、という範囲のみ",
+    "description_includes_explicit_disclaimer": true
+  },
+  "video_id": "UOVyonlQhZ4",
+  "video_url": "https://youtube.com/watch?v=UOVyonlQhZ4",
+  "published_at": "2026-08-12T06:30:24Z",
+  "period": {"start": "2026-08-12", "end": "2026-08-26"},
+  "cost_jpy": 0,
+  "kpi_target": {
+    "note": "単一指標のランキングではなく複合評価(docs/ai-company-os/2026-08-12-bgm-production-standard.md)。シーン01・シーン03とは絶対値でなく「どの需要仮説が最も強いシグナルを得たか」で比較する",
+    "metrics_to_track": ["再生数", "インプレッション", "CTR", "平均視聴時間", "平均再生率(尺に対する割合)", "視聴維持率", "リピーター", "登録者増加", "コメント", "収益化への貢献"],
+    "reference_only_view_target": "2週間で500再生・平均再生率が既存プリセット平均を上回る(絶対値でなく相対比較の目安)"
+  },
+  "improve_or_exit_criteria": "08-26時点で複合指標がsleep_deep_drone/sleep_insomnia_pulseを明確に下回り、かつコメント等の定性シグナルも弱い場合は撤退(改善再挑戦なしでシーン03の学習に回す)。一部指標のみ強い場合はメタデータ/サムネイルの改善を1回試す。複合的に強い場合は継続しシーン03着手後の優先度を上げる",
+  "result": null,
+  "learning": null,
+  "next_action": null,
+  "verdict": "pending",
+  "status": "running"
+}
