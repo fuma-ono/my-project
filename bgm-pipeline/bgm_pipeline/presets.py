@@ -435,11 +435,19 @@ PRESET_METADATA = {
         "title": "呼吸のペースを意識しやすくなる音、吸って4秒・吐いて6秒の呼吸ガイド 15分",
         "icon_category": "sleep",
         # 2026-08-12: the standard gradient+icon+bold-text thumbnail didn't
-        # fit this scene (owner feedback). "scene" style renders an
-        # atmospheric night/water/seated-figure image instead, with text
-        # kept small — see thumbnail.make_breath_scene_thumbnail().
-        "thumbnail_style": "scene",
-        "thumb_hook": "吸う4秒 吐く6秒",
+        # fit this scene. First attempt was a procedural "atmospheric"
+        # illustration (moon/water/silhouette) — owner rejected it outright:
+        # a real photo draws the eye far more than any abstract background,
+        # and asked for the actual owner-supplied AI-generated photo with
+        # minimal text on it instead. That's now the standard for future
+        # scenes too — see thumbnail.make_photo_thumbnail(). This
+        # environment can't generate photorealistic images itself, so
+        # `thumbnail_source` must point to an owner-supplied image, saved
+        # under assets/thumbnails/ so it's reproducible without re-asking.
+        "thumbnail_style": "photo",
+        "thumbnail_source": "assets/thumbnails/breath_guide_coherent_source.png",
+        "thumbnail_crop_top_px": 300,  # trims a UI artifact strip along the top of the source image
+        "thumb_hook": "4秒吸う、6秒吐く",
         "description": "吸って4秒・吐いて6秒のリズムで、呼吸のペースを意識しやすくする音です。声によるガイドはなく、一つの持続音の強弱だけでリズムを示します。",
         "hook": "吸って4秒、吐いて6秒。声のガイドなしで、呼吸のペースを意識しやすくする音です。",
         "about": (

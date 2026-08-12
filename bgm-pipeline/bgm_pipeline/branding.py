@@ -8,7 +8,6 @@ import argparse
 import math
 import sys
 
-import numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 FONT_DIR = "/mnt/skills/examples/canvas-design/canvas-fonts"
@@ -66,123 +65,6 @@ def draw_stars(img: Image.Image, points: list[tuple[int, int, int]], color) -> N
     draw = ImageDraw.Draw(img)
     for x, y, r in points:
         draw.ellipse([x - r, y - r, x + r, y + r], fill=color)
-
-
-def draw_glow_moon(img: Image.Image, center: tuple[int, int], radius: int, color,
-                    glow_reach: float = 3.6, glow_strength: int = 130) -> None:
-    """A full glowing moon (not the crescent used elsewhere) — a smooth,
-    continuous radial falloff (built as a numpy distance field, not stacked
-    discrete circles, which banded visibly at thumbnail scale) for scenes
-    that want an atmospheric night-sky moon rather than the abstract
-    crescent mark. `img` must be RGBA (composites the glow via
-    alpha_composite)."""
-    cx, cy = center
-    w, h = img.size
-    ys, xs = np.mgrid[0:h, 0:w]
-    dist = np.sqrt((xs - cx) ** 2 + (ys - cy) ** 2)
-    max_r = radius * glow_reach
-    t = np.clip(dist / max_r, 0, 1)
-    alpha = (np.clip(1 - t, 0, 1) ** 2) * glow_strength
-    alpha_img = Image.fromarray(alpha.astype(np.uint8), mode="L")
-    glow_rgba = Image.new("RGBA", img.size, (*color, 0))
-    glow_rgba.putalpha(alpha_img)
-    img.alpha_composite(glow_rgba)
-    draw = ImageDraw.Draw(img)
-    draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=(255, 250, 240, 255))
-
-
-def draw_water_moonpath(img: Image.Image, moon_center: tuple[int, int], horizon_y: int,
-                         bottom_y: int, color, width_top: int = 24, width_bottom: int = 220) -> None:
-    """The reflected light path a moon casts on calm water: a widening
-    vertical band of light from the horizon down to the bottom of the frame,
-    built from short horizontal light strokes (like broken reflections on
-    ripples) rather than a flat gradient, so it reads as water, not a beam."""
-    cx = moon_center[0]
-    draw = ImageDraw.Draw(img, "RGBA")
-    n_rows = 46
-    rng = np.random.default_rng(42)
-    for i in range(n_rows):
-        t = i / (n_rows - 1)
-        y = horizon_y + t * (bottom_y - horizon_y)
-        w = width_top + (width_bottom - width_top) * t
-        alpha = int(120 * (1 - t) ** 0.6 + 12)
-        n_segments = 3 + int(t * 4)
-        for _ in range(n_segments):
-            seg_w = w / n_segments * rng.uniform(0.4, 0.95)
-            seg_x = cx - w / 2 + rng.uniform(0, w - seg_w)
-            draw.line([(seg_x, y), (seg_x + seg_w, y)], fill=(*color, alpha), width=2 + int(t * 3))
-
-
-def draw_seated_silhouette(img: Image.Image, ground_center: tuple[int, int], height: int, color) -> None:
-    """A simple seated, cross-legged meditating figure, drawn as flat
-    silhouette shapes (head, torso, folded legs, resting arms) — deliberately
-    abstract/anonymous rather than a detailed figure, so it reads instantly
-    at thumbnail size as 'a person sitting quietly' without needing a photo."""
-    cx, gy = ground_center  # gy = the ground line the figure sits on
-    draw = ImageDraw.Draw(img, "RGBA")
-    fill = (*color, 255)
-
-    # anchored from the bottom up: legs' lowest point sits exactly on `gy`
-    # (the ground/horizon line) so the figure doesn't float above it — the
-    # head is anchored from the top via `height` as before, and the torso
-    # simply spans whatever gap is left between the two.
-    leg_w = int(height * 0.42)
-    leg_h = int(height * 0.18)
-    hip_y = gy - leg_h // 2
-
-    head_r = int(height * 0.11)
-    head_cy = gy - height + head_r
-    draw.ellipse([cx - head_r, head_cy - head_r, cx + head_r, head_cy + head_r], fill=fill)
-
-    torso_top = head_cy + head_r - int(height * 0.02)
-    torso_bottom = hip_y
-    torso_w_top = int(height * 0.20)
-    torso_w_bottom = int(height * 0.30)
-    draw.polygon(
-        [
-            (cx - torso_w_top // 2, torso_top), (cx + torso_w_top // 2, torso_top),
-            (cx + torso_w_bottom // 2, torso_bottom), (cx - torso_w_bottom // 2, torso_bottom),
-        ],
-        fill=fill,
-    )
-
-    # folded legs: two flattened lobes fanning out from the hips, cross-legged,
-    # bottom edge flush with `gy`
-    draw.ellipse([cx - leg_w, gy - leg_h, cx, gy], fill=fill)
-    draw.ellipse([cx, gy - leg_h, cx + leg_w, gy], fill=fill)
-    draw.ellipse([cx - int(leg_w * 0.32), hip_y - int(leg_h * 0.75), cx + int(leg_w * 0.32), hip_y + int(leg_h * 0.75)], fill=fill)
-
-    # arms resting on knees
-    arm_w = int(height * 0.05)
-    for side in (-1, 1):
-        knee_x = cx + side * int(leg_w * 0.82)
-        draw.line([(cx + side * torso_w_bottom // 3, torso_bottom - int(height * 0.05)), (knee_x, hip_y)],
-                  fill=fill, width=arm_w)
-
-
-def draw_breath_wave(img: Image.Image, y_baseline: int, x_range: tuple[int, int], amplitude: int,
-                      color, inhale_frac: float = 0.4, cycles: float = 3.0, width: int = 4) -> None:
-    """A light ribbon tracing the same asymmetric rhythm as the audio itself
-    (slow rise, longer fall — see presets._breath_envelope) instead of a
-    generic symmetric wave, so the thumbnail visually echoes the 4s-in/6s-out
-    pattern the video is actually built around."""
-    x0, x1 = x_range
-    n = 400
-    pts = []
-    for i in range(n + 1):
-        frac = i / n
-        cycle_pos = (frac * cycles) % 1.0
-        if cycle_pos < inhale_frac:
-            local = cycle_pos / inhale_frac
-            v = (1 - math.cos(local * math.pi)) / 2
-        else:
-            local = (cycle_pos - inhale_frac) / (1 - inhale_frac)
-            v = (1 + math.cos(local * math.pi)) / 2
-        x = x0 + frac * (x1 - x0)
-        y = y_baseline - v * amplitude
-        pts.append((x, y))
-    draw = ImageDraw.Draw(img, "RGBA")
-    draw.line(pts, fill=(*color, 190), width=width, joint="curve")
 
 
 def draw_notebook_pencil(img: Image.Image, center: tuple[int, int], size: int, color) -> None:

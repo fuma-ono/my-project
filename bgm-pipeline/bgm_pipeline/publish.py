@@ -24,6 +24,9 @@ import sys
 from . import presets, rotation, thumbnail, video, youtube_upload
 
 DEFAULT_TAGS = ["ambient music", "background music", "AI generated music", "royalty free music"]
+# bgm-pipeline/ — so `thumbnail_source` paths in PRESET_METADATA resolve
+# the same way regardless of the caller's cwd
+PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -54,8 +57,11 @@ def main(argv: list[str] | None = None) -> int:
     video.render(wav_path, mp4_path, meta["thumb_hook"], args.preset, "landscape")
 
     print("[3/5] generating custom thumbnail...")
-    if meta.get("thumbnail_style") == "scene":
-        thumbnail.make_breath_scene_thumbnail(thumb_path, meta["thumb_hook"], args.minutes)
+    if meta.get("thumbnail_style") == "photo":
+        thumbnail.make_photo_thumbnail(
+            thumb_path, os.path.join(PACKAGE_ROOT, meta["thumbnail_source"]), meta["thumb_hook"], args.minutes,
+            crop_top_px=meta.get("thumbnail_crop_top_px", 0),
+        )
     else:
         thumbnail.make_thumbnail(thumb_path, args.preset, meta["thumb_hook"], meta["icon_category"], args.minutes)
 
