@@ -121,6 +121,34 @@ def sleep_insomnia_pulse(minutes: float = 3.0) -> core.StereoTrack:
     return core.widen(mix, width=0.18, sr=sr)
 
 
+def baby_sleep_noise(minutes: float = 3.0) -> core.StereoTrack:
+    """Scene: a parent building a calm sleep environment for an infant/
+    toddler — at bedtime, during a night wake-up, or for a daytime nap
+    (docs/marketing/bgm-content-audit/, scene 02 — 2026-08-12 approved
+    second market test). Deliberately shaped differently from every other
+    preset here, on purpose: no `_chord_pad`, no melody, no chord motion,
+    no breathing LFO swell. Just a very steady, unchanging noise bed —
+    infant white-noise use is about a constant, predictable sound rather
+    than musical content, so removing the pad *is* the scene-driven
+    differentiation, not an omission. Reuses only existing primitives
+    (brown_noise/pink_noise/filters/fade/normalize/widen); no new
+    synthesis system. Stereo width is held much narrower than the other
+    presets (near-mono, minimal panning motion) — final loudness is
+    normalized to the same level as every other preset by
+    `StereoTrack.to_wav()`, so steadiness/width is the real, honest
+    difference here, not volume."""
+    seconds = minutes * 60
+    sr = core.SAMPLE_RATE
+    brown = core.brown_noise(seconds, sr)
+    pink = core.pink_noise(seconds, sr)
+    mix = brown * 0.8 + pink * 0.2
+    mix = core.one_pole_lowpass(mix, cutoff_hz=1800, sr=sr)   # softens anything sharp/hissy
+    mix = core.one_pole_highpass(mix, cutoff_hz=40, sr=sr)    # trims inaudible sub-rumble
+    mix = core.fade_in_out(mix, sr, fade_seconds=10.0)        # slow in/out — no abrupt start
+    mix = core.normalize(mix, peak=0.65)                      # quieter than other presets, on purpose
+    return core.widen(mix, width=0.08, sr=sr)                 # near-mono — steady, non-moving noise
+
+
 def sleep_rain_focus(minutes: float = 3.0) -> core.StereoTrack:
     seconds = minutes * 60
     sr = core.SAMPLE_RATE
@@ -194,6 +222,7 @@ PRESETS = {
     "study_lofi_chill": study_lofi_chill,
     "study_focus_binaural": study_focus_binaural,
     "sleep_insomnia_pulse": sleep_insomnia_pulse,
+    "baby_sleep_noise": baby_sleep_noise,
 }
 
 # title: JP-first, leads with a 【】bracket category tag — this is the
@@ -305,6 +334,32 @@ PRESET_METADATA = {
             "relaxing sleep music",
         ],
         "hashtags": ["睡眠用bgm", "不眠", "安眠", "sleepmusic", "insomnia"],
+    },
+    "baby_sleep_noise": {
+        # Scene 02 (docs/marketing/bgm-content-audit/, 2026-08-12 approved
+        # second market test). Positioning is deliberately limited to "usable
+        # for building a sleep environment" — no claim that it makes a baby
+        # fall asleep, improves sleep, has a medical effect, or is
+        # guaranteed safe. use_cases/tags stay infant-specific only; no
+        # "作業用bgm" or other scene that doesn't match actual use.
+        "title": "赤ちゃんの睡眠環境づくりに使えるホワイトノイズ 1時間",
+        "icon_category": "sleep",
+        "thumb_hook": "赤ちゃんの睡眠環境に",
+        "description": "赤ちゃんの睡眠環境づくりに使える、一定のホワイトノイズです。メロディやコードは使わず、ブラウンノイズとピンクノイズだけを一定の音量で流し続けるシンプルな作りにしています。",
+        "hook": "赤ちゃんの睡眠環境づくりに使える、一定のホワイトノイズです。メロディや展開はなく、ブラウンノイズとピンクノイズだけを一定の音量で流し続けます。",
+        "about": (
+            "ホワイトノイズは、周りの生活音を和らげる目的で使われることがある音です。この動画はメロディや"
+            "音の展開を一切使わず、始まりから終わりまで一定の音量のノイズだけで構成しています。"
+            "左右の広がりも抑え、音が動き回らない落ち着いた音にしています。"
+            "睡眠を改善する、必ず眠るといった効果を保証するものではなく、医学的な効果を示すものでもありません。"
+            "あくまで睡眠環境づくりの一つの選択肢としてご活用ください。"
+        ),
+        "use_cases": ["赤ちゃんの睡眠環境づくりに", "夜泣き対応中の生活音マスキングに", "お昼寝タイムに", "静かな寝室環境をつくりたいときに"],
+        "tags": [
+            "ホワイトノイズ", "赤ちゃん 寝かしつけ", "ベビー ホワイトノイズ", "夜泣き", "赤ちゃん 睡眠",
+            "white noise", "baby white noise", "white noise for babies", "baby sleep sounds", "newborn sleep",
+        ],
+        "hashtags": ["赤ちゃん", "ホワイトノイズ", "babysleep", "whitenoise", "newbornsleep"],
     },
 }
 
