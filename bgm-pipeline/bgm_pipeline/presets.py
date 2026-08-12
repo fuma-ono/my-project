@@ -408,6 +408,11 @@ PRESET_METADATA = {
         # "作業用bgm" or other scene that doesn't match actual use.
         "title": "赤ちゃんの睡眠環境づくりに使えるホワイトノイズ 1時間",
         "icon_category": "sleep",
+        # 2026-08-12: switched to the photo-thumbnail standard (see
+        # breath_guide_coherent's note) with an owner-supplied AI-generated
+        # image; thumb_hook doubles as the on-image caption.
+        "thumbnail_style": "photo",
+        "thumbnail_source": "assets/thumbnails/baby_sleep_noise_source.jpeg",
         "thumb_hook": "赤ちゃんの睡眠環境に",
         "description": "赤ちゃんの睡眠環境づくりに使える、一定のホワイトノイズです。メロディやコードは使わず、ブラウンノイズとピンクノイズだけを一定の音量で流し続けるシンプルな作りにしています。",
         "hook": "赤ちゃんの睡眠環境づくりに使える、一定のホワイトノイズです。メロディや展開はなく、ブラウンノイズとピンクノイズだけを一定の音量で流し続けます。",

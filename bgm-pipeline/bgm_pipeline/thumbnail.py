@@ -117,15 +117,17 @@ def make_thumbnail(path: str, preset: str, thumb_hook: str, icon_category: str, 
     img.convert("RGB").save(path, quality=92)
 
 
-def make_photo_thumbnail(path: str, source_path: str, caption: str, minutes: float, crop_top_px: int = 0) -> None:
+def make_photo_thumbnail(path: str, source_path: str, caption: str, minutes: float,
+                          crop_top_px: int | None = None) -> None:
     """Thumbnail built from a real (owner-supplied, AI-generated) photo
     instead of the abstract gradient+icon style — standard as of 2026-08-12
     per owner direction: a realistic image draws the eye far better than a
-    solid-color background with text on it. Crops the source to 16:9,
-    optionally trimming `crop_top_px` first (for source images that carry
-    an unrelated UI artifact — a status bar, a screenshot chrome — along
-    their top edge), then adds only a small caption and a small duration
-    badge; the photo itself carries the thumbnail, not the text.
+    solid-color background with text on it. Crops the source to 16:9 (a
+    center crop by default — `crop_top_px` only needs to be passed when a
+    source image carries an unrelated artifact, e.g. a screenshot's status
+    bar, along one edge that a centered crop wouldn't remove), then adds
+    only a small caption and a small duration badge; the photo carries the
+    thumbnail, not the text.
 
     This pipeline does not generate the photo — nothing in this environment
     can produce a photorealistic image. `source_path` must point to an
@@ -133,8 +135,17 @@ def make_photo_thumbnail(path: str, source_path: str, caption: str, minutes: flo
     thumbnails/ so it's reproducible without re-asking the owner)."""
     img = Image.open(source_path).convert("RGB")
     w, h = img.size
-    target_h = round(w / (SIZE[0] / SIZE[1]))
-    img = img.crop((0, crop_top_px, w, crop_top_px + target_h))
+    target_ratio = SIZE[0] / SIZE[1]
+    if w / h > target_ratio:
+        # source is wider than 16:9 relative to its height — crop width, keep full height
+        new_w = round(h * target_ratio)
+        left = (w - new_w) // 2
+        img = img.crop((left, 0, left + new_w, h))
+    else:
+        # source is taller/narrower than 16:9 — crop height, keep full width
+        new_h = round(w / target_ratio)
+        top = (h - new_h) // 2 if crop_top_px is None else min(crop_top_px, h - new_h)
+        img = img.crop((0, top, w, top + new_h))
     img = img.resize(SIZE, Image.LANCZOS).convert("RGBA")
     draw = ImageDraw.Draw(img, "RGBA")
 

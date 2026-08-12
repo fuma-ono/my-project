@@ -60,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     if meta.get("thumbnail_style") == "photo":
         thumbnail.make_photo_thumbnail(
             thumb_path, os.path.join(PACKAGE_ROOT, meta["thumbnail_source"]), meta["thumb_hook"], args.minutes,
-            crop_top_px=meta.get("thumbnail_crop_top_px", 0),
+            crop_top_px=meta.get("thumbnail_crop_top_px"),
         )
     else:
         thumbnail.make_thumbnail(thumb_path, args.preset, meta["thumb_hook"], meta["icon_category"], args.minutes)
