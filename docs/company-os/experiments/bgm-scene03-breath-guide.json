@@ -11,7 +11,7 @@
     "preset": "breath_guide_coherent",
     "duration_minutes": 15,
     "audio_design": "PADS_SLEEP最初の和音(単一・進行なし)+detuned_stack持続音 / brown_noise極小音量ベッド / _breath_envelope(吸う4秒上昇・吐く6秒下降)で振幅変調 / simple_reverb・fade_in_out・normalize・widenは既存関数流用",
-    "thumbnail_style": "scene(夜・月・水面・座る人物シルエット・呼吸波形リボン。オーナーフィードバックにより2026-08-12標準サムネイルから変更)"
+    "thumbnail_style": "photo(オーナー提供の実写AI生成画像+最小テキスト。抽象イラスト版は却下され撤去、動画本体の背景も同じ画像に統一)"
   },
   "title": "呼吸のペースを意識しやすくなる音、吸って4秒・吐いて6秒の呼吸ガイド 15分",
   "use_cases": ["仕事や勉強の合間の小休憩に", "就寝前のリラックスタイムに", "緊張する場面の前に", "声によるガイドが苦手な方の呼吸法の練習に"],
@@ -25,9 +25,12 @@
     "banned_claims": ["自律神経を整える", "不安を治す", "睡眠を改善する", "ストレスを治療する"],
     "allowed_positioning": "呼吸のペースを意識するための音、リラックスタイムに使える呼吸ガイド、という利用体験中心の説明のみ"
   },
-  "video_id": "0JZ87lPX04E",
-  "video_url": "https://youtube.com/watch?v=0JZ87lPX04E",
-  "published_at": "2026-08-12T07:25:54Z",
+  "video_id": "kO5dfoyCloE",
+  "video_url": "https://youtube.com/watch?v=kO5dfoyCloE",
+  "published_at": "2026-08-12T11:12:16Z",
+  "video_history": [
+    {"video_id": "0JZ87lPX04E", "published_at": "2026-08-12T07:25:54Z", "status": "private (superseded, same day)", "reason": "動画本体の背景をオーナー提供の実写画像に差し替え(YouTube APIは既存動画の中身を上書きできないため新規アップロードで対応)"}
+  ],
   "period": {"start": "2026-08-12", "end": "2026-08-26"},
   "cost_jpy": 0,
   "kpi_target": {
