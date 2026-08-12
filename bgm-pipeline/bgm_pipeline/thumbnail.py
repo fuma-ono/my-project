@@ -24,7 +24,18 @@ import sys
 from PIL import Image, ImageDraw, ImageFont
 
 from . import video
-from .branding import ACCENT, JP_FONT, draw_crescent_moon, draw_notebook_pencil, draw_stars, vertical_gradient
+from .branding import (
+    ACCENT,
+    JP_FONT,
+    draw_breath_wave,
+    draw_crescent_moon,
+    draw_glow_moon,
+    draw_notebook_pencil,
+    draw_seated_silhouette,
+    draw_stars,
+    draw_water_moonpath,
+    vertical_gradient,
+)
 
 SIZE = (1280, 720)
 
@@ -111,6 +122,85 @@ def make_thumbnail(path: str, preset: str, thumb_hook: str, icon_category: str, 
     badge_x, badge_y = 56, 40
     draw.rounded_rectangle(
         [badge_x, badge_y, badge_x + badge_w, badge_y + badge_h], radius=16, fill=(*ACCENT, 255)
+    )
+    draw.text((badge_x + pad_x, badge_y + pad_y - bbox[1]), badge_text, font=badge_font, fill=(20, 14, 10, 255))
+
+    img.convert("RGB").save(path, quality=92)
+
+
+def make_breath_scene_thumbnail(path: str, caption: str, minutes: float) -> None:
+    """A different thumbnail treatment from `make_thumbnail()`, built for
+    Scene 03 (breath_guide_coherent) after direct owner feedback that the
+    standard gradient+icon+big-text layout didn't fit this scene: a quiet
+    night scene (moon, water, a seated figure) that communicates
+    "breathe → settle" through the image itself, with text kept small and
+    off to the side rather than the visual focus. Still 100% PIL/procedural
+    — no photos or external assets, consistent with the channel's
+    self-generated-only policy. Reserved for scenes that specifically call
+    for this atmospheric style; `make_thumbnail()` stays untouched for the
+    rest of the catalog."""
+    sky_top, sky_bottom = (7, 9, 22), (52, 36, 84)
+    img = vertical_gradient(SIZE, sky_top, sky_bottom).convert("RGBA")
+
+    draw_stars(
+        img,
+        [(SIZE[0] * 0.08, SIZE[1] * 0.08, 3), (SIZE[0] * 0.90, SIZE[1] * 0.07, 3),
+         (SIZE[0] * 0.15, SIZE[1] * 0.18, 2), (SIZE[0] * 0.82, SIZE[1] * 0.20, 2),
+         (SIZE[0] * 0.06, SIZE[1] * 0.28, 2), (SIZE[0] * 0.94, SIZE[1] * 0.30, 2)],
+        (235, 235, 245),
+    )
+
+    moon_center = (int(SIZE[0] * 0.5), int(SIZE[1] * 0.19))
+    moon_glow_color = (232, 214, 176)
+    draw_glow_moon(img, moon_center, radius=58, color=moon_glow_color, glow_reach=3.6, glow_strength=130)
+
+    # water: a visually distinct region below the horizon (darker, more
+    # saturated purple than the sky) so the moonlight reflection and ripples
+    # read as "on water," not floating in empty sky
+    horizon_y = int(SIZE[1] * 0.60)
+    water = vertical_gradient((SIZE[0], SIZE[1] - horizon_y), (34, 24, 58), (14, 12, 30)).convert("RGBA")
+    img.alpha_composite(water, (0, horizon_y))
+    draw = ImageDraw.Draw(img, "RGBA")
+    draw.line([(0, horizon_y), (SIZE[0], horizon_y)], fill=(180, 170, 210, 90), width=2)
+
+    draw_water_moonpath(img, moon_center, horizon_y, SIZE[1], color=(214, 206, 232),
+                         width_top=20, width_bottom=260)
+
+    # a couple of very low-alpha horizontal ripple lines for water texture
+    for i, y_frac in enumerate((0.72, 0.84, 0.94)):
+        y = int(SIZE[1] * y_frac)
+        draw.line([(0, y), (SIZE[0], y)], fill=(200, 200, 225, 18 + i * 6), width=2)
+
+    # the breathing rhythm itself, echoed as a light ribbon on the water,
+    # kept clear of the caption box in the bottom-left corner
+    draw_breath_wave(
+        img, y_baseline=int(SIZE[1] * 0.80), x_range=(SIZE[0] * 0.08, SIZE[0] * 0.92),
+        amplitude=24, color=ACCENT, inhale_frac=0.4, cycles=3.0, width=4,
+    )
+
+    draw_seated_silhouette(img, (SIZE[0] // 2, horizon_y + 4), height=210, color=(6, 7, 14))
+
+    # text kept deliberately small and off to the side — the image carries
+    # "breathe → settle", not a bold caption
+    draw = ImageDraw.Draw(img, "RGBA")
+    cap_font = ImageFont.truetype(JP_FONT, 38)
+    cap_bbox = draw.textbbox((0, 0), caption, font=cap_font)
+    cap_w, cap_h = cap_bbox[2] - cap_bbox[0], cap_bbox[3] - cap_bbox[1]
+    cap_x, cap_y = 44, SIZE[1] - 74
+    draw.rounded_rectangle(
+        [cap_x - 16, cap_y - 12, cap_x + cap_w + 16, cap_y + cap_h + 24], radius=12, fill=(6, 8, 16, 130)
+    )
+    draw.text((cap_x, cap_y - cap_bbox[1]), caption, font=cap_font, fill=(240, 240, 248, 235))
+
+    badge_font = ImageFont.truetype(JP_FONT, 40)
+    badge_text = _duration_label(minutes)
+    bbox = draw.textbbox((0, 0), badge_text, font=badge_font)
+    pad_x, pad_y = 22, 12
+    badge_w = (bbox[2] - bbox[0]) + pad_x * 2
+    badge_h = (bbox[3] - bbox[1]) + pad_y * 2
+    badge_x, badge_y = SIZE[0] - badge_w - 40, 36
+    draw.rounded_rectangle(
+        [badge_x, badge_y, badge_x + badge_w, badge_y + badge_h], radius=14, fill=(*ACCENT, 220)
     )
     draw.text((badge_x + pad_x, badge_y + pad_y - bbox[1]), badge_text, font=badge_font, fill=(20, 14, 10, 255))
 

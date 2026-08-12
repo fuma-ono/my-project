@@ -54,7 +54,10 @@ def main(argv: list[str] | None = None) -> int:
     video.render(wav_path, mp4_path, meta["thumb_hook"], args.preset, "landscape")
 
     print("[3/5] generating custom thumbnail...")
-    thumbnail.make_thumbnail(thumb_path, args.preset, meta["thumb_hook"], meta["icon_category"], args.minutes)
+    if meta.get("thumbnail_style") == "scene":
+        thumbnail.make_breath_scene_thumbnail(thumb_path, meta["thumb_hook"], args.minutes)
+    else:
+        thumbnail.make_thumbnail(thumb_path, args.preset, meta["thumb_hook"], meta["icon_category"], args.minutes)
 
     title = meta["title"]
     description = presets.build_description(args.preset, args.minutes)

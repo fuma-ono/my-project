@@ -434,6 +434,11 @@ PRESET_METADATA = {
         # claims: no 自律神経を整える/不安を治す/睡眠を改善する/ストレスを治療する.
         "title": "呼吸のペースを意識しやすくなる音、吸って4秒・吐いて6秒の呼吸ガイド 15分",
         "icon_category": "sleep",
+        # 2026-08-12: the standard gradient+icon+bold-text thumbnail didn't
+        # fit this scene (owner feedback). "scene" style renders an
+        # atmospheric night/water/seated-figure image instead, with text
+        # kept small — see thumbnail.make_breath_scene_thumbnail().
+        "thumbnail_style": "scene",
         "thumb_hook": "吸う4秒 吐く6秒",
         "description": "吸って4秒・吐いて6秒のリズムで、呼吸のペースを意識しやすくする音です。声によるガイドはなく、一つの持続音の強弱だけでリズムを示します。",
         "hook": "吸って4秒、吐いて6秒。声のガイドなしで、呼吸のペースを意識しやすくする音です。",
