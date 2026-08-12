@@ -1,0 +1,23 @@
+{
+  "id": "bgm-shared-loudness-normalization",
+  "category": "technical_debt",
+  "business_id": "bgm",
+  "title": "core.StereoTrack.to_wav()の共通最終正規化(peak=0.9)が全プリセット共通のラウドネス決定ロジックになっている",
+  "description": "sleep_insomnia_pulse(-14.99 LUFS / True Peak -0.92dBFS)とbaby_sleep_noise(-14.63 LUFS / -0.87dBFS)を実測したところ、個別プリセットの音響設計が異なるにもかかわらずほぼ同じラウドネスだった。原因はStereoTrack.to_wav()が全プリセット共通でpeak=0.9に最終正規化していること。プリセット内部のcore.normalize(peak=X)呼び出しはwiden()のパン処理より前段の相対バランス調整にしかならず、最終出力の絶対ラウドネスには反映されない。睡眠系以外のプリセット(study系・sleep_deep_drone・sleep_rain_focus等)にも同様に影響している可能性がある。",
+  "discovered_at": "2026-08-12",
+  "discovered_via": "Scene 01評価クリップのオーナーレビュー(ffmpeg loudnormによる技術測定)",
+  "severity": "low",
+  "status": "recorded_not_fixed",
+  "owner_decision": "現時点ではコード変更しない。「問題を発見したらすぐ直す」のではなく、市場データで影響度を確認してから直すという経営原則で進める(2026-08-12)。",
+  "reevaluate_when": "Scene 01・02の市場データが揃った時点(2026-08-26以降)",
+  "reevaluate_options": [
+    "現行方式を維持する(共通正規化のまま)",
+    "プリセット別にラウドネス設計を分離する",
+    "用途別(睡眠系/作業集中系等)の最終正規化を導入する"
+  ],
+  "related": {
+    "files": ["bgm-pipeline/bgm_pipeline/core.py (StereoTrack.to_wav)"],
+    "doc": "docs/ai-company-os/2026-08-12-bgm-production-standard.md",
+    "loudness_qa_guideline_status": "初期目安(絶対的な成功条件ではない)。視聴維持率・平均視聴時間・リピーター・コメント・離脱傾向と合わせて市場データ取得後に検証する"
+  }
+}
