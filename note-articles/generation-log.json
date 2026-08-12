@@ -1,0 +1,16 @@
+{
+  "_comment": "note記事の生成・消化ログ(2026-08-12運用開始)。台本生成Routineは新しい記事を作るたびにここへ1エントリ追記し、theme_backlog_idを消化済みとして扱う(docs/marketing/2026-08-content-topics.mdのバックログと重複防止のため突き合わせる)。既存01〜10は2026-08-12にバックフィル記録(当時はこの形式導入前のため、theme_backlog_idはdocs/marketing/2026-08-content-topics.mdの運用ルール記載から逆引き)。",
+  "stock_target": 6,
+  "entries": [
+    {"article_number": "01", "slug": "01-ai-rain-sound", "theme_backlog_id": 1, "pillar": "A", "generated_at": "2026-08-01", "status": "published"},
+    {"article_number": "02", "slug": "02-work-bgm-choice", "theme_backlog_id": 2, "pillar": "A", "generated_at": "2026-08-01", "status": "published"},
+    {"article_number": "03", "slug": "03-why-rain-sounds-work", "theme_backlog_id": 3, "pillar": "A", "generated_at": "2026-08-01", "status": "published"},
+    {"article_number": "04", "slug": "04-white-noise-focus", "theme_backlog_id": 4, "pillar": "A", "generated_at": "2026-08-01", "status": "published"},
+    {"article_number": "05", "slug": "05-ai-runs-the-company", "theme_backlog_id": null, "pillar": "B", "generated_at": "2026-08-02", "status": "published", "note": "バックログ外の独自企画(柱B第1弾)"},
+    {"article_number": "06", "slug": "06-ai-music-copyright", "theme_backlog_id": 6, "pillar": "A", "generated_at": "2026-08-03", "status": "published"},
+    {"article_number": "07", "slug": "07-work-bgm-complaints-50", "theme_backlog_id": 13, "pillar": "A", "generated_at": "2026-08-03", "status": "published"},
+    {"article_number": "08", "slug": "08-app-pricing-decision", "theme_backlog_id": 7, "pillar": "B", "generated_at": "2026-08-05", "status": "draft"},
+    {"article_number": "09", "slug": "09-revenue-report", "theme_backlog_id": 15, "pillar": "B", "generated_at": "2026-08-05", "status": "draft"},
+    {"article_number": "10", "slug": "10-sound-sensitivity", "theme_backlog_id": 14, "pillar": "A", "generated_at": "2026-08-10", "status": "draft"}
+  ]
+}

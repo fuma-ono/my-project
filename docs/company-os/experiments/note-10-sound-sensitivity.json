@@ -1,0 +1,28 @@
+{
+  "id": "note-10-sound-sensitivity",
+  "business_id": "note",
+  "article_number": "10",
+  "title": "発達障害じゃなくても「音に敏感な人」が増えている気がする、という話",
+  "theme_backlog_id": 14,
+  "pillar": "A",
+  "hypothesis": "この記事テーマは読者の実際の悩み・検索意図に一致し、閲覧・スキ・フォロワー増につながる需要がある",
+  "generated_at": "2026-08-10",
+  "published_at": null,
+  "status": "draft",
+  "note_url": "https://note.com/unique_condor276",
+  "metrics": {
+    "views": null,
+    "likes": null,
+    "comments": null,
+    "followers_gained": null,
+    "support_jpy": null,
+    "recorded_at": null,
+    "data_source_note": "note.com公式APIが存在しないため、このサンドボックスからは取得不可。オーナーがnote.comダッシュボードで確認し次第、note-articles/README.mdの計測欄経由で共有・反映する"
+  },
+  "result": null,
+  "learning": null,
+  "next_action": null,
+  "verdict": "pending",
+  "backfilled_at": "2026-08-12",
+  "backfill_note": "2026-08-12のnote週3本運用化に伴い、記事ごとのExperiment記録運用を新設。01〜10はこの時点でのバックフィル記録(公開日時はnote.com側のみ把握のためAI側では未取得)"
+}
