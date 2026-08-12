@@ -97,7 +97,7 @@ def _heartbeat_pulse(seconds: float, bpm: float = 52.0, sr: int = 44100) -> np.n
     return out
 
 
-def sleep_insomnia_pulse(minutes: float = 3.0) -> core.StereoTrack:
+def sleep_insomnia_pulse(minutes: float = 3.0, include_pulse: bool = True) -> core.StereoTrack:
     """Scene: someone who can't fall asleep and is watching the clock,
     2-3am, growing more anxious the longer it takes (docs/marketing/
     bgm-content-audit/, scene 01 — 2026-08-12 approved first market test).
@@ -106,13 +106,21 @@ def sleep_insomnia_pulse(minutes: float = 3.0) -> core.StereoTrack:
     standard's rule 3 — differentiation doesn't require new harmonic
     material when the scene doesn't call for it), plus one new element: a
     barely-audible resting-heart-rate pulse underneath, aimed at the
-    specific anxious-wakefulness scene rather than sleep in general."""
+    specific anxious-wakefulness scene rather than sleep in general.
+
+    `include_pulse` isn't a design decision made here — the owner treats the
+    pulse as an open question ("does a regular pulse under a sleep drone
+    help or hurt retention?"), not a settled feature. Once Scene 01's data
+    is in, a `sleep_insomnia_pulse(include_pulse=False)` variant can be
+    generated and published for an A/B comparison without touching this
+    function further. Defaults to True so the already-published video's
+    behavior is unaffected."""
     seconds = minutes * 60
     sr = core.SAMPLE_RATE
     pad = _chord_pad(PADS_SLEEP, seconds, chord_seconds=28.0, sr=sr)
     pad = core.one_pole_lowpass(pad, cutoff_hz=450, sr=sr)
     bed = core.brown_noise(seconds, sr) * 0.05
-    pulse = _heartbeat_pulse(seconds, bpm=52.0, sr=sr) * 0.05
+    pulse = _heartbeat_pulse(seconds, bpm=52.0, sr=sr) * 0.05 if include_pulse else 0.0
     breathing = core.lfo(0.045, seconds, sr, depth=0.12, offset=0.88)
     mix = (pad * 0.78 + bed + pulse) * breathing
     mix = core.simple_reverb(mix, sr, room_seconds=3.2, mix=0.42)
