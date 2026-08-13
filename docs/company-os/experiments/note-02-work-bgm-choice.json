@@ -16,8 +16,8 @@
     "comments": null,
     "followers_gained": null,
     "support_jpy": null,
-    "recorded_at": null,
-    "data_source_note": "note.com公式APIが存在しないため、このサンドボックスからは取得不可。オーナーがnote.comダッシュボードで確認し次第、note-articles/README.mdの計測欄経由で共有・反映する"
+    "recorded_at": "2026-08-13",
+    "data_source_note": "2026-08-13、オーナーがnote.comダッシュボードのスクリーンショットを共有。ただし上位4本(01・04・06・07)のみ個別内訳が画面に表示されており、本記事の個別値は未確認。01・04・06・07との差分から3本合算でのみ判明: ビュー計20・スキ計4・コメント計0(内訳不明のため views/likes は推測せずnullのまま)"
   },
   "result": null,
   "learning": null,

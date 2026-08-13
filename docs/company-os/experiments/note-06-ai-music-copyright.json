@@ -11,13 +11,13 @@
   "status": "published",
   "note_url": "https://note.com/unique_condor276",
   "metrics": {
-    "views": null,
-    "likes": null,
-    "comments": null,
+    "views": 13,
+    "likes": 3,
+    "comments": 0,
     "followers_gained": null,
     "support_jpy": null,
-    "recorded_at": null,
-    "data_source_note": "note.com公式APIが存在しないため、このサンドボックスからは取得不可。オーナーがnote.comダッシュボードで確認し次第、note-articles/README.mdの計測欄経由で共有・反映する"
+    "recorded_at": "2026-08-13",
+    "data_source_note": "オーナーがnote.comダッシュボード(全期間集計、最新集計時刻2026-08-13T09:48)のスクリーンショットを共有、その値を転記。フォロワー増・サポートは未取得"
   },
   "result": null,
   "learning": null,
