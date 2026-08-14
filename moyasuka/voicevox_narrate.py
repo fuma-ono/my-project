@@ -54,7 +54,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from moyasuka.audio_mix import mix_clips_at_times, wav_duration
-from moyasuka.line_chat import estimate_arrivals, parse_chat_script
+from moyasuka.line_chat import PAUSE_SECONDS, estimate_arrivals, is_pause_only, parse_chat_script
 
 VOICEVOX_URL = "http://127.0.0.1:50021"
 
@@ -142,6 +142,13 @@ def build_narration(script_path: str, out_wav: str, out_durations_json: str) -> 
             if kind == "sticker":
                 from moyasuka.line_chat import STICKER_VIEW_SECONDS
                 durations.append(STICKER_VIEW_SECONDS)
+                continue
+
+            if is_pause_only(item["text"]):
+                # 2026-08-14: see line_chat.py's is_pause_only() — "......"
+                # is a silent beat, not TTS input.
+                print(f"  [{i+1}/{len(items)}] {item['speaker']}: (無音 {PAUSE_SECONDS}s)")
+                durations.append(PAUSE_SECONDS)
                 continue
 
             speaker_name = item["speaker"]

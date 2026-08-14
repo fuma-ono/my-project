@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -184,6 +185,23 @@ def parse_chat_script(path: str) -> tuple[str, list[dict]]:
 
 IMAGE_VIEW_SECONDS = 2.2   # dwell time for an [image] evidence chart (no text to time against)
 STICKER_VIEW_SECONDS = 1.6  # dwell time for a [sticker]
+
+# Owner feedback (2026-08-14, after watching 台本01's actual audio): a
+# message that's just "......" (a beat of silence/hesitation, several
+# scripts use this) doesn't read as silence when sent to a TTS
+# engine — Cloud TTS (and VOICEVOX) will synthesize *something* for a
+# string of punctuation, which comes out as an odd noise, not the pause
+# it's meant to represent. Fix: recognize these lines up front and treat
+# them as a fixed-length silent beat instead of calling TTS at all — the
+# bubble still renders normally (unchanged visually), only the narration
+# generators (gcp_tts_narrate.py, voicevox_narrate.py, manual_narration.py)
+# special-case it via is_pause_only()/PAUSE_SECONDS below.
+PAUSE_SECONDS = 0.4
+_PAUSE_ONLY_RE = re.compile(r"^[.…。、・\s]+$")
+
+
+def is_pause_only(text: str) -> bool:
+    return bool(text) and bool(_PAUSE_ONLY_RE.match(text))
 
 # Owner request (2026-08-10): "ひどい言葉や衝撃的な言葉を言われた際に、
 # BGMとして驚きのような効果音入れて" — a harsh/shocking word landing in the
@@ -598,7 +616,16 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
         if item["type"] == "msg" and item.get("kind", "text") == "text" and _has_harsh_word(item["text"])
     ]
 
-    sfx_cues = sfx_cues + pop_cues + shock_cues
+    # 証拠提示(evidence reveal) gets its own cue — owner request 2026-08-14.
+    # Auto-triggered the same way pop_cues/shock_cues are: every [image]
+    # cue, no manual !sfx: line needed.
+    screenshot_cues = [
+        (start, "screenshot")
+        for (start, _end, item) in visual_arrivals
+        if item["type"] == "msg" and item.get("kind") == "image"
+    ]
+
+    sfx_cues = sfx_cues + pop_cues + shock_cues + screenshot_cues
 
     # render each bubble/card once and reuse the image across every frame
     # instead of re-wrapping and re-drawing text per frame (see render_frame's

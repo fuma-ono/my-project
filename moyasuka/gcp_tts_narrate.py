@@ -51,7 +51,7 @@ import requests
 
 from moyasuka import gcp_tts_auth
 from moyasuka.audio_mix import mix_clips_at_times, wav_duration
-from moyasuka.line_chat import estimate_arrivals, parse_chat_script
+from moyasuka.line_chat import PAUSE_SECONDS, estimate_arrivals, is_pause_only, parse_chat_script
 from moyasuka.voicevox_narrate import CHARACTER_SPEAKER_IDS, DEFAULT_SPEAKER_ID
 
 SYNTHESIZE_URL = "https://texttospeech.googleapis.com/v1/text:synthesize"
@@ -117,6 +117,15 @@ def build_narration(script_path: str, out_wav: str, out_durations_json: str) -> 
             if kind == "sticker":
                 from moyasuka.line_chat import STICKER_VIEW_SECONDS
                 durations.append(STICKER_VIEW_SECONDS)
+                continue
+
+            if is_pause_only(item["text"]):
+                # 2026-08-14: "......" beats are a silent pause, not
+                # something to hand to a TTS engine (see line_chat.py's
+                # is_pause_only() docstring) — no synth_line call, no
+                # clip_paths entry, just a fixed-length gap in the timeline.
+                print(f"  [{i+1}/{len(items)}] {item['speaker']}: (無音 {PAUSE_SECONDS}s)")
+                durations.append(PAUSE_SECONDS)
                 continue
 
             speaker_name = item["speaker"]

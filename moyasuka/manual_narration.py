@@ -96,8 +96,10 @@ from tempfile import TemporaryDirectory
 from moyasuka.audio_mix import mix_clips_at_times, wav_duration
 from moyasuka.line_chat import (
     IMAGE_VIEW_SECONDS,
+    PAUSE_SECONDS,
     STICKER_VIEW_SECONDS,
     estimate_arrivals,
+    is_pause_only,
     parse_chat_script,
 )
 from moyasuka.voicevox_narrate import CHARACTER_SPEAKER_IDS, DEFAULT_SPEAKER_ID
@@ -107,10 +109,13 @@ SUPPORTED_EXTS = (".wav", ".mp3", ".m4a", ".aac", ".ogg")
 
 def _narration_items(items: list[dict]) -> list[int]:
     """Indices into `items` that need a recorded clip — spoken text lines
-    only, not sfx cues, narration cards, images, or stickers."""
+    only, not sfx cues, narration cards, images, stickers, or silent
+    "......" pause beats (2026-08-14: those get a fixed silence instead of
+    a recorded/synthesized clip, see line_chat.py's is_pause_only())."""
     return [
         i for i, item in enumerate(items)
         if item["type"] == "msg" and item.get("kind", "text") == "text"
+        and not is_pause_only(item["text"])
     ]
 
 
@@ -219,6 +224,9 @@ def assemble(script_path: str, clips_dir: str, out_wav: str, out_durations_json:
                 continue
             if kind == "sticker":
                 durations.append(STICKER_VIEW_SECONDS)
+                continue
+            if is_pause_only(item["text"]):
+                durations.append(PAUSE_SECONDS)
                 continue
 
             src = _find_clip(clips_root, i)

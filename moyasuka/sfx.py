@@ -148,9 +148,33 @@ def use_otoko_iyahho(out_path: str) -> None:
     subprocess.run(["ffmpeg", "-y", "-i", str(src), out_path], check=True, capture_output=True)
 
 
+def generate_screenshot(out_path: str) -> None:
+    """Writes a ~0.13s two-click camera-shutter sound for the "証拠提示"
+    beat — an [image] evidence-chart cue landing (owner request,
+    2026-08-14: 証拠提示 → sfx:screenshot). Two short bursts of
+    high-passed white noise with a fast fade-out envelope (mechanical
+    shutter's open/close clicks), separated by a brief gap. Same
+    "no samples" synthesis approach as the rest of this module —
+    `anoisesrc` generates the raw noise, `highpass` + `afade` shape each
+    click, `concat` joins them. Auto-triggered by line_chat.py on every
+    `[image]`/`[image:...]` cue, the same way message_pop/surprise_hit are
+    auto-triggered rather than requiring a manual `!sfx:` line per cue."""
+    filter_complex = (
+        "anoisesrc=d=0.03:c=white:a=0.9,highpass=f=2200,afade=t=out:st=0:d=0.03[c1];"
+        "anoisesrc=d=0.05:c=white:a=0[gap];"
+        "anoisesrc=d=0.045:c=white:a=0.85,highpass=f=1600,afade=t=out:st=0:d=0.045[c2];"
+        "[c1][gap][c2]concat=n=3:v=0:a=1[out]"
+    )
+    subprocess.run(
+        ["ffmpeg", "-y", "-filter_complex", filter_complex, "-map", "[out]", out_path],
+        check=True, capture_output=True,
+    )
+
+
 SFX_GENERATORS = {
     "scratch_dun": generate_scratch_dun,  # superseded as the climax cue, kept as reusable synthesis
     "message_pop": generate_message_pop,
     "otoko_iyahho": use_otoko_iyahho,  # current climax cue (licensed track, see round 4 above)
     "surprise_hit": generate_surprise_hit,  # content-triggered, see HARSH_TRIGGER_WORDS in line_chat.py
+    "screenshot": generate_screenshot,  # content-triggered, see kind=="image" handling in line_chat.py
 }

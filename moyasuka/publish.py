@@ -63,12 +63,22 @@ Google Cloud Text-to-Speechによる音声合成を使用しています
 
 
 def _title_from_script(script_path: str) -> str:
-    """Pulls the `**タイトル案**: ...` line every scripts/*.md file has."""
+    """Pulls the `**タイトル案**: ...` line every scripts/*.md file has and
+    appends " #Shorts" (owner request, 2026-08-14: Shorts向けにタイトルも
+    最適化する) — YouTube's Shorts classifier already picks this video up
+    automatically from format (line_chat.py's 720x1280, 9:16) + duration
+    (well under 3 minutes), but a "#Shorts" signal in the title itself is
+    the extra nudge many creators rely on, on top of DEFAULT_TAGS/
+    DESCRIPTION_TEMPLATE already carrying it. Skipped if the title already
+    mentions Shorts so this never double-appends."""
     text = Path(script_path).read_text(encoding="utf-8")
     m = re.search(r"\*\*タイトル案\*\*:\s*(.+)", text)
     if not m:
         raise SystemExit(f"{script_path} に「**タイトル案**:」行が見つかりません。")
-    return m.group(1).strip()
+    title = m.group(1).strip()
+    if "shorts" not in title.lower():
+        title = f"{title} #Shorts"
+    return title
 
 
 def publish(
