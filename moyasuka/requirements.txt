@@ -1,0 +1,20 @@
+# moyasuka runs on the system python3 (no dedicated venv, unlike
+# bgm-pipeline). This lists what's needed beyond the interpreter's
+# preinstalled set (Pillow, numpy, requests — already present in this
+# environment's base image).
+google-auth   # gcp_tts_auth.py — service-account auth for Cloud Text-to-Speech
+#
+# Install with:
+#   python3 -m pip install -r moyasuka/requirements.txt
+#   python3 -m pip install --ignore-installed cryptography cffi
+#
+# The second line matters: this environment's base image ships an
+# apt-installed `cryptography` (a Debian package with no pip RECORD file,
+# so `pip install` alone can collect a newer cryptography/cffi pair but
+# can't uninstall the old one first) whose _rust bindings + the pip-only
+# cffi end up mismatched, breaking google-auth's import chain with
+# `ModuleNotFoundError: No module named '_cffi_backend'` deep inside
+# cryptography.hazmat.bindings._rust. --ignore-installed installs a
+# matched cryptography+cffi pair that shadows the broken apt one on
+# sys.path without touching the apt package. Confirmed necessary and
+# sufficient on 2026-08-14.

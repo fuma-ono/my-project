@@ -25,9 +25,10 @@ the channel's About section currently credits — see the docstring note in
 `publish.py`'s description template about updating that credit once this
 is live.
 
-Usage (once `python3 -m moyasuka.youtube_auth login` has been run with the
-extended scope — see moyasuka/youtube_auth.py — and Cloud Text-to-Speech
-is enabled on the same GCP project):
+Usage (once a service-account JSON key is saved at moyasuka/credentials/
+gcp_tts_service_account.json — see moyasuka/gcp_tts_auth.py and
+docs/projects/moyasuka/gcp-tts-setup.md — and Cloud Text-to-Speech is
+enabled on the same GCP project):
 
     python3 -m moyasuka.gcp_tts_narrate \\
         --script moyasuka/scripts/01-sample.md \\
@@ -48,7 +49,7 @@ from tempfile import TemporaryDirectory
 
 import requests
 
-from moyasuka import youtube_auth
+from moyasuka import gcp_tts_auth
 from moyasuka.audio_mix import mix_clips_at_times, wav_duration
 from moyasuka.line_chat import estimate_arrivals, parse_chat_script
 from moyasuka.voicevox_narrate import CHARACTER_SPEAKER_IDS, DEFAULT_SPEAKER_ID
@@ -76,7 +77,7 @@ def synth_line(text: str, speaker_id: int) -> bytes:
     bytes (LINEAR16 encoding — a complete, self-contained .wav file, same
     as what VOICEVOX's engine returns)."""
     voice = CLOUD_TTS_VOICES.get(speaker_id, DEFAULT_VOICE)
-    access_token = youtube_auth.get_access_token()
+    access_token = gcp_tts_auth.get_access_token()
     resp = requests.post(
         SYNTHESIZE_URL,
         headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
