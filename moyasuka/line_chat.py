@@ -11,15 +11,16 @@ caption. See docs/projects/moyasuka/line-chat-ui.md for the full design
 note and the script-format convention this module expects.
 
 Layout (720x1280, matching background_gen.py) — revised 2026-08-06 after
-the first version made the ball background nearly invisible behind a
-bottom-sheet panel that covered most of the screen:
+the first version made the background nearly invisible behind a
+bottom-sheet panel that covered most of the screen, then again 2026-08-14
+when the background itself changed from a ball-physics arena to a slow
+parallax scroll (see background_gen.py's module docstring for why):
   - a smaller, fixed-height chat panel floats near the TOP of the frame
     (PANEL_TOP to PANEL_BOTTOM), rounded on all four corners like a card
-  - the ball-bounce background (background_gen.py, whose arena was moved
-    down to ARENA_CY≈0.77·H specifically for this layout) is clearly
-    visible in the larger space below the panel — that's the "ボーっと
-    見れる" ambient loop from 2026-08-05, which the first cut of this
-    feature accidentally buried
+  - the parallax background (background_gen.py) is clearly visible in the
+    larger space below the panel — that's the "ボーっと見れる" ambient
+    loop from 2026-08-05, which the first cut of this feature accidentally
+    buried
 
 No system-notice/narration cards: owner feedback 2026-08-06 ("心の声とか
 いらない") was that scene-setting narration text doesn't belong in a pure
@@ -55,7 +56,7 @@ from moyasuka.sfx import SFX_GENERATORS
 JP_FONT_PATH = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
 
 PANEL_TOP = 50          # px from top where the floating chat card starts
-PANEL_BOTTOM = 700      # px where it ends — background_gen.py's arena (ARENA_CY≈986, ARENA_R=230, spans ~756-1216) sits fully below this
+PANEL_BOTTOM = 700      # px where it ends — background_gen.py's parallax layers are seeded within VISIBLE_Y0-Y1 (≈538-1254), fully below this
 HEADER_H = 92
 PANEL_BG = (247, 247, 250)
 HEADER_COLOR = (6, 199, 85)     # LINE brand green
@@ -70,18 +71,22 @@ CARD_BG = (223, 224, 228)
 CARD_TEXT = (90, 92, 102)
 AVATAR_COLORS = [(255, 138, 101), (77, 182, 172), (149, 117, 205), (100, 181, 246)]
 
-BUBBLE_FONT_SIZE = 30
-NAME_FONT_SIZE = 22
+
+# 2026-08-14 UI pass (owner review against the reference video: "重い・
+# 大きい・読みにくい"): bubbles narrower + more inset from the edges, text
+# smaller, more breathing room between messages.
+BUBBLE_FONT_SIZE = 26    # was 30 (-13%)
+NAME_FONT_SIZE = 19      # was 22, scaled with BUBBLE_FONT_SIZE
 CARD_FONT_SIZE = 24
 HEADER_FONT_SIZE = 32
 
-BUBBLE_MAX_WIDTH = int(BG_W * 0.66)
-PANEL_PAD_X = 24
-GAP_BETWEEN_BLOCKS = 18
+BUBBLE_MAX_WIDTH = int(BG_W * 0.60)  # was 0.66 — "吹き出し幅を60%前後に"
+PANEL_PAD_X = 34                      # was 24 — wider L/R margins, closer to real LINE
+GAP_BETWEEN_BLOCKS = 28               # was 18 — more room between different senders' bursts
 
 CHARS_PER_SECOND = 6.5
 MIN_BLOCK_SECONDS = 1.3
-GAP_SECONDS = 0.25
+GAP_SECONDS = 0.235  # 2026-08-14: was 0.25, small trim to land ~59.5-60.0s (Shorts duration budget)
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont:
@@ -196,7 +201,7 @@ STICKER_VIEW_SECONDS = 1.6  # dwell time for a [sticker]
 # bubble still renders normally (unchanged visually), only the narration
 # generators (gcp_tts_narrate.py, voicevox_narrate.py, manual_narration.py)
 # special-case it via is_pause_only()/PAUSE_SECONDS below.
-PAUSE_SECONDS = 0.4
+PAUSE_SECONDS = 0.3  # 2026-08-14: was 0.4, tightened to fit the owner's 0.2-0.3s "間" spec and the 60s Shorts duration budget
 _PAUSE_ONLY_RE = re.compile(r"^[.…。、・\s]+$")
 
 
@@ -411,7 +416,11 @@ def _render_evidence_chart(header: str, data: list[tuple[str, str]], width: int 
     max_val = max(numeric, default=1) or 1
     bar_x0 = pad + 70
     bar_max_w = width - bar_x0 - pad - 60
-    colors = [(255, 99, 132), (99, 180, 255), (255, 180, 80), (140, 200, 120)]
+    # 2026-08-14 (owner review: 証拠UIの彩度が高くチャットより主張してし
+    # まう): desaturated to ~35% of the original saturation (blended
+    # toward each color's gray/luminance average) so this stays a quiet
+    # background element instead of competing with the chat bubbles.
+    colors = [(195, 140, 152), (150, 179, 205), (201, 175, 140), (149, 170, 142)]
     y = header_h + pad
     for i, (label, val) in enumerate(data):
         d.text((pad, y + 8), label, font=lf, fill=(80, 80, 90))
@@ -468,7 +477,7 @@ def render_block(item: dict) -> _Block:
     return _render_bubble(item["speaker"], item["text"], item["side"], grouped)
 
 
-TIGHT_GAP = 6  # vertical gap within a same-speaker burst (vs. GAP_BETWEEN_BLOCKS between senders)
+TIGHT_GAP = 10  # vertical gap within a same-speaker burst (vs. GAP_BETWEEN_BLOCKS between senders) — was 6, widened alongside GAP_BETWEEN_BLOCKS 2026-08-14
 
 
 def compose_chat_overlay(blocks_with_state: list[_Block], panel_h: int) -> Image.Image:

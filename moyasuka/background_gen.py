@@ -1,32 +1,33 @@
-"""Generates the looping background video for モヤスカ shorts.
+"""Generates the looping background video for モヤスカ shorts — a soft,
+slow parallax scroll (several depth layers of blurred blobs, each moving
+horizontally at its own speed), replacing the earlier "balls bouncing in
+a ring" design.
 
-Design history (owner feedback, 2026-08-05):
-  1. First draft: a soft blurred lava-lamp blob blend. Feedback: "もう少し
-     特徴のある感じがいいな" (wants more visual character).
-  2. Second draft: static floating chat-bubble shapes (ties to the
-     content itself — LINE-style message drama). Feedback: "すこしゲーム性
-     のある...そっちにも目が行ってしまう感じ" (wants game-like physicality
-     that pulls the eye, like the Minecraft-parkour backgrounds this
-     format usually uses).
-  3. Third draft: chat-bubble-shaped balls doing real elastic-collision
-     physics inside a circular arena (gravity-free, constant-speed
-     reflection off the boundary — the classic "ball bouncing in a ring"
-     satisfying-video mechanic). Feedback: "ボールが増えたり減ったりする
-     のはどう?" (wants the population to change over time).
-  4. This version: balls spawn in (scale up from nothing) and despawn
-     (shrink out with a little flash) on a timer, count drifting between
-     MIN_BALLS and MAX_BALLS — keeps a fixed-count arena from going
-     visually static over a long loop, and gives the eye a reason to
-     keep checking back in ("how many are there now").
+Design history:
+  v1: blurred lava-lamp blob blend — "特徴のある感じが欲しい" (too plain)
+  v2: static chat-bubble shapes — "ゲーム性のある...そっちにも目が行って
+      しまう感じ" (too static)
+  v3: chat-bubble-shaped balls, elastic-collision physics in a ring
+  v4: v3 + population drift (balls spawn/despawn over time)
+  v5 (this version, 2026-08-14): after watching the actual published
+      video against the reference channel, the owner's verdict was that
+      the ball-arena motif reads as "busy" and competes with the LINE UI
+      for attention rather than sitting quietly behind it. Explicit brief
+      for the replacement: multiple depth layers, slow horizontal
+      movement, low saturation, high brightness (never a dark
+      background), low detail so the UI stays the visual lead. Real
+      camera pans / a lighting change from day to dusk / wind-blown grass
+      would need photoreal or 3D rendering this project's toolchain
+      (PIL/numpy/ffmpeg only, no reachable video-generation AI) can't
+      produce — a parallax scroll of soft flat shapes is the agreed
+      realistic stand-in, not a compromise nobody signed off on.
 
-No external assets or footage — pure PIL/numpy simulation, same approach
-as bgm_pipeline's thumbnails, so there's nothing to license, attribute,
-or record (unlike sourcing real Minecraft/parkour gameplay).
+No external assets or footage — pure PIL/numpy synthesis, same "nothing to
+license" policy as every other visual in this repo.
 """
 from __future__ import annotations
 
 import argparse
-import math
 import subprocess
 import sys
 
@@ -37,189 +38,92 @@ W, H = 720, 1280
 FPS = 24
 DT = 1.0 / FPS
 
-# Arena sits low in the frame (2026-08-06 owner feedback: the LINE chat
-# panel in line_chat.py covers most of the upper screen, and the balls
-# were invisible behind it at their old centered position). Kept as a
-# module constant rather than a line_chat.py-only parameter since
-# line_chat.py's iter_frames() shares this exact simulation — see that
-# module's PANEL_BOTTOM for the layout this position is tuned against.
-ARENA_CX, ARENA_CY = W / 2, H * 0.77
-ARENA_R = 230
+# High brightness, low saturation — the UI (mostly opaque white/pale
+# panel) stays the clear visual lead; this only needs to read as "always
+# something gently moving" out of the corner of the eye.
+BG = (247, 243, 236)  # warm off-white, never dark
 
-MIN_BALLS = 3
-MAX_BALLS = 9
-SPAWN_ANIM_SEC = 0.5    # scale-up duration when a ball appears
-DESPAWN_ANIM_SEC = 0.4  # shrink-out duration when a ball disappears
-EVENT_INTERVAL_RANGE = (1.6, 3.2)  # seconds between spawn/despawn events
-
-BG = (18, 15, 30)
-RING_COLOR = (255, 255, 255)
-PALETTE = [
-    (255, 99, 132),   # pop pink
-    (99, 220, 255),   # electric cyan
-    (255, 205, 86),   # sunflower
-    (154, 138, 255),  # violet
-    (99, 255, 178),   # mint pop
-    (255, 159, 67),   # tangerine
+# Each layer: how fast its blobs drift sideways (px/s), their radius
+# range, a desaturated color, how heavily blurred (bigger = softer/more
+# distant-reading), and how many blobs. Slower + more blurred + larger =
+# reads as farther away (classic parallax depth cue), matching the
+# reference video's calm background pacing rather than the old arena's
+# constant elastic bouncing.
+LAYERS = [
+    {"speed": 5,  "radius": (150, 210), "color": (214, 205, 224), "blur": 70, "count": 3},  # far
+    {"speed": 13, "radius": (95, 140),  "color": (232, 210, 200), "blur": 50, "count": 4},  # mid
+    {"speed": 24, "radius": (55, 85),   "color": (204, 224, 214), "blur": 32, "count": 5},  # near
 ]
 
-
-class _Ball:
-    def __init__(self, i: int, rng: np.random.Generator, born_at: float) -> None:
-        angle = rng.uniform(0, 2 * math.pi)
-        r = rng.uniform(0, ARENA_R * 0.5)
-        self.x = ARENA_CX + math.cos(angle) * r
-        self.y = ARENA_CY + math.sin(angle) * r
-        speed = rng.uniform(170, 245)  # scaled down with ARENA_R so motion still feels proportionate in the smaller arena
-        vang = rng.uniform(0, 2 * math.pi)
-        self.vx = math.cos(vang) * speed
-        self.vy = math.sin(vang) * speed
-        self.radius = rng.uniform(20, 30)
-        self.color = PALETTE[i % len(PALETTE)]
-        self.tail = "left" if rng.random() < 0.5 else "right"
-        # lifecycle
-        self.born_at = born_at
-        self.dying_at: float | None = None  # set once a despawn event targets this ball
-
-    def scale(self, t: float) -> float:
-        age = t - self.born_at
-        if age < SPAWN_ANIM_SEC:
-            s_in = max(0.0, age / SPAWN_ANIM_SEC)
-        else:
-            s_in = 1.0
-        if self.dying_at is not None:
-            death_age = t - self.dying_at
-            s_out = max(0.0, 1.0 - death_age / DESPAWN_ANIM_SEC)
-            return min(s_in, s_out)
-        return s_in
-
-    def is_dead(self, t: float) -> bool:
-        return self.dying_at is not None and (t - self.dying_at) >= DESPAWN_ANIM_SEC
-
-    def step(self) -> None:
-        self.x += self.vx * DT
-        self.y += self.vy * DT
-        dx, dy = self.x - ARENA_CX, self.y - ARENA_CY
-        dist = math.hypot(dx, dy)
-        limit = ARENA_R - self.radius
-        if dist > limit:
-            nx, ny = dx / dist, dy / dist
-            v_dot_n = self.vx * nx + self.vy * ny
-            self.vx -= 2 * v_dot_n * nx
-            self.vy -= 2 * v_dot_n * ny
-            self.x = ARENA_CX + nx * limit
-            self.y = ARENA_CY + ny * limit
+# Background occupies the same lower region the old ball arena used to
+# (line_chat.py's chat panel covers the upper ~55% of the frame) — blobs
+# are seeded across the full frame height but weighted toward this band so
+# motion stays visible where the panel doesn't already cover it.
+VISIBLE_Y0, VISIBLE_Y1 = H * 0.42, H * 0.98
 
 
-def _draw_ball(canvas: Image.Image, b: _Ball, scale: float) -> None:
-    """A ball silhouette with a small speech-bubble tail nub, so the
-    physics arena still reads as "message bubbles", not generic dots."""
-    if scale <= 0.01:
-        return
-    r = b.radius * scale
-    d = int(r * 2)
-    pad = int(b.radius * 0.6) + 4
-    layer = Image.new("RGBA", (d + pad * 2, d + pad * 2), (0, 0, 0, 0))
-    ld = ImageDraw.Draw(layer)
-    ld.ellipse([pad, pad, pad + d, pad + d], fill=(*b.color, 255))
-    tail_w = r * 0.35
-    ty = pad + d * 0.75
-    if b.tail == "left":
-        ld.polygon([(pad, ty), (pad - tail_w, ty + tail_w * 0.8), (pad, ty + tail_w)], fill=(*b.color, 255))
-    else:
-        ld.polygon([(pad + d, ty), (pad + d + tail_w, ty + tail_w * 0.8), (pad + d, ty + tail_w)], fill=(*b.color, 255))
-    hl_r = r * 0.35
-    ld.ellipse(
-        [pad + r * 0.4, pad + r * 0.3, pad + r * 0.4 + hl_r, pad + r * 0.3 + hl_r],
-        fill=(255, 255, 255, 120),
-    )
-    canvas.paste(layer, (int(b.x - layer.width / 2), int(b.y - layer.height / 2)), layer)
+class _Blob:
+    def __init__(self, rng: np.random.Generator, layer: dict, phase_offset: float) -> None:
+        self.radius = float(rng.uniform(*layer["radius"]))
+        self.speed = layer["speed"]
+        self.color = layer["color"]
+        self.blur = layer["blur"]
+        # spread starting x across a band wide enough that wrap-around
+        # (x mod (W + 2*radius)) never looks like blobs popping in bunched
+        # up — phase_offset staggers each blob's starting position
+        self.x0 = phase_offset
+        self.y = float(rng.uniform(VISIBLE_Y0, VISIBLE_Y1))
+
+    def x_at(self, t: float) -> float:
+        span = W + 2 * self.radius
+        return ((self.x0 + self.speed * t) % span) - self.radius
 
 
-def _draw_pop_flash(canvas: Image.Image, x: float, y: float, progress: float, color) -> None:
-    """A brief expanding ring flash at a ball's spawn/despawn point."""
-    if not (0 <= progress <= 1):
-        return
-    max_r = 70
-    r = 8 + progress * max_r
-    alpha = int(200 * (1 - progress))
-    layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    ld = ImageDraw.Draw(layer)
-    ld.ellipse([x - r, y - r, x + r, y + r], outline=(*color, alpha), width=4)
-    canvas.alpha_composite(layer)
+def _build_layers(seed: int) -> list[list[_Blob]]:
+    rng = np.random.default_rng(seed)
+    layers: list[list[_Blob]] = []
+    for layer in LAYERS:
+        blobs = []
+        span = W + 2 * max(layer["radius"])
+        for i in range(layer["count"]):
+            # evenly spread starting phase across the wrap span, plus a
+            # little jitter so blobs in the same layer don't move in a
+            # visibly uniform row
+            phase = (span / layer["count"]) * i + rng.uniform(-40, 40)
+            blobs.append(_Blob(rng, layer, phase))
+        layers.append(blobs)
+    return layers
 
 
-def compose_frame(balls: list[_Ball], flashes: list[tuple[float, float, float, tuple[int, int, int]]], t: float) -> Image.Image:
-    """Renders one frame (arena + balls + flashes) at time `t` and returns it
-    as an RGB image, given the current ball/flash state. Pulled out of
-    `render_frames`'s loop so other pipelines (moyasuka/line_chat.py's LINE
-    mockup overlay) can composite on top of the same background without
-    round-tripping through PNG files on disk."""
+def compose_frame(layers: list[list[_Blob]], t: float) -> Image.Image:
+    """Renders one frame (background fill + all parallax layers, far to
+    near) at time `t`. Pulled out of `render_frames`'s loop, same reason
+    the old ball version did this — other pipelines (line_chat.py's
+    overlay) composite the LINE UI on top of this directly."""
     img = Image.new("RGB", (W, H), BG)
-    glow = Image.new("RGB", (W, H), BG)
-    gd = ImageDraw.Draw(glow)
-    for b in balls:
-        s = b.scale(t)
-        if s <= 0.01:
-            continue
-        r = b.radius * s * 1.6
-        gd.ellipse([b.x - r, b.y - r, b.x + r, b.y + r], fill=b.color)
-    glow = glow.filter(ImageFilter.GaussianBlur(35))
-    img = Image.blend(img, glow, 0.5)
 
-    base = img.convert("RGBA")
-    draw = ImageDraw.Draw(base)
-    draw.ellipse(
-        [ARENA_CX - ARENA_R, ARENA_CY - ARENA_R, ARENA_CX + ARENA_R, ARENA_CY + ARENA_R],
-        outline=(*RING_COLOR, 200), width=6,
-    )
-    for b in balls:
-        _draw_ball(base, b, b.scale(t))
+    for layer_blobs, layer_spec in zip(layers, LAYERS):
+        glow = Image.new("RGB", (W, H), BG)
+        gd = ImageDraw.Draw(glow)
+        for b in layer_blobs:
+            x = b.x_at(t)
+            gd.ellipse([x - b.radius, b.y - b.radius, x + b.radius, b.y + b.radius], fill=b.color)
+        glow = glow.filter(ImageFilter.GaussianBlur(layer_spec["blur"]))
+        # blend_alpha keeps each layer soft/translucent-reading rather than
+        # a flat cutout — mirrors the old version's glow-blend technique
+        img = Image.blend(img, glow, 0.55)
 
-    for (fx, fy, event_t, color) in flashes:
-        _draw_pop_flash(base, fx, fy, (t - event_t) / 0.5, color)
-
-    return base.convert("RGB")
+    return img
 
 
 def iter_frames(seconds: float, seed: int):
-    """Generator yielding (t, Image) for one full run of the ball
-    simulation — the state-update half of the old `render_frames` loop,
-    reusable by any caller that wants the raw frames instead of PNGs on
-    disk."""
-    rng = np.random.default_rng(seed)
+    """Generator yielding (t, Image), same contract the ball version had
+    so line_chat.py's caller doesn't need to change."""
+    layers = _build_layers(seed)
     n_frames = int(FPS * seconds)
-
-    balls: list[_Ball] = [_Ball(i, rng, born_at=0.0) for i in range(5)]
-    next_id = len(balls)
-    next_event_t = rng.uniform(*EVENT_INTERVAL_RANGE)
-    flashes: list[tuple[float, float, float, tuple[int, int, int]]] = []  # x, y, event_t, color
-
     for f in range(n_frames):
         t = f / FPS
-
-        if t >= next_event_t:
-            alive = [b for b in balls if b.dying_at is None]
-            spawn = len(alive) <= MIN_BALLS or (len(alive) < MAX_BALLS and rng.random() < 0.55)
-            if spawn:
-                nb = _Ball(next_id, rng, born_at=t)
-                next_id += 1
-                balls.append(nb)
-                flashes.append((nb.x, nb.y, t, nb.color))
-            elif alive:
-                target = alive[int(rng.integers(0, len(alive)))]
-                target.dying_at = t
-                flashes.append((target.x, target.y, t, target.color))
-            next_event_t = t + rng.uniform(*EVENT_INTERVAL_RANGE)
-
-        for b in balls:
-            if b.dying_at is None:
-                b.step()
-        balls = [b for b in balls if not b.is_dead(t)]
-
-        yield t, compose_frame(balls, flashes, t)
-
-        flashes = [fl for fl in flashes if (t - fl[2]) < 0.5]
+        yield t, compose_frame(layers, t)
 
 
 def render_frames(out_dir: str, seconds: float, seed: int) -> int:
@@ -246,7 +150,7 @@ def render_video(out_path: str, seconds: float, seed: int = 0) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Render the moyasuka bouncing-bubble background video.")
+    parser = argparse.ArgumentParser(description="Render the moyasuka parallax background video.")
     parser.add_argument("--seconds", type=float, default=60.0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", required=True)
