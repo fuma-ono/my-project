@@ -169,9 +169,10 @@ def generate_notification(out_path: str) -> None:
 
 
 def use_yome_nanimo_shinai(out_path: str) -> None:
-    """Copies an owner-provided clip (see assets/sfx/NOTICE.md for source/
-    license — pending confirmation, 2026-08-16) to `out_path` as wav, same
-    transcode-through-ffmpeg approach as use_otoko_iyahho. Placed via a
+    """Copies an owner-provided clip (効果音ラボ, same source/license as
+    otoko_iyahho.mp3 — confirmed by the owner 2026-08-16, see assets/sfx/
+    NOTICE.md) to `out_path` as wav, same transcode-through-ffmpeg
+    approach as use_otoko_iyahho. Placed via a
     manual `!sfx:yome_nanimo_shinai` line right after 義母's "嫁は何もしな
     いから私が全部って" in scripts/01-sample.md (owner request, 2026-08-16),
     not auto-triggered — this is a one-off cue for that specific line, not
