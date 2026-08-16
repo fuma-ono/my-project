@@ -14,13 +14,20 @@ Layout (720x1280, matching background_gen.py) — revised 2026-08-06 after
 the first version made the background nearly invisible behind a
 bottom-sheet panel that covered most of the screen, then again 2026-08-14
 when the background itself changed from a ball-physics arena to a slow
-parallax scroll (see background_gen.py's module docstring for why):
-  - a smaller, fixed-height chat panel floats near the TOP of the frame
-    (PANEL_TOP to PANEL_BOTTOM), rounded on all four corners like a card
-  - the parallax background (background_gen.py) is clearly visible in the
-    larger space below the panel — that's the "ボーっと見れる" ambient
-    loop from 2026-08-05, which the first cut of this feature accidentally
-    buried
+parallax scroll (see background_gen.py's module docstring for why), then
+again 2026-08-16 per the owner's UI修正指示報告書, reference screenshot
+attached ("Made with AI"-badge style — bubbles floating directly over the
+blurred background, no enclosing card, no header bar):
+  - there is no opaque panel card and no green LINE-style header/group-name
+    bar anymore — those used to sit behind/above the messages (draw_panel_
+    chrome, removed) and the owner's review called them out as unwanted
+    clutter that didn't match the reference channel's look
+  - message bubbles (still individually white/green with their own
+    rounded-rect background — that part of the reference IS kept) are
+    composited straight onto the parallax background within the same
+    PANEL_TOP..PANEL_BOTTOM vertical band the old panel used to occupy, so
+    the background is visible everywhere around/behind them, exactly like
+    the reference
 
 No system-notice/narration cards: owner feedback 2026-08-06 ("心の声とか
 いらない") was that scene-setting narration text doesn't belong in a pure
@@ -55,12 +62,8 @@ from moyasuka.sfx import SFX_GENERATORS
 
 JP_FONT_PATH = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
 
-PANEL_TOP = 50          # px from top where the floating chat card starts
-PANEL_BOTTOM = 700      # px where it ends — background_gen.py's parallax layers are seeded within VISIBLE_Y0-Y1 (≈538-1254), fully below this
-HEADER_H = 92
-PANEL_BG = (247, 247, 250)
-HEADER_COLOR = (6, 199, 85)     # LINE brand green
-HEADER_TEXT = (255, 255, 255)
+PANEL_TOP = 50          # px from top where messages start appearing
+PANEL_BOTTOM = 700      # px where the visible log is cropped — background_gen.py's parallax layers are seeded within VISIBLE_Y0-Y1 (≈538-1254), fully below this
 SELF_BUBBLE = (0, 195, 106)     # sent-message green
 SELF_TEXT = (255, 255, 255)
 OTHER_BUBBLE = (255, 255, 255)
@@ -78,7 +81,6 @@ AVATAR_COLORS = [(255, 138, 101), (77, 182, 172), (149, 117, 205), (100, 181, 24
 BUBBLE_FONT_SIZE = 26    # was 30 (-13%)
 NAME_FONT_SIZE = 19      # was 22, scaled with BUBBLE_FONT_SIZE
 CARD_FONT_SIZE = 24
-HEADER_FONT_SIZE = 32
 
 BUBBLE_MAX_WIDTH = int(BG_W * 0.60)  # was 0.66 — "吹き出し幅を60%前後に"
 PANEL_PAD_X = 34                      # was 24 — wider L/R margins, closer to real LINE
@@ -499,36 +501,23 @@ def compose_chat_overlay(blocks_with_state: list[_Block], panel_h: int) -> Image
     return canvas.crop((0, top, BG_W, top + panel_h))
 
 
-def draw_panel_chrome(frame: Image.Image, title: str) -> None:
-    """Draws the opaque floating chat card (rounded on all four corners,
-    per the 2026-08-06 layout revision) + LINE-green header bar onto a
-    background frame, in place."""
-    draw = ImageDraw.Draw(frame, "RGBA")
-    draw.rounded_rectangle(
-        [0, PANEL_TOP, BG_W, PANEL_BOTTOM], radius=28, fill=(*PANEL_BG, 255), corners=(True, True, True, True)
-    )
-    draw.rectangle([0, PANEL_TOP, BG_W, PANEL_TOP + HEADER_H], fill=HEADER_COLOR)
-    # re-round just the top corners of the header so it matches the panel edge
-    draw.pieslice([0, PANEL_TOP, 56, PANEL_TOP + 56], 180, 270, fill=HEADER_COLOR)
-    draw.pieslice([BG_W - 56, PANEL_TOP, BG_W, PANEL_TOP + 56], 270, 360, fill=HEADER_COLOR)
-    hf = _font(HEADER_FONT_SIZE)
-    draw.text((BG_W / 2, PANEL_TOP + HEADER_H / 2), title, font=hf, fill=HEADER_TEXT, anchor="mm")
-
-
-def render_frame(base: Image.Image, title: str, all_blocks: list[_Block], arrival_times: list[float], t: float) -> Image.Image:
+def render_frame(base: Image.Image, all_blocks: list[_Block], arrival_times: list[float], t: float) -> Image.Image:
     """`all_blocks`/`arrival_times` are pre-rendered once per script (see
     render_video) and reused across every frame — rendering each bubble's
     text/wrapping fresh on every single frame (this function used to take
     the raw `items` and call render_block() here) turned an easy render
     into an O(frames × messages) one and was the reason the first end-to-
-    end test run didn't finish in a reasonable time."""
+    end test run didn't finish in a reasonable time.
+
+    2026-08-16: no more enclosing card/header (see module docstring) — the
+    parallax background frame is used as-is and bubbles are composited
+    straight onto it within the PANEL_TOP..PANEL_BOTTOM band."""
     frame = base.convert("RGBA")
-    draw_panel_chrome(frame, title)
 
     visible = [b for b, start in zip(all_blocks, arrival_times) if start <= t]
-    panel_h = PANEL_BOTTOM - PANEL_TOP - HEADER_H
+    panel_h = PANEL_BOTTOM - PANEL_TOP
     overlay = compose_chat_overlay(visible, panel_h)
-    frame.alpha_composite(overlay, (0, PANEL_TOP + HEADER_H))
+    frame.alpha_composite(overlay, (0, PANEL_TOP))
     return frame.convert("RGB")
 
 
@@ -594,7 +583,7 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
     every bubble/caption to the real recorded speech instead of the
     character-count guess.
     """
-    title, items = parse_chat_script(script_path)
+    _title, items = parse_chat_script(script_path)  # group title no longer drawn on-screen (2026-08-16); still parsed for script-format compatibility
     if not items:
         raise ValueError(f"no chat items found in {script_path}")
     durations = None
@@ -647,7 +636,7 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
         frame_dir.mkdir()
         n = 0
         for f, (t, bg_img) in enumerate(iter_frames(total_seconds, seed)):
-            frame = render_frame(bg_img, title, all_blocks, arrival_times, t)
+            frame = render_frame(bg_img, all_blocks, arrival_times, t)
             frame.save(frame_dir / f"f{f:05d}.png")
             n = f + 1
 
