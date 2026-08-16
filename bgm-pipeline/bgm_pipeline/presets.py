@@ -339,7 +339,7 @@ PRESET_METADATA = {
         "hashtags": ["雨音bgm", "作業用bgm", "睡眠用bgm", "rainsounds", "relaxation"],
     },
     "study_lofi_chill": {
-        "title": "ローファイの音だけの1時間｜集中がはかどる作業用タイム",  # retitled 2026-08-16 (was "【作業用BGM】カフェ気分で集中できる1時間BGM ｜勉強・作業用"), same direction as breath_guide_coherent's retitle
+        "title": "【作業用BGM】カフェ気分で集中できる1時間BGM ｜勉強・作業用",  # 2026-08-16: briefly retitled to "ローファイの音だけの1時間｜集中がはかどる作業用タイム" (same direction as breath_guide_coherent), reverted same day — owner: "日本語として不自然". Thumbnail (v2, centered/no-outline) stayed, only the title reverted.
         "icon_category": "focus",
         # 2026-08-12: switched to the photo-thumbnail standard with an
         # owner-supplied AI-generated image (see breath_guide_coherent's note).
