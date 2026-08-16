@@ -1,8 +1,6 @@
-"""Generates the looping background video for モヤスカ shorts — a low-
-saturation, "マイクラ風" (Minecraft-style) blocky parallax scroll: a distant
-mountains+sky layer, a mid-ground forest layer, and a fast-scrolling
-foreground grass-block ground layer, each drifting sideways at its own
-speed.
+"""Generates the looping background video for モヤスカ shorts — a slow
+"Ken Burns" pan/zoom across a real photo, plus a light sparkle-flicker
+layer seeded from that photo's own bright pixels.
 
 Design history:
   v1: blurred lava-lamp blob blend — "特徴のある感じが欲しい" (too plain)
@@ -10,229 +8,179 @@ Design history:
       しまう感じ" (too static)
   v3: chat-bubble-shaped balls, elastic-collision physics in a ring
   v4: v3 + population drift (balls spawn/despawn over time)
-  v5: after watching the actual published video against the reference
-      channel, the owner's verdict was that the ball-arena motif reads as
-      "busy" and competes with the LINE UI for attention. Replaced with a
-      soft blurred-blob parallax scroll (3 depth layers, no recognizable
-      shapes) — real camera pans / a lighting change from day to dusk /
-      wind-blown grass would need photoreal or 3D rendering this project's
-      toolchain (PIL/numpy/ffmpeg only, no reachable video-generation AI)
-      can't produce.
-  v6 (this version, 2026-08-16): owner's follow-up brief specifically asked
-      for "マイクラ風パララックス" — mountains/sky (far), forest (mid),
-      grass blocks (near), each layer horizontally scrolling at a
-      specified px/frame speed, low saturation, loopable, with the screen
-      center brightened so the (now background-less, see line_chat.py's
-      2026-08-16 revision) chat bubbles stay legible sitting directly on
-      top of it. Unlike v5's brief, blocky/pixel-art scenery like this
-      genuinely IS within this toolchain's reach — Minecraft's own look is
-      flat-shaded rectangles, which is exactly what PIL primitives draw —
-      so this is a real implementation of the request, not a compromise
-      stand-in.
+  v5: soft blurred-blob parallax scroll (3 depth layers, no recognizable
+      shapes) — the ball-arena motif read as "busy" against the reference
+      channel. Real camera pans / lighting changes / wind-blown grass
+      would need photoreal or 3D rendering this toolchain (PIL/numpy/
+      ffmpeg only) can't produce.
+  v6: "マイクラ風" blocky 3-layer parallax (mountains/forest/grass-blocks)
+      per an explicit owner brief — genuinely within reach since Minecraft's
+      own look is flat-shaded rectangles.
+  v7 (this version, 2026-08-16): the owner wanted something closer to a
+      real ocean photo than any procedural shader could produce (tried and
+      rejected: a from-scratch numpy water shader, see git history) and
+      asked to animate an actual reference photo directly. This is a
+      deliberate, one-time exception to this repo's "everything self-
+      generated, nothing to license" policy that every other visual here
+      follows — the owner confirmed the source photo(s) are their own
+      AI-generated images, not third-party stock, so there's no rights
+      question, but this module now depends on real binary image assets
+      (moyasuka/assets/backgrounds/*) instead of drawing everything from
+      code. Drop additional photos into that directory to add rotation
+      variety; nothing else needs to change.
 
-Each layer is authored once as a single seamless tile exactly TILE_W (=W)
-pixels wide — sine-periodic mountains, evenly-spaced trees, and a block
-grid whose block size evenly divides TILE_W — then scrolled per-frame by
-pasting the same tile twice side by side at a shifting offset. Because the
-tile's right edge is mathematically identical to its left edge, this loops
-with no visible seam at any speed or duration.
-
-No external assets or footage — pure PIL/numpy synthesis, same "nothing to
-license" policy as every other visual in this repo.
+No image-to-video model is reachable from this toolchain, so there is no
+real water simulation here — what this actually does is a slow ping-pong
+pan+zoom (a "Ken Burns" camera move) across the source photo, plus a
+sparkle-flicker overlay seeded from the photo's own brightest pixels (its
+real specular highlights), so the added twinkle sits on genuine bright
+spots instead of hallucinating new ones. This is a moving photo, not a
+simulated ocean, and is documented as such rather than oversold.
 """
 from __future__ import annotations
 
 import argparse
-import math
 import subprocess
 import sys
+from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 W, H = 720, 1280
 FPS = 24
-DT = 1.0 / FPS
+TARGET_AR = W / H
 
-TILE_W = W  # each layer's authored pattern repeats every TILE_W px — see
-            # module docstring for why this makes scrolling seamless
+BACKGROUND_DIR = Path(__file__).parent / "assets" / "backgrounds"
 
-# Owner spec (2026-08-16): px/frame speeds, slowest-to-fastest = farthest-
-# to-nearest (classic parallax depth cue). Converted to px/s (this module's
-# internal unit, from v5) by multiplying by FPS.
-FAR_SPEED = 0.4 * FPS    # mountains + sky, ~9.6 px/s (spec: 0.3-0.5px/frame)
-MID_SPEED = 1.3 * FPS    # forest, ~31.2 px/s (spec: 1-1.5px/frame)
-NEAR_SPEED = 2.5 * FPS   # grass blocks, ~60 px/s (spec: 2-3px/frame)
+PAN_PERIOD_S = 22.0          # full there-and-back cycle of the horizontal/vertical pan
+ZOOM_MIN, ZOOM_MAX = 1.0, 1.10  # gentle zoom breathing on top of the pan
+HORIZON_ANCHOR = 0.42        # keeps a landscape photo's horizon roughly this far down the frame instead of drifting vertically
 
-# Vertical bands, top to bottom: sky -> mountain silhouette -> forest
-# canopy -> grass-block ground. Chosen so mountain peaks stay clear of
-# line_chat.py's chat panel (PANEL_TOP=50..PANEL_BOTTOM=700) most of the
-# time — bubbles float over plain sky, the "ゲーム性" motion is concentrated
-# lower on the screen where it doesn't fight the UI for attention.
-HORIZON_Y = int(H * 0.62)    # mountain silhouette's base line
-FOREST_BASE_Y = int(H * 0.66)  # tree trunks sit on this line
-GRASS_TOP_Y = int(H * 0.68)   # grass-block ground starts here, runs to H
+SPARKLE_MIN_LUM = 215        # only the photo's own brightest pixels seed sparkle candidates
+SPARKLE_Y_FRACTION = 0.46    # restrict candidates to below this fraction of the source height (keeps sparkle off sky/clouds)
+SPARKLE_COUNT = 220
+SPARKLE_FLICKER_THRESHOLD = 0.55  # fraction of frames a given seed stays dark — keeps flicker sparse, not a solid glitter sheet
 
-# Low saturation, high brightness — colors blended toward gray the same
-# ~35% the evidence-chart bars use (owner precedent: quiet background,
-# UI/chat stays the visual lead), never a dark palette.
-SKY_TOP_COLOR = (211, 221, 224)
-SKY_HORIZON_COLOR = (232, 227, 213)
-MOUNTAIN_COLOR = (182, 178, 194)
-FOREST_TRUNK_COLOR = (162, 142, 118)
-FOREST_LEAF_COLOR = (156, 176, 148)
-GRASS_TOP_COLOR = (152, 182, 138)
-GRASS_DIRT_COLOR = (168, 143, 116)
+BRIGHTEN_BAND_CENTER_Y = 375  # matches line_chat.py's PANEL_TOP..PANEL_BOTTOM midpoint (kept as a literal to avoid importing line_chat.py here)
+BRIGHTEN_SIGMA = 260
+BRIGHTEN_PEAK = 0.13
 
 
-def _darken(color: tuple[int, int, int], factor: float) -> tuple[int, int, int]:
-    return tuple(max(0, int(c * factor)) for c in color)
-
-
-def _sky_gradient(w: int, h: int) -> Image.Image:
-    top, bot = np.array(SKY_TOP_COLOR), np.array(SKY_HORIZON_COLOR)
-    ys = np.linspace(0.0, 1.0, h)[:, None]
-    row = (top[None, :] * (1 - ys) + bot[None, :] * ys).astype(np.uint8)  # (h, 3)
-    arr = np.repeat(row[:, None, :], w, axis=1)  # (h, w, 3)
-    return Image.fromarray(arr, mode="RGB")
-
-
-def _build_far_tile(rng: np.random.Generator) -> Image.Image:
-    """Sky + mountain silhouette, opaque, covers the full frame height —
-    this is the base every frame starts from (nothing behind it needs to
-    show through). Two sine harmonics give the ridge a jagged-but-gentle
-    profile; both are exact periods of TILE_W so x=0 and x=TILE_W land on
-    identical y, which is what makes the tile seamless when scrolled."""
-    img = _sky_gradient(TILE_W, H)
-    draw = ImageDraw.Draw(img)
-    amp1 = rng.uniform(40, 60)
-    amp2 = rng.uniform(15, 25)
-    phase = rng.uniform(0, 2 * math.pi)
-    pts = []
-    for x in range(0, TILE_W + 1, 6):
-        y = (
-            HORIZON_Y
-            - amp1 * math.sin(2 * math.pi * x / TILE_W)
-            - amp2 * math.sin(4 * math.pi * x / TILE_W + phase)
+def _list_photos() -> list[Path]:
+    exts = ("*.png", "*.jpg", "*.jpeg")
+    paths: list[Path] = []
+    for ext in exts:
+        paths.extend(BACKGROUND_DIR.glob(ext))
+    if not paths:
+        raise FileNotFoundError(
+            f"no background photos found in {BACKGROUND_DIR} — drop at least one .png/.jpg in there"
         )
-        pts.append((x, y))
-    draw.polygon(pts + [(TILE_W, H), (0, H)], fill=MOUNTAIN_COLOR)
-    return img.filter(ImageFilter.GaussianBlur(2))  # soft/distant read
+    return sorted(paths)
 
 
-def _build_mid_tile(rng: np.random.Generator) -> Image.Image:
-    """Forest — simple blocky (Minecraft-style, flat rectangles rather than
-    organic canopy shapes) trees, evenly spaced so the tile wraps cleanly.
-    Transparent everywhere else so the far layer's sky shows through above
-    the treeline."""
-    img = Image.new("RGBA", (TILE_W, H), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    n_trees = 4
-    spacing = TILE_W / n_trees
-    for i in range(n_trees):
-        # jitter stays well inside each tree's spacing slot so no canopy
-        # ever straddles the tile's x=0/x=TILE_W seam
-        cx = spacing * i + spacing / 2 + rng.uniform(-20, 20)
-        trunk_w, trunk_h = rng.uniform(10, 14), rng.uniform(26, 38)
-        base_y = FOREST_BASE_Y + rng.uniform(-6, 10)
-        draw.rectangle([cx - trunk_w / 2, base_y - trunk_h, cx + trunk_w / 2, base_y], fill=FOREST_TRUNK_COLOR)
+class _PhotoLayers:
+    """Everything derived once from a single source photo: the pixel data,
+    its Ken-Burns crop geometry, and its sparkle seed points. Built once
+    per render (see _build_layers) and reused across every frame, same
+    reasoning every earlier version of this module had for not redoing
+    per-frame work that doesn't change per-frame."""
 
-        top_y = base_y - trunk_h
-        canopy = rng.uniform(46, 64)
-        draw.rectangle([cx - canopy / 2, top_y - canopy, cx + canopy / 2, top_y], fill=FOREST_LEAF_COLOR)
-        small = canopy * 0.6
-        draw.rectangle(
-            [cx - small / 2, top_y - canopy - small * 0.5, cx + small / 2, top_y - canopy + small * 0.2],
-            fill=FOREST_LEAF_COLOR,
-        )
-    return img.filter(ImageFilter.GaussianBlur(1))  # slight softness, stays blocky-readable
+    def __init__(self, path: Path, seed: int):
+        self.img = Image.open(path).convert("RGB")
+        self.src_w, self.src_h = self.img.size
+        src_np = np.asarray(self.img).astype(np.float32)
 
+        src_ar = self.src_w / self.src_h
+        if src_ar >= TARGET_AR:
+            # source is relatively wider than the target 9:16 — use the
+            # full source height, crop a narrower width, pan horizontally
+            self.base_h = float(self.src_h)
+            self.base_w = self.base_h * TARGET_AR
+            self.pan_axis = "x"
+        else:
+            # source is relatively taller — use the full width, crop a
+            # shorter height, pan vertically instead
+            self.base_w = float(self.src_w)
+            self.base_h = self.base_w / TARGET_AR
+            self.pan_axis = "y"
 
-def _build_near_tile(rng: np.random.Generator) -> Image.Image:
-    """Grass-block ground — the fastest, nearest layer and the most
-    literally "マイクラ" element: a grid of blocks (green-topped grass on
-    row 0, dirt below), each with a thin darker outline for definition and
-    a little per-block color jitter so it doesn't read as a flat texture
-    fill. block=60 divides TILE_W(720) evenly (12 columns), which is what
-    keeps the grid seamless across the tile boundary."""
-    img = Image.new("RGBA", (TILE_W, H), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    block = 60
-    cols = TILE_W // block
-    rows = (H - GRASS_TOP_Y) // block + 1
-    grid_line = _darken(GRASS_DIRT_COLOR, 0.85)
-    for r in range(rows):
-        for c in range(cols):
-            bx0, by0 = c * block, GRASS_TOP_Y + r * block
-            bx1, by1 = bx0 + block, min(by0 + block, H)
-            tint = int(rng.integers(-8, 8))
-            if r == 0:
-                top_color = tuple(max(0, min(255, ch + tint)) for ch in GRASS_TOP_COLOR)
-                draw.rectangle([bx0, by0, bx1, by0 + block * 0.35], fill=top_color)
-                draw.rectangle([bx0, by0 + block * 0.35, bx1, by1], fill=GRASS_DIRT_COLOR)
-            else:
-                dirt_color = tuple(max(0, min(255, ch + tint)) for ch in GRASS_DIRT_COLOR)
-                draw.rectangle([bx0, by0, bx1, by1], fill=dirt_color)
-            draw.rectangle([bx0, by0, bx1, by1], outline=grid_line, width=1)
-    return img
+        # sparkle candidates: the photo's own brightest pixels, restricted
+        # to the lower portion (water/ground, not sky) — see module docstring
+        lum = src_np.mean(axis=2)
+        y0 = int(self.src_h * SPARKLE_Y_FRACTION)
+        mask = np.zeros_like(lum, dtype=bool)
+        mask[y0:, :] = lum[y0:, :] > SPARKLE_MIN_LUM
+        ys, xs = np.nonzero(mask)
+        rng = np.random.default_rng(seed)
+        if len(xs) > 0:
+            idx = rng.choice(len(xs), size=min(SPARKLE_COUNT, len(xs)), replace=False)
+            self.sparkle_seeds = np.stack([xs[idx], ys[idx]], axis=1).astype(np.float32)
+        else:
+            self.sparkle_seeds = np.empty((0, 2), dtype=np.float32)
+
+        # stagger each render's pan so reusing the same photo across
+        # multiple videos doesn't look identical every time
+        self.phase_offset = rng.uniform(0, PAN_PERIOD_S)
+        self.pan_direction = 1 if rng.random() < 0.5 else -1
 
 
-def _build_brighten_overlay() -> Image.Image:
-    """Owner request (2026-08-16): "画面中央は少し明るめにしてチャットUIが
-    見やすいように" — now that line_chat.py no longer draws an opaque panel
-    behind the chat bubbles (see that module's 2026-08-16 revision), they
-    sit directly on this background, so a soft brightening band keeps them
-    legible. Centered on line_chat.py's PANEL_TOP(50)..PANEL_BOTTOM(700)
-    midpoint rather than the literal frame center, since that's where the
-    bubbles actually are — a plain Gaussian falloff so there's no visible
-    hard edge."""
-    band_center_y = 375  # (PANEL_TOP + PANEL_BOTTOM) / 2, kept as a literal to avoid importing line_chat.py here
-    sigma = 260
-    ys = np.arange(H)
-    weight = np.exp(-0.5 * ((ys - band_center_y) / sigma) ** 2)
-    alpha = (weight * 0.16 * 255).astype(np.uint8)
-    arr = np.zeros((H, W, 4), dtype=np.uint8)
-    arr[..., 0:3] = 255
-    arr[..., 3] = alpha[:, None]
-    return Image.fromarray(arr, mode="RGBA")
+def _build_layers(seed: int) -> _PhotoLayers:
+    photos = _list_photos()
+    photo_path = photos[seed % len(photos)]
+    return _PhotoLayers(photo_path, seed)
 
 
-def _build_layers(seed: int) -> tuple[Image.Image, Image.Image, Image.Image, Image.Image]:
-    rng = np.random.default_rng(seed)
-    far = _build_far_tile(rng)
-    mid = _build_mid_tile(rng)
-    near = _build_near_tile(rng)
-    brighten = _build_brighten_overlay()
-    return far, mid, near, brighten
+def _pingpong(t: float, period: float) -> float:
+    """0..1..0 triangle wave — avoids a hard jump-cut if playback loops."""
+    phase = (t % period) / period
+    return 1 - abs(2 * phase - 1)
 
 
-def _scroll_offset(speed: float, t: float) -> int:
-    return -(round(speed * t) % TILE_W)
+_BRIGHTEN_WEIGHTS = np.exp(-0.5 * ((np.arange(H, dtype=np.float32) - BRIGHTEN_BAND_CENTER_Y) / BRIGHTEN_SIGMA) ** 2)
 
 
-def compose_frame(layers: tuple[Image.Image, Image.Image, Image.Image, Image.Image], t: float) -> Image.Image:
-    """Renders one frame (far -> mid -> near, each scrolled to its own
-    offset at time `t`, then the brighten overlay) at time `t`. Pulled out
-    of `render_frames`'s loop, same reason the earlier versions did this —
-    line_chat.py composites the LINE UI on top of this directly."""
-    far, mid, near, brighten = layers
+def compose_frame(layers: _PhotoLayers, t: float) -> Image.Image:
+    """Renders one frame: crop+resize the Ken-Burns window at time `t`,
+    layer the sparkle flicker on top (seeded from the photo's own
+    highlights), then the same center-brighten band every earlier version
+    of this module used to keep the chat UI legible."""
+    p = _pingpong(layers.phase_offset + layers.pan_direction * t, PAN_PERIOD_S)
+    zoom = ZOOM_MIN + (ZOOM_MAX - ZOOM_MIN) * (0.5 - 0.5 * np.cos(2 * np.pi * t / (PAN_PERIOD_S * 2)))
+    cw, ch = layers.base_w / zoom, layers.base_h / zoom
 
-    fx = _scroll_offset(FAR_SPEED, t)
-    canvas = Image.new("RGB", (W, H))
-    canvas.paste(far, (fx, 0))
-    canvas.paste(far, (fx + TILE_W, 0))
-    canvas = canvas.convert("RGBA")
+    if layers.pan_axis == "x":
+        x0 = p * (layers.src_w - cw)
+        y0 = (layers.src_h - ch) * HORIZON_ANCHOR
+    else:
+        x0 = (layers.src_w - cw) * 0.5
+        y0 = p * (layers.src_h - ch)
 
-    mx = _scroll_offset(MID_SPEED, t)
-    canvas.alpha_composite(mid, (mx, 0))
-    canvas.alpha_composite(mid, (mx + TILE_W, 0))
+    crop = layers.img.crop((x0, y0, x0 + cw, y0 + ch)).resize((W, H), Image.LANCZOS).convert("RGBA")
 
-    nx = _scroll_offset(NEAR_SPEED, t)
-    canvas.alpha_composite(near, (nx, 0))
-    canvas.alpha_composite(near, (nx + TILE_W, 0))
+    if len(layers.sparkle_seeds):
+        rng = np.random.default_rng(int(t * 1000) + 99991)
+        overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        od = ImageDraw.Draw(overlay)
+        for sx, sy in layers.sparkle_seeds:
+            if not (x0 <= sx < x0 + cw and y0 <= sy < y0 + ch):
+                continue
+            twinkle = rng.random()
+            if twinkle < SPARKLE_FLICKER_THRESHOLD:
+                continue
+            fx = (sx - x0) / cw * W
+            fy = (sy - y0) / ch * H
+            r = 2.0 + 3.0 * rng.random()
+            alpha = int(90 + 140 * (twinkle - SPARKLE_FLICKER_THRESHOLD) / (1 - SPARKLE_FLICKER_THRESHOLD))
+            od.ellipse([fx - r, fy - r, fx + r, fy + r], fill=(255, 255, 255, alpha))
+        overlay = overlay.filter(ImageFilter.GaussianBlur(0.6))
+        crop.alpha_composite(overlay)
 
-    canvas.alpha_composite(brighten, (0, 0))
-    return canvas.convert("RGB")
+    frame = np.asarray(crop.convert("RGB")).astype(np.float32)
+    brighten = (_BRIGHTEN_WEIGHTS * BRIGHTEN_PEAK)[:, None, None]
+    frame = frame + brighten * (255 - frame)
+
+    return Image.fromarray(np.clip(frame, 0, 255).astype(np.uint8), mode="RGB")
 
 
 def iter_frames(seconds: float, seed: int):
@@ -269,9 +217,9 @@ def render_video(out_path: str, seconds: float, seed: int = 0) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Render the モヤスカ Minecraft-style parallax background video.")
+    parser = argparse.ArgumentParser(description="Render the モヤスカ Ken-Burns photo background video.")
     parser.add_argument("--seconds", type=float, default=60.0)
-    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=0, help="also selects which photo in assets/backgrounds/ to use (seed % photo count)")
     parser.add_argument("--out", required=True)
     args = parser.parse_args(argv)
     render_video(args.out, args.seconds, args.seed)
