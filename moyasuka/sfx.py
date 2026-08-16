@@ -150,13 +150,15 @@ def use_otoko_iyahho(out_path: str) -> None:
 
 def generate_notification(out_path: str) -> None:
     """Writes a ~0.4s opening "notification" chime — owner request
-    (2026-08-16): "まず最初に通知音を出して". Distinct from
-    generate_message_pop (which plays on every bubble, a quick 0.16s
-    tick): this is the one-time hook at the very start of the video, a
-    slightly warmer/more resonant two-note bell (slower decay, lower
-    pitch) so it reads as "your phone just got a notification" rather
-    than blending into the per-message pops that follow it. Same additive
-    sine+harmonic-under-decay synthesis as everything else in this module."""
+    (2026-08-16): "まず最初に通知音を出して". Superseded as the actual
+    opening cue by use_line_notification (below) once the owner supplied a
+    real LINE notification clip, but kept here as reusable synthesis (same
+    policy as generate_scratch_dun) in case a synthesized fallback is ever
+    needed again — e.g. this is still what plays if assets/sfx/
+    line_notification.mp3 is ever missing, see SFX_GENERATORS. A slightly
+    warmer/more resonant two-note bell (slower decay, lower pitch) than
+    generate_message_pop, so it read as "your phone just got a
+    notification" rather than blending into the per-message pops."""
     filter_complex = (
         f"aevalsrc={_hit_expr(784, 9, 0.55)}:d=0.22[n1];"
         f"aevalsrc={_hit_expr(1046, 7, 0.5)}:d=0.3[n2];"
@@ -166,6 +168,17 @@ def generate_notification(out_path: str) -> None:
         ["ffmpeg", "-y", "-filter_complex", filter_complex, "-map", "[out]", out_path],
         check=True, capture_output=True,
     )
+
+
+def use_line_notification(out_path: str) -> None:
+    """Copies the owner-provided real LINE notification clip (効果音ラボ,
+    free — confirmed by the owner 2026-08-16, see assets/sfx/NOTICE.md) to
+    `out_path` as wav. Owner request: "これを今後の全ての開始にならすよう
+    にして" — this replaces generate_notification as the actual opening
+    cue for every future video (SFX_GENERATORS["notification"] now points
+    here), not just scripts/01-sample.md."""
+    src = ASSETS_DIR / "line_notification.mp3"
+    subprocess.run(["ffmpeg", "-y", "-i", str(src), out_path], check=True, capture_output=True)
 
 
 def use_yome_nanimo_shinai(out_path: str) -> None:
@@ -206,7 +219,7 @@ def generate_screenshot(out_path: str) -> None:
 
 SFX_GENERATORS = {
     "scratch_dun": generate_scratch_dun,  # superseded as the climax cue, kept as reusable synthesis
-    "notification": generate_notification,  # auto-fired once at the very start of the video, see line_chat.py
+    "notification": use_line_notification,  # auto-fired once at the very start of every video, see line_chat.py; real clip, see NOTICE.md
     "message_pop": generate_message_pop,
     "otoko_iyahho": use_otoko_iyahho,  # current climax cue (licensed track, see round 4 above)
     "yome_nanimo_shinai": use_yome_nanimo_shinai,  # owner-provided clip, see NOTICE.md
