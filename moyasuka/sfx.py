@@ -168,6 +168,18 @@ def generate_notification(out_path: str) -> None:
     )
 
 
+def use_yome_nanimo_shinai(out_path: str) -> None:
+    """Copies an owner-provided clip (see assets/sfx/NOTICE.md for source/
+    license — pending confirmation, 2026-08-16) to `out_path` as wav, same
+    transcode-through-ffmpeg approach as use_otoko_iyahho. Placed via a
+    manual `!sfx:yome_nanimo_shinai` line right after 義母's "嫁は何もしな
+    いから私が全部って" in scripts/01-sample.md (owner request, 2026-08-16),
+    not auto-triggered — this is a one-off cue for that specific line, not
+    a content-pattern match like surprise_hit."""
+    src = ASSETS_DIR / "yome_nanimo_shinai.mp3"
+    subprocess.run(["ffmpeg", "-y", "-i", str(src), out_path], check=True, capture_output=True)
+
+
 def generate_screenshot(out_path: str) -> None:
     """Writes a ~0.13s two-click camera-shutter sound for the "証拠提示"
     beat — an [image] evidence-chart cue landing (owner request,
@@ -196,6 +208,7 @@ SFX_GENERATORS = {
     "notification": generate_notification,  # auto-fired once at the very start of the video, see line_chat.py
     "message_pop": generate_message_pop,
     "otoko_iyahho": use_otoko_iyahho,  # current climax cue (licensed track, see round 4 above)
+    "yome_nanimo_shinai": use_yome_nanimo_shinai,  # owner-provided clip, see NOTICE.md
     "surprise_hit": generate_surprise_hit,  # content-triggered, see HARSH_TRIGGER_WORDS in line_chat.py
     "screenshot": generate_screenshot,  # content-triggered, see kind=="image" handling in line_chat.py
 }
