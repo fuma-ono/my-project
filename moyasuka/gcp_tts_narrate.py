@@ -51,7 +51,7 @@ import requests
 
 from moyasuka import gcp_tts_auth
 from moyasuka.audio_mix import mix_clips_at_times, wav_duration
-from moyasuka.line_chat import PAUSE_SECONDS, estimate_arrivals, is_pause_only, parse_chat_script
+from moyasuka.line_chat import HARSH_TRIGGER_WORDS, PAUSE_SECONDS, estimate_arrivals, is_pause_only, parse_chat_script
 from moyasuka.voicevox_narrate import CHARACTER_SPEAKER_IDS, DEFAULT_SPEAKER_ID
 
 SYNTHESIZE_URL = "https://texttospeech.googleapis.com/v1/text:synthesize"
@@ -72,11 +72,35 @@ CLOUD_TTS_VOICES: dict[int, dict] = {
 DEFAULT_VOICE = CLOUD_TTS_VOICES[DEFAULT_SPEAKER_ID]
 
 
+def _prosody_for(text: str) -> tuple[float, float]:
+    """(pitch_delta, speaking_rate), layered on top of the character's base
+    voice — owner feedback (2026-08-16): "音声に抑揚つけて". Cloud TTS reads
+    every line at the exact same flat pitch/rate by default; every line in
+    this project was getting the same delivery whether it's a shocked gasp
+    or a throwaway aside. Simple content-based rules rather than real
+    sentiment analysis — same "curated list, cheap to fix a miss, not worth
+    chasing with NLP" philosophy line_chat.py's HARSH_TRIGGER_WORDS itself
+    uses (reused here directly, so the vocal delivery and the surprise_hit
+    sfx land on the same lines): harsh/shocking lines get sharper and
+    faster, questions rise, exclamations push harder, very short reaction
+    lines land slower and a little lower for weight."""
+    if any(w in text for w in HARSH_TRIGGER_WORDS):
+        return 3.0, 1.12
+    if text.endswith(("?", "？")):
+        return 2.5, 1.05
+    if text.endswith(("!", "！")):
+        return 2.0, 1.08
+    if len(text) <= 4:
+        return -1.0, 0.92
+    return 0.0, 1.0
+
+
 def synth_line(text: str, speaker_id: int) -> bytes:
     """Calls Cloud Text-to-Speech's synthesize endpoint and returns wav
     bytes (LINEAR16 encoding — a complete, self-contained .wav file, same
     as what VOICEVOX's engine returns)."""
     voice = CLOUD_TTS_VOICES.get(speaker_id, DEFAULT_VOICE)
+    pitch_delta, rate = _prosody_for(text)
     access_token = gcp_tts_auth.get_access_token()
     resp = requests.post(
         SYNTHESIZE_URL,
@@ -84,7 +108,7 @@ def synth_line(text: str, speaker_id: int) -> bytes:
         json={
             "input": {"text": text},
             "voice": {"languageCode": "ja-JP", "name": voice["name"]},
-            "audioConfig": {"audioEncoding": "LINEAR16", "pitch": voice["pitch"], "speakingRate": 1.0},
+            "audioConfig": {"audioEncoding": "LINEAR16", "pitch": voice["pitch"] + pitch_delta, "speakingRate": rate},
         },
         timeout=30,
     )

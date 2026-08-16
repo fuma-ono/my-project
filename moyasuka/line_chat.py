@@ -88,7 +88,15 @@ GAP_BETWEEN_BLOCKS = 28               # was 18 — more room between different s
 
 CHARS_PER_SECOND = 6.5
 MIN_BLOCK_SECONDS = 1.3
-GAP_SECONDS = 0.235  # 2026-08-14: was 0.25, small trim to land ~59.5-60.0s (Shorts duration budget)
+GAP_SECONDS = 0.15  # 2026-08-16: was 0.235 (2026-08-14) — trimmed further to make room for LEAD_IN_SECONDS growing, still ~59.5-60.0s (Shorts duration budget)
+
+# Owner feedback (2026-08-16): "最初の通知音が音声と被っている" — the opening
+# notification cue (sfx.py's "notification", now a real ~1.9s clip, see
+# NOTICE.md) was firing at t=0 while the old 0.5s lead-in let the first
+# line's speech start at t=0.5, well before the notification finished —
+# audible overlap. Lead-in now covers the notification's full length (with
+# a little breathing room) so speech never starts until it's done.
+LEAD_IN_SECONDS = 2.0
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont:
@@ -240,7 +248,7 @@ def estimate_arrivals(items: list[dict], durations: list[float] | None = None) -
     exists, so bubbles/captions land exactly when each line is actually
     spoken instead of the character-count guess below. Without it (no
     VOICEVOX audio yet), the guess is all there is to time against."""
-    t = 0.5  # small lead-in before the first message
+    t = LEAD_IN_SECONDS
     out = []
     for i, item in enumerate(items):
         if item["type"] == "sfx":
