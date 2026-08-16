@@ -12,7 +12,7 @@
     "duration_minutes": 60,
     "audio_design": "brown_noise 0.8 + pink_noise 0.2 / lowpass 1800Hz / highpass 40Hz / fade 10秒 / near-mono(width 0.08) / コード・メロディ・LFO揺らぎなし"
   },
-  "title": "赤ちゃんの睡眠環境づくりに使えるホワイトノイズ 1時間",
+  "title": "ホワイトノイズだけの1時間｜赤ちゃんの寝かしつけタイム",
   "use_cases": ["赤ちゃんの睡眠環境づくりに", "夜泣き対応中の生活音マスキングに", "お昼寝タイムに", "静かな寝室環境をつくりたいときに"],
   "tags": [
     "ホワイトノイズ", "赤ちゃん 寝かしつけ", "ベビー ホワイトノイズ", "夜泣き", "赤ちゃん 睡眠",
@@ -29,6 +29,16 @@
   "published_at": "2026-08-12T10:46:57Z",
   "video_history": [
     {"video_id": "UOVyonlQhZ4", "published_at": "2026-08-12T06:30:24Z", "status": "private (superseded, same day)", "reason": "動画本体の背景をオーナー提供の実写画像に差し替え(YouTube APIは既存動画の中身を上書きできないため新規アップロードで対応)"}
+  ],
+  "metadata_updates": [
+    {
+      "date": "2026-08-16",
+      "change": "タイトル・サムネイルを更新(video_idはQkeAOj3VN_Eのまま、in-place更新)。breath_guide_coherent・study_lofi_chillと同じ方向性",
+      "title_before": "赤ちゃんの睡眠環境づくりに使えるホワイトノイズ 1時間",
+      "title_after": "ホワイトノイズだけの1時間｜赤ちゃんの寝かしつけタイム",
+      "thumbnail_after": "assets/thumbnails/baby_sleep_noise_thumb_v2.png(明朝体・中央揃え2行「赤ちゃんが/やさしく眠れる1時間」、赤ちゃんの顔を避けて左上に配置)",
+      "note": "⚠️ サムネイル文言「やさしく眠れる」は、このプリセットのpositioning_constraints(「赤ちゃんを必ず眠らせる」等の効果を謳わない方針)に対してやや踏み込んだ表現。オーナー指示により実施したが、要再検討の可能性ありとして記録。"
+    }
   ],
   "period": {"start": "2026-08-12", "end": "2026-08-26"},
   "cost_jpy": 0,

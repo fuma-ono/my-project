@@ -339,13 +339,21 @@ PRESET_METADATA = {
         "hashtags": ["雨音bgm", "作業用bgm", "睡眠用bgm", "rainsounds", "relaxation"],
     },
     "study_lofi_chill": {
-        "title": "【作業用BGM】カフェ気分で集中できる1時間BGM ｜勉強・作業用",
+        "title": "ローファイの音だけの1時間｜集中がはかどる作業用タイム",  # retitled 2026-08-16 (was "【作業用BGM】カフェ気分で集中できる1時間BGM ｜勉強・作業用"), same direction as breath_guide_coherent's retitle
         "icon_category": "focus",
         # 2026-08-12: switched to the photo-thumbnail standard with an
         # owner-supplied AI-generated image (see breath_guide_coherent's note).
+        #
+        # 2026-08-16: hand-revised past what make_photo_thumbnail() produces
+        # — same treatment as breath_guide_coherent's v2 (see that preset's
+        # note): centered 2-line Noto Serif Bold hook text, no caption
+        # panel, soft shadow instead of an outline. Live file:
+        # assets/thumbnails/study_lofi_chill_thumb_v2.png, uploaded via
+        # youtube_upload.set_thumbnail. thumbnail_source/thumb_hook below
+        # describe the *previous* generated thumbnail, kept for reference.
         "thumbnail_style": "photo",
         "thumbnail_source": "assets/thumbnails/study_lofi_chill_source.jpeg",
-        "thumb_hook": "はかどる作業用BGM",
+        "thumb_hook": "集中できる\nカフェBGM",  # updated 2026-08-16 (was "はかどる作業用BGM") to match the live hand-revised thumbnail's 2-line text
         "description": "温かみのあるローファイコードにヴァイナルの質感を重ねた、カフェのような作業用BGM。",
         "hook": "温かみのあるローファイコードに、ヴァイナルの質感をまとわせた力の抜けるビート。カフェで作業しているような、集中しやすい空気感です。",
         "about": (
@@ -410,14 +418,30 @@ PRESET_METADATA = {
         # fall asleep, improves sleep, has a medical effect, or is
         # guaranteed safe. use_cases/tags stay infant-specific only; no
         # "作業用bgm" or other scene that doesn't match actual use.
-        "title": "赤ちゃんの睡眠環境づくりに使えるホワイトノイズ 1時間",
+        "title": "ホワイトノイズだけの1時間｜赤ちゃんの寝かしつけタイム",  # retitled 2026-08-16 (was "赤ちゃんの睡眠環境づくりに使えるホワイトノイズ 1時間"), same direction as breath_guide_coherent's retitle — ⚠️ see 2026-08-16 note below re: positioning_constraints
         "icon_category": "sleep",
         # 2026-08-12: switched to the photo-thumbnail standard (see
         # breath_guide_coherent's note) with an owner-supplied AI-generated
         # image; thumb_hook doubles as the on-image caption.
+        #
+        # 2026-08-16: hand-revised past what make_photo_thumbnail() produces
+        # — same treatment as breath_guide_coherent's v2 (see that preset's
+        # note): centered 2-line Noto Serif Bold hook text ("赤ちゃんが" /
+        # "やさしく眠れる1時間"), positioned upper-left to avoid the baby's
+        # face rather than overlapping it, soft shadow instead of an
+        # outline. Live file: assets/thumbnails/baby_sleep_noise_thumb_v2.png,
+        # uploaded via youtube_upload.set_thumbnail. thumbnail_source/
+        # thumb_hook below describe the *previous* generated thumbnail, kept
+        # for reference. ⚠️ "やさしく眠れる" reads closer to an effect claim
+        # ("the baby will sleep") than this preset's own documented
+        # positioning rule allows (no claim that it makes a baby fall
+        # asleep — see the class comment above and positioning_constraints
+        # in docs/company-os/experiments/bgm-scene02-baby-sleep-noise.json).
+        # Shipped as explicitly instructed by the owner; flagged here rather
+        # than silently softened, in case it needs revisiting.
         "thumbnail_style": "photo",
         "thumbnail_source": "assets/thumbnails/baby_sleep_noise_source.jpeg",
-        "thumb_hook": "赤ちゃんの睡眠環境に",
+        "thumb_hook": "赤ちゃんが\nやさしく眠れる1時間",  # updated 2026-08-16 (was "赤ちゃんの睡眠環境に")
         "description": "赤ちゃんの睡眠環境づくりに使える、一定のホワイトノイズです。メロディやコードは使わず、ブラウンノイズとピンクノイズだけを一定の音量で流し続けるシンプルな作りにしています。",
         "hook": "赤ちゃんの睡眠環境づくりに使える、一定のホワイトノイズです。メロディや展開はなく、ブラウンノイズとピンクノイズだけを一定の音量で流し続けます。",
         "about": (
