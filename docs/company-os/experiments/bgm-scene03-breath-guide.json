@@ -13,7 +13,7 @@
     "audio_design": "PADS_SLEEP最初の和音(単一・進行なし)+detuned_stack持続音 / brown_noise極小音量ベッド / _breath_envelope(吸う4秒上昇・吐く6秒下降)で振幅変調 / simple_reverb・fade_in_out・normalize・widenは既存関数流用",
     "thumbnail_style": "photo(オーナー提供の実写AI生成画像+最小テキスト。抽象イラスト版は却下され撤去、動画本体の背景も同じ画像に統一)"
   },
-  "title": "海の音だけの15分｜疲れた心を癒すリラックスタイム",
+  "title": "心を落ち着かせる15分｜静かな集中とリラックスのために",
   "use_cases": ["仕事や勉強の合間の小休憩に", "就寝前のリラックスタイムに", "緊張する場面の前に", "声によるガイドが苦手な方の呼吸法の練習に"],
   "tags": [
     "呼吸ガイド", "呼吸法", "深呼吸", "リラックス",
@@ -39,6 +39,14 @@
       "title_after": "海の音だけの15分｜疲れた心を癒すリラックスタイム",
       "thumbnail_after": "assets/thumbnails/breath_guide_coherent_thumb_v2.png(既存の瞑想写真+大きめの明朝体フックテキスト「波に癒やされる15分」を人物に重ねて配置、旧キャプション欄は削除)",
       "note": "improve_or_exit_criteriaの「一部指標のみ強い場合はメタデータ/サムネイルの改善を1回試す」に該当する最初の改善試行。オーナー指示による実施。"
+    },
+    {
+      "date": "2026-08-16",
+      "change": "同日中に2回目のタイトル・サムネイル変更(video_idはkO5dfoyCloEのまま、in-place更新)",
+      "title_before": "海の音だけの15分｜疲れた心を癒すリラックスタイム",
+      "title_after": "心を落ち着かせる15分｜静かな集中とリラックスのために",
+      "thumbnail_after": "assets/thumbnails/breath_guide_coherent_thumb_v3.png(同じ瞑想写真+フックテキストを「心が静まる15分」に差し替え、レイアウト・フォントはv2から変更なし)",
+      "note": "オーナー指示による2回目の改善試行。改善は1回のみという想定だったが、同日中の追加調整として実施。"
     }
   ],
   "period": {"start": "2026-08-12", "end": "2026-08-26"},

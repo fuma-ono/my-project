@@ -465,7 +465,7 @@ PRESET_METADATA = {
         # avoids the therapeutic-technique framing those carry). Positioning
         # stays experience-first per the owner's explicit ban on medical
         # claims: no 自律神経を整える/不安を治す/睡眠を改善する/ストレスを治療する.
-        "title": "海の音だけの15分｜疲れた心を癒すリラックスタイム",  # retitled 2026-08-16 (was "呼吸のペースを意識しやすくなる音、吸って4秒・吐いて6秒の呼吸ガイド 15分"), owner request
+        "title": "心を落ち着かせる15分｜静かな集中とリラックスのために",  # retitled 2026-08-16 again (v1: "呼吸のペースを意識しやすくなる音、吸って4秒・吐いて6秒の呼吸ガイド 15分" -> v2: "海の音だけの15分｜疲れた心を癒すリラックスタイム" -> v3: current), owner request each time
         "icon_category": "sleep",
         # 2026-08-12: the standard gradient+icon+bold-text thumbnail didn't
         # fit this scene. First attempt was a procedural "atmospheric"
@@ -482,15 +482,18 @@ PRESET_METADATA = {
         # make_photo_thumbnail() produces (bigger serif-font hook text
         # overlapping the figure, no caption box/panel, soft shadow instead
         # of an outline) and uploaded directly via youtube_upload.set_thumbnail
-        # — see assets/thumbnails/breath_guide_coherent_thumb_v2.png. The
-        # fields below (thumbnail_source/thumb_hook) describe how the
-        # *previous* live thumbnail was generated, kept for reference; they
-        # no longer regenerate what's actually live on this specific video
-        # unless make_photo_thumbnail() itself is updated to match v2's style.
+        # — see assets/thumbnails/breath_guide_coherent_thumb_v2.png, then
+        # v3.png (owner asked for another text swap same day: "心が静まる
+        # 15分", still centered/no-outline/soft-shadow, v3 is what's live).
+        # The fields below (thumbnail_source/thumb_hook) describe how the
+        # *original* (pre-hand-revision) live thumbnail was generated, kept
+        # for reference; they no longer regenerate what's actually live on
+        # this specific video unless make_photo_thumbnail() itself is
+        # updated to match the v2/v3 style.
         "thumbnail_style": "photo",
         "thumbnail_source": "assets/thumbnails/breath_guide_coherent_source.png",
         "thumbnail_crop_top_px": 300,  # trims a UI artifact strip along the top of the source image
-        "thumb_hook": "波に癒やされる15分",  # updated 2026-08-16 (was "心を落ち着かせるBGM") to match the live hand-revised thumbnail's text
+        "thumb_hook": "心が静まる15分",  # updated 2026-08-16, 2nd revision (v1: "心を落ち着かせるBGM" -> v2: "波に癒やされる15分" -> v3: current) to match the live hand-revised thumbnail's text
         "description": "吸って4秒・吐いて6秒のリズムで、呼吸のペースを意識しやすくする音です。声によるガイドはなく、一つの持続音の強弱だけでリズムを示します。",
         "hook": "吸って4秒、吐いて6秒。声のガイドなしで、呼吸のペースを意識しやすくする音です。",
         "about": (
