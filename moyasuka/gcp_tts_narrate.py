@@ -74,25 +74,51 @@ DEFAULT_VOICE = CLOUD_TTS_VOICES[DEFAULT_SPEAKER_ID]
 
 def _prosody_for(text: str) -> tuple[float, float]:
     """(pitch_delta, speaking_rate), layered on top of the character's base
-    voice — owner feedback (2026-08-16): "音声に抑揚つけて". Cloud TTS reads
-    every line at the exact same flat pitch/rate by default; every line in
-    this project was getting the same delivery whether it's a shocked gasp
-    or a throwaway aside. Simple content-based rules rather than real
-    sentiment analysis — same "curated list, cheap to fix a miss, not worth
-    chasing with NLP" philosophy line_chat.py's HARSH_TRIGGER_WORDS itself
-    uses (reused here directly, so the vocal delivery and the surprise_hit
-    sfx land on the same lines): harsh/shocking lines get sharper and
-    faster, questions rise, exclamations push harder, very short reaction
-    lines land slower and a little lower for weight."""
+    voice — owner feedback (2026-08-16, round 1): "音声に抑揚つけて". Cloud
+    TTS reads every line at the exact same flat pitch/rate by default.
+
+    Round 1's version only touched harsh-word/question/exclamation/very-
+    short lines — maybe 3-4 lines out of 24 in a typical script, so most of
+    the narration stayed just as flat and the owner's follow-up ("まだ抑揚
+    がない") was fair. This version classifies every line into one of
+    several buckets (nothing falls through to a neutral 0.0/1.0 default
+    anymore) so the whole narration varies, not just the rare trigger
+    lines. Still simple content-based rules, not real sentiment analysis —
+    same "curated list, cheap to fix a miss, not worth chasing with NLP"
+    philosophy line_chat.py's HARSH_TRIGGER_WORDS itself uses (reused here
+    directly, so the vocal delivery and the surprise_hit sfx land on the
+    same lines)."""
+    stripped = text.rstrip("。、!！?？…‥.")
     if any(w in text for w in HARSH_TRIGGER_WORDS):
-        return 3.0, 1.12
+        return 4.0, 1.15          # shock/anger — sharp and fast
     if text.endswith(("?", "？")):
-        return 2.5, 1.05
+        return 3.0, 1.08          # question — rises
     if text.endswith(("!", "！")):
-        return 2.0, 1.08
-    if len(text) <= 4:
-        return -1.0, 0.92
-    return 0.0, 1.0
+        return 3.5, 1.15          # exclamation — pushes harder
+    if "…" in text or "..." in text:
+        return -2.5, 0.85         # hesitation/trailing off — slower and lower
+    if len(stripped) <= 6:
+        return -1.5, 0.92         # short reaction line — weighty, deliberate
+    if len(stripped) >= 15:
+        return 1.5, 1.05          # longer explanatory line — a bit more energy so it doesn't drone
+    return 0.5, 1.02              # everything else still gets a small lift, never the untouched default
+
+
+_SSML_ESCAPE = str.maketrans({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;"})
+
+
+def _build_ssml(text: str) -> str:
+    """Wraps any HARSH_TRIGGER_WORDS hit in <emphasis> — a whole-utterance
+    pitch/rate shift (audioConfig, above) changes the line's overall energy
+    but can't accent one word within a sentence; SSML emphasis is what
+    actually gives a harsh word inside an otherwise calm line its own
+    punch, which is closer to what "抑揚" (real intonation) means than a
+    uniform shift alone."""
+    escaped = text.translate(_SSML_ESCAPE)
+    for word in HARSH_TRIGGER_WORDS:
+        if word in text:
+            escaped = escaped.replace(word, f'<emphasis level="strong">{word}</emphasis>')
+    return f"<speak>{escaped}</speak>"
 
 
 def synth_line(text: str, speaker_id: int) -> bytes:
@@ -106,7 +132,7 @@ def synth_line(text: str, speaker_id: int) -> bytes:
         SYNTHESIZE_URL,
         headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
         json={
-            "input": {"text": text},
+            "input": {"ssml": _build_ssml(text)},
             "voice": {"languageCode": "ja-JP", "name": voice["name"]},
             "audioConfig": {"audioEncoding": "LINEAR16", "pitch": voice["pitch"] + pitch_delta, "speakingRate": rate},
         },

@@ -90,13 +90,19 @@ CHARS_PER_SECOND = 6.5
 MIN_BLOCK_SECONDS = 1.3
 GAP_SECONDS = 0.15  # 2026-08-16: was 0.235 (2026-08-14) — trimmed further to make room for LEAD_IN_SECONDS growing, still ~59.5-60.0s (Shorts duration budget)
 
-# Owner feedback (2026-08-16): "最初の通知音が音声と被っている" — the opening
-# notification cue (sfx.py's "notification", now a real ~1.9s clip, see
-# NOTICE.md) was firing at t=0 while the old 0.5s lead-in let the first
-# line's speech start at t=0.5, well before the notification finished —
-# audible overlap. Lead-in now covers the notification's full length (with
-# a little breathing room) so speech never starts until it's done.
-LEAD_IN_SECONDS = 2.0
+# Owner feedback (2026-08-16, round 1): "最初の通知音が音声と被っている" —
+# the opening notification cue (sfx.py's "notification", now a real ~1.9s
+# clip, see NOTICE.md) was firing at t=0 while the old 0.5s lead-in let the
+# first line's speech start at t=0.5, well before the notification
+# finished — audible overlap.
+# Round 2: "最初の通知音が早すぎる" — firing the chime at the very first
+# frame (t=0) read as too abrupt/instant; there's now a brief silent beat
+# before it plays instead. NOTIFICATION_DELAY is where sfx_cues actually
+# schedules the cue (see render_video); LEAD_IN_SECONDS covers that delay
+# plus the clip's own length plus a small buffer, so the chat still never
+# starts until the notification has fully finished.
+NOTIFICATION_DELAY = 0.4
+LEAD_IN_SECONDS = 2.5
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont:
@@ -657,12 +663,12 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
         if item["type"] == "msg" and item.get("kind") == "image"
     ]
 
-    # opening hook — owner request (2026-08-16): "まず最初に通知音を出して".
-    # Fires once at t=0, ahead of the first message's own message_pop
-    # (which lands at estimate_arrivals' 0.5s lead-in), so it reads as "a
-    # notification just arrived" a beat before the chat itself opens,
-    # rather than overlapping the first bubble's own pop.
-    notification_cues = [(0.0, "notification")]
+    # opening hook — owner request (2026-08-16): "まず最初に通知音を出して",
+    # refined twice same day: a brief silent beat (NOTIFICATION_DELAY)
+    # before it plays instead of firing at the very first frame ("早すぎ
+    # る"), then LEAD_IN_SECONDS gives it room to fully finish before the
+    # chat/narration starts (was overlapping the narration before that fix).
+    notification_cues = [(NOTIFICATION_DELAY, "notification")]
 
     sfx_cues = sfx_cues + notification_cues + pop_cues + shock_cues + screenshot_cues
 
