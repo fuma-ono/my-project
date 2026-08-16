@@ -649,7 +649,14 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
         if item["type"] == "msg" and item.get("kind") == "image"
     ]
 
-    sfx_cues = sfx_cues + pop_cues + shock_cues + screenshot_cues
+    # opening hook — owner request (2026-08-16): "まず最初に通知音を出して".
+    # Fires once at t=0, ahead of the first message's own message_pop
+    # (which lands at estimate_arrivals' 0.5s lead-in), so it reads as "a
+    # notification just arrived" a beat before the chat itself opens,
+    # rather than overlapping the first bubble's own pop.
+    notification_cues = [(0.0, "notification")]
+
+    sfx_cues = sfx_cues + notification_cues + pop_cues + shock_cues + screenshot_cues
 
     # render each bubble/card once and reuse the image across every frame
     # instead of re-wrapping and re-drawing text per frame (see render_frame's

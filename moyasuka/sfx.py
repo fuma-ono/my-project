@@ -148,6 +148,26 @@ def use_otoko_iyahho(out_path: str) -> None:
     subprocess.run(["ffmpeg", "-y", "-i", str(src), out_path], check=True, capture_output=True)
 
 
+def generate_notification(out_path: str) -> None:
+    """Writes a ~0.4s opening "notification" chime — owner request
+    (2026-08-16): "まず最初に通知音を出して". Distinct from
+    generate_message_pop (which plays on every bubble, a quick 0.16s
+    tick): this is the one-time hook at the very start of the video, a
+    slightly warmer/more resonant two-note bell (slower decay, lower
+    pitch) so it reads as "your phone just got a notification" rather
+    than blending into the per-message pops that follow it. Same additive
+    sine+harmonic-under-decay synthesis as everything else in this module."""
+    filter_complex = (
+        f"aevalsrc={_hit_expr(784, 9, 0.55)}:d=0.22[n1];"
+        f"aevalsrc={_hit_expr(1046, 7, 0.5)}:d=0.3[n2];"
+        "[n1][n2]concat=n=2:v=0:a=1[out]"
+    )
+    subprocess.run(
+        ["ffmpeg", "-y", "-filter_complex", filter_complex, "-map", "[out]", out_path],
+        check=True, capture_output=True,
+    )
+
+
 def generate_screenshot(out_path: str) -> None:
     """Writes a ~0.13s two-click camera-shutter sound for the "証拠提示"
     beat — an [image] evidence-chart cue landing (owner request,
@@ -173,6 +193,7 @@ def generate_screenshot(out_path: str) -> None:
 
 SFX_GENERATORS = {
     "scratch_dun": generate_scratch_dun,  # superseded as the climax cue, kept as reusable synthesis
+    "notification": generate_notification,  # auto-fired once at the very start of the video, see line_chat.py
     "message_pop": generate_message_pop,
     "otoko_iyahho": use_otoko_iyahho,  # current climax cue (licensed track, see round 4 above)
     "surprise_hit": generate_surprise_hit,  # content-triggered, see HARSH_TRIGGER_WORDS in line_chat.py
