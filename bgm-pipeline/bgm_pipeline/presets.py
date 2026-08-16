@@ -441,7 +441,7 @@ PRESET_METADATA = {
         # avoids the therapeutic-technique framing those carry). Positioning
         # stays experience-first per the owner's explicit ban on medical
         # claims: no 自律神経を整える/不安を治す/睡眠を改善する/ストレスを治療する.
-        "title": "呼吸のペースを意識しやすくなる音、吸って4秒・吐いて6秒の呼吸ガイド 15分",
+        "title": "海の音だけの15分｜疲れた心を癒すリラックスタイム",  # retitled 2026-08-16 (was "呼吸のペースを意識しやすくなる音、吸って4秒・吐いて6秒の呼吸ガイド 15分"), owner request
         "icon_category": "sleep",
         # 2026-08-12: the standard gradient+icon+bold-text thumbnail didn't
         # fit this scene. First attempt was a procedural "atmospheric"
@@ -453,10 +453,20 @@ PRESET_METADATA = {
         # environment can't generate photorealistic images itself, so
         # `thumbnail_source` must point to an owner-supplied image, saved
         # under assets/thumbnails/ so it's reproducible without re-asking.
+        #
+        # 2026-08-16: the live thumbnail was hand-revised past what
+        # make_photo_thumbnail() produces (bigger serif-font hook text
+        # overlapping the figure, no caption box/panel, soft shadow instead
+        # of an outline) and uploaded directly via youtube_upload.set_thumbnail
+        # — see assets/thumbnails/breath_guide_coherent_thumb_v2.png. The
+        # fields below (thumbnail_source/thumb_hook) describe how the
+        # *previous* live thumbnail was generated, kept for reference; they
+        # no longer regenerate what's actually live on this specific video
+        # unless make_photo_thumbnail() itself is updated to match v2's style.
         "thumbnail_style": "photo",
         "thumbnail_source": "assets/thumbnails/breath_guide_coherent_source.png",
         "thumbnail_crop_top_px": 300,  # trims a UI artifact strip along the top of the source image
-        "thumb_hook": "心を落ち着かせるBGM",
+        "thumb_hook": "波に癒やされる15分",  # updated 2026-08-16 (was "心を落ち着かせるBGM") to match the live hand-revised thumbnail's text
         "description": "吸って4秒・吐いて6秒のリズムで、呼吸のペースを意識しやすくする音です。声によるガイドはなく、一つの持続音の強弱だけでリズムを示します。",
         "hook": "吸って4秒、吐いて6秒。声のガイドなしで、呼吸のペースを意識しやすくする音です。",
         "about": (

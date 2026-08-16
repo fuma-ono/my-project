@@ -94,6 +94,37 @@ def set_thumbnail(video_id: str, image_path: str, auth: YouTubeAuth | None = Non
     resp.raise_for_status()
 
 
+def update_title(video_id: str, title: str, auth: YouTubeAuth | None = None) -> None:
+    """Changes an already-published video's title in place (owner request,
+    2026-08-16: retitling breath_guide_coherent after a thumbnail refresh).
+    videos.update replaces the whole `snippet` part it's given, not just
+    the field(s) that changed, so this fetches the current snippet first
+    and only overwrites `title` on it — sending a snippet with just
+    `title` set would silently wipe description/tags/categoryId."""
+    access_token = (auth or youtube_auth._default).get_access_token()
+    resp = requests.get(
+        VIDEOS_URL,
+        params={"part": "snippet", "id": video_id},
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    items = resp.json().get("items", [])
+    if not items:
+        raise RuntimeError(f"Video {video_id} not found when updating title.")
+    snippet = items[0]["snippet"]
+    snippet["title"] = title
+
+    put_resp = requests.put(
+        VIDEOS_URL,
+        params={"part": "snippet"},
+        headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json; charset=UTF-8"},
+        data=json.dumps({"id": video_id, "snippet": snippet}),
+        timeout=30,
+    )
+    put_resp.raise_for_status()
+
+
 def get_video_status(video_id: str, auth: YouTubeAuth | None = None) -> dict:
     """Raw status+processingDetails for a video, for verification after upload."""
     access_token = (auth or youtube_auth._default).get_access_token()
