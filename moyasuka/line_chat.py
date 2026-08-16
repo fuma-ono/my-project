@@ -298,6 +298,32 @@ def _render_card(text: str) -> _Block:
     return _Block(img)
 
 
+# Owner request (2026-08-16): "既読がまだついてない" — real LINE shows a
+# small "既読" label under a message once the recipient has read it; the
+# reference channel's drama often leans on this (a visible "既読" with no
+# reply for several beats reads as more cutting than the words alone).
+# Implemented as its own tiny follow-up block rather than baking it into
+# the bubble image itself, so it can appear on a delay (see render_video)
+# using the exact same stacking/visibility machinery every other block
+# already uses — no new compositing logic needed.
+READ_RECEIPT_DELAY = 0.45  # beat after the bubble lands, not instant — reads as someone actually glancing at their phone
+READ_RECEIPT_H = 20
+READ_RECEIPT_FONT_SIZE = 15
+READ_RECEIPT_COLOR = (154, 158, 168)
+
+
+def _render_read_receipt() -> _Block:
+    font = _font(READ_RECEIPT_FONT_SIZE)
+    text = "既読"
+    probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    tw = probe.textbbox((0, 0), text, font=font)[2]
+    img = Image.new("RGBA", (BG_W, READ_RECEIPT_H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    x1 = BG_W - PANEL_PAD_X
+    d.text((x1 - tw, 0), text, font=font, fill=READ_RECEIPT_COLOR)
+    return _Block(img, tight=True)
+
+
 def _render_bubble(speaker: str, text: str, side: str, grouped: bool) -> _Block:
     """`grouped`: True when this is a consecutive message from the same
     speaker as the block before it — skips the name label/avatar (real
@@ -628,8 +654,17 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
     # render each bubble/card once and reuse the image across every frame
     # instead of re-wrapping and re-drawing text per frame (see render_frame's
     # docstring for why that matters)
-    all_blocks = [render_block(item) for (_start, _end, item) in visual_arrivals]
-    arrival_times = [start for (start, _end, _item) in visual_arrivals]
+    all_blocks: list[_Block] = []
+    arrival_times: list[float] = []
+    for start, _end, item in visual_arrivals:
+        all_blocks.append(render_block(item))
+        arrival_times.append(start)
+        # a delayed follow-up "既読" block right after its own bubble — only
+        # on messages 私 sent, matching real LINE (the receipt shows who
+        # read *your* message, not the other way around)
+        if item["type"] == "msg" and item.get("side") == "self":
+            all_blocks.append(_render_read_receipt())
+            arrival_times.append(start + READ_RECEIPT_DELAY)
 
     with tempfile.TemporaryDirectory() as tmp:
         frame_dir = Path(tmp) / "frames"
