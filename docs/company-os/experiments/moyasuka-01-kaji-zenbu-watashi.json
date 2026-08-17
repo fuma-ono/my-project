@@ -1,0 +1,39 @@
+{
+  "id": "moyasuka-01-kaji-zenbu-watashi",
+  "business_id": "moyasuka",
+  "episode_number": "01",
+  "slug": "01-sample",
+  "title": "「家事は全部私」と言い張る義母、証拠を見せた結果ｗｗ",
+  "opening_type": "A",
+  "theme": "義母×嫁、家事の理不尽な押し付け",
+  "emotion": "怒り→スカッと",
+  "duration_seconds": 54.9,
+  "background_type": "海(ocean_glitter_01.png、Ken Burnsパン&ズーム)",
+  "generated_at": "2026-08-09",
+  "published_at": null,
+  "status": "rendered_not_published",
+  "video_url": null,
+  "hypothesis": "冒頭が「今日も朝から掃除よ」という普通の会話から始まる旧構成(冒頭タイプA)。2026-08-17のオーナーレビューで映像・演出は投稿可能品質(総合55〜60点)だが冒頭の引きが弱い(4/10)と判定された。作り直さずこのまま投稿し、以後導入する新構成(冒頭タイプB〜F)の台本と再生数・維持率を比較するベースラインとして使う",
+  "metrics": {
+    "views": null,
+    "avg_view_duration_seconds": null,
+    "retention_rate": null,
+    "comments": null,
+    "likes": null,
+    "subscribers_gained": null,
+    "recorded_at": null,
+    "data_source_note": "YouTube Analytics APIのスコープが未取得(task #24、docs/company-os配下のタスク管理参照)のため現時点ではAI側から取得不可。オーナーがYouTube Studioで確認でき次第、この欄と併せてnote-articlesと同様の運用でREADME側にも反映する"
+  },
+  "result": null,
+  "learning": null,
+  "next_action": null,
+  "verdict": "pending",
+  "quality_self_check": {
+    "hook_strong_in_3s": false,
+    "reason_to_keep_watching_clear": false,
+    "info_drip_in_middle": true,
+    "emotional_reversal_present": true,
+    "aftertaste_or_hook_at_end": true,
+    "note": "2026-08-17に導入したセルフチェック項目(docs/projects/moyasuka/content-backlog.mdの「生成時セルフチェック」)を、導入前に作られたこの台本へ事後的に当てはめて評価したもの。今後の台本はこのチェックを満たしてから確定する"
+  }
+}

@@ -80,6 +80,17 @@ python3 -m moyasuka.line_chat \
 - 音声合成: **2026-08-09、iPad Shortcuts自動化(方式A')の実機動作確認が完了し、初めての実音声入り動画(台本01、33秒)が完成した。** オーナーがiPhoneのみでPCを持っていないと2026-08-07に判明(VOICEVOXは公式iOS版なし)したため、`manual_narration.py list --format json`が出力するJSON配列をオーナーのiPad Shortcutsに直接テキストとして貼り付け、正しいAPI(`api.tts.quest/v3/voicevox/synthesis`、JSONでダウンロードURLを返す2段階方式)を自動ループ呼び出しする設計に落ち着いた。実際に組む過程で見つかった問題(iCloud経由のファイル参照が不安定/`/simple/`はボット判定される/連続呼び出しでレート制限/ゼロ埋めアクションが見当たらない)は全て解決済み——最後のゼロ埋め問題は`manual_narration.py`の`_find_clip`をゼロ埋みの有無を問わず一致するよう直すことで、iPad側の負担をなくす形で解消した。手順は`docs/projects/moyasuka/voicevox-setup.md`(方式A'、実機確認済みの正確なアクション名で記載)
 - 新YouTubeチャンネル: **作成完了**(2026-08-06、オーナー対応)。[youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ](https://youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ)(`@moyasuka`)。APIで名称・ハンドル・概要欄・バナーが用意した内容と一致していることを確認済み
 - チャンネル名・ハンドル: **「モヤスカ」・`@moyasuka`で確定・反映済み**(`docs/projects/moyasuka/naming.md`)
+- **2026-08-17: オーナーが`final_v6.mp4`(台本01)を視聴してレビュー。** 「投稿可能品質だが、初見ユーザーを最初の数秒で止める力(冒頭の引き4/10)が弱い」と判定(総合55〜60点)。動画生成システムの大改修ではなく台本の冒頭フック改善を最優先とする方針を決定。詳細は下記「台本改善方針(2026-08-17〜)」を参照
+
+## 台本改善方針(2026-08-17〜)
+
+オーナー指示により、モヤスカを「1本を完璧にする」のではなく「10〜30本程度のExperimentから、どの脚本構造が再生されるかを発見する」事業として運用する。
+
+- **既存動画は作り直さない**: 台本01(`final_v6.mp4`)はこのまま投稿してデータを取る。以後の新規台本(06〜)から新構成を適用する
+- **構成の型を刷新**: 「普通の会話から始める」旧構成をやめ、冒頭0〜3秒に強いフック(結末の一部・衝撃的な一文の先出しなど)を置く新構成に変更。詳細・冒頭タイプ分類(A〜F)・生成時セルフチェック5項目は`docs/projects/moyasuka/content-backlog.md`の「構成の型」節を参照
+- **Experiment記録**: 台本ごとに`docs/company-os/experiments/moyasuka-<話数>-<slug>.json`を作成し、冒頭タイプ・テーマ・感情・尺・背景タイプ・指標(再生数/平均視聴時間/維持率/コメント/いいね/登録者増)を記録する(note-articlesと同じ形式)。指標はYouTube Analytics権限が未整備(task #24)のため当面オーナー入力待ち
+- **やらないこと(2026-08-17時点)**: 動画レンダリングシステムの全面改修、背景動画システムの全面改修、新規事業追加、SNS投稿システムの大規模改修。まずは台本生成部分への最小変更を優先する
+- **優先順位**: ①モヤスカ完全自動化PoC(台本→JSON→Shortcuts→VOICEVOX→Dropbox→音声回収→assembleまで1本通す、主にオーナー側のiPad操作) ②台本生成の冒頭フック改善(上記) ③YouTubeへ投稿してExperiment ④数字を蓄積 ⑤勝ちパターンが判明したら自動生成Routineへ反映 ⑥安定後にTikTok/Instagram Reelsへの横展開を検討
 
 ## 人間側でまだ必要な作業
 
