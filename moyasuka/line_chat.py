@@ -222,6 +222,14 @@ def parse_chat_script(path: str) -> tuple[str, list[dict]]:
                     kind, payload, body_text = "image", rest or None, ""
                 elif tag == "sticker":
                     kind, payload, body_text = "sticker", rest or "困り顔", ""
+                elif tag == "photo":
+                    # a real photo attachment (2026-08-17, owner-supplied
+                    # scene image) — `rest` is a filename under
+                    # moyasuka/assets/scenes/, see _render_photo. Unlike
+                    # [image]'s self-generated evidence chart, this is an
+                    # actual provided photo, rendered as-is (resized,
+                    # rounded corners) — no bar chart/graphic synthesis.
+                    kind, payload, body_text = "photo", rest or None, ""
             items.append({"type": "msg", "speaker": speaker, "text": body_text, "side": side, "kind": kind, "payload": payload})
 
     # group consecutive messages from the same speaker: real LINE only
@@ -243,6 +251,8 @@ def parse_chat_script(path: str) -> tuple[str, list[dict]]:
 
 IMAGE_VIEW_SECONDS = 2.2   # dwell time for an [image] evidence chart (no text to time against)
 STICKER_VIEW_SECONDS = 1.6  # dwell time for a [sticker]
+PHOTO_VIEW_SECONDS = 2.4    # dwell time for a [photo] attachment — slightly longer than a chart/sticker since a real photo has more to look at
+SCENES_DIR = Path(__file__).resolve().parent / "assets" / "scenes"
 
 # Owner feedback (2026-08-14, after watching 台本01's actual audio): a
 # message that's just "......" (a beat of silence/hesitation, several
@@ -599,6 +609,29 @@ def _render_sticker_face(label: str, size: int = 170) -> Image.Image:
     return img
 
 
+PHOTO_MAX_WIDTH = 340  # a bit wider than the evidence chart's 300px — a real photo reads better larger
+
+
+def _render_photo(filename: str, max_width: int = PHOTO_MAX_WIDTH) -> Image.Image:
+    """Loads a real photo from assets/scenes/ (owner-supplied, e.g. an
+    AI-generated scene still) and returns it resized to `max_width` with
+    rounded corners — matching how real LINE displays a photo attachment
+    (no bubble background, just the rounded image itself, same as
+    _render_evidence_chart/_render_sticker_face's self-generated graphics
+    but here the pixels come from a provided file instead of being drawn)."""
+    path = SCENES_DIR / filename
+    photo = Image.open(path).convert("RGB")
+    w, h = photo.size
+    new_h = int(h * (max_width / w))
+    photo = photo.resize((max_width, new_h), Image.LANCZOS)
+
+    mask = Image.new("L", (max_width, new_h), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, max_width - 1, new_h - 1], radius=18, fill=255)
+    img = Image.new("RGBA", (max_width, new_h), (0, 0, 0, 0))
+    img.paste(photo, (0, 0), mask)
+    return img
+
+
 def render_block(item: dict) -> _Block:
     if item["type"] == "card":
         return _render_card(item["text"])
@@ -611,6 +644,9 @@ def render_block(item: dict) -> _Block:
     if kind == "sticker":
         face = _render_sticker_face(item.get("payload") or "困り顔")
         return _wrap_media_block(item["speaker"], item["side"], grouped, face)
+    if kind == "photo":
+        photo = _render_photo(item.get("payload") or "")
+        return _wrap_media_block(item["speaker"], item["side"], grouped, photo)
     return _render_bubble(item["speaker"], item["text"], item["side"], grouped)
 
 

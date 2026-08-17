@@ -97,6 +97,7 @@ from moyasuka.audio_mix import mix_clips_at_times, wav_duration
 from moyasuka.line_chat import (
     IMAGE_VIEW_SECONDS,
     PAUSE_SECONDS,
+    PHOTO_VIEW_SECONDS,
     STICKER_VIEW_SECONDS,
     estimate_arrivals,
     is_pause_only,
@@ -224,6 +225,9 @@ def assemble(script_path: str, clips_dir: str, out_wav: str, out_durations_json:
                 continue
             if kind == "sticker":
                 durations.append(STICKER_VIEW_SECONDS)
+                continue
+            if kind == "photo":
+                durations.append(PHOTO_VIEW_SECONDS)
                 continue
             if is_pause_only(item["text"]):
                 durations.append(PAUSE_SECONDS)

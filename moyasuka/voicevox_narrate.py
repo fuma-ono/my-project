@@ -143,6 +143,10 @@ def build_narration(script_path: str, out_wav: str, out_durations_json: str) -> 
                 from moyasuka.line_chat import STICKER_VIEW_SECONDS
                 durations.append(STICKER_VIEW_SECONDS)
                 continue
+            if kind == "photo":
+                from moyasuka.line_chat import PHOTO_VIEW_SECONDS
+                durations.append(PHOTO_VIEW_SECONDS)
+                continue
 
             if is_pause_only(item["text"]):
                 # 2026-08-14: see line_chat.py's is_pause_only() — "......"
