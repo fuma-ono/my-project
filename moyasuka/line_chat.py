@@ -122,7 +122,20 @@ LEAD_IN_SECONDS = 3.1
 # starts (still the firm invariant from Round 1/2 above) plus a small
 # buffer — nothing more.
 POST_HOOK_NOTIFICATION_DELAY = 0.2
-POST_HOOK_LEAD_IN_SECONDS = 2.3
+POST_HOOK_LEAD_IN_SECONDS = 2.3  # the narration-safe floor: no item with real spoken narration may start before hook_end + this (still fully covers the chime's ~1.9s length + a small buffer)
+
+# Owner feedback (2026-08-17, on v11): "もう少し通知音の後すぐに画像出し
+# て" — POST_HOOK_LEAD_IN_SECONDS above was being applied even to a silent
+# visual (a [photo]/[image]/[sticker] item has no narration audio of its
+# own), which doesn't need the same "wait for the chime to finish"
+# protection a *spoken* line does — that protection exists purely to keep
+# the chime from overlapping narration audio, and a silent visual has no
+# audio to overlap. So a silent item may appear almost immediately after
+# the hook (POST_HOOK_SILENT_GAP), while whichever item is the first to
+# actually carry spoken narration is still floored at
+# hook_end + POST_HOOK_LEAD_IN_SECONDS regardless of how many silent items
+# came before it (see the max() in estimate_arrivals).
+POST_HOOK_SILENT_GAP = 0.15
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont:
@@ -242,7 +255,15 @@ def parse_chat_script(path: str) -> tuple[str, list[dict]]:
     for item in items:
         if item["type"] == "msg":
             item["grouped"] = item["speaker"] == prev_speaker
-            prev_speaker = item["speaker"]
+            # a [photo] doesn't count toward burst continuity (2026-08-17,
+            # owner: "写真には義母のアイコン入らない" — its own header is
+            # force-hidden in render_block regardless of `grouped`; not
+            # updating prev_speaker here means the *next* real message
+            # from the same speaker still gets treated as the start of a
+            # new burst and shows its name/avatar normally, instead of
+            # inheriting "grouped" from a photo that has no header at all)
+            if item.get("kind") != "photo":
+                prev_speaker = item["speaker"]
         elif item["type"] != "sfx":  # a card resets the burst; a zero-duration sfx cue doesn't
             prev_speaker = None
 
@@ -303,7 +324,8 @@ def estimate_arrivals(items: list[dict], durations: list[float] | None = None) -
     VOICEVOX audio yet), the guess is all there is to time against."""
     t = 0.0
     lead_in_applied = False  # a lead-in is added once, right before the first real (non-hook, non-sfx) item — see is_hook handling below
-    hook_occurred = False    # which lead-in to use: POST_HOOK_LEAD_IN_SECONDS (tight) if a hook already played, else LEAD_IN_SECONDS (cold open)
+    hook_occurred = False    # which lead-in to use: the post-hook constants if a hook already played, else LEAD_IN_SECONDS (cold open)
+    narration_floor = None   # earliest a *spoken* item may start, post-hook (see POST_HOOK_SILENT_GAP's comment) — None until a hook sets it
     out = []
     for i, item in enumerate(items):
         if item["type"] == "sfx":
@@ -325,17 +347,28 @@ def estimate_arrivals(items: list[dict], durations: list[float] | None = None) -
         if item.get("is_hook"):
             # Opening hook always sits at t=0. Once it ends, a lead-in
             # begins before the chat starts — but a much tighter one than a
-            # cold open's (POST_HOOK_LEAD_IN_SECONDS, not LEAD_IN_SECONDS;
-            # see those constants' comments — 2026-08-17, "冒頭6〜9秒が
-            # 映像的に弱い" fix).
+            # cold open's (post-hook constants, not LEAD_IN_SECONDS; see
+            # those constants' comments — 2026-08-17, "冒頭6〜9秒が映像的に
+            # 弱い" fix).
             out.append((t, t + dur, item))
             t += dur
             hook_occurred = True
+            narration_floor = t + POST_HOOK_LEAD_IN_SECONDS
             continue
 
         if not lead_in_applied:
-            t += POST_HOOK_LEAD_IN_SECONDS if hook_occurred else LEAD_IN_SECONDS
+            t += POST_HOOK_SILENT_GAP if hook_occurred else LEAD_IN_SECONDS
             lead_in_applied = True
+
+        kind = item.get("kind", "text")
+        has_narration = kind == "text" and not is_pause_only(item.get("text", ""))
+        if has_narration and narration_floor is not None:
+            # whichever item is the *first* to actually carry spoken
+            # narration after a hook must not start before the chime has
+            # fully finished, no matter how many silent items (a [photo],
+            # say) already used up some of that time — see
+            # POST_HOOK_SILENT_GAP's comment.
+            t = max(t, narration_floor)
 
         out.append((t, t + dur, item))
         t += dur + GAP_SECONDS
@@ -645,8 +678,14 @@ def render_block(item: dict) -> _Block:
         face = _render_sticker_face(item.get("payload") or "困り顔")
         return _wrap_media_block(item["speaker"], item["side"], grouped, face)
     if kind == "photo":
+        # owner feedback (2026-08-17): "写真には義母のアイコン入らない" —
+        # unlike a chart/sticker reaction, a scene photo like this reads
+        # better with no name/avatar header at all, so `grouped` is forced
+        # True here regardless of the item's actual burst position
+        # (_wrap_media_block only shows the header when side=="other" and
+        # not grouped).
         photo = _render_photo(item.get("payload") or "")
-        return _wrap_media_block(item["speaker"], item["side"], grouped, photo)
+        return _wrap_media_block(item["speaker"], item["side"], True, photo)
     return _render_bubble(item["speaker"], item["text"], item["side"], grouped)
 
 
