@@ -1,0 +1,18 @@
+{
+  "business_id": "bgm",
+  "period": "2026-W34",
+  "collected_at": "2026-08-17",
+  "source": "YouTube Data API videos.list(統計値)",
+  "videos": [
+    {"id": "2ANtYRALumw", "title": "study_lofi_chill(長尺)", "type": "long", "views": 7, "likes": 0, "comments": 0},
+    {"id": "QkeAOj3VN_E", "title": "baby_sleep_noise(長尺)", "type": "long", "views": 5, "likes": 0, "comments": 0},
+    {"id": "kO5dfoyCloE", "title": "breath_guide_coherent(長尺)", "type": "long", "views": 6, "likes": 0, "comments": 0},
+    {"id": "xT472Ht5omk", "title": "sleep_rain_focus(長尺)", "type": "long", "views": 18, "likes": 0, "comments": 0},
+    {"id": "nf7yiIO2hB8", "title": "study_focus_binaural(長尺)", "type": "long", "views": 14, "likes": 0, "comments": 0},
+    {"id": "qkpqzOM5zLM", "title": "sleep_insomnia_pulse(長尺)", "type": "long", "views": 14, "likes": 0, "comments": 0},
+    {"id": "qU_xmGEW8C0", "title": "study_lofi_chill(Shorts第4弾)", "type": "shorts", "views": 194, "likes": 0, "comments": 0},
+    {"id": "Sf6hQb1-i6U", "title": "sleep_rain_focus(Shorts第2弾)", "type": "shorts", "views": 269, "likes": 0, "comments": 0}
+  ],
+  "observation": "W32時点の観察(Shortsが長尺の約15〜20倍)が継続。長尺6本の再生数は5〜18回のレンジで大きな伸びはなく、Shorts2本は194・269回と桁が違う。like/comment獲得はどちらも依然ゼロ(エンゲージメント計測の弱さは引き続き課題)。",
+  "not_yet_measured": ["note記事7本以降の閲覧数(note.com API非公開、オーナー手動確認が必要)", "YouTube Analytics(インプレッション・CTR・平均視聴維持率)— スコープ未取得、タスク#24として保留中"]
+}
