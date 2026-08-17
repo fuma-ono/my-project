@@ -251,7 +251,7 @@ def parse_chat_script(path: str) -> tuple[str, list[dict]]:
 
 IMAGE_VIEW_SECONDS = 2.2   # dwell time for an [image] evidence chart (no text to time against)
 STICKER_VIEW_SECONDS = 1.6  # dwell time for a [sticker]
-PHOTO_VIEW_SECONDS = 2.4    # dwell time for a [photo] attachment — slightly longer than a chart/sticker since a real photo has more to look at
+PHOTO_VIEW_SECONDS = 1.6    # 2026-08-17: was 2.4 — owner: "画像を出してすぐ後にチャットを開始して", shortened to move into the real chat faster
 SCENES_DIR = Path(__file__).resolve().parent / "assets" / "scenes"
 
 # Owner feedback (2026-08-14, after watching 台本01's actual audio): a
