@@ -1,0 +1,51 @@
+name: note.com publish auto-detect
+
+# Claude Code cloud sessions cannot reach note.com (network-restricted
+# sandbox — see note-articles/note_publish/note_auth.py). GitHub-hosted
+# runners have normal internet access, so this workflow does the
+# detection work a session physically cannot: it polls note.com's public
+# RSS feed, matches published titles against this repo's draft backlog,
+# and commits the status flip directly. No chat confirmation needed.
+#
+# See note-articles/note_publish/check_published.py for the full
+# explanation and matching logic.
+
+on:
+  schedule:
+    # Every 6 hours. Cron is UTC; note.com publish timing doesn't need
+    # tighter granularity than this for a ~週3本 cadence.
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: note-publish-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check note.com RSS for newly-published drafts
+        id: check
+        run: python3 note-articles/note_publish/check_published.py
+
+      - name: Commit and push if anything changed
+        run: |
+          if git diff --quiet; then
+            echo "No changes."
+            exit 0
+          fi
+          git config user.name "note-publish-check[bot]"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "note: RSS自動検知による投稿ステータス更新 [skip ci]"
+          git push
