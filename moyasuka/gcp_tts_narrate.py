@@ -154,6 +154,22 @@ def synth_line(text: str, speaker_id: int) -> bytes:
 
 
 def build_narration(script_path: str, out_wav: str, out_durations_json: str) -> float:
+    """IMPORTANT: every spoken clip's position in the returned .wav is
+    baked in using `estimate_arrivals()` *at the moment this runs* (see
+    `mix_clips_at_times` below). render_video() independently recomputes
+    `estimate_arrivals()` again at render time from the same script +
+    durations.json — normally identical, so the two stay in sync. But if
+    line_chat.py's timing logic (LEAD_IN_SECONDS, POST_HOOK_*, GAP_SECONDS,
+    etc.) changes *after* a narration .wav was generated, re-rendering with
+    that same old .wav desyncs the audio from the bubbles: the clips are
+    still sitting at their old baked-in positions while the bubbles now
+    follow the new timing (2026-08-17, real incident: "チャットと音声が
+    合っていない" after a timing-only line_chat.py change reused a
+    pre-existing .wav — root cause, not a hypothetical). Rule: whenever
+    line_chat.py's arrival-timing logic changes, always regenerate
+    narration before the next render, even if the script's own text/items
+    didn't change — reusing an old .wav is only safe when *nothing* about
+    how arrivals are computed changed since it was generated."""
     title, items = parse_chat_script(script_path)
     if not items:
         raise ValueError(f"no chat items found in {script_path}")
