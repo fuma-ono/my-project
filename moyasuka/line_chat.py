@@ -169,6 +169,23 @@ def parse_chat_script(path: str) -> tuple[str, list[dict]]:
         if line.startswith("グループ名:"):
             title = line.split(":", 1)[1].strip()
             continue
+        if line.startswith("フック:") or line.startswith("フック："):
+            # opening hook (2026-08-17, owner review of final_v6.mp4:
+            # "初見ユーザーを最初の数秒で止める力が弱い" — a full-frame line
+            # shown before the chat itself starts, narrated in 私's own
+            # voice (it's her framing the story, not a chat message) — see
+            # render_video's is_hook handling. Modeled as an ordinary "msg"
+            # item tagged is_hook=True rather than a new item type, so every
+            # narration path (gcp_tts_narrate/voicevox_narrate/manual_
+            # narration all key off "type"/"speaker"/"kind"/"text", never
+            # "is_hook") synthesizes/times it exactly like a normal line
+            # with zero changes there — only the rendering layer here needs
+            # to know it's special.
+            sep = ":" if ":" in line else "："
+            hook_text = line.split(sep, 1)[1].strip()
+            if hook_text:
+                items.append({"type": "msg", "speaker": "私", "text": hook_text, "side": "self", "kind": "text", "payload": None, "is_hook": True})
+            continue
         if line.startswith("> "):
             items.append({"type": "card", "text": line[2:].strip()})
             continue
@@ -258,7 +275,8 @@ def estimate_arrivals(items: list[dict], durations: list[float] | None = None) -
     exists, so bubbles/captions land exactly when each line is actually
     spoken instead of the character-count guess below. Without it (no
     VOICEVOX audio yet), the guess is all there is to time against."""
-    t = LEAD_IN_SECONDS
+    t = 0.0
+    lead_in_applied = False  # LEAD_IN_SECONDS is added once, right before the first real (non-hook, non-sfx) item — see is_hook handling below
     out = []
     for i, item in enumerate(items):
         if item["type"] == "sfx":
@@ -276,6 +294,20 @@ def estimate_arrivals(items: list[dict], durations: list[float] | None = None) -
                 dur = STICKER_VIEW_SECONDS
             else:
                 dur = max(MIN_BLOCK_SECONDS, len(item["text"]) / CHARS_PER_SECOND)
+
+        if item.get("is_hook"):
+            # Opening hook always sits at t=0 (before any lead-in silence).
+            # Once it ends, the usual pre-chat LEAD_IN_SECONDS (silence +
+            # notification chime) begins — same invariant as a hook-less
+            # script, just shifted to start after the hook instead of at t=0.
+            out.append((t, t + dur, item))
+            t += dur
+            continue
+
+        if not lead_in_applied:
+            t += LEAD_IN_SECONDS
+            lead_in_applied = True
+
         out.append((t, t + dur, item))
         t += dur + GAP_SECONDS
     return out
@@ -314,6 +346,46 @@ def _render_card(text: str) -> _Block:
         tw = d.textbbox((0, 0), ln, font=font)[2]
         d.text((cx - tw // 2, 5 + pad_y + i * line_h), ln, font=font, fill=CARD_TEXT)
     return _Block(img)
+
+
+# Opening hook (2026-08-17, owner review of final_v6.mp4): a full-frame
+# statement shown before the chat panel appears at all, distinct from the
+# small in-chat `_render_card` pill above (that one is a system-notice
+# style card meant to sit *within* the ongoing bubble stack; this is a
+# one-time cold-open line over the bare background, closer in spirit to
+# this genre's reference channels opening on bold text before cutting to
+# the chat reenactment). Composited directly onto the background frame in
+# render_video's frame loop rather than stacked as a _Block, since it
+# needs the whole frame, not a slice of the chat panel band.
+HOOK_FONT_SIZE = 46
+HOOK_TEXT_COLOR = (255, 255, 255)
+HOOK_OUTLINE_COLOR = (0, 0, 0)
+HOOK_DIM_ALPHA = 140  # darkens the background under the text so white text stays legible over any photo
+
+
+def _render_hook_frame(base: Image.Image, text: str) -> Image.Image:
+    frame = base.convert("RGBA")
+    dim = Image.new("RGBA", frame.size, (0, 0, 0, HOOK_DIM_ALPHA))
+    frame.alpha_composite(dim)
+
+    font = _font(HOOK_FONT_SIZE)
+    max_w = int(BG_W * 0.82)
+    lines = _wrap(text, font, max_w)
+    probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    line_h = probe.textbbox((0, 0), "あ", font=font)[3] + 16
+    total_h = line_h * len(lines)
+    d = ImageDraw.Draw(frame)
+    top = frame.height // 2 - total_h // 2
+    for i, ln in enumerate(lines):
+        tw = d.textbbox((0, 0), ln, font=font)[2]
+        x, y = (BG_W - tw) // 2, top + i * line_h
+        # thin dark outline for legibility over any background photo — the
+        # rest of this module puts text on solid bubble fills, this is the
+        # one place it floats directly over a photo
+        for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
+            d.text((x + dx, y + dy), ln, font=font, fill=(*HOOK_OUTLINE_COLOR, 220))
+        d.text((x, y), ln, font=font, fill=HOOK_TEXT_COLOR)
+    return frame.convert("RGB")
 
 
 # Owner request (2026-08-16): "既読がまだついてない" — real LINE shows a
@@ -642,6 +714,19 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
     sfx_cues = [(start, item["name"]) for (start, _end, item) in arrivals if item["type"] == "sfx"]
     visual_arrivals = [(start, end, item) for (start, end, item) in arrivals if item["type"] != "sfx"]
 
+    # opening hook (see is_hook in estimate_arrivals/parse_chat_script): at
+    # most one, always the first visual item if present. Pulled out here so
+    # it can be composited as a full frame instead of a chat bubble, and so
+    # the notification/chat cues below can be scheduled to start *after* it
+    # instead of overlapping it.
+    hook_window: tuple[float, float, str] | None = None
+    for start, end, item in visual_arrivals:
+        if item.get("is_hook"):
+            hook_window = (start, end, item["text"])
+            break
+    visual_arrivals = [(start, end, item) for (start, end, item) in visual_arrivals if not item.get("is_hook")]
+    hook_end = hook_window[1] if hook_window else 0.0
+
     # every message bubble gets a short notification "pop" as it lands —
     # not a one-off cue, this is the actual, constant soundscape of the
     # genre (owner feedback 2026-08-06, round 3: the missing piece wasn't
@@ -667,12 +752,16 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
         if item["type"] == "msg" and item.get("kind") == "image"
     ]
 
-    # opening hook — owner request (2026-08-16): "まず最初に通知音を出して",
-    # refined twice same day: a brief silent beat (NOTIFICATION_DELAY)
-    # before it plays instead of firing at the very first frame ("早すぎ
-    # る"), then LEAD_IN_SECONDS gives it room to fully finish before the
-    # chat/narration starts (was overlapping the narration before that fix).
-    notification_cues = [(NOTIFICATION_DELAY, "notification")]
+    # opening notification chime — owner request (2026-08-16): "まず最初に
+    # 通知音を出して", refined twice same day: a brief silent beat
+    # (NOTIFICATION_DELAY) before it plays instead of firing at the very
+    # first frame ("早すぎる"), then LEAD_IN_SECONDS gives it room to fully
+    # finish before the chat/narration starts (was overlapping the
+    # narration before that fix). Offset by hook_end (2026-08-17) so that
+    # when a script has an opening hook, the chime still fires *after* the
+    # hook finishes rather than overlapping it — hook_end is 0.0 for a
+    # hook-less script, so this is unchanged from before in that case.
+    notification_cues = [(hook_end + NOTIFICATION_DELAY, "notification")]
 
     sfx_cues = sfx_cues + notification_cues + pop_cues + shock_cues + screenshot_cues
 
@@ -696,7 +785,10 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
         frame_dir.mkdir()
         n = 0
         for f, (t, bg_img) in enumerate(iter_frames(total_seconds, seed)):
-            frame = render_frame(bg_img, all_blocks, arrival_times, t)
+            if hook_window and hook_window[0] <= t < hook_window[1]:
+                frame = _render_hook_frame(bg_img, hook_window[2])
+            else:
+                frame = render_frame(bg_img, all_blocks, arrival_times, t)
             frame.save(frame_dir / f"f{f:05d}.png")
             n = f + 1
 
