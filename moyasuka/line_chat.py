@@ -108,6 +108,22 @@ GAP_SECONDS = 0.15  # 2026-08-16: was 0.235 (2026-08-14) — trimmed further to 
 NOTIFICATION_DELAY = 1.0
 LEAD_IN_SECONDS = 3.1
 
+# Owner feedback (2026-08-17, on v8 with a hook): "冒頭6〜9秒が映像的に
+# 弱い...3〜9秒あたりで海だけになる時間がある" — v8 still applied the same
+# NOTIFICATION_DELAY/LEAD_IN_SECONDS *after* the hook ended as it does at a
+# cold open (t=0, no hook), leaving several seconds of bare background
+# between the hook disappearing and the first chat bubble arriving. That
+# 1.0s pre-chime cushion exists to avoid the chime feeling instant/abrupt
+# coming out of *silence* — it doesn't apply the same way coming out of a
+# hook, which is already a deliberate scene change (full-frame text →
+# chat). So a hook gets its own, much tighter pair of constants: fires the
+# chime almost immediately, and only enough total gap for the chime clip
+# (~1.9s, see NOTICE.md) to fully finish before the first line's narration
+# starts (still the firm invariant from Round 1/2 above) plus a small
+# buffer — nothing more.
+POST_HOOK_NOTIFICATION_DELAY = 0.2
+POST_HOOK_LEAD_IN_SECONDS = 2.3
+
 
 def _font(size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(JP_FONT_PATH, size)
@@ -276,7 +292,8 @@ def estimate_arrivals(items: list[dict], durations: list[float] | None = None) -
     spoken instead of the character-count guess below. Without it (no
     VOICEVOX audio yet), the guess is all there is to time against."""
     t = 0.0
-    lead_in_applied = False  # LEAD_IN_SECONDS is added once, right before the first real (non-hook, non-sfx) item — see is_hook handling below
+    lead_in_applied = False  # a lead-in is added once, right before the first real (non-hook, non-sfx) item — see is_hook handling below
+    hook_occurred = False    # which lead-in to use: POST_HOOK_LEAD_IN_SECONDS (tight) if a hook already played, else LEAD_IN_SECONDS (cold open)
     out = []
     for i, item in enumerate(items):
         if item["type"] == "sfx":
@@ -296,16 +313,18 @@ def estimate_arrivals(items: list[dict], durations: list[float] | None = None) -
                 dur = max(MIN_BLOCK_SECONDS, len(item["text"]) / CHARS_PER_SECOND)
 
         if item.get("is_hook"):
-            # Opening hook always sits at t=0 (before any lead-in silence).
-            # Once it ends, the usual pre-chat LEAD_IN_SECONDS (silence +
-            # notification chime) begins — same invariant as a hook-less
-            # script, just shifted to start after the hook instead of at t=0.
+            # Opening hook always sits at t=0. Once it ends, a lead-in
+            # begins before the chat starts — but a much tighter one than a
+            # cold open's (POST_HOOK_LEAD_IN_SECONDS, not LEAD_IN_SECONDS;
+            # see those constants' comments — 2026-08-17, "冒頭6〜9秒が
+            # 映像的に弱い" fix).
             out.append((t, t + dur, item))
             t += dur
+            hook_occurred = True
             continue
 
         if not lead_in_applied:
-            t += LEAD_IN_SECONDS
+            t += POST_HOOK_LEAD_IN_SECONDS if hook_occurred else LEAD_IN_SECONDS
             lead_in_applied = True
 
         out.append((t, t + dur, item))
@@ -758,10 +777,13 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
     # first frame ("早すぎる"), then LEAD_IN_SECONDS gives it room to fully
     # finish before the chat/narration starts (was overlapping the
     # narration before that fix). Offset by hook_end (2026-08-17) so that
-    # when a script has an opening hook, the chime still fires *after* the
-    # hook finishes rather than overlapping it — hook_end is 0.0 for a
-    # hook-less script, so this is unchanged from before in that case.
-    notification_cues = [(hook_end + NOTIFICATION_DELAY, "notification")]
+    # when a script has an opening hook, the chime fires after the hook
+    # finishes rather than overlapping it — and uses the tighter
+    # POST_HOOK_NOTIFICATION_DELAY in that case (see that constant's
+    # comment: "冒頭6〜9秒が映像的に弱い" — the cold-open delay is far more
+    # cushion than a hook→chat scene change needs). hook_window is None for
+    # a hook-less script, so this is unchanged from before in that case.
+    notification_cues = [(hook_end + (POST_HOOK_NOTIFICATION_DELAY if hook_window else NOTIFICATION_DELAY), "notification")]
 
     sfx_cues = sfx_cues + notification_cues + pop_cues + shock_cues + screenshot_cues
 
