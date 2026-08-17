@@ -54,7 +54,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from moyasuka.audio_mix import mix_clips_at_times, wav_duration
-from moyasuka.line_chat import PAUSE_SECONDS, estimate_arrivals, is_pause_only, parse_chat_script
+from moyasuka.line_chat import PAUSE_SECONDS, estimate_arrivals, is_pause_only, parse_chat_script, timing_fingerprint
 
 VOICEVOX_URL = "http://127.0.0.1:50021"
 
@@ -179,6 +179,10 @@ def build_narration(script_path: str, out_wav: str, out_durations_json: str) -> 
 
     with open(out_durations_json, "w", encoding="utf-8") as f:
         json.dump(durations, f, ensure_ascii=False)
+
+    # see gcp_tts_narrate.build_narration's docstring / line_chat.
+    # timing_fingerprint's docstring — same stale-audio hazard applies here
+    Path(f"{out_durations_json}.timing").write_text(timing_fingerprint(), encoding="utf-8")
 
     return total_seconds
 

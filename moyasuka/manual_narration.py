@@ -102,6 +102,7 @@ from moyasuka.line_chat import (
     estimate_arrivals,
     is_pause_only,
     parse_chat_script,
+    timing_fingerprint,
 )
 from moyasuka.voicevox_narrate import CHARACTER_SPEAKER_IDS, DEFAULT_SPEAKER_ID
 
@@ -257,6 +258,10 @@ def assemble(script_path: str, clips_dir: str, out_wav: str, out_durations_json:
 
     with open(out_durations_json, "w", encoding="utf-8") as f:
         json.dump(durations, f, ensure_ascii=False)
+
+    # see gcp_tts_narrate.build_narration's docstring / line_chat.
+    # timing_fingerprint's docstring — same stale-audio hazard applies here
+    Path(f"{out_durations_json}.timing").write_text(timing_fingerprint(), encoding="utf-8")
 
     return total_seconds
 

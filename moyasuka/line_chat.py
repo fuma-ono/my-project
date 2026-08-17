@@ -48,6 +48,7 @@ import argparse
 import json
 import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -373,6 +374,32 @@ def estimate_arrivals(items: list[dict], durations: list[float] | None = None) -
         out.append((t, t + dur, item))
         t += dur + GAP_SECONDS
     return out
+
+
+def timing_fingerprint() -> str:
+    """A short hash covering everything that affects estimate_arrivals()'s
+    output: its own source plus every timing constant it reads. narration
+    generators (gcp_tts_narrate.py etc.) stamp this into a sidecar file
+    next to durations.json when they bake clip positions into the .wav;
+    render_video() recomputes it fresh and warns loudly if it doesn't
+    match — catches exactly the class of bug behind the 2026-08-17
+    incident ("チャットと音声が合っていない": a timing-logic change in this
+    file made an old, still-passing --durations/--audio pair silently
+    desync from a freshly-rendered chat, because the audio's clip
+    positions were baked in at generation time under the *old* logic).
+    Anything that changes estimate_arrivals' behavior — editing its body,
+    or any constant it reads — must change this hash; if you add a new
+    timing constant, add it to the tuple below or this stops catching it."""
+    import hashlib
+    import inspect
+
+    src = inspect.getsource(estimate_arrivals)
+    constants = (
+        LEAD_IN_SECONDS, GAP_SECONDS, MIN_BLOCK_SECONDS, CHARS_PER_SECOND,
+        POST_HOOK_LEAD_IN_SECONDS, POST_HOOK_SILENT_GAP,
+        IMAGE_VIEW_SECONDS, STICKER_VIEW_SECONDS, PHOTO_VIEW_SECONDS,
+    )
+    return hashlib.sha256((src + repr(constants)).encode()).hexdigest()[:16]
 
 
 class _Block:
@@ -800,6 +827,29 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
     if durations_path:
         with open(durations_path, encoding="utf-8") as f:
             durations = json.load(f)
+        # stale-audio guard (2026-08-17 incident: "チャットと音声が
+        # 合っていない") — see timing_fingerprint()'s docstring. The
+        # narration .wav's clip positions were baked in under whatever
+        # timing logic was live when it was generated; if that logic has
+        # changed since, this --audio/--durations pair no longer matches
+        # what this render will produce and MUST be regenerated first.
+        timing_sidecar = Path(f"{durations_path}.timing")
+        current_fp = timing_fingerprint()
+        if not timing_sidecar.exists():
+            print(
+                f"WARNING: {timing_sidecar} not found — cannot verify this narration audio "
+                "matches the current timing logic. If it predates this fingerprinting change, "
+                "regenerate narration to be safe before treating this render as final.",
+                file=sys.stderr,
+            )
+        elif timing_sidecar.read_text(encoding="utf-8").strip() != current_fp:
+            print(
+                f"WARNING: timing logic changed since {audio_path} was generated "
+                f"(fingerprint mismatch: {timing_sidecar} has a stale value). The chat bubbles "
+                "and the narration audio's baked-in clip positions will NOT match. "
+                "Regenerate narration before sending this render anywhere.",
+                file=sys.stderr,
+            )
     arrivals = estimate_arrivals(items, durations)
     total_seconds = arrivals[-1][1] + 1.2
 

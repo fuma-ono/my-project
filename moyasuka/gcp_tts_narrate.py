@@ -51,7 +51,7 @@ import requests
 
 from moyasuka import gcp_tts_auth
 from moyasuka.audio_mix import mix_clips_at_times, wav_duration
-from moyasuka.line_chat import HARSH_TRIGGER_WORDS, PAUSE_SECONDS, estimate_arrivals, is_pause_only, parse_chat_script
+from moyasuka.line_chat import HARSH_TRIGGER_WORDS, PAUSE_SECONDS, estimate_arrivals, is_pause_only, parse_chat_script, timing_fingerprint
 from moyasuka.voicevox_narrate import CHARACTER_SPEAKER_IDS, DEFAULT_SPEAKER_ID
 
 SYNTHESIZE_URL = "https://texttospeech.googleapis.com/v1/text:synthesize"
@@ -231,6 +231,12 @@ def build_narration(script_path: str, out_wav: str, out_durations_json: str) -> 
 
     with open(out_durations_json, "w", encoding="utf-8") as f:
         json.dump(durations, f, ensure_ascii=False)
+
+    # stamp the timing logic's fingerprint at the moment clip positions
+    # were baked into out_wav — see line_chat.timing_fingerprint()'s
+    # docstring. render_video() checks this against the current code and
+    # warns if line_chat.py's timing logic changed since this .wav was built.
+    Path(f"{out_durations_json}.timing").write_text(timing_fingerprint(), encoding="utf-8")
 
     return total_seconds
 
