@@ -1,14 +1,14 @@
 {
-  "id": "note-12-family-noise-wfh",
+  "id": "note-18-breathing-4-6-practice",
   "business_id": "note",
-  "article_number": "12",
-  "title": "家族の生活音が気になって在宅ワークに集中できない、を解決した話",
-  "theme_backlog_id": 16,
+  "article_number": "18",
+  "title": "「吸って4秒・吐いて6秒」を2週間試して、実際に変わったこと・変わらなかったこと",
+  "theme_backlog_id": 22,
   "pillar": "A",
   "hypothesis": "この記事テーマは読者の実際の悩み・検索意図に一致し、閲覧・スキ・フォロワー増につながる需要がある",
-  "generated_at": "2026-08-12",
+  "generated_at": "2026-08-17",
   "published_at": null,
-  "status": "published",
+  "status": "draft",
   "note_url": "https://note.com/unique_condor276",
   "metrics": {
     "views": null,
@@ -30,7 +30,6 @@
     "clickable_title": true,
     "clear_reader_value": true,
     "no_duplication_with_existing": true,
-    "note": "2026-08-12の週3本運用化にあたり新設したチェックリスト。既存記事(01〜10)とテーマ・切り口の重複がないことを確認済み"
-  },
-  "publish_confirmation_note": "2026-08-17、オーナーより投稿済みと確認。正確な公開日時はnote.com側のみ把握のためAI側では未取得。"
+    "note": "2026-08-17、週2回運用Routineでの新規生成。既存記事(01〜16)とテーマ・切り口の重複がないことを確認済み(docs/marketing/2026-08-content-topics.mdの差別化欄参照)"
+  }
 }

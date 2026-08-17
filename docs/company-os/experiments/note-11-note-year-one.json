@@ -8,7 +8,7 @@
   "hypothesis": "この記事テーマは読者の実際の悩み・検索意図に一致し、閲覧・スキ・フォロワー増につながる需要がある",
   "generated_at": "2026-08-12",
   "published_at": null,
-  "status": "draft",
+  "status": "published",
   "note_url": "https://note.com/unique_condor276",
   "metrics": {
     "views": null,
@@ -31,5 +31,6 @@
     "clear_reader_value": true,
     "no_duplication_with_existing": true,
     "note": "2026-08-12の週3本運用化にあたり新設したチェックリスト。既存記事(01〜10)とテーマ・切り口の重複がないことを確認済み"
-  }
+  },
+  "publish_confirmation_note": "2026-08-17、オーナーより投稿済みと確認。正確な公開日時はnote.com側のみ把握のためAI側では未取得。"
 }
