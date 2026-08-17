@@ -72,12 +72,18 @@ CLOUD_TTS_VOICES: dict[int, dict] = {
 DEFAULT_VOICE = CLOUD_TTS_VOICES[DEFAULT_SPEAKER_ID]
 
 
-# Owner feedback (2026-08-17): "もう少し話すスピードを早くして" — applied
-# as a flat multiplier on top of every bucket in _prosody_for below, rather
-# than raising each bucket's rate individually, so the relative pacing
-# differences between e.g. a hesitant line and an exclamation are
-# preserved exactly, just all shifted faster together.
-GLOBAL_RATE_MULTIPLIER = 1.12
+# Owner feedback (2026-08-17, round 1): "もう少し話すスピードを早くして"
+# — applied as a flat multiplier on top of every bucket in _prosody_for
+# below, rather than raising each bucket's rate individually, so the
+# relative pacing differences between e.g. a hesitant line and an
+# exclamation are preserved exactly, just all shifted faster together.
+# Round 2 (same day, on the モヤスカ v13 render): "もう少し話すスピードを
+# 早くして。チャットもそれに合わせて" — bumped further. The "チャットも
+# それに合わせて" part needs no separate code change: bubble timing is
+# already driven entirely by the real per-line audio durations
+# (durations.json), so regenerating narration with the new rate and
+# re-rendering is sufficient — the chat automatically follows.
+GLOBAL_RATE_MULTIPLIER = 1.2
 
 
 def _prosody_for(text: str) -> tuple[float, float]:
