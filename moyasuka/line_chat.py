@@ -101,8 +101,12 @@ GAP_SECONDS = 0.15  # 2026-08-16: was 0.235 (2026-08-14) — trimmed further to 
 # schedules the cue (see render_video); LEAD_IN_SECONDS covers that delay
 # plus the clip's own length plus a small buffer, so the chat still never
 # starts until the notification has fully finished.
-NOTIFICATION_DELAY = 0.4
-LEAD_IN_SECONDS = 2.5
+# Round 3 (2026-08-17): "最初の通知音の前に無音の時間を長くして" — the
+# 0.4s beat still read as too quick; stretched to 1.0s. LEAD_IN_SECONDS
+# grows by the same amount so the invariant above still holds (chat never
+# starts before the chime finishes playing).
+NOTIFICATION_DELAY = 1.0
+LEAD_IN_SECONDS = 3.1
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont:

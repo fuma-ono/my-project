@@ -72,6 +72,14 @@ CLOUD_TTS_VOICES: dict[int, dict] = {
 DEFAULT_VOICE = CLOUD_TTS_VOICES[DEFAULT_SPEAKER_ID]
 
 
+# Owner feedback (2026-08-17): "もう少し話すスピードを早くして" — applied
+# as a flat multiplier on top of every bucket in _prosody_for below, rather
+# than raising each bucket's rate individually, so the relative pacing
+# differences between e.g. a hesitant line and an exclamation are
+# preserved exactly, just all shifted faster together.
+GLOBAL_RATE_MULTIPLIER = 1.12
+
+
 def _prosody_for(text: str) -> tuple[float, float]:
     """(pitch_delta, speaking_rate), layered on top of the character's base
     voice — owner feedback (2026-08-16, round 1): "音声に抑揚つけて". Cloud
@@ -90,18 +98,20 @@ def _prosody_for(text: str) -> tuple[float, float]:
     same lines)."""
     stripped = text.rstrip("。、!！?？…‥.")
     if any(w in text for w in HARSH_TRIGGER_WORDS):
-        return 4.0, 1.15          # shock/anger — sharp and fast
-    if text.endswith(("?", "？")):
-        return 3.0, 1.08          # question — rises
-    if text.endswith(("!", "！")):
-        return 3.5, 1.15          # exclamation — pushes harder
-    if "…" in text or "..." in text:
-        return -2.5, 0.85         # hesitation/trailing off — slower and lower
-    if len(stripped) <= 6:
-        return -1.5, 0.92         # short reaction line — weighty, deliberate
-    if len(stripped) >= 15:
-        return 1.5, 1.05          # longer explanatory line — a bit more energy so it doesn't drone
-    return 0.5, 1.02              # everything else still gets a small lift, never the untouched default
+        pitch, rate = 4.0, 1.15          # shock/anger — sharp and fast
+    elif text.endswith(("?", "？")):
+        pitch, rate = 3.0, 1.08          # question — rises
+    elif text.endswith(("!", "！")):
+        pitch, rate = 3.5, 1.15          # exclamation — pushes harder
+    elif "…" in text or "..." in text:
+        pitch, rate = -2.5, 0.85         # hesitation/trailing off — slower and lower
+    elif len(stripped) <= 6:
+        pitch, rate = -1.5, 0.92         # short reaction line — weighty, deliberate
+    elif len(stripped) >= 15:
+        pitch, rate = 1.5, 1.05          # longer explanatory line — a bit more energy so it doesn't drone
+    else:
+        pitch, rate = 0.5, 1.02          # everything else still gets a small lift, never the untouched default
+    return pitch, rate * GLOBAL_RATE_MULTIPLIER
 
 
 _SSML_ESCAPE = str.maketrans({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;"})
