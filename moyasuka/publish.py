@@ -70,30 +70,35 @@ https://x.com/moyasuka_ch
 #スカッと #LINEドラマ #ショートドラマ #Shorts"""
 
 
-# 2026-08-18: 「毎回タイトルに絵文字をつけるようにして」(オーナー指示) —
-# タイトルは「〜結果ｗｗ」のように"笑い"で締める型が定番(content-backlog.md
-# の「タイトルの型」)なので、その空気に合う🤣を標準絵文字として固定する。
-# 台本ごとに変えたい場合はここではなく _title_from_script 側で分岐すればよい。
-TITLE_EMOJI = "🤣"
+# 2026-08-18: 「毎回タイトルに絵文字をつけるようにして」(オーナー指示、
+# 1回目)→ 最初は単純に🤣を末尾に追加していたが、実際の見た目("...結果
+# ｗｗ🤣 #Shorts")を見たオーナーから明示的な修正指示(2回目): 「"結果
+# 🤣🤣ww #Shorts"こうして 今後も同じような感じにするように覚えて」。
+# タイトルの型(content-backlog.md)の「ｗｗ(全角)で締める」を、絵文字2つ
+# +半角wwに置き換える形に統一する——全角ｗｗをこのサフィックスに置き換える
+# (両方乗せない)。以後すべての台本でこの形が標準。
+TITLE_LAUGH_SUFFIX = "🤣🤣ww"
 
 
 def _title_from_script(script_path: str) -> str:
     """Pulls the `**タイトル案**: ...` line every scripts/*.md file has,
-    appends TITLE_EMOJI (owner request, 2026-08-18: 毎回タイトルに絵文字を
-    つける), then appends " #Shorts" (owner request, 2026-08-14: Shorts向け
-    にタイトルも最適化する) — YouTube's Shorts classifier already picks
-    this video up automatically from format (line_chat.py's 720x1280, 9:16)
-    + duration (well under 3 minutes), but a "#Shorts" signal in the title
-    itself is the extra nudge many creators rely on, on top of
-    DEFAULT_TAGS/DESCRIPTION_TEMPLATE already carrying it. Both appends are
-    skipped if already present, so this never double-appends on a re-run."""
+    replaces a trailing 全角"ｗｗ"(タイトルの型の定番の締め方)with
+    TITLE_LAUGH_SUFFIX if present — otherwise just appends it — then
+    appends " #Shorts" (owner request, 2026-08-14: Shorts向けにタイトルも
+    最適化する) — YouTube's Shorts classifier already picks this video up
+    automatically from format (line_chat.py's 720x1280, 9:16) + duration
+    (well under 3 minutes), but a "#Shorts" signal in the title itself is
+    the extra nudge many creators rely on, on top of DEFAULT_TAGS/
+    DESCRIPTION_TEMPLATE already carrying it. Both appends are skipped if
+    already present, so this never double-appends on a re-run."""
     text = Path(script_path).read_text(encoding="utf-8")
     m = re.search(r"\*\*タイトル案\*\*:\s*(.+)", text)
     if not m:
         raise SystemExit(f"{script_path} に「**タイトル案**:」行が見つかりません。")
     title = m.group(1).strip()
-    if TITLE_EMOJI not in title:
-        title = f"{title}{TITLE_EMOJI}"
+    title = re.sub(r"ｗ+$", "", title).rstrip()  # drop the 全角ｗｗ this suffix replaces
+    if not title.endswith(TITLE_LAUGH_SUFFIX):
+        title = f"{title}{TITLE_LAUGH_SUFFIX}"
     if "shorts" not in title.lower():
         title = f"{title} #Shorts"
     return title
