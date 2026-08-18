@@ -145,7 +145,7 @@ LEAD_IN_SECONDS = 3.1
 # (~1.9s, see NOTICE.md) to fully finish before the first line's narration
 # starts (still the firm invariant from Round 1/2 above) plus a small
 # buffer — nothing more.
-POST_HOOK_NOTIFICATION_DELAY = 0.2
+POST_HOOK_NOTIFICATION_DELAY = 0.1
 POST_HOOK_LEAD_IN_SECONDS = 2.3  # the narration-safe floor: no item with real spoken narration may start before hook_end + this (still fully covers the chime's ~1.9s length + a small buffer)
 
 # Owner feedback (2026-08-17, on v11): "もう少し通知音の後すぐに画像出し
@@ -159,7 +159,15 @@ POST_HOOK_LEAD_IN_SECONDS = 2.3  # the narration-safe floor: no item with real s
 # actually carry spoken narration is still floored at
 # hook_end + POST_HOOK_LEAD_IN_SECONDS regardless of how many silent items
 # came before it (see the max() in estimate_arrivals).
-POST_HOOK_SILENT_GAP = 0.15
+#
+# Round 2 (2026-08-18): "最初通知音の前に画像が出ている。逆にして" — with
+# POST_HOOK_NOTIFICATION_DELAY=0.2 and this at 0.15, the photo (arriving
+# at hook_end+0.15) was actually landing *before* the chime (hook_end+0.2)
+# — backwards from what "通知音→画像" should read as. Fixed by making the
+# chime fire first (delay lowered to 0.1 above) and pushing this out to
+# 0.3, so the chime is audibly already playing by the time the photo pops
+# in, not the other way around.
+POST_HOOK_SILENT_GAP = 0.3
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont:

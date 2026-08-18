@@ -85,7 +85,9 @@ DEFAULT_VOICE = CLOUD_TTS_VOICES[DEFAULT_SPEAKER_ID]
 # re-rendering is sufficient — the chat automatically follows.
 # Round 3 (2026-08-18): "1.25倍くらい速度を早くして" — a specific target
 # this time rather than "a bit more", so set directly instead of nudging.
-GLOBAL_RATE_MULTIPLIER = 1.25
+# Round 4 (same day, next round): "もう少し話速を1.4倍にして" — again a
+# direct target.
+GLOBAL_RATE_MULTIPLIER = 1.4
 
 
 def _prosody_for(text: str) -> tuple[float, float]:
