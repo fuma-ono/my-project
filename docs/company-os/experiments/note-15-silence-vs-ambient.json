@@ -7,9 +7,9 @@
   "pillar": "A",
   "hypothesis": "この記事テーマは読者の実際の悩み・検索意図に一致し、閲覧・スキ・フォロワー増につながる需要がある",
   "generated_at": "2026-08-12",
-  "published_at": null,
-  "status": "draft",
-  "note_url": "https://note.com/unique_condor276",
+  "published_at": "2026-08-18",
+  "status": "published",
+  "note_url": "https://note.com/unique_condor276/n/nde90ac1b0d43",
   "metrics": {
     "views": null,
     "likes": null,
@@ -31,5 +31,6 @@
     "clear_reader_value": true,
     "no_duplication_with_existing": true,
     "note": "2026-08-12の週3本運用化にあたり新設したチェックリスト。既存記事(01〜10)とテーマ・切り口の重複がないことを確認済み"
-  }
+  },
+  "publish_confirmation_note": "2026-08-18、note.com公開RSSフィードとのタイトル一致により自動検知(GitHub Actions定期実行)。"
 }
