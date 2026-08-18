@@ -84,7 +84,27 @@ CHARACTER_SPEAKER_IDS: dict[str, int] = {
     "先輩": 12,        # 白上虎太郎(ノーマル) — secondary male witness, 03. Verify this ID specifically; less commonly cited than the others above.
     "幹事": 2,         # 四国めたん — primary antagonist, 04 (friend-group setting instead of family/work, but same "年上の女性・主な敵役" slot per content-backlog.mdのキャスト運用)
     "店員": 2,         # 05
-    "店長": 12,        # 05 — authority figure who rules in the protagonist's favor, same slot as 先輩's witness role in 03
+    "店長": 12,        # 05 — authority figure who rules in the protagonist's favor, same slot as 先輩's witness役 in 03
+    # 06〜10 (若者向けリニューアル, 2026-08-18): content-backlog.mdの
+    # 2026-08-18追記(役割の型は続柄でなく"主な敵役/主な相手役/証人"で汎用化)
+    # に沿って、既存5声のスロットをそのまま流用。
+    "りさ": 8,         # 06 — 女性の証人役
+    "奈々": 2,         # 07 — 主な敵役(女性)
+    "ひかる": 8,        # 07 — 女性の証人役(途中で味方に回る)
+    "大輝": 12,        # 07 — 男性の証人役
+    "まお": 2,         # 08 — 主な敵役(女性)
+    "りん": 8,         # 08 — 女性の証人役
+    "母": 2,          # 09 — 主な敵役(女性)。docs/projects/moyasuka/2026-08-18-youth-relaunch-plan.mdの配慮により本編では最終的に和解する役どころ
+    "父": 11,         # 09 — 主な相手役(男性)
+    "祖母": 8,         # 09 — 女性の証人役
+    "ゆい": 2,         # 10 — 主な敵役(女性)
+    "かえで": 8,        # 10 — 女性の証人役(部長)
+    "たいが": 12,       # 10 — 男性の証人役
+    # "ことね"(06)は意図的にここへ含めていない — オーナー指示「ことねの声は
+    # かわいらしい感じで」を受け、既存5声のどれにも寄せず専用の声を選ぶ
+    # ことにしたため、speaker_id=13を新設予定(下記CLOUD_TTS_VOICES参照)。
+    # 候補4種(Aoede/Zephyr/Autonoe/Erinome)を試聴用に生成してオーナーの
+    # 選択待ち — 選ばれ次第ここに追記する。
 }
 DEFAULT_SPEAKER_ID = 3  # ずんだもん — used with a warning if a script introduces a new character name not listed above
 

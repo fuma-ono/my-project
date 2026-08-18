@@ -130,6 +130,16 @@ GAP_SECONDS = 0.15  # 2026-08-16: was 0.235 (2026-08-14) — trimmed further to 
 # 0.4s beat still read as too quick; stretched to 1.0s. LEAD_IN_SECONDS
 # grows by the same amount so the invariant above still holds (chat never
 # starts before the chime finishes playing).
+#
+# 2026-08-18 (フック廃止後、台本06で最初の要素が[photo]になったケース):
+# 「通知音→画像で始めて、これは今後の動画もマスト」— hook_windowがない
+# コールドオープンでは notification_cues が t=NOTIFICATION_DELAY(1.0s)で
+# チャイムを鳴らし、最初の項目([photo]でも通常メッセージでも)は
+# LEAD_IN_SECONDS(3.1s)より前には表示されない(estimate_arrivalsのnarration
+# floorがsilentな項目にも一律で適用されるため)。1.0 + チャイム自体の長さ
+# (~1.9s) < 3.1なので、チャイムが鳴り切ってから最初の要素が出る順序は
+# 常に成立する——これは台本06固有の設定ではなく、フックなしのどの台本でも
+# 構造的に保証されている。
 NOTIFICATION_DELAY = 1.0
 LEAD_IN_SECONDS = 3.1
 
