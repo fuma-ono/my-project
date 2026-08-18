@@ -47,7 +47,14 @@ from moyasuka.line_chat import render_video
 from bgm_pipeline import youtube_upload
 
 CATEGORY_ENTERTAINMENT = "24"  # not bgm_pipeline's default "10" (Music) — this is drama content
-DEFAULT_TAGS = ["スカッと", "LINEドラマ", "ショートドラマ", "スカッとする話", "Shorts"]
+
+# 2026-08-18: #マイクラ/#Minecraft追加(オーナー指示)。以前(channel-
+# description.mdの旧注記)はあえて付けていなかった——当時の背景は自前生成の
+# Ken Burns風パン(background_gen.py)で、実写マイクラ映像ではなかったため
+# "実態と違うタグを付けない"方針だった。今は背景が実際のマイクラ実況/
+# パルクール映像(background_video.py、minecraft_parkour_05.mp4)に差し替え
+# 済みなので、このタグは今は実態通り。
+DEFAULT_TAGS = ["スカッと", "LINEドラマ", "ショートドラマ", "スカッとする話", "Shorts", "マイクラ", "Minecraft"]
 
 # 2026-08-18: 【ネタ募集】行を追加(channel-description.mdの「概要」欄には
 # 元々あったが、動画ごとのこのテンプレートには反映し忘れていた)。オーナーが
@@ -67,7 +74,7 @@ https://x.com/moyasuka_ch
 
 毎日20:00更新。チャンネル登録で見逃し防止。
 
-#スカッと #LINEドラマ #ショートドラマ #Shorts"""
+#スカッと #LINEドラマ #ショートドラマ #Shorts #マイクラ #Minecraft"""
 
 
 # 2026-08-18: 「毎回タイトルに絵文字をつけるようにして」(オーナー指示、
