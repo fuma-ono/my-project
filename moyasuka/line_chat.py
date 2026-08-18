@@ -204,15 +204,21 @@ POST_HOOK_LEAD_IN_SECONDS = 2.3  # the narration-safe floor: no item with real s
 POST_HOOK_SILENT_GAP = 0.3
 
 # 2026-08-18: see the BIG_STINGER_GAP usage in estimate_arrivals for the
-# full story — a "big" dramatic stinger (scratch_dun's でででででデェェ
-# ェェン, ~2.2s; otoko_iyahho, ~1.75s) placed mid-script needs its own
+# full story — a "big" dramatic stinger placed mid-script needs its own
 # breathing room before the next line's narration starts, or it plays
-# entirely underneath that line and reads as absent. BIG_STINGER_GAP
-# matches scratch_dun's own 5-hit buildup (0.9s) — otoko_iyahho is
-# currently only ever placed as the video's last item (nothing follows to
-# bury it), but it's included here too in case that ever changes.
+# entirely underneath that line and reads as absent. otoko_iyahho (~1.75s)
+# is currently only ever placed as the video's last item (nothing follows
+# to bury it), but it's included here too in case that ever changes.
+#
+# BIG_STINGER_GAP was originally 0.9s, sized to scratch_dun's synthesized
+# 5-hit buildup — moot now that "scratch_dun" plays a real owner-provided
+# clip instead (sfx.py's use_dun): a single sharp impact at t=0 followed
+# by a long (~3.8s) decaying reverb tail, not a rhythmic crescendo. The
+# impact itself lands almost instantly, so it doesn't need nearly as much
+# lead room to be heard clearly before dialogue resumes — just enough that
+# the next line's onset doesn't land in the exact same frame as the hit.
 BIG_STINGER_NAMES = {"scratch_dun", "otoko_iyahho"}
-BIG_STINGER_GAP = 0.9
+BIG_STINGER_GAP = 0.4
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont:
