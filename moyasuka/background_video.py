@@ -51,14 +51,14 @@ TARGET_W, TARGET_H = 1080, 1920
 DEFAULT_CLIP_SECONDS = 15.0
 
 
-def split_video_to_clips(source_path: str, clip_seconds: float = DEFAULT_CLIP_SECONDS, out_dir: Path = CLIPS_DIR) -> list[Path]:
+def _split_one_source(source_path: str, clip_seconds: float, out_dir: Path, name_prefix: str) -> list[Path]:
     """Crops `source_path` to a centered 9:16 window (owner instruction:
     "プレイヤー視点の中央を優先する" — parkour footage is usually already
     roughly centered on the player, so a plain center-crop is the
     reasonable default; revisit with real footage if that's not true),
     scales to TARGET_W x TARGET_H, and segments into `clip_seconds`-long
-    .mp4 files named background_01.mp4, background_02.mp4, ... in
-    `out_dir`. Returns the list of written clip paths, in order.
+    .mp4 files named `{name_prefix}_00.mp4`, `{name_prefix}_01.mp4`, ...
+    in `out_dir`. Returns the list of written clip paths, in order.
 
     Uses ffmpeg's `-f segment` muxer for the split (a single decode pass,
     not N separate re-encodes) and a crop+scale filter matched to the
@@ -67,10 +67,6 @@ def split_video_to_clips(source_path: str, clip_seconds: float = DEFAULT_CLIP_SE
       - crop to the largest centered 9:16 (or already-9:16 source: no-op
         crop) window, then scale to TARGET_W x TARGET_H.
     """
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for old in out_dir.glob("background_*.mp4"):
-        old.unlink()
-
     # Compute the centered 9:16 crop window in Python against the source's
     # *actual* pixel dimensions (via ffprobe), rather than an in-filter
     # if()/gt() expression — ffmpeg's filtergraph parser treats a bare `,`
@@ -95,7 +91,7 @@ def split_video_to_clips(source_path: str, clip_seconds: float = DEFAULT_CLIP_SE
     crop_y = (src_h - crop_h) // 2
     vf = f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y},scale={TARGET_W}:{TARGET_H}"
 
-    pattern = str(out_dir / "background_%02d.mp4")
+    pattern = str(out_dir / f"{name_prefix}_%02d.mp4")
     subprocess.run(
         [
             "ffmpeg", "-y", "-i", source_path,
@@ -108,12 +104,34 @@ def split_video_to_clips(source_path: str, clip_seconds: float = DEFAULT_CLIP_SE
         ],
         check=True, capture_output=True,
     )
-    clips = sorted(out_dir.glob("background_*.mp4"))
+    clips = sorted(out_dir.glob(f"{name_prefix}_*.mp4"))
     if not clips:
         raise RuntimeError(f"ffmpeg produced no clips from {source_path} — check the source file/filter")
-
-    _save_state({"clips": [c.name for c in clips], "last_used_index": -1})
     return clips
+
+
+def split_video_to_clips(source_paths: str | list[str], clip_seconds: float = DEFAULT_CLIP_SECONDS, out_dir: Path = CLIPS_DIR) -> list[Path]:
+    """Splits one or more source videos into the rotation pool (see
+    `_split_one_source`). Multiple sources all feed the *same* pool —
+    clips are named per-source (`bg{n}_00.mp4`, `bg{n}_01.mp4`, ...) so
+    filenames from different sources never collide, and the combined,
+    sorted list becomes the new rotation (replacing whatever was split
+    before: this always starts a fresh pool, not an incremental append,
+    since re-running with a different/updated set of sources is the
+    common case, not adding one clip at a time)."""
+    if isinstance(source_paths, str):
+        source_paths = [source_paths]
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for old in out_dir.glob("bg*_*.mp4"):
+        old.unlink()
+
+    all_clips: list[Path] = []
+    for i, source_path in enumerate(source_paths):
+        all_clips += _split_one_source(source_path, clip_seconds, out_dir, name_prefix=f"bg{i}")
+
+    _save_state({"clips": [c.name for c in all_clips], "last_used_index": -1})
+    return all_clips
 
 
 def _load_state() -> dict:
@@ -150,8 +168,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_split = sub.add_parser("split", help="split a source video into rotation-ready 9:16 clips")
-    p_split.add_argument("--source", required=True)
+    p_split = sub.add_parser("split", help="split one or more source videos into one rotation-ready 9:16 clip pool")
+    p_split.add_argument("--source", required=True, action="append", help="repeat for multiple sources; all feed the same rotation pool")
     p_split.add_argument("--clip-seconds", type=float, default=DEFAULT_CLIP_SECONDS)
 
     sub.add_parser("next", help="print the next clip's path and advance the rotation")
@@ -159,7 +177,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "split":
         clips = split_video_to_clips(args.source, args.clip_seconds)
-        print(f"wrote {len(clips)} clips to {CLIPS_DIR}")
+        print(f"wrote {len(clips)} clips from {len(args.source)} source(s) to {CLIPS_DIR}")
     elif args.command == "next":
         print(next_clip())
     return 0
