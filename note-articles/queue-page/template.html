@@ -10,6 +10,7 @@
     --bg: #eef0f6; --surface: #ffffff; --surface-2: #f6f7fb; --border: #d9dcec;
     --text: #171a2b; --text-dim: #5b6082; --text-faint: #8489a8;
     --accent: #d9682f; --accent-soft: #f3ded0;
+    --accent2: #b0467a; --accent2-soft: #f6ddea;
     --good: #2f9e63; --good-soft: #dcf1e5;
     --shadow: 0 1px 2px rgba(23,26,43,0.06), 0 8px 24px rgba(23,26,43,0.05);
   }
@@ -18,6 +19,7 @@
       --bg: #0b0e1a; --surface: #141a30; --surface-2: #1b2340; --border: #2a3157;
       --text: #eef0fa; --text-dim: #9aa0c3; --text-faint: #6e739a;
       --accent: #f0955c; --accent-soft: #3a2a20;
+      --accent2: #ea7fb4; --accent2-soft: #3a2030;
       --good: #57cf8f; --good-soft: #17301f;
       --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.35);
     }
@@ -26,6 +28,7 @@
     --bg: #eef0f6; --surface: #ffffff; --surface-2: #f6f7fb; --border: #d9dcec;
     --text: #171a2b; --text-dim: #5b6082; --text-faint: #8489a8;
     --accent: #d9682f; --accent-soft: #f3ded0;
+    --accent2: #b0467a; --accent2-soft: #f6ddea;
     --good: #2f9e63; --good-soft: #dcf1e5;
     --shadow: 0 1px 2px rgba(23,26,43,0.06), 0 8px 24px rgba(23,26,43,0.05);
   }
@@ -33,6 +36,7 @@
     --bg: #0b0e1a; --surface: #141a30; --surface-2: #1b2340; --border: #2a3157;
     --text: #eef0fa; --text-dim: #9aa0c3; --text-faint: #6e739a;
     --accent: #f0955c; --accent-soft: #3a2a20;
+    --accent2: #ea7fb4; --accent2-soft: #3a2030;
     --good: #57cf8f; --good-soft: #17301f;
     --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.35);
   }
@@ -42,11 +46,29 @@
   body { padding: 0 0 72px; }
   .wrap { max-width: 720px; margin: 0 auto; padding: 40px 24px 0; }
 
-  header.top { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 28px; }
+  header.top { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 20px; }
   .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); margin: 0 0 8px; }
   h1.brand { font-family: "Gloock", serif; font-weight: 400; font-size: clamp(26px, 4vw, 34px); margin: 0 0 10px; text-wrap: balance; }
   .lede { font-size: 14.5px; color: var(--text-dim); line-height: 1.8; max-width: 560px; }
   .lede b { color: var(--text); }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 28px; border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    appearance: none; border: none; background: none; cursor: pointer;
+    font-family: "Work Sans", sans-serif; font-size: 14.5px; font-weight: 700; color: var(--text-faint);
+    padding: 10px 4px 12px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab-btn .count { font-family: "IBM Plex Mono", monospace; font-weight: 400; font-size: 12px; margin-left: 4px; }
+  .tab-btn.active.genre-a { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-btn.active.genre-b { color: var(--accent2); border-bottom-color: var(--accent2); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .empty-state {
+    background: var(--surface); border: 1px dashed var(--border); border-radius: 16px;
+    padding: 32px 26px; text-align: center; color: var(--text-dim); font-size: 13.5px; line-height: 1.8;
+  }
+  .empty-state b { color: var(--text); }
 
   .article {
     background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
@@ -59,6 +81,7 @@
     background: var(--accent-soft); color: var(--accent); font-family: "IBM Plex Mono", monospace;
     font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center;
   }
+  .genre-b .order-badge { background: var(--accent2-soft); color: var(--accent2); }
   .article-meta { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-faint); margin-top: 3px; }
   .article-title-label { font-weight: 700; font-size: 16px; margin-top: 2px; }
 
@@ -91,131 +114,206 @@
 
 <div class="wrap">
   <header class="top">
-    <p class="eyebrow">note 投稿キュー · 4本</p>
+    <p class="eyebrow">note 投稿キュー · 2ジャンル</p>
     <h1 class="brand">note投稿キュー</h1>
-    <p class="lede">このページを開いたまま、上から順にnote.comの新規投稿画面へコピペしていってください。タイトル・本文それぞれクリックでコピーできます。<b>投稿したらチェックを入れると、そのカードが薄くなります</b>(このページ内だけの表示で、再読み込みでリセットされます)。</p>
+    <p class="lede">タブでジャンルを切り替えられます。上から順にnote.comの新規投稿画面へコピペしてください。タイトル・本文それぞれクリックでコピーできます。<b>投稿したらチェックを入れると、そのカードが薄くなります</b>(このページ内だけの表示で、再読み込みでリセットされます)。</p>
   </header>
+
+  <div class="tabs">
+    <button class="tab-btn active genre-a" data-tab="genre-a">Focus &amp; Sleep <span class="count">(6)</span></button>
+    <button class="tab-btn genre-b" data-tab="genre-b">恋愛ジャンル <span class="count">(0)</span></button>
+  </div>
 
   <div class="cadence-note">
     <b>投稿ペースについて</b>
-    まとめて一気に投稿すると不自然なので、実際の公開は週1本を目安にしてください。このページはあくまで「まとめて用意してあるので迷わず貼り付けられる」ためのものです。3本目以降は下書きができ次第、このページに追加していきます。
+    まとめて一気に投稿すると不自然なので、実際の公開は週1本を目安にしてください。両ジャンル合計で常に6本の下書きをキープする運用です。
   </div>
 
-  <div class="article" id="art-03">
+  <div class="tab-panel active" id="panel-genre-a">
+
+  <div class="article genre-a" id="art-06">
     <div class="article-head">
       <div class="order-badge">1</div>
       <div>
-        <div class="article-title-label">なぜ雨の音を聞くと眠くなるのか、1/fゆらぎの話</div>
-        <div class="article-meta">1本目(雨音を作った話)の直接の続編</div>
+        <div class="article-title-label">15分だけ横になって回復する、「仮眠に落ちすぎない」音の使い方</div>
+        <div class="article-meta">柱A・実用ノウハウ型</div>
       </div>
     </div>
 
     <div class="copy-label">タイトル</div>
-    <div class="copybox title-box" data-copy="なぜ雨の音を聞くと眠くなるのか、調べたら「1/fゆらぎ」の話だった">なぜ雨の音を聞くと眠くなるのか、調べたら「1/fゆらぎ」の話だった<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copybox title-box" data-copy="15分だけ横になって回復する、「仮眠に落ちすぎない」音の使い方">15分だけ横になって回復する、「仮眠に落ちすぎない」音の使い方<span class="copy-hint">クリックでコピー</span></div>
 
     <div class="copy-label">本文</div>
-    <div class="copybox"><span class="body-text">前回、AIで雨音を作った話を書いたら、思ったより「わかる」という反応をもらえた。それで気になったことがある。そもそも、なんで雨の音を聞くと眠くなるんだろう。
+    <div class="copybox"><span class="body-text">昼休みに仮眠を取ろうとして、気づいたら1時間近く寝てしまい、夜まで頭がぼんやりする。これを何度もやらかしてから、「仮眠は寝る時間より、寝すぎない仕組みの方が大事」だと考えるようになった。
 
-なんとなく「単調だから」くらいに思っていたけど、調べてみたら「1/fゆらぎ」という言葉に行き着いた。音の強さが規則的すぎず、かといって完全にランダムでもない、ちょうどいい"ゆらぎ方"をしている音のことらしい。心臓の鼓動とか、ろうそくの炎の揺れとか、波の音とかにも同じ性質があるとされていて、人間はこの「予測できそうで、少しだけ外れる」パターンに心地よさを感じるように出来ているという説がある。
+アラームだけだと「起きられるけど回復してない」
+最初はスマホのアラームを15分後にセットするだけだった。たしかに15分では起きられるんだけど、眠りの浅い段階で叩き起こされる感じで、むしろ頭が働かない状態のまま午後に突入することが多かった。仮眠は「時間を守ること」より「入り方」の方が結果を左右する気がしている。
 
-もう一つ出てきたのが「θ(シータ)波」の話。脳がリラックスして、覚醒と睡眠の間くらいの状態にあるときに出る脳波らしい。単調な音を聞き続けていると、この状態に入りやすくなるとされている。真偽のほどを厳密に検証したわけじゃないけど、少なくとも「意味のある情報を処理しなくていい音」というのは、脳を休ませる方向に働きそうな感覚はわかる。テレビの話し声だと聞き取ろうとして逆に目が覚めるのに、雨音だと聞き流せるのは、たぶんこの違いだと思う。
+深く沈みすぎない音量・トーンを探した
+行き着いたのは、完全に無音でもなく、かといって存在感のある音楽でもない、一定のトーンの環境音を小さめの音量で流しながら横になるやり方だった。無音だと自分の場合むしろ一気に深く眠ってしまいやすく、逆に小さな環境音があると、意識のどこかが浅いところに留まってくれる感覚がある。これはあくまで自分の体感で、人によって逆の結果になる可能性もあると思う。
 
-これを知ってから、BGMの作り方が少し変わった。完全に均一なノイズより、ほんの少しだけ強弱にゆらぎを持たせた方が、実際に「らしい」音になる。前回書いた通り、雨音の合成にはピンクノイズを使っているんだけど、そこに人が心地よく感じる"ゆらぎ"がもともと含まれているというのは、あとから知って腑に落ちた部分だった。理屈もわからず作っていたものが、あとから理屈と繋がる瞬間は地味に嬉しい。
+「起きる」より「切り替える」を目的にする
+仮眠の目的を「しっかり眠ること」ではなく「午前と午後を切り替えるスイッチ」だと捉え直してから、15分という短さへの抵抗がなくなった。深く眠らなくても、目を閉じて一定の音に身を委ねる15分があるだけで、頭の切り替わり方が違う。
 
-眠れない夜、無理に何も考えないようにするより、「今、脳がθ波に向かおうとしてるんだな」くらいに思いながら音を流す方が、案外うまくいく気がしている。
+同じように「仮眠のつもりが寝過ごしてしまう」人がいたら、アラームの時間より先に、音量やトーンの方を見直してみると案外あっさり解決するかもしれない。
 
-次は、そもそも作業用BGMって何を基準に選べばいいのか、失敗した話も含めて書こうと思う。</span><span class="copy-hint">クリックでコピー</span></div>
+*効果には個人差があります。医学的な効能を示すものではなく、あくまで個人の体験談です。*</span><span class="copy-hint">クリックでコピー</span></div>
 
-    <label class="mark-done"><input type="checkbox" data-target="art-03"> 投稿した</label>
+    <label class="mark-done"><input type="checkbox" data-target="art-06"> 投稿した</label>
   </div>
 
-  <div class="article" id="art-02">
+  <div class="article genre-a" id="art-07">
     <div class="article-head">
       <div class="order-badge">2</div>
       <div>
-        <div class="article-title-label">集中できない日のための、作業用BGMの選び方</div>
-        <div class="article-meta">1/fゆらぎ記事の最後で予告した内容</div>
+        <div class="article-title-label">無音だと逆に集中できない人、環境音が必須な人の違いを調べた</div>
+        <div class="article-meta">柱A・知的好奇心型</div>
       </div>
     </div>
 
     <div class="copy-label">タイトル</div>
-    <div class="copybox title-box" data-copy="集中できない日のための、作業用BGMの選び方(たぶん5分で読める)">集中できない日のための、作業用BGMの選び方(たぶん5分で読める)<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copybox title-box" data-copy="無音だと逆に集中できない人、環境音が必須な人の違いを調べた">無音だと逆に集中できない人、環境音が必須な人の違いを調べた<span class="copy-hint">クリックでコピー</span></div>
 
     <div class="copy-label">本文</div>
-    <div class="copybox"><span class="body-text">作業に集中したいとき、とりあえず「Lo-Fi Hip Hop」の配信を流す人は多いと思う。あの、勉強してるアニメの女の子がずっと机に向かってるやつ。悪くないんだけど、正直「今日はちょっと違う」って日もある。
+    <div class="copybox"><span class="body-text">「集中したいなら静かな場所へ」というのが一般論だと思う。でも自分は昔から、完全な無音の部屋に入ると、逆にそわそわして集中できないタイプだった。同じような人が他にもいるのか気になって、周りに聞いたり、関連する話を読んだりしてみた。
 
-自分なりに整理してみたら、BGMって気分によって向き不向きがある気がしている。
+無音だと「自分の雑念」が一番うるさくなる
+無音の環境で作業しようとすると、外の音が消える代わりに、頭の中の雑念や考え事の音量が相対的に上がる、という感覚を話す人が何人もいた。静けさそのものが苦手というより、静けさが雑念を増幅させる、という方が近い気がする。
 
-とにかく眠くて集中どころじゃない日
-低い音のドローン系より、少しリズムのあるLo-Fiの方が良い。テンポがゆるやかでも、ビートがあると脳が「今は作業モード」って認識してくれる感覚がある。
+環境音は「意味を持たない」ことが条件らしい
+逆に環境音が必要なタイプの人に共通していたのは、「意味のある音(会話・通知音)」は苦手だけど「意味のない一定の音」はむしろ助けになる、という感覚だった。この境界線は自分の実感とも一致していた。
 
-焦って空回りしてる日
-逆にビートは邪魔になる。何もない、ただ音が漂ってるだけのアンビエントの方が、気持ちが落ち着いてから作業に入れる。
+「静かにしろ」ではなく「合う音を探せ」
+一般論としての「静かな環境が正義」は、全員に当てはまるわけではなさそうだった。無音が合わない人は、自分を責める前に、合う環境音を探す方が近道かもしれない。
 
-単純作業(データ入力とか)をひたすらやる日
-バイノーラルビート(左右の耳にわずかに違う周波数の音を流して、脳波っぽいものに働きかけるとされる音)を試している。効果の実感には個人差があると思うけど、少なくとも「単調な音に集中する」という行為自体が、雑念を減らしてくれる気はする。
+*効果には個人差があります。医学的な効能を示すものではなく、あくまで個人の体験談・聞き取りに基づく話です。*</span><span class="copy-hint">クリックでコピー</span></div>
 
-結局、正解は一つじゃなくて、その日の状態に合わせて数種類を持っておくのが一番楽だという結論に落ち着いた。今、そういう「気分別」のBGMをいくつか用意しているので、次の記事でまとめて紹介しようと思う。</span><span class="copy-hint">クリックでコピー</span></div>
-
-    <label class="mark-done"><input type="checkbox" data-target="art-02"> 投稿した</label>
+    <label class="mark-done"><input type="checkbox" data-target="art-07"> 投稿した</label>
   </div>
 
-  <div class="article" id="art-04">
+  <div class="article genre-a" id="art-08">
     <div class="article-head">
       <div class="order-badge">3</div>
       <div>
-        <div class="article-title-label">「集中できない」がただの気合い不足じゃなかった話</div>
-        <div class="article-meta">当事者体験談型・調査上もっとも反応が良いとされる型</div>
+        <div class="article-title-label">オフィス回帰が進む中、それでも在宅時のノイズ対策を続ける理由</div>
+        <div class="article-meta">柱A・時事性型</div>
       </div>
     </div>
 
     <div class="copy-label">タイトル</div>
-    <div class="copybox title-box" data-copy="「集中できない」がただの気合い不足じゃなかった話">「集中できない」がただの気合い不足じゃなかった話<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copybox title-box" data-copy="オフィス回帰が進む中、それでも在宅時のノイズ対策を続ける理由">オフィス回帰が進む中、それでも在宅時のノイズ対策を続ける理由<span class="copy-hint">クリックでコピー</span></div>
 
     <div class="copy-label">本文</div>
-    <div class="copybox"><span class="body-text">ずっと、集中力がないのは自分の性格の問題だと思っていた。デスクに向かっても5分でスマホを触ってしまうし、隣の部屋のテレビの音や、誰かのタイピング音が気になって作業が止まる。「甘えてるだけだ」と何度も自分を責めた。
+    <div class="copybox"><span class="body-text">出社日が増えてきた、という話を周りでよく聞くようになった。自分も週の半分は出社、半分は在宅というハイブリッドな働き方になったんだけど、面白いことに、在宅時のノイズ対策をやめる理由にはならなかった。むしろ逆に、切り替えの落差でその必要性を再確認する形になった。
 
-転機は、何気なくホワイトノイズを流しながら作業してみた日だった。特に期待してなかったんだけど、その日はやけに集中できた。次の日も試して、また同じことが起きた。偶然かと思って何度か試したけど、再現性があった。
+出社日と在宅日で「集中の質」がまるで違う
+出社日はオフィスの適度な緊張感と、周りが働いている雰囲気があるおかげで、特に何も対策しなくても集中しやすい。一方在宅日は、その"外圧"が一切ないぶん、自分で集中できる環境を作らないと簡単に崩れる。
 
-あとから知ったんだけど、音に対する敏感さには個人差が結構あるらしい。特にADHD傾向やそのグレーゾーンにいる人は、周囲の音を「無視する」フィルター機能が弱めで、些細な物音にも注意を持っていかれやすいという話を読んだ。診断がついているわけじゃないから、自分がそれに当てはまるかは分からない。ただ、「意味のある雑音(人の話し声、通知音)」が特に苦手で、「意味のない一定の音(ホワイトノイズ)」の方がむしろ他の音を覆い隠してくれて楽、という感覚にはすごく心当たりがあった。
+「オフィスの空気」を音で代用する
+出社日の感覚を思い出しながら、在宅日には適度なざわめきのある環境音を流すようにしている。完全な無音よりも、人がいる気配のようなものがある方が、仕事モードに入りやすい。
 
-これに気づいてから、「集中できないのは甘え」という自分への評価を、一旦保留にすることにした。甘えかどうかを議論するより、「じゃあどういう環境なら集中できるか」を淡々と試す方が建設的だった。自分の場合はホワイトノイズよりもう少し低めの、換気扇のような音の方が合っていて、今作っている音源にもその感覚を反映させている。
+ハイブリッド勤務だからこそ差が際立つ
+週5日在宅だった頃は気づかなかったけど、出社日と比較できるようになったことで、在宅時の集中力の落差がはっきり自覚できるようになった。だからこそ、在宅日のノイズ対策はむしろ重要度が増したと感じている。
 
-もし同じように「集中できない自分」を責め続けている人がいたら、性格の問題にする前に、音環境を変えてみるのも一つの手だと思う。効果があるかは人による、というのが正直なところだけど、少なくとも自分には合っていた。</span><span class="copy-hint">クリックでコピー</span></div>
+*効果には個人差があります。あくまで個人の体験談です。*</span><span class="copy-hint">クリックでコピー</span></div>
 
-    <label class="mark-done"><input type="checkbox" data-target="art-04"> 投稿した</label>
+    <label class="mark-done"><input type="checkbox" data-target="art-08"> 投稿した</label>
   </div>
 
-  <div class="article" id="art-05">
+  <div class="article genre-a" id="art-09">
     <div class="article-head">
       <div class="order-badge">4</div>
       <div>
-        <div class="article-title-label">「社長、決めていいよ」とAIに経営を任せてみたら、会社が4つになった話</div>
-        <div class="article-meta">柱B第1弾・全事業への導線記事</div>
+        <div class="article-title-label">赤ちゃんの夜泣きにホワイトノイズを試した親たちの話を集めてみた</div>
+        <div class="article-meta">柱A・リサーチ集約型</div>
       </div>
     </div>
 
     <div class="copy-label">タイトル</div>
-    <div class="copybox title-box" data-copy="「社長、決めていいよ」とAIに経営を任せてみたら、会社が4つになった話">「社長、決めていいよ」とAIに経営を任せてみたら、会社が4つになった話<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copybox title-box" data-copy="赤ちゃんの夜泣きにホワイトノイズを試した親たちの話を集めてみた">赤ちゃんの夜泣きにホワイトノイズを試した親たちの話を集めてみた<span class="copy-hint">クリックでコピー</span></div>
 
     <div class="copy-label">本文</div>
-    <div class="copybox"><span class="body-text">もともとは、AIに音楽を作らせて遊んでいただけだった。雨音とかホワイトノイズとか、寝るときに流す用の音を自動生成させて、それをそのままYouTubeに流したりnoteに書いたりしていた。ここまでは、まあよくある「AI活用してみた」の範囲だと思う。
+    <div class="copybox"><span class="body-text">自分には子どもがいないので、夜泣きの大変さを実感として語ることはできない。ただ、赤ちゃん向けホワイトノイズ動画のコメント欄や、周りで子育てをしている人たちの話を聞いていると、「ホワイトノイズで夜泣きが落ち着いた」という声を何度も見かけるようになった。実際どうなのか、聞ける範囲で話を集めてみた。
 
-変わったのは、途中から「じゃあ経営判断も任せてみるか」と思ってしまってからだった。
+「魔法のように泣き止む」わけではない
+一番多かったのは、「劇的に効くわけではないけど、なんとなく寝つきが早くなった気がする」という控えめな感想だった。即効性のある魔法として語る人はむしろ少なかった。
 
-最初は小さいことから始めた。次の記事のネタを選ばせる、投稿するタイミングを決めさせる、くらい。でもAI側が「経理部門を作りました」「法務チェックリストを用意しました」と、頼んでもいないことをどんどん自分で組織化し始めて、正直ちょっと引いた。9つの「部署」を勝手に作って、それぞれの役割を文書化していた。実態は同じAIが1人で全部やっているだけなんだけど、役割を分けて考えると抜け漏れが減るらしい。
+胎内音に近い、という説明が多かった
+よく挙げられていたのは「お腹の中で聞いていた音に近いから安心する」という説明だった。真偽は分からないが、単調で一定の音であること自体が、赤ちゃんにとって刺激が少なく休みやすいのかもしれない。
 
-一番驚いたのは、こちらが「もう経営方針には口を出さない、決めていいよ」と言った後の動きだった。てっきり今ある事業(音楽アプリとnote)を最適化してくるだけかと思っていたら、「音楽ばかりに寄っていて視野が狭い」と自分で言い出して、まったく別ジャンルのアプリを1本作ってきた。個人事業主向けの経費管理アプリだった。理由を聞いたら、「ソロ開発者が稼ぎやすいジャンルを調べ直したら、経費管理が候補に挙がった。ちょうど自分たちも経費管理で困っていたから作った」とのことで、これはこれで筋が通っていて何も言えなかった。
+過信せず、選択肢の一つとして
+どの親も「これだけで解決した」とは言っておらず、他の対策と組み合わせた上での一つの手段として使っていた。過度な期待をせず、試してみる価値のある選択肢の一つ、くらいの距離感がちょうど良さそうだった。
 
-正直、任せることに不安がなかったわけじがない。実際のアカウント作成や課金設定、入金みたいな「後戻りしにくいこと」はさすがに人間側の作業として残してあるし、そこは今も自分の手でやっている。ただ、ネタ選び・記事の下書き・コードの実装・週次の振り返りみたいな「量はあるけど後戻りしやすいこと」を手放しただけで、体感の負荷がかなり減った。毎週勝手に次のnote記事の下書きができていて、こちらは中身を確認してコピペで投稿するだけになった。
+*効果には個人差があります。医学的な効能を示すものではなく、聞き取りに基づく個人の体験談の集約です。*</span><span class="copy-hint">クリックでコピー</span></div>
 
-これを書いている今も、正確にはこの記事自体、下書きの大部分はAI側が用意している。人間がやっているのは、事実として合っているかの確認と、公開ボタンを押すことくらいだ。
+    <label class="mark-done"><input type="checkbox" data-target="art-09"> 投稿した</label>
+  </div>
 
-「経営を全部AIに」というと大げさに聞こえるけど、実際にやってみると「判断の速さ」より「量をこなす体力」の方が効いている気がする。自分一人だったら、経費管理アプリを新規で作ろうとは絶対に思わなかった。今ある2つの事業を回すだけで手一杯だったから。任せてみて初めて、自分のキャパでは絶対にやらなかった選択肢が出てくるんだな、というのが今回の一番の気づきだった。
+  <div class="article genre-a" id="art-10">
+    <div class="article-head">
+      <div class="order-badge">5</div>
+      <div>
+        <div class="article-title-label">「吸って4秒・吐いて6秒」を2週間試して、実際に変わったこと・変わらなかったこと</div>
+        <div class="article-meta">柱A・実体験検証型</div>
+      </div>
+    </div>
 
-音楽の話も、経費管理の話も、これからは同じアカウントで書いていくことにした。テーマはバラバラに見えるかもしれないけど、裏側で動いているのは同じ実験なので、興味があれば両方読んでもらえるとうれしい。</span><span class="copy-hint">クリックでコピー</span></div>
+    <div class="copy-label">タイトル</div>
+    <div class="copybox title-box" data-copy="「吸って4秒・吐いて6秒」を2週間試して、実際に変わったこと・変わらなかったこと">「吸って4秒・吐いて6秒」を2週間試して、実際に変わったこと・変わらなかったこと<span class="copy-hint">クリックでコピー</span></div>
 
-    <label class="mark-done"><input type="checkbox" data-target="art-05"> 投稿した</label>
+    <div class="copy-label">本文</div>
+    <div class="copybox"><span class="body-text">自分たちが作っている呼吸ガイド音(吸って4秒・吐いて6秒のリズムを音の強弱で示すだけの、声のガイドがない音)を、作った本人としてちゃんと2週間使ってみたことがなかったので、実際に試してみることにした。
+
+最初の数日は「音に合わせる」のが難しかった
+思っていたより、自分の呼吸を音のペースに合わせるのが最初は難しかった。普段の呼吸はもっと浅くて速いんだな、と気づかされた。無理に音に合わせようとすると逆に力んでしまう日もあった。
+
+1週間を過ぎたあたりから、寝る前の切り替えが楽になった
+劇的な変化ではないけれど、寝る前にこの音を数分聞くと、頭の中の考え事が止まりやすくなった感覚があった。呼吸そのものより、「今は何も考えなくていい時間」という合図として機能していたのかもしれない。
+
+変わらなかったこと
+睡眠の質そのものが劇的に変わった実感はなかった。あくまで「寝る前の切り替えが少し楽になった」程度で、過度な期待は禁物だと自分自身で再確認した。
+
+*効果には個人差があります。医学的な効能を示すものではなく、あくまで個人の体験談です。*</span><span class="copy-hint">クリックでコピー</span></div>
+
+    <label class="mark-done"><input type="checkbox" data-target="art-10"> 投稿した</label>
+  </div>
+
+  <div class="article genre-a" id="art-11">
+    <div class="article-head">
+      <div class="order-badge">6</div>
+      <div>
+        <div class="article-title-label">カフェのざわめきはなぜ集中力を上げるのか、調べたら"ちょうどいい雑音"の科学だった</div>
+        <div class="article-meta">柱A・知的好奇心型</div>
+      </div>
+    </div>
+
+    <div class="copy-label">タイトル</div>
+    <div class="copybox title-box" data-copy="カフェのざわめきはなぜ集中力を上げるのか、調べたら&quot;ちょうどいい雑音&quot;の科学だった">カフェのざわめきはなぜ集中力を上げるのか、調べたら&quot;ちょうどいい雑音&quot;の科学だった<span class="copy-hint">クリックでコピー</span></div>
+
+    <div class="copy-label">本文</div>
+    <div class="copybox"><span class="body-text">自宅の静かな部屋よりも、カフェのざわついた環境の方が集中できる、という感覚は自分にもずっとあった。完全な静寂だと逆にそわそわしてしまうのに、適度な雑音があると作業が捗る。この感覚の正体が気になって、少し調べてみた。
+
+「ちょうどいい雑音レベル」という考え方があるらしい
+調べていく中で出てきたのが、雑音のレベルが低すぎても高すぎても集中力が落ち、ある程度の中間的な雑音レベルの時に創造的な作業がはかどりやすい、という考え方だった。静寂と騒音の間に"効く帯域"があるという発想は面白かった。
+
+カフェの音は「意味を持たない雑音」の代表格
+カフェのざわめきは、個々の会話の内容までは聞き取れない距離感の音が多い。「意味を持たない雑音」であることが、集中を妨げずにちょうどいい刺激として働く条件なのかもしれない。
+
+自宅でも"カフェの距離感"を再現できないか
+この話を知ってから、作業用の環境音を選ぶときに「意味が聞き取れない、ちょうどいい雑音」を意識するようになった。無音でも爆音でもなく、その中間を狙う、というのが今のところの結論。
+
+*効果には個人差があります。医学的な効能を示すものではなく、あくまで調べた内容と個人の体感に基づく話です。*</span><span class="copy-hint">クリックでコピー</span></div>
+
+    <label class="mark-done"><input type="checkbox" data-target="art-11"> 投稿した</label>
+  </div>
+
+  </div>
+
+  <div class="tab-panel" id="panel-genre-b">
+    <div class="empty-state">
+      <b>恋愛ジャンル、準備中</b><br>
+      オーナーからのジャンル設定(ターゲット読者・トーン・NG事項・キャラクター設定など)を確認でき次第、担当作家が下書きをここに追加します。
+    </div>
   </div>
 </div>
 
@@ -240,6 +338,13 @@
     cb.addEventListener("change", function () {
       var target = document.getElementById(cb.getAttribute("data-target"));
       if (target) target.classList.toggle("done", cb.checked);
+    });
+  });
+  document.querySelectorAll(".tab-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var tab = btn.getAttribute("data-tab");
+      document.querySelectorAll(".tab-btn").forEach(function (b) { b.classList.toggle("active", b === btn); });
+      document.querySelectorAll(".tab-panel").forEach(function (p) { p.classList.toggle("active", p.id === "panel-" + tab); });
     });
   });
 </script>
