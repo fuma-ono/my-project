@@ -26,3 +26,6 @@ note-articles/queue-page/note-queue.html
 note-articles/queue-page/fonts.py
 note-articles/sns-queue/sns-queue.html
 note-articles/sns-queue/fonts.py
+
+# love-note: browser session state (equivalent to being logged in, never commit)
+love-note/storage-state.json
