@@ -54,50 +54,45 @@ DEFAULT_CLIP_SECONDS = 15.0
 
 
 def _split_one_source(source_path: str, clip_seconds: float, out_dir: Path, name_prefix: str) -> list[Path]:
-    """Crops `source_path` to a centered 9:16 window (owner instruction:
-    "プレイヤー視点の中央を優先する" — parkour footage is usually already
-    roughly centered on the player, so a plain center-crop is the
-    reasonable default; revisit with real footage if that's not true),
-    scales to TARGET_W x TARGET_H, and segments into `clip_seconds`-long
+    """Fits `source_path` into a 9:16 frame using a "sharp center, blurred
+    fill" composite (owner feedback, 2026-08-18: "背景の画質上げて" — the
+    source is only 640x360, and the previous plain center-crop-then-scale
+    approach threw away most of the frame's width and then upscaled the
+    narrow remainder ~5.3x, which is what actually caused the blur. This
+    is the standard professional technique for turning landscape footage
+    into vertical video without that: scale the *whole* frame to fit
+    TARGET_W (a gentle ~1.7x upscale for a 640px-wide source, not 5.3x),
+    keep that crisp and centered, and fill the empty top/bottom bands with
+    a heavily blurred, cropped-to-fill copy of the same footage — visually
+    reads as an intentional stylistic choice (shallow depth of field),
+    not a flaw, and is what most real vertical-conversion tools do.
+    Scales to TARGET_W x TARGET_H, and segments into `clip_seconds`-long
     .mp4 files named `{name_prefix}_00.mp4`, `{name_prefix}_01.mp4`, ...
     in `out_dir`. Returns the list of written clip paths, in order.
 
     Uses ffmpeg's `-f segment` muxer for the split (a single decode pass,
-    not N separate re-encodes) and a crop+scale filter matched to the
-    source's actual aspect ratio so this works regardless of whether the
-    source is itself already 9:16, 16:9, or something else:
-      - crop to the largest centered 9:16 (or already-9:16 source: no-op
-        crop) window, then scale to TARGET_W x TARGET_H.
-    """
-    # Compute the centered 9:16 crop window in Python against the source's
-    # *actual* pixel dimensions (via ffprobe), rather than an in-filter
-    # if()/gt() expression — ffmpeg's filtergraph parser treats a bare `,`
-    # inside -vf as a filter-chain separator, so an unescaped comma-bearing
-    # expression like `if(gt(a,b),c,d)` silently breaks the graph ("No such
-    # filter: '...'"). Plain integers sidestep that whole escaping problem.
-    probe = subprocess.run(
-        ["ffprobe", "-v", "error", "-select_streams", "v:0",
-         "-show_entries", "stream=width,height", "-of", "json", source_path],
-        check=True, capture_output=True, text=True,
-    )
-    stream = json.loads(probe.stdout)["streams"][0]
-    src_w, src_h = stream["width"], stream["height"]
-    target_ar = TARGET_W / TARGET_H
-    if src_w / src_h > target_ar:
-        crop_h = src_h
-        crop_w = round(src_h * target_ar)
-    else:
-        crop_w = src_w
-        crop_h = round(src_w / target_ar)
-    crop_x = (src_w - crop_w) // 2
-    crop_y = (src_h - crop_h) // 2
-    vf = f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y},scale={TARGET_W}:{TARGET_H}"
-
+    not N separate re-encodes)."""
     pattern = str(out_dir / f"{name_prefix}_%02d.mp4")
+    # split the decoded stream once into two copies: [bg] gets scaled to
+    # fully cover the frame (cropped, then blurred) as the backdrop; [fg]
+    # is scaled to fit the frame width at its native aspect ratio (lanczos
+    # — sharper than the default bicubic for this big an upscale) and
+    # overlaid centered on top of the blurred backdrop. No if()/gt()
+    # expressions here (the earlier crop-based version's comma-escaping
+    # hazard, see git history) — every filter option below is a plain
+    # constant or an ffmpeg overlay position expression, neither of which
+    # contains a bare `,`.
+    filter_complex = (
+        f"split=2[bg][fg];"
+        f"[bg]scale={TARGET_W}:{TARGET_H}:force_original_aspect_ratio=increase,"
+        f"crop={TARGET_W}:{TARGET_H},gblur=sigma=30[bgblur];"
+        f"[fg]scale={TARGET_W}:-2:flags=lanczos[fgsharp];"
+        f"[bgblur][fgsharp]overlay=(W-w)/2:(H-h)/2"
+    )
     subprocess.run(
         [
             "ffmpeg", "-y", "-i", source_path,
-            "-vf", vf,
+            "-filter_complex", filter_complex,
             "-an",  # background footage is muted in the final composite (narration/BGM/sfx own the audio track)
             "-f", "segment", "-segment_time", str(clip_seconds),
             "-reset_timestamps", "1",

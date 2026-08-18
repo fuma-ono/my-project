@@ -62,12 +62,19 @@ SYNTHESIZE_URL = "https://texttospeech.googleapis.com/v1/text:synthesize"
 # そのまま流用する). pitch offsets differentiate same-gender voices that
 # would otherwise sound too similar mid-conversation (the exact problem
 # 2026-08-06's 5-voice VOICEVOX expansion solved for the original cast).
+# 2026-08-18: switched from Wavenet/Standard to Chirp3-HD (owner: "声を
+# 変えて...プロの方々でこれは面白いと思える作品を作ってください" — this is
+# Google's newest, most natural/expressive Japanese TTS family, a real
+# step up from Wavenet's flatter delivery for a comedy-leaning script.
+# Trade-off: confirmed against the live API that Chirp3-HD rejects the
+# `pitch` param outright, so these entries have no "pitch" key at all —
+# synth_line() only sends pitch when the key is present (see there).
 CLOUD_TTS_VOICES: dict[int, dict] = {
-    3: {"name": "ja-JP-Wavenet-A", "pitch": 2.0},    # ずんだもん役 — 私(主人公)、やや高め
-    2: {"name": "ja-JP-Wavenet-B", "pitch": -2.0},   # 四国めたん役 — 主な敵役、やや低め
-    8: {"name": "ja-JP-Standard-A", "pitch": 0.0},   # 春日部つむぎ役 — 女性の証人役、別の声質
-    11: {"name": "ja-JP-Wavenet-C", "pitch": 0.0},   # 玄野武宏役 — 主な男性役
-    12: {"name": "ja-JP-Wavenet-D", "pitch": -3.0},  # 白上虎太郎役 — 男性の証人役、やや低め
+    3: {"name": "ja-JP-Chirp3-HD-Kore"},        # ずんだもん役 — 私(主人公)
+    2: {"name": "ja-JP-Chirp3-HD-Despina"},     # 四国めたん役 — 主な敵役
+    8: {"name": "ja-JP-Chirp3-HD-Leda"},        # 春日部つむぎ役 — 女性の証人役、別の声質
+    11: {"name": "ja-JP-Chirp3-HD-Puck"},       # 玄野武宏役 — 主な男性役
+    12: {"name": "ja-JP-Chirp3-HD-Fenrir"},     # 白上虎太郎役 — 男性の証人役、別の声質
 }
 DEFAULT_VOICE = CLOUD_TTS_VOICES[DEFAULT_SPEAKER_ID]
 
@@ -148,13 +155,23 @@ def synth_line(text: str, speaker_id: int) -> bytes:
     voice = CLOUD_TTS_VOICES.get(speaker_id, DEFAULT_VOICE)
     pitch_delta, rate = _prosody_for(text)
     access_token = gcp_tts_auth.get_access_token()
+    audio_config = {"audioEncoding": "LINEAR16", "speakingRate": rate}
+    # Chirp3-HD voices (2026-08-18 switch, see CLOUD_TTS_VOICES) reject the
+    # `pitch` param outright ("This voice does not support pitch parameters
+    # at this time" — confirmed against the live API, not documented
+    # anywhere obvious). Acceptable trade: Chirp3-HD's own built-in prosody
+    # is already far more natural/expressive than Wavenet's flat baseline,
+    # so per-line pitch nudging matters less than it used to — the
+    # speakingRate half of _prosody_for's per-line variation still applies.
+    if "pitch" in voice:
+        audio_config["pitch"] = voice["pitch"] + pitch_delta
     resp = requests.post(
         SYNTHESIZE_URL,
         headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
         json={
             "input": {"ssml": _build_ssml(text)},
             "voice": {"languageCode": "ja-JP", "name": voice["name"]},
-            "audioConfig": {"audioEncoding": "LINEAR16", "pitch": voice["pitch"] + pitch_delta, "speakingRate": rate},
+            "audioConfig": audio_config,
         },
         timeout=30,
     )
