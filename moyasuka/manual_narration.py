@@ -103,6 +103,7 @@ from moyasuka.line_chat import (
     is_pause_only,
     parse_chat_script,
     timing_fingerprint,
+    total_seconds_for,
 )
 from moyasuka.voicevox_narrate import CHARACTER_SPEAKER_IDS, DEFAULT_SPEAKER_ID
 
@@ -253,7 +254,10 @@ def assemble(script_path: str, clips_dir: str, out_wav: str, out_durations_json:
             )
 
         arrivals = estimate_arrivals(items, durations)
-        total_seconds = arrivals[-1][1] + 1.2
+        # shared with line_chat.render_video/gcp_tts_narrate.build_narration
+        # — see total_seconds_for()'s docstring for why this must not be a
+        # locally-duplicated `+ 1.2` (2026-08-18 incident).
+        total_seconds = total_seconds_for(items, arrivals)
         mix_clips_at_times(clip_paths, arrivals, total_seconds, out_wav)
 
     with open(out_durations_json, "w", encoding="utf-8") as f:

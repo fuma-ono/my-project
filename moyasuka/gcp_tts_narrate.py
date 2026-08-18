@@ -51,7 +51,7 @@ import requests
 
 from moyasuka import gcp_tts_auth
 from moyasuka.audio_mix import mix_clips_at_times, wav_duration
-from moyasuka.line_chat import HARSH_TRIGGER_WORDS, PAUSE_SECONDS, estimate_arrivals, is_pause_only, parse_chat_script, timing_fingerprint
+from moyasuka.line_chat import HARSH_TRIGGER_WORDS, PAUSE_SECONDS, estimate_arrivals, is_pause_only, parse_chat_script, timing_fingerprint, total_seconds_for
 from moyasuka.voicevox_narrate import CHARACTER_SPEAKER_IDS, DEFAULT_SPEAKER_ID
 
 SYNTHESIZE_URL = "https://texttospeech.googleapis.com/v1/text:synthesize"
@@ -283,7 +283,13 @@ def build_narration(script_path: str, out_wav: str, out_durations_json: str) -> 
             clip_paths[i] = clip_path
 
         arrivals = estimate_arrivals(items, durations)
-        total_seconds = arrivals[-1][1] + 1.2
+        # 2026-08-18: use the shared total_seconds_for() rather than a
+        # local `+ 1.2` — this used to be its own independent copy of the
+        # same formula, and it drifted from line_chat.py's copy the moment
+        # only one of them was updated to give a trailing `!sfx:` cue (e.g.
+        # otoko_iyahho moved to be the video's last item) enough tail room.
+        # See total_seconds_for()'s docstring for the full incident.
+        total_seconds = total_seconds_for(items, arrivals)
         mix_clips_at_times(clip_paths, arrivals, total_seconds, out_wav)
 
     with open(out_durations_json, "w", encoding="utf-8") as f:

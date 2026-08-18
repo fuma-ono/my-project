@@ -54,7 +54,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from moyasuka.audio_mix import mix_clips_at_times, wav_duration
-from moyasuka.line_chat import PAUSE_SECONDS, estimate_arrivals, is_pause_only, parse_chat_script, timing_fingerprint
+from moyasuka.line_chat import PAUSE_SECONDS, estimate_arrivals, is_pause_only, parse_chat_script, timing_fingerprint, total_seconds_for
 
 VOICEVOX_URL = "http://127.0.0.1:50021"
 
@@ -194,7 +194,10 @@ def build_narration(script_path: str, out_wav: str, out_durations_json: str) -> 
             clip_paths[i] = clip_path
 
         arrivals = estimate_arrivals(items, durations)
-        total_seconds = arrivals[-1][1] + 1.2
+        # shared with line_chat.render_video/gcp_tts_narrate.build_narration
+        # — see total_seconds_for()'s docstring for why this must not be a
+        # locally-duplicated `+ 1.2` (2026-08-18 incident).
+        total_seconds = total_seconds_for(items, arrivals)
         mix_clips_at_times(clip_paths, arrivals, total_seconds, out_wav)
 
     with open(out_durations_json, "w", encoding="utf-8") as f:

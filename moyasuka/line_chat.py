@@ -487,24 +487,53 @@ def estimate_arrivals(items: list[dict], durations: list[float] | None = None) -
     return out
 
 
+def total_seconds_for(items: list[dict], arrivals: list[tuple[float, float, dict]]) -> float:
+    """The single source of truth for how long the episode's audio/video
+    needs to run, given `arrivals` (estimate_arrivals()'s output).
+
+    2026-08-18 bugfix: this used to be a one-line `arrivals[-1][1] + 1.2`
+    duplicated in both render_video() (here) and gcp_tts_narrate.py's
+    build_narration() — harmless while both copies agreed, but when the
+    owner asked to move otoko_iyahho to be the video's literal last item
+    ("最後のいやっフォーも...一番最後に鳴らすようにして"), only *this*
+    file's copy was updated to give a trailing `!sfx:` cue enough tail
+    room (otoko_iyahho.mp3 is ~1.75s; the old flat 1.2s cut it short).
+    gcp_tts_narrate.py's independent copy kept building narration.wav to
+    the old, shorter length — and since _mix_audio's amix uses
+    `duration=first` (narration's own length as the ceiling), the video's
+    correctly-extended frame count didn't matter: the mixed audio, and
+    then the final `-shortest` mux, still truncated the stinger. Same bug
+    class as the 2026-08-17 "チャットと音声が合っていない" incident
+    (independently-computed timing drifting apart), just in a spot
+    timing_fingerprint() doesn't cover since it's not part of
+    estimate_arrivals() itself. Factored out here so there is exactly one
+    place this formula lives — every caller must use this, not its own
+    copy."""
+    tail_buffer = 2.2 if items and items[-1]["type"] == "sfx" else 1.2
+    return arrivals[-1][1] + tail_buffer
+
+
 def timing_fingerprint() -> str:
     """A short hash covering everything that affects estimate_arrivals()'s
-    output: its own source plus every timing constant it reads. narration
-    generators (gcp_tts_narrate.py etc.) stamp this into a sidecar file
-    next to durations.json when they bake clip positions into the .wav;
-    render_video() recomputes it fresh and warns loudly if it doesn't
-    match — catches exactly the class of bug behind the 2026-08-17
-    incident ("チャットと音声が合っていない": a timing-logic change in this
-    file made an old, still-passing --durations/--audio pair silently
-    desync from a freshly-rendered chat, because the audio's clip
-    positions were baked in at generation time under the *old* logic).
-    Anything that changes estimate_arrivals' behavior — editing its body,
-    or any constant it reads — must change this hash; if you add a new
-    timing constant, add it to the tuple below or this stops catching it."""
+    and total_seconds_for()'s output: their source plus every timing
+    constant they read. narration generators (gcp_tts_narrate.py etc.)
+    stamp this into a sidecar file next to durations.json when they bake
+    clip positions into the .wav; render_video() recomputes it fresh and
+    warns loudly if it doesn't match — catches exactly the class of bug
+    behind the 2026-08-17 incident ("チャットと音声が合っていない": a
+    timing-logic change in this file made an old, still-passing --audio/
+    --durations pair silently desync from a freshly-rendered chat, because
+    the audio's clip positions were baked in at generation time under the
+    *old* logic) — and, as of 2026-08-18, also total_seconds_for()'s own
+    duplication bug (see that function's docstring: two independent copies
+    of the same formula drifted apart when only one was updated). Anything
+    that changes either function's behavior — editing its body, or any
+    constant it reads — must change this hash; if you add a new timing
+    constant, add it to the tuple below or this stops catching it."""
     import hashlib
     import inspect
 
-    src = inspect.getsource(estimate_arrivals)
+    src = inspect.getsource(estimate_arrivals) + inspect.getsource(total_seconds_for)
     constants = (
         LEAD_IN_SECONDS, GAP_SECONDS, MIN_BLOCK_SECONDS, CHARS_PER_SECOND,
         POST_HOOK_LEAD_IN_SECONDS, POST_HOOK_SILENT_GAP, COLD_OPEN_SILENT_GAP,
@@ -974,16 +1003,7 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
                 file=sys.stderr,
             )
     arrivals = estimate_arrivals(items, durations)
-    # 2026-08-18: a flat 1.2s tail is enough room after the last *visual*
-    # item, but not if the very last item in the script is a manual `!sfx:`
-    # cue with real length of its own (otoko_iyahho.mp3 is ~1.75s) — owner
-    # request: "最後のいやっフォーも...一番最後に鳴らすようにして" moves it
-    # to be literally the last item, which needs its own tail room or the
-    # render cuts the stinger off mid-sound (total_seconds governs both the
-    # video's frame count and, via -shortest at the final mux, the mixed
-    # audio's effective length).
-    tail_buffer = 2.2 if items and items[-1]["type"] == "sfx" else 1.2
-    total_seconds = arrivals[-1][1] + tail_buffer
+    total_seconds = total_seconds_for(items, arrivals)
 
     # sfx cues carry no visual block (see estimate_arrivals) — pull them
     # out before building the chat overlay's block list
