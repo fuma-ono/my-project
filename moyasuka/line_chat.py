@@ -202,9 +202,25 @@ def _font(size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(JP_FONT_PATH, size)
 
 
+def _is_kanji(ch: str) -> bool:
+    return "一" <= ch <= "鿿"
+
+
 def _wrap(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
     """Character-wrap, not word-wrap — Japanese has no spaces between
-    words. Same approach as bgm_pipeline/thumbnail.py and assemble_video.py."""
+    words. Same approach as bgm_pipeline/thumbnail.py and assemble_video.py.
+
+    2026-08-18: pure greedy char-wrap can (and did — owner report: "チャッ
+    トの改行位置がおかしい") cut a kanji compound in half, e.g. "内緒"
+    landing as "...内" / "緒..." across a line break — visually reads as
+    broken to a Japanese reader even though it's not a syntax error. Real
+    word-boundary-aware wrapping needs an actual segmenter (MeCab etc.,
+    not a dependency here); the cheap, targeted fix for the specific
+    failure mode observed is: never break between two adjacent kanji
+    characters — if the wrap point would land exactly there, pull the
+    trailing kanji back onto the next line instead. Hiragana/katakana/
+    punctuation boundaries (where particles and okurigana naturally sit)
+    are left alone, since those are the normal, safe break points."""
     probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
     lines: list[str] = []
     current = ""
@@ -213,9 +229,16 @@ def _wrap(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
         if probe.textbbox((0, 0), candidate, font=font)[2] <= max_width:
             current = candidate
         else:
-            if current:
-                lines.append(current)
-            current = ch
+            if current and _is_kanji(current[-1]) and _is_kanji(ch):
+                pulled = current[-1]
+                current = current[:-1]
+                if current:
+                    lines.append(current)
+                current = pulled + ch
+            else:
+                if current:
+                    lines.append(current)
+                current = ch
     if current:
         lines.append(current)
     return lines
@@ -442,6 +465,21 @@ def estimate_arrivals(items: list[dict], durations: list[float] | None = None) -
             # fully finished, no matter how many silent items (a [photo],
             # say) already used up some of that time — see
             # POST_HOOK_SILENT_GAP's comment.
+            if t < narration_floor and out:
+                # 2026-08-18: rather than just leaving this gap as bare
+                # background (owner: "もう少し開始を早くして。変な間が
+                # ある" — a leading [photo] disappearing before the first
+                # spoken line is floor-protected into starting reads as a
+                # dead pause), extend the immediately-preceding silent
+                # item's on-screen time to bridge the gap instead. Only
+                # safe when that item really is the one butting up against
+                # this gap (silent, and its own end lines up with the
+                # current cursor).
+                prev_start, prev_end, prev_item = out[-1]
+                prev_kind = prev_item.get("kind", "text")
+                prev_is_silent = prev_kind != "text" or is_pause_only(prev_item.get("text", ""))
+                if prev_is_silent and prev_end <= t:
+                    out[-1] = (prev_start, narration_floor, prev_item)
             t = max(t, narration_floor)
 
         out.append((t, t + dur, item))
@@ -936,7 +974,16 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
                 file=sys.stderr,
             )
     arrivals = estimate_arrivals(items, durations)
-    total_seconds = arrivals[-1][1] + 1.2
+    # 2026-08-18: a flat 1.2s tail is enough room after the last *visual*
+    # item, but not if the very last item in the script is a manual `!sfx:`
+    # cue with real length of its own (otoko_iyahho.mp3 is ~1.75s) — owner
+    # request: "最後のいやっフォーも...一番最後に鳴らすようにして" moves it
+    # to be literally the last item, which needs its own tail room or the
+    # render cuts the stinger off mid-sound (total_seconds governs both the
+    # video's frame count and, via -shortest at the final mux, the mixed
+    # audio's effective length).
+    tail_buffer = 2.2 if items and items[-1]["type"] == "sfx" else 1.2
+    total_seconds = arrivals[-1][1] + tail_buffer
 
     # sfx cues carry no visual block (see estimate_arrivals) — pull them
     # out before building the chat overlay's block list

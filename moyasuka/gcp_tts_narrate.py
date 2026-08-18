@@ -101,7 +101,10 @@ DEFAULT_VOICE = CLOUD_TTS_VOICES[DEFAULT_SPEAKER_ID]
 # this time rather than "a bit more", so set directly instead of nudging.
 # Round 4 (same day, next round): "もう少し話速を1.4倍にして" — again a
 # direct target.
-GLOBAL_RATE_MULTIPLIER = 1.4
+# Round 5 (2026-08-18, on 台本06): "テンポをもう少し速くして" — after the
+# 変な間(dead-gap) fixes elsewhere in this same round, tempo was still
+# flagged as slow. Bumped once more.
+GLOBAL_RATE_MULTIPLIER = 1.5
 
 
 def _prosody_for(text: str) -> tuple[float, float]:
