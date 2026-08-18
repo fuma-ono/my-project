@@ -57,7 +57,7 @@ REAL_BGM_TRACKS = {
 # once actually heard against picture.
 SCRIPT_BGM_TRACK = {
     "06-wrong-chat-boyfriend": "phantom_mirage",  # betrayal-reveal beat, moodier than the earlier comedic drafts
-    "07-group-chat-gossip": "banana_shuffle",
+    "07-shared-note-cheat": "banana_shuffle",
     "08-mooching-friend": "banana_shuffle",
     "09-overbearing-mom": "phantom_mirage",  # heavier family-conflict tone
     "10-impersonation": "phantom_mirage",  # "who did this" mystery beat fits phantom_mirage's name
