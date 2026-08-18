@@ -56,7 +56,7 @@ REAL_BGM_TRACKS = {
 # episodes. Not a hard rule — swap an entry here if the fit feels wrong
 # once actually heard against picture.
 SCRIPT_BGM_TRACK = {
-    "06-group-project-slacker": "banana_shuffle",
+    "06-fake-sick-runner": "banana_shuffle",
     "07-group-chat-gossip": "banana_shuffle",
     "08-mooching-friend": "banana_shuffle",
     "09-overbearing-mom": "phantom_mirage",  # heavier family-conflict tone
