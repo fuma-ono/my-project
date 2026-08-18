@@ -18,3 +18,20 @@ python3 moyasuka/background_gen.py --seconds 60 --seed 1 --out background.mp4
 ```
 
 `--seed`を変えると毎回違う配置・タイミングになる(動画ごとに単調な使い回しを避けるため、`bgm_pipeline`のプリセットローテーションと同じ考え方)。
+
+## 2026-08-18: 実写(マイクラアスレ)背景への転換(方針転換)
+
+オーナー指示「まずは背景動画から変えていこう」を受け、上記の「実写映像は使わない」方針を転換する。①〜③の懸念(調達不可・オーナー作業・著作権)のうち、①は依然として制約(このサンドボックスからYouTubeへのダウンロードは不可)、③は個別の動画ごとに権利関係を確認する運用に変更、②はオーナーが動画ファイルを直接渡す形で許容する。
+
+**土台(分割・ローテーション管理)を`moyasuka/background_video.py`として実装済み**(素材未着手のため、まだ`line_chat.py`への組み込みはしていない):
+
+```bash
+python3 -m moyasuka.background_video split --source /path/to/parkour.mp4 --clip-seconds 15
+python3 -m moyasuka.background_video next   # 次のクリップのパスを返し、ローテーションを1つ進める
+```
+
+- 元動画を中央クロップで9:16(1080x1920)に切り出し、`--clip-seconds`ごとに分割(`assets/background_video_clips/background_NN.mp4`、gitignore対象——バイナリの派生物のため`moyasuka/output/`等と同じ扱い)
+- ローテーション状態は`assets/background_video_clips/rotation_state.json`に永続化。プロセスをまたいでも「前回使ったクリップ」を覚えていて、次は必ず違うクリップを返す(全て使い切ったら最初に戻る)
+- ダミー動画(ffmpeg testsrcで生成)で分割・ローテーションの両方を動作確認済み。1本目の`background_gen.py`(完全自前生成)は当面フォールバックとして残す
+
+**未着手**: `line_chat.py`のフレーム合成(現状はPILで1フレームずつKen Burnsパンを描画)を、実写動画のデコードに対応させる部分。実際の素材が届いてから、素材の特性(解像度・fps・尺)を見て設計する。
