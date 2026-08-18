@@ -83,7 +83,9 @@ DEFAULT_VOICE = CLOUD_TTS_VOICES[DEFAULT_SPEAKER_ID]
 # already driven entirely by the real per-line audio durations
 # (durations.json), so regenerating narration with the new rate and
 # re-rendering is sufficient — the chat automatically follows.
-GLOBAL_RATE_MULTIPLIER = 1.2
+# Round 3 (2026-08-18): "1.25倍くらい速度を早くして" — a specific target
+# this time rather than "a bit more", so set directly instead of nudging.
+GLOBAL_RATE_MULTIPLIER = 1.25
 
 
 def _prosody_for(text: str) -> tuple[float, float]:

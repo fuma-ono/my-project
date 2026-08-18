@@ -62,7 +62,12 @@ from moyasuka.bgm import render_bgm_loop
 from moyasuka.sfx import SFX_GENERATORS
 from moyasuka import background_video
 
-JP_FONT_PATH = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
+# Owner feedback (2026-08-18): "チャットのフォントを変えたい" — was
+# WenQuanYi Zen Hei (a Chinese-origin font, workable but not built for
+# Japanese UI text). Switched to Noto Sans CJK JP, the standard clean
+# sans-serif used across real Japanese apps/UIs — closer to what LINE
+# itself actually renders with than the previous font was.
+JP_FONT_PATH = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
 
 
 def _iter_background_frames(seconds: float, seed: int):
