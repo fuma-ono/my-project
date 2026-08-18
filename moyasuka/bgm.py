@@ -24,11 +24,66 @@ and faded out at the very end.
 """
 from __future__ import annotations
 
+import subprocess
 import wave
+from pathlib import Path
 
 import numpy as np
 
 SR = 44100
+
+BGM_ASSETS_DIR = Path(__file__).resolve().parent / "assets" / "bgm"
+
+# Owner-provided real tracks (2026-08-18, "次の動画からこの音楽をBGMで使用
+# して") — see assets/bgm/NOTICE.md for provenance. These replace
+# render_bgm_loop's self-synthesized loop below for scripts 06 onward.
+# Scripts 01-05 deliberately keep the old synthesized loop (see
+# SCRIPT_BGM_TRACK below) since those were already reviewed/approved with
+# it — this is a "starting from the next video" change, not retroactive.
+REAL_BGM_TRACKS = {
+    "banana_shuffle": BGM_ASSETS_DIR / "banana_shuffle.mp3",
+    "phantom_mirage": BGM_ASSETS_DIR / "phantom_mirage.mp3",
+}
+
+# Per-script track assignment. Owner instruction (2026-08-18): "ランダムで
+# どちらが雰囲気に合ってるかで判断して使用して" — pick whichever of the two
+# fits each episode's mood (not literally at random). Judged from the
+# tracks' names/character and a quick ffmpeg volumedetect pass rather than
+# by ear (no audio-listening capability available here):
+# banana_shuffle's bouncy "shuffle" name + slightly lower/gentler measured
+# level -> lighter comedic episodes; phantom_mirage's moodier name +
+# slightly hotter/louder measured level -> tenser or mystery-flavored
+# episodes. Not a hard rule — swap an entry here if the fit feels wrong
+# once actually heard against picture.
+SCRIPT_BGM_TRACK = {
+    "06-boyfriend-read": "banana_shuffle",
+    "07-group-chat-gossip": "banana_shuffle",
+    "08-mooching-friend": "banana_shuffle",
+    "09-overbearing-mom": "phantom_mirage",  # heavier family-conflict tone
+    "10-impersonation": "phantom_mirage",  # "who did this" mystery beat fits phantom_mirage's name
+}
+
+
+def render_real_bgm(total_seconds: float, out_path: str, track_key: str, amplitude: float = 0.16) -> None:
+    """Trims an owner-provided real track (see REAL_BGM_TRACKS) to
+    `total_seconds` with a short fade-out, at the same quiet mix level as
+    the old synthesized render_bgm_loop (amplitude default unchanged —
+    narration must stay clearly on top, same owner request as that
+    function's docstring). No looping needed: both tracks (~200s+) run far
+    longer than any single episode (~45-65s), so this always just takes an
+    intro slice. Converts to mono/44100Hz to match render_bgm_loop's output
+    format, since line_chat.py._mix_audio's filtergraph expects mono."""
+    src = REAL_BGM_TRACKS[track_key]
+    fade_dur = min(0.6, total_seconds / 4)
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-i", str(src), "-t", f"{total_seconds:.3f}",
+            "-af", f"aformat=channel_layouts=mono,volume={amplitude},"
+                   f"afade=t=out:st={total_seconds - fade_dur:.3f}:d={fade_dur:.3f}",
+            "-ar", "44100", out_path,
+        ],
+        check=True, capture_output=True,
+    )
 
 NOTE_FREQS = {
     "C4": 261.63, "D4": 293.66, "E4": 329.63, "G4": 392.00,

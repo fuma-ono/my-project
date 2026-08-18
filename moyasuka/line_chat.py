@@ -58,6 +58,7 @@ from moyasuka.background_gen import FPS
 from moyasuka.background_gen import H as BG_H
 from moyasuka.background_gen import W as BG_W
 from moyasuka.background_gen import iter_frames as _iter_photo_frames
+from moyasuka import bgm
 from moyasuka.bgm import render_bgm_loop
 from moyasuka.sfx import SFX_GENERATORS
 from moyasuka import background_video
@@ -789,8 +790,8 @@ def render_frame(base: Image.Image, all_blocks: list[_Block], arrival_times: lis
     return frame.convert("RGB")
 
 
-def _mix_audio(narration_path: str, total_seconds: float, sfx_cues: list[tuple[float, str]], tmp: str) -> str:
-    """Layers the BGM loop (always, quiet — owner request 2026-08-06:
+def _mix_audio(narration_path: str, total_seconds: float, sfx_cues: list[tuple[float, str]], tmp: str, script_path: str | None = None) -> str:
+    """Layers the BGM bed (always, quiet — owner request 2026-08-06:
     "小さい音でいいからBGMは付けて") and each `!sfx:` cue's synthesized
     stinger (at its cue time, via adelay) onto the narration track.
 
@@ -800,10 +801,21 @@ def _mix_audio(narration_path: str, total_seconds: float, sfx_cues: list[tuple[f
     reason and mute short cue clips mixed against long narration — with
     normalize off, tracks with nothing playing at a given moment
     contribute nothing and don't dilute the others' volume. BGM's own
-    quiet level is baked into bgm.render_bgm_loop's `amplitude`, not
-    handled here."""
+    quiet level is baked into the amplitude passed to whichever BGM
+    function below is used, not handled here.
+
+    BGM source (2026-08-18): `script_path`'s stem is looked up in
+    bgm.SCRIPT_BGM_TRACK — scripts 06+ get one of the owner-provided real
+    tracks (bgm.render_real_bgm), scripts 01-05 (and anything not yet
+    assigned a track) keep the original self-synthesized loop
+    (render_bgm_loop) unchanged, since those were already reviewed with
+    it. See bgm.py's module-level comments for the full rationale."""
     bgm_path = f"{tmp}/bgm.wav"
-    render_bgm_loop(total_seconds, bgm_path)
+    track_key = bgm.SCRIPT_BGM_TRACK.get(Path(script_path).stem) if script_path else None
+    if track_key:
+        bgm.render_real_bgm(total_seconds, bgm_path, track_key)
+    else:
+        render_bgm_loop(total_seconds, bgm_path)
 
     inputs = ["-i", narration_path, "-i", bgm_path]
     filter_parts = [
@@ -986,7 +998,7 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
                 check=True, capture_output=True,
             )
 
-        audio_path = _mix_audio(audio_path, total_seconds, sfx_cues, tmp)
+        audio_path = _mix_audio(audio_path, total_seconds, sfx_cues, tmp, script_path=script_path)
 
         subprocess.run(
             ["ffmpeg", "-y", "-i", video_only, "-i", audio_path,
