@@ -2,6 +2,8 @@
 
 `docs/marketing/2026-08-market-research.md` の調査(C)、および `docs/marketing/2026-08-content-topics.md` のネタ調査に基づく方針。
 
+**体制**: 専任の note編集部(編集長・ベテラン作家2人・中堅編集者2人・ベテランマーケター・天才作家)で運用する。詳細は `note-articles/TEAM.md`。
+
 **投稿キュー(コピペ用ページ)**: https://claude.ai/code/artifact/4463f3ba-3008-4e37-bbff-c9b338cbcb87
 下書きが増えたら `note-articles/queue-page/template.html` に追記して `python3 note-articles/queue-page/build.py` → Artifact再公開。
 
