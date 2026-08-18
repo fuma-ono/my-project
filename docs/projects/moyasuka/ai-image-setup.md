@@ -63,6 +63,38 @@ POST https://us-central1-aiplatform.googleapis.com/v1/projects/focus-sleep-sound
    場合、Vertex AI呼び出しには追加で"Vertex AI User"ロールの付与が必要に
    なる可能性がある(有効化後の再テストで403が続く場合はこちらを疑う)
 
+## 2026-08-18追記: API有効化後も、もう1段階ブロッカーが残っている
+
+オーナーがVertex AI APIを有効化(上記URL)。再テストの結果:
+
+- **SERVICE_DISABLED(API未有効化)のエラーは解消**——API有効化は成功している
+- しかし**Imagen(`imagen-3.0-generate-002`ほか試した7種のモデルID全て)への
+  リクエストが軒並り404 "Publisher model ... was not found or your project
+  does not have access to it"** になる
+- 同じ404が、Imagenだけでなく**Gemini(`gemini-2.0-flash-001`)への
+  generateContent呼び出しでも発生**することを確認——Imagen固有の問題では
+  なく、**このプロジェクトからGoogleの生成AIモデル(Model Garden配下)自体に
+  まだアクセスできていない**、より根本的な状態と判断した
+
+考えられる原因(2つとも、コンソールでの操作が必要でAI側からは解決不可):
+1. **請求先アカウント(Billing)がこのプロジェクトに紐付いていない**——生成AI
+   系のAPIは無料枠だけでは動かないことが多く、Cloud TTSは動いていても
+   Imagen/Geminiは別途課金設定が必要な場合がある
+2. **Vertex AI Studio側で生成AIモデルの利用規約に未同意**——初回はコンソール
+   のVertex AI Studio画面を一度開いて同意する操作が必要なことがある
+
+**オーナーへのお願い**: Google Cloud Console → 該当プロジェクト
+(`focus-sleep-sounds`)→ 「お支払い」でBillingアカウントが紐付いているか
+確認、なければ設定。あわせて一度Vertex AI Studio
+(https://console.cloud.google.com/vertex-ai/studio) を開いて、生成AI利用の
+同意画面が出ないか確認していただけますか。どちらもAPI経由では確認・
+突破できない、コンソールでの人の操作が必要な部分でした。
+
+モデルID自体(`imagen-3.0-generate-002`等)が古い可能性も残っているが、
+上記のアクセス問題が解決してから、コンソールのVertex AI Studioに実際に
+表示される最新の正しいモデルIDを確認する方が早い(このAI側で当てずっぽうに
+7種類試して全滅した後だったため)。
+
 ## 有効化できたら実装すること
 
 - `moyasuka/ai_image_gen.py`(新規)を`gcp_tts_narrate.py`と同じ認証パターンで実装
