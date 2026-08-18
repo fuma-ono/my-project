@@ -60,6 +60,7 @@ Google Cloud Text-to-Speechによる音声合成を使用しています
 
 ■ ネタ募集
 実際にあった「モヤモヤ→スカッと」なLINEエピソード、募集中です。X(@moyasuka_ch)にDMいただけると嬉しいです✨
+https://x.com/moyasuka_ch
 
 ■ ご注意
 本チャンネルのストーリーはすべてフィクションです。実在の人物・団体とは一切関係ありません。
@@ -69,20 +70,30 @@ Google Cloud Text-to-Speechによる音声合成を使用しています
 #スカッと #LINEドラマ #ショートドラマ #Shorts"""
 
 
+# 2026-08-18: 「毎回タイトルに絵文字をつけるようにして」(オーナー指示) —
+# タイトルは「〜結果ｗｗ」のように"笑い"で締める型が定番(content-backlog.md
+# の「タイトルの型」)なので、その空気に合う🤣を標準絵文字として固定する。
+# 台本ごとに変えたい場合はここではなく _title_from_script 側で分岐すればよい。
+TITLE_EMOJI = "🤣"
+
+
 def _title_from_script(script_path: str) -> str:
-    """Pulls the `**タイトル案**: ...` line every scripts/*.md file has and
-    appends " #Shorts" (owner request, 2026-08-14: Shorts向けにタイトルも
-    最適化する) — YouTube's Shorts classifier already picks this video up
-    automatically from format (line_chat.py's 720x1280, 9:16) + duration
-    (well under 3 minutes), but a "#Shorts" signal in the title itself is
-    the extra nudge many creators rely on, on top of DEFAULT_TAGS/
-    DESCRIPTION_TEMPLATE already carrying it. Skipped if the title already
-    mentions Shorts so this never double-appends."""
+    """Pulls the `**タイトル案**: ...` line every scripts/*.md file has,
+    appends TITLE_EMOJI (owner request, 2026-08-18: 毎回タイトルに絵文字を
+    つける), then appends " #Shorts" (owner request, 2026-08-14: Shorts向け
+    にタイトルも最適化する) — YouTube's Shorts classifier already picks
+    this video up automatically from format (line_chat.py's 720x1280, 9:16)
+    + duration (well under 3 minutes), but a "#Shorts" signal in the title
+    itself is the extra nudge many creators rely on, on top of
+    DEFAULT_TAGS/DESCRIPTION_TEMPLATE already carrying it. Both appends are
+    skipped if already present, so this never double-appends on a re-run."""
     text = Path(script_path).read_text(encoding="utf-8")
     m = re.search(r"\*\*タイトル案\*\*:\s*(.+)", text)
     if not m:
         raise SystemExit(f"{script_path} に「**タイトル案**:」行が見つかりません。")
     title = m.group(1).strip()
+    if TITLE_EMOJI not in title:
+        title = f"{title}{TITLE_EMOJI}"
     if "shorts" not in title.lower():
         title = f"{title} #Shorts"
     return title
