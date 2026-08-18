@@ -231,11 +231,21 @@ def generate_screenshot(out_path: str) -> None:
 
 
 SFX_GENERATORS = {
-    "scratch_dun": generate_scratch_dun,  # superseded as the climax cue, kept as reusable synthesis
+    "scratch_dun": generate_scratch_dun,  # kept directly callable too (manual `!sfx:scratch_dun`), though nothing currently uses it that way — see "surprise_hit" below for where it's actually heard now
     "notification": use_line_notification,  # auto-fired once at the very start of every video, see line_chat.py; real clip, see NOTICE.md
     "message_pop": generate_message_pop,
     "otoko_iyahho": use_otoko_iyahho,  # current climax cue (licensed track, see round 4 above)
     "yome_nanimo_shinai": use_yome_nanimo_shinai,  # owner-provided clip, see NOTICE.md
-    "surprise_hit": generate_surprise_hit,  # content-triggered, see HARSH_TRIGGER_WORDS in line_chat.py
+    # 2026-08-18: was generate_surprise_hit (a synthesized sweep+thud).
+    # Owner feedback on an actual render: "効果音のドーンはなぜ使われて
+    # いない？...変な音がある" — pointed at exactly this cue and asked why
+    # the "ドーン"(でででででデェェェェン)sound wasn't the one playing.
+    # That sound is generate_scratch_dun above — originally built for this
+    # exact purpose (owner request round 2, see module docstring) but
+    # displaced as the *climax* cue by otoko_iyahho.mp3 and left orphaned
+    # (defined, never actually triggered by anything). Repointing this
+    # content-triggered slot to it fixes both complaints at once: the
+    # "weird" sweep+thud is gone, and ドーン is actually used again.
+    "surprise_hit": generate_scratch_dun,  # content-triggered, see HARSH_TRIGGER_WORDS in line_chat.py
     "screenshot": generate_screenshot,  # content-triggered, see kind=="image" handling in line_chat.py
 }
