@@ -117,7 +117,32 @@ def _split_one_source(source_path: str, clip_seconds: float, out_dir: Path, name
     clips = sorted(out_dir.glob(f"{name_prefix}_*.mp4"))
     if not clips:
         raise RuntimeError(f"ffmpeg produced no clips from {source_path} — check the source file/filter")
-    return clips
+
+    # ffmpeg's -f segment muxer always writes source_duration % clip_seconds
+    # as one final, short leftover clip alongside the full-length ones —
+    # e.g. a 62s source split at 15s yields four 15s clips plus a ~2s tail
+    # (in one real case, the tail was 0.35s). A clip this short is fine on
+    # disk but breaks badly once it enters the rotation and gets looped/
+    # walked for actual playback — owner report, 2026-08-18: "背景の動画が
+    # バグっている", traced back to exactly this fragment sitting in the
+    # pool. Drop anything under half the target clip length before it ever
+    # reaches next_clip()/iter_frames_for_episode; the source videos here
+    # are all 60s+, so losing one short tail per source barely dents the
+    # pool.
+    min_usable_seconds = clip_seconds / 2
+    usable_clips = []
+    for clip in clips:
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", str(clip)],
+            check=True, capture_output=True, text=True,
+        )
+        if float(probe.stdout.strip()) >= min_usable_seconds:
+            usable_clips.append(clip)
+        else:
+            clip.unlink()
+    if not usable_clips:
+        raise RuntimeError(f"every clip ffmpeg produced from {source_path} was under {min_usable_seconds}s — source video may be too short")
+    return usable_clips
 
 
 def split_video_to_clips(source_paths: str | list[str], clip_seconds: float = DEFAULT_CLIP_SECONDS, out_dir: Path = CLIPS_DIR) -> list[Path]:
@@ -217,6 +242,54 @@ def iter_frames_from_clip(clip_path: Path, seconds: float, fps: int | None = Non
             t = f / fps
             img = Image.open(frame_paths[f % len(frame_paths)]).convert("RGB")
             yield t, img
+
+
+def iter_frames_for_episode(seconds: float, fps: int | None = None):
+    """Generator yielding (t, Image), same contract as
+    iter_frames_from_clip — but walks *forward through the rotation pool*
+    instead of picking one clip and looping it for the entire episode.
+
+    2026-08-18 fix: a single rotation clip is only ~15-17s (DEFAULT_CLIP_
+    SECONDS), while an episode runs 45-65s — the old approach (line_chat.
+    _iter_background_frames calling next_clip() once, then looping just
+    that one clip's frames via iter_frames_from_clip) meant the *same*
+    ~15s of footage visibly repeated 3-4 times within a single video.
+    Owner report: "背景の動画がバグっている" — a viewer noticing the exact
+    same camera angle/block reappear every few seconds reads as broken,
+    not as a deliberate loop. This function calls next_clip() again each
+    time the current clip's frames run out, so a long episode shows
+    continuously fresh footage (cycling through the whole rotation pool if
+    the episode is long enough to need more clips than exist) instead of
+    one clip stuck on repeat. The rotation still only advances once per
+    clip actually consumed — same persisted-state contract as before,
+    just checked as many times as a single episode needs instead of once."""
+    import tempfile
+
+    from moyasuka.background_gen import FPS as BG_FPS
+    from moyasuka.background_gen import H as BG_H
+    from moyasuka.background_gen import W as BG_W
+    from PIL import Image
+
+    fps = fps or BG_FPS
+    n_frames_needed = int(fps * seconds)
+    yielded = 0
+    while yielded < n_frames_needed:
+        clip_path = next_clip()
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", str(clip_path), "-vf", f"scale={BG_W}:{BG_H},fps={fps}", f"{tmp}/f%05d.png"],
+                check=True, capture_output=True,
+            )
+            frame_paths = sorted(Path(tmp).glob("f*.png"))
+            if not frame_paths:
+                raise RuntimeError(f"ffmpeg extracted no frames from {clip_path}")
+            for frame_path in frame_paths:
+                if yielded >= n_frames_needed:
+                    break
+                t = yielded / fps
+                img = Image.open(frame_path).convert("RGB")
+                yield t, img
+                yielded += 1
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -143,9 +143,22 @@ def use_otoko_iyahho(out_path: str) -> None:
     source/license) to `out_path` as wav, so it fits the same pipeline as
     the synthesized cues (_mix_audio expects a readable audio file, it
     doesn't care whether ffmpeg generated it from scratch or transcoded
-    an existing one)."""
+    an existing one).
+
+    2026-08-18: +5dB boost added (owner: "効果音が使われていない" — a
+    forensic byte-diff of the actual mixed output proved this cue *was*
+    present and correctly mixed, but at its unmodified source level
+    (peaks around -7.5dB) it can read as absent when layered under BGM
+    and narration in a casual watch. The source has headroom to -7.5dB
+    peak, so +5dB still leaves ~2.5dB before clipping. This is the one
+    manual climax stinger every script places — it's meant to be the
+    unmistakable "スカッと" moment, so it should cut through the mix
+    clearly rather than blend into it."""
     src = ASSETS_DIR / "otoko_iyahho.mp3"
-    subprocess.run(["ffmpeg", "-y", "-i", str(src), out_path], check=True, capture_output=True)
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", str(src), "-af", "volume=5dB", out_path],
+        check=True, capture_output=True,
+    )
 
 
 def generate_notification(out_path: str) -> None:

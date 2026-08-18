@@ -119,22 +119,38 @@ def _prosody_for(text: str) -> tuple[float, float]:
     same "curated list, cheap to fix a miss, not worth chasing with NLP"
     philosophy line_chat.py's HARSH_TRIGGER_WORDS itself uses (reused here
     directly, so the vocal delivery and the surprise_hit sfx land on the
-    same lines)."""
+    same lines).
+
+    2026-08-18 correction: the pitch magnitudes below (originally ±1.5 to
+    ±4.0 semitones) were tuned back when _build_ssml() silently dropped
+    pitch entirely for Chirp3-HD (see that function's docstring) — they
+    were never actually heard in production. The same day, pitch was
+    wired up for real via SSML <prosody>, and at the original magnitudes
+    it overshot badly: swinging a single character's pitch by up to ~6.5
+    semitones line-to-line (e.g. a hesitant -2.5 line next to a harsh-word
+    +4.0 line) made ONE character sound like several different voices —
+    owner feedback: "登場人物3人しかいないのに声の種類がおおい" on a
+    3-character script. Chirp3-HD's own built-in prosody is already
+    considerably more expressive than the flat Wavenet baseline this
+    bucket scheme was originally designed for, so it doesn't need as large
+    an explicit push. Values below are cut to roughly a third of the
+    original magnitudes — keeps a perceptible lift on questions/
+    exclamations/harsh words without breaking character-voice identity."""
     stripped = text.rstrip("。、!！?？…‥.")
     if any(w in text for w in HARSH_TRIGGER_WORDS):
-        pitch, rate = 4.0, 1.15          # shock/anger — sharp and fast
+        pitch, rate = 1.4, 1.15          # shock/anger — sharp and fast
     elif text.endswith(("?", "？")):
-        pitch, rate = 3.0, 1.08          # question — rises
+        pitch, rate = 1.0, 1.08          # question — rises
     elif text.endswith(("!", "！")):
-        pitch, rate = 3.5, 1.15          # exclamation — pushes harder
+        pitch, rate = 1.2, 1.15          # exclamation — pushes harder
     elif "…" in text or "..." in text:
-        pitch, rate = -2.5, 0.85         # hesitation/trailing off — slower and lower
+        pitch, rate = -0.8, 0.85         # hesitation/trailing off — slower and lower
     elif len(stripped) <= 6:
-        pitch, rate = -1.5, 0.92         # short reaction line — weighty, deliberate
+        pitch, rate = -0.5, 0.92         # short reaction line — weighty, deliberate
     elif len(stripped) >= 15:
-        pitch, rate = 1.5, 1.05          # longer explanatory line — a bit more energy so it doesn't drone
+        pitch, rate = 0.5, 1.05          # longer explanatory line — a bit more energy so it doesn't drone
     else:
-        pitch, rate = 0.5, 1.02          # everything else still gets a small lift, never the untouched default
+        pitch, rate = 0.2, 1.02          # everything else still gets a small lift, never the untouched default
     return pitch, rate * GLOBAL_RATE_MULTIPLIER
 
 

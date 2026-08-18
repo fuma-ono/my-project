@@ -80,10 +80,17 @@ def _iter_background_frames(seconds: float, seed: int):
     with no source video ever split — see background_video.py's module
     docstring). Picking the fallback here, in one place, means every other
     caller (render_video, any future one) just gets frames without needing
-    to know which backend is active."""
+    to know which backend is active.
+
+    Uses iter_frames_for_episode (walks the rotation forward, pulling a
+    new clip each time the current one's frames run out) rather than
+    picking a single clip and looping it for the whole episode — a single
+    ~15s clip looped across a 45-65s episode visibly repeats the same
+    footage 3-4 times, which read as a bug ("背景の動画がバグっている",
+    2026-08-18) rather than a deliberate loop. See that function's
+    docstring for the full reasoning."""
     if background_video.has_rotation_pool():
-        clip = background_video.next_clip()
-        yield from background_video.iter_frames_from_clip(clip, seconds, fps=FPS)
+        yield from background_video.iter_frames_for_episode(seconds, fps=FPS)
     else:
         yield from _iter_photo_frames(seconds, seed)
 
