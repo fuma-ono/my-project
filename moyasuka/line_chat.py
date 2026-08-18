@@ -132,16 +132,26 @@ GAP_SECONDS = 0.15  # 2026-08-16: was 0.235 (2026-08-14) — trimmed further to 
 # starts before the chime finishes playing).
 #
 # 2026-08-18 (フック廃止後、台本06で最初の要素が[photo]になったケース):
-# 「通知音→画像で始めて、これは今後の動画もマスト」— hook_windowがない
-# コールドオープンでは notification_cues が t=NOTIFICATION_DELAY(1.0s)で
-# チャイムを鳴らし、最初の項目([photo]でも通常メッセージでも)は
-# LEAD_IN_SECONDS(3.1s)より前には表示されない(estimate_arrivalsのnarration
-# floorがsilentな項目にも一律で適用されるため)。1.0 + チャイム自体の長さ
-# (~1.9s) < 3.1なので、チャイムが鳴り切ってから最初の要素が出る順序は
-# 常に成立する——これは台本06固有の設定ではなく、フックなしのどの台本でも
-# 構造的に保証されている。
+# 「通知音→画像で始めて、これは今後の動画もマスト」の**順序**自体は、
+# hook_windowがないコールドオープンでも常に成立する(チャイムがt=
+# NOTIFICATION_DELAY=1.0で鳴り、最初の項目はそれより前には出ない)。
+# ただし当初の実装は、最初の項目が[photo]のような無音の要素でも
+# LEAD_IN_SECONDS(3.1s)まるごと待たせていた——これはPOST_HOOK_LEAD_IN_
+# SECONDSがまさに解決した「無音の要素はナレーションとチャイムの被り防止の
+# ために待つ必要がない」問題と同じもので、対応がフック後のケースにしか
+# 入っていなかった(見落とし)。オーナー指摘「通知音がなってから画像が出る
+# までに間がありすぎる。無くして」を受け、COLD_OPEN_SILENT_GAP(下記)で
+# コールドオープン側にも同じ考え方を適用した。
 NOTIFICATION_DELAY = 1.0
-LEAD_IN_SECONDS = 3.1
+LEAD_IN_SECONDS = 3.1  # 最初に「実際に喋る」項目が守るべき下限(チャイムが鳴り切るまでの保護)。無音の先頭項目には適用しない — COLD_OPEN_SILENT_GAP参照
+
+# 2026-08-18: コールドオープン版のPOST_HOOK_SILENT_GAP。最初の項目が無音
+# (photo/image/sticker)の場合、LEAD_IN_SECONDS全部を待たせず、チャイムが
+# 鳴り始めてすぐ(NOTIFICATION_DELAY + 0.2s、post-hookのチャイム→画像の
+# 間隔と同じ0.2sギャップ)に表示する。最初の「実際に喋る」項目は、無音の
+# 項目がいくつ先行していてもLEAD_IN_SECONDSの下限は変わらず守られる
+# (estimate_arrivalsのnarration_floor参照、post-hook版と同じ仕組み)。
+COLD_OPEN_SILENT_GAP = NOTIFICATION_DELAY + 0.2
 
 # Owner feedback (2026-08-17, on v8 with a hook): "冒頭6〜9秒が映像的に
 # 弱い...3〜9秒あたりで海だけになる時間がある" — v8 still applied the same
@@ -400,7 +410,21 @@ def estimate_arrivals(items: list[dict], durations: list[float] | None = None) -
             continue
 
         if not lead_in_applied:
-            t += POST_HOOK_SILENT_GAP if hook_occurred else LEAD_IN_SECONDS
+            first_kind = item.get("kind", "text")
+            first_is_silent = first_kind != "text" or is_pause_only(item.get("text", ""))
+            if hook_occurred:
+                t += POST_HOOK_SILENT_GAP
+            elif first_is_silent:
+                # cold open, but the very first item is silent (e.g. a
+                # leading [photo] with no フック) — same reasoning as
+                # POST_HOOK_SILENT_GAP: no narration to protect yet, so
+                # don't make it wait for the full LEAD_IN_SECONDS. The
+                # first *spoken* item still gets floored at LEAD_IN_SECONDS
+                # below via narration_floor.
+                t += COLD_OPEN_SILENT_GAP
+                narration_floor = LEAD_IN_SECONDS
+            else:
+                t += LEAD_IN_SECONDS
             lead_in_applied = True
 
         kind = item.get("kind", "text")
@@ -438,7 +462,7 @@ def timing_fingerprint() -> str:
     src = inspect.getsource(estimate_arrivals)
     constants = (
         LEAD_IN_SECONDS, GAP_SECONDS, MIN_BLOCK_SECONDS, CHARS_PER_SECOND,
-        POST_HOOK_LEAD_IN_SECONDS, POST_HOOK_SILENT_GAP,
+        POST_HOOK_LEAD_IN_SECONDS, POST_HOOK_SILENT_GAP, COLD_OPEN_SILENT_GAP,
         IMAGE_VIEW_SECONDS, STICKER_VIEW_SECONDS, PHOTO_VIEW_SECONDS,
     )
     return hashlib.sha256((src + repr(constants)).encode()).hexdigest()[:16]
