@@ -100,11 +100,11 @@ CHARACTER_SPEAKER_IDS: dict[str, int] = {
     "ゆい": 2,         # 10 — 主な敵役(女性)
     "かえで": 8,        # 10 — 女性の証人役(部長)
     "たいが": 12,       # 10 — 男性の証人役
-    # "ことね"(06)は意図的にここへ含めていない — オーナー指示「ことねの声は
-    # かわいらしい感じで」を受け、既存5声のどれにも寄せず専用の声を選ぶ
-    # ことにしたため、speaker_id=13を新設予定(下記CLOUD_TTS_VOICES参照)。
-    # 候補4種(Aoede/Zephyr/Autonoe/Erinome)を試聴用に生成してオーナーの
-    # 選択待ち — 選ばれ次第ここに追記する。
+    "ことね": 13,        # 06 — 専用ボイス(Sulafat)。オーナー指示「かわいらしい
+                        # 感じで」「もう少し若い声」を受け、ja-JP Chirp3-HD女性
+                        # ボイス全14種を試聴してもらい選定(gcp_tts_narrate.py
+                        # のCLOUD_TTS_VOICES[13]参照)。既存5声のどのロールにも
+                        # 属さない、このキャラクター専用の追加スロット。
 }
 DEFAULT_SPEAKER_ID = 3  # ずんだもん — used with a warning if a script introduces a new character name not listed above
 

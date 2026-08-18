@@ -75,6 +75,13 @@ CLOUD_TTS_VOICES: dict[int, dict] = {
     8: {"name": "ja-JP-Chirp3-HD-Leda"},        # 春日部つむぎ役 — 女性の証人役、別の声質
     11: {"name": "ja-JP-Chirp3-HD-Puck"},       # 玄野武宏役 — 主な男性役
     12: {"name": "ja-JP-Chirp3-HD-Fenrir"},     # 白上虎太郎役 — 男性の証人役、別の声質
+    # 2026-08-18: 台本06「ことね」専用(既存5声のどのロールにも属さない、
+    # オーナー指示「かわいらしい感じで」「もう少し若い声」に対応する声)。
+    # ja-JP Chirp3-HD女性ボイス全14種の試聴サンプルをオーナーに送り、
+    # Sulafatを選定。既存ロール(主な敵役=Despina等)を上書きせず、新規
+    # speaker_id=13として追加(voicevox_narrate.CHARACTER_SPEAKER_IDSの
+    # "ことね"エントリと対応)。
+    13: {"name": "ja-JP-Chirp3-HD-Sulafat"},    # ことね役(06)
 }
 DEFAULT_VOICE = CLOUD_TTS_VOICES[DEFAULT_SPEAKER_ID]
 
@@ -134,18 +141,31 @@ def _prosody_for(text: str) -> tuple[float, float]:
 _SSML_ESCAPE = str.maketrans({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;"})
 
 
-def _build_ssml(text: str) -> str:
-    """Wraps any HARSH_TRIGGER_WORDS hit in <emphasis> — a whole-utterance
-    pitch/rate shift (audioConfig, above) changes the line's overall energy
-    but can't accent one word within a sentence; SSML emphasis is what
-    actually gives a harsh word inside an otherwise calm line its own
-    punch, which is closer to what "抑揚" (real intonation) means than a
-    uniform shift alone."""
+def _build_ssml(text: str, pitch_delta: float) -> str:
+    """Wraps any HARSH_TRIGGER_WORDS hit in <emphasis>, and the whole
+    utterance in <prosody pitch="...st">, to actually deliver
+    _prosody_for's per-line pitch_delta.
+
+    2026-08-18 fix: the previous version left pitch_delta unused for
+    Chirp3-HD voices — synth_line() used to try setting it via the
+    top-level `audioConfig.pitch` field, which Chirp3-HD rejects outright
+    ("This voice does not support pitch parameters at this time"), so that
+    branch was written to simply skip pitch for every Chirp3-HD voice
+    (i.e. all of them, see CLOUD_TTS_VOICES). The rationale at the time was
+    "Chirp3-HD's built-in prosody is expressive enough on its own" — the
+    owner's actual listening test proved that wrong ("抑揚をしっかりつけて。
+    棒読みだから"): with pitch fully dropped, only speakingRate was varying
+    per line, which reads as flat/monotone exactly as reported. Confirmed
+    live against the API that SSML-level `<prosody pitch="+Nst">` (semitone
+    units, same numeric scale _prosody_for already returns) IS accepted
+    even though the audioConfig-level field isn't — different mechanism,
+    not documented anywhere obvious either. So pitch now goes through SSML
+    instead of audioConfig, for every voice (Chirp3-HD or otherwise)."""
     escaped = text.translate(_SSML_ESCAPE)
     for word in HARSH_TRIGGER_WORDS:
         if word in text:
             escaped = escaped.replace(word, f'<emphasis level="strong">{word}</emphasis>')
-    return f"<speak>{escaped}</speak>"
+    return f'<speak><prosody pitch="{pitch_delta:+.1f}st">{escaped}</prosody></speak>'
 
 
 def synth_line(text: str, speaker_id: int) -> bytes:
@@ -156,20 +176,11 @@ def synth_line(text: str, speaker_id: int) -> bytes:
     pitch_delta, rate = _prosody_for(text)
     access_token = gcp_tts_auth.get_access_token()
     audio_config = {"audioEncoding": "LINEAR16", "speakingRate": rate}
-    # Chirp3-HD voices (2026-08-18 switch, see CLOUD_TTS_VOICES) reject the
-    # `pitch` param outright ("This voice does not support pitch parameters
-    # at this time" — confirmed against the live API, not documented
-    # anywhere obvious). Acceptable trade: Chirp3-HD's own built-in prosody
-    # is already far more natural/expressive than Wavenet's flat baseline,
-    # so per-line pitch nudging matters less than it used to — the
-    # speakingRate half of _prosody_for's per-line variation still applies.
-    if "pitch" in voice:
-        audio_config["pitch"] = voice["pitch"] + pitch_delta
     resp = requests.post(
         SYNTHESIZE_URL,
         headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
         json={
-            "input": {"ssml": _build_ssml(text)},
+            "input": {"ssml": _build_ssml(text, pitch_delta)},
             "voice": {"languageCode": "ja-JP", "name": voice["name"]},
             "audioConfig": audio_config,
         },
