@@ -49,10 +49,17 @@ from bgm_pipeline import youtube_upload
 CATEGORY_ENTERTAINMENT = "24"  # not bgm_pipeline's default "10" (Music) — this is drama content
 DEFAULT_TAGS = ["スカッと", "LINEドラマ", "ショートドラマ", "スカッとする話", "Shorts"]
 
+# 2026-08-18: 【ネタ募集】行を追加(channel-description.mdの「概要」欄には
+# 元々あったが、動画ごとのこのテンプレートには反映し忘れていた)。オーナーが
+# ちょうどモヤスカ専用Xアカウント(@moyasuka_ch、第一候補@moyasukaは取得
+# できず)を作成したタイミングに合わせて、告知が実際に効く状態にする。
 DESCRIPTION_TEMPLATE = """{title}
 
 ■ 使用音声
 Google Cloud Text-to-Speechによる音声合成を使用しています
+
+■ ネタ募集
+実際にあった「モヤモヤ→スカッと」なLINEエピソード、募集中です。X(@moyasuka_ch)にDMいただけると嬉しいです✨
 
 ■ ご注意
 本チャンネルのストーリーはすべてフィクションです。実在の人物・団体とは一切関係ありません。
