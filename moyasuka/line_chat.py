@@ -149,8 +149,14 @@ GAP_SECONDS = 0.15  # 2026-08-16: was 0.235 (2026-08-14) — trimmed further to 
 # 入っていなかった(見落とし)。オーナー指摘「通知音がなってから画像が出る
 # までに間がありすぎる。無くして」を受け、COLD_OPEN_SILENT_GAP(下記)で
 # コールドオープン側にも同じ考え方を適用した。
-NOTIFICATION_DELAY = 1.0
-LEAD_IN_SECONDS = 3.1  # 最初に「実際に喋る」項目が守るべき下限(チャイムが鳴り切るまでの保護)。無音の先頭項目には適用しない — COLD_OPEN_SILENT_GAP参照
+# Round 4 (2026-08-18): 「開始から1秒後に通知音と画像が出ている。この1秒
+# いらない。開始して0.2秒くらいで開始するようにして」— Round 3の「1.0秒に
+# 伸ばす」判断を明示的に覆す指示。0.2秒に戻す。LEAD_IN_SECONDSもこれに
+# 合わせて縮小(0.2秒の遅延 + チャイム自体の長さ約1.9秒 + 0.2秒の余裕 ≈
+# 2.3秒) — 「チャイムが鳴り切るまでナレーションは始めない」という不変条件
+# 自体は変えていない。
+NOTIFICATION_DELAY = 0.2
+LEAD_IN_SECONDS = 2.3  # 最初に「実際に喋る」項目が守るべき下限(チャイムが鳴り切るまでの保護)。無音の先頭項目には適用しない — COLD_OPEN_SILENT_GAP参照
 
 # 2026-08-18: コールドオープン版のPOST_HOOK_SILENT_GAP。最初の項目が無音
 # (photo/image/sticker)の場合、LEAD_IN_SECONDS全部を待たせず、チャイムが
@@ -196,6 +202,17 @@ POST_HOOK_LEAD_IN_SECONDS = 2.3  # the narration-safe floor: no item with real s
 # 0.3, so the chime is audibly already playing by the time the photo pops
 # in, not the other way around.
 POST_HOOK_SILENT_GAP = 0.3
+
+# 2026-08-18: see the BIG_STINGER_GAP usage in estimate_arrivals for the
+# full story — a "big" dramatic stinger (scratch_dun's でででででデェェ
+# ェェン, ~2.2s; otoko_iyahho, ~1.75s) placed mid-script needs its own
+# breathing room before the next line's narration starts, or it plays
+# entirely underneath that line and reads as absent. BIG_STINGER_GAP
+# matches scratch_dun's own 5-hit buildup (0.9s) — otoko_iyahho is
+# currently only ever placed as the video's last item (nothing follows to
+# bury it), but it's included here too in case that ever changes.
+BIG_STINGER_NAMES = {"scratch_dun", "otoko_iyahho"}
+BIG_STINGER_GAP = 0.9
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont:
@@ -415,6 +432,23 @@ def estimate_arrivals(items: list[dict], durations: list[float] | None = None) -
             # zero-duration: stamps the current timeline position without
             # pushing anything after it later, since it's just an audio cue
             out.append((t, t, item))
+            if item["name"] in BIG_STINGER_NAMES:
+                # 2026-08-18: a "big" stinger (dramatic reveal sting, ~2s+)
+                # placed mid-script used to get buried instantly — the next
+                # line's narration started at the exact same timestamp,
+                # so its dialogue played right on top of the whole sting
+                # from the first frame. Owner report: "ここにドーンの効果音
+                # 入れてとお願いしたよね？" — technically present, audibly
+                # gone. otoko_iyahho never had this problem because it's
+                # always placed as the video's last item (nothing follows
+                # it to compete). Give the same breathing room to any big
+                # stinger that isn't last: BIG_STINGER_GAP matches
+                # generate_scratch_dun's own 5-hit buildup length (0.9s),
+                # so at least the crescendo lands clean before dialogue
+                # resumes — the final hit's decay tail is allowed to blend
+                # into the next line's start, same as normal foley/edit
+                # practice.
+                t += BIG_STINGER_GAP
             continue
         if durations is not None:
             dur = durations[i]
@@ -538,6 +572,7 @@ def timing_fingerprint() -> str:
         LEAD_IN_SECONDS, GAP_SECONDS, MIN_BLOCK_SECONDS, CHARS_PER_SECOND,
         POST_HOOK_LEAD_IN_SECONDS, POST_HOOK_SILENT_GAP, COLD_OPEN_SILENT_GAP,
         IMAGE_VIEW_SECONDS, STICKER_VIEW_SECONDS, PHOTO_VIEW_SECONDS,
+        BIG_STINGER_GAP, tuple(sorted(BIG_STINGER_NAMES)),
     )
     return hashlib.sha256((src + repr(constants)).encode()).hexdigest()[:16]
 
@@ -668,9 +703,16 @@ def _render_bubble(speaker: str, text: str, side: str, grouped: bool) -> _Block:
         bx0, bx1 = BG_W - PANEL_PAD_X - bw, BG_W - PANEL_PAD_X
         fill, text_color = SELF_BUBBLE, SELF_TEXT
         d.rounded_rectangle([bx0, 0, bx1, bh], radius=22, fill=fill)
+        # 2026-08-18 fix: each wrapped line used to be right-justified to
+        # its own width (`bx1 - pad_x - tw`), so a multi-line bubble read
+        # ragged-left — owner report: "なんで自分側は右詰めなの？ラインは
+        # どうなっているか確認した？". Checked: real LINE left-aligns text
+        # inside every bubble regardless of which side it's docked to —
+        # only the bubble's own position (left/right) differs, not how
+        # text flows inside it. Same fixed-x-per-line approach the "other"
+        # side already used correctly below.
         for i, ln in enumerate(lines):
-            tw = d.textbbox((0, 0), ln, font=font)[2]
-            d.text((bx1 - pad_x - tw, pad_y + i * line_h), ln, font=font, fill=text_color)
+            d.text((bx0 + pad_x, pad_y + i * line_h), ln, font=font, fill=text_color)
     else:
         ax = PANEL_PAD_X
         bx0 = ax + avatar_d + 12

@@ -151,7 +151,16 @@ def _prosody_for(text: str) -> tuple[float, float]:
     elif len(stripped) <= 6:
         pitch, rate = -0.5, 0.92         # short reaction line — weighty, deliberate
     elif len(stripped) >= 15:
-        pitch, rate = 0.5, 1.05          # longer explanatory line — a bit more energy so it doesn't drone
+        # 2026-08-18: was rate=1.05 ("a bit more energy so it doesn't
+        # drone") — combined with GLOBAL_RATE_MULTIPLIER=1.5 that's an
+        # effective 1.575x on exactly the lines carrying the most plot
+        # information per line (long enough to hit this bucket), which is
+        # backwards: a dense reveal line needs more room to be parsed by
+        # ear, not less. Owner report on 台本06's misdirected-message line
+        # ("たっくん、今日私も熱っぽいから...") specifically: "早口すぎる
+        # から修正して". Dropped below 1.0 so long lines are the one
+        # bucket that's calmer than baseline, not faster.
+        pitch, rate = 0.5, 0.85
     else:
         pitch, rate = 0.2, 1.02          # everything else still gets a small lift, never the untouched default
     return pitch, rate * GLOBAL_RATE_MULTIPLIER
