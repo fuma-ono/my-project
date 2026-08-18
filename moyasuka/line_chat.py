@@ -57,11 +57,29 @@ from PIL import Image, ImageDraw, ImageFont
 from moyasuka.background_gen import FPS
 from moyasuka.background_gen import H as BG_H
 from moyasuka.background_gen import W as BG_W
-from moyasuka.background_gen import iter_frames
+from moyasuka.background_gen import iter_frames as _iter_photo_frames
 from moyasuka.bgm import render_bgm_loop
 from moyasuka.sfx import SFX_GENERATORS
+from moyasuka import background_video
 
 JP_FONT_PATH = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
+
+
+def _iter_background_frames(seconds: float, seed: int):
+    """(t, Image) generator for the background layer — real footage from
+    the rotation pool when one exists (2026-08-18, owner: "まずは背景動画
+    から変えていこう" → "1で", i.e. use the real Minecraft footage as-is,
+    blur and all, no masking treatment), falling back to background_gen's
+    self-generated Ken Burns photo pan otherwise (e.g. a fresh checkout
+    with no source video ever split — see background_video.py's module
+    docstring). Picking the fallback here, in one place, means every other
+    caller (render_video, any future one) just gets frames without needing
+    to know which backend is active."""
+    if background_video.has_rotation_pool():
+        clip = background_video.next_clip()
+        yield from background_video.iter_frames_from_clip(clip, seconds, fps=FPS)
+    else:
+        yield from _iter_photo_frames(seconds, seed)
 
 PANEL_TOP = 50          # px from top where messages start appearing
 PANEL_BOTTOM = 700      # px where the visible log is cropped — background_gen.py's parallax layers are seeded within VISIBLE_Y0-Y1 (≈538-1254), fully below this
@@ -806,9 +824,10 @@ def _mix_audio(narration_path: str, total_seconds: float, sfx_cues: list[tuple[f
 
 
 def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str | None = None, durations_path: str | None = None) -> float:
-    """Full pipeline: parse the chat script, render every frame (ball
-    background from background_gen.iter_frames + the LINE chat overlay on
-    top), encode, and mux with narration audio.
+    """Full pipeline: parse the chat script, render every frame
+    (background from _iter_background_frames — real rotation footage when
+    available, else background_gen's Ken Burns pan — + the LINE chat
+    overlay on top), encode, and mux with narration audio.
 
     Mirrors assemble_video.py's placeholder-audio approach: with no
     --audio, a silent track is generated from the estimated total duration
@@ -931,7 +950,7 @@ def render_video(script_path: str, out_path: str, seed: int = 0, audio_path: str
         frame_dir = Path(tmp) / "frames"
         frame_dir.mkdir()
         n = 0
-        for f, (t, bg_img) in enumerate(iter_frames(total_seconds, seed)):
+        for f, (t, bg_img) in enumerate(_iter_background_frames(total_seconds, seed)):
             if hook_window and hook_window[0] <= t < hook_window[1]:
                 frame = _render_hook_frame(bg_img, hook_window[2])
             else:

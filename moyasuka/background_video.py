@@ -20,11 +20,13 @@ the same constraint against other sites). The owner supplies the source
 video file directly (downloaded on their own machine, rights confirmed);
 this module takes it from there.
 
-Not yet wired into line_chat.py's per-frame compositing (background_gen.
-iter_frames) — that's a real architecture question (decoding real video
-frames in sync with the chat overlay loop, vs. compositing as a separate
-ffmpeg pass) deliberately deferred until there's an actual source clip to
-test against, rather than guessing at an integration no one can verify yet.
+Wired into line_chat.py's per-frame compositing via `iter_frames_from_clip`
+below (2026-08-18, owner: "1で" — go with the blurry-but-usable footage
+as-is, no masking treatment). line_chat.py picks a clip from the rotation
+and loops it (via this generator) to fill however long the episode runs,
+falling back to background_gen.iter_frames' self-generated Ken Burns pan
+when no rotation pool exists yet (e.g. a fresh checkout with no source
+video split).
 
 Usage (once a source file exists):
     python3 -m moyasuka.background_video split \\
@@ -162,6 +164,51 @@ def next_clip(clips_dir: Path = CLIPS_DIR) -> Path:
     state["last_used_index"] = idx
     _save_state(state)
     return clips_dir / clips[idx]
+
+
+def has_rotation_pool() -> bool:
+    """True once `split_video_to_clips()` has run at least once and the
+    clips it wrote are still on disk — line_chat.py uses this to decide
+    whether to pull a real background clip via `next_clip()`/
+    `iter_frames_from_clip()` or fall back to background_gen's
+    self-generated Ken Burns pan (e.g. a fresh checkout with no source
+    video split yet)."""
+    return bool(_load_state().get("clips"))
+
+
+def iter_frames_from_clip(clip_path: Path, seconds: float, fps: int | None = None):
+    """Generator yielding (t, Image) — same contract as background_gen.
+    iter_frames, so line_chat.py's caller doesn't need to know which
+    backend produced the frames. Extracts `clip_path`'s frames once (via
+    ffmpeg, scaled straight to the render resolution so no separate PIL
+    resize pass is needed) into a temp PNG sequence, then loops through
+    them frame-by-frame to fill `seconds` — a rotation clip (~15s) is
+    almost always shorter than a full episode (45-60s), so looping is the
+    normal case, not an edge case. Frames are read from disk one at a time
+    rather than held in memory all at once (a 15s clip at 720x1280 would
+    be roughly 1GB of raw RGB if fully loaded up front)."""
+    import tempfile
+
+    from moyasuka.background_gen import FPS as BG_FPS
+    from moyasuka.background_gen import H as BG_H
+    from moyasuka.background_gen import W as BG_W
+    from PIL import Image
+
+    fps = fps or BG_FPS
+    with tempfile.TemporaryDirectory() as tmp:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(clip_path), "-vf", f"scale={BG_W}:{BG_H},fps={fps}", f"{tmp}/f%05d.png"],
+            check=True, capture_output=True,
+        )
+        frame_paths = sorted(Path(tmp).glob("f*.png"))
+        if not frame_paths:
+            raise RuntimeError(f"ffmpeg extracted no frames from {clip_path}")
+
+        n_frames = int(fps * seconds)
+        for f in range(n_frames):
+            t = f / fps
+            img = Image.open(frame_paths[f % len(frame_paths)]).convert("RGB")
+            yield t, img
 
 
 def main(argv: list[str] | None = None) -> int:
