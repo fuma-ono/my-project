@@ -1,46 +1,71 @@
 """恋愛ジャンルnoteアカウントの、初回ログインセッションを保存するスクリプト。
 
-オーナーのPCで一度だけ実行する。実行すると実ブラウザが開くので、
-note.comに手動でログインし、ターミナルに戻ってEnterを押すこと。
-パスワードはこのスクリプト・Claude側には一切渡らない
-(ブラウザに直接入力するだけで、保存されるのはログイン後のセッション情報のみ)。
+オーナーのPCで一度だけ実行する。
 
-★「Googleでログイン」はここでは使わないこと★
-Googleは自動操作ツール(Playwright)から起動したブラウザを検知して
-「安全ではないブラウザ」としてログインをブロックする仕様になっている。
-事前にnote.com側でメールアドレス+パスワードのログインを設定し(Googleログインとは別に、
-note.comのアカウント設定画面から追加できる)、ここではそのメール+パスワードでログインすること。
+★このスクリプトは、真っさらな自動操作ブラウザではなく、
+オーナーの「実際のChromeプロフィール」をそのまま起動する方式に変更した★
+
+理由: note.comのreCAPTCHA・Googleのログイン確認は、Playwrightが作る
+真っさらなブラウザ(自動操作の痕跡がある)を検知して、認証そのものを
+表示しない/ブロックすることがある。実際に普段使っているChromeプロフィールを
+そのまま使えば、これは通常のブラウザ利用と見分けがつかなくなる。
+
+## 事前準備(このスクリプトを実行する前に)
+
+1. Chromeで新しいプロフィールを作成する(個人の普段使いとは分ける):
+   右上の丸いアイコン →「プロフィールを追加」
+2. その新しいプロフィールのChromeで、普通に手動でnote.com(恋愛ジャンル専用アカウント)に
+   ログインしておく(ここでのreCAPTCHA/Googleログインは、正真正銘ふつうのChromeなので問題なく通る)
+3. ログインできたら、Chromeを完全に閉じる(すべてのウィンドウ)
+4. 新しいプロフィールでもう一度Chromeを開き、アドレスバーに `chrome://version` と入力、
+   「プロフィール パス」の一番最後のフォルダ名を確認する(例: `Profile 3`)
+5. 確認できたらChromeをまた完全に閉じる(このスクリプトが同じプロフィールを使うため、
+   起動中のChromeがあると失敗する)
+
+## 実行方法
+
+```
+python love-note/auth_setup.py
+```
+
+実行すると、上で確認したプロフィール名の入力を求められる。入力するとそのプロフィールで
+Chromeが自動的に開く(既にログイン済みのはずなので、ログイン画面は出ないはず)。
+そのままEnterキーを押せばセッション情報が保存される。
 """
 
 import pathlib
+import os
 from playwright.sync_api import sync_playwright
 
 HERE = pathlib.Path(__file__).parent
 STORAGE_STATE = HERE / "storage-state.json"
 
-with sync_playwright() as p:
-    # インストール済みの実Chromeを使う(channel="chrome")。Playwright付属の
-    # Chromiumより自動化として検知されにくいが、Googleログインは検知対策として
-    # 使わない前提であることに変わりはない。実Chromeが無ければ自動でChromiumにフォールバックする。
-    try:
-        browser = p.chromium.launch(headless=False, channel="chrome")
-    except Exception:
-        print("実Chromeが見つからなかったため、付属のChromiumで起動します。")
-        browser = p.chromium.launch(headless=False)
+default_user_data_dir = os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\User Data")
 
-    context = browser.new_context()
+print(f"Chromeのユーザーデータフォルダ(既定値: {default_user_data_dir})")
+user_data_dir = input("そのまま使う場合はEnter、違う場合はフォルダのパスを入力: ").strip() or default_user_data_dir
+
+profile_directory = input("chrome://version で確認したプロフィール名(例: Profile 3。既定 'Default' の場合はそのままEnter): ").strip() or "Default"
+
+with sync_playwright() as p:
+    context = p.chromium.launch_persistent_context(
+        user_data_dir=user_data_dir,
+        channel="chrome",
+        headless=False,
+        args=[f"--profile-directory={profile_directory}"],
+    )
     page = context.new_page()
-    page.goto("https://note.com/login")
+    page.goto("https://note.com/")
 
     input(
-        "ブラウザでnote.com(恋愛ジャンル専用アカウント)にログインしてください。\n"
-        "※「Googleでログイン」は使わず、メールアドレス+パスワードでログインしてください\n"
-        "(パスワード未設定の場合は、普段のブラウザでnote.comのアカウント設定から先に設定してください)。\n"
-        "ログインが完了したら、ここでEnterキーを押してください..."
+        "ブラウザが開きました。もし既にログイン済みならそのままEnterを押してください。\n"
+        "まだログインしていなければ、ここで通常通りログインしてからEnterを押してください。\n"
+        "(このプロフィールはあなたの普段のChromeそのものなので、reCAPTCHAが出ても普通に解けます)"
     )
 
     context.storage_state(path=str(STORAGE_STATE))
-    browser.close()
+    context.close()
 
 print(f"保存しました: {STORAGE_STATE}")
 print("このファイルは絶対に他人に渡さない・commitしないこと(.gitignore済み)。")
+print("以降の週次公開(publish.py)は、この保存済みセッションを使うので、ここまでで準備完了です。")
