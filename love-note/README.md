@@ -23,7 +23,7 @@ note.comには記事公開用の公式APIが存在しない。「note APIキー�
 
 1. 恋愛ジャンル専用のnote.comアカウントを作成(`docs/setup-guide/` のガイド参照。アカウント名・プロフィール文・世界観は `brand.md` を参照)
 2. 自分のPCに Python + Playwright をインストール: `pip install playwright && playwright install chromium`
-3. `python love-note/auth_setup.py` を実行し、開いたブラウザで手動ログイン(初回のみ)
+3. `python love-note/auth_setup.py` を実行し、開いたブラウザで手動ログイン(初回のみ)。**「Googleでログイン」は使わない**(Googleが自動操作ブラウザを検知してブロックするため)。事前に普段のブラウザでnote.comにログインし、アカウント設定からメールアドレス+パスワードでのログインを有効にしておくこと
 4. 週1回、`python love-note/publish.py` を実行(最初は `--debug` を付けて、実際の画面と処理が合っているか確認すること。note.comの画面構造に合わせてセレクタの調整が必要な可能性が高い)
 5. 手間をゼロに近づけたい場合は、オーナー自身のPC/家サーバーでcron・タスクスケジューラに登録すれば、4も自動化できる
 
