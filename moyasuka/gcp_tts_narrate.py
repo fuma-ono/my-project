@@ -85,6 +85,18 @@ CLOUD_TTS_VOICES: dict[int, dict] = {
 }
 DEFAULT_VOICE = CLOUD_TTS_VOICES[DEFAULT_SPEAKER_ID]
 
+# Per-script voice overrides: swaps one character's voice for a single
+# script only, without touching CHARACTER_SPEAKER_IDS's global per-name
+# mapping (which every other script still relies on). Checked before that
+# global lookup in narrate_script() below. Keyed by script filename stem.
+SCRIPT_VOICE_OVERRIDES: dict[str, dict[str, int]] = {
+    # オーナー指示(2026-08-20): 「私側の声を男の声にして」、この台本(07)
+    # だけの変更と確認済み(01〜06・08は主人公「私」=id3のまま)。id11
+    # (玄野武宏)を割り当て——同じ台本内の「ゆうと」(id12)と被らない、
+    # 既存の男性ボイス(旦那/夫/先生等と同じ声)を再利用。
+    "07-wrong-exam-number": {"私": 11},
+}
+
 
 # Owner feedback (2026-08-17, round 1): "もう少し話すスピードを早くして"
 # — applied as a flat multiplier on top of every bucket in _prosody_for
@@ -275,7 +287,8 @@ def build_narration(script_path: str, out_wav: str, out_durations_json: str) -> 
                 continue
 
             speaker_name = item["speaker"]
-            speaker_id = CHARACTER_SPEAKER_IDS.get(speaker_name)
+            overrides = SCRIPT_VOICE_OVERRIDES.get(Path(script_path).stem, {})
+            speaker_id = overrides.get(speaker_name, CHARACTER_SPEAKER_IDS.get(speaker_name))
             if speaker_id is None:
                 print(
                     f"警告: 話者「{speaker_name}」の音声IDが未設定です。"
