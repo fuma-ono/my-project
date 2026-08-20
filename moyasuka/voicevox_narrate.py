@@ -54,7 +54,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from moyasuka.audio_mix import mix_clips_at_times, wav_duration
-from moyasuka.line_chat import PAUSE_SECONDS, estimate_arrivals, is_pause_only, parse_chat_script, strip_emoji, timing_fingerprint, total_seconds_for
+from moyasuka.line_chat import PAUSE_SECONDS, estimate_arrivals, is_pause_only, parse_chat_script, prepare_for_tts, timing_fingerprint, total_seconds_for
 
 VOICEVOX_URL = "http://127.0.0.1:50021"
 
@@ -186,10 +186,11 @@ def build_narration(script_path: str, out_wav: str, out_durations_json: str) -> 
                 speaker_id = DEFAULT_SPEAKER_ID
 
             print(f"  [{i+1}/{len(items)}] {speaker_name}: {item['text'][:20]}...")
-            # 絵文字は視覚的な身振りであって単語ではない(line_chat.strip_
-            # emoji参照)——gcp_tts_narrate.pyで判明した「読み上げてしまう」
-            # 問題と同じ理由で、VOICEVOX側も渡す前に取り除く。
-            wav_bytes = synth_line(strip_emoji(item["text"]), speaker_id)
+            # 絵文字・末尾の「ｗ」は視覚的な記号であって単語ではない
+            # (line_chat.prepare_for_tts参照)——gcp_tts_narrate.pyで判明
+            # した「読み上げてしまう」問題と同じ理由で、VOICEVOX側も渡す
+            # 前に取り除く。
+            wav_bytes = synth_line(prepare_for_tts(item["text"]), speaker_id)
             clip_path = f"{tmp}/clip_{i:03d}.wav"
             Path(clip_path).write_bytes(wav_bytes)
             durations.append(wav_duration(clip_path))

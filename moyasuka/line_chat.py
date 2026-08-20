@@ -105,6 +105,27 @@ def strip_emoji(text: str) -> str:
     return "".join(ch for ch in text if not _is_emoji(ch))
 
 
+_LAUGH_W_CHARS = set("wWｗＷ")
+
+
+def prepare_for_tts(text: str) -> str:
+    """Strips everything at the end of `text` that's a visual-only marker,
+    not a word to speak: emoji anywhere (see strip_emoji), plus a trailing
+    run of "w"/"ｗ" laugh characters (the house style's "ｗｗ" — confirmed
+    live, 2026-08-20, that a single trailing ｗ costs Google Cloud TTS
+    ~0.8s of extra spoken audio, same class of bug as the emoji case).
+    Only strips a *trailing* run — a "w" appearing mid-word elsewhere in
+    dialogue is left alone, since the laugh marker is always used as a
+    suffix (title's "ｗｗ", a line ending "...ですよｗ", "...ｗ👋👋") and
+    never anywhere else in this project's scripts. Always use this
+    (not strip_emoji alone) when building the string handed to a TTS
+    engine; the bubble's own visual text keeps both untouched."""
+    text = strip_emoji(text)
+    while text and text[-1] in _LAUGH_W_CHARS:
+        text = text[:-1]
+    return text
+
+
 _EMOJI_GLYPH_CACHE: dict[tuple[str, int], Image.Image | None] = {}
 
 
