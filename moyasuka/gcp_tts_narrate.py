@@ -51,7 +51,7 @@ import requests
 
 from moyasuka import gcp_tts_auth
 from moyasuka.audio_mix import mix_clips_at_times, wav_duration
-from moyasuka.line_chat import HARSH_TRIGGER_WORDS, PAUSE_SECONDS, estimate_arrivals, is_pause_only, parse_chat_script, timing_fingerprint, total_seconds_for
+from moyasuka.line_chat import HARSH_TRIGGER_WORDS, PAUSE_SECONDS, estimate_arrivals, is_pause_only, parse_chat_script, strip_emoji, timing_fingerprint, total_seconds_for
 from moyasuka.voicevox_narrate import CHARACTER_SPEAKER_IDS, DEFAULT_SPEAKER_ID
 
 SYNTHESIZE_URL = "https://texttospeech.googleapis.com/v1/text:synthesize"
@@ -304,7 +304,9 @@ def build_narration(script_path: str, out_wav: str, out_durations_json: str) -> 
                 speaker_id = DEFAULT_SPEAKER_ID
 
             print(f"  [{i+1}/{len(items)}] {speaker_name}: {item['text'][:20]}...")
-            wav_bytes = synth_line(item["text"], speaker_id)
+            # 絵文字は視覚的な身振りであって単語ではない(strip_emoji参照)
+            # ——渡したままだとGoogle Cloud TTSが読み上げてしまう。
+            wav_bytes = synth_line(strip_emoji(item["text"]), speaker_id)
             clip_path = f"{tmp}/clip_{i:03d}.wav"
             Path(clip_path).write_bytes(wav_bytes)
             durations.append(wav_duration(clip_path))

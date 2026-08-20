@@ -24,12 +24,17 @@ CHARACTER_SPEAKER_IDSでは台本03の女性上司役(id2)に割り当て済み�
 この台本内でのみ別の男声(id12)に上書きする。id11(私)とid12(上司)は
 同一エピソード内で異なる声になるよう選定。
 
-絵文字(原文の「:hand:」)はこのレンダラーが絵文字グリフに対応していない
-ため、文字化けを避けて省略した。
+**2026-08-20追記**: オーナー提供の解雇通知書の写真を冒頭に追加
+(`上司: [photo:08-termination-notice.jpg]`)。また末尾のセリフに実際の
+絵文字🤚を指定されたため、line_chat.pyに絵文字描画を新規実装した
+(Noto Sans CJKに絵文字グリフが無く「:hand:」は文字化けする一方、
+実際のUnicode絵文字文字はNoto Color Emojiフォントで描画可能——
+`_emoji_glyph`/`_draw_text_line`参照)。
 
 ---
 
 グループ名: 上司
+上司: [photo:08-termination-notice.jpg]
 上司: お前、今日でクビな
 !sfx:scratch_dun
 私: え?
@@ -51,5 +56,5 @@ CHARACTER_SPEAKER_IDSでは台本03の女性上司役(id2)に割り当て済み�
 私: ちなみに
 私: 社長も知ってますよｗ
 上司: ......
-私: じゃあ、お先に失礼します
+私: じゃあ、お先に失礼します🤚
 !sfx:otoko_iyahho

@@ -70,6 +70,97 @@ from moyasuka import background_video
 # itself actually renders with than the previous font was.
 JP_FONT_PATH = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
 
+# 2026-08-20: オーナーが台本08の最後のセリフに実際の絵文字(🤚)を指定
+# ("最後のじゃあ、お先に失礼しますを🤚にして")。JP_FONT_PATHのNoto Sans
+# CJKには絵文字グリフが無く(確認済み — 未対応文字は四角い「トーフ」に
+# なる)、別途システムにあるNoto Color Emoji(CBDT/CBLCのカラー絵文字
+# フォント)で描画する必要がある。このフォントは埋め込みビットマップが
+# 109px一種類のみで、他のサイズを`ImageFont.truetype`に直接渡すと
+# "invalid pixel size"で例外になる——必ず109pxで描画してからPIL側で
+# 目的のサイズへ縮小する(`_emoji_glyph`参照)。
+EMOJI_FONT_PATH = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
+EMOJI_FONT_NATIVE_SIZE = 109
+
+
+def _is_emoji(ch: str) -> bool:
+    cp = ord(ch)
+    return (
+        0x1F300 <= cp <= 0x1FAFF  # misc symbols/pictographs, emoticons, supplemental symbols
+        or 0x2600 <= cp <= 0x27BF  # misc symbols, dingbats
+        or 0x1F1E6 <= cp <= 0x1F1FF  # regional indicator (flag) letters
+        or cp in (0xFE0F, 0x200D)  # variation selector-16, zero-width joiner — no visible glyph of their own
+    )
+
+
+def strip_emoji(text: str) -> str:
+    """Removes emoji characters from `text` — for building the string
+    handed to a TTS engine, never for the bubble's own visual text (which
+    keeps the emoji, rendered via `_emoji_glyph`/`_draw_text_line`).
+    Confirmed live (2026-08-20, 台本08's 🤚 line) that Google Cloud TTS
+    doesn't just silently skip an emoji character in the input — it reads
+    it aloud (a ~1.2s longer clip than the same line without the emoji),
+    which is exactly the "棒読み"-adjacent mess this whole narration
+    pipeline has spent real effort avoiding. A hand-wave emoji is a visual
+    gesture, not a word, so it should never reach the synthesizer at all."""
+    return "".join(ch for ch in text if not _is_emoji(ch))
+
+
+_EMOJI_GLYPH_CACHE: dict[tuple[str, int], Image.Image | None] = {}
+
+
+def _emoji_glyph(ch: str, target_size: int) -> Image.Image | None:
+    """Renders one emoji character as a small RGBA image whose height is
+    roughly `target_size` px, for inline compositing next to regular text
+    (see EMOJI_FONT_NATIVE_SIZE for why this can't just ask FreeType for
+    `target_size` directly). Returns None for a modifier codepoint with no
+    glyph of its own (variation selector, ZWJ) or if the font has nothing
+    to draw for `ch`. Cached — the same emoji at the same target size is
+    cheap to reuse across a render."""
+    key = (ch, target_size)
+    if key in _EMOJI_GLYPH_CACHE:
+        return _EMOJI_GLYPH_CACHE[key]
+    if ord(ch) in (0xFE0F, 0x200D):
+        _EMOJI_GLYPH_CACHE[key] = None
+        return None
+    font = ImageFont.truetype(EMOJI_FONT_PATH, EMOJI_FONT_NATIVE_SIZE)
+    canvas = Image.new("RGBA", (EMOJI_FONT_NATIVE_SIZE * 2, EMOJI_FONT_NATIVE_SIZE * 2), (0, 0, 0, 0))
+    d = ImageDraw.Draw(canvas)
+    bbox = d.textbbox((0, 0), ch, font=font, embedded_color=True)
+    if bbox[2] <= bbox[0] or bbox[3] <= bbox[1]:
+        _EMOJI_GLYPH_CACHE[key] = None
+        return None
+    d.text((0, 0), ch, font=font, embedded_color=True)
+    glyph = canvas.crop(bbox)
+    scale = target_size / glyph.height
+    resized = glyph.resize((max(1, round(glyph.width * scale)), max(1, round(glyph.height * scale))), Image.LANCZOS)
+    _EMOJI_GLYPH_CACHE[key] = resized
+    return resized
+
+
+def _draw_text_line(img: Image.Image, d: ImageDraw.ImageDraw, xy: tuple[int, int], line: str, font: ImageFont.FreeTypeFont, fill, line_h: int) -> None:
+    """Draws one already-wrapped line of bubble text, same as a plain
+    `d.text(xy, line, font=font, fill=fill)` call — except any emoji
+    character in `line` is substituted with a small color glyph
+    (`_emoji_glyph`) instead of the JP font's tofu box for it. Falls back
+    to the single-call `d.text` path when the line has no emoji at all
+    (the overwhelming majority of lines), so ordinary Japanese text keeps
+    going through FreeType's normal shaping/kerning for the whole string
+    at once, unchanged from before this function existed."""
+    if not any(_is_emoji(ch) for ch in line):
+        d.text(xy, line, font=font, fill=fill)
+        return
+    x, y = xy
+    for ch in line:
+        if _is_emoji(ch):
+            glyph = _emoji_glyph(ch, font.size)
+            if glyph is not None:
+                img.paste(glyph, (round(x), round(y + (line_h - glyph.height) / 2)), glyph)
+                x += glyph.width
+            continue
+        w = d.textbbox((0, 0), ch, font=font)[2]
+        d.text((x, y), ch, font=font, fill=fill)
+        x += w
+
 
 def _iter_background_frames(seconds: float, seed: int):
     """(t, Image) generator for the background layer — real footage from
@@ -718,7 +809,7 @@ def _render_bubble(speaker: str, text: str, side: str, grouped: bool) -> _Block:
         # text flows inside it. Same fixed-x-per-line approach the "other"
         # side already used correctly below.
         for i, ln in enumerate(lines):
-            d.text((bx0 + pad_x, pad_y + i * line_h), ln, font=font, fill=text_color)
+            _draw_text_line(img, d, (bx0 + pad_x, pad_y + i * line_h), ln, font, text_color, line_h)
     else:
         ax = PANEL_PAD_X
         bx0 = ax + avatar_d + 12
@@ -733,7 +824,7 @@ def _render_bubble(speaker: str, text: str, side: str, grouped: bool) -> _Block:
             )
         d.rounded_rectangle([bx0, name_h, bx1, name_h + bh], radius=22, fill=OTHER_BUBBLE, outline=OTHER_BORDER, width=2)
         for i, ln in enumerate(lines):
-            d.text((bx0 + pad_x, name_h + pad_y + i * line_h), ln, font=font, fill=OTHER_TEXT)
+            _draw_text_line(img, d, (bx0 + pad_x, name_h + pad_y + i * line_h), ln, font, OTHER_TEXT, line_h)
 
     return _Block(img, tight=grouped)
 
