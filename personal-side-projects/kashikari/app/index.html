@@ -23,48 +23,7 @@
     --shadow-sm: 0 1px 2px rgba(60, 40, 20, 0.06);
     --shadow-md: 0 4px 14px rgba(60, 40, 20, 0.09), 0 1px 3px rgba(60, 40, 20, 0.06);
   }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #211a15;
-      --surface: #2b2219;
-      --surface-2: #362b1f;
-      --ink: #fbf1e4;
-      --muted: #b9a892;
-      --line: #423527;
-      --accent: #ff8564;
-      --accent-ink: #211a15;
-      --accent-soft: #4a2c22;
-      --favor: #b083ec;
-      --favor-soft: #3a2e50;
-      --owed: #4fd3a6;
-      --owed-soft: #1c3d33;
-      --owe: #ff7b93;
-      --owe-soft: #4a2530;
-      --brand2: #8c9eff;
-      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-      --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
-    }
-  }
-  :root[data-theme="dark"] {
-    --bg: #211a15;
-    --surface: #2b2219;
-    --surface-2: #362b1f;
-    --ink: #fbf1e4;
-    --muted: #b9a892;
-    --line: #423527;
-    --accent: #ff8564;
-    --accent-ink: #211a15;
-    --accent-soft: #4a2c22;
-    --favor: #b083ec;
-    --favor-soft: #3a2e50;
-    --owed: #4fd3a6;
-    --owed-soft: #1c3d33;
-    --owe: #ff7b93;
-    --owe-soft: #4a2530;
-    --brand2: #8c9eff;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
-  }
+  /* kashikariは常に明るいトーンで統一する(意図的にライトテーマ単一構成、ダークモード追従なし) */
 
   * { box-sizing: border-box; }
   body {
@@ -99,7 +58,32 @@
     font-size: clamp(26px, 6vw, 32px);
     letter-spacing: -0.01em;
   }
-  .tagline { margin: 8px 0 22px; color: var(--muted); font-size: 14.5px; }
+  .tagline { margin: 8px 0 18px; color: var(--muted); font-size: 14.5px; }
+
+  /* who am I */
+  .who-row { margin-bottom: 16px; }
+  .who-pill {
+    all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface); border: 1.5px solid var(--line);
+    border-radius: 999px; padding: 7px 14px 7px 8px;
+    font-size: 13.5px; font-weight: 600; color: var(--ink);
+    box-shadow: var(--shadow-sm);
+  }
+  .who-pill .avatar { width: 22px; height: 22px; font-size: 11px; box-shadow: none; }
+  .who-pill .muted-label { color: var(--muted); font-weight: 500; }
+  .who-panel {
+    display: none; flex-wrap: wrap; gap: 6px;
+    margin-top: 8px; padding: 10px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-sm);
+  }
+  .who-panel.open { display: flex; }
+  .who-panel button {
+    all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px 6px 6px; border-radius: 999px; border: 1.5px solid var(--line);
+    font-size: 13px; font-weight: 600;
+  }
+  .who-panel button:hover { border-color: var(--accent); }
+  .who-panel button.clear { border-style: dashed; color: var(--muted); padding: 6px 12px; }
 
   .banner {
     background: var(--owe-soft);
@@ -197,9 +181,11 @@
     padding: 14px 16px;
     display: flex; align-items: center; gap: 12px;
   }
+  #balances li.mine { border: 1.5px solid color-mix(in srgb, var(--accent) 45%, transparent); }
   .bal-pair { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
   .bal-arrow { color: var(--muted); font-size: 15px; }
   .bal-name { font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bal-name.me { color: var(--accent); }
   .bal-amount { font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 19px; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .bal-amount.owe { color: var(--owe); }
   .bal-amount.owed { color: var(--favor); }
@@ -276,6 +262,7 @@
   .entry-main { min-width: 0; }
   .entry-who { font-size: 14.5px; font-weight: 600; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
   .entry-desc { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .entry-date { font-size: 11.5px; color: var(--muted); }
   .entry-amount { font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 16px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
   #entries li[data-settled="true"] { opacity: 0.42; }
   #entries li[data-settled="true"] .entry-who, #entries li[data-settled="true"] .entry-amount { text-decoration: line-through; }
@@ -312,6 +299,13 @@
   <p class="tagline">友達との貸し借りを、お金も頼みごとも一緒に記録する</p>
 
   <div class="banner" id="readonlyBanner">この端末では編集できません。閲覧のみです。</div>
+
+  <div class="who-row" artifact-local>
+    <button type="button" class="who-pill" id="whoAmIBtn">
+      <span class="muted-label">あなたは:</span> <span id="whoAmILabel">未設定</span>
+    </button>
+    <div class="who-panel" id="whoPanel"></div>
+  </div>
 
   <div class="member-strip" id="memberStrip" artifact-sync></div>
   <div class="member-strip" artifact-local>
@@ -396,6 +390,54 @@
     var initial = Array.from(name || "?")[0] || "?";
     return '<span class="avatar' + (size === "sm" ? " sm" : "") + '" style="background:' + avatarColor(name) + '">' + esc(initial) + "</span>";
   }
+  function formatDate(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    var now = new Date();
+    var sameYear = d.getFullYear() === now.getFullYear();
+    return sameYear ? (d.getMonth() + 1) + "/" + d.getDate() : d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate();
+  }
+  function renderEntryDates() {
+    entriesList.querySelectorAll("li[data-ts]").forEach(function (li) {
+      var span = li.querySelector(".entry-date");
+      if (!span) return;
+      var hasDesc = !!(li.dataset.desc && li.dataset.desc.trim());
+      span.textContent = (hasDesc ? "・" : "") + formatDate(li.dataset.ts);
+    });
+  }
+
+  // ---------- who am I (per-device, local only) ----------
+
+  var ME_KEY = "kashikari_me";
+  function getMe() {
+    try { return localStorage.getItem(ME_KEY) || ""; } catch (e) { return ""; }
+  }
+  function setMe(name) {
+    try {
+      if (name) localStorage.setItem(ME_KEY, name); else localStorage.removeItem(ME_KEY);
+    } catch (e) { /* storage unavailable, ignore */ }
+    renderWhoAmI();
+    renderBalances();
+  }
+  var whoAmILabel = document.getElementById("whoAmILabel");
+  var whoPanel = document.getElementById("whoPanel");
+  function renderWhoAmI() {
+    var me = getMe();
+    var names = memberNames();
+    whoAmILabel.textContent = (me && names.indexOf(me) !== -1) ? me : "未設定";
+    whoPanel.innerHTML = names.map(function (n) {
+      return '<button type="button" data-me="' + esc(n) + '">' + avatarHtml(n, "sm") + esc(n) + "</button>";
+    }).join("") + '<button type="button" class="clear" data-me="">設定しない</button>';
+  }
+  document.getElementById("whoAmIBtn").addEventListener("click", function () {
+    whoPanel.classList.toggle("open");
+  });
+  whoPanel.addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-me]");
+    if (!btn) return;
+    setMe(btn.dataset.me);
+    whoPanel.classList.remove("open");
+  });
 
   // ---------- members ----------
 
@@ -415,6 +457,7 @@
     }
     openAddBtn.disabled = names.length < 2;
     openAddBtn.title = names.length < 2 ? "先にメンバーを2人以上追加してください" : "";
+    renderWhoAmI();
   }
 
   function addMember(name) {
@@ -502,6 +545,7 @@
     li.dataset.amount = entry.amount || "";
     li.dataset.desc = entry.desc;
     li.dataset.settled = entry.settled ? "true" : "false";
+    li.dataset.ts = entry.ts || new Date().toISOString();
 
     var badgeHtml = entry.type === "money"
       ? '<span class="type-badge money" aria-hidden="true">💰</span>'
@@ -514,7 +558,7 @@
       badgeHtml +
       '<div class="entry-main">' +
         '<div class="entry-who">' + esc(entry.from) + ' <span class="arrow">→</span> ' + esc(entry.to) + "</div>" +
-        (entry.desc ? '<div class="entry-desc">' + esc(entry.desc) + "</div>" : "") +
+        '<div class="entry-desc">' + (entry.desc ? esc(entry.desc) : "") + '<span class="entry-date" artifact-local></span></div>' +
       "</div>" +
       '<div class="row-menu-wrap">' +
         amountHtml +
@@ -532,6 +576,7 @@
     entriesList.prepend(li);
     li.classList.add("entering");
     refreshEntriesEmpty();
+    renderEntryDates();
     renderBalances();
   }
 
@@ -610,6 +655,7 @@
 
   function renderBalances() {
     var open = readOpenEntries();
+    var me = getMe();
     var money = {}, favorCount = {};
 
     open.forEach(function (e) {
@@ -637,13 +683,18 @@
       rows.push({ debtor: parts[0], creditor: parts[1], amount: favorCount[k] + "件", cls: "owed", type: "favor" });
     });
 
+    rows.forEach(function (r) { r.mine = !!me && (r.debtor === me || r.creditor === me); });
+    rows.sort(function (a, b) { return (b.mine === a.mine) ? 0 : (b.mine ? 1 : -1); });
+
     balancesList.innerHTML = rows.map(function (r) {
-      return '<li>' +
+      var debtorLabel = r.mine && r.debtor === me ? "あなた" : r.debtor;
+      var creditorLabel = r.mine && r.creditor === me ? "あなた" : r.creditor;
+      return '<li class="' + (r.mine ? "mine" : "") + '">' +
         '<div class="bal-pair">' + avatarHtml(r.debtor, "sm") +
-          '<span class="bal-name">' + esc(r.debtor) + '</span>' +
+          '<span class="bal-name' + (r.mine && r.debtor === me ? " me" : "") + '">' + esc(debtorLabel) + '</span>' +
           '<span class="bal-arrow">→</span>' +
           avatarHtml(r.creditor, "sm") +
-          '<span class="bal-name">' + esc(r.creditor) + '</span>' +
+          '<span class="bal-name' + (r.mine && r.creditor === me ? " me" : "") + '">' + esc(creditorLabel) + '</span>' +
         '</div>' +
         '<span class="bal-amount ' + r.cls + '">' + esc(r.amount) + '</span>' +
         '<button type="button" class="bal-settle" data-type="' + r.type + '" data-a="' + esc(r.debtor) + '" data-b="' + esc(r.creditor) + '">精算する</button>' +
@@ -664,6 +715,8 @@
   function fullRefresh() {
     renderSelects();
     refreshEntriesEmpty();
+    renderEntryDates();
+    renderWhoAmI();
     renderBalances();
   }
 
