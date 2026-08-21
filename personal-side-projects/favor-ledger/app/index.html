@@ -1,0 +1,608 @@
+<title>カシカリ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #ede8dc;
+    --paper-raised: #f5f1e6;
+    --ink: #2a2622;
+    --muted: #8a8175;
+    --line: #d9d2c2;
+    --accent: #34467a;
+    --accent-ink: #ffffff;
+    --owe: #b3402c;
+    --owed: #4b7a3e;
+    --danger: #b3402c;
+    --shadow: 0 1px 2px rgba(42, 38, 34, 0.06), 0 8px 24px rgba(42, 38, 34, 0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1e1b17;
+      --paper-raised: #262219;
+      --ink: #ede7da;
+      --muted: #a79e8e;
+      --line: #3a352c;
+      --accent: #93a3dd;
+      --accent-ink: #1a1f33;
+      --owe: #e2725a;
+      --owed: #86c26f;
+      --danger: #e2725a;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #1e1b17;
+    --paper-raised: #262219;
+    --ink: #ede7da;
+    --muted: #a79e8e;
+    --line: #3a352c;
+    --accent: #93a3dd;
+    --accent-ink: #1a1f33;
+    --owe: #e2725a;
+    --owed: #86c26f;
+    --danger: #e2725a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+
+  * { box-sizing: border-box; }
+  html { text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Work Sans", system-ui, -apple-system, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: clamp(16px, 5vw, 56px) 16px 80px;
+  }
+  .sheet {
+    width: 100%;
+    max-width: 560px;
+  }
+
+  h1 {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 600;
+    font-size: clamp(28px, 6vw, 36px);
+    letter-spacing: -0.01em;
+    margin: 0 0 4px;
+    text-wrap: balance;
+  }
+  .tagline {
+    margin: 0 0 22px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .card {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 20px;
+    margin-bottom: 18px;
+  }
+
+  .card h2 {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 500;
+    font-size: 15px;
+    margin: 0 0 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* members */
+  #members {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  #members li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 8px 6px 14px;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  #members li button {
+    all: unset;
+    cursor: pointer;
+    color: var(--muted);
+    width: 20px;
+    height: 20px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    font-size: 13px;
+    line-height: 1;
+  }
+  #members li button:hover { background: var(--line); color: var(--ink); }
+  #members li button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .add-row { display: flex; gap: 8px; margin-top: 12px; }
+  input[type="text"], input[type="number"], select {
+    font: inherit;
+    color: var(--ink);
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 9px 11px;
+  }
+  input:focus-visible, select:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .add-row input[type="text"] { flex: 1; min-width: 0; }
+
+  button.primary {
+    all: unset;
+    cursor: pointer;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-weight: 600;
+    font-size: 14px;
+    padding: 9px 16px;
+    border-radius: 8px;
+    text-align: center;
+  }
+  button.primary:hover { filter: brightness(1.08); }
+  button.primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  button.ghost {
+    all: unset;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 4px;
+  }
+  button.ghost:hover { color: var(--ink); }
+
+  /* entry form */
+  .entry-form { display: flex; flex-direction: column; gap: 10px; }
+  .entry-form .row { display: flex; gap: 8px; align-items: center; }
+  .entry-form select { flex: 1; min-width: 0; }
+  .arrow { color: var(--muted); font-family: "IBM Plex Mono", monospace; }
+  .type-toggle { display: flex; gap: 6px; }
+  .type-toggle button {
+    all: unset;
+    cursor: pointer;
+    flex: 1;
+    text-align: center;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--muted);
+  }
+  .type-toggle button[aria-pressed="true"] {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .amount-row { display: flex; align-items: center; gap: 6px; }
+  .amount-row input[type="number"] { width: 100%; font-family: "IBM Plex Mono", monospace; }
+  .yen { font-family: "IBM Plex Mono", monospace; color: var(--muted); }
+
+  /* entries ledger */
+  #entries { list-style: none; margin: 0; padding: 0; }
+  #entries li {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: start;
+    gap: 4px 12px;
+    padding: 12px 0;
+    border-top: 1px dashed var(--line);
+  }
+  #entries li:first-child { border-top: none; padding-top: 2px; }
+  .entry-main { min-width: 0; }
+  .entry-who { font-size: 14px; font-weight: 500; }
+  .entry-who .arrow { margin: 0 4px; }
+  .entry-desc { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .entry-amount {
+    font-family: "IBM Plex Mono", monospace;
+    font-weight: 600;
+    font-size: 15px;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .entry-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 14px;
+    margin-top: 6px;
+  }
+  #entries li[data-settled="true"] { opacity: 0.5; }
+  #entries li[data-settled="true"] .entry-who,
+  #entries li[data-settled="true"] .entry-amount { text-decoration: line-through; }
+  .empty-note { color: var(--muted); font-size: 14px; padding: 4px 0 2px; }
+
+  /* balance summary */
+  #balances { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  #balances li {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    font-size: 15px;
+  }
+  #balances .who { font-weight: 500; }
+  #balances .amount { font-family: "IBM Plex Mono", monospace; font-weight: 600; white-space: nowrap; }
+  .amount.owe { color: var(--owe); }
+  .amount.owed { color: var(--owed); }
+  .settled-all { color: var(--muted); font-size: 14px; }
+
+  .footer-note {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 24px;
+    line-height: 1.6;
+  }
+
+  .banner {
+    background: color-mix(in srgb, var(--owe) 14%, var(--paper-raised));
+    border: 1px solid color-mix(in srgb, var(--owe) 35%, var(--line));
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .banner.show { display: block; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .card { animation: rise 0.4s ease both; }
+    .card:nth-of-type(2) { animation-delay: 0.05s; }
+    .card:nth-of-type(3) { animation-delay: 0.1s; }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  }
+</style>
+
+<div class="sheet">
+  <h1>カシカリ</h1>
+  <p class="tagline">友達との「貸し借り」を、お金も頼みごとも一緒に記録する台帳</p>
+
+  <div class="banner" id="readonlyBanner">この端末では編集できません。閲覧のみです。</div>
+
+  <div class="card">
+    <h2>メンバー</h2>
+    <ul id="members" artifact-sync></ul>
+    <div class="add-row" artifact-local>
+      <input type="text" id="memberInput" placeholder="名前を追加(例: 太郎)" maxlength="20">
+      <button class="primary" id="addMemberBtn">追加</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>貸し借りを記録</h2>
+    <div class="entry-form" artifact-local>
+      <div class="row">
+        <select id="fromSelect" aria-label="貸した人"></select>
+        <span class="arrow">→</span>
+        <select id="toSelect" aria-label="借りた人"></select>
+      </div>
+      <div class="type-toggle" role="group" aria-label="種類">
+        <button type="button" id="typeMoney" aria-pressed="true">💰 お金</button>
+        <button type="button" id="typeFavor" aria-pressed="false">🤝 頼みごと</button>
+      </div>
+      <div class="amount-row" id="amountRow">
+        <span class="yen">¥</span>
+        <input type="number" id="amountInput" placeholder="金額" min="0" step="1" inputmode="numeric">
+      </div>
+      <input type="text" id="descInput" placeholder="内容(例: ラーメン奢った / 引っ越し手伝った)" maxlength="60">
+      <button class="primary" id="addEntryBtn">記録する</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>台帳</h2>
+    <ul id="entries" artifact-sync></ul>
+    <p class="empty-note" id="entriesEmpty">まだ記録がありません。上のフォームから最初の貸し借りを記録しましょう。</p>
+  </div>
+
+  <div class="card">
+    <h2>残っている貸し借り</h2>
+    <ul id="balances" artifact-local></ul>
+    <p class="settled-all" id="balancesEmpty">今のところ貸し借りはすべて精算済みです。</p>
+  </div>
+
+  <p class="footer-note">全員が同じページを見ています。誰かが記録すると、みんなの画面に反映されます。<br>金額の貸し借りは自動で相殺され、頼みごとは1件ずつ残ります。</p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var membersList = document.getElementById("members");
+  var entriesList = document.getElementById("entries");
+  var entriesEmpty = document.getElementById("entriesEmpty");
+  var balancesList = document.getElementById("balances");
+  var balancesEmpty = document.getElementById("balancesEmpty");
+  var fromSelect = document.getElementById("fromSelect");
+  var toSelect = document.getElementById("toSelect");
+  var readonlyBanner = document.getElementById("readonlyBanner");
+
+  var currentType = "money"; // "money" | "favor"
+  var writable = true;
+
+  function esc(s) {
+    var d = document.createElement("div");
+    d.textContent = String(s == null ? "" : s);
+    return d.innerHTML;
+  }
+
+  function genKey() {
+    return "k" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  // ---------- members ----------
+
+  function memberNames() {
+    return Array.from(membersList.querySelectorAll("li[data-name]")).map(function (li) {
+      return li.dataset.name;
+    });
+  }
+
+  function renderSelects() {
+    var names = memberNames();
+    [fromSelect, toSelect].forEach(function (sel) {
+      var prev = sel.value;
+      sel.innerHTML = names.map(function (n) {
+        return '<option value="' + esc(n) + '">' + esc(n) + "</option>";
+      }).join("");
+      if (names.indexOf(prev) !== -1) sel.value = prev;
+    });
+    if (names.length >= 2 && fromSelect.value === toSelect.value) {
+      toSelect.selectedIndex = toSelect.selectedIndex === 0 ? 1 : 0;
+    }
+    var addEntryBtn = document.getElementById("addEntryBtn");
+    addEntryBtn.disabled = names.length < 2;
+  }
+
+  function addMember(name) {
+    name = name.trim();
+    if (!name) return;
+    if (memberNames().indexOf(name) !== -1) return;
+    var li = document.createElement("li");
+    li.dataset.name = name;
+    li.dataset.key = genKey();
+    li.innerHTML = esc(name) + ' <button type="button" aria-label="' + esc(name) + 'を削除">✕</button>';
+    membersList.appendChild(li);
+    renderSelects();
+  }
+
+  document.getElementById("addMemberBtn").addEventListener("click", function () {
+    var input = document.getElementById("memberInput");
+    addMember(input.value);
+    input.value = "";
+    input.focus();
+  });
+  document.getElementById("memberInput").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") document.getElementById("addMemberBtn").click();
+  });
+
+  membersList.addEventListener("click", function (e) {
+    var btn = e.target.closest("button");
+    if (!btn) return;
+    var li = btn.closest("li");
+    var name = li.dataset.name;
+    var inUse = entriesList.querySelector('li[data-from="' + CSS.escape(name) + '"], li[data-to="' + CSS.escape(name) + '"]');
+    if (inUse && !confirm(name + "さんは台帳に記録があります。メンバーからは削除しますが、過去の記録は残ります。よろしいですか?")) {
+      return;
+    }
+    li.remove();
+    renderSelects();
+  });
+
+  // ---------- entry type toggle ----------
+
+  var typeMoneyBtn = document.getElementById("typeMoney");
+  var typeFavorBtn = document.getElementById("typeFavor");
+  var amountRow = document.getElementById("amountRow");
+
+  function setType(type) {
+    currentType = type;
+    typeMoneyBtn.setAttribute("aria-pressed", String(type === "money"));
+    typeFavorBtn.setAttribute("aria-pressed", String(type === "favor"));
+    amountRow.style.display = type === "money" ? "flex" : "none";
+  }
+  typeMoneyBtn.addEventListener("click", function () { setType("money"); });
+  typeFavorBtn.addEventListener("click", function () { setType("favor"); });
+  setType("money");
+
+  // ---------- entries ----------
+
+  function entryLi(entry) {
+    var li = document.createElement("li");
+    li.dataset.key = entry.key;
+    li.dataset.from = entry.from;
+    li.dataset.to = entry.to;
+    li.dataset.type = entry.type;
+    li.dataset.amount = entry.amount || "";
+    li.dataset.desc = entry.desc;
+    li.dataset.settled = entry.settled ? "true" : "false";
+
+    var amountHtml = entry.type === "money"
+      ? '<div class="entry-amount">¥' + Number(entry.amount).toLocaleString("ja-JP") + "</div>"
+      : '<div class="entry-amount">🤝</div>';
+
+    li.innerHTML =
+      '<div class="entry-main">' +
+        '<div class="entry-who">' + esc(entry.from) + ' <span class="arrow">→</span> ' + esc(entry.to) + "</div>" +
+        (entry.desc ? '<div class="entry-desc">' + esc(entry.desc) + "</div>" : "") +
+      "</div>" +
+      amountHtml +
+      '<div class="entry-actions">' +
+        '<button type="button" class="ghost" data-action="settle">' + (entry.settled ? "未精算に戻す" : "精算済みにする") + "</button>" +
+        '<button type="button" class="ghost" data-action="delete">削除</button>' +
+      "</div>";
+    return li;
+  }
+
+  function addEntry(entry) {
+    entriesList.appendChild(entryLi(entry));
+    refreshEntriesEmpty();
+    renderBalances();
+  }
+
+  document.getElementById("addEntryBtn").addEventListener("click", function () {
+    var from = fromSelect.value;
+    var to = toSelect.value;
+    var desc = document.getElementById("descInput").value.trim();
+    var amountInput = document.getElementById("amountInput");
+
+    if (!from || !to || from === to) {
+      alert("貸した人と借りた人は別のメンバーを選んでください。");
+      return;
+    }
+    if (currentType === "money") {
+      var amount = Number(amountInput.value);
+      if (!amount || amount <= 0) {
+        alert("金額を入力してください。");
+        return;
+      }
+      addEntry({ key: genKey(), from: from, to: to, type: "money", amount: amount, desc: desc, settled: false });
+      amountInput.value = "";
+    } else {
+      if (!desc) {
+        alert("頼みごとの内容を入力してください(例: 引っ越し手伝った)。");
+        return;
+      }
+      addEntry({ key: genKey(), from: from, to: to, type: "favor", amount: "", desc: desc, settled: false });
+    }
+    document.getElementById("descInput").value = "";
+  });
+
+  entriesList.addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-action]");
+    if (!btn) return;
+    var li = btn.closest("li");
+    if (btn.dataset.action === "settle") {
+      var next = li.dataset.settled !== "true";
+      li.dataset.settled = String(next);
+      btn.textContent = next ? "未精算に戻す" : "精算済みにする";
+    } else if (btn.dataset.action === "delete") {
+      if (confirm("この記録を削除しますか?")) li.remove();
+    }
+    refreshEntriesEmpty();
+    renderBalances();
+  });
+
+  function refreshEntriesEmpty() {
+    entriesEmpty.style.display = entriesList.children.length ? "none" : "block";
+  }
+
+  // ---------- balances (computed, local render) ----------
+
+  function readEntries() {
+    return Array.from(entriesList.querySelectorAll("li[data-key]")).map(function (li) {
+      return {
+        from: li.dataset.from,
+        to: li.dataset.to,
+        type: li.dataset.type,
+        amount: Number(li.dataset.amount) || 0,
+        settled: li.dataset.settled === "true",
+      };
+    }).filter(function (e) { return !e.settled; });
+  }
+
+  function renderBalances() {
+    var open = readEntries();
+    var money = {}; // "A|B" (A<B alphabetically by first-seen order) -> net
+    var favorCount = {}; // "from→to" -> count
+    var pairOrder = [];
+
+    open.forEach(function (e) {
+      if (e.type === "money") {
+        var pairKey = [e.from, e.to].sort().join("|");
+        if (pairOrder.indexOf(pairKey) === -1) pairOrder.push(pairKey);
+        if (!money[pairKey]) money[pairKey] = { a: e.from, b: e.to, net: 0 };
+        var m = money[pairKey];
+        // net > 0 means `a` is owed by `b`; keep signs relative to m.a/m.b
+        var signed = (e.from === m.a) ? e.amount : -e.amount;
+        m.net += signed;
+      } else {
+        var fk = e.from + "→" + e.to;
+        favorCount[fk] = (favorCount[fk] || 0) + 1;
+      }
+    });
+
+    var rows = [];
+    Object.keys(money).forEach(function (k) {
+      var m = money[k];
+      if (m.net === 0) return;
+      var creditor = m.net > 0 ? m.a : m.b;
+      var debtor = m.net > 0 ? m.b : m.a;
+      rows.push({
+        text: debtor + " → " + creditor,
+        amount: "¥" + Math.abs(m.net).toLocaleString("ja-JP"),
+        cls: "owe"
+      });
+    });
+    Object.keys(favorCount).forEach(function (k) {
+      var parts = k.split("→");
+      rows.push({
+        text: parts[0] + " → " + parts[1],
+        amount: favorCount[k] + "件",
+        cls: "owed"
+      });
+    });
+
+    balancesList.innerHTML = rows.map(function (r) {
+      return '<li><span class="who">' + esc(r.text) + '</span><span class="amount ' + r.cls + '">' + esc(r.amount) + "</span></li>";
+    }).join("");
+    balancesEmpty.style.display = rows.length ? "none" : "block";
+  }
+
+  // ---------- init & sync from other viewers ----------
+
+  function fullRefresh() {
+    renderSelects();
+    refreshEntriesEmpty();
+    renderBalances();
+  }
+
+  document.addEventListener("claude:edit", fullRefresh);
+  document.addEventListener("claude:sync-off", function () {
+    writable = false;
+    readonlyBanner.classList.add("show");
+    document.querySelectorAll("button, input, select").forEach(function (el) {
+      if (!el.closest("#readonlyBanner")) el.disabled = true;
+    });
+  });
+
+  (async function checkCapability() {
+    try {
+      var cap = (window.claude && typeof window.claude.use === "function")
+        ? await window.claude.use("artifact")
+        : null;
+      if (!cap) {
+        writable = false;
+        readonlyBanner.textContent = "この環境ではリアルタイム保存が利用できません。変更はこの画面だけに残ります。";
+        readonlyBanner.classList.add("show");
+      }
+    } catch (err) {
+      // capability probing failure should never block rendering
+    }
+  })();
+
+  fullRefresh();
+})();
+</script>
