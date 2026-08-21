@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "kashikari",
+    "slug": "kashikari",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "kashikari",
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "レシートを撮影して記録に添付するために使用します。",
+        "NSPhotoLibraryUsageDescription": "レシートの写真を記録に添付するために使用します。"
+      }
+    },
+    "android": {
+      "permissions": ["CAMERA", "READ_MEDIA_IMAGES"]
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "レシートの写真を記録に添付するために使用します。",
+          "cameraPermission": "レシートを撮影して記録に添付するために使用します。"
+        }
+      ]
+    ]
+  }
+}

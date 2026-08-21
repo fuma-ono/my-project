@@ -1,0 +1,124 @@
+import { useState } from 'react';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+
+import GroupFormModal from '../components/GroupFormModal';
+import PrimaryButton from '../components/PrimaryButton';
+import { colors, fonts } from '../theme';
+import type { Group } from '../types';
+
+type Props = {
+  displayName: string;
+  groups: Group[];
+  loading: boolean;
+  onRefresh: () => Promise<void>;
+  onOpenGroup: (group: Group) => void;
+  onCreateGroup: (name: string) => Promise<{ error: string | null; group: Group | null }>;
+  onJoinGroup: (code: string) => Promise<{ error: string | null; group: Group | null }>;
+};
+
+export default function GroupsScreen({ displayName, groups, loading, onRefresh, onOpenGroup, onCreateGroup, onJoinGroup }: Props) {
+  const [modal, setModal] = useState<'create' | 'join' | null>(null);
+
+  return (
+    <View style={styles.wrap}>
+      <View style={styles.header}>
+        <Text style={styles.wordmark}>kashikari</Text>
+        <Text style={styles.hello}>{displayName} さん</Text>
+      </View>
+
+      <FlatList
+        data={groups}
+        keyExtractor={(g) => g.id}
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={onRefresh} tintColor={colors.accent} />}
+        ListEmptyComponent={
+          !loading ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyText}>まだグループがありません。{'\n'}新しく作るか、招待コードで参加しましょう。</Text>
+            </View>
+          ) : null
+        }
+        renderItem={({ item }) => (
+          <Pressable onPress={() => onOpenGroup(item)} style={styles.card}>
+            <View style={styles.cardIcon}>
+              <Text style={styles.cardIconText}>⇄</Text>
+            </View>
+            <View style={styles.cardMain}>
+              <Text style={styles.cardTitle}>{item.name}</Text>
+              <Text style={styles.cardCode}>招待コード: {item.invite_code}</Text>
+            </View>
+          </Pressable>
+        )}
+      />
+
+      <View style={styles.actions}>
+        <PrimaryButton title="招待コードで参加" variant="ghost" onPress={() => setModal('join')} />
+        <PrimaryButton title="＋ グループを作る" onPress={() => setModal('create')} />
+      </View>
+
+      <GroupFormModal
+        visible={modal === 'create'}
+        mode="create"
+        onClose={() => setModal(null)}
+        onSubmit={async (name) => {
+          const res = await onCreateGroup(name);
+          if (res.group) onOpenGroup(res.group);
+          return { error: res.error };
+        }}
+      />
+      <GroupFormModal
+        visible={modal === 'join'}
+        mode="join"
+        onClose={() => setModal(null)}
+        onSubmit={async (code) => {
+          const res = await onJoinGroup(code);
+          if (res.group) onOpenGroup(res.group);
+          return { error: res.error };
+        }}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: { flex: 1, backgroundColor: colors.bg },
+  header: { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 12 },
+  wordmark: { fontFamily: fonts.display, fontSize: 30, color: colors.ink },
+  hello: { fontFamily: fonts.body, fontSize: 14, color: colors.muted, marginTop: 4 },
+  list: { paddingHorizontal: 20, paddingBottom: 24, gap: 10, flexGrow: 1 },
+  empty: { alignItems: 'center', paddingTop: 60 },
+  emptyText: { fontFamily: fonts.body, fontSize: 14.5, color: colors.muted, textAlign: 'center', lineHeight: 22 },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#3c2814',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  cardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 13,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardIconText: { fontFamily: fonts.display, fontSize: 18, color: colors.accent },
+  cardMain: { flex: 1 },
+  cardTitle: { fontFamily: fonts.bodySemiBold, fontSize: 16, color: colors.ink },
+  cardCode: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted, marginTop: 2 },
+  actions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 28,
+    paddingTop: 8,
+  },
+});
