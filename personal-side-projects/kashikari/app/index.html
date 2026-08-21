@@ -771,9 +771,7 @@
     if (!actionBtn) return;
     var li = actionBtn.closest("li");
     if (actionBtn.dataset.action === "settle") {
-      var next = li.dataset.settled !== "true";
-      li.dataset.settled = String(next);
-      actionBtn.textContent = next ? "未精算に戻す" : "精算済みにする";
+      markSettled(li, li.dataset.settled !== "true");
     } else if (actionBtn.dataset.action === "delete") {
       if (confirm("この記録を削除しますか?")) li.remove();
     }
@@ -803,15 +801,21 @@
     }).filter(function (e) { return !e.settled; });
   }
 
+  function markSettled(li, settled) {
+    li.dataset.settled = settled ? "true" : "false";
+    var btn = li.querySelector('button[data-action="settle"]');
+    if (btn) btn.textContent = settled ? "未精算に戻す" : "精算済みにする";
+  }
+
   function settlePair(type, a, b, currency) {
     entriesList.querySelectorAll("li[data-key]").forEach(function (li) {
       if (li.dataset.settled === "true") return;
       if (type === "money" && li.dataset.type === "money" && (li.dataset.currency || "JPY") === currency &&
           ((li.dataset.from === a && li.dataset.to === b) || (li.dataset.from === b && li.dataset.to === a))) {
-        li.dataset.settled = "true";
+        markSettled(li, true);
       }
       if (type === "favor" && li.dataset.type === "favor" && li.dataset.from === a && li.dataset.to === b) {
-        li.dataset.settled = "true";
+        markSettled(li, true);
       }
     });
     refreshEntriesEmpty();
