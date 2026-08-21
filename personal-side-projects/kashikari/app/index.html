@@ -285,9 +285,21 @@
   }
 
   /* ledger rows */
-  #entries { list-style: none; margin: 4px 0 0; padding: 0; }
-  #entries li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 13px 0; border-top: 1px solid var(--line); }
-  #entries li:first-child { border-top: none; padding-top: 2px; }
+  #entries { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  #entries li {
+    display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
+    padding: 12px 13px;
+    border: 1.5px solid var(--line);
+    border-left: 4px solid var(--line);
+    border-radius: 12px;
+  }
+  #entries li[data-type="money"] { border-left-color: var(--accent); }
+  #entries li[data-type="favor"] { border-left-color: var(--favor); }
+  #entries li[data-settled="true"] {
+    border-style: dashed;
+    border-left-style: dashed;
+    border-left-color: var(--line);
+  }
   .type-badge {
     width: 38px; height: 38px; border-radius: 12px;
     display: grid; place-items: center; font-size: 17px; flex: none;
