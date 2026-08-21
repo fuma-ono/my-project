@@ -30,6 +30,22 @@ npx expo start
 
 スマホに **Expo Go** アプリを入れてQRコードを読み込めば、すぐ動作確認できる。
 
+## デモモード(Supabase未接続でUIを確認する)
+
+Supabaseプロジェクトをまだ作っていなくても、UIだけならすぐ確認できる。
+
+```bash
+EXPO_PUBLIC_DEMO_MODE=1 npx expo start --web
+```
+
+ダミーの3人グループ(たろう・はなこ・じろう)とダミーの記録が入った状態で起動する。認証・DB通信は一切行わない。画面例:
+
+| グループ一覧 | グループ詳細 | 記録を追加 |
+|---|---|---|
+| ![groups](docs/screenshots/groups.png) | ![group detail](docs/screenshots/group-detail.png) | ![add entry](docs/screenshots/add-entry.png) |
+
+`EXPO_PUBLIC_DEMO_MODE` は本番の `.env` には設定しないこと(設定するとログイン・実データが一切表示されなくなる)。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え

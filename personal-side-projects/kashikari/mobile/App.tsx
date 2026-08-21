@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useFonts as useFredoka, Fredoka_500Medium, Fredoka_600SemiBold } from '@expo-google-fonts/fredoka';
 import { useFonts as useWorkSans, WorkSans_400Regular, WorkSans_500Medium, WorkSans_600SemiBold } from '@expo-google-fonts/work-sans';
 
+import DemoApp from './src/demo/DemoApp';
 import GroupScreen from './src/screens/GroupScreen';
 import GroupsScreen from './src/screens/GroupsScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
@@ -14,14 +15,35 @@ import type { Group } from './src/types';
 
 type Screen = { name: 'groups' } | { name: 'group'; group: Group };
 
+// デモモード: Supabase未接続でもUIを確認できるようにする(スクリーンショット・
+// 動作確認用)。本番の.envではこの変数を設定しないこと。
+const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO_MODE === '1';
+
 export default function App() {
   const [fredokaLoaded] = useFredoka({ Fredoka_500Medium, Fredoka_600SemiBold });
   const [workSansLoaded] = useWorkSans({ WorkSans_400Regular, WorkSans_500Medium, WorkSans_600SemiBold });
   const { loading: authLoading, userId, profile, setDisplayName } = useAuth();
-  const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup } = useGroups(userId);
+  const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup } = useGroups(DEMO_MODE ? null : userId);
   const [screen, setScreen] = useState<Screen>({ name: 'groups' });
 
-  if (!fredokaLoaded || !workSansLoaded || authLoading) {
+  if (!fredokaLoaded || !workSansLoaded) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator color={colors.accent} size="large" />
+      </View>
+    );
+  }
+
+  if (DEMO_MODE) {
+    return (
+      <>
+        <DemoApp />
+        <StatusBar style="dark" />
+      </>
+    );
+  }
+
+  if (authLoading) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator color={colors.accent} size="large" />
