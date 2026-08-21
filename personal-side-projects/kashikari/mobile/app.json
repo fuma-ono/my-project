@@ -4,6 +4,7 @@
     "slug": "kashikari",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "kashikari",
     "ios": {
@@ -14,7 +15,14 @@
       }
     },
     "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ff6b4a",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      },
       "permissions": ["CAMERA", "READ_MEDIA_IMAGES"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
       [

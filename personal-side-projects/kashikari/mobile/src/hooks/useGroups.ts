@@ -44,5 +44,15 @@ export function useGroups(userId: string | null) {
     [refresh]
   );
 
-  return { groups, loading, refresh, createGroup, joinGroup };
+  const leaveGroup = useCallback(
+    async (groupId: string) => {
+      const { error } = await supabase.rpc('leave_group', { _group_id: groupId });
+      if (error) return { error: error.message };
+      await refresh();
+      return { error: null };
+    },
+    [refresh]
+  );
+
+  return { groups, loading, refresh, createGroup, joinGroup, leaveGroup };
 }

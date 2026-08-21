@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, RefreshControl, Share, StyleSheet, Text, View } from 'react-native';
 
 import AddEntrySheet from '../components/AddEntrySheet';
 import Avatar from '../components/Avatar';
@@ -10,7 +10,14 @@ import { computeBalances } from '../lib/balances';
 import { colors, fonts } from '../theme';
 import type { Group } from '../types';
 
-export default function GroupScreen({ group, meId, onBack }: { group: Group; meId: string | null; onBack: () => void }) {
+type Props = {
+  group: Group;
+  meId: string | null;
+  onBack: () => void;
+  onLeave: (groupId: string) => Promise<{ error: string | null }>;
+};
+
+export default function GroupScreen({ group, meId, onBack, onLeave }: Props) {
   const { members, entries, loading, refresh, addEntry, toggleSettled, deleteEntry, settlePair } = useGroupData(group.id, meId);
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -19,6 +26,24 @@ export default function GroupScreen({ group, meId, onBack }: { group: Group; meI
 
   const invite = () => {
     Share.share({ message: `kashikariの「${group.name}」に招待するよ。アプリを開いて招待コード「${group.invite_code}」で参加してね。` });
+  };
+
+  const leave = () => {
+    Alert.alert('グループを抜けますか?', `「${group.name}」の記録は他のメンバーの画面には残りますが、あなたはこのグループのデータにアクセスできなくなります。`, [
+      { text: 'キャンセル', style: 'cancel' },
+      {
+        text: '抜ける',
+        style: 'destructive',
+        onPress: async () => {
+          const res = await onLeave(group.id);
+          if (res.error) {
+            Alert.alert('抜けられませんでした', res.error);
+            return;
+          }
+          onBack();
+        },
+      },
+    ]);
   };
 
   return (
@@ -33,6 +58,9 @@ export default function GroupScreen({ group, meId, onBack }: { group: Group; meI
             <View style={styles.headerRow}>
               <Pressable onPress={onBack} hitSlop={10}>
                 <Text style={styles.back}>‹ グループ</Text>
+              </Pressable>
+              <Pressable onPress={leave} hitSlop={10}>
+                <Text style={styles.leave}>グループを抜ける</Text>
               </Pressable>
             </View>
             <Text style={styles.title}>{group.name}</Text>
@@ -99,8 +127,9 @@ export default function GroupScreen({ group, meId, onBack }: { group: Group; meI
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
   list: { padding: 20, paddingBottom: 100 },
-  headerRow: { marginTop: 44, marginBottom: 4 },
+  headerRow: { marginTop: 44, marginBottom: 4, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   back: { fontFamily: fonts.bodySemiBold, fontSize: 15, color: colors.accent },
+  leave: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.muted },
   title: { fontFamily: fonts.display, fontSize: 28, color: colors.ink, marginTop: 6, marginBottom: 16 },
   memberStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 22 },
   memberChip: {

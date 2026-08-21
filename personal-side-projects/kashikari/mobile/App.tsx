@@ -18,7 +18,7 @@ export default function App() {
   const [fredokaLoaded] = useFredoka({ Fredoka_500Medium, Fredoka_600SemiBold });
   const [workSansLoaded] = useWorkSans({ WorkSans_400Regular, WorkSans_500Medium, WorkSans_600SemiBold });
   const { loading: authLoading, userId, profile, setDisplayName } = useAuth();
-  const { groups, loading: groupsLoading, refresh, createGroup, joinGroup } = useGroups(userId);
+  const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup } = useGroups(userId);
   const [screen, setScreen] = useState<Screen>({ name: 'groups' });
 
   if (!fredokaLoaded || !workSansLoaded || authLoading) {
@@ -52,7 +52,7 @@ export default function App() {
         />
       )}
       {screen.name === 'group' && (
-        <GroupScreen group={screen.group} meId={userId} onBack={() => setScreen({ name: 'groups' })} />
+        <GroupScreen group={screen.group} meId={userId} onBack={() => setScreen({ name: 'groups' })} onLeave={leaveGroup} />
       )}
       <StatusBar style="dark" />
     </>

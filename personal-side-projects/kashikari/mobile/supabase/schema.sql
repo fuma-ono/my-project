@@ -214,8 +214,23 @@ begin
 end;
 $$;
 
+create or replace function public.leave_group(_group_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  delete from public.group_members where group_id = _group_id and user_id = auth.uid();
+end;
+$$;
+
 grant execute on function public.create_group(text) to authenticated;
 grant execute on function public.join_group(text) to authenticated;
+grant execute on function public.leave_group(uuid) to authenticated;
 grant execute on function public.is_group_member(uuid) to authenticated;
 
 -- ============================================================
