@@ -258,9 +258,12 @@
   .type-toggle button:active { transform: scale(0.97); }
   .type-toggle button[data-type="money"][aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
   .type-toggle button[data-type="favor"][aria-pressed="true"] { border-color: var(--favor); color: var(--favor); background: var(--favor-soft); }
-  .amount-row { display: flex; align-items: center; gap: 6px; background: var(--surface-2); border-radius: 10px; padding: 0 4px 0 12px; }
+  .amount-row { display: flex; align-items: center; gap: 4px; background: var(--surface-2); border-radius: 10px; padding: 0 4px; }
   .amount-row input[type="number"] { width: 100%; background: transparent; border: none; font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 16px; }
-  .yen { font-family: "Fredoka", sans-serif; font-weight: 600; color: var(--muted); }
+  .amount-row select {
+    background: transparent; border: none; font-family: "Fredoka", sans-serif;
+    font-weight: 600; color: var(--muted); padding: 10px 4px 10px 10px;
+  }
   .entry-form-actions { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
   button.ghost { all: unset; cursor: pointer; color: var(--muted); font-size: 13.5px; font-weight: 600; padding: 9px 12px; }
   button.ghost:hover { color: var(--ink); }
@@ -385,8 +388,8 @@
         <button type="button" id="typeFavor" data-type="favor" aria-pressed="false">🤝 頼みごと</button>
       </div>
       <div class="amount-row" id="amountRow">
-        <span class="yen">¥</span>
-        <input type="number" id="amountInput" placeholder="金額" min="0" step="1" inputmode="numeric">
+        <select id="currencySelect" aria-label="通貨"></select>
+        <input type="number" id="amountInput" placeholder="金額" min="0" step="0.01" inputmode="decimal">
       </div>
       <input type="text" id="descInput" placeholder="内容(例: ラーメン奢った / 引っ越し手伝った)" maxlength="60">
 
@@ -432,6 +435,29 @@
 
   var currentType = "money";
   var AVATAR_PALETTE = ["#ff6b4a", "#1fa37a", "#2d3a8c", "#e0a73c", "#8c4fd1", "#2aa7c4", "#4b8b3b", "#e0527a"];
+  var CURRENCIES = [
+    { code: "JPY", label: "¥ JPY" },
+    { code: "USD", label: "$ USD" },
+    { code: "EUR", label: "€ EUR" },
+    { code: "GBP", label: "£ GBP" },
+    { code: "KRW", label: "₩ KRW" },
+    { code: "CNY", label: "¥ CNY" },
+    { code: "TWD", label: "NT$ TWD" },
+    { code: "THB", label: "฿ THB" },
+    { code: "AUD", label: "A$ AUD" }
+  ];
+  var LAST_CURRENCY_KEY = "kashikari_last_currency";
+
+  function formatMoney(amount, code) {
+    code = code || "JPY";
+    var formatted;
+    try {
+      formatted = new Intl.NumberFormat(undefined, { style: "currency", currency: code }).format(amount);
+    } catch (e) {
+      formatted = "¥" + Number(amount).toLocaleString("ja-JP");
+    }
+    return code === "JPY" ? formatted : formatted + " " + code;
+  }
 
   function esc(s) {
     return String(s == null ? "" : s)
@@ -651,6 +677,19 @@
   typeFavorBtn.addEventListener("click", function () { setType("favor"); });
   setType("money");
 
+  var currencySelect = document.getElementById("currencySelect");
+  currencySelect.innerHTML = CURRENCIES.map(function (c) {
+    return '<option value="' + c.code + '">' + c.label + "</option>";
+  }).join("");
+  (function () {
+    var saved;
+    try { saved = localStorage.getItem(LAST_CURRENCY_KEY); } catch (e) { saved = null; }
+    if (saved && CURRENCIES.some(function (c) { return c.code === saved; })) currencySelect.value = saved;
+  })();
+  currencySelect.addEventListener("change", function () {
+    try { localStorage.setItem(LAST_CURRENCY_KEY, currencySelect.value); } catch (e) { /* ignore */ }
+  });
+
   // ---------- entries ----------
 
   function entryLi(entry) {
@@ -660,6 +699,7 @@
     li.dataset.to = entry.to;
     li.dataset.type = entry.type;
     li.dataset.amount = entry.amount || "";
+    li.dataset.currency = entry.currency || "JPY";
     li.dataset.desc = entry.desc;
     li.dataset.settled = entry.settled ? "true" : "false";
     li.dataset.ts = entry.ts || new Date().toISOString();
@@ -668,7 +708,7 @@
       ? '<span class="type-badge money" aria-hidden="true">💰</span>'
       : '<span class="type-badge favor" aria-hidden="true">🤝</span>';
     var amountHtml = entry.type === "money"
-      ? '<div class="entry-amount">¥' + Number(entry.amount).toLocaleString("ja-JP") + "</div>"
+      ? '<div class="entry-amount">' + esc(formatMoney(entry.amount, entry.currency)) + "</div>"
       : '<div class="entry-amount">1件</div>';
     var photoHtml = entry.photo ? '<img class="entry-photo" src="' + esc(entry.photo) + '" alt="レシート">' : "";
 
@@ -708,7 +748,7 @@
     if (currentType === "money") {
       var amount = Number(amountInput.value);
       if (!amount || amount <= 0) { alert("金額を入力してください。"); return; }
-      addEntry({ key: genKey(), from: from, to: to, type: "money", amount: amount, desc: desc, settled: false, photo: pendingPhoto });
+      addEntry({ key: genKey(), from: from, to: to, type: "money", amount: amount, currency: currencySelect.value, desc: desc, settled: false, photo: pendingPhoto });
     } else {
       if (!desc) { alert("頼みごとの内容を入力してください(例: 引っ越し手伝った)。"); return; }
       addEntry({ key: genKey(), from: from, to: to, type: "favor", amount: "", desc: desc, settled: false, photo: pendingPhoto });
@@ -755,14 +795,18 @@
 
   function readOpenEntries() {
     return Array.from(entriesList.querySelectorAll("li[data-key]")).map(function (li) {
-      return { from: li.dataset.from, to: li.dataset.to, type: li.dataset.type, amount: Number(li.dataset.amount) || 0, settled: li.dataset.settled === "true" };
+      return {
+        from: li.dataset.from, to: li.dataset.to, type: li.dataset.type,
+        amount: Number(li.dataset.amount) || 0, currency: li.dataset.currency || "JPY",
+        settled: li.dataset.settled === "true"
+      };
     }).filter(function (e) { return !e.settled; });
   }
 
-  function settlePair(type, a, b) {
+  function settlePair(type, a, b, currency) {
     entriesList.querySelectorAll("li[data-key]").forEach(function (li) {
       if (li.dataset.settled === "true") return;
-      if (type === "money" && li.dataset.type === "money" &&
+      if (type === "money" && li.dataset.type === "money" && (li.dataset.currency || "JPY") === currency &&
           ((li.dataset.from === a && li.dataset.to === b) || (li.dataset.from === b && li.dataset.to === a))) {
         li.dataset.settled = "true";
       }
@@ -781,8 +825,8 @@
 
     open.forEach(function (e) {
       if (e.type === "money") {
-        var pairKey = [e.from, e.to].sort().join("|");
-        if (!money[pairKey]) money[pairKey] = { a: e.from, b: e.to, net: 0 };
+        var pairKey = [e.from, e.to].sort().join("|") + "|" + e.currency;
+        if (!money[pairKey]) money[pairKey] = { a: e.from, b: e.to, net: 0, currency: e.currency };
         var m = money[pairKey];
         m.net += (e.from === m.a) ? e.amount : -e.amount;
       } else {
@@ -794,10 +838,10 @@
     var rows = [];
     Object.keys(money).forEach(function (k) {
       var m = money[k];
-      if (m.net === 0) return;
+      if (Math.abs(m.net) < 0.005) return;
       var creditor = m.net > 0 ? m.a : m.b;
       var debtor = m.net > 0 ? m.b : m.a;
-      rows.push({ debtor: debtor, creditor: creditor, amount: "¥" + Math.abs(m.net).toLocaleString("ja-JP"), cls: "owe", type: "money" });
+      rows.push({ debtor: debtor, creditor: creditor, amount: formatMoney(Math.abs(m.net), m.currency), currency: m.currency, cls: "owe", type: "money" });
     });
     Object.keys(favorCount).forEach(function (k) {
       var parts = k.split("→");
@@ -818,7 +862,7 @@
           '<span class="bal-name' + (r.mine && r.creditor === me ? " me" : "") + '">' + esc(creditorLabel) + '</span>' +
         '</div>' +
         '<span class="bal-amount ' + r.cls + '">' + esc(r.amount) + '</span>' +
-        '<button type="button" class="bal-settle" data-type="' + r.type + '" data-a="' + esc(r.debtor) + '" data-b="' + esc(r.creditor) + '">精算する</button>' +
+        '<button type="button" class="bal-settle" data-type="' + r.type + '" data-a="' + esc(r.debtor) + '" data-b="' + esc(r.creditor) + '" data-currency="' + esc(r.currency || "") + '">精算する</button>' +
       "</li>";
     }).join("");
     balancesEmpty.style.display = rows.length ? "none" : "block";
@@ -828,7 +872,7 @@
   balancesList.addEventListener("click", function (e) {
     var btn = e.target.closest(".bal-settle");
     if (!btn) return;
-    settlePair(btn.dataset.type, btn.dataset.a, btn.dataset.b);
+    settlePair(btn.dataset.type, btn.dataset.a, btn.dataset.b, btn.dataset.currency);
   });
 
   // ---------- init & sync from other viewers ----------
