@@ -111,6 +111,64 @@ def _title_from_script(script_path: str) -> str:
     return title
 
 
+# The @moyasuka channel's own ID (from YouTube Studio / confirmed via
+# `channels.list?mine=true` while genuinely authorized as @moyasuka,
+# 2026-08-21 publish of script07). Fixed once a channel exists — unlike a
+# handle, a channel ID never changes.
+MOYASUKA_CHANNEL_ID = "UCrbgwaQhPlDOcQGfUF29VFQ"
+
+
+def _assert_correct_channel() -> None:
+    """Refuses to upload unless youtube_auth.auth's token is actually
+    authorized as @moyasuka.
+
+    **2026-08-22 incident**: moyasuka/youtube_auth.py deliberately reuses
+    bgm_pipeline's shared OAuth client (so the owner doesn't need a second
+    GCP client) but keeps its own separate token file — the token's
+    *channel* is decided purely by which Google account approves the
+    device-flow code, with nothing in the code enforcing it's the right
+    one. During a same-day re-authorization the owner approved with the
+    account managing `focus.sleep.sounds` (the BGM/app channel) instead of
+    @moyasuka. Nothing caught this before upload, so two モヤスカ episodes
+    (script08/09) went out publicly on the wrong channel — a real-audience
+    mistake, not a test failure. Both were set back to private immediately
+    after, but the check that would have stopped it from happening in the
+    first place didn't exist. This function is that check: it must run
+    before every upload, not just be a thing a human remembers to verify
+    manually.
+    """
+    import requests as _requests
+
+    token = youtube_auth.auth.get_access_token()
+    resp = _requests.get(
+        "https://www.googleapis.com/youtube/v3/channels",
+        params={"part": "snippet", "mine": "true"},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    items = resp.json().get("items", [])
+    if not items:
+        raise SystemExit(
+            "moyasuka.youtube_authのトークンでchannels.list(mine=true)を呼んだが"
+            "チャンネルが1件も返らなかった。認証状態を確認してください。"
+        )
+    channel_id = items[0]["id"]
+    channel_title = items[0]["snippet"]["title"]
+    if channel_id != MOYASUKA_CHANNEL_ID:
+        raise SystemExit(
+            f"アップロード先チャンネルの取り違えを検知しました。\n"
+            f"moyasuka.youtube_authのトークンは現在「{channel_title}」"
+            f"({channel_id})に認可されています。期待していたのは@moyasuka"
+            f"({MOYASUKA_CHANNEL_ID})です。\n"
+            f"モヤスカを管理しているGoogleアカウントで"
+            f"`python3 -m moyasuka.youtube_auth login`を再実行し、"
+            f"正しいアカウントで承認してから再試行してください。"
+            f"(2026-08-22、script08/09がfocus.sleep.soundsに誤公開された"
+            f"事故の再発防止チェック)"
+        )
+
+
 def publish(
     script_path: str,
     audio_path: str,
@@ -119,6 +177,7 @@ def publish(
     workdir: str = "/tmp/moyasuka-publish",
 ) -> str:
     """Renders the video and uploads it. Returns the new video's ID."""
+    _assert_correct_channel()
     title = _title_from_script(script_path)
     Path(workdir).mkdir(parents=True, exist_ok=True)
     mp4_path = f"{workdir}/{Path(script_path).stem}.mp4"
