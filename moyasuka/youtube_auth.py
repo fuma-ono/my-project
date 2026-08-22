@@ -26,6 +26,33 @@ account manages @moyasuka):
 After that, moyasuka.publish uses get_access_token() below —
 completely independent of bgm-pipeline/credentials/youtube_token.json, so
 authorizing this channel never touches the other one's token.
+
+**Known limitation (same as bgm_pipeline's own token, see bgm-pipeline/
+README.md)**: while the OAuth consent screen stays in "Testing" publishing
+status, refresh tokens expire after **7 days**, not indefinitely. Moving to
+"In production" doesn't fix this on its own — `youtube.upload` is a
+restricted scope, so it still needs Google's full app-verification process
+(hosted privacy policy, scope justification, review) to actually work
+there; not attempted, since that's a heavy lift for a single owner-operated
+channel. Confirmed the hard way 2026-08-21: a scheduled publish for
+script08 failed mid-upload because this token had silently expired ~8
+hours earlier, and re-authorizing took 5 device-code attempts because
+nobody was around to approve within each 30-minute code window — the
+owner then asked (2026-08-22) for a standing fix.
+
+**2026-08-22: every moyasuka publish-trigger prompt must therefore open
+with the same proactive check bgm-pipeline's Shorts/長尺 routines already
+use** (see bgm-pipeline/bgm_pipeline/youtube_auth.py's docstring / the
+"BGM Shorts 週3回自動公開" trigger's Step 0): call
+`youtube_auth.auth.days_until_refresh_expiry()` *before* attempting to
+render/upload anything. If it's under **2 days**, or `None` (never
+authorized), don't attempt the publish — call `login()` for a fresh device
+code and PushNotification the owner with the URL+code, then end the
+routine (it'll be re-checked next time it fires). This turns "publish
+silently fails mid-upload because nobody checked" into "owner gets a
+heads-up several days before it would actually break." The weekly
+management review (週次経営レビュー trigger, step 5) also cross-checks this
+independently as a backstop, with a 3-day threshold.
 """
 from __future__ import annotations
 
