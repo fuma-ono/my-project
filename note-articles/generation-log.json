@@ -155,7 +155,8 @@
       "theme_backlog_id": 22,
       "pillar": "A",
       "generated_at": "2026-08-17",
-      "status": "draft"
+      "status": "published",
+      "published_auto_detected_at": "2026-08-23"
     },
     {
       "article_number": "19",
