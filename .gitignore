@@ -29,3 +29,6 @@ note-articles/sns-queue/fonts.py
 
 # love-note: browser session state (equivalent to being logged in, never commit)
 love-note/storage-state.json
+
+# threads-affiliate: API access token + app secret, never commit
+threads-affiliate/access-token.json
