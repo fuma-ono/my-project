@@ -13,6 +13,14 @@
 // モダンなプロダクトでよく使われる個性のある書体)を、本文・ラベルは
 // 引き続きManrope(可読性重視)のまま。丸ゴシックのFredokaのような
 // 「子供っぽさ」を避けつつ、単一書体だった前回より性格を持たせる狙い。
+//
+// 6回目の見直し: 「iOS標準のSF Proを使ってほしい」という指示を受け、
+// Google FontsのWebフォント読み込みをやめ、OSのシステムフォントに切り替えた。
+// SF Proはフォントファイル自体をAppleが配布制限しているため同梱できないが、
+// fontFamilyを指定しなければiOSは自動でSan Francisco(SF Pro)、Androidは
+// 自動でRobotoを使ってレンダリングする。書体を1系統だけに絞る代わりに、
+// 太さ(fontWeight)で見出し/本文の区別をつける、というOS標準アプリと
+// 同じ考え方に変更した。
 
 export const colors = {
   bg: '#fff9f2',
@@ -38,12 +46,16 @@ export const colors = {
   danger: '#c1503f',
 } as const;
 
+// fontFamilyを指定しない = OS標準フォント(iOS: San Francisco / SF Pro、
+// Android: Roboto)。太さだけをトークンごとに変える。使う側は
+// `style={[..., fonts.display]}` のように展開して使う(fontFamilyと
+// fontWeightの2つのスタイルプロパティをまとめて持つオブジェクトのため)。
 export const fonts = {
-  display: 'SpaceGrotesk_700Bold',
-  displayMedium: 'SpaceGrotesk_600SemiBold',
-  body: 'Manrope_400Regular',
-  bodyMedium: 'Manrope_500Medium',
-  bodySemiBold: 'Manrope_600SemiBold',
+  display: { fontFamily: undefined, fontWeight: '700' } as const,
+  displayMedium: { fontFamily: undefined, fontWeight: '600' } as const,
+  body: { fontFamily: undefined, fontWeight: '400' } as const,
+  bodyMedium: { fontFamily: undefined, fontWeight: '500' } as const,
+  bodySemiBold: { fontFamily: undefined, fontWeight: '600' } as const,
 } as const;
 
 // 彩度・明度を揃えた4色のみ(主アクセントの色相違いバリエーション)。

@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
   ghost: { backgroundColor: 'transparent', paddingVertical: 10, paddingHorizontal: 12 },
   disabled: { opacity: 0.4 },
   pressed: { transform: [{ scale: 0.97 }] },
-  text: { fontFamily: fonts.bodySemiBold, fontSize: 15 },
+  text: { ...fonts.bodySemiBold, fontSize: 15 },
   primaryText: { color: colors.accentInk },
   ghostText: { color: colors.muted },
 });

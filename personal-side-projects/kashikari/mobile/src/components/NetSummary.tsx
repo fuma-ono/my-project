@@ -40,14 +40,14 @@ const styles = StyleSheet.create({
   line: { paddingVertical: 6 },
   lineDivider: { marginTop: 6, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.22)', paddingTop: 14 },
   label: {
-    fontFamily: fonts.bodySemiBold,
+    ...fonts.bodySemiBold,
     fontSize: 12.5,
     color: 'rgba(255,255,255,0.85)',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
     marginBottom: 2,
   },
-  amount: { fontFamily: fonts.display, fontSize: 42, color: '#fff', letterSpacing: -0.5 },
+  amount: { ...fonts.display, fontSize: 42, color: '#fff', letterSpacing: -0.5 },
   settledWrap: {
     backgroundColor: colors.surface,
     borderRadius: 20,
@@ -56,5 +56,5 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   emoji: { fontSize: 30, marginBottom: 6 },
-  settledText: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.muted },
+  settledText: { ...fonts.bodyMedium, fontSize: 15, color: colors.muted },
 });

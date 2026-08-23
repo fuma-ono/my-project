@@ -1,13 +1,5 @@
 import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import {
-  useFonts as useManrope,
-  Manrope_400Regular,
-  Manrope_500Medium,
-  Manrope_600SemiBold,
-  Manrope_700Bold,
-} from '@expo-google-fonts/manrope';
-import { useFonts as useSpaceGrotesk, SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 
 import DemoApp from './src/demo/DemoApp';
 import GroupScreen from './src/screens/GroupScreen';
@@ -29,8 +21,6 @@ type Screen = { name: 'groups' } | { name: 'group'; group: Group };
 const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO_MODE === '1';
 
 export default function App() {
-  const [manropeLoaded] = useManrope({ Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold });
-  const [spaceGroteskLoaded] = useSpaceGrotesk({ SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold });
   const { loading: authLoading, userId, profile, setDisplayName } = useAuth();
   const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup } = useGroups(DEMO_MODE ? null : userId);
   const [screen, setScreen] = useState<Screen>({ name: 'groups' });
@@ -41,7 +31,7 @@ export default function App() {
     return () => clearTimeout(t);
   }, []);
 
-  if (!manropeLoaded || !spaceGroteskLoaded || !minSplashDone || (!DEMO_MODE && authLoading)) {
+  if (!minSplashDone || (!DEMO_MODE && authLoading)) {
     return <SplashScreen />;
   }
 

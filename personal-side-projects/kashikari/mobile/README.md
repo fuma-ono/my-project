@@ -73,6 +73,14 @@ EXPO_PUBLIC_DEMO_MODE=1 npx expo start --web
 
 2回目の見直しで「丸ゴシックのFredoka」を「子供っぽい」として単一書体のManropeに寄せたが、それだと今度は個性がなく単調になっていた。Space Groteskは丸みがなくシャープで、それでいて画一的でない書体のため、両方の指摘のバランスを取れると判断した。
 
+## デザインの見直し(6回目)
+
+「iOS標準のSF Pro(San Francisco)を使ってほしい」という指示への対応。
+
+- Google Fonts(Manrope・Space Grotesk)の読み込みをやめ、**OSのシステムフォントに切り替えた**。`fontFamily`を指定しなければiOSは自動でSan Francisco、Androidは自動でRobotoでレンダリングする。SF Pro自体のフォントファイルはAppleがiOS以外への配布を制限しているため同梱できないが、この方法ならOSが標準搭載しているものをそのまま使うので、ライセンス上の問題も追加の読み込みコストもない
+- 書体を1系統に絞る代わりに、太さ(`fontWeight`)で見出し/本文の区別をつける、というOS標準アプリと同じ考え方に変更(`src/theme.ts`の`fonts`トークンが`{fontFamily: undefined, fontWeight: ...}`を返すようになった)
+- **注意**: この開発サンドボックス(Linux)にはSan Francisco自体がインストールされていないため、`docs/screenshots/`のWeb版デモ画面は代替の汎用フォントで表示されている。実機のiPhoneで動かすと正しくSF Proになる
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え

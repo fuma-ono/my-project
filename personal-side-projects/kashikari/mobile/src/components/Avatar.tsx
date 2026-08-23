@@ -18,5 +18,5 @@ export default function Avatar({ name, size = 'md' }: { name: string; size?: 'sm
 
 const styles = StyleSheet.create({
   base: { alignItems: 'center', justifyContent: 'center' },
-  text: { color: '#fff', fontFamily: fonts.bodySemiBold },
+  text: { color: '#fff', ...fonts.bodySemiBold },
 });

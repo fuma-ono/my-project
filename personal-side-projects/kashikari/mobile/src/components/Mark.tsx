@@ -20,5 +20,5 @@ export default function Mark({ size = 40 }: { size?: number }) {
 
 const styles = StyleSheet.create({
   base: { alignItems: 'center', justifyContent: 'center' },
-  glyph: { fontFamily: fonts.display, color: '#fff' },
+  glyph: { ...fonts.display, color: '#fff' },
 });

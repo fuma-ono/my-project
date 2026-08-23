@@ -29,5 +29,5 @@ const styles = StyleSheet.create({
   },
   gradient: { flex: 1, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.4 },
-  text: { fontFamily: fonts.display, fontSize: 30, color: colors.accentInk },
+  text: { ...fonts.display, fontSize: 30, color: colors.accentInk },
 });

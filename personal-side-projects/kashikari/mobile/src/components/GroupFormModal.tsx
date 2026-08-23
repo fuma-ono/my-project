@@ -65,16 +65,16 @@ export default function GroupFormModal({ visible, mode, onClose, onSubmit }: Pro
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(20,15,10,0.45)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   card: { width: '100%', backgroundColor: colors.surface, borderRadius: 18, padding: 20 },
-  title: { fontFamily: fonts.display, fontSize: 19, color: colors.ink, marginBottom: 14 },
+  title: { ...fonts.display, fontSize: 19, color: colors.ink, marginBottom: 14 },
   input: {
     backgroundColor: colors.surface2,
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    fontFamily: fonts.body,
+    ...fonts.body,
     fontSize: 16,
     color: colors.ink,
   },
-  error: { color: colors.danger, fontFamily: fonts.body, fontSize: 13, marginTop: 8 },
+  error: { color: colors.danger, ...fonts.body, fontSize: 13, marginTop: 8 },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 18 },
 });

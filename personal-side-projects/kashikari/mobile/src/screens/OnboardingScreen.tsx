@@ -52,10 +52,10 @@ export default function OnboardingScreen({
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg, padding: 24, justifyContent: 'center' },
   markWrap: { marginBottom: 16 },
-  wordmark: { fontFamily: fonts.display, fontSize: 38, color: colors.ink },
-  tagline: { fontFamily: fonts.body, fontSize: 14.5, color: colors.muted, marginTop: 8, marginBottom: 32 },
+  wordmark: { ...fonts.display, fontSize: 38, color: colors.ink },
+  tagline: { ...fonts.body, fontSize: 14.5, color: colors.muted, marginTop: 8, marginBottom: 32 },
   label: {
-    fontFamily: fonts.bodySemiBold,
+    ...fonts.bodySemiBold,
     fontSize: 12.5,
     color: colors.muted,
     textTransform: 'uppercase',
@@ -67,12 +67,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 16,
-    fontFamily: fonts.body,
+    ...fonts.body,
     fontSize: 17,
     color: colors.ink,
     borderWidth: 1.5,
     borderColor: colors.line,
   },
-  error: { color: colors.danger, fontFamily: fonts.body, fontSize: 13, marginTop: 8 },
+  error: { color: colors.danger, ...fonts.body, fontSize: 13, marginTop: 8 },
   button: { marginTop: 24, alignSelf: 'flex-start', paddingHorizontal: 28 },
 });
