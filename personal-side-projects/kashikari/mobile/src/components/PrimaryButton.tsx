@@ -1,4 +1,5 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import { colors, fonts } from '../theme';
 
@@ -11,25 +12,32 @@ type Props = {
   style?: ViewStyle;
 };
 
+// primaryはブランドのグラデーション(コーラル→プラム)、ghostは装飾なしの
+// テキストのみ。ボタンごとに色を変えず、この2種類だけに絞る。
 export default function PrimaryButton({ title, onPress, disabled, loading, variant = 'primary', style }: Props) {
   const isGhost = variant === 'ghost';
+  const content = loading ? (
+    <ActivityIndicator color={isGhost ? colors.muted : colors.accentInk} />
+  ) : (
+    <Text style={[styles.text, isGhost ? styles.ghostText : styles.primaryText]}>{title}</Text>
+  );
+
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled || loading}
-      style={({ pressed }) => [
-        styles.base,
-        isGhost ? styles.ghost : styles.primary,
-        (disabled || loading) && styles.disabled,
-        pressed && !disabled && !loading && styles.pressed,
-        style,
-      ]}
-    >
-      {loading ? (
-        <ActivityIndicator color={isGhost ? colors.muted : colors.accentInk} />
-      ) : (
-        <Text style={[styles.text, isGhost ? styles.ghostText : styles.primaryText]}>{title}</Text>
-      )}
+    <Pressable onPress={onPress} disabled={disabled || loading} style={style}>
+      {({ pressed }) =>
+        isGhost ? (
+          <View style={[styles.base, styles.ghost, (disabled || loading) && styles.disabled, pressed && styles.pressed]}>{content}</View>
+        ) : (
+          <LinearGradient
+            colors={[colors.accent, colors.plum]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.base, (disabled || loading) && styles.disabled, pressed && styles.pressed]}
+          >
+            {content}
+          </LinearGradient>
+        )
+      }
     </Pressable>
   );
 }
@@ -42,7 +50,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  primary: { backgroundColor: colors.accent },
   ghost: { backgroundColor: 'transparent', paddingVertical: 10, paddingHorizontal: 12 },
   disabled: { opacity: 0.4 },
   pressed: { transform: [{ scale: 0.97 }] },

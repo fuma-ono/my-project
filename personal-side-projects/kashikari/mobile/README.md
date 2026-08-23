@@ -40,9 +40,9 @@ EXPO_PUBLIC_DEMO_MODE=1 npx expo start --web
 
 ダミーの3人グループ(たろう・はなこ・じろう)とダミーの記録が入った状態で起動する。認証・DB通信は一切行わない。画面例:
 
-| グループ一覧 | 残高タブ | 台帳タブ | 記録を追加 |
-|---|---|---|---|
-| ![groups](docs/screenshots/groups.png) | ![balance](docs/screenshots/group-detail.png) | ![ledger](docs/screenshots/ledger.png) | ![add entry](docs/screenshots/add-entry.png) |
+| 起動画面 | グループ一覧 | 残高タブ | 台帳タブ | 記録を追加 |
+|---|---|---|---|---|
+| ![splash](docs/screenshots/splash.png) | ![groups](docs/screenshots/groups.png) | ![balance](docs/screenshots/group-detail.png) | ![ledger](docs/screenshots/ledger.png) | ![add entry](docs/screenshots/add-entry.png) |
 
 `EXPO_PUBLIC_DEMO_MODE` は本番の `.env` には設定しないこと(設定するとログイン・実データが一切表示されなくなる)。
 
@@ -54,6 +54,15 @@ EXPO_PUBLIC_DEMO_MODE=1 npx expo start --web
 - **一番知りたい数字(純額)を画面冒頭に大きく表示**(Venmo/Cash App: 太字タイポグラフィで最重要情報を最初に見せる)
 - **緑=あなたが受け取る、赤=あなたが払う、という意味のある色分けを導入**(Splitwise)。前回の見直しでは装飾色を減らすことだけに気を取られ、貸し借りの向きという一番大事な情報を色で伝えられていなかった
 - **台帳をカード風から、日付見出し付きのフラットな一覧(アクティビティフィード)に変更**。精算済みはデフォルトで非表示にし、「精算済みN件を表示」で展開する(Splitwise: 情報量を絞るフィルター)
+
+## デザインの見直し(4回目)
+
+「質素すぎる・売れそうに見えない・かっこよくない」という指摘への対応。ブランドの主要な瞬間だけにコーラル→プラムのグラデーションを使い、それ以外は静かなニュートラルのままにした(装飾を全面に広げず1箇所に集中させる)。
+
+- **起動時にアイコン+ワードマークだけのスプラッシュ画面**を追加(`src/screens/SplashScreen.tsx`)。読み込みが一瞬で終わってもロゴがフラッシュするだけにならないよう、最低表示時間を設けている
+- **グループ一覧のヘッダーにロゴマークを追加**(以前は「kashikari」の文字だけで、アイコンが抜けていた)
+- ロゴマーク(`src/components/Mark.tsx`)・主要ボタン(`PrimaryButton`のprimary)・記録追加ボタン(`Fab`)・残高のヒーロー数字(`NetSummary`)にグラデーションを適用
+- 残高ヒーローはコーラル→プラムのグラデーションカード1枚に統一し、白文字で「受け取り/支払い」の金額を大きく見せる(緑/赤の意味的な色分けは、グラデーションの上では読みにくくなるため、下の内訳リスト側で担う設計に整理した)
 
 ## 構成
 

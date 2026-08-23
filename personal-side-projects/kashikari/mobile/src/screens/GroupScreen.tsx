@@ -5,6 +5,7 @@ import AddEntrySheet from '../components/AddEntrySheet';
 import Avatar from '../components/Avatar';
 import BalanceCard from '../components/BalanceCard';
 import EntryRow from '../components/EntryRow';
+import Fab from '../components/Fab';
 import NetSummary from '../components/NetSummary';
 import { useGroupData } from '../hooks/useGroupData';
 import { computeBalances, computeMyNet } from '../lib/balances';
@@ -156,14 +157,6 @@ export default function GroupScreen({ group, meId, onBack, onLeave }: Props) {
   );
 }
 
-function Fab({ onPress, disabled }: { onPress: () => void; disabled?: boolean }) {
-  return (
-    <Pressable onPress={onPress} disabled={disabled} style={[styles.fab, disabled && styles.fabDisabled]}>
-      <Text style={styles.fabText}>＋</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
   list: { paddingHorizontal: 20, paddingBottom: 100 },
@@ -219,22 +212,4 @@ const styles = StyleSheet.create({
   settledToggleText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.accent },
   hairline: { height: 1, backgroundColor: colors.line },
   emptyNote: { fontFamily: fonts.body, fontSize: 14.5, color: colors.muted, textAlign: 'center', paddingVertical: 24 },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 28,
-    width: 60,
-    height: 60,
-    borderRadius: 999,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: colors.accent,
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
-  },
-  fabDisabled: { opacity: 0.4 },
-  fabText: { fontFamily: fonts.display, fontSize: 30, color: colors.accentInk },
 });

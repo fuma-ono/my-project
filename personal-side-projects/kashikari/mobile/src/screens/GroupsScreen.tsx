@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import GroupFormModal from '../components/GroupFormModal';
+import Mark from '../components/Mark';
 import PrimaryButton from '../components/PrimaryButton';
 import { colors, fonts } from '../theme';
 import type { Group } from '../types';
@@ -22,7 +23,10 @@ export default function GroupsScreen({ displayName, groups, loading, onRefresh, 
   return (
     <View style={styles.wrap}>
       <View style={styles.header}>
-        <Text style={styles.wordmark}>kashikari</Text>
+        <View style={styles.brandRow}>
+          <Mark size={34} />
+          <Text style={styles.wordmark}>kashikari</Text>
+        </View>
         <Text style={styles.hello}>{displayName} さん</Text>
       </View>
 
@@ -40,9 +44,7 @@ export default function GroupsScreen({ displayName, groups, loading, onRefresh, 
         }
         renderItem={({ item }) => (
           <Pressable onPress={() => onOpenGroup(item)} style={styles.card}>
-            <View style={styles.cardIcon}>
-              <Text style={styles.cardIconText}>⇄</Text>
-            </View>
+            <Mark size={44} />
             <View style={styles.cardMain}>
               <Text style={styles.cardTitle}>{item.name}</Text>
               <Text style={styles.cardCode}>招待コード: {item.invite_code}</Text>
@@ -83,8 +85,9 @@ export default function GroupsScreen({ displayName, groups, loading, onRefresh, 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
   header: { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 12 },
-  wordmark: { fontFamily: fonts.display, fontSize: 30, color: colors.ink },
-  hello: { fontFamily: fonts.body, fontSize: 14, color: colors.muted, marginTop: 4 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  wordmark: { fontFamily: fonts.display, fontSize: 28, color: colors.ink },
+  hello: { fontFamily: fonts.body, fontSize: 14, color: colors.muted, marginTop: 8 },
   list: { paddingHorizontal: 20, paddingBottom: 24, gap: 10, flexGrow: 1 },
   empty: { alignItems: 'center', paddingTop: 60 },
   emptyText: { fontFamily: fonts.body, fontSize: 14.5, color: colors.muted, textAlign: 'center', lineHeight: 22 },
@@ -101,15 +104,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
-  cardIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 13,
-    backgroundColor: colors.accentSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardIconText: { fontFamily: fonts.display, fontSize: 18, color: colors.accent },
   cardMain: { flex: 1 },
   cardTitle: { fontFamily: fonts.bodySemiBold, fontSize: 16, color: colors.ink },
   cardCode: { fontFamily: fonts.body, fontSize: 12.5, color: colors.muted, marginTop: 2 },

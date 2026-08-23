@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   useFonts as useManrope,
@@ -13,10 +12,14 @@ import DemoApp from './src/demo/DemoApp';
 import GroupScreen from './src/screens/GroupScreen';
 import GroupsScreen from './src/screens/GroupsScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
+import SplashScreen from './src/screens/SplashScreen';
 import { useAuth } from './src/hooks/useAuth';
 import { useGroups } from './src/hooks/useGroups';
-import { colors } from './src/theme';
 import type { Group } from './src/types';
+
+// 起動直後、読み込みが一瞬で終わってもロゴが一瞬フラッシュするだけにならない
+// よう、最低でもこれだけはブランド画面を見せる(体感の「間」を作るため)。
+const MIN_SPLASH_MS = 900;
 
 type Screen = { name: 'groups' } | { name: 'group'; group: Group };
 
@@ -29,13 +32,15 @@ export default function App() {
   const { loading: authLoading, userId, profile, setDisplayName } = useAuth();
   const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup } = useGroups(DEMO_MODE ? null : userId);
   const [screen, setScreen] = useState<Screen>({ name: 'groups' });
+  const [minSplashDone, setMinSplashDone] = useState(false);
 
-  if (!manropeLoaded) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator color={colors.accent} size="large" />
-      </View>
-    );
+  useEffect(() => {
+    const t = setTimeout(() => setMinSplashDone(true), MIN_SPLASH_MS);
+    return () => clearTimeout(t);
+  }, []);
+
+  if (!manropeLoaded || !minSplashDone || (!DEMO_MODE && authLoading)) {
+    return <SplashScreen />;
   }
 
   if (DEMO_MODE) {
@@ -44,14 +49,6 @@ export default function App() {
         <DemoApp />
         <StatusBar style="dark" />
       </>
-    );
-  }
-
-  if (authLoading) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator color={colors.accent} size="large" />
-      </View>
     );
   }
 
@@ -84,7 +81,3 @@ export default function App() {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
-});

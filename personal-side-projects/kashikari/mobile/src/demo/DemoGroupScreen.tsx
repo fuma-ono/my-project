@@ -7,6 +7,7 @@ import AddEntrySheet from '../components/AddEntrySheet';
 import Avatar from '../components/Avatar';
 import BalanceCard from '../components/BalanceCard';
 import EntryRow from '../components/EntryRow';
+import Fab from '../components/Fab';
 import NetSummary from '../components/NetSummary';
 import { computeBalances, computeMyNet } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
@@ -152,9 +153,7 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
         />
       )}
 
-      <Pressable onPress={() => setSheetOpen(true)} style={styles.fab}>
-        <Text style={styles.fabText}>＋</Text>
-      </Pressable>
+      <Fab onPress={() => setSheetOpen(true)} />
 
       <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} />
     </View>
@@ -210,21 +209,4 @@ const styles = StyleSheet.create({
   settledToggle: { alignSelf: 'flex-start', marginBottom: 6 },
   settledToggleText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.accent },
   hairline: { height: 1, backgroundColor: colors.line },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 28,
-    width: 60,
-    height: 60,
-    borderRadius: 999,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: colors.accent,
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
-  },
-  fabText: { fontFamily: fonts.display, fontSize: 30, color: colors.accentInk },
 });

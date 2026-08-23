@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import Mark from '../components/Mark';
 import PrimaryButton from '../components/PrimaryButton';
 import { colors, fonts } from '../theme';
 
@@ -22,8 +23,8 @@ export default function OnboardingScreen({
 
   return (
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.mark}>
-        <Text style={styles.markText}>⇄</Text>
+      <View style={styles.markWrap}>
+        <Mark size={64} />
       </View>
       <Text style={styles.wordmark}>kashikari</Text>
       <Text style={styles.tagline}>友達との貸し借りを、お金も頼みごとも一緒に記録する</Text>
@@ -50,16 +51,7 @@ export default function OnboardingScreen({
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg, padding: 24, justifyContent: 'center' },
-  mark: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  markText: { fontFamily: fonts.display, fontSize: 30, color: '#fff' },
+  markWrap: { marginBottom: 16 },
   wordmark: { fontFamily: fonts.display, fontSize: 38, color: colors.ink },
   tagline: { fontFamily: fonts.body, fontSize: 14.5, color: colors.muted, marginTop: 8, marginBottom: 32 },
   label: {
