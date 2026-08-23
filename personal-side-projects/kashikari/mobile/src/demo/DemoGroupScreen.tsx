@@ -1,27 +1,36 @@
 // デモモード専用。GroupScreen.tsxと同じ見た目・操作感を、Supabaseを
 // 一切呼ばずローカルstateだけで再現する(スクリーンショット・動作確認用)。
 import { useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 
 import AddEntrySheet from '../components/AddEntrySheet';
 import Avatar from '../components/Avatar';
 import BalanceCard from '../components/BalanceCard';
 import EntryRow from '../components/EntryRow';
-import { computeBalances } from '../lib/balances';
+import NetSummary from '../components/NetSummary';
+import { computeBalances, computeMyNet } from '../lib/balances';
+import { groupEntriesByDate } from '../lib/dateGroups';
 import { colors, fonts } from '../theme';
 import type { Entry, EntryType } from '../types';
 import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS } from './mockData';
 
+type Tab = 'balance' | 'ledger';
 let demoIdSeq = 100;
 
 export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   const [entries, setEntries] = useState<Entry[]>(DEMO_ENTRIES);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [tab, setTab] = useState<Tab>('balance');
+  const [showSettled, setShowSettled] = useState(false);
   const members = DEMO_MEMBERS;
   const meId = DEMO_ME_ID;
 
   const nameOf = (id: string) => members.find((m) => m.id === id)?.display_name ?? '不明';
   const balances = useMemo(() => computeBalances(entries, meId), [entries]);
+  const netTotals = useMemo(() => computeMyNet(entries, meId), [entries]);
+  const visibleEntries = useMemo(() => (showSettled ? entries : entries.filter((e) => !e.settled)), [entries, showSettled]);
+  const sections = useMemo(() => groupEntriesByDate(visibleEntries), [visibleEntries]);
+  const settledCount = entries.length - entries.filter((e) => !e.settled).length;
 
   const addEntry = async (input: {
     fromUser: string;
@@ -50,83 +59,98 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
     return { error: null };
   };
 
-  const toggleSettled = (e: Entry) => {
-    setEntries((prev) => prev.map((x) => (x.id === e.id ? { ...x, settled: !x.settled } : x)));
-  };
-  const deleteEntry = (e: Entry) => {
-    setEntries((prev) => prev.filter((x) => x.id !== e.id));
-  };
+  const toggleSettled = (e: Entry) => setEntries((prev) => prev.map((x) => (x.id === e.id ? { ...x, settled: !x.settled } : x)));
+  const deleteEntry = (e: Entry) => setEntries((prev) => prev.filter((x) => x.id !== e.id));
   const settlePair = (type: EntryType, a: string, b: string, currency: string | null) => {
     setEntries((prev) =>
       prev.map((e) => {
         if (e.settled || e.type !== type) return e;
         const match =
           type === 'money'
-            ? (e.currency || 'JPY') === (currency || 'JPY') &&
-              ((e.from_user === a && e.to_user === b) || (e.from_user === b && e.to_user === a))
+            ? (e.currency || 'JPY') === (currency || 'JPY') && ((e.from_user === a && e.to_user === b) || (e.from_user === b && e.to_user === a))
             : e.from_user === a && e.to_user === b;
         return match ? { ...e, settled: true } : e;
       })
     );
   };
 
-  return (
-    <View style={styles.wrap}>
+  const header = (
+    <View>
       <View style={styles.demoBanner}>
         <Text style={styles.demoBannerText}>デモモード(Supabase未接続・操作はこの端末だけに反映されます)</Text>
       </View>
-      <FlatList
-        data={entries}
-        keyExtractor={(e) => e.id}
-        contentContainerStyle={styles.list}
-        ListHeaderComponent={
-          <View>
-            <View style={styles.headerRow}>
-              <Pressable onPress={onBack} hitSlop={10}>
-                <Text style={styles.back}>‹ グループ</Text>
-              </Pressable>
-            </View>
-            <Text style={styles.title}>{DEMO_GROUP.name}</Text>
+      <View style={styles.headerRow}>
+        <Pressable onPress={onBack} hitSlop={10}>
+          <Text style={styles.back}>‹ グループ</Text>
+        </Pressable>
+      </View>
+      <Text style={styles.title}>{DEMO_GROUP.name}</Text>
 
-            <View style={styles.memberStrip}>
-              {members.map((m) => (
-                <View key={m.id} style={styles.memberChip}>
-                  <Avatar name={m.display_name} size="sm" />
-                  <Text style={styles.memberName}>{m.display_name}</Text>
-                </View>
-              ))}
-              <Pressable onPress={() => Alert.alert('デモモードでは招待できません')} style={styles.inviteChip}>
-                <Text style={styles.inviteChipText}>＋ 招待</Text>
-              </Pressable>
-            </View>
-
-            <Text style={styles.sectionTitle}>いまの貸し借り</Text>
-            {balances.length === 0 ? (
-              <View style={styles.settledAll}>
-                <Text style={styles.settledAllText}>🎉 今のところ貸し借りはすべて精算済みです</Text>
-              </View>
-            ) : (
-              <View style={styles.balanceList}>
-                {balances.map((row, i) => (
-                  <BalanceCard
-                    key={`${row.debtor}-${row.creditor}-${row.type}-${row.currency}-${i}`}
-                    row={row}
-                    nameOf={nameOf}
-                    meId={meId}
-                    onSettle={() => settlePair(row.type, row.debtor, row.creditor, row.currency)}
-                  />
-                ))}
-              </View>
-            )}
-
-            <Text style={styles.sectionTitle}>台帳</Text>
+      <View style={styles.memberStrip}>
+        {members.map((m) => (
+          <View key={m.id} style={styles.memberChip}>
+            <Avatar name={m.display_name} size="sm" />
+            <Text style={styles.memberName}>{m.display_name}</Text>
           </View>
-        }
-        renderItem={({ item }) => (
-          <EntryRow entry={item} nameOf={nameOf} onToggleSettled={toggleSettled} onDelete={deleteEntry} />
-        )}
-        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-      />
+        ))}
+        <Pressable onPress={() => Alert.alert('デモモードでは招待できません')} style={styles.inviteChip}>
+          <Text style={styles.inviteChipText}>＋ 招待</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.tabs}>
+        <Pressable onPress={() => setTab('balance')} style={[styles.tabBtn, tab === 'balance' && styles.tabBtnActive]}>
+          <Text style={[styles.tabText, tab === 'balance' && styles.tabTextActive]}>残高</Text>
+        </Pressable>
+        <Pressable onPress={() => setTab('ledger')} style={[styles.tabBtn, tab === 'ledger' && styles.tabBtnActive]}>
+          <Text style={[styles.tabText, tab === 'ledger' && styles.tabTextActive]}>台帳</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.wrap}>
+      {tab === 'balance' ? (
+        <FlatList
+          data={balances}
+          keyExtractor={(row, i) => `${row.debtor}-${row.creditor}-${row.type}-${row.currency}-${i}`}
+          contentContainerStyle={styles.list}
+          ListHeaderComponent={
+            <View>
+              {header}
+              <NetSummary totals={netTotals} />
+              {balances.length > 0 && <Text style={styles.sectionTitle}>内訳</Text>}
+            </View>
+          }
+          renderItem={({ item }) => (
+            <BalanceCard row={item} nameOf={nameOf} meId={meId} onSettle={() => settlePair(item.type, item.debtor, item.creditor, item.currency)} />
+          )}
+          ItemSeparatorComponent={() => <View style={styles.hairline} />}
+        />
+      ) : (
+        <SectionList
+          sections={sections}
+          keyExtractor={(e) => e.id}
+          contentContainerStyle={styles.list}
+          stickySectionHeadersEnabled={false}
+          ListHeaderComponent={
+            <View>
+              {header}
+              {settledCount > 0 && (
+                <Pressable onPress={() => setShowSettled((v) => !v)} style={styles.settledToggle}>
+                  <Text style={styles.settledToggleText}>{showSettled ? '精算済みを隠す' : `精算済み${settledCount}件を表示`}</Text>
+                </Pressable>
+              )}
+            </View>
+          }
+          renderSectionHeader={({ section }) => <Text style={styles.dateHeader}>{section.title}</Text>}
+          renderItem={({ item }) => (
+            <EntryRow entry={item} nameOf={nameOf} meId={meId} onToggleSettled={toggleSettled} onDelete={deleteEntry} />
+          )}
+          ItemSeparatorComponent={() => <View style={styles.hairline} />}
+        />
+      )}
 
       <Pressable onPress={() => setSheetOpen(true)} style={styles.fab}>
         <Text style={styles.fabText}>＋</Text>
@@ -139,13 +163,13 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
-  demoBanner: { backgroundColor: colors.favor, paddingVertical: 8, paddingHorizontal: 16, paddingTop: 44 },
+  demoBanner: { backgroundColor: colors.favor, marginHorizontal: -20, paddingVertical: 8, paddingHorizontal: 16, paddingTop: 44, marginBottom: 8 },
   demoBannerText: { fontFamily: fonts.bodySemiBold, fontSize: 12, color: '#fff', textAlign: 'center' },
-  list: { padding: 20, paddingBottom: 100 },
+  list: { paddingHorizontal: 20, paddingBottom: 100 },
   headerRow: { marginBottom: 4 },
   back: { fontFamily: fonts.bodySemiBold, fontSize: 15, color: colors.accent },
-  title: { fontFamily: fonts.display, fontSize: 28, color: colors.ink, marginTop: 6, marginBottom: 16 },
-  memberStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 22 },
+  title: { fontFamily: fonts.display, fontSize: 26, color: colors.ink, marginTop: 4, marginBottom: 14 },
+  memberStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 },
   memberChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -169,17 +193,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   inviteChipText: { fontFamily: fonts.bodySemiBold, fontSize: 13, color: colors.muted },
+  tabs: { flexDirection: 'row', backgroundColor: colors.surface2, borderRadius: 12, padding: 4, marginBottom: 22 },
+  tabBtn: { flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center' },
+  tabBtnActive: { backgroundColor: colors.surface, shadowColor: '#3c2814', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  tabText: { fontFamily: fonts.bodySemiBold, fontSize: 14, color: colors.muted },
+  tabTextActive: { color: colors.ink },
   sectionTitle: {
-    fontFamily: fonts.display,
-    fontSize: 14,
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 12.5,
     color: colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 12,
+    marginBottom: 4,
   },
-  balanceList: { gap: 10, marginBottom: 26 },
-  settledAll: { backgroundColor: colors.surface, borderRadius: 16, padding: 22, alignItems: 'center', marginBottom: 26 },
-  settledAllText: { fontFamily: fonts.body, fontSize: 14.5, color: colors.muted },
+  dateHeader: { fontFamily: fonts.bodySemiBold, fontSize: 12.5, color: colors.muted, marginTop: 14, marginBottom: 2 },
+  settledToggle: { alignSelf: 'flex-start', marginBottom: 6 },
+  settledToggleText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.accent },
+  hairline: { height: 1, backgroundColor: colors.line },
   fab: {
     position: 'absolute',
     right: 20,

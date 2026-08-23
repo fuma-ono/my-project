@@ -6,21 +6,18 @@ import { colors, fonts } from '../theme';
 import type { Entry } from '../types';
 import { useReceiptUrl } from '../hooks/useReceiptUrl';
 
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const sameYear = d.getFullYear() === now.getFullYear();
-  return sameYear ? `${d.getMonth() + 1}/${d.getDate()}` : `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
-}
-
 type Props = {
   entry: Entry;
   nameOf: (id: string) => string;
+  meId: string | null;
   onToggleSettled: (entry: Entry) => void;
   onDelete: (entry: Entry) => void;
 };
 
-export default function EntryRow({ entry, nameOf, onToggleSettled, onDelete }: Props) {
+// Venmo/Cash Appのアクティビティフィードに寄せ、カード感(枠線・影)をやめて
+// フラットな一覧行にした。金額の色は残高と同じ意味付け(緑=受け取る/赤=払う)を
+// 使い、自分が関係しない記録はニュートラルにする。
+export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onDelete }: Props) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const photoUrl = useReceiptUrl(entry.photo_path);
   const settled = entry.settled;
@@ -38,8 +35,13 @@ export default function EntryRow({ entry, nameOf, onToggleSettled, onDelete }: P
     );
   };
 
+  // from_user = 貸した人(あとで受け取る側)、to_user = 借りた人(あとで払う側)
+  const iAmReceiver = entry.from_user === meId;
+  const iAmPayer = entry.to_user === meId;
+  const amountColor = settled ? colors.muted : iAmPayer ? colors.negative : iAmReceiver ? colors.positive : colors.ink;
+
   return (
-    <View style={[styles.row, settled && styles.rowSettled]}>
+    <View style={styles.row}>
       <View style={[styles.badge, { backgroundColor: entry.type === 'money' ? colors.accentSoft : colors.favorSoft }]}>
         <Text style={styles.badgeEmoji}>{entry.type === 'money' ? '💰' : '🤝'}</Text>
       </View>
@@ -48,10 +50,11 @@ export default function EntryRow({ entry, nameOf, onToggleSettled, onDelete }: P
         <Text style={[styles.who, settled && styles.strike]} numberOfLines={1}>
           {nameOf(entry.from_user)} <Text style={styles.arrow}>→</Text> {nameOf(entry.to_user)}
         </Text>
-        <Text style={styles.desc} numberOfLines={1}>
-          {entry.description ? entry.description + ' ・ ' : ''}
-          {formatDate(entry.created_at)}
-        </Text>
+        {!!entry.description && (
+          <Text style={styles.desc} numberOfLines={1}>
+            {entry.description}
+          </Text>
+        )}
       </View>
 
       {photoUrl && (
@@ -60,7 +63,7 @@ export default function EntryRow({ entry, nameOf, onToggleSettled, onDelete }: P
         </Pressable>
       )}
 
-      <Text style={[styles.amount, settled && styles.strike]}>
+      <Text style={[styles.amount, { color: amountColor }, settled && styles.strike]}>
         {entry.type === 'money' ? formatMoney(entry.amount ?? 0, entry.currency) : '1件'}
       </Text>
 
@@ -82,22 +85,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    padding: 12,
-    borderWidth: 1.5,
-    borderColor: colors.line,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
+    paddingVertical: 10,
   },
-  rowSettled: { borderStyle: 'dashed' },
-  badge: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  badgeEmoji: { fontSize: 17 },
+  badge: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  badgeEmoji: { fontSize: 16 },
   main: { flex: 1, minWidth: 0 },
-  who: { fontFamily: fonts.bodySemiBold, fontSize: 14.5, color: colors.ink },
+  who: { fontFamily: fonts.bodyMedium, fontSize: 14.5, color: colors.ink },
   arrow: { color: colors.muted },
   desc: { fontFamily: fonts.body, fontSize: 12, color: colors.muted, marginTop: 2 },
-  thumb: { width: 36, height: 36, borderRadius: 9 },
-  amount: { fontFamily: fonts.display, fontSize: 15, color: colors.ink },
-  strike: { textDecorationLine: 'line-through', opacity: 0.5 },
+  thumb: { width: 34, height: 34, borderRadius: 9 },
+  amount: { fontFamily: fonts.display, fontSize: 15 },
+  strike: { textDecorationLine: 'line-through', opacity: 0.6 },
   menuBtn: { padding: 4 },
   menuDots: { fontSize: 18, color: colors.muted },
   lightboxBg: { flex: 1, backgroundColor: 'rgba(20,15,10,0.9)', alignItems: 'center', justifyContent: 'center', padding: 24 },

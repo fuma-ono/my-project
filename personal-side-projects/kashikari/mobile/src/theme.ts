@@ -1,10 +1,10 @@
 // デザイントークン。personal-side-projects/kashikari/app/index.html(Web版プロトタイプ)の
 // 配色・書体をそのまま踏襲している。両方を直す場合は同じ値をこちらにも反映すること。
 //
-// 2回目の見直し(2024): 「色がごちゃごちゃ」という指摘を受け、書体をFredoka+
-// Work Sansの2系統からManrope1系統に統一。配色もアクセント(コーラル)+
-// セカンダリ(スレートティール)の2色に絞り、アバターも8色の原色寄りな
-// パレットから、彩度を抑えた4色に削減した。
+// 3回目の見直し: Splitwise/PayPay/Venmoを参考に、「装飾色」と「意味を持つ色」を
+// 明確に分けた。前回(2回目)は装飾色を削っただけで、残高の貸し借り方向という
+// 一番大事な情報を色で伝えられていなかった。Splitwiseに倣い、緑=あなたが
+// 受け取る、赤=あなたが払う、という意味的な色分けを導入する。
 
 export const colors = {
   bg: '#fff9f2',
@@ -13,16 +13,19 @@ export const colors = {
   ink: '#2b2420',
   muted: '#948572',
   line: '#f1e4d3',
-  // 主アクセント(CTA・お金の記録・「あなた」のハイライト)
+  // 主アクセント(ブランド・CTA・「頼みごと」の記録種別)
   accent: '#ff6b4a',
   accentInk: '#ffffff',
   accentSoft: '#ffe4da',
-  // 副アクセント(頼みごとの記録)。彩度を落として主アクセントと喧嘩しないようにする
   favor: '#4f7d8c',
   favorSoft: '#e3edef',
-  // フォームのバリデーションエラー表示専用(装飾ではなく意味を持つ色なので、
-  // アクセント2色とは別に最小限だけ用意する)
-  danger: '#c14a3a',
+  // 意味を持つ色(装飾ではなく金額の向きを伝える): 緑=受け取る、赤=払う
+  positive: '#2f8f5b',
+  positiveSoft: '#e1f2e8',
+  negative: '#c1503f',
+  negativeSoft: '#f7e4e0',
+  // フォームのバリデーションエラー表示は negative を流用する
+  danger: '#c1503f',
 } as const;
 
 export const fonts = {

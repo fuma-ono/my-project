@@ -42,3 +42,21 @@ export function computeBalances(entries: Entry[], meId: string | null): BalanceR
   rows.sort((x, y) => (x.mine === y.mine ? 0 : x.mine ? -1 : 1));
   return rows;
 }
+
+export type NetTotal = { currency: string; amount: number }; // amount > 0: 受け取る / < 0: 払う
+
+// 自分の「純額」を通貨ごとに1つの数字にまとめる(Venmo/Cash App的な、画面冒頭に
+// 出す一番大事な数字)。個々の相手との内訳はcomputeBalancesの行で別途見せる。
+export function computeMyNet(entries: Entry[], meId: string | null): NetTotal[] {
+  if (!meId) return [];
+  const totals: Record<string, number> = {};
+  for (const e of entries) {
+    if (e.settled || e.type !== 'money' || !e.amount) continue;
+    const currency = e.currency || 'JPY';
+    if (e.from_user === meId) totals[currency] = (totals[currency] || 0) + e.amount;
+    else if (e.to_user === meId) totals[currency] = (totals[currency] || 0) - e.amount;
+  }
+  return Object.entries(totals)
+    .filter(([, amount]) => Math.abs(amount) >= 0.005)
+    .map(([currency, amount]) => ({ currency, amount }));
+}

@@ -40,11 +40,20 @@ EXPO_PUBLIC_DEMO_MODE=1 npx expo start --web
 
 ダミーの3人グループ(たろう・はなこ・じろう)とダミーの記録が入った状態で起動する。認証・DB通信は一切行わない。画面例:
 
-| グループ一覧 | グループ詳細 | 記録を追加 |
-|---|---|---|
-| ![groups](docs/screenshots/groups.png) | ![group detail](docs/screenshots/group-detail.png) | ![add entry](docs/screenshots/add-entry.png) |
+| グループ一覧 | 残高タブ | 台帳タブ | 記録を追加 |
+|---|---|---|---|
+| ![groups](docs/screenshots/groups.png) | ![balance](docs/screenshots/group-detail.png) | ![ledger](docs/screenshots/ledger.png) | ![add entry](docs/screenshots/add-entry.png) |
 
 `EXPO_PUBLIC_DEMO_MODE` は本番の `.env` には設定しないこと(設定するとログイン・実データが一切表示されなくなる)。
+
+## デザインの見直し(3回目)
+
+「UIが使いにくい・見にくい」という指摘を受け、Splitwise・PayPay・Venmoの設計思想を参考に構成を見直した。
+
+- **画面を「残高」「台帳」の2タブに分割**(PayPay: 1画面1アクションに絞る)。以前は1画面に残高カードと台帳を両方詰め込んでいた
+- **一番知りたい数字(純額)を画面冒頭に大きく表示**(Venmo/Cash App: 太字タイポグラフィで最重要情報を最初に見せる)
+- **緑=あなたが受け取る、赤=あなたが払う、という意味のある色分けを導入**(Splitwise)。前回の見直しでは装飾色を減らすことだけに気を取られ、貸し借りの向きという一番大事な情報を色で伝えられていなかった
+- **台帳をカード風から、日付見出し付きのフラットな一覧(アクティビティフィード)に変更**。精算済みはデフォルトで非表示にし、「精算済みN件を表示」で展開する(Splitwise: 情報量を絞るフィルター)
 
 ## 構成
 

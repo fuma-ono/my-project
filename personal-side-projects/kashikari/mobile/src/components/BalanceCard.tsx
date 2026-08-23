@@ -12,61 +12,69 @@ type Props = {
   onSettle: () => void;
 };
 
+// Splitwiseに倣い、「あなたが受け取る=緑」「あなたが払う=赤」という意味を持つ
+// 色分けにする(単なる装飾ではなく、金額の向きを一目で伝えるための色)。
+// 自分が関係しない行(グループ内の他の2人同士)は色を付けずニュートラルにする。
 export default function BalanceCard({ row, nameOf, meId, onSettle }: Props) {
   const debtorLabel = row.mine && row.debtor === meId ? 'あなた' : nameOf(row.debtor);
   const creditorLabel = row.mine && row.creditor === meId ? 'あなた' : nameOf(row.creditor);
   const amountLabel = row.type === 'money' ? formatMoney(row.amount, row.currency) : `${row.amount}件`;
 
+  const iOwe = row.mine && row.debtor === meId;
+  const iAmOwed = row.mine && row.creditor === meId;
+  const amountColor = iOwe ? colors.negative : iAmOwed ? colors.positive : colors.muted;
+  const directionLabel = iOwe ? '払う' : iAmOwed ? '受け取る' : null;
+
   return (
-    <View style={[styles.card, row.mine && styles.mine]}>
-      <View style={styles.topRow}>
-        <View style={styles.pair}>
-          <Avatar name={nameOf(row.debtor)} size="sm" />
-          <Text style={[styles.name, row.mine && row.debtor === meId && styles.me]} numberOfLines={1}>
-            {debtorLabel}
-          </Text>
-          <Text style={styles.arrow}>→</Text>
-          <Avatar name={nameOf(row.creditor)} size="sm" />
-          <Text style={[styles.name, row.mine && row.creditor === meId && styles.me]} numberOfLines={1}>
-            {creditorLabel}
-          </Text>
-        </View>
-        <Text style={[styles.amount, { color: row.type === 'money' ? colors.accent : colors.favor }]} numberOfLines={1}>
-          {amountLabel}
+    <View style={styles.row}>
+      <View style={styles.pair}>
+        <Avatar name={nameOf(row.debtor)} size="sm" />
+        <Text style={[styles.name, row.debtor === meId && styles.me]} numberOfLines={1}>
+          {debtorLabel}
+        </Text>
+        <Text style={styles.arrow}>→</Text>
+        <Avatar name={nameOf(row.creditor)} size="sm" />
+        <Text style={[styles.name, row.creditor === meId && styles.me]} numberOfLines={1}>
+          {creditorLabel}
         </Text>
       </View>
-      <Pressable onPress={onSettle} style={styles.settleBtn}>
-        <Text style={styles.settleText}>精算する</Text>
-      </Pressable>
+
+      <View style={styles.right}>
+        <View style={styles.amountBlock}>
+          {directionLabel && <Text style={[styles.directionLabel, { color: amountColor }]}>{directionLabel}</Text>}
+          <Text style={[styles.amount, { color: amountColor }]} numberOfLines={1}>
+            {amountLabel}
+          </Text>
+        </View>
+        <Pressable onPress={onSettle} hitSlop={8} style={styles.settleBtn}>
+          <Text style={styles.settleText}>精算</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 14,
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 10,
-    shadowColor: '#3c2814',
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+    paddingVertical: 14,
   },
-  mine: { borderWidth: 1.5, borderColor: `${colors.accent}73` },
-  topRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   pair: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
-  name: { fontFamily: fonts.bodySemiBold, fontSize: 14, color: colors.ink, flexShrink: 1 },
-  me: { color: colors.accent },
+  name: { fontFamily: fonts.bodyMedium, fontSize: 14.5, color: colors.ink, flexShrink: 1 },
+  me: { fontFamily: fonts.bodySemiBold },
   arrow: { color: colors.muted },
-  amount: { fontFamily: fonts.display, fontSize: 18, flexShrink: 0 },
+  right: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  amountBlock: { alignItems: 'flex-end' },
+  directionLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, marginBottom: 1 },
+  amount: { fontFamily: fonts.display, fontSize: 19, flexShrink: 0 },
   settleBtn: {
-    alignSelf: 'flex-end',
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.surface2,
     borderRadius: 999,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
-  settleText: { fontFamily: fonts.bodySemiBold, fontSize: 12.5, color: colors.accent },
+  settleText: { fontFamily: fonts.bodySemiBold, fontSize: 12, color: colors.muted },
 });
