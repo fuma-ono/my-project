@@ -38,6 +38,7 @@ HERE = pathlib.Path(__file__).parent
 CONFIG_FILE = HERE / "rakuten-config.json"
 PRODUCTS_FILE = HERE / "products.json"
 CANDIDATES_MD = HERE / "product-candidates.md"
+AMAZON_LINKS_MD = HERE / "amazon-links.md"
 
 SEARCH_API = "https://app.rakuten.co.jp/services/api/IchibaItem/Search/20220601"
 
@@ -105,9 +106,34 @@ def score_item(item: dict) -> float:
     return round(demand_score + quality_score + price_score, 1)
 
 
+def load_amazon_links() -> dict[str, str]:
+    """amazon-links.md の表を {商品名キーワード: URL} に読み込む(手動管理、API不要)。"""
+    if not AMAZON_LINKS_MD.exists():
+        return {}
+    links = {}
+    for line in AMAZON_LINKS_MD.read_text(encoding="utf-8").splitlines():
+        if not line.startswith("|"):
+            continue
+        cols = [c.strip() for c in line.strip("|").split("|")]
+        if len(cols) != 2 or cols[0] in ("商品名(researcher.pyの候補と対応させる)", "---"):
+            continue
+        name, url = cols
+        if url.startswith("http"):
+            links[name] = url
+    return links
+
+
+def match_amazon_link(product_name: str, amazon_links: dict[str, str]) -> str | None:
+    for keyword, url in amazon_links.items():
+        if keyword and keyword in product_name:
+            return url
+    return None
+
+
 def main() -> None:
     config = load_config()
     app_id, affiliate_id = config["app_id"], config["affiliate_id"]
+    amazon_links = load_amazon_links()
 
     all_candidates = []
     for keyword in KEYWORDS:
@@ -120,12 +146,18 @@ def main() -> None:
             d = item["Item"]
             if d.get("itemPrice", 0) > MAX_PRICE:
                 continue
+            name = d.get("itemName")
+            amazon_url = match_amazon_link(name, amazon_links)
             all_candidates.append({
-                "name": d.get("itemName"),
+                "name": name,
                 "price": d.get("itemPrice"),
                 "review_count": d.get("reviewCount", 0),
                 "review_average": d.get("reviewAverage", 0),
                 "affiliate_url": d.get("affiliateUrl") or d.get("itemUrl"),
+                "amazon_affiliate_url": amazon_url,
+                # Amazon側の実績(3件の成果)を作るまでは、手動リンクが登録済みの商品は
+                # Amazon優先で紹介する。無ければ楽天(完全自動)を使う。
+                "preferred_platform": "amazon" if amazon_url else "rakuten",
                 "keyword": keyword,
                 "score": score_item(item),
             })
@@ -145,14 +177,18 @@ def main() -> None:
         "",
         "## 上位候補",
         "",
-        "| 商品名 | 価格 | レビュー数 | 評価 | スコア | リンク |",
-        "|---|---|---|---|---|---|",
+        "Amazonリンクが `amazon-links.md` に登録済みの商品は、Amazon側の実績作りを優先して",
+        "Amazonリンクを使う(推奨プラットフォーム欄が `amazon`)。未登録の商品は楽天(完全自動)。",
+        "",
+        "| 商品名 | 価格 | レビュー数 | 評価 | スコア | 推奨 | リンク |",
+        "|---|---|---|---|---|---|---|",
     ]
     for c in top:
         name = c["name"][:40].replace("|", "-")
+        link = c["amazon_affiliate_url"] if c["preferred_platform"] == "amazon" else c["affiliate_url"]
         lines.append(
             f"| {name} | ¥{c['price']:,} | {c['review_count']} | {c['review_average']} | "
-            f"{c['score']} | [リンク]({c['affiliate_url']}) |"
+            f"{c['score']} | {c['preferred_platform']} | [リンク]({link}) |"
         )
     lines += [
         "",
@@ -160,6 +196,7 @@ def main() -> None:
         "",
         "- 1商品につき週1回までの紹介に留める(同じ商品を毎日連投しない)",
         "- 実際にクリック・購入があった商品は下部の「実績」に記録する",
+        "- Amazon側で3件の成果が貯まったら、`amazon-links.md` の運用をPA-API自動化に切り替える",
         "",
         "## 実績",
         "",

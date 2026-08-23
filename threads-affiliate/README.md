@@ -57,6 +57,16 @@ Windowsの場合、タスクスケジューラで以下を週2〜3回のトリ�
 
 週1回程度、`research.py` → `git push` をタスクスケジューラに登録しておけば、商品調査も無人化できる(`publish.py`と同様の仕組み)。
 
+### Amazonアフィリエイトとの併用
+
+Amazon公式のPA-API(商品検索の自動化)は、**直近180日で3件以上の成果が無いとアクセスできない**ため、新規アカウントでは楽天と同じ形の完全自動化ができない。そのため当面は次の運用にしている:
+
+1. Amazonアソシエイトに登録し、SiteStripeで商品ページごとに手動でアフィリエイトリンクを生成
+2. `threads-affiliate/amazon-links.md` の表に「商品名キーワード → リンク」を追加(手動更新、`git push`)
+3. `research.py` が楽天APIの候補と `amazon-links.md` を突き合わせ、一致した商品はAmazon側の実績作りを優先してAmazonリンクを使う(`product-candidates.md` の「推奨」欄が `amazon`)。一致しなければ楽天(完全自動)にフォールバックする
+
+Amazon経由で3件の成果が貯まったらPA-APIへのアクセス申請ができるようになるので、その時点で楽天と同様の自動検索スクリプトに切り替える(詳細は `amazon-links.md` 参照)。
+
 ## 投稿の中身
 
 `threads-affiliate/pending/*.json` に `{"text": "...", "affiliate_link": "..."}` の形式で置かれた下書きを、古いものから1件ずつ投稿する。下書きは週次のRoutine(クラウド側)が自動生成し、コミット・pushする。オーナーは `git pull` するだけで最新の下書きを受け取れる。
