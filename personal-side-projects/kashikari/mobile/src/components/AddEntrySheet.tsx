@@ -215,12 +215,14 @@ function PersonPicker({
     Alert.alert(
       '選ぶ',
       undefined,
-      members.map((m) => ({ text: m.display_name, onPress: () => onSelect(m.id) })).concat([{ text: 'キャンセル', style: 'cancel' } as any])
+      members
+        .map((m) => ({ text: m.avatar_emoji ? `${m.avatar_emoji} ${m.display_name}` : m.display_name, onPress: () => onSelect(m.id) }))
+        .concat([{ text: 'キャンセル', style: 'cancel' } as any])
     );
   };
   return (
     <Pressable onPress={open} style={styles.personPicker}>
-      {selected && <Avatar name={selected.display_name} size="sm" />}
+      {selected && <Avatar name={selected.display_name} emoji={selected.avatar_emoji} size="sm" />}
       <Text style={styles.personName} numberOfLines={1}>
         {selected?.display_name ?? '選択'}
       </Text>

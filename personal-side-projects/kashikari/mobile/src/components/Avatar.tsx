@@ -1,22 +1,29 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { avatarColor, avatarInitial, fonts } from '../theme';
+import { avatarColor, avatarInitial } from '../theme';
 
-export default function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' }) {
+type Props = {
+  name: string;
+  emoji?: string | null;
+  size?: 'sm' | 'md';
+};
+
+// emojiが選ばれていれば絵文字アバター、なければ従来通り頭文字を表示する
+// (絵文字選択前の既存ユーザーや、フォールバック用)。
+export default function Avatar({ name, emoji, size = 'md' }: Props) {
   const dim = size === 'sm' ? 24 : 34;
   return (
-    <View
-      style={[
-        styles.base,
-        { width: dim, height: dim, borderRadius: dim / 2, backgroundColor: avatarColor(name) },
-      ]}
-    >
-      <Text style={[styles.text, { fontSize: size === 'sm' ? 11.5 : 14 }]}>{avatarInitial(name)}</Text>
+    <View style={[styles.base, { width: dim, height: dim, borderRadius: dim / 2, backgroundColor: avatarColor(name) }]}>
+      {emoji ? (
+        <Text style={{ fontSize: dim * 0.58 }}>{emoji}</Text>
+      ) : (
+        <Text style={[styles.text, { fontSize: size === 'sm' ? 11.5 : 14 }]}>{avatarInitial(name)}</Text>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   base: { alignItems: 'center', justifyContent: 'center' },
-  text: { color: '#fff', ...fonts.bodySemiBold },
+  text: { color: '#fff', fontWeight: '600' },
 });

@@ -3,6 +3,7 @@ import { Alert, FlatList, Pressable, RefreshControl, SectionList, Share, StyleSh
 
 import AddEntrySheet from '../components/AddEntrySheet';
 import Avatar from '../components/Avatar';
+import AvatarPicker from '../components/AvatarPicker';
 import BalanceCard from '../components/BalanceCard';
 import EntryRow from '../components/EntryRow';
 import Fab from '../components/Fab';
@@ -20,15 +21,19 @@ type Props = {
   meId: string | null;
   onBack: () => void;
   onLeave: (groupId: string) => Promise<{ error: string | null }>;
+  onChangeAvatar: (emoji: string) => Promise<{ error: string | null }>;
 };
 
-export default function GroupScreen({ group, meId, onBack, onLeave }: Props) {
+export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvatar }: Props) {
   const { members, entries, loading, refresh, addEntry, toggleSettled, deleteEntry, settlePair } = useGroupData(group.id, meId);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('balance');
   const [showSettled, setShowSettled] = useState(false);
 
   const nameOf = (id: string) => members.find((m) => m.id === id)?.display_name ?? '不明';
+  const emojiOf = (id: string) => members.find((m) => m.id === id)?.avatar_emoji ?? null;
+  const me = members.find((m) => m.id === meId);
   const balances = useMemo(() => computeBalances(entries, meId), [entries, meId]);
   const netTotals = useMemo(() => computeMyNet(entries, meId), [entries, meId]);
 
@@ -38,6 +43,19 @@ export default function GroupScreen({ group, meId, onBack, onLeave }: Props) {
   );
   const sections = useMemo(() => groupEntriesByDate(visibleEntries), [visibleEntries]);
   const settledCount = entries.length - entries.filter((e) => !e.settled).length;
+
+  const avatarPicker = (
+    <AvatarPicker
+      visible={avatarPickerOpen}
+      name={me?.display_name ?? '?'}
+      selected={me?.avatar_emoji ?? null}
+      onSelect={async (emoji) => {
+        setAvatarPickerOpen(false);
+        await onChangeAvatar(emoji);
+      }}
+      onClose={() => setAvatarPickerOpen(false)}
+    />
+  );
 
   const invite = () => {
     Share.share({ message: `kashikariの「${group.name}」に招待するよ。アプリを開いて招待コード「${group.invite_code}」で参加してね。` });
@@ -74,12 +92,20 @@ export default function GroupScreen({ group, meId, onBack, onLeave }: Props) {
       <Text style={styles.title}>{group.name}</Text>
 
       <View style={styles.memberStrip}>
-        {members.map((m) => (
-          <View key={m.id} style={styles.memberChip}>
-            <Avatar name={m.display_name} size="sm" />
-            <Text style={styles.memberName}>{m.display_name}</Text>
-          </View>
-        ))}
+        {members.map((m) =>
+          m.id === meId ? (
+            <Pressable key={m.id} onPress={() => setAvatarPickerOpen(true)} style={styles.memberChip}>
+              <Avatar name={m.display_name} emoji={m.avatar_emoji} size="sm" />
+              <Text style={styles.memberName}>{m.display_name}</Text>
+              <Text style={styles.editHint}>変更</Text>
+            </Pressable>
+          ) : (
+            <View key={m.id} style={styles.memberChip}>
+              <Avatar name={m.display_name} emoji={m.avatar_emoji} size="sm" />
+              <Text style={styles.memberName}>{m.display_name}</Text>
+            </View>
+          )
+        )}
         <Pressable onPress={invite} style={styles.inviteChip}>
           <Text style={styles.inviteChipText}>＋ 招待</Text>
         </Pressable>
@@ -112,12 +138,19 @@ export default function GroupScreen({ group, meId, onBack, onLeave }: Props) {
             </View>
           }
           renderItem={({ item }) => (
-            <BalanceCard row={item} nameOf={nameOf} meId={meId} onSettle={() => settlePair(item.type, item.debtor, item.creditor, item.currency)} />
+            <BalanceCard
+              row={item}
+              nameOf={nameOf}
+              emojiOf={emojiOf}
+              meId={meId}
+              onSettle={() => settlePair(item.type, item.debtor, item.creditor, item.currency)}
+            />
           )}
           ItemSeparatorComponent={() => <View style={styles.hairline} />}
         />
         <Fab onPress={() => setSheetOpen(true)} disabled={members.length < 2} />
         <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} />
+        {avatarPicker}
       </View>
     );
   }
@@ -153,6 +186,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave }: Props) {
       />
       <Fab onPress={() => setSheetOpen(true)} disabled={members.length < 2} />
       <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} />
+      {avatarPicker}
     </View>
   );
 }
@@ -178,6 +212,7 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
   },
   memberName: { ...fonts.bodySemiBold, fontSize: 13, color: colors.ink },
+  editHint: { ...fonts.bodyMedium, fontSize: 11, color: colors.accent },
   inviteChip: {
     borderWidth: 1.5,
     borderColor: colors.muted,

@@ -13,7 +13,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
     if (!groupId) return;
     setLoading(true);
     const [membersRes, entriesRes] = await Promise.all([
-      supabase.from('group_members').select('profiles(id, display_name)').eq('group_id', groupId),
+      supabase.from('group_members').select('profiles(id, display_name, avatar_emoji)').eq('group_id', groupId),
       supabase.from('entries').select('*').eq('group_id', groupId).order('created_at', { ascending: false }),
     ]);
     if (membersRes.data) {

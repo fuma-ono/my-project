@@ -4,12 +4,12 @@ import type { Entry, Group, Profile } from '../types';
 
 export const DEMO_ME_ID = 'demo-taro';
 
-export const DEMO_PROFILE: Profile = { id: DEMO_ME_ID, display_name: 'たろう' };
+export const DEMO_PROFILE: Profile = { id: DEMO_ME_ID, display_name: 'たろう', avatar_emoji: '🦊' };
 
 export const DEMO_MEMBERS: Profile[] = [
   DEMO_PROFILE,
-  { id: 'demo-hanako', display_name: 'はなこ' },
-  { id: 'demo-jiro', display_name: 'じろう' },
+  { id: 'demo-hanako', display_name: 'はなこ', avatar_emoji: '🐰' },
+  { id: 'demo-jiro', display_name: 'じろう', avatar_emoji: null },
 ];
 
 export const DEMO_GROUP: Group = {

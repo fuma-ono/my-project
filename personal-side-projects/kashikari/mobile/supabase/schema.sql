@@ -13,6 +13,10 @@
 -- (Row Level Security)でデータベース側で強制する。アプリのUI側で表示を
 -- 制限しているだけではない点が重要(以前のWebプロトタイプはUI側の制限しか
 -- なく、URLさえ知っていれば誰でも全データが見えてしまう問題があったため)。
+--
+-- このファイルは複数回実行しても安全(create/alterはすべてif not exists等で
+-- 冪等にしてある)。すでにプロジェクトを作成済みの場合も、更新のたびに
+-- SQL Editorで全文を再実行すれば、追加された列やRPCが反映される。
 
 -- ============================================================
 -- 1. profiles: 認証ユーザー1人につき1行(匿名サインインでも作成される)
@@ -21,8 +25,13 @@
 create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   display_name text not null check (char_length(display_name) between 1 and 20),
+  avatar_emoji text,
   created_at timestamptz not null default now()
 );
+
+-- schema.sqlを2回目以降に再実行しても安全なように、既存テーブルにも
+-- 列を追加できるようにしておく(初回作成時は上のcreate tableで既に入る)。
+alter table public.profiles add column if not exists avatar_emoji text;
 
 alter table public.profiles enable row level security;
 

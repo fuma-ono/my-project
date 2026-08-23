@@ -1,6 +1,7 @@
 export type Profile = {
   id: string;
   display_name: string;
+  avatar_emoji: string | null;
 };
 
 export type Group = {

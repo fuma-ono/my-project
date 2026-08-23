@@ -4,6 +4,8 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import type { Profile } from '../types';
 
+const PROFILE_COLUMNS = 'id, display_name, avatar_emoji';
+
 type AuthState = {
   loading: boolean;
   userId: string | null;
@@ -20,7 +22,7 @@ export function useAuth() {
   });
 
   const loadProfile = useCallback(async (userId: string) => {
-    const { data, error } = await supabase.from('profiles').select('id, display_name').eq('id', userId).maybeSingle();
+    const { data, error } = await supabase.from('profiles').select(PROFILE_COLUMNS).eq('id', userId).maybeSingle();
     if (error) {
       setState((s) => ({ ...s, loading: false, error: error.message }));
       return;
@@ -62,14 +64,14 @@ export function useAuth() {
   }, [bootstrap, loadProfile]);
 
   const setDisplayName = useCallback(
-    async (name: string) => {
+    async (name: string, avatarEmoji: string | null) => {
       if (!state.userId) return { error: '未認証です' };
       const trimmed = name.trim();
       if (!trimmed) return { error: '名前を入力してください' };
       const { data, error } = await supabase
         .from('profiles')
-        .upsert({ id: state.userId, display_name: trimmed })
-        .select('id, display_name')
+        .upsert({ id: state.userId, display_name: trimmed, avatar_emoji: avatarEmoji })
+        .select(PROFILE_COLUMNS)
         .single();
       if (error) return { error: error.message };
       setState((s) => ({ ...s, profile: data }));
@@ -78,5 +80,21 @@ export function useAuth() {
     [state.userId]
   );
 
-  return { ...state, setDisplayName };
+  const updateAvatar = useCallback(
+    async (avatarEmoji: string) => {
+      if (!state.userId) return { error: '未認証です' };
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({ avatar_emoji: avatarEmoji })
+        .eq('id', state.userId)
+        .select(PROFILE_COLUMNS)
+        .single();
+      if (error) return { error: error.message };
+      setState((s) => ({ ...s, profile: data }));
+      return { error: null };
+    },
+    [state.userId]
+  );
+
+  return { ...state, setDisplayName, updateAvatar };
 }

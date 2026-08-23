@@ -8,6 +8,7 @@ import type { BalanceRow } from '../types';
 type Props = {
   row: BalanceRow;
   nameOf: (id: string) => string;
+  emojiOf: (id: string) => string | null;
   meId: string | null;
   onSettle: () => void;
 };
@@ -15,7 +16,7 @@ type Props = {
 // Splitwiseに倣い、「あなたが受け取る=緑」「あなたが払う=赤」という意味を持つ
 // 色分けにする(単なる装飾ではなく、金額の向きを一目で伝えるための色)。
 // 自分が関係しない行(グループ内の他の2人同士)は色を付けずニュートラルにする。
-export default function BalanceCard({ row, nameOf, meId, onSettle }: Props) {
+export default function BalanceCard({ row, nameOf, emojiOf, meId, onSettle }: Props) {
   const debtorLabel = row.mine && row.debtor === meId ? 'あなた' : nameOf(row.debtor);
   const creditorLabel = row.mine && row.creditor === meId ? 'あなた' : nameOf(row.creditor);
   const amountLabel = row.type === 'money' ? formatMoney(row.amount, row.currency) : `${row.amount}件`;
@@ -28,12 +29,12 @@ export default function BalanceCard({ row, nameOf, meId, onSettle }: Props) {
   return (
     <View style={styles.row}>
       <View style={styles.pair}>
-        <Avatar name={nameOf(row.debtor)} size="sm" />
+        <Avatar name={nameOf(row.debtor)} emoji={emojiOf(row.debtor)} size="sm" />
         <Text style={[styles.name, row.debtor === meId && styles.me]} numberOfLines={1}>
           {debtorLabel}
         </Text>
         <Text style={styles.arrow}>→</Text>
-        <Avatar name={nameOf(row.creditor)} size="sm" />
+        <Avatar name={nameOf(row.creditor)} emoji={emojiOf(row.creditor)} size="sm" />
         <Text style={[styles.name, row.creditor === meId && styles.me]} numberOfLines={1}>
           {creditorLabel}
         </Text>

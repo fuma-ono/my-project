@@ -5,6 +5,7 @@ import { Alert, FlatList, Pressable, SectionList, StyleSheet, Text, View } from 
 
 import AddEntrySheet from '../components/AddEntrySheet';
 import Avatar from '../components/Avatar';
+import AvatarPicker from '../components/AvatarPicker';
 import BalanceCard from '../components/BalanceCard';
 import EntryRow from '../components/EntryRow';
 import Fab from '../components/Fab';
@@ -12,7 +13,7 @@ import NetSummary from '../components/NetSummary';
 import { computeBalances, computeMyNet } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
 import { colors, fonts } from '../theme';
-import type { Entry, EntryType } from '../types';
+import type { Entry, EntryType, Profile } from '../types';
 import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS } from './mockData';
 
 type Tab = 'balance' | 'ledger';
@@ -20,13 +21,16 @@ let demoIdSeq = 100;
 
 export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   const [entries, setEntries] = useState<Entry[]>(DEMO_ENTRIES);
+  const [members, setMembers] = useState<Profile[]>(DEMO_MEMBERS);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('balance');
   const [showSettled, setShowSettled] = useState(false);
-  const members = DEMO_MEMBERS;
   const meId = DEMO_ME_ID;
+  const me = members.find((m) => m.id === meId);
 
   const nameOf = (id: string) => members.find((m) => m.id === id)?.display_name ?? '不明';
+  const emojiOf = (id: string) => members.find((m) => m.id === id)?.avatar_emoji ?? null;
   const balances = useMemo(() => computeBalances(entries, meId), [entries]);
   const netTotals = useMemo(() => computeMyNet(entries, meId), [entries]);
   const visibleEntries = useMemo(() => (showSettled ? entries : entries.filter((e) => !e.settled)), [entries, showSettled]);
@@ -88,12 +92,20 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
       <Text style={styles.title}>{DEMO_GROUP.name}</Text>
 
       <View style={styles.memberStrip}>
-        {members.map((m) => (
-          <View key={m.id} style={styles.memberChip}>
-            <Avatar name={m.display_name} size="sm" />
-            <Text style={styles.memberName}>{m.display_name}</Text>
-          </View>
-        ))}
+        {members.map((m) =>
+          m.id === meId ? (
+            <Pressable key={m.id} onPress={() => setAvatarPickerOpen(true)} style={styles.memberChip}>
+              <Avatar name={m.display_name} emoji={m.avatar_emoji} size="sm" />
+              <Text style={styles.memberName}>{m.display_name}</Text>
+              <Text style={styles.editHint}>変更</Text>
+            </Pressable>
+          ) : (
+            <View key={m.id} style={styles.memberChip}>
+              <Avatar name={m.display_name} emoji={m.avatar_emoji} size="sm" />
+              <Text style={styles.memberName}>{m.display_name}</Text>
+            </View>
+          )
+        )}
         <Pressable onPress={() => Alert.alert('デモモードでは招待できません')} style={styles.inviteChip}>
           <Text style={styles.inviteChipText}>＋ 招待</Text>
         </Pressable>
@@ -125,7 +137,13 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
             </View>
           }
           renderItem={({ item }) => (
-            <BalanceCard row={item} nameOf={nameOf} meId={meId} onSettle={() => settlePair(item.type, item.debtor, item.creditor, item.currency)} />
+            <BalanceCard
+              row={item}
+              nameOf={nameOf}
+              emojiOf={emojiOf}
+              meId={meId}
+              onSettle={() => settlePair(item.type, item.debtor, item.creditor, item.currency)}
+            />
           )}
           ItemSeparatorComponent={() => <View style={styles.hairline} />}
         />
@@ -156,6 +174,17 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
       <Fab onPress={() => setSheetOpen(true)} />
 
       <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} />
+
+      <AvatarPicker
+        visible={avatarPickerOpen}
+        name={me?.display_name ?? '?'}
+        selected={me?.avatar_emoji ?? null}
+        onSelect={(emoji) => {
+          setAvatarPickerOpen(false);
+          setMembers((prev) => prev.map((m) => (m.id === meId ? { ...m, avatar_emoji: emoji } : m)));
+        }}
+        onClose={() => setAvatarPickerOpen(false)}
+      />
     </View>
   );
 }
@@ -182,6 +211,7 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
   },
   memberName: { ...fonts.bodySemiBold, fontSize: 13, color: colors.ink },
+  editHint: { ...fonts.bodyMedium, fontSize: 11, color: colors.accent },
   inviteChip: {
     borderWidth: 1.5,
     borderColor: colors.muted,

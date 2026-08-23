@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import Avatar from '../components/Avatar';
+import AvatarPicker from '../components/AvatarPicker';
 import Mark from '../components/Mark';
 import PrimaryButton from '../components/PrimaryButton';
 import { colors, fonts } from '../theme';
@@ -8,15 +10,17 @@ import { colors, fonts } from '../theme';
 export default function OnboardingScreen({
   onSubmit,
 }: {
-  onSubmit: (name: string) => Promise<{ error: string | null }>;
+  onSubmit: (name: string, avatarEmoji: string | null) => Promise<{ error: string | null }>;
 }) {
   const [name, setName] = useState('');
+  const [avatarEmoji, setAvatarEmoji] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const submit = async () => {
     setSubmitting(true);
-    const res = await onSubmit(name);
+    const res = await onSubmit(name, avatarEmoji);
     setSubmitting(false);
     if (res.error) setError(res.error);
   };
@@ -42,9 +46,27 @@ export default function OnboardingScreen({
         style={styles.input}
         autoFocus
       />
+
+      <Text style={styles.label}>アイコン</Text>
+      <Pressable onPress={() => setPickerOpen(true)} style={styles.avatarRow}>
+        <Avatar name={name || '?'} emoji={avatarEmoji} size="md" />
+        <Text style={styles.avatarRowText}>{avatarEmoji ? 'アイコンを変える' : 'アイコンを選ぶ(あとで変更できます)'}</Text>
+      </Pressable>
+
       {error && <Text style={styles.error}>{error}</Text>}
 
       <PrimaryButton title="はじめる" onPress={submit} loading={submitting} disabled={!name.trim()} style={styles.button} />
+
+      <AvatarPicker
+        visible={pickerOpen}
+        name={name || '?'}
+        selected={avatarEmoji}
+        onSelect={(e) => {
+          setAvatarEmoji(e);
+          setPickerOpen(false);
+        }}
+        onClose={() => setPickerOpen(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -72,7 +94,20 @@ const styles = StyleSheet.create({
     color: colors.ink,
     borderWidth: 1.5,
     borderColor: colors.line,
+    marginBottom: 20,
   },
+  avatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+  },
+  avatarRowText: { ...fonts.bodyMedium, fontSize: 14, color: colors.ink, flexShrink: 1 },
   error: { color: colors.danger, ...fonts.body, fontSize: 13, marginTop: 8 },
   button: { marginTop: 24, alignSelf: 'flex-start', paddingHorizontal: 28 },
 });

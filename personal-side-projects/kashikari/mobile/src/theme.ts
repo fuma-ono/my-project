@@ -73,3 +73,13 @@ export function avatarColor(name: string): string {
 export function avatarInitial(name: string): string {
   return Array.from(name || '?')[0] || '?';
 }
+
+// アバターとして選べる絵文字。動物モチーフで統一し、雰囲気を揃えている。
+// カスタム画像のアップロード・ホスティングを持たない構成のため、追加コスト
+// なしで「イラストらしいアイコン」を選べるようにする狙い。
+export const AVATAR_EMOJI_OPTIONS = [
+  '🦊', '🐻', '🐼', '🐨', '🐰', '🐯',
+  '🦁', '🐸', '🐵', '🐶', '🐱', '🐹',
+  '🦄', '🐺', '🐷', '🐮', '🐔', '🐧',
+  '🦉', '🐙', '🐢', '🦋', '🐝', '🐬',
+] as const;

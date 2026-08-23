@@ -21,7 +21,7 @@ type Screen = { name: 'groups' } | { name: 'group'; group: Group };
 const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO_MODE === '1';
 
 export default function App() {
-  const { loading: authLoading, userId, profile, setDisplayName } = useAuth();
+  const { loading: authLoading, userId, profile, setDisplayName, updateAvatar } = useAuth();
   const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup } = useGroups(DEMO_MODE ? null : userId);
   const [screen, setScreen] = useState<Screen>({ name: 'groups' });
   const [minSplashDone, setMinSplashDone] = useState(false);
@@ -67,7 +67,13 @@ export default function App() {
         />
       )}
       {screen.name === 'group' && (
-        <GroupScreen group={screen.group} meId={userId} onBack={() => setScreen({ name: 'groups' })} onLeave={leaveGroup} />
+        <GroupScreen
+          group={screen.group}
+          meId={userId}
+          onBack={() => setScreen({ name: 'groups' })}
+          onLeave={leaveGroup}
+          onChangeAvatar={updateAvatar}
+        />
       )}
       <StatusBar style="dark" />
     </>
