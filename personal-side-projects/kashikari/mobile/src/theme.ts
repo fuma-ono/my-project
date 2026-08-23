@@ -6,6 +6,13 @@
 // コーラル→プラムのグラデーションを使い、視覚的な「決め」を作った。それ以外の
 // 面(背景・カード・本文)はニュートラルのまま保ち、装飾を全面に広げて
 // ごちゃつかせないようにする(ブランドらしさは1箇所に集中させ、他は静かに)。
+//
+// 5回目の見直し: 「フォントがまだダメ・もう少しオシャレに」という指摘を受け、
+// Manrope1系統から2系統構成に戻した。見出し・大きい数字(ワードマーク、
+// 画面タイトル、残高のヒーロー数字)にはSpace Grotesk(数字のデザインが良く、
+// モダンなプロダクトでよく使われる個性のある書体)を、本文・ラベルは
+// 引き続きManrope(可読性重視)のまま。丸ゴシックのFredokaのような
+// 「子供っぽさ」を避けつつ、単一書体だった前回より性格を持たせる狙い。
 
 export const colors = {
   bg: '#fff9f2',
@@ -32,8 +39,8 @@ export const colors = {
 } as const;
 
 export const fonts = {
-  display: 'Manrope_700Bold',
-  displayMedium: 'Manrope_600SemiBold',
+  display: 'SpaceGrotesk_700Bold',
+  displayMedium: 'SpaceGrotesk_600SemiBold',
   body: 'Manrope_400Regular',
   bodyMedium: 'Manrope_500Medium',
   bodySemiBold: 'Manrope_600SemiBold',
