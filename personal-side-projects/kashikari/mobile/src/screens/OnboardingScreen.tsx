@@ -81,6 +81,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.line,
   },
-  error: { color: colors.owe, fontFamily: fonts.body, fontSize: 13, marginTop: 8 },
+  error: { color: colors.danger, fontFamily: fonts.body, fontSize: 13, marginTop: 8 },
   button: { marginTop: 24, alignSelf: 'flex-start', paddingHorizontal: 28 },
 });

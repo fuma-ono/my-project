@@ -1,8 +1,13 @@
 import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { useFonts as useFredoka, Fredoka_500Medium, Fredoka_600SemiBold } from '@expo-google-fonts/fredoka';
-import { useFonts as useWorkSans, WorkSans_400Regular, WorkSans_500Medium, WorkSans_600SemiBold } from '@expo-google-fonts/work-sans';
+import {
+  useFonts as useManrope,
+  Manrope_400Regular,
+  Manrope_500Medium,
+  Manrope_600SemiBold,
+  Manrope_700Bold,
+} from '@expo-google-fonts/manrope';
 
 import DemoApp from './src/demo/DemoApp';
 import GroupScreen from './src/screens/GroupScreen';
@@ -20,13 +25,12 @@ type Screen = { name: 'groups' } | { name: 'group'; group: Group };
 const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO_MODE === '1';
 
 export default function App() {
-  const [fredokaLoaded] = useFredoka({ Fredoka_500Medium, Fredoka_600SemiBold });
-  const [workSansLoaded] = useWorkSans({ WorkSans_400Regular, WorkSans_500Medium, WorkSans_600SemiBold });
+  const [manropeLoaded] = useManrope({ Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold });
   const { loading: authLoading, userId, profile, setDisplayName } = useAuth();
   const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup } = useGroups(DEMO_MODE ? null : userId);
   const [screen, setScreen] = useState<Screen>({ name: 'groups' });
 
-  if (!fredokaLoaded || !workSansLoaded) {
+  if (!manropeLoaded) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator color={colors.accent} size="large" />

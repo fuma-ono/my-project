@@ -38,10 +38,8 @@ export default function EntryRow({ entry, nameOf, onToggleSettled, onDelete }: P
     );
   };
 
-  const accent = entry.type === 'money' ? colors.accent : colors.favor;
-
   return (
-    <View style={[styles.row, { borderColor: settled ? colors.line : accent, borderStyle: settled ? 'dashed' : 'solid' }]}>
+    <View style={[styles.row, settled && styles.rowSettled]}>
       <View style={[styles.badge, { backgroundColor: entry.type === 'money' ? colors.accentSoft : colors.favorSoft }]}>
         <Text style={styles.badgeEmoji}>{entry.type === 'money' ? '💰' : '🤝'}</Text>
       </View>
@@ -86,10 +84,11 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 12,
     borderWidth: 1.5,
-    borderLeftWidth: 4,
+    borderColor: colors.line,
     borderRadius: 12,
     backgroundColor: colors.surface,
   },
+  rowSettled: { borderStyle: 'dashed' },
   badge: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   badgeEmoji: { fontSize: 17 },
   main: { flex: 1, minWidth: 0 },

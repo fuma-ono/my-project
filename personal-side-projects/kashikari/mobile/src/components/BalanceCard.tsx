@@ -31,7 +31,7 @@ export default function BalanceCard({ row, nameOf, meId, onSettle }: Props) {
             {creditorLabel}
           </Text>
         </View>
-        <Text style={[styles.amount, { color: row.type === 'money' ? colors.owe : colors.favor }]} numberOfLines={1}>
+        <Text style={[styles.amount, { color: row.type === 'money' ? colors.accent : colors.favor }]} numberOfLines={1}>
           {amountLabel}
         </Text>
       </View>

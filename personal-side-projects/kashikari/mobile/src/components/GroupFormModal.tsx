@@ -75,6 +75,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.ink,
   },
-  error: { color: colors.owe, fontFamily: fonts.body, fontSize: 13, marginTop: 8 },
+  error: { color: colors.danger, fontFamily: fonts.body, fontSize: 13, marginTop: 8 },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 18 },
 });
