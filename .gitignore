@@ -32,3 +32,4 @@ love-note/storage-state.json
 
 # threads-affiliate: API access token + app secret, never commit
 threads-affiliate/access-token.json
+threads-affiliate/rakuten-config.json

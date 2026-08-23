@@ -42,6 +42,21 @@ Windowsの場合、タスクスケジューラで以下を週2〜3回のトリ�
 
 トークン延長用に、`threads-affiliate/refresh_token.py` も月1回のトリガーで登録しておく。
 
+## 商品調査(楽天API、Phase 1〜2)
+
+こちらもクラウドからは `webservice.rakuten.co.jp` への接続がブロックされているため、オーナーのPCで実行する。
+
+1. [webservice.rakuten.co.jp](https://webservice.rakuten.co.jp/) でアプリIDを発行(即時・無料)
+2. 楽天アフィリエイトの管理画面でアフィリエイトIDを確認
+3. 実行:
+   ```
+   python threads-affiliate/research.py
+   ```
+   初回はアプリID・アフィリエイトIDの入力を求められる(以降は保存された設定を使う)
+4. `product-candidates.md` が最新の候補で更新されるので、`git add / commit / push`
+
+週1回程度、`research.py` → `git push` をタスクスケジューラに登録しておけば、商品調査も無人化できる(`publish.py`と同様の仕組み)。
+
 ## 投稿の中身
 
 `threads-affiliate/pending/*.json` に `{"text": "...", "affiliate_link": "..."}` の形式で置かれた下書きを、古いものから1件ずつ投稿する。下書きは週次のRoutine(クラウド側)が自動生成し、コミット・pushする。オーナーは `git pull` するだけで最新の下書きを受け取れる。
