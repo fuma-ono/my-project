@@ -8,7 +8,7 @@
     "userInterfaceStyle": "light",
     "scheme": "kashikari",
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "レシートを撮影して記録に添付するために使用します。",
         "NSPhotoLibraryUsageDescription": "レシートの写真を記録に添付するために使用します。"
