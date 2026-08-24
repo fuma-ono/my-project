@@ -619,28 +619,28 @@
             <div class="unit-name">💬 モヤスカ</div>
             <div class="unit-tagline"><a href="https://youtube.com/channel/UCrbgwaQhPlDOcQGfUF29VFQ" target="_blank" rel="noopener">@moyasuka</a> — LINEドラマ×AI音声合成のShorts(第4事業)</div>
           </div>
-          <span class="status-pill warn"><span class="dot"></span>チャンネル開設済み・準備中</span>
+          <span class="status-pill ok"><span class="dot"></span>公開中</span>
         </div>
         <div class="steps">
-          <div class="step current"><div class="step-dot">●</div><div class="step-label">開発</div></div>
-          <div class="step-line todo"></div>
+          <div class="step done"><div class="step-dot">✓</div><div class="step-label">開発</div></div>
+          <div class="step-line done"></div>
           <div class="step done"><div class="step-dot">✓</div><div class="step-label">調査</div></div>
-          <div class="step-line todo"></div>
-          <div class="step todo"><div class="step-dot"></div><div class="step-label">公開</div></div>
+          <div class="step-line done"></div>
+          <div class="step current"><div class="step-dot">●</div><div class="step-label">公開</div></div>
           <div class="step-line todo"></div>
           <div class="step todo"><div class="step-dot"></div><div class="step-label">収益化</div></div>
         </div>
         <div class="unit-stats">
-          <div class="stat"><div class="num">実写KB</div><div class="label">背景映像</div></div>
+          <div class="stat"><div class="num">実写</div><div class="label">背景映像</div></div>
           <div class="stat"><div class="num">5</div><div class="label">台本完成</div></div>
-          <div class="stat"><div class="num">0</div><div class="label">公開本数</div></div>
+          <div class="stat"><div class="num">5</div><div class="label">公開本数</div></div>
         </div>
         <ul class="unit-detail">
-          <li>2026-08-14〜16: GCP Cloud TTSでの実音声ナレーションに切替(iPad手動収録から自動化)。背景映像をボール物理演算→パララックス→マイクラ風ブロック→手続き型の波シェーダーと複数回作り直し、最終的に<b>オーナー提供のAI生成写真によるKen Burns(ゆっくりパン+ズーム)方式</b>に確定。チャットUIも白パネル・ヘッダーを撤去し吹き出しが背景に直接浮かぶ構成へ刷新、既読表示・冒頭通知音(実クリップ)・セリフの抑揚(SSML)を追加</li>
-          <li>公開後レビューで発覚した音声・チャットのズレ(台本編集後にナレーションを再生成し忘れたことが原因)を特定・修正。今後同様の事故を避けるため、台本変更時は必ずナレーション再生成から通しで確認するプロセスを徹底</li>
-          <li>台本5本すべて完成(週次自動生成Routineで在庫5本を維持)。台本01のフル尺(58.9秒、Shorts尺内)での最終レンダリングをオーナー確認中</li>
+          <li>2026-08-18〜21: 若者向けリニューアル(06〜10)に着手。背景映像をKen Burns写真パンから<b>実写マイクラパルクールのゲーム実況映像</b>に方針転換(2ソース・計14クリップのローテーションプール)、絵文字の色付き描画(Noto Color Emoji)に対応、LINE風チャットに写真挿入(<code>[photo:]</code>)機能を追加</li>
+          <li>台本01・06・07・08・09の5本を@moyasukaに公開(台本02〜05は旧構成のまま据え置き)。台詞の多くはオーナー自身が直接執筆・提供したものを清書して反映</li>
+          <li><b>2026-08-22、重大インシデント発生・対応済み</b>: モヤスカ専用YouTube OAuthの期限切れ(テストモード7日ルール)からの再認証時、誤って<b>別事業(focus.sleep.sounds)を管理するGoogleアカウントで承認</b>してしまい、台本08・09の2本が全く違うチャンネルに公開される事故が発生(オーナー指摘で発覚)。誤公開分は即座に削除、正しいアカウントで再認証の上@moyasukaへ再公開して収拾。再発防止として<b>アップロード前に必ずchannels.list APIでチャンネルIDを検証し、想定外なら処理を止めるガード</b>(<code>moyasuka/publish.py</code>の<code>_assert_correct_channel</code>)をコードに追加。あわせて「1日1本」の投稿ルールを明文化(繰り越し分と当日分を同日にまとめて出さない)</li>
         </ul>
-        <div class="unit-blocker"><b>依頼中</b>: 台本01最終版(実写背景+既読+効果音+ナレーション)のオーナー最終確認。確認が取れ次第、既存のunlisted動画(kDdauVKZ1Po)を差し替えて初回公開に進む</div>
+        <div class="unit-blocker"><b>次のアクション</b>: 台本10(なりすましネタ)が未着手のまま残っている。収益化はYouTubeパートナープログラム基準(登録者1,000人・総再生時間4,000時間 or Shorts視聴回数基準)待ち、実績蓄積中</div>
       </div>
 
     </div>
@@ -667,6 +667,13 @@
   <section>
     <h2 class="section-title">経営ログ</h2>
     <div class="highlights">
+      <div class="hl-row"><div class="hl-date">08-24</div><div class="hl-body"><b>週次経営レビュー。</b>bgm-pipeline側YouTube OAuthの残り日数が2.25日まで低下したため事前検知し、再認証手続きを開始・オーナーに承認依頼。モヤスカ側は5.6日残と健全、チャンネル確認ガードも正常動作を確認。</div></div>
+      <div class="hl-row"><div class="hl-date">08-23</div><div class="hl-body"><b>モヤスカ台本09(先生の不倫暴露オチ)を@moyasukaへ正しく公開。</b><a href="https://youtube.com/watch?v=T6rOqwOn3g8" target="_blank" rel="noopener">視聴はこちら</a>。前日のチャンネル取り違え事故を受け、公開前にチャンネルIDをAPIで直接検証してから実施、公開後も同様に再確認。「1日1本」ルールを守り、台本08とは別日に公開。</div></div>
+      <div class="hl-row"><div class="hl-date">08-22</div><div class="hl-body"><b>重大インシデント: モヤスカ台本08・09を誤って別事業のチャンネル(focus.sleep.sounds)に公開。</b>モヤスカ専用YouTube OAuthの期限切れ(テストモード7日ルール)からの再認証時、誤った(BGM側を管理する)Googleアカウントで承認してしまったことが原因。オーナーからの指摘で発覚し、誤公開の2本を即座に非公開化→完全削除。台本08は正しいアカウントで再認証の上、同日中に@moyasukaへ再公開(<a href="https://youtube.com/watch?v=72sZsKLPkfY" target="_blank" rel="noopener">視聴はこちら</a>)。再発防止として、アップロード前に必ずchannels.list APIで宛先チャンネルを検証し不一致ならSystemExitで止まるガードをコードに追加(<code>moyasuka/publish.py</code>の<code>_assert_correct_channel</code>)。あわせて、この日は前日繰り越し分(台本08)と当日分(台本09)を同日にまとめて公開してしまい「1日1本」の既存方針にも違反していたため、posting-policy.mdに明文化して再発防止。</div></div>
+      <div class="hl-row"><div class="hl-date">08-22</div><div class="hl-body"><b>BGM動画Shorts第6弾を自動公開。</b><a href="https://youtube.com/watch?v=MuHTXlXFKIg" target="_blank" rel="noopener">breath_guide_coherent・45秒</a>、再生可能な状態を確認済み。</div></div>
+      <div class="hl-row"><div class="hl-date">08-21</div><div class="hl-body"><b>モヤスカ台本07(番号勘違い×自爆オチ)を@moyasukaへ公開。</b><a href="https://youtube.com/watch?v=ghRDGInsyhQ" target="_blank" rel="noopener">視聴はこちら</a>。オーナー提供の台詞をそのまま反映、掲示板写真の挿入・男声オーバーライドにも対応。同日夜、モヤスカ側OAuthがテストモードの7日ルールで期限切れとなり台本08の公開が一時失敗(翌日再認証で解消)。</div></div>
+      <div class="hl-row"><div class="hl-date">08-20</div><div class="hl-body"><b>BGM動画Shorts第5弾を自動公開。</b><a href="https://youtube.com/watch?v=BhcTRRipQzw" target="_blank" rel="noopener">baby_sleep_noise・45秒</a>、再生可能な状態を確認済み。同日、モヤスカの絵文字カラー描画対応(Noto Color Emoji)・末尾「ｗ」のTTS読み上げ抑制も実装。</div></div>
+      <div class="hl-row"><div class="hl-date">08-18〜19</div><div class="hl-body"><b>モヤスカを若者向けリニューアル、背景映像を実写マイクラ映像に方針転換。</b>台本06〜10をLINE風スカッと系の新構成に刷新。背景をAI生成写真のKen Burnsパンから、オーナー提供の実写マイクラパルクール映像(2ソース・計14クリップのローテーション)に切り替え。</div></div>
       <div class="hl-row"><div class="hl-date">08-10</div><div class="hl-body"><b>BGM長尺動画第3弾を自動公開。</b>週次Routineが無人で実行、study_lofi_chill・60分。実行前にOAuth残り日数を事前チェックする仕組み(8/10導入)も正常動作し、再生可能な状態まで確認済み。<i>(08-12: サムネイル・動画背景を実写画像に統一する方針転換に伴い<a href="https://youtube.com/watch?v=2ANtYRALumw" target="_blank" rel="noopener">新動画として再公開</a>、この動画は非公開化)</i></div></div>
       <div class="hl-row"><div class="hl-date">08-09</div><div class="hl-body"><b>モヤスカ: iPad Shortcuts自動化の実機動作確認が完了、初めての実音声入り動画が完成。</b>オーナーと1アクションずつ一緒に組み、実機ならではの問題を順に解決: ①JSONを「ファイル」アクションで読むと参照が不安定 → テキストとして直接埋め込む方式に変更 ②`voicevox.su-shiki.com/simple/`は人間のブラウザ操作専用でボット判定される(reCAPTCHA)ことが判明 → 正しいAPI(`api.tts.quest/v3/voicevox/synthesis`、JSONでダウンロードURLを返す2段階方式)に切り替え ③30行を連続呼び出しするとレート制限で一部失敗 → ループ内に2秒待機を追加 ④ファイル名のゼロ埋めができる組み込みアクションが見当たらない → 受け取り側の`manual_narration.py`の`_find_clip`をゼロ埋みの有無を問わず一致するよう修正し、iPad側の作業を簡略化。台本01(30行)を実際に自動生成・アップロードしてもらい、`assemble`+`line_chat.py`で組み立てた初めての実音声入り動画(33秒)をオーナーへ送付。手順は実際に動作確認済みの内容で`docs/projects/moyasuka/voicevox-setup.md`を全面更新。あわせて週次のYouTube Shorts自動公開ルーチンが権限クラシファイアにブロックされる問題を発見、課題リストに追加(オーナー対応待ち)。</div></div>
       <div class="hl-row"><div class="hl-date">08-07</div><div class="hl-body"><b>モヤスカのナレーション収録を自動化、容量管理の運用ルールも整備。</b>手動アプリでの1行ずつのコピペ(20〜30回/本)が手間との声を受け、開発部+グロース/運用部の横断で対応。オーナーのiPad上のShortcutsアプリからWEB版VOICEVOX API(tts.quest/su-shiki.com)を自動ループ呼び出しする方式(方式A')を設計し、<code>manual_narration.py</code>に<code>list --format json</code>を追加(話者ID込みの機械可読チェックリスト、話者ID対応表は<code>voicevox_narrate.py</code>と二重管理せず共用)。このAPI自体はこのクラウド環境からはブロックされ私からは呼べない(<code>curl</code>で403確認済み)が、オーナーのiPadは制約対象外という位置づけを整理した上でドキュメント化。Shortcut実行のたびに出力フォルダを自動削除する自己クリーンアップ付きのため、「1本収録→即アップロード→組み立て確認→次の収録」の順序を守る運用ルールを明記。私たちはiOS実機を持っておらず未検証の旨も隠さず記載し、オーナーに実機での動作確認を依頼。手順は<code>docs/projects/moyasuka/voicevox-setup.md</code>の方式A'。</div></div>
