@@ -1,0 +1,35 @@
+{
+  "id": "note-22-notification-not-the-cause",
+  "business_id": "note",
+  "article_number": "22",
+  "title": "通知を全部消しても集中できなかった、本当の原因を探った話",
+  "theme_backlog_id": 26,
+  "pillar": "A",
+  "hypothesis": "「集中できない 原因」の実用検索層に一致し、通知対策済みでも解決しない読者の悩みに応えることで閲覧・スキ・フォロワー増につながる",
+  "generated_at": "2026-08-24",
+  "published_at": null,
+  "status": "draft",
+  "note_url": "https://note.com/unique_condor276",
+  "metrics": {
+    "views": null,
+    "likes": null,
+    "comments": null,
+    "followers_gained": null,
+    "support_jpy": null,
+    "recorded_at": null,
+    "data_source_note": "note.com公式APIが存在しないため、このサンドボックスからは取得不可。オーナーがnote.comダッシュボードで確認し次第、note-articles/README.mdの計測欄経由で共有・反映する"
+  },
+  "result": null,
+  "learning": null,
+  "next_action": null,
+  "verdict": "pending",
+  "quality_self_check": {
+    "japanese_natural": true,
+    "no_ai_cliche": true,
+    "concrete_content": true,
+    "clickable_title": true,
+    "clear_reader_value": true,
+    "no_duplication_with_existing": true,
+    "note": "2026-08-24、週2回運用Routineでの新規生成。既存記事は音への対策が中心のため、通知/デジタル面という別角度で重複を回避"
+  }
+}

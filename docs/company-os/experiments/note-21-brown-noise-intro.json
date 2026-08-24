@@ -1,0 +1,35 @@
+{
+  "id": "note-21-brown-noise-intro",
+  "business_id": "note",
+  "article_number": "21",
+  "title": "「音楽」ではなく「音」を流すという発想、ブラウンノイズ入門",
+  "theme_backlog_id": 25,
+  "pillar": "A",
+  "hypothesis": "「ブラウンノイズ」という用語検索・作業用BGMの選び方に悩む層の需要に一致し、閲覧・スキ・フォロワー増につながる",
+  "generated_at": "2026-08-24",
+  "published_at": null,
+  "status": "draft",
+  "note_url": "https://note.com/unique_condor276",
+  "metrics": {
+    "views": null,
+    "likes": null,
+    "comments": null,
+    "followers_gained": null,
+    "support_jpy": null,
+    "recorded_at": null,
+    "data_source_note": "note.com公式APIが存在しないため、このサンドボックスからは取得不可。オーナーがnote.comダッシュボードで確認し次第、note-articles/README.mdの計測欄経由で共有・反映する"
+  },
+  "result": null,
+  "learning": null,
+  "next_action": null,
+  "verdict": "pending",
+  "quality_self_check": {
+    "japanese_natural": true,
+    "no_ai_cliche": true,
+    "concrete_content": true,
+    "clickable_title": true,
+    "clear_reader_value": true,
+    "no_duplication_with_existing": true,
+    "note": "2026-08-24、週2回運用Routineでの新規生成。既存記事はホワイトノイズ中心のため、ノイズ系の使い分け(ホワイト/ブラウン/ピンク)という切り口で重複を回避"
+  }
+}

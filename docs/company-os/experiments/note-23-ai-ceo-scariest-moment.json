@@ -1,0 +1,35 @@
+{
+  "id": "note-23-ai-ceo-scariest-moment",
+  "business_id": "note",
+  "article_number": "23",
+  "title": "AIに経営判断を任せて一番ヒヤッとした瞬間の話",
+  "theme_backlog_id": 28,
+  "pillar": "B",
+  "hypothesis": "AI経営の透明性コンテンツとして、失敗談・リスクに正直に触れることで拡散・信頼構築につながる",
+  "generated_at": "2026-08-24",
+  "published_at": null,
+  "status": "draft",
+  "note_url": "https://note.com/unique_condor276",
+  "metrics": {
+    "views": null,
+    "likes": null,
+    "comments": null,
+    "followers_gained": null,
+    "support_jpy": null,
+    "recorded_at": null,
+    "data_source_note": "note.com公式APIが存在しないため、このサンドボックスからは取得不可。オーナーがnote.comダッシュボードで確認し次第、note-articles/README.mdの計測欄経由で共有・反映する"
+  },
+  "result": null,
+  "learning": null,
+  "next_action": null,
+  "verdict": "pending",
+  "quality_self_check": {
+    "japanese_natural": true,
+    "no_ai_cliche": true,
+    "concrete_content": true,
+    "clickable_title": true,
+    "clear_reader_value": true,
+    "no_duplication_with_existing": true,
+    "note": "2026-08-24、週2回運用Routineでの新規生成。2026-08-22に実際に発生したモヤスカのチャンネル取り違えインシデント(誤公開→即日削除→再認証→再発防止ガード実装)を題材に、オーナー視点で正直に書いた。既存の柱Bはポジティブな話が中心のため、リスク・ヒヤリハットに絞った点で差別化。#24(10日間ログ)にも同インシデントへの言及があるが、そちらは概要のみで焦点は別"
+  }
+}

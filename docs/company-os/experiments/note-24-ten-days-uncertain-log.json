@@ -1,0 +1,35 @@
+{
+  "id": "note-24-ten-days-uncertain-log",
+  "business_id": "note",
+  "article_number": "24",
+  "title": "儲かるかわからないまま10日間AIに会社を動かし続けたログ",
+  "theme_backlog_id": 29,
+  "pillar": "B",
+  "hypothesis": "#09(収益公開)の続編として、収益化前の不安・意思決定プロセスに焦点を当てることで読者の共感・信頼構築につながる",
+  "generated_at": "2026-08-24",
+  "published_at": null,
+  "status": "draft",
+  "note_url": "https://note.com/unique_condor276",
+  "metrics": {
+    "views": null,
+    "likes": null,
+    "comments": null,
+    "followers_gained": null,
+    "support_jpy": null,
+    "recorded_at": null,
+    "data_source_note": "note.com公式APIが存在しないため、このサンドボックスからは取得不可。オーナーがnote.comダッシュボードで確認し次第、note-articles/README.mdの計測欄経由で共有・反映する"
+  },
+  "result": null,
+  "learning": null,
+  "next_action": null,
+  "verdict": "pending",
+  "quality_self_check": {
+    "japanese_natural": true,
+    "no_ai_cliche": true,
+    "concrete_content": true,
+    "clickable_title": true,
+    "clear_reader_value": true,
+    "no_duplication_with_existing": true,
+    "note": "2026-08-24、週2回運用Routineでの新規生成。#09は売上のスナップショット報告だったのに対し、今回は10日間の心理・意思決定プロセスに焦点。#23と同じインシデントに軽く触れるが、あちらは失敗そのものが主題、こちらは日々の不確実性の中での継続という主題で重複を回避"
+  }
+}

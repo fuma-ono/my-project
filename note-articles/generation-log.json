@@ -173,6 +173,38 @@
       "pillar": "A",
       "generated_at": "2026-08-20",
       "status": "draft"
+    },
+    {
+      "article_number": "21",
+      "slug": "21-brown-noise-intro",
+      "theme_backlog_id": 25,
+      "pillar": "A",
+      "generated_at": "2026-08-24",
+      "status": "draft"
+    },
+    {
+      "article_number": "22",
+      "slug": "22-notification-not-the-cause",
+      "theme_backlog_id": 26,
+      "pillar": "A",
+      "generated_at": "2026-08-24",
+      "status": "draft"
+    },
+    {
+      "article_number": "23",
+      "slug": "23-ai-ceo-scariest-moment",
+      "theme_backlog_id": 28,
+      "pillar": "B",
+      "generated_at": "2026-08-24",
+      "status": "draft"
+    },
+    {
+      "article_number": "24",
+      "slug": "24-ten-days-uncertain-log",
+      "theme_backlog_id": 29,
+      "pillar": "B",
+      "generated_at": "2026-08-24",
+      "status": "draft"
     }
   ]
 }
