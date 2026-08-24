@@ -15,6 +15,6 @@ export default function SplashScreen() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg, gap: 16 },
-  wordmark: { ...fonts.display, fontSize: 30, color: colors.ink },
+  wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg, gap: 20 },
+  wordmark: { ...fonts.display, fontSize: 44, color: colors.ink, letterSpacing: -0.5 },
 });

@@ -21,7 +21,7 @@ type Screen = { name: 'groups' } | { name: 'group'; group: Group };
 const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO_MODE === '1';
 
 export default function App() {
-  const { loading: authLoading, userId, profile, setDisplayName, updateAvatar } = useAuth();
+  const { loading: authLoading, userId, profile, error: authError, setDisplayName, updateAvatar } = useAuth();
   const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup } = useGroups(DEMO_MODE ? null : userId);
   const [screen, setScreen] = useState<Screen>({ name: 'groups' });
   const [minSplashDone, setMinSplashDone] = useState(false);
@@ -47,7 +47,7 @@ export default function App() {
   if (!profile) {
     return (
       <>
-        <OnboardingScreen onSubmit={setDisplayName} />
+        <OnboardingScreen onSubmit={setDisplayName} authError={authError} />
         <StatusBar style="dark" />
       </>
     );

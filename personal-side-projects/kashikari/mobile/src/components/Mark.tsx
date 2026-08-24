@@ -5,6 +5,12 @@ import { colors, fonts } from '../theme';
 
 // ブランドのロゴマーク。アプリアイコンと同じコーラル→プラムのグラデーションを
 // 使い、スプラッシュ・オンボーディング・グループ一覧ヘッダーで使い回す。
+//
+// グリフは以前「⇄」(矢印の記号)を使っていたが、システムフォント任せの
+// 記号はデバイスによって細すぎたり位置がずれたりして見栄えが悪かった
+// ("アイコンが変" というフィードバック)。絵文字は各OSがネイティブに
+// 描画するため太さ・見た目が安定しており、かつ「頼みごと」の絵文字
+// (🤝)ともモチーフが揃うため、友達同士の貸し借り・信頼を表す🤝に変更。
 export default function Mark({ size = 40 }: { size?: number }) {
   return (
     <LinearGradient
@@ -13,7 +19,7 @@ export default function Mark({ size = 40 }: { size?: number }) {
       end={{ x: 1, y: 1 }}
       style={[styles.base, { width: size, height: size, borderRadius: size * 0.32 }]}
     >
-      <Text style={[styles.glyph, { fontSize: size * 0.46 }]}>⇄</Text>
+      <Text style={[styles.glyph, { fontSize: size * 0.52 }]}>🤝</Text>
     </LinearGradient>
   );
 }
