@@ -104,6 +104,11 @@ CHARACTER_SPEAKER_IDS: dict[str, int] = {
                         # ボイス全14種を試聴してもらい選定(gcp_tts_narrate.py
                         # のCLOUD_TTS_VOICES[13]参照)。既存5声のどのロールにも
                         # 属さない、このキャラクター専用の追加スロット。
+    "みお": 2,         # 11 — 主な敵役(女性)
+    "そら": 12,        # 11 — 男性の証人役
+    "ゆずき": 8,        # 12 — 女性の証人役(妹)
+    "あかり": 2,        # 13 — 主な敵役(女性)
+    "ゆうき": 12,       # 13 — 男性の証人役
 }
 DEFAULT_SPEAKER_ID = 3  # ずんだもん — used with a warning if a script introduces a new character name not listed above
 

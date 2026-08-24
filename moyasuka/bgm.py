@@ -61,6 +61,9 @@ SCRIPT_BGM_TRACK = {
     "08-mass-resignation": "phantom_mirage",  # クビ宣告からの逆転劇、緊迫感寄り
     "09-teacher-affair-reveal": "phantom_mirage",  # 不倫どんでん返しの緊迫感寄り
     "10-impersonation": "phantom_mirage",  # "who did this" mystery beat fits phantom_mirage's name
+    "11-group-admin-twist": "phantom_mirage",  # 誰が抜けたか/誰が見てるかの緊張感が続く展開
+    "12-mom-secret-account": "banana_shuffle",  # 推し活裏アカウントの発覚は軽めのコメディ
+    "13-fake-payment-screenshot": "phantom_mirage",  # 偽装証拠を暴くミステリー寄りの展開
 }
 
 
