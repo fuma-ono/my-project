@@ -125,6 +125,35 @@ def update_title(video_id: str, title: str, auth: YouTubeAuth | None = None) -> 
     put_resp.raise_for_status()
 
 
+def update_description(video_id: str, description: str, auth: YouTubeAuth | None = None) -> None:
+    """Same fetch-then-overwrite-one-field pattern as update_title above,
+    for description instead of title (2026-08-25: backfilling the
+    Japanese-only description rewrite in presets.build_description /
+    publish_shorts._shorts_description onto already-published videos)."""
+    access_token = (auth or youtube_auth._default).get_access_token()
+    resp = requests.get(
+        VIDEOS_URL,
+        params={"part": "snippet", "id": video_id},
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    items = resp.json().get("items", [])
+    if not items:
+        raise RuntimeError(f"Video {video_id} not found when updating description.")
+    snippet = items[0]["snippet"]
+    snippet["description"] = description
+
+    put_resp = requests.put(
+        VIDEOS_URL,
+        params={"part": "snippet"},
+        headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json; charset=UTF-8"},
+        data=json.dumps({"id": video_id, "snippet": snippet}),
+        timeout=30,
+    )
+    put_resp.raise_for_status()
+
+
 def get_video_status(video_id: str, auth: YouTubeAuth | None = None) -> dict:
     """Raw status+processingDetails for a video, for verification after upload."""
     access_token = (auth or youtube_auth._default).get_access_token()

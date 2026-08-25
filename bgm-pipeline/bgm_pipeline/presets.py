@@ -523,29 +523,52 @@ def duration_label(minutes: float) -> str:
 NOTE_URL = "https://note.com/unique_condor276"
 
 
+# 2026-08-25: エンゲージメント導線が弱いという仮説(docs/marketing/
+# 2026-08-17-bgm-engagement-analysis.md)への対応として追加。カテゴリ別に
+# コメントを誘発する質問文を用意(「高評価お願いします」的な一方的な
+# お願いより、答えやすい質問の方がコメント率が上がるとされる定石)。
+ENGAGEMENT_QUESTION = {
+    "sleep": "この音、寝つくまで何分くらいで効きましたか?コメントで教えてください。",
+    "focus": "作業中に流すなら、これくらいの音量がちょうどいいですか?普段何をしながら聴いているか教えてください。",
+}
+
+
 def build_description(preset: str, minutes: float) -> str:
     """Composes the full YouTube description: a keyword-rich hook (the first
     ~150 chars are what shows before "Show more" and in search results),
     an expanded blurb, a use-case list, an AI/royalty-free disclosure, a
     cross-promotion link to the note.com essays (the only channel with a
-    working, review-free monetization path right now), and a hashtag
-    block (YouTube surfaces the first 3 above the title).
+    working, review-free monetization path right now), an engagement
+    question (2026-08-25 addition, see ENGAGEMENT_QUESTION above), and a
+    hashtag block (YouTube surfaces the first 3 above the title).
+
+    2026-08-25: previously the hook/about (Japanese) were followed by
+    boilerplate lines written in English (duration explainer, use-case
+    header, AI disclosure, subscribe CTA) — inconsistent for a channel
+    that's deliberately JP-first (docs/projects/bgm-pipeline branding
+    decisions). Rewrote the whole thing in Japanese so nothing switches
+    language mid-description.
     """
     meta = PRESET_METADATA[preset]
     hours = minutes / 60
-    duration_txt = (f"{hours:g} hour" + ("s" if hours != 1 else "")) if minutes >= 60 else f"{minutes:g} minutes"
+    if minutes >= 60:
+        duration_txt = f"{hours:g}時間"
+    else:
+        duration_txt = f"{minutes:g}分"
     use_cases = "\n".join(f"- {u}" for u in meta["use_cases"])
     hashtags = " ".join(f"#{h}" for h in meta["hashtags"])
+    question = ENGAGEMENT_QUESTION.get(meta["icon_category"], ENGAGEMENT_QUESTION["sleep"])
 
     return (
         f"{meta['hook']}\n\n"
         f"{meta['about']}\n\n"
-        f"This video runs {duration_txt} continuously — fine to loop, leave playing overnight, "
-        "or use as background audio in another app.\n\n"
-        f"Good for:\n{use_cases}\n\n"
-        "100% AI-generated, royalty-free ambient audio — no samples or copyrighted material, "
-        "so it's safe for background listening, streams, or your own projects.\n\n"
-        f"More writing on sleep, focus, and building this project: {NOTE_URL}\n\n"
-        "New tracks posted regularly — subscribe if this helped you relax, focus, or sleep.\n\n"
+        f"この動画は{duration_txt}ノンストップで再生されます。ループ再生や、"
+        "一晩流しっぱなし、他のアプリのBGM代わりとしてもお使いいただけます。\n\n"
+        f"こんな時におすすめ:\n{use_cases}\n\n"
+        "100% AI生成のロイヤリティフリー音源です。既存の楽曲・音源のサンプリングは"
+        "一切使用していないため、配信・作業中のBGM・ご自身の制作物への利用も安心です。\n\n"
+        f"睡眠・集中・この会社の運営についてのnoteはこちら: {NOTE_URL}\n\n"
+        f"{question}\n\n"
+        "新しい音源を定期的に公開しています。よければチャンネル登録もお願いします。\n\n"
         f"{hashtags}"
     )

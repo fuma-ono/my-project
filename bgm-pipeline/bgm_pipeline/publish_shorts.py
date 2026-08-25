@@ -30,13 +30,23 @@ DEFAULT_TAGS = ["ambient music", "background music", "AI generated music", "shor
 
 
 def _shorts_description(preset: str, link_video_id: str | None) -> str:
+    """2026-08-25: rewrote in Japanese — previously the hook (Japanese)
+    was followed by English boilerplate (link line, note.com line),
+    inconsistent for a JP-first channel. Shorts get 15〜20x the views of
+    long-form on this channel (docs/marketing/2026-08-17-bgm-engagement-
+    analysis.md), so this description is the highest-traffic surface on
+    the channel — worth getting right. Also adds the same engagement
+    question used in the long-form description (build_description above)
+    so Shorts, the actual discovery channel, carry the comment-bait too.
+    """
     meta = presets.PRESET_METADATA[preset]
     hashtags = " ".join(f"#{h}" for h in meta["hashtags"][:3]) + " #Shorts"
     link_line = (
-        f"\n\nFull length version: https://youtube.com/watch?v={link_video_id}"
+        f"\n\nフルバージョン(ノンストップ再生)はこちら: https://youtube.com/watch?v={link_video_id}"
         if link_video_id else ""
     )
-    return f"{meta['hook']}{link_line}\n\nMore writing: {presets.NOTE_URL}\n\n{hashtags}"
+    question = presets.ENGAGEMENT_QUESTION.get(meta["icon_category"], presets.ENGAGEMENT_QUESTION["sleep"])
+    return f"{meta['hook']}{link_line}\n\n{question}\n\nもっと読む: {presets.NOTE_URL}\n\n{hashtags}"
 
 
 def main(argv: list[str] | None = None) -> int:
