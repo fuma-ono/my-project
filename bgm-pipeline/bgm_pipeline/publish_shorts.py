@@ -3,10 +3,17 @@ upload, verify processing, then clean up local files. Nothing here
 uploaded Shorts before this — the vertical file produce.py made was
 never actually pushed to YouTube.
 
-Shorts get almost no benefit from a custom thumbnail (viewed full-screen
-in a swipe feed, not a browse grid), so this skips thumbnail generation
-to keep things simple — worth adding if that turns out to matter for
-search/browse placement.
+2026-08-25: this used to skip thumbnail generation entirely, reasoning
+that Shorts are viewed full-screen in a swipe feed rather than a browse
+grid so a custom thumbnail wouldn't matter much. That reasoning missed
+that Shorts still show a static thumbnail in every browse/search-grid
+context (channel page, search results, subscriptions feed, related
+videos) — and with no custom thumbnail set, YouTube was auto-picking a
+plain video frame there, with no text and no branding, for every Short
+ever published on this channel. Owner caught this while asking why
+thumbnail text "never changed" (docs: rotation.py's 2026-08-25 notes).
+Now generates and sets a real (vertical) thumbnail for any preset on the
+photo-thumbnail track, same as long-form.
 
 Usage:
     python -m bgm_pipeline.publish_shorts --seconds 45
@@ -24,7 +31,7 @@ import argparse
 import os
 import sys
 
-from . import presets, rotation, video, youtube_upload
+from . import presets, rotation, thumbnail, video, youtube_upload
 
 DEFAULT_TAGS = ["ambient music", "background music", "AI generated music", "shorts"]
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -78,12 +85,14 @@ def main(argv: list[str] | None = None) -> int:
 
     wav_path = os.path.join(args.workdir, f"{args.preset}_short.wav")
     mp4_path = os.path.join(args.workdir, f"{args.preset}_short.mp4")
+    thumb_path = os.path.join(args.workdir, f"{args.preset}_short_thumb.jpg")
 
-    print(f"[1/3] generating {args.seconds:g}s of audio ({args.preset})...")
+    print(f"[1/4] generating {args.seconds:g}s of audio ({args.preset})...")
     track = presets.PRESETS[args.preset](minutes=minutes)
     track.to_wav(wav_path)
 
-    print("[2/3] rendering vertical video...")
+    print("[2/4] rendering vertical video...")
+    photo_source = None
     if meta.get("thumbnail_style") == "photo":
         # 2026-08-25: Shorts previously always used the abstract
         # gradient renderer regardless of preset, even for presets that
@@ -97,11 +106,27 @@ def main(argv: list[str] | None = None) -> int:
     else:
         video.render(wav_path, mp4_path, meta["thumb_hook"], args.preset, "vertical")
 
+    print("[3/4] generating custom thumbnail...")
+    if photo_source is not None:
+        # 2026-08-25: Shorts never called any thumbnail-generation
+        # function before today — YouTube was auto-picking a plain video
+        # frame for the browse/search-grid thumbnail on every Short ever
+        # published on this channel. Since Shorts are the dominant
+        # traffic surface here, that (not just small text on long-form)
+        # is the real reason the owner saw no change across videos. See
+        # thumbnail.make_photo_thumbnail_vertical()'s docstring.
+        thumbnail.make_photo_thumbnail_vertical(
+            thumb_path, photo_source, meta["thumb_hook"], minutes,
+            crop_top_px=meta.get("thumbnail_crop_top_px"),
+        )
+    else:
+        thumb_path = None
+
     title = f"{meta['title']} #Shorts"
     description = _shorts_description(args.preset, args.link_video_id)
     tags = DEFAULT_TAGS + meta["tags"][:5]
 
-    print("[3/3] uploading to YouTube...")
+    print("[4/4] uploading to YouTube...")
     video_id = youtube_upload.upload_video(mp4_path, title, description, tags, privacy_status=args.privacy)
     watch_url = f"https://youtube.com/watch?v={video_id}"
     print(f"Uploaded: {watch_url}")
@@ -118,10 +143,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Local files kept at {wav_path} / {mp4_path} — check manually and delete yourself.")
         return 1
 
+    if thumb_path is not None:
+        try:
+            youtube_upload.set_thumbnail(video_id, thumb_path)
+            print("Custom thumbnail set.")
+        except Exception as exc:  # noqa: BLE001 — a bad thumbnail shouldn't undo a successful publish
+            print(f"Thumbnail upload failed (video is still published fine): {exc}")
+
     if not args.keep_local:
         os.remove(wav_path)
         os.remove(mp4_path)
-        print("Local audio/video files deleted.")
+        if os.path.exists(thumb_path or ""):
+            os.remove(thumb_path)
+        print("Local audio/video/thumbnail files deleted.")
 
     return 0
 

@@ -38,6 +38,11 @@ def _duration_label(minutes: float) -> str:
     if minutes >= 60:
         hours = minutes / 60
         return f"{hours:g}時間" if hours != 1 else "1時間"
+    if minutes < 1:
+        # 2026-08-25: Shorts durations (e.g. 46s = 0.77min) used to render
+        # as "0.77分" — nonsensical. Found while wiring up Shorts'
+        # first-ever custom thumbnail (see make_photo_thumbnail_vertical).
+        return f"{round(minutes * 60)}秒"
     return f"{minutes:g}分"
 
 
@@ -118,16 +123,36 @@ def make_thumbnail(path: str, preset: str, thumb_hook: str, icon_category: str, 
 
 
 def make_photo_thumbnail(path: str, source_path: str, caption: str, minutes: float,
-                          crop_top_px: int | None = None) -> None:
+                          crop_top_px: int | None = None, size: tuple[int, int] = SIZE) -> None:
     """Thumbnail built from a real (owner-supplied, AI-generated) photo
     instead of the abstract gradient+icon style — standard as of 2026-08-12
     per owner direction: a realistic image draws the eye far better than a
-    solid-color background with text on it. Crops the source to 16:9 (a
-    center crop by default — `crop_top_px` only needs to be passed when a
-    source image carries an unrelated artifact, e.g. a screenshot's status
-    bar, along one edge that a centered crop wouldn't remove), then adds
-    only a small caption and a small duration badge; the photo carries the
-    thumbnail, not the text.
+    solid-color background with text on it. Crops the source to `size`'s
+    aspect ratio (a center crop by default — `crop_top_px` only needs to be
+    passed when a source image carries an unrelated artifact, e.g. a
+    screenshot's status bar, along one edge that a centered crop wouldn't
+    remove).
+
+    2026-08-25 (owner correction — "中央に大きな文字で書くって統一した
+    よね？"): the caption used to be a small (40px) line tucked in the
+    bottom-left corner. Every photo-style thumbnail published since 08-12
+    had that same small-corner-caption look, which is why the owner saw
+    no change across videos — this was never actually "large, centered
+    text," despite that being the stated standard. Now the caption is
+    large (scaled off `size`'s width, ~118px at the 1280px landscape
+    default — same order as the old abstract-thumbnail hook text),
+    wrapped/centered on both axes, on a semi-transparent dark band across
+    the middle so it stays legible over any photo. The photo is still the
+    background (per the 08-12 direction) — the text is just no longer an
+    afterthought. Captions with an embedded "\\n" (e.g. "集中できる\\n
+    カフェBGM") render as their own explicit line break via PIL's native
+    multiline handling, not the character-wrap helper used elsewhere in
+    this file.
+
+    Also 2026-08-25: `size` was added so this same function can generate a
+    vertical (1080x1920) thumbnail for Shorts — see
+    make_photo_thumbnail_vertical() below and its docstring for why Shorts
+    never had *any* custom thumbnail (text or otherwise) before today.
 
     This pipeline does not generate the photo — nothing in this environment
     can produce a photorealistic image. `source_path` must point to an
@@ -135,41 +160,73 @@ def make_photo_thumbnail(path: str, source_path: str, caption: str, minutes: flo
     thumbnails/ so it's reproducible without re-asking the owner)."""
     img = Image.open(source_path).convert("RGB")
     w, h = img.size
-    target_ratio = SIZE[0] / SIZE[1]
+    target_ratio = size[0] / size[1]
     if w / h > target_ratio:
-        # source is wider than 16:9 relative to its height — crop width, keep full height
+        # source is wider than target ratio relative to its height — crop width, keep full height
         new_w = round(h * target_ratio)
         left = (w - new_w) // 2
         img = img.crop((left, 0, left + new_w, h))
     else:
-        # source is taller/narrower than 16:9 — crop height, keep full width
+        # source is taller/narrower than target ratio — crop height, keep full width
         new_h = round(w / target_ratio)
         top = (h - new_h) // 2 if crop_top_px is None else min(crop_top_px, h - new_h)
         img = img.crop((0, top, w, top + new_h))
-    img = img.resize(SIZE, Image.LANCZOS).convert("RGBA")
+    img = img.resize(size, Image.LANCZOS).convert("RGBA")
     draw = ImageDraw.Draw(img, "RGBA")
 
-    cap_font = ImageFont.truetype(JP_FONT, 40)
-    cap_bbox = draw.textbbox((0, 0), caption, font=cap_font)
-    cap_w, cap_h = cap_bbox[2] - cap_bbox[0], cap_bbox[3] - cap_bbox[1]
-    cap_x, cap_y = 40, SIZE[1] - cap_h - 56
-    draw.rounded_rectangle(
-        [cap_x - 16, cap_y - 12, cap_x + cap_w + 16, cap_y + cap_h + 22], radius=12, fill=(6, 8, 16, 140)
-    )
-    draw.text((cap_x, cap_y - cap_bbox[1]), caption, font=cap_font, fill=(245, 245, 250, 235))
+    scale = size[0] / SIZE[0]
+    cap_font = ImageFont.truetype(JP_FONT, round(118 * scale))
+    spacing = round(18 * scale)
+    bbox = draw.multiline_textbbox((0, 0), caption, font=cap_font, align="center", spacing=spacing)
+    text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
 
-    badge_font = ImageFont.truetype(JP_FONT, 38)
+    band_pad_y = round(44 * scale)
+    band_top = (size[1] - text_h) // 2 - band_pad_y - bbox[1]
+    band_bottom = (size[1] - text_h) // 2 + text_h + band_pad_y - bbox[1]
+    overlay = Image.new("RGBA", size, (0, 0, 0, 0))
+    odraw = ImageDraw.Draw(overlay)
+    odraw.rectangle([0, band_top, size[0], band_bottom], fill=(6, 8, 16, 155))
+    img = Image.alpha_composite(img, overlay)
+    draw = ImageDraw.Draw(img, "RGBA")
+
+    text_x = (size[0] - text_w) // 2 - bbox[0]
+    text_y = (size[1] - text_h) // 2 - bbox[1]
+    draw.multiline_text(
+        (text_x, text_y), caption, font=cap_font, fill=(255, 255, 255, 255),
+        align="center", spacing=spacing,
+    )
+
+    badge_font = ImageFont.truetype(JP_FONT, round(38 * scale))
     badge_text = _duration_label(minutes)
     bbox = draw.textbbox((0, 0), badge_text, font=badge_font)
-    pad_x, pad_y = 20, 10
+    pad_x, pad_y = round(20 * scale), round(10 * scale)
     badge_w, badge_h = (bbox[2] - bbox[0]) + pad_x * 2, (bbox[3] - bbox[1]) + pad_y * 2
-    badge_x, badge_y = SIZE[0] - badge_w - 36, 32
+    badge_x, badge_y = size[0] - badge_w - round(36 * scale), round(32 * scale)
     draw.rounded_rectangle(
         [badge_x, badge_y, badge_x + badge_w, badge_y + badge_h], radius=12, fill=(*ACCENT, 215)
     )
     draw.text((badge_x + pad_x, badge_y + pad_y - bbox[1]), badge_text, font=badge_font, fill=(20, 14, 10, 255))
 
     img.convert("RGB").save(path, quality=92)
+
+
+VERTICAL_SIZE = (1080, 1920)
+
+
+def make_photo_thumbnail_vertical(path: str, source_path: str, caption: str, minutes: float,
+                                   crop_top_px: int | None = None) -> None:
+    """Vertical (1080x1920) counterpart of make_photo_thumbnail(), for
+    Shorts. Added 2026-08-25 after discovering — while investigating the
+    owner's "サムネの文字が変わってない" complaint — that publish_shorts.py
+    had never called any thumbnail-generation function at all, for any
+    preset, ever. Shorts got no custom thumbnail and no burned-in video
+    text (render_photo_background() draws no text on the frame either), so
+    YouTube auto-picked a plain video frame for the browse/search-grid
+    thumbnail. Since Shorts publish daily and are this channel's dominant
+    traffic surface (see docs/marketing/2026-08-17-bgm-engagement-
+    analysis.md), that gap — not just small text on long-form — is the
+    main reason nothing looked different across videos."""
+    make_photo_thumbnail(path, source_path, caption, minutes, crop_top_px=crop_top_px, size=VERTICAL_SIZE)
 
 
 def main(argv: list[str] | None = None) -> int:
