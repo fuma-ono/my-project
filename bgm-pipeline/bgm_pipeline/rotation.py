@@ -6,6 +6,31 @@ Tracks long-form and Shorts rotation separately (they run on different
 cadences) in a small git-tracked JSON file — not a secret, so unlike
 credentials/ this is meant to be committed and reviewed like any other
 state a human might want to see or edit by hand.
+
+**2026-08-25 incident**: this repeated anyway. On 2026-08-12, three
+long-form videos were manually re-published outside this rotation (a
+branding fix — new thumbnails/backgrounds, old versions set private) and
+`rotation_state.json`'s `long` key was left unchanged during that batch —
+only `last_long_form_video_id` got updated. Two weeks later the routine
+long-form publish called `next_preset("long")`, which advanced from that
+stale value and picked `baby_sleep_noise` — a preset that had, in
+reality, already gone out as a long-form video 13 days earlier. The
+public channel briefly had two live `baby_sleep_noise` long-form videos.
+Caught by the owner watching the channel, not by anything in this code.
+
+**The lesson**: `long`/`shorts` here are just single "last used" pointers
+— cheap, but only correct if *every* publish to that surface goes through
+`next_preset()`. Any one-off/manual (re-)publish that bypasses it (a
+branding fix, a manual `--preset` override, fixing a broken upload) will
+silently desync this file from what's actually live on the channel, and
+the desync won't surface until the rotation happens to loop back onto the
+skipped preset. If you publish something manually outside the normal
+Routine call path, update `rotation_state.json`'s relevant key by hand in
+the same commit — set it to the preset you just used, exactly as
+`next_preset()` itself would have recorded. When in doubt, cross-check
+against what's actually live (see the 2026-08-25 fix: `videos.list` on
+the channel's uploads, filtered to `privacyStatus: public`, matched by
+title against `PRESET_METADATA`) rather than trusting this file blindly.
 """
 from __future__ import annotations
 
