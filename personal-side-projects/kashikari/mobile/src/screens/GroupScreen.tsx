@@ -187,6 +187,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
               {autoSettlePlans.map((plan) => (
                 <AutoSettlePlan
                   key={plan.currency}
+                  groupName={group.name}
                   currency={plan.currency}
                   transactions={plan.transactions}
                   nameOf={nameOf}

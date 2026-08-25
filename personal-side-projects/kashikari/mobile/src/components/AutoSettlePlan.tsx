@@ -1,13 +1,15 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Share, StyleSheet, Text, View } from 'react-native';
 
 import Avatar from './Avatar';
 import PrimaryButton from './PrimaryButton';
 import { useT } from '../i18n';
 import { formatMoney } from '../lib/currency';
+import { buildSettlementShareText } from '../lib/shareText';
 import { colors, fonts } from '../theme';
 import type { SimplifiedTransaction } from '../types';
 
 type Props = {
+  groupName: string;
   currency: string;
   transactions: SimplifiedTransaction[];
   nameOf: (id: string) => string;
@@ -19,8 +21,17 @@ type Props = {
 // グループ全体を最小の支払い回数にまとめたプランをカードで見せる。
 // このカードは、それが実際に減らせている場合(pairwiseの行数より
 // simplifiedの行数が少ない場合)にだけGroupScreen側で表示される。
-export default function AutoSettlePlan({ currency, transactions, nameOf, emojiOf, onSettleAll }: Props) {
+export default function AutoSettlePlan({ groupName, currency, transactions, nameOf, emojiOf, onSettleAll }: Props) {
   const t = useT();
+
+  const share = () => {
+    const text = buildSettlementShareText(groupName, transactions, nameOf, {
+      heading: t.share.settlementHeading,
+      closing: t.share.settlementClosing,
+    });
+    Share.share({ message: text });
+  };
+
   return (
     <View style={styles.card}>
       <Text style={styles.title}>{t.group.autoSettleTitle}</Text>
@@ -45,7 +56,10 @@ export default function AutoSettlePlan({ currency, transactions, nameOf, emojiOf
         ))}
       </View>
 
-      <PrimaryButton title={t.group.autoSettleButton} onPress={onSettleAll} style={styles.button} />
+      <View style={styles.actions}>
+        <PrimaryButton title={t.group.autoSettleShareButton} variant="ghost" onPress={share} style={styles.shareButton} />
+        <PrimaryButton title={t.group.autoSettleButton} onPress={onSettleAll} style={styles.settleButton} />
+      </View>
     </View>
   );
 }
@@ -66,5 +80,7 @@ const styles = StyleSheet.create({
   name: { ...fonts.bodyMedium, fontSize: 13.5, color: colors.ink, flexShrink: 1 },
   arrow: { color: colors.muted },
   amount: { ...fonts.bodySemiBold, fontSize: 13.5, color: colors.ink, marginLeft: 'auto' },
-  button: { width: '100%' },
+  actions: { flexDirection: 'row', gap: 8 },
+  shareButton: {},
+  settleButton: { flex: 1 },
 });

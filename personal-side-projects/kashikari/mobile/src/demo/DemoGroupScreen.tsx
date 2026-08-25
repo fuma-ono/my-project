@@ -201,6 +201,7 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
               {autoSettlePlans.map((plan) => (
                 <AutoSettlePlan
                   key={plan.currency}
+                  groupName={group.name}
                   currency={plan.currency}
                   transactions={plan.transactions}
                   nameOf={nameOf}

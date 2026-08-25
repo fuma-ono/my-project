@@ -42,6 +42,7 @@ export const ja = {
     autoSettleTitle: '🎯 自動精算プラン',
     autoSettleSubtitle: (count: number) => `最小${count}回の支払いで、みんなの残高をゼロにできます`,
     autoSettleButton: 'まとめて精算する',
+    autoSettleShareButton: '共有する',
     hideSettled: '精算済みを隠す',
     showSettled: (count: number) => `精算済み${count}件を表示`,
     emptyLedger: 'まだ記録がありません。右下の「＋」から最初の貸し借りを記録しましょう。',
@@ -148,6 +149,12 @@ export const ja = {
     version: (v: string) => `バージョン ${v}`,
     savedNote: '保存しました',
   },
+  share: {
+    // kashikariを使っていない相手にもそのまま伝わるよう、アプリ内リンク等は
+    // 使わず、読んでそのまま意味が通るテキストにしている。
+    settlementHeading: (groupName: string) => `「${groupName}」の精算結果`,
+    settlementClosing: 'よろしくお願いします!',
+  },
   demo: {
     banner: 'デモモード(Supabase未接続・操作はこの端末だけに反映されます)',
     createDisabled: 'デモモードでは作成できません',
@@ -194,6 +201,7 @@ export const en: Strings = {
     autoSettleTitle: '🎯 Auto-settle plan',
     autoSettleSubtitle: (count: number) => `Settle everyone up in as few as ${count} payment${count === 1 ? '' : 's'}`,
     autoSettleButton: 'Settle up',
+    autoSettleShareButton: 'Share',
     hideSettled: 'Hide settled',
     showSettled: (count: number) => `Show ${count} settled`,
     emptyLedger: 'No records yet. Tap the “＋” below to log your first one.',
@@ -299,6 +307,10 @@ export const en: Strings = {
     about: 'About',
     version: (v: string) => `Version ${v}`,
     savedNote: 'Saved',
+  },
+  share: {
+    settlementHeading: (groupName: string) => `Settlement for "${groupName}"`,
+    settlementClosing: 'Thanks!',
   },
   demo: {
     banner: 'Demo mode (not connected to Supabase — changes only affect this device)',
