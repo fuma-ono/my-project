@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Linking } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
 import DemoApp from './src/demo/DemoApp';
@@ -10,13 +11,22 @@ import SplashScreen from './src/screens/SplashScreen';
 import { useAuth } from './src/hooks/useAuth';
 import { useGroups } from './src/hooks/useGroups';
 import { LanguageProvider } from './src/i18n';
+import { logEvent } from './src/lib/analytics';
 import type { Group } from './src/types';
 
 // 起動直後、読み込みが一瞬で終わってもロゴが一瞬フラッシュするだけにならない
 // よう、最低でもこれだけはブランド画面を見せる(体感の「間」を作るため)。
 const MIN_SPLASH_MS = 900;
 
-type Screen = { name: 'groups' } | { name: 'group'; group: Group } | { name: 'settings' };
+type Screen = { name: 'groups' } | { name: 'group'; group: Group; justCreated?: boolean } | { name: 'settings' };
+
+// kashikari://join?code=XXXXXX 形式の招待リンクが開かれたかどうかを判定する。
+// 現状(Expo Go実行中)はこのリンク自体を開いても実際にはアプリに渡って
+// 来ないため実質的には発火しないが、スタンドアロン/開発ビルドにした
+// 将来のために「リンク経由で開かれた」ことだけは計測できるようにしておく。
+function isInviteLink(url: string): boolean {
+  return url.startsWith('kashikari://join');
+}
 
 // デモモード: Supabase未接続でもUIを確認できるようにする(スクリーンショット・
 // 動作確認用)。本番の.envではこの変数を設定しないこと。
@@ -36,6 +46,18 @@ function AppInner() {
     const t = setTimeout(() => setMinSplashDone(true), MIN_SPLASH_MS);
     return () => clearTimeout(t);
   }, []);
+
+  // 招待URL経由でアプリが開かれたことを計測する(成功指標の「招待リンク
+  // クリック数」)。デモモードでは計測しない。
+  useEffect(() => {
+    if (DEMO_MODE) return;
+    const handle = (url: string | null) => {
+      if (url && isInviteLink(url)) logEvent('invite_link_clicked', { userId });
+    };
+    Linking.getInitialURL().then(handle);
+    const sub = Linking.addEventListener('url', (e) => handle(e.url));
+    return () => sub.remove();
+  }, [userId]);
 
   if (!minSplashDone || (!DEMO_MODE && authLoading)) {
     return <SplashScreen />;
@@ -67,7 +89,7 @@ function AppInner() {
           groups={groups}
           loading={groupsLoading}
           onRefresh={refresh}
-          onOpenGroup={(group) => setScreen({ name: 'group', group })}
+          onOpenGroup={(group, justCreated) => setScreen({ name: 'group', group, justCreated })}
           onCreateGroup={createGroup}
           onJoinGroup={joinGroup}
           onOpenSettings={() => setScreen({ name: 'settings' })}
@@ -77,6 +99,7 @@ function AppInner() {
         <GroupScreen
           group={screen.group}
           meId={userId}
+          justCreated={screen.justCreated}
           onBack={() => setScreen({ name: 'groups' })}
           onLeave={leaveGroup}
           onChangeAvatar={updateAvatar}

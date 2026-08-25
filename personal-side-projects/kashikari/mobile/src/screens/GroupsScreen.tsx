@@ -13,7 +13,7 @@ type Props = {
   groups: Group[];
   loading: boolean;
   onRefresh: () => Promise<void>;
-  onOpenGroup: (group: Group) => void;
+  onOpenGroup: (group: Group, justCreated?: boolean) => void;
   onCreateGroup: (name: string, iconEmoji: string | null) => Promise<{ error: string | null; group: Group | null }>;
   onJoinGroup: (code: string) => Promise<{ error: string | null; group: Group | null }>;
   onOpenSettings: () => void;
@@ -79,7 +79,7 @@ export default function GroupsScreen({
         onClose={() => setModal(null)}
         onSubmit={async (name, iconEmoji) => {
           const res = await onCreateGroup(name, iconEmoji);
-          if (res.group) onOpenGroup(res.group);
+          if (res.group) onOpenGroup(res.group, true);
           return { error: res.error };
         }}
       />

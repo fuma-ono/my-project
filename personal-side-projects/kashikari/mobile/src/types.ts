@@ -13,6 +13,20 @@ export type Group = {
   created_at: string;
 };
 
+// 招待した記録(誰を招待し、まだ参加していないか)。招待コード自体は
+// Groupが1つ持つだけで変わらない。参加が確認できると status が
+// 'joined' になる(FIFOでの簡易的なマッチング。詳細はschema.sql参照)。
+export type GroupInvite = {
+  id: string;
+  group_id: string;
+  invited_name: string;
+  status: 'pending' | 'joined';
+  created_by: string;
+  created_at: string;
+  joined_user_id: string | null;
+  joined_at: string | null;
+};
+
 export type EntryType = 'money' | 'favor';
 
 export type Entry = {

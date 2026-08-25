@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useT } from '../i18n';
+import { logEvent } from '../lib/analytics';
 import { supabase } from '../lib/supabase';
 import type { Group } from '../types';
 
@@ -28,10 +29,12 @@ export function useGroups(userId: string | null) {
       if (!trimmed) return { error: t.groupsHook.nameRequired, group: null };
       const { data, error } = await supabase.rpc('create_group', { _name: trimmed, _icon_emoji: iconEmoji });
       if (error) return { error: error.message, group: null };
+      const group = data as Group;
+      logEvent('group_created', { userId, groupId: group.id });
       await refresh();
-      return { error: null, group: data as Group };
+      return { error: null, group };
     },
-    [refresh, t]
+    [refresh, t, userId]
   );
 
   const joinGroup = useCallback(
@@ -40,10 +43,12 @@ export function useGroups(userId: string | null) {
       if (!trimmed) return { error: t.groupsHook.codeRequired, group: null };
       const { data, error } = await supabase.rpc('join_group', { _invite_code: trimmed });
       if (error) return { error: error.message, group: null };
+      const group = data as Group;
+      logEvent('group_joined', { userId, groupId: group.id });
       await refresh();
-      return { error: null, group: data as Group };
+      return { error: null, group };
     },
-    [refresh, t]
+    [refresh, t, userId]
   );
 
   const leaveGroup = useCallback(

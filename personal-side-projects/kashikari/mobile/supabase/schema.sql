@@ -65,6 +65,23 @@ create table if not exists public.group_members (
 
 alter table public.group_members enable row level security;
 
+-- グループに人を招待した記録。招待コード自体はgroupsに1つしかないが、
+-- 「誰を招待して、まだ参加していないか」を追跡するために、招待した
+-- タイミングごとに1行作る(create_group_invite RPC経由)。参加が
+-- 確認できたら status を 'joined' に進める(join_group RPC側で更新)。
+create table if not exists public.group_invites (
+  id uuid primary key default gen_random_uuid(),
+  group_id uuid not null references public.groups (id) on delete cascade,
+  invited_name text not null check (char_length(invited_name) between 1 and 20),
+  status text not null default 'pending' check (status in ('pending', 'joined')),
+  created_by uuid not null references public.profiles (id),
+  created_at timestamptz not null default now(),
+  joined_user_id uuid references public.profiles (id),
+  joined_at timestamptz
+);
+
+alter table public.group_invites enable row level security;
+
 -- RLSポリシー内で group_members を再帰的に参照すると無限再帰になるため、
 -- security definer 関数を介してメンバーかどうかを判定する(Supabase定番パターン)。
 create or replace function public.is_group_member(_group_id uuid)
@@ -144,6 +161,14 @@ create policy "group members are visible to members"
   on public.group_members for select
   using (public.is_group_member(group_id));
 
+-- group_invites: 自分が参加しているグループの招待状況だけ見える。
+-- 作成・更新はcreate_group_invite / join_group RPC経由のみ(直接の
+-- INSERT/UPDATEポリシーは用意しない)。
+drop policy if exists "group invites are visible to members" on public.group_invites;
+create policy "group invites are visible to members"
+  on public.group_invites for select
+  using (public.is_group_member(group_id));
+
 -- entries: 参加しているグループの記録だけ、読み書きできる(グループ内は
 -- お互いを信頼する前提のため、メンバーなら誰でも記録・精算・削除できる)
 drop policy if exists "entries are visible to members" on public.entries;
@@ -210,6 +235,33 @@ begin
 end;
 $$;
 
+-- 「招待中」の一覧に名前で出すための1件を作る(招待コード自体は
+-- groups.invite_codeのまま変わらない。これはあくまで「誰を招待したか」の
+-- 記録)。
+create or replace function public.create_group_invite(_group_id uuid, _invited_name text)
+returns public.group_invites
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  _invite public.group_invites;
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  if not public.is_group_member(_group_id) then
+    raise exception 'このグループのメンバーではありません';
+  end if;
+
+  insert into public.group_invites (group_id, invited_name, created_by)
+  values (_group_id, _invited_name, auth.uid())
+  returning * into _invite;
+
+  return _invite;
+end;
+$$;
+
 create or replace function public.join_group(_invite_code text)
 returns public.groups
 language plpgsql
@@ -231,6 +283,22 @@ begin
   insert into public.group_members (group_id, user_id)
   values (_group.id, auth.uid())
   on conflict do nothing;
+
+  -- 新規参加(既存メンバーの再参加ではない)のときだけ、このグループで
+  -- 一番古い「招待中」を「参加中」に進める。招待コードはグループ共通の
+  -- 1つしかなく、誰の招待で参加したかを厳密には特定できないため、
+  -- 「先に招待した人から順に参加していくはず」という前提の簡易的な
+  -- マッチングにしている(FIFO)。該当する招待が無ければ何も起きない。
+  if found then
+    update public.group_invites
+    set status = 'joined', joined_user_id = auth.uid(), joined_at = now()
+    where id = (
+      select id from public.group_invites
+      where group_id = _group.id and status = 'pending'
+      order by created_at asc
+      limit 1
+    );
+  end if;
 
   return _group;
 end;
@@ -278,6 +346,7 @@ end;
 $$;
 
 grant execute on function public.create_group(text, text) to authenticated;
+grant execute on function public.create_group_invite(uuid, text) to authenticated;
 grant execute on function public.join_group(text) to authenticated;
 grant execute on function public.leave_group(uuid) to authenticated;
 grant execute on function public.update_group_icon(uuid, text) to authenticated;
@@ -316,3 +385,31 @@ create policy "group members can delete receipts"
     bucket_id = 'receipts'
     and public.is_group_member((storage.foldername(name))[1]::uuid)
   );
+
+-- ============================================================
+-- 7. 成長施策の計測(招待〜精算までのファネルを追う最小限のログ)
+-- ============================================================
+--
+-- グループ作成数・招待発行数・招待クリック数・参加完了数・精算完了数を
+-- 追うための、ごく簡単なイベントログ。誰でも自分の行動として1件ずつ
+-- INSERTできるだけで、他人のイベントは読めない(SELECTポリシーを
+-- 用意しない)。オーナーはSupabaseダッシュボードのSQL Editor(サービス
+-- ロール、RLSを迂回できる)から次のように集計できる:
+--
+--   select event_type, count(*) from public.analytics_events
+--   group by event_type order by count(*) desc;
+
+create table if not exists public.analytics_events (
+  id uuid primary key default gen_random_uuid(),
+  event_type text not null,
+  user_id uuid references public.profiles (id) on delete set null,
+  group_id uuid references public.groups (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.analytics_events enable row level security;
+
+drop policy if exists "users can log their own analytics events" on public.analytics_events;
+create policy "users can log their own analytics events"
+  on public.analytics_events for insert
+  with check (user_id = auth.uid() or user_id is null);

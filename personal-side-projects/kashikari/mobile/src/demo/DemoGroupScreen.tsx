@@ -1,7 +1,7 @@
 // デモモード専用。GroupScreen.tsxと同じ見た目・操作感を、Supabaseを
 // 一切呼ばずローカルstateだけで再現する(スクリーンショット・動作確認用)。
-import { useMemo, useState } from 'react';
-import { Alert, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Pressable, SectionList, Share, StyleSheet, Text, View } from 'react-native';
 
 import AddEntrySheet from '../components/AddEntrySheet';
 import AutoSettlePlan from '../components/AutoSettlePlan';
@@ -11,16 +11,19 @@ import BalanceCard from '../components/BalanceCard';
 import EntryRow from '../components/EntryRow';
 import Fab from '../components/Fab';
 import GroupIconPicker from '../components/GroupIconPicker';
+import InviteModal from '../components/InviteModal';
 import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
+import PendingInvites from '../components/PendingInvites';
 import SettlementProgress from '../components/SettlementProgress';
 import UnpaidMembersModal from '../components/UnpaidMembersModal';
 import { useT } from '../i18n';
 import { computeBalances, computeMyNet, computeSimplifiedSettlement } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
+import { buildInviteUrl } from '../lib/invite';
 import { splitAmount } from '../lib/split';
 import { colors, fonts } from '../theme';
-import type { BalanceRow, Entry, EntryType, Group, Profile, SimplifiedTransaction } from '../types';
+import type { BalanceRow, Entry, EntryType, Group, GroupInvite, Profile, SimplifiedTransaction } from '../types';
 import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS } from './mockData';
 
 type Tab = 'balance' | 'ledger';
@@ -37,6 +40,8 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   const [tab, setTab] = useState<Tab>('balance');
   const [showSettled, setShowSettled] = useState(false);
   const [unpaidModalOpen, setUnpaidModalOpen] = useState(false);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [invites, setInvites] = useState<GroupInvite[]>([]);
   const meId = DEMO_ME_ID;
   const me = members.find((m) => m.id === meId);
 
@@ -102,6 +107,39 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   const settleAllMoney = async (currency: string) => {
     setEntries((prev) => prev.map((e) => (e.type === 'money' && (e.currency || 'JPY') === currency && !e.settled ? { ...e, settled: true } : e)));
     return { error: null };
+  };
+
+  // 貸し借りが0件になった瞬間だけ紹介導線を出す(本番のGroupScreenと同じ狙い)。
+  const prevBalanceCountRef = useRef<number | null>(null);
+  useEffect(() => {
+    const prev = prevBalanceCountRef.current;
+    if (prev !== null && prev > 0 && balances.length === 0) {
+      Alert.alert(t.group.referralTitle, t.group.referralMessage, [
+        { text: t.group.referralDismiss, style: 'cancel' },
+        { text: t.group.referralNow, onPress: () => setInviteModalOpen(true) },
+      ]);
+    }
+    prevBalanceCountRef.current = balances.length;
+  }, [balances.length, t]);
+
+  const inviteMember = async (invitedName: string) => {
+    const invite: GroupInvite = {
+      id: `demo-invite-${demoIdSeq++}`,
+      group_id: group.id,
+      invited_name: invitedName,
+      status: 'pending',
+      created_by: meId,
+      created_at: new Date().toISOString(),
+      joined_user_id: null,
+      joined_at: null,
+    };
+    setInvites((prev) => [...prev, invite]);
+    return { error: null };
+  };
+
+  const shareInvite = () => {
+    const url = buildInviteUrl(group.invite_code);
+    Share.share({ message: t.group.inviteMessage(group.name, url, group.invite_code) });
   };
 
   const addEntry = async (input: {
@@ -187,7 +225,10 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
       </View>
       <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleRow}>
         <Mark size={40} glyph={group.icon_emoji ?? undefined} />
-        <Text style={styles.title}>{group.name}</Text>
+        <View style={styles.titleTextCol}>
+          <Text style={styles.title}>{group.name}</Text>
+          <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
+        </View>
       </Pressable>
 
       <View style={styles.memberStrip}>
@@ -205,10 +246,12 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
             </View>
           )
         )}
-        <Pressable onPress={() => Alert.alert(t.demo.inviteDisabled)} style={styles.inviteChip}>
+        <Pressable onPress={() => setInviteModalOpen(true)} style={styles.inviteChip}>
           <Text style={styles.inviteChipText}>{t.group.invite}</Text>
         </Pressable>
       </View>
+
+      <PendingInvites invites={invites} />
 
       <View style={styles.tabs}>
         <Pressable onPress={() => setTab('balance')} style={[styles.tabBtn, tab === 'balance' && styles.tabBtnActive]}>
@@ -322,6 +365,16 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
         onClose={() => setGroupIconPickerOpen(false)}
       />
 
+      <InviteModal
+        visible={inviteModalOpen}
+        onClose={() => setInviteModalOpen(false)}
+        onSubmit={async (invitedName) => {
+          const res = await inviteMember(invitedName);
+          if (!res.error) shareInvite();
+          return res;
+        }}
+      />
+
       <UnpaidMembersModal
         visible={unpaidModalOpen}
         rows={receivingRows}
@@ -341,7 +394,9 @@ const styles = StyleSheet.create({
   headerRow: { marginBottom: 4 },
   back: { ...fonts.bodySemiBold, fontSize: 15, color: colors.accent },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4, marginBottom: 14 },
+  titleTextCol: { flexShrink: 1 },
   title: { ...fonts.display, fontSize: 26, color: colors.ink },
+  memberCount: { ...fonts.bodyMedium, fontSize: 12.5, color: colors.muted, marginTop: 1 },
   memberStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 },
   memberChip: {
     flexDirection: 'row',

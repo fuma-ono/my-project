@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Pressable, RefreshControl, SectionList, Share, StyleSheet, Text, View } from 'react-native';
 
 import AddEntrySheet from '../components/AddEntrySheet';
@@ -9,14 +9,18 @@ import BalanceCard from '../components/BalanceCard';
 import EntryRow from '../components/EntryRow';
 import Fab from '../components/Fab';
 import GroupIconPicker from '../components/GroupIconPicker';
+import InviteModal from '../components/InviteModal';
 import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
+import PendingInvites from '../components/PendingInvites';
 import SettlementProgress from '../components/SettlementProgress';
 import UnpaidMembersModal from '../components/UnpaidMembersModal';
 import { useGroupData } from '../hooks/useGroupData';
 import { useT } from '../i18n';
+import { logEvent } from '../lib/analytics';
 import { computeBalances, computeMyNet, computeSimplifiedSettlement } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
+import { buildInviteUrl } from '../lib/invite';
 import { colors, fonts } from '../theme';
 import type { BalanceRow, Group, SimplifiedTransaction } from '../types';
 
@@ -25,21 +29,33 @@ type Tab = 'balance' | 'ledger';
 type Props = {
   group: Group;
   meId: string | null;
+  justCreated?: boolean; // グループ作成直後に開かれた場合、招待導線を1回だけ出す
   onBack: () => void;
   onLeave: (groupId: string) => Promise<{ error: string | null }>;
   onChangeAvatar: (emoji: string) => Promise<{ error: string | null }>;
   onChangeGroupIcon: (emoji: string) => Promise<{ error: string | null }>;
 };
 
-export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvatar, onChangeGroupIcon }: Props) {
+export default function GroupScreen({ group, meId, justCreated, onBack, onLeave, onChangeAvatar, onChangeGroupIcon }: Props) {
   const t = useT();
-  const { members, entries, loading, refresh, addEntry, addSplitEntry, toggleSettled, deleteEntry, settlePair, settleAllMoney } = useGroupData(
-    group.id,
-    meId
-  );
+  const {
+    members,
+    entries,
+    invites,
+    loading,
+    refresh,
+    addEntry,
+    addSplitEntry,
+    toggleSettled,
+    deleteEntry,
+    settlePair,
+    settleAllMoney,
+    inviteMember,
+  } = useGroupData(group.id, meId);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [groupIconPickerOpen, setGroupIconPickerOpen] = useState(false);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('balance');
   const [showSettled, setShowSettled] = useState(false);
   const [unpaidModalOpen, setUnpaidModalOpen] = useState(false);
@@ -120,6 +136,32 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
   );
   const settledCount = entries.length - entries.filter((e) => !e.settled).length;
 
+  // グループ作成直後だけ、1回きりの招待導線を出す(成長施策⑥)。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!justCreated) return;
+    Alert.alert(t.group.inviteAfterCreateTitle, t.group.inviteAfterCreateMessage(group.name), [
+      { text: t.group.inviteAfterCreateLater, style: 'cancel' },
+      { text: t.group.inviteAfterCreateNow, onPress: () => setInviteModalOpen(true) },
+    ]);
+  }, []);
+
+  // 貸し借りが1件もない状態(balances.length === 0)に「今まさに」なった
+  // 瞬間だけ、紹介導線を出す(成長施策⑦)。開いた時点で既に精算済みだった
+  // 場合は出さない(prevが分かっているとき=2回目以降のレンダーだけ発火)。
+  const prevBalanceCountRef = useRef<number | null>(null);
+  useEffect(() => {
+    const prev = prevBalanceCountRef.current;
+    if (prev !== null && prev > 0 && balances.length === 0) {
+      logEvent('settlement_completed', { userId: meId, groupId: group.id });
+      Alert.alert(t.group.referralTitle, t.group.referralMessage, [
+        { text: t.group.referralDismiss, style: 'cancel' },
+        { text: t.group.referralNow, onPress: () => setInviteModalOpen(true) },
+      ]);
+    }
+    prevBalanceCountRef.current = balances.length;
+  }, [balances.length, group.id, group.name, meId, t]);
+
   const avatarPicker = (
     <AvatarPicker
       visible={avatarPickerOpen}
@@ -145,9 +187,22 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
     />
   );
 
-  const invite = () => {
-    Share.share({ message: t.group.inviteMessage(group.name, group.invite_code) });
+  const shareInvite = () => {
+    const url = buildInviteUrl(group.invite_code);
+    Share.share({ message: t.group.inviteMessage(group.name, url, group.invite_code) });
   };
+
+  const inviteModal = (
+    <InviteModal
+      visible={inviteModalOpen}
+      onClose={() => setInviteModalOpen(false)}
+      onSubmit={async (invitedName) => {
+        const res = await inviteMember(invitedName);
+        if (!res.error) shareInvite();
+        return res;
+      }}
+    />
+  );
 
   const leave = () => {
     Alert.alert(t.group.leaveConfirmTitle, t.group.leaveConfirmMessage(group.name), [
@@ -179,7 +234,10 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
       </View>
       <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleRow}>
         <Mark size={40} glyph={group.icon_emoji ?? undefined} />
-        <Text style={styles.title}>{group.name}</Text>
+        <View style={styles.titleTextCol}>
+          <Text style={styles.title}>{group.name}</Text>
+          <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
+        </View>
       </Pressable>
 
       <View style={styles.memberStrip}>
@@ -197,10 +255,12 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
             </View>
           )
         )}
-        <Pressable onPress={invite} style={styles.inviteChip}>
+        <Pressable onPress={() => setInviteModalOpen(true)} style={styles.inviteChip}>
           <Text style={styles.inviteChipText}>{t.group.invite}</Text>
         </Pressable>
       </View>
+
+      <PendingInvites invites={invites} />
 
       <View style={styles.tabs}>
         <Pressable onPress={() => setTab('balance')} style={[styles.tabBtn, tab === 'balance' && styles.tabBtnActive]}>
@@ -263,6 +323,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
         <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} onSubmitSplit={addSplitEntry} />
         {avatarPicker}
         {groupIconPicker}
+        {inviteModal}
         <UnpaidMembersModal
           visible={unpaidModalOpen}
           rows={receivingRows}
@@ -305,6 +366,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
       <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} onSubmitSplit={addSplitEntry} />
       {avatarPicker}
       {groupIconPicker}
+      {inviteModal}
     </View>
   );
 }
@@ -316,7 +378,9 @@ const styles = StyleSheet.create({
   back: { ...fonts.bodySemiBold, fontSize: 15, color: colors.accent },
   leave: { ...fonts.bodyMedium, fontSize: 12.5, color: colors.muted },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4, marginBottom: 14 },
+  titleTextCol: { flexShrink: 1 },
   title: { ...fonts.display, fontSize: 26, color: colors.ink },
+  memberCount: { ...fonts.bodyMedium, fontSize: 12.5, color: colors.muted, marginTop: 1 },
   memberStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 },
   memberChip: {
     flexDirection: 'row',

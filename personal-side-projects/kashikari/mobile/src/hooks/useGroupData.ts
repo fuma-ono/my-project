@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import * as Crypto from 'expo-crypto';
 
 import { useT } from '../i18n';
+import { logEvent } from '../lib/analytics';
 import { supabase } from '../lib/supabase';
 import { splitAmount } from '../lib/split';
-import type { Entry, EntryType, Profile } from '../types';
+import type { Entry, EntryType, GroupInvite, Profile } from '../types';
 import type { Strings } from '../i18n/strings';
 
 // addEntry・addSplitEntryの両方で使う、レシート画像アップロードの共通処理。
@@ -33,14 +34,16 @@ export function useGroupData(groupId: string | null, userId: string | null) {
   const t = useT();
   const [members, setMembers] = useState<Profile[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [invites, setInvites] = useState<GroupInvite[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadAll = useCallback(async () => {
     if (!groupId) return;
     setLoading(true);
-    const [membersRes, entriesRes] = await Promise.all([
+    const [membersRes, entriesRes, invitesRes] = await Promise.all([
       supabase.from('group_members').select('profiles(id, display_name, avatar_emoji)').eq('group_id', groupId),
       supabase.from('entries').select('*').eq('group_id', groupId).order('created_at', { ascending: false }),
+      supabase.from('group_invites').select('*').eq('group_id', groupId).order('created_at', { ascending: true }),
     ]);
     if (membersRes.data) {
       const list = membersRes.data
@@ -49,6 +52,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       setMembers(list);
     }
     if (entriesRes.data) setEntries(entriesRes.data as Entry[]);
+    if (invitesRes.data) setInvites(invitesRes.data as GroupInvite[]);
     setLoading(false);
   }, [groupId]);
 
@@ -56,7 +60,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
     loadAll();
   }, [loadAll]);
 
-  // 誰かが記録・精算・メンバー追加をすると、グループ内の全員の画面に
+  // 誰かが記録・精算・メンバー追加・招待をすると、グループ内の全員の画面に
   // リアルタイムで反映されるようにする(Web版プロトタイプの体験を踏襲)。
   useEffect(() => {
     if (!groupId) return;
@@ -72,11 +76,30 @@ export function useGroupData(groupId: string | null, userId: string | null) {
         { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${groupId}` },
         () => loadAll()
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'group_invites', filter: `group_id=eq.${groupId}` },
+        () => loadAll()
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
   }, [groupId, loadAll]);
+
+  // 友達を招待: 「招待中」一覧に名前で出すための1件を作る。実際の招待URL
+  // 共有(Share.share)は呼び出し側(GroupScreen)が行う。
+  const inviteMember = useCallback(
+    async (invitedName: string) => {
+      if (!groupId) return { error: t.auth.unauthenticated };
+      const { error } = await supabase.rpc('create_group_invite', { _group_id: groupId, _invited_name: invitedName });
+      if (error) return { error: error.message };
+      logEvent('invite_link_generated', { userId, groupId });
+      await loadAll();
+      return { error: null };
+    },
+    [groupId, userId, loadAll, t]
+  );
 
   const addEntry = useCallback(
     async (input: {
@@ -224,5 +247,18 @@ export function useGroupData(groupId: string | null, userId: string | null) {
     [groupId, loadAll, t]
   );
 
-  return { members, entries, loading, refresh: loadAll, addEntry, addSplitEntry, toggleSettled, deleteEntry, settlePair, settleAllMoney };
+  return {
+    members,
+    entries,
+    invites,
+    loading,
+    refresh: loadAll,
+    addEntry,
+    addSplitEntry,
+    toggleSettled,
+    deleteEntry,
+    settlePair,
+    settleAllMoney,
+    inviteMember,
+  };
 }
