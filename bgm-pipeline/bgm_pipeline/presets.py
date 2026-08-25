@@ -398,6 +398,11 @@ PRESET_METADATA = {
             "10hz binaural beats", "concentration music",
         ],
         "hashtags": ["集中用bgm", "勉強用bgm", "バイノーラルビート", "binauralbeats", "focusmusic"],
+        # 2026-08-25追加: study_focus_binauralも08-12の実写化方針転換の対象漏れ
+        # だった(sleep系3プリセットと同じ経緯)。オーナー提供の写真(和の書斎、
+        # 日本語の画面表示・掛け軸)で他プリセットと統一。
+        "thumbnail_style": "photo",
+        "thumbnail_source": "assets/thumbnails/study_focus_binaural_source.jpg",
     },
     "sleep_insomnia_pulse": {
         # Scene 01 (docs/marketing/bgm-content-audit/, 2026-08-12 approved
