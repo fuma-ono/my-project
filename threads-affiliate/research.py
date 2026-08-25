@@ -31,6 +31,7 @@ python threads-affiliate/research.py
 
 import json
 import pathlib
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -76,8 +77,14 @@ def search_items(keyword: str, app_id: str, affiliate_id: str) -> list[dict]:
         "format": "json",
     }
     url = f"{SEARCH_API}?{urllib.parse.urlencode(params)}"
-    with urllib.request.urlopen(url, timeout=30) as resp:
-        data = json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            data = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        # 楽天APIはエラーの詳細(error_description等)をレスポンス本文に返すが、
+        # urllibはデフォルトで本文を握りつぶすため、明示的に読んで再送出する。
+        body = e.read().decode(errors="replace")
+        raise RuntimeError(f"{e.code} {e.reason}: {body}") from None
     return data.get("Items", [])
 
 
