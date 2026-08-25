@@ -183,7 +183,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
           ListHeaderComponent={
             <View>
               {header}
-              <NetSummary totals={netTotals} />
+              <NetSummary totals={netTotals} unsettledCount={balances.filter((b) => b.mine).length} />
               {autoSettlePlans.map((plan) => (
                 <AutoSettlePlan
                   key={plan.currency}

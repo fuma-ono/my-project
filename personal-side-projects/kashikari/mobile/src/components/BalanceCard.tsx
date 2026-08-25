@@ -18,20 +18,24 @@ type Props = {
 // 色分けにする(単なる装飾ではなく、金額の向きを一目で伝えるための色)。
 // 自分が関係しない行(グループ内の他の2人同士)は色を付けずニュートラルにする。
 //
+// 以前は「はなこ → あなた」のような矢印表記だったが、「誰が受け取る/払う
+// 側なのか一瞬考える必要がある」という指摘を受け、自分が関係する行は
+// 「はなこから受け取る」「はなこへ支払う」という文章表記に変えた
+// (相手の名前と向きが1つの文で読める)。自分が関係しない行(グループ内の
+// 他の2人同士)には「あなた」という基準点が無いため、従来通り
+// 「A → B」の表記のまま。
+//
 // 「催促する」ボタンを追加した際、1行に名前ペア+金額+ボタン2つを
 // 詰め込むと長い名前・長い通貨表記(例: "$20.00 USD")で名前が
-// "は…"のように潰れてしまったため、上段(名前ペア+金額)と
-// 下段(向きラベル+アクションボタン)の2段組みに分けている。
+// "は…"のように潰れてしまったため、上段(名前/文章+金額)と
+// 下段(アクションボタン)の2段組みに分けている。
 export default function BalanceCard({ row, nameOf, emojiOf, meId, onSettle }: Props) {
   const t = useT();
-  const debtorLabel = row.mine && row.debtor === meId ? t.balanceCard.you : nameOf(row.debtor);
-  const creditorLabel = row.mine && row.creditor === meId ? t.balanceCard.you : nameOf(row.creditor);
   const amountLabel = row.type === 'money' ? formatMoney(row.amount, row.currency) : t.common.favorCount(row.amount);
 
   const iOwe = row.mine && row.debtor === meId;
   const iAmOwed = row.mine && row.creditor === meId;
   const amountColor = iOwe ? colors.negative : iAmOwed ? colors.positive : colors.muted;
-  const directionLabel = iOwe ? t.balanceCard.pay : iAmOwed ? t.balanceCard.receive : null;
 
   // 「催促する」は、自分が受け取る側(相手が自分にお金を払っていない)の
   // 場合だけ意味があるので、それ以外では出さない。頼みごとは金額が
@@ -50,35 +54,77 @@ export default function BalanceCard({ row, nameOf, emojiOf, meId, onSettle }: Pr
   return (
     <View style={styles.card}>
       <View style={styles.topRow}>
-        <View style={styles.pair}>
-          <Avatar name={nameOf(row.debtor)} emoji={emojiOf(row.debtor)} size="sm" />
-          <Text style={[styles.name, row.debtor === meId && styles.me]} numberOfLines={1}>
-            {debtorLabel}
-          </Text>
-          <Text style={styles.arrow}>→</Text>
-          <Avatar name={nameOf(row.creditor)} emoji={emojiOf(row.creditor)} size="sm" />
-          <Text style={[styles.name, row.creditor === meId && styles.me]} numberOfLines={1}>
-            {creditorLabel}
-          </Text>
-        </View>
+        {row.mine ? (
+          <MineLine row={row} nameOf={nameOf} emojiOf={emojiOf} iOwe={iOwe} t={t} />
+        ) : (
+          <OtherPairLine row={row} nameOf={nameOf} emojiOf={emojiOf} />
+        )}
         <Text style={[styles.amount, { color: amountColor }]} numberOfLines={1}>
           {amountLabel}
         </Text>
       </View>
 
       <View style={styles.bottomRow}>
-        {directionLabel ? <Text style={[styles.directionLabel, { color: amountColor }]}>{directionLabel}</Text> : <View />}
-        <View style={styles.actions}>
-          {canRemind && (
-            <Pressable onPress={remind} hitSlop={8} style={styles.remindBtn}>
-              <Text style={styles.remindText}>{t.balanceCard.remind}</Text>
-            </Pressable>
-          )}
-          <Pressable onPress={onSettle} hitSlop={8} style={styles.settleBtn}>
-            <Text style={styles.settleText}>{t.balanceCard.settle}</Text>
+        {canRemind && (
+          <Pressable onPress={remind} hitSlop={8} style={styles.remindBtn}>
+            <Text style={styles.remindText}>{t.balanceCard.remind}</Text>
           </Pressable>
-        </View>
+        )}
+        <Pressable onPress={onSettle} hitSlop={8} style={styles.settleBtn}>
+          <Text style={styles.settleText}>{t.balanceCard.settle}</Text>
+        </Pressable>
       </View>
+    </View>
+  );
+}
+
+// 自分が関係する行: 相手の名前だけを1文にまとめて見せる。
+function MineLine({
+  row,
+  nameOf,
+  emojiOf,
+  iOwe,
+  t,
+}: {
+  row: BalanceRow;
+  nameOf: (id: string) => string;
+  emojiOf: (id: string) => string | null;
+  iOwe: boolean;
+  t: ReturnType<typeof useT>;
+}) {
+  const otherId = iOwe ? row.creditor : row.debtor;
+  const otherName = nameOf(otherId);
+  return (
+    <View style={styles.line}>
+      <Avatar name={otherName} emoji={emojiOf(otherId)} size="sm" />
+      <Text style={styles.sentence} numberOfLines={1}>
+        {iOwe ? t.balanceCard.sentencePay(otherName) : t.balanceCard.sentenceReceive(otherName)}
+      </Text>
+    </View>
+  );
+}
+
+// 自分が関係しない行(グループ内の他の2人同士): 従来通りA→B表記。
+function OtherPairLine({
+  row,
+  nameOf,
+  emojiOf,
+}: {
+  row: BalanceRow;
+  nameOf: (id: string) => string;
+  emojiOf: (id: string) => string | null;
+}) {
+  return (
+    <View style={styles.line}>
+      <Avatar name={nameOf(row.debtor)} emoji={emojiOf(row.debtor)} size="sm" />
+      <Text style={styles.name} numberOfLines={1}>
+        {nameOf(row.debtor)}
+      </Text>
+      <Text style={styles.arrow}>→</Text>
+      <Avatar name={nameOf(row.creditor)} emoji={emojiOf(row.creditor)} size="sm" />
+      <Text style={styles.name} numberOfLines={1}>
+        {nameOf(row.creditor)}
+      </Text>
     </View>
   );
 }
@@ -90,14 +136,12 @@ function shareReminder(message: string) {
 const styles = StyleSheet.create({
   card: { paddingVertical: 14, gap: 8 },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  pair: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
+  line: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
+  sentence: { ...fonts.bodyMedium, fontSize: 14.5, color: colors.ink, flexShrink: 1 },
   name: { ...fonts.bodyMedium, fontSize: 14.5, color: colors.ink, flexShrink: 1 },
-  me: { ...fonts.bodySemiBold },
   arrow: { color: colors.muted },
   amount: { ...fonts.display, fontSize: 19, flexShrink: 0 },
-  bottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  directionLabel: { ...fonts.bodyMedium, fontSize: 12 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  bottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
   remindBtn: {
     backgroundColor: colors.favorSoft,
     borderRadius: 999,

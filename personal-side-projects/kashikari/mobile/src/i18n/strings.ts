@@ -72,9 +72,8 @@ export const ja = {
     title: 'アイコンを選ぶ',
   },
   balanceCard: {
-    you: 'あなた',
-    pay: '払う',
-    receive: '受け取る',
+    sentencePay: (name: string) => `${name}へ支払う`,
+    sentenceReceive: (name: string) => `${name}から受け取る`,
     settle: '精算',
     remind: '催促する',
   },
@@ -90,9 +89,11 @@ export const ja = {
     strongMessage: (amount: string) => `すみません、${amount}の精算をお願いします!`,
   },
   netSummary: {
+    heading: 'あなたの残高',
     allSettled: '貸し借りはすべて精算済みです',
-    receiving: '受け取り',
-    paying: '支払い',
+    receiving: '受け取る金額',
+    paying: '支払う金額',
+    unsettledCount: (n: number) => `未精算${n}件`,
   },
   entryRow: {
     markUnsettled: '未精算に戻す',
@@ -243,9 +244,8 @@ export const en: Strings = {
     title: 'Choose an icon',
   },
   balanceCard: {
-    you: 'You',
-    pay: 'you owe',
-    receive: 'owed to you',
+    sentencePay: (name: string) => `Pay ${name}`,
+    sentenceReceive: (name: string) => `Receive from ${name}`,
     settle: 'Settle',
     remind: 'Remind',
   },
@@ -261,9 +261,11 @@ export const en: Strings = {
     strongMessage: (amount: string) => `Hi, could you settle up the ${amount}? Thanks.`,
   },
   netSummary: {
+    heading: 'Your balance',
     allSettled: 'Everything is settled up',
-    receiving: "You're owed",
-    paying: 'You owe',
+    receiving: "Amount you'll receive",
+    paying: "Amount you'll pay",
+    unsettledCount: (n: number) => `${n} unsettled`,
   },
   entryRow: {
     markUnsettled: 'Mark as unsettled',

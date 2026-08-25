@@ -197,7 +197,7 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
           ListHeaderComponent={
             <View>
               {header}
-              <NetSummary totals={netTotals} />
+              <NetSummary totals={netTotals} unsettledCount={balances.filter((b) => b.mine).length} />
               {autoSettlePlans.map((plan) => (
                 <AutoSettlePlan
                   key={plan.currency}
