@@ -7,7 +7,9 @@ export type AnalyticsEvent =
   | 'invite_link_generated'
   | 'invite_link_clicked'
   | 'group_joined'
-  | 'settlement_completed';
+  | 'settlement_completed'
+  | 'entry_marked_paid'
+  | 'entry_marked_received';
 
 // 計測はあくまで補助情報であり、失敗してもアプリ本来の操作を絶対に
 // 止めてはいけないため、fire-and-forgetにする(呼び出し側でawaitしない)。

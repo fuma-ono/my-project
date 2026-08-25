@@ -9,6 +9,7 @@ import BalanceCard from '../components/BalanceCard';
 import EntryRow from '../components/EntryRow';
 import Fab from '../components/Fab';
 import GroupIconPicker from '../components/GroupIconPicker';
+import HistoryEntryRow from '../components/HistoryEntryRow';
 import InviteModal from '../components/InviteModal';
 import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
@@ -24,7 +25,7 @@ import { buildInviteUrl } from '../lib/invite';
 import { colors, fonts } from '../theme';
 import type { BalanceRow, Group, SimplifiedTransaction } from '../types';
 
-type Tab = 'balance' | 'ledger';
+type Tab = 'balance' | 'ledger' | 'history';
 
 type Props = {
   group: Group;
@@ -50,6 +51,8 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
     deleteEntry,
     settlePair,
     settleAllMoney,
+    markPaid,
+    confirmReceived,
     inviteMember,
   } = useGroupData(group.id, meId);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -111,30 +114,41 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
     };
   }, [balances, meId, t]);
 
-  // 精算進捗: このグループで貸し借りが1つも残っていないメンバーの割合。
-  // 進捗が見えると完了したくなる、という狙い。全員精算済みならNetSummary
-  // 側の🎉メッセージと役割が重複するため、balances.length > 0のときだけ
+  // 精算進捗: まだ完了(confirmed)していない内訳のうち、既に「支払った」
+  // 済みで受け取る側の確認待ちのものがどれだけあるか。進捗が見えると
+  // 完了したくなる、という狙い。全員精算済みならNetSummary側の🎉
+  // メッセージと役割が重複するため、balances.length > 0のときだけ
   // 出す(呼び出し側で判定)。
   const settlementProgress = useMemo(() => {
-    const involvedIds = new Set<string>();
-    for (const row of balances) {
-      involvedIds.add(row.debtor);
-      involvedIds.add(row.creditor);
-    }
-    const total = members.length;
-    const done = members.filter((m) => !involvedIds.has(m.id)).length;
-    return { done, total };
-  }, [balances, members]);
+    const remaining = balances.length;
+    const paid = balances.filter((r) => r.type === 'money' && r.status === 'paid').length;
+    return { remaining, paid };
+  }, [balances]);
 
   const visibleEntries = useMemo(
-    () => (showSettled ? entries : entries.filter((e) => !e.settled)),
+    () => (showSettled ? entries : entries.filter((e) => e.settle_status !== 'confirmed')),
     [entries, showSettled]
   );
   const sections = useMemo(
     () => groupEntriesByDate(visibleEntries, { today: t.dateGroups.today, yesterday: t.dateGroups.yesterday }),
     [visibleEntries, t]
   );
-  const settledCount = entries.length - entries.filter((e) => !e.settled).length;
+  const settledCount = entries.filter((e) => e.settle_status === 'confirmed').length;
+
+  // 履歴タブ: 双方確認が完了(confirmed)した記録だけを、確認日の新しい順に
+  // 並べる。日付グルーピングはconfirmed_at基準にしたいが、groupEntriesByDate
+  // はcreated_atしか見ないため、この呼び出し専用にcreated_atをconfirmed_at
+  // で置き換えたコピーを渡す(表示に使うentry自体は元のまま)。
+  const historySections = useMemo(() => {
+    const confirmed = entries
+      .filter((e) => e.settle_status === 'confirmed' && e.confirmed_at)
+      .slice()
+      .sort((a, b) => ((a.confirmed_at as string) < (b.confirmed_at as string) ? 1 : -1));
+    return groupEntriesByDate(
+      confirmed.map((e) => ({ ...e, created_at: e.confirmed_at as string })),
+      { today: t.dateGroups.today, yesterday: t.dateGroups.yesterday }
+    );
+  }, [entries, t]);
 
   // グループ作成直後だけ、1回きりの招待導線を出す(成長施策⑥)。
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -269,6 +283,9 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
         <Pressable onPress={() => setTab('ledger')} style={[styles.tabBtn, tab === 'ledger' && styles.tabBtnActive]}>
           <Text style={[styles.tabText, tab === 'ledger' && styles.tabTextActive]}>{t.group.tabLedger}</Text>
         </Pressable>
+        <Pressable onPress={() => setTab('history')} style={[styles.tabBtn, tab === 'history' && styles.tabBtnActive]}>
+          <Text style={[styles.tabText, tab === 'history' && styles.tabTextActive]}>{t.group.tabHistory}</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -288,8 +305,8 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
               <NetSummary totals={netTotals} balances={balances} meId={meId} />
               {balances.length > 0 && (
                 <SettlementProgress
-                  doneCount={settlementProgress.done}
-                  totalCount={settlementProgress.total}
+                  remaining={settlementProgress.remaining}
+                  paid={settlementProgress.paid}
                   onPress={() => setUnpaidModalOpen(true)}
                 />
               )}
@@ -315,6 +332,8 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
               emojiOf={emojiOf}
               meId={meId}
               onSettle={() => settlePair(item.type, item.debtor, item.creditor, item.currency)}
+              onMarkPaid={() => markPaid(item.debtor, item.creditor, item.currency)}
+              onConfirmReceived={() => confirmReceived(item.debtor, item.creditor, item.currency)}
             />
           )}
           ItemSeparatorComponent={() => <View style={styles.hairline} />}
@@ -329,8 +348,33 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
           rows={receivingRows}
           nameOf={nameOf}
           emojiOf={emojiOf}
+          onConfirmReceived={(row) => confirmReceived(row.debtor, row.creditor, row.currency)}
           onClose={() => setUnpaidModalOpen(false)}
         />
+      </View>
+    );
+  }
+
+  if (tab === 'history') {
+    return (
+      <View style={styles.wrap}>
+        <SectionList
+          sections={historySections}
+          keyExtractor={(e) => e.id}
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={colors.accent} />}
+          contentContainerStyle={styles.list}
+          stickySectionHeadersEnabled={false}
+          ListHeaderComponent={<View>{header}</View>}
+          renderSectionHeader={({ section }) => <Text style={styles.dateHeader}>{section.title}</Text>}
+          renderItem={({ item }) => <HistoryEntryRow entry={item} nameOf={nameOf} meId={meId} />}
+          ItemSeparatorComponent={() => <View style={styles.hairline} />}
+          ListEmptyComponent={!loading ? <Text style={styles.emptyNote}>{t.history.empty}</Text> : null}
+        />
+        <Fab onPress={() => setSheetOpen(true)} disabled={members.length < 2} />
+        <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} onSubmitSplit={addSplitEntry} />
+        {avatarPicker}
+        {groupIconPicker}
+        {inviteModal}
       </View>
     );
   }
@@ -357,7 +401,13 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
         }
         renderSectionHeader={({ section }) => <Text style={styles.dateHeader}>{section.title}</Text>}
         renderItem={({ item }) => (
-          <EntryRow entry={item} nameOf={nameOf} meId={meId} onToggleSettled={(e) => toggleSettled(e.id, !e.settled)} onDelete={(e) => deleteEntry(e.id)} />
+          <EntryRow
+            entry={item}
+            nameOf={nameOf}
+            meId={meId}
+            onToggleSettled={(e) => toggleSettled(e.id, e.settle_status === 'confirmed' ? 'unpaid' : 'confirmed')}
+            onDelete={(e) => deleteEntry(e.id)}
+          />
         )}
         ItemSeparatorComponent={() => <View style={styles.hairline} />}
         ListEmptyComponent={!loading ? <Text style={styles.emptyNote}>{t.group.emptyLedger}</Text> : null}

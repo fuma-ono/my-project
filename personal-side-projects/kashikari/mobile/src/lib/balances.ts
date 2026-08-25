@@ -3,18 +3,19 @@ import type { BalanceRow, Entry, SimplifiedTransaction } from '../types';
 // 相手×通貨ごとに残高を集計する。異なる通貨同士は為替レートが分からないため
 // 合算・換算せず、それぞれ独立した残高として返す(Web版プロトタイプと同じ方針)。
 export function computeBalances(entries: Entry[], meId: string | null): BalanceRow[] {
-  const open = entries.filter((e) => !e.settled);
-  const money: Record<string, { a: string; b: string; net: number; currency: string; oldestAt: string }> = {};
+  const open = entries.filter((e) => e.settle_status !== 'confirmed');
+  const money: Record<string, { a: string; b: string; net: number; currency: string; oldestAt: string; hasUnpaid: boolean }> = {};
   const favor: Record<string, { count: number; oldestAt: string }> = {};
 
   for (const e of open) {
     if (e.type === 'money') {
       const currency = e.currency || 'JPY';
       const pairKey = `${[e.from_user, e.to_user].sort().join('|')}|${currency}`;
-      if (!money[pairKey]) money[pairKey] = { a: e.from_user, b: e.to_user, net: 0, currency, oldestAt: e.created_at };
+      if (!money[pairKey]) money[pairKey] = { a: e.from_user, b: e.to_user, net: 0, currency, oldestAt: e.created_at, hasUnpaid: false };
       const m = money[pairKey];
       m.net += e.from_user === m.a ? e.amount ?? 0 : -(e.amount ?? 0);
       if (e.created_at < m.oldestAt) m.oldestAt = e.created_at;
+      if (e.settle_status === 'unpaid') m.hasUnpaid = true;
     } else {
       const key = `${e.from_user}→${e.to_user}`;
       if (!favor[key]) favor[key] = { count: 0, oldestAt: e.created_at };
@@ -36,6 +37,9 @@ export function computeBalances(entries: Entry[], meId: string | null): BalanceR
       currency: m.currency,
       mine: !!meId && (debtor === meId || creditor === meId),
       oldestUnsettledAt: m.oldestAt,
+      // 残っている記録が全て支払い済みなら'paid'(受け取る側の確認待ち)、
+      // 1件でも未着手が残っていれば'unpaid'。
+      status: m.hasUnpaid ? 'unpaid' : 'paid',
     });
   }
   for (const [key, { count, oldestAt }] of Object.entries(favor)) {
@@ -48,6 +52,7 @@ export function computeBalances(entries: Entry[], meId: string | null): BalanceR
       currency: null,
       mine: !!meId && (from === meId || to === meId),
       oldestUnsettledAt: oldestAt,
+      status: 'unpaid',
     });
   }
 
@@ -73,7 +78,7 @@ export function computeMyNet(entries: Entry[], meId: string | null): NetTotal[] 
   if (!meId) return [];
   const totals: Record<string, number> = {};
   for (const e of entries) {
-    if (e.settled || e.type !== 'money' || !e.amount) continue;
+    if (e.settle_status === 'confirmed' || e.type !== 'money' || !e.amount) continue;
     const currency = e.currency || 'JPY';
     if (e.from_user === meId) totals[currency] = (totals[currency] || 0) + e.amount;
     else if (e.to_user === meId) totals[currency] = (totals[currency] || 0) - e.amount;
@@ -98,7 +103,7 @@ export function computeMyNet(entries: Entry[], meId: string | null): NetTotal[] 
 // お金のように無差別に付け替えられるものではないため、対象外(従来通り
 // 相手ごとのペア表示のみ)。
 export function computeSimplifiedSettlement(entries: Entry[]): SimplifiedTransaction[] {
-  const open = entries.filter((e) => !e.settled && e.type === 'money');
+  const open = entries.filter((e) => e.settle_status !== 'confirmed' && e.type === 'money');
 
   // 通貨ごとに「各人の純増減」を集計する(from_user=貸した人=受け取る側は+、
   // to_user=借りた人=払う側は-。computeMyNetと同じ向きの規約)。

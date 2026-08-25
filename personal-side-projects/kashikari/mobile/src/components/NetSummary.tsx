@@ -35,6 +35,7 @@ export default function NetSummary({ totals, balances, meId }: Props) {
     return (
       <View style={styles.settledWrap}>
         <Text style={styles.emoji}>🎉</Text>
+        <Text style={styles.settledTitle}>{t.netSummary.allSettledTitle}</Text>
         <Text style={styles.settledText}>{t.netSummary.allSettled}</Text>
       </View>
     );
@@ -96,5 +97,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   emoji: { fontSize: 30, marginBottom: 6 },
-  settledText: { ...fonts.bodyMedium, fontSize: 15, color: colors.muted },
+  settledTitle: { ...fonts.display, fontSize: 17, color: colors.ink, marginBottom: 2 },
+  settledText: { ...fonts.bodyMedium, fontSize: 14, color: colors.muted },
 });

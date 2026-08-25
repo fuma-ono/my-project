@@ -4,21 +4,21 @@ import { useT } from '../i18n';
 import { colors, fonts } from '../theme';
 
 type Props = {
-  doneCount: number;
-  totalCount: number;
+  remaining: number; // まだ完了(confirmed)していない内訳の件数
+  paid: number; // そのうち「支払った」済み(受け取る側の確認待ち)の件数
   onPress?: () => void;
 };
 
-// 「進捗が見えると完了したくなる」という狙いのミニカード。メンバーのうち
-// 何人が(このグループで)貸し借りゼロの状態になっているかを進捗バーで
-// 見せる。全員精算済みの場合はNetSummary側の🎉メッセージと役割が
-// 重複するため、GroupScreen側でbalances.length > 0のときだけ表示する。
-//
-// 4回目のUI改善指示で、タップすると「未払いユーザー一覧」を開けるように
-// した(進捗を確認するだけでなく、そのまま催促のアクションに繋げる導線)。
-export default function SettlementProgress({ doneCount, totalCount, onPress }: Props) {
+// 「進捗が見えると完了したくなる」という狙いのミニカード。以前はメンバーの
+// 完了人数(◯/◯人完了)を見せていたが、「支払った→受け取った」の2段階
+// 確認を導入したことで、より具体的に動ける「あと何件残っているか」を
+// 見せる方が行動に繋がる、という指摘を受けて変更した。バーの割合は
+// 「残っている件数のうち、既に支払い済みで受け取る側の確認待ちのものが
+// どれだけあるか」を表す(0% = まだ誰も支払っていない、100% = 全件
+// 支払い済みで確認待ちのみ)。
+export default function SettlementProgress({ remaining, paid, onPress }: Props) {
   const t = useT();
-  const pct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 100;
+  const pct = remaining > 0 ? Math.round((paid / remaining) * 100) : 100;
 
   return (
     <Pressable style={styles.card} onPress={onPress} disabled={!onPress}>
@@ -30,7 +30,7 @@ export default function SettlementProgress({ doneCount, totalCount, onPress }: P
         <View style={[styles.barFill, { width: `${pct}%` }]} />
       </View>
       <View style={styles.footerRow}>
-        <Text style={styles.count}>{t.group.progressCount(doneCount, totalCount)}</Text>
+        <Text style={styles.count}>{t.group.progressRemaining(remaining)}</Text>
         {onPress && <Text style={styles.chevron}>›</Text>}
       </View>
     </Pressable>

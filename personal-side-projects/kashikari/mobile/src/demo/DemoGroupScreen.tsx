@@ -11,6 +11,7 @@ import BalanceCard from '../components/BalanceCard';
 import EntryRow from '../components/EntryRow';
 import Fab from '../components/Fab';
 import GroupIconPicker from '../components/GroupIconPicker';
+import HistoryEntryRow from '../components/HistoryEntryRow';
 import InviteModal from '../components/InviteModal';
 import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
@@ -26,7 +27,7 @@ import { colors, fonts } from '../theme';
 import type { BalanceRow, Entry, EntryType, Group, GroupInvite, Profile, SimplifiedTransaction } from '../types';
 import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS } from './mockData';
 
-type Tab = 'balance' | 'ledger';
+type Tab = 'balance' | 'ledger' | 'history';
 let demoIdSeq = 100;
 
 export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
@@ -49,12 +50,26 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   const emojiOf = (id: string) => members.find((m) => m.id === id)?.avatar_emoji ?? null;
   const balances = useMemo(() => computeBalances(entries, meId), [entries]);
   const netTotals = useMemo(() => computeMyNet(entries, meId), [entries]);
-  const visibleEntries = useMemo(() => (showSettled ? entries : entries.filter((e) => !e.settled)), [entries, showSettled]);
+  const visibleEntries = useMemo(
+    () => (showSettled ? entries : entries.filter((e) => e.settle_status !== 'confirmed')),
+    [entries, showSettled]
+  );
   const sections = useMemo(
     () => groupEntriesByDate(visibleEntries, { today: t.dateGroups.today, yesterday: t.dateGroups.yesterday }),
     [visibleEntries, t]
   );
-  const settledCount = entries.length - entries.filter((e) => !e.settled).length;
+  const settledCount = entries.filter((e) => e.settle_status === 'confirmed').length;
+
+  const historySections = useMemo(() => {
+    const confirmed = entries
+      .filter((e) => e.settle_status === 'confirmed' && e.confirmed_at)
+      .slice()
+      .sort((a, b) => ((a.confirmed_at as string) < (b.confirmed_at as string) ? 1 : -1));
+    return groupEntriesByDate(
+      confirmed.map((e) => ({ ...e, created_at: e.confirmed_at as string })),
+      { today: t.dateGroups.today, yesterday: t.dateGroups.yesterday }
+    );
+  }, [entries, t]);
 
   const autoSettlePlans = useMemo(() => {
     const simplified = computeSimplifiedSettlement(entries);
@@ -94,18 +109,20 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   }, [balances, meId, t]);
 
   const settlementProgress = useMemo(() => {
-    const involvedIds = new Set<string>();
-    for (const row of balances) {
-      involvedIds.add(row.debtor);
-      involvedIds.add(row.creditor);
-    }
-    const total = members.length;
-    const done = members.filter((m) => !involvedIds.has(m.id)).length;
-    return { done, total };
-  }, [balances, members]);
+    const remaining = balances.length;
+    const paid = balances.filter((r) => r.type === 'money' && r.status === 'paid').length;
+    return { remaining, paid };
+  }, [balances]);
 
   const settleAllMoney = async (currency: string) => {
-    setEntries((prev) => prev.map((e) => (e.type === 'money' && (e.currency || 'JPY') === currency && !e.settled ? { ...e, settled: true } : e)));
+    const now = new Date().toISOString();
+    setEntries((prev) =>
+      prev.map((e) =>
+        e.type === 'money' && (e.currency || 'JPY') === currency && e.settle_status !== 'confirmed'
+          ? { ...e, settle_status: 'confirmed', confirmed_at: now }
+          : e
+      )
+    );
     return { error: null };
   };
 
@@ -161,7 +178,9 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
       currency: input.currency,
       description: input.description || null,
       photo_path: null,
-      settled: false,
+      settle_status: 'unpaid',
+      paid_at: null,
+      confirmed_at: null,
       created_by: meId,
       created_at: new Date().toISOString(),
     };
@@ -190,7 +209,9 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
       currency: input.currency,
       description: input.description || null,
       photo_path: null,
-      settled: false,
+      settle_status: 'unpaid',
+      paid_at: null,
+      confirmed_at: null,
       created_by: meId,
       created_at: new Date().toISOString(),
     }));
@@ -198,19 +219,55 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
     return { error: null };
   };
 
-  const toggleSettled = (e: Entry) => setEntries((prev) => prev.map((x) => (x.id === e.id ? { ...x, settled: !x.settled } : x)));
+  // 台帳の「精算済みにする/未精算に戻す」(1件単位の手動オーバーライド)。
+  const toggleSettled = (e: Entry) =>
+    setEntries((prev) =>
+      prev.map((x) => {
+        if (x.id !== e.id) return x;
+        return x.settle_status === 'confirmed'
+          ? { ...x, settle_status: 'unpaid', paid_at: null, confirmed_at: null }
+          : { ...x, settle_status: 'confirmed', confirmed_at: new Date().toISOString() };
+      })
+    );
   const deleteEntry = (e: Entry) => setEntries((prev) => prev.filter((x) => x.id !== e.id));
+
+  // 頼みごと専用: 一括で直接confirmedにする。
   const settlePair = (type: EntryType, a: string, b: string, currency: string | null) => {
+    const now = new Date().toISOString();
     setEntries((prev) =>
       prev.map((e) => {
-        if (e.settled || e.type !== type) return e;
+        if (e.settle_status === 'confirmed' || e.type !== type) return e;
         const match =
           type === 'money'
             ? (e.currency || 'JPY') === (currency || 'JPY') && ((e.from_user === a && e.to_user === b) || (e.from_user === b && e.to_user === a))
             : e.from_user === a && e.to_user === b;
-        return match ? { ...e, settled: true } : e;
+        return match ? { ...e, settle_status: 'confirmed', confirmed_at: now } : e;
       })
     );
+  };
+
+  // お金の「支払った」/「受け取った」の2段階確認。
+  const markPaid = (a: string, b: string, currency: string | null) => {
+    const now = new Date().toISOString();
+    setEntries((prev) =>
+      prev.map((e) => {
+        if (e.type !== 'money' || e.settle_status !== 'unpaid') return e;
+        const match = (e.currency || 'JPY') === (currency || 'JPY') && ((e.from_user === a && e.to_user === b) || (e.from_user === b && e.to_user === a));
+        return match ? { ...e, settle_status: 'paid', paid_at: now } : e;
+      })
+    );
+    return Promise.resolve({ error: null });
+  };
+  const confirmReceived = (a: string, b: string, currency: string | null) => {
+    const now = new Date().toISOString();
+    setEntries((prev) =>
+      prev.map((e) => {
+        if (e.type !== 'money' || e.settle_status !== 'paid') return e;
+        const match = (e.currency || 'JPY') === (currency || 'JPY') && ((e.from_user === a && e.to_user === b) || (e.from_user === b && e.to_user === a));
+        return match ? { ...e, settle_status: 'confirmed', confirmed_at: now } : e;
+      })
+    );
+    return Promise.resolve({ error: null });
   };
 
   const header = (
@@ -260,6 +317,9 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
         <Pressable onPress={() => setTab('ledger')} style={[styles.tabBtn, tab === 'ledger' && styles.tabBtnActive]}>
           <Text style={[styles.tabText, tab === 'ledger' && styles.tabTextActive]}>{t.group.tabLedger}</Text>
         </Pressable>
+        <Pressable onPress={() => setTab('history')} style={[styles.tabBtn, tab === 'history' && styles.tabBtnActive]}>
+          <Text style={[styles.tabText, tab === 'history' && styles.tabTextActive]}>{t.group.tabHistory}</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -278,8 +338,8 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
               <NetSummary totals={netTotals} balances={balances} meId={meId} />
               {balances.length > 0 && (
                 <SettlementProgress
-                  doneCount={settlementProgress.done}
-                  totalCount={settlementProgress.total}
+                  remaining={settlementProgress.remaining}
+                  paid={settlementProgress.paid}
                   onPress={() => setUnpaidModalOpen(true)}
                 />
               )}
@@ -305,9 +365,23 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
               emojiOf={emojiOf}
               meId={meId}
               onSettle={() => settlePair(item.type, item.debtor, item.creditor, item.currency)}
+              onMarkPaid={() => markPaid(item.debtor, item.creditor, item.currency)}
+              onConfirmReceived={() => confirmReceived(item.debtor, item.creditor, item.currency)}
             />
           )}
           ItemSeparatorComponent={() => <View style={styles.hairline} />}
+        />
+      ) : tab === 'history' ? (
+        <SectionList
+          sections={historySections}
+          keyExtractor={(e) => e.id}
+          contentContainerStyle={styles.list}
+          stickySectionHeadersEnabled={false}
+          ListHeaderComponent={<View>{header}</View>}
+          renderSectionHeader={({ section }) => <Text style={styles.dateHeader}>{section.title}</Text>}
+          renderItem={({ item }) => <HistoryEntryRow entry={item} nameOf={nameOf} meId={meId} />}
+          ItemSeparatorComponent={() => <View style={styles.hairline} />}
+          ListEmptyComponent={<Text style={styles.emptyNote}>{t.history.empty}</Text>}
         />
       ) : (
         <SectionList
@@ -380,6 +454,7 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
         rows={receivingRows}
         nameOf={nameOf}
         emojiOf={emojiOf}
+        onConfirmReceived={(row) => confirmReceived(row.debtor, row.creditor, row.currency)}
         onClose={() => setUnpaidModalOpen(false)}
       />
     </View>
@@ -440,4 +515,5 @@ const styles = StyleSheet.create({
   settledToggle: { alignSelf: 'flex-start', marginBottom: 6 },
   settledToggleText: { ...fonts.bodyMedium, fontSize: 13, color: colors.accent },
   hairline: { height: 1, backgroundColor: colors.line },
+  emptyNote: { ...fonts.body, fontSize: 14.5, color: colors.muted, textAlign: 'center', paddingVertical: 24 },
 });

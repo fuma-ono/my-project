@@ -414,6 +414,64 @@ select event_type, count(*) from public.analytics_events
 group by event_type order by count(*) desc;
 ```
 
+## 「支払った」「受け取った」の2段階確認(19回目)
+
+「ユーザーの本当のゴールは貸し借りを記録することではなく、貸したお金を回収すること」という指摘への対応。優先度は最高。**この回もスキーマ変更あり**(`entries.settled`を`settle_status`+`paid_at`+`confirmed_at`に置き換え)。Codespacesで`git pull`した後、`supabase/schema.sql`の全文をSupabaseのSQL Editorで再実行してください(いつも通り安全に再実行できます)。
+
+![pay/confirm flow](docs/screenshots/pay-confirm-flow.png)
+
+**① 精算状態を追加**
+
+お金の記録に「未精算→支払済み→受取確認済み(=完了)」の3段階を持たせた(`entries.settle_status`: `unpaid` / `paid` / `confirmed`)。頼みごとには支払う/受け取るという概念が無いため、従来通り一括の「精算」ボタンで直接`confirmed`にする
+
+**②③ 「支払った」「受け取った」ボタン**
+
+内訳の「支払う」セクションでは、支払う側にだけ「支払った」ボタンを出す。押すと、受け取る側の確認待ち(`paid`)になり、支払う側には「支払済み・確認待ち」という表示に切り替わる。「受け取る」セクションでは、`paid`になった行にだけ「受け取った」ボタンが現れ、押すと双方確認済み(`confirmed`)で内訳から消える(未払いユーザー一覧モーダルからも同じ操作ができる)
+
+**④ 双方確認が完了したら緑色の完了表示**
+
+新規`HistoryEntryRow`を追加。「✅ 精算完了」の緑バッジ付きで、「じろうから受け取った」のように過去形の文章で表示する(後述の履歴タブで使用)
+
+**⑤ 精算進捗の表示を改善**
+
+```
+0/3人完了
+```
+↓
+```
+あと5件で完了
+```
+
+メンバーの完了人数ではなく、残っている内訳の件数を見せるようにした。バーの割合は「残っている内訳のうち、既に支払い済みで確認待ちのものがどれだけあるか」を表す
+
+**⑥ 履歴タブを追加**
+
+![history tab](docs/screenshots/history-tab.png)
+
+タブを「残高/台帳/履歴」の3つにし、双方確認が完了(`confirmed`)した記録だけを確認日の新しい順に一覧表示する専用タブを追加した。台帳タブは「まだ動きがある(未精算・支払済み)記録」だけを見せる場として残し、完了した記録は履歴タブに移した
+
+**⑦ 精算完了時のお祝い表示**
+
+以前からあった🎉メッセージ(ヒーローカード)の文言を、「精算完了!」という見出し+「全員の貸し借りが解消されました」という2行構成に更新した
+
+**成功指標の追加計測**
+
+`analytics_events`に`entry_marked_paid`(支払った回数)・`entry_marked_received`(受け取った回数)の2種類を追加した。「精算完了率」「平均精算日数」はイベントログではなく実データから直接SQLで計算できるため、専用のイベント種別は作らず、`schema.sql`にクエリ例をコメントで残した:
+
+```sql
+-- 精算完了率(グループ作成数のうち、少なくとも1回精算完了したグループの割合)
+select
+  count(distinct case when event_type = 'settlement_completed' then group_id end)::float
+  / nullif(count(distinct case when event_type = 'group_created' then group_id end), 0)
+  as settlement_completion_rate
+from public.analytics_events;
+
+-- 平均精算日数(記録作成〜受取確認までの平均日数)
+select avg(extract(epoch from (confirmed_at - created_at)) / 86400) as avg_days_to_settle
+from public.entries
+where settle_status = 'confirmed' and confirmed_at is not null;
+```
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え

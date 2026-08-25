@@ -13,7 +13,9 @@ type Props = {
   nameOf: (id: string) => string;
   emojiOf: (id: string) => string | null;
   meId: string | null;
-  onSettle: () => void;
+  onSettle: () => void; // 頼みごと用(支払う/受け取るの概念が無いため一括confirmed)
+  onMarkPaid: () => void; // お金・支払う側:「支払った」
+  onConfirmReceived: () => void; // お金・受け取る側:「受け取った」
 };
 
 // Splitwiseに倣い、「あなたが受け取る=緑」「あなたが払う=赤」という意味を持つ
@@ -31,7 +33,7 @@ type Props = {
 // 詰め込むと長い名前・長い通貨表記(例: "$20.00 USD")で名前が
 // "は…"のように潰れてしまったため、上段(名前/文章+金額)と
 // 下段(アクションボタン)の2段組みに分けている。
-export default function BalanceCard({ row, nameOf, emojiOf, meId, onSettle }: Props) {
+export default function BalanceCard({ row, nameOf, emojiOf, meId, onSettle, onMarkPaid, onConfirmReceived }: Props) {
   const t = useT();
   // 残高画面は金額確認のための画面のため、頼みごと(金額を持たない)でも
   // 「1件」のような件数をここに出さない(件数確認は台帳側の役割)。
@@ -39,17 +41,30 @@ export default function BalanceCard({ row, nameOf, emojiOf, meId, onSettle }: Pr
 
   const iOwe = row.mine && row.debtor === meId;
   const iAmOwed = row.mine && row.creditor === meId;
+  const isMoney = row.type === 'money';
   // 色の意味を「受け取る=緑・支払う=赤・金額未設定=グレー」に統一する。
   // 頼みごとは金額を持たない(「金額未設定」表示)ため、向き(iOwe/iAmOwed)
   // に関わらずグレー固定にする。
-  const amountColor = row.type !== 'money' ? colors.muted : iOwe ? colors.negative : iAmOwed ? colors.positive : colors.muted;
+  const amountColor = !isMoney ? colors.muted : iOwe ? colors.negative : iAmOwed ? colors.positive : colors.muted;
 
-  // 「催促する」は、自分が受け取る側(相手が自分にお金を払っていない)の
-  // 場合だけ意味があるので、それ以外では出さない。頼みごとは金額が
-  // 無いため文面が作れず対象外(お金のみ)。同じ理由で、未払い日数も
-  // 受け取る側の行にだけ添える(「回収」導線としての意味がある情報のため)。
-  const canRemind = iAmOwed && row.type === 'money';
+  // お金は「支払った→受け取った」の2段階確認にする(ユーザーの本当の
+  // ゴールは記録ではなく回収のため)。頼みごとには支払う/受け取るという
+  // 概念が無いため、従来通り一括の「精算」ボタンのまま(onSettle)。
+  //
+  // 「催促する」は、まだ相手が支払った操作をしていない(status==='unpaid')
+  // 段階でのみ意味がある。support済み(status==='paid')になったら、
+  // 「催促する」の代わりに「受け取った」ボタンに切り替わる。
+  const canRemind = iAmOwed && isMoney && row.status === 'unpaid';
+  const canMarkPaid = iOwe && isMoney && row.status === 'unpaid';
+  const canConfirmReceived = iAmOwed && isMoney && row.status === 'paid';
+  const awaitingConfirm = isMoney && row.status === 'paid';
   const remind = () => openRemindPrompt(t, amountLabel);
+
+  const secondaryLabel = awaitingConfirm
+    ? t.balanceCard.awaitingConfirm
+    : canRemind
+      ? t.balanceCard.daysAgo(daysSince(row.oldestUnsettledAt))
+      : null;
 
   return (
     <View style={styles.card}>
@@ -63,19 +78,31 @@ export default function BalanceCard({ row, nameOf, emojiOf, meId, onSettle }: Pr
           <Text style={[styles.amount, { color: amountColor }]} numberOfLines={1}>
             {amountLabel}
           </Text>
-          {canRemind && <Text style={styles.daysAgo}>{t.balanceCard.daysAgo(daysSince(row.oldestUnsettledAt))}</Text>}
+          {secondaryLabel && <Text style={styles.daysAgo}>{secondaryLabel}</Text>}
         </View>
       </View>
 
       <View style={styles.bottomRow}>
+        {!isMoney && (
+          <Pressable onPress={onSettle} hitSlop={8} style={styles.settleBtn}>
+            <Text style={styles.settleText}>{t.balanceCard.settle}</Text>
+          </Pressable>
+        )}
+        {canMarkPaid && (
+          <Pressable onPress={onMarkPaid} hitSlop={8} style={styles.payBtn}>
+            <Text style={styles.payText}>{t.balanceCard.markPaid}</Text>
+          </Pressable>
+        )}
         {canRemind && (
           <Pressable onPress={remind} hitSlop={8} style={styles.remindBtn}>
             <Text style={styles.remindText}>{t.balanceCard.remind}</Text>
           </Pressable>
         )}
-        <Pressable onPress={onSettle} hitSlop={8} style={styles.settleBtn}>
-          <Text style={styles.settleText}>{t.balanceCard.settle}</Text>
-        </Pressable>
+        {canConfirmReceived && (
+          <Pressable onPress={onConfirmReceived} hitSlop={8} style={styles.confirmBtn}>
+            <Text style={styles.confirmText}>{t.balanceCard.confirmReceived}</Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -157,4 +184,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   settleText: { ...fonts.bodySemiBold, fontSize: 12, color: colors.muted },
+  payBtn: {
+    backgroundColor: colors.accentSoft,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  payText: { ...fonts.bodySemiBold, fontSize: 12, color: colors.accent },
+  confirmBtn: {
+    backgroundColor: colors.positiveSoft,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  confirmText: { ...fonts.bodySemiBold, fontSize: 12, color: colors.positive },
 });

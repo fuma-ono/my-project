@@ -13,14 +13,17 @@ type Props = {
   rows: BalanceRow[]; // 「受け取る」セクションと同じ行(=自分が受け取る側)だけを渡す
   nameOf: (id: string) => string;
   emojiOf: (id: string) => string | null;
+  onConfirmReceived: (row: BalanceRow) => void;
   onClose: () => void;
 };
 
 // 精算進捗カードをタップすると開く、「回収」に特化したモーダル。内訳画面の
 // 「受け取る」セクションと同じデータを使うが、行ごとに未払い日数を添えて
 // 一覧にすることで、「誰にまだ催促していないか」をひと目で把握できるように
-// している(催促→支払い→完了、という導線のハブ)。
-export default function UnpaidMembersModal({ visible, rows, nameOf, emojiOf, onClose }: Props) {
+// している(催促→支払い→完了、という導線のハブ)。行がstatus==='paid'
+// (相手が既に「支払った」を押した)になっていれば、催促するの代わりに
+// その場で「受け取った」を押して完了させられる。
+export default function UnpaidMembersModal({ visible, rows, nameOf, emojiOf, onConfirmReceived, onClose }: Props) {
   const t = useT();
 
   return (
@@ -36,7 +39,8 @@ export default function UnpaidMembersModal({ visible, rows, nameOf, emojiOf, onC
                 const otherId = row.debtor;
                 const otherName = nameOf(otherId);
                 const amountLabel = row.type === 'money' ? formatMoney(row.amount, row.currency) : t.balanceCard.noAmountLabel;
-                const canRemind = row.type === 'money';
+                const isMoney = row.type === 'money';
+                const awaitingConfirm = isMoney && row.status === 'paid';
                 return (
                   <View key={`${row.debtor}-${row.creditor}-${row.type}-${row.currency}`} style={styles.row}>
                     <Avatar name={otherName} emoji={emojiOf(otherId)} size="sm" />
@@ -44,13 +48,20 @@ export default function UnpaidMembersModal({ visible, rows, nameOf, emojiOf, onC
                       <Text style={styles.name} numberOfLines={1}>
                         {otherName}
                       </Text>
-                      <Text style={styles.days}>{t.balanceCard.daysAgo(daysSince(row.oldestUnsettledAt))}</Text>
+                      <Text style={styles.days}>
+                        {awaitingConfirm ? t.balanceCard.awaitingConfirm : t.balanceCard.daysAgo(daysSince(row.oldestUnsettledAt))}
+                      </Text>
                     </View>
                     <View style={styles.rowRight}>
-                      <Text style={[styles.amount, { color: row.type === 'money' ? colors.positive : colors.muted }]} numberOfLines={1}>
+                      <Text style={[styles.amount, { color: isMoney ? colors.positive : colors.muted }]} numberOfLines={1}>
                         {amountLabel}
                       </Text>
-                      {canRemind && (
+                      {isMoney && awaitingConfirm && (
+                        <Pressable onPress={() => onConfirmReceived(row)} hitSlop={8} style={styles.confirmBtn}>
+                          <Text style={styles.confirmText}>{t.balanceCard.confirmReceived}</Text>
+                        </Pressable>
+                      )}
+                      {isMoney && !awaitingConfirm && (
                         <Pressable onPress={() => openRemindPrompt(t, amountLabel)} hitSlop={8} style={styles.remindBtn}>
                           <Text style={styles.remindText}>{t.balanceCard.remind}</Text>
                         </Pressable>
@@ -86,4 +97,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   remindText: { ...fonts.bodySemiBold, fontSize: 11.5, color: colors.favor },
+  confirmBtn: {
+    backgroundColor: colors.positiveSoft,
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  confirmText: { ...fonts.bodySemiBold, fontSize: 11.5, color: colors.positive },
 });

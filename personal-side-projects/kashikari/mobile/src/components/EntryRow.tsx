@@ -22,7 +22,7 @@ export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onDelet
   const t = useT();
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const photoUrl = useReceiptUrl(entry.photo_path);
-  const settled = entry.settled;
+  const settled = entry.settle_status === 'confirmed';
 
   const openMenu = () => {
     Alert.alert(

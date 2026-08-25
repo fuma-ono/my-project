@@ -130,7 +130,6 @@ export function useGroupData(groupId: string | null, userId: string | null) {
         currency: input.currency,
         description: input.description || null,
         photo_path: photoPath,
-        settled: false,
         created_by: userId,
       });
       if (error) return { error: error.message };
@@ -176,7 +175,6 @@ export function useGroupData(groupId: string | null, userId: string | null) {
         currency: input.currency,
         description: input.description || null,
         photo_path: photoPath,
-        settled: false,
         created_by: userId,
       }));
 
@@ -188,9 +186,15 @@ export function useGroupData(groupId: string | null, userId: string | null) {
     [groupId, userId, loadAll, t]
   );
 
+  // 台帳側の「精算済みにする/未精算に戻す」(1件単位の手動オーバーライド)。
+  // 支払った→受け取ったの2段階を経由せず、confirmed⇄unpaidを直接行き来する。
   const toggleSettled = useCallback(
-    async (entryId: string, settled: boolean) => {
-      const { error } = await supabase.from('entries').update({ settled }).eq('id', entryId);
+    async (entryId: string, status: 'unpaid' | 'confirmed') => {
+      const patch =
+        status === 'confirmed'
+          ? { settle_status: 'confirmed', confirmed_at: new Date().toISOString() }
+          : { settle_status: 'unpaid', paid_at: null, confirmed_at: null };
+      const { error } = await supabase.from('entries').update(patch).eq('id', entryId);
       if (!error) await loadAll();
       return { error: error?.message ?? null };
     },
@@ -206,11 +210,13 @@ export function useGroupData(groupId: string | null, userId: string | null) {
     [loadAll]
   );
 
+  // 頼みごと専用: 「支払う/受け取る」という概念が無いため、従来通り
+  // 一括で直接confirmedにする(お金の2段階確認とは別ルート)。
   const settlePair = useCallback(
     async (type: EntryType, a: string, b: string, currency: string | null) => {
       const ids = entries
         .filter((e) => {
-          if (e.settled || e.type !== type) return false;
+          if (e.settle_status === 'confirmed' || e.type !== type) return false;
           if (type === 'money') {
             return (e.currency || 'JPY') === (currency || 'JPY') && ((e.from_user === a && e.to_user === b) || (e.from_user === b && e.to_user === a));
           }
@@ -218,11 +224,68 @@ export function useGroupData(groupId: string | null, userId: string | null) {
         })
         .map((e) => e.id);
       if (ids.length === 0) return { error: null };
-      const { error } = await supabase.from('entries').update({ settled: true }).in('id', ids);
+      const { error } = await supabase
+        .from('entries')
+        .update({ settle_status: 'confirmed', confirmed_at: new Date().toISOString() })
+        .in('id', ids);
       if (!error) await loadAll();
       return { error: error?.message ?? null };
     },
     [entries, loadAll]
+  );
+
+  // お金の「支払った」: 支払う側が押す。対象ペア×通貨のunpaidな記録を
+  // まとめてpaidにする(受け取る側の確認待ちになる)。
+  const markPaid = useCallback(
+    async (a: string, b: string, currency: string | null) => {
+      const ids = entries
+        .filter(
+          (e) =>
+            e.type === 'money' &&
+            e.settle_status === 'unpaid' &&
+            (e.currency || 'JPY') === (currency || 'JPY') &&
+            ((e.from_user === a && e.to_user === b) || (e.from_user === b && e.to_user === a))
+        )
+        .map((e) => e.id);
+      if (ids.length === 0) return { error: null };
+      const { error } = await supabase
+        .from('entries')
+        .update({ settle_status: 'paid', paid_at: new Date().toISOString() })
+        .in('id', ids);
+      if (!error) {
+        logEvent('entry_marked_paid', { userId, groupId });
+        await loadAll();
+      }
+      return { error: error?.message ?? null };
+    },
+    [entries, loadAll, groupId, userId]
+  );
+
+  // お金の「受け取った」: 受け取る側が押す。対象ペア×通貨のpaidな記録を
+  // まとめてconfirmedにする(双方確認済み=完了)。
+  const confirmReceived = useCallback(
+    async (a: string, b: string, currency: string | null) => {
+      const ids = entries
+        .filter(
+          (e) =>
+            e.type === 'money' &&
+            e.settle_status === 'paid' &&
+            (e.currency || 'JPY') === (currency || 'JPY') &&
+            ((e.from_user === a && e.to_user === b) || (e.from_user === b && e.to_user === a))
+        )
+        .map((e) => e.id);
+      if (ids.length === 0) return { error: null };
+      const { error } = await supabase
+        .from('entries')
+        .update({ settle_status: 'confirmed', confirmed_at: new Date().toISOString() })
+        .in('id', ids);
+      if (!error) {
+        logEvent('entry_marked_received', { userId, groupId });
+        await loadAll();
+      }
+      return { error: error?.message ?? null };
+    },
+    [entries, loadAll, groupId, userId]
   );
 
   // 「自動精算」用: 通貨を指定して、その通貨の未精算のお金の記録を
@@ -230,17 +293,18 @@ export function useGroupData(groupId: string | null, userId: string | null) {
   // 最小の支払い回数に組み直したものなので、そのプラン通りに全員が
   // 支払い終えた時点では、元になった個々の記録も(誰から誰への分かは
   // バラバラでも)全額分の受け渡しが完了している = 全部精算済みにして
-  // 問題ない、という考え方。
+  // 問題ない、という考え方(支払った→受け取ったの2段階はスキップする
+  // ショートカット)。
   const settleAllMoney = useCallback(
     async (currency: string) => {
       if (!groupId) return { error: t.auth.unauthenticated };
       const { error } = await supabase
         .from('entries')
-        .update({ settled: true })
+        .update({ settle_status: 'confirmed', confirmed_at: new Date().toISOString() })
         .eq('group_id', groupId)
         .eq('type', 'money')
         .eq('currency', currency)
-        .eq('settled', false);
+        .neq('settle_status', 'confirmed');
       if (!error) await loadAll();
       return { error: error?.message ?? null };
     },
@@ -259,6 +323,8 @@ export function useGroupData(groupId: string | null, userId: string | null) {
     deleteEntry,
     settlePair,
     settleAllMoney,
+    markPaid,
+    confirmReceived,
     inviteMember,
   };
 }

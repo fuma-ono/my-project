@@ -125,6 +125,30 @@ alter table public.entries enable row level security;
 
 create index if not exists entries_group_id_idx on public.entries (group_id);
 
+-- 「精算済みかどうか」の単純なON/OFFではなく、「支払った→受け取った」の
+-- 2段階確認を追跡できるようにする(ユーザーの本当のゴールは記録では
+-- なく回収なので、双方が確認して初めて完了とみなす)。
+--   unpaid    未精算(まだ誰も動いていない)
+--   paid      支払う側が「支払った」を押した(受け取る側の確認待ち)
+--   confirmed 受け取る側が「受け取った」を押した(双方確認済み=完了)
+alter table public.entries add column if not exists settle_status text not null default 'unpaid' check (settle_status in ('unpaid', 'paid', 'confirmed'));
+alter table public.entries add column if not exists paid_at timestamptz;
+alter table public.entries add column if not exists confirmed_at timestamptz;
+
+-- 旧settled(boolean)からの移行。初回実行時だけ意味を持ち、settled列を
+-- 移行後に削除する(2回目以降は列自体が無いのでこのブロックは丸ごと
+-- スキップされ、ファイル全体を安全に再実行できる)。
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'entries' and column_name = 'settled'
+  ) then
+    update public.entries set settle_status = 'confirmed', confirmed_at = created_at where settled = true;
+    alter table public.entries drop column settled;
+  end if;
+end $$;
+
 -- ============================================================
 -- 4. RLSポリシー
 -- ============================================================
@@ -390,14 +414,30 @@ create policy "group members can delete receipts"
 -- 7. 成長施策の計測(招待〜精算までのファネルを追う最小限のログ)
 -- ============================================================
 --
--- グループ作成数・招待発行数・招待クリック数・参加完了数・精算完了数を
--- 追うための、ごく簡単なイベントログ。誰でも自分の行動として1件ずつ
--- INSERTできるだけで、他人のイベントは読めない(SELECTポリシーを
--- 用意しない)。オーナーはSupabaseダッシュボードのSQL Editor(サービス
--- ロール、RLSを迂回できる)から次のように集計できる:
+-- グループ作成数・招待発行数・招待クリック数・参加完了数・精算完了数・
+-- 支払った回数・受け取った回数を追うための、ごく簡単なイベントログ。
+-- 誰でも自分の行動として1件ずつINSERTできるだけで、他人のイベントは
+-- 読めない(SELECTポリシーを用意しない)。オーナーはSupabaseダッシュ
+-- ボードのSQL Editor(サービスロール、RLSを迂回できる)から次のように
+-- 集計できる:
 --
 --   select event_type, count(*) from public.analytics_events
 --   group by event_type order by count(*) desc;
+--
+-- 「精算完了率」「平均精算日数」はイベントログではなく実データから
+-- 直接計算できるため、専用のイベント種別は用意していない:
+--
+--   -- 精算完了率(グループ作成数のうち、少なくとも1回精算完了したグループの割合)
+--   select
+--     count(distinct case when event_type = 'settlement_completed' then group_id end)::float
+--     / nullif(count(distinct case when event_type = 'group_created' then group_id end), 0)
+--     as settlement_completion_rate
+--   from public.analytics_events;
+--
+--   -- 平均精算日数(記録作成〜受取確認までの平均日数)
+--   select avg(extract(epoch from (confirmed_at - created_at)) / 86400) as avg_days_to_settle
+--   from public.entries
+--   where settle_status = 'confirmed' and confirmed_at is not null;
 
 create table if not exists public.analytics_events (
   id uuid primary key default gen_random_uuid(),
