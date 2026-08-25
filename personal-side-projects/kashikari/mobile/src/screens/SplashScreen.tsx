@@ -8,7 +8,7 @@ import { colors, fonts } from '../theme';
 export default function SplashScreen() {
   return (
     <View style={styles.wrap}>
-      <Mark size={72} />
+      <Mark size={112} />
       <Text style={styles.wordmark}>kashikari</Text>
     </View>
   );

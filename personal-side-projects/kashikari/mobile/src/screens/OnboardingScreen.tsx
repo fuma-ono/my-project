@@ -72,8 +72,9 @@ export default function OnboardingScreen({
         {error && <Text style={styles.error}>{error}</Text>}
       </View>
 
-      {/* 主要CTAは内容のすぐ下に小さく浮かせるのではなく、画面下部に
-          幅いっぱいで固定する(他アプリのオンボーディングでも一般的な配置)。 */}
+      {/* 内容のすぐ下に小さく左寄せで浮かせるのではなく、幅いっぱいのCTAにする。
+          ただし画面の一番下端まで押し下げると逆に遠すぎたため、内容から
+          一定の余白を空けた位置に置く(flex:1で下端に固定、はしない)。 */}
       <PrimaryButton title="はじめる" onPress={submit} loading={submitting} disabled={!name.trim()} style={styles.button} />
 
       <AvatarPicker
@@ -91,8 +92,8 @@ export default function OnboardingScreen({
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.bg, paddingTop: 60, paddingHorizontal: 24, paddingBottom: 28 },
-  content: { flex: 1 },
+  wrap: { flex: 1, backgroundColor: colors.bg, paddingTop: 60, paddingHorizontal: 24, paddingBottom: 40 },
+  content: { marginBottom: 36 },
   markWrap: { marginBottom: 16 },
   wordmark: { ...fonts.display, fontSize: 38, color: colors.ink },
   tagline: { ...fonts.body, fontSize: 14.5, color: colors.muted, marginTop: 8, marginBottom: 32 },
