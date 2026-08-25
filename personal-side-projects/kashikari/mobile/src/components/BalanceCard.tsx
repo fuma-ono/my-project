@@ -37,7 +37,10 @@ export default function BalanceCard({ row, nameOf, emojiOf, meId, onSettle }: Pr
 
   const iOwe = row.mine && row.debtor === meId;
   const iAmOwed = row.mine && row.creditor === meId;
-  const amountColor = iOwe ? colors.negative : iAmOwed ? colors.positive : colors.muted;
+  // 色の意味を「受け取る=緑・支払う=赤・金額未設定=グレー」に統一する。
+  // 頼みごとは金額を持たない(「金額未設定」表示)ため、向き(iOwe/iAmOwed)
+  // に関わらずグレー固定にする。
+  const amountColor = row.type !== 'money' ? colors.muted : iOwe ? colors.negative : iAmOwed ? colors.positive : colors.muted;
 
   // 「催促する」は、自分が受け取る側(相手が自分にお金を払っていない)の
   // 場合だけ意味があるので、それ以外では出さない。頼みごとは金額が

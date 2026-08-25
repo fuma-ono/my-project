@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, RefreshControl, SectionList, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, SectionList, Share, StyleSheet, Text, View } from 'react-native';
 
 import AddEntrySheet from '../components/AddEntrySheet';
 import AutoSettlePlan from '../components/AutoSettlePlan';
@@ -11,12 +11,13 @@ import Fab from '../components/Fab';
 import GroupIconPicker from '../components/GroupIconPicker';
 import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
+import SettlementProgress from '../components/SettlementProgress';
 import { useGroupData } from '../hooks/useGroupData';
 import { useT } from '../i18n';
 import { computeBalances, computeMyNet, computeSimplifiedSettlement } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
 import { colors, fonts } from '../theme';
-import type { Group, SimplifiedTransaction } from '../types';
+import type { BalanceRow, Group, SimplifiedTransaction } from '../types';
 
 type Tab = 'balance' | 'ledger';
 
@@ -68,6 +69,41 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
       .filter(([currency, txs]) => txs.length < (pairwiseCountByCurrency.get(currency) ?? Infinity))
       .map(([currency, transactions]) => ({ currency, transactions }));
   }, [entries, balances]);
+
+  // 「受け取る」「支払う」を混ぜて出すと認知負荷が高い、という指摘を
+  // 受けて、内訳を自分視点のセクションに分ける。自分が関係しない行
+  // (グループ内の他の2人同士)は「受け取る/支払う」のどちらにも属さない
+  // ため、別セクションにまとめる。
+  const balanceSections = useMemo(() => {
+    const receiving: BalanceRow[] = [];
+    const paying: BalanceRow[] = [];
+    const other: BalanceRow[] = [];
+    for (const row of balances) {
+      if (row.mine && row.creditor === meId) receiving.push(row);
+      else if (row.mine && row.debtor === meId) paying.push(row);
+      else other.push(row);
+    }
+    return [
+      { title: t.group.receivingSection, data: receiving },
+      { title: t.group.payingSection, data: paying },
+      { title: t.group.otherSection, data: other },
+    ].filter((s) => s.data.length > 0);
+  }, [balances, meId, t]);
+
+  // 精算進捗: このグループで貸し借りが1つも残っていないメンバーの割合。
+  // 進捗が見えると完了したくなる、という狙い。全員精算済みならNetSummary
+  // 側の🎉メッセージと役割が重複するため、balances.length > 0のときだけ
+  // 出す(呼び出し側で判定)。
+  const settlementProgress = useMemo(() => {
+    const involvedIds = new Set<string>();
+    for (const row of balances) {
+      involvedIds.add(row.debtor);
+      involvedIds.add(row.creditor);
+    }
+    const total = members.length;
+    const done = members.filter((m) => !involvedIds.has(m.id)).length;
+    return { done, total };
+  }, [balances, members]);
 
   const visibleEntries = useMemo(
     () => (showSettled ? entries : entries.filter((e) => !e.settled)),
@@ -175,15 +211,17 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
   if (tab === 'balance') {
     return (
       <View style={styles.wrap}>
-        <FlatList
-          data={balances}
-          keyExtractor={(row, i) => `${row.debtor}-${row.creditor}-${row.type}-${row.currency}-${i}`}
+        <SectionList
+          sections={balanceSections}
+          keyExtractor={(row) => `${row.debtor}-${row.creditor}-${row.type}-${row.currency}`}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={colors.accent} />}
           contentContainerStyle={styles.list}
+          stickySectionHeadersEnabled={false}
           ListHeaderComponent={
             <View>
               {header}
               <NetSummary totals={netTotals} balances={balances} meId={meId} />
+              {balances.length > 0 && <SettlementProgress doneCount={settlementProgress.done} totalCount={settlementProgress.total} />}
               {autoSettlePlans.map((plan) => (
                 <AutoSettlePlan
                   key={plan.currency}
@@ -196,9 +234,9 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
                   onSettleAll={() => settleAllMoney(plan.currency)}
                 />
               ))}
-              {balances.length > 0 && <Text style={styles.sectionTitle}>{t.group.breakdown}</Text>}
             </View>
           }
+          renderSectionHeader={({ section }) => <Text style={styles.sectionTitle}>{section.title}</Text>}
           renderItem={({ item }) => (
             <BalanceCard
               row={item}
@@ -297,6 +335,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginTop: 14,
     marginBottom: 4,
   },
   dateHeader: {

@@ -1,7 +1,7 @@
 // デモモード専用。GroupScreen.tsxと同じ見た目・操作感を、Supabaseを
 // 一切呼ばずローカルstateだけで再現する(スクリーンショット・動作確認用)。
 import { useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 
 import AddEntrySheet from '../components/AddEntrySheet';
 import AutoSettlePlan from '../components/AutoSettlePlan';
@@ -13,12 +13,13 @@ import Fab from '../components/Fab';
 import GroupIconPicker from '../components/GroupIconPicker';
 import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
+import SettlementProgress from '../components/SettlementProgress';
 import { useT } from '../i18n';
 import { computeBalances, computeMyNet, computeSimplifiedSettlement } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
 import { splitAmount } from '../lib/split';
 import { colors, fonts } from '../theme';
-import type { Entry, EntryType, Group, Profile, SimplifiedTransaction } from '../types';
+import type { BalanceRow, Entry, EntryType, Group, Profile, SimplifiedTransaction } from '../types';
 import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS } from './mockData';
 
 type Tab = 'balance' | 'ledger';
@@ -65,6 +66,33 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
       .filter(([currency, txs]) => txs.length < (pairwiseCountByCurrency.get(currency) ?? Infinity))
       .map(([currency, transactions]) => ({ currency, transactions }));
   }, [entries, balances]);
+
+  const balanceSections = useMemo(() => {
+    const receiving: BalanceRow[] = [];
+    const paying: BalanceRow[] = [];
+    const other: BalanceRow[] = [];
+    for (const row of balances) {
+      if (row.mine && row.creditor === meId) receiving.push(row);
+      else if (row.mine && row.debtor === meId) paying.push(row);
+      else other.push(row);
+    }
+    return [
+      { title: t.group.receivingSection, data: receiving },
+      { title: t.group.payingSection, data: paying },
+      { title: t.group.otherSection, data: other },
+    ].filter((s) => s.data.length > 0);
+  }, [balances, meId, t]);
+
+  const settlementProgress = useMemo(() => {
+    const involvedIds = new Set<string>();
+    for (const row of balances) {
+      involvedIds.add(row.debtor);
+      involvedIds.add(row.creditor);
+    }
+    const total = members.length;
+    const done = members.filter((m) => !involvedIds.has(m.id)).length;
+    return { done, total };
+  }, [balances, members]);
 
   const settleAllMoney = async (currency: string) => {
     setEntries((prev) => prev.map((e) => (e.type === 'money' && (e.currency || 'JPY') === currency && !e.settled ? { ...e, settled: true } : e)));
@@ -191,14 +219,16 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   return (
     <View style={styles.wrap}>
       {tab === 'balance' ? (
-        <FlatList
-          data={balances}
-          keyExtractor={(row, i) => `${row.debtor}-${row.creditor}-${row.type}-${row.currency}-${i}`}
+        <SectionList
+          sections={balanceSections}
+          keyExtractor={(row) => `${row.debtor}-${row.creditor}-${row.type}-${row.currency}`}
           contentContainerStyle={styles.list}
+          stickySectionHeadersEnabled={false}
           ListHeaderComponent={
             <View>
               {header}
               <NetSummary totals={netTotals} balances={balances} meId={meId} />
+              {balances.length > 0 && <SettlementProgress doneCount={settlementProgress.done} totalCount={settlementProgress.total} />}
               {autoSettlePlans.map((plan) => (
                 <AutoSettlePlan
                   key={plan.currency}
@@ -211,9 +241,9 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
                   onSettleAll={() => settleAllMoney(plan.currency)}
                 />
               ))}
-              {balances.length > 0 && <Text style={styles.sectionTitle}>{t.group.breakdown}</Text>}
             </View>
           }
+          renderSectionHeader={({ section }) => <Text style={styles.sectionTitle}>{section.title}</Text>}
           renderItem={({ item }) => (
             <BalanceCard
               row={item}
@@ -329,6 +359,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginTop: 14,
     marginBottom: 4,
   },
   dateHeader: { ...fonts.bodySemiBold, fontSize: 12.5, color: colors.muted, marginTop: 14, marginBottom: 2 },
