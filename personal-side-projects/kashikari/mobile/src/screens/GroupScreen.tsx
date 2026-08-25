@@ -31,7 +31,7 @@ type Props = {
 
 export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvatar, onChangeGroupIcon }: Props) {
   const t = useT();
-  const { members, entries, loading, refresh, addEntry, toggleSettled, deleteEntry, settlePair, settleAllMoney } = useGroupData(
+  const { members, entries, loading, refresh, addEntry, addSplitEntry, toggleSettled, deleteEntry, settlePair, settleAllMoney } = useGroupData(
     group.id,
     meId
   );
@@ -209,7 +209,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
           ItemSeparatorComponent={() => <View style={styles.hairline} />}
         />
         <Fab onPress={() => setSheetOpen(true)} disabled={members.length < 2} />
-        <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} />
+        <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} onSubmitSplit={addSplitEntry} />
         {avatarPicker}
         {groupIconPicker}
       </View>
@@ -244,7 +244,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
         ListEmptyComponent={!loading ? <Text style={styles.emptyNote}>{t.group.emptyLedger}</Text> : null}
       />
       <Fab onPress={() => setSheetOpen(true)} disabled={members.length < 2} />
-      <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} />
+      <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} onSubmitSplit={addSplitEntry} />
       {avatarPicker}
       {groupIconPicker}
     </View>

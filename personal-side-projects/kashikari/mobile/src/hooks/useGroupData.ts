@@ -3,7 +3,31 @@ import * as Crypto from 'expo-crypto';
 
 import { useT } from '../i18n';
 import { supabase } from '../lib/supabase';
+import { splitAmount } from '../lib/split';
 import type { Entry, EntryType, Profile } from '../types';
+import type { Strings } from '../i18n/strings';
+
+// addEntry・addSplitEntryの両方で使う、レシート画像アップロードの共通処理。
+// 割り勘は複数のentries行を1枚の同じ画像で共有するため、パスをid単位で
+// 呼び出し側から渡してもらう形にしている。
+async function uploadReceipt(
+  groupId: string,
+  photoUri: string,
+  t: Strings
+): Promise<{ path: string | null; error: string | null }> {
+  try {
+    const response = await fetch(photoUri);
+    const arrayBuffer = await response.arrayBuffer();
+    const path = `${groupId}/${Crypto.randomUUID()}.jpg`;
+    const { error: uploadError } = await supabase.storage
+      .from('receipts')
+      .upload(path, arrayBuffer, { contentType: 'image/jpeg', upsert: true });
+    if (uploadError) return { path: null, error: t.groupData.photoUploadFailed(uploadError.message) };
+    return { path, error: null };
+  } catch {
+    return { path: null, error: t.groupData.photoProcessFailed };
+  }
+}
 
 export function useGroupData(groupId: string | null, userId: string | null) {
   const t = useT();
@@ -65,26 +89,16 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       photoUri?: string | null;
     }) => {
       if (!groupId || !userId) return { error: t.auth.unauthenticated };
-      const id = Crypto.randomUUID();
       let photoPath: string | null = null;
 
       if (input.photoUri) {
-        try {
-          const response = await fetch(input.photoUri);
-          const arrayBuffer = await response.arrayBuffer();
-          const path = `${groupId}/${id}.jpg`;
-          const { error: uploadError } = await supabase.storage
-            .from('receipts')
-            .upload(path, arrayBuffer, { contentType: 'image/jpeg', upsert: true });
-          if (uploadError) return { error: t.groupData.photoUploadFailed(uploadError.message) };
-          photoPath = path;
-        } catch {
-          return { error: t.groupData.photoProcessFailed };
-        }
+        const res = await uploadReceipt(groupId, input.photoUri, t);
+        if (res.error) return { error: res.error };
+        photoPath = res.path;
       }
 
       const { error } = await supabase.from('entries').insert({
-        id,
+        id: Crypto.randomUUID(),
         group_id: groupId,
         from_user: input.fromUser,
         to_user: input.toUser,
@@ -96,6 +110,54 @@ export function useGroupData(groupId: string | null, userId: string | null) {
         settled: false,
         created_by: userId,
       });
+      if (error) return { error: error.message };
+      await loadAll();
+      return { error: null };
+    },
+    [groupId, userId, loadAll, t]
+  );
+
+  // 割り勘: 支払った人以外の各参加者について、1件ずつmoneyのentriesを
+  // 作る(支払った人自身の取り分はentriesにする必要がない=自分に借りは
+  // 発生しないため)。スキーマは変更せず、既存のentriesの複数行として
+  // 表現するだけなので、残高計算・自動精算・台帳表示は何も変更しなくても
+  // そのまま正しく機能する。
+  const addSplitEntry = useCallback(
+    async (input: {
+      payer: string;
+      participantIds: string[]; // 支払った人自身を含めてよい(その場合その人の分は自動的に除かれる)
+      totalAmount: number;
+      currency: string;
+      description: string;
+      photoUri?: string | null;
+    }) => {
+      if (!groupId || !userId) return { error: t.auth.unauthenticated };
+      const others = input.participantIds.filter((id) => id !== input.payer);
+      if (others.length === 0) return { error: t.addEntry.splitNeedOthersError };
+
+      let photoPath: string | null = null;
+      if (input.photoUri) {
+        const res = await uploadReceipt(groupId, input.photoUri, t);
+        if (res.error) return { error: res.error };
+        photoPath = res.path;
+      }
+
+      const shares = splitAmount(input.totalAmount, input.participantIds.length, input.currency);
+      const rows = others.map((id) => ({
+        id: Crypto.randomUUID(),
+        group_id: groupId,
+        from_user: input.payer,
+        to_user: id,
+        type: 'money' as const,
+        amount: shares[input.participantIds.indexOf(id)],
+        currency: input.currency,
+        description: input.description || null,
+        photo_path: photoPath,
+        settled: false,
+        created_by: userId,
+      }));
+
+      const { error } = await supabase.from('entries').insert(rows);
       if (error) return { error: error.message };
       await loadAll();
       return { error: null };
@@ -162,5 +224,5 @@ export function useGroupData(groupId: string | null, userId: string | null) {
     [groupId, loadAll, t]
   );
 
-  return { members, entries, loading, refresh: loadAll, addEntry, toggleSettled, deleteEntry, settlePair, settleAllMoney };
+  return { members, entries, loading, refresh: loadAll, addEntry, addSplitEntry, toggleSettled, deleteEntry, settlePair, settleAllMoney };
 }

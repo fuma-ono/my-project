@@ -16,6 +16,7 @@ import NetSummary from '../components/NetSummary';
 import { useT } from '../i18n';
 import { computeBalances, computeMyNet, computeSimplifiedSettlement } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
+import { splitAmount } from '../lib/split';
 import { colors, fonts } from '../theme';
 import type { Entry, EntryType, Group, Profile, SimplifiedTransaction } from '../types';
 import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS } from './mockData';
@@ -93,6 +94,35 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
       created_at: new Date().toISOString(),
     };
     setEntries((prev) => [entry, ...prev]);
+    return { error: null };
+  };
+
+  const addSplitEntry = async (input: {
+    payer: string;
+    participantIds: string[];
+    totalAmount: number;
+    currency: string;
+    description: string;
+    photoUri?: string | null;
+  }) => {
+    const others = input.participantIds.filter((id) => id !== input.payer);
+    if (others.length === 0) return { error: t.addEntry.splitNeedOthersError };
+    const shares = splitAmount(input.totalAmount, input.participantIds.length, input.currency);
+    const newEntries: Entry[] = others.map((id) => ({
+      id: `demo-${demoIdSeq++}`,
+      group_id: group.id,
+      from_user: input.payer,
+      to_user: id,
+      type: 'money',
+      amount: shares[input.participantIds.indexOf(id)],
+      currency: input.currency,
+      description: input.description || null,
+      photo_path: null,
+      settled: false,
+      created_by: meId,
+      created_at: new Date().toISOString(),
+    }));
+    setEntries((prev) => [...newEntries, ...prev]);
     return { error: null };
   };
 
@@ -218,7 +248,14 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
 
       <Fab onPress={() => setSheetOpen(true)} />
 
-      <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} />
+      <AddEntrySheet
+        visible={sheetOpen}
+        members={members}
+        meId={meId}
+        onClose={() => setSheetOpen(false)}
+        onSubmit={addEntry}
+        onSubmitSplit={addSplitEntry}
+      />
 
       <AvatarPicker
         visible={avatarPickerOpen}

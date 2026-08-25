@@ -15,9 +15,11 @@ import {
 import Avatar from './Avatar';
 import PrimaryButton from './PrimaryButton';
 import { useT } from '../i18n';
-import { CURRENCIES } from '../lib/currency';
+import { CURRENCIES, formatMoney } from '../lib/currency';
 import { colors, fonts } from '../theme';
 import type { EntryType, Profile } from '../types';
+
+type Mode = EntryType | 'split';
 
 type Props = {
   visible: boolean;
@@ -33,33 +35,49 @@ type Props = {
     description: string;
     photoUri: string | null;
   }) => Promise<{ error: string | null }>;
+  onSubmitSplit: (input: {
+    payer: string;
+    participantIds: string[];
+    totalAmount: number;
+    currency: string;
+    description: string;
+    photoUri: string | null;
+  }) => Promise<{ error: string | null }>;
 };
 
-export default function AddEntrySheet({ visible, members, meId, onClose, onSubmit }: Props) {
+export default function AddEntrySheet({ visible, members, meId, onClose, onSubmit, onSubmitSplit }: Props) {
   const t = useT();
   const others = members.filter((m) => m.id !== meId);
   const [fromId, setFromId] = useState<string | null>(meId ?? members[0]?.id ?? null);
   const [toId, setToId] = useState<string | null>(others[0]?.id ?? members[1]?.id ?? null);
-  const [type, setType] = useState<EntryType>('money');
+  const [mode, setMode] = useState<Mode>('money');
   const [currency, setCurrency] = useState('JPY');
   const [amount, setAmount] = useState('');
   const [desc, setDesc] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [payerId, setPayerId] = useState<string | null>(meId ?? members[0]?.id ?? null);
+  const [participantIds, setParticipantIds] = useState<string[]>(members.map((m) => m.id));
 
   const reset = () => {
     setFromId(meId ?? members[0]?.id ?? null);
     setToId(others[0]?.id ?? members[1]?.id ?? null);
-    setType('money');
+    setMode('money');
     setCurrency('JPY');
     setAmount('');
     setDesc('');
     setPhotoUri(null);
+    setPayerId(meId ?? members[0]?.id ?? null);
+    setParticipantIds(members.map((m) => m.id));
   };
 
   const close = () => {
     reset();
     onClose();
+  };
+
+  const toggleParticipant = (id: string) => {
+    setParticipantIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
   const pickPhoto = () => {
@@ -86,12 +104,45 @@ export default function AddEntrySheet({ visible, members, meId, onClose, onSubmi
     ]);
   };
 
+  const submitSplit = async () => {
+    const n = Number(amount);
+    if (!n || n <= 0) {
+      Alert.alert(t.addEntry.amountRequiredError);
+      return;
+    }
+    if (!payerId) {
+      Alert.alert(t.addEntry.differentPeopleError);
+      return;
+    }
+    if (participantIds.filter((id) => id !== payerId).length === 0) {
+      Alert.alert(t.addEntry.splitNeedOthersError);
+      return;
+    }
+    setSubmitting(true);
+    const { error } = await onSubmitSplit({
+      payer: payerId,
+      participantIds,
+      totalAmount: n,
+      currency,
+      description: desc.trim(),
+      photoUri,
+    });
+    setSubmitting(false);
+    if (error) {
+      Alert.alert(t.addEntry.submitFailedTitle, error);
+      return;
+    }
+    close();
+  };
+
   const submit = async () => {
+    if (mode === 'split') return submitSplit();
+
     if (!fromId || !toId || fromId === toId) {
       Alert.alert(t.addEntry.differentPeopleError);
       return;
     }
-    if (type === 'money') {
+    if (mode === 'money') {
       const n = Number(amount);
       if (!n || n <= 0) {
         Alert.alert(t.addEntry.amountRequiredError);
@@ -105,9 +156,9 @@ export default function AddEntrySheet({ visible, members, meId, onClose, onSubmi
     const { error } = await onSubmit({
       fromUser: fromId,
       toUser: toId,
-      type,
-      amount: type === 'money' ? Number(amount) : null,
-      currency: type === 'money' ? currency : null,
+      type: mode,
+      amount: mode === 'money' ? Number(amount) : null,
+      currency: mode === 'money' ? currency : null,
       description: desc.trim(),
       photoUri,
     });
@@ -119,37 +170,47 @@ export default function AddEntrySheet({ visible, members, meId, onClose, onSubmi
     close();
   };
 
+  const perPersonShare = participantIds.length > 0 ? (Number(amount) || 0) / participantIds.length : 0;
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
       <ScrollView style={styles.sheet} contentContainerStyle={styles.content}>
-        <Text style={styles.title}>{t.addEntry.title}</Text>
-
-        <Text style={styles.label}>{t.addEntry.fromTo}</Text>
-        <View style={styles.pickerRow}>
-          <PersonPicker members={members} selectedId={fromId} onSelect={setFromId} />
-          <Text style={styles.arrow}>→</Text>
-          <PersonPicker members={members} selectedId={toId} onSelect={setToId} />
-        </View>
+        <Text style={styles.title}>{mode === 'split' ? t.addEntry.splitTitle : t.addEntry.title}</Text>
 
         <Text style={styles.label}>{t.addEntry.type}</Text>
         <View style={styles.typeToggle}>
-          <Pressable
-            onPress={() => setType('money')}
-            style={[styles.typeBtn, type === 'money' && styles.typeBtnActiveMoney]}
-          >
-            <Text style={[styles.typeText, type === 'money' && { color: colors.accent }]}>{t.addEntry.moneyType}</Text>
+          <Pressable onPress={() => setMode('money')} style={[styles.typeBtn, mode === 'money' && styles.typeBtnActiveMoney]}>
+            <Text style={[styles.typeText, mode === 'money' && { color: colors.accent }]}>{t.addEntry.moneyType}</Text>
           </Pressable>
-          <Pressable
-            onPress={() => setType('favor')}
-            style={[styles.typeBtn, type === 'favor' && styles.typeBtnActiveFavor]}
-          >
-            <Text style={[styles.typeText, type === 'favor' && { color: colors.favor }]}>{t.addEntry.favorType}</Text>
+          <Pressable onPress={() => setMode('favor')} style={[styles.typeBtn, mode === 'favor' && styles.typeBtnActiveFavor]}>
+            <Text style={[styles.typeText, mode === 'favor' && { color: colors.favor }]}>{t.addEntry.favorType}</Text>
+          </Pressable>
+          <Pressable onPress={() => setMode('split')} style={[styles.typeBtn, mode === 'split' && styles.typeBtnActiveMoney]}>
+            <Text style={[styles.typeText, mode === 'split' && { color: colors.accent }]}>{t.addEntry.splitType}</Text>
           </Pressable>
         </View>
 
-        {type === 'money' && (
+        {mode !== 'split' && (
           <>
-            <Text style={styles.label}>{t.addEntry.amountLabel}</Text>
+            <Text style={styles.label}>{t.addEntry.fromTo}</Text>
+            <View style={styles.pickerRow}>
+              <PersonPicker members={members} selectedId={fromId} onSelect={setFromId} />
+              <Text style={styles.arrow}>→</Text>
+              <PersonPicker members={members} selectedId={toId} onSelect={setToId} />
+            </View>
+          </>
+        )}
+
+        {mode === 'split' && (
+          <>
+            <Text style={styles.label}>{t.addEntry.splitPayerLabel}</Text>
+            <PersonPicker members={members} selectedId={payerId} onSelect={setPayerId} />
+          </>
+        )}
+
+        {(mode === 'money' || mode === 'split') && (
+          <>
+            <Text style={styles.label}>{mode === 'split' ? t.addEntry.splitTotalLabel : t.addEntry.amountLabel}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.currencyRow}>
               {CURRENCIES.map((c) => (
                 <Pressable
@@ -169,6 +230,29 @@ export default function AddEntrySheet({ visible, members, meId, onClose, onSubmi
               keyboardType="decimal-pad"
               style={styles.input}
             />
+          </>
+        )}
+
+        {mode === 'split' && (
+          <>
+            <Text style={styles.label}>{t.addEntry.splitParticipantsLabel}</Text>
+            <View style={styles.participantList}>
+              {members.map((m) => {
+                const checked = participantIds.includes(m.id);
+                return (
+                  <Pressable key={m.id} onPress={() => toggleParticipant(m.id)} style={styles.participantRow}>
+                    <Avatar name={m.display_name} emoji={m.avatar_emoji} size="sm" />
+                    <Text style={styles.participantName}>{m.display_name}</Text>
+                    <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+                      {checked && <Text style={styles.checkboxMark}>✓</Text>}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {!!Number(amount) && participantIds.length > 0 && (
+              <Text style={styles.splitHint}>{t.addEntry.splitPerPersonHint(formatMoney(perPersonShare, currency))}</Text>
+            )}
           </>
         )}
 
@@ -270,6 +354,29 @@ const styles = StyleSheet.create({
     color: colors.ink,
     marginTop: 6,
   },
+  participantList: { gap: 6 },
+  participantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.surface2,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  participantName: { ...fonts.bodyMedium, fontSize: 14, color: colors.ink, flex: 1 },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: colors.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
+  checkboxMark: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  splitHint: { ...fonts.body, fontSize: 12.5, color: colors.muted, marginTop: 8 },
   photoBtn: { backgroundColor: colors.favorSoft, borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16, alignSelf: 'flex-start', marginTop: 12 },
   photoBtnText: { ...fonts.bodySemiBold, fontSize: 13.5, color: colors.favor },
   photoPreviewWrap: { marginTop: 10 },
