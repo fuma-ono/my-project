@@ -27,6 +27,7 @@ import sys
 from . import presets, rotation, video, youtube_upload
 
 DEFAULT_TAGS = ["ambient music", "background music", "AI generated music", "shorts"]
+PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _shorts_description(preset: str, link_video_id: str | None) -> str:
@@ -83,7 +84,18 @@ def main(argv: list[str] | None = None) -> int:
     track.to_wav(wav_path)
 
     print("[2/3] rendering vertical video...")
-    video.render(wav_path, mp4_path, meta["thumb_hook"], args.preset, "vertical")
+    if meta.get("thumbnail_style") == "photo":
+        # 2026-08-25: Shorts previously always used the abstract
+        # gradient renderer regardless of preset, even for presets that
+        # had real photos in long-form — a leftover from before the
+        # photo-background style existed, never revisited. Now matches
+        # long-form's look and, per owner instruction ("これから全写真
+        # 使って"), actually puts the photo pool to use — Shorts publish
+        # daily now, so this is where most of the rotation happens.
+        photo_source = os.path.join(PACKAGE_ROOT, rotation.next_thumbnail_source(args.preset))
+        video.render_photo_background(wav_path, mp4_path, photo_source, "vertical")
+    else:
+        video.render(wav_path, mp4_path, meta["thumb_hook"], args.preset, "vertical")
 
     title = f"{meta['title']} #Shorts"
     description = _shorts_description(args.preset, args.link_video_id)

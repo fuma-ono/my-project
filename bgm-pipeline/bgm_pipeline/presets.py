@@ -323,7 +323,16 @@ PRESET_METADATA = {
         # 公開経験が無かったため取りこぼしていた(オーナー指摘で発覚)。オーナー
         # 提供の写真(月明かりの森・小川)で他3プリセットと統一。
         "thumbnail_style": "photo",
-        "thumbnail_source": "assets/thumbnails/sleep_deep_drone_source.jpg",
+        # 2026-08-25: オーナー指示「これから全写真使って」を受け、単一画像
+        # (thumbnail_source)から複数画像のプール(thumbnail_sources)に変更。
+        # 公開のたびにrotation.next_thumbnail_source()が順番に選ぶ(詳細は
+        # rotation.pyのdocstring参照)。毎日Shorts公開が始まり同じプリセットが
+        # 短い周期で繰り返し使われるようになったため、同じ写真の連続露出を
+        # 避ける狙いもある。
+        "thumbnail_sources": [
+            "assets/thumbnails/sleep_deep_drone_source.jpg",
+            "assets/thumbnails/sleep_deep_drone_alt2.jpg",
+        ],
     },
     "sleep_rain_focus": {
         "title": "【睡眠・作業用BGM】雨音とやわらかなパッドで眠れる 1時間",
@@ -347,7 +356,7 @@ PRESET_METADATA = {
         # 実写化方針転換の対象に入っていなかった(オーナー指摘で発覚)。オーナー
         # 提供の写真(雨の竹林・灯り)に更新、雨音プリセットに文字通り合う絵柄。
         "thumbnail_style": "photo",
-        "thumbnail_source": "assets/thumbnails/sleep_rain_focus_source.jpg",
+        "thumbnail_sources": ["assets/thumbnails/sleep_rain_focus_source.jpg"],
     },
     "study_lofi_chill": {
         "title": "【作業用BGM】カフェ気分で集中できる1時間BGM ｜勉強・作業用",  # 2026-08-16: briefly retitled to "ローファイの音だけの1時間｜集中がはかどる作業用タイム" (same direction as breath_guide_coherent), reverted same day — owner: "日本語として不自然". Thumbnail (v2, centered/no-outline) stayed, only the title reverted.
@@ -363,7 +372,7 @@ PRESET_METADATA = {
         # youtube_upload.set_thumbnail. thumbnail_source/thumb_hook below
         # describe the *previous* generated thumbnail, kept for reference.
         "thumbnail_style": "photo",
-        "thumbnail_source": "assets/thumbnails/study_lofi_chill_source.jpeg",
+        "thumbnail_sources": ["assets/thumbnails/study_lofi_chill_source.jpeg"],
         "thumb_hook": "集中できる\nカフェBGM",  # updated 2026-08-16 (was "はかどる作業用BGM") to match the live hand-revised thumbnail's 2-line text
         "description": "温かみのあるローファイコードにヴァイナルの質感を重ねた、カフェのような作業用BGM。",
         "hook": "温かみのあるローファイコードに、ヴァイナルの質感をまとわせた力の抜けるビート。カフェで作業しているような、集中しやすい空気感です。",
@@ -402,7 +411,13 @@ PRESET_METADATA = {
         # だった(sleep系3プリセットと同じ経緯)。オーナー提供の写真(和の書斎、
         # 日本語の画面表示・掛け軸)で他プリセットと統一。
         "thumbnail_style": "photo",
-        "thumbnail_source": "assets/thumbnails/study_focus_binaural_source.jpg",
+        "thumbnail_sources": [
+            "assets/thumbnails/study_focus_binaural_source.jpg",
+            "assets/thumbnails/study_focus_binaural_alt2.jpg",
+            "assets/thumbnails/study_focus_binaural_alt3.jpg",
+            "assets/thumbnails/study_focus_binaural_alt4.jpg",
+            "assets/thumbnails/study_focus_binaural_alt5.jpg",
+        ],
     },
     "sleep_insomnia_pulse": {
         # Scene 01 (docs/marketing/bgm-content-audit/, 2026-08-12 approved
@@ -430,7 +445,7 @@ PRESET_METADATA = {
         # だった。オーナー提供の写真(霧の山あいの夜景)に更新、広く静かな
         # 視点が「考えすぎた心を静める」というコンセプトに合う。
         "thumbnail_style": "photo",
-        "thumbnail_source": "assets/thumbnails/sleep_insomnia_pulse_source.jpg",
+        "thumbnail_sources": ["assets/thumbnails/sleep_insomnia_pulse_source.jpg"],
     },
     "baby_sleep_noise": {
         # Scene 02 (docs/marketing/bgm-content-audit/, 2026-08-12 approved
@@ -461,7 +476,7 @@ PRESET_METADATA = {
         # Shipped as explicitly instructed by the owner; flagged here rather
         # than silently softened, in case it needs revisiting.
         "thumbnail_style": "photo",
-        "thumbnail_source": "assets/thumbnails/baby_sleep_noise_source.jpeg",
+        "thumbnail_sources": ["assets/thumbnails/baby_sleep_noise_source.jpeg"],
         "thumb_hook": "赤ちゃんが\nやさしく眠れる1時間",  # updated 2026-08-16 (was "赤ちゃんの睡眠環境に")
         "description": "赤ちゃんの睡眠環境づくりに使える、一定のホワイトノイズです。メロディやコードは使わず、ブラウンノイズとピンクノイズだけを一定の音量で流し続けるシンプルな作りにしています。",
         "hook": "赤ちゃんの睡眠環境づくりに使える、一定のホワイトノイズです。メロディや展開はなく、ブラウンノイズとピンクノイズだけを一定の音量で流し続けます。",
@@ -512,7 +527,7 @@ PRESET_METADATA = {
         # this specific video unless make_photo_thumbnail() itself is
         # updated to match the v2/v3 style.
         "thumbnail_style": "photo",
-        "thumbnail_source": "assets/thumbnails/breath_guide_coherent_source.png",
+        "thumbnail_sources": ["assets/thumbnails/breath_guide_coherent_source.png"],
         "thumbnail_crop_top_px": 300,  # trims a UI artifact strip along the top of the source image
         "thumb_hook": "心が静まる15分",  # updated 2026-08-16, 2nd revision (v1: "心を落ち着かせるBGM" -> v2: "波に癒やされる15分" -> v3: current) to match the live hand-revised thumbnail's text
         "description": "吸って4秒・吐いて6秒のリズムで、呼吸のペースを意識しやすくする音です。声によるガイドはなく、一つの持続音の強弱だけでリズムを示します。",

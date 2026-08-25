@@ -55,7 +55,11 @@ def main(argv: list[str] | None = None) -> int:
 
     print("[2/5] rendering video...")
     if meta.get("thumbnail_style") == "photo":
-        photo_source = os.path.join(PACKAGE_ROOT, meta["thumbnail_source"])
+        # picked once and reused for both the video background and the
+        # thumbnail below, so they always match — see rotation.py's
+        # next_thumbnail_source() docstring for why this rotates instead
+        # of always using the same image.
+        photo_source = os.path.join(PACKAGE_ROOT, rotation.next_thumbnail_source(args.preset))
         video.render_photo_background(wav_path, mp4_path, photo_source, "landscape")
     else:
         video.render(wav_path, mp4_path, meta["thumb_hook"], args.preset, "landscape")
@@ -63,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     print("[3/5] generating custom thumbnail...")
     if meta.get("thumbnail_style") == "photo":
         thumbnail.make_photo_thumbnail(
-            thumb_path, os.path.join(PACKAGE_ROOT, meta["thumbnail_source"]), meta["thumb_hook"], args.minutes,
+            thumb_path, photo_source, meta["thumb_hook"], args.minutes,
             crop_top_px=meta.get("thumbnail_crop_top_px"),
         )
     else:

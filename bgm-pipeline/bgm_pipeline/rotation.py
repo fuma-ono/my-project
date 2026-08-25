@@ -91,3 +91,27 @@ def set_last_long_form(video_id: str) -> None:
 
 def get_last_long_form() -> str | None:
     return _load_state().get("last_long_form_video_id")
+
+
+def next_thumbnail_source(preset: str) -> str:
+    """Cycles through a preset's photo pool (PRESET_METADATA[preset]
+    ["thumbnail_sources"]) so repeated publishes of the same preset don't
+    always show the identical image — added 2026-08-25 per owner
+    instruction ("これから全写真使って") after several owner-supplied
+    photos sat unused as "spares". Tracked in rotation_state.json under
+    "thumbnail_index" (one index per preset, keyed by preset name, shared
+    across long-form and Shorts publishes of that preset — both surfaces
+    advance the same counter, so the pool empties out evenly regardless
+    of which format happens to publish next).
+
+    Presets with only one photo in their pool just return that photo
+    every time (index always wraps to 0) — safe to call unconditionally
+    for any thumbnail_style="photo" preset, single-image or not.
+    """
+    sources = presets.PRESET_METADATA[preset]["thumbnail_sources"]
+    state = _load_state()
+    indices = state.setdefault("thumbnail_index", {})
+    idx = indices.get(preset, 0) % len(sources)
+    indices[preset] = (idx + 1) % len(sources)
+    _save_state(state)
+    return sources[idx]
