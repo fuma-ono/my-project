@@ -7,9 +7,9 @@
   "pillar": "A",
   "hypothesis": "この記事テーマは読者の実際の悩み・検索意図に一致し、閲覧・スキ・フォロワー増につながる需要がある",
   "generated_at": "2026-08-17",
-  "published_at": null,
-  "status": "draft",
-  "note_url": "https://note.com/unique_condor276",
+  "published_at": "2026-08-25",
+  "status": "published",
+  "note_url": "https://note.com/unique_condor276/n/n210f1cb0d461",
   "metrics": {
     "views": null,
     "likes": null,
@@ -31,5 +31,6 @@
     "clear_reader_value": true,
     "no_duplication_with_existing": true,
     "note": "2026-08-17、週2回運用Routineでの新規生成。既存記事(01〜16)とテーマ・切り口の重複がないことを確認済み(docs/marketing/2026-08-content-topics.mdの差別化欄参照)"
-  }
+  },
+  "publish_confirmation_note": "2026-08-25、note.com公開RSSフィードとのタイトル一致により自動検知(GitHub Actions定期実行)。"
 }
