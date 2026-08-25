@@ -534,7 +534,7 @@
         </div>
         <div class="unit-stats">
           <div class="stat"><div class="num">7</div><div class="label">プリセット</div></div>
-          <div class="stat"><div class="num">6</div><div class="label">長尺公開</div></div>
+          <div class="stat"><div class="num">7</div><div class="label">長尺公開</div></div>
           <div class="stat"><div class="num">6</div><div class="label">Shorts</div></div>
           <div class="stat"><div class="num">¥0</div><div class="label">収益</div></div>
         </div>
@@ -667,6 +667,7 @@
   <section>
     <h2 class="section-title">経営ログ</h2>
     <div class="highlights">
+      <div class="hl-row"><div class="hl-date">08-25</div><div class="hl-body"><b>再生数を伸ばす施策を実行、BGM長尺第7弾を自動公開。</b>オーナー指示「どうしたら再生数が伸びるのかをしっかり考えて行動して」を受け: ①概要欄を全面日本語化しカテゴリ別のコメント誘発質問を追加、公開済み15本すべてに遡って反映 ②Shorts自動公開を週3回→毎日に変更(このチャンネルの実測でShortsが長尺の15〜20倍再生されているデータに基づく判断) ③長尺第7弾(<a href="https://youtube.com/watch?v=_0CM52Y8_Io" target="_blank" rel="noopener">baby_sleep_noise・60分</a>)を自動公開、再生可能な状態を確認済み。最大の未解決課題(YouTube Analyticsスコープが未取得で露出不足か離脱か切り分けできない)は引き続き残っている</div></div>
       <div class="hl-row"><div class="hl-date">08-24</div><div class="hl-body"><b>週次経営レビュー。</b>bgm-pipeline側YouTube OAuthの残り日数が2.25日まで低下したため事前検知し、再認証手続きを開始・オーナーに承認依頼。モヤスカ側は5.6日残と健全、チャンネル確認ガードも正常動作を確認。</div></div>
       <div class="hl-row"><div class="hl-date">08-23</div><div class="hl-body"><b>モヤスカ台本09(先生の不倫暴露オチ)を@moyasukaへ正しく公開。</b><a href="https://youtube.com/watch?v=T6rOqwOn3g8" target="_blank" rel="noopener">視聴はこちら</a>。前日のチャンネル取り違え事故を受け、公開前にチャンネルIDをAPIで直接検証してから実施、公開後も同様に再確認。「1日1本」ルールを守り、台本08とは別日に公開。</div></div>
       <div class="hl-row"><div class="hl-date">08-22</div><div class="hl-body"><b>重大インシデント: モヤスカ台本08・09を誤って別事業のチャンネル(focus.sleep.sounds)に公開。</b>モヤスカ専用YouTube OAuthの期限切れ(テストモード7日ルール)からの再認証時、誤った(BGM側を管理する)Googleアカウントで承認してしまったことが原因。オーナーからの指摘で発覚し、誤公開の2本を即座に非公開化→完全削除。台本08は正しいアカウントで再認証の上、同日中に@moyasukaへ再公開(<a href="https://youtube.com/watch?v=72sZsKLPkfY" target="_blank" rel="noopener">視聴はこちら</a>)。再発防止として、アップロード前に必ずchannels.list APIで宛先チャンネルを検証し不一致ならSystemExitで止まるガードをコードに追加(<code>moyasuka/publish.py</code>の<code>_assert_correct_channel</code>)。あわせて、この日は前日繰り越し分(台本08)と当日分(台本09)を同日にまとめて公開してしまい「1日1本」の既存方針にも違反していたため、posting-policy.mdに明文化して再発防止。</div></div>
