@@ -1,4 +1,4 @@
-import type { BalanceRow, Entry } from '../types';
+import type { BalanceRow, Entry, SimplifiedTransaction } from '../types';
 
 // 相手×通貨ごとに残高を集計する。異なる通貨同士は為替レートが分からないため
 // 合算・換算せず、それぞれ独立した残高として返す(Web版プロトタイプと同じ方針)。
@@ -59,4 +59,59 @@ export function computeMyNet(entries: Entry[], meId: string | null): NetTotal[] 
   return Object.entries(totals)
     .filter(([, amount]) => Math.abs(amount) >= 0.005)
     .map(([currency, amount]) => ({ currency, amount }));
+}
+
+// 「自動精算」機能: グループ全体のお金の貸し借りを、実際の記録の組み合わせに
+// こだわらず、最小限の支払い回数になるよう再計算する。
+//
+// 例: たろう→はなこ 1,500円、じろう→たろう 2,000円、はなこ→じろう 500円、
+//     たろう→じろう 1,000円 の4件があっても、各人の「通貨ごとの純増減」だけ
+//     見れば、たろう→じろう 1,000円、はなこ→じろう 500円の2件で全員の
+//     残高をゼロにできる。これを「借金の単純化(debt simplification)」問題
+//     と呼び、最大の債権者と最大の債務者を順番にマッチさせる貪欲法で解く
+//     (真の最小回数を求めるのはNP困難だが、実用上はSplitwise等も同じ
+//     貪欲法を使っており、ほとんどの場合で最小、もしくは最小に近い結果になる)。
+//
+// 頼みごと(favor)は「誰から誰への借り」という関係性自体に意味があり、
+// お金のように無差別に付け替えられるものではないため、対象外(従来通り
+// 相手ごとのペア表示のみ)。
+export function computeSimplifiedSettlement(entries: Entry[]): SimplifiedTransaction[] {
+  const open = entries.filter((e) => !e.settled && e.type === 'money');
+
+  // 通貨ごとに「各人の純増減」を集計する(from_user=貸した人=受け取る側は+、
+  // to_user=借りた人=払う側は-。computeMyNetと同じ向きの規約)。
+  const netsByCurrency: Record<string, Record<string, number>> = {};
+  for (const e of open) {
+    const currency = e.currency || 'JPY';
+    const amount = e.amount ?? 0;
+    const nets = (netsByCurrency[currency] ??= {});
+    nets[e.from_user] = (nets[e.from_user] || 0) + amount;
+    nets[e.to_user] = (nets[e.to_user] || 0) - amount;
+  }
+
+  const result: SimplifiedTransaction[] = [];
+  for (const [currency, nets] of Object.entries(netsByCurrency)) {
+    const creditors = Object.entries(nets)
+      .filter(([, v]) => v > 0.005)
+      .map(([id, v]) => ({ id, amount: v }))
+      .sort((a, b) => b.amount - a.amount);
+    const debtors = Object.entries(nets)
+      .filter(([, v]) => v < -0.005)
+      .map(([id, v]) => ({ id, amount: -v }))
+      .sort((a, b) => b.amount - a.amount);
+
+    let ci = 0;
+    let di = 0;
+    while (ci < creditors.length && di < debtors.length) {
+      const c = creditors[ci];
+      const d = debtors[di];
+      const amount = Math.min(c.amount, d.amount);
+      if (amount > 0.005) result.push({ debtor: d.id, creditor: c.id, amount, currency });
+      c.amount -= amount;
+      d.amount -= amount;
+      if (c.amount < 0.005) ci++;
+      if (d.amount < 0.005) di++;
+    }
+  }
+  return result;
 }

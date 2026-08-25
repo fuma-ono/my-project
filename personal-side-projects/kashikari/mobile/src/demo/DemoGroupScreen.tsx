@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 
 import AddEntrySheet from '../components/AddEntrySheet';
+import AutoSettlePlan from '../components/AutoSettlePlan';
 import Avatar from '../components/Avatar';
 import AvatarPicker from '../components/AvatarPicker';
 import BalanceCard from '../components/BalanceCard';
@@ -13,10 +14,10 @@ import GroupIconPicker from '../components/GroupIconPicker';
 import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
 import { useT } from '../i18n';
-import { computeBalances, computeMyNet } from '../lib/balances';
+import { computeBalances, computeMyNet, computeSimplifiedSettlement } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
 import { colors, fonts } from '../theme';
-import type { Entry, EntryType, Group, Profile } from '../types';
+import type { Entry, EntryType, Group, Profile, SimplifiedTransaction } from '../types';
 import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS } from './mockData';
 
 type Tab = 'balance' | 'ledger';
@@ -45,6 +46,28 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
     [visibleEntries, t]
   );
   const settledCount = entries.length - entries.filter((e) => !e.settled).length;
+
+  const autoSettlePlans = useMemo(() => {
+    const simplified = computeSimplifiedSettlement(entries);
+    const byCurrency = new Map<string, SimplifiedTransaction[]>();
+    for (const tx of simplified) {
+      const list = byCurrency.get(tx.currency) ?? [];
+      list.push(tx);
+      byCurrency.set(tx.currency, list);
+    }
+    const pairwiseCountByCurrency = new Map<string, number>();
+    for (const row of balances) {
+      if (row.type !== 'money' || !row.currency) continue;
+      pairwiseCountByCurrency.set(row.currency, (pairwiseCountByCurrency.get(row.currency) ?? 0) + 1);
+    }
+    return [...byCurrency.entries()]
+      .filter(([currency, txs]) => txs.length < (pairwiseCountByCurrency.get(currency) ?? Infinity))
+      .map(([currency, transactions]) => ({ currency, transactions }));
+  }, [entries, balances]);
+
+  const settleAllMoney = (currency: string) => {
+    setEntries((prev) => prev.map((e) => (e.type === 'money' && (e.currency || 'JPY') === currency && !e.settled ? { ...e, settled: true } : e)));
+  };
 
   const addEntry = async (input: {
     fromUser: string;
@@ -145,6 +168,16 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
             <View>
               {header}
               <NetSummary totals={netTotals} />
+              {autoSettlePlans.map((plan) => (
+                <AutoSettlePlan
+                  key={plan.currency}
+                  currency={plan.currency}
+                  transactions={plan.transactions}
+                  nameOf={nameOf}
+                  emojiOf={emojiOf}
+                  onSettleAll={() => settleAllMoney(plan.currency)}
+                />
+              ))}
               {balances.length > 0 && <Text style={styles.sectionTitle}>{t.group.breakdown}</Text>}
             </View>
           }

@@ -94,4 +94,35 @@ export const DEMO_ENTRIES: Entry[] = [
     created_by: DEMO_ME_ID,
     created_at: hoursAgo(72),
   },
+  // e5・e6は、e1と合わせてたろう・はなこ・じろうの3人でJPYの貸し借りが
+  // 三角形になるようにしてある(自動精算で3件→2件にまとまる様子を
+  // デモ・スクリーンショットで確認できるようにするため)。
+  {
+    id: 'e5',
+    group_id: DEMO_GROUP.id,
+    from_user: 'demo-jiro',
+    to_user: DEMO_ME_ID,
+    type: 'money',
+    amount: 2000,
+    currency: 'JPY',
+    description: '飲み会代を立て替えてもらった',
+    photo_path: null,
+    settled: false,
+    created_by: 'demo-jiro',
+    created_at: hoursAgo(10),
+  },
+  {
+    id: 'e6',
+    group_id: DEMO_GROUP.id,
+    from_user: 'demo-hanako',
+    to_user: 'demo-jiro',
+    type: 'money',
+    amount: 500,
+    currency: 'JPY',
+    description: '旅行のお土産代',
+    photo_path: null,
+    settled: false,
+    created_by: 'demo-hanako',
+    created_at: hoursAgo(6),
+  },
 ];

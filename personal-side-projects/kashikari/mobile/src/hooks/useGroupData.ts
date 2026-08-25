@@ -140,5 +140,27 @@ export function useGroupData(groupId: string | null, userId: string | null) {
     [entries, loadAll]
   );
 
-  return { members, entries, loading, refresh: loadAll, addEntry, toggleSettled, deleteEntry, settlePair };
+  // 「自動精算」用: 通貨を指定して、その通貨の未精算のお金の記録を
+  // まとめて精算済みにする。自動精算プランは各人の純増減だけを見て
+  // 最小の支払い回数に組み直したものなので、そのプラン通りに全員が
+  // 支払い終えた時点では、元になった個々の記録も(誰から誰への分かは
+  // バラバラでも)全額分の受け渡しが完了している = 全部精算済みにして
+  // 問題ない、という考え方。
+  const settleAllMoney = useCallback(
+    async (currency: string) => {
+      if (!groupId) return { error: t.auth.unauthenticated };
+      const { error } = await supabase
+        .from('entries')
+        .update({ settled: true })
+        .eq('group_id', groupId)
+        .eq('type', 'money')
+        .eq('currency', currency)
+        .eq('settled', false);
+      if (!error) await loadAll();
+      return { error: error?.message ?? null };
+    },
+    [groupId, loadAll, t]
+  );
+
+  return { members, entries, loading, refresh: loadAll, addEntry, toggleSettled, deleteEntry, settlePair, settleAllMoney };
 }

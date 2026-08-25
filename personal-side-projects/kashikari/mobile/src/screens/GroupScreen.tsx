@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, RefreshControl, SectionList, Share, StyleSheet, Text, View } from 'react-native';
 
 import AddEntrySheet from '../components/AddEntrySheet';
+import AutoSettlePlan from '../components/AutoSettlePlan';
 import Avatar from '../components/Avatar';
 import AvatarPicker from '../components/AvatarPicker';
 import BalanceCard from '../components/BalanceCard';
@@ -12,10 +13,10 @@ import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
 import { useGroupData } from '../hooks/useGroupData';
 import { useT } from '../i18n';
-import { computeBalances, computeMyNet } from '../lib/balances';
+import { computeBalances, computeMyNet, computeSimplifiedSettlement } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
 import { colors, fonts } from '../theme';
-import type { Group } from '../types';
+import type { Group, SimplifiedTransaction } from '../types';
 
 type Tab = 'balance' | 'ledger';
 
@@ -30,7 +31,10 @@ type Props = {
 
 export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvatar, onChangeGroupIcon }: Props) {
   const t = useT();
-  const { members, entries, loading, refresh, addEntry, toggleSettled, deleteEntry, settlePair } = useGroupData(group.id, meId);
+  const { members, entries, loading, refresh, addEntry, toggleSettled, deleteEntry, settlePair, settleAllMoney } = useGroupData(
+    group.id,
+    meId
+  );
   const [sheetOpen, setSheetOpen] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [groupIconPickerOpen, setGroupIconPickerOpen] = useState(false);
@@ -42,6 +46,28 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
   const me = members.find((m) => m.id === meId);
   const balances = useMemo(() => computeBalances(entries, meId), [entries, meId]);
   const netTotals = useMemo(() => computeMyNet(entries, meId), [entries, meId]);
+
+  // 自動精算プラン: 通貨ごとに「まとめると何回の支払いで済むか」を計算し、
+  // それが素朴なペアごとの内訳(balances)の件数より実際に少ない通貨だけ
+  // カードを出す(2人だけのグループ等、まとめても件数が変わらない場合は
+  // 表示しても意味がないため)。
+  const autoSettlePlans = useMemo(() => {
+    const simplified = computeSimplifiedSettlement(entries);
+    const byCurrency = new Map<string, SimplifiedTransaction[]>();
+    for (const tx of simplified) {
+      const list = byCurrency.get(tx.currency) ?? [];
+      list.push(tx);
+      byCurrency.set(tx.currency, list);
+    }
+    const pairwiseCountByCurrency = new Map<string, number>();
+    for (const row of balances) {
+      if (row.type !== 'money' || !row.currency) continue;
+      pairwiseCountByCurrency.set(row.currency, (pairwiseCountByCurrency.get(row.currency) ?? 0) + 1);
+    }
+    return [...byCurrency.entries()]
+      .filter(([currency, txs]) => txs.length < (pairwiseCountByCurrency.get(currency) ?? Infinity))
+      .map(([currency, transactions]) => ({ currency, transactions }));
+  }, [entries, balances]);
 
   const visibleEntries = useMemo(
     () => (showSettled ? entries : entries.filter((e) => !e.settled)),
@@ -158,6 +184,16 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
             <View>
               {header}
               <NetSummary totals={netTotals} />
+              {autoSettlePlans.map((plan) => (
+                <AutoSettlePlan
+                  key={plan.currency}
+                  currency={plan.currency}
+                  transactions={plan.transactions}
+                  nameOf={nameOf}
+                  emojiOf={emojiOf}
+                  onSettleAll={() => settleAllMoney(plan.currency)}
+                />
+              ))}
               {balances.length > 0 && <Text style={styles.sectionTitle}>{t.group.breakdown}</Text>}
             </View>
           }
