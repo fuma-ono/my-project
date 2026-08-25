@@ -32,44 +32,48 @@ export default function OnboardingScreen({
 
   return (
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.markWrap}>
-        <Mark size={64} />
-      </View>
-      <Text style={styles.wordmark}>kashikari</Text>
-      <Text style={styles.tagline}>友達との貸し借りを、お金も頼みごとも一緒に記録する</Text>
-
-      {authError && (
-        <View style={styles.authErrorBox}>
-          <Text style={styles.authErrorTitle}>サインインに失敗しました</Text>
-          <Text style={styles.authErrorBody}>{authError}</Text>
-          <Text style={styles.authErrorHint}>
-            Supabaseの管理画面で Authentication {'>'} Providers {'>'} Anonymous Sign-Ins が有効になっているか確認してください。
-          </Text>
+      <View style={styles.content}>
+        <View style={styles.markWrap}>
+          <Mark size={64} />
         </View>
-      )}
+        <Text style={styles.wordmark}>kashikari</Text>
+        <Text style={styles.tagline}>友達との貸し借りを、お金も頼みごとも一緒に記録する</Text>
 
-      <Text style={styles.label}>あなたの名前</Text>
-      <TextInput
-        value={name}
-        onChangeText={(t) => {
-          setName(t);
-          setError(null);
-        }}
-        placeholder="例: たろう"
-        placeholderTextColor={colors.muted}
-        maxLength={20}
-        style={styles.input}
-        autoFocus
-      />
+        {authError && (
+          <View style={styles.authErrorBox}>
+            <Text style={styles.authErrorTitle}>サインインに失敗しました</Text>
+            <Text style={styles.authErrorBody}>{authError}</Text>
+            <Text style={styles.authErrorHint}>
+              Supabaseの管理画面で Authentication {'>'} Providers {'>'} Anonymous Sign-Ins が有効になっているか確認してください。
+            </Text>
+          </View>
+        )}
 
-      <Text style={styles.label}>アイコン</Text>
-      <Pressable onPress={() => setPickerOpen(true)} style={styles.avatarRow}>
-        <Avatar name={name || '?'} emoji={avatarEmoji} size="md" />
-        <Text style={styles.avatarRowText}>{avatarEmoji ? 'アイコンを変える' : 'アイコンを選ぶ(あとで変更できます)'}</Text>
-      </Pressable>
+        <Text style={styles.label}>あなたの名前</Text>
+        <TextInput
+          value={name}
+          onChangeText={(t) => {
+            setName(t);
+            setError(null);
+          }}
+          placeholder="例: たろう"
+          placeholderTextColor={colors.muted}
+          maxLength={20}
+          style={styles.input}
+          autoFocus
+        />
 
-      {error && <Text style={styles.error}>{error}</Text>}
+        <Text style={styles.label}>アイコン</Text>
+        <Pressable onPress={() => setPickerOpen(true)} style={styles.avatarRow}>
+          <Avatar name={name || '?'} emoji={avatarEmoji} size="md" />
+          <Text style={styles.avatarRowText}>{avatarEmoji ? 'アイコンを変える' : 'アイコンを選ぶ(あとで変更できます)'}</Text>
+        </Pressable>
 
+        {error && <Text style={styles.error}>{error}</Text>}
+      </View>
+
+      {/* 主要CTAは内容のすぐ下に小さく浮かせるのではなく、画面下部に
+          幅いっぱいで固定する(他アプリのオンボーディングでも一般的な配置)。 */}
       <PrimaryButton title="はじめる" onPress={submit} loading={submitting} disabled={!name.trim()} style={styles.button} />
 
       <AvatarPicker
@@ -87,7 +91,8 @@ export default function OnboardingScreen({
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.bg, paddingTop: 60, paddingHorizontal: 24 },
+  wrap: { flex: 1, backgroundColor: colors.bg, paddingTop: 60, paddingHorizontal: 24, paddingBottom: 28 },
+  content: { flex: 1 },
   markWrap: { marginBottom: 16 },
   wordmark: { ...fonts.display, fontSize: 38, color: colors.ink },
   tagline: { ...fonts.body, fontSize: 14.5, color: colors.muted, marginTop: 8, marginBottom: 32 },
@@ -135,5 +140,5 @@ const styles = StyleSheet.create({
   authErrorTitle: { ...fonts.bodySemiBold, fontSize: 14, color: colors.danger },
   authErrorBody: { ...fonts.body, fontSize: 13, color: colors.danger, marginTop: 4 },
   authErrorHint: { ...fonts.body, fontSize: 12.5, color: colors.muted, marginTop: 8, lineHeight: 18 },
-  button: { marginTop: 24, alignSelf: 'flex-start', paddingHorizontal: 28 },
+  button: { width: '100%' },
 });
