@@ -14,6 +14,7 @@ import GroupIconPicker from '../components/GroupIconPicker';
 import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
 import SettlementProgress from '../components/SettlementProgress';
+import UnpaidMembersModal from '../components/UnpaidMembersModal';
 import { useT } from '../i18n';
 import { computeBalances, computeMyNet, computeSimplifiedSettlement } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
@@ -35,6 +36,7 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   const [groupIconPickerOpen, setGroupIconPickerOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('balance');
   const [showSettled, setShowSettled] = useState(false);
+  const [unpaidModalOpen, setUnpaidModalOpen] = useState(false);
   const meId = DEMO_ME_ID;
   const me = members.find((m) => m.id === meId);
 
@@ -67,7 +69,7 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
       .map(([currency, transactions]) => ({ currency, transactions }));
   }, [entries, balances]);
 
-  const balanceSections = useMemo(() => {
+  const { balanceSections, receivingRows } = useMemo(() => {
     const receiving: BalanceRow[] = [];
     const paying: BalanceRow[] = [];
     const other: BalanceRow[] = [];
@@ -76,11 +78,14 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
       else if (row.mine && row.debtor === meId) paying.push(row);
       else other.push(row);
     }
-    return [
-      { title: t.group.receivingSection, data: receiving },
-      { title: t.group.payingSection, data: paying },
-      { title: t.group.otherSection, data: other },
-    ].filter((s) => s.data.length > 0);
+    return {
+      balanceSections: [
+        { title: t.group.receivingSection, data: receiving },
+        { title: t.group.payingSection, data: paying },
+        { title: t.group.otherSection, data: other },
+      ].filter((s) => s.data.length > 0),
+      receivingRows: receiving,
+    };
   }, [balances, meId, t]);
 
   const settlementProgress = useMemo(() => {
@@ -228,7 +233,13 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
             <View>
               {header}
               <NetSummary totals={netTotals} balances={balances} meId={meId} />
-              {balances.length > 0 && <SettlementProgress doneCount={settlementProgress.done} totalCount={settlementProgress.total} />}
+              {balances.length > 0 && (
+                <SettlementProgress
+                  doneCount={settlementProgress.done}
+                  totalCount={settlementProgress.total}
+                  onPress={() => setUnpaidModalOpen(true)}
+                />
+              )}
               {autoSettlePlans.map((plan) => (
                 <AutoSettlePlan
                   key={plan.currency}
@@ -309,6 +320,14 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
           setGroup((prev) => ({ ...prev, icon_emoji: emoji }));
         }}
         onClose={() => setGroupIconPickerOpen(false)}
+      />
+
+      <UnpaidMembersModal
+        visible={unpaidModalOpen}
+        rows={receivingRows}
+        nameOf={nameOf}
+        emojiOf={emojiOf}
+        onClose={() => setUnpaidModalOpen(false)}
       />
     </View>
   );

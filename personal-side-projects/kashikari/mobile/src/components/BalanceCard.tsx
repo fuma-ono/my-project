@@ -1,8 +1,10 @@
-import { Alert, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import Avatar from './Avatar';
 import { useT } from '../i18n';
 import { formatMoney } from '../lib/currency';
+import { daysSince } from '../lib/balances';
+import { openRemindPrompt } from '../lib/remind';
 import { colors, fonts } from '../theme';
 import type { BalanceRow } from '../types';
 
@@ -44,17 +46,10 @@ export default function BalanceCard({ row, nameOf, emojiOf, meId, onSettle }: Pr
 
   // 「催促する」は、自分が受け取る側(相手が自分にお金を払っていない)の
   // 場合だけ意味があるので、それ以外では出さない。頼みごとは金額が
-  // 無いため文面が作れず対象外(お金のみ)。
+  // 無いため文面が作れず対象外(お金のみ)。同じ理由で、未払い日数も
+  // 受け取る側の行にだけ添える(「回収」導線としての意味がある情報のため)。
   const canRemind = iAmOwed && row.type === 'money';
-  const remind = () => {
-    Alert.alert(t.remind.toneTitle, undefined, [
-      { text: t.remind.toneGentle, onPress: () => shareReminder(t.remind.gentleMessage(amountLabel)) },
-      { text: t.remind.toneNormal, onPress: () => shareReminder(t.remind.normalMessage(amountLabel)) },
-      { text: t.remind.toneFunny, onPress: () => shareReminder(t.remind.funnyMessage(amountLabel)) },
-      { text: t.remind.toneStrong, onPress: () => shareReminder(t.remind.strongMessage(amountLabel)) },
-      { text: t.common.cancel, style: 'cancel' },
-    ]);
-  };
+  const remind = () => openRemindPrompt(t, amountLabel);
 
   return (
     <View style={styles.card}>
@@ -64,9 +59,12 @@ export default function BalanceCard({ row, nameOf, emojiOf, meId, onSettle }: Pr
         ) : (
           <OtherPairLine row={row} nameOf={nameOf} emojiOf={emojiOf} />
         )}
-        <Text style={[styles.amount, { color: amountColor }]} numberOfLines={1}>
-          {amountLabel}
-        </Text>
+        <View style={styles.amountCol}>
+          <Text style={[styles.amount, { color: amountColor }]} numberOfLines={1}>
+            {amountLabel}
+          </Text>
+          {canRemind && <Text style={styles.daysAgo}>{t.balanceCard.daysAgo(daysSince(row.oldestUnsettledAt))}</Text>}
+        </View>
       </View>
 
       <View style={styles.bottomRow}>
@@ -134,10 +132,6 @@ function OtherPairLine({
   );
 }
 
-function shareReminder(message: string) {
-  Share.share({ message });
-}
-
 const styles = StyleSheet.create({
   card: { paddingVertical: 14, gap: 8 },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
@@ -145,7 +139,9 @@ const styles = StyleSheet.create({
   sentence: { ...fonts.bodyMedium, fontSize: 14.5, color: colors.ink, flexShrink: 1 },
   name: { ...fonts.bodyMedium, fontSize: 14.5, color: colors.ink, flexShrink: 1 },
   arrow: { color: colors.muted },
-  amount: { ...fonts.display, fontSize: 19, flexShrink: 0 },
+  amountCol: { alignItems: 'flex-end', flexShrink: 0 },
+  amount: { ...fonts.display, fontSize: 19 },
+  daysAgo: { ...fonts.body, fontSize: 11, color: colors.muted, marginTop: 2 },
   bottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
   remindBtn: {
     backgroundColor: colors.favorSoft,

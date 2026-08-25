@@ -37,6 +37,11 @@ function hoursAgo(h: number): string {
   return new Date(Date.now() - h * 60 * 60 * 1000).toISOString();
 }
 
+// 未払い日数(BalanceCard・未払いユーザー一覧)のデモ表示用。
+function daysAgo(d: number): string {
+  return new Date(Date.now() - d * 24 * 60 * 60 * 1000).toISOString();
+}
+
 export const DEMO_ENTRIES: Entry[] = [
   {
     id: 'e1',
@@ -50,7 +55,7 @@ export const DEMO_ENTRIES: Entry[] = [
     photo_path: null,
     settled: false,
     created_by: DEMO_ME_ID,
-    created_at: hoursAgo(2),
+    created_at: daysAgo(3),
   },
   {
     id: 'e2',

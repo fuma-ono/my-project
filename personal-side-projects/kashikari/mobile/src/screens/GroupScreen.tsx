@@ -12,6 +12,7 @@ import GroupIconPicker from '../components/GroupIconPicker';
 import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
 import SettlementProgress from '../components/SettlementProgress';
+import UnpaidMembersModal from '../components/UnpaidMembersModal';
 import { useGroupData } from '../hooks/useGroupData';
 import { useT } from '../i18n';
 import { computeBalances, computeMyNet, computeSimplifiedSettlement } from '../lib/balances';
@@ -41,6 +42,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
   const [groupIconPickerOpen, setGroupIconPickerOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('balance');
   const [showSettled, setShowSettled] = useState(false);
+  const [unpaidModalOpen, setUnpaidModalOpen] = useState(false);
 
   const nameOf = (id: string) => members.find((m) => m.id === id)?.display_name ?? t.group.unknownMember;
   const emojiOf = (id: string) => members.find((m) => m.id === id)?.avatar_emoji ?? null;
@@ -74,7 +76,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
   // 受けて、内訳を自分視点のセクションに分ける。自分が関係しない行
   // (グループ内の他の2人同士)は「受け取る/支払う」のどちらにも属さない
   // ため、別セクションにまとめる。
-  const balanceSections = useMemo(() => {
+  const { balanceSections, receivingRows } = useMemo(() => {
     const receiving: BalanceRow[] = [];
     const paying: BalanceRow[] = [];
     const other: BalanceRow[] = [];
@@ -83,11 +85,14 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
       else if (row.mine && row.debtor === meId) paying.push(row);
       else other.push(row);
     }
-    return [
-      { title: t.group.receivingSection, data: receiving },
-      { title: t.group.payingSection, data: paying },
-      { title: t.group.otherSection, data: other },
-    ].filter((s) => s.data.length > 0);
+    return {
+      balanceSections: [
+        { title: t.group.receivingSection, data: receiving },
+        { title: t.group.payingSection, data: paying },
+        { title: t.group.otherSection, data: other },
+      ].filter((s) => s.data.length > 0),
+      receivingRows: receiving,
+    };
   }, [balances, meId, t]);
 
   // 精算進捗: このグループで貸し借りが1つも残っていないメンバーの割合。
@@ -221,7 +226,13 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
             <View>
               {header}
               <NetSummary totals={netTotals} balances={balances} meId={meId} />
-              {balances.length > 0 && <SettlementProgress doneCount={settlementProgress.done} totalCount={settlementProgress.total} />}
+              {balances.length > 0 && (
+                <SettlementProgress
+                  doneCount={settlementProgress.done}
+                  totalCount={settlementProgress.total}
+                  onPress={() => setUnpaidModalOpen(true)}
+                />
+              )}
               {autoSettlePlans.map((plan) => (
                 <AutoSettlePlan
                   key={plan.currency}
@@ -252,6 +263,13 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
         <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} onSubmitSplit={addSplitEntry} />
         {avatarPicker}
         {groupIconPicker}
+        <UnpaidMembersModal
+          visible={unpaidModalOpen}
+          rows={receivingRows}
+          nameOf={nameOf}
+          emojiOf={emojiOf}
+          onClose={() => setUnpaidModalOpen(false)}
+        />
       </View>
     );
   }

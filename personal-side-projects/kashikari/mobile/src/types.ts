@@ -37,6 +37,7 @@ export type BalanceRow = {
   amount: number; // money: 金額 / favor: 件数
   currency: string | null;
   mine: boolean;
+  oldestUnsettledAt: string; // この相手×通貨(頼みごとは相手×向き)で最初に未精算になった記録のcreated_at
 };
 
 // 「自動精算」で使う、グループ全体を最小の支払い回数にまとめた結果の1行。

@@ -4,19 +4,22 @@ import type { BalanceRow, Entry, SimplifiedTransaction } from '../types';
 // 合算・換算せず、それぞれ独立した残高として返す(Web版プロトタイプと同じ方針)。
 export function computeBalances(entries: Entry[], meId: string | null): BalanceRow[] {
   const open = entries.filter((e) => !e.settled);
-  const money: Record<string, { a: string; b: string; net: number; currency: string }> = {};
-  const favor: Record<string, number> = {};
+  const money: Record<string, { a: string; b: string; net: number; currency: string; oldestAt: string }> = {};
+  const favor: Record<string, { count: number; oldestAt: string }> = {};
 
   for (const e of open) {
     if (e.type === 'money') {
       const currency = e.currency || 'JPY';
       const pairKey = `${[e.from_user, e.to_user].sort().join('|')}|${currency}`;
-      if (!money[pairKey]) money[pairKey] = { a: e.from_user, b: e.to_user, net: 0, currency };
+      if (!money[pairKey]) money[pairKey] = { a: e.from_user, b: e.to_user, net: 0, currency, oldestAt: e.created_at };
       const m = money[pairKey];
       m.net += e.from_user === m.a ? e.amount ?? 0 : -(e.amount ?? 0);
+      if (e.created_at < m.oldestAt) m.oldestAt = e.created_at;
     } else {
       const key = `${e.from_user}→${e.to_user}`;
-      favor[key] = (favor[key] || 0) + 1;
+      if (!favor[key]) favor[key] = { count: 0, oldestAt: e.created_at };
+      favor[key].count += 1;
+      if (e.created_at < favor[key].oldestAt) favor[key].oldestAt = e.created_at;
     }
   }
 
@@ -32,15 +35,34 @@ export function computeBalances(entries: Entry[], meId: string | null): BalanceR
       amount: Math.abs(m.net),
       currency: m.currency,
       mine: !!meId && (debtor === meId || creditor === meId),
+      oldestUnsettledAt: m.oldestAt,
     });
   }
-  for (const [key, count] of Object.entries(favor)) {
+  for (const [key, { count, oldestAt }] of Object.entries(favor)) {
     const [from, to] = key.split('→');
-    rows.push({ debtor: from, creditor: to, type: 'favor', amount: count, currency: null, mine: !!meId && (from === meId || to === meId) });
+    rows.push({
+      debtor: from,
+      creditor: to,
+      type: 'favor',
+      amount: count,
+      currency: null,
+      mine: !!meId && (from === meId || to === meId),
+      oldestUnsettledAt: oldestAt,
+    });
   }
 
   rows.sort((x, y) => (x.mine === y.mine ? 0 : x.mine ? -1 : 1));
   return rows;
+}
+
+// BalanceCard・未払いユーザー一覧モーダルで共通して使う「経過日数」計算。
+// 記録日の翌日を「1日前」として数える(記録した当日は「今日」)。
+export function daysSince(isoDate: string): number {
+  const start = new Date(isoDate);
+  start.setHours(0, 0, 0, 0);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.round((now.getTime() - start.getTime()) / 86400000));
 }
 
 export type NetTotal = { currency: string; amount: number }; // amount > 0: 受け取る / < 0: 払う
