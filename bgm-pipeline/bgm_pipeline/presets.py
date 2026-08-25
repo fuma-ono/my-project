@@ -318,6 +318,12 @@ PRESET_METADATA = {
             "insomnia relief", "relaxing sleep music", "sleep drone",
         ],
         "hashtags": ["睡眠用bgm", "熟睡", "ブラウンノイズ", "sleepmusic", "ambientmusic"],
+        # 2026-08-25追加: sleep_deep_droneは08-12の実写化方針転換(study_lofi_chill/
+        # baby_sleep_noise/breath_guide_coherentの3本のみ対象)を、当時一度も
+        # 公開経験が無かったため取りこぼしていた(オーナー指摘で発覚)。オーナー
+        # 提供の写真(月明かりの森・小川)で他3プリセットと統一。
+        "thumbnail_style": "photo",
+        "thumbnail_source": "assets/thumbnails/sleep_deep_drone_source.jpg",
     },
     "sleep_rain_focus": {
         "title": "【睡眠・作業用BGM】雨音とやわらかなパッドで眠れる 1時間",
@@ -337,6 +343,11 @@ PRESET_METADATA = {
             "relaxing rain", "ambient rain",
         ],
         "hashtags": ["雨音bgm", "作業用bgm", "睡眠用bgm", "rainsounds", "relaxation"],
+        # 2026-08-25追加: sleep_rain_focusは08-05の文字化け修正止まりで、08-12の
+        # 実写化方針転換の対象に入っていなかった(オーナー指摘で発覚)。オーナー
+        # 提供の写真(雨の竹林・灯り)に更新、雨音プリセットに文字通り合う絵柄。
+        "thumbnail_style": "photo",
+        "thumbnail_source": "assets/thumbnails/sleep_rain_focus_source.jpg",
     },
     "study_lofi_chill": {
         "title": "【作業用BGM】カフェ気分で集中できる1時間BGM ｜勉強・作業用",  # 2026-08-16: briefly retitled to "ローファイの音だけの1時間｜集中がはかどる作業用タイム" (same direction as breath_guide_coherent), reverted same day — owner: "日本語として不自然". Thumbnail (v2, centered/no-outline) stayed, only the title reverted.
@@ -410,6 +421,11 @@ PRESET_METADATA = {
             "relaxing sleep music",
         ],
         "hashtags": ["睡眠用bgm", "不眠", "安眠", "sleepmusic", "insomnia"],
+        # 2026-08-25追加: sleep_insomnia_pulseも08-12の実写化方針転換の対象漏れ
+        # だった。オーナー提供の写真(霧の山あいの夜景)に更新、広く静かな
+        # 視点が「考えすぎた心を静める」というコンセプトに合う。
+        "thumbnail_style": "photo",
+        "thumbnail_source": "assets/thumbnails/sleep_insomnia_pulse_source.jpg",
     },
     "baby_sleep_noise": {
         # Scene 02 (docs/marketing/bgm-content-audit/, 2026-08-12 approved
