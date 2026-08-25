@@ -66,8 +66,9 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
       .map(([currency, transactions]) => ({ currency, transactions }));
   }, [entries, balances]);
 
-  const settleAllMoney = (currency: string) => {
+  const settleAllMoney = async (currency: string) => {
     setEntries((prev) => prev.map((e) => (e.type === 'money' && (e.currency || 'JPY') === currency && !e.settled ? { ...e, settled: true } : e)));
+    return { error: null };
   };
 
   const addEntry = async (input: {
@@ -197,7 +198,7 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
           ListHeaderComponent={
             <View>
               {header}
-              <NetSummary totals={netTotals} unsettledCount={balances.filter((b) => b.mine).length} />
+              <NetSummary totals={netTotals} balances={balances} meId={meId} />
               {autoSettlePlans.map((plan) => (
                 <AutoSettlePlan
                   key={plan.currency}
@@ -206,6 +207,7 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
                   transactions={plan.transactions}
                   nameOf={nameOf}
                   emojiOf={emojiOf}
+                  meId={meId}
                   onSettleAll={() => settleAllMoney(plan.currency)}
                 />
               ))}

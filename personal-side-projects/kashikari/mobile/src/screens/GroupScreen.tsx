@@ -183,7 +183,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
           ListHeaderComponent={
             <View>
               {header}
-              <NetSummary totals={netTotals} unsettledCount={balances.filter((b) => b.mine).length} />
+              <NetSummary totals={netTotals} balances={balances} meId={meId} />
               {autoSettlePlans.map((plan) => (
                 <AutoSettlePlan
                   key={plan.currency}
@@ -192,6 +192,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
                   transactions={plan.transactions}
                   nameOf={nameOf}
                   emojiOf={emojiOf}
+                  meId={meId}
                   onSettleAll={() => settleAllMoney(plan.currency)}
                 />
               ))}

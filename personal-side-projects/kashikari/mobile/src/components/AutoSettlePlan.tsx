@@ -14,28 +14,51 @@ type Props = {
   transactions: SimplifiedTransaction[];
   nameOf: (id: string) => string;
   emojiOf: (id: string) => string | null;
-  onSettleAll: () => void;
+  meId: string | null;
+  onSettleAll: () => Promise<{ error: string | null }>;
 };
 
 // 「自動精算」機能の見た目。個々の相手ごとの内訳(BalanceCard)とは別枠で、
 // グループ全体を最小の支払い回数にまとめたプランをカードで見せる。
 // このカードは、それが実際に減らせている場合(pairwiseの行数より
 // simplifiedの行数が少ない場合)にだけGroupScreen側で表示される。
-export default function AutoSettlePlan({ groupName, currency, transactions, nameOf, emojiOf, onSettleAll }: Props) {
+export default function AutoSettlePlan({ groupName, currency, transactions, nameOf, emojiOf, meId, onSettleAll }: Props) {
   const t = useT();
 
-  const share = () => {
-    const text = buildSettlementShareText(groupName, transactions, nameOf, {
+  const shareText = () =>
+    buildSettlementShareText(groupName, transactions, nameOf, {
       heading: t.share.settlementHeading,
       closing: t.share.settlementClosing,
     });
-    Share.share({ message: text });
+
+  const share = () => {
+    Share.share({ message: shareText() });
   };
+
+  // 「まとめて精算する」は、精算して終わりではなく、そのままLINE等への
+  // 共有シートまで開く(精算結果を相手に伝えるところまでが目的のため)。
+  // 「共有する」ボタン単体は、精算前にプランだけ先に伝えたい場合用。
+  const settleAndShare = async () => {
+    const res = await onSettleAll();
+    if (!res.error) share();
+  };
+
+  // アルゴリズムの説明("最小N回の支払いで…")より、自分にとっての
+  // メリット("自分がいくら払えば/受け取れば終わるか")を伝える方が
+  // わかりやすい、という指摘への対応。このプランの中に自分の支払い/
+  // 受け取りがあればそれを、無ければ("自分は関係ないがグループ全体を
+  // 見せている"場合)汎用の説明文を出す。
+  const mine = transactions.find((tx) => tx.debtor === meId || tx.creditor === meId);
+  const subtitle = mine
+    ? mine.debtor === meId
+      ? t.group.autoSettleSubtitleMinePay(formatMoney(mine.amount, currency))
+      : t.group.autoSettleSubtitleMineReceive(formatMoney(mine.amount, currency))
+    : t.group.autoSettleSubtitleGeneric;
 
   return (
     <View style={styles.card}>
       <Text style={styles.title}>{t.group.autoSettleTitle}</Text>
-      <Text style={styles.subtitle}>{t.group.autoSettleSubtitle(transactions.length)}</Text>
+      <Text style={styles.subtitle}>{subtitle}</Text>
 
       <View style={styles.rows}>
         {transactions.map((tx, i) => (
@@ -58,7 +81,7 @@ export default function AutoSettlePlan({ groupName, currency, transactions, name
 
       <View style={styles.actions}>
         <PrimaryButton title={t.group.autoSettleShareButton} variant="ghost" onPress={share} style={styles.shareButton} />
-        <PrimaryButton title={t.group.autoSettleButton} onPress={onSettleAll} style={styles.settleButton} />
+        <PrimaryButton title={t.group.autoSettleButton} onPress={settleAndShare} style={styles.settleButton} />
       </View>
     </View>
   );

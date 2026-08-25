@@ -31,7 +31,9 @@ type Props = {
 // 下段(アクションボタン)の2段組みに分けている。
 export default function BalanceCard({ row, nameOf, emojiOf, meId, onSettle }: Props) {
   const t = useT();
-  const amountLabel = row.type === 'money' ? formatMoney(row.amount, row.currency) : t.common.favorCount(row.amount);
+  // 残高画面は金額確認のための画面のため、頼みごと(金額を持たない)でも
+  // 「1件」のような件数をここに出さない(件数確認は台帳側の役割)。
+  const amountLabel = row.type === 'money' ? formatMoney(row.amount, row.currency) : t.balanceCard.noAmountLabel;
 
   const iOwe = row.mine && row.debtor === meId;
   const iAmOwed = row.mine && row.creditor === meId;
