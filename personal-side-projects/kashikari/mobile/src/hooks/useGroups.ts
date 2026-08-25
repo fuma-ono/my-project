@@ -21,10 +21,10 @@ export function useGroups(userId: string | null) {
   }, [refresh]);
 
   const createGroup = useCallback(
-    async (name: string) => {
+    async (name: string, iconEmoji: string | null = null) => {
       const trimmed = name.trim();
       if (!trimmed) return { error: 'グループ名を入力してください', group: null };
-      const { data, error } = await supabase.rpc('create_group', { _name: trimmed });
+      const { data, error } = await supabase.rpc('create_group', { _name: trimmed, _icon_emoji: iconEmoji });
       if (error) return { error: error.message, group: null };
       await refresh();
       return { error: null, group: data as Group };
@@ -54,5 +54,15 @@ export function useGroups(userId: string | null) {
     [refresh]
   );
 
-  return { groups, loading, refresh, createGroup, joinGroup, leaveGroup };
+  const updateGroupIcon = useCallback(
+    async (groupId: string, iconEmoji: string) => {
+      const { error } = await supabase.rpc('update_group_icon', { _group_id: groupId, _icon_emoji: iconEmoji });
+      if (error) return { error: error.message };
+      await refresh();
+      return { error: null };
+    },
+    [refresh]
+  );
+
+  return { groups, loading, refresh, createGroup, joinGroup, leaveGroup, updateGroupIcon };
 }

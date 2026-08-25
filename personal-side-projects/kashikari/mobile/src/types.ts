@@ -8,6 +8,7 @@ export type Group = {
   id: string;
   name: string;
   invite_code: string;
+  icon_emoji: string | null;
   created_by: string;
   created_at: string;
 };

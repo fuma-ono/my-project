@@ -13,7 +13,7 @@ type Props = {
   loading: boolean;
   onRefresh: () => Promise<void>;
   onOpenGroup: (group: Group) => void;
-  onCreateGroup: (name: string) => Promise<{ error: string | null; group: Group | null }>;
+  onCreateGroup: (name: string, iconEmoji: string | null) => Promise<{ error: string | null; group: Group | null }>;
   onJoinGroup: (code: string) => Promise<{ error: string | null; group: Group | null }>;
 };
 
@@ -44,7 +44,7 @@ export default function GroupsScreen({ displayName, groups, loading, onRefresh, 
         }
         renderItem={({ item }) => (
           <Pressable onPress={() => onOpenGroup(item)} style={styles.card}>
-            <Mark size={44} />
+            <Mark size={44} glyph={item.icon_emoji ?? undefined} />
             <View style={styles.cardMain}>
               <Text style={styles.cardTitle}>{item.name}</Text>
               <Text style={styles.cardCode}>招待コード: {item.invite_code}</Text>
@@ -62,8 +62,8 @@ export default function GroupsScreen({ displayName, groups, loading, onRefresh, 
         visible={modal === 'create'}
         mode="create"
         onClose={() => setModal(null)}
-        onSubmit={async (name) => {
-          const res = await onCreateGroup(name);
+        onSubmit={async (name, iconEmoji) => {
+          const res = await onCreateGroup(name, iconEmoji);
           if (res.group) onOpenGroup(res.group);
           return { error: res.error };
         }}

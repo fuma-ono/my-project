@@ -22,7 +22,9 @@ const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO_MODE === '1';
 
 export default function App() {
   const { loading: authLoading, userId, profile, error: authError, setDisplayName, updateAvatar } = useAuth();
-  const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup } = useGroups(DEMO_MODE ? null : userId);
+  const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup, updateGroupIcon } = useGroups(
+    DEMO_MODE ? null : userId
+  );
   const [screen, setScreen] = useState<Screen>({ name: 'groups' });
   const [minSplashDone, setMinSplashDone] = useState(false);
 
@@ -73,6 +75,15 @@ export default function App() {
           onBack={() => setScreen({ name: 'groups' })}
           onLeave={leaveGroup}
           onChangeAvatar={updateAvatar}
+          onChangeGroupIcon={async (emoji) => {
+            const res = await updateGroupIcon(screen.group.id, emoji);
+            // groupsの一覧はupdateGroupIcon内のrefresh()で更新されるが、
+            // 今開いている画面が持つgroupはApp.tsx側で保持しているスナップショット
+            // なので、こちらも合わせて更新しないとアイコンの変更がこの画面に
+            // 反映されない(戻って開き直すまで古いままになってしまう)。
+            if (!res.error) setScreen({ name: 'group', group: { ...screen.group, icon_emoji: emoji } });
+            return res;
+          }}
         />
       )}
       <StatusBar style="dark" />

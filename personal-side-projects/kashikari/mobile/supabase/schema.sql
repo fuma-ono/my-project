@@ -45,9 +45,14 @@ create table if not exists public.groups (
   id uuid primary key default gen_random_uuid(),
   name text not null check (char_length(name) between 1 and 30),
   invite_code text not null unique,
+  icon_emoji text,
   created_by uuid not null references public.profiles (id),
   created_at timestamptz not null default now()
 );
+
+-- schema.sqlを2回目以降に再実行しても安全なように、既存テーブルにも
+-- 列を追加できるようにしておく(初回作成時は上のcreate tableで既に入る)。
+alter table public.groups add column if not exists icon_emoji text;
 
 alter table public.groups enable row level security;
 
@@ -166,7 +171,13 @@ create policy "members can delete entries"
 -- 5. グループ作成・参加はRPC経由(招待コードの生成・照合をサーバー側に集約)
 -- ============================================================
 
-create or replace function public.create_group(_name text)
+-- 以前は create_group(_name text) の1引数だった。_icon_emoji を追加した
+-- ことで引数の型構成が変わり、create or replace では置き換えられず
+-- 別関数として並存してしまう(呼び出しが曖昧になる)ため、先に古い方を
+-- 明示的に削除してから作り直す。
+drop function if exists public.create_group(text);
+
+create or replace function public.create_group(_name text, _icon_emoji text default null)
 returns public.groups
 language plpgsql
 security definer
@@ -189,8 +200,8 @@ begin
     exit when not exists (select 1 from public.groups where invite_code = _code);
   end loop;
 
-  insert into public.groups (name, invite_code, created_by)
-  values (_name, _code, auth.uid())
+  insert into public.groups (name, invite_code, icon_emoji, created_by)
+  values (_name, _code, _icon_emoji, auth.uid())
   returning * into _group;
 
   insert into public.group_members (group_id, user_id) values (_group.id, auth.uid());
@@ -239,9 +250,37 @@ begin
 end;
 $$;
 
-grant execute on function public.create_group(text) to authenticated;
+-- グループのアイコン変更は、groups テーブルへの直接UPDATEポリシーを
+-- 開放する(name等の他の列も一緒に書き換えられてしまう)代わりに、この列だけを
+-- 更新するRPCに絞る。entries同様、グループ内はお互いを信頼する前提のため
+-- 作成者に限らずメンバーなら誰でも変更できる。
+create or replace function public.update_group_icon(_group_id uuid, _icon_emoji text)
+returns public.groups
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  _group public.groups;
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  if not public.is_group_member(_group_id) then
+    raise exception 'このグループのメンバーではありません';
+  end if;
+
+  update public.groups set icon_emoji = _icon_emoji where id = _group_id
+  returning * into _group;
+
+  return _group;
+end;
+$$;
+
+grant execute on function public.create_group(text, text) to authenticated;
 grant execute on function public.join_group(text) to authenticated;
 grant execute on function public.leave_group(uuid) to authenticated;
+grant execute on function public.update_group_icon(uuid, text) to authenticated;
 grant execute on function public.is_group_member(uuid) to authenticated;
 
 -- ============================================================

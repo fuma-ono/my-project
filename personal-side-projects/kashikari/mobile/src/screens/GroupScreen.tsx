@@ -7,6 +7,8 @@ import AvatarPicker from '../components/AvatarPicker';
 import BalanceCard from '../components/BalanceCard';
 import EntryRow from '../components/EntryRow';
 import Fab from '../components/Fab';
+import GroupIconPicker from '../components/GroupIconPicker';
+import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
 import { useGroupData } from '../hooks/useGroupData';
 import { computeBalances, computeMyNet } from '../lib/balances';
@@ -22,12 +24,14 @@ type Props = {
   onBack: () => void;
   onLeave: (groupId: string) => Promise<{ error: string | null }>;
   onChangeAvatar: (emoji: string) => Promise<{ error: string | null }>;
+  onChangeGroupIcon: (emoji: string) => Promise<{ error: string | null }>;
 };
 
-export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvatar }: Props) {
+export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvatar, onChangeGroupIcon }: Props) {
   const { members, entries, loading, refresh, addEntry, toggleSettled, deleteEntry, settlePair } = useGroupData(group.id, meId);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [groupIconPickerOpen, setGroupIconPickerOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('balance');
   const [showSettled, setShowSettled] = useState(false);
 
@@ -54,6 +58,18 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
         await onChangeAvatar(emoji);
       }}
       onClose={() => setAvatarPickerOpen(false)}
+    />
+  );
+
+  const groupIconPicker = (
+    <GroupIconPicker
+      visible={groupIconPickerOpen}
+      selected={group.icon_emoji}
+      onSelect={async (emoji) => {
+        setGroupIconPickerOpen(false);
+        await onChangeGroupIcon(emoji);
+      }}
+      onClose={() => setGroupIconPickerOpen(false)}
     />
   );
 
@@ -89,7 +105,10 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
           <Text style={styles.leave}>抜ける</Text>
         </Pressable>
       </View>
-      <Text style={styles.title}>{group.name}</Text>
+      <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleRow}>
+        <Mark size={40} glyph={group.icon_emoji ?? undefined} />
+        <Text style={styles.title}>{group.name}</Text>
+      </Pressable>
 
       <View style={styles.memberStrip}>
         {members.map((m) =>
@@ -151,6 +170,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
         <Fab onPress={() => setSheetOpen(true)} disabled={members.length < 2} />
         <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} />
         {avatarPicker}
+        {groupIconPicker}
       </View>
     );
   }
@@ -187,6 +207,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
       <Fab onPress={() => setSheetOpen(true)} disabled={members.length < 2} />
       <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} />
       {avatarPicker}
+      {groupIconPicker}
     </View>
   );
 }
@@ -197,7 +218,8 @@ const styles = StyleSheet.create({
   headerRow: { marginTop: 44, marginBottom: 4, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   back: { ...fonts.bodySemiBold, fontSize: 15, color: colors.accent },
   leave: { ...fonts.bodyMedium, fontSize: 12.5, color: colors.muted },
-  title: { ...fonts.display, fontSize: 26, color: colors.ink, marginTop: 4, marginBottom: 14 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4, marginBottom: 14 },
+  title: { ...fonts.display, fontSize: 26, color: colors.ink },
   memberStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 },
   memberChip: {
     flexDirection: 'row',

@@ -16,6 +16,7 @@ export const DEMO_GROUP: Group = {
   id: 'demo-group',
   name: '大学の友達',
   invite_code: 'K7XQ2M',
+  icon_emoji: '🎓',
   created_by: DEMO_ME_ID,
   created_at: new Date().toISOString(),
 };
@@ -26,6 +27,7 @@ export const DEMO_GROUPS: Group[] = [
     id: 'demo-group-2',
     name: 'サークル同期',
     invite_code: 'B3F9PL',
+    icon_emoji: '⚽',
     created_by: DEMO_ME_ID,
     created_at: new Date().toISOString(),
   },

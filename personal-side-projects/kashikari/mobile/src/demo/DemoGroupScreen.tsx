@@ -9,11 +9,13 @@ import AvatarPicker from '../components/AvatarPicker';
 import BalanceCard from '../components/BalanceCard';
 import EntryRow from '../components/EntryRow';
 import Fab from '../components/Fab';
+import GroupIconPicker from '../components/GroupIconPicker';
+import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
 import { computeBalances, computeMyNet } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
 import { colors, fonts } from '../theme';
-import type { Entry, EntryType, Profile } from '../types';
+import type { Entry, EntryType, Group, Profile } from '../types';
 import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS } from './mockData';
 
 type Tab = 'balance' | 'ledger';
@@ -22,8 +24,10 @@ let demoIdSeq = 100;
 export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   const [entries, setEntries] = useState<Entry[]>(DEMO_ENTRIES);
   const [members, setMembers] = useState<Profile[]>(DEMO_MEMBERS);
+  const [group, setGroup] = useState<Group>(DEMO_GROUP);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [groupIconPickerOpen, setGroupIconPickerOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('balance');
   const [showSettled, setShowSettled] = useState(false);
   const meId = DEMO_ME_ID;
@@ -48,7 +52,7 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   }) => {
     const entry: Entry = {
       id: `demo-${demoIdSeq++}`,
-      group_id: DEMO_GROUP.id,
+      group_id: group.id,
       from_user: input.fromUser,
       to_user: input.toUser,
       type: input.type,
@@ -89,7 +93,10 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
           <Text style={styles.back}>‹ グループ</Text>
         </Pressable>
       </View>
-      <Text style={styles.title}>{DEMO_GROUP.name}</Text>
+      <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleRow}>
+        <Mark size={40} glyph={group.icon_emoji ?? undefined} />
+        <Text style={styles.title}>{group.name}</Text>
+      </Pressable>
 
       <View style={styles.memberStrip}>
         {members.map((m) =>
@@ -185,6 +192,16 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
         }}
         onClose={() => setAvatarPickerOpen(false)}
       />
+
+      <GroupIconPicker
+        visible={groupIconPickerOpen}
+        selected={group.icon_emoji}
+        onSelect={(emoji) => {
+          setGroupIconPickerOpen(false);
+          setGroup((prev) => ({ ...prev, icon_emoji: emoji }));
+        }}
+        onClose={() => setGroupIconPickerOpen(false)}
+      />
     </View>
   );
 }
@@ -196,7 +213,8 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: 20, paddingBottom: 100 },
   headerRow: { marginBottom: 4 },
   back: { ...fonts.bodySemiBold, fontSize: 15, color: colors.accent },
-  title: { ...fonts.display, fontSize: 26, color: colors.ink, marginTop: 4, marginBottom: 14 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4, marginBottom: 14 },
+  title: { ...fonts.display, fontSize: 26, color: colors.ink },
   memberStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 },
   memberChip: {
     flexDirection: 'row',
