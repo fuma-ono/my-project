@@ -21,12 +21,20 @@ from __future__ import annotations
 import argparse
 import sys
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from . import video
 from .branding import ACCENT, JP_FONT, draw_crescent_moon, draw_notebook_pencil, draw_stars, vertical_gradient
 
 SIZE = (1280, 720)
+
+# Bold Japanese serif (明朝体), index 0 = the JP face in this CJK-bundled
+# ttc (checked via ImageFont.truetype(..., index=N).getname() — JP/KR/SC/
+# TC/HK in that order). This is the font actually used for the 2026-08-16
+# hand-revised live thumbnails (breath_guide_coherent/study_lofi_chill/
+# baby_sleep_noise _thumb_v2/v3.png) — see make_photo_thumbnail()'s
+# docstring for why it matters that this matches, not just "some big font."
+JP_SERIF_BOLD = "/usr/share/fonts/opentype/noto/NotoSerifCJK-Bold.ttc"
 
 
 def _hex_to_rgb(hex_str: str) -> tuple[int, int, int]:
@@ -123,7 +131,8 @@ def make_thumbnail(path: str, preset: str, thumb_hook: str, icon_category: str, 
 
 
 def make_photo_thumbnail(path: str, source_path: str, caption: str, minutes: float,
-                          crop_top_px: int | None = None, size: tuple[int, int] = SIZE) -> None:
+                          crop_top_px: int | None = None, size: tuple[int, int] = SIZE,
+                          text_anchor: str = "center") -> None:
     """Thumbnail built from a real (owner-supplied, AI-generated) photo
     instead of the abstract gradient+icon style — standard as of 2026-08-12
     per owner direction: a realistic image draws the eye far better than a
@@ -134,20 +143,33 @@ def make_photo_thumbnail(path: str, source_path: str, caption: str, minutes: flo
     remove).
 
     2026-08-25 (owner correction — "中央に大きな文字で書くって統一した
-    よね？"): the caption used to be a small (40px) line tucked in the
-    bottom-left corner. Every photo-style thumbnail published since 08-12
-    had that same small-corner-caption look, which is why the owner saw
-    no change across videos — this was never actually "large, centered
-    text," despite that being the stated standard. Now the caption is
-    large (scaled off `size`'s width, ~118px at the 1280px landscape
-    default — same order as the old abstract-thumbnail hook text),
-    wrapped/centered on both axes, on a semi-transparent dark band across
-    the middle so it stays legible over any photo. The photo is still the
-    background (per the 08-12 direction) — the text is just no longer an
-    afterthought. Captions with an embedded "\\n" (e.g. "集中できる\\n
-    カフェBGM") render as their own explicit line break via PIL's native
-    multiline handling, not the character-wrap helper used elsewhere in
-    this file.
+    よね？", then "前作ったサムネイルは覚えてないの？... 前のサムネと全然
+    違うやん"): this function's caption used to be a small (40px) line in
+    the bottom-left corner — never actually "large, centered text." But the
+    *real* large-centered-text standard already existed and had been
+    hand-applied to 3 live thumbnails back on 2026-08-16 (see
+    assets/thumbnails/breath_guide_coherent_thumb_v3.png,
+    study_lofi_chill_thumb_v2.png, baby_sleep_noise_thumb_v2.png, and the
+    "hand-revised past what make_photo_thumbnail() produces" comments on
+    those presets below) — bold serif (JP_SERIF_BOLD), no background
+    panel/band, a soft drop-shadow instead, text placed in whatever open
+    part of the photo doesn't cover the subject. A first attempt at fixing
+    this function invented a *different* look from scratch (sans-serif,
+    dark band across the middle) and overwrote those hand-tuned live
+    thumbnails with it — a real mistake, caught by the owner, not by
+    re-reading the existing hand-revision notes first as should have
+    happened. This version matches the actual established style instead.
+
+    `text_anchor` picks where the text sits, per-photo, same as the 08-16
+    hand revisions did by eye: "center" places it horizontally and
+    vertically centered (used where the photo has open space in the
+    middle, e.g. a night sky/forest/mountain shot); "left" places it near
+    the top-left (used where the subject — a face, a busy desk — occupies
+    the center/right and would otherwise be covered). Set per preset via
+    PRESET_METADATA's "thumbnail_text_anchor" (defaults to "center").
+    Captions with an embedded "\\n" (e.g. "集中できる\\nカフェBGM") render
+    as their own explicit line break via PIL's native multiline handling,
+    not the character-wrap helper used elsewhere in this file.
 
     Also 2026-08-25: `size` was added so this same function can generate a
     vertical (1080x1920) thumbnail for Shorts — see
@@ -172,28 +194,47 @@ def make_photo_thumbnail(path: str, source_path: str, caption: str, minutes: flo
         top = (h - new_h) // 2 if crop_top_px is None else min(crop_top_px, h - new_h)
         img = img.crop((0, top, w, top + new_h))
     img = img.resize(size, Image.LANCZOS).convert("RGBA")
-    draw = ImageDraw.Draw(img, "RGBA")
 
     scale = size[0] / SIZE[0]
-    cap_font = ImageFont.truetype(JP_FONT, round(118 * scale))
-    spacing = round(18 * scale)
-    bbox = draw.multiline_textbbox((0, 0), caption, font=cap_font, align="center", spacing=spacing)
-    text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    spacing = round(14 * scale)
+    align = "center" if text_anchor == "center" else "left"
+    margin = round(80 * scale)
+    max_text_w = size[0] - (2 * margin if text_anchor == "center" else margin + round(40 * scale))
 
-    band_pad_y = round(44 * scale)
-    band_top = (size[1] - text_h) // 2 - band_pad_y - bbox[1]
-    band_bottom = (size[1] - text_h) // 2 + text_h + band_pad_y - bbox[1]
-    overlay = Image.new("RGBA", size, (0, 0, 0, 0))
-    odraw = ImageDraw.Draw(overlay)
-    odraw.rectangle([0, band_top, size[0], band_bottom], fill=(6, 8, 16, 155))
-    img = Image.alpha_composite(img, overlay)
+    # auto-shrink from 130px (scaled) until the longest line fits — a
+    # fixed size clipped off the right edge for 2-line captions like
+    # "赤ちゃんが\nやさしく眠れる1時間" (found while re-matching the 08-16
+    # hand-revised style: that version was sized by eye per image, this
+    # has to work for every caption without per-preset font-size tuning).
+    probe = ImageDraw.Draw(img)
+    font_size = round(130 * scale)
+    while True:
+        cap_font = ImageFont.truetype(JP_SERIF_BOLD, font_size, index=0)
+        bbox = probe.multiline_textbbox((0, 0), caption, font=cap_font, align=align, spacing=spacing)
+        text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        if text_w <= max_text_w or font_size <= 40:
+            break
+        font_size -= 4
+    if text_anchor == "center":
+        text_x = (size[0] - text_w) // 2 - bbox[0]
+        text_y = (size[1] - text_h) // 2 - bbox[1]
+    else:
+        text_x = margin - bbox[0]
+        text_y = margin - bbox[1]
+
+    # soft drop-shadow (blurred, offset-free) instead of a background
+    # panel — legible over a photo without hiding it, matching the 08-16
+    # hand revisions.
+    shadow = Image.new("RGBA", size, (0, 0, 0, 0))
+    sdraw = ImageDraw.Draw(shadow)
+    sdraw.multiline_text(
+        (text_x, text_y), caption, font=cap_font, fill=(0, 0, 0, 255), align=align, spacing=spacing,
+    )
+    shadow = shadow.filter(ImageFilter.GaussianBlur(max(1, round(6 * scale))))
+    img = Image.alpha_composite(img, shadow)
     draw = ImageDraw.Draw(img, "RGBA")
-
-    text_x = (size[0] - text_w) // 2 - bbox[0]
-    text_y = (size[1] - text_h) // 2 - bbox[1]
     draw.multiline_text(
-        (text_x, text_y), caption, font=cap_font, fill=(255, 255, 255, 255),
-        align="center", spacing=spacing,
+        (text_x, text_y), caption, font=cap_font, fill=(255, 255, 255, 255), align=align, spacing=spacing,
     )
 
     badge_font = ImageFont.truetype(JP_FONT, round(38 * scale))
@@ -214,7 +255,7 @@ VERTICAL_SIZE = (1080, 1920)
 
 
 def make_photo_thumbnail_vertical(path: str, source_path: str, caption: str, minutes: float,
-                                   crop_top_px: int | None = None) -> None:
+                                   crop_top_px: int | None = None, text_anchor: str = "center") -> None:
     """Vertical (1080x1920) counterpart of make_photo_thumbnail(), for
     Shorts. Added 2026-08-25 after discovering — while investigating the
     owner's "サムネの文字が変わってない" complaint — that publish_shorts.py
@@ -226,7 +267,10 @@ def make_photo_thumbnail_vertical(path: str, source_path: str, caption: str, min
     traffic surface (see docs/marketing/2026-08-17-bgm-engagement-
     analysis.md), that gap — not just small text on long-form — is the
     main reason nothing looked different across videos."""
-    make_photo_thumbnail(path, source_path, caption, minutes, crop_top_px=crop_top_px, size=VERTICAL_SIZE)
+    make_photo_thumbnail(
+        path, source_path, caption, minutes, crop_top_px=crop_top_px, size=VERTICAL_SIZE,
+        text_anchor=text_anchor,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

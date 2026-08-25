@@ -69,6 +69,7 @@ def main(argv: list[str] | None = None) -> int:
         thumbnail.make_photo_thumbnail(
             thumb_path, photo_source, meta["thumb_hook"], args.minutes,
             crop_top_px=meta.get("thumbnail_crop_top_px"),
+            text_anchor=meta.get("thumbnail_text_anchor", "center"),
         )
     else:
         thumbnail.make_thumbnail(thumb_path, args.preset, meta["thumb_hook"], meta["icon_category"], args.minutes)

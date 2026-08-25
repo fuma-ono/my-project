@@ -333,6 +333,7 @@ PRESET_METADATA = {
             "assets/thumbnails/sleep_deep_drone_source.jpg",
             "assets/thumbnails/sleep_deep_drone_alt2.jpg",
         ],
+        "thumbnail_text_anchor": "center",  # both photos in the pool have open sky/mist in the middle
     },
     "sleep_rain_focus": {
         "title": "【睡眠・作業用BGM】雨音とやわらかなパッドで眠れる 1時間",
@@ -357,6 +358,7 @@ PRESET_METADATA = {
         # 提供の写真(雨の竹林・灯り)に更新、雨音プリセットに文字通り合う絵柄。
         "thumbnail_style": "photo",
         "thumbnail_sources": ["assets/thumbnails/sleep_rain_focus_source.jpg"],
+        "thumbnail_text_anchor": "center",  # dark uniform bamboo path, open in the middle
     },
     "study_lofi_chill": {
         "title": "【作業用BGM】カフェ気分で集中できる1時間BGM ｜勉強・作業用",  # 2026-08-16: briefly retitled to "ローファイの音だけの1時間｜集中がはかどる作業用タイム" (same direction as breath_guide_coherent), reverted same day — owner: "日本語として不自然". Thumbnail (v2, centered/no-outline) stayed, only the title reverted.
@@ -373,6 +375,7 @@ PRESET_METADATA = {
         # describe the *previous* generated thumbnail, kept for reference.
         "thumbnail_style": "photo",
         "thumbnail_sources": ["assets/thumbnails/study_lofi_chill_source.jpeg"],
+        "thumbnail_text_anchor": "left",  # matches the 08-16 hand revision: top-left, avoids the desk/laptop on the right
         "thumb_hook": "集中できる\nカフェBGM",  # updated 2026-08-16 (was "はかどる作業用BGM") to match the live hand-revised thumbnail's 2-line text
         "description": "温かみのあるローファイコードにヴァイナルの質感を重ねた、カフェのような作業用BGM。",
         "hook": "温かみのあるローファイコードに、ヴァイナルの質感をまとわせた力の抜けるビート。カフェで作業しているような、集中しやすい空気感です。",
@@ -418,6 +421,7 @@ PRESET_METADATA = {
             "assets/thumbnails/study_focus_binaural_alt4.jpg",
             "assets/thumbnails/study_focus_binaural_alt5.jpg",
         ],
+        "thumbnail_text_anchor": "left",  # busy desk scenes — top-left keeps clear of the laptop screen/subject
     },
     "sleep_insomnia_pulse": {
         # Scene 01 (docs/marketing/bgm-content-audit/, 2026-08-12 approved
@@ -446,6 +450,7 @@ PRESET_METADATA = {
         # 視点が「考えすぎた心を静める」というコンセプトに合う。
         "thumbnail_style": "photo",
         "thumbnail_sources": ["assets/thumbnails/sleep_insomnia_pulse_source.jpg"],
+        "thumbnail_text_anchor": "center",  # uniform dark mountain/mist, open in the middle
     },
     "baby_sleep_noise": {
         # Scene 02 (docs/marketing/bgm-content-audit/, 2026-08-12 approved
@@ -477,6 +482,7 @@ PRESET_METADATA = {
         # than silently softened, in case it needs revisiting.
         "thumbnail_style": "photo",
         "thumbnail_sources": ["assets/thumbnails/baby_sleep_noise_source.jpeg"],
+        "thumbnail_text_anchor": "left",  # matches the 08-16 hand revision: top-left, avoids the baby's face
         "thumb_hook": "赤ちゃんが\nやさしく眠れる1時間",  # updated 2026-08-16 (was "赤ちゃんの睡眠環境に")
         "description": "赤ちゃんの睡眠環境づくりに使える、一定のホワイトノイズです。メロディやコードは使わず、ブラウンノイズとピンクノイズだけを一定の音量で流し続けるシンプルな作りにしています。",
         "hook": "赤ちゃんの睡眠環境づくりに使える、一定のホワイトノイズです。メロディや展開はなく、ブラウンノイズとピンクノイズだけを一定の音量で流し続けます。",
@@ -528,6 +534,7 @@ PRESET_METADATA = {
         # updated to match the v2/v3 style.
         "thumbnail_style": "photo",
         "thumbnail_sources": ["assets/thumbnails/breath_guide_coherent_source.png"],
+        "thumbnail_text_anchor": "center",  # matches the 08-16 hand revision (v3): centered over open sea/sky
         "thumbnail_crop_top_px": 300,  # trims a UI artifact strip along the top of the source image
         "thumb_hook": "心が静まる15分",  # updated 2026-08-16, 2nd revision (v1: "心を落ち着かせるBGM" -> v2: "波に癒やされる15分" -> v3: current) to match the live hand-revised thumbnail's text
         "description": "吸って4秒・吐いて6秒のリズムで、呼吸のペースを意識しやすくする音です。声によるガイドはなく、一つの持続音の強弱だけでリズムを示します。",

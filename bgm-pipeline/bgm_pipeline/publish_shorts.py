@@ -118,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
         thumbnail.make_photo_thumbnail_vertical(
             thumb_path, photo_source, meta["thumb_hook"], minutes,
             crop_top_px=meta.get("thumbnail_crop_top_px"),
+            text_anchor=meta.get("thumbnail_text_anchor", "center"),
         )
     else:
         thumb_path = None
