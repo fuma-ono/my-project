@@ -11,7 +11,7 @@ Web版プロトタイプ(`../app/index.html`、Claude Artifacts)は「1URL=1つ�
 1. https://supabase.com でアカウント作成、新規プロジェクト作成(無料枠でOK)
 2. プロジェクトの **SQL Editor** を開き、`supabase/schema.sql` の中身を全部貼り付けて実行する
 3. **Authentication > Sign In / Providers** で **Anonymous Sign-Ins** を有効にする(このアプリはメールアドレス登録を一切求めない設計のため必須)
-4. **Project Settings > API** から `Project URL` と `anon public` キーを控える
+4. **Project Settings > API Keys** を開き、`Project URL` と、**「Publishable and secret API keys」**タブにある **Publishable key**(`sb_publishable_...`)を控える。**「Legacy anon, service_role API keys」タブの`anon`キーは使わない**こと(Supabaseが新しいキー体系に移行しており、レガシーキーは同じプロジェクトでも無効化されている/されるため)
 
 ### 2. 環境変数を設定する
 

@@ -3,8 +3,10 @@
 -- オーナー向け手順:
 -- 1. https://supabase.com でプロジェクトを新規作成する(無料枠でOK)
 -- 2. プロジェクトの SQL Editor でこのファイルの内容を全部貼り付けて実行する
--- 3. Project Settings > API から Project URL と anon public key を取得し、
---    mobile/.env に EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY として設定する
+-- 3. Project Settings > API Keys から Project URL と Publishable key(sb_publishable_...)を
+--    取得し、mobile/.env に EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY として
+--    設定する(「Legacy anon, service_role API keys」タブの古いanonキーではなく、
+--    「Publishable and secret API keys」タブのPublishable keyを使うこと)
 -- 4. Authentication > Providers で「Anonymous Sign-Ins」を有効にする(このアプリはメール登録なし、
 --    匿名サインイン+表示名のみで動く設計のため必須)
 --
