@@ -9,7 +9,9 @@ export type AnalyticsEvent =
   | 'group_joined'
   | 'settlement_completed'
   | 'entry_marked_paid'
-  | 'entry_marked_received';
+  | 'entry_marked_received'
+  | 'premium_view'
+  | 'premium_interest';
 
 // 計測はあくまで補助情報であり、失敗してもアプリ本来の操作を絶対に
 // 止めてはいけないため、fire-and-forgetにする(呼び出し側でawaitしない)。

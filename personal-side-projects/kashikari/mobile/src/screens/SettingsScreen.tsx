@@ -15,9 +15,10 @@ type Props = {
   onBack: () => void;
   onChangeDisplayName: (name: string) => Promise<{ error: string | null }>;
   onChangeAvatar: (emoji: string) => Promise<{ error: string | null }>;
+  onOpenPremium: () => void;
 };
 
-export default function SettingsScreen({ profile, onBack, onChangeDisplayName, onChangeAvatar }: Props) {
+export default function SettingsScreen({ profile, onBack, onChangeDisplayName, onChangeAvatar, onOpenPremium }: Props) {
   const { lang, setLang, t } = useLanguage();
   const [name, setName] = useState(profile.display_name);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -78,6 +79,11 @@ export default function SettingsScreen({ profile, onBack, onChangeDisplayName, o
         {nameError && <Text style={styles.error}>{nameError}</Text>}
         {savedNote && !nameError && <Text style={styles.savedNote}>{t.settings.savedNote}</Text>}
         <PrimaryButton title={t.common.save} onPress={saveName} loading={saving} disabled={!nameDirty} style={styles.saveButton} />
+
+        <Pressable onPress={onOpenPremium} style={styles.premiumRow}>
+          <Text style={styles.premiumRowText}>{t.settings.premiumRow}</Text>
+          <Text style={styles.premiumChevron}>›</Text>
+        </Pressable>
 
         <Text style={styles.sectionLabel}>{t.settings.about}</Text>
         <Text style={styles.aboutText}>kashikari</Text>
@@ -157,6 +163,20 @@ const styles = StyleSheet.create({
   error: { color: colors.danger, ...fonts.body, fontSize: 13, marginTop: 8 },
   savedNote: { color: colors.positive, ...fonts.body, fontSize: 13, marginTop: 8 },
   saveButton: { marginTop: 14, alignSelf: 'flex-start', paddingHorizontal: 28 },
+  premiumRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginTop: 28,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+  },
+  premiumRowText: { ...fonts.bodySemiBold, fontSize: 15, color: colors.plum },
+  premiumChevron: { ...fonts.bodySemiBold, fontSize: 18, color: colors.muted },
   aboutText: { ...fonts.bodySemiBold, fontSize: 15, color: colors.ink },
   aboutVersion: { ...fonts.body, fontSize: 13, color: colors.muted, marginTop: 4 },
 });

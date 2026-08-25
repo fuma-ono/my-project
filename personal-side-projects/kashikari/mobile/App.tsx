@@ -6,6 +6,7 @@ import DemoApp from './src/demo/DemoApp';
 import GroupScreen from './src/screens/GroupScreen';
 import GroupsScreen from './src/screens/GroupsScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
+import PremiumScreen from './src/screens/PremiumScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import SplashScreen from './src/screens/SplashScreen';
 import { useAuth } from './src/hooks/useAuth';
@@ -18,7 +19,14 @@ import type { Group } from './src/types';
 // よう、最低でもこれだけはブランド画面を見せる(体感の「間」を作るため)。
 const MIN_SPLASH_MS = 900;
 
-type Screen = { name: 'groups' } | { name: 'group'; group: Group; justCreated?: boolean } | { name: 'settings' };
+// settings/premiumは複数の入り口(グループ一覧・グループ詳細)から開けるため、
+// 「戻る」で正しい画面に戻れるよう、開いた時点の画面をreturnToとして
+// 持ち運ぶ(簡易的なナビゲーションスタック)。
+type Screen =
+  | { name: 'groups' }
+  | { name: 'group'; group: Group; justCreated?: boolean }
+  | { name: 'settings'; returnTo?: Screen }
+  | { name: 'premium'; returnTo?: Screen };
 
 // kashikari://join?code=XXXXXX 形式の招待リンクが開かれたかどうかを判定する。
 // 現状(Expo Go実行中)はこのリンク自体を開いても実際にはアプリに渡って
@@ -112,14 +120,23 @@ function AppInner() {
             if (!res.error) setScreen({ name: 'group', group: { ...screen.group, icon_emoji: emoji } });
             return res;
           }}
+          onOpenSettings={() => setScreen({ name: 'settings', returnTo: screen })}
         />
       )}
       {screen.name === 'settings' && (
         <SettingsScreen
           profile={profile}
-          onBack={() => setScreen({ name: 'groups' })}
+          onBack={() => setScreen(screen.returnTo ?? { name: 'groups' })}
           onChangeDisplayName={(name) => setDisplayName(name, profile.avatar_emoji)}
           onChangeAvatar={updateAvatar}
+          onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
+        />
+      )}
+      {screen.name === 'premium' && (
+        <PremiumScreen
+          onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })}
+          onView={() => logEvent('premium_view', { userId })}
+          onInterest={() => logEvent('premium_interest', { userId })}
         />
       )}
       <StatusBar style="dark" />

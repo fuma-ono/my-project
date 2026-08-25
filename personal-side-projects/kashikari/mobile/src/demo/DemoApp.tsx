@@ -3,13 +3,20 @@
 import { useState } from 'react';
 
 import GroupsScreen from '../screens/GroupsScreen';
+import PremiumScreen from '../screens/PremiumScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import { useT } from '../i18n';
 import type { Group, Profile } from '../types';
 import DemoGroupScreen from './DemoGroupScreen';
 import { DEMO_GROUPS, DEMO_PROFILE } from './mockData';
 
-type Screen = { name: 'groups' } | { name: 'group' } | { name: 'settings' };
+// settings/premiumは複数の入り口(グループ一覧・グループ詳細)から開けるため、
+// 本番のApp.tsxと同じくreturnToで「戻る」先を持ち運ぶ。
+type Screen =
+  | { name: 'groups' }
+  | { name: 'group' }
+  | { name: 'settings'; returnTo?: Screen }
+  | { name: 'premium'; returnTo?: Screen };
 
 export default function DemoApp() {
   const t = useT();
@@ -17,14 +24,19 @@ export default function DemoApp() {
   const [profile, setProfile] = useState<Profile>(DEMO_PROFILE);
 
   if (screen.name === 'group') {
-    return <DemoGroupScreen onBack={() => setScreen({ name: 'groups' })} />;
+    return (
+      <DemoGroupScreen
+        onBack={() => setScreen({ name: 'groups' })}
+        onOpenSettings={() => setScreen({ name: 'settings', returnTo: screen })}
+      />
+    );
   }
 
   if (screen.name === 'settings') {
     return (
       <SettingsScreen
         profile={profile}
-        onBack={() => setScreen({ name: 'groups' })}
+        onBack={() => setScreen(screen.returnTo ?? { name: 'groups' })}
         onChangeDisplayName={async (name) => {
           setProfile((p) => ({ ...p, display_name: name.trim() || p.display_name }));
           return { error: null };
@@ -33,8 +45,14 @@ export default function DemoApp() {
           setProfile((p) => ({ ...p, avatar_emoji: emoji }));
           return { error: null };
         }}
+        onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
       />
     );
+  }
+
+  if (screen.name === 'premium') {
+    // デモモードでは計測しない(本番のanalytics_eventsは呼ばない)。
+    return <PremiumScreen onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })} onView={() => {}} onInterest={() => {}} />;
   }
 
   return (

@@ -30,7 +30,7 @@ import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS } from './mockData';
 type Tab = 'balance' | 'ledger' | 'history';
 let demoIdSeq = 100;
 
-export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
+export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: () => void; onOpenSettings: () => void }) {
   const t = useT();
   const [entries, setEntries] = useState<Entry[]>(DEMO_ENTRIES);
   const [members, setMembers] = useState<Profile[]>(DEMO_MEMBERS);
@@ -310,15 +310,20 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
 
       <PendingInvites invites={invites} />
 
-      <View style={styles.tabs}>
-        <Pressable onPress={() => setTab('balance')} style={[styles.tabBtn, tab === 'balance' && styles.tabBtnActive]}>
-          <Text style={[styles.tabText, tab === 'balance' && styles.tabTextActive]}>{t.group.tabBalance}</Text>
-        </Pressable>
-        <Pressable onPress={() => setTab('ledger')} style={[styles.tabBtn, tab === 'ledger' && styles.tabBtnActive]}>
-          <Text style={[styles.tabText, tab === 'ledger' && styles.tabTextActive]}>{t.group.tabLedger}</Text>
-        </Pressable>
-        <Pressable onPress={() => setTab('history')} style={[styles.tabBtn, tab === 'history' && styles.tabBtnActive]}>
-          <Text style={[styles.tabText, tab === 'history' && styles.tabTextActive]}>{t.group.tabHistory}</Text>
+      <View style={styles.tabsRow}>
+        <View style={styles.tabs}>
+          <Pressable onPress={() => setTab('balance')} style={[styles.tabBtn, tab === 'balance' && styles.tabBtnActive]}>
+            <Text style={[styles.tabText, tab === 'balance' && styles.tabTextActive]}>{t.group.tabBalance}</Text>
+          </Pressable>
+          <Pressable onPress={() => setTab('ledger')} style={[styles.tabBtn, tab === 'ledger' && styles.tabBtnActive]}>
+            <Text style={[styles.tabText, tab === 'ledger' && styles.tabTextActive]}>{t.group.tabLedger}</Text>
+          </Pressable>
+          <Pressable onPress={() => setTab('history')} style={[styles.tabBtn, tab === 'history' && styles.tabBtnActive]}>
+            <Text style={[styles.tabText, tab === 'history' && styles.tabTextActive]}>{t.group.tabHistory}</Text>
+          </Pressable>
+        </View>
+        <Pressable onPress={onOpenSettings} hitSlop={10} style={styles.settingsBtn} accessibilityLabel={t.groups.settingsButton}>
+          <Text style={styles.settingsIcon}>⚙️</Text>
         </Pressable>
       </View>
     </View>
@@ -497,7 +502,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   inviteChipText: { ...fonts.bodySemiBold, fontSize: 13, color: colors.muted },
-  tabs: { flexDirection: 'row', backgroundColor: colors.surface2, borderRadius: 12, padding: 4, marginBottom: 22 },
+  tabsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 22 },
+  tabs: { flex: 1, flexDirection: 'row', backgroundColor: colors.surface2, borderRadius: 12, padding: 4 },
+  settingsBtn: { padding: 4 },
+  settingsIcon: { fontSize: 20 },
   tabBtn: { flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center' },
   tabBtnActive: { backgroundColor: colors.surface, shadowColor: '#3c2814', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
   tabText: { ...fonts.bodySemiBold, fontSize: 14, color: colors.muted },

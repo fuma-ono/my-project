@@ -35,9 +35,10 @@ type Props = {
   onLeave: (groupId: string) => Promise<{ error: string | null }>;
   onChangeAvatar: (emoji: string) => Promise<{ error: string | null }>;
   onChangeGroupIcon: (emoji: string) => Promise<{ error: string | null }>;
+  onOpenSettings: () => void;
 };
 
-export default function GroupScreen({ group, meId, justCreated, onBack, onLeave, onChangeAvatar, onChangeGroupIcon }: Props) {
+export default function GroupScreen({ group, meId, justCreated, onBack, onLeave, onChangeAvatar, onChangeGroupIcon, onOpenSettings }: Props) {
   const t = useT();
   const {
     members,
@@ -276,15 +277,20 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
 
       <PendingInvites invites={invites} />
 
-      <View style={styles.tabs}>
-        <Pressable onPress={() => setTab('balance')} style={[styles.tabBtn, tab === 'balance' && styles.tabBtnActive]}>
-          <Text style={[styles.tabText, tab === 'balance' && styles.tabTextActive]}>{t.group.tabBalance}</Text>
-        </Pressable>
-        <Pressable onPress={() => setTab('ledger')} style={[styles.tabBtn, tab === 'ledger' && styles.tabBtnActive]}>
-          <Text style={[styles.tabText, tab === 'ledger' && styles.tabTextActive]}>{t.group.tabLedger}</Text>
-        </Pressable>
-        <Pressable onPress={() => setTab('history')} style={[styles.tabBtn, tab === 'history' && styles.tabBtnActive]}>
-          <Text style={[styles.tabText, tab === 'history' && styles.tabTextActive]}>{t.group.tabHistory}</Text>
+      <View style={styles.tabsRow}>
+        <View style={styles.tabs}>
+          <Pressable onPress={() => setTab('balance')} style={[styles.tabBtn, tab === 'balance' && styles.tabBtnActive]}>
+            <Text style={[styles.tabText, tab === 'balance' && styles.tabTextActive]}>{t.group.tabBalance}</Text>
+          </Pressable>
+          <Pressable onPress={() => setTab('ledger')} style={[styles.tabBtn, tab === 'ledger' && styles.tabBtnActive]}>
+            <Text style={[styles.tabText, tab === 'ledger' && styles.tabTextActive]}>{t.group.tabLedger}</Text>
+          </Pressable>
+          <Pressable onPress={() => setTab('history')} style={[styles.tabBtn, tab === 'history' && styles.tabBtnActive]}>
+            <Text style={[styles.tabText, tab === 'history' && styles.tabTextActive]}>{t.group.tabHistory}</Text>
+          </Pressable>
+        </View>
+        <Pressable onPress={onOpenSettings} hitSlop={10} style={styles.settingsBtn} accessibilityLabel={t.groups.settingsButton}>
+          <Text style={styles.settingsIcon}>⚙️</Text>
         </Pressable>
       </View>
     </View>
@@ -456,7 +462,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   inviteChipText: { ...fonts.bodySemiBold, fontSize: 13, color: colors.muted },
-  tabs: { flexDirection: 'row', backgroundColor: colors.surface2, borderRadius: 12, padding: 4, marginBottom: 22 },
+  tabsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 22 },
+  tabs: { flex: 1, flexDirection: 'row', backgroundColor: colors.surface2, borderRadius: 12, padding: 4 },
+  settingsBtn: { padding: 4 },
+  settingsIcon: { fontSize: 20 },
   tabBtn: { flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center' },
   tabBtnActive: { backgroundColor: colors.surface, shadowColor: '#3c2814', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
   tabText: { ...fonts.bodySemiBold, fontSize: 14, color: colors.muted },
