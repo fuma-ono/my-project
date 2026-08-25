@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useT } from '../i18n';
 import { formatMoney } from '../lib/currency';
 import { colors, fonts } from '../theme';
 import type { Entry } from '../types';
@@ -18,6 +19,7 @@ type Props = {
 // フラットな一覧行にした。金額の色は残高と同じ意味付け(緑=受け取る/赤=払う)を
 // 使い、自分が関係しない記録はニュートラルにする。
 export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onDelete }: Props) {
+  const t = useT();
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const photoUrl = useReceiptUrl(entry.photo_path);
   const settled = entry.settled;
@@ -27,9 +29,9 @@ export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onDelet
       '',
       undefined,
       [
-        { text: settled ? '未精算に戻す' : '精算済みにする', onPress: () => onToggleSettled(entry) },
-        { text: '削除', style: 'destructive', onPress: () => onDelete(entry) },
-        { text: 'キャンセル', style: 'cancel' },
+        { text: settled ? t.entryRow.markUnsettled : t.entryRow.markSettled, onPress: () => onToggleSettled(entry) },
+        { text: t.entryRow.delete, style: 'destructive', onPress: () => onDelete(entry) },
+        { text: t.common.cancel, style: 'cancel' },
       ],
       { cancelable: true }
     );
@@ -64,7 +66,7 @@ export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onDelet
       )}
 
       <Text style={[styles.amount, { color: amountColor }, settled && styles.strike]}>
-        {entry.type === 'money' ? formatMoney(entry.amount ?? 0, entry.currency) : '1件'}
+        {entry.type === 'money' ? formatMoney(entry.amount ?? 0, entry.currency) : t.common.favorCount(1)}
       </Text>
 
       <Pressable onPress={openMenu} hitSlop={8} style={styles.menuBtn}>

@@ -1,6 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { useT } from '../i18n';
 import { formatMoney } from '../lib/currency';
 import { colors, fonts } from '../theme';
 import type { NetTotal } from '../lib/balances';
@@ -11,23 +12,25 @@ import type { NetTotal } from '../lib/balances';
 // (緑/赤)は下の内訳リスト側で担う(グラデーションの上で赤緑を使うと
 // 逆に読みにくくなるため)。
 export default function NetSummary({ totals }: { totals: NetTotal[] }) {
+  const t = useT();
+
   if (totals.length === 0) {
     return (
       <View style={styles.settledWrap}>
         <Text style={styles.emoji}>🎉</Text>
-        <Text style={styles.settledText}>貸し借りはすべて精算済みです</Text>
+        <Text style={styles.settledText}>{t.netSummary.allSettled}</Text>
       </View>
     );
   }
 
   return (
     <LinearGradient colors={[colors.accent, colors.plum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
-      {totals.map((t, i) => {
-        const owed = t.amount > 0; // 正値 = 自分が受け取る側(lib/balances.tsのNetTotal参照)
+      {totals.map((total, i) => {
+        const owed = total.amount > 0; // 正値 = 自分が受け取る側(lib/balances.tsのNetTotal参照)
         return (
-          <View key={t.currency} style={[styles.line, i > 0 && styles.lineDivider]}>
-            <Text style={styles.label}>{owed ? '受け取り' : '支払い'}</Text>
-            <Text style={styles.amount}>{formatMoney(Math.abs(t.amount), t.currency)}</Text>
+          <View key={total.currency} style={[styles.line, i > 0 && styles.lineDivider]}>
+            <Text style={styles.label}>{owed ? t.netSummary.receiving : t.netSummary.paying}</Text>
+            <Text style={styles.amount}>{formatMoney(Math.abs(total.amount), total.currency)}</Text>
           </View>
         );
       })}

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import * as Crypto from 'expo-crypto';
 
+import { useT } from '../i18n';
 import { supabase } from '../lib/supabase';
 import type { Entry, EntryType, Profile } from '../types';
 
 export function useGroupData(groupId: string | null, userId: string | null) {
+  const t = useT();
   const [members, setMembers] = useState<Profile[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,7 +64,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       description: string;
       photoUri?: string | null;
     }) => {
-      if (!groupId || !userId) return { error: '未認証です' };
+      if (!groupId || !userId) return { error: t.auth.unauthenticated };
       const id = Crypto.randomUUID();
       let photoPath: string | null = null;
 
@@ -74,10 +76,10 @@ export function useGroupData(groupId: string | null, userId: string | null) {
           const { error: uploadError } = await supabase.storage
             .from('receipts')
             .upload(path, arrayBuffer, { contentType: 'image/jpeg', upsert: true });
-          if (uploadError) return { error: `写真のアップロードに失敗しました: ${uploadError.message}` };
+          if (uploadError) return { error: t.groupData.photoUploadFailed(uploadError.message) };
           photoPath = path;
         } catch {
-          return { error: '写真の処理に失敗しました' };
+          return { error: t.groupData.photoProcessFailed };
         }
       }
 
@@ -98,7 +100,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       await loadAll();
       return { error: null };
     },
-    [groupId, userId, loadAll]
+    [groupId, userId, loadAll, t]
   );
 
   const toggleSettled = useCallback(

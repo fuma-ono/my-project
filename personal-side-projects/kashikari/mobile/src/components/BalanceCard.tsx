@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import Avatar from './Avatar';
+import { useT } from '../i18n';
 import { formatMoney } from '../lib/currency';
 import { colors, fonts } from '../theme';
 import type { BalanceRow } from '../types';
@@ -17,14 +18,15 @@ type Props = {
 // 色分けにする(単なる装飾ではなく、金額の向きを一目で伝えるための色)。
 // 自分が関係しない行(グループ内の他の2人同士)は色を付けずニュートラルにする。
 export default function BalanceCard({ row, nameOf, emojiOf, meId, onSettle }: Props) {
-  const debtorLabel = row.mine && row.debtor === meId ? 'あなた' : nameOf(row.debtor);
-  const creditorLabel = row.mine && row.creditor === meId ? 'あなた' : nameOf(row.creditor);
-  const amountLabel = row.type === 'money' ? formatMoney(row.amount, row.currency) : `${row.amount}件`;
+  const t = useT();
+  const debtorLabel = row.mine && row.debtor === meId ? t.balanceCard.you : nameOf(row.debtor);
+  const creditorLabel = row.mine && row.creditor === meId ? t.balanceCard.you : nameOf(row.creditor);
+  const amountLabel = row.type === 'money' ? formatMoney(row.amount, row.currency) : t.common.favorCount(row.amount);
 
   const iOwe = row.mine && row.debtor === meId;
   const iAmOwed = row.mine && row.creditor === meId;
   const amountColor = iOwe ? colors.negative : iAmOwed ? colors.positive : colors.muted;
-  const directionLabel = iOwe ? '払う' : iAmOwed ? '受け取る' : null;
+  const directionLabel = iOwe ? t.balanceCard.pay : iAmOwed ? t.balanceCard.receive : null;
 
   return (
     <View style={styles.row}>
@@ -48,7 +50,7 @@ export default function BalanceCard({ row, nameOf, emojiOf, meId, onSettle }: Pr
           </Text>
         </View>
         <Pressable onPress={onSettle} hitSlop={8} style={styles.settleBtn}>
-          <Text style={styles.settleText}>精算</Text>
+          <Text style={styles.settleText}>{t.balanceCard.settle}</Text>
         </Pressable>
       </View>
     </View>

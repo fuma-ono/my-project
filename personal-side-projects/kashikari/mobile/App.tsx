@@ -5,22 +5,26 @@ import DemoApp from './src/demo/DemoApp';
 import GroupScreen from './src/screens/GroupScreen';
 import GroupsScreen from './src/screens/GroupsScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 import SplashScreen from './src/screens/SplashScreen';
 import { useAuth } from './src/hooks/useAuth';
 import { useGroups } from './src/hooks/useGroups';
+import { LanguageProvider } from './src/i18n';
 import type { Group } from './src/types';
 
 // 起動直後、読み込みが一瞬で終わってもロゴが一瞬フラッシュするだけにならない
 // よう、最低でもこれだけはブランド画面を見せる(体感の「間」を作るため)。
 const MIN_SPLASH_MS = 900;
 
-type Screen = { name: 'groups' } | { name: 'group'; group: Group };
+type Screen = { name: 'groups' } | { name: 'group'; group: Group } | { name: 'settings' };
 
 // デモモード: Supabase未接続でもUIを確認できるようにする(スクリーンショット・
 // 動作確認用)。本番の.envではこの変数を設定しないこと。
 const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO_MODE === '1';
 
-export default function App() {
+// LanguageProviderの内側でuseAuth/useGroups(どちらも文言を扱う)を呼ぶため、
+// 実体はAppInnerに分離し、下のdefault exportでProviderをかぶせている。
+function AppInner() {
   const { loading: authLoading, userId, profile, error: authError, setDisplayName, updateAvatar } = useAuth();
   const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup, updateGroupIcon } = useGroups(
     DEMO_MODE ? null : userId
@@ -66,6 +70,7 @@ export default function App() {
           onOpenGroup={(group) => setScreen({ name: 'group', group })}
           onCreateGroup={createGroup}
           onJoinGroup={joinGroup}
+          onOpenSettings={() => setScreen({ name: 'settings' })}
         />
       )}
       {screen.name === 'group' && (
@@ -86,7 +91,23 @@ export default function App() {
           }}
         />
       )}
+      {screen.name === 'settings' && (
+        <SettingsScreen
+          profile={profile}
+          onBack={() => setScreen({ name: 'groups' })}
+          onChangeDisplayName={(name) => setDisplayName(name, profile.avatar_emoji)}
+          onChangeAvatar={updateAvatar}
+        />
+      )}
       <StatusBar style="dark" />
     </>
+  );
+}
+
+export default function App() {
+  return (
+    <LanguageProvider>
+      <AppInner />
+    </LanguageProvider>
   );
 }

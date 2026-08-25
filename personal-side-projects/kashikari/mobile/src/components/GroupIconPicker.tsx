@@ -1,4 +1,5 @@
 import EmojiGridPicker from './EmojiGridPicker';
+import { useT } from '../i18n';
 import { GROUP_ICON_EMOJI_OPTIONS, colors } from '../theme';
 
 type Props = {
@@ -11,10 +12,11 @@ type Props = {
 // 個人のアバター(AvatarPicker)とは別の絵文字セット・配色を使う。
 // 「これは人ではなくグループのアイコン」と一目で区別できるようにするため。
 export default function GroupIconPicker({ visible, selected, onSelect, onClose }: Props) {
+  const t = useT();
   return (
     <EmojiGridPicker
       visible={visible}
-      title="グループのアイコンを選ぶ"
+      title={t.groupIconPicker.title}
       options={GROUP_ICON_EMOJI_OPTIONS}
       selected={selected}
       cellBackground={colors.accentSoft}

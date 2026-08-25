@@ -4,6 +4,7 @@ import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import GroupIconPicker from './GroupIconPicker';
 import Mark from './Mark';
 import PrimaryButton from './PrimaryButton';
+import { useT } from '../i18n';
 import { colors, fonts } from '../theme';
 
 type Props = {
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export default function GroupFormModal({ visible, mode, onClose, onSubmit }: Props) {
+  const t = useT();
   const [value, setValue] = useState('');
   const [iconEmoji, setIconEmoji] = useState<string | null>(null);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
@@ -44,22 +46,22 @@ export default function GroupFormModal({ visible, mode, onClose, onSubmit }: Pro
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
-          <Text style={styles.title}>{mode === 'create' ? '新しいグループ' : '招待コードで参加'}</Text>
+          <Text style={styles.title}>{mode === 'create' ? t.groupForm.createTitle : t.groupForm.joinTitle}</Text>
 
           {mode === 'create' && (
             <Pressable onPress={() => setIconPickerOpen(true)} style={styles.iconRow}>
               <Mark size={44} glyph={iconEmoji ?? undefined} />
-              <Text style={styles.iconRowText}>{iconEmoji ? 'アイコンを変える' : 'アイコンを選ぶ(あとで変更できます)'}</Text>
+              <Text style={styles.iconRowText}>{iconEmoji ? t.groupForm.changeIcon : t.groupForm.pickIcon}</Text>
             </Pressable>
           )}
 
           <TextInput
             value={value}
-            onChangeText={(t) => {
-              setValue(mode === 'join' ? t.toUpperCase() : t);
+            onChangeText={(v) => {
+              setValue(mode === 'join' ? v.toUpperCase() : v);
               setError(null);
             }}
-            placeholder={mode === 'create' ? '例: 大学の友達' : '例: A1B2C3'}
+            placeholder={mode === 'create' ? t.groupForm.namePlaceholder : t.groupForm.codePlaceholder}
             placeholderTextColor={colors.muted}
             autoCapitalize={mode === 'join' ? 'characters' : 'none'}
             maxLength={mode === 'create' ? 30 : 6}
@@ -68,8 +70,13 @@ export default function GroupFormModal({ visible, mode, onClose, onSubmit }: Pro
           />
           {error && <Text style={styles.error}>{error}</Text>}
           <View style={styles.actions}>
-            <PrimaryButton title="キャンセル" variant="ghost" onPress={close} />
-            <PrimaryButton title={mode === 'create' ? '作成する' : '参加する'} onPress={submit} loading={submitting} disabled={!value.trim()} />
+            <PrimaryButton title={t.common.cancel} variant="ghost" onPress={close} />
+            <PrimaryButton
+              title={mode === 'create' ? t.groupForm.createButton : t.groupForm.joinButton}
+              onPress={submit}
+              loading={submitting}
+              disabled={!value.trim()}
+            />
           </View>
         </View>
       </View>

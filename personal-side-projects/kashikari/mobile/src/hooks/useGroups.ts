@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { useT } from '../i18n';
 import { supabase } from '../lib/supabase';
 import type { Group } from '../types';
 
 export function useGroups(userId: string | null) {
+  const t = useT();
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -23,25 +25,25 @@ export function useGroups(userId: string | null) {
   const createGroup = useCallback(
     async (name: string, iconEmoji: string | null = null) => {
       const trimmed = name.trim();
-      if (!trimmed) return { error: 'グループ名を入力してください', group: null };
+      if (!trimmed) return { error: t.groupsHook.nameRequired, group: null };
       const { data, error } = await supabase.rpc('create_group', { _name: trimmed, _icon_emoji: iconEmoji });
       if (error) return { error: error.message, group: null };
       await refresh();
       return { error: null, group: data as Group };
     },
-    [refresh]
+    [refresh, t]
   );
 
   const joinGroup = useCallback(
     async (inviteCode: string) => {
       const trimmed = inviteCode.trim();
-      if (!trimmed) return { error: '招待コードを入力してください', group: null };
+      if (!trimmed) return { error: t.groupsHook.codeRequired, group: null };
       const { data, error } = await supabase.rpc('join_group', { _invite_code: trimmed });
       if (error) return { error: error.message, group: null };
       await refresh();
       return { error: null, group: data as Group };
     },
-    [refresh]
+    [refresh, t]
   );
 
   const leaveGroup = useCallback(

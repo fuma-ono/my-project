@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
+import { useT } from '../i18n';
 import { supabase } from '../lib/supabase';
 import type { Profile } from '../types';
 
@@ -14,6 +15,7 @@ type AuthState = {
 };
 
 export function useAuth() {
+  const t = useT();
   const [state, setState] = useState<AuthState>({
     loading: true,
     userId: null,
@@ -41,12 +43,12 @@ export function useAuth() {
       // Anonymous Sign-Ins を有効化しておく必要がある。README参照)。
       const { data, error } = await supabase.auth.signInAnonymously();
       if (error || !data.user) {
-        setState((s) => ({ ...s, loading: false, error: error?.message ?? '匿名サインインに失敗しました' }));
+        setState((s) => ({ ...s, loading: false, error: error?.message ?? t.auth.anonymousSignInFailed }));
         return;
       }
       setState((s) => ({ ...s, loading: false, userId: data.user!.id, profile: null }));
     },
-    [loadProfile]
+    [loadProfile, t]
   );
 
   useEffect(() => {
@@ -65,9 +67,9 @@ export function useAuth() {
 
   const setDisplayName = useCallback(
     async (name: string, avatarEmoji: string | null) => {
-      if (!state.userId) return { error: '未認証です' };
+      if (!state.userId) return { error: t.auth.unauthenticated };
       const trimmed = name.trim();
-      if (!trimmed) return { error: '名前を入力してください' };
+      if (!trimmed) return { error: t.auth.nameRequired };
       const { data, error } = await supabase
         .from('profiles')
         .upsert({ id: state.userId, display_name: trimmed, avatar_emoji: avatarEmoji })
@@ -77,12 +79,12 @@ export function useAuth() {
       setState((s) => ({ ...s, profile: data }));
       return { error: null };
     },
-    [state.userId]
+    [state.userId, t]
   );
 
   const updateAvatar = useCallback(
     async (avatarEmoji: string) => {
-      if (!state.userId) return { error: '未認証です' };
+      if (!state.userId) return { error: t.auth.unauthenticated };
       const { data, error } = await supabase
         .from('profiles')
         .update({ avatar_emoji: avatarEmoji })
@@ -93,7 +95,7 @@ export function useAuth() {
       setState((s) => ({ ...s, profile: data }));
       return { error: null };
     },
-    [state.userId]
+    [state.userId, t]
   );
 
   return { ...state, setDisplayName, updateAvatar };

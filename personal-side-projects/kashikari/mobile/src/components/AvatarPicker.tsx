@@ -1,4 +1,5 @@
 import EmojiGridPicker from './EmojiGridPicker';
+import { useT } from '../i18n';
 import { AVATAR_EMOJI_OPTIONS, avatarColor } from '../theme';
 
 type Props = {
@@ -10,10 +11,11 @@ type Props = {
 };
 
 export default function AvatarPicker({ visible, name, selected, onSelect, onClose }: Props) {
+  const t = useT();
   return (
     <EmojiGridPicker
       visible={visible}
-      title="アイコンを選ぶ"
+      title={t.avatarPicker.title}
       options={AVATAR_EMOJI_OPTIONS}
       selected={selected}
       cellBackground={avatarColor(name)}

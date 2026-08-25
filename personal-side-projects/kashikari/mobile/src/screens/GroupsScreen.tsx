@@ -4,6 +4,7 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'rea
 import GroupFormModal from '../components/GroupFormModal';
 import Mark from '../components/Mark';
 import PrimaryButton from '../components/PrimaryButton';
+import { useT } from '../i18n';
 import { colors, fonts } from '../theme';
 import type { Group } from '../types';
 
@@ -15,9 +16,20 @@ type Props = {
   onOpenGroup: (group: Group) => void;
   onCreateGroup: (name: string, iconEmoji: string | null) => Promise<{ error: string | null; group: Group | null }>;
   onJoinGroup: (code: string) => Promise<{ error: string | null; group: Group | null }>;
+  onOpenSettings: () => void;
 };
 
-export default function GroupsScreen({ displayName, groups, loading, onRefresh, onOpenGroup, onCreateGroup, onJoinGroup }: Props) {
+export default function GroupsScreen({
+  displayName,
+  groups,
+  loading,
+  onRefresh,
+  onOpenGroup,
+  onCreateGroup,
+  onJoinGroup,
+  onOpenSettings,
+}: Props) {
+  const t = useT();
   const [modal, setModal] = useState<'create' | 'join' | null>(null);
 
   return (
@@ -26,8 +38,11 @@ export default function GroupsScreen({ displayName, groups, loading, onRefresh, 
         <View style={styles.brandRow}>
           <Mark size={34} />
           <Text style={styles.wordmark}>kashikari</Text>
+          <Pressable onPress={onOpenSettings} hitSlop={10} style={styles.settingsBtn} accessibilityLabel={t.groups.settingsButton}>
+            <Text style={styles.settingsIcon}>⚙️</Text>
+          </Pressable>
         </View>
-        <Text style={styles.hello}>{displayName} さん</Text>
+        <Text style={styles.hello}>{t.groups.hello(displayName)}</Text>
       </View>
 
       <FlatList
@@ -38,7 +53,7 @@ export default function GroupsScreen({ displayName, groups, loading, onRefresh, 
         ListEmptyComponent={
           !loading ? (
             <View style={styles.empty}>
-              <Text style={styles.emptyText}>まだグループがありません。{'\n'}新しく作るか、招待コードで参加しましょう。</Text>
+              <Text style={styles.emptyText}>{t.groups.empty}</Text>
             </View>
           ) : null
         }
@@ -47,15 +62,15 @@ export default function GroupsScreen({ displayName, groups, loading, onRefresh, 
             <Mark size={44} glyph={item.icon_emoji ?? undefined} />
             <View style={styles.cardMain}>
               <Text style={styles.cardTitle}>{item.name}</Text>
-              <Text style={styles.cardCode}>招待コード: {item.invite_code}</Text>
+              <Text style={styles.cardCode}>{t.groups.inviteCode(item.invite_code)}</Text>
             </View>
           </Pressable>
         )}
       />
 
       <View style={styles.actions}>
-        <PrimaryButton title="招待コードで参加" variant="ghost" onPress={() => setModal('join')} />
-        <PrimaryButton title="＋ グループを作る" onPress={() => setModal('create')} />
+        <PrimaryButton title={t.groups.joinButton} variant="ghost" onPress={() => setModal('join')} />
+        <PrimaryButton title={t.groups.createButton} onPress={() => setModal('create')} />
       </View>
 
       <GroupFormModal
@@ -86,7 +101,9 @@ const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
   header: { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 12 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  wordmark: { ...fonts.display, fontSize: 28, color: colors.ink },
+  wordmark: { ...fonts.display, fontSize: 28, color: colors.ink, flex: 1 },
+  settingsBtn: { padding: 4 },
+  settingsIcon: { fontSize: 22 },
   hello: { ...fonts.body, fontSize: 14, color: colors.muted, marginTop: 8 },
   list: { paddingHorizontal: 20, paddingBottom: 24, gap: 10, flexGrow: 1 },
   empty: { alignItems: 'center', paddingTop: 60 },

@@ -5,6 +5,7 @@ import Avatar from '../components/Avatar';
 import AvatarPicker from '../components/AvatarPicker';
 import Mark from '../components/Mark';
 import PrimaryButton from '../components/PrimaryButton';
+import { useT } from '../i18n';
 import { colors, fonts } from '../theme';
 
 export default function OnboardingScreen({
@@ -17,6 +18,7 @@ export default function OnboardingScreen({
   // 一切表示されず、ユーザーが原因不明のまま「未認証です」に遭遇していた。
   authError?: string | null;
 }) {
+  const t = useT();
   const [name, setName] = useState('');
   const [avatarEmoji, setAvatarEmoji] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -37,36 +39,34 @@ export default function OnboardingScreen({
           <Mark size={64} />
         </View>
         <Text style={styles.wordmark}>kashikari</Text>
-        <Text style={styles.tagline}>友達との貸し借りを、お金も頼みごとも一緒に記録する</Text>
+        <Text style={styles.tagline}>{t.onboarding.tagline}</Text>
 
         {authError && (
           <View style={styles.authErrorBox}>
-            <Text style={styles.authErrorTitle}>サインインに失敗しました</Text>
+            <Text style={styles.authErrorTitle}>{t.onboarding.signInFailedTitle}</Text>
             <Text style={styles.authErrorBody}>{authError}</Text>
-            <Text style={styles.authErrorHint}>
-              Supabaseの管理画面で Authentication {'>'} Providers {'>'} Anonymous Sign-Ins が有効になっているか確認してください。
-            </Text>
+            <Text style={styles.authErrorHint}>{t.onboarding.signInFailedHint}</Text>
           </View>
         )}
 
-        <Text style={styles.label}>あなたの名前</Text>
+        <Text style={styles.label}>{t.onboarding.nameLabel}</Text>
         <TextInput
           value={name}
-          onChangeText={(t) => {
-            setName(t);
+          onChangeText={(v) => {
+            setName(v);
             setError(null);
           }}
-          placeholder="例: たろう"
+          placeholder={t.onboarding.namePlaceholder}
           placeholderTextColor={colors.muted}
           maxLength={20}
           style={styles.input}
           autoFocus
         />
 
-        <Text style={styles.label}>アイコン</Text>
+        <Text style={styles.label}>{t.onboarding.iconLabel}</Text>
         <Pressable onPress={() => setPickerOpen(true)} style={styles.avatarRow}>
           <Avatar name={name || '?'} emoji={avatarEmoji} size="md" />
-          <Text style={styles.avatarRowText}>{avatarEmoji ? 'アイコンを変える' : 'アイコンを選ぶ(あとで変更できます)'}</Text>
+          <Text style={styles.avatarRowText}>{avatarEmoji ? t.onboarding.changeIcon : t.onboarding.pickIcon}</Text>
         </Pressable>
 
         {error && <Text style={styles.error}>{error}</Text>}
@@ -75,7 +75,7 @@ export default function OnboardingScreen({
       {/* 内容のすぐ下に小さく左寄せで浮かせるのではなく、幅いっぱいのCTAにする。
           ただし画面の一番下端まで押し下げると逆に遠すぎたため、内容から
           一定の余白を空けた位置に置く(flex:1で下端に固定、はしない)。 */}
-      <PrimaryButton title="はじめる" onPress={submit} loading={submitting} disabled={!name.trim()} style={styles.button} />
+      <PrimaryButton title={t.onboarding.start} onPress={submit} loading={submitting} disabled={!name.trim()} style={styles.button} />
 
       <AvatarPicker
         visible={pickerOpen}

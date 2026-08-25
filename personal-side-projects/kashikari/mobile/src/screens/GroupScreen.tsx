@@ -11,6 +11,7 @@ import GroupIconPicker from '../components/GroupIconPicker';
 import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
 import { useGroupData } from '../hooks/useGroupData';
+import { useT } from '../i18n';
 import { computeBalances, computeMyNet } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
 import { colors, fonts } from '../theme';
@@ -28,6 +29,7 @@ type Props = {
 };
 
 export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvatar, onChangeGroupIcon }: Props) {
+  const t = useT();
   const { members, entries, loading, refresh, addEntry, toggleSettled, deleteEntry, settlePair } = useGroupData(group.id, meId);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
@@ -35,7 +37,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
   const [tab, setTab] = useState<Tab>('balance');
   const [showSettled, setShowSettled] = useState(false);
 
-  const nameOf = (id: string) => members.find((m) => m.id === id)?.display_name ?? '不明';
+  const nameOf = (id: string) => members.find((m) => m.id === id)?.display_name ?? t.group.unknownMember;
   const emojiOf = (id: string) => members.find((m) => m.id === id)?.avatar_emoji ?? null;
   const me = members.find((m) => m.id === meId);
   const balances = useMemo(() => computeBalances(entries, meId), [entries, meId]);
@@ -45,7 +47,10 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
     () => (showSettled ? entries : entries.filter((e) => !e.settled)),
     [entries, showSettled]
   );
-  const sections = useMemo(() => groupEntriesByDate(visibleEntries), [visibleEntries]);
+  const sections = useMemo(
+    () => groupEntriesByDate(visibleEntries, { today: t.dateGroups.today, yesterday: t.dateGroups.yesterday }),
+    [visibleEntries, t]
+  );
   const settledCount = entries.length - entries.filter((e) => !e.settled).length;
 
   const avatarPicker = (
@@ -74,19 +79,19 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
   );
 
   const invite = () => {
-    Share.share({ message: `kashikariの「${group.name}」に招待するよ。アプリを開いて招待コード「${group.invite_code}」で参加してね。` });
+    Share.share({ message: t.group.inviteMessage(group.name, group.invite_code) });
   };
 
   const leave = () => {
-    Alert.alert('グループを抜けますか?', `「${group.name}」の記録は他のメンバーの画面には残りますが、あなたはこのグループのデータにアクセスできなくなります。`, [
-      { text: 'キャンセル', style: 'cancel' },
+    Alert.alert(t.group.leaveConfirmTitle, t.group.leaveConfirmMessage(group.name), [
+      { text: t.common.cancel, style: 'cancel' },
       {
-        text: '抜ける',
+        text: t.group.leaveConfirmButton,
         style: 'destructive',
         onPress: async () => {
           const res = await onLeave(group.id);
           if (res.error) {
-            Alert.alert('抜けられませんでした', res.error);
+            Alert.alert(t.group.leaveFailedTitle, res.error);
             return;
           }
           onBack();
@@ -99,10 +104,10 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
     <View>
       <View style={styles.headerRow}>
         <Pressable onPress={onBack} hitSlop={10}>
-          <Text style={styles.back}>‹ グループ</Text>
+          <Text style={styles.back}>{t.group.back}</Text>
         </Pressable>
         <Pressable onPress={leave} hitSlop={10}>
-          <Text style={styles.leave}>抜ける</Text>
+          <Text style={styles.leave}>{t.group.leave}</Text>
         </Pressable>
       </View>
       <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleRow}>
@@ -116,7 +121,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
             <Pressable key={m.id} onPress={() => setAvatarPickerOpen(true)} style={styles.memberChip}>
               <Avatar name={m.display_name} emoji={m.avatar_emoji} size="sm" />
               <Text style={styles.memberName}>{m.display_name}</Text>
-              <Text style={styles.editHint}>変更</Text>
+              <Text style={styles.editHint}>{t.group.changeHint}</Text>
             </Pressable>
           ) : (
             <View key={m.id} style={styles.memberChip}>
@@ -126,16 +131,16 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
           )
         )}
         <Pressable onPress={invite} style={styles.inviteChip}>
-          <Text style={styles.inviteChipText}>＋ 招待</Text>
+          <Text style={styles.inviteChipText}>{t.group.invite}</Text>
         </Pressable>
       </View>
 
       <View style={styles.tabs}>
         <Pressable onPress={() => setTab('balance')} style={[styles.tabBtn, tab === 'balance' && styles.tabBtnActive]}>
-          <Text style={[styles.tabText, tab === 'balance' && styles.tabTextActive]}>残高</Text>
+          <Text style={[styles.tabText, tab === 'balance' && styles.tabTextActive]}>{t.group.tabBalance}</Text>
         </Pressable>
         <Pressable onPress={() => setTab('ledger')} style={[styles.tabBtn, tab === 'ledger' && styles.tabBtnActive]}>
-          <Text style={[styles.tabText, tab === 'ledger' && styles.tabTextActive]}>台帳</Text>
+          <Text style={[styles.tabText, tab === 'ledger' && styles.tabTextActive]}>{t.group.tabLedger}</Text>
         </Pressable>
       </View>
     </View>
@@ -153,7 +158,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
             <View>
               {header}
               <NetSummary totals={netTotals} />
-              {balances.length > 0 && <Text style={styles.sectionTitle}>内訳</Text>}
+              {balances.length > 0 && <Text style={styles.sectionTitle}>{t.group.breakdown}</Text>}
             </View>
           }
           renderItem={({ item }) => (
@@ -189,7 +194,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
             {settledCount > 0 && (
               <Pressable onPress={() => setShowSettled((v) => !v)} style={styles.settledToggle}>
                 <Text style={styles.settledToggleText}>
-                  {showSettled ? '精算済みを隠す' : `精算済み${settledCount}件を表示`}
+                  {showSettled ? t.group.hideSettled : t.group.showSettled(settledCount)}
                 </Text>
               </Pressable>
             )}
@@ -200,9 +205,7 @@ export default function GroupScreen({ group, meId, onBack, onLeave, onChangeAvat
           <EntryRow entry={item} nameOf={nameOf} meId={meId} onToggleSettled={(e) => toggleSettled(e.id, !e.settled)} onDelete={(e) => deleteEntry(e.id)} />
         )}
         ItemSeparatorComponent={() => <View style={styles.hairline} />}
-        ListEmptyComponent={
-          !loading ? <Text style={styles.emptyNote}>まだ記録がありません。右下の「＋」から最初の貸し借りを記録しましょう。</Text> : null
-        }
+        ListEmptyComponent={!loading ? <Text style={styles.emptyNote}>{t.group.emptyLedger}</Text> : null}
       />
       <Fab onPress={() => setSheetOpen(true)} disabled={members.length < 2} />
       <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} />

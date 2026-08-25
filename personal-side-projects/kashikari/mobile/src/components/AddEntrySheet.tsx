@@ -14,6 +14,7 @@ import {
 
 import Avatar from './Avatar';
 import PrimaryButton from './PrimaryButton';
+import { useT } from '../i18n';
 import { CURRENCIES } from '../lib/currency';
 import { colors, fonts } from '../theme';
 import type { EntryType, Profile } from '../types';
@@ -35,6 +36,7 @@ type Props = {
 };
 
 export default function AddEntrySheet({ visible, members, meId, onClose, onSubmit }: Props) {
+  const t = useT();
   const others = members.filter((m) => m.id !== meId);
   const [fromId, setFromId] = useState<string | null>(meId ?? members[0]?.id ?? null);
   const [toId, setToId] = useState<string | null>(others[0]?.id ?? members[1]?.id ?? null);
@@ -61,42 +63,42 @@ export default function AddEntrySheet({ visible, members, meId, onClose, onSubmi
   };
 
   const pickPhoto = () => {
-    Alert.alert('レシートを添付', undefined, [
+    Alert.alert(t.addEntry.photoAlertTitle, undefined, [
       {
-        text: 'カメラで撮る',
+        text: t.addEntry.takePhoto,
         onPress: async () => {
           const perm = await ImagePicker.requestCameraPermissionsAsync();
-          if (!perm.granted) return Alert.alert('カメラへのアクセスが許可されていません');
+          if (!perm.granted) return Alert.alert(t.addEntry.cameraPermissionDenied);
           const result = await ImagePicker.launchCameraAsync({ quality: 0.6, allowsEditing: false });
           if (!result.canceled) setPhotoUri(result.assets[0].uri);
         },
       },
       {
-        text: 'アルバムから選ぶ',
+        text: t.addEntry.pickFromLibrary,
         onPress: async () => {
           const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-          if (!perm.granted) return Alert.alert('写真へのアクセスが許可されていません');
+          if (!perm.granted) return Alert.alert(t.addEntry.libraryPermissionDenied);
           const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.6, mediaTypes: ['images'] });
           if (!result.canceled) setPhotoUri(result.assets[0].uri);
         },
       },
-      { text: 'キャンセル', style: 'cancel' },
+      { text: t.common.cancel, style: 'cancel' },
     ]);
   };
 
   const submit = async () => {
     if (!fromId || !toId || fromId === toId) {
-      Alert.alert('貸した人と借りた人は別のメンバーを選んでください');
+      Alert.alert(t.addEntry.differentPeopleError);
       return;
     }
     if (type === 'money') {
       const n = Number(amount);
       if (!n || n <= 0) {
-        Alert.alert('金額を入力してください');
+        Alert.alert(t.addEntry.amountRequiredError);
         return;
       }
     } else if (!desc.trim()) {
-      Alert.alert('頼みごとの内容を入力してください', '例: 引っ越し手伝った');
+      Alert.alert(t.addEntry.favorDescRequiredTitle, t.addEntry.favorDescRequiredMessage);
       return;
     }
     setSubmitting(true);
@@ -111,7 +113,7 @@ export default function AddEntrySheet({ visible, members, meId, onClose, onSubmi
     });
     setSubmitting(false);
     if (error) {
-      Alert.alert('記録できませんでした', error);
+      Alert.alert(t.addEntry.submitFailedTitle, error);
       return;
     }
     close();
@@ -120,34 +122,34 @@ export default function AddEntrySheet({ visible, members, meId, onClose, onSubmi
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
       <ScrollView style={styles.sheet} contentContainerStyle={styles.content}>
-        <Text style={styles.title}>貸し借りを記録</Text>
+        <Text style={styles.title}>{t.addEntry.title}</Text>
 
-        <Text style={styles.label}>誰から誰へ</Text>
+        <Text style={styles.label}>{t.addEntry.fromTo}</Text>
         <View style={styles.pickerRow}>
           <PersonPicker members={members} selectedId={fromId} onSelect={setFromId} />
           <Text style={styles.arrow}>→</Text>
           <PersonPicker members={members} selectedId={toId} onSelect={setToId} />
         </View>
 
-        <Text style={styles.label}>種類</Text>
+        <Text style={styles.label}>{t.addEntry.type}</Text>
         <View style={styles.typeToggle}>
           <Pressable
             onPress={() => setType('money')}
             style={[styles.typeBtn, type === 'money' && styles.typeBtnActiveMoney]}
           >
-            <Text style={[styles.typeText, type === 'money' && { color: colors.accent }]}>💰 お金</Text>
+            <Text style={[styles.typeText, type === 'money' && { color: colors.accent }]}>{t.addEntry.moneyType}</Text>
           </Pressable>
           <Pressable
             onPress={() => setType('favor')}
             style={[styles.typeBtn, type === 'favor' && styles.typeBtnActiveFavor]}
           >
-            <Text style={[styles.typeText, type === 'favor' && { color: colors.favor }]}>🤝 頼みごと</Text>
+            <Text style={[styles.typeText, type === 'favor' && { color: colors.favor }]}>{t.addEntry.favorType}</Text>
           </Pressable>
         </View>
 
         {type === 'money' && (
           <>
-            <Text style={styles.label}>金額</Text>
+            <Text style={styles.label}>{t.addEntry.amountLabel}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.currencyRow}>
               {CURRENCIES.map((c) => (
                 <Pressable
@@ -162,7 +164,7 @@ export default function AddEntrySheet({ visible, members, meId, onClose, onSubmi
             <TextInput
               value={amount}
               onChangeText={setAmount}
-              placeholder="金額"
+              placeholder={t.addEntry.amountPlaceholder}
               placeholderTextColor={colors.muted}
               keyboardType="decimal-pad"
               style={styles.input}
@@ -170,18 +172,18 @@ export default function AddEntrySheet({ visible, members, meId, onClose, onSubmi
           </>
         )}
 
-        <Text style={styles.label}>内容</Text>
+        <Text style={styles.label}>{t.addEntry.descriptionLabel}</Text>
         <TextInput
           value={desc}
           onChangeText={setDesc}
-          placeholder="例: ラーメン奢った / 引っ越し手伝った"
+          placeholder={t.addEntry.descriptionPlaceholder}
           placeholderTextColor={colors.muted}
           maxLength={60}
           style={styles.input}
         />
 
         <Pressable onPress={pickPhoto} style={styles.photoBtn}>
-          <Text style={styles.photoBtnText}>📷 レシートを撮る/添付</Text>
+          <Text style={styles.photoBtnText}>{t.addEntry.attachReceipt}</Text>
         </Pressable>
         {photoUri && (
           <View style={styles.photoPreviewWrap}>
@@ -193,8 +195,8 @@ export default function AddEntrySheet({ visible, members, meId, onClose, onSubmi
         )}
 
         <View style={styles.actions}>
-          <PrimaryButton title="キャンセル" variant="ghost" onPress={close} />
-          <PrimaryButton title="記録する" onPress={submit} loading={submitting} />
+          <PrimaryButton title={t.common.cancel} variant="ghost" onPress={close} />
+          <PrimaryButton title={t.addEntry.submit} onPress={submit} loading={submitting} />
         </View>
       </ScrollView>
     </Modal>
@@ -210,21 +212,22 @@ function PersonPicker({
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
+  const t = useT();
   const selected = members.find((m) => m.id === selectedId);
   const open = () => {
     Alert.alert(
-      '選ぶ',
+      t.addEntry.pickPersonTitle,
       undefined,
       members
         .map((m) => ({ text: m.avatar_emoji ? `${m.avatar_emoji} ${m.display_name}` : m.display_name, onPress: () => onSelect(m.id) }))
-        .concat([{ text: 'キャンセル', style: 'cancel' } as any])
+        .concat([{ text: t.common.cancel, style: 'cancel' } as any])
     );
   };
   return (
     <Pressable onPress={open} style={styles.personPicker}>
       {selected && <Avatar name={selected.display_name} emoji={selected.avatar_emoji} size="sm" />}
       <Text style={styles.personName} numberOfLines={1}>
-        {selected?.display_name ?? '選択'}
+        {selected?.display_name ?? t.addEntry.selectPlaceholder}
       </Text>
     </Pressable>
   );

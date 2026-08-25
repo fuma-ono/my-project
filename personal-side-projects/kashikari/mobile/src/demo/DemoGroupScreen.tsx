@@ -12,6 +12,7 @@ import Fab from '../components/Fab';
 import GroupIconPicker from '../components/GroupIconPicker';
 import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
+import { useT } from '../i18n';
 import { computeBalances, computeMyNet } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
 import { colors, fonts } from '../theme';
@@ -22,6 +23,7 @@ type Tab = 'balance' | 'ledger';
 let demoIdSeq = 100;
 
 export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
+  const t = useT();
   const [entries, setEntries] = useState<Entry[]>(DEMO_ENTRIES);
   const [members, setMembers] = useState<Profile[]>(DEMO_MEMBERS);
   const [group, setGroup] = useState<Group>(DEMO_GROUP);
@@ -33,12 +35,15 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   const meId = DEMO_ME_ID;
   const me = members.find((m) => m.id === meId);
 
-  const nameOf = (id: string) => members.find((m) => m.id === id)?.display_name ?? '不明';
+  const nameOf = (id: string) => members.find((m) => m.id === id)?.display_name ?? t.group.unknownMember;
   const emojiOf = (id: string) => members.find((m) => m.id === id)?.avatar_emoji ?? null;
   const balances = useMemo(() => computeBalances(entries, meId), [entries]);
   const netTotals = useMemo(() => computeMyNet(entries, meId), [entries]);
   const visibleEntries = useMemo(() => (showSettled ? entries : entries.filter((e) => !e.settled)), [entries, showSettled]);
-  const sections = useMemo(() => groupEntriesByDate(visibleEntries), [visibleEntries]);
+  const sections = useMemo(
+    () => groupEntriesByDate(visibleEntries, { today: t.dateGroups.today, yesterday: t.dateGroups.yesterday }),
+    [visibleEntries, t]
+  );
   const settledCount = entries.length - entries.filter((e) => !e.settled).length;
 
   const addEntry = async (input: {
@@ -86,11 +91,11 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   const header = (
     <View>
       <View style={styles.demoBanner}>
-        <Text style={styles.demoBannerText}>デモモード(Supabase未接続・操作はこの端末だけに反映されます)</Text>
+        <Text style={styles.demoBannerText}>{t.demo.banner}</Text>
       </View>
       <View style={styles.headerRow}>
         <Pressable onPress={onBack} hitSlop={10}>
-          <Text style={styles.back}>‹ グループ</Text>
+          <Text style={styles.back}>{t.group.back}</Text>
         </Pressable>
       </View>
       <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleRow}>
@@ -104,7 +109,7 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
             <Pressable key={m.id} onPress={() => setAvatarPickerOpen(true)} style={styles.memberChip}>
               <Avatar name={m.display_name} emoji={m.avatar_emoji} size="sm" />
               <Text style={styles.memberName}>{m.display_name}</Text>
-              <Text style={styles.editHint}>変更</Text>
+              <Text style={styles.editHint}>{t.group.changeHint}</Text>
             </Pressable>
           ) : (
             <View key={m.id} style={styles.memberChip}>
@@ -113,17 +118,17 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
             </View>
           )
         )}
-        <Pressable onPress={() => Alert.alert('デモモードでは招待できません')} style={styles.inviteChip}>
-          <Text style={styles.inviteChipText}>＋ 招待</Text>
+        <Pressable onPress={() => Alert.alert(t.demo.inviteDisabled)} style={styles.inviteChip}>
+          <Text style={styles.inviteChipText}>{t.group.invite}</Text>
         </Pressable>
       </View>
 
       <View style={styles.tabs}>
         <Pressable onPress={() => setTab('balance')} style={[styles.tabBtn, tab === 'balance' && styles.tabBtnActive]}>
-          <Text style={[styles.tabText, tab === 'balance' && styles.tabTextActive]}>残高</Text>
+          <Text style={[styles.tabText, tab === 'balance' && styles.tabTextActive]}>{t.group.tabBalance}</Text>
         </Pressable>
         <Pressable onPress={() => setTab('ledger')} style={[styles.tabBtn, tab === 'ledger' && styles.tabBtnActive]}>
-          <Text style={[styles.tabText, tab === 'ledger' && styles.tabTextActive]}>台帳</Text>
+          <Text style={[styles.tabText, tab === 'ledger' && styles.tabTextActive]}>{t.group.tabLedger}</Text>
         </Pressable>
       </View>
     </View>
@@ -140,7 +145,7 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
             <View>
               {header}
               <NetSummary totals={netTotals} />
-              {balances.length > 0 && <Text style={styles.sectionTitle}>内訳</Text>}
+              {balances.length > 0 && <Text style={styles.sectionTitle}>{t.group.breakdown}</Text>}
             </View>
           }
           renderItem={({ item }) => (
@@ -165,7 +170,7 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
               {header}
               {settledCount > 0 && (
                 <Pressable onPress={() => setShowSettled((v) => !v)} style={styles.settledToggle}>
-                  <Text style={styles.settledToggleText}>{showSettled ? '精算済みを隠す' : `精算済み${settledCount}件を表示`}</Text>
+                  <Text style={styles.settledToggleText}>{showSettled ? t.group.hideSettled : t.group.showSettled(settledCount)}</Text>
                 </Pressable>
               )}
             </View>
