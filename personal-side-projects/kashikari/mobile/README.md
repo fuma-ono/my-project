@@ -772,6 +772,18 @@ Web版だけ`-apple-system, BlinkMacSystemFont, ...`を含むCSSフォントス�
 
 `NetSummary.tsx`・`GroupScreen.tsx`・`DemoGroupScreen.tsx`・`SettlementProgress.tsx`・`BottomTabBar.tsx`を変更。
 
+## さらに細かい位置・サイズ調整(32回目)
+
+31回目のあと、6点の追加指摘への対応。**スキーマ変更なし**。
+
+- 下部タブバーのアイコン・ラベルを、バーの枠とともにさらに下に(`paddingTop`を14→20、`paddingBottom`を26→22に。「枠が大きいから」という指摘を受け、下端の余白も少し詰めた)
+- ホーム/履歴/台帳の3アイコンを少し大きく(22→26)
+- 「あなたの残高」の財布アイコンを、見出しの右上ではなく「¥500」と高さが揃う位置に(`walletIcon`の`top`を12→34)
+- 「おすすめの精算方法」の説明文(「¥500支払うだけで精算が完了します」)を少し小さく(13→12)し、空いた分`marginBottom`を14→10に詰めて下のカードを上に寄せた
+- ＋ボタン(FAB)を少し下に・小さく(`bottom`を96→84、サイズを60→50、文字を30→24。`AutoSettlePlan`のボタン用余白`paddingRight`もFABの新しい幅に合わせて44→36に調整)
+
+`BottomTabBar.tsx`・`NetSummary.tsx`・`AutoSettlePlan.tsx`・`Fab.tsx`を変更。
+
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え
 - `src/hooks/useAuth.ts` — 匿名サインイン+表示名(プロフィール)の管理
 - `src/hooks/useGroups.ts` — 自分が参加しているグループの一覧・作成・招待コード参加

@@ -34,7 +34,7 @@ export default function BottomTabBar({ tab, onChange }: Props) {
                 色の変化だけでなく、アイコン+ラベルの背後に薄い背景ピルを
                 添えて選択状態をより分かりやすくした。 */}
             <View style={[styles.iconWrap, active && styles.iconWrapActive]}>
-              <Ionicons name={active ? item.iconActive : item.icon} size={22} color={active ? colors.accent : colors.muted} />
+              <Ionicons name={active ? item.iconActive : item.icon} size={26} color={active ? colors.accent : colors.muted} />
             </View>
             <Text style={[styles.label, active && styles.labelActive]}>{labelOf(item.key)}</Text>
           </Pressable>
@@ -45,10 +45,10 @@ export default function BottomTabBar({ tab, onChange }: Props) {
 }
 
 const styles = StyleSheet.create({
-  // 「ホーム・履歴・台帳のアイコンと名前をもう少し枠と共に下にして」
-  // という指摘を受け、paddingTopを8→14に増やし、バー(枠)の中で
-  // アイコン+ラベルの行自体を少し下に寄せた(paddingBottomは
-  // ホームバー避けの余白のためそのまま)。
+  // 「アイコン・名前を、バーの枠とともに下に下げて。枠が大きいから
+  // 下げて」という指摘を受け、paddingTopを14→20にさらに増やして
+  // アイコン+ラベルの行を下に寄せつつ、paddingBottomを26→22に
+  // 減らしてバー全体の余分な高さ(=「枠が大きい」)も少し詰めた。
   wrap: {
     position: 'absolute',
     left: 0,
@@ -58,8 +58,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.line,
-    paddingTop: 14,
-    paddingBottom: 26,
+    paddingTop: 20,
+    paddingBottom: 22,
   },
   btn: { flex: 1, alignItems: 'center', gap: 5 },
   iconWrap: { paddingHorizontal: 18, paddingVertical: 3, borderRadius: 999 },

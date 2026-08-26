@@ -44,10 +44,11 @@ export default function NetSummary({ totals, balances, meId }: Props) {
 
   return (
     <LinearGradient colors={[colors.accent, colors.plum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
-      {/* 参考UIの残高カードに合わせて、右上に財布アイコン(装飾)を添えた。
+      {/* 参考UIの残高カードに合わせて、右側に財布アイコン(装飾)を添えた。
           「主役は金額」という指摘を受け、財布アイコンは金額の邪魔に
-          ならないよう、より薄くしている。「財布マークをもっと大きく」
-          という指摘を受け、56→80に拡大した。 */}
+          ならないよう、より薄くしている。「財布マークを¥500の横の
+          位置に」という指摘を受け、見出し(heading)の右上ではなく、
+          金額(amount)と高さが揃う位置まで下げた。 */}
       <Ionicons name="wallet" size={80} color="rgba(255,255,255,0.12)" style={styles.walletIcon} />
       <Text style={styles.heading}>{t.netSummary.heading}</Text>
       {totals.map((total, i) => {
@@ -105,7 +106,10 @@ const styles = StyleSheet.create({
   // 間隔を縮めた(カード自体を上に動かすというより、後に続くカードとの
   // 余白を詰める形で対応)。
   card: { borderRadius: 24, padding: 24, marginBottom: 12, overflow: 'hidden' },
-  walletIcon: { position: 'absolute', top: 12, right: 10 },
+  // 「財布のマークを¥500の横の位置に」という指摘を受け、見出しの右上
+  // (top:12)ではなく、金額(amount, fontSize46)の高さと揃うところまで
+  // topを下げた。
+  walletIcon: { position: 'absolute', top: 34, right: 6 },
   heading: {
     ...fonts.bodyMedium,
     fontSize: 13,

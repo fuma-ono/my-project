@@ -14,13 +14,14 @@ export default function Fab({ onPress, disabled }: { onPress: () => void; disabl
 }
 
 const styles = StyleSheet.create({
+  // 「＋を下に下げて小さく」という指摘を受け、bottomを96→84に下げ、
+  // サイズを60→50に縮小した(BottomTabBarの上に浮かせる分は維持)。
   wrap: {
     position: 'absolute',
     right: 20,
-    // 画面下固定のBottomTabBar(高さ+セーフエリア分)の上に浮かせる。
-    bottom: 96,
-    width: 60,
-    height: 60,
+    bottom: 84,
+    width: 50,
+    height: 50,
     borderRadius: 999,
     shadowColor: colors.plum,
     shadowOpacity: 0.4,
@@ -30,5 +31,5 @@ const styles = StyleSheet.create({
   },
   gradient: { flex: 1, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.4 },
-  text: { ...fonts.display, fontSize: 30, color: colors.accentInk },
+  text: { ...fonts.display, fontSize: 24, color: colors.accentInk },
 });

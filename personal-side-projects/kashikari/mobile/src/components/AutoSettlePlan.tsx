@@ -105,17 +105,20 @@ const styles = StyleSheet.create({
   title: { ...fonts.bodySemiBold, fontSize: 15, color: colors.ink },
   // 「『¥500支払うだけで精算完了します』の説明を目立たせる」という
   // 指摘を受け、色をmutedからaccentに、太さをbodySemiBoldに変更した。
-  subtitle: { ...fonts.bodySemiBold, fontSize: 13, color: colors.accent, marginTop: 2, marginBottom: 14 },
+  // 「文字を少し小さく。その分できたスペースを上に上げて」という指摘を
+  // 受け、fontSizeを13→12、marginBottomを14→10に詰めた。
+  subtitle: { ...fonts.bodySemiBold, fontSize: 12, color: colors.accent, marginTop: 2, marginBottom: 10 },
   rows: { gap: 10, marginBottom: 16 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { ...fonts.bodyMedium, fontSize: 13.5, color: colors.ink, flexShrink: 1 },
   arrow: { color: colors.muted },
   amount: { ...fonts.bodySemiBold, fontSize: 13.5, color: colors.ink, marginLeft: 'auto' },
   // 「＋ボタンがこのカードと重なっている」という指摘への対応。右下に
-  // 浮くFAB(幅60・右余白20)の左端までボタンの右端が収まるよう余白を
-  // 確保している。ボタン自体もcompact(左右paddingを詰める)にして、
+  // 浮くFAB(幅50・右余白20)の左端までボタンの右端が収まるよう余白を
+  // 確保している(FABを60→50に縮小したのに合わせてpaddingRightも
+  // 44→36に調整)。ボタン自体もcompact(左右paddingを詰める)にして、
   // 「まとめて精算する」が1行に収まる幅を残した。
-  actions: { flexDirection: 'row', gap: 6, paddingRight: 44 },
+  actions: { flexDirection: 'row', gap: 6, paddingRight: 36 },
   shareButton: {},
   settleButton: { flex: 1 },
 });
