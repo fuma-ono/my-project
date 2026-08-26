@@ -25,7 +25,7 @@ import { computeBalances, computeMyNet, computeSimplifiedSettlement } from '../l
 import { groupEntriesByDate } from '../lib/dateGroups';
 import { buildInviteUrl } from '../lib/invite';
 import { splitAmount } from '../lib/split';
-import { colors, fonts } from '../theme';
+import { avatarColor, colors, fonts } from '../theme';
 import type { BalanceRow, Entry, EntryType, Group, GroupInvite, Profile, SimplifiedTransaction } from '../types';
 import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS } from './mockData';
 
@@ -282,10 +282,24 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
           という指摘を受け、ヘッダーに重なっていたバナーを削除した。
           デモモードであること自体は、設定画面などから引き続き分かる。 */}
       <View style={styles.headerShadowWrap}>
-        <LinearGradient colors={[colors.headerAccent, colors.headerPlum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.headerGradient}>
+        {/* ヘッダーの2層構成(横グラデーション+縦の黒フェード)の詳細は
+            GroupScreen.tsxの同じ箇所のコメント参照。 */}
+        <View style={styles.headerGradientBase}>
+          <LinearGradient
+            colors={[colors.headerAccent, colors.headerPlum]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <LinearGradient
+            colors={[colors.headerShadeTop, colors.headerShadeBottom]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 0.75 }}
+            style={StyleSheet.absoluteFill}
+          />
           <View style={styles.headerRow}>
-            <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back}>
-              <Ionicons name="chevron-back" size={22} color="#fff" />
+            <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back} style={styles.closeButton}>
+              <Ionicons name="close" size={20} color="#fff" />
             </Pressable>
             <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleCol}>
               <Text style={styles.title} numberOfLines={1}>{group.name}</Text>
@@ -300,7 +314,7 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
               </Pressable>
             </View>
           </View>
-        </LinearGradient>
+        </View>
       </View>
 
       {/* 画像で示してもらって判明: 動かすべきはアイコンの位置ではなく、
@@ -313,7 +327,9 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
             const isAdmin = m.id === group.created_by;
             const slot = (
               <>
-                <Avatar name={m.display_name} emoji={m.avatar_emoji} size="lg" />
+                <View style={[styles.avatarRing, { borderColor: avatarColor(m.display_name) }]}>
+                  <Avatar name={m.display_name} emoji={m.avatar_emoji} size="lg" />
+                </View>
                 <Text style={styles.memberSlotName} numberOfLines={1}>
                   {m.display_name}
                 </Text>
@@ -524,12 +540,23 @@ const styles = StyleSheet.create({
     marginHorizontal: -20,
     marginBottom: 0,
   },
-  headerGradient: {
+  headerGradientBase: {
+    position: 'relative',
     paddingTop: 44,
     paddingHorizontal: 20,
     paddingBottom: 16,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   titleCol: { flex: 1, marginHorizontal: 16 },
   title: { ...fonts.display, fontSize: 23, color: '#fff' },
@@ -547,6 +574,14 @@ const styles = StyleSheet.create({
   },
   memberStrip: { flexDirection: 'row', gap: 16, marginBottom: 18, paddingRight: 4 },
   memberSlot: { alignItems: 'center', width: 70, gap: 4 },
+  avatarRing: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   memberSlotName: { ...fonts.bodyMedium, fontSize: 12, color: colors.ink, maxWidth: 68 },
   adminBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1, paddingHorizontal: 6 },
   adminBadgeText: { ...fonts.bodySemiBold, fontSize: 8.5, color: colors.accent },

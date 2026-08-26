@@ -13,13 +13,16 @@ type Props = {
 // lgは「メンバーのアイコンを少し大きくする」という指摘を受けて追加した
 // (グループ画面のメンバー行専用。他の画面のmdサイズはそのまま)。
 export default function Avatar({ name, emoji, size = 'md' }: Props) {
-  const dim = size === 'sm' ? 24 : size === 'lg' ? 44 : 34;
+  // 参考画像のメンバー行アイコンが現状より一回り大きかったため、
+  // lgを44→48に拡大した(グループ画面のメンバー行専用サイズのため、
+  // 他画面のmd/smサイズには影響しない)。
+  const dim = size === 'sm' ? 24 : size === 'lg' ? 48 : 34;
   return (
     <View style={[styles.base, { width: dim, height: dim, borderRadius: dim / 2, backgroundColor: avatarColor(name) }]}>
       {emoji ? (
         <Text style={{ fontSize: dim * 0.58 }}>{emoji}</Text>
       ) : (
-        <Text style={[styles.text, { fontSize: size === 'sm' ? 11.5 : size === 'lg' ? 18 : 14 }]}>{avatarInitial(name)}</Text>
+        <Text style={[styles.text, { fontSize: size === 'sm' ? 11.5 : size === 'lg' ? 19 : 14 }]}>{avatarInitial(name)}</Text>
       )}
     </View>
   );

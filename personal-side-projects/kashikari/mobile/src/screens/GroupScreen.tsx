@@ -24,7 +24,7 @@ import { logEvent } from '../lib/analytics';
 import { computeBalances, computeMyNet, computeSimplifiedSettlement } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
 import { buildInviteUrl } from '../lib/invite';
-import { colors, fonts } from '../theme';
+import { avatarColor, colors, fonts } from '../theme';
 import type { BalanceRow, Group, SimplifiedTransaction } from '../types';
 
 type Tab = GroupTab;
@@ -287,12 +287,32 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
           View と、角丸+overflow:hiddenでグラデーションをクリップする
           内側のViewを分けている)。 */}
       <View style={styles.headerShadowWrap}>
-        <LinearGradient colors={[colors.headerAccent, colors.headerPlum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.headerGradient}>
+        {/* 参考画像から実際に色を採取したところ、ヘッダーは単純な単色
+            グラデーションではなく、「左右方向のグラデーション(横)」の
+            上に「上から下へ薄くなる黒のオーバーレイ(縦)」を重ねた
+            2層構成だった(上ほど暗く、下の白い本体に近づくほど元の
+            グラデーション色そのままに明るくなる)。1枚のLinearGradientの
+            色だけでは再現できないため、背景を2枚重ねたView(position:
+            relative + absoluteFill)にしている。 */}
+        <View style={styles.headerGradientBase}>
+          <LinearGradient
+            colors={[colors.headerAccent, colors.headerPlum]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <LinearGradient
+            colors={[colors.headerShadeTop, colors.headerShadeBottom]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 0.75 }}
+            style={StyleSheet.absoluteFill}
+          />
           <View style={styles.headerRow}>
-            {/* 「戻る・通知・設定のアイコンサイズと余白を統一する」という
-                指摘を受け、3つとも同じサイズ(22)・同じ間隔(gap:16)に揃えた。 */}
-            <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back}>
-              <Ionicons name="chevron-back" size={22} color="#fff" />
+            {/* 参考画像は「＜戻る」ではなく、半透明の丸ボタンに入った
+                「×閉じる」アイコンだったため、見た目をそれに合わせた
+                (押したときの動作は変わらず、グループ一覧に戻る)。 */}
+            <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back} style={styles.closeButton}>
+              <Ionicons name="close" size={20} color="#fff" />
             </Pressable>
             <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleCol}>
               <Text style={styles.title} numberOfLines={1}>{group.name}</Text>
@@ -307,7 +327,7 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
               </Pressable>
             </View>
           </View>
-        </LinearGradient>
+        </View>
       </View>
 
       {/* 画像で示してもらって判明: 動かすべきはアイコンの位置ではなく、
@@ -327,7 +347,13 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
             const isAdmin = m.id === group.created_by;
             const slot = (
               <>
-                <Avatar name={m.display_name} emoji={m.avatar_emoji} size="lg" />
+                {/* 参考画像のアイコンには、アイコン自身の色と同系色の
+                    細いリング(少し隙間を空けた輪)が付いていたため、
+                    アバターの色(avatarColor)をそのまま縁取りに使った
+                    リング状のViewで囲んでいる。 */}
+                <View style={[styles.avatarRing, { borderColor: avatarColor(m.display_name) }]}>
+                  <Avatar name={m.display_name} emoji={m.avatar_emoji} size="lg" />
+                </View>
                 <Text style={styles.memberSlotName} numberOfLines={1}>
                   {m.display_name}
                 </Text>
@@ -532,12 +558,27 @@ const styles = StyleSheet.create({
     marginHorizontal: -20,
     marginBottom: 0,
   },
-  headerGradient: {
+  // position:'relative'を付けたことで、中の2枚のLinearGradient
+  // (StyleSheet.absoluteFill)がこのViewいっぱいに重なり、その上に
+  // headerRow(実際のコンテンツ)がpadding付きで乗る。
+  headerGradientBase: {
+    position: 'relative',
     paddingTop: 44,
     paddingHorizontal: 20,
     paddingBottom: 16,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
+  // 参考画像の「×」ボタンにあった、半透明の丸いボタン背景。
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   // 「戻る・通知・設定の余白を統一する」ため、titleColの左右マージンを
   // headerRightRowのgapと同じ16に揃えた。
   headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
@@ -565,6 +606,15 @@ const styles = StyleSheet.create({
   },
   memberStrip: { flexDirection: 'row', gap: 16, marginBottom: 18, paddingRight: 4 },
   memberSlot: { alignItems: 'center', width: 70, gap: 4 },
+  // lgアバター(48px)の周りに、隙間を空けた同系色のリングを描く。
+  avatarRing: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   memberSlotName: { ...fonts.bodyMedium, fontSize: 12, color: colors.ink, maxWidth: 68 },
   // 「『管理者』タグは位置・サイズで問題ないが、少し小さくして主張を
   // 弱める」という指摘を受け、paddingとfontSizeを一段階小さくした。
