@@ -329,15 +329,24 @@ def _piano_note(freq: float, seconds: float, sr: int = core.SAMPLE_RATE,
 # within what's feasible from procedural synthesis — genuinely composing
 # "a Hisaishi piece" isn't something this can claim, but the goal is to
 # get closer to that character than generic random-note ambient piano.
+# 2026-08-26(2): brightened per owner feedback ("もっと明るい感じがいい")
+# on the first melody-driven preview. That version's I-V-vi-iii-IV-I-ii-V
+# progression leaned on minor chords (Bm/F#m/Em) for a wistful, "One
+# Summer's Day"-ish color — nice, but read as melancholic rather than
+# bright. Switched to an all-major I-IV-V progression (no minor chords at
+# all) — closer to Hisaishi's more cheerful, pastoral pieces (「さんぽ」
+# 「海の見える街」) than his bittersweet ones. The I chord adds a 9th
+# (E, a 5th entry per chord) for a bit of shimmer without introducing a
+# minor color.
 PIANO_CHORDS_HISAISHI = [
-    [62, 66, 69],  # I    D    (D F# A)
-    [69, 73, 76],  # V    A    (A C# E)
-    [71, 74, 78],  # vi   Bm   (B D F#)
-    [66, 69, 73],  # iii  F#m  (F# A C#)
-    [67, 71, 74],  # IV   G    (G B D)
-    [62, 66, 69],  # I    D
-    [64, 67, 71],  # ii   Em   (E G B)
-    [69, 73, 76],  # V    A
+    [62, 66, 69, 76],  # I(add9)  D  (D F# A E)
+    [67, 71, 74],       # IV       G  (G B D)
+    [69, 73, 76],       # V        A  (A C# E)
+    [62, 66, 69, 76],  # I(add9)  D
+    [67, 71, 74],       # IV       G
+    [69, 73, 76],       # V        A
+    [62, 66, 69, 76],  # I(add9)  D
+    [62, 66, 69, 76],  # I(add9)  D
 ]
 
 
@@ -451,7 +460,7 @@ def _render_melody(events: list[tuple[float, float, int | None]], bpm: float,
         if midi_note is None:
             continue
         note_s = start_beat * beat_s
-        note_len = dur_beats * beat_s * 1.6  # let it ring past its nominal duration, piano-like
+        note_len = dur_beats * beat_s * 1.3  # 2026-08-26(2): shortened from 1.6 — less legato wash, crisper/brighter
         note = _piano_note(midi_to_freq(midi_note), note_len, sr, brightness=brightness)
         note *= rng.uniform(0.75, 1.0)
         start = int(note_s * sr)
@@ -461,18 +470,22 @@ def _render_melody(events: list[tuple[float, float, int | None]], bpm: float,
 
 
 def piano_hisaishi_style(minutes: float = 3.0) -> core.StereoTrack:
-    """Solo-piano preset in the vein of Joe Hisaishi's gentler pieces —
-    added 2026-08-26 per owner request ("BGMのジャンルにピアノを増やし
-    たい", refined to "久石譲的なピアノがいい" after the first, purely
-    ambient/arpeggio-only draft). A clear right-hand melody
+    """Solo-piano preset in the vein of Joe Hisaishi's brighter, more
+    cheerful pieces — added 2026-08-26 per owner request ("BGMのジャンル
+    にピアノを増やしたい"), refined twice from the first draft: "久石譲
+    的なピアノがいい" (→ melody-driven rewrite, see the module comment
+    above PIANO_CHORDS_HISAISHI) then "もっと明るい感じがいい" (→ all-
+    major chords, faster ~104 BPM, brighter timbre, drier reverb — see
+    that constant's second comment). A clear right-hand melody
     (_generate_melody + _render_melody) over a continuous rolling left-
-    hand accompaniment (_rolling_arpeggio), D major, moderate ~76 BPM,
-    lighter reverb than the ambient presets (clarity over wash — closer
-    to a concert-hall piano recording than a sleep-noise texture). No
-    sample library or paid instrument is used; every note is synthesized
-    from scratch (_piano_note), same as the rest of this pipeline.
+    hand accompaniment (_rolling_arpeggio), lighter reverb than the
+    ambient presets (clarity over wash — closer to a concert-hall piano
+    recording than a sleep-noise texture). No sample library or paid
+    instrument is used; every note is synthesized from scratch
+    (_piano_note), same as the rest of this pipeline.
 
-    The ~100s composed piece loops for the full requested duration rather
+    The ~74s composed piece (32 bars — PIANO_CHORDS_HISAISHI tiled 4x,
+    see `chords` below) loops for the full requested duration rather
     than generating fresh material for a whole hour — real "relaxing
     piano" compilations on YouTube do the same (a handful of pieces
     repeated), and it keeps the melody actually recognizable/thematic
@@ -485,25 +498,39 @@ def piano_hisaishi_style(minutes: float = 3.0) -> core.StereoTrack:
     get the owner's listen on a preview first.
     """
     sr = core.SAMPLE_RATE
-    bpm = 76.0
+    bpm = 104.0  # 2026-08-26(2): up from 76 — more forward momentum, less languid
     beats_per_chord = 4.0
-    chords = PIANO_CHORDS_HISAISHI
     scale_notes = _scale_notes(62, D_MAJOR_STEPS)
+
+    # 2026-08-26(2) bugfix: PIANO_CHORDS_HISAISHI is only 8 bars — at this
+    # tempo that's ~18s, not the ~100s a "piece" was assumed to be when
+    # n_passes was first computed (it was ceil(seconds/100), so a 3-minute
+    # preview rendered only 2 real passes and ~2.5 minutes of silence
+    # padding). Tiling the progression 4x gives a proper ~74s piece (32
+    # bars); the melody generator's random walk still produces different
+    # notes each time through the repeated harmony (it's one continuous
+    # walk across all 32 bars, not reset every 8), so this isn't a literal
+    # note-for-note loop within a pass.
+    chords = PIANO_CHORDS_HISAISHI * 4
+    pass_beats = beats_per_chord * len(chords)
+    pass_seconds = pass_beats * 60 / bpm
 
     def render_pass(seed: int, octave_shift: int) -> np.ndarray:
         melody_events = _generate_melody(chords, beats_per_chord, seed, scale_notes)
         melody_events = [
             (s, d, (n + 12 * octave_shift if n is not None else n)) for s, d, n in melody_events
         ]
-        melody = _render_melody(melody_events, bpm, sr, brightness=0.85, velocity_seed=seed)
-        accomp = _rolling_arpeggio(chords, beats_per_chord, bpm, sr, brightness=0.6, seed=seed + 1)
+        # brightness bumped (0.85→0.92, 0.6→0.68) — more upper-harmonic
+        # content survives per note, a more present/shimmering tone
+        melody = _render_melody(melody_events, bpm, sr, brightness=0.92, velocity_seed=seed)
+        accomp = _rolling_arpeggio(chords, beats_per_chord, bpm, sr, brightness=0.68, seed=seed + 1)
         n = max(len(melody), len(accomp))
         melody = np.pad(melody, (0, n - len(melody)))
         accomp = np.pad(accomp, (0, n - len(accomp)))
         return melody + accomp
 
     passes = []
-    n_passes = max(1, int(np.ceil((minutes * 60) / 100)))
+    n_passes = max(1, int(np.ceil((minutes * 60) / pass_seconds)))
     for p in range(n_passes):
         octave_shift = 1 if (p % 3 == 2) else 0  # every 3rd pass, a brighter higher-octave variation
         pass_audio = render_pass(seed=1000 + p, octave_shift=octave_shift)
@@ -517,7 +544,7 @@ def piano_hisaishi_style(minutes: float = 3.0) -> core.StereoTrack:
     else:
         mix = np.pad(mix, (0, target_n - len(mix)))
 
-    mix = core.simple_reverb(mix, sr, room_seconds=2.0, mix=0.22)  # hall clarity, not ambient wash
+    mix = core.simple_reverb(mix, sr, room_seconds=1.5, mix=0.16)  # 2026-08-26(2): drier still, for brightness
     mix = core.fade_in_out(mix, sr, fade_seconds=4.0)
     mix = core.normalize(mix, peak=0.82)
     return core.widen(mix, width=0.15, sr=sr)
