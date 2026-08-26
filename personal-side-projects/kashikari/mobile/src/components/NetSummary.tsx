@@ -48,11 +48,7 @@ export default function NetSummary({ totals, balances, meId }: Props) {
           シェブロン(装飾。すぐ下に内訳セクションが続くため、タップ先は
           別途持たせていない)を添えた。「主役は金額」という指摘を受け、
           財布アイコンは金額の邪魔にならないよう、より薄くしている。 */}
-      <Ionicons name="wallet" size={64} color="rgba(255,255,255,0.12)" style={styles.walletIcon} />
-      {/* 「『あなたの残高』と『支払う金額』が混同しやすい」という指摘への
-          対応: 見出し(heading)はグループ名の下にある小さな添え書きとして
-          さらに控えめにし、「支払う金額/受け取る金額」のラベルを金額の
-          直前に来る一番の主張点として太さ・不透明度を上げた。 */}
+      <Ionicons name="wallet" size={56} color="rgba(255,255,255,0.12)" style={styles.walletIcon} />
       <Text style={styles.heading}>{t.netSummary.heading}</Text>
       {totals.map((total, i) => {
         const owed = total.amount > 0; // 正値 = 自分が受け取る側(lib/balances.tsのNetTotal参照)
@@ -66,7 +62,9 @@ export default function NetSummary({ totals, balances, meId }: Props) {
         const amountStr = formatMoney(Math.abs(total.amount), total.currency);
         return (
           <View key={total.currency} style={[styles.line, i > 0 && styles.lineDivider]}>
-            <Text style={styles.label}>{owed ? t.netSummary.receiving : t.netSummary.paying}</Text>
+            {/* 「あなたの残高の下の支払う金額はいらない」という指摘を受け、
+                見出し(heading)のすぐ下にあった「支払う金額/受け取る金額」
+                ラベルを削除した。方向は下の説明文(actionHint)で伝わる。 */}
             <Text style={styles.amount}>{amountStr}</Text>
             {/* 「何をすべきか分かる説明を追加してもよい」という指摘への対応。 */}
             <Text style={styles.actionHint}>
@@ -94,37 +92,27 @@ export default function NetSummary({ totals, balances, meId }: Props) {
 }
 
 const styles = StyleSheet.create({
-  // 「カード内の余白を少し増やして窮屈感をなくす」「カード間の余白も
-  // 統一する」という指摘を受け、paddingとmarginBottomをそれぞれ増やした
-  // (他のカードのmarginBottom:18と揃えている)。
-  card: { borderRadius: 24, padding: 26, marginBottom: 18, overflow: 'hidden' },
-  walletIcon: { position: 'absolute', top: 18, right: 18 },
-  chevron: { position: 'absolute', bottom: 20, right: 20 },
-  // 「『あなたの残高』と『支払う金額』が混同しやすい」という指摘への
-  // 対応で、headingはより控えめな添え書きに(不透明度を下げた)。
+  // 「画像と比べて大きすぎる」という指摘を受け、padding・金額の
+  // フォントサイズ・各要素間の余白を全体的に詰めた(以前の見直しで
+  // 逆に広げすぎていた)。
+  card: { borderRadius: 24, padding: 20, marginBottom: 18, overflow: 'hidden' },
+  walletIcon: { position: 'absolute', top: 16, right: 16 },
+  chevron: { position: 'absolute', bottom: 16, right: 16 },
   heading: {
     ...fonts.bodyMedium,
     fontSize: 12,
     color: 'rgba(255,255,255,0.65)',
-    marginBottom: 10,
+    marginBottom: 6,
   },
-  line: { paddingVertical: 6 },
-  lineDivider: { marginTop: 6, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.22)', paddingTop: 14 },
-  // labelは「支払う金額/受け取る金額」— 金額の直前に来る、実質的な
-  // メインの見出し。headingより濃く・太くして主張を強めている。
-  label: {
-    ...fonts.bodySemiBold,
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.95)',
-    marginBottom: 4,
-  },
-  amount: { ...fonts.display, fontSize: 44, color: '#fff', letterSpacing: -0.5 },
-  actionHint: { ...fonts.bodyMedium, fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 6 },
-  grossRow: { flexDirection: 'row', alignItems: 'center', marginTop: 18, paddingRight: 28 },
+  line: { paddingVertical: 2 },
+  lineDivider: { marginTop: 4, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.22)', paddingTop: 10 },
+  amount: { ...fonts.display, fontSize: 34, color: '#fff', letterSpacing: -0.5 },
+  actionHint: { ...fonts.bodyMedium, fontSize: 12.5, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
+  grossRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12, paddingRight: 24 },
   grossCol: { flex: 1 },
-  grossDivider: { width: 1, height: 28, backgroundColor: 'rgba(255,255,255,0.25)', marginHorizontal: 16 },
-  grossLabel: { ...fonts.bodyMedium, fontSize: 12, color: 'rgba(255,255,255,0.75)', marginBottom: 3 },
-  grossAmount: { ...fonts.bodySemiBold, fontSize: 16, color: '#fff' },
+  grossDivider: { width: 1, height: 26, backgroundColor: 'rgba(255,255,255,0.25)', marginHorizontal: 14 },
+  grossLabel: { ...fonts.bodyMedium, fontSize: 11.5, color: 'rgba(255,255,255,0.75)', marginBottom: 2 },
+  grossAmount: { ...fonts.bodySemiBold, fontSize: 15, color: '#fff' },
   settledWrap: {
     backgroundColor: colors.surface,
     borderRadius: 20,

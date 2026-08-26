@@ -256,7 +256,6 @@ export const ja = {
     settlementClosing: 'よろしくお願いします!',
   },
   demo: {
-    banner: 'デモモード(Supabase未接続・操作はこの端末だけに反映されます)',
     createDisabled: 'デモモードでは作成できません',
     joinDisabled: 'デモモードでは参加できません',
     inviteDisabled: 'デモモードでは招待できません',
@@ -506,7 +505,6 @@ export const en: Strings = {
     settlementClosing: 'Thanks!',
   },
   demo: {
-    banner: 'Demo mode (not connected to Supabase — changes only affect this device)',
     createDisabled: "Can't create groups in demo mode",
     joinDisabled: "Can't join groups in demo mode",
     inviteDisabled: "Can't invite in demo mode",

@@ -278,9 +278,9 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
 
   const header = (
     <View>
-      <View style={styles.demoBanner}>
-        <Text style={styles.demoBannerText}>{t.demo.banner}</Text>
-      </View>
+      {/* 「デモモードの上部は消せないの？大学の友達タブと重なってしまってる」
+          という指摘を受け、ヘッダーに重なっていたバナーを削除した。
+          デモモードであること自体は、設定画面などから引き続き分かる。 */}
       <View style={styles.headerShadowWrap}>
         <LinearGradient colors={[colors.headerAccent, colors.headerPlum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.headerGradient}>
           <View style={styles.headerRow}>
@@ -517,32 +517,15 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
-  // 「デモモード表示は高さを少し小さくし、薄いバナー程度にしてメインUIへの
-  // 影響を減らす」という指摘を受け、上下の余白とフォントサイズを縮小した。
-  demoBanner: { backgroundColor: colors.favor, marginHorizontal: -20, paddingVertical: 3, paddingHorizontal: 16, paddingTop: 40, marginBottom: 4 },
-  demoBannerText: { ...fonts.bodyMedium, fontSize: 10.5, color: '#fff', textAlign: 'center' },
   list: { paddingHorizontal: 20, paddingBottom: 100 },
-  // デモバナー自体がステータスバー分のpaddingTopを持っているため、ここでは
-  // 本番のGroupScreen.tsxより控えめなpaddingTopにしている。
-  // overflow:'hidden'を付けないと、上下非対称なborderRadiusが
-  // LinearGradientで正しく反映されないことがあるため明示している。
-  // 「ふちが逆になっている」という指摘を受けて再修正: 画面端まで塗り
-  // 広げるバナー的な扱いをやめ、参考画像通り左右にも余白を持たせた
-  // 「浮いたカード」として四隅すべてを丸める形に変更した(GroupScreen.tsx
-  // と同じ)。デモバナー自体が既にステータスバー分の余白を持っている
-  // ため、ここでのmarginTopは小さめでよい。
-  // 影(shadow)はoverflow:'hidden'を持つViewには描画されないため、
-  // 影を持つ外側のラッパーと、角丸+クリップ用の内側のViewを分けている。
-  // デモバナー自体が既にステータスバー分の余白を持っているため、
-  // ここのpaddingTopはGroupScreen.tsxより控えめでよい。
-  // 「下部分の角丸を削除し、重なる部分まで自然に伸ばして下のコンテンツと
-  // 一体化させる」という指摘への対応(GroupScreen.tsxと同じ)。
+  // デモモードバナーを削除したため、ステータスバー避けの余白は本番の
+  // GroupScreen.tsxと同じpaddingTop(44)に戻している。
   headerShadowWrap: {
     marginHorizontal: -20,
     marginBottom: 0,
   },
   headerGradient: {
-    paddingTop: 14,
+    paddingTop: 44,
     paddingHorizontal: 20,
     paddingBottom: 16,
   },
