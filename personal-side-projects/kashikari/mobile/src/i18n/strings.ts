@@ -49,18 +49,16 @@ export const ja = {
     payingSection: '支払う',
     otherSection: 'グループ内の他のやりとり',
     progressLabel: '精算の進捗',
-    // 「20%だけでは何の20%か分かりにくい」という指摘を受け、割合の
-    // 内訳(支払い済み/残り件数)を添えるようにした。「完了」ではなく
-    // 「支払い済み」としているのは、この段階はまだ受け取る側の確認待ち
-    // (settle_status: 'paid')であり、双方確認が済んだ「完了」
-    // (confirmed)とは区別しているため。
-    progressFraction: (paid: number, remaining: number) => `${paid}/${remaining}件 支払い済み`,
+    // 「『あとN件で完了』にしてほしい」という指摘を受け、残っている件数
+    // (remaining、まだ双方確認=confirmedが済んでいない件数)をそのまま
+    // 見せる表示に戻した。
+    progressRemaining: (remaining: number) => `あと${remaining}件で完了`,
     unpaidTitle: '未払い',
     unpaidEmpty: '未払いの相手はいません',
-    autoSettleTitle: '🎯 おすすめ精算方法',
+    autoSettleTitle: '💡 おすすめの精算方法',
     autoSettleSubtitleGeneric: 'この方法で精算すると、全員の残高が0円になります',
-    autoSettleSubtitleMinePay: (amount: string) => `あなたは${amount}支払うだけで精算完了です`,
-    autoSettleSubtitleMineReceive: (amount: string) => `あなたは${amount}受け取るだけで精算完了です`,
+    autoSettleSubtitleMinePay: (amount: string) => `あなたは${amount}支払うだけで精算が完了します`,
+    autoSettleSubtitleMineReceive: (amount: string) => `あなたは${amount}受け取るだけで精算が完了します`,
     autoSettleButton: 'まとめて精算する',
     autoSettleShareButton: '共有する',
     hideSettled: '精算済みを隠す',
@@ -305,10 +303,10 @@ export const en: Strings = {
     payingSection: 'Paying',
     otherSection: "Other members' balances",
     progressLabel: 'Settlement progress',
-    progressFraction: (paid: number, remaining: number) => `${paid}/${remaining} paid`,
+    progressRemaining: (remaining: number) => `${remaining} left to settle`,
     unpaidTitle: 'Unpaid',
     unpaidEmpty: 'Nobody owes you right now',
-    autoSettleTitle: '🎯 Recommended way to settle',
+    autoSettleTitle: '💡 Recommended way to settle',
     autoSettleSubtitleGeneric: "This plan brings everyone's balance to zero",
     autoSettleSubtitleMinePay: (amount: string) => `You're all set once you pay ${amount}`,
     autoSettleSubtitleMineReceive: (amount: string) => `You're all set once you receive ${amount}`,

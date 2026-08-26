@@ -18,7 +18,9 @@ type Props = {
 // 支払い済みで確認待ちのみ)。
 //
 // 「20%だけでは何の20%か分かりにくい」という指摘を受け、割合の下に
-// 「1/5件 支払い済み」のような内訳を添えた。また、0%(未着手)・
+// 内訳を添えている。一時「1/5件 支払い済み」という表示にしていたが、
+// 「『あとN件で完了』にしてほしい」という指摘を受けて、残っている
+// 件数(remaining)をそのまま見せる元の形式に戻した。0%(未着手)・
 // 100%(全件支払い済み、あとは確認待ちのみ)の状態が一目でわかるよう、
 // バーの色とラベルを状態に応じて変える。
 export default function SettlementProgress({ remaining, paid, onPress }: Props) {
@@ -38,7 +40,7 @@ export default function SettlementProgress({ remaining, paid, onPress }: Props) 
       </View>
       <View style={styles.footerRow}>
         <Text style={[styles.fraction, isDone && styles.fractionDone, !isStarted && styles.fractionMuted]}>
-          {t.group.progressFraction(paid, remaining)}
+          {t.group.progressRemaining(remaining)}
         </Text>
         {onPress && <Text style={styles.chevron}>›</Text>}
       </View>
