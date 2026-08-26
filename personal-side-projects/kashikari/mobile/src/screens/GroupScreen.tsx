@@ -480,15 +480,19 @@ const styles = StyleSheet.create({
   // 下だけでなく上にも出てしまうことがある。paddingTopも、以前の
   // headerRow(marginTop:44)で実績のあった値に戻し、必要以上に高く
   // ならないようにした。
+  // 「ふちが逆になっている」という指摘を受けて再修正: 画面の端まで
+  // 塗り広げて下だけ丸める「バナー」的な扱いをやめ、参考画像の通り
+  // 左右にも余白を持たせた「浮いた1枚のカード」として四隅すべてを
+  // 丸める形に変更した(残高カード等、他のカードと同じ扱いに揃えた)。
+  // ステータスバー避けの余白は、以前はpaddingTop(帯の内側の余白)で
+  // 持たせていたが、カード化にともないmarginTop(カードの外側の余白)
+  // に変更している。
   headerGradient: {
-    paddingTop: 44,
+    marginTop: 44,
+    paddingTop: 18,
     paddingHorizontal: 20,
     paddingBottom: 16,
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    marginHorizontal: -20,
+    borderRadius: 24,
     marginBottom: 14,
     overflow: 'hidden',
   },

@@ -512,13 +512,17 @@ const styles = StyleSheet.create({
   // 本番のGroupScreen.tsxより控えめなpaddingTopにしている。
   // overflow:'hidden'を付けないと、上下非対称なborderRadiusが
   // LinearGradientで正しく反映されないことがあるため明示している。
+  // 「ふちが逆になっている」という指摘を受けて再修正: 画面端まで塗り
+  // 広げるバナー的な扱いをやめ、参考画像通り左右にも余白を持たせた
+  // 「浮いたカード」として四隅すべてを丸める形に変更した(GroupScreen.tsx
+  // と同じ)。デモバナー自体が既にステータスバー分の余白を持っている
+  // ため、ここでのmarginTopは小さめでよい。
   headerGradient: {
-    paddingTop: 14,
+    marginTop: 10,
+    paddingTop: 18,
     paddingHorizontal: 20,
     paddingBottom: 16,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    marginHorizontal: -20,
+    borderRadius: 24,
     marginBottom: 14,
     overflow: 'hidden',
   },
