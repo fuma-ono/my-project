@@ -546,17 +546,21 @@ const styles = StyleSheet.create({
   title: { ...fonts.display, fontSize: 23, color: '#fff' },
   memberCount: { ...fonts.bodyMedium, fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 1 },
   // メンバー行の「背景」だけを、上端が角丸のカードにしてヘッダーの下端に
-  // 少しめり込ませる。marginTopを負にして食い込ませた分、paddingTopで
-  // 打ち消しているため、中身(アイコン・名前・バッジ)の位置自体は
-  // 動かない。左右は画面端まで塗り広げ(marginHorizontal:-20)、
-  // paddingHorizontalで元の内容の位置(20px inset)を保っている。
+  // 少しめり込ませる。marginTopを負にして食い込ませ、paddingTopで
+  // 打ち消す仕組み(打ち消し量が同じだと中身の位置は変わらない)。
+  // 「まだ被っている」「名前とアイコンを下に下げて」という指摘を受け、
+  // 食い込み量(marginTop)を浅くしつつ、paddingTopを打ち消し量より
+  // 大きくすることで、中身(アイコン・名前・バッジ)を実際に少し
+  // 下へずらし、ヘッダーとの間にゆとりを持たせた。左右は画面端まで
+  // 塗り広げ(marginHorizontal:-20)、paddingHorizontalで元の内容の
+  // 位置(20px inset)を保っている。
   memberStripCard: {
     backgroundColor: colors.bg,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     marginHorizontal: -20,
-    marginTop: -20,
-    paddingTop: 20,
+    marginTop: -12,
+    paddingTop: 26,
     paddingHorizontal: 20,
   },
   memberStrip: { flexDirection: 'row', gap: 16, marginBottom: 18, paddingRight: 4 },

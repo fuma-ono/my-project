@@ -51,7 +51,6 @@ export default function NetSummary({ totals, balances, meId }: Props) {
       <Ionicons name="wallet" size={56} color="rgba(255,255,255,0.12)" style={styles.walletIcon} />
       <Text style={styles.heading}>{t.netSummary.heading}</Text>
       {totals.map((total, i) => {
-        const owed = total.amount > 0; // 正値 = 自分が受け取る側(lib/balances.tsのNetTotal参照)
         let receivable = 0;
         let payable = 0;
         for (const b of balances) {
@@ -64,12 +63,10 @@ export default function NetSummary({ totals, balances, meId }: Props) {
           <View key={total.currency} style={[styles.line, i > 0 && styles.lineDivider]}>
             {/* 「あなたの残高の下の支払う金額はいらない」という指摘を受け、
                 見出し(heading)のすぐ下にあった「支払う金額/受け取る金額」
-                ラベルを削除した。方向は下の説明文(actionHint)で伝わる。 */}
+                ラベルを削除した。さらに「¥500支払うと精算が完了します」の
+                説明文(actionHint)も不要という指摘を受けて削除し、
+                空いた分カード全体を縮小した。 */}
             <Text style={styles.amount}>{amountStr}</Text>
-            {/* 「何をすべきか分かる説明を追加してもよい」という指摘への対応。 */}
-            <Text style={styles.actionHint}>
-              {owed ? t.netSummary.actionHintReceive(amountStr) : t.netSummary.actionHintPay(amountStr)}
-            </Text>
             {/* 参考UIに合わせ、「受取 ¥1,500」のような省略形1行ではなく、
                 「受け取る金額」「支払う金額」を見出しにした2カラム構成にした。 */}
             <View style={styles.grossRow}>
@@ -92,27 +89,26 @@ export default function NetSummary({ totals, balances, meId }: Props) {
 }
 
 const styles = StyleSheet.create({
-  // 「画像と比べて大きすぎる」という指摘を受け、padding・金額の
-  // フォントサイズ・各要素間の余白を全体的に詰めた(以前の見直しで
-  // 逆に広げすぎていた)。
-  card: { borderRadius: 24, padding: 20, marginBottom: 18, overflow: 'hidden' },
-  walletIcon: { position: 'absolute', top: 16, right: 16 },
-  chevron: { position: 'absolute', bottom: 16, right: 16 },
+  // 「画像と比べて大きすぎる」という指摘に加え、「¥500支払うと精算が
+  // 完了しますはいらない」という指摘で説明文(actionHint)を削除した分、
+  // padding・金額のフォントサイズ・各要素間の余白をさらに詰めた。
+  card: { borderRadius: 22, padding: 16, marginBottom: 16, overflow: 'hidden' },
+  walletIcon: { position: 'absolute', top: 14, right: 14 },
+  chevron: { position: 'absolute', bottom: 14, right: 14 },
   heading: {
     ...fonts.bodyMedium,
     fontSize: 12,
     color: 'rgba(255,255,255,0.65)',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   line: { paddingVertical: 2 },
-  lineDivider: { marginTop: 4, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.22)', paddingTop: 10 },
-  amount: { ...fonts.display, fontSize: 34, color: '#fff', letterSpacing: -0.5 },
-  actionHint: { ...fonts.bodyMedium, fontSize: 12.5, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
-  grossRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12, paddingRight: 24 },
+  lineDivider: { marginTop: 4, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.22)', paddingTop: 8 },
+  amount: { ...fonts.display, fontSize: 28, color: '#fff', letterSpacing: -0.5 },
+  grossRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, paddingRight: 24 },
   grossCol: { flex: 1 },
-  grossDivider: { width: 1, height: 26, backgroundColor: 'rgba(255,255,255,0.25)', marginHorizontal: 14 },
+  grossDivider: { width: 1, height: 24, backgroundColor: 'rgba(255,255,255,0.25)', marginHorizontal: 14 },
   grossLabel: { ...fonts.bodyMedium, fontSize: 11.5, color: 'rgba(255,255,255,0.75)', marginBottom: 2 },
-  grossAmount: { ...fonts.bodySemiBold, fontSize: 15, color: '#fff' },
+  grossAmount: { ...fonts.bodySemiBold, fontSize: 14, color: '#fff' },
   settledWrap: {
     backgroundColor: colors.surface,
     borderRadius: 20,

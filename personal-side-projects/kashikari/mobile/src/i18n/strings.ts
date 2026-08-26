@@ -138,8 +138,6 @@ export const ja = {
   },
   netSummary: {
     heading: 'あなたの残高',
-    actionHintPay: (amount: string) => `${amount}支払うと精算が完了します`,
-    actionHintReceive: (amount: string) => `${amount}受け取ると精算が完了します`,
     allSettledTitle: '精算完了!',
     allSettled: '全員の貸し借りが解消されました',
     receiving: '受け取る金額',
@@ -391,8 +389,6 @@ export const en: Strings = {
   },
   netSummary: {
     heading: 'Your balance',
-    actionHintPay: (amount: string) => `Pay ${amount} to settle up`,
-    actionHintReceive: (amount: string) => `Receive ${amount} to settle up`,
     allSettledTitle: 'All settled!',
     allSettled: "Everyone's debts are cleared",
     receiving: "Amount you'll receive",
