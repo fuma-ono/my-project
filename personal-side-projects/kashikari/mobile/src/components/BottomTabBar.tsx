@@ -45,10 +45,19 @@ export default function BottomTabBar({ tab, onChange }: Props) {
 }
 
 const styles = StyleSheet.create({
-  // 「アイコン・名前を、バーの枠とともに下に下げて。枠が大きいから
-  // 下げて」という指摘を受け、paddingTopを14→20にさらに増やして
-  // アイコン+ラベルの行を下に寄せつつ、paddingBottomを26→22に
-  // 減らしてバー全体の余分な高さ(=「枠が大きい」)も少し詰めた。
+  // 【重要な気づき】wrapはbottom:0で画面下端に固定されているため、
+  // paddingTopを増やしても「バーの高さ(=上端の位置)」が上に伸びる
+  // だけで、中のアイコン・ラベル自体の画面上の位置は変わらない
+  // (btnはalignItems:'center'で横方向は揃えるが、中身はデフォルトで
+  // 上詰めのため、アイコン・ラベルの実際の位置はpaddingBottom側で
+  // 決まる)。そのため前回までpaddingTopを8→14→20と増やし続けても
+  // 「まだ下がってない」という指摘が続き、むしろバーの上端(罫線)が
+  // 上に伸びて＋ボタン(FAB)と重なってしまっていた。
+  // 今回「アイコンと名前をまだ下げて」「上線も＋が見えるくらいまで
+  // 下げて」という指摘を受け、根本原因を踏まえて逆方向に修正:
+  // paddingBottomを22→14に減らしてアイコン・ラベルを実際に下へ
+  // 動かし、paddingTopも20→10に戻してバー自体の高さを縮め、上端の
+  // 罫線をFABの下まで下げた。
   wrap: {
     position: 'absolute',
     left: 0,
@@ -58,8 +67,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.line,
-    paddingTop: 20,
-    paddingBottom: 22,
+    paddingTop: 10,
+    paddingBottom: 14,
   },
   btn: { flex: 1, alignItems: 'center', gap: 5 },
   iconWrap: { paddingHorizontal: 18, paddingVertical: 3, borderRadius: 999 },
