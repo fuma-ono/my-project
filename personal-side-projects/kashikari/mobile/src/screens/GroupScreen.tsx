@@ -474,14 +474,23 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
   list: { paddingHorizontal: 20, paddingBottom: 100 },
+  // 実機で「ふちが逆(上が丸くなっている)・上部が長い」という指摘を受けて
+  // 修正: overflow:'hidden'を付けないと、asymmetric(上下非対称)な
+  // borderRadiusがLinearGradientで正しく反映されず、角の丸みが意図通り
+  // 下だけでなく上にも出てしまうことがある。paddingTopも、以前の
+  // headerRow(marginTop:44)で実績のあった値に戻し、必要以上に高く
+  // ならないようにした。
   headerGradient: {
-    paddingTop: 54,
+    paddingTop: 44,
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 16,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     marginHorizontal: -20,
-    marginBottom: 18,
+    marginBottom: 14,
+    overflow: 'hidden',
   },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },

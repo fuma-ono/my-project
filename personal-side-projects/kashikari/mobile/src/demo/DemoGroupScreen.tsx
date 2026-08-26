@@ -510,14 +510,17 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: 20, paddingBottom: 100 },
   // デモバナー自体がステータスバー分のpaddingTopを持っているため、ここでは
   // 本番のGroupScreen.tsxより控えめなpaddingTopにしている。
+  // overflow:'hidden'を付けないと、上下非対称なborderRadiusが
+  // LinearGradientで正しく反映されないことがあるため明示している。
   headerGradient: {
-    paddingTop: 18,
+    paddingTop: 14,
     paddingHorizontal: 20,
-    paddingBottom: 22,
+    paddingBottom: 16,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     marginHorizontal: -20,
-    marginBottom: 18,
+    marginBottom: 14,
+    overflow: 'hidden',
   },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
