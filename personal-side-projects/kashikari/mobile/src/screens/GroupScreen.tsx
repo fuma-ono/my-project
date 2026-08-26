@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { Alert, Pressable, RefreshControl, SectionList, Share, StyleSheet, Text, View } from 'react-native';
 
 import AddEntrySheet from '../components/AddEntrySheet';
@@ -6,6 +7,7 @@ import AutoSettlePlan from '../components/AutoSettlePlan';
 import Avatar from '../components/Avatar';
 import AvatarPicker from '../components/AvatarPicker';
 import BalanceCard from '../components/BalanceCard';
+import BottomTabBar, { type GroupTab } from '../components/BottomTabBar';
 import EntryRow from '../components/EntryRow';
 import Fab from '../components/Fab';
 import GroupIconPicker from '../components/GroupIconPicker';
@@ -13,7 +15,6 @@ import HistoryEntryRow from '../components/HistoryEntryRow';
 import InviteModal from '../components/InviteModal';
 import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
-import PendingInvites from '../components/PendingInvites';
 import SettlementProgress from '../components/SettlementProgress';
 import UnpaidMembersModal from '../components/UnpaidMembersModal';
 import { useGroupData } from '../hooks/useGroupData';
@@ -25,7 +26,7 @@ import { buildInviteUrl } from '../lib/invite';
 import { colors, fonts } from '../theme';
 import type { BalanceRow, Group, SimplifiedTransaction } from '../types';
 
-type Tab = 'balance' | 'ledger' | 'history';
+type Tab = GroupTab;
 
 type Props = {
   group: Group;
@@ -243,15 +244,22 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
     ]);
   };
 
+  const pendingInvites = useMemo(() => invites.filter((i) => i.status === 'pending'), [invites]);
+
   const header = (
     <View>
       <View style={styles.headerRow}>
         <Pressable onPress={onBack} hitSlop={10}>
           <Text style={styles.back}>{t.group.back}</Text>
         </Pressable>
-        <Pressable onPress={leave} hitSlop={10}>
-          <Text style={styles.leave}>{t.group.leave}</Text>
-        </Pressable>
+        <View style={styles.headerRightRow}>
+          <Pressable onPress={leave} hitSlop={10}>
+            <Text style={styles.leave}>{t.group.leave}</Text>
+          </Pressable>
+          <Pressable onPress={onOpenSettings} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
+            <Ionicons name="settings-outline" size={22} color={colors.ink} />
+          </Pressable>
+        </View>
       </View>
       <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleRow}>
         <Mark size={40} glyph={group.icon_emoji ?? undefined} />
@@ -262,139 +270,126 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
       </Pressable>
 
       <View style={styles.memberStrip}>
-        {members.map((m) =>
-          m.id === meId ? (
-            <Pressable key={m.id} onPress={() => setAvatarPickerOpen(true)} style={styles.memberChip}>
-              <Avatar name={m.display_name} emoji={m.avatar_emoji} size="sm" />
-              <Text style={styles.memberName}>{m.display_name}</Text>
-              <Text style={styles.editHint}>{t.group.changeHint}</Text>
+        {members.map((m) => {
+          const isMe = m.id === meId;
+          const isAdmin = m.id === group.created_by;
+          const slot = (
+            <>
+              <Avatar name={m.display_name} emoji={m.avatar_emoji} size="md" />
+              <Text style={styles.memberSlotName} numberOfLines={1}>
+                {m.display_name}
+              </Text>
+              {isAdmin && (
+                <View style={styles.adminBadge}>
+                  <Text style={styles.adminBadgeText}>{t.group.adminBadge}</Text>
+                </View>
+              )}
+            </>
+          );
+          return isMe ? (
+            <Pressable key={m.id} onPress={() => setAvatarPickerOpen(true)} style={styles.memberSlot}>
+              {slot}
             </Pressable>
           ) : (
-            <View key={m.id} style={styles.memberChip}>
-              <Avatar name={m.display_name} emoji={m.avatar_emoji} size="sm" />
-              <Text style={styles.memberName}>{m.display_name}</Text>
+            <View key={m.id} style={styles.memberSlot}>
+              {slot}
             </View>
-          )
-        )}
-        <Pressable onPress={() => setInviteModalOpen(true)} style={styles.inviteChip}>
-          <Text style={styles.inviteChipText}>{t.group.invite}</Text>
-        </Pressable>
-      </View>
-
-      <PendingInvites invites={invites} />
-
-      <View style={styles.tabsRow}>
-        <View style={styles.tabs}>
-          <Pressable onPress={() => setTab('balance')} style={[styles.tabBtn, tab === 'balance' && styles.tabBtnActive]}>
-            <Text style={[styles.tabText, tab === 'balance' && styles.tabTextActive]}>{t.group.tabBalance}</Text>
-          </Pressable>
-          <Pressable onPress={() => setTab('ledger')} style={[styles.tabBtn, tab === 'ledger' && styles.tabBtnActive]}>
-            <Text style={[styles.tabText, tab === 'ledger' && styles.tabTextActive]}>{t.group.tabLedger}</Text>
-          </Pressable>
-          <Pressable onPress={() => setTab('history')} style={[styles.tabBtn, tab === 'history' && styles.tabBtnActive]}>
-            <Text style={[styles.tabText, tab === 'history' && styles.tabTextActive]}>{t.group.tabHistory}</Text>
-          </Pressable>
-        </View>
-        <Pressable onPress={onOpenSettings} hitSlop={10} style={styles.settingsBtn} accessibilityLabel={t.groups.settingsButton}>
-          <Text style={styles.settingsIcon}>⚙️</Text>
+          );
+        })}
+        {pendingInvites.map((invite) => (
+          <View key={invite.id} style={styles.memberSlot}>
+            <View style={[styles.avatarCircle, styles.pendingCircle]}>
+              <Ionicons name="mail-outline" size={16} color={colors.muted} />
+            </View>
+            <Text style={styles.memberSlotName} numberOfLines={1}>
+              {invite.invited_name}
+            </Text>
+            <View style={styles.pendingBadge}>
+              <Text style={styles.pendingBadgeText}>{t.group.pendingSectionTitle}</Text>
+            </View>
+          </View>
+        ))}
+        <Pressable onPress={() => setInviteModalOpen(true)} style={styles.memberSlot}>
+          <View style={[styles.avatarCircle, styles.addCircle]}>
+            <Ionicons name="add" size={22} color={colors.muted} />
+          </View>
+          <Text style={styles.memberSlotName}>{t.group.invite}</Text>
         </Pressable>
       </View>
     </View>
   );
 
+  // 以前はタブごとに3つのreturn文でSectionList・Fab・各種モーダルを
+  // まるごと複製していたが、下固定のBottomTabBarを導入するにあたり
+  // 「タブに応じて中身(SectionList)だけ切り替え、Fab・モーダル・
+  // タブバー自体は1つだけ」という構成に整理した。
+  let listContent: ReactElement;
   if (tab === 'balance') {
-    return (
-      <View style={styles.wrap}>
-        <SectionList
-          sections={balanceSections}
-          keyExtractor={(row) => `${row.debtor}-${row.creditor}-${row.type}-${row.currency}`}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={colors.accent} />}
-          contentContainerStyle={styles.list}
-          stickySectionHeadersEnabled={false}
-          ListHeaderComponent={
-            <View>
-              {header}
-              <NetSummary totals={netTotals} balances={balances} meId={meId} />
-              {balances.length > 0 && (
-                <SettlementProgress
-                  remaining={settlementProgress.remaining}
-                  paid={settlementProgress.paid}
-                  onPress={() => setUnpaidModalOpen(true)}
-                />
-              )}
-              {autoSettlePlans.map((plan) => (
-                <AutoSettlePlan
-                  key={plan.currency}
-                  groupName={group.name}
-                  currency={plan.currency}
-                  transactions={plan.transactions}
-                  nameOf={nameOf}
-                  emojiOf={emojiOf}
-                  meId={meId}
-                  onSettleAll={() => settleAllMoney(plan.currency)}
-                />
-              ))}
-            </View>
-          }
-          renderSectionHeader={({ section }) => <Text style={styles.sectionTitle}>{section.title}</Text>}
-          renderItem={({ item }) => (
-            <BalanceCard
-              row={item}
-              nameOf={nameOf}
-              emojiOf={emojiOf}
-              meId={meId}
-              onSettle={() => settlePair(item.type, item.debtor, item.creditor, item.currency)}
-              onMarkPaid={() => markPaid(item.debtor, item.creditor, item.currency)}
-              onConfirmReceived={() => confirmReceived(item.debtor, item.creditor, item.currency)}
-              onRemindSent={() => logEvent('reminder_sent', { userId: meId, groupId: group.id })}
-            />
-          )}
-          ItemSeparatorComponent={() => <View style={styles.hairline} />}
-        />
-        <Fab onPress={() => setSheetOpen(true)} disabled={members.length < 2} />
-        <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} onSubmitSplit={addSplitEntry} />
-        {avatarPicker}
-        {groupIconPicker}
-        {inviteModal}
-        <UnpaidMembersModal
-          visible={unpaidModalOpen}
-          rows={receivingRows}
-          nameOf={nameOf}
-          emojiOf={emojiOf}
-          onConfirmReceived={(row) => confirmReceived(row.debtor, row.creditor, row.currency)}
-          onRemindSent={() => logEvent('reminder_sent', { userId: meId, groupId: group.id })}
-          onClose={() => setUnpaidModalOpen(false)}
-        />
-      </View>
+    listContent = (
+      <SectionList
+        sections={balanceSections}
+        keyExtractor={(row) => `${row.debtor}-${row.creditor}-${row.type}-${row.currency}`}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={colors.accent} />}
+        contentContainerStyle={styles.list}
+        stickySectionHeadersEnabled={false}
+        ListHeaderComponent={
+          <View>
+            {header}
+            <NetSummary totals={netTotals} balances={balances} meId={meId} />
+            {balances.length > 0 && (
+              <SettlementProgress
+                remaining={settlementProgress.remaining}
+                paid={settlementProgress.paid}
+                onPress={() => setUnpaidModalOpen(true)}
+              />
+            )}
+            {autoSettlePlans.map((plan) => (
+              <AutoSettlePlan
+                key={plan.currency}
+                groupName={group.name}
+                currency={plan.currency}
+                transactions={plan.transactions}
+                nameOf={nameOf}
+                emojiOf={emojiOf}
+                meId={meId}
+                onSettleAll={() => settleAllMoney(plan.currency)}
+              />
+            ))}
+          </View>
+        }
+        renderSectionHeader={({ section }) => <Text style={styles.sectionTitle}>{section.title}</Text>}
+        renderItem={({ item }) => (
+          <BalanceCard
+            row={item}
+            nameOf={nameOf}
+            emojiOf={emojiOf}
+            meId={meId}
+            onSettle={() => settlePair(item.type, item.debtor, item.creditor, item.currency)}
+            onMarkPaid={() => markPaid(item.debtor, item.creditor, item.currency)}
+            onConfirmReceived={() => confirmReceived(item.debtor, item.creditor, item.currency)}
+            onRemindSent={() => logEvent('reminder_sent', { userId: meId, groupId: group.id })}
+          />
+        )}
+        ItemSeparatorComponent={() => <View style={styles.hairline} />}
+      />
     );
-  }
-
-  if (tab === 'history') {
-    return (
-      <View style={styles.wrap}>
-        <SectionList
-          sections={historySections}
-          keyExtractor={(e) => e.id}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={colors.accent} />}
-          contentContainerStyle={styles.list}
-          stickySectionHeadersEnabled={false}
-          ListHeaderComponent={<View>{header}</View>}
-          renderSectionHeader={({ section }) => <Text style={styles.dateHeader}>{section.title}</Text>}
-          renderItem={({ item }) => <HistoryEntryRow entry={item} nameOf={nameOf} meId={meId} />}
-          ItemSeparatorComponent={() => <View style={styles.hairline} />}
-          ListEmptyComponent={!loading ? <Text style={styles.emptyNote}>{t.history.empty}</Text> : null}
-        />
-        <Fab onPress={() => setSheetOpen(true)} disabled={members.length < 2} />
-        <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} onSubmitSplit={addSplitEntry} />
-        {avatarPicker}
-        {groupIconPicker}
-        {inviteModal}
-      </View>
+  } else if (tab === 'history') {
+    listContent = (
+      <SectionList
+        sections={historySections}
+        keyExtractor={(e) => e.id}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={colors.accent} />}
+        contentContainerStyle={styles.list}
+        stickySectionHeadersEnabled={false}
+        ListHeaderComponent={<View>{header}</View>}
+        renderSectionHeader={({ section }) => <Text style={styles.dateHeader}>{section.title}</Text>}
+        renderItem={({ item }) => <HistoryEntryRow entry={item} nameOf={nameOf} meId={meId} />}
+        ItemSeparatorComponent={() => <View style={styles.hairline} />}
+        ListEmptyComponent={!loading ? <Text style={styles.emptyNote}>{t.history.empty}</Text> : null}
+      />
     );
-  }
-
-  return (
-    <View style={styles.wrap}>
+  } else {
+    listContent = (
       <SectionList
         sections={sections}
         keyExtractor={(e) => e.id}
@@ -426,11 +421,29 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
         ItemSeparatorComponent={() => <View style={styles.hairline} />}
         ListEmptyComponent={!loading ? <Text style={styles.emptyNote}>{t.group.emptyLedger}</Text> : null}
       />
+    );
+  }
+
+  return (
+    <View style={styles.wrap}>
+      {listContent}
       <Fab onPress={() => setSheetOpen(true)} disabled={members.length < 2} />
+      <BottomTabBar tab={tab} onChange={setTab} />
       <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} onSubmitSplit={addSplitEntry} />
       {avatarPicker}
       {groupIconPicker}
       {inviteModal}
+      {tab === 'balance' && (
+        <UnpaidMembersModal
+          visible={unpaidModalOpen}
+          rows={receivingRows}
+          nameOf={nameOf}
+          emojiOf={emojiOf}
+          onConfirmReceived={(row) => confirmReceived(row.debtor, row.creditor, row.currency)}
+          onRemindSent={() => logEvent('reminder_sent', { userId: meId, groupId: group.id })}
+          onClose={() => setUnpaidModalOpen(false)}
+        />
+      )}
     </View>
   );
 }
@@ -439,45 +452,29 @@ const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
   list: { paddingHorizontal: 20, paddingBottom: 100 },
   headerRow: { marginTop: 44, marginBottom: 4, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   back: { ...fonts.bodySemiBold, fontSize: 15, color: colors.accent },
   leave: { ...fonts.bodyMedium, fontSize: 12.5, color: colors.muted },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4, marginBottom: 14 },
   titleTextCol: { flexShrink: 1 },
   title: { ...fonts.display, fontSize: 26, color: colors.ink },
   memberCount: { ...fonts.bodyMedium, fontSize: 12.5, color: colors.muted, marginTop: 1 },
-  memberStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 },
-  memberChip: {
-    flexDirection: 'row',
+  memberStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 18 },
+  memberSlot: { alignItems: 'center', width: 64, gap: 3 },
+  memberSlotName: { ...fonts.bodyMedium, fontSize: 11.5, color: colors.ink, maxWidth: 62 },
+  adminBadge: { backgroundColor: colors.surface2, borderRadius: 999, paddingVertical: 1.5, paddingHorizontal: 7 },
+  adminBadgeText: { ...fonts.bodySemiBold, fontSize: 9.5, color: colors.muted },
+  avatarCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 999,
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.surface,
-    borderRadius: 999,
-    paddingVertical: 5,
-    paddingRight: 12,
-    paddingLeft: 5,
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
-  memberName: { ...fonts.bodySemiBold, fontSize: 13, color: colors.ink },
-  editHint: { ...fonts.bodyMedium, fontSize: 11, color: colors.accent },
-  inviteChip: {
-    borderWidth: 1.5,
-    borderColor: colors.muted,
-    borderStyle: 'dashed',
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
     justifyContent: 'center',
   },
-  inviteChipText: { ...fonts.bodySemiBold, fontSize: 13, color: colors.muted },
-  tabsRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 22 },
-  tabs: { flex: 1, flexDirection: 'row', backgroundColor: colors.surface2, borderRadius: 12, padding: 4 },
-  settingsBtn: { padding: 4 },
-  settingsIcon: { fontSize: 20 },
-  tabBtn: { flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center' },
-  tabBtnActive: { backgroundColor: colors.surface, shadowColor: '#3c2814', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
-  tabText: { ...fonts.bodySemiBold, fontSize: 14, color: colors.muted },
-  tabTextActive: { color: colors.ink },
+  pendingCircle: { backgroundColor: colors.surface2, borderWidth: 1.5, borderColor: colors.line, borderStyle: 'dashed' },
+  pendingBadge: { backgroundColor: colors.surface2, borderRadius: 999, paddingVertical: 1.5, paddingHorizontal: 7 },
+  pendingBadgeText: { ...fonts.bodySemiBold, fontSize: 9.5, color: colors.muted },
+  addCircle: { borderWidth: 1.5, borderColor: colors.muted, borderStyle: 'dashed' },
   sectionTitle: {
     ...fonts.bodySemiBold,
     fontSize: 12.5,

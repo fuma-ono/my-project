@@ -17,7 +17,8 @@ const styles = StyleSheet.create({
   wrap: {
     position: 'absolute',
     right: 20,
-    bottom: 28,
+    // 画面下固定のBottomTabBar(高さ+セーフエリア分)の上に浮かせる。
+    bottom: 96,
     width: 60,
     height: 60,
     borderRadius: 999,
