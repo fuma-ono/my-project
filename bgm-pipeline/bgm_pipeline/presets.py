@@ -279,6 +279,116 @@ def study_focus_binaural(minutes: float = 3.0) -> core.StereoTrack:
     return core.StereoTrack(left, right, sr)
 
 
+def _piano_note(freq: float, seconds: float, sr: int = core.SAMPLE_RATE,
+                 brightness: float = 0.75) -> np.ndarray:
+    """One struck piano-like note. Added 2026-08-26 per owner request
+    ("BGMのジャンルにピアノを増やしたい") — every other preset here is a
+    sustained pad/drone/noise texture (core.detuned_stack, chord pads that
+    fade smoothly between chords); a real piano note doesn't sustain like
+    that, it's struck once and decays. This is additive synthesis instead
+    of a single detuned-sine stack: `n_harmonics` overtones, each with its
+    own exponential decay (higher harmonics die out faster than the
+    fundamental — how a real piano string actually behaves, and the main
+    thing that makes this read as "struck" rather than "organ"), plus a
+    small inharmonicity stretch on the upper partials (real piano strings
+    aren't perfect harmonic series either — a little detuning-with-
+    frequency is part of what a piano "sounds like" vs. a pure tone).
+    `brightness` < 1 rolls off the harmonics faster, for a softer
+    felt/una-corda character suited to sleep/relax genres; keep close to
+    1.0 for a more present, percussive tone.
+    """
+    n = int(seconds * sr)
+    t = np.arange(n) / sr
+    out = np.zeros(n)
+    n_harmonics = 8
+    base_decay_s = 2.4  # roughly how long the fundamental takes to decay ~63%
+    for h in range(1, n_harmonics + 1):
+        partial_freq = freq * h * (1 + 0.0004 * h ** 2) ** 0.5  # inharmonicity stretch
+        if partial_freq > sr * 0.45:
+            break
+        amp = (1.0 / h ** 1.3) * (brightness ** (h - 1))
+        decay_rate = (1 + 0.35 * (h - 1)) / base_decay_s  # higher harmonics decay faster
+        out += amp * np.exp(-t * decay_rate) * np.sin(2 * np.pi * partial_freq * t)
+    attack_n = max(1, int(0.006 * sr))  # a few ms — struck, not faded in
+    out[:attack_n] *= np.linspace(0, 1, attack_n)
+    return out
+
+
+def _piano_arpeggio(chords: list[list[int]], seconds: float, chord_seconds: float,
+                     notes_per_chord: int = 5, brightness: float = 0.72,
+                     sr: int = core.SAMPLE_RATE, seed: int | None = None) -> np.ndarray:
+    """Broken-chord arpeggiation over `chords`, looping every `chord_seconds`
+    — chord boundaries stay locked to fixed multiples of chord_seconds (not
+    drifted by note timing) so this stays harmonically in sync with a
+    `_chord_pad` call using the same chords/chord_seconds layered underneath
+    (see piano_relaxing_ambient). Notes are picked randomly from the current
+    chord with slight timing jitter and velocity variance so it doesn't
+    sound mechanical/sequenced; ring past the next note's onset (sustain-
+    pedal-like) rather than cutting off cleanly."""
+    rng = np.random.default_rng(seed)
+    tail_s = 4.0
+    out = np.zeros(int((seconds + tail_s) * sr))
+    n_chords = int(np.ceil(seconds / chord_seconds))
+    note_gap = chord_seconds / notes_per_chord
+    for i in range(n_chords):
+        chord = chords[i % len(chords)]
+        chord_start = i * chord_seconds
+        for k in range(notes_per_chord):
+            jitter = rng.uniform(-0.15, 0.15) * note_gap
+            note_time = chord_start + k * note_gap + jitter
+            if note_time < 0 or note_time >= seconds:
+                continue
+            midi_note = int(rng.choice(chord))
+            if k > 0 and rng.uniform(0, 1) < 0.3:
+                midi_note += 12  # occasional octave lift for variety
+            note_len = min(6.0, seconds + tail_s - note_time)
+            velocity = rng.uniform(0.55, 1.0)
+            note = _piano_note(midi_to_freq(midi_note), note_len, sr, brightness=brightness) * velocity
+            start = int(note_time * sr)
+            end = min(start + len(note), len(out))
+            out[start:end] += note[: end - start]
+    return out[: int(seconds * sr)]
+
+
+def piano_relaxing_ambient(minutes: float = 3.0) -> core.StereoTrack:
+    """Solo-piano-style ambient bed — struck-note synthesis (_piano_note)
+    arpeggiated slowly over a warm chord progression (_piano_arpeggio),
+    wrapped in generous room reverb. Distinct from every other preset here,
+    which are sustained pad/drone/noise textures; this is the first one
+    built from discrete struck notes. Added 2026-08-26 per owner request
+    ("BGMのジャンルにピアノを増やしたい"). No sample library or paid
+    instrument/plugin is used — every note is synthesized from scratch
+    (see _piano_note), so this preset's marginal cost stays ~¥0 like every
+    other one here.
+
+    NOT YET added to PRESETS/PRESET_METADATA — piano is a genuinely new
+    timbre for this pipeline (everything else is pads/noise/tones) and
+    whether the synthesis actually sounds convincing is a judgment call
+    best made by ear before it's wired into rotation/thumbnails/YouTube,
+    not something to assume from reading the code. Render a preview and
+    get the owner's listen first; register it for real afterward.
+    """
+    seconds = minutes * 60
+    sr = core.SAMPLE_RATE
+    chords = PADS_STUDY  # Cmaj7-Am7-Fmaj7-G7 (I-vi-IV-V7) — warm, unhurried, already used elsewhere
+    chord_seconds = 10.0
+
+    piano = _piano_arpeggio(chords, seconds, chord_seconds, notes_per_chord=5,
+                             brightness=0.72, sr=sr)
+    piano = core.one_pole_lowpass(piano, cutoff_hz=5000, sr=sr)  # soften the top end — felt-piano warmth
+    piano = core.simple_reverb(piano, sr, room_seconds=3.2, mix=0.32)
+
+    # very quiet sustained pad underneath, locked to the same chords/timing,
+    # standing in for room ambience / sympathetic string resonance between
+    # struck notes rather than dead silence
+    pad = _chord_pad(chords, seconds, chord_seconds=chord_seconds, sr=sr)
+    pad = core.one_pole_lowpass(pad, cutoff_hz=800, sr=sr) * 0.06
+
+    mix = core.fade_in_out(piano + pad, sr, fade_seconds=4.0)
+    mix = core.normalize(mix, peak=0.82)
+    return core.widen(mix, width=0.18, sr=sr)
+
+
 PRESETS = {
     "sleep_deep_drone": sleep_deep_drone,
     "sleep_rain_focus": sleep_rain_focus,
