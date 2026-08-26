@@ -213,7 +213,13 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
       onClose={() => setInviteModalOpen(false)}
       onSubmit={async (invitedName) => {
         const res = await inviteMember(invitedName);
-        if (!res.error) shareInvite();
+        // 送信成功後、InviteModal(独自の<Modal>)はこの直後にclose()を呼ぶ。
+        // その閉じるアニメーション中にShare.share()(OS標準の共有シート)を
+        // 呼ぶと、iOSでは「自分のモーダルを閉じている最中に別のモーダルを
+        // 開こうとする」形になり、共有シートが一切表示されないまま消えて
+        // しまう(名前だけ登録されて共有が開かない、という不具合の原因)。
+        // InviteModalの閉じるアニメーションが終わるのを待ってから開く。
+        if (!res.error) setTimeout(shareInvite, 500);
         return res;
       }}
     />

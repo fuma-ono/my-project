@@ -450,7 +450,9 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
         onClose={() => setInviteModalOpen(false)}
         onSubmit={async (invitedName) => {
           const res = await inviteMember(invitedName);
-          if (!res.error) shareInvite();
+          // InviteModal自身の閉じるアニメーションと競合しないよう、共有シートは
+          // 少し遅らせて開く(詳細はGroupScreen.tsxの同じ箇所のコメント参照)。
+          if (!res.error) setTimeout(shareInvite, 500);
           return res;
         }}
       />
