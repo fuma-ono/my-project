@@ -280,25 +280,27 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
       <View style={styles.demoBanner}>
         <Text style={styles.demoBannerText}>{t.demo.banner}</Text>
       </View>
-      <LinearGradient colors={[colors.accent, colors.plum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.headerGradient}>
-        <View style={styles.headerRow}>
-          <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back}>
-            <Ionicons name="chevron-back" size={26} color="#fff" />
-          </Pressable>
-          <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleCol}>
-            <Text style={styles.title} numberOfLines={1}>{group.name}</Text>
-            <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
-          </Pressable>
-          <View style={styles.headerRightRow}>
-            <Pressable onPress={() => setNotifToastVisible(true)} hitSlop={10}>
-              <Ionicons name="notifications-outline" size={22} color="#fff" />
+      <View style={styles.headerShadowWrap}>
+        <LinearGradient colors={[colors.accent, colors.plum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.headerGradient}>
+          <View style={styles.headerRow}>
+            <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back}>
+              <Ionicons name="chevron-back" size={26} color="#fff" />
             </Pressable>
-            <Pressable onPress={onOpenSettings} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
-              <Ionicons name="settings-outline" size={22} color="#fff" />
+            <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleCol}>
+              <Text style={styles.title} numberOfLines={1}>{group.name}</Text>
+              <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
             </Pressable>
+            <View style={styles.headerRightRow}>
+              <Pressable onPress={() => setNotifToastVisible(true)} hitSlop={10}>
+                <Ionicons name="notifications-outline" size={22} color="#fff" />
+              </Pressable>
+              <Pressable onPress={onOpenSettings} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
+                <Ionicons name="settings-outline" size={22} color="#fff" />
+              </Pressable>
+            </View>
           </View>
-        </View>
-      </LinearGradient>
+        </LinearGradient>
+      </View>
 
       <View style={styles.memberStrip}>
         {members.map((m) => {
@@ -517,13 +519,25 @@ const styles = StyleSheet.create({
   // 「浮いたカード」として四隅すべてを丸める形に変更した(GroupScreen.tsx
   // と同じ)。デモバナー自体が既にステータスバー分の余白を持っている
   // ため、ここでのmarginTopは小さめでよい。
+  // 影(shadow)はoverflow:'hidden'を持つViewには描画されないため、
+  // 影を持つ外側のラッパーと、角丸+クリップ用の内側のViewを分けている。
+  // デモバナー自体が既にステータスバー分の余白を持っているため、
+  // ここのpaddingTopはGroupScreen.tsxより控えめでよい。
+  headerShadowWrap: {
+    marginHorizontal: -20,
+    marginBottom: 16,
+    shadowColor: colors.plum,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
   headerGradient: {
-    marginTop: 10,
-    paddingTop: 18,
+    paddingTop: 14,
     paddingHorizontal: 20,
     paddingBottom: 16,
-    borderRadius: 24,
-    marginBottom: 14,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
     overflow: 'hidden',
   },
   headerRow: { flexDirection: 'row', alignItems: 'center' },

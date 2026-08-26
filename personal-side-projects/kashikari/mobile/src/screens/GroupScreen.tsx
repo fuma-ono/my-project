@@ -270,26 +270,36 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
           変更する機能自体はタイトル部分に残している。
           「グループ名の位置がおかしい、＜の横に」という指摘を受け、
           戻る矢印とタイトルを別の行に分けていたのをやめ、矢印のすぐ
-          右にタイトルが来る1行のレイアウトに変更した。 */}
-      <LinearGradient colors={[colors.accent, colors.plum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.headerGradient}>
-        <View style={styles.headerRow}>
-          <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back}>
-            <Ionicons name="chevron-back" size={26} color="#fff" />
-          </Pressable>
-          <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleCol}>
-            <Text style={styles.title} numberOfLines={1}>{group.name}</Text>
-            <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
-          </Pressable>
-          <View style={styles.headerRightRow}>
-            <Pressable onPress={() => setNotifToastVisible(true)} hitSlop={10}>
-              <Ionicons name="notifications-outline" size={22} color="#fff" />
+          右にタイトルが来る1行のレイアウトに変更した。
+          「左右は丸めなくていい、画面の端まで塗り広げて、下をメインの
+          画面の下にかぶせられるような形に」という指摘を受け、左右にも
+          余白を持たせた「浮いたカード」案からは撤回し、画面の端まで
+          塗り広げて下の角だけ丸める形に戻した。「かぶせる」感じを出す
+          ため、影(shadow/elevation)を付けて、本体の上に一枚重なって
+          いるように見せている(影を描画するため、影自体を持つ外側の
+          View と、角丸+overflow:hiddenでグラデーションをクリップする
+          内側のViewを分けている)。 */}
+      <View style={styles.headerShadowWrap}>
+        <LinearGradient colors={[colors.accent, colors.plum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.headerGradient}>
+          <View style={styles.headerRow}>
+            <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back}>
+              <Ionicons name="chevron-back" size={26} color="#fff" />
             </Pressable>
-            <Pressable onPress={openGroupMenu} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
-              <Ionicons name="settings-outline" size={22} color="#fff" />
+            <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleCol}>
+              <Text style={styles.title} numberOfLines={1}>{group.name}</Text>
+              <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
             </Pressable>
+            <View style={styles.headerRightRow}>
+              <Pressable onPress={() => setNotifToastVisible(true)} hitSlop={10}>
+                <Ionicons name="notifications-outline" size={22} color="#fff" />
+              </Pressable>
+              <Pressable onPress={openGroupMenu} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
+                <Ionicons name="settings-outline" size={22} color="#fff" />
+              </Pressable>
+            </View>
           </View>
-        </View>
-      </LinearGradient>
+        </LinearGradient>
+      </View>
 
       <View style={styles.memberStrip}>
         {members.map((m) => {
@@ -487,13 +497,23 @@ const styles = StyleSheet.create({
   // ステータスバー避けの余白は、以前はpaddingTop(帯の内側の余白)で
   // 持たせていたが、カード化にともないmarginTop(カードの外側の余白)
   // に変更している。
+  // 影(shadow)はoverflow:'hidden'を持つViewには描画されないため、
+  // 影を持つ外側のラッパーと、角丸+クリップ用の内側のViewを分けている。
+  headerShadowWrap: {
+    marginHorizontal: -20,
+    marginBottom: 16,
+    shadowColor: colors.plum,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
   headerGradient: {
-    marginTop: 44,
-    paddingTop: 18,
+    paddingTop: 44,
     paddingHorizontal: 20,
     paddingBottom: 16,
-    borderRadius: 24,
-    marginBottom: 14,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
     overflow: 'hidden',
   },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
