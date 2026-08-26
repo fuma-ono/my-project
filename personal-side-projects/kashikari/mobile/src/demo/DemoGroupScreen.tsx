@@ -303,14 +303,7 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
         </LinearGradient>
       </View>
 
-      {/* 「メンバーアイコンがヘッダーに食い込んでいるレイアウトにする」
-          という指摘への対応(詳細はGroupScreen.tsxの同じ箇所参照)。 */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.memberStripWrap}
-        contentContainerStyle={styles.memberStrip}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.memberStrip}>
         {members.map((m) => {
           const isMe = m.id === meId;
           const isAdmin = m.id === group.created_by;
@@ -553,7 +546,6 @@ const styles = StyleSheet.create({
   titleCol: { flex: 1, marginHorizontal: 16 },
   title: { ...fonts.display, fontSize: 23, color: '#fff' },
   memberCount: { ...fonts.bodyMedium, fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 1 },
-  memberStripWrap: { marginTop: -22 },
   memberStrip: { flexDirection: 'row', gap: 16, marginBottom: 18, paddingRight: 4 },
   memberSlot: { alignItems: 'center', width: 70, gap: 4 },
   memberSlotName: { ...fonts.bodyMedium, fontSize: 12, color: colors.ink, maxWidth: 68 },

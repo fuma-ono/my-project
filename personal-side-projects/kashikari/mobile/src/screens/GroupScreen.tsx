@@ -313,19 +313,10 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
       {/* 「メンバーが増えた場合は横スクロールできるようにする」という
           指摘を受け、折り返し(flexWrap)から横スクロール(ScrollView)に
           変更した。人数が少ない間は画面内に収まるため見た目は変わらない。
-          「ヘッダーとメンバー一覧を単純に上下に並べるのではなく、メンバー
-          アイコンがヘッダーに食い込んでいるレイアウトにする」という指摘
-          を受け、ScrollView自体(外側のstyle)に負のmarginTopを与えて
-          上にずらし、アイコンの上半分がグラデーション領域に重なるように
-          した(この要素は見た目のJSX順で後に来るため、重なった部分では
-          手前に描画される。角丸・影は前回すでに外してあるので、重なり
-          部分に丸みの切れ込みや白い隙間は出ない)。 */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.memberStripWrap}
-        contentContainerStyle={styles.memberStrip}
-      >
+          (一度アイコンをヘッダーに重ねるよう上にずらしたが、「アイコン・
+          名前・バッジの位置は一切動かさないでほしい、直したいのは下部分の
+          角丸の見え方だけ」という指摘を受けて元の位置に戻した。) */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.memberStrip}>
         {members.map((m) => {
           const isMe = m.id === meId;
           const isAdmin = m.id === group.created_by;
@@ -548,9 +539,6 @@ const styles = StyleSheet.create({
   // 「グループ名をもう少し大きくする」という指摘を受けてfontSizeを上げた。
   title: { ...fonts.display, fontSize: 23, color: '#fff' },
   memberCount: { ...fonts.bodyMedium, fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 1 },
-  // アイコン(lgサイズ=44px)の上半分がヘッダーに重なるよう、高さの半分
-  // だけ上にずらす。
-  memberStripWrap: { marginTop: -22 },
   memberStrip: { flexDirection: 'row', gap: 16, marginBottom: 18, paddingRight: 4 },
   memberSlot: { alignItems: 'center', width: 70, gap: 4 },
   memberSlotName: { ...fonts.bodyMedium, fontSize: 12, color: colors.ink, maxWidth: 68 },
