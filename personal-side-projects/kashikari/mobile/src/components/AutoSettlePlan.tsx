@@ -94,25 +94,27 @@ const styles = StyleSheet.create({
   // 「グラデーションを多用しすぎない。その他は白背景＋薄いグレーの
   // 境界線を基本とする」という指摘を受け、枠線をブランドカラー
   // (accentSoft)から薄いグレー(line)に変更した。
+  // 「おすすめの精算の枠も＋より上に収めたい。文字や幅などを調整して」
+  // という指摘を受け、カード全体を一回り詰めた(padding・行間・
+  // フォントサイズを縮小し、カードの高さ自体を縮めて、右下に浮く
+  // ＋ボタン(FAB)より上に収まるようにした)。
   card: {
     backgroundColor: colors.surface,
     borderRadius: 20,
-    padding: 18,
+    padding: 12,
     marginBottom: 18,
     borderWidth: 1.5,
     borderColor: colors.line,
   },
-  title: { ...fonts.bodySemiBold, fontSize: 15, color: colors.ink },
+  title: { ...fonts.bodySemiBold, fontSize: 14, color: colors.ink },
   // 「『¥500支払うだけで精算完了します』の説明を目立たせる」という
   // 指摘を受け、色をmutedからaccentに、太さをbodySemiBoldに変更した。
-  // 「文字を少し小さく。その分できたスペースを上に上げて」という指摘を
-  // 受け、fontSizeを13→12、marginBottomを14→10に詰めた。
-  subtitle: { ...fonts.bodySemiBold, fontSize: 12, color: colors.accent, marginTop: 2, marginBottom: 10 },
-  rows: { gap: 10, marginBottom: 16 },
+  subtitle: { ...fonts.bodySemiBold, fontSize: 12, color: colors.accent, marginTop: 2, marginBottom: 6 },
+  rows: { gap: 6, marginBottom: 8 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  name: { ...fonts.bodyMedium, fontSize: 13.5, color: colors.ink, flexShrink: 1 },
+  name: { ...fonts.bodyMedium, fontSize: 12.5, color: colors.ink, flexShrink: 1 },
   arrow: { color: colors.muted },
-  amount: { ...fonts.bodySemiBold, fontSize: 13.5, color: colors.ink, marginLeft: 'auto' },
+  amount: { ...fonts.bodySemiBold, fontSize: 12.5, color: colors.ink, marginLeft: 'auto' },
   // 「＋ボタンがこのカードと重なっている」という指摘への対応。右下に
   // 浮くFAB(幅50・右余白20)の左端までボタンの右端が収まるよう余白を
   // 確保している(FABを60→50に縮小したのに合わせてpaddingRightも

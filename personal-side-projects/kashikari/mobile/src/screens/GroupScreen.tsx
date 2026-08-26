@@ -610,10 +610,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   memberSlotName: { ...fonts.bodyMedium, fontSize: 12, color: colors.ink, maxWidth: 68 },
-  // 「『管理者』タグは位置・サイズで問題ないが、少し小さくして主張を
-  // 弱める」という指摘を受け、paddingとfontSizeを一段階小さくした。
+  // 過去に「少し小さくして主張を弱める」という指摘でfontSizeを
+  // 落としていたが、「管理者の文字をもう少しだけ大きくして」という
+  // 指摘を受け、8.5→9.5に少し戻した。
   adminBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1, paddingHorizontal: 6 },
-  adminBadgeText: { ...fonts.bodySemiBold, fontSize: 8.5, color: colors.accent },
+  adminBadgeText: { ...fonts.bodySemiBold, fontSize: 9.5, color: colors.accent },
   // 「招待するの◯もアイコンと同じ大きさにして」という指摘を受け、
   // 44(アバター本体と同じ)→56(アバター+リングの見た目上の外径と同じ)
   // に拡大した。通常メンバーはリング(avatarRing、56px)込みで見た目の

@@ -575,7 +575,7 @@ const styles = StyleSheet.create({
   },
   memberSlotName: { ...fonts.bodyMedium, fontSize: 12, color: colors.ink, maxWidth: 68 },
   adminBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1, paddingHorizontal: 6 },
-  adminBadgeText: { ...fonts.bodySemiBold, fontSize: 8.5, color: colors.accent },
+  adminBadgeText: { ...fonts.bodySemiBold, fontSize: 9.5, color: colors.accent },
   avatarCircle: {
     width: 56,
     height: 56,
