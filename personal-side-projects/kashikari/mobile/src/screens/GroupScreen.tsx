@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { Alert, Pressable, RefreshControl, SectionList, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, SectionList, Share, StyleSheet, Text, View } from 'react-native';
 
 import AddEntrySheet from '../components/AddEntrySheet';
 import AutoSettlePlan from '../components/AutoSettlePlan';
@@ -66,6 +66,10 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
   const [showSettled, setShowSettled] = useState(false);
   const [unpaidModalOpen, setUnpaidModalOpen] = useState(false);
   const [notifToastVisible, setNotifToastVisible] = useState(false);
+  // 「招待成功後は『けんたを招待しました』のような完了表示を出す」という
+  // 指摘への対応。メッセージ自体を都度差し替えるため、通知トーストとは
+  // 別枠のstateにしている。
+  const [inviteToastMessage, setInviteToastMessage] = useState<string | null>(null);
 
   const nameOf = (id: string) => members.find((m) => m.id === id)?.display_name ?? t.group.unknownMember;
   const emojiOf = (id: string) => members.find((m) => m.id === id)?.avatar_emoji ?? null;
@@ -222,7 +226,10 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
         // 開こうとする」形になり、共有シートが一切表示されないまま消えて
         // しまう(名前だけ登録されて共有が開かない、という不具合の原因)。
         // InviteModalの閉じるアニメーションが終わるのを待ってから開く。
-        if (!res.error) setTimeout(shareInvite, 500);
+        if (!res.error) {
+          setInviteToastMessage(t.group.inviteSuccessToast(invitedName));
+          setTimeout(shareInvite, 500);
+        }
         return res;
       }}
     />
@@ -280,10 +287,12 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
           View と、角丸+overflow:hiddenでグラデーションをクリップする
           内側のViewを分けている)。 */}
       <View style={styles.headerShadowWrap}>
-        <LinearGradient colors={[colors.accent, colors.plum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.headerGradient}>
+        <LinearGradient colors={[colors.headerAccent, colors.headerPlum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.headerGradient}>
           <View style={styles.headerRow}>
+            {/* 「戻る・通知・設定のアイコンサイズと余白を統一する」という
+                指摘を受け、3つとも同じサイズ(22)・同じ間隔(gap:16)に揃えた。 */}
             <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back}>
-              <Ionicons name="chevron-back" size={26} color="#fff" />
+              <Ionicons name="chevron-back" size={22} color="#fff" />
             </Pressable>
             <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleCol}>
               <Text style={styles.title} numberOfLines={1}>{group.name}</Text>
@@ -301,13 +310,16 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
         </LinearGradient>
       </View>
 
-      <View style={styles.memberStrip}>
+      {/* 「メンバーが増えた場合は横スクロールできるようにする」という
+          指摘を受け、折り返し(flexWrap)から横スクロール(ScrollView)に
+          変更した。人数が少ない間は画面内に収まるため見た目は変わらない。 */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.memberStrip}>
         {members.map((m) => {
           const isMe = m.id === meId;
           const isAdmin = m.id === group.created_by;
           const slot = (
             <>
-              <Avatar name={m.display_name} emoji={m.avatar_emoji} size="md" />
+              <Avatar name={m.display_name} emoji={m.avatar_emoji} size="lg" />
               <Text style={styles.memberSlotName} numberOfLines={1}>
                 {m.display_name}
               </Text>
@@ -347,7 +359,7 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
           </View>
           <Text style={styles.memberSlotName}>{t.group.invite}</Text>
         </Pressable>
-      </View>
+      </ScrollView>
     </View>
   );
 
@@ -477,6 +489,7 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
         />
       )}
       <Toast message={t.group.notificationsComingSoon} visible={notifToastVisible} onHide={() => setNotifToastVisible(false)} />
+      <Toast message={inviteToastMessage ?? ''} visible={inviteToastMessage !== null} onHide={() => setInviteToastMessage(null)} />
     </View>
   );
 }
@@ -517,15 +530,20 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
-  headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  titleCol: { flex: 1, marginHorizontal: 12 },
-  title: { ...fonts.display, fontSize: 20, color: '#fff' },
+  // 「戻る・通知・設定の余白を統一する」ため、titleColの左右マージンを
+  // headerRightRowのgapと同じ16に揃えた。
+  headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  titleCol: { flex: 1, marginHorizontal: 16 },
+  // 「グループ名をもう少し大きくする」という指摘を受けてfontSizeを上げた。
+  title: { ...fonts.display, fontSize: 23, color: '#fff' },
   memberCount: { ...fonts.bodyMedium, fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 1 },
-  memberStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 18 },
-  memberSlot: { alignItems: 'center', width: 64, gap: 3 },
-  memberSlotName: { ...fonts.bodyMedium, fontSize: 11.5, color: colors.ink, maxWidth: 62 },
-  adminBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1.5, paddingHorizontal: 7 },
-  adminBadgeText: { ...fonts.bodySemiBold, fontSize: 9.5, color: colors.accent },
+  memberStrip: { flexDirection: 'row', gap: 16, marginBottom: 18, paddingRight: 4 },
+  memberSlot: { alignItems: 'center', width: 70, gap: 4 },
+  memberSlotName: { ...fonts.bodyMedium, fontSize: 12, color: colors.ink, maxWidth: 68 },
+  // 「『管理者』タグは位置・サイズで問題ないが、少し小さくして主張を
+  // 弱める」という指摘を受け、paddingとfontSizeを一段階小さくした。
+  adminBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1, paddingHorizontal: 6 },
+  adminBadgeText: { ...fonts.bodySemiBold, fontSize: 8.5, color: colors.accent },
   avatarCircle: {
     width: 44,
     height: 44,
@@ -533,9 +551,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pendingCircle: { backgroundColor: colors.favor },
-  pendingBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1.5, paddingHorizontal: 7 },
-  pendingBadgeText: { ...fonts.bodySemiBold, fontSize: 9.5, color: colors.accent },
+  // 「招待中のユーザーは通常メンバーと見た目を明確に区別する(点線枠＋
+  // メールアイコン＋招待中)」という指摘を受け、塗りつぶし円はそのまま
+  // 維持しつつ、点線の縁取りを重ねて「まだ確定していない」印象を強めた。
+  pendingCircle: {
+    backgroundColor: colors.favor,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255,255,255,0.7)',
+  },
+  pendingBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1, paddingHorizontal: 6 },
+  pendingBadgeText: { ...fonts.bodySemiBold, fontSize: 8.5, color: colors.accent },
   addCircle: { borderWidth: 1.5, borderColor: colors.muted, borderStyle: 'dashed' },
   sectionTitle: {
     ...fonts.bodySemiBold,

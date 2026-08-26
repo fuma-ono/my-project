@@ -3,7 +3,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { Alert, Pressable, SectionList, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, SectionList, Share, StyleSheet, Text, View } from 'react-native';
 
 import AddEntrySheet from '../components/AddEntrySheet';
 import AutoSettlePlan from '../components/AutoSettlePlan';
@@ -46,6 +46,7 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [invites, setInvites] = useState<GroupInvite[]>([]);
   const [notifToastVisible, setNotifToastVisible] = useState(false);
+  const [inviteToastMessage, setInviteToastMessage] = useState<string | null>(null);
   const meId = DEMO_ME_ID;
   const me = members.find((m) => m.id === meId);
 
@@ -281,10 +282,10 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
         <Text style={styles.demoBannerText}>{t.demo.banner}</Text>
       </View>
       <View style={styles.headerShadowWrap}>
-        <LinearGradient colors={[colors.accent, colors.plum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.headerGradient}>
+        <LinearGradient colors={[colors.headerAccent, colors.headerPlum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.headerGradient}>
           <View style={styles.headerRow}>
             <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back}>
-              <Ionicons name="chevron-back" size={26} color="#fff" />
+              <Ionicons name="chevron-back" size={22} color="#fff" />
             </Pressable>
             <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleCol}>
               <Text style={styles.title} numberOfLines={1}>{group.name}</Text>
@@ -302,13 +303,13 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
         </LinearGradient>
       </View>
 
-      <View style={styles.memberStrip}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.memberStrip}>
         {members.map((m) => {
           const isMe = m.id === meId;
           const isAdmin = m.id === group.created_by;
           const slot = (
             <>
-              <Avatar name={m.display_name} emoji={m.avatar_emoji} size="md" />
+              <Avatar name={m.display_name} emoji={m.avatar_emoji} size="lg" />
               <Text style={styles.memberSlotName} numberOfLines={1}>
                 {m.display_name}
               </Text>
@@ -348,7 +349,7 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
           </View>
           <Text style={styles.memberSlotName}>{t.group.invite}</Text>
         </Pressable>
-      </View>
+      </ScrollView>
     </View>
   );
 
@@ -485,7 +486,10 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
           const res = await inviteMember(invitedName);
           // InviteModal自身の閉じるアニメーションと競合しないよう、共有シートは
           // 少し遅らせて開く(詳細はGroupScreen.tsxの同じ箇所のコメント参照)。
-          if (!res.error) setTimeout(shareInvite, 500);
+          if (!res.error) {
+            setInviteToastMessage(t.group.inviteSuccessToast(invitedName));
+            setTimeout(shareInvite, 500);
+          }
           return res;
         }}
       />
@@ -501,14 +505,17 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
       />
 
       <Toast message={t.group.notificationsComingSoon} visible={notifToastVisible} onHide={() => setNotifToastVisible(false)} />
+      <Toast message={inviteToastMessage ?? ''} visible={inviteToastMessage !== null} onHide={() => setInviteToastMessage(null)} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
-  demoBanner: { backgroundColor: colors.favor, marginHorizontal: -20, paddingVertical: 8, paddingHorizontal: 16, paddingTop: 44, marginBottom: 8 },
-  demoBannerText: { ...fonts.bodySemiBold, fontSize: 12, color: '#fff', textAlign: 'center' },
+  // 「デモモード表示は高さを少し小さくし、薄いバナー程度にしてメインUIへの
+  // 影響を減らす」という指摘を受け、上下の余白とフォントサイズを縮小した。
+  demoBanner: { backgroundColor: colors.favor, marginHorizontal: -20, paddingVertical: 3, paddingHorizontal: 16, paddingTop: 40, marginBottom: 4 },
+  demoBannerText: { ...fonts.bodyMedium, fontSize: 10.5, color: '#fff', textAlign: 'center' },
   list: { paddingHorizontal: 20, paddingBottom: 100 },
   // デモバナー自体がステータスバー分のpaddingTopを持っているため、ここでは
   // 本番のGroupScreen.tsxより控えめなpaddingTopにしている。
@@ -541,15 +548,15 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
-  headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  titleCol: { flex: 1, marginHorizontal: 12 },
-  title: { ...fonts.display, fontSize: 20, color: '#fff' },
+  headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  titleCol: { flex: 1, marginHorizontal: 16 },
+  title: { ...fonts.display, fontSize: 23, color: '#fff' },
   memberCount: { ...fonts.bodyMedium, fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 1 },
-  memberStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 18 },
-  memberSlot: { alignItems: 'center', width: 64, gap: 3 },
-  memberSlotName: { ...fonts.bodyMedium, fontSize: 11.5, color: colors.ink, maxWidth: 62 },
-  adminBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1.5, paddingHorizontal: 7 },
-  adminBadgeText: { ...fonts.bodySemiBold, fontSize: 9.5, color: colors.accent },
+  memberStrip: { flexDirection: 'row', gap: 16, marginBottom: 18, paddingRight: 4 },
+  memberSlot: { alignItems: 'center', width: 70, gap: 4 },
+  memberSlotName: { ...fonts.bodyMedium, fontSize: 12, color: colors.ink, maxWidth: 68 },
+  adminBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1, paddingHorizontal: 6 },
+  adminBadgeText: { ...fonts.bodySemiBold, fontSize: 8.5, color: colors.accent },
   avatarCircle: {
     width: 44,
     height: 44,
@@ -557,9 +564,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pendingCircle: { backgroundColor: colors.favor },
-  pendingBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1.5, paddingHorizontal: 7 },
-  pendingBadgeText: { ...fonts.bodySemiBold, fontSize: 9.5, color: colors.accent },
+  pendingCircle: {
+    backgroundColor: colors.favor,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255,255,255,0.7)',
+  },
+  pendingBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1, paddingHorizontal: 6 },
+  pendingBadgeText: { ...fonts.bodySemiBold, fontSize: 8.5, color: colors.accent },
   addCircle: { borderWidth: 1.5, borderColor: colors.muted, borderStyle: 'dashed' },
   sectionTitle: {
     ...fonts.bodySemiBold,

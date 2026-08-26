@@ -30,7 +30,12 @@ export default function BottomTabBar({ tab, onChange }: Props) {
         const active = tab === item.key;
         return (
           <Pressable key={item.key} onPress={() => onChange(item.key)} style={styles.btn} hitSlop={4}>
-            <Ionicons name={active ? item.iconActive : item.icon} size={22} color={active ? colors.accent : colors.muted} />
+            {/* 「選択中のタブは背景＋文字色で明確にする」という指摘を受け、
+                色の変化だけでなく、アイコン+ラベルの背後に薄い背景ピルを
+                添えて選択状態をより分かりやすくした。 */}
+            <View style={[styles.iconWrap, active && styles.iconWrapActive]}>
+              <Ionicons name={active ? item.iconActive : item.icon} size={22} color={active ? colors.accent : colors.muted} />
+            </View>
             <Text style={[styles.label, active && styles.labelActive]}>{labelOf(item.key)}</Text>
           </Pressable>
         );
@@ -52,7 +57,9 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 26,
   },
-  btn: { flex: 1, alignItems: 'center', gap: 3 },
+  btn: { flex: 1, alignItems: 'center', gap: 5 },
+  iconWrap: { paddingHorizontal: 18, paddingVertical: 3, borderRadius: 999 },
+  iconWrapActive: { backgroundColor: colors.accentSoft },
   label: { ...fonts.bodyMedium, fontSize: 11, color: colors.muted },
   labelActive: { ...fonts.bodySemiBold, color: colors.accent },
 });

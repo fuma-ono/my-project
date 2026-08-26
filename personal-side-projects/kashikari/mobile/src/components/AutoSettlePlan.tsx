@@ -79,31 +79,43 @@ export default function AutoSettlePlan({ groupName, currency, transactions, name
         ))}
       </View>
 
+      {/* 「共有する/まとめて精算するの重要度を明確にする」という指摘を
+          受け、共有するは白背景＋枠線のsecondaryボタンに変更した
+          (以前はテキストのみのghost)。 */}
       <View style={styles.actions}>
-        <PrimaryButton title={t.group.autoSettleShareButton} variant="ghost" onPress={share} style={styles.shareButton} />
-        <PrimaryButton title={t.group.autoSettleButton} onPress={settleAndShare} style={styles.settleButton} />
+        <PrimaryButton title={t.group.autoSettleShareButton} variant="secondary" compact onPress={share} style={styles.shareButton} />
+        <PrimaryButton title={t.group.autoSettleButton} compact onPress={settleAndShare} style={styles.settleButton} />
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  // 「グラデーションを多用しすぎない。その他は白背景＋薄いグレーの
+  // 境界線を基本とする」という指摘を受け、枠線をブランドカラー
+  // (accentSoft)から薄いグレー(line)に変更した。
   card: {
     backgroundColor: colors.surface,
     borderRadius: 20,
     padding: 18,
     marginBottom: 18,
     borderWidth: 1.5,
-    borderColor: colors.accentSoft,
+    borderColor: colors.line,
   },
   title: { ...fonts.bodySemiBold, fontSize: 15, color: colors.ink },
-  subtitle: { ...fonts.body, fontSize: 12.5, color: colors.muted, marginTop: 2, marginBottom: 14 },
+  // 「『¥500支払うだけで精算完了します』の説明を目立たせる」という
+  // 指摘を受け、色をmutedからaccentに、太さをbodySemiBoldに変更した。
+  subtitle: { ...fonts.bodySemiBold, fontSize: 13, color: colors.accent, marginTop: 2, marginBottom: 14 },
   rows: { gap: 10, marginBottom: 16 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { ...fonts.bodyMedium, fontSize: 13.5, color: colors.ink, flexShrink: 1 },
   arrow: { color: colors.muted },
   amount: { ...fonts.bodySemiBold, fontSize: 13.5, color: colors.ink, marginLeft: 'auto' },
-  actions: { flexDirection: 'row', gap: 8 },
+  // 「＋ボタンがこのカードと重なっている」という指摘への対応。右下に
+  // 浮くFAB(幅60・右余白20)の左端までボタンの右端が収まるよう余白を
+  // 確保している。ボタン自体もcompact(左右paddingを詰める)にして、
+  // 「まとめて精算する」が1行に収まる幅を残した。
+  actions: { flexDirection: 'row', gap: 6, paddingRight: 44 },
   shareButton: {},
   settleButton: { flex: 1 },
 });

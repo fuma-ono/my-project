@@ -46,8 +46,13 @@ export default function NetSummary({ totals, balances, meId }: Props) {
     <LinearGradient colors={[colors.accent, colors.plum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
       {/* 参考UIの残高カードに合わせて、右上に財布アイコン(装飾)・右下に
           シェブロン(装飾。すぐ下に内訳セクションが続くため、タップ先は
-          別途持たせていない)を添えた。 */}
-      <Ionicons name="wallet" size={64} color="rgba(255,255,255,0.18)" style={styles.walletIcon} />
+          別途持たせていない)を添えた。「主役は金額」という指摘を受け、
+          財布アイコンは金額の邪魔にならないよう、より薄くしている。 */}
+      <Ionicons name="wallet" size={64} color="rgba(255,255,255,0.12)" style={styles.walletIcon} />
+      {/* 「『あなたの残高』と『支払う金額』が混同しやすい」という指摘への
+          対応: 見出し(heading)はグループ名の下にある小さな添え書きとして
+          さらに控えめにし、「支払う金額/受け取る金額」のラベルを金額の
+          直前に来る一番の主張点として太さ・不透明度を上げた。 */}
       <Text style={styles.heading}>{t.netSummary.heading}</Text>
       {totals.map((total, i) => {
         const owed = total.amount > 0; // 正値 = 自分が受け取る側(lib/balances.tsのNetTotal参照)
@@ -58,10 +63,15 @@ export default function NetSummary({ totals, balances, meId }: Props) {
           if (b.creditor === meId) receivable += b.amount;
           else if (b.debtor === meId) payable += b.amount;
         }
+        const amountStr = formatMoney(Math.abs(total.amount), total.currency);
         return (
           <View key={total.currency} style={[styles.line, i > 0 && styles.lineDivider]}>
             <Text style={styles.label}>{owed ? t.netSummary.receiving : t.netSummary.paying}</Text>
-            <Text style={styles.amount}>{formatMoney(Math.abs(total.amount), total.currency)}</Text>
+            <Text style={styles.amount}>{amountStr}</Text>
+            {/* 「何をすべきか分かる説明を追加してもよい」という指摘への対応。 */}
+            <Text style={styles.actionHint}>
+              {owed ? t.netSummary.actionHintReceive(amountStr) : t.netSummary.actionHintPay(amountStr)}
+            </Text>
             {/* 参考UIに合わせ、「受取 ¥1,500」のような省略形1行ではなく、
                 「受け取る金額」「支払う金額」を見出しにした2カラム構成にした。 */}
             <View style={styles.grossRow}>
@@ -84,27 +94,33 @@ export default function NetSummary({ totals, balances, meId }: Props) {
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: 24, padding: 24, marginBottom: 8, overflow: 'hidden' },
+  // 「カード内の余白を少し増やして窮屈感をなくす」「カード間の余白も
+  // 統一する」という指摘を受け、paddingとmarginBottomをそれぞれ増やした
+  // (他のカードのmarginBottom:18と揃えている)。
+  card: { borderRadius: 24, padding: 26, marginBottom: 18, overflow: 'hidden' },
   walletIcon: { position: 'absolute', top: 18, right: 18 },
   chevron: { position: 'absolute', bottom: 20, right: 20 },
+  // 「『あなたの残高』と『支払う金額』が混同しやすい」という指摘への
+  // 対応で、headingはより控えめな添え書きに(不透明度を下げた)。
   heading: {
-    ...fonts.bodySemiBold,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.85)',
-    marginBottom: 14,
+    ...fonts.bodyMedium,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.65)',
+    marginBottom: 10,
   },
   line: { paddingVertical: 6 },
   lineDivider: { marginTop: 6, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.22)', paddingTop: 14 },
+  // labelは「支払う金額/受け取る金額」— 金額の直前に来る、実質的な
+  // メインの見出し。headingより濃く・太くして主張を強めている。
   label: {
     ...fonts.bodySemiBold,
-    fontSize: 12.5,
-    color: 'rgba(255,255,255,0.85)',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom: 2,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.95)',
+    marginBottom: 4,
   },
-  amount: { ...fonts.display, fontSize: 42, color: '#fff', letterSpacing: -0.5 },
-  grossRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, paddingRight: 28 },
+  amount: { ...fonts.display, fontSize: 44, color: '#fff', letterSpacing: -0.5 },
+  actionHint: { ...fonts.bodyMedium, fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 6 },
+  grossRow: { flexDirection: 'row', alignItems: 'center', marginTop: 18, paddingRight: 28 },
   grossCol: { flex: 1 },
   grossDivider: { width: 1, height: 28, backgroundColor: 'rgba(255,255,255,0.25)', marginHorizontal: 16 },
   grossLabel: { ...fonts.bodyMedium, fontSize: 12, color: 'rgba(255,255,255,0.75)', marginBottom: 3 },

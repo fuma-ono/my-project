@@ -48,9 +48,13 @@ export const ja = {
     receivingSection: '受け取る',
     payingSection: '支払う',
     otherSection: 'グループ内の他のやりとり',
-    progressLabel: '精算進捗',
-    progressCount: (done: number, total: number) => `${done}/${total}人完了`,
-    progressRemaining: (n: number) => `あと${n}件で完了`,
+    progressLabel: '精算の進捗',
+    // 「20%だけでは何の20%か分かりにくい」という指摘を受け、割合の
+    // 内訳(支払い済み/残り件数)を添えるようにした。「完了」ではなく
+    // 「支払い済み」としているのは、この段階はまだ受け取る側の確認待ち
+    // (settle_status: 'paid')であり、双方確認が済んだ「完了」
+    // (confirmed)とは区別しているため。
+    progressFraction: (paid: number, remaining: number) => `${paid}/${remaining}件 支払い済み`,
     unpaidTitle: '未払い',
     unpaidEmpty: '未払いの相手はいません',
     autoSettleTitle: '🎯 おすすめ精算方法',
@@ -86,6 +90,7 @@ export const ja = {
     leaveConfirmButton: '抜ける',
     leaveFailedTitle: '抜けられませんでした',
     notificationsComingSoon: '通知機能は準備中です。もうしばらくお待ちください。',
+    inviteSuccessToast: (name: string) => `${name}を招待しました`,
   },
   groupForm: {
     createTitle: '新しいグループ',
@@ -133,6 +138,8 @@ export const ja = {
   },
   netSummary: {
     heading: 'あなたの残高',
+    actionHintPay: (amount: string) => `${amount}支払うと精算が完了します`,
+    actionHintReceive: (amount: string) => `${amount}受け取ると精算が完了します`,
     allSettledTitle: '精算完了!',
     allSettled: '全員の貸し借りが解消されました',
     receiving: '受け取る金額',
@@ -301,8 +308,7 @@ export const en: Strings = {
     payingSection: 'Paying',
     otherSection: "Other members' balances",
     progressLabel: 'Settlement progress',
-    progressCount: (done: number, total: number) => `${done}/${total} done`,
-    progressRemaining: (n: number) => `${n} left to settle`,
+    progressFraction: (paid: number, remaining: number) => `${paid}/${remaining} paid`,
     unpaidTitle: 'Unpaid',
     unpaidEmpty: 'Nobody owes you right now',
     autoSettleTitle: '🎯 Recommended way to settle',
@@ -338,6 +344,7 @@ export const en: Strings = {
     leaveConfirmButton: 'Leave',
     leaveFailedTitle: "Couldn't leave the group",
     notificationsComingSoon: 'Notifications are coming soon. Hang tight!',
+    inviteSuccessToast: (name: string) => `Invited ${name}`,
   },
   groupForm: {
     createTitle: 'New group',
@@ -385,6 +392,8 @@ export const en: Strings = {
   },
   netSummary: {
     heading: 'Your balance',
+    actionHintPay: (amount: string) => `Pay ${amount} to settle up`,
+    actionHintReceive: (amount: string) => `Receive ${amount} to settle up`,
     allSettledTitle: 'All settled!',
     allSettled: "Everyone's debts are cleared",
     receiving: "Amount you'll receive",
