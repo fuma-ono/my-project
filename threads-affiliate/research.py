@@ -63,10 +63,12 @@ KEYWORDS = [
 
 MAX_PRICE = 15000  # これを超える価格帯は購入ハードルが高いとみなし除外(暫定の目安)
 
-# 楽天アプリ作成フォームの「許可されたウェブサイト」に登録したドメイン。
-# 新APIはRefererヘッダーが無いと REQUEST_CONTEXT_BODY_HTTP_REFERRER_MISSING で
-# 弾かれることを実機確認したため、必ずこのRefererを付けて呼び出す。
-REFERER = "https://note.com/"
+# 楽天アプリ作成フォームで「アプリケーションURL」に登録した値そのもの。
+# 「許可されたウェブサイト」欄のドメイン(note.com)に対する単純なRefererでは
+# REQUEST_CONTEXT_BODY_HTTP_REFERRER_MISSING が解消しなかったため、
+# アプリケーションURLと完全一致させる形に変更した(公式APIドキュメントには
+# この項目の記載が無く、WAF層での照合と見られるため未確定要素あり)。
+REFERER = "https://note.com/unique_condor276"
 
 REQUEST_INTERVAL_SEC = 2  # 連続リクエストで 429 Too Many Requests になったため、間隔を空ける
 
@@ -102,7 +104,11 @@ def search_items(keyword: str, app_id: str, access_key: str, affiliate_id: str) 
         "format": "json",
     }
     url = f"{SEARCH_API}?{urllib.parse.urlencode(params)}"
-    request = urllib.request.Request(url, headers={"Referer": REFERER})
+    # Origin も併用: WAFがRefererではなくOriginを見ているケースへの保険
+    # (OriginはRefererと違いパスを含まない、scheme://hostのみの形式)
+    referer_parts = urllib.parse.urlsplit(REFERER)
+    origin = f"{referer_parts.scheme}://{referer_parts.netloc}"
+    request = urllib.request.Request(url, headers={"Referer": REFERER, "Origin": origin})
     try:
         with urllib.request.urlopen(request, timeout=30) as resp:
             data = json.loads(resp.read().decode())
