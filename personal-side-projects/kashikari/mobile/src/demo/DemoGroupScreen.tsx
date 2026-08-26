@@ -285,6 +285,10 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
           <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back}>
             <Ionicons name="chevron-back" size={26} color="#fff" />
           </Pressable>
+          <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleCol}>
+            <Text style={styles.title} numberOfLines={1}>{group.name}</Text>
+            <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
+          </Pressable>
           <View style={styles.headerRightRow}>
             <Pressable onPress={() => setNotifToastVisible(true)} hitSlop={10}>
               <Ionicons name="notifications-outline" size={22} color="#fff" />
@@ -294,10 +298,6 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
             </Pressable>
           </View>
         </View>
-        <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleRow}>
-          <Text style={styles.title}>{group.name}</Text>
-          <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
-        </Pressable>
       </LinearGradient>
 
       <View style={styles.memberStrip}>
@@ -519,11 +519,11 @@ const styles = StyleSheet.create({
     marginHorizontal: -20,
     marginBottom: 18,
   },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerRow: { flexDirection: 'row', alignItems: 'center' },
   headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  titleRow: { marginTop: 10 },
-  title: { ...fonts.display, fontSize: 24, color: '#fff' },
-  memberCount: { ...fonts.bodyMedium, fontSize: 12.5, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
+  titleCol: { flex: 1, marginHorizontal: 12 },
+  title: { ...fonts.display, fontSize: 20, color: '#fff' },
+  memberCount: { ...fonts.bodyMedium, fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 1 },
   memberStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 18 },
   memberSlot: { alignItems: 'center', width: 64, gap: 3 },
   memberSlotName: { ...fonts.bodyMedium, fontSize: 11.5, color: colors.ink, maxWidth: 62 },

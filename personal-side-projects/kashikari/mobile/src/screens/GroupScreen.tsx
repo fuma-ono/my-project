@@ -267,11 +267,18 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
           グラデーションだったが、参考画像に合わせてヘッダー自体にも
           ブランドのグラデーションを敷いた。グループアイコンの絵文字
           (Mark)は参考画像に無いため非表示にしたが、タップでアイコンを
-          変更する機能自体はタイトル部分に残している。 */}
+          変更する機能自体はタイトル部分に残している。
+          「グループ名の位置がおかしい、＜の横に」という指摘を受け、
+          戻る矢印とタイトルを別の行に分けていたのをやめ、矢印のすぐ
+          右にタイトルが来る1行のレイアウトに変更した。 */}
       <LinearGradient colors={[colors.accent, colors.plum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.headerGradient}>
         <View style={styles.headerRow}>
           <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back}>
             <Ionicons name="chevron-back" size={26} color="#fff" />
+          </Pressable>
+          <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleCol}>
+            <Text style={styles.title} numberOfLines={1}>{group.name}</Text>
+            <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
           </Pressable>
           <View style={styles.headerRightRow}>
             <Pressable onPress={() => setNotifToastVisible(true)} hitSlop={10}>
@@ -282,10 +289,6 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
             </Pressable>
           </View>
         </View>
-        <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleRow}>
-          <Text style={styles.title}>{group.name}</Text>
-          <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
-        </Pressable>
       </LinearGradient>
 
       <View style={styles.memberStrip}>
@@ -474,17 +477,17 @@ const styles = StyleSheet.create({
   headerGradient: {
     paddingTop: 54,
     paddingHorizontal: 20,
-    paddingBottom: 22,
+    paddingBottom: 20,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     marginHorizontal: -20,
     marginBottom: 18,
   },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerRow: { flexDirection: 'row', alignItems: 'center' },
   headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  titleRow: { marginTop: 10 },
-  title: { ...fonts.display, fontSize: 24, color: '#fff' },
-  memberCount: { ...fonts.bodyMedium, fontSize: 12.5, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
+  titleCol: { flex: 1, marginHorizontal: 12 },
+  title: { ...fonts.display, fontSize: 20, color: '#fff' },
+  memberCount: { ...fonts.bodyMedium, fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 1 },
   memberStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 18 },
   memberSlot: { alignItems: 'center', width: 64, gap: 3 },
   memberSlotName: { ...fonts.bodyMedium, fontSize: 11.5, color: colors.ink, maxWidth: 62 },
