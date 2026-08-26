@@ -340,6 +340,7 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
               onSettle={() => settlePair(item.type, item.debtor, item.creditor, item.currency)}
               onMarkPaid={() => markPaid(item.debtor, item.creditor, item.currency)}
               onConfirmReceived={() => confirmReceived(item.debtor, item.creditor, item.currency)}
+              onRemindSent={() => logEvent('reminder_sent', { userId: meId, groupId: group.id })}
             />
           )}
           ItemSeparatorComponent={() => <View style={styles.hairline} />}
@@ -355,6 +356,7 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
           nameOf={nameOf}
           emojiOf={emojiOf}
           onConfirmReceived={(row) => confirmReceived(row.debtor, row.creditor, row.currency)}
+          onRemindSent={() => logEvent('reminder_sent', { userId: meId, groupId: group.id })}
           onClose={() => setUnpaidModalOpen(false)}
         />
       </View>

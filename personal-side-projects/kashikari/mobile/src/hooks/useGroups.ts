@@ -44,7 +44,7 @@ export function useGroups(userId: string | null) {
       const { data, error } = await supabase.rpc('join_group', { _invite_code: trimmed });
       if (error) return { error: error.message, group: null };
       const group = data as Group;
-      logEvent('group_joined', { userId, groupId: group.id });
+      logEvent('invite_joined', { userId, groupId: group.id });
       await refresh();
       return { error: null, group };
     },

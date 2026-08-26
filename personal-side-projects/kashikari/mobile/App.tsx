@@ -9,10 +9,11 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import PremiumScreen from './src/screens/PremiumScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import SplashScreen from './src/screens/SplashScreen';
+import UsageScreen from './src/screens/UsageScreen';
 import { useAuth } from './src/hooks/useAuth';
 import { useGroups } from './src/hooks/useGroups';
 import { LanguageProvider } from './src/i18n';
-import { logEvent } from './src/lib/analytics';
+import { getUsageStats, logEvent } from './src/lib/analytics';
 import type { Group } from './src/types';
 
 // 起動直後、読み込みが一瞬で終わってもロゴが一瞬フラッシュするだけにならない
@@ -26,7 +27,8 @@ type Screen =
   | { name: 'groups' }
   | { name: 'group'; group: Group; justCreated?: boolean }
   | { name: 'settings'; returnTo?: Screen }
-  | { name: 'premium'; returnTo?: Screen };
+  | { name: 'premium'; returnTo?: Screen }
+  | { name: 'usage'; returnTo?: Screen };
 
 // kashikari://join?code=XXXXXX 形式の招待リンクが開かれたかどうかを判定する。
 // 現状(Expo Go実行中)はこのリンク自体を開いても実際にはアプリに渡って
@@ -130,6 +132,7 @@ function AppInner() {
           onChangeDisplayName={(name) => setDisplayName(name, profile.avatar_emoji)}
           onChangeAvatar={updateAvatar}
           onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
+          onOpenUsage={() => setScreen({ name: 'usage', returnTo: screen })}
         />
       )}
       {screen.name === 'premium' && (
@@ -138,6 +141,9 @@ function AppInner() {
           onView={() => logEvent('premium_view', { userId })}
           onInterest={() => logEvent('premium_interest', { userId })}
         />
+      )}
+      {screen.name === 'usage' && (
+        <UsageScreen onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })} fetchStats={getUsageStats} />
       )}
       <StatusBar style="dark" />
     </>

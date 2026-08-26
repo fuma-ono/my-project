@@ -16,9 +16,10 @@ type Props = {
   onChangeDisplayName: (name: string) => Promise<{ error: string | null }>;
   onChangeAvatar: (emoji: string) => Promise<{ error: string | null }>;
   onOpenPremium: () => void;
+  onOpenUsage: () => void;
 };
 
-export default function SettingsScreen({ profile, onBack, onChangeDisplayName, onChangeAvatar, onOpenPremium }: Props) {
+export default function SettingsScreen({ profile, onBack, onChangeDisplayName, onChangeAvatar, onOpenPremium, onOpenUsage }: Props) {
   const { lang, setLang, t } = useLanguage();
   const [name, setName] = useState(profile.display_name);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -82,6 +83,11 @@ export default function SettingsScreen({ profile, onBack, onChangeDisplayName, o
 
         <Pressable onPress={onOpenPremium} style={styles.premiumRow}>
           <Text style={styles.premiumRowText}>{t.settings.premiumRow}</Text>
+          <Text style={styles.premiumChevron}>›</Text>
+        </Pressable>
+
+        <Pressable onPress={onOpenUsage} style={[styles.premiumRow, styles.usageRow]}>
+          <Text style={styles.usageRowText}>{t.settings.usageRow}</Text>
           <Text style={styles.premiumChevron}>›</Text>
         </Pressable>
 
@@ -177,6 +183,8 @@ const styles = StyleSheet.create({
   },
   premiumRowText: { ...fonts.bodySemiBold, fontSize: 15, color: colors.plum },
   premiumChevron: { ...fonts.bodySemiBold, fontSize: 18, color: colors.muted },
+  usageRow: { marginTop: 10 },
+  usageRowText: { ...fonts.bodySemiBold, fontSize: 15, color: colors.ink },
   aboutText: { ...fonts.bodySemiBold, fontSize: 15, color: colors.ink },
   aboutVersion: { ...fonts.body, fontSize: 13, color: colors.muted, marginTop: 4 },
 });

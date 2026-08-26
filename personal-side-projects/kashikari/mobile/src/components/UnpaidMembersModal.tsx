@@ -14,6 +14,7 @@ type Props = {
   nameOf: (id: string) => string;
   emojiOf: (id: string) => string | null;
   onConfirmReceived: (row: BalanceRow) => void;
+  onRemindSent: () => void;
   onClose: () => void;
 };
 
@@ -23,7 +24,7 @@ type Props = {
 // している(催促→支払い→完了、という導線のハブ)。行がstatus==='paid'
 // (相手が既に「支払った」を押した)になっていれば、催促するの代わりに
 // その場で「受け取った」を押して完了させられる。
-export default function UnpaidMembersModal({ visible, rows, nameOf, emojiOf, onConfirmReceived, onClose }: Props) {
+export default function UnpaidMembersModal({ visible, rows, nameOf, emojiOf, onConfirmReceived, onRemindSent, onClose }: Props) {
   const t = useT();
 
   return (
@@ -62,7 +63,7 @@ export default function UnpaidMembersModal({ visible, rows, nameOf, emojiOf, onC
                         </Pressable>
                       )}
                       {isMoney && !awaitingConfirm && (
-                        <Pressable onPress={() => openRemindPrompt(t, amountLabel)} hitSlop={8} style={styles.remindBtn}>
+                        <Pressable onPress={() => openRemindPrompt(t, amountLabel, onRemindSent)} hitSlop={8} style={styles.remindBtn}>
                           <Text style={styles.remindText}>{t.balanceCard.remind}</Text>
                         </Pressable>
                       )}

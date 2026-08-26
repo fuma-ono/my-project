@@ -372,6 +372,7 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
               onSettle={() => settlePair(item.type, item.debtor, item.creditor, item.currency)}
               onMarkPaid={() => markPaid(item.debtor, item.creditor, item.currency)}
               onConfirmReceived={() => confirmReceived(item.debtor, item.creditor, item.currency)}
+              onRemindSent={() => {}}
             />
           )}
           ItemSeparatorComponent={() => <View style={styles.hairline} />}
@@ -460,6 +461,7 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
         nameOf={nameOf}
         emojiOf={emojiOf}
         onConfirmReceived={(row) => confirmReceived(row.debtor, row.creditor, row.currency)}
+        onRemindSent={() => {}}
         onClose={() => setUnpaidModalOpen(false)}
       />
     </View>

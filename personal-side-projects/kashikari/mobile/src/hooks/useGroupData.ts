@@ -94,7 +94,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       if (!groupId) return { error: t.auth.unauthenticated };
       const { error } = await supabase.rpc('create_group_invite', { _group_id: groupId, _invited_name: invitedName });
       if (error) return { error: error.message };
-      logEvent('invite_link_generated', { userId, groupId });
+      logEvent('invite_sent', { userId, groupId });
       await loadAll();
       return { error: null };
     },
@@ -133,6 +133,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
         created_by: userId,
       });
       if (error) return { error: error.message };
+      logEvent('entry_created', { userId, groupId });
       await loadAll();
       return { error: null };
     },
@@ -180,6 +181,9 @@ export function useGroupData(groupId: string | null, userId: string | null) {
 
       const { error } = await supabase.from('entries').insert(rows);
       if (error) return { error: error.message };
+      // 割り勘は1回の操作でrows.length件のentriesが作られるため、
+      // 「貸し借り登録数」の集計と揃うよう作られた件数分だけ記録する。
+      for (let i = 0; i < rows.length; i++) logEvent('entry_created', { userId, groupId });
       await loadAll();
       return { error: null };
     },
@@ -253,7 +257,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
         .update({ settle_status: 'paid', paid_at: new Date().toISOString() })
         .in('id', ids);
       if (!error) {
-        logEvent('entry_marked_paid', { userId, groupId });
+        logEvent('marked_paid', { userId, groupId });
         await loadAll();
       }
       return { error: error?.message ?? null };
@@ -280,7 +284,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
         .update({ settle_status: 'confirmed', confirmed_at: new Date().toISOString() })
         .in('id', ids);
       if (!error) {
-        logEvent('entry_marked_received', { userId, groupId });
+        logEvent('marked_confirmed', { userId, groupId });
         await loadAll();
       }
       return { error: error?.message ?? null };

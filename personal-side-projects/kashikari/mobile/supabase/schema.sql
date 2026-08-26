@@ -414,12 +414,14 @@ create policy "group members can delete receipts"
 -- 7. 成長施策の計測(招待〜精算までのファネルを追う最小限のログ)
 -- ============================================================
 --
--- グループ作成数・招待発行数・招待クリック数・参加完了数・精算完了数・
--- 支払った回数・受け取った回数を追うための、ごく簡単なイベントログ。
--- 誰でも自分の行動として1件ずつINSERTできるだけで、他人のイベントは
--- 読めない(SELECTポリシーを用意しない)。オーナーはSupabaseダッシュ
--- ボードのSQL Editor(サービスロール、RLSを迂回できる)から次のように
--- 集計できる:
+-- グループ作成数・招待送信数・参加完了数・貸し借り登録数・催促送信数・
+-- 精算完了数・Premium閲覧数・Premium興味数を追うための、ごく簡単な
+-- イベントログ。誰でも自分の行動として1件ずつINSERTできるだけで、
+-- 行そのもの(誰が・いつ・どのグループで)へのSELECTは誰にも許可して
+-- いない。アプリ内の「利用状況」画面は、下のget_usage_stats()という
+-- event_typeごとの件数だけを返す関数を経由して読む(個々の行は見えない)。
+-- オーナーはSupabaseダッシュボードのSQL Editor(サービスロール、RLSを
+-- 迂回できる)からも直接次のように集計できる:
 --
 --   select event_type, count(*) from public.analytics_events
 --   group by event_type order by count(*) desc;
@@ -453,3 +455,21 @@ drop policy if exists "users can log their own analytics events" on public.analy
 create policy "users can log their own analytics events"
   on public.analytics_events for insert
   with check (user_id = auth.uid() or user_id is null);
+
+-- アプリ内の「利用状況」画面用。analytics_eventsに直接SELECTポリシーは
+-- 与えず(他人の行動が個別に見えてしまうため)、event_typeごとの件数
+-- だけを返すsecurity definer関数を経由させる。個々の行(誰が・いつ・
+-- どのグループで)は一切外に出さない集計専用の窓口。
+create or replace function public.get_usage_stats()
+returns table(event_type text, event_count bigint)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select event_type, count(*) as event_count
+  from public.analytics_events
+  group by event_type;
+$$;
+
+grant execute on function public.get_usage_stats() to authenticated;

@@ -2,14 +2,22 @@ import { supabase } from './supabase';
 
 // 成長施策(招待→参加→精算)の効果を追うための、ごく最小限のイベント
 // ログ。集計方法はsupabase/schema.sqlのコメントを参照。
+//
+// 「検証施策」で「利用状況」ダッシュボードに合わせてイベント名を整理
+// した(invite_link_generated→invite_sent、group_joined→invite_joined、
+// entry_marked_paid→marked_paid、entry_marked_received→marked_confirmed)。
+// event_typeはDB側では単なるtext列(enum制約なし)のため、この変更は
+// 今後記録される行にのみ適用され、既存データを移行するものではない。
 export type AnalyticsEvent =
   | 'group_created'
-  | 'invite_link_generated'
+  | 'invite_sent'
   | 'invite_link_clicked'
-  | 'group_joined'
+  | 'invite_joined'
+  | 'entry_created'
+  | 'reminder_sent'
+  | 'marked_paid'
+  | 'marked_confirmed'
   | 'settlement_completed'
-  | 'entry_marked_paid'
-  | 'entry_marked_received'
   | 'premium_view'
   | 'premium_interest';
 
@@ -27,4 +35,34 @@ export function logEvent(event: AnalyticsEvent, opts: { userId?: string | null; 
       // 計測失敗は握りつぶす
     }
   })();
+}
+
+// 「利用状況」ダッシュボード用。event_typeごとの件数だけを返す
+// get_usage_stats() RPC(個々の行は見えない集計専用の窓口)を呼び、
+// 扱いやすい { イベント名: 件数 } の形にする。指定したevent_typeが
+// 1件も無ければ0を返す(呼び出し側でundefinedを気にしなくてよいように)。
+export async function getUsageStats(): Promise<Record<AnalyticsEvent, number>> {
+  const zeroed = {
+    group_created: 0,
+    invite_sent: 0,
+    invite_link_clicked: 0,
+    invite_joined: 0,
+    entry_created: 0,
+    reminder_sent: 0,
+    marked_paid: 0,
+    marked_confirmed: 0,
+    settlement_completed: 0,
+    premium_view: 0,
+    premium_interest: 0,
+  } as Record<AnalyticsEvent, number>;
+
+  const { data, error } = await supabase.rpc('get_usage_stats');
+  if (error || !data) return zeroed;
+
+  for (const row of data as { event_type: string; event_count: number | string }[]) {
+    if (row.event_type in zeroed) {
+      zeroed[row.event_type as AnalyticsEvent] = Number(row.event_count);
+    }
+  }
+  return zeroed;
 }
