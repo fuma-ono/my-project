@@ -383,6 +383,25 @@ PIANO_CHORDS_HISAISHI = [
     [62, 66, 69, 76],  # I(add9)  D
 ]
 
+# 2026-08-26(3): a second, contrasting progression — added per owner
+# feedback on the long-form structure ("曲A→曲B→曲C→曲D→曲A'→曲B'のよう
+# に微妙に展開を変えて、「同じ曲を延々ループしている感」を減らします").
+# Still all-major/D-major (same brightness direction), but opens on IV
+# instead of I and reorders the middle, so the melody generator's chord-
+# tone landings trace a different contour — piano_hisaishi_style()
+# alternates between this and PIANO_CHORDS_HISAISHI pass by pass instead
+# of tiling one progression for the full hour.
+PIANO_CHORDS_HISAISHI_B = [
+    [67, 71, 74],       # IV       G
+    [69, 73, 76],       # V        A
+    [62, 66, 69, 76],  # I(add9)  D
+    [67, 71, 74],       # IV       G
+    [62, 66, 69, 76],  # I(add9)  D
+    [69, 73, 76],       # V        A
+    [67, 71, 74],       # IV       G
+    [62, 66, 69, 76],  # I(add9)  D
+]
+
 
 def _scale_notes(root_midi: int, steps: list[int], low: int = 48, high: int = 88) -> list[int]:
     """All MIDI notes of a diatonic scale (root + `steps`, semitone offsets
@@ -540,16 +559,16 @@ def piano_hisaishi_style(minutes: float = 3.0) -> core.StereoTrack:
     # tempo that's ~18s, not the ~100s a "piece" was assumed to be when
     # n_passes was first computed (it was ceil(seconds/100), so a 3-minute
     # preview rendered only 2 real passes and ~2.5 minutes of silence
-    # padding). Tiling the progression 4x gives a proper ~74s piece (32
+    # padding). Tiling a progression 4x gives a proper ~74s piece (32
     # bars); the melody generator's random walk still produces different
     # notes each time through the repeated harmony (it's one continuous
     # walk across all 32 bars, not reset every 8), so this isn't a literal
     # note-for-note loop within a pass.
-    chords = PIANO_CHORDS_HISAISHI * 4
-    pass_beats = beats_per_chord * len(chords)
+    section_chords = [PIANO_CHORDS_HISAISHI * 4, PIANO_CHORDS_HISAISHI_B * 4]
+    pass_beats = beats_per_chord * len(section_chords[0])
     pass_seconds = pass_beats * 60 / bpm
 
-    def render_pass(seed: int, octave_shift: int) -> np.ndarray:
+    def render_pass(chords: list[list[int]], seed: int, octave_shift: int) -> np.ndarray:
         melody_events = _generate_melody(chords, beats_per_chord, seed, scale_notes)
         melody_events = [
             (s, d, (n + 12 * octave_shift if n is not None else n)) for s, d, n in melody_events
@@ -566,8 +585,14 @@ def piano_hisaishi_style(minutes: float = 3.0) -> core.StereoTrack:
     passes = []
     n_passes = max(1, int(np.ceil((minutes * 60) / pass_seconds)))
     for p in range(n_passes):
-        octave_shift = 1 if (p % 3 == 2) else 0  # every 3rd pass, a brighter higher-octave variation
-        pass_audio = render_pass(seed=1000 + p, octave_shift=octave_shift)
+        # 2026-08-26(3): A/B/A/B... instead of always A — see
+        # PIANO_CHORDS_HISAISHI_B's comment. Every 3rd pass (of either
+        # section) also shifts up an octave for a brighter variation, so
+        # the full sequence over an hour reads roughly A,B,A',B,A,B',...
+        # rather than one identical loop.
+        chords = section_chords[p % 2]
+        octave_shift = 1 if (p % 3 == 2) else 0
+        pass_audio = render_pass(chords, seed=1000 + p, octave_shift=octave_shift)
         passes.append(pass_audio)
         passes.append(np.zeros(int(2.2 * sr)))  # a breath between passes, not a hard loop
 
@@ -592,6 +617,7 @@ PRESETS = {
     "sleep_insomnia_pulse": sleep_insomnia_pulse,
     "baby_sleep_noise": baby_sleep_noise,
     "breath_guide_coherent": breath_guide_coherent,
+    "piano_hisaishi_style": piano_hisaishi_style,
 }
 
 # title: JP-first, leads with a 【】bracket category tag — this is the
@@ -857,6 +883,41 @@ PRESET_METADATA = {
             "breathing meditation", "calm breathing",
         ],
         "hashtags": ["呼吸ガイド", "深呼吸", "リラックス", "breathingexercise", "guidedbreathing"],
+    },
+    "piano_hisaishi_style": {
+        # 2026-08-26追加。オーナー指示「BGMのジャンルにピアノを増やしたい」
+        # →「久石譲的なピアノがいい」→「もっと明るい感じがいい」→「電子音的
+        # な感じだからピアノの音で作成して」の4段階のフィードバックを経て
+        # 確定(presets.piano_hisaishi_style()参照)。オーナー自身も用途を
+        # 「カフェでの作業や明るい気持ちになりたいときに聞く音楽」と明言、
+        # さらに詳細な運営方針(タイトルは「曲」でなく「用途」を売る/
+        # シリーズ化/複数枚の写真を使った世界観づくり)の提案あり。
+        # タイトルはオーナー提案をほぼそのまま採用。
+        "title": "【作業用BGM】静かなピアノで集中する1時間｜仕事・勉強・読書",
+        "icon_category": "focus",
+        "thumb_hook": "静かなピアノで\n集中する時間",
+        "description": "久石譲さんの穏やかな曲調を思わせる、明るいアコースティックピアノのBGM。カフェでの作業や読書に。",
+        "hook": "はっきりしたメロディラインと、流れるようなアルベルティ・バス風の伴奏。明るい長調で、聴いていて疲れない、それでいて主張しすぎないピアノの音です。",
+        "about": (
+            "サンプル音源は使わず、ハンマーが弦を叩くノイズ・複数弦のうなり・打弦位置による倍音の凹凸まで、"
+            "音の一つ一つをゼロから合成しています。メロディは主張しすぎず、同じ雰囲気を長時間保つように作っているので、"
+            "「なんとなく流しておきたい」作業用BGMとして使いやすいはずです。"
+        ),
+        "use_cases": ["カフェ気分で作業・仕事に集中したいときに", "読書のお供に", "気分を明るくしたいときに", "勉強・在宅ワークのBGMに"],
+        "tags": [
+            "作業用bgm", "勉強用bgm", "ピアノbgm", "集中",
+            "piano music", "relaxing piano", "study piano", "focus music", "acoustic piano",
+            "cafe music", "work music",
+        ],
+        "hashtags": ["作業用bgm", "ピアノbgm", "集中", "pianomusic", "focusmusic"],
+        # サムネイル: オーナーから雰囲気の合う写真3枚(カフェ×ピアノ、雨の窓辺の
+        # カフェ、ピアノ+作業机)を提示いただいたが、チャット添付の画像として
+        # 見えているのみで、他の写真(assets/thumbnails/内)のようにファイルと
+        # してこの環境のディスクに保存されていない(過去の9枚はCLIの添付経由で
+        # 保存された経緯があるが、今回は同じ経路になっていない模様)。
+        # thumbnail_style: "photo" は既存の仕組み上、実在するファイルパスが
+        # 必須なため、ファイルを確認できるまでは未設定(=抽象グラデーション+
+        # アイコンのデフォルト表示)にしている。写真を保存できたら追加する。
     },
 }
 
