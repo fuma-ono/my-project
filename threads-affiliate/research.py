@@ -5,10 +5,15 @@
 
 ## 事前準備(初回のみ)
 
-1. https://webservice.rakuten.co.jp/ で「アプリID」を発行(即時発行、無料)
+1. https://webservice.rakuten.co.jp/ でアプリケーションを作成すると、
+   「アプリケーションID」(UUID形式)と「アクセスキー」(`pk_...`形式)が発行される。
+   **この2つは別物で、APIを呼ぶには両方が必要**(2026年に楽天側の認証方式が
+   刷新され、以前の「アプリID単体」方式では `specify valid applicationId` エラーに
+   なることを実機で確認済み)
 2. 楽天アフィリエイトの管理画面で「アフィリエイトID」を確認
 3. `threads-affiliate/rakuten-config.json` を作成(このスクリプトを初回実行すると
-   対話式で作成される。内容は `{"app_id": "...", "affiliate_id": "..."}`)
+   対話式で作成される。内容は
+   `{"app_id": "...(UUID)", "access_key": "pk_...", "affiliate_id": "..."}`)
 
 ## 実行方法
 
@@ -41,7 +46,10 @@ PRODUCTS_FILE = HERE / "products.json"
 CANDIDATES_MD = HERE / "product-candidates.md"
 AMAZON_LINKS_MD = HERE / "amazon-links.md"
 
-SEARCH_API = "https://app.rakuten.co.jp/services/api/IchibaItem/Search/20220601"
+# 2026年の楽天API刷新後の新エンドポイント。旧エンドポイント
+# (app.rakuten.co.jp/services/api/.../20220601)はapplicationId単体では
+# 認証エラーになることを実機確認したため、こちらに切り替えた。
+SEARCH_API = "https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260701"
 
 # Focus & Sleep事業と親和性の高いジャンルの検索キーワード。増減はここを編集するだけでよい。
 KEYWORDS = [
@@ -57,21 +65,30 @@ MAX_PRICE = 15000  # これを超える価格帯は購入ハードルが高い�
 
 def load_config() -> dict:
     if CONFIG_FILE.exists():
-        return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-    print("初回実行です。楽天のアプリID・アフィリエイトIDを入力してください。")
-    app_id = input("アプリID: ").strip()
+        config = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        if "access_key" in config:
+            return config
+        # 旧バージョン(access_keyを持たない設定)が残っている場合は再入力を促す
+        print("設定ファイルが古い形式です(accessKeyが未保存)。再入力してください。")
+    print("初回実行です。楽天のアプリケーションID・アクセスキー・アフィリエイトIDを入力してください。")
+    print("(アプリケーションID=UUID形式、アクセスキー=pk_で始まる文字列。両方とも")
+    print(" https://webservice.rakuten.co.jp/ のアプリ詳細ページで確認できます)")
+    app_id = input("アプリケーションID: ").strip()
+    access_key = input("アクセスキー: ").strip()
     affiliate_id = input("アフィリエイトID: ").strip()
-    config = {"app_id": app_id, "affiliate_id": affiliate_id}
+    config = {"app_id": app_id, "access_key": access_key, "affiliate_id": affiliate_id}
     CONFIG_FILE.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"保存しました: {CONFIG_FILE}(.gitignore済み、commitされません)")
     return config
 
 
-def search_items(keyword: str, app_id: str, affiliate_id: str) -> list[dict]:
+def search_items(keyword: str, app_id: str, access_key: str, affiliate_id: str) -> list[dict]:
     params = {
         "applicationId": app_id,
+        "accessKey": access_key,
         "affiliateId": affiliate_id,
         "keyword": keyword,
+        "genreId": 0,  # 全ジャンル対象(APIテストフォームでの成功例に合わせた)
         "sort": "-reviewCount",
         "hits": 10,
         "format": "json",
@@ -139,13 +156,15 @@ def match_amazon_link(product_name: str, amazon_links: dict[str, str]) -> str | 
 
 def main() -> None:
     config = load_config()
-    app_id, affiliate_id = config["app_id"], config["affiliate_id"]
+    app_id = config["app_id"]
+    access_key = config["access_key"]
+    affiliate_id = config["affiliate_id"]
     amazon_links = load_amazon_links()
 
     all_candidates = []
     for keyword in KEYWORDS:
         try:
-            items = search_items(keyword, app_id, affiliate_id)
+            items = search_items(keyword, app_id, access_key, affiliate_id)
         except Exception as e:
             print(f"'{keyword}' の検索に失敗しました: {e}")
             continue
