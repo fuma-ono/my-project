@@ -36,6 +36,7 @@ python threads-affiliate/research.py
 
 import json
 import pathlib
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -61,6 +62,13 @@ KEYWORDS = [
 ]
 
 MAX_PRICE = 15000  # これを超える価格帯は購入ハードルが高いとみなし除外(暫定の目安)
+
+# 楽天アプリ作成フォームの「許可されたウェブサイト」に登録したドメイン。
+# 新APIはRefererヘッダーが無いと REQUEST_CONTEXT_BODY_HTTP_REFERRER_MISSING で
+# 弾かれることを実機確認したため、必ずこのRefererを付けて呼び出す。
+REFERER = "https://note.com/"
+
+REQUEST_INTERVAL_SEC = 2  # 連続リクエストで 429 Too Many Requests になったため、間隔を空ける
 
 
 def load_config() -> dict:
@@ -94,8 +102,9 @@ def search_items(keyword: str, app_id: str, access_key: str, affiliate_id: str) 
         "format": "json",
     }
     url = f"{SEARCH_API}?{urllib.parse.urlencode(params)}"
+    request = urllib.request.Request(url, headers={"Referer": REFERER})
     try:
-        with urllib.request.urlopen(url, timeout=30) as resp:
+        with urllib.request.urlopen(request, timeout=30) as resp:
             data = json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
         # 楽天APIはエラーの詳細(error_description等)をレスポンス本文に返すが、
@@ -162,12 +171,23 @@ def main() -> None:
     amazon_links = load_amazon_links()
 
     all_candidates = []
-    for keyword in KEYWORDS:
-        try:
-            items = search_items(keyword, app_id, access_key, affiliate_id)
-        except Exception as e:
-            print(f"'{keyword}' の検索に失敗しました: {e}")
-            continue
+    for i, keyword in enumerate(KEYWORDS):
+        if i > 0:
+            time.sleep(REQUEST_INTERVAL_SEC)  # 連続リクエストでの429対策
+
+        items = []
+        for attempt in range(2):  # 429時に1回だけ長めに待って再試行する
+            try:
+                items = search_items(keyword, app_id, access_key, affiliate_id)
+                break
+            except Exception as e:
+                is_rate_limited = "429" in str(e)
+                if is_rate_limited and attempt == 0:
+                    print(f"'{keyword}': レート制限のため5秒待って再試行します...")
+                    time.sleep(5)
+                    continue
+                print(f"'{keyword}' の検索に失敗しました: {e}")
+                break
         for item in items:
             d = item["Item"]
             if d.get("itemPrice", 0) > MAX_PRICE:
