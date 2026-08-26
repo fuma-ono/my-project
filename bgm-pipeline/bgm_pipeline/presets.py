@@ -314,79 +314,213 @@ def _piano_note(freq: float, seconds: float, sr: int = core.SAMPLE_RATE,
     return out
 
 
-def _piano_arpeggio(chords: list[list[int]], seconds: float, chord_seconds: float,
-                     notes_per_chord: int = 5, brightness: float = 0.72,
-                     sr: int = core.SAMPLE_RATE, seed: int | None = None) -> np.ndarray:
-    """Broken-chord arpeggiation over `chords`, looping every `chord_seconds`
-    — chord boundaries stay locked to fixed multiples of chord_seconds (not
-    drifted by note timing) so this stays harmonically in sync with a
-    `_chord_pad` call using the same chords/chord_seconds layered underneath
-    (see piano_relaxing_ambient). Notes are picked randomly from the current
-    chord with slight timing jitter and velocity variance so it doesn't
-    sound mechanical/sequenced; ring past the next note's onset (sustain-
-    pedal-like) rather than cutting off cleanly."""
+# 2026-08-26: rewritten per owner feedback on the first preview
+# ("久石譲的なピアノがいい" — "I want something like Joe Hisaishi's
+# piano"). The first version (_piano_arpeggio, now unused — see git
+# history) picked notes randomly from each chord with no melodic line;
+# that's a fine texture for pure ambient/sleep presets but isn't what
+# "Hisaishi-style" means. His piano writing (「One Summer's Day」「Merry-
+# Go-Round of Life」etc.) has: a clear, mostly-stepwise, singable melody
+# in the right hand; a continuous flowing broken-chord ("Alberti bass"-
+# style) accompaniment in the left hand, not sparse scattered notes;
+# moderate concert-hall reverb rather than a heavy ambient wash; a
+# melody that repeats/develops (a recognizable rhythmic cell reused
+# across phrases) instead of wandering. The functions below aim at that,
+# within what's feasible from procedural synthesis — genuinely composing
+# "a Hisaishi piece" isn't something this can claim, but the goal is to
+# get closer to that character than generic random-note ambient piano.
+PIANO_CHORDS_HISAISHI = [
+    [62, 66, 69],  # I    D    (D F# A)
+    [69, 73, 76],  # V    A    (A C# E)
+    [71, 74, 78],  # vi   Bm   (B D F#)
+    [66, 69, 73],  # iii  F#m  (F# A C#)
+    [67, 71, 74],  # IV   G    (G B D)
+    [62, 66, 69],  # I    D
+    [64, 67, 71],  # ii   Em   (E G B)
+    [69, 73, 76],  # V    A
+]
+
+
+def _scale_notes(root_midi: int, steps: list[int], low: int = 48, high: int = 88) -> list[int]:
+    """All MIDI notes of a diatonic scale (root + `steps`, semitone offsets
+    within an octave) across a wide register, for melody generation to walk
+    through by index (adjacent index = adjacent scale step, not adjacent
+    semitone — keeps melodic motion diatonic without per-note key-signature
+    bookkeeping)."""
+    notes = set()
+    for octave in range(-3, 4):
+        for s in steps:
+            n = root_midi + s + 12 * octave
+            if low <= n <= high:
+                notes.add(n)
+    return sorted(notes)
+
+
+D_MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11]
+
+
+def _generate_melody(chords: list[list[int]], beats_per_chord: float, seed: int,
+                      scale_notes: list[int] | None = None) -> list[tuple[float, float, int | None]]:
+    """A right-hand melody over `chords`: mostly stepwise motion through the
+    diatonic scale (occasional small leap), biased to land on a current-
+    chord tone at the start of each bar, using a fixed asymmetric 7-event
+    rhythmic cell (sums to 8 beats = 2 bars) reused throughout — a
+    repeating rhythmic "shape" is what makes a generated line read as a
+    phrase rather than a wander, even though the pitches themselves vary
+    with the chords/seed. Occasional rests give it room to breathe instead
+    of being a constant stream of notes. Returns (start_beat, duration_beats,
+    midi_note_or_None) tuples."""
+    scale_notes = scale_notes or _scale_notes(62, D_MAJOR_STEPS)
     rng = np.random.default_rng(seed)
+    rhythm_cell = [1.0, 1.0, 2.0, 1.0, 0.5, 0.5, 2.0]
+    total_beats = beats_per_chord * len(chords)
+
+    start_note = min(scale_notes, key=lambda n: abs(n - (chords[0][0] + 12)))
+    idx = scale_notes.index(start_note)
+    events: list[tuple[float, float, int | None]] = []
+    t = 0.0
+    cell_pos = 0
+    while t < total_beats:
+        dur = rhythm_cell[cell_pos % len(rhythm_cell)]
+        cell_pos += 1
+        chord = chords[int(t // beats_per_chord) % len(chords)]
+        beat_in_bar = t % beats_per_chord
+
+        if rng.uniform(0, 1) < 0.12:
+            events.append((t, dur, None))  # a breath — real melodies aren't wall-to-wall notes
+            t += dur
+            continue
+
+        on_strong_beat = beat_in_bar < 1e-6 or abs(beat_in_bar - 2.0) < 1e-6
+        if on_strong_beat and rng.uniform(0, 1) < 0.65:
+            chord_pcs = {c % 12 for c in chord}
+            nearest_chord_tone = min(
+                (n for n in scale_notes if n % 12 in chord_pcs),
+                key=lambda n: abs(n - scale_notes[idx]),
+            )
+            idx = scale_notes.index(nearest_chord_tone)
+        else:
+            step = int(rng.choice([-2, -1, -1, 1, 1, 2]))  # stepwise-biased random walk
+            idx = int(np.clip(idx + step, 0, len(scale_notes) - 1))
+
+        events.append((t, dur, scale_notes[idx]))
+        t += dur
+    return events
+
+
+def _rolling_arpeggio(chords: list[list[int]], beats_per_chord: float, bpm: float,
+                       sr: int = core.SAMPLE_RATE, brightness: float = 0.6,
+                       seed: int | None = None) -> np.ndarray:
+    """Continuous eighth-note broken-chord accompaniment — root/3rd/5th/3rd
+    per bar (Alberti-bass-style), one octave below the chord's written
+    register — the flowing left-hand texture under Hisaishi's melodies
+    (most recognizably in 「One Summer's Day」), as opposed to the sparse
+    scattered notes of the first draft's _piano_arpeggio."""
+    rng = np.random.default_rng(seed)
+    beat_s = 60.0 / bpm
+    step_s = beat_s * 0.5
+    total_beats = beats_per_chord * len(chords)
+    total_s = total_beats * beat_s
+    tail_s = 3.0
+    out = np.zeros(int((total_s + tail_s) * sr))
+    pattern = [0, 1, 2, 1]  # chord-tone index: root, 3rd, 5th, 3rd
+    t = 0.0
+    step_i = 0
+    while t < total_s:
+        chord = chords[int((t / beat_s) // beats_per_chord) % len(chords)]
+        tone_midi = chord[pattern[step_i % len(pattern)]] - 12
+        note = _piano_note(midi_to_freq(tone_midi), step_s * 2.2, sr, brightness=brightness)
+        note *= rng.uniform(0.32, 0.45)
+        start = int(t * sr)
+        end = min(start + len(note), len(out))
+        out[start:end] += note[: end - start]
+        t += step_s
+        step_i += 1
+    return out[: int(total_s * sr)]
+
+
+def _render_melody(events: list[tuple[float, float, int | None]], bpm: float,
+                    sr: int = core.SAMPLE_RATE, brightness: float = 0.85,
+                    velocity_seed: int | None = None) -> np.ndarray:
+    rng = np.random.default_rng(velocity_seed)
+    beat_s = 60.0 / bpm
+    total_s = (events[-1][0] + events[-1][1]) * beat_s if events else 0.0
     tail_s = 4.0
-    out = np.zeros(int((seconds + tail_s) * sr))
-    n_chords = int(np.ceil(seconds / chord_seconds))
-    note_gap = chord_seconds / notes_per_chord
-    for i in range(n_chords):
-        chord = chords[i % len(chords)]
-        chord_start = i * chord_seconds
-        for k in range(notes_per_chord):
-            jitter = rng.uniform(-0.15, 0.15) * note_gap
-            note_time = chord_start + k * note_gap + jitter
-            if note_time < 0 or note_time >= seconds:
-                continue
-            midi_note = int(rng.choice(chord))
-            if k > 0 and rng.uniform(0, 1) < 0.3:
-                midi_note += 12  # occasional octave lift for variety
-            note_len = min(6.0, seconds + tail_s - note_time)
-            velocity = rng.uniform(0.55, 1.0)
-            note = _piano_note(midi_to_freq(midi_note), note_len, sr, brightness=brightness) * velocity
-            start = int(note_time * sr)
-            end = min(start + len(note), len(out))
-            out[start:end] += note[: end - start]
-    return out[: int(seconds * sr)]
+    out = np.zeros(int((total_s + tail_s) * sr))
+    for start_beat, dur_beats, midi_note in events:
+        if midi_note is None:
+            continue
+        note_s = start_beat * beat_s
+        note_len = dur_beats * beat_s * 1.6  # let it ring past its nominal duration, piano-like
+        note = _piano_note(midi_to_freq(midi_note), note_len, sr, brightness=brightness)
+        note *= rng.uniform(0.75, 1.0)
+        start = int(note_s * sr)
+        end = min(start + len(note), len(out))
+        out[start:end] += note[: end - start]
+    return out
 
 
-def piano_relaxing_ambient(minutes: float = 3.0) -> core.StereoTrack:
-    """Solo-piano-style ambient bed — struck-note synthesis (_piano_note)
-    arpeggiated slowly over a warm chord progression (_piano_arpeggio),
-    wrapped in generous room reverb. Distinct from every other preset here,
-    which are sustained pad/drone/noise textures; this is the first one
-    built from discrete struck notes. Added 2026-08-26 per owner request
-    ("BGMのジャンルにピアノを増やしたい"). No sample library or paid
-    instrument/plugin is used — every note is synthesized from scratch
-    (see _piano_note), so this preset's marginal cost stays ~¥0 like every
-    other one here.
+def piano_hisaishi_style(minutes: float = 3.0) -> core.StereoTrack:
+    """Solo-piano preset in the vein of Joe Hisaishi's gentler pieces —
+    added 2026-08-26 per owner request ("BGMのジャンルにピアノを増やし
+    たい", refined to "久石譲的なピアノがいい" after the first, purely
+    ambient/arpeggio-only draft). A clear right-hand melody
+    (_generate_melody + _render_melody) over a continuous rolling left-
+    hand accompaniment (_rolling_arpeggio), D major, moderate ~76 BPM,
+    lighter reverb than the ambient presets (clarity over wash — closer
+    to a concert-hall piano recording than a sleep-noise texture). No
+    sample library or paid instrument is used; every note is synthesized
+    from scratch (_piano_note), same as the rest of this pipeline.
 
-    NOT YET added to PRESETS/PRESET_METADATA — piano is a genuinely new
-    timbre for this pipeline (everything else is pads/noise/tones) and
-    whether the synthesis actually sounds convincing is a judgment call
-    best made by ear before it's wired into rotation/thumbnails/YouTube,
-    not something to assume from reading the code. Render a preview and
-    get the owner's listen first; register it for real afterward.
+    The ~100s composed piece loops for the full requested duration rather
+    than generating fresh material for a whole hour — real "relaxing
+    piano" compilations on YouTube do the same (a handful of pieces
+    repeated), and it keeps the melody actually recognizable/thematic
+    instead of aimless. Alternate passes shift the melody up an octave
+    and re-seed its rhythmic phrasing slightly, so it's not a bit-for-bit
+    identical loop, and each pass is separated by a couple of quiet
+    seconds (not a hard cut).
+
+    NOT YET added to PRESETS/PRESET_METADATA — same reasoning as before:
+    get the owner's listen on a preview first.
     """
-    seconds = minutes * 60
     sr = core.SAMPLE_RATE
-    chords = PADS_STUDY  # Cmaj7-Am7-Fmaj7-G7 (I-vi-IV-V7) — warm, unhurried, already used elsewhere
-    chord_seconds = 10.0
+    bpm = 76.0
+    beats_per_chord = 4.0
+    chords = PIANO_CHORDS_HISAISHI
+    scale_notes = _scale_notes(62, D_MAJOR_STEPS)
 
-    piano = _piano_arpeggio(chords, seconds, chord_seconds, notes_per_chord=5,
-                             brightness=0.72, sr=sr)
-    piano = core.one_pole_lowpass(piano, cutoff_hz=5000, sr=sr)  # soften the top end — felt-piano warmth
-    piano = core.simple_reverb(piano, sr, room_seconds=3.2, mix=0.32)
+    def render_pass(seed: int, octave_shift: int) -> np.ndarray:
+        melody_events = _generate_melody(chords, beats_per_chord, seed, scale_notes)
+        melody_events = [
+            (s, d, (n + 12 * octave_shift if n is not None else n)) for s, d, n in melody_events
+        ]
+        melody = _render_melody(melody_events, bpm, sr, brightness=0.85, velocity_seed=seed)
+        accomp = _rolling_arpeggio(chords, beats_per_chord, bpm, sr, brightness=0.6, seed=seed + 1)
+        n = max(len(melody), len(accomp))
+        melody = np.pad(melody, (0, n - len(melody)))
+        accomp = np.pad(accomp, (0, n - len(accomp)))
+        return melody + accomp
 
-    # very quiet sustained pad underneath, locked to the same chords/timing,
-    # standing in for room ambience / sympathetic string resonance between
-    # struck notes rather than dead silence
-    pad = _chord_pad(chords, seconds, chord_seconds=chord_seconds, sr=sr)
-    pad = core.one_pole_lowpass(pad, cutoff_hz=800, sr=sr) * 0.06
+    passes = []
+    n_passes = max(1, int(np.ceil((minutes * 60) / 100)))
+    for p in range(n_passes):
+        octave_shift = 1 if (p % 3 == 2) else 0  # every 3rd pass, a brighter higher-octave variation
+        pass_audio = render_pass(seed=1000 + p, octave_shift=octave_shift)
+        passes.append(pass_audio)
+        passes.append(np.zeros(int(2.2 * sr)))  # a breath between passes, not a hard loop
 
-    mix = core.fade_in_out(piano + pad, sr, fade_seconds=4.0)
+    mix = np.concatenate(passes)
+    target_n = int(minutes * 60 * sr)
+    if len(mix) > target_n:
+        mix = mix[:target_n]
+    else:
+        mix = np.pad(mix, (0, target_n - len(mix)))
+
+    mix = core.simple_reverb(mix, sr, room_seconds=2.0, mix=0.22)  # hall clarity, not ambient wash
+    mix = core.fade_in_out(mix, sr, fade_seconds=4.0)
     mix = core.normalize(mix, peak=0.82)
-    return core.widen(mix, width=0.18, sr=sr)
+    return core.widen(mix, width=0.15, sr=sr)
 
 
 PRESETS = {
