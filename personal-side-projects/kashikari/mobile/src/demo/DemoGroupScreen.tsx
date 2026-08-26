@@ -1,6 +1,7 @@
 // デモモード専用。GroupScreen.tsxと同じ見た目・操作感を、Supabaseを
 // 一切呼ばずローカルstateだけで再現する(スクリーンショット・動作確認用)。
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { Alert, Pressable, SectionList, Share, StyleSheet, Text, View } from 'react-native';
 
@@ -15,7 +16,6 @@ import Fab from '../components/Fab';
 import GroupIconPicker from '../components/GroupIconPicker';
 import HistoryEntryRow from '../components/HistoryEntryRow';
 import InviteModal from '../components/InviteModal';
-import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
 import SettlementProgress from '../components/SettlementProgress';
 import Toast from '../components/Toast';
@@ -280,26 +280,25 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
       <View style={styles.demoBanner}>
         <Text style={styles.demoBannerText}>{t.demo.banner}</Text>
       </View>
-      <View style={styles.headerRow}>
-        <Pressable onPress={onBack} hitSlop={10}>
-          <Text style={styles.back}>{t.group.back}</Text>
-        </Pressable>
-        <View style={styles.headerRightRow}>
-          <Pressable onPress={() => setNotifToastVisible(true)} hitSlop={10}>
-            <Ionicons name="notifications-outline" size={22} color={colors.ink} />
+      <LinearGradient colors={[colors.accent, colors.plum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.headerGradient}>
+        <View style={styles.headerRow}>
+          <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back}>
+            <Ionicons name="chevron-back" size={26} color="#fff" />
           </Pressable>
-          <Pressable onPress={onOpenSettings} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
-            <Ionicons name="settings-outline" size={22} color={colors.ink} />
-          </Pressable>
+          <View style={styles.headerRightRow}>
+            <Pressable onPress={() => setNotifToastVisible(true)} hitSlop={10}>
+              <Ionicons name="notifications-outline" size={22} color="#fff" />
+            </Pressable>
+            <Pressable onPress={onOpenSettings} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
+              <Ionicons name="settings-outline" size={22} color="#fff" />
+            </Pressable>
+          </View>
         </View>
-      </View>
-      <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleRow}>
-        <Mark size={40} glyph={group.icon_emoji ?? undefined} />
-        <View style={styles.titleTextCol}>
+        <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleRow}>
           <Text style={styles.title}>{group.name}</Text>
           <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
-        </View>
-      </Pressable>
+        </Pressable>
+      </LinearGradient>
 
       <View style={styles.memberStrip}>
         {members.map((m) => {
@@ -509,13 +508,22 @@ const styles = StyleSheet.create({
   demoBanner: { backgroundColor: colors.favor, marginHorizontal: -20, paddingVertical: 8, paddingHorizontal: 16, paddingTop: 44, marginBottom: 8 },
   demoBannerText: { ...fonts.bodySemiBold, fontSize: 12, color: '#fff', textAlign: 'center' },
   list: { paddingHorizontal: 20, paddingBottom: 100 },
-  headerRow: { marginBottom: 4, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  // デモバナー自体がステータスバー分のpaddingTopを持っているため、ここでは
+  // 本番のGroupScreen.tsxより控えめなpaddingTopにしている。
+  headerGradient: {
+    paddingTop: 18,
+    paddingHorizontal: 20,
+    paddingBottom: 22,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    marginHorizontal: -20,
+    marginBottom: 18,
+  },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  back: { ...fonts.bodySemiBold, fontSize: 15, color: colors.accent },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4, marginBottom: 14 },
-  titleTextCol: { flexShrink: 1 },
-  title: { ...fonts.display, fontSize: 26, color: colors.ink },
-  memberCount: { ...fonts.bodyMedium, fontSize: 12.5, color: colors.muted, marginTop: 1 },
+  titleRow: { marginTop: 10 },
+  title: { ...fonts.display, fontSize: 24, color: '#fff' },
+  memberCount: { ...fonts.bodyMedium, fontSize: 12.5, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
   memberStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 18 },
   memberSlot: { alignItems: 'center', width: 64, gap: 3 },
   memberSlotName: { ...fonts.bodyMedium, fontSize: 11.5, color: colors.ink, maxWidth: 62 },

@@ -62,9 +62,18 @@ export default function NetSummary({ totals, balances, meId }: Props) {
           <View key={total.currency} style={[styles.line, i > 0 && styles.lineDivider]}>
             <Text style={styles.label}>{owed ? t.netSummary.receiving : t.netSummary.paying}</Text>
             <Text style={styles.amount}>{formatMoney(Math.abs(total.amount), total.currency)}</Text>
+            {/* 参考UIに合わせ、「受取 ¥1,500」のような省略形1行ではなく、
+                「受け取る金額」「支払う金額」を見出しにした2カラム構成にした。 */}
             <View style={styles.grossRow}>
-              <Text style={styles.grossText}>{t.netSummary.grossReceivable(formatMoney(receivable, total.currency))}</Text>
-              <Text style={styles.grossText}>{t.netSummary.grossPayable(formatMoney(payable, total.currency))}</Text>
+              <View style={styles.grossCol}>
+                <Text style={styles.grossLabel}>{t.netSummary.receiving}</Text>
+                <Text style={styles.grossAmount}>{formatMoney(receivable, total.currency)}</Text>
+              </View>
+              <View style={styles.grossDivider} />
+              <View style={styles.grossCol}>
+                <Text style={styles.grossLabel}>{t.netSummary.paying}</Text>
+                <Text style={styles.grossAmount}>{formatMoney(payable, total.currency)}</Text>
+              </View>
             </View>
           </View>
         );
@@ -95,8 +104,11 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   amount: { ...fonts.display, fontSize: 42, color: '#fff', letterSpacing: -0.5 },
-  grossRow: { flexDirection: 'row', gap: 16, marginTop: 12 },
-  grossText: { ...fonts.bodyMedium, fontSize: 13, color: 'rgba(255,255,255,0.8)' },
+  grossRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, paddingRight: 28 },
+  grossCol: { flex: 1 },
+  grossDivider: { width: 1, height: 28, backgroundColor: 'rgba(255,255,255,0.25)', marginHorizontal: 16 },
+  grossLabel: { ...fonts.bodyMedium, fontSize: 12, color: 'rgba(255,255,255,0.75)', marginBottom: 3 },
+  grossAmount: { ...fonts.bodySemiBold, fontSize: 16, color: '#fff' },
   settledWrap: {
     backgroundColor: colors.surface,
     borderRadius: 20,

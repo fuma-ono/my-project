@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { Alert, Pressable, RefreshControl, SectionList, Share, StyleSheet, Text, View } from 'react-native';
 
@@ -13,7 +14,6 @@ import Fab from '../components/Fab';
 import GroupIconPicker from '../components/GroupIconPicker';
 import HistoryEntryRow from '../components/HistoryEntryRow';
 import InviteModal from '../components/InviteModal';
-import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
 import SettlementProgress from '../components/SettlementProgress';
 import Toast from '../components/Toast';
@@ -261,26 +261,32 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
 
   const header = (
     <View>
-      <View style={styles.headerRow}>
-        <Pressable onPress={onBack} hitSlop={10}>
-          <Text style={styles.back}>{t.group.back}</Text>
-        </Pressable>
-        <View style={styles.headerRightRow}>
-          <Pressable onPress={() => setNotifToastVisible(true)} hitSlop={10}>
-            <Ionicons name="notifications-outline" size={22} color={colors.ink} />
+      {/* 参考UIでは「戻る/タイトル/通知/設定」がグラデーションの帯の中に
+          白抜きで収まっていて、その下に白い本体が続く2層構成になっている。
+          以前はここも本体と同じクリーム色の背景で、残高カードだけが
+          グラデーションだったが、参考画像に合わせてヘッダー自体にも
+          ブランドのグラデーションを敷いた。グループアイコンの絵文字
+          (Mark)は参考画像に無いため非表示にしたが、タップでアイコンを
+          変更する機能自体はタイトル部分に残している。 */}
+      <LinearGradient colors={[colors.accent, colors.plum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.headerGradient}>
+        <View style={styles.headerRow}>
+          <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back}>
+            <Ionicons name="chevron-back" size={26} color="#fff" />
           </Pressable>
-          <Pressable onPress={openGroupMenu} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
-            <Ionicons name="settings-outline" size={22} color={colors.ink} />
-          </Pressable>
+          <View style={styles.headerRightRow}>
+            <Pressable onPress={() => setNotifToastVisible(true)} hitSlop={10}>
+              <Ionicons name="notifications-outline" size={22} color="#fff" />
+            </Pressable>
+            <Pressable onPress={openGroupMenu} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
+              <Ionicons name="settings-outline" size={22} color="#fff" />
+            </Pressable>
+          </View>
         </View>
-      </View>
-      <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleRow}>
-        <Mark size={40} glyph={group.icon_emoji ?? undefined} />
-        <View style={styles.titleTextCol}>
+        <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleRow}>
           <Text style={styles.title}>{group.name}</Text>
           <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
-        </View>
-      </Pressable>
+        </Pressable>
+      </LinearGradient>
 
       <View style={styles.memberStrip}>
         {members.map((m) => {
@@ -465,13 +471,20 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
   list: { paddingHorizontal: 20, paddingBottom: 100 },
-  headerRow: { marginTop: 44, marginBottom: 4, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerGradient: {
+    paddingTop: 54,
+    paddingHorizontal: 20,
+    paddingBottom: 22,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    marginHorizontal: -20,
+    marginBottom: 18,
+  },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  back: { ...fonts.bodySemiBold, fontSize: 15, color: colors.accent },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4, marginBottom: 14 },
-  titleTextCol: { flexShrink: 1 },
-  title: { ...fonts.display, fontSize: 26, color: colors.ink },
-  memberCount: { ...fonts.bodyMedium, fontSize: 12.5, color: colors.muted, marginTop: 1 },
+  titleRow: { marginTop: 10 },
+  title: { ...fonts.display, fontSize: 24, color: '#fff' },
+  memberCount: { ...fonts.bodyMedium, fontSize: 12.5, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
   memberStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 18 },
   memberSlot: { alignItems: 'center', width: 64, gap: 3 },
   memberSlotName: { ...fonts.bodyMedium, fontSize: 11.5, color: colors.ink, maxWidth: 62 },

@@ -12,6 +12,9 @@ export const ja = {
     save: '保存',
     favorCount: (n: number) => `${n}件`,
   },
+  splash: {
+    tagline: 'かんたん・あんしん・スマートに\nお金をシェア',
+  },
   onboarding: {
     tagline: '友達との貸し借りを、お金も頼みごとも一緒に記録する',
     signInFailedTitle: 'サインインに失敗しました',
@@ -37,7 +40,7 @@ export const ja = {
     changeHint: '変更',
     invite: '招待する',
     adminBadge: '管理者',
-    memberCount: (n: number) => `${n}人参加`,
+    memberCount: (n: number) => `${n}人のメンバー`,
     tabBalance: 'ホーム',
     tabLedger: '台帳',
     tabHistory: '履歴',
@@ -134,8 +137,6 @@ export const ja = {
     allSettled: '全員の貸し借りが解消されました',
     receiving: '受け取る金額',
     paying: '支払う金額',
-    grossReceivable: (amount: string) => `受取 ${amount}`,
-    grossPayable: (amount: string) => `支払 ${amount}`,
   },
   entryRow: {
     markUnsettled: '未精算に戻す',
@@ -263,6 +264,9 @@ export const en: Strings = {
     save: 'Save',
     favorCount: (n: number) => `${n} favor${n === 1 ? '' : 's'}`,
   },
+  splash: {
+    tagline: 'Simple, secure, and smart\nway to share money',
+  },
   onboarding: {
     tagline: 'Track money and favors you owe friends, all in one place',
     signInFailedTitle: 'Sign-in failed',
@@ -385,8 +389,6 @@ export const en: Strings = {
     allSettled: "Everyone's debts are cleared",
     receiving: "Amount you'll receive",
     paying: "Amount you'll pay",
-    grossReceivable: (amount: string) => `Receive ${amount}`,
-    grossPayable: (amount: string) => `Pay ${amount}`,
   },
   entryRow: {
     markUnsettled: 'Mark as unsettled',

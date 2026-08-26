@@ -1,5 +1,3 @@
-import { Platform } from 'react-native';
-
 // デザイントークン。personal-side-projects/kashikari/app/index.html(Web版プロトタイプ)の
 // 配色・書体をそのまま踏襲している。両方を直す場合は同じ値をこちらにも反映すること。
 //
@@ -29,12 +27,17 @@ import { Platform } from 'react-native';
 // 解決されるため変更していない。問題はWeb版(react-native-web)側で、
 // fontFamily未指定だとブラウザ標準のフォント(多くの場合Times系)まで
 // 落ちてしまい、SF Proにならず「おかしい」見た目になっていた。Web限定で
-// -apple-system等を含むCSSフォントスタックを明示することで、Mac/iOSの
-// Safari・Chromeで開いたときは正しくSF Proになる(この開発サンドボックス
-// はLinuxのため、SF Pro自体が無くスクリーンショットでは代替フォントの
-// ままになる。実機のMac/iPhone/iPadで開いたときだけ正しく見える)。
-const WEB_FONT_STACK =
-  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+// -apple-system等を含むCSSフォントスタックを明示することで対応していた。
+//
+// 「送ったUI画像にして」という指摘(24回目の見直し): 参考画像の丸みの
+// あるフレンドリーな書体に合わせるため、6回目でやめたWebフォント読み込み
+// を復活させた。今回はOSのシステムフォントに任せるのではなく、
+// @expo-google-fonts/m-plus-rounded-1c(M PLUS Rounded 1c。日本語・
+// 英数字とも丸みがあり、家計簿・お金まわりの個人アプリでよく使われる
+// 書体)をアプリに同梱する方式にしたため、iOS/Android/Webのどこで開いても
+// 同じ書体になる(この開発サンドボックスのWeb版スクリーンショットも、
+// 実機と同じ書体で正しく表示される)。読み込みはApp.tsx側のuseFontsで行い、
+// 完了するまでSplashScreenを表示し続ける。
 
 export const colors = {
   bg: '#fff9f2',
@@ -60,19 +63,15 @@ export const colors = {
   danger: '#c1503f',
 } as const;
 
-// ネイティブ(iOS/Android)はfontFamily未指定のままOS標準フォントに任せ、
-// Webだけ明示的にSF Pro(-apple-system)を含むフォントスタックを指定する
-// (詳細は上のコメント参照)。太さだけをトークンごとに変える。使う側は
-// `style={[..., fonts.display]}` のように展開して使う(fontFamilyと
-// fontWeightの2つのスタイルプロパティをまとめて持つオブジェクトのため)。
-const webFontFamily = Platform.OS === 'web' ? WEB_FONT_STACK : undefined;
-
+// M PLUS Rounded 1cの太さ別ファイルをそのままfontFamily名として使う
+// (太さごとに別ファイルなので、fontWeightは別途指定しない)。使う側は
+// `style={[..., fonts.display]}` のように展開して使う。
 export const fonts = {
-  display: { fontFamily: webFontFamily, fontWeight: '700' } as const,
-  displayMedium: { fontFamily: webFontFamily, fontWeight: '600' } as const,
-  body: { fontFamily: webFontFamily, fontWeight: '400' } as const,
-  bodyMedium: { fontFamily: webFontFamily, fontWeight: '500' } as const,
-  bodySemiBold: { fontFamily: webFontFamily, fontWeight: '600' } as const,
+  display: { fontFamily: 'MPLUSRounded1c_800ExtraBold' } as const,
+  displayMedium: { fontFamily: 'MPLUSRounded1c_700Bold' } as const,
+  body: { fontFamily: 'MPLUSRounded1c_400Regular' } as const,
+  bodyMedium: { fontFamily: 'MPLUSRounded1c_500Medium' } as const,
+  bodySemiBold: { fontFamily: 'MPLUSRounded1c_700Bold' } as const,
 } as const;
 
 // 彩度・明度を揃えた4色のみ(主アクセントの色相違いバリエーション)。

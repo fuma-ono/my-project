@@ -1,3 +1,10 @@
+import {
+  useFonts,
+  MPLUSRounded1c_400Regular,
+  MPLUSRounded1c_500Medium,
+  MPLUSRounded1c_700Bold,
+  MPLUSRounded1c_800ExtraBold,
+} from '@expo-google-fonts/m-plus-rounded-1c';
 import { useEffect, useState } from 'react';
 import { Linking } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -51,6 +58,12 @@ function AppInner() {
   );
   const [screen, setScreen] = useState<Screen>({ name: 'groups' });
   const [minSplashDone, setMinSplashDone] = useState(false);
+  const [fontsLoaded] = useFonts({
+    MPLUSRounded1c_400Regular,
+    MPLUSRounded1c_500Medium,
+    MPLUSRounded1c_700Bold,
+    MPLUSRounded1c_800ExtraBold,
+  });
 
   useEffect(() => {
     const t = setTimeout(() => setMinSplashDone(true), MIN_SPLASH_MS);
@@ -69,7 +82,7 @@ function AppInner() {
     return () => sub.remove();
   }, [userId]);
 
-  if (!minSplashDone || (!DEMO_MODE && authLoading)) {
+  if (!fontsLoaded || !minSplashDone || (!DEMO_MODE && authLoading)) {
     return <SplashScreen />;
   }
 
