@@ -353,7 +353,7 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
           {pendingInvites.map((invite) => (
             <View key={invite.id} style={styles.memberSlot}>
               <View style={[styles.avatarCircle, styles.pendingCircle]}>
-                <Ionicons name="mail" size={18} color="#fff" />
+                <Ionicons name="mail" size={22} color="#fff" />
               </View>
               <Text style={styles.memberSlotName} numberOfLines={1}>
                 {invite.invited_name}
@@ -365,7 +365,7 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
           ))}
           <Pressable onPress={() => setInviteModalOpen(true)} style={styles.memberSlot}>
             <View style={[styles.avatarCircle, styles.addCircle]}>
-              <Ionicons name="add" size={22} color={colors.muted} />
+              <Ionicons name="add" size={26} color={colors.muted} />
             </View>
             <Text style={styles.memberSlotName}>{t.group.invite}</Text>
           </Pressable>
@@ -560,10 +560,10 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     marginHorizontal: -20,
     marginTop: -12,
-    paddingTop: 26,
+    paddingTop: 18,
     paddingHorizontal: 20,
   },
-  memberStrip: { flexDirection: 'row', gap: 16, marginBottom: 18, paddingRight: 4 },
+  memberStrip: { flexDirection: 'row', gap: 16, marginBottom: 10, paddingRight: 4 },
   memberSlot: { alignItems: 'center', width: 70, gap: 4 },
   avatarRing: {
     width: 56,
@@ -577,8 +577,8 @@ const styles = StyleSheet.create({
   adminBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1, paddingHorizontal: 6 },
   adminBadgeText: { ...fonts.bodySemiBold, fontSize: 8.5, color: colors.accent },
   avatarCircle: {
-    width: 44,
-    height: 44,
+    width: 56,
+    height: 56,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',

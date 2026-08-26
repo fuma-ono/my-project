@@ -44,11 +44,11 @@ export default function NetSummary({ totals, balances, meId }: Props) {
 
   return (
     <LinearGradient colors={[colors.accent, colors.plum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
-      {/* 参考UIの残高カードに合わせて、右上に財布アイコン(装飾)・右下に
-          シェブロン(装飾。すぐ下に内訳セクションが続くため、タップ先は
-          別途持たせていない)を添えた。「主役は金額」という指摘を受け、
-          財布アイコンは金額の邪魔にならないよう、より薄くしている。 */}
-      <Ionicons name="wallet" size={56} color="rgba(255,255,255,0.12)" style={styles.walletIcon} />
+      {/* 参考UIの残高カードに合わせて、右上に財布アイコン(装飾)を添えた。
+          「主役は金額」という指摘を受け、財布アイコンは金額の邪魔に
+          ならないよう、より薄くしている。「財布マークをもっと大きく」
+          という指摘を受け、56→80に拡大した。 */}
+      <Ionicons name="wallet" size={80} color="rgba(255,255,255,0.12)" style={styles.walletIcon} />
       <Text style={styles.heading}>{t.netSummary.heading}</Text>
       {totals.map((total, i) => {
         let receivable = 0;
@@ -68,7 +68,14 @@ export default function NetSummary({ totals, balances, meId }: Props) {
                 空いた分カード全体を縮小した。 */}
             <Text style={styles.amount}>{amountStr}</Text>
             {/* 参考UIに合わせ、「受取 ¥1,500」のような省略形1行ではなく、
-                「受け取る金額」「支払う金額」を見出しにした2カラム構成にした。 */}
+                「受け取る金額」「支払う金額」を見出しにした2カラム構成にした。
+                「支払う金額の右の›を、支払う金額と¥2,000の間の高さで
+                右端に」という指摘を受け、カード右下角に絶対配置していた
+                シェブロンを、この行(grossRow)の最後の要素として並べる
+                形に変更した。grossRowはalignItems:'center'のため、
+                2行(ラベル+金額)のグロス列と高さの異なるシェブロンは
+                行全体の高さの中央=ちょうどラベルと金額の間の高さに
+                自然と揃う。 */}
             <View style={styles.grossRow}>
               <View style={styles.grossCol}>
                 <Text style={styles.grossLabel}>{t.netSummary.receiving}</Text>
@@ -79,11 +86,11 @@ export default function NetSummary({ totals, balances, meId }: Props) {
                 <Text style={styles.grossLabel}>{t.netSummary.paying}</Text>
                 <Text style={styles.grossAmount}>{formatMoney(payable, total.currency)}</Text>
               </View>
+              <Ionicons name="chevron-forward" size={24} color="rgba(255,255,255,0.7)" style={styles.chevron} />
             </View>
           </View>
         );
       })}
-      <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" style={styles.chevron} />
     </LinearGradient>
   );
 }
@@ -93,9 +100,12 @@ const styles = StyleSheet.create({
   // 大きくして。金額も大きく」という指摘を受け、前回縮めたpadding・
   // 金額のフォントサイズ・各要素間の余白を、前回より大きい値に
   // 戻した(単純な巻き戻しではなく、旧デザインより一段階大きくした)。
-  card: { borderRadius: 24, padding: 24, marginBottom: 18, overflow: 'hidden' },
-  walletIcon: { position: 'absolute', top: 18, right: 18 },
-  chevron: { position: 'absolute', bottom: 18, right: 18 },
+  // 「あなたの残高の枠も少し上に」「精算の進捗ももう少し上に」という
+  // 指摘を受け、marginBottomを18→12に詰め、下の精算進捗カードとの
+  // 間隔を縮めた(カード自体を上に動かすというより、後に続くカードとの
+  // 余白を詰める形で対応)。
+  card: { borderRadius: 24, padding: 24, marginBottom: 12, overflow: 'hidden' },
+  walletIcon: { position: 'absolute', top: 12, right: 10 },
   heading: {
     ...fonts.bodyMedium,
     fontSize: 13,
@@ -104,12 +114,15 @@ const styles = StyleSheet.create({
   },
   line: { paddingVertical: 2 },
   lineDivider: { marginTop: 6, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.22)', paddingTop: 10 },
-  amount: { ...fonts.display, fontSize: 40, color: '#fff', letterSpacing: -0.5 },
-  grossRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14, paddingRight: 24 },
+  // 「¥500も大きく」という指摘を受け、40→46に拡大した。
+  amount: { ...fonts.display, fontSize: 46, color: '#fff', letterSpacing: -0.5 },
+  grossRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
   grossCol: { flex: 1 },
   grossDivider: { width: 1, height: 26, backgroundColor: 'rgba(255,255,255,0.25)', marginHorizontal: 14 },
   grossLabel: { ...fonts.bodyMedium, fontSize: 12, color: 'rgba(255,255,255,0.75)', marginBottom: 2 },
   grossAmount: { ...fonts.bodySemiBold, fontSize: 16, color: '#fff' },
+  // grossRowの最後の要素として並ぶシェブロン(詳細はJSX側のコメント参照)。
+  chevron: { marginLeft: 10 },
   settledWrap: {
     backgroundColor: colors.surface,
     borderRadius: 20,

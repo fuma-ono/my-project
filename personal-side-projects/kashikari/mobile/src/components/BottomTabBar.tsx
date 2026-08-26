@@ -45,6 +45,10 @@ export default function BottomTabBar({ tab, onChange }: Props) {
 }
 
 const styles = StyleSheet.create({
+  // 「ホーム・履歴・台帳のアイコンと名前をもう少し枠と共に下にして」
+  // という指摘を受け、paddingTopを8→14に増やし、バー(枠)の中で
+  // アイコン+ラベルの行自体を少し下に寄せた(paddingBottomは
+  // ホームバー避けの余白のためそのまま)。
   wrap: {
     position: 'absolute',
     left: 0,
@@ -54,7 +58,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.line,
-    paddingTop: 8,
+    paddingTop: 14,
     paddingBottom: 26,
   },
   btn: { flex: 1, alignItems: 'center', gap: 5 },

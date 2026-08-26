@@ -376,7 +376,7 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
           {pendingInvites.map((invite) => (
             <View key={invite.id} style={styles.memberSlot}>
               <View style={[styles.avatarCircle, styles.pendingCircle]}>
-                <Ionicons name="mail" size={18} color="#fff" />
+                <Ionicons name="mail" size={22} color="#fff" />
               </View>
               <Text style={styles.memberSlotName} numberOfLines={1}>
                 {invite.invited_name}
@@ -388,7 +388,7 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
           ))}
           <Pressable onPress={() => setInviteModalOpen(true)} style={styles.memberSlot}>
             <View style={[styles.avatarCircle, styles.addCircle]}>
-              <Ionicons name="add" size={22} color={colors.muted} />
+              <Ionicons name="add" size={26} color={colors.muted} />
             </View>
             <Text style={styles.memberSlotName}>{t.group.invite}</Text>
           </Pressable>
@@ -581,22 +581,22 @@ const styles = StyleSheet.create({
   // メンバー行の「背景」だけを、上端が角丸のカードにしてヘッダーの下端に
   // 少しめり込ませる。marginTopを負にして食い込ませ、paddingTopで
   // 打ち消す仕組み(打ち消し量が同じだと中身の位置は変わらない)。
-  // 「まだ被っている」「名前とアイコンを下に下げて」という指摘を受け、
-  // 食い込み量(marginTop)を浅くしつつ、paddingTopを打ち消し量より
-  // 大きくすることで、中身(アイコン・名前・バッジ)を実際に少し
-  // 下へずらし、ヘッダーとの間にゆとりを持たせた。左右は画面端まで
-  // 塗り広げ(marginHorizontal:-20)、paddingHorizontalで元の内容の
-  // 位置(20px inset)を保っている。
+  // 過去の「まだ被っている」という指摘を受けてpaddingTopを一度26まで
+  // 増やしたが、「名前とアイコンを少し上の位置に上げて」という指摘を
+  // 受け、26→18に少し戻した(marginTop:-12との差分=正味の下方向の
+  // オフセットを14→6に縮め、アイコン・名前を少し上に寄せた)。
   memberStripCard: {
     backgroundColor: colors.bg,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     marginHorizontal: -20,
     marginTop: -12,
-    paddingTop: 26,
+    paddingTop: 18,
     paddingHorizontal: 20,
   },
-  memberStrip: { flexDirection: 'row', gap: 16, marginBottom: 18, paddingRight: 4 },
+  // 「あなたの残高の枠も少し上に」という指摘を受け、メンバー行と
+  // 残高カードの間隔(marginBottom)を18→10に詰めた。
+  memberStrip: { flexDirection: 'row', gap: 16, marginBottom: 10, paddingRight: 4 },
   memberSlot: { alignItems: 'center', width: 70, gap: 4 },
   // lgアバター(44px)の周りに、隙間を空けた同系色のリングを描く
   // (アイコン自体は「大きくするんじゃなくて」の指摘で44に戻したため、
@@ -614,9 +614,13 @@ const styles = StyleSheet.create({
   // 弱める」という指摘を受け、paddingとfontSizeを一段階小さくした。
   adminBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1, paddingHorizontal: 6 },
   adminBadgeText: { ...fonts.bodySemiBold, fontSize: 8.5, color: colors.accent },
+  // 「招待するの◯もアイコンと同じ大きさにして」という指摘を受け、
+  // 44(アバター本体と同じ)→56(アバター+リングの見た目上の外径と同じ)
+  // に拡大した。通常メンバーはリング(avatarRing、56px)込みで見た目の
+  // 直径が56pxになるため、それに揃えている。
   avatarCircle: {
-    width: 44,
-    height: 44,
+    width: 56,
+    height: 56,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',

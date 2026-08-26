@@ -49,11 +49,13 @@ export default function SettlementProgress({ remaining, paid, onPress }: Props) 
 }
 
 const styles = StyleSheet.create({
+  // 「おすすめの精算方法も上に」という指摘を受け、marginBottomを
+  // 18→12に詰め、次のAutoSettlePlanカードとの間隔を縮めた。
   card: {
     backgroundColor: colors.surface,
     borderRadius: 20,
     padding: 16,
-    marginBottom: 18,
+    marginBottom: 12,
   },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   label: { ...fonts.bodySemiBold, fontSize: 13, color: colors.ink },
