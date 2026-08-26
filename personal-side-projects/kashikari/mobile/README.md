@@ -561,6 +561,16 @@ from public.analytics_events;
 
 `analytics_events`の合計が0件のとき、「まだデータがありません / 友達を招待して利用を始めましょう」を表示する。デモモードでは実データが無いため、この空状態が常に表示される(`fetchStats`にダミー関数を渡している)
 
+## フォント修正(22回目)
+
+「フォントがおかしくなっている」という指摘への対応。**スキーマ変更なし**。
+
+6回目の見直しで、iOS標準のSF Proを使うために`fontFamily`を指定しない方針にした。これはネイティブ(iOS/Android)では正しく動く(iOSは自動でSF Pro、Androidは自動でRoboto)が、**Web版(react-native-web)だけ**は`fontFamily`未指定だとブラウザ標準のフォント(Times系)まで落ちてしまい、SF Proとはかけ離れた見た目になっていた。
+
+Web版だけ`-apple-system, BlinkMacSystemFont, ...`を含むCSSフォントスタックを明示するよう`src/theme.ts`を修正した(`Platform.select`でネイティブ側は変更なし)。これにより、Mac/iPhone/iPadのSafari・Chromeで開いたときは正しくSF Proになる。
+
+**注意**: この開発サンドボックス(Linux)にはSF Pro自体がインストールされていないため、`docs/screenshots/`のWeb版デモ画面は今後も代替フォントのままになる(これは仕様上のこの環境固有の制限で、コードの問題ではない)。実機のiPhone/iPad/Macで動かせば正しく見える
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え

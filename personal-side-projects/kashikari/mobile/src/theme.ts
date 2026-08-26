@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 // デザイントークン。personal-side-projects/kashikari/app/index.html(Web版プロトタイプ)の
 // 配色・書体をそのまま踏襲している。両方を直す場合は同じ値をこちらにも反映すること。
 //
@@ -21,6 +23,18 @@
 // 自動でRobotoを使ってレンダリングする。書体を1系統だけに絞る代わりに、
 // 太さ(fontWeight)で見出し/本文の区別をつける、というOS標準アプリと
 // 同じ考え方に変更した。
+//
+// 「フォントがおかしい」という指摘への対応(21回目の見直し): iOS/Android
+// のネイティブアプリはfontFamily未指定のままでSF Pro/Robotoに正しく
+// 解決されるため変更していない。問題はWeb版(react-native-web)側で、
+// fontFamily未指定だとブラウザ標準のフォント(多くの場合Times系)まで
+// 落ちてしまい、SF Proにならず「おかしい」見た目になっていた。Web限定で
+// -apple-system等を含むCSSフォントスタックを明示することで、Mac/iOSの
+// Safari・Chromeで開いたときは正しくSF Proになる(この開発サンドボックス
+// はLinuxのため、SF Pro自体が無くスクリーンショットでは代替フォントの
+// ままになる。実機のMac/iPhone/iPadで開いたときだけ正しく見える)。
+const WEB_FONT_STACK =
+  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
 
 export const colors = {
   bg: '#fff9f2',
@@ -46,16 +60,19 @@ export const colors = {
   danger: '#c1503f',
 } as const;
 
-// fontFamilyを指定しない = OS標準フォント(iOS: San Francisco / SF Pro、
-// Android: Roboto)。太さだけをトークンごとに変える。使う側は
+// ネイティブ(iOS/Android)はfontFamily未指定のままOS標準フォントに任せ、
+// Webだけ明示的にSF Pro(-apple-system)を含むフォントスタックを指定する
+// (詳細は上のコメント参照)。太さだけをトークンごとに変える。使う側は
 // `style={[..., fonts.display]}` のように展開して使う(fontFamilyと
 // fontWeightの2つのスタイルプロパティをまとめて持つオブジェクトのため)。
+const webFontFamily = Platform.OS === 'web' ? WEB_FONT_STACK : undefined;
+
 export const fonts = {
-  display: { fontFamily: undefined, fontWeight: '700' } as const,
-  displayMedium: { fontFamily: undefined, fontWeight: '600' } as const,
-  body: { fontFamily: undefined, fontWeight: '400' } as const,
-  bodyMedium: { fontFamily: undefined, fontWeight: '500' } as const,
-  bodySemiBold: { fontFamily: undefined, fontWeight: '600' } as const,
+  display: { fontFamily: webFontFamily, fontWeight: '700' } as const,
+  displayMedium: { fontFamily: webFontFamily, fontWeight: '600' } as const,
+  body: { fontFamily: webFontFamily, fontWeight: '400' } as const,
+  bodyMedium: { fontFamily: webFontFamily, fontWeight: '500' } as const,
+  bodySemiBold: { fontFamily: webFontFamily, fontWeight: '600' } as const,
 } as const;
 
 // 彩度・明度を揃えた4色のみ(主アクセントの色相違いバリエーション)。
