@@ -282,17 +282,30 @@ def study_focus_binaural(minutes: float = 3.0) -> core.StereoTrack:
 def _piano_note(freq: float, seconds: float, sr: int = core.SAMPLE_RATE,
                  brightness: float = 0.75) -> np.ndarray:
     """One struck piano-like note. Added 2026-08-26 per owner request
-    ("BGMのジャンルにピアノを増やしたい") — every other preset here is a
-    sustained pad/drone/noise texture (core.detuned_stack, chord pads that
-    fade smoothly between chords); a real piano note doesn't sustain like
-    that, it's struck once and decays. This is additive synthesis instead
-    of a single detuned-sine stack: `n_harmonics` overtones, each with its
-    own exponential decay (higher harmonics die out faster than the
-    fundamental — how a real piano string actually behaves, and the main
-    thing that makes this read as "struck" rather than "organ"), plus a
-    small inharmonicity stretch on the upper partials (real piano strings
-    aren't perfect harmonic series either — a little detuning-with-
-    frequency is part of what a piano "sounds like" vs. a pure tone).
+    ("BGMのジャンルにピアノを増やしたい"); rewritten same day per owner
+    feedback ("電子音的な感じだから") — a clean stack of phase-aligned
+    sine harmonics with a smooth 1/h falloff *is* basically what a
+    subtractive/additive synth pad sounds like, no matter how the decay
+    envelope is shaped. What was missing is what actually separates a
+    struck acoustic string from an oscillator bank:
+
+    1. **Hammer noise**: a real piano hammer hitting a string produces a
+       brief broadband "thud" before the tone settles, not a pure tone
+       from sample zero. Added as a short bandpassed noise burst under
+       the attack.
+    2. **Unison-string beating**: each piano key (above the lowest
+       register) rings 2-3 physical strings tuned *almost* but not quite
+       identically — the slight beating between them is a large part of
+       piano's characteristic shimmer/warmth. Modeled as `unison` detuned
+       copies of the harmonic stack summed together, each with independent
+       random phase (a single phase-locked oscillator bank per note is
+       part of what reads as "electronic").
+    3. **Strike-position comb filtering**: a hammer strikes a string at a
+       fixed fraction of its length (~1/7, a real piano-design constant),
+       which suppresses harmonics near multiples of that ratio rather than
+       rolling off smoothly — a big part of why a piano's spectrum doesn't
+       look (or sound) like a clean synth pad's.
+
     `brightness` < 1 rolls off the harmonics faster, for a softer
     felt/una-corda character suited to sleep/relax genres; keep close to
     1.0 for a more present, percussive tone.
@@ -300,17 +313,38 @@ def _piano_note(freq: float, seconds: float, sr: int = core.SAMPLE_RATE,
     n = int(seconds * sr)
     t = np.arange(n) / sr
     out = np.zeros(n)
-    n_harmonics = 8
+    n_harmonics = 10
     base_decay_s = 2.4  # roughly how long the fundamental takes to decay ~63%
-    for h in range(1, n_harmonics + 1):
-        partial_freq = freq * h * (1 + 0.0004 * h ** 2) ** 0.5  # inharmonicity stretch
-        if partial_freq > sr * 0.45:
-            break
-        amp = (1.0 / h ** 1.3) * (brightness ** (h - 1))
-        decay_rate = (1 + 0.35 * (h - 1)) / base_decay_s  # higher harmonics decay faster
-        out += amp * np.exp(-t * decay_rate) * np.sin(2 * np.pi * partial_freq * t)
+    strike_ratio = 1.0 / 7.0  # hammer strike position along the string (standard piano design)
+    unison = 3
+    detune_cents = 4.0
+    # deterministic-per-pitch seed so a given note is reproducible run to
+    # run, but different notes don't all share identical unison phase
+    rng = np.random.default_rng(int(freq * 97) % (2 ** 31 - 1))
+
+    for u in range(unison):
+        spread_cents = (u - (unison - 1) / 2) * detune_cents
+        detune_mult = 2 ** (spread_cents / 1200)
+        phases = rng.uniform(0, 2 * np.pi, n_harmonics + 1)
+        for h in range(1, n_harmonics + 1):
+            partial_freq = freq * detune_mult * h * (1 + 0.0004 * h ** 2) ** 0.5  # inharmonicity stretch
+            if partial_freq > sr * 0.45:
+                break
+            strike_atten = max(abs(np.sin(h * np.pi * strike_ratio)), 0.15)  # comb-filtered by strike position
+            amp = (1.0 / h ** 1.15) * (brightness ** (h - 1)) * strike_atten / unison
+            decay_rate = (1 + 0.35 * (h - 1)) / base_decay_s  # higher harmonics decay faster
+            out += amp * np.exp(-t * decay_rate) * np.sin(2 * np.pi * partial_freq * t + phases[h])
+
     attack_n = max(1, int(0.006 * sr))  # a few ms — struck, not faded in
     out[:attack_n] *= np.linspace(0, 1, attack_n)
+
+    hammer_n = min(n, int(0.018 * sr))
+    if hammer_n > 4:
+        hammer = core.white_noise(hammer_n / sr, sr)
+        hammer = core.one_pole_highpass(hammer, cutoff_hz=min(freq * 0.8, sr * 0.4), sr=sr)
+        hammer = core.one_pole_lowpass(hammer, cutoff_hz=min(freq * 6, sr * 0.45), sr=sr)
+        hammer_env = np.exp(-np.arange(hammer_n) / sr * 110)
+        out[:hammer_n] += hammer * hammer_env * 0.09
     return out
 
 
