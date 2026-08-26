@@ -18,6 +18,7 @@ import InviteModal from '../components/InviteModal';
 import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
 import SettlementProgress from '../components/SettlementProgress';
+import Toast from '../components/Toast';
 import UnpaidMembersModal from '../components/UnpaidMembersModal';
 import { useT } from '../i18n';
 import { computeBalances, computeMyNet, computeSimplifiedSettlement } from '../lib/balances';
@@ -44,6 +45,7 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
   const [unpaidModalOpen, setUnpaidModalOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [invites, setInvites] = useState<GroupInvite[]>([]);
+  const [notifToastVisible, setNotifToastVisible] = useState(false);
   const meId = DEMO_ME_ID;
   const me = members.find((m) => m.id === meId);
 
@@ -282,9 +284,14 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
         <Pressable onPress={onBack} hitSlop={10}>
           <Text style={styles.back}>{t.group.back}</Text>
         </Pressable>
-        <Pressable onPress={onOpenSettings} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
-          <Ionicons name="settings-outline" size={22} color={colors.ink} />
-        </Pressable>
+        <View style={styles.headerRightRow}>
+          <Pressable onPress={() => setNotifToastVisible(true)} hitSlop={10}>
+            <Ionicons name="notifications-outline" size={22} color={colors.ink} />
+          </Pressable>
+          <Pressable onPress={onOpenSettings} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
+            <Ionicons name="settings-outline" size={22} color={colors.ink} />
+          </Pressable>
+        </View>
       </View>
       <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleRow}>
         <Mark size={40} glyph={group.icon_emoji ?? undefined} />
@@ -324,7 +331,7 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
         {pendingInvites.map((invite) => (
           <View key={invite.id} style={styles.memberSlot}>
             <View style={[styles.avatarCircle, styles.pendingCircle]}>
-              <Ionicons name="mail-outline" size={16} color={colors.muted} />
+              <Ionicons name="mail" size={18} color="#fff" />
             </View>
             <Text style={styles.memberSlotName} numberOfLines={1}>
               {invite.invited_name}
@@ -491,6 +498,8 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
         onRemindSent={() => {}}
         onClose={() => setUnpaidModalOpen(false)}
       />
+
+      <Toast message={t.group.notificationsComingSoon} visible={notifToastVisible} onHide={() => setNotifToastVisible(false)} />
     </View>
   );
 }
@@ -501,6 +510,7 @@ const styles = StyleSheet.create({
   demoBannerText: { ...fonts.bodySemiBold, fontSize: 12, color: '#fff', textAlign: 'center' },
   list: { paddingHorizontal: 20, paddingBottom: 100 },
   headerRow: { marginBottom: 4, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   back: { ...fonts.bodySemiBold, fontSize: 15, color: colors.accent },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4, marginBottom: 14 },
   titleTextCol: { flexShrink: 1 },
@@ -509,8 +519,8 @@ const styles = StyleSheet.create({
   memberStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 18 },
   memberSlot: { alignItems: 'center', width: 64, gap: 3 },
   memberSlotName: { ...fonts.bodyMedium, fontSize: 11.5, color: colors.ink, maxWidth: 62 },
-  adminBadge: { backgroundColor: colors.surface2, borderRadius: 999, paddingVertical: 1.5, paddingHorizontal: 7 },
-  adminBadgeText: { ...fonts.bodySemiBold, fontSize: 9.5, color: colors.muted },
+  adminBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1.5, paddingHorizontal: 7 },
+  adminBadgeText: { ...fonts.bodySemiBold, fontSize: 9.5, color: colors.accent },
   avatarCircle: {
     width: 44,
     height: 44,
@@ -518,9 +528,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pendingCircle: { backgroundColor: colors.surface2, borderWidth: 1.5, borderColor: colors.line, borderStyle: 'dashed' },
-  pendingBadge: { backgroundColor: colors.surface2, borderRadius: 999, paddingVertical: 1.5, paddingHorizontal: 7 },
-  pendingBadgeText: { ...fonts.bodySemiBold, fontSize: 9.5, color: colors.muted },
+  pendingCircle: { backgroundColor: colors.favor },
+  pendingBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1.5, paddingHorizontal: 7 },
+  pendingBadgeText: { ...fonts.bodySemiBold, fontSize: 9.5, color: colors.accent },
   addCircle: { borderWidth: 1.5, borderColor: colors.muted, borderStyle: 'dashed' },
   sectionTitle: {
     ...fonts.bodySemiBold,

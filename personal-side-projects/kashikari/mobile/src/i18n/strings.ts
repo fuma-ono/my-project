@@ -82,6 +82,7 @@ export const ja = {
       `「${groupName}」の記録は他のメンバーの画面には残りますが、あなたはこのグループのデータにアクセスできなくなります。`,
     leaveConfirmButton: '抜ける',
     leaveFailedTitle: '抜けられませんでした',
+    notificationsComingSoon: '通知機能は準備中です。もうしばらくお待ちください。',
   },
   groupForm: {
     createTitle: '新しいグループ',
@@ -332,6 +333,7 @@ export const en: Strings = {
       `Your records in "${groupName}" will stay visible to other members, but you'll lose access to this group's data.`,
     leaveConfirmButton: 'Leave',
     leaveFailedTitle: "Couldn't leave the group",
+    notificationsComingSoon: 'Notifications are coming soon. Hang tight!',
   },
   groupForm: {
     createTitle: 'New group',

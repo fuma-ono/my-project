@@ -16,6 +16,7 @@ import InviteModal from '../components/InviteModal';
 import Mark from '../components/Mark';
 import NetSummary from '../components/NetSummary';
 import SettlementProgress from '../components/SettlementProgress';
+import Toast from '../components/Toast';
 import UnpaidMembersModal from '../components/UnpaidMembersModal';
 import { useGroupData } from '../hooks/useGroupData';
 import { useT } from '../i18n';
@@ -64,6 +65,7 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
   const [tab, setTab] = useState<Tab>('balance');
   const [showSettled, setShowSettled] = useState(false);
   const [unpaidModalOpen, setUnpaidModalOpen] = useState(false);
+  const [notifToastVisible, setNotifToastVisible] = useState(false);
 
   const nameOf = (id: string) => members.find((m) => m.id === id)?.display_name ?? t.group.unknownMember;
   const emojiOf = (id: string) => members.find((m) => m.id === id)?.avatar_emoji ?? null;
@@ -244,6 +246,17 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
     ]);
   };
 
+  // 参考UIのヘッダーにはアイコンだけが並び、「抜ける」のテキストボタンは
+  // 無い。抜ける操作自体は無くさず、歯車アイコンをタップしたときの
+  // メニュー(設定/抜ける)に格納する形にした。
+  const openGroupMenu = () => {
+    Alert.alert(group.name, undefined, [
+      { text: t.groups.settingsButton, onPress: onOpenSettings },
+      { text: t.group.leave, style: 'destructive', onPress: leave },
+      { text: t.common.cancel, style: 'cancel' },
+    ]);
+  };
+
   const pendingInvites = useMemo(() => invites.filter((i) => i.status === 'pending'), [invites]);
 
   const header = (
@@ -253,10 +266,10 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
           <Text style={styles.back}>{t.group.back}</Text>
         </Pressable>
         <View style={styles.headerRightRow}>
-          <Pressable onPress={leave} hitSlop={10}>
-            <Text style={styles.leave}>{t.group.leave}</Text>
+          <Pressable onPress={() => setNotifToastVisible(true)} hitSlop={10}>
+            <Ionicons name="notifications-outline" size={22} color={colors.ink} />
           </Pressable>
-          <Pressable onPress={onOpenSettings} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
+          <Pressable onPress={openGroupMenu} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
             <Ionicons name="settings-outline" size={22} color={colors.ink} />
           </Pressable>
         </View>
@@ -299,7 +312,7 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
         {pendingInvites.map((invite) => (
           <View key={invite.id} style={styles.memberSlot}>
             <View style={[styles.avatarCircle, styles.pendingCircle]}>
-              <Ionicons name="mail-outline" size={16} color={colors.muted} />
+              <Ionicons name="mail" size={18} color="#fff" />
             </View>
             <Text style={styles.memberSlotName} numberOfLines={1}>
               {invite.invited_name}
@@ -444,6 +457,7 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
           onClose={() => setUnpaidModalOpen(false)}
         />
       )}
+      <Toast message={t.group.notificationsComingSoon} visible={notifToastVisible} onHide={() => setNotifToastVisible(false)} />
     </View>
   );
 }
@@ -454,7 +468,6 @@ const styles = StyleSheet.create({
   headerRow: { marginTop: 44, marginBottom: 4, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   back: { ...fonts.bodySemiBold, fontSize: 15, color: colors.accent },
-  leave: { ...fonts.bodyMedium, fontSize: 12.5, color: colors.muted },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4, marginBottom: 14 },
   titleTextCol: { flexShrink: 1 },
   title: { ...fonts.display, fontSize: 26, color: colors.ink },
@@ -462,8 +475,8 @@ const styles = StyleSheet.create({
   memberStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 18 },
   memberSlot: { alignItems: 'center', width: 64, gap: 3 },
   memberSlotName: { ...fonts.bodyMedium, fontSize: 11.5, color: colors.ink, maxWidth: 62 },
-  adminBadge: { backgroundColor: colors.surface2, borderRadius: 999, paddingVertical: 1.5, paddingHorizontal: 7 },
-  adminBadgeText: { ...fonts.bodySemiBold, fontSize: 9.5, color: colors.muted },
+  adminBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1.5, paddingHorizontal: 7 },
+  adminBadgeText: { ...fonts.bodySemiBold, fontSize: 9.5, color: colors.accent },
   avatarCircle: {
     width: 44,
     height: 44,
@@ -471,9 +484,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pendingCircle: { backgroundColor: colors.surface2, borderWidth: 1.5, borderColor: colors.line, borderStyle: 'dashed' },
-  pendingBadge: { backgroundColor: colors.surface2, borderRadius: 999, paddingVertical: 1.5, paddingHorizontal: 7 },
-  pendingBadgeText: { ...fonts.bodySemiBold, fontSize: 9.5, color: colors.muted },
+  pendingCircle: { backgroundColor: colors.favor },
+  pendingBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1.5, paddingHorizontal: 7 },
+  pendingBadgeText: { ...fonts.bodySemiBold, fontSize: 9.5, color: colors.accent },
   addCircle: { borderWidth: 1.5, borderColor: colors.muted, borderStyle: 'dashed' },
   sectionTitle: {
     ...fonts.bodySemiBold,

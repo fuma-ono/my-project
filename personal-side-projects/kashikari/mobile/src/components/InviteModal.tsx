@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -48,9 +47,12 @@ export default function InviteModal({ visible, onClose, onSubmit }: Props) {
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <View style={styles.iconHeader}>
-            <LinearGradient colors={[colors.accent, colors.plum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.iconBadge}>
-              <Ionicons name="person-add" size={26} color={colors.accentInk} />
-            </LinearGradient>
+            <View style={styles.iconBadge}>
+              <Ionicons name="mail" size={28} color={colors.accent} />
+            </View>
+            <View style={styles.addBadge}>
+              <Ionicons name="add" size={14} color="#fff" />
+            </View>
             <Ionicons name="sparkles" size={14} color={colors.accent} style={styles.sparkleTopRight} />
             <Ionicons name="sparkles" size={10} color={colors.plum} style={styles.sparkleBottomLeft} />
           </View>
@@ -89,7 +91,32 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(20,15,10,0.45)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   card: { width: '100%', backgroundColor: colors.surface, borderRadius: 18, padding: 20, alignItems: 'center' },
   iconHeader: { width: 64, height: 64, marginBottom: 14, alignItems: 'center', justifyContent: 'center' },
-  iconBadge: { width: 64, height: 64, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
+  iconBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 999,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#3c2814',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  addBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 24,
+    height: 24,
+    borderRadius: 999,
+    backgroundColor: colors.favor,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.surface,
+  },
   sparkleTopRight: { position: 'absolute', top: -4, right: -6 },
   sparkleBottomLeft: { position: 'absolute', bottom: -2, left: -8 },
   title: { ...fonts.display, fontSize: 19, color: colors.ink, textAlign: 'center' },

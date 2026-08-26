@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
@@ -39,7 +40,7 @@ export default function GroupsScreen({
           <Mark size={34} />
           <Text style={styles.wordmark}>kashikari</Text>
           <Pressable onPress={onOpenSettings} hitSlop={10} style={styles.settingsBtn} accessibilityLabel={t.groups.settingsButton}>
-            <Text style={styles.settingsIcon}>⚙️</Text>
+            <Ionicons name="settings-outline" size={22} color={colors.ink} />
           </Pressable>
         </View>
         <Text style={styles.hello}>{t.groups.hello(displayName)}</Text>
@@ -103,7 +104,6 @@ const styles = StyleSheet.create({
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   wordmark: { ...fonts.display, fontSize: 28, color: colors.ink, flex: 1 },
   settingsBtn: { padding: 4 },
-  settingsIcon: { fontSize: 22 },
   hello: { ...fonts.body, fontSize: 14, color: colors.muted, marginTop: 8 },
   list: { paddingHorizontal: 20, paddingBottom: 24, gap: 10, flexGrow: 1 },
   empty: { alignItems: 'center', paddingTop: 60 },

@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -43,6 +44,10 @@ export default function NetSummary({ totals, balances, meId }: Props) {
 
   return (
     <LinearGradient colors={[colors.accent, colors.plum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
+      {/* 参考UIの残高カードに合わせて、右上に財布アイコン(装飾)・右下に
+          シェブロン(装飾。すぐ下に内訳セクションが続くため、タップ先は
+          別途持たせていない)を添えた。 */}
+      <Ionicons name="wallet" size={64} color="rgba(255,255,255,0.18)" style={styles.walletIcon} />
       <Text style={styles.heading}>{t.netSummary.heading}</Text>
       {totals.map((total, i) => {
         const owed = total.amount > 0; // 正値 = 自分が受け取る側(lib/balances.tsのNetTotal参照)
@@ -64,12 +69,15 @@ export default function NetSummary({ totals, balances, meId }: Props) {
           </View>
         );
       })}
+      <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" style={styles.chevron} />
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: 24, padding: 24, marginBottom: 8 },
+  card: { borderRadius: 24, padding: 24, marginBottom: 8, overflow: 'hidden' },
+  walletIcon: { position: 'absolute', top: 18, right: 18 },
+  chevron: { position: 'absolute', bottom: 20, right: 20 },
   heading: {
     ...fonts.bodySemiBold,
     fontSize: 13,
