@@ -303,53 +303,58 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
         </LinearGradient>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.memberStrip}>
-        {members.map((m) => {
-          const isMe = m.id === meId;
-          const isAdmin = m.id === group.created_by;
-          const slot = (
-            <>
-              <Avatar name={m.display_name} emoji={m.avatar_emoji} size="lg" />
+      {/* 画像で示してもらって判明: 動かすべきはアイコンの位置ではなく、
+          「下の白い本体側」の形だった。詳細はGroupScreen.tsxの同じ箇所
+          のコメント参照。 */}
+      <View style={styles.memberStripCard}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.memberStrip}>
+          {members.map((m) => {
+            const isMe = m.id === meId;
+            const isAdmin = m.id === group.created_by;
+            const slot = (
+              <>
+                <Avatar name={m.display_name} emoji={m.avatar_emoji} size="lg" />
+                <Text style={styles.memberSlotName} numberOfLines={1}>
+                  {m.display_name}
+                </Text>
+                {isAdmin && (
+                  <View style={styles.adminBadge}>
+                    <Text style={styles.adminBadgeText}>{t.group.adminBadge}</Text>
+                  </View>
+                )}
+              </>
+            );
+            return isMe ? (
+              <Pressable key={m.id} onPress={() => setAvatarPickerOpen(true)} style={styles.memberSlot}>
+                {slot}
+              </Pressable>
+            ) : (
+              <View key={m.id} style={styles.memberSlot}>
+                {slot}
+              </View>
+            );
+          })}
+          {pendingInvites.map((invite) => (
+            <View key={invite.id} style={styles.memberSlot}>
+              <View style={[styles.avatarCircle, styles.pendingCircle]}>
+                <Ionicons name="mail" size={18} color="#fff" />
+              </View>
               <Text style={styles.memberSlotName} numberOfLines={1}>
-                {m.display_name}
+                {invite.invited_name}
               </Text>
-              {isAdmin && (
-                <View style={styles.adminBadge}>
-                  <Text style={styles.adminBadgeText}>{t.group.adminBadge}</Text>
-                </View>
-              )}
-            </>
-          );
-          return isMe ? (
-            <Pressable key={m.id} onPress={() => setAvatarPickerOpen(true)} style={styles.memberSlot}>
-              {slot}
-            </Pressable>
-          ) : (
-            <View key={m.id} style={styles.memberSlot}>
-              {slot}
+              <View style={styles.pendingBadge}>
+                <Text style={styles.pendingBadgeText}>{t.group.pendingSectionTitle}</Text>
+              </View>
             </View>
-          );
-        })}
-        {pendingInvites.map((invite) => (
-          <View key={invite.id} style={styles.memberSlot}>
-            <View style={[styles.avatarCircle, styles.pendingCircle]}>
-              <Ionicons name="mail" size={18} color="#fff" />
+          ))}
+          <Pressable onPress={() => setInviteModalOpen(true)} style={styles.memberSlot}>
+            <View style={[styles.avatarCircle, styles.addCircle]}>
+              <Ionicons name="add" size={22} color={colors.muted} />
             </View>
-            <Text style={styles.memberSlotName} numberOfLines={1}>
-              {invite.invited_name}
-            </Text>
-            <View style={styles.pendingBadge}>
-              <Text style={styles.pendingBadgeText}>{t.group.pendingSectionTitle}</Text>
-            </View>
-          </View>
-        ))}
-        <Pressable onPress={() => setInviteModalOpen(true)} style={styles.memberSlot}>
-          <View style={[styles.avatarCircle, styles.addCircle]}>
-            <Ionicons name="add" size={22} color={colors.muted} />
-          </View>
-          <Text style={styles.memberSlotName}>{t.group.invite}</Text>
-        </Pressable>
-      </ScrollView>
+            <Text style={styles.memberSlotName}>{t.group.invite}</Text>
+          </Pressable>
+        </ScrollView>
+      </View>
     </View>
   );
 
@@ -546,6 +551,17 @@ const styles = StyleSheet.create({
   titleCol: { flex: 1, marginHorizontal: 16 },
   title: { ...fonts.display, fontSize: 23, color: '#fff' },
   memberCount: { ...fonts.bodyMedium, fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 1 },
+  // メンバー行の「背景」だけを上端角丸のカードにしてヘッダー下端に
+  // めり込ませる(詳細はGroupScreen.tsxの同じ箇所のコメント参照)。
+  memberStripCard: {
+    backgroundColor: colors.bg,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    marginHorizontal: -20,
+    marginTop: -20,
+    paddingTop: 20,
+    paddingHorizontal: 20,
+  },
   memberStrip: { flexDirection: 'row', gap: 16, marginBottom: 18, paddingRight: 4 },
   memberSlot: { alignItems: 'center', width: 70, gap: 4 },
   memberSlotName: { ...fonts.bodyMedium, fontSize: 12, color: colors.ink, maxWidth: 68 },
