@@ -344,6 +344,15 @@ def _piano_note(freq: float, seconds: float, sr: int = core.SAMPLE_RATE,
         hammer = core.one_pole_highpass(hammer, cutoff_hz=min(freq * 0.8, sr * 0.4), sr=sr)
         hammer = core.one_pole_lowpass(hammer, cutoff_hz=min(freq * 6, sr * 0.45), sr=sr)
         hammer_env = np.exp(-np.arange(hammer_n) / sr * 110)
+        # 2026-08-26(4) bugfix: found via QA on the full 1-hour render (a
+        # spike in >0.35-per-sample amplitude jumps at thousands of
+        # points) — this noise burst was being added starting at its full
+        # instantaneous value (hammer_env[0] == 1.0), a genuine digital
+        # click at every single note onset, not an intentional "thud".
+        # A ~1ms ramp-in removes the discontinuity while keeping the
+        # burst itself just as short/percussive.
+        ramp_n = min(hammer_n, max(1, int(0.001 * sr)))
+        hammer_env[:ramp_n] *= np.linspace(0, 1, ramp_n)
         out[:hammer_n] += hammer * hammer_env * 0.09
     return out
 
