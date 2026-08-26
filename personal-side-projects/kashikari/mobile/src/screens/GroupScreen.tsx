@@ -512,22 +512,21 @@ const styles = StyleSheet.create({
   // に変更している。
   // 影(shadow)はoverflow:'hidden'を持つViewには描画されないため、
   // 影を持つ外側のラッパーと、角丸+クリップ用の内側のViewを分けている。
+  // 「下部分の角丸を削除し、重なる部分まで自然に伸ばして下のコンテンツと
+  // 一体化させる」という指摘への対応。以前は下だけ角丸+影を付けて
+  // 「本体の上に浮くカード」に見せていたが、それだと重なり付近に丸みの
+  // 切れ込みや不自然な隙間ができてしまっていた。角丸(borderBottomLeft/
+  // RightRadius)と影(shadow/elevation)を両方やめ、四角いまま下の
+  // メンバー行の直前まで隙間なく伸ばすことで、継ぎ目のない1枚の背景に
+  // 見えるようにした。
   headerShadowWrap: {
     marginHorizontal: -20,
-    marginBottom: 16,
-    shadowColor: colors.plum,
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    marginBottom: 0,
   },
   headerGradient: {
     paddingTop: 44,
     paddingHorizontal: 20,
     paddingBottom: 16,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    overflow: 'hidden',
   },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   // 「戻る・通知・設定の余白を統一する」ため、titleColの左右マージンを

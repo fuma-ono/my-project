@@ -530,22 +530,16 @@ const styles = StyleSheet.create({
   // 影を持つ外側のラッパーと、角丸+クリップ用の内側のViewを分けている。
   // デモバナー自体が既にステータスバー分の余白を持っているため、
   // ここのpaddingTopはGroupScreen.tsxより控えめでよい。
+  // 「下部分の角丸を削除し、重なる部分まで自然に伸ばして下のコンテンツと
+  // 一体化させる」という指摘への対応(GroupScreen.tsxと同じ)。
   headerShadowWrap: {
     marginHorizontal: -20,
-    marginBottom: 16,
-    shadowColor: colors.plum,
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    marginBottom: 0,
   },
   headerGradient: {
     paddingTop: 14,
     paddingHorizontal: 20,
     paddingBottom: 16,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
-    overflow: 'hidden',
   },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
