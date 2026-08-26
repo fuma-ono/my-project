@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -46,8 +47,10 @@ export default function SettingsScreen({ profile, onBack, onChangeDisplayName, o
     <View style={styles.wrap}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
-          <Pressable onPress={onBack} hitSlop={10}>
-            <Text style={styles.back}>{t.settings.back}</Text>
+          {/* グループ画面の「‹」アイコンに合わせて、テキストの矢印
+              ("‹ 戻る")からIonicons(chevron-back)に統一した。 */}
+          <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.settings.back}>
+            <Ionicons name="chevron-back" size={24} color={colors.ink} />
           </Pressable>
         </View>
         <Text style={styles.title}>{t.settings.title}</Text>
@@ -83,12 +86,12 @@ export default function SettingsScreen({ profile, onBack, onChangeDisplayName, o
 
         <Pressable onPress={onOpenPremium} style={styles.premiumRow}>
           <Text style={styles.premiumRowText}>{t.settings.premiumRow}</Text>
-          <Text style={styles.premiumChevron}>›</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.muted} />
         </Pressable>
 
         <Pressable onPress={onOpenUsage} style={[styles.premiumRow, styles.usageRow]}>
           <Text style={styles.usageRowText}>{t.settings.usageRow}</Text>
-          <Text style={styles.premiumChevron}>›</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.muted} />
         </Pressable>
 
         <Text style={styles.sectionLabel}>{t.settings.about}</Text>
@@ -122,7 +125,6 @@ const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 20, paddingTop: 60, paddingBottom: 60 },
   headerRow: { marginBottom: 4 },
-  back: { ...fonts.bodySemiBold, fontSize: 15, color: colors.accent },
   title: { ...fonts.display, fontSize: 26, color: colors.ink, marginTop: 4, marginBottom: 20 },
   sectionLabel: {
     ...fonts.bodySemiBold,
@@ -182,7 +184,6 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
   },
   premiumRowText: { ...fonts.bodySemiBold, fontSize: 15, color: colors.plum },
-  premiumChevron: { ...fonts.bodySemiBold, fontSize: 18, color: colors.muted },
   usageRow: { marginTop: 10 },
   usageRowText: { ...fonts.bodySemiBold, fontSize: 15, color: colors.ink },
   aboutText: { ...fonts.bodySemiBold, fontSize: 15, color: colors.ink },

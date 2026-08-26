@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -81,8 +82,10 @@ export default function UsageScreen({ onBack, fetchStats }: Props) {
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.accent} />}
       >
         <View style={styles.headerRow}>
-          <Pressable onPress={onBack} hitSlop={10}>
-            <Text style={styles.back}>{t.usage.back}</Text>
+          {/* グループ画面の「‹」アイコンに揃え、テキストの矢印から
+              Ionicons(chevron-back)に統一した。 */}
+          <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.usage.back}>
+            <Ionicons name="chevron-back" size={24} color={colors.ink} />
           </Pressable>
         </View>
         <Text style={styles.title}>{t.usage.title}</Text>
@@ -161,7 +164,6 @@ const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 20, paddingTop: 60, paddingBottom: 60 },
   headerRow: { marginBottom: 4 },
-  back: { ...fonts.bodySemiBold, fontSize: 15, color: colors.accent },
   title: { ...fonts.display, fontSize: 26, color: colors.ink, marginTop: 4, marginBottom: 20 },
   statusText: { ...fonts.body, fontSize: 14.5, color: colors.muted, marginTop: 12 },
   emptyWrap: { alignItems: 'center', paddingVertical: 48 },

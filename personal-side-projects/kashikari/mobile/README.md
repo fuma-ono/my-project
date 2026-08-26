@@ -813,6 +813,17 @@ Web版だけ`-apple-system, BlinkMacSystemFont, ...`を含むCSSフォントス�
 
 `NetSummary.tsx`を変更。
 
+## 他の画面のアイコン表記を統一する(36回目)
+
+「他のui画面にも同じように修正して」という指摘への対応。**スキーマ変更なし**。
+
+グループ詳細画面(`GroupScreen`)は、これまでの一連の修正で「戻る/進むはIonicons、テキストの矢印記号は使わない」という表記に統一されていたが、他の画面(設定・Premium・利用状況)は以前のまま「‹ 戻る」「›」のようなテキストの矢印記号が残っていた。統一のため、以下を変更した。
+
+- `SettingsScreen.tsx`・`PremiumScreen.tsx`・`UsageScreen.tsx`: 戻るボタンをテキスト(「‹ 戻る」等)からIonicons(`chevron-back`、アイコンのみ)に変更。設定画面の「✨ Premium」「📊 利用状況」の行末にあったテキストの「›」もIonicons(`chevron-forward`)に変更
+- 上記に伴い、`t.settings.back` / `t.premium.back` / `t.usage.back` / `t.group.back`(グループ画面ではアクセシビリティラベルとしてのみ使用)のi18n文字列から、視覚的には表示されなくなった「‹ 」の接頭辞を削除(ja/en両方)
+
+`SettingsScreen.tsx`・`PremiumScreen.tsx`・`UsageScreen.tsx`・`i18n/strings.ts`を変更。グループ一覧・グループ詳細(ホーム/履歴/台帳/招待)・設定・Premium・利用状況の全画面をPlaywrightで確認し、スクリーンショットを`docs/screenshots/`に反映した。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え

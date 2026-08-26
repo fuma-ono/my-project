@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -37,8 +38,10 @@ export default function PremiumScreen({ onBack, onView, onInterest }: Props) {
     <View style={styles.wrap}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
-          <Pressable onPress={onBack} hitSlop={10}>
-            <Text style={styles.back}>{t.premium.back}</Text>
+          {/* グループ画面の「‹」アイコンに揃え、テキストの矢印から
+              Ionicons(chevron-back)に統一した。 */}
+          <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.premium.back}>
+            <Ionicons name="chevron-back" size={24} color={colors.ink} />
           </Pressable>
         </View>
         <Text style={styles.title}>{t.premium.title}</Text>
@@ -74,7 +77,6 @@ const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 20, paddingTop: 60, paddingBottom: 60 },
   headerRow: { marginBottom: 4 },
-  back: { ...fonts.bodySemiBold, fontSize: 15, color: colors.accent },
   title: { ...fonts.display, fontSize: 26, color: colors.ink, marginTop: 4, marginBottom: 4 },
   price: { ...fonts.bodySemiBold, fontSize: 15, color: colors.plum, marginBottom: 24 },
   sectionLabel: {

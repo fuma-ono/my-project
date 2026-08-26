@@ -35,7 +35,7 @@ export const ja = {
     settingsButton: '設定',
   },
   group: {
-    back: '‹ グループ',
+    back: 'グループ',
     leave: '抜ける',
     changeHint: '変更',
     invite: '招待する',
@@ -199,7 +199,7 @@ export const ja = {
     title: '設定',
     // グループ詳細画面からも開けるようになり、「戻る」の実際の遷移先が
     // 常にグループ一覧とは限らなくなったため、行き先を特定しない文言にする。
-    back: '‹ 戻る',
+    back: '戻る',
     language: '言語',
     languageJa: '日本語',
     languageEn: 'English',
@@ -213,7 +213,7 @@ export const ja = {
     savedNote: '保存しました',
   },
   premium: {
-    back: '‹ 設定',
+    back: '設定',
     title: '✨ Premium',
     price: '月額300円(予定)',
     featuresTitle: 'Premiumでできること',
@@ -224,7 +224,7 @@ export const ja = {
     toastMessage: 'ありがとうございます!リリース時に優先案内します',
   },
   usage: {
-    back: '‹ 設定',
+    back: '設定',
     title: '📊 利用状況',
     loading: '読み込み中...',
     loadFailed: '読み込みに失敗しました',
@@ -289,7 +289,7 @@ export const en: Strings = {
     settingsButton: 'Settings',
   },
   group: {
-    back: '‹ Groups',
+    back: 'Groups',
     leave: 'Leave',
     changeHint: 'Change',
     invite: 'Invite',
@@ -448,7 +448,7 @@ export const en: Strings = {
   },
   settings: {
     title: 'Settings',
-    back: '‹ Back',
+    back: 'Back',
     language: 'Language',
     languageJa: '日本語',
     languageEn: 'English',
@@ -462,7 +462,7 @@ export const en: Strings = {
     savedNote: 'Saved',
   },
   premium: {
-    back: '‹ Settings',
+    back: 'Settings',
     title: '✨ Premium',
     price: '$3/month (planned)',
     featuresTitle: 'What you get with Premium',
@@ -473,7 +473,7 @@ export const en: Strings = {
     toastMessage: "Thanks! We'll give you early access when it launches",
   },
   usage: {
-    back: '‹ Settings',
+    back: 'Settings',
     title: '📊 Usage',
     loading: 'Loading...',
     loadFailed: 'Failed to load',
