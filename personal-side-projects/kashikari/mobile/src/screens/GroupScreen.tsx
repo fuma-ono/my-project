@@ -308,11 +308,10 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
             style={StyleSheet.absoluteFill}
           />
           <View style={styles.headerRow}>
-            {/* 参考画像は「＜戻る」ではなく、半透明の丸ボタンに入った
-                「×閉じる」アイコンだったため、見た目をそれに合わせた
-                (押したときの動作は変わらず、グループ一覧に戻る)。 */}
-            <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back} style={styles.closeButton}>
-              <Ionicons name="close" size={20} color="#fff" />
+            {/* 「✖️は＜に戻して」という指摘を受け、×ボタン(丸背景付き)
+                から元の＜(chevron-back、背景なし)に戻した。 */}
+            <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back}>
+              <Ionicons name="chevron-back" size={22} color="#fff" />
             </Pressable>
             <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleCol}>
               <Text style={styles.title} numberOfLines={1}>{group.name}</Text>
@@ -561,24 +560,17 @@ const styles = StyleSheet.create({
   // position:'relative'を付けたことで、中の2枚のLinearGradient
   // (StyleSheet.absoluteFill)がこのViewいっぱいに重なり、その上に
   // headerRow(実際のコンテンツ)がpadding付きで乗る。
+  // 「大学の友達・通知・設定・◯人のメンバーを上に配置して」という
+  // 指摘を受け、paddingTopを44→28に詰めてタイトル行全体を上に
+  // 寄せた(下側のmemberStripCardとの重なり方=paddingBottom(16)は
+  // そのまま維持)。
   headerGradientBase: {
     position: 'relative',
-    paddingTop: 44,
+    paddingTop: 28,
     paddingHorizontal: 20,
     paddingBottom: 16,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
-  // 参考画像の「×」ボタンにあった、半透明の丸いボタン背景。
-  closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   // 「戻る・通知・設定の余白を統一する」ため、titleColの左右マージンを
   // headerRightRowのgapと同じ16に揃えた。
   headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
@@ -606,11 +598,13 @@ const styles = StyleSheet.create({
   },
   memberStrip: { flexDirection: 'row', gap: 16, marginBottom: 18, paddingRight: 4 },
   memberSlot: { alignItems: 'center', width: 70, gap: 4 },
-  // lgアバター(48px)の周りに、隙間を空けた同系色のリングを描く。
+  // lgアバター(44px)の周りに、隙間を空けた同系色のリングを描く
+  // (アイコン自体は「大きくするんじゃなくて」の指摘で44に戻したため、
+  // リングのサイズもそれに合わせて60→56に調整)。
   avatarRing: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',

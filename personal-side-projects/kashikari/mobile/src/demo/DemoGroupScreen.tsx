@@ -298,8 +298,8 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
             style={StyleSheet.absoluteFill}
           />
           <View style={styles.headerRow}>
-            <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back} style={styles.closeButton}>
-              <Ionicons name="close" size={20} color="#fff" />
+            <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back}>
+              <Ionicons name="chevron-back" size={22} color="#fff" />
             </Pressable>
             <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleCol}>
               <Text style={styles.title} numberOfLines={1}>{group.name}</Text>
@@ -535,28 +535,19 @@ const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.bg },
   list: { paddingHorizontal: 20, paddingBottom: 100 },
   // デモモードバナーを削除したため、ステータスバー避けの余白は本番の
-  // GroupScreen.tsxと同じpaddingTop(44)に戻している。
+  // GroupScreen.tsxと同じ値にしている。「タイトル行を上に配置して」の
+  // 指摘を受け、paddingTopは44→28に詰めた(GroupScreen.tsxと同じ)。
   headerShadowWrap: {
     marginHorizontal: -20,
     marginBottom: 0,
   },
   headerGradientBase: {
     position: 'relative',
-    paddingTop: 44,
+    paddingTop: 28,
     paddingHorizontal: 20,
     paddingBottom: 16,
   },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
-  closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   titleCol: { flex: 1, marginHorizontal: 16 },
   title: { ...fonts.display, fontSize: 23, color: '#fff' },
@@ -575,9 +566,9 @@ const styles = StyleSheet.create({
   memberStrip: { flexDirection: 'row', gap: 16, marginBottom: 18, paddingRight: 4 },
   memberSlot: { alignItems: 'center', width: 70, gap: 4 },
   avatarRing: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',

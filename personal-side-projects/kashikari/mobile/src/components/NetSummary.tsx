@@ -89,26 +89,27 @@ export default function NetSummary({ totals, balances, meId }: Props) {
 }
 
 const styles = StyleSheet.create({
-  // 「画像と比べて大きすぎる」という指摘に加え、「¥500支払うと精算が
-  // 完了しますはいらない」という指摘で説明文(actionHint)を削除した分、
-  // padding・金額のフォントサイズ・各要素間の余白をさらに詰めた。
-  card: { borderRadius: 22, padding: 16, marginBottom: 16, overflow: 'hidden' },
-  walletIcon: { position: 'absolute', top: 14, right: 14 },
-  chevron: { position: 'absolute', bottom: 14, right: 14 },
+  // 「人のアイコンを大きくするんじゃなくて、あなたの残高の欄を
+  // 大きくして。金額も大きく」という指摘を受け、前回縮めたpadding・
+  // 金額のフォントサイズ・各要素間の余白を、前回より大きい値に
+  // 戻した(単純な巻き戻しではなく、旧デザインより一段階大きくした)。
+  card: { borderRadius: 24, padding: 24, marginBottom: 18, overflow: 'hidden' },
+  walletIcon: { position: 'absolute', top: 18, right: 18 },
+  chevron: { position: 'absolute', bottom: 18, right: 18 },
   heading: {
     ...fonts.bodyMedium,
-    fontSize: 12,
+    fontSize: 13,
     color: 'rgba(255,255,255,0.65)',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   line: { paddingVertical: 2 },
-  lineDivider: { marginTop: 4, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.22)', paddingTop: 8 },
-  amount: { ...fonts.display, fontSize: 28, color: '#fff', letterSpacing: -0.5 },
-  grossRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, paddingRight: 24 },
+  lineDivider: { marginTop: 6, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.22)', paddingTop: 10 },
+  amount: { ...fonts.display, fontSize: 40, color: '#fff', letterSpacing: -0.5 },
+  grossRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14, paddingRight: 24 },
   grossCol: { flex: 1 },
-  grossDivider: { width: 1, height: 24, backgroundColor: 'rgba(255,255,255,0.25)', marginHorizontal: 14 },
-  grossLabel: { ...fonts.bodyMedium, fontSize: 11.5, color: 'rgba(255,255,255,0.75)', marginBottom: 2 },
-  grossAmount: { ...fonts.bodySemiBold, fontSize: 14, color: '#fff' },
+  grossDivider: { width: 1, height: 26, backgroundColor: 'rgba(255,255,255,0.25)', marginHorizontal: 14 },
+  grossLabel: { ...fonts.bodyMedium, fontSize: 12, color: 'rgba(255,255,255,0.75)', marginBottom: 2 },
+  grossAmount: { ...fonts.bodySemiBold, fontSize: 16, color: '#fff' },
   settledWrap: {
     backgroundColor: colors.surface,
     borderRadius: 20,
