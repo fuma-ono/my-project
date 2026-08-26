@@ -77,13 +77,14 @@ export default function NetSummary({ totals, balances, meId }: Props) {
                 2行(ラベル+金額)のグロス列と高さの異なるシェブロンは
                 行全体の高さの中央=ちょうどラベルと金額の間の高さに
                 自然と揃う。
-                「|を2つの間に配置して」という指摘を受け、grossColを
-                flex:1(=カード幅いっぱいに引き伸ばされ、divider位置が
-                テキストの実際の幅とずれる)から、中身の幅にフィットする
-                形に変更。2つの列とdividerが3つ並んで自然にひとかたまり
-                になるため、dividerは常にテキストとテキストの真ん中に
-                来る。シェブロンだけは右端に固定したいので、その手前に
-                flex:1のスペーサーを挟んで右へ押し出している。 */}
+                「|を2つの間に配置して」という指摘を一度、両方の列を
+                中身の幅にフィットさせる形で対応したが、それだと
+                「支払う金額」列の位置自体がずれてしまう(左に寄る)、
+                という指摘を受けて撤回。列は元のflex:1(=カード幅を
+                半分ずつ、支払う金額の位置は固定)に戻し、代わりに
+                dividerの左右マージンの配分だけを変えて見た目の位置を
+                動かした(合計幅=marginLeft+width+marginRightは変えて
+                いないため、2列目=支払う金額の開始位置には影響しない)。 */}
             <View style={styles.grossRow}>
               <View style={styles.grossCol}>
                 <Text style={styles.grossLabel}>{t.netSummary.receiving}</Text>
@@ -94,7 +95,6 @@ export default function NetSummary({ totals, balances, meId }: Props) {
                 <Text style={styles.grossLabel}>{t.netSummary.paying}</Text>
                 <Text style={styles.grossAmount}>{formatMoney(payable, total.currency)}</Text>
               </View>
-              <View style={styles.grossSpacer} />
               <Ionicons name="chevron-forward" size={24} color="rgba(255,255,255,0.7)" style={styles.chevron} />
             </View>
           </View>
@@ -132,14 +132,15 @@ const styles = StyleSheet.create({
   // 「¥500も大きく」という指摘を受け、40→46に拡大した。
   amount: { ...fonts.display, fontSize: 46, color: '#fff', letterSpacing: -0.5 },
   grossRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
-  // 「|を2つの間に配置して」の対応でflex:1をやめ、中身の幅にフィット
-  // させた(詳細はJSX側のコメント参照)。
-  grossCol: {},
-  grossDivider: { width: 1, height: 26, backgroundColor: 'rgba(255,255,255,0.25)', marginHorizontal: 14 },
+  // 「支払う金額の位置は変えないで、|の位置だけ変える」という指摘を
+  // 受け、flex:1(カード幅を半分ずつ)に戻した。
+  grossCol: { flex: 1 },
+  // marginLeft+width+marginRightの合計(=28)は変えずに左右の配分だけ
+  // 変えることで、2列目(支払う金額)の開始位置を動かさずにdivider自体の
+  // 見た目の位置だけを「受け取る金額」側に寄せている。
+  grossDivider: { width: 1, height: 26, backgroundColor: 'rgba(255,255,255,0.25)', marginLeft: 4, marginRight: 24 },
   grossLabel: { ...fonts.bodyMedium, fontSize: 12, color: 'rgba(255,255,255,0.92)', marginBottom: 2 },
   grossAmount: { ...fonts.bodySemiBold, fontSize: 16, color: '#fff' },
-  // シェブロンを右端に押し出すための可変スペーサー。
-  grossSpacer: { flex: 1 },
   chevron: { marginLeft: 10 },
   settledWrap: {
     backgroundColor: colors.surface,
