@@ -5,6 +5,7 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'rea
 import GroupFormModal from '../components/GroupFormModal';
 import Mark from '../components/Mark';
 import PrimaryButton from '../components/PrimaryButton';
+import Toast from '../components/Toast';
 import { useT } from '../i18n';
 import { colors, fonts } from '../theme';
 import type { Group } from '../types';
@@ -32,6 +33,7 @@ export default function GroupsScreen({
 }: Props) {
   const t = useT();
   const [modal, setModal] = useState<'create' | 'join' | null>(null);
+  const [notifToastVisible, setNotifToastVisible] = useState(false);
 
   return (
     <View style={styles.wrap}>
@@ -39,9 +41,19 @@ export default function GroupsScreen({
         <View style={styles.brandRow}>
           <Mark size={34} />
           <Text style={styles.wordmark}>kashikari</Text>
-          <Pressable onPress={onOpenSettings} hitSlop={10} style={styles.settingsBtn} accessibilityLabel={t.groups.settingsButton}>
-            <Ionicons name="settings-outline" size={22} color={colors.ink} />
-          </Pressable>
+          {/* グループ詳細画面のヘッダー(通知ベル＋歯車)と揃えた。以前は
+              歯車アイコンだけで、サイズは同じ(22)だったが独自の
+              padding:4のラッパーが付いていて、詳細画面側(paddingなし)
+              と見た目の余白が微妙に違っていた。ラッパーを無くしつつ
+              headerRightRowと同じgap(16)の行にして統一した。 */}
+          <View style={styles.headerRightRow}>
+            <Pressable onPress={() => setNotifToastVisible(true)} hitSlop={10}>
+              <Ionicons name="notifications-outline" size={22} color={colors.ink} />
+            </Pressable>
+            <Pressable onPress={onOpenSettings} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
+              <Ionicons name="settings-outline" size={22} color={colors.ink} />
+            </Pressable>
+          </View>
         </View>
         <Text style={styles.hello}>{t.groups.hello(displayName)}</Text>
       </View>
@@ -94,6 +106,7 @@ export default function GroupsScreen({
           return { error: res.error };
         }}
       />
+      <Toast message={t.group.notificationsComingSoon} visible={notifToastVisible} onHide={() => setNotifToastVisible(false)} />
     </View>
   );
 }
@@ -103,7 +116,8 @@ const styles = StyleSheet.create({
   header: { paddingTop: 60, paddingHorizontal: 20, paddingBottom: 12 },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   wordmark: { ...fonts.display, fontSize: 28, color: colors.ink, flex: 1 },
-  settingsBtn: { padding: 4 },
+  // グループ詳細画面のheaderRightRowと同じgap(16)。
+  headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   hello: { ...fonts.body, fontSize: 14, color: colors.muted, marginTop: 8 },
   list: { paddingHorizontal: 20, paddingBottom: 24, gap: 10, flexGrow: 1 },
   empty: { alignItems: 'center', paddingTop: 60 },
