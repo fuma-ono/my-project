@@ -201,6 +201,7 @@ def main() -> None:
             name = d.get("itemName")
             amazon_url = match_amazon_link(name, amazon_links)
             all_candidates.append({
+                "item_code": d.get("itemCode"),
                 "name": name,
                 "price": d.get("itemPrice"),
                 "review_count": d.get("reviewCount", 0),
@@ -213,6 +214,18 @@ def main() -> None:
                 "keyword": keyword,
                 "score": score_item(item),
             })
+
+    # 同じ商品が複数キーワードでヒットすることがあるため、itemCode基準で重複除去
+    # (無ければ商品名で代用)。最初に見つかったキーワードの結果を残す。
+    seen = set()
+    deduped = []
+    for c in all_candidates:
+        dedup_key = c["item_code"] or c["name"]
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
+        deduped.append(c)
+    all_candidates = deduped
 
     all_candidates.sort(key=lambda c: c["score"], reverse=True)
 
