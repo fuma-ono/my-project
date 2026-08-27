@@ -17,13 +17,24 @@ import PrimaryButton from './PrimaryButton';
 import { useT } from '../i18n';
 import { CURRENCIES, formatMoney } from '../lib/currency';
 import { colors, fonts } from '../theme';
-import type { EntryType, Profile } from '../types';
+import type { EntryType, GroupInvite, Profile } from '../types';
 
 type Mode = EntryType | 'split';
+
+// 「招待した相手が参加する前でも記録できる」対応。実メンバー(Profile)と
+// 招待中の相手(GroupInvite)を、この画面の中では区別なく1つの「選べる
+// 相手」として扱う(pending:trueで招待中かどうかだけ判別できるように
+// している。相手を確定するID自体は、実メンバーならprofiles.id、招待中
+// ならgroup_invites.idで、呼び出し側(useGroupData.addEntry等)がどちらか
+// 判定してentries.from_user/from_inviteのどちらに入れるか決める)。
+type Person = { id: string; display_name: string; avatar_emoji: string | null; pending: boolean };
 
 type Props = {
   visible: boolean;
   members: Profile[];
+  // 招待中(まだ参加していない)の相手一覧。ここに渡すのは
+  // status==='pending'のものだけを想定(呼び出し側でフィルタ済み)。
+  pendingInvites: GroupInvite[];
   meId: string | null;
   onClose: () => void;
   onSubmit: (input: {
@@ -45,30 +56,37 @@ type Props = {
   }) => Promise<{ error: string | null }>;
 };
 
-export default function AddEntrySheet({ visible, members, meId, onClose, onSubmit, onSubmitSplit }: Props) {
+export default function AddEntrySheet({ visible, members, pendingInvites, meId, onClose, onSubmit, onSubmitSplit }: Props) {
   const t = useT();
-  const others = members.filter((m) => m.id !== meId);
-  const [fromId, setFromId] = useState<string | null>(meId ?? members[0]?.id ?? null);
-  const [toId, setToId] = useState<string | null>(others[0]?.id ?? members[1]?.id ?? null);
+  // 実メンバー＋招待中の相手をまとめた「選べる相手」一覧。招待中は
+  // avatar_emojiが無いためAvatarコンポーネントが頭文字表示にフォール
+  // バックする(既存の挙動と同じ)。
+  const people: Person[] = [
+    ...members.map((m) => ({ id: m.id, display_name: m.display_name, avatar_emoji: m.avatar_emoji, pending: false })),
+    ...pendingInvites.map((i) => ({ id: i.id, display_name: i.invited_name, avatar_emoji: null, pending: true })),
+  ];
+  const others = people.filter((p) => p.id !== meId);
+  const [fromId, setFromId] = useState<string | null>(meId ?? people[0]?.id ?? null);
+  const [toId, setToId] = useState<string | null>(others[0]?.id ?? people[1]?.id ?? null);
   const [mode, setMode] = useState<Mode>('money');
   const [currency, setCurrency] = useState('JPY');
   const [amount, setAmount] = useState('');
   const [desc, setDesc] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [payerId, setPayerId] = useState<string | null>(meId ?? members[0]?.id ?? null);
-  const [participantIds, setParticipantIds] = useState<string[]>(members.map((m) => m.id));
+  const [payerId, setPayerId] = useState<string | null>(meId ?? people[0]?.id ?? null);
+  const [participantIds, setParticipantIds] = useState<string[]>(people.map((p) => p.id));
 
   const reset = () => {
-    setFromId(meId ?? members[0]?.id ?? null);
-    setToId(others[0]?.id ?? members[1]?.id ?? null);
+    setFromId(meId ?? people[0]?.id ?? null);
+    setToId(others[0]?.id ?? people[1]?.id ?? null);
     setMode('money');
     setCurrency('JPY');
     setAmount('');
     setDesc('');
     setPhotoUri(null);
-    setPayerId(meId ?? members[0]?.id ?? null);
-    setParticipantIds(members.map((m) => m.id));
+    setPayerId(meId ?? people[0]?.id ?? null);
+    setParticipantIds(people.map((p) => p.id));
   };
 
   const close = () => {
@@ -194,9 +212,9 @@ export default function AddEntrySheet({ visible, members, meId, onClose, onSubmi
           <>
             <Text style={styles.label}>{t.addEntry.fromTo}</Text>
             <View style={styles.pickerRow}>
-              <PersonPicker members={members} selectedId={fromId} onSelect={setFromId} />
+              <PersonPicker people={people} selectedId={fromId} onSelect={setFromId} />
               <Text style={styles.arrow}>→</Text>
-              <PersonPicker members={members} selectedId={toId} onSelect={setToId} />
+              <PersonPicker people={people} selectedId={toId} onSelect={setToId} />
             </View>
           </>
         )}
@@ -204,7 +222,7 @@ export default function AddEntrySheet({ visible, members, meId, onClose, onSubmi
         {mode === 'split' && (
           <>
             <Text style={styles.label}>{t.addEntry.splitPayerLabel}</Text>
-            <PersonPicker members={members} selectedId={payerId} onSelect={setPayerId} />
+            <PersonPicker people={people} selectedId={payerId} onSelect={setPayerId} />
           </>
         )}
 
@@ -237,12 +255,13 @@ export default function AddEntrySheet({ visible, members, meId, onClose, onSubmi
           <>
             <Text style={styles.label}>{t.addEntry.splitParticipantsLabel}</Text>
             <View style={styles.participantList}>
-              {members.map((m) => {
-                const checked = participantIds.includes(m.id);
+              {people.map((p) => {
+                const checked = participantIds.includes(p.id);
                 return (
-                  <Pressable key={m.id} onPress={() => toggleParticipant(m.id)} style={styles.participantRow}>
-                    <Avatar name={m.display_name} emoji={m.avatar_emoji} size="sm" />
-                    <Text style={styles.participantName}>{m.display_name}</Text>
+                  <Pressable key={p.id} onPress={() => toggleParticipant(p.id)} style={styles.participantRow}>
+                    <Avatar name={p.display_name} emoji={p.avatar_emoji} size="sm" />
+                    <Text style={styles.participantName}>{p.display_name}</Text>
+                    {p.pending && <Text style={styles.pendingTag}>{t.group.pendingSectionTitle}</Text>}
                     <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
                       {checked && <Text style={styles.checkboxMark}>✓</Text>}
                     </View>
@@ -288,22 +307,27 @@ export default function AddEntrySheet({ visible, members, meId, onClose, onSubmi
 }
 
 function PersonPicker({
-  members,
+  people,
   selectedId,
   onSelect,
 }: {
-  members: Profile[];
+  people: Person[];
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
   const t = useT();
-  const selected = members.find((m) => m.id === selectedId);
+  const selected = people.find((p) => p.id === selectedId);
   const open = () => {
     Alert.alert(
       t.addEntry.pickPersonTitle,
       undefined,
-      members
-        .map((m) => ({ text: m.avatar_emoji ? `${m.avatar_emoji} ${m.display_name}` : m.display_name, onPress: () => onSelect(m.id) }))
+      people
+        .map((p) => {
+          const label = p.avatar_emoji ? `${p.avatar_emoji} ${p.display_name}` : p.display_name;
+          // Alert.alertは装飾できるUIを持たないため、招待中の相手は
+          // 文字列の末尾に「(招待中)」を添えて区別する。
+          return { text: p.pending ? `${label}(${t.group.pendingSectionTitle})` : label, onPress: () => onSelect(p.id) };
+        })
         .concat([{ text: t.common.cancel, style: 'cancel' } as any])
     );
   };
@@ -313,6 +337,7 @@ function PersonPicker({
       <Text style={styles.personName} numberOfLines={1}>
         {selected?.display_name ?? t.addEntry.selectPlaceholder}
       </Text>
+      {selected?.pending && <Text style={styles.pendingTag}>{t.group.pendingSectionTitle}</Text>}
     </Pressable>
   );
 }
@@ -334,6 +359,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   personName: { ...fonts.bodyMedium, fontSize: 14, color: colors.ink, flexShrink: 1 },
+  // 「招待した相手が参加する前でも記録できる」対応。招待中の相手が
+  // ピッカー・参加者一覧に選ばれているとき、実メンバーと見分けが
+  // つくよう添える小さなタグ。
+  pendingTag: { ...fonts.bodySemiBold, fontSize: 10.5, color: colors.accent, backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 2, paddingHorizontal: 6 },
   arrow: { color: colors.muted, fontSize: 16 },
   typeToggle: { flexDirection: 'row', gap: 8 },
   typeBtn: { flex: 1, borderWidth: 1.5, borderColor: colors.line, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },

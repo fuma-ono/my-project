@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Alert, Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useT } from '../i18n';
+import { entryFromKey, entryToKey } from '../lib/balances';
 import { formatMoney } from '../lib/currency';
 import { colors, fonts } from '../theme';
 import type { Entry } from '../types';
@@ -38,8 +39,10 @@ export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onDelet
   };
 
   // from_user = 貸した人(あとで受け取る側)、to_user = 借りた人(あとで払う側)
-  const iAmReceiver = entry.from_user === meId;
-  const iAmPayer = entry.to_user === meId;
+  const fromKey = entryFromKey(entry);
+  const toKey = entryToKey(entry);
+  const iAmReceiver = fromKey === meId;
+  const iAmPayer = toKey === meId;
   const amountColor = settled ? colors.muted : iAmPayer ? colors.negative : iAmReceiver ? colors.positive : colors.ink;
 
   return (
@@ -50,7 +53,7 @@ export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onDelet
 
       <View style={styles.main}>
         <Text style={[styles.who, settled && styles.strike]} numberOfLines={1}>
-          {nameOf(entry.from_user)} <Text style={styles.arrow}>→</Text> {nameOf(entry.to_user)}
+          {nameOf(fromKey)} <Text style={styles.arrow}>→</Text> {nameOf(toKey)}
         </Text>
         {!!entry.description && (
           <Text style={styles.desc} numberOfLines={1}>

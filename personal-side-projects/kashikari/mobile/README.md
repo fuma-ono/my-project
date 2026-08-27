@@ -850,6 +850,37 @@ Web版だけ`-apple-system, BlinkMacSystemFont, ...`を含むCSSフォントス�
 
 `Fab.tsx`・`InviteModal.tsx`・`GroupScreen.tsx`・`DemoGroupScreen.tsx`・`i18n/strings.ts`を変更。
 
+## 招待した相手が参加する前でも記録できるようにする(39回目・要DBマイグレーション)
+
+「参加する前でも記録できた方がよくないかな？」という提案への対応。**このリリースだけ、Supabaseで`schema.sql`の再実行(マイグレーション)が必要**。
+
+**背景**
+
+貸し借りの記録(`entries`)は、これまで「貸した人」「借りた人」を実在するメンバーのID(`profiles.id`)でしか指定できなかった。招待した相手はまだアカウントを作っていない(名前を登録しただけ)ため、正式な記録の相手として指定できず、参加するまで＋ボタンが押せない仕様になっていた。
+
+**対応方針**
+
+「相手用の仮アカウントを作る」方式ではなく、既存の認証の仕組み(`profiles.id = auth.users.id`)には一切手を入れない、より安全で小さな変更にした。`entries`の「貸した人・借りた人」を指す列を、実メンバー用(`from_user`/`to_user`)と招待中の相手用(`from_invite`/`to_invite`、`group_invites.id`を指す)の2系統に分け、常にどちらか一方だけが入る形にした(DB側のCHECK制約で保証)。招待した相手が実際に参加すると、`join_group` RPC内でその人宛ての記録を自動的に`from_invite`/`to_invite`から`from_user`/`to_user`へ付け替える(招待コードはグループ共通の1つのため、「一番古い招待中の人が参加した」という従来からのFIFO前提のマッチングに合わせている)。
+
+**DB(`supabase/schema.sql`)**
+
+- `entries`に`from_invite`/`to_invite`列を追加し、`from_user`/`to_user`のNOT NULL制約を外した
+- 「貸した人・借りた人が別人であること」のCHECK制約を、実メンバー同士・招待中同士それぞれで見るように更新
+- `join_group` RPC: 参加とマッチングに成功したら、その招待宛ての記録を新メンバー本人の記録へ付け替える処理を追加
+
+**アプリ側**
+
+- `lib/balances.ts`: 相手を「実メンバーIDか招待中IDのどちらか」として統一的に扱う`entryFromKey`/`entryToKey`を追加し、残高計算・自動精算・純額計算(`computeBalances`/`computeSimplifiedSettlement`/`computeMyNet`)をこれ経由にした
+- `useGroupData.ts`(`DemoGroupScreen.tsx`も同様): 記録作成時、相手のIDが実メンバーかどうかで書き込み先の列を切り替える。精算操作(支払った/受け取った等)の相手照合もentryFromKey/entryToKey経由に統一
+- `AddEntrySheet.tsx`: 相手を選ぶピッカー・割り勘の参加者一覧に、招待中の相手も選べるようにした(「招待中」タグ付き)
+- `GroupScreen.tsx`/`DemoGroupScreen.tsx`: 名前解決(`nameOf`)が招待中の相手にも対応。＋ボタンが押せる条件を「実メンバー数」から「実メンバー数＋招待中の人数」に変更(招待さえしていれば記録できる)
+
+**⚠️ 適用手順(オーナー作業)**: Supabaseのプロジェクトで、SQL Editorから`supabase/schema.sql`の全文を再実行してください(このファイルは何度実行しても安全な作りになっています)。この手順を行うまでは、実機(本番モード)で「参加前の相手を記録する」動作はエラーになります。デモモードは影響を受けず、そのまま動作を確認できます。
+
+Playwrightで、デモモード上で実際に「招待→参加前に割り勘で記録→台帳・ホームの内訳に正しい名前で反映、自動精算の最適化にも組み込まれる」という一連の流れを確認済み。
+
+`schema.sql`・`types.ts`・`lib/balances.ts`・`hooks/useGroupData.ts`・`components/AddEntrySheet.tsx`・`components/HistoryEntryRow.tsx`・`components/EntryRow.tsx`・`screens/GroupScreen.tsx`・`demo/DemoGroupScreen.tsx`・`demo/mockData.ts`を変更。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え

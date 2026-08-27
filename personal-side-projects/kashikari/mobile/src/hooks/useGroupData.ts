@@ -3,6 +3,7 @@ import * as Crypto from 'expo-crypto';
 
 import { useT } from '../i18n';
 import { logEvent } from '../lib/analytics';
+import { entryFromKey, entryToKey } from '../lib/balances';
 import { supabase } from '../lib/supabase';
 import { splitAmount } from '../lib/split';
 import type { Entry, EntryType, GroupInvite, Profile } from '../types';
@@ -59,6 +60,18 @@ export function useGroupData(groupId: string | null, userId: string | null) {
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  // 「招待した相手が参加する前でも記録できる」対応。呼び出し側(AddEntrySheet)
+  // からは実メンバーIDと招待中の相手のID(group_invites.id)を区別なく1つの
+  // 文字列で受け取るため、実際にどちらのカラムに入れるべきかをここで
+  // membersと突き合わせて判定する。
+  const personColumns = useCallback(
+    (id: string, prefix: 'from' | 'to') => {
+      const isMember = members.some((m) => m.id === id);
+      return isMember ? { [`${prefix}_user`]: id, [`${prefix}_invite`]: null } : { [`${prefix}_user`]: null, [`${prefix}_invite`]: id };
+    },
+    [members]
+  );
 
   // 誰かが記録・精算・メンバー追加・招待をすると、グループ内の全員の画面に
   // リアルタイムで反映されるようにする(Web版プロトタイプの体験を踏襲)。
@@ -123,8 +136,8 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       const { error } = await supabase.from('entries').insert({
         id: Crypto.randomUUID(),
         group_id: groupId,
-        from_user: input.fromUser,
-        to_user: input.toUser,
+        ...personColumns(input.fromUser, 'from'),
+        ...personColumns(input.toUser, 'to'),
         type: input.type,
         amount: input.amount,
         currency: input.currency,
@@ -137,7 +150,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       await loadAll();
       return { error: null };
     },
-    [groupId, userId, loadAll, t]
+    [groupId, userId, loadAll, t, personColumns]
   );
 
   // 割り勘: 支払った人以外の各参加者について、1件ずつmoneyのentriesを
@@ -169,8 +182,8 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       const rows = others.map((id) => ({
         id: Crypto.randomUUID(),
         group_id: groupId,
-        from_user: input.payer,
-        to_user: id,
+        ...personColumns(input.payer, 'from'),
+        ...personColumns(id, 'to'),
         type: 'money' as const,
         amount: shares[input.participantIds.indexOf(id)],
         currency: input.currency,
@@ -187,7 +200,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       await loadAll();
       return { error: null };
     },
-    [groupId, userId, loadAll, t]
+    [groupId, userId, loadAll, t, personColumns]
   );
 
   // 台帳側の「精算済みにする/未精算に戻す」(1件単位の手動オーバーライド)。
@@ -222,9 +235,12 @@ export function useGroupData(groupId: string | null, userId: string | null) {
         .filter((e) => {
           if (e.settle_status === 'confirmed' || e.type !== type) return false;
           if (type === 'money') {
-            return (e.currency || 'JPY') === (currency || 'JPY') && ((e.from_user === a && e.to_user === b) || (e.from_user === b && e.to_user === a));
+            return (
+              (e.currency || 'JPY') === (currency || 'JPY') &&
+              ((entryFromKey(e) === a && entryToKey(e) === b) || (entryFromKey(e) === b && entryToKey(e) === a))
+            );
           }
-          return e.from_user === a && e.to_user === b;
+          return entryFromKey(e) === a && entryToKey(e) === b;
         })
         .map((e) => e.id);
       if (ids.length === 0) return { error: null };
@@ -248,7 +264,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
             e.type === 'money' &&
             e.settle_status === 'unpaid' &&
             (e.currency || 'JPY') === (currency || 'JPY') &&
-            ((e.from_user === a && e.to_user === b) || (e.from_user === b && e.to_user === a))
+            ((entryFromKey(e) === a && entryToKey(e) === b) || (entryFromKey(e) === b && entryToKey(e) === a))
         )
         .map((e) => e.id);
       if (ids.length === 0) return { error: null };
@@ -275,7 +291,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
             e.type === 'money' &&
             e.settle_status === 'paid' &&
             (e.currency || 'JPY') === (currency || 'JPY') &&
-            ((e.from_user === a && e.to_user === b) || (e.from_user === b && e.to_user === a))
+            ((entryFromKey(e) === a && entryToKey(e) === b) || (entryFromKey(e) === b && entryToKey(e) === a))
         )
         .map((e) => e.id);
       if (ids.length === 0) return { error: null };

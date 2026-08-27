@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useT } from '../i18n';
+import { entryFromKey, entryToKey } from '../lib/balances';
 import { formatMoney } from '../lib/currency';
 import { colors, fonts } from '../theme';
 import type { Entry } from '../types';
@@ -19,13 +20,15 @@ export default function HistoryEntryRow({ entry, nameOf, meId }: Props) {
   const t = useT();
   const amountLabel = entry.type === 'money' ? formatMoney(entry.amount ?? 0, entry.currency) : t.common.favorCount(1);
 
+  const fromKey = entryFromKey(entry);
+  const toKey = entryToKey(entry);
   let sentence: string;
-  if (entry.from_user === meId) {
-    sentence = t.history.receivedFrom(nameOf(entry.to_user));
-  } else if (entry.to_user === meId) {
-    sentence = t.history.paidTo(nameOf(entry.from_user));
+  if (fromKey === meId) {
+    sentence = t.history.receivedFrom(nameOf(toKey));
+  } else if (toKey === meId) {
+    sentence = t.history.paidTo(nameOf(fromKey));
   } else {
-    sentence = `${nameOf(entry.from_user)} → ${nameOf(entry.to_user)}`;
+    sentence = `${nameOf(fromKey)} → ${nameOf(toKey)}`;
   }
 
   return (

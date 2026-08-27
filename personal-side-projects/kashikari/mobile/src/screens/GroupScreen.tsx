@@ -78,7 +78,11 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
   // onDismissのコメント参照)。
   const pendingShareRef = useRef(false);
 
-  const nameOf = (id: string) => members.find((m) => m.id === id)?.display_name ?? t.group.unknownMember;
+  // 「招待した相手が参加する前でも記録できる」対応。相手のIDが実メンバー
+  // (members)に無ければ、招待中の相手(invites, group_invites.id)を見る
+  // (詳細はlib/balances.tsのentryFromKey/entryToKeyのコメント参照)。
+  const nameOf = (id: string) =>
+    members.find((m) => m.id === id)?.display_name ?? invites.find((i) => i.id === id)?.invited_name ?? t.group.unknownMember;
   const emojiOf = (id: string) => members.find((m) => m.id === id)?.avatar_emoji ?? null;
   const me = members.find((m) => m.id === meId);
   const balances = useMemo(() => computeBalances(entries, meId), [entries, meId]);
@@ -526,11 +530,19 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
       {listContent}
       <Fab
         onPress={() => setSheetOpen(true)}
-        disabled={members.length < 2}
+        disabled={members.length + pendingInvites.length < 2}
         onDisabledPress={() => setFabHintToastVisible(true)}
       />
       <BottomTabBar tab={tab} onChange={setTab} />
-      <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} onSubmitSplit={addSplitEntry} />
+      <AddEntrySheet
+        visible={sheetOpen}
+        members={members}
+        pendingInvites={pendingInvites}
+        meId={meId}
+        onClose={() => setSheetOpen(false)}
+        onSubmit={addEntry}
+        onSubmitSplit={addSplitEntry}
+      />
       {avatarPicker}
       {groupIconPicker}
       {inviteModal}

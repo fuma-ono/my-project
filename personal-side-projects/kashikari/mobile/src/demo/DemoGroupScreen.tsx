@@ -21,7 +21,7 @@ import SettlementProgress from '../components/SettlementProgress';
 import Toast from '../components/Toast';
 import UnpaidMembersModal from '../components/UnpaidMembersModal';
 import { useT } from '../i18n';
-import { computeBalances, computeMyNet, computeSimplifiedSettlement } from '../lib/balances';
+import { computeBalances, computeMyNet, computeSimplifiedSettlement, entryFromKey, entryToKey } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
 import { buildInviteUrl } from '../lib/invite';
 import { splitAmount } from '../lib/split';
@@ -47,13 +47,15 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
   const [invites, setInvites] = useState<GroupInvite[]>([]);
   const [notifToastVisible, setNotifToastVisible] = useState(false);
   const [inviteToastMessage, setInviteToastMessage] = useState<string | null>(null);
+  const [fabHintToastVisible, setFabHintToastVisible] = useState(false);
   // 招待送信直後、InviteModalが実際に閉じ終わってから共有シートを
   // 開くためのフラグ(詳細はGroupScreen.tsxの同じ箇所のコメント参照)。
   const pendingShareRef = useRef(false);
   const meId = DEMO_ME_ID;
   const me = members.find((m) => m.id === meId);
 
-  const nameOf = (id: string) => members.find((m) => m.id === id)?.display_name ?? t.group.unknownMember;
+  const nameOf = (id: string) =>
+    members.find((m) => m.id === id)?.display_name ?? invites.find((i) => i.id === id)?.invited_name ?? t.group.unknownMember;
   const emojiOf = (id: string) => members.find((m) => m.id === id)?.avatar_emoji ?? null;
   const balances = useMemo(() => computeBalances(entries, meId), [entries]);
   const netTotals = useMemo(() => computeMyNet(entries, meId), [entries]);
@@ -172,6 +174,16 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
     shareInvite();
   };
 
+  // 「招待した相手が参加する前でも記録できる」対応(詳細はuseGroupData.tsの
+  // 同じ箇所のコメント参照)。実メンバーIDならfrom_user/to_user、招待中の
+  // 相手(group_invites.id)ならfrom_invite/to_inviteに入れる。
+  const personColumns = (id: string, prefix: 'from' | 'to'): Pick<Entry, 'from_user' | 'from_invite'> | Pick<Entry, 'to_user' | 'to_invite'> => {
+    const isMember = members.some((m) => m.id === id);
+    return prefix === 'from'
+      ? { from_user: isMember ? id : null, from_invite: isMember ? null : id }
+      : { to_user: isMember ? id : null, to_invite: isMember ? null : id };
+  };
+
   const addEntry = async (input: {
     fromUser: string;
     toUser: string;
@@ -184,8 +196,8 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
     const entry: Entry = {
       id: `demo-${demoIdSeq++}`,
       group_id: group.id,
-      from_user: input.fromUser,
-      to_user: input.toUser,
+      ...(personColumns(input.fromUser, 'from') as Pick<Entry, 'from_user' | 'from_invite'>),
+      ...(personColumns(input.toUser, 'to') as Pick<Entry, 'to_user' | 'to_invite'>),
       type: input.type,
       amount: input.amount,
       currency: input.currency,
@@ -215,8 +227,8 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
     const newEntries: Entry[] = others.map((id) => ({
       id: `demo-${demoIdSeq++}`,
       group_id: group.id,
-      from_user: input.payer,
-      to_user: id,
+      ...(personColumns(input.payer, 'from') as Pick<Entry, 'from_user' | 'from_invite'>),
+      ...(personColumns(id, 'to') as Pick<Entry, 'to_user' | 'to_invite'>),
       type: 'money',
       amount: shares[input.participantIds.indexOf(id)],
       currency: input.currency,
@@ -252,8 +264,9 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
         if (e.settle_status === 'confirmed' || e.type !== type) return e;
         const match =
           type === 'money'
-            ? (e.currency || 'JPY') === (currency || 'JPY') && ((e.from_user === a && e.to_user === b) || (e.from_user === b && e.to_user === a))
-            : e.from_user === a && e.to_user === b;
+            ? (e.currency || 'JPY') === (currency || 'JPY') &&
+              ((entryFromKey(e) === a && entryToKey(e) === b) || (entryFromKey(e) === b && entryToKey(e) === a))
+            : entryFromKey(e) === a && entryToKey(e) === b;
         return match ? { ...e, settle_status: 'confirmed', confirmed_at: now } : e;
       })
     );
@@ -265,7 +278,9 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
     setEntries((prev) =>
       prev.map((e) => {
         if (e.type !== 'money' || e.settle_status !== 'unpaid') return e;
-        const match = (e.currency || 'JPY') === (currency || 'JPY') && ((e.from_user === a && e.to_user === b) || (e.from_user === b && e.to_user === a));
+        const match =
+          (e.currency || 'JPY') === (currency || 'JPY') &&
+          ((entryFromKey(e) === a && entryToKey(e) === b) || (entryFromKey(e) === b && entryToKey(e) === a));
         return match ? { ...e, settle_status: 'paid', paid_at: now } : e;
       })
     );
@@ -276,7 +291,9 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
     setEntries((prev) =>
       prev.map((e) => {
         if (e.type !== 'money' || e.settle_status !== 'paid') return e;
-        const match = (e.currency || 'JPY') === (currency || 'JPY') && ((e.from_user === a && e.to_user === b) || (e.from_user === b && e.to_user === a));
+        const match =
+          (e.currency || 'JPY') === (currency || 'JPY') &&
+          ((entryFromKey(e) === a && entryToKey(e) === b) || (entryFromKey(e) === b && entryToKey(e) === a));
         return match ? { ...e, settle_status: 'confirmed', confirmed_at: now } : e;
       })
     );
@@ -476,12 +493,17 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
     <View style={styles.wrap}>
       {listContent}
 
-      <Fab onPress={() => setSheetOpen(true)} />
+      <Fab
+        onPress={() => setSheetOpen(true)}
+        disabled={members.length + pendingInvites.length < 2}
+        onDisabledPress={() => setFabHintToastVisible(true)}
+      />
       <BottomTabBar tab={tab} onChange={setTab} />
 
       <AddEntrySheet
         visible={sheetOpen}
         members={members}
+        pendingInvites={pendingInvites}
         meId={meId}
         onClose={() => setSheetOpen(false)}
         onSubmit={addEntry}
@@ -538,6 +560,7 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
 
       <Toast message={t.group.notificationsComingSoon} visible={notifToastVisible} onHide={() => setNotifToastVisible(false)} />
       <Toast message={inviteToastMessage ?? ''} visible={inviteToastMessage !== null} onHide={() => setInviteToastMessage(null)} />
+      <Toast message={t.group.fabNeedMemberHint} visible={fabHintToastVisible} onHide={() => setFabHintToastVisible(false)} />
     </View>
   );
 }

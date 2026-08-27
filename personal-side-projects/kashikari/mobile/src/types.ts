@@ -36,8 +36,17 @@ export type SettleStatus = 'unpaid' | 'paid' | 'confirmed';
 export type Entry = {
   id: string;
   group_id: string;
-  from_user: string;
-  to_user: string;
+  // 「招待した相手が参加する前でも記録できる」対応。相手が実メンバーなら
+  // from_user/to_user、まだ参加していない招待中の相手ならfrom_invite/
+  // to_invite(group_invites.id)に入る。片方だけが必ず入っている
+  // (DB側のCHECK制約で保証)。招待が実際の参加に変わったタイミングで、
+  // join_group RPC側がfrom_invite/to_invite→from_user/to_userに
+  // 付け替える。相手を1つのIDとして扱いたい箇所はlib/balances.tsの
+  // entryFromKey/entryToKeyを経由すること。
+  from_user: string | null;
+  to_user: string | null;
+  from_invite: string | null;
+  to_invite: string | null;
   type: EntryType;
   amount: number | null;
   currency: string | null;

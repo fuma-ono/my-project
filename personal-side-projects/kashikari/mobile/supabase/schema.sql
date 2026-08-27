@@ -125,6 +125,36 @@ alter table public.entries enable row level security;
 
 create index if not exists entries_group_id_idx on public.entries (group_id);
 
+-- 「招待した相手が参加する前でも記録できる」対応。from_user/to_userは
+-- 実際に参加しているメンバー(profiles.id)しか参照できないため、まだ
+-- 参加していない招待中の相手(group_invites.id)を代わりに指せる列を
+-- 追加する。片方(from_user or from_invite、to_user or to_invite)が
+-- 必ずどちらか一方だけ入る形にする。招待が実際の参加に変わったとき
+-- (join_group RPC内)に、from_invite/to_inviteをfrom_user/to_userへ
+-- 付け替える。
+alter table public.entries add column if not exists from_invite uuid references public.group_invites (id) on delete cascade;
+alter table public.entries add column if not exists to_invite uuid references public.group_invites (id) on delete cascade;
+alter table public.entries alter column from_user drop not null;
+alter table public.entries alter column to_user drop not null;
+
+alter table public.entries drop constraint if exists entries_different_people;
+alter table public.entries drop constraint if exists entries_from_one_of;
+alter table public.entries drop constraint if exists entries_to_one_of;
+alter table public.entries add constraint entries_from_one_of check (
+  (from_user is not null and from_invite is null) or (from_user is null and from_invite is not null)
+);
+alter table public.entries add constraint entries_to_one_of check (
+  (to_user is not null and to_invite is null) or (to_user is null and to_invite is not null)
+);
+-- 「貸した人・借りた人が同一人物ではないこと」の確認。from/toが
+-- どちらも実メンバーの場合、どちらも招待中の相手の場合、それぞれの
+-- IDが一致していないことだけ見る(実メンバー↔招待中の組み合わせは
+-- 型が違う=別人として扱ってよい)。
+alter table public.entries add constraint entries_different_people check (
+  not (from_user is not null and from_user = to_user)
+  and not (from_invite is not null and from_invite = to_invite)
+);
+
 -- 「精算済みかどうか」の単純なON/OFFではなく、「支払った→受け取った」の
 -- 2段階確認を追跡できるようにする(ユーザーの本当のゴールは記録では
 -- なく回収なので、双方が確認して初めて完了とみなす)。
@@ -294,6 +324,7 @@ set search_path = public
 as $$
 declare
   _group public.groups;
+  _matched_invite_id uuid;
 begin
   if auth.uid() is null then
     raise exception 'not authenticated';
@@ -321,7 +352,16 @@ begin
       where group_id = _group.id and status = 'pending'
       order by created_at asc
       limit 1
-    );
+    )
+    returning id into _matched_invite_id;
+
+    -- 「招待した相手が参加する前でも記録できる」対応。マッチした招待宛て
+    -- (from_invite/to_invite)に記録されていたentriesを、今参加した本人
+    -- (from_user/to_user)へ付け替える。
+    if _matched_invite_id is not null then
+      update public.entries set from_user = auth.uid(), from_invite = null where from_invite = _matched_invite_id;
+      update public.entries set to_user = auth.uid(), to_invite = null where to_invite = _matched_invite_id;
+    end if;
   end if;
 
   return _group;

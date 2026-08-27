@@ -1,5 +1,20 @@
 import type { BalanceRow, Entry, SimplifiedTransaction } from '../types';
 
+// 「参加する前でも記録できる」対応: entryのfrom/toは、実在メンバー
+// (from_user/to_user)か、まだ参加していない招待中の相手(from_invite/
+// to_invite)のどちらか一方だけが入っている(DB側のCHECK制約で保証)。
+// 残高計算・自動精算・支払い操作など、相手を「1つのID」として扱う箇所は
+// 全部この2関数を経由させ、実メンバーIDと招待IDを区別なく扱えるように
+// している(招待が参加に変わったタイミングで、entries側のfrom_invite/
+// to_inviteはfrom_user/to_userに付け替えられる。lib/invite.tsではなく
+// join_group RPC側の仕事)。
+export function entryFromKey(e: Pick<Entry, 'from_user' | 'from_invite'>): string {
+  return e.from_user ?? e.from_invite ?? '';
+}
+export function entryToKey(e: Pick<Entry, 'to_user' | 'to_invite'>): string {
+  return e.to_user ?? e.to_invite ?? '';
+}
+
 // 相手×通貨ごとに残高を集計する。異なる通貨同士は為替レートが分からないため
 // 合算・換算せず、それぞれ独立した残高として返す(Web版プロトタイプと同じ方針)。
 export function computeBalances(entries: Entry[], meId: string | null): BalanceRow[] {
@@ -8,16 +23,18 @@ export function computeBalances(entries: Entry[], meId: string | null): BalanceR
   const favor: Record<string, { count: number; oldestAt: string }> = {};
 
   for (const e of open) {
+    const from = entryFromKey(e);
+    const to = entryToKey(e);
     if (e.type === 'money') {
       const currency = e.currency || 'JPY';
-      const pairKey = `${[e.from_user, e.to_user].sort().join('|')}|${currency}`;
-      if (!money[pairKey]) money[pairKey] = { a: e.from_user, b: e.to_user, net: 0, currency, oldestAt: e.created_at, hasUnpaid: false };
+      const pairKey = `${[from, to].sort().join('|')}|${currency}`;
+      if (!money[pairKey]) money[pairKey] = { a: from, b: to, net: 0, currency, oldestAt: e.created_at, hasUnpaid: false };
       const m = money[pairKey];
-      m.net += e.from_user === m.a ? e.amount ?? 0 : -(e.amount ?? 0);
+      m.net += from === m.a ? e.amount ?? 0 : -(e.amount ?? 0);
       if (e.created_at < m.oldestAt) m.oldestAt = e.created_at;
       if (e.settle_status === 'unpaid') m.hasUnpaid = true;
     } else {
-      const key = `${e.from_user}→${e.to_user}`;
+      const key = `${from}→${to}`;
       if (!favor[key]) favor[key] = { count: 0, oldestAt: e.created_at };
       favor[key].count += 1;
       if (e.created_at < favor[key].oldestAt) favor[key].oldestAt = e.created_at;
@@ -80,8 +97,8 @@ export function computeMyNet(entries: Entry[], meId: string | null): NetTotal[] 
   for (const e of entries) {
     if (e.settle_status === 'confirmed' || e.type !== 'money' || !e.amount) continue;
     const currency = e.currency || 'JPY';
-    if (e.from_user === meId) totals[currency] = (totals[currency] || 0) + e.amount;
-    else if (e.to_user === meId) totals[currency] = (totals[currency] || 0) - e.amount;
+    if (entryFromKey(e) === meId) totals[currency] = (totals[currency] || 0) + e.amount;
+    else if (entryToKey(e) === meId) totals[currency] = (totals[currency] || 0) - e.amount;
   }
   return Object.entries(totals)
     .filter(([, amount]) => Math.abs(amount) >= 0.005)
@@ -111,9 +128,11 @@ export function computeSimplifiedSettlement(entries: Entry[]): SimplifiedTransac
   for (const e of open) {
     const currency = e.currency || 'JPY';
     const amount = e.amount ?? 0;
+    const from = entryFromKey(e);
+    const to = entryToKey(e);
     const nets = (netsByCurrency[currency] ??= {});
-    nets[e.from_user] = (nets[e.from_user] || 0) + amount;
-    nets[e.to_user] = (nets[e.to_user] || 0) - amount;
+    nets[from] = (nets[from] || 0) + amount;
+    nets[to] = (nets[to] || 0) - amount;
   }
 
   const result: SimplifiedTransaction[] = [];
