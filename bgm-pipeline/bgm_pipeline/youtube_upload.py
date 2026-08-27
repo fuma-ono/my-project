@@ -154,6 +154,38 @@ def update_description(video_id: str, description: str, auth: YouTubeAuth | None
     put_resp.raise_for_status()
 
 
+def update_privacy_status(video_id: str, privacy_status: str, auth: YouTubeAuth | None = None) -> None:
+    """Flips an already-published video's privacyStatus (public/unlisted/
+    private) in place. Added 2026-08-27 for the STEP4→6 review workflow
+    (piano_hisaishi_style's 1-hour flagship video: publish unlisted first
+    so the owner can watch the real YouTube page before it's public, then
+    flip to public once approved) — mirrors update_title/update_description's
+    fetch-then-overwrite pattern, but on the `status` part instead of
+    `snippet` (privacyStatus lives there, not in snippet)."""
+    access_token = (auth or youtube_auth._default).get_access_token()
+    resp = requests.get(
+        VIDEOS_URL,
+        params={"part": "status", "id": video_id},
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    items = resp.json().get("items", [])
+    if not items:
+        raise RuntimeError(f"Video {video_id} not found when updating privacy status.")
+    status = items[0]["status"]
+    status["privacyStatus"] = privacy_status
+
+    put_resp = requests.put(
+        VIDEOS_URL,
+        params={"part": "status"},
+        headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json; charset=UTF-8"},
+        data=json.dumps({"id": video_id, "status": status}),
+        timeout=30,
+    )
+    put_resp.raise_for_status()
+
+
 def get_video_status(video_id: str, auth: YouTubeAuth | None = None) -> dict:
     """Raw status+processingDetails for a video, for verification after upload."""
     access_token = (auth or youtube_auth._default).get_access_token()
