@@ -60,7 +60,15 @@ def main(argv: list[str] | None = None) -> int:
         # next_thumbnail_source() docstring for why this rotates instead
         # of always using the same image.
         photo_source = os.path.join(PACKAGE_ROOT, rotation.next_thumbnail_source(args.preset))
-        video.render_photo_background(wav_path, mp4_path, photo_source, "landscape")
+        # 2026-08-27: per-preset opt-in countdown timer (meta["video_countdown"])
+        # — owner request ("動画側にも時間表示させたい"). Not yet rolled out
+        # to every preset, so this only fires where explicitly enabled
+        # (currently piano_hisaishi_style). Uses the actual rendered audio
+        # duration, not the requested --minutes, so it lands on 0:00:00
+        # exactly when the track (which can run a few seconds long/short,
+        # see piano_hisaishi_style's tiling) actually ends.
+        countdown_seconds = video.wav_duration_seconds(wav_path) if meta.get("video_countdown") else None
+        video.render_photo_background(wav_path, mp4_path, photo_source, "landscape", countdown_seconds=countdown_seconds)
     else:
         video.render(wav_path, mp4_path, meta["thumb_hook"], args.preset, "landscape")
 

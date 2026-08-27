@@ -78,19 +78,58 @@ def render(audio_path: str, out_path: str, title: str, preset: str,
     subprocess.run(cmd, check=True)
 
 
+def _countdown_drawtext(total_seconds: float, fontsize: int) -> str:
+    """ffmpeg drawtext filter fragment showing a live H:MM:SS countdown from
+    `total_seconds` down to 0:00:00, driven entirely by ffmpeg's per-frame
+    `t` (presentation timestamp) expression — no per-frame text file or
+    Python-side frame generation needed. Added 2026-08-27 per owner request
+    ("動画側にも時間表示させたい。1時間から1秒ずつ減っていく仕組みは作れ
+    る？").
+
+    Built from three independent %{eif:EXPR:d[:WIDTH]} expansions (hours,
+    minutes, seconds), each clamped with max(...,0) so it holds at 0:00:00
+    rather than going negative if the video runs a hair past `total_seconds`
+    (encoder rounding). `:` and `,` inside the expression have to be
+    backslash-escaped because they're also ffmpeg filter-graph syntax
+    characters — verified against a real rendered/frame-extracted test
+    clip, not just read from docs, since this is easy to get subtly wrong.
+    """
+    remaining = f"max(({total_seconds}-t)\\,0)"
+    hours = f"trunc({remaining}/3600)"
+    minutes = f"trunc(mod({remaining}\\,3600)/60)"
+    seconds = f"trunc(mod({remaining}\\,60))"
+    text = f"%{{eif\\:{hours}\\:d}}\\:%{{eif\\:{minutes}\\:d\\:2}}\\:%{{eif\\:{seconds}\\:d\\:2}}"
+    return (
+        f"drawtext=fontfile={FONT_PATH}:text='{text}':fontcolor=white:fontsize={fontsize}:"
+        f"x=w-text_w-40:y=h-text_h-40:box=1:boxcolor=black@0.45:boxborderw=14"
+    )
+
+
 def render_photo_background(audio_path: str, out_path: str, image_path: str,
-                             orientation: str = "landscape") -> None:
-    """Static photo as the entire visual — no animated gradient, no
-    burned-in text. Standard as of 2026-08-12 for presets on the
-    photo-thumbnail track (see thumbnail.make_photo_thumbnail()): the same
-    real image that carries the thumbnail also carries the video body, cover
-    -cropped to fill the frame and held static for the whole duration."""
+                             orientation: str = "landscape", countdown_seconds: float | None = None) -> None:
+    """Static photo as the entire visual — no animated gradient. Standard as
+    of 2026-08-12 for presets on the photo-thumbnail track (see
+    thumbnail.make_photo_thumbnail()): the same real image that carries the
+    thumbnail also carries the video body, cover-cropped to fill the frame
+    and held static for the whole duration.
+
+    2026-08-27: `countdown_seconds` optionally adds a live H:MM:SS countdown
+    timer in the bottom-right corner (see _countdown_drawtext) — the one
+    intentional bit of motion in an otherwise still frame, so it doesn't
+    compete with "動きは控えめ" (minimal movement) as a design goal. Pass
+    the track's actual duration in seconds (matching the audio) so it lands
+    on 0:00:00 right as the video ends. Off (None) by default — not yet
+    rolled out to every existing preset, just available where wired in."""
     w, h = (1920, 1080) if orientation == "landscape" else (1080, 1920)
+    vf = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}"
+    if countdown_seconds is not None:
+        fontsize = w // 24
+        vf += "," + _countdown_drawtext(countdown_seconds, fontsize)
     cmd = [
         "ffmpeg", "-y",
         "-loop", "1", "-i", image_path,
         "-i", audio_path,
-        "-vf", f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}",
+        "-vf", vf,
         "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "192k",
         "-shortest",

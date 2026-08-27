@@ -932,6 +932,12 @@ PRESET_METADATA = {
             "assets/thumbnails/piano_hisaishi_style_alt3.jpg",
         ],
         "thumbnail_text_anchor": "left",  # 3枚とも右下〜中央に主要な被写体があるため、左上に配置
+        # 2026-08-27追加(STEP3): オーナー指示「動画側にも時間表示させたい」
+        # を受け、video.render_photo_background()に実装したカウントダウン
+        # タイマー(video._countdown_drawtext参照)をこのプリセットで有効化。
+        # 他7プリセットはまだ無効(見た目を勝手に変えないため) — 展開する
+        # 場合はオーナー確認の上、各presetに同じフラグを追加する。
+        "video_countdown": True,
     },
 }
 
