@@ -919,14 +919,19 @@ PRESET_METADATA = {
             "cafe music", "work music",
         ],
         "hashtags": ["作業用bgm", "ピアノbgm", "集中", "pianomusic", "focusmusic"],
-        # サムネイル: オーナーから雰囲気の合う写真3枚(カフェ×ピアノ、雨の窓辺の
-        # カフェ、ピアノ+作業机)を提示いただいたが、チャット添付の画像として
-        # 見えているのみで、他の写真(assets/thumbnails/内)のようにファイルと
-        # してこの環境のディスクに保存されていない(過去の9枚はCLIの添付経由で
-        # 保存された経緯があるが、今回は同じ経路になっていない模様)。
-        # thumbnail_style: "photo" は既存の仕組み上、実在するファイルパスが
-        # 必須なため、ファイルを確認できるまでは未設定(=抽象グラデーション+
-        # アイコンのデフォルト表示)にしている。写真を保存できたら追加する。
+        # サムネイル: 2026-08-27、オーナーから再送いただいた3枚がようやく
+        # ファイルとしてこの環境のディスクに保存できたため実写化。最も
+        # ピアノ+カフェの世界観が明確な1枚(暖色のカフェ、背景にピアノ、
+        # 壁に「Slow down / breathe deep / enjoy the moment」の文字)を
+        # source(プールの先頭=最初に使われる)に、ピアノが写り込む書斎风の
+        # 1枚をalt2、ピアノは写っていないが明るい作業机の1枚をalt3にした。
+        "thumbnail_style": "photo",
+        "thumbnail_sources": [
+            "assets/thumbnails/piano_hisaishi_style_source.jpg",
+            "assets/thumbnails/piano_hisaishi_style_alt2.jpg",
+            "assets/thumbnails/piano_hisaishi_style_alt3.jpg",
+        ],
+        "thumbnail_text_anchor": "left",  # 3枚とも右下〜中央に主要な被写体があるため、左上に配置
     },
 }
 
