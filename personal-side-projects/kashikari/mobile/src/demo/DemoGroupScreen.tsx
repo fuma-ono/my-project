@@ -3,7 +3,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { Alert, Pressable, ScrollView, SectionList, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, SectionList, Share, StyleSheet, Text, View } from 'react-native';
 
 import AddEntrySheet from '../components/AddEntrySheet';
 import AutoSettlePlan from '../components/AutoSettlePlan';
@@ -47,6 +47,9 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
   const [invites, setInvites] = useState<GroupInvite[]>([]);
   const [notifToastVisible, setNotifToastVisible] = useState(false);
   const [inviteToastMessage, setInviteToastMessage] = useState<string | null>(null);
+  // 招待送信直後、InviteModalが実際に閉じ終わってから共有シートを
+  // 開くためのフラグ(詳細はGroupScreen.tsxの同じ箇所のコメント参照)。
+  const pendingShareRef = useRef(false);
   const meId = DEMO_ME_ID;
   const me = members.find((m) => m.id === meId);
 
@@ -161,6 +164,12 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
   const shareInvite = () => {
     const url = buildInviteUrl(group.invite_code);
     Share.share({ message: t.group.inviteMessage(group.name, url, group.invite_code) });
+  };
+
+  const triggerPendingShare = () => {
+    if (!pendingShareRef.current) return;
+    pendingShareRef.current = false;
+    shareInvite();
   };
 
   const addEntry = async (input: {
@@ -503,13 +512,15 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
       <InviteModal
         visible={inviteModalOpen}
         onClose={() => setInviteModalOpen(false)}
+        onDismiss={triggerPendingShare}
         onSubmit={async (invitedName) => {
           const res = await inviteMember(invitedName);
-          // InviteModal自身の閉じるアニメーションと競合しないよう、共有シートは
-          // 少し遅らせて開く(詳細はGroupScreen.tsxの同じ箇所のコメント参照)。
+          // InviteModalが実際に閉じ終わってから共有シートを開く
+          // (詳細はGroupScreen.tsxの同じ箇所のコメント参照)。
           if (!res.error) {
             setInviteToastMessage(t.group.inviteSuccessToast(invitedName));
-            setTimeout(shareInvite, 500);
+            pendingShareRef.current = true;
+            if (Platform.OS !== 'ios') setTimeout(triggerPendingShare, 400);
           }
           return res;
         }}

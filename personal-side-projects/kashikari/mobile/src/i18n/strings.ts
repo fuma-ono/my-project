@@ -64,6 +64,10 @@ export const ja = {
     hideSettled: '精算済みを隠す',
     showSettled: (count: number) => `精算済み${count}件を表示`,
     emptyLedger: 'まだ記録がありません。右下の「＋」から最初の貸し借りを記録しましょう。',
+    // 「グループに1人でも追加しないと＋が押せないのはなんで？」という
+    // 質問への対応。貸し借りは必ず2人以上の間で成り立つため、自分1人
+    // だけのグループでは記録できない、という理由をタップ時に説明する。
+    fabNeedMemberHint: '記録するには、まず友達を招待してください',
     unknownMember: '不明',
     inviteMessage: (groupName: string, url: string, code: string) =>
       `【${groupName}】\n割り勘と貸し借り管理をしています。\n\n下記リンクから参加してください。\n\n${url}\n\n(リンクが開けない場合は、アプリの「招待コードで参加」から「${code}」を入力してください)`,
@@ -315,6 +319,7 @@ export const en: Strings = {
     hideSettled: 'Hide settled',
     showSettled: (count: number) => `Show ${count} settled`,
     emptyLedger: 'No records yet. Tap the “＋” below to log your first one.',
+    fabNeedMemberHint: 'Invite a friend first — recording needs at least 2 people.',
     unknownMember: 'Unknown',
     inviteMessage: (groupName: string, url: string, code: string) =>
       `[${groupName}]\nWe're using this to split bills and track who owes what.\n\nJoin using the link below.\n\n${url}\n\n(If the link doesn't open, use "Join with code" in the app and enter "${code}")`,

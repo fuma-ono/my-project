@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, SectionList, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, RefreshControl, ScrollView, SectionList, Share, StyleSheet, Text, View } from 'react-native';
 
 import AddEntrySheet from '../components/AddEntrySheet';
 import AutoSettlePlan from '../components/AutoSettlePlan';
@@ -70,6 +70,13 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
   // 指摘への対応。メッセージ自体を都度差し替えるため、通知トーストとは
   // 別枠のstateにしている。
   const [inviteToastMessage, setInviteToastMessage] = useState<string | null>(null);
+  // 「グループに1人でも追加しないと＋が押せないのはなんで？」という
+  // 質問への対応。＋が無効な理由をタップ時にトーストで説明する。
+  const [fabHintToastVisible, setFabHintToastVisible] = useState(false);
+  // 招待送信の直後、InviteModal自身の閉じるアニメーションが完全に
+  // 終わってから共有シートを開くためのフラグ(詳細はinviteModalの
+  // onDismissのコメント参照)。
+  const pendingShareRef = useRef(false);
 
   const nameOf = (id: string) => members.find((m) => m.id === id)?.display_name ?? t.group.unknownMember;
   const emojiOf = (id: string) => members.find((m) => m.id === id)?.avatar_emoji ?? null;
@@ -214,21 +221,33 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
     Share.share({ message: t.group.inviteMessage(group.name, url, group.invite_code) });
   };
 
+  // 送信成功後、InviteModal(独自の<Modal>)はこの直後にclose()を呼ぶ。
+  // その閉じるアニメーション中にShare.share()(OS標準の共有シート)を
+  // 呼ぶと、iOSでは「自分のモーダルを閉じている最中に別のモーダルを
+  // 開こうとする」形になり、共有シートが一切表示されないまま消えて
+  // しまう(名前だけ登録されて共有が開かない、という不具合の原因)。
+  // 以前はsetTimeout(500ms)で回避していたが、実機で「共有フォームが
+  // 出ない」という報告を受け、固定時間待つのではなく、iOSの
+  // <Modal>が実際に閉じ終わった瞬間を通知するonDismiss(iOS専用)を
+  // 使う形に変更した。Androidはこのコールバックが無いため、従来通り
+  // 短いsetTimeoutにフォールバックする。
+  const triggerPendingShare = () => {
+    if (!pendingShareRef.current) return;
+    pendingShareRef.current = false;
+    shareInvite();
+  };
+
   const inviteModal = (
     <InviteModal
       visible={inviteModalOpen}
       onClose={() => setInviteModalOpen(false)}
+      onDismiss={triggerPendingShare}
       onSubmit={async (invitedName) => {
         const res = await inviteMember(invitedName);
-        // 送信成功後、InviteModal(独自の<Modal>)はこの直後にclose()を呼ぶ。
-        // その閉じるアニメーション中にShare.share()(OS標準の共有シート)を
-        // 呼ぶと、iOSでは「自分のモーダルを閉じている最中に別のモーダルを
-        // 開こうとする」形になり、共有シートが一切表示されないまま消えて
-        // しまう(名前だけ登録されて共有が開かない、という不具合の原因)。
-        // InviteModalの閉じるアニメーションが終わるのを待ってから開く。
         if (!res.error) {
           setInviteToastMessage(t.group.inviteSuccessToast(invitedName));
-          setTimeout(shareInvite, 500);
+          pendingShareRef.current = true;
+          if (Platform.OS !== 'ios') setTimeout(triggerPendingShare, 400);
         }
         return res;
       }}
@@ -505,7 +524,11 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
   return (
     <View style={styles.wrap}>
       {listContent}
-      <Fab onPress={() => setSheetOpen(true)} disabled={members.length < 2} />
+      <Fab
+        onPress={() => setSheetOpen(true)}
+        disabled={members.length < 2}
+        onDisabledPress={() => setFabHintToastVisible(true)}
+      />
       <BottomTabBar tab={tab} onChange={setTab} />
       <AddEntrySheet visible={sheetOpen} members={members} meId={meId} onClose={() => setSheetOpen(false)} onSubmit={addEntry} onSubmitSplit={addSplitEntry} />
       {avatarPicker}
@@ -524,6 +547,7 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
       )}
       <Toast message={t.group.notificationsComingSoon} visible={notifToastVisible} onHide={() => setNotifToastVisible(false)} />
       <Toast message={inviteToastMessage ?? ''} visible={inviteToastMessage !== null} onHide={() => setInviteToastMessage(null)} />
+      <Toast message={t.group.fabNeedMemberHint} visible={fabHintToastVisible} onHide={() => setFabHintToastVisible(false)} />
     </View>
   );
 }

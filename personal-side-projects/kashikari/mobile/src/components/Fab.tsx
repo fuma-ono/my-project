@@ -3,9 +3,20 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 
 import { colors, fonts } from '../theme';
 
-export default function Fab({ onPress, disabled }: { onPress: () => void; disabled?: boolean }) {
+type Props = {
+  onPress: () => void;
+  disabled?: boolean;
+  // 「1人でも追加しないと＋が押せないのはなんで？」という質問を受け、
+  // disabled状態でも見た目は薄いままタップだけは無効化せず、代わりに
+  // 理由を説明するトースト等を呼び出し側で出せるようにした
+  // (以前はPressable自体をdisabledにしていたため、押しても何も
+  // 起きず「反応しない壊れたボタン」に見えてしまっていた)。
+  onDisabledPress?: () => void;
+};
+
+export default function Fab({ onPress, disabled, onDisabledPress }: Props) {
   return (
-    <Pressable onPress={onPress} disabled={disabled} style={[styles.wrap, disabled && styles.disabled]}>
+    <Pressable onPress={disabled ? onDisabledPress : onPress} style={[styles.wrap, disabled && styles.disabled]}>
       <LinearGradient colors={[colors.accent, colors.plum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.gradient}>
         <Text style={styles.text}>＋</Text>
       </LinearGradient>

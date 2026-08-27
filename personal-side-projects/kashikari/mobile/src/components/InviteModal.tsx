@@ -12,9 +12,15 @@ type Props = {
   // 招待した相手の名前を「招待中」一覧に出すために必須にしている。
   // 成功したら呼び出し側で共有シートを開く。
   onSubmit: (invitedName: string) => Promise<{ error: string | null }>;
+  // <Modal>が実際に閉じ終わった瞬間(iOS専用)に呼ばれる。招待成功後、
+  // このモーダルの閉じるアニメーション中にOS標準の共有シートを開こうと
+  // すると、iOSでは「モーダルを閉じている最中に別のモーダルを開こうと
+  // する」形になり共有シートが表示されないまま消えてしまうため、
+  // 呼び出し側はこのコールバックまで共有シートを開くのを待つ。
+  onDismiss?: () => void;
 };
 
-export default function InviteModal({ visible, onClose, onSubmit }: Props) {
+export default function InviteModal({ visible, onClose, onSubmit, onDismiss }: Props) {
   const t = useT();
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +49,7 @@ export default function InviteModal({ visible, onClose, onSubmit }: Props) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={close} onDismiss={onDismiss}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <View style={styles.iconHeader}>
