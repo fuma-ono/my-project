@@ -881,6 +881,34 @@ Playwrightで、デモモード上で実際に「招待→参加前に割り勘�
 
 `schema.sql`・`types.ts`・`lib/balances.ts`・`hooks/useGroupData.ts`・`components/AddEntrySheet.tsx`・`components/HistoryEntryRow.tsx`・`components/EntryRow.tsx`・`screens/GroupScreen.tsx`・`demo/DemoGroupScreen.tsx`・`demo/mockData.ts`を変更。
 
+## Google/Apple/LINE/メールでのログインを追加(40回目・要オーナー作業)
+
+「そもそもアカウントはどう作成される？ Google/Apple/LINE/メールでアカウント作成できるようにした方がよくない?」という指摘への対応。**Google Cloud Console・Apple Developer Program・LINE Developersでの外部登録作業(オーナーのみ実施可)が必要**。それが終わるまでコードは入っているが実際にはログインできない状態。
+
+**背景・今までの問題**
+
+今までは「匿名サインイン」(端末に紐づくだけの仮アカウント、メール・パスワードなし)のみだった。アプリを消す・再インストールする・機種変更する、といったことが起きると、そのアカウント(グループ・記録)に二度とアクセスできなくなる欠陥があった。
+
+**対応**
+
+匿名サインインは今まで通り「登録なしで今すぐ使える」入り口として残しつつ、以下の4通りのログイン方法を追加した。
+
+- **設定画面**の「アカウントを保護する」: 今の(匿名の)アカウントに後付けでログイン方法を追加する(データは失われない)
+- **アプリ初回起動時**の「既にアカウントをお持ちの方はこちら」: 以前ログイン方法を追加したことがあれば、機種変更・再インストール後もそこから同じアカウントに戻れる
+
+実装は、Google/LINEはSupabase経由のブラウザOAuth、Appleはネイティブの「Sign in with Apple」ボタン(iOSのみ)、メールはディープリンク不要の6桁コード方式にした(いずれもExpo Go上でそのまま動く作り)。
+
+**⚠️ 使えるようにするには、オーナーが以下を行う必要があります**(詳しい手順はチャットで別途案内)。
+
+1. **メール**: Supabaseの `Authentication > Providers > Email` が有効になっているか確認するだけ(追加の外部登録は不要)
+2. **Google**: [Google Cloud Console](https://console.cloud.google.com)でOAuthクライアントを作成し、SupabaseのProviders設定にClient ID/Secretを入力
+3. **Apple**: [Apple Developer Program](https://developer.apple.com/programs/)(年間$99)への加入、Sign in with Appleの設定、SupabaseのProviders設定への登録
+4. **LINE**: [LINE Developers](https://developers.line.biz)でLINEログインのチャネルを作成し、Supabaseに「カスタムOIDCプロバイダー」(識別子 `custom:line`、issuer `https://access.line.me`)として登録
+
+いずれも、SupabaseがOAuthのやり取りを仲介するため、アプリ側の`.env`に新しい値を追加する必要はない(各プロバイダーのClient ID/SecretはSupabaseのダッシュボード側にだけ入力する)。
+
+`package.json`(`expo-web-browser`・`expo-auth-session`・`expo-apple-authentication`を追加)・`app.json`・`lib/socialAuth.ts`(新規)・`components/AuthMethods.tsx`(新規)・`screens/SettingsScreen.tsx`・`screens/OnboardingScreen.tsx`・`demo/DemoApp.tsx`・`i18n/strings.ts`を変更。実際の外部プロバイダー設定が無いと動作確認ができないため、tsc・ビルド成功までは確認済みだが、実際のログインの動作確認はオーナー側の設定完了後になる。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え

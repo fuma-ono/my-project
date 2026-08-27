@@ -4,8 +4,10 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 
 import appJson from '../../app.json';
 import Avatar from '../components/Avatar';
+import AuthMethods from '../components/AuthMethods';
 import AvatarPicker from '../components/AvatarPicker';
 import PrimaryButton from '../components/PrimaryButton';
+import Toast from '../components/Toast';
 import { useLanguage } from '../i18n';
 import type { Lang } from '../i18n';
 import { colors, fonts } from '../theme';
@@ -18,15 +20,19 @@ type Props = {
   onChangeAvatar: (emoji: string) => Promise<{ error: string | null }>;
   onOpenPremium: () => void;
   onOpenUsage: () => void;
+  // デモモードでは実際のSupabase認証が無い(全てローカルstate)ため、
+  // 「アカウントを保護する」セクション自体を出さない。
+  isDemo?: boolean;
 };
 
-export default function SettingsScreen({ profile, onBack, onChangeDisplayName, onChangeAvatar, onOpenPremium, onOpenUsage }: Props) {
+export default function SettingsScreen({ profile, onBack, onChangeDisplayName, onChangeAvatar, onOpenPremium, onOpenUsage, isDemo }: Props) {
   const { lang, setLang, t } = useLanguage();
   const [name, setName] = useState(profile.display_name);
   const [nameError, setNameError] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState(false);
   const [saving, setSaving] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [authToastMessage, setAuthToastMessage] = useState<string | null>(null);
 
   const nameDirty = name.trim() !== profile.display_name && name.trim().length > 0;
 
@@ -84,6 +90,20 @@ export default function SettingsScreen({ profile, onBack, onChangeDisplayName, o
         {savedNote && !nameError && <Text style={styles.savedNote}>{t.settings.savedNote}</Text>}
         <PrimaryButton title={t.common.save} onPress={saveName} loading={saving} disabled={!nameDirty} style={styles.saveButton} />
 
+        {/* 「アカウントは今どう作られている？Google/Apple/LINE/メールで
+            ログインできるようにした方がいい」という提案への対応。今は
+            端末に紐づく匿名アカウントしか無く、機種変更等でグループ
+            データに二度とアクセスできなくなるリスクがあるため、ここで
+            ログイン方法を後付けできるようにした(デモモードには実際の
+            認証が無いため出さない)。 */}
+        {!isDemo && (
+          <>
+            <Text style={styles.sectionLabel}>{t.authMethods.protectTitle}</Text>
+            <Text style={styles.authDescription}>{t.authMethods.protectDescription}</Text>
+            <AuthMethods mode="link" onDone={setAuthToastMessage} />
+          </>
+        )}
+
         <Pressable onPress={onOpenPremium} style={styles.premiumRow}>
           <Text style={styles.premiumRowText}>{t.settings.premiumRow}</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.muted} />
@@ -109,6 +129,7 @@ export default function SettingsScreen({ profile, onBack, onChangeDisplayName, o
         }}
         onClose={() => setAvatarPickerOpen(false)}
       />
+      <Toast message={authToastMessage ?? ''} visible={authToastMessage !== null} onHide={() => setAuthToastMessage(null)} />
     </View>
   );
 }
@@ -169,6 +190,7 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
   error: { color: colors.danger, ...fonts.body, fontSize: 13, marginTop: 8 },
+  authDescription: { ...fonts.body, fontSize: 13, color: colors.muted, lineHeight: 19, marginBottom: 10 },
   savedNote: { color: colors.positive, ...fonts.body, fontSize: 13, marginTop: 8 },
   saveButton: { marginTop: 14, alignSelf: 'flex-start', paddingHorizontal: 28 },
   premiumRow: {

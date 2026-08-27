@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Avatar from '../components/Avatar';
+import AuthMethods from '../components/AuthMethods';
 import AvatarPicker from '../components/AvatarPicker';
 import Mark from '../components/Mark';
 import PrimaryButton from '../components/PrimaryButton';
@@ -24,6 +25,12 @@ export default function OnboardingScreen({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // 「機種変更・再インストールでアカウントを失う」問題への対応。以前
+  // ログイン方法を追加したことがある人は、新規登録フォームの代わりに
+  // ここからサインインし直せる(成功すると、useAuth側のセッション監視が
+  // 自動的にプロフィールを読み込み、この画面自体が自動的に切り替わる)。
+  const [showSignIn, setShowSignIn] = useState(false);
+  const [signInNote, setSignInNote] = useState<string | null>(null);
 
   const submit = async () => {
     setSubmitting(true);
@@ -49,33 +56,54 @@ export default function OnboardingScreen({
           </View>
         )}
 
-        <Text style={styles.label}>{t.onboarding.nameLabel}</Text>
-        <TextInput
-          value={name}
-          onChangeText={(v) => {
-            setName(v);
-            setError(null);
-          }}
-          placeholder={t.onboarding.namePlaceholder}
-          placeholderTextColor={colors.muted}
-          maxLength={20}
-          style={styles.input}
-          autoFocus
-        />
+        {showSignIn ? (
+          <>
+            <Text style={styles.label}>{t.authMethods.signInTitle}</Text>
+            <Text style={styles.signInDescription}>{t.authMethods.signInDescription}</Text>
+            <AuthMethods mode="signin" onDone={setSignInNote} />
+            {signInNote && <Text style={styles.signInNote}>{signInNote}</Text>}
+            <Pressable onPress={() => setShowSignIn(false)} style={styles.switchLink}>
+              <Text style={styles.switchLinkText}>{t.authMethods.switchToSignUp}</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <Text style={styles.label}>{t.onboarding.nameLabel}</Text>
+            <TextInput
+              value={name}
+              onChangeText={(v) => {
+                setName(v);
+                setError(null);
+              }}
+              placeholder={t.onboarding.namePlaceholder}
+              placeholderTextColor={colors.muted}
+              maxLength={20}
+              style={styles.input}
+              autoFocus
+            />
 
-        <Text style={styles.label}>{t.onboarding.iconLabel}</Text>
-        <Pressable onPress={() => setPickerOpen(true)} style={styles.avatarRow}>
-          <Avatar name={name || '?'} emoji={avatarEmoji} size="md" />
-          <Text style={styles.avatarRowText}>{avatarEmoji ? t.onboarding.changeIcon : t.onboarding.pickIcon}</Text>
-        </Pressable>
+            <Text style={styles.label}>{t.onboarding.iconLabel}</Text>
+            <Pressable onPress={() => setPickerOpen(true)} style={styles.avatarRow}>
+              <Avatar name={name || '?'} emoji={avatarEmoji} size="md" />
+              <Text style={styles.avatarRowText}>{avatarEmoji ? t.onboarding.changeIcon : t.onboarding.pickIcon}</Text>
+            </Pressable>
 
-        {error && <Text style={styles.error}>{error}</Text>}
+            {error && <Text style={styles.error}>{error}</Text>}
+
+            <Pressable onPress={() => setShowSignIn(true)} style={styles.switchLink}>
+              <Text style={styles.switchLinkText}>{t.authMethods.switchToSignIn}</Text>
+            </Pressable>
+          </>
+        )}
       </View>
 
       {/* 内容のすぐ下に小さく左寄せで浮かせるのではなく、幅いっぱいのCTAにする。
           ただし画面の一番下端まで押し下げると逆に遠すぎたため、内容から
-          一定の余白を空けた位置に置く(flex:1で下端に固定、はしない)。 */}
-      <PrimaryButton title={t.onboarding.start} onPress={submit} loading={submitting} disabled={!name.trim()} style={styles.button} />
+          一定の余白を空けた位置に置く(flex:1で下端に固定、はしない)。
+          サインインモードのときは、新規登録用のこのボタン自体を隠す。 */}
+      {!showSignIn && (
+        <PrimaryButton title={t.onboarding.start} onPress={submit} loading={submitting} disabled={!name.trim()} style={styles.button} />
+      )}
 
       <AvatarPicker
         visible={pickerOpen}
@@ -130,6 +158,10 @@ const styles = StyleSheet.create({
   },
   avatarRowText: { ...fonts.bodyMedium, fontSize: 14, color: colors.ink, flexShrink: 1 },
   error: { color: colors.danger, ...fonts.body, fontSize: 13, marginTop: 8 },
+  signInDescription: { ...fonts.body, fontSize: 13, color: colors.muted, lineHeight: 19, marginBottom: 14 },
+  signInNote: { ...fonts.bodyMedium, fontSize: 13, color: colors.positive, marginTop: 10 },
+  switchLink: { marginTop: 16, alignSelf: 'flex-start' },
+  switchLinkText: { ...fonts.bodySemiBold, fontSize: 13.5, color: colors.accent },
   authErrorBox: {
     backgroundColor: colors.danger + '14',
     borderWidth: 1,

@@ -31,7 +31,8 @@
           "photosPermission": "レシートの写真を記録に添付するために使用します。",
           "cameraPermission": "レシートを撮影して記録に添付するために使用します。"
         }
-      ]
+      ],
+      "expo-apple-authentication"
     ]
   }
 }

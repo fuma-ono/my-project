@@ -49,6 +49,7 @@ export default function DemoApp() {
         }}
         onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
         onOpenUsage={() => setScreen({ name: 'usage', returnTo: screen })}
+        isDemo
       />
     );
   }
