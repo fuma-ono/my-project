@@ -106,7 +106,14 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(f"Confirmed watchable: {watch_url}")
-    rotation.set_last_long_form(video_id)
+    if args.privacy == "public":
+        # 2026-08-27 bugfix: this used to fire regardless of --privacy.
+        # Found while unlisted-publishing piano_hisaishi_style's 1-hour
+        # review copy (STEP4/5 of the owner's rollout plan) — it pointed
+        # Shorts' "link to the last long-form video" at a video the public
+        # can't actually watch yet. Only advance this pointer for videos
+        # that are actually public.
+        rotation.set_last_long_form(video_id)
 
     try:
         youtube_upload.set_thumbnail(video_id, thumb_path)
