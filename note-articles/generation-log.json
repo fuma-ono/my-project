@@ -207,6 +207,22 @@
       "pillar": "B",
       "generated_at": "2026-08-24",
       "status": "draft"
+    },
+    {
+      "article_number": "25",
+      "slug": "25-one-day-with-ai-ceo",
+      "theme_backlog_id": 27,
+      "pillar": "B",
+      "generated_at": "2026-08-27",
+      "status": "draft"
+    },
+    {
+      "article_number": "26",
+      "slug": "26-reading-the-terms",
+      "theme_backlog_id": 30,
+      "pillar": "B",
+      "generated_at": "2026-08-27",
+      "status": "draft"
     }
   ]
 }

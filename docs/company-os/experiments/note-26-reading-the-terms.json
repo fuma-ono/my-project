@@ -1,0 +1,35 @@
+{
+  "id": "note-26-reading-the-terms",
+  "business_id": "note",
+  "article_number": "26",
+  "title": "AIが作ったコンテンツ、YouTube/noteの規約を全部読んでみた話",
+  "theme_backlog_id": 30,
+  "pillar": "B",
+  "hypothesis": "#06(著作権法の話)と読者層は重なるが切り口が異なる(プラットフォーム利用規約・アプリストア審査要件という実務Q&A型)。個人開発者・AI活用でコンテンツ制作をしたい層の「規約違反にならないか不安」という悩みに具体的に答えることで保存・共感を得る",
+  "generated_at": "2026-08-27",
+  "published_at": null,
+  "status": "draft",
+  "note_url": "https://note.com/unique_condor276",
+  "metrics": {
+    "views": null,
+    "likes": null,
+    "comments": null,
+    "followers_gained": null,
+    "support_jpy": null,
+    "recorded_at": null,
+    "data_source_note": "note.com公式APIが存在しないため、このサンドボックスからは取得不可。オーナーがnote.comダッシュボードで確認し次第、note-articles/README.mdの計測欄経由で共有・反映する"
+  },
+  "result": null,
+  "learning": null,
+  "next_action": null,
+  "verdict": "pending",
+  "quality_self_check": {
+    "japanese_natural": true,
+    "no_ai_cliche": true,
+    "concrete_content": true,
+    "clickable_title": true,
+    "clear_reader_value": true,
+    "no_duplication_with_existing": true,
+    "note": "2026-08-27、週2回運用Routineでの新規生成。docs/legal/checklist.md・terms-of-service.mdの実際の確認内容(Content IDリスク構造、医療機器でない旨の免責、note有料記事の特定商取引法表記が未確認のまま残っている点)に基づき執筆、誇張を避けた。#06(著作権法・創作性の議論)とは明示的に住み分け、プラットフォーム規約に絞ることで重複を回避"
+  }
+}
