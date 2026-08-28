@@ -1012,6 +1012,27 @@ tsc・demo/非demo両方のビルド成功。Playwrightで、設定画面の「k
 
 その他、ログインシートを開いて入力→キャンセル→再度開く、という操作でメールアドレス欄が前回の入力を引きずっていないか(モーダルが閉じるたびに内部stateがリセットされるか)も確認し、問題無し。
 
+## Facebookログインを追加(51回目・要オーナー作業)
+
+「インスタアカウントかFacebookアカウントでログインも欲しいかも」という要望への対応。
+
+**Facebookは追加した。Instagramは追加していない。**
+
+- **Facebook**: Supabaseの組み込みプロバイダーで、Google/LINEと全く同じ仕組み(ブラウザ経由OAuth)でそのまま動くため追加した
+- **Instagram**: SupabaseにInstagram用の組み込みプロバイダーが無いことに加えて、そもそもInstagram自体が「一般のアプリ向けのアカウントログイン」という機能を提供していない(Instagramの外部連携はFacebookのビジネス向けAPIに統合されており、企業アカウント・投稿管理などが目的で、個人の「Instagramでログイン」に使える仕組みではない)。そのため見送った。Instagramのユーザーの多くはFacebookアカウントも持っている(または連携している)ため、実質的にはFacebookログインでカバーできる
+
+`lib/socialAuth.ts`(`signInWithFacebook`追加)・`components/AuthMethods.tsx`・`i18n/strings.ts`を変更。
+
+**⚠️ 使えるようにするには、オーナーが以下を行う必要があります**(Googleの時と同じ手順です)。
+
+1. [Facebook for Developers](https://developers.facebook.com)で新しいアプリを作成(種類は「消費者(Consumer)」)
+2. アプリに「Facebookログイン」の製品を追加
+3. 有効なOAuthリダイレクトURIに `https://ixtxrwlqrqyvlpvzroaq.supabase.co/auth/v1/callback` を登録
+4. アプリの設定画面から「アプリID」「app secret」を控える
+5. Supabaseダッシュボード → `Authentication > Providers > Facebook` を有効化し、アプリID/app secretを貼り付けて保存
+
+tsc・demo/非demo両方のビルド成功。Playwrightで、Facebookボタンが正しく表示されることを確認済み。実際のログイン動作はオーナー側の外部設定完了後に要確認。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え

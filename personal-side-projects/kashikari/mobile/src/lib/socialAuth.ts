@@ -35,7 +35,9 @@ WebBrowser.maybeCompleteAuthSession();
 // 'apple'はGoogle/LINEとは別経路(ネイティブSign in with Apple、下記
 // signInWithApple参照)を主に使うが、linkIdentityにはApple用の口が
 // 無いため、そのケースだけこのブラウザ経由OAuthにフォールバックする。
-export type OAuthProvider = 'google' | 'custom:line' | 'apple';
+// 'facebook'はSupabaseの組み込みプロバイダーなので、Google/LINEと
+// 全く同じブラウザ経由OAuthで動く。
+export type OAuthProvider = 'google' | 'custom:line' | 'apple' | 'facebook';
 // 「今の(匿名の)アカウントに後付けする」か、「(別の端末等で)本来の
 // アカウントとしてサインインし直す」かで、呼ぶSupabaseのAPIが違う。
 export type AuthMode = 'link' | 'signin';
@@ -85,6 +87,10 @@ export function signInWithGoogle(mode: AuthMode) {
 
 export function signInWithLine(mode: AuthMode) {
   return runOAuthFlow('custom:line', mode);
+}
+
+export function signInWithFacebook(mode: AuthMode) {
+  return runOAuthFlow('facebook', mode);
 }
 
 // Appleは公式パッケージのネイティブボタン経由(iOSのみ)。ブラウザの

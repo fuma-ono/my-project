@@ -7,6 +7,7 @@ import {
   isAppleSignInAvailable,
   sendEmailCode,
   signInWithApple,
+  signInWithFacebook,
   signInWithGoogle,
   signInWithLine,
   verifyEmailCode,
@@ -120,6 +121,15 @@ export default function AuthMethods({ mode, onDone }: Props) {
           linkedLabel={t.authMethods.linkedBadge}
           busy={busyProvider === 'custom:line'}
           onPress={() => run('custom:line', () => signInWithLine(mode))}
+        />
+        <ProviderButton
+          icon="logo-facebook"
+          iconColor="#1877F2"
+          label={t.authMethods.facebookButton}
+          linked={isLinked('facebook')}
+          linkedLabel={t.authMethods.linkedBadge}
+          busy={busyProvider === 'facebook'}
+          onPress={() => run('facebook', () => signInWithFacebook(mode))}
         />
       </View>
 
