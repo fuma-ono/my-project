@@ -9,6 +9,13 @@ import PrimaryButton from '../components/PrimaryButton';
 import { useT } from '../i18n';
 import { colors, fonts } from '../theme';
 
+// 「最初のkashikariページの後、サインインページに移り、その後名前を
+// 登録する画面に」という指摘への対応。以前は1画面に名前入力と
+// アカウント連携を両方詰め込んでいたが、見た目も動線も分かりにくいため
+// account(連携するorアカウントなしで始める)→name(名前・アイコン登録)
+// の2画面(ウィザード)に分けた。
+type Step = 'account' | 'name';
+
 export default function OnboardingScreen({
   onSubmit,
   authError,
@@ -20,6 +27,7 @@ export default function OnboardingScreen({
   authError?: string | null;
 }) {
   const t = useT();
+  const [step, setStep] = useState<Step>('account');
   const [name, setName] = useState('');
   const [avatarEmoji, setAvatarEmoji] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -32,10 +40,11 @@ export default function OnboardingScreen({
   const [showSignIn, setShowSignIn] = useState(false);
   const [signInNote, setSignInNote] = useState<string | null>(null);
   // 「アカウント保護は設定の奥に置くのではなく、サインイン(初回登録)の
-  // 時点で紐づけたい」という要望への対応。設定画面にあった「アカウントを
-  // 保護する」と同じmode='link'を、ここ(オンボーディング)にもそのまま
-  // 表示する。裏側では既にuseAuth.bootstrapで匿名サインインが済んで
-  // いるため、名前を入力する前でもGoogle/Apple/LINE/メールを紐づけられる。
+  // 時点で紐づけたい」という要望への対応。裏側では既にuseAuth.bootstrap
+  // で匿名サインインが済んでいるため、名前を入力する前でも
+  // Google/Apple/LINE/メールを紐づけられる。連携に成功したら、そのまま
+  // 名前登録ステップへ自動で進める(linkNoteは名前ステップ側に持ち越して
+  // 表示する)。
   const [linkNote, setLinkNote] = useState<string | null>(null);
 
   const submit = async () => {
@@ -62,18 +71,40 @@ export default function OnboardingScreen({
           </View>
         )}
 
-        {showSignIn ? (
-          <>
-            <Text style={styles.label}>{t.authMethods.signInTitle}</Text>
-            <Text style={styles.signInDescription}>{t.authMethods.signInDescription}</Text>
-            <AuthMethods mode="signin" onDone={setSignInNote} />
-            {signInNote && <Text style={styles.signInNote}>{signInNote}</Text>}
-            <Pressable onPress={() => setShowSignIn(false)} style={styles.switchLink}>
-              <Text style={styles.switchLinkText}>{t.authMethods.switchToSignUp}</Text>
-            </Pressable>
-          </>
+        {step === 'account' ? (
+          showSignIn ? (
+            <>
+              <Text style={styles.label}>{t.authMethods.signInTitle}</Text>
+              <Text style={styles.signInDescription}>{t.authMethods.signInDescription}</Text>
+              <AuthMethods mode="signin" onDone={setSignInNote} />
+              {signInNote && <Text style={styles.signInNote}>{signInNote}</Text>}
+              <Pressable onPress={() => setShowSignIn(false)} style={styles.switchLink}>
+                <Text style={styles.switchLinkText}>{t.authMethods.switchToSignUp}</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Text style={styles.label}>{t.authMethods.protectTitle}</Text>
+              <Text style={styles.signInDescription}>{t.onboarding.accountStepDescription}</Text>
+              <AuthMethods
+                mode="link"
+                onDone={(message) => {
+                  setLinkNote(message);
+                  setStep('name');
+                }}
+              />
+              <Pressable onPress={() => setStep('name')} style={styles.skipButton}>
+                <Text style={styles.skipButtonText}>{t.onboarding.skipToName}</Text>
+              </Pressable>
+              <Pressable onPress={() => setShowSignIn(true)} style={styles.switchLink}>
+                <Text style={styles.switchLinkText}>{t.authMethods.switchToSignIn}</Text>
+              </Pressable>
+            </>
+          )
         ) : (
           <>
+            {linkNote && <Text style={styles.signInNote}>{linkNote}</Text>}
+
             <Text style={styles.label}>{t.onboarding.nameLabel}</Text>
             <TextInput
               value={name}
@@ -95,17 +126,6 @@ export default function OnboardingScreen({
             </Pressable>
 
             {error && <Text style={styles.error}>{error}</Text>}
-
-            <View style={styles.linkSection}>
-              <Text style={styles.label}>{t.authMethods.protectTitle}</Text>
-              <Text style={styles.signInDescription}>{t.authMethods.protectDescription}</Text>
-              <AuthMethods mode="link" onDone={setLinkNote} />
-              {linkNote && <Text style={styles.signInNote}>{linkNote}</Text>}
-            </View>
-
-            <Pressable onPress={() => setShowSignIn(true)} style={styles.switchLink}>
-              <Text style={styles.switchLinkText}>{t.authMethods.switchToSignIn}</Text>
-            </Pressable>
           </>
         )}
       </View>
@@ -113,8 +133,8 @@ export default function OnboardingScreen({
       {/* 内容のすぐ下に小さく左寄せで浮かせるのではなく、幅いっぱいのCTAにする。
           ただし画面の一番下端まで押し下げると逆に遠すぎたため、内容から
           一定の余白を空けた位置に置く(flex:1で下端に固定、はしない)。
-          サインインモードのときは、新規登録用のこのボタン自体を隠す。 */}
-      {!showSignIn && (
+          名前ステップ以外では、この登録用ボタン自体を隠す。 */}
+      {step === 'name' && (
         <PrimaryButton title={t.onboarding.start} onPress={submit} loading={submitting} disabled={!name.trim()} style={styles.button} />
       )}
 
@@ -171,11 +191,12 @@ const styles = StyleSheet.create({
   },
   avatarRowText: { ...fonts.bodyMedium, fontSize: 14, color: colors.ink, flexShrink: 1 },
   error: { color: colors.danger, ...fonts.body, fontSize: 13, marginTop: 8 },
-  linkSection: { marginTop: 28 },
   signInDescription: { ...fonts.body, fontSize: 13, color: colors.muted, lineHeight: 19, marginBottom: 14 },
-  signInNote: { ...fonts.bodyMedium, fontSize: 13, color: colors.positive, marginTop: 10 },
+  signInNote: { ...fonts.bodyMedium, fontSize: 13, color: colors.positive, marginBottom: 16 },
   switchLink: { marginTop: 16, alignSelf: 'flex-start' },
   switchLinkText: { ...fonts.bodySemiBold, fontSize: 13.5, color: colors.accent },
+  skipButton: { marginTop: 14, alignItems: 'center', paddingVertical: 4 },
+  skipButtonText: { ...fonts.bodyMedium, fontSize: 13.5, color: colors.muted, textDecorationLine: 'underline' },
   authErrorBox: {
     backgroundColor: colors.danger + '14',
     borderWidth: 1,

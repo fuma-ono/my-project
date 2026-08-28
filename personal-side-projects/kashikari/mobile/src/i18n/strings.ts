@@ -19,6 +19,12 @@ export const ja = {
     tagline: '友達との貸し借りを、お金も頼みごとも一緒に記録する',
     signInFailedTitle: 'サインインに失敗しました',
     signInFailedHint: 'Supabaseの管理画面で Authentication > Providers > Anonymous Sign-Ins が有効になっているか確認してください。',
+    // 「最初のkashikariページの後、サインインページに移り、その後名前を
+    // 登録する画面に」という指摘への対応。以前は1画面に名前入力と
+    // アカウント連携を両方詰め込んでいたが、account(連携orスキップ)→
+    // name(名前・アイコン登録)の2画面に分けた。
+    accountStepDescription: 'Google/Apple/LINE/メールでアカウントを作ると、機種変更やアプリの再インストールをしても、グループのデータを失わずに済みます。',
+    skipToName: 'アカウントなしで今すぐ始める',
     nameLabel: 'あなたの名前',
     namePlaceholder: '例: たろう',
     iconLabel: 'アイコン',
@@ -312,6 +318,9 @@ export const en: Strings = {
     tagline: 'Track money and favors you owe friends, all in one place',
     signInFailedTitle: 'Sign-in failed',
     signInFailedHint: 'Check that Authentication > Providers > Anonymous Sign-Ins is enabled in your Supabase dashboard.',
+    accountStepDescription:
+      'Creating an account with Google/Apple/LINE/email means you keep your groups even if you switch phones or reinstall the app.',
+    skipToName: 'Start now without an account',
     nameLabel: 'Your name',
     namePlaceholder: 'e.g. Alex',
     iconLabel: 'Icon',
