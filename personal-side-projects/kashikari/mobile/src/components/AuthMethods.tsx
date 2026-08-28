@@ -232,6 +232,10 @@ const styles = StyleSheet.create({
   emailRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   input: {
     flex: 1,
+    // flexアイテムの初期値min-width:autoのせいで、狭い画面幅では
+    // TextInputが縮まずに右のボタンごと画面外へはみ出す(react-native-web
+    // 特有のflexboxの罠)。明示的にminWidth:0を指定して縮めるようにする。
+    minWidth: 0,
     backgroundColor: colors.surface2,
     borderRadius: 10,
     paddingVertical: 12,
