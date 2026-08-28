@@ -44,11 +44,17 @@ export default function AuthMethods({ mode, onDone }: Props) {
     }
   }, [mode]);
 
-  const run = async (provider: string, action: () => Promise<{ error: string | null }>) => {
+  const run = async (provider: string, action: () => Promise<{ error: string | null; cancelled?: boolean }>) => {
     setError(null);
     setBusyProvider(provider);
     const res = await action();
     setBusyProvider(null);
+    // 「Googleでログインしようとしてログインページを閉じたら、そのまま
+    // 次に進めてしまう」というバグへの対応。以前はerrorが無ければ
+    // 即成功扱いにしていたが、キャンセル(ブラウザを自分で閉じた/Apple
+    // シートをキャンセルした)もerror:nullで返ってくるため、区別せず
+    // onDoneを呼んでいた。cancelledの場合は何もせず静かに戻る。
+    if (res.cancelled) return;
     if (res.error) {
       setError(res.error);
       return;

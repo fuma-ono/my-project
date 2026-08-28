@@ -253,7 +253,12 @@ const styles = StyleSheet.create({
   premiumRowText: { ...fonts.bodySemiBold, fontSize: 15, color: colors.plum },
   usageRow: { marginTop: 10 },
   usageRowText: { ...fonts.bodySemiBold, fontSize: 15, color: colors.ink },
-  aboutText: { ...fonts.bodySemiBold, fontSize: 15, color: colors.ink },
+  // 「最初のページのフォントと別のページのkashikariのフォントが違う」
+  // という指摘への対応。ここだけfonts.bodySemiBold(通常の太字)を
+  // 使っており、ワードマークとして使うべきfonts.display(ロゴ用の
+  // 一番太いウェイト、Onboarding/Groups/Splashの各画面と共通)に
+  // なっていなかった。
+  aboutText: { ...fonts.display, fontSize: 17, color: colors.ink },
   aboutVersion: { ...fonts.body, fontSize: 13, color: colors.muted, marginTop: 4 },
   logoutRow: {
     flexDirection: 'row',

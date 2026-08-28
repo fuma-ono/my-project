@@ -40,7 +40,13 @@ export type OAuthProvider = 'google' | 'custom:line' | 'apple';
 // アカウントとしてサインインし直す」かで、呼ぶSupabaseのAPIが違う。
 export type AuthMode = 'link' | 'signin';
 
-async function runOAuthFlow(provider: OAuthProvider, mode: AuthMode): Promise<{ error: string | null }> {
+// 「Googleでログインしようとしてログインページを閉じたら、そのまま
+// 次に進めてしまう」というバグへの対応。以前は「キャンセルされた」場合も
+// { error: null }を返しており、呼び出し元(AuthMethods.tsxのrun())は
+// 「errorが無い=成功」としてonDone(次のステップへ進む処理)を呼んで
+// しまっていた。キャンセルと成功を区別するため、cancelledフラグを
+// 追加した(呼び出し元はcancelled===trueなら何もせず静かに戻る)。
+async function runOAuthFlow(provider: OAuthProvider, mode: AuthMode): Promise<{ error: string | null; cancelled?: boolean }> {
   // Expo Go内ではexp://の一時URLに、スタンドアロン/開発ビルドでは
   // kashikari://に、自動的に出し分けられる。
   const redirectTo = AuthSession.makeRedirectUri();
@@ -51,7 +57,7 @@ async function runOAuthFlow(provider: OAuthProvider, mode: AuthMode): Promise<{ 
   if (!data?.url) return { error: 'failed to start oauth' };
 
   const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-  if (result.type === 'cancel' || result.type === 'dismiss') return { error: null }; // ユーザーが自分でキャンセルしただけ
+  if (result.type === 'cancel' || result.type === 'dismiss') return { error: null, cancelled: true }; // ユーザーが自分でキャンセルしただけ
   if (result.type !== 'success' || !result.url) return { error: 'oauth failed' };
 
   // SupabaseはPKCEフローで「?code=...」を付けて返す(実装によっては
@@ -99,7 +105,7 @@ export async function isAppleSignInAvailable(): Promise<boolean> {
   }
 }
 
-export async function signInWithApple(mode: AuthMode): Promise<{ error: string | null }> {
+export async function signInWithApple(mode: AuthMode): Promise<{ error: string | null; cancelled?: boolean }> {
   try {
     const credential = await AppleAuthentication.signInAsync({
       requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME, AppleAuthentication.AppleAuthenticationScope.EMAIL],
@@ -116,7 +122,9 @@ export async function signInWithApple(mode: AuthMode): Promise<{ error: string |
     return { error: error?.message ?? null };
   } catch (e) {
     const err = e as { code?: string };
-    if (err.code === 'ERR_REQUEST_CANCELED') return { error: null }; // 自分でキャンセルしただけ
+    // 「キャンセルしたら次に進めてしまう」バグへの対応(runOAuthFlowと
+    // 同じ理由)。cancelled:trueを返し、成功と区別できるようにする。
+    if (err.code === 'ERR_REQUEST_CANCELED') return { error: null, cancelled: true };
     return { error: 'apple sign-in failed' };
   }
 }
