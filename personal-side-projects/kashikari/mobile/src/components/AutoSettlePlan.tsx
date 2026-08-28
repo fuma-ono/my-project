@@ -32,7 +32,12 @@ export default function AutoSettlePlan({ groupName, currency, transactions, name
     });
 
   const share = () => {
-    Share.share({ message: shareText() });
+    // ブラウザ環境(Web Share API未対応)ではShare.share()がrejectされた
+    // Promiseを返す(react-native-web実装で確認、Playwrightでのテスト中に
+    // 発見)。実機のネイティブ共有シートでは起きないが、拾わないと
+    // 未処理のPromise rejectionとしてアプリの外まで伝播してしまうため
+    // 保険として.catch()を付ける。
+    Share.share({ message: shareText() }).catch(() => {});
   };
 
   // 「まとめて精算する」は、精算して終わりではなく、そのままLINE等への

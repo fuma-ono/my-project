@@ -33,15 +33,20 @@ export default function ShareChannelSheet({ visible, message, onClose, onCopied 
   const pendingActionRef = useRef<Action | null>(null);
 
   const runAction = (action: Action) => {
+    // LINE/メールアプリが端末に無い、ブラウザがWeb Share API未対応、
+    // といった環境ではLinking.openURL/Share.shareがPromiseをrejectする
+    // ことがある(Playwrightでのテスト中に発見)。実機では通常起きない
+    // が、拾わないと未処理のPromise rejectionとして伝播してしまうため
+    // 保険として.catch()を付ける。
     if (action === 'line') {
-      Linking.openURL(`https://line.me/R/msg/text/?${encodeURIComponent(message)}`);
+      Linking.openURL(`https://line.me/R/msg/text/?${encodeURIComponent(message)}`).catch(() => {});
     } else if (action === 'email') {
-      Linking.openURL(`mailto:?body=${encodeURIComponent(message)}`);
+      Linking.openURL(`mailto:?body=${encodeURIComponent(message)}`).catch(() => {});
     } else if (action === 'copy') {
       Clipboard.setStringAsync(message);
       onCopied?.();
     } else {
-      Share.share({ message });
+      Share.share({ message }).catch(() => {});
     }
   };
 

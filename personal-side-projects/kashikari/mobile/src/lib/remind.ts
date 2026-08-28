@@ -11,7 +11,12 @@ import type { Strings } from '../i18n/strings';
 // 中身(logEventを呼ぶか、何もしないか)で決める。
 export function openRemindPrompt(t: Strings, amountLabel: string, onSent?: () => void) {
   const send = (message: string) => {
-    Share.share({ message });
+    // ブラウザ環境(Web Share API未対応)ではShare.share()がrejectされた
+    // Promiseを返す(react-native-web実装で確認、Playwrightでのテスト中に
+    // 発見)。実機のネイティブ共有シートでは起きないが、拾わないと
+    // 未処理のPromise rejectionとしてアプリの外まで伝播してしまうため
+    // 保険として.catch()を付ける。
+    Share.share({ message }).catch(() => {});
     onSent?.();
   };
   Alert.alert(t.remind.toneTitle, undefined, [
