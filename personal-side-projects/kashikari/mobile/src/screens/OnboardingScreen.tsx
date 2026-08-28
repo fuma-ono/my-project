@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -9,17 +10,22 @@ import PrimaryButton from '../components/PrimaryButton';
 import { useT } from '../i18n';
 import { colors, fonts } from '../theme';
 
-// 「サインイン前提で作成してくれない?」という指摘への対応。以前は
-// 匿名サインインが裏で自動的に済んでおり、Google/Apple/LINE/メールでの
-// 連携は「あとから追加できる任意のおまけ」でしかなかった。今は
-// useAuth側で匿名サインインを撤廃し、ここが本当の意味での必須の
-// サインイン画面になる(スキップする手段は無い)。
-// account(サインイン、必須)→name(名前・アイコン登録)の2画面構成。
-// signInWithOAuth/signInWithIdToken/OTPはいずれも「既存アカウントなら
-// ログイン、無ければ新規作成」を自動でやってくれるため、新規登録用と
-// 復帰用の画面を分ける必要が無くなり、以前あった「既にアカウントを
-// お持ちの方はこちら」の切り替えも不要になった。
-type Step = 'account' | 'name';
+// 「サインイン前提で作成してくれない?」への対応(45回目)でサインインを
+// 必須にしたが、続けて「ボタンで選べるように、サインインとログインを
+// 分けた方がよくない?最初のkashikari画面のあと、その下にボタンが
+// 表示される画面が来るみたいな」という指摘を受け、welcome(新しく始める/
+// ログイン、の2択)→account(選んだ方に応じた見出しでサインイン)→
+// name(名前・アイコン登録)の3画面構成にした。
+//
+// 技術的には、signInWithOAuth/signInWithIdToken/OTPはいずれも「既存
+// アカウントならログイン、無ければ新規作成」を自動でやってくれるため、
+// 「新しく始める」を選んでも「ログイン」を選んでも、accountステップで
+// 実際に呼ぶ処理(AuthMethods mode="signin")は全く同じ。welcomeステップは
+// あくまで見出し・説明文を出し分けて「今どちらのつもりで進んでいるか」を
+// 分かりやすくするためのもの(ユーザーが安心して選べることを優先し、
+// 内部実装の都合でUIを間引かない)。
+type Step = 'welcome' | 'account' | 'name';
+type Intent = 'signup' | 'login';
 
 export default function OnboardingScreen({
   onSubmit,
@@ -30,13 +36,19 @@ export default function OnboardingScreen({
   authError?: string | null;
 }) {
   const t = useT();
-  const [step, setStep] = useState<Step>('account');
+  const [step, setStep] = useState<Step>('welcome');
+  const [intent, setIntent] = useState<Intent>('signup');
   const [name, setName] = useState('');
   const [avatarEmoji, setAvatarEmoji] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [signInNote, setSignInNote] = useState<string | null>(null);
+
+  const goToAccount = (chosen: Intent) => {
+    setIntent(chosen);
+    setStep('account');
+  };
 
   const submit = async () => {
     setSubmitting(true);
@@ -61,10 +73,21 @@ export default function OnboardingScreen({
           </View>
         )}
 
-        {step === 'account' ? (
+        {step === 'welcome' && (
+          <View style={styles.welcomeButtons}>
+            <PrimaryButton title={t.onboarding.welcomeSignupButton} onPress={() => goToAccount('signup')} style={styles.welcomeButton} />
+            <Pressable onPress={() => goToAccount('login')} style={styles.welcomeLoginButton}>
+              <Text style={styles.welcomeLoginButtonText}>{t.onboarding.welcomeLoginButton}</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {step === 'account' && (
           <>
-            <Text style={styles.label}>{t.onboarding.accountStepTitle}</Text>
-            <Text style={styles.signInDescription}>{t.onboarding.accountStepDescription}</Text>
+            <Text style={styles.label}>{intent === 'signup' ? t.onboarding.accountStepTitleSignup : t.onboarding.accountStepTitleLogin}</Text>
+            <Text style={styles.signInDescription}>
+              {intent === 'signup' ? t.onboarding.accountStepDescriptionSignup : t.onboarding.accountStepDescriptionLogin}
+            </Text>
             <AuthMethods
               mode="signin"
               onDone={(message) => {
@@ -80,8 +103,14 @@ export default function OnboardingScreen({
               }}
             />
             {signInNote && <Text style={styles.signInNote}>{signInNote}</Text>}
+            <Pressable onPress={() => setStep('welcome')} style={styles.backLink} hitSlop={8}>
+              <Ionicons name="chevron-back" size={16} color={colors.muted} />
+              <Text style={styles.backLinkText}>{t.onboarding.backToWelcome}</Text>
+            </Pressable>
           </>
-        ) : (
+        )}
+
+        {step === 'name' && (
           <>
             <Text style={styles.label}>{t.onboarding.nameLabel}</Text>
             <TextInput
@@ -171,6 +200,19 @@ const styles = StyleSheet.create({
   error: { color: colors.danger, ...fonts.body, fontSize: 13, marginTop: 8 },
   signInDescription: { ...fonts.body, fontSize: 13, color: colors.muted, lineHeight: 19, marginBottom: 14 },
   signInNote: { ...fonts.bodyMedium, fontSize: 13, color: colors.positive, marginTop: 16 },
+  welcomeButtons: { gap: 12 },
+  welcomeButton: { width: '100%' },
+  welcomeLoginButton: {
+    borderRadius: 999,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.line,
+  },
+  welcomeLoginButtonText: { ...fonts.bodySemiBold, fontSize: 15, color: colors.ink },
+  backLink: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 16, alignSelf: 'flex-start' },
+  backLinkText: { ...fonts.bodySemiBold, fontSize: 13.5, color: colors.muted },
   authErrorBox: {
     backgroundColor: colors.danger + '14',
     borderWidth: 1,

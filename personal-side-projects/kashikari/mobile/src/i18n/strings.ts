@@ -18,11 +18,16 @@ export const ja = {
   onboarding: {
     tagline: '友達との貸し借りを、お金も頼みごとも一緒に記録する',
     signInFailedTitle: 'エラーが発生しました',
-    // 「サインイン前提で作成してくれない?」という指摘への対応。以前の
-    // 「account(連携orスキップ)→name」から、スキップを無くし
-    // account(サインイン、必須)→nameの2画面にした。
-    accountStepTitle: 'サインイン',
-    accountStepDescription: 'kashikariを使うには、Google/Apple/LINE/メールのいずれかでサインインしてください。',
+    // 「ボタンで選べるように、サインインとログインを分けた方がよくない?」
+    // という指摘への対応。welcome(新しく始める/ログイン、の2択)→account
+    // (選んだ方に応じた見出しでサインイン)→nameの3画面構成。
+    welcomeSignupButton: '新しく始める',
+    welcomeLoginButton: 'すでにアカウントをお持ちの方はこちら',
+    accountStepTitleSignup: 'アカウントを作成',
+    accountStepDescriptionSignup: 'Google/Apple/LINE/メールのいずれかでアカウントを作成します。',
+    accountStepTitleLogin: 'ログイン',
+    accountStepDescriptionLogin: '以前使ったGoogle/Apple/LINE/メールでログインしてください。',
+    backToWelcome: '戻る',
     nameLabel: 'あなたの名前',
     namePlaceholder: '例: たろう',
     iconLabel: 'アイコン',
@@ -323,8 +328,13 @@ export const en: Strings = {
   onboarding: {
     tagline: 'Track money and favors you owe friends, all in one place',
     signInFailedTitle: 'Something went wrong',
-    accountStepTitle: 'Sign in',
-    accountStepDescription: 'To use kashikari, sign in with Google, Apple, LINE, or email.',
+    welcomeSignupButton: 'Get started',
+    welcomeLoginButton: 'I already have an account',
+    accountStepTitleSignup: 'Create an account',
+    accountStepDescriptionSignup: 'Create an account with Google, Apple, LINE, or email.',
+    accountStepTitleLogin: 'Log in',
+    accountStepDescriptionLogin: 'Log in with the Google, Apple, LINE, or email account you used before.',
+    backToWelcome: 'Back',
     nameLabel: 'Your name',
     namePlaceholder: 'e.g. Alex',
     iconLabel: 'Icon',
