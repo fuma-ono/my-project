@@ -909,6 +909,22 @@ Playwrightで、デモモード上で実際に「招待→参加前に割り勘�
 
 `package.json`(`expo-web-browser`・`expo-auth-session`・`expo-apple-authentication`を追加)・`app.json`・`lib/socialAuth.ts`(新規)・`components/AuthMethods.tsx`(新規)・`screens/SettingsScreen.tsx`・`screens/OnboardingScreen.tsx`・`demo/DemoApp.tsx`・`i18n/strings.ts`を変更。実際の外部プロバイダー設定が無いと動作確認ができないため、tsc・ビルド成功までは確認済みだが、実際のログインの動作確認はオーナー側の設定完了後になる。
 
+## アカウント連携をオンボーディングに統合・招待共有にLINE/メールを追加(41回目)
+
+「アカウント保護は設定の奥ではなく、サインイン(初回登録)の時点で紐づけたい」「共有するを押したときにLINEやメール宛てのリンクを送れるようにしてほしい」という指摘への対応。
+
+**アカウント連携の位置を変更**
+
+40回目では「設定 → アカウントを保護する」という、後から気づいて使う想定の場所にしかログイン方法の追加がなかった。今回、オンボーディング画面(名前・アイコンを入力する最初の画面)にも同じ機能(Google/Apple/LINE/メール、`AuthMethods` mode="link")をそのまま表示するようにした。裏側では匿名サインインが既に完了しているため、名前を入力する前でも紐づけられる。設定画面側の「アカウントを保護する」はそのまま残している(オンボーディングで飛ばした人が後から追加できるように)。
+
+**招待の共有にLINE/メール専用ボタンを追加**
+
+以前は「招待して共有する」を押すとOS標準の共有シート(Share.share)が開くだけで、LINEやメールは他の多くのアプリに混ざって一覧の奥に埋もれていた。新しく`ShareChannelSheet`という独自の選択シートを追加し、「LINEで送る」「メールで送る」を専用ボタンとして手前に出した。加えて「リンクをコピー」(クリップボードにコピー)、「その他の方法で共有」(従来通りのOS共有シート、Messages/AirDrop等)も選べる。LINEは`https://line.me/R/msg/text/?...`というLINE公式の共有用リンク、メールは`mailto:`を使っており、どちらもExpo Go上でそのまま動く(特別な設定は不要)。
+
+新規: `components/ShareChannelSheet.tsx`。変更: `screens/OnboardingScreen.tsx`(アカウント連携セクション追加)・`screens/GroupScreen.tsx`・`demo/DemoGroupScreen.tsx`(共有シートの差し替え)・`i18n/strings.ts`・`package.json`(`expo-clipboard`追加)。
+
+tsc・demo/非demo両方のビルド成功。Playwrightで、招待→共有シートでLINE/メール/コピー/その他の4択が出ること、「リンクをコピー」を押すとトーストが出ること、オンボーディング画面に新しいアカウント連携セクションが表示されること、「既にアカウントをお持ちの方はこちら」からのサインイン画面切り替えが正しく動くことを確認済み。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え

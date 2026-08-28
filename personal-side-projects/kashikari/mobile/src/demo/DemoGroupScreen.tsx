@@ -3,7 +3,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { Alert, Platform, Pressable, ScrollView, SectionList, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
 
 import AddEntrySheet from '../components/AddEntrySheet';
 import AutoSettlePlan from '../components/AutoSettlePlan';
@@ -18,6 +18,7 @@ import HistoryEntryRow from '../components/HistoryEntryRow';
 import InviteModal from '../components/InviteModal';
 import NetSummary from '../components/NetSummary';
 import SettlementProgress from '../components/SettlementProgress';
+import ShareChannelSheet from '../components/ShareChannelSheet';
 import Toast from '../components/Toast';
 import UnpaidMembersModal from '../components/UnpaidMembersModal';
 import { useT } from '../i18n';
@@ -44,6 +45,8 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
   const [showSettled, setShowSettled] = useState(false);
   const [unpaidModalOpen, setUnpaidModalOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
+  const [shareMessage, setShareMessage] = useState('');
   const [invites, setInvites] = useState<GroupInvite[]>([]);
   const [notifToastVisible, setNotifToastVisible] = useState(false);
   const [inviteToastMessage, setInviteToastMessage] = useState<string | null>(null);
@@ -163,15 +166,14 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
     return { error: null };
   };
 
-  const shareInvite = () => {
-    const url = buildInviteUrl(group.invite_code);
-    Share.share({ message: t.group.inviteMessage(group.name, url, group.invite_code) });
-  };
-
+  // 「共有する時にLINEやメールへのリンクを送れるようにしてほしい」への
+  // 対応(詳細はGroupScreen.tsxの同じ箇所のコメント参照)。
   const triggerPendingShare = () => {
     if (!pendingShareRef.current) return;
     pendingShareRef.current = false;
-    shareInvite();
+    const url = buildInviteUrl(group.invite_code);
+    setShareMessage(t.group.inviteMessage(group.name, url, group.invite_code));
+    setShareSheetOpen(true);
   };
 
   // 「招待した相手が参加する前でも記録できる」対応(詳細はuseGroupData.tsの
@@ -546,6 +548,13 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
           }
           return res;
         }}
+      />
+
+      <ShareChannelSheet
+        visible={shareSheetOpen}
+        message={shareMessage}
+        onClose={() => setShareSheetOpen(false)}
+        onCopied={() => setInviteToastMessage(t.group.inviteLinkCopiedToast)}
       />
 
       <UnpaidMembersModal

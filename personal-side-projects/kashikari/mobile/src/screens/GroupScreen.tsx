@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { Alert, Platform, Pressable, RefreshControl, ScrollView, SectionList, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
 
 import AddEntrySheet from '../components/AddEntrySheet';
 import AutoSettlePlan from '../components/AutoSettlePlan';
@@ -16,6 +16,7 @@ import HistoryEntryRow from '../components/HistoryEntryRow';
 import InviteModal from '../components/InviteModal';
 import NetSummary from '../components/NetSummary';
 import SettlementProgress from '../components/SettlementProgress';
+import ShareChannelSheet from '../components/ShareChannelSheet';
 import Toast from '../components/Toast';
 import UnpaidMembersModal from '../components/UnpaidMembersModal';
 import { useGroupData } from '../hooks/useGroupData';
@@ -62,6 +63,8 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [groupIconPickerOpen, setGroupIconPickerOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
+  const [shareMessage, setShareMessage] = useState('');
   const [tab, setTab] = useState<Tab>('balance');
   const [showSettled, setShowSettled] = useState(false);
   const [unpaidModalOpen, setUnpaidModalOpen] = useState(false);
@@ -220,13 +223,8 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
     />
   );
 
-  const shareInvite = () => {
-    const url = buildInviteUrl(group.invite_code);
-    Share.share({ message: t.group.inviteMessage(group.name, url, group.invite_code) });
-  };
-
   // 送信成功後、InviteModal(独自の<Modal>)はこの直後にclose()を呼ぶ。
-  // その閉じるアニメーション中にShare.share()(OS標準の共有シート)を
+  // その閉じるアニメーション中に別のネイティブ画面(共有シート等)を
   // 呼ぶと、iOSでは「自分のモーダルを閉じている最中に別のモーダルを
   // 開こうとする」形になり、共有シートが一切表示されないまま消えて
   // しまう(名前だけ登録されて共有が開かない、という不具合の原因)。
@@ -235,10 +233,16 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
   // <Modal>が実際に閉じ終わった瞬間を通知するonDismiss(iOS専用)を
   // 使う形に変更した。Androidはこのコールバックが無いため、従来通り
   // 短いsetTimeoutにフォールバックする。
+  // 「共有する時にLINEやメールへのリンクを送れるようにしてほしい」への
+  // 対応で、以前はここでOS標準の共有シート(Share.share)を直接開いて
+  // いたが、今はShareChannelSheet(LINE/メール/コピー/その他を選べる
+  // 独自シート)を開くようにしている。
   const triggerPendingShare = () => {
     if (!pendingShareRef.current) return;
     pendingShareRef.current = false;
-    shareInvite();
+    const url = buildInviteUrl(group.invite_code);
+    setShareMessage(t.group.inviteMessage(group.name, url, group.invite_code));
+    setShareSheetOpen(true);
   };
 
   const inviteModal = (
@@ -255,6 +259,15 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
         }
         return res;
       }}
+    />
+  );
+
+  const shareChannelSheet = (
+    <ShareChannelSheet
+      visible={shareSheetOpen}
+      message={shareMessage}
+      onClose={() => setShareSheetOpen(false)}
+      onCopied={() => setInviteToastMessage(t.group.inviteLinkCopiedToast)}
     />
   );
 
@@ -546,6 +559,7 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
       {avatarPicker}
       {groupIconPicker}
       {inviteModal}
+      {shareChannelSheet}
       {tab === 'balance' && (
         <UnpaidMembersModal
           visible={unpaidModalOpen}

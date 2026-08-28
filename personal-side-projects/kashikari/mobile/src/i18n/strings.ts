@@ -93,6 +93,15 @@ export const ja = {
     leaveFailedTitle: '抜けられませんでした',
     notificationsComingSoon: '通知機能は準備中です。もうしばらくお待ちください。',
     inviteSuccessToast: (name: string) => `${name}を招待しました`,
+    // 「共有するでLINEやメールへのリンクを送れるようにしてほしい」への対応。
+    // OS標準の共有シート一択だとLINE・メールが選択肢の奥に埋もれるため、
+    // この2つを専用ボタンとして手前に出す(ShareChannelSheet.tsx)。
+    shareSheetTitle: '招待リンクを送る',
+    shareSheetLine: 'LINEで送る',
+    shareSheetEmail: 'メールで送る',
+    shareSheetCopy: 'リンクをコピー',
+    shareSheetOther: 'その他の方法で共有',
+    inviteLinkCopiedToast: '招待リンクをコピーしました',
   },
   groupForm: {
     createTitle: '新しいグループ',
@@ -371,6 +380,12 @@ export const en: Strings = {
     leaveFailedTitle: "Couldn't leave the group",
     notificationsComingSoon: 'Notifications are coming soon. Hang tight!',
     inviteSuccessToast: (name: string) => `Invited ${name}`,
+    shareSheetTitle: 'Send invite link',
+    shareSheetLine: 'Send via LINE',
+    shareSheetEmail: 'Send via email',
+    shareSheetCopy: 'Copy link',
+    shareSheetOther: 'Share another way',
+    inviteLinkCopiedToast: 'Invite link copied',
   },
   groupForm: {
     createTitle: 'New group',

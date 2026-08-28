@@ -31,6 +31,12 @@ export default function OnboardingScreen({
   // 自動的にプロフィールを読み込み、この画面自体が自動的に切り替わる)。
   const [showSignIn, setShowSignIn] = useState(false);
   const [signInNote, setSignInNote] = useState<string | null>(null);
+  // 「アカウント保護は設定の奥に置くのではなく、サインイン(初回登録)の
+  // 時点で紐づけたい」という要望への対応。設定画面にあった「アカウントを
+  // 保護する」と同じmode='link'を、ここ(オンボーディング)にもそのまま
+  // 表示する。裏側では既にuseAuth.bootstrapで匿名サインインが済んで
+  // いるため、名前を入力する前でもGoogle/Apple/LINE/メールを紐づけられる。
+  const [linkNote, setLinkNote] = useState<string | null>(null);
 
   const submit = async () => {
     setSubmitting(true);
@@ -89,6 +95,13 @@ export default function OnboardingScreen({
             </Pressable>
 
             {error && <Text style={styles.error}>{error}</Text>}
+
+            <View style={styles.linkSection}>
+              <Text style={styles.label}>{t.authMethods.protectTitle}</Text>
+              <Text style={styles.signInDescription}>{t.authMethods.protectDescription}</Text>
+              <AuthMethods mode="link" onDone={setLinkNote} />
+              {linkNote && <Text style={styles.signInNote}>{linkNote}</Text>}
+            </View>
 
             <Pressable onPress={() => setShowSignIn(true)} style={styles.switchLink}>
               <Text style={styles.switchLinkText}>{t.authMethods.switchToSignIn}</Text>
@@ -158,6 +171,7 @@ const styles = StyleSheet.create({
   },
   avatarRowText: { ...fonts.bodyMedium, fontSize: 14, color: colors.ink, flexShrink: 1 },
   error: { color: colors.danger, ...fonts.body, fontSize: 13, marginTop: 8 },
+  linkSection: { marginTop: 28 },
   signInDescription: { ...fonts.body, fontSize: 13, color: colors.muted, lineHeight: 19, marginBottom: 14 },
   signInNote: { ...fonts.bodyMedium, fontSize: 13, color: colors.positive, marginTop: 10 },
   switchLink: { marginTop: 16, alignSelf: 'flex-start' },
