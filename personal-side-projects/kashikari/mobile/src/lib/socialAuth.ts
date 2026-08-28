@@ -128,3 +128,13 @@ export async function verifyEmailCode(email: string, token: string, mode: AuthMo
   const { error } = await supabase.auth.verifyOtp({ email, token, type: mode === 'link' ? 'email_change' : 'email' });
   return { error: error?.message ?? null };
 }
+
+// 「ログアウト機能」への対応。匿名サインインのみのアカウントでログアウト
+// すると、次回起動時に作られる新しい匿名アカウントは全くの別人扱いになり、
+// 今のグループのデータに二度とアクセスできなくなる。ログアウト前にこれを
+// 判定して警告文を出し分けるため、Google/Apple/LINE/メールのいずれかが
+// 連携済み(=サインインし直せば元のアカウントに戻れる)かどうかを返す。
+export async function hasLinkedIdentity(): Promise<boolean> {
+  const { data } = await supabase.auth.getUserIdentities();
+  return (data?.identities.length ?? 0) > 0;
+}

@@ -56,14 +56,32 @@ export function useAuth() {
     supabase.auth.getSession().then(({ data }) => {
       if (mounted) bootstrap(data.session);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) loadProfile(session.user.id);
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        loadProfile(session.user.id);
+        return;
+      }
+      // 「ログアウト機能が無いのはおかしい」への対応。signOut()が呼ばれると
+      // ここがsession=nullで発火する。以前はここが何もしていなかったため、
+      // ログアウトしても画面上は古いuserId/profileが残ったままになる
+      // バグがあった。ここでstateを一度リセットしてbootstrap(null)を
+      // 呼び直すことで、新しい匿名セッションを自動作成し、オンボーディング
+      // 画面(名前登録前の状態)に正しく戻す。
+      if (event === 'SIGNED_OUT') {
+        setState({ loading: true, userId: null, profile: null, error: null });
+        bootstrap(null);
+      }
     });
     return () => {
       mounted = false;
       sub.subscription.unsubscribe();
     };
   }, [bootstrap, loadProfile]);
+
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut();
+    // 以降の状態更新はonAuthStateChange(上のSIGNED_OUTハンドラ)側で行われる。
+  }, []);
 
   const setDisplayName = useCallback(
     async (name: string, avatarEmoji: string | null) => {
@@ -98,5 +116,5 @@ export function useAuth() {
     [state.userId, t]
   );
 
-  return { ...state, setDisplayName, updateAvatar };
+  return { ...state, setDisplayName, updateAvatar, signOut };
 }

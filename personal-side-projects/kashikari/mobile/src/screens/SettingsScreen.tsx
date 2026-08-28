@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import appJson from '../../app.json';
 import Avatar from '../components/Avatar';
@@ -10,6 +10,7 @@ import PrimaryButton from '../components/PrimaryButton';
 import Toast from '../components/Toast';
 import { useLanguage } from '../i18n';
 import type { Lang } from '../i18n';
+import { hasLinkedIdentity } from '../lib/socialAuth';
 import { colors, fonts } from '../theme';
 import type { Profile } from '../types';
 
@@ -23,9 +24,21 @@ type Props = {
   // デモモードでは実際のSupabase認証が無い(全てローカルstate)ため、
   // 「アカウントを保護する」セクション自体を出さない。
   isDemo?: boolean;
+  // 「ログアウト機能が付いてないのはおかしい」への対応。デモモードでは
+  // 実際のセッションが無いため呼ばれない(渡されない)。
+  onSignOut?: () => Promise<void>;
 };
 
-export default function SettingsScreen({ profile, onBack, onChangeDisplayName, onChangeAvatar, onOpenPremium, onOpenUsage, isDemo }: Props) {
+export default function SettingsScreen({
+  profile,
+  onBack,
+  onChangeDisplayName,
+  onChangeAvatar,
+  onOpenPremium,
+  onOpenUsage,
+  isDemo,
+  onSignOut,
+}: Props) {
   const { lang, setLang, t } = useLanguage();
   const [name, setName] = useState(profile.display_name);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -33,8 +46,33 @@ export default function SettingsScreen({ profile, onBack, onChangeDisplayName, o
   const [saving, setSaving] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [authToastMessage, setAuthToastMessage] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const nameDirty = name.trim() !== profile.display_name && name.trim().length > 0;
+
+  // 「通常のアプリの基本的要素なのになんでログアウトが無いのか」への対応。
+  // Google/Apple/LINE/メールのいずれとも連携していない(=匿名のみの)
+  // アカウントでログアウトすると、次に開いたときに作られる匿名アカウントは
+  // 完全な別人扱いになり、今のグループのデータへ二度とアクセスできなく
+  // なる。そのため連携の有無で警告文を出し分け、未連携の場合はより強い
+  // 確認を挟む。
+  const confirmLogout = async () => {
+    if (!onSignOut) return;
+    setLoggingOut(true);
+    const linked = await hasLinkedIdentity();
+    setLoggingOut(false);
+    if (linked) {
+      Alert.alert(t.settings.logoutConfirmTitle, t.settings.logoutConfirmMessage, [
+        { text: t.common.cancel, style: 'cancel' },
+        { text: t.settings.logoutConfirmButton, style: 'destructive', onPress: onSignOut },
+      ]);
+    } else {
+      Alert.alert(t.settings.logoutUnsafeTitle, t.settings.logoutUnsafeMessage, [
+        { text: t.common.cancel, style: 'cancel' },
+        { text: t.settings.logoutUnsafeButton, style: 'destructive', onPress: onSignOut },
+      ]);
+    }
+  };
 
   const saveName = async () => {
     setSaving(true);
@@ -117,6 +155,13 @@ export default function SettingsScreen({ profile, onBack, onChangeDisplayName, o
         <Text style={styles.sectionLabel}>{t.settings.about}</Text>
         <Text style={styles.aboutText}>kashikari</Text>
         <Text style={styles.aboutVersion}>{t.settings.version(appJson.expo.version)}</Text>
+
+        {!isDemo && onSignOut && (
+          <Pressable onPress={confirmLogout} disabled={loggingOut} style={styles.logoutRow}>
+            <Ionicons name="log-out-outline" size={18} color={colors.danger} />
+            <Text style={styles.logoutRowText}>{t.settings.logoutRow}</Text>
+          </Pressable>
+        )}
       </ScrollView>
 
       <AvatarPicker
@@ -210,4 +255,16 @@ const styles = StyleSheet.create({
   usageRowText: { ...fonts.bodySemiBold, fontSize: 15, color: colors.ink },
   aboutText: { ...fonts.bodySemiBold, fontSize: 15, color: colors.ink },
   aboutVersion: { ...fonts.body, fontSize: 13, color: colors.muted, marginTop: 4 },
+  logoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 32,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.danger + '40',
+  },
+  logoutRowText: { ...fonts.bodySemiBold, fontSize: 15, color: colors.danger },
 });

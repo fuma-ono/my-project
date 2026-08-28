@@ -52,7 +52,7 @@ const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO_MODE === '1';
 // LanguageProviderの内側でuseAuth/useGroups(どちらも文言を扱う)を呼ぶため、
 // 実体はAppInnerに分離し、下のdefault exportでProviderをかぶせている。
 function AppInner() {
-  const { loading: authLoading, userId, profile, error: authError, setDisplayName, updateAvatar } = useAuth();
+  const { loading: authLoading, userId, profile, error: authError, setDisplayName, updateAvatar, signOut } = useAuth();
   const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup, updateGroupIcon } = useGroups(
     DEMO_MODE ? null : userId
   );
@@ -146,6 +146,7 @@ function AppInner() {
           onChangeAvatar={updateAvatar}
           onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
           onOpenUsage={() => setScreen({ name: 'usage', returnTo: screen })}
+          onSignOut={signOut}
         />
       )}
       {screen.name === 'premium' && (

@@ -256,6 +256,17 @@ export const ja = {
     about: 'アプリについて',
     version: (v: string) => `バージョン ${v}`,
     savedNote: '保存しました',
+    // 「ログアウト機能が付いてないのはおかしい」への対応。Google/Apple/
+    // LINE/メールのいずれかと連携済みなら復帰できる旨を伝える通常の確認、
+    // 未連携(匿名のみ)ならデータを失う可能性を強く警告する2種類を用意。
+    logoutRow: 'ログアウト',
+    logoutConfirmTitle: 'ログアウトしますか?',
+    logoutConfirmMessage: '連携済みのログイン方法があるので、次に同じ方法でサインインすれば同じアカウントに戻れます。',
+    logoutConfirmButton: 'ログアウト',
+    logoutUnsafeTitle: '⚠️ このアカウントは保護されていません',
+    logoutUnsafeMessage:
+      'Google/Apple/LINE/メールのいずれとも連携していません。今ログアウトすると、このグループのデータに二度とアクセスできなくなります。それでもログアウトしますか?',
+    logoutUnsafeButton: 'それでもログアウトする',
   },
   premium: {
     back: '設定',
@@ -538,6 +549,14 @@ export const en: Strings = {
     about: 'About',
     version: (v: string) => `Version ${v}`,
     savedNote: 'Saved',
+    logoutRow: 'Log out',
+    logoutConfirmTitle: 'Log out?',
+    logoutConfirmMessage: "You've linked a sign-in method, so you can get back to this account by signing in the same way next time.",
+    logoutConfirmButton: 'Log out',
+    logoutUnsafeTitle: '⚠️ This account isn’t protected',
+    logoutUnsafeMessage:
+      "You haven't linked Google, Apple, LINE, or email. Logging out now means you'll permanently lose access to this group's data. Log out anyway?",
+    logoutUnsafeButton: 'Log out anyway',
   },
   premium: {
     back: 'Settings',
