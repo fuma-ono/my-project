@@ -5,27 +5,28 @@ import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput,
 import Avatar from '../components/Avatar';
 import AuthMethods from '../components/AuthMethods';
 import AvatarPicker from '../components/AvatarPicker';
+import LoginSheet from '../components/LoginSheet';
 import Mark from '../components/Mark';
 import PrimaryButton from '../components/PrimaryButton';
 import { useT } from '../i18n';
 import { colors, fonts } from '../theme';
 
 // 「サインイン前提で作成してくれない?」への対応(45回目)でサインインを
-// 必須にしたが、続けて「ボタンで選べるように、サインインとログインを
-// 分けた方がよくない?最初のkashikari画面のあと、その下にボタンが
-// 表示される画面が来るみたいな」という指摘を受け、welcome(新しく始める/
-// ログイン、の2択)→account(選んだ方に応じた見出しでサインイン)→
-// name(名前・アイコン登録)の3画面構成にした。
+// 必須にし、続けて「ボタンで選べるように、サインインとログインを
+// 分けた方がよくない?」への対応(47回目)でwelcome画面を追加した。
+// さらに「ログインの時はページではなく、ボタンを押したら下から
+// ログイン項目が出てくる感じがいいんじゃないかな?」という指摘を受け、
+// 「ログイン」は独立したページ(account相当)ではなく、下から出る
+// シート(LoginSheet.tsx)に変更した。新規登録は名前・アイコン登録へと
+// 続く「一連の流れ」なのでページ遷移のまま、ログインは(成功すれば
+// それだけで完了する)単発の操作なのでシート、と使い分けている。
 //
-// 技術的には、signInWithOAuth/signInWithIdToken/OTPはいずれも「既存
-// アカウントならログイン、無ければ新規作成」を自動でやってくれるため、
-// 「新しく始める」を選んでも「ログイン」を選んでも、accountステップで
-// 実際に呼ぶ処理(AuthMethods mode="signin")は全く同じ。welcomeステップは
-// あくまで見出し・説明文を出し分けて「今どちらのつもりで進んでいるか」を
-// 分かりやすくするためのもの(ユーザーが安心して選べることを優先し、
-// 内部実装の都合でUIを間引かない)。
+// welcome(「新しく始める」ボタン+「ログイン」リンク)→account(新規登録用の
+// サインイン、ページ)→name(名前・アイコン登録)。ログインを選んだ場合は
+// LoginSheetの中で完結し、成功すればApp.tsx側がprofile読み込み後に
+// この画面自体を抜ける(新規のアカウントだった場合だけ、この画面に
+// 残ったままnameステップへ進む)。
 type Step = 'welcome' | 'account' | 'name';
-type Intent = 'signup' | 'login';
 
 export default function OnboardingScreen({
   onSubmit,
@@ -37,18 +38,13 @@ export default function OnboardingScreen({
 }) {
   const t = useT();
   const [step, setStep] = useState<Step>('welcome');
-  const [intent, setIntent] = useState<Intent>('signup');
+  const [loginSheetOpen, setLoginSheetOpen] = useState(false);
   const [name, setName] = useState('');
   const [avatarEmoji, setAvatarEmoji] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [signInNote, setSignInNote] = useState<string | null>(null);
-
-  const goToAccount = (chosen: Intent) => {
-    setIntent(chosen);
-    setStep('account');
-  };
 
   const submit = async () => {
     setSubmitting(true);
@@ -75,8 +71,8 @@ export default function OnboardingScreen({
 
         {step === 'welcome' && (
           <View style={styles.welcomeButtons}>
-            <PrimaryButton title={t.onboarding.welcomeSignupButton} onPress={() => goToAccount('signup')} style={styles.welcomeButton} />
-            <Pressable onPress={() => goToAccount('login')} style={styles.welcomeLoginButton}>
+            <PrimaryButton title={t.onboarding.welcomeSignupButton} onPress={() => setStep('account')} style={styles.welcomeButton} />
+            <Pressable onPress={() => setLoginSheetOpen(true)} style={styles.welcomeLoginButton}>
               <Text style={styles.welcomeLoginButtonText}>{t.onboarding.welcomeLoginButton}</Text>
             </Pressable>
           </View>
@@ -84,10 +80,8 @@ export default function OnboardingScreen({
 
         {step === 'account' && (
           <>
-            <Text style={styles.label}>{intent === 'signup' ? t.onboarding.accountStepTitleSignup : t.onboarding.accountStepTitleLogin}</Text>
-            <Text style={styles.signInDescription}>
-              {intent === 'signup' ? t.onboarding.accountStepDescriptionSignup : t.onboarding.accountStepDescriptionLogin}
-            </Text>
+            <Text style={styles.label}>{t.onboarding.accountStepTitleSignup}</Text>
+            <Text style={styles.signInDescription}>{t.onboarding.accountStepDescriptionSignup}</Text>
             <AuthMethods
               mode="signin"
               onDone={(message) => {
@@ -154,6 +148,20 @@ export default function OnboardingScreen({
           setPickerOpen(false);
         }}
         onClose={() => setPickerOpen(false)}
+      />
+
+      <LoginSheet
+        visible={loginSheetOpen}
+        onClose={() => setLoginSheetOpen(false)}
+        onSignedIn={() => {
+          setLoginSheetOpen(false);
+          // ログインしたつもりが実は初めてのアカウントだった場合(=まだ
+          // 名前未登録)、App.tsx側はprofileがnullのままこの画面を
+          // 抜けないので、そのままnameステップに進めて名前を登録して
+          // もらう。既存アカウントでログインできた場合はApp.tsx側が
+          // profile読み込み後にこの画面自体を抜けるため無害。
+          setStep('name');
+        }}
       />
     </KeyboardAvoidingView>
   );
