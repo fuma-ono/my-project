@@ -14,6 +14,16 @@ type AuthState = {
   error: string | null;
 };
 
+// 「サインイン前提で作成してくれない?」という指摘への対応。以前は
+// セッションが無い端末で自動的に匿名サインインしていた(=ノーアカウント
+// でも即使える設計)が、以下の理由で撤廃した。
+// - 匿名のまま使い続けると、機種変更・アプリ再インストールで
+//   グループのデータへ二度とアクセスできなくなる事故が起きうる
+// - 「ログイン方法を後から追加できる」形にしても、追加を忘れる/後回し
+//   にする人がいる限りこのリスクは消えない
+// 今は、セッションが無い(=誰もサインインしていない)場合はuserId/profile
+// ともnullのまま止まり、OnboardingScreen側がGoogle/Apple/LINE/メールでの
+// サインインを要求する画面を表示する(スキップする手段は無い)。
 export function useAuth() {
   const t = useT();
   const [state, setState] = useState<AuthState>({
@@ -38,17 +48,11 @@ export function useAuth() {
         await loadProfile(session.user.id);
         return;
       }
-      // まだ誰もサインインしていない端末: 匿名で自動サインインする。
-      // メール/パスワードの入力を一切求めない設計(Supabase側で
-      // Anonymous Sign-Ins を有効化しておく必要がある。README参照)。
-      const { data, error } = await supabase.auth.signInAnonymously();
-      if (error || !data.user) {
-        setState((s) => ({ ...s, loading: false, error: error?.message ?? t.auth.anonymousSignInFailed }));
-        return;
-      }
-      setState((s) => ({ ...s, loading: false, userId: data.user!.id, profile: null }));
+      // 誰もサインインしていない: サインイン待ちの状態にするだけで、
+      // ここでは何も作らない(以前あった匿名の自動サインインを撤廃)。
+      setState((s) => ({ ...s, loading: false, userId: null, profile: null, error: null }));
     },
-    [loadProfile, t]
+    [loadProfile]
   );
 
   useEffect(() => {
@@ -61,16 +65,11 @@ export function useAuth() {
         loadProfile(session.user.id);
         return;
       }
-      // 「ログアウト機能が無いのはおかしい」への対応。signOut()が呼ばれると
-      // ここがsession=nullで発火する。以前はここが何もしていなかったため、
-      // ログアウトしても画面上は古いuserId/profileが残ったままになる
-      // バグがあった。ここでstateを一度リセットしてbootstrap(null)を
-      // 呼び直すことで、新しい匿名セッションを自動作成し、オンボーディング
-      // 画面(名前登録前の状態)に正しく戻す。
-      if (event === 'SIGNED_OUT') {
-        setState({ loading: true, userId: null, profile: null, error: null });
-        bootstrap(null);
-      }
+      // ログアウト後(event === 'SIGNED_OUT')も含め、セッションが無く
+      // なったら素直にサインイン待ちの状態へ戻す。以前はここが何もして
+      // おらず、ログアウトしても画面上に古いuserId/profileが残ったままに
+      // なるバグがあったため、あわせて修正している。
+      setState({ loading: false, userId: null, profile: null, error: null });
     });
     return () => {
       mounted = false;
@@ -80,7 +79,7 @@ export function useAuth() {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
-    // 以降の状態更新はonAuthStateChange(上のSIGNED_OUTハンドラ)側で行われる。
+    // 以降の状態更新はonAuthStateChange(上のハンドラ)側で行われる。
   }, []);
 
   const setDisplayName = useCallback(

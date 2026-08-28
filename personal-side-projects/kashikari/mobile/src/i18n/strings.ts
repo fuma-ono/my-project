@@ -17,14 +17,12 @@ export const ja = {
   },
   onboarding: {
     tagline: '友達との貸し借りを、お金も頼みごとも一緒に記録する',
-    signInFailedTitle: 'サインインに失敗しました',
-    signInFailedHint: 'Supabaseの管理画面で Authentication > Providers > Anonymous Sign-Ins が有効になっているか確認してください。',
-    // 「最初のkashikariページの後、サインインページに移り、その後名前を
-    // 登録する画面に」という指摘への対応。以前は1画面に名前入力と
-    // アカウント連携を両方詰め込んでいたが、account(連携orスキップ)→
-    // name(名前・アイコン登録)の2画面に分けた。
-    accountStepDescription: 'Google/Apple/LINE/メールでアカウントを作ると、機種変更やアプリの再インストールをしても、グループのデータを失わずに済みます。',
-    skipToName: 'アカウントなしで今すぐ始める',
+    signInFailedTitle: 'エラーが発生しました',
+    // 「サインイン前提で作成してくれない?」という指摘への対応。以前の
+    // 「account(連携orスキップ)→name」から、スキップを無くし
+    // account(サインイン、必須)→nameの2画面にした。
+    accountStepTitle: 'サインイン',
+    accountStepDescription: 'kashikariを使うには、Google/Apple/LINE/メールのいずれかでサインインしてください。',
     nameLabel: 'あなたの名前',
     namePlaceholder: '例: たろう',
     iconLabel: 'アイコン',
@@ -203,17 +201,16 @@ export const ja = {
   },
   auth: {
     unauthenticated: '未認証です',
-    anonymousSignInFailed: '匿名サインインに失敗しました',
     nameRequired: '名前を入力してください',
   },
   // 「Google/Apple/LINE/メールでログインできるようにした方がいい」という
   // 提案への対応。設定画面(mode:'link'、今のアカウントに後付け)と
   // オンボーディング(mode:'signin'、別端末での復旧用)の両方で共通に使う文言。
   authMethods: {
-    protectTitle: 'アカウントを保護する',
-    protectDescription: 'ログイン方法を追加しておくと、機種変更やアプリの再インストールをしても、グループのデータを失わずに済みます。',
-    signInTitle: 'サインイン',
-    signInDescription: '以前ログイン方法を追加したことがあれば、ここから同じアカウントに入れます。',
+    protectTitle: 'ログイン方法を追加する',
+    // サインインが必須になったため、ここは「唯一の保護手段」ではなく
+    // 「もう一つの入り口を増やす(バックアップ)」という位置づけに変更。
+    protectDescription: 'もう一つログイン方法を追加しておくと、万が一いつもの方法が使えなくなっても、別の方法でこのアカウントに入れます。',
     googleButton: 'Googleでログイン',
     appleButton: 'Appleでログイン',
     lineButton: 'LINEでログイン',
@@ -229,8 +226,6 @@ export const ja = {
     codeRequiredError: 'コードを入力してください',
     linkSuccessToast: 'ログイン方法を追加しました',
     signInSuccessToast: 'サインインしました',
-    switchToSignIn: '既にアカウントをお持ちの方はこちら',
-    switchToSignUp: '新しく始める',
   },
   groupData: {
     photoUploadFailed: (msg: string) => `写真のアップロードに失敗しました: ${msg}`,
@@ -327,11 +322,9 @@ export const en: Strings = {
   },
   onboarding: {
     tagline: 'Track money and favors you owe friends, all in one place',
-    signInFailedTitle: 'Sign-in failed',
-    signInFailedHint: 'Check that Authentication > Providers > Anonymous Sign-Ins is enabled in your Supabase dashboard.',
-    accountStepDescription:
-      'Creating an account with Google/Apple/LINE/email means you keep your groups even if you switch phones or reinstall the app.',
-    skipToName: 'Start now without an account',
+    signInFailedTitle: 'Something went wrong',
+    accountStepTitle: 'Sign in',
+    accountStepDescription: 'To use kashikari, sign in with Google, Apple, LINE, or email.',
     nameLabel: 'Your name',
     namePlaceholder: 'e.g. Alex',
     iconLabel: 'Icon',
@@ -501,14 +494,11 @@ export const en: Strings = {
   },
   auth: {
     unauthenticated: 'Not signed in',
-    anonymousSignInFailed: 'Anonymous sign-in failed',
     nameRequired: 'Please enter a name',
   },
   authMethods: {
-    protectTitle: 'Protect your account',
-    protectDescription: 'Adding a sign-in method means you won’t lose your groups if you switch phones or reinstall the app.',
-    signInTitle: 'Sign in',
-    signInDescription: 'If you’ve added a sign-in method before, use it here to get back into the same account.',
+    protectTitle: 'Add a sign-in method',
+    protectDescription: 'Adding another sign-in method gives you a backup way into this account if your usual one stops working.',
     googleButton: 'Continue with Google',
     appleButton: 'Continue with Apple',
     lineButton: 'Continue with LINE',
@@ -524,8 +514,6 @@ export const en: Strings = {
     codeRequiredError: 'Please enter the code',
     linkSuccessToast: 'Sign-in method added',
     signInSuccessToast: 'Signed in',
-    switchToSignIn: 'Already have an account?',
-    switchToSignUp: 'Start fresh instead',
   },
   groupData: {
     photoUploadFailed: (msg: string) => `Failed to upload photo: ${msg}`,

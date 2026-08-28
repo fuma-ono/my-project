@@ -10,7 +10,7 @@ Web版プロトタイプ(`../app/index.html`、Claude Artifacts)は「1URL=1つ�
 
 1. https://supabase.com でアカウント作成、新規プロジェクト作成(無料枠でOK)
 2. プロジェクトの **SQL Editor** を開き、`supabase/schema.sql` の中身を全部貼り付けて実行する
-3. **Authentication > Sign In / Providers** で **Anonymous Sign-Ins** を有効にする(このアプリはメールアドレス登録を一切求めない設計のため必須)
+3. **Authentication > Providers** で **Email** が有効になっていることを確認する(44回目までの匿名サインイン前提の設計を撤廃し、Google/Apple/LINE/メールのいずれかでのサインインが必須になった。Emailは追加登録なしで使えるので、最低限これだけは有効にしておく。Google/Apple/LINEも使いたい場合は、それぞれ「Google/Apple/LINEでのログインを追加(40回目)」を参照)
 4. **Project Settings > API Keys** を開き、`Project URL` と、**「Publishable and secret API keys」**タブにある **Publishable key**(`sb_publishable_...`)を控える。**「Legacy anon, service_role API keys」タブの`anon`キーは使わない**こと(Supabaseが新しいキー体系に移行しており、レガシーキーは同じプロジェクトでも無効化されている/されるため)
 
 ### 2. 環境変数を設定する
@@ -950,10 +950,30 @@ tsc・demo/非demo両方のビルド成功。Playwrightで、招待→共有シ�
 
 tsc・demo/非demo両方のビルド成功。Playwrightでデモモードのログアウトボタン非表示を確認済み。実際のログアウト動作(ボタン押下→確認ダイアログ→signOut→オンボーディング画面への遷移)は、この開発環境がSupabaseに接続できないため実機側での確認が必要。
 
+## サインインを必須にする(45回目)
+
+「サインイン前提で作成してくれない?」という指摘への対応。これまでは匿名サインインが裏で自動的に行われ、Google/Apple/LINE/メールでのアカウント連携は「あとから追加できる任意のおまけ」でしかなかった(40〜44回目)。これを撤廃し、Google/Apple/LINE/メールのいずれかでサインインしないとアプリを使えないようにした。
+
+**変更したこと**
+
+- `useAuth.ts`: セッションが無い場合に自動で匿名サインインしていた処理を削除。今はセッションが無ければ`userId`/`profile`ともnullのまま止まり、`OnboardingScreen`側がサインインを要求する
+- `OnboardingScreen.tsx`: 「account(連携 or アカウントなしで始める)→name」という2択構成をやめ、「account(サインイン、必須)→name」にした。`signInWithOAuth`/`signInWithIdToken`/OTPはいずれも「既存アカウントならログイン、無ければ新規作成」を自動でやってくれるため、以前あった「既にアカウントをお持ちの方はこちら」という新規/復帰の切り替えUIも不要になり、画面がシンプルになった
+- 設定画面の「アカウントを保護する」は、常に既にサインイン済みである前提に合わせて「ログイン方法を追加する」に文言変更(バックアップの入り口を増やす位置づけに変更。データ消失を防ぐための唯一の手段、という前提ではなくなったため)
+
+**影響・注意点**
+
+- 招待リンクを受け取った友達も、グループに入る前にまずGoogle/Apple/LINE/メールのいずれかでサインインする必要がある(以前より一手間増える)。39回目で作った「参加前でも記録できる」機能(招待中の相手を`from_invite`/`to_invite`で扱う仕組み)自体は今回変更していないので、そちらは引き続き使える
+- Apple・LINEは、オーナー側の外部登録(40回目の「⚠️ 使えるようにするには」参照)が終わるまで、ボタンを押しても失敗する。今すぐ全員が使えるのはGoogleとメールのみ
+- オーナー自身の今の(匿名で始まった)アカウントはローカルに保存済みのセッションがそのまま使われ続けるため、影響を受けない。この変更は「セッションが全く無い」場合(新規インストール・ログアウト後)にだけ効く
+
+`hooks/useAuth.ts`・`screens/OnboardingScreen.tsx`・`i18n/strings.ts`・`README.md`(セットアップ手順)を変更。
+
+tsc・demo/非demo両方のビルド成功。demo/非demoともOnboardingScreen自体の分岐ロジックを見直したのみで新規UIパーツは無いため、Playwrightでの追加のスクリーンショット確認は省略(44回目までの画面と見た目は変わらない)。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え
-- `src/hooks/useAuth.ts` — 匿名サインイン+表示名(プロフィール)の管理
+- `src/hooks/useAuth.ts` — Google/Apple/LINE/メールでのサインイン(必須)+表示名(プロフィール)の管理
 - `src/hooks/useGroups.ts` — 自分が参加しているグループの一覧・作成・招待コード参加
 - `src/hooks/useGroupData.ts` — グループ内のメンバー・記録の取得、追加・精算・削除、リアルタイム同期
 - `src/lib/balances.ts` — 相手×通貨ごとの残高計算(Web版プロトタイプと同じロジック)
@@ -986,5 +1006,5 @@ eas build --platform all --profile production
 - **Expo/EASアカウント**(無料)— `eas login` してから `eas build` を実行
 - **Apple Developer Program**(年額$99)+ **Google Play Console**(買い切り$25)のアカウント作成
 - **アプリアイコンの本番差し替え**: `assets/icon.png`等は`scripts/generate_icons.py`で生成したプレースホルダー(コーラル×バイオレットのグラデーションに⇄マーク)。正式なブランドアイコンができたら差し替える
-- プライバシーポリシー・利用規約(`docs/legal/`に会社事業用の雛形があるが、kashikari用に内容を書き換える必要がある。特に「匿名認証」「グループ内で他メンバーの表示名・記録が見える」という仕様は明記した方がよい)
+- プライバシーポリシー・利用規約(`docs/legal/`に会社事業用の雛形があるが、kashikari用に内容を書き換える必要がある。特に「Google/Apple/LINE/メールでのサインインが必須」「グループ内で他メンバーの表示名・記録が見える」という仕様は明記した方がよい)
 - `eas submit`(または手動でのXcode/Android Studioビルド)で実際にストアへ提出

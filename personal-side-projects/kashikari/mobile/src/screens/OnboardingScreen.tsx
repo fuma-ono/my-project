@@ -9,11 +9,16 @@ import PrimaryButton from '../components/PrimaryButton';
 import { useT } from '../i18n';
 import { colors, fonts } from '../theme';
 
-// 「最初のkashikariページの後、サインインページに移り、その後名前を
-// 登録する画面に」という指摘への対応。以前は1画面に名前入力と
-// アカウント連携を両方詰め込んでいたが、見た目も動線も分かりにくいため
-// account(連携するorアカウントなしで始める)→name(名前・アイコン登録)
-// の2画面(ウィザード)に分けた。
+// 「サインイン前提で作成してくれない?」という指摘への対応。以前は
+// 匿名サインインが裏で自動的に済んでおり、Google/Apple/LINE/メールでの
+// 連携は「あとから追加できる任意のおまけ」でしかなかった。今は
+// useAuth側で匿名サインインを撤廃し、ここが本当の意味での必須の
+// サインイン画面になる(スキップする手段は無い)。
+// account(サインイン、必須)→name(名前・アイコン登録)の2画面構成。
+// signInWithOAuth/signInWithIdToken/OTPはいずれも「既存アカウントなら
+// ログイン、無ければ新規作成」を自動でやってくれるため、新規登録用と
+// 復帰用の画面を分ける必要が無くなり、以前あった「既にアカウントを
+// お持ちの方はこちら」の切り替えも不要になった。
 type Step = 'account' | 'name';
 
 export default function OnboardingScreen({
@@ -21,9 +26,7 @@ export default function OnboardingScreen({
   authError,
 }: {
   onSubmit: (name: string, avatarEmoji: string | null) => Promise<{ error: string | null }>;
-  // 匿名サインイン自体が失敗している場合のエラー(例: Supabase側で
-  // Anonymous Sign-Insが無効になっている)。以前は「はじめる」を押すまで
-  // 一切表示されず、ユーザーが原因不明のまま「未認証です」に遭遇していた。
+  // プロフィール取得など、サインイン後に起きたエラー(通信エラー等)。
   authError?: string | null;
 }) {
   const t = useT();
@@ -33,19 +36,7 @@ export default function OnboardingScreen({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  // 「機種変更・再インストールでアカウントを失う」問題への対応。以前
-  // ログイン方法を追加したことがある人は、新規登録フォームの代わりに
-  // ここからサインインし直せる(成功すると、useAuth側のセッション監視が
-  // 自動的にプロフィールを読み込み、この画面自体が自動的に切り替わる)。
-  const [showSignIn, setShowSignIn] = useState(false);
   const [signInNote, setSignInNote] = useState<string | null>(null);
-  // 「アカウント保護は設定の奥に置くのではなく、サインイン(初回登録)の
-  // 時点で紐づけたい」という要望への対応。裏側では既にuseAuth.bootstrap
-  // で匿名サインインが済んでいるため、名前を入力する前でも
-  // Google/Apple/LINE/メールを紐づけられる。連携に成功したら、そのまま
-  // 名前登録ステップへ自動で進める(linkNoteは名前ステップ側に持ち越して
-  // 表示する)。
-  const [linkNote, setLinkNote] = useState<string | null>(null);
 
   const submit = async () => {
     setSubmitting(true);
@@ -67,44 +58,31 @@ export default function OnboardingScreen({
           <View style={styles.authErrorBox}>
             <Text style={styles.authErrorTitle}>{t.onboarding.signInFailedTitle}</Text>
             <Text style={styles.authErrorBody}>{authError}</Text>
-            <Text style={styles.authErrorHint}>{t.onboarding.signInFailedHint}</Text>
           </View>
         )}
 
         {step === 'account' ? (
-          showSignIn ? (
-            <>
-              <Text style={styles.label}>{t.authMethods.signInTitle}</Text>
-              <Text style={styles.signInDescription}>{t.authMethods.signInDescription}</Text>
-              <AuthMethods mode="signin" onDone={setSignInNote} />
-              {signInNote && <Text style={styles.signInNote}>{signInNote}</Text>}
-              <Pressable onPress={() => setShowSignIn(false)} style={styles.switchLink}>
-                <Text style={styles.switchLinkText}>{t.authMethods.switchToSignUp}</Text>
-              </Pressable>
-            </>
-          ) : (
-            <>
-              <Text style={styles.label}>{t.authMethods.protectTitle}</Text>
-              <Text style={styles.signInDescription}>{t.onboarding.accountStepDescription}</Text>
-              <AuthMethods
-                mode="link"
-                onDone={(message) => {
-                  setLinkNote(message);
-                  setStep('name');
-                }}
-              />
-              <Pressable onPress={() => setStep('name')} style={styles.skipButton}>
-                <Text style={styles.skipButtonText}>{t.onboarding.skipToName}</Text>
-              </Pressable>
-              <Pressable onPress={() => setShowSignIn(true)} style={styles.switchLink}>
-                <Text style={styles.switchLinkText}>{t.authMethods.switchToSignIn}</Text>
-              </Pressable>
-            </>
-          )
+          <>
+            <Text style={styles.label}>{t.onboarding.accountStepTitle}</Text>
+            <Text style={styles.signInDescription}>{t.onboarding.accountStepDescription}</Text>
+            <AuthMethods
+              mode="signin"
+              onDone={(message) => {
+                setSignInNote(message);
+                // 名前が未登録(=新規サインアップ)の場合はuseAuth側で
+                // profileがnullのままなので、App.tsx側は自動的にこの
+                // コンポーネントをnameステップの状態に保つ…わけではなく、
+                // ここは同じマウントを維持したままなので、明示的に
+                // 次のステップへ進める。既存アカウントで名前登録済みの
+                // 場合はApp.tsx側がprofile非nullを検知してこの画面自体を
+                // 抜けるため、この行は実行されても実害は無い。
+                setStep('name');
+              }}
+            />
+            {signInNote && <Text style={styles.signInNote}>{signInNote}</Text>}
+          </>
         ) : (
           <>
-            {linkNote && <Text style={styles.signInNote}>{linkNote}</Text>}
-
             <Text style={styles.label}>{t.onboarding.nameLabel}</Text>
             <TextInput
               value={name}
@@ -192,11 +170,7 @@ const styles = StyleSheet.create({
   avatarRowText: { ...fonts.bodyMedium, fontSize: 14, color: colors.ink, flexShrink: 1 },
   error: { color: colors.danger, ...fonts.body, fontSize: 13, marginTop: 8 },
   signInDescription: { ...fonts.body, fontSize: 13, color: colors.muted, lineHeight: 19, marginBottom: 14 },
-  signInNote: { ...fonts.bodyMedium, fontSize: 13, color: colors.positive, marginBottom: 16 },
-  switchLink: { marginTop: 16, alignSelf: 'flex-start' },
-  switchLinkText: { ...fonts.bodySemiBold, fontSize: 13.5, color: colors.accent },
-  skipButton: { marginTop: 14, alignItems: 'center', paddingVertical: 4 },
-  skipButtonText: { ...fonts.bodyMedium, fontSize: 13.5, color: colors.muted, textDecorationLine: 'underline' },
+  signInNote: { ...fonts.bodyMedium, fontSize: 13, color: colors.positive, marginTop: 16 },
   authErrorBox: {
     backgroundColor: colors.danger + '14',
     borderWidth: 1,
@@ -207,6 +181,5 @@ const styles = StyleSheet.create({
   },
   authErrorTitle: { ...fonts.bodySemiBold, fontSize: 14, color: colors.danger },
   authErrorBody: { ...fonts.body, fontSize: 13, color: colors.danger, marginTop: 4 },
-  authErrorHint: { ...fonts.body, fontSize: 12.5, color: colors.muted, marginTop: 8, lineHeight: 18 },
   button: { width: '100%' },
 });
