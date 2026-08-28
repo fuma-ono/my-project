@@ -83,9 +83,20 @@ export function signInWithLine(mode: AuthMode) {
 
 // Appleは公式パッケージのネイティブボタン経由(iOSのみ)。ブラウザの
 // 往復が要らないため、Google/LINEよりシンプルかつ確実。
+// 「なんでAppleが無い?」という指摘への対応。isAvailableAsync()自体が
+// 何らかの理由(ネイティブモジュールが見つからない等)で例外を投げると、
+// 呼び出し元(AuthMethods.tsx)はawaitしているだけなので、これまでは
+// catchされずにボタンがただ静かに出ない状態になっていた(エラーの手掛かりが
+// 一切残らない)。try/catchで確実にfalseへ倒し、開発中に原因を追えるよう
+// console.warnも残す。
 export async function isAppleSignInAvailable(): Promise<boolean> {
   if (Platform.OS !== 'ios') return false;
-  return AppleAuthentication.isAvailableAsync();
+  try {
+    return await AppleAuthentication.isAvailableAsync();
+  } catch (e) {
+    console.warn('[socialAuth] isAppleSignInAvailable failed:', e);
+    return false;
+  }
 }
 
 export async function signInWithApple(mode: AuthMode): Promise<{ error: string | null }> {
