@@ -124,22 +124,28 @@ Deno.serve(async (req) => {
     const channelSecret = Deno.env.get('LINE_CHANNEL_SECRET');
     if (!channelId || !channelSecret) return fail('server not configured (missing LINE secrets)');
 
+    const bodyParams = new URLSearchParams();
+    bodyParams.set('grant_type', 'authorization_code');
+    bodyParams.set('code', code);
+    bodyParams.set('redirect_uri', CALLBACK_URL);
+    bodyParams.set('client_id', channelId);
+    bodyParams.set('client_secret', channelSecret);
+
     const tokenRes = await fetch(LINE_TOKEN_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: CALLBACK_URL,
-        client_id: channelId,
-        client_secret: channelSecret,
-      }),
+      body: bodyParams.toString(),
     });
     if (!tokenRes.ok) {
       // 「400としか分からない」ではデバッグできないため、LINE側が返してくる
       // 実際のエラー内容(invalid_client等)をそのままアプリの画面まで返す。
+      // 一時的な診断用に、client_id/secretが実際に読めていた長さも一緒に返す
+      // (値そのものは含めない)。原因が分かったら消してよい。
       const bodyText = await tokenRes.text();
-      return fail(`line token exchange failed (${tokenRes.status}): ${bodyText.slice(0, 300)}`);
+      return fail(
+        `line token exchange failed (${tokenRes.status}): ${bodyText.slice(0, 300)} ` +
+          `[debug: channelId.len=${channelId.length} channelSecret.len=${channelSecret.length} redirect_uri=${CALLBACK_URL}]`
+      );
     }
     const tokenBody = (await tokenRes.json()) as { id_token?: string };
     if (!tokenBody.id_token) return fail('line response missing id_token');
