@@ -5,7 +5,7 @@
 // 本物のログイン方法を後付けする」(=データは失わない)ことができる。
 //
 // 実装方針:
-// - Google/Facebook: Supabaseのブラウザ経由OAuth(signInWithOAuth/
+// - Google: Supabaseのブラウザ経由OAuth(signInWithOAuth/
 //   linkIdentity)。Expo Go上でも動く(expo-auth-sessionのmakeRedirectUriが、
 //   Expo Go内では自動的にexp://の一時URLを、スタンドアロンビルドでは
 //   kashikari://を使うよう出し分けてくれるため)。
@@ -52,10 +52,9 @@ WebBrowser.maybeCompleteAuthSession();
 // 'apple'はGoogleとは別経路(ネイティブSign in with Apple、下記
 // signInWithApple参照)を主に使うが、linkIdentityにはApple用の口が
 // 無いため、そのケースだけこのブラウザ経由OAuthにフォールバックする。
-// 'facebook'はSupabaseの組み込みプロバイダーなので、Googleと
-// 全く同じブラウザ経由OAuthで動く。LINEはSupabaseを経由しない
-// 別実装(下記signInWithLine参照)のため、ここには含めない。
-export type OAuthProvider = 'google' | 'apple' | 'facebook';
+// LINEはSupabaseを経由しない別実装(下記signInWithLine参照)のため、
+// ここには含めない。
+export type OAuthProvider = 'google' | 'apple';
 // 「今の(匿名の)アカウントに後付けする」か、「(別の端末等で)本来の
 // アカウントとしてサインインし直す」かで、呼ぶSupabaseのAPIが違う。
 export type AuthMode = 'link' | 'signin';
@@ -146,10 +145,6 @@ export async function signInWithLine(mode: AuthMode): Promise<{ error: string | 
   // 弾かれる。
   const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'email' });
   return { error: error?.message ?? null };
-}
-
-export function signInWithFacebook(mode: AuthMode) {
-  return runOAuthFlow('facebook', mode);
 }
 
 // Appleは公式パッケージのネイティブボタン経由(iOSのみ)。ブラウザの

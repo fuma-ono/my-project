@@ -1083,6 +1083,18 @@ Supabaseの「カスタムOIDCプロバイダー」経由のLINEログインが�
 
 tsc --noEmit・demo/非demo両方のビルド成功。Edge Function自体はDenoランタイム向けのコードで、この開発環境にDenoが無くネットワークもSupabase/Denoに繋がらないため、実際のデプロイ・動作確認はできていない。オーナー側でのデプロイ後、実機での動作確認が必要。
 
+## Facebookログインを削除(58回目)
+
+「Facebookログインはもう要らない」という要望への対応。51回目で追加したFacebookログイン
+ボタンを削除した。Supabaseダッシュボード側の`Authentication > Providers > Facebook`は
+そのまま残っていても実害はないが、使わなくなったので無効化・削除してもよい。
+
+`lib/socialAuth.ts`(`signInWithFacebook`・`OAuthProvider`の`'facebook'`を削除)・
+`components/AuthMethods.tsx`(Facebookボタンを削除)・`i18n/strings.ts`
+(`facebookButton`を削除)を変更。
+
+tsc --noEmit clean。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え
