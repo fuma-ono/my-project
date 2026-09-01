@@ -1183,6 +1183,16 @@ tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightで通知
 
 tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightで未読マークの表示→通知ページを開くと消えることまで確認済み。
 
+## フォアグラウンド時もプッシュ通知のバナーを表示(64回目)
+
+**63回目の結論を訂正**: 「iOS向けの配信にはAPNsプッシュキーの設定(Apple Developer Program登録)が必須」と書いたが、これは誤りだった。実機でオーナーに再確認してもらったところ、**アプリを閉じている時は催促・記録どちらの通知も正しく届いており**、問題は「アプリを開いている(フォアグラウンド)間だけバナーが出ない」ことだと判明した。
+
+原因はこのアプリのコード側にあった。`expo-notifications`の`setNotificationHandler`(`shouldShowBanner: true`)でOSにフォアグラウンド表示を許可するよう設定してはいたが、実機(Expo Go)ではこの設定が効かずバナーが出ないことがある(既知の事象。参考: [Push notifications troubleshooting and FAQ](https://docs.expo.dev/push-notifications/faq/))。OS側の挙動に頼るのをやめ、`Notifications.addNotificationReceivedListener`(アプリが起動中に通知を受け取ったことを検知するリスナー)を使って、**アプリ側で自前のバナー**(`NotificationBanner`、画面上部に4.5秒表示、タップでその通知のグループを開く)を出すように変更した。アプリを閉じている時の配信(OSが直接表示するので影響を受けない)には変更はない。
+
+新規: `src/components/NotificationBanner.tsx`。変更: `src/hooks/usePushNotifications.ts`(`addNotificationReceivedListener`追加)・`App.tsx`を変更。
+
+tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightでconsole errorが出ないことを確認済み(バナー自体の表示確認は実機でのプッシュ通知受信が必要なため、オーナー側での確認が必要)。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え

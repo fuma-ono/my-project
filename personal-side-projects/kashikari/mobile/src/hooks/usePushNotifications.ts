@@ -5,6 +5,8 @@ import { Platform } from 'react-native';
 import { useLanguage } from '../i18n';
 import { extractGroupIdFromNotification, registerForPushNotifications } from '../lib/pushNotifications';
 
+export type ForegroundNotification = { title: string; body: string; groupId: string | null };
+
 // サインイン中(userIdがある)ことを条件に、この端末のプッシュ通知
 // トークンを登録する。言語設定(lang)が変わったら通知文言もそちらに
 // 合わせたいので、langが変わるたびにも登録し直す(upsert_push_tokenは
@@ -17,6 +19,7 @@ import { extractGroupIdFromNotification, registerForPushNotifications } from '..
 export function usePushNotifications(userId: string | null) {
   const { lang } = useLanguage();
   const [pendingGroupId, setPendingGroupId] = useState<string | null>(null);
+  const [foregroundNotification, setForegroundNotification] = useState<ForegroundNotification | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -42,5 +45,27 @@ export function usePushNotifications(userId: string | null) {
     return () => sub.remove();
   }, []);
 
-  return { pendingGroupId, clearPendingGroupId: () => setPendingGroupId(null) };
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    // アプリを開いている間(フォアグラウンド)に通知を受け取った場合。
+    // 実機で確認したところ、setNotificationHandler(shouldShowBanner:
+    // true)を設定していても、Expo Go実行中はOSの通知バナー自体が
+    // フォアグラウンド時に表示されないことがある(アプリを閉じている
+    // 時は問題なく届く)。OS側の挙動に頼らず、自前でバナー
+    // (NotificationBanner、App.tsx参照)を出すことで確実に気づける
+    // ようにする。
+    const sub = Notifications.addNotificationReceivedListener((notification) => {
+      const { title, body, data } = notification.request.content;
+      const groupId = typeof data?.group_id === 'string' ? data.group_id : null;
+      setForegroundNotification({ title: title ?? '', body: body ?? '', groupId });
+    });
+    return () => sub.remove();
+  }, []);
+
+  return {
+    pendingGroupId,
+    clearPendingGroupId: () => setPendingGroupId(null),
+    foregroundNotification,
+    clearForegroundNotification: () => setForegroundNotification(null),
+  };
 }

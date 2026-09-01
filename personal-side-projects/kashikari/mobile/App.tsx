@@ -10,6 +10,7 @@ import { Linking } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 
 import DemoApp from './src/demo/DemoApp';
+import NotificationBanner from './src/components/NotificationBanner';
 import GroupScreen from './src/screens/GroupScreen';
 import GroupsScreen from './src/screens/GroupsScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
@@ -69,7 +70,8 @@ function AppInner() {
   const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup, updateGroupIcon } = useGroups(
     DEMO_MODE ? null : userId
   );
-  const { pendingGroupId, clearPendingGroupId } = usePushNotifications(DEMO_MODE ? null : userId);
+  const { pendingGroupId, clearPendingGroupId, foregroundNotification, clearForegroundNotification } =
+    usePushNotifications(DEMO_MODE ? null : userId);
   const {
     items: notificationItems,
     loading: notificationsLoading,
@@ -125,6 +127,18 @@ function AppInner() {
   const openNotifications = () => {
     setScreen({ name: 'notifications', returnTo: screen });
     markNotificationsSeen();
+  };
+
+  // フォアグラウンドで届いた通知バナー(NotificationBanner)をタップ
+  // した時。通知タップ経由(pendingGroupId)と違い、こちらは既に
+  // groupsが読み込み済みの状態でしか出ないバナーなので、その場で
+  // 見つからなければ静かに諦める(groupsの読み込み待ちは行わない)。
+  const openForegroundNotificationGroup = () => {
+    const groupId = foregroundNotification?.groupId;
+    if (groupId) {
+      const group = groups.find((g) => g.id === groupId);
+      if (group) setScreen({ name: 'group', group });
+    }
   };
 
   if (!fontsLoaded || !minSplashDone || (!DEMO_MODE && authLoading)) {
@@ -216,6 +230,15 @@ function AppInner() {
           onRefresh={refreshNotifications}
         />
       )}
+      {/* 通知ページを開いている間は、リアルタイムで一覧に反映されるので
+          バナーは出さない(二重に知らせる必要が無いため)。 */}
+      <NotificationBanner
+        title={foregroundNotification?.title ?? ''}
+        body={foregroundNotification?.body ?? ''}
+        visible={!!foregroundNotification && screen.name !== 'notifications'}
+        onPress={openForegroundNotificationGroup}
+        onHide={clearForegroundNotification}
+      />
       <StatusBar style="dark" />
     </>
   );
