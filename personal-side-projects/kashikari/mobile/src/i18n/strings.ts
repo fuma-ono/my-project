@@ -100,8 +100,9 @@ export const ja = {
       `「${groupName}」の記録は他のメンバーの画面には残りますが、あなたはこのグループのデータにアクセスできなくなります。`,
     leaveConfirmButton: '抜ける',
     leaveFailedTitle: '抜けられませんでした',
-    notificationsComingSoon: '通知機能は準備中です。もうしばらくお待ちください。',
     inviteSuccessToast: (name: string) => `${name}を招待しました`,
+    remindSentToast: '通知を送りました',
+    remindFailedToast: '通知を送れませんでした(相手が通知を有効にしていない可能性があります)',
     // 「共有するでLINEやメールへのリンクを送れるようにしてほしい」への対応。
     // OS標準の共有シート一択だとLINE・メールが選択肢の奥に埋もれるため、
     // この2つを専用ボタンとして手前に出す(ShareChannelSheet.tsx)。
@@ -151,10 +152,6 @@ export const ja = {
     toneNormal: '普通',
     toneFunny: '面白く',
     toneStrong: '強め',
-    gentleMessage: (amount: string) => `この前の精算、まだだったので時間のあるときお願いします🙏\n\n金額：${amount}`,
-    normalMessage: (amount: string) => `この前の分で${amount}お願い!`,
-    funnyMessage: (amount: string) => `あなたの${amount}がまだ旅を続けています💸\n\nそろそろ帰してあげてください。`,
-    strongMessage: (amount: string) => `すみません、${amount}の精算をお願いします!`,
   },
   netSummary: {
     heading: 'あなたの残高',
@@ -401,8 +398,9 @@ export const en: Strings = {
       `Your records in "${groupName}" will stay visible to other members, but you'll lose access to this group's data.`,
     leaveConfirmButton: 'Leave',
     leaveFailedTitle: "Couldn't leave the group",
-    notificationsComingSoon: 'Notifications are coming soon. Hang tight!',
     inviteSuccessToast: (name: string) => `Invited ${name}`,
+    remindSentToast: 'Notification sent',
+    remindFailedToast: "Couldn't send the notification (the other person may not have notifications enabled)",
     shareSheetTitle: 'Send invite link',
     shareSheetLine: 'Send via LINE',
     shareSheetEmail: 'Send via email',
@@ -449,10 +447,6 @@ export const en: Strings = {
     toneNormal: 'Normal',
     toneFunny: 'Funny',
     toneStrong: 'Firm',
-    gentleMessage: (amount: string) => `Hey, no rush, but whenever you get a chance 🙏\n\nAmount: ${amount}`,
-    normalMessage: (amount: string) => `Quick one — ${amount} from before, whenever works!`,
-    funnyMessage: (amount: string) => `Your ${amount} has been on quite a journey 💸\n\nTime to bring it home?`,
-    strongMessage: (amount: string) => `Hi, could you settle up the ${amount}? Thanks.`,
   },
   netSummary: {
     heading: 'Your balance',

@@ -68,7 +68,10 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
   const [tab, setTab] = useState<Tab>('balance');
   const [showSettled, setShowSettled] = useState(false);
   const [unpaidModalOpen, setUnpaidModalOpen] = useState(false);
-  const [notifToastVisible, setNotifToastVisible] = useState(false);
+  // 催促(openRemindPrompt)の結果、実際にプッシュ通知を送れたかどうかを
+  // 表示するトースト(60回目でプッシュ通知を追加し、催促がOS共有シート
+  // 経由のテキストからプッシュ通知に一本化されたのに合わせて追加)。
+  const [remindToastMessage, setRemindToastMessage] = useState<string | null>(null);
   // 「招待成功後は『けんたを招待しました』のような完了表示を出す」という
   // 指摘への対応。メッセージ自体を都度差し替えるため、通知トーストとは
   // 別枠のstateにしている。
@@ -354,9 +357,6 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
               <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
             </Pressable>
             <View style={styles.headerRightRow}>
-              <Pressable onPress={() => setNotifToastVisible(true)} hitSlop={10}>
-                <Ionicons name="notifications-outline" size={22} color="#fff" />
-              </Pressable>
               <Pressable onPress={openGroupMenu} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
                 <Ionicons name="settings-outline" size={22} color="#fff" />
               </Pressable>
@@ -478,10 +478,12 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
             nameOf={nameOf}
             emojiOf={emojiOf}
             meId={meId}
+            groupId={group.id}
             onSettle={() => settlePair(item.type, item.debtor, item.creditor, item.currency)}
             onMarkPaid={() => markPaid(item.debtor, item.creditor, item.currency)}
             onConfirmReceived={() => confirmReceived(item.debtor, item.creditor, item.currency)}
             onRemindSent={() => logEvent('reminder_sent', { userId: meId, groupId: group.id })}
+            onRemindResult={(sent) => setRemindToastMessage(sent ? t.group.remindSentToast : t.group.remindFailedToast)}
           />
         )}
         ItemSeparatorComponent={() => <View style={styles.hairline} />}
@@ -566,12 +568,14 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
           rows={receivingRows}
           nameOf={nameOf}
           emojiOf={emojiOf}
+          groupId={group.id}
           onConfirmReceived={(row) => confirmReceived(row.debtor, row.creditor, row.currency)}
           onRemindSent={() => logEvent('reminder_sent', { userId: meId, groupId: group.id })}
+          onRemindResult={(sent) => setRemindToastMessage(sent ? t.group.remindSentToast : t.group.remindFailedToast)}
           onClose={() => setUnpaidModalOpen(false)}
         />
       )}
-      <Toast message={t.group.notificationsComingSoon} visible={notifToastVisible} onHide={() => setNotifToastVisible(false)} />
+      <Toast message={remindToastMessage ?? ''} visible={remindToastMessage !== null} onHide={() => setRemindToastMessage(null)} />
       <Toast message={inviteToastMessage ?? ''} visible={inviteToastMessage !== null} onHide={() => setInviteToastMessage(null)} />
       <Toast message={t.group.fabNeedMemberHint} visible={fabHintToastVisible} onHide={() => setFabHintToastVisible(false)} />
     </View>

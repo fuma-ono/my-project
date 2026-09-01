@@ -148,7 +148,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       });
       if (error) return { error: error.message };
       logEvent('entry_created', { userId, groupId });
-      notifyGroup({
+      void notifyGroup({
         groupId,
         kind: 'entry_created',
         recipientIds: members.filter((m) => m.id !== userId).map((m) => m.id),
@@ -207,7 +207,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       // 「貸し借り登録数」の集計と揃うよう作られた件数分だけ記録する。
       for (let i = 0; i < rows.length; i++) logEvent('entry_created', { userId, groupId });
       // 通知は1回の操作につき1回でよい(rows.length件分送る必要はない)。
-      notifyGroup({
+      void notifyGroup({
         groupId,
         kind: 'entry_created',
         recipientIds: members.filter((m) => m.id !== userId).map((m) => m.id),
@@ -295,7 +295,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
         // 呼び出し元(GroupScreen)は常にmarkPaid(debtor, creditor, ...)の
         // 順で呼ぶ規約になっている(支払う側=debtor=自分が押す操作なので、
         // 通知したい相手は必ずb=creditor)。
-        if (groupId) notifyGroup({ groupId, kind: 'marked_paid', recipientIds: [b] });
+        if (groupId) void notifyGroup({ groupId, kind: 'marked_paid', recipientIds: [b] });
         await loadAll();
       }
       return { error: error?.message ?? null };
@@ -326,7 +326,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
         // 呼び出し元(GroupScreen)は常にconfirmReceived(debtor, creditor,
         // ...)の順で呼ぶ規約になっている(受け取る側=creditor=自分が
         // 押す操作なので、通知したい相手は必ずa=debtor)。
-        if (groupId) notifyGroup({ groupId, kind: 'marked_confirmed', recipientIds: [a] });
+        if (groupId) void notifyGroup({ groupId, kind: 'marked_confirmed', recipientIds: [a] });
         await loadAll();
       }
       return { error: error?.message ?? null };

@@ -13,10 +13,12 @@ type Props = {
   nameOf: (id: string) => string;
   emojiOf: (id: string) => string | null;
   meId: string | null;
+  groupId: string | null; // 催促のプッシュ通知先を絞り込むのに必要。デモモードではnull
   onSettle: () => void; // 頼みごと用(支払う/受け取るの概念が無いため一括confirmed)
   onMarkPaid: () => void; // お金・支払う側:「支払った」
   onConfirmReceived: () => void; // お金・受け取る側:「受け取った」
-  onRemindSent: () => void; // 催促の計測用
+  onRemindSent: () => void; // 催促の計測用(トーンを選んだ時点で呼ぶ)
+  onRemindResult: (sent: boolean) => void; // 催促の通知が実際に届いたかどうかの結果表示用
 };
 
 // Splitwiseに倣い、「あなたが受け取る=緑」「あなたが払う=赤」という意味を持つ
@@ -34,7 +36,18 @@ type Props = {
 // 詰め込むと長い名前・長い通貨表記(例: "$20.00 USD")で名前が
 // "は…"のように潰れてしまったため、上段(名前/文章+金額)と
 // 下段(アクションボタン)の2段組みに分けている。
-export default function BalanceCard({ row, nameOf, emojiOf, meId, onSettle, onMarkPaid, onConfirmReceived, onRemindSent }: Props) {
+export default function BalanceCard({
+  row,
+  nameOf,
+  emojiOf,
+  meId,
+  groupId,
+  onSettle,
+  onMarkPaid,
+  onConfirmReceived,
+  onRemindSent,
+  onRemindResult,
+}: Props) {
   const t = useT();
   // 残高画面は金額確認のための画面のため、頼みごと(金額を持たない)でも
   // 「1件」のような件数をここに出さない(件数確認は台帳側の役割)。
@@ -59,7 +72,8 @@ export default function BalanceCard({ row, nameOf, emojiOf, meId, onSettle, onMa
   const canMarkPaid = iOwe && isMoney && row.status === 'unpaid';
   const canConfirmReceived = iAmOwed && isMoney && row.status === 'paid';
   const awaitingConfirm = isMoney && row.status === 'paid';
-  const remind = () => openRemindPrompt(t, amountLabel, onRemindSent);
+  const remind = () =>
+    openRemindPrompt(t, { groupId, debtorId: row.debtor, amount: row.amount, currency: row.currency }, onRemindSent, onRemindResult);
 
   const secondaryLabel = awaitingConfirm
     ? t.balanceCard.awaitingConfirm

@@ -1,7 +1,7 @@
 // プッシュ通知(Expoのプッシュ通知サービス)の送信を担うEdge Function。
 // 「誰かが記録してもアプリを開くまで気づけない」への対応。
 //
-// 呼び出し元(アプリ)は、entry作成・支払い報告・受取確認のたびに、
+// 呼び出し元(アプリ)は、entry作成・支払い報告・受取確認・催促のたびに、
 // group_id・kind(通知の種類)・recipient_ids(通知したい相手のID)
 // だけを渡す。実際の通知文言(誰が・どのグループで)は、なりすまし
 // 防止のためクライアントの自己申告を信用せず、この関数がSupabaseの
@@ -17,8 +17,11 @@
 // 相手のトークンを読む部分だけservice_role権限のクライアントに切り替える。
 //
 // 通知はベストエフォート: 失敗してもアプリ側の操作(entry作成等)自体は
-// 既に成功しているため、この関数はほぼ常に200 okを返す(失敗の詳細は
-// ログにのみ残す)。
+// 既に成功しているため、この関数はほぼ常に200を返す(失敗の詳細はログ
+// にのみ残す)。ただし「催促する」(kind:'remind')だけは、送信できたか
+// どうかを呼び出し元(アプリ)がユーザーに表示するため、レスポンスボディ
+// を`{ sent: boolean }`のJSONにしている(トークンが見つからず実際には
+// 送っていない場合はsent:false)。
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -32,7 +35,8 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-type PushKind = 'entry_created' | 'marked_paid' | 'marked_confirmed';
+type PushKind = 'entry_created' | 'marked_paid' | 'marked_confirmed' | 'remind';
+type RemindTone = 'gentle' | 'normal' | 'funny' | 'strong';
 
 type RequestBody = {
   group_id: string;
@@ -41,7 +45,12 @@ type RequestBody = {
   amount?: number | null;
   currency?: string | null;
   description?: string | null;
+  tone?: RemindTone | null;
 };
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+}
 
 // src/lib/currency.tsのformatMoneyと考え方は同じ(Deno側は別ランタイム
 // のため、小さいのでここに複製している)。
@@ -52,6 +61,35 @@ function formatMoney(amount: number, code: string | null | undefined): string {
     return c === 'JPY' ? formatted : `${formatted} ${c}`;
   } catch {
     return `¥${Math.round(amount).toLocaleString('ja-JP')}`;
+  }
+}
+
+// 「催促する」の文面。旧src/lib/remind.tsが持っていた4トーンの文面と
+// 同じ(共有シートでのテキスト送信をやめてプッシュ通知に一本化した際、
+// 文面の組み立てをここに移した)。誰から届いた通知か分かるよう、
+// 先頭にactorNameを付ける。
+function remindMessage(lang: 'ja' | 'en', tone: RemindTone, actorName: string, amountText: string): string {
+  if (lang === 'en') {
+    switch (tone) {
+      case 'gentle':
+        return `${actorName}: Hey, no rush, but whenever you get a chance 🙏\n\nAmount: ${amountText}`;
+      case 'normal':
+        return `${actorName}: Quick one — ${amountText} from before, whenever works!`;
+      case 'funny':
+        return `${actorName}: Your ${amountText} has been on quite a journey 💸\n\nTime to bring it home?`;
+      case 'strong':
+        return `${actorName}: Hi, could you settle up the ${amountText}? Thanks.`;
+    }
+  }
+  switch (tone) {
+    case 'gentle':
+      return `${actorName}: この前の精算、まだだったので時間のあるときお願いします🙏\n\n金額：${amountText}`;
+    case 'normal':
+      return `${actorName}: この前の分で${amountText}お願い!`;
+    case 'funny':
+      return `${actorName}: あなたの${amountText}がまだ旅を続けています💸\n\nそろそろ帰してあげてください。`;
+    case 'strong':
+      return `${actorName}: すみません、${amountText}の精算をお願いします!`;
   }
 }
 
@@ -77,6 +115,8 @@ function buildMessage(
         return { title: groupName, body: `${actorName} marked a payment as sent. Please confirm.` };
       case 'marked_confirmed':
         return { title: groupName, body: `${actorName} confirmed your payment.` };
+      case 'remind':
+        return { title: groupName, body: remindMessage('en', body.tone ?? 'normal', actorName, amountText ?? '') };
     }
   }
   switch (body.kind) {
@@ -93,6 +133,8 @@ function buildMessage(
       return { title: groupName, body: `${actorName}さんが支払ったと報告しました。確認をお願いします` };
     case 'marked_confirmed':
       return { title: groupName, body: `${actorName}さんへの支払いが確認されました` };
+    case 'remind':
+      return { title: groupName, body: remindMessage('ja', body.tone ?? 'normal', actorName, amountText ?? '') };
   }
 }
 
@@ -124,7 +166,7 @@ Deno.serve(async (req) => {
     ]);
     // groupRes.dataがnull = RLS的にこのグループが見えない(=メンバーで
     // ない)ということなので、静かに終了する。
-    if (!groupRes.data || !actorRes.data) return new Response('ok', { headers: CORS_HEADERS });
+    if (!groupRes.data || !actorRes.data) return jsonResponse({ sent: false });
 
     const groupName = groupRes.data.name as string;
     const actorName = actorRes.data.display_name as string;
@@ -138,14 +180,14 @@ Deno.serve(async (req) => {
     const validRecipientIds = (membersRes.data ?? [])
       .map((r) => r.user_id as string)
       .filter((id) => id !== userData.user.id);
-    if (validRecipientIds.length === 0) return new Response('ok', { headers: CORS_HEADERS });
+    if (validRecipientIds.length === 0) return jsonResponse({ sent: false });
 
     // ここから先はpush_tokensを読む必要がある(SELECTポリシーが無い
     // テーブルのため、service_role権限に切り替える)。
     const admin = createClient(supabaseUrl, serviceRoleKey);
     const tokensRes = await admin.from('push_tokens').select('token, lang').in('user_id', validRecipientIds);
     const tokens = tokensRes.data ?? [];
-    if (tokens.length === 0) return new Response('ok', { headers: CORS_HEADERS });
+    if (tokens.length === 0) return jsonResponse({ sent: false });
 
     const messages = tokens.map((row) => {
       const lang = row.lang === 'en' ? 'en' : 'ja';
@@ -169,10 +211,10 @@ Deno.serve(async (req) => {
       if (!res.ok) console.error('expo push send failed', res.status, await res.text());
     }
 
-    return new Response('ok', { headers: CORS_HEADERS });
+    return jsonResponse({ sent: true });
   } catch (e) {
     console.error('send-push failed', e);
     // ベストエフォートなので、失敗してもアプリ側には500を返さない。
-    return new Response('ok', { headers: CORS_HEADERS });
+    return jsonResponse({ sent: false });
   }
 });

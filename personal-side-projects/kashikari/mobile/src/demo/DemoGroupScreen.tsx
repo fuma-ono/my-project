@@ -48,7 +48,7 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
   const [shareSheetOpen, setShareSheetOpen] = useState(false);
   const [shareMessage, setShareMessage] = useState('');
   const [invites, setInvites] = useState<GroupInvite[]>([]);
-  const [notifToastVisible, setNotifToastVisible] = useState(false);
+  const [remindToastMessage, setRemindToastMessage] = useState<string | null>(null);
   const [inviteToastMessage, setInviteToastMessage] = useState<string | null>(null);
   const [fabHintToastVisible, setFabHintToastVisible] = useState(false);
   // 招待送信直後、InviteModalが実際に閉じ終わってから共有シートを
@@ -334,9 +334,6 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
               <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
             </Pressable>
             <View style={styles.headerRightRow}>
-              <Pressable onPress={() => setNotifToastVisible(true)} hitSlop={10}>
-                <Ionicons name="notifications-outline" size={22} color="#fff" />
-              </Pressable>
               <Pressable onPress={onOpenSettings} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
                 <Ionicons name="settings-outline" size={22} color="#fff" />
               </Pressable>
@@ -442,10 +439,12 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
               nameOf={nameOf}
               emojiOf={emojiOf}
               meId={meId}
+              groupId={null}
               onSettle={() => settlePair(item.type, item.debtor, item.creditor, item.currency)}
               onMarkPaid={() => markPaid(item.debtor, item.creditor, item.currency)}
               onConfirmReceived={() => confirmReceived(item.debtor, item.creditor, item.currency)}
               onRemindSent={() => {}}
+              onRemindResult={(sent) => setRemindToastMessage(sent ? t.group.remindSentToast : t.group.remindFailedToast)}
             />
           )}
           ItemSeparatorComponent={() => <View style={styles.hairline} />}
@@ -562,12 +561,14 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
         rows={receivingRows}
         nameOf={nameOf}
         emojiOf={emojiOf}
+        groupId={null}
         onConfirmReceived={(row) => confirmReceived(row.debtor, row.creditor, row.currency)}
         onRemindSent={() => {}}
+        onRemindResult={(sent) => setRemindToastMessage(sent ? t.group.remindSentToast : t.group.remindFailedToast)}
         onClose={() => setUnpaidModalOpen(false)}
       />
 
-      <Toast message={t.group.notificationsComingSoon} visible={notifToastVisible} onHide={() => setNotifToastVisible(false)} />
+      <Toast message={remindToastMessage ?? ''} visible={remindToastMessage !== null} onHide={() => setRemindToastMessage(null)} />
       <Toast message={inviteToastMessage ?? ''} visible={inviteToastMessage !== null} onHide={() => setInviteToastMessage(null)} />
       <Toast message={t.group.fabNeedMemberHint} visible={fabHintToastVisible} onHide={() => setFabHintToastVisible(false)} />
     </View>

@@ -27,7 +27,8 @@ import { Platform } from 'react-native';
 import type { Lang } from '../i18n';
 import { supabase } from './supabase';
 
-export type PushKind = 'entry_created' | 'marked_paid' | 'marked_confirmed';
+export type PushKind = 'entry_created' | 'marked_paid' | 'marked_confirmed' | 'remind';
+export type RemindTone = 'gentle' | 'normal' | 'funny' | 'strong';
 
 // フォアグラウンド中に通知を受け取ったときも、バナー表示・音を鳴らす
 // (デフォルトのままだとフォアグラウンドでは何も表示されない)。
@@ -100,20 +101,25 @@ export async function unregisterPushNotifications(): Promise<void> {
   }
 }
 
-// entry作成・支払い報告・受取確認のたびに呼ぶ。Edge Function
-// (send-push)の応答を待たず、失敗しても呼び出し元には伝えない
-// (通知はあくまで付加的な機能で、本体の操作を失敗扱いにしたくないため)。
-export function notifyGroup(input: {
+// entry作成・支払い報告・受取確認・催促のたびに呼ぶ。戻り値の`sent`は
+// 「実際に(1件以上の)プッシュ通知を送れたか」(相手が通知トークンを
+// 登録していない等の理由で送れなかった場合はfalse)。entry作成等の
+// 呼び出し元は結果を待たず・見ずに使ってよい(通知はあくまで付加的な
+// 機能で、本体の操作を失敗扱いにしたくないため)。「催促する」
+// (lib/remind.ts)だけは、送れたかどうかをユーザーに表示するため
+// この戻り値を使う。失敗時も例外は投げず、必ず{ sent: false }を返す。
+export async function notifyGroup(input: {
   groupId: string;
   kind: PushKind;
   recipientIds: string[];
   amount?: number | null;
   currency?: string | null;
   description?: string | null;
-}): void {
-  if (input.recipientIds.length === 0) return;
-  supabase.functions
-    .invoke('send-push', {
+  tone?: RemindTone | null;
+}): Promise<{ sent: boolean }> {
+  if (input.recipientIds.length === 0) return { sent: false };
+  try {
+    const { data, error } = await supabase.functions.invoke('send-push', {
       body: {
         group_id: input.groupId,
         kind: input.kind,
@@ -121,11 +127,14 @@ export function notifyGroup(input: {
         amount: input.amount ?? null,
         currency: input.currency ?? null,
         description: input.description ?? null,
+        tone: input.tone ?? null,
       },
-    })
-    .catch(() => {
-      // ベストエフォート。
     });
+    if (error || !data) return { sent: false };
+    return { sent: (data as { sent?: boolean }).sent === true };
+  } catch {
+    return { sent: false };
+  }
 }
 
 // 通知をタップして開かれたとき、送信側(send-push)が載せたdata.group_id

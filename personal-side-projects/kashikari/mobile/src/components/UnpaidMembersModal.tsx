@@ -13,8 +13,10 @@ type Props = {
   rows: BalanceRow[]; // 「受け取る」セクションと同じ行(=自分が受け取る側)だけを渡す
   nameOf: (id: string) => string;
   emojiOf: (id: string) => string | null;
+  groupId: string | null; // 催促のプッシュ通知先を絞り込むのに必要。デモモードではnull
   onConfirmReceived: (row: BalanceRow) => void;
-  onRemindSent: () => void;
+  onRemindSent: () => void; // 催促の計測用(トーンを選んだ時点で呼ぶ)
+  onRemindResult: (sent: boolean) => void; // 催促の通知が実際に届いたかどうかの結果表示用
   onClose: () => void;
 };
 
@@ -24,7 +26,17 @@ type Props = {
 // している(催促→支払い→完了、という導線のハブ)。行がstatus==='paid'
 // (相手が既に「支払った」を押した)になっていれば、催促するの代わりに
 // その場で「受け取った」を押して完了させられる。
-export default function UnpaidMembersModal({ visible, rows, nameOf, emojiOf, onConfirmReceived, onRemindSent, onClose }: Props) {
+export default function UnpaidMembersModal({
+  visible,
+  rows,
+  nameOf,
+  emojiOf,
+  groupId,
+  onConfirmReceived,
+  onRemindSent,
+  onRemindResult,
+  onClose,
+}: Props) {
   const t = useT();
 
   return (
@@ -63,7 +75,18 @@ export default function UnpaidMembersModal({ visible, rows, nameOf, emojiOf, onC
                         </Pressable>
                       )}
                       {isMoney && !awaitingConfirm && (
-                        <Pressable onPress={() => openRemindPrompt(t, amountLabel, onRemindSent)} hitSlop={8} style={styles.remindBtn}>
+                        <Pressable
+                          onPress={() =>
+                            openRemindPrompt(
+                              t,
+                              { groupId, debtorId: row.debtor, amount: row.amount, currency: row.currency },
+                              onRemindSent,
+                              onRemindResult
+                            )
+                          }
+                          hitSlop={8}
+                          style={styles.remindBtn}
+                        >
                           <Text style={styles.remindText}>{t.balanceCard.remind}</Text>
                         </Pressable>
                       )}

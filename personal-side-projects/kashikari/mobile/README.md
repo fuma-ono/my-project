@@ -1130,6 +1130,23 @@ tsc --noEmit clean。
 
 tsc --noEmit clean。demo/非demo両方のweb export成功。PlaywrightでどちらもWeb実行時にエラーが出ないことを確認済み(expo-notificationsの一部API・expo-deviceのisDeviceがWebでは非対応/常にtrueを返すため、Platform.OS==='web'でのガードが必要だった)。Edge Function自体・実機でのプッシュ通知の実際の着信確認は、この開発環境からはできないため、オーナー側での動作確認が必要。
 
+## 「催促する」をプッシュ通知に一本化・古い通知ベルを削除(61回目)
+
+60回目でプッシュ通知の仕組みができたので、2つ整理した。
+
+- **「催促する」ボタン**: 以前はOS標準の共有シート(`Share.share`)経由でLINE・メール等にトーン別の文面を貼る方式だったが、相手が誰か(debtor)は既に分かっているため、共有シートを開かず**直接プッシュ通知を送る**方式に変更した。通知文言(4トーン)はなりすまし防止のためEdge Function側(`send-push`)で組み立て、クライアントはトーンの選択肢だけを渡す。実際に送れたか(相手が通知トークンを未登録等で送れなかったか)をトースト表示するようにした
+- **グループ一覧・グループ詳細ヘッダーの通知ベルアイコン**: 実際のプッシュ通知ができる前に置いていた「通知機能は準備中です」というダミーのボタンで、本物の通知ができた今は紛らわしいだけなので削除した
+
+`supabase/functions/send-push/index.ts`(kind:'remind'追加、レスポンスを`{ sent: boolean }`のJSONに変更)・`src/lib/pushNotifications.ts`(notifyGroupが結果を返すように変更)・`src/lib/remind.ts`(Share.share→notifyGroup)・`src/components/BalanceCard.tsx`・`src/components/UnpaidMembersModal.tsx`(groupId・onRemindResultプロパティ追加)・`src/screens/GroupScreen.tsx`・`src/screens/GroupsScreen.tsx`・`src/demo/DemoGroupScreen.tsx`(通知ベル削除・催促の配線変更)・`src/i18n/strings.ts`を変更。
+
+**⚠️ 要オーナー作業**: Edge Functionを再デプロイしてください。
+
+```bash
+npx supabase functions deploy send-push
+```
+
+tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightでconsole errorが出ないことを確認済み(デモモードでの「催促する」タップまで確認。react-native-webの制約でAlert.alertの複数ボタン選択肢自体はWeb上では検証できないため、その先のトースト表示は実機での確認が必要)。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え
