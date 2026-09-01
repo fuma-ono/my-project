@@ -19,11 +19,7 @@
         "backgroundColor": "#ff6b4a",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
-      "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.RECORD_AUDIO"
-      ]
+      "permissions": ["android.permission.CAMERA", "android.permission.READ_MEDIA_IMAGES"]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -33,7 +29,8 @@
         "expo-image-picker",
         {
           "photosPermission": "レシートの写真を記録に添付するために使用します。",
-          "cameraPermission": "レシートを撮影して記録に添付するために使用します。"
+          "cameraPermission": "レシートを撮影して記録に添付するために使用します。",
+          "microphonePermission": false
         }
       ],
       "expo-apple-authentication",
