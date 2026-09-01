@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
 import { useT } from '../i18n';
+import { unregisterPushNotifications } from '../lib/pushNotifications';
 import { supabase } from '../lib/supabase';
 import type { Profile } from '../types';
 
@@ -78,6 +79,10 @@ export function useAuth() {
   }, [bootstrap, loadProfile]);
 
   const signOut = useCallback(async () => {
+    // この端末のプッシュ通知トークンの削除は、セッションが切れる(=RLS上
+    // 自分の行だと証明できなくなる)より前に行う必要があるため、
+    // signOut本体より先に呼ぶ。
+    await unregisterPushNotifications();
     await supabase.auth.signOut();
     // 以降の状態更新はonAuthStateChange(上のハンドラ)側で行われる。
   }, []);

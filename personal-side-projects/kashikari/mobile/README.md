@@ -1095,6 +1095,41 @@ tsc --noEmit・demo/非demo両方のビルド成功。Edge Function自体はDeno
 
 tsc --noEmit clean。
 
+## プッシュ通知を追加(60回目・要オーナー作業)
+
+「誰かが記録してもアプリを開くまで気づけない」への対応。仕組み:
+
+1. サインイン中の端末は、自分のExpoプッシュトークンを`push_tokens`テーブルに登録する(`upsert_push_token` RPC経由。サインアウト時は自分の端末の分だけ削除)
+2. 記録の追加・「支払った」報告・「受け取った」確認のタイミングで、アプリが新しいEdge Function `send-push` を呼ぶ
+3. `send-push`は、呼び出したユーザー自身の権限(RLS)で「本当にそのグループのメンバーか」「通知したい相手は本当にそのグループのメンバーか」を確認した上で、service_role権限で該当メンバーのプッシュトークンを引き、Expoのプッシュ送信API(`https://exp.host/--/api/v2/push/send`)経由で通知を送る。通知文言(誰が・どのグループで、日本語/英語どちらか)はクライアントの自己申告を使わず、DBの値からこの関数が組み立てる(なりすまし防止)
+4. 通知をタップすると、該当グループの画面を直接開く(`data.group_id`をApp.tsx側で見て遷移)
+
+通知はベストエフォート(結果を待たない・失敗してもアプリ本体の操作は成功のまま)。
+
+**⚠️ 使えるようにするには、オーナーが以下を行う必要があります**:
+
+1. `supabase/schema.sql`を再実行(`push_tokens`テーブル・`upsert_push_token`関数を追加)
+2. Edge Functionをデプロイ:
+   ```bash
+   npx supabase functions deploy send-push
+   ```
+3. **EASプロジェクトを初期化していない場合は初期化する**(プッシュ通知トークンの取得に`app.json`の`extra.eas.projectId`が必要):
+   ```bash
+   npm install -g eas-cli
+   eas login
+   eas init
+   ```
+
+**既知の制限**:
+
+- **Expo GoはSDK53以降、Androidでのリモートプッシュ通知をサポートしない**(Googleのポリシー変更に伴うExpo側の対応)。Android実機での動作確認には development build(`eas build --profile development`)が必要。iOSのExpo Goでは引き続き動作する
+- Web版(デモモード含む)はプッシュ通知非対応(該当コードはPlatform.OS==='web'で早期リターンする)
+- 本番のスタンドアロンビルド(EAS build)でのiOS向けプッシュ通知には、Apple Developer ProgramのAPNs設定が別途必要(`eas build`が自動で案内する)
+
+新規: `supabase/functions/send-push/index.ts`。変更: `supabase/schema.sql`(push_tokensテーブル・upsert_push_token関数)・`app.json`(expo-notificationsプラグイン)・`package.json`(expo-notifications・expo-device・expo-constants追加)・`src/lib/pushNotifications.ts`(新規)・`src/hooks/usePushNotifications.ts`(新規)・`src/hooks/useAuth.ts`・`src/hooks/useGroupData.ts`・`App.tsx`。
+
+tsc --noEmit clean。demo/非demo両方のweb export成功。PlaywrightでどちらもWeb実行時にエラーが出ないことを確認済み(expo-notificationsの一部API・expo-deviceのisDeviceがWebでは非対応/常にtrueを返すため、Platform.OS==='web'でのガードが必要だった)。Edge Function自体・実機でのプッシュ通知の実際の着信確認は、この開発環境からはできないため、オーナー側での動作確認が必要。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え
@@ -1115,7 +1150,7 @@ tsc --noEmit clean。
 ## 既知の制約(現時点)
 
 - グループ内は「お互いを信頼する前提」で、メンバーなら誰でも他人が記録した内容を編集・削除・精算できる(記録した本人だけに制限する権限管理はまだない)
-- プッシュ通知はまだない(誰かが記録しても、アプリを開くまで気づけない)
+- プッシュ通知は追加した(60回目)が、Android実機での動作確認にはExpo Goではなくdevelopment buildが必要(詳細は60回目の項目参照)
 - 為替換算はしない(通貨が違う残高は合算せず、別々に表示する。設計判断の詳細はWeb版プロトタイプとのやり取りの経緯を参照)
 
 ## EASでビルドする
@@ -1129,7 +1164,7 @@ eas build --platform all --profile production
 
 ## ストア公開までに、まだ人間(オーナー)がやる必要があること
 
-- **Expo/EASアカウント**(無料)— `eas login` してから `eas build` を実行
+- **Expo/EASアカウント**(無料)— `eas login` してから `eas build` を実行。プッシュ通知(60回目)を使うには`eas init`でこのプロジェクトをEASに紐付けておく必要もある
 - **Apple Developer Program**(年額$99)+ **Google Play Console**(買い切り$25)のアカウント作成
 - **アプリアイコンの本番差し替え**: `assets/icon.png`等は`scripts/generate_icons.py`で生成したプレースホルダー(コーラル×バイオレットのグラデーションに⇄マーク)。正式なブランドアイコンができたら差し替える
 - プライバシーポリシー・利用規約(`docs/legal/`に会社事業用の雛形があるが、kashikari用に内容を書き換える必要がある。特に「Google/Apple/LINE/メールでのサインインが必須」「グループ内で他メンバーの表示名・記録が見える」という仕様は明記した方がよい)

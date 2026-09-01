@@ -32,7 +32,14 @@
           "cameraPermission": "レシートを撮影して記録に添付するために使用します。"
         }
       ],
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-foreground.png",
+          "color": "#ff6b4a"
+        }
+      ]
     ]
   }
 }

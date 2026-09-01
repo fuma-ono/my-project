@@ -19,6 +19,7 @@ import SplashScreen from './src/screens/SplashScreen';
 import UsageScreen from './src/screens/UsageScreen';
 import { useAuth } from './src/hooks/useAuth';
 import { useGroups } from './src/hooks/useGroups';
+import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { LanguageProvider } from './src/i18n';
 import { getUsageStats, logEvent } from './src/lib/analytics';
 import type { Group } from './src/types';
@@ -56,6 +57,7 @@ function AppInner() {
   const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup, updateGroupIcon } = useGroups(
     DEMO_MODE ? null : userId
   );
+  const { pendingGroupId, clearPendingGroupId } = usePushNotifications(DEMO_MODE ? null : userId);
   const [screen, setScreen] = useState<Screen>({ name: 'groups' });
   const [minSplashDone, setMinSplashDone] = useState(false);
   const [fontsLoaded] = useFonts({
@@ -81,6 +83,21 @@ function AppInner() {
     const sub = Linking.addEventListener('url', (e) => handle(e.url));
     return () => sub.remove();
   }, [userId]);
+
+  // 通知をタップして開かれた場合、そのgroup_idの画面を直接開く。groupsの
+  // 読み込みが間に合っていない場合はここで何もせず、groups更新のたびに
+  // この副作用が再評価されるので、読み込みが終わった時点で見つかれば開く。
+  // 読み込みが終わっても見つからない場合(グループを抜けた等)は諦める。
+  useEffect(() => {
+    if (DEMO_MODE || !pendingGroupId) return;
+    const group = groups.find((g) => g.id === pendingGroupId);
+    if (group) {
+      setScreen({ name: 'group', group });
+      clearPendingGroupId();
+    } else if (!groupsLoading) {
+      clearPendingGroupId();
+    }
+  }, [pendingGroupId, groups, groupsLoading, clearPendingGroupId]);
 
   if (!fontsLoaded || !minSplashDone || (!DEMO_MODE && authLoading)) {
     return <SplashScreen />;

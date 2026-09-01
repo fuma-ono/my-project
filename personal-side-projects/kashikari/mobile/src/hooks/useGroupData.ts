@@ -4,6 +4,7 @@ import * as Crypto from 'expo-crypto';
 import { useT } from '../i18n';
 import { logEvent } from '../lib/analytics';
 import { entryFromKey, entryToKey } from '../lib/balances';
+import { notifyGroup } from '../lib/pushNotifications';
 import { supabase } from '../lib/supabase';
 import { splitAmount } from '../lib/split';
 import type { Entry, EntryType, GroupInvite, Profile } from '../types';
@@ -147,10 +148,18 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       });
       if (error) return { error: error.message };
       logEvent('entry_created', { userId, groupId });
+      notifyGroup({
+        groupId,
+        kind: 'entry_created',
+        recipientIds: members.filter((m) => m.id !== userId).map((m) => m.id),
+        amount: input.amount,
+        currency: input.currency,
+        description: input.description || null,
+      });
       await loadAll();
       return { error: null };
     },
-    [groupId, userId, loadAll, t, personColumns]
+    [groupId, userId, loadAll, t, personColumns, members]
   );
 
   // 割り勘: 支払った人以外の各参加者について、1件ずつmoneyのentriesを
@@ -197,10 +206,19 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       // 割り勘は1回の操作でrows.length件のentriesが作られるため、
       // 「貸し借り登録数」の集計と揃うよう作られた件数分だけ記録する。
       for (let i = 0; i < rows.length; i++) logEvent('entry_created', { userId, groupId });
+      // 通知は1回の操作につき1回でよい(rows.length件分送る必要はない)。
+      notifyGroup({
+        groupId,
+        kind: 'entry_created',
+        recipientIds: members.filter((m) => m.id !== userId).map((m) => m.id),
+        amount: input.totalAmount,
+        currency: input.currency,
+        description: input.description || null,
+      });
       await loadAll();
       return { error: null };
     },
-    [groupId, userId, loadAll, t, personColumns]
+    [groupId, userId, loadAll, t, personColumns, members]
   );
 
   // 台帳側の「精算済みにする/未精算に戻す」(1件単位の手動オーバーライド)。
@@ -274,6 +292,10 @@ export function useGroupData(groupId: string | null, userId: string | null) {
         .in('id', ids);
       if (!error) {
         logEvent('marked_paid', { userId, groupId });
+        // 呼び出し元(GroupScreen)は常にmarkPaid(debtor, creditor, ...)の
+        // 順で呼ぶ規約になっている(支払う側=debtor=自分が押す操作なので、
+        // 通知したい相手は必ずb=creditor)。
+        if (groupId) notifyGroup({ groupId, kind: 'marked_paid', recipientIds: [b] });
         await loadAll();
       }
       return { error: error?.message ?? null };
@@ -301,6 +323,10 @@ export function useGroupData(groupId: string | null, userId: string | null) {
         .in('id', ids);
       if (!error) {
         logEvent('marked_confirmed', { userId, groupId });
+        // 呼び出し元(GroupScreen)は常にconfirmReceived(debtor, creditor,
+        // ...)の順で呼ぶ規約になっている(受け取る側=creditor=自分が
+        // 押す操作なので、通知したい相手は必ずa=debtor)。
+        if (groupId) notifyGroup({ groupId, kind: 'marked_confirmed', recipientIds: [a] });
         await loadAll();
       }
       return { error: error?.message ?? null };

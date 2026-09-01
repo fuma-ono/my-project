@@ -513,3 +513,57 @@ as $$
 $$;
 
 grant execute on function public.get_usage_stats() to authenticated;
+
+-- ============================================================
+-- 8. push_tokens: プッシュ通知(Expoのプッシュトークン)
+-- ============================================================
+--
+-- 「誰かが記録してもアプリを開くまで気づけない」への対応。端末ごとの
+-- Expoプッシュトークンをここに保存し、supabase/functions/send-push
+-- (Edge Function)がentry作成・支払い報告・受取確認のタイミングで
+-- 該当メンバーの端末に通知を送る。
+--
+-- tokenを主キーにしている(1端末=1行)。同じ端末を別アカウントで
+-- ログインし直した場合は、upsert_push_token側でtokenの持ち主を
+-- 付け替える(古いアカウント宛には届かなくなる、というシンプルな
+-- 仕組み)。langは通知文言をどちらの言語で組み立てるか
+-- (send-push側)に使う。
+create table if not exists public.push_tokens (
+  token text primary key,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  lang text not null default 'ja' check (lang in ('ja', 'en')),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.push_tokens enable row level security;
+
+-- SELECTポリシーは意図的に与えない(他人のトークンを読めても嬉しい
+-- ことがなく、送信自体はservice_role権限のEdge Function側で行うため)。
+-- 登録・更新はRLSを迂回できるupsert_push_token関数経由に統一し、
+-- テーブルへの直接insert/updateポリシーは用意しない(下記参照)。
+drop policy if exists "users can delete their own push token" on public.push_tokens;
+create policy "users can delete their own push token"
+  on public.push_tokens for delete
+  using (user_id = auth.uid());
+
+-- 同じtokenが既に別アカウントの持ち物として残っていても構わず、
+-- 呼び出したユーザー(auth.uid())の持ち物として登録し直す。RLSの
+-- insert/updateポリシーで「他人のtokenを上書きしようとしたら弾く」
+-- という組み方だと、端末の使い回し(ログアウトし忘れ等)で新しい
+-- アカウントが二度と登録できなくなるため、それを避けるために
+-- security definerのRPCに統一している。
+create or replace function public.upsert_push_token(_token text, _lang text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from public.push_tokens where token = _token and user_id <> auth.uid();
+  insert into public.push_tokens (token, user_id, lang, updated_at)
+  values (_token, auth.uid(), _lang, now())
+  on conflict (token) do update set user_id = auth.uid(), lang = excluded.lang, updated_at = now();
+end;
+$$;
+
+grant execute on function public.upsert_push_token(text, text) to authenticated;
