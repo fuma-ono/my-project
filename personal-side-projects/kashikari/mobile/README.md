@@ -1168,6 +1168,21 @@ npx supabase functions deploy send-push
 
 tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightで通知ベル→通知一覧の表示まで確認済み(この確認の過程で、このアプリの開発用サンドボックス自体の`.env`にデモモード用の環境変数を渡す際、シェルの`export`だけでは反映されず`.env`ファイルへの直接追記が必要という、この開発環境固有の癖も見つけた。アプリのコード自体の問題ではない)。
 
+## 通知ベルに未読マークを追加(63回目)
+
+「通知が来ているかどうか、アイコンを見ただけでは分からない」への対応。`profiles`に「最後に通知ページを開いた時刻」(`notifications_seen_at`)を1列追加し、それより新しい`notification_log`があれば通知ベルの右上に小さな赤い点を出すようにした。通知ページを開くとその時刻を更新し、マークが消える(既読/未読を1件ずつ管理する必要はなく、この1つの時刻だけで済む単純な仕組み)。
+
+実機でのプッシュ通知配信の調査もあわせて行った。結論として、**このアプリのコード側は正常**(Edge Functionは正しく相手を特定しExpoのプッシュ送信APIまで正しく届けている。実機の`push_tokens`も正しい形式。Expo公式のテストツール(https://expo.dev/notifications)で直接同じトークン宛に送っても届かないことも確認済み)で、原因はiOS向けのプッシュ通知配信に必要な**APNsプッシュキーがまだEAS側に設定されていない**ことだった。これは[Expo公式ドキュメント](https://docs.expo.dev/push-notifications/faq/)に明記されている通り、Apple Developer Program(有料)への登録が前提になっている。ストア公開までにいずれ必要になる作業(README末尾を参照)がここでも前提条件になっていた、というだけで、コードの不具合ではない。
+
+**⚠️ 要オーナー作業**:
+
+1. `supabase/schema.sql`をSupabase SQL Editorで再実行(`profiles.notifications_seen_at`列を追加)
+2. 実際のプッシュ通知配信を試すには、Apple Developer Programへの登録後、`eas credentials`(iOS → Push Notifications: Manage your Apple Push Notifications Key)でプッシュキーを設定する必要がある。それまでは、通知自体は(アプリ内の通知ページ・未読マークとも)正しく動くが、OSのプッシュ通知バナー表示だけは届かない
+
+変更: `supabase/schema.sql`(`profiles.notifications_seen_at`列)・`src/types.ts`・`src/hooks/useAuth.ts`(`markNotificationsSeen`追加)・`App.tsx`・`src/screens/GroupScreen.tsx`・`src/screens/GroupsScreen.tsx`・`src/demo/DemoApp.tsx`・`src/demo/DemoGroupScreen.tsx`・`src/demo/mockData.ts`を変更。
+
+tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightで未読マークの表示→通知ページを開くと消えることまで確認済み。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え

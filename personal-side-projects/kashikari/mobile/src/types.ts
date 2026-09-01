@@ -2,6 +2,9 @@ export type Profile = {
   id: string;
   display_name: string;
   avatar_emoji: string | null;
+  // 通知ベルの未読マーク用。この時刻より新しいnotification_logがあれば
+  // 未読とみなす。通知ページを開くたびに今の時刻に更新する。
+  notifications_seen_at: string;
 };
 
 export type Group = {

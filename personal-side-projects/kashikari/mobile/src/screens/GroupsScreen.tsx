@@ -19,6 +19,7 @@ type Props = {
   onJoinGroup: (code: string) => Promise<{ error: string | null; group: Group | null }>;
   onOpenSettings: () => void;
   onOpenNotifications: () => void;
+  hasUnreadNotifications: boolean;
 };
 
 export default function GroupsScreen({
@@ -31,6 +32,7 @@ export default function GroupsScreen({
   onJoinGroup,
   onOpenSettings,
   onOpenNotifications,
+  hasUnreadNotifications,
 }: Props) {
   const t = useT();
   const [modal, setModal] = useState<'create' | 'join' | null>(null);
@@ -42,8 +44,9 @@ export default function GroupsScreen({
           <Mark size={34} />
           <Text style={styles.wordmark}>kashikari</Text>
           <View style={styles.headerRightRow}>
-            <Pressable onPress={onOpenNotifications} hitSlop={10} accessibilityLabel={t.notifications.title}>
+            <Pressable onPress={onOpenNotifications} hitSlop={10} accessibilityLabel={t.notifications.title} style={styles.bellWrap}>
               <Ionicons name="notifications-outline" size={22} color={colors.ink} />
+              {hasUnreadNotifications && <View style={styles.unreadDot} />}
             </Pressable>
             <Pressable onPress={onOpenSettings} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
               <Ionicons name="settings-outline" size={22} color={colors.ink} />
@@ -112,6 +115,18 @@ const styles = StyleSheet.create({
   wordmark: { ...fonts.display, fontSize: 28, color: colors.ink, flex: 1 },
   // グループ詳細画面のheaderRightRowと同じgap(16)。
   headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  bellWrap: { position: 'relative' },
+  unreadDot: {
+    position: 'absolute',
+    top: -1,
+    right: -1,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: colors.accent,
+    borderWidth: 1.5,
+    borderColor: colors.bg,
+  },
   hello: { ...fonts.body, fontSize: 14, color: colors.muted, marginTop: 8 },
   list: { paddingHorizontal: 20, paddingBottom: 24, gap: 10, flexGrow: 1 },
   empty: { alignItems: 'center', paddingTop: 60 },

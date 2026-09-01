@@ -40,6 +40,7 @@ type Props = {
   onChangeGroupIcon: (emoji: string) => Promise<{ error: string | null }>;
   onOpenSettings: () => void;
   onOpenNotifications: () => void;
+  hasUnreadNotifications: boolean;
 };
 
 export default function GroupScreen({
@@ -52,6 +53,7 @@ export default function GroupScreen({
   onChangeGroupIcon,
   onOpenSettings,
   onOpenNotifications,
+  hasUnreadNotifications,
 }: Props) {
   const t = useT();
   const {
@@ -368,8 +370,9 @@ export default function GroupScreen({
               <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
             </Pressable>
             <View style={styles.headerRightRow}>
-              <Pressable onPress={onOpenNotifications} hitSlop={10} accessibilityLabel={t.notifications.title}>
+              <Pressable onPress={onOpenNotifications} hitSlop={10} accessibilityLabel={t.notifications.title} style={styles.bellWrap}>
                 <Ionicons name="notifications-outline" size={22} color="#fff" />
+                {hasUnreadNotifications && <View style={styles.unreadDot} />}
               </Pressable>
               <Pressable onPress={openGroupMenu} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
                 <Ionicons name="settings-outline" size={22} color="#fff" />
@@ -642,6 +645,18 @@ const styles = StyleSheet.create({
   // 「戻る・通知・設定の余白を統一する」ため、titleColの左右マージンを
   // headerRightRowのgapと同じ16に揃えた。
   headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  bellWrap: { position: 'relative' },
+  unreadDot: {
+    position: 'absolute',
+    top: -1,
+    right: -1,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: colors.accent,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
   titleCol: { flex: 1, marginHorizontal: 16 },
   // 「グループ名をもう少し大きくする」という指摘を受けてfontSizeを上げた。
   title: { ...fonts.display, fontSize: 23, color: '#fff' },

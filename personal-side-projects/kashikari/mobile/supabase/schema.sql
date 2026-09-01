@@ -646,3 +646,10 @@ begin
     alter publication supabase_realtime add table public.notification_log;
   end if;
 end $$;
+
+-- 「通知が来ているかどうか、アイコンを見ただけでは分からない」への
+-- 対応。通知ベルの未読マーク用に、profilesへ「最後に通知ページを
+-- 開いた時刻」を1列追加する。この時刻より新しいnotification_logが
+-- あれば未読(ベルに赤い点を表示)とみなす。既存ユーザーには今の時刻を
+-- 入れておく(移行時点より前の通知をいきなり全部未読扱いにしないため)。
+alter table public.profiles add column if not exists notifications_seen_at timestamptz not null default now();

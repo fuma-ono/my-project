@@ -4,12 +4,17 @@ import type { Entry, Group, NotificationLogItem, Profile } from '../types';
 
 export const DEMO_ME_ID = 'demo-taro';
 
-export const DEMO_PROFILE: Profile = { id: DEMO_ME_ID, display_name: 'たろう', avatar_emoji: '🦊' };
+export const DEMO_PROFILE: Profile = {
+  id: DEMO_ME_ID,
+  display_name: 'たろう',
+  avatar_emoji: '🦊',
+  notifications_seen_at: new Date(0).toISOString(),
+};
 
 export const DEMO_MEMBERS: Profile[] = [
   DEMO_PROFILE,
-  { id: 'demo-hanako', display_name: 'はなこ', avatar_emoji: '🐰' },
-  { id: 'demo-jiro', display_name: 'じろう', avatar_emoji: null },
+  { id: 'demo-hanako', display_name: 'はなこ', avatar_emoji: '🐰', notifications_seen_at: new Date(0).toISOString() },
+  { id: 'demo-jiro', display_name: 'じろう', avatar_emoji: null, notifications_seen_at: new Date(0).toISOString() },
 ];
 
 export const DEMO_GROUP: Group = {

@@ -6,7 +6,7 @@ import { unregisterPushNotifications } from '../lib/pushNotifications';
 import { supabase } from '../lib/supabase';
 import type { Profile } from '../types';
 
-const PROFILE_COLUMNS = 'id, display_name, avatar_emoji';
+const PROFILE_COLUMNS = 'id, display_name, avatar_emoji, notifications_seen_at';
 
 type AuthState = {
   loading: boolean;
@@ -120,5 +120,16 @@ export function useAuth() {
     [state.userId, t]
   );
 
-  return { ...state, setDisplayName, updateAvatar, signOut };
+  // 通知ベルの未読マーク用。「今の時刻より前のnotification_logは既読」
+  // という単純な仕組みなので、通知ページを開いたタイミングでこれを
+  // 呼んで基準時刻を更新するだけでよい(既読/未読を1件ずつ管理しない)。
+  const markNotificationsSeen = useCallback(async () => {
+    if (!state.userId) return;
+    const now = new Date().toISOString();
+    // 楽観的に即座にベルの表示へ反映する(サーバーの応答を待たない)。
+    setState((s) => (s.profile ? { ...s, profile: { ...s.profile, notifications_seen_at: now } } : s));
+    await supabase.from('profiles').update({ notifications_seen_at: now }).eq('id', state.userId);
+  }, [state.userId]);
+
+  return { ...state, setDisplayName, updateAvatar, signOut, markNotificationsSeen };
 }

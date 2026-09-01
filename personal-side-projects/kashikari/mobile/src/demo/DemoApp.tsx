@@ -27,13 +27,22 @@ export default function DemoApp() {
   const t = useT();
   const [screen, setScreen] = useState<Screen>({ name: 'groups' });
   const [profile, setProfile] = useState<Profile>(DEMO_PROFILE);
+  // 本番同様、通知ページを開くまでは未読マークを出す(初期値はepoch=
+  // 「まだ一度も開いていない」相当なので、デモの通知は最初は全部未読)。
+  const [notificationsSeenAt, setNotificationsSeenAt] = useState(new Date(0).toISOString());
+  const hasUnreadNotifications = DEMO_NOTIFICATIONS.some((n) => n.created_at > notificationsSeenAt);
+  const openNotifications = (returnTo?: Screen) => {
+    setScreen({ name: 'notifications', returnTo });
+    setNotificationsSeenAt(new Date().toISOString());
+  };
 
   if (screen.name === 'group') {
     return (
       <DemoGroupScreen
         onBack={() => setScreen({ name: 'groups' })}
         onOpenSettings={() => setScreen({ name: 'settings', returnTo: screen })}
-        onOpenNotifications={() => setScreen({ name: 'notifications', returnTo: screen })}
+        onOpenNotifications={() => openNotifications(screen)}
+        hasUnreadNotifications={hasUnreadNotifications}
       />
     );
   }
@@ -89,7 +98,8 @@ export default function DemoApp() {
       onCreateGroup={async () => ({ error: t.demo.createDisabled, group: null })}
       onJoinGroup={async () => ({ error: t.demo.joinDisabled, group: null })}
       onOpenSettings={() => setScreen({ name: 'settings' })}
-      onOpenNotifications={() => setScreen({ name: 'notifications' })}
+      onOpenNotifications={() => openNotifications()}
+      hasUnreadNotifications={hasUnreadNotifications}
     />
   );
 }

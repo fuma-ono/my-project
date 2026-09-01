@@ -37,10 +37,12 @@ export default function DemoGroupScreen({
   onBack,
   onOpenSettings,
   onOpenNotifications,
+  hasUnreadNotifications,
 }: {
   onBack: () => void;
   onOpenSettings: () => void;
   onOpenNotifications: () => void;
+  hasUnreadNotifications: boolean;
 }) {
   const t = useT();
   const [entries, setEntries] = useState<Entry[]>(DEMO_ENTRIES);
@@ -342,8 +344,9 @@ export default function DemoGroupScreen({
               <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
             </Pressable>
             <View style={styles.headerRightRow}>
-              <Pressable onPress={onOpenNotifications} hitSlop={10} accessibilityLabel={t.notifications.title}>
+              <Pressable onPress={onOpenNotifications} hitSlop={10} accessibilityLabel={t.notifications.title} style={styles.bellWrap}>
                 <Ionicons name="notifications-outline" size={22} color="#fff" />
+                {hasUnreadNotifications && <View style={styles.unreadDot} />}
               </Pressable>
               <Pressable onPress={onOpenSettings} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
                 <Ionicons name="settings-outline" size={22} color="#fff" />
@@ -604,6 +607,18 @@ const styles = StyleSheet.create({
   },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  bellWrap: { position: 'relative' },
+  unreadDot: {
+    position: 'absolute',
+    top: -1,
+    right: -1,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: colors.accent,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
   titleCol: { flex: 1, marginHorizontal: 16 },
   title: { ...fonts.display, fontSize: 23, color: '#fff' },
   memberCount: { ...fonts.bodyMedium, fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 1 },

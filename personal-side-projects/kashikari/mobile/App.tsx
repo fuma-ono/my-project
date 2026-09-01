@@ -56,7 +56,16 @@ const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO_MODE === '1';
 // LanguageProviderの内側でuseAuth/useGroups(どちらも文言を扱う)を呼ぶため、
 // 実体はAppInnerに分離し、下のdefault exportでProviderをかぶせている。
 function AppInner() {
-  const { loading: authLoading, userId, profile, error: authError, setDisplayName, updateAvatar, signOut } = useAuth();
+  const {
+    loading: authLoading,
+    userId,
+    profile,
+    error: authError,
+    setDisplayName,
+    updateAvatar,
+    signOut,
+    markNotificationsSeen,
+  } = useAuth();
   const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup, updateGroupIcon } = useGroups(
     DEMO_MODE ? null : userId
   );
@@ -107,6 +116,17 @@ function AppInner() {
     }
   }, [pendingGroupId, groups, groupsLoading, clearPendingGroupId]);
 
+  // 通知ベルの未読マーク。「profile.notifications_seen_atより新しい
+  // notification_logがあるか」だけを見る単純な仕組み(詳細はuseAuth.ts
+  // のmarkNotificationsSeenのコメント参照)。
+  const hasUnreadNotifications =
+    !DEMO_MODE && !!profile && notificationItems.some((item) => item.created_at > profile.notifications_seen_at);
+
+  const openNotifications = () => {
+    setScreen({ name: 'notifications', returnTo: screen });
+    markNotificationsSeen();
+  };
+
   if (!fontsLoaded || !minSplashDone || (!DEMO_MODE && authLoading)) {
     return <SplashScreen />;
   }
@@ -141,7 +161,8 @@ function AppInner() {
           onCreateGroup={createGroup}
           onJoinGroup={joinGroup}
           onOpenSettings={() => setScreen({ name: 'settings' })}
-          onOpenNotifications={() => setScreen({ name: 'notifications', returnTo: screen })}
+          onOpenNotifications={openNotifications}
+          hasUnreadNotifications={hasUnreadNotifications}
         />
       )}
       {screen.name === 'group' && (
@@ -162,7 +183,8 @@ function AppInner() {
             return res;
           }}
           onOpenSettings={() => setScreen({ name: 'settings', returnTo: screen })}
-          onOpenNotifications={() => setScreen({ name: 'notifications', returnTo: screen })}
+          onOpenNotifications={openNotifications}
+          hasUnreadNotifications={hasUnreadNotifications}
         />
       )}
       {screen.name === 'settings' && (
