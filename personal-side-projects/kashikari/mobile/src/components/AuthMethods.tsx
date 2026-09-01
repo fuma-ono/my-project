@@ -117,10 +117,13 @@ export default function AuthMethods({ mode, onDone }: Props) {
           icon="chatbubble"
           iconColor="#06C755"
           label={t.authMethods.lineButton}
-          linked={isLinked('custom:line')}
+          // LINEはSupabaseのOAuthを経由しない独自実装(lib/socialAuth.ts参照)
+          // のため、Supabase側の連携プロバイダー一覧には出てこない
+          // (=常にisLinkedはfalse)。実態と合っているので問題ない。
+          linked={isLinked('line')}
           linkedLabel={t.authMethods.linkedBadge}
-          busy={busyProvider === 'custom:line'}
-          onPress={() => run('custom:line', () => signInWithLine(mode))}
+          busy={busyProvider === 'line'}
+          onPress={() => run('line', () => signInWithLine(mode))}
         />
         <ProviderButton
           icon="logo-facebook"

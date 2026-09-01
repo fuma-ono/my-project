@@ -1033,6 +1033,56 @@ tsc・demo/非demo両方のビルド成功。Playwrightで、設定画面の「k
 
 tsc・demo/非demo両方のビルド成功。Playwrightで、Facebookボタンが正しく表示されることを確認済み。実際のログイン動作はオーナー側の外部設定完了後に要確認。
 
+## LINEログインをEdge Function経由の自前実装に変更(52回目・要オーナー作業)
+
+Supabaseの「カスタムOIDCプロバイダー」経由のLINEログインが、`failed to verify ID token: oidc: malformed jwt: unexpected signature algorithm "HS256"; expected ["ES256"]`で必ず失敗する不具合への対応。
+
+**原因(設定ミスではない)**: LINEの通常のWebログインは、IDトークンをHS256(チャネルシークレットを鍵にする対称鍵方式)で署名して返す。Supabaseの「カスタムOIDCプロバイダー」機能は汎用のOIDCライブラリを使っており、ES256(非対称鍵)を前提にしているため、LINEのIDトークンを検証できずに失敗する。LINE側・Supabase側どちらの設定を変えても直せない、既知の非互換(他のOIDCライブラリ利用者からも同様の報告あり)。
+
+**対応**: SupabaseのAuth機能(カスタムOIDCプロバイダー)を経由するのをやめ、自前のSupabase Edge Function(`supabase/functions/line-signin`)でLINEとのOAuthのやり取り・IDトークン検証を行うようにした。
+
+1. アプリがLINEの認可URLを直接開く(戻り先の`exp://...`URLを`state`引数に載せる)
+2. LINEはこのEdge Function自身の固定URLへ`code`と`state`を付けてリダイレクトする(この固定URLだけをLINE Developers側に登録すればよく、Expo Goの`exp://...`がセッションごとに変わっても困らない)
+3. Edge Functionが`code`をLINEのトークンエンドポイントに送ってIDトークンを取得し、HS256で自前検証する(Web Crypto APIのHMAC検証、JWKS不要)
+4. 検証できたら、LINEのユーザーID(`sub`)から決まる仮のメールアドレスでSupabaseの管理者APIからマジックリンクのトークンを発行してもらう(対象ユーザーがいなければ自動作成される)
+5. 発行されたトークンを、アプリの`exp://...`URLにクエリパラメータとして付けてリダイレクトする
+6. アプリ側はそのトークンを`supabase.auth.verifyOtp()`に渡して実際のセッションを確立する
+
+この仕組み上、「今のセッションにLINEを追加連携する」(設定画面からの追加連携)には対応していない。常に「LINEのアカウントに紐づく別セッションへのサインインし直し」という形になるため、意図せず今のアカウントのデータを見失わないよう、設定画面の「LINEでログイン」はエラーメッセージを返すだけにしている(サインイン画面からのみ利用可能)。
+
+**⚠️ 要オーナー作業(この機能を使うにはデプロイが必要)**
+
+1. Codespacesのターミナルで、Supabase CLIにログイン:
+   ```bash
+   cd personal-side-projects/kashikari/mobile
+   npx supabase login
+   ```
+2. プロジェクトと連携(初回のみ。`ixtxrwlqrqyvlpvzroaq`のところは自分のプロジェクトrefに置き換え):
+   ```bash
+   npx supabase link --project-ref ixtxrwlqrqyvlpvzroaq
+   ```
+3. Edge Functionをデプロイ(LINEから直接呼ばれるため、Supabaseの認証チェックを無効にする`--no-verify-jwt`を必ず付ける。`supabase/config.toml`にも同じ設定を書いてあるが、念のため明示的に付ける):
+   ```bash
+   npx supabase functions deploy line-signin --no-verify-jwt
+   ```
+4. LINEのChannel ID・Channel SecretをEdge Functionのsecretとして設定(Google/Facebookの秘密鍵と同じく、チャットには貼らずここに直接):
+   ```bash
+   npx supabase secrets set LINE_CHANNEL_ID=xxxxxxxxxx LINE_CHANNEL_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   ```
+5. **LINE Developers側のコールバックURLを変更する**: 「LINEログイン設定」タブのコールバックURLを、今までの`https://ixtxrwlqrqyvlpvzroaq.supabase.co/auth/v1/callback`から、次のURLに変更する:
+   ```
+   https://ixtxrwlqrqyvlpvzroaq.supabase.co/functions/v1/line-signin
+   ```
+6. `.env`ファイルに、LINEのChannel ID(秘密ではないので直接書いてOK)を追加する:
+   ```bash
+   EXPO_PUBLIC_LINE_CHANNEL_ID=xxxxxxxxxx
+   ```
+7. Supabase側の「カスタムOIDCプロバイダー」(`custom:line`)はもう使わないので、そのままにしておいても削除してもどちらでもよい(削除する場合は Authentication > Sign In / Providers > Custom Providers から)
+
+`supabase/functions/line-signin/index.ts`(新規)・`supabase/config.toml`(新規)・`lib/socialAuth.ts`・`components/AuthMethods.tsx`・`.env.example`・`tsconfig.json`(`supabase/functions/`をアプリ本体のtscの対象から除外。Deno向けコードのため)を変更。
+
+tsc --noEmit・demo/非demo両方のビルド成功。Edge Function自体はDenoランタイム向けのコードで、この開発環境にDenoが無くネットワークもSupabase/Denoに繋がらないため、実際のデプロイ・動作確認はできていない。オーナー側でのデプロイ後、実機での動作確認が必要。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え
@@ -1042,6 +1092,7 @@ tsc・demo/非demo両方のビルド成功。Playwrightで、Facebookボタン�
 - `src/lib/balances.ts` — 相手×通貨ごとの残高計算(Web版プロトタイプと同じロジック)
 - `src/screens/` — オンボーディング/グループ一覧/グループ詳細(残高・台帳・記録追加)
 - `supabase/schema.sql` — テーブル定義・RLSポリシー・グループ作成/参加用RPC・レシート画像用ストレージ設定
+- `supabase/functions/line-signin/` — LINEログイン専用のEdge Function(SupabaseのOIDC機能がLINEのHS256署名に非対応なため自前実装。要デプロイ、52回目参照)
 
 ## データの分離について(重要)
 

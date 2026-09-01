@@ -5,12 +5,24 @@
 // 本物のログイン方法を後付けする」(=データは失わない)ことができる。
 //
 // 実装方針:
-// - Google/LINE: Supabaseのブラウザ経由OAuth(signInWithOAuth/linkIdentity)。
-//   Expo Go上でも動く(expo-auth-sessionのmakeRedirectUriが、Expo Go内では
-//   自動的にexp://の一時URLを、スタンドアロンビルドではkashikari://を
-//   使うよう出し分けてくれるため)。LINEはSupabase標準のプロバイダー一覧に
-//   無いため、Supabase側で「カスタムOIDCプロバイダー」として
-//   provider id "custom:line" で登録してもらう前提(README参照)。
+// - Google/Facebook: Supabaseのブラウザ経由OAuth(signInWithOAuth/
+//   linkIdentity)。Expo Go上でも動く(expo-auth-sessionのmakeRedirectUriが、
+//   Expo Go内では自動的にexp://の一時URLを、スタンドアロンビルドでは
+//   kashikari://を使うよう出し分けてくれるため)。
+// - LINE: SupabaseのAuthを経由せず、自前のEdge Function
+//   (supabase/functions/line-signin)を介した独自実装。LINEの通常の
+//   Webログインが返すIDトークンはHS256署名(チャネルシークレットを
+//   鍵にする対称鍵方式)だが、SupabaseのOIDC検証はES256(非対称鍵)を
+//   前提にしており、この組み合わせだと「failed to verify ID token:
+//   unexpected signature algorithm "HS256"; expected ["ES256"]」で
+//   必ず失敗する(LINE側・Supabase側どちらの設定でも直せない既知の
+//   非互換)。そのため、LINEとのやり取りとIDトークン検証は自前の
+//   Edge Functionで行い、検証できたらSupabaseの管理者APIで
+//   マジックリンクのトークンを発行してもらい、それをアプリ側で
+//   verifyOtpに渡してセッションを確立する。詳細はEdge Function内の
+//   コメント参照。この仕組み上、「今のセッションにLINEを追加連携する」
+//   (mode:'link')には対応していない(常にLINE側のアカウントに
+//   紐づく別セッションへのサインインになる)。
 // - Apple: expo-apple-authentication(Expo公式パッケージなのでExpo Go内でも
 //   動く)のネイティブSign in with Appleボタンを使い、そこで得られる
 //   identityTokenをsupabase.auth.signInWithIdTokenに渡す方式(ブラウザ
@@ -26,18 +38,24 @@ import { Platform } from 'react-native';
 
 import { supabase } from './supabase';
 
+// LINEログイン専用Edge Functionの固定URL。LINE Developers側の
+// 「コールバックURL」にはこれを登録する(Supabase自身のauth/v1/callback
+// ではない)。詳細はsupabase/functions/line-signin/index.tsのコメント参照。
+const LINE_SIGNIN_FUNCTION_URL = 'https://ixtxrwlqrqyvlpvzroaq.supabase.co/functions/v1/line-signin';
+
 // signInWithOAuthが返すブラウザ用URLを開いたあと、ExpoアプリのURLへ
 // リダイレクトが戻ってきたときに、開いたままのブラウザセッションを
 // 閉じて呼び出し元に結果を返せるようにするおまじない(モジュール読み込み
 // 時に1度だけ呼べばよい)。
 WebBrowser.maybeCompleteAuthSession();
 
-// 'apple'はGoogle/LINEとは別経路(ネイティブSign in with Apple、下記
+// 'apple'はGoogleとは別経路(ネイティブSign in with Apple、下記
 // signInWithApple参照)を主に使うが、linkIdentityにはApple用の口が
 // 無いため、そのケースだけこのブラウザ経由OAuthにフォールバックする。
-// 'facebook'はSupabaseの組み込みプロバイダーなので、Google/LINEと
-// 全く同じブラウザ経由OAuthで動く。
-export type OAuthProvider = 'google' | 'custom:line' | 'apple' | 'facebook';
+// 'facebook'はSupabaseの組み込みプロバイダーなので、Googleと
+// 全く同じブラウザ経由OAuthで動く。LINEはSupabaseを経由しない
+// 別実装(下記signInWithLine参照)のため、ここには含めない。
+export type OAuthProvider = 'google' | 'apple' | 'facebook';
 // 「今の(匿名の)アカウントに後付けする」か、「(別の端末等で)本来の
 // アカウントとしてサインインし直す」かで、呼ぶSupabaseのAPIが違う。
 export type AuthMode = 'link' | 'signin';
@@ -85,8 +103,44 @@ export function signInWithGoogle(mode: AuthMode) {
   return runOAuthFlow('google', mode);
 }
 
-export function signInWithLine(mode: AuthMode) {
-  return runOAuthFlow('custom:line', mode);
+// LINEはSupabaseのOAuthを経由しない独自実装(冒頭のコメント参照)。
+// 上のrunOAuthFlowとは別の、専用のロジック。
+export async function signInWithLine(mode: AuthMode): Promise<{ error: string | null; cancelled?: boolean }> {
+  if (mode === 'link') {
+    // Edge Function側の仕組み上、常に「LINEのアカウントに紐づく
+    // (既存 or 新規の)セッションへサインインし直す」形になり、今の
+    // セッションに追加連携することができない。誤って今のアカウントの
+    // データを見失わせないよう、ここでは対応しない。
+    return { error: 'LINEでの追加連携には対応していません(サインインのみ利用できます)' };
+  }
+  const channelId = process.env.EXPO_PUBLIC_LINE_CHANNEL_ID;
+  if (!channelId) return { error: 'LINEログインが設定されていません(EXPO_PUBLIC_LINE_CHANNEL_ID未設定)' };
+
+  // アプリの戻り先(exp://...、セッションごとに変わる)をstateに載せて
+  // Edge Functionまで運んでもらう。Edge Function自身のURLは固定なので、
+  // LINE Developers側にはそちらを登録すればよい。
+  const redirectTo = AuthSession.makeRedirectUri();
+  const authUrl =
+    `https://access.line.me/oauth2/v2.1/authorize?response_type=code` +
+    `&client_id=${encodeURIComponent(channelId)}` +
+    `&redirect_uri=${encodeURIComponent(LINE_SIGNIN_FUNCTION_URL)}` +
+    `&state=${encodeURIComponent(redirectTo)}` +
+    `&scope=openid`;
+
+  const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectTo);
+  if (result.type === 'cancel' || result.type === 'dismiss') return { error: null, cancelled: true };
+  if (result.type !== 'success' || !result.url) return { error: 'line sign-in failed' };
+
+  const url = new URL(result.url.replace('#', '?'));
+  const errorParam = url.searchParams.get('error');
+  if (errorParam) return { error: errorParam };
+
+  const email = url.searchParams.get('email');
+  const tokenHash = url.searchParams.get('token_hash');
+  if (!email || !tokenHash) return { error: 'line sign-in failed (missing token)' };
+
+  const { error } = await supabase.auth.verifyOtp({ email, token_hash: tokenHash, type: 'email' });
+  return { error: error?.message ?? null };
 }
 
 export function signInWithFacebook(mode: AuthMode) {
