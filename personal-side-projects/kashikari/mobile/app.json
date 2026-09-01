@@ -19,7 +19,11 @@
         "backgroundColor": "#ff6b4a",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
-      "permissions": ["CAMERA", "READ_MEDIA_IMAGES"]
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -40,6 +44,12 @@
           "color": "#ff6b4a"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "b2a25440-45da-4f81-86d8-150cbf71328d"
+      }
+    },
+    "owner": "fumaono"
   }
 }
