@@ -1147,6 +1147,27 @@ npx supabase functions deploy send-push
 
 tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightでconsole errorが出ないことを確認済み(デモモードでの「催促する」タップまで確認。react-native-webの制約でAlert.alertの複数ボタン選択肢自体はWeb上では検証できないため、その先のトースト表示は実機での確認が必要)。
 
+## リアルタイム配信の有効化・通知ページの追加(62回目・要オーナー作業)
+
+実機での動作確認中に見つかった2つの不具合・要望に対応した。
+
+- **「相手の記録を見るのに毎回リロードが必要」というリアルタイム不具合**: `useGroupData.ts`はentries・group_members・group_invitesの変更をSupabase Realtimeで購読するコードは元々あったが、対象テーブルを`supabase_realtime`パブリケーションに追加する設定(ダッシュボードのDatabase > Replicationで行う設定)が漏れていた。単独端末での動作確認だけでは気づけない類の不具合で、おそらく最初のセットアップ時から漏れていた。schema.sqlに、対象テーブルをパブリケーションに追加するSQLを追加した(何度実行しても安全)
+- **「通知ページが欲しい」**: 61回目で削除した通知ベルを、実際に機能するものとして作り直した。新規テーブル`notification_log`に、send-push(Edge Function)が通知を組み立てるたびに、実際にOSのプッシュ通知を送れたかに関わらず(相手が通知トークン未登録の場合も含め)対象メンバー1人につき1行記録するようにし、通知ベルをタップするとその履歴を新しい順に見られる新しい画面(`NotificationsScreen`)を追加した
+
+あわせて、「催促するが相手に届かない(送信は成功しているように見えるのに)」の原因切り分けのため、send-push側でExpoのプッシュ送信APIが返す個々のメッセージ単位のエラー(無効化されたトークン等)もログに残すようにした(以前はHTTPレベルで200が返れば成功扱いにしていた)。
+
+**⚠️ 要オーナー作業**:
+
+```bash
+# schema.sqlをSupabase SQL Editorで再実行(notification_logテーブル・
+# Realtimeパブリケーションへの追加)した後、Edge Functionを再デプロイ
+npx supabase functions deploy send-push
+```
+
+新規: `src/screens/NotificationsScreen.tsx`・`src/hooks/useNotifications.ts`。変更: `supabase/schema.sql`(notification_logテーブル・Realtimeパブリケーション設定)・`supabase/functions/send-push/index.ts`(notification_logへの書き込み・チケット単位のエラーログ)・`App.tsx`・`src/demo/DemoApp.tsx`・`src/demo/DemoGroupScreen.tsx`・`src/demo/mockData.ts`・`src/screens/GroupScreen.tsx`・`src/screens/GroupsScreen.tsx`・`src/types.ts`・`src/i18n/strings.ts`を変更。
+
+tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightで通知ベル→通知一覧の表示まで確認済み(この確認の過程で、このアプリの開発用サンドボックス自体の`.env`にデモモード用の環境変数を渡す際、シェルの`export`だけでは反映されず`.env`ファイルへの直接追記が必要という、この開発環境固有の癖も見つけた。アプリのコード自体の問題ではない)。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え

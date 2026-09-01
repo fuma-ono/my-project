@@ -82,3 +82,15 @@ export type SimplifiedTransaction = {
   amount: number;
   currency: string;
 };
+
+// アプリ内の通知履歴(notification_logテーブル)。send-push(Edge
+// Function)が、実際にOSのプッシュ通知を送れたかに関わらず対象メンバー
+// 1人につき1行書き込む。詳細はsupabase/schema.sqlのコメント参照。
+export type NotificationLogItem = {
+  id: string;
+  group_id: string | null;
+  group_name: string;
+  title: string;
+  body: string;
+  created_at: string;
+};

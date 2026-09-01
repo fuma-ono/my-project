@@ -18,6 +18,7 @@ type Props = {
   onCreateGroup: (name: string, iconEmoji: string | null) => Promise<{ error: string | null; group: Group | null }>;
   onJoinGroup: (code: string) => Promise<{ error: string | null; group: Group | null }>;
   onOpenSettings: () => void;
+  onOpenNotifications: () => void;
 };
 
 export default function GroupsScreen({
@@ -29,6 +30,7 @@ export default function GroupsScreen({
   onCreateGroup,
   onJoinGroup,
   onOpenSettings,
+  onOpenNotifications,
 }: Props) {
   const t = useT();
   const [modal, setModal] = useState<'create' | 'join' | null>(null);
@@ -40,6 +42,9 @@ export default function GroupsScreen({
           <Mark size={34} />
           <Text style={styles.wordmark}>kashikari</Text>
           <View style={styles.headerRightRow}>
+            <Pressable onPress={onOpenNotifications} hitSlop={10} accessibilityLabel={t.notifications.title}>
+              <Ionicons name="notifications-outline" size={22} color={colors.ink} />
+            </Pressable>
             <Pressable onPress={onOpenSettings} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
               <Ionicons name="settings-outline" size={22} color={colors.ink} />
             </Pressable>

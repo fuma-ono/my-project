@@ -12,6 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import DemoApp from './src/demo/DemoApp';
 import GroupScreen from './src/screens/GroupScreen';
 import GroupsScreen from './src/screens/GroupsScreen';
+import NotificationsScreen from './src/screens/NotificationsScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import PremiumScreen from './src/screens/PremiumScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -19,6 +20,7 @@ import SplashScreen from './src/screens/SplashScreen';
 import UsageScreen from './src/screens/UsageScreen';
 import { useAuth } from './src/hooks/useAuth';
 import { useGroups } from './src/hooks/useGroups';
+import { useNotifications } from './src/hooks/useNotifications';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { LanguageProvider } from './src/i18n';
 import { getUsageStats, logEvent } from './src/lib/analytics';
@@ -36,7 +38,8 @@ type Screen =
   | { name: 'group'; group: Group; justCreated?: boolean }
   | { name: 'settings'; returnTo?: Screen }
   | { name: 'premium'; returnTo?: Screen }
-  | { name: 'usage'; returnTo?: Screen };
+  | { name: 'usage'; returnTo?: Screen }
+  | { name: 'notifications'; returnTo?: Screen };
 
 // kashikari://join?code=XXXXXX 形式の招待リンクが開かれたかどうかを判定する。
 // 現状(Expo Go実行中)はこのリンク自体を開いても実際にはアプリに渡って
@@ -58,6 +61,11 @@ function AppInner() {
     DEMO_MODE ? null : userId
   );
   const { pendingGroupId, clearPendingGroupId } = usePushNotifications(DEMO_MODE ? null : userId);
+  const {
+    items: notificationItems,
+    loading: notificationsLoading,
+    refresh: refreshNotifications,
+  } = useNotifications(DEMO_MODE ? null : userId);
   const [screen, setScreen] = useState<Screen>({ name: 'groups' });
   const [minSplashDone, setMinSplashDone] = useState(false);
   const [fontsLoaded] = useFonts({
@@ -133,6 +141,7 @@ function AppInner() {
           onCreateGroup={createGroup}
           onJoinGroup={joinGroup}
           onOpenSettings={() => setScreen({ name: 'settings' })}
+          onOpenNotifications={() => setScreen({ name: 'notifications', returnTo: screen })}
         />
       )}
       {screen.name === 'group' && (
@@ -153,6 +162,7 @@ function AppInner() {
             return res;
           }}
           onOpenSettings={() => setScreen({ name: 'settings', returnTo: screen })}
+          onOpenNotifications={() => setScreen({ name: 'notifications', returnTo: screen })}
         />
       )}
       {screen.name === 'settings' && (
@@ -175,6 +185,14 @@ function AppInner() {
       )}
       {screen.name === 'usage' && (
         <UsageScreen onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })} fetchStats={getUsageStats} />
+      )}
+      {screen.name === 'notifications' && (
+        <NotificationsScreen
+          onBack={() => setScreen(screen.returnTo ?? { name: 'groups' })}
+          items={notificationItems}
+          loading={notificationsLoading}
+          onRefresh={refreshNotifications}
+        />
       )}
       <StatusBar style="dark" />
     </>

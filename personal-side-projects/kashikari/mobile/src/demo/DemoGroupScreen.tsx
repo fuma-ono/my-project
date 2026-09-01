@@ -33,7 +33,15 @@ import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS } from './mockData';
 type Tab = GroupTab;
 let demoIdSeq = 100;
 
-export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: () => void; onOpenSettings: () => void }) {
+export default function DemoGroupScreen({
+  onBack,
+  onOpenSettings,
+  onOpenNotifications,
+}: {
+  onBack: () => void;
+  onOpenSettings: () => void;
+  onOpenNotifications: () => void;
+}) {
   const t = useT();
   const [entries, setEntries] = useState<Entry[]>(DEMO_ENTRIES);
   const [members, setMembers] = useState<Profile[]>(DEMO_MEMBERS);
@@ -334,6 +342,9 @@ export default function DemoGroupScreen({ onBack, onOpenSettings }: { onBack: ()
               <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
             </Pressable>
             <View style={styles.headerRightRow}>
+              <Pressable onPress={onOpenNotifications} hitSlop={10} accessibilityLabel={t.notifications.title}>
+                <Ionicons name="notifications-outline" size={22} color="#fff" />
+              </Pressable>
               <Pressable onPress={onOpenSettings} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
                 <Ionicons name="settings-outline" size={22} color="#fff" />
               </Pressable>

@@ -567,3 +567,82 @@ end;
 $$;
 
 grant execute on function public.upsert_push_token(text, text) to authenticated;
+
+-- ============================================================
+-- 9. リアルタイム配信の有効化
+-- ============================================================
+--
+-- 「相手側の記録が反映されない、いちいちリロードしないといけない」への
+-- 対応。src/hooks/useGroupData.tsは`supabase.channel(...).on('postgres_changes',
+-- ...)`でentries・group_members・group_invitesの変更をリアルタイムに
+-- 購読しているが、テーブルを作っただけではSupabase Realtimeは配信して
+-- くれない。対象テーブルをsupabase_realtimeパブリケーションに明示的に
+-- 追加する必要がある(ダッシュボードのDatabase > Replicationで手動で
+-- トグルするのと同じことをSQLでやっている)。これは最初のセットアップ
+-- 時から漏れていた可能性が高い(単独端末での動作確認だけでは気づけない
+-- 不具合のため)。
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'entries'
+  ) then
+    alter publication supabase_realtime add table public.entries;
+  end if;
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'group_members'
+  ) then
+    alter publication supabase_realtime add table public.group_members;
+  end if;
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'group_invites'
+  ) then
+    alter publication supabase_realtime add table public.group_invites;
+  end if;
+end $$;
+
+-- ============================================================
+-- 10. notification_log: アプリ内の通知履歴
+-- ============================================================
+--
+-- 「通知をためられるように、通知ページが必要」への対応。send-push
+-- (Edge Function)が通知を組み立てるたびに、実際にOSのプッシュ通知を
+-- 送れたかどうかに関わらず(相手が通知トークンを登録していない場合も
+-- 含め)、対象メンバー1人につき1行ずつ記録する。アプリを開いた時に
+-- 「見逃した通知」を後から見返せるようにするための、いわば受信箱。
+--
+-- group_nameは非正規化して保存する(グループを抜けた後や、グループ名が
+-- 変わった後でも、その時点の履歴として読めるようにするため。JOINで
+-- 都度引く方式だと、抜けた後はRLSで見えなくなってしまう)。
+create table if not exists public.notification_log (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  group_id uuid references public.groups (id) on delete set null,
+  group_name text not null,
+  title text not null,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.notification_log enable row level security;
+
+-- 自分宛の通知だけ見える。挿入はservice_role権限(send-push)からのみ
+-- 行うため、クライアント向けのinsertポリシーは用意しない。
+drop policy if exists "users can read their own notification log" on public.notification_log;
+create policy "users can read their own notification log"
+  on public.notification_log for select
+  using (user_id = auth.uid());
+
+-- このテーブルも、通知ページを開いたままでも新着が反映されるよう
+-- リアルタイム配信を有効化する(セクション9と同じ理由)。
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'notification_log'
+  ) then
+    alter publication supabase_realtime add table public.notification_log;
+  end if;
+end $$;

@@ -185,8 +185,22 @@ Deno.serve(async (req) => {
     // ここから先はpush_tokensを読む必要がある(SELECTポリシーが無い
     // テーブルのため、service_role権限に切り替える)。
     const admin = createClient(supabaseUrl, serviceRoleKey);
-    const tokensRes = await admin.from('push_tokens').select('token, lang').in('user_id', validRecipientIds);
+    const tokensRes = await admin.from('push_tokens').select('token, user_id, lang').in('user_id', validRecipientIds);
     const tokens = tokensRes.data ?? [];
+
+    // アプリ内の通知履歴(notification_log)には、実際にOSのプッシュ通知を
+    // 送れたか(=通知トークンを持っているか)に関わらず、対象メンバー
+    // 全員に1行ずつ記録する。トークンを持つ相手はその言語設定に合わせ、
+    // 持たない相手は日本語をデフォルトにする。
+    const langByUser = new Map<string, 'ja' | 'en'>();
+    for (const row of tokens) langByUser.set(row.user_id as string, row.lang === 'en' ? 'en' : 'ja');
+    const logRows = validRecipientIds.map((recipientId) => {
+      const { title, body: messageBody } = buildMessage(langByUser.get(recipientId) ?? 'ja', actorName, groupName, body);
+      return { user_id: recipientId, group_id: body.group_id, group_name: groupName, title, body: messageBody };
+    });
+    const { error: logError } = await admin.from('notification_log').insert(logRows);
+    if (logError) console.error('notification_log insert failed', logError);
+
     if (tokens.length === 0) return jsonResponse({ sent: false });
 
     const messages = tokens.map((row) => {
@@ -208,7 +222,19 @@ Deno.serve(async (req) => {
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(batch),
       });
-      if (!res.ok) console.error('expo push send failed', res.status, await res.text());
+      if (!res.ok) {
+        console.error('expo push send failed', res.status, await res.text());
+        continue;
+      }
+      // res.okでも、個々のメッセージ単位でエラーが返ることがある
+      // (無効化されたトークン等)。「送ったつもりで実は届いていない」を
+      // 追えるよう、そのチケットの内容をログに残す。
+      const resultJson = (await res.json()) as { data?: Array<{ status: string; message?: string; details?: unknown }> };
+      resultJson.data?.forEach((ticket, idx) => {
+        if (ticket.status !== 'ok') {
+          console.error('expo push ticket error', batch[idx]?.to, ticket.status, ticket.message, ticket.details);
+        }
+      });
     }
 
     return jsonResponse({ sent: true });

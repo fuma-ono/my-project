@@ -298,6 +298,12 @@ export const ja = {
     premiumInterestRate: (n: number) => `興味率 ${n}%`,
     rateUnavailable: '-',
   },
+  notifications: {
+    back: '戻る',
+    title: '🔔 通知',
+    emptyTitle: 'まだ通知はありません',
+    emptyMessage: '記録の追加や催促があると、ここに届きます',
+  },
   share: {
     // kashikariを使っていない相手にもそのまま伝わるよう、アプリ内リンク等は
     // 使わず、読んでそのまま意味が通るテキストにしている。
@@ -582,6 +588,12 @@ export const en: Strings = {
     inviteJoinRate: (n: number) => `${n}% joined`,
     premiumInterestRate: (n: number) => `${n}% interested`,
     rateUnavailable: '-',
+  },
+  notifications: {
+    back: 'Back',
+    title: '🔔 Notifications',
+    emptyTitle: 'No notifications yet',
+    emptyMessage: "You'll see new entries and reminders here",
   },
   share: {
     settlementHeading: (groupName: string) => `Settlement for "${groupName}"`,

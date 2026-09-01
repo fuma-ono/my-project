@@ -39,9 +39,20 @@ type Props = {
   onChangeAvatar: (emoji: string) => Promise<{ error: string | null }>;
   onChangeGroupIcon: (emoji: string) => Promise<{ error: string | null }>;
   onOpenSettings: () => void;
+  onOpenNotifications: () => void;
 };
 
-export default function GroupScreen({ group, meId, justCreated, onBack, onLeave, onChangeAvatar, onChangeGroupIcon, onOpenSettings }: Props) {
+export default function GroupScreen({
+  group,
+  meId,
+  justCreated,
+  onBack,
+  onLeave,
+  onChangeAvatar,
+  onChangeGroupIcon,
+  onOpenSettings,
+  onOpenNotifications,
+}: Props) {
   const t = useT();
   const {
     members,
@@ -357,6 +368,9 @@ export default function GroupScreen({ group, meId, justCreated, onBack, onLeave,
               <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
             </Pressable>
             <View style={styles.headerRightRow}>
+              <Pressable onPress={onOpenNotifications} hitSlop={10} accessibilityLabel={t.notifications.title}>
+                <Ionicons name="notifications-outline" size={22} color="#fff" />
+              </Pressable>
               <Pressable onPress={openGroupMenu} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
                 <Ionicons name="settings-outline" size={22} color="#fff" />
               </Pressable>

@@ -1,6 +1,6 @@
 // デモモード専用のダミーデータ。Supabase接続なしでUIを確認するために使う。
 // EXPO_PUBLIC_DEMO_MODE=1 のときだけApp.tsxから参照される(本番ビルドには影響しない)。
-import type { Entry, Group, Profile } from '../types';
+import type { Entry, Group, NotificationLogItem, Profile } from '../types';
 
 export const DEMO_ME_ID = 'demo-taro';
 
@@ -155,5 +155,24 @@ export const DEMO_ENTRIES: Entry[] = [
     confirmed_at: null,
     created_by: 'demo-hanako',
     created_at: hoursAgo(6),
+  },
+];
+
+export const DEMO_NOTIFICATIONS: NotificationLogItem[] = [
+  {
+    id: 'n1',
+    group_id: DEMO_GROUP.id,
+    group_name: DEMO_GROUP.name,
+    title: DEMO_GROUP.name,
+    body: 'はなこさんが「旅行のお土産代」を記録しました',
+    created_at: hoursAgo(1),
+  },
+  {
+    id: 'n2',
+    group_id: DEMO_GROUP.id,
+    group_name: DEMO_GROUP.name,
+    title: DEMO_GROUP.name,
+    body: 'じろうさんが支払ったと報告しました。確認をお願いします',
+    created_at: hoursAgo(20),
   },
 ];
