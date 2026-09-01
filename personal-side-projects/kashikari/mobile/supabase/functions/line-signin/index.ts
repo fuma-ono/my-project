@@ -141,13 +141,8 @@ Deno.serve(async (req) => {
     if (!tokenRes.ok) {
       // 「400としか分からない」ではデバッグできないため、LINE側が返してくる
       // 実際のエラー内容(invalid_client等)をそのままアプリの画面まで返す。
-      // 一時的な診断用に、client_id/secretが実際に読めていた長さも一緒に返す
-      // (値そのものは含めない)。原因が分かったら消してよい。
       const bodyText = await tokenRes.text();
-      return fail(
-        `line token exchange failed (${tokenRes.status}): ${bodyText.slice(0, 300)} ` +
-          `[debug: channelId.len=${channelId.length} channelSecret.len=${channelSecret.length} redirect_uri=${CALLBACK_URL}]`
-      );
+      return fail(`line token exchange failed (${tokenRes.status}): ${bodyText.slice(0, 300)}`);
     }
     const tokenBody = (await tokenRes.json()) as { id_token?: string };
     if (!tokenBody.id_token) return fail('line response missing id_token');
