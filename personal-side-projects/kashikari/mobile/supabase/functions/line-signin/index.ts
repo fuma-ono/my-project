@@ -135,7 +135,12 @@ Deno.serve(async (req) => {
         client_secret: channelSecret,
       }),
     });
-    if (!tokenRes.ok) return fail(`line token exchange failed: ${tokenRes.status}`);
+    if (!tokenRes.ok) {
+      // 「400としか分からない」ではデバッグできないため、LINE側が返してくる
+      // 実際のエラー内容(invalid_client等)をそのままアプリの画面まで返す。
+      const bodyText = await tokenRes.text();
+      return fail(`line token exchange failed (${tokenRes.status}): ${bodyText.slice(0, 300)}`);
+    }
     const tokenBody = (await tokenRes.json()) as { id_token?: string };
     if (!tokenBody.id_token) return fail('line response missing id_token');
 
