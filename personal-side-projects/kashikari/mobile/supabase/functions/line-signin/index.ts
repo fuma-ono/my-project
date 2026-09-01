@@ -120,8 +120,10 @@ Deno.serve(async (req) => {
   try {
     if (!code) return fail('missing code');
 
-    const channelId = Deno.env.get('LINE_CHANNEL_ID');
-    const channelSecret = Deno.env.get('LINE_CHANNEL_SECRET');
+    // .trim()しているのは、supabase secrets setに値を渡す際にクリップボードや
+    // シェル経由で紛れ込みうる前後の空白・改行を保険として取り除くため。
+    const channelId = Deno.env.get('LINE_CHANNEL_ID')?.trim();
+    const channelSecret = Deno.env.get('LINE_CHANNEL_SECRET')?.trim();
     if (!channelId || !channelSecret) return fail('server not configured (missing LINE secrets)');
 
     const bodyParams = new URLSearchParams();
