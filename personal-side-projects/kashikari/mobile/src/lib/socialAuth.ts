@@ -139,7 +139,12 @@ export async function signInWithLine(mode: AuthMode): Promise<{ error: string | 
   const tokenHash = url.searchParams.get('token_hash');
   if (!email || !tokenHash) return { error: 'line sign-in failed (missing token)' };
 
-  const { error } = await supabase.auth.verifyOtp({ email, token_hash: tokenHash, type: 'email' });
+  // emailは事前チェック(140行目)のためだけに使い、verifyOtp自体には渡さない。
+  // supabase-jsのverifyOtpは「token_hash + type」か「email + token + type」の
+  // どちらか一方の組み合わせしか受け付けず、token_hashと一緒にemailも渡すと
+  // 実行時に「Only the token_hash and type should be provided」というエラーで
+  // 弾かれる。
+  const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'email' });
   return { error: error?.message ?? null };
 }
 
