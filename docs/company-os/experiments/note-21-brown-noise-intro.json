@@ -7,9 +7,9 @@
   "pillar": "A",
   "hypothesis": "「ブラウンノイズ」という用語検索・作業用BGMの選び方に悩む層の需要に一致し、閲覧・スキ・フォロワー増につながる",
   "generated_at": "2026-08-24",
-  "published_at": null,
-  "status": "draft",
-  "note_url": "https://note.com/unique_condor276",
+  "published_at": "2026-09-02",
+  "status": "published",
+  "note_url": "https://note.com/unique_condor276/n/ne6335d3450db",
   "metrics": {
     "views": null,
     "likes": null,
@@ -31,5 +31,6 @@
     "clear_reader_value": true,
     "no_duplication_with_existing": true,
     "note": "2026-08-24、週2回運用Routineでの新規生成。既存記事はホワイトノイズ中心のため、ノイズ系の使い分け(ホワイト/ブラウン/ピンク)という切り口で重複を回避"
-  }
+  },
+  "publish_confirmation_note": "2026-09-02、note.com公開RSSフィードとのタイトル一致により自動検知(GitHub Actions定期実行)。"
 }
