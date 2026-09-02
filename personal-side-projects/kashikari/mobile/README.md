@@ -1274,6 +1274,16 @@ alter table public.entries add column if not exists updated_at timestamptz;
 
 tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightで対象記録の金額が実際にアクセントカラー(`rgb(255, 107, 74)`)になり、無関係な記録は通常色のままであることを確認済み。
 
+## 記録の内容(金額・メモ・レシート)を編集できるようにする(70回目)
+
+これまで記録に対してできる操作は「精算済みにする/未精算に戻す」「削除」だけで、金額やメモを間違えて登録した場合に直せなかった(削除して作り直すしかなかった)。台帳画面の「⋯」メニューに「編集する」を追加し、金額・通貨・メモ・レシート画像を変更できるようにした。誰から誰への貸し借りか(from/to)・種類(お金/頼みごと)は変更できない(残高計算・割り勘の前提が崩れるため。作り直す場合は削除→新規登録)。
+
+精算状態の変更・削除と同じ扱いで、自分以外の誰かが編集した場合は当事者・記録した本人に通知が届き(新しい通知の種類`entry_edited`)、台帳画面でも金額がハイライトされる(69回目の仕組みをそのまま利用)。
+
+新規: `src/components/EditEntrySheet.tsx`。変更: `src/hooks/useGroupData.ts`(`updateEntry`追加)・`src/components/EntryRow.tsx`(編集メニュー追加)・`src/lib/pushNotifications.ts`・`supabase/functions/send-push/index.ts`(`entry_edited`の文面追加)・`src/i18n/strings.ts`・`src/demo/DemoGroupScreen.tsx`。DBのスキーマ変更は無い(既存のentries UPDATEポリシー・updated_by/updated_atをそのまま使う)ため、SQL実行は不要。**Edge Functionの再デプロイ**(`npx supabase functions deploy send-push`)だけ必要。
+
+tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightでconsole errorが出ないことを確認済み。ただし「⋯」メニュー自体はreact-native-webでは`Alert.alert`がno-op(何も起きない)なため、web/デモ版では実際にメニューを開いて動作確認することができない(この制約はEntryRowの他の操作・催促のトーン選択など、このアプリのAlert.alertを使う全ての箇所に元からある。コード側の問題ではない)。そのため今回の編集フロー自体の動作確認は、実機でオーナーに確認してもらう必要がある。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え

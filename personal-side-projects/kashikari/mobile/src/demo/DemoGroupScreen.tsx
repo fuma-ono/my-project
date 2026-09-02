@@ -273,6 +273,31 @@ export default function DemoGroupScreen({
     );
   const deleteEntry = (e: Entry) => setEntries((prev) => prev.filter((x) => x.id !== e.id));
 
+  // 記録の内容(金額・通貨・メモ)の編集。デモはSupabase Storageに実際
+  // にはアップロードしないため、レシートの新規追加はフォーム内の
+  // プレビューだけに留め(保存後には反映しない)、削除(removePhoto)
+  // だけ反映する。
+  const updateEntry = (
+    e: Entry,
+    input: { amount: number | null; currency: string | null; description: string; photoUri?: string | null; removePhoto?: boolean }
+  ) => {
+    setEntries((prev) =>
+      prev.map((x) => {
+        if (x.id !== e.id) return x;
+        return {
+          ...x,
+          amount: x.type === 'money' ? input.amount : x.amount,
+          currency: x.type === 'money' ? input.currency : x.currency,
+          description: input.description || null,
+          photo_path: input.removePhoto ? null : x.photo_path,
+          updated_by: meId,
+          updated_at: new Date().toISOString(),
+        };
+      })
+    );
+    return Promise.resolve({ error: null });
+  };
+
   // 頼みごと専用: 一括で直接confirmedにする。
   const settlePair = (type: EntryType, a: string, b: string, currency: string | null) => {
     const now = new Date().toISOString();
@@ -502,7 +527,7 @@ export default function DemoGroupScreen({
         }
         renderSectionHeader={({ section }) => <Text style={styles.dateHeader}>{section.title}</Text>}
         renderItem={({ item }) => (
-          <EntryRow entry={item} nameOf={nameOf} meId={meId} onToggleSettled={toggleSettled} onDelete={deleteEntry} />
+          <EntryRow entry={item} nameOf={nameOf} meId={meId} onToggleSettled={toggleSettled} onUpdate={updateEntry} onDelete={deleteEntry} />
         )}
         ItemSeparatorComponent={() => <View style={styles.hairline} />}
       />

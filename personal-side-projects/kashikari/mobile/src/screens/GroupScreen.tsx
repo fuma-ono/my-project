@@ -66,6 +66,7 @@ export default function GroupScreen({
     addSplitEntry,
     toggleSettled,
     deleteEntry,
+    updateEntry,
     settlePair,
     settleAllMoney,
     markPaid,
@@ -548,6 +549,7 @@ export default function GroupScreen({
             nameOf={nameOf}
             meId={meId}
             onToggleSettled={(e) => toggleSettled(e, e.settle_status === 'confirmed' ? 'unpaid' : 'confirmed')}
+            onUpdate={updateEntry}
             onDelete={(e) => deleteEntry(e)}
           />
         )}

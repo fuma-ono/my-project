@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import EditEntrySheet from './EditEntrySheet';
 import { useT } from '../i18n';
 import { entryFromKey, entryToKey } from '../lib/balances';
 import { formatMoney } from '../lib/currency';
@@ -13,6 +14,10 @@ type Props = {
   nameOf: (id: string) => string;
   meId: string | null;
   onToggleSettled: (entry: Entry) => void;
+  onUpdate: (
+    entry: Entry,
+    input: { amount: number | null; currency: string | null; description: string; photoUri?: string | null; removePhoto?: boolean }
+  ) => Promise<{ error: string | null }>;
   onDelete: (entry: Entry) => void;
 };
 
@@ -25,9 +30,10 @@ const RECENTLY_CHANGED_WINDOW_MS = 48 * 60 * 60 * 1000; // 48時間
 // Venmo/Cash Appのアクティビティフィードに寄せ、カード感(枠線・影)をやめて
 // フラットな一覧行にした。金額の色は残高と同じ意味付け(緑=受け取る/赤=払う)を
 // 使い、自分が関係しない記録はニュートラルにする。
-export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onDelete }: Props) {
+export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onUpdate, onDelete }: Props) {
   const t = useT();
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const photoUrl = useReceiptUrl(entry.photo_path);
   const settled = entry.settle_status === 'confirmed';
 
@@ -70,6 +76,7 @@ export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onDelet
       undefined,
       [
         { text: settled ? t.entryRow.markUnsettled : t.entryRow.markSettled, onPress: () => onToggleSettled(entry) },
+        { text: t.entryRow.edit, onPress: () => setEditOpen(true) },
         { text: t.entryRow.delete, style: 'destructive', onPress: () => onDelete(entry) },
         { text: t.common.cancel, style: 'cancel' },
       ],
@@ -113,6 +120,8 @@ export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onDelet
           {photoUrl && <Image source={{ uri: photoUrl }} style={styles.lightboxImg} resizeMode="contain" />}
         </Pressable>
       </Modal>
+
+      <EditEntrySheet visible={editOpen} entry={editOpen ? entry : null} onClose={() => setEditOpen(false)} onSubmit={onUpdate} />
     </View>
   );
 }

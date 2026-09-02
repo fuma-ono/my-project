@@ -41,6 +41,7 @@ type PushKind =
   | 'marked_confirmed'
   | 'remind'
   | 'entry_deleted'
+  | 'entry_edited'
   | 'settled_manually'
   | 'unsettled_manually';
 type RemindTone = 'gentle' | 'normal' | 'funny' | 'strong';
@@ -133,6 +134,15 @@ function buildMessage(
               ? `${actorName} deleted the ${amountText} entry`
               : `${actorName} deleted an entry`,
         };
+      case 'entry_edited':
+        return {
+          title: groupName,
+          body: body.description
+            ? `${actorName} edited "${body.description}"`
+            : amountText
+              ? `${actorName} changed the amount to ${amountText}`
+              : `${actorName} edited an entry`,
+        };
       case 'settled_manually':
         return {
           title: groupName,
@@ -175,6 +185,15 @@ function buildMessage(
           : amountText
             ? `${actorName}さんが${amountText}の記録を削除しました`
             : `${actorName}さんが記録を削除しました`,
+      };
+    case 'entry_edited':
+      return {
+        title: groupName,
+        body: body.description
+          ? `${actorName}さんが「${body.description}」を編集しました`
+          : amountText
+            ? `${actorName}さんが記録を${amountText}に変更しました`
+            : `${actorName}さんが記録を編集しました`,
       };
     case 'settled_manually':
       return {

@@ -230,7 +230,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
   const notifyEntryTouched = useCallback(
     (
       entry: Pick<Entry, 'created_by' | 'from_user' | 'to_user' | 'amount' | 'currency' | 'description'>,
-      kind: 'entry_deleted' | 'settled_manually' | 'unsettled_manually'
+      kind: 'entry_deleted' | 'entry_edited' | 'settled_manually' | 'unsettled_manually'
     ) => {
       if (!groupId || !userId) return;
       const recipientIds = Array.from(
@@ -277,6 +277,49 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       return { error: error?.message ?? null };
     },
     [loadAll, notifyEntryTouched]
+  );
+
+  // 記録内容(金額・通貨・メモ・レシート)の編集。「金額を間違えて登録
+  // した」等の訂正用に68回目の権限撤回に続けて追加した(69回目までは
+  // 精算状態の変更・削除しかできなかった)。誰から誰への貸し借りか
+  // (from/to)・種類(money/favor)は変更させない(残高計算・割り勘の
+  // 前提が崩れるため)。photoUriを渡せば新しいレシートに差し替え、
+  // removePhotoを渡せば既存のレシートを外す(どちらも渡さなければ
+  // 既存のphoto_pathはそのまま)。
+  const updateEntry = useCallback(
+    async (
+      entry: Entry,
+      input: { amount: number | null; currency: string | null; description: string; photoUri?: string | null; removePhoto?: boolean }
+    ) => {
+      let photoPath: string | null | undefined; // undefinedのまま=既存のphoto_pathを変更しない
+      if (input.photoUri) {
+        if (!groupId) return { error: t.auth.unauthenticated };
+        const res = await uploadReceipt(groupId, input.photoUri, t);
+        if (res.error) return { error: res.error };
+        photoPath = res.path;
+      } else if (input.removePhoto) {
+        photoPath = null;
+      }
+
+      const patch: Record<string, unknown> = {
+        description: input.description || null,
+        updated_by: userId,
+        updated_at: new Date().toISOString(),
+      };
+      if (entry.type === 'money') {
+        patch.amount = input.amount;
+        patch.currency = input.currency;
+      }
+      if (photoPath !== undefined) patch.photo_path = photoPath;
+
+      const { error } = await supabase.from('entries').update(patch).eq('id', entry.id);
+      if (!error) {
+        notifyEntryTouched(entry, 'entry_edited');
+        await loadAll();
+      }
+      return { error: error?.message ?? null };
+    },
+    [groupId, userId, t, loadAll, notifyEntryTouched]
   );
 
   // 頼みごと専用: 「支払う/受け取る」という概念が無いため、従来通り
@@ -407,6 +450,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
     addSplitEntry,
     toggleSettled,
     deleteEntry,
+    updateEntry,
     settlePair,
     settleAllMoney,
     markPaid,

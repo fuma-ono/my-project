@@ -33,6 +33,7 @@ export type PushKind =
   | 'marked_confirmed'
   | 'remind'
   | 'entry_deleted'
+  | 'entry_edited'
   | 'settled_manually'
   | 'unsettled_manually';
 export type RemindTone = 'gentle' | 'normal' | 'funny' | 'strong';

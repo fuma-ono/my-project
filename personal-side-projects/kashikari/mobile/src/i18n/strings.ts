@@ -166,7 +166,13 @@ export const ja = {
   entryRow: {
     markUnsettled: '未精算に戻す',
     markSettled: '精算済みにする',
+    edit: '編集する',
     delete: '削除',
+  },
+  editEntry: {
+    title: '記録を編集',
+    submit: '保存する',
+    submitFailedTitle: '保存できませんでした',
   },
   addEntry: {
     title: '貸し借りを記録',
@@ -470,7 +476,13 @@ export const en: Strings = {
   entryRow: {
     markUnsettled: 'Mark as unsettled',
     markSettled: 'Mark as settled',
+    edit: 'Edit',
     delete: 'Delete',
+  },
+  editEntry: {
+    title: 'Edit entry',
+    submit: 'Save',
+    submitFailedTitle: 'Could not save',
   },
   addEntry: {
     title: 'Log a debt',
