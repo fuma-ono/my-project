@@ -341,16 +341,16 @@ export function useGroupData(groupId: string | null, userId: string | null) {
   // バラバラでも)全額分の受け渡しが完了している = 全部精算済みにして
   // 問題ない、という考え方(支払った→受け取ったの2段階はスキップする
   // ショートカット)。
+  //
+  // 66回目でentriesの直接UPDATEを当事者(from_user/to_user)・記録者
+  // (created_by)限定に絞ったため、「自分が当事者ではない他の2人組の
+  // 記録」も含むこの一括操作は直接のUPDATEでは行えなくなった。
+  // security definer関数(settle_all_money、グループメンバーかどうか
+  // だけを見る)経由に変更している。
   const settleAllMoney = useCallback(
     async (currency: string) => {
       if (!groupId) return { error: t.auth.unauthenticated };
-      const { error } = await supabase
-        .from('entries')
-        .update({ settle_status: 'confirmed', confirmed_at: new Date().toISOString() })
-        .eq('group_id', groupId)
-        .eq('type', 'money')
-        .eq('currency', currency)
-        .neq('settle_status', 'confirmed');
+      const { error } = await supabase.rpc('settle_all_money', { _group_id: groupId, _currency: currency });
       if (!error) await loadAll();
       return { error: error?.message ?? null };
     },

@@ -25,25 +25,36 @@ export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onDelet
   const photoUrl = useReceiptUrl(entry.photo_path);
   const settled = entry.settle_status === 'confirmed';
 
-  const openMenu = () => {
-    Alert.alert(
-      '',
-      undefined,
-      [
-        { text: settled ? t.entryRow.markUnsettled : t.entryRow.markSettled, onPress: () => onToggleSettled(entry) },
-        { text: t.entryRow.delete, style: 'destructive', onPress: () => onDelete(entry) },
-        { text: t.common.cancel, style: 'cancel' },
-      ],
-      { cancelable: true }
-    );
-  };
-
   // from_user = 貸した人(あとで受け取る側)、to_user = 借りた人(あとで払う側)
   const fromKey = entryFromKey(entry);
   const toKey = entryToKey(entry);
   const iAmReceiver = fromKey === meId;
   const iAmPayer = toKey === meId;
   const amountColor = settled ? colors.muted : iAmPayer ? colors.negative : iAmReceiver ? colors.positive : colors.ink;
+
+  // 66回目: グループ内なら誰でも他人の記録を編集・削除できてしまう
+  // 状態をやめ、「記録の当事者(貸した人/借りた人)か、記録した本人」だけに
+  // 絞った(schema.sqlのentries UPDATE/DELETEポリシーと対応させている)。
+  // 削除は記録した本人だけ(間違えて登録した記録を本人が取り消す用途の
+  // ため)、精算状態の切り替えは当事者2人のどちらかでも本人でも可。
+  const canToggleSettled = entry.created_by === meId || iAmReceiver || iAmPayer;
+  const canDelete = entry.created_by === meId;
+
+  const openMenu = () => {
+    if (!canToggleSettled && !canDelete) return;
+    Alert.alert(
+      '',
+      undefined,
+      [
+        ...(canToggleSettled
+          ? [{ text: settled ? t.entryRow.markUnsettled : t.entryRow.markSettled, onPress: () => onToggleSettled(entry) }]
+          : []),
+        ...(canDelete ? [{ text: t.entryRow.delete, style: 'destructive' as const, onPress: () => onDelete(entry) }] : []),
+        { text: t.common.cancel, style: 'cancel' as const },
+      ],
+      { cancelable: true }
+    );
+  };
 
   return (
     <View style={styles.row}>
@@ -72,9 +83,11 @@ export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onDelet
         {entry.type === 'money' ? formatMoney(entry.amount ?? 0, entry.currency) : t.common.favorCount(1)}
       </Text>
 
-      <Pressable onPress={openMenu} hitSlop={8} style={styles.menuBtn}>
-        <Text style={styles.menuDots}>⋯</Text>
-      </Pressable>
+      {(canToggleSettled || canDelete) && (
+        <Pressable onPress={openMenu} hitSlop={8} style={styles.menuBtn}>
+          <Text style={styles.menuDots}>⋯</Text>
+        </Pressable>
+      )}
 
       <Modal visible={lightboxOpen} transparent animationType="fade" onRequestClose={() => setLightboxOpen(false)}>
         <Pressable style={styles.lightboxBg} onPress={() => setLightboxOpen(false)}>

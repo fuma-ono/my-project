@@ -68,6 +68,10 @@ export default function BalanceCard({
   // 「催促する」は、まだ相手が支払った操作をしていない(status==='unpaid')
   // 段階でのみ意味がある。support済み(status==='paid')になったら、
   // 「催促する」の代わりに「受け取った」ボタンに切り替わる。
+  // 頼みごとの「精算」(onSettle)は、以前は自分が関係しない行(row.mine
+  // がfalse、他の2人組の頼みごと)でもボタンが出て押せてしまっていた。
+  // 66回目でschema.sql側のentries UPDATEポリシーを当事者限定に絞った
+  // のに合わせ、ここでも当事者(iOwe/iAmOwed)だけに表示する。
   const canRemind = iAmOwed && isMoney && row.status === 'unpaid';
   const canMarkPaid = iOwe && isMoney && row.status === 'unpaid';
   const canConfirmReceived = iAmOwed && isMoney && row.status === 'paid';
@@ -98,7 +102,7 @@ export default function BalanceCard({
       </View>
 
       <View style={styles.bottomRow}>
-        {!isMoney && (
+        {!isMoney && (iOwe || iAmOwed) && (
           <Pressable onPress={onSettle} hitSlop={8} style={styles.settleBtn}>
             <Text style={styles.settleText}>{t.balanceCard.settle}</Text>
           </Pressable>
