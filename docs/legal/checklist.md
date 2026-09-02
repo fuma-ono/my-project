@@ -15,6 +15,13 @@
 - [ ] アプリ内課金(サブスク)を実装する場合、Apple/Googleそれぞれの課金ガイドライン準拠が必要
 - [ ] 睡眠/集中アプリという性質上、「医療行為ではない」旨の免責表記があると安全(不眠症治療等を謳わない)
 
+## アプリ「kashikari」
+
+- [x] **プライバシーポリシー**(App Store / Google Play 申請に必須)— ドラフト作成済み(`docs/legal/kashikari-privacy-policy.md`)。連絡先メールアドレスの記入と法的最終確認はオーナー側の作業
+- [x] **利用規約** — ドラフト作成済み(`docs/legal/kashikari-terms-of-service.md`)。事業者名・連絡先・準拠法の記入と法的最終確認はオーナー側の作業
+- [ ] 「グループ内はメンバーなら誰でも他人の記録の精算状態を変更・削除・編集できる(信頼前提)」という設計は、利用規約に明記済み。ストア審査・ユーザーからの問い合わせで誤解が生じないよう、アプリ内(オンボーディング等)でも一言触れておくと親切かもしれない
+- [ ] Apple Developer Program・Google Play Consoleへの登録(`personal-side-projects/kashikari/mobile/README.md`の「ストア公開までに、まだ人間がやる必要があること」参照)
+
 ## note記事
 
 - [ ] 有料記事販売を行う場合、**特定商取引法に基づく表記**が必要になるケースがある(要確認・note側の規定次第)
@@ -27,5 +34,6 @@
 ## オーナーへの依頼
 
 - `docs/legal/privacy-policy.md` の連絡先メールアドレス欄、`docs/legal/terms-of-service.md` の事業者名・連絡先・準拠法欄を記入
-- 両ドラフトの法的な最終確認(必要なら専門家レビュー)
+- `docs/legal/kashikari-privacy-policy.md` の連絡先メールアドレス欄、`docs/legal/kashikari-terms-of-service.md` の事業者名・連絡先・準拠法欄を記入
+- 両アプリのドラフトの法的な最終確認(必要なら専門家レビュー)
 - 会社形態(個人事業主/法人)の方針決定

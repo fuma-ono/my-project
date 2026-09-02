@@ -9,12 +9,14 @@
     "scheme": "kashikari",
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.fumaono.kashikari",
       "infoPlist": {
         "NSCameraUsageDescription": "レシートを撮影して記録に添付するために使用します。",
         "NSPhotoLibraryUsageDescription": "レシートの写真を記録に添付するために使用します。"
       }
     },
     "android": {
+      "package": "com.fumaono.kashikari",
       "adaptiveIcon": {
         "backgroundColor": "#ff6b4a",
         "foregroundImage": "./assets/android-icon-foreground.png"
