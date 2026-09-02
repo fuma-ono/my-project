@@ -24,7 +24,7 @@
   - 利用規約: https://claude.ai/code/artifact/2fbe0df7-aa78-4277-b890-b32f76bf7022
 - [x] **ストア掲載情報の下書き**(`personal-side-projects/kashikari/mobile/docs/store-listing.md`、74回目)— サブタイトル・説明文・キーワード・カテゴリ・プライバシー質問票の回答目安まで用意済み
 - [ ] 「グループ内はメンバーなら誰でも他人の記録の精算状態を変更・削除・編集できる(信頼前提)」という設計は、利用規約に明記済み。ストア審査・ユーザーからの問い合わせで誤解が生じないよう、アプリ内(オンボーディング等)でも一言触れておくと親切かもしれない
-- [ ] Apple Developer Program・Google Play Consoleへの登録(`personal-side-projects/kashikari/mobile/README.md`の「ストア公開までに、まだ人間がやる必要があること」参照)
+- [ ] Apple Developer Program・Google Play Consoleへの登録(`personal-side-projects/kashikari/mobile/README.md`の「ストア公開までに、まだ人間がやる必要があること」参照)。**Apple側はIndividual(個人)登録に決定**(オーナー判断)。Individual登録では、屋号「kashikari」ではなくApp Store上の「販売元」表示に本名が使われる仕様のため、その前提で進める
 
 ## note記事
 

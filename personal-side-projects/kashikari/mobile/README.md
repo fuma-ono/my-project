@@ -1334,6 +1334,12 @@ tsc --noEmit clean、web export成功を確認済み(app.jsonの変更のみで�
 
 現時点で人間(オーナー)がやる必要が残っているのは、Apple Developer Program/Google Play Consoleへの登録・アイコンの最終判断・実際の`eas build`/`eas submit`・ストア掲載情報の実入力とスクリーンショット撮影のみ(詳細は「ストア公開までに、まだ人間がやる必要があること」参照)。
 
+## Apple Developer ProgramをIndividualで登録することに決定(75回目)
+
+Apple Developer Programの登録方式には Individual(個人)と Organization(組織)があり、**Individualの場合、App Store上の「販売元」表示に屋号(kashikari)ではなく本名が使われる**(Apple公式仕様)。Organizationなら屋号を表示できるが、D-U-N-S番号(法人としての登録が前提)が必要で、個人事業主(屋号のみ)で取得できるかは不確実かつ手続きも煩雑になる。この2択をオーナーに確認したところ、**Individualで登録し、本名が表示されることを受け入れる**という判断になった。`docs/legal/checklist.md`に記録済み。
+
+実際のアカウント登録(本人確認・支払い情報の入力)はブラウザ操作が必須で、この環境からは代行できないため、オーナー自身に進めてもらう必要がある。
+
 ## データの分離について(重要)
 
 - グループの作成・参加はすべて `create_group` / `join_group` というサーバー側関数(RPC)経由で行われ、招待コードを知っている人だけがそのグループに参加できる
