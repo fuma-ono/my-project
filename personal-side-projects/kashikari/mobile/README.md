@@ -1203,7 +1203,7 @@ tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightでconsol
 
 `src/hooks/useNotifications.ts`(通知ページ用のフック)に`latestInsert`(直近にRealtimeで届いた1件)を追加し、`App.tsx`のバナー表示をこちらに差し替えた。`src/hooks/usePushNotifications.ts`側の`addNotificationReceivedListener`・`foregroundNotification`は削除(タップして開く機能=`addNotificationResponseReceivedListener`はそのまま維持。こちらは通知を閉じている時の配信で問題なく動いている機能で、対象が別)。
 
-tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightでconsole errorが出ないことを確認済み。実機でのバナー表示確認はオーナー側での確認が必要(Realtime自体は62回目で実機確認済みのため、今回は動く可能性が高いと見ている)。
+tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightでconsole errorが出ないことを確認済み。**オーナーが実機(アプリを開いたまま)で再テストし、バナーが表示されることを確認済み**。
 
 ## 構成
 
