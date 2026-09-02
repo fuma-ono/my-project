@@ -424,7 +424,7 @@ export default function DemoGroupScreen({
           ListHeaderComponent={
             <View>
               {header}
-              <NetSummary totals={netTotals} balances={balances} meId={meId} />
+              <NetSummary totals={netTotals} balances={balances} meId={meId} nameOf={nameOf} emojiOf={emojiOf} />
               {balances.length > 0 && (
                 <SettlementProgress
                   remaining={settlementProgress.remaining}

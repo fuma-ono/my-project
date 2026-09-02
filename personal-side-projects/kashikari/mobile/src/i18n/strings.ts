@@ -159,6 +159,9 @@ export const ja = {
     allSettled: '全員の貸し借りが解消されました',
     receiving: '受け取る金額',
     paying: '支払う金額',
+    detailTitle: (currency: string) => `${currency}の内訳`,
+    detailReceivingEmpty: '受け取る相手はいません',
+    detailPayingEmpty: '支払う相手はいません',
   },
   entryRow: {
     markUnsettled: '未精算に戻す',
@@ -460,6 +463,9 @@ export const en: Strings = {
     allSettled: "Everyone's debts are cleared",
     receiving: "Amount you'll receive",
     paying: "Amount you'll pay",
+    detailTitle: (currency: string) => `${currency} breakdown`,
+    detailReceivingEmpty: 'Nobody owes you',
+    detailPayingEmpty: "You don't owe anyone",
   },
   entryRow: {
     markUnsettled: 'Mark as unsettled',

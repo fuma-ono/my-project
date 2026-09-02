@@ -1226,6 +1226,14 @@ UI側も、権限が無い操作は最初からボタン・メニュー項目自
 
 tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightで台帳画面の「⋯」メニューが当事者・記録者の記録にだけ表示され、それ以外の記録(デモデータの「はなこ→じろう」等)には表示されないことを確認済み。
 
+## 「あなたの残高」カードの›をタップで内訳モーダルを表示(67回目)
+
+「あなたの残高」カード(NetSummary)の各通貨行にある›(シェブロン)が、以前は装飾だけで押しても何も起きなかった。タップすると、その通貨について「誰から受け取るか/誰に支払うか」を人ごとに一覧できるモーダル(`BalanceDetailModal`)を新しく開くようにした。複数の通貨で貸し借りがある場合、通貨ごとに絞り込んで内訳を見られる。
+
+新規: `src/components/BalanceDetailModal.tsx`。変更: `src/components/NetSummary.tsx`(タップ可能にしてモーダルを開く)・`src/screens/GroupScreen.tsx`・`src/demo/DemoGroupScreen.tsx`(NetSummaryにnameOf/emojiOfを渡すよう変更)・`src/i18n/strings.ts`。
+
+tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightで›をタップして内訳モーダル(はなこから¥1,500受け取る・じろうへ¥2,000支払う、というデモデータ通りの内容)が開くことを確認済み。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え

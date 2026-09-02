@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import BalanceDetailModal from './BalanceDetailModal';
 import { useT } from '../i18n';
 import { formatMoney } from '../lib/currency';
 import { colors, fonts } from '../theme';
@@ -14,6 +16,8 @@ type Props = {
   // 内訳の生データ(balances)を受け取って通貨ごとに集計する。
   balances: BalanceRow[];
   meId: string | null;
+  nameOf: (id: string) => string;
+  emojiOf: (id: string) => string | null;
 };
 
 // Venmo/Cash App的な「まず一番大事な数字を大きく見せる」ヒーロー表示。
@@ -29,8 +33,12 @@ type Props = {
 // の方が有益、という指摘を受けて差し替えた。ここに出す受取/支払は、
 // 相手ごとに既にネット済みのbalances(内訳)を合算したもので、
 // 受取−支払=上のヒーロー数字(net)と一致する。
-export default function NetSummary({ totals, balances, meId }: Props) {
+export default function NetSummary({ totals, balances, meId, nameOf, emojiOf }: Props) {
   const t = useT();
+  // タップされた通貨行の内訳をBalanceDetailModalで見せる。「›」は装飾
+  // だけで押しても何も起きなかった、という指摘を受けて追加した。
+  const [detailCurrency, setDetailCurrency] = useState<string | null>(null);
+  const detailRows = balances.filter((b) => b.mine && b.type === 'money' && b.currency === detailCurrency);
 
   if (totals.length === 0) {
     return (
@@ -85,7 +93,7 @@ export default function NetSummary({ totals, balances, meId }: Props) {
                 dividerの左右マージンの配分だけを変えて見た目の位置を
                 動かした(合計幅=marginLeft+width+marginRightは変えて
                 いないため、2列目=支払う金額の開始位置には影響しない)。 */}
-            <View style={styles.grossRow}>
+            <Pressable style={styles.grossRow} onPress={() => setDetailCurrency(total.currency)} hitSlop={4}>
               <View style={styles.grossCol}>
                 <Text style={styles.grossLabel}>{t.netSummary.receiving}</Text>
                 <Text style={styles.grossAmount}>{formatMoney(receivable, total.currency)}</Text>
@@ -96,10 +104,19 @@ export default function NetSummary({ totals, balances, meId }: Props) {
                 <Text style={styles.grossAmount}>{formatMoney(payable, total.currency)}</Text>
               </View>
               <Ionicons name="chevron-forward" size={24} color="rgba(255,255,255,0.7)" style={styles.chevron} />
-            </View>
+            </Pressable>
           </View>
         );
       })}
+      <BalanceDetailModal
+        visible={detailCurrency !== null}
+        currency={detailCurrency}
+        rows={detailRows}
+        meId={meId}
+        nameOf={nameOf}
+        emojiOf={emojiOf}
+        onClose={() => setDetailCurrency(null)}
+      />
     </LinearGradient>
   );
 }
