@@ -1295,6 +1295,14 @@ tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightでconsol
 - `supabase/schema.sql` — テーブル定義・RLSポリシー・グループ作成/参加用RPC・レシート画像用ストレージ設定
 - `supabase/functions/line-signin/` — LINEログイン専用のEdge Function(SupabaseのOIDC機能がLINEのHS256署名に非対応なため自前実装。要デプロイ、52回目参照)
 
+## 「最近変更された」の示し方を金額の色から専用の印に変更(71回目)
+
+69回目で「自分以外が最近変更した記録」の金額をアクセントカラーに変える形にしていたが、「色より分かりやすいマーク・文字にしてほしい」という指摘を受けて変更した。金額はいつも通りの色(受け取る=緑/支払う=赤)のままにし、代わりに金額の下に「変更あり」という小さなタグを付けるようにした。ハイライトするかどうかの条件(自分が当事者・記録者である記録のうち、自分以外が直近48時間以内に変更したもの)自体は69回目と同じ。
+
+変更: `src/components/EntryRow.tsx`・`src/i18n/strings.ts`。DBのスキーマ変更・Edge Functionの変更は無い(表示方法だけの変更)。
+
+tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightで対象記録に「変更あり」タグが表示され、他の記録には表示されないことを確認済み。
+
 ## データの分離について(重要)
 
 - グループの作成・参加はすべて `create_group` / `join_group` というサーバー側関数(RPC)経由で行われ、招待コードを知っている人だけがそのグループに参加できる

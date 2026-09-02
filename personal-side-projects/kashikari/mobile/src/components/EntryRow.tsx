@@ -21,10 +21,10 @@ type Props = {
   onDelete: (entry: Entry) => void;
 };
 
-// 自分以外の誰かが精算状態を変更してから、まだこのくらいの時間内なら
-// 「最近変わった」とみなしてハイライトする(68回目)。ずっと表示され
-// 続けると気付いた後もノイズになるため、既読管理はせず一定時間で
-// 自然に消えるだけの簡易な仕組みにしている。
+// 自分以外の誰かが精算状態や内容を変更してから、まだこのくらいの
+// 時間内なら「最近変わった」とみなして印を付ける(68回目)。ずっと
+// 表示され続けると気付いた後もノイズになるため、既読管理はせず
+// 一定時間で自然に消えるだけの簡易な仕組みにしている。
 const RECENTLY_CHANGED_WINDOW_MS = 48 * 60 * 60 * 1000; // 48時間
 
 // Venmo/Cash Appのアクティビティフィードに寄せ、カード感(枠線・影)をやめて
@@ -54,15 +54,7 @@ export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onUpdat
     !!entry.updated_at &&
     Date.now() - new Date(entry.updated_at).getTime() < RECENTLY_CHANGED_WINDOW_MS;
 
-  const amountColor = isRecentlyChangedByOther
-    ? colors.accent
-    : settled
-      ? colors.muted
-      : iAmPayer
-        ? colors.negative
-        : iAmReceiver
-          ? colors.positive
-          : colors.ink;
+  const amountColor = settled ? colors.muted : iAmPayer ? colors.negative : iAmReceiver ? colors.positive : colors.ink;
 
   // グループ内は「メンバーなら誰でも他人の記録に触れてよい」という
   // 信頼前提(schema.sql参照)。66回目で一度、当事者・記録者だけに
@@ -107,9 +99,12 @@ export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onUpdat
         </Pressable>
       )}
 
-      <Text style={[styles.amount, { color: amountColor }, settled && styles.strike]}>
-        {entry.type === 'money' ? formatMoney(entry.amount ?? 0, entry.currency) : t.common.favorCount(1)}
-      </Text>
+      <View style={styles.amountCol}>
+        <Text style={[styles.amount, { color: amountColor }, settled && styles.strike]}>
+          {entry.type === 'money' ? formatMoney(entry.amount ?? 0, entry.currency) : t.common.favorCount(1)}
+        </Text>
+        {isRecentlyChangedByOther && <Text style={styles.recentlyChangedTag}>{t.entryRow.recentlyChanged}</Text>}
+      </View>
 
       <Pressable onPress={openMenu} hitSlop={8} style={styles.menuBtn}>
         <Text style={styles.menuDots}>⋯</Text>
@@ -140,7 +135,21 @@ const styles = StyleSheet.create({
   arrow: { color: colors.muted },
   desc: { ...fonts.body, fontSize: 12, color: colors.muted, marginTop: 2 },
   thumb: { width: 34, height: 34, borderRadius: 9 },
+  amountCol: { alignItems: 'flex-end' },
   amount: { ...fonts.display, fontSize: 15 },
+  // 自分以外の誰かが最近変更した記録に付ける小さな印(68回目は金額の
+  // 色を変えていたが、「色より分かりやすいマーク・文字にしてほしい」
+  // という指摘を受けて71回目でこちらに変更した)。
+  recentlyChangedTag: {
+    ...fonts.bodySemiBold,
+    fontSize: 10.5,
+    color: colors.accent,
+    backgroundColor: colors.accentSoft,
+    borderRadius: 999,
+    paddingVertical: 1,
+    paddingHorizontal: 6,
+    marginTop: 3,
+  },
   strike: { textDecorationLine: 'line-through', opacity: 0.6 },
   menuBtn: { padding: 4 },
   menuDots: { fontSize: 18, color: colors.muted },

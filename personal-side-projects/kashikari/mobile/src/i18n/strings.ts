@@ -168,6 +168,7 @@ export const ja = {
     markSettled: '精算済みにする',
     edit: '編集する',
     delete: '削除',
+    recentlyChanged: '変更あり',
   },
   editEntry: {
     title: '記録を編集',
@@ -478,6 +479,7 @@ export const en: Strings = {
     markSettled: 'Mark as settled',
     edit: 'Edit',
     delete: 'Delete',
+    recentlyChanged: 'Changed',
   },
   editEntry: {
     title: 'Edit entry',
