@@ -16,6 +16,12 @@ type Props = {
   onDelete: (entry: Entry) => void;
 };
 
+// 自分以外の誰かが精算状態を変更してから、まだこのくらいの時間内なら
+// 「最近変わった」とみなしてハイライトする(68回目)。ずっと表示され
+// 続けると気付いた後もノイズになるため、既読管理はせず一定時間で
+// 自然に消えるだけの簡易な仕組みにしている。
+const RECENTLY_CHANGED_WINDOW_MS = 48 * 60 * 60 * 1000; // 48時間
+
 // Venmo/Cash Appのアクティビティフィードに寄せ、カード感(枠線・影)をやめて
 // フラットな一覧行にした。金額の色は残高と同じ意味付け(緑=受け取る/赤=払う)を
 // 使い、自分が関係しない記録はニュートラルにする。
@@ -30,7 +36,27 @@ export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onDelet
   const toKey = entryToKey(entry);
   const iAmReceiver = fromKey === meId;
   const iAmPayer = toKey === meId;
-  const amountColor = settled ? colors.muted : iAmPayer ? colors.negative : iAmReceiver ? colors.positive : colors.ink;
+
+  // グループ内はメンバーなら誰でも他人の記録に触れてよいので(schema.sql
+  // 参照)、押しつけのプッシュ通知だけでなく、台帳を見た時にも「これ、
+  // 自分以外の誰かが最近変えたんだ」と一目で分かるようにする。対象は
+  // 自分が当事者・記録者である記録だけ(通知を送る相手と同じ集合)。
+  const isRecentlyChangedByOther =
+    !!entry.updated_by &&
+    entry.updated_by !== meId &&
+    (entry.created_by === meId || iAmReceiver || iAmPayer) &&
+    !!entry.updated_at &&
+    Date.now() - new Date(entry.updated_at).getTime() < RECENTLY_CHANGED_WINDOW_MS;
+
+  const amountColor = isRecentlyChangedByOther
+    ? colors.accent
+    : settled
+      ? colors.muted
+      : iAmPayer
+        ? colors.negative
+        : iAmReceiver
+          ? colors.positive
+          : colors.ink;
 
   // グループ内は「メンバーなら誰でも他人の記録に触れてよい」という
   // 信頼前提(schema.sql参照)。66回目で一度、当事者・記録者だけに

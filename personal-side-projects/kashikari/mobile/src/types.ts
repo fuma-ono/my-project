@@ -60,6 +60,12 @@ export type Entry = {
   confirmed_at: string | null;
   created_by: string;
   created_at: string;
+  // 精算状態を最後に変更した人・時刻(68回目)。「グループ内は誰でも
+  // 他人の記録に触れてよい」代わりに、自分以外の誰かが変更したことに
+  // 台帳画面で気づけるようにするための情報(EntryRowのハイライト表示)。
+  // 作成時点ではnull(作成しただけでは「変更」扱いしない)。
+  updated_by: string | null;
+  updated_at: string | null;
 };
 
 export type BalanceRow = {

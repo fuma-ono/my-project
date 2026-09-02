@@ -165,6 +165,14 @@ alter table public.entries add column if not exists settle_status text not null 
 alter table public.entries add column if not exists paid_at timestamptz;
 alter table public.entries add column if not exists confirmed_at timestamptz;
 
+-- 精算状態を最後に変更した人・時刻(68回目)。「グループ内はメンバー
+-- なら誰でも他人の記録に触れてよい」代わりに、自分以外の誰かが
+-- 精算状態を変更したことに台帳画面で気づけるようにする
+-- (src/components/EntryRow.tsxのハイライト表示)。作成しただけでは
+-- 更新扱いしないため、初期値はnullのまま。
+alter table public.entries add column if not exists updated_by uuid references public.profiles (id);
+alter table public.entries add column if not exists updated_at timestamptz;
+
 -- 旧settled(boolean)からの移行。初回実行時だけ意味を持ち、settled列を
 -- 移行後に削除する(2回目以降は列自体が無いのでこのブロックは丸ごと
 -- スキップされ、ファイル全体を安全に再実行できる)。

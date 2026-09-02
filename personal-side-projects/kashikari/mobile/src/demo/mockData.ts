@@ -65,6 +65,8 @@ export const DEMO_ENTRIES: Entry[] = [
     confirmed_at: null,
     created_by: DEMO_ME_ID,
     created_at: daysAgo(3),
+    updated_by: null,
+    updated_at: null,
   },
   {
     id: 'e2',
@@ -83,6 +85,12 @@ export const DEMO_ENTRIES: Entry[] = [
     confirmed_at: null,
     created_by: 'demo-jiro',
     created_at: hoursAgo(20),
+    // 「グループ内は誰でも他人の記録に触れてよい」デモ用に、じろうが
+    // 作った記録(自分=たろうも当事者)を、はなこ(第三者)が最近
+    // 触った状態にしてある。台帳画面でこの行の件数表示がハイライト
+    // されることを確認できる(68回目、EntryRow.tsx参照)。
+    updated_by: 'demo-hanako',
+    updated_at: hoursAgo(2),
   },
   {
     id: 'e3',
@@ -101,6 +109,8 @@ export const DEMO_ENTRIES: Entry[] = [
     confirmed_at: null,
     created_by: 'demo-hanako',
     created_at: hoursAgo(30),
+    updated_by: null,
+    updated_at: null,
   },
   {
     id: 'e4',
@@ -119,6 +129,8 @@ export const DEMO_ENTRIES: Entry[] = [
     confirmed_at: hoursAgo(48),
     created_by: DEMO_ME_ID,
     created_at: hoursAgo(72),
+    updated_by: null,
+    updated_at: null,
   },
   // e5・e6は、e1と合わせてたろう・はなこ・じろうの3人でJPYの貸し借りが
   // 三角形になるようにしてある(自動精算で3件→2件にまとまる様子を
@@ -142,6 +154,8 @@ export const DEMO_ENTRIES: Entry[] = [
     confirmed_at: null,
     created_by: 'demo-jiro',
     created_at: hoursAgo(10),
+    updated_by: null,
+    updated_at: null,
   },
   {
     id: 'e6',
@@ -160,6 +174,8 @@ export const DEMO_ENTRIES: Entry[] = [
     confirmed_at: null,
     created_by: 'demo-hanako',
     created_at: hoursAgo(6),
+    updated_by: null,
+    updated_at: null,
   },
 ];
 

@@ -255,8 +255,8 @@ export function useGroupData(groupId: string | null, userId: string | null) {
     async (entry: Entry, status: 'unpaid' | 'confirmed') => {
       const patch =
         status === 'confirmed'
-          ? { settle_status: 'confirmed', confirmed_at: new Date().toISOString() }
-          : { settle_status: 'unpaid', paid_at: null, confirmed_at: null };
+          ? { settle_status: 'confirmed', confirmed_at: new Date().toISOString(), updated_by: userId, updated_at: new Date().toISOString() }
+          : { settle_status: 'unpaid', paid_at: null, confirmed_at: null, updated_by: userId, updated_at: new Date().toISOString() };
       const { error } = await supabase.from('entries').update(patch).eq('id', entry.id);
       if (!error) {
         notifyEntryTouched(entry, status === 'confirmed' ? 'settled_manually' : 'unsettled_manually');
@@ -264,7 +264,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       }
       return { error: error?.message ?? null };
     },
-    [loadAll, notifyEntryTouched]
+    [loadAll, notifyEntryTouched, userId]
   );
 
   const deleteEntry = useCallback(
@@ -298,7 +298,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       if (ids.length === 0) return { error: null };
       const { error } = await supabase
         .from('entries')
-        .update({ settle_status: 'confirmed', confirmed_at: new Date().toISOString() })
+        .update({ settle_status: 'confirmed', confirmed_at: new Date().toISOString(), updated_by: userId, updated_at: new Date().toISOString() })
         .in('id', ids);
       if (!error) {
         if (groupId && userId) {
@@ -328,7 +328,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       if (ids.length === 0) return { error: null };
       const { error } = await supabase
         .from('entries')
-        .update({ settle_status: 'paid', paid_at: new Date().toISOString() })
+        .update({ settle_status: 'paid', paid_at: new Date().toISOString(), updated_by: userId, updated_at: new Date().toISOString() })
         .in('id', ids);
       if (!error) {
         logEvent('marked_paid', { userId, groupId });
@@ -359,7 +359,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       if (ids.length === 0) return { error: null };
       const { error } = await supabase
         .from('entries')
-        .update({ settle_status: 'confirmed', confirmed_at: new Date().toISOString() })
+        .update({ settle_status: 'confirmed', confirmed_at: new Date().toISOString(), updated_by: userId, updated_at: new Date().toISOString() })
         .in('id', ids);
       if (!error) {
         logEvent('marked_confirmed', { userId, groupId });
@@ -386,7 +386,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       if (!groupId) return { error: t.auth.unauthenticated };
       const { error } = await supabase
         .from('entries')
-        .update({ settle_status: 'confirmed', confirmed_at: new Date().toISOString() })
+        .update({ settle_status: 'confirmed', confirmed_at: new Date().toISOString(), updated_by: userId, updated_at: new Date().toISOString() })
         .eq('group_id', groupId)
         .eq('type', 'money')
         .eq('currency', currency)
@@ -394,7 +394,7 @@ export function useGroupData(groupId: string | null, userId: string | null) {
       if (!error) await loadAll();
       return { error: error?.message ?? null };
     },
-    [groupId, loadAll, t]
+    [groupId, loadAll, t, userId]
   );
 
   return {

@@ -1255,6 +1255,25 @@ npx supabase functions deploy send-push
 
 tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightで台帳画面の「⋯」メニューが(66回目とは逆に)全ての記録に表示されることを確認済み。
 
+## 台帳で、自分以外が変更した記録の金額をハイライト(69回目・要オーナー作業)
+
+68回目でプッシュ通知による変更の通知を追加したが、「変更したら金額の色が変わるとかにしたら」という提案を受け、台帳画面を見た時にも一目で気づけるようにした。
+
+- entriesに`updated_by`・`updated_at`(精算状態を最後に変更した人・時刻)を追加。精算状態の変更(台帳の手動切り替え・支払った/受け取った・頼みごとの精算・オート精算)のたびに記録するようにした
+- 台帳画面(`EntryRow.tsx`)で、自分が当事者・記録者である記録のうち、**自分以外の誰かが直近48時間以内に変更した**ものは、金額の色をアクセントカラー(オレンジ)にして目立たせる。既読管理はせず、48時間経てば自然に元の色(受け取る=緑/支払う=赤)に戻る簡易な仕組み
+
+**⚠️ 要オーナー作業**:
+
+```sql
+-- entriesにupdated_by・updated_atを追加(Supabase SQL Editorで実行)
+alter table public.entries add column if not exists updated_by uuid references public.profiles (id);
+alter table public.entries add column if not exists updated_at timestamptz;
+```
+
+変更: `supabase/schema.sql`・`src/types.ts`・`src/hooks/useGroupData.ts`(各精算操作でupdated_by/updated_atを設定)・`src/components/EntryRow.tsx`(ハイライト表示)・`src/demo/mockData.ts`・`src/demo/DemoGroupScreen.tsx`。
+
+tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightで対象記録の金額が実際にアクセントカラー(`rgb(255, 107, 74)`)になり、無関係な記録は通常色のままであることを確認済み。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え

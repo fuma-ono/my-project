@@ -141,7 +141,7 @@ export default function DemoGroupScreen({
     setEntries((prev) =>
       prev.map((e) =>
         e.type === 'money' && (e.currency || 'JPY') === currency && e.settle_status !== 'confirmed'
-          ? { ...e, settle_status: 'confirmed', confirmed_at: now }
+          ? { ...e, settle_status: 'confirmed', confirmed_at: now, updated_by: meId, updated_at: now }
           : e
       )
     );
@@ -220,6 +220,8 @@ export default function DemoGroupScreen({
       confirmed_at: null,
       created_by: meId,
       created_at: new Date().toISOString(),
+      updated_by: null,
+      updated_at: null,
     };
     setEntries((prev) => [entry, ...prev]);
     return { error: null };
@@ -251,6 +253,8 @@ export default function DemoGroupScreen({
       confirmed_at: null,
       created_by: meId,
       created_at: new Date().toISOString(),
+      updated_by: null,
+      updated_at: null,
     }));
     setEntries((prev) => [...newEntries, ...prev]);
     return { error: null };
@@ -261,9 +265,10 @@ export default function DemoGroupScreen({
     setEntries((prev) =>
       prev.map((x) => {
         if (x.id !== e.id) return x;
+        const now = new Date().toISOString();
         return x.settle_status === 'confirmed'
-          ? { ...x, settle_status: 'unpaid', paid_at: null, confirmed_at: null }
-          : { ...x, settle_status: 'confirmed', confirmed_at: new Date().toISOString() };
+          ? { ...x, settle_status: 'unpaid', paid_at: null, confirmed_at: null, updated_by: meId, updated_at: now }
+          : { ...x, settle_status: 'confirmed', confirmed_at: now, updated_by: meId, updated_at: now };
       })
     );
   const deleteEntry = (e: Entry) => setEntries((prev) => prev.filter((x) => x.id !== e.id));
@@ -279,7 +284,7 @@ export default function DemoGroupScreen({
             ? (e.currency || 'JPY') === (currency || 'JPY') &&
               ((entryFromKey(e) === a && entryToKey(e) === b) || (entryFromKey(e) === b && entryToKey(e) === a))
             : entryFromKey(e) === a && entryToKey(e) === b;
-        return match ? { ...e, settle_status: 'confirmed', confirmed_at: now } : e;
+        return match ? { ...e, settle_status: 'confirmed', confirmed_at: now, updated_by: meId, updated_at: now } : e;
       })
     );
   };
@@ -293,7 +298,7 @@ export default function DemoGroupScreen({
         const match =
           (e.currency || 'JPY') === (currency || 'JPY') &&
           ((entryFromKey(e) === a && entryToKey(e) === b) || (entryFromKey(e) === b && entryToKey(e) === a));
-        return match ? { ...e, settle_status: 'paid', paid_at: now } : e;
+        return match ? { ...e, settle_status: 'paid', paid_at: now, updated_by: meId, updated_at: now } : e;
       })
     );
     return Promise.resolve({ error: null });
@@ -306,7 +311,7 @@ export default function DemoGroupScreen({
         const match =
           (e.currency || 'JPY') === (currency || 'JPY') &&
           ((entryFromKey(e) === a && entryToKey(e) === b) || (entryFromKey(e) === b && entryToKey(e) === a));
-        return match ? { ...e, settle_status: 'confirmed', confirmed_at: now } : e;
+        return match ? { ...e, settle_status: 'confirmed', confirmed_at: now, updated_by: meId, updated_at: now } : e;
       })
     );
     return Promise.resolve({ error: null });
