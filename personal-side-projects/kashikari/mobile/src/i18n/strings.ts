@@ -103,6 +103,10 @@ export const ja = {
     inviteSuccessToast: (name: string) => `${name}を招待しました`,
     remindSentToast: '通知を送りました',
     remindFailedToast: '通知を送れませんでした(相手が通知を有効にしていない可能性があります)',
+    // 精算状態の変更・削除・編集・オート精算が失敗した時のトースト。
+    // 以前はこれらの操作が失敗しても画面上に何も表示されず、原因の
+    // 切り分けが難しかったため追加した(71回目)。
+    actionFailedToast: (error: string) => `操作に失敗しました(${error})`,
     // 「共有するでLINEやメールへのリンクを送れるようにしてほしい」への対応。
     // OS標準の共有シート一択だとLINE・メールが選択肢の奥に埋もれるため、
     // この2つを専用ボタンとして手前に出す(ShareChannelSheet.tsx)。
@@ -417,6 +421,7 @@ export const en: Strings = {
     inviteSuccessToast: (name: string) => `Invited ${name}`,
     remindSentToast: 'Notification sent',
     remindFailedToast: "Couldn't send the notification (the other person may not have notifications enabled)",
+    actionFailedToast: (error: string) => `Action failed (${error})`,
     shareSheetTitle: 'Send invite link',
     shareSheetLine: 'Send via LINE',
     shareSheetEmail: 'Send via email',

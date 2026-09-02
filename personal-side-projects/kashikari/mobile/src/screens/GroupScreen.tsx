@@ -93,6 +93,14 @@ export default function GroupScreen({
   // 「グループに1人でも追加しないと＋が押せないのはなんで？」という
   // 質問への対応。＋が無効な理由をタップ時にトーストで説明する。
   const [fabHintToastVisible, setFabHintToastVisible] = useState(false);
+  // 精算状態の変更・削除・オート精算が失敗した時のトースト。以前は
+  // これらの操作の戻り値(error)を誰も見ておらず、失敗しても画面上に
+  // 何も表示されなかった(気づけないまま「編集ができない」と分かる
+  // までに時間がかかったことがあった)ため追加した(71回目)。
+  const [entryErrorToastMessage, setEntryErrorToastMessage] = useState<string | null>(null);
+  const showEntryErrorIfAny = (result: { error: string | null }) => {
+    if (result.error) setEntryErrorToastMessage(t.group.actionFailedToast(result.error));
+  };
   // 招待送信の直後、InviteModal自身の閉じるアニメーションが完全に
   // 終わってから共有シートを開くためのフラグ(詳細はinviteModalの
   // onDismissのコメント参照)。
@@ -484,7 +492,12 @@ export default function GroupScreen({
                 nameOf={nameOf}
                 emojiOf={emojiOf}
                 meId={meId}
-                onSettleAll={() => settleAllMoney(plan.currency)}
+                onSettleAll={() =>
+                  settleAllMoney(plan.currency).then((res) => {
+                    showEntryErrorIfAny(res);
+                    return res;
+                  })
+                }
               />
             ))}
           </View>
@@ -497,9 +510,9 @@ export default function GroupScreen({
             emojiOf={emojiOf}
             meId={meId}
             groupId={group.id}
-            onSettle={() => settlePair(item.type, item.debtor, item.creditor, item.currency)}
-            onMarkPaid={() => markPaid(item.debtor, item.creditor, item.currency)}
-            onConfirmReceived={() => confirmReceived(item.debtor, item.creditor, item.currency)}
+            onSettle={() => settlePair(item.type, item.debtor, item.creditor, item.currency).then(showEntryErrorIfAny)}
+            onMarkPaid={() => markPaid(item.debtor, item.creditor, item.currency).then(showEntryErrorIfAny)}
+            onConfirmReceived={() => confirmReceived(item.debtor, item.creditor, item.currency).then(showEntryErrorIfAny)}
             onRemindSent={() => logEvent('reminder_sent', { userId: meId, groupId: group.id })}
             onRemindResult={(sent) => setRemindToastMessage(sent ? t.group.remindSentToast : t.group.remindFailedToast)}
           />
@@ -548,9 +561,11 @@ export default function GroupScreen({
             entry={item}
             nameOf={nameOf}
             meId={meId}
-            onToggleSettled={(e) => toggleSettled(e, e.settle_status === 'confirmed' ? 'unpaid' : 'confirmed')}
+            onToggleSettled={(e) =>
+              toggleSettled(e, e.settle_status === 'confirmed' ? 'unpaid' : 'confirmed').then(showEntryErrorIfAny)
+            }
             onUpdate={updateEntry}
-            onDelete={(e) => deleteEntry(e)}
+            onDelete={(e) => deleteEntry(e).then(showEntryErrorIfAny)}
           />
         )}
         ItemSeparatorComponent={() => <View style={styles.hairline} />}
@@ -588,7 +603,7 @@ export default function GroupScreen({
           nameOf={nameOf}
           emojiOf={emojiOf}
           groupId={group.id}
-          onConfirmReceived={(row) => confirmReceived(row.debtor, row.creditor, row.currency)}
+          onConfirmReceived={(row) => confirmReceived(row.debtor, row.creditor, row.currency).then(showEntryErrorIfAny)}
           onRemindSent={() => logEvent('reminder_sent', { userId: meId, groupId: group.id })}
           onRemindResult={(sent) => setRemindToastMessage(sent ? t.group.remindSentToast : t.group.remindFailedToast)}
           onClose={() => setUnpaidModalOpen(false)}
@@ -597,6 +612,11 @@ export default function GroupScreen({
       <Toast message={remindToastMessage ?? ''} visible={remindToastMessage !== null} onHide={() => setRemindToastMessage(null)} />
       <Toast message={inviteToastMessage ?? ''} visible={inviteToastMessage !== null} onHide={() => setInviteToastMessage(null)} />
       <Toast message={t.group.fabNeedMemberHint} visible={fabHintToastVisible} onHide={() => setFabHintToastVisible(false)} />
+      <Toast
+        message={entryErrorToastMessage ?? ''}
+        visible={entryErrorToastMessage !== null}
+        onHide={() => setEntryErrorToastMessage(null)}
+      />
     </View>
   );
 }
