@@ -12,14 +12,15 @@ type Props = {
   duration?: number;
 };
 
-// アプリを開いている間(フォアグラウンド)に届いたプッシュ通知を、
-// OSの通知バナーの代わりに自前で表示する。実機で確認したところ、
-// expo-notificationsのsetNotificationHandler(shouldShowBanner: true)
-// を設定していても、Expo Go実行中はフォアグラウンド時にOSの通知
-// バナーが出ないことがあった(アプリを閉じている時は問題なく届く)。
-// OS側の挙動に依存せず確実に気づけるよう、画面上部に自前でこの
-// バナーを出す(src/hooks/usePushNotifications.tsのforegroundNotification
-// 参照)。
+// アプリを開いている間(フォアグラウンド)に届いた通知を、OSの通知
+// バナーの代わりに自前で表示する。実機で確認したところ、
+// expo-notificationsのsetNotificationHandler(shouldShowBanner: true)や
+// addNotificationReceivedListenerを設定していても、Expo Go実行中は
+// フォアグラウンド時にOSの通知バナー・リスナーが信頼して発火しない
+// ことがあった(アプリを閉じている時は問題なく届く)。プッシュ通知の
+// 受信経路そのものに頼らず、send-pushが書き込むnotification_logへの
+// Realtime購読(DBの変化を直接見る)を情報源にすることで確実に気づける
+// ようにする(src/hooks/useNotifications.tsのlatestInsert参照)。
 export default function NotificationBanner({ title, body, visible, onPress, onHide, duration = 4500 }: Props) {
   useEffect(() => {
     if (!visible) return;

@@ -5,8 +5,6 @@ import { Platform } from 'react-native';
 import { useLanguage } from '../i18n';
 import { extractGroupIdFromNotification, registerForPushNotifications } from '../lib/pushNotifications';
 
-export type ForegroundNotification = { title: string; body: string; groupId: string | null };
-
 // サインイン中(userIdがある)ことを条件に、この端末のプッシュ通知
 // トークンを登録する。言語設定(lang)が変わったら通知文言もそちらに
 // 合わせたいので、langが変わるたびにも登録し直す(upsert_push_tokenは
@@ -16,10 +14,16 @@ export type ForegroundNotification = { title: string; body: string; groupId: str
 // フォアグラウンドに戻ってきた場合のgroup_idをpendingGroupIdとして返す。
 // 実際にその画面を開く処理はApp.tsx側(groupsの読み込みを待つ必要が
 // あるため)。
+//
+// フォアグラウンド中に届いた通知をその場でバナー表示する機能は、
+// 69回目でこのフックから削除した(useNotifications.tsのlatestInsert
+// 参照)。以前はここでaddNotificationReceivedListener(OSのプッシュ
+// 通知に反応する仕組み)を使っていたが、実機で確認したところExpo Go
+// 実行中はアプリがフォアグラウンドの時には信頼して発火しなかった
+// ため。
 export function usePushNotifications(userId: string | null) {
   const { lang } = useLanguage();
   const [pendingGroupId, setPendingGroupId] = useState<string | null>(null);
-  const [foregroundNotification, setForegroundNotification] = useState<ForegroundNotification | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -45,27 +49,8 @@ export function usePushNotifications(userId: string | null) {
     return () => sub.remove();
   }, []);
 
-  useEffect(() => {
-    if (Platform.OS === 'web') return;
-    // アプリを開いている間(フォアグラウンド)に通知を受け取った場合。
-    // 実機で確認したところ、setNotificationHandler(shouldShowBanner:
-    // true)を設定していても、Expo Go実行中はOSの通知バナー自体が
-    // フォアグラウンド時に表示されないことがある(アプリを閉じている
-    // 時は問題なく届く)。OS側の挙動に頼らず、自前でバナー
-    // (NotificationBanner、App.tsx参照)を出すことで確実に気づける
-    // ようにする。
-    const sub = Notifications.addNotificationReceivedListener((notification) => {
-      const { title, body, data } = notification.request.content;
-      const groupId = typeof data?.group_id === 'string' ? data.group_id : null;
-      setForegroundNotification({ title: title ?? '', body: body ?? '', groupId });
-    });
-    return () => sub.remove();
-  }, []);
-
   return {
     pendingGroupId,
     clearPendingGroupId: () => setPendingGroupId(null),
-    foregroundNotification,
-    clearForegroundNotification: () => setForegroundNotification(null),
   };
 }

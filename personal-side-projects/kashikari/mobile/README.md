@@ -1193,6 +1193,18 @@ tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightで未読
 
 tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightでconsole errorが出ないことを確認済み(バナー自体の表示確認は実機でのプッシュ通知受信が必要なため、オーナー側での確認が必要)。
 
+## フォアグラウンドバナーの情報源をプッシュ通知受信リスナーからRealtime購読に変更(65回目)
+
+**64回目の対応を訂正**: `addNotificationReceivedListener`(OSのプッシュ通知そのものに反応するリスナー)で自前バナーを出すようにしたが、オーナーに実機(開いたまま)で再テストしてもらったところ、**バナーは出なかった**(通知自体は通知ページには届いていたので、通知の送信・保存自体は成功していた)。
+
+調べたところ、これはこのアプリのコードの不具合ではなく、**Expo Go自体の既知の制限**だった。複数のExpo公式リポジトリのissue([#36419](https://github.com/expo/expo/issues/36419)ほか)で、「`addNotificationReceivedListener`はExpo Go実行中、リモートプッシュ通知に対してアプリがフォアグラウンドの間は信頼して発火しない」ことが報告されている(アプリを閉じている時にOSが直接配信する分には影響しない。だからこそ「閉じている時は届くが、開いている間だけ届かない」という症状になっていた)。development build(`eas build --profile development`)にすれば直る可能性が高いが、iOSの場合はApple Developer Program登録が必要になり、実機テストのためだけに今それをやるのは大掛かりすぎる。
+
+そこで、プッシュ通知の受信経路(OSのリスナー)に頼るのをやめ、**既に動作確認済みのRealtime購読**(通知ページ・未読マークが使っているのと同じ、`notification_log`テーブルへのINSERTをSupabase Realtimeで直接購読する仕組み。62回目で有効化済み)を情報源にするよう変更した。この仕組みはプッシュ通知配信そのものとは独立した経路(DBの変化を直接見る)なので、Expo Goのフォアグラウンド制限を受けない。
+
+`src/hooks/useNotifications.ts`(通知ページ用のフック)に`latestInsert`(直近にRealtimeで届いた1件)を追加し、`App.tsx`のバナー表示をこちらに差し替えた。`src/hooks/usePushNotifications.ts`側の`addNotificationReceivedListener`・`foregroundNotification`は削除(タップして開く機能=`addNotificationResponseReceivedListener`はそのまま維持。こちらは通知を閉じている時の配信で問題なく動いている機能で、対象が別)。
+
+tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightでconsole errorが出ないことを確認済み。実機でのバナー表示確認はオーナー側での確認が必要(Realtime自体は62回目で実機確認済みのため、今回は動く可能性が高いと見ている)。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え
