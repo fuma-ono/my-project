@@ -27,7 +27,14 @@ import { Platform } from 'react-native';
 import type { Lang } from '../i18n';
 import { supabase } from './supabase';
 
-export type PushKind = 'entry_created' | 'marked_paid' | 'marked_confirmed' | 'remind';
+export type PushKind =
+  | 'entry_created'
+  | 'marked_paid'
+  | 'marked_confirmed'
+  | 'remind'
+  | 'entry_deleted'
+  | 'settled_manually'
+  | 'unsettled_manually';
 export type RemindTone = 'gentle' | 'normal' | 'funny' | 'strong';
 
 // フォアグラウンド中に通知を受け取ったときも、バナー表示・音を鳴らす

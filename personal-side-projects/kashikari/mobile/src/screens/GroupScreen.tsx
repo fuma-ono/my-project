@@ -547,8 +547,8 @@ export default function GroupScreen({
             entry={item}
             nameOf={nameOf}
             meId={meId}
-            onToggleSettled={(e) => toggleSettled(e.id, e.settle_status === 'confirmed' ? 'unpaid' : 'confirmed')}
-            onDelete={(e) => deleteEntry(e.id)}
+            onToggleSettled={(e) => toggleSettled(e, e.settle_status === 'confirmed' ? 'unpaid' : 'confirmed')}
+            onDelete={(e) => deleteEntry(e)}
           />
         )}
         ItemSeparatorComponent={() => <View style={styles.hairline} />}

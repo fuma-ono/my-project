@@ -1234,6 +1234,27 @@ tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightで台帳
 
 tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightで›をタップして内訳モーダル(はなこから¥1,500受け取る・じろうへ¥2,000支払う、というデモデータ通りの内容)が開くことを確認済み。
 
+## 記録の権限制限をやめ、変更を通知する形に戻す(68回目・要オーナー作業)
+
+66回目で「記録の当事者・記録した本人しか編集・削除できない」に絞ったが、オーナーから「相手の記録に触れてもいいから、変更が分かるようにした方がいいのでは」という意向を受け、方針を変更した。
+
+- entriesのRLSを66回目より前の状態(グループのメンバーなら誰でも精算状態の変更・削除ができる)に戻した
+- 代わりに、精算状態の変更(台帳の「精算済みにする/未精算に戻す」・頼みごとの「精算」)・削除を、自分以外の誰かが行った場合は、その記録の当事者(貸した人・借りた人)・記録した本人にプッシュ通知が届くようにした(新しいプッシュ通知の種類として`entry_deleted`・`settled_manually`・`unsettled_manually`を追加。仕組みは60回目の`entry_created`等と同じ)
+- 66回目で導入した「オート精算」専用RPC(`settle_all_money`)は、entriesのUPDATEが再び全員に開かれたため不要になり削除した(直接のUPDATEに戻した)
+- EntryRow(台帳)の「⋯」メニュー・BalanceCardの頼みごとの「精算」ボタンも、66回目で入れた表示制限を外し、誰の記録にも常に出るようにした
+
+**⚠️ 要オーナー作業**:
+
+```bash
+# schema.sqlをSupabase SQL Editorで再実行(entries RLSを元に戻す・
+# settle_all_money RPCの削除)した後、Edge Functionを再デプロイ
+npx supabase functions deploy send-push
+```
+
+変更: `supabase/schema.sql`・`supabase/functions/send-push/index.ts`(新しい通知種類の文面追加)・`src/lib/pushNotifications.ts`・`src/hooks/useGroupData.ts`(通知処理の追加・`settleAllMoney`を直接UPDATEに戻す)・`src/components/EntryRow.tsx`・`src/components/BalanceCard.tsx`(表示制限を撤回)・`src/screens/GroupScreen.tsx`。
+
+tsc --noEmit clean。demo/非demo両方のweb export成功、Playwrightで台帳画面の「⋯」メニューが(66回目とは逆に)全ての記録に表示されることを確認済み。
+
 ## 構成
 
 - `App.tsx` — フォント読み込み・認証状態に応じた画面切り替え(オンボーディング/グループ一覧/グループ詳細)。会社の`app/`と同じく、ルーティングライブラリなしのシンプルな画面切り替え

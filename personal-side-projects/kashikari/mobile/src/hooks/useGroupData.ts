@@ -221,28 +221,62 @@ export function useGroupData(groupId: string | null, userId: string | null) {
     [groupId, userId, loadAll, t, personColumns, members]
   );
 
+  // グループ内は「メンバーなら誰でも他人の記録に触れてよい」という
+  // 信頼前提(schema.sqlのentries RLS参照)。ただし触れたこと自体は
+  // 分かった方がいいという意向を受け、精算状態の変更・削除は、その
+  // 記録の当事者(from_user/to_user)・記録した本人(created_by)に
+  // 通知する(68回目)。自分自身は除く(自分の操作を自分に通知しても
+  // 意味が無いため)。
+  const notifyEntryTouched = useCallback(
+    (
+      entry: Pick<Entry, 'created_by' | 'from_user' | 'to_user' | 'amount' | 'currency' | 'description'>,
+      kind: 'entry_deleted' | 'settled_manually' | 'unsettled_manually'
+    ) => {
+      if (!groupId || !userId) return;
+      const recipientIds = Array.from(
+        new Set([entry.created_by, entry.from_user, entry.to_user].filter((id): id is string => !!id && id !== userId))
+      );
+      if (recipientIds.length === 0) return;
+      void notifyGroup({
+        groupId,
+        kind,
+        recipientIds,
+        amount: entry.amount ?? null,
+        currency: entry.currency ?? null,
+        description: entry.description ?? null,
+      });
+    },
+    [groupId, userId]
+  );
+
   // 台帳側の「精算済みにする/未精算に戻す」(1件単位の手動オーバーライド)。
   // 支払った→受け取ったの2段階を経由せず、confirmed⇄unpaidを直接行き来する。
   const toggleSettled = useCallback(
-    async (entryId: string, status: 'unpaid' | 'confirmed') => {
+    async (entry: Entry, status: 'unpaid' | 'confirmed') => {
       const patch =
         status === 'confirmed'
           ? { settle_status: 'confirmed', confirmed_at: new Date().toISOString() }
           : { settle_status: 'unpaid', paid_at: null, confirmed_at: null };
-      const { error } = await supabase.from('entries').update(patch).eq('id', entryId);
-      if (!error) await loadAll();
+      const { error } = await supabase.from('entries').update(patch).eq('id', entry.id);
+      if (!error) {
+        notifyEntryTouched(entry, status === 'confirmed' ? 'settled_manually' : 'unsettled_manually');
+        await loadAll();
+      }
       return { error: error?.message ?? null };
     },
-    [loadAll]
+    [loadAll, notifyEntryTouched]
   );
 
   const deleteEntry = useCallback(
-    async (entryId: string) => {
-      const { error } = await supabase.from('entries').delete().eq('id', entryId);
-      if (!error) await loadAll();
+    async (entry: Entry) => {
+      const { error } = await supabase.from('entries').delete().eq('id', entry.id);
+      if (!error) {
+        notifyEntryTouched(entry, 'entry_deleted');
+        await loadAll();
+      }
       return { error: error?.message ?? null };
     },
-    [loadAll]
+    [loadAll, notifyEntryTouched]
   );
 
   // 頼みごと専用: 「支払う/受け取る」という概念が無いため、従来通り
@@ -266,10 +300,16 @@ export function useGroupData(groupId: string | null, userId: string | null) {
         .from('entries')
         .update({ settle_status: 'confirmed', confirmed_at: new Date().toISOString() })
         .in('id', ids);
-      if (!error) await loadAll();
+      if (!error) {
+        if (groupId && userId) {
+          const recipientIds = [a, b].filter((id) => id !== userId);
+          if (recipientIds.length > 0) void notifyGroup({ groupId, kind: 'settled_manually', recipientIds, currency });
+        }
+        await loadAll();
+      }
       return { error: error?.message ?? null };
     },
-    [entries, loadAll]
+    [entries, loadAll, groupId, userId]
   );
 
   // お金の「支払った」: 支払う側が押す。対象ペア×通貨のunpaidな記録を
@@ -341,16 +381,16 @@ export function useGroupData(groupId: string | null, userId: string | null) {
   // バラバラでも)全額分の受け渡しが完了している = 全部精算済みにして
   // 問題ない、という考え方(支払った→受け取ったの2段階はスキップする
   // ショートカット)。
-  //
-  // 66回目でentriesの直接UPDATEを当事者(from_user/to_user)・記録者
-  // (created_by)限定に絞ったため、「自分が当事者ではない他の2人組の
-  // 記録」も含むこの一括操作は直接のUPDATEでは行えなくなった。
-  // security definer関数(settle_all_money、グループメンバーかどうか
-  // だけを見る)経由に変更している。
   const settleAllMoney = useCallback(
     async (currency: string) => {
       if (!groupId) return { error: t.auth.unauthenticated };
-      const { error } = await supabase.rpc('settle_all_money', { _group_id: groupId, _currency: currency });
+      const { error } = await supabase
+        .from('entries')
+        .update({ settle_status: 'confirmed', confirmed_at: new Date().toISOString() })
+        .eq('group_id', groupId)
+        .eq('type', 'money')
+        .eq('currency', currency)
+        .neq('settle_status', 'confirmed');
       if (!error) await loadAll();
       return { error: error?.message ?? null };
     },

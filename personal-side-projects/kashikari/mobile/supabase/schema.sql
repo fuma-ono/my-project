@@ -223,14 +223,16 @@ create policy "group invites are visible to members"
   on public.group_invites for select
   using (public.is_group_member(group_id));
 
--- entries: 参加しているグループの記録は全員が見られる(グループ内の
--- 残高は全員に関わるため)。ただし書き換え・削除は「その記録の当事者
--- (from_user/to_user)か、記録した本人(created_by)」に限る(65回目までは
--- メンバーなら誰でも他人の記録を編集・削除できてしまっていたが、実際に
--- 使ってみると事故・トラブルの元になりうるため66回目で絞った)。
--- グループ全体の一括精算(オート精算)だけは当事者以外の記録にも触れる
--- 必要があるため、この一般ポリシーの対象外としてsettle_all_money RPC
--- (security definer)を別途用意する。
+-- entries: 参加しているグループの記録だけ、読み書きできる(グループ内は
+-- お互いを信頼する前提のため、メンバーなら誰でも記録・精算・削除できる)。
+--
+-- 66回目でこれを「当事者(from_user/to_user)か記録した本人(created_by)」
+-- だけに絞ったが、「相手の記録に触れてもいいから、誰が変更したか分かる
+-- ようにしてほしい」というオーナーの意向を受け、68回目で元の「メンバー
+-- なら誰でも」に戻した。代わりに、精算状態の変更・削除は
+-- notifyGroup(src/hooks/useGroupData.ts)経由でその記録の当事者・記録者に
+-- 通知するようにして、権限を絞るのではなく「見えるようにする」方向で
+-- 対応している。
 drop policy if exists "entries are visible to members" on public.entries;
 create policy "entries are visible to members"
   on public.entries for select
@@ -243,22 +245,16 @@ create policy "members can add entries"
 
 drop policy if exists "members can update entries" on public.entries;
 drop policy if exists "members can update own or party entries" on public.entries;
-create policy "members can update own or party entries"
+create policy "members can update entries"
   on public.entries for update
-  using (
-    public.is_group_member(group_id)
-    and (created_by = auth.uid() or from_user = auth.uid() or to_user = auth.uid())
-  )
-  with check (
-    public.is_group_member(group_id)
-    and (created_by = auth.uid() or from_user = auth.uid() or to_user = auth.uid())
-  );
+  using (public.is_group_member(group_id))
+  with check (public.is_group_member(group_id));
 
 drop policy if exists "members can delete entries" on public.entries;
 drop policy if exists "creator can delete own entries" on public.entries;
-create policy "creator can delete own entries"
+create policy "members can delete entries"
   on public.entries for delete
-  using (public.is_group_member(group_id) and created_by = auth.uid());
+  using (public.is_group_member(group_id));
 
 -- ============================================================
 -- 5. グループ作成・参加はRPC経由(招待コードの生成・照合をサーバー側に集約)
@@ -423,41 +419,16 @@ begin
 end;
 $$;
 
--- 「オート精算」(残高を最小の支払い回数に組み直したプランを、まとめて
--- 精算済みにする)専用。66回目でentriesのUPDATEを当事者(from_user/
--- to_user)・記録者(created_by)限定に絞ったため、通常のUPDATEポリシー
--- では「自分が当事者ではない他の2人組の記録」を含む一括精算ができなく
--- なった。この操作はグループ全員が現金精算などで合意した上で行う
--- 集団的な操作(個々の記録を勝手に書き換えるものではない)ため、
--- security definer関数としてグループメンバーであることだけを条件に許可する。
-create or replace function public.settle_all_money(_group_id uuid, _currency text)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if auth.uid() is null then
-    raise exception 'not authenticated';
-  end if;
-  if not public.is_group_member(_group_id) then
-    raise exception 'このグループのメンバーではありません';
-  end if;
-
-  update public.entries
-  set settle_status = 'confirmed', confirmed_at = now()
-  where group_id = _group_id
-    and type = 'money'
-    and currency = _currency
-    and settle_status <> 'confirmed';
-end;
-$$;
+-- 66回目でentriesのUPDATEを当事者・記録者限定に絞った際に導入した
+-- 「オート精算」専用のRPC。68回目でentriesのUPDATEポリシー自体を
+-- 「メンバーなら誰でも」に戻したため不要になった(直接のUPDATEで
+-- 元通り一括精算できる)。既にデプロイ済みの環境から取り除く。
+drop function if exists public.settle_all_money(uuid, text);
 
 grant execute on function public.create_group(text, text) to authenticated;
 grant execute on function public.create_group_invite(uuid, text) to authenticated;
 grant execute on function public.join_group(text) to authenticated;
 grant execute on function public.leave_group(uuid) to authenticated;
-grant execute on function public.settle_all_money(uuid, text) to authenticated;
 grant execute on function public.update_group_icon(uuid, text) to authenticated;
 grant execute on function public.is_group_member(uuid) to authenticated;
 

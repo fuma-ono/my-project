@@ -35,7 +35,14 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-type PushKind = 'entry_created' | 'marked_paid' | 'marked_confirmed' | 'remind';
+type PushKind =
+  | 'entry_created'
+  | 'marked_paid'
+  | 'marked_confirmed'
+  | 'remind'
+  | 'entry_deleted'
+  | 'settled_manually'
+  | 'unsettled_manually';
 type RemindTone = 'gentle' | 'normal' | 'funny' | 'strong';
 
 type RequestBody = {
@@ -117,6 +124,31 @@ function buildMessage(
         return { title: groupName, body: `${actorName} confirmed your payment.` };
       case 'remind':
         return { title: groupName, body: remindMessage('en', body.tone ?? 'normal', actorName, amountText ?? '') };
+      case 'entry_deleted':
+        return {
+          title: groupName,
+          body: body.description
+            ? `${actorName} deleted "${body.description}"`
+            : amountText
+              ? `${actorName} deleted the ${amountText} entry`
+              : `${actorName} deleted an entry`,
+        };
+      case 'settled_manually':
+        return {
+          title: groupName,
+          body: body.description
+            ? `${actorName} marked "${body.description}" as settled`
+            : amountText
+              ? `${actorName} marked ${amountText} as settled`
+              : `${actorName} marked an entry as settled`,
+        };
+      case 'unsettled_manually':
+        return {
+          title: groupName,
+          body: body.description
+            ? `${actorName} marked "${body.description}" as unsettled`
+            : `${actorName} marked an entry as unsettled`,
+        };
     }
   }
   switch (body.kind) {
@@ -135,6 +167,31 @@ function buildMessage(
       return { title: groupName, body: `${actorName}さんへの支払いが確認されました` };
     case 'remind':
       return { title: groupName, body: remindMessage('ja', body.tone ?? 'normal', actorName, amountText ?? '') };
+    case 'entry_deleted':
+      return {
+        title: groupName,
+        body: body.description
+          ? `${actorName}さんが「${body.description}」の記録を削除しました`
+          : amountText
+            ? `${actorName}さんが${amountText}の記録を削除しました`
+            : `${actorName}さんが記録を削除しました`,
+      };
+    case 'settled_manually':
+      return {
+        title: groupName,
+        body: body.description
+          ? `${actorName}さんが「${body.description}」を精算済みにしました`
+          : amountText
+            ? `${actorName}さんが${amountText}を精算済みにしました`
+            : `${actorName}さんが記録を精算済みにしました`,
+      };
+    case 'unsettled_manually':
+      return {
+        title: groupName,
+        body: body.description
+          ? `${actorName}さんが「${body.description}」を未精算に戻しました`
+          : `${actorName}さんが記録を未精算に戻しました`,
+      };
   }
 }
 

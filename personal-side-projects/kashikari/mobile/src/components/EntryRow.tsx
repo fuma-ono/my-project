@@ -32,25 +32,20 @@ export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onDelet
   const iAmPayer = toKey === meId;
   const amountColor = settled ? colors.muted : iAmPayer ? colors.negative : iAmReceiver ? colors.positive : colors.ink;
 
-  // 66回目: グループ内なら誰でも他人の記録を編集・削除できてしまう
-  // 状態をやめ、「記録の当事者(貸した人/借りた人)か、記録した本人」だけに
-  // 絞った(schema.sqlのentries UPDATE/DELETEポリシーと対応させている)。
-  // 削除は記録した本人だけ(間違えて登録した記録を本人が取り消す用途の
-  // ため)、精算状態の切り替えは当事者2人のどちらかでも本人でも可。
-  const canToggleSettled = entry.created_by === meId || iAmReceiver || iAmPayer;
-  const canDelete = entry.created_by === meId;
-
+  // グループ内は「メンバーなら誰でも他人の記録に触れてよい」という
+  // 信頼前提(schema.sql参照)。66回目で一度、当事者・記録者だけに
+  // 絞ったが、「相手の記録に触れてもいいから、誰が変更したか分かる
+  // ようにしてほしい」というオーナーの意向を受けて68回目で元に戻した。
+  // 代わりに、ここでの操作(精算済み/未精算の切り替え・削除)は
+  // useGroupData.ts側で当事者・記録者に通知される。
   const openMenu = () => {
-    if (!canToggleSettled && !canDelete) return;
     Alert.alert(
       '',
       undefined,
       [
-        ...(canToggleSettled
-          ? [{ text: settled ? t.entryRow.markUnsettled : t.entryRow.markSettled, onPress: () => onToggleSettled(entry) }]
-          : []),
-        ...(canDelete ? [{ text: t.entryRow.delete, style: 'destructive' as const, onPress: () => onDelete(entry) }] : []),
-        { text: t.common.cancel, style: 'cancel' as const },
+        { text: settled ? t.entryRow.markUnsettled : t.entryRow.markSettled, onPress: () => onToggleSettled(entry) },
+        { text: t.entryRow.delete, style: 'destructive', onPress: () => onDelete(entry) },
+        { text: t.common.cancel, style: 'cancel' },
       ],
       { cancelable: true }
     );
@@ -83,11 +78,9 @@ export default function EntryRow({ entry, nameOf, meId, onToggleSettled, onDelet
         {entry.type === 'money' ? formatMoney(entry.amount ?? 0, entry.currency) : t.common.favorCount(1)}
       </Text>
 
-      {(canToggleSettled || canDelete) && (
-        <Pressable onPress={openMenu} hitSlop={8} style={styles.menuBtn}>
-          <Text style={styles.menuDots}>⋯</Text>
-        </Pressable>
-      )}
+      <Pressable onPress={openMenu} hitSlop={8} style={styles.menuBtn}>
+        <Text style={styles.menuDots}>⋯</Text>
+      </Pressable>
 
       <Modal visible={lightboxOpen} transparent animationType="fade" onRequestClose={() => setLightboxOpen(false)}>
         <Pressable style={styles.lightboxBg} onPress={() => setLightboxOpen(false)}>
