@@ -17,8 +17,8 @@
 
 ## アプリ「kashikari」
 
-- [x] **プライバシーポリシー**(App Store / Google Play 申請に必須)— ドラフト作成済み(`docs/legal/kashikari-privacy-policy.md`)。連絡先メールアドレスの記入と法的最終確認はオーナー側の作業
-- [x] **利用規約** — ドラフト作成済み(`docs/legal/kashikari-terms-of-service.md`)。事業者名・連絡先・準拠法の記入と法的最終確認はオーナー側の作業
+- [x] **プライバシーポリシー**(App Store / Google Play 申請に必須)— ドラフト作成済み(`docs/legal/kashikari-privacy-policy.md`)。連絡先メールアドレス(shanqikanghuang271@gmail.com)記入済み。法的最終確認はオーナー側の作業
+- [x] **利用規約** — ドラフト作成済み(`docs/legal/kashikari-terms-of-service.md`)。連絡先メールアドレス記入済み。事業者名・準拠法の記入と法的最終確認はオーナー側の作業
 - [ ] 「グループ内はメンバーなら誰でも他人の記録の精算状態を変更・削除・編集できる(信頼前提)」という設計は、利用規約に明記済み。ストア審査・ユーザーからの問い合わせで誤解が生じないよう、アプリ内(オンボーディング等)でも一言触れておくと親切かもしれない
 - [ ] Apple Developer Program・Google Play Consoleへの登録(`personal-side-projects/kashikari/mobile/README.md`の「ストア公開までに、まだ人間がやる必要があること」参照)
 
@@ -34,6 +34,6 @@
 ## オーナーへの依頼
 
 - `docs/legal/privacy-policy.md` の連絡先メールアドレス欄、`docs/legal/terms-of-service.md` の事業者名・連絡先・準拠法欄を記入
-- `docs/legal/kashikari-privacy-policy.md` の連絡先メールアドレス欄、`docs/legal/kashikari-terms-of-service.md` の事業者名・連絡先・準拠法欄を記入
+- `docs/legal/kashikari-terms-of-service.md` の事業者名・準拠法欄を記入(連絡先メールアドレスは記入済み)
 - 両アプリのドラフトの法的な最終確認(必要なら専門家レビュー)
 - 会社形態(個人事業主/法人)の方針決定

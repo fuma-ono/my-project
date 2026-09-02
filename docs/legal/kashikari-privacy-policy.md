@@ -51,8 +51,8 @@ kashikariは、友達同士の貸し借り(お金・頼みごと)を記録・精
 
 ご質問は下記までご連絡ください。
 
-- お問い合わせ先: `<オーナーが連絡先メールアドレスを記入>`
+- お問い合わせ先: shanqikanghuang271@gmail.com
 
 ---
 
-**オーナーへの依頼**: 上記の連絡先メールアドレスを記入のうえ、App Store Connect / Google Play Console の該当欄にこのページのURL(公開後のURL)を登録してください。内容の法的な最終確認もお願いします。
+**オーナーへの依頼**: App Store Connect / Google Play Console の該当欄にこのページのURL(公開後のURL)を登録してください。内容の法的な最終確認もお願いします。
