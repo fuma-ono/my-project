@@ -1,7 +1,8 @@
 # プライバシーポリシー(ドラフト)
 
 **対象**: 「kashikari」アプリ
-**最終更新**: 2026-09-02(ドラフト。公開前にオーナーが日付・連絡先を確定させてください)
+**最終更新**: 2026-09-02
+**公開URL**: https://claude.ai/code/artifact/984fcff8-5d34-4ea0-a750-2d0968cb4173(このMarkdownと同内容をブランドに合わせて公開したページ。App Store Connect / Google Play ConsoleのPrivacy Policy URL欄にはこちらを登録する。**Artifactは既定で非公開のため、ページ右上の共有メニューから「Anyone with the link」等に変更して公開状態にしてから使うこと**)
 
 このドラフトは、App Store / Google Play への申請に必要なプライバシーポリシーとして提出できる形式で書いていますが、内容は現時点のアプリの実装(`personal-side-projects/kashikari/mobile/`)に基づく事実のみを記載しています。実装が変わったら(新しいサインイン方法の追加、広告SDKの追加など)、その都度このファイルを更新してください。
 

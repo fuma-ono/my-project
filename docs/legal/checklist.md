@@ -19,6 +19,10 @@
 
 - [x] **プライバシーポリシー**(App Store / Google Play 申請に必須)— ドラフト作成済み(`docs/legal/kashikari-privacy-policy.md`)。連絡先メールアドレス(shanqikanghuang271@gmail.com)記入済み。法的最終確認はオーナー側の作業
 - [x] **利用規約** — ドラフト作成済み(`docs/legal/kashikari-terms-of-service.md`)。事業者名(屋号: kashikari)・連絡先メールアドレス・準拠法(日本法・運営者住所地の裁判所)すべて記入済み。法的最終確認はオーナー側の作業
+- [x] **両ページの公開URL**(Artifact、74回目)を作成済み。App Store Connect / Google Play Consoleに登録する前に、**共有メニューから公開状態への切り替えが必要**(既定で非公開)
+  - プライバシーポリシー: https://claude.ai/code/artifact/984fcff8-5d34-4ea0-a750-2d0968cb4173
+  - 利用規約: https://claude.ai/code/artifact/2fbe0df7-aa78-4277-b890-b32f76bf7022
+- [x] **ストア掲載情報の下書き**(`personal-side-projects/kashikari/mobile/docs/store-listing.md`、74回目)— サブタイトル・説明文・キーワード・カテゴリ・プライバシー質問票の回答目安まで用意済み
 - [ ] 「グループ内はメンバーなら誰でも他人の記録の精算状態を変更・削除・編集できる(信頼前提)」という設計は、利用規約に明記済み。ストア審査・ユーザーからの問い合わせで誤解が生じないよう、アプリ内(オンボーディング等)でも一言触れておくと親切かもしれない
 - [ ] Apple Developer Program・Google Play Consoleへの登録(`personal-side-projects/kashikari/mobile/README.md`の「ストア公開までに、まだ人間がやる必要があること」参照)
 

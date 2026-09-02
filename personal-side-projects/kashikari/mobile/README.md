@@ -1323,6 +1323,17 @@ Expo/EASアカウント連携(`eas init`)は60回目で既に完了している�
 
 tsc --noEmit clean、web export成功を確認済み(app.jsonの変更のみで、アプリの挙動自体への影響は無い)。
 
+## ストア公開に向けた準備・続き(74回目)
+
+「リリース準備を進めて」という指示を受け、73回目に続きコード側で対応できる分を進めた。
+
+- **プライバシーポリシー・利用規約の公開ページ**(Artifact)を作成。`docs/legal/`のMarkdownドラフトと同内容を、kashikariのブランド(コーラル→プラムのグラデーション、M PLUS Rounded 1cの丸ゴシック)に合わせたページとして公開した。App Store Connect / Google Play Consoleの「プライバシーポリシーURL」欄には、GitHub上のMarkdownではなくこちらのURLを登録する想定(両ページとも既定で非公開のため、登録前に共有設定を変更する必要がある)
+- **ストア掲載情報の下書き**(`personal-side-projects/kashikari/mobile/docs/store-listing.md`): サブタイトル・プロモーションテキスト・キーワード・詳細な説明文(App Store/Google Play共通)・カテゴリ・年齢レーティング・App PrivacyとGoogle Playデータセーフティフォームの回答目安をまとめた。基本的にそのままコピーして使える内容にしている
+
+途中、「開業届を出さないといけないの?」という質問を受け、開業届はアプリ公開そのものには不要(App Store/Google Playへの登録は個人アカウントで完結する)であることを確認し、`docs/legal/checklist.md`の記載を訂正した(収益化のタイミングで検討すればよいという位置づけに変更)。
+
+現時点で人間(オーナー)がやる必要が残っているのは、Apple Developer Program/Google Play Consoleへの登録・アイコンの最終判断・実際の`eas build`/`eas submit`・ストア掲載情報の実入力とスクリーンショット撮影のみ(詳細は「ストア公開までに、まだ人間がやる必要があること」参照)。
+
 ## データの分離について(重要)
 
 - グループの作成・参加はすべて `create_group` / `join_group` というサーバー側関数(RPC)経由で行われ、招待コードを知っている人だけがそのグループに参加できる
@@ -1348,10 +1359,15 @@ eas build --platform all --profile production
 準備が済んでいるもの:
 - **Expo/EASアカウント**は連携済み(`eas.json`・`app.json`の`extra.eas.projectId`が既に設定されている。60回目のプッシュ通知導入時に`eas init`済み)。ただしCodespacesがリセットされるたびに`eas login`でのログインは都度やり直しが必要(70回目までの「Codespacesがリセットされた」を参照)
 - **アプリのbundle identifier / package name**(73回目): `com.kashikari.app`を`app.json`(`ios.bundleIdentifier`・`android.package`)に設定済み。一度ストアに登録すると原則変更できない識別子のため、公開前に「これで問題ないか」だけ確認してください
-- **プライバシーポリシー・利用規約**(73回目): `docs/legal/kashikari-privacy-policy.md`・`docs/legal/kashikari-terms-of-service.md`にkashikari専用のドラフトを作成済み(実際のデータの扱い・「グループ内は信頼前提」の仕様を反映済み)。連絡先メールアドレス・事業者名・準拠法の欄(`<オーナーが記入>`の箇所)を埋め、法的な最終確認をしてから、公開後のURLをApp Store Connect / Google Play Consoleの該当欄に登録してください
+- **プライバシーポリシー・利用規約**(73・74回目): `docs/legal/kashikari-privacy-policy.md`・`docs/legal/kashikari-terms-of-service.md`にkashikari専用のドラフトを作成済み。事業者名(屋号: kashikari)・連絡先(shanqikanghuang271@gmail.com)・準拠法(日本法・運営者住所地の裁判所)まで記入済みで、あとは法的な最終確認のみ。あわせて、ブランドに合わせた公開ページ(Artifact)も作成済み:
+  - プライバシーポリシー: https://claude.ai/code/artifact/984fcff8-5d34-4ea0-a750-2d0968cb4173
+  - 利用規約: https://claude.ai/code/artifact/2fbe0df7-aa78-4277-b890-b32f76bf7022
+  - **どちらも既定で非公開のため、App Store Connect / Google Play Consoleに登録する前に、ページ右上の共有メニューから公開状態に切り替えること**
+- **ストア掲載情報の下書き**(74回目): `docs/store-listing.md`に、サブタイトル・説明文・キーワード・カテゴリ・App Privacy/データセーフティの回答目安をまとめて用意済み。基本的にコピペで使える内容
+- **会社形態**: 個人事業主(屋号: kashikari)に決定済み。開業届はアプリ公開そのものには不要(収益化するタイミングで検討すればよい。詳細は`docs/legal/checklist.md`参照)
 
 まだ人間(オーナー)がやる必要があるもの:
 - **Apple Developer Program**(年額$99)+ **Google Play Console**(買い切り$25)のアカウント作成。Apple Developer Programは、Sign in with Apple・iOSプッシュ通知(APNs)・App Store提出の3つ全ての前提条件になっている(72回目までの経緯を参照)ため、登録すればまとめて解決する
-- **アプリアイコンの本番差し替え**: `assets/icon.png`等は`scripts/generate_icons.py`で生成したプレースホルダー(コーラル×バイオレットのグラデーションに⇄マーク)。正式なブランドアイコンができたら差し替える(デザイン案があれば、生成・差し替え作業自体は依頼してもらえれば対応できる)
+- **アプリアイコンの本番差し替え**: `assets/icon.png`等は`scripts/generate_icons.py`で生成したもの(コーラル×プラムのグラデーションに🤝マーク。ブランドカラーは実際に使っているので、差し替えなくてもそのまま公開して差し支えないレベルではある)。もっと違うデザインにしたい場合は依頼してもらえれば対応できる
 - `eas build --platform all --profile production` でビルドし、`eas submit`(または手動でのXcode/Android Studioビルド)で実際にストアへ提出
-- App Store Connect / Google Play Consoleでのストア掲載情報の入力(アプリ説明文・スクリーンショット・カテゴリ・年齢レーティング・プライバシー質問票への回答など。説明文の下書きは依頼してもらえれば対応できる)
+- App Store Connect / Google Play Consoleでのストア掲載情報の実際の入力(`docs/store-listing.md`のコピーを使う)・スクリーンショットの用意(`docs/screenshots/`にある開発中の参考画像はストア提出用の解像度・構成ではないため、別途撮影が必要)
