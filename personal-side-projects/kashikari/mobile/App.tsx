@@ -22,6 +22,7 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import SplashScreen from './src/screens/SplashScreen';
 import UsageScreen from './src/screens/UsageScreen';
 import { useAuth } from './src/hooks/useAuth';
+import { useGroupMembers } from './src/hooks/useGroupMembers';
 import { useGroupNotificationsSeen } from './src/hooks/useGroupNotificationsSeen';
 import { useGroups } from './src/hooks/useGroups';
 import { useNotifications } from './src/hooks/useNotifications';
@@ -43,14 +44,14 @@ type Screen =
   | { name: 'group'; group: Group; justCreated?: boolean }
   // 「グループ内の設定ボタンを押したら、グループの設定(アイコンや
   // グループ名など)を変更できるようにした方がいい」という指摘への
-  // 対応(86回目)。グループ詳細画面(group)からしか開けないので、
+  // 対応(87回目)。グループ詳細画面(group)からしか開けないので、
   // returnToはgroup画面固定(必須)にしておく。
   | { name: 'groupSettings'; group: Group; returnTo: { name: 'group'; group: Group; justCreated?: boolean } }
   | { name: 'settings'; returnTo?: Screen }
   | { name: 'premium'; returnTo?: Screen }
   | { name: 'usage'; returnTo?: Screen }
   // 「グループ内の通知は、そのグループのみを表示するようにした方が
-  // いい」という指摘への対応(87回目)。groupId/groupNameを渡すと
+  // いい」という指摘への対応(88回目)。groupId/groupNameを渡すと
   // (グループ詳細画面のベルから開いた時)、全グループ横断ではなく
   // そのグループだけに絞った一覧になる。渡さない(ホーム画面のベルから
   // 開いた時)場合は従来通り全グループ横断のまま。
@@ -92,6 +93,8 @@ function AppInner() {
     updateGroupIcon,
     updateGroupIconPhoto,
     updateGroupName,
+    removeMember,
+    deleteGroup,
   } = useGroups(DEMO_MODE ? null : userId);
   const { pendingGroupId, clearPendingGroupId } = usePushNotifications(DEMO_MODE ? null : userId);
   const {
@@ -101,8 +104,16 @@ function AppInner() {
     latestInsert: latestNotification,
     clearLatestInsert: clearLatestNotification,
   } = useNotifications(DEMO_MODE ? null : userId);
-  const { seenAtFor: groupNotificationsSeenAt, markGroupSeen } = useGroupNotificationsSeen(DEMO_MODE ? null : userId);
+  const { seenAtFor: groupNotificationsSeenAt, markGroupSeen, isMuted: isGroupMuted, setGroupMuted } = useGroupNotificationsSeen(
+    DEMO_MODE ? null : userId
+  );
   const [screen, setScreen] = useState<Screen>({ name: 'groups' });
+  // グループの設定画面(メンバー削除に必要)専用の軽量なメンバー取得。
+  // groupSettings画面を開いている時だけ取得すればよいので、それ以外は
+  // groupIdにnullを渡して何もしない。
+  const { members: groupSettingsMembers, refresh: refreshGroupSettingsMembers } = useGroupMembers(
+    screen.name === 'groupSettings' ? screen.group.id : null
+  );
   const [minSplashDone, setMinSplashDone] = useState(false);
   const [fontsLoaded] = useFonts({
     MPLUSRounded1c_400Regular,
@@ -155,7 +166,7 @@ function AppInner() {
   };
 
   // グループ詳細画面のベル用。「そのグループのみの通知を表示する」への
-  // 対応(87回目)。全グループ共通のmarkNotificationsSeen(profiles側)は
+  // 対応(88回目)。全グループ共通のmarkNotificationsSeen(profiles側)は
   // 呼ばない — 呼ぶと、このグループを見ただけで他のグループの未読
   // (ホームのベルの赤丸)まで一緒に消えてしまうため、代わりに
   // このグループだけの既読時刻(group_members側)を更新する。
@@ -246,6 +257,8 @@ function AppInner() {
       {screen.name === 'groupSettings' && (
         <GroupSettingsScreen
           group={screen.group}
+          members={groupSettingsMembers}
+          meId={userId}
           // 「戻る」時、このgroupSettings画面内で変更していれば(screen.group
           // が最新)、それを戻り先(group画面)にも反映する。反映しないと、
           // 戻った直後は変更前の名前・アイコンのまま表示されてしまう
@@ -271,6 +284,21 @@ function AppInner() {
               const updated = groups.find((g) => g.id === screen.group.id);
               if (updated) setScreen({ ...screen, group: updated });
             }
+            return res;
+          }}
+          isMuted={isGroupMuted(screen.group.id)}
+          onToggleMute={(muted) => setGroupMuted(screen.group.id, muted)}
+          onRemoveMember={async (memberUserId) => {
+            const res = await removeMember(screen.group.id, memberUserId);
+            if (!res.error) refreshGroupSettingsMembers();
+            return res;
+          }}
+          onDeleteGroup={async () => {
+            const res = await deleteGroup(screen.group.id);
+            // 削除後はこのグループがもう存在しないため、戻り先(group画面)
+            // ではなくホーム画面に戻す。groupsの一覧はdeleteGroup内の
+            // refresh()で既に更新済み。
+            if (!res.error) setScreen({ name: 'groups' });
             return res;
           }}
         />

@@ -253,20 +253,28 @@ Deno.serve(async (req) => {
     const actorName = actorRes.data.display_name as string;
 
     // recipient_idsを「本当にこのグループのメンバーか」で絞り込む。
+    // 「グループの設定でこのグループの通知をミュートできるように」への
+    // 対応(89回目)。mutedも一緒に取得し、OSのプッシュ通知だけ止める
+    // (ミュート=「割り込みで知らせてほしくない」であって「記録を消す」
+    // ではないため、notification_log(アプリ内の通知履歴)への記録は
+    // ミュート中の相手にも変わらず行う)。
     const membersRes = await callerClient
       .from('group_members')
-      .select('user_id')
+      .select('user_id, muted')
       .eq('group_id', body.group_id)
       .in('user_id', body.recipient_ids);
-    const validRecipientIds = (membersRes.data ?? [])
-      .map((r) => r.user_id as string)
-      .filter((id) => id !== userData.user.id);
+    const validMembers = (membersRes.data ?? []).filter((r) => (r.user_id as string) !== userData.user.id);
+    const validRecipientIds = validMembers.map((r) => r.user_id as string);
     if (validRecipientIds.length === 0) return jsonResponse({ sent: false });
+    const pushRecipientIds = validMembers.filter((r) => !r.muted).map((r) => r.user_id as string);
 
     // ここから先はpush_tokensを読む必要がある(SELECTポリシーが無い
     // テーブルのため、service_role権限に切り替える)。
     const admin = createClient(supabaseUrl, serviceRoleKey);
-    const tokensRes = await admin.from('push_tokens').select('token, user_id, lang').in('user_id', validRecipientIds);
+    const tokensRes =
+      pushRecipientIds.length > 0
+        ? await admin.from('push_tokens').select('token, user_id, lang').in('user_id', pushRecipientIds)
+        : { data: [] };
     const tokens = tokensRes.data ?? [];
 
     // アプリ内の通知履歴(notification_log)には、実際にOSのプッシュ通知を

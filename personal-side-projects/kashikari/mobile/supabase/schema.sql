@@ -75,7 +75,7 @@ create table if not exists public.group_members (
 );
 
 -- 「グループ内の通知は、そのグループのみを表示するようにした方がいい」
--- という指摘への対応(87回目)。profiles.notifications_seen_at(ホーム
+-- という指摘への対応(88回目)。profiles.notifications_seen_at(ホーム
 -- 画面全体のベル用、全グループ共通の1つの既読時刻)とは別に、グループ
 -- ごとの既読時刻をここに持たせる。これにより、あるグループの通知一覧を
 -- 開いて既読にしても、他のグループの未読が誤って消えたことにならない
@@ -84,6 +84,13 @@ create table if not exists public.group_members (
 -- 参加した時点より前の通知(自分がまだいなかった頃のもの)をいきなり
 -- 未読扱いにしないよう、既定値はjoined_atと同じ「今」にしておく。
 alter table public.group_members add column if not exists notifications_seen_at timestamptz not null default now();
+
+-- 「グループの設定でアイコンとグループ名だけじゃ寂しい、もう少し
+-- 必要なものを考えてみて」という指摘への対応(89回目)。グループ単位で
+-- プッシュ通知を止められるようにする(アプリ内の通知履歴・ホーム画面の
+-- ベルには引き続き残る。ミュート=「割り込みで知らせてほしくない」であって
+-- 「記録を消す」ではないため)。
+alter table public.group_members add column if not exists muted boolean not null default false;
 
 alter table public.group_members enable row level security;
 
@@ -423,7 +430,7 @@ end;
 $$;
 
 -- 「グループ内の通知は、そのグループのみを表示するようにした方がいい」
--- という指摘への対応(87回目)。group_members.notifications_seen_at
+-- という指摘への対応(88回目)。group_members.notifications_seen_at
 -- (このグループを最後にいつまで見たか)を自分の行だけ更新するRPC。
 -- group_membersへの直接UPDATEは開放していない(他人の行やjoined_at等
 -- 他の列まで書き換えられてしまうため)ので、update_group_icon等と
@@ -440,6 +447,75 @@ begin
   end if;
   update public.group_members set notifications_seen_at = now()
   where group_id = _group_id and user_id = auth.uid();
+end;
+$$;
+
+-- 「グループの設定でアイコンとグループ名だけじゃ寂しい、もう少し
+-- 必要なものを考えてみて」という指摘への対応(89回目)。上と同じ理由
+-- (group_membersへの直接UPDATEは開放していない)でRPCに絞る。
+create or replace function public.set_group_muted(_group_id uuid, _muted boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  update public.group_members set muted = _muted
+  where group_id = _group_id and user_id = auth.uid();
+end;
+$$;
+
+-- 「メンバーを削除する(管理者のみ)」への対応(89回目)。作成者(管理者)
+-- だけが、自分以外のメンバーを外せる。leave_group(自分自身を抜ける)
+-- とは別に用意し、管理者が誤って自分自身を外せないようガードする。
+create or replace function public.remove_group_member(_group_id uuid, _user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  _created_by uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  select created_by into _created_by from public.groups where id = _group_id;
+  if _created_by is null or _created_by <> auth.uid() then
+    raise exception 'このグループの管理者ではありません';
+  end if;
+  if _user_id = auth.uid() then
+    raise exception '自分自身は削除できません(抜けるを使ってください)';
+  end if;
+  delete from public.group_members where group_id = _group_id and user_id = _user_id;
+end;
+$$;
+
+-- 「グループを削除する(管理者のみ)」への対応(89回目)。作成者(管理者)
+-- だけがグループごと削除できる。group_members・entries・group_invitesは
+-- groupsへの外部キーにon delete cascadeを付けてあるため自動的に消える。
+-- notification_logはon delete set null(履歴として残す設計、10節参照)
+-- のため、削除後もgroup_name(非正規化済み)付きの記録として残る。
+create or replace function public.delete_group(_group_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  _created_by uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  select created_by into _created_by from public.groups where id = _group_id;
+  if _created_by is null or _created_by <> auth.uid() then
+    raise exception 'このグループの管理者ではありません';
+  end if;
+  delete from public.groups where id = _group_id;
 end;
 $$;
 
@@ -518,6 +594,9 @@ grant execute on function public.create_group_invite(uuid, text) to authenticate
 grant execute on function public.join_group(text) to authenticated;
 grant execute on function public.leave_group(uuid) to authenticated;
 grant execute on function public.mark_group_notifications_seen(uuid) to authenticated;
+grant execute on function public.set_group_muted(uuid, boolean) to authenticated;
+grant execute on function public.remove_group_member(uuid, uuid) to authenticated;
+grant execute on function public.delete_group(uuid) to authenticated;
 grant execute on function public.update_group_icon(uuid, text, text) to authenticated;
 grant execute on function public.update_group_name(uuid, text) to authenticated;
 grant execute on function public.is_group_member(uuid) to authenticated;

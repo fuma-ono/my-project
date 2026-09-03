@@ -40,10 +40,12 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   const [members, setMembers] = useState<Profile[]>(DEMO_MEMBERS);
   const [group, setGroup] = useState<Group>(DEMO_GROUP);
   // 「グループ内の設定ボタンを押したら、グループの設定を変更できるように」
-  // (86回目)。個人設定(onOpenSettings)とは別に、この画面内だけで完結する。
+  // (87回目)。個人設定(onOpenSettings)とは別に、この画面内だけで完結する。
   const [groupSettingsOpen, setGroupSettingsOpen] = useState(false);
+  // 89回目で追加した「このグループの通知をミュート」のデモ用ローカルstate。
+  const [groupMuted, setGroupMuted] = useState(false);
   // 「グループ内の通知は、そのグループのみを表示するようにした方が
-  // いい」という指摘への対応(87回目)。本番はApp.tsx側でグループごとの
+  // いい」という指摘への対応(88回目)。本番はApp.tsx側でグループごとの
   // 既読時刻(group_members.notifications_seen_at)をSupabaseに持たせたが、
   // デモ側はSupabaseを呼ばないため、この画面のローカルstateだけで
   // 同じ見た目(このグループだけの一覧・未読バッジ)を再現する。
@@ -348,14 +350,22 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
 
   // 「グループ内の設定ボタンを押したら、グループの設定(アイコンや
   // グループ名など)を変更できるようにした方がいい」という指摘への
-  // 対応(86回目)。GroupScreen.tsx側は本番のナビゲーション(App.tsx)に
+  // 対応(87回目)。GroupScreen.tsx側は本番のナビゲーション(App.tsx)に
   // 新しい画面を追加したが、デモ側はDemoGroupScreenがgroup状態を丸ごと
   // ローカルで持っているため、DemoApp.tsx側に画面を増やさず、この
   // コンポーネント内だけで完結するシンプルな切り替えにした。
+  //
+  // 89回目で追加したメンバー削除・グループ削除も同じ考え方でローカルの
+  // members/onBackだけで完結させている。DEMO_GROUP.created_byはDEMO_ME_ID
+  // (=自分)なので、デモでは常に管理者としてこれらのUIを確認できる。
+  // グループ削除は実際にはDEMO_GROUPSから消さない(ホーム画面のグループ
+  // 一覧はデモ用の固定データのため)。ホーム画面に戻る所までを再現する。
   if (groupSettingsOpen) {
     return (
       <GroupSettingsScreen
         group={group}
+        members={members}
+        meId={meId}
         onBack={() => setGroupSettingsOpen(false)}
         onChangeName={async (name) => {
           setGroup((prev) => ({ ...prev, name: name.trim() }));
@@ -363,6 +373,20 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
         }}
         onChangeIcon={async (emoji) => {
           setGroup((prev) => ({ ...prev, icon_emoji: emoji, icon_photo_path: null }));
+          return { error: null };
+        }}
+        isMuted={groupMuted}
+        onToggleMute={async (muted) => {
+          setGroupMuted(muted);
+          return { error: null };
+        }}
+        onRemoveMember={async (userId) => {
+          setMembers((prev) => prev.filter((m) => m.id !== userId));
+          return { error: null };
+        }}
+        onDeleteGroup={async () => {
+          setGroupSettingsOpen(false);
+          onBack();
           return { error: null };
         }}
       />

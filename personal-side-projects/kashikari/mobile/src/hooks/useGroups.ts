@@ -90,7 +90,7 @@ export function useGroups(userId: string | null) {
 
   // 「グループ内の設定ボタンを押したら、グループの設定(アイコンや
   // グループ名など)を変更できるようにした方がいい」という指摘への
-  // 対応(86回目)。updateGroupIconと同じパターン。
+  // 対応(87回目)。updateGroupIconと同じパターン。
   const updateGroupName = useCallback(
     async (groupId: string, name: string) => {
       const trimmed = name.trim();
@@ -120,5 +120,38 @@ export function useGroups(userId: string | null) {
     [refresh, t]
   );
 
-  return { groups, loading, refresh, createGroup, joinGroup, leaveGroup, updateGroupIcon, updateGroupIconPhoto, updateGroupName };
+  // 「メンバーを削除する(管理者のみ)」への対応(89回目)。leaveGroupと
+  // 違い、自分ではなく他のメンバーをRPC側で管理者チェックした上で外す。
+  const removeMember = useCallback(async (groupId: string, memberUserId: string) => {
+    const { error } = await supabase.rpc('remove_group_member', { _group_id: groupId, _user_id: memberUserId });
+    if (error) return { error: error.message };
+    return { error: null };
+  }, []);
+
+  // 「グループを削除する(管理者のみ)」への対応(89回目)。グループ一覧
+  // からこのグループ自体が消えるため、呼び出し側でホーム画面に戻す
+  // 必要がある。
+  const deleteGroup = useCallback(
+    async (groupId: string) => {
+      const { error } = await supabase.rpc('delete_group', { _group_id: groupId });
+      if (error) return { error: error.message };
+      await refresh();
+      return { error: null };
+    },
+    [refresh]
+  );
+
+  return {
+    groups,
+    loading,
+    refresh,
+    createGroup,
+    joinGroup,
+    leaveGroup,
+    updateGroupIcon,
+    updateGroupIconPhoto,
+    updateGroupName,
+    removeMember,
+    deleteGroup,
+  };
 }
