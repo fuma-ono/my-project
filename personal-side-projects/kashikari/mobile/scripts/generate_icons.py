@@ -72,7 +72,24 @@ def make_adaptive_foreground():
     emoji_layer(SIZE).save(f"{OUT_DIR}/android-icon-foreground.png")
 
 
+# 「実機で確認したら、ホーム画面アイコンとアプリ内のロゴマーク(Mark.tsx)で
+# 手の絵文字の見た目そのものが違う(平面的なNoto vs 実機OSの絵文字フォント、
+# iOSなら光沢のあるApple Color Emoji)」という指摘への対応。Mark.tsxが
+# これまで絵文字を文字として描画していたため、実機ではOS標準の絵文字
+# フォントに差し替わってしまい、ホーム画面アイコン(Notoで静的画像に
+# 焼き込み済み)と食い違って見えていた。ブランドのロゴマークとしての
+# 見た目を完全に固定するため、透明背景の画像としてここで書き出し、
+# Mark.tsx側はこれをImageとして埋め込む(=どの端末で見ても同じ絵柄になる)。
+# icon.pngと全く同じzoom=6を使い、見た目を完全に一致させる。
+MARK_ASSET_SIZE = 512
+
+
+def make_mark_asset():
+    emoji_layer(MARK_ASSET_SIZE, zoom=6).save(f"{OUT_DIR}/mark.png")
+
+
 if __name__ == "__main__":
     make_icon()
     make_adaptive_foreground()
+    make_mark_asset()
     print("done")

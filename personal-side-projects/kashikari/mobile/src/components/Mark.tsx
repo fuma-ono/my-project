@@ -26,12 +26,28 @@ import { colors, fonts } from '../theme';
 // なるようfontSizeの倍率を逆算した(詳細はREADME参照)。
 const GLYPH_ZOOM = 1.22;
 
+// さらに実機(iPhone)で確認したところ、サイズの比率は合っていても
+// 絵文字そのものの絵柄が違って見える不具合が見つかった: ホーム画面
+// アイコンはビルド時にNoto Color Emojiで静的画像として焼き込んでいるが、
+// このMarkは絵文字を「文字」として描画していたため、実機ではOS標準の
+// 絵文字フォント(iOSなら光沢のあるApple Color Emoji)に置き換わって
+// しまい、平面的なホーム画面アイコンと食い違って見えていた。この
+// 開発環境にはApple Color Emojiが存在しない(Appleが配布制限している)
+// ため、Web版の確認だけでは気づけなかった不具合。
+// 対策として、ブランドの既定マーク(🤝、glyph未指定時)はicon.pngと
+// 全く同じ手順(generate_icons.py)で書き出した透明背景の画像
+// (assets/mark.png)を埋め込み、どの端末で見ても同じ絵柄になるようにした。
+// glyphを明示的に渡すケース(グループ・アバターの絵文字選択)は、元々
+// 「好きな絵文字を選べる」機能で比較対象の固定アイコンが無いため、
+// 従来通り文字描画のままにしている。
+import markAsset from '../../assets/mark.png';
+
 // glyphを渡せば、同じグラデーションの入れ物のまま中身だけ差し替えられる。
 // グループごとのアイコン(GROUP_ICON_EMOJI_OPTIONSから選択)を表示するのに使う。
 // photoPath(avatarsバケット内のパス、groups.icon_photo_path)を渡すと、
 // 署名付きURLを取得してグラデーション+絵文字より優先して表示する
 // (「グループのアイコンも写真を選べるように」への対応)。
-export default function Mark({ size = 40, glyph = '🤝', photoPath }: { size?: number; glyph?: string; photoPath?: string | null }) {
+export default function Mark({ size = 40, glyph, photoPath }: { size?: number; glyph?: string; photoPath?: string | null }) {
   const photoUrl = useSignedUrl('avatars', photoPath ?? null);
   const boxStyle = [styles.base, { width: size, height: size, borderRadius: size * 0.32 }];
   if (photoUrl) {
@@ -39,7 +55,11 @@ export default function Mark({ size = 40, glyph = '🤝', photoPath }: { size?: 
   }
   return (
     <LinearGradient colors={[colors.accent, colors.plum]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={boxStyle}>
-      <Text style={[styles.glyph, { fontSize: size * 0.52 * GLYPH_ZOOM, lineHeight: size * 0.52 * GLYPH_ZOOM }]}>{glyph}</Text>
+      {glyph ? (
+        <Text style={[styles.glyph, { fontSize: size * 0.52 * GLYPH_ZOOM, lineHeight: size * 0.52 * GLYPH_ZOOM }]}>{glyph}</Text>
+      ) : (
+        <Image source={markAsset} style={{ width: size, height: size }} resizeMode="cover" />
+      )}
     </LinearGradient>
   );
 }

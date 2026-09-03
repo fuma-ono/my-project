@@ -28,7 +28,14 @@ export default function SplashScreen({ fontsReady = true }: { fontsReady?: boole
 
       <View style={styles.content}>
         <Mark size={112} />
-        <View style={{ opacity: fontsReady ? 1 : 0 }}>
+        {/* 「kashikariの文字がアイコンに対して左にずれている」という
+            指摘への対応(実測で約73px、画面幅の約6%のズレを確認)。
+            このView自体にalignItems:'center'が抜けていたため、既定値
+            (stretch)で子のTextが親の幅いっぱいに広がり、2行のtagline
+            (幅が広い)に対して1行のwordmarkが左寄せのまま埋もれていた。
+            明示的にcenterを指定し、念のためwordmark自体にもtextAlignを
+            付けて二重に保険をかける。 */}
+        <View style={[styles.fontsWrap, { opacity: fontsReady ? 1 : 0 }]}>
           <Text style={styles.wordmark}>kashikari</Text>
           <Text style={styles.tagline}>{t.splash.tagline}</Text>
         </View>
@@ -44,6 +51,7 @@ const styles = StyleSheet.create({
   blobTopRight: { width: 220, height: 220, top: -40, right: -70, backgroundColor: colors.favorSoft, opacity: 0.6 },
   blobBottom: { width: 300, height: 300, bottom: -100, left: -60, backgroundColor: colors.accentSoft, opacity: 0.5 },
   content: { alignItems: 'center', gap: 20 },
-  wordmark: { ...fonts.display, fontSize: 44, color: colors.ink, letterSpacing: -0.5 },
+  fontsWrap: { alignItems: 'center' },
+  wordmark: { ...fonts.display, fontSize: 44, color: colors.ink, letterSpacing: -0.5, textAlign: 'center' },
   tagline: { ...fonts.bodyMedium, fontSize: 15, color: colors.muted, textAlign: 'center', lineHeight: 22 },
 });
