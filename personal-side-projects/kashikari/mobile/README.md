@@ -1346,6 +1346,17 @@ App Store Connectでのアプリ作成に先立ち、developer.apple.comの「Ce
 
 tsc --noEmit clean、web export成功を確認済み(app.jsonの変更のみ)。
 
+## 初回iOS本番ビルド成功(77回目)
+
+`eas build --platform ios --profile production`を実行したところ、Codespaces特有の問題が2つ見つかり対応した:
+
+- **`eas login`がブラウザ経由の認証で失敗**: `http://localhost:<port>/auth/callback`にリダイレクトしようとするが、Codespaces環境だとオーナーのブラウザから見えない(Metro/QRコードの時と同じ種類の問題)。[Expoのアクセストークン](https://expo.dev/settings/access-tokens)を発行し、`export EXPO_TOKEN=...`でログインする方式に切り替えて解決した(Codespacesがリセットされるたびに再設定が必要)
+- **EASプロジェクトIDが現在のアカウントから見えない**: `app.json`の`extra.eas.projectId`が指す既存プロジェクトが、今ログイン中のアカウント(`fuma-ono`)から「Entity not authorized」で読めなかった(`owner`欄が`fumaono`とハイフン無しになっていたのも一因)。projectIdを削除して`eas init`で新規プロジェクトとして紐付け直し、`owner`も実際のアカウント名(`fuma-ono`)に修正した
+
+さらに、`npm ci --include=dev`が「Missing: typescript@5.9.3 from lock file」で失敗する事象があり(詳細は直前の対応記録を参照)、`.npmrc`に`legacy-peer-deps=true`を追加して対応した。
+
+これらを経て、**初回のiOS本番ビルドが成功**。ビルド過程でApple証明書・プロビジョニングプロファイルに加えて**APNsプッシュキーも自動生成**されており、これでiOS実機でのプッシュ通知配信(development build/production build経由)に必要な認証情報が揃った。ビルド成果物(.ipa)はEAS上に生成済みで、次は`eas submit`でApp Store Connect(TestFlight)に提出する。
+
 ## データの分離について(重要)
 
 - グループの作成・参加はすべて `create_group` / `join_group` というサーバー側関数(RPC)経由で行われ、招待コードを知っている人だけがそのグループに参加できる
