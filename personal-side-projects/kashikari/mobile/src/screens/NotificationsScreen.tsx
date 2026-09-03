@@ -10,12 +10,19 @@ type Props = {
   items: NotificationLogItem[];
   loading: boolean;
   onRefresh: () => void;
+  // 「グループ内の通知は、そのグループのみを表示するようにした方が
+  // いい」という指摘への対応(87回目)。渡すと、全グループ共通の受信箱
+  // ではなくこのグループ専用の一覧として表示する: タイトルをグループ名
+  // 入りのものに変え、行ごとに繰り返し出ていた(全部同じ)グループ名の
+  // ラベルを省いて本文を見やすくする。渡さない場合(ホーム画面のベルから
+  // 開いた時)は従来通り全グループ横断の一覧のまま。
+  scopedGroupName?: string;
 };
 
 // 通知ベル(グループ一覧・グループ詳細のヘッダー)から開く、過去の通知の
 // 一覧。send-push(Edge Function)がnotification_logに書き込んだ内容を
 // そのまま新しい順に並べるだけの、シンプルな受信箱。
-export default function NotificationsScreen({ onBack, items, loading, onRefresh }: Props) {
+export default function NotificationsScreen({ onBack, items, loading, onRefresh, scopedGroupName }: Props) {
   const t = useT();
 
   return (
@@ -24,7 +31,9 @@ export default function NotificationsScreen({ onBack, items, loading, onRefresh 
         <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.notifications.back}>
           <Ionicons name="chevron-back" size={24} color={colors.ink} />
         </Pressable>
-        <Text style={styles.title}>{t.notifications.title}</Text>
+        <Text style={styles.title} numberOfLines={1}>
+          {scopedGroupName ? t.notifications.groupTitle(scopedGroupName) : t.notifications.title}
+        </Text>
       </View>
 
       <FlatList
@@ -37,7 +46,9 @@ export default function NotificationsScreen({ onBack, items, loading, onRefresh 
             <View style={styles.emptyWrap}>
               <Text style={styles.emptyEmoji}>🔔</Text>
               <Text style={styles.emptyTitle}>{t.notifications.emptyTitle}</Text>
-              <Text style={styles.emptyMessage}>{t.notifications.emptyMessage}</Text>
+              <Text style={styles.emptyMessage}>
+                {scopedGroupName ? t.notifications.groupEmptyMessage : t.notifications.emptyMessage}
+              </Text>
             </View>
           ) : null
         }
@@ -47,12 +58,16 @@ export default function NotificationsScreen({ onBack, items, loading, onRefresh 
               <Ionicons name="notifications" size={16} color={colors.accent} />
             </View>
             <View style={styles.main}>
-              <View style={styles.rowTop}>
-                <Text style={styles.groupName} numberOfLines={1}>
-                  {item.group_name}
-                </Text>
+              {scopedGroupName ? (
                 <Text style={styles.time}>{formatNotificationTime(item.created_at)}</Text>
-              </View>
+              ) : (
+                <View style={styles.rowTop}>
+                  <Text style={styles.groupName} numberOfLines={1}>
+                    {item.group_name}
+                  </Text>
+                  <Text style={styles.time}>{formatNotificationTime(item.created_at)}</Text>
+                </View>
+              )}
               <Text style={styles.body} numberOfLines={3}>
                 {item.body}
               </Text>

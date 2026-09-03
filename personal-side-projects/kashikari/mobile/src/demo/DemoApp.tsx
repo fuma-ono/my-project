@@ -38,11 +38,7 @@ export default function DemoApp() {
 
   if (screen.name === 'group') {
     return (
-      <DemoGroupScreen
-        onBack={() => setScreen({ name: 'groups' })}
-        onOpenNotifications={() => openNotifications(screen)}
-        hasUnreadNotifications={hasUnreadNotifications}
-      />
+      <DemoGroupScreen onBack={() => setScreen({ name: 'groups' })} />
     );
   }
 

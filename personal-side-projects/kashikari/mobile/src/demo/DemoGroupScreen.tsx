@@ -26,22 +26,15 @@ import { groupEntriesByDate } from '../lib/dateGroups';
 import { buildInviteUrl } from '../lib/invite';
 import { splitAmount } from '../lib/split';
 import GroupSettingsScreen from '../screens/GroupSettingsScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
 import { avatarColor, colors, fonts } from '../theme';
 import type { BalanceRow, Entry, EntryType, Group, GroupInvite, Profile, SimplifiedTransaction } from '../types';
-import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS } from './mockData';
+import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS, DEMO_NOTIFICATIONS } from './mockData';
 
 type Tab = GroupTab;
 let demoIdSeq = 100;
 
-export default function DemoGroupScreen({
-  onBack,
-  onOpenNotifications,
-  hasUnreadNotifications,
-}: {
-  onBack: () => void;
-  onOpenNotifications: () => void;
-  hasUnreadNotifications: boolean;
-}) {
+export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   const t = useT();
   const [entries, setEntries] = useState<Entry[]>(DEMO_ENTRIES);
   const [members, setMembers] = useState<Profile[]>(DEMO_MEMBERS);
@@ -49,6 +42,15 @@ export default function DemoGroupScreen({
   // 「グループ内の設定ボタンを押したら、グループの設定を変更できるように」
   // (86回目)。個人設定(onOpenSettings)とは別に、この画面内だけで完結する。
   const [groupSettingsOpen, setGroupSettingsOpen] = useState(false);
+  // 「グループ内の通知は、そのグループのみを表示するようにした方が
+  // いい」という指摘への対応(87回目)。本番はApp.tsx側でグループごとの
+  // 既読時刻(group_members.notifications_seen_at)をSupabaseに持たせたが、
+  // デモ側はSupabaseを呼ばないため、この画面のローカルstateだけで
+  // 同じ見た目(このグループだけの一覧・未読バッジ)を再現する。
+  const [groupNotificationsOpen, setGroupNotificationsOpen] = useState(false);
+  const [groupNotificationsSeenAt, setGroupNotificationsSeenAt] = useState(new Date(0).toISOString());
+  const groupNotifications = useMemo(() => DEMO_NOTIFICATIONS.filter((n) => n.group_id === group.id), [group.id]);
+  const hasUnreadGroupNotifications = groupNotifications.some((n) => n.created_at > groupNotificationsSeenAt);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('balance');
@@ -367,6 +369,18 @@ export default function DemoGroupScreen({
     );
   }
 
+  if (groupNotificationsOpen) {
+    return (
+      <NotificationsScreen
+        onBack={() => setGroupNotificationsOpen(false)}
+        items={groupNotifications}
+        loading={false}
+        onRefresh={async () => {}}
+        scopedGroupName={group.name}
+      />
+    );
+  }
+
   const header = (
     <View>
       {/* 「デモモードの上部は消せないの？大学の友達タブと重なってしまってる」
@@ -397,9 +411,17 @@ export default function DemoGroupScreen({
               <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
             </View>
             <View style={styles.headerRightRow}>
-              <Pressable onPress={onOpenNotifications} hitSlop={10} accessibilityLabel={t.notifications.title} style={styles.bellWrap}>
+              <Pressable
+                onPress={() => {
+                  setGroupNotificationsOpen(true);
+                  setGroupNotificationsSeenAt(new Date().toISOString());
+                }}
+                hitSlop={10}
+                accessibilityLabel={t.notifications.title}
+                style={styles.bellWrap}
+              >
                 <Ionicons name="notifications-outline" size={22} color="#fff" />
-                {hasUnreadNotifications && <View style={styles.unreadDot} />}
+                {hasUnreadGroupNotifications && <View style={styles.unreadDot} />}
               </Pressable>
               {/* GroupScreen.tsx側の「設定マークは設定のみ、抜けるは別マークで」
                   という修正を見た目だけこちらにもミラーしておく(実際の

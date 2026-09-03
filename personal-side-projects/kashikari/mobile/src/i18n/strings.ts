@@ -341,8 +341,14 @@ export const ja = {
   notifications: {
     back: '戻る',
     title: '🔔 通知',
+    // 「グループ内の通知は、そのグループのみを表示するようにした方が
+    // いい」という指摘への対応(87回目)。グループ詳細画面のベルから
+    // 開いた時は、全グループ共通の受信箱ではなく、このグループ名を
+    // タイトルに出す。
+    groupTitle: (groupName: string) => `🔔 ${groupName}の通知`,
     emptyTitle: 'まだ通知はありません',
     emptyMessage: '記録の追加や催促があると、ここに届きます',
+    groupEmptyMessage: 'このグループで記録の追加や催促があると、ここに届きます',
   },
   share: {
     // kashikariを使っていない相手にもそのまま伝わるよう、アプリ内リンク等は
@@ -663,8 +669,10 @@ export const en: Strings = {
   notifications: {
     back: 'Back',
     title: '🔔 Notifications',
+    groupTitle: (groupName: string) => `🔔 ${groupName}`,
     emptyTitle: 'No notifications yet',
     emptyMessage: "You'll see new entries and reminders here",
+    groupEmptyMessage: "You'll see new entries and reminders from this group here",
   },
   share: {
     settlementHeading: (groupName: string) => `Settlement for "${groupName}"`,

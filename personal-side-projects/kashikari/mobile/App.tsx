@@ -22,6 +22,7 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import SplashScreen from './src/screens/SplashScreen';
 import UsageScreen from './src/screens/UsageScreen';
 import { useAuth } from './src/hooks/useAuth';
+import { useGroupNotificationsSeen } from './src/hooks/useGroupNotificationsSeen';
 import { useGroups } from './src/hooks/useGroups';
 import { useNotifications } from './src/hooks/useNotifications';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
@@ -48,7 +49,12 @@ type Screen =
   | { name: 'settings'; returnTo?: Screen }
   | { name: 'premium'; returnTo?: Screen }
   | { name: 'usage'; returnTo?: Screen }
-  | { name: 'notifications'; returnTo?: Screen };
+  // 「グループ内の通知は、そのグループのみを表示するようにした方が
+  // いい」という指摘への対応(87回目)。groupId/groupNameを渡すと
+  // (グループ詳細画面のベルから開いた時)、全グループ横断ではなく
+  // そのグループだけに絞った一覧になる。渡さない(ホーム画面のベルから
+  // 開いた時)場合は従来通り全グループ横断のまま。
+  | { name: 'notifications'; returnTo?: Screen; groupId?: string; groupName?: string };
 
 // kashikari://join?code=XXXXXX 形式の招待リンクが開かれたかどうかを判定する。
 // 現状(Expo Go実行中)はこのリンク自体を開いても実際にはアプリに渡って
@@ -95,6 +101,7 @@ function AppInner() {
     latestInsert: latestNotification,
     clearLatestInsert: clearLatestNotification,
   } = useNotifications(DEMO_MODE ? null : userId);
+  const { seenAtFor: groupNotificationsSeenAt, markGroupSeen } = useGroupNotificationsSeen(DEMO_MODE ? null : userId);
   const [screen, setScreen] = useState<Screen>({ name: 'groups' });
   const [minSplashDone, setMinSplashDone] = useState(false);
   const [fontsLoaded] = useFonts({
@@ -146,6 +153,19 @@ function AppInner() {
     setScreen({ name: 'notifications', returnTo: screen });
     markNotificationsSeen();
   };
+
+  // グループ詳細画面のベル用。「そのグループのみの通知を表示する」への
+  // 対応(87回目)。全グループ共通のmarkNotificationsSeen(profiles側)は
+  // 呼ばない — 呼ぶと、このグループを見ただけで他のグループの未読
+  // (ホームのベルの赤丸)まで一緒に消えてしまうため、代わりに
+  // このグループだけの既読時刻(group_members側)を更新する。
+  const openGroupNotifications = (group: Group) => {
+    setScreen({ name: 'notifications', returnTo: screen, groupId: group.id, groupName: group.name });
+    markGroupSeen(group.id);
+  };
+
+  const hasUnreadNotificationsForGroup = (groupId: string) =>
+    !DEMO_MODE && notificationItems.some((item) => item.group_id === groupId && item.created_at > groupNotificationsSeenAt(groupId));
 
   // フォアグラウンドで届いた通知バナー(NotificationBanner)をタップ
   // した時。通知タップ経由(pendingGroupId)と違い、こちらは既に
@@ -219,8 +239,8 @@ function AppInner() {
           onChangeAvatar={updateAvatar}
           onChangeAvatarPhoto={updateAvatarPhoto}
           onOpenSettings={() => setScreen({ name: 'groupSettings', group: screen.group, returnTo: screen })}
-          onOpenNotifications={openNotifications}
-          hasUnreadNotifications={hasUnreadNotifications}
+          onOpenNotifications={() => openGroupNotifications(screen.group)}
+          hasUnreadNotifications={hasUnreadNotificationsForGroup(screen.group.id)}
         />
       )}
       {screen.name === 'groupSettings' && (
@@ -280,9 +300,10 @@ function AppInner() {
       {screen.name === 'notifications' && (
         <NotificationsScreen
           onBack={() => setScreen(screen.returnTo ?? { name: 'groups' })}
-          items={notificationItems}
+          items={screen.groupId ? notificationItems.filter((item) => item.group_id === screen.groupId) : notificationItems}
           loading={notificationsLoading}
           onRefresh={refreshNotifications}
+          scopedGroupName={screen.groupName}
         />
       )}
       {/* 通知ページを開いている間は、リアルタイムで一覧に反映されるので

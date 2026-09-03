@@ -74,6 +74,17 @@ create table if not exists public.group_members (
   primary key (group_id, user_id)
 );
 
+-- 「グループ内の通知は、そのグループのみを表示するようにした方がいい」
+-- という指摘への対応(87回目)。profiles.notifications_seen_at(ホーム
+-- 画面全体のベル用、全グループ共通の1つの既読時刻)とは別に、グループ
+-- ごとの既読時刻をここに持たせる。これにより、あるグループの通知一覧を
+-- 開いて既読にしても、他のグループの未読が誤って消えたことにならない
+-- (単一のグローバルな既読時刻だけを使い回すと、1つのグループを見ただけで
+-- 他のグループの未読バッジまで一緒に消えてしまう不具合になるため)。
+-- 参加した時点より前の通知(自分がまだいなかった頃のもの)をいきなり
+-- 未読扱いにしないよう、既定値はjoined_atと同じ「今」にしておく。
+alter table public.group_members add column if not exists notifications_seen_at timestamptz not null default now();
+
 alter table public.group_members enable row level security;
 
 -- グループに人を招待した記録。招待コード自体はgroupsに1つしかないが、
@@ -411,6 +422,27 @@ begin
 end;
 $$;
 
+-- 「グループ内の通知は、そのグループのみを表示するようにした方がいい」
+-- という指摘への対応(87回目)。group_members.notifications_seen_at
+-- (このグループを最後にいつまで見たか)を自分の行だけ更新するRPC。
+-- group_membersへの直接UPDATEは開放していない(他人の行やjoined_at等
+-- 他の列まで書き換えられてしまうため)ので、update_group_icon等と
+-- 同じ理由でRPCに絞る。
+create or replace function public.mark_group_notifications_seen(_group_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  update public.group_members set notifications_seen_at = now()
+  where group_id = _group_id and user_id = auth.uid();
+end;
+$$;
+
 -- グループのアイコン変更は、groups テーブルへの直接UPDATEポリシーを
 -- 開放する(name等の他の列も一緒に書き換えられてしまう)代わりに、この列だけを
 -- 更新するRPCに絞る。entries同様、グループ内はお互いを信頼する前提のため
@@ -485,6 +517,7 @@ grant execute on function public.create_group(text, text) to authenticated;
 grant execute on function public.create_group_invite(uuid, text) to authenticated;
 grant execute on function public.join_group(text) to authenticated;
 grant execute on function public.leave_group(uuid) to authenticated;
+grant execute on function public.mark_group_notifications_seen(uuid) to authenticated;
 grant execute on function public.update_group_icon(uuid, text, text) to authenticated;
 grant execute on function public.update_group_name(uuid, text) to authenticated;
 grant execute on function public.is_group_member(uuid) to authenticated;
