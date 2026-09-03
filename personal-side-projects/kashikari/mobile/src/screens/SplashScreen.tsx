@@ -5,10 +5,10 @@ import { useT } from '../i18n';
 import { colors, fonts } from '../theme';
 
 // 起動直後に一瞬だけ見せるブランド画面。参考UI画像に合わせて、背景に
-// 淡いグラデーションのぼかし玉(装飾)、キャッチコピー、ページ
-// インジケータ(ドット)を追加した。ドットは実際にスワイプできる
-// カルーセルではなく静的な装飾(複数ページのオンボーディングは、今回の
-// UI刷新とは別の規模の大きい変更として見送っている)。
+// 淡いグラデーションのぼかし玉(装飾)・キャッチコピーを追加した。
+// 以前は下部にページインジケータ(ドット)も置いていたが、実際に
+// スワイプできるカルーセルではない静的な装飾で意味を持たないため、
+// 「いらなくない?」という指摘を受けて削除した。
 //
 // この画面はApp.tsx側で「カスタムフォント(M PLUS Rounded 1c)の読み込みが
 // 終わるまで」表示され続ける("最初のページだけkashikariの字体が違う"という
@@ -33,12 +33,6 @@ export default function SplashScreen({ fontsReady = true }: { fontsReady?: boole
           <Text style={styles.tagline}>{t.splash.tagline}</Text>
         </View>
       </View>
-
-      <View style={styles.dots}>
-        <View style={[styles.dot, styles.dotActive]} />
-        <View style={styles.dot} />
-        <View style={styles.dot} />
-      </View>
     </View>
   );
 }
@@ -52,7 +46,4 @@ const styles = StyleSheet.create({
   content: { alignItems: 'center', gap: 20 },
   wordmark: { ...fonts.display, fontSize: 44, color: colors.ink, letterSpacing: -0.5 },
   tagline: { ...fonts.bodyMedium, fontSize: 15, color: colors.muted, textAlign: 'center', lineHeight: 22 },
-  dots: { position: 'absolute', bottom: 64, flexDirection: 'row', gap: 8 },
-  dot: { width: 7, height: 7, borderRadius: 999, backgroundColor: colors.line },
-  dotActive: { backgroundColor: colors.accent, width: 20 },
 });
