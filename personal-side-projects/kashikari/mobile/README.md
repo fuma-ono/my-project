@@ -1386,6 +1386,13 @@ tsc --noEmit clean、web export成功を確認済み(app.jsonの変更のみ)。
 自体はコードでは直せない、人間側の設定作業が必要(下の「まだ人間(オーナー)が
 やる必要があること」参照)。
 
+**追記(同日)**: オーナーがEASダッシュボード(expo.dev)で`EXPO_PUBLIC_SUPABASE_URL`・
+`EXPO_PUBLIC_SUPABASE_ANON_KEY`をEnvironment Variablesとして登録し、Codespaces
+から`eas build --platform ios --profile production` → `eas submit --platform ios --latest`
+を再実行。**Build番号3**として無事ビルド・App Store Connectへの提出まで完了した
+(Codespacesのブラウザ経由`eas login`が使えない問題は、これまで通りアクセス
+トークン方式で回避)。Appleの処理完了(5〜10分)後、TestFlightで動作確認が必要。
+
 ## データの分離について(重要)
 
 - グループの作成・参加はすべて `create_group` / `join_group` というサーバー側関数(RPC)経由で行われ、招待コードを知っている人だけがそのグループに参加できる
@@ -1419,12 +1426,10 @@ eas build --platform all --profile production
 - **会社形態**: 個人事業主(屋号: kashikari)に決定済み。開業届はアプリ公開そのものには不要(収益化するタイミングで検討すればよい。詳細は`docs/legal/checklist.md`参照)
 
 - **Apple Developer Program(Individual)・Google Play Console**: どちらも登録・支払い完了済み(2026-09-03、75回目)
+- **EASのEnvironment Variables登録**(79回目): `EXPO_PUBLIC_SUPABASE_URL`・`EXPO_PUBLIC_SUPABASE_ANON_KEY`をexpo.devダッシュボードに登録済み(TestFlightが真っ白画面のまま動かなかった根本原因への対応)。この状態で再ビルド(Build番号3)・再提出まで完了
 
 まだ人間(オーナー)がやる必要があるもの:
-- **【最優先・TestFlightが真っ白のまま動かない原因】EASにEnvironment Variablesを登録する**(79回目): `.env`はリポジトリにコミットされておらず、EAS Build側にも未登録のため、これまでのビルドは`EXPO_PUBLIC_SUPABASE_URL`・`EXPO_PUBLIC_SUPABASE_ANON_KEY`(LINEログインを使うなら`EXPO_PUBLIC_LINE_CHANNEL_ID`も)が空のまま作られていた。次の手順で登録してから**再ビルド・再提出**が必要:
-  1. ブラウザで https://expo.dev/accounts/fuma-ono/projects/kashikari/environment-variables を開く(要ログイン)
-  2. 上記の環境変数(値は手元の`.env`ファイル、またはSupabaseプロジェクトのProject Settings > API Keysから取得)を、Environment(Production。念のためPreview/Developmentにも同じ値を登録しておくと`eas build --profile preview`等でも動く)を選んで追加する。値はもともとクライアント埋め込み前提の公開情報なので、Visibilityは"Plain text"でよい
-  3. 登録できたら`eas build --platform ios --profile production`で再ビルド → `eas submit --platform ios --latest`で再提出(TestFlightは新しいビルド番号として並ぶので、古い真っ白ビルドは削除するか無視してよい)
+- **TestFlightでのBuild番号3の動作確認**(79回目): Appleの処理完了後、TestFlightアプリから最新ビルドをインストールし、ログイン・グループ作成・記録の追加など一通り動くか確認する
 - **アプリアイコンの本番差し替え**: `assets/icon.png`等は`scripts/generate_icons.py`で生成したもの(コーラル×プラムのグラデーションに🤝マーク。ブランドカラーは実際に使っているので、差し替えなくてもそのまま公開して差し支えないレベルではある)。もっと違うデザインにしたい場合は依頼してもらえれば対応できる
 - Androidも同様に`eas build --platform android --profile production`でビルドし、`eas submit`(または手動でのXcode/Android Studioビルド)で実際にストアへ提出
 - App Store Connect / Google Play Consoleでのストア掲載情報の実際の入力(`docs/store-listing.md`のコピーを使う)・スクリーンショットの用意(`docs/screenshots/`にある開発中の参考画像はストア提出用の解像度・構成ではないため、別途撮影が必要)
