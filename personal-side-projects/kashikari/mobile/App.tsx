@@ -11,6 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import DemoApp from './src/demo/DemoApp';
 import NotificationBanner from './src/components/NotificationBanner';
+import ConfigErrorScreen from './src/screens/ConfigErrorScreen';
 import GroupScreen from './src/screens/GroupScreen';
 import GroupsScreen from './src/screens/GroupsScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
@@ -25,6 +26,7 @@ import { useNotifications } from './src/hooks/useNotifications';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { LanguageProvider } from './src/i18n';
 import { getUsageStats, logEvent } from './src/lib/analytics';
+import { isSupabaseConfigured } from './src/lib/supabase';
 import type { Group } from './src/types';
 
 // 起動直後、読み込みが一瞬で終わってもロゴが一瞬フラッシュするだけにならない
@@ -144,6 +146,18 @@ function AppInner() {
 
   if (!fontsLoaded || !minSplashDone || (!DEMO_MODE && authLoading)) {
     return <SplashScreen />;
+  }
+
+  // EXPO_PUBLIC_SUPABASE_URL/ANON_KEYが未設定のビルド(EAS BuildのEnvironment
+  // Variables登録漏れ等)では、以前はここから先で例外が起きて真っ白画面の
+  // ままクラッシュしていた。DEMO_MODEはSupabase未接続が前提の動作なので対象外。
+  if (!DEMO_MODE && !isSupabaseConfigured) {
+    return (
+      <>
+        <ConfigErrorScreen />
+        <StatusBar style="dark" />
+      </>
+    );
   }
 
   if (DEMO_MODE) {

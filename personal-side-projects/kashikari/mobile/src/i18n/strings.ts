@@ -15,6 +15,10 @@ export const ja = {
   splash: {
     tagline: 'かんたん・あんしん・スマートに\nお金をシェア',
   },
+  configError: {
+    title: '設定エラー',
+    message: 'アプリの起動に必要な設定(接続情報)が見つかりませんでした。開発者への確認をお願いします。',
+  },
   onboarding: {
     tagline: '友達との貸し借りを、お金も頼みごとも一緒に記録する',
     signInFailedTitle: 'エラーが発生しました',
@@ -341,6 +345,10 @@ export const en: Strings = {
   },
   splash: {
     tagline: 'Simple, secure, and smart\nway to share money',
+  },
+  configError: {
+    title: 'Configuration Error',
+    message: 'The app is missing required configuration to start. Please contact the developer.',
   },
   onboarding: {
     tagline: 'Track money and favors you owe friends, all in one place',

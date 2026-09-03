@@ -1363,6 +1363,29 @@ tsc --noEmit clean、web export成功を確認済み(app.jsonの変更のみ)。
 
 「アイコンの手のマークもう少し大きくできない?結構大きめに」という指摘を受け、`scripts/generate_icons.py`の`emoji_layer(size, zoom=...)`の`zoom`値を3→4.5→6と段階的に上げ、都度`assets/icon.png`・`assets/favicon.png`を再生成して確認した。最終的に`zoom=6`(オーナー確認済み「これで行こう」)で確定。Androidのadaptive icon用フォアグラウンド(`assets/android-icon-foreground.png`)はOS側で自動的にトリミング・拡大されるため、従来通り`zoom=3`(デフォルト)のまま変更していない。
 
+## TestFlightで真っ白画面のまま動かない不具合を調査・修正(79回目・要オーナー作業)
+
+「TestFlightでkashikariを開いたけど真っ白の画面のまま動かない」という報告を受けて調査。
+
+**原因**: `.env`は`.gitignore`対象でリポジトリにコミットされておらず、EAS Build側にも
+`EXPO_PUBLIC_SUPABASE_URL`・`EXPO_PUBLIC_SUPABASE_ANON_KEY`をEnvironment Variables
+として登録していなかったため、77回目のビルドはこの2つが未設定のまま作られていた。
+`src/lib/supabase.ts`は未設定時`createClient('', '', ...)`を呼んでおり、
+`@supabase/supabase-js`内部の`new URL('realtime/v1', '')`が不正なURLとして例外を
+投げる。この例外はJSバンドルの読み込み・評価中(Reactが何か描画するより前)に
+発生するため、本番ビルドではエラー画面(RedBox)も出ず、起動直後に真っ白のまま
+何も表示されない状態になっていた。
+
+**修正した点(コード側)**:
+- `src/lib/supabase.ts`: 未設定でも`createClient`自体は例外を投げないダミーURLを渡すようにし、`isSupabaseConfigured`という真偽値をexportして呼び出し側で判定できるようにした
+- `App.tsx`: 起動時に`isSupabaseConfigured`が`false`(かつデモモードでない)場合、真っ白のまま止まる代わりに新設の`ConfigErrorScreen`(「設定エラー」というタイトルと説明文)を表示するようにした
+- `src/screens/ConfigErrorScreen.tsx`(新規)・`src/i18n/strings.ts`(`configError`キーをja/en両方に追加)
+
+これで**今後同種の設定漏れが起きても、真っ白画面ではなく分かりやすいエラー画面が
+出るようになった**。ただし今回の根本原因(EAS側にEnvironment Variablesが未登録)
+自体はコードでは直せない、人間側の設定作業が必要(下の「まだ人間(オーナー)が
+やる必要があること」参照)。
+
 ## データの分離について(重要)
 
 - グループの作成・参加はすべて `create_group` / `join_group` というサーバー側関数(RPC)経由で行われ、招待コードを知っている人だけがそのグループに参加できる
@@ -1398,6 +1421,10 @@ eas build --platform all --profile production
 - **Apple Developer Program(Individual)・Google Play Console**: どちらも登録・支払い完了済み(2026-09-03、75回目)
 
 まだ人間(オーナー)がやる必要があるもの:
+- **【最優先・TestFlightが真っ白のまま動かない原因】EASにEnvironment Variablesを登録する**(79回目): `.env`はリポジトリにコミットされておらず、EAS Build側にも未登録のため、これまでのビルドは`EXPO_PUBLIC_SUPABASE_URL`・`EXPO_PUBLIC_SUPABASE_ANON_KEY`(LINEログインを使うなら`EXPO_PUBLIC_LINE_CHANNEL_ID`も)が空のまま作られていた。次の手順で登録してから**再ビルド・再提出**が必要:
+  1. ブラウザで https://expo.dev/accounts/fuma-ono/projects/kashikari/environment-variables を開く(要ログイン)
+  2. 上記の環境変数(値は手元の`.env`ファイル、またはSupabaseプロジェクトのProject Settings > API Keysから取得)を、Environment(Production。念のためPreview/Developmentにも同じ値を登録しておくと`eas build --profile preview`等でも動く)を選んで追加する。値はもともとクライアント埋め込み前提の公開情報なので、Visibilityは"Plain text"でよい
+  3. 登録できたら`eas build --platform ios --profile production`で再ビルド → `eas submit --platform ios --latest`で再提出(TestFlightは新しいビルド番号として並ぶので、古い真っ白ビルドは削除するか無視してよい)
 - **アプリアイコンの本番差し替え**: `assets/icon.png`等は`scripts/generate_icons.py`で生成したもの(コーラル×プラムのグラデーションに🤝マーク。ブランドカラーは実際に使っているので、差し替えなくてもそのまま公開して差し支えないレベルではある)。もっと違うデザインにしたい場合は依頼してもらえれば対応できる
-- `eas build --platform all --profile production` でビルドし、`eas submit`(または手動でのXcode/Android Studioビルド)で実際にストアへ提出
+- Androidも同様に`eas build --platform android --profile production`でビルドし、`eas submit`(または手動でのXcode/Android Studioビルド)で実際にストアへ提出
 - App Store Connect / Google Play Consoleでのストア掲載情報の実際の入力(`docs/store-listing.md`のコピーを使う)・スクリーンショットの用意(`docs/screenshots/`にある開発中の参考画像はストア提出用の解像度・構成ではないため、別途撮影が必要)
