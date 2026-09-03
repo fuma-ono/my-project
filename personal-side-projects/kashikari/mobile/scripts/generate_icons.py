@@ -81,11 +81,18 @@ def make_adaptive_foreground():
 # 見た目を完全に固定するため、透明背景の画像としてここで書き出し、
 # Mark.tsx側はこれをImageとして埋め込む(=どの端末で見ても同じ絵柄になる)。
 # icon.pngと全く同じzoom=6を使い、見た目を完全に一致させる。
-MARK_ASSET_SIZE = 512
-
-
+#
+# 【一度出した不具合】最初512pxの別キャンバスサイズで書き出したところ、
+# 「手の大きさがおかしい」という指摘を受けて実測したら、手が枠から
+# はみ出るほど大きくなっていた。原因はemoji_layer内のフォントサイズが
+# 常に109pt固定であること: キャンバスに対する絵文字の相対サイズが
+# size引数に反比例して変わってしまうため、icon.pngと同じzoom=6を使っても
+# 512px版では絵文字がicon.png(1024px)の約2倍相対的に大きく描かれ、
+# そこにさらに6倍ズームがかかって破綻していた。icon.pngと完全に同じ
+# 比率にするには、emoji_layerに渡すsize自体もicon.pngと同じ(SIZE定数、
+# 1024px)にする必要がある(scale-invariantな関数ではないため)。
 def make_mark_asset():
-    emoji_layer(MARK_ASSET_SIZE, zoom=6).save(f"{OUT_DIR}/mark.png")
+    emoji_layer(SIZE, zoom=6).save(f"{OUT_DIR}/mark.png")
 
 
 if __name__ == "__main__":
