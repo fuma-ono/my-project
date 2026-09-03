@@ -9,7 +9,16 @@ import { colors, fonts } from '../theme';
 // インジケータ(ドット)を追加した。ドットは実際にスワイプできる
 // カルーセルではなく静的な装飾(複数ページのオンボーディングは、今回の
 // UI刷新とは別の規模の大きい変更として見送っている)。
-export default function SplashScreen() {
+//
+// この画面はApp.tsx側で「カスタムフォント(M PLUS Rounded 1c)の読み込みが
+// 終わるまで」表示され続ける("最初のページだけkashikariの字体が違う"という
+// 指摘への対応)。つまりfontsLoadedがfalseの間、まさにこの画面自身が表示
+// されている真っ最中であり、その間はwordmark/taglineのfontFamilyが未登録
+// でOSの標準フォントにフォールバックしてしまう。読み込みが遅い端末・
+// 初回起動では最小表示時間(900ms)いっぱいこの状態のまま切り替わって
+// しまうこともあるため、fontsReadyがtrueになるまでは文字を透明にして
+// 見せないようにし、正しいフォントで描画できるようになってから表示する。
+export default function SplashScreen({ fontsReady = true }: { fontsReady?: boolean }) {
   const t = useT();
   return (
     <View style={styles.wrap}>
@@ -19,8 +28,10 @@ export default function SplashScreen() {
 
       <View style={styles.content}>
         <Mark size={112} />
-        <Text style={styles.wordmark}>kashikari</Text>
-        <Text style={styles.tagline}>{t.splash.tagline}</Text>
+        <View style={{ opacity: fontsReady ? 1 : 0 }}>
+          <Text style={styles.wordmark}>kashikari</Text>
+          <Text style={styles.tagline}>{t.splash.tagline}</Text>
+        </View>
       </View>
 
       <View style={styles.dots}>

@@ -145,7 +145,7 @@ function AppInner() {
   };
 
   if (!fontsLoaded || !minSplashDone || (!DEMO_MODE && authLoading)) {
-    return <SplashScreen />;
+    return <SplashScreen fontsReady={fontsLoaded} />;
   }
 
   // EXPO_PUBLIC_SUPABASE_URL/ANON_KEYが未設定のビルド(EAS BuildのEnvironment
