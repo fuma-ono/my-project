@@ -1393,6 +1393,34 @@ tsc --noEmit clean、web export成功を確認済み(app.jsonの変更のみ)。
 (Codespacesのブラウザ経由`eas login`が使えない問題は、これまで通りアクセス
 トークン方式で回避)。Appleの処理完了(5〜10分)後、TestFlightで動作確認が必要。
 
+## Build番号3でGoogle・Apple・LINE・メールログインができない不具合を調査・修正(79回目・続き)
+
+真っ白画面は直ったが、今度は4つのログイン方法すべてが失敗するという報告を受けて
+調査。原因は4つとも別々で、**いずれもコードの不具合ではなくSupabase/Google側の
+設定漏れ**だった(Expo Go上での開発時は一度も本番相当の設定を通さずに動いていた
+ため、これまで気づかれていなかった):
+
+- **Apple**: エラー文言`Provider (issuer "https://appleid.apple.com") is not enabled`。
+  Supabase Authentication > ProvidersでApple自体が無効化されたままだった。
+  有効化し、Client IDs欄にbundle identifier(`com.kashikari.mobile`)を登録して解決
+- **Google**: ボタンを押すとブラウザが開き「localhost」に接続できずエラー。
+  Google Cloud Console側のOAuthクライアント自体は(以前から)正しく設定済み
+  だったが、Supabase Authentication > URL ConfigurationのRedirect URLsに
+  `exp://**`(Expo Go用)しか登録されておらず、本番ビルド用の`kashikari://**`が
+  無かったため、認証成功後の戻り先が見つからずSite URL(初期値の
+  `http://localhost:3000`のまま)にフォールバックしていた。Redirect URLsに
+  `kashikari://**`を追加して解決
+- **LINE**: `EXPO_PUBLIC_LINE_CHANNEL_ID`がEAS Environment Variablesに
+  未登録だった(79回目の最初の対応時にSupabase用の2つしか登録していなかった
+  ため)。追加登録した
+- **メール**: 上記3つの調査の過程で特に問題は見つからず(6桁コード方式は
+  ディープリンクを使わないため、リダイレクトURL設定の影響を受けない)
+
+`EXPO_PUBLIC_LINE_CHANNEL_ID`は`EXPO_PUBLIC_`環境変数(ビルド時にアプリの中に
+焼き込まれる値)のため、EAS側に追加登録しただけでは既存のビルドには反映されない
+(Apple/Google/Supabase側の設定はサーバー側の設定なので即時反映される、という
+違いがある)。そのため**Build番号4として再ビルド・再提出**した。
+
 ## データの分離について(重要)
 
 - グループの作成・参加はすべて `create_group` / `join_group` というサーバー側関数(RPC)経由で行われ、招待コードを知っている人だけがそのグループに参加できる
@@ -1429,7 +1457,7 @@ eas build --platform all --profile production
 - **EASのEnvironment Variables登録**(79回目): `EXPO_PUBLIC_SUPABASE_URL`・`EXPO_PUBLIC_SUPABASE_ANON_KEY`をexpo.devダッシュボードに登録済み(TestFlightが真っ白画面のまま動かなかった根本原因への対応)。この状態で再ビルド(Build番号3)・再提出まで完了
 
 まだ人間(オーナー)がやる必要があるもの:
-- **TestFlightでのBuild番号3の動作確認**(79回目): Appleの処理完了後、TestFlightアプリから最新ビルドをインストールし、ログイン・グループ作成・記録の追加など一通り動くか確認する
+- **TestFlightでのBuild番号4の動作確認**(79回目): Appleの処理完了後、TestFlightアプリから最新ビルドをインストールし、Google/Apple/LINE/メールの4つのログイン方法すべてとグループ作成・記録の追加など一通り動くか確認する
 - **アプリアイコンの本番差し替え**: `assets/icon.png`等は`scripts/generate_icons.py`で生成したもの(コーラル×プラムのグラデーションに🤝マーク。ブランドカラーは実際に使っているので、差し替えなくてもそのまま公開して差し支えないレベルではある)。もっと違うデザインにしたい場合は依頼してもらえれば対応できる
 - Androidも同様に`eas build --platform android --profile production`でビルドし、`eas submit`(または手動でのXcode/Android Studioビルド)で実際にストアへ提出
 - App Store Connect / Google Play Consoleでのストア掲載情報の実際の入力(`docs/store-listing.md`のコピーを使う)・スクリーンショットの用意(`docs/screenshots/`にある開発中の参考画像はストア提出用の解像度・構成ではないため、別途撮影が必要)
