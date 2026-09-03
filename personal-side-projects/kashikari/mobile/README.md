@@ -1338,7 +1338,13 @@ tsc --noEmit clean、web export成功を確認済み(app.jsonの変更のみで�
 
 Apple Developer Programの登録方式には Individual(個人)と Organization(組織)があり、**Individualの場合、App Store上の「販売元」表示に屋号(kashikari)ではなく本名が使われる**(Apple公式仕様)。Organizationなら屋号を表示できるが、D-U-N-S番号(法人としての登録が前提)が必要で、個人事業主(屋号のみ)で取得できるかは不確実かつ手続きも煩雑になる。この2択をオーナーに確認したところ、**Individualで登録し、本名が表示されることを受け入れる**という判断になった。`docs/legal/checklist.md`に記録済み。
 
-実際のアカウント登録(本人確認・支払い情報の入力)はブラウザ操作が必須で、この環境からは代行できないため、オーナー自身に進めてもらう必要がある。
+実際のアカウント登録(本人確認・支払い情報の入力)はブラウザ操作が必須で、この環境からは代行できないため、オーナー自身に進めてもらう必要がある。**その後、Apple Developer Program(Individual)・Google Play Consoleとも登録・支払い完了(2026-09-03)。**
+
+## bundle identifierをcom.kashikari.mobileに変更(76回目)
+
+App Store Connectでのアプリ作成に先立ち、developer.apple.comの「Certificates, Identifiers & Profiles」でApp ID(`com.kashikari.app`)を登録しようとしたところ、**「識別子が既に使われている」と弾かれた**(Apple全体で一意である必要があるため、無関係な誰かが既に使っている可能性が高い)。オーナーに代替案(`com.kashikari.mobile`・`com.getkashikari.app`・`com.kashikari.ledger`)を提示し、`com.kashikari.mobile`で登録できることを確認したため、`app.json`の`ios.bundleIdentifier`・`android.package`を`com.kashikari.mobile`に変更した。
+
+tsc --noEmit clean、web export成功を確認済み(app.jsonの変更のみ)。
 
 ## データの分離について(重要)
 
@@ -1364,7 +1370,7 @@ eas build --platform all --profile production
 
 準備が済んでいるもの:
 - **Expo/EASアカウント**は連携済み(`eas.json`・`app.json`の`extra.eas.projectId`が既に設定されている。60回目のプッシュ通知導入時に`eas init`済み)。ただしCodespacesがリセットされるたびに`eas login`でのログインは都度やり直しが必要(70回目までの「Codespacesがリセットされた」を参照)
-- **アプリのbundle identifier / package name**(73回目): `com.kashikari.app`を`app.json`(`ios.bundleIdentifier`・`android.package`)に設定済み。一度ストアに登録すると原則変更できない識別子のため、公開前に「これで問題ないか」だけ確認してください
+- **アプリのbundle identifier / package name**(73・76回目): `app.json`(`ios.bundleIdentifier`・`android.package`)は現在`com.kashikari.mobile`。当初`com.kashikari.app`にしていたが、Apple Developer側で「識別子が既に使われている(Apple全体で一意である必要がある)」と弾かれたため、オーナーの承認を得て`com.kashikari.mobile`に変更した
 - **プライバシーポリシー・利用規約**(73・74回目): `docs/legal/kashikari-privacy-policy.md`・`docs/legal/kashikari-terms-of-service.md`にkashikari専用のドラフトを作成済み。事業者名(屋号: kashikari)・連絡先(shanqikanghuang271@gmail.com)・準拠法(日本法・運営者住所地の裁判所)まで記入済みで、あとは法的な最終確認のみ。あわせて、ブランドに合わせた公開ページ(Artifact)も作成済み:
   - プライバシーポリシー: https://claude.ai/code/artifact/984fcff8-5d34-4ea0-a750-2d0968cb4173
   - 利用規約: https://claude.ai/code/artifact/2fbe0df7-aa78-4277-b890-b32f76bf7022
