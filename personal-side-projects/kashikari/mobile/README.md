@@ -1372,8 +1372,9 @@ eas build --platform all --profile production
 - **ストア掲載情報の下書き**(74回目): `docs/store-listing.md`に、サブタイトル・説明文・キーワード・カテゴリ・App Privacy/データセーフティの回答目安をまとめて用意済み。基本的にコピペで使える内容
 - **会社形態**: 個人事業主(屋号: kashikari)に決定済み。開業届はアプリ公開そのものには不要(収益化するタイミングで検討すればよい。詳細は`docs/legal/checklist.md`参照)
 
+- **Apple Developer Program(Individual)・Google Play Console**: どちらも登録・支払い完了済み(2026-09-03、75回目)
+
 まだ人間(オーナー)がやる必要があるもの:
-- **Apple Developer Program**(年額$99)+ **Google Play Console**(買い切り$25)のアカウント作成。Apple Developer Programは、Sign in with Apple・iOSプッシュ通知(APNs)・App Store提出の3つ全ての前提条件になっている(72回目までの経緯を参照)ため、登録すればまとめて解決する
 - **アプリアイコンの本番差し替え**: `assets/icon.png`等は`scripts/generate_icons.py`で生成したもの(コーラル×プラムのグラデーションに🤝マーク。ブランドカラーは実際に使っているので、差し替えなくてもそのまま公開して差し支えないレベルではある)。もっと違うデザインにしたい場合は依頼してもらえれば対応できる
 - `eas build --platform all --profile production` でビルドし、`eas submit`(または手動でのXcode/Android Studioビルド)で実際にストアへ提出
 - App Store Connect / Google Play Consoleでのストア掲載情報の実際の入力(`docs/store-listing.md`のコピーを使う)・スクリーンショットの用意(`docs/screenshots/`にある開発中の参考画像はストア提出用の解像度・構成ではないため、別途撮影が必要)
