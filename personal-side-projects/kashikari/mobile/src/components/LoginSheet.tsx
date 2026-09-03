@@ -1,4 +1,4 @@
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import AuthMethods from './AuthMethods';
 import { useT } from '../i18n';
@@ -16,6 +16,14 @@ type Props = {
 // 名前・アイコン登録へと続く「一連の流れ」なのでページ遷移のままにし、
 // ログインは(成功すればそれだけで完了する)単発の操作なので、
 // ShareChannelSheet.tsxと同じ下から出るシートに変更した。
+
+// シート自体の高さに明示的な上限を設けないと(=中身に合わせて伸びるだけだと)、
+// 中のScrollView(下記)が「はみ出た分だけスクロールする」という挙動に
+// ならない(親の高さが不定だと、子のScrollViewも中身に合わせて伸びて
+// しまい、結局スクロール不要な状態のまま画面からはみ出る)。画面の高さの
+// 85%を上限にして、それを超える分だけスクロールできるようにする。
+const MAX_SHEET_HEIGHT = Dimensions.get('window').height * 0.85;
+
 export default function LoginSheet({ visible, onClose, onSignedIn }: Props) {
   const t = useT();
 
@@ -25,13 +33,19 @@ export default function LoginSheet({ visible, onClose, onSignedIn }: Props) {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.avoider}>
           {/* カード自体のタップがbackdropのonPress(閉じる)まで伝播しないようにする */}
           <Pressable style={styles.card} onPress={() => {}}>
-            <View style={styles.grabber} />
-            <Text style={styles.title}>{t.onboarding.accountStepTitleLogin}</Text>
-            <Text style={styles.description}>{t.onboarding.accountStepDescriptionLogin}</Text>
-            <AuthMethods mode="signin" onDone={onSignedIn} />
-            <Pressable onPress={onClose} style={styles.cancelBtn}>
-              <Text style={styles.cancelBtnText}>{t.common.cancel}</Text>
-            </Pressable>
+            {/* 「メールアドレス欄がキーボードに隠れて入力しづらい」という
+                指摘への対応(OnboardingScreen.tsxと同じ理由)。カードの
+                高さをmaxHeightで頭打ちにしたうえでScrollViewにすることで、
+                キーボード表示時にメール欄までスクロールできるようにする。 */}
+            <ScrollView style={styles.cardScroll} contentContainerStyle={styles.cardScrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <View style={styles.grabber} />
+              <Text style={styles.title}>{t.onboarding.accountStepTitleLogin}</Text>
+              <Text style={styles.description}>{t.onboarding.accountStepDescriptionLogin}</Text>
+              <AuthMethods mode="signin" onDone={onSignedIn} />
+              <Pressable onPress={onClose} style={styles.cancelBtn}>
+                <Text style={styles.cancelBtnText}>{t.common.cancel}</Text>
+              </Pressable>
+            </ScrollView>
           </Pressable>
         </KeyboardAvoidingView>
       </Pressable>
@@ -42,7 +56,9 @@ export default function LoginSheet({ visible, onClose, onSignedIn }: Props) {
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(20,15,10,0.45)', justifyContent: 'flex-end' },
   avoider: { justifyContent: 'flex-end' },
-  card: { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 32 },
+  card: { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  cardScroll: { maxHeight: MAX_SHEET_HEIGHT },
+  cardScrollContent: { padding: 20, paddingBottom: 32 },
   grabber: { width: 36, height: 4, borderRadius: 999, backgroundColor: colors.line, alignSelf: 'center', marginBottom: 16 },
   title: { ...fonts.display, fontSize: 19, color: colors.ink, textAlign: 'center' },
   description: { ...fonts.body, fontSize: 13, color: colors.muted, textAlign: 'center', lineHeight: 19, marginTop: 4, marginBottom: 18 },

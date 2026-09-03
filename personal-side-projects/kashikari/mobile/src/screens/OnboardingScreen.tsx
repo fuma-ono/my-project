@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Avatar from '../components/Avatar';
 import AuthMethods from '../components/AuthMethods';
@@ -55,7 +55,13 @@ export default function OnboardingScreen({
 
   return (
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.content}>
+      {/* 「メールアドレス欄がキーボードに隠れて入力しづらい」という指摘への
+          対応。以前はスクロールしない素のViewだったため、Googleなどの
+          ボタンより下にあるメール欄は、キーボードで隠れても手動でも
+          スクロールして避けようが無かった。ScrollViewに変えることで、
+          入力欄フォーカス時にOSが自動でスクロールして見えるようにする。 */}
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <View style={styles.content}>
         <View style={styles.markWrap}>
           <Mark size={64} />
         </View>
@@ -138,6 +144,7 @@ export default function OnboardingScreen({
       {step === 'name' && (
         <PrimaryButton title={t.onboarding.start} onPress={submit} loading={submitting} disabled={!name.trim()} style={styles.button} />
       )}
+      </ScrollView>
 
       <AvatarPicker
         visible={pickerOpen}
@@ -168,7 +175,8 @@ export default function OnboardingScreen({
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.bg, paddingTop: 60, paddingHorizontal: 24, paddingBottom: 40 },
+  wrap: { flex: 1, backgroundColor: colors.bg },
+  scrollContent: { flexGrow: 1, paddingTop: 60, paddingHorizontal: 24, paddingBottom: 40 },
   content: { marginBottom: 36 },
   markWrap: { marginBottom: 16 },
   wordmark: { ...fonts.display, fontSize: 38, color: colors.ink },
