@@ -44,11 +44,6 @@
         }
       ]
     ],
-    "extra": {
-      "eas": {
-        "projectId": "b2a25440-45da-4f81-86d8-150cbf71328d"
-      }
-    },
-    "owner": "fumaono"
+    "owner": "fuma-ono"
   }
 }
