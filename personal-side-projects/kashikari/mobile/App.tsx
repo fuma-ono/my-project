@@ -13,6 +13,7 @@ import DemoApp from './src/demo/DemoApp';
 import NotificationBanner from './src/components/NotificationBanner';
 import ConfigErrorScreen from './src/screens/ConfigErrorScreen';
 import GroupScreen from './src/screens/GroupScreen';
+import GroupSettingsScreen from './src/screens/GroupSettingsScreen';
 import GroupsScreen from './src/screens/GroupsScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
@@ -39,6 +40,11 @@ const MIN_SPLASH_MS = 900;
 type Screen =
   | { name: 'groups' }
   | { name: 'group'; group: Group; justCreated?: boolean }
+  // 「グループ内の設定ボタンを押したら、グループの設定(アイコンや
+  // グループ名など)を変更できるようにした方がいい」という指摘への
+  // 対応(86回目)。グループ詳細画面(group)からしか開けないので、
+  // returnToはgroup画面固定(必須)にしておく。
+  | { name: 'groupSettings'; group: Group; returnTo: { name: 'group'; group: Group; justCreated?: boolean } }
   | { name: 'settings'; returnTo?: Screen }
   | { name: 'premium'; returnTo?: Screen }
   | { name: 'usage'; returnTo?: Screen }
@@ -70,9 +76,17 @@ function AppInner() {
     signOut,
     markNotificationsSeen,
   } = useAuth();
-  const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup, updateGroupIcon, updateGroupIconPhoto } = useGroups(
-    DEMO_MODE ? null : userId
-  );
+  const {
+    groups,
+    loading: groupsLoading,
+    refresh,
+    createGroup,
+    joinGroup,
+    leaveGroup,
+    updateGroupIcon,
+    updateGroupIconPhoto,
+    updateGroupName,
+  } = useGroups(DEMO_MODE ? null : userId);
   const { pendingGroupId, clearPendingGroupId } = usePushNotifications(DEMO_MODE ? null : userId);
   const {
     items: notificationItems,
@@ -204,16 +218,30 @@ function AppInner() {
           onLeave={leaveGroup}
           onChangeAvatar={updateAvatar}
           onChangeAvatarPhoto={updateAvatarPhoto}
-          onChangeGroupIcon={async (emoji) => {
-            const res = await updateGroupIcon(screen.group.id, emoji);
-            // groupsの一覧はupdateGroupIcon内のrefresh()で更新されるが、
-            // 今開いている画面が持つgroupはApp.tsx側で保持しているスナップショット
-            // なので、こちらも合わせて更新しないとアイコンの変更がこの画面に
-            // 反映されない(戻って開き直すまで古いままになってしまう)。
-            if (!res.error) setScreen({ name: 'group', group: { ...screen.group, icon_emoji: emoji, icon_photo_path: null } });
+          onOpenSettings={() => setScreen({ name: 'groupSettings', group: screen.group, returnTo: screen })}
+          onOpenNotifications={openNotifications}
+          hasUnreadNotifications={hasUnreadNotifications}
+        />
+      )}
+      {screen.name === 'groupSettings' && (
+        <GroupSettingsScreen
+          group={screen.group}
+          // 「戻る」時、このgroupSettings画面内で変更していれば(screen.group
+          // が最新)、それを戻り先(group画面)にも反映する。反映しないと、
+          // 戻った直後は変更前の名前・アイコンのまま表示されてしまう
+          // (再度この画面を出入りするまで気づけない)。
+          onBack={() => setScreen({ ...screen.returnTo, group: screen.group })}
+          onChangeName={async (name) => {
+            const res = await updateGroupName(screen.group.id, name);
+            if (!res.error) setScreen({ ...screen, group: { ...screen.group, name: name.trim() } });
             return res;
           }}
-          onChangeGroupIconPhoto={async (uri) => {
+          onChangeIcon={async (emoji) => {
+            const res = await updateGroupIcon(screen.group.id, emoji);
+            if (!res.error) setScreen({ ...screen, group: { ...screen.group, icon_emoji: emoji, icon_photo_path: null } });
+            return res;
+          }}
+          onChangeIconPhoto={async (uri) => {
             const res = await updateGroupIconPhoto(screen.group.id, uri);
             // アップロード後のパスは分からない(uploadIconPhoto内で決まる)ため、
             // 確実に最新化するにはgroups一覧から取り直す必要がある。
@@ -221,13 +249,10 @@ function AppInner() {
             // groupsから該当グループを探して使う。
             if (!res.error) {
               const updated = groups.find((g) => g.id === screen.group.id);
-              if (updated) setScreen({ name: 'group', group: updated });
+              if (updated) setScreen({ ...screen, group: updated });
             }
             return res;
           }}
-          onOpenSettings={() => setScreen({ name: 'settings', returnTo: screen })}
-          onOpenNotifications={openNotifications}
-          hasUnreadNotifications={hasUnreadNotifications}
         />
       )}
       {screen.name === 'settings' && (

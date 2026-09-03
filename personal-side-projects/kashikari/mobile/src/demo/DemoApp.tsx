@@ -40,7 +40,6 @@ export default function DemoApp() {
     return (
       <DemoGroupScreen
         onBack={() => setScreen({ name: 'groups' })}
-        onOpenSettings={() => setScreen({ name: 'settings', returnTo: screen })}
         onOpenNotifications={() => openNotifications(screen)}
         hasUnreadNotifications={hasUnreadNotifications}
       />

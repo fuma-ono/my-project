@@ -11,7 +11,6 @@ import BalanceCard from '../components/BalanceCard';
 import BottomTabBar, { type GroupTab } from '../components/BottomTabBar';
 import EntryRow from '../components/EntryRow';
 import Fab from '../components/Fab';
-import GroupIconPicker from '../components/GroupIconPicker';
 import HistoryEntryRow from '../components/HistoryEntryRow';
 import InviteModal from '../components/InviteModal';
 import NetSummary from '../components/NetSummary';
@@ -39,8 +38,6 @@ type Props = {
   onLeave: (groupId: string) => Promise<{ error: string | null }>;
   onChangeAvatar: (emoji: string) => Promise<{ error: string | null }>;
   onChangeAvatarPhoto: (uri: string) => Promise<{ error: string | null }>;
-  onChangeGroupIcon: (emoji: string) => Promise<{ error: string | null }>;
-  onChangeGroupIconPhoto: (uri: string) => Promise<{ error: string | null }>;
   onOpenSettings: () => void;
   onOpenNotifications: () => void;
   hasUnreadNotifications: boolean;
@@ -54,8 +51,6 @@ export default function GroupScreen({
   onLeave,
   onChangeAvatar,
   onChangeAvatarPhoto,
-  onChangeGroupIcon,
-  onChangeGroupIconPhoto,
   onOpenSettings,
   onOpenNotifications,
   hasUnreadNotifications,
@@ -80,7 +75,6 @@ export default function GroupScreen({
   } = useGroupData(group.id, meId);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
-  const [groupIconPickerOpen, setGroupIconPickerOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [shareSheetOpen, setShareSheetOpen] = useState(false);
   const [shareMessage, setShareMessage] = useState('');
@@ -266,22 +260,6 @@ export default function GroupScreen({
     />
   );
 
-  const groupIconPicker = (
-    <GroupIconPicker
-      visible={groupIconPickerOpen}
-      selected={group.icon_emoji}
-      onSelect={async (emoji) => {
-        setGroupIconPickerOpen(false);
-        await onChangeGroupIcon(emoji);
-      }}
-      onSelectPhoto={async (uri) => {
-        setGroupIconPickerOpen(false);
-        await onChangeGroupIconPhoto(uri);
-      }}
-      onClose={() => setGroupIconPickerOpen(false)}
-    />
-  );
-
   // 送信成功後、InviteModal(独自の<Modal>)はこの直後にclose()を呼ぶ。
   // その閉じるアニメーション中に別のネイティブ画面(共有シート等)を
   // 呼ぶと、iOSでは「自分のモーダルを閉じている最中に別のモーダルを
@@ -404,10 +382,16 @@ export default function GroupScreen({
             <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back}>
               <Ionicons name="chevron-back" size={22} color="#fff" />
             </Pressable>
-            <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleCol}>
+            {/* 以前はここ(グループ名部分)をタップするとアイコン変更用の
+                モーダルが開いたが、「設定ボタンからアイコンやグループ名を
+                変更できるようにした方がいい」という指摘(86回目)を受け、
+                アイコン変更もGroupSettingsScreenに一本化した(入り口が
+                2つあると分かりにくいため)。そのためタップ不要のただの
+                テキストに戻した。 */}
+            <View style={styles.titleCol}>
               <Text style={styles.title} numberOfLines={1}>{group.name}</Text>
               <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
-            </Pressable>
+            </View>
             <View style={styles.headerRightRow}>
               <Pressable onPress={onOpenNotifications} hitSlop={10} accessibilityLabel={t.notifications.title} style={styles.bellWrap}>
                 <Ionicons name="notifications-outline" size={22} color="#fff" />
@@ -626,7 +610,6 @@ export default function GroupScreen({
         onSubmitSplit={addSplitEntry}
       />
       {avatarPicker}
-      {groupIconPicker}
       {inviteModal}
       {shareChannelSheet}
       {tab === 'balance' && (

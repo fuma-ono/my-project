@@ -88,6 +88,21 @@ export function useGroups(userId: string | null) {
     [refresh]
   );
 
+  // 「グループ内の設定ボタンを押したら、グループの設定(アイコンや
+  // グループ名など)を変更できるようにした方がいい」という指摘への
+  // 対応(86回目)。updateGroupIconと同じパターン。
+  const updateGroupName = useCallback(
+    async (groupId: string, name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return { error: t.groupsHook.nameRequired };
+      const { error } = await supabase.rpc('update_group_name', { _group_id: groupId, _name: trimmed });
+      if (error) return { error: error.message };
+      await refresh();
+      return { error: null };
+    },
+    [refresh, t]
+  );
+
   // 「グループのアイコンも写真を選べるように」への対応。
   const updateGroupIconPhoto = useCallback(
     async (groupId: string, photoUri: string) => {
@@ -105,5 +120,5 @@ export function useGroups(userId: string | null) {
     [refresh, t]
   );
 
-  return { groups, loading, refresh, createGroup, joinGroup, leaveGroup, updateGroupIcon, updateGroupIconPhoto };
+  return { groups, loading, refresh, createGroup, joinGroup, leaveGroup, updateGroupIcon, updateGroupIconPhoto, updateGroupName };
 }

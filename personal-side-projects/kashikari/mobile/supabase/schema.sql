@@ -444,6 +444,37 @@ begin
 end;
 $$;
 
+-- 「グループ内の設定ボタンを押したら、グループの設定(アイコンやグループ名
+-- など)を変更できるようにした方がいい」という指摘への対応(86回目)。
+-- update_group_iconと同じ理由(直接UPDATEを開放するとname以外の列も
+-- 書き換えられてしまう)で、この列だけを更新するRPCに絞る。
+create or replace function public.update_group_name(_group_id uuid, _name text)
+returns public.groups
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  _group public.groups;
+  _trimmed text := trim(_name);
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  if not public.is_group_member(_group_id) then
+    raise exception 'このグループのメンバーではありません';
+  end if;
+  if _trimmed = '' then
+    raise exception 'グループ名を入力してください';
+  end if;
+
+  update public.groups set name = _trimmed where id = _group_id
+  returning * into _group;
+
+  return _group;
+end;
+$$;
+
 -- 66回目でentriesのUPDATEを当事者・記録者限定に絞った際に導入した
 -- 「オート精算」専用のRPC。68回目でentriesのUPDATEポリシー自体を
 -- 「メンバーなら誰でも」に戻したため不要になった(直接のUPDATEで
@@ -455,6 +486,7 @@ grant execute on function public.create_group_invite(uuid, text) to authenticate
 grant execute on function public.join_group(text) to authenticated;
 grant execute on function public.leave_group(uuid) to authenticated;
 grant execute on function public.update_group_icon(uuid, text, text) to authenticated;
+grant execute on function public.update_group_name(uuid, text) to authenticated;
 grant execute on function public.is_group_member(uuid) to authenticated;
 
 -- ============================================================

@@ -140,6 +140,20 @@ export const ja = {
     photoButton: '写真から選ぶ',
     photoAlertTitle: 'グループの写真を選ぶ',
   },
+  // 「グループ内の設定ボタンを押したら、グループの設定(アイコンや
+  // グループ名など)を変更できるようにした方がいい」という指摘への
+  // 対応(86回目)。以前はグループ詳細の歯車アイコンから個人設定
+  // (SettingsScreen、言語・自分のアイコン・ログイン方法など)を開いて
+  // いたが、グループの文脈で個人設定が出るのは分かりにくいという指摘を
+  // 受け、この専用画面(アイコン・グループ名のみ)に差し替えた。
+  groupSettings: {
+    title: 'グループの設定',
+    back: '戻る',
+    icon: 'アイコン',
+    name: 'グループ名',
+    namePlaceholder: '例: 大学の友達',
+    savedNote: '保存しました',
+  },
   avatarPicker: {
     title: 'アイコンを選ぶ',
     photoButton: '写真から選ぶ',
@@ -463,6 +477,14 @@ export const en: Strings = {
     title: 'Choose a group icon',
     photoButton: 'Choose a photo',
     photoAlertTitle: "Choose the group's photo",
+  },
+  groupSettings: {
+    title: 'Group settings',
+    back: 'Back',
+    icon: 'Icon',
+    name: 'Group name',
+    namePlaceholder: 'e.g. College friends',
+    savedNote: 'Saved',
   },
   avatarPicker: {
     title: 'Choose an icon',

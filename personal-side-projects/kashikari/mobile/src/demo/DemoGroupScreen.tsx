@@ -13,7 +13,6 @@ import BalanceCard from '../components/BalanceCard';
 import BottomTabBar, { type GroupTab } from '../components/BottomTabBar';
 import EntryRow from '../components/EntryRow';
 import Fab from '../components/Fab';
-import GroupIconPicker from '../components/GroupIconPicker';
 import HistoryEntryRow from '../components/HistoryEntryRow';
 import InviteModal from '../components/InviteModal';
 import NetSummary from '../components/NetSummary';
@@ -26,6 +25,7 @@ import { computeBalances, computeMyNet, computeSimplifiedSettlement, entryFromKe
 import { groupEntriesByDate } from '../lib/dateGroups';
 import { buildInviteUrl } from '../lib/invite';
 import { splitAmount } from '../lib/split';
+import GroupSettingsScreen from '../screens/GroupSettingsScreen';
 import { avatarColor, colors, fonts } from '../theme';
 import type { BalanceRow, Entry, EntryType, Group, GroupInvite, Profile, SimplifiedTransaction } from '../types';
 import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS } from './mockData';
@@ -35,12 +35,10 @@ let demoIdSeq = 100;
 
 export default function DemoGroupScreen({
   onBack,
-  onOpenSettings,
   onOpenNotifications,
   hasUnreadNotifications,
 }: {
   onBack: () => void;
-  onOpenSettings: () => void;
   onOpenNotifications: () => void;
   hasUnreadNotifications: boolean;
 }) {
@@ -48,9 +46,11 @@ export default function DemoGroupScreen({
   const [entries, setEntries] = useState<Entry[]>(DEMO_ENTRIES);
   const [members, setMembers] = useState<Profile[]>(DEMO_MEMBERS);
   const [group, setGroup] = useState<Group>(DEMO_GROUP);
+  // 「グループ内の設定ボタンを押したら、グループの設定を変更できるように」
+  // (86回目)。個人設定(onOpenSettings)とは別に、この画面内だけで完結する。
+  const [groupSettingsOpen, setGroupSettingsOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
-  const [groupIconPickerOpen, setGroupIconPickerOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('balance');
   const [showSettled, setShowSettled] = useState(false);
   const [unpaidModalOpen, setUnpaidModalOpen] = useState(false);
@@ -344,6 +344,29 @@ export default function DemoGroupScreen({
 
   const pendingInvites = useMemo(() => invites.filter((i) => i.status === 'pending'), [invites]);
 
+  // 「グループ内の設定ボタンを押したら、グループの設定(アイコンや
+  // グループ名など)を変更できるようにした方がいい」という指摘への
+  // 対応(86回目)。GroupScreen.tsx側は本番のナビゲーション(App.tsx)に
+  // 新しい画面を追加したが、デモ側はDemoGroupScreenがgroup状態を丸ごと
+  // ローカルで持っているため、DemoApp.tsx側に画面を増やさず、この
+  // コンポーネント内だけで完結するシンプルな切り替えにした。
+  if (groupSettingsOpen) {
+    return (
+      <GroupSettingsScreen
+        group={group}
+        onBack={() => setGroupSettingsOpen(false)}
+        onChangeName={async (name) => {
+          setGroup((prev) => ({ ...prev, name: name.trim() }));
+          return { error: null };
+        }}
+        onChangeIcon={async (emoji) => {
+          setGroup((prev) => ({ ...prev, icon_emoji: emoji, icon_photo_path: null }));
+          return { error: null };
+        }}
+      />
+    );
+  }
+
   const header = (
     <View>
       {/* 「デモモードの上部は消せないの？大学の友達タブと重なってしまってる」
@@ -369,10 +392,10 @@ export default function DemoGroupScreen({
             <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back}>
               <Ionicons name="chevron-back" size={22} color="#fff" />
             </Pressable>
-            <Pressable onPress={() => setGroupIconPickerOpen(true)} style={styles.titleCol}>
+            <View style={styles.titleCol}>
               <Text style={styles.title} numberOfLines={1}>{group.name}</Text>
               <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
-            </Pressable>
+            </View>
             <View style={styles.headerRightRow}>
               <Pressable onPress={onOpenNotifications} hitSlop={10} accessibilityLabel={t.notifications.title} style={styles.bellWrap}>
                 <Ionicons name="notifications-outline" size={22} color="#fff" />
@@ -394,7 +417,7 @@ export default function DemoGroupScreen({
               >
                 <Ionicons name="exit-outline" size={22} color="#fff" />
               </Pressable>
-              <Pressable onPress={onOpenSettings} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
+              <Pressable onPress={() => setGroupSettingsOpen(true)} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
                 <Ionicons name="settings-outline" size={22} color="#fff" />
               </Pressable>
             </View>
@@ -580,16 +603,6 @@ export default function DemoGroupScreen({
           setMembers((prev) => prev.map((m) => (m.id === meId ? { ...m, avatar_emoji: emoji } : m)));
         }}
         onClose={() => setAvatarPickerOpen(false)}
-      />
-
-      <GroupIconPicker
-        visible={groupIconPickerOpen}
-        selected={group.icon_emoji}
-        onSelect={(emoji) => {
-          setGroupIconPickerOpen(false);
-          setGroup((prev) => ({ ...prev, icon_emoji: emoji }));
-        }}
-        onClose={() => setGroupIconPickerOpen(false)}
       />
 
       <InviteModal
