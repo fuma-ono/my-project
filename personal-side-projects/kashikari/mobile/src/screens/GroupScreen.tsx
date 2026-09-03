@@ -348,16 +348,12 @@ export default function GroupScreen({
     ]);
   };
 
-  // 参考UIのヘッダーにはアイコンだけが並び、「抜ける」のテキストボタンは
-  // 無い。抜ける操作自体は無くさず、歯車アイコンをタップしたときの
-  // メニュー(設定/抜ける)に格納する形にした。
-  const openGroupMenu = () => {
-    Alert.alert(group.name, undefined, [
-      { text: t.groups.settingsButton, onPress: onOpenSettings },
-      { text: t.group.leave, style: 'destructive', onPress: leave },
-      { text: t.common.cancel, style: 'cancel' },
-    ]);
-  };
+  // 以前は歯車アイコンをタップすると「設定/抜ける」のメニューが出る形に
+  // していたが、「設定マークは設定のみに動くべきで、抜けるは別のマークで
+  // 作るべき」という指摘を受け、歯車は素直に設定画面を開くだけにし、
+  // 抜ける操作は専用のアイコン(exit-outline)を別途ヘッダーに置く形に
+  // 変更した。抜ける操作自体はグループ詳細(この画面)にしか無くてよい
+  // (ホーム側のグループ一覧はグループ単位の操作をしないため不要)。
 
   const pendingInvites = useMemo(() => invites.filter((i) => i.status === 'pending'), [invites]);
 
@@ -417,7 +413,10 @@ export default function GroupScreen({
                 <Ionicons name="notifications-outline" size={22} color="#fff" />
                 {hasUnreadNotifications && <View style={styles.unreadDot} />}
               </Pressable>
-              <Pressable onPress={openGroupMenu} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
+              <Pressable onPress={leave} hitSlop={10} accessibilityLabel={t.group.leave}>
+                <Ionicons name="exit-outline" size={22} color="#fff" />
+              </Pressable>
+              <Pressable onPress={onOpenSettings} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
                 <Ionicons name="settings-outline" size={22} color="#fff" />
               </Pressable>
             </View>

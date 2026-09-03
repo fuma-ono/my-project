@@ -378,6 +378,22 @@ export default function DemoGroupScreen({
                 <Ionicons name="notifications-outline" size={22} color="#fff" />
                 {hasUnreadNotifications && <View style={styles.unreadDot} />}
               </Pressable>
+              {/* GroupScreen.tsx側の「設定マークは設定のみ、抜けるは別マークで」
+                  という修正を見た目だけこちらにもミラーしておく(実際の
+                  退出処理は行わず、確認ダイアログを出して一覧に戻るだけの
+                  デモ用スタブ)。 */}
+              <Pressable
+                onPress={() =>
+                  Alert.alert(t.group.leaveConfirmTitle, t.group.leaveConfirmMessage(group.name), [
+                    { text: t.common.cancel, style: 'cancel' },
+                    { text: t.group.leaveConfirmButton, style: 'destructive', onPress: onBack },
+                  ])
+                }
+                hitSlop={10}
+                accessibilityLabel={t.group.leave}
+              >
+                <Ionicons name="exit-outline" size={22} color="#fff" />
+              </Pressable>
               <Pressable onPress={onOpenSettings} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
                 <Ionicons name="settings-outline" size={22} color="#fff" />
               </Pressable>
