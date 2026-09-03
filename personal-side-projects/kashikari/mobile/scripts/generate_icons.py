@@ -49,16 +49,19 @@ def emoji_layer(size, zoom=3):
     bbox = draw.textbbox((0, 0), EMOJI, font=font, embedded_color=True)
     w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
     draw.text(((size - w) / 2 - bbox[0], (size - h) / 2 - bbox[1]), EMOJI, font=font, embedded_color=True)
-    layer = layer.resize((size * zoom, size * zoom), Image.LANCZOS)
-    off = size * (zoom - 1) // 2
+    layer = layer.resize((int(size * zoom), int(size * zoom)), Image.LANCZOS)
+    off = int(size * (zoom - 1) // 2)
     return layer.crop((off, off, off + size, off + size))
 
 
 def make_icon():
+    # 「手のマークをもう少し大きく」という指摘を受け、zoomを3→4.5に
+    # 上げた(emoji_layerは対角トリミングで拡大する仕組みなので、
+    # zoomを上げるほど絵文字がキャンバスいっぱいに大きく見える)。
     bg = gradient_bg(SIZE, ACCENT, PLUM).convert("RGBA")
     rounded = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     rounded.paste(bg, (0, 0), rounded_mask(SIZE, 0.22))
-    out = Image.alpha_composite(rounded, emoji_layer(SIZE))
+    out = Image.alpha_composite(rounded, emoji_layer(SIZE, zoom=4.5))
     out.convert("RGB").save(f"{OUT_DIR}/icon.png")
     out.convert("RGB").resize((256, 256), Image.LANCZOS).save(f"{OUT_DIR}/favicon.png")
 
