@@ -1553,6 +1553,8 @@ Google Playにも対応)のレビュー投稿ページを直接開く。既存�
 
 TestFlight実機のスクリーンショットを見せてもらい、「この画面の下のオレンジ線の部分いらなくない?」という指摘を受けた。`SplashScreen.tsx`下部にあった3つの丸(ページインジケータ風の装飾ドット)のことで、実際にスワイプできるカルーセルではない単なる静的装飾だったため、指摘の通り削除した。
 
+**追記(同日)**: `npx supabase functions deploy send-push`でEdge Functionを再デプロイし、`eas build` → `eas submit`で**Build番号5**として再ビルド・再提出した。これで80〜84回目(アイコン比率調整・起動時フォント崩れ修正・グループ退出通知・ログイン画面のキーボード被り修正・スプラッシュ画面のドット削除)がすべてTestFlightに反映される見込み。Appleの処理完了後、実機での動作確認が必要。
+
 ## 既知の制約(現時点)
 
 - プッシュ通知は追加した(60回目)が、Android実機での動作確認にはExpo Goではなくdevelopment buildが必要(詳細は60回目の項目参照)
@@ -1588,7 +1590,7 @@ eas build --platform all --profile production
   RPCの引数追加)のため、`supabase/schema.sql`をSupabaseのSQL Editorで
   再実行する必要がある。実行しないと、写真アイコンを選ぼうとした時に
   エラーになる
-- **TestFlightでのBuild番号4の動作確認**(79回目): Appleの処理完了後、TestFlightアプリから最新ビルドをインストールし、Google/Apple/LINE/メールの4つのログイン方法すべてとグループ作成・記録の追加など一通り動くか確認する
+- **TestFlightでのBuild番号5の動作確認**(84回目): Appleの処理完了後、TestFlightアプリから最新ビルドをインストールし、アイコン比率・起動時のフォント・グループ退出通知・ログイン画面のキーボード被り・スプラッシュ画面のドット削除に加え、Google/Apple/LINE/メールの4つのログイン方法・グループ作成・記録の追加など一通り動くか確認する
 - **アプリアイコンの本番差し替え**: `assets/icon.png`等は`scripts/generate_icons.py`で生成したもの(コーラル×プラムのグラデーションに🤝マーク。ブランドカラーは実際に使っているので、差し替えなくてもそのまま公開して差し支えないレベルではある)。もっと違うデザインにしたい場合は依頼してもらえれば対応できる
 - Androidも同様に`eas build --platform android --profile production`でビルドし、`eas submit`(または手動でのXcode/Android Studioビルド)で実際にストアへ提出
 - App Store Connect / Google Play Consoleでのストア掲載情報の実際の入力(`docs/store-listing.md`のコピーを使う)・スクリーンショットの用意(`docs/screenshots/`にある開発中の参考画像はストア提出用の解像度・構成ではないため、別途撮影が必要)
