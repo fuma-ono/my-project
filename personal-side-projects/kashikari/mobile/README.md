@@ -1357,6 +1357,8 @@ tsc --noEmit clean、web export成功を確認済み(app.jsonの変更のみ)。
 
 これらを経て、**初回のiOS本番ビルドが成功**。ビルド過程でApple証明書・プロビジョニングプロファイルに加えて**APNsプッシュキーも自動生成**されており、これでiOS実機でのプッシュ通知配信(development build/production build経由)に必要な認証情報が揃った。ビルド成果物(.ipa)はEAS上に生成済みで、次は`eas submit`でApp Store Connect(TestFlight)に提出する。
 
+続けて`eas submit --platform ios --latest`も成功。App Store Connect API Key(EAS管理)を自動生成し、ビルドをApp Store Connectにアップロードした。**App Store Connect App ID: `6808062809`**。TestFlightの内部テストグループ(Team (Expo))も自動作成され、オーナーのApple ID(サインインに使ったもの)がテスターとして自動追加済み。Appleの処理完了(5〜10分)後、iPhoneのTestFlightアプリからインストールできるようになる。
+
 ## データの分離について(重要)
 
 - グループの作成・参加はすべて `create_group` / `join_group` というサーバー側関数(RPC)経由で行われ、招待コードを知っている人だけがそのグループに参加できる
