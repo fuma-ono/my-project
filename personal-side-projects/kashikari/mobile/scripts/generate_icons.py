@@ -55,13 +55,13 @@ def emoji_layer(size, zoom=3):
 
 
 def make_icon():
-    # 「手のマークをもう少し大きく」という指摘を受け、zoomを3→4.5に
+    # 「手のマークをもう少し大きく」という指摘を受け、zoomを3→4.5→6に
     # 上げた(emoji_layerは対角トリミングで拡大する仕組みなので、
     # zoomを上げるほど絵文字がキャンバスいっぱいに大きく見える)。
     bg = gradient_bg(SIZE, ACCENT, PLUM).convert("RGBA")
     rounded = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     rounded.paste(bg, (0, 0), rounded_mask(SIZE, 0.22))
-    out = Image.alpha_composite(rounded, emoji_layer(SIZE, zoom=4.5))
+    out = Image.alpha_composite(rounded, emoji_layer(SIZE, zoom=6))
     out.convert("RGB").save(f"{OUT_DIR}/icon.png")
     out.convert("RGB").resize((256, 256), Image.LANCZOS).save(f"{OUT_DIR}/favicon.png")
 
