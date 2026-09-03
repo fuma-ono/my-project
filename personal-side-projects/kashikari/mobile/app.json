@@ -21,7 +21,10 @@
         "backgroundColor": "#ff6b4a",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
-      "permissions": ["android.permission.CAMERA", "android.permission.READ_MEDIA_IMAGES"]
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -44,6 +47,11 @@
         }
       ]
     ],
-    "owner": "fuma-ono"
+    "owner": "fuma-ono",
+    "extra": {
+      "eas": {
+        "projectId": "3db8fea4-64ac-4861-b462-df511a81f2d0"
+      }
+    }
   }
 }
