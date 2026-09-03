@@ -1359,6 +1359,10 @@ tsc --noEmit clean、web export成功を確認済み(app.jsonの変更のみ)。
 
 続けて`eas submit --platform ios --latest`も成功。App Store Connect API Key(EAS管理)を自動生成し、ビルドをApp Store Connectにアップロードした。**App Store Connect App ID: `6808062809`**。TestFlightの内部テストグループ(Team (Expo))も自動作成され、オーナーのApple ID(サインインに使ったもの)がテスターとして自動追加済み。Appleの処理完了(5〜10分)後、iPhoneのTestFlightアプリからインストールできるようになる。
 
+## アプリアイコンの手のマーク(🤝)を拡大(78回目)
+
+「アイコンの手のマークもう少し大きくできない?結構大きめに」という指摘を受け、`scripts/generate_icons.py`の`emoji_layer(size, zoom=...)`の`zoom`値を3→4.5→6と段階的に上げ、都度`assets/icon.png`・`assets/favicon.png`を再生成して確認した。最終的に`zoom=6`(オーナー確認済み「これで行こう」)で確定。Androidのadaptive icon用フォアグラウンド(`assets/android-icon-foreground.png`)はOS側で自動的にトリミング・拡大されるため、従来通り`zoom=3`(デフォルト)のまま変更していない。
+
 ## データの分離について(重要)
 
 - グループの作成・参加はすべて `create_group` / `join_group` というサーバー側関数(RPC)経由で行われ、招待コードを知っている人だけがそのグループに参加できる
