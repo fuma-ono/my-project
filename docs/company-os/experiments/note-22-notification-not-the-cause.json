@@ -7,9 +7,9 @@
   "pillar": "A",
   "hypothesis": "「集中できない 原因」の実用検索層に一致し、通知対策済みでも解決しない読者の悩みに応えることで閲覧・スキ・フォロワー増につながる",
   "generated_at": "2026-08-24",
-  "published_at": null,
-  "status": "draft",
-  "note_url": "https://note.com/unique_condor276",
+  "published_at": "2026-09-03",
+  "status": "published",
+  "note_url": "https://note.com/unique_condor276/n/nff42c6239713",
   "metrics": {
     "views": null,
     "likes": null,
@@ -31,5 +31,6 @@
     "clear_reader_value": true,
     "no_duplication_with_existing": true,
     "note": "2026-08-24、週2回運用Routineでの新規生成。既存記事は音への対策が中心のため、通知/デジタル面という別角度で重複を回避"
-  }
+  },
+  "publish_confirmation_note": "2026-09-03、note.com公開RSSフィードとのタイトル一致により自動検知(GitHub Actions定期実行)。"
 }
