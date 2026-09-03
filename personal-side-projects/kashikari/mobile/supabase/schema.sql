@@ -35,6 +35,13 @@ create table if not exists public.profiles (
 -- 列を追加できるようにしておく(初回作成時は上のcreate tableで既に入る)。
 alter table public.profiles add column if not exists avatar_emoji text;
 
+-- 「アイコンで自分の写真を使えるようにしてほしい」への対応。絵文字
+-- (avatar_emoji)と写真(avatar_photo_path、storageのavatarsバケット内の
+-- パス)は排他(どちらか一方だけが入る。片方を選んだらもう片方はnullに
+-- クリアする、というルールをクライアント側で徹底する)。表示側は
+-- avatar_photo_pathがあればそちらを優先する。
+alter table public.profiles add column if not exists avatar_photo_path text;
+
 alter table public.profiles enable row level security;
 
 -- ============================================================
@@ -53,6 +60,10 @@ create table if not exists public.groups (
 -- schema.sqlを2回目以降に再実行しても安全なように、既存テーブルにも
 -- 列を追加できるようにしておく(初回作成時は上のcreate tableで既に入る)。
 alter table public.groups add column if not exists icon_emoji text;
+
+-- グループアイコンも同様に、絵文字/写真を排他で持てるようにする
+-- (avatar_photo_pathと同じ考え方)。
+alter table public.groups add column if not exists icon_photo_path text;
 
 alter table public.groups enable row level security;
 
@@ -404,7 +415,13 @@ $$;
 -- 開放する(name等の他の列も一緒に書き換えられてしまう)代わりに、この列だけを
 -- 更新するRPCに絞る。entries同様、グループ内はお互いを信頼する前提のため
 -- 作成者に限らずメンバーなら誰でも変更できる。
-create or replace function public.update_group_icon(_group_id uuid, _icon_emoji text)
+-- 「グループのアイコンも写真を選べるように」への対応。_icon_photo_path
+-- を追加(既存の2引数版は削除し、3引数版に統一。呼び出し側は絵文字を
+-- 選んだ時はicon_photo_pathにnullを、写真を選んだ時はicon_emojiにnullを
+-- 明示的に渡すことで、常にどちらか一方だけが入っている状態を保つ)。
+drop function if exists public.update_group_icon(uuid, text);
+
+create or replace function public.update_group_icon(_group_id uuid, _icon_emoji text, _icon_photo_path text default null)
 returns public.groups
 language plpgsql
 security definer
@@ -420,7 +437,7 @@ begin
     raise exception 'このグループのメンバーではありません';
   end if;
 
-  update public.groups set icon_emoji = _icon_emoji where id = _group_id
+  update public.groups set icon_emoji = _icon_emoji, icon_photo_path = _icon_photo_path where id = _group_id
   returning * into _group;
 
   return _group;
@@ -437,7 +454,7 @@ grant execute on function public.create_group(text, text) to authenticated;
 grant execute on function public.create_group_invite(uuid, text) to authenticated;
 grant execute on function public.join_group(text) to authenticated;
 grant execute on function public.leave_group(uuid) to authenticated;
-grant execute on function public.update_group_icon(uuid, text) to authenticated;
+grant execute on function public.update_group_icon(uuid, text, text) to authenticated;
 grant execute on function public.is_group_member(uuid) to authenticated;
 
 -- ============================================================
@@ -472,6 +489,74 @@ create policy "group members can delete receipts"
   using (
     bucket_id = 'receipts'
     and public.is_group_member((storage.foldername(name))[1]::uuid)
+  );
+
+-- ============================================================
+-- 6.5 アイコン写真用ストレージ(自分の写真・グループの写真)
+-- ============================================================
+--
+-- 「アイコンで自分の写真を使えるようにしてほしい。グループのアイコンも
+-- 同じ」への対応。保存パスは種類ごとに規約を分ける:
+--   - 自分のアバター写真: "users/<user_id>/<uuid>.jpg"
+--   - グループのアイコン写真: "groups/<group_id>/<uuid>.jpg"
+-- レシートと同じ非公開バケットにし、署名付きURL(useSignedUrl)経由でだけ
+-- 読める。閲覧できる相手はprofilesの閲覧範囲(自分自身+同じグループの
+-- メンバー)と揃えている(「データの分離について」の方針と同じ)。
+
+insert into storage.buckets (id, name, public)
+values ('avatars', 'avatars', false)
+on conflict (id) do nothing;
+
+drop policy if exists "avatar photos are visible to self and groupmates" on storage.objects;
+create policy "avatar photos are visible to self and groupmates"
+  on storage.objects for select
+  using (
+    bucket_id = 'avatars'
+    and (
+      (
+        (storage.foldername(name))[1] = 'users'
+        and (
+          (storage.foldername(name))[2]::uuid = auth.uid()
+          or exists (
+            select 1 from public.group_members gm1
+            join public.group_members gm2 on gm1.group_id = gm2.group_id
+            where gm1.user_id = auth.uid() and gm2.user_id = (storage.foldername(name))[2]::uuid
+          )
+        )
+      )
+      or (
+        (storage.foldername(name))[1] = 'groups'
+        and public.is_group_member((storage.foldername(name))[2]::uuid)
+      )
+    )
+  );
+
+drop policy if exists "users manage their own avatar photo" on storage.objects;
+create policy "users manage their own avatar photo"
+  on storage.objects for all
+  using (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = 'users'
+    and (storage.foldername(name))[2]::uuid = auth.uid()
+  )
+  with check (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = 'users'
+    and (storage.foldername(name))[2]::uuid = auth.uid()
+  );
+
+drop policy if exists "group members manage the group icon photo" on storage.objects;
+create policy "group members manage the group icon photo"
+  on storage.objects for all
+  using (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = 'groups'
+    and public.is_group_member((storage.foldername(name))[2]::uuid)
+  )
+  with check (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = 'groups'
+    and public.is_group_member((storage.foldername(name))[2]::uuid)
   );
 
 -- ============================================================

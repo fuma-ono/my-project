@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 
 import { useT } from '../i18n';
+import { uploadIconPhoto } from '../lib/iconPhoto';
 import { unregisterPushNotifications } from '../lib/pushNotifications';
 import { supabase } from '../lib/supabase';
 import type { Profile } from '../types';
 
-const PROFILE_COLUMNS = 'id, display_name, avatar_emoji, notifications_seen_at';
+const PROFILE_COLUMNS = 'id, display_name, avatar_emoji, avatar_photo_path, notifications_seen_at';
 
 type AuthState = {
   loading: boolean;
@@ -107,9 +108,32 @@ export function useAuth() {
   const updateAvatar = useCallback(
     async (avatarEmoji: string) => {
       if (!state.userId) return { error: t.auth.unauthenticated };
+      // 写真とは排他のため、絵文字を選んだらavatar_photo_pathを明示的に
+      // クリアする(「アイコンで自分の写真を使えるようにしてほしい」への
+      // 対応で追加。以前アップロード済みの写真ファイル自体はstorageに
+      // 残るが、参照が外れるだけで実害は無いため削除まではしていない)。
       const { data, error } = await supabase
         .from('profiles')
-        .update({ avatar_emoji: avatarEmoji })
+        .update({ avatar_emoji: avatarEmoji, avatar_photo_path: null })
+        .eq('id', state.userId)
+        .select(PROFILE_COLUMNS)
+        .single();
+      if (error) return { error: error.message };
+      setState((s) => ({ ...s, profile: data }));
+      return { error: null };
+    },
+    [state.userId, t]
+  );
+
+  // 「アイコンで自分の写真を使えるようにしてほしい」への対応。
+  const updateAvatarPhoto = useCallback(
+    async (photoUri: string) => {
+      if (!state.userId) return { error: t.auth.unauthenticated };
+      const uploadRes = await uploadIconPhoto('users', state.userId, photoUri, t);
+      if (uploadRes.error) return { error: uploadRes.error };
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({ avatar_photo_path: uploadRes.path, avatar_emoji: null })
         .eq('id', state.userId)
         .select(PROFILE_COLUMNS)
         .single();
@@ -131,5 +155,5 @@ export function useAuth() {
     await supabase.from('profiles').update({ notifications_seen_at: now }).eq('id', state.userId);
   }, [state.userId]);
 
-  return { ...state, setDisplayName, updateAvatar, signOut, markNotificationsSeen };
+  return { ...state, setDisplayName, updateAvatar, updateAvatarPhoto, signOut, markNotificationsSeen };
 }

@@ -1,5 +1,6 @@
 import EmojiGridPicker from './EmojiGridPicker';
 import { useT } from '../i18n';
+import { pickPhotoViaAlert } from '../lib/pickPhoto';
 import { AVATAR_EMOJI_OPTIONS, avatarColor } from '../theme';
 
 type Props = {
@@ -8,9 +9,12 @@ type Props = {
   selected: string | null;
   onSelect: (emoji: string) => void;
   onClose: () => void;
+  // 「アイコンで自分の写真を使えるようにしてほしい」への対応。渡すと
+  // 「写真から選ぶ」ボタンが出る(渡さない場合は絵文字のみ、従来通り)。
+  onSelectPhoto?: (uri: string) => void;
 };
 
-export default function AvatarPicker({ visible, name, selected, onSelect, onClose }: Props) {
+export default function AvatarPicker({ visible, name, selected, onSelect, onClose, onSelectPhoto }: Props) {
   const t = useT();
   return (
     <EmojiGridPicker
@@ -21,6 +25,8 @@ export default function AvatarPicker({ visible, name, selected, onSelect, onClos
       cellBackground={avatarColor(name)}
       onSelect={onSelect}
       onClose={onClose}
+      photoButtonLabel={onSelectPhoto ? t.avatarPicker.photoButton : undefined}
+      onPickPhoto={onSelectPhoto ? () => pickPhotoViaAlert(t.avatarPicker.photoAlertTitle, t, onSelectPhoto) : undefined}
     />
   );
 }

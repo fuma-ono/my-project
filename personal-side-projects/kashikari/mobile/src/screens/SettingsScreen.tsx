@@ -19,6 +19,10 @@ type Props = {
   onBack: () => void;
   onChangeDisplayName: (name: string) => Promise<{ error: string | null }>;
   onChangeAvatar: (emoji: string) => Promise<{ error: string | null }>;
+  // 「アイコンで自分の写真を使えるようにしてほしい」への対応。デモモードでは
+  // 実際のアップロードができないため渡されない(渡されない場合は
+  // AvatarPicker側で「写真から選ぶ」ボタン自体を出さない)。
+  onChangeAvatarPhoto?: (uri: string) => Promise<{ error: string | null }>;
   onOpenPremium: () => void;
   onOpenUsage: () => void;
   // デモモードでは実際のSupabase認証が無い(全てローカルstate)ため、
@@ -34,6 +38,7 @@ export default function SettingsScreen({
   onBack,
   onChangeDisplayName,
   onChangeAvatar,
+  onChangeAvatarPhoto,
   onOpenPremium,
   onOpenUsage,
   isDemo,
@@ -107,8 +112,8 @@ export default function SettingsScreen({
 
         <Text style={styles.sectionLabel}>{t.settings.icon}</Text>
         <Pressable onPress={() => setAvatarPickerOpen(true)} style={styles.iconRow}>
-          <Avatar name={profile.display_name} emoji={profile.avatar_emoji} size="md" />
-          <Text style={styles.iconRowText}>{profile.avatar_emoji ? t.onboarding.changeIcon : t.onboarding.pickIcon}</Text>
+          <Avatar name={profile.display_name} emoji={profile.avatar_emoji} photoPath={profile.avatar_photo_path} size="md" />
+          <Text style={styles.iconRowText}>{profile.avatar_emoji || profile.avatar_photo_path ? t.onboarding.changeIcon : t.onboarding.pickIcon}</Text>
         </Pressable>
 
         <Text style={styles.sectionLabel}>{t.settings.displayName}</Text>
@@ -172,6 +177,13 @@ export default function SettingsScreen({
           setAvatarPickerOpen(false);
           await onChangeAvatar(emoji);
         }}
+        onSelectPhoto={
+          onChangeAvatarPhoto &&
+          (async (uri) => {
+            setAvatarPickerOpen(false);
+            await onChangeAvatarPhoto(uri);
+          })
+        }
         onClose={() => setAvatarPickerOpen(false)}
       />
       <Toast message={authToastMessage ?? ''} visible={authToastMessage !== null} onHide={() => setAuthToastMessage(null)} />

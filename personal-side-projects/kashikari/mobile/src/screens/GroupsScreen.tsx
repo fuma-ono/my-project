@@ -70,7 +70,7 @@ export default function GroupsScreen({
         }
         renderItem={({ item }) => (
           <Pressable onPress={() => onOpenGroup(item)} style={styles.card}>
-            <Mark size={44} glyph={item.icon_emoji ?? undefined} />
+            <Mark size={44} glyph={item.icon_emoji ?? undefined} photoPath={item.icon_photo_path} />
             <View style={styles.cardMain}>
               <Text style={styles.cardTitle}>{item.name}</Text>
               <Text style={styles.cardCode}>{t.groups.inviteCode(item.invite_code)}</Text>

@@ -99,6 +99,10 @@ export const ja = {
     referralMessage: '貸し借りがすべて解消されました。友達にもkashikariを紹介しませんか?',
     referralNow: '紹介する',
     referralDismiss: '閉じる',
+    reviewPromptTitle: '😊 気に入っていただけましたか?',
+    reviewPromptMessage: 'よろしければストアでレビューをお願いします。今後のアプリ作りの励みになります!',
+    reviewPromptNow: 'レビューする',
+    reviewPromptDismiss: 'あとで',
     leaveConfirmTitle: 'グループを抜けますか?',
     leaveConfirmMessage: (groupName: string) =>
       `「${groupName}」の記録は他のメンバーの画面には残りますが、あなたはこのグループのデータにアクセスできなくなります。`,
@@ -133,9 +137,13 @@ export const ja = {
   },
   groupIconPicker: {
     title: 'グループのアイコンを選ぶ',
+    photoButton: '写真から選ぶ',
+    photoAlertTitle: 'グループの写真を選ぶ',
   },
   avatarPicker: {
     title: 'アイコンを選ぶ',
+    photoButton: '写真から選ぶ',
+    photoAlertTitle: 'アイコンの写真を選ぶ',
   },
   balanceCard: {
     sentencePay: (name: string) => `${name}へ支払う`,
@@ -421,6 +429,10 @@ export const en: Strings = {
     referralMessage: "Every debt in this group is cleared. Want to tell a friend about kashikari?",
     referralNow: 'Tell a friend',
     referralDismiss: 'Dismiss',
+    reviewPromptTitle: '😊 Enjoying kashikari?',
+    reviewPromptMessage: "We'd love a review on the store — it really helps us keep building this app!",
+    reviewPromptNow: 'Leave a review',
+    reviewPromptDismiss: 'Later',
     leaveConfirmTitle: 'Leave this group?',
     leaveConfirmMessage: (groupName: string) =>
       `Your records in "${groupName}" will stay visible to other members, but you'll lose access to this group's data.`,
@@ -449,9 +461,13 @@ export const en: Strings = {
   },
   groupIconPicker: {
     title: 'Choose a group icon',
+    photoButton: 'Choose a photo',
+    photoAlertTitle: "Choose the group's photo",
   },
   avatarPicker: {
     title: 'Choose an icon',
+    photoButton: 'Choose a photo',
+    photoAlertTitle: 'Choose your photo',
   },
   balanceCard: {
     sentencePay: (name: string) => `Pay ${name}`,

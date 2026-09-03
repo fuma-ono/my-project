@@ -2,6 +2,10 @@ export type Profile = {
   id: string;
   display_name: string;
   avatar_emoji: string | null;
+  // 「アイコンで自分の写真を使えるようにしてほしい」への対応。
+  // avatar_emojiと排他(どちらか一方だけが入る)。storageのavatarsバケット
+  // 内のパス(useSignedUrlで署名付きURLに変換して表示する)。
+  avatar_photo_path: string | null;
   // 通知ベルの未読マーク用。この時刻より新しいnotification_logがあれば
   // 未読とみなす。通知ページを開くたびに今の時刻に更新する。
   notifications_seen_at: string;
@@ -12,6 +16,8 @@ export type Group = {
   name: string;
   invite_code: string;
   icon_emoji: string | null;
+  // icon_emojiと同じく排他。グループのアイコン写真。
+  icon_photo_path: string | null;
   created_by: string;
   created_at: string;
 };

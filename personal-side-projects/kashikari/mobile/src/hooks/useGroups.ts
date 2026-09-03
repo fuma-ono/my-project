@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useT } from '../i18n';
 import { logEvent } from '../lib/analytics';
+import { uploadIconPhoto } from '../lib/iconPhoto';
 import { notifyGroup } from '../lib/pushNotifications';
 import { supabase } from '../lib/supabase';
 import type { Group } from '../types';
@@ -77,6 +78,8 @@ export function useGroups(userId: string | null) {
 
   const updateGroupIcon = useCallback(
     async (groupId: string, iconEmoji: string) => {
+      // 写真とは排他のため、絵文字を選んだらicon_photo_pathをRPC側で
+      // 明示的にクリアする(_icon_photo_pathを渡さない=デフォルトのnull)。
       const { error } = await supabase.rpc('update_group_icon', { _group_id: groupId, _icon_emoji: iconEmoji });
       if (error) return { error: error.message };
       await refresh();
@@ -85,5 +88,22 @@ export function useGroups(userId: string | null) {
     [refresh]
   );
 
-  return { groups, loading, refresh, createGroup, joinGroup, leaveGroup, updateGroupIcon };
+  // 「グループのアイコンも写真を選べるように」への対応。
+  const updateGroupIconPhoto = useCallback(
+    async (groupId: string, photoUri: string) => {
+      const uploadRes = await uploadIconPhoto('groups', groupId, photoUri, t);
+      if (uploadRes.error) return { error: uploadRes.error };
+      const { error } = await supabase.rpc('update_group_icon', {
+        _group_id: groupId,
+        _icon_emoji: null,
+        _icon_photo_path: uploadRes.path,
+      });
+      if (error) return { error: error.message };
+      await refresh();
+      return { error: null };
+    },
+    [refresh, t]
+  );
+
+  return { groups, loading, refresh, createGroup, joinGroup, leaveGroup, updateGroupIcon, updateGroupIconPhoto };
 }

@@ -27,7 +27,7 @@ type Mode = EntryType | 'split';
 // している。相手を確定するID自体は、実メンバーならprofiles.id、招待中
 // ならgroup_invites.idで、呼び出し側(useGroupData.addEntry等)がどちらか
 // 判定してentries.from_user/from_inviteのどちらに入れるか決める)。
-type Person = { id: string; display_name: string; avatar_emoji: string | null; pending: boolean };
+type Person = { id: string; display_name: string; avatar_emoji: string | null; avatar_photo_path: string | null; pending: boolean };
 
 type Props = {
   visible: boolean;
@@ -62,8 +62,8 @@ export default function AddEntrySheet({ visible, members, pendingInvites, meId, 
   // avatar_emojiが無いためAvatarコンポーネントが頭文字表示にフォール
   // バックする(既存の挙動と同じ)。
   const people: Person[] = [
-    ...members.map((m) => ({ id: m.id, display_name: m.display_name, avatar_emoji: m.avatar_emoji, pending: false })),
-    ...pendingInvites.map((i) => ({ id: i.id, display_name: i.invited_name, avatar_emoji: null, pending: true })),
+    ...members.map((m) => ({ id: m.id, display_name: m.display_name, avatar_emoji: m.avatar_emoji, avatar_photo_path: m.avatar_photo_path, pending: false })),
+    ...pendingInvites.map((i) => ({ id: i.id, display_name: i.invited_name, avatar_emoji: null, avatar_photo_path: null, pending: true })),
   ];
   const others = people.filter((p) => p.id !== meId);
   const [fromId, setFromId] = useState<string | null>(meId ?? people[0]?.id ?? null);
@@ -259,7 +259,7 @@ export default function AddEntrySheet({ visible, members, pendingInvites, meId, 
                 const checked = participantIds.includes(p.id);
                 return (
                   <Pressable key={p.id} onPress={() => toggleParticipant(p.id)} style={styles.participantRow}>
-                    <Avatar name={p.display_name} emoji={p.avatar_emoji} size="sm" />
+                    <Avatar name={p.display_name} emoji={p.avatar_emoji} photoPath={p.avatar_photo_path} size="sm" />
                     <Text style={styles.participantName}>{p.display_name}</Text>
                     {p.pending && <Text style={styles.pendingTag}>{t.group.pendingSectionTitle}</Text>}
                     <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
@@ -333,7 +333,7 @@ function PersonPicker({
   };
   return (
     <Pressable onPress={open} style={styles.personPicker}>
-      {selected && <Avatar name={selected.display_name} emoji={selected.avatar_emoji} size="sm" />}
+      {selected && <Avatar name={selected.display_name} emoji={selected.avatar_emoji} photoPath={selected.avatar_photo_path} size="sm" />}
       <Text style={styles.personName} numberOfLines={1}>
         {selected?.display_name ?? t.addEntry.selectPlaceholder}
       </Text>

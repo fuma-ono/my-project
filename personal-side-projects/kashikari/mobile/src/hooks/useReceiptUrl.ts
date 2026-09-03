@@ -1,27 +1,7 @@
-import { useEffect, useState } from 'react';
-
-import { supabase } from '../lib/supabase';
+import { useSignedUrl } from './useSignedUrl';
 
 // receipts バケットは非公開(private)のため、表示のたびに署名付きURLを発行する。
+// 実体はuseSignedUrl(汎用化済み)に委譲している。
 export function useReceiptUrl(photoPath: string | null): string | null {
-  const [url, setUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!photoPath) {
-      setUrl(null);
-      return;
-    }
-    supabase.storage
-      .from('receipts')
-      .createSignedUrl(photoPath, 60 * 60)
-      .then(({ data }) => {
-        if (!cancelled) setUrl(data?.signedUrl ?? null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [photoPath]);
-
-  return url;
+  return useSignedUrl('receipts', photoPath);
 }

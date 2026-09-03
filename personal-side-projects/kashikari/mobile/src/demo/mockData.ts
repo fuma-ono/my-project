@@ -4,17 +4,21 @@ import type { Entry, Group, NotificationLogItem, Profile } from '../types';
 
 export const DEMO_ME_ID = 'demo-taro';
 
+// 写真アイコン機能(avatar_photo_path/icon_photo_path)はstorageへの実際の
+// アップロードを伴うため、デモモードではシミュレートしていない(常にnull。
+// updateEntryのレシート写真と同じ考え方)。
 export const DEMO_PROFILE: Profile = {
   id: DEMO_ME_ID,
   display_name: 'たろう',
   avatar_emoji: '🦊',
+  avatar_photo_path: null,
   notifications_seen_at: new Date(0).toISOString(),
 };
 
 export const DEMO_MEMBERS: Profile[] = [
   DEMO_PROFILE,
-  { id: 'demo-hanako', display_name: 'はなこ', avatar_emoji: '🐰', notifications_seen_at: new Date(0).toISOString() },
-  { id: 'demo-jiro', display_name: 'じろう', avatar_emoji: null, notifications_seen_at: new Date(0).toISOString() },
+  { id: 'demo-hanako', display_name: 'はなこ', avatar_emoji: '🐰', avatar_photo_path: null, notifications_seen_at: new Date(0).toISOString() },
+  { id: 'demo-jiro', display_name: 'じろう', avatar_emoji: null, avatar_photo_path: null, notifications_seen_at: new Date(0).toISOString() },
 ];
 
 export const DEMO_GROUP: Group = {
@@ -22,6 +26,7 @@ export const DEMO_GROUP: Group = {
   name: '大学の友達',
   invite_code: 'K7XQ2M',
   icon_emoji: '🎓',
+  icon_photo_path: null,
   created_by: DEMO_ME_ID,
   created_at: new Date().toISOString(),
 };
@@ -33,6 +38,7 @@ export const DEMO_GROUPS: Group[] = [
     name: 'サークル同期',
     invite_code: 'B3F9PL',
     icon_emoji: '⚽',
+    icon_photo_path: null,
     created_by: DEMO_ME_ID,
     created_at: new Date().toISOString(),
   },

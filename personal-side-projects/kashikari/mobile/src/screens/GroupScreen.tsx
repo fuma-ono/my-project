@@ -25,6 +25,7 @@ import { logEvent } from '../lib/analytics';
 import { computeBalances, computeMyNet, computeSimplifiedSettlement } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
 import { buildInviteUrl } from '../lib/invite';
+import { markReviewPromptShown, markReviewed, openStoreReview, shouldShowReviewPrompt } from '../lib/reviewPrompt';
 import { avatarColor, colors, fonts } from '../theme';
 import type { BalanceRow, Group, SimplifiedTransaction } from '../types';
 
@@ -37,7 +38,9 @@ type Props = {
   onBack: () => void;
   onLeave: (groupId: string) => Promise<{ error: string | null }>;
   onChangeAvatar: (emoji: string) => Promise<{ error: string | null }>;
+  onChangeAvatarPhoto: (uri: string) => Promise<{ error: string | null }>;
   onChangeGroupIcon: (emoji: string) => Promise<{ error: string | null }>;
+  onChangeGroupIconPhoto: (uri: string) => Promise<{ error: string | null }>;
   onOpenSettings: () => void;
   onOpenNotifications: () => void;
   hasUnreadNotifications: boolean;
@@ -50,7 +53,9 @@ export default function GroupScreen({
   onBack,
   onLeave,
   onChangeAvatar,
+  onChangeAvatarPhoto,
   onChangeGroupIcon,
+  onChangeGroupIconPhoto,
   onOpenSettings,
   onOpenNotifications,
   hasUnreadNotifications,
@@ -215,8 +220,29 @@ export default function GroupScreen({
     const prev = prevBalanceCountRef.current;
     if (prev !== null && prev > 0 && balances.length === 0) {
       logEvent('settlement_completed', { userId: meId, groupId: group.id });
+      // 「紹介する」ポップアップを閉じた(=「閉じる」を押した)後、条件を
+      // 満たしていればレビュー依頼ポップアップも続けて出す(reviewPrompt.ts
+      // 参照。同時に2つ出すと衝突するため必ず片方を閉じてから)。「紹介する」
+      // を選んだ場合は招待シートが開くため、その導線を邪魔しないよう
+      // こちらは出さない。
+      const maybeShowReviewPrompt = () => {
+        void shouldShowReviewPrompt().then((should) => {
+          if (!should) return;
+          void markReviewPromptShown();
+          Alert.alert(t.group.reviewPromptTitle, t.group.reviewPromptMessage, [
+            { text: t.group.reviewPromptDismiss, style: 'cancel' },
+            {
+              text: t.group.reviewPromptNow,
+              onPress: () => {
+                void markReviewed();
+                openStoreReview();
+              },
+            },
+          ]);
+        });
+      };
       Alert.alert(t.group.referralTitle, t.group.referralMessage, [
-        { text: t.group.referralDismiss, style: 'cancel' },
+        { text: t.group.referralDismiss, style: 'cancel', onPress: maybeShowReviewPrompt },
         { text: t.group.referralNow, onPress: () => setInviteModalOpen(true) },
       ]);
     }
@@ -232,6 +258,10 @@ export default function GroupScreen({
         setAvatarPickerOpen(false);
         await onChangeAvatar(emoji);
       }}
+      onSelectPhoto={async (uri) => {
+        setAvatarPickerOpen(false);
+        await onChangeAvatarPhoto(uri);
+      }}
       onClose={() => setAvatarPickerOpen(false)}
     />
   );
@@ -243,6 +273,10 @@ export default function GroupScreen({
       onSelect={async (emoji) => {
         setGroupIconPickerOpen(false);
         await onChangeGroupIcon(emoji);
+      }}
+      onSelectPhoto={async (uri) => {
+        setGroupIconPickerOpen(false);
+        await onChangeGroupIconPhoto(uri);
       }}
       onClose={() => setGroupIconPickerOpen(false)}
     />
@@ -413,7 +447,7 @@ export default function GroupScreen({
                     アバターの色(avatarColor)をそのまま縁取りに使った
                     リング状のViewで囲んでいる。 */}
                 <View style={[styles.avatarRing, { borderColor: avatarColor(m.display_name) }]}>
-                  <Avatar name={m.display_name} emoji={m.avatar_emoji} size="lg" />
+                  <Avatar name={m.display_name} emoji={m.avatar_emoji} photoPath={m.avatar_photo_path} size="lg" />
                 </View>
                 <Text style={styles.memberSlotName} numberOfLines={1}>
                   {m.display_name}

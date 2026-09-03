@@ -66,10 +66,11 @@ function AppInner() {
     error: authError,
     setDisplayName,
     updateAvatar,
+    updateAvatarPhoto,
     signOut,
     markNotificationsSeen,
   } = useAuth();
-  const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup, updateGroupIcon } = useGroups(
+  const { groups, loading: groupsLoading, refresh, createGroup, joinGroup, leaveGroup, updateGroupIcon, updateGroupIconPhoto } = useGroups(
     DEMO_MODE ? null : userId
   );
   const { pendingGroupId, clearPendingGroupId } = usePushNotifications(DEMO_MODE ? null : userId);
@@ -202,13 +203,26 @@ function AppInner() {
           onBack={() => setScreen({ name: 'groups' })}
           onLeave={leaveGroup}
           onChangeAvatar={updateAvatar}
+          onChangeAvatarPhoto={updateAvatarPhoto}
           onChangeGroupIcon={async (emoji) => {
             const res = await updateGroupIcon(screen.group.id, emoji);
             // groupsの一覧はupdateGroupIcon内のrefresh()で更新されるが、
             // 今開いている画面が持つgroupはApp.tsx側で保持しているスナップショット
             // なので、こちらも合わせて更新しないとアイコンの変更がこの画面に
             // 反映されない(戻って開き直すまで古いままになってしまう)。
-            if (!res.error) setScreen({ name: 'group', group: { ...screen.group, icon_emoji: emoji } });
+            if (!res.error) setScreen({ name: 'group', group: { ...screen.group, icon_emoji: emoji, icon_photo_path: null } });
+            return res;
+          }}
+          onChangeGroupIconPhoto={async (uri) => {
+            const res = await updateGroupIconPhoto(screen.group.id, uri);
+            // アップロード後のパスは分からない(uploadIconPhoto内で決まる)ため、
+            // 確実に最新化するにはgroups一覧から取り直す必要がある。
+            // refresh()はupdateGroupIconPhoto内で既に済んでいるので、
+            // groupsから該当グループを探して使う。
+            if (!res.error) {
+              const updated = groups.find((g) => g.id === screen.group.id);
+              if (updated) setScreen({ name: 'group', group: updated });
+            }
             return res;
           }}
           onOpenSettings={() => setScreen({ name: 'settings', returnTo: screen })}
@@ -222,6 +236,7 @@ function AppInner() {
           onBack={() => setScreen(screen.returnTo ?? { name: 'groups' })}
           onChangeDisplayName={(name) => setDisplayName(name, profile.avatar_emoji)}
           onChangeAvatar={updateAvatar}
+          onChangeAvatarPhoto={updateAvatarPhoto}
           onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
           onOpenUsage={() => setScreen({ name: 'usage', returnTo: screen })}
           onSignOut={signOut}
