@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useT } from '../i18n';
 import { logEvent } from '../lib/analytics';
+import { notifyGroup } from '../lib/pushNotifications';
 import { supabase } from '../lib/supabase';
 import type { Group } from '../types';
 
@@ -53,12 +54,25 @@ export function useGroups(userId: string | null) {
 
   const leaveGroup = useCallback(
     async (groupId: string) => {
+      // 「グループを抜けたら相手に通知は行くのか?」という指摘への対応。
+      // これまでは何も通知していなかった(退出したことに他のメンバーが
+      // 気づけない)。send-push Edge Function側は「呼び出したユーザー
+      // 自身がそのグループのメンバーであること」をRLS経由で検証するため、
+      // leave_groupで自分を抜けさせた後では検証に失敗し送れなくなる。
+      // 必ず抜ける前に、残りのメンバーIDを集めてから通知を送る。
+      // 通知(Edge Function呼び出し)がleave_groupのRPCと同時並行で走ると、
+      // 先にleave_groupの方が完了した場合にメンバーシップ検証で弾かれて
+      // しまう恐れがあるため、ここは(他の呼び出し箇所と違い)結果を待つ。
+      const { data: members } = await supabase.from('group_members').select('user_id').eq('group_id', groupId);
+      const recipientIds = (members ?? []).map((m) => m.user_id as string).filter((id) => id !== userId);
+      if (recipientIds.length > 0) await notifyGroup({ groupId, kind: 'left_group', recipientIds });
+
       const { error } = await supabase.rpc('leave_group', { _group_id: groupId });
       if (error) return { error: error.message };
       await refresh();
       return { error: null };
     },
-    [refresh]
+    [refresh, userId]
   );
 
   const updateGroupIcon = useCallback(

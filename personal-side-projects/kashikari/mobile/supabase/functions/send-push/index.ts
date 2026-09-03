@@ -43,7 +43,8 @@ type PushKind =
   | 'entry_deleted'
   | 'entry_edited'
   | 'settled_manually'
-  | 'unsettled_manually';
+  | 'unsettled_manually'
+  | 'left_group';
 type RemindTone = 'gentle' | 'normal' | 'funny' | 'strong';
 
 type RequestBody = {
@@ -159,6 +160,8 @@ function buildMessage(
             ? `${actorName} marked "${body.description}" as unsettled`
             : `${actorName} marked an entry as unsettled`,
         };
+      case 'left_group':
+        return { title: groupName, body: `${actorName} left the group` };
     }
   }
   switch (body.kind) {
@@ -211,6 +214,8 @@ function buildMessage(
           ? `${actorName}さんが「${body.description}」を未精算に戻しました`
           : `${actorName}さんが記録を未精算に戻しました`,
       };
+    case 'left_group':
+      return { title: groupName, body: `${actorName}さんがグループを退出しました` };
   }
 }
 

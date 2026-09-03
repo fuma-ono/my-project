@@ -35,7 +35,8 @@ export type PushKind =
   | 'entry_deleted'
   | 'entry_edited'
   | 'settled_manually'
-  | 'unsettled_manually';
+  | 'unsettled_manually'
+  | 'left_group';
 export type RemindTone = 'gentle' | 'normal' | 'funny' | 'strong';
 
 // フォアグラウンド中に通知を受け取ったときも、バナー表示・音を鳴らす
