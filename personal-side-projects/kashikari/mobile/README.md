@@ -1805,7 +1805,7 @@ eas build --platform all --profile production
 
 まだ人間(オーナー)がやる必要があるもの:
 - **AdMobアカウント作成・アプリID/広告ユニットID差し替え**(95回目): https://admob.google.com でアプリを登録し、本番の広告ユニット(バナー)を作成する。`app.json`のテスト用AdMobアプリID(`androidAppId`/`iosAppId`)を実際の値に差し替え、広告ユニットIDは`EXPO_PUBLIC_ADMOB_BANNER_IOS`・`EXPO_PUBLIC_ADMOB_BANNER_ANDROID`としてEASのEnvironment Variablesに登録する。テストIDのまま公開すると広告収益が発生しないため、ストア提出前に必須
-- **RevenueCatアカウント作成・APIキー登録**(94回目): https://app.revenuecat.com でプロジェクトを作成し、App Store Connect/Google Play Consoleと連携。サブスクリプション商品(月額プラン)を両ストアで作成し、`premium`というエンタイトルメントに紐付けたあと、RevenueCatのPublic API keyをEASのEnvironment Variablesに`EXPO_PUBLIC_REVENUECAT_IOS_KEY`・`EXPO_PUBLIC_REVENUECAT_ANDROID_KEY`として登録する必要がある。あわせて、App Store Connect側の「Agreements, Tax, and Banking」(税務・銀行口座情報)が未登録の場合は、有料販売自体ができないため先に済ませておく
+- **RevenueCatアカウント作成・APIキー登録**(94回目): https://app.revenuecat.com でプロジェクトを作成し、App Store Connect/Google Play Consoleと連携。サブスクリプション商品(月額プラン)を両ストアで作成し、`premium`というエンタイトルメントに紐付けたあと、RevenueCatのPublic API keyをEASのEnvironment Variablesに`EXPO_PUBLIC_REVENUECAT_IOS_KEY`・`EXPO_PUBLIC_REVENUECAT_ANDROID_KEY`として登録する必要がある。あわせて、App Store Connect側の「Agreements, Tax, and Banking」(税務・銀行口座情報)が未登録の場合は、有料販売自体ができないため先に済ませておく。**詳しい手順はチェックリスト形式で`docs/revenuecat-setup.md`にまとめた(99回目)。**この作業自体(ログイン・銀行口座情報の入力)はオーナー側でしかできない
 - **SQL再実行**(83回目): アイコン写真機能(`profiles.avatar_photo_path`・
   `groups.icon_photo_path`・`avatars`ストレージバケット・`update_group_icon`
   RPCの引数追加)のため、`supabase/schema.sql`をSupabaseのSQL Editorで
