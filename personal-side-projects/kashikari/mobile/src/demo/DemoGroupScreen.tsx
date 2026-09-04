@@ -26,8 +26,11 @@ import { computeBalances, computeMyNet, computeSimplifiedSettlement, entryFromKe
 import { groupEntriesByDate } from '../lib/dateGroups';
 import { buildInviteUrl } from '../lib/invite';
 import { splitAmount } from '../lib/split';
+import { usePremiumContext } from '../lib/premiumContext';
+import { isWithinFreeHistoryWindow } from '../lib/premiumLimits';
 import GroupSettingsScreen from '../screens/GroupSettingsScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
+import PremiumScreen from '../screens/PremiumScreen';
 import { avatarColor, colors, fonts } from '../theme';
 import type { BalanceRow, Entry, EntryType, Group, GroupInvite, Profile, SimplifiedTransaction } from '../types';
 import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS, DEMO_NOTIFICATIONS } from './mockData';
@@ -55,6 +58,11 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   // デモ側はSupabaseを呼ばないため、この画面のローカルstateだけで
   // 同じ見た目(このグループだけの一覧・未読バッジ)を再現する。
   const [groupNotificationsOpen, setGroupNotificationsOpen] = useState(false);
+  // 94回目: 履歴タブの3ヶ月制限バナーから直接Premium画面を開けるように
+  // した。isPremium自体はApp.tsx側のPremiumProvider(demo=true)から
+  // 取得するので、常にfalse(デモでは購入できない)。
+  const [premiumOpen, setPremiumOpen] = useState(false);
+  const { isPremium } = usePremiumContext();
   const [groupNotificationsSeenAt, setGroupNotificationsSeenAt] = useState(new Date(0).toISOString());
   const groupNotifications = useMemo(() => DEMO_NOTIFICATIONS.filter((n) => n.group_id === group.id), [group.id]);
   const hasUnreadGroupNotifications = groupNotifications.some((n) => n.created_at > groupNotificationsSeenAt);
@@ -91,16 +99,25 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   );
   const settledCount = entries.filter((e) => e.settle_status === 'confirmed').length;
 
-  const historySections = useMemo(() => {
+  // GroupScreen.tsxと同じ3ヶ月制限ロジック(94回目)。
+  const { confirmedEntries, isOlderThanFreeWindow } = useMemo(() => {
     const confirmed = entries
       .filter((e) => e.settle_status === 'confirmed' && e.confirmed_at)
       .slice()
       .sort((a, b) => ((a.confirmed_at as string) < (b.confirmed_at as string) ? 1 : -1));
-    return groupEntriesByDate(
-      confirmed.map((e) => ({ ...e, created_at: e.confirmed_at as string })),
-      { today: t.dateGroups.today, yesterday: t.dateGroups.yesterday }
-    );
-  }, [entries, t]);
+    const hasHidden = !isPremium && confirmed.some((e) => !isWithinFreeHistoryWindow(e.confirmed_at as string));
+    const visible = isPremium ? confirmed : confirmed.filter((e) => isWithinFreeHistoryWindow(e.confirmed_at as string));
+    return { confirmedEntries: visible, isOlderThanFreeWindow: hasHidden };
+  }, [entries, isPremium]);
+
+  const historySections = useMemo(
+    () =>
+      groupEntriesByDate(
+        confirmedEntries.map((e) => ({ ...e, created_at: e.confirmed_at as string })),
+        { today: t.dateGroups.today, yesterday: t.dateGroups.yesterday }
+      ),
+    [confirmedEntries, t]
+  );
 
   const autoSettlePlans = useMemo(() => {
     const simplified = computeSimplifiedSettlement(entries);
@@ -394,6 +411,11 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
           onBack();
           return { error: null };
         }}
+        entries={entries}
+        onOpenPremium={() => {
+          setGroupSettingsOpen(false);
+          setPremiumOpen(true);
+        }}
       />
     );
   }
@@ -408,6 +430,10 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
         scopedGroupName={group.name}
       />
     );
+  }
+
+  if (premiumOpen) {
+    return <PremiumScreen onBack={() => setPremiumOpen(false)} onView={() => {}} onPurchased={() => {}} />;
   }
 
   const header = (
@@ -596,6 +622,14 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
         renderItem={({ item }) => <HistoryEntryRow entry={item} nameOf={nameOf} meId={meId} />}
         ItemSeparatorComponent={() => <View style={styles.hairline} />}
         ListEmptyComponent={<Text style={styles.emptyNote}>{t.history.empty}</Text>}
+        ListFooterComponent={
+          isOlderThanFreeWindow ? (
+            <Pressable onPress={() => setPremiumOpen(true)} style={styles.historyLimitBanner}>
+              <Text style={styles.historyLimitBannerText}>{t.history.limitedNote}</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.plum} />
+            </Pressable>
+          ) : null
+        }
       />
     );
   } else {
@@ -789,4 +823,18 @@ const styles = StyleSheet.create({
   settledToggleText: { ...fonts.bodyMedium, fontSize: 13, color: colors.accent },
   hairline: { height: 1, backgroundColor: colors.line },
   emptyNote: { ...fonts.body, fontSize: 14.5, color: colors.muted, textAlign: 'center', paddingVertical: 24 },
+  historyLimitBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+  },
+  historyLimitBannerText: { ...fonts.bodyMedium, fontSize: 13.5, color: colors.plum, textAlign: 'center' },
 });

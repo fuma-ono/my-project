@@ -1705,6 +1705,24 @@ Build番号10の実機スクリーンショットを詳しく見たところ、�
 
 **追記**: Codespaces再起動後、`git pull`(`app.json`・`package-lock.json`を`git restore`してから)→`eas build --platform ios --profile production`→`eas submit --platform ios --latest`で再ビルド・再提出し、実機で確認してもらったところ、「問題ないと思う」との回答。85回目から続いていたスプラッシュ画面のフォント崩れ(文字の絵柄違い→文字欠け→行の欠落)は、条件付きレンダリングへの作り直しで解消したと判断する。あわせて、グループ画面のステータスバー被り(90回目)・グループ専用設定画面(招待コード共有・通知ミュート・メンバー削除・グループ削除、87〜89回目)・グループ内通知の絞り込み(88回目)も含め、今回の開発サイクルで指摘のあった項目は一通り完了とする。
 
+## 課金基盤(RevenueCat)導入・Premium画面を実購入フローに刷新(94回目)
+
+「課金機能はどうする？広告も入れたい、無課金/課金の出し分けはできてる？」という指摘への対応。現状確認したところ、20回目に作った`PremiumScreen`は「本当にお金を払いたい人がいるか」を確かめるための興味計測ページに過ぎず、実際の決済も機能の出し分けも一切していなかった(誰でも全機能を無料で使える状態)。
+
+方針をユーザーと確認し、①課金・広告を作り込んでからストア提出を進める、②ATT許可ダイアログを追加する、③紹介ページの5機能(CSV出力・会計レポート・広告なし・履歴の無制限保存・サークル会計)すべてを実装する、で合意した。今回はその第一弾として、決済基盤とPremium画面そのものを実装した。
+
+- **RevenueCat導入**(`react-native-purchases`)。App Store(StoreKit)・Google Play(Play Billing)を1つのAPIで扱えるので、生のネイティブ決済APIをそれぞれ実装するより大幅に楽。`src/lib/purchases.ts`がラッパーで、RevenueCatダッシュボード側で両ストアの購入商品を`premium`というエンタイトルメントIDに紐付けておく想定(オーナー側の設定、後述)
+- **Web/デモ対応**: `react-native-purchases`はネイティブ専用のため、`purchases.web.ts`という同名のWebスタブファイルを用意した。Metroはファイル名の`.web.ts`サフィックスを見てWebビルド時だけこちらを自動的に使うので、ネイティブモジュールがWebバンドルに含まれることはない(常に「無課金」として振る舞うだけの実装)
+- **`usePremium`フック + `PremiumProvider`**(`src/lib/premiumContext.tsx`): isPremiumは広告の出し分け・CSV出力・履歴の閲覧範囲など複数の離れた画面から参照する必要があるため、Context化してApp.tsx/DemoApp.tsxのルートで1回だけ被せた
+- **`PremiumScreen.tsx`を実購入フローに刷新**: 「興味がある」ボタンを、実際の「購読する」ボタン(RevenueCatの`purchasePackage`を呼ぶ)に置き換えた。価格はストアから取得できた実際の価格(ローカライズ済み)を優先表示し、取得できない場合だけ固定文言にフォールバックする。「購入を復元」ボタンも追加(機種変更・再インストール時に必須)
+- **計測イベントの更新**: `premium_interest`(興味表明)→`premium_purchased`(購入完了)に変更。既存データの移行は不要(event_typeは単なるtext列のため、今後記録される行にのみ適用される、という従来からの方針)
+- **無料/課金の出し分け(第一弾)**: 「履歴の無制限保存」特典を実装した。無料ユーザーは履歴タブで直近3ヶ月分の完了記録のみ閲覧可能(`src/lib/premiumLimits.ts`)。それより古い記録が隠れている場合のみ、履歴タブ下部に「Premiumで全期間の履歴を見る」バナーを表示する。データ自体は消えず、表示範囲だけを絞る設計なのでSupabase側のスキーマ変更は不要
+- **CSV出力(Premium限定)**: グループ設定画面に「データ」セクションを追加し、「CSVで出力する」ボタンを設置(`src/lib/exportCsv.ts`)。無課金ユーザーにもボタン自体は見せておき(Premiumバッジ付き)、押すとPremium画面に誘導する。課金済みなら、他の共有機能(自動精算プラン・招待)と同じくOS標準の共有シート(`Share.share`)でCSVテキストを渡す(ファイルシステム系の追加ライブラリは使わず、既存の共有パターンを踏襲)
+
+**オーナー側の設定が必要**: RevenueCatのAPIキー(`EXPO_PUBLIC_REVENUECAT_IOS_KEY`・`EXPO_PUBLIC_REVENUECAT_ANDROID_KEY`、`.env.example`参照)が未設定の間は、購入ボタンを押すと「購入機能が準備できていません」というエラーになる(アプリ全体がクラッシュすることはない)。https://app.revenuecat.com でプロジェクトを作り、App Store Connect/Google Play Consoleと連携した後、APIキーを控えてEASのEnvironment Variablesに登録する必要がある(SupabaseのURL/キーと同じ要領)。
+
+`npx tsc --noEmit`はクリーン。`EXPO_PUBLIC_DEMO_MODE=1`でのWeb版ビルド・Playwrightで、グループ設定画面の「CSVで出力する」ボタンを押すとPremium画面(新しい「購読する」「購入を復元」ボタン付き)に正しく遷移すること、コンソールエラーが出ないことを確認した。広告(AdMob)・会計レポート・サークル会計機能は次回以降で対応する。
+
 ## 既知の制約(現時点)
 
 - プッシュ通知は追加した(60回目)が、Android実機での動作確認にはExpo Goではなくdevelopment buildが必要(詳細は60回目の項目参照)
@@ -1735,6 +1753,7 @@ eas build --platform all --profile production
 - **EASのEnvironment Variables登録**(79回目): `EXPO_PUBLIC_SUPABASE_URL`・`EXPO_PUBLIC_SUPABASE_ANON_KEY`をexpo.devダッシュボードに登録済み(TestFlightが真っ白画面のまま動かなかった根本原因への対応)。この状態で再ビルド(Build番号3)・再提出まで完了
 
 まだ人間(オーナー)がやる必要があるもの:
+- **RevenueCatアカウント作成・APIキー登録**(94回目): https://app.revenuecat.com でプロジェクトを作成し、App Store Connect/Google Play Consoleと連携。サブスクリプション商品(月額プラン)を両ストアで作成し、`premium`というエンタイトルメントに紐付けたあと、RevenueCatのPublic API keyをEASのEnvironment Variablesに`EXPO_PUBLIC_REVENUECAT_IOS_KEY`・`EXPO_PUBLIC_REVENUECAT_ANDROID_KEY`として登録する必要がある。あわせて、App Store Connect側の「Agreements, Tax, and Banking」(税務・銀行口座情報)が未登録の場合は、有料販売自体ができないため先に済ませておく
 - **SQL再実行**(83回目): アイコン写真機能(`profiles.avatar_photo_path`・
   `groups.icon_photo_path`・`avatars`ストレージバケット・`update_group_icon`
   RPCの引数追加)のため、`supabase/schema.sql`をSupabaseのSQL Editorで

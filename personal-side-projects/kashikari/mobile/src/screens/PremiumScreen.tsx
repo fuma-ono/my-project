@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import PrimaryButton from '../components/PrimaryButton';
-import Toast from '../components/Toast';
 import { useT } from '../i18n';
+import { usePremiumContext } from '../lib/premiumContext';
 import { colors, fonts } from '../theme';
 
 type Props = {
@@ -12,26 +12,51 @@ type Props = {
   // 実際の計測(analytics_events)は呼び出し側(App.tsx / DemoApp.tsx)に
   // 任せる。デモモードでは何もしない関数を渡してもらう想定。
   onView: () => void;
-  onInterest: () => void;
+  onPurchased: () => void;
 };
 
-// 決済はまだ実装しない。「本当にお金を払いたい人がいるか」を、課金機能を
-// 作り込む前に確かめるための紹介ページ(閲覧数と「興味がある」率を計測する)。
-export default function PremiumScreen({ onBack, onView, onInterest }: Props) {
+// 94回目: 「本当にお金を払いたい人がいるか」を確かめるだけの興味計測
+// ページ(20回目)から、RevenueCat経由の実際の購入フローに作り替えた。
+// isPremium・購入処理・復元処理はすべてPremiumProvider(usePremium)
+// 経由で取得する(App.tsx/DemoApp.tsxのルートで配線済み)。
+export default function PremiumScreen({ onBack, onView, onPurchased }: Props) {
   const t = useT();
-  const [interested, setInterested] = useState(false);
-  const [toastVisible, setToastVisible] = useState(false);
+  const { isPremium, loading, offering, purchase, restore } = usePremiumContext();
+  const [purchasing, setPurchasing] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     onView();
   }, []);
 
-  const pressInterest = () => {
-    if (interested) return;
-    setInterested(true);
-    setToastVisible(true);
-    onInterest();
+  const priceLabel = offering?.availablePackages[0]?.product.priceString ?? t.premium.price;
+
+  const pressSubscribe = async () => {
+    setPurchasing(true);
+    const res = await purchase();
+    setPurchasing(false);
+    if (res.cancelled) return;
+    if (res.error) {
+      Alert.alert(t.premium.purchaseErrorTitle, res.error);
+      return;
+    }
+    onPurchased();
+  };
+
+  const pressRestore = async () => {
+    setRestoring(true);
+    const res = await restore();
+    setRestoring(false);
+    if (res.error) {
+      Alert.alert(t.premium.restoreErrorTitle, res.error);
+      return;
+    }
+    if (res.isPremium) {
+      Alert.alert(t.premium.restoreSuccessTitle, t.premium.restoreSuccessMessage);
+    } else {
+      Alert.alert(t.premium.restoreNotFoundTitle, t.premium.restoreNotFoundMessage);
+    }
   };
 
   return (
@@ -45,7 +70,7 @@ export default function PremiumScreen({ onBack, onView, onInterest }: Props) {
           </Pressable>
         </View>
         <Text style={styles.title}>{t.premium.title}</Text>
-        <Text style={styles.price}>{t.premium.price}</Text>
+        <Text style={styles.price}>{priceLabel}</Text>
 
         <Text style={styles.sectionLabel}>{t.premium.featuresTitle}</Text>
         <View style={styles.featureList}>
@@ -57,18 +82,24 @@ export default function PremiumScreen({ onBack, onView, onInterest }: Props) {
           ))}
         </View>
 
-        <View style={styles.comingSoonBadge}>
-          <Text style={styles.comingSoonText}>{t.premium.comingSoon}</Text>
-        </View>
-
-        {interested ? (
-          <Text style={styles.interestedNote}>{t.premium.interestedNote}</Text>
+        {loading ? (
+          <ActivityIndicator style={styles.loading} color={colors.plum} />
+        ) : isPremium ? (
+          <Text style={styles.alreadySubscribedNote}>{t.premium.alreadySubscribedNote}</Text>
         ) : (
-          <PrimaryButton title={t.premium.interestButton} onPress={pressInterest} style={styles.interestButton} />
+          <>
+            <PrimaryButton
+              title={t.premium.subscribeButton}
+              onPress={pressSubscribe}
+              loading={purchasing}
+              style={styles.subscribeButton}
+            />
+            <Pressable onPress={pressRestore} disabled={restoring} style={styles.restoreRow}>
+              <Text style={styles.restoreText}>{restoring ? t.premium.restoringNote : t.premium.restoreButton}</Text>
+            </Pressable>
+          </>
         )}
       </ScrollView>
-
-      <Toast message={t.premium.toastMessage} visible={toastVisible} onHide={() => setToastVisible(false)} />
     </View>
   );
 }
@@ -91,14 +122,9 @@ const styles = StyleSheet.create({
   featureRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   featureCheck: { ...fonts.bodySemiBold, fontSize: 14, color: colors.positive },
   featureText: { ...fonts.bodyMedium, fontSize: 14.5, color: colors.ink },
-  comingSoonBadge: {
-    marginTop: 20,
-    backgroundColor: colors.surface2,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-  },
-  comingSoonText: { ...fonts.body, fontSize: 13, color: colors.muted, lineHeight: 19 },
-  interestButton: { marginTop: 24, alignSelf: 'flex-start', paddingHorizontal: 28 },
-  interestedNote: { ...fonts.bodyMedium, fontSize: 14, color: colors.positive, marginTop: 24 },
+  loading: { marginTop: 28 },
+  subscribeButton: { marginTop: 24, alignSelf: 'flex-start', paddingHorizontal: 28 },
+  restoreRow: { marginTop: 16, alignSelf: 'flex-start' },
+  restoreText: { ...fonts.bodyMedium, fontSize: 13.5, color: colors.muted, textDecorationLine: 'underline' },
+  alreadySubscribedNote: { ...fonts.bodyMedium, fontSize: 14, color: colors.positive, marginTop: 24 },
 });

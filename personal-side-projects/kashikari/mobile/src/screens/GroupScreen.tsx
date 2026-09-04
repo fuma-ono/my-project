@@ -25,6 +25,8 @@ import { logEvent } from '../lib/analytics';
 import { computeBalances, computeMyNet, computeSimplifiedSettlement } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
 import { buildInviteUrl } from '../lib/invite';
+import { usePremiumContext } from '../lib/premiumContext';
+import { isWithinFreeHistoryWindow } from '../lib/premiumLimits';
 import { markReviewPromptShown, markReviewed, openStoreReview, shouldShowReviewPrompt } from '../lib/reviewPrompt';
 import { avatarColor, colors, fonts } from '../theme';
 import type { BalanceRow, Group, SimplifiedTransaction } from '../types';
@@ -47,6 +49,9 @@ type Props = {
   onOpenSettings: () => void;
   onOpenNotifications: () => void;
   hasUnreadNotifications: boolean;
+  // 履歴タブの3ヶ月制限(94回目)に引っかかったとき、Premium画面へ
+  // 直接誘導するための遷移。
+  onOpenPremium: () => void;
 };
 
 export default function GroupScreen({
@@ -60,8 +65,10 @@ export default function GroupScreen({
   onOpenSettings,
   onOpenNotifications,
   hasUnreadNotifications,
+  onOpenPremium,
 }: Props) {
   const t = useT();
+  const { isPremium } = usePremiumContext();
   // 「グループ名や通知・設定ボタンがステータスバーに被る」という指摘への
   // 対応。以前はheaderGradientBaseのpaddingTopを固定値(28)で持たせて
   // いたが、これは特定の端末で目視調整した値に過ぎず、Dynamic Island
@@ -199,16 +206,28 @@ export default function GroupScreen({
   // 並べる。日付グルーピングはconfirmed_at基準にしたいが、groupEntriesByDate
   // はcreated_atしか見ないため、この呼び出し専用にcreated_atをconfirmed_at
   // で置き換えたコピーを渡す(表示に使うentry自体は元のまま)。
-  const historySections = useMemo(() => {
+  // 「履歴の無制限保存」をPremium特典にした(94回目)。無料ユーザーは
+  // 直近3ヶ月分の完了記録のみを見られるようにする(データ自体は消えず、
+  // 表示範囲だけを絞る)。isOlderThanFreeWindowは、絞り込みで実際に
+  // 隠れた記録が1件でもあるか(=バナーを出す必要があるか)の判定に使う。
+  const { confirmedEntries, isOlderThanFreeWindow } = useMemo(() => {
     const confirmed = entries
       .filter((e) => e.settle_status === 'confirmed' && e.confirmed_at)
       .slice()
       .sort((a, b) => ((a.confirmed_at as string) < (b.confirmed_at as string) ? 1 : -1));
-    return groupEntriesByDate(
-      confirmed.map((e) => ({ ...e, created_at: e.confirmed_at as string })),
-      { today: t.dateGroups.today, yesterday: t.dateGroups.yesterday }
-    );
-  }, [entries, t]);
+    const hasHidden = !isPremium && confirmed.some((e) => !isWithinFreeHistoryWindow(e.confirmed_at as string));
+    const visible = isPremium ? confirmed : confirmed.filter((e) => isWithinFreeHistoryWindow(e.confirmed_at as string));
+    return { confirmedEntries: visible, isOlderThanFreeWindow: hasHidden };
+  }, [entries, isPremium]);
+
+  const historySections = useMemo(
+    () =>
+      groupEntriesByDate(
+        confirmedEntries.map((e) => ({ ...e, created_at: e.confirmed_at as string })),
+        { today: t.dateGroups.today, yesterday: t.dateGroups.yesterday }
+      ),
+    [confirmedEntries, t]
+  );
 
   // グループ作成直後だけ、1回きりの招待導線を出す(成長施策⑥)。
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -564,6 +583,14 @@ export default function GroupScreen({
         renderItem={({ item }) => <HistoryEntryRow entry={item} nameOf={nameOf} meId={meId} />}
         ItemSeparatorComponent={() => <View style={styles.hairline} />}
         ListEmptyComponent={!loading ? <Text style={styles.emptyNote}>{t.history.empty}</Text> : null}
+        ListFooterComponent={
+          isOlderThanFreeWindow ? (
+            <Pressable onPress={onOpenPremium} style={styles.historyLimitBanner}>
+              <Text style={styles.historyLimitBannerText}>{t.history.limitedNote}</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.plum} />
+            </Pressable>
+          ) : null
+        }
       />
     );
   } else {
@@ -796,4 +823,18 @@ const styles = StyleSheet.create({
   settledToggleText: { ...fonts.bodyMedium, fontSize: 13, color: colors.accent },
   hairline: { height: 1, backgroundColor: colors.line },
   emptyNote: { ...fonts.body, fontSize: 14.5, color: colors.muted, textAlign: 'center', paddingVertical: 24 },
+  historyLimitBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+  },
+  historyLimitBannerText: { ...fonts.bodyMedium, fontSize: 13.5, color: colors.plum, textAlign: 'center' },
 });

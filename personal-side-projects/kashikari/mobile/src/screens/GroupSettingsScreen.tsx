@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import Avatar from '../components/Avatar';
 import GroupIconPicker from '../components/GroupIconPicker';
@@ -8,9 +8,11 @@ import Mark from '../components/Mark';
 import PrimaryButton from '../components/PrimaryButton';
 import ShareChannelSheet from '../components/ShareChannelSheet';
 import { useT } from '../i18n';
+import { buildEntriesCsv } from '../lib/exportCsv';
 import { buildInviteUrl } from '../lib/invite';
+import { usePremiumContext } from '../lib/premiumContext';
 import { colors, fonts } from '../theme';
-import type { Group, Profile } from '../types';
+import type { Entry, Group, Profile } from '../types';
 
 // 「グループ内の設定ボタンを押したら、グループの設定(アイコンやグループ名
 // など)を変更できるようにした方がいい」という指摘への対応(87回目)。
@@ -41,6 +43,11 @@ type Props = {
   onToggleMute: (muted: boolean) => Promise<{ error: string | null }>;
   onRemoveMember: (userId: string) => Promise<{ error: string | null }>;
   onDeleteGroup: () => Promise<{ error: string | null }>;
+  // CSV出力(94回目、Premium特典)。このグループの記録一覧そのもの
+  // (useGroupDataが持っている全件)が必要なので、GroupScreen側から
+  // そのまま渡してもらう。
+  entries: Entry[];
+  onOpenPremium: () => void;
 };
 
 export default function GroupSettingsScreen({
@@ -55,8 +62,11 @@ export default function GroupSettingsScreen({
   onToggleMute,
   onRemoveMember,
   onDeleteGroup,
+  entries,
+  onOpenPremium,
 }: Props) {
   const t = useT();
+  const { isPremium } = usePremiumContext();
   const [name, setName] = useState(group.name);
   const [nameError, setNameError] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState(false);
@@ -80,6 +90,23 @@ export default function GroupSettingsScreen({
     }
     setNameError(null);
     setSavedNote(true);
+  };
+
+  // CSV出力(94回目)。無課金ユーザーが押した場合は実際にはエクスポート
+  // せず、Premium画面へ誘導する(「広告なし」と同じく、機能自体は
+  // 見えているが実行はPremium加入後、という出し分け方にした)。
+  const nameOfForExport = (id: string) => members.find((m) => m.id === id)?.display_name ?? t.group.unknownMember;
+  const exportCsv = async () => {
+    if (!isPremium) {
+      onOpenPremium();
+      return;
+    }
+    const csv = buildEntriesCsv(entries, nameOfForExport);
+    try {
+      await Share.share({ message: csv });
+    } catch {
+      // 共有シート自体のキャンセル・失敗は握りつぶす(他の共有機能と同じ方針)。
+    }
   };
 
   const toggleMute = async (value: boolean) => {
@@ -202,6 +229,17 @@ export default function GroupSettingsScreen({
           })}
         </View>
 
+        <Text style={styles.sectionLabel}>{t.groupSettings.dataLabel}</Text>
+        <Pressable onPress={exportCsv} style={styles.row}>
+          <Ionicons name="download-outline" size={20} color={colors.ink} />
+          <Text style={styles.rowText}>{t.groupSettings.exportCsvButton}</Text>
+          {!isPremium && (
+            <View style={styles.premiumBadge}>
+              <Text style={styles.premiumBadgeText}>{t.groupSettings.premiumBadge}</Text>
+            </View>
+          )}
+        </Pressable>
+
         {isAdmin && (
           <>
             <Text style={styles.sectionLabel}>{t.groupSettings.dangerZoneLabel}</Text>
@@ -265,6 +303,8 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
   },
   rowText: { ...fonts.bodyMedium, fontSize: 14, color: colors.ink, flexShrink: 1 },
+  premiumBadge: { marginLeft: 'auto', backgroundColor: colors.plum + '1a', borderRadius: 999, paddingVertical: 3, paddingHorizontal: 8 },
+  premiumBadgeText: { ...fonts.bodySemiBold, fontSize: 10.5, color: colors.plum },
   input: {
     backgroundColor: colors.surface2,
     borderRadius: 10,

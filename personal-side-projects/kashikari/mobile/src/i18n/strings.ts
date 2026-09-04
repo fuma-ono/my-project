@@ -165,6 +165,11 @@ export const ja = {
     removeMemberConfirmMessage: '記録はグループに残りますが、本人はこのグループのデータにアクセスできなくなります。',
     removeMemberConfirmButton: '外す',
     removeMemberFailedTitle: '外せませんでした',
+    // CSV出力(94回目、Premium特典)。無課金ユーザーにもボタン自体は
+    // 見せておき、押すとPremium画面に案内する(バッジで事前に伝える)。
+    dataLabel: 'データ',
+    exportCsvButton: 'CSVで出力する',
+    premiumBadge: 'Premium',
     dangerZoneLabel: '危険な操作',
     deleteGroupButton: 'グループを削除する',
     deleteGroupConfirmTitle: (groupName: string) => `「${groupName}」を削除しますか?`,
@@ -193,6 +198,9 @@ export const ja = {
     completedBadge: '精算完了',
     receivedFrom: (name: string) => `${name}から受け取った`,
     paidTo: (name: string) => `${name}へ支払った`,
+    // 「履歴の無制限保存」をPremium特典にした(94回目)。無料プランでは
+    // 直近3ヶ月より前の完了記録が隠れているときだけ、この案内を出す。
+    limitedNote: '直近3ヶ月分のみ表示中。Premiumで全期間の履歴を見る',
   },
   remind: {
     toneTitle: 'どんなトーンで送る?',
@@ -326,13 +334,22 @@ export const ja = {
   premium: {
     back: '設定',
     title: '✨ Premium',
+    // ストアから取得できた実際の価格(offering.availablePackages[0].
+    // product.priceString)を優先して表示し、取得できなかった場合
+    // だけこのフォールバック文言を使う(94回目、RevenueCat導入)。
     price: '月額300円(予定)',
     featuresTitle: 'Premiumでできること',
     features: ['CSV出力', '会計レポート', '広告なし', '履歴の無制限保存', 'サークル会計機能'],
-    comingSoon: '決済機能は準備中です。もうしばらくお待ちください。',
-    interestButton: '興味がある',
-    interestedNote: 'ありがとうございます!リリース時に優先案内します',
-    toastMessage: 'ありがとうございます!リリース時に優先案内します',
+    subscribeButton: '購読する',
+    restoreButton: '購入を復元',
+    alreadySubscribedNote: '✓ Premiumに加入中です。いつもありがとうございます!',
+    restoringNote: '確認中...',
+    purchaseErrorTitle: '購入できませんでした',
+    restoreErrorTitle: '復元できませんでした',
+    restoreSuccessTitle: '復元しました',
+    restoreSuccessMessage: 'Premiumのご利用状況を復元しました。',
+    restoreNotFoundTitle: '購入が見つかりませんでした',
+    restoreNotFoundMessage: 'このアカウントでの購入履歴が見つかりませんでした。別のアカウントで購入していないかご確認ください。',
   },
   usage: {
     back: '設定',
@@ -349,11 +366,13 @@ export const ja = {
     reminderSent: '催促送信数',
     settlementCompleted: '精算完了数',
     premiumView: 'Premium閲覧数',
-    premiumInterest: 'Premium興味数',
+    // 「興味がある」ボタンが実際の購入ボタンに置き換わった(94回目)ため、
+    // 計測イベントも興味表明→実購入完了に変更した。
+    premiumInterest: 'Premium購入数',
     funnelHeading: '招待の参加率',
-    premiumFunnelHeading: 'Premiumの興味率',
+    premiumFunnelHeading: 'Premiumの購入率',
     inviteJoinRate: (n: number) => `参加率 ${n}%`,
-    premiumInterestRate: (n: number) => `興味率 ${n}%`,
+    premiumInterestRate: (n: number) => `購入率 ${n}%`,
     rateUnavailable: '-',
   },
   notifications: {
@@ -519,6 +538,9 @@ export const en: Strings = {
     removeMemberConfirmMessage: 'Their entries will stay in the group, but they will lose access to this group’s data.',
     removeMemberConfirmButton: 'Remove',
     removeMemberFailedTitle: "Couldn't remove them",
+    dataLabel: 'Data',
+    exportCsvButton: 'Export as CSV',
+    premiumBadge: 'Premium',
     dangerZoneLabel: 'Danger zone',
     deleteGroupButton: 'Delete this group',
     deleteGroupConfirmTitle: (groupName: string) => `Delete "${groupName}"?`,
@@ -547,6 +569,7 @@ export const en: Strings = {
     completedBadge: 'Settled',
     receivedFrom: (name: string) => `Received from ${name}`,
     paidTo: (name: string) => `Paid ${name}`,
+    limitedNote: 'Showing the last 3 months only. Get Premium to see your full history',
   },
   remind: {
     toneTitle: 'Pick a tone',
@@ -673,10 +696,16 @@ export const en: Strings = {
     price: '$3/month (planned)',
     featuresTitle: 'What you get with Premium',
     features: ['CSV export', 'Accounting reports', 'No ads', 'Unlimited history', 'Club/organization accounting'],
-    comingSoon: "Payments aren't available yet. Hang tight!",
-    interestButton: "I'm interested",
-    interestedNote: "Thanks! We'll give you early access when it launches",
-    toastMessage: "Thanks! We'll give you early access when it launches",
+    subscribeButton: 'Subscribe',
+    restoreButton: 'Restore purchases',
+    alreadySubscribedNote: "✓ You're subscribed to Premium. Thank you!",
+    restoringNote: 'Checking...',
+    purchaseErrorTitle: 'Purchase failed',
+    restoreErrorTitle: 'Restore failed',
+    restoreSuccessTitle: 'Restored',
+    restoreSuccessMessage: 'Your Premium status has been restored.',
+    restoreNotFoundTitle: 'No purchase found',
+    restoreNotFoundMessage: "We couldn't find a purchase for this account. Check whether you purchased with a different account.",
   },
   usage: {
     back: 'Settings',
@@ -693,11 +722,11 @@ export const en: Strings = {
     reminderSent: 'Reminders sent',
     settlementCompleted: 'Settlements completed',
     premiumView: 'Premium views',
-    premiumInterest: 'Premium interest',
+    premiumInterest: 'Premium purchases',
     funnelHeading: 'Invite → join rate',
-    premiumFunnelHeading: 'Premium interest rate',
+    premiumFunnelHeading: 'Premium purchase rate',
     inviteJoinRate: (n: number) => `${n}% joined`,
-    premiumInterestRate: (n: number) => `${n}% interested`,
+    premiumInterestRate: (n: number) => `${n}% purchased`,
     rateUnavailable: '-',
   },
   notifications: {

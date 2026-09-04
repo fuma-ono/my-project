@@ -55,7 +55,7 @@ export default function UsageScreen({ onBack, fetchStats }: Props) {
         { key: 'reminder_sent', label: t.usage.reminderSent },
         { key: 'settlement_completed', label: t.usage.settlementCompleted },
         { key: 'premium_view', label: t.usage.premiumView },
-        { key: 'premium_interest', label: t.usage.premiumInterest },
+        { key: 'premium_purchased', label: t.usage.premiumInterest },
       ]
     : [];
 
@@ -72,7 +72,7 @@ export default function UsageScreen({ onBack, fetchStats }: Props) {
   ];
   const premiumFunnel: StepDef[] = [
     { key: 'premium_view', label: t.usage.premiumView },
-    { key: 'premium_interest', label: t.usage.premiumInterest },
+    { key: 'premium_purchased', label: t.usage.premiumInterest },
   ];
 
   return (

@@ -64,7 +64,9 @@ export default function DemoApp() {
 
   if (screen.name === 'premium') {
     // デモモードでは計測しない(本番のanalytics_eventsは呼ばない)。
-    return <PremiumScreen onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })} onView={() => {}} onInterest={() => {}} />;
+    // isPremium・購入処理はApp.tsx側でPremiumProvider(demo=true)を
+    // 被せているので、ここでは何も渡さなくてよい(94回目)。
+    return <PremiumScreen onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })} onView={() => {}} onPurchased={() => {}} />;
   }
 
   if (screen.name === 'usage') {

@@ -23,6 +23,7 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import SplashScreen from './src/screens/SplashScreen';
 import UsageScreen from './src/screens/UsageScreen';
 import { useAuth } from './src/hooks/useAuth';
+import { useGroupEntries } from './src/hooks/useGroupEntries';
 import { useGroupMembers } from './src/hooks/useGroupMembers';
 import { useGroupNotificationsSeen } from './src/hooks/useGroupNotificationsSeen';
 import { useGroups } from './src/hooks/useGroups';
@@ -30,6 +31,7 @@ import { useNotifications } from './src/hooks/useNotifications';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { LanguageProvider } from './src/i18n';
 import { getUsageStats, logEvent } from './src/lib/analytics';
+import { PremiumProvider } from './src/lib/premiumContext';
 import { isSupabaseConfigured } from './src/lib/supabase';
 import type { Group } from './src/types';
 
@@ -115,6 +117,9 @@ function AppInner() {
   const { members: groupSettingsMembers, refresh: refreshGroupSettingsMembers } = useGroupMembers(
     screen.name === 'groupSettings' ? screen.group.id : null
   );
+  // CSV出力(94回目)用。同じ理由で、groupSettings画面を開いている時だけ
+  // 記録一覧を取得する軽量なフックを使う。
+  const { entries: groupSettingsEntries } = useGroupEntries(screen.name === 'groupSettings' ? screen.group.id : null);
   const [minSplashDone, setMinSplashDone] = useState(false);
   const [fontsLoaded] = useFonts({
     MPLUSRounded1c_400Regular,
@@ -275,6 +280,7 @@ function AppInner() {
           onOpenSettings={() => setScreen({ name: 'groupSettings', group: screen.group, returnTo: screen })}
           onOpenNotifications={() => openGroupNotifications(screen.group)}
           hasUnreadNotifications={hasUnreadNotificationsForGroup(screen.group.id)}
+          onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
         />
       )}
       {screen.name === 'groupSettings' && (
@@ -324,6 +330,8 @@ function AppInner() {
             if (!res.error) setScreen({ name: 'groups' });
             return res;
           }}
+          entries={groupSettingsEntries}
+          onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
         />
       )}
       {screen.name === 'settings' && (
@@ -342,7 +350,7 @@ function AppInner() {
         <PremiumScreen
           onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })}
           onView={() => logEvent('premium_view', { userId })}
-          onInterest={() => logEvent('premium_interest', { userId })}
+          onPurchased={() => logEvent('premium_purchased', { userId })}
         />
       )}
       {screen.name === 'usage' && (
@@ -374,12 +382,18 @@ function AppInner() {
 // 「グループ名や通知・設定ボタンがステータスバーに被る」という指摘への
 // 対応。GroupScreen.tsxがuseSafeAreaInsets()でセーフエリアの実測値を
 // 取れるよう、アプリ全体をSafeAreaProviderで包む。
+//
+// PremiumProvider(94回目)は、広告の出し分け・CSV出力・履歴の閲覧範囲
+// など離れた複数の画面がisPremiumを参照する必要があるため、ルートで
+// 1回だけ被せてある。
 export default function App() {
   return (
     <SafeAreaProvider>
-      <LanguageProvider>
-        <AppInner />
-      </LanguageProvider>
+      <PremiumProvider demo={DEMO_MODE}>
+        <LanguageProvider>
+          <AppInner />
+        </LanguageProvider>
+      </PremiumProvider>
     </SafeAreaProvider>
   );
 }
