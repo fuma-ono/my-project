@@ -30,6 +30,17 @@ import { colors, fonts } from '../theme';
 // 表示されるだけになっていたため。fontsReadyが切り替わるタイミングで
 // key propを変えてこのView自体を強制的にアンマウント→再マウントさせる
 // ことで、フォントが確実に登録済みの状態から新規にTextを生成させる。
+//
+// 【追記2】上記の再マウント対応だけでは、今度は「kashikariの最後の
+// 文字が欠けてkashikaになる」という不具合が出た。これは、JS側で
+// fontsLoadedがtrueになった「直後」に再マウント(=文字幅の計測)が
+// 行われる際、ネイティブ側のフォント登録がまだ完全には終わっておらず、
+// 実際より狭い(未登録時の代替フォントに近い)幅で計測されてしまい、
+// 少し遅れて正しい(より幅の広い)フォントで描画されたときに、計測時の
+// 狭い枠からはみ出た部分が見えなくなっていた、という説明が筋が通る。
+// この画面自体を直すのではなく、App.tsx側でfontsLoadedがtrueになって
+// から実際にfontsReady(このpropに渡る値)をtrueにするまで短い猶予
+// (150ms)を挟むようにした(詳細はApp.tsxのfontsSettled参照)。
 export default function SplashScreen({ fontsReady = true }: { fontsReady?: boolean }) {
   const t = useT();
   return (

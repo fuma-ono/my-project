@@ -122,6 +122,28 @@ function AppInner() {
     MPLUSRounded1c_700Bold,
     MPLUSRounded1c_800ExtraBold,
   });
+  // 91回目でSplashScreen.tsx側にkeyによる強制再マウントを入れたが、
+  // それでも実機で「kashikariの最後の文字が欠けてkashikaになる」という
+  // 新しい不具合が出た(フォントの絵柄自体は正しくなったので、根本原因が
+  // 「フォント登録前に描画してしまう」ことだった、という見立て自体は
+  // 合っていたと考えられる)。原因は、useFontsのfontsLoadedがtrueになる
+  // (JS側で読み込み完了とみなす)タイミングと、ネイティブ側で実際に
+  // フォントが完全に登録され、文字の幅などを正しく計測できるように
+  // なるタイミングとの間に、ごくわずかなずれがあるため: 91回目の
+  // 再マウントは、フォント読み込み完了の「直後」に行われるが、その
+  // 「直後」がネイティブ側の登録完了より早すぎると、まだ完全に登録
+  // されていない状態のフォントで文字幅が計測されてしまい、実際に
+  // (少し遅れて)描画されるフォントの方が幅が広いために、計測時の
+  // (狭すぎる)枠からはみ出た分が見えなくなる=文字が欠けて見える、
+  // という説明が最も筋が通る。fontsLoadedがtrueになってから実際に
+  // 「準備完了」とみなすまでに短い猶予(150ms)を挟むことで、ネイティブ
+  // 側の登録が追いつくのを待つ。
+  const [fontsSettled, setFontsSettled] = useState(false);
+  useEffect(() => {
+    if (!fontsLoaded) return;
+    const t = setTimeout(() => setFontsSettled(true), 150);
+    return () => clearTimeout(t);
+  }, [fontsLoaded]);
 
   useEffect(() => {
     const t = setTimeout(() => setMinSplashDone(true), MIN_SPLASH_MS);
@@ -192,7 +214,7 @@ function AppInner() {
   };
 
   if (!fontsLoaded || !minSplashDone || (!DEMO_MODE && authLoading)) {
-    return <SplashScreen fontsReady={fontsLoaded} />;
+    return <SplashScreen fontsReady={fontsSettled} />;
   }
 
   // EXPO_PUBLIC_SUPABASE_URL/ANON_KEYが未設定のビルド(EAS BuildのEnvironment
