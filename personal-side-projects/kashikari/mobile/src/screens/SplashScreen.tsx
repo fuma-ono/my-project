@@ -18,6 +18,18 @@ import { colors, fonts } from '../theme';
 // 初回起動では最小表示時間(900ms)いっぱいこの状態のまま切り替わって
 // しまうこともあるため、fontsReadyがtrueになるまでは文字を透明にして
 // 見せないようにし、正しいフォントで描画できるようになってから表示する。
+//
+// 【追記】上記の対応(opacityの切り替え)だけでは実機で直りきらなかった
+// (設定画面のkashikariは崩れないのに、この画面のwordmarkだけ崩れる、
+// という切り分けで判明)。原因は、Textのfontsが未登録のうちに一度
+// マウントされてしまうと、iOS側がその時点で標準フォントへの描画を
+// ネイティブ層で確定させてしまい、後からfontsReady(=opacity)だけを
+// 切り替えても、fontFamilyの文字列自体はマウント時からずっと同じ
+// (見た目上は変化なし)なため、Reactの差分検出的には「再描画が必要な
+// 変更」と認識されず、確定済みの(誤った)ネイティブ描画がopacityで
+// 表示されるだけになっていたため。fontsReadyが切り替わるタイミングで
+// key propを変えてこのView自体を強制的にアンマウント→再マウントさせる
+// ことで、フォントが確実に登録済みの状態から新規にTextを生成させる。
 export default function SplashScreen({ fontsReady = true }: { fontsReady?: boolean }) {
   const t = useT();
   return (
@@ -35,7 +47,7 @@ export default function SplashScreen({ fontsReady = true }: { fontsReady?: boole
             (幅が広い)に対して1行のwordmarkが左寄せのまま埋もれていた。
             明示的にcenterを指定し、念のためwordmark自体にもtextAlignを
             付けて二重に保険をかける。 */}
-        <View style={[styles.fontsWrap, { opacity: fontsReady ? 1 : 0 }]}>
+        <View key={fontsReady ? 'ready' : 'loading'} style={[styles.fontsWrap, { opacity: fontsReady ? 1 : 0 }]}>
           <Text style={styles.wordmark}>kashikari</Text>
           <Text style={styles.tagline}>{t.splash.tagline}</Text>
         </View>
