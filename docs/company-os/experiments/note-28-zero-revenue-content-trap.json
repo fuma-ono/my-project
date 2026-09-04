@@ -1,0 +1,35 @@
+{
+  "id": "note-28-zero-revenue-content-trap",
+  "business_id": "note",
+  "article_number": "28",
+  "title": "¥0事業を4つ同時に動かして分かった、\"儲かる前提\"のコンテンツ作りの罠",
+  "theme_backlog_id": 33,
+  "pillar": "B",
+  "hypothesis": "教訓型+透明性の組み合わせで拡散されやすい切り口。#29(article 24として消化済み、10日間の実体験ログ)とは異なり、「事業運営の罠」という一般化した学びに焦点を当て重複を回避する",
+  "generated_at": "2026-09-04",
+  "published_at": null,
+  "status": "draft",
+  "note_url": "https://note.com/unique_condor276",
+  "metrics": {
+    "views": null,
+    "likes": null,
+    "comments": null,
+    "followers_gained": null,
+    "support_jpy": null,
+    "recorded_at": null,
+    "data_source_note": "note.com公式APIが存在しないため、このサンドボックスからは取得不可。オーナーがnote.comダッシュボードで確認し次第、note-articles/README.mdの計測欄経由で共有・反映する"
+  },
+  "result": null,
+  "learning": null,
+  "next_action": null,
+  "verdict": "pending",
+  "quality_self_check": {
+    "japanese_natural": true,
+    "no_ai_cliche": true,
+    "concrete_content": true,
+    "clickable_title": true,
+    "clear_reader_value": true,
+    "no_duplication_with_existing": true,
+    "note": "2026-09-04、週2回運用Routineでの新規生成(4日分の遅延分)。piano_hisaishi_style導入時の試作往復(約5回)を「儲かる前提で急いで公開しなかった」具体例として使用"
+  }
+}

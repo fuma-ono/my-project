@@ -1,0 +1,35 @@
+{
+  "id": "note-27-things-i-decided-not-to-do",
+  "business_id": "note",
+  "article_number": "27",
+  "title": "一人で3つの事業を並行して回すために「やらない」と決めたこと",
+  "theme_backlog_id": 31,
+  "pillar": "B",
+  "hypothesis": "既存の柱Bは「やったこと」中心の実体験ログが多かった。「やらないこと」というNot-to-doリスト型の切り口は初で、保存率(ノウハウ系の中でも高い傾向)を狙う",
+  "generated_at": "2026-09-04",
+  "published_at": null,
+  "status": "draft",
+  "note_url": "https://note.com/unique_condor276",
+  "metrics": {
+    "views": null,
+    "likes": null,
+    "comments": null,
+    "followers_gained": null,
+    "support_jpy": null,
+    "recorded_at": null,
+    "data_source_note": "note.com公式APIが存在しないため、このサンドボックスからは取得不可。オーナーがnote.comダッシュボードで確認し次第、note-articles/README.mdの計測欄経由で共有・反映する"
+  },
+  "result": null,
+  "learning": null,
+  "next_action": null,
+  "verdict": "pending",
+  "quality_self_check": {
+    "japanese_natural": true,
+    "no_ai_cliche": true,
+    "concrete_content": true,
+    "clickable_title": true,
+    "clear_reader_value": true,
+    "no_duplication_with_existing": true,
+    "note": "2026-09-04、週2回運用Routineでの新規生成(4日分の遅延分、環境リセットからの復旧直後)。実際に2026-09-04に発生した認証情報消失インシデント(コンテナ再作成でgit管理外のcredentialsが失われたが、git管理下のコード・作業は無事だった)を「やらないと決めたこと」の具体例として使用、当日の実体験のため具体性・当事者性が高い"
+  }
+}

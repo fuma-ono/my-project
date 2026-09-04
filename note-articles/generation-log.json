@@ -225,6 +225,22 @@
       "pillar": "B",
       "generated_at": "2026-08-27",
       "status": "draft"
+    },
+    {
+      "article_number": "27",
+      "slug": "27-things-i-decided-not-to-do",
+      "theme_backlog_id": 31,
+      "pillar": "B",
+      "generated_at": "2026-09-04",
+      "status": "draft"
+    },
+    {
+      "article_number": "28",
+      "slug": "28-zero-revenue-content-trap",
+      "theme_backlog_id": 33,
+      "pillar": "B",
+      "generated_at": "2026-09-04",
+      "status": "draft"
     }
   ]
 }
