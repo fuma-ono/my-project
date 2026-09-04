@@ -1806,6 +1806,8 @@ eas build --platform all --profile production
 まだ人間(オーナー)がやる必要があるもの:
 - **AdMobアカウント作成・アプリID/広告ユニットID差し替え**(95回目): https://admob.google.com でアプリを登録し、本番の広告ユニット(バナー)を作成する。`app.json`のテスト用AdMobアプリID(`androidAppId`/`iosAppId`)を実際の値に差し替え、広告ユニットIDは`EXPO_PUBLIC_ADMOB_BANNER_IOS`・`EXPO_PUBLIC_ADMOB_BANNER_ANDROID`としてEASのEnvironment Variablesに登録する。テストIDのまま公開すると広告収益が発生しないため、ストア提出前に必須
 - **RevenueCatアカウント作成・APIキー登録**(94回目): https://app.revenuecat.com でプロジェクトを作成し、App Store Connect/Google Play Consoleと連携。サブスクリプション商品(月額プラン)を両ストアで作成し、`premium`というエンタイトルメントに紐付けたあと、RevenueCatのPublic API keyをEASのEnvironment Variablesに`EXPO_PUBLIC_REVENUECAT_IOS_KEY`・`EXPO_PUBLIC_REVENUECAT_ANDROID_KEY`として登録する必要がある。あわせて、App Store Connect側の「Agreements, Tax, and Banking」(税務・銀行口座情報)が未登録の場合は、有料販売自体ができないため先に済ませておく。**詳しい手順はチェックリスト形式で`docs/revenuecat-setup.md`にまとめた(99回目)。**この作業自体(ログイン・銀行口座情報の入力)はオーナー側でしかできない
+- **Apple Small Business Program登録**: App Store Connectのサブスク商品画面にある「Apple Small Business Program」から申請できる。年間の売上(全アプリ合算)が100万ドル未満なら、Appleの取り分が30%→15%に半減する(手取りが単純に増える)。個人事業主・低売上のうちは対象になるはずなので、登録しない理由がない
+- **Sentryアカウント作成・DSN登録**(99回目): https://sentry.io でプロジェクトを作成(Platform: React Native)し、DSNを`EXPO_PUBLIC_SENTRY_DSN`としてEASのEnvironment Variablesに登録する。未設定の間はクラッシュ監視が無効なだけでアプリは問題なく動くが、**本番でのクラッシュに気づく手段が無くなるため、ストア提出前の設定を強く推奨**。あわせて`SENTRY_ORG`・`SENTRY_PROJECT`・`SENTRY_AUTH_TOKEN`(Organization Settings > Auth Tokens)も登録すると、クラッシュのスタックトレースが読める形になる(任意)
 - **SQL再実行**(83回目): アイコン写真機能(`profiles.avatar_photo_path`・
   `groups.icon_photo_path`・`avatars`ストレージバケット・`update_group_icon`
   RPCの引数追加)のため、`supabase/schema.sql`をSupabaseのSQL Editorで
@@ -1833,3 +1835,18 @@ eas build --platform all --profile production
 ## Premium価格の確定表記(99回目)
 
 「月額300円は妥当。ただ(予定)という表記はもう要らない」との判断を受け、フォールバック価格文言(ストアの実価格が取得できない時だけ使う`t.premium.price`)から「(予定)」を外した(`月額300円(予定)` → `月額300円`、英語版も`$3/month (planned)` → `$3/month`)。実際の購入導線ではストアが返す実価格(ローカライズ済み)を優先表示する仕様は元から変わらない。
+
+## クラッシュ・エラー監視の導入(Sentry、99回目)
+
+「本番でユーザーがクラッシュに遭遇しても、開発側が気づく手段が何もない」という指摘への対応。それまでこのアプリにはクラッシュ・エラー監視ツールもエラーバウンダリ(画面が真っ白になるのを防ぐ仕組み)も一切入っていなかった。
+
+- **`@sentry/react-native`導入**。`app.json`のpluginsに`@sentry/react-native/expo`を追加(ネイティブビルド時の設定・ソースマップアップロード用スクリプトの組み込みを行う公式Expoプラグイン)
+- **`src/lib/sentry.ts`**: `initSentry()`は`EXPO_PUBLIC_SENTRY_DSN`(.env)が未設定の間は`Sentry.init`自体を呼ばない、RevenueCat/AdMobと同じ「未設定でもアプリはクラッシュしない」方針。`SentryErrorBoundary`は`Sentry.ErrorBoundary`をそのまま再エクスポートしたもの
+- **`src/lib/sentry.web.ts`**(Webスタブ): `initSentry()`は何もしないが、`SentryErrorBoundary`だけはWeb版でも「真っ白画面」を避けるため、Sentryへの送信はしない簡易的なReactエラーバウンダリとして実装した(デモ/プレビュー用途での見た目の担保)
+- **`src/screens/ErrorFallbackScreen.tsx`**: クラッシュ時に表示する案内画面。i18nコンテキストに依存すると、その仕組み自体が原因のクラッシュの場合に道連れで壊れる可能性があるため、あえて文言は日本語固定のプレーンな実装にした。「もう一度試す」ボタン付き(`resetError`)
+- **`App.tsx`**: `initSentry()`をモジュール読み込み時に1回呼び、`LanguageProvider`の内側・`AppInner`の外側に`SentryErrorBoundary`を配置(フォールバック画面がテーマ・フォントの文脈で描画されるよう、Providerの内側に置いている)。デモモードの`DemoApp`も`AppInner`経由でレンダリングされるため、同じバウンダリで保護される
+- **検証**: `GroupsScreen.tsx`に`throw new Error(...)`を一時的に仕込み、Web版ビルドで実際にフォールバック画面(絵文字・見出し・「もう一度試す」ボタン)が正しく表示されることをスクリーンショットで確認した上で、仕込んだコードは`git diff`で差分なしを確認して元に戻した
+
+**オーナー側の設定が必要**: https://sentry.io でプロジェクトを作成(Platform: React Native)し、DSNを`EXPO_PUBLIC_SENTRY_DSN`としてEASのEnvironment Variablesに登録する必要がある(`.env.example`参照)。あわせて、スタックトレースを読める形にするため`SENTRY_ORG`・`SENTRY_PROJECT`・`SENTRY_AUTH_TOKEN`(Organization Settings > Auth Tokens、`project:releases`権限)も登録すると良い(任意。未設定でもクラッシュ捕捉自体は動くが、スタックトレースが難読化されたままになる)。
+
+`npx tsc --noEmit`はクリーン。`EXPO_PUBLIC_DEMO_MODE=1`でのWeb版ビルド・Playwrightでグループ一覧→グループ詳細の遷移がコンソールエラーなく動くことを確認済み。

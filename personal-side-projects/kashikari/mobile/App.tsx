@@ -13,6 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import DemoApp from './src/demo/DemoApp';
 import NotificationBanner from './src/components/NotificationBanner';
 import ConfigErrorScreen from './src/screens/ConfigErrorScreen';
+import ErrorFallbackScreen from './src/screens/ErrorFallbackScreen';
 import GroupScreen from './src/screens/GroupScreen';
 import GroupSettingsScreen from './src/screens/GroupSettingsScreen';
 import GroupsScreen from './src/screens/GroupsScreen';
@@ -36,6 +37,7 @@ import { LanguageProvider } from './src/i18n';
 import { requestTrackingPermission } from './src/lib/ads';
 import { getUsageStats, logEvent } from './src/lib/analytics';
 import { PremiumProvider } from './src/lib/premiumContext';
+import { initSentry, SentryErrorBoundary } from './src/lib/sentry';
 import { isSupabaseConfigured } from './src/lib/supabase';
 import type { Group } from './src/types';
 
@@ -433,12 +435,21 @@ function AppInner() {
 // PremiumProvider(94回目)は、広告の出し分け・CSV出力・履歴の閲覧範囲
 // など離れた複数の画面がisPremiumを参照する必要があるため、ルートで
 // 1回だけ被せてある。
+//
+// initSentry()はモジュール読み込み時に1回だけ呼べば十分(RevenueCatの
+// initPurchases()と同じく、DSN未設定なら何もしない)。SentryErrorBoundary
+// はLanguageProviderの内側に置き、フォールバック画面(ErrorFallbackScreen)
+// も同じテーマ・フォントの文脈で描画されるようにしている(99回目)。
+initSentry();
+
 export default function App() {
   return (
     <SafeAreaProvider>
       <PremiumProvider demo={DEMO_MODE}>
         <LanguageProvider>
-          <AppInner />
+          <SentryErrorBoundary fallback={({ resetError }: { resetError: () => void }) => <ErrorFallbackScreen resetError={resetError} />}>
+            <AppInner />
+          </SentryErrorBoundary>
         </LanguageProvider>
       </PremiumProvider>
     </SafeAreaProvider>
