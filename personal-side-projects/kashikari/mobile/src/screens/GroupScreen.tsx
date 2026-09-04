@@ -21,6 +21,7 @@ import Toast from '../components/Toast';
 import UnpaidMembersModal from '../components/UnpaidMembersModal';
 import { useGroupData } from '../hooks/useGroupData';
 import { useT } from '../i18n';
+import { preloadCelebrationAd, showCelebrationAdIfReady } from '../lib/ads';
 import { logEvent } from '../lib/analytics';
 import { computeBalances, computeMyNet, computeSimplifiedSettlement } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
@@ -239,6 +240,17 @@ export default function GroupScreen({
     ]);
   }, []);
 
+  // 無課金ユーザー向けの「精算完了」インタースティシャル広告(98回目、
+  // ユーザーからの提案)。操作の合間ではなく、この「貸し借りが0件になった
+  // お祝いの瞬間」だけに絞ることで、通常の操作動線を邪魔しない軽い広告に
+  // している。あらかじめ裏で読み込んでおき(マウント時)、間に合っている
+  // 時だけ表示する(読み込み待ちでユーザーを止めない)。Premiumユーザーは
+  // そもそも呼ばない。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!isPremium) preloadCelebrationAd();
+  }, [isPremium]);
+
   // 貸し借りが1件もない状態(balances.length === 0)に「今まさに」なった
   // 瞬間だけ、紹介導線を出す(成長施策⑦)。開いた時点で既に精算済みだった
   // 場合は出さない(prevが分かっているとき=2回目以降のレンダーだけ発火)。
@@ -268,13 +280,23 @@ export default function GroupScreen({
           ]);
         });
       };
-      Alert.alert(t.group.referralTitle, t.group.referralMessage, [
-        { text: t.group.referralDismiss, style: 'cancel', onPress: maybeShowReviewPrompt },
-        { text: t.group.referralNow, onPress: () => setInviteModalOpen(true) },
-      ]);
+      const showReferral = () => {
+        Alert.alert(t.group.referralTitle, t.group.referralMessage, [
+          { text: t.group.referralDismiss, style: 'cancel', onPress: maybeShowReviewPrompt },
+          { text: t.group.referralNow, onPress: () => setInviteModalOpen(true) },
+        ]);
+      };
+      // 広告は紹介ダイアログより先に見せる(お祝いの瞬間そのものに広告を
+      // 挟み、その後に紹介・レビューの導線を続ける流れ)。読み込みが
+      // 間に合っていなければ広告は出さず、すぐ紹介ダイアログに進む。
+      if (isPremium) {
+        showReferral();
+      } else {
+        void showCelebrationAdIfReady().then(showReferral);
+      }
     }
     prevBalanceCountRef.current = balances.length;
-  }, [balances.length, group.id, group.name, meId, t]);
+  }, [balances.length, group.id, group.name, meId, t, isPremium]);
 
   const avatarPicker = (
     <AvatarPicker

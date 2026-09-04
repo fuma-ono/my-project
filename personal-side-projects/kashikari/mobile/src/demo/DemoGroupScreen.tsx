@@ -22,6 +22,7 @@ import ShareChannelSheet from '../components/ShareChannelSheet';
 import Toast from '../components/Toast';
 import UnpaidMembersModal from '../components/UnpaidMembersModal';
 import { useT } from '../i18n';
+import { preloadCelebrationAd, showCelebrationAdIfReady } from '../lib/ads';
 import { computeBalances, computeMyNet, computeSimplifiedSettlement, entryFromKey, entryToKey } from '../lib/balances';
 import { groupEntriesByDate } from '../lib/dateGroups';
 import { buildInviteUrl } from '../lib/invite';
@@ -177,18 +178,33 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
     return { error: null };
   };
 
+  // 精算完了時のお祝いインタースティシャル広告(98回目)。本番のGroupScreen
+  // と同じ狙いだが、Web版ではads.web.tsのスタブが常にfalseを即座に返す
+  // ため、実際に広告が挟まる様子はここでは確認できない(実機のみ)。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!isPremium) preloadCelebrationAd();
+  }, [isPremium]);
+
   // 貸し借りが0件になった瞬間だけ紹介導線を出す(本番のGroupScreenと同じ狙い)。
   const prevBalanceCountRef = useRef<number | null>(null);
   useEffect(() => {
     const prev = prevBalanceCountRef.current;
     if (prev !== null && prev > 0 && balances.length === 0) {
-      Alert.alert(t.group.referralTitle, t.group.referralMessage, [
-        { text: t.group.referralDismiss, style: 'cancel' },
-        { text: t.group.referralNow, onPress: () => setInviteModalOpen(true) },
-      ]);
+      const showReferral = () => {
+        Alert.alert(t.group.referralTitle, t.group.referralMessage, [
+          { text: t.group.referralDismiss, style: 'cancel' },
+          { text: t.group.referralNow, onPress: () => setInviteModalOpen(true) },
+        ]);
+      };
+      if (isPremium) {
+        showReferral();
+      } else {
+        void showCelebrationAdIfReady().then(showReferral);
+      }
     }
     prevBalanceCountRef.current = balances.length;
-  }, [balances.length, t]);
+  }, [balances.length, t, isPremium]);
 
   const inviteMember = async (invitedName: string) => {
     const invite: GroupInvite = {
