@@ -1036,3 +1036,53 @@ $$;
 grant execute on function public.set_group_dues(uuid, numeric, text, text) to authenticated;
 grant execute on function public.stop_group_dues(uuid) to authenticated;
 grant execute on function public.generate_due_entries(uuid) to authenticated;
+
+-- ============================================================
+-- 8. リリース運用の仕組み(99回目)
+-- ============================================================
+--
+-- 「問い合わせ・障害・レビューを検知し、まとめてリリースしていく仕組みを
+-- 作ってほしい。ただし自分はあまり介入したくない(確認はするが自動化して
+-- ほしい)」という依頼への対応。検知経路の1つとして、アプリ内に簡易な
+-- フィードバックフォームを設ける。メールや外部連携を増やさず、既存の
+-- Supabaseだけで完結させる。
+
+-- ユーザーからの「ご意見・不具合報告」の投書箱。既存のanalytics_eventsと
+-- 違い、自由記述のテキストを保持するため個人情報を含みうる。そのため、
+-- 投稿(insert)は本人のみ許可するが、閲覧(select)は誰にも許可しない
+-- (=投稿した本人ですら後から読み返せない)。運営側はservice role key
+-- (RLSを無視できる管理者用の鍵。.envには絶対に入れず、Claude Codeの
+-- 環境変数側にだけ置く想定)経由でのみ読む。
+create table if not exists public.feedback (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  message text not null,
+  app_version text,
+  platform text,
+  -- 定期トリアージの進捗管理用。new(未対応)→triaged(方針決定済み、
+  -- GitHub Issue化やその場修正など)→resolved(対応完了)。
+  status text not null default 'new' check (status in ('new', 'triaged', 'resolved')),
+  created_at timestamptz not null default now()
+);
+
+alter table public.feedback enable row level security;
+
+drop policy if exists "users can submit feedback" on public.feedback;
+create policy "users can submit feedback"
+  on public.feedback for insert
+  with check (auth.uid() = user_id);
+
+-- selectポリシーは意図的に作らない(=service role以外は誰も読めない)。
+
+-- 定期トリアージ・リリースバッチ処理が「前回どこまで見たか」を覚えて
+-- おくための、汎用の1行キーバリューストア。ローカルファイルに状態を
+-- 持たせると、開発環境のコンテナが再作成された時に消えてしまうため、
+-- Supabase側に永続化する。ユーザーには一切関係ない運営メタデータなので
+-- RLSは全閉鎖(service role専用)。
+create table if not exists public.ops_state (
+  key text primary key,
+  value jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.ops_state enable row level security;

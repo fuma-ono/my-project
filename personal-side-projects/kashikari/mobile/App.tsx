@@ -36,6 +36,7 @@ import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { LanguageProvider } from './src/i18n';
 import { requestTrackingPermission } from './src/lib/ads';
 import { getUsageStats, logEvent } from './src/lib/analytics';
+import { submitFeedback } from './src/lib/feedback';
 import { PremiumProvider } from './src/lib/premiumContext';
 import { initSentry, SentryErrorBoundary } from './src/lib/sentry';
 import { isSupabaseConfigured } from './src/lib/supabase';
@@ -384,6 +385,7 @@ function AppInner() {
           onOpenUsage={() => setScreen({ name: 'usage', returnTo: screen })}
           onOpenReport={() => setScreen({ name: 'report', returnTo: screen })}
           onSignOut={signOut}
+          onSubmitFeedback={userId ? (message) => submitFeedback(userId, message) : undefined}
         />
       )}
       {screen.name === 'premium' && (

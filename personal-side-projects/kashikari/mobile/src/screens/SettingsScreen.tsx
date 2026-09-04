@@ -6,6 +6,7 @@ import appJson from '../../app.json';
 import Avatar from '../components/Avatar';
 import AuthMethods from '../components/AuthMethods';
 import AvatarPicker from '../components/AvatarPicker';
+import FeedbackModal from '../components/FeedbackModal';
 import PrimaryButton from '../components/PrimaryButton';
 import Toast from '../components/Toast';
 import { useLanguage } from '../i18n';
@@ -32,6 +33,9 @@ type Props = {
   // 「ログアウト機能が付いてないのはおかしい」への対応。デモモードでは
   // 実際のセッションが無いため呼ばれない(渡されない)。
   onSignOut?: () => Promise<void>;
+  // リリース運用の仕組み(99回目)。デモモードでは実際のuser_idが無い
+  // ため渡されない(渡されない場合は行自体を出さない、他の項目と同じ方針)。
+  onSubmitFeedback?: (message: string) => Promise<{ error: string | null }>;
 };
 
 export default function SettingsScreen({
@@ -45,6 +49,7 @@ export default function SettingsScreen({
   onOpenReport,
   isDemo,
   onSignOut,
+  onSubmitFeedback,
 }: Props) {
   const { lang, setLang, t } = useLanguage();
   const [name, setName] = useState(profile.display_name);
@@ -54,6 +59,7 @@ export default function SettingsScreen({
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [authToastMessage, setAuthToastMessage] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const nameDirty = name.trim() !== profile.display_name && name.trim().length > 0;
 
@@ -166,6 +172,13 @@ export default function SettingsScreen({
           <Ionicons name="chevron-forward" size={18} color={colors.muted} />
         </Pressable>
 
+        {onSubmitFeedback && (
+          <Pressable onPress={() => setFeedbackOpen(true)} style={[styles.premiumRow, styles.usageRow]}>
+            <Text style={styles.usageRowText}>{t.settings.feedbackRow}</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+          </Pressable>
+        )}
+
         <Text style={styles.sectionLabel}>{t.settings.about}</Text>
         <Text style={styles.aboutText}>kashikari</Text>
         <Text style={styles.aboutVersion}>{t.settings.version(appJson.expo.version)}</Text>
@@ -196,6 +209,9 @@ export default function SettingsScreen({
         onClose={() => setAvatarPickerOpen(false)}
       />
       <Toast message={authToastMessage ?? ''} visible={authToastMessage !== null} onHide={() => setAuthToastMessage(null)} />
+      {onSubmitFeedback && (
+        <FeedbackModal visible={feedbackOpen} onClose={() => setFeedbackOpen(false)} onSubmit={onSubmitFeedback} />
+      )}
     </View>
   );
 }

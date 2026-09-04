@@ -10,6 +10,7 @@ export const ja = {
   common: {
     cancel: 'キャンセル',
     save: '保存',
+    close: '閉じる',
     favorCount: (n: number) => `${n}件`,
   },
   splash: {
@@ -329,6 +330,7 @@ export const ja = {
     premiumRow: '✨ Premium',
     reportRow: '📈 会計レポート',
     usageRow: '📊 利用状況',
+    feedbackRow: '💬 ご意見・不具合を報告',
     about: 'アプリについて',
     version: (v: string) => `バージョン ${v}`,
     savedNote: '保存しました',
@@ -343,6 +345,14 @@ export const ja = {
     logoutUnsafeMessage:
       'Google/Apple/LINE/メールのいずれとも連携していません。今ログアウトすると、このグループのデータに二度とアクセスできなくなります。それでもログアウトしますか?',
     logoutUnsafeButton: 'それでもログアウトする',
+  },
+  feedback: {
+    title: 'ご意見・不具合を報告',
+    subtitle: '気になったこと・困ったことを教えてください。個別の返信はできませんが、今後の改善に役立てます。',
+    placeholder: '例: ○○の画面で△△が分かりにくかった、□□のとき正しく表示されなかった、など',
+    submitButton: '送信する',
+    sentTitle: '送信しました',
+    sentBody: 'ご意見ありがとうございます。今後のアップデートの参考にさせていただきます。',
   },
   premium: {
     back: '設定',
@@ -434,6 +444,7 @@ export const en: Strings = {
   common: {
     cancel: 'Cancel',
     save: 'Save',
+    close: 'Close',
     favorCount: (n: number) => `${n} favor${n === 1 ? '' : 's'}`,
   },
   splash: {
@@ -718,6 +729,7 @@ export const en: Strings = {
     premiumRow: '✨ Premium',
     reportRow: '📈 Accounting report',
     usageRow: '📊 Usage',
+    feedbackRow: '💬 Send feedback / report an issue',
     about: 'About',
     version: (v: string) => `Version ${v}`,
     savedNote: 'Saved',
@@ -729,6 +741,14 @@ export const en: Strings = {
     logoutUnsafeMessage:
       "You haven't linked Google, Apple, LINE, or email. Logging out now means you'll permanently lose access to this group's data. Log out anyway?",
     logoutUnsafeButton: 'Log out anyway',
+  },
+  feedback: {
+    title: 'Send feedback / report an issue',
+    subtitle: "Let us know what's on your mind. We can't reply individually, but it helps us improve.",
+    placeholder: 'e.g. "The X screen was confusing", "Y didn\'t display correctly when..."',
+    submitButton: 'Send',
+    sentTitle: 'Sent',
+    sentBody: "Thanks for your feedback! We'll take it into account for future updates.",
   },
   premium: {
     back: 'Settings',
