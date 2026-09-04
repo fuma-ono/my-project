@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { Alert, Platform, Pressable, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AddEntrySheet from '../components/AddEntrySheet';
 import AutoSettlePlan from '../components/AutoSettlePlan';
@@ -34,8 +35,12 @@ import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS, DEMO_NOTIFICATIONS 
 type Tab = GroupTab;
 let demoIdSeq = 100;
 
+// GroupScreen.tsxと同じ値(詳細はそちらのコメント参照)。
+const EXTRA_TOP_PADDING = 8;
+
 export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   const t = useT();
+  const insets = useSafeAreaInsets();
   const [entries, setEntries] = useState<Entry[]>(DEMO_ENTRIES);
   const [members, setMembers] = useState<Profile[]>(DEMO_MEMBERS);
   const [group, setGroup] = useState<Group>(DEMO_GROUP);
@@ -413,7 +418,7 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
       <View style={styles.headerShadowWrap}>
         {/* ヘッダーの2層構成(横グラデーション+縦の黒フェード)の詳細は
             GroupScreen.tsxの同じ箇所のコメント参照。 */}
-        <View style={styles.headerGradientBase}>
+        <View style={[styles.headerGradientBase, { paddingTop: insets.top + EXTRA_TOP_PADDING }]}>
           <LinearGradient
             colors={[colors.headerAccent, colors.headerPlum]}
             start={{ x: 0, y: 0 }}
@@ -700,13 +705,16 @@ const styles = StyleSheet.create({
   // デモモードバナーを削除したため、ステータスバー避けの余白は本番の
   // GroupScreen.tsxと同じ値にしている。「タイトル行を上に配置して」の
   // 指摘を受け、paddingTopは44→28に詰めた(GroupScreen.tsxと同じ)。
+  // その後「ステータスバーに被る」不具合の原因になっていたため、
+  // GroupScreen.tsxと同じくinsets.top(セーフエリアの実測値)+
+  // EXTRA_TOP_PADDINGをJSX側でインラインで指定する形に変更した
+  // (paddingTopの固定値はここから撤去)。
   headerShadowWrap: {
     marginHorizontal: -20,
     marginBottom: 0,
   },
   headerGradientBase: {
     position: 'relative',
-    paddingTop: 28,
     paddingHorizontal: 20,
     paddingBottom: 16,
   },

@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { Alert, Platform, Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AddEntrySheet from '../components/AddEntrySheet';
 import AutoSettlePlan from '../components/AutoSettlePlan';
@@ -30,6 +31,11 @@ import type { BalanceRow, Group, SimplifiedTransaction } from '../types';
 
 type Tab = GroupTab;
 
+// セーフエリア(insets.top、ステータスバー・ノッチ・Dynamic Island分の
+// 実測値)だけだとアイコン等がステータスバーの直下にぴったりくっついて
+// 窮屈に見えるため、見た目の余白としてこれを追加で足す。
+const EXTRA_TOP_PADDING = 8;
+
 type Props = {
   group: Group;
   meId: string | null;
@@ -56,6 +62,14 @@ export default function GroupScreen({
   hasUnreadNotifications,
 }: Props) {
   const t = useT();
+  // 「グループ名や通知・設定ボタンがステータスバーに被る」という指摘への
+  // 対応。以前はheaderGradientBaseのpaddingTopを固定値(28)で持たせて
+  // いたが、これは特定の端末で目視調整した値に過ぎず、Dynamic Island
+  // 搭載機種など画面上部の切り欠き(セーフエリア)が広い端末では全く
+  // 足りていなかった。react-native-safe-area-contextの実測値(insets.top)
+  // を使い、どの端末でも確実にステータスバー分の余白を確保した上で、
+  // 見た目の余白(EXTRA_TOP_PADDING)を追加する形にした。
+  const insets = useSafeAreaInsets();
   const {
     members,
     entries,
@@ -363,7 +377,7 @@ export default function GroupScreen({
             グラデーション色そのままに明るくなる)。1枚のLinearGradientの
             色だけでは再現できないため、背景を2枚重ねたView(position:
             relative + absoluteFill)にしている。 */}
-        <View style={styles.headerGradientBase}>
+        <View style={[styles.headerGradientBase, { paddingTop: insets.top + EXTRA_TOP_PADDING }]}>
           <LinearGradient
             colors={[colors.headerAccent, colors.headerPlum]}
             start={{ x: 0, y: 0 }}
@@ -673,9 +687,12 @@ const styles = StyleSheet.create({
   // 指摘を受け、paddingTopを44→28に詰めてタイトル行全体を上に
   // 寄せた(下側のmemberStripCardとの重なり方=paddingBottom(16)は
   // そのまま維持)。
+  // paddingTopの固定値(28)は「ステータスバーに被る」不具合の原因に
+  // なっていたため撤去し、代わりにinsets.top(セーフエリアの実測値)+
+  // EXTRA_TOP_PADDINGを呼び出し側でインラインで指定するようにした
+  // (styles.headerGradientBaseWithInsetsを参照)。
   headerGradientBase: {
     position: 'relative',
-    paddingTop: 28,
     paddingHorizontal: 20,
     paddingBottom: 16,
   },

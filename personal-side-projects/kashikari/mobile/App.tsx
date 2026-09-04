@@ -7,6 +7,7 @@ import {
 } from '@expo-google-fonts/m-plus-rounded-1c';
 import { useEffect, useState } from 'react';
 import { Linking } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import DemoApp from './src/demo/DemoApp';
@@ -348,10 +349,15 @@ function AppInner() {
   );
 }
 
+// 「グループ名や通知・設定ボタンがステータスバーに被る」という指摘への
+// 対応。GroupScreen.tsxがuseSafeAreaInsets()でセーフエリアの実測値を
+// 取れるよう、アプリ全体をSafeAreaProviderで包む。
 export default function App() {
   return (
-    <LanguageProvider>
-      <AppInner />
-    </LanguageProvider>
+    <SafeAreaProvider>
+      <LanguageProvider>
+        <AppInner />
+      </LanguageProvider>
+    </SafeAreaProvider>
   );
 }

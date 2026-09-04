@@ -1639,6 +1639,34 @@ Build番号5を実機で確認してもらったところ、80回目の修正(�
 
 **追記(同日)**: `schema.sql`の再実行(87〜89回目の新しい列・RPC)、`npx supabase functions deploy send-push`(ミュート機能を効かせるための再デプロイ)をオーナーに完了してもらった。続けて`eas build --platform ios --profile production` → `eas submit --platform ios --latest`で**Build番号6**として再ビルド・再提出した。これで85〜89回目(スプラッシュ画面の文字位置・ロゴマークの絵柄/サイズ修正、「設定/抜ける」分離、グループ専用の設定画面、グループ内通知の絞り込み、招待コード共有・通知ミュート・メンバー削除・グループ削除)がすべてTestFlightに反映される見込み。Appleの処理完了後、実機での動作確認が必要。
 
+## フォント崩れの根本原因を特定・グループ画面のヘッダーがステータスバーに被る不具合を修正(90回目)
+
+Build番号6を確認してもらったところ、2つの指摘があった。
+
+**1. 「kashikariの文字のフォントが直っていない」**
+
+80回目から複数回にわたり「直したはず」と報告しては実機で直っていない、を繰り返していた不具合。今回、コードではなく**依存パッケージのバージョン不整合**が原因だと判明した。
+
+`npm ls expo-font`で調べたところ、`expo-font`が2つの異なるバージョンで重複インストールされていた:
+- `expo`(SDK 54)経由: `expo-font@14.0.12`(SDK 54が要求する正しいバージョン)
+- `@expo/vector-icons@15.1.1`経由: `expo-font@57.0.1`(SDK 54とは全く噛み合わない、大幅に新しいバージョン)
+
+`@expo/vector-icons`の`package.json`が`expo-font`の依存範囲を`>=14.0.4`という上限のないゆるい指定にしていたため、npmのインストール時に別バージョンが解決されてしまっていた。`npx expo-doctor`でも独立に「Missing peer dependency: expo-font, Required by: @expo/vector-icons」「Your app may crash outside of Expo Go without this dependency」と警告されており、この診断を裏付けている。
+
+カスタムフォント(M PLUS Rounded 1c)の読み込み自体は成功する(`useFonts`がエラーなく`true`を返す)ため、これまでコードレビューだけでは気づけなかった。native moduleが2つの異なるバージョンで重複していることで、production/standaloneビルド時のフォント登録がどちらか一方(またはどちらも不完全)にしか反映されず、実機ではシステム標準フォントにフォールバックしていた、というのが最も筋の通る説明。
+
+対応として`package.json`に`overrides`で`expo-font`を`~14.0.12`(SDK 54の正しいバージョン)に固定し、あわせて`expo-font`自体も直接の依存として明示した(`expo-doctor`の指摘通り、native moduleのpeer dependencyは直接インストールする必要があるため)。`npm ls expo-font`で単一バージョンになったことを確認済み。
+
+**2. 「グループ画面のグループ名・通知・設定ボタンがステータスバーに被っていて押しにくい」**
+
+`GroupScreen.tsx`のヘッダーは、これまで`paddingTop`に固定値(28px)を指定していた。この値は特定の端末で目視調整しただけの値で、Dynamic Island搭載機種(iPhone 14 Pro以降)など画面上部の切り欠きが大きい端末では、セーフエリアの実測値(47〜59px程度)に対して全く足りていなかった。過去に何度も「まだ被っている」→微調整、を繰り返していたのも、根本的にこの「固定値で決め打ち」というアプローチ自体が誤りだったため。
+
+`react-native-safe-area-context`(Expo SDK 54の対応バージョン`~5.6.0`)を導入し、`useSafeAreaInsets()`で取得した実際のセーフエリア分の余白(`insets.top`)+ 見た目の余白(8px)を`paddingTop`に使うよう変更した。どの端末でも(ノッチなし・ノッチあり・Dynamic Island問わず)確実にステータスバーの下に収まるようになる。`App.tsx`全体を`SafeAreaProvider`で包み、`useSafeAreaInsets`が使えるようにした。`DemoGroupScreen.tsx`(スクリーンショット確認用のミラー)にも同じ変更を反映した。
+
+ホーム画面(`GroupsScreen.tsx`)のヘッダーも同じ固定値パディング(60px)を使っているが、今回指摘されたのはグループ詳細画面のみで、60pxは28pxよりだいぶ余裕があり今のところ問題の報告もないため、今回は変更していない。
+
+`EXPO_PUBLIC_DEMO_MODE=1`でのWeb版ビルド・Playwrightで、console errorが出ないこと・レイアウトが崩れていないことを確認した。ただしWebブラウザにはノッチ/Dynamic Island相当のセーフエリアが無い(`insets.top`が常に0になる)ため、この環境では「実際にステータスバーの被りが解消されたか」自体は確認できない。実機での確認が必要。フォント修正についても、`npm ls`でパッケージ構成が正しくなったことは確認できたが、実機での見た目の確認はまだ。
+
 ## 既知の制約(現時点)
 
 - プッシュ通知は追加した(60回目)が、Android実機での動作確認にはExpo Goではなくdevelopment buildが必要(詳細は60回目の項目参照)
