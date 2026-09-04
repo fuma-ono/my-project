@@ -906,3 +906,133 @@ end $$;
 -- あれば未読(ベルに赤い点を表示)とみなす。既存ユーザーには今の時刻を
 -- 入れておく(移行時点より前の通知をいきなり全部未読扱いにしないため)。
 alter table public.profiles add column if not exists notifications_seen_at timestamptz not null default now();
+
+-- ============================================================
+-- 11. group_dues: サークル会計(定期会費の徴収)
+-- ============================================================
+--
+-- 「サークル会計」機能への対応(97回目)。既存の「グループ」に会費モードを
+-- 追加する形にした(サークル専用の別概念は作らない)。管理者(グループ
+-- 作成者)が「月額◯円」を設定すると、月が変わるたびに、管理者以外の
+-- 全メンバー分の「未払い」お金の記録(entries)が自動生成される。生成
+-- された記録は普通の割り勘・貸し借りの記録と全く同じ扱いになるため、
+-- 催促・支払った/受け取った確認・自動精算・履歴・CSV出力など、既存の
+-- 仕組みがそのまま使える(会費専用の一覧画面は別途作らず、descriptionに
+-- 「(会費ラベル) YYYY-MM」を入れて、通常の台帳の中で区別できるようにした)。
+--
+-- 1グループにつき会費設定は1つ(group_idを主キーにして、設定し直しは
+-- upsertで上書きする)。activeで停止(会費徴収をやめる)を表現し、行自体は
+-- 消さない(過去の設定を追える)。
+create table if not exists public.group_dues (
+  group_id uuid primary key references public.groups (id) on delete cascade,
+  amount numeric not null check (amount > 0),
+  currency text not null default 'JPY',
+  label text not null default '会費' check (char_length(label) between 1 and 20),
+  active boolean not null default true,
+  created_by uuid not null references public.profiles (id),
+  updated_at timestamptz not null default now(),
+  -- 直近で未払い記録を生成した月("YYYY-MM")。同じ月に何度呼ばれても
+  -- 二重生成しないための冪等性チェックに使う。
+  last_generated_month text
+);
+
+alter table public.group_dues enable row level security;
+
+drop policy if exists "group_dues visible to members" on public.group_dues;
+create policy "group_dues visible to members"
+  on public.group_dues for select
+  using (public.is_group_member(group_id));
+
+-- 直接のINSERT/UPDATE/DELETEポリシーは用意せず、以下のRPC(security
+-- definer)経由でのみ変更を許可する(このファイル全体で一貫した方針)。
+
+-- 会費を設定/変更する(管理者のみ)。既に設定済みなら上書きするが、
+-- last_generated_monthは維持する(金額を変更しても、既に生成済みの
+-- 今月分を再生成しないようにするため)。
+create or replace function public.set_group_dues(_group_id uuid, _amount numeric, _currency text, _label text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from public.groups where id = _group_id and created_by = auth.uid()) then
+    raise exception 'not authorized';
+  end if;
+  if _amount is null or _amount <= 0 then
+    raise exception 'invalid amount';
+  end if;
+
+  insert into public.group_dues (group_id, amount, currency, label, active, created_by, updated_at)
+  values (_group_id, _amount, coalesce(nullif(_currency, ''), 'JPY'), coalesce(nullif(trim(_label), ''), '会費'), true, auth.uid(), now())
+  on conflict (group_id) do update
+    set amount = excluded.amount,
+        currency = excluded.currency,
+        label = excluded.label,
+        active = true,
+        updated_at = now();
+end;
+$$;
+
+-- 会費徴収を停止する(管理者のみ)。行は残す(履歴・再開のため)。
+create or replace function public.stop_group_dues(_group_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from public.groups where id = _group_id and created_by = auth.uid()) then
+    raise exception 'not authorized';
+  end if;
+  update public.group_dues set active = false, updated_at = now() where group_id = _group_id;
+end;
+$$;
+
+-- 今月分の会費未払い記録を生成する。管理者以外のメンバーなら誰でも
+-- 呼べる(グループ画面を開くたびに呼ぶ想定。cron等の定期実行の仕組みを
+-- 持たないため、「誰かがアプリを開いたタイミングで、その月の分がまだ
+-- なければ作る」という遅延生成にしている)。冪等: 同じ月に何度呼んでも
+-- 二重には生成されない。しばらく誰もアプリを開かなかった月の分は
+-- 遡って生成しない(その月はスキップされる。README参照)。
+create or replace function public.generate_due_entries(_group_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  _dues record;
+  _month text := to_char(now(), 'YYYY-MM');
+  _admin uuid;
+  _member record;
+begin
+  if not exists (select 1 from public.group_members gm where gm.group_id = _group_id and gm.user_id = auth.uid()) then
+    raise exception 'not a member';
+  end if;
+
+  select * into _dues from public.group_dues where group_id = _group_id and active = true;
+  if not found then
+    return;
+  end if;
+
+  if _dues.last_generated_month is not null and _dues.last_generated_month >= _month then
+    return;
+  end if;
+
+  select created_by into _admin from public.groups where id = _group_id;
+
+  for _member in
+    select user_id from public.group_members where group_id = _group_id and user_id <> _admin
+  loop
+    insert into public.entries (group_id, from_user, to_user, type, amount, currency, description, settle_status, created_by)
+    values (_group_id, _member.user_id, _admin, 'money', _dues.amount, _dues.currency, _dues.label || ' ' || _month, 'unpaid', _admin);
+  end loop;
+
+  update public.group_dues set last_generated_month = _month where group_id = _group_id;
+end;
+$$;
+
+grant execute on function public.set_group_dues(uuid, numeric, text, text) to authenticated;
+grant execute on function public.stop_group_dues(uuid) to authenticated;
+grant execute on function public.generate_due_entries(uuid) to authenticated;

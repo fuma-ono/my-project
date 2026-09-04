@@ -8,11 +8,12 @@ import Mark from '../components/Mark';
 import PrimaryButton from '../components/PrimaryButton';
 import ShareChannelSheet from '../components/ShareChannelSheet';
 import { useT } from '../i18n';
+import { formatMoney } from '../lib/currency';
 import { buildEntriesCsv } from '../lib/exportCsv';
 import { buildInviteUrl } from '../lib/invite';
 import { usePremiumContext } from '../lib/premiumContext';
 import { colors, fonts } from '../theme';
-import type { Entry, Group, Profile } from '../types';
+import type { Entry, Group, GroupDues, Profile } from '../types';
 
 // 「グループ内の設定ボタンを押したら、グループの設定(アイコンやグループ名
 // など)を変更できるようにした方がいい」という指摘への対応(87回目)。
@@ -48,6 +49,10 @@ type Props = {
   // そのまま渡してもらう。
   entries: Entry[];
   onOpenPremium: () => void;
+  // サークル会計(97回目)。dues=nullは未設定(または停止中)。
+  dues: GroupDues | null;
+  onSetDues: (amount: number) => Promise<{ error: string | null }>;
+  onStopDues: () => Promise<{ error: string | null }>;
 };
 
 export default function GroupSettingsScreen({
@@ -64,6 +69,9 @@ export default function GroupSettingsScreen({
   onDeleteGroup,
   entries,
   onOpenPremium,
+  dues,
+  onSetDues,
+  onStopDues,
 }: Props) {
   const t = useT();
   const { isPremium } = usePremiumContext();
@@ -75,6 +83,9 @@ export default function GroupSettingsScreen({
   const [shareSheetOpen, setShareSheetOpen] = useState(false);
   const [mutedToggling, setMutedToggling] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [duesAmountInput, setDuesAmountInput] = useState('');
+  const [settingDues, setSettingDues] = useState(false);
+  const [stoppingDues, setStoppingDues] = useState(false);
 
   const isAdmin = meId != null && meId === group.created_by;
   const nameDirty = name.trim() !== group.name && name.trim().length > 0;
@@ -125,6 +136,38 @@ export default function GroupSettingsScreen({
         onPress: async () => {
           const res = await onRemoveMember(member.id);
           if (res.error) Alert.alert(t.groupSettings.removeMemberFailedTitle, res.error);
+        },
+      },
+    ]);
+  };
+
+  // サークル会計(97回目)。金額はJPYの整数のみを受け付ける(通貨選択は
+  // v1のスコープ外。大学サークル・部活の会費徴収という想定用途では
+  // 円建てで十分なため)。
+  const submitDues = async () => {
+    const amount = Number(duesAmountInput);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    setSettingDues(true);
+    const res = await onSetDues(amount);
+    setSettingDues(false);
+    if (res.error) {
+      Alert.alert(t.groupSettings.duesSetFailedTitle, res.error);
+      return;
+    }
+    setDuesAmountInput('');
+  };
+
+  const confirmStopDues = () => {
+    Alert.alert(t.groupSettings.duesStopConfirmTitle, t.groupSettings.duesStopConfirmMessage, [
+      { text: t.common.cancel, style: 'cancel' },
+      {
+        text: t.groupSettings.duesStopConfirmButton,
+        style: 'destructive',
+        onPress: async () => {
+          setStoppingDues(true);
+          const res = await onStopDues();
+          setStoppingDues(false);
+          if (res.error) Alert.alert(t.groupSettings.duesStopFailedTitle, res.error);
         },
       },
     ]);
@@ -239,6 +282,46 @@ export default function GroupSettingsScreen({
             </View>
           )}
         </Pressable>
+
+        {/* サークル会計(97回目)。管理者は設定・停止でき、それ以外の
+            メンバーは会費が有効な時だけ読み取り専用で金額を確認できる
+            (未設定/停止中のグループでは非表示)。 */}
+        {(isAdmin || dues?.active) && (
+          <>
+            <Text style={styles.sectionLabel}>{t.groupSettings.duesLabel}</Text>
+            {dues?.active ? (
+              <View style={styles.row}>
+                <Ionicons name="people-outline" size={20} color={colors.ink} />
+                <Text style={styles.rowText}>
+                  {isAdmin ? t.groupSettings.duesActiveNote(formatMoney(dues.amount, dues.currency)) : t.groupSettings.duesReadOnlyNote(formatMoney(dues.amount, dues.currency))}
+                </Text>
+              </View>
+            ) : (
+              <View>
+                <TextInput
+                  value={duesAmountInput}
+                  onChangeText={setDuesAmountInput}
+                  placeholder={t.groupSettings.duesAmountPlaceholder}
+                  placeholderTextColor={colors.muted}
+                  keyboardType="numeric"
+                  style={styles.input}
+                />
+                <PrimaryButton
+                  title={t.groupSettings.duesSetButton}
+                  onPress={submitDues}
+                  loading={settingDues}
+                  disabled={!duesAmountInput}
+                  style={styles.duesSetButton}
+                />
+              </View>
+            )}
+            {isAdmin && dues?.active && (
+              <Pressable onPress={confirmStopDues} disabled={stoppingDues} style={styles.duesStopRow}>
+                <Text style={styles.duesStopText}>{t.groupSettings.duesStopButton}</Text>
+              </Pressable>
+            )}
+          </>
+        )}
 
         {isAdmin && (
           <>
@@ -366,4 +449,7 @@ const styles = StyleSheet.create({
     borderColor: colors.danger + '40',
   },
   deleteButtonText: { ...fonts.bodySemiBold, fontSize: 15, color: colors.danger },
+  duesSetButton: { marginTop: 10, alignSelf: 'flex-start', paddingHorizontal: 28 },
+  duesStopRow: { marginTop: 10, alignSelf: 'flex-start' },
+  duesStopText: { ...fonts.bodyMedium, fontSize: 13, color: colors.danger, textDecorationLine: 'underline' },
 });

@@ -141,6 +141,21 @@ export function useGroups(userId: string | null) {
     [refresh]
   );
 
+  // サークル会計(97回目、管理者のみ)。RPC側で管理者チェックする。
+  // 呼び出し元(GroupSettingsScreen)がuseGroupDuesのrefreshで
+  // 最新状態を取り直す想定なので、ここではrefresh()は呼ばない。
+  const setGroupDues = useCallback(async (groupId: string, amount: number, currency: string, label: string) => {
+    const { error } = await supabase.rpc('set_group_dues', { _group_id: groupId, _amount: amount, _currency: currency, _label: label });
+    if (error) return { error: error.message };
+    return { error: null };
+  }, []);
+
+  const stopGroupDues = useCallback(async (groupId: string) => {
+    const { error } = await supabase.rpc('stop_group_dues', { _group_id: groupId });
+    if (error) return { error: error.message };
+    return { error: null };
+  }, []);
+
   return {
     groups,
     loading,
@@ -153,5 +168,7 @@ export function useGroups(userId: string | null) {
     updateGroupName,
     removeMember,
     deleteGroup,
+    setGroupDues,
+    stopGroupDues,
   };
 }

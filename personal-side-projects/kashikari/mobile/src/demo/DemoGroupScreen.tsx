@@ -32,7 +32,7 @@ import GroupSettingsScreen from '../screens/GroupSettingsScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import PremiumScreen from '../screens/PremiumScreen';
 import { avatarColor, colors, fonts } from '../theme';
-import type { BalanceRow, Entry, EntryType, Group, GroupInvite, Profile, SimplifiedTransaction } from '../types';
+import type { BalanceRow, Entry, EntryType, Group, GroupDues, GroupInvite, Profile, SimplifiedTransaction } from '../types';
 import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS, DEMO_NOTIFICATIONS } from './mockData';
 
 type Tab = GroupTab;
@@ -52,6 +52,9 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   const [groupSettingsOpen, setGroupSettingsOpen] = useState(false);
   // 89回目で追加した「このグループの通知をミュート」のデモ用ローカルstate。
   const [groupMuted, setGroupMuted] = useState(false);
+  // サークル会計(97回目)。デモではDEMO_ME_IDが常に管理者なので、
+  // 設定・停止のUI両方を確認できる。
+  const [duesState, setDuesState] = useState<GroupDues | null>(null);
   // 「グループ内の通知は、そのグループのみを表示するようにした方が
   // いい」という指摘への対応(88回目)。本番はApp.tsx側でグループごとの
   // 既読時刻(group_members.notifications_seen_at)をSupabaseに持たせたが、
@@ -415,6 +418,24 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
         onOpenPremium={() => {
           setGroupSettingsOpen(false);
           setPremiumOpen(true);
+        }}
+        dues={duesState}
+        onSetDues={async (amount) => {
+          setDuesState({
+            group_id: group.id,
+            amount,
+            currency: 'JPY',
+            label: '会費',
+            active: true,
+            created_by: DEMO_ME_ID,
+            updated_at: new Date().toISOString(),
+            last_generated_month: null,
+          });
+          return { error: null };
+        }}
+        onStopDues={async () => {
+          setDuesState((prev) => (prev ? { ...prev, active: false } : prev));
+          return { error: null };
         }}
       />
     );

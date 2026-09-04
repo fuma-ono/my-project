@@ -25,6 +25,7 @@ import SplashScreen from './src/screens/SplashScreen';
 import UsageScreen from './src/screens/UsageScreen';
 import { useAllMoneyEntries } from './src/hooks/useAllMoneyEntries';
 import { useAuth } from './src/hooks/useAuth';
+import { useGroupDues } from './src/hooks/useGroupDues';
 import { useGroupEntries } from './src/hooks/useGroupEntries';
 import { useGroupMembers } from './src/hooks/useGroupMembers';
 import { useGroupNotificationsSeen } from './src/hooks/useGroupNotificationsSeen';
@@ -102,6 +103,8 @@ function AppInner() {
     updateGroupName,
     removeMember,
     deleteGroup,
+    setGroupDues,
+    stopGroupDues,
   } = useGroups(DEMO_MODE ? null : userId);
   const { pendingGroupId, clearPendingGroupId } = usePushNotifications(DEMO_MODE ? null : userId);
   const {
@@ -124,6 +127,11 @@ function AppInner() {
   // CSV出力(94回目)用。同じ理由で、groupSettings画面を開いている時だけ
   // 記録一覧を取得する軽量なフックを使う。
   const { entries: groupSettingsEntries } = useGroupEntries(screen.name === 'groupSettings' ? screen.group.id : null);
+  // サークル会計(97回目)用。同じ理由で、groupSettings画面を開いている
+  // 時だけ会費設定を取得する軽量なフックを使う。
+  const { dues: groupSettingsDues, refresh: refreshGroupSettingsDues } = useGroupDues(
+    screen.name === 'groupSettings' ? screen.group.id : null
+  );
   // 会計レポート(96回目)用。report画面を開いている時だけ、グループ
   // 横断でお金の記録を取得する。
   const { entries: reportEntries, loading: reportLoading } = useAllMoneyEntries(
@@ -350,6 +358,17 @@ function AppInner() {
           }}
           entries={groupSettingsEntries}
           onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
+          dues={groupSettingsDues}
+          onSetDues={async (amount) => {
+            const res = await setGroupDues(screen.group.id, amount, 'JPY', '会費');
+            if (!res.error) refreshGroupSettingsDues();
+            return res;
+          }}
+          onStopDues={async () => {
+            const res = await stopGroupDues(screen.group.id);
+            if (!res.error) refreshGroupSettingsDues();
+            return res;
+          }}
         />
       )}
       {screen.name === 'settings' && (

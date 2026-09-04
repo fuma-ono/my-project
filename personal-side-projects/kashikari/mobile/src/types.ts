@@ -109,3 +109,15 @@ export type NotificationLogItem = {
   body: string;
   created_at: string;
 };
+
+// サークル会計(97回目)。1グループにつき1つ(group_idが主キー)。
+export type GroupDues = {
+  group_id: string;
+  amount: number;
+  currency: string;
+  label: string;
+  active: boolean;
+  created_by: string;
+  updated_at: string;
+  last_generated_month: string | null;
+};

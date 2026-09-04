@@ -42,6 +42,17 @@ export function useGroupData(groupId: string | null, userId: string | null) {
   const loadAll = useCallback(async () => {
     if (!groupId) return;
     setLoading(true);
+    // サークル会計(97回目)。cron等の定期実行の仕組みを持たないため、
+    // グループを開く(=このフックが呼ばれる)たびに「今月分の会費未払い
+    // 記録がまだ無ければ作る」を試みる、遅延生成の仕組みにしている。
+    // 会費が設定されていない/既に今月分生成済みのグループでは何もしない
+    // (RPC側で早期returnする)。失敗しても記録の閲覧自体は止めたくない
+    // ため、エラーは無視する。
+    try {
+      await supabase.rpc('generate_due_entries', { _group_id: groupId });
+    } catch {
+      // 失敗しても記録の閲覧自体は止めない
+    }
     const [membersRes, entriesRes, invitesRes] = await Promise.all([
       supabase.from('group_members').select('profiles(id, display_name, avatar_emoji, avatar_photo_path)').eq('group_id', groupId),
       supabase.from('entries').select('*').eq('group_id', groupId).order('created_at', { ascending: false }),
