@@ -7,6 +7,7 @@ import { entryFromKey, entryToKey } from '../lib/balances';
 import { notifyGroup } from '../lib/pushNotifications';
 import { supabase } from '../lib/supabase';
 import { splitAmount } from '../lib/split';
+import { prefetchSignedUrls } from './useSignedUrl';
 import type { Entry, EntryType, GroupInvite, Profile } from '../types';
 import type { Strings } from '../i18n/strings';
 
@@ -63,6 +64,13 @@ export function useGroupData(groupId: string | null, userId: string | null) {
         .map((row) => (row as unknown as { profiles: Profile | null }).profiles)
         .filter((p): p is Profile => !!p);
       setMembers(list);
+      // メンバー行の各Avatarが個別に署名付きURLを取りに行く前に、
+      // まとめて1回のリクエストで先読みしておく(グループを開いた瞬間に
+      // メンバーのアイコンが一斉にポップインするラグへの横展開対応、99回目)。
+      prefetchSignedUrls(
+        'avatars',
+        list.map((p) => p.avatar_photo_path)
+      );
     }
     if (entriesRes.data) setEntries(entriesRes.data as Entry[]);
     if (invitesRes.data) setInvites(invitesRes.data as GroupInvite[]);

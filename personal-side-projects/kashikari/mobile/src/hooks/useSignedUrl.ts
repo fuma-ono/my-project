@@ -27,6 +27,39 @@ function cacheKey(bucket: string, path: string) {
   return `${bucket}:${path}`;
 }
 
+// グループ一覧・メンバー一覧のように「複数のアイコンが一度に並ぶ」画面向け。
+// 1件ずつcreateSignedUrlを個別に呼ぶ(=一覧のアイコン数だけ往復が並列発生する)
+// 代わりに、createSignedUrls(複数形)でまとめて1回のリクエストにする。
+// 結果はそのままモジュールのキャッシュに書き込むので、この後に各Avatar/Mark
+// コンポーネントがuseSignedUrlで同じpathを引くとキャッシュヒットする
+// (=一覧が表示される時点でほぼ全アイコンの往復が終わっている状態を狙う)。
+// 呼び出し側は結果を待つ必要はない(fire-and-forget)。
+export function prefetchSignedUrls(bucket: string, paths: (string | null | undefined)[]): void {
+  const uncached = Array.from(new Set(paths.filter((p): p is string => !!p))).filter((p) => {
+    const existing = cache.get(cacheKey(bucket, p));
+    return !existing || existing.expiresAt <= Date.now();
+  });
+  if (uncached.length === 0) return;
+  supabase.storage
+    .from(bucket)
+    .createSignedUrls(uncached, SIGNED_URL_TTL_SEC)
+    .then(({ data }) => {
+      if (!data) return;
+      for (const item of data) {
+        if (item.signedUrl && item.path) {
+          cache.set(cacheKey(bucket, item.path), {
+            url: item.signedUrl,
+            expiresAt: Date.now() + SIGNED_URL_TTL_SEC * 1000 - REFRESH_MARGIN_MS,
+          });
+        }
+      }
+    })
+    .catch(() => {
+      // 一覧表示自体は各Avatar/Markの個別フェッチにフォールバックするので、
+      // ここで失敗しても致命的ではない(先読みの最適化に過ぎない)。
+    });
+}
+
 export function useSignedUrl(bucket: string, path: string | null): string | null {
   const key = path ? cacheKey(bucket, path) : null;
   const cached = key ? cache.get(key) : undefined;

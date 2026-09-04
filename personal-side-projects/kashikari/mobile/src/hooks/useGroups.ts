@@ -6,6 +6,7 @@ import { uploadIconPhoto } from '../lib/iconPhoto';
 import { notifyGroup } from '../lib/pushNotifications';
 import { supabase } from '../lib/supabase';
 import type { Group } from '../types';
+import { prefetchSignedUrls } from './useSignedUrl';
 
 export function useGroups(userId: string | null) {
   const t = useT();
@@ -17,7 +18,16 @@ export function useGroups(userId: string | null) {
     setLoading(true);
     // RLSにより、自分が参加しているグループしか返ってこない。
     const { data, error } = await supabase.from('groups').select('*').order('created_at', { ascending: false });
-    if (!error && data) setGroups(data);
+    if (!error && data) {
+      setGroups(data);
+      // 一覧の各行がMarkコンポーネントで写真アイコンの署名付きURLを
+      // 個別に取りに行く前に、まとめて1回のリクエストで先読みしておく
+      // (「グループ選択で一瞬アイコンが出ない」への横展開対応、99回目)。
+      prefetchSignedUrls(
+        'avatars',
+        data.map((g) => g.icon_photo_path)
+      );
+    }
     setLoading(false);
   }, [userId]);
 

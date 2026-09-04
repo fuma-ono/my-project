@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { supabase } from '../lib/supabase';
 import type { Profile } from '../types';
+import { prefetchSignedUrls } from './useSignedUrl';
 
 // 「グループの設定でメンバーを削除できるように」という指摘への対応
 // (89回目)。useGroupData.tsは残高・記録なども含む大きなフックで、
@@ -24,6 +25,10 @@ export function useGroupMembers(groupId: string | null) {
         .map((row) => (row as unknown as { profiles: Profile | null }).profiles)
         .filter((p): p is Profile => !!p);
       setMembers(list);
+      prefetchSignedUrls(
+        'avatars',
+        list.map((p) => p.avatar_photo_path)
+      );
     }
     setLoading(false);
   }, [groupId]);

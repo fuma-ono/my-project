@@ -350,7 +350,7 @@ export const ja = {
     // ストアから取得できた実際の価格(offering.availablePackages[0].
     // product.priceString)を優先して表示し、取得できなかった場合
     // だけこのフォールバック文言を使う(94回目、RevenueCat導入)。
-    price: '月額300円(予定)',
+    price: '月額300円',
     featuresTitle: 'Premiumでできること',
     features: ['CSV出力', '会計レポート', '広告なし', '履歴の無制限保存', 'サークル会計機能'],
     subscribeButton: '購読する',
@@ -733,7 +733,7 @@ export const en: Strings = {
   premium: {
     back: 'Settings',
     title: '✨ Premium',
-    price: '$3/month (planned)',
+    price: '$3/month',
     featuresTitle: 'What you get with Premium',
     features: ['CSV export', 'Accounting reports', 'No ads', 'Unlimited history', 'Club/organization accounting'],
     subscribeButton: 'Subscribe',
