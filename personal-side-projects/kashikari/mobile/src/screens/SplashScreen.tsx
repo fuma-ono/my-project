@@ -12,35 +12,33 @@ import { colors, fonts } from '../theme';
 //
 // この画面はApp.tsx側で「カスタムフォント(M PLUS Rounded 1c)の読み込みが
 // 終わるまで」表示され続ける("最初のページだけkashikariの字体が違う"という
-// 指摘への対応)。つまりfontsLoadedがfalseの間、まさにこの画面自身が表示
-// されている真っ最中であり、その間はwordmark/taglineのfontFamilyが未登録
-// でOSの標準フォントにフォールバックしてしまう。読み込みが遅い端末・
-// 初回起動では最小表示時間(900ms)いっぱいこの状態のまま切り替わって
-// しまうこともあるため、fontsReadyがtrueになるまでは文字を透明にして
-// 見せないようにし、正しいフォントで描画できるようになってから表示する。
+// 指摘への対応)。
 //
-// 【追記】上記の対応(opacityの切り替え)だけでは実機で直りきらなかった
-// (設定画面のkashikariは崩れないのに、この画面のwordmarkだけ崩れる、
-// という切り分けで判明)。原因は、Textのfontsが未登録のうちに一度
-// マウントされてしまうと、iOS側がその時点で標準フォントへの描画を
-// ネイティブ層で確定させてしまい、後からfontsReady(=opacity)だけを
-// 切り替えても、fontFamilyの文字列自体はマウント時からずっと同じ
-// (見た目上は変化なし)なため、Reactの差分検出的には「再描画が必要な
-// 変更」と認識されず、確定済みの(誤った)ネイティブ描画がopacityで
-// 表示されるだけになっていたため。fontsReadyが切り替わるタイミングで
-// key propを変えてこのView自体を強制的にアンマウント→再マウントさせる
-// ことで、フォントが確実に登録済みの状態から新規にTextを生成させる。
+// 【試行錯誤の記録】この「フォント読み込み前にwordmark/taglineが崩れて
+// 見える」問題は、これまで2段階の対処を重ねてきたが、どちらも実機では
+// 直りきらなかった:
+//   1. 最初はTextを常にマウントしたまま、fontsReadyでopacityだけ0↔1に
+//      切り替える方式にしたが、フォント未登録の状態で一度マウントされた
+//      Textはネイティブ層でその時点のフォントでの描画を確定してしまい、
+//      後からopacityを1にしても確定済みの(誤った)描画がそのまま
+//      見えるだけだった。
+//   2. 次にfontsReadyの値をkey propに使い、値が変わった瞬間にView自体を
+//      強制的にアンマウント→再マウントする方式に変えたが、今度は
+//      「kashikariの最後の文字が欠ける」「キャッチコピーの2行目が
+//      まるごと消える」という、位置・幅の計算そのものが崩れる不具合が
+//      新たに出た。App.tsx側でfontsLoaded後に短い遅延を挟んでも直らず、
+//      根本的にこの「一度マウントしたものを後から作り直す」アプローチ
+//      自体に無理があったと判断した。
 //
-// 【追記2】上記の再マウント対応だけでは、今度は「kashikariの最後の
-// 文字が欠けてkashikaになる」という不具合が出た。これは、JS側で
-// fontsLoadedがtrueになった「直後」に再マウント(=文字幅の計測)が
-// 行われる際、ネイティブ側のフォント登録がまだ完全には終わっておらず、
-// 実際より狭い(未登録時の代替フォントに近い)幅で計測されてしまい、
-// 少し遅れて正しい(より幅の広い)フォントで描画されたときに、計測時の
-// 狭い枠からはみ出た部分が見えなくなっていた、という説明が筋が通る。
-// この画面自体を直すのではなく、App.tsx側でfontsLoadedがtrueになって
-// から実際にfontsReady(このpropに渡る値)をtrueにするまで短い猶予
-// (150ms)を挟むようにした(詳細はApp.tsxのfontsSettled参照)。
+// 現在の対応: wordmark/taglineをまとめて条件付きレンダリングにし、
+// fontsReadyがtrueになるまではこのブロック自体を一切マウントしない
+// ようにした。Textが生成される瞬間は必ずfontsReadyがtrueになった後の
+// 1回だけなので、上記のような「フォント未登録の状態での描画・計測が
+// 後から尾を引く」類の不具合が原理的に起こり得ない、最もシンプルで
+// 確実な方法。代わりに、フォントの読み込みが遅い端末では文字が現れる
+// 瞬間にMarkのアイコンがわずかに位置調整される(contentのgapの分だけ
+// 上下にずれる)可能性があるが、これは実害の少ない一瞬の見た目の話で
+// あり、崩れた/欠けた文字が表示され続けるより明らかに良い。
 export default function SplashScreen({ fontsReady = true }: { fontsReady?: boolean }) {
   const t = useT();
   return (
@@ -51,17 +49,19 @@ export default function SplashScreen({ fontsReady = true }: { fontsReady?: boole
 
       <View style={styles.content}>
         <Mark size={112} />
-        {/* 「kashikariの文字がアイコンに対して左にずれている」という
-            指摘への対応(実測で約73px、画面幅の約6%のズレを確認)。
-            このView自体にalignItems:'center'が抜けていたため、既定値
-            (stretch)で子のTextが親の幅いっぱいに広がり、2行のtagline
-            (幅が広い)に対して1行のwordmarkが左寄せのまま埋もれていた。
-            明示的にcenterを指定し、念のためwordmark自体にもtextAlignを
-            付けて二重に保険をかける。 */}
-        <View key={fontsReady ? 'ready' : 'loading'} style={[styles.fontsWrap, { opacity: fontsReady ? 1 : 0 }]}>
-          <Text style={styles.wordmark}>kashikari</Text>
-          <Text style={styles.tagline}>{t.splash.tagline}</Text>
-        </View>
+        {fontsReady && (
+          // 「kashikariの文字がアイコンに対して左にずれている」という
+          // 指摘への対応(実測で約73px、画面幅の約6%のズレを確認)。
+          // このView自体にalignItems:'center'が抜けていたため、既定値
+          // (stretch)で子のTextが親の幅いっぱいに広がり、2行のtagline
+          // (幅が広い)に対して1行のwordmarkが左寄せのまま埋もれていた。
+          // 明示的にcenterを指定し、念のためwordmark自体にもtextAlignを
+          // 付けて二重に保険をかける。
+          <View style={styles.fontsWrap}>
+            <Text style={styles.wordmark}>kashikari</Text>
+            <Text style={styles.tagline}>{t.splash.tagline}</Text>
+          </View>
+        )}
       </View>
     </View>
   );
