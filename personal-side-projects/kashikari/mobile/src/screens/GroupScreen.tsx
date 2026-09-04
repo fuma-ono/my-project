@@ -264,20 +264,33 @@ export default function GroupScreen({
       // 参照。同時に2つ出すと衝突するため必ず片方を閉じてから)。「紹介する」
       // を選んだ場合は招待シートが開くため、その導線を邪魔しないよう
       // こちらは出さない。
+      //
+      // 「閉じるを押すと真っ白い画面のまま固まる」というバグ報告への対応
+      // (99回目)。原因は、1つ目のAlert(紹介ポップアップ)がまだ閉じる
+      // アニメーション中のうちに、2つ目のAlert(レビュー依頼)を出そうと
+      // していたこと。iOSはネイティブのアラートを閉じている最中に次の
+      // アラートを提示しようとすると競合してしまう(このファイル内の
+      // ShareChannelSheet/InviteModalで既に踏んだのと同じ種類の不具合)。
+      // shouldShowReviewPrompt()自体は一瞬で終わる非同期処理のため、
+      // 実質「onPressの直後」に近いタイミングで2つ目のAlertが呼ばれて
+      // しまっていた。1つ目の閉じるアニメーションが確実に終わるまで、
+      // 短い遅延を挟んでから出すようにする。
       const maybeShowReviewPrompt = () => {
         void shouldShowReviewPrompt().then((should) => {
           if (!should) return;
           void markReviewPromptShown();
-          Alert.alert(t.group.reviewPromptTitle, t.group.reviewPromptMessage, [
-            { text: t.group.reviewPromptDismiss, style: 'cancel' },
-            {
-              text: t.group.reviewPromptNow,
-              onPress: () => {
-                void markReviewed();
-                openStoreReview();
+          setTimeout(() => {
+            Alert.alert(t.group.reviewPromptTitle, t.group.reviewPromptMessage, [
+              { text: t.group.reviewPromptDismiss, style: 'cancel' },
+              {
+                text: t.group.reviewPromptNow,
+                onPress: () => {
+                  void markReviewed();
+                  openStoreReview();
+                },
               },
-            },
-          ]);
+            ]);
+          }, 400);
         });
       };
       const showReferral = () => {

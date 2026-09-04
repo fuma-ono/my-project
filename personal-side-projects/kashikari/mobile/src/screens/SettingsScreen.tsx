@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import appJson from '../../app.json';
 import Avatar from '../components/Avatar';
@@ -101,7 +101,12 @@ export default function SettingsScreen({
   };
 
   return (
-    <View style={styles.wrap}>
+    // 「メールアドレス入力欄がキーボードで隠れる」というバグ報告への対応
+    // (99回目)。設定画面は入力欄(表示名・メールアドレス等)が縦に
+    // いくつも並ぶ長い画面のため、フォーカス時にキーボード分の余白を
+    // 確保するKeyboardAvoidingViewが必要だった(OnboardingScreen.tsx・
+    // LoginSheet.tsxと同じ、このアプリで確立済みのパターン)。
+    <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
           {/* グループ画面の「‹」アイコンに合わせて、テキストの矢印
@@ -212,7 +217,7 @@ export default function SettingsScreen({
       {onSubmitFeedback && (
         <FeedbackModal visible={feedbackOpen} onClose={() => setFeedbackOpen(false)} onSubmit={onSubmitFeedback} />
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
