@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
+import AdBanner from '../components/AdBanner';
 import GroupFormModal from '../components/GroupFormModal';
 import Mark from '../components/Mark';
 import PrimaryButton from '../components/PrimaryButton';
@@ -78,6 +79,11 @@ export default function GroupsScreen({
           </Pressable>
         )}
       />
+
+      {/* 「広告を入れたい」への対応(95回目)。Premiumユーザーには何も
+          出ない(isPremiumの出し分けはAdBanner内部で行う)。一覧と
+          操作ボタンの間という、誤タップしにくい位置にした。 */}
+      <AdBanner />
 
       <View style={styles.actions}>
         <PrimaryButton title={t.groups.joinButton} variant="ghost" onPress={() => setModal('join')} />

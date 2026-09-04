@@ -45,6 +45,19 @@
           "icon": "./assets/android-icon-foreground.png",
           "color": "#ff6b4a"
         }
+      ],
+      [
+        "expo-tracking-transparency",
+        {
+          "userTrackingPermission": "広告の表示に必要な情報を、あなたの他アプリ・Webサイトでの利用状況と組み合わせないためにご協力ください。"
+        }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+        }
       ]
     ],
     "owner": "fuma-ono",

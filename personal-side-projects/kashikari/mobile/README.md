@@ -1723,6 +1723,20 @@ Build番号10の実機スクリーンショットを詳しく見たところ、�
 
 `npx tsc --noEmit`はクリーン。`EXPO_PUBLIC_DEMO_MODE=1`でのWeb版ビルド・Playwrightで、グループ設定画面の「CSVで出力する」ボタンを押すとPremium画面(新しい「購読する」「購入を復元」ボタン付き)に正しく遷移すること、コンソールエラーが出ないことを確認した。広告(AdMob)・会計レポート・サークル会計機能は次回以降で対応する。
 
+## 広告(AdMob)導入・ATT許可ダイアログ(95回目)
+
+「広告なし」がPremium特典のリストに入っているのに、広告自体がまだ実装されていなかったので追加した。
+
+- **`react-native-google-mobile-ads`導入**。バナー広告(画面下部の適応バナー、`BannerAdSize.ANCHORED_ADAPTIVE_BANNER`)を`src/components/AdBanner.tsx`として実装し、グループ一覧画面(`GroupsScreen.tsx`)の一覧と操作ボタンの間に設置した。`GroupsScreen.tsx`は本番・デモモード共通のコンポーネントなので、配線はここ1箇所で済む
+- **`isPremium`による出し分け**: `AdBanner`は`usePremiumContext()`を見て、Premiumユーザーには何もレンダリングしない(広告リクエスト自体を送らない)。無課金ユーザーにのみ表示される
+- **広告ユニットIDのフォールバック**: `EXPO_PUBLIC_ADMOB_BANNER_IOS`・`EXPO_PUBLIC_BANNER_ANDROID`が未設定でも、Google公式のテスト広告ユニットID(`TestIds.BANNER`)に自動フォールバックするため、AdMobアカウントが無い状態でも安全に動く(テスト広告が出るだけ)
+- **App Tracking Transparency(ATT)**: `expo-tracking-transparency`を導入。iOSでパーソナライズ広告のためにIDFAを使う前に必須の許可ダイアログを、サインイン済みでホーム画面が使える状態になったタイミングで1回だけ出すようにした(`App.tsx`)。許可を拒否されても広告自体は(非パーソナライズ広告として)引き続き出せるため、アプリの動作は止めない
+- **Web/デモ対応**: `react-native-google-mobile-ads`・`expo-tracking-transparency`はどちらもネイティブ専用のため、`ads.web.ts`・`AdBanner.web.tsx`というWebスタブを用意した(94回目の`purchases.web.ts`と同じ`.web`拡張子による自動切り替えの仕組み)。Web版では常に「広告なし」として振る舞う(何もレンダリングしない)
+
+**オーナー側の設定が必要**: `app.json`の`react-native-google-mobile-ads`プラグイン設定(`androidAppId`/`iosAppId`)には、現在Google公式の**テスト用AdMobアプリID**を仮に入れてある。これはネイティブビルド時に固定される値のためAdMobダッシュボードで実際のアプリを登録し、本番のアプリIDに差し替える必要がある(`.env`のような実行時の環境変数では上書きできない)。広告ユニットID(バナー)は`.env`の`EXPO_PUBLIC_ADMOB_BANNER_IOS`・`EXPO_PUBLIC_ADMOB_BANNER_ANDROID`をEASのEnvironment Variablesに登録すればよい。**テストIDのまま本番ビルドをストアに提出すると実際の広告収益が発生しない(テスト広告のみ)ため、公開前に必ず実際のAdMobアプリID・広告ユニットIDに差し替えること。**
+
+`npx tsc --noEmit`はクリーン。`EXPO_PUBLIC_DEMO_MODE=1`でのWeb版ビルド・Playwrightで、ホーム画面のレイアウトが崩れていない(Web版ではAdBanner自体が何もレンダリングしないため見た目は変わらない)・コンソールエラーが出ないことを確認した。ATT許可ダイアログ・実際の広告表示自体はネイティブ専用のため、Web版では検証できない(実機でのみ確認可能)。
+
 ## 既知の制約(現時点)
 
 - プッシュ通知は追加した(60回目)が、Android実機での動作確認にはExpo Goではなくdevelopment buildが必要(詳細は60回目の項目参照)
@@ -1753,6 +1767,7 @@ eas build --platform all --profile production
 - **EASのEnvironment Variables登録**(79回目): `EXPO_PUBLIC_SUPABASE_URL`・`EXPO_PUBLIC_SUPABASE_ANON_KEY`をexpo.devダッシュボードに登録済み(TestFlightが真っ白画面のまま動かなかった根本原因への対応)。この状態で再ビルド(Build番号3)・再提出まで完了
 
 まだ人間(オーナー)がやる必要があるもの:
+- **AdMobアカウント作成・アプリID/広告ユニットID差し替え**(95回目): https://admob.google.com でアプリを登録し、本番の広告ユニット(バナー)を作成する。`app.json`のテスト用AdMobアプリID(`androidAppId`/`iosAppId`)を実際の値に差し替え、広告ユニットIDは`EXPO_PUBLIC_ADMOB_BANNER_IOS`・`EXPO_PUBLIC_ADMOB_BANNER_ANDROID`としてEASのEnvironment Variablesに登録する。テストIDのまま公開すると広告収益が発生しないため、ストア提出前に必須
 - **RevenueCatアカウント作成・APIキー登録**(94回目): https://app.revenuecat.com でプロジェクトを作成し、App Store Connect/Google Play Consoleと連携。サブスクリプション商品(月額プラン)を両ストアで作成し、`premium`というエンタイトルメントに紐付けたあと、RevenueCatのPublic API keyをEASのEnvironment Variablesに`EXPO_PUBLIC_REVENUECAT_IOS_KEY`・`EXPO_PUBLIC_REVENUECAT_ANDROID_KEY`として登録する必要がある。あわせて、App Store Connect側の「Agreements, Tax, and Banking」(税務・銀行口座情報)が未登録の場合は、有料販売自体ができないため先に済ませておく
 - **SQL再実行**(83回目): アイコン写真機能(`profiles.avatar_photo_path`・
   `groups.icon_photo_path`・`avatars`ストレージバケット・`update_group_icon`

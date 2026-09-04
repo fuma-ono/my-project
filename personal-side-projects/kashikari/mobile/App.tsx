@@ -30,6 +30,7 @@ import { useGroups } from './src/hooks/useGroups';
 import { useNotifications } from './src/hooks/useNotifications';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { LanguageProvider } from './src/i18n';
+import { requestTrackingPermission } from './src/lib/ads';
 import { getUsageStats, logEvent } from './src/lib/analytics';
 import { PremiumProvider } from './src/lib/premiumContext';
 import { isSupabaseConfigured } from './src/lib/supabase';
@@ -165,6 +166,15 @@ function AppInner() {
     Linking.getInitialURL().then(handle);
     const sub = Linking.addEventListener('url', (e) => handle(e.url));
     return () => sub.remove();
+  }, [userId]);
+
+  // 「広告を入れたい」への対応(95回目)。iOSはApp Tracking Transparency
+  // (ATT)の許可ダイアログを、パーソナライズ広告のためにIDFAを使う前に
+  // 1回出す必要がある。サインイン済みでホーム画面が使える状態(=文脈が
+  // 分かるタイミング)になってから呼ぶ。デモモードでは呼ばない。
+  useEffect(() => {
+    if (DEMO_MODE || !userId) return;
+    requestTrackingPermission();
   }, [userId]);
 
   // 通知をタップして開かれた場合、そのgroup_idの画面を直接開く。groupsの
