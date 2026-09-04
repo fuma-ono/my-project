@@ -141,10 +141,15 @@ export default function GroupSettingsScreen({
     ]);
   };
 
-  // サークル会計(97回目)。金額はJPYの整数のみを受け付ける(通貨選択は
-  // v1のスコープ外。大学サークル・部活の会費徴収という想定用途では
-  // 円建てで十分なため)。
+  // サークル会計(97回目、Premium特典)。金額はJPYの整数のみを受け付ける
+  // (通貨選択はv1のスコープ外。大学サークル・部活の会費徴収という
+  // 想定用途では円建てで十分なため)。CSV出力・履歴の3ヶ月制限と同じ
+  // 出し分け方針(ボタンは見えるが、実行は無課金だとPremium画面に誘導)。
   const submitDues = async () => {
+    if (!isPremium) {
+      onOpenPremium();
+      return;
+    }
     const amount = Number(duesAmountInput);
     if (!Number.isFinite(amount) || amount <= 0) return;
     setSettingDues(true);
@@ -288,7 +293,14 @@ export default function GroupSettingsScreen({
             (未設定/停止中のグループでは非表示)。 */}
         {(isAdmin || dues?.active) && (
           <>
-            <Text style={styles.sectionLabel}>{t.groupSettings.duesLabel}</Text>
+            <View style={styles.sectionLabelRow}>
+              <Text style={styles.sectionLabel}>{t.groupSettings.duesLabel}</Text>
+              {!isPremium && !dues?.active && (
+                <View style={styles.premiumBadge}>
+                  <Text style={styles.premiumBadgeText}>{t.groupSettings.premiumBadge}</Text>
+                </View>
+              )}
+            </View>
             {dues?.active ? (
               <View style={styles.row}>
                 <Ionicons name="people-outline" size={20} color={colors.ink} />
@@ -386,6 +398,7 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
   },
   rowText: { ...fonts.bodyMedium, fontSize: 14, color: colors.ink, flexShrink: 1 },
+  sectionLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   premiumBadge: { marginLeft: 'auto', backgroundColor: colors.plum + '1a', borderRadius: 999, paddingVertical: 3, paddingHorizontal: 8 },
   premiumBadgeText: { ...fonts.bodySemiBold, fontSize: 10.5, color: colors.plum },
   input: {
