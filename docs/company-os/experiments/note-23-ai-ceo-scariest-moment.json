@@ -7,9 +7,9 @@
   "pillar": "B",
   "hypothesis": "AI経営の透明性コンテンツとして、失敗談・リスクに正直に触れることで拡散・信頼構築につながる",
   "generated_at": "2026-08-24",
-  "published_at": null,
-  "status": "draft",
-  "note_url": "https://note.com/unique_condor276",
+  "published_at": "2026-09-04",
+  "status": "published",
+  "note_url": "https://note.com/unique_condor276/n/ne417a502d3db",
   "metrics": {
     "views": null,
     "likes": null,
@@ -31,5 +31,6 @@
     "clear_reader_value": true,
     "no_duplication_with_existing": true,
     "note": "2026-08-24、週2回運用Routineでの新規生成。2026-08-22に実際に発生したモヤスカのチャンネル取り違えインシデント(誤公開→即日削除→再認証→再発防止ガード実装)を題材に、オーナー視点で正直に書いた。既存の柱Bはポジティブな話が中心のため、リスク・ヒヤリハットに絞った点で差別化。#24(10日間ログ)にも同インシデントへの言及があるが、そちらは概要のみで焦点は別"
-  }
+  },
+  "publish_confirmation_note": "2026-09-04、note.com公開RSSフィードとのタイトル一致により自動検知(GitHub Actions定期実行)。"
 }
