@@ -1637,7 +1637,7 @@ Build番号5を実機で確認してもらったところ、80回目の修正(�
 
 `EXPO_PUBLIC_DEMO_MODE=1`でのWeb版ビルド・Playwrightで、招待コードの表示・「共有する」タップでの共有シート起動・通知ミュートのトグル切り替え・メンバー一覧(管理者バッジ・削除ボタン)・危険な操作セクション(グループ削除ボタン)を、実際にクリックしてスクリーンショットで確認した。ただし`Switch`コンポーネント(ミュートのトグル)と`Alert.alert`(メンバー削除・グループ削除の確認ダイアログ)はどちらもreact-native-web上ではネイティブの見た目・挙動どおりに描画されない既知の制約があり、切り替わること自体は確認できたが、実機(iOS)での正確な見た目・確認ダイアログの表示は未確認。
 
-**追記(同日)**: `schema.sql`の再実行(87〜89回目の新しい列・RPC)、`npx supabase functions deploy send-push`(ミュート機能を効かせるための再デプロイ)をオーナーに完了してもらった。
+**追記(同日)**: `schema.sql`の再実行(87〜89回目の新しい列・RPC)、`npx supabase functions deploy send-push`(ミュート機能を効かせるための再デプロイ)をオーナーに完了してもらった。続けて`eas build --platform ios --profile production` → `eas submit --platform ios --latest`で**Build番号6**として再ビルド・再提出した。これで85〜89回目(スプラッシュ画面の文字位置・ロゴマークの絵柄/サイズ修正、「設定/抜ける」分離、グループ専用の設定画面、グループ内通知の絞り込み、招待コード共有・通知ミュート・メンバー削除・グループ削除)がすべてTestFlightに反映される見込み。Appleの処理完了後、実機での動作確認が必要。
 
 ## 既知の制約(現時点)
 
@@ -1674,7 +1674,7 @@ eas build --platform all --profile production
   RPCの引数追加)のため、`supabase/schema.sql`をSupabaseのSQL Editorで
   再実行する必要がある。実行しないと、写真アイコンを選ぼうとした時に
   エラーになる
-- **TestFlightでのBuild番号5の動作確認**(84回目): Appleの処理完了後、TestFlightアプリから最新ビルドをインストールし、アイコン比率・起動時のフォント・グループ退出通知・ログイン画面のキーボード被り・スプラッシュ画面のドット削除に加え、Google/Apple/LINE/メールの4つのログイン方法・グループ作成・記録の追加など一通り動くか確認する
+- **TestFlightでのBuild番号6の動作確認**(85〜89回目): Appleの処理完了後、TestFlightアプリから最新ビルドをインストールし、スプラッシュ画面の文字位置・ロゴマークの絵柄/サイズ・グループ画面の「設定/抜ける」分離・グループ専用の設定画面(アイコン・グループ名編集・招待コード共有・通知ミュート・メンバー削除・グループ削除)・グループ内通知の絞り込みに加え、Google/Apple/LINE/メールの4つのログイン方法・グループ作成・記録の追加など一通り動くか確認する
 - **アプリアイコンの本番差し替え**: `assets/icon.png`等は`scripts/generate_icons.py`で生成したもの(コーラル×プラムのグラデーションに🤝マーク。ブランドカラーは実際に使っているので、差し替えなくてもそのまま公開して差し支えないレベルではある)。もっと違うデザインにしたい場合は依頼してもらえれば対応できる
 - Androidも同様に`eas build --platform android --profile production`でビルドし、`eas submit`(または手動でのXcode/Android Studioビルド)で実際にストアへ提出
 - App Store Connect / Google Play Consoleでのストア掲載情報の実際の入力(`docs/store-listing.md`のコピーを使う)・スクリーンショットの用意(`docs/screenshots/`にある開発中の参考画像はストア提出用の解像度・構成ではないため、別途撮影が必要)
