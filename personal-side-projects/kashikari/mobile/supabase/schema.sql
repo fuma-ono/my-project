@@ -553,7 +553,7 @@ end;
 $$;
 
 -- 「グループ内の設定ボタンを押したら、グループの設定(アイコンやグループ名
--- など)を変更できるようにした方がいい」という指摘への対応(86回目)。
+-- など)を変更できるようにした方がいい」という指摘への対応(87回目)。
 -- update_group_iconと同じ理由(直接UPDATEを開放するとname以外の列も
 -- 書き換えられてしまう)で、この列だけを更新するRPCに絞る。
 create or replace function public.update_group_name(_group_id uuid, _name text)
