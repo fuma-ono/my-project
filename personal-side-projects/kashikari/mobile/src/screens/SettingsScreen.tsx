@@ -25,6 +25,7 @@ type Props = {
   onChangeAvatarPhoto?: (uri: string) => Promise<{ error: string | null }>;
   onOpenPremium: () => void;
   onOpenUsage: () => void;
+  onOpenReport: () => void;
   // デモモードでは実際のSupabase認証が無い(全てローカルstate)ため、
   // 「アカウントを保護する」セクション自体を出さない。
   isDemo?: boolean;
@@ -41,6 +42,7 @@ export default function SettingsScreen({
   onChangeAvatarPhoto,
   onOpenPremium,
   onOpenUsage,
+  onOpenReport,
   isDemo,
   onSignOut,
 }: Props) {
@@ -149,6 +151,13 @@ export default function SettingsScreen({
 
         <Pressable onPress={onOpenPremium} style={styles.premiumRow}>
           <Text style={styles.premiumRowText}>{t.settings.premiumRow}</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+        </Pressable>
+
+        {/* 会計レポート(96回目、Premium特典)。無課金でも入り口自体は
+            見せておき、中身の出し分けはReportScreen側で行う。 */}
+        <Pressable onPress={onOpenReport} style={[styles.premiumRow, styles.usageRow]}>
+          <Text style={styles.usageRowText}>{t.settings.reportRow}</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.muted} />
         </Pressable>
 

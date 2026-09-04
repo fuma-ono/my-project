@@ -19,9 +19,11 @@ import GroupsScreen from './src/screens/GroupsScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import PremiumScreen from './src/screens/PremiumScreen';
+import ReportScreen from './src/screens/ReportScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import SplashScreen from './src/screens/SplashScreen';
 import UsageScreen from './src/screens/UsageScreen';
+import { useAllMoneyEntries } from './src/hooks/useAllMoneyEntries';
 import { useAuth } from './src/hooks/useAuth';
 import { useGroupEntries } from './src/hooks/useGroupEntries';
 import { useGroupMembers } from './src/hooks/useGroupMembers';
@@ -54,6 +56,7 @@ type Screen =
   | { name: 'settings'; returnTo?: Screen }
   | { name: 'premium'; returnTo?: Screen }
   | { name: 'usage'; returnTo?: Screen }
+  | { name: 'report'; returnTo?: Screen }
   // 「グループ内の通知は、そのグループのみを表示するようにした方が
   // いい」という指摘への対応(88回目)。groupId/groupNameを渡すと
   // (グループ詳細画面のベルから開いた時)、全グループ横断ではなく
@@ -121,6 +124,11 @@ function AppInner() {
   // CSV出力(94回目)用。同じ理由で、groupSettings画面を開いている時だけ
   // 記録一覧を取得する軽量なフックを使う。
   const { entries: groupSettingsEntries } = useGroupEntries(screen.name === 'groupSettings' ? screen.group.id : null);
+  // 会計レポート(96回目)用。report画面を開いている時だけ、グループ
+  // 横断でお金の記録を取得する。
+  const { entries: reportEntries, loading: reportLoading } = useAllMoneyEntries(
+    screen.name === 'report' && !DEMO_MODE ? userId : null
+  );
   const [minSplashDone, setMinSplashDone] = useState(false);
   const [fontsLoaded] = useFonts({
     MPLUSRounded1c_400Regular,
@@ -353,6 +361,7 @@ function AppInner() {
           onChangeAvatarPhoto={updateAvatarPhoto}
           onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
           onOpenUsage={() => setScreen({ name: 'usage', returnTo: screen })}
+          onOpenReport={() => setScreen({ name: 'report', returnTo: screen })}
           onSignOut={signOut}
         />
       )}
@@ -365,6 +374,15 @@ function AppInner() {
       )}
       {screen.name === 'usage' && (
         <UsageScreen onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })} fetchStats={getUsageStats} />
+      )}
+      {screen.name === 'report' && (
+        <ReportScreen
+          onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })}
+          meId={userId}
+          entries={reportEntries}
+          loading={reportLoading}
+          onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
+        />
       )}
       {screen.name === 'notifications' && (
         <NotificationsScreen

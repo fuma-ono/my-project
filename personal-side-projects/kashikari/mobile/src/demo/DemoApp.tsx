@@ -5,15 +5,16 @@ import { useState } from 'react';
 import GroupsScreen from '../screens/GroupsScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import PremiumScreen from '../screens/PremiumScreen';
+import ReportScreen from '../screens/ReportScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import UsageScreen from '../screens/UsageScreen';
 import { useT } from '../i18n';
 import type { Group, Profile } from '../types';
 import DemoGroupScreen from './DemoGroupScreen';
-import { DEMO_GROUPS, DEMO_NOTIFICATIONS, DEMO_PROFILE } from './mockData';
+import { DEMO_ENTRIES, DEMO_GROUPS, DEMO_ME_ID, DEMO_NOTIFICATIONS, DEMO_PROFILE } from './mockData';
 
-// settings/premium/usage/notificationsは複数の入り口(グループ一覧・
-// グループ詳細)から開けるため、本番のApp.tsxと同じくreturnToで
+// settings/premium/usage/report/notificationsは複数の入り口(グループ
+// 一覧・グループ詳細)から開けるため、本番のApp.tsxと同じくreturnToで
 // 「戻る」先を持ち運ぶ。
 type Screen =
   | { name: 'groups' }
@@ -21,6 +22,7 @@ type Screen =
   | { name: 'settings'; returnTo?: Screen }
   | { name: 'premium'; returnTo?: Screen }
   | { name: 'usage'; returnTo?: Screen }
+  | { name: 'report'; returnTo?: Screen }
   | { name: 'notifications'; returnTo?: Screen };
 
 export default function DemoApp() {
@@ -57,6 +59,7 @@ export default function DemoApp() {
         }}
         onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
         onOpenUsage={() => setScreen({ name: 'usage', returnTo: screen })}
+        onOpenReport={() => setScreen({ name: 'report', returnTo: screen })}
         isDemo
       />
     );
@@ -72,6 +75,20 @@ export default function DemoApp() {
   if (screen.name === 'usage') {
     // デモモードには実データが無いため、常に空状態(実装④)を確認できる。
     return <UsageScreen onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })} fetchStats={async () => ({})} />;
+  }
+
+  if (screen.name === 'report') {
+    // DEMO_ENTRIESはグループ横断の固定データなので、そのまま渡せる
+    // (本番はSupabaseから都度取得するが、デモは静的データで十分)。
+    return (
+      <ReportScreen
+        onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })}
+        meId={DEMO_ME_ID}
+        entries={DEMO_ENTRIES}
+        loading={false}
+        onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
+      />
+    );
   }
 
   if (screen.name === 'notifications') {
