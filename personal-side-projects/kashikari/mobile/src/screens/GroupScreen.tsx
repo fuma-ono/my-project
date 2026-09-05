@@ -10,6 +10,7 @@ import Avatar from '../components/Avatar';
 import AvatarPicker from '../components/AvatarPicker';
 import BalanceCard from '../components/BalanceCard';
 import BottomTabBar, { type GroupTab } from '../components/BottomTabBar';
+import CelebrationModal from '../components/CelebrationModal';
 import EntryRow from '../components/EntryRow';
 import Fab from '../components/Fab';
 import HistoryEntryRow from '../components/HistoryEntryRow';
@@ -98,6 +99,13 @@ export default function GroupScreen({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  // 精算完了時の「紹介する」「レビュー依頼」ダイアログ(99回目、Alertから
+  // 独自Modalへの置き換え)。onDismiss発火時にどちらのボタンが押された
+  // かで処理を分ける必要があるため、真偽値ではなく次にやることの関数を
+  // refで持ち回す(下のonDismiss参照)。
+  const [referralModalOpen, setReferralModalOpen] = useState(false);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const afterReferralDismissRef = useRef<(() => void) | null>(null);
   const [shareSheetOpen, setShareSheetOpen] = useState(false);
   const [shareMessage, setShareMessage] = useState('');
   const [tab, setTab] = useState<Tab>('balance');
@@ -259,57 +267,65 @@ export default function GroupScreen({
     const prev = prevBalanceCountRef.current;
     if (prev !== null && prev > 0 && balances.length === 0) {
       logEvent('settlement_completed', { userId: meId, groupId: group.id });
-      // 「紹介する」ポップアップを閉じた(=「閉じる」を押した)後、条件を
-      // 満たしていればレビュー依頼ポップアップも続けて出す(reviewPrompt.ts
-      // 参照。同時に2つ出すと衝突するため必ず片方を閉じてから)。「紹介する」
-      // を選んだ場合は招待シートが開くため、その導線を邪魔しないよう
-      // こちらは出さない。
+      // 「紹介する」ポップアップを閉じた後、条件を満たしていればレビュー
+      // 依頼ポップアップも続けて出す(reviewPrompt.ts参照。同時に2つ出すと
+      // 衝突するため必ず片方を閉じてから)。「紹介する」を選んだ場合は
+      // 招待モーダルが開くため、その導線を邪魔しないようこちらは出さない。
       //
-      // 「閉じるを押すと真っ白い画面のまま固まる」というバグ報告への対応
-      // (99回目)。原因は、1つ目のAlert(紹介ポップアップ)がまだ閉じる
-      // アニメーション中のうちに、2つ目のAlert(レビュー依頼)を出そうと
-      // していたこと。iOSはネイティブのアラートを閉じている最中に次の
-      // アラートを提示しようとすると競合してしまう(このファイル内の
-      // ShareChannelSheet/InviteModalで既に踏んだのと同じ種類の不具合)。
-      // shouldShowReviewPrompt()自体は一瞬で終わる非同期処理のため、
-      // 実質「onPressの直後」に近いタイミングで2つ目のAlertが呼ばれて
-      // しまっていた。1つ目の閉じるアニメーションが確実に終わるまで、
-      // 短い遅延を挟んでから出すようにする。
-      const maybeShowReviewPrompt = () => {
-        void shouldShowReviewPrompt().then((should) => {
-          if (!should) return;
-          void markReviewPromptShown();
-          setTimeout(() => {
-            Alert.alert(t.group.reviewPromptTitle, t.group.reviewPromptMessage, [
-              { text: t.group.reviewPromptDismiss, style: 'cancel' },
-              {
-                text: t.group.reviewPromptNow,
-                onPress: () => {
-                  void markReviewed();
-                  openStoreReview();
-                },
-              },
-            ]);
-          }, 400);
-        });
-      };
-      const showReferral = () => {
-        Alert.alert(t.group.referralTitle, t.group.referralMessage, [
-          { text: t.group.referralDismiss, style: 'cancel', onPress: maybeShowReviewPrompt },
-          { text: t.group.referralNow, onPress: () => setInviteModalOpen(true) },
-        ]);
-      };
-      // 広告は紹介ダイアログより先に見せる(お祝いの瞬間そのものに広告を
+      // 「閉じるを押すと真っ白い画面のまま固まる」「紹介するを押しても
+      // 何も出てこない」というバグ報告への対応(99回目)。以前はAlert.alert
+      // を連続で呼んでおり、setTimeoutで遅延を挟んでも実機では解消しなかった
+      // (iOSのネイティブアラートは、1つを閉じている最中に次のアラートや
+      // 別のネイティブ画面を提示しようとすると競合しやすい)。このアプリで
+      // 既に確実に動いている「独自の<Modal>+onDismiss」方式
+      // (InviteModal/ShareChannelSheetと同じ)に統一し、Alertの連続呼び出し
+      // 自体をやめた。
+      //
+      // 広告は紹介モーダルより先に見せる(お祝いの瞬間そのものに広告を
       // 挟み、その後に紹介・レビューの導線を続ける流れ)。読み込みが
-      // 間に合っていなければ広告は出さず、すぐ紹介ダイアログに進む。
+      // 間に合っていなければ広告は出さず、すぐ紹介モーダルに進む。
       if (isPremium) {
-        showReferral();
+        setReferralModalOpen(true);
       } else {
-        void showCelebrationAdIfReady().then(showReferral);
+        void showCelebrationAdIfReady().then(() => setReferralModalOpen(true));
       }
     }
     prevBalanceCountRef.current = balances.length;
-  }, [balances.length, group.id, group.name, meId, t, isPremium]);
+  }, [balances.length, group.id, group.name, meId, isPremium]);
+
+  // 「紹介する」モーダルの閉じるアニメーションが完全に終わってから
+  // (onDismiss)、次にやること(レビュー依頼を出す/招待モーダルを開く/
+  // 何もしない)を実行する。
+  const dismissReferralModal = () => setReferralModalOpen(false);
+  const onReferralDismissed = () => {
+    const next = afterReferralDismissRef.current;
+    afterReferralDismissRef.current = null;
+    next?.();
+  };
+  const pressReferralClose = () => {
+    afterReferralDismissRef.current = () => {
+      void shouldShowReviewPrompt().then((should) => {
+        if (!should) return;
+        void markReviewPromptShown();
+        setReviewModalOpen(true);
+      });
+    };
+    dismissReferralModal();
+  };
+  const pressReferralNow = () => {
+    afterReferralDismissRef.current = () => setInviteModalOpen(true);
+    dismissReferralModal();
+  };
+
+  // レビュー依頼モーダル側は、この後に別のネイティブUIを連鎖して開く
+  // わけではない(Linking.openURLでApp Storeを開くだけ)ため、
+  // onDismissでの待ち合わせは不要。
+  const pressReviewDismiss = () => setReviewModalOpen(false);
+  const pressReviewNow = () => {
+    setReviewModalOpen(false);
+    void markReviewed();
+    openStoreReview();
+  };
 
   const avatarPicker = (
     <AvatarPicker
@@ -364,6 +380,31 @@ export default function GroupScreen({
         }
         return res;
       }}
+    />
+  );
+
+  const referralModal = (
+    <CelebrationModal
+      visible={referralModalOpen}
+      title={t.group.referralTitle}
+      message={t.group.referralMessage}
+      cancelLabel={t.group.referralDismiss}
+      confirmLabel={t.group.referralNow}
+      onCancel={pressReferralClose}
+      onConfirm={pressReferralNow}
+      onDismiss={onReferralDismissed}
+    />
+  );
+
+  const reviewPromptModal = (
+    <CelebrationModal
+      visible={reviewModalOpen}
+      title={t.group.reviewPromptTitle}
+      message={t.group.reviewPromptMessage}
+      cancelLabel={t.group.reviewPromptDismiss}
+      confirmLabel={t.group.reviewPromptNow}
+      onCancel={pressReviewDismiss}
+      onConfirm={pressReviewNow}
     />
   );
 
@@ -687,6 +728,8 @@ export default function GroupScreen({
       />
       {avatarPicker}
       {inviteModal}
+      {referralModal}
+      {reviewPromptModal}
       {shareChannelSheet}
       {tab === 'balance' && (
         <UnpaidMembersModal

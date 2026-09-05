@@ -15,6 +15,7 @@ import BottomTabBar, { type GroupTab } from '../components/BottomTabBar';
 import EntryRow from '../components/EntryRow';
 import Fab from '../components/Fab';
 import HistoryEntryRow from '../components/HistoryEntryRow';
+import CelebrationModal from '../components/CelebrationModal';
 import InviteModal from '../components/InviteModal';
 import NetSummary from '../components/NetSummary';
 import SettlementProgress from '../components/SettlementProgress';
@@ -76,6 +77,7 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   const [showSettled, setShowSettled] = useState(false);
   const [unpaidModalOpen, setUnpaidModalOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [referralModalOpen, setReferralModalOpen] = useState(false);
   const [shareSheetOpen, setShareSheetOpen] = useState(false);
   const [shareMessage, setShareMessage] = useState('');
   const [invites, setInvites] = useState<GroupInvite[]>([]);
@@ -187,24 +189,32 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
   }, [isPremium]);
 
   // 貸し借りが0件になった瞬間だけ紹介導線を出す(本番のGroupScreenと同じ狙い)。
+  // Alertの連続呼び出しをやめ、独自Modal+onDismiss方式に統一した経緯は
+  // 本番のGroupScreen.tsxの同じ箇所のコメント参照(99回目)。
   const prevBalanceCountRef = useRef<number | null>(null);
   useEffect(() => {
     const prev = prevBalanceCountRef.current;
     if (prev !== null && prev > 0 && balances.length === 0) {
-      const showReferral = () => {
-        Alert.alert(t.group.referralTitle, t.group.referralMessage, [
-          { text: t.group.referralDismiss, style: 'cancel' },
-          { text: t.group.referralNow, onPress: () => setInviteModalOpen(true) },
-        ]);
-      };
       if (isPremium) {
-        showReferral();
+        setReferralModalOpen(true);
       } else {
-        void showCelebrationAdIfReady().then(showReferral);
+        void showCelebrationAdIfReady().then(() => setReferralModalOpen(true));
       }
     }
     prevBalanceCountRef.current = balances.length;
-  }, [balances.length, t, isPremium]);
+  }, [balances.length, isPremium]);
+
+  const afterReferralDismissRef = useRef<(() => void) | null>(null);
+  const onReferralDismissed = () => {
+    const next = afterReferralDismissRef.current;
+    afterReferralDismissRef.current = null;
+    next?.();
+  };
+  const pressReferralClose = () => setReferralModalOpen(false);
+  const pressReferralNow = () => {
+    afterReferralDismissRef.current = () => setInviteModalOpen(true);
+    setReferralModalOpen(false);
+  };
 
   const inviteMember = async (invitedName: string) => {
     const invite: GroupInvite = {
@@ -725,6 +735,17 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
           setMembers((prev) => prev.map((m) => (m.id === meId ? { ...m, avatar_emoji: emoji } : m)));
         }}
         onClose={() => setAvatarPickerOpen(false)}
+      />
+
+      <CelebrationModal
+        visible={referralModalOpen}
+        title={t.group.referralTitle}
+        message={t.group.referralMessage}
+        cancelLabel={t.group.referralDismiss}
+        confirmLabel={t.group.referralNow}
+        onCancel={pressReferralClose}
+        onConfirm={pressReferralNow}
+        onDismiss={onReferralDismissed}
       />
 
       <InviteModal
