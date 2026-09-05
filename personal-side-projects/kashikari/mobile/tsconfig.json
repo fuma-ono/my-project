@@ -1,0 +1,12 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  // supabase/functions/ はSupabase Edge Functions用のDenoコード。
+  // グローバル(Deno)やリモートURLからのimportなど、このアプリ本体
+  // (React Native/Expo)とは全く別のランタイム向けのため、アプリの
+  // tscでは型チェックしない(Supabase CLI/Denoの方で別途チェックする)。
+  "exclude": ["supabase/functions/**"]
+}

@@ -1,0 +1,184 @@
+import { useCallback, useEffect, useState } from 'react';
+
+import { useT } from '../i18n';
+import { logEvent } from '../lib/analytics';
+import { uploadIconPhoto } from '../lib/iconPhoto';
+import { notifyGroup } from '../lib/pushNotifications';
+import { supabase } from '../lib/supabase';
+import type { Group } from '../types';
+import { prefetchSignedUrls } from './useSignedUrl';
+
+export function useGroups(userId: string | null) {
+  const t = useT();
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    if (!userId) return;
+    setLoading(true);
+    // RLSにより、自分が参加しているグループしか返ってこない。
+    const { data, error } = await supabase.from('groups').select('*').order('created_at', { ascending: false });
+    if (!error && data) {
+      setGroups(data);
+      // 一覧の各行がMarkコンポーネントで写真アイコンの署名付きURLを
+      // 個別に取りに行く前に、まとめて1回のリクエストで先読みしておく
+      // (「グループ選択で一瞬アイコンが出ない」への横展開対応、99回目)。
+      prefetchSignedUrls(
+        'avatars',
+        data.map((g) => g.icon_photo_path)
+      );
+    }
+    setLoading(false);
+  }, [userId]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const createGroup = useCallback(
+    async (name: string, iconEmoji: string | null = null) => {
+      const trimmed = name.trim();
+      if (!trimmed) return { error: t.groupsHook.nameRequired, group: null };
+      const { data, error } = await supabase.rpc('create_group', { _name: trimmed, _icon_emoji: iconEmoji });
+      if (error) return { error: error.message, group: null };
+      const group = data as Group;
+      logEvent('group_created', { userId, groupId: group.id });
+      await refresh();
+      return { error: null, group };
+    },
+    [refresh, t, userId]
+  );
+
+  const joinGroup = useCallback(
+    async (inviteCode: string) => {
+      const trimmed = inviteCode.trim();
+      if (!trimmed) return { error: t.groupsHook.codeRequired, group: null };
+      const { data, error } = await supabase.rpc('join_group', { _invite_code: trimmed });
+      if (error) return { error: error.message, group: null };
+      const group = data as Group;
+      logEvent('invite_joined', { userId, groupId: group.id });
+      await refresh();
+      return { error: null, group };
+    },
+    [refresh, t, userId]
+  );
+
+  const leaveGroup = useCallback(
+    async (groupId: string) => {
+      // 「グループを抜けたら相手に通知は行くのか?」という指摘への対応。
+      // これまでは何も通知していなかった(退出したことに他のメンバーが
+      // 気づけない)。send-push Edge Function側は「呼び出したユーザー
+      // 自身がそのグループのメンバーであること」をRLS経由で検証するため、
+      // leave_groupで自分を抜けさせた後では検証に失敗し送れなくなる。
+      // 必ず抜ける前に、残りのメンバーIDを集めてから通知を送る。
+      // 通知(Edge Function呼び出し)がleave_groupのRPCと同時並行で走ると、
+      // 先にleave_groupの方が完了した場合にメンバーシップ検証で弾かれて
+      // しまう恐れがあるため、ここは(他の呼び出し箇所と違い)結果を待つ。
+      const { data: members } = await supabase.from('group_members').select('user_id').eq('group_id', groupId);
+      const recipientIds = (members ?? []).map((m) => m.user_id as string).filter((id) => id !== userId);
+      if (recipientIds.length > 0) await notifyGroup({ groupId, kind: 'left_group', recipientIds });
+
+      const { error } = await supabase.rpc('leave_group', { _group_id: groupId });
+      if (error) return { error: error.message };
+      await refresh();
+      return { error: null };
+    },
+    [refresh, userId]
+  );
+
+  const updateGroupIcon = useCallback(
+    async (groupId: string, iconEmoji: string) => {
+      // 写真とは排他のため、絵文字を選んだらicon_photo_pathをRPC側で
+      // 明示的にクリアする(_icon_photo_pathを渡さない=デフォルトのnull)。
+      const { error } = await supabase.rpc('update_group_icon', { _group_id: groupId, _icon_emoji: iconEmoji });
+      if (error) return { error: error.message };
+      await refresh();
+      return { error: null };
+    },
+    [refresh]
+  );
+
+  // 「グループ内の設定ボタンを押したら、グループの設定(アイコンや
+  // グループ名など)を変更できるようにした方がいい」という指摘への
+  // 対応(87回目)。updateGroupIconと同じパターン。
+  const updateGroupName = useCallback(
+    async (groupId: string, name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return { error: t.groupsHook.nameRequired };
+      const { error } = await supabase.rpc('update_group_name', { _group_id: groupId, _name: trimmed });
+      if (error) return { error: error.message };
+      await refresh();
+      return { error: null };
+    },
+    [refresh, t]
+  );
+
+  // 「グループのアイコンも写真を選べるように」への対応。
+  const updateGroupIconPhoto = useCallback(
+    async (groupId: string, photoUri: string) => {
+      const uploadRes = await uploadIconPhoto('groups', groupId, photoUri, t);
+      if (uploadRes.error) return { error: uploadRes.error };
+      const { error } = await supabase.rpc('update_group_icon', {
+        _group_id: groupId,
+        _icon_emoji: null,
+        _icon_photo_path: uploadRes.path,
+      });
+      if (error) return { error: error.message };
+      await refresh();
+      return { error: null };
+    },
+    [refresh, t]
+  );
+
+  // 「メンバーを削除する(管理者のみ)」への対応(89回目)。leaveGroupと
+  // 違い、自分ではなく他のメンバーをRPC側で管理者チェックした上で外す。
+  const removeMember = useCallback(async (groupId: string, memberUserId: string) => {
+    const { error } = await supabase.rpc('remove_group_member', { _group_id: groupId, _user_id: memberUserId });
+    if (error) return { error: error.message };
+    return { error: null };
+  }, []);
+
+  // 「グループを削除する(管理者のみ)」への対応(89回目)。グループ一覧
+  // からこのグループ自体が消えるため、呼び出し側でホーム画面に戻す
+  // 必要がある。
+  const deleteGroup = useCallback(
+    async (groupId: string) => {
+      const { error } = await supabase.rpc('delete_group', { _group_id: groupId });
+      if (error) return { error: error.message };
+      await refresh();
+      return { error: null };
+    },
+    [refresh]
+  );
+
+  // サークル会計(97回目、管理者のみ)。RPC側で管理者チェックする。
+  // 呼び出し元(GroupSettingsScreen)がuseGroupDuesのrefreshで
+  // 最新状態を取り直す想定なので、ここではrefresh()は呼ばない。
+  const setGroupDues = useCallback(async (groupId: string, amount: number, currency: string, label: string) => {
+    const { error } = await supabase.rpc('set_group_dues', { _group_id: groupId, _amount: amount, _currency: currency, _label: label });
+    if (error) return { error: error.message };
+    return { error: null };
+  }, []);
+
+  const stopGroupDues = useCallback(async (groupId: string) => {
+    const { error } = await supabase.rpc('stop_group_dues', { _group_id: groupId });
+    if (error) return { error: error.message };
+    return { error: null };
+  }, []);
+
+  return {
+    groups,
+    loading,
+    refresh,
+    createGroup,
+    joinGroup,
+    leaveGroup,
+    updateGroupIcon,
+    updateGroupIconPhoto,
+    updateGroupName,
+    removeMember,
+    deleteGroup,
+    setGroupDues,
+    stopGroupDues,
+  };
+}

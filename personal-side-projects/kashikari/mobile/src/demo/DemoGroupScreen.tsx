@@ -1,0 +1,898 @@
+// デモモード専用。GroupScreen.tsxと同じ見た目・操作感を、Supabaseを
+// 一切呼ばずローカルstateだけで再現する(スクリーンショット・動作確認用)。
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { Alert, Platform, Pressable, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import AddEntrySheet from '../components/AddEntrySheet';
+import AutoSettlePlan from '../components/AutoSettlePlan';
+import Avatar from '../components/Avatar';
+import AvatarPicker from '../components/AvatarPicker';
+import BalanceCard from '../components/BalanceCard';
+import BottomTabBar, { type GroupTab } from '../components/BottomTabBar';
+import EntryRow from '../components/EntryRow';
+import Fab from '../components/Fab';
+import HistoryEntryRow from '../components/HistoryEntryRow';
+import CelebrationModal from '../components/CelebrationModal';
+import InviteModal from '../components/InviteModal';
+import NetSummary from '../components/NetSummary';
+import SettlementProgress from '../components/SettlementProgress';
+import ShareChannelSheet from '../components/ShareChannelSheet';
+import Toast from '../components/Toast';
+import UnpaidMembersModal from '../components/UnpaidMembersModal';
+import { useT } from '../i18n';
+import { preloadCelebrationAd, showCelebrationAdIfReady } from '../lib/ads';
+import { computeBalances, computeMyNet, computeSimplifiedSettlement, entryFromKey, entryToKey } from '../lib/balances';
+import { groupEntriesByDate } from '../lib/dateGroups';
+import { buildInviteUrl } from '../lib/invite';
+import { splitAmount } from '../lib/split';
+import { usePremiumContext } from '../lib/premiumContext';
+import { isWithinFreeHistoryWindow } from '../lib/premiumLimits';
+import GroupSettingsScreen from '../screens/GroupSettingsScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
+import PremiumScreen from '../screens/PremiumScreen';
+import { avatarColor, colors, fonts } from '../theme';
+import type { BalanceRow, Entry, EntryType, Group, GroupDues, GroupInvite, Profile, SimplifiedTransaction } from '../types';
+import { DEMO_ENTRIES, DEMO_GROUP, DEMO_ME_ID, DEMO_MEMBERS, DEMO_NOTIFICATIONS } from './mockData';
+
+type Tab = GroupTab;
+let demoIdSeq = 100;
+
+// GroupScreen.tsxと同じ値(詳細はそちらのコメント参照)。
+const EXTRA_TOP_PADDING = 8;
+
+export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
+  const t = useT();
+  const insets = useSafeAreaInsets();
+  const [entries, setEntries] = useState<Entry[]>(DEMO_ENTRIES);
+  const [members, setMembers] = useState<Profile[]>(DEMO_MEMBERS);
+  const [group, setGroup] = useState<Group>(DEMO_GROUP);
+  // 「グループ内の設定ボタンを押したら、グループの設定を変更できるように」
+  // (87回目)。個人設定(onOpenSettings)とは別に、この画面内だけで完結する。
+  const [groupSettingsOpen, setGroupSettingsOpen] = useState(false);
+  // 89回目で追加した「このグループの通知をミュート」のデモ用ローカルstate。
+  const [groupMuted, setGroupMuted] = useState(false);
+  // サークル会計(97回目)。デモではDEMO_ME_IDが常に管理者なので、
+  // 設定・停止のUI両方を確認できる。
+  const [duesState, setDuesState] = useState<GroupDues | null>(null);
+  // 「グループ内の通知は、そのグループのみを表示するようにした方が
+  // いい」という指摘への対応(88回目)。本番はApp.tsx側でグループごとの
+  // 既読時刻(group_members.notifications_seen_at)をSupabaseに持たせたが、
+  // デモ側はSupabaseを呼ばないため、この画面のローカルstateだけで
+  // 同じ見た目(このグループだけの一覧・未読バッジ)を再現する。
+  const [groupNotificationsOpen, setGroupNotificationsOpen] = useState(false);
+  // 94回目: 履歴タブの3ヶ月制限バナーから直接Premium画面を開けるように
+  // した。isPremium自体はApp.tsx側のPremiumProvider(demo=true)から
+  // 取得するので、常にfalse(デモでは購入できない)。
+  const [premiumOpen, setPremiumOpen] = useState(false);
+  const { isPremium } = usePremiumContext();
+  const [groupNotificationsSeenAt, setGroupNotificationsSeenAt] = useState(new Date(0).toISOString());
+  const groupNotifications = useMemo(() => DEMO_NOTIFICATIONS.filter((n) => n.group_id === group.id), [group.id]);
+  const hasUnreadGroupNotifications = groupNotifications.some((n) => n.created_at > groupNotificationsSeenAt);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [tab, setTab] = useState<Tab>('balance');
+  const [showSettled, setShowSettled] = useState(false);
+  const [unpaidModalOpen, setUnpaidModalOpen] = useState(false);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [referralModalOpen, setReferralModalOpen] = useState(false);
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
+  const [shareMessage, setShareMessage] = useState('');
+  const [invites, setInvites] = useState<GroupInvite[]>([]);
+  const [remindToastMessage, setRemindToastMessage] = useState<string | null>(null);
+  const [inviteToastMessage, setInviteToastMessage] = useState<string | null>(null);
+  const [fabHintToastVisible, setFabHintToastVisible] = useState(false);
+  // 招待送信直後、InviteModalが実際に閉じ終わってから共有シートを
+  // 開くためのフラグ(詳細はGroupScreen.tsxの同じ箇所のコメント参照)。
+  const pendingShareRef = useRef(false);
+  const meId = DEMO_ME_ID;
+  const me = members.find((m) => m.id === meId);
+
+  const nameOf = (id: string) =>
+    members.find((m) => m.id === id)?.display_name ?? invites.find((i) => i.id === id)?.invited_name ?? t.group.unknownMember;
+  const emojiOf = (id: string) => members.find((m) => m.id === id)?.avatar_emoji ?? null;
+  const balances = useMemo(() => computeBalances(entries, meId), [entries]);
+  const netTotals = useMemo(() => computeMyNet(entries, meId), [entries]);
+  const visibleEntries = useMemo(
+    () => (showSettled ? entries : entries.filter((e) => e.settle_status !== 'confirmed')),
+    [entries, showSettled]
+  );
+  const sections = useMemo(
+    () => groupEntriesByDate(visibleEntries, { today: t.dateGroups.today, yesterday: t.dateGroups.yesterday }),
+    [visibleEntries, t]
+  );
+  const settledCount = entries.filter((e) => e.settle_status === 'confirmed').length;
+
+  // GroupScreen.tsxと同じ3ヶ月制限ロジック(94回目)。
+  const { confirmedEntries, isOlderThanFreeWindow } = useMemo(() => {
+    const confirmed = entries
+      .filter((e) => e.settle_status === 'confirmed' && e.confirmed_at)
+      .slice()
+      .sort((a, b) => ((a.confirmed_at as string) < (b.confirmed_at as string) ? 1 : -1));
+    const hasHidden = !isPremium && confirmed.some((e) => !isWithinFreeHistoryWindow(e.confirmed_at as string));
+    const visible = isPremium ? confirmed : confirmed.filter((e) => isWithinFreeHistoryWindow(e.confirmed_at as string));
+    return { confirmedEntries: visible, isOlderThanFreeWindow: hasHidden };
+  }, [entries, isPremium]);
+
+  const historySections = useMemo(
+    () =>
+      groupEntriesByDate(
+        confirmedEntries.map((e) => ({ ...e, created_at: e.confirmed_at as string })),
+        { today: t.dateGroups.today, yesterday: t.dateGroups.yesterday }
+      ),
+    [confirmedEntries, t]
+  );
+
+  const autoSettlePlans = useMemo(() => {
+    const simplified = computeSimplifiedSettlement(entries);
+    const byCurrency = new Map<string, SimplifiedTransaction[]>();
+    for (const tx of simplified) {
+      const list = byCurrency.get(tx.currency) ?? [];
+      list.push(tx);
+      byCurrency.set(tx.currency, list);
+    }
+    const pairwiseCountByCurrency = new Map<string, number>();
+    for (const row of balances) {
+      if (row.type !== 'money' || !row.currency) continue;
+      pairwiseCountByCurrency.set(row.currency, (pairwiseCountByCurrency.get(row.currency) ?? 0) + 1);
+    }
+    return [...byCurrency.entries()]
+      .filter(([currency, txs]) => txs.length < (pairwiseCountByCurrency.get(currency) ?? Infinity))
+      .map(([currency, transactions]) => ({ currency, transactions }));
+  }, [entries, balances]);
+
+  const { balanceSections, receivingRows } = useMemo(() => {
+    const receiving: BalanceRow[] = [];
+    const paying: BalanceRow[] = [];
+    const other: BalanceRow[] = [];
+    for (const row of balances) {
+      if (row.mine && row.creditor === meId) receiving.push(row);
+      else if (row.mine && row.debtor === meId) paying.push(row);
+      else other.push(row);
+    }
+    return {
+      balanceSections: [
+        { title: t.group.receivingSection, data: receiving },
+        { title: t.group.payingSection, data: paying },
+        { title: t.group.otherSection, data: other },
+      ].filter((s) => s.data.length > 0),
+      receivingRows: receiving,
+    };
+  }, [balances, meId, t]);
+
+  const settlementProgress = useMemo(() => {
+    const remaining = balances.length;
+    const paid = balances.filter((r) => r.type === 'money' && r.status === 'paid').length;
+    return { remaining, paid };
+  }, [balances]);
+
+  const settleAllMoney = async (currency: string) => {
+    const now = new Date().toISOString();
+    setEntries((prev) =>
+      prev.map((e) =>
+        e.type === 'money' && (e.currency || 'JPY') === currency && e.settle_status !== 'confirmed'
+          ? { ...e, settle_status: 'confirmed', confirmed_at: now, updated_by: meId, updated_at: now }
+          : e
+      )
+    );
+    return { error: null };
+  };
+
+  // 精算完了時のお祝いインタースティシャル広告(98回目)。本番のGroupScreen
+  // と同じ狙いだが、Web版ではads.web.tsのスタブが常にfalseを即座に返す
+  // ため、実際に広告が挟まる様子はここでは確認できない(実機のみ)。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!isPremium) preloadCelebrationAd();
+  }, [isPremium]);
+
+  // 貸し借りが0件になった瞬間だけ紹介導線を出す(本番のGroupScreenと同じ狙い)。
+  // Alertの連続呼び出しをやめ、独自Modal+onDismiss方式に統一した経緯は
+  // 本番のGroupScreen.tsxの同じ箇所のコメント参照(99回目)。
+  const prevBalanceCountRef = useRef<number | null>(null);
+  useEffect(() => {
+    const prev = prevBalanceCountRef.current;
+    if (prev !== null && prev > 0 && balances.length === 0) {
+      if (isPremium) {
+        setReferralModalOpen(true);
+      } else {
+        void showCelebrationAdIfReady().then(() => setReferralModalOpen(true));
+      }
+    }
+    prevBalanceCountRef.current = balances.length;
+  }, [balances.length, isPremium]);
+
+  const afterReferralDismissRef = useRef<(() => void) | null>(null);
+  const onReferralDismissed = () => {
+    const next = afterReferralDismissRef.current;
+    afterReferralDismissRef.current = null;
+    next?.();
+  };
+  const pressReferralClose = () => setReferralModalOpen(false);
+  const pressReferralNow = () => {
+    afterReferralDismissRef.current = () => setInviteModalOpen(true);
+    setReferralModalOpen(false);
+  };
+
+  const inviteMember = async (invitedName: string) => {
+    const invite: GroupInvite = {
+      id: `demo-invite-${demoIdSeq++}`,
+      group_id: group.id,
+      invited_name: invitedName,
+      status: 'pending',
+      created_by: meId,
+      created_at: new Date().toISOString(),
+      joined_user_id: null,
+      joined_at: null,
+    };
+    setInvites((prev) => [...prev, invite]);
+    return { error: null };
+  };
+
+  // 「共有する時にLINEやメールへのリンクを送れるようにしてほしい」への
+  // 対応(詳細はGroupScreen.tsxの同じ箇所のコメント参照)。
+  const triggerPendingShare = () => {
+    if (!pendingShareRef.current) return;
+    pendingShareRef.current = false;
+    const url = buildInviteUrl(group.invite_code);
+    setShareMessage(t.group.inviteMessage(group.name, url, group.invite_code));
+    setShareSheetOpen(true);
+  };
+
+  // 「招待した相手が参加する前でも記録できる」対応(詳細はuseGroupData.tsの
+  // 同じ箇所のコメント参照)。実メンバーIDならfrom_user/to_user、招待中の
+  // 相手(group_invites.id)ならfrom_invite/to_inviteに入れる。
+  const personColumns = (id: string, prefix: 'from' | 'to'): Pick<Entry, 'from_user' | 'from_invite'> | Pick<Entry, 'to_user' | 'to_invite'> => {
+    const isMember = members.some((m) => m.id === id);
+    return prefix === 'from'
+      ? { from_user: isMember ? id : null, from_invite: isMember ? null : id }
+      : { to_user: isMember ? id : null, to_invite: isMember ? null : id };
+  };
+
+  const addEntry = async (input: {
+    fromUser: string;
+    toUser: string;
+    type: EntryType;
+    amount: number | null;
+    currency: string | null;
+    description: string;
+    photoUri?: string | null;
+  }) => {
+    const entry: Entry = {
+      id: `demo-${demoIdSeq++}`,
+      group_id: group.id,
+      ...(personColumns(input.fromUser, 'from') as Pick<Entry, 'from_user' | 'from_invite'>),
+      ...(personColumns(input.toUser, 'to') as Pick<Entry, 'to_user' | 'to_invite'>),
+      type: input.type,
+      amount: input.amount,
+      currency: input.currency,
+      description: input.description || null,
+      photo_path: null,
+      settle_status: 'unpaid',
+      paid_at: null,
+      confirmed_at: null,
+      created_by: meId,
+      created_at: new Date().toISOString(),
+      updated_by: null,
+      updated_at: null,
+    };
+    setEntries((prev) => [entry, ...prev]);
+    return { error: null };
+  };
+
+  const addSplitEntry = async (input: {
+    payer: string;
+    participantIds: string[];
+    totalAmount: number;
+    currency: string;
+    description: string;
+    photoUri?: string | null;
+  }) => {
+    const others = input.participantIds.filter((id) => id !== input.payer);
+    if (others.length === 0) return { error: t.addEntry.splitNeedOthersError };
+    const shares = splitAmount(input.totalAmount, input.participantIds.length, input.currency);
+    const newEntries: Entry[] = others.map((id) => ({
+      id: `demo-${demoIdSeq++}`,
+      group_id: group.id,
+      ...(personColumns(input.payer, 'from') as Pick<Entry, 'from_user' | 'from_invite'>),
+      ...(personColumns(id, 'to') as Pick<Entry, 'to_user' | 'to_invite'>),
+      type: 'money',
+      amount: shares[input.participantIds.indexOf(id)],
+      currency: input.currency,
+      description: input.description || null,
+      photo_path: null,
+      settle_status: 'unpaid',
+      paid_at: null,
+      confirmed_at: null,
+      created_by: meId,
+      created_at: new Date().toISOString(),
+      updated_by: null,
+      updated_at: null,
+    }));
+    setEntries((prev) => [...newEntries, ...prev]);
+    return { error: null };
+  };
+
+  // 台帳の「精算済みにする/未精算に戻す」(1件単位の手動オーバーライド)。
+  const toggleSettled = (e: Entry) =>
+    setEntries((prev) =>
+      prev.map((x) => {
+        if (x.id !== e.id) return x;
+        const now = new Date().toISOString();
+        return x.settle_status === 'confirmed'
+          ? { ...x, settle_status: 'unpaid', paid_at: null, confirmed_at: null, updated_by: meId, updated_at: now }
+          : { ...x, settle_status: 'confirmed', confirmed_at: now, updated_by: meId, updated_at: now };
+      })
+    );
+  const deleteEntry = (e: Entry) => setEntries((prev) => prev.filter((x) => x.id !== e.id));
+
+  // 記録の内容(金額・通貨・メモ)の編集。デモはSupabase Storageに実際
+  // にはアップロードしないため、レシートの新規追加はフォーム内の
+  // プレビューだけに留め(保存後には反映しない)、削除(removePhoto)
+  // だけ反映する。
+  const updateEntry = (
+    e: Entry,
+    input: { amount: number | null; currency: string | null; description: string; photoUri?: string | null; removePhoto?: boolean }
+  ) => {
+    setEntries((prev) =>
+      prev.map((x) => {
+        if (x.id !== e.id) return x;
+        return {
+          ...x,
+          amount: x.type === 'money' ? input.amount : x.amount,
+          currency: x.type === 'money' ? input.currency : x.currency,
+          description: input.description || null,
+          photo_path: input.removePhoto ? null : x.photo_path,
+          updated_by: meId,
+          updated_at: new Date().toISOString(),
+        };
+      })
+    );
+    return Promise.resolve({ error: null });
+  };
+
+  // 頼みごと専用: 一括で直接confirmedにする。
+  const settlePair = (type: EntryType, a: string, b: string, currency: string | null) => {
+    const now = new Date().toISOString();
+    setEntries((prev) =>
+      prev.map((e) => {
+        if (e.settle_status === 'confirmed' || e.type !== type) return e;
+        const match =
+          type === 'money'
+            ? (e.currency || 'JPY') === (currency || 'JPY') &&
+              ((entryFromKey(e) === a && entryToKey(e) === b) || (entryFromKey(e) === b && entryToKey(e) === a))
+            : entryFromKey(e) === a && entryToKey(e) === b;
+        return match ? { ...e, settle_status: 'confirmed', confirmed_at: now, updated_by: meId, updated_at: now } : e;
+      })
+    );
+  };
+
+  // お金の「支払った」/「受け取った」の2段階確認。
+  const markPaid = (a: string, b: string, currency: string | null) => {
+    const now = new Date().toISOString();
+    setEntries((prev) =>
+      prev.map((e) => {
+        if (e.type !== 'money' || e.settle_status !== 'unpaid') return e;
+        const match =
+          (e.currency || 'JPY') === (currency || 'JPY') &&
+          ((entryFromKey(e) === a && entryToKey(e) === b) || (entryFromKey(e) === b && entryToKey(e) === a));
+        return match ? { ...e, settle_status: 'paid', paid_at: now, updated_by: meId, updated_at: now } : e;
+      })
+    );
+    return Promise.resolve({ error: null });
+  };
+  const confirmReceived = (a: string, b: string, currency: string | null) => {
+    const now = new Date().toISOString();
+    setEntries((prev) =>
+      prev.map((e) => {
+        if (e.type !== 'money' || e.settle_status !== 'paid') return e;
+        const match =
+          (e.currency || 'JPY') === (currency || 'JPY') &&
+          ((entryFromKey(e) === a && entryToKey(e) === b) || (entryFromKey(e) === b && entryToKey(e) === a));
+        return match ? { ...e, settle_status: 'confirmed', confirmed_at: now, updated_by: meId, updated_at: now } : e;
+      })
+    );
+    return Promise.resolve({ error: null });
+  };
+
+  const pendingInvites = useMemo(() => invites.filter((i) => i.status === 'pending'), [invites]);
+
+  // 「グループ内の設定ボタンを押したら、グループの設定(アイコンや
+  // グループ名など)を変更できるようにした方がいい」という指摘への
+  // 対応(87回目)。GroupScreen.tsx側は本番のナビゲーション(App.tsx)に
+  // 新しい画面を追加したが、デモ側はDemoGroupScreenがgroup状態を丸ごと
+  // ローカルで持っているため、DemoApp.tsx側に画面を増やさず、この
+  // コンポーネント内だけで完結するシンプルな切り替えにした。
+  //
+  // 89回目で追加したメンバー削除・グループ削除も同じ考え方でローカルの
+  // members/onBackだけで完結させている。DEMO_GROUP.created_byはDEMO_ME_ID
+  // (=自分)なので、デモでは常に管理者としてこれらのUIを確認できる。
+  // グループ削除は実際にはDEMO_GROUPSから消さない(ホーム画面のグループ
+  // 一覧はデモ用の固定データのため)。ホーム画面に戻る所までを再現する。
+  if (groupSettingsOpen) {
+    return (
+      <GroupSettingsScreen
+        group={group}
+        members={members}
+        meId={meId}
+        onBack={() => setGroupSettingsOpen(false)}
+        onChangeName={async (name) => {
+          setGroup((prev) => ({ ...prev, name: name.trim() }));
+          return { error: null };
+        }}
+        onChangeIcon={async (emoji) => {
+          setGroup((prev) => ({ ...prev, icon_emoji: emoji, icon_photo_path: null }));
+          return { error: null };
+        }}
+        isMuted={groupMuted}
+        onToggleMute={async (muted) => {
+          setGroupMuted(muted);
+          return { error: null };
+        }}
+        onRemoveMember={async (userId) => {
+          setMembers((prev) => prev.filter((m) => m.id !== userId));
+          return { error: null };
+        }}
+        onDeleteGroup={async () => {
+          setGroupSettingsOpen(false);
+          onBack();
+          return { error: null };
+        }}
+        entries={entries}
+        onOpenPremium={() => {
+          setGroupSettingsOpen(false);
+          setPremiumOpen(true);
+        }}
+        dues={duesState}
+        onSetDues={async (amount) => {
+          setDuesState({
+            group_id: group.id,
+            amount,
+            currency: 'JPY',
+            label: '会費',
+            active: true,
+            created_by: DEMO_ME_ID,
+            updated_at: new Date().toISOString(),
+            last_generated_month: null,
+          });
+          return { error: null };
+        }}
+        onStopDues={async () => {
+          setDuesState((prev) => (prev ? { ...prev, active: false } : prev));
+          return { error: null };
+        }}
+      />
+    );
+  }
+
+  if (groupNotificationsOpen) {
+    return (
+      <NotificationsScreen
+        onBack={() => setGroupNotificationsOpen(false)}
+        items={groupNotifications}
+        loading={false}
+        onRefresh={async () => {}}
+        scopedGroupName={group.name}
+      />
+    );
+  }
+
+  if (premiumOpen) {
+    return <PremiumScreen onBack={() => setPremiumOpen(false)} onView={() => {}} onPurchased={() => {}} />;
+  }
+
+  const header = (
+    <View>
+      {/* 「デモモードの上部は消せないの？大学の友達タブと重なってしまってる」
+          という指摘を受け、ヘッダーに重なっていたバナーを削除した。
+          デモモードであること自体は、設定画面などから引き続き分かる。 */}
+      <View style={styles.headerShadowWrap}>
+        {/* ヘッダーの2層構成(横グラデーション+縦の黒フェード)の詳細は
+            GroupScreen.tsxの同じ箇所のコメント参照。 */}
+        <View style={[styles.headerGradientBase, { paddingTop: insets.top + EXTRA_TOP_PADDING }]}>
+          <LinearGradient
+            colors={[colors.headerAccent, colors.headerPlum]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <LinearGradient
+            colors={[colors.headerShadeTop, colors.headerShadeBottom]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 0.75 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.headerRow}>
+            <Pressable onPress={onBack} hitSlop={10} accessibilityLabel={t.group.back}>
+              <Ionicons name="chevron-back" size={22} color="#fff" />
+            </Pressable>
+            <View style={styles.titleCol}>
+              <Text style={styles.title} numberOfLines={1}>{group.name}</Text>
+              <Text style={styles.memberCount}>{t.group.memberCount(members.length)}</Text>
+            </View>
+            <View style={styles.headerRightRow}>
+              <Pressable
+                onPress={() => {
+                  setGroupNotificationsOpen(true);
+                  setGroupNotificationsSeenAt(new Date().toISOString());
+                }}
+                hitSlop={10}
+                accessibilityLabel={t.notifications.title}
+                style={styles.bellWrap}
+              >
+                <Ionicons name="notifications-outline" size={22} color="#fff" />
+                {hasUnreadGroupNotifications && <View style={styles.unreadDot} />}
+              </Pressable>
+              {/* GroupScreen.tsx側の「設定マークは設定のみ、抜けるは別マークで」
+                  という修正を見た目だけこちらにもミラーしておく(実際の
+                  退出処理は行わず、確認ダイアログを出して一覧に戻るだけの
+                  デモ用スタブ)。 */}
+              <Pressable
+                onPress={() =>
+                  Alert.alert(t.group.leaveConfirmTitle, t.group.leaveConfirmMessage(group.name), [
+                    { text: t.common.cancel, style: 'cancel' },
+                    { text: t.group.leaveConfirmButton, style: 'destructive', onPress: onBack },
+                  ])
+                }
+                hitSlop={10}
+                accessibilityLabel={t.group.leave}
+              >
+                <Ionicons name="exit-outline" size={22} color="#fff" />
+              </Pressable>
+              <Pressable onPress={() => setGroupSettingsOpen(true)} hitSlop={10} accessibilityLabel={t.groups.settingsButton}>
+                <Ionicons name="settings-outline" size={22} color="#fff" />
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {/* 画像で示してもらって判明: 動かすべきはアイコンの位置ではなく、
+          「下の白い本体側」の形だった。詳細はGroupScreen.tsxの同じ箇所
+          のコメント参照。 */}
+      <View style={styles.memberStripCard}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.memberStrip}>
+          {members.map((m) => {
+            const isMe = m.id === meId;
+            const isAdmin = m.id === group.created_by;
+            const slot = (
+              <>
+                <View style={[styles.avatarRing, { borderColor: avatarColor(m.display_name) }]}>
+                  <Avatar name={m.display_name} emoji={m.avatar_emoji} size="lg" />
+                </View>
+                <Text style={styles.memberSlotName} numberOfLines={1}>
+                  {m.display_name}
+                </Text>
+                {isAdmin && (
+                  <View style={styles.adminBadge}>
+                    <Text style={styles.adminBadgeText}>{t.group.adminBadge}</Text>
+                  </View>
+                )}
+              </>
+            );
+            return isMe ? (
+              <Pressable key={m.id} onPress={() => setAvatarPickerOpen(true)} style={styles.memberSlot}>
+                {slot}
+              </Pressable>
+            ) : (
+              <View key={m.id} style={styles.memberSlot}>
+                {slot}
+              </View>
+            );
+          })}
+          {pendingInvites.map((invite) => (
+            <View key={invite.id} style={styles.memberSlot}>
+              <View style={[styles.avatarCircle, styles.pendingCircle]}>
+                <Ionicons name="mail" size={22} color="#fff" />
+              </View>
+              <Text style={styles.memberSlotName} numberOfLines={1}>
+                {invite.invited_name}
+              </Text>
+              <View style={styles.pendingBadge}>
+                <Text style={styles.pendingBadgeText}>{t.group.pendingSectionTitle}</Text>
+              </View>
+            </View>
+          ))}
+          <Pressable onPress={() => setInviteModalOpen(true)} style={styles.memberSlot}>
+            <View style={[styles.avatarCircle, styles.addCircle]}>
+              <Ionicons name="add" size={26} color={colors.muted} />
+            </View>
+            <Text style={styles.memberSlotName}>{t.group.invite}</Text>
+          </Pressable>
+        </ScrollView>
+      </View>
+    </View>
+  );
+
+  let listContent: ReactElement;
+  if (tab === 'balance') {
+    listContent = (
+      <SectionList
+          sections={balanceSections}
+          keyExtractor={(row) => `${row.debtor}-${row.creditor}-${row.type}-${row.currency}`}
+          contentContainerStyle={styles.list}
+          stickySectionHeadersEnabled={false}
+          ListHeaderComponent={
+            <View>
+              {header}
+              <NetSummary totals={netTotals} balances={balances} meId={meId} nameOf={nameOf} emojiOf={emojiOf} />
+              {balances.length > 0 && (
+                <SettlementProgress
+                  remaining={settlementProgress.remaining}
+                  paid={settlementProgress.paid}
+                  onPress={() => setUnpaidModalOpen(true)}
+                />
+              )}
+              {autoSettlePlans.map((plan) => (
+                <AutoSettlePlan
+                  key={plan.currency}
+                  groupName={group.name}
+                  currency={plan.currency}
+                  transactions={plan.transactions}
+                  nameOf={nameOf}
+                  emojiOf={emojiOf}
+                  meId={meId}
+                  onSettleAll={() => settleAllMoney(plan.currency)}
+                />
+              ))}
+            </View>
+          }
+          renderSectionHeader={({ section }) => <Text style={styles.sectionTitle}>{section.title}</Text>}
+          renderItem={({ item }) => (
+            <BalanceCard
+              row={item}
+              nameOf={nameOf}
+              emojiOf={emojiOf}
+              meId={meId}
+              groupId={null}
+              onSettle={() => settlePair(item.type, item.debtor, item.creditor, item.currency)}
+              onMarkPaid={() => markPaid(item.debtor, item.creditor, item.currency)}
+              onConfirmReceived={() => confirmReceived(item.debtor, item.creditor, item.currency)}
+              onRemindSent={() => {}}
+              onRemindResult={(sent) => setRemindToastMessage(sent ? t.group.remindSentToast : t.group.remindFailedToast)}
+            />
+          )}
+          ItemSeparatorComponent={() => <View style={styles.hairline} />}
+        />
+      );
+  } else if (tab === 'history') {
+    listContent = (
+      <SectionList
+        sections={historySections}
+        keyExtractor={(e) => e.id}
+        contentContainerStyle={styles.list}
+        stickySectionHeadersEnabled={false}
+        ListHeaderComponent={<View>{header}</View>}
+        renderSectionHeader={({ section }) => <Text style={styles.dateHeader}>{section.title}</Text>}
+        renderItem={({ item }) => <HistoryEntryRow entry={item} nameOf={nameOf} meId={meId} />}
+        ItemSeparatorComponent={() => <View style={styles.hairline} />}
+        ListEmptyComponent={<Text style={styles.emptyNote}>{t.history.empty}</Text>}
+        ListFooterComponent={
+          isOlderThanFreeWindow ? (
+            <Pressable onPress={() => setPremiumOpen(true)} style={styles.historyLimitBanner}>
+              <Text style={styles.historyLimitBannerText}>{t.history.limitedNote}</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.plum} />
+            </Pressable>
+          ) : null
+        }
+      />
+    );
+  } else {
+    listContent = (
+      <SectionList
+        sections={sections}
+        keyExtractor={(e) => e.id}
+        contentContainerStyle={styles.list}
+        stickySectionHeadersEnabled={false}
+        ListHeaderComponent={
+          <View>
+            {header}
+            {settledCount > 0 && (
+              <Pressable onPress={() => setShowSettled((v) => !v)} style={styles.settledToggle}>
+                <Text style={styles.settledToggleText}>{showSettled ? t.group.hideSettled : t.group.showSettled(settledCount)}</Text>
+              </Pressable>
+            )}
+          </View>
+        }
+        renderSectionHeader={({ section }) => <Text style={styles.dateHeader}>{section.title}</Text>}
+        renderItem={({ item }) => (
+          <EntryRow entry={item} nameOf={nameOf} meId={meId} onToggleSettled={toggleSettled} onUpdate={updateEntry} onDelete={deleteEntry} />
+        )}
+        ItemSeparatorComponent={() => <View style={styles.hairline} />}
+      />
+    );
+  }
+
+  return (
+    <View style={styles.wrap}>
+      {listContent}
+
+      <Fab
+        onPress={() => setSheetOpen(true)}
+        disabled={members.length + pendingInvites.length < 2}
+        onDisabledPress={() => setFabHintToastVisible(true)}
+      />
+      <BottomTabBar tab={tab} onChange={setTab} />
+
+      <AddEntrySheet
+        visible={sheetOpen}
+        members={members}
+        pendingInvites={pendingInvites}
+        meId={meId}
+        onClose={() => setSheetOpen(false)}
+        onSubmit={addEntry}
+        onSubmitSplit={addSplitEntry}
+      />
+
+      <AvatarPicker
+        visible={avatarPickerOpen}
+        name={me?.display_name ?? '?'}
+        selected={me?.avatar_emoji ?? null}
+        onSelect={(emoji) => {
+          setAvatarPickerOpen(false);
+          setMembers((prev) => prev.map((m) => (m.id === meId ? { ...m, avatar_emoji: emoji } : m)));
+        }}
+        onClose={() => setAvatarPickerOpen(false)}
+      />
+
+      <CelebrationModal
+        visible={referralModalOpen}
+        title={t.group.referralTitle}
+        message={t.group.referralMessage}
+        cancelLabel={t.group.referralDismiss}
+        confirmLabel={t.group.referralNow}
+        onCancel={pressReferralClose}
+        onConfirm={pressReferralNow}
+        onDismiss={onReferralDismissed}
+      />
+
+      <InviteModal
+        visible={inviteModalOpen}
+        onClose={() => setInviteModalOpen(false)}
+        onDismiss={triggerPendingShare}
+        onSubmit={async (invitedName) => {
+          const res = await inviteMember(invitedName);
+          // InviteModalが実際に閉じ終わってから共有シートを開く
+          // (詳細はGroupScreen.tsxの同じ箇所のコメント参照)。
+          if (!res.error) {
+            setInviteToastMessage(t.group.inviteSuccessToast(invitedName));
+            pendingShareRef.current = true;
+            if (Platform.OS !== 'ios') setTimeout(triggerPendingShare, 400);
+          }
+          return res;
+        }}
+      />
+
+      <ShareChannelSheet
+        visible={shareSheetOpen}
+        message={shareMessage}
+        onClose={() => setShareSheetOpen(false)}
+        onCopied={() => setInviteToastMessage(t.group.inviteLinkCopiedToast)}
+      />
+
+      <UnpaidMembersModal
+        visible={unpaidModalOpen}
+        rows={receivingRows}
+        nameOf={nameOf}
+        emojiOf={emojiOf}
+        groupId={null}
+        onConfirmReceived={(row) => confirmReceived(row.debtor, row.creditor, row.currency)}
+        onRemindSent={() => {}}
+        onRemindResult={(sent) => setRemindToastMessage(sent ? t.group.remindSentToast : t.group.remindFailedToast)}
+        onClose={() => setUnpaidModalOpen(false)}
+      />
+
+      <Toast message={remindToastMessage ?? ''} visible={remindToastMessage !== null} onHide={() => setRemindToastMessage(null)} />
+      <Toast message={inviteToastMessage ?? ''} visible={inviteToastMessage !== null} onHide={() => setInviteToastMessage(null)} />
+      <Toast message={t.group.fabNeedMemberHint} visible={fabHintToastVisible} onHide={() => setFabHintToastVisible(false)} />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: { flex: 1, backgroundColor: colors.bg },
+  list: { paddingHorizontal: 20, paddingBottom: 100 },
+  // デモモードバナーを削除したため、ステータスバー避けの余白は本番の
+  // GroupScreen.tsxと同じ値にしている。「タイトル行を上に配置して」の
+  // 指摘を受け、paddingTopは44→28に詰めた(GroupScreen.tsxと同じ)。
+  // その後「ステータスバーに被る」不具合の原因になっていたため、
+  // GroupScreen.tsxと同じくinsets.top(セーフエリアの実測値)+
+  // EXTRA_TOP_PADDINGをJSX側でインラインで指定する形に変更した
+  // (paddingTopの固定値はここから撤去)。
+  headerShadowWrap: {
+    marginHorizontal: -20,
+    marginBottom: 0,
+  },
+  headerGradientBase: {
+    position: 'relative',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  headerRow: { flexDirection: 'row', alignItems: 'center' },
+  headerRightRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  bellWrap: { position: 'relative' },
+  unreadDot: {
+    position: 'absolute',
+    top: -1,
+    right: -1,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: colors.accent,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+  titleCol: { flex: 1, marginHorizontal: 16 },
+  title: { ...fonts.display, fontSize: 23, color: '#fff' },
+  memberCount: { ...fonts.bodyMedium, fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 1 },
+  // メンバー行の「背景」だけを上端角丸のカードにしてヘッダー下端に
+  // めり込ませる(詳細はGroupScreen.tsxの同じ箇所のコメント参照)。
+  memberStripCard: {
+    backgroundColor: colors.bg,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    marginHorizontal: -20,
+    marginTop: -12,
+    paddingTop: 18,
+    paddingHorizontal: 20,
+  },
+  memberStrip: { flexDirection: 'row', gap: 16, marginBottom: 10, paddingRight: 4 },
+  memberSlot: { alignItems: 'center', width: 70, gap: 4 },
+  avatarRing: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  memberSlotName: { ...fonts.bodyMedium, fontSize: 12, color: colors.ink, maxWidth: 68 },
+  adminBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1, paddingHorizontal: 6 },
+  adminBadgeText: { ...fonts.bodySemiBold, fontSize: 9.5, color: colors.accent },
+  avatarCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pendingCircle: {
+    backgroundColor: colors.favor,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255,255,255,0.7)',
+  },
+  pendingBadge: { backgroundColor: colors.accentSoft, borderRadius: 999, paddingVertical: 1, paddingHorizontal: 6 },
+  pendingBadgeText: { ...fonts.bodySemiBold, fontSize: 8.5, color: colors.accent },
+  addCircle: { borderWidth: 1.5, borderColor: colors.muted, borderStyle: 'dashed' },
+  sectionTitle: {
+    ...fonts.bodySemiBold,
+    fontSize: 12.5,
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 14,
+    marginBottom: 4,
+  },
+  dateHeader: { ...fonts.bodySemiBold, fontSize: 12.5, color: colors.muted, marginTop: 14, marginBottom: 2 },
+  settledToggle: { alignSelf: 'flex-start', marginBottom: 6 },
+  settledToggleText: { ...fonts.bodyMedium, fontSize: 13, color: colors.accent },
+  hairline: { height: 1, backgroundColor: colors.line },
+  emptyNote: { ...fonts.body, fontSize: 14.5, color: colors.muted, textAlign: 'center', paddingVertical: 24 },
+  historyLimitBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+  },
+  historyLimitBannerText: { ...fonts.bodyMedium, fontSize: 13.5, color: colors.plum, textAlign: 'center' },
+});
