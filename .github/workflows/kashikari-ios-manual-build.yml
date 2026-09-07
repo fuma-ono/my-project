@@ -78,6 +78,10 @@ jobs:
 
       - name: Build and upload to TestFlight
         env:
+          # Sentryの組織情報(SENTRY_ORG等)を登録していないため、ビルド時の
+          # ソースマップ自動アップロードを無効化する(EAS側と同じ対応、
+          # 100回目)。未設定のままだとsentry-cliがビルド自体を失敗させる。
+          SENTRY_DISABLE_AUTO_UPLOAD: "true"
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
