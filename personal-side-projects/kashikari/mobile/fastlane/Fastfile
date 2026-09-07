@@ -85,10 +85,18 @@ platform :ios do
       output_name: "kashikari.ipa"
     )
 
+    # skip_waiting_for_build_processing: trueだと、Appleの処理完了を
+    # 待たずにこのステップが終わってしまい、テスターグループへの自動配布
+    # (groups)が行われないまま終わっていた。ビルド自体はApp Store
+    # Connectに上がっているのに、TestFlightアプリには出てこない、という
+    # 報告への対応(100回目)。処理完了を待って、既存の内部テストグループ
+    # 「Team (Expo)」に自動配布するようにした。
     upload_to_testflight(
       api_key: api_key,
       ipa: "build/kashikari.ipa",
-      skip_waiting_for_build_processing: true
+      skip_waiting_for_build_processing: false,
+      groups: ["Team (Expo)"],
+      distribute_external: false
     )
   end
 end
