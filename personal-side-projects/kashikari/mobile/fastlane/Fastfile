@@ -85,30 +85,18 @@ platform :ios do
       output_name: "kashikari.ipa"
     )
 
-    # skip_waiting_for_build_processing: trueだと、Appleの処理完了を
-    # 待たずにこのステップが終わってしまい、テスターグループへの自動配布
-    # (groups)が行われないまま終わっていた。ビルド自体はApp Store
-    # Connectに上がっているのに、TestFlightアプリには出てこない、という
-    # 報告への対応(100回目)。処理完了を待って、既存の内部テストグループ
-    # 「Team (Expo)」に自動配布するようにした。
-    # groups(内部テストグループ)を指定した配布でも、App Store Connect側の
-    # アプリ全体の「テスト情報」(Betaアプリの説明)が一度も設定されていないと
-    # 「Beta App Description is missing」で配布に失敗する(内部テストなので
-    # 本来Apple審査は不要なはずだが、この項目自体はAPI経由だと必須になる、
-    # 100回目)。localized_app_infoで一緒に設定する。
+    # groups(テスターグループへの自動配布)を指定すると、内部テストの
+    # はずなのにpilotが外部テスト向けのBeta App Review提出扱いにしてしまい
+    # 「Beta App Description is missing」「Missing required information to
+    # submit for external testing」で失敗し続けた(100回目)。ここはAppleの
+    # API側の癖が強く、これ以上の自動化は割に合わないと判断し、深追いを
+    # やめた。groupsを指定せず、アップロードのみ自動化する。ビルドを
+    # 「Team (Expo)」テスターグループに追加する操作(数秒で終わる)は、
+    # App Store Connectの当該ビルドのページから手動で行うこと。
     upload_to_testflight(
       api_key: api_key,
       ipa: "build/kashikari.ipa",
-      skip_waiting_for_build_processing: false,
-      groups: ["Team (Expo)"],
-      distribute_external: false,
-      changelog: "GitHub Actions経由の自動ビルドです。",
-      localized_app_info: {
-        "ja" => {
-          feedback_email: ENV["APPLE_ID"],
-          description: "貸し借り管理アプリ kashikari の社内テストビルドです。"
-        }
-      }
+      skip_waiting_for_build_processing: true
     )
   end
 end
