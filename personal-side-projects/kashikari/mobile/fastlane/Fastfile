@@ -48,10 +48,18 @@ platform :ios do
     profile_name = ENV["IOS_PROVISIONING_PROFILE_NAME"] || "kashikari AppStore Distribution"
     install_provisioning_profile(path: "distribution.mobileprovision")
 
+    # export_options(下)は.xcarchiveを.ipaに書き出す段階にしか効かない。
+    # アーカイブ自体(xcodebuild archive)は、expo prebuildが生成した
+    # プロジェクトのデフォルト設定(自動署名・DEVELOPMENT_TEAM未設定)の
+    # まま実行されてしまい、「requires a development team」で失敗して
+    # いた(初回実行の失敗、100回目)。xcargsでアーカイブ時にも明示的に
+    # 手動署名の設定を渡すことで解決する。
     build_app(
       workspace: "ios/kashikari.xcworkspace",
       scheme: "kashikari",
       export_method: "app-store",
+      xcargs: "CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=#{ENV['APPLE_TEAM_ID']} " \
+              "PROVISIONING_PROFILE_SPECIFIER=\"#{profile_name}\" CODE_SIGN_IDENTITY=\"Apple Distribution\"",
       export_options: {
         signingStyle: "manual",
         provisioningProfiles: {
