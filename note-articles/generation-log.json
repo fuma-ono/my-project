@@ -242,6 +242,14 @@
       "pillar": "B",
       "generated_at": "2026-09-04",
       "status": "draft"
+    },
+    {
+      "article_number": "29",
+      "slug": "29-three-minutes-before-starting",
+      "theme_backlog_id": 34,
+      "pillar": "A",
+      "generated_at": "2026-09-07",
+      "status": "draft"
     }
   ]
 }
