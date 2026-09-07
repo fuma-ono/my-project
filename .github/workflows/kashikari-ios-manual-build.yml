@@ -57,6 +57,24 @@ jobs:
           EXPO_PUBLIC_SENTRY_DSN=${{ secrets.EXPO_PUBLIC_SENTRY_DSN }}
           EOF
 
+      - name: Set unique iOS build number
+        # app.jsonにios.buildNumberの指定が無く、expo prebuildだと毎回
+        # 既定値(1)になってしまう。EAS側は既にビルド18まで進んでいて、
+        # App Store Connect上でビルド番号が重複するとCI自体は成功しても
+        # TestFlightに反映されない(初回実行の失敗、100回目)。日時ベースの
+        # 常に増加するユニークな番号を都度app.jsonに書き込む。
+        run: |
+          BUILD_NUMBER=$(date -u +%Y%m%d%H%M)
+          echo "iOS build number: $BUILD_NUMBER"
+          node -e "
+            const fs = require('fs');
+            const path = 'app.json';
+            const json = JSON.parse(fs.readFileSync(path, 'utf8'));
+            json.expo.ios = json.expo.ios || {};
+            json.expo.ios.buildNumber = '${BUILD_NUMBER}';
+            fs.writeFileSync(path, JSON.stringify(json, null, 2) + '\n');
+          "
+
       - name: Prebuild native iOS project
         run: npx expo prebuild --platform ios --clean --no-install
 
