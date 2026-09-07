@@ -1,0 +1,11 @@
+# EAS(eas build/eas submit)を使わずにGitHub Actions上でiOSをビルド・
+# TestFlightへ提出するためのFastlane設定(EASの無料枠を使い切った際の
+# 代替経路、100回目)。
+#
+# app_identifier/apple_idはApp Store Connect API Key経由の認証では
+# 直接は使わないが、fastlaneの一部アクションが参照することがあるため
+# 明示しておく。
+app_identifier("com.kashikari.mobile")
+apple_id(ENV["APPLE_ID"])
+itc_team_id(ENV["ASC_TEAM_ID"])
+team_id(ENV["APPLE_TEAM_ID"])

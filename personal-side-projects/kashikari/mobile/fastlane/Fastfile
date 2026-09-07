@@ -1,0 +1,94 @@
+# EASのクラウドビルド枠を使い切ったため、EASを経由せずGitHub Actions
+# (macOSランナー)上でXcodeビルド→TestFlight提出まで行うための代替経路
+# (100回目)。証明書・プロビジョニングプロファイル・App Store Connect
+# APIキーはすべてGitHub Actionsのsecretsから渡す想定(README/
+# docs/manual-ios-build-setup.md参照)。
+#
+# ワークフロー側(.github/workflows/ios-manual-build.yml)が、この
+# lane実行前に以下を済ませておく前提:
+#   - `npx expo prebuild --platform ios` でios/を生成済み
+#   - `pod install`実行済み
+#   - ios_distribution.p12 / distribution.mobileprovision を
+#     mobileディレクトリ直下に配置済み(base64デコード済み)
+default_platform(:ios)
+
+platform :ios do
+  desc "証明書・プロファイルをインストールし、ビルドしてTestFlightへ提出する"
+  lane :release do
+    api_key = app_store_connect_api_key(
+      key_id: ENV["ASC_KEY_ID"],
+      issuer_id: ENV["ASC_ISSUER_ID"],
+      key_content: ENV["ASC_KEY_P8_BASE64"],
+      is_key_content_base64: true,
+      in_house: false
+    )
+
+    keychain_name = "ios_build.keychain"
+    keychain_password = ENV["IOS_BUILD_KEYCHAIN_PASSWORD"]
+
+    create_keychain(
+      name: keychain_name,
+      password: keychain_password,
+      default_keychain: true,
+      unlock: true,
+      timeout: 3600,
+      lock_when_sleeps: false
+    )
+
+    import_certificate(
+      certificate_path: "ios_distribution.p12",
+      certificate_password: ENV["IOS_DIST_CERT_PASSWORD"],
+      keychain_name: keychain_name,
+      keychain_password: keychain_password
+    )
+
+    # import_certificateが実際に成功したか(=秘密鍵付きの署名用アイデン
+    # ティティがキーチェーンに入っているか)をここで必ず確認する。ここが
+    # 空なら、p12かパスワードそのものが壊れている証拠(3回目の実行の
+    # 失敗、100回目)。
+    sh("security find-identity -v -p codesigning #{keychain_name} || true")
+
+    # プロファイル名はApple Developer Portalで作成する際に付けた名前と
+    # 完全に一致させる必要がある(docs/manual-ios-build-setup.md参照、
+    # デフォルトの案内では"kashikari AppStore Distribution"としている)。
+    profile_name = ENV["IOS_PROVISIONING_PROFILE_NAME"] || "kashikari AppStore Distribution"
+    install_provisioning_profile(path: "distribution.mobileprovision")
+
+    # xcargsでのCODE_SIGN_IDENTITY等の上書きは、expo prebuildが生成した
+    # プロジェクト側の設定(SDK条件付きの既定値)より優先されないことが
+    # あり、「requires a development team」「No 'iOS Distribution'
+    # signing certificate found」が解消しなかった(2〜3回目の実行の
+    # 失敗、100回目)。xcargsではなくupdate_code_signing_settingsで
+    # プロジェクトファイル自体の署名設定を直接書き換える、より確実な
+    # 方法に切り替える。
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "ios/kashikari.xcodeproj",
+      team_id: ENV["APPLE_TEAM_ID"],
+      code_sign_identity: "Apple Distribution",
+      profile_name: profile_name,
+      targets: ["kashikari"],
+      build_configurations: ["Release"]
+    )
+
+    build_app(
+      workspace: "ios/kashikari.xcworkspace",
+      scheme: "kashikari",
+      export_method: "app-store",
+      export_options: {
+        signingStyle: "manual",
+        provisioningProfiles: {
+          "com.kashikari.mobile" => profile_name
+        }
+      },
+      output_directory: "build",
+      output_name: "kashikari.ipa"
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: "build/kashikari.ipa",
+      skip_waiting_for_build_processing: true
+    )
+  end
+end

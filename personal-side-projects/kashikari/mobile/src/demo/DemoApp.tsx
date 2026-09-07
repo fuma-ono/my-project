@@ -1,0 +1,119 @@
+// デモモードのルート。認証・DB通信を一切せず、グループ一覧⇄グループ詳細を
+// ローカルデータだけで行き来できるようにする。
+import { useState } from 'react';
+
+import GroupsScreen from '../screens/GroupsScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
+import PremiumScreen from '../screens/PremiumScreen';
+import ReportScreen from '../screens/ReportScreen';
+import SettingsScreen from '../screens/SettingsScreen';
+import UsageScreen from '../screens/UsageScreen';
+import { useT } from '../i18n';
+import type { Group, Profile } from '../types';
+import DemoGroupScreen from './DemoGroupScreen';
+import { DEMO_ENTRIES, DEMO_GROUPS, DEMO_ME_ID, DEMO_NOTIFICATIONS, DEMO_PROFILE } from './mockData';
+
+// settings/premium/usage/report/notificationsは複数の入り口(グループ
+// 一覧・グループ詳細)から開けるため、本番のApp.tsxと同じくreturnToで
+// 「戻る」先を持ち運ぶ。
+type Screen =
+  | { name: 'groups' }
+  | { name: 'group' }
+  | { name: 'settings'; returnTo?: Screen }
+  | { name: 'premium'; returnTo?: Screen }
+  | { name: 'usage'; returnTo?: Screen }
+  | { name: 'report'; returnTo?: Screen }
+  | { name: 'notifications'; returnTo?: Screen };
+
+export default function DemoApp() {
+  const t = useT();
+  const [screen, setScreen] = useState<Screen>({ name: 'groups' });
+  const [profile, setProfile] = useState<Profile>(DEMO_PROFILE);
+  // 本番同様、通知ページを開くまでは未読マークを出す(初期値はepoch=
+  // 「まだ一度も開いていない」相当なので、デモの通知は最初は全部未読)。
+  const [notificationsSeenAt, setNotificationsSeenAt] = useState(new Date(0).toISOString());
+  const hasUnreadNotifications = DEMO_NOTIFICATIONS.some((n) => n.created_at > notificationsSeenAt);
+  const openNotifications = (returnTo?: Screen) => {
+    setScreen({ name: 'notifications', returnTo });
+    setNotificationsSeenAt(new Date().toISOString());
+  };
+
+  if (screen.name === 'group') {
+    return (
+      <DemoGroupScreen onBack={() => setScreen({ name: 'groups' })} />
+    );
+  }
+
+  if (screen.name === 'settings') {
+    return (
+      <SettingsScreen
+        profile={profile}
+        onBack={() => setScreen(screen.returnTo ?? { name: 'groups' })}
+        onChangeDisplayName={async (name) => {
+          setProfile((p) => ({ ...p, display_name: name.trim() || p.display_name }));
+          return { error: null };
+        }}
+        onChangeAvatar={async (emoji) => {
+          setProfile((p) => ({ ...p, avatar_emoji: emoji }));
+          return { error: null };
+        }}
+        onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
+        onOpenUsage={() => setScreen({ name: 'usage', returnTo: screen })}
+        onOpenReport={() => setScreen({ name: 'report', returnTo: screen })}
+        isDemo
+      />
+    );
+  }
+
+  if (screen.name === 'premium') {
+    // デモモードでは計測しない(本番のanalytics_eventsは呼ばない)。
+    // isPremium・購入処理はApp.tsx側でPremiumProvider(demo=true)を
+    // 被せているので、ここでは何も渡さなくてよい(94回目)。
+    return <PremiumScreen onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })} onView={() => {}} onPurchased={() => {}} />;
+  }
+
+  if (screen.name === 'usage') {
+    // デモモードには実データが無いため、常に空状態(実装④)を確認できる。
+    return <UsageScreen onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })} fetchStats={async () => ({})} />;
+  }
+
+  if (screen.name === 'report') {
+    // DEMO_ENTRIESはグループ横断の固定データなので、そのまま渡せる
+    // (本番はSupabaseから都度取得するが、デモは静的データで十分)。
+    return (
+      <ReportScreen
+        onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })}
+        meId={DEMO_ME_ID}
+        entries={DEMO_ENTRIES}
+        loading={false}
+        onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
+      />
+    );
+  }
+
+  if (screen.name === 'notifications') {
+    return (
+      <NotificationsScreen
+        onBack={() => setScreen(screen.returnTo ?? { name: 'groups' })}
+        items={DEMO_NOTIFICATIONS}
+        loading={false}
+        onRefresh={async () => {}}
+      />
+    );
+  }
+
+  return (
+    <GroupsScreen
+      displayName={profile.display_name}
+      groups={DEMO_GROUPS}
+      loading={false}
+      onRefresh={async () => {}}
+      onOpenGroup={(_g: Group) => setScreen({ name: 'group' })}
+      onCreateGroup={async () => ({ error: t.demo.createDisabled, group: null })}
+      onJoinGroup={async () => ({ error: t.demo.joinDisabled, group: null })}
+      onOpenSettings={() => setScreen({ name: 'settings' })}
+      onOpenNotifications={() => openNotifications()}
+      hasUnreadNotifications={hasUnreadNotifications}
+    />
+  );
+}

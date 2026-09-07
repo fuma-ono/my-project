@@ -1,0 +1,8 @@
+# Supabase Edge Functionsは、デフォルトで全リクエストにSupabaseの
+# JWT(Authorization: Bearerヘッダー)を要求する。line-signinはLINEの
+# サーバーから直接(認証ヘッダーを一切付けずに)リダイレクトで呼ばれる
+# ため、この関数だけはJWT検証を無効にする必要がある。
+# (念のため、デプロイ時にも `--no-verify-jwt` を付けることを推奨。
+# READMEのデプロイ手順を参照)
+[functions.line-signin]
+verify_jwt = false

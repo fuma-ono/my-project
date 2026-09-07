@@ -1,0 +1,459 @@
+import {
+  useFonts,
+  MPLUSRounded1c_400Regular,
+  MPLUSRounded1c_500Medium,
+  MPLUSRounded1c_700Bold,
+  MPLUSRounded1c_800ExtraBold,
+} from '@expo-google-fonts/m-plus-rounded-1c';
+import { useEffect, useState } from 'react';
+import { Linking } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+
+import DemoApp from './src/demo/DemoApp';
+import NotificationBanner from './src/components/NotificationBanner';
+import ConfigErrorScreen from './src/screens/ConfigErrorScreen';
+import ErrorFallbackScreen from './src/screens/ErrorFallbackScreen';
+import GroupScreen from './src/screens/GroupScreen';
+import GroupSettingsScreen from './src/screens/GroupSettingsScreen';
+import GroupsScreen from './src/screens/GroupsScreen';
+import NotificationsScreen from './src/screens/NotificationsScreen';
+import OnboardingScreen from './src/screens/OnboardingScreen';
+import PremiumScreen from './src/screens/PremiumScreen';
+import ReportScreen from './src/screens/ReportScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
+import SplashScreen from './src/screens/SplashScreen';
+import UsageScreen from './src/screens/UsageScreen';
+import { useAllMoneyEntries } from './src/hooks/useAllMoneyEntries';
+import { useAuth } from './src/hooks/useAuth';
+import { useGroupDues } from './src/hooks/useGroupDues';
+import { useGroupEntries } from './src/hooks/useGroupEntries';
+import { useGroupMembers } from './src/hooks/useGroupMembers';
+import { useGroupNotificationsSeen } from './src/hooks/useGroupNotificationsSeen';
+import { useGroups } from './src/hooks/useGroups';
+import { useNotifications } from './src/hooks/useNotifications';
+import { usePushNotifications } from './src/hooks/usePushNotifications';
+import { LanguageProvider } from './src/i18n';
+import { requestTrackingPermission } from './src/lib/ads';
+import { getUsageStats, logEvent } from './src/lib/analytics';
+import { submitFeedback } from './src/lib/feedback';
+import { PremiumProvider } from './src/lib/premiumContext';
+import { initSentry, SentryErrorBoundary } from './src/lib/sentry';
+import { isSupabaseConfigured } from './src/lib/supabase';
+import type { Group } from './src/types';
+
+// 起動直後、読み込みが一瞬で終わってもロゴが一瞬フラッシュするだけにならない
+// よう、最低でもこれだけはブランド画面を見せる(体感の「間」を作るため)。
+const MIN_SPLASH_MS = 900;
+
+// settings/premiumは複数の入り口(グループ一覧・グループ詳細)から開けるため、
+// 「戻る」で正しい画面に戻れるよう、開いた時点の画面をreturnToとして
+// 持ち運ぶ(簡易的なナビゲーションスタック)。
+type Screen =
+  | { name: 'groups' }
+  | { name: 'group'; group: Group; justCreated?: boolean }
+  // 「グループ内の設定ボタンを押したら、グループの設定(アイコンや
+  // グループ名など)を変更できるようにした方がいい」という指摘への
+  // 対応(87回目)。グループ詳細画面(group)からしか開けないので、
+  // returnToはgroup画面固定(必須)にしておく。
+  | { name: 'groupSettings'; group: Group; returnTo: { name: 'group'; group: Group; justCreated?: boolean } }
+  | { name: 'settings'; returnTo?: Screen }
+  | { name: 'premium'; returnTo?: Screen }
+  | { name: 'usage'; returnTo?: Screen }
+  | { name: 'report'; returnTo?: Screen }
+  // 「グループ内の通知は、そのグループのみを表示するようにした方が
+  // いい」という指摘への対応(88回目)。groupId/groupNameを渡すと
+  // (グループ詳細画面のベルから開いた時)、全グループ横断ではなく
+  // そのグループだけに絞った一覧になる。渡さない(ホーム画面のベルから
+  // 開いた時)場合は従来通り全グループ横断のまま。
+  | { name: 'notifications'; returnTo?: Screen; groupId?: string; groupName?: string };
+
+// kashikari://join?code=XXXXXX 形式の招待リンクが開かれたかどうかを判定する。
+// 現状(Expo Go実行中)はこのリンク自体を開いても実際にはアプリに渡って
+// 来ないため実質的には発火しないが、スタンドアロン/開発ビルドにした
+// 将来のために「リンク経由で開かれた」ことだけは計測できるようにしておく。
+function isInviteLink(url: string): boolean {
+  return url.startsWith('kashikari://join');
+}
+
+// デモモード: Supabase未接続でもUIを確認できるようにする(スクリーンショット・
+// 動作確認用)。本番の.envではこの変数を設定しないこと。
+const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO_MODE === '1';
+
+// LanguageProviderの内側でuseAuth/useGroups(どちらも文言を扱う)を呼ぶため、
+// 実体はAppInnerに分離し、下のdefault exportでProviderをかぶせている。
+function AppInner() {
+  const {
+    loading: authLoading,
+    userId,
+    profile,
+    error: authError,
+    setDisplayName,
+    updateAvatar,
+    updateAvatarPhoto,
+    signOut,
+    markNotificationsSeen,
+  } = useAuth();
+  const {
+    groups,
+    loading: groupsLoading,
+    refresh,
+    createGroup,
+    joinGroup,
+    leaveGroup,
+    updateGroupIcon,
+    updateGroupIconPhoto,
+    updateGroupName,
+    removeMember,
+    deleteGroup,
+    setGroupDues,
+    stopGroupDues,
+  } = useGroups(DEMO_MODE ? null : userId);
+  const { pendingGroupId, clearPendingGroupId } = usePushNotifications(DEMO_MODE ? null : userId);
+  const {
+    items: notificationItems,
+    loading: notificationsLoading,
+    refresh: refreshNotifications,
+    latestInsert: latestNotification,
+    clearLatestInsert: clearLatestNotification,
+  } = useNotifications(DEMO_MODE ? null : userId);
+  const { seenAtFor: groupNotificationsSeenAt, markGroupSeen, isMuted: isGroupMuted, setGroupMuted } = useGroupNotificationsSeen(
+    DEMO_MODE ? null : userId
+  );
+  const [screen, setScreen] = useState<Screen>({ name: 'groups' });
+  // グループの設定画面(メンバー削除に必要)専用の軽量なメンバー取得。
+  // groupSettings画面を開いている時だけ取得すればよいので、それ以外は
+  // groupIdにnullを渡して何もしない。
+  const { members: groupSettingsMembers, refresh: refreshGroupSettingsMembers } = useGroupMembers(
+    screen.name === 'groupSettings' ? screen.group.id : null
+  );
+  // CSV出力(94回目)用。同じ理由で、groupSettings画面を開いている時だけ
+  // 記録一覧を取得する軽量なフックを使う。
+  const { entries: groupSettingsEntries } = useGroupEntries(screen.name === 'groupSettings' ? screen.group.id : null);
+  // サークル会計(97回目)用。同じ理由で、groupSettings画面を開いている
+  // 時だけ会費設定を取得する軽量なフックを使う。
+  const { dues: groupSettingsDues, refresh: refreshGroupSettingsDues } = useGroupDues(
+    screen.name === 'groupSettings' ? screen.group.id : null
+  );
+  // 会計レポート(96回目)用。report画面を開いている時だけ、グループ
+  // 横断でお金の記録を取得する。
+  const { entries: reportEntries, loading: reportLoading } = useAllMoneyEntries(
+    screen.name === 'report' && !DEMO_MODE ? userId : null
+  );
+  const [minSplashDone, setMinSplashDone] = useState(false);
+  const [fontsLoaded] = useFonts({
+    MPLUSRounded1c_400Regular,
+    MPLUSRounded1c_500Medium,
+    MPLUSRounded1c_700Bold,
+    MPLUSRounded1c_800ExtraBold,
+  });
+  // 91回目でSplashScreen.tsx側にkeyによる強制再マウントを入れたが、
+  // それでも実機で「kashikariの最後の文字が欠けてkashikaになる」という
+  // 新しい不具合が出た(フォントの絵柄自体は正しくなったので、根本原因が
+  // 「フォント登録前に描画してしまう」ことだった、という見立て自体は
+  // 合っていたと考えられる)。原因は、useFontsのfontsLoadedがtrueになる
+  // (JS側で読み込み完了とみなす)タイミングと、ネイティブ側で実際に
+  // フォントが完全に登録され、文字の幅などを正しく計測できるように
+  // なるタイミングとの間に、ごくわずかなずれがあるため: 91回目の
+  // 再マウントは、フォント読み込み完了の「直後」に行われるが、その
+  // 「直後」がネイティブ側の登録完了より早すぎると、まだ完全に登録
+  // されていない状態のフォントで文字幅が計測されてしまい、実際に
+  // (少し遅れて)描画されるフォントの方が幅が広いために、計測時の
+  // (狭すぎる)枠からはみ出た分が見えなくなる=文字が欠けて見える、
+  // という説明が最も筋が通る。fontsLoadedがtrueになってから実際に
+  // 「準備完了」とみなすまでに短い猶予(150ms)を挟むことで、ネイティブ
+  // 側の登録が追いつくのを待つ。
+  const [fontsSettled, setFontsSettled] = useState(false);
+  useEffect(() => {
+    if (!fontsLoaded) return;
+    const t = setTimeout(() => setFontsSettled(true), 150);
+    return () => clearTimeout(t);
+  }, [fontsLoaded]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setMinSplashDone(true), MIN_SPLASH_MS);
+    return () => clearTimeout(t);
+  }, []);
+
+  // 招待URL経由でアプリが開かれたことを計測する(成功指標の「招待リンク
+  // クリック数」)。デモモードでは計測しない。
+  useEffect(() => {
+    if (DEMO_MODE) return;
+    const handle = (url: string | null) => {
+      if (url && isInviteLink(url)) logEvent('invite_link_clicked', { userId });
+    };
+    Linking.getInitialURL().then(handle);
+    const sub = Linking.addEventListener('url', (e) => handle(e.url));
+    return () => sub.remove();
+  }, [userId]);
+
+  // 「広告を入れたい」への対応(95回目)。iOSはApp Tracking Transparency
+  // (ATT)の許可ダイアログを、パーソナライズ広告のためにIDFAを使う前に
+  // 1回出す必要がある。サインイン済みでホーム画面が使える状態(=文脈が
+  // 分かるタイミング)になってから呼ぶ。デモモードでは呼ばない。
+  useEffect(() => {
+    if (DEMO_MODE || !userId) return;
+    requestTrackingPermission();
+  }, [userId]);
+
+  // 通知をタップして開かれた場合、そのgroup_idの画面を直接開く。groupsの
+  // 読み込みが間に合っていない場合はここで何もせず、groups更新のたびに
+  // この副作用が再評価されるので、読み込みが終わった時点で見つかれば開く。
+  // 読み込みが終わっても見つからない場合(グループを抜けた等)は諦める。
+  useEffect(() => {
+    if (DEMO_MODE || !pendingGroupId) return;
+    const group = groups.find((g) => g.id === pendingGroupId);
+    if (group) {
+      setScreen({ name: 'group', group });
+      clearPendingGroupId();
+    } else if (!groupsLoading) {
+      clearPendingGroupId();
+    }
+  }, [pendingGroupId, groups, groupsLoading, clearPendingGroupId]);
+
+  // 通知ベルの未読マーク。「profile.notifications_seen_atより新しい
+  // notification_logがあるか」だけを見る単純な仕組み(詳細はuseAuth.ts
+  // のmarkNotificationsSeenのコメント参照)。
+  const hasUnreadNotifications =
+    !DEMO_MODE && !!profile && notificationItems.some((item) => item.created_at > profile.notifications_seen_at);
+
+  const openNotifications = () => {
+    setScreen({ name: 'notifications', returnTo: screen });
+    markNotificationsSeen();
+  };
+
+  // グループ詳細画面のベル用。「そのグループのみの通知を表示する」への
+  // 対応(88回目)。全グループ共通のmarkNotificationsSeen(profiles側)は
+  // 呼ばない — 呼ぶと、このグループを見ただけで他のグループの未読
+  // (ホームのベルの赤丸)まで一緒に消えてしまうため、代わりに
+  // このグループだけの既読時刻(group_members側)を更新する。
+  const openGroupNotifications = (group: Group) => {
+    setScreen({ name: 'notifications', returnTo: screen, groupId: group.id, groupName: group.name });
+    markGroupSeen(group.id);
+  };
+
+  const hasUnreadNotificationsForGroup = (groupId: string) =>
+    !DEMO_MODE && notificationItems.some((item) => item.group_id === groupId && item.created_at > groupNotificationsSeenAt(groupId));
+
+  // フォアグラウンドで届いた通知バナー(NotificationBanner)をタップ
+  // した時。通知タップ経由(pendingGroupId)と違い、こちらは既に
+  // groupsが読み込み済みの状態でしか出ないバナーなので、その場で
+  // 見つからなければ静かに諦める(groupsの読み込み待ちは行わない)。
+  const openLatestNotificationGroup = () => {
+    const groupId = latestNotification?.group_id;
+    if (groupId) {
+      const group = groups.find((g) => g.id === groupId);
+      if (group) setScreen({ name: 'group', group });
+    }
+  };
+
+  if (!fontsLoaded || !minSplashDone || (!DEMO_MODE && authLoading)) {
+    return <SplashScreen fontsReady={fontsSettled} />;
+  }
+
+  // EXPO_PUBLIC_SUPABASE_URL/ANON_KEYが未設定のビルド(EAS BuildのEnvironment
+  // Variables登録漏れ等)では、以前はここから先で例外が起きて真っ白画面の
+  // ままクラッシュしていた。DEMO_MODEはSupabase未接続が前提の動作なので対象外。
+  if (!DEMO_MODE && !isSupabaseConfigured) {
+    return (
+      <>
+        <ConfigErrorScreen />
+        <StatusBar style="dark" />
+      </>
+    );
+  }
+
+  if (DEMO_MODE) {
+    return (
+      <>
+        <DemoApp />
+        <StatusBar style="dark" />
+      </>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <>
+        <OnboardingScreen onSubmit={setDisplayName} authError={authError} />
+        <StatusBar style="dark" />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {screen.name === 'groups' && (
+        <GroupsScreen
+          displayName={profile.display_name}
+          groups={groups}
+          loading={groupsLoading}
+          onRefresh={refresh}
+          onOpenGroup={(group, justCreated) => setScreen({ name: 'group', group, justCreated })}
+          onCreateGroup={createGroup}
+          onJoinGroup={joinGroup}
+          onOpenSettings={() => setScreen({ name: 'settings' })}
+          onOpenNotifications={openNotifications}
+          hasUnreadNotifications={hasUnreadNotifications}
+        />
+      )}
+      {screen.name === 'group' && (
+        <GroupScreen
+          group={screen.group}
+          meId={userId}
+          justCreated={screen.justCreated}
+          onBack={() => setScreen({ name: 'groups' })}
+          onLeave={leaveGroup}
+          onChangeAvatar={updateAvatar}
+          onChangeAvatarPhoto={updateAvatarPhoto}
+          onOpenSettings={() => setScreen({ name: 'groupSettings', group: screen.group, returnTo: screen })}
+          onOpenNotifications={() => openGroupNotifications(screen.group)}
+          hasUnreadNotifications={hasUnreadNotificationsForGroup(screen.group.id)}
+          onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
+        />
+      )}
+      {screen.name === 'groupSettings' && (
+        <GroupSettingsScreen
+          group={screen.group}
+          members={groupSettingsMembers}
+          meId={userId}
+          // 「戻る」時、このgroupSettings画面内で変更していれば(screen.group
+          // が最新)、それを戻り先(group画面)にも反映する。反映しないと、
+          // 戻った直後は変更前の名前・アイコンのまま表示されてしまう
+          // (再度この画面を出入りするまで気づけない)。
+          onBack={() => setScreen({ ...screen.returnTo, group: screen.group })}
+          onChangeName={async (name) => {
+            const res = await updateGroupName(screen.group.id, name);
+            if (!res.error) setScreen({ ...screen, group: { ...screen.group, name: name.trim() } });
+            return res;
+          }}
+          onChangeIcon={async (emoji) => {
+            const res = await updateGroupIcon(screen.group.id, emoji);
+            if (!res.error) setScreen({ ...screen, group: { ...screen.group, icon_emoji: emoji, icon_photo_path: null } });
+            return res;
+          }}
+          onChangeIconPhoto={async (uri) => {
+            const res = await updateGroupIconPhoto(screen.group.id, uri);
+            // アップロード後のパスは分からない(uploadIconPhoto内で決まる)ため、
+            // 確実に最新化するにはgroups一覧から取り直す必要がある。
+            // refresh()はupdateGroupIconPhoto内で既に済んでいるので、
+            // groupsから該当グループを探して使う。
+            if (!res.error) {
+              const updated = groups.find((g) => g.id === screen.group.id);
+              if (updated) setScreen({ ...screen, group: updated });
+            }
+            return res;
+          }}
+          isMuted={isGroupMuted(screen.group.id)}
+          onToggleMute={(muted) => setGroupMuted(screen.group.id, muted)}
+          onRemoveMember={async (memberUserId) => {
+            const res = await removeMember(screen.group.id, memberUserId);
+            if (!res.error) refreshGroupSettingsMembers();
+            return res;
+          }}
+          onDeleteGroup={async () => {
+            const res = await deleteGroup(screen.group.id);
+            // 削除後はこのグループがもう存在しないため、戻り先(group画面)
+            // ではなくホーム画面に戻す。groupsの一覧はdeleteGroup内の
+            // refresh()で既に更新済み。
+            if (!res.error) setScreen({ name: 'groups' });
+            return res;
+          }}
+          entries={groupSettingsEntries}
+          onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
+          dues={groupSettingsDues}
+          onSetDues={async (amount) => {
+            const res = await setGroupDues(screen.group.id, amount, 'JPY', '会費');
+            if (!res.error) refreshGroupSettingsDues();
+            return res;
+          }}
+          onStopDues={async () => {
+            const res = await stopGroupDues(screen.group.id);
+            if (!res.error) refreshGroupSettingsDues();
+            return res;
+          }}
+        />
+      )}
+      {screen.name === 'settings' && (
+        <SettingsScreen
+          profile={profile}
+          onBack={() => setScreen(screen.returnTo ?? { name: 'groups' })}
+          onChangeDisplayName={(name) => setDisplayName(name, profile.avatar_emoji)}
+          onChangeAvatar={updateAvatar}
+          onChangeAvatarPhoto={updateAvatarPhoto}
+          onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
+          onOpenUsage={() => setScreen({ name: 'usage', returnTo: screen })}
+          onOpenReport={() => setScreen({ name: 'report', returnTo: screen })}
+          onSignOut={signOut}
+          onSubmitFeedback={userId ? (message) => submitFeedback(userId, message) : undefined}
+        />
+      )}
+      {screen.name === 'premium' && (
+        <PremiumScreen
+          onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })}
+          onView={() => logEvent('premium_view', { userId })}
+          onPurchased={() => logEvent('premium_purchased', { userId })}
+        />
+      )}
+      {screen.name === 'usage' && (
+        <UsageScreen onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })} fetchStats={getUsageStats} />
+      )}
+      {screen.name === 'report' && (
+        <ReportScreen
+          onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })}
+          meId={userId}
+          entries={reportEntries}
+          loading={reportLoading}
+          onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
+        />
+      )}
+      {screen.name === 'notifications' && (
+        <NotificationsScreen
+          onBack={() => setScreen(screen.returnTo ?? { name: 'groups' })}
+          items={screen.groupId ? notificationItems.filter((item) => item.group_id === screen.groupId) : notificationItems}
+          loading={notificationsLoading}
+          onRefresh={refreshNotifications}
+          scopedGroupName={screen.groupName}
+        />
+      )}
+      {/* 通知ページを開いている間は、リアルタイムで一覧に反映されるので
+          バナーは出さない(二重に知らせる必要が無いため)。 */}
+      <NotificationBanner
+        title={latestNotification?.title ?? ''}
+        body={latestNotification?.body ?? ''}
+        visible={!!latestNotification && screen.name !== 'notifications'}
+        onPress={openLatestNotificationGroup}
+        onHide={clearLatestNotification}
+      />
+      <StatusBar style="dark" />
+    </>
+  );
+}
+
+// 「グループ名や通知・設定ボタンがステータスバーに被る」という指摘への
+// 対応。GroupScreen.tsxがuseSafeAreaInsets()でセーフエリアの実測値を
+// 取れるよう、アプリ全体をSafeAreaProviderで包む。
+//
+// PremiumProvider(94回目)は、広告の出し分け・CSV出力・履歴の閲覧範囲
+// など離れた複数の画面がisPremiumを参照する必要があるため、ルートで
+// 1回だけ被せてある。
+//
+// initSentry()はモジュール読み込み時に1回だけ呼べば十分(RevenueCatの
+// initPurchases()と同じく、DSN未設定なら何もしない)。SentryErrorBoundary
+// はLanguageProviderの内側に置き、フォールバック画面(ErrorFallbackScreen)
+// も同じテーマ・フォントの文脈で描画されるようにしている(99回目)。
+initSentry();
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <PremiumProvider demo={DEMO_MODE}>
+        <LanguageProvider>
+          <SentryErrorBoundary fallback={({ resetError }: { resetError: () => void }) => <ErrorFallbackScreen resetError={resetError} />}>
+            <AppInner />
+          </SentryErrorBoundary>
+        </LanguageProvider>
+      </PremiumProvider>
+    </SafeAreaProvider>
+  );
+}
