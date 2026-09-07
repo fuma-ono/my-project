@@ -19,12 +19,21 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    # macos-14のデフォルトXcode(15.4)ではReact Native 0.8x系が要求する
+    # Xcode 16.1以上を満たせずpod installが失敗したため、macos-15に変更した
+    # 上で、念のためXcodeバージョンも明示的に指定する(初回実行の失敗、
+    # 100回目)。
+    runs-on: macos-15
     defaults:
       run:
         working-directory: personal-side-projects/kashikari/mobile
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode (>= 16.1 required)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
 
       - uses: actions/setup-node@v4
         with:
