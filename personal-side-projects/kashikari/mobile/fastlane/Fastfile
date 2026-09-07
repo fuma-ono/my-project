@@ -91,12 +91,24 @@ platform :ios do
     # Connectに上がっているのに、TestFlightアプリには出てこない、という
     # 報告への対応(100回目)。処理完了を待って、既存の内部テストグループ
     # 「Team (Expo)」に自動配布するようにした。
+    # groups(内部テストグループ)を指定した配布でも、App Store Connect側の
+    # アプリ全体の「テスト情報」(Betaアプリの説明)が一度も設定されていないと
+    # 「Beta App Description is missing」で配布に失敗する(内部テストなので
+    # 本来Apple審査は不要なはずだが、この項目自体はAPI経由だと必須になる、
+    # 100回目)。localized_app_infoで一緒に設定する。
     upload_to_testflight(
       api_key: api_key,
       ipa: "build/kashikari.ipa",
       skip_waiting_for_build_processing: false,
       groups: ["Team (Expo)"],
-      distribute_external: false
+      distribute_external: false,
+      changelog: "GitHub Actions経由の自動ビルドです。",
+      localized_app_info: {
+        "ja" => {
+          feedback_email: ENV["APPLE_ID"],
+          description: "貸し借り管理アプリ kashikari の社内テストビルドです。"
+        }
+      }
     )
   end
 end
