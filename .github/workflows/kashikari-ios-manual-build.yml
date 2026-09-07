@@ -1,0 +1,89 @@
+name: kashikari iOS manual build (no EAS)
+
+# EAS(eas build)の無料枠を使い切った際の代替経路(100回目)。
+# GitHub Actionsの無料macOSランナー上でXcodeビルド→TestFlight提出まで
+# 行う。手動トリガー(Actionsタブから「Run workflow」)のみで、pushでは
+# 自動起動しない(macOSランナーは無料枠の消費が大きいため)。
+#
+# 事前に以下のRepository secretsの登録が必要
+# (docs/manual-ios-build-setup.mdに詳しい手順あり):
+#   ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8_BASE64  … App Store Connect APIキー
+#   IOS_DIST_CERT_P12_BASE64 / IOS_DIST_CERT_PASSWORD … 配布証明書
+#   IOS_PROVISIONING_PROFILE_BASE64 / IOS_PROVISIONING_PROFILE_NAME … プロファイル
+#   IOS_BUILD_KEYCHAIN_PASSWORD … CI内で作る一時キーチェーンの任意パスワード
+#   APPLE_ID / APPLE_TEAM_ID / ASC_TEAM_ID
+#   EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY / 他EXPO_PUBLIC_*
+#     (.env.example参照。アプリのビルドに埋め込む値)
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: personal-side-projects/kashikari/mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Write .env from secrets
+        run: |
+          cat > .env <<EOF
+          EXPO_PUBLIC_SUPABASE_URL=${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_LINE_CHANNEL_ID=${{ secrets.EXPO_PUBLIC_LINE_CHANNEL_ID }}
+          EXPO_PUBLIC_REVENUECAT_IOS_KEY=${{ secrets.EXPO_PUBLIC_REVENUECAT_IOS_KEY }}
+          EXPO_PUBLIC_REVENUECAT_ANDROID_KEY=${{ secrets.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY }}
+          EXPO_PUBLIC_ADMOB_BANNER_IOS=${{ secrets.EXPO_PUBLIC_ADMOB_BANNER_IOS }}
+          EXPO_PUBLIC_ADMOB_BANNER_ANDROID=${{ secrets.EXPO_PUBLIC_ADMOB_BANNER_ANDROID }}
+          EXPO_PUBLIC_ADMOB_INTERSTITIAL_IOS=${{ secrets.EXPO_PUBLIC_ADMOB_INTERSTITIAL_IOS }}
+          EXPO_PUBLIC_ADMOB_INTERSTITIAL_ANDROID=${{ secrets.EXPO_PUBLIC_ADMOB_INTERSTITIAL_ANDROID }}
+          EXPO_PUBLIC_SENTRY_DSN=${{ secrets.EXPO_PUBLIC_SENTRY_DSN }}
+          EOF
+
+      - name: Prebuild native iOS project
+        run: npx expo prebuild --platform ios --clean --no-install
+
+      - name: Install CocoaPods dependencies
+        run: cd ios && pod install
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+
+      - name: Install Fastlane
+        run: gem install fastlane -N
+
+      - name: Decode signing files
+        run: |
+          echo "${{ secrets.IOS_DIST_CERT_P12_BASE64 }}" | base64 --decode > ios_distribution.p12
+          echo "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > distribution.mobileprovision
+
+      - name: Build and upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          IOS_BUILD_KEYCHAIN_PASSWORD: ${{ secrets.IOS_BUILD_KEYCHAIN_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_NAME: ${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_TEAM_ID: ${{ secrets.ASC_TEAM_ID }}
+        run: fastlane ios release
+
+      - name: Upload .ipa as build artifact (debug用、失敗時の調査に使う)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kashikari-ipa
+          path: personal-side-projects/kashikari/mobile/build/kashikari.ipa
+          if-no-files-found: ignore

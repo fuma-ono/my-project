@@ -29,6 +29,13 @@ yarn-error.*
 # macOS
 .DS_Store
 *.pem
+*.cer
+*.csr
+*.b64
+
+# fastlane(EASを使わない手動iOSビルドの出力・ログ、100回目)
+fastlane/report.xml
+/build
 
 # local env files / secrets
 .env
