@@ -68,19 +68,23 @@ export async function requestTrackingPermission(): Promise<void> {
 let interstitial: InterstitialAd | null = null;
 let interstitialLoaded = false;
 
+// 広告を閉じてから次のモーダル(紹介する)を開くまでに空ける待ち時間。
+// 広告のネイティブ全画面ビューが閉じるアニメーションの途中で別の
+// ネイティブUI(Modal)を提示しようとすると、iOS側の画面遷移が競合して
+// 「閉じるを押すと真っ白い画面のまま固まる」不具合が起きる(実機で確認、
+// 99回目でAlertの連続呼び出しに対して行った修正と同種の問題が、
+// 広告→紹介モーダルの遷移にも残っていた)。setTimeoutでの遅延は
+// Alert同士の競合には効かなかったが、こちらは別レイヤー(UIKitの
+// ビューコントローラ遷移)の競合のため有効。
+const AD_DISMISS_TRANSITION_DELAY_MS = 400;
+
 function loadNextInterstitial() {
   const ad = InterstitialAd.createForAdRequest(INTERSTITIAL_AD_UNIT_ID);
   interstitial = ad;
   interstitialLoaded = false;
   const unsubscribeLoaded = ad.addAdEventListener(AdEventType.LOADED, () => {
     interstitialLoaded = true;
-  });
-  const unsubscribeClosed = ad.addAdEventListener(AdEventType.CLOSED, () => {
     unsubscribeLoaded();
-    unsubscribeClosed();
-    // 1回表示し終わったら、次のお祝いの瞬間に間に合うよう裏で読み込み
-    // 直しておく(インタースティシャルは1回表示すると使い捨てのため)。
-    loadNextInterstitial();
   });
   ad.load();
 }
@@ -95,13 +99,23 @@ export function preloadCelebrationAd() {
 // 読み込みが間に合っていれば表示し、閉じられたら解決する。間に合って
 // いなければユーザーを待たせずfalseで即座に解決する(呼び出し側は
 // そのまま次の演出・ダイアログに進めばよい)。
+//
+// 「次の広告の裏読み込み」はここ(表示した本人)だけが行う。以前は
+// loadNextInterstitial側にもCLOSEDリスナーを持たせていたため、表示した
+// 広告が閉じた瞬間にリスナーが二重に発火し、重い読み込み処理と
+// モーダル表示が同じタイミングで競合していた。
 export function showCelebrationAdIfReady(): Promise<boolean> {
   if (!interstitial || !interstitialLoaded) return Promise.resolve(false);
   const ad = interstitial;
+  interstitial = null;
+  interstitialLoaded = false;
   return new Promise((resolve) => {
     const unsubscribeClosed = ad.addAdEventListener(AdEventType.CLOSED, () => {
       unsubscribeClosed();
-      resolve(true);
+      // 次のお祝いの瞬間に備えて、裏で次の広告を読み込み直しておく
+      // (インタースティシャルは1回表示すると使い捨てのため)。
+      loadNextInterstitial();
+      setTimeout(() => resolve(true), AD_DISMISS_TRANSITION_DELAY_MS);
     });
     ad.show();
   });
