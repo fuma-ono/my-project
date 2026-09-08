@@ -43,6 +43,7 @@ import { initSentry, SentryErrorBoundary } from './src/lib/sentry';
 import { isSupabaseConfigured } from './src/lib/supabase';
 import type { Group } from './src/types';
 import BootLogOverlay from './src/components/BootLogOverlay';
+import DebugErrorBoundary from './src/components/DebugErrorBoundary';
 
 // 起動時フリーズ調査用(101回目)。App.tsx自身の全import(画面・フック・
 // lib群)の評価がここまで完了した、という記録。
@@ -491,6 +492,13 @@ if (!DISABLE_SENTRY_FOR_DEBUG) {
 // 101回目: BootLogOverlayはSafeAreaProvider等どのProviderにも依存させ
 // たくないため、あえてSafeAreaProviderの外側・兄弟の位置に置く。原因が
 // 判明したらBootLogOverlayの呼び出しごと削除すること。
+//
+// DebugErrorBoundaryは、Sentryを無効化した状態でもフリーズが直らな
+// かったことを受けて追加した、Sentryに一切頼らない素のReactエラー
+// 境界(101回目)。AppInnerのレンダー中に未捕捉の例外が起きているなら、
+// 初回コミットが一切できず画面が真っ白になっていた説明がつくため、
+// SafeAreaProviderごと一番外側から包み、例外があれば内容を画面に
+// 直接表示する。原因判明後は削除すること。
 export default function App() {
   const inner = (
     <SafeAreaProvider>
@@ -510,7 +518,7 @@ export default function App() {
   return (
     <>
       <BootLogOverlay />
-      {inner}
+      <DebugErrorBoundary>{inner}</DebugErrorBoundary>
     </>
   );
 }
