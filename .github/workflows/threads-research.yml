@@ -1,0 +1,44 @@
+name: Threads Affiliate - Research
+
+# 楽天APIで商品候補を調査する(threads-affiliate/research.py)。
+# 毎週火曜 06:00 JST(投稿生成Routineより前)に実行する想定。
+on:
+  schedule:
+    - cron: '0 21 * * 1' # 火曜 06:00 JST = 月曜 21:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/note-issue-1pjubh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run research.py
+        env:
+          RAKUTEN_APP_ID: ${{ secrets.RAKUTEN_APP_ID }}
+          RAKUTEN_ACCESS_KEY: ${{ secrets.RAKUTEN_ACCESS_KEY }}
+          RAKUTEN_AFFILIATE_ID: ${{ secrets.RAKUTEN_AFFILIATE_ID }}
+        run: python3 threads-affiliate/research.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A -- threads-affiliate/product-candidates.md threads-affiliate/products.json
+          if git diff --cached --quiet; then
+            echo "変更なし"
+          else
+            git commit -m "商品候補を自動更新(GitHub Actions)"
+            git fetch origin claude/note-issue-1pjubh
+            git rebase origin/claude/note-issue-1pjubh
+            git push origin HEAD:claude/note-issue-1pjubh
+          fi

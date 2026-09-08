@@ -24,6 +24,7 @@ Windowsのタスクスケジューラ、Macのcronに登録すれば、以降は
 import argparse
 import datetime
 import json
+import os
 import pathlib
 import sys
 import time
@@ -40,8 +41,16 @@ GRAPH_BASE = "https://graph.threads.net/v1.0"
 
 
 def load_token() -> tuple[str, str]:
+    # GitHub Actions等、無人実行の環境ではJSONファイルではなく環境変数
+    # (リポジトリのSecrets)からトークンを渡す想定。ローカル/Codespacesでは
+    # 従来通りaccess-token.jsonを使う。
+    env_token = os.environ.get("THREADS_ACCESS_TOKEN")
+    env_user_id = os.environ.get("THREADS_USER_ID")
+    if env_token and env_user_id:
+        return env_token, env_user_id
     if not TOKEN_FILE.exists():
         print("access-token.json が見つかりません。先に get_token.py を実行してください。")
+        print("(または環境変数 THREADS_ACCESS_TOKEN / THREADS_USER_ID を設定してください)")
         sys.exit(1)
     data = json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
     return data["access_token"], data["threads_user_id"]

@@ -13,7 +13,7 @@
 Claude Codeが動くこのクラウド環境(セッションの中でコードを書いている環境)は `graph.threads.net` への接続がネットワークポリシーでブロックされていることを確認済み(実測: `CONNECT tunnel failed, response 403`)。**ただしGitHub Codespacesは別のネットワークなのでブロックされない**(実際に楽天API・Threads APIともCodespacesからの疎通を確認済み)。そのため:
 
 - `get_token.py`(初回のみ、認可コードの手動コピペが必要): Codespaces・PCどちらでも可
-- `publish.py` / `research.py` / `refresh_token.py`(通常運用): Codespacesでも動くが、**無人化(タスクスケジューラ登録)したい場合はPCが必要**(Codespacesは自動起動の仕組みを持たないため)。PCが無い場合は、しばらくはCodespacesを都度開いて手動実行する運用でも問題ない
+- `publish.py` / `research.py` / `refresh_token.py` / `fetch_threads_insights.py`(通常運用): **2026-09-08〜、GitHub Actionsで完全無人実行できるようにした**(下記「完全に無人化する」参照)。PC・iPad・Codespacesを開かなくても、スケジュール通りに動く
 
 ## セットアップ手順(オーナー作業、初回のみ)
 
@@ -44,14 +44,36 @@ Claude Codeが動くこのクラウド環境(セッションの中でコード�
    python3 threads-affiliate/publish.py
    ```
 
-## 完全に無人化する(タスクスケジューラ登録)
+## 完全に無人化する(GitHub Actions、2026-09-08〜)
 
-Windowsの場合、タスクスケジューラで以下を週2〜3回のトリガーで登録する:
-- プログラム: `python`
-- 引数: `threads-affiliate/publish.py`
-- 開始(作業)フォルダ: このリポジトリのフォルダ
+PC・iPad・Codespacesを一切開かなくても、GitHub Actionsのスケジュール実行で以下が自動で回る:
 
-トークン延長用に、`threads-affiliate/refresh_token.py` も月1回のトリガーで登録しておく。
+| ワークフロー | 頻度 | 内容 |
+|---|---|---|
+| `.github/workflows/threads-research.yml` | 火曜 06:00 JST | `research.py`で商品候補を更新 |
+| `.github/workflows/threads-publish.yml` | 月・水・金 12:00 JST | `publish.py`で下書きを投稿(無ければ何もしない) |
+| `.github/workflows/threads-insights.yml` | 土曜 06:00 JST | `fetch_threads_insights.py`で実績を取得 |
+
+### 事前準備(オーナー作業、初回のみ)
+
+1. GitHubのリポジトリ画面 → 「Settings」→ 左メニュー「Secrets and variables」→「Actions」
+2. 「New repository secret」から、以下を1つずつ登録する:
+   - `RAKUTEN_APP_ID`(`rakuten-config.json`の`app_id`と同じ値)
+   - `RAKUTEN_ACCESS_KEY`(同`access_key`)
+   - `RAKUTEN_AFFILIATE_ID`(同`affiliate_id`)
+   - `THREADS_ACCESS_TOKEN`(`access-token.json`の`access_token`)
+   - `THREADS_USER_ID`(同`threads_user_id`)
+3. `access-token.json`・`rakuten-config.json`の中身は、Codespaces/PCでこれまで作業してきたファイルをそのまま開いて値をコピーすればよい(`cat threads-affiliate/access-token.json`等で確認できる)
+
+### ★重要な制約: スケジュール実行にはデフォルトブランチへの反映が必要
+
+GitHub Actionsの`schedule`(cron)は、**リポジトリのデフォルトブランチ(通常`main`)に置かれたワークフローファイルでないと自動発火しない**仕様。今このコードがある`claude/note-issue-1pjubh`ブランチに置いただけでは、手動実行(Actionsタブの「Run workflow」ボタン)はできるが、**スケジュール通りの自動実行はまだ始まらない**。
+
+自動実行を始めるには、このブランチ(少なくとも`.github/workflows/`と`threads-affiliate/`)をデフォルトブランチにマージする必要がある。
+
+### トークンの延長(60日ごと)
+
+`refresh_token.py`のGitHub Actions化(Secretsの自動更新)は、Secrets書き換え権限を持つ個人アクセストークンの追加設定が必要でやや複雑なため、今回は見送った。代わりに、このセッションから50日ごとにオーナーへリマインドを送るようにする(`get_token.py`を再実行し、`THREADS_ACCESS_TOKEN` Secretを手動更新するだけの簡単な作業)。完全自動化したい場合は追加設定するので伝えてください。
 
 ## 商品調査(楽天API、Phase 1〜2)
 
@@ -66,7 +88,7 @@ Windowsの場合、タスクスケジューラで以下を週2〜3回のトリ�
    初回はアプリID・アフィリエイトIDの入力を求められる(以降は保存された設定を使う)
 4. `product-candidates.md` が最新の候補で更新されるので、`git add / commit / push`
 
-週1回程度、`research.py` → `git push` をタスクスケジューラに登録しておけば、商品調査も無人化できる(`publish.py`と同様の仕組み)。
+これは初回セットアップ用の手順。以降は`.github/workflows/threads-research.yml`が週1回自動実行する(前述「完全に無人化する」参照)。
 
 ### Amazonアフィリエイトとの併用
 

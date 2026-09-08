@@ -35,6 +35,7 @@ python threads-affiliate/research.py
 """
 
 import json
+import os
 import pathlib
 import time
 import urllib.error
@@ -80,6 +81,17 @@ REQUEST_INTERVAL_SEC = 2  # 連続リクエストで 429 Too Many Requests に�
 
 
 def load_config() -> dict:
+    # GitHub Actions等の無人実行環境では、環境変数(Secrets)経由で
+    # 設定を渡す(対話式inputができないため)。ローカル/Codespacesでは
+    # 従来通りrakuten-config.jsonを使う。
+    env_app_id = os.environ.get("RAKUTEN_APP_ID")
+    env_access_key = os.environ.get("RAKUTEN_ACCESS_KEY")
+    if env_app_id and env_access_key:
+        return {
+            "app_id": env_app_id,
+            "access_key": env_access_key,
+            "affiliate_id": os.environ.get("RAKUTEN_AFFILIATE_ID", ""),
+        }
     if CONFIG_FILE.exists():
         config = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
         if "access_key" in config:

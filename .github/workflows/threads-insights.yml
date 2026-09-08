@@ -1,0 +1,43 @@
+name: Threads Affiliate - Insights
+
+# publish-log.jsonlの各投稿についてThreads Insightsを取得する
+# (threads-affiliate/fetch_threads_insights.py)。
+# 毎週土曜 06:00 JSTに実行する想定(週の投稿が出揃った後)。
+on:
+  schedule:
+    - cron: '0 21 * * 5' # 土曜 06:00 JST = 金曜 21:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  insights:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/note-issue-1pjubh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run fetch_threads_insights.py
+        env:
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+        run: python3 threads-affiliate/fetch_threads_insights.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A -- threads-affiliate/publish-log.jsonl
+          if git diff --cached --quiet; then
+            echo "変更なし"
+          else
+            git commit -m "実績データを自動更新(GitHub Actions)"
+            git fetch origin claude/note-issue-1pjubh
+            git rebase origin/claude/note-issue-1pjubh
+            git push origin HEAD:claude/note-issue-1pjubh
+          fi

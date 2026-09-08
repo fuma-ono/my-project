@@ -29,6 +29,7 @@ python threads-affiliate/fetch_threads_insights.py <post_id>  # 特定の1件だ
 
 import datetime
 import json
+import os
 import pathlib
 import sys
 import urllib.error
@@ -46,8 +47,12 @@ CONFIRMED_METRICS = "views,likes,replies,reposts,quotes"
 
 
 def load_token() -> str:
+    env_token = os.environ.get("THREADS_ACCESS_TOKEN")
+    if env_token:
+        return env_token
     if not TOKEN_FILE.exists():
         print("access-token.json が見つかりません。先に get_token.py を実行してください。")
+        print("(または環境変数 THREADS_ACCESS_TOKEN を設定してください)")
         sys.exit(1)
     return json.loads(TOKEN_FILE.read_text(encoding="utf-8"))["access_token"]
 
