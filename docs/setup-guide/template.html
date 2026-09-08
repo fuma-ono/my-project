@@ -128,7 +128,7 @@
 
 <div class="wrap">
   <header class="top">
-    <p class="eyebrow">Setup Guide · 12 items</p>
+    <p class="eyebrow">Setup Guide · 11 items</p>
     <h1 class="brand">アカウント作成ガイド</h1>
     <p class="lede">上から順番にやればOKです。名前・説明文などは<b>そのままコピペで使える文面</b>を用意しました。各項目右上に<b>チェックボックス</b>があります。完了したらチェックしてください — <b>ブラウザに自動保存される</b>ので、閉じてもタブを変えても消えません(この端末のこのブラウザだけに保存されます)。</p>
     <div class="progress-bar" id="progress-bar"></div>
@@ -405,9 +405,55 @@ python3 -m venv .venv
     <div class="after"><b>これが終われば、note記事もキュー画面からのコピペではなく自動投稿できるようになります。</b></div>
   </div>
 
-  <div class="platform" id="plat-billing">
+  <div class="platform" id="plat-love-note">
     <div class="platform-head">
       <div class="platform-num">8</div>
+      <div>
+        <div class="platform-title">note.com(恋愛ジャンル専用アカウント)</div>
+        <div class="platform-meta">所要時間: 約3分・無料・Focus &amp; Sleepとは別アカウント</div>
+      </div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1"><a href="https://note.com/signup" target="_blank" rel="noopener">note.com/signup</a> を別のメールアドレスで登録(Focus &amp; Sleepと同じメールは使えません)</li>
+      <li data-n="2">表示名・note ID・プロフィール文を下の候補で設定</li>
+      <li data-n="3">作成後、`love-note/auth_setup.py` の手順(`love-note/README.md`)で自動投稿用のログインセッションを保存してください</li>
+    </ol>
+    <div class="copy-label">表示名候補</div>
+    <div class="copybox" data-copy="たぶん、誰かも同じ。">たぶん、誰かも同じ。<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copy-label">note ID候補</div>
+    <div class="copybox" data-copy="tabun_onaji">tabun_onaji<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copy-label">プロフィール文候補</div>
+    <div class="copybox" data-copy="人には言えない恋の話を、ここでは言葉にしてみる。&#10;片思い・失恋・同棲・別れ ── 月ごとのテーマで、感情の正体と付き合い方を綴っています。&#10;更新は週1回。「わかる」と思ったら、そっと❤を。">人には言えない恋の話を、ここでは言葉にしてみる。
+片思い・失恋・同棲・別れ ── 月ごとのテーマで、感情の正体と付き合い方を綴っています。
+更新は週1回。「わかる」と思ったら、そっと❤を。<span class="copy-hint">クリックでコピー</span></div>
+    <div class="after"><b>作成後は</b> `love-note/README.md` のセットアップ手順に進んでください。デザインコンセプト・固定記事案は `love-note/brand.md` 参照。以降は月テーマの確認以外、基本的にお任せいただけます。</div>
+  </div>
+
+  <div class="platform" id="plat-x">
+    <div class="platform-head">
+      <div class="platform-num">9</div>
+      <div>
+        <div class="platform-title">X(旧Twitter)</div>
+        <div class="platform-meta">所要時間: 約3分・無料・note記事の告知用</div>
+      </div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1"><a href="https://x.com/i/flow/signup" target="_blank" rel="noopener">x.com/i/flow/signup</a> で新規アカウント作成(電話番号かメールアドレスでOK)</li>
+      <li data-n="2">表示名・ユーザー名を下の候補で設定</li>
+      <li data-n="3">プロフィール文も下の候補をそのまま使えます</li>
+    </ol>
+    <div class="copy-label">表示名候補</div>
+    <div class="copybox" data-copy="Focus &amp; Sleep Sounds">Focus &amp; Sleep Sounds<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copy-label">ユーザーネーム候補</div>
+    <div class="copybox" data-copy="focusandsleepsounds">focusandsleepsounds<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copy-label">プロフィール文候補</div>
+    <div class="copybox" data-copy="AIで作る睡眠・集中サウンドと、個人開発の記録。noteで週1更新しています。">AIで作る睡眠・集中サウンドと、個人開発の記録。noteで週1更新しています。<span class="copy-hint">クリックでコピー</span></div>
+    <div class="after"><b>これで完了。</b>note記事を公開したら、SNS投稿キューの文面をこのアカウントでコピペ投稿してください。</div>
+  </div>
+
+  <div class="platform" id="plat-billing">
+    <div class="platform-head">
+      <div class="platform-num">10</div>
       <div>
         <div class="platform-title">課金/広告SDKの方針決定</div>
         <div class="platform-meta">所要時間: 決めるだけなら5分(実装はこちらで着手可能)</div>
@@ -429,7 +475,7 @@ python3 -m venv .venv
 
   <div class="platform" id="plat-legal">
     <div class="platform-head">
-      <div class="platform-num">9</div>
+      <div class="platform-num">11</div>
       <div>
         <div class="platform-title">プライバシーポリシー・利用規約の記入</div>
         <div class="platform-meta">所要時間: 約5分</div>

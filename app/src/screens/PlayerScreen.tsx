@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { CATEGORY_LABEL, Track } from '../data/tracks';
 import MoonBadge from '../components/MoonBadge';
 
@@ -30,9 +30,21 @@ export default function PlayerScreen({ track, onBack }: Props) {
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      interruptionMode: 'doNotMix',
+    });
+
     player.loop = true;
     player.play();
+    player.setActiveForLockScreen(true, {
+      title: track.title,
+      artist: 'Focus & Sleep Sounds',
+    });
+
     return () => {
+      player.clearLockScreenControls();
       player.pause();
     };
   }, [player]);

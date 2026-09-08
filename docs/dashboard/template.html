@@ -671,6 +671,7 @@
   <section>
     <h2 class="section-title">経営ログ</h2>
     <div class="highlights">
+      <div class="hl-row"><div class="hl-date">09-08</div><div class="hl-body"><b>threads-affiliate(Threadsアフィリエイト自動化)を本格稼働。</b>楽天API連携(2026年のAPI仕様変更でエンドポイント・2要素認証・Referer必須化に対応)、Threads API投稿、投稿品質改善(スペック羅列→悩み解決型の8ステップ構成)、実績計測基盤(Threads Insights)、GitHub Actionsによる完全無人実行(research/publish/insights)まで一通り整備。詳細は<code>threads-affiliate/README.md</code>・<code>docs/marketing/2026-09-08-threads-post-quality-guidelines.md</code>。ジャンルは検証基準(型番の安定性・比較記事の少なさ・価格帯・規制リスク)に基づきモバイルバッテリー・電気ケトル・折りたたみ傘・電気毛布に決定(<code>docs/marketing/2026-09-08-genre-pivot.md</code>)。</div></div>
       <div class="hl-row"><div class="hl-date">09-07</div><div class="hl-body"><b>週次経営レビュー。credential消失は9日目、依然オーナー対応待ち。</b>BGM・moyasukaのYouTube公開は8/29のShorts(study_lofi_chill)以降ずっと停止したまま。原因は2段階: ①8/31時点でいつもの「テストモード7日失効」を検知し再認証コードを発行(想定内の動作)、②その再認証が完了する前にセッション環境のコンテナが丸ごと再作成される事故が発生し、<code>client_secret.json</code>(OAuthアプリ登録そのもの)を含む認証情報一式が消滅。単なるトークン失効と違い、アプリ登録自体が無いと自力での再ログインもできない。オーナーへ、Google Cloud Consoleでの再発行手順を改めて案内済み、届き次第即座に復旧作業に入る。この間、YouTube認証が不要なnote記事の下書き生成は影響を受けず正常稼働(在庫が6→4本に減少していたため#27・#28を新規生成し6本に復元、9/4)。BGMコンテンツ戦略の週次チェック(4a)は、そもそも新規公開ができない状態のため今回は見送り。</div></div>
       <div class="hl-row"><div class="hl-date">08-31</div><div class="hl-body"><b>週次経営レビュー。ピアノ導入完了後、初のコンテンツ戦略チェック。</b>piano_hisaishi_styleは公開4日目で判断基準(2週間以上ライブ)未達のため、バリエーション追加・3時間版とも今回は見送り。全体傾向としてShorts(62〜313回)が長尺(2〜123回)を引き続き大きく上回るが悪化の兆候はなし。08-25以降追加したコメント誘発質問文の効果が初めて確認できた(<a href="https://youtube.com/watch?v=0gYXbR9KIAE" target="_blank" rel="noopener">0gYXbR9KIAE</a>で高評価3・コメント2、導入前は全動画0件だった)。<b>OAuth再認証が2件必要</b>: bgm-pipeline残り1.2日、moyasukaは既に期限切れ。デバイスコードを発行しオーナーに承認依頼済み。</div></div>
       <div class="hl-row"><div class="hl-date">08-25(3)</div><div class="hl-body"><b>study_focus_binauralのサムネイルも実写化、これで本当に7プリセット全て統一。</b>08-25(2)の時点でstudy_focus_binauralの見落としに気づかず「7プリセット全て統一」と誤って記録していたが、オーナーから追加で写真をいただき判明・対応。集中・作業をテーマにした写真5枚から、日本語の画面表示・掛け軸が写る和の書斎カットを採用し、公開中動画のサムネイルを差し替え済み。残り4枚は今後の新規プリセット用に予備保存</div></div>
@@ -682,6 +683,7 @@
       <div class="hl-row"><div class="hl-date">08-22</div><div class="hl-body"><b>BGM動画Shorts第6弾を自動公開。</b><a href="https://youtube.com/watch?v=MuHTXlXFKIg" target="_blank" rel="noopener">breath_guide_coherent・45秒</a>、再生可能な状態を確認済み。</div></div>
       <div class="hl-row"><div class="hl-date">08-21</div><div class="hl-body"><b>モヤスカ台本07(番号勘違い×自爆オチ)を@moyasukaへ公開。</b><a href="https://youtube.com/watch?v=ghRDGInsyhQ" target="_blank" rel="noopener">視聴はこちら</a>。オーナー提供の台詞をそのまま反映、掲示板写真の挿入・男声オーバーライドにも対応。同日夜、モヤスカ側OAuthがテストモードの7日ルールで期限切れとなり台本08の公開が一時失敗(翌日再認証で解消)。</div></div>
       <div class="hl-row"><div class="hl-date">08-20</div><div class="hl-body"><b>BGM動画Shorts第5弾を自動公開。</b><a href="https://youtube.com/watch?v=BhcTRRipQzw" target="_blank" rel="noopener">baby_sleep_noise・45秒</a>、再生可能な状態を確認済み。同日、モヤスカの絵文字カラー描画対応(Noto Color Emoji)・末尾「ｗ」のTTS読み上げ抑制も実装。</div></div>
+      <div class="hl-row"><div class="hl-date">08-18</div><div class="hl-body"><b>note編集部を専任チームとして編成。</b>オーナーより「note部隊のみを引き連れてきて」との指示で、編集長・ベテラン作家2人・中堅編集者2人・ベテランマーケター・天才作家の7人体制を新設。柱Aはベテラン作家2人が分担執筆、柱B(メタ記事・拡散狙い)は天才作家が専任、SNS投稿文とキューページのメンテはそれぞれ別の編集者が担当する役割分担にした。体制・週次フローは<code>note-articles/TEAM.md</code>。</div></div>
       <div class="hl-row"><div class="hl-date">08-18〜19</div><div class="hl-body"><b>モヤスカを若者向けリニューアル、背景映像を実写マイクラ映像に方針転換。</b>台本06〜10をLINE風スカッと系の新構成に刷新。背景をAI生成写真のKen Burnsパンから、オーナー提供の実写マイクラパルクール映像(2ソース・計14クリップのローテーション)に切り替え。</div></div>
       <div class="hl-row"><div class="hl-date">08-10</div><div class="hl-body"><b>BGM長尺動画第3弾を自動公開。</b>週次Routineが無人で実行、study_lofi_chill・60分。実行前にOAuth残り日数を事前チェックする仕組み(8/10導入)も正常動作し、再生可能な状態まで確認済み。<i>(08-12: サムネイル・動画背景を実写画像に統一する方針転換に伴い<a href="https://youtube.com/watch?v=2ANtYRALumw" target="_blank" rel="noopener">新動画として再公開</a>、この動画は非公開化)</i></div></div>
       <div class="hl-row"><div class="hl-date">08-09</div><div class="hl-body"><b>モヤスカ: iPad Shortcuts自動化の実機動作確認が完了、初めての実音声入り動画が完成。</b>オーナーと1アクションずつ一緒に組み、実機ならではの問題を順に解決: ①JSONを「ファイル」アクションで読むと参照が不安定 → テキストとして直接埋め込む方式に変更 ②`voicevox.su-shiki.com/simple/`は人間のブラウザ操作専用でボット判定される(reCAPTCHA)ことが判明 → 正しいAPI(`api.tts.quest/v3/voicevox/synthesis`、JSONでダウンロードURLを返す2段階方式)に切り替え ③30行を連続呼び出しするとレート制限で一部失敗 → ループ内に2秒待機を追加 ④ファイル名のゼロ埋めができる組み込みアクションが見当たらない → 受け取り側の`manual_narration.py`の`_find_clip`をゼロ埋みの有無を問わず一致するよう修正し、iPad側の作業を簡略化。台本01(30行)を実際に自動生成・アップロードしてもらい、`assemble`+`line_chat.py`で組み立てた初めての実音声入り動画(33秒)をオーナーへ送付。手順は実際に動作確認済みの内容で`docs/projects/moyasuka/voicevox-setup.md`を全面更新。あわせて週次のYouTube Shorts自動公開ルーチンが権限クラシファイアにブロックされる問題を発見、課題リストに追加(オーナー対応待ち)。</div></div>
@@ -759,6 +761,30 @@
         <div class="tl-row">
           <div class="tl-date">08-01</div>
           <div class="tl-body"><b>マーケティング強化。</b>「読者が食いつくネタ」を実調査し、3事業横断のコンテンツバックログ15本を作成(<code>docs/marketing/2026-08-content-topics.md</code>)。調査結果を反映した記事(雨音の科学)を1本追加執筆。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>note運用を仕組み化。</b>投稿キュー(コピペ用ページ)を新設。下書きが「投稿済み/依頼中」より2〜3本先行する状態を維持するため、週次(毎週月曜)で次の下書きを自動作成する社内Routineを設定。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>オーナーより経営方針の全権委任を受けた。</b>今後は新規収益源の追加や事業の優先順位づけも社長判断で決定・実行し、都度この経営ログに記録する運用に変更(<code>docs/ORG.md</code> 意思決定の原則を更新)。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>note収益源を追加決定。</b>Amazon/楽天アフィリエイトを導入(追加コストゼロで実行可能なため優先)。Kindle電子書籍化は下書き本数がまだ薄いため保留、8〜10本到達時点で再検討(<code>docs/marketing/note-affiliate-guideline.md</code>)。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>実行の都度確認を廃止。</b>オーナーより「許可を聞かずに進めて」との指示。以後、コミット・push・Routine設定なども含め、社長判断で実行してからこのログに記録する運用とする。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>4事業目「サクッと経費」を新規開始(★別セッションの判断と相違あり)。</b>オーナーより「音楽に固執せず、もっと広い視野で今需要のあるアプリを」との指摘を受け、テーマを切り離して市場調査をやり直した。ソロ開発者向けの高収益ニッチ調査の結果、個人事業主・副業ワーカー向けの経費/収支管理アプリ(確定申告用CSV書き出し付き)を選定(<code>docs/marketing/2026-08-app-pivot-decision.md</code>)。Expo/React Native・端末内保存のみでMVPを実装、型チェック・バンドルとも確認済み(<code>expense-app/</code>)。Focus & Sleep Soundsアプリは保守モードに縮小。※このセッションとは別に運営されていたセッションは同時期に「経費アプリ転換を却下、3事業集中を継続」と正反対の判断を記録しており、2026-09-08のブランチ統合時点で未調整のまま両論併記している。オーナーの最終判断が必要。</div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-date">08-01</div>
+          <div class="tl-body"><b>noteをアジャイル運用に切り替え、SNS導線を新設。</b>オーナーより「音楽に固執せず、noteの読者を増やす手広い施策を、結果で示せ」との指示。ウォーターフォールではなくアジャイル(週次: 計画→公開→計測→振り返り)を採用し、コンテンツを2本柱化(柱A: 睡眠・集中サウンド、柱B: 個人開発・お金・AI経営)。第1弾として全事業への導線記事「AIに経営を任せてみたら会社が4つになった話」を下書き。告知用にX(旧Twitter)アカウントをアカウント作成ガイドに追加し、SNS投稿キューページを新設(<a href="https://claude.ai/code/artifact/7f511c5f-f2cd-4b2a-840c-00b2f8023edc" target="_blank" rel="noopener">Artifact</a>)。詳細は<code>docs/marketing/2026-08-note-sns-growth-strategy.md</code>。</div>
         </div>
         <div class="tl-row">
           <div class="tl-date">08-01</div>

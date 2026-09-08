@@ -10,6 +10,7 @@
     --bg: #eef0f6; --surface: #ffffff; --surface-2: #f6f7fb; --border: #d9dcec;
     --text: #171a2b; --text-dim: #5b6082; --text-faint: #8489a8;
     --accent: #d9682f; --accent-soft: #f3ded0;
+    --accent2: #b0467a; --accent2-soft: #f6ddea;
     --good: #2f9e63; --good-soft: #dcf1e5;
     --shadow: 0 1px 2px rgba(23,26,43,0.06), 0 8px 24px rgba(23,26,43,0.05);
   }
@@ -18,6 +19,7 @@
       --bg: #0b0e1a; --surface: #141a30; --surface-2: #1b2340; --border: #2a3157;
       --text: #eef0fa; --text-dim: #9aa0c3; --text-faint: #6e739a;
       --accent: #f0955c; --accent-soft: #3a2a20;
+      --accent2: #ea7fb4; --accent2-soft: #3a2030;
       --good: #57cf8f; --good-soft: #17301f;
       --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.35);
     }
@@ -26,6 +28,7 @@
     --bg: #eef0f6; --surface: #ffffff; --surface-2: #f6f7fb; --border: #d9dcec;
     --text: #171a2b; --text-dim: #5b6082; --text-faint: #8489a8;
     --accent: #d9682f; --accent-soft: #f3ded0;
+    --accent2: #b0467a; --accent2-soft: #f6ddea;
     --good: #2f9e63; --good-soft: #dcf1e5;
     --shadow: 0 1px 2px rgba(23,26,43,0.06), 0 8px 24px rgba(23,26,43,0.05);
   }
@@ -33,6 +36,7 @@
     --bg: #0b0e1a; --surface: #141a30; --surface-2: #1b2340; --border: #2a3157;
     --text: #eef0fa; --text-dim: #9aa0c3; --text-faint: #6e739a;
     --accent: #f0955c; --accent-soft: #3a2a20;
+    --accent2: #ea7fb4; --accent2-soft: #3a2030;
     --good: #57cf8f; --good-soft: #17301f;
     --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.35);
   }
@@ -42,11 +46,29 @@
   body { padding: 0 0 72px; }
   .wrap { max-width: 720px; margin: 0 auto; padding: 40px 24px 0; }
 
-  header.top { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 28px; }
+  header.top { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 20px; }
   .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); margin: 0 0 8px; }
   h1.brand { font-family: "Gloock", serif; font-weight: 400; font-size: clamp(26px, 4vw, 34px); margin: 0 0 10px; text-wrap: balance; }
   .lede { font-size: 14.5px; color: var(--text-dim); line-height: 1.8; max-width: 560px; }
   .lede b { color: var(--text); }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 28px; border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    appearance: none; border: none; background: none; cursor: pointer;
+    font-family: "Work Sans", sans-serif; font-size: 14.5px; font-weight: 700; color: var(--text-faint);
+    padding: 10px 4px 12px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab-btn .count { font-family: "IBM Plex Mono", monospace; font-weight: 400; font-size: 12px; margin-left: 4px; }
+  .tab-btn.active.genre-a { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-btn.active.genre-b { color: var(--accent2); border-bottom-color: var(--accent2); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .empty-state {
+    background: var(--surface); border: 1px dashed var(--border); border-radius: 16px;
+    padding: 32px 26px; text-align: center; color: var(--text-dim); font-size: 13.5px; line-height: 1.8;
+  }
+  .empty-state b { color: var(--text); }
 
   .article {
     background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
@@ -58,6 +80,7 @@
     background: var(--accent-soft); color: var(--accent); font-family: "IBM Plex Mono", monospace;
     font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center;
   }
+  .genre-b .order-badge { background: var(--accent2-soft); color: var(--accent2); }
   .article-meta { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-faint); margin-top: 3px; }
   .article-title-label { font-weight: 700; font-size: 16px; margin-top: 2px; }
 
@@ -91,15 +114,19 @@
   <header class="top">
     <p class="eyebrow">note 投稿キュー · 25本公開済み(非表示)・4本待ち・週3本投稿中</p>
     <h1 class="brand">note投稿キュー</h1>
-    <p class="lede">01〜13は投稿済みのため、このページから削除済みです。14〜19が次の投稿分。上から順にnote.comの新規投稿画面へコピペしてください。投稿したら下の「投稿した」チェックを入れておくと、自分用の目印としてこのページ上でそのカードが消えます(ブラウザ内だけの見た目上の記録です)。<b>投稿ステータスは6時間おきに自動チェックされ、note.com上でタイトルが一致する記事が見つかり次第、システム側にも自動で反映されます。</b>チャットで報告する必要はありません。反映まで最大6時間ほどかかることがあります。</p>
+    <p class="lede">01〜25は投稿済みのため、このページから削除済みです。26〜29が次の投稿分。タブで「Focus &amp; Sleep」と「恋愛ジャンル」を切り替えられます。上から順にnote.comの新規投稿画面へコピペしてください。投稿したら下の「投稿した」チェックを入れておくと、自分用の目印としてこのページ上でそのカードが消えます(ブラウザ内だけの見た目上の記録です)。<b>投稿ステータスは6時間おきに自動チェックされ、note.com上でタイトルが一致する記事が見つかり次第、システム側にも自動で反映されます。</b>チャットで報告する必要はありません。反映まで最大6時間ほどかかることがあります。</p>
   </header>
 
-  <div class="cadence-note">
-    <b>25本公開済み。2026-08-12〜週3本投稿で運用中。</b>下書き在庫が6本を下回ると自動補充されます(週2回生成)。23の投稿完了に伴い、新たに29を補充しました(在庫6本)。詳細は <code>note-articles/README.md</code> の「note運用ポリシー」を参照してください。
+  <div class="tabs">
+    <button class="tab-btn active genre-a" data-tab="genre-a">Focus &amp; Sleep <span class="count">(4)</span></button>
+    <button class="tab-btn genre-b" data-tab="genre-b">恋愛ジャンル <span class="count">(0)</span></button>
   </div>
 
+  <div class="cadence-note">
+    <b>25本公開済み。2026-08-12〜週3本投稿で運用中。</b>下書き在庫が6本を下回ると自動補充されます(週2回生成)。まとめて一気に投稿すると不自然なので、実際の公開ペースは週3本を目安にしてください。詳細は <code>note-articles/README.md</code> の「note運用ポリシー」を参照してください。
+  </div>
 
-
+  <div class="tab-panel active" id="panel-genre-a">
 
 
 
@@ -252,6 +279,15 @@ BGMチャンネルに新しい音楽ジャンルを追加したとき、育て�
     <label class="mark-done"><input type="checkbox" data-target="art-29"> 投稿した</label>
   </div>
 
+  </div>
+
+  <div class="tab-panel" id="panel-genre-b">
+    <div class="empty-state">
+      <b>恋愛ジャンル、準備中</b><br>
+      アカウント作成(<code>note.com/tabun_onaji</code>)・ブランド設計(<code>love-note/brand.md</code>)は完了済み。投稿は<code>love-note/</code>の自動化基盤(週次生成)で行うため、このページでの手動コピペキューは使わない想定。オーナーのPC側セットアップ(<code>love-note/auth_setup.py</code>)待ち。
+    </div>
+  </div>
+
 </div>
 
 <footer>社長発 · note投稿キュー · 新しい下書きができ次第このページに追加</footer>
@@ -293,6 +329,13 @@ BGMチャンネルに新しい音楽ジャンルを追加したとき、育て�
       var ids = loadPosted();
       if (ids.indexOf(id) === -1) { ids.push(id); savePosted(ids); }
       removeCard(id);
+    });
+  });
+  document.querySelectorAll(".tab-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var tab = btn.getAttribute("data-tab");
+      document.querySelectorAll(".tab-btn").forEach(function (b) { b.classList.toggle("active", b === btn); });
+      document.querySelectorAll(".tab-panel").forEach(function (p) { p.classList.toggle("active", p.id === "panel-" + tab); });
     });
   });
 </script>

@@ -9,6 +9,11 @@ note-articles/note_publish/.venv/
 note-articles/note_publish/__pycache__/
 note-articles/note_publish/credentials/
 
+# any Python cache anywhere in the repo (love-note/, threads-affiliate/, etc.)
+__pycache__/
+**/__pycache__/
+*.pyc
+
 # secrets / credentials (API keys for YouTube Data API, Meta Graph API, EAS, RevenueCat, AdMob, etc.)
 .env
 .env.*
@@ -34,6 +39,8 @@ docs/setup-guide/setup-guide.html
 docs/setup-guide/fonts.py
 note-articles/queue-page/note-queue.html
 note-articles/queue-page/fonts.py
+note-articles/sns-queue/sns-queue.html
+note-articles/sns-queue/fonts.py
 
 # weekly report slide decks (regenerate with docs/reports/weekly/YYYY-MM-DD.js)
 docs/reports/weekly/*.pptx
@@ -51,3 +58,10 @@ moyasuka/.venv/
 moyasuka/channel_art/output/
 moyasuka/output/
 moyasuka/assets/background_video_clips/
+
+# love-note: browser session state (equivalent to being logged in, never commit)
+love-note/storage-state.json
+
+# threads-affiliate: API access token + app secret, never commit
+threads-affiliate/access-token.json
+threads-affiliate/rakuten-config.json

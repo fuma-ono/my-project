@@ -22,6 +22,19 @@
 
 詳細・使い方は `app/README.md` を参照。
 
+## 事業3: note.com有料記事事業(`note-articles/`)
+
+- 睡眠・集中サウンドの世界観に合わせたゆる記事を無料公開し、ファンが増えた段階で定期購読マガジンへ移行する方針
+- 詳細は `note-articles/README.md` を参照
+
+## 事業4: 経費管理アプリ「サクッと経費」(`expense-app/`)
+
+- 個人事業主・副業ワーカー向けに、収支を数タップで記録し確定申告用のCSVを書き出せるアプリ
+- 「音楽・睡眠」というテーマに依存しない事業として、市場調査(ソロ開発者向けの高収益ニッチ)に基づいて2026-08-01に開始。詳細・選定理由は `docs/marketing/2026-08-app-pivot-decision.md` を参照
+- Expo/React Native製、端末内保存のみでバックエンド不要。TypeScript型チェック・Metroバンドル確認済み
+
+詳細・使い方は `expense-app/README.md` を参照。
+
 ## 今後、人間側(オーナー)の判断・作業が必要な項目
 
 どちらの事業も「投稿ボタン/申請ボタンを押す」部分は代行できません(アカウント認証情報が必要なため)。
@@ -42,4 +55,7 @@
 ```
 bgm-pipeline/   # AI BGM生成 + 動画書き出しパイプライン(Python)
 app/            # Focus & Sleep Sounds アプリ(Expo/React Native)
+note-articles/  # note.com有料記事事業の下書き・投稿キュー
+expense-app/    # サクッと経費(Expo/React Native)
+docs/           # 組織体制・マーケティング調査・財務・法務・経営ダッシュボード
 ```
