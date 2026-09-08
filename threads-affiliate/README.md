@@ -14,16 +14,22 @@
 
 ## セットアップ手順(オーナー作業、初回のみ)
 
-1. Threadsアプリで、アカウントを「プロフェッショナル」に切り替える(設定 → アカウントの種類を切り替える)
-2. [developers.facebook.com](https://developers.facebook.com/) でMeta開発者アプリを新規作成し、製品として「Threads API」を追加
-3. アプリ設定の「有効なOAuthリダイレクトURI」に `http://localhost:8910/callback` を追加
-4. アプリの「App ID」「App Secret」を控える
-5. パソコンで以下を実行:
+1. Threadsアプリで、アカウントを「プロフェッショナル」に切り替える(Instagram側が既にプロフェッショナルなら自動で反映されていることもある)
+2. [developers.facebook.com](https://developers.facebook.com/) でMeta開発者アプリを新規作成し、ユースケースとして「Threads APIにアクセス」を追加
+3. 作成直後は「ビジネスポートフォリオのリンク」を聞かれるが、個人利用なら「現時点ではリンクしない」を選択
+4. Threads APIの「設定」で、アプリ設定の「有効なOAuthリダイレクトURI」に `https://localhost:8910/callback` を追加
+   - ★`http://`ではなく`https://`。2026年時点のThreads APIは全リダイレクトURIにHTTPS必須(実機確認済み、`http://localhost`は`すべてのリダイレクトURLでHTTPSが必要です`エラーになる)
+   - 「コールバックURLをアンインストール」「コールバックURLを削除」も未入力だと保存できない場合がある。その場合は`https://example.com/uninstall`のようなダミーのHTTPS URLで埋めてよい(個人利用でこれらのWebhookは使わないため)
+5. 「Threadsテスターを追加または削除」から、投稿に使うThreadsアカウントをテスターとして追加する(アプリがMeta審査未通過の間、認証できるのはテスターだけ)
+6. アプリの「App ID」「App Secret」を控える
+7. パソコンで以下を実行:
    ```
    git pull
+   pip install cryptography   # 初回のみ。HTTPSのローカルサーバー用の自己署名証明書作成に使う
    python threads-affiliate/get_token.py
    ```
    App ID・App Secretの入力を求められるので入力。ブラウザが開くので、Threadsアカウントで「許可する」を押す
+   - 認可後、`https://localhost:8910/callback`へのリダイレクト時にブラウザが「この接続ではプライバシーが保護されません」等の警告を出すが、自己署名証明書によるもの(自分自身が今立てたローカルサーバー)。「詳細設定」→「localhostにアクセスする」で進めてよい
 6. 投稿を確認したいだけなら:
    ```
    python threads-affiliate/publish.py --dry-run

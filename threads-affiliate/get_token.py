@@ -2,16 +2,26 @@
 
 事前に developers.facebook.com でMeta開発者アプリを作り、Threads APIを
 有効化し、「App ID」「App Secret」を控えておくこと(README.md参照)。
-リダイレクトURIはこのスクリプトが使う `http://localhost:8910/callback` を
+リダイレクトURIはこのスクリプトが使う `https://localhost:8910/callback` を
 Meta側のアプリ設定にも登録しておくこと。
+
+★2026年時点でThreads APIは全リダイレクトURIにHTTPSを必須化しており、
+`http://localhost`は使えない(実機で `Redirect URIs: すべてのリダイレクト
+URLでHTTPSが必要です` エラーを確認済み)。そのため、このスクリプトは
+自己署名証明書を自動生成し、ローカルでHTTPSサーバーを立てて認可コードを
+受け取る。ブラウザに「この接続ではプライバシーが保護されません」等の警告が
+出るが、自分自身が今立てたローカルサーバーへの接続なので、
+「詳細設定」→「localhostにアクセスする(安全ではありません)」を選んで進めてよい。
 
 実行するとブラウザが開き、Threadsアカウントでの認可画面が出る。
 「許可する」を押すと、このスクリプトが自動でトークンを受け取り保存する。
 """
 
+import datetime
 import http.server
 import json
 import pathlib
+import ssl
 import threading
 import urllib.parse
 import urllib.request
@@ -19,10 +29,52 @@ import webbrowser
 
 HERE = pathlib.Path(__file__).parent
 TOKEN_FILE = HERE / "access-token.json"
+CERT_FILE = HERE / "localhost-cert.pem"
+KEY_FILE = HERE / "localhost-key.pem"
 REDIRECT_PORT = 8910
-REDIRECT_URI = f"http://localhost:{REDIRECT_PORT}/callback"
+REDIRECT_URI = f"https://localhost:{REDIRECT_PORT}/callback"
 
 received_code = {}
+
+
+def ensure_self_signed_cert() -> None:
+    """localhost向けの自己署名証明書を(無ければ)生成する。"""
+    if CERT_FILE.exists() and KEY_FILE.exists():
+        return
+    try:
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.x509.oid import NameOID
+    except ImportError:
+        raise SystemExit(
+            "自己署名証明書の作成に `cryptography` パッケージが必要です。\n"
+            "先に `pip install cryptography` を実行してから、もう一度実行してください。"
+        )
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
+    now = datetime.datetime.now(datetime.timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now)
+        .not_valid_after(now + datetime.timedelta(days=825))
+        .add_extension(x509.SubjectAlternativeName([x509.DNSName("localhost")]), critical=False)
+        .sign(key, hashes.SHA256())
+    )
+    CERT_FILE.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    KEY_FILE.write_bytes(
+        key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
+    print(f"自己署名証明書を作成しました: {CERT_FILE.name} / {KEY_FILE.name}(.gitignore済み)")
 
 
 class CallbackHandler(http.server.BaseHTTPRequestHandler):
@@ -70,11 +122,17 @@ def main() -> None:
         })
     )
 
+    ensure_self_signed_cert()
     server = http.server.HTTPServer(("localhost", REDIRECT_PORT), CallbackHandler)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(certfile=str(CERT_FILE), keyfile=str(KEY_FILE))
+    server.socket = context.wrap_socket(server.socket, server_side=True)
     server_thread = threading.Thread(target=server.handle_request)
     server_thread.start()
 
     print("ブラウザで認可画面を開きます。Threadsアカウントで「許可する」を押してください...")
+    print("(認可後、localhostへのリダイレクト時に「安全ではありません」という警告が")
+    print(" 出ますが、自己署名証明書によるものです。「詳細設定」から進んでください)")
     webbrowser.open(authorize_url)
     server_thread.join(timeout=180)
 
