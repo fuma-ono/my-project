@@ -80,15 +80,21 @@ def publish(dry_run: bool) -> None:
     text = post["text"]  # PR表記込みの本文(500文字以内、Threadsの制限に注意)
     link = post.get("affiliate_link")  # 任意: 商品リンク
 
+    # Threadsの投稿は本文中のURLを自動的にリンク化するため、実際に投稿する
+    # 本文にリンクを含める(以前はここでリンクを本文に混ぜていなかったため、
+    # 投稿にリンクが一切表示されないバグがあった)。
+    full_text = f"{text}\n\n{link}" if link else text
+    if len(full_text) > 500:
+        print(f"警告: リンクを含めると{len(full_text)}文字になり、Threadsの500文字制限を超えます。")
+        sys.exit(1)
+
     if dry_run:
-        print("--- DRY RUN(実際には投稿しません) ---")
-        print(text)
-        if link:
-            print(f"リンク: {link}")
+        print("--- DRY RUN(実際には投稿しません、実際に投稿される本文そのもの) ---")
+        print(full_text)
         return
 
     # Step 1: メディアコンテナを作成
-    container_params = {"media_type": "TEXT", "text": text, "access_token": access_token}
+    container_params = {"media_type": "TEXT", "text": full_text, "access_token": access_token}
     container = api_post(f"{user_id}/threads", container_params)
     if "id" not in container:
         print("コンテナ作成に失敗しました:", container)
