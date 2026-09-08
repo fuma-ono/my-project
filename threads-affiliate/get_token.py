@@ -54,14 +54,29 @@ def http_post_json(url: str, data: dict) -> dict:
         return json.loads(resp.read().decode())
 
 
-def extract_code(pasted: str) -> str:
-    """貼り付けられた文字列(URL全体、またはcodeの値そのもの)からcodeを取り出す。"""
+def extract_code(pasted: str) -> str | None:
+    """貼り付けられた文字列(URL全体、またはcodeの値そのもの)からcodeを取り出す。
+
+    認可自体が失敗した場合、Threadsは code の代わりに
+    error_message / error_code を含むURLを返す。これをcodeと誤認して
+    トークン交換に進むと無意味な400エラーになるため、ここで検出して
+    Noneを返す(呼び出し側でエラー内容を表示して中断する)。
+    """
     pasted = pasted.strip()
-    if "code=" in pasted:
-        parsed = urllib.parse.urlparse(pasted)
-        params = urllib.parse.parse_qs(parsed.query)
-        if "code" in params:
-            return params["code"][0]
+    parsed = urllib.parse.urlparse(pasted)
+    params = urllib.parse.parse_qs(parsed.query)
+    if "error_message" in params or "error_code" in params:
+        message = params.get("error_message", ["(詳細不明)"])[0]
+        code_num = params.get("error_code", ["?"])[0]
+        print(f"\n認可自体が失敗しています(error_code={code_num}): {message}")
+        print(
+            "考えられる原因: ①Threadsテスターへの招待をアカウント側で承認していない "
+            "②「アクセス許可と機能」でthreads_basic/threads_content_publishが有効に"
+            "なっていない ③App IDが誤っている、のいずれか。"
+        )
+        return None
+    if "code" in params:
+        return params["code"][0]
     return pasted  # URL形式でなければ、code値がそのまま貼られたとみなす
 
 
