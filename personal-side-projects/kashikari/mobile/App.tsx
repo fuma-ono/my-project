@@ -465,35 +465,52 @@ function AppInner() {
 // しなかった。Sentry.init()自体はネイティブ呼び出しをPromiseで包んで
 // おり(sentry-react-native/dist/js/client.jsで確認済み)、JSスレッドを
 // 同期的にブロックする構造ではないため、Sentryが直接の原因という仮説の
-// 確度は下がっている。次にどこを疑うべきか実機ログから判断するため、
-// この呼び出しの前後をlogBoot()で記録する。
-setTimeout(() => {
-  logBoot('setTimeoutコールバック開始、initSentry()呼び出し前');
-  try {
-    initSentry();
-    logBoot('initSentry()呼び出し完了(同期部分が正常に返った)');
-  } catch (e) {
-    logBoot(`initSentry()が例外を投げた: ${String(e)}`);
-    // Sentry自体の初期化失敗でアプリ本体を巻き込まない。
-  }
-}, 0);
+// 確度は下がっている。
+//
+// 切り分け用に、App.tsx配下のimportグラフの中でこのビルドサイクルで
+// 唯一「新しく実際に動き出した」コードがSentry(DSN設定+SentryErrorBoundary)
+// であるため、一時的にSentry関連を丸ごと無効化して試す。
+// 原因特定後、DISABLE_SENTRY_FOR_DEBUGはfalseに戻すこと。
+const DISABLE_SENTRY_FOR_DEBUG = true;
+
+if (!DISABLE_SENTRY_FOR_DEBUG) {
+  setTimeout(() => {
+    logBoot('setTimeoutコールバック開始、initSentry()呼び出し前');
+    try {
+      initSentry();
+      logBoot('initSentry()呼び出し完了(同期部分が正常に返った)');
+    } catch (e) {
+      logBoot(`initSentry()が例外を投げた: ${String(e)}`);
+      // Sentry自体の初期化失敗でアプリ本体を巻き込まない。
+    }
+  }, 0);
+} else {
+  logBoot('DISABLE_SENTRY_FOR_DEBUG=true: initSentry()もSentryErrorBoundaryもスキップ');
+}
 
 // 101回目: BootLogOverlayはSafeAreaProvider等どのProviderにも依存させ
 // たくないため、あえてSafeAreaProviderの外側・兄弟の位置に置く。原因が
 // 判明したらBootLogOverlayの呼び出しごと削除すること。
 export default function App() {
-  return (
-    <>
-      <BootLogOverlay />
-      <SafeAreaProvider>
-        <PremiumProvider demo={DEMO_MODE}>
-          <LanguageProvider>
+  const inner = (
+    <SafeAreaProvider>
+      <PremiumProvider demo={DEMO_MODE}>
+        <LanguageProvider>
+          {DISABLE_SENTRY_FOR_DEBUG ? (
+            <AppInner />
+          ) : (
             <SentryErrorBoundary fallback={({ resetError }: { resetError: () => void }) => <ErrorFallbackScreen resetError={resetError} />}>
               <AppInner />
             </SentryErrorBoundary>
-          </LanguageProvider>
-        </PremiumProvider>
-      </SafeAreaProvider>
+          )}
+        </LanguageProvider>
+      </PremiumProvider>
+    </SafeAreaProvider>
+  );
+  return (
+    <>
+      <BootLogOverlay />
+      {inner}
     </>
   );
 }
