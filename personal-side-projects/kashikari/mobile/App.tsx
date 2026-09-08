@@ -36,18 +36,11 @@ import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { LanguageProvider } from './src/i18n';
 import { requestTrackingPermission } from './src/lib/ads';
 import { getUsageStats, logEvent } from './src/lib/analytics';
-import { logBoot } from './src/lib/bootLog';
 import { submitFeedback } from './src/lib/feedback';
 import { PremiumProvider } from './src/lib/premiumContext';
-import { initSentry, SentryErrorBoundary } from './src/lib/sentry';
+import { SentryErrorBoundary } from './src/lib/sentry';
 import { isSupabaseConfigured } from './src/lib/supabase';
 import type { Group } from './src/types';
-import BootLogOverlay from './src/components/BootLogOverlay';
-import DebugErrorBoundary from './src/components/DebugErrorBoundary';
-
-// 起動時フリーズ調査用(101回目)。App.tsx自身の全import(画面・フック・
-// lib群)の評価がここまで完了した、という記録。
-logBoot('App.tsx: 全import評価完了');
 
 // 起動直後、読み込みが一瞬で終わってもロゴが一瞬フラッシュするだけにならない
 // よう、最低でもこれだけはブランド画面を見せる(体感の「間」を作るため)。
@@ -89,14 +82,7 @@ const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO_MODE === '1';
 
 // LanguageProviderの内側でuseAuth/useGroups(どちらも文言を扱う)を呼ぶため、
 // 実体はAppInnerに分離し、下のdefault exportでProviderをかぶせている。
-// AppInnerは何度も再描画されるため、ログが埋もれないよう初回のみ記録する。
-let loggedAppInnerRender = false;
-
 function AppInner() {
-  if (!loggedAppInnerRender) {
-    loggedAppInnerRender = true;
-    logBoot('AppInner: 初回render開始');
-  }
   const {
     loading: authLoading,
     userId,
@@ -452,73 +438,28 @@ function AppInner() {
 // など離れた複数の画面がisPremiumを参照する必要があるため、ルートで
 // 1回だけ被せてある。
 //
-// initSentry()を起動と同じ瞬間(モジュール評価中、Reactが1枚目の画面を
-// 描画する前)に同期的に呼んでいたところ、実際にDSNを設定して
-// Sentry.init()が本当に動き出した初回のビルドから、起動直後に真っ白い
-// 画面のまま固まる不具合が実機で発生した(100回目)。原因の切り分けが
-// ついていないため、①ネイティブ初期化が万一失敗しても起動を道連れに
-// しないようtry/catchで囲み、②最初の画面が描画された後に遅らせて
-// 呼ぶことで、Sentry初期化が起動そのものをブロックしないようにした。
-// SentryErrorBoundaryはLanguageProviderの内側に置き、フォールバック画面
-// (ErrorFallbackScreen)も同じテーマ・フォントの文脈で描画されるように
-// している(99回目)。
-// 101回目: setTimeoutで遅らせる修正を実機で試したが、フリーズは解消
-// しなかった。Sentry.init()自体はネイティブ呼び出しをPromiseで包んで
-// おり(sentry-react-native/dist/js/client.jsで確認済み)、JSスレッドを
-// 同期的にブロックする構造ではないため、Sentryが直接の原因という仮説の
-// 確度は下がっている。
+// 100〜101回目: initSentry()を起動と同じ瞬間に同期的に呼んでいたところ、
+// 実際にDSNを設定してSentry.init()が本当に動き出した初回のビルドから、
+// 起動直後に真っ白い画面のまま固まる不具合が実機で発生した。setTimeoutで
+// 遅らせる、Sentryを丸ごと無効化する、素のエラー境界を挟む、といった
+// 切り分けを重ねたが、Sentryを完全に無効化した状態でもフリーズが解消
+// しなかったため、Sentry自体は原因ではないと判断できた。
 //
-// 切り分け用に、App.tsx配下のimportグラフの中でこのビルドサイクルで
-// 唯一「新しく実際に動き出した」コードがSentry(DSN設定+SentryErrorBoundary)
-// であるため、一時的にSentry関連を丸ごと無効化して試す。
-// 原因特定後、DISABLE_SENTRY_FOR_DEBUGはfalseに戻すこと。
-const DISABLE_SENTRY_FOR_DEBUG = true;
-
-if (!DISABLE_SENTRY_FOR_DEBUG) {
-  setTimeout(() => {
-    logBoot('setTimeoutコールバック開始、initSentry()呼び出し前');
-    try {
-      initSentry();
-      logBoot('initSentry()呼び出し完了(同期部分が正常に返った)');
-    } catch (e) {
-      logBoot(`initSentry()が例外を投げた: ${String(e)}`);
-      // Sentry自体の初期化失敗でアプリ本体を巻き込まない。
-    }
-  }, 0);
-} else {
-  logBoot('DISABLE_SENTRY_FOR_DEBUG=true: initSentry()もSentryErrorBoundaryもスキップ');
-}
-
-// 101回目: BootLogOverlayはSafeAreaProvider等どのProviderにも依存させ
-// たくないため、あえてSafeAreaProviderの外側・兄弟の位置に置く。原因が
-// 判明したらBootLogOverlayの呼び出しごと削除すること。
-//
-// DebugErrorBoundaryは、Sentryを無効化した状態でもフリーズが直らな
-// かったことを受けて追加した、Sentryに一切頼らない素のReactエラー
-// 境界(101回目)。AppInnerのレンダー中に未捕捉の例外が起きているなら、
-// 初回コミットが一切できず画面が真っ白になっていた説明がつくため、
-// SafeAreaProviderごと一番外側から包み、例外があれば内容を画面に
-// 直接表示する。原因判明後は削除すること。
+// ただし原因の絞り込みに時間がかかりすぎているため、一旦Sentryの初期化
+// 自体を見送り(呼び出さない)、クラッシュ監視機能無しでリリースを進める
+// 判断とした。SentryErrorBoundaryは(Sentryが初期化されていなくても
+// 安全に動く実装のため)そのまま残し、フォールバック画面の仕組み自体は
+// 活かす。
 export default function App() {
-  const inner = (
+  return (
     <SafeAreaProvider>
       <PremiumProvider demo={DEMO_MODE}>
         <LanguageProvider>
-          {DISABLE_SENTRY_FOR_DEBUG ? (
+          <SentryErrorBoundary fallback={({ resetError }: { resetError: () => void }) => <ErrorFallbackScreen resetError={resetError} />}>
             <AppInner />
-          ) : (
-            <SentryErrorBoundary fallback={({ resetError }: { resetError: () => void }) => <ErrorFallbackScreen resetError={resetError} />}>
-              <AppInner />
-            </SentryErrorBoundary>
-          )}
+          </SentryErrorBoundary>
         </LanguageProvider>
       </PremiumProvider>
     </SafeAreaProvider>
-  );
-  return (
-    <>
-      <BootLogOverlay />
-      <DebugErrorBoundary>{inner}</DebugErrorBoundary>
-    </>
   );
 }
