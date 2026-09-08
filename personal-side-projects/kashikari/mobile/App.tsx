@@ -36,11 +36,17 @@ import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { LanguageProvider } from './src/i18n';
 import { requestTrackingPermission } from './src/lib/ads';
 import { getUsageStats, logEvent } from './src/lib/analytics';
+import { logBoot } from './src/lib/bootLog';
 import { submitFeedback } from './src/lib/feedback';
 import { PremiumProvider } from './src/lib/premiumContext';
 import { initSentry, SentryErrorBoundary } from './src/lib/sentry';
 import { isSupabaseConfigured } from './src/lib/supabase';
 import type { Group } from './src/types';
+import BootLogOverlay from './src/components/BootLogOverlay';
+
+// 起動時フリーズ調査用(101回目)。App.tsx自身の全import(画面・フック・
+// lib群)の評価がここまで完了した、という記録。
+logBoot('App.tsx: 全import評価完了');
 
 // 起動直後、読み込みが一瞬で終わってもロゴが一瞬フラッシュするだけにならない
 // よう、最低でもこれだけはブランド画面を見せる(体感の「間」を作るため)。
@@ -82,7 +88,14 @@ const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO_MODE === '1';
 
 // LanguageProviderの内側でuseAuth/useGroups(どちらも文言を扱う)を呼ぶため、
 // 実体はAppInnerに分離し、下のdefault exportでProviderをかぶせている。
+// AppInnerは何度も再描画されるため、ログが埋もれないよう初回のみ記録する。
+let loggedAppInnerRender = false;
+
 function AppInner() {
+  if (!loggedAppInnerRender) {
+    loggedAppInnerRender = true;
+    logBoot('AppInner: 初回render開始');
+  }
   const {
     loading: authLoading,
     userId,
@@ -448,24 +461,39 @@ function AppInner() {
 // SentryErrorBoundaryはLanguageProviderの内側に置き、フォールバック画面
 // (ErrorFallbackScreen)も同じテーマ・フォントの文脈で描画されるように
 // している(99回目)。
+// 101回目: setTimeoutで遅らせる修正を実機で試したが、フリーズは解消
+// しなかった。Sentry.init()自体はネイティブ呼び出しをPromiseで包んで
+// おり(sentry-react-native/dist/js/client.jsで確認済み)、JSスレッドを
+// 同期的にブロックする構造ではないため、Sentryが直接の原因という仮説の
+// 確度は下がっている。次にどこを疑うべきか実機ログから判断するため、
+// この呼び出しの前後をlogBoot()で記録する。
 setTimeout(() => {
+  logBoot('setTimeoutコールバック開始、initSentry()呼び出し前');
   try {
     initSentry();
-  } catch {
+    logBoot('initSentry()呼び出し完了(同期部分が正常に返った)');
+  } catch (e) {
+    logBoot(`initSentry()が例外を投げた: ${String(e)}`);
     // Sentry自体の初期化失敗でアプリ本体を巻き込まない。
   }
 }, 0);
 
+// 101回目: BootLogOverlayはSafeAreaProvider等どのProviderにも依存させ
+// たくないため、あえてSafeAreaProviderの外側・兄弟の位置に置く。原因が
+// 判明したらBootLogOverlayの呼び出しごと削除すること。
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <PremiumProvider demo={DEMO_MODE}>
-        <LanguageProvider>
-          <SentryErrorBoundary fallback={({ resetError }: { resetError: () => void }) => <ErrorFallbackScreen resetError={resetError} />}>
-            <AppInner />
-          </SentryErrorBoundary>
-        </LanguageProvider>
-      </PremiumProvider>
-    </SafeAreaProvider>
+    <>
+      <BootLogOverlay />
+      <SafeAreaProvider>
+        <PremiumProvider demo={DEMO_MODE}>
+          <LanguageProvider>
+            <SentryErrorBoundary fallback={({ resetError }: { resetError: () => void }) => <ErrorFallbackScreen resetError={resetError} />}>
+              <AppInner />
+            </SentryErrorBoundary>
+          </LanguageProvider>
+        </PremiumProvider>
+      </SafeAreaProvider>
+    </>
   );
 }
