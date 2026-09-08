@@ -1,19 +1,12 @@
 import { registerRootComponent } from 'expo';
 import 'react-native-url-polyfill/auto';
 
-import { logBoot } from './src/lib/bootLog';
-import App from './App';
+// 起動時フリーズ調査(101回目)のための一時的な切り分け。App.tsxは
+// 大量のファイルをimportしており、その評価中にオーバーレイの表示
+// すら阻害する何かが起きている可能性を切り分けるため、あえて
+// './App'を一切importせず、依存の無い最小構成コンポーネントだけを
+// 登録する。原因が判明したら、この2行をコメントアウト前の状態
+// (App.tsxを登録する形)に戻すこと。
+import MinimalDebugApp from './MinimalDebugApp';
 
-// 起動時フリーズ調査用(101回目)の記録。
-//
-// 注意: import文はモジュール内の他のコードより先にすべて実行される
-// (ESMのhoisting)ため、ここでのlogBoot()は「'./App'を含む全importの
-// 評価が完了した後」に呼ばれる。つまりApp.tsx側の同期的なimport評価が
-// フリーズの原因なら、この行自体が実行されずログに何も残らない。
-// その場合は「index.ts: registerRootComponent呼び出し前」のログすら
-// 出ていない=importの評価中に固まっている、と判断できる。
-logBoot('index.ts: 全importの評価完了、registerRootComponent呼び出し前');
-
-registerRootComponent(App);
-
-logBoot('index.ts: registerRootComponent呼び出し後');
+registerRootComponent(MinimalDebugApp);
