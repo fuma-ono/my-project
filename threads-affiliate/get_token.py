@@ -1,98 +1,45 @@
-"""Threads API のアクセストークンを取得するスクリプト(オーナーのPCで初回のみ実行)。
+"""Threads API のアクセストークンを取得するスクリプト(初回のみ実行)。
 
 事前に developers.facebook.com でMeta開発者アプリを作り、Threads APIを
 有効化し、「App ID」「App Secret」を控えておくこと(README.md参照)。
-リダイレクトURIはこのスクリプトが使う `https://localhost:8910/callback` を
-Meta側のアプリ設定にも登録しておくこと。
+リダイレクトURIはこのスクリプトが使う `https://example.com/oauth-callback`
+をMeta側のアプリ設定にも登録しておくこと。
 
-★2026年時点でThreads APIは全リダイレクトURIにHTTPSを必須化しており、
-`http://localhost`は使えない(実機で `Redirect URIs: すべてのリダイレクト
-URLでHTTPSが必要です` エラーを確認済み)。そのため、このスクリプトは
-自己署名証明書を自動生成し、ローカルでHTTPSサーバーを立てて認可コードを
-受け取る。ブラウザに「この接続ではプライバシーが保護されません」等の警告が
-出るが、自分自身が今立てたローカルサーバーへの接続なので、
-「詳細設定」→「localhostにアクセスする(安全ではありません)」を選んで進めてよい。
+## なぜ example.com を使うのか(ローカルサーバー方式をやめた理由)
 
-実行するとブラウザが開き、Threadsアカウントでの認可画面が出る。
-「許可する」を押すと、このスクリプトが自動でトークンを受け取り保存する。
+以前はPC上にローカルのHTTPSサーバーを立てて認可コードを自動受信する
+方式だったが、これは「ブラウザとサーバーが同じ端末上にある」ことが前提
+になる。iPad + Codespacesのような構成(Safariは端末側、スクリプトは
+クラウド側)では、Codespaces内のlocalhostにSafari側からアクセスする
+ことができず、原理的に成立しない。
+
+そこで、認可後のリダイレクト先を実在するダミードメイン(example.com、
+IANAが管理する常時アクセス可能なドメイン)にし、**リダイレクト後の
+アドレスバーのURLを手動でコピペする**方式に変更した。これならローカル
+サーバーもHTTPS証明書も不要で、iPad・PC・Codespaces、どの組み合わせでも
+動く(認可画面を開くブラウザさえあれば、スクリプト自体はどこで実行しても
+よい)。
+
+## 実行方法
+
+1. このスクリプトを実行(Codespacesでも可)
+2. App ID・App Secretを入力
+3. 表示されるURLをコピーし、ブラウザ(Safari等、どの端末でもよい)で開く
+4. Threadsアカウントで「許可する」を押す
+5. example.comのページにリダイレクトされる(中身は「Example Domain」と
+   いう簡素なページで問題ない)。**そのページのアドレスバーのURL全体を
+   コピー**する
+6. ターミナルに戻り、コピーしたURLを貼り付けてEnter
 """
 
-import datetime
-import http.server
 import json
 import pathlib
-import ssl
-import threading
 import urllib.parse
 import urllib.request
-import webbrowser
 
 HERE = pathlib.Path(__file__).parent
 TOKEN_FILE = HERE / "access-token.json"
-CERT_FILE = HERE / "localhost-cert.pem"
-KEY_FILE = HERE / "localhost-key.pem"
-REDIRECT_PORT = 8910
-REDIRECT_URI = f"https://localhost:{REDIRECT_PORT}/callback"
-
-received_code = {}
-
-
-def ensure_self_signed_cert() -> None:
-    """localhost向けの自己署名証明書を(無ければ)生成する。"""
-    if CERT_FILE.exists() and KEY_FILE.exists():
-        return
-    try:
-        from cryptography import x509
-        from cryptography.hazmat.primitives import hashes, serialization
-        from cryptography.hazmat.primitives.asymmetric import rsa
-        from cryptography.x509.oid import NameOID
-    except ImportError:
-        raise SystemExit(
-            "自己署名証明書の作成に `cryptography` パッケージが必要です。\n"
-            "先に `pip install cryptography` を実行してから、もう一度実行してください。"
-        )
-
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
-    now = datetime.datetime.now(datetime.timezone.utc)
-    cert = (
-        x509.CertificateBuilder()
-        .subject_name(name)
-        .issuer_name(name)
-        .public_key(key.public_key())
-        .serial_number(x509.random_serial_number())
-        .not_valid_before(now)
-        .not_valid_after(now + datetime.timedelta(days=825))
-        .add_extension(x509.SubjectAlternativeName([x509.DNSName("localhost")]), critical=False)
-        .sign(key, hashes.SHA256())
-    )
-    CERT_FILE.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
-    KEY_FILE.write_bytes(
-        key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
-    )
-    print(f"自己署名証明書を作成しました: {CERT_FILE.name} / {KEY_FILE.name}(.gitignore済み)")
-
-
-class CallbackHandler(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        parsed = urllib.parse.urlparse(self.path)
-        params = urllib.parse.parse_qs(parsed.query)
-        if "code" in params:
-            received_code["code"] = params["code"][0]
-            self.send_response(200)
-            self.send_header("Content-type", "text/html; charset=utf-8")
-            self.end_headers()
-            self.wfile.write("認可できました。このタブは閉じてターミナルに戻ってください。".encode())
-        else:
-            self.send_response(400)
-            self.end_headers()
-
-    def log_message(self, format, *args):
-        pass  # 標準出力を汚さない
+REDIRECT_URI = "https://example.com/oauth-callback"
 
 
 def http_get_json(url: str) -> dict:
@@ -107,8 +54,19 @@ def http_post_json(url: str, data: dict) -> dict:
         return json.loads(resp.read().decode())
 
 
+def extract_code(pasted: str) -> str:
+    """貼り付けられた文字列(URL全体、またはcodeの値そのもの)からcodeを取り出す。"""
+    pasted = pasted.strip()
+    if "code=" in pasted:
+        parsed = urllib.parse.urlparse(pasted)
+        params = urllib.parse.parse_qs(parsed.query)
+        if "code" in params:
+            return params["code"][0]
+    return pasted  # URL形式でなければ、code値がそのまま貼られたとみなす
+
+
 def main() -> None:
-    client_id = input("Meta開発者アプリの App ID: ").strip()
+    client_id = input("Meta開発者アプリの App ID(数字だけの値): ").strip()
     client_secret = input("Meta開発者アプリの App Secret: ").strip()
 
     scope = "threads_basic,threads_content_publish"
@@ -122,22 +80,17 @@ def main() -> None:
         })
     )
 
-    ensure_self_signed_cert()
-    server = http.server.HTTPServer(("localhost", REDIRECT_PORT), CallbackHandler)
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    context.load_cert_chain(certfile=str(CERT_FILE), keyfile=str(KEY_FILE))
-    server.socket = context.wrap_socket(server.socket, server_side=True)
-    server_thread = threading.Thread(target=server.handle_request)
-    server_thread.start()
-
-    print("ブラウザで認可画面を開きます。Threadsアカウントで「許可する」を押してください...")
-    print("(認可後、localhostへのリダイレクト時に「安全ではありません」という警告が")
-    print(" 出ますが、自己署名証明書によるものです。「詳細設定」から進んでください)")
-    webbrowser.open(authorize_url)
-    server_thread.join(timeout=180)
-
-    if "code" not in received_code:
-        print("認可コードを受け取れませんでした。もう一度実行してください。")
+    print("\n以下のURLをコピーして、ブラウザ(iPadのSafariでもOK)で開いてください:\n")
+    print(authorize_url)
+    print(
+        "\nThreadsアカウントで「許可する」を押すと、example.comのページに"
+        "リダイレクトされます。\nそのページのアドレスバーに表示されている"
+        "URL全体をコピーして、下に貼り付けてください。"
+    )
+    pasted = input("\nリダイレクト後のURL(またはcodeの値): ").strip()
+    code = extract_code(pasted)
+    if not code:
+        print("codeを読み取れませんでした。もう一度実行してください。")
         return
 
     # 短期トークンを取得
@@ -148,7 +101,7 @@ def main() -> None:
             "client_secret": client_secret,
             "grant_type": "authorization_code",
             "redirect_uri": REDIRECT_URI,
-            "code": received_code["code"],
+            "code": code,
         },
     )
     short_token = short_lived["access_token"]

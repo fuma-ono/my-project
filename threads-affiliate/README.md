@@ -8,35 +8,40 @@
 - 以降の投稿はすべてHTTPSでのAPI呼び出し(`graph.threads.net`)。ブラウザもログイン画面も経由しないので、reCAPTCHAのような詰まりが原理的に起きない
 - トークンは60日ごとの延長が必要だが、これも`refresh_token.py`をタスクスケジューラに登録しておけば自動化できる
 
-## なぜクラウドではなくオーナーのPCで実行するのか
+## どこで実行するか
 
-このリポジトリが動くクラウド環境は `graph.threads.net` への接続がネットワークポリシーでブロックされていることを確認済み(実測: `CONNECT tunnel failed, response 403`)。そのためAPI呼び出し自体はオーナーのPC(制限なし)で実行する。**タスクスケジューラ/cronに登録すれば、オーナーが毎回手を動かす必要はなくなる**(これが目指す「完全自動化」の実際の形)。
+Claude Codeが動くこのクラウド環境(セッションの中でコードを書いている環境)は `graph.threads.net` への接続がネットワークポリシーでブロックされていることを確認済み(実測: `CONNECT tunnel failed, response 403`)。**ただしGitHub Codespacesは別のネットワークなのでブロックされない**(実際に楽天API・Threads APIともCodespacesからの疎通を確認済み)。そのため:
+
+- `get_token.py`(初回のみ、認可コードの手動コピペが必要): Codespaces・PCどちらでも可
+- `publish.py` / `research.py` / `refresh_token.py`(通常運用): Codespacesでも動くが、**無人化(タスクスケジューラ登録)したい場合はPCが必要**(Codespacesは自動起動の仕組みを持たないため)。PCが無い場合は、しばらくはCodespacesを都度開いて手動実行する運用でも問題ない
 
 ## セットアップ手順(オーナー作業、初回のみ)
 
 1. Threadsアプリで、アカウントを「プロフェッショナル」に切り替える(Instagram側が既にプロフェッショナルなら自動で反映されていることもある)
 2. [developers.facebook.com](https://developers.facebook.com/) でMeta開発者アプリを新規作成し、ユースケースとして「Threads APIにアクセス」を追加
 3. 作成直後は「ビジネスポートフォリオのリンク」を聞かれるが、個人利用なら「現時点ではリンクしない」を選択
-4. Threads APIの「設定」で、アプリ設定の「有効なOAuthリダイレクトURI」に `https://localhost:8910/callback` を追加
-   - ★`http://`ではなく`https://`。2026年時点のThreads APIは全リダイレクトURIにHTTPS必須(実機確認済み、`http://localhost`は`すべてのリダイレクトURLでHTTPSが必要です`エラーになる)
+4. Threads APIの「設定」で、アプリ設定の「有効なOAuthリダイレクトURI」に `https://example.com/oauth-callback` を追加
+   - ★`example.com`はIANAが管理する常時アクセス可能なダミードメイン。`get_token.py`が「認可コードを自動受信するローカルサーバー」を使わず、**リダイレクト後のURLを手動でコピペする方式**にしたため、実在してさえいれば中身は何でもよい
+   - 2026年時点のThreads APIは全リダイレクトURIにHTTPS必須(`http://`は`すべてのリダイレクトURLでHTTPSが必要です`エラーになる)。`https://example.com/...`ならこの条件も満たす
    - 「コールバックURLをアンインストール」「コールバックURLを削除」も未入力だと保存できない場合がある。その場合は`https://example.com/uninstall`のようなダミーのHTTPS URLで埋めてよい(個人利用でこれらのWebhookは使わないため)
 5. 「Threadsテスターを追加または削除」から、投稿に使うThreadsアカウントをテスターとして追加する(アプリがMeta審査未通過の間、認証できるのはテスターだけ)
-6. アプリの「App ID」「App Secret」を控える
-7. パソコンで以下を実行:
+6. アプリの「App ID」(数字だけの値)と「App Secret」を控える(developers.facebookのログイン用メールアドレス・パスワードとは別物なので注意)
+7. **Codespacesでも、PCでもどちらでも実行可能**(iPadしか無くても、ブラウザさえあればOK):
    ```
    git pull
-   pip install cryptography   # 初回のみ。HTTPSのローカルサーバー用の自己署名証明書作成に使う
-   python threads-affiliate/get_token.py
+   python3 threads-affiliate/get_token.py
    ```
-   App ID・App Secretの入力を求められるので入力。ブラウザが開くので、Threadsアカウントで「許可する」を押す
-   - 認可後、`https://localhost:8910/callback`へのリダイレクト時にブラウザが「この接続ではプライバシーが保護されません」等の警告を出すが、自己署名証明書によるもの(自分自身が今立てたローカルサーバー)。「詳細設定」→「localhostにアクセスする」で進めてよい
-6. 投稿を確認したいだけなら:
+   - App ID・App Secretを入力すると、認可用のURLが表示される
+   - そのURLをコピーし、ブラウザ(Safari含む、どの端末でもよい)で開いて「許可する」を押す
+   - `example.com`のページ(中身は簡素な英語ページで問題ない)にリダイレクトされるので、**そのページのアドレスバーのURLを丸ごとコピー**
+   - ターミナルに戻り、貼り付けてEnter。これでトークンが保存される
+8. 投稿を確認したいだけなら:
    ```
-   python threads-affiliate/publish.py --dry-run
+   python3 threads-affiliate/publish.py --dry-run
    ```
-7. 実際に投稿:
+9. 実際に投稿:
    ```
-   python threads-affiliate/publish.py
+   python3 threads-affiliate/publish.py
    ```
 
 ## 完全に無人化する(タスクスケジューラ登録)
