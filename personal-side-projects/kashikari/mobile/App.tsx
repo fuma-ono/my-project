@@ -438,11 +438,23 @@ function AppInner() {
 // など離れた複数の画面がisPremiumを参照する必要があるため、ルートで
 // 1回だけ被せてある。
 //
-// initSentry()はモジュール読み込み時に1回だけ呼べば十分(RevenueCatの
-// initPurchases()と同じく、DSN未設定なら何もしない)。SentryErrorBoundary
-// はLanguageProviderの内側に置き、フォールバック画面(ErrorFallbackScreen)
-// も同じテーマ・フォントの文脈で描画されるようにしている(99回目)。
-initSentry();
+// initSentry()を起動と同じ瞬間(モジュール評価中、Reactが1枚目の画面を
+// 描画する前)に同期的に呼んでいたところ、実際にDSNを設定して
+// Sentry.init()が本当に動き出した初回のビルドから、起動直後に真っ白い
+// 画面のまま固まる不具合が実機で発生した(100回目)。原因の切り分けが
+// ついていないため、①ネイティブ初期化が万一失敗しても起動を道連れに
+// しないようtry/catchで囲み、②最初の画面が描画された後に遅らせて
+// 呼ぶことで、Sentry初期化が起動そのものをブロックしないようにした。
+// SentryErrorBoundaryはLanguageProviderの内側に置き、フォールバック画面
+// (ErrorFallbackScreen)も同じテーマ・フォントの文脈で描画されるように
+// している(99回目)。
+setTimeout(() => {
+  try {
+    initSentry();
+  } catch {
+    // Sentry自体の初期化失敗でアプリ本体を巻き込まない。
+  }
+}, 0);
 
 export default function App() {
   return (
