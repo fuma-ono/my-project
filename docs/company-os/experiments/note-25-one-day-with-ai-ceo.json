@@ -7,9 +7,9 @@
   "pillar": "B",
   "hypothesis": "#05(着手初期の感想)の続編。今回は実際の1日分の具体的なログという形で、「AIに任せる」ことの実態(自動化・共同作業・自己修正が同時に起きている)を見せることで読者の信頼構築につながる",
   "generated_at": "2026-08-27",
-  "published_at": null,
-  "status": "draft",
-  "note_url": "https://note.com/unique_condor276",
+  "published_at": "2026-09-08",
+  "status": "published",
+  "note_url": "https://note.com/unique_condor276/n/n9cc4d0d95ac5",
   "metrics": {
     "views": null,
     "likes": null,
@@ -31,5 +31,6 @@
     "clear_reader_value": true,
     "no_duplication_with_existing": true,
     "note": "2026-08-27、週2回運用Routineでの新規生成。同日実際に起きたBGMピアノプリセットの試作往復・サムネイル修正・音声バグの自己発見と修正を題材にした。#23(チャンネル誤投稿インシデント、失敗そのものが主題)・#24(10日間の不確実性)とは異なり、1日の中で自動化/共同作業/自己修正が同時に起きているという運用実態のスナップショットに焦点"
-  }
+  },
+  "publish_confirmation_note": "2026-09-08、note.com公開RSSフィードとのタイトル一致により自動検知(GitHub Actions定期実行)。"
 }
