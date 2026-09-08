@@ -22,6 +22,7 @@ Windowsのタスクスケジューラ、Macのcronに登録すれば、以降は
 """
 
 import argparse
+import datetime
 import json
 import pathlib
 import sys
@@ -113,10 +114,27 @@ def publish(dry_run: bool) -> None:
     PUBLISHED_DIR.mkdir(exist_ok=True)
     path.rename(PUBLISHED_DIR / path.name)
     log_result({
-        "text": text,
-        "affiliate_link": link,
-        "threads_post_id": result["id"],
+        # --- 公開時に確定する情報 ---
+        "post_id": result["id"],
+        "published_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "text": full_text,  # 実際に投稿された本文(リンク込み)
+        "affiliate_url": link,
+        "product_name": post.get("product_name"),
+        "category": post.get("pattern"),  # 共感投稿/発見投稿/比較投稿/商品紹介/まとめ投稿
         "source_file": path.name,
+        # --- 後からfetch_threads_insights.pyが埋める項目 ---
+        # views/likes/replies/reposts/quotesはThreads Media Insights APIで
+        # 取得可能なことを確認済み(2026-09-08、developers.facebook.com一次情報)。
+        "impressions": None,
+        "likes": None,
+        "replies": None,
+        "reposts": None,
+        "quotes": None,
+        # profile_visits・link_clicksはThreads APIで取得可能か未確認
+        # (2026-09-08時点。check_insights.pyで実際に確認してから対応する)。
+        "profile_visits": None,
+        "link_clicks": None,
+        "last_metrics_at": None,
     })
     print(f"公開しました。投稿ID: {result['id']}")
     print("Threadsアプリ/サイトで実際に表示されているか、目視で確認してください。")

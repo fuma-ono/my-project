@@ -82,6 +82,21 @@ Amazon経由で3件の成果が貯まったらPA-APIへのアクセス申請が�
 
 `threads-affiliate/pending/*.json` に `{"text": "...", "affiliate_link": "..."}` の形式で置かれた下書きを、古いものから1件ずつ投稿する。下書きは週次のRoutine(クラウド側)が自動生成し、コミット・pushする。オーナーは `git pull` するだけで最新の下書きを受け取れる。
 
+## 実績計測(2026-09-08〜)
+
+投稿を「いいね数」だけで評価しないため、以下の計測基盤を用意した。詳細方針は `docs/marketing/2026-09-08-threads-post-quality-guidelines.md` 参照。
+
+1. `publish.py`が投稿の度に `publish-log.jsonl` に記録(post_id・投稿日時・本文・リンク・商品名・パターン)
+2. `check_insights.py <post_id>` — Threads Insights APIで実際に取得可能なmetricを確認する診断スクリプト。`profile_visits`・`link_clicks`相当のmetricが存在するか2026-09-08時点で未確認のため、まずこれで実機確認する
+3. `fetch_threads_insights.py` — `publish-log.jsonl`の各投稿について実績(表示数・いいね・返信・リポスト・引用)を取得して追記する。現状は確認済みの5metricのみ対応(`views/likes/replies/reposts/quotes`)
+
+```
+python threads-affiliate/check_insights.py          # 初回、取得可能metricの確認
+python threads-affiliate/fetch_threads_insights.py  # 実績の取得・記録更新
+```
+
+楽天側のクリック・成果データとの突合は、投稿数がある程度貯まってから着手する(オーナー方針: 分析より先に正確なデータを貯めることを優先)。
+
 ## 運用ルール
 
 - 本文には必ずPR表記(`#PR` など)を含める(景品表示法対応)
