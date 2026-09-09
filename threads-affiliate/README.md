@@ -44,15 +44,22 @@ Claude Codeが動くこのクラウド環境(セッションの中でコード�
    python3 threads-affiliate/publish.py
    ```
 
-## 完全に無人化する(GitHub Actions、2026-09-08〜)
+## 完全に無人化する(GitHub Actions、2026-09-08〜。投稿は現在Phase 1で一時停止中)
 
 PC・iPad・Codespacesを一切開かなくても、GitHub Actionsのスケジュール実行で以下が自動で回る:
 
 | ワークフロー | 頻度 | 内容 |
 |---|---|---|
 | `.github/workflows/threads-research.yml` | 火曜 06:00 JST | `research.py`で商品候補を更新 |
-| `.github/workflows/threads-publish.yml` | 月・水・金 12:00 JST | `publish.py`で下書きを投稿(無ければ何もしない) |
+| `.github/workflows/threads-publish.yml` | **停止中(Phase 1)** | `publish.py`で下書きを投稿。2026-09-09、品質・投稿実績が安定するまではオーナーが手動実行する運用に変更(下記「運用フェーズ」参照)。手動実行(workflow_dispatch)は可能 |
 | `.github/workflows/threads-insights.yml` | 土曜 06:00 JST | `fetch_threads_insights.py`で実績を取得 |
+
+## 運用フェーズ(2026-09-09〜)
+
+`docs/marketing/2026-09-09-threads-account-repositioning.md`の指示により、アカウントの位置づけを「特定ジャンルの商品を売るアカウント」から「暮らしの中の便利を発掘して紹介するアカウント」(ジャンル無制限)に変更した。投稿頻度も週次→毎日(目標21:00頃投稿)に変更している。
+
+- **Phase 1(現在)**: 毎日20:00頃、クラウド側のRoutineが`pending/`に投稿案を自動生成・commit・pushする。**実際の投稿は自動化しない**。オーナーが内容を確認してから`publish.py`を手動実行する
+- **Phase 2(将来)**: 品質・投稿実績が安定したら`threads-publish.yml`のスケジュールトリガーを再度有効化し、生成から投稿まで完全自動化する
 
 ### 事前準備(オーナー作業、初回のみ)
 
@@ -102,13 +109,26 @@ Amazon経由で3件の成果が貯まったらPA-APIへのアクセス申請が�
 
 ## 投稿の中身
 
-`threads-affiliate/pending/*.json` に `{"text": "...", "affiliate_link": "..."}` の形式で置かれた下書きを、古いものから1件ずつ投稿する。下書きは週次のRoutine(クラウド側)が自動生成し、コミット・pushする。オーナーは `git pull` するだけで最新の下書きを受け取れる。
+`threads-affiliate/pending/*.json` に以下の形式で置かれた下書きを、古いものから1件ずつ投稿する(詳細フォーマットは`post-template.md`参照):
+
+```json
+{
+  "text": "本文(アフィリエイトリンクを含む場合は【PR】等の表記を冒頭に)",
+  "affiliate_link": "https://... または null",
+  "affiliate_platform": "rakuten|amazon|null",
+  "product_name": "商品名(社内管理用)",
+  "category": "商品ジャンル(例: キッチン用品)",
+  "post_type": "empathy|discovery|comparison|summary"
+}
+```
+
+下書きは毎日20:00頃のRoutine(クラウド側)が自動生成し、コミット・pushする。オーナーは `git pull` するだけで最新の下書きを受け取れる。ジャンルはもう限定していない(`docs/marketing/2026-09-09-threads-account-repositioning.md`参照)。
 
 ## 実績計測(2026-09-08〜)
 
 投稿を「いいね数」だけで評価しないため、以下の計測基盤を用意した。詳細方針は `docs/marketing/2026-09-08-threads-post-quality-guidelines.md` 参照。
 
-1. `publish.py`が投稿の度に `publish-log.jsonl` に記録(post_id・投稿日時・本文・リンク・商品名・パターン)
+1. `publish.py`が投稿の度に `publish-log.jsonl` に記録(post_id・投稿日時・本文・リンク・アフィリエイトプラットフォーム・商品名・ジャンル・post_type)
 2. `check_insights.py <post_id>` — Threads Insights APIで実際に取得可能なmetricを確認する診断スクリプト。`profile_visits`・`link_clicks`相当のmetricが存在するか2026-09-08時点で未確認のため、まずこれで実機確認する
 3. `fetch_threads_insights.py` — `publish-log.jsonl`の各投稿について実績(表示数・いいね・返信・リポスト・引用)を取得して追記する。現状は確認済みの5metricのみ対応(`views/likes/replies/reposts/quotes`)
 
@@ -121,9 +141,9 @@ python threads-affiliate/fetch_threads_insights.py  # 実績の取得・記録�
 
 ## 運用ルール
 
-- 本文には必ずPR表記(`#PR` など)を含める(景品表示法対応)
+- アフィリエイトリンクを含む投稿は、本文の**冒頭**に必ずPR表記(`【PR】`/`#PR`/`#広告`/`[PR]`)を入れる(末尾に小さく書くだけは不可、景品表示法対応)。`publish.py`が投稿時にこれを検証し、無い・末尾のみの場合は投稿を中断する(`validate_pr_disclosure()`)
 - 使ったことのない商品について断定的な体験談は書かない(`docs/marketing/2026-08-18-ai-affiliate-feasibility.md` セクション15参照)
-- 最初のうちは`pending/`に追加された下書きに一度目を通してから`publish.py`を実行することを推奨(無人化は、内容に問題が無いと確認できてから)
+- Phase 1の間は、`pending/`に追加された下書きに必ず一度目を通してから`publish.py`を実行する(GitHub Actionsによる自動投稿は現在停止中、上記「運用フェーズ」参照)
 
 ## セキュリティ
 

@@ -53,22 +53,32 @@ AMAZON_LINKS_MD = HERE / "amazon-links.md"
 # 認証エラーになることを実機確認したため、こちらに切り替えた。
 SEARCH_API = "https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260701"
 
-# 「儲かりそう」という直感ではなく、以下5基準で選定したジャンル
-# (docs/marketing/2026-09-08-genre-pivot.md 参照):
-# ①数値・サイズで比較できる ②型番が変わりにくく来年も同じ悩みで検索される
-# ③検索需要はあるのに比較記事が少ない ④3,000〜15,000円の価格帯
-# ⑤効果・効能を語る必要がない(薬機法・景品表示法リスクが低い)
-# 「繰り返し検索されるか」を最優先し、対象者を特定の趣味・職業に絞らない
-# 広い需要のジャンルを選んでいる。増減はここを編集するだけでよい。
-KEYWORDS = [
-    "モバイルバッテリー 10000mAh",
-    "電気ケトル おすすめ",
-    "折りたたみ傘 自動開閉",
-    "電気毛布 洗える",
-]
+# 2026-09-09、オーナー指示によりジャンル限定を撤廃した
+# (docs/marketing/2026-09-09-threads-account-repositioning.md 参照。
+# 旧・4ジャンル限定方針は docs/marketing/2026-09-08-genre-pivot.md に経緯を残すのみ)。
+# 「誰かの困りごとを解決する便利なもの」を優先しつつ、生活便利グッズ・
+# キッチン用品・家電・スマホ/PC周辺機器・旅行用品・車用品・防災用品・
+# 季節商品・美容/身だしなみ用品・収納/掃除用品を幅広く調査する。
+# AI/Webサービスは楽天・Amazonの商品検索APIでは扱えないため対象外
+# (別途手動リサーチする運用。post-template.md参照)。
+# カテゴリ名は`category`としてproducts.json/product-candidates.mdに残し、
+# 商品選定・レポートで参照できるようにする。増減はこの辞書を編集するだけでよい。
+KEYWORDS_BY_CATEGORY = {
+    "モバイル機器": ["モバイルバッテリー 10000mAh", "スマホ 折りたたみスタンド"],
+    "キッチン用品": ["電気ケトル おすすめ", "みじん切り 便利グッズ"],
+    "生活便利グッズ": ["折りたたみ傘 自動開閉", "収納ボックス 便利"],
+    "季節商品": ["電気毛布 洗える", "冷感タオル 便利"],
+    "旅行用品": ["旅行 圧縮バッグ", "パッキングキューブ 便利"],
+    "車用品": ["車 収納 便利グッズ", "車載 芳香剤 おすすめ"],
+    "防災用品": ["防災グッズ セット 便利", "モバイルバッテリー 大容量 防災"],
+    "美容・身だしなみ用品": ["ヘアドライヤー 速乾 おすすめ", "携帯用 毛玉取り"],
+    "掃除用品": ["コードレス掃除機 コンパクト", "お風呂掃除 便利グッズ"],
+}
+# 後方互換のためフラットなリストも保持(既存コードからの参照用)
+KEYWORDS = [kw for kws in KEYWORDS_BY_CATEGORY.values() for kw in kws]
 
 MIN_PRICE = 3000   # これ未満は「安すぎて迷わず買う」価格帯とみなし除外
-MAX_PRICE = 15000  # これを超える価格帯は購入ハードルが高いとみなし除外(暫定の目安)
+MAX_PRICE = 20000  # 家電など単価が上がるジャンルを含めたため、旧15,000円から引き上げ(暫定の目安)
 
 # 楽天アプリ作成フォームで「アプリケーションURL」に登録した値そのもの。
 # 「許可されたウェブサイト」欄のドメイン(note.com)に対する単純なRefererでは
@@ -194,6 +204,10 @@ def main() -> None:
     affiliate_id = config["affiliate_id"]
     amazon_links = load_amazon_links()
 
+    keyword_category = {
+        kw: category for category, kws in KEYWORDS_BY_CATEGORY.items() for kw in kws
+    }
+
     all_candidates = []
     for i, keyword in enumerate(KEYWORDS):
         if i > 0:
@@ -230,6 +244,7 @@ def main() -> None:
                 # Amazon優先で紹介する。無ければ楽天(完全自動)を使う。
                 "preferred_platform": "amazon" if amazon_url else "rakuten",
                 "keyword": keyword,
+                "category": keyword_category.get(keyword, ""),
                 "score": score_item(item),
             })
 
@@ -251,33 +266,34 @@ def main() -> None:
         json.dumps(all_candidates, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    top = all_candidates[:10]
+    top = all_candidates[:20]
     lines = [
         "# 商品候補リスト(楽天API自動調査、最終更新は products.json のタイムスタンプ参照)",
         "",
         "`research.py` の自動スコアリング結果。需要(レビュー件数)・満足度(レビュー平均)・",
         "価格帯のバランスで暫定スコアを付けている。実データが貯まったら重み付けを見直すこと。",
+        "ジャンルは限定しない方針(`docs/marketing/2026-09-09-threads-account-repositioning.md`)。",
         "",
         "## 上位候補",
         "",
         "Amazonリンクが `amazon-links.md` に登録済みの商品は、Amazon側の実績作りを優先して",
         "Amazonリンクを使う(推奨プラットフォーム欄が `amazon`)。未登録の商品は楽天(完全自動)。",
         "",
-        "| 商品名 | 価格 | レビュー数 | 評価 | スコア | 推奨 | リンク |",
-        "|---|---|---|---|---|---|---|",
+        "| 商品名 | ジャンル | 価格 | レビュー数 | 評価 | スコア | 推奨 | リンク |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for c in top:
         name = c["name"][:40].replace("|", "-")
         link = c["amazon_affiliate_url"] if c["preferred_platform"] == "amazon" else c["affiliate_url"]
         lines.append(
-            f"| {name} | ¥{c['price']:,} | {c['review_count']} | {c['review_average']} | "
+            f"| {name} | {c.get('category', '')} | ¥{c['price']:,} | {c['review_count']} | {c['review_average']} | "
             f"{c['score']} | {c['preferred_platform']} | [リンク]({link}) |"
         )
     lines += [
         "",
         "## 運用ルール",
         "",
-        "- 1商品につき週1回までの紹介に留める(同じ商品を毎日連投しない)",
+        "- 毎日1投稿ペースなので、同じ商品を7日以内に再度取り上げない",
         "- 実際にクリック・購入があった商品は下部の「実績」に記録する",
         "- Amazon側で3件の成果が貯まったら、`amazon-links.md` の運用をPA-API自動化に切り替える",
         "",
