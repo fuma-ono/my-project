@@ -33,6 +33,17 @@
     },
     "plugins": [
       [
+        "expo-build-properties",
+        {
+          "ios": {
+            "newArchEnabled": false
+          },
+          "android": {
+            "newArchEnabled": false
+          }
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "レシートの写真を記録に添付するために使用します。",
