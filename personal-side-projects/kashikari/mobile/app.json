@@ -9,7 +9,7 @@
     "scheme": "kashikari",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.kashikari.mobile2",
+      "bundleIdentifier": "com.kashikari.mobile",
       "infoPlist": {
         "NSCameraUsageDescription": "レシートを撮影して記録に添付するために使用します。",
         "NSPhotoLibraryUsageDescription": "レシートの写真を記録に添付するために使用します。",
@@ -17,7 +17,7 @@
       }
     },
     "android": {
-      "package": "com.kashikari.mobile2",
+      "package": "com.kashikari.mobile",
       "adaptiveIcon": {
         "backgroundColor": "#ff6b4a",
         "foregroundImage": "./assets/android-icon-foreground.png"

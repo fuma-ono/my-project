@@ -1,4 +1,4 @@
-import type { CustomerInfo } from 'react-native-purchases';
+import type { CustomerInfo } from './purchases';
 
 // react-native-purchasesはネイティブ専用のモジュールで、Web版
 // (EXPO_PUBLIC_DEMO_MODE=1でのWebプレビュー、Playwright検証)では
