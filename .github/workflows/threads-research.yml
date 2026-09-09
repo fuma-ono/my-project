@@ -1,10 +1,16 @@
 name: Threads Affiliate - Research
 
 # 楽天APIで商品候補を調査する(threads-affiliate/research.py)。
-# 毎週火曜 06:00 JST(投稿生成Routineより前)に実行する想定。
+# 毎週火曜 06:00 JST頃(投稿生成Routineより前)に実行する想定。
+#
+# 2026-09-09: threads-publish.ymlで「毎時00分」設定のスケジュールが
+# 一度も発火しない事象が発生し、GitHub公式ドキュメントの「毎時00分は
+# Actions全体の混雑ピークで遅延・スキップされやすい」という既知の制限が
+# 原因と判明した。このワークフローも同じく毎時00分だったため、
+# 同時に`5`分にずらした。
 on:
   schedule:
-    - cron: '0 21 * * 1' # 火曜 06:00 JST = 月曜 21:00 UTC
+    - cron: '5 21 * * 1' # 火曜 06:05 JST = 月曜 21:05 UTC(毎時00分の混雑を回避)
   workflow_dispatch: {}
 
 permissions:
