@@ -4,13 +4,18 @@ name: Threads Affiliate - Publish
 # 下書きが無ければ何もしない(publish.py側で判定済み)。
 #
 # 2026-09-09、オーナー指示によりPhase 2(完全自動投稿)へ移行した。
-# 毎日20:00 JSTの投稿案生成Routineの後、21:00 JSTにこのワークフローが
+# 毎日20:00 JSTの投稿案生成Routineの後、21:00 JST頃にこのワークフローが
 # pending/の下書きを自動投稿する。人間のレビューは入らないため、
 # publish.py側のPR表記検証(validate_pr_disclosure)が最後の安全弁になる。
 # 詳細: docs/marketing/2026-09-09-threads-account-repositioning.md
+#
+# 2026-09-09: 初回の`0 12 * * *`(毎時00分)が一度も発火しなかった事象が発生。
+# GitHub公式ドキュメントで「毎時00分はActions全体の混雑ピークで、
+# スケジュール実行が遅延・スキップされやすい」と明記されているため、
+# 毎時00分を避けて`5`分にずらした(体感の投稿時刻はほぼ変わらない)。
 on:
   schedule:
-    - cron: '0 12 * * *' # 毎日21:00 JST = 12:00 UTC
+    - cron: '5 12 * * *' # 毎日21:05 JST = 12:05 UTC(毎時00分の混雑を回避)
   workflow_dispatch: {}
 
 permissions:
