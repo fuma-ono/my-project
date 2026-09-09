@@ -104,10 +104,12 @@
   "replies": null,
   "reposts": null,
   "quotes": null,
-  "profile_visits": null,
-  "link_clicks": null,
+  "shares": null,
+  "clicks": null,
   "last_metrics_at": null
 }
 ```
+
+**2026-09-09追記**: `check_insights.py`の実機確認により、Threads Media Insights APIで有効なmetricは`clicks, likes, quotes, replies, reposts, shares, views`の7つのみと判明した。`profile_visits`相当のmetricは投稿単位のInsightsには存在しないため、フィールド自体を廃止した。`clicks`はリンク・ハッシュタグ・メンション・メディアへのクリックを合算した値で、アフィリエイトリンク単体のクリック数ではない可能性がある点に注意。
 
 `category`は商品ジャンル(例: "キッチン用品")、`post_type`は上記4パターンの英語値。旧スキーマの`category`(実際には投稿パターンを格納していた)は`post_type`に役割を移した。
