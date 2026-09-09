@@ -84,7 +84,10 @@ def main() -> None:
     client_id = input("Meta開発者アプリの App ID(数字だけの値): ").strip()
     client_secret = input("Meta開発者アプリの App Secret: ").strip()
 
-    scope = "threads_basic,threads_content_publish"
+    # 2026-09-09: threads_manage_insightsが抜けていたため、Insights API呼び出しが
+    # 全metricで「Application does not have permission for this action」(code 10)
+    # になっていた(metric名の問題ではなく、スコープ自体が無かったのが原因)。
+    scope = "threads_basic,threads_content_publish,threads_manage_insights"
     authorize_url = (
         "https://threads.net/oauth/authorize?"
         + urllib.parse.urlencode({
