@@ -188,10 +188,15 @@ def publish(dry_run: bool) -> None:
     # (empathy/discovery/comparison/summary)。旧`pattern`フィールドしか無い
     # 下書きは後方互換マッピングで変換する。
     post_type = post.get("post_type") or LEGACY_PATTERN_TO_POST_TYPE.get(post.get("pattern"))
+    published_at_dt = datetime.datetime.now(datetime.timezone.utc)
     log_result({
         # --- 公開時に確定する情報 ---
         "post_id": result["id"],
-        "published_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "published_at": published_at_dt.isoformat(),
+        # 楽天/Amazonの成果画面は「注文日」単位でしか出ないため、日付だけを
+        # 取り出したこのフィールドで月次の手動突合をしやすくする(2026-09-09、
+        # ログ設計の一環。post単位の自動紐付けIDは現状存在しない、後述)。
+        "published_date": published_at_dt.date().isoformat(),
         "text": full_text,  # 実際に投稿された本文(リンク込み)
         "affiliate_url": link,
         "affiliate_platform": infer_affiliate_platform(post),
@@ -203,7 +208,8 @@ def publish(dry_run: bool) -> None:
         # 2026-09-09、check_insights.pyの実機確認により、Threads Media Insights APIで
         # 有効なmetricはこの7つ(views/likes/replies/reposts/quotes/shares/clicks)の
         # みと確定した(無効なmetric名を指定した際のエラーメッセージで確認)。
-        "impressions": None,
+        # フィールド名はAPIのmetric名そのまま(views)に統一する(旧impressionsから改称)。
+        "views": None,
         "likes": None,
         "replies": None,
         "reposts": None,

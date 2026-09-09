@@ -99,7 +99,7 @@
   "product_name": "...",
   "category": "...",
   "post_type": "empathy",
-  "impressions": null,
+  "views": null,
   "likes": null,
   "replies": null,
   "reposts": null,

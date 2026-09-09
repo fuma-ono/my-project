@@ -105,10 +105,9 @@ def main() -> None:
         try:
             raw = fetch_insights(post_id, access_token)
             metrics = parse_metrics(raw)
-            for key in ("impressions", "likes", "replies", "reposts", "quotes", "shares", "clicks"):
-                api_key = "views" if key == "impressions" else key
-                if api_key in metrics:
-                    entry[key] = metrics[api_key]
+            for key in ("views", "likes", "replies", "reposts", "quotes", "shares", "clicks"):
+                if key in metrics:
+                    entry[key] = metrics[key]
             entry["last_metrics_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
             updated_count += 1
             print(f"post_id={post_id}: {metrics}")
