@@ -15,10 +15,14 @@ Meta社の公式APIを直接HTTPSで呼ぶだけなので、ログイン画面�
 2. developers.facebook.com でMeta開発者アプリを作成し、Threads APIを有効化
 3. `python threads-affiliate/get_token.py` でアクセストークンを取得・保存
 
-## 定期実行
+## 定期実行(Phase 1: 現在はオーナーが手動実行する運用)
 
-Windowsのタスクスケジューラ、Macのcronに登録すれば、以降は完全に無人で
-「下書きを読む→投稿する」を繰り返せる。
+2026-09-09のオーナー指示により、品質・投稿実績が安定するまでは
+**このスクリプトを無人スケジュール実行しない**(`.github/workflows/threads-publish.yml`の
+スケジュールトリガーは一時停止済み)。`pending/`の下書きを目視確認したうえで、
+オーナーがこのスクリプトを手動実行する運用とする。将来、Phase 2として
+無人化する際は同ワークフローのcronを再度有効化すればよい
+(詳細: `docs/marketing/2026-09-09-threads-account-repositioning.md`)。
 """
 
 import argparse
@@ -38,6 +42,57 @@ PUBLISHED_DIR = HERE / "published"
 LOG_FILE = HERE / "publish-log.jsonl"
 
 GRAPH_BASE = "https://graph.threads.net/v1.0"
+
+# 2026-09-09、オーナー指示によりPR表記は「冒頭に配置」が必須になった
+# (末尾に小さく書くだけの設計は禁止。docs/marketing/2026-09-09-threads-account-repositioning.md)。
+# 表記漏れ・末尾のみの表記をこの一覧で検知する。
+PR_MARKERS = ["【PR】", "#PR", "#広告", "[PR]"]
+PR_MARKER_MAX_OFFSET = 10  # 本文の最初の何文字以内に現れれば「冒頭」とみなすか(絵文字等の遊びを許容)
+
+# 旧pending JSON(`pattern`フィールドのみ、5パターン制)からの後方互換用マッピング。
+# 新規に生成する下書きは`post_type`を直接指定する(post-template.md参照)。
+LEGACY_PATTERN_TO_POST_TYPE = {
+    "共感投稿": "empathy",
+    "発見投稿": "discovery",
+    "比較投稿": "comparison",
+    "まとめ投稿": "summary",
+    "商品紹介": "discovery",  # 独立パターンを廃止したため、暫定でdiscoveryに寄せる
+}
+
+
+def validate_pr_disclosure(text: str, has_link: bool) -> None:
+    """アフィリエイトリンクを含む投稿の本文が、冒頭でPR表記を行っているか検証する。
+
+    景品表示法のステマ規制対応。表記が無い、または末尾など冒頭以外にしか
+    無い場合は例外を投げて投稿を中断する(オーナー指示で必須のバリデーション)。
+    """
+    if not has_link:
+        return
+    head = text[:PR_MARKER_MAX_OFFSET]
+    if any(marker in head for marker in PR_MARKERS):
+        return
+    if any(marker in text for marker in PR_MARKERS):
+        raise ValueError(
+            "PR表記が本文中に見つかりましたが、冒頭ではありません。"
+            "アフィリエイトリンクを含む投稿は【PR】等を本文の先頭に配置してください"
+            "(末尾に小さく書くだけの設計は禁止)。"
+        )
+    raise ValueError(
+        "アフィリエイトリンクを含む投稿にPR表記(【PR】/#PR/#広告のいずれか)がありません。"
+        "本文の冒頭に追加してください。"
+    )
+
+
+def infer_affiliate_platform(post: dict) -> str | None:
+    explicit = post.get("affiliate_platform")
+    if explicit:
+        return explicit
+    link = post.get("affiliate_link") or ""
+    if "amazon" in link or "amzn" in link:
+        return "amazon"
+    if "rakuten" in link:
+        return "rakuten"
+    return None
 
 
 def load_token() -> tuple[str, str]:
@@ -90,6 +145,12 @@ def publish(dry_run: bool) -> None:
     text = post["text"]  # PR表記込みの本文(500文字以内、Threadsの制限に注意)
     link = post.get("affiliate_link")  # 任意: 商品リンク
 
+    try:
+        validate_pr_disclosure(text, has_link=bool(link))
+    except ValueError as e:
+        print(f"投稿を中断しました({path.name}): {e}")
+        sys.exit(1)
+
     # Threadsの投稿は本文中のURLを自動的にリンク化するため、実際に投稿する
     # 本文にリンクを含める(以前はここでリンクを本文に混ぜていなかったため、
     # 投稿にリンクが一切表示されないバグがあった)。
@@ -122,14 +183,20 @@ def publish(dry_run: bool) -> None:
 
     PUBLISHED_DIR.mkdir(exist_ok=True)
     path.rename(PUBLISHED_DIR / path.name)
+    # post_type: 新スキーマでは pending JSON が直接 post_type を指定する
+    # (empathy/discovery/comparison/summary)。旧`pattern`フィールドしか無い
+    # 下書きは後方互換マッピングで変換する。
+    post_type = post.get("post_type") or LEGACY_PATTERN_TO_POST_TYPE.get(post.get("pattern"))
     log_result({
         # --- 公開時に確定する情報 ---
         "post_id": result["id"],
         "published_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "text": full_text,  # 実際に投稿された本文(リンク込み)
         "affiliate_url": link,
+        "affiliate_platform": infer_affiliate_platform(post),
         "product_name": post.get("product_name"),
-        "category": post.get("pattern"),  # 共感投稿/発見投稿/比較投稿/商品紹介/まとめ投稿
+        "category": post.get("category"),  # 商品ジャンル(例: キッチン用品)
+        "post_type": post_type,  # empathy/discovery/comparison/summary
         "source_file": path.name,
         # --- 後からfetch_threads_insights.pyが埋める項目 ---
         # views/likes/replies/reposts/quotesはThreads Media Insights APIで
