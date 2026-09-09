@@ -199,17 +199,20 @@ def publish(dry_run: bool) -> None:
         "post_type": post_type,  # empathy/discovery/comparison/summary
         "source_file": path.name,
         # --- 後からfetch_threads_insights.pyが埋める項目 ---
-        # views/likes/replies/reposts/quotesはThreads Media Insights APIで
-        # 取得可能なことを確認済み(2026-09-08、developers.facebook.com一次情報)。
+        # 2026-09-09、check_insights.pyの実機確認により、Threads Media Insights APIで
+        # 有効なmetricはこの7つ(views/likes/replies/reposts/quotes/shares/clicks)の
+        # みと確定した(無効なmetric名を指定した際のエラーメッセージで確認)。
         "impressions": None,
         "likes": None,
         "replies": None,
         "reposts": None,
         "quotes": None,
-        # profile_visits・link_clicksはThreads APIで取得可能か未確認
-        # (2026-09-08時点。check_insights.pyで実際に確認してから対応する)。
-        "profile_visits": None,
-        "link_clicks": None,
+        "shares": None,
+        # clicksはリンク・ハッシュタグ・メンション・メディアへのクリックを合算した値
+        # (アフィリエイトリンク単体のクリック数ではない可能性がある)。
+        "clicks": None,
+        # profile_visits相当のmetricは投稿単位のInsightsには存在しないと確認済み
+        # (2026-09-09)。フィールド自体を廃止した。
         "last_metrics_at": None,
     })
     print(f"公開しました。投稿ID: {result['id']}")

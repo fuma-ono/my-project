@@ -4,17 +4,22 @@ publish.pyとは別スクリプトとして分離している(投稿処理とイ
 責務を分けるため)。オーナーのPC/Codespacesで、投稿から数日おきに実行する
 運用を想定(タスクスケジューラ登録も可)。
 
-## 現状の対応範囲(2026-09-08時点)
+## 対応範囲(2026-09-09、check_insights.pyで実機確認済み)
 
-`views` / `likes` / `replies` / `reposts` / `quotes` の5metricのみ取得する。
-これらは一次情報(developers.facebook.com検索結果)と一致度が高いが、
-`check_insights.py`での実機確認はまだ完了していない。
+Threads Media Insights APIが実際に受け付ける有効なmetricは
+`clicks, likes, quotes, replies, reposts, shares, views` の7つのみ
+(2026-09-09、`check_insights.py`が意図的に無効なmetric名でリクエストした際の
+エラーメッセージで確定。以前の権限エラーはmetric名の問題ではなく、
+トークンに`threads_manage_insights`スコープが無かったことが原因だった)。
 
-`profile_visits` / `link_clicks` 相当のmetricは、実際にThreads APIで
-取得可能か2026-09-08時点で確認できていないため、**このスクリプトでは
-問い合わせない**(推測で存在しないmetric名をリクエストしてエラーに
-するくらいなら、確認済みの範囲だけ実装する、というオーナー方針に従う)。
-`check_insights.py`の実行結果を見て、取得可能と判明次第この一覧に追加する。
+`profile_visits`相当のmetricは**このリストに存在せず、投稿単位のInsightsでは
+取得不可と判明した**。アカウント単位の指標として別途存在する可能性はあるが、
+今回の用途(投稿ごとの効果測定)では使えないため対応しない。
+
+`clicks`はリンク・ハッシュタグ・メンション・添付メディアへのクリックを
+合算した値(Threads公式の説明ベース)で、アフィリエイトリンク単体のクリック数
+ではない可能性がある点に注意。それでも「表示→クリック→購入」の大まかな
+離脱率を見る目的には使える。
 
 ## 使い方
 
@@ -41,9 +46,8 @@ TOKEN_FILE = HERE / "access-token.json"
 LOG_FILE = HERE / "publish-log.jsonl"
 GRAPH_BASE = "https://graph.threads.net/v1.0"
 
-# 2026-09-08時点で取得可能と考えられる(要: check_insights.pyでの実機確認)metricのみ。
-# profile_visits / link_clicks 相当は未確認のためリクエストしない。
-CONFIRMED_METRICS = "views,likes,replies,reposts,quotes"
+# 2026-09-09、check_insights.pyで実機確認済みの全7metric。
+CONFIRMED_METRICS = "views,likes,replies,reposts,quotes,shares,clicks"
 
 
 def load_token() -> str:
@@ -101,7 +105,7 @@ def main() -> None:
         try:
             raw = fetch_insights(post_id, access_token)
             metrics = parse_metrics(raw)
-            for key in ("impressions", "likes", "replies", "reposts", "quotes"):
+            for key in ("impressions", "likes", "replies", "reposts", "quotes", "shares", "clicks"):
                 api_key = "views" if key == "impressions" else key
                 if api_key in metrics:
                     entry[key] = metrics[api_key]

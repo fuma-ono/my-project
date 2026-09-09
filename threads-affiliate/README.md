@@ -99,6 +99,8 @@ GitHub Actionsの`schedule`(cron)は、**リポジトリのデフォルトブラ
 
 ### Amazonアフィリエイトとの併用
 
+**2026-09-09、オーナーのAmazonアソシエイトアカウントが承認済み(いつでもリンク生成可能)であることを確認した。** ただし「紹介料のお支払いのための税務情報アンケート」が未回答の場合、実際に売上が発生しても支払いが止まるため、早めの回答を推奨(リンク生成自体はブロックされない)。
+
 Amazon公式のPA-API(商品検索の自動化)は、**直近180日で3件以上の成果が無いとアクセスできない**ため、新規アカウントでは楽天と同じ形の完全自動化ができない。そのため当面は次の運用にしている:
 
 1. Amazonアソシエイトに登録し、SiteStripeで商品ページごとに手動でアフィリエイトリンクを生成
@@ -129,8 +131,8 @@ Amazon経由で3件の成果が貯まったらPA-APIへのアクセス申請が�
 投稿を「いいね数」だけで評価しないため、以下の計測基盤を用意した。詳細方針は `docs/marketing/2026-09-08-threads-post-quality-guidelines.md` 参照。
 
 1. `publish.py`が投稿の度に `publish-log.jsonl` に記録(post_id・投稿日時・本文・リンク・アフィリエイトプラットフォーム・商品名・ジャンル・post_type)
-2. `check_insights.py <post_id>` — Threads Insights APIで実際に取得可能なmetricを確認する診断スクリプト。`profile_visits`・`link_clicks`相当のmetricが存在するか2026-09-08時点で未確認のため、まずこれで実機確認する
-3. `fetch_threads_insights.py` — `publish-log.jsonl`の各投稿について実績(表示数・いいね・返信・リポスト・引用)を取得して追記する。現状は確認済みの5metricのみ対応(`views/likes/replies/reposts/quotes`)
+2. `check_insights.py <post_id>` — Threads Insights APIで実際に取得可能なmetricを確認する診断スクリプト。**2026-09-09、実機確認完了**: 有効なmetricは`clicks, likes, quotes, replies, reposts, shares, views`の7つのみ。`profile_visits`相当は投稿単位のInsightsには存在しないと判明した(当初の権限エラーはmetric名の問題ではなく、トークンに`threads_manage_insights`スコープが無かったことが原因だった)
+3. `fetch_threads_insights.py` — `publish-log.jsonl`の各投稿について実績(表示数・いいね・返信・リポスト・引用・共有・クリック)を取得して追記する。確認済みの7metric全てに対応(`views/likes/replies/reposts/quotes/shares/clicks`)
 
 ```
 python threads-affiliate/check_insights.py          # 初回、取得可能metricの確認
