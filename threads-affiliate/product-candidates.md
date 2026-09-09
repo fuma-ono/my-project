@@ -11,8 +11,8 @@ Amazonリンクを使う(推奨プラットフォーム欄が `amazon`)。未登
 
 | 商品名 | ジャンル | 価格 | レビュー数 | 評価 | スコア | 推奨 | リンク |
 |---|---|---|---|---|---|---|---|
-| 【エントリーで店内全品P10倍★ 9/11 1:59迄】タイガー魔法瓶 タイガー | キッチン用品 | ¥4,980 | 589 | 4.7 | 97.6 | rakuten | [リンク](https://hb.afl.rakuten.co.jp/hgc/g00rgmqo.3agd0ed5.g00rgmqo.3agd196a/?pc=https%3A%2F%2Fitem.rakuten.co.jp%2Ftiger-online%2Fpcm-a080%2F&m=http%3A%2F%2Fm.rakuten.co.jp%2Ftiger-online%2Fi%2F10003897%2F&rafcid=wsc_i_is_2a84f5dd-1de6-473f-8afa-bfaf2d63eea1) |
-| 【20%ポイント還元 】 【楽天1位】ドライヤー 速乾 早く乾く 大風量 大風圧 | 美容・身だしなみ用品 | ¥4,480 | 2379 | 4.67 | 97.4 | rakuten | [リンク](https://hb.afl.rakuten.co.jp/hgc/g00tc8co.3agd06fb.g00tc8co.3agd1c9e/?pc=https%3A%2F%2Fitem.rakuten.co.jp%2Ftescom-japan%2Fspeedom_02%2F&m=http%3A%2F%2Fm.rakuten.co.jp%2Ftescom-japan%2Fi%2F10000036%2F&rafcid=wsc_i_is_2a84f5dd-1de6-473f-8afa-bfaf2d63eea1) |
+| 【エントリーで店内全品P10倍★ 9/11 1:59迄】タイガー魔法瓶 タイガー | キッチン用品 | ¥4,980 | 589 | 4.7 | 97.6 | amazon | [リンク](https://link.amazon/B0bwBlftG) |
+| 【20%ポイント還元 】 【楽天1位】ドライヤー 速乾 早く乾く 大風量 大風圧 | 美容・身だしなみ用品 | ¥4,480 | 2379 | 4.67 | 97.4 | amazon | [リンク](https://link.amazon/B062JpFBZ) |
 | サーフィン バケツ TOOLS ウォーターボックス ツールス WATER BOX | 車用品 | ¥4,880 | 1205 | 4.66 | 97.3 | rakuten | [リンク](https://hb.afl.rakuten.co.jp/hgc/g00pvoyo.3agd0021.g00pvoyo.3agd1a3d/?pc=https%3A%2F%2Fitem.rakuten.co.jp%2Fmaniac%2Fsf-etc-tools-waterbox%2F&m=http%3A%2F%2Fm.rakuten.co.jp%2Fmaniac%2Fi%2F10005228%2F&rafcid=wsc_i_is_2a84f5dd-1de6-473f-8afa-bfaf2d63eea1) |
 | 【9月限定★冬支度応援クーポン】【楽天1位】電気毛布 掛け敷き兼用 大判190× | 季節商品 | ¥5,380 | 1812 | 4.57 | 96.6 | rakuten | [リンク](https://hb.afl.rakuten.co.jp/hgc/g00u552o.3agd0515.g00u552o.3agd1af7/?pc=https%3A%2F%2Fitem.rakuten.co.jp%2Fkatariyashop%2Fflrmt%2F&m=http%3A%2F%2Fm.rakuten.co.jp%2Fkatariyashop%2Fi%2F10000441%2F&rafcid=wsc_i_is_2a84f5dd-1de6-473f-8afa-bfaf2d63eea1) |
 | 【スーパーSALE限定！最大1,000円OFFクーポン】 お得な3・4点セット  | 旅行用品 | ¥4,480 | 1326 | 4.55 | 96.4 | rakuten | [リンク](https://hb.afl.rakuten.co.jp/hgc/g00tkn8o.3agd0990.g00tkn8o.3agd19cb/?pc=https%3A%2F%2Fitem.rakuten.co.jp%2Fichifujiec%2Fnk058set3%2F&m=http%3A%2F%2Fm.rakuten.co.jp%2Fichifujiec%2Fi%2F10000136%2F&rafcid=wsc_i_is_2a84f5dd-1de6-473f-8afa-bfaf2d63eea1) |
