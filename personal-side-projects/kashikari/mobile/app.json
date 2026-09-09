@@ -7,10 +7,9 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "kashikari",
-    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.kashikari.mobile",
+      "bundleIdentifier": "com.kashikari.mobile2",
       "infoPlist": {
         "NSCameraUsageDescription": "レシートを撮影して記録に添付するために使用します。",
         "NSPhotoLibraryUsageDescription": "レシートの写真を記録に添付するために使用します。",
@@ -18,7 +17,7 @@
       }
     },
     "android": {
-      "package": "com.kashikari.mobile",
+      "package": "com.kashikari.mobile2",
       "adaptiveIcon": {
         "backgroundColor": "#ff6b4a",
         "foregroundImage": "./assets/android-icon-foreground.png"
@@ -32,17 +31,6 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      [
-        "expo-build-properties",
-        {
-          "ios": {
-            "newArchEnabled": false
-          },
-          "android": {
-            "newArchEnabled": false
-          }
-        }
-      ],
       [
         "expo-image-picker",
         {
