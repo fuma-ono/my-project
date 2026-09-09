@@ -15,14 +15,15 @@ Meta社の公式APIを直接HTTPSで呼ぶだけなので、ログイン画面�
 2. developers.facebook.com でMeta開発者アプリを作成し、Threads APIを有効化
 3. `python threads-affiliate/get_token.py` でアクセストークンを取得・保存
 
-## 定期実行(Phase 1: 現在はオーナーが手動実行する運用)
+## 定期実行(Phase 2: 完全自動投稿、2026-09-09〜)
 
-2026-09-09のオーナー指示により、品質・投稿実績が安定するまでは
-**このスクリプトを無人スケジュール実行しない**(`.github/workflows/threads-publish.yml`の
-スケジュールトリガーは一時停止済み)。`pending/`の下書きを目視確認したうえで、
-オーナーがこのスクリプトを手動実行する運用とする。将来、Phase 2として
-無人化する際は同ワークフローのcronを再度有効化すればよい
-(詳細: `docs/marketing/2026-09-09-threads-account-repositioning.md`)。
+`.github/workflows/threads-publish.yml`が毎日21:00 JSTにこのスクリプトを
+無人実行する(20:00 JSTの投稿案生成Routineの1時間後)。人間のレビューは
+入らないため、`validate_pr_disclosure()`(PR表記の有無・位置チェック)が
+コード側の最後の安全弁になる。詳細: `docs/marketing/2026-09-09-threads-account-repositioning.md`。
+
+オーナー自身のPCから手動実行することも引き続き可能(`--dry-run`で内容確認、
+引数無しで即投稿)。
 """
 
 import argparse

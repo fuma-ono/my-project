@@ -3,14 +3,14 @@ name: Threads Affiliate - Publish
 # pending/にある下書きをThreadsへ実際に投稿する(threads-affiliate/publish.py)。
 # 下書きが無ければ何もしない(publish.py側で判定済み)。
 #
-# ⚠️ 2026-09-09、オーナー指示によりスケジュール自動実行は一時停止中(Phase 1)。
-# 品質・投稿実績が安定するまでは、オーナーが内容を確認してから
-# workflow_dispatch(手動実行)または手元のPCでpublish.pyを実行する運用とする。
-# Phase 2(完全自動化)へ移行する際は、下のscheduleのコメントアウトを解除する。
+# 2026-09-09、オーナー指示によりPhase 2(完全自動投稿)へ移行した。
+# 毎日20:00 JSTの投稿案生成Routineの後、21:00 JSTにこのワークフローが
+# pending/の下書きを自動投稿する。人間のレビューは入らないため、
+# publish.py側のPR表記検証(validate_pr_disclosure)が最後の安全弁になる。
 # 詳細: docs/marketing/2026-09-09-threads-account-repositioning.md
 on:
-  # schedule:
-  #   - cron: '0 12 * * *' # 毎日21:00 JST = 12:00 UTC(Phase 2で有効化)
+  schedule:
+    - cron: '0 12 * * *' # 毎日21:00 JST = 12:00 UTC
   workflow_dispatch: {}
 
 permissions:

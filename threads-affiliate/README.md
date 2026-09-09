@@ -44,22 +44,22 @@ Claude Codeが動くこのクラウド環境(セッションの中でコード�
    python3 threads-affiliate/publish.py
    ```
 
-## 完全に無人化する(GitHub Actions、2026-09-08〜。投稿は現在Phase 1で一時停止中)
+## 完全に無人化する(GitHub Actions、2026-09-08〜)
 
 PC・iPad・Codespacesを一切開かなくても、GitHub Actionsのスケジュール実行で以下が自動で回る:
 
 | ワークフロー | 頻度 | 内容 |
 |---|---|---|
 | `.github/workflows/threads-research.yml` | 火曜 06:00 JST | `research.py`で商品候補を更新 |
-| `.github/workflows/threads-publish.yml` | **停止中(Phase 1)** | `publish.py`で下書きを投稿。2026-09-09、品質・投稿実績が安定するまではオーナーが手動実行する運用に変更(下記「運用フェーズ」参照)。手動実行(workflow_dispatch)は可能 |
+| `.github/workflows/threads-publish.yml` | **毎日21:00 JST** | `publish.py`で下書きを投稿。2026-09-09、Phase 2(完全自動投稿)へ移行済み |
 | `.github/workflows/threads-insights.yml` | 土曜 06:00 JST | `fetch_threads_insights.py`で実績を取得 |
 
 ## 運用フェーズ(2026-09-09〜)
 
 `docs/marketing/2026-09-09-threads-account-repositioning.md`の指示により、アカウントの位置づけを「特定ジャンルの商品を売るアカウント」から「暮らしの中の便利を発掘して紹介するアカウント」(ジャンル無制限)に変更した。投稿頻度も週次→毎日(目標21:00頃投稿)に変更している。
 
-- **Phase 1(現在)**: 毎日20:00頃、クラウド側のRoutineが`pending/`に投稿案を自動生成・commit・pushする。**実際の投稿は自動化しない**。オーナーが内容を確認してから`publish.py`を手動実行する
-- **Phase 2(将来)**: 品質・投稿実績が安定したら`threads-publish.yml`のスケジュールトリガーを再度有効化し、生成から投稿まで完全自動化する
+- ~~Phase 1: 20:00頃に投稿案を自動生成し、オーナーが確認してから手動投稿~~ → **2026-09-09、オーナー指示によりPhase 1を経ずPhase 2へ移行**
+- **Phase 2(現在)**: 毎日20:00 JSTにRoutineが`pending/`へ投稿案を自動生成・commit・push、毎日21:00 JSTに`threads-publish.yml`が自動投稿する。人間のレビューは入らないため、`publish.py`の`validate_pr_disclosure()`(PR表記チェック)がコード側の最後の安全弁になる。投稿内容に問題が続くようなら、`threads-publish.yml`のscheduleをコメントアウトしてPhase 1に戻せる
 
 ### 事前準備(オーナー作業、初回のみ)
 
@@ -145,7 +145,7 @@ python threads-affiliate/fetch_threads_insights.py  # 実績の取得・記録�
 
 - アフィリエイトリンクを含む投稿は、本文の**冒頭**に必ずPR表記(`【PR】`/`#PR`/`#広告`/`[PR]`)を入れる(末尾に小さく書くだけは不可、景品表示法対応)。`publish.py`が投稿時にこれを検証し、無い・末尾のみの場合は投稿を中断する(`validate_pr_disclosure()`)
 - 使ったことのない商品について断定的な体験談は書かない(`docs/marketing/2026-08-18-ai-affiliate-feasibility.md` セクション15参照)
-- Phase 1の間は、`pending/`に追加された下書きに必ず一度目を通してから`publish.py`を実行する(GitHub Actionsによる自動投稿は現在停止中、上記「運用フェーズ」参照)
+- Phase 2(現在)は投稿が完全自動化されているため、実際に公開された投稿は`publish-log.jsonl`または`threads.net/@benri_mitsuketa`で事後に確認する運用にする。内容に問題が続くようならPhase 1(手動レビュー)に戻す(上記「運用フェーズ」参照)
 
 ## セキュリティ
 
