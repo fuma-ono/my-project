@@ -1,0 +1,35 @@
+{
+  "id": "note-30-thin-walls-white-noise",
+  "business_id": "note",
+  "article_number": "30",
+  "title": "壁の薄い部屋に引っ越して、ホワイトノイズの使い方が変わった話",
+  "theme_backlog_id": 35,
+  "pillar": "A",
+  "hypothesis": "「隣人の生活音」対策という実用検索ニーズに応える。既存の#12(同居家族の生活音)とは対策の性質が異なる(相手に声をかけられない他人の生活音)ため、住み分けを明確にして重複を回避する",
+  "generated_at": "2026-09-10",
+  "published_at": null,
+  "status": "draft",
+  "note_url": "https://note.com/unique_condor276",
+  "metrics": {
+    "views": null,
+    "likes": null,
+    "comments": null,
+    "followers_gained": null,
+    "support_jpy": null,
+    "recorded_at": null,
+    "data_source_note": "note.com公式APIが存在しないため、このサンドボックスからは取得不可。オーナーがnote.comダッシュボードで確認し次第、note-articles/README.mdの計測欄経由で共有・反映する"
+  },
+  "result": null,
+  "learning": null,
+  "next_action": null,
+  "verdict": "pending",
+  "quality_self_check": {
+    "japanese_natural": true,
+    "no_ai_cliche": true,
+    "concrete_content": true,
+    "clickable_title": true,
+    "clear_reader_value": true,
+    "no_duplication_with_existing": true,
+    "note": "2026-09-10、週2回運用Routineでの新規生成。#24・25がRSS自動検知で公開済みになり在庫が4本に減少していたため2本補充(30・31)。docs/marketing/2026-08-content-topics.mdの優先順#34〜38のうち#35を採用"
+  }
+}

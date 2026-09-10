@@ -252,6 +252,22 @@
       "pillar": "A",
       "generated_at": "2026-09-07",
       "status": "draft"
+    },
+    {
+      "article_number": "30",
+      "slug": "30-thin-walls-white-noise",
+      "theme_backlog_id": 35,
+      "pillar": "A",
+      "generated_at": "2026-09-10",
+      "status": "draft"
+    },
+    {
+      "article_number": "31",
+      "slug": "31-timer-for-ending-work",
+      "theme_backlog_id": 36,
+      "pillar": "A",
+      "generated_at": "2026-09-10",
+      "status": "draft"
     }
   ]
 }
