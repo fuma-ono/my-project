@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import type { PurchasesOffering } from 'react-native-purchases';
 
 import {
   addCustomerInfoListener,
@@ -8,7 +9,6 @@ import {
   isPremiumFromInfo,
   purchasePremium as purchasePremiumImpl,
   restorePurchases as restorePurchasesImpl,
-  type PurchasesOffering,
 } from '../lib/purchases';
 
 // アプリ全体で「今のユーザーがPremium加入済みかどうか」を1箇所で
