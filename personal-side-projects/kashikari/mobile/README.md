@@ -1804,7 +1804,7 @@ eas build --platform all --profile production
 - **EASのEnvironment Variables登録**(79回目): `EXPO_PUBLIC_SUPABASE_URL`・`EXPO_PUBLIC_SUPABASE_ANON_KEY`をexpo.devダッシュボードに登録済み(TestFlightが真っ白画面のまま動かなかった根本原因への対応)。この状態で再ビルド(Build番号3)・再提出まで完了
 
 まだ人間(オーナー)がやる必要があるもの:
-- **AdMobアカウント作成・アプリID/広告ユニットID差し替え**(95回目): https://admob.google.com でアプリを登録し、本番の広告ユニット(バナー)を作成する。`app.json`のテスト用AdMobアプリID(`androidAppId`/`iosAppId`)を実際の値に差し替え、広告ユニットIDは`EXPO_PUBLIC_ADMOB_BANNER_IOS`・`EXPO_PUBLIC_ADMOB_BANNER_ANDROID`としてEASのEnvironment Variablesに登録する。テストIDのまま公開すると広告収益が発生しないため、ストア提出前に必須
+- **AdMob(残りはAndroidのみ)**(95・101回目): iOSは本番のAdMobアプリID・広告ユニットID(バナー・インタースティシャル)への差し替え済み。**AdMobアカウント自体がまだGoogleの承認待ち**のため、承認完了までは`[googleMobileAds/no-fill] Account not approved yet`エラーで広告が出ない(コード側の対応は不要、審査完了を待つだけでよい)。**Android版は未着手**——https://admob.google.com でAndroidアプリを登録し、本番の広告ユニット(バナー・インタースティシャル)を作成、`app.json`の`androidAppId`と`.env`/EASの`EXPO_PUBLIC_ADMOB_BANNER_ANDROID`・`EXPO_PUBLIC_ADMOB_INTERSTITIAL_ANDROID`に差し替える必要がある
 - **RevenueCatアカウント作成・APIキー登録**(94回目): https://app.revenuecat.com でプロジェクトを作成し、App Store Connect/Google Play Consoleと連携。サブスクリプション商品(月額プラン)を両ストアで作成し、`premium`というエンタイトルメントに紐付けたあと、RevenueCatのPublic API keyをEASのEnvironment Variablesに`EXPO_PUBLIC_REVENUECAT_IOS_KEY`・`EXPO_PUBLIC_REVENUECAT_ANDROID_KEY`として登録する必要がある。あわせて、App Store Connect側の「Agreements, Tax, and Banking」(税務・銀行口座情報)が未登録の場合は、有料販売自体ができないため先に済ませておく。**詳しい手順はチェックリスト形式で`docs/revenuecat-setup.md`にまとめた(99回目)。**この作業自体(ログイン・銀行口座情報の入力)はオーナー側でしかできない
 - **Apple Small Business Program登録**: App Store Connectのサブスク商品画面にある「Apple Small Business Program」から申請できる。年間の売上(全アプリ合算)が100万ドル未満なら、Appleの取り分が30%→15%に半減する(手取りが単純に増える)。個人事業主・低売上のうちは対象になるはずなので、登録しない理由がない
 - **Sentryアカウント作成・DSN登録**(99回目): https://sentry.io でプロジェクトを作成(Platform: React Native)し、DSNを`EXPO_PUBLIC_SENTRY_DSN`としてEASのEnvironment Variablesに登録する。未設定の間はクラッシュ監視が無効なだけでアプリは問題なく動くが、**本番でのクラッシュに気づく手段が無くなるため、ストア提出前の設定を強く推奨**。あわせて`SENTRY_ORG`・`SENTRY_PROJECT`・`SENTRY_AUTH_TOKEN`(Organization Settings > Auth Tokens)も登録すると、クラッシュのスタックトレースが読める形になる(任意)
@@ -1905,3 +1905,24 @@ eas build --platform all --profile production
 - **`useSignedUrl.ts`**: 前回のメモリ内キャッシュに加え、`AsyncStorage`にも永続化するよう拡張した。メモリキャッシュだけだと、アプリを強制終了して開き直すたび(=JSコンテキストが作り直されるたび)にまた往復が発生してしまう。テスト中は不具合確認のために強制終了・再起動を繰り返しがちで、そのたびに「初回扱い」になっていたことも「直っていないように見える」一因と考えられる
 
 `npx tsc --noEmit`はクリーン。写真のリサイズ・AsyncStorage永続化は実際のファイルアップロード・端末ストレージが絡むためWeb版では直接検証できないが、ロジック自体はシンプルで(`manipulateAsync`の標準的な使い方、既存のAsyncStorageパターンの踏襲)、次のビルドでの実機確認をお願いしたい。
+
+## ビルド不能の根本原因を特定・実機テストが初めて成立(101回目)
+
+これまで何十回も「起動時フリーズ」の原因を調査・New Architecture無効化・Bundle ID変更・RevenueCat削除などを試してきたが、実は**`eas build`のiOSビルド自体が`pod install`の時点でずっと失敗し続けており、実機での検証が一度も成立していなかった**ことが判明した。
+
+**根本原因**: `expo-image-manipulator`(99回目でアイコン写真のリサイズ用に導入)がSDK57系のバージョン(`^57.0.16`)に上がっていたが、このプロジェクトはExpo SDK 54。その依存先`expo-image-loader`も`package.json`の`overrides`でSDK57系(`57.0.1`)に固定されていたが、このバージョンにはiOSネイティブコード(`ios/`ディレクトリ、Podspec)自体が存在せず、`pod install`が`EXImageLoader`のPodspecをローカルで見つけられずCocoaPods公開リポジトリを探しに行って失敗していた。
+
+- `expo-image-manipulator`をSDK54互換の`~14.0.8`に戻し、`overrides`の`expo-image-loader`も実際の依存要求(`~6.0.0`)に合わせて修正
+- `expo-dev-client`が未コミットのままだった(developmentプロファイルに必須)ため正式にコミット
+- これで`eas build --platform ios --profile development`が初めて成功し、実機テストが可能になった
+
+**実機テストで判明した「精算完了フリーズ」の本当の原因**: 「貸し借りを記録」シート(`AddEntrySheet`、`presentationStyle="pageSheet"`)で精算完了になる記録を送信すると、シート自身の閉じるアニメーションが終わる前に、精算完了を検知した処理が即座にインタースティシャル広告(別のネイティブ全画面)を開こうとしていた。iOS側で2つのネイティブ画面遷移(シートのpageSheet dismissと広告のpresent)が競合し、真っ白い画面のまま完全に固まる(Metroにも一切エラーが出ない=JSではなくネイティブ層のデッドロック)。`InviteModal`で既に確立していた「`onDismiss`(閉じ終わった瞬間)まで次のネイティブUIを待つ」パターンを`AddEntrySheet`にも適用し、`GroupScreen.tsx`側で記録シートからの送信による精算完了だけ`pendingSheetSettlementRef`に保留してシートが実際に閉じ終わってから広告・紹介モーダルを開くように直した(`DemoGroupScreen.tsx`にもミラー)。過去の「New Architecture無効化」「Bundle ID変更」「RevenueCat削除」の検証は、いずれもこの`pod install`失敗のせいで実際には実機確認が成立しておらず、無効だった可能性が高い。**RevenueCatは検証目的を終えたため実装を元に戻した**(後述)。
+
+そのほか、この回で対応したもの:
+
+- **`showCelebrationAdIfReady()`のエラーハンドリング漏れ**: 広告のCLOSEDイベントしか見ておらず、表示失敗時(ERRORイベント・`ad.show()`の例外)にPromiseが永遠に解決されず、「紹介する」ポップアップ自体が二度と出てこなくなるバグがあった。ERRORイベント購読とtry/catchを追加
+- **AdMobの本番iOSアプリID差し替え**: オーナーがAdMobでiOSアプリを登録し取得した本番アプリID・広告ユニットID(バナー・インタースティシャル)に差し替えた。実機で確認したところ`[googleMobileAds/no-fill] Account not approved yet`のエラーが出た(AdMobアカウント自体がまだGoogleの承認待ちのため)。これはコード側の問題ではなく、承認が完了すればビルドし直さずとも自動的に広告が出るようになる。診断用に`AdBanner.tsx`・`ads.ts`に一時的なエラーログを追加した(原因判明後も残しているが実害はない)
+- **ヘッダーのMarkアイコンの表示ラグ**: `Image.prefetch`でSplash画面が閉じる前に画像読み込み完了を待つようにした。ただし実機で確認したところ、Splash画面自体でも一瞬アイコンが空箱に見える現象は解消しなかった——原因はMetro経由(特に`--tunnel`)でのアセット配信そのものの遅さであり、本番ビルド(アセットがバイナリに同梱される)では起こらない可能性が高いと判断し、これ以上の対応は見送った
+- **RevenueCatの復元**: 起動時フリーズの原因候補としてcc6e895で一時的に`react-native-purchases`を完全削除し、`purchases.ts`を「常に無課金」のスタブに置き換えていたが、上記の通り真因が判明しRevenueCatとは無関係だったため、`react-native-purchases`を依存関係に戻し、`purchases.ts`/`purchases.web.ts`/`usePremium.ts`を元の実装に復元した
+
+`npx tsc --noEmit`はクリーン。iOS実機(development build)で「精算完了→白画面フリーズ」の再現・修正確認まで完了。広告はAdMobアカウント承認待ちのため実際の表示は未確認。
