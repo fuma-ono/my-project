@@ -103,7 +103,8 @@
   "affiliate_platform": "rakuten|amazon",
   "product_name": "商品名(社内管理用、投稿には含めなくてよい)",
   "category": "商品ジャンル(例: キッチン用品。社内管理用、かつ下記トピックタグにもそのまま使う)",
-  "post_type": "empathy|discovery|comparison|summary"
+  "post_type": "empathy|discovery|comparison|summary",
+  "price": "商品価格(数値、products.jsonのpriceフィールドをそのまま転記。2026-09-10追加、Phase 2の価格帯分析に備えたデータ収集用、社内管理用)"
 }
 ```
 

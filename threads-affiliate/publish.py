@@ -211,6 +211,9 @@ def publish(dry_run: bool) -> None:
         "affiliate_platform": infer_affiliate_platform(post),
         "product_name": post.get("product_name"),
         "category": post.get("category"),  # 商品ジャンル(例: キッチン用品)
+        # 2026-09-10、Phase 2(投稿30件超後)の価格帯分析に備えたデータ収集のみ。
+        # 分析ロジック自体はまだ追加しない(docs/marketing/2026-09-10-ai-autonomous-operation-design.md参照)。
+        "price": post.get("price"),
         "post_type": post_type,  # empathy/discovery/comparison/summary
         "topic_tag": container_params.get("topic_tag"),  # 実際に付与できた場合のみ値が入る
         "source_file": path.name,
