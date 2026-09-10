@@ -6,7 +6,7 @@ import {
   MPLUSRounded1c_800ExtraBold,
 } from '@expo-google-fonts/m-plus-rounded-1c';
 import { useEffect, useState } from 'react';
-import { Linking } from 'react-native';
+import { Image, Linking, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
@@ -41,6 +41,7 @@ import { PremiumProvider } from './src/lib/premiumContext';
 import { SentryErrorBoundary } from './src/lib/sentry';
 import { isSupabaseConfigured } from './src/lib/supabase';
 import type { Group } from './src/types';
+import markAsset from './assets/mark.png';
 
 // 起動直後、読み込みが一瞬で終わってもロゴが一瞬フラッシュするだけにならない
 // よう、最低でもこれだけはブランド画面を見せる(体感の「間」を作るため)。
@@ -175,6 +176,37 @@ function AppInner() {
     return () => clearTimeout(t);
   }, []);
 
+  // 「グループ一覧ヘッダーの手のアイコン(Mark)が一瞬グラデーションだけの
+  // 空箱で表示され、少し遅れて絵柄が出る」というラグへの対応(101回目)。
+  // Splash画面自体もMarkを使っているが、Metro経由の開発ビルド(特に
+  // --tunnel)ではmark.png自体がネットワーク越しに配信されるため、
+  // MIN_SPLASH_MS(900ms)以内に読み込みが間に合わないことがある。
+  // Image.prefetchで明示的に読み込み完了を待ってからSplashを閉じる
+  // ことで、以降どの画面でMarkが使われても即座に(キャッシュ済みの)
+  // 絵柄が出るようにする。prefetch自体が失敗しても(オフライン等)
+  // 永久に起動画面で止まらないよう、失敗時もmarkLoadedをtrueにする。
+  // react-native-web(Web版)にはImage.resolveAssetSourceが実装されて
+  // おらず、呼ぶとクラッシュするためネイティブ(iOS/Android)限定にする
+  // (Web版はバンドラーが素直に<img>で配信するため、そもそもこの種の
+  // ラグ自体が起こらない)。
+  const [markLoaded, setMarkLoaded] = useState(Platform.OS === 'web');
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    let cancelled = false;
+    const uri = Image.resolveAssetSource(markAsset)?.uri;
+    const settle = () => {
+      if (!cancelled) setMarkLoaded(true);
+    };
+    if (!uri) {
+      settle();
+      return;
+    }
+    Image.prefetch(uri).then(settle, settle);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // 招待URL経由でアプリが開かれたことを計測する(成功指標の「招待リンク
   // クリック数」)。デモモードでは計測しない。
   useEffect(() => {
@@ -247,7 +279,7 @@ function AppInner() {
     }
   };
 
-  if (!fontsLoaded || !minSplashDone || (!DEMO_MODE && authLoading)) {
+  if (!fontsLoaded || !minSplashDone || !markLoaded || (!DEMO_MODE && authLoading)) {
     return <SplashScreen fontsReady={fontsSettled} />;
   }
 
