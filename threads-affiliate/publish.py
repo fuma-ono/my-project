@@ -33,6 +33,7 @@ import os
 import pathlib
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -116,8 +117,15 @@ def api_post(path: str, params: dict) -> dict:
     url = f"{GRAPH_BASE}/{path}"
     body = urllib.parse.urlencode(params).encode()
     req = urllib.request.Request(url, data=body, method="POST")
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        # 2026-09-10、topic_tag追加時にHTTP 400が本文無しで報告され原因究明が
+        # 難航した反省から、エラー本文(Metaの実際のエラーメッセージ)を読んで
+        # 例外メッセージに含める。
+        detail = e.read().decode(errors="replace")
+        raise RuntimeError(f"HTTP {e.code} {e.reason}: {detail}") from e
 
 
 def load_next_pending():
@@ -176,7 +184,20 @@ def publish(dry_run: bool) -> None:
     category = post.get("category")
     if category and 1 <= len(category) <= 50 and "." not in category and "&" not in category:
         container_params["topic_tag"] = category
-    container = api_post(f"{user_id}/threads", container_params)
+
+    # 2026-09-10: topic_tag付きのリクエストがHTTP 400で拒否される事象が発生
+    # (原因未特定、日本語が非対応の可能性がある)。トピックタグは「無くても
+    # 投稿自体は成立する」付加機能なので、失敗したらtopic_tagを外して
+    # 1回だけ再試行し、本来の投稿(こちらが本質)を優先して確実に通す。
+    try:
+        container = api_post(f"{user_id}/threads", container_params)
+    except RuntimeError as e:
+        if "topic_tag" in container_params:
+            print(f"警告: topic_tag付きでコンテナ作成に失敗したため、topic_tag無しで再試行します: {e}")
+            container_params.pop("topic_tag")
+            container = api_post(f"{user_id}/threads", container_params)
+        else:
+            raise
     if "id" not in container:
         print("コンテナ作成に失敗しました:", container)
         sys.exit(1)
