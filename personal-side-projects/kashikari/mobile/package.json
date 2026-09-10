@@ -39,7 +39,7 @@
   },
   "overrides": {
     "expo-font": "~14.0.12",
-    "expo-image-loader": "57.0.1"
+    "expo-image-loader": "~6.0.0"
   },
   "scripts": {
     "start": "expo start",
