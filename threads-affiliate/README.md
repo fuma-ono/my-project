@@ -141,6 +141,24 @@ python threads-affiliate/fetch_threads_insights.py  # 実績の取得・記録�
 
 楽天側のクリック・成果データとの突合は、投稿数がある程度貯まってから着手する(オーナー方針: 分析より先に正確なデータを貯めることを優先)。
 
+## 完全自動返信(2026-09-10〜)
+
+投稿へのコメントに、AI(定期Routine)が自動で返信する。設計・判断基準は
+`docs/marketing/2026-09-10-ai-autonomous-operation-design.md`と
+`docs/marketing/2026-09-10-threads-auto-reply-guardrails.md`参照。
+
+1. `fetch_replies.py` — 新着コメントを集めて `replies-pending.json` に書き出す(判断はしない)
+2. Claude Code Remoteの定期Routine(「Threads返信 自動対応」、2時間おき)が、ガードレール文書の基準で各コメントの`action`(reply/skip)を判断し `reply-decisions.json` に書く
+3. `send_replies.py` — 実際にThreadsへ返信を投稿し `replies-log.jsonl` に記録する。二重返信防止・同一ユーザーへのレート制限(24時間で3件まで)・PR表記の自動補完はここでコード側が強制する
+
+**要スコープ**: `threads_read_replies` / `threads_manage_replies` / `threads_manage_mentions`(2026-09-10、`get_token.py`に追加済み)。既存トークンではこれらの権限が無いため、**オーナーによる`get_token.py`の再認可とGitHub Secrets(`THREADS_ACCESS_TOKEN`)の更新が必要**(手順は`get_token.py`実行時の案内に従う。2026-09-09のInsightsスコープ追加時と同じ流れ)。
+
+```
+python threads-affiliate/fetch_replies.py
+# (この間に判断ステップ: reply-decisions.jsonを用意する)
+python threads-affiliate/send_replies.py
+```
+
 ## 運用ルール
 
 - アフィリエイトリンクを含む投稿は、本文の**冒頭**に必ずPR表記(`【PR】`/`#PR`/`#広告`/`[PR]`)を入れる(末尾に小さく書くだけは不可、景品表示法対応)。`publish.py`が投稿時にこれを検証し、無い・末尾のみの場合は投稿を中断する(`validate_pr_disclosure()`)

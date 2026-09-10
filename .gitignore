@@ -38,3 +38,8 @@ love-note/storage-state.json
 # threads-affiliate: API access token + app secret, never commit
 threads-affiliate/access-token.json
 threads-affiliate/rakuten-config.json
+
+# threads-affiliate: 完全自動返信の一時ファイル(1回の実行内だけで使う中間生成物、
+# 恒久的なログはreplies-log.jsonlの方にあるのでこちらはコミット不要)
+threads-affiliate/replies-pending.json
+threads-affiliate/reply-decisions.json

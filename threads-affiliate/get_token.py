@@ -87,7 +87,12 @@ def main() -> None:
     # 2026-09-09: threads_manage_insightsが抜けていたため、Insights API呼び出しが
     # 全metricで「Application does not have permission for this action」(code 10)
     # になっていた(metric名の問題ではなく、スコープ自体が無かったのが原因)。
-    scope = "threads_basic,threads_content_publish,threads_manage_insights"
+    # 2026-09-10: 完全自動返信機能(fetch_replies.py/send_replies.py)のため、
+    # 返信の取得・投稿・メンション取得に必要な3スコープを追加した。
+    scope = (
+        "threads_basic,threads_content_publish,threads_manage_insights,"
+        "threads_read_replies,threads_manage_replies,threads_manage_mentions"
+    )
     authorize_url = (
         "https://threads.net/oauth/authorize?"
         + urllib.parse.urlencode({
