@@ -259,39 +259,83 @@ export default function GroupScreen({
     if (!isPremium) preloadCelebrationAd();
   }, [isPremium]);
 
+  // 精算完了(広告→紹介モーダル)の演出本体。呼び出し元(下のuseEffectか、
+  // AddEntrySheetのonDismiss)によって、必ず「他のネイティブUIが完全に
+  // 閉じ終わってから」呼ばれることが前提。
+  const celebrateSettlement = () => {
+    // 「紹介する」ポップアップを閉じた後、条件を満たしていればレビュー
+    // 依頼ポップアップも続けて出す(reviewPrompt.ts参照。同時に2つ出すと
+    // 衝突するため必ず片方を閉じてから)。「紹介する」を選んだ場合は
+    // 招待モーダルが開くため、その導線を邪魔しないようこちらは出さない。
+    //
+    // 「閉じるを押すと真っ白い画面のまま固まる」「紹介するを押しても
+    // 何も出てこない」というバグ報告への対応(99回目)。以前はAlert.alert
+    // を連続で呼んでおり、setTimeoutで遅延を挟んでも実機では解消しなかった
+    // (iOSのネイティブアラートは、1つを閉じている最中に次のアラートや
+    // 別のネイティブ画面を提示しようとすると競合しやすい)。このアプリで
+    // 既に確実に動いている「独自の<Modal>+onDismiss」方式
+    // (InviteModal/ShareChannelSheetと同じ)に統一し、Alertの連続呼び出し
+    // 自体をやめた。
+    //
+    // 広告は紹介モーダルより先に見せる(お祝いの瞬間そのものに広告を
+    // 挟み、その後に紹介・レビューの導線を続ける流れ)。読み込みが
+    // 間に合っていなければ広告は出さず、すぐ紹介モーダルに進む。
+    if (isPremium) {
+      setReferralModalOpen(true);
+    } else {
+      void showCelebrationAdIfReady().then(() => setReferralModalOpen(true));
+    }
+  };
+
   // 貸し借りが1件もない状態(balances.length === 0)に「今まさに」なった
   // 瞬間だけ、紹介導線を出す(成長施策⑦)。開いた時点で既に精算済みだった
   // 場合は出さない(prevが分かっているとき=2回目以降のレンダーだけ発火)。
   const prevBalanceCountRef = useRef<number | null>(null);
+  // 「貸し借りを記録」シート(AddEntrySheet)からの送信で精算完了に
+  // なった場合の目印。送信成功時にonSubmit側のラッパーがtrueにする
+  // (下のhandleAddEntry/handleAddSplitEntry参照)。この場合、シート自身の
+  // <Modal>(pageSheet)がまだ閉じるアニメーションの途中である可能性が
+  // 高く、この直後に広告(別のネイティブ全画面)を開こうとすると、
+  // シートの閉じるアニメーションと競合して「真っ白い画面のまま固まる」
+  // (実機で確認、101回目・AddEntrySheetから記録して精算完了した時にのみ
+  // 再現)。この場合はここでは何もせず、AddEntrySheetのonDismiss
+  // (閉じ終わった瞬間)まで演出を保留する。
+  const pendingSheetSettlementRef = useRef(false);
+  const justSubmittedViaSheetRef = useRef(false);
   useEffect(() => {
     const prev = prevBalanceCountRef.current;
     if (prev !== null && prev > 0 && balances.length === 0) {
       logEvent('settlement_completed', { userId: meId, groupId: group.id });
-      // 「紹介する」ポップアップを閉じた後、条件を満たしていればレビュー
-      // 依頼ポップアップも続けて出す(reviewPrompt.ts参照。同時に2つ出すと
-      // 衝突するため必ず片方を閉じてから)。「紹介する」を選んだ場合は
-      // 招待モーダルが開くため、その導線を邪魔しないようこちらは出さない。
-      //
-      // 「閉じるを押すと真っ白い画面のまま固まる」「紹介するを押しても
-      // 何も出てこない」というバグ報告への対応(99回目)。以前はAlert.alert
-      // を連続で呼んでおり、setTimeoutで遅延を挟んでも実機では解消しなかった
-      // (iOSのネイティブアラートは、1つを閉じている最中に次のアラートや
-      // 別のネイティブ画面を提示しようとすると競合しやすい)。このアプリで
-      // 既に確実に動いている「独自の<Modal>+onDismiss」方式
-      // (InviteModal/ShareChannelSheetと同じ)に統一し、Alertの連続呼び出し
-      // 自体をやめた。
-      //
-      // 広告は紹介モーダルより先に見せる(お祝いの瞬間そのものに広告を
-      // 挟み、その後に紹介・レビューの導線を続ける流れ)。読み込みが
-      // 間に合っていなければ広告は出さず、すぐ紹介モーダルに進む。
-      if (isPremium) {
-        setReferralModalOpen(true);
+      if (justSubmittedViaSheetRef.current) {
+        pendingSheetSettlementRef.current = true;
       } else {
-        void showCelebrationAdIfReady().then(() => setReferralModalOpen(true));
+        celebrateSettlement();
       }
     }
+    justSubmittedViaSheetRef.current = false;
     prevBalanceCountRef.current = balances.length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [balances.length, group.id, group.name, meId, isPremium]);
+
+  // AddEntrySheetの<Modal>が実際に閉じ終わった瞬間(iOS専用、Androidは
+  // シート側でsetTimeoutフォールバック)。送信によって精算完了になって
+  // いた場合だけ、ここで初めて広告・紹介モーダルを開く。
+  const onAddEntrySheetDismissed = () => {
+    if (pendingSheetSettlementRef.current) {
+      pendingSheetSettlementRef.current = false;
+      celebrateSettlement();
+    }
+  };
+  const handleAddEntry: typeof addEntry = async (input) => {
+    const res = await addEntry(input);
+    if (!res.error) justSubmittedViaSheetRef.current = true;
+    return res;
+  };
+  const handleAddSplitEntry: typeof addSplitEntry = async (input) => {
+    const res = await addSplitEntry(input);
+    if (!res.error) justSubmittedViaSheetRef.current = true;
+    return res;
+  };
 
   // 「紹介する」モーダルの閉じるアニメーションが完全に終わってから
   // (onDismiss)、次にやること(レビュー依頼を出す/招待モーダルを開く/
@@ -722,9 +766,15 @@ export default function GroupScreen({
         members={members}
         pendingInvites={pendingInvites}
         meId={meId}
-        onClose={() => setSheetOpen(false)}
-        onSubmit={addEntry}
-        onSubmitSplit={addSplitEntry}
+        onClose={() => {
+          setSheetOpen(false);
+          // AndroidにはModalのonDismissが無いため、代わりに短い待ちで
+          // フォールバックする(InviteModal/CelebrationModalと同じ方針)。
+          if (Platform.OS !== 'ios') setTimeout(onAddEntrySheetDismissed, 400);
+        }}
+        onDismiss={onAddEntrySheetDismissed}
+        onSubmit={handleAddEntry}
+        onSubmitSplit={handleAddSplitEntry}
       />
       {avatarPicker}
       {inviteModal}

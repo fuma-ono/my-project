@@ -37,6 +37,11 @@ type Props = {
   pendingInvites: GroupInvite[];
   meId: string | null;
   onClose: () => void;
+  // <Modal>が実際に閉じ終わった瞬間(iOS専用)に呼ばれる。呼び出し側は、
+  // この記録シートを閉じた直後に別のネイティブUI(精算完了時の広告・
+  // 紹介モーダル等)を開きたい場合、必ずこのコールバックまで待つこと
+  // (CelebrationModal/InviteModalと同じ理由・同じパターン、101回目)。
+  onDismiss?: () => void;
   onSubmit: (input: {
     fromUser: string;
     toUser: string;
@@ -56,7 +61,7 @@ type Props = {
   }) => Promise<{ error: string | null }>;
 };
 
-export default function AddEntrySheet({ visible, members, pendingInvites, meId, onClose, onSubmit, onSubmitSplit }: Props) {
+export default function AddEntrySheet({ visible, members, pendingInvites, meId, onClose, onDismiss, onSubmit, onSubmitSplit }: Props) {
   const t = useT();
   // 実メンバー＋招待中の相手をまとめた「選べる相手」一覧。招待中は
   // avatar_emojiが無いためAvatarコンポーネントが頭文字表示にフォール
@@ -191,7 +196,7 @@ export default function AddEntrySheet({ visible, members, pendingInvites, meId, 
   const perPersonShare = participantIds.length > 0 ? (Number(amount) || 0) / participantIds.length : 0;
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={close} onDismiss={onDismiss}>
       <ScrollView style={styles.sheet} contentContainerStyle={styles.content}>
         <Text style={styles.title}>{mode === 'split' ? t.addEntry.splitTitle : t.addEntry.title}</Text>
 

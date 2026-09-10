@@ -188,21 +188,42 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
     if (!isPremium) preloadCelebrationAd();
   }, [isPremium]);
 
+  const celebrateSettlement = () => {
+    if (isPremium) {
+      setReferralModalOpen(true);
+    } else {
+      void showCelebrationAdIfReady().then(() => setReferralModalOpen(true));
+    }
+  };
+
   // 貸し借りが0件になった瞬間だけ紹介導線を出す(本番のGroupScreenと同じ狙い)。
   // Alertの連続呼び出しをやめ、独自Modal+onDismiss方式に統一した経緯は
-  // 本番のGroupScreen.tsxの同じ箇所のコメント参照(99回目)。
+  // 本番のGroupScreen.tsxの同じ箇所のコメント参照(99回目)。AddEntrySheet
+  // からの送信で精算完了になった場合はシートが閉じ終わるまで演出を保留する
+  // 経緯も本番と同じ(101回目)。
   const prevBalanceCountRef = useRef<number | null>(null);
+  const pendingSheetSettlementRef = useRef(false);
+  const justSubmittedViaSheetRef = useRef(false);
   useEffect(() => {
     const prev = prevBalanceCountRef.current;
     if (prev !== null && prev > 0 && balances.length === 0) {
-      if (isPremium) {
-        setReferralModalOpen(true);
+      if (justSubmittedViaSheetRef.current) {
+        pendingSheetSettlementRef.current = true;
       } else {
-        void showCelebrationAdIfReady().then(() => setReferralModalOpen(true));
+        celebrateSettlement();
       }
     }
+    justSubmittedViaSheetRef.current = false;
     prevBalanceCountRef.current = balances.length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [balances.length, isPremium]);
+
+  const onAddEntrySheetDismissed = () => {
+    if (pendingSheetSettlementRef.current) {
+      pendingSheetSettlementRef.current = false;
+      celebrateSettlement();
+    }
+  };
 
   const afterReferralDismissRef = useRef<(() => void) | null>(null);
   const onReferralDismissed = () => {
@@ -313,6 +334,19 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
     }));
     setEntries((prev) => [...newEntries, ...prev]);
     return { error: null };
+  };
+
+  // AddEntrySheetからの送信を検知するためのラッパー(上のuseEffect/
+  // onAddEntrySheetDismissed参照)。
+  const handleAddEntry: typeof addEntry = async (input) => {
+    const res = await addEntry(input);
+    if (!res.error) justSubmittedViaSheetRef.current = true;
+    return res;
+  };
+  const handleAddSplitEntry: typeof addSplitEntry = async (input) => {
+    const res = await addSplitEntry(input);
+    if (!res.error) justSubmittedViaSheetRef.current = true;
+    return res;
   };
 
   // 台帳の「精算済みにする/未精算に戻す」(1件単位の手動オーバーライド)。
@@ -721,9 +755,13 @@ export default function DemoGroupScreen({ onBack }: { onBack: () => void }) {
         members={members}
         pendingInvites={pendingInvites}
         meId={meId}
-        onClose={() => setSheetOpen(false)}
-        onSubmit={addEntry}
-        onSubmitSplit={addSplitEntry}
+        onClose={() => {
+          setSheetOpen(false);
+          if (Platform.OS !== 'ios') setTimeout(onAddEntrySheetDismissed, 400);
+        }}
+        onDismiss={onAddEntrySheetDismissed}
+        onSubmit={handleAddEntry}
+        onSubmitSplit={handleAddSplitEntry}
       />
 
       <AvatarPicker
