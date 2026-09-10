@@ -167,6 +167,15 @@ def publish(dry_run: bool) -> None:
 
     # Step 1: メディアコンテナを作成
     container_params = {"media_type": "TEXT", "text": full_text, "access_token": access_token}
+    # トピックタグ(2026-09-10追加): 興味のある人に見つけてもらいやすくする
+    # ためのMeta公式機能。1投稿につき1個、1〜50文字、"."と"&"は使用不可という
+    # API側の制約があるため、category(商品ジャンル)をそのまま流用する
+    # (すでに生成時に決まっている値を再利用するだけで、新たな判断ロジックは
+    # 増やさない)。制約を満たさない場合は黙って付与をスキップする(投稿自体は
+    # 継続、トピックタグは無くても投稿は成立するため)。
+    category = post.get("category")
+    if category and 1 <= len(category) <= 50 and "." not in category and "&" not in category:
+        container_params["topic_tag"] = category
     container = api_post(f"{user_id}/threads", container_params)
     if "id" not in container:
         print("コンテナ作成に失敗しました:", container)
@@ -203,6 +212,7 @@ def publish(dry_run: bool) -> None:
         "product_name": post.get("product_name"),
         "category": post.get("category"),  # 商品ジャンル(例: キッチン用品)
         "post_type": post_type,  # empathy/discovery/comparison/summary
+        "topic_tag": container_params.get("topic_tag"),  # 実際に付与できた場合のみ値が入る
         "source_file": path.name,
         # --- 後からfetch_threads_insights.pyが埋める項目 ---
         # 2026-09-09、check_insights.pyの実機確認により、Threads Media Insights APIで
