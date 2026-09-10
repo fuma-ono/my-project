@@ -13,6 +13,10 @@ note-articles/note_publish/credentials/
 .env
 .env.*
 !.env.example
+
+# kashikariの起動時フリーズ調査用(101回目)、iOS 26でのExpo Go動作確認
+# だけが目的の使い捨てアプリ。kashikari本体とは無関係なので追跡しない。
+expo-go-test-app/
 *credentials*.json
 *token*.json
 client_secret*.json
