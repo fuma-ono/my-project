@@ -86,6 +86,14 @@ function loadNextInterstitial() {
     interstitialLoaded = true;
     unsubscribeLoaded();
   });
+  // 読み込み自体が失敗すると(審査中のno-fill等)interstitialLoadedが
+  // 一生falseのままになり、showCelebrationAdIfReadyは常にfalseで即座に
+  // 解決する(=広告が出ない)。原因を実機のMetroログから判別できる
+  // ようにする一時的な計測(101回目)。原因が判明したら消してよい。
+  const unsubscribeError = ad.addAdEventListener(AdEventType.ERROR, (error) => {
+    console.warn('[Interstitial] failed to load:', error);
+    unsubscribeError();
+  });
   ad.load();
 }
 

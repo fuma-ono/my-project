@@ -20,7 +20,15 @@ export default function AdBanner() {
 
   return (
     <View style={styles.wrap}>
-      <BannerAd unitId={BANNER_AD_UNIT_ID} size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER} />
+      <BannerAd
+        unitId={BANNER_AD_UNIT_ID}
+        size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+        // 本番の広告ユニットIDに切り替えた直後、審査中で広告が出ない/
+        // 設定ミスで出ないのかを実機のMetroログから判別できるように
+        // する一時的な計測(101回目)。原因が判明したら消してよい。
+        onAdFailedToLoad={(error) => console.warn('[AdBanner] failed to load:', error)}
+        onAdLoaded={() => console.log('[AdBanner] loaded')}
+      />
     </View>
   );
 }
