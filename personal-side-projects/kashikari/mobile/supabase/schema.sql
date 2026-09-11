@@ -1086,3 +1086,31 @@ create table if not exists public.ops_state (
 );
 
 alter table public.ops_state enable row level security;
+
+-- ============================================================
+-- 9. サポートページ(Web)からの問い合わせ(101回目)
+-- ============================================================
+--
+-- App Storeの「サポートURL」に登録する公開Webページ(Artifact)からの
+-- 問い合わせフォーム用。feedbackテーブルと違い、送信者はアプリの
+-- サインインユーザーとは限らない(アプリ未インストールの人・審査担当者
+-- 含む、誰でも開けるページのため)。そのため匿名(anon)ロールでも
+-- insertできるポリシーにしている。feedbackと同じ方針で、閲覧(select)
+-- は誰にも許可せずservice role key経由でのみ読む。
+create table if not exists public.web_support_messages (
+  id uuid primary key default gen_random_uuid(),
+  email text,
+  category text,
+  message text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.web_support_messages enable row level security;
+
+drop policy if exists "anyone can submit a web support message" on public.web_support_messages;
+create policy "anyone can submit a web support message"
+  on public.web_support_messages for insert
+  to anon, authenticated
+  with check (true);
+
+-- selectポリシーは意図的に作らない(feedbackと同じく、service role以外は誰も読めない)。
