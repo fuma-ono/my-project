@@ -1,0 +1,52 @@
+name: Threads Affiliate - Token Health Check
+
+# Threadsアクセストークンが生きているか、投稿・返信とは無関係に定期確認する
+# (threads-affiliate/check_token_health.py)。
+#
+# 2026-09-11: 2026-09-09に取得したトークンが2026-09-10の21:05 JST投稿
+# 直前になって初めて「API access blocked」で無効と判明した反省から、
+# もっと早く・頻繁に気づける仕組みとして新設した。
+#
+# このワークフロー自身はプッシュ通知を送れない(GitHub Actions環境には
+# その手段が無い)ため、結果をtoken-health.jsonにコミットするだけに留める。
+# 実際の通知はClaude Code Remoteの定期Routine(「Threadsトークン 監視」)が
+# このファイルを見て行う。
+on:
+  schedule:
+    - cron: '15 */4 * * *' # 4時間おき、毎時15分(毎時00分の混雑を回避)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/note-issue-1pjubh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run check_token_health.py
+        env:
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+          THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
+        run: python3 threads-affiliate/check_token_health.py
+
+      - name: Commit and push token-health.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A -- threads-affiliate/token-health.json
+          if git diff --cached --quiet; then
+            echo "変更なし"
+          else
+            git commit -m "トークンの生存確認結果を更新(GitHub Actions)"
+            git fetch origin claude/note-issue-1pjubh
+            git rebase origin/claude/note-issue-1pjubh
+            git push origin HEAD:claude/note-issue-1pjubh
+          fi

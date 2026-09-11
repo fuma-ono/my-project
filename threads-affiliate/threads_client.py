@@ -10,6 +10,7 @@ import json
 import os
 import pathlib
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -31,15 +32,28 @@ def load_token() -> tuple[str, str]:
     return data["access_token"], data["threads_user_id"]
 
 
+def _raise_with_body(e: urllib.error.HTTPError):
+    # 2026-09-10、publish.pyで「HTTP Error 400」としか出ず本文(Metaの実際の
+    # エラーメッセージ)が読めなかった反省を踏まえ、こちらでも本文を含める。
+    detail = e.read().decode(errors="replace")
+    raise RuntimeError(f"HTTP {e.code} {e.reason}: {detail}") from e
+
+
 def api_get(path: str, params: dict) -> dict:
     url = f"{GRAPH_BASE}/{path}?{urllib.parse.urlencode(params)}"
-    with urllib.request.urlopen(url, timeout=30) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        _raise_with_body(e)
 
 
 def api_post(path: str, params: dict) -> dict:
     url = f"{GRAPH_BASE}/{path}"
     body = urllib.parse.urlencode(params).encode()
     req = urllib.request.Request(url, data=body, method="POST")
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        _raise_with_body(e)
