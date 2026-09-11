@@ -1,0 +1,49 @@
+name: Threads Affiliate - Send Replies
+
+# 判断済みの返信案(threads-affiliate/reply-decisions.json)を実際にThreadsへ
+# 投稿する(threads-affiliate/send_replies.py)。判断結果が無ければ何もしない
+# (send_replies.py側で判定済み)。
+#
+# 2026-09-11: 完全自動返信(モードA)の一部。threads-fetch-replies.ymlと同じ理由
+# (Claude Code Remoteのセッションからgraph.threads.netへ接続できない)で、
+# 実際の投稿処理はGitHub Actions側に分離した。全体の流れは
+# threads-fetch-replies.ymlのコメント参照。
+on:
+  schedule:
+    - cron: '50 */2 * * *' # 2時間おき、毎時50分(毎時00分の混雑を回避)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/note-issue-1pjubh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run send_replies.py
+        env:
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+          THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
+        run: python3 threads-affiliate/send_replies.py
+
+      - name: Commit and push replies-log.jsonl
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A -- threads-affiliate/replies-log.jsonl
+          if git diff --cached --quiet; then
+            echo "変更なし"
+          else
+            git commit -m "返信を自動投稿(GitHub Actions)"
+            git fetch origin claude/note-issue-1pjubh
+            git rebase origin/claude/note-issue-1pjubh
+            git push origin HEAD:claude/note-issue-1pjubh
+          fi
