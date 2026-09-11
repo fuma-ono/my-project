@@ -1804,19 +1804,17 @@ eas build --platform all --profile production
 - **EASのEnvironment Variables登録**(79回目): `EXPO_PUBLIC_SUPABASE_URL`・`EXPO_PUBLIC_SUPABASE_ANON_KEY`をexpo.devダッシュボードに登録済み(TestFlightが真っ白画面のまま動かなかった根本原因への対応)。この状態で再ビルド(Build番号3)・再提出まで完了
 
 まだ人間(オーナー)がやる必要があるもの:
-- **AdMob(残りはAndroidのみ)**(95・101回目): iOSは本番のAdMobアプリID・広告ユニットID(バナー・インタースティシャル)への差し替え済み。**AdMobアカウント自体がまだGoogleの承認待ち**のため、承認完了までは`[googleMobileAds/no-fill] Account not approved yet`エラーで広告が出ない(コード側の対応は不要、審査完了を待つだけでよい)。**Android版は未着手**——https://admob.google.com でAndroidアプリを登録し、本番の広告ユニット(バナー・インタースティシャル)を作成、`app.json`の`androidAppId`と`.env`/EASの`EXPO_PUBLIC_ADMOB_BANNER_ANDROID`・`EXPO_PUBLIC_ADMOB_INTERSTITIAL_ANDROID`に差し替える必要がある
-- **RevenueCatアカウント作成・APIキー登録**(94回目): https://app.revenuecat.com でプロジェクトを作成し、App Store Connect/Google Play Consoleと連携。サブスクリプション商品(月額プラン)を両ストアで作成し、`premium`というエンタイトルメントに紐付けたあと、RevenueCatのPublic API keyをEASのEnvironment Variablesに`EXPO_PUBLIC_REVENUECAT_IOS_KEY`・`EXPO_PUBLIC_REVENUECAT_ANDROID_KEY`として登録する必要がある。あわせて、App Store Connect側の「Agreements, Tax, and Banking」(税務・銀行口座情報)が未登録の場合は、有料販売自体ができないため先に済ませておく。**詳しい手順はチェックリスト形式で`docs/revenuecat-setup.md`にまとめた(99回目)。**この作業自体(ログイン・銀行口座情報の入力)はオーナー側でしかできない
-- **Apple Small Business Program登録**: App Store Connectのサブスク商品画面にある「Apple Small Business Program」から申請できる。年間の売上(全アプリ合算)が100万ドル未満なら、Appleの取り分が30%→15%に半減する(手取りが単純に増える)。個人事業主・低売上のうちは対象になるはずなので、登録しない理由がない
-- **Sentryアカウント作成・DSN登録**(99回目): https://sentry.io でプロジェクトを作成(Platform: React Native)し、DSNを`EXPO_PUBLIC_SENTRY_DSN`としてEASのEnvironment Variablesに登録する。未設定の間はクラッシュ監視が無効なだけでアプリは問題なく動くが、**本番でのクラッシュに気づく手段が無くなるため、ストア提出前の設定を強く推奨**。あわせて`SENTRY_ORG`・`SENTRY_PROJECT`・`SENTRY_AUTH_TOKEN`(Organization Settings > Auth Tokens)も登録すると、クラッシュのスタックトレースが読める形になる(任意)
-- **SQL再実行**(83回目): アイコン写真機能(`profiles.avatar_photo_path`・
-  `groups.icon_photo_path`・`avatars`ストレージバケット・`update_group_icon`
-  RPCの引数追加)のため、`supabase/schema.sql`をSupabaseのSQL Editorで
-  再実行する必要がある。実行しないと、写真アイコンを選ぼうとした時に
-  エラーになる
-- ~~**TestFlightでの動作確認**(85〜93回目)~~: 完了。スプラッシュ画面の文字位置・ロゴマークの絵柄/サイズ・wordmarkのフォント・グループ画面の「設定/抜ける」分離・グループ専用の設定画面(アイコン・グループ名編集・招待コード共有・通知ミュート・メンバー削除・グループ削除)・グループ内通知の絞り込み・グループ画面ヘッダーのステータスバー被りを実機で確認し、「問題ない」との回答を得た。ストア公開に向けては引き続き下記の項目が必要
+- ~~**AdMob**~~(95・101回目): iOS・Androidともに本番のAdMobアプリID・広告ユニットID(バナー・インタースティシャル)への差し替え完了。**AdMobアカウント自体がまだGoogleの承認待ち**のため、承認完了までは`[googleMobileAds/no-fill] Account not approved yet`エラーで広告が出ない(コード側の対応は不要、審査完了を待つだけでよい)
+- ~~**RevenueCatアカウント作成・APIキー登録**~~(94・99・101回目): 完了。App Store Connect側の「Agreements, Tax, and Banking」・サブスク商品(`com.kashikari.premium.monthly`、月額300円)・RevenueCat側の`premium`エンタイトルメント・商品紐付け・オファリング設定・APIキーのEAS登録まで済み、実機でSandbox購入まで確認済み(101回目)
+- ~~**Apple Small Business Program登録**~~(101回目): 申請送信済み、Appleからの審査結果待ち
+- ~~**Sentryアカウント作成・DSN登録**~~(99・101回目): 完了。DSN・`SENTRY_ORG`・`SENTRY_PROJECT`・`SENTRY_AUTH_TOKEN`まですべてEASに登録済み
+- ~~**SQL再実行**~~(83・101回目): 完了。アイコン写真機能(`profiles.avatar_photo_path`・`groups.icon_photo_path`・`avatars`ストレージバケット・`update_group_icon` RPCの引数追加)のためのスキーマ更新をSupabaseに反映済み
+- ~~**プライバシーポリシー・利用規約ページの公開**~~(101回目): 完了(Artifactを公開設定に切り替え済み)
+- ~~**TestFlightでの動作確認**(85〜93回目)~~: 完了
 - **アプリアイコンの本番差し替え**: `assets/icon.png`等は`scripts/generate_icons.py`で生成したもの(コーラル×プラムのグラデーションに🤝マーク。ブランドカラーは実際に使っているので、差し替えなくてもそのまま公開して差し支えないレベルではある)。もっと違うデザインにしたい場合は依頼してもらえれば対応できる
-- Androidも同様に`eas build --platform android --profile production`でビルドし、`eas submit`(または手動でのXcode/Android Studioビルド)で実際にストアへ提出
-- App Store Connect / Google Play Consoleでのストア掲載情報の実際の入力(`docs/store-listing.md`のコピーを使う)・スクリーンショットの用意(`docs/screenshots/`にある開発中の参考画像はストア提出用の解像度・構成ではないため、別途撮影が必要)
+- **Android対応は今回見送り**(101回目): Google Play Consoleの新規デベロッパーアカウント確認で「Android実機でPlay Consoleアプリにログインして確認する」ことが必須要件になっており、手元にAndroid実機が無いため保留にした。AdMob・app.json側のAndroid設定(`androidAppId`・広告ユニットID)自体は先に完了させてある(101回目)ので、Android実機が用意でき次第、Google Play Console側のデベロッパーアカウント確認から再開できる
+- App Store Connectでのストア掲載情報の実際の入力(`docs/store-listing.md`のコピーを使う)・スクリーンショットの用意(`docs/screenshots/`にある開発中の参考画像はストア提出用の解像度・構成ではないため、別途撮影が必要)
+- 上記が揃ったら`eas build --platform ios --profile production`→`eas submit`でストア提出
 
 ## アイコン写真の表示ラグ修正(99回目)
 
