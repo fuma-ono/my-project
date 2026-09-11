@@ -37,10 +37,13 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import automation_guard
+
 HERE = pathlib.Path(__file__).parent
 TOKEN_FILE = HERE / "access-token.json"
 PENDING_DIR = HERE / "pending"
 PUBLISHED_DIR = HERE / "published"
+REJECTED_DIR = PENDING_DIR / "rejected"  # 2026-09-11: 形式異常な下書きの退避先(無限リトライ防止)
 LOG_FILE = HERE / "publish-log.jsonl"
 
 GRAPH_BASE = "https://graph.threads.net/v1.0"
@@ -143,6 +146,11 @@ def log_result(entry: dict) -> None:
 
 
 def publish(dry_run: bool) -> None:
+    # 2026-09-11、オーナー指示「完全自動運営の安全基盤」: 一時停止中なら
+    # ここで即座に終了する(エラーが起きているのに気づかず実行し続けるのを防ぐ)。
+    if not dry_run:
+        automation_guard.ensure_not_paused("publish")
+
     access_token, user_id = load_token()
 
     pending = load_next_pending()
@@ -150,14 +158,37 @@ def publish(dry_run: bool) -> None:
         print("公開待ちの下書きがありません(threads-affiliate/pending/ が空です)。")
         return
 
+    # 短時間での異常な投稿数を検知する(例: 何らかのバグで同じ処理が
+    # 複数回同時実行されたケースへの保険)。
+    if not dry_run:
+        recent = automation_guard.count_recent_posts(LOG_FILE, hours=24)
+        if recent >= automation_guard.MAX_POSTS_PER_24H:
+            reason = f"直近24時間の投稿数が{recent}件で異常(しきい値{automation_guard.MAX_POSTS_PER_24H}件)"
+            print(f"投稿を中断しました: {reason}")
+            automation_guard.record_failure("publish", reason)
+            sys.exit(1)
+
     path, post = pending
     text = post["text"]  # PR表記込みの本文(500文字以内、Threadsの制限に注意)
     link = post.get("affiliate_link")  # 任意: 商品リンク
+
+    # アフィリエイトリンクの形式異常を検知する。壊れたリンクのまま投稿する
+    # よりは、この下書きを退避して次回以降リトライし続けないようにする方が安全。
+    if link and not (isinstance(link, str) and link.startswith("https://")):
+        reason = f"affiliate_linkの形式が不正です({path.name}): {link!r}"
+        print(f"投稿を中断し、下書きを退避します: {reason}")
+        if not dry_run:
+            REJECTED_DIR.mkdir(parents=True, exist_ok=True)
+            path.rename(REJECTED_DIR / path.name)
+            automation_guard.record_failure("publish", reason)
+        sys.exit(1)
 
     try:
         validate_pr_disclosure(text, has_link=bool(link))
     except ValueError as e:
         print(f"投稿を中断しました({path.name}): {e}")
+        if not dry_run:
+            automation_guard.record_failure("publish", str(e))
         sys.exit(1)
 
     # Threadsの投稿は本文中のURLを自動的にリンク化するため、実際に投稿する
@@ -185,31 +216,38 @@ def publish(dry_run: bool) -> None:
     if category and 1 <= len(category) <= 50 and "." not in category and "&" not in category:
         container_params["topic_tag"] = category
 
-    # 2026-09-10: topic_tag付きのリクエストがHTTP 400で拒否される事象が発生
-    # (原因未特定、日本語が非対応の可能性がある)。トピックタグは「無くても
-    # 投稿自体は成立する」付加機能なので、失敗したらtopic_tagを外して
-    # 1回だけ再試行し、本来の投稿(こちらが本質)を優先して確実に通す。
+    # 2026-09-11、オーナー指示「完全自動運営の安全基盤」: Step 1・2の
+    # API呼び出しをまとめて監視する。何らかの理由で失敗したら
+    # automation_guard に記録し(連続失敗が続けば自動的に一時停止する)、
+    # 無闇なリトライはしない(このプロセス自体もここで終了する)。
     try:
-        container = api_post(f"{user_id}/threads", container_params)
-    except RuntimeError as e:
-        if "topic_tag" in container_params:
-            print(f"警告: topic_tag付きでコンテナ作成に失敗したため、topic_tag無しで再試行します: {e}")
-            container_params.pop("topic_tag")
+        # 2026-09-10: topic_tag付きのリクエストがHTTP 400で拒否される事象が発生
+        # (原因未特定、日本語が非対応の可能性がある)。トピックタグは「無くても
+        # 投稿自体は成立する」付加機能なので、失敗したらtopic_tagを外して
+        # 1回だけ再試行し、本来の投稿(こちらが本質)を優先して確実に通す。
+        try:
             container = api_post(f"{user_id}/threads", container_params)
-        else:
-            raise
-    if "id" not in container:
-        print("コンテナ作成に失敗しました:", container)
-        sys.exit(1)
-    creation_id = container["id"]
+        except RuntimeError as e:
+            if "topic_tag" in container_params:
+                print(f"警告: topic_tag付きでコンテナ作成に失敗したため、topic_tag無しで再試行します: {e}")
+                container_params.pop("topic_tag")
+                container = api_post(f"{user_id}/threads", container_params)
+            else:
+                raise
+        if "id" not in container:
+            raise RuntimeError(f"コンテナ作成に失敗しました: {container}")
+        creation_id = container["id"]
 
-    time.sleep(3)  # Meta推奨: 公開前に数秒待つ
+        time.sleep(3)  # Meta推奨: 公開前に数秒待つ
 
-    # Step 2: 実際に公開
-    publish_params = {"creation_id": creation_id, "access_token": access_token}
-    result = api_post(f"{user_id}/threads_publish", publish_params)
-    if "id" not in result:
-        print("公開に失敗しました:", result)
+        # Step 2: 実際に公開
+        publish_params = {"creation_id": creation_id, "access_token": access_token}
+        result = api_post(f"{user_id}/threads_publish", publish_params)
+        if "id" not in result:
+            raise RuntimeError(f"公開に失敗しました: {result}")
+    except Exception as e:  # noqa: BLE001 — 種類を問わず記録し、リトライせず終了する
+        automation_guard.record_failure("publish", str(e))
+        print(f"投稿処理でエラーが発生しました: {e}")
         sys.exit(1)
 
     PUBLISHED_DIR.mkdir(exist_ok=True)
@@ -256,6 +294,7 @@ def publish(dry_run: bool) -> None:
         # (2026-09-09)。フィールド自体を廃止した。
         "last_metrics_at": None,
     })
+    automation_guard.record_success("publish")
     print(f"公開しました。投稿ID: {result['id']}")
     print("Threadsアプリ/サイトで実際に表示されているか、目視で確認してください。")
 

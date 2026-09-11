@@ -44,6 +44,7 @@ import pathlib
 import time
 import json
 
+import automation_guard
 from threads_client import api_post, load_token
 
 HERE = pathlib.Path(__file__).parent
@@ -107,6 +108,10 @@ def ensure_pr_disclosure(reply_text: str, affiliate_url: str | None) -> str:
 
 
 def main() -> None:
+    # 2026-09-11、オーナー指示「完全自動運営の安全基盤」: 一時停止中なら
+    # ここで即座に終了する。
+    automation_guard.ensure_not_paused("send_replies")
+
     if not DECISIONS_FILE.exists():
         print(f"{DECISIONS_FILE} が見つかりません。fetch_replies.py→判断の順で先に用意してください。")
         return
@@ -123,10 +128,35 @@ def main() -> None:
     replied_count = 0
     skipped_count = 0
     error_count = 0
+    attempted_count = 0  # API呼び出しを実際に試みた件数(success/failure判定用)
 
     for item in decisions:
         comment_id = item["comment_id"]
         if already_handled(log, comment_id):
+            continue
+
+        # 短時間での異常な返信数を検知する(全ユーザー合計、オーナー指示)。
+        global_recent = automation_guard.count_recent_replies(REPLIES_LOG_FILE, hours=1)
+        if global_recent + replied_count >= automation_guard.MAX_REPLIES_PER_HOUR_GLOBAL:
+            base_entry = {
+                "reply_id": None,
+                "post_id": item.get("post_id"),
+                "comment_id": comment_id,
+                "user_id": item.get("from_username"),
+                "received_at": item.get("received_at_hint"),
+                "comment_text": item.get("comment_text"),
+                "generated_reply": None,
+                "replied_at": None,
+                "reply_status": "skipped",
+                "skip_reason": (
+                    f"グローバルレート制限(直近1時間の返信が{automation_guard.MAX_REPLIES_PER_HOUR_GLOBAL}件以上、"
+                    "異常な頻度のため見送り)"
+                ),
+                "affiliate_link_used": False,
+            }
+            log_reply(base_entry)
+            log.append(base_entry)
+            skipped_count += 1
             continue
 
         base_entry = {
@@ -179,6 +209,7 @@ def main() -> None:
             item.get("affiliate_url") and item["affiliate_url"] in reply_text
         )
 
+        attempted_count += 1
         try:
             container = api_post(f"{user_id}/threads", {
                 "media_type": "TEXT",
@@ -210,6 +241,16 @@ def main() -> None:
 
         log_reply(base_entry)
         log.append(base_entry)
+
+    # 2026-09-11、オーナー指示「完全自動運営の安全基盤」: このRunでAPI呼び出しを
+    # 試みた場合のみ判定する(スキップのみ・対象無しの場合はカウントを変えない)。
+    # 1件でも成功していれば連続失敗はリセットし、全滅していれば失敗として記録する
+    # (連続すると自動的に一時停止する)。
+    if attempted_count > 0:
+        if replied_count > 0:
+            automation_guard.record_success("reply")
+        else:
+            automation_guard.record_failure("reply", f"{attempted_count}件全てAPI呼び出しに失敗しました")
 
     print(f"返信: {replied_count}件 / スキップ: {skipped_count}件 / エラー: {error_count}件")
 

@@ -16,6 +16,11 @@ on:
     - cron: '15 */4 * * *' # 4時間おき、毎時15分(毎時00分の混雑を回避)
   workflow_dispatch: {}
 
+# 2026-09-11、オーナー指示「完全自動運営の安全基盤」: 実行が重ならないよう直列化する。
+concurrency:
+  group: threads-affiliate-token-health-check
+  cancel-in-progress: false
+
 permissions:
   contents: write
 

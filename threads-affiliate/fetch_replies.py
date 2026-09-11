@@ -24,6 +24,7 @@
 import json
 import pathlib
 
+import automation_guard
 from threads_client import api_get, load_token
 
 HERE = pathlib.Path(__file__).parent
@@ -79,6 +80,10 @@ def fetch_replies_for_post(post_id: str, access_token: str) -> list[dict]:
 
 
 def main() -> None:
+    # 2026-09-11、オーナー指示「完全自動運営の安全基盤」: 一時停止中は
+    # 無駄なAPI呼び出しをしない(読み取り専用だが念のため)。
+    automation_guard.ensure_not_paused("fetch_replies")
+
     access_token, _user_id = load_token()
     posts = load_published_posts()
     handled = load_handled_comment_ids()

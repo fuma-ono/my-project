@@ -13,6 +13,12 @@ on:
     - cron: '50 */2 * * *' # 2時間おき、毎時50分(毎時00分の混雑を回避)
   workflow_dispatch: {}
 
+# 2026-09-11、オーナー指示「完全自動運営の安全基盤」: 実行が重なって
+# 重複返信を起こさないよう直列化する。
+concurrency:
+  group: threads-affiliate-send-replies
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
