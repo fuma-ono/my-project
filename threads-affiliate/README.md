@@ -171,6 +171,15 @@ python threads-affiliate/fetch_replies.py
 python threads-affiliate/send_replies.py
 ```
 
+## 完全自動運営の安全基盤(2026-09-11〜)
+
+`automation_guard.py` が投稿・返信の暴走を防ぐサーキットブレーカーとして動く。詳細設計は`docs/marketing/2026-09-10-ai-autonomous-operation-design.md`セクション6参照。
+
+- 連続3回失敗すると自動的に一時停止(`threads-affiliate/automation-status.json`の`paused: true`)し、以後のスクリプトは実行前に即座に終了する
+- 復帰させるには`automation-status.json`の`paused`を`false`、連続失敗カウントを`0`に戻してコミットする
+- 24時間で3件超の投稿・1時間で20件超の返信・`https://`で始まらないアフィリエイトリンクは異常とみなして中断する(壊れた下書きは`pending/rejected/`へ退避)
+- `threads-affiliate/decision_log.py` は将来のPhase 2(戦略変更ループ)向けに意思決定を記録する構造のみ用意済み(現時点では呼び出し元なし、戦略変更ロジックは未実装)
+
 ## 運用ルール
 
 - アフィリエイトリンクを含む投稿は、本文の**冒頭**に必ずPR表記(`【PR】`/`#PR`/`#広告`/`[PR]`)を入れる(末尾に小さく書くだけは不可、景品表示法対応)。`publish.py`が投稿時にこれを検証し、無い・末尾のみの場合は投稿を中断する(`validate_pr_disclosure()`)

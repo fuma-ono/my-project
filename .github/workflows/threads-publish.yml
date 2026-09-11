@@ -30,6 +30,13 @@ on:
     - cron: '5 13 * * *'  # 22:05 JST(2回目もダメだった場合の保険)
   workflow_dispatch: {}
 
+# 2026-09-11、オーナー指示「完全自動運営の安全基盤」: 複数の起動経路
+# (バックアップcron・CCR Routineからの直接起動等)が重なった場合に同じ
+# ジョブが同時実行されて重複投稿を起こさないよう、直列化する。
+concurrency:
+  group: threads-affiliate-publish
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
