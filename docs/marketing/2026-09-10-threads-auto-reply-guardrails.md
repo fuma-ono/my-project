@@ -8,15 +8,15 @@
 同一ユーザーへのレート制限・PR表記の補完・エラー時リトライ禁止)は
 `send_replies.py`のdocstring参照。この文書は**内容面の判断**が対象。
 
-## 全体フロー
+## 全体フロー(2026-09-11修正: GitHub Actions 2本 + Routine 1本の3系統)
 
-1. `python threads-affiliate/fetch_replies.py` を実行し、`replies-pending.json` を得る
-2. `replies-pending.json`の各コメントについて、以下の基準で`action`(reply/skip)と
-   `reply_text`または`skip_reason`を判断する
-3. 判断結果を`reply-decisions.json`に書き出す(下記フォーマット)
-4. `python threads-affiliate/send_replies.py` を実行し、実際に投稿・ログ記録する
-5. `threads-affiliate/replies-log.jsonl`をコミット・push する
-   (`replies-pending.json`/`reply-decisions.json`は一時ファイルなので.gitignore対象、コミット不要)
+Claude Code Remoteのセッションから`graph.threads.net`へ接続できないため、
+Threads APIへの接続が必要な処理はGitHub Actionsに分離している
+(`threads-affiliate/README.md`「完全自動返信」節参照)。2時間おき、20分刻み:
+
+1. **`threads-fetch-replies.yml`(毎時10分)** — `fetch_replies.py`を実行し、`replies-pending.json`をコミット
+2. **このRoutine(毎時30分)** — `replies-pending.json`の各コメントについて、以下の基準で`action`(reply/skip)と`reply_text`または`skip_reason`を判断し、`reply-decisions.json`をコミット
+3. **`threads-send-replies.yml`(毎時50分)** — `send_replies.py`を実行し、実際に投稿・`replies-log.jsonl`へのログ記録・コミットを行う
 
 ## reply-decisions.json フォーマット
 

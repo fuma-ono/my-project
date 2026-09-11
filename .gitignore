@@ -39,7 +39,8 @@ love-note/storage-state.json
 threads-affiliate/access-token.json
 threads-affiliate/rakuten-config.json
 
-# threads-affiliate: 完全自動返信の一時ファイル(1回の実行内だけで使う中間生成物、
-# 恒久的なログはreplies-log.jsonlの方にあるのでこちらはコミット不要)
-threads-affiliate/replies-pending.json
-threads-affiliate/reply-decisions.json
+# 2026-09-11: replies-pending.json/reply-decisions.jsonは、当初「1回の実行内
+# だけで使う中間生成物」としてgitignore対象にしていたが、実際にはGitHub Actions
+# (Threads APIへの接続担当)とClaude Code Remoteのセッション(判断担当、
+# graph.threads.netへの接続がブロックされている)の間でファイル経由の受け渡しが
+# 必要と判明したため、コミット対象に戻した(threads-affiliate/README.md参照)。

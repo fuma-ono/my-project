@@ -141,17 +141,29 @@ python threads-affiliate/fetch_threads_insights.py  # 実績の取得・記録�
 
 楽天側のクリック・成果データとの突合は、投稿数がある程度貯まってから着手する(オーナー方針: 分析より先に正確なデータを貯めることを優先)。
 
-## 完全自動返信(2026-09-10〜)
+## 完全自動返信(2026-09-10〜、2026-09-11に3系統構成へ修正)
 
 投稿へのコメントに、AI(定期Routine)が自動で返信する。設計・判断基準は
 `docs/marketing/2026-09-10-ai-autonomous-operation-design.md`と
 `docs/marketing/2026-09-10-threads-auto-reply-guardrails.md`参照。
 
-1. `fetch_replies.py` — 新着コメントを集めて `replies-pending.json` に書き出す(判断はしない)
-2. Claude Code Remoteの定期Routine(「Threads返信 自動対応」、2時間おき)が、ガードレール文書の基準で各コメントの`action`(reply/skip)を判断し `reply-decisions.json` に書く
-3. `send_replies.py` — 実際にThreadsへ返信を投稿し `replies-log.jsonl` に記録する。二重返信防止・同一ユーザーへのレート制限(24時間で3件まで)・PR表記の自動補完はここでコード側が強制する
+**2026-09-11、設計を修正した**: 当初はClaude Code Remoteの定期Routineが
+`fetch_replies.py`/`send_replies.py`を直接実行する設計だったが、この
+セッションから`graph.threads.net`への接続がブロックされている(`publish.py`と
+同じ制約、実機で確認済み)ことが判明。Threads APIへの接続が必要な処理は
+GitHub Actionsへ分離し、Routineは「判断」だけを担当する3系統構成にした。
 
-**要スコープ**: `threads_read_replies` / `threads_manage_replies` / `threads_manage_mentions`(2026-09-10、`get_token.py`に追加済み)。既存トークンではこれらの権限が無いため、**オーナーによる`get_token.py`の再認可とGitHub Secrets(`THREADS_ACCESS_TOKEN`)の更新が必要**(手順は`get_token.py`実行時の案内に従う。2026-09-09のInsightsスコープ追加時と同じ流れ)。
+コミットされたJSONファイル経由でバトンタッチする(2時間おき、20分刻み):
+
+1. **`.github/workflows/threads-fetch-replies.yml`(毎時10分)** — `fetch_replies.py`で新着コメントを集め、`replies-pending.json`をコミット(判断はしない)
+2. **Claude Code Remoteの定期Routine「Threads返信 自動対応」(毎時30分)** — `replies-pending.json`を読み、ガードレール文書の基準で各コメントの`action`(reply/skip)を判断し、`reply-decisions.json`をコミット
+3. **`.github/workflows/threads-send-replies.yml`(毎時50分)** — `send_replies.py`で実際にThreadsへ返信を投稿し `replies-log.jsonl` に記録・コミット。二重返信防止・同一ユーザーへのレート制限(24時間で3件まで)・PR表記の自動補完はここでコード側が強制する
+
+`replies-pending.json`/`reply-decisions.json`は3系統間の受け渡しに使うため、`.gitignore`対象ではなくコミットする(当初はgitignore対象にしていたが、この設計変更に伴い戻した)。
+
+**要スコープ**: `threads_read_replies` / `threads_manage_replies` / `threads_manage_mentions`(2026-09-10、`get_token.py`に追加済み。2026-09-11、オーナーが再認可・GitHub Secrets更新済み)。
+
+手動で1サイクルを試す場合(要Threads APIへの接続、オーナーのPC等で):
 
 ```
 python threads-affiliate/fetch_replies.py
