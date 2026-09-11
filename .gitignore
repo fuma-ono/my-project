@@ -20,6 +20,10 @@ __pycache__/
 !.env.example
 *credentials*.json
 *token*.json
+# token-health.jsonは秘密情報を含まない(生存確認結果のbool/日時/usernameのみ)。
+# 上記の広いパターン(*token*.json)に誤って引っかかるため明示的に除外する
+# (2026-09-11、実際にGitHub Actionsでコミット失敗するのを確認して発覚)。
+!threads-affiliate/token-health.json
 client_secret*.json
 meta_app.json
 bgm-pipeline/credentials/
