@@ -38,6 +38,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # 2026-09-11: replies-log.jsonlは初回の返信が実際に発生するまで
+          # リポジトリに存在しない。存在しないパスへの`git add -A --`は
+          # 「pathspec did not match any files」でジョブ全体を失敗させて
+          # しまうため、無ければ空ファイルを作ってから追加する(テストで
+          # 実際にこの失敗を再現・確認した)。
+          touch threads-affiliate/replies-log.jsonl
           git add -A -- threads-affiliate/replies-log.jsonl
           if git diff --cached --quiet; then
             echo "変更なし"
