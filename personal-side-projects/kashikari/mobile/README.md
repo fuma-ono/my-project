@@ -1813,8 +1813,8 @@ eas build --platform all --profile production
 - ~~**TestFlightでの動作確認**(85〜93回目)~~: 完了
 - **アプリアイコンの本番差し替え**: `assets/icon.png`等は`scripts/generate_icons.py`で生成したもの(コーラル×プラムのグラデーションに🤝マーク。ブランドカラーは実際に使っているので、差し替えなくてもそのまま公開して差し支えないレベルではある)。もっと違うデザインにしたい場合は依頼してもらえれば対応できる
 - **Android対応は今回見送り**(101回目): Google Play Consoleの新規デベロッパーアカウント確認で「Android実機でPlay Consoleアプリにログインして確認する」ことが必須要件になっており、手元にAndroid実機が無いため保留にした。AdMob・app.json側のAndroid設定(`androidAppId`・広告ユニットID)自体は先に完了させてある(101回目)ので、Android実機が用意でき次第、Google Play Console側のデベロッパーアカウント確認から再開できる
-- App Store Connectでのストア掲載情報の実際の入力(`docs/store-listing.md`のコピーを使う)・スクリーンショットの用意(`docs/screenshots/`にある開発中の参考画像はストア提出用の解像度・構成ではないため、別途撮影が必要)
-- 上記が揃ったら`eas build --platform ios --profile production`→`eas submit`でストア提出
+- ~~**App Store Connectでのストア掲載情報の入力**~~(101回目): 完了。アプリ情報(サブタイトル・カテゴリ)・スクリーンショット・プロモーションテキスト・概要・キーワードすべて入力済み。「アプリのプライバシー」(App Privacy)も実装に即した内容(連絡先情報・ユーザコンテンツ・ID・購入・使用状況データを収集、クラッシュデータのみユーザー非紐付け、トラッキング目的は一切無し)に修正済み。デジタルサービス法(DSA)のトレーダー確認は、開業届等の書類が無くまだ対応できないため、**EU加盟27か国を配信対象から除外**することで回避した(EU向け配信が必要になったら書類を揃えて再度有効化できる)
+- ~~**本番ビルド・ストア提出**~~(101回目): `eas build --platform ios --profile production`→`eas submit --platform ios`まで完了。App Store Connectへのアップロード成功、Apple側の処理待ち。処理完了後、TestFlightでの最終動作確認→審査提出が残タスク
 
 ## アイコン写真の表示ラグ修正(99回目)
 
