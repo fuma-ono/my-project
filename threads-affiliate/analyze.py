@@ -50,7 +50,13 @@ def load_entries() -> list[dict]:
         line = line.strip()
         if not line:
             continue
-        entries.append(json.loads(line))
+        entry = json.loads(line)
+        # 2026-09-11、最終運用監査で発見: 削除済み投稿(deleted_at付き、
+        # 例: リンク無しで誤公開し手動削除したもの)がフィルタされておらず、
+        # 実際には存在しない投稿として集計・分析に混入していた。
+        if entry.get("deleted_at"):
+            continue
+        entries.append(entry)
     return entries
 
 
