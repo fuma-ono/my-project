@@ -7,9 +7,9 @@
   "pillar": "B",
   "hypothesis": "#06(著作権法の話)と読者層は重なるが切り口が異なる(プラットフォーム利用規約・アプリストア審査要件という実務Q&A型)。個人開発者・AI活用でコンテンツ制作をしたい層の「規約違反にならないか不安」という悩みに具体的に答えることで保存・共感を得る",
   "generated_at": "2026-08-27",
-  "published_at": null,
-  "status": "draft",
-  "note_url": "https://note.com/unique_condor276",
+  "published_at": "2026-09-11",
+  "status": "published",
+  "note_url": "https://note.com/unique_condor276/n/n996e967375e9",
   "metrics": {
     "views": null,
     "likes": null,
@@ -31,5 +31,6 @@
     "clear_reader_value": true,
     "no_duplication_with_existing": true,
     "note": "2026-08-27、週2回運用Routineでの新規生成。docs/legal/checklist.md・terms-of-service.mdの実際の確認内容(Content IDリスク構造、医療機器でない旨の免責、note有料記事の特定商取引法表記が未確認のまま残っている点)に基づき執筆、誇張を避けた。#06(著作権法・創作性の議論)とは明示的に住み分け、プラットフォーム規約に絞ることで重複を回避"
-  }
+  },
+  "publish_confirmation_note": "2026-09-11、note.com公開RSSフィードとのタイトル一致により自動検知(GitHub Actions定期実行)。"
 }
