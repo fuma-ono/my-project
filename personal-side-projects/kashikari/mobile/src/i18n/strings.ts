@@ -345,6 +345,14 @@ export const ja = {
     logoutUnsafeMessage:
       'Google/Apple/LINE/メールのいずれとも連携していません。今ログアウトすると、このグループのデータに二度とアクセスできなくなります。それでもログアウトしますか?',
     logoutUnsafeButton: 'それでもログアウトする',
+    // アカウント削除(Apple審査 Guideline 2.1/5.1.1(v)対応)。
+    deleteAccountRow: 'アカウントを削除',
+    deleteAccountConfirmTitle: 'アカウントを削除しますか?',
+    deleteAccountConfirmMessage:
+      'この操作は取り消せません。ログインできなくなり、参加しているすべてのグループから外れます(あなたが記録した貸し借りは、他のメンバーの台帳を壊さないよう「退会したユーザー」として残ります)。',
+    deleteAccountConfirmButton: '削除する',
+    deleteAccountFailedTitle: '削除できませんでした',
+    deletedUserPlaceholder: '退会したユーザー',
   },
   feedback: {
     title: 'ご意見・不具合を報告',
@@ -741,6 +749,13 @@ export const en: Strings = {
     logoutUnsafeMessage:
       "You haven't linked Google, Apple, LINE, or email. Logging out now means you'll permanently lose access to this group's data. Log out anyway?",
     logoutUnsafeButton: 'Log out anyway',
+    deleteAccountRow: 'Delete account',
+    deleteAccountConfirmTitle: 'Delete your account?',
+    deleteAccountConfirmMessage:
+      "This can't be undone. You'll be signed out for good and removed from every group you're in (money you recorded stays visible to other members, shown as coming from a \"Deleted user\", so their ledgers stay accurate).",
+    deleteAccountConfirmButton: 'Delete',
+    deleteAccountFailedTitle: "Couldn't delete account",
+    deletedUserPlaceholder: 'Deleted user',
   },
   feedback: {
     title: 'Send feedback / report an issue',

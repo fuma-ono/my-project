@@ -1816,7 +1816,8 @@ eas build --platform all --profile production
 - ~~**App Store Connectでのストア掲載情報の入力**~~(101回目): 完了。アプリ情報(サブタイトル・カテゴリ)・スクリーンショット・プロモーションテキスト・概要・キーワードすべて入力済み。「アプリのプライバシー」(App Privacy)も実装に即した内容(連絡先情報・ユーザコンテンツ・ID・購入・使用状況データを収集、クラッシュデータのみユーザー非紐付け)に修正済み。デジタルサービス法(DSA)のトレーダー確認は、開業届等の書類が無くまだ対応できないため、**EU加盟27か国を配信対象から除外**することで回避した(EU向け配信が必要になったら書類を揃えて再度有効化できる)
 - ~~**サポートURL**~~(101回目): App Store Connectの「サポートURL」が未入力で審査に提出できなかったため、`docs/`にあった内容をもとにサポートページ(Artifact、お問い合わせフォーム+よくある質問)を新規作成・公開した。フォームの送信内容はSupabaseの新テーブル`web_support_messages`に書き込まれる(既存の`feedback`テーブルと同じ方針: 投稿は誰でも可、閲覧はservice role経由のみ。アプリ未インストールの人・審査担当者でも送れるようにするため、匿名(anon)ロールでもinsert可能にしている)
 - ~~**トラッキング宣言の修正**~~(101回目): 審査提出時に「`NSUserTrackingUsageDescription`を含むのに、アプリのプライバシーが全項目トラッキング目的:いいえになっている」と指摘された。AdMobのパーソナライズ広告のためにATT許可を求めている実態に合わせ、データタイプに「デバイスID」(利用目的: サードパーティ広告、トラッキング目的: はい)を追加して解消した
-- ~~**本番ビルド・ストア提出**~~(101回目): `eas build --platform ios --profile production`→`eas submit --platform ios`→App Store Connectで「審査に追加」まで完了。**審査提出済み**、Appleからの結果待ち(通常1〜3日)
+- ~~**本番ビルド・ストア提出**~~(101回目): `eas build --platform ios --profile production`→`eas submit --platform ios`→App Store Connectで「審査に追加」まで完了。
+  - **追記(102回目)**: 「Guideline 2.1 - Information Needed」で差し戻された。要求内容にあった「アカウント削除の導線」が実際に欠けていたため実装した(102回目の項目参照)。**残作業**: ①`schema.sql`再実行、②`npx supabase functions deploy delete-account`、③実機でアカウント削除が実際に動くことの確認、④再ビルド・再提出(`eas build`→`eas submit`)。あわせて、Appleへの返信(Resolution Centerへの6項目の回答+App Store ConnectのNotes欄への転記)が必要— 文面のドラフトは別途用意する
 
 ## アイコン写真の表示ラグ修正(99回目)
 
@@ -1926,3 +1927,26 @@ eas build --platform all --profile production
 - **RevenueCatの復元**: 起動時フリーズの原因候補としてcc6e895で一時的に`react-native-purchases`を完全削除し、`purchases.ts`を「常に無課金」のスタブに置き換えていたが、上記の通り真因が判明しRevenueCatとは無関係だったため、`react-native-purchases`を依存関係に戻し、`purchases.ts`/`purchases.web.ts`/`usePremium.ts`を元の実装に復元した
 
 `npx tsc --noEmit`はクリーン。iOS実機(development build)で「精算完了→白画面フリーズ」の再現・修正確認まで完了。広告はAdMobアカウント承認待ちのため実際の表示は未確認。
+
+## アカウント削除の実装(102回目)。**この回はスキーマ変更あり・Edge Functionの新規デプロイが必要**
+
+Apple App Store審査で「Guideline 2.1 - Information Needed」として差し戻された。要求内容の1つに「アカウント作成に対応するアプリには、アプリ内にアカウント削除の導線が必要」とあり、実際に調べたところ**ログアウト機能はあったが、アカウント削除機能そのものが存在しなかった**(Apple Guideline 5.1.1(v)の要件)。放置すると再提出しても同じ理由で弾かれるため、審査への回答文を用意する前に、まずこの欠落を直した。
+
+**設計上の判断**: 単純に認証ユーザー(`auth.users`)を物理削除すると、`entries.from_user`/`to_user`等(`public.profiles`への外部キー。`on delete cascade`を付けていない)が違反し、**貸し借りの記録が1件でもあるユーザーは退会できない**という詰み状態になる(`profiles.id`は`auth.users(id)`にcascadeが付いているため、認証ユーザーを消すとprofiles行も道連れで消えようとしてしまう)。これは意図的な設計(グループの他メンバーの台帳・残高計算を、退会した相手のために壊したくない)なので、削除ではなく**Supabase公式推奨の「ソフトデリート」**(`auth.admin.deleteUser(id, true)`)を採用した。認証側は「ログイン不可・メールアドレス等をスクランブル」されるが行自体は残るため、profilesへのcascadeは発火しない。
+
+- **`supabase/functions/delete-account`(新規Edge Function)**: line-signin/send-pushと同じ理由(service_role鍵が要る)でEdge Function化。呼び出したユーザー本人か確認した上で、①アバター写真をStorageから削除、②`profiles`の個人情報(表示名→「退会したユーザー」、アイコン)を消去(行自体は残す)、③`push_tokens`・`group_members`を削除(退会後は通知を受け取らない・参加中メンバーとして出続けない)、④最後に`auth.admin.deleteUser(id, true)`でソフトデリート、の順に行う
+- **`schema.sql`**: `profiles.deleted_at`列を追加(いつ退会処理されたかの記録用)
+- **`src/lib/deleteAccount.ts`(新規)**: 上記Edge Functionを呼び、成功したらローカルセッションも`signOut`する(既存のログアウトと同じ`onAuthStateChange`の仕組みでアプリ側は自動的にログイン画面へ戻る)
+- **`SettingsScreen.tsx`**: 「アカウントを削除」を追加。ログアウトボタンより下に、あえて目立たないテキストリンクとして配置(見つけられる必要はあるが、誤タップを誘発したくないため)。確認ダイアログは既存の「グループを削除する」と同じ1段階のAlert(destructive style)
+
+**副作用として残る制約**: 退会したユーザーがグループの管理者(`groups.created_by`)だった場合、そのグループは以後「メンバー削除・グループ削除・会費設定」等の管理者専用操作ができなくなる(`created_by = auth.uid()`の比較が、二度とログインできないユーザーとは一致し得ないため)。閲覧・記録の追加・精算等の通常操作には影響しない。管理者移譲機能は現状無く、将来必要になれば別途対応する(今回のApple要求はあくまで「アカウントを削除できること」であり、この副作用の解消は必須ではないため)。
+
+`npx tsc --noEmit`はクリーン。`EXPO_PUBLIC_DEMO_MODE=1`でのWeb版ビルド・Playwrightで、設定画面が従来通りエラーなく表示されること(デモモードでは`onDeleteAccount`を渡していないため、行自体が出ないことも含めて)を確認した。実際の削除フロー(Edge Function呼び出し・ソフトデリート)はSupabase接続が必須のため、実機/TestFlightでの確認が必要。
+
+**オーナー側の対応が必要**:
+1. `schema.sql`の全文をSupabaseのSQL Editorで再実行(`profiles.deleted_at`列の追加)
+2. `npx supabase functions deploy delete-account`でEdge Functionを新規デプロイ
+3. 上記2つの後、実機(TestFlight等)で「設定→アカウントを削除」が実際に動くこと(削除後ログイン画面に戻り、再ログインできないこと)を一度確認してほしい
+4. 確認が取れたら、`eas build --platform ios --profile production` → `eas submit --platform ios --latest`で再ビルド・再提出
+
+審査への回答文(6項目)は別途まとめる。

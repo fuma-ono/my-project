@@ -42,6 +42,12 @@ alter table public.profiles add column if not exists avatar_emoji text;
 -- avatar_photo_pathがあればそちらを優先する。
 alter table public.profiles add column if not exists avatar_photo_path text;
 
+-- アカウント削除(Apple App Review 2.1/5.1.1(v)対応)。deleted_atが
+-- 入っている行は、delete-account Edge Function経由で個人情報を消去済み
+-- (display_name=プレースホルダー、avatar系はnull)。詳細はEdge Function
+-- (supabase/functions/delete-account)のコメント参照。
+alter table public.profiles add column if not exists deleted_at timestamptz;
+
 alter table public.profiles enable row level security;
 
 -- ============================================================

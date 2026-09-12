@@ -36,6 +36,9 @@ type Props = {
   // リリース運用の仕組み(99回目)。デモモードでは実際のuser_idが無い
   // ため渡されない(渡されない場合は行自体を出さない、他の項目と同じ方針)。
   onSubmitFeedback?: (message: string) => Promise<{ error: string | null }>;
+  // アカウント削除(Apple審査 Guideline 2.1/5.1.1(v)対応)。デモモードでは
+  // 実際のアカウントが無いため渡されない(他の項目と同じ方針)。
+  onDeleteAccount?: (placeholderName: string) => Promise<{ error: string | null }>;
 };
 
 export default function SettingsScreen({
@@ -50,6 +53,7 @@ export default function SettingsScreen({
   isDemo,
   onSignOut,
   onSubmitFeedback,
+  onDeleteAccount,
 }: Props) {
   const { lang, setLang, t } = useLanguage();
   const [name, setName] = useState(profile.display_name);
@@ -60,6 +64,7 @@ export default function SettingsScreen({
   const [authToastMessage, setAuthToastMessage] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const nameDirty = name.trim() !== profile.display_name && name.trim().length > 0;
 
@@ -85,6 +90,26 @@ export default function SettingsScreen({
         { text: t.settings.logoutUnsafeButton, style: 'destructive', onPress: onSignOut },
       ]);
     }
+  };
+
+  const confirmDeleteAccount = () => {
+    if (!onDeleteAccount) return;
+    Alert.alert(t.settings.deleteAccountConfirmTitle, t.settings.deleteAccountConfirmMessage, [
+      { text: t.common.cancel, style: 'cancel' },
+      {
+        text: t.settings.deleteAccountConfirmButton,
+        style: 'destructive',
+        onPress: async () => {
+          setDeletingAccount(true);
+          const res = await onDeleteAccount(t.settings.deletedUserPlaceholder);
+          setDeletingAccount(false);
+          if (res.error) Alert.alert(t.settings.deleteAccountFailedTitle, res.error);
+          // 成功時は特に何もしない: onDeleteAccount内でsignOutされ、
+          // useAuthのonAuthStateChange経由でアプリ側が自動的にログイン
+          // 画面へ遷移する(通常のログアウトと同じ仕組み)。
+        },
+      },
+    ]);
   };
 
   const saveName = async () => {
@@ -192,6 +217,12 @@ export default function SettingsScreen({
           <Pressable onPress={confirmLogout} disabled={loggingOut} style={styles.logoutRow}>
             <Ionicons name="log-out-outline" size={18} color={colors.danger} />
             <Text style={styles.logoutRowText}>{t.settings.logoutRow}</Text>
+          </Pressable>
+        )}
+
+        {!isDemo && onDeleteAccount && (
+          <Pressable onPress={confirmDeleteAccount} disabled={deletingAccount} style={styles.deleteAccountRow}>
+            <Text style={styles.deleteAccountRowText}>{t.settings.deleteAccountRow}</Text>
           </Pressable>
         )}
       </ScrollView>
@@ -314,4 +345,8 @@ const styles = StyleSheet.create({
     borderColor: colors.danger + '40',
   },
   logoutRowText: { ...fonts.bodySemiBold, fontSize: 15, color: colors.danger },
+  // ログアウトより頻繁に押させたくない操作のため、ボタンではなく控えめな
+  // テキストリンクにしている(見つけられる必要はあるが、目立たせすぎない)。
+  deleteAccountRow: { alignItems: 'center', marginTop: 20, paddingVertical: 8 },
+  deleteAccountRowText: { ...fonts.body, fontSize: 13, color: colors.muted, textDecorationLine: 'underline' },
 });

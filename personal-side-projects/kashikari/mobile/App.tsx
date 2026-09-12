@@ -36,6 +36,7 @@ import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { LanguageProvider } from './src/i18n';
 import { requestTrackingPermission } from './src/lib/ads';
 import { getUsageStats, logEvent } from './src/lib/analytics';
+import { deleteAccount } from './src/lib/deleteAccount';
 import { submitFeedback } from './src/lib/feedback';
 import { PremiumProvider } from './src/lib/premiumContext';
 import { SentryErrorBoundary } from './src/lib/sentry';
@@ -418,6 +419,7 @@ function AppInner() {
           onOpenReport={() => setScreen({ name: 'report', returnTo: screen })}
           onSignOut={signOut}
           onSubmitFeedback={userId ? (message) => submitFeedback(userId, message) : undefined}
+          onDeleteAccount={deleteAccount}
         />
       )}
       {screen.name === 'premium' && (
