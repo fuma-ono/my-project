@@ -35,6 +35,11 @@
 
 詳細・使い方は `expense-app/README.md` を参照。
 
+## 事業5: 貸し借り精算アプリ「kashikari」
+
+- 旅行・飲み会・友人間・カップル・サークルなどでの立替/貸し借りの精算を簡単にするアプリ。アプリ本体は開発部が別ブランチ(`personal-side-projects/kashikari/mobile`)で開発中
+- Growth戦略(認知→インストール→初回利用→招待→継続→収益の成長ループ検証、Invitation Loop仮説、撤退基準等)は `docs/projects/kashikari/growth-strategy.md` を参照
+
 ## 今後、人間側(オーナー)の判断・作業が必要な項目
 
 どちらの事業も「投稿ボタン/申請ボタンを押す」部分は代行できません(アカウント認証情報が必要なため)。
