@@ -7,9 +7,9 @@
   "pillar": "B",
   "hypothesis": "教訓型+透明性の組み合わせで拡散されやすい切り口。#29(article 24として消化済み、10日間の実体験ログ)とは異なり、「事業運営の罠」という一般化した学びに焦点を当て重複を回避する",
   "generated_at": "2026-09-04",
-  "published_at": null,
-  "status": "draft",
-  "note_url": "https://note.com/unique_condor276",
+  "published_at": "2026-09-13",
+  "status": "published",
+  "note_url": "https://note.com/unique_condor276/n/n6fb23c1949ce",
   "metrics": {
     "views": null,
     "likes": null,
@@ -31,5 +31,6 @@
     "clear_reader_value": true,
     "no_duplication_with_existing": true,
     "note": "2026-09-04、週2回運用Routineでの新規生成(4日分の遅延分)。piano_hisaishi_style導入時の試作往復(約5回)を「儲かる前提で急いで公開しなかった」具体例として使用"
-  }
+  },
+  "publish_confirmation_note": "2026-09-13、note.com公開RSSフィードとのタイトル一致により自動検知(GitHub Actions定期実行)。"
 }

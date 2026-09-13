@@ -7,9 +7,9 @@
   "pillar": "B",
   "hypothesis": "既存の柱Bは「やったこと」中心の実体験ログが多かった。「やらないこと」というNot-to-doリスト型の切り口は初で、保存率(ノウハウ系の中でも高い傾向)を狙う",
   "generated_at": "2026-09-04",
-  "published_at": null,
-  "status": "draft",
-  "note_url": "https://note.com/unique_condor276",
+  "published_at": "2026-09-13",
+  "status": "published",
+  "note_url": "https://note.com/unique_condor276/n/na3accbbed142",
   "metrics": {
     "views": null,
     "likes": null,
@@ -31,5 +31,6 @@
     "clear_reader_value": true,
     "no_duplication_with_existing": true,
     "note": "2026-09-04、週2回運用Routineでの新規生成(4日分の遅延分、環境リセットからの復旧直後)。実際に2026-09-04に発生した認証情報消失インシデント(コンテナ再作成でgit管理外のcredentialsが失われたが、git管理下のコード・作業は無事だった)を「やらないと決めたこと」の具体例として使用、当日の実体験のため具体性・当事者性が高い"
-  }
+  },
+  "publish_confirmation_note": "2026-09-13、note.com公開RSSフィードとのタイトル一致により自動検知(GitHub Actions定期実行)。"
 }
