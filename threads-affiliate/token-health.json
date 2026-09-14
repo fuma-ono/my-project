@@ -1,5 +1,5 @@
 {
-  "ok": true,
-  "checked_at": "2026-09-13T00:17:30.211327+00:00",
-  "username": "benri_mitsuketa"
+  "ok": false,
+  "checked_at": "2026-09-14T04:58:01.496554+00:00",
+  "error": "HTTP 400 Bad Request: {\"error\":{\"message\":\"Error validating access token: Session key is malformed because of invalid user id.\",\"type\":\"OAuthException\",\"code\":190,\"error_subcode\":0,\"fbtrace_id\":\"AbQJbS4yK4ZTYEbSIkI21ph\"}}"
 }
