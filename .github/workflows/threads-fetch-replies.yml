@@ -49,7 +49,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A -- threads-affiliate/replies-pending.json
+          # 2026-09-14発覚: automation-status.json(サーキットブレーカーの状態)を
+          # publish.py/send_replies.py側のワークフローでもコミット対象に追加した
+          # のに合わせ、こちらも同様に含める(fetch_replies.py自体は
+          # ensure_not_paused()のみで失敗カウントは持たないが、初回読み込み時に
+          # automation_guard.pyがデフォルト状態を書き出すため、一貫性のため含める)。
+          git add -A -- threads-affiliate/replies-pending.json threads-affiliate/automation-status.json
           if git diff --cached --quiet; then
             echo "変更なし"
           else

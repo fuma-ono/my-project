@@ -50,7 +50,12 @@ jobs:
           # しまうため、無ければ空ファイルを作ってから追加する(テストで
           # 実際にこの失敗を再現・確認した)。
           touch threads-affiliate/replies-log.jsonl
-          git add -A -- threads-affiliate/replies-log.jsonl
+          # 2026-09-14発覚: automation-status.json(サーキットブレーカーの状態)が
+          # このgit addに含まれておらず、send_replies.py内のrecord_failure()の
+          # 内容がジョブ終了時に毎回消え、連続失敗が積み上がらないバグがあった。
+          # automation_guard.py側で初回読み込み時に必ず書き出すようにした上で、
+          # ここでもコミット対象に含める。
+          git add -A -- threads-affiliate/replies-log.jsonl threads-affiliate/automation-status.json
           if git diff --cached --quiet; then
             echo "変更なし"
           else
