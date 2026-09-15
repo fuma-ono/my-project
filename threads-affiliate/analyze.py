@@ -87,22 +87,31 @@ def group_by(entries: list[dict], key: str) -> dict[str, list[dict]]:
 
 
 def format_group_table(groups: dict[str, list[dict]], label: str) -> list[str]:
+    # 2026-09-13、オーナー指示「投稿戦略の再設計」: 「表示数だけで勝ちと判断
+    # しない」ため、これまで集計はしていたが表示していなかったreplies/reposts/
+    # quotes/sharesも列として追加した(判定ロジック・しきい値は変更しない、
+    # 既存データを見えるようにする追加のみ)。
     lines = [
         f"### {label}別",
         "",
-        f"| {label} | 投稿数 | views合計 | likes合計 | clicks合計 | CTR相当 |",
-        "|---|---|---|---|---|---|",
+        f"| {label} | 投稿数 | views合計 | likes合計 | replies合計 | reposts合計 | quotes合計 | shares合計 | clicks合計 | CTR相当 |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for key, group_entries in sorted(groups.items(), key=lambda kv: -len(kv[1])):
         totals, unmeasured = sum_metrics(group_entries)
         n = len(group_entries)
         note = f"(うち{unmeasured}件は実績未取得)" if unmeasured else ""
         lines.append(
-            f"| {key} | {n}{note} | {totals['views']} | {totals['likes']} | "
+            f"| {key} | {n}{note} | {totals['views']} | {totals['likes']} | {totals['replies']} | "
+            f"{totals['reposts']} | {totals['quotes']} | {totals['shares']} | "
             f"{totals['clicks']} | {ctr_like(totals)} |"
         )
         if n < MIN_SAMPLE_FOR_JUDGEMENT:
-            lines.append(f"| | *サンプル{n}件 < {MIN_SAMPLE_FOR_JUDGEMENT}件のため、この{label}が良いかは判断不能* | | | | |")
+            # 表の列数(10列)に合わせて空セルの数を組み立てる(手打ちの
+            # パイプ数え間違いを避けるため、join で機械的に生成する)。
+            note_text = f"*サンプル{n}件 < {MIN_SAMPLE_FOR_JUDGEMENT}件のため、この{label}が良いかは判断不能*"
+            cells = ["", note_text] + [""] * 8  # label, 投稿数(note), 残り8列
+            lines.append("| " + " | ".join(cells) + " |")
     lines.append("")
     return lines
 

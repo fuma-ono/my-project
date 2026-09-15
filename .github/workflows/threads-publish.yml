@@ -67,7 +67,13 @@ jobs:
           # `git add -A -- .../pending`が「pathspec did not match any files」で
           # 失敗し、公開処理自体は正常でもジョブ全体がfailure扱いになっていた。
           mkdir -p threads-affiliate/pending threads-affiliate/published
-          git add -A -- threads-affiliate/pending threads-affiliate/published threads-affiliate/publish-log.jsonl
+          # 2026-09-14発覚: automation-status.json(サーキットブレーカーの状態)が
+          # このgit addに含まれていなかったため、publish.py内でrecord_failure()が
+          # 書き込んだ内容がジョブ終了時に毎回消え、連続失敗が積み上がらず
+          # 自動停止が一度も機能しないバグがあった。automation_guard.py側でも
+          # 初回読み込み時にファイルを必ず書き出すようにした上で、ここでも
+          # コミット対象に含める。
+          git add -A -- threads-affiliate/pending threads-affiliate/published threads-affiliate/publish-log.jsonl threads-affiliate/automation-status.json
           if git diff --cached --quiet; then
             echo "変更なし"
           else

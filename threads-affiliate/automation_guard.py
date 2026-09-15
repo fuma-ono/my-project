@@ -52,13 +52,24 @@ MAX_REPLIES_PER_HOUR_GLOBAL = 20  # 全ユーザー合計で1時間にこの件�
 
 def _load() -> dict:
     if not STATUS_FILE.exists():
-        return {
+        # 2026-09-14発覚: GitHub Actionsの各ワークフローはチェックアウトの
+        # たびにまっさらな作業ディレクトリから始まるため、このファイルを
+        # git addでコミットしていないと、record_failure()で書き込んだ内容が
+        # 実行終了時に消え、連続失敗カウントが実行のたびに0にリセットされて
+        # しまい、MAX_CONSECUTIVE_FAILURESに到達しても自動停止しないバグが
+        # あった(publish.pyがOAuthExceptionで失敗し続けても気づけなかった)。
+        # 対策として、初回読み込み時にデフォルト状態を即座にディスクへ書き出す
+        # ことで、ensure_not_paused()を呼ぶだけの正常系でもファイルが必ず
+        # 実在するようにし、ワークフロー側のgit addで確実に拾えるようにする。
+        default = {
             "paused": False,
             "pause_reason": None,
             "consecutive_publish_failures": 0,
             "consecutive_reply_failures": 0,
             "last_updated": None,
         }
+        _save(default)
+        return default
     return json.loads(STATUS_FILE.read_text(encoding="utf-8"))
 
 
