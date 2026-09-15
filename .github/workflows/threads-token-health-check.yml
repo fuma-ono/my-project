@@ -7,10 +7,19 @@ name: Threads Affiliate - Token Health Check
 # 直前になって初めて「API access blocked」で無効と判明した反省から、
 # もっと早く・頻繁に気づける仕組みとして新設した。
 #
-# このワークフロー自身はプッシュ通知を送れない(GitHub Actions環境には
-# その手段が無い)ため、結果をtoken-health.jsonにコミットするだけに留める。
-# 実際の通知はClaude Code Remoteの定期Routine(「Threadsトークン 監視」)が
-# このファイルを見て行う。
+# 2026-09-15(AI利用量監査への対応): 以前はこのワークフロー自身が
+# プッシュ通知を送れないため、結果をtoken-health.jsonにコミットするだけに
+# 留め、実際の通知はClaude Code Remoteの定期Routine(「Threadsトークン
+# 監視」、4時間おき)が別途起動して行っていた。判断が一切ない単純な
+# 「JSONを読んで異常なら通知する」処理にフルのAIエージェントセッションを
+# 使う必要は無いため、この処理自体をワークフロー内に取り込んだ:
+# 異常を検知し、かつ同じ異常について未通知の場合は、このジョブ自体を
+# 意図的に失敗させる(exit 1)。GitHubはデフォルトで、失敗したワーク
+# フロー実行をリポジトリの通知設定に従ってメール通知する(Settings >
+# Notifications > Actions が「失敗したワークフローのみ通知」になって
+# いることを確認しておくこと)。同じ異常が続いている間は再通知しない
+# (notifiedフラグでスパム防止、既存のcheck_token_health.py側のロジックを
+# 踏襲)。Claude Code Remoteの「Threadsトークン 監視」Routineは廃止した。
 on:
   schedule:
     - cron: '15 */4 * * *' # 4時間おき、毎時15分(毎時00分の混雑を回避)
@@ -42,6 +51,31 @@ jobs:
           THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
         run: python3 threads-affiliate/check_token_health.py
 
+      - name: Mark newly-detected failures as notified
+        id: alert
+        run: |
+          python3 - <<'EOF'
+          import json, os
+
+          path = 'threads-affiliate/token-health.json'
+          try:
+              with open(path) as f:
+                  data = json.load(f)
+          except FileNotFoundError:
+              raise SystemExit(0)
+
+          needs_alert = data.get('ok') is False and not data.get('notified')
+          if needs_alert:
+              data['notified'] = True
+              with open(path, 'w') as f:
+                  json.dump(data, f, ensure_ascii=False, indent=2)
+                  f.write('\n')
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"needs_alert={'true' if needs_alert else 'false'}\n")
+              f.write(f"error_message={data.get('error', 'unknown error')}\n")
+          EOF
+
       - name: Commit and push token-health.json
         run: |
           git config user.name "github-actions[bot]"
@@ -55,3 +89,12 @@ jobs:
             git rebase origin/claude/note-issue-1pjubh
             git push origin HEAD:claude/note-issue-1pjubh
           fi
+
+      # commitの後に置くことで、失敗させてジョブを止めても notified:true が
+      # 確実に永続化された後になるようにする(スパム防止フラグを次回以降も
+      # 効かせるため)。
+      - name: Fail the job to trigger GitHub's failure notification
+        if: steps.alert.outputs.needs_alert == 'true'
+        run: |
+          echo "::error::Threadsトークン異常検知: ${{ steps.alert.outputs.error_message }}。get_token.pyの再認可とGitHub Secrets更新が必要です"
+          exit 1
