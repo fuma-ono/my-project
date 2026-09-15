@@ -1950,3 +1950,7 @@ Apple App Store審査で「Guideline 2.1 - Information Needed」として差し�
 4. 確認が取れたら、`eas build --platform ios --profile production` → `eas submit --platform ios --latest`で再ビルド・再提出
 
 審査への回答文(6項目)は別途まとめる。
+
+**追記(実機確認、PGRST204エラー)**: `schema.sql`再実行・Edge Functionデプロイ後、実機で「アカウントを削除」を試したところ、Edge Functionのログに`Could not find the 'deleted_at' column of 'profiles' in the schema cache`(PGRST204)というエラーが記録されていた。列自体は`ALTER TABLE`で追加済みだったが、SupabaseのAPI層(PostgREST)が保持しているテーブル構造のキャッシュが更新されていなかったことが原因(`ALTER TABLE`実行後に自動でキャッシュが更新されないことがある、という既知の挙動)。SQL Editorで`NOTIFY pgrst, 'reload schema';`を実行してキャッシュを強制更新してもらったところ解消し、**実機でアカウント削除の動作を確認できた**(削除後ログイン画面に戻り、以後ログインできない)。
+
+同様の「列は追加したのに`could not find the column ... in the schema cache`」が今後起きた場合は、まずこの`NOTIFY pgrst, 'reload schema';`を試すとよい。
