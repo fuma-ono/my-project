@@ -1,7 +1,7 @@
 {
-  "paused": false,
-  "pause_reason": null,
+  "paused": true,
+  "pause_reason": "2026-09-15、オーナー報告によりThreadsアカウントが停止(BANまたは一時停止)されたことが判明。手動で全自動化を停止した。9/14から続いていたOAuthException 190「invalid user id」はこのアカウント停止が原因だった可能性が高い。復帰にはMeta側でのアカウント停止理由の確認・異議申し立て、解除後にget_token.pyの再認可が必要。",
   "consecutive_publish_failures": 0,
   "consecutive_reply_failures": 0,
-  "last_updated": "2026-09-14T12:18:24.764650+00:00"
+  "last_updated": "2026-09-15T07:30:00+00:00"
 }
