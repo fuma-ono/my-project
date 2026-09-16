@@ -10,6 +10,7 @@
 - [ui-screens.md](./ui-screens.md) — 画面設計・UI方針 v1.0(モックアップ・画面一覧・画面遷移)
 - [features.md](./features.md) — 機能一覧 v1.5(FEAT-ID、優先度P0/P1/P2/OUT。HQにより正式な基準仕様として確定済み)
 - [db-design.md](./db-design.md) — DB詳細設計 v4.0(HQ確定・完成版。全17件のHQ確認事項に最終判断済み)
+- [api-design.md](./api-design.md) — API詳細設計書 v1.1(HQ作成。Claude CodeによるレビューのAランク8件・Bランク7件への対応を反映)
 - [mockups/](./mockups/) — UIモックアップ画像
 
 ## 開発体制(2026-09〜)
@@ -34,11 +35,13 @@
 10. HQよりDB詳細設計の正式なEntity定義・Relationship・Column一覧を受領し、`db-design.md`をv2.0へ全面改訂。既存設計との重要な不整合を報告(`EconomicEvent`と`EventSnapshot`が同一エンティティか別テーブルか、`EventExplanation`のEntity一覧からの欠落、`favorable_direction`/`release_datetime_precision`の欠落等)。HQ指定14項目+既存資料との整合性確認から追加で判明した項目をあわせ、計25件をHQ確認事項として整理。DB設計の実装(migration/Table作成等)は未着手のまま
 11. HQよりv2.0で報告した不整合・確認事項への正式回答を受領。`EconomicEvent`/`EventSnapshot`を別Entityとして正式採用(`snapshot_type`は将来の複数種類を想定、MVPはRELEASE固定)、`EventExplanation`をMVP必須Entityとして復活、`favorable_direction`/`release_datetime_precision`/`IngestionLog`を追加、Supabase+PostgreSQLを正式採用しRLSを実装前提の設計条件に確定、Surpriseは保存方式(raw+direction)を採用、EventPriceReactionは段階的生成(データ不足時は0を保存せず分析対象外として扱う)を採用。`db-design.md`をv3.0へ全面改訂し、要件定義書v1.4・概要設計書v1.4へ反映(EconomicEvent=EventSnapshotという旧来表現を修正)。残るHQ確認事項17件(主に型・精度・enum境界値等の技術的細部)を整理
 12. HQよりv3.0で報告した17件のHQ確認事項すべてに最終判断を受領。EventSnapshotの不変性をDBトリガーで担保、EventExplanationを上書きせず履歴保持(version管理)に変更、Entitlement.feature_codeを機能単位のコード体系に具体化(FREE/PRO名称は埋め込まない)、IngestionLog.data_typeを確定、Surprise=0の場合はNEUTRAL(NULLと明確に区別)、Numeric精度をカラム用途ごとに個別設定、EconomicEventの重複防止をprovider_event_id優先に変更、EventPriceReactionのmax_upward/max_downwardを「pre_release_price基準の期間内最大変動」に確定、RLS/Delete-Cascade/FxPriceデータ保持範囲を最終確定。`db-design.md`をv4.0(完成版)へ改訂し、概要設計書をv1.5へ改訂(EventExplanationの履歴保持化を反映)。DB設計の実装(migration/Table作成等)は今回も未着手のまま
+13. HQよりAPI詳細設計書v1.0(HQ作成)を受領し、要件定義書・features.md・design.md・ui-screens.md・db-design.mdとの整合性を第三者レビュー。Aランク(必須修正)8件・Bランク(推奨修正)7件を報告(EventRevision取得APIの欠落・Event Detailの複数FXペア反応サマリー欠如・Data Quality状態名のDB不一致・Profile.timezone未設計・Currencyマスタ不在・event_nameカラム不在・Data Pending/UnavailableのHTTPエラー扱いの是非・Historical Comparisonのtimeframe単一指定、等)
+14. HQよりAランク8件・Bランク7件すべてに方針確定を受領。`api-design.md`をv1.1として新規作成し反映(EventRevision API新設、related_fx_pairsへのReaction Summary追加、Data Quality状態のDB↔APIマッピング表明記、Profile.timezoneは追加せずRequestで明示受領する方式に変更、Currencyは静的マッピングで対応、event_nameはIndicator基準検索に変更、DATA_PENDING/UNAVAILABLEはHTTPエラーから除外し200+status field方式に統一、Historical Comparisonにtimeframe=all追加、Entitlement×Endpoint対応表追加等)。要件定義書・概要設計書・DB設計は変更せず、変更候補として報告するに留めた
 
 ## 次のアクション
 
-- HQがDB詳細設計(`db-design.md` v4.0)を最終レビューし、API詳細設計へ進む合図を出す
-- API詳細設計(Endpoint・Request/Response・Error Code)を開始する。Search機能(FEAT-110〜115)のIndex構成・複数エンティティ横断検索の仕様はこのフェーズで確定する
+- HQが`api-design.md` v1.1をレビューし、8章「他ドキュメントへの変更候補」(event_nameの要件定義書記載の扱い、Backend↔Postgres接続方式、Advanced Statisticsの段階的アクセス制御案、pg_trgm Index追加の要否等)について判断する
+- 上記が確定次第、API設計を最終確定し実装フェーズへ進む
 - 経済指標API(Trading Economics / EODHD等)へ、エンドユーザーへの商用配信権込みで正式見積もりを取る(requirements.md 6.2節)。詳細設計自体はAPI未選定でも進められる(Adapter抽象化のため)
 - FEAT-227(決済実装)の着手時期(β版の前か後か)をリリース計画段階でHQが判断する
 - 詳細設計書が確定次第、Claude Codeが実装フェーズに入る
