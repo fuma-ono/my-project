@@ -86,6 +86,31 @@ HTTP 400 Bad Request: {"error":{"message":"Error validating access token: Sessio
 
 いずれもオーナーの経営判断が必要な事項のため、このセッションから一方的に決定しない。
 
+## 追記(2026-09-16): オーナー決定「1. 新しいThreadsアカウントで再挑戦する」
+
+### 実装した安全策(コード変更、テスト済み)
+
+1. **助走期間の強制ブロック**(`automation_guard.py`の`warmup_status()`、`publish.py`)
+   - `automation-status.json`に`current_account_started_at`(新アカウント運用開始日、ISO日付)と`warmup_days`(既定14日)を追加した。
+   - `current_account_started_at`設定から`warmup_days`日以内は、`affiliate_link`付きの下書きを`publish.py`が**コード側で強制的に拒否**する(`pending/rejected/`へ退避)。生成側(CCR Routine)のプロンプト判断だけに頼らない二重の安全弁。
+   - `current_account_started_at`が未設定(null)の間は従来通り無効(後方互換)。
+2. **重複・酷似投稿の検知**(`publish.py`の`find_similar_recent_post()`)
+   - 直近20件の公開済み投稿本文と`difflib.SequenceMatcher`で類似度を比較し、82%以上一致する場合は投稿を中断し`pending/rejected/`へ退避する。
+   - 旧アカウントで実際に発生した重複投稿(「折りたたみ傘」投稿、類似度93%)を再現し、正しく検知されることを確認済み。明確に異なる投稿文が誤検知されないことも確認済み。
+3. **「毎日投稿案生成」Routineのプロンプト更新**(無効化状態のまま更新のみ実施):助走期間中はアフィリエイトリンク無しの非商用投稿を生成するよう明記。`current_account_started_at`が未設定なら生成自体をスキップするよう明記。
+
+### 新アカウント再開までの残タスク(オーナー側)
+
+1. 新しいThreadsアカウントを作成し「プロフェッショナル」に切り替える
+2. developers.facebook.comで新しいMeta開発者アプリを作成(または既存アプリを使う場合はリスクを理解の上で判断)し、Threads APIを有効化
+3. `get_token.py`を実行し、新アカウントのアクセストークンを取得
+4. GitHub Secrets(`THREADS_ACCESS_TOKEN`/`THREADS_USER_ID`)を新しい値に更新
+5. **このセッションに「新アカウントの準備ができた、運用開始日は◯月◯日」と伝える** → 以下をこちらで実施する:
+   - `threads-affiliate/automation-status.json`の`paused`を`false`に戻す
+   - `current_account_started_at`に運用開始日を設定する
+   - 無効化した9件のCCR Routineを`enabled: true`に戻す
+   - 助走期間(既定14日)が終わる頃に、アフィリエイト投稿への切り替えを確認する
+
 ## 参考: 自動化がアカウント停止の一因になった可能性について
 
 現時点でMetaからの具体的な停止理由は確認できていないため断定はできないが、念のため記録しておく。本アカウントは1日1投稿・返信は数時間おきの自動判断という、比較的抑制的な運用ではあった(`docs/marketing/2026-09-10-threads-auto-reply-guardrails.md`のガードレールにより、医療/法律/金融等の個別助言やセンシティブ内容は自動返信しない設計)。停止理由が判明次第、自動化ロジック(投稿頻度・返信内容・アフィリエイトリンクの扱い等)に問題がなかったかを再点検する。

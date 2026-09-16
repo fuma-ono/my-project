@@ -28,6 +28,7 @@ Meta社の公式APIを直接HTTPSで呼ぶだけなので、ログイン画面�
 
 import argparse
 import datetime
+import difflib
 import json
 import os
 import pathlib
@@ -53,6 +54,11 @@ GRAPH_BASE = "https://graph.threads.net/v1.0"
 # 表記漏れ・末尾のみの表記をこの一覧で検知する。
 PR_MARKERS = ["【PR】", "#PR", "#広告", "[PR]"]
 PR_MARKER_MAX_OFFSET = 10  # 本文の最初の何文字以内に現れれば「冒頭」とみなすか(絵文字等の遊びを許容)
+
+# 2026-09-16追加: 直近の投稿と本文が酷似していないか確認するしきい値
+# (docs/marketing/2026-09-15-threads-account-suspended.md参照)。
+DUPLICATE_SIMILARITY_THRESHOLD = 0.82
+DUPLICATE_CHECK_LOOKBACK = 20  # 直近何件の公開済み投稿と比較するか
 
 # 旧pending JSON(`pattern`フィールドのみ、5パターン制)からの後方互換用マッピング。
 # 新規に生成する下書きは`post_type`を直接指定する(post-template.md参照)。
@@ -86,6 +92,37 @@ def validate_pr_disclosure(text: str, has_link: bool) -> None:
         "アフィリエイトリンクを含む投稿にPR表記(【PR】/#PR/#広告のいずれか)がありません。"
         "本文の冒頭に追加してください。"
     )
+
+
+def find_similar_recent_post(text: str) -> tuple[str, float] | None:
+    """直近の公開済み投稿と本文が酷似していないか確認する。
+
+    2026-09-15、旧アカウントが停止された際にpublish-log.jsonlを分析した
+    ところ、運用初期にほぼ同一内容の投稿を短時間に複数回行っていたことが
+    判明した(docs/marketing/2026-09-15-threads-account-suspended.md)。
+    新規アカウントに対してMetaのスパム検知に触れた一因ではないかと推定し、
+    公開直前の機械的なチェックとして追加した(生成側の判断だけに頼らない)。
+    """
+    if not LOG_FILE.exists():
+        return None
+    checked = 0
+    for line in reversed(LOG_FILE.read_text(encoding="utf-8").splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        entry = json.loads(line)
+        if entry.get("deleted_at"):
+            continue
+        past_text = entry.get("text")
+        if not past_text:
+            continue
+        ratio = difflib.SequenceMatcher(None, text, past_text).ratio()
+        if ratio >= DUPLICATE_SIMILARITY_THRESHOLD:
+            return past_text, ratio
+        checked += 1
+        if checked >= DUPLICATE_CHECK_LOOKBACK:
+            break
+    return None
 
 
 def infer_affiliate_platform(post: dict) -> str | None:
@@ -189,6 +226,35 @@ def publish(dry_run: bool) -> None:
         print(f"投稿を中断しました({path.name}): {e}")
         if not dry_run:
             automation_guard.record_failure("publish", str(e))
+        sys.exit(1)
+
+    # 2026-09-16追加: 新アカウントの助走期間中はアフィリエイトリンク付き投稿を
+    # 強制的にブロックする(automation_guard.warmup_status()参照)。生成側の
+    # プロンプトが誤ってリンクを含めても、ここで確実に止める。
+    warmup = automation_guard.warmup_status()
+    if warmup["in_warmup"] and link:
+        reason = (
+            f"新アカウントの助走期間中(開始から{warmup['days_elapsed']}日目、"
+            f"残り{warmup['days_remaining']}日)はアフィリエイトリンク付き投稿を"
+            "禁止しています。非商用の投稿に差し替えてください。"
+        )
+        print(f"投稿を中断し、下書きを退避します({path.name}): {reason}")
+        if not dry_run:
+            REJECTED_DIR.mkdir(parents=True, exist_ok=True)
+            path.rename(REJECTED_DIR / path.name)
+        sys.exit(1)
+
+    # 2026-09-16追加: 直近の投稿と酷似した本文でないか確認する(重複投稿の
+    # 事故防止、find_similar_recent_post()のdocstring参照)。
+    similar = find_similar_recent_post(text)
+    if similar is not None:
+        past_text, ratio = similar
+        reason = f"直近の投稿と酷似しています(類似度{ratio:.0%})。重複投稿を防ぐため中断します。"
+        print(f"投稿を中断し、下書きを退避します({path.name}): {reason}")
+        if not dry_run:
+            REJECTED_DIR.mkdir(parents=True, exist_ok=True)
+            path.rename(REJECTED_DIR / path.name)
+            automation_guard.record_failure("publish", reason)
         sys.exit(1)
 
     # Threadsの投稿は本文中のURLを自動的にリンク化するため、実際に投稿する
