@@ -1,4 +1,4 @@
-# FXイベント反応分析アプリ 概要設計書 v1.5
+# FXイベント反応分析アプリ 概要設計書 v1.6
 
 ## 変更履歴
 
@@ -16,7 +16,7 @@
   - データ品質管理・運営者向け機能の分離方針を追加(13章、新設)
   - MVP範囲を再定義(28章)
 - **v1.2**(今回): 機能一覧レビューでの整合性確認3点(FEAT-045/224/028)に対するHQ回答を反映
-  - Indicator↔FXPairの多対多関連(IndicatorFxPair)をER図・Indicator節に追加(5章)
+  - Indicator↔FxPairの多対多関連(IndicatorFxPair)をER図・Indicator節に追加(5章)
   - EventRevisionのUI表示ルールを「改定後」ラベルで明示区別するよう強化(5.4節)
   - Subscriptionを「Entitlement設計・プラン概念はMVP対象、決済(StoreKit)実装のタイミングはBeta前後で別途判断」という方針に更新(25章)
 - **v1.3**: HQが再発行した機能一覧v1.2との突き合わせで判明した差分を反映
@@ -27,10 +27,16 @@
   - `EventExplanation`を5章の正式なEntity一覧・サブセクションとして明記(5.6節、従来はER図のみへの記載)
   - `favorable_direction`のenum値をHIGHER_IS_POSITIVE/LOWER_IS_POSITIVE/NEUTRALに更新(5.2節、9.2節と整合)
   - `release_datetime_precision`の値セットをEXACT/DATE_ONLY/APPROXIMATE/UNKNOWNに具体化(5.3節、8.2節)
-  - 5章の節番号を5.1〜5.7に整理(EventSnapshot挿入・EventExplanation昇格のため、旧5.4 EventRevision→5.5、旧5.5 FXPair→5.7に移動)
-- **v1.5**(今回): DB詳細設計の最終確定(HQ確定、2026-09-16 第3回)を受けて5.6節を更新
+  - 5章の節番号を5.1〜5.7に整理(EventSnapshot挿入・EventExplanation昇格のため、旧5.4 EventRevision→5.5、旧5.5 FxPair→5.7に移動)
+- **v1.5**: DB詳細設計の最終確定(HQ確定、2026-09-16 第3回)を受けて5.6節を更新
   - `EventExplanation`は上書きせず履歴保持とする(複数versionが存在しうる構造に変更、5.6節)
   - AI拡張カラムはMVPでは追加せず、実装時のMigrationで追加する方針を明記(5.6節)
+- **v1.6**(今回): 全設計横断監査(M-2/M-4/M-5/L-1/L-2)での確定事項を反映(2026-09-16)
+  - M-2: `data_status`のサンプル値を、DB詳細設計で確定した実際の値(`PARTIAL`/`UNAVAILABLE`/`AVAILABLE`)に更新(旧: incomplete/complete。8.5/10.2/10.3節)
+  - M-4: `IngestionLog`をEntity一覧・ER図に追加(5.8節、新設)
+  - M-5: 8.1節にtimezoneのRequest Parameter方式(API詳細設計で確定済み)を追記
+  - L-1: ER図のEntity名を「User」から「Profile」に統一(db-design.md/api-design.mdの実体に合わせる。意味は変更なし)
+  - L-2: 「FXPair」/「FXPrice」の表記を「FxPair」/「FxPrice」に統一(db-design.md/api-design.mdの表記に合わせる)
 
 ---
 
@@ -163,25 +169,26 @@ Backend(モノリポ)
 
 ## 5. Database概要
 
-**Supabase + PostgreSQLを正式採用する**(DB詳細設計でHQ確定、2026-09-16)。RLS(Row Level Security)は参考モデルではなく実装前提の設計条件とする。データ特性に応じてRLS方針を分離する: ユーザー固有データ(Profile/Subscription/Entitlement)は本人のみアクセス可能なRLSを適用し、共有データ(EconomicIndicator/EconomicEvent/EventSnapshot/EventRevision/EventExplanation/IndicatorFxPair/FXPair/FXPrice/EventPriceReaction)はユーザー単位のRLSを前提としない(具体的なポリシーは`db-design.md`参照)。
+**Supabase + PostgreSQLを正式採用する**(DB詳細設計でHQ確定、2026-09-16)。RLS(Row Level Security)は参考モデルではなく実装前提の設計条件とする。データ特性に応じてRLS方針を分離する: ユーザー固有データ(Profile/Subscription/Entitlement)は本人のみアクセス可能なRLSを適用し、共有データ(EconomicIndicator/EconomicEvent/EventSnapshot/EventRevision/EventExplanation/IndicatorFxPair/FxPair/FxPrice/EventPriceReaction)はユーザー単位のRLSを前提としない(具体的なポリシーは`db-design.md`参照)。
 
 ### 5.1 主要エンティティ(改訂: EconomicEvent / EventSnapshotを別Entityに分離)
 
 **HQ確定(2026-09-16、DB詳細設計)**: `EconomicEvent`と`EventSnapshot`は同一エンティティではなく、**別テーブル**として正式に採用する。`EconomicEvent`はイベントのメタデータ(いつ・どの指標が・どんな状態か)を、`EventSnapshot`は発表時点で利用可能だった値(forecast/actual/previous等)を保持する。旧版(v1.0〜v1.3)の「EconomicEvent(= EventSnapshot)」という表現はこの分離方針に置き換える。
 
 ```
-User
+Profile(認証基盤=Supabase Authのユーザーに対応するアプリ側データ。L-1でUserから改称)
  │
  ├── FavoriteIndicator
  ├── FavoritePair
  ├── AlertSetting
- └── Subscription
+ ├── Subscription
+ └── Entitlement
 
 Indicator
  │
- ├── IndicatorFxPair[]    … Indicator×FXPairの多対多関連(5.2節)
+ ├── IndicatorFxPair[]    … Indicator×FxPairの多対多関連(5.2節)
  │        │
- │        └── FXPair
+ │        └── FxPair
  │
  └── EconomicEvent                … イベントのメタデータ(不変ではない。status/data_status等は更新されうる)
         │
@@ -190,9 +197,11 @@ Indicator
         ├── EventExplanation      … 乖離理由(MVP: 出典付き事実要約 / 将来: AI解説、5.6節)
         └── EventPriceReaction
                   │
-                  └── FXPrice
+                  └── FxPrice
 
-FXPair
+FxPair
+
+IngestionLog(他Entityへの直接参照なし。外部データ取得・取り込みの運用ログ、5.8節)
 
 Person
  │
@@ -205,10 +214,10 @@ Person
 
 指標固有の情報: indicator_id / name / country / currency / category / unit / importance / description / **favorable_direction**(HIGHER_IS_POSITIVE / LOWER_IS_POSITIVE / NEUTRAL、9.2節。DB詳細設計でHQがenum名を確定) / source
 
-**Indicator↔FXPairの関連**: 「関連通貨ペア表示」(機能一覧 FEAT-028)に必要な、指標ごとの分析対象FXペアを、固定文字列ではなく`IndicatorFxPair`という多対多の中間テーブルで管理する。指標ごとの主要/準主要ペアの区別は`priority`フィールドで表現する(DB詳細設計で確定、`db-design.md`参照)。
+**Indicator↔FxPairの関連**: 「関連通貨ペア表示」(機能一覧 FEAT-028)に必要な、指標ごとの分析対象FXペアを、固定文字列ではなく`IndicatorFxPair`という多対多の中間テーブルで管理する。指標ごとの主要/準主要ペアの区別は`priority`フィールドで表現する(DB詳細設計で確定、`db-design.md`参照)。
 
 ```
-Indicator ── IndicatorFxPair ── FXPair
+Indicator ── IndicatorFxPair ── FxPair
 ```
 
 ### 5.3 EconomicEvent
@@ -231,7 +240,7 @@ Indicator ── IndicatorFxPair ── FXPair
 
 管理情報: revision_id / event_id / field(actual/previousのいずれか) / old_value / new_value / revised_at(改定が判明した日時) / revision_source
 
-**UI表示ルール(HQ回答、2026-09で明確化)**: UI上は「参考情報: この指標は後日◯◯に改定されました」として、Snapshotの値とは別枠で表示する。改定値を表示する箇所には必ず**「改定後」等のラベルを付し、発表時点(Snapshot)の値と視覚的にも文言上も明確に区別する。** 発表時点の分析結果(Surprise・市場反応・統計)は、改定値によって書き換えない(5.1節原則、要件定義書v1.4 5.1節と同じ)。機能一覧のFEAT-045「Revised Previous表示」は、この`EventRevision`に基づく改定履歴の参考表示を指す。`EventSnapshot`に可変の`revised_previous`フィールドを持たせることはしない。
+**UI表示ルール(HQ回答、2026-09で明確化)**: UI上は「参考情報: この指標は後日◯◯に改定されました」として、Snapshotの値とは別枠で表示する。改定値を表示する箇所には必ず**「改定後」等のラベルを付し、発表時点(Snapshot)の値と視覚的にも文言上も明確に区別する。** 発表時点の分析結果(Surprise・市場反応・統計)は、改定値によって書き換えない(5.1節原則、要件定義書v1.5 5.1節と同じ)。機能一覧のFEAT-045「Revised Previous表示」は、この`EventRevision`に基づく改定履歴の参考表示を指す。`EventSnapshot`に可変の`revised_previous`フィールドを持たせることはしない。
 
 ### 5.6 EventExplanation(新設: DB詳細設計でMVP必須Entityとして再確認)
 
@@ -241,11 +250,15 @@ Indicator ── IndicatorFxPair ── FXPair
 
 **上書きせず履歴保持とする(DB詳細設計でHQ確定、2026-09-16)。** 同一イベントについて複数のExplanationが存在しうる構造とし、将来的なAI分析導入時にも過去の生成結果を追跡できるようにする。将来的にAI分析等へ拡張できる構造にする(11.2節の拡張方針を維持。AI向けの追加カラムはMVPでは追加せず、実装時のMigrationで追加する方針。具体的なカラム設計は`db-design.md`参照)。
 
-### 5.7 FXPair
+### 5.7 FxPair
 
 USDJPY / EURUSD / GBPUSD / EURJPY / GBPJPY / AUDJPY / NZDJPY / AUDUSD / NZDUSD / USDCHF / USDCAD / EURGBP
 
 各ペアについて、base_currency / quote_currency / pip_size / decimal_digits を管理する。**pipsの定義はFrontendに持たせずBackendを正とする。**
+
+### 5.8 IngestionLog(新設、M-4)
+
+外部データ取得・取り込みの運用ログ(機能一覧FEAT-150に対応)。一般ユーザー向けAPIからは非公開とし、管理者機能・Ingestion Worker内部でのみ参照する。具体的なカラム定義は`db-design.md` 3.13節を正とする。
 
 ---
 
@@ -291,6 +304,7 @@ timestamp(open time基準) / open / high / low / close / volume(取得可能な�
 - **DB内部の時刻はUTCで統一する。** UI表示時にユーザーのtimezoneへ変換する。
 - **1分足はopen timestamp基準**(足の開始時刻をその足の時刻とみなす)で統一する。データソースが異なるtimestamp規約(close time基準等)を採用している場合は、取り込み時に正規化する。
 - 基準時刻 T = release_datetime(要件定義書9.2節の通り、実発表時刻の自動推定は行わず、スケジュール時刻を用いる)。
+- **(M-5で追加、2026-09-16)** 日付境界の判定が必要なAPI(例: Home画面の「今日」の範囲判定)では、Profileにtimezoneを永続化するのではなく、**Requestパラメータとしてtimezoneを明示的に受け取る**方式とする(API詳細設計でHQ確定)。例: `GET /api/v1/home?date=2026-09-12&timezone=Asia/Tokyo`。
 
 ### 8.2 発表時刻の精度管理
 
@@ -316,7 +330,7 @@ USD/JPY: Before 147.20 → +1m 147.48(+28pips) → +5m 147.76(+56pips) → +15m 
 
 - 価格データ欠損 / イベント時刻不明・低精度 / API障害・取得遅延 / 時刻ずれの疑い / 市場休場 / データ取得遅延
 
-`data_status = incomplete`等で管理し、Read APIはこれをそのまま(null等で)返し、クライアントは必ずN/A表示する契約とする。
+`data_status = PARTIAL`/`UNAVAILABLE`(DB詳細設計でHQが確定した値)で管理し、Read APIはこれをそのまま(null等で)返し、クライアントは必ずN/A表示する契約とする。
 
 ---
 
@@ -352,11 +366,11 @@ Date / Forecast / Actual / Previous / Surprise / 5m/15m/30m/60m movement
 
 Indicator単位・FX Pair単位で、平均変動・平均絶対変動・最大変動・最小変動・上昇回数・下落回数・変化なし回数を、時間別(1/5/15/30/60分)に算出する。
 
-**`data_status = complete`のイベントのみを統計計算の対象とする。** 欠損・不完全なイベントは統計から除外する。Read APIは、算出に使ったイベント数(母数)を統計結果とあわせて返却し、クライアントは「過去20回中18回のデータで算出」のように母数を明示する。
+**`data_status = AVAILABLE`(DB詳細設計でHQが確定した値)のイベントのみを統計計算の対象とする。** 欠損・不完全なイベントは統計から除外する。Read APIは、算出に使ったイベント数(母数)を統計結果とあわせて返却し、クライアントは「過去20回中18回のデータで算出」のように母数を明示する。
 
 ### 10.3 対象件数の考え方
 
-固定件数(例: 常に20件)に依存せず、**「data_status=completeの直近N件」**を対象とする設計を基本とする。目安件数(20件相当)に満たない場合は、確保できた件数で計算し、母数を明示する(10.2節)。
+固定件数(例: 常に20件)に依存せず、**「data_status=AVAILABLEの直近N件」**を対象とする設計を基本とする。目安件数(20件相当)に満たない場合は、確保できた件数で計算し、母数を明示する(10.2節)。
 
 ### 10.4 類似イベント(将来拡張)
 
@@ -485,7 +499,7 @@ v1.0の内容を維持する。Backend(Read API)/DB/Account/Subscriptionを共�
 - Event × FX Reaction処理(Snapshotベース、改定に影響されない)
 - 乖離理由: **出典付き事実要約のみ**(11.1節)
 - **Subscriptionの設計**(Free/Proプラン概念・Entitlement判定ロジック・プラン表示。決済実装そのものは含まない、25.1節)
-- **Indicator↔FXPairの多対多関連**(5.2節)
+- **Indicator↔FxPairの多対多関連**(5.2節)
 
 ### MVPでは縮小
 

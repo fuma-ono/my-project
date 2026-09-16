@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.2
+# FX Event Analyzer: API詳細設計書 v1.3
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -31,6 +31,11 @@
   - B-5: pg_trgm + GIN Index案を正式採用。対象カラムをdb-design.mdへ追記(db-design.md側の変更、本書23.2章から参照)
   - A-6: `event_name`関連は要件定義書側の変更候補として確定(要件定義書は今回も変更していない)(43章)
   - timezone: Request Parameter方式を正式採用として再確認(6章、変更なし)
+- **v1.3**(今回): 全設計横断監査(H-2/M-3/L-5/L-6)での確定事項を反映(2026-09-16)
+  - H-2: Homeの「最近のイベント」は当日中に`RELEASED`になったイベントを指すと定義を明確化。専用API・フィールド追加は不要と確認(12章)
+  - M-3: `max_upward_pips`/`max_downward_pips`をDB保存値としてそのまま返す方式に変更(旧: API応答時に都度計算。18.1節)
+  - L-5: 30章の画面対応表にSCR-010(Login)を追加。Supabase Auth SDK直接利用のためBackend Endpointなしと明記
+  - L-6: `event.revision_status`がDB保存値ではなくBackendによる動的算出値であることを明記(14.3節)
 
 ---
 
@@ -392,6 +397,8 @@ Eventには以下を含む。
 
 major_fxにはHomeで表示する主要FX Pairの最新情報を含める。想定項目：fx_pair_id / symbol / price / change / change_percent / timestamp。実際の価格データProviderには依存しない。
 
+**「今日の注目イベント」と「最近のイベント」の扱い(v1.3で確定、H-2)**: `events`は`date`でスコープされた当日分の一覧であり、「最近のイベント」は**当日中に`status = RELEASED`になったイベント**を指す(複数日にまたがる履歴ではない)。専用APIや`recent_events`フィールドは追加せず、Clientが`events`配列を`status`(`SCHEDULED`/`RELEASED`/`CANCELLED`)で「今日の注目イベント」(主にSCHEDULED)と「最近のイベント」(RELEASED)に表示分けする。
+
 ---
 
 # 13. Indicator API
@@ -502,6 +509,8 @@ Movement Chart等の比較的重いデータ、および特定timeframe・特定
 - `NONE`: 改定なし
 - `REVISED`: 1件以上の改定が存在する
 
+**算出方法(v1.3で明記、L-6)**: `revision_status`はDBに保存された列ではなく、`EventRevision`の存在有無(`event_id`に紐づく行数)からBackendが都度動的に算出する値である。RELEASE Snapshotの値自体は一切変更しない。
+
 詳細な改定履歴(誰が・いつ・どの値を、等)が必要な場合は、16.1節の`GET /events/{event_id}/revisions`を別途呼び出す。Event Detail API自体には改定履歴の全件を含めない(Responseの肥大化を避けるため)。
 
 ---
@@ -551,7 +560,7 @@ Response：
 }
 ```
 
-UI表示時は必ず「改定後」等のラベルを付し、Release Snapshotの値と明確に区別すること(概要設計書v1.5 5.5節のUI表示ルールに準拠)。本APIはRELEASE Snapshotの値を変更しない、参照専用のEndpointである。
+UI表示時は必ず「改定後」等のラベルを付し、Release Snapshotの値と明確に区別すること(概要設計書v1.6 5.5節のUI表示ルールに準拠)。本APIはRELEASE Snapshotの値を変更しない、参照専用のEndpointである。
 
 ---
 
@@ -624,6 +633,8 @@ timeframe：1m / 5m / 15m / 30m / 60m / all
 `pre_release_price`は全timeframeで共通のため配列の外側(トップレベル)に1つだけ持たせ、各timeframe固有の値(`post_release_price`/`movement`/`pips`等)のみを`reactions`配列の各要素に含める(冗長なデータ重複を避ける)。
 
 `analysis_status`を使用し、Event自体のstatusとは区別する(7章参照、200 OK + status field方式)。
+
+**`max_upward_pips`/`max_downward_pips`の算出方針(v1.3で確定、M-3)**: これらは`EventPriceReaction`テーブルにDB保存された値をそのまま返す。通常の`pips`列と同様にIngestion Worker側で算出・保存し、**API応答時に`pip_size`を用いて都度計算する設計は採用しない**(pips系カラムの保存方針を統一するため)。db-design.md 3.12節参照。
 
 ---
 
@@ -940,6 +951,7 @@ Backend APIはSupabase JWTを検証する。
 
 | Screen | API |
 |---|---|
+| SCR-010 Login(v1.3で追加、L-5) | なし(Supabase Auth SDKを直接利用、Backend API Endpointを使用しない。29章参照) |
 | SCR-001 Home | GET /home |
 | SCR-002 Indicators | GET /indicators |
 | SCR-003 Indicator Detail | GET /indicators/{id} |
@@ -1160,20 +1172,22 @@ API設計確定後に実装へ移行する。
 
 # 43. 他ドキュメントへの変更候補(v1.2で新設)
 
-本書の作成にあたり、要件定義書・概要設計書・DB詳細設計書は変更していない。以下は、本書の内容と既存ドキュメントとの間で修正が必要と考えられる箇所を、変更候補として報告するものである(要件定義書・概要設計書は今回も変更していない)。
+本書の作成にあたり、要件定義書・概要設計書・DB詳細設計書は変更していない。以下は、本書の内容と既存ドキュメントとの間で修正が必要と考えられる箇所を、変更候補として報告するものである。
 
-### 43.1 要件定義書5.2節「event_name」(A-6、HQ確定: 変更候補として確定)
+### 43.1 要件定義書5.2節「event_name」(A-6、**v1.3で解決**)
 
-要件定義書v1.4 5.2節は`event_name`をイベントの必須管理項目として記載しているが、db-design.md(EconomicEvent/EventSnapshot)にはこれに相当するカラムが存在せず、本書23.1節でもEvent検索を`EconomicIndicator.name`/`code`基準とする設計にした。**要件定義書側の該当記載を「Indicator基準のEvent管理・検索」に整合するよう修正する変更候補として確定したが、要件定義書自体は変更していない。** HQによる要件定義書の正式な更新をお願いしたい。
+要件定義書v1.4 5.2節は`event_name`をイベントの必須管理項目として記載していたが、db-design.md(EconomicEvent/EventSnapshot)にはこれに相当するカラムが存在せず、本書23.1節でもEvent検索を`EconomicIndicator.name`/`code`基準とする設計にした。**全設計横断監査(A-6)でHQが正式に反映を指示し、要件定義書v1.5 5.2節を「Indicator基準のEvent管理・検索」に整合するよう修正済み。**
 
-### 43.2 要件定義書9.1節・概要設計書8.1節「timezone」の扱い(補足の要否、HQ確認)
+### 43.2 要件定義書9.1節・概要設計書8.1節「timezone」の扱い(**v1.3で解決**)
 
-要件定義書・概要設計書は「DB内部はUTC、表示時にクライアント側でローカル変換」という原則を定めている。本書ではこの原則を維持しつつ、Home等一部APIで「Requestでtimezoneを明示的に受け取る」運用を追加した(6章)。この運用が原則の範囲内の実装詳細と扱うか、要件定義書・概要設計書に一行の補足を加えるかは、HQのご判断次第である。**Claude Code側からは、既存の原則と矛盾しないため必須の修正ではないと考えるが、確認のため変更候補として記載する。**
+要件定義書・概要設計書は「DB内部はUTC、表示時にクライアント側でローカル変換」という原則を定めている。本書のHome等一部APIにおける「Requestでtimezoneを明示的に受け取る」運用(6章)は、**全設計横断監査(M-5)でHQが正式に反映を指示し、概要設計書v1.6 8.1節に追記済み。**
 
 ### 43.3 db-design.md「Search Index」(B-5、反映済み)
 
 pg_trgm + GIN Indexの追加(23.2節)は、HQ指示に基づき**db-design.md側に既に反映済み**(db-design.md v4.1、本章とは別に実施)。ドキュメント上の追記のみで、DB Migrationは実施していない。
 
+**本章に記載していた事項はすべて解決済みとなった(2026-09-16、全設計横断監査クリーンアップ)。**
+
 ---
 
-# API詳細設計書 v1.2 END
+# API詳細設計書 v1.3 END

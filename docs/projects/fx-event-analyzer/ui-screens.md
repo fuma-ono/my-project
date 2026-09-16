@@ -1,8 +1,16 @@
-# FX Event Analyzer: 画面設計・UI方針 v1.0
+# FX Event Analyzer: 画面設計・UI方針 v1.1
 
 **出典**: HQより2026-09-16共有。UIモックアップ(ダーク版)と画面仕様テキストをそのまま設計資料として保存したもの。
 
-**位置づけ**: 本書はUI・画面遷移レベルの設計であり、要件定義書v1.4・概要設計書v1.5(データモデル・API・アーキテクチャ)を置き換えるものではない。画面とAPI/DBとの対応関係は、HQによる詳細設計の次のフェーズで確定する。
+## 変更履歴
+
+- **v1.0**: 初版
+- **v1.1**(今回): 全設計横断監査(H-1/H-2/L-4)での確定事項を反映(2026-09-16)
+  - H-1: SCR-004に「乖離理由(事実要約・出典URL)」を、Forecast/Actual/Previous→Surprise→乖離理由→市場への影響→関連FXペア/Reactionの順で追加
+  - H-2: SCR-001「最近のイベント」を「当日中にRELEASEDになったイベント」と定義(複数日にまたがる履歴ではない)。状態別表示に「発表済み」を追加
+  - L-4: SCR-002のフィルター候補から「頻度」を削除(features.mdに対応するFEAT-IDが存在せず、MVP要件として確認できなかったため)
+
+**位置づけ**: 本書はUI・画面遷移レベルの設計であり、要件定義書v1.5・概要設計書v1.6(データモデル・API・アーキテクチャ)を置き換えるものではない。画面とAPI/DBとの対応関係は、HQによる詳細設計の次のフェーズで確定する。
 
 モックアップ内の数値・日時・文言はサンプル。実際の実装では確定した要件・詳細設計を正とする。
 
@@ -62,14 +70,16 @@ MVPでは**4タブ**とする: Home / Indicators / Search / Settings。
 
 **構成**: 今日の注目イベント / イベントカード / 主要通貨ペアの動向 / 最近のイベント / 各イベントへの導線
 
+**「最近のイベント」の定義(v1.1で明確化、H-2)**: 当日の日付範囲内で、`status = RELEASED`になったイベントを指す。複数日・複数週にまたがる履歴を表示するものではない(履歴の閲覧はSCR-006 Historical ComparisonまたはSCR-007 Historical Event Detailが担当する)。「今日の注目イベント」(主に`SCHEDULED`)と同じ当日データセットから、状態(`status`)によって表示を分ける。
+
 **イベントカードの表示項目**: 国旗 / 通貨 / 指標名 / 発表時刻 / 重要度 / Forecast / Previous / Actual / 発表前・発表済み / カウントダウン / 関連通貨ペア
 
 **状態別表示**:
 
 | 状態 | 表示 |
 |---|---|
-| 発表前 | Forecast / Previous / Actual未確定 |
-| 発表後 | Forecast / Actual / Previous → Surprise |
+| 発表前(`SCHEDULED`) | Forecast / Previous / Actual未確定 |
+| 発表済み(`RELEASED`、「最近のイベント」に表示) | Forecast / Actual / Previous → Surprise |
 | データ取得中 | 「データ取得中」 |
 | データ欠損 | 「データ未取得」等、状態を明示 |
 
@@ -101,7 +111,7 @@ MVPでは**4タブ**とする: Home / Indicators / Search / Settings。
 
 **目的**: 経済指標を一覧から探す。
 
-**フィルター候補**: すべて / 重要度 / 国・地域 / 通貨 / 頻度
+**フィルター候補**: すべて / 重要度 / 国・地域 / 通貨(v1.1で「頻度」を削除、L-4。features.mdに対応するFEAT-IDがなくMVP要件として確認できなかったため)
 
 指標を選択するとSCR-003へ遷移。
 
@@ -117,11 +127,11 @@ MVPでは**4タブ**とする: Home / Indicators / Search / Settings。
 
 **目的**: 特定の経済指標発表について、Forecast → Actual → Previous → Surprise → 市場の反応、を一画面で理解できるようにする。
 
-**主な表示**: 指標名 / 国・地域 / 通貨 / 重要度 / 発表日時 / Forecast / Actual / Previous / Surprise / 関連FXペア(複数ペアへの影響を並記) / 市場への影響
+**主な表示(v1.1で表示順序を確定、H-1)**: 指標名 / 国・地域 / 通貨 / 重要度 / 発表日時 / Forecast / Actual / Previous → Surprise → **乖離理由**(事実要約・出典・出典URL、MVPでは自由生成AI解説は行わない) → 市場への影響 → 関連FXペア/Reaction(複数ペアへの影響を並記)
 
 「値動きの詳細を見る」からSCR-005 Movement Detailへ。
 
-> **技術メモ(6.3節参照)**: モックアップでは「関連FXペア」欄に複数ペア(USD/JPY・EUR/USD・GBP/USD)の反応(%)を同時表示している。1イベントに対する複数ペアの`EventPriceReaction`サマリーを、この画面用に軽量に取得できるAPI設計が必要になる(SCR-005が単一ペア・全時間軸の詳細を扱うのに対し、SCR-004は複数ペア・単一時間軸の概要、という役割分担)。
+> **技術メモ(6.3節参照)**: モックアップでは「関連FXペア」欄に複数ペア(USD/JPY・EUR/USD・GBP/USD)の反応(%)を同時表示している。1イベントに対する複数ペアの`EventPriceReaction`サマリーを、この画面用に軽量に取得できるAPI設計が必要になる(SCR-005が単一ペア・全時間軸の詳細を扱うのに対し、SCR-004は複数ペア・単一時間軸の概要、という役割分担)。**API詳細設計で解決済み**: `GET /events/{event_id}`の`related_fx_pairs`に5m基準のReaction Summaryが含まれる(api-design.md 14.2節)。
 
 ### SCR-005 Movement Detail
 
@@ -207,14 +217,14 @@ Historical Event Detail → Indicator Detail
 
 ### 8.2 整合が取れている箇所(確認事項)
 
-- **SCR-007→SCR-003の必須遷移**: 概要設計書v1.5 13.6節・要件定義書17章が要求する「Historical Event Detail→Indicator Detail」の必須遷移と一致
-- **Home画面のデータ状態表示(取得中/未取得)**: 概要設計書v1.5 8.5節「data_statusをそのまま返し、クライアントはN/A表示する契約」と一致する設計思想
-- **Historical Comparisonの母数表示**: 概要設計書v1.5 10.2節「分析可能件数/全件数を提示する」設計と完全に一致
-- **ForecastなしイベントのHome表示**(モックアップのFOMC「予想 -」): 要件定義書v1.4 11.2節「Forecastなしはsurprise=null」の扱いと整合
+- **SCR-007→SCR-003の必須遷移**: 概要設計書v1.6 13.6節・要件定義書17章が要求する「Historical Event Detail→Indicator Detail」の必須遷移と一致
+- **Home画面のデータ状態表示(取得中/未取得)**: 概要設計書v1.6 8.5節「data_statusをそのまま返し、クライアントはN/A表示する契約」と一致する設計思想
+- **Historical Comparisonの母数表示**: 概要設計書v1.6 10.2節「分析可能件数/全件数を提示する」設計と完全に一致
+- **ForecastなしイベントのHome表示**(モックアップのFOMC「予想 -」): 要件定義書v1.5 11.2節「Forecastなしはsurprise=null」の扱いと整合
 
 ### 8.3 技術的懸念(報告のみ、判断はHQに委ねる)
 
-1. **SCR-004 Event Detailの複数ペア表示**: 5.のSCR-004技術メモの通り、1イベント×複数ペアの反応サマリーを返すAPIが、SCR-005(1ペア×全時間軸)とは別に必要になる可能性が高い。詳細設計時にAPI設計へ反映することを推奨。
+1. **SCR-004 Event Detailの複数ペア表示(解決済み)**: 5.のSCR-004技術メモの通り、1イベント×複数ペアの反応サマリーを返すAPIが必要という懸念は、API詳細設計(api-design.md 14.2節、`related_fx_pairs`への5m Reaction Summary追加)で解決済み。
 2. **SCR-005 Movement Detailの複数ペア比較**: 概要設計書v1.0 13.5節は「複数FX Pairを比較可能とする」としていたが、今回のモックアップのMovement Detailは単一ペア(USD/JPYのみ)の表示になっている。複数ペア比較がMovement Detail内の機能として残るのか、Event Detail側の概要表示に統合されたのか、詳細設計での確認を推奨する。
 3. **通知設定のUI先行配置**: SettingsのUI候補に「通知設定」が入っているが、通知機能自体はFuture scope(要件定義書23章)。UIの入り口だけ先に用意し、押下時の挙動(Coming Soon表示等)を詳細設計で決めておくと、MVP範囲との齟齬を避けやすい。
 
@@ -225,17 +235,17 @@ Historical Event Detail → Indicator Detail
 ```
 docs/projects/fx-event-analyzer/
 ├── README.md                        … プロジェクト概要・開発体制・経緯
-├── requirements.md                  … 要件定義書 v1.4
-├── design.md                        … 概要設計書 v1.4
+├── requirements.md                  … 要件定義書 v1.5
+├── design.md                        … 概要設計書 v1.6
 ├── implementation-notes-for-hq.md   … 詳細設計インプット情報(制約・リスク・未確定事項)
-├── ui-screens.md                    … 本書。画面設計・UI方針 v1.0
-├── features.md                      … 機能一覧 v1.4
-├── db-design.md                     … DB詳細設計 v4.1
-├── api-design.md                    … API詳細設計書 v1.2
+├── ui-screens.md                    … 本書。画面設計・UI方針 v1.1
+├── features.md                      … 機能一覧 v1.6
+├── db-design.md                     … DB詳細設計 v4.2
+├── api-design.md                    … API詳細設計書 v1.3
 └── mockups/
     └── screens-overview-dark-v1.png … UIモックアップ(ダーク版、11画面)
 ```
 
 ## 10. 次のフェーズ
 
-HQ側で「機能一覧」の詳細設計を行い、その後、各画面のUI詳細・API・DBとの対応関係を確定する。Claude Codeは実装未着手のまま待機する。
+全設計横断監査(H-1/H-2/M-1〜M-5/L-1〜L-6/A-6)での確定事項を各設計書へ反映済み。HQによる再監査(PASS判定)後、設計凍結→実装フェーズへ移行する。

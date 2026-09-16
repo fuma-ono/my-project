@@ -1,4 +1,4 @@
-# FXイベント反応分析アプリ 要件定義書 v1.4
+# FXイベント反応分析アプリ 要件定義書 v1.5
 
 ## 変更履歴
 
@@ -19,6 +19,11 @@
 - **v1.4**(今回): DB詳細設計(HQ確定、2026-09-16)を受けて5章・27章を更新
   - `EconomicEvent`(イベントのメタデータ)と`EventSnapshot`(発表時点の値)を別Entityとして明記(旧: 「EconomicEvent(Snapshot)」という同一視の書き方だった。5.1節・27章)
   - `EventExplanation`はMVP必須Entityであることを27章で改めて明記(DB詳細設計でEntity一覧からの欠落が指摘されたため)
+- **v1.5**(今回): 全設計横断監査(M-1/M-2/L-3/A-6)での確定事項を反映(2026-09-16)
+  - M-1: `favorable_direction`のenum値を、DB詳細設計でHQが確定した`HIGHER_IS_POSITIVE`/`LOWER_IS_POSITIVE`/`NEUTRAL`に更新(旧: higher_is_favorable等。11.1節)。意味は変更なし
+  - M-2: `data_status`のサンプル値を、DB詳細設計で確定した実際の値(`AVAILABLE`)に更新(旧: complete。13.2/14章)
+  - L-3: 27章の推奨データモデル一覧に`Subscription`/`Entitlement`を追加(既存の詳細定義は変更なし)
+  - A-6: `event_name`を管理データ項目から削除し、イベントの識別・検索はIndicator基準で行うことを明記(5.2節)。country/currencyもIndicatorからの導出である旨を明記
 
 ---
 
@@ -114,9 +119,6 @@ MVPでは以下を実現する。
 
 - event_id
 - indicator_id
-- event_name
-- country
-- currency
 - release_datetime(スケジュール時刻。5.3節で精度を扱う)
 - importance
 - forecast(存在しない場合はnull。9章参照)
@@ -126,6 +128,8 @@ MVPでは以下を実現する。
 - description
 - source
 - data_status(6章のデータ品質状態)
+
+**イベントの識別・検索は`indicator_id`を介した`Indicator`基準で行う(DB詳細設計でHQ確定、2026-09)。** `event_name`のようなイベント独自の名称項目は管理しない。country/currencyは`Indicator`から導出する。画面・検索での「イベント名」表示は、指標名(`Indicator.name`)と発表日時の組み合わせで表現する。
 
 改定履歴(EventRevision)には、少なくとも以下を管理する。
 
@@ -267,7 +271,7 @@ Before  147.20
 
 原則: `Surprise = Actual - Forecast`
 
-ただし、指標ごとに「高い方が市場にとって好ましい」「低い方が好ましい」「単純比較できない」が異なるため、**Indicatorごとに方向性(favorable_direction: higher_is_favorable / lower_is_favorable / not_applicable)を設定できる構造とする。**
+ただし、指標ごとに「高い方が市場にとって好ましい」「低い方が好ましい」「単純比較できない」が異なるため、**Indicatorごとに方向性(favorable_direction: `HIGHER_IS_POSITIVE` / `LOWER_IS_POSITIVE` / `NEUTRAL`。DB詳細設計でHQが確定した値、2026-09)を設定できる構造とする。**
 
 MVPでは、この方向性を用いた**符号ベースの判定(上振れ/下振れ/予想通り)**までを実装対象とする。
 
@@ -326,7 +330,7 @@ AIは価格を予測しない(11.3節と同様、将来もこの方針を維持)
 
 ### 13.2 対象件数とデータ品質
 
-「過去◯件」という固定件数に機械的に依存せず、**「分析可能な直近N件」**を基本とする。すなわち、データ品質が揃っている(data_statusが完全な)イベントのみを対象とし、目安件数(20件相当)に届かない場合は実際に確保できた件数で表示する。
+「過去◯件」という固定件数に機械的に依存せず、**「分析可能な直近N件」**を基本とする。すなわち、データ品質が揃っている(`data_status = AVAILABLE`、DB詳細設計でHQが確定した値)イベントのみを対象とし、目安件数(20件相当)に届かない場合は実際に確保できた件数で表示する。
 
 **ユーザーには、母数(何件中何件のデータで算出したか)を提示する。** 例: 「過去20回中18回のデータで算出」
 
@@ -336,7 +340,7 @@ AIは価格を予測しない(11.3節と同様、将来もこの方針を維持)
 
 同一指標・FX Pair単位で、平均変動・平均絶対変動・最大変動・最小変動・上昇回数・下落回数・変化なし回数を、時間別(1分・5分・15分・30分・60分)に算出する。
 
-**統計計算の対象は、データが揃っている(data_status=complete)イベントに限定する。** 欠損・不完全なイベントを平均・最大・最小の計算に混入させてはならない。除外した件数も含め、母数を13.2節と同様にユーザーへ提示する。
+**統計計算の対象は、データが揃っている(`data_status = AVAILABLE`)イベントに限定する。** 欠損・不完全なイベントを平均・最大・最小の計算に混入させてはならない。除外した件数も含め、母数を13.2節と同様にユーザーへ提示する。
 
 ---
 
@@ -360,7 +364,7 @@ Surpriseの大きさによる分類分析(例: Surprise > +0.3等のバケット
 
 ## 27. 推奨データモデル(概要)
 
-Indicator / **IndicatorFxPair**(Indicator↔FXPairの多対多関連) / EconomicEvent(イベントのメタデータ) / **EventSnapshot**(発表時点の値。EconomicEventとは別Entity、DB詳細設計でHQ確定・2026-09) / EventRevision / **EventExplanation**(乖離理由、MVP必須) / FXPair / FXPrice / EventPriceReaction / Person / SpeechEvent / SpeechPriceReaction
+Indicator / **IndicatorFxPair**(Indicator↔FxPairの多対多関連) / EconomicEvent(イベントのメタデータ) / **EventSnapshot**(発表時点の値。EconomicEventとは別Entity、DB詳細設計でHQ確定・2026-09) / EventRevision / **EventExplanation**(乖離理由、MVP必須) / FxPair / FxPrice / EventPriceReaction / **Subscription** / **Entitlement**(38〜55章のSubscription要件に対応。DB詳細設計で別テーブルとして具体化、2026-09) / Person / SpeechEvent / SpeechPriceReaction
 
 **IndicatorFxPair**は、「関連通貨ペア表示」に必要な、指標ごとの分析対象FXペアを固定文字列ではなく関連テーブルとして管理するために新設した(HQ回答、2026-09)。具体的なカラム・制約はDB詳細設計で確定する。
 

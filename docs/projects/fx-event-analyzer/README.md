@@ -4,13 +4,13 @@
 
 現在のフェーズ: **詳細設計(HQ主導)**。実装(DB作成・API実装・UI実装)はまだ開始していない。
 
-- [requirements.md](./requirements.md) — 要件定義書 v1.4
-- [design.md](./design.md) — 概要設計書 v1.5
+- [requirements.md](./requirements.md) — 要件定義書 v1.5
+- [design.md](./design.md) — 概要設計書 v1.6
 - [implementation-notes-for-hq.md](./implementation-notes-for-hq.md) — 詳細設計のためのHQ向け情報整理(制約・リスク・API依存部分・未確定事項)
-- [ui-screens.md](./ui-screens.md) — 画面設計・UI方針 v1.0(モックアップ・画面一覧・画面遷移)
-- [features.md](./features.md) — 機能一覧 v1.5(FEAT-ID、優先度P0/P1/P2/OUT。HQにより正式な基準仕様として確定済み)
-- [db-design.md](./db-design.md) — DB詳細設計 v4.1(HQ確定・完成版。Search Index(pg_trgm+GIN)方針を追加)
-- [api-design.md](./api-design.md) — API詳細設計書 v1.2(HQ作成のv1.0をベースに、Claude CodeレビューのAランク8件・Bランク7件・残課題6件すべてに対応)
+- [ui-screens.md](./ui-screens.md) — 画面設計・UI方針 v1.1(モックアップ・画面一覧・画面遷移)
+- [features.md](./features.md) — 機能一覧 v1.6(FEAT-ID、優先度P0/P1/P2/OUT。HQにより正式な基準仕様として確定済み)
+- [db-design.md](./db-design.md) — DB詳細設計 v4.2(HQ確定・完成版。max_upward_pips/max_downward_pipsをDB保存に統一)
+- [api-design.md](./api-design.md) — API詳細設計書 v1.3(HQ作成のv1.0をベースに、全設計横断監査の確定事項まで反映)
 - [mockups/](./mockups/) — UIモックアップ画像
 
 ## 開発体制(2026-09〜)
@@ -38,11 +38,13 @@
 13. HQよりAPI詳細設計書v1.0(HQ作成)を受領し、要件定義書・features.md・design.md・ui-screens.md・db-design.mdとの整合性を第三者レビュー。Aランク(必須修正)8件・Bランク(推奨修正)7件を報告(EventRevision取得APIの欠落・Event Detailの複数FXペア反応サマリー欠如・Data Quality状態名のDB不一致・Profile.timezone未設計・Currencyマスタ不在・event_nameカラム不在・Data Pending/UnavailableのHTTPエラー扱いの是非・Historical Comparisonのtimeframe単一指定、等)
 14. HQよりAランク8件・Bランク7件すべてに方針確定を受領。`api-design.md`をv1.1として新規作成し反映(EventRevision API新設、related_fx_pairsへのReaction Summary追加、Data Quality状態のDB↔APIマッピング表明記、Profile.timezoneは追加せずRequestで明示受領する方式に変更、Currencyは静的マッピングで対応、event_nameはIndicator基準検索に変更、DATA_PENDING/UNAVAILABLEはHTTPエラーから除外し200+status field方式に統一、Historical Comparisonにtimeframe=all追加、Entitlement×Endpoint対応表追加等)。要件定義書・概要設計書・DB設計は変更せず、変更候補として報告するに留めた
 15. HQよりv1.1の残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受領。`api-design.md`をv1.2へ改訂(Advanced Statisticsの段階的制御をavailable/required_entitlement/data形式で確定、available_timeframesの精度別除外ルールを正式確定、Backend↔PostgreSQLはservice_role接続+Backend Authorizationを正式採用し7段階の処理順序を明記、Revision APIはEntitlement制限なしと確定)。pg_trgm+GIN Index方針は`db-design.md`をv4.1へ改訂して直接反映(HQ指示による、Migrationは未実施)。event_name関連は要件定義書側の変更候補として確定(要件定義書自体は変更せず)
+16. HQ指示により「実装開始前の全設計最終整合性監査」を実施。要件定義書・概要設計書・features.md・ui-screens.md・db-design.md・api-design.mdを横断監査し、Critical 0件・High 2件(H-1: EventExplanationがSCR-004・features.mdに未反映、H-2: Homeの「最近のイベント」のデータソース未確定)・Medium 5件(favorable_direction/data_statusの旧enum表記、max_upward_pips等の保存方針の非対称性、design.mdのIngestionLog欠落、timezone方針の反映漏れ)・Low 6件(User/Profile・FXPair/FxPairの表記揺れ等)を報告。総合判定「PASS WITH CHANGES」
+17. HQよりH-1/H-2/M-1〜M-5/L-1〜L-6/A-6すべてに最終方針を受領し、全設計書へクリーンアップとして反映。SCR-004に乖離理由表示を追加(features.mdにFEAT-055新設)、Homeの「最近のイベント」を「当日中のRELEASEDイベント」と定義、EventPriceReactionのmax_upward_pips/max_downward_pipsをDB保存方式に統一、要件定義書・概要設計書の旧enum表記・旧サンプル値を確定済みDB値に統一、design.mdにIngestionLog追加・timezone方針反映・User→Profile/FXPair→FxPairの表記統一、requirements.md 27章にSubscription/Entitlement追加、requirements.md 5.2節からevent_nameを削除しIndicator基準に整合。実装は今回も一切行っていない
 
 ## 次のアクション
 
-- HQが`api-design.md` v1.2の43章「他ドキュメントへの変更候補」(要件定義書のevent_name記載、timezone補足の要否)について最終判断する
-- 上記が確定次第、API設計を最終確定し実装フェーズへ進む
+- HQが今回のクリーンアップ結果を確認し、「全設計最終監査」を再実施する
+- 再監査でPASS判定となれば「設計凍結→実装フェーズ」へ移行する
 - 経済指標API(Trading Economics / EODHD等)へ、エンドユーザーへの商用配信権込みで正式見積もりを取る(requirements.md 6.2節)。詳細設計自体はAPI未選定でも進められる(Adapter抽象化のため)
 - FEAT-227(決済実装)の着手時期(β版の前か後か)をリリース計画段階でHQが判断する
 - 詳細設計書が確定次第、Claude Codeが実装フェーズに入る

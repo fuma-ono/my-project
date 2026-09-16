@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.1
+# FX Event Analyzer: DB詳細設計 v4.2
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -20,7 +20,8 @@
   - `EventPriceReaction.max_upward`/`max_downward`の定義を「pre_release_price基準・期間内の最大上昇幅/下降幅」に確定
   - RLS論理方針・Delete/Cascade方針(RESTRICT中心)・FxPriceのデータ保持範囲(イベント時間窓中心)を最終確定
   - 概要設計書・要件定義書に残る「EconomicEvent = EventSnapshot」等の旧仕様表現は、既にv1.4で修正済みであることを再確認(11章参照)
-- **v4.1**(今回): API詳細設計レビュー(B-5)での確定事項を反映。Partial Match Search(部分一致検索)の性能を担保するため、`pg_trgm` + GIN Indexの追加方針を12章に明記(HQ確定、2026-09-16)。DB Migrationは実施していない(ドキュメント追記のみ)
+- **v4.1**: API詳細設計レビュー(B-5)での確定事項を反映。Partial Match Search(部分一致検索)の性能を担保するため、`pg_trgm` + GIN Indexの追加方針を12章に明記(HQ確定、2026-09-16)。DB Migrationは実施していない(ドキュメント追記のみ)
+- **v4.2**(今回): 全設計横断監査(M-3)での確定事項を反映。`EventPriceReaction.max_upward_pips`/`max_downward_pips`をDBカラムとして追加し保存する方針に変更(旧: API応答時に都度計算する方針だったが、通常の`pips`列との保存方針の非対称性を解消するためDB保存に統一、HQ確定、2026-09-16)
 
 ---
 
@@ -36,7 +37,7 @@
 | `EventSnapshot` | 発表時点でユーザーに提供されていた値。immutable(DBレベルで担保) |
 | `EventRevision` | 後日判明した改定情報(参考情報、分析には使わない) |
 | `EventExplanation` | 乖離理由(MVP: 出典付き事実要約。履歴保持) |
-| `IndicatorFxPair` | Indicator↔FXPairの多対多関連 |
+| `IndicatorFxPair` | Indicator↔FxPairの多対多関連 |
 | `FxPair` | 通貨ペアマスタ |
 | `FxPrice` | FX価格ローソク足(イベント時間窓中心の保持) |
 | `EventPriceReaction` | イベント×通貨ペア×時間軸ごとの価格反応 |
@@ -295,7 +296,7 @@ IDX(fx_pair_id, timeframe, timestamp)
 
 **データ保持範囲(HQ確定)**: MVPでは連続した全期間の価格データを永続保存する方式にはしない。経済イベント分析に必要な**イベント周辺の時間窓**(発表前〜+60分の1m/5m/15m/30m/60m算出に必要な範囲)を中心に保持する。将来Web分析ダッシュボードや通常のFXチャート機能を追加する場合、連続価格データ保存へ拡張可能な設計とする(テーブル構造自体はどちらの運用にも対応できるため、保持範囲は運用(Ingestion Workerの取得・保持ポリシー)側の設定で制御する)。
 
-### 3.12 EventPriceReaction(確定: max_upward/max_downwardの定義、timeframeからBEFOREを除外、Numeric精度)
+### 3.12 EventPriceReaction(確定: max_upward/max_downwardの定義、timeframeからBEFOREを除外、Numeric精度、max_upward_pips/max_downward_pipsをDB保存に統一)
 
 | カラム | 型 | 制約 | 備考 |
 |---|---|---|---|
@@ -310,6 +311,8 @@ IDX(fx_pair_id, timeframe, timestamp)
 | change_percent | numeric(10,4) | nullable | |
 | max_upward | numeric(12,6) | nullable | **HQ確定の定義**: `pre_release_price`を基準とした、発表後その時間軸までの期間内の最大上昇幅(= 期間内の最高値 − pre_release_price)。累積変動量ではない |
 | max_downward | numeric(12,6) | nullable | 同様に、期間内の最大下降幅(= 期間内の最安値 − pre_release_price、負の値) |
+| max_upward_pips | numeric(10,2) | nullable | **v4.2で追加(HQ確定)**: `max_upward / FxPair.pip_size`。通常の`pips`と同様にBackend算出時にDB保存する(API応答時の都度計算は行わない) |
+| max_downward_pips | numeric(10,2) | nullable | 同様に`max_downward / FxPair.pip_size` |
 | data_status | text | NN, DEF `PENDING`, CHK: `data_status IN ('PENDING','AVAILABLE','UNAVAILABLE')` | 価格データ不足時に0を保存せず「分析対象外/Data Pending」を表現 |
 | calculated_at | timestamptz | nullable | data_status=AVAILABLEになった時点の計算時刻 |
 | created_at | timestamptz | NN, DEF now() | |
@@ -319,7 +322,9 @@ IDX(event_id)
 IDX(fx_pair_id)
 IDX(event_id, fx_pair_id, timeframe)
 
-**max_upward/max_downwardの計算例(HQ提示)**: `pre_release_price = 150.00`で、期間中に150.20まで上昇・149.70まで下落した場合、`max_upward = +0.20`・`max_downward = -0.30`。pips換算値(`max_upward_pips`等)は本テーブルには保持せず、pips化が必要な画面ではAPI応答時に`FxPair.pip_size`を用いて算出する(カラム追加の要否はAPI詳細設計で確認)。
+**max_upward/max_downwardの計算例(HQ提示)**: `pre_release_price = 150.00`で、期間中に150.20まで上昇・149.70まで下落した場合、`max_upward = +0.20`・`max_downward = -0.30`。
+
+**pips換算値の保存方針(v4.2でHQ確定)**: `max_upward_pips`/`max_downward_pips`は、通常の`pips`列と同じ方針で、Ingestion Worker側の算出時にDBへ保存する。API応答時に`FxPair.pip_size`を用いて都度計算する設計は採用しない(pips系カラムの保存方針を統一するため)。
 
 **段階的生成**: イベント発表後、該当timeframeの`FxPrice`が確定した時点で、その都度該当timeframeの行を生成・upsertする。行が存在しない、または`data_status = PENDING`は「まだ計算されていない」ことを表す。価格データが取得できなかった場合は`data_status = UNAVAILABLE`とし、数値列は`0`ではなく`null`のまま保持する。
 
@@ -394,7 +399,7 @@ Supabase RLSを実装前提の設計条件として採用する。論理方針�
 |---|---|---|
 | 経済指標値(指標により単位・桁数が大きく異なる) | `numeric(18,4)` | `EventSnapshot.forecast`/`actual`/`previous`/`surprise`、`EventRevision.old_value`/`new_value` |
 | FX価格(レート) | `numeric(12,6)` | `FxPrice.open`/`high`/`low`/`close`、`EventPriceReaction.pre_release_price`/`post_release_price`/`movement`/`max_upward`/`max_downward` |
-| pips | `numeric(10,2)` | `EventPriceReaction.pips` |
+| pips | `numeric(10,2)` | `EventPriceReaction.pips`/`max_upward_pips`/`max_downward_pips` |
 | 変化率(%) | `numeric(10,4)` | `EventPriceReaction.change_percent` |
 | pip_size(通貨ペア固有の定数) | `numeric(10,6)` | `FxPair.pip_size` |
 
@@ -402,7 +407,7 @@ FX価格の実際の小数桁数は`FxPair.price_precision`(通貨ペアごと)�
 
 ## 9. UTC/Timezone方針
 
-全テーブルの時刻系カラムは`timestamptz`(内部はUTC)で統一する。ユーザー表示時にクライアント側でローカルタイムゾーンへ変換する(概要設計書v1.5 8.1節・要件定義書v1.4 9.1節で確定済みの方針を踏襲)。
+全テーブルの時刻系カラムは`timestamptz`(内部はUTC)で統一する。ユーザー表示時にクライアント側でローカルタイムゾーンへ変換する(概要設計書v1.6 8.1節・要件定義書v1.5 9.1節で確定済みの方針を踏襲)。
 
 ## 10. データ品質ルール
 
@@ -411,7 +416,7 @@ FX価格の実際の小数桁数は`FxPair.price_precision`(通貨ペアごと)�
 - 取得できていないデータを0として扱わない
 - Forecastがない場合、Surpriseを0にしない(0とnullを明確に区別する、5章)
 - Release時点の情報と、後から改定された情報を区別する(4章)
-- 統計対象外イベントを分析件数に無条件で含めない(母数を明示、概要設計書v1.5 10.2節)
+- 統計対象外イベントを分析件数に無条件で含めない(母数を明示、概要設計書v1.6 10.2節)
 - 外部APIのデータをそのままUIへ流さず、Backendで正規化してから利用する
 - データ取得失敗・欠損・遅延を状態(data_status)として管理する
 
@@ -421,7 +426,7 @@ FX価格の実際の小数桁数は`FxPair.price_precision`(通貨ペアごと)�
 
 本ラウンドの確定事項のうち、`EventExplanation`の履歴保持化は概要設計書5.6節にも反映済み(v1.4→**v1.5**、「上書きせず履歴保持とする」を明記)。
 
-以下は、概要設計書v1.5・要件定義書v1.4に**明記がなく、今回DB詳細設計のみで確定した実装レベルの設計判断**であるため、ドキュメント本文の修正は不要と判断したが、12章「他ドキュメントの更新対象」で確認のため報告する:
+以下は、概要設計書v1.6・要件定義書v1.5に**明記がなく、今回DB詳細設計のみで確定した実装レベルの設計判断**であるため、ドキュメント本文の修正は不要と判断したが、12章「他ドキュメントの更新対象」で確認のため報告する:
 
 - `Entitlement.feature_code`の具体化(概要設計書25章・要件定義書38〜55章はEntitlementの「存在」を要件化しているのみで、feature_codeの命名規則までは踏み込んでいない。矛盾はないため本文修正は不要と判断)
 - `EconomicEvent`への`provider`/`provider_event_id`追加(概要設計書のEconomicEvent管理情報の記述と矛盾しない、追加情報のため本文修正は不要と判断)
@@ -430,7 +435,7 @@ FX価格の実際の小数桁数は`FxPair.price_precision`(通貨ペアごと)�
 
 ## 12. Search機能に必要なIndex(API詳細設計で確定、v4.1)
 
-Search機能(FEAT-110〜115)は、API詳細設計(api-design.md v1.2)でPartial Match Search(部分一致検索、`ILIKE '%…%'`)を採用することが確定した。標準のB-tree Indexは部分一致検索を効率的に処理できないため、以下のカラムに**`pg_trgm`拡張によるGIN Index**を追加する方針を確定する(HQ確定、2026-09-16)。
+Search機能(FEAT-110〜115)は、API詳細設計(api-design.md v1.3)でPartial Match Search(部分一致検索、`ILIKE '%…%'`)を採用することが確定した。標準のB-tree Indexは部分一致検索を効率的に処理できないため、以下のカラムに**`pg_trgm`拡張によるGIN Index**を追加する方針を確定する(HQ確定、2026-09-16)。
 
 | テーブル.カラム | Index種別 | 目的 |
 |---|---|---|

@@ -1,8 +1,8 @@
-# FX Event Analyzer: 機能一覧 v1.5
+# FX Event Analyzer: 機能一覧 v1.6
 
 **出典**: HQより2026-09-16共有。v1.2は、HQが再発行した「正式版 機能一覧」テキストを本書に統合したもの。v1.3で、v1.2の内容がHQにより正式な基準仕様として確定し、あわせて用語統一(MarketReaction→EventPriceReaction)を反映した。v1.4で、DB詳細設計確定(EconomicEvent/EventSnapshot分離、EventExplanation復活等)に伴う用語表・節番号の更新を反映した。実装は未着手。
 
-**位置づけ**: 要件定義書v1.4・概要設計書v1.5・画面設計(ui-screens.md v1.0)の内容を、機能ID(FEAT-xxx)単位に分解したもの。今後の設計・実装で本書のIDを参照する。次フェーズでHQが「画面×機能」「画面×機能×API×DB」の対応表を作成する際の基礎資料となる。
+**位置づけ**: 要件定義書v1.5・概要設計書v1.6・画面設計(ui-screens.md v1.1)の内容を、機能ID(FEAT-xxx)単位に分解したもの。今後の設計・実装で本書のIDを参照する。次フェーズでHQが「画面×機能」「画面×機能×API×DB」の対応表を作成する際の基礎資料となる。
 
 ## 変更履歴
 
@@ -24,9 +24,12 @@
 - **v1.4**(今回): HQ確定のDB詳細設計方針(2026-09-16)を反映
   - `EventSnapshot`が`EconomicEvent`とは別Entityであることの確定、`EventExplanation`のMVP必須Entityとしての復活を反映し、15.4節の用語表・各所の節番号引用を更新
   - 要件定義書v1.4・概要設計書v1.4への版番号追従(内容変更なし箇所も含め、引用を最新版に統一)
-- **v1.5**(今回): HQ確定のDB詳細設計最終版(2026-09-16 第3回)を受けて版番号引用を追従
+- **v1.5**: HQ確定のDB詳細設計最終版(2026-09-16 第3回)を受けて版番号引用を追従
   - 概要設計書がv1.5へ改訂(EventExplanationの履歴保持化を反映)されたことに伴い、引用箇所を更新
   - `db-design.md`がv4.0(DB詳細設計の完成版)になったことを反映
+- **v1.6**(今回): 全設計横断監査(H-1)での確定事項を反映(2026-09-16)
+  - H-1: 新規FEAT-055「乖離理由表示」(P0、Event Detail)を4.1節として追加。SCR-004での表示順序(Surprise→乖離理由→市場への影響→関連FXペア/Reaction)を明記
+  - 版番号引用を要件定義書v1.5・概要設計書v1.6・ui-screens.md v1.1・db-design.md v4.2・api-design.md v1.3に追従
 
 ## 優先度定義
 
@@ -83,7 +86,7 @@
 | FEAT-048 | データ取得状態表示 | P0 | Event Detail |
 | FEAT-049 | データ欠損状態表示 | P0 | Event Detail |
 
-**Snapshotの重要ルール**(要件定義書v1.4 5.1節・概要設計書v1.5 5.3/5.4/5.5節と同じ原則): 経済指標の現在値を単純に上書きして、過去の分析結果を書き換えてはいけない。`EconomicEvent`(メタデータ)・`EventSnapshot`(発表時点の値、別Entity)・`EventRevision`の概念を維持し、相場反応分析は原則としてRelease-time Snapshotを参照する。
+**Snapshotの重要ルール**(要件定義書v1.5 5.1節・概要設計書v1.6 5.3/5.4/5.5節と同じ原則): 経済指標の現在値を単純に上書きして、過去の分析結果を書き換えてはいけない。`EconomicEvent`(メタデータ)・`EventSnapshot`(発表時点の値、別Entity)・`EventRevision`の概念を維持し、相場反応分析は原則としてRelease-time Snapshotを参照する。
 
 ## 4. Surprise分析
 
@@ -96,6 +99,14 @@
 | FEAT-054 | Surprise分析対象外表示 | P0 | Event Detail |
 
 MVP: `Surprise = Actual - Forecast`。Forecastが存在しない場合は`Surprise = null`(0扱い禁止)。将来: 指標ごとの標準化・Surprise magnitude・bucket・高度な乖離分析。
+
+### 4.1 乖離理由表示(v1.6で新設、H-1)
+
+| ID | 機能 | 優先度 | 対応画面 |
+|---|---|---|---|
+| FEAT-055 | 乖離理由表示(EventExplanation。公式ソースに基づく事実要約・出典・出典URL) | P0 | Event Detail |
+
+MVPでは自由生成によるAIの解説は行わない(要件定義書12章・概要設計書11章のスコープに準拠)。SCR-004内の表示順序はForecast/Actual/Previous→Surprise→乖離理由→市場への影響→関連FXペア/Reactionとする(ui-screens.md SCR-004参照)。`EventExplanation`はMVP必須Entityとして既にdb-design.md 3.8節・api-design.md 14.1/17章で扱われており、本FEAT-IDはその画面表示を機能一覧に正式に位置づけるもの。
 
 ## 5. FX価格・相場反応機能
 
@@ -117,7 +128,7 @@ MVP: `Surprise = Actual - Forecast`。Forecastが存在しない場合は`Surpri
 | FEAT-073 | 発表時刻チャート表示 | P0 | Movement Detail |
 | FEAT-074 | 通貨ペア切り替え | P0 | Movement Detail |
 
-対象時間軸: 1m/5m/15m/30m/60m。発表時刻とFX価格の時刻同期仕様は別途詳細設計で厳密に定義する(概要設計書v1.5 8章が基本方針)。
+対象時間軸: 1m/5m/15m/30m/60m。発表時刻とFX価格の時刻同期仕様は別途詳細設計で厳密に定義する(概要設計書v1.6 8章が基本方針)。
 
 ## 6. Historical Comparison
 
@@ -184,7 +195,7 @@ Historical Event Detail(過去の特定回のイベント)とIndicator Detail(�
 | FEAT-224 | Free/Proプラン概念・ユーザーの現在プラン管理・機能アクセス判定(Entitlement)・Backend側Entitlementデータ構造・UI上のプラン表示 | **P1**(MVP対象。決済実装は含まない) |
 | FEAT-227(新設) | App Store決済(StoreKit)実装・購入処理・更新・解約・レシート/トランザクション検証 | 実装タイミング未定(β版前後で別途判断) |
 
-「課金を後から追加する設計」ではなく、「最初からFree/Proへ拡張可能な設計にしておき、決済機構の実装タイミングだけ後で判断する」という方針(HQ回答、2026-09)。詳細は要件定義書v1.4 38〜55章・概要設計書v1.5 25章参照。
+「課金を後から追加する設計」ではなく、「最初からFree/Proへ拡張可能な設計にしておき、決済機構の実装タイミングだけ後で判断する」という方針(HQ回答、2026-09)。詳細は要件定義書v1.5 38〜55章・概要設計書v1.6 25章参照。
 
 ## 10. データ取得・管理(非表示、システム内部機能)
 
@@ -234,7 +245,7 @@ MVPでは自由生成AIによる「なぜ乖離したか」の説明は行わな
 
 ### 13.1 データ品質に関する絶対ルール(v1.2で新設)
 
-金融データを扱うため、以下をプロダクト全体の絶対ルールとして明文化する(いずれも既存の要件定義書v1.4・概要設計書v1.5に個別に記載済みの原則を、チェックリストとして一箇所に集約したもの)。
+金融データを扱うため、以下をプロダクト全体の絶対ルールとして明文化する(いずれも既存の要件定義書v1.5・概要設計書v1.6に個別に記載済みの原則を、チェックリストとして一箇所に集約したもの)。
 
 1. 取得できていないデータを0として扱わない
 2. Forecastがない場合、Surpriseを0にしない(`Surprise = null`)
@@ -264,24 +275,24 @@ MVPでは自由生成AIによる「なぜ乖離したか」の説明は行わな
 #### 懸念-1(解決)
 - **該当ID**: FEAT-045(Revised Previous表示、P0、Event Detail)
 - **HQ回答**: FEAT-045は`EventRevision`ベースの改定履歴・改定値を扱う機能。`EconomicEvent.revised_previous`のような可変フィールドは復活させない。UI上で改定値を表示する場合は「改定後」等のラベルで発表時点の値と明確に区別する。
-- **反映先**: 要件定義書v1.4 5.1節・概要設計書v1.5 5.5節(EventRevision。DB詳細設計でのEconomicEvent/EventSnapshot分離に伴い旧5.4節から移動)、本書FEAT-045の記述を更新。
+- **反映先**: 要件定義書v1.5 5.1節・概要設計書v1.6 5.5節(EventRevision。DB詳細設計でのEconomicEvent/EventSnapshot分離に伴い旧5.4節から移動)、本書FEAT-045の記述を更新。
 
 #### 懸念-2(解決)
 - **該当ID**: FEAT-224(Subscription)
 - **HQ回答**: 優先度をP2→P1へ変更。ただしMVP対象はFree/Proのプラン概念・Entitlement設計・UI表示までで、「決済まで完成させる」という意味ではない。App Store決済(StoreKit)実装・購入/更新/解約・レシート検証はβ版前後で実装タイミングを別途判断する。
-- **反映先**: 要件定義書v1.4 38〜55章・概要設計書v1.5 25章、本書9.1節(新設)・FEAT-227(新設)。
+- **反映先**: 要件定義書v1.5 38〜55章・概要設計書v1.6 25章、本書9.1節(新設)・FEAT-227(新設)。
 
 #### 懸念-3(解決)
 - **該当ID**: FEAT-028(関連通貨ペア表示、P0、Indicator Detail)
 - **HQ回答**: 報告通り、Indicator↔FXPairの多対多関係を基本とし、`IndicatorFxPair`という関連モデルを検討する。具体的なテーブル名・カラム・制約はDB詳細設計で確定する。
-- **反映先**: 要件定義書v1.4 27章・概要設計書v1.5 5.1/5.2節。
+- **反映先**: 要件定義書v1.5 27章・概要設計書v1.6 5.1/5.2節。
 
 ### 15.2 整合性が確認できた箇所(参考)
 
-- Surprise分析(FEAT-050〜054)は要件定義書v1.4 11章・概要設計書v1.5 9章の「Forecast欠損時はnull、0禁止」の方針と完全に一致
-- AI分析(FEAT-200〜204)が全てP2であることは、要件定義書v1.4 12章・概要設計書v1.5 11章の「MVPでは出典付き事実要約のみ、自由生成AI解説は将来拡張」という縮小方針と一致
-- 統計除外(FEAT-091)・分析可能件数表示(FEAT-090)は概要設計書v1.5 10.2/10.3節の母数表示ルールと完全に一致
-- Snapshot/Revision管理(FEAT-046・143・144)は概要設計書v1.5 5.3(EconomicEvent)/5.4(EventSnapshot)/5.5節(EventRevision)の設計と一致
+- Surprise分析(FEAT-050〜054)は要件定義書v1.5 11章・概要設計書v1.6 9章の「Forecast欠損時はnull、0禁止」の方針と完全に一致
+- AI分析(FEAT-200〜204)が全てP2であることは、要件定義書v1.5 12章・概要設計書v1.6 11章の「MVPでは出典付き事実要約のみ、自由生成AI解説は将来拡張」という縮小方針と一致
+- 統計除外(FEAT-091)・分析可能件数表示(FEAT-090)は概要設計書v1.6 10.2/10.3節の母数表示ルールと完全に一致
+- Snapshot/Revision管理(FEAT-046・143・144)は概要設計書v1.6 5.3(EconomicEvent)/5.4(EventSnapshot)/5.5節(EventRevision)の設計と一致
 - FEAT-074(通貨ペア切り替え、Movement Detail、P0)により、ui-screens.md 8.3節で報告していた「Movement Detailの複数ペア比較の要否」という技術的懸念の一部が解消された(少なくとも「切り替え」は確定した。同時比較表示の要否は引き続き未確認)
 
 ### 15.3 新たに発生した懸念
@@ -304,16 +315,16 @@ HQ指示の7項目に沿って報告する。**コードは一切存在しない
 
 | 用語 | 現在のドキュメント上の状態 |
 |---|---|
-| EventSnapshot | **解決(DB詳細設計、HQ確定2026-09-16)**: `EconomicEvent`とは別Entityとして概要設計書v1.5 5.4節で定義(immutable、snapshot_type列を持ち将来の複数種類に対応。MVPはRELEASEのみ) |
-| EventRevision | 概要設計書v1.5 5.5節で定義済み(「改定後」ラベル表示ルールも明記済み) |
-| IndicatorFxPair | 概要設計書v1.5 5.1/5.2節で定義済み(多対多、priorityで主要/準主要ペアを区別、`db-design.md`で確定) |
+| EventSnapshot | **解決(DB詳細設計、HQ確定2026-09-16)**: `EconomicEvent`とは別Entityとして概要設計書v1.6 5.4節で定義(immutable、snapshot_type列を持ち将来の複数種類に対応。MVPはRELEASEのみ) |
+| EventRevision | 概要設計書v1.6 5.5節で定義済み(「改定後」ラベル表示ルールも明記済み) |
+| IndicatorFxPair | 概要設計書v1.6 5.1/5.2節で定義済み(多対多、priorityで主要/準主要ペアを区別、`db-design.md`で確定) |
 | MarketReaction / EventPriceReaction | **解決(HQ確認、2026-09-16)**: `EventPriceReaction`に正式統一。設計書・DB設計・API設計・FEAT関連資料・コード上のEntity/Model/DTO/Repository等すべてで今後この名称を使用する |
-| FX Pips calculation | 概要設計書v1.5 5.7節・要件定義書v1.4 10章で「Backendを正とする」ことが明記済み |
-| Data Quality | 概要設計書v1.5 13章(データ品質管理・運営機能)・13.1節(絶対ルール)で明記済み |
-| Subscription / Entitlement | 概要設計書v1.5 25章・本書9.1節で「Entitlement設計はMVP、決済実装はFEAT-227として分離・タイミング未定」の方針が明記済み。DB詳細設計でSubscription(契約状態)とEntitlement(機能単位フラグ)を別テーブルとして具体化 |
-| Forecast missing handling | 要件定義書v1.4 11.2節・概要設計書v1.5 9.3節で`Surprise = null`(0禁止)と明記済み |
-| Historical statistics denominator | 概要設計書v1.5 10.2/10.3節で「分析可能件数/全件数を提示する」ルールが明記済み |
-| EventExplanation | **DB詳細設計でMVP必須Entityとして再確認(2026-09-16)**: 概要設計書v1.5 5.6節・要件定義書v1.4 27章に明記。DB詳細設計での欠落指摘を受けHQが復活を確定 |
+| FX Pips calculation | 概要設計書v1.6 5.7節・要件定義書v1.5 10章で「Backendを正とする」ことが明記済み |
+| Data Quality | 概要設計書v1.6 13章(データ品質管理・運営機能)・13.1節(絶対ルール)で明記済み |
+| Subscription / Entitlement | 概要設計書v1.6 25章・本書9.1節で「Entitlement設計はMVP、決済実装はFEAT-227として分離・タイミング未定」の方針が明記済み。DB詳細設計でSubscription(契約状態)とEntitlement(機能単位フラグ)を別テーブルとして具体化 |
+| Forecast missing handling | 要件定義書v1.5 11.2節・概要設計書v1.6 9.3節で`Surprise = null`(0禁止)と明記済み |
+| Historical statistics denominator | 概要設計書v1.6 10.2/10.3節で「分析可能件数/全件数を提示する」ルールが明記済み |
+| EventExplanation | **DB詳細設計でMVP必須Entityとして再確認(2026-09-16)**: 概要設計書v1.6 5.6節・要件定義書v1.5 27章に明記。DB詳細設計での欠落指摘を受けHQが復活を確定 |
 
 **ディレクトリ構成の提案について**: HQから`docs/requirements/`・`docs/design/{screen,feature,database,api}/`のような階層構成の提案があったが、HQ自身の指示にある「既存構成を勝手に大幅変更しない」という原則に従い、**今回は変更していない**。現在の`docs/projects/fx-event-analyzer/`配下のフラット構成(requirements.md / design.md / features.md / ui-screens.md / implementation-notes-for-hq.md)は、他プロジェクト(moyasuka・bgm-pipeline)と同じ`docs/projects/<name>/`規約に沿っており、相互参照リンクも既に機能している。ディレクトリ階層化が必要かどうかは、DB詳細設計・API詳細設計のドキュメントが増えた際に改めてHQの判断を仰ぎたい。
 
@@ -324,17 +335,17 @@ HQ指示の7項目に沿って報告する。**コードは一切存在しない
 ```
 docs/projects/fx-event-analyzer/
 ├── README.md                        … プロジェクト概要・開発体制・経緯
-├── requirements.md                  … 要件定義書 v1.4
-├── design.md                        … 概要設計書 v1.4
+├── requirements.md                  … 要件定義書 v1.5
+├── design.md                        … 概要設計書 v1.6
 ├── implementation-notes-for-hq.md   … 詳細設計インプット情報
-├── ui-screens.md                    … 画面設計・UI方針 v1.0
-├── features.md                      … 本書。機能一覧 v1.4(FEAT-ID)
-├── db-design.md                     … DB詳細設計 v4.1
-├── api-design.md                    … API詳細設計書 v1.2
+├── ui-screens.md                    … 画面設計・UI方針 v1.1
+├── features.md                      … 本書。機能一覧 v1.6(FEAT-ID)
+├── db-design.md                     … DB詳細設計 v4.2
+├── api-design.md                    … API詳細設計書 v1.3
 └── mockups/
     └── screens-overview-dark-v1.png
 ```
 
 ## 17. 次のフェーズ
 
-機能一覧v1.2はHQにより正式な基準仕様として確定した(v1.3、2026-09-16)。DB詳細設計はHQが全17件の確認事項に最終判断を下し、`db-design.md` v4.0として完成した。HQレビューの後、API詳細設計へ進む。Claude Codeは実装未着手のまま待機する。
+全設計横断監査(H-1/H-2/M-1〜M-5/L-1〜L-6/A-6)での確定事項を各設計書へ反映済み。HQによる再監査(PASS判定)後、設計凍結→実装フェーズへ移行する。
