@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.0
+# FX Event Analyzer: DB詳細設計 v4.1
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -20,6 +20,7 @@
   - `EventPriceReaction.max_upward`/`max_downward`の定義を「pre_release_price基準・期間内の最大上昇幅/下降幅」に確定
   - RLS論理方針・Delete/Cascade方針(RESTRICT中心)・FxPriceのデータ保持範囲(イベント時間窓中心)を最終確定
   - 概要設計書・要件定義書に残る「EconomicEvent = EventSnapshot」等の旧仕様表現は、既にv1.4で修正済みであることを再確認(11章参照)
+- **v4.1**(今回): API詳細設計レビュー(B-5)での確定事項を反映。Partial Match Search(部分一致検索)の性能を担保するため、`pg_trgm` + GIN Indexの追加方針を12章に明記(HQ確定、2026-09-16)。DB Migrationは実施していない(ドキュメント追記のみ)
 
 ---
 
@@ -427,14 +428,23 @@ FX価格の実際の小数桁数は`FxPair.price_precision`(通貨ペアごと)�
 
 ---
 
-## 12. Search機能に必要なIndex(現時点の到達点)
+## 12. Search機能に必要なIndex(API詳細設計で確定、v4.1)
 
-Search機能(FEAT-110〜115)の最終Index構成はAPI詳細設計で確定する。本書では検索対象Entityと主要検索カラムの候補のみ記録する:
+Search機能(FEAT-110〜115)は、API詳細設計(api-design.md v1.2)でPartial Match Search(部分一致検索、`ILIKE '%…%'`)を採用することが確定した。標準のB-tree Indexは部分一致検索を効率的に処理できないため、以下のカラムに**`pg_trgm`拡張によるGIN Index**を追加する方針を確定する(HQ確定、2026-09-16)。
 
-- `EconomicIndicator`: `name`(部分一致検索の可能性、全文検索Indexの要否は検索要件次第)
-- `EconomicEvent`: `release_datetime`(範囲検索、3.5節のIndexで対応済み)
-- `FxPair`: `symbol`
-- `EconomicIndicator.country_code` / `currency_code`(絞り込み検索)
+| テーブル.カラム | Index種別 | 目的 |
+|---|---|---|
+| `economic_indicators.name` | GIN(`pg_trgm`) | Indicator検索(部分一致) |
+| `economic_indicators.code` | GIN(`pg_trgm`) | Indicator検索(部分一致) |
+| `fx_pairs.symbol` | GIN(`pg_trgm`) | FX Pair検索(部分一致) |
+
+**Event検索**: `economic_events`に独立した`event_name`カラムは存在しないため(API詳細設計A-6でIndicator基準の検索に変更確定)、`economic_indicators.name`/`code`のGIN Indexを経由する。`EconomicEvent`側への追加Index(部分一致用)は不要。
+
+**Currency検索**: `currency_code`は静的なCode→Nameマッピング(アプリケーション側、DBクエリを介さない)で対応するため、Index対象外(API詳細設計A-5)。
+
+**country_code / importance等の絞り込み検索**: 完全一致(`=`)のフィルタであり、標準のB-tree Index(3.4節`economic_indicators`テーブルへの追加を推奨)で十分。GIN Indexは不要。
+
+DB Migration(`CREATE EXTENSION pg_trgm`・`CREATE INDEX ... USING GIN (... gin_trgm_ops)`)は今回実施していない。実装フェーズでの対応事項とする。
 
 具体的なIndex構成(pg_trgm等の全文検索Indexの要否含む)は、API詳細設計で検索対象・検索条件が確定してから決定する。
 

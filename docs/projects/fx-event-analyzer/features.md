@@ -329,7 +329,8 @@ docs/projects/fx-event-analyzer/
 ├── implementation-notes-for-hq.md   … 詳細設計インプット情報
 ├── ui-screens.md                    … 画面設計・UI方針 v1.0
 ├── features.md                      … 本書。機能一覧 v1.4(FEAT-ID)
-├── db-design.md                     … DB詳細設計 v4.0
+├── db-design.md                     … DB詳細設計 v4.1
+├── api-design.md                    … API詳細設計書 v1.2
 └── mockups/
     └── screens-overview-dark-v1.png
 ```

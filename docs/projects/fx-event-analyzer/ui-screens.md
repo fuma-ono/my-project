@@ -230,7 +230,8 @@ docs/projects/fx-event-analyzer/
 ├── implementation-notes-for-hq.md   … 詳細設計インプット情報(制約・リスク・未確定事項)
 ├── ui-screens.md                    … 本書。画面設計・UI方針 v1.0
 ├── features.md                      … 機能一覧 v1.4
-├── db-design.md                     … DB詳細設計 v4.0
+├── db-design.md                     … DB詳細設計 v4.1
+├── api-design.md                    … API詳細設計書 v1.2
 └── mockups/
     └── screens-overview-dark-v1.png … UIモックアップ(ダーク版、11画面)
 ```

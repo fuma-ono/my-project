@@ -1,8 +1,8 @@
-# FX Event Analyzer: API詳細設計書 v1.1
+# FX Event Analyzer: API詳細設計書 v1.2
 
-**出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受け、v1.1として本書を新規作成・反映した。
+**出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
-**位置づけ**: 本書はAPI設計ドキュメントであり、API実装・Swift実装・DB Migration・Supabase変更・コード変更は一切行っていない(HQ指示「設計書の修正のみ」)。要件定義書・概要設計書・DB詳細設計書は本書の作成にあたり変更していない。変更が必要と考えられる箇所は8章「他ドキュメントへの変更候補」として報告するに留める。
+**位置づけ**: 本書はAPI設計ドキュメントであり、API実装・Swift実装・DB Migration・Supabase変更・コード変更は一切行っていない(HQ指示「設計書の修正のみ」)。要件定義書・概要設計書・DB詳細設計書は本書の作成にあたり変更していない。変更が必要と考えられる箇所は43章「他ドキュメントへの変更候補」として報告するに留める。
 
 ## 変更履歴
 
@@ -13,16 +13,24 @@
   - A-3: Data QualityのDB↔API状態名マッピング表を明記。`NOT_ANALYZABLE`はBackendの分析可否判定により生成される旨を明記(7章)
   - A-4: `Profile.timezone`案を撤回。Home等のRequestで明示的にtimezoneを受け取る方式に変更。Account APIからtimezone項目を削除(6章・24章)
   - A-5: Currencyマスタは復活させず、静的Code→Nameマッピングで対応する方針を明記(23章)
-  - A-6: `event_name`はDBに追加せず、Event検索は`EconomicIndicator.name`/`code`基準に変更。要件定義書等の`event_name`記載は変更候補として報告(23章、8章)
+  - A-6: `event_name`はDBに追加せず、Event検索は`EconomicIndicator.name`/`code`基準に変更。要件定義書等の`event_name`記載は変更候補として報告(23章、43章)
   - A-7: `DATA_PENDING`/`DATA_UNAVAILABLE`をError Codeから削除。200 OK + status fieldの原則を明記(4章・7章)
   - A-8: Historical Comparison APIに`timeframe=all`を追加(21章)
   - B-1: Entitlement・Endpoint対応表を追加(27.1節)
   - B-2: Reaction API `timeframe=all`のResponse形状(配列)を明記(18章)
   - B-3: Search Filterの範囲をfeatures.md/要件定義書のSource of Truthに基づき現状維持と確認(23章)
   - B-4: Historical ComparisonのeventsにPaginationを追加(21章)
-  - B-5: Partial Match Search性能についてpg_trgm + GIN Index案を技術検討として明記、DB設計への変更候補として報告(10章、8章)
+  - B-5: Partial Match Search性能についてpg_trgm + GIN Index案を技術検討として明記、DB設計への変更候補として報告(23章、43章)
   - B-6: `available_timeframes`の算出条件に`release_datetime_precision`を反映するルールを明記(11.1節)
   - B-7: Backend↔Postgres接続方式について技術提案を明記(2.3節)
+- **v1.2**(今回): v1.1で残課題として提示した6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答(2026-09-16)を反映
+  - B-1: Advanced Statisticsを段階的制御(`available`/`required_entitlement`/`data`)の具体的なResponse形状として確定(21.2節・27.1節)
+  - B-6: `release_datetime_precision`→`available_timeframes`ルールを保守的な初期ルールとして正式確定(将来調整可能)(11.1節)
+  - B-7: service_role接続 + Backend Authorizationを正式採用。7段階の処理順序を明記(2.3.1節)
+  - A-1: Revision APIはEntitlement制限なし(認証済みユーザーなら取得可能)と確定(27.1節)
+  - B-5: pg_trgm + GIN Index案を正式採用。対象カラムをdb-design.mdへ追記(db-design.md側の変更、本書23.2章から参照)
+  - A-6: `event_name`関連は要件定義書側の変更候補として確定(要件定義書は今回も変更していない)(43章)
+  - timezone: Request Parameter方式を正式採用として再確認(6章、変更なし)
 
 ---
 
@@ -88,16 +96,21 @@ Request Header：`Authorization: Bearer <access_token>`
 
 ユーザー固有データについてはSupabase RLSも利用する。
 
-### 2.3.1 Backend↔Postgres接続方式(v1.1で追加、B-7)
+### 2.3.1 Backend↔Postgres接続方式(v1.2で確定、B-7)
 
-**技術提案(HQ確認事項)**: Backendは**service_role接続を基本とし、Authorization(2.3節)をアプリケーション層(Backend)で一元的に実施する**方式を提案する。
+**正式採用**: Backendは**service_role接続 + Backend Authorization**を使用する。RLSを無効化したことを理由にAuthorizationを省略してよい設計にはしない。**Backend Authorizationを必須とする。**
 
-理由:
-- 本書2.3節は既に「認証だけでなくBackend側で権限チェックを行う」ことを原則としており、Backendが自前でAuthorizationロジックを持つ設計が前提になっている。JWTをそのままPostgRESTへ転送しRLSを一次的な権限境界とする方式は、この既存方針と役割が重複する。
-- db-design.md 6章のRLS方針(ユーザー固有データ: 本人のみSELECT可・共有データ: 認証済み全員SELECT可、書き込みはservice_roleのみ)は、service_role接続を前提にしても矛盾なく成立する(RLSは「万一Backendを経由しない直接アクセスが将来発生した場合の防御」として有効なまま残せる)。
-- Entitlement等の複雑な業務ロジック(B-1のEndpoint×feature_code判定等)は、RLSのポリシー式だけで表現するには複雑すぎるため、アプリケーション層での判定が現実的。
+**処理順序(確定)**:
 
-**結論(提案)**: service_role接続 + Backend Authorizationを主、RLSを「直接アクセス発生時の保険」として維持する。この提案の採否はHQ確認事項とする(8章参照)。
+1. ClientからSupabase JWTを受信
+2. BackendでJWTを検証
+3. `user_id`を確定
+4. Endpoint権限を確認(27.1節のEndpoint×feature_code対応表)
+5. Entitlementを確認
+6. BackendからPostgreSQLへアクセス(service_role接続)
+7. DTOとしてResponseを返す
+
+service_role credentialはClientへ絶対に公開しない。db-design.md 6章のRLS方針(ユーザー固有データ: 本人のみSELECT可・共有データ: 認証済み全員SELECT可、書き込みはservice_roleのみ)は、万一Backendを経由しない直接アクセスが将来発生した場合の防御としてテーブル側に維持する(RLSポリシー自体は有効なまま残すが、Backend経由の通常フローではservice_role接続によりRLSはバイパスされ、Authorization4〜5がアクセス制御の主たる境界となる)。
 
 ---
 
@@ -319,9 +332,9 @@ MVPで対応するTimeframe：1m / 5m / 15m / 30m / 60m
 
 BEFOREというTimeframeは作らない。Release前価格は`pre_release_price`として別管理する。`EventPriceReaction`のtimeframeには、1m / 5m / 15m / 30m / 60mのみを許可する。
 
-## 11.1 available_timeframesの算出条件(v1.1で追加、B-6)
+## 11.1 available_timeframesの算出条件(v1.2で確定、B-6)
 
-Event Detail API(14章)が返す`available_timeframes`は、`EconomicEvent.release_datetime_precision`を考慮して算出する。**発表時刻の精度が低いイベントを、1m等の高精度な市場反応分析対象として扱わない**という概要設計書8.2節の原則を、以下のルール(Claude Code提案、HQ確認事項)として明文化する。
+Event Detail API(14章)が返す`available_timeframes`は、`EconomicEvent.release_datetime_precision`を考慮して算出する。**発表時刻の精度が低いイベントを、1m等の高精度な市場反応分析対象として扱わない**という概要設計書8.2節の原則を、以下のルールとして正式確定する(HQ確定、2026-09-16)。
 
 | `release_datetime_precision` | 除外するtimeframe | 提供するtimeframe |
 |---|---|---|
@@ -330,7 +343,7 @@ Event Detail API(14章)が返す`available_timeframes`は、`EconomicEvent.relea
 | `DATE_ONLY` | `1m`/`5m`を除外 | 15m / 30m / 60m |
 | `UNKNOWN` | `1m`/`5m`を除外 | 15m / 30m / 60m |
 
-この閾値(何分足まで除外するか)は暫定案であり、実データでの検証結果を踏まえて調整可能とする。8章「HQ確認事項」参照。
+**これはデータ精度を踏まえた保守的な初期ルールとして扱う。** 将来的に実データを検証し、必要であれば閾値・ルールを変更可能な設計とする(固定値としてハードコードせず、設定変更で調整できる実装を推奨)。
 
 ---
 
@@ -664,7 +677,23 @@ Query：
   "timeframe": "5m",
   "total_events": 20,
   "analyzable_events": 18,
-  "stats": {},
+  "stats": {
+    "average_movement": 0.21,
+    "average_pips": 21.0,
+    "max_movement": 0.55,
+    "min_movement": -0.30,
+    "upward_count": 12,
+    "downward_count": 6,
+    "no_change_count": 0
+  },
+  "advanced_statistics": {
+    "available": true,
+    "required_entitlement": null,
+    "data": {
+      "average_absolute_movement": 0.28,
+      "average_absolute_pips": 28.0
+    }
+  },
   "events": [],
   "meta": {
     "page": 1,
@@ -677,7 +706,7 @@ Query：
 
 ### 21.2 Response(timeframe=all指定時、v1.1で追加、A-8)
 
-`stats`と`events`内の各要素をtimeframeごとに配列化する。18.1節のReaction APIと同様の考え方で、各eventオブジェクトの中に`reactions: []`(1m〜60mの反応)を持たせる:
+`stats`/`advanced_statistics`と`events`内の各要素をtimeframeごとに配列化する。18.1節のReaction APIと同様の考え方で、各eventオブジェクトの中に`reactions: []`(1m〜60mの反応)を持たせる:
 
 ```json
 {
@@ -686,8 +715,8 @@ Query：
   "total_events": 20,
   "analyzable_events": 18,
   "stats_by_timeframe": [
-    { "timeframe": "1m", "stats": {} },
-    { "timeframe": "5m", "stats": {} }
+    { "timeframe": "1m", "stats": {}, "advanced_statistics": { "available": true, "required_entitlement": null, "data": {} } },
+    { "timeframe": "5m", "stats": {}, "advanced_statistics": { "available": true, "required_entitlement": null, "data": {} } }
   ],
   "events": [
     {
@@ -708,6 +737,39 @@ Query：
 ```
 
 これにより、SCR-006(1m〜60mの反応を含む一覧表示)を不要なAPI連打なしで取得できる。
+
+### 21.3 Advanced Statisticsの段階的制御(v1.2で確定、B-1)
+
+Advanced Statistics全体を403で拒否するのではなく、**`VIEW_HISTORICAL`を持つユーザーであれば`stats`(Basic Statistics)は常に取得可能**とし、`VIEW_ADVANCED_STATS`を持たないユーザーには`advanced_statistics`オブジェクト自体は返しつつ、中身を以下のように制御する。
+
+**`VIEW_ADVANCED_STATS`を持たない場合**:
+
+```json
+{
+  "advanced_statistics": {
+    "available": false,
+    "required_entitlement": "VIEW_ADVANCED_STATS",
+    "data": null
+  }
+}
+```
+
+**`VIEW_ADVANCED_STATS`を持つ場合**:
+
+```json
+{
+  "advanced_statistics": {
+    "available": true,
+    "required_entitlement": null,
+    "data": {
+      "average_absolute_movement": 0.28,
+      "average_absolute_pips": 28.0
+    }
+  }
+}
+```
+
+`available: false`は「データが存在しない」のではなく「Entitlement不足で見られない」ことを意味し、Clientはこれを明確に区別して表示する(例: 「Proで解放」バナー等)。この区別を必須のResponse契約とする。
 
 分析不能EventはStatisticsから除外する。ただし`total_events`と`analyzable_events`は分けて返す。これにより、「過去20回あるが、分析可能なのは18回」という状態をUI上で表現できる。
 
@@ -749,13 +811,27 @@ type：all / indicator / event / fx_pair / currency
 
 **Indicator**: `EconomicIndicator.name` / `EconomicIndicator.code`
 
-**Event**(v1.1で修正、A-6): ~~event name~~ → `EconomicIndicator.name` / `EconomicIndicator.code`(Eventは`indicator_id`経由でIndicatorに紐づくため、Indicator名・コードを検索基準とする)。加えて`release_datetime`等の日付属性による絞り込みを想定する。**`EconomicEvent`に独立した`event_name`カラムは存在しないため、これへの直接検索は行わない。** 要件定義書5.2節等に残る`event_name`の記載は8章「他ドキュメントへの変更候補」で報告する。
+**Event**(v1.1で修正、A-6): ~~event name~~ → `EconomicIndicator.name` / `EconomicIndicator.code`(Eventは`indicator_id`経由でIndicatorに紐づくため、Indicator名・コードを検索基準とする)。加えて`release_datetime`等の日付属性による絞り込みを想定する。**`EconomicEvent`に独立した`event_name`カラムは存在しないため、これへの直接検索は行わない。** 要件定義書5.2節等に残る`event_name`の記載は43章「他ドキュメントへの変更候補」で報告する。
 
 **FX Pair**: `FxPair.symbol`
 
 **Currency**(v1.1で修正、A-5): `currency_code`(DB上のSource of Truth)に加え、**アプリケーション側の静的なCode→Nameマッピング**(例: `USD → US Dollar`、`JPY → Japanese Yen`、`EUR → Euro`)を用いてcurrency nameでも検索可能にする。DBに`currencies`マスタテーブルは追加しない。将来Currency情報が大幅に増える場合のみマスタテーブル化を再検討する。
 
-MVPでは部分一致検索。Full Text SearchはMVP対象外(10章参照)。
+MVPでは部分一致検索。Full Text SearchはMVP対象外。
+
+### 23.2 Search Index方針(v1.2で確定、B-5)
+
+**pg_trgm + GIN Indexを正式採用する。** 部分一致検索(`ILIKE '%…%'`)は標準のB-tree Indexでは効率的に利用できないため、以下のカラムに`pg_trgm`拡張によるGIN Indexを追加する方針を確定した。
+
+| テーブル.カラム | 目的 |
+|---|---|
+| `EconomicIndicator.name` | Indicator検索(23.1節) |
+| `EconomicIndicator.code` | Indicator検索(23.1節) |
+| `FxPair.symbol` | FX Pair検索(23.1節) |
+
+`currency_code`は静的マッピングによる検索(DBクエリ不要)のためIndex対象外。`event`検索は`EconomicIndicator.name`/`code`のIndexを経由するため、`EconomicEvent`側への追加Indexは不要。
+
+**この変更はdb-design.mdへの追記対象であり、本ラウンドでdb-design.md v4.1として反映した(DB Migrationは未実施、ドキュメント上の追記のみ)。** 詳細はdb-design.md 7章「Index一覧」参照。
 
 ---
 
@@ -817,21 +893,24 @@ MVP：VIEW_BASIC_EVENT / VIEW_HISTORICAL / VIEW_MARKET_REACTION / VIEW_ADVANCED_
 
 EntitlementはPlan名ではなくFeature単位で管理する。
 
-## 27.1 Endpoint × feature_code対応表(v1.1で追加、B-1)
+## 27.1 Endpoint × feature_code対応表(v1.2で確定、B-1・A-1)
 
-Backend側の各Endpointが要求するEntitlementを以下の通りとする。満たさない場合`403 FEATURE_NOT_ENTITLED`を返す。
+Backend側の各Endpointが要求するEntitlementを以下の通り確定する。満たさない場合`403 FEATURE_NOT_ENTITLED`を返す。
 
 | 対象 | Endpoint | 必要なfeature_code |
 |---|---|---|
 | Event Detail | `GET /events/{id}` | `VIEW_BASIC_EVENT` |
-| Historical Comparison | `GET /indicators/{id}/comparison` | `VIEW_HISTORICAL` |
+| **Event Revision(v1.2で追加)** | `GET /events/{id}/revisions` | **Authentication Required / Entitlementなし** |
+| Historical Comparison(Basic Statistics) | `GET /indicators/{id}/comparison`の`stats` | `VIEW_HISTORICAL` |
+| Historical Comparison(Advanced Statistics) | `GET /indicators/{id}/comparison`の`advanced_statistics` | `VIEW_ADVANCED_STATS`(21.3節参照。403にはせず`available:false`で表現) |
 | Market Reaction | `GET /events/{id}/reaction`、`GET /events/{id}/reaction/chart` | `VIEW_MARKET_REACTION` |
-| Advanced Statistics | `GET /indicators/{id}/comparison`の`stats`詳細項目(average_absolute_movement等の高度統計) | `VIEW_ADVANCED_STATS` |
 | Historical Event Detail | `GET /events/{id}/history` | `VIEW_HISTORICAL` |
 
 Home / Indicators / Indicator Detail / Search / Account / Subscription / Entitlement APIは、認証済みであれば全ユーザーがアクセス可能とし、特定feature_codeを要求しない。
 
-「Advanced Statistics」は`VIEW_ADVANCED_STATS`を持たないユーザーに対し、`GET /indicators/{id}/comparison`自体を403にするのではなく、**`stats`内の高度な項目(average_absolute_movement等)のみを省略またはnullにし、基本統計(average_movement等)は`VIEW_HISTORICAL`のみで返す**という段階的な制御を提案する(8章のHQ確認事項参照)。
+**Event Revision APIについて(HQ確定、v1.2)**: `GET /events/{id}/revisions`はMVPではEntitlement制限を設けない。認証済みユーザーであれば取得可能とする。理由: Revisionは課金対象となる高度分析そのものではなく、イベントデータの履歴・事実情報であるため。
+
+**Advanced Statisticsについて(HQ確定、v1.2)**: `GET /indicators/{id}/comparison`自体を403にするのではなく、`VIEW_HISTORICAL`を持つユーザーには常に`stats`(Basic Statistics)を返し、`advanced_statistics`は`VIEW_ADVANCED_STATS`の有無に応じて`available`/`required_entitlement`/`data`の3フィールドで利用可否を明示する(21.3節参照)。
 
 ---
 
@@ -1079,4 +1158,22 @@ API設計確定後に実装へ移行する。
 
 ---
 
-# API詳細設計書 v1.1 END
+# 43. 他ドキュメントへの変更候補(v1.2で新設)
+
+本書の作成にあたり、要件定義書・概要設計書・DB詳細設計書は変更していない。以下は、本書の内容と既存ドキュメントとの間で修正が必要と考えられる箇所を、変更候補として報告するものである(要件定義書・概要設計書は今回も変更していない)。
+
+### 43.1 要件定義書5.2節「event_name」(A-6、HQ確定: 変更候補として確定)
+
+要件定義書v1.4 5.2節は`event_name`をイベントの必須管理項目として記載しているが、db-design.md(EconomicEvent/EventSnapshot)にはこれに相当するカラムが存在せず、本書23.1節でもEvent検索を`EconomicIndicator.name`/`code`基準とする設計にした。**要件定義書側の該当記載を「Indicator基準のEvent管理・検索」に整合するよう修正する変更候補として確定したが、要件定義書自体は変更していない。** HQによる要件定義書の正式な更新をお願いしたい。
+
+### 43.2 要件定義書9.1節・概要設計書8.1節「timezone」の扱い(補足の要否、HQ確認)
+
+要件定義書・概要設計書は「DB内部はUTC、表示時にクライアント側でローカル変換」という原則を定めている。本書ではこの原則を維持しつつ、Home等一部APIで「Requestでtimezoneを明示的に受け取る」運用を追加した(6章)。この運用が原則の範囲内の実装詳細と扱うか、要件定義書・概要設計書に一行の補足を加えるかは、HQのご判断次第である。**Claude Code側からは、既存の原則と矛盾しないため必須の修正ではないと考えるが、確認のため変更候補として記載する。**
+
+### 43.3 db-design.md「Search Index」(B-5、反映済み)
+
+pg_trgm + GIN Indexの追加(23.2節)は、HQ指示に基づき**db-design.md側に既に反映済み**(db-design.md v4.1、本章とは別に実施)。ドキュメント上の追記のみで、DB Migrationは実施していない。
+
+---
+
+# API詳細設計書 v1.2 END
