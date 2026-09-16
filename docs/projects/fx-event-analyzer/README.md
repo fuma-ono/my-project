@@ -7,6 +7,8 @@
 - [requirements.md](./requirements.md) — 要件定義書 v1.2
 - [design.md](./design.md) — 概要設計書 v1.1
 - [implementation-notes-for-hq.md](./implementation-notes-for-hq.md) — 詳細設計のためのHQ向け情報整理(制約・リスク・API依存部分・未確定事項)
+- [ui-screens.md](./ui-screens.md) — 画面設計・UI方針 v1.0(モックアップ・画面一覧・画面遷移)
+- [mockups/](./mockups/) — UIモックアップ画像
 
 ## 開発体制(2026-09〜)
 
@@ -22,9 +24,10 @@
 2. 概要設計書 v1.0 を受領し、実装前レビューを実施(Critical/High 7件を含む指摘)
 3. レビュー結果を反映し、要件定義書 v1.2・概要設計書 v1.1 に改訂
 4. HQより「詳細設計はHQ主導、Claude Codeは実装担当」という開発体制の方針を受領。詳細設計のインプットとなる情報(制約・リスク・未確定事項)を整理(本ディレクトリの`implementation-notes-for-hq.md`)
+5. HQより画面設計・UIモックアップ(ダーク版、11画面)を受領し保存。ナビゲーション構成が5タブ→4タブ(Analysisタブ廃止)に更新されたことを確認(本ディレクトリの`ui-screens.md`)
 
 ## 次のアクション
 
-- HQ側で詳細設計書を作成(`implementation-notes-for-hq.md`の内容を参考情報として利用可能)
+- HQ側で「機能一覧」の詳細設計、および各画面のUI詳細・API・DBとの対応関係を確定する(`implementation-notes-for-hq.md`・`ui-screens.md`の内容を参考情報として利用可能)
 - 経済指標API(Trading Economics / EODHD等)へ、エンドユーザーへの商用配信権込みで正式見積もりを取る(requirements.md 6.2節)。詳細設計自体はAPI未選定でも進められる(Adapter抽象化のため)
 - 詳細設計書が確定次第、Claude Codeが実装フェーズに入る
