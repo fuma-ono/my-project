@@ -4,11 +4,11 @@
 
 現在のフェーズ: **詳細設計(HQ主導)**。実装(DB作成・API実装・UI実装)はまだ開始していない。
 
-- [requirements.md](./requirements.md) — 要件定義書 v1.2
-- [design.md](./design.md) — 概要設計書 v1.1
+- [requirements.md](./requirements.md) — 要件定義書 v1.3
+- [design.md](./design.md) — 概要設計書 v1.2
 - [implementation-notes-for-hq.md](./implementation-notes-for-hq.md) — 詳細設計のためのHQ向け情報整理(制約・リスク・API依存部分・未確定事項)
 - [ui-screens.md](./ui-screens.md) — 画面設計・UI方針 v1.0(モックアップ・画面一覧・画面遷移)
-- [features.md](./features.md) — 機能一覧 v1.0(FEAT-ID、優先度P0/P1/P2/OUT)
+- [features.md](./features.md) — 機能一覧 v1.1(FEAT-ID、優先度P0/P1/P2/OUT)
 - [mockups/](./mockups/) — UIモックアップ画像
 
 ## 開発体制(2026-09〜)
@@ -27,10 +27,11 @@
 4. HQより「詳細設計はHQ主導、Claude Codeは実装担当」という開発体制の方針を受領。詳細設計のインプットとなる情報(制約・リスク・未確定事項)を整理(本ディレクトリの`implementation-notes-for-hq.md`)
 5. HQより画面設計・UIモックアップ(ダーク版、11画面)を受領し保存。ナビゲーション構成が5タブ→4タブ(Analysisタブ廃止)に更新されたことを確認(本ディレクトリの`ui-screens.md`)
 6. HQより機能一覧v1.0(FEAT-ID)を受領し保存。既存設計との整合性確認を実施し、矛盾・懸念3件(Revised Previousの定義・Subscription実装タイミング・Indicator/FXPairの関連付け不足)を報告(本ディレクトリの`features.md`)
+7. HQより上記3件への回答を受領し、要件定義書v1.3・概要設計書v1.2・機能一覧v1.1に反映。Subscriptionの優先度をP1に変更(ただし決済実装はFEAT-227として分離・実装タイミング未定のまま)、Indicator↔FXPairの多対多関連(IndicatorFxPair)を追加、EventRevisionの「改定後」ラベル表示ルールを明記
 
 ## 次のアクション
 
 - HQ側で「画面×機能」「画面×機能×API×DB」の対応表を作成し、詳細設計を完成させる(`implementation-notes-for-hq.md`・`ui-screens.md`・`features.md`の内容を参考情報として利用可能)
-- features.md 15.1節の3件の矛盾・懸念について、HQの判断を確認する
 - 経済指標API(Trading Economics / EODHD等)へ、エンドユーザーへの商用配信権込みで正式見積もりを取る(requirements.md 6.2節)。詳細設計自体はAPI未選定でも進められる(Adapter抽象化のため)
+- FEAT-227(決済実装)の着手時期(β版の前か後か)をリリース計画段階でHQが判断する
 - 詳細設計書が確定次第、Claude Codeが実装フェーズに入る

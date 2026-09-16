@@ -1,9 +1,9 @@
-# FXイベント反応分析アプリ 概要設計書 v1.1
+# FXイベント反応分析アプリ 概要設計書 v1.2
 
 ## 変更履歴
 
 - **v1.0**: 初版
-- **v1.1**(今回): 設計レビューの指摘を反映
+- **v1.1**: 設計レビューの指摘を反映
   - システム構成にScheduler / Queue / Ingestion Workerを追加(2章)
   - BackendをRead APIとIngestion Workerに責務分離(4章)
   - EventSnapshot / EventRevisionを追加、Event中心のER図を更新(5章)
@@ -15,6 +15,10 @@
   - キャッシュ方針(DB保存値を返す、Redis等は現時点で必須としない)を追加(12章、新設)
   - データ品質管理・運営者向け機能の分離方針を追加(13章、新設)
   - MVP範囲を再定義(28章)
+- **v1.2**(今回): 機能一覧レビューでの整合性確認3点(FEAT-045/224/028)に対するHQ回答を反映
+  - Indicator↔FXPairの多対多関連(IndicatorFxPair)をER図・Indicator節に追加(5章)
+  - EventRevisionのUI表示ルールを「改定後」ラベルで明示区別するよう強化(5.4節)
+  - Subscriptionを「Entitlement設計・プラン概念はMVP対象、決済(StoreKit)実装のタイミングはBeta前後で別途判断」という方針に更新(25章)
 
 ---
 
@@ -161,6 +165,10 @@ User
 
 Indicator
  │
+ ├── IndicatorFxPair[]    … Indicator×FXPairの多対多関連(新設、5.2節)
+ │        │
+ │        └── FXPair
+ │
  └── EconomicEvent (= EventSnapshot、発表時点の値。不変)
         │
         ├── EventRevision[]     … 後日の改定履歴(参考情報。分析には使わない)
@@ -182,6 +190,14 @@ Person
 
 指標固有の情報: indicator_id / name / country / currency / category / unit / importance / description / **favorable_direction**(higher_is_favorable / lower_is_favorable / not_applicable、9.2節) / source
 
+**Indicator↔FXPairの関連(新設)**: 「関連通貨ペア表示」(機能一覧 FEAT-028)に必要な、指標ごとの分析対象FXペアを、固定文字列ではなく`IndicatorFxPair`という多対多の中間テーブルで管理する。
+
+```
+Indicator ── IndicatorFxPair ── FXPair
+```
+
+具体的なテーブル名・カラム・制約・関連付けルール(例: 指標ごとに主要ペア/準主要ペアの区別を持たせるか等)はDB詳細設計で確定する(HQ方針、2026-09)。
+
 ### 5.3 EconomicEvent(= EventSnapshot)
 
 **発表された瞬間の値を記録する、不変(immutable)のレコード。** 一度保存した`actual`・`previous`は、後日の改定があっても書き換えない。
@@ -194,7 +210,7 @@ Person
 
 管理情報: revision_id / event_id / field(actual/previousのいずれか) / old_value / new_value / revised_at(改定が判明した日時) / revision_source
 
-UI上は「参考情報: この指標は後日◯◯に改定されました」として、Snapshotの値とは別枠で表示する。
+**UI表示ルール(HQ回答、2026-09で明確化)**: UI上は「参考情報: この指標は後日◯◯に改定されました」として、Snapshotの値とは別枠で表示する。改定値を表示する箇所には必ず**「改定後」等のラベルを付し、発表時点(Snapshot)の値と視覚的にも文言上も明確に区別する。** 発表時点の分析結果(Surprise・市場反応・統計)は、改定値によって書き換えない(5.1節原則、要件定義書v1.3 5.1節と同じ)。機能一覧のFEAT-045「Revised Previous表示」は、この`EventRevision`に基づく改定履歴の参考表示を指す。`EconomicEvent`に可変の`revised_previous`フィールドを再度持たせることはしない。
 
 ### 5.5 FXPair
 
@@ -379,13 +395,33 @@ v1.0の内容を維持する。画面構成(Home/Indicators/Analysis/Search/Sett
 
 ---
 
-## 25. サブスクリプション
+## 25. サブスクリプション(改訂: MVPスコープをHQが明確化)
 
-### 25.1 Free / Pro
+### 25.1 MVPスコープの区分(新設、HQ回答2026-09)
+
+機能一覧レビューでFEAT-224(Subscription)の優先度がP2→**P1**に変更された。ただし、これは「MVPで決済まで完成させる」という意味ではなく、以下のように**設計対象と実装タイミングを分離する**方針である。
+
+**MVP設計対象(P1、Free/Proへ拡張可能な設計をMVPから作り込む)**:
+
+- Free / Proのプラン概念
+- ユーザーの現在プランの管理
+- 機能アクセス判定(Entitlement)ロジック
+- Backend側のEntitlementデータ構造(将来のApp Store Subscription導入を前提とした設計)
+- UI上のプラン表示
+
+**実装タイミングを別途判断するもの(β版前後で決定)**:
+
+- App Store決済(StoreKit)の実装
+- 購入処理・更新・解約
+- レシート/トランザクション検証
+
+**まとめ**: 「課金を後から追加する設計」ではなく、「最初からFree/Proへ拡張可能な設計にしておき、決済機構の実装タイミングだけ後で判断する」という方針。MVPリリース時点でEntitlementの仕組み自体は動いているが、実際の決済が有効になっているかどうかは、Beta前後の判断次第で変わりうる(例: 当面は全ユーザーをPro相当のEntitlementとして扱い、決済導入時に実際の判定へ切り替える、といった移行パスも取りうる設計にしておく)。
+
+### 25.2 Free / Pro
 
 v1.0の内容を維持する。ただし、Proプランの「AI分析」の実体は、要件定義書12.3節・本書11.2節の将来拡張スコープに従う。**MVP時点のProプランでは、AI分析は出典付き事実要約(11.1節)であり、自由生成のAI解説は含まれない。**
 
-### 25.2 価格
+### 25.3 価格
 
 **Subscriptionの価格は現時点では確定せず、β版での利用状況・継続率・機能利用率を見て決定する方針を維持する。** 月額980円/年額9,800円は初期候補であり、実装時の固定値としない。
 
@@ -417,10 +453,13 @@ v1.0の内容を維持する。Backend(Read API)/DB/Account/Subscriptionを共�
 - 経済指標データ取得・FX価格データ取得(Scheduler/Queue/Worker構成、2章)
 - Event × FX Reaction処理(Snapshotベース、改定に影響されない)
 - 乖離理由: **出典付き事実要約のみ**(11.1節)
+- **Subscriptionの設計**(Free/Proプラン概念・Entitlement判定ロジック・プラン表示。決済実装そのものは含まない、25.1節)
+- **Indicator↔FXPairの多対多関連**(5.2節)
 
 ### MVPでは縮小
 
 - 乖離理由の高度なAI分析(自由生成解説)は実装しない。事実要約+出典URL表示に留める。
+- Subscriptionの決済実装(StoreKit・購入/更新/解約・レシート検証)はβ版前後で実装タイミングを別途判断する(25.1節)。MVP必須なのはEntitlement設計まで。
 
 ### 将来拡張(設計だけ考慮、実装は後回し)
 
