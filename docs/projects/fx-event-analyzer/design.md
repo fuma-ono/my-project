@@ -1,4 +1,4 @@
-# FXイベント反応分析アプリ 概要設計書 v1.4
+# FXイベント反応分析アプリ 概要設計書 v1.5
 
 ## 変更履歴
 
@@ -28,6 +28,9 @@
   - `favorable_direction`のenum値をHIGHER_IS_POSITIVE/LOWER_IS_POSITIVE/NEUTRALに更新(5.2節、9.2節と整合)
   - `release_datetime_precision`の値セットをEXACT/DATE_ONLY/APPROXIMATE/UNKNOWNに具体化(5.3節、8.2節)
   - 5章の節番号を5.1〜5.7に整理(EventSnapshot挿入・EventExplanation昇格のため、旧5.4 EventRevision→5.5、旧5.5 FXPair→5.7に移動)
+- **v1.5**(今回): DB詳細設計の最終確定(HQ確定、2026-09-16 第3回)を受けて5.6節を更新
+  - `EventExplanation`は上書きせず履歴保持とする(複数versionが存在しうる構造に変更、5.6節)
+  - AI拡張カラムはMVPでは追加せず、実装時のMigrationで追加する方針を明記(5.6節)
 
 ---
 
@@ -234,9 +237,9 @@ Indicator ── IndicatorFxPair ── FXPair
 
 11章の「乖離理由」機能に対応するEntity。MVPではAIによる自由形式の推測・解説ではなく、公式情報・公式ソースに基づく事実情報を保持する。
 
-管理情報: id / event_id / explanation_type / summary / source / source_url / published_at / created_at
+管理情報: id / event_id / version(新旧の判別用) / explanation_type / summary / source / source_url / published_at / created_at
 
-将来的にAI分析等へ拡張できる構造にする(11.2節の拡張方針を維持。具体的なカラム設計は`db-design.md`参照)。
+**上書きせず履歴保持とする(DB詳細設計でHQ確定、2026-09-16)。** 同一イベントについて複数のExplanationが存在しうる構造とし、将来的なAI分析導入時にも過去の生成結果を追跡できるようにする。将来的にAI分析等へ拡張できる構造にする(11.2節の拡張方針を維持。AI向けの追加カラムはMVPでは追加せず、実装時のMigrationで追加する方針。具体的なカラム設計は`db-design.md`参照)。
 
 ### 5.7 FXPair
 
