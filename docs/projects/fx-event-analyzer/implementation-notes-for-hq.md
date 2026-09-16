@@ -1,6 +1,6 @@
 # FX Event Analyzer: 詳細設計のためのHQ向け情報整理
 
-**作成方針(2026-09時点)**: 詳細設計の仕様・設計判断はHQ(楓真＋ChatGPT)側で行う。本書はClaude Code側で確定した設計ではなく、HQが詳細設計を作成する際の**インプット情報**として、要件定義書v1.3・概要設計書v1.3・設計レビューで判明した内容を整理したもの。ここに書かれた内容はいずれも**未確定**であり、Claude Codeが独自に決定・実装したものではない。
+**作成方針(2026-09時点)**: 詳細設計の仕様・設計判断はHQ(楓真＋ChatGPT)側で行う。本書はClaude Code側で確定した設計ではなく、HQが詳細設計を作成する際の**インプット情報**として、要件定義書v1.4・概要設計書v1.4・設計レビューで判明した内容を整理したもの。ここに書かれた内容はいずれも**未確定**であり、Claude Codeが独自に決定・実装したものではない。DB詳細設計(`db-design.md`)がHQにより確定した現在は、本書の役割はDB確定前のインプット情報の記録として維持している。
 
 対象読者: HQ。Claude Codeはこの後、HQが確定した詳細設計書を受け取り次第、実装フェーズに入る。
 
@@ -8,7 +8,7 @@
 
 ## 1. 実装上の制約
 
-- **DB**: PostgreSQL(概要設計書で確定済み)。Snapshot(EconomicEvent)は**不変**として扱う必要があり、アプリケーション層で`actual`/`previous`列へのUPDATEを禁止する運用ルール(またはDB側のトリガー/権限制御)が必要になる。改定はすべて`EventRevision`への追記で表現する。
+- **DB**: Supabase + PostgreSQL(DB詳細設計でHQ確定、2026-09)。`EventSnapshot`(`EconomicEvent`とは別Entity、`db-design.md`参照)は**不変**として扱う必要があり、アプリケーション層で`forecast`/`actual`/`previous`列へのUPDATEを禁止する運用ルール(またはDB側のトリガー/権限制御)が必要になる。改定はすべて`EventRevision`への追記で表現する。
 - **クライアント**: React Native + Expo(iOS/iPad)。外部APIキーはクライアントに一切持たせない(概要設計原則5)。
 - **アーキテクチャ**: マイクロサービス化はしない。Read API(ユーザー向け)とIngestion Worker(外部データ取得)の2プロセス構成が前提(概要設計2章・4章)。
 - **Provider抽象化**: HQ指示通り、`EconomicDataProvider` / `FXPriceDataProvider`のAdapter/Interfaceで外部APIを抽象化する。これは概要設計書の原則5(外部APIを直接Frontendから呼ばない)・原則10(データソースの条件を本番採用前に確認する)とも整合しており、Claude Code側から見ても妥当な方向性と考える。
@@ -38,9 +38,7 @@
 - Economic Data Provider / FX Price Providerの最終選定(商用配信権込みの見積もり待ち。要件定義書6.2節)
 - Backend framework(言語・フレームワーク)
 - Scheduler/Queueの技術選定(例: cronベースの単純な定期ジョブか、専用のQueueミドルウェアを使うか)
-- Auth service(自前実装 or マネージドサービス)
-- Cloud infrastructure(ホスティング先)
-- DBホスティング(自前運用 or マネージドPostgreSQL)
+- Cloud infrastructure(ホスティング先。DB/Authは以下の通りSupabaseに確定)
 - Subscription provider(StoreKit直接 or RevenueCat等のラッパー)
 - Notification infrastructure
 - Web framework(将来のWeb版)
@@ -69,6 +67,6 @@
 
 ## 7. Claude Code側からの所感(判断ではなく報告)
 
-- 要件定義書v1.3・概要設計書v1.3の内容(Snapshot/Revision分離・API配信権の必須化・時刻同期ルール・統計除外ルール・AI縮小・Scheduler/Queue/Worker構成・Subscription基盤の段階的実装方針)は、いずれも今回のHQ方針(4章のAdapter抽象化含む)と矛盾しておらず、そのまま詳細設計のベースにできると考えている。
+- 要件定義書v1.4・概要設計書v1.4の内容(Snapshot/Revision分離・API配信権の必須化・時刻同期ルール・統計除外ルール・AI縮小・Scheduler/Queue/Worker構成・Subscription基盤の段階的実装方針)は、いずれも今回のHQ方針(4章のAdapter抽象化含む)と矛盾しておらず、そのまま詳細設計のベースにできると考えている。
 - 唯一、**Snapshot不変性をDB制約で強制するか、アプリケーション層の規律のみに頼るか**は、詳細設計で明示的に決めておくことを推奨する(規律のみに頼ると、将来別の開発者・別のコードパスから誤ってUPDATEしてしまうリスクが残るため)。
 - 上記はあくまで報告であり、最終判断はHQに委ねる。

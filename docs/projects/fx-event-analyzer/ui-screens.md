@@ -2,7 +2,7 @@
 
 **出典**: HQより2026-09-16共有。UIモックアップ(ダーク版)と画面仕様テキストをそのまま設計資料として保存したもの。
 
-**位置づけ**: 本書はUI・画面遷移レベルの設計であり、要件定義書v1.3・概要設計書v1.3(データモデル・API・アーキテクチャ)を置き換えるものではない。画面とAPI/DBとの対応関係は、HQによる詳細設計の次のフェーズで確定する。
+**位置づけ**: 本書はUI・画面遷移レベルの設計であり、要件定義書v1.4・概要設計書v1.4(データモデル・API・アーキテクチャ)を置き換えるものではない。画面とAPI/DBとの対応関係は、HQによる詳細設計の次のフェーズで確定する。
 
 モックアップ内の数値・日時・文言はサンプル。実際の実装では確定した要件・詳細設計を正とする。
 
@@ -207,10 +207,10 @@ Historical Event Detail → Indicator Detail
 
 ### 8.2 整合が取れている箇所(確認事項)
 
-- **SCR-007→SCR-003の必須遷移**: 概要設計書v1.3 13.6節・要件定義書17章が要求する「Historical Event Detail→Indicator Detail」の必須遷移と一致
-- **Home画面のデータ状態表示(取得中/未取得)**: 概要設計書v1.3 8.5節「data_statusをそのまま返し、クライアントはN/A表示する契約」と一致する設計思想
-- **Historical Comparisonの母数表示**: 概要設計書v1.3 10.2節「分析可能件数/全件数を提示する」設計と完全に一致
-- **ForecastなしイベントのHome表示**(モックアップのFOMC「予想 -」): 要件定義書v1.3 11.2節「Forecastなしはsurprise=null」の扱いと整合
+- **SCR-007→SCR-003の必須遷移**: 概要設計書v1.4 13.6節・要件定義書17章が要求する「Historical Event Detail→Indicator Detail」の必須遷移と一致
+- **Home画面のデータ状態表示(取得中/未取得)**: 概要設計書v1.4 8.5節「data_statusをそのまま返し、クライアントはN/A表示する契約」と一致する設計思想
+- **Historical Comparisonの母数表示**: 概要設計書v1.4 10.2節「分析可能件数/全件数を提示する」設計と完全に一致
+- **ForecastなしイベントのHome表示**(モックアップのFOMC「予想 -」): 要件定義書v1.4 11.2節「Forecastなしはsurprise=null」の扱いと整合
 
 ### 8.3 技術的懸念(報告のみ、判断はHQに委ねる)
 
@@ -225,11 +225,12 @@ Historical Event Detail → Indicator Detail
 ```
 docs/projects/fx-event-analyzer/
 ├── README.md                        … プロジェクト概要・開発体制・経緯
-├── requirements.md                  … 要件定義書 v1.3
-├── design.md                        … 概要設計書 v1.3
+├── requirements.md                  … 要件定義書 v1.4
+├── design.md                        … 概要設計書 v1.4
 ├── implementation-notes-for-hq.md   … 詳細設計インプット情報(制約・リスク・未確定事項)
 ├── ui-screens.md                    … 本書。画面設計・UI方針 v1.0
-├── features.md                      … 機能一覧 v1.2
+├── features.md                      … 機能一覧 v1.4
+├── db-design.md                     … DB詳細設計 v3.0
 └── mockups/
     └── screens-overview-dark-v1.png … UIモックアップ(ダーク版、11画面)
 ```

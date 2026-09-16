@@ -4,12 +4,12 @@
 
 現在のフェーズ: **詳細設計(HQ主導)**。実装(DB作成・API実装・UI実装)はまだ開始していない。
 
-- [requirements.md](./requirements.md) — 要件定義書 v1.3
-- [design.md](./design.md) — 概要設計書 v1.3
+- [requirements.md](./requirements.md) — 要件定義書 v1.4
+- [design.md](./design.md) — 概要設計書 v1.4
 - [implementation-notes-for-hq.md](./implementation-notes-for-hq.md) — 詳細設計のためのHQ向け情報整理(制約・リスク・API依存部分・未確定事項)
 - [ui-screens.md](./ui-screens.md) — 画面設計・UI方針 v1.0(モックアップ・画面一覧・画面遷移)
-- [features.md](./features.md) — 機能一覧 v1.3(FEAT-ID、優先度P0/P1/P2/OUT。HQにより正式な基準仕様として確定済み)
-- [db-design.md](./db-design.md) — DB詳細設計 v2.0(HQ提示のEntity定義に基づく正式版。Table定義・RLS方針・データ保持方針・HQ確認事項25件)
+- [features.md](./features.md) — 機能一覧 v1.4(FEAT-ID、優先度P0/P1/P2/OUT。HQにより正式な基準仕様として確定済み)
+- [db-design.md](./db-design.md) — DB詳細設計 v3.0(HQ確定のEntity/Column/RLS方針を反映。HQ確認事項17件)
 - [mockups/](./mockups/) — UIモックアップ画像
 
 ## 開発体制(2026-09〜)
@@ -32,10 +32,11 @@
 8. HQより機能一覧v1.0の統合再送版を受領し、機能一覧v1.2・概要設計書v1.3に反映。Community機能(FEAT-225)のスコープ明確化、OUT項目「MVPでの高度通知機能」の追加、「データ品質に関する絶対ルール」8項目の明文化、既存9用語の状態確認レポートを実施(`features.md` 15.4節)。ディレクトリ再構成の提案は現状の構成を維持する形で見送り。「MarketReaction」という用語名と既存の`EventPriceReaction`との関係はHQの決定待ち
 9. HQより機能一覧v1.2の確定確認を受領(機能一覧v1.3)。用語を`EventPriceReaction`に正式統一、Search API(FEAT-110〜115)の最終仕様は詳細設計へ持ち越しを確認。次工程を「DB詳細設計」と指示され、`db-design.md`(Entity/Table定義・RLS方針・データ保持方針・HQ確認事項11件)を新規作成(v1.0)
 10. HQよりDB詳細設計の正式なEntity定義・Relationship・Column一覧を受領し、`db-design.md`をv2.0へ全面改訂。既存設計との重要な不整合を報告(`EconomicEvent`と`EventSnapshot`が同一エンティティか別テーブルか、`EventExplanation`のEntity一覧からの欠落、`favorable_direction`/`release_datetime_precision`の欠落等)。HQ指定14項目+既存資料との整合性確認から追加で判明した項目をあわせ、計25件をHQ確認事項として整理。DB設計の実装(migration/Table作成等)は未着手のまま
+11. HQよりv2.0で報告した不整合・確認事項への正式回答を受領。`EconomicEvent`/`EventSnapshot`を別Entityとして正式採用(`snapshot_type`は将来の複数種類を想定、MVPはRELEASE固定)、`EventExplanation`をMVP必須Entityとして復活、`favorable_direction`/`release_datetime_precision`/`IngestionLog`を追加、Supabase+PostgreSQLを正式採用しRLSを実装前提の設計条件に確定、Surpriseは保存方式(raw+direction)を採用、EventPriceReactionは段階的生成(データ不足時は0を保存せず分析対象外として扱う)を採用。`db-design.md`をv3.0へ全面改訂し、要件定義書v1.4・概要設計書v1.4へ反映(EconomicEvent=EventSnapshotという旧来表現を修正)。残るHQ確認事項17件(主に型・精度・enum境界値等の技術的細部)を整理
 
 ## 次のアクション
 
-- HQが`db-design.md` v2.0をレビューし、1章の整合性確認6件・8章のHQ確認事項19件(計25件、特に`EconomicEvent`/`EventSnapshot`の構造・`EventExplanation`の扱い・`favorable_direction`の追加要否)について判断する
+- HQが`db-design.md` v3.0の7章「HQ確認事項」17件(Snapshot不変性の担保方法・各種enum値セット・Cascade方針・FxPriceのデータ保持範囲等)について判断する
 - HQ確認事項の反映後、API詳細設計(Endpoint・Request/Response・Error Code)へ進む
 - 経済指標API(Trading Economics / EODHD等)へ、エンドユーザーへの商用配信権込みで正式見積もりを取る(requirements.md 6.2節)。詳細設計自体はAPI未選定でも進められる(Adapter抽象化のため)
 - FEAT-227(決済実装)の着手時期(β版の前か後か)をリリース計画段階でHQが判断する

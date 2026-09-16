@@ -1,4 +1,4 @@
-# FXイベント反応分析アプリ 要件定義書 v1.3
+# FXイベント反応分析アプリ 要件定義書 v1.4
 
 ## 変更履歴
 
@@ -16,6 +16,9 @@
   - Subscriptionの優先度をP1に変更。ただしMVP対象はEntitlement設計・プラン概念までとし、決済(StoreKit)実装のタイミングはβ版前後で別途判断する方針を明記(38〜55章)
   - Indicator↔FXPairの多対多関連(IndicatorFxPair)をデータモデルに追加(27章)
   - EventRevisionのUI表示は「改定後」ラベルで発表時点の値と明確に区別することを明記(5.1節)
+- **v1.4**(今回): DB詳細設計(HQ確定、2026-09-16)を受けて5章・27章を更新
+  - `EconomicEvent`(イベントのメタデータ)と`EventSnapshot`(発表時点の値)を別Entityとして明記(旧: 「EconomicEvent(Snapshot)」という同一視の書き方だった。5.1節・27章)
+  - `EventExplanation`はMVP必須Entityであることを27章で改めて明記(DB詳細設計でEntity一覧からの欠落が指摘されたため)
 
 ---
 
@@ -103,7 +106,7 @@ MVPでは以下を実現する。
 
 **最重要原則: 市場反応の分析(Surprise計算・pips計算・過去比較・統計)は、常にEventSnapshotの値を用いる。後日の改定値によって、過去のSurpriseや市場反応を再計算してはならない。** 相場は発表当時に発表された値に反応するのであり、数ヶ月後の改定値には反応しないため。
 
-改定情報自体は、ユーザーに「その後この指標は◯◯に改定されました」という参考情報として提示してよいが、これは分析結果を書き換える目的ではなく、事実の補足情報として扱う。**改定値を画面に表示する場合は、必ず「改定後」等のラベルを付し、発表時点(Snapshot)の値と文言上・視覚上も明確に区別すること**(HQ回答、2026-09)。機能一覧(features.md)のFEAT-045「Revised Previous表示」は、この改定履歴(EventRevision)ベースの参考表示を指し、EconomicEventに改定後の値で上書きする可変フィールドを持たせることは意味しない。
+改定情報自体は、ユーザーに「その後この指標は◯◯に改定されました」という参考情報として提示してよいが、これは分析結果を書き換える目的ではなく、事実の補足情報として扱う。**改定値を画面に表示する場合は、必ず「改定後」等のラベルを付し、発表時点(Snapshot)の値と文言上・視覚上も明確に区別すること**(HQ回答、2026-09)。機能一覧(features.md)のFEAT-045「Revised Previous表示」は、この改定履歴(EventRevision)ベースの参考表示を指し、EventSnapshotに改定後の値で上書きする可変フィールドを持たせることは意味しない(DB詳細設計でEconomicEventとEventSnapshotを別Entityとして分離したことに伴い、v1.4で記述を更新)。
 
 ### 5.2 管理データ
 
@@ -357,7 +360,7 @@ Surpriseの大きさによる分類分析(例: Surprise > +0.3等のバケット
 
 ## 27. 推奨データモデル(概要)
 
-Indicator / **IndicatorFxPair**(新設、Indicator↔FXPairの多対多関連) / EconomicEvent(Snapshot) / EventRevision / EventExplanation / FXPair / FXPrice / EventPriceReaction / Person / SpeechEvent / SpeechPriceReaction
+Indicator / **IndicatorFxPair**(Indicator↔FXPairの多対多関連) / EconomicEvent(イベントのメタデータ) / **EventSnapshot**(発表時点の値。EconomicEventとは別Entity、DB詳細設計でHQ確定・2026-09) / EventRevision / **EventExplanation**(乖離理由、MVP必須) / FXPair / FXPrice / EventPriceReaction / Person / SpeechEvent / SpeechPriceReaction
 
 **IndicatorFxPair**は、「関連通貨ペア表示」に必要な、指標ごとの分析対象FXペアを固定文字列ではなく関連テーブルとして管理するために新設した(HQ回答、2026-09)。具体的なカラム・制約はDB詳細設計で確定する。
 
