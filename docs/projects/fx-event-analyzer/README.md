@@ -4,8 +4,8 @@
 
 現在のフェーズ: **詳細設計(HQ主導)**。実装(DB作成・API実装・UI実装)はまだ開始していない。
 
-- [requirements.md](./requirements.md) — 要件定義書 v1.6
-- [design.md](./design.md) — 概要設計書 v1.7
+- [requirements.md](./requirements.md) — 要件定義書 v1.7
+- [design.md](./design.md) — 概要設計書 v1.8
 - [implementation-notes-for-hq.md](./implementation-notes-for-hq.md) — 詳細設計のためのHQ向け情報整理(制約・リスク・API依存部分・未確定事項)
 - [ui-screens.md](./ui-screens.md) — 画面設計・UI方針 v1.2(モックアップ・画面一覧・画面遷移。SCR-000 Splash / App Icon仕様を追加)
 - [features.md](./features.md) — 機能一覧 v1.7(FEAT-ID、優先度P0/P1/P2/OUT。HQにより正式な基準仕様として確定済み)

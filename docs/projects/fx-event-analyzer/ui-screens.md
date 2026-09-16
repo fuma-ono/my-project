@@ -16,7 +16,7 @@
   - 本追加は設計ドキュメントのみの変更であり、実装・コード変更・Asset生成は一切行っていない
   - 参考画像2点を`mockups/`に保存(`app-icon-reference-v1.png`, `splash-screen-reference-v1.png`)。レイアウト・配色・質感の参考であり、画像内のサンプル文言・数値はそのまま仕様として採用したものではない
 
-**位置づけ**: 本書はUI・画面遷移レベルの設計であり、要件定義書v1.6・概要設計書v1.7(データモデル・API・アーキテクチャ)を置き換えるものではない。画面とAPI/DBとの対応関係は、HQによる詳細設計の次のフェーズで確定する。
+**位置づけ**: 本書はUI・画面遷移レベルの設計であり、要件定義書v1.7・概要設計書v1.8(データモデル・API・アーキテクチャ)を置き換えるものではない。画面とAPI/DBとの対応関係は、HQによる詳細設計の次のフェーズで確定する。
 
 モックアップ内の数値・日時・文言はサンプル。実際の実装では確定した要件・詳細設計を正とする。
 
@@ -352,7 +352,7 @@ Splash・App Iconは、Home/Indicator Detail/Event Detail/Movement Detail等で�
 docs/projects/fx-event-analyzer/
 ├── README.md                        … プロジェクト概要・開発体制・経緯
 ├── requirements.md                  … 要件定義書 v1.6
-├── design.md                        … 概要設計書 v1.7
+├── design.md                        … 概要設計書 v1.8
 ├── implementation-notes-for-hq.md   … 詳細設計インプット情報(制約・リスク・未確定事項)
 ├── ui-screens.md                    … 本書。画面設計・UI方針 v1.2
 ├── features.md                      … 機能一覧 v1.7

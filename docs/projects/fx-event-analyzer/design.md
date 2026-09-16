@@ -1,4 +1,4 @@
-# FXイベント反応分析アプリ 概要設計書 v1.7
+# FXイベント反応分析アプリ 概要設計書 v1.8
 
 ## 変更履歴
 
@@ -41,6 +41,11 @@
   - 15〜24章に15.1節「App起動フロー(SCR-000 Splash / Launch Screen)」を新設: iOSシステムLaunch ScreenとSCR-000の責務分離、起動フロー、Session Expired/API接続エラー時の遷移ロジックを追記(詳細UI仕様はui-screens.md 5.0節を参照)
   - 15〜24章に15.2節「App Icon / Brand Asset方針」を新設: ブランド方向性・Asset管理方針の概要を追記(詳細はui-screens.md 9章を参照)
   - 実装・コード変更・Asset生成は行っていない(設計ドキュメントのみの変更)
+- **v1.8**(今回): HQ最終決定「技術スタック確定」を反映(2026-09-16)
+  - 3.2節の技術候補「React Native + Expo」を、MVP正式採用「**SwiftUI + Xcode**」に置き換え(HQ確定理由: 主要プラットフォームがiOS/iPadOS、UI設計がSwiftUI/iOSネイティブの画面構造を前提、iOS Launch Screen/Asset Catalog/iOSネイティブUIとの整合性優先、クロスプラットフォーム対応はMVPの目的外)
+  - 2.1節のシステム構成図の「iOS / iPad App」ブロックの実装技術表記を「React Native/Expo」から「SwiftUI」に更新
+  - リポジトリ内にSwiftコード・Xcodeプロジェクトが存在しないことを確認済み(既存実装との衝突なし)
+  - 具体的なSwiftUIコード・Xcodeプロジェクト構成は今回実装しない(設計方針の確定のみ)
 
 ---
 
@@ -69,7 +74,7 @@ FXイベント反応分析アプリ
 ```
 ┌─────────────────────────┐
 │       iOS / iPad App    │
-│     React Native/Expo   │
+│      SwiftUI(Xcode)     │
 └────────────┬────────────┘
              │ HTTPS
              ▼
@@ -121,9 +126,26 @@ FXイベント反応分析アプリ
 
 MVPでは、iPhone / iPad を対象とする。Webは将来拡張を前提としてBackend/APIを設計する。
 
-### 3.2 技術候補
+### 3.2 技術スタック(MVP正式採用、v1.8で確定)
 
-React Native + Expoを基本候補とする(iOS/iPad対応・開発速度・TypeScript利用・将来的なWeb展開との親和性・MVPでの開発コスト)。最終決定は詳細設計時に技術検証を行う。
+**MVP正式採用: SwiftUI + Xcode(ネイティブiOS/iPadOSアプリ)**(HQ確定、2026-09-16)。
+
+| 項目 | 採用技術 |
+|---|---|
+| Frontend | SwiftUI |
+| IDE / Build | Xcode |
+| Asset管理 | Xcode Asset Catalog |
+| 認証SDK | Supabase Auth SDK(iOS) |
+
+**確定理由**:
+
+- 本プロジェクトの主要プラットフォームがiOS/iPadOSであること
+- 現在のUI設計(ui-screens.md)がSwiftUI/iOSネイティブの画面構造を前提としていること
+- iOS Launch Screen / Asset Catalog / iOSネイティブUIとの整合性を優先すること
+- iPhone/iPadのレスポンシブUIをネイティブに最適化すること
+- 本設計がクロスプラットフォーム対応をMVPの目的としていないこと
+
+旧版(v1.0〜v1.7)で技術候補としていた「React Native + Expo」は、MVPの正式採用候補から外す。Backendは既存設計どおりBackend API + PostgreSQL / Supabaseを使用する(変更なし)。Web版展開時のクライアント技術は27章の通り別途検討する(将来拡張、MVP対象外)。
 
 ---
 
