@@ -4,14 +4,14 @@
 
 現在のフェーズ: **詳細設計(HQ主導)**。実装(DB作成・API実装・UI実装)はまだ開始していない。
 
-- [requirements.md](./requirements.md) — 要件定義書 v1.5
-- [design.md](./design.md) — 概要設計書 v1.6
+- [requirements.md](./requirements.md) — 要件定義書 v1.6
+- [design.md](./design.md) — 概要設計書 v1.7
 - [implementation-notes-for-hq.md](./implementation-notes-for-hq.md) — 詳細設計のためのHQ向け情報整理(制約・リスク・API依存部分・未確定事項)
-- [ui-screens.md](./ui-screens.md) — 画面設計・UI方針 v1.1(モックアップ・画面一覧・画面遷移)
-- [features.md](./features.md) — 機能一覧 v1.6(FEAT-ID、優先度P0/P1/P2/OUT。HQにより正式な基準仕様として確定済み)
+- [ui-screens.md](./ui-screens.md) — 画面設計・UI方針 v1.2(モックアップ・画面一覧・画面遷移。SCR-000 Splash / App Icon仕様を追加)
+- [features.md](./features.md) — 機能一覧 v1.7(FEAT-ID、優先度P0/P1/P2/OUT。HQにより正式な基準仕様として確定済み)
 - [db-design.md](./db-design.md) — DB詳細設計 v4.2(HQ確定・完成版。max_upward_pips/max_downward_pipsをDB保存に統一)
 - [api-design.md](./api-design.md) — API詳細設計書 v1.3(HQ作成のv1.0をベースに、全設計横断監査の確定事項まで反映)
-- [mockups/](./mockups/) — UIモックアップ画像
+- [mockups/](./mockups/) — UIモックアップ画像(画面一覧・App Icon参考・Splash参考)
 
 ## 開発体制(2026-09〜)
 
@@ -40,11 +40,13 @@
 15. HQよりv1.1の残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受領。`api-design.md`をv1.2へ改訂(Advanced Statisticsの段階的制御をavailable/required_entitlement/data形式で確定、available_timeframesの精度別除外ルールを正式確定、Backend↔PostgreSQLはservice_role接続+Backend Authorizationを正式採用し7段階の処理順序を明記、Revision APIはEntitlement制限なしと確定)。pg_trgm+GIN Index方針は`db-design.md`をv4.1へ改訂して直接反映(HQ指示による、Migrationは未実施)。event_name関連は要件定義書側の変更候補として確定(要件定義書自体は変更せず)
 16. HQ指示により「実装開始前の全設計最終整合性監査」を実施。要件定義書・概要設計書・features.md・ui-screens.md・db-design.md・api-design.mdを横断監査し、Critical 0件・High 2件(H-1: EventExplanationがSCR-004・features.mdに未反映、H-2: Homeの「最近のイベント」のデータソース未確定)・Medium 5件(favorable_direction/data_statusの旧enum表記、max_upward_pips等の保存方針の非対称性、design.mdのIngestionLog欠落、timezone方針の反映漏れ)・Low 6件(User/Profile・FXPair/FxPairの表記揺れ等)を報告。総合判定「PASS WITH CHANGES」
 17. HQよりH-1/H-2/M-1〜M-5/L-1〜L-6/A-6すべてに最終方針を受領し、全設計書へクリーンアップとして反映。SCR-004に乖離理由表示を追加(features.mdにFEAT-055新設)、Homeの「最近のイベント」を「当日中のRELEASEDイベント」と定義、EventPriceReactionのmax_upward_pips/max_downward_pipsをDB保存方式に統一、要件定義書・概要設計書の旧enum表記・旧サンプル値を確定済みDB値に統一、design.mdにIngestionLog追加・timezone方針反映・User→Profile/FXPair→FxPairの表記統一、requirements.md 27章にSubscription/Entitlement追加、requirements.md 5.2節からevent_nameを削除しIndicator基準に整合。実装は今回も一切行っていない
+18. HQより「Splash / Launch ScreenとApp Iconの追加」の指示を受領し、参考画像2点(App Icon・Splashモックアップシート)とともに設計へ反映。SCR-000 Splash / Launch Screenを新規MVP画面としてui-screens.mdへ追加(iOSシステムLaunch Screenとの責務分離、起動フロー、Session Expired/API接続エラー処理、レスポンシブ方針)、App Icon / Brand Asset仕様を新設(ブランド方向性・Asset管理方針・「フルロゴ版」「シンボル版」を候補として記録、HQ判断待ち)、design.md/requirements.mdに起動フロー・App Icon方針の必要最小限の記述を追加、features.mdに新規FEAT-126〜129(アプリ起動・Splash)を追加(Splashのブランド表示自体はFEAT化せず理由を明記)。api-design.md/db-design.mdは指示通り変更せず(新規APIもDBスキーマ変更も不要と確認)。実装・コード変更・Asset生成は今回も一切行っていない
 
 ## 次のアクション
 
-- HQが今回のクリーンアップ結果を確認し、「全設計最終監査」を再実施する
+- HQが今回のクリーンアップ結果および今回のSCR-000/App Icon追加を確認し、「全設計最終監査」を再実施する
 - 再監査でPASS判定となれば「設計凍結→実装フェーズ」へ移行する
+- App Iconの「フルロゴ版」/「シンボル版」のどちらを採用するか(またはどう使い分けるか)をHQが判断する
 - 経済指標API(Trading Economics / EODHD等)へ、エンドユーザーへの商用配信権込みで正式見積もりを取る(requirements.md 6.2節)。詳細設計自体はAPI未選定でも進められる(Adapter抽象化のため)
 - FEAT-227(決済実装)の着手時期(β版の前か後か)をリリース計画段階でHQが判断する
 - 詳細設計書が確定次第、Claude Codeが実装フェーズに入る

@@ -1,4 +1,4 @@
-# FX Event Analyzer: 機能一覧 v1.6
+# FX Event Analyzer: 機能一覧 v1.7
 
 **出典**: HQより2026-09-16共有。v1.2は、HQが再発行した「正式版 機能一覧」テキストを本書に統合したもの。v1.3で、v1.2の内容がHQにより正式な基準仕様として確定し、あわせて用語統一(MarketReaction→EventPriceReaction)を反映した。v1.4で、DB詳細設計確定(EconomicEvent/EventSnapshot分離、EventExplanation復活等)に伴う用語表・節番号の更新を反映した。実装は未着手。
 
@@ -30,6 +30,10 @@
 - **v1.6**(今回): 全設計横断監査(H-1)での確定事項を反映(2026-09-16)
   - H-1: 新規FEAT-055「乖離理由表示」(P0、Event Detail)を4.1節として追加。SCR-004での表示順序(Surprise→乖離理由→市場への影響→関連FXペア/Reaction)を明記
   - 版番号引用を要件定義書v1.5・概要設計書v1.6・ui-screens.md v1.1・db-design.md v4.2・api-design.md v1.3に追従
+- **v1.7**(今回): HQ指示「Splash / Launch ScreenとApp Iconの追加」を反映(2026-09-16)
+  - 新規FEAT-126〜129「アプリ起動・Splash」(P0、Splash)を9.2節として追加。既存採番(120〜125: 認証・アカウント、140〜: データ取得・管理)と衝突しないことを確認し、認証・アカウント(120〜125)の直後の空き番号(126〜139)を採用した
+  - Splash画面のブランド表示(App Icon・タイトル・ローディング表示自体)は静的なUI要素であり、独立した機能(FEAT)としては追加しない(理由は9.2節に明記)。UI仕様はui-screens.md SCR-000を参照
+  - 版番号引用を要件定義書v1.6・概要設計書v1.7・ui-screens.md v1.2に追従
 
 ## 優先度定義
 
@@ -197,6 +201,19 @@ Historical Event Detail(過去の特定回のイベント)とIndicator Detail(�
 
 「課金を後から追加する設計」ではなく、「最初からFree/Proへ拡張可能な設計にしておき、決済機構の実装タイミングだけ後で判断する」という方針(HQ回答、2026-09)。詳細は要件定義書v1.5 38〜55章・概要設計書v1.6 25章参照。
 
+### 9.2 アプリ起動・Splash(新設、v1.7、SCR-000)
+
+| ID | 機能 | 優先度 | 対応画面 |
+|---|---|---|---|
+| FEAT-126 | アプリ起動時のSupabase Authセッション確認 | P0 | Splash |
+| FEAT-127 | セッション有無によるHome/Loginへのルーティング | P0 | Splash |
+| FEAT-128 | 起動時初期化エラー・API接続エラー時の再試行UI | P0 | Splash |
+| FEAT-129 | セッション期限切れ時のログイン画面への遷移 | P0 | Splash |
+
+**採番の確認**: 既存の認証・アカウント(FEAT-120〜125)・Subscription基盤(FEAT-224/227)・データ取得・管理(FEAT-140〜151)と衝突しないことを確認した上で、認証・アカウントブロックの直後の空き番号(126〜139)から採番した。
+
+**Splash画面自体はFEAT-IDを持たない理由**: Splash(SCR-000)のブランド表示(App Icon・タイトルテキスト・タグライン・下部ローディング表示)は、上記FEAT-126〜129が担う機能(セッション確認・ルーティング・エラー処理)を実行する間の静的なUI表現であり、それ自体が独立した「機能」ではないと判断した。そのためFEAT-ID化していない。UI仕様の詳細はui-screens.md SCR-000節を参照。
+
 ## 10. データ取得・管理(非表示、システム内部機能)
 
 | ID | 機能 | 優先度 |
@@ -335,17 +352,19 @@ HQ指示の7項目に沿って報告する。**コードは一切存在しない
 ```
 docs/projects/fx-event-analyzer/
 ├── README.md                        … プロジェクト概要・開発体制・経緯
-├── requirements.md                  … 要件定義書 v1.5
-├── design.md                        … 概要設計書 v1.6
+├── requirements.md                  … 要件定義書 v1.6
+├── design.md                        … 概要設計書 v1.7
 ├── implementation-notes-for-hq.md   … 詳細設計インプット情報
-├── ui-screens.md                    … 画面設計・UI方針 v1.1
-├── features.md                      … 本書。機能一覧 v1.6(FEAT-ID)
+├── ui-screens.md                    … 画面設計・UI方針 v1.2
+├── features.md                      … 本書。機能一覧 v1.7(FEAT-ID)
 ├── db-design.md                     … DB詳細設計 v4.2
 ├── api-design.md                    … API詳細設計書 v1.3
 └── mockups/
-    └── screens-overview-dark-v1.png
+    ├── screens-overview-dark-v1.png
+    ├── app-icon-reference-v1.png
+    └── splash-screen-reference-v1.png
 ```
 
 ## 17. 次のフェーズ
 
-全設計横断監査(H-1/H-2/M-1〜M-5/L-1〜L-6/A-6)での確定事項を各設計書へ反映済み。HQによる再監査(PASS判定)後、設計凍結→実装フェーズへ移行する。
+全設計横断監査(H-1/H-2/M-1〜M-5/L-1〜L-6/A-6)・SCR-000/App Icon追加(v1.7)での確定事項を各設計書へ反映済み。HQによる再監査(PASS判定)後、設計凍結→実装フェーズへ移行する。

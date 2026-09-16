@@ -1,4 +1,4 @@
-# FXイベント反応分析アプリ 概要設計書 v1.6
+# FXイベント反応分析アプリ 概要設計書 v1.7
 
 ## 変更履歴
 
@@ -37,6 +37,10 @@
   - M-5: 8.1節にtimezoneのRequest Parameter方式(API詳細設計で確定済み)を追記
   - L-1: ER図のEntity名を「User」から「Profile」に統一(db-design.md/api-design.mdの実体に合わせる。意味は変更なし)
   - L-2: 「FXPair」/「FXPrice」の表記を「FxPair」/「FxPrice」に統一(db-design.md/api-design.mdの表記に合わせる)
+- **v1.7**(今回): HQ指示「Splash / Launch ScreenとApp Iconの追加」を反映(2026-09-16)
+  - 15〜24章に15.1節「App起動フロー(SCR-000 Splash / Launch Screen)」を新設: iOSシステムLaunch ScreenとSCR-000の責務分離、起動フロー、Session Expired/API接続エラー時の遷移ロジックを追記(詳細UI仕様はui-screens.md 5.0節を参照)
+  - 15〜24章に15.2節「App Icon / Brand Asset方針」を新設: ブランド方向性・Asset管理方針の概要を追記(詳細はui-screens.md 9章を参照)
+  - 実装・コード変更・Asset生成は行っていない(設計ドキュメントのみの変更)
 
 ---
 
@@ -434,9 +438,38 @@ MVPでは基本機能を優先し、拡張機能として設計する(要件定�
 
 ---
 
-## 15〜24. 画面構成・検索・通知・認証(変更なし)
+## 15〜24. 画面構成・検索・通知・認証
 
-v1.0の内容を維持する。画面構成(Home/Indicators/Analysis/Search/Settings)・各画面のワイヤーフレーム相当の説明・検索対象・通知方針・認証方針に、本レビューによる変更はない。
+### 15.1 App起動フロー(SCR-000 Splash / Launch Screen)(新設、v1.7)
+
+アプリ起動時のフローとして、SCR-000 Splash / Launch Screenを画面設計(ui-screens.md 5.0節)に正式追加した。本節では概要設計レベルでの責務分離と遷移ロジックのみを記す。UIレイアウト・色・レスポンシブ仕様等の詳細はui-screens.md 5.0節を参照。
+
+**責務分離**: iOSがアプリプロセス起動前に表示するシステムレベルのLaunch Screen(白画面回避のためのOS機能、Xcode Launch Screen Storyboard/Asset)と、アプリ内画面であるSCR-000(SwiftUIで実装される、ブランド表示・初期化・認証判定・遷移先決定を担う画面)を、同一画面・同一責務として扱わない。
+
+**起動フロー**:
+
+```
+App起動 → iOS Launch Screen → SCR-000 Splash → アプリ初期化
+  → Supabase Authセッション確認
+    ├─ セッションあり → SCR-001 Home
+    └─ セッションなし → SCR-010 Login
+```
+
+**Session Expired**: SCR-000でのセッション確認時にセッション期限切れを検出した場合、SCR-010 Loginへ遷移する(「セッションの有効期限が切れています」「再度ログインしてください」を表示)。
+
+**初期化エラー/API接続エラー**: 無限ローディング状態を作らず、常に再試行手段を提示する。可能な範囲で認証エラーとAPI接続エラーを区別し、エラー詳細をユーザーへ過度に露出しない。
+
+**設計原則**: SCR-000は経済指標データ・FXチャート等のデータ取得を待ち受けない、最小限の初期化(Auth/初期設定/API疎通確認)に留める画面とする。Splashは「データ分析画面」ではない。
+
+**API/DB設計への影響**: 本追加のために新規APIエンドポイントは設けない。既存のAuth/Account/Backend疎通確認用のAPIを利用する(api-design.mdへの変更は不要、43章参照)。DB設計への変更も不要(db-design.mdへの変更は不要)。
+
+### 15.2 App Icon / Brand Asset方針(新設、v1.7)
+
+App Iconをブランドアセットとして正式に設計対象へ加えた。詳細な配色方向性・Asset管理方針・「フルロゴ版」「シンボル版」の2候補はui-screens.md 9章を参照。
+
+**概要**: FX/マーケットチャート・上昇トレンドを抽象化したグラフィックを、ブルー〜シアン系グラデーションで濃紺〜黒背景上に配置する方向性とする。正確なRGB値は実装時のDesign Tokensで確定し、本書・ui-screens.mdでは方向性のみを定める。iOS App IconはXcodeのAsset Catalog(AppIcon)で管理し、元画像をUIコードへ直接埋め込む設計は採らない。
+
+**その他(検索・要人発言・通知・認証)**: v1.0の内容を維持する。本節(15.1/15.2)以外に、本レビューによる変更はない。
 
 ---
 
