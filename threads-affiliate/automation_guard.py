@@ -67,6 +67,14 @@ def _load() -> dict:
             "consecutive_publish_failures": 0,
             "consecutive_reply_failures": 0,
             "last_updated": None,
+            # 2026-09-16追加(旧アカウント停止を受けての安全策、
+            # docs/marketing/2026-09-15-threads-account-suspended.md参照):
+            # 新しいThreadsアカウントで運用を再開する日をここに設定すると、
+            # warmup_status()がその日から`warmup_days`日間を「助走期間」と
+            # みなし、publish.py側でアフィリエイトリンク付き投稿を強制的に
+            # ブロックする。未設定(null)の間は助走期間の管理自体を行わない。
+            "current_account_started_at": None,  # 例: "2026-10-01"(ISO日付)
+            "warmup_days": 14,
         }
         _save(default)
         return default
@@ -81,6 +89,37 @@ def _save(status: dict) -> None:
 def is_paused() -> tuple[bool, str | None]:
     status = _load()
     return status.get("paused", False), status.get("pause_reason")
+
+
+def warmup_status() -> dict:
+    """新アカウントの助走期間(アフィリエイトリンク無し投稿のみ)の状態を返す。
+
+    2026-09-15、旧アカウントが停止された際の分析(publish-log.jsonl)で、
+    運用初期からアフィリエイトリンク付き投稿ばかりを行っていたことが
+    スパム検知の一因ではないかと推定した
+    (docs/marketing/2026-09-15-threads-account-suspended.md)。新しい
+    アカウントで再開する際、生成側のプロンプトだけに頼らず、コード側でも
+    強制的にリンク付き投稿を止める安全弁としてこれを追加した。
+
+    `current_account_started_at`(ISO日付、例"2026-10-01")が未設定なら
+    助走期間の管理自体を行わない({"in_warmup": False, ...}を返す)。
+    """
+    status = _load()
+    started_at = status.get("current_account_started_at")
+    if not started_at:
+        return {"in_warmup": False, "days_elapsed": None, "days_remaining": None}
+    warmup_days = status.get("warmup_days", 14)
+    try:
+        start_date = datetime.date.fromisoformat(started_at)
+    except ValueError:
+        return {"in_warmup": False, "days_elapsed": None, "days_remaining": None}
+    days_elapsed = (datetime.datetime.now(datetime.timezone.utc).date() - start_date).days
+    in_warmup = days_elapsed < warmup_days
+    return {
+        "in_warmup": in_warmup,
+        "days_elapsed": days_elapsed,
+        "days_remaining": max(warmup_days - days_elapsed, 0) if in_warmup else 0,
+    }
 
 
 def ensure_not_paused(kind: str) -> None:
