@@ -8,7 +8,8 @@
 - [design.md](./design.md) — 概要設計書 v1.3
 - [implementation-notes-for-hq.md](./implementation-notes-for-hq.md) — 詳細設計のためのHQ向け情報整理(制約・リスク・API依存部分・未確定事項)
 - [ui-screens.md](./ui-screens.md) — 画面設計・UI方針 v1.0(モックアップ・画面一覧・画面遷移)
-- [features.md](./features.md) — 機能一覧 v1.2(FEAT-ID、優先度P0/P1/P2/OUT)
+- [features.md](./features.md) — 機能一覧 v1.3(FEAT-ID、優先度P0/P1/P2/OUT。HQにより正式な基準仕様として確定済み)
+- [db-design.md](./db-design.md) — DB詳細設計 v1.0(Entity/Table定義・RLS方針・データ保持方針・HQ確認事項)
 - [mockups/](./mockups/) — UIモックアップ画像
 
 ## 開発体制(2026-09〜)
@@ -29,10 +30,12 @@
 6. HQより機能一覧v1.0(FEAT-ID)を受領し保存。既存設計との整合性確認を実施し、矛盾・懸念3件(Revised Previousの定義・Subscription実装タイミング・Indicator/FXPairの関連付け不足)を報告(本ディレクトリの`features.md`)
 7. HQより上記3件への回答を受領し、要件定義書v1.3・概要設計書v1.2・機能一覧v1.1に反映。Subscriptionの優先度をP1に変更(ただし決済実装はFEAT-227として分離・実装タイミング未定のまま)、Indicator↔FXPairの多対多関連(IndicatorFxPair)を追加、EventRevisionの「改定後」ラベル表示ルールを明記
 8. HQより機能一覧v1.0の統合再送版を受領し、機能一覧v1.2・概要設計書v1.3に反映。Community機能(FEAT-225)のスコープ明確化、OUT項目「MVPでの高度通知機能」の追加、「データ品質に関する絶対ルール」8項目の明文化、既存9用語の状態確認レポートを実施(`features.md` 15.4節)。ディレクトリ再構成の提案は現状の構成を維持する形で見送り。「MarketReaction」という用語名と既存の`EventPriceReaction`との関係はHQの決定待ち
+9. HQより機能一覧v1.2の確定確認を受領(機能一覧v1.3)。用語を`EventPriceReaction`に正式統一、Search API(FEAT-110〜115)の最終仕様は詳細設計へ持ち越しを確認。次工程を「DB詳細設計」と指示され、`db-design.md`(Entity/Table定義・RLS方針・データ保持方針・HQ確認事項11件)を新規作成
 
 ## 次のアクション
 
-- HQ側で「画面×機能」「画面×機能×API×DB」の対応表を作成し、詳細設計を完成させる(`implementation-notes-for-hq.md`・`ui-screens.md`・`features.md`の内容を参考情報として利用可能)
+- HQが`db-design.md`をレビューし、11件のHQ確認事項(Snapshot不変性の担保方法・IndicatorFxPairのrelation_type・data_status値セット・event_explanationsの生成方式等)について判断する
+- HQ確認事項の反映後、API詳細設計(Endpoint・Request/Response・Error Code)へ進む
 - 経済指標API(Trading Economics / EODHD等)へ、エンドユーザーへの商用配信権込みで正式見積もりを取る(requirements.md 6.2節)。詳細設計自体はAPI未選定でも進められる(Adapter抽象化のため)
 - FEAT-227(決済実装)の着手時期(β版の前か後か)をリリース計画段階でHQが判断する
 - 詳細設計書が確定次第、Claude Codeが実装フェーズに入る

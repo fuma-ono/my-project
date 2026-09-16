@@ -1,6 +1,6 @@
-# FX Event Analyzer: 機能一覧 v1.2
+# FX Event Analyzer: 機能一覧 v1.3
 
-**出典**: HQより2026-09-16共有。v1.2は、HQが再発行した「正式版 機能一覧」テキストを本書に統合したもの。実装は未着手。
+**出典**: HQより2026-09-16共有。v1.2は、HQが再発行した「正式版 機能一覧」テキストを本書に統合したもの。v1.3で、v1.2の内容がHQにより正式な基準仕様として確定し、あわせて用語統一(MarketReaction→EventPriceReaction)を反映した。実装は未着手。
 
 **位置づけ**: 要件定義書v1.3・概要設計書v1.3・画面設計(ui-screens.md v1.0)の内容を、機能ID(FEAT-xxx)単位に分解したもの。今後の設計・実装で本書のIDを参照する。次フェーズでHQが「画面×機能」「画面×機能×API×DB」の対応表を作成する際の基礎資料となる。
 
@@ -16,6 +16,11 @@
   - OUT OF SCOPEに「MVPでの高度通知機能」を追加(13.作らない機能)
   - データ品質に関する絶対ルール(8項目)を独立セクションとして明文化(13.1節、新設)
   - それ以外の項目(Priority定義・FEAT-001〜226の内容)は既存のv1.1と完全に一致していることを確認済み(15.4節に確認結果を記載)
+- **v1.3**(今回): HQ回答(2026-09-16「HQ確認」)を反映
+  - 本書v1.2の内容を、HQが正式な基準仕様として確定
+  - 用語「MarketReaction」を`EventPriceReaction`に統一することを確定(15.4節の用語表を更新)。今後、設計書・DB設計・API設計・FEAT関連資料・コード上のEntity/Model/DTO/Repository等はすべて`EventPriceReaction`を使用する。既存コードは存在しないため、コード側の変更対象は無し
+  - Search API(FEAT-110〜115)の最終仕様は今回確定せず、DB詳細設計・API詳細設計へ持ち越すことを確認(申し送り事項として維持)
+  - 次工程を「DB詳細設計」とすることを確認(`db-design.md`を新設)
 
 ## 優先度定義
 
@@ -283,7 +288,7 @@ HQ指示の7項目に沿って報告する。**コードは一切存在しない
 
 1. **現在のコード・設計との不整合**: コードは存在しない。設計ドキュメント(要件定義書v1.3・概要設計書v1.3・ui-screens.md v1.0)との不整合は無し。差分は13章・13.1節に反映した2点のみ(Community説明の具体化、OUT項目の追加)。
 2. **機能一覧に不足している依存関係**: 新たな不足は見つからなかった。既知の依存(Home→Event Detail遷移がFEAT-040に依存、等)は画面遷移(ui-screens.md 6章)と一致している。
-3. **DB設計に影響する機能**: EventSnapshot(FEAT-046)・EventRevision(FEAT-045/143)・IndicatorFxPair(FEAT-028)・EventPriceReaction相当のMarketReaction(FEAT-069〜074)・DataQualityStatus(FEAT-151)。いずれも概要設計書v1.3 5章に反映済み。
+3. **DB設計に影響する機能**: EventSnapshot(FEAT-046)・EventRevision(FEAT-045/143)・IndicatorFxPair(FEAT-028)・EventPriceReaction(FEAT-069〜074、旧称MarketReaction)・DataQualityStatus(FEAT-151)。いずれも概要設計書v1.3 5章・db-design.md v1.0に反映済み。
 4. **API設計に影響する機能**: 検索(FEAT-110〜115)が指標・イベント・FXペア・通貨を横断するため、複数エンティティを跨ぐ検索APIの設計が必要になる点は、現時点ではAPI詳細設計に未反映(詳細設計での確認事項として記録)。
 5. **P0/P1/P2の矛盾**: 確認した範囲で矛盾なし。全FEAT-IDの優先度は本書(v1.1で確定済みの内容)と完全に一致していた。
 6. **既存仕様との矛盾**: 無し。
@@ -296,7 +301,7 @@ HQ指示の7項目に沿って報告する。**コードは一切存在しない
 | EventSnapshot | 概要設計書v1.3 5.3節で`EconomicEvent`として定義済み(immutable) |
 | EventRevision | 概要設計書v1.3 5.4節で定義済み(「改定後」ラベル表示ルールも明記済み) |
 | IndicatorFxPair | 概要設計書v1.3 5.1/5.2節で定義済み(多対多、具体的カラムはDB詳細設計待ち) |
-| MarketReaction | **要確認**: 本書・HQ指示ではこの呼称が使われているが、概要設計書では同じ概念を`EventPriceReaction`と呼んでいる。同一エンティティを指すという理解で進めているが、詳細設計で呼称をどちらかに統一することを推奨(HQ判断) |
+| MarketReaction / EventPriceReaction | **解決(HQ確認、2026-09-16)**: `EventPriceReaction`に正式統一。設計書・DB設計・API設計・FEAT関連資料・コード上のEntity/Model/DTO/Repository等すべてで今後この名称を使用する |
 | FX Pips calculation | 概要設計書v1.3 5.5節・要件定義書v1.3 10章で「Backendを正とする」ことが明記済み |
 | Data Quality | 概要設計書v1.3 13章(データ品質管理・運営機能)・13.1節(絶対ルール)で明記済み |
 | Subscription / Entitlement | 概要設計書v1.3 25章・本書9.1節で「Entitlement設計はMVP、決済実装はFEAT-227として分離・タイミング未定」の方針が明記済み |
@@ -316,11 +321,12 @@ docs/projects/fx-event-analyzer/
 ├── design.md                        … 概要設計書 v1.3
 ├── implementation-notes-for-hq.md   … 詳細設計インプット情報
 ├── ui-screens.md                    … 画面設計・UI方針 v1.0
-├── features.md                      … 本書。機能一覧 v1.2(FEAT-ID)
+├── features.md                      … 本書。機能一覧 v1.3(FEAT-ID)
+├── db-design.md                     … DB詳細設計 v1.0(新設)
 └── mockups/
     └── screens-overview-dark-v1.png
 ```
 
 ## 17. 次のフェーズ
 
-HQ側で「画面×機能」の対応表を作成し、その後「画面×機能×API×DB」まで紐付けて詳細設計を完成させる。Claude Codeは実装未着手のまま待機する。
+機能一覧v1.2はHQにより正式な基準仕様として確定した(v1.3、2026-09-16)。次工程は「DB詳細設計」(`db-design.md`)。HQレビューの後、API詳細設計へ進む。Claude Codeは実装未着手のまま待機する。
