@@ -81,6 +81,78 @@ export async function listRelatedFxPairs(supabase: SupabaseClient, indicatorId: 
   });
 }
 
+export interface IndicatorEventRow {
+  id: string;
+  release_datetime: string;
+  release_datetime_precision: string;
+  importance: string;
+  status: string;
+  data_status: string;
+  forecast: number | null;
+  actual: number | null;
+  previous: number | null;
+  surprise: number | null;
+  surprise_direction: string | null;
+}
+
+export interface ListIndicatorEventsFilters {
+  from?: string | undefined;
+  to?: string | undefined;
+  status?: string | undefined;
+}
+
+/** api-design.md §13.3 — past/future Event list for one Indicator.
+ * `from` is inclusive, `to` is exclusive (§6). */
+export async function listEventsForIndicator(
+  supabase: SupabaseClient,
+  indicatorId: string,
+  filters: ListIndicatorEventsFilters,
+  pagination: PaginationParams,
+): Promise<{ rows: IndicatorEventRow[]; total: number }> {
+  let query = supabase
+    .from('economic_events')
+    .select(
+      'id, release_datetime, release_datetime_precision, importance, status, data_status, event_snapshots(forecast, actual, previous, surprise, surprise_direction, snapshot_type)',
+      { count: 'exact' },
+    )
+    .eq('indicator_id', indicatorId);
+
+  if (filters.from) query = query.gte('release_datetime', filters.from);
+  if (filters.to) query = query.lt('release_datetime', filters.to);
+  if (filters.status) query = query.eq('status', filters.status);
+
+  const { from, to } = rangeFor(pagination.page, pagination.limit);
+  const { data, error, count } = await query.order('release_datetime', { ascending: false }).range(from, to);
+  if (error) throw error;
+
+  const rows: IndicatorEventRow[] = (data ?? []).map((row) => {
+    const snapshots = row.event_snapshots as unknown as Array<{
+      forecast: number | null;
+      actual: number | null;
+      previous: number | null;
+      surprise: number | null;
+      surprise_direction: string | null;
+      snapshot_type: string;
+    }>;
+    const snapshot = snapshots?.find((entry) => entry.snapshot_type === 'RELEASE') ?? null;
+    return {
+      id: row.id,
+      release_datetime: row.release_datetime,
+      release_datetime_precision: row.release_datetime_precision,
+      importance: row.importance,
+      status: row.status,
+      data_status: row.data_status,
+      forecast: snapshot?.forecast ?? null,
+      actual: snapshot?.actual ?? null,
+      previous: snapshot?.previous ?? null,
+      surprise: snapshot?.surprise ?? null,
+      surprise_direction: snapshot?.surprise_direction ?? null,
+    };
+  });
+
+  return { rows, total: count ?? 0 };
+}
+
 export interface LatestEventRow {
   id: string;
   release_datetime: string;

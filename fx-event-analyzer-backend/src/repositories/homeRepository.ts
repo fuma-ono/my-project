@@ -72,6 +72,40 @@ export async function listSnapshotsForEvents(
   return data ?? [];
 }
 
+export interface RelatedFxPairSummary {
+  fx_pair_id: string;
+  symbol: string;
+  priority: number;
+}
+
+/** Batched `indicator_fx_pairs` lookup for a set of indicators — the Home
+ * event list is day-scoped and small, but this still avoids one query per
+ * event row (N+1) by fetching all indicators' pairs in a single call. */
+export async function listRelatedFxPairsForIndicators(
+  supabase: SupabaseClient,
+  indicatorIds: string[],
+): Promise<Map<string, RelatedFxPairSummary[]>> {
+  const uniqueIds = [...new Set(indicatorIds)];
+  const byIndicator = new Map<string, RelatedFxPairSummary[]>();
+  if (uniqueIds.length === 0) return byIndicator;
+
+  const { data, error } = await supabase
+    .from('indicator_fx_pairs')
+    .select('indicator_id, priority, fx_pairs!inner(id, symbol)')
+    .in('indicator_id', uniqueIds)
+    .eq('is_active', true)
+    .order('priority', { ascending: true });
+  if (error) throw error;
+
+  for (const row of data ?? []) {
+    const fxPair = row.fx_pairs as unknown as { id: string; symbol: string };
+    const list = byIndicator.get(row.indicator_id) ?? [];
+    list.push({ fx_pair_id: fxPair.id, symbol: fxPair.symbol, priority: row.priority });
+    byIndicator.set(row.indicator_id, list);
+  }
+  return byIndicator;
+}
+
 export interface MajorFxRow {
   fx_pair_id: string;
   symbol: string;

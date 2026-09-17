@@ -1,5 +1,10 @@
 import type { FastifyInstance } from 'fastify';
-import { listEventsInRange, listMajorFx, listSnapshotsForEvents } from '../repositories/homeRepository.js';
+import {
+  listEventsInRange,
+  listMajorFx,
+  listRelatedFxPairsForIndicators,
+  listSnapshotsForEvents,
+} from '../repositories/homeRepository.js';
 import { resolveDayRangeUtc } from '../domain/timezone.js';
 import { homeQuerySchema } from '../schemas/home.js';
 
@@ -19,6 +24,10 @@ export function registerHomeRoutes(app: FastifyInstance): void {
       events.map((event) => event.id),
     );
     const snapshotByEventId = new Map(snapshots.map((snapshot) => [snapshot.event_id, snapshot]));
+    const relatedFxPairsByIndicator = await listRelatedFxPairsForIndicators(
+      app.supabase,
+      events.map((event) => event.indicator_id),
+    );
 
     const majorFx = await listMajorFx(app.supabase);
 
@@ -43,6 +52,7 @@ export function registerHomeRoutes(app: FastifyInstance): void {
           previous: snapshot?.previous ?? null,
           surprise: snapshot?.surprise ?? null,
           surprise_direction: snapshot?.surprise_direction ?? null,
+          related_fx_pairs: relatedFxPairsByIndicator.get(event.indicator_id) ?? [],
         };
       }),
       major_fx: majorFx,

@@ -18,18 +18,42 @@ Auth access token to every Backend request (`Authorization: Bearer
 a real token into it. `Networking/AccountService.swift`,
 `SubscriptionService.swift`, and `EntitlementsService.swift` connect to
 the Backend's `GET /api/v1/account`, `/subscription`, and `/entitlements`
-respectively (matching `fx-event-analyzer-backend/src/routes/` exactly);
-no screen consumes them yet, since none existed before Phase 2 and
-building new ones wasn't asked for — they're ready for a future
-Account/Subscription screen the same way `HomeViewModel(apiClient:)`
-already consumes `APIClient`.
+respectively.
+
+Phase 3: the core UX flow — 経済指標 → イベント → 予想/結果 → Surprise →
+乖離理由 — is now real Backend-backed across 4 new screens plus Home's
+completed API connection:
+
+- **SCR-001 Home**: full event card (Forecast/Actual/Previous/Surprise/
+  countdown/related FX pairs), split into 今日の注目イベント(`SCHEDULED`)
+  and 最近のイベント(`RELEASED`), plus 主要通貨ペアの動向(`major_fx`).
+- **SCR-002 Indicators** (`Features/Indicators/`): `GET /indicators` list
+  with search (`q`) and an importance filter — no ad-hoc frequency filter,
+  per HQ's Phase 3 instruction.
+- **SCR-003 Indicator Detail** (`Features/IndicatorDetail/`):
+  `GET /indicators/{id}` + `GET /indicators/{id}/events` (the latter newly
+  added Backend-side this phase — see the Backend README). Distinct from
+  Event Detail: no single event's Surprise is this screen's headline.
+- **SCR-004 Event Detail** (`Features/EventDetail/`, the central screen):
+  `GET /events/{event_id}`, in ui-screens.md's fixed H-1 order — Forecast/
+  Actual/Previous → Surprise → 乖離理由(fact summary + source URL, no
+  AI-generated text) → 市場への影響 (related FX pairs' 5m reaction).
+  Handles DATA_PENDING/DATA_UNAVAILABLE/NOT_ANALYZABLE and the entitlement-
+  gated 403 case explicitly.
+- **SCR-007 Historical Event Detail** (`Features/HistoricalEventDetail/`):
+  `GET /events/{event_id}/history`, with the mandatory "指標詳細を見る" →
+  SCR-003 navigation.
+- **Navigation**: 4-tab main navigation (Home/Indicators/Search/Settings,
+  ui-screens.md §4 — Search/Settings are tab-slot placeholders only, their
+  content is a later phase), each tab owning its own `NavigationPath` and
+  routing through a shared `AppRoute` enum (`Navigation/`).
 
 No real Supabase project is provisioned yet, and the Node.js Backend
 (`fx-event-analyzer-backend/`) has no deployment target — both `SUPABASE_URL`/
-`SUPABASE_ANON_KEY` and the new `API_BASE_URL` build setting are still
-blank by default, so `HomeView` still — correctly — shows "Backendは準備中
-です" (this is real, not stale copy: nothing is actually reachable yet).
-The app is built to run safely with all three unconfigured.
+`SUPABASE_ANON_KEY` and the `API_BASE_URL` build setting are still blank by
+default, so every screen still — correctly — shows its "Backendは準備中
+です" empty state (this is real, not stale copy: nothing is actually
+reachable yet). The app is built to run safely with all three unconfigured.
 
 ## Requirements
 

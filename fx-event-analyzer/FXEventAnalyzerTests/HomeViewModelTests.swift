@@ -12,16 +12,17 @@ final class HomeViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.state, .backendNotConfigured)
     }
 
-    func testLoadSuccessShowsLoadedEvents() async {
+    func testLoadSuccessSplitsEventsByStatus() async {
         let apiClient = MockAPIClient()
-        let events = [
-            HomeEventSummary(id: "evt_1", indicatorName: "CPI", releaseDatetime: Date(), status: "SCHEDULED")
-        ]
-        apiClient.result = .success(HomeResponse(events: events))
+        let scheduled = Self.makeEvent(id: "evt_scheduled", status: .scheduled)
+        let released = Self.makeEvent(id: "evt_released", status: .released)
+        apiClient.result = .success(HomeResponse(date: "2026-09-17", timezone: "UTC", events: [scheduled, released], majorFx: []))
 
         let viewModel = await load(with: apiClient)
 
-        XCTAssertEqual(viewModel.state, .loaded(events))
+        XCTAssertEqual(viewModel.state, .loaded(events: [scheduled, released], majorFx: []))
+        XCTAssertEqual(viewModel.upcomingEvents, [scheduled])
+        XCTAssertEqual(viewModel.recentEvents, [released])
     }
 
     func testLoadOtherFailureShowsGenericError() async {
@@ -33,6 +34,29 @@ final class HomeViewModelTests: XCTestCase {
         guard case .error = viewModel.state else {
             return XCTFail("Expected .error state, got \(viewModel.state)")
         }
+    }
+
+    // MARK: - Fixtures
+
+    private static func makeEvent(id: String, status: EventStatus) -> HomeEventSummary {
+        HomeEventSummary(
+            id: id,
+            indicatorId: "ind_1",
+            indicatorName: "US CPI",
+            countryCode: "US",
+            currencyCode: "USD",
+            importance: .high,
+            releaseDatetime: Date(),
+            releaseDatetimePrecision: .exact,
+            status: status,
+            dataStatus: .ready,
+            forecast: 3.1,
+            actual: status == .released ? 3.3 : nil,
+            previous: 3.0,
+            surprise: status == .released ? 0.2 : nil,
+            surpriseDirection: status == .released ? .positive : nil,
+            relatedFxPairs: []
+        )
     }
 
     // MARK: - Helper

@@ -78,6 +78,40 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(response.statusCode).toBe(404);
       expect(JSON.parse(response.body).error.code).toBe('INDICATOR_NOT_FOUND');
     });
+
+    it('lists an indicator’s events (§13.3) with the release snapshot folded in', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/v1/indicators/${US_CPI_INDICATOR_ID}/events`,
+        headers: authHeader,
+      });
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0]).toMatchObject({ event_id: US_CPI_EVENT_ID, status: 'RELEASED' });
+      expect(Number(body.data[0].surprise)).toBeCloseTo(0.2);
+      expect(body.meta.total).toBe(1);
+    });
+
+    it('filters an indicator’s events by status', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/v1/indicators/${US_CPI_INDICATOR_ID}/events?status=SCHEDULED`,
+        headers: authHeader,
+      });
+      const body = JSON.parse(response.body);
+      expect(body.data).toHaveLength(0);
+    });
+
+    it('404s the events sub-resource for an unknown indicator', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/api/v1/indicators/00000000-0000-0000-0000-000000000000/events',
+        headers: authHeader,
+      });
+      expect(response.statusCode).toBe(404);
+      expect(JSON.parse(response.body).error.code).toBe('INDICATOR_NOT_FOUND');
+    });
   });
 
   describe('Events', () => {
@@ -142,6 +176,26 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
     });
   });
 
+  describe('Historical Event Detail (api-design.md §20)', () => {
+    it('returns snapshot/explanation and maps reaction data_status to the API-contract analysis_status', async () => {
+      await grantEntitlement(ctx, user.id, FEATURE_CODES.VIEW_HISTORICAL);
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/v1/events/${US_CPI_EVENT_ID}/history`,
+        headers: authHeader,
+      });
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.indicator_id).toBe(US_CPI_INDICATOR_ID);
+      expect(Number(body.snapshot.surprise)).toBeCloseTo(0.2);
+
+      const usdjpy = body.related_fx_pairs.find((pair: { symbol: string }) => pair.symbol === 'USDJPY');
+      const oneMin = usdjpy.reactions.find((r: { timeframe: string }) => r.timeframe === '1m');
+      expect(oneMin.analysis_status).toBe('READY');
+      expect(oneMin.data_status).toBeUndefined();
+    });
+  });
+
   describe('Entitlement gating — VIEW_MARKET_REACTION (api-design.md §27.1)', () => {
     it('403s the reaction endpoint for a user without the entitlement', async () => {
       const response = await ctx.app.inject({
@@ -201,6 +255,17 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.events.some((e: { event_id: string }) => e.event_id === US_CPI_EVENT_ID)).toBe(true);
+    });
+
+    it('includes related_fx_pairs per event (ui-screens.md §5　関連通貨ペア)', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/api/v1/home?date=2026-09-10&timezone=UTC',
+        headers: authHeader,
+      });
+      const body = JSON.parse(response.body);
+      const cpiEvent = body.events.find((e: { event_id: string }) => e.event_id === US_CPI_EVENT_ID);
+      expect(cpiEvent.related_fx_pairs.some((pair: { symbol: string }) => pair.symbol === 'USDJPY')).toBe(true);
     });
 
     it('does not return the event for an unrelated day', async () => {

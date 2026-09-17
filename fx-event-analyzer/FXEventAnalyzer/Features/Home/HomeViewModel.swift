@@ -3,19 +3,18 @@ import Foundation
 
 enum HomeState: Equatable {
     case loading
-    /// No Backend exists yet (Phase 6) — distinct from a real failure.
-    /// HQ's explicit Phase 1 instruction: "API未接続状態は明示的に扱う".
+    /// No Backend base URL configured yet — distinct from a real failure.
     case backendNotConfigured
-    case loaded([HomeEventSummary])
+    case loaded(events: [HomeEventSummary], majorFx: [MajorFxSummary])
     case error(String)
 }
 
-/// SCR-001 Home shell. Phase 1 builds the state machine and UI only — there
-/// is no Backend to actually return events yet, so this will realistically
-/// always resolve to `.backendNotConfigured` until Phase 6. No fake/sample
-/// production data is substituted for a real response; see
-/// `HomeModels.swift` for the DTOs this decodes against once a Backend
-/// exists.
+/// SCR-001 Home. Phase 3 §4: real `GET /home` connection —
+/// `HomeView → HomeViewModel → APIClient → Backend API → DTO → UI`, no
+/// fake production data. Splits the single day-scoped `events` array into
+/// "今日の注目イベント" (mainly SCHEDULED) and "最近のイベント" (RELEASED)
+/// itself, per api-design.md §12's H-2 resolution — the Backend does not
+/// provide a separate field/endpoint for this.
 @MainActor
 final class HomeViewModel: ObservableObject {
     @Published private(set) var state: HomeState = .loading
@@ -24,6 +23,16 @@ final class HomeViewModel: ObservableObject {
 
     init(apiClient: APIClient) {
         self.apiClient = apiClient
+    }
+
+    var upcomingEvents: [HomeEventSummary] {
+        guard case .loaded(let events, _) = state else { return [] }
+        return events.filter { $0.status == .scheduled }
+    }
+
+    var recentEvents: [HomeEventSummary] {
+        guard case .loaded(let events, _) = state else { return [] }
+        return events.filter { $0.status == .released }
     }
 
     func load() {
@@ -43,7 +52,7 @@ final class HomeViewModel: ObservableObject {
         )
         do {
             let response: HomeResponse = try await apiClient.send(endpoint)
-            state = .loaded(response.events)
+            state = .loaded(events: response.events, majorFx: response.majorFx)
         } catch let error as APIError where error.isNotConfigured {
             state = .backendNotConfigured
         } catch {

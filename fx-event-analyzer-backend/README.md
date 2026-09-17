@@ -7,15 +7,25 @@ full specs live at
 (`db-design.md`, `api-design.md` are the ones this directory implements
 against).
 
-## Status (Phase 2)
+## Status (Phase 3)
 
-**Done**: DB migrations (all 13 entities from db-design.md v4.2), RLS
-policies, `pg_trgm` search indexes, development/test seed data, and the
+**Done (Phase 2)**: DB migrations (all 13 entities from db-design.md v4.2),
+RLS policies, `pg_trgm` search indexes, development/test seed data, and the
 Backend API server itself — bootstrap (Fastify/TypeScript/config/error
 handler/health check/graceful shutdown), JWT auth middleware, Authorization
 and Entitlement checks, and all 12 HQ-specified endpoints (Account,
 Subscription, Entitlements, Indicators, Events, Reaction, Historical,
 Search, Home).
+
+**Done (Phase 3)**: two gaps found while wiring the iOS client's SCR-001〜
+SCR-004/007 screens against this Backend, both already specified in
+api-design.md but not yet implemented/correct in Phase 2 code — fixed as
+minor implementation-level corrections (api-design.md's contract itself was
+unchanged):
+- `GET /indicators/{id}/events` (§13.3) — was entirely missing.
+- `GET /home`'s events were missing `related_fx_pairs` (§12); `GET
+  /events/{id}/history`'s reactions leaked the raw DB `data_status` value
+  instead of the API-contract `analysis_status` (§7.1/§20).
 
 **Backend Technology (HQ confirmed, 2026-09-17)**: Node.js + TypeScript +
 Fastify v5, `@supabase/supabase-js` (service_role) for DB access, `zod` for
@@ -38,8 +48,8 @@ verification handles either signing mode transparently and needs no
 **Not yet provisioned**: no real Supabase project exists for FX Event
 Analyzer (confirmed in the Phase 0 audit, still true). Migrations and the
 API server here are ready to run the moment one exists; `.env.example`
-lists what `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`SUPABASE_JWT_SECRET`
-need to be set to.
+lists what `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`SUPABASE_ANON_KEY`
+need to be set to (no JWT secret — see JWKS note below).
 
 **Out of scope for Phase 2** (per the Phase 2 instruction, deliberately not
 implemented yet): external Economic Indicator/FX Price Provider
@@ -52,7 +62,7 @@ auto-trading/signal/prediction features.
 ```sh
 cd fx-event-analyzer-backend
 npm install
-cp .env.example .env   # fill in SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_JWT_SECRET
+cp .env.example .env   # fill in SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
 npm run dev             # tsx watch src/server.ts
 ```
 
@@ -64,9 +74,9 @@ npm run format       # prettier --check
 npm run typecheck    # tsc --noEmit against both src/ and tests/
 npm test             # vitest — pure-logic + fake-boundary tests always run;
                       # tests/integration/** self-skips unless SUPABASE_URL /
-                      # SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY /
-                      # SUPABASE_JWT_SECRET point at a real local Supabase
-                      # stack (see tests/integration/setup.ts). CI provides
+                      # SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY point
+                      # at a real local Supabase stack (see
+                      # tests/integration/setup.ts). CI provides
                       # that stack via the Supabase CLI — see
                       # .github/workflows/fx-event-analyzer-backend-ci.yml.
 ```

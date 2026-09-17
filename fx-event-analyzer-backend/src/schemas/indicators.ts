@@ -9,3 +9,12 @@ export const listIndicatorsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
   sort: z.enum(['name', 'importance', 'created_at']).optional(),
 });
+
+export const listIndicatorEventsQuerySchema = z.object({
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+  status: z.enum(['SCHEDULED', 'RELEASED', 'CANCELLED']).optional(),
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  sort: z.enum(['release_datetime']).optional(),
+});

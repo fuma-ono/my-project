@@ -11,6 +11,7 @@ import {
 import { listReactionsForPair } from '../repositories/reactionsRepository.js';
 import { computeAdvancedHistoricalStats, computeHistoricalStats } from '../domain/historicalStatistics.js';
 import { gateAdvancedStatistics } from '../domain/advancedStatistics.js';
+import { resolveTimeframeAnalysisStatus, type ReleaseDatetimePrecision } from '../domain/dataQuality.js';
 import { comparisonQuerySchema } from '../schemas/historical.js';
 import { buildMeta, parsePagination, rangeFor } from '../utils/pagination.js';
 
@@ -34,12 +35,27 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
       listRelatedFxPairs(app.supabase, event.indicator_id),
     ]);
 
+    const precision = event.release_datetime_precision as ReleaseDatetimePrecision;
+
     const reactionsByPair = await Promise.all(
-      relatedFxPairs.map(async (pair) => ({
-        fx_pair_id: pair.fx_pair_id,
-        symbol: pair.symbol,
-        reactions: await listReactionsForPair(app.supabase, eventId, pair.fx_pair_id),
-      })),
+      relatedFxPairs.map(async (pair) => {
+        const reactions = await listReactionsForPair(app.supabase, eventId, pair.fx_pair_id);
+        return {
+          fx_pair_id: pair.fx_pair_id,
+          symbol: pair.symbol,
+          // api-design.md §7.1: never leak the raw DB data_status value —
+          // always the API-contract analysis_status (READY/DATA_PENDING/
+          // DATA_UNAVAILABLE/NOT_ANALYZABLE).
+          reactions: reactions.map(({ data_status: dataStatus, ...rest }) => ({
+            ...rest,
+            analysis_status: resolveTimeframeAnalysisStatus(
+              rest.timeframe as '1m' | '5m' | '15m' | '30m' | '60m',
+              precision,
+              dataStatus as 'PENDING' | 'AVAILABLE' | 'UNAVAILABLE',
+            ),
+          })),
+        };
+      }),
     );
 
     return {

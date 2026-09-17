@@ -30,7 +30,7 @@ struct RootView: View {
                     sessionExpired: sessionExpired
                 )
             case .loggedIn:
-                HomeView(viewModel: HomeViewModel(apiClient: apiClient))
+                MainTabView(apiClient: apiClient)
             }
         }
         .preferredColorScheme(.dark) // MVP baseline theme (ui-screens.md 5.0節); see DesignTokens.swift
