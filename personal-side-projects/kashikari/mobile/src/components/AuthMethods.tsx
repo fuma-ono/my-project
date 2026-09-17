@@ -20,7 +20,10 @@ type Props = {
   // 'signin': 別のアカウントとしてサインインし直す(オンボーディング、
   // 機種変更・再インストール後の復旧用)。
   mode: AuthMode;
-  onDone: (message: string) => void;
+  // appleFullName: Sign in with Appleが返した氏名(初回のみ、それ以外は
+  // undefined/null)。呼び出し元(Onboarding/LoginSheet)が名前入力欄の
+  // 初期値として使う(Apple審査Guideline 4対応、下記run()参照)。
+  onDone: (message: string, appleFullName?: string | null) => void;
 };
 
 // Google/Apple/LINE/メールでのログインをまとめた共通UI。設定画面
@@ -44,7 +47,7 @@ export default function AuthMethods({ mode, onDone }: Props) {
     }
   }, [mode]);
 
-  const run = async (provider: string, action: () => Promise<{ error: string | null; cancelled?: boolean }>) => {
+  const run = async (provider: string, action: () => Promise<{ error: string | null; cancelled?: boolean; fullName?: string | null }>) => {
     setError(null);
     setBusyProvider(provider);
     const res = await action();
@@ -59,7 +62,7 @@ export default function AuthMethods({ mode, onDone }: Props) {
       setError(res.error);
       return;
     }
-    onDone(mode === 'link' ? t.authMethods.linkSuccessToast : t.authMethods.signInSuccessToast);
+    onDone(mode === 'link' ? t.authMethods.linkSuccessToast : t.authMethods.signInSuccessToast, res.fullName);
   };
 
   const sendCode = async () => {

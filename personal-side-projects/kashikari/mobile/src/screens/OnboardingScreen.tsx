@@ -90,8 +90,14 @@ export default function OnboardingScreen({
             <Text style={styles.signInDescription}>{t.onboarding.accountStepDescriptionSignup}</Text>
             <AuthMethods
               mode="signin"
-              onDone={(message) => {
+              onDone={(message, appleFullName) => {
                 setSignInNote(message);
+                // Sign in with Appleが名前を返した場合、名前入力欄に
+                // あらかじめ入れておく(Apple審査Guideline 4対応:
+                // Authentication Servicesで既に取得済みの情報を、
+                // アプリ側で改めて入力させない)。ユーザーはそのまま
+                // 進める(=何も入力しなくてよい)か、必要なら編集できる。
+                if (appleFullName) setName(appleFullName);
                 // 名前が未登録(=新規サインアップ)の場合はuseAuth側で
                 // profileがnullのままなので、App.tsx側は自動的にこの
                 // コンポーネントをnameステップの状態に保つ…わけではなく、
@@ -160,8 +166,10 @@ export default function OnboardingScreen({
       <LoginSheet
         visible={loginSheetOpen}
         onClose={() => setLoginSheetOpen(false)}
-        onSignedIn={() => {
+        onSignedIn={(appleFullName) => {
           setLoginSheetOpen(false);
+          // 同上(account stepのAuthMethods.onDoneと同じ理由)。
+          if (appleFullName) setName(appleFullName);
           // ログインしたつもりが実は初めてのアカウントだった場合(=まだ
           // 名前未登録)、App.tsx側はprofileがnullのままこの画面を
           // 抜けないので、そのままnameステップに進めて名前を登録して

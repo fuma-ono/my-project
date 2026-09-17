@@ -8,7 +8,8 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   // サインインが成功した瞬間(=中断ではなく実際にサインインできた)に呼ぶ。
-  onSignedIn: () => void;
+  // appleFullName: Sign in with Appleが返した氏名(初回のみ)。
+  onSignedIn: (appleFullName?: string | null) => void;
 };
 
 // 「ログインの時はページではなく、ボタンを押したら下からログイン項目が
@@ -41,7 +42,7 @@ export default function LoginSheet({ visible, onClose, onSignedIn }: Props) {
               <View style={styles.grabber} />
               <Text style={styles.title}>{t.onboarding.accountStepTitleLogin}</Text>
               <Text style={styles.description}>{t.onboarding.accountStepDescriptionLogin}</Text>
-              <AuthMethods mode="signin" onDone={onSignedIn} />
+              <AuthMethods mode="signin" onDone={(_message, appleFullName) => onSignedIn(appleFullName)} />
               <Pressable onPress={onClose} style={styles.cancelBtn}>
                 <Text style={styles.cancelBtnText}>{t.common.cancel}</Text>
               </Pressable>

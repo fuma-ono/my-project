@@ -12,6 +12,13 @@ Web版プロトタイプ(`../app/index.html`、Claude Artifacts)は「1URL=1つ�
 2. プロジェクトの **SQL Editor** を開き、`supabase/schema.sql` の中身を全部貼り付けて実行する
 3. **Authentication > Providers** で **Email** が有効になっていることを確認する(44回目までの匿名サインイン前提の設計を撤廃し、Google/Apple/LINE/メールのいずれかでのサインインが必須になった。Emailは追加登録なしで使えるので、最低限これだけは有効にしておく。Google/Apple/LINEも使いたい場合は、それぞれ「Google/Apple/LINEでのログインを追加(40回目)」を参照)
 4. **Project Settings > API Keys** を開き、`Project URL` と、**「Publishable and secret API keys」**タブにある **Publishable key**(`sb_publishable_...`)を控える。**「Legacy anon, service_role API keys」タブの`anon`キーは使わない**こと(Supabaseが新しいキー体系に移行しており、レガシーキーは同じプロジェクトでも無効化されている/されるため)
+5. **【必須・見落としやすい】Authentication > Email Templates** で **「Confirm signup」** と **「Magic Link」** の両方を編集し、本文中の確認リンク(`{{ .ConfirmationURL }}` を使ったボタン/リンク)を、6桁コード(`{{ .Token }}`)を表示する形に書き換える。デフォルトのテンプレートはどちらもリンク方式のままなので、**これをやらないとアプリ側は6桁コード入力の画面を出しているのに、実際に届くメールはリンクのみ(コードがどこにも書かれていない)という状態になる**(103回目、Apple審査Guideline 2.1(a)で指摘・差し戻された不具合の原因)。両テンプレートとも、本文のリンク部分を例えば以下のように置き換える:
+   ```html
+   <h2>確認コード</h2>
+   <p>以下の6桁のコードをアプリに入力してください。</p>
+   <h1>{{ .Token }}</h1>
+   ```
+   （デザインは自由。重要なのは`{{ .ConfirmationURL }}`だけに頼らず`{{ .Token }}`を本文に表示すること。`shouldCreateUser: true`で送る`signInWithOtp`は、宛先が新規メールアドレスかどうかでSupabase内部的に「Confirm signup」「Magic Link」のどちらのテンプレートが使われるか変わりうるため、両方直しておく。）
 
 ### 2. 環境変数を設定する
 
@@ -1954,3 +1961,34 @@ Apple App Store審査で「Guideline 2.1 - Information Needed」として差し�
 **追記(実機確認、PGRST204エラー)**: `schema.sql`再実行・Edge Functionデプロイ後、実機で「アカウントを削除」を試したところ、Edge Functionのログに`Could not find the 'deleted_at' column of 'profiles' in the schema cache`(PGRST204)というエラーが記録されていた。列自体は`ALTER TABLE`で追加済みだったが、SupabaseのAPI層(PostgREST)が保持しているテーブル構造のキャッシュが更新されていなかったことが原因(`ALTER TABLE`実行後に自動でキャッシュが更新されないことがある、という既知の挙動)。SQL Editorで`NOTIFY pgrst, 'reload schema';`を実行してキャッシュを強制更新してもらったところ解消し、**実機でアカウント削除の動作を確認できた**(削除後ログイン画面に戻り、以後ログインできない)。
 
 同様の「列は追加したのに`could not find the column ... in the schema cache`」が今後起きた場合は、まずこの`NOTIFY pgrst, 'reload schema';`を試すとよい。
+
+## 再提出後の審査差し戻し(103回目)。Sign in with Apple・メールOTP・IAP未提出の3件
+
+2026-09-16、アカウント削除対応(102回目)後の再提出に対し、Apple審査から新たに3件の指摘で差し戻された。1件はコード側の不具合、残り2件はダッシュボード側の設定・操作漏れ。
+
+**① Guideline 4 - Design: Sign in with Appleで、既に取得済みの氏名を改めて入力させている**
+
+`OnboardingScreen.tsx`は、どのログイン方法を使っても一律で「名前」入力画面(name step)に進む作りだった。Sign in with Appleは初回サインインの際に氏名(`AppleAuthentication.signInAsync`の`credential.fullName`)を返すが、これまではその値を一切使っておらず、Appleでサインインした直後でも空欄の名前入力を求めていた。Sign in with AppleのHIGは「Authentication Servicesで既に取得できる情報を、アプリ側で改めて要求してはいけない」と定めている。
+
+- `socialAuth.ts`の`signInWithApple()`が`credential.fullName`(givenName + familyName)を組み立てて返すように変更(2回目以降のサインインではAppleがfullNameを返さない仕様のため、その場合は`null`)
+- `AuthMethods.tsx`の`onDone`コールバックに`appleFullName`引数を追加し、`run()`内で結果を素通しするように変更
+- `OnboardingScreen.tsx`・`LoginSheet.tsx`: `appleFullName`が取れた場合、名前入力欄をあらかじめその値で埋めるようにした。ユーザーは何も入力せずそのまま次へ進めるし、必要なら編集もできる(=「既に取得済みの情報の再入力を強制する」状態を解消。氏名以外のアイコン選択ステップはAuthentication Servicesが提供する情報ではないため対象外)
+
+`npx tsc --noEmit`はクリーン。Sign in with Apple自体の実機テストは(Apple IDでの初回認可が絡むため)TestFlight/本番ビルドでの確認が必要。
+
+**② Guideline 2.1(a): アカウント登録時、6桁コードではなくメール確認リンクが届いた**
+
+アプリ側(`socialAuth.ts`)は`signInWithOtp` + `verifyOtp`という6桁コード方式で実装済みだったが、**Supabase側の「Confirm signup」「Magic Link」メールテンプレートがどちらもデフォルトのまま(`{{ .ConfirmationURL }}`のリンク方式)**だったため、アプリが6桁コード入力画面を出しているにもかかわらず、実際に届くメールにはコードが書かれておらずリンクしか無い、という不一致が起きていた。**これはコードの不具合ではなくSupabaseダッシュボード側の設定漏れ**であり、このリポジトリのコードだけでは直せない(`supabase/config.toml`にメールテンプレートの管理は含まれていない)。
+
+**オーナー対応が必須**: 上記セットアップ手順の「1-5」に追記した通り、Supabaseダッシュボードの **Authentication > Email Templates** で「Confirm signup」「Magic Link」の両方を編集し、本文に`{{ .Token }}`(6桁コード)を表示するように直す必要がある。
+
+**③ Guideline 2.1(b): In-App Purchase(Premium)が審査に提出されていない**
+
+アプリ内のPremium課金機能(RevenueCat経由)自体は実装済みだが、**App Store Connect側でPremiumのIn-App Purchase商品がApp Reviewに提出されていなかった**ため、審査チームがバイナリと一緒に確認できなかった。これもコード側の問題ではなくApp Store Connect側の操作漏れ。
+
+**オーナー対応が必須**: App Store Connectの「アプリ内課金」で該当のPremium商品にApp Reviewスクリーンショットを添付した上で審査へ提出し、その状態で次のビルドを再提出する必要がある(IAPは新規バイナリと同時審査でないと通らない)。
+
+**まとめ・次のアクション**:
+1. コード側(①)は本コミットで修正済み
+2. オーナー側で②(Email Templates)・③(IAP審査提出)を対応
+3. 対応後、`eas build --platform ios --profile production` → `eas submit --platform ios --latest`で再ビルド・再提出

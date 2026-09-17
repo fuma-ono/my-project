@@ -165,21 +165,31 @@ export async function isAppleSignInAvailable(): Promise<boolean> {
   }
 }
 
-export async function signInWithApple(mode: AuthMode): Promise<{ error: string | null; cancelled?: boolean }> {
+export async function signInWithApple(mode: AuthMode): Promise<{ error: string | null; cancelled?: boolean; fullName?: string | null }> {
   try {
     const credential = await AppleAuthentication.signInAsync({
       requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME, AppleAuthentication.AppleAuthenticationScope.EMAIL],
     });
     if (!credential.identityToken) return { error: 'apple sign-in failed' };
+    // Appleは初回サインインのそのユーザー・そのアプリの組み合わせでのみ
+    // fullNameを返す(2回目以降はnull)。Sign in with AppleのHIG違反
+    // (Apple審査、2026-09-16指摘「Authentication Servicesで既に
+    // 取得できる名前を、アプリ側で改めて入力させている」)への対応として、
+    // ここで拾えた名前を呼び出し元(AuthMethods→Onboarding画面)まで
+    // 返し、名前入力欄をあらかじめ埋める(=ユーザーは何も入力せず
+    // 進めるようにし、必要なら編集できる状態にする)。
+    const given = credential.fullName?.givenName?.trim();
+    const family = credential.fullName?.familyName?.trim();
+    const fullName = [given, family].filter(Boolean).join(' ') || null;
     if (mode === 'link') {
       // linkIdentityはOAuthの往復(URL)を前提にしたAPIのため、Appleの
       // ネイティブトークンを直接渡す口が無い。今の匿名アカウントを
       // 保護する目的では、Google/LINE同様にブラウザ経由のOAuthに
-      // フォールバックする。
+      // フォールバックする(この経路ではfullNameは取得できない)。
       return runOAuthFlow('apple', mode);
     }
     const { error } = await supabase.auth.signInWithIdToken({ provider: 'apple', token: credential.identityToken });
-    return { error: error?.message ?? null };
+    return { error: error?.message ?? null, fullName };
   } catch (e) {
     const err = e as { code?: string };
     // 「キャンセルしたら次に進めてしまう」バグへの対応(runOAuthFlowと
