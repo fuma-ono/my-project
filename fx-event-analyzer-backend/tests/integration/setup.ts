@@ -62,6 +62,35 @@ export interface TestUser {
 
 let userCounter = 0;
 
+/**
+ * `supabase db reset` restarts containers as its very last step, and
+ * GoTrue's own `/auth/v1/health` (polled by CI before running this suite)
+ * only reports process liveness, not full DB-write readiness — the first
+ * `admin.createUser()` call of a run can still land in that narrow gap.
+ * Observed for real in CI ("Database error creating new user") even after
+ * the health-check wait was added. Retry with a short backoff rather than
+ * fail the whole suite on infra warm-up timing.
+ */
+async function createUserWithRetry(
+  ctx: IntegrationContext,
+  email: string,
+  password: string,
+): Promise<{ user: { id: string } }> {
+  const maxAttempts = 5;
+  let lastErrorMessage = 'unknown error';
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const { data, error } = await ctx.serviceClient.auth.admin.createUser({ email, password, email_confirm: true });
+    if (!error && data.user) {
+      return { user: data.user };
+    }
+    lastErrorMessage = error?.message ?? 'unknown error';
+    if (attempt < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+    }
+  }
+  throw new Error(`Failed to create test user after ${maxAttempts} attempts: ${lastErrorMessage}`);
+}
+
 /** Creates a real auth.users row via the Admin API, then signs in as them
  * (via a fresh anon-key client) to obtain a genuine, GoTrue-issued access
  * token — never a hand-minted JWT — so Auth tests exercise the exact same
@@ -71,10 +100,7 @@ export async function createTestUser(ctx: IntegrationContext): Promise<TestUser>
   const email = `fx-backend-test-${Date.now()}-${userCounter}@example.com`;
   const password = 'Test-Password-1234!';
 
-  const { data, error } = await ctx.serviceClient.auth.admin.createUser({ email, password, email_confirm: true });
-  if (error || !data.user) {
-    throw new Error(`Failed to create test user: ${error?.message ?? 'unknown error'}`);
-  }
+  const data = await createUserWithRetry(ctx, email, password);
 
   const anonClient = createClient(ctx.supabaseUrl, ctx.anonKey);
   const signIn = await anonClient.auth.signInWithPassword({ email, password });
