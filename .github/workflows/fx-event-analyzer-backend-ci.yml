@@ -35,6 +35,7 @@ on:
 jobs:
   lint-typecheck-unit:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: fx-event-analyzer-backend
@@ -64,6 +65,7 @@ jobs:
 
   db-and-integration:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: fx-event-analyzer-backend
@@ -85,9 +87,14 @@ jobs:
           version: latest
 
       - name: Start local Supabase stack
+        # `supabase start` pulls ~10 container images the first time; give
+        # it real headroom, but fail loudly (with logs we can read, unlike
+        # a job that silently runs for hours) rather than hanging forever.
+        timeout-minutes: 12
         run: supabase start
 
       - name: Reset DB (re-applies every migration + seed.sql from scratch)
+        timeout-minutes: 5
         run: supabase db reset
 
       - name: Export local Supabase connection details for integration tests
