@@ -21,15 +21,14 @@ export interface IntegrationEnv {
 }
 
 export function loadIntegrationEnv(): IntegrationEnv | null {
-  const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET, SUPABASE_ANON_KEY } = process.env;
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SUPABASE_JWT_SECRET || !SUPABASE_ANON_KEY) {
+  const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY } = process.env;
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !SUPABASE_ANON_KEY) {
     return null;
   }
   return {
     env: loadEnv({
       SUPABASE_URL,
       SUPABASE_SERVICE_ROLE_KEY,
-      SUPABASE_JWT_SECRET,
       PORT: '3000',
       HOST: '0.0.0.0',
       LOG_LEVEL: 'silent',

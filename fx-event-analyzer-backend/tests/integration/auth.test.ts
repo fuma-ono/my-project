@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import jwt from 'jsonwebtoken';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   buildIntegrationContext,
@@ -44,28 +43,19 @@ describe.skipIf(!integration)('Auth — JWT verification (api-design.md §2.2)',
     expect(response.statusCode).toBe(401);
   });
 
-  it('rejects a token signed with the wrong secret as 401', async () => {
-    const forged = jwt.sign({ sub: userA.id, role: 'authenticated' }, 'wrong-secret', {
-      algorithm: 'HS256',
-      expiresIn: 3600,
-    });
+  it('rejects a genuine token whose signature has been tampered with as 401', async () => {
+    // We hold no private key that the live JWKS trusts, so "wrong secret"/
+    // "expired" signing is not reproducible against a real server here —
+    // that's covered for real (with a locally generated ES256 keypair and
+    // genuine jose signing/verification) in tests/auth/jwt.test.ts. This
+    // exercises the one forgery a real access token *can* be turned into
+    // without a private key: corrupting its signature.
+    const [header, payload, signature] = userA.accessToken.split('.');
+    const tamperedSignature = signature!.slice(0, -1) + (signature!.at(-1) === 'A' ? 'B' : 'A');
     const response = await ctx.app.inject({
       method: 'GET',
       url: '/api/v1/account',
-      headers: { authorization: `Bearer ${forged}` },
-    });
-    expect(response.statusCode).toBe(401);
-  });
-
-  it('rejects an expired token as 401', async () => {
-    const expired = jwt.sign({ sub: userA.id, role: 'authenticated' }, integration!.env.SUPABASE_JWT_SECRET, {
-      algorithm: 'HS256',
-      expiresIn: -10,
-    });
-    const response = await ctx.app.inject({
-      method: 'GET',
-      url: '/api/v1/account',
-      headers: { authorization: `Bearer ${expired}` },
+      headers: { authorization: `Bearer ${header}.${payload}.${tamperedSignature}` },
     });
     expect(response.statusCode).toBe(401);
   });

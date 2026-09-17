@@ -16,7 +16,7 @@ import { registerHomeRoutes } from './home.js';
  * §27.1; endpoint-specific Entitlement checks happen inside each route.
  */
 export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
-  registerAuth(app, app.env.SUPABASE_JWT_SECRET);
+  registerAuth(app, app.env.SUPABASE_URL);
 
   await app.register(registerAccountRoutes);
   await app.register(registerSubscriptionRoutes);

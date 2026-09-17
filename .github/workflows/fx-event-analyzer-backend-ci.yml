@@ -98,13 +98,14 @@ jobs:
         run: supabase db reset
 
       - name: Export local Supabase connection details for integration tests
+        # No JWT secret needed — src/auth/jwt.ts verifies against the
+        # project's own JWKS (SUPABASE_URL alone is enough).
         run: |
           eval "$(supabase status -o env)"
           {
             echo "SUPABASE_URL=http://127.0.0.1:54321"
             echo "SUPABASE_ANON_KEY=$ANON_KEY"
             echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
-            echo "SUPABASE_JWT_SECRET=$JWT_SECRET"
           } >> "$GITHUB_ENV"
 
       - name: Verify the exported env vars are non-empty
@@ -112,7 +113,7 @@ jobs:
         # loadIntegrationEnv() return null and every integration test would
         # SKIP rather than run — a false green. Fail loudly instead.
         run: |
-          for name in SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY SUPABASE_JWT_SECRET; do
+          for name in SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY; do
             if [ -z "${!name}" ]; then
               echo "::error::$name is empty — 'supabase status -o env' output shape may have changed."
               exit 1

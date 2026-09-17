@@ -1,23 +1,52 @@
-import jwt from 'jsonwebtoken';
-import { describe, expect, it } from 'vitest';
-import { extractBearerToken, verifySupabaseJwt } from '../../src/auth/jwt.js';
+import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type CryptoKey, type JWTVerifyGetKey } from 'jose';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { extractBearerToken, verifyJwtWithKeys } from '../../src/auth/jwt.js';
 
-const SECRET = 'test-jwt-secret-at-least-32-characters-long';
 const USER_ID = '00000000-0000-0000-0000-000000000001';
 
-function signToken(overrides: Partial<{ sub: string; role: string; expiresInSeconds: number; secret: string }> = {}) {
-  const { sub = USER_ID, role = 'authenticated', expiresInSeconds = 3600, secret = SECRET } = overrides;
-  return jwt.sign({ sub, role }, secret, { algorithm: 'HS256', expiresIn: expiresInSeconds });
+// Real jose crypto throughout: a genuine ES256 keypair generated for this
+// test file (mirroring the ES256 signing Supabase Auth actually uses as of
+// Supabase CLI 2.71.1+ — see src/auth/jwt.ts's doc comment), a genuine
+// signature, and genuine verification via the same jwtVerify() call
+// verifySupabaseJwt uses in production. Only the key *source* differs
+// (createLocalJWKSet here vs. createRemoteJWKSet's live HTTP fetch in
+// production) — that's exactly why verifyJwtWithKeys exists as a seam.
+let keys: JWTVerifyGetKey;
+let privateKey: CryptoKey;
+let otherPrivateKey: CryptoKey;
+
+beforeAll(async () => {
+  const pair = await generateKeyPair('ES256', { extractable: true });
+  privateKey = pair.privateKey;
+  keys = createLocalJWKSet({ keys: [{ ...(await exportJWK(pair.publicKey)), alg: 'ES256' }] });
+
+  // A second, untrusted keypair — only its private key is used, to sign a
+  // token that `keys` (above) must not accept.
+  const otherPair = await generateKeyPair('ES256', { extractable: true });
+  otherPrivateKey = otherPair.privateKey;
+});
+
+async function signToken(
+  key: CryptoKey,
+  overrides: Partial<{ sub: string; role: string; expiresInSeconds: number }> = {},
+): Promise<string> {
+  const { sub = USER_ID, role = 'authenticated', expiresInSeconds = 3600 } = overrides;
+  return new SignJWT({ role })
+    .setProtectedHeader({ alg: 'ES256' })
+    .setSubject(sub)
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(Date.now() / 1000) + expiresInSeconds)
+    .sign(key);
 }
 
-describe('verifySupabaseJwt', () => {
-  it('rejects a missing token as "missing"', () => {
-    expect(verifySupabaseJwt(undefined, SECRET)).toEqual({ ok: false, reason: 'missing' });
+describe('verifyJwtWithKeys', () => {
+  it('rejects a missing token as "missing"', async () => {
+    expect(await verifyJwtWithKeys(undefined, keys)).toEqual({ ok: false, reason: 'missing' });
   });
 
-  it('accepts a validly signed, unexpired token and returns its payload', () => {
-    const token = signToken();
-    const result = verifySupabaseJwt(token, SECRET);
+  it('accepts a validly signed, unexpired token and returns its payload', async () => {
+    const token = await signToken(privateKey);
+    const result = await verifyJwtWithKeys(token, keys);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.payload.sub).toBe(USER_ID);
@@ -25,31 +54,37 @@ describe('verifySupabaseJwt', () => {
     }
   });
 
-  it('rejects a token signed with the wrong secret as "invalid"', () => {
-    const token = signToken({ secret: 'a-completely-different-secret-value' });
-    expect(verifySupabaseJwt(token, SECRET)).toEqual({ ok: false, reason: 'invalid' });
+  it('rejects a token signed with a key outside the trusted JWKS as "invalid"', async () => {
+    const token = await signToken(otherPrivateKey);
+    expect(await verifyJwtWithKeys(token, keys)).toEqual({ ok: false, reason: 'invalid' });
   });
 
-  it('rejects a malformed token string as "invalid"', () => {
-    expect(verifySupabaseJwt('not-a-real-jwt', SECRET)).toEqual({ ok: false, reason: 'invalid' });
+  it('rejects a malformed token string as "invalid"', async () => {
+    expect(await verifyJwtWithKeys('not-a-real-jwt', keys)).toEqual({ ok: false, reason: 'invalid' });
   });
 
-  it('rejects an expired token as "expired", distinct from "invalid"', () => {
-    const token = signToken({ expiresInSeconds: -10 });
-    expect(verifySupabaseJwt(token, SECRET)).toEqual({ ok: false, reason: 'expired' });
+  it('rejects an expired token as "expired", distinct from "invalid"', async () => {
+    const token = await signToken(privateKey, { expiresInSeconds: -10 });
+    expect(await verifyJwtWithKeys(token, keys)).toEqual({ ok: false, reason: 'expired' });
   });
 
-  it('rejects a token with no sub claim as "invalid"', () => {
-    const token = jwt.sign({ role: 'authenticated' }, SECRET, { algorithm: 'HS256', expiresIn: 3600 });
-    expect(verifySupabaseJwt(token, SECRET)).toEqual({ ok: false, reason: 'invalid' });
+  it('rejects a token with no sub claim as "invalid"', async () => {
+    const token = await new SignJWT({ role: 'authenticated' })
+      .setProtectedHeader({ alg: 'ES256' })
+      .setIssuedAt()
+      .setExpirationTime(Math.floor(Date.now() / 1000) + 3600)
+      .sign(privateKey);
+    expect(await verifyJwtWithKeys(token, keys)).toEqual({ ok: false, reason: 'invalid' });
   });
 
-  it('rejects a token signed with a different algorithm (alg confusion) as "invalid"', () => {
-    // verifySupabaseJwt pins algorithms: ['HS256'] — a token asserting a
-    // different alg in its header must not be accepted even if some other
-    // part of the signature happens to validate.
-    const token = jwt.sign({ sub: USER_ID }, SECRET, { algorithm: 'HS384', expiresIn: 3600 });
-    expect(verifySupabaseJwt(token, SECRET)).toEqual({ ok: false, reason: 'invalid' });
+  it('rejects a token whose signature has been tampered with as "invalid"', async () => {
+    const token = await signToken(privateKey);
+    const [header, payload, signature] = token.split('.');
+    const tamperedSignature = signature!.slice(0, -1) + (signature!.at(-1) === 'A' ? 'B' : 'A');
+    expect(await verifyJwtWithKeys(`${header}.${payload}.${tamperedSignature}`, keys)).toEqual({
+      ok: false,
+      reason: 'invalid',
+    });
   });
 });
 

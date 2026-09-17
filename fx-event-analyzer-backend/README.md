@@ -19,12 +19,21 @@ Search, Home).
 
 **Backend Technology (HQ confirmed, 2026-09-17)**: Node.js + TypeScript +
 Fastify v5, `@supabase/supabase-js` (service_role) for DB access, `zod` for
-validation, `jsonwebtoken` for JWT verification, `vitest` for tests. No
-ORM — db-design.md's schema is small and stable enough that raw
-supabase-js queries plus hand-written repository return types (see
+validation, `jose` for JWT verification, `vitest` for tests. No ORM —
+db-design.md's schema is small and stable enough that raw supabase-js
+queries plus hand-written repository return types (see
 `src/repositories/`) are enough; see `eslint.config.js` for why that
 layer's untyped Supabase results don't leak `no-unsafe-*` complaints into
 the rest of the codebase.
+
+JWT verification (`src/auth/jwt.ts`) fetches the project's own JWKS
+(`${SUPABASE_URL}/auth/v1/.well-known/jwks.json`) rather than checking a
+shared secret — confirmed necessary against a real local stack in Phase 2
+integration testing: Supabase CLI 2.71.1+ issues ES256-signed access
+tokens by default, not the legacy HS256 this Backend originally verified
+(every authenticated request 401'd until this was fixed). JWKS-based
+verification handles either signing mode transparently and needs no
+`SUPABASE_JWT_SECRET` at all.
 
 **Not yet provisioned**: no real Supabase project exists for FX Event
 Analyzer (confirmed in the Phase 0 audit, still true). Migrations and the

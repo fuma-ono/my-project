@@ -10,10 +10,10 @@ import './types.js';
  * `request.user`; throws 401 on missing/invalid/expired token
  * (api-design.md §2.2, Phase 2 instruction §7).
  */
-export function registerAuth(app: FastifyInstance, jwtSecret: string): void {
-  app.addHook('onRequest', (request) => {
+export function registerAuth(app: FastifyInstance, supabaseUrl: string): void {
+  app.addHook('onRequest', async (request) => {
     const token = extractBearerToken(request.headers.authorization);
-    const result = verifySupabaseJwt(token, jwtSecret);
+    const result = await verifySupabaseJwt(token, supabaseUrl);
 
     if (!result.ok) {
       const message =
