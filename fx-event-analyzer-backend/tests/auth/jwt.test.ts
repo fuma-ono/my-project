@@ -1,6 +1,7 @@
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type CryptoKey, type JWTVerifyGetKey } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { extractBearerToken, verifyJwtWithKeys } from '../../src/auth/jwt.js';
+import { tamperSignature } from '../helpers/tamperSignature.js';
 
 const USER_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -79,9 +80,7 @@ describe('verifyJwtWithKeys', () => {
 
   it('rejects a token whose signature has been tampered with as "invalid"', async () => {
     const token = await signToken(privateKey);
-    const [header, payload, signature] = token.split('.');
-    const tamperedSignature = signature!.slice(0, -1) + (signature!.at(-1) === 'A' ? 'B' : 'A');
-    expect(await verifyJwtWithKeys(`${header}.${payload}.${tamperedSignature}`, keys)).toEqual({
+    expect(await verifyJwtWithKeys(tamperSignature(token), keys)).toEqual({
       ok: false,
       reason: 'invalid',
     });

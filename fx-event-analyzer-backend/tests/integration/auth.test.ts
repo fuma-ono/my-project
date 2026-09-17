@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { tamperSignature } from '../helpers/tamperSignature.js';
 import {
   buildIntegrationContext,
   createTestUser,
@@ -50,12 +51,10 @@ describe.skipIf(!integration)('Auth — JWT verification (api-design.md §2.2)',
     // genuine jose signing/verification) in tests/auth/jwt.test.ts. This
     // exercises the one forgery a real access token *can* be turned into
     // without a private key: corrupting its signature.
-    const [header, payload, signature] = userA.accessToken.split('.');
-    const tamperedSignature = signature!.slice(0, -1) + (signature!.at(-1) === 'A' ? 'B' : 'A');
     const response = await ctx.app.inject({
       method: 'GET',
       url: '/api/v1/account',
-      headers: { authorization: `Bearer ${header}.${payload}.${tamperedSignature}` },
+      headers: { authorization: `Bearer ${tamperSignature(userA.accessToken)}` },
     });
     expect(response.statusCode).toBe(401);
   });
