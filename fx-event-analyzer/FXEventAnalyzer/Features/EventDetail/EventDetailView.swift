@@ -48,7 +48,7 @@ struct EventDetailView: View {
                     if let explanation = response.explanation {
                         explanationSection(explanation)
                     }
-                    relatedFxPairsSection(response.relatedFxPairs)
+                    relatedFxPairsSection(response.relatedFxPairs, event: response.event)
                 }
                 .padding(DesignTokens.Spacing.md)
                 .adaptiveContentWidth()
@@ -206,7 +206,7 @@ struct EventDetailView: View {
 
     // MARK: - 市場への影響 / 関連FXペア・Reaction
 
-    private func relatedFxPairsSection(_ pairs: [EventRelatedFxPair]) -> some View {
+    private func relatedFxPairsSection(_ pairs: [EventRelatedFxPair], event: EventDetailEvent) -> some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
             Text("市場への影響 (関連通貨ペア)")
                 .font(DesignTokens.Typography.headline)
@@ -217,7 +217,16 @@ struct EventDetailView: View {
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
             } else {
                 ForEach(pairs) { pair in
-                    reactionRow(pair)
+                    NavigationLink(value: AppRoute.movementDetail(
+                        eventId: event.id,
+                        fxPairId: pair.fxPairId,
+                        symbol: pair.symbol,
+                        indicatorName: event.indicatorName,
+                        releaseDatetime: event.releaseDatetime
+                    )) {
+                        reactionRow(pair)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -244,6 +253,9 @@ struct EventDetailView: View {
                     .font(DesignTokens.Typography.caption)
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
             }
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
         }
         .padding(.vertical, DesignTokens.Spacing.sm)
         .padding(.horizontal, DesignTokens.Spacing.md)

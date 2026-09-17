@@ -48,6 +48,28 @@ completed API connection:
   content is a later phase), each tab owning its own `NavigationPath` and
   routing through a shared `AppRoute` enum (`Navigation/`).
 
+Phase 4: "市場への影響" — SCR-005 Movement Detail and SCR-006 Historical
+Comparison, both real Backend-backed:
+
+- **SCR-005 Movement Detail** (`Features/MovementDetail/`): reached by
+  tapping a related FX pair on SCR-004. Fetches every timeframe's Reaction
+  summary once (`GET /events/{id}/reaction?timeframe=all`, api-design.md
+  §18.1) so the 1m/5m/15m/30m/60m Segmented Control switches instantly, and
+  re-fetches only the Chart (`GET /events/{id}/reaction/chart`, §19) per
+  timeframe. Uses Swift Charts (`import Charts`, no third-party
+  dependency) for a close-price line with a release-time `RuleMark` and
+  pre/post `RectangleMark` shading. pips/movement/change%/max upward-
+  downward are the Backend's values, never recomputed client-side.
+- **SCR-006 Historical Comparison** (`Features/HistoricalComparison/`):
+  `GET /indicators/{id}/comparison`, reached from SCR-003's "過去の発表を
+  見る". Advanced Statistics follows the existing partial-gating contract
+  (§21.3) — a FREE user sees the whole screen with a "Proで解放" note, never
+  a 403 blocking the page.
+- Both screens share the same Segmented Control timeframe pattern as SCR-005
+  for visual consistency, and cap content width on iPad via
+  `adaptiveContentWidth()`; Movement Detail additionally splits chart/
+  figures side-by-side on wide layouts via `ViewThatFits`.
+
 No real Supabase project is provisioned yet, and the Node.js Backend
 (`fx-event-analyzer-backend/`) has no deployment target — both `SUPABASE_URL`/
 `SUPABASE_ANON_KEY` and the `API_BASE_URL` build setting are still blank by

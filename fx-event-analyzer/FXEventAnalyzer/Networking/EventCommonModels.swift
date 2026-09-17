@@ -4,6 +4,14 @@ import Foundation
 /// across Home / Indicators / Event Detail / Historical Event Detail DTOs.
 /// Kept together rather than duplicated per-screen-model file.
 
+/// api-design.md §11: the fixed MVP timeframe set. BEFORE is never a
+/// timeframe — pre-release price is tracked separately as
+/// `pre_release_price`.
+enum ReactionTimeframe {
+    static let all = ["1m", "5m", "15m", "30m", "60m"]
+    static let `default` = "5m"
+}
+
 enum Importance: String, Decodable, Equatable {
     case low = "LOW"
     case medium = "MEDIUM"

@@ -36,6 +36,25 @@ struct IndicatorDetailView: View {
                     metadataSection(indicator)
                     if !relatedFxPairs.isEmpty {
                         relatedFxPairsSection(relatedFxPairs)
+                        // ui-screens.md §5 SCR-003: "「過去の発表を見る」からSCR-006
+                        // Historical Comparisonへ" — priority-sorted, so the first
+                        // related pair is the primary one for this indicator.
+                        if let primaryPair = relatedFxPairs.first {
+                            NavigationLink(value: AppRoute.historicalComparison(
+                                indicatorId: indicator.id,
+                                indicatorName: indicator.name,
+                                fxPairId: primaryPair.fxPairId,
+                                fxPairSymbol: primaryPair.symbol
+                            )) {
+                                Text("過去の発表を見る")
+                                    .font(DesignTokens.Typography.body)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(DesignTokens.Spacing.md)
+                                    .background(DesignTokens.Colors.accentGradient)
+                                    .foregroundStyle(Color.black)
+                                    .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.control))
+                            }
+                        }
                     }
                     recentEventsSection(recentEvents)
                 }
