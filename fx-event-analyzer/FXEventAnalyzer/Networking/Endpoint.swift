@@ -6,7 +6,7 @@ import Foundation
 /// consumers (starting with `HomeViewModel`) have a real shape to build
 /// against instead of ad-hoc `URLRequest` construction later.
 struct Endpoint {
-    enum Method: String {
+    enum Method: String, Equatable {
         case get = "GET"
         case post = "POST"
         case patch = "PATCH"

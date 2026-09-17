@@ -4,7 +4,7 @@ import Foundation
 /// §4 (Error Response). These are the codes the Backend is specified to
 /// return in `error.code`; the client must not invent its own vocabulary
 /// for the same failure modes.
-enum APIErrorCode: String, Decodable {
+enum APIErrorCode: String, Decodable, Equatable {
     case unauthorized = "UNAUTHORIZED"
     case forbidden = "FORBIDDEN"
     case notFound = "NOT_FOUND"

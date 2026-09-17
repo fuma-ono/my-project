@@ -7,8 +7,18 @@ struct FXEventAnalyzerApp: App {
 
     init() {
         let config = SupabaseConfig.loadFromInfoPlist()
-        authService = SupabaseAuthService(config: config)
-        apiClient = URLSessionAPIClient()
+        let authService = SupabaseAuthService(config: config)
+        self.authService = authService
+        // Phase 2: every Backend request now carries the signed-in user's
+        // Supabase Auth access token (api-design.md §2.2's
+        // Authorization: Bearer <token>) — without this, every
+        // authenticated Backend endpoint would 401 regardless of how
+        // correctly it's called. `try?` because a missing/expired session
+        // must degrade to an unauthenticated request (and a 401 from the
+        // Backend), never crash the app.
+        apiClient = URLSessionAPIClient(authTokenProvider: {
+            try? await authService.currentSession()?.accessToken
+        })
     }
 
     var body: some Scene {

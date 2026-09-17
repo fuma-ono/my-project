@@ -10,12 +10,14 @@ name: FX Event Analyzer iOS Build & Test
 # builds and runs unit tests on the Simulator only, no TestFlight
 # submission. See fx-event-analyzer/README.md.
 #
-# SUPABASE_URL / SUPABASE_ANON_KEY are read from repo secrets
-# (FX_SUPABASE_URL / FX_SUPABASE_ANON_KEY). Until a real Supabase project
-# exists these are simply unset, which GitHub Actions resolves to an empty
-# string — the app is built to handle that without crashing (see
-# FXEventAnalyzer/Auth/SupabaseConfig.swift), so an unconfigured build is
-# expected to succeed, not fail.
+# SUPABASE_URL / SUPABASE_ANON_KEY / API_BASE_URL are read from repo
+# secrets (FX_SUPABASE_URL / FX_SUPABASE_ANON_KEY / FX_API_BASE_URL). Until
+# a real Supabase project and a deployed Backend exist these are simply
+# unset, which GitHub Actions resolves to an empty string — the app is
+# built to handle that without crashing (see
+# FXEventAnalyzer/Auth/SupabaseConfig.swift and
+# Networking/APIClient.swift's defaultBaseURLProvider), so an unconfigured
+# build is expected to succeed, not fail.
 #
 # This project is entirely independent of personal-side-projects/kashikari/
 # (separate Bundle ID, separate Supabase project, no shared secrets) — see
@@ -84,6 +86,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.FX_SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.FX_SUPABASE_ANON_KEY }}
+          API_BASE_URL: ${{ secrets.FX_API_BASE_URL }}
         run: |
           xcodebuild build \
             -project FXEventAnalyzer.xcodeproj \
@@ -92,12 +95,14 @@ jobs:
             -derivedDataPath DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             SUPABASE_URL="$SUPABASE_URL" \
-            SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+            SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            API_BASE_URL="$API_BASE_URL"
 
       - name: Test
         env:
           SUPABASE_URL: ${{ secrets.FX_SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.FX_SUPABASE_ANON_KEY }}
+          API_BASE_URL: ${{ secrets.FX_API_BASE_URL }}
         run: |
           xcodebuild test \
             -project FXEventAnalyzer.xcodeproj \
@@ -106,4 +111,5 @@ jobs:
             -derivedDataPath DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             SUPABASE_URL="$SUPABASE_URL" \
-            SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+            SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            API_BASE_URL="$API_BASE_URL"

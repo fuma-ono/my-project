@@ -7,8 +7,10 @@ final class MockAPIClient: APIClient {
     }
 
     var result: MockResult = .failure(APIError.notConfigured)
+    private(set) var lastEndpoint: Endpoint?
 
     func send<T: Decodable>(_ endpoint: Endpoint) async throws -> T {
+        lastEndpoint = endpoint
         switch result {
         case .success(let value):
             guard let typed = value as? T else {

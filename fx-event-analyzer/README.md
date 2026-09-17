@@ -10,9 +10,26 @@ treat that directory as the source of truth for behavior, not this README.
 
 Phase 1 (app foundation): Xcode project scaffold, navigation, theme,
 network layer, Supabase Auth integration, SCR-000 Splash, SCR-010 Login,
-SCR-001 Home shell. No backend exists yet (Phase 6) and no real Supabase
-project is connected yet — the app is built to run safely with those
-unconfigured.
+SCR-001 Home shell.
+
+Phase 2: `URLSessionAPIClient` now attaches the signed-in user's Supabase
+Auth access token to every Backend request (`Authorization: Bearer
+<token>`, api-design.md §2.2) — Phase 1 built this client but never wired
+a real token into it. `Networking/AccountService.swift`,
+`SubscriptionService.swift`, and `EntitlementsService.swift` connect to
+the Backend's `GET /api/v1/account`, `/subscription`, and `/entitlements`
+respectively (matching `fx-event-analyzer-backend/src/routes/` exactly);
+no screen consumes them yet, since none existed before Phase 2 and
+building new ones wasn't asked for — they're ready for a future
+Account/Subscription screen the same way `HomeViewModel(apiClient:)`
+already consumes `APIClient`.
+
+No real Supabase project is provisioned yet, and the Node.js Backend
+(`fx-event-analyzer-backend/`) has no deployment target — both `SUPABASE_URL`/
+`SUPABASE_ANON_KEY` and the new `API_BASE_URL` build setting are still
+blank by default, so `HomeView` still — correctly — shows "Backendは準備中
+です" (this is real, not stale copy: nothing is actually reachable yet).
+The app is built to run safely with all three unconfigured.
 
 ## Requirements
 

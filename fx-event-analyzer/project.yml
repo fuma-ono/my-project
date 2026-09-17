@@ -15,6 +15,12 @@ settings:
     # see FXEventAnalyzer/Auth/SupabaseConfig.swift.
     SUPABASE_URL: ""
     SUPABASE_ANON_KEY: ""
+    # Phase 2: the Node.js Backend's own base URL (e.g.
+    # https://api.example.com/api/v1), separate from SUPABASE_URL (the
+    # Supabase project iOS's Auth SDK talks to directly — see
+    # Networking/APIClient.swift's defaultBaseURLProvider). Blank by
+    # default; no Backend has been deployed anywhere yet (Phase 2 report).
+    API_BASE_URL: ""
 
 packages:
   Supabase:
@@ -61,6 +67,8 @@ targets:
         # populates from GitHub Actions secrets and which are blank by default.
         SUPABASE_URL: "$(SUPABASE_URL)"
         SUPABASE_ANON_KEY: "$(SUPABASE_ANON_KEY)"
+        # Read at runtime via URLSessionAPIClient.defaultBaseURLProvider.
+        API_BASE_URL: "$(API_BASE_URL)"
     dependencies:
       - package: Supabase
         product: Auth
