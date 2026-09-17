@@ -7,6 +7,7 @@ import {
 } from '../repositories/homeRepository.js';
 import { resolveDayRangeUtc } from '../domain/timezone.js';
 import { homeQuerySchema } from '../schemas/home.js';
+import { mapEventDataStatus, type EconomicEventDbStatus } from '../domain/dataQuality.js';
 
 /**
  * GET /home — api-design.md §12. "最近のイベント" is not a separate
@@ -46,7 +47,7 @@ export function registerHomeRoutes(app: FastifyInstance): void {
           release_datetime: event.release_datetime,
           release_datetime_precision: event.release_datetime_precision,
           status: event.status,
-          data_status: event.data_status,
+          data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
           forecast: snapshot?.forecast ?? null,
           actual: snapshot?.actual ?? null,
           previous: snapshot?.previous ?? null,

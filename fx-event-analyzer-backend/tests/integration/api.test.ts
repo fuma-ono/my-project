@@ -88,7 +88,8 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.data).toHaveLength(1);
-      expect(body.data[0]).toMatchObject({ event_id: US_CPI_EVENT_ID, status: 'RELEASED' });
+      // §7.1: the API contract value (READY), never the raw DB data_status (AVAILABLE).
+      expect(body.data[0]).toMatchObject({ event_id: US_CPI_EVENT_ID, status: 'RELEASED', data_status: 'READY' });
       expect(Number(body.data[0].surprise)).toBeCloseTo(0.2);
       expect(body.meta.total).toBe(1);
     });
@@ -124,6 +125,8 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.event.revision_status).toBe('REVISED');
+      // §7.1: the API contract value (READY), never the raw DB data_status (AVAILABLE).
+      expect(body.event.data_status).toBe('READY');
       expect(body.explanation).not.toBeNull();
       expect(Number(body.analysis.surprise)).toBeCloseTo(0.2);
       expect(body.analysis.surprise_direction).toBe('POSITIVE');
@@ -138,6 +141,8 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       const body = JSON.parse(response.body);
       expect(body.analysis.surprise).toBeNull();
       expect(body.analysis.surprise_direction).toBeNull();
+      // Seed data_status PARTIAL -> API contract DATA_PENDING (§7.1).
+      expect(body.event.data_status).toBe('DATA_PENDING');
       // APPROXIMATE precision excludes 1m.
       expect(body.available_timeframes).not.toContain('1m');
     });
@@ -266,6 +271,8 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       const body = JSON.parse(response.body);
       const cpiEvent = body.events.find((e: { event_id: string }) => e.event_id === US_CPI_EVENT_ID);
       expect(cpiEvent.related_fx_pairs.some((pair: { symbol: string }) => pair.symbol === 'USDJPY')).toBe(true);
+      // §7.1: the API contract value (READY), never the raw DB data_status (AVAILABLE).
+      expect(cpiEvent.data_status).toBe('READY');
     });
 
     it('does not return the event for an unrelated day', async () => {

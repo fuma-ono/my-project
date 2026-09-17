@@ -9,6 +9,7 @@ import {
 } from '../repositories/indicatorsRepository.js';
 import { listIndicatorEventsQuerySchema, listIndicatorsQuerySchema } from '../schemas/indicators.js';
 import { buildMeta, parsePagination, resolveSort } from '../utils/pagination.js';
+import { mapEventDataStatus, type EconomicEventDbStatus } from '../domain/dataQuality.js';
 
 const SORT_ALLOWLIST = ['name', 'importance', 'created_at'] as const;
 
@@ -77,7 +78,12 @@ export function registerIndicatorRoutes(app: FastifyInstance): void {
       );
 
       return {
-        data: rows.map(({ id, ...rest }) => ({ event_id: id, indicator_id: indicatorId, ...rest })),
+        data: rows.map(({ id, data_status: dataStatus, ...rest }) => ({
+          event_id: id,
+          indicator_id: indicatorId,
+          ...rest,
+          data_status: mapEventDataStatus(dataStatus as EconomicEventDbStatus),
+        })),
         meta: buildMeta(pagination.page, pagination.limit, total),
       };
     },

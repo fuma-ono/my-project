@@ -18,7 +18,9 @@ import {
 } from '../repositories/reactionsRepository.js';
 import {
   availableTimeframes,
+  mapEventDataStatus,
   resolveTimeframeAnalysisStatus,
+  type EconomicEventDbStatus,
   type ReleaseDatetimePrecision,
 } from '../domain/dataQuality.js';
 import { resolveRevisionStatus } from '../domain/revisionStatus.js';
@@ -71,7 +73,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
         release_datetime_precision: event.release_datetime_precision,
         importance: event.importance,
         status: event.status,
-        data_status: event.data_status,
+        data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
         revision_status: resolveRevisionStatus(revisionCount),
       },
       snapshot: snapshot ?? null,
