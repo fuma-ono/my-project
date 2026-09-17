@@ -1,3 +1,4 @@
+import Foundation
 @testable import FXEventAnalyzer
 
 final class MockAPIClient: APIClient {
@@ -16,11 +17,18 @@ final class MockAPIClient: APIClient {
     var results: [String: MockResult] = [:]
     private(set) var lastEndpoint: Endpoint?
     private(set) var requestedPaths: [String] = []
+    /// View models like `IndicatorDetailViewModel` fire two `send` calls
+    /// concurrently via `async let`; without this, concurrent mutation of
+    /// `requestedPaths`/`lastEndpoint` from those overlapping calls is a
+    /// data race that intermittently drops an append (flaky CI failures).
+    private let stateLock = NSLock()
 
     func send<T: Decodable>(_ endpoint: Endpoint) async throws -> T {
+        stateLock.lock()
         lastEndpoint = endpoint
         requestedPaths.append(endpoint.path)
         let outcome = results[endpoint.path] ?? result
+        stateLock.unlock()
         switch outcome {
         case .success(let value):
             guard let typed = value as? T else {
