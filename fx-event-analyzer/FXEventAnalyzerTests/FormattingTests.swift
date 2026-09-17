@@ -50,6 +50,24 @@ final class ValueFormatTests: XCTestCase {
         let future = now.addingTimeInterval(90 * 60)
         XCTAssertEqual(ValueFormat.countdown(to: future, from: now), "1時間30分後")
     }
+
+    // MARK: - surpriseComparisonLabel (Phase 5 §8 UX audit follow-up)
+
+    func testSurpriseComparisonLabelReturnsNilForNoSurprise() {
+        XCTAssertNil(ValueFormat.surpriseComparisonLabel(nil))
+    }
+
+    func testSurpriseComparisonLabelForAPositiveSurprise() {
+        XCTAssertEqual(ValueFormat.surpriseComparisonLabel(0.2), "予想を上回る結果")
+    }
+
+    func testSurpriseComparisonLabelForANegativeSurprise() {
+        XCTAssertEqual(ValueFormat.surpriseComparisonLabel(-0.2), "予想を下回る結果")
+    }
+
+    func testSurpriseComparisonLabelForAZeroSurprise() {
+        XCTAssertEqual(ValueFormat.surpriseComparisonLabel(0), "予想通りの結果")
+    }
 }
 
 final class CountryFlagTests: XCTestCase {

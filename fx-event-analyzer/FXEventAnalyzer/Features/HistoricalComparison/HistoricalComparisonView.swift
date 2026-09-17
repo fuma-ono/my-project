@@ -130,7 +130,13 @@ struct HistoricalComparisonView: View {
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
             } else {
                 ForEach(events) { event in
-                    eventRow(event)
+                    // Phase 4.5 UX audit: this list was previously a dead
+                    // end — HQ Phase 5 §4 makes each past event tappable
+                    // through to its own Historical Event Detail.
+                    NavigationLink(value: AppRoute.historicalEventDetail(id: event.id)) {
+                        eventRow(event)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -151,6 +157,9 @@ struct HistoricalComparisonView: View {
                     .font(DesignTokens.Typography.caption)
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
             }
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
         }
         .padding(.vertical, DesignTokens.Spacing.sm)
         .padding(.horizontal, DesignTokens.Spacing.md)

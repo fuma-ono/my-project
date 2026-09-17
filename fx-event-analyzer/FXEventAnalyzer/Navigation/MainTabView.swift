@@ -6,6 +6,8 @@ import SwiftUI
 /// switching tabs preserves each stack's position independently.
 struct MainTabView: View {
     let apiClient: APIClient
+    let authService: AuthServicing
+    let onSignOut: () -> Void
 
     @State private var homePath = NavigationPath()
     @State private var indicatorsPath = NavigationPath()
@@ -21,7 +23,7 @@ struct MainTabView: View {
             SearchPlaceholderView()
                 .tabItem { Label("Search", systemImage: "magnifyingglass") }
 
-            SettingsPlaceholderView()
+            SettingsView(authService: authService, onSignOut: onSignOut)
                 .tabItem { Label("Settings", systemImage: "gearshape.fill") }
         }
         .tint(DesignTokens.Colors.accentPrimary)
@@ -44,25 +46,6 @@ private struct SearchPlaceholderView: View {
                 )
             }
             .navigationTitle("Search")
-            .toolbarBackground(DesignTokens.Colors.backgroundPrimary, for: .navigationBar)
-        }
-    }
-}
-
-/// SCR-009 Settings — same status as Search above: tab slot only, content
-/// deferred.
-private struct SettingsPlaceholderView: View {
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                DesignTokens.Colors.backgroundPrimary.ignoresSafeArea()
-                EmptyStateView(
-                    title: "Settingsは準備中です",
-                    message: "アプリ設定・アカウント管理は今後追加予定です。",
-                    systemImage: "gearshape"
-                )
-            }
-            .navigationTitle("Settings")
             .toolbarBackground(DesignTokens.Colors.backgroundPrimary, for: .navigationBar)
         }
     }

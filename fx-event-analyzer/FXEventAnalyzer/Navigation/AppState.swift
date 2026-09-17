@@ -40,6 +40,18 @@ final class AppState: ObservableObject {
         phase = .loggedIn
     }
 
+    /// Called by `SettingsViewModel` after a deliberate, user-initiated
+    /// sign-out succeeds. Deliberately distinct from the `.signedOut`
+    /// branch in `startObservingAuthStateIfNeeded()` below — that path means
+    /// "セッションの有効期限が切れています", which would be the wrong
+    /// message for a user who just tapped ログアウト themselves. The auth
+    /// state stream still delivers its own `.signedOut` event after this
+    /// runs; by then `phase` is no longer `.loggedIn`, so that handler's
+    /// guard makes it a no-op.
+    func handleSignOut() {
+        phase = .loggedOut(sessionExpired: false)
+    }
+
     /// Starts listening for auth state changes that happen *after* launch —
     /// most importantly session expiry while the user is already on Home,
     /// which must route back to SCR-010 with the "セッションの有効期限が

@@ -38,17 +38,19 @@ final class MovementDetailViewModel: ObservableObject {
         }
     }
 
+    let indicatorId: String
+    let fxPairId: String
     let symbol: String
     let indicatorName: String
     let releaseDatetime: Date
 
     private let apiClient: APIClient
     private let eventId: String
-    private let fxPairId: String
 
-    init(apiClient: APIClient, eventId: String, fxPairId: String, symbol: String, indicatorName: String, releaseDatetime: Date) {
+    init(apiClient: APIClient, eventId: String, indicatorId: String, fxPairId: String, symbol: String, indicatorName: String, releaseDatetime: Date) {
         self.apiClient = apiClient
         self.eventId = eventId
+        self.indicatorId = indicatorId
         self.fxPairId = fxPairId
         self.symbol = symbol
         self.indicatorName = indicatorName

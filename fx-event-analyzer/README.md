@@ -70,6 +70,42 @@ Comparison, both real Backend-backed:
   `adaptiveContentWidth()`; Movement Detail additionally splits chart/
   figures side-by-side on wide layouts via `ViewThatFits`.
 
+Phase 4.5 was a UX audit only (no code changes) — full report delivered to
+HQ separately. It found that individual screens were complete but not
+connected into one continuous analysis experience. Phase 5 closes those
+gaps and finishes two App-Store-readiness items, without adding new
+screens or touching the Backend:
+
+- **Navigation is now a connected chain**, not isolated screens: Movement
+  Detail → Historical Comparison (`historicalComparisonLink` in
+  `MovementDetailView`, reusing the current event's `indicatorId`/
+  `fxPairId` — no re-search); Historical Comparison's event list is now
+  tappable → Historical Event Detail; Event Detail → Historical
+  Comparison directly (via its highest-priority related FX pair); and
+  Historical Event Detail's FX pair rows → Movement Detail, so the chart
+  experience works for past events too, not only the live/current flow.
+  `AppRoute.movementDetail` carries `indicatorId` now for this reason.
+- **Login's two previously-inert buttons** ("パスワードをお忘れですか？" /
+  "新規登録") now surface an explicit "準備中" alert instead of doing
+  nothing — building the underlying flows is out of Phase 5's scope
+  (HQ: don't expand Auth scope), but a dead tap target is not acceptable.
+- **A real ログアウト exists** (`Features/Settings/`): Settings' tab is no
+  longer a pure placeholder — it calls `AuthServicing.signOut()`, guards
+  against a double-tap firing two concurrent sign-outs, shows an error
+  inline on failure, and routes back to Login via `AppState.handleSignOut()`
+  (deliberately distinct from the session-expiry path, so a user who signs
+  out on purpose never sees "セッションの有効期限が切れています").
+- **Surprise now shows a plain-language comparison**
+  (`ValueFormat.surpriseComparisonLabel`) — "予想を上回る結果" / "予想を
+  下回る結果" / "予想通りの結果" — derived only from the sign of the
+  Backend's own `surprise` value, alongside the existing `favorable_
+  direction`-adjusted POSITIVE/NEGATIVE/NEUTRAL label. No AI, no trading
+  implication.
+- **Splash's tagline** changed from "Turn Economic Events into Trading
+  Opportunities" to "Understand Economic Events & FX Reactions" — the
+  original wording implied trading signals/advice, which this app
+  explicitly does not provide.
+
 No real Supabase project is provisioned yet, and the Node.js Backend
 (`fx-event-analyzer-backend/`) has no deployment target — both `SUPABASE_URL`/
 `SUPABASE_ANON_KEY` and the `API_BASE_URL` build setting are still blank by

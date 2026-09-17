@@ -44,7 +44,7 @@ struct HistoricalEventDetailView: View {
                     if let explanation = response.explanation {
                         explanationSection(explanation)
                     }
-                    reactionsSection(response.relatedFxPairs)
+                    reactionsSection(response.relatedFxPairs, event: response.event, indicatorId: response.indicatorId)
                     NavigationLink(value: AppRoute.indicatorDetail(id: response.indicatorId)) {
                         Text("指標詳細を見る")
                             .font(DesignTokens.Typography.body)
@@ -89,9 +89,16 @@ struct HistoricalEventDetailView: View {
                     valueColumn(title: "前回", value: ValueFormat.number(snapshot.previous))
                 }
                 if let surprise = snapshot.surprise, let direction = snapshot.surpriseDirection {
-                    Text("Surprise \(ValueFormat.number(surprise, signed: true)) (\(direction.label))")
-                        .font(DesignTokens.Typography.caption)
-                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let comparisonLabel = ValueFormat.surpriseComparisonLabel(surprise) {
+                            Text(comparisonLabel)
+                                .font(DesignTokens.Typography.body)
+                                .foregroundStyle(DesignTokens.Colors.textPrimary)
+                        }
+                        Text("Surprise \(ValueFormat.number(surprise, signed: true)) (\(direction.label))")
+                            .font(DesignTokens.Typography.caption)
+                            .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    }
                 } else {
                     Text("Forecastが存在しないため、Surprise分析対象外です。")
                         .font(DesignTokens.Typography.caption)
@@ -139,7 +146,7 @@ struct HistoricalEventDetailView: View {
         }
     }
 
-    private func reactionsSection(_ pairs: [HistoricalRelatedFxPair]) -> some View {
+    private func reactionsSection(_ pairs: [HistoricalRelatedFxPair], event: HistoricalEventSummary, indicatorId: String) -> some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
             Text("値動き")
                 .font(DesignTokens.Typography.headline)
@@ -150,17 +157,36 @@ struct HistoricalEventDetailView: View {
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
             } else {
                 ForEach(pairs) { pair in
-                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
-                        Text(pair.symbol)
-                            .font(DesignTokens.Typography.body)
-                            .foregroundStyle(DesignTokens.Colors.textPrimary)
-                        ForEach(pair.reactions) { reaction in
-                            reactionRow(reaction)
+                    // Phase 4.5 UX audit: past events had no way to reach
+                    // the chart — HQ Phase 5 §6 makes this apply to
+                    // historical events too, not only the live/current flow.
+                    NavigationLink(value: AppRoute.movementDetail(
+                        eventId: event.id,
+                        indicatorId: indicatorId,
+                        fxPairId: pair.fxPairId,
+                        symbol: pair.symbol,
+                        indicatorName: event.indicatorName,
+                        releaseDatetime: event.releaseDatetime
+                    )) {
+                        VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
+                            HStack {
+                                Text(pair.symbol)
+                                    .font(DesignTokens.Typography.body)
+                                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2)
+                                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                            }
+                            ForEach(pair.reactions) { reaction in
+                                reactionRow(reaction)
+                            }
                         }
+                        .padding(DesignTokens.Spacing.md)
+                        .background(DesignTokens.Colors.backgroundSurface)
+                        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.control))
                     }
-                    .padding(DesignTokens.Spacing.md)
-                    .background(DesignTokens.Colors.backgroundSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.control))
+                    .buttonStyle(.plain)
                 }
             }
         }

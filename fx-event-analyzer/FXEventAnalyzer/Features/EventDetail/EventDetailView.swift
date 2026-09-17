@@ -155,6 +155,11 @@ struct EventDetailView: View {
                     .font(DesignTokens.Typography.caption)
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
                 if let surprise = response.analysis.surprise, let direction = response.analysis.surpriseDirection {
+                    if let comparisonLabel = ValueFormat.surpriseComparisonLabel(surprise) {
+                        Text(comparisonLabel)
+                            .font(DesignTokens.Typography.body)
+                            .foregroundStyle(DesignTokens.Colors.textPrimary)
+                    }
                     HStack {
                         Text(ValueFormat.number(surprise, signed: true))
                             .font(DesignTokens.Typography.headline)
@@ -219,6 +224,7 @@ struct EventDetailView: View {
                 ForEach(pairs) { pair in
                     NavigationLink(value: AppRoute.movementDetail(
                         eventId: event.id,
+                        indicatorId: event.indicatorId,
                         fxPairId: pair.fxPairId,
                         symbol: pair.symbol,
                         indicatorName: event.indicatorName,
@@ -227,6 +233,29 @@ struct EventDetailView: View {
                         reactionRow(pair)
                     }
                     .buttonStyle(.plain)
+                }
+                // Phase 4.5 UX audit: "結果は分かった → 過去と比べてどうか"
+                // needed a direct jump, not a detour through re-searching
+                // the indicator (HQ Phase 5 §5). Reuses the highest-priority
+                // related pair, same as Indicator Detail's own link.
+                if let primaryPair = pairs.first {
+                    NavigationLink(value: AppRoute.historicalComparison(
+                        indicatorId: event.indicatorId,
+                        indicatorName: event.indicatorName,
+                        fxPairId: primaryPair.fxPairId,
+                        fxPairSymbol: primaryPair.symbol
+                    )) {
+                        HStack {
+                            Text("過去の発表と比較する")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                        }
+                        .font(DesignTokens.Typography.body)
+                        .padding(DesignTokens.Spacing.md)
+                        .background(DesignTokens.Colors.backgroundSurface)
+                        .foregroundStyle(DesignTokens.Colors.textPrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.control))
+                    }
                 }
             }
         }

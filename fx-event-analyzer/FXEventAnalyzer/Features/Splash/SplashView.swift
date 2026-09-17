@@ -25,7 +25,7 @@ struct SplashView: View {
                         Text("FX Event Analyzer")
                             .font(DesignTokens.Typography.title)
                             .foregroundStyle(DesignTokens.Colors.textPrimary)
-                        Text("Turn Economic Events into Trading Opportunities")
+                        Text("Understand Economic Events & FX Reactions")
                             .font(DesignTokens.Typography.tagline)
                             .foregroundStyle(DesignTokens.Colors.textSecondary)
                     }

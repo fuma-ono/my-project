@@ -4,6 +4,12 @@ import SwiftUI
 struct LoginView: View {
     @StateObject private var viewModel: LoginViewModel
     let sessionExpired: Bool
+    /// Phase 4.5 UX audit: these buttons previously did nothing at all on
+    /// tap. Password Reset / Sign Up have no screen spec yet
+    /// (ui-screens.md), and HQ's Phase 5 instruction is explicit not to
+    /// expand Auth scope to build them now — so tapping surfaces an honest
+    /// "準備中" message instead of silence (HQ: "何も起きない状態は禁止").
+    @State private var pendingFeatureMessage: String?
 
     init(viewModel: @autoclosure @escaping () -> LoginViewModel, sessionExpired: Bool = false) {
         _viewModel = StateObject(wrappedValue: viewModel())
@@ -68,18 +74,32 @@ struct LoginView: View {
                     .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.card))
 
                     VStack(spacing: DesignTokens.Spacing.sm) {
-                        // Navigation stubs only — no Password Reset / Sign Up
-                        // screen spec exists yet in ui-screens.md.
-                        Button("パスワードをお忘れですか？") {}
-                            .font(DesignTokens.Typography.caption)
-                        Button("新規登録") {}
-                            .font(DesignTokens.Typography.caption)
+                        Button("パスワードをお忘れですか？") {
+                            pendingFeatureMessage = "パスワードリセットは準備中です。もうしばらくお待ちください。"
+                        }
+                        .font(DesignTokens.Typography.caption)
+                        Button("新規登録") {
+                            pendingFeatureMessage = "新規登録は準備中です。もうしばらくお待ちください。"
+                        }
+                        .font(DesignTokens.Typography.caption)
                     }
                     .tint(DesignTokens.Colors.accentSecondary)
                 }
                 .padding(.horizontal, DesignTokens.Spacing.lg)
                 .frame(maxWidth: 480)
             }
+        }
+        .alert(
+            "準備中の機能です",
+            isPresented: Binding(
+                get: { pendingFeatureMessage != nil },
+                set: { isPresented in if !isPresented { pendingFeatureMessage = nil } }
+            ),
+            presenting: pendingFeatureMessage
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { message in
+            Text(message)
         }
     }
 

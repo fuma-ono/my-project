@@ -8,10 +8,11 @@ import SwiftUI
 struct MovementDetailView: View {
     @StateObject private var viewModel: MovementDetailViewModel
 
-    init(apiClient: APIClient, eventId: String, fxPairId: String, symbol: String, indicatorName: String, releaseDatetime: Date) {
+    init(apiClient: APIClient, eventId: String, indicatorId: String, fxPairId: String, symbol: String, indicatorName: String, releaseDatetime: Date) {
         _viewModel = StateObject(wrappedValue: MovementDetailViewModel(
             apiClient: apiClient,
             eventId: eventId,
+            indicatorId: indicatorId,
             fxPairId: fxPairId,
             symbol: symbol,
             indicatorName: indicatorName,
@@ -51,6 +52,7 @@ struct MovementDetailView: View {
                     header
                     timeframePicker
                     adaptiveBody(preReleasePrice: preReleasePrice, reactions: reactions)
+                    historicalComparisonLink
                 }
                 .padding(DesignTokens.Spacing.md)
                 .adaptiveContentWidth()
@@ -101,6 +103,29 @@ struct MovementDetailView: View {
             }
         }
         .pickerStyle(.segmented)
+    }
+
+    /// Phase 4.5 UX audit: "このイベントでこれだけ動いた → 過去はどうだった？"
+    /// was previously a dead end from this screen — HQ Phase 5 §3 closes it,
+    /// reusing this event's indicator/FX pair so the user never re-searches.
+    private var historicalComparisonLink: some View {
+        NavigationLink(value: AppRoute.historicalComparison(
+            indicatorId: viewModel.indicatorId,
+            indicatorName: viewModel.indicatorName,
+            fxPairId: viewModel.fxPairId,
+            fxPairSymbol: viewModel.symbol
+        )) {
+            HStack {
+                Text("過去の値動きと比較する")
+                Spacer()
+                Image(systemName: "chevron.right")
+            }
+            .font(DesignTokens.Typography.body)
+            .padding(DesignTokens.Spacing.md)
+            .background(DesignTokens.Colors.backgroundSurface)
+            .foregroundStyle(DesignTokens.Colors.textPrimary)
+            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.control))
+        }
     }
 
     // MARK: - Chart

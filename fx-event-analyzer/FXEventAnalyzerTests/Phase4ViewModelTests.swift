@@ -52,7 +52,7 @@ final class MovementDetailViewModelTests: XCTestCase {
         apiClient.results["events/evt_1/reaction/chart"] = .success(makeChart(timeframe: "5m"))
 
         let viewModel = MovementDetailViewModel(
-            apiClient: apiClient, eventId: "evt_1", fxPairId: "fx_1", symbol: "USDJPY",
+            apiClient: apiClient, eventId: "evt_1", indicatorId: "ind_1", fxPairId: "fx_1", symbol: "USDJPY",
             indicatorName: "US CPI", releaseDatetime: Date()
         )
         viewModel.load()
@@ -76,7 +76,7 @@ final class MovementDetailViewModelTests: XCTestCase {
         apiClient.results["events/evt_1/reaction/chart"] = .success(makeChart(timeframe: "5m"))
 
         let viewModel = MovementDetailViewModel(
-            apiClient: apiClient, eventId: "evt_1", fxPairId: "fx_1", symbol: "USDJPY",
+            apiClient: apiClient, eventId: "evt_1", indicatorId: "ind_1", fxPairId: "fx_1", symbol: "USDJPY",
             indicatorName: "US CPI", releaseDatetime: Date()
         )
         viewModel.load()
@@ -99,7 +99,7 @@ final class MovementDetailViewModelTests: XCTestCase {
         apiClient.results["events/evt_1/reaction/chart"] = .success(makeChart(timeframe: "5m"))
 
         let viewModel = MovementDetailViewModel(
-            apiClient: apiClient, eventId: "evt_1", fxPairId: "fx_1", symbol: "USDJPY",
+            apiClient: apiClient, eventId: "evt_1", indicatorId: "ind_1", fxPairId: "fx_1", symbol: "USDJPY",
             indicatorName: "US CPI", releaseDatetime: Date()
         )
         viewModel.load()
@@ -121,7 +121,7 @@ final class MovementDetailViewModelTests: XCTestCase {
         apiClient.result = .failure(APIError.server(code: .fxPairNotFound, message: "FX pair not found.", httpStatus: 404))
 
         let viewModel = MovementDetailViewModel(
-            apiClient: apiClient, eventId: "evt_1", fxPairId: "missing", symbol: "USDJPY",
+            apiClient: apiClient, eventId: "evt_1", indicatorId: "ind_1", fxPairId: "missing", symbol: "USDJPY",
             indicatorName: "US CPI", releaseDatetime: Date()
         )
         viewModel.load()
@@ -137,7 +137,7 @@ final class MovementDetailViewModelTests: XCTestCase {
         )
 
         let viewModel = MovementDetailViewModel(
-            apiClient: apiClient, eventId: "evt_1", fxPairId: "fx_1", symbol: "USDJPY",
+            apiClient: apiClient, eventId: "evt_1", indicatorId: "ind_1", fxPairId: "fx_1", symbol: "USDJPY",
             indicatorName: "US CPI", releaseDatetime: Date()
         )
         viewModel.load()
@@ -151,13 +151,26 @@ final class MovementDetailViewModelTests: XCTestCase {
         apiClient.result = .failure(APIError.notConfigured)
 
         let viewModel = MovementDetailViewModel(
-            apiClient: apiClient, eventId: "evt_1", fxPairId: "fx_1", symbol: "USDJPY",
+            apiClient: apiClient, eventId: "evt_1", indicatorId: "ind_1", fxPairId: "fx_1", symbol: "USDJPY",
             indicatorName: "US CPI", releaseDatetime: Date()
         )
         viewModel.load()
         await waitUntil { viewModel.state != .loading }
 
         XCTAssertEqual(viewModel.state, .backendNotConfigured)
+    }
+
+    /// Phase 5 §3: Movement Detail's own "過去の値動きと比較する" link needs
+    /// indicatorId/fxPairId carried in from construction, not re-derived.
+    func testIndicatorIdAndFxPairIdAreExposedForTheHistoricalComparisonLink() {
+        let apiClient = MockAPIClient()
+        let viewModel = MovementDetailViewModel(
+            apiClient: apiClient, eventId: "evt_1", indicatorId: "ind_1", fxPairId: "fx_1", symbol: "USDJPY",
+            indicatorName: "US CPI", releaseDatetime: Date()
+        )
+
+        XCTAssertEqual(viewModel.indicatorId, "ind_1")
+        XCTAssertEqual(viewModel.fxPairId, "fx_1")
     }
 }
 

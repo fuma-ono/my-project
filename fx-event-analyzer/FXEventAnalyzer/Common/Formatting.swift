@@ -52,6 +52,18 @@ enum ValueFormat {
         if hours > 0 { return "\(hours)時間\(minutes)分後" }
         return "\(minutes)分後"
     }
+
+    /// Phase 4.5 UX audit: the existing POSITIVE/NEGATIVE/NEUTRAL label is
+    /// `favorable_direction`-adjusted and doesn't say which way the raw
+    /// numbers moved. This reads only the sign of `surprise` (already
+    /// `actual - forecast`, api-design.md §9) — Backend data only, no
+    /// inference, no trading implication.
+    static func surpriseComparisonLabel(_ surprise: Double?) -> String? {
+        guard let surprise else { return nil }
+        if surprise > 0 { return "予想を上回る結果" }
+        if surprise < 0 { return "予想を下回る結果" }
+        return "予想通りの結果"
+    }
 }
 
 enum CountryFlag {

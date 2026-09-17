@@ -16,10 +16,11 @@ struct AppRouteDestinationView: View {
             EventDetailView(apiClient: apiClient, eventId: id)
         case .historicalEventDetail(let id):
             HistoricalEventDetailView(apiClient: apiClient, eventId: id)
-        case .movementDetail(let eventId, let fxPairId, let symbol, let indicatorName, let releaseDatetime):
+        case .movementDetail(let eventId, let indicatorId, let fxPairId, let symbol, let indicatorName, let releaseDatetime):
             MovementDetailView(
                 apiClient: apiClient,
                 eventId: eventId,
+                indicatorId: indicatorId,
                 fxPairId: fxPairId,
                 symbol: symbol,
                 indicatorName: indicatorName,
