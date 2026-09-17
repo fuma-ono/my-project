@@ -2,10 +2,10 @@
 
 経済指標・要人発言の「市場予想→実際の結果→サプライズ→FX価格反応→過去イベント比較」を分析できるiOS/iPadアプリ(将来Web展開)。
 
-現在のフェーズ: **詳細設計(HQ主導)**。実装(DB作成・API実装・UI実装)はまだ開始していない。
+現在のフェーズ: **実装フェーズ(Phase 2: Backend/DB基盤)**。設計はHQ主導で確定済み(全設計最終監査PASS WITH CHANGES)。iOSクライアント基盤(Phase 1)完了、DB migration/RLS/Seed(Phase 2a)完了、Backend APIサーバー実装(Node.js/TypeScript/Fastify、Phase 2b)進行中。実装コードは`fx-event-analyzer/`(iOS)・`fx-event-analyzer-backend/`(Backend)を参照。
 
-- [requirements.md](./requirements.md) — 要件定義書 v1.7
-- [design.md](./design.md) — 概要設計書 v1.8
+- [requirements.md](./requirements.md) — 要件定義書 v1.8
+- [design.md](./design.md) — 概要設計書 v1.9
 - [implementation-notes-for-hq.md](./implementation-notes-for-hq.md) — 詳細設計のためのHQ向け情報整理(制約・リスク・API依存部分・未確定事項)
 - [ui-screens.md](./ui-screens.md) — 画面設計・UI方針 v1.2(モックアップ・画面一覧・画面遷移。SCR-000 Splash / App Icon仕様を追加)
 - [features.md](./features.md) — 機能一覧 v1.7(FEAT-ID、優先度P0/P1/P2/OUT。HQにより正式な基準仕様として確定済み)

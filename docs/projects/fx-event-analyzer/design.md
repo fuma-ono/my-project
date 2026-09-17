@@ -1,4 +1,4 @@
-# FXイベント反応分析アプリ 概要設計書 v1.8
+# FXイベント反応分析アプリ 概要設計書 v1.9
 
 ## 変更履歴
 
@@ -46,6 +46,11 @@
   - 2.1節のシステム構成図の「iOS / iPad App」ブロックの実装技術表記を「React Native/Expo」から「SwiftUI」に更新
   - リポジトリ内にSwiftコード・Xcodeプロジェクトが存在しないことを確認済み(既存実装との衝突なし)
   - 具体的なSwiftUIコード・Xcodeプロジェクト構成は今回実装しない(設計方針の確定のみ)
+- **v1.9**(今回): HQ最終決定「Backend Technology確定」を反映(2026-09-17)
+  - 31章の未確定事項「Backend framework / Cloud infrastructure」のうち、Backend frameworkを確定(Cloud infrastructureはDBホスティング・Auth基盤=Supabaseに確定済みのため、実質解消)
+  - MVP正式採用: **Node.js + TypeScript + Fastify**(REST API、Base Path `/api/v1`)。Python + FastAPIは不採用
+  - 3.2節にBackend技術スタックを追記(Client: SwiftUI、Backend: Node.js/TypeScript/Fastify)
+  - `fx-event-analyzer-backend/`をBackendプロジェクトのルートとして新設(`fx-event-analyzer/`=iOSクライアントとはmonorepo内の独立プロジェクトとして分離)
 
 ---
 
@@ -126,9 +131,9 @@ FXイベント反応分析アプリ
 
 MVPでは、iPhone / iPad を対象とする。Webは将来拡張を前提としてBackend/APIを設計する。
 
-### 3.2 技術スタック(MVP正式採用、v1.8で確定)
+### 3.2 技術スタック(MVP正式採用、v1.8/v1.9で確定)
 
-**MVP正式採用: SwiftUI + Xcode(ネイティブiOS/iPadOSアプリ)**(HQ確定、2026-09-16)。
+**Client — MVP正式採用: SwiftUI + Xcode(ネイティブiOS/iPadOSアプリ)**(HQ確定、2026-09-16)。
 
 | 項目 | 採用技術 |
 |---|---|
@@ -136,6 +141,19 @@ MVPでは、iPhone / iPad を対象とする。Webは将来拡張を前提とし
 | IDE / Build | Xcode |
 | Asset管理 | Xcode Asset Catalog |
 | 認証SDK | Supabase Auth SDK(iOS) |
+
+**Backend — MVP正式採用: Node.js + TypeScript + Fastify**(HQ確定、2026-09-17。v1.9で追記)。
+
+| 項目 | 採用技術 |
+|---|---|
+| Runtime | Node.js |
+| 言語 | TypeScript |
+| Framework | Fastify |
+| Database | Supabase PostgreSQL |
+| Auth | Supabase Auth JWT検証 |
+| API形式 | REST / JSON、Base Path `/api/v1` |
+
+Python + FastAPIは不採用。プロジェクトルートは`fx-event-analyzer-backend/`(iOSクライアント`fx-event-analyzer/`とはmonorepo内の独立プロジェクトとして分離)。
 
 **確定理由**:
 
@@ -611,7 +629,7 @@ v1.0の内容を維持する。Backend(Read API)/DB/Account/Subscriptionを共�
 ## 31. 概要設計の未確定事項
 
 - Economic API / FX Price APIの最終選定(要件定義書6.2節の確認結果次第)
-- Backend framework / Cloud infrastructure(DBホスティング・Auth基盤はSupabaseに確定、5章参照)
+- ~~Backend framework~~ → **解決(v1.9、HQ確定2026-09-17)**: Node.js + TypeScript + Fastify(3.2節参照)。Cloud infrastructure(DBホスティング・Auth基盤)はSupabaseに確定済み(5章参照)
 - AI provider(将来分)
 - Subscription provider / Notification infrastructure
 - Web framework

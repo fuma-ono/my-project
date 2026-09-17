@@ -2,7 +2,7 @@
 
 **出典**: HQより2026-09-16共有。v1.2は、HQが再発行した「正式版 機能一覧」テキストを本書に統合したもの。v1.3で、v1.2の内容がHQにより正式な基準仕様として確定し、あわせて用語統一(MarketReaction→EventPriceReaction)を反映した。v1.4で、DB詳細設計確定(EconomicEvent/EventSnapshot分離、EventExplanation復活等)に伴う用語表・節番号の更新を反映した。実装は未着手。
 
-**位置づけ**: 要件定義書v1.7・概要設計書v1.8・画面設計(ui-screens.md v1.2)の内容を、機能ID(FEAT-xxx)単位に分解したもの。今後の設計・実装で本書のIDを参照する。次フェーズでHQが「画面×機能」「画面×機能×API×DB」の対応表を作成する際の基礎資料となる。
+**位置づけ**: 要件定義書v1.8・概要設計書v1.9・画面設計(ui-screens.md v1.2)の内容を、機能ID(FEAT-xxx)単位に分解したもの。今後の設計・実装で本書のIDを参照する。次フェーズでHQが「画面×機能」「画面×機能×API×DB」の対応表を作成する際の基礎資料となる。
 
 ## 変更履歴
 
@@ -352,8 +352,8 @@ HQ指示の7項目に沿って報告する。**コードは一切存在しない
 ```
 docs/projects/fx-event-analyzer/
 ├── README.md                        … プロジェクト概要・開発体制・経緯
-├── requirements.md                  … 要件定義書 v1.6
-├── design.md                        … 概要設計書 v1.8
+├── requirements.md                  … 要件定義書 v1.8
+├── design.md                        … 概要設計書 v1.9
 ├── implementation-notes-for-hq.md   … 詳細設計インプット情報
 ├── ui-screens.md                    … 画面設計・UI方針 v1.2
 ├── features.md                      … 本書。機能一覧 v1.7(FEAT-ID)
