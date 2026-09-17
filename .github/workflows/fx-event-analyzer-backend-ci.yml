@@ -120,6 +120,19 @@ jobs:
             fi
           done
 
+      - name: Wait for GoTrue (Auth) to accept requests
+        # `supabase db reset` restarts containers as its last step; the very
+        # first tests/integration/setup.ts createTestUser() call landed
+        # while GoTrue was still coming back up on the first real CI run
+        # ("Database error creating new user"). Poll its health endpoint
+        # rather than trust a fixed sleep.
+        timeout-minutes: 2
+        run: |
+          until curl -sf "${SUPABASE_URL}/auth/v1/health" > /dev/null; do
+            echo "Waiting for GoTrue..."
+            sleep 1
+          done
+
       - name: Integration tests (real Fastify app + real local Supabase stack)
         run: npx vitest run tests/integration
 

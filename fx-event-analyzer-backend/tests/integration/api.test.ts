@@ -30,6 +30,9 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
     ctx = buildIntegrationContext(integration!);
     user = await createTestUser(ctx);
     authHeader = { authorization: `Bearer ${user.accessToken}` };
+    // GET /events/:event_id itself requires VIEW_BASIC_EVENT (api-design.md
+    // §27.1) — granted once here since most of this file's tests read it.
+    await grantEntitlement(ctx, user.id, FEATURE_CODES.VIEW_BASIC_EVENT);
   });
 
   afterAll(async () => {
