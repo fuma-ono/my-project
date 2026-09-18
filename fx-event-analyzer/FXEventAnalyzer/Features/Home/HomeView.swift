@@ -232,6 +232,7 @@ private struct HomeEventRow: View {
             }
         }
         .padding(.vertical, DesignTokens.Spacing.sm)
+        .contentShape(Rectangle())
     }
 
     /// The Reference shows the exact release time for an EXACT-precision
