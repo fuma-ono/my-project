@@ -105,12 +105,24 @@ final class ScreenshotTests: XCTestCase {
         let predicate = NSPredicate(format: "label CONTAINS[c] %@", text)
         let collections: [XCUIElementQuery] = [app.buttons, app.cells, app.otherElements, app.staticTexts]
         let deadline = Date().addingTimeInterval(timeout)
+        var swipeAttempts = 0
         while Date() < deadline {
             for collection in collections {
                 let element = collection.matching(predicate).firstMatch
-                if element.exists, element.isHittable {
+                guard element.exists else { continue }
+                if element.isHittable {
                     element.tap()
                     return
+                }
+                // Found in the accessibility tree (e.g. a ScrollView row
+                // rendered off-screen) but not yet hittable — scroll and
+                // retry rather than waiting out the timeout. Real failure
+                // seen in CI on Historical Comparison's event list: 06-
+                // HistoricalEventDetail came out as a stale screenshot of
+                // Historical Comparison because this case wasn't handled.
+                if swipeAttempts < 8 {
+                    app.swipeUp()
+                    swipeAttempts += 1
                 }
             }
             Thread.sleep(forTimeInterval: 0.3)
