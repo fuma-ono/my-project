@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import PrimaryButton from '../components/PrimaryButton';
 import { useT } from '../i18n';
+import { PRIVACY_POLICY_URL, TERMS_OF_USE_URL } from '../lib/legalLinks';
 import { usePremiumContext } from '../lib/premiumContext';
 import { colors, fonts } from '../theme';
 
@@ -30,7 +31,14 @@ export default function PremiumScreen({ onBack, onView, onPurchased }: Props) {
     onView();
   }, []);
 
-  const priceLabel = offering?.availablePackages[0]?.product.priceString ?? t.premium.price;
+  // ストアの実価格が取れた場合も「月額」を付けて表示する(103回目、
+  // Apple審査Guideline 3.1.2(c): 購入画面に価格だけでなく期間も
+  // 明示する要件への対応。priceString自体は期間を含まないため)。
+  const realPrice = offering?.availablePackages[0]?.product.priceString;
+  const priceLabel = realPrice ? t.premium.priceWithPeriod(realPrice) : t.premium.price;
+
+  const openTerms = () => Linking.openURL(TERMS_OF_USE_URL).catch(() => {});
+  const openPrivacy = () => Linking.openURL(PRIVACY_POLICY_URL).catch(() => {});
 
   const pressSubscribe = async () => {
     setPurchasing(true);
@@ -99,6 +107,21 @@ export default function PremiumScreen({ onBack, onView, onPurchased }: Props) {
             </Pressable>
           </>
         )}
+
+        {/* 103回目、Apple審査Guideline 3.1.2(c)対応: 自動更新サブスク
+            リプションの購入画面自体(App Store Connect側のメタデータ
+            だけでなく)に、利用規約・プライバシーポリシーへの機能する
+            リンクを表示する必要があるため追加。isPremiumの状態に関係なく
+            常に表示する。 */}
+        <View style={styles.legalLinks}>
+          <Pressable onPress={openTerms} hitSlop={8}>
+            <Text style={styles.legalLinkText}>{t.premium.termsLink}</Text>
+          </Pressable>
+          <Text style={styles.legalLinkSeparator}>・</Text>
+          <Pressable onPress={openPrivacy} hitSlop={8}>
+            <Text style={styles.legalLinkText}>{t.premium.privacyLink}</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </View>
   );
@@ -127,4 +150,7 @@ const styles = StyleSheet.create({
   restoreRow: { marginTop: 16, alignSelf: 'flex-start' },
   restoreText: { ...fonts.bodyMedium, fontSize: 13.5, color: colors.muted, textDecorationLine: 'underline' },
   alreadySubscribedNote: { ...fonts.bodyMedium, fontSize: 14, color: colors.positive, marginTop: 24 },
+  legalLinks: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 32 },
+  legalLinkText: { ...fonts.body, fontSize: 12.5, color: colors.muted, textDecorationLine: 'underline' },
+  legalLinkSeparator: { ...fonts.body, fontSize: 12.5, color: colors.muted },
 });

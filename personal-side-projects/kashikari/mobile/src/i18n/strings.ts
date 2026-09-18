@@ -368,7 +368,15 @@ export const ja = {
     // ストアから取得できた実際の価格(offering.availablePackages[0].
     // product.priceString)を優先して表示し、取得できなかった場合
     // だけこのフォールバック文言を使う(94回目、RevenueCat導入)。
+    // 「月額」を含めているのは、価格だけでなく期間(サブスクリプション
+    // の長さ)もひと目で分かるようにするため(103回目、Apple審査
+    // Guideline 3.1.2(c)対応、下記priceWithPeriod参照)。
     price: '月額300円',
+    // priceStringは価格のみ(期間を含まない)で返ってくるため、実際の
+    // 価格が取得できた場合もこの関数で「月額」を付けて表示する
+    // (103回目、Guideline 3.1.2(c): 購入画面にサブスクリプションの
+    // 期間を明示する要件への対応)。
+    priceWithPeriod: (priceString: string) => `月額${priceString}`,
     featuresTitle: 'Premiumでできること',
     features: ['CSV出力', '会計レポート', '広告なし', '履歴の無制限保存', 'サークル会計機能'],
     subscribeButton: '購読する',
@@ -381,6 +389,11 @@ export const ja = {
     restoreSuccessMessage: 'Premiumのご利用状況を復元しました。',
     restoreNotFoundTitle: '購入が見つかりませんでした',
     restoreNotFoundMessage: 'このアカウントでの購入履歴が見つかりませんでした。別のアカウントで購入していないかご確認ください。',
+    // 103回目、Apple審査Guideline 3.1.2(c)対応: 自動更新サブスクリプ
+    // ションの購入画面自体に、利用規約・プライバシーポリシーへの
+    // 機能するリンクを表示する必要があるため追加。
+    termsLink: '利用規約',
+    privacyLink: 'プライバシーポリシー',
   },
   usage: {
     back: '設定',
@@ -769,6 +782,7 @@ export const en: Strings = {
     back: 'Settings',
     title: '✨ Premium',
     price: '$3/month',
+    priceWithPeriod: (priceString: string) => `${priceString}/month`,
     featuresTitle: 'What you get with Premium',
     features: ['CSV export', 'Accounting reports', 'No ads', 'Unlimited history', 'Club/organization accounting'],
     subscribeButton: 'Subscribe',
@@ -781,6 +795,8 @@ export const en: Strings = {
     restoreSuccessMessage: 'Your Premium status has been restored.',
     restoreNotFoundTitle: 'No purchase found',
     restoreNotFoundMessage: "We couldn't find a purchase for this account. Check whether you purchased with a different account.",
+    termsLink: 'Terms of Use',
+    privacyLink: 'Privacy Policy',
   },
   usage: {
     back: 'Settings',
