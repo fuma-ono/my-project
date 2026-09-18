@@ -24,17 +24,16 @@ struct SplashView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea()
 
-            // The Reference positions the logo/title group in the upper
-            // third (arrow top ~29%, tagline bottom ~50% of screen height)
-            // and the loading bar around ~79%, not vertically centered —
-            // measured directly off splash-screen-reference-v1.png with a
-            // gridline overlay, not eyeballed. A GeometryReader lets this
-            // match those proportions on any device instead of a
-            // symmetric Spacer/Spacer layout centering everything.
+            // Positions measured directly off the Reference with a
+            // gridline overlay, not eyeballed: logo top ~13%, tagline
+            // bottom ~49%, loading bar ~89.5% of screen height. A
+            // GeometryReader lets this match those proportions on any
+            // device instead of a symmetric Spacer/Spacer layout
+            // centering everything.
             GeometryReader { geometry in
                 ZStack(alignment: .top) {
                     VStack(spacing: DesignTokens.Spacing.md) {
-                        BrandMark()
+                        BrandMark(glow: true)
                         VStack(spacing: 2) {
                             (
                                 Text("FX")
@@ -44,7 +43,16 @@ struct SplashView: View {
                             )
                             .font(DesignTokens.Typography.title)
 
-                            Text("Turn Economic Events\ninto Trading Opportunities")
+                            // Not the Reference's earlier "Turn Economic
+                            // Events into Trading Opportunities" wording —
+                            // that phrasing was deliberately changed in
+                            // Phase 5 (commit 6578d6a) because it implied
+                            // trading signals/advice, out of this app's
+                            // scope (features.md excludes 投資助言). This
+                            // latest Reference image itself now shows
+                            // "Understand Economic Events & FX Reactions",
+                            // which matches.
+                            Text("Understand Economic Events &\nFX Reactions")
                                 .font(DesignTokens.Typography.tagline)
                                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                                 .multilineTextAlignment(.center)
@@ -53,12 +61,12 @@ struct SplashView: View {
                     .padding(.horizontal, DesignTokens.Spacing.lg)
                     .frame(maxWidth: 480) // keeps brand elements from stretching oversized on iPad
                     .frame(width: geometry.size.width)
-                    .padding(.top, geometry.size.height * 0.29)
+                    .padding(.top, geometry.size.height * 0.13)
 
                     bottomContent
                         .padding(.horizontal, DesignTokens.Spacing.lg)
                         .frame(width: geometry.size.width)
-                        .padding(.top, geometry.size.height * 0.79)
+                        .padding(.top, geometry.size.height * 0.895)
                 }
             }
         }
