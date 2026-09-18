@@ -25,15 +25,12 @@ struct SplashView: View {
                 .ignoresSafeArea()
 
             // Every position and gap here was measured pixel-by-pixel off
-            // the Reference (bounding-box detection on the mark, per-row
-            // brightness scans for the title/tagline text bands), not
-            // eyeballed: mark top 14.8%/bottom 27.4% (width ~24% of
-            // screen width), title text band 32.4–36.8%, tagline lines at
-            // 42.1–44.0% and 46.2–48.1%, loading bar ~89.5%. The mark-to-
-            // title gap (~4.3% ≈ 43pt) and title-to-tagline gap
-            // (~4.5% ≈ 45pt) are both far larger than a tight stacked
-            // VStack would produce, which is why this isn't nested
-            // VStacks with small spacing.
+            // the most recent, best-proportioned Reference (a real
+            // iPhone-aspect-ratio screenshot with status bar, so its
+            // fractions translate directly): mark top ~28.8% of full
+            // screen height / width ~34% (matching BrandMark's own
+            // 132pt default almost exactly — confirmed, not re-sized),
+            // title-to-tagline gap ~3%, loading bar ~85.5%.
             GeometryReader { geometry in
                 ZStack(alignment: .top) {
                     VStack(spacing: DesignTokens.Spacing.xl) {
@@ -56,8 +53,9 @@ struct SplashView: View {
                         // scope (features.md excludes 投資助言). This
                         // latest Reference image itself now shows
                         // "Understand Economic Events & FX Reactions",
-                        // which matches.
-                        Text("Understand Economic Events &\nFX Reactions")
+                        // wrapped after "Events" (not after "&") —
+                        // matched exactly.
+                        Text("Understand Economic Events\n& FX Reactions")
                             .font(DesignTokens.Typography.tagline)
                             .foregroundStyle(DesignTokens.Colors.textSecondary)
                             .multilineTextAlignment(.center)
@@ -65,12 +63,12 @@ struct SplashView: View {
                     .padding(.horizontal, DesignTokens.Spacing.lg)
                     .frame(maxWidth: 480) // keeps brand elements from stretching oversized on iPad
                     .frame(width: geometry.size.width)
-                    .padding(.top, geometry.size.height * 0.148)
+                    .padding(.top, geometry.size.height * 0.24)
 
                     bottomContent
                         .padding(.horizontal, DesignTokens.Spacing.lg)
                         .frame(width: geometry.size.width)
-                        .padding(.top, geometry.size.height * 0.895)
+                        .padding(.top, geometry.size.height * 0.855)
                 }
             }
         }
