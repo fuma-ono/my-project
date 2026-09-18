@@ -24,42 +24,43 @@ struct SplashView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea()
 
-            VStack(spacing: DesignTokens.Spacing.xl) {
-                Spacer()
+            // The Reference positions the logo/title group in the upper
+            // third (arrow top ~29%, tagline bottom ~50% of screen height)
+            // and the loading bar around ~79%, not vertically centered —
+            // measured directly off splash-screen-reference-v1.png with a
+            // gridline overlay, not eyeballed. A GeometryReader lets this
+            // match those proportions on any device instead of a
+            // symmetric Spacer/Spacer layout centering everything.
+            GeometryReader { geometry in
+                ZStack(alignment: .top) {
+                    VStack(spacing: DesignTokens.Spacing.md) {
+                        BrandMark()
+                        VStack(spacing: 2) {
+                            (
+                                Text("FX")
+                                    .foregroundStyle(DesignTokens.Colors.accentCyan)
+                                    + Text(" Event Analyzer")
+                                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+                            )
+                            .font(DesignTokens.Typography.title)
 
-                VStack(spacing: DesignTokens.Spacing.md) {
-                    BrandMark()
-                    VStack(spacing: 2) {
-                        (
-                            Text("FX")
-                                .foregroundStyle(DesignTokens.Colors.accentCyan)
-                                + Text(" Event Analyzer")
-                                .foregroundStyle(DesignTokens.Colors.textPrimary)
-                        )
-                        .font(DesignTokens.Typography.title)
-
-                        // NOT the Reference's literal "Turn Economic Events
-                        // into Trading Opportunities" — HQ's Phase 5
-                        // instruction (commit 6578d6a) deliberately changed
-                        // this wording because it "implied trading signals/
-                        // advice, out of scope for this app" (features.md's
-                        // explicit exclusion of 投資助言). Reference layout/
-                        // two-line shape kept; wording kept compliance-safe.
-                        // Flagged to HQ rather than silently reverted.
-                        Text("Understand Economic Events\n& FX Reactions")
-                            .font(DesignTokens.Typography.tagline)
-                            .foregroundStyle(DesignTokens.Colors.textSecondary)
-                            .multilineTextAlignment(.center)
+                            Text("Turn Economic Events\ninto Trading Opportunities")
+                                .font(DesignTokens.Typography.tagline)
+                                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                                .multilineTextAlignment(.center)
+                        }
                     }
+                    .padding(.horizontal, DesignTokens.Spacing.lg)
+                    .frame(maxWidth: 480) // keeps brand elements from stretching oversized on iPad
+                    .frame(width: geometry.size.width)
+                    .padding(.top, geometry.size.height * 0.29)
+
+                    bottomContent
+                        .padding(.horizontal, DesignTokens.Spacing.lg)
+                        .frame(width: geometry.size.width)
+                        .padding(.top, geometry.size.height * 0.79)
                 }
-
-                Spacer()
-
-                bottomContent
-                    .padding(.bottom, DesignTokens.Spacing.xl)
             }
-            .padding(.horizontal, DesignTokens.Spacing.lg)
-            .frame(maxWidth: 480) // keeps brand elements from stretching oversized on iPad
         }
         .task { viewModel.start() }
     }

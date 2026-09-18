@@ -25,7 +25,7 @@ struct SplashMarketTexture: View {
             let meshLines = 7
             for lineIndex in 0..<meshLines {
                 let t = Double(lineIndex) / Double(meshLines - 1)
-                let y = size.height * (0.35 + 0.6 * t)
+                let y = size.height * (0.5 + 0.28 * t)
                 let amplitude = 10.0 + 18.0 * t
                 var path = Path()
                 let steps = 40
@@ -47,10 +47,10 @@ struct SplashMarketTexture: View {
             // Upward-trending candlesticks along the bottom edge.
             let candleCount = 16
             let candleSlot = size.width / Double(candleCount)
-            let baseline = size.height * 0.92
+            let baseline = size.height * 0.76
             for index in 0..<candleCount {
                 let progress = Double(index) / Double(candleCount - 1)
-                let trendHeight = size.height * (0.08 + 0.4 * progress)
+                let trendHeight = size.height * (0.06 + 0.26 * progress)
                 let jitter = (nextUnit() - 0.5) * size.height * 0.08
                 let bodyHeight = max(6, trendHeight + jitter)
                 let x = candleSlot * (Double(index) + 0.5)
