@@ -60,6 +60,14 @@ struct SplashMarketTexture: View {
         }
     }
 
+    /// Pixel-sampled from the Reference (def9f700 crop, 852×510): a vertical
+    /// scan through a bright candle body reads near-pure cyan at the top
+    /// (~#00FAFF) softening toward the shared `accentCyan` by the bottom
+    /// edge, not one flat fill color — so each body gets its own top→bottom
+    /// gradient. The same scan found each body's brightness falling off
+    /// smoothly over roughly 30px either side (852px-wide crop) before
+    /// reaching background — a soft blur halo, not the earlier thin
+    /// fixed-width stroke this replaces.
     private var candles: some View {
         Canvas { context, size in
             var seed: UInt64 = 0xD1B5_4A32_9E77_1C03
@@ -70,9 +78,19 @@ struct SplashMarketTexture: View {
                 return Double(seed % 1000) / 1000
             }
 
+            struct CandleShape {
+                let bodyPath: Path
+                let bodyBounds: CGRect
+                let wickPath: Path
+                let isBright: Bool
+            }
+
             let candleCount = 16
             let candleSlot = size.width / Double(candleCount)
             let baseline = size.height * 0.87
+            let glowRadius = size.width * 0.035
+
+            var shapes: [CandleShape] = []
             for index in 0..<candleCount {
                 let progress = Double(index) / Double(candleCount - 1)
                 let trendHeight = size.height * (0.03 + 0.2 * progress)
@@ -89,16 +107,35 @@ struct SplashMarketTexture: View {
                 var wick = Path()
                 wick.move(to: CGPoint(x: x, y: baseline))
                 wick.addLine(to: CGPoint(x: x, y: baseline - wickHeight))
-                context.stroke(wick, with: .color(DesignTokens.Colors.accentCyan.opacity(0.55)), lineWidth: 1)
 
                 let bodyRect = CGRect(x: x - bodyWidth / 2, y: baseline - bodyHeight, width: bodyWidth, height: bodyHeight)
                 let bodyPath = Path(roundedRect: bodyRect, cornerRadius: 1.5)
-                if isBright {
-                    context.stroke(bodyPath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.4)), lineWidth: 4)
-                    context.fill(bodyPath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.85)))
-                } else {
-                    context.fill(bodyPath, with: .color(DesignTokens.Colors.accentPrimary.opacity(0.6)))
+                shapes.append(CandleShape(bodyPath: bodyPath, bodyBounds: bodyRect, wickPath: wick, isBright: isBright))
+            }
+
+            context.drawLayer { layer in
+                layer.addFilter(.blur(radius: glowRadius))
+                for shape in shapes {
+                    let glowColor = shape.isBright ? DesignTokens.Colors.accentCyan : DesignTokens.Colors.accentPrimary
+                    layer.fill(shape.bodyPath, with: .color(glowColor.opacity(shape.isBright ? 0.9 : 0.55)))
+                    layer.stroke(shape.wickPath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.75)), lineWidth: 2)
                 }
+            }
+
+            for shape in shapes {
+                context.stroke(shape.wickPath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.7)), lineWidth: 1)
+
+                let gradient = shape.isBright
+                    ? Gradient(colors: [Color(red: 0, green: 0.98, blue: 1.0), DesignTokens.Colors.accentCyan])
+                    : Gradient(colors: [DesignTokens.Colors.accentCyan.opacity(0.75), DesignTokens.Colors.accentPrimary])
+                context.fill(
+                    shape.bodyPath,
+                    with: .linearGradient(
+                        gradient,
+                        startPoint: CGPoint(x: shape.bodyBounds.midX, y: shape.bodyBounds.minY),
+                        endPoint: CGPoint(x: shape.bodyBounds.midX, y: shape.bodyBounds.maxY)
+                    )
+                )
             }
         }
     }
