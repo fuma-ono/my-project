@@ -11,34 +11,20 @@ struct MainTabView: View {
 
     @State private var homePath = NavigationPath()
     @State private var indicatorsPath = NavigationPath()
-    @State private var selectedTab: Tab = .home
-
-    /// SCR-001 Home Reference's Bottom Tab Bar: the selected tab shows a
-    /// filled icon, every other tab an outline one — SwiftUI's `TabView`
-    /// doesn't switch a tab's SF Symbol on selection by itself (verified;
-    /// there is no automatic outline↔filled behavior), so the tag/selection
-    /// is tracked explicitly here just to pick each icon's name.
-    private enum Tab {
-        case home, indicators, search, settings
-    }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
+        TabView {
             HomeView(apiClient: apiClient, path: $homePath)
-                .tabItem { Label("Home", systemImage: selectedTab == .home ? "house.fill" : "house") }
-                .tag(Tab.home)
+                .tabItem { Label("Home", systemImage: "house.fill") }
 
             IndicatorsView(apiClient: apiClient, path: $indicatorsPath)
-                .tabItem { Label("Indicators", systemImage: selectedTab == .indicators ? "chart.bar.fill" : "chart.bar") }
-                .tag(Tab.indicators)
+                .tabItem { Label("Indicators", systemImage: "chart.bar.fill") }
 
             SearchPlaceholderView()
                 .tabItem { Label("Search", systemImage: "magnifyingglass") }
-                .tag(Tab.search)
 
             SettingsView(authService: authService, onSignOut: onSignOut)
-                .tabItem { Label("Settings", systemImage: selectedTab == .settings ? "gearshape.fill" : "gearshape") }
-                .tag(Tab.settings)
+                .tabItem { Label("Settings", systemImage: "gearshape.fill") }
         }
         .tint(DesignTokens.Colors.accentPrimary)
     }
