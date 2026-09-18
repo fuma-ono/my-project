@@ -37,7 +37,7 @@ struct SplashView: View {
             GeometryReader { geometry in
                 ZStack(alignment: .top) {
                     VStack(spacing: DesignTokens.Spacing.xl) {
-                        BrandMark(width: 94, glow: true)
+                        BrandMark(glow: true)
                         (
                             Text("FX")
                                 .foregroundStyle(DesignTokens.Colors.accentCyan)
