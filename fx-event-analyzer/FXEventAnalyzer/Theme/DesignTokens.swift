@@ -156,6 +156,14 @@ enum DesignTokens {
         static let largeTitle = Font.system(size: 32, weight: .bold, design: .rounded)
         static let title = Font.system(size: 24, weight: .bold, design: .rounded)
         static let headline = Font.system(size: 18, weight: .semibold, design: .rounded)
+        /// Splash-only — its Reference wordmark reads larger than the
+        /// shared `title` size, so this is its own token rather than
+        /// stretching a token other screens share. Capped below the
+        /// cap-height-derived estimate (~51pt) because at that size
+        /// "FX Event Analyzer" no longer fits one line at the Reference's
+        /// measured width ratio on an iPhone-width screen; `.lineLimit(1)`
+        /// + `.minimumScaleFactor` at the call site is the real safety net.
+        static let splashTitle = Font.system(size: 30, weight: .bold, design: .rounded)
 
         // Body / data — default (San Francisco) design reads as more
         // "serious financial app", per HQ's "専門的だが難しくない".
@@ -164,7 +172,7 @@ enum DesignTokens {
         static let caption = Font.system(size: 13, weight: .regular)
         static let captionEmphasized = Font.system(size: 13, weight: .semibold)
         static let footnote = Font.system(size: 11, weight: .medium)
-        static let tagline = Font.system(size: 14, weight: .medium, design: .rounded)
+        static let tagline = Font.system(size: 16, weight: .medium, design: .rounded)
 
         // Numeric — tabular figures so columns of prices/percentages align,
         // a standard financial-UI convention this app didn't have yet.

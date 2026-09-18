@@ -24,44 +24,48 @@ struct SplashView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea()
 
-            // Positions measured directly off the Reference with a
-            // gridline overlay, not eyeballed: logo top ~13%, tagline
-            // bottom ~49%, loading bar ~89.5% of screen height. A
-            // GeometryReader lets this match those proportions on any
-            // device instead of a symmetric Spacer/Spacer layout
-            // centering everything.
+            // Every position and gap here was measured pixel-by-pixel off
+            // the Reference (bounding-box detection on the mark, per-row
+            // brightness scans for the title/tagline text bands), not
+            // eyeballed: mark top 14.8%/bottom 27.4% (width ~24% of
+            // screen width), title text band 32.4–36.8%, tagline lines at
+            // 42.1–44.0% and 46.2–48.1%, loading bar ~89.5%. The mark-to-
+            // title gap (~4.3% ≈ 43pt) and title-to-tagline gap
+            // (~4.5% ≈ 45pt) are both far larger than a tight stacked
+            // VStack would produce, which is why this isn't nested
+            // VStacks with small spacing.
             GeometryReader { geometry in
                 ZStack(alignment: .top) {
-                    VStack(spacing: DesignTokens.Spacing.md) {
-                        BrandMark(glow: true)
-                        VStack(spacing: 2) {
-                            (
-                                Text("FX")
-                                    .foregroundStyle(DesignTokens.Colors.accentCyan)
-                                    + Text(" Event Analyzer")
-                                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-                            )
-                            .font(DesignTokens.Typography.title)
+                    VStack(spacing: DesignTokens.Spacing.xl) {
+                        BrandMark(width: 94, glow: true)
+                        (
+                            Text("FX")
+                                .foregroundStyle(DesignTokens.Colors.accentCyan)
+                                + Text(" Event Analyzer")
+                                .foregroundStyle(DesignTokens.Colors.textPrimary)
+                        )
+                        .font(DesignTokens.Typography.splashTitle)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
 
-                            // Not the Reference's earlier "Turn Economic
-                            // Events into Trading Opportunities" wording —
-                            // that phrasing was deliberately changed in
-                            // Phase 5 (commit 6578d6a) because it implied
-                            // trading signals/advice, out of this app's
-                            // scope (features.md excludes 投資助言). This
-                            // latest Reference image itself now shows
-                            // "Understand Economic Events & FX Reactions",
-                            // which matches.
-                            Text("Understand Economic Events &\nFX Reactions")
-                                .font(DesignTokens.Typography.tagline)
-                                .foregroundStyle(DesignTokens.Colors.textSecondary)
-                                .multilineTextAlignment(.center)
-                        }
+                        // Not the Reference's earlier "Turn Economic
+                        // Events into Trading Opportunities" wording —
+                        // that phrasing was deliberately changed in
+                        // Phase 5 (commit 6578d6a) because it implied
+                        // trading signals/advice, out of this app's
+                        // scope (features.md excludes 投資助言). This
+                        // latest Reference image itself now shows
+                        // "Understand Economic Events & FX Reactions",
+                        // which matches.
+                        Text("Understand Economic Events &\nFX Reactions")
+                            .font(DesignTokens.Typography.tagline)
+                            .foregroundStyle(DesignTokens.Colors.textSecondary)
+                            .multilineTextAlignment(.center)
                     }
                     .padding(.horizontal, DesignTokens.Spacing.lg)
                     .frame(maxWidth: 480) // keeps brand elements from stretching oversized on iPad
                     .frame(width: geometry.size.width)
-                    .padding(.top, geometry.size.height * 0.13)
+                    .padding(.top, geometry.size.height * 0.148)
 
                     bottomContent
                         .padding(.horizontal, DesignTokens.Spacing.lg)
