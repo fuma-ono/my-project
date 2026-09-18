@@ -82,6 +82,24 @@ targets:
     dependencies:
       - target: FXEventAnalyzer
 
+  # HQ instruction "FX Event Analyzer UIスクリーンショット取得"
+  # (2026-09-18): drives the real, unmodified app against
+  # fx-event-analyzer-backend/scripts/ui-screenshot-mock-server.mjs and
+  # captures XCTAttachment screenshots for HQ to review in CI Artifacts.
+  # Deliberately its own target/scheme (below), not added to
+  # FXEventAnalyzerTests or the FXEventAnalyzer scheme's test action, so
+  # the existing fx-event-analyzer-ios-build.yml workflow — which has no
+  # mock backend running — is untouched and cannot be slowed or broken by
+  # it (HQ: "既存のmacOS CIを壊さないこと").
+  FXEventAnalyzerUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: FXEventAnalyzerUITests
+    dependencies:
+      - target: FXEventAnalyzer
+
 schemes:
   FXEventAnalyzer:
     build:
@@ -95,3 +113,14 @@ schemes:
         - FXEventAnalyzerTests
     archive:
       config: Release
+
+  # Separate scheme (see FXEventAnalyzerUITests above) — only
+  # .github/workflows/fx-event-analyzer-ui-screenshots.yml invokes this.
+  FXEventAnalyzerUIScreenshots:
+    build:
+      targets:
+        FXEventAnalyzer: all
+    test:
+      config: Debug
+      targets:
+        - FXEventAnalyzerUITests
