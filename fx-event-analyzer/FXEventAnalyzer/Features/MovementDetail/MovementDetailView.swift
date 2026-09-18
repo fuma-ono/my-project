@@ -5,6 +5,13 @@ import SwiftUI
 /// "発表前後にFX相場が実際にどれくらい動いたのか確認する". Timeframe
 /// Segmented Control (iOS標準UI) drives both the Reaction figures (already
 /// fetched for every timeframe) and the Chart (re-fetched per timeframe).
+///
+/// Rebuilt under HQ's "UI全面再構築" instruction (2026-09-18, Phase UI-4) —
+/// same `MovementDetailViewModel`/data contract; the chart is now visually
+/// the anchor of the screen (elevated card, brand-tinted segmented
+/// control), and every signed figure (movement/pips/変化率/最大上昇/
+/// 最大下落) is colored by direction instead of uniform white text — HQ:
+/// "色によって情報の重要度を表現する", not decoration for its own sake.
 struct MovementDetailView: View {
     @StateObject private var viewModel: MovementDetailViewModel
 
@@ -87,7 +94,7 @@ struct MovementDetailView: View {
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
             HStack {
                 Text(viewModel.symbol)
-                    .font(DesignTokens.Typography.body)
+                    .font(DesignTokens.Typography.bodyEmphasized)
                     .foregroundStyle(DesignTokens.Colors.accentPrimary)
                 Text(ValueFormat.dateTime(viewModel.releaseDatetime))
                     .font(DesignTokens.Typography.caption)
@@ -103,6 +110,7 @@ struct MovementDetailView: View {
             }
         }
         .pickerStyle(.segmented)
+        .tint(DesignTokens.Colors.accentPrimary)
     }
 
     /// Phase 4.5 UX audit: "このイベントでこれだけ動いた → 過去はどうだった？"
@@ -115,16 +123,7 @@ struct MovementDetailView: View {
             fxPairId: viewModel.fxPairId,
             fxPairSymbol: viewModel.symbol
         )) {
-            HStack {
-                Text("過去の値動きと比較する")
-                Spacer()
-                Image(systemName: "chevron.right")
-            }
-            .font(DesignTokens.Typography.body)
-            .padding(DesignTokens.Spacing.md)
-            .background(DesignTokens.Colors.backgroundSurface)
-            .foregroundStyle(DesignTokens.Colors.textPrimary)
-            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.control))
+            FXActionRow(title: "過去の値動きと比較する", systemImage: "chart.bar.xaxis")
         }
     }
 
@@ -151,7 +150,8 @@ struct MovementDetailView: View {
 
     private func reactionSection(preReleasePrice: Double?, reactions: [ReactionTimeframeEntry]) -> some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
-            metadataRow(title: "発表前価格", value: ValueFormat.number(preReleasePrice, fractionDigits: 3))
+            MetricRow(title: "発表前価格", value: ValueFormat.number(preReleasePrice, fractionDigits: 3))
+                .fxCard(.surface)
             if let selected = reactions.first(where: { $0.timeframe == viewModel.selectedTimeframe }) {
                 reactionCard(selected)
             }
@@ -160,46 +160,46 @@ struct MovementDetailView: View {
 
     @ViewBuilder
     private func reactionCard(_ reaction: ReactionTimeframeEntry) -> some View {
-        card {
-            switch reaction.analysisStatus {
-            case .ready:
-                VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
-                    metadataRow(title: "発表後価格", value: ValueFormat.number(reaction.postReleasePrice, fractionDigits: 3))
-                    metadataRow(title: "変動幅 (Movement)", value: ValueFormat.number(reaction.movement, fractionDigits: 3, signed: true))
-                    metadataRow(title: "Pips", value: ValueFormat.pips(reaction.pips))
-                    metadataRow(title: "変化率 (%)", value: ValueFormat.percent(reaction.changePercent, signed: true))
-                    Divider().background(DesignTokens.Colors.borderSubtle)
-                    metadataRow(title: "最大上昇", value: ValueFormat.number(reaction.maxUpward, fractionDigits: 3, signed: true))
-                    metadataRow(title: "最大上昇 Pips", value: ValueFormat.pips(reaction.maxUpwardPips))
-                    metadataRow(title: "最大下落", value: ValueFormat.number(reaction.maxDownward, fractionDigits: 3, signed: true))
-                    metadataRow(title: "最大下落 Pips", value: ValueFormat.pips(reaction.maxDownwardPips))
-                }
-            case .dataPending, .dataUnavailable, .notAnalyzable:
-                Text(reaction.analysisStatus.label)
-                    .font(DesignTokens.Typography.body)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+        switch reaction.analysisStatus {
+        case .ready:
+            VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
+                MetricRow(title: "発表後価格", value: ValueFormat.number(reaction.postReleasePrice, fractionDigits: 3))
+                MetricRow(
+                    title: "変動幅 (Movement)",
+                    value: ValueFormat.number(reaction.movement, fractionDigits: 3, signed: true),
+                    valueColor: DesignTokens.Colors.directional(reaction.movement)
+                )
+                MetricRow(
+                    title: "Pips",
+                    value: ValueFormat.pips(reaction.pips),
+                    valueColor: DesignTokens.Colors.directional(reaction.pips)
+                )
+                MetricRow(
+                    title: "変化率 (%)",
+                    value: ValueFormat.percent(reaction.changePercent, signed: true),
+                    valueColor: DesignTokens.Colors.directional(reaction.changePercent)
+                )
+                Divider().background(DesignTokens.Colors.borderSubtle)
+                MetricRow(
+                    title: "最大上昇",
+                    value: ValueFormat.number(reaction.maxUpward, fractionDigits: 3, signed: true),
+                    valueColor: DesignTokens.Colors.statusSuccess
+                )
+                MetricRow(title: "最大上昇 Pips", value: ValueFormat.pips(reaction.maxUpwardPips), valueColor: DesignTokens.Colors.statusSuccess)
+                MetricRow(
+                    title: "最大下落",
+                    value: ValueFormat.number(reaction.maxDownward, fractionDigits: 3, signed: true),
+                    valueColor: DesignTokens.Colors.statusError
+                )
+                MetricRow(title: "最大下落 Pips", value: ValueFormat.pips(reaction.maxDownwardPips), valueColor: DesignTokens.Colors.statusError)
             }
-        }
-    }
-
-    private func metadataRow(title: String, value: String) -> some View {
-        HStack {
-            Text(title)
-                .font(DesignTokens.Typography.caption)
-                .foregroundStyle(DesignTokens.Colors.textSecondary)
-            Spacer()
-            Text(value)
+            .fxCard(.surface)
+        case .dataPending, .dataUnavailable, .notAnalyzable:
+            Text(reaction.analysisStatus.label)
                 .font(DesignTokens.Typography.body)
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                .fxCard(.surface)
         }
-    }
-
-    private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(DesignTokens.Spacing.md)
-            .background(DesignTokens.Colors.backgroundSurface)
-            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.card))
     }
 }
 
@@ -229,7 +229,7 @@ private struct MovementChartView: View {
                     yStart: .value("Low", priceBounds.low),
                     yEnd: .value("High", priceBounds.high)
                 )
-                .foregroundStyle(DesignTokens.Colors.backgroundSurface.opacity(0.6))
+                .foregroundStyle(DesignTokens.Colors.backgroundPrimary.opacity(0.5))
             }
             if let last = chart.prices.last?.timestamp {
                 RectangleMark(
@@ -238,7 +238,7 @@ private struct MovementChartView: View {
                     yStart: .value("Low", priceBounds.low),
                     yEnd: .value("High", priceBounds.high)
                 )
-                .foregroundStyle(DesignTokens.Colors.accentPrimary.opacity(0.08))
+                .foregroundStyle(DesignTokens.Colors.accentPrimary.opacity(0.10))
             }
 
             ForEach(chart.prices) { point in
@@ -252,25 +252,31 @@ private struct MovementChartView: View {
 
             RuleMark(x: .value("Release", chart.releaseDatetime))
                 .foregroundStyle(DesignTokens.Colors.accentSecondary)
-                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
                 .annotation(position: .top, alignment: .center) {
-                    Text("発表")
-                        .font(DesignTokens.Typography.caption)
-                        .foregroundStyle(DesignTokens.Colors.accentSecondary)
+                    Text("発表時刻")
+                        .font(DesignTokens.Typography.footnote)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, DesignTokens.Spacing.sm)
+                        .padding(.vertical, 3)
+                        .background(DesignTokens.Colors.accentSecondary, in: Capsule())
                 }
         }
         .chartXAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                AxisGridLine()
+                AxisGridLine().foregroundStyle(DesignTokens.Colors.borderSubtle)
                 AxisValueLabel(format: .dateTime.hour().minute())
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
             }
         }
         .chartYAxis {
-            AxisMarks(position: .leading)
+            AxisMarks(position: .leading) { _ in
+                AxisGridLine().foregroundStyle(DesignTokens.Colors.borderSubtle)
+                AxisValueLabel()
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+            }
         }
-        .frame(height: 220)
-        .padding(DesignTokens.Spacing.md)
-        .background(DesignTokens.Colors.backgroundSurface)
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.card))
+        .frame(height: 240)
+        .fxCard(.elevated)
     }
 }

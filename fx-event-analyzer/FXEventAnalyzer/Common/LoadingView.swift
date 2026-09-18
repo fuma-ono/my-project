@@ -16,5 +16,7 @@ struct LoadingView: View {
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
             }
         }
+        .frame(maxWidth: .infinity)
+        .padding(DesignTokens.Spacing.xl)
     }
 }

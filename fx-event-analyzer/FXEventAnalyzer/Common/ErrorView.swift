@@ -37,6 +37,7 @@ struct ErrorView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(DesignTokens.Colors.accentPrimary)
         }
-        .padding(DesignTokens.Spacing.lg)
+        .frame(maxWidth: .infinity)
+        .padding(DesignTokens.Spacing.xl)
     }
 }

@@ -139,7 +139,7 @@ struct HistoricalEventDetailView: View {
                     Link(destination: url) {
                         Text("出典: \(source)")
                             .font(DesignTokens.Typography.caption)
-                            .foregroundStyle(DesignTokens.Colors.accentSecondary)
+                            .foregroundStyle(DesignTokens.Colors.accentCyan)
                     }
                 }
             }

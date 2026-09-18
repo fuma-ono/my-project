@@ -22,6 +22,7 @@ struct EmptyStateView: View {
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                 .multilineTextAlignment(.center)
         }
-        .padding(DesignTokens.Spacing.lg)
+        .frame(maxWidth: .infinity)
+        .padding(DesignTokens.Spacing.xl)
     }
 }

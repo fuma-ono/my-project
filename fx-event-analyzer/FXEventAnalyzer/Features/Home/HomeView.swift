@@ -4,6 +4,14 @@ import SwiftUI
 /// "今日の注目イベント" (SCHEDULED) / "主要通貨ペアの動向" (major_fx) /
 /// "最近のイベント" (RELEASED), each event tappable to SCR-004 Event
 /// Detail.
+///
+/// Rebuilt under HQ's "UI全面再構築" instruction (2026-09-18, Phase UI-2):
+/// same `HomeViewModel`/data contract, new visual structure — a custom
+/// brand header (not the system nav bar), "今日の注目イベント" promoted to
+/// an elevated hero card (the one thing this screen wants you to notice
+/// first), and Major FX Pairs shown as real price + change cards instead
+/// of a bare percentage. No new network calls; `MajorFxSummary.price` was
+/// already being fetched and simply wasn't rendered before.
 struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
     @Binding var path: NavigationPath
@@ -21,8 +29,7 @@ struct HomeView: View {
                 DesignTokens.Colors.backgroundPrimary.ignoresSafeArea()
                 content
             }
-            .navigationTitle("FX Event Analyzer")
-            .toolbarBackground(DesignTokens.Colors.backgroundPrimary, for: .navigationBar)
+            .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: AppRoute.self) { route in
                 AppRouteDestinationView(route: route, apiClient: apiClient)
             }
@@ -48,7 +55,7 @@ struct HomeView: View {
                 systemImage: "calendar"
             )
         case .loaded:
-            loadedList
+            loadedScroll
         case .error(let message):
             ErrorView(
                 title: "読み込みに失敗しました",
@@ -58,47 +65,119 @@ struct HomeView: View {
         }
     }
 
-    private var loadedList: some View {
-        List {
-            if !viewModel.upcomingEvents.isEmpty {
-                Section("今日の注目イベント") {
-                    ForEach(viewModel.upcomingEvents) { event in
-                        NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
-                            HomeEventRow(event: event)
-                        }
-                        .listRowBackground(DesignTokens.Colors.backgroundSurface)
-                    }
-                }
-            }
+    private var loadedScroll: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: DesignTokens.Spacing.lg) {
+                header
 
-            if !viewModel.majorFxList.isEmpty {
-                Section("主要通貨ペアの動向") {
-                    MajorFxRow(items: viewModel.majorFxList)
-                        .listRowBackground(DesignTokens.Colors.backgroundSurface)
+                if !viewModel.upcomingEvents.isEmpty {
+                    todaysEventsSection
                 }
-            }
 
-            if !viewModel.recentEvents.isEmpty {
-                Section("最近のイベント") {
-                    ForEach(viewModel.recentEvents) { event in
-                        NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
-                            HomeEventRow(event: event)
-                        }
-                        .listRowBackground(DesignTokens.Colors.backgroundSurface)
-                    }
+                if !viewModel.majorFxList.isEmpty {
+                    majorFxSection
                 }
-            }
 
-            if viewModel.upcomingEvents.isEmpty && viewModel.recentEvents.isEmpty {
-                Section {
+                if !viewModel.recentEvents.isEmpty {
+                    recentEventsSection
+                }
+
+                if viewModel.upcomingEvents.isEmpty && viewModel.recentEvents.isEmpty {
                     Text("本日発表予定・発表済みの経済指標はありません。")
                         .font(DesignTokens.Typography.caption)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
-                        .listRowBackground(DesignTokens.Colors.backgroundSurface)
+                }
+            }
+            .padding(DesignTokens.Spacing.md)
+            .padding(.top, DesignTokens.Spacing.sm)
+            .adaptiveContentWidth()
+        }
+    }
+
+    // MARK: - Header
+
+    /// Custom brand header, not `.navigationTitle` — the reference's bold
+    /// two-tone wordmark isn't achievable with the system nav bar's title
+    /// styling, and Home is a tab root with nothing to navigate back from.
+    /// The bell is deliberately not a button: notifications aren't a Phase
+    /// 5 feature, and an inert tap target is worse than none at all.
+    private var header: some View {
+        HStack {
+            (
+                Text("FX")
+                    .foregroundStyle(DesignTokens.Colors.accentCyan)
+                    + Text(" Event Analyzer")
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+            )
+            .font(DesignTokens.Typography.title)
+
+            Spacer()
+
+            Image(systemName: "bell")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                .accessibilityHidden(true)
+        }
+    }
+
+    // MARK: - 今日の注目イベント (hero)
+
+    private var todaysEventsSection: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+            SectionHeader(title: "今日の注目イベント", subtitle: Self.todayLabel())
+            VStack(spacing: DesignTokens.Spacing.sm) {
+                ForEach(viewModel.upcomingEvents) { event in
+                    NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
+                        HomeEventRow(event: event)
+                    }
+                    .buttonStyle(.plain)
+                    if event.id != viewModel.upcomingEvents.last?.id {
+                        Divider().background(DesignTokens.Colors.borderSubtle)
+                    }
                 }
             }
         }
-        .scrollContentBackground(.hidden)
+        .fxCard(.elevated)
+    }
+
+    private static func todayLabel() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M月d日 (E)"
+        formatter.locale = Locale(identifier: "ja_JP")
+        return formatter.string(from: Date())
+    }
+
+    // MARK: - 主要通貨ペアの動向
+
+    private var majorFxSection: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+            SectionHeader(title: "主要通貨ペアの動向")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: DesignTokens.Spacing.sm) {
+                    ForEach(viewModel.majorFxList) { fx in
+                        FxPairChip(fx: fx)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+    }
+
+    // MARK: - 最近のイベント
+
+    private var recentEventsSection: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.Spacing.md) {
+            SectionHeader(title: "最近のイベント")
+            VStack(spacing: DesignTokens.Spacing.sm) {
+                ForEach(viewModel.recentEvents) { event in
+                    NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
+                        HomeEventRow(event: event)
+                            .fxCard(.surface)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
     }
 }
 
@@ -108,71 +187,72 @@ private struct HomeEventRow: View {
     let event: HomeEventSummary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
-            HStack {
+        HStack(alignment: .top, spacing: DesignTokens.Spacing.sm) {
+            VStack(spacing: 2) {
                 Text(CountryFlag.emoji(for: event.countryCode))
+                    .font(.system(size: 22))
                 Text(event.currencyCode)
-                    .font(DesignTokens.Typography.caption)
+                    .font(DesignTokens.Typography.footnote)
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
-                Text(event.indicatorName)
-                    .font(DesignTokens.Typography.body)
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-                Spacer()
-                Text(event.importance.starDisplay)
-                    .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.accentPrimary)
             }
+            .frame(width: 40)
 
-            HStack {
-                Text(ValueFormat.time(event.releaseDatetime))
-                    .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                if let countdown = ValueFormat.countdown(to: event.releaseDatetime), event.status == .scheduled {
-                    Text(countdown)
+            VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(ValueFormat.time(event.releaseDatetime))
+                        .font(DesignTokens.Typography.numericCaption)
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    Text(event.indicatorName)
+                        .font(DesignTokens.Typography.bodyEmphasized)
+                        .foregroundStyle(DesignTokens.Colors.textPrimary)
+                        .lineLimit(1)
+                    Spacer()
+                    Text(event.importance.starDisplay)
                         .font(DesignTokens.Typography.caption)
-                        .foregroundStyle(DesignTokens.Colors.accentSecondary)
+                        .foregroundStyle(DesignTokens.Colors.accentPrimary)
                 }
-                Spacer()
-                statusBadge
-            }
 
-            switch event.dataStatus {
-            case .dataPending:
-                Text(event.dataStatus.label)
-                    .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-            case .dataUnavailable:
-                Text(event.dataStatus.label)
-                    .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.statusError)
-            default:
-                valuesRow
-            }
+                HStack(spacing: DesignTokens.Spacing.xs) {
+                    statusBadge
+                    if let countdown = ValueFormat.countdown(to: event.releaseDatetime), event.status == .scheduled {
+                        Text(countdown)
+                            .font(DesignTokens.Typography.footnote)
+                            .foregroundStyle(DesignTokens.Colors.accentCyan)
+                    }
+                    Spacer()
+                }
 
-            if !event.relatedFxPairs.isEmpty {
-                Text(event.relatedFxPairs.map(\.symbol).joined(separator: " / "))
-                    .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                switch event.dataStatus {
+                case .dataPending:
+                    Text(event.dataStatus.label)
+                        .font(DesignTokens.Typography.caption)
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                case .dataUnavailable:
+                    Text(event.dataStatus.label)
+                        .font(DesignTokens.Typography.caption)
+                        .foregroundStyle(DesignTokens.Colors.statusError)
+                default:
+                    valuesRow
+                }
+
+                if !event.relatedFxPairs.isEmpty {
+                    Text(event.relatedFxPairs.map(\.symbol).joined(separator: " / "))
+                        .font(DesignTokens.Typography.footnote)
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                }
             }
         }
         .padding(.vertical, DesignTokens.Spacing.xs)
     }
 
-    @ViewBuilder
     private var statusBadge: some View {
         switch event.status {
         case .scheduled:
-            Text("発表前")
-                .font(DesignTokens.Typography.caption)
-                .foregroundStyle(DesignTokens.Colors.textSecondary)
+            return FXBadge(text: "発表前", tone: .neutral)
         case .released:
-            Text("発表済み")
-                .font(DesignTokens.Typography.caption)
-                .foregroundStyle(DesignTokens.Colors.accentPrimary)
+            return FXBadge(text: "発表済み", tone: .negative)
         case .cancelled:
-            Text("中止")
-                .font(DesignTokens.Typography.caption)
-                .foregroundStyle(DesignTokens.Colors.statusError)
+            return FXBadge(text: "中止", tone: .neutral)
         }
     }
 
@@ -184,8 +264,8 @@ private struct HomeEventRow: View {
                 valueLabel("結果", ValueFormat.number(event.actual))
                 if let surprise = event.surprise, let direction = event.surpriseDirection {
                     Text("Surprise \(ValueFormat.number(surprise, signed: true))")
-                        .font(DesignTokens.Typography.caption)
-                        .foregroundStyle(surpriseColor(direction))
+                        .font(DesignTokens.Typography.numericCaption)
+                        .foregroundStyle(DesignTokens.Colors.directional(direction))
                 }
             } else {
                 valueLabel("結果", "--")
@@ -199,51 +279,31 @@ private struct HomeEventRow: View {
                 .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
             Text(value)
-                .font(DesignTokens.Typography.caption)
+                .font(DesignTokens.Typography.numericCaption)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
         }
     }
-
-    private func surpriseColor(_ direction: SurpriseDirection) -> Color {
-        switch direction {
-        case .positive: return DesignTokens.Colors.statusSuccess
-        case .negative: return DesignTokens.Colors.statusError
-        case .neutral: return DesignTokens.Colors.textSecondary
-        }
-    }
 }
 
-private struct MajorFxRow: View {
-    let items: [MajorFxSummary]
+/// A single Major FX Pair card: symbol, last price, and change% — the
+/// price itself is new in this rebuild (the data was already fetched via
+/// `MajorFxSummary.price`, just never shown).
+private struct FxPairChip: View {
+    let fx: MajorFxSummary
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: DesignTokens.Spacing.md) {
-                ForEach(items) { fx in
-                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
-                        Text(fx.symbol)
-                            .font(DesignTokens.Typography.body)
-                            .foregroundStyle(DesignTokens.Colors.textPrimary)
-                        Text(ValueFormat.percent(fx.changePercent, signed: true))
-                            .font(DesignTokens.Typography.caption)
-                            .foregroundStyle(color(for: fx.changePercent))
-                    }
-                }
-            }
+        VStack(alignment: .leading, spacing: 4) {
+            Text(fx.symbol)
+                .font(DesignTokens.Typography.captionEmphasized)
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
+            Text(ValueFormat.number(fx.price, fractionDigits: 3))
+                .font(DesignTokens.Typography.numericBody)
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+            Text(ValueFormat.percent(fx.changePercent, signed: true))
+                .font(DesignTokens.Typography.numericCaption)
+                .foregroundStyle(DesignTokens.Colors.directional(fx.changePercent))
         }
-    }
-
-    private func color(for changePercent: Double?) -> Color {
-        guard let changePercent else { return DesignTokens.Colors.textSecondary }
-        if changePercent > 0 { return DesignTokens.Colors.statusSuccess }
-        if changePercent < 0 { return DesignTokens.Colors.statusError }
-        return DesignTokens.Colors.textSecondary
-    }
-}
-
-private extension HomeViewModel {
-    var majorFxList: [MajorFxSummary] {
-        guard case .loaded(_, let majorFx) = state else { return [] }
-        return majorFx
+        .frame(minWidth: 104, alignment: .leading)
+        .fxCard(.surface, padding: DesignTokens.Spacing.sm)
     }
 }
