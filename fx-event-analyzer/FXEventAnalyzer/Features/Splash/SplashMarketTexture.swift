@@ -50,8 +50,8 @@ struct SplashMarketTexture: View {
             let baseline = size.height * 0.76
             for index in 0..<candleCount {
                 let progress = Double(index) / Double(candleCount - 1)
-                let trendHeight = size.height * (0.06 + 0.26 * progress)
-                let jitter = (nextUnit() - 0.5) * size.height * 0.08
+                let trendHeight = size.height * (0.04 + 0.15 * progress)
+                let jitter = (nextUnit() - 0.5) * size.height * 0.04
                 let bodyHeight = max(6, trendHeight + jitter)
                 let x = candleSlot * (Double(index) + 0.5)
                 let bodyWidth = candleSlot * 0.45
