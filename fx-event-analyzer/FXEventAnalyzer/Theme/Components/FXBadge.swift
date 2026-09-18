@@ -11,6 +11,11 @@ struct FXBadge: View {
         case positive
         case negative
         case emphasis
+        /// SCR-001 Home's "今日の注目イベント" countdown badge — a deep
+        /// blue distinct from `.info`'s brighter `accentCyan` (the
+        /// Reference renders them as different colors; see
+        /// `DesignTokens.Colors.accentDeepBlue`).
+        case scheduled
     }
 
     let text: String
@@ -40,6 +45,7 @@ struct FXBadge: View {
         case .positive: return DesignTokens.Colors.statusSuccess
         case .negative: return DesignTokens.Colors.statusError
         case .emphasis: return DesignTokens.Colors.accentSecondary
+        case .scheduled: return DesignTokens.Colors.accentDeepBlue
         }
     }
 }

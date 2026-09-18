@@ -87,6 +87,52 @@ enum DesignTokens {
             case .neutral: return textSecondary
             }
         }
+
+        /// A muted deep blue, distinct from `accentCyan` — the reference's
+        /// "scheduled event" countdown badge outline (sampled ~#0C4F9C),
+        /// noticeably darker/less saturated than the brand cyan. Its own
+        /// token rather than reusing `accentCyan` because the two read as
+        /// different colors in the Reference, not two uses of one color.
+        static let accentDeepBlue = Color("AccentDeepBlue")
+
+        /// SCR-001 Home-only tokens (HQ's Reference-fidelity instruction,
+        /// 2026-09-18): Home may redefine its own semantic palette without
+        /// touching the shared tokens above, which every other screen
+        /// (Indicators/Event Detail/Movement Detail/Search/Settings — all
+        /// out of scope this round) still renders with. Where the Reference
+        /// matches an existing shared value, the alias below just forwards
+        /// to it; where pixel-sampling the Reference found a different
+        /// value (accent/positive/rating/time text/divider), a dedicated
+        /// colorset backs it instead of a literal in HomeView.
+        enum Home {
+            static let background = backgroundPrimary
+            static let surface = backgroundSurface
+            static let elevated = backgroundElevated
+            static let primaryText = textPrimary
+            static let secondaryText = textSecondary
+            /// Header wordmark + bell — reference sampled ~#04D3FF/#40CCFF,
+            /// both brighter/more saturated than the shared `accentCyan`.
+            static let accent = Color("HomeAccentCyan")
+            static let accentSecondary = DesignTokens.Colors.accentSecondary
+            /// FX pair change% / positive values — sampled ~#1EB179,
+            /// noticeably more teal than the shared `statusSuccess`.
+            static let positive = Color("HomePositive")
+            static let negative = statusError
+            static let border = borderSubtle
+            static let selected = accent
+            /// Filled star — sampled ~#FFB026 (gold/amber), not the shared
+            /// `accentPrimary` blue the pre-Reference Home used.
+            static let ratingGold = Color("RatingGold")
+            static let ratingEmpty = textSecondary
+            /// Release time (or currency code, when the release datetime
+            /// isn't exact) — sampled ~#F5CEB1, a warm peach/cream with no
+            /// existing equivalent token.
+            static let timeText = Color("HomeTimeText")
+            /// Divider between event rows inside the hero card — sampled
+            /// ~#071828, much darker than the shared `borderSubtle`
+            /// (#233049), because it sits on the darker elevated surface.
+            static let divider = Color("HomeDivider")
+        }
     }
 
     enum Spacing {
