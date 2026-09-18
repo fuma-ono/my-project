@@ -46,8 +46,13 @@ final class ScreenshotTests: XCTestCase {
         app.secureTextFields["パスワード"].typeText("ui-screenshot-password")
         app.buttons["ログイン"].tap()
 
-        // SCR-001 Home (required #1)
-        XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 20), "Home tab did not appear after login")
+        // SCR-001 Home (required #1). Not app.tabBars.buttons["Home"] —
+        // iPadOS's adaptive tab bar (floating/sidebar depending on size
+        // class) doesn't always expose as a `TabBar`-typed accessibility
+        // element the way iPhone's bottom tab bar does (real iPad CI
+        // failure: "No matches found for Descendants matching type
+        // TabBar"), so search broadly instead of assuming a container type.
+        XCTAssertTrue(waitForAnyElement(containing: "Home", timeout: 20), "Home tab did not appear after login")
         XCTAssertTrue(
             waitForAnyElement(containing: "米国CPI", timeout: 15),
             "Home did not load event data from the mock Backend"
@@ -74,8 +79,10 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "指標詳細を見る", timeout: 15), "Historical Event Detail did not load")
         capture("06-HistoricalEventDetail")
 
-        // SCR-002 Indicators (required #6, via tab bar — independent nav path)
-        app.tabBars.buttons["Indicators"].tap()
+        // SCR-002 Indicators (required #6, via tab bar — independent nav
+        // path). Same reasoning as the Home tab wait above — use the
+        // broad-search helper, not a `tabBars`-typed query.
+        tap(containing: "Indicators")
         XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicators list did not load")
         capture("07-Indicators")
 
