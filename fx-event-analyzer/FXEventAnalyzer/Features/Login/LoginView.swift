@@ -22,7 +22,7 @@ struct LoginView: View {
 
             ScrollView {
                 VStack(spacing: DesignTokens.Spacing.lg) {
-                    BrandMark(size: 64)
+                    BrandMark(width: 64)
                         .padding(.top, DesignTokens.Spacing.xl)
 
                     if sessionExpired {

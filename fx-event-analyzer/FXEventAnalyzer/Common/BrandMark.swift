@@ -1,29 +1,23 @@
 import SwiftUI
 
-/// Programmatic placeholder brand mark for Splash (SCR-000).
-///
-/// This is deliberately NOT the final App Icon/logo — HQ's instruction was
-/// explicit: reproduce the *direction* of
-/// `docs/projects/fx-event-analyzer/mockups/splash-screen-reference-v1.png`
-/// (layout, background, brand mark, typography, loading, spacing) in
-/// SwiftUI rather than embedding the reference image as a screen
-/// background, and the "フルロゴ版" vs "シンボル版" App Icon choice is
-/// still undecided (ui-screens.md 9.3節). An SF Symbol standing in for an
-/// FX/market-chart uptrend glyph, on the same blue→cyan gradient used for
-/// `AppIcon`'s color direction, satisfies both constraints without
-/// prejudging the final design.
+/// Splash's (SCR-000) brand mark — HQ's "Reference画像の完全再現" instruction
+/// (2026-09-18, App Icon + Splash round) is explicit: reproduce
+/// `docs/projects/fx-event-analyzer/mockups/{app-icon,splash-screen}-reference-v1.png`
+/// as given, not a self-designed stand-in. This used to be a programmatic
+/// SF Symbol placeholder on a gradient square — HQ rejected that approach
+/// outright ("自分で作成するのではなく画像を真似ろ"). `BrandMarkGraphic` is
+/// the zigzag-chart/uptrend-arrow mark cropped directly out of the
+/// Reference App Icon image (both Reference images use the same mark), so
+/// this renders the actual Reference artwork rather than an interpretation
+/// of it.
 struct BrandMark: View {
-    var size: CGFloat = 96
+    var width: CGFloat = 132
 
     var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
-            .fill(DesignTokens.Colors.accentGradient)
-            .frame(width: size, height: size)
-            .overlay {
-                Image(systemName: "chart.line.uptrend.xyaxis")
-                    .font(.system(size: size * 0.44, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
+        Image("BrandMarkGraphic")
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: width)
             .accessibilityLabel("FX Event Analyzer")
     }
 }
