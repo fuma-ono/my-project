@@ -1,4 +1,4 @@
-# FXイベント反応分析アプリ 概要設計書 v1.9
+# FXイベント反応分析アプリ 概要設計書 v1.10
 
 ## 変更履歴
 
@@ -51,6 +51,12 @@
   - MVP正式採用: **Node.js + TypeScript + Fastify**(REST API、Base Path `/api/v1`)。Python + FastAPIは不採用
   - 3.2節にBackend技術スタックを追記(Client: SwiftUI、Backend: Node.js/TypeScript/Fastify)
   - `fx-event-analyzer-backend/`をBackendプロジェクトのルートとして新設(`fx-event-analyzer/`=iOSクライアントとはmonorepo内の独立プロジェクトとして分離)
+- **v1.10**(今回): HQ決定「Provider方針」を反映(2026-09-18)
+  - 経済指標データ・FX価格データの第一候補ProviderとしてTrading Economicsを記録、代替候補としてTwelve Dataを記録(6.2節・7章)
+  - 商用表示・保存・再配布権の契約確認を本番実装開始の前提条件として明記(6.2節・7章)。APIを取得できることと商用表示できることは同義ではない
+  - Provider Adapter抽象化方針(Ingestion Worker → Provider Adapter → Normalized Domain Model)を追記(4.3節、新設)。Adapter実装は未着手
+  - `provider`/`provider_event_id`によるProvider非依存の内部ID設計方針を追記(5.3節)
+  - Provider契約・API Client実装・Ingestion Worker実装・migration・API・iOSは本バージョンでは変更しない(方針決定・設計書追記のみ)
 
 ---
 
@@ -209,6 +215,22 @@ Backend(モノリポ)
 
 内部的には責務を分離するが、初期段階ではこの2プロセス構成に留める。
 
+### 4.3 Provider Abstraction方針(新設、v1.10、HQ決定2026-09-18)
+
+Ingestion WorkerはProvider固有のAPIレスポンス形式をDomain層(9章のSurprise計算等)に直接持ち込まない。以下の抽象化を方針として確定する。
+
+```
+Ingestion Worker
+    ↓
+Provider Adapter(Provider固有のAPI呼び出し・レスポンス変換)
+    ↓
+Normalized Domain Model(Provider非依存の共通形式)
+    ↓
+EconomicEvent / EventSnapshot / FxPrice(5章)
+```
+
+将来的に`TradingEconomicsAdapter`・`TwelveDataAdapter`・その他Providerに対応するAdapterを追加できる構造を想定し、Provider変更・追加時にDomain層への影響を出さないことを目的とする。**本バージョンではAdapterの実装には着手しない(方針確定のみ)。**
+
 ---
 
 ## 5. Database概要
@@ -270,6 +292,8 @@ Indicator ── IndicatorFxPair ── FxPair
 
 管理情報: event_id / indicator_id / release_datetime / release_datetime_precision(時刻精度フラグ、8.2節。値はEXACT/DATE_ONLY/APPROXIMATE/UNKNOWN) / importance / status(SCHEDULED/RELEASED/CANCELLED) / data_status
 
+**Provider識別(新設、v1.10、HQ決定2026-09-18)**: `provider`(例: `tradingeconomics`)と`provider_event_id`(Provider側のネイティブID)の組み合わせで外部イベントを一意識別する。Provider固有のIDを内部の`indicator_id`/`event_id`(UUID)として直接利用せず、内部IDとProvider IDを常に分離する(将来の複数Provider対応・Provider変更を可能にするため)。FX価格データについても、必要に応じてProvider由来のsource情報を保持する(7.2節)。
+
 ### 5.4 EventSnapshot(改訂: EconomicEventから分離)
 
 **最重要エンティティ。発表時点でユーザーに提供されていた情報を、不変(immutable)に保存する。** 一度保存した`actual`・`previous`は、後日の改定があっても書き換えない。
@@ -316,6 +340,12 @@ USDJPY / EURUSD / GBPUSD / EURJPY / GBPJPY / AUDJPY / NZDJPY / AUDUSD / NZDUSD /
 
 要件定義書6.1節と同じ条件を設計レベルでも遵守する。**「取得したデータをエンドユーザーへ商用配信できる権利」を持たないAPIは採用しない。** 候補ごとの確認状況は要件定義書6.2節の表を正とする(推測で埋めない)。
 
+**第一候補: Trading Economics(新設、v1.10、HQ決定2026-09-18)**。Economic Calendar API(Actual/Previous/Consensus=Forecast取得可能、指標履歴取得可能、Point-in-Timeデータ対応)と、FXを含むMarket Data API(Intraday API、1分足ベース)を同一Provider内で提供しており、Economic DataとFX Priceを単一Provider体系で扱うことでtimestamp/source差異を低減できることを採用理由とする。**MVPではProviderを分離しない方針とする。**
+
+**契約締結前の確認事項(必須、実装着手の前提条件)**: APIを取得できることと、アプリで商用表示できることは同義ではないため、契約締結・本番利用権の確認が完了するまで実装を開始しない。特に以下を確認する — 商用iOSアプリへの表示 / Forecast・Actual・Previousの表示 / 過去データの保存・ユーザー表示 / 改定前Snapshot(5.4節)の保存 / Point-in-Timeデータの利用 / 派生値(Surprise等)の生成・表示 / 有料サブスクリプションアプリでの利用。
+
+**代替候補: Twelve Data(新設、v1.10、HQ決定2026-09-18)**。第一候補で商用表示・保存・派生データ利用条件を満たせない場合の代替として記録する。個人向けプランは商用外部表示・再配布用途には使用しない。利用する場合はBusiness系プランおよび必要なRedistribution Rights/Data Licenseを契約時に確認する。**無料・個人向けAPIをそのまま本番アプリに利用することは禁止。**
+
 ### 6.3 必須データ
 
 event / country / currency / release datetime(精度フラグ込み) / importance / forecast(null許容) / actual / previous / source
@@ -324,6 +354,7 @@ event / country / currency / release datetime(精度フラグ込み) / importanc
 
 - **通常時**: Schedulerが定期的(例: 1日1〜数回)にカレンダー取得ジョブをキューに投入する。
 - **イベント前後**: イベント発表が近づくと、Schedulerが対象通貨ペアのFX価格取得ジョブの投入頻度を上げる。**具体的な間隔(秒単位)は、採用するFX価格APIのRate Limitとストリーミング対応状況を確認してから詳細設計で決定する。** 本書時点では「高頻度ポーリングまたはストリーミングのいずれかを、Ingestion Workerが対応できる形で抽象化する」という方針のみ確定する。
+- **取得方式(新設、v1.10、HQ決定2026-09-18)**: MVPでは**Polling + Scheduled Worker**を基本方針とする(いきなりStreaming/Queueの独立コンポーネント化には拡張しない)。ただしイベント発表直前〜直後のFX 1分足取得は、通常のEconomic Calendar pollingとは分離して考える。具体的なポーリング間隔は実装前に決定する。
 
 ---
 
@@ -336,6 +367,14 @@ MVP: 1分足・5分足・15分足・30分足・60分足。将来: 4時間足・�
 ### 7.2 保存データ
 
 timestamp(open time基準) / open / high / low / close / volume(取得可能な場合のみ) / symbol
+
+### 7.3 Provider方針(新設、v1.10、HQ決定2026-09-18、6.2節と同じ方針)
+
+**第一候補**: Trading Economics(Intraday API、1分足ベース)。**代替候補**: Twelve Data(FXの1分足/5分足等のIntraday OHLCを提供。ただし個人向けプランは商用外部表示・再配布不可、Business系プラン+Redistribution Rights契約が必要。無料・個人向けAPIをそのまま本番アプリに利用することは禁止)。
+
+**契約締結前の確認事項(必須、実装着手の前提条件)**: 1-minute OHLCの商用利用 / iOSアプリでの外部表示 / 過去1-minute dataの保存 / Chartへの表示 / pips・change_percent等の派生値の表示 / `EventPriceReaction`として保存した派生データのユーザー提供 / 有料サブスクリプションアプリでの利用 / データ再配布に該当する範囲 / 必要なattribution。
+
+**MVP検証対象(新設、v1.10)**: Indicatorは既存設計済みの主要指標(US CPI / US NFP / US FOMC / Japan CPI / Japan BOJ等)、FxPairはUSD/JPY・EUR/USD・EUR/JPYを最初の実データ検証対象とし、その後5.7節の既存定義済みPairへ拡張する。
 
 ---
 
@@ -628,12 +667,12 @@ v1.0の内容を維持する。Backend(Read API)/DB/Account/Subscriptionを共�
 
 ## 31. 概要設計の未確定事項
 
-- Economic API / FX Price APIの最終選定(要件定義書6.2節の確認結果次第)
+- ~~Economic API / FX Price APIの最終選定~~ → **一部解決(v1.10、HQ決定2026-09-18)**: 第一候補Trading Economics、代替候補Twelve Data(6.2節・7.3節参照)。ただし契約締結・商用利用権の確認が完了するまで実装は未着手
 - ~~Backend framework~~ → **解決(v1.9、HQ確定2026-09-17)**: Node.js + TypeScript + Fastify(3.2節参照)。Cloud infrastructure(DBホスティング・Auth基盤)はSupabaseに確定済み(5章参照)
 - AI provider(将来分)
 - Subscription provider / Notification infrastructure
 - Web framework
-- Ingestion Workerの具体的なポーリング間隔・ストリーミング利用の要否(採用APIの仕様次第)
+- Ingestion Workerの具体的なポーリング間隔・ストリーミング利用の要否(MVPはPolling + Scheduled Workerを基本方針とすることは確定〔6.4節〕、具体的な間隔は採用APIのRate Limit確認後に決定)
 - Data retention period / Historical data acquisition period
 - API障害時のFallback(複数データソース併用の要否)
 - Free/Proの最終機能境界
