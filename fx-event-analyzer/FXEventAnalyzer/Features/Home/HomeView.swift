@@ -307,3 +307,10 @@ private struct FxPairChip: View {
         .fxCard(.surface, padding: DesignTokens.Spacing.sm)
     }
 }
+
+private extension HomeViewModel {
+    var majorFxList: [MajorFxSummary] {
+        guard case .loaded(_, let majorFx) = state else { return [] }
+        return majorFx
+    }
+}
