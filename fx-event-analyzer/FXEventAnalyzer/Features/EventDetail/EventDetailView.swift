@@ -133,6 +133,7 @@ struct EventDetailView: View {
                 Link(destination: url) {
                     FXActionRow(icon: "link", title: "公式ソース", subtitle: source, action: {})
                         .allowsHitTesting(false)
+                        .contentShape(Rectangle())
                 }
             }
         }.fxCard()
@@ -176,7 +177,7 @@ struct EventDetailView: View {
                 Text(pair.reaction.analysisStatus.label).font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
             }
             Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(FXColor.tertiaryText)
-        }.padding(.vertical, 6)
+        }.padding(.vertical, 6).contentShape(Rectangle())
     }
 }
 

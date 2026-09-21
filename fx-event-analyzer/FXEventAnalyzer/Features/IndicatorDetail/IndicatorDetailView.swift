@@ -63,6 +63,7 @@ struct IndicatorDetailView: View {
                         )) {
                             FXActionRow(icon: "chart.bar.xaxis", title: "過去イベントを比較", subtitle: "予想・結果・FX反応を時系列で確認", action: {})
                                 .allowsHitTesting(false)
+                                .contentShape(Rectangle())
                         }
                     }
                 }.padding(20).frame(maxWidth: 900)
