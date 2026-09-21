@@ -3,6 +3,14 @@ import SwiftUI
 /// SCR-007 Historical Event Detail (ui-screens.md §5): 指標/発表日時/
 /// Forecast/Actual/Previous/Surprise/発表前後価格/pips/%、+必須の
 /// 「指標詳細を見る」→ SCR-003 遷移.
+///
+/// HQ Frontend integration (2026-09-21): visual content is HQ's
+/// `FXEventAnalyzer_HQFrontend/HistoricalEventDetailView.swift`, driven by
+/// the real `HistoricalEventDetailResponse` in place of HQ's demo
+/// `FXHistoryUI`/`FXRevisionUI`. HQ's "値動き詳細を見る" and "指標詳細を
+/// 見る" links pushed to demo `FXDemo.events[0]`/`FXDemo.indicators[0]` —
+/// both now push the real `AppRoute.movementDetail`/`AppRoute.indicatorDetail`
+/// for this event/indicator, as before integration.
 struct HistoricalEventDetailView: View {
     @StateObject private var viewModel: HistoricalEventDetailViewModel
 
@@ -12,12 +20,11 @@ struct HistoricalEventDetailView: View {
 
     var body: some View {
         ZStack {
-            DesignTokens.Colors.backgroundPrimary.ignoresSafeArea()
+            FXAppBackground()
             content
         }
-        .navigationTitle("過去のイベント")
+        .navigationTitle("Past Event")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(DesignTokens.Colors.backgroundPrimary, for: .navigationBar)
         .task { viewModel.load() }
     }
 
@@ -27,139 +34,77 @@ struct HistoricalEventDetailView: View {
         case .loading:
             LoadingView(caption: "読み込み中...")
         case .backendNotConfigured:
-            EmptyStateView(title: "Backendは準備中です", message: "過去のイベント情報はまだ利用できません。", systemImage: "server.rack")
+            FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "過去のイベント情報はまだ利用できません。")
         case .notFound:
-            EmptyStateView(title: "イベントが見つかりません", message: "指定されたイベントは存在しません。", systemImage: "questionmark.circle")
+            FXEmptyState(icon: "questionmark.circle", title: "イベントが見つかりません", message: "指定されたイベントは存在しません。")
         case .notEntitled:
-            EmptyStateView(
-                title: "この情報はご利用いただけません",
-                message: "現在のプランでは過去のイベント情報を閲覧できません。",
-                systemImage: "lock.fill"
-            )
+            FXEmptyState(icon: "lock.fill", title: "この情報はご利用いただけません", message: "現在のプランでは過去のイベント情報を閲覧できません。")
         case .loaded(let response):
             ScrollView {
-                VStack(alignment: .leading, spacing: DesignTokens.Spacing.lg) {
-                    header(response.event)
+                VStack(alignment: .leading, spacing: 20) {
+                    HStack {
+                        FXBadge(text: "HISTORICAL", tint: FXColor.secondaryText)
+                        Spacer()
+                        Text(response.event.releaseDatetime, style: .date).foregroundStyle(FXColor.secondaryText).font(.system(size: 12))
+                    }
+                    Text("Past Event Detail").font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                    Text(response.event.indicatorName).font(.system(size: 15, weight: .semibold)).foregroundStyle(FXColor.cyan)
+
                     snapshotSection(response.snapshot)
+
                     if let explanation = response.explanation {
                         explanationSection(explanation)
                     }
+
                     reactionsSection(response.relatedFxPairs, event: response.event, indicatorId: response.indicatorId)
+
                     NavigationLink(value: AppRoute.indicatorDetail(id: response.indicatorId)) {
-                        Text("指標詳細を見る")
-                            .font(DesignTokens.Typography.body)
-                            .frame(maxWidth: .infinity)
-                            .padding(DesignTokens.Spacing.md)
-                            .background(DesignTokens.Colors.accentGradient)
-                            .foregroundStyle(Color.black)
-                            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.control))
-                    }
-                }
-                .padding(DesignTokens.Spacing.md)
-                .adaptiveContentWidth()
+                        HStack { Text("指標詳細を見る"); Spacer(); Image(systemName: "arrow.right") }
+                            .foregroundStyle(.white).frame(maxWidth: .infinity).frame(height: 52)
+                            .background(FXGradient.brand).clipShape(RoundedRectangle(cornerRadius: 15))
+                    }.buttonStyle(.plain)
+                }.padding(20).frame(maxWidth: 900)
             }
         case .error(let message):
             ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() })
         }
     }
 
-    private func header(_ event: HistoricalEventSummary) -> some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
-            Text(event.indicatorName)
-                .font(DesignTokens.Typography.headline)
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
-            HStack {
-                Text(ValueFormat.dateTime(event.releaseDatetime))
-                    .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                Text(event.importance.starDisplay)
-                    .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.accentPrimary)
-            }
-        }
-    }
-
-    @ViewBuilder
     private func snapshotSection(_ snapshot: HistoricalSnapshot?) -> some View {
-        card {
+        VStack(alignment: .leading, spacing: 10) {
             if let snapshot {
-                HStack(spacing: DesignTokens.Spacing.lg) {
-                    valueColumn(title: "予想", value: ValueFormat.number(snapshot.forecast))
-                    valueColumn(title: "結果", value: ValueFormat.number(snapshot.actual))
-                    valueColumn(title: "前回", value: ValueFormat.number(snapshot.previous))
-                }
-                if let surprise = snapshot.surprise, let direction = snapshot.surpriseDirection {
-                    VStack(alignment: .leading, spacing: 2) {
-                        if let comparisonLabel = ValueFormat.surpriseComparisonLabel(surprise) {
-                            Text(comparisonLabel)
-                                .font(DesignTokens.Typography.body)
-                                .foregroundStyle(DesignTokens.Colors.textPrimary)
-                        }
-                        Text("Surprise \(ValueFormat.number(surprise, signed: true)) (\(direction.label))")
-                            .font(DesignTokens.Typography.caption)
-                            .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    }
-                } else {
-                    Text("Forecastが存在しないため、Surprise分析対象外です。")
-                        .font(DesignTokens.Typography.caption)
-                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                HStack {
+                    HeroMetric(label: "予想", value: ValueFormat.number(snapshot.forecast))
+                    HeroMetric(label: "結果", value: ValueFormat.number(snapshot.actual))
+                    HeroMetric(label: "Surprise", value: ValueFormat.number(snapshot.surprise, signed: true))
                 }
             } else {
-                Text("データ未取得")
-                    .font(DesignTokens.Typography.body)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                Text("データ未取得").font(.system(size: 14)).foregroundStyle(FXColor.secondaryText)
             }
-        }
-    }
-
-    private func valueColumn(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
-            Text(title)
-                .font(DesignTokens.Typography.caption)
-                .foregroundStyle(DesignTokens.Colors.textSecondary)
-            Text(value)
-                .font(DesignTokens.Typography.headline)
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        }.fxCard()
     }
 
     private func explanationSection(_ explanation: EventExplanationDetail) -> some View {
-        card {
-            VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
-                Text("乖離理由")
-                    .font(DesignTokens.Typography.headline)
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-                if let summary = explanation.summary {
-                    Text(summary)
-                        .font(DesignTokens.Typography.body)
-                        .foregroundStyle(DesignTokens.Colors.textPrimary)
-                }
-                if let source = explanation.source, let urlString = explanation.sourceUrl, let url = URL(string: urlString) {
-                    Link(destination: url) {
-                        Text("出典: \(source)")
-                            .font(DesignTokens.Typography.caption)
-                            .foregroundStyle(DesignTokens.Colors.accentCyan)
-                    }
+        VStack(alignment: .leading, spacing: 10) {
+            FXSectionHeader(title: "乖離理由")
+            if let summary = explanation.summary {
+                Text(summary).font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
+            }
+            if let source = explanation.source, let urlString = explanation.sourceUrl, let url = URL(string: urlString) {
+                Link(destination: url) {
+                    Text("出典: \(source)").font(.system(size: 12)).foregroundStyle(FXColor.cyan)
                 }
             }
-        }
+        }.fxCard()
     }
 
     private func reactionsSection(_ pairs: [HistoricalRelatedFxPair], event: HistoricalEventSummary, indicatorId: String) -> some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.sm) {
-            Text("値動き")
-                .font(DesignTokens.Typography.headline)
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
+        VStack(alignment: .leading, spacing: 14) {
+            FXSectionHeader(title: "FX Reaction")
             if pairs.isEmpty {
-                Text("値動きデータはまだありません。")
-                    .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                Text("値動きデータはまだありません。").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
             } else {
                 ForEach(pairs) { pair in
-                    // Phase 4.5 UX audit: past events had no way to reach
-                    // the chart — HQ Phase 5 §6 makes this apply to
-                    // historical events too, not only the live/current flow.
                     NavigationLink(value: AppRoute.movementDetail(
                         eventId: event.id,
                         indicatorId: indicatorId,
@@ -168,57 +113,34 @@ struct HistoricalEventDetailView: View {
                         indicatorName: event.indicatorName,
                         releaseDatetime: event.releaseDatetime
                     )) {
-                        VStack(alignment: .leading, spacing: DesignTokens.Spacing.xs) {
-                            HStack {
-                                Text(pair.symbol)
-                                    .font(DesignTokens.Typography.body)
-                                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption2)
-                                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                            }
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(pair.symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
                             ForEach(pair.reactions) { reaction in
-                                reactionRow(reaction)
+                                HStack {
+                                    Text(reaction.timeframe).font(.system(size: 11)).foregroundStyle(FXColor.secondaryText).frame(width: 36, alignment: .leading)
+                                    Spacer()
+                                    if reaction.analysisStatus == .ready {
+                                        Text(ValueFormat.pips(reaction.pips)).font(.system(size: 12)).foregroundStyle(.white)
+                                    } else {
+                                        Text(reaction.analysisStatus.label).font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
+                                    }
+                                }
                             }
-                        }
-                        .padding(DesignTokens.Spacing.md)
-                        .background(DesignTokens.Colors.backgroundSurface)
-                        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.control))
-                    }
-                    .buttonStyle(.plain)
+                        }.fxCard()
+                    }.buttonStyle(.plain)
                 }
             }
         }
     }
+}
 
-    private func reactionRow(_ reaction: HistoricalReaction) -> some View {
-        HStack {
-            Text(reaction.timeframe)
-                .font(DesignTokens.Typography.caption)
-                .foregroundStyle(DesignTokens.Colors.textSecondary)
-                .frame(width: 40, alignment: .leading)
-            Spacer()
-            if reaction.analysisStatus == .ready {
-                Text(ValueFormat.pips(reaction.pips))
-                    .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.textPrimary)
-                Text(ValueFormat.percent(reaction.changePercent, signed: true))
-                    .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-            } else {
-                Text(reaction.analysisStatus.label)
-                    .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-            }
-        }
-    }
-
-    private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(DesignTokens.Spacing.md)
-            .background(DesignTokens.Colors.backgroundSurface)
-            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.card))
+private struct HeroMetric: View {
+    let label: String
+    let value: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label).font(.system(size: 11)).foregroundStyle(FXColor.secondaryText)
+            Text(value).font(.system(size: 19, weight: .bold, design: .rounded)).foregroundStyle(.white)
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }

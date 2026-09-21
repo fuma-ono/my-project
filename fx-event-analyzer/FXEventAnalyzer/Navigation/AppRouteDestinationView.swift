@@ -34,6 +34,8 @@ struct AppRouteDestinationView: View {
                 fxPairId: fxPairId,
                 fxPairSymbol: fxPairSymbol
             )
+        case .account:
+            AccountView(apiClient: apiClient)
         }
     }
 }

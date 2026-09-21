@@ -1,14 +1,25 @@
 import SwiftUI
 
 /// SCR-010 Login (ui-screens.md).
+///
+/// HQ Frontend integration (2026-09-21): visual content is HQ's
+/// `FXEventAnalyzer_HQFrontend/LoginView.swift` (brand mark, "Welcome back"
+/// header, card-framed fields, gradient CTA). Two adaptations from HQ's
+/// standalone mockup, both wiring, not redesign:
+/// - HQ's fields are local `@State`; here they bind to the real
+///   `LoginViewModel`'s `$email`/`$password`, and the button calls
+///   `viewModel.submit()` instead of an `onLogin` callback, since Auth must
+///   stay wired exactly as before (`RootView` still constructs this the
+///   same way).
+/// - HQ's "パスワードを忘れた" opens a `PasswordResetView` sheet whose only
+///   action button does nothing (`Button("再設定メールを送る") {}` in the
+///   HQ file) — no password-reset API exists to wire it to, and shipping a
+///   dead-end sheet would be worse than the existing "準備中" alert this
+///   screen already used, so that existing alert-based behavior is kept
+///   for both Password Reset and Sign Up, in HQ's own text styling.
 struct LoginView: View {
     @StateObject private var viewModel: LoginViewModel
     let sessionExpired: Bool
-    /// Phase 4.5 UX audit: these buttons previously did nothing at all on
-    /// tap. Password Reset / Sign Up have no screen spec yet
-    /// (ui-screens.md), and HQ's Phase 5 instruction is explicit not to
-    /// expand Auth scope to build them now — so tapping surfaces an honest
-    /// "準備中" message instead of silence (HQ: "何も起きない状態は禁止").
     @State private var pendingFeatureMessage: String?
 
     init(viewModel: @autoclosure @escaping () -> LoginViewModel, sessionExpired: Bool = false) {
@@ -18,77 +29,79 @@ struct LoginView: View {
 
     var body: some View {
         ZStack {
-            DesignTokens.Colors.backgroundPrimary.ignoresSafeArea()
-
+            FXAppBackground()
             ScrollView {
-                VStack(spacing: DesignTokens.Spacing.lg) {
-                    BrandMark(width: 64)
-                        .padding(.top, DesignTokens.Spacing.xl)
+                VStack(spacing: 28) {
+                    Spacer(minLength: 38)
+                    FXBrandMark()
 
                     if sessionExpired {
                         sessionExpiredBanner
                     }
 
-                    VStack(spacing: DesignTokens.Spacing.md) {
-                        TextField("メールアドレス", text: $viewModel.email)
-                            .textContentType(.username)
-                            .keyboardType(.emailAddress)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .padding(DesignTokens.Spacing.md)
-                            .background(DesignTokens.Colors.backgroundSurface)
-                            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.control))
+                    VStack(spacing: 8) {
+                        Text("Welcome back").font(.system(size: 28, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                        Text("Economic events, explained by the numbers.").font(.system(size: 14)).foregroundStyle(FXColor.secondaryText)
+                    }
 
-                        SecureField("パスワード", text: $viewModel.password)
-                            .textContentType(.password)
-                            .padding(DesignTokens.Spacing.md)
-                            .background(DesignTokens.Colors.backgroundSurface)
-                            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.control))
+                    VStack(spacing: 14) {
+                        FXTextField(title: "Email", text: $viewModel.email, icon: "envelope", keyboard: .emailAddress)
+                        FXSecureField(title: "Password", text: $viewModel.password)
 
                         if case .error(let message) = viewModel.state {
                             Text(message)
-                                .font(DesignTokens.Typography.caption)
-                                .foregroundStyle(DesignTokens.Colors.statusError)
+                                .font(.system(size: 12))
+                                .foregroundStyle(FXColor.red)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        HStack {
+                            Spacer()
+                            Button("パスワードを忘れた") {
+                                pendingFeatureMessage = "パスワードリセットは準備中です。もうしばらくお待ちください。"
+                            }.font(.system(size: 12, weight: .semibold)).foregroundStyle(FXColor.cyan)
                         }
 
                         Button {
                             viewModel.submit()
                         } label: {
-                            if viewModel.state == .submitting {
-                                ProgressView().tint(.white)
-                            } else {
-                                Text("ログイン")
+                            Group {
+                                if viewModel.state == .submitting {
+                                    ProgressView().tint(.white)
+                                } else {
+                                    Text("ログイン")
+                                }
                             }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 54)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(DesignTokens.Spacing.md)
-                        .background(DesignTokens.Colors.accentPrimary)
+                        .background(FXGradient.brand)
                         .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.control))
+                        .font(.system(size: 16, weight: .bold))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .shadow(color: FXColor.cyan.opacity(0.2), radius: 16)
+                        .buttonStyle(.plain)
                         .disabled(!viewModel.canSubmit)
                         .opacity(viewModel.canSubmit ? 1 : 0.5)
-                    }
-                    .padding(DesignTokens.Spacing.lg)
-                    .background(DesignTokens.Colors.backgroundSurface.opacity(0.4))
-                    .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.card))
+                    }.frame(maxWidth: 460).padding(20).fxCard()
 
-                    VStack(spacing: DesignTokens.Spacing.sm) {
-                        Button("パスワードをお忘れですか？") {
-                            pendingFeatureMessage = "パスワードリセットは準備中です。もうしばらくお待ちください。"
-                        }
-                        .font(DesignTokens.Typography.caption)
-                        Button("新規登録") {
-                            pendingFeatureMessage = "新規登録は準備中です。もうしばらくお待ちください。"
-                        }
-                        .font(DesignTokens.Typography.caption)
-                    }
-                    .tint(DesignTokens.Colors.accentSecondary)
-                }
-                .padding(.horizontal, DesignTokens.Spacing.lg)
-                .frame(maxWidth: 480)
+                    HStack {
+                        Rectangle().fill(FXColor.border).frame(height: 1)
+                        Text("or").font(.system(size: 12)).foregroundStyle(FXColor.tertiaryText)
+                        Rectangle().fill(FXColor.border).frame(height: 1)
+                    }.frame(maxWidth: 460)
+
+                    Button {
+                        pendingFeatureMessage = "新規登録は準備中です。もうしばらくお待ちください。"
+                    } label: {
+                        Text("アカウントを作成").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white).frame(maxWidth: 460).frame(height: 50).background(FXColor.card).clipShape(RoundedRectangle(cornerRadius: 15)).overlay(RoundedRectangle(cornerRadius: 15).stroke(FXColor.border))
+                    }.buttonStyle(.plain)
+
+                    Spacer(minLength: 30)
+                }.padding(.horizontal, 20)
             }
         }
+        .preferredColorScheme(.dark)
         .alert(
             "準備中の機能です",
             isPresented: Binding(
@@ -104,17 +117,48 @@ struct LoginView: View {
     }
 
     private var sessionExpiredBanner: some View {
-        VStack(spacing: DesignTokens.Spacing.xs) {
+        VStack(spacing: 6) {
             Text("セッションの有効期限が切れています")
-                .font(DesignTokens.Typography.body)
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
             Text("再度ログインしてください")
-                .font(DesignTokens.Typography.caption)
-                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                .font(.system(size: 12))
+                .foregroundStyle(FXColor.secondaryText)
         }
-        .padding(DesignTokens.Spacing.md)
+        .padding(14)
         .frame(maxWidth: .infinity)
-        .background(DesignTokens.Colors.statusError.opacity(0.15))
-        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.control))
+        .background(FXColor.red.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(FXColor.red.opacity(0.25)))
+    }
+}
+
+struct FXTextField: View {
+    let title: String
+    @Binding var text: String
+    let icon: String
+    var keyboard: UIKeyboardType = .default
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(FXColor.secondaryText)
+            HStack {
+                Image(systemName: icon).foregroundStyle(FXColor.cyan)
+                TextField(title, text: $text).keyboardType(keyboard).textInputAutocapitalization(.never).foregroundStyle(.white)
+            }.padding(.horizontal, 14).frame(height: 50).background(FXColor.backgroundElevated).clipShape(RoundedRectangle(cornerRadius: 13))
+        }
+    }
+}
+
+struct FXSecureField: View {
+    let title: String
+    @Binding var text: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(FXColor.secondaryText)
+            HStack {
+                Image(systemName: "lock").foregroundStyle(FXColor.cyan)
+                SecureField(title, text: $text).foregroundStyle(.white)
+            }.padding(.horizontal, 14).frame(height: 50).background(FXColor.backgroundElevated).clipShape(RoundedRectangle(cornerRadius: 13))
+        }
     }
 }

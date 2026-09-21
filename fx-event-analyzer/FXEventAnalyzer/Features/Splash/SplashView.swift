@@ -2,12 +2,15 @@ import SwiftUI
 
 /// SCR-000 Splash / Launch Screen.
 ///
-/// Rebuilt under HQ's "Reference画像の完全再現" instruction (2026-09-18,
-/// App Icon + Splash round): a literal reproduction of
-/// `docs/projects/fx-event-analyzer/mockups/splash-screen-reference-v1.png`,
-/// not a from-scratch design. Absolute rule enforced here by omission:
-/// this view has no dependency on any economic/FX data type. It shows
-/// brand + initialization status only.
+/// HQ Frontend integration (2026-09-21): visual content is HQ's
+/// `FXEventAnalyzer_HQFrontend/SplashView.swift`, reproduced as given (icon
+/// glow, wordmark, tagline, decorative candle/curve background, progress
+/// capsule). What changed from HQ's standalone mockup is wiring only: this
+/// view still owns the real `SplashViewModel` (unchanged init signature —
+/// `RootView` constructs it the same way as before) and still renders
+/// `.initializationError`/`.apiConnectionError` via the existing `ErrorView`
+/// with retry, since HQ's mockup — a single always-`.initializing` state —
+/// had no design for those two states to carry over.
 struct SplashView: View {
     @StateObject private var viewModel: SplashViewModel
 
@@ -17,81 +20,73 @@ struct SplashView: View {
 
     var body: some View {
         ZStack {
-            DesignTokens.Colors.backgroundPrimary
-                .ignoresSafeArea()
+            FXAppBackground()
 
-            SplashMarketTexture()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .ignoresSafeArea()
-
-            // Every position and gap here was measured pixel-by-pixel off
-            // the most recent, best-proportioned Reference (a real
-            // iPhone-aspect-ratio screenshot with status bar, so its
-            // fractions translate directly): mark top ~28.8% of full
-            // screen height / width ~34% (matching BrandMark's own
-            // 132pt default almost exactly — confirmed, not re-sized),
-            // title-to-tagline gap ~3%, loading bar ~85.5%.
-            GeometryReader { geometry in
-                ZStack(alignment: .top) {
-                    VStack(spacing: DesignTokens.Spacing.xl) {
-                        BrandMark(glow: true)
-                        (
-                            Text("FX")
-                                .foregroundStyle(DesignTokens.Colors.accentCyan)
-                                + Text(" Event Analyzer")
-                                .foregroundStyle(DesignTokens.Colors.textPrimary)
-                        )
-                        .font(DesignTokens.Typography.splashTitle)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-
-                        // Not the Reference's earlier "Turn Economic
-                        // Events into Trading Opportunities" wording —
-                        // that phrasing was deliberately changed in
-                        // Phase 5 (commit 6578d6a) because it implied
-                        // trading signals/advice, out of this app's
-                        // scope (features.md excludes 投資助言). This
-                        // latest Reference image itself now shows
-                        // "Understand Economic Events & FX Reactions",
-                        // wrapped after "Events" (not after "&") —
-                        // matched exactly.
-                        Text("Understand Economic Events\n& FX Reactions")
-                            .font(DesignTokens.Typography.tagline)
-                            .foregroundStyle(DesignTokens.Colors.textSecondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(.horizontal, DesignTokens.Spacing.lg)
-                    .frame(maxWidth: 480) // keeps brand elements from stretching oversized on iPad
-                    .frame(width: geometry.size.width)
-                    .padding(.top, geometry.size.height * 0.24)
-
-                    bottomContent
-                        .padding(.horizontal, DesignTokens.Spacing.lg)
-                        .frame(width: geometry.size.width)
-                        .padding(.top, geometry.size.height * 0.855)
-                }
+            switch viewModel.state {
+            case .initializing:
+                initializingContent
+            case .initializationError:
+                ErrorView(
+                    title: "アプリの初期化に失敗しました",
+                    message: "もう一度お試しください。",
+                    onRetry: { viewModel.retry() }
+                )
+            case .apiConnectionError:
+                ErrorView(
+                    title: "サーバーに接続できませんでした",
+                    message: "ネットワーク接続を確認し、再試行してください。",
+                    onRetry: { viewModel.retry() }
+                )
             }
         }
+        .preferredColorScheme(.dark)
         .task { viewModel.start() }
     }
 
-    @ViewBuilder
-    private var bottomContent: some View {
-        switch viewModel.state {
-        case .initializing:
-            SplashLoadingBar()
-        case .initializationError:
-            ErrorView(
-                title: "アプリの初期化に失敗しました",
-                message: "もう一度お試しください。",
-                onRetry: { viewModel.retry() }
-            )
-        case .apiConnectionError:
-            ErrorView(
-                title: "サーバーに接続できませんでした",
-                message: "ネットワーク接続を確認し、再試行してください。",
-                onRetry: { viewModel.retry() }
-            )
-        }
+    private var initializingContent: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 70)
+            VStack(spacing: 18) {
+                ZStack {
+                    Circle().fill(FXColor.cyan.opacity(0.08)).frame(width: 180, height: 180).blur(radius: 28)
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.system(size: 70, weight: .bold))
+                        .foregroundStyle(FXGradient.brand)
+                        .shadow(color: FXColor.cyan.opacity(0.6), radius: 22)
+                }
+                VStack(spacing: 8) {
+                    Text("FX Event Analyzer").font(.system(size: 31, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                    Text("Understand Economic Events\n& FX Reactions")
+                        .font(.system(size: 14, weight: .medium, design: .rounded)).tracking(1.2).foregroundStyle(FXColor.secondaryText).multilineTextAlignment(.center)
+                }
+            }
+            Spacer()
+            GeometryReader { geo in
+                ZStack(alignment: .bottomLeading) {
+                    Path { path in
+                        path.move(to: CGPoint(x: -20, y: geo.size.height * 0.72))
+                        path.addCurve(to: CGPoint(x: geo.size.width + 20, y: geo.size.height * 0.18), control1: CGPoint(x: geo.size.width * 0.35, y: geo.size.height), control2: CGPoint(x: geo.size.width * 0.62, y: 0))
+                    }.stroke(FXColor.blue.opacity(0.45), lineWidth: 1.5)
+                    Path { path in
+                        path.move(to: CGPoint(x: -20, y: geo.size.height * 0.86))
+                        path.addCurve(to: CGPoint(x: geo.size.width + 20, y: geo.size.height * 0.34), control1: CGPoint(x: geo.size.width * 0.40, y: geo.size.height * 0.45), control2: CGPoint(x: geo.size.width * 0.65, y: geo.size.height * 0.20))
+                    }.stroke(FXColor.cyan.opacity(0.35), lineWidth: 1)
+                    HStack(alignment: .bottom, spacing: 8) {
+                        ForEach(0..<20, id: \.self) { i in
+                            let h = CGFloat(14 + (i * 17) % 80)
+                            VStack(spacing: 0) {
+                                Rectangle().fill(FXColor.cyan.opacity(0.65)).frame(width: 7, height: 5)
+                                Rectangle().fill(FXGradient.brand).frame(width: 9, height: h)
+                                Rectangle().fill(FXColor.blue.opacity(0.8)).frame(width: 1, height: 10)
+                            }.shadow(color: FXColor.cyan.opacity(0.18), radius: 8)
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .center).padding(.horizontal, 8)
+                }
+            }.frame(height: 220)
+            VStack(spacing: 12) {
+                Capsule().fill(FXColor.cardStrong).frame(width: 190, height: 5).overlay(alignment: .leading) { Capsule().fill(FXGradient.brand).frame(width: 190 * 0.55, height: 5) }
+                Text("Analyzing market data…").font(.system(size: 11, weight: .medium)).foregroundStyle(FXColor.tertiaryText)
+            }.padding(.bottom, 18)
+        }.padding(.horizontal, 24)
     }
 }

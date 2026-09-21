@@ -12,6 +12,11 @@ enum AppRoute: Hashable {
     case indicatorDetail(id: String)
     case eventDetail(id: String)
     case historicalEventDetail(id: String)
+    /// SCR-011 Account, reached from Settings — HQ Frontend integration
+    /// (2026-09-21): the only new route this round added, since the
+    /// delivered UI package includes an Account screen with no prior
+    /// production route to it.
+    case account
     /// SCR-004/SCR-007's related FX pair rows carry enough already-fetched
     /// display context (symbol/indicator name/release datetime) to avoid an
     /// extra round trip just to re-render Movement Detail's header.
