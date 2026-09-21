@@ -23,7 +23,7 @@ struct HistoricalEventDetailView: View {
             FXAppBackground()
             content
         }
-        .navigationTitle("Past Event")
+        .navigationTitle("過去のイベント")
         .navigationBarTitleDisplayMode(.inline)
         .task { viewModel.load() }
     }

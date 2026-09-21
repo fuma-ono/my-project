@@ -28,7 +28,7 @@ struct IndicatorDetailView: View {
             FXAppBackground()
             content
         }
-        .navigationTitle("Indicator")
+        .navigationTitle("指標詳細")
         .navigationBarTitleDisplayMode(.inline)
         .task { viewModel.load() }
     }

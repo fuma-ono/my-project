@@ -28,7 +28,7 @@ struct EventDetailView: View {
             FXAppBackground()
             content
         }
-        .navigationTitle("Event Detail")
+        .navigationTitle("イベント詳細")
         .navigationBarTitleDisplayMode(.inline)
         .task { viewModel.load() }
     }

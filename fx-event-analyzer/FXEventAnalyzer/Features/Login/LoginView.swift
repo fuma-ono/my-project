@@ -45,8 +45,8 @@ struct LoginView: View {
                     }
 
                     VStack(spacing: 14) {
-                        FXTextField(title: "Email", text: $viewModel.email, icon: "envelope", keyboard: .emailAddress)
-                        FXSecureField(title: "Password", text: $viewModel.password)
+                        FXTextField(title: "メールアドレス", text: $viewModel.email, icon: "envelope", keyboard: .emailAddress)
+                        FXSecureField(title: "パスワード", text: $viewModel.password)
 
                         if case .error(let message) = viewModel.state {
                             Text(message)

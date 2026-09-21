@@ -31,7 +31,7 @@ struct HistoricalComparisonView: View {
             FXAppBackground()
             content
         }
-        .navigationTitle("Comparison")
+        .navigationTitle("過去の比較")
         .navigationBarTitleDisplayMode(.inline)
         .task { viewModel.load() }
     }
@@ -112,7 +112,7 @@ struct HistoricalComparisonView: View {
 
     private func eventsSection(_ events: [ComparisonEventSummary]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            FXSectionHeader(title: "過去イベント", subtitle: "タップして詳細を見る")
+            FXSectionHeader(title: "過去のイベント", subtitle: "タップして詳細を見る")
             if events.isEmpty {
                 Text("比較対象のイベントはまだありません。").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
             } else {
@@ -146,7 +146,7 @@ private struct HistoryRow: View {
             Spacer()
             VStack(alignment: .trailing, spacing: 4) {
                 if let surprise = event.surprise {
-                    Text(ValueFormat.number(surprise, signed: true)).font(.system(size: 15, weight: .bold)).foregroundStyle(FXColor.cyan)
+                    Text("Surprise \(ValueFormat.number(surprise, signed: true))").font(.system(size: 15, weight: .bold)).foregroundStyle(FXColor.cyan)
                 } else {
                     Text("--").font(.system(size: 15, weight: .bold)).foregroundStyle(FXColor.secondaryText)
                 }
