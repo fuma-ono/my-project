@@ -35,7 +35,7 @@ struct MovementDetailView: View {
             FXAppBackground()
             content
         }
-        .navigationTitle(viewModel.symbol)
+        .navigationTitle("変動詳細")
         .navigationBarTitleDisplayMode(.inline)
         .task { viewModel.load() }
     }
@@ -67,11 +67,14 @@ struct MovementDetailView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(viewModel.symbol).font(.system(size: 13, weight: .bold)).foregroundStyle(FXColor.cyan)
-            Text("Market Reaction").font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(.white)
-            Text(viewModel.indicatorName).foregroundStyle(FXColor.secondaryText)
-        }
+        HStack(spacing: 10) {
+            Text(viewModel.selectedTimeframe)
+                .font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(FXColor.cyan).clipShape(Capsule())
+            Text(viewModel.symbol).font(.system(size: 18, weight: .bold, design: .rounded)).foregroundStyle(.white)
+            Spacer()
+        }.fxCard(padding: 14)
     }
 
     private var timeframePicker: some View {
@@ -96,27 +99,37 @@ struct MovementDetailView: View {
 
     private func reactionTiles(preReleasePrice: Double?, reactions: [ReactionTimeframeEntry]) -> some View {
         let selected = reactions.first(where: { $0.timeframe == viewModel.selectedTimeframe })
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                FXMetricTile(label: "発表前価格", value: ValueFormat.number(preReleasePrice, fractionDigits: 3))
-                if let selected, selected.analysisStatus == .ready {
-                    FXMetricTile(label: "Movement", value: ValueFormat.number(selected.movement, fractionDigits: 3, signed: true), tint: (selected.movement ?? 0) >= 0 ? FXColor.green : FXColor.red)
-                    FXMetricTile(label: "Pips", value: ValueFormat.pips(selected.pips), tint: (selected.pips ?? 0) >= 0 ? FXColor.green : FXColor.red)
-                } else {
-                    FXMetricTile(label: "Movement", value: selected?.analysisStatus.label ?? "--")
+        return VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("発表前後の変動").font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                HStack {
+                    metric(title: "発表前", value: ValueFormat.number(preReleasePrice, fractionDigits: 3))
+                    if let selected, selected.analysisStatus == .ready {
+                        metric(title: "発表後", value: ValueFormat.number(selected.postReleasePrice, fractionDigits: 3))
+                        metric(title: "変動幅", value: ValueFormat.number(selected.movement, fractionDigits: 3, signed: true), tint: (selected.movement ?? 0) >= 0 ? FXColor.green : FXColor.red)
+                    } else {
+                        metric(title: "発表後", value: selected?.analysisStatus.label ?? "--")
+                    }
                 }
-            }
+            }.fxCard()
+
             if let selected, selected.analysisStatus == .ready {
-                HStack {
-                    FXMetricTile(label: "最大上昇", value: ValueFormat.number(selected.maxUpward, fractionDigits: 3, signed: true), tint: FXColor.green)
-                    FXMetricTile(label: "最大上昇 Pips", value: ValueFormat.pips(selected.maxUpwardPips), tint: FXColor.green)
-                }
-                HStack {
-                    FXMetricTile(label: "最大下落", value: ValueFormat.number(selected.maxDownward, fractionDigits: 3, signed: true), tint: FXColor.red)
-                    FXMetricTile(label: "最大下落 Pips", value: ValueFormat.pips(selected.maxDownwardPips), tint: FXColor.red)
-                }
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("主要指標").font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                    HStack {
+                        metric(title: "最大上昇幅", value: ValueFormat.number(selected.maxUpward, fractionDigits: 3, signed: true), tint: FXColor.green)
+                        metric(title: "最大下落幅", value: ValueFormat.number(selected.maxDownward, fractionDigits: 3, signed: true), tint: FXColor.red)
+                    }
+                }.fxCard()
             }
         }
+    }
+
+    private func metric(title: String, value: String, tint: Color = .white) -> some View {
+        VStack(spacing: 4) {
+            Text(title).font(.system(size: 11)).foregroundStyle(FXColor.secondaryText)
+            Text(value).font(.system(size: 17, weight: .bold, design: .rounded)).foregroundStyle(tint)
+        }.frame(maxWidth: .infinity)
     }
 
     private var historicalComparisonLink: some View {

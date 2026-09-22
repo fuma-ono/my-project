@@ -23,7 +23,7 @@ struct HistoricalEventDetailView: View {
             FXAppBackground()
             content
         }
-        .navigationTitle("過去のイベント")
+        .navigationTitle("過去のイベント詳細")
         .navigationBarTitleDisplayMode(.inline)
         .task { viewModel.load() }
     }
@@ -42,15 +42,8 @@ struct HistoricalEventDetailView: View {
         case .loaded(let response):
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    HStack {
-                        FXBadge(text: "HISTORICAL", tint: FXColor.secondaryText)
-                        Spacer()
-                        Text(response.event.releaseDatetime, style: .date).foregroundStyle(FXColor.secondaryText).font(.system(size: 12))
-                    }
-                    Text("Past Event Detail").font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(.white)
-                    Text(response.event.indicatorName).font(.system(size: 15, weight: .semibold)).foregroundStyle(FXColor.cyan)
-
-                    snapshotSection(response.snapshot)
+                    header(response.event)
+                    snapshotSection(response.snapshot, event: response.event)
 
                     if let explanation = response.explanation {
                         explanationSection(explanation)
@@ -70,13 +63,36 @@ struct HistoricalEventDetailView: View {
         }
     }
 
-    private func snapshotSection(_ snapshot: HistoricalSnapshot?) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private func header(_ event: HistoricalEventSummary) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(event.indicatorName).font(.system(size: 18, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                Text("重要度 \(event.importance.starDisplay)").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
+            }
+            Spacer()
+        }.fxCard()
+    }
+
+    private func snapshotSection(_ snapshot: HistoricalSnapshot?, event: HistoricalEventSummary) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("発表日時").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
+                Spacer()
+                Text(ValueFormat.dateTime(event.releaseDatetime)).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+            }
             if let snapshot {
                 HStack {
-                    HeroMetric(label: "予想", value: ValueFormat.number(snapshot.forecast))
                     HeroMetric(label: "結果", value: ValueFormat.number(snapshot.actual))
-                    HeroMetric(label: "Surprise", value: ValueFormat.number(snapshot.surprise, signed: true))
+                    HeroMetric(label: "予想", value: ValueFormat.number(snapshot.forecast))
+                    HeroMetric(label: "前回", value: ValueFormat.number(snapshot.previous))
+                }
+                if let surprise = snapshot.surprise {
+                    Divider().background(FXColor.border)
+                    HStack {
+                        Text("サプライズ").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                        Spacer()
+                        Text(ValueFormat.number(surprise, signed: true)).font(.system(size: 18, weight: .bold, design: .rounded)).foregroundStyle(FXColor.red)
+                    }
                 }
             } else {
                 Text("データ未取得").font(.system(size: 14)).foregroundStyle(FXColor.secondaryText)
@@ -100,7 +116,7 @@ struct HistoricalEventDetailView: View {
 
     private func reactionsSection(_ pairs: [HistoricalRelatedFxPair], event: HistoricalEventSummary, indicatorId: String) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            FXSectionHeader(title: "FX Reaction")
+            FXSectionHeader(title: "発表後の相場反応")
             if pairs.isEmpty {
                 Text("値動きデータはまだありません。").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
             } else {
@@ -120,7 +136,8 @@ struct HistoricalEventDetailView: View {
                                     Text(reaction.timeframe).font(.system(size: 11)).foregroundStyle(FXColor.secondaryText).frame(width: 36, alignment: .leading)
                                     Spacer()
                                     if reaction.analysisStatus == .ready {
-                                        Text(ValueFormat.pips(reaction.pips)).font(.system(size: 12)).foregroundStyle(.white)
+                                        Text("\(ValueFormat.pips(reaction.pips)) (\(ValueFormat.percent(reaction.changePercent, signed: true)))")
+                                            .font(.system(size: 12)).foregroundStyle(.white)
                                     } else {
                                         Text(reaction.analysisStatus.label).font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
                                     }

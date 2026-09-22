@@ -3,22 +3,28 @@ import SwiftUI
 /// SCR-009 Settings (Phase 5 §2 minimum scope) — a real ログアウト導線,
 /// plus (this integration) the real navigation to SCR-011 Account.
 ///
-/// HQ Frontend integration (2026-09-21): visual content — rows, subscription
-/// card, sign-out button — is HQ's
-/// `FXEventAnalyzer_HQFrontend/SettingsView.swift`. Adaptation: HQ's
-/// "アカウント" row pushed a parameterless `AccountView()`; the real one
-/// needs `apiClient` to fetch real account data, so this view now also
-/// takes `apiClient` (passed through by `MainTabView`) and routes via
-/// `AppRoute.account`. The sign-out failure message
-/// (`SettingsViewModel.state == .error`), not present in HQ's mockup, is
-/// kept visible in HQ's own red/caption styling — an existing, working
-/// error state this integration must not silently drop.
+/// HQ UI Master v5 integration (2026-09-22): reproduces
+/// `Assets/Reference/SCR-009.png` — "設定" title (no brand mark), two
+/// grouped row cards (通知設定/表示設定/データ取得設定/アカウント設定, then
+/// ヘルプ・サポート/利用規約/プライバシーポリシー), then a standalone
+/// red-bordered "ログアウト" card. Only "アカウント設定" has a real
+/// destination (`AppRoute.account`, routed to the real `AccountView` via
+/// the override below); the rest have no backing ViewModel/API (no
+/// notification/display/data-fetch settings service, no help/terms/privacy
+/// content endpoint exists), so they use the "準備中" alert Login already
+/// established for its own non-functional rows, rather than inventing
+/// screens or content for them.
 struct SettingsView: View {
     @StateObject private var viewModel: SettingsViewModel
     private let apiClient: APIClient
+    private let authService: AuthServicing
+    private let onSignOut: () -> Void
+    @State private var pendingFeatureMessage: String?
 
     init(apiClient: APIClient, authService: AuthServicing, onSignOut: @escaping () -> Void) {
         self.apiClient = apiClient
+        self.authService = authService
+        self.onSignOut = onSignOut
         _viewModel = StateObject(wrappedValue: SettingsViewModel(authService: authService, onSignOut: onSignOut))
     }
 
@@ -28,30 +34,39 @@ struct SettingsView: View {
                 FXAppBackground()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-                        FXBrandMark()
-                        Text("Settings").font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                        Text("設定").font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(.white)
 
                         VStack(spacing: 0) {
-                            NavigationLink(value: AppRoute.account) {
-                                settingRow("person.crop.circle", "アカウント", "メール・アカウント情報")
+                            settingRow("bell", "通知設定") {
+                                pendingFeatureMessage = "通知設定は準備中です。もうしばらくお待ちください。"
                             }
                             Divider().background(FXColor.border)
-                            settingRow("bell", "通知", "イベント通知は準備中", disabled: true)
+                            settingRow("gearshape", "表示設定") {
+                                pendingFeatureMessage = "表示設定は準備中です。もうしばらくお待ちください。"
+                            }
                             Divider().background(FXColor.border)
-                            settingRow("moon.fill", "外観", "ダークテーマ", disabled: true)
+                            settingRow("calendar", "データ取得設定") {
+                                pendingFeatureMessage = "データ取得設定は準備中です。もうしばらくお待ちください。"
+                            }
+                            Divider().background(FXColor.border)
+                            NavigationLink(value: AppRoute.account) {
+                                settingRowLabel("person", "アカウント設定")
+                            }
                         }.fxCard(padding: 4)
 
-                        VStack(alignment: .leading, spacing: 12) {
-                            FXSectionHeader(title: "Subscription")
-                            HStack {
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text("Free").font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
-                                    Text("基本イベント・履歴・市場反応").font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
-                                }
-                                Spacer()
-                                FXBadge(text: "CURRENT", tint: FXColor.cyan)
+                        VStack(spacing: 0) {
+                            settingRow("questionmark.circle", "ヘルプ・サポート") {
+                                pendingFeatureMessage = "ヘルプ・サポートは準備中です。もうしばらくお待ちください。"
                             }
-                        }.fxCard()
+                            Divider().background(FXColor.border)
+                            settingRow("calendar", "利用規約") {
+                                pendingFeatureMessage = "利用規約は準備中です。もうしばらくお待ちください。"
+                            }
+                            Divider().background(FXColor.border)
+                            settingRow("checkmark.shield", "プライバシーポリシー") {
+                                pendingFeatureMessage = "プライバシーポリシーは準備中です。もうしばらくお待ちください。"
+                            }
+                        }.fxCard(padding: 4)
 
                         if case .error(let message) = viewModel.state {
                             Text(message).font(.system(size: 12)).foregroundStyle(FXColor.red).multilineTextAlignment(.leading)
@@ -61,10 +76,26 @@ struct SettingsView: View {
                     }.padding(20).frame(maxWidth: 800)
                 }
             }
-            .navigationTitle("Settings")
+            .navigationTitle("設定")
             .navigationDestination(for: AppRoute.self) { route in
-                AppRouteDestinationView(route: route, apiClient: apiClient)
+                if route == .account {
+                    AccountView(apiClient: apiClient, authService: authService, onSignOut: onSignOut)
+                } else {
+                    AppRouteDestinationView(route: route, apiClient: apiClient)
+                }
             }
+        }
+        .alert(
+            "準備中の機能です",
+            isPresented: Binding(
+                get: { pendingFeatureMessage != nil },
+                set: { isPresented in if !isPresented { pendingFeatureMessage = nil } }
+            ),
+            presenting: pendingFeatureMessage
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { message in
+            Text(message)
         }
     }
 
@@ -89,17 +120,18 @@ struct SettingsView: View {
         .disabled(viewModel.state == .signingOut)
     }
 
-    private func settingRow(_ icon: String, _ title: String, _ subtitle: String, disabled: Bool = false) -> some View {
+    private func settingRow(_ icon: String, _ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            settingRowLabel(icon, title)
+        }.buttonStyle(.plain)
+    }
+
+    private func settingRowLabel(_ icon: String, _ title: String) -> some View {
         HStack(spacing: 13) {
-            Image(systemName: icon).foregroundStyle(disabled ? FXColor.tertiaryText : FXColor.cyan).frame(width: 36, height: 36).background(FXColor.cyan.opacity(disabled ? 0.04 : 0.09)).clipShape(RoundedRectangle(cornerRadius: 10))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).foregroundStyle(disabled ? FXColor.secondaryText : .white).font(.system(size: 15, weight: .semibold))
-                Text(subtitle).foregroundStyle(FXColor.tertiaryText).font(.system(size: 11))
-            }
+            Image(systemName: icon).foregroundStyle(.white).frame(width: 24)
+            Text(title).foregroundStyle(.white).font(.system(size: 15))
             Spacer()
-            if !disabled {
-                Image(systemName: "chevron.right").foregroundStyle(FXColor.tertiaryText)
-            }
+            Image(systemName: "chevron.right").foregroundStyle(FXColor.tertiaryText)
         }.padding(14).contentShape(Rectangle())
     }
 }

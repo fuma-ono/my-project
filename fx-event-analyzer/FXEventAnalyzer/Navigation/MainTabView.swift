@@ -92,10 +92,10 @@ enum FXTab: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .home: return "Home"
-        case .indicators: return "Indicators"
-        case .search: return "Search"
-        case .settings: return "Settings"
+        case .home: return "ホーム"
+        case .indicators: return "指標一覧"
+        case .search: return "検索"
+        case .settings: return "設定"
         }
     }
 

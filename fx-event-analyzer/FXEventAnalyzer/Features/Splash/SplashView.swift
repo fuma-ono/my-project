@@ -56,7 +56,7 @@ struct SplashView: View {
                 }
                 VStack(spacing: 8) {
                     Text("FX Event Analyzer").font(.system(size: 31, weight: .bold, design: .rounded)).foregroundStyle(.white)
-                    Text("Understand Economic Events\n& FX Reactions")
+                    Text("Turn Economic Events\ninto Trading Opportunities")
                         .font(.system(size: 14, weight: .medium, design: .rounded)).tracking(1.2).foregroundStyle(FXColor.secondaryText).multilineTextAlignment(.center)
                 }
             }
@@ -85,7 +85,7 @@ struct SplashView: View {
             }.frame(height: 220)
             VStack(spacing: 12) {
                 Capsule().fill(FXColor.cardStrong).frame(width: 190, height: 5).overlay(alignment: .leading) { Capsule().fill(FXGradient.brand).frame(width: 190 * 0.55, height: 5) }
-                Text("Analyzing market data…").font(.system(size: 11, weight: .medium)).foregroundStyle(FXColor.tertiaryText)
+                Text("Loading...").font(.system(size: 11, weight: .medium)).foregroundStyle(FXColor.tertiaryText)
             }.padding(.bottom, 18)
         }.padding(.horizontal, 24)
     }

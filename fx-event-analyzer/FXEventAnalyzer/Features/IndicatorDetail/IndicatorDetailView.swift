@@ -1,21 +1,15 @@
 import SwiftUI
 
 /// SCR-003 Indicator Detail (ui-screens.md §5) — "指標そのものを理解する"。
-/// Distinct from SCR-004 Event Detail: no single event's Surprise is the
-/// headline here, only the indicator's own metadata and a "最近の発表結果"
-/// list that taps through to SCR-007.
 ///
-/// HQ Frontend integration (2026-09-21): header/metadata/related-pair
-/// visual is HQ's `FXEventAnalyzer_HQFrontend/IndicatorDetailView.swift`.
-/// Two corrections from HQ's mockup, both required to keep real navigation
-/// working rather than a redesign: HQ's recent-events list pushed to
-/// `EventDetailView` (Event Detail) using demo events — the real recent
-/// events here are RELEASED-only summaries meant for SCR-007 Historical
-/// Event Detail (`AppRoute.historicalEventDetail`), so that's what each row
-/// links to; and HQ's "過去イベントを比較" `FXActionRow` had an empty
-/// `action: {}` (no comparison screen existed in its demo) — it now pushes
-/// `AppRoute.historicalComparison` for the indicator's primary related FX
-/// pair, exactly as this screen already did before integration.
+/// HQ UI Master v5 integration (2026-09-22): reproduces
+/// `Assets/Reference/SCR-003.png` — flag/name/importance header card, "次回
+///発表予定" (next scheduled release) block with 予想/結果/前回/サプライズ,
+/// "この指標の影響" description, "関連通貨ペア" chips, "出典". The star icon
+/// is decorative (no favoriting API exists, same treatment as Home's bell).
+/// "最近の発表結果"/"過去イベントを比較" (not visible in the reference's
+/// single screenshot, likely below the fold) are kept further down so that
+/// existing functionality isn't dropped.
 struct IndicatorDetailView: View {
     @StateObject private var viewModel: IndicatorDetailViewModel
 
@@ -30,6 +24,13 @@ struct IndicatorDetailView: View {
         }
         .navigationTitle("指標詳細")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {} label: {
+                    Image(systemName: "star").foregroundStyle(FXColor.amber)
+                }
+            }
+        }
         .task { viewModel.load() }
     }
 
@@ -40,19 +41,34 @@ struct IndicatorDetailView: View {
             LoadingView(caption: "読み込み中...")
         case .backendNotConfigured:
             FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "指標情報はまだ利用できません。")
-        case .loaded(let indicator, let relatedFxPairs, let recentEvents):
+        case .loaded(let indicator, let relatedFxPairs, let recentEvents, let nextScheduledEvent):
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 20) {
                     header(indicator)
-                    FXSectionHeader(title: "関連イベント", subtitle: "最新リリース")
-                    if recentEvents.isEmpty {
-                        Text("発表済みのデータはまだありません。").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
-                    } else {
-                        ForEach(recentEvents) { event in
-                            NavigationLink(value: AppRoute.historicalEventDetail(id: event.id)) {
-                                RecentEventRow(event: event)
-                            }.buttonStyle(.plain)
+                    if let nextScheduledEvent {
+                        nextReleaseCard(nextScheduledEvent)
+                    }
+                    if let description = indicator.description, !description.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("この指標の影響").font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                            Text(description).font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
+                        }.fxCard()
+                    }
+                    if !relatedFxPairs.isEmpty {
+                        relatedFxPairsSection(relatedFxPairs)
+                    }
+                    if let source = indicator.source {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("出典").font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                            if let urlString = indicator.sourceUrl, let url = URL(string: urlString) {
+                                Link(source, destination: url).font(.system(size: 13)).foregroundStyle(FXColor.cyan)
+                            } else {
+                                Text(source).font(.system(size: 13)).foregroundStyle(FXColor.cyan)
+                            }
                         }
+                    }
+                    if !recentEvents.isEmpty {
+                        recentEventsSection(recentEvents)
                     }
                     if let primaryPair = relatedFxPairs.first {
                         NavigationLink(value: AppRoute.historicalComparison(
@@ -74,31 +90,83 @@ struct IndicatorDetailView: View {
     }
 
     private func header(_ indicator: IndicatorSummary) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        HStack(alignment: .top, spacing: 14) {
+            Text(CountryFlag.emoji(for: indicator.countryCode)).font(.system(size: 40))
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(CountryFlag.kanjiAbbreviation(for: indicator.countryCode))) \(indicator.name) (\(indicator.code))")
+                    .font(.system(size: 18, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                Text(indicator.currencyCode).font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
+            }
+            Spacer()
+            FXBadge(text: "重要度 \(indicator.importance.rawValue.capitalized)", tint: importanceTint(indicator.importance))
+        }.fxCard()
+    }
+
+    private func nextReleaseCard(_ event: IndicatorEventSummary) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("次回発表予定").font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
+                Text(ValueFormat.dateTime(event.releaseDatetime)).font(.system(size: 18, weight: .bold, design: .rounded)).foregroundStyle(.white)
+            }
             HStack {
-                FXBadge(text: indicator.code, tint: FXColor.cyan)
-                FXBadge(text: indicator.importance.rawValue, tint: indicator.importance == .high ? FXColor.pink : FXColor.cyan)
+                metric(title: "予想", value: ValueFormat.number(event.forecast))
+                metric(title: "結果", value: event.actual.map { ValueFormat.number($0) } ?? "-")
+                metric(title: "前回", value: ValueFormat.number(event.previous))
             }
-            Text(indicator.name).font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(.white)
-            Text("\(indicator.countryCode) · \(indicator.currencyCode)").foregroundStyle(FXColor.secondaryText)
-            if let description = indicator.description, !description.isEmpty {
-                Text(description).font(.system(size: 14)).foregroundStyle(FXColor.secondaryText).lineSpacing(4)
-            }
-            metadataRow(title: "発表頻度", value: indicator.frequency)
-            if let unit = indicator.unit {
-                metadataRow(title: "単位", value: unit)
-            }
-            if let source = indicator.source {
-                metadataRow(title: "出典", value: source)
+            if let surprise = event.surprise {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("サプライズ").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                        Text("(予想比)").font(.system(size: 11)).foregroundStyle(FXColor.secondaryText)
+                    }
+                    Spacer()
+                    Text(ValueFormat.percent(surprise, signed: true)).font(.system(size: 20, weight: .bold, design: .rounded)).foregroundStyle(FXColor.red)
+                    Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(FXColor.tertiaryText)
+                }
             }
         }.fxCard()
     }
 
-    private func metadataRow(title: String, value: String) -> some View {
-        HStack {
+    private func metric(title: String, value: String) -> some View {
+        VStack(spacing: 4) {
             Text(title).font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
-            Spacer()
-            Text(value).font(.system(size: 12)).foregroundStyle(.white)
+            Text(value).font(.system(size: 18, weight: .bold, design: .rounded)).foregroundStyle(.white)
+        }.frame(maxWidth: .infinity)
+    }
+
+    private func importanceTint(_ importance: Importance) -> Color {
+        switch importance {
+        case .high: return FXColor.red
+        case .medium: return FXColor.green
+        case .low: return FXColor.blue
+        }
+    }
+
+    private func relatedFxPairsSection(_ pairs: [RelatedFxPairSummary]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("関連通貨ペア").font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white)
+            HStack {
+                ForEach(pairs) { pair in
+                    Text(pair.symbol)
+                        .font(.system(size: 13, weight: .semibold))
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(FXColor.card)
+                        .foregroundStyle(.white)
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(FXColor.border))
+                }
+            }
+        }
+    }
+
+    private func recentEventsSection(_ events: [IndicatorEventSummary]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("最近の発表結果").font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white)
+            ForEach(events) { event in
+                NavigationLink(value: AppRoute.historicalEventDetail(id: event.id)) {
+                    RecentEventRow(event: event)
+                }.buttonStyle(.plain)
+            }
         }
     }
 }

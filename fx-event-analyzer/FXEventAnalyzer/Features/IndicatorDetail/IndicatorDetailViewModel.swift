@@ -4,7 +4,7 @@ import Foundation
 enum IndicatorDetailState: Equatable {
     case loading
     case backendNotConfigured
-    case loaded(indicator: IndicatorSummary, relatedFxPairs: [RelatedFxPairSummary], recentEvents: [IndicatorEventSummary])
+    case loaded(indicator: IndicatorSummary, relatedFxPairs: [RelatedFxPairSummary], recentEvents: [IndicatorEventSummary], nextScheduledEvent: IndicatorEventSummary?)
     case error(String)
 }
 
@@ -44,11 +44,26 @@ final class IndicatorDetailViewModel: ObservableObject {
                     ]
                 )
             )
-            let (detailResponse, eventsResponse) = try await (detail, events)
+            // HQ UI Master v5's SCR-003 header shows the indicator's next
+            // scheduled release (date/forecast) — the same
+            // `/indicators/{id}/events` endpoint the RELEASED fetch above
+            // already uses, just with its existing `status` parameter set
+            // to SCHEDULED instead.
+            async let scheduled: IndicatorEventsListResponse = apiClient.send(
+                Endpoint(
+                    path: "indicators/\(indicatorId)/events",
+                    queryItems: [
+                        URLQueryItem(name: "status", value: "SCHEDULED"),
+                        URLQueryItem(name: "limit", value: "1"),
+                    ]
+                )
+            )
+            let (detailResponse, eventsResponse, scheduledResponse) = try await (detail, events, scheduled)
             state = .loaded(
                 indicator: detailResponse.indicator,
                 relatedFxPairs: detailResponse.relatedFxPairs,
-                recentEvents: eventsResponse.data
+                recentEvents: eventsResponse.data,
+                nextScheduledEvent: scheduledResponse.data.first
             )
         } catch let error as APIError where error.isNotConfigured {
             state = .backendNotConfigured

@@ -52,7 +52,7 @@ final class ScreenshotTests: XCTestCase {
         // element the way iPhone's bottom tab bar does (real iPad CI
         // failure: "No matches found for Descendants matching type
         // TabBar"), so search broadly instead of assuming a container type.
-        XCTAssertTrue(waitForAnyElement(containing: "Home", timeout: 20), "Home tab did not appear after login")
+        XCTAssertTrue(waitForAnyElement(containing: "ホーム", timeout: 20), "Home tab did not appear after login")
         XCTAssertTrue(
             waitForAnyElement(containing: "米国CPI", timeout: 15),
             "Home did not load event data from the mock Backend"
@@ -61,7 +61,7 @@ final class ScreenshotTests: XCTestCase {
 
         // SCR-004 Event Detail (required #2, via Home's event card)
         tap(containing: "米国CPI(消費者物価指数)")
-        XCTAssertTrue(waitForAnyElement(containing: "Surprise", timeout: 15), "Event Detail did not load")
+        XCTAssertTrue(waitForAnyElement(containing: "発表日時", timeout: 15), "Event Detail did not load")
         capture("03-EventDetail")
 
         // SCR-005 Movement Detail (required #3, via Event Detail's related FX pair row)
@@ -71,18 +71,21 @@ final class ScreenshotTests: XCTestCase {
 
         // SCR-006 Historical Comparison (required #4, via Movement Detail's link)
         tap(containing: "過去の値動きと比較する")
-        XCTAssertTrue(waitForAnyElement(containing: "過去のイベント", timeout: 15), "Historical Comparison did not load")
+        XCTAssertTrue(waitForAnyElement(containing: "過去の発表一覧", timeout: 15), "Historical Comparison did not load")
         capture("05-HistoricalComparison")
 
-        // SCR-007 Historical Event Detail (required #5, via a comparison event row)
-        tap(containing: "Surprise")
+        // SCR-007 Historical Event Detail (required #5, via a comparison
+        // event row). Row text is variable mock data (dates/numbers), not a
+        // stable literal, so the row carries its own accessibility
+        // identifier for this tap instead of matching on displayed text.
+        tapIdentifier("historyEventRow")
         XCTAssertTrue(waitForAnyElement(containing: "指標詳細を見る", timeout: 15), "Historical Event Detail did not load")
         capture("06-HistoricalEventDetail")
 
         // SCR-002 Indicators (required #6, via tab bar — independent nav
         // path). Same reasoning as the Home tab wait above — use the
         // broad-search helper, not a `tabBars`-typed query.
-        tap(containing: "Indicators")
+        tap(containing: "指標一覧")
         XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicators list did not load")
         capture("07-Indicators")
 
@@ -135,6 +138,32 @@ final class ScreenshotTests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.3)
         }
         XCTFail("Could not find a tappable element containing '\(text)' within \(timeout)s")
+    }
+
+    /// Same scroll-and-retry approach as `tap(containing:)`, but matches by
+    /// `accessibilityIdentifier` instead of displayed text — for rows whose
+    /// text is variable mock data (dates, numbers) rather than a stable
+    /// literal.
+    private func tapIdentifier(_ identifier: String, timeout: TimeInterval = 10) {
+        let collections: [XCUIElementQuery] = [app.buttons, app.cells, app.otherElements]
+        let deadline = Date().addingTimeInterval(timeout)
+        var swipeAttempts = 0
+        while Date() < deadline {
+            for collection in collections {
+                let element = collection.matching(identifier: identifier).firstMatch
+                guard element.exists else { continue }
+                if element.isHittable {
+                    element.tap()
+                    return
+                }
+                if swipeAttempts < 8 {
+                    app.swipeUp()
+                    swipeAttempts += 1
+                }
+            }
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        XCTFail("Could not find a tappable element with identifier '\(identifier)' within \(timeout)s")
     }
 
     private func waitForAnyElement(containing text: String, timeout: TimeInterval) -> Bool {

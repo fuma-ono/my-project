@@ -3,19 +3,24 @@ import SwiftUI
 /// SCR-002 Indicators (ui-screens.md §5): browse indicators, tap through to
 /// SCR-003 Indicator Detail.
 ///
-/// HQ Frontend integration (2026-09-21): visual content — page header, row
-/// styling — is HQ's `FXEventAnalyzer_HQFrontend/IndicatorsView.swift`.
-/// Two adaptations, both wiring not redesign: HQ's `.searchable` bound to a
-/// local `@State` that only filtered its own `FXDemo` array is rewired to
-/// the real `IndicatorsViewModel.searchText` (server-side, debounced search
-/// — the existing data-fetch behavior); and the existing importance-filter
-/// chips (すべて/高/中/低, driving `viewModel.importanceFilter`) are kept —
-/// HQ's mockup had no filter row at all, but dropping a working filter
-/// wasn't asked for, so it's re-added in HQ's own chip/typography style.
+/// HQ UI Master v5 integration (2026-09-22): reproduces
+/// `Assets/Reference/SCR-002.png` — title "指標一覧" (no subtitle), search
+/// bar, and four filter chips (すべて / 重要度 / 国・地域 / 通貨ペア).
+/// "重要度" wires to the existing `viewModel.importanceFilter` (unchanged
+/// server-side filter). "国・地域"/"通貨ペア" have no server-side filter
+/// endpoint — implemented as a client-side filter over the already-fetched
+/// `indicators` list (real countryCode/currencyCode fields already on
+/// `IndicatorSummary`), not a new API. The reference's per-row release time
+/// ("21:30") has no equivalent in `IndicatorSummary` (Indicators is
+/// indicator metadata, not scheduled events) — omitted rather than
+/// fabricated.
 struct IndicatorsView: View {
     @StateObject private var viewModel: IndicatorsViewModel
     @Binding var path: NavigationPath
     private let apiClient: APIClient
+
+    @State private var countryFilter: String?
+    @State private var currencyFilter: String?
 
     init(apiClient: APIClient, path: Binding<NavigationPath>) {
         self.apiClient = apiClient
@@ -29,8 +34,8 @@ struct IndicatorsView: View {
                 FXAppBackground()
                 content
             }
-            .navigationTitle("Indicators")
-            .searchable(text: $viewModel.searchText, prompt: "指標名・コードで検索")
+            .navigationTitle("指標一覧")
+            .searchable(text: $viewModel.searchText, prompt: "指標名・国名で検索")
             .navigationDestination(for: AppRoute.self) { route in
                 AppRouteDestinationView(route: route, apiClient: apiClient)
             }
@@ -42,8 +47,7 @@ struct IndicatorsView: View {
     private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                pageHeader
-                importanceFilterRow
+                filterRow
                 switch viewModel.state {
                 case .loading:
                     LoadingView(caption: "読み込み中...")
@@ -52,11 +56,16 @@ struct IndicatorsView: View {
                 case .loaded(let indicators) where indicators.isEmpty:
                     FXEmptyState(icon: "magnifyingglass", title: "指標が見つかりません", message: "条件に一致する経済指標がありません。")
                 case .loaded(let indicators):
-                    LazyVStack(spacing: 10) {
-                        ForEach(indicators) { indicator in
-                            NavigationLink(value: AppRoute.indicatorDetail(id: indicator.id)) {
-                                IndicatorRow(indicator: FXIndicatorUI(indicator: indicator))
-                            }.buttonStyle(.plain)
+                    let filtered = applyLocalFilters(indicators)
+                    if filtered.isEmpty {
+                        FXEmptyState(icon: "magnifyingglass", title: "指標が見つかりません", message: "条件に一致する経済指標がありません。")
+                    } else {
+                        LazyVStack(spacing: 10) {
+                            ForEach(filtered) { indicator in
+                                NavigationLink(value: AppRoute.indicatorDetail(id: indicator.id)) {
+                                    IndicatorRow(indicator: FXIndicatorUI(indicator: indicator))
+                                }.buttonStyle(.plain)
+                            }
                         }
                     }
                 case .error(let message):
@@ -67,35 +76,71 @@ struct IndicatorsView: View {
         }
     }
 
-    private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text("ECONOMIC CALENDAR").font(.system(size: 11, weight: .bold)).tracking(2).foregroundStyle(FXColor.cyan)
-            Text("経済指標").font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(.white)
-            Text("指標を選ぶと、過去イベントとFX反応を確認できます").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
-        }
-    }
-
-    private var importanceFilterRow: some View {
+    private var filterRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
-                filterChip(title: "すべて", isSelected: viewModel.importanceFilter == nil) { viewModel.importanceFilter = nil }
-                filterChip(title: "重要度: 高", isSelected: viewModel.importanceFilter == .high) { viewModel.importanceFilter = .high }
-                filterChip(title: "重要度: 中", isSelected: viewModel.importanceFilter == .medium) { viewModel.importanceFilter = .medium }
-                filterChip(title: "重要度: 低", isSelected: viewModel.importanceFilter == .low) { viewModel.importanceFilter = .low }
+                filterChip(title: "すべて", isSelected: viewModel.importanceFilter == nil && countryFilter == nil && currencyFilter == nil) {
+                    viewModel.importanceFilter = nil
+                    countryFilter = nil
+                    currencyFilter = nil
+                }
+                Menu {
+                    Button("すべて") { viewModel.importanceFilter = nil }
+                    Button("重要度: 高") { viewModel.importanceFilter = .high }
+                    Button("重要度: 中") { viewModel.importanceFilter = .medium }
+                    Button("重要度: 低") { viewModel.importanceFilter = .low }
+                } label: {
+                    filterChipLabel(title: "重要度", isSelected: viewModel.importanceFilter != nil)
+                }
+                Menu {
+                    Button("すべて") { countryFilter = nil }
+                    ForEach(availableCountries, id: \.self) { code in
+                        Button("\(CountryFlag.emoji(for: code)) \(code)") { countryFilter = code }
+                    }
+                } label: {
+                    filterChipLabel(title: "国・地域", isSelected: countryFilter != nil)
+                }
+                Menu {
+                    Button("すべて") { currencyFilter = nil }
+                    ForEach(availableCurrencies, id: \.self) { code in
+                        Button(code) { currencyFilter = code }
+                    }
+                } label: {
+                    filterChipLabel(title: "通貨ペア", isSelected: currencyFilter != nil)
+                }
             }
         }
     }
 
+    private var availableCountries: [String] {
+        guard case .loaded(let indicators) = viewModel.state else { return [] }
+        return Array(Set(indicators.map(\.countryCode))).sorted()
+    }
+
+    private var availableCurrencies: [String] {
+        guard case .loaded(let indicators) = viewModel.state else { return [] }
+        return Array(Set(indicators.map(\.currencyCode))).sorted()
+    }
+
+    private func applyLocalFilters(_ indicators: [IndicatorSummary]) -> [IndicatorSummary] {
+        indicators.filter { indicator in
+            (countryFilter == nil || indicator.countryCode == countryFilter)
+                && (currencyFilter == nil || indicator.currencyCode == currencyFilter)
+        }
+    }
+
     private func filterChip(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-                .padding(.horizontal, 12).padding(.vertical, 7)
-                .background(isSelected ? FXColor.cyan.opacity(0.16) : FXColor.card)
-                .foregroundStyle(isSelected ? FXColor.cyan : FXColor.secondaryText)
-                .clipShape(Capsule())
-                .overlay(Capsule().stroke(isSelected ? FXColor.cyan.opacity(0.4) : FXColor.border, lineWidth: 1))
-        }.buttonStyle(.plain)
+        Button(action: action) { filterChipLabel(title: title, isSelected: isSelected) }.buttonStyle(.plain)
+    }
+
+    private func filterChipLabel(title: String, isSelected: Bool) -> some View {
+        Text(title)
+            .font(.system(size: 12, weight: .semibold))
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(isSelected ? FXColor.cyan.opacity(0.16) : FXColor.card)
+            .foregroundStyle(isSelected ? FXColor.cyan : FXColor.secondaryText)
+            .clipShape(Capsule())
+            .overlay(Capsule().stroke(isSelected ? FXColor.cyan.opacity(0.4) : FXColor.border, lineWidth: 1))
     }
 }
 
@@ -105,17 +150,23 @@ struct IndicatorRow: View {
     let indicator: FXIndicatorUI
     var body: some View {
         HStack(spacing: 14) {
+            Text(CountryFlag.emoji(for: indicator.country)).font(.system(size: 28))
             VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(indicator.name).font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
-                    FXBadge(text: indicator.code, tint: FXColor.secondaryText)
-                }
-                Text("\(indicator.country) · \(indicator.currency)").font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
+                Text("\(CountryFlag.kanjiAbbreviation(for: indicator.country))) \(indicator.name) (\(indicator.code))")
+                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                Text(indicator.currency).font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
             }
             Spacer()
-            FXBadge(text: indicator.importance, tint: indicator.importance == "HIGH" ? FXColor.pink : FXColor.cyan)
-            Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(FXColor.tertiaryText)
+            FXBadge(text: indicator.importance.capitalized, tint: importanceTint)
         }.padding(16).background(FXColor.card).clipShape(RoundedRectangle(cornerRadius: 16)).overlay(RoundedRectangle(cornerRadius: 16).stroke(FXColor.border))
+    }
+
+    private var importanceTint: Color {
+        switch indicator.importance {
+        case "HIGH": return FXColor.red
+        case "MEDIUM": return FXColor.green
+        default: return FXColor.blue
+        }
     }
 }
 

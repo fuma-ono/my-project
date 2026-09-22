@@ -81,6 +81,25 @@ enum CountryFlag {
         }
         return String(view)
     }
+
+    /// HQ UI Master v5's "米) 消費者物価指数" country-abbreviation prefix
+    /// (SCR-002/003/004) — a single-kanji short form, not the full country
+    /// name. Falls back to the raw country code for anything not in this
+    /// common set rather than guessing an abbreviation.
+    static func kanjiAbbreviation(for countryCode: String) -> String {
+        switch countryCode.uppercased() {
+        case "US": return "米"
+        case "JP": return "日"
+        case "GB": return "英"
+        case "DE", "FR", "IT", "ES", "EA", "EU": return "欧"
+        case "AU": return "豪"
+        case "CA": return "加"
+        case "CN": return "中"
+        case "NZ": return "新"
+        case "CH": return "瑞"
+        default: return countryCode.uppercased()
+        }
+    }
 }
 
 extension Importance {

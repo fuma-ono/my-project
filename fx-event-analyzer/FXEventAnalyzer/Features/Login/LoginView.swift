@@ -3,9 +3,9 @@ import SwiftUI
 /// SCR-010 Login (ui-screens.md).
 ///
 /// HQ Frontend integration (2026-09-21): visual content is HQ's
-/// `FXEventAnalyzer_HQFrontend/LoginView.swift` (brand mark, "Welcome back"
-/// header, card-framed fields, gradient CTA). Two adaptations from HQ's
-/// standalone mockup, both wiring, not redesign:
+/// `FXEventAnalyzer_HQFrontend/LoginView.swift` (brand mark, card-framed
+/// fields, gradient CTA). Two adaptations from HQ's standalone mockup, both
+/// wiring, not redesign:
 /// - HQ's fields are local `@State`; here they bind to the real
 ///   `LoginViewModel`'s `$email`/`$password`, and the button calls
 ///   `viewModel.submit()` instead of an `onLogin` callback, since Auth must
@@ -17,6 +17,13 @@ import SwiftUI
 ///   dead-end sheet would be worse than the existing "準備中" alert this
 ///   screen already used, so that existing alert-based behavior is kept
 ///   for both Password Reset and Sign Up, in HQ's own text styling.
+///
+/// HQ UI Master v5 integration (2026-09-22): reproduces
+/// `Assets/Reference/SCR-010.png` — brand mark + "FX Event Analyzer"
+/// wordmark directly followed by the form fields, with no "Welcome back"
+/// heading/tagline (dropped, since the reference doesn't show one) and a
+/// reveal-password eye toggle on the password field in place of the fixed
+/// lock icon.
 struct LoginView: View {
     @StateObject private var viewModel: LoginViewModel
     let sessionExpired: Bool
@@ -33,15 +40,19 @@ struct LoginView: View {
             ScrollView {
                 VStack(spacing: 28) {
                     Spacer(minLength: 38)
-                    FXBrandMark()
+                    VStack(spacing: 14) {
+                        ZStack {
+                            Circle().fill(FXColor.cyan.opacity(0.08)).frame(width: 120, height: 120).blur(radius: 20)
+                            Image(systemName: "chart.line.uptrend.xyaxis")
+                                .font(.system(size: 46, weight: .bold))
+                                .foregroundStyle(FXGradient.brand)
+                                .shadow(color: FXColor.cyan.opacity(0.6), radius: 16)
+                        }
+                        Text("FX Event Analyzer").font(.system(size: 26, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                    }
 
                     if sessionExpired {
                         sessionExpiredBanner
-                    }
-
-                    VStack(spacing: 8) {
-                        Text("Welcome back").font(.system(size: 28, weight: .bold, design: .rounded)).foregroundStyle(.white)
-                        Text("Economic events, explained by the numbers.").font(.system(size: 14)).foregroundStyle(FXColor.secondaryText)
                     }
 
                     VStack(spacing: 14) {
@@ -152,12 +163,23 @@ struct FXTextField: View {
 struct FXSecureField: View {
     let title: String
     @Binding var text: String
+    @State private var isRevealed = false
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(FXColor.secondaryText)
             HStack {
-                Image(systemName: "lock").foregroundStyle(FXColor.cyan)
-                SecureField(title, text: $text).foregroundStyle(.white)
+                Group {
+                    if isRevealed {
+                        TextField(title, text: $text).textInputAutocapitalization(.never)
+                    } else {
+                        SecureField(title, text: $text)
+                    }
+                }.foregroundStyle(.white)
+                Button {
+                    isRevealed.toggle()
+                } label: {
+                    Image(systemName: isRevealed ? "eye.slash" : "eye").foregroundStyle(FXColor.cyan)
+                }
             }.padding(.horizontal, 14).frame(height: 50).background(FXColor.backgroundElevated).clipShape(RoundedRectangle(cornerRadius: 13))
         }
     }

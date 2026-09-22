@@ -1,18 +1,17 @@
+import Charts
 import SwiftUI
 
 /// SCR-006 Historical Comparison (ui-screens.md §5) — "今回だけでなく、
-/// 過去の同一指標発表時に相場がどう動いたか比較する". Statistics are the
-/// Backend's Source of Truth; Advanced Statistics follows the existing
-/// partial-gating contract (§21.3) rather than a blanket 403.
+/// 過去の同一指標発表時に相場がどう動いたか比較する".
 ///
-/// HQ Frontend integration (2026-09-21): visual content — stat tiles, event
-/// rows — is HQ's `FXEventAnalyzer_HQFrontend/HistoricalComparisonView.swift`.
-/// HQ's stats card showed only average movement/pips from its demo data;
-/// the real `ComparisonStats`/`AdvancedStatistics` carry more (max/min,
-/// up/down/no-change counts, and a separate Pro-gated advanced section),
-/// so those are added in HQ's own tile/typography style rather than
-/// dropped, and each event row links to the real
-/// `AppRoute.historicalEventDetail`.
+/// HQ UI Master v5 integration (2026-09-22): reproduces
+/// `Assets/Reference/SCR-006.png` — indicator header with a "直近5回"
+/// count, a bar chart of each past release's actual value, and a
+/// "過去の発表一覧" table (発表日/結果/予想/変動). The bar chart and table
+/// use the same real `ComparisonEventSummary` data as before (actual/
+/// forecast/surprise); the existing stats/advanced-statistics cards (not
+/// visible in the reference's single screenshot) are kept further down so
+/// that data isn't dropped.
 struct HistoricalComparisonView: View {
     @StateObject private var viewModel: HistoricalComparisonViewModel
 
@@ -50,11 +49,10 @@ struct HistoricalComparisonView: View {
         case .loaded(let response):
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    header
                     timeframePicker
+                    comparisonCard(response)
                     statsSection(response)
                     advancedStatisticsSection(response.advancedStatistics)
-                    eventsSection(response.events)
                 }.padding(20).frame(maxWidth: 1000)
             }
         case .error(let message):
@@ -62,18 +60,79 @@ struct HistoricalComparisonView: View {
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text("HISTORICAL COMPARISON").font(.system(size: 11, weight: .bold)).tracking(2).foregroundStyle(FXColor.cyan)
-            Text(viewModel.indicatorName).font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(.white)
-            Text(viewModel.fxPairSymbol).font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
-        }
-    }
-
     private var timeframePicker: some View {
         Picker("時間軸", selection: $viewModel.selectedTimeframe) {
             ForEach(ReactionTimeframe.all, id: \.self) { Text($0).tag($0) }
         }.pickerStyle(.segmented)
+    }
+
+    private func comparisonCard(_ response: ComparisonResponse) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("過去の同一指標との比較").font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white)
+            HStack {
+                Text("\(viewModel.indicatorName) (\(response.indicator.code))").font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                Spacer()
+                Text("直近\(response.events.count)回").font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
+            }
+            Text(viewModel.fxPairSymbol).font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
+
+            if !response.events.isEmpty {
+                Chart(response.events) { event in
+                    BarMark(
+                        x: .value("発表日", ValueFormat.dateTime(event.releaseDatetime)),
+                        y: .value("結果", event.actual ?? 0)
+                    ).foregroundStyle(FXColor.cyan.gradient)
+                }
+                .chartXAxis(.hidden)
+                .chartYAxis {
+                    AxisMarks { _ in
+                        AxisGridLine().foregroundStyle(FXColor.border)
+                        AxisValueLabel().foregroundStyle(FXColor.secondaryText)
+                    }
+                }
+                .frame(height: 180)
+            }
+
+            Text("過去の発表一覧").font(.system(size: 15, weight: .bold, design: .rounded)).foregroundStyle(.white)
+            VStack(spacing: 0) {
+                historyTableHeader
+                Divider().background(FXColor.border)
+                ForEach(Array(response.events.enumerated()), id: \.element.id) { index, event in
+                    NavigationLink(value: AppRoute.historicalEventDetail(id: event.id)) {
+                        historyTableRow(event)
+                    }.buttonStyle(.plain).accessibilityIdentifier("historyEventRow")
+                    if index != response.events.count - 1 {
+                        Divider().background(FXColor.border)
+                    }
+                }
+            }
+        }.fxCard()
+    }
+
+    private var historyTableHeader: some View {
+        HStack {
+            tableCell("発表日", alignment: .leading)
+            tableCell("結果", alignment: .trailing)
+            tableCell("予想", alignment: .trailing)
+            tableCell("変動", alignment: .trailing)
+        }.font(.system(size: 11, weight: .semibold)).foregroundStyle(FXColor.secondaryText)
+    }
+
+    private func historyTableRow(_ event: ComparisonEventSummary) -> some View {
+        HStack {
+            tableCell(ValueFormat.dateTime(event.releaseDatetime), alignment: .leading, color: .white)
+            tableCell(ValueFormat.number(event.actual), alignment: .trailing, color: .white)
+            tableCell(ValueFormat.number(event.forecast), alignment: .trailing, color: .white)
+            tableCell(
+                event.surprise.map { ValueFormat.number($0, signed: true) } ?? "--",
+                alignment: .trailing,
+                color: (event.surprise ?? 0) >= 0 ? FXColor.green : FXColor.red
+            )
+        }.font(.system(size: 12)).padding(.vertical, 10).contentShape(Rectangle())
+    }
+
+    private func tableCell(_ text: String, alignment: Alignment, color: Color = FXColor.secondaryText) -> some View {
+        Text(text).foregroundStyle(color).frame(maxWidth: .infinity, alignment: alignment)
     }
 
     private func statsSection(_ response: ComparisonResponse) -> some View {
@@ -110,48 +169,10 @@ struct HistoricalComparisonView: View {
         }.fxCard()
     }
 
-    private func eventsSection(_ events: [ComparisonEventSummary]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            FXSectionHeader(title: "過去のイベント", subtitle: "タップして詳細を見る")
-            if events.isEmpty {
-                Text("比較対象のイベントはまだありません。").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
-            } else {
-                LazyVStack(spacing: 10) {
-                    ForEach(events) { event in
-                        NavigationLink(value: AppRoute.historicalEventDetail(id: event.id)) {
-                            HistoryRow(event: event)
-                        }.buttonStyle(.plain)
-                    }
-                }
-            }
-        }
-    }
-
     private func countColumn(title: String, value: Int, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
             Text("\(value)").font(.system(size: 18, weight: .bold, design: .rounded)).foregroundStyle(color)
         }
-    }
-}
-
-private struct HistoryRow: View {
-    let event: ComparisonEventSummary
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(event.releaseDatetime, style: .date).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
-                Text("予想 \(ValueFormat.number(event.forecast)) → 結果 \(ValueFormat.number(event.actual))").font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 4) {
-                if let surprise = event.surprise {
-                    Text("Surprise \(ValueFormat.number(surprise, signed: true))").font(.system(size: 15, weight: .bold)).foregroundStyle(FXColor.cyan)
-                } else {
-                    Text("--").font(.system(size: 15, weight: .bold)).foregroundStyle(FXColor.secondaryText)
-                }
-            }
-            Image(systemName: "chevron.right").foregroundStyle(FXColor.tertiaryText)
-        }.padding(15).background(FXColor.card).clipShape(RoundedRectangle(cornerRadius: 15)).overlay(RoundedRectangle(cornerRadius: 15).stroke(FXColor.border))
     }
 }

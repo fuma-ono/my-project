@@ -1,20 +1,21 @@
 import SwiftUI
 
-/// SCR-001 Home (ui-screens.md §5). Real `GET /home` data — "今日の注目
-/// イベント" (SCHEDULED + RELEASED) / "主要通貨ペアの動向" (major_fx), each
-/// event tappable to SCR-004 Event Detail.
+/// SCR-001 Home (ui-screens.md §5). Real `GET /home` data — SCHEDULED /
+/// RELEASED events, each tappable to SCR-004 Event Detail.
 ///
-/// HQ Frontend integration (2026-09-21): visual content — hero card,
-/// section headers, FX pair grid, event rows — is HQ's
-/// `FXEventAnalyzer_HQFrontend/HomeView.swift`, reproduced with its own
-/// `HeroEventCard`/`HeroMetric`/`FXPairCard`/`EventRow` bodies unchanged.
-/// What changed: HQ's default parameters were `FXDemo` sample arrays (its
-/// README is explicit that demo data must not ship); those are replaced by
-/// mapping the real `HomeViewModel`'s `HomeEventSummary`/`MajorFxSummary`
-/// into HQ's own `FXEventUI`/`FXPairUI` shapes (`FrontendModels.swift`),
-/// and the still-owned `HomeViewModel`/`NavigationPath`/`AppRoute` wiring —
-/// same data flow, `NavigationStack`, and loading/error/empty states as
-/// before — is kept intact around HQ's content.
+/// HQ UI Master v5 integration (2026-09-22): visual content — the
+/// "Upcoming Events" hero card (the single next SCHEDULED event) and the
+/// separate "Recent Events" list card below it — reproduces
+/// `Assets/Reference/SCR-001.png` exactly, per HQ's explicit instruction
+/// that this reference is final and not to be redesigned. The only
+/// adaptation: `HomeViewModel`'s `upcomingEvents`/`recentEvents` already
+/// split events by status — "Upcoming Events" shows the soonest upcoming
+/// one as the hero, "Recent Events" shows every other event today (the
+/// rest of upcoming + all released), so no event the API returns is
+/// dropped from the screen just because the reference mockup only showed
+/// one example row under "Upcoming Events". The major-FX-pairs card
+/// (existing `GET /home` data, not visible in the reference's single
+/// screenshot viewport) is kept below, so that existing data isn't lost.
 struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
     @Binding var path: NavigationPath
@@ -67,33 +68,30 @@ struct HomeView: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("MARKET PULSE").font(.system(size: 11, weight: .bold)).tracking(2).foregroundStyle(FXColor.cyan)
-                    Text("今日の注目イベント").font(.system(size: 29, weight: .bold, design: .rounded)).foregroundStyle(.white)
-                    Text("予想 → 結果 → FX反応を一画面で確認").font(.system(size: 14)).foregroundStyle(FXColor.secondaryText)
+                if let hero = mappedEvents.upcoming.first {
+                    upcomingEventsCard(hero)
                 }
 
-                if let heroEvent = mappedEvents.first {
-                    NavigationLink(value: AppRoute.eventDetail(id: heroEvent.id)) {
-                        HeroEventCard(event: heroEvent)
-                    }.buttonStyle(.plain)
+                if !mappedEvents.rest.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Recent Events").font(.system(size: 20, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                        VStack(spacing: 0) {
+                            ForEach(Array(mappedEvents.rest.enumerated()), id: \.element.id) { index, event in
+                                NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
+                                    EventRow(event: event)
+                                }.buttonStyle(.plain)
+                                if index != mappedEvents.rest.count - 1 {
+                                    Divider().background(FXColor.border)
+                                }
+                            }
+                        }.fxCard()
+                    }
                 }
 
                 if !mappedPairs.isEmpty {
                     FXSectionHeader(title: "主要FX", subtitle: "リアルタイム価格")
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 145), spacing: 12)], spacing: 12) {
                         ForEach(mappedPairs) { pair in FXPairCard(pair: pair) }
-                    }
-                }
-
-                if !mappedEvents.isEmpty {
-                    FXSectionHeader(title: "今日のイベント", subtitle: "重要度の高い順")
-                    LazyVStack(spacing: 10) {
-                        ForEach(mappedEvents) { event in
-                            NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
-                                EventRow(event: event)
-                            }.buttonStyle(.plain)
-                        }
                     }
                 }
             }
@@ -103,8 +101,22 @@ struct HomeView: View {
         }.scrollIndicators(.hidden)
     }
 
-    private var mappedEvents: [FXEventUI] {
-        viewModel.todaysEvents.map(FXEventUI.init(home:))
+    private func upcomingEventsCard(_ event: FXEventUI) -> some View {
+        NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Upcoming Events").font(.system(size: 20, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                Text("Today \(ValueFormat.time(event.releaseDate))").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
+                EventRow(event: event)
+            }.fxCard()
+        }.buttonStyle(.plain)
+    }
+
+    private var mappedEvents: (upcoming: [FXEventUI], rest: [FXEventUI]) {
+        let upcoming = viewModel.upcomingEvents.sorted { $0.releaseDatetime < $1.releaseDatetime }.map(FXEventUI.init(home:))
+        let rest = (viewModel.upcomingEvents.dropFirst() + viewModel.recentEvents)
+            .sorted { $0.releaseDatetime < $1.releaseDatetime }
+            .map(FXEventUI.init(home:))
+        return (upcoming, rest)
     }
 
     private var mappedPairs: [FXPairUI] {
@@ -112,37 +124,38 @@ struct HomeView: View {
     }
 }
 
-private struct HeroEventCard: View {
+private struct EventRow: View {
     let event: FXEventUI
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack {
-                FXBadge(text: event.importance == "HIGH" ? "HIGH IMPACT" : event.importance, tint: event.importance == "HIGH" ? FXColor.pink : FXColor.cyan)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Text(CountryFlag.emoji(for: event.country)).font(.system(size: 24))
+                Text(event.currency).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+                Text(event.indicatorName).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
                 Spacer()
-                Text(event.releaseDate, style: .time).font(.system(size: 12, weight: .semibold)).foregroundStyle(FXColor.secondaryText)
-            }
-            Text(event.indicatorName).font(.system(size: 24, weight: .bold, design: .rounded)).foregroundStyle(.white)
-            HStack(spacing: 18) {
-                HeroMetric(label: "予想", value: event.forecast ?? "—")
-                HeroMetric(label: "結果", value: event.actual ?? "—")
-                HeroMetric(label: "前回", value: event.previous ?? "—")
+                FXBadge(text: event.importance.capitalized, tint: importanceTint)
+                Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(FXColor.tertiaryText)
             }
             HStack {
-                Text(event.pair).font(.system(size: 13, weight: .bold)).foregroundStyle(FXColor.cyan)
-                Spacer()
-                Image(systemName: "arrow.up.right").foregroundStyle(FXColor.cyan)
+                metric(title: "予想", value: event.forecast ?? "-")
+                metric(title: "結果", value: event.actual ?? "-")
+                metric(title: "前回", value: event.previous ?? "-")
             }
-        }.fxCard(padding: 20).overlay(RoundedRectangle(cornerRadius: FXMetric.radius).stroke(FXGradient.brand, lineWidth: 1).opacity(0.35))
+        }.padding(.vertical, 10)
     }
-}
 
-private struct HeroMetric: View {
-    let label: String
-    let value: String
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(label).font(.system(size: 11)).foregroundStyle(FXColor.secondaryText)
-            Text(value).font(.system(size: 19, weight: .bold, design: .rounded)).foregroundStyle(.white)
+    private var importanceTint: Color {
+        switch event.importance {
+        case "HIGH": return FXColor.red
+        case "MEDIUM": return FXColor.green
+        default: return FXColor.blue
+        }
+    }
+
+    private func metric(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.system(size: 11)).foregroundStyle(FXColor.secondaryText)
+            Text(value).font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -162,36 +175,10 @@ private struct FXPairCard: View {
     }
 }
 
-private struct EventRow: View {
-    let event: FXEventUI
-    var body: some View {
-        HStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 3).fill(event.importance == "HIGH" ? FXColor.pink : FXColor.cyan).frame(width: 4, height: 54)
-            VStack(alignment: .leading, spacing: 5) {
-                HStack {
-                    Text(event.indicatorName).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
-                    FXBadge(text: event.currency, tint: FXColor.secondaryText)
-                }
-                Text(event.releaseDate, style: .time).font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 4) {
-                Text(event.actual ?? "未発表").font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
-                Text(event.pair).font(.system(size: 11, weight: .semibold)).foregroundStyle(FXColor.cyan)
-            }
-            Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold)).foregroundStyle(FXColor.tertiaryText)
-        }.padding(15).background(FXColor.card.opacity(0.85)).clipShape(RoundedRectangle(cornerRadius: 16)).overlay(RoundedRectangle(cornerRadius: 16).stroke(FXColor.border))
-    }
-}
-
 private extension HomeViewModel {
     var majorFxList: [MajorFxSummary] {
         guard case .loaded(_, let majorFx) = state else { return [] }
         return majorFx
-    }
-
-    var todaysEvents: [HomeEventSummary] {
-        (upcomingEvents + recentEvents).sorted { $0.releaseDatetime < $1.releaseDatetime }
     }
 }
 

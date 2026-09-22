@@ -1,21 +1,16 @@
 import SwiftUI
 
 /// SCR-004 Event Detail (ui-screens.md §5, H-1) — "予想と結果、その結果に
-/// よる相場の反応を一画面で理解する". Display order fixed by H-1: 指標名/
-/// 国地域/通貨/重要度/発表日時 → Forecast/Actual/Previous → Surprise →
-/// 乖離理由 → 市場への影響 → 関連FXペア/Reaction.
+/// よる相場の反応を一画面で理解する".
 ///
-/// HQ Frontend integration (2026-09-21): card layout/typography/colors are
-/// HQ's `FXEventAnalyzer_HQFrontend/EventDetailView.swift`. HQ's version
-/// took a single flat `FXEventUI` — the real `GET /events/{id}` response
-/// (`EventDetailResponse`) carries more than that shape holds (a separate
-/// snapshot/analysis/explanation, and each related FX pair's own Reaction
-/// with its own `analysis_status`), so this reads straight from the real
-/// response types instead of going through `FXEventUI`, keeping HQ's exact
-/// section styling. HQ's bottom "過去イベントと比較" CTA had no indicator/
-/// pair context to link with (demo data only) — it now pushes
-/// `AppRoute.historicalComparison` for the primary related FX pair, same
-/// as before integration.
+/// HQ UI Master v5 integration (2026-09-22): reproduces
+/// `Assets/Reference/SCR-004.png` — header card (flag/name/currency/
+/// importance), a "発表日時" + 予想/結果/前回 + サプライズ card, "市場への
+/// 影響 (想定)" pair rows with a blue "関連する通貨ペアを見る" CTA (wired to
+/// Movement Detail for the primary pair, since the button has no other
+/// real destination), then "詳細情報". The existing "過去イベントと比較"
+/// CTA (not visible in the reference's single screenshot, presumably below
+/// the fold) is kept further down so existing functionality isn't dropped.
 struct EventDetailView: View {
     @StateObject private var viewModel: EventDetailViewModel
 
@@ -30,6 +25,11 @@ struct EventDetailView: View {
         }
         .navigationTitle("イベント詳細")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {} label: { Image(systemName: "star").foregroundStyle(FXColor.amber) }
+            }
+        }
         .task { viewModel.load() }
     }
 
@@ -46,16 +46,13 @@ struct EventDetailView: View {
             FXEmptyState(icon: "lock.fill", title: "この情報はご利用いただけません", message: "現在のプランではこのイベント情報を閲覧できません。")
         case .loaded(let response):
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 20) {
                     header(response.event)
-                    snapshot(response)
-                    if response.event.status == .released, response.event.dataStatus == .ready {
-                        surprise(response)
-                    }
+                    snapshotCard(response)
+                    reactionSection(response)
                     if let explanation = response.explanation {
                         explanationSection(explanation)
                     }
-                    reactionSection(response)
                     if let primaryPair = response.relatedFxPairs.first {
                         NavigationLink(value: AppRoute.historicalComparison(
                             indicatorId: response.event.indicatorId,
@@ -76,118 +73,137 @@ struct EventDetailView: View {
     }
 
     private func header(_ event: EventDetailEvent) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                FXBadge(text: event.importance.rawValue, tint: event.importance == .high ? FXColor.pink : FXColor.cyan)
-                Spacer()
-                Text(event.releaseDatetime, style: .date).font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
+        HStack(alignment: .top, spacing: 14) {
+            Text(CountryFlag.emoji(for: event.countryCode)).font(.system(size: 40))
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(CountryFlag.kanjiAbbreviation(for: event.countryCode))) \(event.indicatorName)")
+                    .font(.system(size: 18, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                Text(event.currencyCode).font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
             }
-            Text(event.indicatorName).font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(.white)
-            Text("\(event.countryCode) · \(event.currencyCode) · \(event.status.rawValue)").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
-            if event.revisionStatus == .revised {
-                FXBadge(text: "改定あり", tint: FXColor.amber)
-            }
+            Spacer()
+            FXBadge(text: event.importance.rawValue.capitalized, tint: importanceTint(event.importance))
+        }.fxCard()
+    }
+
+    private func importanceTint(_ importance: Importance) -> Color {
+        switch importance {
+        case .high: return FXColor.red
+        case .medium: return FXColor.green
+        case .low: return FXColor.blue
         }
     }
 
-    private func snapshot(_ response: EventDetailResponse) -> some View {
-        Group {
+    private func snapshotCard(_ response: EventDetailResponse) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("発表日時").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
+                Spacer()
+                Text(ValueFormat.dateTime(response.event.releaseDatetime)).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+            }
             switch response.event.dataStatus {
             case .dataPending, .dataUnavailable:
                 Text(response.event.dataStatus.label).font(.system(size: 14)).foregroundStyle(FXColor.secondaryText)
             default:
-                HStack(spacing: 8) {
-                    HeroMetric(label: "予想", value: ValueFormat.number(response.snapshot?.forecast))
-                    HeroMetric(label: "結果", value: response.event.status == .released ? ValueFormat.number(response.snapshot?.actual) : "--")
-                    HeroMetric(label: "前回", value: ValueFormat.number(response.snapshot?.previous))
+                HStack {
+                    metric(title: "予想", value: ValueFormat.number(response.snapshot?.forecast))
+                    metric(title: "結果", value: response.event.status == .released ? ValueFormat.number(response.snapshot?.actual) : "-")
+                    metric(title: "前回", value: ValueFormat.number(response.snapshot?.previous))
+                }
+            }
+            if response.event.status == .released, response.event.dataStatus == .ready {
+                Divider().background(FXColor.border)
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("サプライズ").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                        Text("(予想比)").font(.system(size: 11)).foregroundStyle(FXColor.secondaryText)
+                    }
+                    Spacer()
+                    if let surprise = response.analysis.surprise {
+                        Text(ValueFormat.percent(surprise, signed: true)).font(.system(size: 20, weight: .bold, design: .rounded)).foregroundStyle(FXColor.red)
+                        Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(FXColor.tertiaryText)
+                    } else {
+                        Text("分析対象外").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
+                    }
                 }
             }
         }.fxCard()
     }
 
-    private func surprise(_ response: EventDetailResponse) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("SURPRISE").font(.system(size: 11, weight: .bold)).tracking(2).foregroundStyle(FXColor.pink)
-            if let surprise = response.analysis.surprise, let direction = response.analysis.surpriseDirection {
-                Text(ValueFormat.number(surprise, signed: true)).font(.system(size: 34, weight: .bold, design: .rounded)).foregroundStyle(.white)
-                if let label = ValueFormat.surpriseComparisonLabel(surprise) {
-                    Text(label).font(.system(size: 13, weight: .semibold)).foregroundStyle(FXColor.secondaryText)
-                }
-                Text(direction.label).font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
+    private func metric(title: String, value: String) -> some View {
+        VStack(spacing: 4) {
+            Text(title).font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
+            Text(value).font(.system(size: 18, weight: .bold, design: .rounded)).foregroundStyle(.white)
+        }.frame(maxWidth: .infinity)
+    }
+
+    private func reactionSection(_ response: EventDetailResponse) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("市場への影響 (想定)").font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white)
+            if response.relatedFxPairs.isEmpty {
+                Text("関連する通貨ペアはありません。").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText).fxCard()
             } else {
-                Text("Forecastが存在しないため、Surprise分析対象外です。").font(.system(size: 14)).foregroundStyle(FXColor.secondaryText)
+                VStack(spacing: 0) {
+                    ForEach(Array(response.relatedFxPairs.enumerated()), id: \.element.id) { index, pair in
+                        NavigationLink(value: AppRoute.movementDetail(
+                            eventId: response.event.id,
+                            indicatorId: response.event.indicatorId,
+                            fxPairId: pair.fxPairId,
+                            symbol: pair.symbol,
+                            indicatorName: response.event.indicatorName,
+                            releaseDatetime: response.event.releaseDatetime
+                        )) {
+                            reactionRow(pair)
+                        }.buttonStyle(.plain)
+                        if index != response.relatedFxPairs.count - 1 {
+                            Divider().background(FXColor.border)
+                        }
+                    }
+                }.fxCard()
+
+                if let primaryPair = response.relatedFxPairs.first {
+                    NavigationLink(value: AppRoute.movementDetail(
+                        eventId: response.event.id,
+                        indicatorId: response.event.indicatorId,
+                        fxPairId: primaryPair.fxPairId,
+                        symbol: primaryPair.symbol,
+                        indicatorName: response.event.indicatorName,
+                        releaseDatetime: response.event.releaseDatetime
+                    )) {
+                        Text("関連する通貨ペアを見る").font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
+                            .frame(maxWidth: .infinity).frame(height: 50)
+                            .background(FXGradient.brand).clipShape(RoundedRectangle(cornerRadius: 14))
+                    }.buttonStyle(.plain)
+                }
             }
-            Text("Surprise = Actual − Forecast").font(.system(size: 11)).foregroundStyle(FXColor.tertiaryText)
-        }.fxCard()
+        }
+    }
+
+    private func reactionRow(_ pair: EventRelatedFxPair) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "mappin.circle").foregroundStyle(FXColor.secondaryText)
+            Text(pair.symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+            Spacer()
+            switch pair.reaction.analysisStatus {
+            case .ready:
+                Text(ValueFormat.percent(pair.reaction.changePercent, signed: true))
+                    .font(.system(size: 14, weight: .semibold)).foregroundStyle((pair.reaction.changePercent ?? 0) >= 0 ? FXColor.green : FXColor.red)
+            default:
+                Text(pair.reaction.analysisStatus.label).font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
+            }
+        }.padding(14).contentShape(Rectangle())
     }
 
     private func explanationSection(_ explanation: EventExplanationDetail) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            FXSectionHeader(title: "結果の背景", subtitle: "公式ソースに基づく要約")
+            Text("詳細情報").font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white)
             if let summary = explanation.summary {
                 Text(summary).font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
             } else {
                 Text("公式発表の内容はデータソース連携後に表示されます。推測による説明は表示しません。").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
             }
             if let source = explanation.source, let urlString = explanation.sourceUrl, let url = URL(string: urlString) {
-                Link(destination: url) {
-                    FXActionRow(icon: "link", title: "公式ソース", subtitle: source, action: {})
-                        .allowsHitTesting(false)
-                        .contentShape(Rectangle())
-                }
+                Link("出典: \(source)", destination: url).font(.system(size: 12)).foregroundStyle(FXColor.cyan)
             }
         }.fxCard()
-    }
-
-    private func reactionSection(_ response: EventDetailResponse) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            FXSectionHeader(title: "市場への影響", subtitle: "関連通貨ペア")
-            let event = response.event
-            if response.relatedFxPairs.isEmpty {
-                Text("関連する通貨ペアはありません。").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
-            } else {
-                ForEach(response.relatedFxPairs) { pair in
-                    NavigationLink(value: AppRoute.movementDetail(
-                        eventId: event.id,
-                        indicatorId: event.indicatorId,
-                        fxPairId: pair.fxPairId,
-                        symbol: pair.symbol,
-                        indicatorName: event.indicatorName,
-                        releaseDatetime: event.releaseDatetime
-                    )) {
-                        reactionRow(pair)
-                    }.buttonStyle(.plain)
-                }
-            }
-        }.fxCard()
-    }
-
-    private func reactionRow(_ pair: EventRelatedFxPair) -> some View {
-        HStack {
-            Text(pair.symbol).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
-            Spacer()
-            switch pair.reaction.analysisStatus {
-            case .ready:
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(ValueFormat.pips(pair.reaction.pips)).font(.system(size: 13)).foregroundStyle(.white)
-                    Text(ValueFormat.percent(pair.reaction.changePercent, signed: true))
-                        .font(.system(size: 12)).foregroundStyle((pair.reaction.changePercent ?? 0) >= 0 ? FXColor.green : FXColor.red)
-                }
-            default:
-                Text(pair.reaction.analysisStatus.label).font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
-            }
-            Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(FXColor.tertiaryText)
-        }.padding(.vertical, 6).contentShape(Rectangle())
-    }
-}
-
-private struct HeroMetric: View {
-    let label: String
-    let value: String
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(label).font(.system(size: 11)).foregroundStyle(FXColor.secondaryText)
-            Text(value).font(.system(size: 19, weight: .bold, design: .rounded)).foregroundStyle(.white)
-        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
