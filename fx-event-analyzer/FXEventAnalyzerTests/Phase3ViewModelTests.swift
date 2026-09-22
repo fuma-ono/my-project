@@ -81,7 +81,12 @@ final class IndicatorDetailViewModelTests: XCTestCase {
         viewModel.load()
         await waitUntil { viewModel.state != .loading }
 
-        XCTAssertEqual(viewModel.state, .loaded(indicator: indicator, relatedFxPairs: relatedFxPairs, recentEvents: [event]))
+        // MockAPIClient keys results by path only, so the ViewModel's
+        // second `indicators/ind_1/events` call (status=SCHEDULED, for
+        // `nextScheduledEvent`) resolves to the same registered response as
+        // the first (status=RELEASED, for `recentEvents`) — both yield
+        // `event` here, which is what this assertion reflects.
+        XCTAssertEqual(viewModel.state, .loaded(indicator: indicator, relatedFxPairs: relatedFxPairs, recentEvents: [event], nextScheduledEvent: event))
         XCTAssertTrue(apiClient.requestedPaths.contains("indicators/ind_1"))
         XCTAssertTrue(apiClient.requestedPaths.contains("indicators/ind_1/events"))
     }
