@@ -141,7 +141,7 @@ private struct EventRow: View {
                 metric(title: "結果", value: event.actual ?? "-")
                 metric(title: "前回", value: event.previous ?? "-")
             }
-        }.padding(.vertical, 10)
+        }.padding(.vertical, 10).contentShape(Rectangle())
     }
 
     private var importanceTint: Color {
