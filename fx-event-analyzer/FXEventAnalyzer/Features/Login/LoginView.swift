@@ -24,10 +24,22 @@ import SwiftUI
 ///   alignment: .bottom)`, the same technique HQ's own `V5EventRow` uses
 ///   to place its metric row outside a fixed box — so the panel's own
 ///   204×139 frame and background are never resized to fit real content.
+/// - `V5Viewport` scales its fixed canvas via `.scaleEffect`, which is
+///   known to make XCUITest's synthesized tap land without actually
+///   moving keyboard focus onto a `TextField`/`SecureField` inside it
+///   (the tap itself resolves to the right place; the responder change
+///   doesn't follow) — a Simulator/XCUITest limitation, not a visual
+///   change. `@FocusState` + an explicit `.onTapGesture` on each field
+///   forces the focus assignment directly, working around it.
 struct LoginView: View {
     @StateObject private var viewModel: LoginViewModel
     let sessionExpired: Bool
     @State private var pendingFeatureMessage: String?
+    @FocusState private var focusedField: Field?
+
+    private enum Field {
+        case email, password
+    }
 
     init(viewModel: @autoclosure @escaping () -> LoginViewModel, sessionExpired: Bool = false) {
         _viewModel = StateObject(wrappedValue: viewModel())
@@ -58,6 +70,8 @@ struct LoginView: View {
                         .padding(.horizontal, 10).frame(height: 27)
                         .background(V5P.bg0.opacity(0.8), in: Capsule())
                         .accessibilityLabel("メールアドレス")
+                        .focused($focusedField, equals: .email)
+                        .onTapGesture { focusedField = .email }
                     Text("パスワード").font(.system(size: 7)).foregroundStyle(V5P.muted)
                     SecureField("パスワードを入力", text: $viewModel.password)
                         .font(.system(size: 9))
@@ -65,6 +79,8 @@ struct LoginView: View {
                         .padding(.horizontal, 10).frame(height: 27)
                         .background(V5P.bg0.opacity(0.8), in: Capsule())
                         .accessibilityLabel("パスワード")
+                        .focused($focusedField, equals: .password)
+                        .onTapGesture { focusedField = .password }
                     Button {
                         viewModel.submit()
                     } label: {

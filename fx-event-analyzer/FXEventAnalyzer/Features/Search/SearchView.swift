@@ -26,11 +26,17 @@ import SwiftUI
 /// static "popular" entries would be fabricated data, so both its heading
 /// and rows are omitted entirely, the same call made in both prior
 /// integration rounds.
+/// - `V5Viewport`'s `.scaleEffect` is known to make a synthesized tap
+///   land without moving keyboard focus onto a `TextField` inside it (a
+///   Simulator/XCUITest limitation, not a visual change) — `@FocusState`
+///   + an explicit `.onTapGesture` forces the focus assignment, the same
+///   fix Login needed.
 struct SearchView: View {
     @StateObject private var viewModel: IndicatorsViewModel
     @State private var path = NavigationPath()
     @State private var selectedFilter: SearchFilter = .all
     @State private var recentSearches: [String] = RecentSearchStore.load()
+    @FocusState private var searchFieldFocused: Bool
     @Binding var tabSelection: Int
     private let apiClient: APIClient
 
@@ -50,6 +56,8 @@ struct SearchView: View {
                     TextField("指標名・イベント・通貨ペアなどで検索", text: $viewModel.searchText)
                         .font(.system(size: 7))
                         .foregroundStyle(.white)
+                        .focused($searchFieldFocused)
+                        .onTapGesture { searchFieldFocused = true }
                     Spacer()
                 }
                 .foregroundStyle(.white).padding(7).frame(width: 204, height: 28).background(V5P.panel2, in: Capsule()).position(x: 117, y: 67)

@@ -22,6 +22,10 @@ import SwiftUI
 /// - HQ's per-row release time ("21:30") has no equivalent field on
 ///   `IndicatorSummary` (Indicators is metadata, not a scheduled event) —
 ///   hidden rather than fabricated, per instruction.
+/// - `V5Viewport`'s `.scaleEffect` is known to make a synthesized tap land
+///   without moving keyboard focus onto a `TextField` inside it —
+///   `@FocusState` + an explicit `.onTapGesture` forces the focus
+///   assignment, the same fix Login needed.
 struct IndicatorsView: View {
     @StateObject private var viewModel: IndicatorsViewModel
     @Binding var path: NavigationPath
@@ -30,6 +34,7 @@ struct IndicatorsView: View {
 
     @State private var countryFilter: String?
     @State private var currencyFilter: String?
+    @FocusState private var searchFieldFocused: Bool
 
     init(apiClient: APIClient, path: Binding<NavigationPath>, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
@@ -65,6 +70,8 @@ struct IndicatorsView: View {
                     TextField("指標名・国名で検索", text: $viewModel.searchText)
                         .font(.system(size: 8))
                         .foregroundStyle(.white)
+                        .focused($searchFieldFocused)
+                        .onTapGesture { searchFieldFocused = true }
                 }
                 .padding(7).frame(width: 204, height: 27, alignment: .leading)
                 .background(V5P.panel2, in: Capsule()).position(x: 117, y: 66)
