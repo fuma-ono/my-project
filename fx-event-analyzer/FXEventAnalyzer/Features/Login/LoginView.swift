@@ -49,9 +49,11 @@ struct LoginView: View {
                                 .textInputAutocapitalization(.never)
                                 .keyboardType(.emailAddress)
                                 .padding(10).background(HQV5.panel, in: Capsule()).foregroundStyle(.white)
+                                .accessibilityLabel("メールアドレス")
                             Text("パスワード").font(.system(size: 9)).foregroundStyle(HQV5.muted)
                             SecureField("パスワードを入力", text: $viewModel.password)
                                 .padding(10).background(HQV5.panel, in: Capsule()).foregroundStyle(.white)
+                                .accessibilityLabel("パスワード")
 
                             if case .error(let message) = viewModel.state {
                                 Text(message)
