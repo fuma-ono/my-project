@@ -18,6 +18,22 @@ enum HQV5 {
     static let purple = Color(red: 0.58, green: 0.32, blue: 1.0)
 }
 
+/// HQ's `HQV5PrimaryButton` is filed in `Sources/HQV5Screens.swift` in the
+/// delivered package rather than `Sources/HQV5DesignSystem.swift`, even
+/// though it's a reusable style (used by Login/Event Detail/Historical
+/// Event Detail's CTAs), not screen content — relocated here, verbatim,
+/// so it's available without pulling in the demo screens file.
+struct HQV5PrimaryButton: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity).frame(height: 36)
+            .background(LinearGradient(colors: [HQV5.blue, HQV5.cyan2], startPoint: .leading, endPoint: .trailing), in: RoundedRectangle(cornerRadius: 9))
+            .opacity(configuration.isPressed ? 0.78 : 1)
+    }
+}
+
 struct HQV5Background: View {
     var body: some View {
         LinearGradient(colors: [HQV5.bg, HQV5.bg2, HQV5.bg], startPoint: .top, endPoint: .bottom)
