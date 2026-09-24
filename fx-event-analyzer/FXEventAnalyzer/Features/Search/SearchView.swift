@@ -1,82 +1,80 @@
 import SwiftUI
 
 /// SCR-008 Search (ui-screens.md §4) — was a "準備中" placeholder before
-/// this integration; no dedicated ViewModel/endpoint exists for search, but
-/// `IndicatorsViewModel` already does real server-side `q`-search against
-/// `GET /indicators` (used by the Indicators tab). This screen reuses that
-/// same, already-existing capability with its own instance — not a new
-/// API/ViewModel, just a second consumer of one that already exists.
+/// the prior integration; no dedicated ViewModel/endpoint exists for search,
+/// but `IndicatorsViewModel` already does real server-side `q`-search
+/// against `GET /indicators` (used by the Indicators tab). This screen
+/// reuses that same, already-existing capability with its own instance —
+/// not a new API/ViewModel, just a second consumer of one that already
+/// exists.
 ///
-/// HQ UI Master v5 integration (2026-09-22): reproduces
-/// `Assets/Reference/SCR-008.png` — "検索" title, search field, filter
-/// chips (すべて/指標/イベント/通貨ペア), "最近の検索", "人気の検索". Two
-/// deliberate deviations from the reference, not redesigns: (1) only
-/// indicator search is a real, existing capability (`GET /indicators?q=`);
-/// there is no event- or currency-pair-search endpoint, so the イベント/
-/// 通貨ペア chips are kept (matching the reference) but surface an honest
-/// "この検索対象はまだ利用できません" state rather than silently falling
-/// back to indicator results or inventing an endpoint. (2) "人気の検索" has
-/// no backing analytics/popularity endpoint — inventing static "popular"
-/// entries would be fabricated data, so it is omitted, the same "necessary
-/// deviation due to missing real data" call already made elsewhere this
-/// round (e.g. Movement Detail's dropped 平均変動幅 column). "最近の検索" is
+/// HQ UI Master v5 Frontend integration (2026-09-24): visual content is
+/// HQ's `HQV5Screens.swift` `HQV5SearchView` (search field, filter
+/// `HQV5Pill`s すべて/指標/イベント/通貨ペア, "最近の検索"
+/// `HQV5NeonCard` rows), reproduced as given. Two deliberate deviations,
+/// carried over unchanged from the prior integration (real-data
+/// constraints, not redesigns): (1) only indicator search is a real,
+/// existing capability; イベント/通貨ペア chips surface an honest "この
+/// 検索対象はまだ利用できません" state rather than a fabricated result.
+/// (2) HQ's "人気の検索" has no backing analytics/popularity endpoint —
+/// inventing static "popular" entries would be fabricated data, so it is
+/// omitted, same as Movement Detail's dropped 平均変動幅. "最近の検索" is
 /// real, on-device history of indicators the user has actually opened from
-/// this screen, persisted locally.
+/// this screen. Search results (when a query is active) use the same
+/// `HQV5NeonCard` indicator row as the Indicators tab, since HQ's file has
+/// no dedicated results-row visual of its own to reproduce.
 struct SearchView: View {
     @StateObject private var viewModel: IndicatorsViewModel
     @State private var path = NavigationPath()
     @State private var selectedFilter: SearchFilter = .all
     @State private var recentSearches: [String] = RecentSearchStore.load()
+    @Binding var tabSelection: Int
     private let apiClient: APIClient
 
-    init(apiClient: APIClient) {
+    init(apiClient: APIClient, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
         _viewModel = StateObject(wrappedValue: IndicatorsViewModel(apiClient: apiClient))
+        _tabSelection = tabSelection
     }
 
     var body: some View {
         NavigationStack(path: $path) {
-            ZStack {
-                FXAppBackground()
+            ZStack(alignment: .bottom) {
+                HQV5Background()
                 content
+                    .safeAreaInset(edge: .bottom) {
+                        HQV5BottomBar(selected: $tabSelection).padding(.horizontal, 10).padding(.bottom, 5)
+                    }
             }
-            .navigationTitle("検索")
+            .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: AppRoute.self) { route in
-                AppRouteDestinationView(route: route, apiClient: apiClient)
+                AppRouteDestinationView(route: route, apiClient: apiClient, tabSelection: $tabSelection)
             }
         }
     }
 
     @ViewBuilder
     private var content: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                Text("検索").font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(.white)
+        HQV5Screen(title: "検索") {
+            HStack {
+                Image(systemName: "magnifyingglass").foregroundStyle(HQV5.muted)
+                TextField("指標名・イベント・通貨ペアなどで検索", text: $viewModel.searchText)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white)
+                Spacer()
+            }.padding(11).background(HQV5.panel2, in: Capsule())
 
-                HStack {
-                    Image(systemName: "magnifyingglass").foregroundStyle(FXColor.cyan)
-                    TextField("指標名・イベント・通貨ペアなどで検索", text: $viewModel.searchText).foregroundStyle(.white)
-                }.padding(.horizontal, 15).frame(height: 52).background(FXColor.card).clipShape(RoundedRectangle(cornerRadius: 15))
+            filterChips
 
-                filterChips
-
-                resultsSection
-            }.padding(20).frame(maxWidth: 900)
+            resultsSection
         }
     }
 
     private var filterChips: some View {
-        HStack(spacing: 10) {
+        HStack {
             ForEach(SearchFilter.allCases) { filter in
-                Button {
-                    selectedFilter = filter
-                } label: {
-                    Text(filter.title)
-                        .font(.system(size: 13, weight: .semibold))
-                        .padding(.horizontal, 16).padding(.vertical, 9)
-                        .background(selectedFilter == filter ? FXColor.cyan : FXColor.card)
-                        .foregroundStyle(selectedFilter == filter ? .white : FXColor.secondaryText)
-                        .clipShape(Capsule())
+                Button { selectedFilter = filter } label: {
+                    HQV5Pill(text: filter.title, active: selectedFilter == filter)
                 }.buttonStyle(.plain)
             }
         }
@@ -101,14 +99,12 @@ struct SearchView: View {
             case .loaded(let indicators) where indicators.isEmpty:
                 FXEmptyState(icon: "magnifyingglass", title: "見つかりませんでした", message: "別のキーワードでお試しください。")
             case .loaded(let indicators):
-                LazyVStack(spacing: 10) {
-                    ForEach(indicators) { indicator in
-                        NavigationLink(value: AppRoute.indicatorDetail(id: indicator.id)) {
-                            IndicatorRow(indicator: FXIndicatorUI(indicator: indicator))
-                        }.buttonStyle(.plain).simultaneousGesture(TapGesture().onEnded {
-                            recentSearches = RecentSearchStore.record(indicator.name)
-                        })
-                    }
+                ForEach(indicators) { indicator in
+                    NavigationLink(value: AppRoute.indicatorDetail(id: indicator.id)) {
+                        row(FXIndicatorUI(indicator: indicator))
+                    }.buttonStyle(.plain).simultaneousGesture(TapGesture().onEnded {
+                        recentSearches = RecentSearchStore.record(indicator.name)
+                    })
                 }
             case .error(let message):
                 ErrorView(title: "検索に失敗しました", message: message, onRetry: { viewModel.load() })
@@ -118,23 +114,32 @@ struct SearchView: View {
 
     private var recentSearchesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("最近の検索").font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white)
-            VStack(spacing: 0) {
-                ForEach(Array(recentSearches.enumerated()), id: \.element) { index, term in
-                    Button {
-                        viewModel.searchText = term
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "clock.arrow.circlepath").foregroundStyle(FXColor.red)
-                            Text(term).font(.system(size: 14)).foregroundStyle(.white)
+            Text("最近の検索").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+            ForEach(Array(recentSearches.enumerated()), id: \.element) { index, term in
+                Button { viewModel.searchText = term } label: {
+                    HQV5NeonCard {
+                        HStack {
+                            Circle().fill(HQV5.red).frame(width: 6)
+                            Text(term).font(.system(size: 10, weight: .semibold)).foregroundStyle(.white)
                             Spacer()
-                        }.padding(14).contentShape(Rectangle())
-                    }.buttonStyle(.plain)
-                    if index != recentSearches.count - 1 {
-                        Divider().background(FXColor.border)
+                        }
                     }
+                }.buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder private func row(_ indicator: FXIndicatorUI) -> some View {
+        HQV5NeonCard {
+            HStack {
+                Text(CountryFlag.emoji(for: indicator.country)).font(.title3)
+                VStack(alignment: .leading) {
+                    Text("\(CountryFlag.kanjiAbbreviation(for: indicator.country))) \(indicator.name)").font(.system(size: 10, weight: .semibold)).foregroundStyle(.white)
+                    Text(indicator.code).font(.system(size: 8)).foregroundStyle(HQV5.muted)
                 }
-            }.fxCard(padding: 4)
+                Spacer()
+                HQV5Badge(text: indicator.importance.capitalized, kind: indicator.hqv5Kind)
+            }
         }
     }
 }

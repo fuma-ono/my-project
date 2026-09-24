@@ -4,27 +4,44 @@ import SwiftUI
 /// Forecast/Actual/Previous/Surprise/発表前後価格/pips/%、+必須の
 /// 「指標詳細を見る」→ SCR-003 遷移.
 ///
-/// HQ Frontend integration (2026-09-21): visual content is HQ's
-/// `FXEventAnalyzer_HQFrontend/HistoricalEventDetailView.swift`, driven by
-/// the real `HistoricalEventDetailResponse` in place of HQ's demo
-/// `FXHistoryUI`/`FXRevisionUI`. HQ's "値動き詳細を見る" and "指標詳細を
-/// 見る" links pushed to demo `FXDemo.events[0]`/`FXDemo.indicators[0]` —
-/// both now push the real `AppRoute.movementDetail`/`AppRoute.indicatorDetail`
-/// for this event/indicator, as before integration.
+/// HQ UI Master v5 Frontend integration (2026-09-24): visual content is
+/// HQ's `HQV5Screens.swift` `HQV5HistoricalEventDetailView` (`HQV5TopBar`,
+/// `HQV5NeonCard` header, 発表日時 + 結果/予想/前回 + サプライズ card,
+/// "発表後の相場反応"), reproduced as given. Adaptations, all wiring, not
+/// redesign:
+/// - HQ's hardcoded flag/CPI header → the real `HistoricalEventSummary`
+///   (`indicatorName`/`importance.starDisplay`). This endpoint carries no
+///   country/currency, unlike Indicator/Event Detail, so no flag is shown —
+///   omitted rather than invented, same rule as elsewhere in this
+///   integration.
+/// - HQ's two `HQV5Chart()` price-movement placeholders have no real data
+///   source at this endpoint (`HistoricalReaction` is per-timeframe
+///   pips/%, not a price series) — omitted rather than shown with
+///   fabricated values; the real per-pair, per-timeframe reaction rows
+///   (unchanged since the prior HQ Frontend integration) are kept instead.
+/// - "乖離理由" (explanation) and the "指標詳細を見る" CTA are not visible
+///   in HQ's single screenshot but are existing real functionality — kept,
+///   styled to HQV5's card language.
+/// - `tabSelection`: a real `Binding<Int>` threaded from `MainTabView`.
 struct HistoricalEventDetailView: View {
     @StateObject private var viewModel: HistoricalEventDetailViewModel
+    @Binding var tabSelection: Int
+    @Environment(\.dismiss) private var dismiss
 
-    init(apiClient: APIClient, eventId: String) {
+    init(apiClient: APIClient, eventId: String, tabSelection: Binding<Int>) {
         _viewModel = StateObject(wrappedValue: HistoricalEventDetailViewModel(apiClient: apiClient, eventId: eventId))
+        _tabSelection = tabSelection
     }
 
     var body: some View {
-        ZStack {
-            FXAppBackground()
+        ZStack(alignment: .bottom) {
+            HQV5Background()
             content
+                .safeAreaInset(edge: .bottom) {
+                    HQV5BottomBar(selected: $tabSelection).padding(.horizontal, 10).padding(.bottom, 5)
+                }
         }
-        .navigationTitle("過去のイベント詳細")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .task { viewModel.load() }
     }
 
@@ -40,124 +57,101 @@ struct HistoricalEventDetailView: View {
         case .notEntitled:
             FXEmptyState(icon: "lock.fill", title: "この情報はご利用いただけません", message: "現在のプランでは過去のイベント情報を閲覧できません。")
         case .loaded(let response):
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    header(response.event)
-                    snapshotSection(response.snapshot, event: response.event)
+            HQV5Screen {
+                HQV5TopBar(title: "過去のイベント詳細", onBack: { dismiss() })
 
-                    if let explanation = response.explanation {
-                        explanationSection(explanation)
+                HQV5NeonCard {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(response.event.indicatorName).font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
+                        Text("重要度 \(response.event.importance.starDisplay)").font(.system(size: 9, weight: .bold)).foregroundStyle(HQV5.red)
                     }
+                }
 
-                    reactionsSection(response.relatedFxPairs, event: response.event, indicatorId: response.indicatorId)
+                HStack {
+                    Text("発表日時").font(.system(size: 10)).foregroundStyle(HQV5.muted)
+                    Spacer()
+                    Text(ValueFormat.dateTime(response.event.releaseDatetime)).font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
+                }
 
-                    NavigationLink(value: AppRoute.indicatorDetail(id: response.indicatorId)) {
-                        HStack { Text("指標詳細を見る"); Spacer(); Image(systemName: "arrow.right") }
-                            .foregroundStyle(.white).frame(maxWidth: .infinity).frame(height: 52)
-                            .background(FXGradient.brand).clipShape(RoundedRectangle(cornerRadius: 15))
-                    }.buttonStyle(.plain)
-                }.padding(20).frame(maxWidth: 900)
+                HQV5NeonCard {
+                    if let snapshot = response.snapshot {
+                        VStack(spacing: 10) {
+                            HStack {
+                                HQV5MetricRow(title: "結果", value: ValueFormat.number(snapshot.actual), tint: .white)
+                                HQV5MetricRow(title: "予想", value: ValueFormat.number(snapshot.forecast), tint: .white)
+                                HQV5MetricRow(title: "前回", value: ValueFormat.number(snapshot.previous), tint: .white)
+                            }
+                            if let surprise = snapshot.surprise {
+                                Divider().overlay(Color.white.opacity(0.08))
+                                HStack {
+                                    Text("サプライズ").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                                    Spacer()
+                                    Text(ValueFormat.number(surprise, signed: true)).font(.system(size: 16, weight: .bold)).foregroundStyle(HQV5.red)
+                                }
+                            }
+                        }
+                    } else {
+                        Text("データ未取得").font(.system(size: 10)).foregroundStyle(HQV5.muted)
+                    }
+                }
+
+                if let explanation = response.explanation {
+                    explanationSection(explanation)
+                }
+
+                Text("発表後の相場反応").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                if response.relatedFxPairs.isEmpty {
+                    Text("値動きデータはまだありません。").font(.system(size: 10)).foregroundStyle(HQV5.muted)
+                } else {
+                    ForEach(response.relatedFxPairs) { pair in
+                        NavigationLink(value: AppRoute.movementDetail(
+                            eventId: response.event.id,
+                            indicatorId: response.indicatorId,
+                            fxPairId: pair.fxPairId,
+                            symbol: pair.symbol,
+                            indicatorName: response.event.indicatorName,
+                            releaseDatetime: response.event.releaseDatetime
+                        )) {
+                            HQV5NeonCard {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(pair.symbol).font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
+                                    ForEach(pair.reactions) { reaction in
+                                        HStack {
+                                            Text(reaction.timeframe).font(.system(size: 9)).foregroundStyle(HQV5.muted).frame(width: 32, alignment: .leading)
+                                            Spacer()
+                                            if reaction.analysisStatus == .ready {
+                                                Text("\(ValueFormat.pips(reaction.pips)) (\(ValueFormat.percent(reaction.changePercent, signed: true)))")
+                                                    .font(.system(size: 9)).foregroundStyle(.white)
+                                            } else {
+                                                Text(reaction.analysisStatus.label).font(.system(size: 9)).foregroundStyle(HQV5.muted)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }.buttonStyle(.plain)
+                    }
+                }
+
+                NavigationLink(value: AppRoute.indicatorDetail(id: response.indicatorId)) {
+                    Text("指標詳細を見る")
+                }
+                .buttonStyle(HQV5PrimaryButton())
             }
         case .error(let message):
             ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() })
         }
     }
 
-    private func header(_ event: HistoricalEventSummary) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(event.indicatorName).font(.system(size: 18, weight: .bold, design: .rounded)).foregroundStyle(.white)
-                Text("重要度 \(event.importance.starDisplay)").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
-            }
-            Spacer()
-        }.fxCard()
-    }
-
-    private func snapshotSection(_ snapshot: HistoricalSnapshot?, event: HistoricalEventSummary) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text("発表日時").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
-                Spacer()
-                Text(ValueFormat.dateTime(event.releaseDatetime)).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
-            }
-            if let snapshot {
-                HStack {
-                    HeroMetric(label: "結果", value: ValueFormat.number(snapshot.actual))
-                    HeroMetric(label: "予想", value: ValueFormat.number(snapshot.forecast))
-                    HeroMetric(label: "前回", value: ValueFormat.number(snapshot.previous))
-                }
-                if let surprise = snapshot.surprise {
-                    Divider().background(FXColor.border)
-                    HStack {
-                        Text("サプライズ").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
-                        Spacer()
-                        Text(ValueFormat.number(surprise, signed: true)).font(.system(size: 18, weight: .bold, design: .rounded)).foregroundStyle(FXColor.red)
-                    }
-                }
-            } else {
-                Text("データ未取得").font(.system(size: 14)).foregroundStyle(FXColor.secondaryText)
-            }
-        }.fxCard()
-    }
-
     private func explanationSection(_ explanation: EventExplanationDetail) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            FXSectionHeader(title: "乖離理由")
+        VStack(alignment: .leading, spacing: 8) {
+            Text("乖離理由").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
             if let summary = explanation.summary {
-                Text(summary).font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
+                Text(summary).font(.system(size: 9)).foregroundStyle(HQV5.muted)
             }
             if let source = explanation.source, let urlString = explanation.sourceUrl, let url = URL(string: urlString) {
-                Link(destination: url) {
-                    Text("出典: \(source)").font(.system(size: 12)).foregroundStyle(FXColor.cyan)
-                }
-            }
-        }.fxCard()
-    }
-
-    private func reactionsSection(_ pairs: [HistoricalRelatedFxPair], event: HistoricalEventSummary, indicatorId: String) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            FXSectionHeader(title: "発表後の相場反応")
-            if pairs.isEmpty {
-                Text("値動きデータはまだありません。").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
-            } else {
-                ForEach(pairs) { pair in
-                    NavigationLink(value: AppRoute.movementDetail(
-                        eventId: event.id,
-                        indicatorId: indicatorId,
-                        fxPairId: pair.fxPairId,
-                        symbol: pair.symbol,
-                        indicatorName: event.indicatorName,
-                        releaseDatetime: event.releaseDatetime
-                    )) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(pair.symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
-                            ForEach(pair.reactions) { reaction in
-                                HStack {
-                                    Text(reaction.timeframe).font(.system(size: 11)).foregroundStyle(FXColor.secondaryText).frame(width: 36, alignment: .leading)
-                                    Spacer()
-                                    if reaction.analysisStatus == .ready {
-                                        Text("\(ValueFormat.pips(reaction.pips)) (\(ValueFormat.percent(reaction.changePercent, signed: true)))")
-                                            .font(.system(size: 12)).foregroundStyle(.white)
-                                    } else {
-                                        Text(reaction.analysisStatus.label).font(.system(size: 12)).foregroundStyle(FXColor.secondaryText)
-                                    }
-                                }
-                            }
-                        }.fxCard()
-                    }.buttonStyle(.plain)
-                }
+                Link("出典: \(source)", destination: url).font(.system(size: 9)).foregroundStyle(HQV5.cyan)
             }
         }
-    }
-}
-
-private struct HeroMetric: View {
-    let label: String
-    let value: String
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(label).font(.system(size: 11)).foregroundStyle(FXColor.secondaryText)
-            Text(value).font(.system(size: 19, weight: .bold, design: .rounded)).foregroundStyle(.white)
-        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }

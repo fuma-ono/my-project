@@ -2,21 +2,24 @@ import SwiftUI
 
 /// ui-screens.md §4: main navigation frame.
 ///
-/// HQ Frontend integration (2026-09-21): structure and responsive rule are
-/// HQ's `FXEventAnalyzer_HQFrontend/MainTabView.swift` verbatim — iPhone +
-/// iPad portrait use the bottom `TabView`; iPad landscape (width > height
-/// and width >= 900pt) switches to a collapsible left sidebar with no
-/// bottom tab bar. What changed from HQ's mockup is wiring only: HQ's
-/// `HomeView()`/`IndicatorsView()`/`SearchView()`/`SettingsView()` took no
-/// arguments; the real screens need `apiClient`/`authService`/`onSignOut`
-/// and (Home/Indicators) a per-tab `NavigationPath`, so `contentFor(_:)`
-/// supplies those — same as the pre-integration `MainTabView` did.
+/// HQ UI Master v5 Frontend integration (2026-09-24): HQ's screens
+/// (`HQV5Screens.swift`) each render their own floating `HQV5BottomBar`
+/// inline (see `HQV5HomeView` etc.), unlike the pre-integration mockup
+/// which relied on a native `TabView` tab bar. Keeping the system
+/// `TabView` here would draw two tab bars at once, so portrait mode is now
+/// a plain switch over a real `tabSelection: Int` (matching
+/// `HQV5BottomBar`'s 0-3 index order, the same wiring HQ's own
+/// `HQV5RootView` demo uses) — each screen owns its own `NavigationStack`
+/// and floating bottom bar; `MainTabView` only picks which one is visible.
+/// iPad landscape's collapsible left sidebar predates the v5 UI package
+/// (not one of HQ's 12 screens) and is kept as-is, now driven by the same
+/// `tabSelection` state instead of a separate `FXTab` selection.
 struct MainTabView: View {
     let apiClient: APIClient
     let authService: AuthServicing
     let onSignOut: () -> Void
 
-    @State private var selected: FXTab = .home
+    @State private var tabSelection = 0
     @State private var collapsed = false
     @State private var homePath = NavigationPath()
     @State private var indicatorsPath = NavigationPath()
@@ -31,23 +34,13 @@ struct MainTabView: View {
     }
 
     @ViewBuilder
-    private func contentFor(_ tab: FXTab) -> some View {
-        switch tab {
-        case .home: HomeView(apiClient: apiClient, path: $homePath)
-        case .indicators: IndicatorsView(apiClient: apiClient, path: $indicatorsPath)
-        case .search: SearchView(apiClient: apiClient)
-        case .settings: SettingsView(apiClient: apiClient, authService: authService, onSignOut: onSignOut)
-        }
-    }
-
     private var portraitLayout: some View {
-        TabView(selection: $selected) {
-            ForEach(FXTab.allCases) { tab in
-                contentFor(tab)
-                    .tabItem { Label(tab.title, systemImage: tab.icon) }
-                    .tag(tab)
-            }
-        }.tint(FXColor.cyan)
+        switch tabSelection {
+        case 0: HomeView(apiClient: apiClient, path: $homePath, tabSelection: $tabSelection)
+        case 1: IndicatorsView(apiClient: apiClient, path: $indicatorsPath, tabSelection: $tabSelection)
+        case 2: SearchView(apiClient: apiClient, tabSelection: $tabSelection)
+        default: SettingsView(apiClient: apiClient, authService: authService, onSignOut: onSignOut, tabSelection: $tabSelection)
+        }
     }
 
     private var landscapeLayout: some View {
@@ -63,15 +56,15 @@ struct MainTabView: View {
                     }
                 }.padding(.horizontal, 14).padding(.top, 12)
                 ForEach(FXTab.allCases) { tab in
-                    Button { selected = tab } label: {
+                    Button { tabSelection = tab.index } label: {
                         HStack {
                             Image(systemName: tab.icon).frame(width: 22)
                             if !collapsed { Text(tab.title) }
                             Spacer()
                         }
                         .padding(.horizontal, 14).frame(height: 48)
-                        .foregroundStyle(selected == tab ? FXColor.cyan : FXColor.secondaryText)
-                        .background(selected == tab ? FXColor.cyan.opacity(0.10) : .clear)
+                        .foregroundStyle(tabSelection == tab.index ? FXColor.cyan : FXColor.secondaryText)
+                        .background(tabSelection == tab.index ? FXColor.cyan.opacity(0.10) : .clear)
                         .clipShape(RoundedRectangle(cornerRadius: 13))
                     }.buttonStyle(.plain)
                 }
@@ -81,7 +74,7 @@ struct MainTabView: View {
             .background(FXColor.backgroundElevated.opacity(0.86))
             .overlay(alignment: .trailing) { Rectangle().fill(FXColor.border).frame(width: 1) }
 
-            contentFor(selected).frame(maxWidth: .infinity, maxHeight: .infinity)
+            portraitLayout.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
@@ -89,6 +82,9 @@ struct MainTabView: View {
 enum FXTab: String, CaseIterable, Identifiable {
     case home, indicators, search, settings
     var id: String { rawValue }
+
+    /// Matches `HQV5BottomBar`'s fixed 0-3 tab order.
+    var index: Int { Self.allCases.firstIndex(of: self) ?? 0 }
 
     var title: String {
         switch self {

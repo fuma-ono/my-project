@@ -2,28 +2,21 @@ import SwiftUI
 
 /// SCR-010 Login (ui-screens.md).
 ///
-/// HQ Frontend integration (2026-09-21): visual content is HQ's
-/// `FXEventAnalyzer_HQFrontend/LoginView.swift` (brand mark, card-framed
-/// fields, gradient CTA). Two adaptations from HQ's standalone mockup, both
-/// wiring, not redesign:
+/// HQ UI Master v5 Frontend integration (2026-09-24): visual content is
+/// HQ's `HQV5Screens.swift` `HQV5LoginView` (icon, wordmark,
+/// `HQV5NeonCard`-framed fields, `HQV5PrimaryButton` CTA), reproduced as
+/// given. Adaptations, all wiring, not redesign:
 /// - HQ's fields are local `@State`; here they bind to the real
 ///   `LoginViewModel`'s `$email`/`$password`, and the button calls
-///   `viewModel.submit()` instead of an `onLogin` callback, since Auth must
-///   stay wired exactly as before (`RootView` still constructs this the
-///   same way).
-/// - HQ's "パスワードを忘れた" opens a `PasswordResetView` sheet whose only
-///   action button does nothing (`Button("再設定メールを送る") {}` in the
-///   HQ file) — no password-reset API exists to wire it to, and shipping a
-///   dead-end sheet would be worse than the existing "準備中" alert this
-///   screen already used, so that existing alert-based behavior is kept
-///   for both Password Reset and Sign Up, in HQ's own text styling.
-///
-/// HQ UI Master v5 integration (2026-09-22): reproduces
-/// `Assets/Reference/SCR-010.png` — brand mark + "FX Event Analyzer"
-/// wordmark directly followed by the form fields, with no "Welcome back"
-/// heading/tagline (dropped, since the reference doesn't show one) and a
-/// reveal-password eye toggle on the password field in place of the fixed
-/// lock icon.
+///   `viewModel.submit()` instead of doing nothing, since Auth must stay
+///   wired exactly as before (`RootView` still constructs this the same
+///   way).
+/// - HQ's "パスワードを忘れた"/"新規登録" buttons do nothing — no
+///   password-reset or sign-up API exists to wire them to, so they keep
+///   the existing "準備中" alert this screen already used.
+/// - `sessionExpired`/`viewModel.state == .error` (not present in HQ's
+///   file, which has no such states) keep their existing banner/message
+///   treatment so those real states aren't silently dropped.
 struct LoginView: View {
     @StateObject private var viewModel: LoginViewModel
     let sessionExpired: Bool
@@ -36,80 +29,64 @@ struct LoginView: View {
 
     var body: some View {
         ZStack {
-            FXAppBackground()
-            ScrollView {
-                VStack(spacing: 28) {
-                    Spacer(minLength: 38)
-                    VStack(spacing: 14) {
-                        ZStack {
-                            Circle().fill(FXColor.cyan.opacity(0.08)).frame(width: 120, height: 120).blur(radius: 20)
-                            Image(systemName: "chart.line.uptrend.xyaxis")
-                                .font(.system(size: 46, weight: .bold))
-                                .foregroundStyle(FXGradient.brand)
-                                .shadow(color: FXColor.cyan.opacity(0.6), radius: 16)
-                        }
-                        Text("FX Event Analyzer").font(.system(size: 26, weight: .bold, design: .rounded)).foregroundStyle(.white)
-                    }
+            HQV5Background()
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 55)
+                    Image(systemName: "chart.line.uptrend.xyaxis").font(.system(size: 48, weight: .bold))
+                        .foregroundStyle(LinearGradient(colors: [HQV5.blue, HQV5.cyan], startPoint: .bottomLeading, endPoint: .topTrailing))
+                        .padding(.bottom, 8)
+                    Text("FX Event Analyzer").font(.system(size: 22, weight: .medium)).foregroundStyle(.white)
 
                     if sessionExpired {
-                        sessionExpiredBanner
+                        sessionExpiredBanner.padding(.top, 20)
                     }
 
-                    VStack(spacing: 14) {
-                        FXTextField(title: "メールアドレス", text: $viewModel.email, icon: "envelope", keyboard: .emailAddress)
-                        FXSecureField(title: "パスワード", text: $viewModel.password)
+                    HQV5NeonCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("メールアドレス").font(.system(size: 9)).foregroundStyle(HQV5.muted)
+                            TextField("example@domain.com", text: $viewModel.email)
+                                .textInputAutocapitalization(.never)
+                                .keyboardType(.emailAddress)
+                                .padding(10).background(HQV5.panel, in: Capsule()).foregroundStyle(.white)
+                            Text("パスワード").font(.system(size: 9)).foregroundStyle(HQV5.muted)
+                            SecureField("パスワードを入力", text: $viewModel.password)
+                                .padding(10).background(HQV5.panel, in: Capsule()).foregroundStyle(.white)
 
-                        if case .error(let message) = viewModel.state {
-                            Text(message)
-                                .font(.system(size: 12))
-                                .foregroundStyle(FXColor.red)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                            if case .error(let message) = viewModel.state {
+                                Text(message)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(HQV5.red)
+                            }
 
-                        HStack {
-                            Spacer()
-                            Button("パスワードを忘れた") {
-                                pendingFeatureMessage = "パスワードリセットは準備中です。もうしばらくお待ちください。"
-                            }.font(.system(size: 12, weight: .semibold)).foregroundStyle(FXColor.cyan)
-                        }
-
-                        Button {
-                            viewModel.submit()
-                        } label: {
-                            Group {
+                            Button {
+                                viewModel.submit()
+                            } label: {
                                 if viewModel.state == .submitting {
                                     ProgressView().tint(.white)
                                 } else {
                                     Text("ログイン")
                                 }
                             }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 54)
+                            .buttonStyle(HQV5PrimaryButton())
+                            .disabled(!viewModel.canSubmit)
+                            .opacity(viewModel.canSubmit ? 1 : 0.5)
+
+                            Button("パスワードをお忘れの方") {
+                                pendingFeatureMessage = "パスワードリセットは準備中です。もうしばらくお待ちください。"
+                            }.font(.system(size: 10, weight: .semibold)).foregroundStyle(HQV5.cyan).frame(maxWidth: .infinity)
+
+                            Text("アカウントをお持ちでない方").font(.system(size: 9)).foregroundStyle(HQV5.muted).frame(maxWidth: .infinity)
+
+                            Button("新規登録") {
+                                pendingFeatureMessage = "新規登録は準備中です。もうしばらくお待ちください。"
+                            }.font(.system(size: 11, weight: .bold)).foregroundStyle(HQV5.cyan).frame(maxWidth: .infinity)
                         }
-                        .background(FXGradient.brand)
-                        .foregroundStyle(.white)
-                        .font(.system(size: 16, weight: .bold))
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .shadow(color: FXColor.cyan.opacity(0.2), radius: 16)
-                        .buttonStyle(.plain)
-                        .disabled(!viewModel.canSubmit)
-                        .opacity(viewModel.canSubmit ? 1 : 0.5)
-                    }.frame(maxWidth: 460).padding(20).fxCard()
-
-                    HStack {
-                        Rectangle().fill(FXColor.border).frame(height: 1)
-                        Text("or").font(.system(size: 12)).foregroundStyle(FXColor.tertiaryText)
-                        Rectangle().fill(FXColor.border).frame(height: 1)
-                    }.frame(maxWidth: 460)
-
-                    Button {
-                        pendingFeatureMessage = "新規登録は準備中です。もうしばらくお待ちください。"
-                    } label: {
-                        Text("アカウントを作成").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white).frame(maxWidth: 460).frame(height: 50).background(FXColor.card).clipShape(RoundedRectangle(cornerRadius: 15)).overlay(RoundedRectangle(cornerRadius: 15).stroke(FXColor.border))
-                    }.buttonStyle(.plain)
-
+                    }
+                    .padding(.top, 26)
                     Spacer(minLength: 30)
-                }.padding(.horizontal, 20)
+                }
+                .padding(.horizontal, 18)
             }
         }
         .preferredColorScheme(.dark)
@@ -134,53 +111,12 @@ struct LoginView: View {
                 .foregroundStyle(.white)
             Text("再度ログインしてください")
                 .font(.system(size: 12))
-                .foregroundStyle(FXColor.secondaryText)
+                .foregroundStyle(HQV5.muted)
         }
         .padding(14)
         .frame(maxWidth: .infinity)
-        .background(FXColor.red.opacity(0.12))
+        .background(HQV5.red.opacity(0.12))
         .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(FXColor.red.opacity(0.25)))
-    }
-}
-
-struct FXTextField: View {
-    let title: String
-    @Binding var text: String
-    let icon: String
-    var keyboard: UIKeyboardType = .default
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(FXColor.secondaryText)
-            HStack {
-                Image(systemName: icon).foregroundStyle(FXColor.cyan)
-                TextField(title, text: $text).keyboardType(keyboard).textInputAutocapitalization(.never).foregroundStyle(.white)
-            }.padding(.horizontal, 14).frame(height: 50).background(FXColor.backgroundElevated).clipShape(RoundedRectangle(cornerRadius: 13))
-        }
-    }
-}
-
-struct FXSecureField: View {
-    let title: String
-    @Binding var text: String
-    @State private var isRevealed = false
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(FXColor.secondaryText)
-            HStack {
-                Group {
-                    if isRevealed {
-                        TextField(title, text: $text).textInputAutocapitalization(.never)
-                    } else {
-                        SecureField(title, text: $text)
-                    }
-                }.foregroundStyle(.white)
-                Button {
-                    isRevealed.toggle()
-                } label: {
-                    Image(systemName: isRevealed ? "eye.slash" : "eye").foregroundStyle(FXColor.cyan)
-                }
-            }.padding(.horizontal, 14).frame(height: 50).background(FXColor.backgroundElevated).clipShape(RoundedRectangle(cornerRadius: 13))
-        }
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(HQV5.red.opacity(0.25)))
     }
 }

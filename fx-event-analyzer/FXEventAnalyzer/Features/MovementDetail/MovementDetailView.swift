@@ -5,20 +5,29 @@ import SwiftUI
 /// the Reaction figures (fetched once, every timeframe) and the Chart
 /// (re-fetched per timeframe).
 ///
-/// HQ Frontend integration (2026-09-21): visual content — segmented picker,
-/// elevated chart card, metric tiles — is HQ's
-/// `FXEventAnalyzer_HQFrontend/MovementDetailView.swift`, including its
-/// `FXPriceChart` component (`FXComponents.swift`) fed real
-/// `ChartResponse.prices` mapped into `ChartPoint`, with `releaseIndex`
-/// computed from the real `releaseDatetime` rather than HQ's fixed demo
-/// index. Reaction figures use HQ's `FXMetricTile` with the real selected
-/// timeframe's `ReactionTimeframeEntry`, and the loading/empty/error states
-/// HQ's mockup didn't cover (chart not yet available, entitlement, 404) are
-/// kept via the existing components.
+/// HQ UI Master v5 Frontend integration (2026-09-24): visual content is
+/// HQ's `HQV5Screens.swift` `HQV5MovementDetailView` (`HQV5TopBar`,
+/// timeframe pill row, chart card, 発表前/発表後/変動幅 metric card, "主要
+/// 指標" metric card), reproduced as given, with one necessary substitution:
+/// HQ's `HQV5Chart()` here is a fixed decorative line with no real data
+/// binding — the real price series (`FXPriceChart` fed
+/// `ChartResponse.prices`, unchanged since the prior HQ Frontend
+/// integration) is kept in its place instead of a fabricated-looking chart,
+/// same "never show real screens with invented data" rule already applied
+/// throughout this integration. Other adaptations, all wiring:
+/// - The pill row is a real `Picker`-equivalent over `ReactionTimeframe.all`
+///   bound to `viewModel.selectedTimeframe`, not HQ's hardcoded 5 pills.
+/// - 発表前/発表後/変動幅/最大上昇幅/最大下落幅 use the real
+///   `ReactionTimeframeEntry` for the selected timeframe; HQ's demo third
+///   "平均変動幅" tile has no backing field and is omitted rather than
+///   invented.
+/// - `tabSelection`: a real `Binding<Int>` threaded from `MainTabView`.
 struct MovementDetailView: View {
     @StateObject private var viewModel: MovementDetailViewModel
+    @Binding var tabSelection: Int
+    @Environment(\.dismiss) private var dismiss
 
-    init(apiClient: APIClient, eventId: String, indicatorId: String, fxPairId: String, symbol: String, indicatorName: String, releaseDatetime: Date) {
+    init(apiClient: APIClient, eventId: String, indicatorId: String, fxPairId: String, symbol: String, indicatorName: String, releaseDatetime: Date, tabSelection: Binding<Int>) {
         _viewModel = StateObject(wrappedValue: MovementDetailViewModel(
             apiClient: apiClient,
             eventId: eventId,
@@ -28,15 +37,18 @@ struct MovementDetailView: View {
             indicatorName: indicatorName,
             releaseDatetime: releaseDatetime
         ))
+        _tabSelection = tabSelection
     }
 
     var body: some View {
-        ZStack {
-            FXAppBackground()
+        ZStack(alignment: .bottom) {
+            HQV5Background()
             content
+                .safeAreaInset(edge: .bottom) {
+                    HQV5BottomBar(selected: $tabSelection).padding(.horizontal, 10).padding(.bottom, 5)
+                }
         }
-        .navigationTitle("変動詳細")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .task { viewModel.load() }
     }
 
@@ -52,84 +64,73 @@ struct MovementDetailView: View {
         case .notEntitled:
             FXEmptyState(icon: "lock.fill", title: "この情報はご利用いただけません", message: "現在のプランでは値動き情報を閲覧できません。")
         case .loaded(let preReleasePrice, let reactions):
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    header
-                    timeframePicker
-                    chartSection
-                    reactionTiles(preReleasePrice: preReleasePrice, reactions: reactions)
-                    historicalComparisonLink
-                }.padding(20).frame(maxWidth: 1000)
+            HQV5Screen {
+                HQV5TopBar(title: "変動詳細", onBack: { dismiss() })
+
+                HStack {
+                    HQV5Pill(text: viewModel.selectedTimeframe, active: true)
+                    Text(viewModel.symbol).font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
+                    Spacer()
+                }.padding(8).background(HQV5.panel2, in: Capsule())
+
+                HStack {
+                    ForEach(ReactionTimeframe.all, id: \.self) { timeframe in
+                        Button { viewModel.selectedTimeframe = timeframe } label: {
+                            HQV5Pill(text: timeframe, active: timeframe == viewModel.selectedTimeframe)
+                        }.buttonStyle(.plain)
+                    }
+                }
+
+                chartSection
+
+                reactionTiles(preReleasePrice: preReleasePrice, reactions: reactions)
+
+                historicalComparisonLink
             }
         case .error(let message):
             ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() })
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 10) {
-            Text(viewModel.selectedTimeframe)
-                .font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .background(FXColor.cyan).clipShape(Capsule())
-            Text(viewModel.symbol).font(.system(size: 18, weight: .bold, design: .rounded)).foregroundStyle(.white)
-            Spacer()
-        }.fxCard(padding: 14)
-    }
-
-    private var timeframePicker: some View {
-        Picker("Timeframe", selection: $viewModel.selectedTimeframe) {
-            ForEach(ReactionTimeframe.all, id: \.self) { Text($0).tag($0) }
-        }.pickerStyle(.segmented)
-    }
-
     @ViewBuilder
     private var chartSection: some View {
         switch viewModel.chartState {
         case .loading:
-            LoadingView(caption: "チャートを読み込み中...").frame(height: 220)
+            LoadingView(caption: "チャートを読み込み中...").frame(height: 190)
         case .empty:
-            FXEmptyState(icon: "chart.xyaxis.line", title: "チャートデータがありません", message: "この時間軸のチャートデータはまだ取得されていません。").frame(height: 220)
+            FXEmptyState(icon: "chart.xyaxis.line", title: "チャートデータがありません", message: "この時間軸のチャートデータはまだ取得されていません。").frame(height: 190)
         case .error(let message):
-            ErrorView(title: "チャート取得に失敗しました", message: message, onRetry: { viewModel.retryChart() }).frame(height: 220)
+            ErrorView(title: "チャート取得に失敗しました", message: message, onRetry: { viewModel.retryChart() }).frame(height: 190)
         case .loaded(let chart):
-            FXPriceChart(points: mappedPoints(chart), releaseIndex: releaseIndex(chart)).frame(height: 280).fxCard(padding: 10)
+            FXPriceChart(points: mappedPoints(chart), releaseIndex: releaseIndex(chart)).frame(height: 190)
         }
     }
 
     private func reactionTiles(preReleasePrice: Double?, reactions: [ReactionTimeframeEntry]) -> some View {
         let selected = reactions.first(where: { $0.timeframe == viewModel.selectedTimeframe })
-        return VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("発表前後の変動").font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white)
+        return VStack(alignment: .leading, spacing: 12) {
+            HQV5NeonCard {
                 HStack {
-                    metric(title: "発表前", value: ValueFormat.number(preReleasePrice, fractionDigits: 3))
+                    HQV5MetricRow(title: "発表前", value: ValueFormat.number(preReleasePrice, fractionDigits: 3), tint: .white)
                     if let selected, selected.analysisStatus == .ready {
-                        metric(title: "発表後", value: ValueFormat.number(selected.postReleasePrice, fractionDigits: 3))
-                        metric(title: "変動幅", value: ValueFormat.number(selected.movement, fractionDigits: 3, signed: true), tint: (selected.movement ?? 0) >= 0 ? FXColor.green : FXColor.red)
+                        HQV5MetricRow(title: "発表後", value: ValueFormat.number(selected.postReleasePrice, fractionDigits: 3), tint: .white)
+                        HQV5MetricRow(title: "変動幅", value: ValueFormat.number(selected.movement, fractionDigits: 3, signed: true), tint: (selected.movement ?? 0) >= 0 ? HQV5.green : HQV5.red)
                     } else {
-                        metric(title: "発表後", value: selected?.analysisStatus.label ?? "--")
+                        HQV5MetricRow(title: "発表後", value: selected?.analysisStatus.label ?? "--", tint: .white)
                     }
                 }
-            }.fxCard()
+            }
 
             if let selected, selected.analysisStatus == .ready {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("主要指標").font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white)
+                Text("主要指標").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                HQV5NeonCard {
                     HStack {
-                        metric(title: "最大上昇幅", value: ValueFormat.number(selected.maxUpward, fractionDigits: 3, signed: true), tint: FXColor.green)
-                        metric(title: "最大下落幅", value: ValueFormat.number(selected.maxDownward, fractionDigits: 3, signed: true), tint: FXColor.red)
+                        HQV5MetricRow(title: "最大上昇幅", value: ValueFormat.number(selected.maxUpward, fractionDigits: 3, signed: true), tint: HQV5.green)
+                        HQV5MetricRow(title: "最大下落幅", value: ValueFormat.number(selected.maxDownward, fractionDigits: 3, signed: true), tint: HQV5.red)
                     }
-                }.fxCard()
+                }
             }
         }
-    }
-
-    private func metric(title: String, value: String, tint: Color = .white) -> some View {
-        VStack(spacing: 4) {
-            Text(title).font(.system(size: 11)).foregroundStyle(FXColor.secondaryText)
-            Text(value).font(.system(size: 17, weight: .bold, design: .rounded)).foregroundStyle(tint)
-        }.frame(maxWidth: .infinity)
     }
 
     private var historicalComparisonLink: some View {
@@ -139,9 +140,14 @@ struct MovementDetailView: View {
             fxPairId: viewModel.fxPairId,
             fxPairSymbol: viewModel.symbol
         )) {
-            HStack { Text("過去の値動きと比較する"); Spacer(); Image(systemName: "arrow.right") }
-                .foregroundStyle(.white).frame(maxWidth: .infinity).frame(height: 52)
-                .background(FXColor.card).clipShape(RoundedRectangle(cornerRadius: 15)).overlay(RoundedRectangle(cornerRadius: 15).stroke(FXColor.border))
+            HQV5NeonCard {
+                HStack {
+                    Image(systemName: "chart.bar.xaxis").foregroundStyle(HQV5.cyan)
+                    Text("過去の値動きと比較する").font(.system(size: 11, weight: .semibold)).foregroundStyle(.white)
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(HQV5.muted)
+                }
+            }
         }.buttonStyle(.plain)
     }
 

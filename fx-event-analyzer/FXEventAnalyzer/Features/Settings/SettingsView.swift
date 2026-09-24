@@ -1,87 +1,51 @@
 import SwiftUI
 
 /// SCR-009 Settings (Phase 5 §2 minimum scope) — a real ログアウト導線,
-/// plus (this integration) the real navigation to SCR-011 Account.
+/// plus the real navigation to SCR-011 Account.
 ///
-/// HQ UI Master v5 integration (2026-09-22): reproduces
-/// `Assets/Reference/SCR-009.png` — "設定" title (no brand mark), two
-/// grouped row cards (通知設定/表示設定/データ取得設定/アカウント設定, then
-/// ヘルプ・サポート/利用規約/プライバシーポリシー), then a standalone
-/// red-bordered "ログアウト" card. Only "アカウント設定" has a real
-/// destination (`AppRoute.account`, routed to the real `AccountView` via
-/// the override below); the rest have no backing ViewModel/API (no
-/// notification/display/data-fetch settings service, no help/terms/privacy
-/// content endpoint exists), so they use the "準備中" alert Login already
-/// established for its own non-functional rows, rather than inventing
-/// screens or content for them.
+/// HQ UI Master v5 Frontend integration (2026-09-24): visual content is
+/// HQ's `HQV5Screens.swift` `HQV5SettingsView` (grouped `HQV5NeonCard` rows,
+/// a red-bordered "ログアウト" row, `HQV5BottomBar`), reproduced as given.
+/// Only "アカウント設定" has a real destination (`AppRoute.account`); the
+/// rest have no backing ViewModel/API (no notification/display/data-fetch
+/// settings service, no help/terms/privacy content endpoint), so they use
+/// the "準備中" alert Login already established for its own non-functional
+/// rows, rather than inventing screens or content. `tabSelection` is a real
+/// `Binding<Int>` threaded from `MainTabView`, and — same as before this
+/// round — this tab's own `.navigationDestination` intercepts
+/// `AppRoute.account` to supply `authService`/`onSignOut`, since the shared
+/// `AppRouteDestinationView` only carries `apiClient`.
 struct SettingsView: View {
     @StateObject private var viewModel: SettingsViewModel
     private let apiClient: APIClient
     private let authService: AuthServicing
     private let onSignOut: () -> Void
     @State private var pendingFeatureMessage: String?
+    @Binding var tabSelection: Int
 
-    init(apiClient: APIClient, authService: AuthServicing, onSignOut: @escaping () -> Void) {
+    init(apiClient: APIClient, authService: AuthServicing, onSignOut: @escaping () -> Void, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
         self.authService = authService
         self.onSignOut = onSignOut
         _viewModel = StateObject(wrappedValue: SettingsViewModel(authService: authService, onSignOut: onSignOut))
+        _tabSelection = tabSelection
     }
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                FXAppBackground()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        Text("設定").font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(.white)
-
-                        VStack(spacing: 0) {
-                            settingRow("bell", "通知設定") {
-                                pendingFeatureMessage = "通知設定は準備中です。もうしばらくお待ちください。"
-                            }
-                            Divider().background(FXColor.border)
-                            settingRow("gearshape", "表示設定") {
-                                pendingFeatureMessage = "表示設定は準備中です。もうしばらくお待ちください。"
-                            }
-                            Divider().background(FXColor.border)
-                            settingRow("calendar", "データ取得設定") {
-                                pendingFeatureMessage = "データ取得設定は準備中です。もうしばらくお待ちください。"
-                            }
-                            Divider().background(FXColor.border)
-                            NavigationLink(value: AppRoute.account) {
-                                settingRowLabel("person", "アカウント設定")
-                            }
-                        }.fxCard(padding: 4)
-
-                        VStack(spacing: 0) {
-                            settingRow("questionmark.circle", "ヘルプ・サポート") {
-                                pendingFeatureMessage = "ヘルプ・サポートは準備中です。もうしばらくお待ちください。"
-                            }
-                            Divider().background(FXColor.border)
-                            settingRow("calendar", "利用規約") {
-                                pendingFeatureMessage = "利用規約は準備中です。もうしばらくお待ちください。"
-                            }
-                            Divider().background(FXColor.border)
-                            settingRow("checkmark.shield", "プライバシーポリシー") {
-                                pendingFeatureMessage = "プライバシーポリシーは準備中です。もうしばらくお待ちください。"
-                            }
-                        }.fxCard(padding: 4)
-
-                        if case .error(let message) = viewModel.state {
-                            Text(message).font(.system(size: 12)).foregroundStyle(FXColor.red).multilineTextAlignment(.leading)
-                        }
-
-                        signOutButton
-                    }.padding(20).frame(maxWidth: 800)
-                }
+            ZStack(alignment: .bottom) {
+                HQV5Background()
+                content
+                    .safeAreaInset(edge: .bottom) {
+                        HQV5BottomBar(selected: $tabSelection).padding(.horizontal, 10).padding(.bottom, 5)
+                    }
             }
-            .navigationTitle("設定")
+            .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: AppRoute.self) { route in
                 if route == .account {
-                    AccountView(apiClient: apiClient, authService: authService, onSignOut: onSignOut)
+                    AccountView(apiClient: apiClient, authService: authService, onSignOut: onSignOut, tabSelection: $tabSelection)
                 } else {
-                    AppRouteDestinationView(route: route, apiClient: apiClient)
+                    AppRouteDestinationView(route: route, apiClient: apiClient, tabSelection: $tabSelection)
                 }
             }
         }
@@ -99,23 +63,60 @@ struct SettingsView: View {
         }
     }
 
+    @ViewBuilder
+    private var content: some View {
+        HQV5Screen(title: "設定") {
+            settingRow("bell", "通知設定") {
+                pendingFeatureMessage = "通知設定は準備中です。もうしばらくお待ちください。"
+            }
+            settingRow("gearshape", "表示設定") {
+                pendingFeatureMessage = "表示設定は準備中です。もうしばらくお待ちください。"
+            }
+            settingRow("calendar", "データ取得設定") {
+                pendingFeatureMessage = "データ取得設定は準備中です。もうしばらくお待ちください。"
+            }
+            NavigationLink(value: AppRoute.account) {
+                settingRowLabel("person", "アカウント設定")
+            }.buttonStyle(.plain)
+
+            settingRow("questionmark.circle", "ヘルプ・サポート") {
+                pendingFeatureMessage = "ヘルプ・サポートは準備中です。もうしばらくお待ちください。"
+            }
+            settingRow("doc.text", "利用規約") {
+                pendingFeatureMessage = "利用規約は準備中です。もうしばらくお待ちください。"
+            }
+            settingRow("checkmark.shield", "プライバシーポリシー") {
+                pendingFeatureMessage = "プライバシーポリシーは準備中です。もうしばらくお待ちください。"
+            }
+
+            if case .error(let message) = viewModel.state {
+                Text(message).font(.system(size: 10)).foregroundStyle(HQV5.red).multilineTextAlignment(.leading)
+            }
+
+            signOutButton
+        }
+    }
+
     private var signOutButton: some View {
         Button {
             viewModel.signOut()
         } label: {
-            Group {
-                if viewModel.state == .signingOut {
-                    ProgressView().tint(.white)
-                } else {
-                    Text("ログアウト")
+            HStack {
+                Image(systemName: "rectangle.portrait.and.arrow.right")
+                Group {
+                    if viewModel.state == .signingOut {
+                        ProgressView().tint(HQV5.red)
+                    } else {
+                        Text("ログアウト").font(.system(size: 11, weight: .bold))
+                    }
                 }
-            }.frame(maxWidth: .infinity).frame(height: 52)
+                Spacer()
+            }
+            .foregroundStyle(HQV5.red)
+            .padding(12)
+            .background(HQV5.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(HQV5.red, lineWidth: 1))
         }
-        .background(FXColor.red.opacity(0.08))
-        .foregroundStyle(FXColor.red)
-        .font(.system(size: 15, weight: .bold))
-        .clipShape(RoundedRectangle(cornerRadius: 15))
-        .overlay(RoundedRectangle(cornerRadius: 15).stroke(FXColor.red.opacity(0.2)))
         .buttonStyle(.plain)
         .disabled(viewModel.state == .signingOut)
     }
@@ -127,11 +128,13 @@ struct SettingsView: View {
     }
 
     private func settingRowLabel(_ icon: String, _ title: String) -> some View {
-        HStack(spacing: 13) {
-            Image(systemName: icon).foregroundStyle(.white).frame(width: 24)
-            Text(title).foregroundStyle(.white).font(.system(size: 15))
-            Spacer()
-            Image(systemName: "chevron.right").foregroundStyle(FXColor.tertiaryText)
-        }.padding(14).contentShape(Rectangle())
+        HQV5NeonCard {
+            HStack {
+                Image(systemName: icon).foregroundStyle(.white)
+                Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.white)
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(HQV5.muted)
+            }
+        }
     }
 }

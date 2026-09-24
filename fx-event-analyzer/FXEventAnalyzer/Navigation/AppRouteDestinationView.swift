@@ -7,15 +7,16 @@ import SwiftUI
 struct AppRouteDestinationView: View {
     let route: AppRoute
     let apiClient: APIClient
+    @Binding var tabSelection: Int
 
     var body: some View {
         switch route {
         case .indicatorDetail(let id):
-            IndicatorDetailView(apiClient: apiClient, indicatorId: id)
+            IndicatorDetailView(apiClient: apiClient, indicatorId: id, tabSelection: $tabSelection)
         case .eventDetail(let id):
-            EventDetailView(apiClient: apiClient, eventId: id)
+            EventDetailView(apiClient: apiClient, eventId: id, tabSelection: $tabSelection)
         case .historicalEventDetail(let id):
-            HistoricalEventDetailView(apiClient: apiClient, eventId: id)
+            HistoricalEventDetailView(apiClient: apiClient, eventId: id, tabSelection: $tabSelection)
         case .movementDetail(let eventId, let indicatorId, let fxPairId, let symbol, let indicatorName, let releaseDatetime):
             MovementDetailView(
                 apiClient: apiClient,
@@ -24,7 +25,8 @@ struct AppRouteDestinationView: View {
                 fxPairId: fxPairId,
                 symbol: symbol,
                 indicatorName: indicatorName,
-                releaseDatetime: releaseDatetime
+                releaseDatetime: releaseDatetime,
+                tabSelection: $tabSelection
             )
         case .historicalComparison(let indicatorId, let indicatorName, let fxPairId, let fxPairSymbol):
             HistoricalComparisonView(
@@ -32,10 +34,11 @@ struct AppRouteDestinationView: View {
                 indicatorId: indicatorId,
                 indicatorName: indicatorName,
                 fxPairId: fxPairId,
-                fxPairSymbol: fxPairSymbol
+                fxPairSymbol: fxPairSymbol,
+                tabSelection: $tabSelection
             )
         case .account:
-            AccountView(apiClient: apiClient)
+            AccountView(apiClient: apiClient, tabSelection: $tabSelection)
         }
     }
 }

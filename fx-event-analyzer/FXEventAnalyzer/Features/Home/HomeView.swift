@@ -3,39 +3,48 @@ import SwiftUI
 /// SCR-001 Home (ui-screens.md §5). Real `GET /home` data — SCHEDULED /
 /// RELEASED events, each tappable to SCR-004 Event Detail.
 ///
-/// HQ UI Master v5 integration (2026-09-22): visual content — the
-/// "Upcoming Events" hero card (the single next SCHEDULED event) and the
-/// separate "Recent Events" list card below it — reproduces
-/// `Assets/Reference/SCR-001.png` exactly, per HQ's explicit instruction
-/// that this reference is final and not to be redesigned. The only
-/// adaptation: `HomeViewModel`'s `upcomingEvents`/`recentEvents` already
-/// split events by status — "Upcoming Events" shows the soonest upcoming
-/// one as the hero, "Recent Events" shows every other event today (the
-/// rest of upcoming + all released), so no event the API returns is
-/// dropped from the screen just because the reference mockup only showed
-/// one example row under "Upcoming Events". The major-FX-pairs card
-/// (existing `GET /home` data, not visible in the reference's single
-/// screenshot viewport) is kept below, so that existing data isn't lost.
+/// HQ UI Master v5 Frontend integration (2026-09-24): visual content is
+/// HQ's `HQV5Screens.swift` `HQV5HomeView` (`HQV5Logo`, "Upcoming Events"
+/// hero card, "Recent Events" list, "主要FX" pair row, `HQV5BottomBar`),
+/// reproduced as given. Adaptations, all wiring, not redesign:
+/// - `HQV5DemoRouter.push("event")` → real `AppRoute.eventDetail`
+///   `NavigationLink`.
+/// - `HQV5Store.shared.upcoming`/`.recent` → `HomeViewModel`'s real
+///   `upcomingEvents`/`recentEvents`, mapped to `HQV5Event`. HQ's demo
+///   always shows one upcoming event; the real day can have none, so the
+///   hero card is shown only `if let`, matching how every other real-data
+///   gap in this app is handled (never fabricated).
+/// - The two hardcoded `pairCard` calls (USD/JPY, EUR/USD) → a `ForEach`
+///   over the real `GET /home` major-FX list, so no pair the API returns
+///   is dropped just because HQ's file only demoed two.
+/// - `@State private var tab` (a local, disconnected int) → `tabSelection`,
+///   a real `Binding<Int>` threaded down from `MainTabView`'s actual tab
+///   selection, so `HQV5BottomBar` switches tabs for real.
 struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
     @Binding var path: NavigationPath
+    @Binding var tabSelection: Int
     private let apiClient: APIClient
 
-    init(apiClient: APIClient, path: Binding<NavigationPath>) {
+    init(apiClient: APIClient, path: Binding<NavigationPath>, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
         _viewModel = StateObject(wrappedValue: HomeViewModel(apiClient: apiClient))
         _path = path
+        _tabSelection = tabSelection
     }
 
     var body: some View {
         NavigationStack(path: $path) {
-            ZStack {
-                FXAppBackground()
+            ZStack(alignment: .bottom) {
+                HQV5Background()
                 content
+                    .safeAreaInset(edge: .bottom) {
+                        HQV5BottomBar(selected: $tabSelection).padding(.horizontal, 10).padding(.bottom, 5)
+                    }
             }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: AppRoute.self) { route in
-                AppRouteDestinationView(route: route, apiClient: apiClient)
+                AppRouteDestinationView(route: route, apiClient: apiClient, tabSelection: $tabSelection)
             }
         }
         .task { viewModel.load() }
@@ -58,120 +67,69 @@ struct HomeView: View {
     }
 
     private var loadedScroll: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: FXMetric.sectionGap) {
-                HStack {
-                    FXBrandMark()
-                    Spacer()
-                    Button {} label: {
-                        Image(systemName: "bell").font(.system(size: 17, weight: .semibold)).foregroundStyle(.white).frame(width: 42, height: 42).background(FXColor.card).clipShape(Circle())
-                    }
-                }
+        HQV5Screen {
+            HStack { HQV5Logo(); Spacer(); Image(systemName: "bell").foregroundStyle(.white) }
 
-                if let hero = mappedEvents.upcoming.first {
-                    upcomingEventsCard(hero)
-                }
-
-                if !mappedEvents.rest.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Recent Events").font(.system(size: 20, weight: .bold, design: .rounded)).foregroundStyle(.white)
-                        VStack(spacing: 0) {
-                            ForEach(Array(mappedEvents.rest.enumerated()), id: \.element.id) { index, event in
-                                NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
-                                    EventRow(event: event)
-                                }.buttonStyle(.plain)
-                                if index != mappedEvents.rest.count - 1 {
-                                    Divider().background(FXColor.border)
-                                }
-                            }
-                        }.fxCard()
-                    }
-                }
-
-                if !mappedPairs.isEmpty {
-                    FXSectionHeader(title: "主要FX", subtitle: "リアルタイム価格")
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 145), spacing: 12)], spacing: 12) {
-                        ForEach(mappedPairs) { pair in FXPairCard(pair: pair) }
+            if let hero = mappedEvents.upcoming.first {
+                HQV5NeonCard {
+                    VStack(alignment: .leading, spacing: 9) {
+                        Text("Upcoming Events").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+                        Text("Today \(ValueFormat.time(hero.releaseDate))").font(.system(size: 9)).foregroundStyle(HQV5.muted)
+                        NavigationLink(value: AppRoute.eventDetail(id: hero.id)) {
+                            eventLine(HQV5Event(home: hero))
+                        }.buttonStyle(.plain)
                     }
                 }
             }
-            .padding(.horizontal, FXMetric.horizontal)
-            .padding(.vertical, 22)
-            .frame(maxWidth: 1050)
-        }.scrollIndicators(.hidden)
+
+            if !mappedEvents.rest.isEmpty {
+                Text("Recent Events").font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+                ForEach(mappedEvents.rest) { event in
+                    NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
+                        eventCard(HQV5Event(home: event))
+                    }.buttonStyle(.plain)
+                }
+            }
+
+            if !mappedPairs.isEmpty {
+                Text("主要FX").font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+                HStack(spacing: 7) {
+                    ForEach(mappedPairs) { pair in pairCard(pair) }
+                }
+                .padding(.bottom, 12)
+            }
+        }
     }
 
-    private func upcomingEventsCard(_ event: FXEventUI) -> some View {
-        NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Upcoming Events").font(.system(size: 20, weight: .bold, design: .rounded)).foregroundStyle(.white)
-                Text("Today \(ValueFormat.time(event.releaseDate))").font(.system(size: 13)).foregroundStyle(FXColor.secondaryText)
-                EventRow(event: event)
-            }.fxCard()
-        }.buttonStyle(.plain)
+    @ViewBuilder private func eventLine(_ e: HQV5Event) -> some View {
+        HStack { Text(e.flag); Text(e.name).font(.system(size: 10, weight: .semibold)).foregroundStyle(.white); Spacer(); HQV5Badge(text: e.importanceText, kind: e.importance); Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white) }
+        HStack { HQV5MetricRow(title: "予想", value: e.forecast, tint: .white); HQV5MetricRow(title: "結果", value: e.actual, tint: .white); HQV5MetricRow(title: "前回", value: e.previous, tint: .white) }
+    }
+    @ViewBuilder private func eventCard(_ e: HQV5Event) -> some View {
+        HQV5NeonCard {
+            HStack { Text(e.flag); Text(e.name).font(.system(size: 10, weight: .semibold)).foregroundStyle(.white); Spacer(); HQV5Badge(text: e.importanceText, kind: e.importance); Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white) }
+            HStack { HQV5MetricRow(title: "予想", value: e.forecast, tint: .white); HQV5MetricRow(title: "結果", value: e.actual, tint: .white); HQV5MetricRow(title: "前回", value: e.previous, tint: .white) }
+        }
+    }
+    @ViewBuilder private func pairCard(_ pair: FXPairUI) -> some View {
+        HQV5NeonCard {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack { Text(pair.symbol).font(.system(size: 10, weight: .bold)).foregroundStyle(.white); Spacer(); Circle().fill(pair.isUp ? HQV5.green : HQV5.red).frame(width: 5, height: 5) }
+                Text(pair.price).font(.system(size: 17, weight: .bold)).foregroundStyle(.white)
+                Text(pair.change).font(.system(size: 9, weight: .semibold)).foregroundStyle(pair.isUp ? HQV5.green : HQV5.red)
+            }
+        }
     }
 
-    private var mappedEvents: (upcoming: [FXEventUI], rest: [FXEventUI]) {
-        let upcoming = viewModel.upcomingEvents.sorted { $0.releaseDatetime < $1.releaseDatetime }.map(FXEventUI.init(home:))
+    private var mappedEvents: (upcoming: [HomeEventSummary], rest: [HomeEventSummary]) {
+        let upcoming = viewModel.upcomingEvents.sorted { $0.releaseDatetime < $1.releaseDatetime }
         let rest = (viewModel.upcomingEvents.dropFirst() + viewModel.recentEvents)
             .sorted { $0.releaseDatetime < $1.releaseDatetime }
-            .map(FXEventUI.init(home:))
         return (upcoming, rest)
     }
 
     private var mappedPairs: [FXPairUI] {
         viewModel.majorFxList.map(FXPairUI.init(major:))
-    }
-}
-
-private struct EventRow: View {
-    let event: FXEventUI
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Text(CountryFlag.emoji(for: event.country)).font(.system(size: 24))
-                Text(event.currency).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
-                Text(event.indicatorName).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-                Spacer()
-                FXBadge(text: event.importance.capitalized, tint: importanceTint)
-                Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(FXColor.tertiaryText)
-            }
-            HStack {
-                metric(title: "予想", value: event.forecast ?? "-")
-                metric(title: "結果", value: event.actual ?? "-")
-                metric(title: "前回", value: event.previous ?? "-")
-            }
-        }.padding(.vertical, 10).contentShape(Rectangle())
-    }
-
-    private var importanceTint: Color {
-        switch event.importance {
-        case "HIGH": return FXColor.red
-        case "MEDIUM": return FXColor.green
-        default: return FXColor.blue
-        }
-    }
-
-    private func metric(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.system(size: 11)).foregroundStyle(FXColor.secondaryText)
-            Text(value).font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(.white)
-        }.frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct FXPairCard: View {
-    let pair: FXPairUI
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack {
-                Text(pair.symbol).font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
-                Spacer()
-                Circle().fill(pair.isUp ? FXColor.green : FXColor.red).frame(width: 6, height: 6)
-            }
-            Text(pair.price).font(.system(size: 22, weight: .bold, design: .rounded))
-            Text(pair.change).font(.system(size: 12, weight: .semibold)).foregroundStyle(pair.isUp ? FXColor.green : FXColor.red)
-        }.fxCard(padding: 14)
     }
 }
 
@@ -182,26 +140,31 @@ private extension HomeViewModel {
     }
 }
 
-private extension FXEventUI {
+extension HQV5Event {
     init(home event: HomeEventSummary) {
         self.init(
             id: event.id,
-            indicatorID: event.indicatorId,
-            indicatorName: event.indicatorName,
-            country: event.countryCode,
-            currency: event.currencyCode,
-            importance: event.importance.rawValue,
-            releaseDate: event.releaseDatetime,
-            status: event.status.rawValue,
-            dataStatus: event.dataStatus.rawValue,
-            forecast: event.forecast.map { ValueFormat.number($0) },
-            actual: event.status == .released ? event.actual.map { ValueFormat.number($0) } : nil,
-            previous: event.previous.map { ValueFormat.number($0) },
-            surprise: event.surprise.map { ValueFormat.number($0, signed: true) },
-            surpriseLabel: event.surpriseDirection?.label,
-            pair: event.relatedFxPairs.first?.symbol ?? "--",
-            reaction5m: nil
+            flag: CountryFlag.emoji(for: event.countryCode),
+            name: "\(CountryFlag.kanjiAbbreviation(for: event.countryCode))) \(event.indicatorName)",
+            code: event.currencyCode,
+            importance: event.importance.hqv5Kind,
+            importanceText: event.importance.rawValue.capitalized,
+            time: ValueFormat.dateTime(event.releaseDatetime),
+            forecast: event.forecast.map { ValueFormat.number($0) } ?? "-",
+            actual: event.status == .released ? (event.actual.map { ValueFormat.number($0) } ?? "-") : "—",
+            previous: event.previous.map { ValueFormat.number($0) } ?? "-",
+            surprise: event.surprise.map { ValueFormat.number($0, signed: true) } ?? "—"
         )
+    }
+}
+
+extension Importance {
+    var hqv5Kind: HQV5Badge.Kind {
+        switch self {
+        case .high: return .high
+        case .medium: return .medium
+        case .low: return .low
+        }
     }
 }
 
