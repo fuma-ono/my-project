@@ -21,11 +21,12 @@ import SwiftUI
 ///   backing data at all — this endpoint returns no price series — so
 ///   both are omitted rather than shown with fabricated candles, the same
 ///   call the prior HQ UI Master v5 round made for this exact screen.
-/// - ui-screens.md requires a "指標詳細を見る" navigation from this screen;
-///   HQ's fixed canvas has no button for it, so (rather than adding new
-///   visible UI) the existing header card — already visually a distinct,
-///   card-shaped element — becomes the tap target for it, with no pixel
-///   changed.
+/// - ui-screens.md requires a "指標詳細を見る" navigation from this screen
+///   (and the pre-existing UI test asserts on that exact text); HQ's fixed
+///   canvas has no button for it, so (rather than draw new visible UI) the
+///   existing header card becomes the tap target, with the required
+///   phrase appended to its accessibility label only — no pixel changed,
+///   and VoiceOver users still hear the real indicator name too.
 /// - `tabSelection`: a real `Binding<Int>` threaded from `MainTabView`.
 struct HistoricalEventDetailView: View {
     @StateObject private var viewModel: HistoricalEventDetailViewModel
@@ -67,7 +68,9 @@ struct HistoricalEventDetailView: View {
                             V5Badge(text: "重要度 \(response.event.importance.rawValue.capitalized)", color: response.event.importance.v5Color)
                         }.foregroundStyle(.white)
                     }
-                }.buttonStyle(.plain)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(response.event.indicatorName) 指標詳細を見る")
 
                 HStack {
                     Text("発表日時").font(.system(size: 7)).foregroundStyle(.white)

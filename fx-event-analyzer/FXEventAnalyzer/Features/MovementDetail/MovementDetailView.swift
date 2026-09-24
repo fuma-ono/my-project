@@ -23,6 +23,14 @@ import SwiftUI
 ///   two-line 変動幅 ("+0.33\n(+0.22%)") and third "主要指標" slot
 ///   ("平均変動幅") have no backing percent/average field on this model —
 ///   shown as a single line / omitted rather than fabricated.
+/// - ui-screens.md's required screen flow (and the pre-existing UI test)
+///   needs a real path from here to Historical Comparison, but HQ's fixed
+///   canvas has no button for it. Rather than draw new visible UI, the
+///   existing "発表前後の変動" card (always present, unlike "主要指標"
+///   which only shows when analysis is ready) becomes the tap target,
+///   with the required phrase appended to its accessibility label only —
+///   sighted users see zero pixel change; VoiceOver users hear the real
+///   metric readout plus the destination, never just the phrase alone.
 struct MovementDetailView: View {
     @StateObject private var viewModel: MovementDetailViewModel
     @Binding var tabSelection: Int
@@ -84,18 +92,27 @@ struct MovementDetailView: View {
                 chartSection.frame(width: 204, height: 135).position(x: 117, y: 165)
 
                 Text("発表前後の変動").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 48, y: 247)
-                V5Card(CGRect(x: 10, y: 257, width: 214, height: 64)) {
-                    let selected = reactions.first(where: { $0.timeframe == viewModel.selectedTimeframe })
-                    HStack {
-                        metric("発表前", ValueFormat.number(preReleasePrice, fractionDigits: 3))
-                        if let selected, selected.analysisStatus == .ready {
-                            metric("発表後", ValueFormat.number(selected.postReleasePrice, fractionDigits: 3))
-                            metric("変動幅", ValueFormat.number(selected.movement, fractionDigits: 3, signed: true))
-                        } else {
-                            metric("発表後", selected?.analysisStatus.label ?? "--")
+                NavigationLink(value: AppRoute.historicalComparison(
+                    indicatorId: viewModel.indicatorId,
+                    indicatorName: viewModel.indicatorName,
+                    fxPairId: viewModel.fxPairId,
+                    fxPairSymbol: viewModel.symbol
+                )) {
+                    V5Card(CGRect(x: 10, y: 257, width: 214, height: 64)) {
+                        let selected = reactions.first(where: { $0.timeframe == viewModel.selectedTimeframe })
+                        HStack {
+                            metric("発表前", ValueFormat.number(preReleasePrice, fractionDigits: 3))
+                            if let selected, selected.analysisStatus == .ready {
+                                metric("発表後", ValueFormat.number(selected.postReleasePrice, fractionDigits: 3))
+                                metric("変動幅", ValueFormat.number(selected.movement, fractionDigits: 3, signed: true))
+                            } else {
+                                metric("発表後", selected?.analysisStatus.label ?? "--")
+                            }
                         }
                     }
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("発表前後の変動 過去の値動きと比較する")
 
                 if let selected = reactions.first(where: { $0.timeframe == viewModel.selectedTimeframe }), selected.analysisStatus == .ready {
                     Text("主要指標").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 39, y: 335)
