@@ -74,7 +74,7 @@ struct HomeView: View {
                 HQV5NeonCard {
                     VStack(alignment: .leading, spacing: 9) {
                         Text("Upcoming Events").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
-                        Text("Today \(ValueFormat.time(hero.releaseDate))").font(.system(size: 9)).foregroundStyle(HQV5.muted)
+                        Text("Today \(ValueFormat.time(hero.releaseDatetime))").font(.system(size: 9)).foregroundStyle(HQV5.muted)
                         NavigationLink(value: AppRoute.eventDetail(id: hero.id)) {
                             eventLine(HQV5Event(home: hero))
                         }.buttonStyle(.plain)
