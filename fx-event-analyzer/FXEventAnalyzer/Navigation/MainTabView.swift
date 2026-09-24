@@ -2,18 +2,17 @@ import SwiftUI
 
 /// ui-screens.md §4: main navigation frame.
 ///
-/// HQ UI Master v5 Frontend integration (2026-09-24): HQ's screens
-/// (`HQV5Screens.swift`) each render their own floating `HQV5BottomBar`
-/// inline (see `HQV5HomeView` etc.), unlike the pre-integration mockup
-/// which relied on a native `TabView` tab bar. Keeping the system
-/// `TabView` here would draw two tab bars at once, so portrait mode is now
-/// a plain switch over a real `tabSelection: Int` (matching
-/// `HQV5BottomBar`'s 0-3 index order, the same wiring HQ's own
-/// `HQV5RootView` demo uses) — each screen owns its own `NavigationStack`
-/// and floating bottom bar; `MainTabView` only picks which one is visible.
-/// iPad landscape's collapsible left sidebar predates the v5 UI package
-/// (not one of HQ's 12 screens) and is kept as-is, now driven by the same
-/// `tabSelection` state instead of a separate `FXTab` selection.
+/// HQ "V5 Pixel Frontend" integration (2026-09-24): HQ's screens
+/// (`V5PixelFrontend.swift`) each render their own `V5BottomBar` inline
+/// inside their own fixed 234×491 canvas, unlike the pre-integration
+/// mockup which relied on a native `TabView` tab bar. Keeping the system
+/// `TabView` here would draw two tab bars at once, so portrait mode is a
+/// plain switch over a real `tabSelection: Int` (matching `V5BottomBar`'s
+/// 0-3 index order) — each screen owns its own `NavigationStack` and
+/// bottom bar; `MainTabView` only picks which one is visible. Carried over
+/// unchanged from the prior HQ UI Master v5 round. iPad landscape's
+/// collapsible left sidebar predates both v5 UI packages (not one of HQ's
+/// 12 screens) and is kept as-is, driven by the same `tabSelection` state.
 struct MainTabView: View {
     let apiClient: APIClient
     let authService: AuthServicing
@@ -83,7 +82,7 @@ enum FXTab: String, CaseIterable, Identifiable {
     case home, indicators, search, settings
     var id: String { rawValue }
 
-    /// Matches `HQV5BottomBar`'s fixed 0-3 tab order.
+    /// Matches `V5BottomBar`'s fixed 0-3 tab order.
     var index: Int { Self.allCases.firstIndex(of: self) ?? 0 }
 
     var title: String {

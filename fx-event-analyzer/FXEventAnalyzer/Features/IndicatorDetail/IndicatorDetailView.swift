@@ -2,27 +2,25 @@ import SwiftUI
 
 /// SCR-003 Indicator Detail (ui-screens.md §5) — "指標そのものを理解する"。
 ///
-/// HQ UI Master v5 Frontend integration (2026-09-24): visual content is
-/// HQ's `HQV5Screens.swift` `HQV5IndicatorDetailView` (`HQV5TopBar` with
-/// favorite star, `HQV5NeonCard` header, "次回発表予定"/メトリクス/
-/// サプライズ card, "この指標の影響", "関連通貨ペア", "出典",
-/// `HQV5BottomBar`), reproduced as given. Adaptations, all wiring, not
-/// redesign:
-/// - HQ's hardcoded 米CPI header/next-release/description/pairs/source →
-///   the real `IndicatorDetailViewModel` state
-///   (`indicator`/`nextScheduledEvent`/`relatedFxPairs`), each section shown
-///   only `if let`/`!isEmpty` since a real indicator may lack any of these,
-///   never fabricated.
-/// - The favorite star stays decorative (no favoriting API exists, same
-///   treatment as Home's bell).
-/// - "最近の発表結果"/"過去イベントを比較" are not part of HQ's single
-///   screenshot for this screen but are existing real functionality
-///   (`recentEvents`, the historical-comparison route) — kept, styled to
-///   match HQV5's card language, so nothing already shipped is silently
-///   dropped.
-/// - `tabSelection`: a real `Binding<Int>` threaded from `MainTabView`, so
-///   this pushed screen's own `HQV5BottomBar` (HQ's screens render one on
-///   every screen, not just tab roots) switches tabs for real.
+/// HQ "V5 Pixel Frontend" integration (2026-09-24): visual content is HQ's
+/// `V5PixelFrontend.swift` `V5IndicatorDetail` (fixed 234×491 canvas,
+/// header, header card, 次回発表予定 + metrics + サプライズ card, この指標
+/// の影響, 関連通貨ペア, 出典), reproduced as given. Adaptations, all
+/// wiring, not redesign:
+/// - HQ's hardcoded header/next-release/description/pairs/source → the
+///   real `IndicatorDetailViewModel` state, each section shown only
+///   `if let`/`!isEmpty`. Every element here is absolute-positioned, so
+///   hiding a section never shifts anything else on screen.
+/// - HQ's "次回発表予定" always shows a サプライズ value even though a
+///   SCHEDULED (not yet released) event cannot have one — the real
+///   `surprise` is shown only `if let`, never fabricated for an event that
+///   hasn't happened yet.
+/// - The favorite star stays decorative (no favoriting API exists).
+/// - This design has no `ScrollView` (a fixed, non-scrolling 234×491
+///   composition) and no "最近の発表結果"/"過去イベントを比較" section at
+///   all, unlike the prior (scrolling) HQ UI Master v5 integration — kept
+///   out entirely rather than appended past HQ's fixed canvas, per this
+///   round's explicit "don't break the coordinate system" instruction.
 struct IndicatorDetailView: View {
     @StateObject private var viewModel: IndicatorDetailViewModel
     @Binding var tabSelection: Int
@@ -34,59 +32,52 @@ struct IndicatorDetailView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            HQV5Background()
-            content
-                .safeAreaInset(edge: .bottom) {
-                    HQV5BottomBar(selected: $tabSelection).padding(.horizontal, 10).padding(.bottom, 5)
-                }
-        }
-        .toolbar(.hidden, for: .navigationBar)
-        .task { viewModel.load() }
+        content
+            .toolbar(.hidden, for: .navigationBar)
+            .task { viewModel.load() }
     }
 
     @ViewBuilder
     private var content: some View {
         switch viewModel.state {
         case .loading:
-            LoadingView(caption: "読み込み中...")
+            loadingScaffold { LoadingView(caption: "読み込み中...") }
         case .backendNotConfigured:
-            FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "指標情報はまだ利用できません。")
-        case .loaded(let indicator, let relatedFxPairs, let recentEvents, let nextScheduledEvent):
-            HQV5Screen {
-                HQV5TopBar(title: "指標詳細", favorite: true, onBack: { dismiss() })
+            loadingScaffold { FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "指標情報はまだ利用できません。") }
+        case .loaded(let indicator, let relatedFxPairs, _, let nextScheduledEvent):
+            V5Viewport {
+                V5TopStatus()
+                V5Header(title: "指標詳細", back: true, star: true, onBack: { dismiss() })
 
-                HQV5NeonCard {
-                    HStack {
-                        Text(CountryFlag.emoji(for: indicator.countryCode)).font(.title)
-                        VStack(alignment: .leading) {
-                            Text("\(CountryFlag.kanjiAbbreviation(for: indicator.countryCode))) \(indicator.name)")
-                                .font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
-                            Text(indicator.currencyCode).font(.system(size: 9)).foregroundStyle(HQV5.muted)
+                V5Card(CGRect(x: 10, y: 57, width: 214, height: 59)) {
+                    HStack(spacing: 5) {
+                        Text(CountryFlag.emoji(for: indicator.countryCode)).font(.system(size: 22))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(CountryFlag.kanjiAbbreviation(for: indicator.countryCode))) \(indicator.name)").font(.system(size: 9, weight: .bold))
+                            Text(indicator.currencyCode).font(.system(size: 7)).foregroundStyle(V5P.muted)
                         }
                         Spacer()
-                        HQV5Badge(text: "重要度 \(indicator.importance.rawValue.capitalized)", kind: indicator.importance.hqv5Kind)
-                    }
+                        V5Badge(text: "重要度 \(indicator.importance.rawValue.capitalized)", color: indicator.importance.v5Color)
+                    }.foregroundStyle(.white)
                 }
 
                 if let nextScheduledEvent {
-                    Text("次回発表予定").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
-                    Text(ValueFormat.dateTime(nextScheduledEvent.releaseDatetime))
-                        .font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
-                    HQV5NeonCard {
-                        VStack(spacing: 10) {
+                    Text("次回発表予定").font(.system(size: 7)).foregroundStyle(V5P.muted).position(x: 39, y: 128)
+                    Text(ValueFormat.dateTime(nextScheduledEvent.releaseDatetime)).font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 95, y: 140)
+                    V5Card(CGRect(x: 10, y: 151, width: 214, height: 95)) {
+                        VStack(spacing: 6) {
                             HStack {
-                                HQV5MetricRow(title: "予想", value: ValueFormat.number(nextScheduledEvent.forecast), tint: .white)
-                                HQV5MetricRow(title: "結果", value: nextScheduledEvent.actual.map { ValueFormat.number($0) } ?? "—", tint: .white)
-                                HQV5MetricRow(title: "前回", value: ValueFormat.number(nextScheduledEvent.previous), tint: .white)
+                                metric("予想", ValueFormat.number(nextScheduledEvent.forecast))
+                                metric("結果", nextScheduledEvent.actual.map { ValueFormat.number($0) } ?? "-")
+                                metric("前回", ValueFormat.number(nextScheduledEvent.previous))
                             }
                             if let surprise = nextScheduledEvent.surprise {
-                                Divider().overlay(Color.white.opacity(0.08))
+                                Divider().overlay(V5P.line)
                                 HStack {
-                                    Text("サプライズ").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                                    Text("サプライズ\n(予想比)").font(.system(size: 8)).foregroundStyle(.white)
                                     Spacer()
-                                    Text(ValueFormat.percent(surprise, signed: true))
-                                        .foregroundStyle(HQV5.red).font(.system(size: 16, weight: .bold))
+                                    Text(ValueFormat.percent(surprise, signed: true)).font(.system(size: 13, weight: .bold)).foregroundStyle(V5P.red)
+                                    Image(systemName: "chevron.right").foregroundStyle(V5P.red)
                                 }
                             }
                         }
@@ -94,76 +85,46 @@ struct IndicatorDetailView: View {
                 }
 
                 if let description = indicator.description, !description.isEmpty {
-                    Text("この指標の影響").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
-                    Text(description).font(.system(size: 10)).foregroundStyle(HQV5.muted)
+                    Text("この指標の影響").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 43, y: 260)
+                    Text(description)
+                        .font(.system(size: 7)).foregroundStyle(V5P.muted).frame(width: 204, alignment: .leading).position(x: 117, y: 281)
                 }
 
                 if !relatedFxPairs.isEmpty {
-                    Text("関連通貨ペア").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
-                    HStack {
-                        ForEach(relatedFxPairs) { pair in
-                            Text(pair.symbol)
-                                .font(.system(size: 9, weight: .semibold)).foregroundStyle(.white)
-                                .padding(8).background(HQV5.panel2, in: Capsule())
-                        }
-                    }
+                    Text("関連通貨ペア").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 44, y: 307)
+                    HStack(spacing: 5) {
+                        ForEach(relatedFxPairs) { pair in smallPill(pair.symbol) }
+                    }.position(x: 117, y: 326)
                 }
 
                 if let source = indicator.source {
-                    Text("出典").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                    Text("出典").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 25, y: 352)
                     if let urlString = indicator.sourceUrl, let url = URL(string: urlString) {
-                        Link(source, destination: url).font(.system(size: 10)).foregroundStyle(HQV5.cyan)
+                        Link(source, destination: url).font(.system(size: 8)).foregroundStyle(V5P.cyan).position(x: 44, y: 366)
                     } else {
-                        Text(source).font(.system(size: 10)).foregroundStyle(HQV5.cyan)
+                        Text(source).font(.system(size: 8)).foregroundStyle(V5P.cyan).position(x: 44, y: 366)
                     }
                 }
 
-                if !recentEvents.isEmpty {
-                    Text("最近の発表結果").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
-                    ForEach(recentEvents) { event in
-                        NavigationLink(value: AppRoute.historicalEventDetail(id: event.id)) {
-                            recentEventRow(event)
-                        }.buttonStyle(.plain)
-                    }
-                }
-
-                if let primaryPair = relatedFxPairs.first {
-                    NavigationLink(value: AppRoute.historicalComparison(
-                        indicatorId: indicator.id,
-                        indicatorName: indicator.name,
-                        fxPairId: primaryPair.fxPairId,
-                        fxPairSymbol: primaryPair.symbol
-                    )) {
-                        HQV5NeonCard {
-                            HStack {
-                                Image(systemName: "chart.bar.xaxis").foregroundStyle(HQV5.cyan)
-                                Text("過去イベントを比較").font(.system(size: 11, weight: .semibold)).foregroundStyle(.white)
-                                Spacer()
-                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(HQV5.muted)
-                            }
-                        }
-                    }.buttonStyle(.plain)
-                }
+                V5BottomBar(selected: $tabSelection)
             }
         case .error(let message):
-            ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() })
+            loadingScaffold { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() }) }
         }
     }
 
-    @ViewBuilder private func recentEventRow(_ event: IndicatorEventSummary) -> some View {
-        HQV5NeonCard {
-            HStack {
-                Text(ValueFormat.dateTime(event.releaseDatetime)).font(.system(size: 9)).foregroundStyle(HQV5.muted)
-                Spacer()
-                if event.dataStatus != .ready {
-                    Text(event.dataStatus.label).font(.system(size: 9)).foregroundStyle(HQV5.muted)
-                } else if let surprise = event.surprise {
-                    Text("Surprise \(ValueFormat.number(surprise, signed: true))").font(.system(size: 9, weight: .semibold)).foregroundStyle(.white)
-                } else {
-                    Text("Surprise分析対象外").font(.system(size: 9)).foregroundStyle(HQV5.muted)
-                }
-                Image(systemName: "chevron.right").font(.system(size: 9)).foregroundStyle(HQV5.muted)
-            }
+    @ViewBuilder private func loadingScaffold(@ViewBuilder content: () -> some View) -> some View {
+        ZStack {
+            LinearGradient(colors: [V5P.bg0, V5P.bg1, V5P.bg0], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
+            content()
         }
+    }
+
+    @ViewBuilder private func metric(_ a: String, _ b: String) -> some View {
+        VStack(spacing: 2) { Text(a).font(.system(size: 6)).foregroundStyle(V5P.muted); Text(b).font(.system(size: 10, weight: .bold)).foregroundStyle(.white) }.frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder private func smallPill(_ t: String) -> some View {
+        Text(t).font(.system(size: 7, weight: .semibold)).foregroundStyle(.white).padding(.horizontal, 7).padding(.vertical, 5).background(V5P.panel2, in: Capsule())
     }
 }

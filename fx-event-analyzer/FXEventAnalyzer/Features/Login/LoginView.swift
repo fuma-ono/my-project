@@ -2,21 +2,28 @@ import SwiftUI
 
 /// SCR-010 Login (ui-screens.md).
 ///
-/// HQ UI Master v5 Frontend integration (2026-09-24): visual content is
-/// HQ's `HQV5Screens.swift` `HQV5LoginView` (icon, wordmark,
-/// `HQV5NeonCard`-framed fields, `HQV5PrimaryButton` CTA), reproduced as
-/// given. Adaptations, all wiring, not redesign:
+/// HQ "V5 Pixel Frontend" integration (2026-09-24): visual content is HQ's
+/// `V5PixelFrontend.swift` `V5Login` (icon, wordmark, fixed-size field
+/// panel), reproduced as given. Adaptations, all wiring, not redesign:
 /// - HQ's fields are local `@State`; here they bind to the real
-///   `LoginViewModel`'s `$email`/`$password`, and the button calls
-///   `viewModel.submit()` instead of doing nothing, since Auth must stay
-///   wired exactly as before (`RootView` still constructs this the same
-///   way).
-/// - HQ's "パスワードを忘れた"/"新規登録" buttons do nothing — no
-///   password-reset or sign-up API exists to wire them to, so they keep
-///   the existing "準備中" alert this screen already used.
-/// - `sessionExpired`/`viewModel.state == .error` (not present in HQ's
-///   file, which has no such states) keep their existing banner/message
-///   treatment so those real states aren't silently dropped.
+///   `LoginViewModel`'s `$email`/`$password`. Accessibility labels are
+///   attached explicitly (`app.textFields["メールアドレス"]` etc.) since a
+///   bare `TextField` next to an unrelated `Text` label isn't associated
+///   automatically — the same fix the prior HQV5 integration needed.
+/// - HQ's "ログイン" is a plain `Text` with no action; wrapped in a real
+///   `Button` calling `viewModel.submit()`, swapping in a `ProgressView`
+///   while submitting — same visual shape otherwise.
+/// - HQ's "パスワードを忘れた"/"新規登録" are plain `Text` with no action —
+///   wired to the existing "準備中" alert this screen already used, since
+///   no password-reset or sign-up API exists.
+/// - `sessionExpired`/`viewModel.state == .error` (states HQ's static
+///   mock has no design for) are added as the minimum necessary: the
+///   session-expired banner sits above the fixed field panel (pushes it
+///   down within the same fixed 234×491 canvas, doesn't resize the panel);
+///   the error message is anchored just below the panel via `.overlay(
+///   alignment: .bottom)`, the same technique HQ's own `V5EventRow` uses
+///   to place its metric row outside a fixed box — so the panel's own
+///   204×139 frame and background are never resized to fit real content.
 struct LoginView: View {
     @StateObject private var viewModel: LoginViewModel
     let sessionExpired: Bool
@@ -28,68 +35,82 @@ struct LoginView: View {
     }
 
     var body: some View {
-        ZStack {
-            HQV5Background()
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 0) {
-                    Spacer(minLength: 55)
-                    Image(systemName: "chart.line.uptrend.xyaxis").font(.system(size: 48, weight: .bold))
-                        .foregroundStyle(LinearGradient(colors: [HQV5.blue, HQV5.cyan], startPoint: .bottomLeading, endPoint: .topTrailing))
-                        .padding(.bottom, 8)
-                    Text("FX Event Analyzer").font(.system(size: 22, weight: .medium)).foregroundStyle(.white)
+        V5Viewport {
+            V5TopStatus()
+            VStack(spacing: 0) {
+                Spacer().frame(height: 92)
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .font(.system(size: 47, weight: .bold))
+                    .foregroundStyle(LinearGradient(colors: [V5P.blue, V5P.cyan], startPoint: .bottomLeading, endPoint: .topTrailing))
+                Text("FX Event Analyzer").font(.system(size: 20, weight: .medium)).foregroundStyle(.white).padding(.top, 8)
 
-                    if sessionExpired {
-                        sessionExpiredBanner.padding(.top, 20)
-                    }
-
-                    HQV5NeonCard {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("メールアドレス").font(.system(size: 9)).foregroundStyle(HQV5.muted)
-                            TextField("example@domain.com", text: $viewModel.email)
-                                .textInputAutocapitalization(.never)
-                                .keyboardType(.emailAddress)
-                                .padding(10).background(HQV5.panel, in: Capsule()).foregroundStyle(.white)
-                                .accessibilityLabel("メールアドレス")
-                            Text("パスワード").font(.system(size: 9)).foregroundStyle(HQV5.muted)
-                            SecureField("パスワードを入力", text: $viewModel.password)
-                                .padding(10).background(HQV5.panel, in: Capsule()).foregroundStyle(.white)
-                                .accessibilityLabel("パスワード")
-
-                            if case .error(let message) = viewModel.state {
-                                Text(message)
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(HQV5.red)
-                            }
-
-                            Button {
-                                viewModel.submit()
-                            } label: {
-                                if viewModel.state == .submitting {
-                                    ProgressView().tint(.white)
-                                } else {
-                                    Text("ログイン")
-                                }
-                            }
-                            .buttonStyle(HQV5PrimaryButton())
-                            .disabled(!viewModel.canSubmit)
-                            .opacity(viewModel.canSubmit ? 1 : 0.5)
-
-                            Button("パスワードをお忘れの方") {
-                                pendingFeatureMessage = "パスワードリセットは準備中です。もうしばらくお待ちください。"
-                            }.font(.system(size: 10, weight: .semibold)).foregroundStyle(HQV5.cyan).frame(maxWidth: .infinity)
-
-                            Text("アカウントをお持ちでない方").font(.system(size: 9)).foregroundStyle(HQV5.muted).frame(maxWidth: .infinity)
-
-                            Button("新規登録") {
-                                pendingFeatureMessage = "新規登録は準備中です。もうしばらくお待ちください。"
-                            }.font(.system(size: 11, weight: .bold)).foregroundStyle(HQV5.cyan).frame(maxWidth: .infinity)
-                        }
-                    }
-                    .padding(.top, 26)
-                    Spacer(minLength: 30)
+                if sessionExpired {
+                    sessionExpiredBanner.padding(.top, 10)
                 }
-                .padding(.horizontal, 18)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("メールアドレス").font(.system(size: 7)).foregroundStyle(V5P.muted)
+                    TextField("example@domain.com", text: $viewModel.email)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.emailAddress)
+                        .font(.system(size: 9))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10).frame(height: 27)
+                        .background(V5P.bg0.opacity(0.8), in: Capsule())
+                        .accessibilityLabel("メールアドレス")
+                    Text("パスワード").font(.system(size: 7)).foregroundStyle(V5P.muted)
+                    SecureField("パスワードを入力", text: $viewModel.password)
+                        .font(.system(size: 9))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10).frame(height: 27)
+                        .background(V5P.bg0.opacity(0.8), in: Capsule())
+                        .accessibilityLabel("パスワード")
+                    Button {
+                        viewModel.submit()
+                    } label: {
+                        Group {
+                            if viewModel.state == .submitting {
+                                ProgressView().tint(.white)
+                            } else {
+                                Text("ログイン").font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
+                            }
+                        }
+                        .frame(maxWidth: .infinity).frame(height: 29)
+                        .background(LinearGradient(colors: [V5P.blue, V5P.cyan.opacity(0.8)], startPoint: .leading, endPoint: .trailing), in: RoundedRectangle(cornerRadius: 7))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!viewModel.canSubmit)
+                    .opacity(viewModel.canSubmit ? 1 : 0.5)
+                    Button {
+                        pendingFeatureMessage = "パスワードリセットは準備中です。もうしばらくお待ちください。"
+                    } label: {
+                        Text("パスワードをお忘れの方").font(.system(size: 7, weight: .semibold)).foregroundStyle(V5P.cyan).frame(maxWidth: .infinity)
+                    }.buttonStyle(.plain)
+                    Text("アカウントをお持ちでない方").font(.system(size: 7)).foregroundStyle(V5P.muted).frame(maxWidth: .infinity)
+                    Button {
+                        pendingFeatureMessage = "新規登録は準備中です。もうしばらくお待ちください。"
+                    } label: {
+                        Text("新規登録").font(.system(size: 8, weight: .bold)).foregroundStyle(V5P.cyan).frame(maxWidth: .infinity)
+                    }.buttonStyle(.plain)
+                }
+                .padding(9)
+                .frame(width: 204, height: 139)
+                .background(V5P.panel.opacity(0.9), in: RoundedRectangle(cornerRadius: 9))
+                .overlay(RoundedRectangle(cornerRadius: 9).stroke(V5P.line.opacity(0.7), lineWidth: 0.7))
+                .overlay(alignment: .bottom) {
+                    if case .error(let message) = viewModel.state {
+                        Text(message)
+                            .font(.system(size: 7))
+                            .foregroundStyle(V5P.red)
+                            .multilineTextAlignment(.center)
+                            .frame(width: 204)
+                            .offset(y: 16)
+                    }
+                }
+                .padding(.top, 18)
+                Spacer()
             }
+            .frame(width: V5P.W, height: V5P.H)
         }
         .preferredColorScheme(.dark)
         .alert(
@@ -107,18 +128,18 @@ struct LoginView: View {
     }
 
     private var sessionExpiredBanner: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 3) {
             Text("セッションの有効期限が切れています")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.white)
             Text("再度ログインしてください")
-                .font(.system(size: 12))
-                .foregroundStyle(HQV5.muted)
+                .font(.system(size: 7))
+                .foregroundStyle(V5P.muted)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity)
-        .background(HQV5.red.opacity(0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(HQV5.red.opacity(0.25)))
+        .multilineTextAlignment(.center)
+        .padding(8)
+        .frame(width: 204)
+        .background(V5P.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(V5P.red.opacity(0.3), lineWidth: 0.6))
     }
 }

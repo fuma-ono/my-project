@@ -3,23 +3,30 @@ import SwiftUI
 /// SCR-001 Home (ui-screens.md §5). Real `GET /home` data — SCHEDULED /
 /// RELEASED events, each tappable to SCR-004 Event Detail.
 ///
-/// HQ UI Master v5 Frontend integration (2026-09-24): visual content is
-/// HQ's `HQV5Screens.swift` `HQV5HomeView` (`HQV5Logo`, "Upcoming Events"
-/// hero card, "Recent Events" list, "主要FX" pair row, `HQV5BottomBar`),
-/// reproduced as given. Adaptations, all wiring, not redesign:
-/// - `HQV5DemoRouter.push("event")` → real `AppRoute.eventDetail`
-///   `NavigationLink`.
-/// - `HQV5Store.shared.upcoming`/`.recent` → `HomeViewModel`'s real
-///   `upcomingEvents`/`recentEvents`, mapped to `HQV5Event`. HQ's demo
-///   always shows one upcoming event; the real day can have none, so the
-///   hero card is shown only `if let`, matching how every other real-data
-///   gap in this app is handled (never fabricated).
-/// - The two hardcoded `pairCard` calls (USD/JPY, EUR/USD) → a `ForEach`
-///   over the real `GET /home` major-FX list, so no pair the API returns
-///   is dropped just because HQ's file only demoed two.
-/// - `@State private var tab` (a local, disconnected int) → `tabSelection`,
-///   a real `Binding<Int>` threaded down from `MainTabView`'s actual tab
-///   selection, so `HQV5BottomBar` switches tabs for real.
+/// HQ "V5 Pixel Frontend" integration (2026-09-24): visual content is HQ's
+/// `V5PixelFrontend.swift` `V5Home` (fixed 234×491 coordinate space via
+/// `V5Viewport`, absolute-positioned cards), reproduced as given.
+/// Adaptations, all wiring, not redesign:
+/// - HQ's `V5Home` has no `ScrollView` at all — the whole screen is one
+///   fixed, non-scrolling composition, unlike the prior HQV5 integration.
+///   Because every element here is placed with `.position()` (not normal
+///   flow layout), hiding an absent element never shifts anything else —
+///   so "no real data → hidden, never fabricated" is layout-safe by
+///   construction, not a coordinate change.
+/// - The hero "Upcoming Events" card is real `HomeViewModel.upcomingEvents`
+///   `.first`, shown only `if let` (a real day can have none; HQ's demo
+///   always shows one).
+/// - HQ's 4 hardcoded "Recent Events" rows and 3 hardcoded "主要FX" boxes
+///   are real `ForEach`s bound to the real lists, `.prefix`-ed to the same
+///   4/3 slot counts HQ's fixed coordinates provision for (174+idx*53 for
+///   4 rows; 3 side-by-side boxes) — extra real items beyond that are not
+///   shown (Home is a preview; the full lists live on the Indicators tab
+///   and are not cut off there), fewer real items just leave the
+///   remaining fixed slots empty, never inventing rows to fill them.
+/// - `HQV5DemoRouter.push(...)` → real `AppRoute.eventDetail`
+///   `NavigationLink`s.
+/// - `tabSelection`: a real `Binding<Int>` threaded from `MainTabView`, so
+///   `V5BottomBar` switches tabs for real.
 struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
     @Binding var path: NavigationPath
@@ -35,17 +42,11 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            ZStack(alignment: .bottom) {
-                HQV5Background()
-                content
-                    .safeAreaInset(edge: .bottom) {
-                        HQV5BottomBar(selected: $tabSelection).padding(.horizontal, 10).padding(.bottom, 5)
-                    }
-            }
-            .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(for: AppRoute.self) { route in
-                AppRouteDestinationView(route: route, apiClient: apiClient, tabSelection: $tabSelection)
-            }
+            content
+                .toolbar(.hidden, for: .navigationBar)
+                .navigationDestination(for: AppRoute.self) { route in
+                    AppRouteDestinationView(route: route, apiClient: apiClient, tabSelection: $tabSelection)
+                }
         }
         .task { viewModel.load() }
     }
@@ -54,71 +55,81 @@ struct HomeView: View {
     private var content: some View {
         switch viewModel.state {
         case .loading:
-            LoadingView(caption: "読み込み中...")
+            loadingScaffold { LoadingView(caption: "読み込み中...") }
         case .backendNotConfigured:
-            FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "経済指標データはまだ利用できません。実装が完了次第、ここに表示されます。")
+            loadingScaffold { FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "経済指標データはまだ利用できません。実装が完了次第、ここに表示されます。") }
         case .loaded(let events, let majorFx) where events.isEmpty && majorFx.isEmpty:
-            FXEmptyState(icon: "calendar", title: "本日のイベントはありません", message: "本日発表予定の経済指標はありません。")
+            loadingScaffold { FXEmptyState(icon: "calendar", title: "本日のイベントはありません", message: "本日発表予定の経済指標はありません。") }
         case .loaded:
-            loadedScroll
+            loadedScreen
         case .error(let message):
-            ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() })
+            loadingScaffold { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() }) }
         }
     }
 
-    private var loadedScroll: some View {
-        HQV5Screen {
-            HStack { HQV5Logo(); Spacer(); Image(systemName: "bell").foregroundStyle(.white) }
+    @ViewBuilder private func loadingScaffold(@ViewBuilder content: () -> some View) -> some View {
+        ZStack {
+            LinearGradient(colors: [V5P.bg0, V5P.bg1, V5P.bg0], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
+            content()
+        }
+    }
+
+    private var loadedScreen: some View {
+        V5Viewport {
+            V5TopStatus()
+            HStack {
+                Image(systemName: "chart.line.uptrend.xyaxis").foregroundStyle(V5P.cyan)
+                Text("FX Event Analyzer").font(.system(size: 12, weight: .bold))
+                Spacer()
+                Image(systemName: "bell").font(.system(size: 12))
+            }
+            .foregroundStyle(.white)
+            .frame(width: 204)
+            .position(x: 117, y: 40)
 
             if let hero = mappedEvents.upcoming.first {
-                HQV5NeonCard {
-                    VStack(alignment: .leading, spacing: 9) {
-                        Text("Upcoming Events").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
-                        Text("Today \(ValueFormat.time(hero.releaseDatetime))").font(.system(size: 9)).foregroundStyle(HQV5.muted)
-                        NavigationLink(value: AppRoute.eventDetail(id: hero.id)) {
-                            eventLine(HQV5Event(home: hero))
-                        }.buttonStyle(.plain)
+                NavigationLink(value: AppRoute.eventDetail(id: hero.id)) {
+                    V5Card(CGRect(x: 10, y: 58, width: 214, height: 94)) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Upcoming Events").font(.system(size: 11, weight: .bold))
+                            Text("Today  \(ValueFormat.time(hero.releaseDatetime))").font(.system(size: 7)).foregroundStyle(V5P.muted)
+                            V5EventRow(home: hero)
+                        }
                     }
-                }
+                }.buttonStyle(.plain)
             }
 
-            if !mappedEvents.rest.isEmpty {
-                Text("Recent Events").font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
-                ForEach(mappedEvents.rest) { event in
-                    NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
-                        eventCard(HQV5Event(home: event))
-                    }.buttonStyle(.plain)
-                }
+            Text("Recent Events").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                .position(x: 49, y: 162)
+            ForEach(Array(mappedEvents.rest.prefix(4).enumerated()), id: \.element.id) { idx, event in
+                NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
+                    V5Card(CGRect(x: 10, y: 174 + CGFloat(idx) * 53, width: 214, height: 48)) {
+                        V5EventRow(home: event)
+                    }
+                }.buttonStyle(.plain)
             }
 
             if !mappedPairs.isEmpty {
-                Text("主要FX").font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
-                HStack(spacing: 7) {
-                    ForEach(mappedPairs) { pair in pairCard(pair) }
-                }
-                .padding(.bottom, 12)
+                Text("主要FX").font(.system(size: 11, weight: .bold)).foregroundStyle(.white).position(x: 35, y: 395)
+                HStack(spacing: 5) {
+                    ForEach(mappedPairs.prefix(3)) { pair in fxBox(pair) }
+                }.frame(width: 214).position(x: 117, y: 421)
             }
+
+            V5BottomBar(selected: $tabSelection)
         }
     }
 
-    @ViewBuilder private func eventLine(_ e: HQV5Event) -> some View {
-        HStack { Text(e.flag); Text(e.name).font(.system(size: 10, weight: .semibold)).foregroundStyle(.white); Spacer(); HQV5Badge(text: e.importanceText, kind: e.importance); Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white) }
-        HStack { HQV5MetricRow(title: "予想", value: e.forecast, tint: .white); HQV5MetricRow(title: "結果", value: e.actual, tint: .white); HQV5MetricRow(title: "前回", value: e.previous, tint: .white) }
-    }
-    @ViewBuilder private func eventCard(_ e: HQV5Event) -> some View {
-        HQV5NeonCard {
-            HStack { Text(e.flag); Text(e.name).font(.system(size: 10, weight: .semibold)).foregroundStyle(.white); Spacer(); HQV5Badge(text: e.importanceText, kind: e.importance); Image(systemName: "chevron.right").font(.caption).foregroundStyle(.white) }
-            HStack { HQV5MetricRow(title: "予想", value: e.forecast, tint: .white); HQV5MetricRow(title: "結果", value: e.actual, tint: .white); HQV5MetricRow(title: "前回", value: e.previous, tint: .white) }
+    @ViewBuilder private func fxBox(_ pair: FXPairUI) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack { Text(pair.symbol).font(.system(size: 7, weight: .bold)); Spacer(); Circle().fill(pair.isUp ? V5P.green : V5P.red).frame(width: 4, height: 4) }
+            Text(pair.price).font(.system(size: 12, weight: .bold))
+            Text(pair.change).font(.system(size: 7, weight: .semibold)).foregroundStyle(pair.isUp ? V5P.green : V5P.red)
         }
-    }
-    @ViewBuilder private func pairCard(_ pair: FXPairUI) -> some View {
-        HQV5NeonCard {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack { Text(pair.symbol).font(.system(size: 10, weight: .bold)).foregroundStyle(.white); Spacer(); Circle().fill(pair.isUp ? HQV5.green : HQV5.red).frame(width: 5, height: 5) }
-                Text(pair.price).font(.system(size: 17, weight: .bold)).foregroundStyle(.white)
-                Text(pair.change).font(.system(size: 9, weight: .semibold)).foregroundStyle(pair.isUp ? HQV5.green : HQV5.red)
-            }
-        }
+        .foregroundStyle(.white)
+        .padding(6).frame(width: 68, height: 55, alignment: .topLeading)
+        .background(V5P.panel, in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(V5P.line.opacity(0.6), lineWidth: 0.5))
     }
 
     private var mappedEvents: (upcoming: [HomeEventSummary], rest: [HomeEventSummary]) {
@@ -140,30 +151,27 @@ private extension HomeViewModel {
     }
 }
 
-extension HQV5Event {
+extension V5EventRow {
     init(home event: HomeEventSummary) {
         self.init(
-            id: event.id,
             flag: CountryFlag.emoji(for: event.countryCode),
-            name: "\(CountryFlag.kanjiAbbreviation(for: event.countryCode))) \(event.indicatorName)",
+            name: event.indicatorName,
             code: event.currencyCode,
-            importance: event.importance.hqv5Kind,
-            importanceText: event.importance.rawValue.capitalized,
-            time: ValueFormat.dateTime(event.releaseDatetime),
+            badge: event.importance.rawValue.capitalized,
+            badgeColor: event.importance.v5Color,
             forecast: event.forecast.map { ValueFormat.number($0) } ?? "-",
-            actual: event.status == .released ? (event.actual.map { ValueFormat.number($0) } ?? "-") : "—",
-            previous: event.previous.map { ValueFormat.number($0) } ?? "-",
-            surprise: event.surprise.map { ValueFormat.number($0, signed: true) } ?? "—"
+            actual: event.status == .released ? (event.actual.map { ValueFormat.number($0) } ?? "-") : "-",
+            previous: event.previous.map { ValueFormat.number($0) } ?? "-"
         )
     }
 }
 
 extension Importance {
-    var hqv5Kind: HQV5Badge.Kind {
+    var v5Color: Color {
         switch self {
-        case .high: return .high
-        case .medium: return .medium
-        case .low: return .low
+        case .high: return V5P.red
+        case .medium: return V5P.green
+        case .low: return V5P.blue
         }
     }
 }
