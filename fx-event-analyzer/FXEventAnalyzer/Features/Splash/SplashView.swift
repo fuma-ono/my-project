@@ -2,17 +2,26 @@ import SwiftUI
 
 /// SCR-000 Splash / Launch Screen.
 ///
-/// HQ "V5 Pixel Frontend" integration (2026-09-24): visual content is HQ's
-/// `V5PixelFrontend.swift` `V5Splash` (icon, wordmark, tagline,
-/// `V5CandleChart`, loading capsule, fixed 234×491 coordinate space via
-/// `V5Viewport`), reproduced as given. What changed from HQ's file is
-/// wiring only: this view still owns the real `SplashViewModel` (unchanged
-/// init signature — `RootView` constructs it the same way) and still
-/// renders `.initializationError`/`.apiConnectionError` via the existing
-/// `ErrorView` with retry — HQ's screen, a single always-showing splash
-/// with no state machine, has no design for those two states, so (same
-/// call as the prior integration) they fall back to a plain full-bleed
-/// V5-toned background instead of the fixed-coordinate V5 layout.
+/// Direction change (2026-09-25): HQ now supplies reference images
+/// directly rather than a SwiftUI source package, one screen at a time —
+/// this restores the literal-reproduction approach from the original
+/// "Reference画像の完全再現" instruction (2026-09-18), which this exact
+/// screen was already built and iteratively measured against before the
+/// later HQ SwiftUI-package rounds (HQ Frontend / HQ UI Master v5 / V5
+/// Pixel Frontend) temporarily replaced it. `BrandMark` (the literal
+/// cropped mark image — HQ rejected a self-drawn/SF Symbol stand-in for
+/// this exact reason back then: "自分で作成するのではなく画像を真似ろ"),
+/// `SplashMarketTexture` (glowing two-tone candlesticks + crossing
+/// curves), `SplashLoadingBar`, and `DesignTokens` were never touched by
+/// those later rounds and are restored here unchanged. The one real
+/// difference from that prior version: the tagline. The current reference
+/// image reads "Turn Economic Events / into Trading Opportunities" — the
+/// literal wording from before Phase 5 (commit 6578d6a) intentionally
+/// changed it to "Understand Economic Events / & FX Reactions" to avoid
+/// implying investment advice (features.md excludes 投資助言). The user's
+/// explicit instruction this round is exact image reproduction, so the
+/// image's current wording is used as given; flagged here rather than
+/// silently overriding that earlier scope concern.
 struct SplashView: View {
     @StateObject private var viewModel: SplashViewModel
 
@@ -21,65 +30,70 @@ struct SplashView: View {
     }
 
     var body: some View {
-        Group {
-            switch viewModel.state {
-            case .initializing:
-                initializingContent
-            case .initializationError:
-                errorBackground {
-                    ErrorView(
-                        title: "アプリの初期化に失敗しました",
-                        message: "もう一度お試しください。",
-                        onRetry: { viewModel.retry() }
-                    )
-                }
-            case .apiConnectionError:
-                errorBackground {
-                    ErrorView(
-                        title: "サーバーに接続できませんでした",
-                        message: "ネットワーク接続を確認し、再試行してください。",
-                        onRetry: { viewModel.retry() }
-                    )
+        ZStack {
+            DesignTokens.Colors.backgroundPrimary
+                .ignoresSafeArea()
+
+            SplashMarketTexture()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea()
+
+            // Every position and gap here was measured pixel-by-pixel off
+            // the Reference (a real iPhone-aspect-ratio screenshot with
+            // status bar, so its fractions translate directly): mark top
+            // ~24% of full screen height, width ~34% (BrandMark's own
+            // 132pt default), title-to-tagline gap ~3%, loading bar ~85.5%.
+            GeometryReader { geometry in
+                ZStack(alignment: .top) {
+                    VStack(spacing: DesignTokens.Spacing.xl) {
+                        BrandMark(glow: true)
+                        (
+                            Text("FX")
+                                .foregroundStyle(DesignTokens.Colors.accentCyan)
+                                + Text(" Event Analyzer")
+                                .foregroundStyle(DesignTokens.Colors.textPrimary)
+                        )
+                        .font(DesignTokens.Typography.splashTitle)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+
+                        Text("Turn Economic Events\ninto Trading Opportunities")
+                            .font(DesignTokens.Typography.tagline)
+                            .foregroundStyle(DesignTokens.Colors.textSecondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.horizontal, DesignTokens.Spacing.lg)
+                    .frame(maxWidth: 480) // keeps brand elements from stretching oversized on iPad
+                    .frame(width: geometry.size.width)
+                    .padding(.top, geometry.size.height * 0.24)
+
+                    bottomContent
+                        .padding(.horizontal, DesignTokens.Spacing.lg)
+                        .frame(width: geometry.size.width)
+                        .padding(.top, geometry.size.height * 0.855)
                 }
             }
         }
-        .preferredColorScheme(.dark)
         .task { viewModel.start() }
     }
 
-    private var initializingContent: some View {
-        V5Viewport {
-            V5TopStatus()
-            VStack(spacing: 0) {
-                Spacer().frame(height: 100)
-                Image(systemName: "chart.line.uptrend.xyaxis")
-                    .font(.system(size: 50, weight: .bold))
-                    .foregroundStyle(LinearGradient(colors: [V5P.blue, V5P.cyan], startPoint: .bottomLeading, endPoint: .topTrailing))
-                    .shadow(color: V5P.cyan.opacity(0.6), radius: 10)
-                Text("FX Event Analyzer")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(.white)
-                    .padding(.top, 8)
-                Text("Turn Economic Events\ninto Trading Opportunities")
-                    .multilineTextAlignment(.center)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.white)
-                    .padding(.top, 16)
-                Spacer()
-                V5CandleChart().frame(width: 222, height: 150)
-                Capsule().fill(V5P.cyan).frame(width: 80, height: 1.4).padding(.top, 12)
-                Text("Loading...").font(.system(size: 8)).foregroundStyle(V5P.muted).padding(.top, 6)
-                Spacer().frame(height: 20)
-            }
-            .frame(width: V5P.W, height: V5P.H)
-        }
-    }
-
-    @ViewBuilder private func errorBackground(@ViewBuilder content: () -> some View) -> some View {
-        ZStack {
-            LinearGradient(colors: [V5P.bg0, V5P.bg1, V5P.bg0], startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
-            content()
+    @ViewBuilder
+    private var bottomContent: some View {
+        switch viewModel.state {
+        case .initializing:
+            SplashLoadingBar()
+        case .initializationError:
+            ErrorView(
+                title: "アプリの初期化に失敗しました",
+                message: "もう一度お試しください。",
+                onRetry: { viewModel.retry() }
+            )
+        case .apiConnectionError:
+            ErrorView(
+                title: "サーバーに接続できませんでした",
+                message: "ネットワーク接続を確認し、再試行してください。",
+                onRetry: { viewModel.retry() }
+            )
         }
     }
 }
