@@ -23,33 +23,26 @@ final class ScreenshotTests: XCTestCase {
         // on the first miss.
         continueAfterFailure = true
         app = XCUIApplication()
-        // Holds SplashViewModel briefly (test-only; see its doc comment) so
-        // "00-Splash-bestEffort" below actually has a chance to catch
-        // Splash instead of the already-transitioned Login screen.
-        app.launchEnvironment["UI_SCREENSHOT_HOLD_SPLASH"] = "1"
         app.launch()
     }
 
     func testCaptureAllScreens() throws {
-        // SCR-000 Splash — bonus, not in HQ's required 7. SplashViewModel
-        // holds for 60s here (UI_SCREENSHOT_HOLD_SPLASH, set above) — well
-        // past the 13-46s of launch+automation-session-setup latency
-        // observed across real CI runs before this capture actually
-        // fires — so this reliably catches Splash rather than the
-        // already-transitioned Login screen; kept the "-bestEffort" name
-        // since an exceptionally slow CI runner could still in principle
-        // miss it.
+        // SCR-000 Splash — bonus, not in HQ's required 7; the real init
+        // sequence (SplashViewModel) resolves in well under a second when
+        // there is no persisted session (a fresh Simulator install always
+        // starts this way), so this is best-effort only and may already
+        // show Login. A launch-environment-gated hold was tried to force
+        // this to reliably catch Splash, but a hold long enough to survive
+        // real CI's 13-46s launch+automation-session-setup latency (60s)
+        // made XCUIApplication.launch() itself time out ("Timed out while
+        // launching application via Xcode") — confirmed via a real CI
+        // failure — so that approach was reverted; this stays best-effort.
         capture("00-Splash-bestEffort", settle: 0)
 
         // SCR-010 Login — also bonus, but required to reach every other
         // screen, so always exercised.
-        // 75s, not 20s: how much of SplashViewModel's 60s
-        // UI_SCREENSHOT_HOLD_SPLASH hold is still outstanding here varies
-        // with how long the automation-session setup before the Splash
-        // capture above took (observed 13-46s across real CI runs) — in
-        // the fastest case almost the whole 60s is still ahead of us.
         let emailField = app.textFields["メールアドレス"]
-        XCTAssertTrue(emailField.waitForExistence(timeout: 75), "Login screen did not appear")
+        XCTAssertTrue(emailField.waitForExistence(timeout: 20), "Login screen did not appear")
         capture("01-Login")
 
         emailField.tap()
