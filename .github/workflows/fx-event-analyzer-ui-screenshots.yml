@@ -245,7 +245,18 @@ jobs:
           git add ci-screenshots/iPhone
           if ! git diff --cached --quiet; then
             git commit -m "ci: update iPhone UI screenshots [skip ci]"
-            git push origin "HEAD:${GITHUB_REF_NAME}"
+            # A manual re-run (or a concurrent push/pull_request-triggered
+            # run) can advance origin's branch between this job's checkout
+            # and this push — confirmed via a real "! [rejected] ...
+            # (fetch first)" CI failure. Rebase onto the latest tip and
+            # retry: this commit only ever touches ci-screenshots/iPhone,
+            # so the rebase has nothing to conflict with in practice.
+            for attempt in 1 2 3; do
+              git push origin "HEAD:${GITHUB_REF_NAME}" && break
+              echo "Push attempt ${attempt} rejected, fetching and rebasing before retry."
+              git fetch origin "${GITHUB_REF_NAME}"
+              git rebase "origin/${GITHUB_REF_NAME}"
+            done
           else
             echo "No screenshot changes to commit."
           fi
