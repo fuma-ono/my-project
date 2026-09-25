@@ -164,6 +164,7 @@ jobs:
             xcrun xcresulttool export attachments \
               --path DerivedData/iPhone.xcresult \
               --output-path Screenshots/iPhone-raw \
+              | tee Screenshots/iPhone-raw/export.log \
               || echo "::warning::xcresulttool export attachments failed for iPhone; raw .xcresult is still uploaded."
           else
             echo "::warning::No iPhone .xcresult bundle was produced (test run likely failed before producing results)."
@@ -177,39 +178,45 @@ jobs:
             xcrun xcresulttool export attachments \
               --path DerivedData/iPad.xcresult \
               --output-path Screenshots/iPad-raw \
+              | tee Screenshots/iPad-raw/export.log \
               || echo "::warning::xcresulttool export attachments failed for iPad; raw .xcresult is still uploaded."
           else
             echo "::warning::No iPad .xcresult bundle was produced."
           fi
 
+      # `xcresulttool export attachments`'s manifest.json schema isn't
+      # documented and doesn't match the key names ("name" / "exportedFileName")
+      # this step originally guessed at (confirmed via a real CI run: the
+      # rename loop silently matched zero attachments, so Screenshots/iPhone
+      # was never created). Its own stdout is a stable, observed format
+      # instead ("File: <uuid>.png, suggested name: "<name>.png""), captured
+      # to export.log by the export steps above — parse that instead of the
+      # manifest.
       - name: Rename exported screenshots to their attachment names (best-effort)
         if: always()
         run: |
           python3 - <<'PY'
-          import json, pathlib, shutil
+          import pathlib, re, shutil
+
+          pattern = re.compile(r'^File: (\S+), suggested name: "(.+)"$')
 
           for platform in ("iPhone", "iPad"):
               raw = pathlib.Path(f"Screenshots/{platform}-raw")
-              manifest = raw / "manifest.json"
-              if not manifest.exists():
+              log = raw / "export.log"
+              if not log.exists():
                   continue
               out = pathlib.Path(f"Screenshots/{platform}")
               out.mkdir(parents=True, exist_ok=True)
-              try:
-                  entries = json.loads(manifest.read_text())
-              except Exception as exc:
-                  print(f"::warning::Could not parse {manifest}: {exc}")
-                  continue
-              for entry in entries if isinstance(entries, list) else entries.get("attachments", []):
-                  name = entry.get("name") or entry.get("suggestedHumanReadableName") or entry.get("exportedFileName")
-                  filename = entry.get("exportedFileName") or entry.get("filename")
-                  if not name or not filename:
+              for line in log.read_text().splitlines():
+                  m = pattern.match(line.strip())
+                  if not m:
                       continue
+                  filename, name = m.group(1), m.group(2)
                   src = raw / filename
-                  if not src.exists():
+                  if not src.exists() or not name.endswith(".png"):
                       continue
                   safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in name)
-                  dest = out / (safe_name if safe_name.endswith(".png") else f"{safe_name}.png")
+                  dest = out / safe_name
                   shutil.copyfile(src, dest)
                   print(f"{src} -> {dest}")
           PY
