@@ -42,9 +42,13 @@ struct SplashView: View {
             // the Reference (a real iPhone-aspect-ratio screenshot with
             // status bar, so its fractions translate directly): mark top
             // ~24% of full screen height, width ~34% (BrandMark's own
-            // 132pt default), title-to-tagline gap ~3%, loading bar ~85.5%.
+            // 132pt default), title-to-tagline gap ~3%. bottomContent is
+            // anchored from the bottom edge via Spacer rather than a
+            // computed top-offset — confirmed via a real CI screenshot
+            // that the earlier top-padding-percentage approach silently
+            // failed to render this block at all.
             GeometryReader { geometry in
-                ZStack(alignment: .top) {
+                VStack(spacing: 0) {
                     VStack(spacing: DesignTokens.Spacing.xl) {
                         BrandMark(glow: true)
                         (
@@ -67,10 +71,12 @@ struct SplashView: View {
                     .frame(width: geometry.size.width)
                     .padding(.top, geometry.size.height * 0.24)
 
+                    Spacer(minLength: 0)
+
                     bottomContent
                         .padding(.horizontal, DesignTokens.Spacing.lg)
                         .frame(width: geometry.size.width)
-                        .padding(.top, geometry.size.height * 0.855)
+                        .padding(.bottom, geometry.size.height * 0.06)
                 }
             }
         }
@@ -81,7 +87,12 @@ struct SplashView: View {
     private var bottomContent: some View {
         switch viewModel.state {
         case .initializing:
-            SplashLoadingBar()
+            VStack(spacing: DesignTokens.Spacing.sm) {
+                SplashLoadingBar()
+                Text("Loading...")
+                    .font(DesignTokens.Typography.footnote)
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+            }
         case .initializationError:
             ErrorView(
                 title: "アプリの初期化に失敗しました",
