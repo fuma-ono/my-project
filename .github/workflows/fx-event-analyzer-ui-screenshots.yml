@@ -38,6 +38,9 @@ on:
       - ".github/workflows/fx-event-analyzer-ui-screenshots.yml"
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   screenshots:
     runs-on: macos-15
@@ -210,6 +213,35 @@ jobs:
                   shutil.copyfile(src, dest)
                   print(f"{src} -> {dest}")
           PY
+
+      # GitHub Actions Artifacts are served through the Actions API's
+      # redirect to Azure Blob Storage; Claude's sandboxed review session
+      # cannot reach that host through its network policy, so it can never
+      # download the artifact above itself — every prior round required a
+      # human to download and re-upload the zip by hand. Committing just
+      # the iPhone PNGs into the repo (outside fx-event-analyzer/**, so
+      # this push doesn't retrigger this or any other path-filtered
+      # workflow; [skip ci] as a second guard) makes them reachable via the
+      # ordinary Git Contents API instead, which is not blocked — no human
+      # download/upload round-trip needed to review a screen.
+      - name: Commit iPhone screenshots into the repo for direct review
+        if: always() && github.event_name == 'push'
+        run: |
+          mkdir -p ../ci-screenshots/iPhone
+          rm -f ../ci-screenshots/iPhone/*.png
+          if [ -d "Screenshots/iPhone" ]; then
+            cp Screenshots/iPhone/*.png ../ci-screenshots/iPhone/ 2>/dev/null || true
+          fi
+          cd ..
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ci-screenshots/iPhone
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: update iPhone UI screenshots [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          else
+            echo "No screenshot changes to commit."
+          fi
 
       - name: Upload screenshots artifact
         if: always()
