@@ -2036,3 +2036,15 @@ Apple App Store審査で「Guideline 2.1 - Information Needed」として差し�
 **まとめ・次のアクション**:
 1. ①のコード修正を含む新しいビルドを作る(`eas build --platform ios --profile production` → `eas submit --platform ios --latest`)。既にリリース済みのバージョンへの修正なので、通常のアップデート審査として提出する
 2. ②はコード変更不要。実機のコンソールログ(`[AdBanner] failed to load:` の内容)とAdMobダッシュボードの広告ユニット有効化状況を確認してほしい
+
+## フィードバックの毎日自動対応(105回目)
+
+投書箱(`feedback`テーブル、99回目)を毎日1回自動で確認し、明らかなバグは修正→ビルド→`eas submit`まで人の確認なしで進める仕組みを用意した(99回目の「ストア提出だけは必ず確認を挟む」方針は、オーナーとの合意によりこの回から撤廃)。判断が難しいもの・要望/仕様変更に近いものは手を出さず報告のみ。返信機能は作らない(投書箱方式のまま)。
+
+- **`docs/feedback-autopilot.md`(新規)**: 毎日起きたセッションが従う手順書。分類基準(A:明らかなバグ/B:判断が難しい/C:要望・仕様変更/D:対応不要)、自動修正してよい範囲(スキーマ・課金・ログイン・ネイティブ設定・依存追加などは対象外)、`status`列(new→triaged/resolved)による処理済み管理、失敗時の止め方を定義
+- **`scripts/feedback.sh`(新規)**: `check`(疎通確認)/`new`(未処理一覧)/`mark <id> <status>`。鍵はClaude Code環境のAPI認証情報がプロキシ経由で付与するため、スクリプトは`SUPABASE_URL`しか読まない
+- **`eas.json`**: `submit.production.ios.ascAppId`(`6808062809`、過去の提出履歴から取得)を追加。これが無いと`eas submit --non-interactive`がアプリを特定できない
+
+**疎通確認の結果**: `SUPABASE_URL`は設定済み。Expo(`eas whoami`→`fuma-ono`、`build:list`も取得可)はOK。**Supabase REST APIは`401 Invalid API key`**で、登録された鍵の値そのものが拒否されている(未送信なら`No API key found`になるため、ヘッダーは付与されている)。鍵を直すまで、毎日の自動対応は「接続できない」と報告するだけになる。
+
+**注意**: `eas submit`はApp Store Connectへのアップロードまでで、App Reviewへの提出(バージョン作成→「審査へ提出」)はASC APIキーがこの環境に無いため自動化できていない。また1.0.0はリリース済みのため、自動修正のたびに`app.json`の`version`のパッチ番号を上げる手順にしている。104回目のキーボード修正はまだビルドされていない(最終ビルドは9/18の`202609080023`)。
