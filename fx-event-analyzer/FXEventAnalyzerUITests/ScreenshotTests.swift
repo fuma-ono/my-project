@@ -23,15 +23,19 @@ final class ScreenshotTests: XCTestCase {
         // on the first miss.
         continueAfterFailure = true
         app = XCUIApplication()
+        // Holds SplashViewModel briefly (test-only; see its doc comment) so
+        // "00-Splash-bestEffort" below actually has a chance to catch
+        // Splash instead of the already-transitioned Login screen.
+        app.launchEnvironment["UI_SCREENSHOT_HOLD_SPLASH"] = "1"
         app.launch()
     }
 
     func testCaptureAllScreens() throws {
-        // SCR-000 Splash — bonus, not in HQ's required 7; the real init
-        // sequence (SplashViewModel) resolves in well under a second when
-        // there is no persisted session (a fresh Simulator install always
-        // starts this way), so this is best-effort only and may already
-        // show Login.
+        // SCR-000 Splash — bonus, not in HQ's required 7. SplashViewModel
+        // holds briefly here (UI_SCREENSHOT_HOLD_SPLASH, set above) so this
+        // reliably catches Splash rather than the already-transitioned
+        // Login screen; kept the "-bestEffort" name since a slow CI runner
+        // could still in principle miss it.
         capture("00-Splash-bestEffort", settle: 0)
 
         // SCR-010 Login — also bonus, but required to reach every other

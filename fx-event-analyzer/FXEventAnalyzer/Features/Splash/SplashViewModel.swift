@@ -61,6 +61,18 @@ final class SplashViewModel: ObservableObject {
         // Step 1: app initial-state check. Nothing beyond process launch to
         // verify in Phase 1.
 
+        // Test-only instrumentation: the real init sequence resolves in
+        // well under a second against a fresh/no-session Simulator install,
+        // which races XCUITest's ~40s automation-session setup and made the
+        // UI-screenshot suite's "00-Splash-bestEffort" capture near-always
+        // land on Login instead (confirmed via a real CI run). Holding
+        // briefly here — only when the screenshot test target sets this
+        // launch environment flag, never in the shipped app — lets that
+        // capture actually catch Splash.
+        if ProcessInfo.processInfo.environment["UI_SCREENSHOT_HOLD_SPLASH"] != nil {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+        }
+
         // Step 2 + 5: Supabase Auth session check / logged-in determination.
         let session: UserSession?
         do {
