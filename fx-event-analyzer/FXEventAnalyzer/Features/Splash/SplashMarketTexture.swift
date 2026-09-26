@@ -7,16 +7,15 @@ import SwiftUI
 /// bright saturated `accentCyan` this file used earlier (confirmed wrong
 /// via direct pixel sampling after user feedback that the color looked
 /// "monotone" and too vivid next to the Reference's paler, background-
-/// blending look). Below the candles, the Reference has a glowing
-/// wireframe mesh woven diagonally over a surface that sweeps down-right
-/// then flattens (pixel-traced by scanning each column for its brightest
-/// point, not guessed) — not a flat horizontal grid, which is what this
-/// file drew in its first mesh attempt and was directly flagged as wrong
-/// ("why are the lines horizontal"). Like Home's `HeroMapTexture`, this
-/// app has no real chart-data source to draw from at Splash time (nothing
-/// is fetched yet), so this remains a deliberate best-effort decorative
-/// approximation — a deterministic pattern, not real market data —
-/// disclosed as such rather than claimed pixel-exact.
+/// blending look). Below the candles, the Reference has a glowing curve
+/// with a mesh draped along it, both built from actual (x, y) control
+/// points pixel-traced off the Reference — see `mesh`'s doc comment for
+/// the coordinate table and why an abstract formula (this file's earlier
+/// approach) kept drifting from the real shape. Like Home's
+/// `HeroMapTexture`, this app has no real chart-data source to draw from
+/// at Splash time (nothing is fetched yet), so this remains a deliberate
+/// best-effort decorative approximation — a deterministic pattern, not
+/// real market data — disclosed as such rather than claimed pixel-exact.
 struct SplashMarketTexture: View {
     var body: some View {
         ZStack {
@@ -27,98 +26,126 @@ struct SplashMarketTexture: View {
         .accessibilityHidden(true)
     }
 
-    /// An organically-draped mesh, NOT a rigid straight-line grid — the
-    /// root cause behind a direct HQ instruction to stop treating this as a
-    /// coordinate/opacity tuning problem and instead fix the underlying
-    /// draw structure: both the weft (wave) rows *and* the warp (shear)
-    /// diagonals previously only bent through the single sigmoid dip, so
-    /// the warp lines in particular still read as straight diagonal grid
-    /// strokes once actually captured on a device — the Reference's
-    /// surface visibly ripples like draped cloth, not a flat plane bent
-    /// once. `height(at:row:)` is now the single source of vertical
-    /// deformation shared by every weft row *and* every warp diagonal: the
-    /// same sigmoid descent as before, plus a small multi-cycle ripple
-    /// (sine, phase-shifted per row) layered on top — so no line in the
-    /// mesh is ever straight, matching the Reference's woven/folded-fabric
-    /// look instead of a UV-mapped flat grid. The bright ridge line reuses
-    /// this deformation too, and now glows via a real Gaussian blur layer
-    /// (`context.drawLayer(...addFilter(.blur...))`) instead of a second
-    /// wide low-opacity stroke standing in for one. Verified against the
-    /// Reference's lower-half crop with a Python re-implementation
-    /// (full_scene_v7_organic) before porting.
+    /// HQ instruction, explicit: stop tuning an abstract sigmoid+sine
+    /// formula and instead pixel-trace the Reference's actual curve into
+    /// numeric (x, y) control points, normalized 0...1 against the app's
+    /// own display area (not the phone-mockup image), then rebuild from
+    /// those coordinates with real interpolated control points — not a
+    /// guessed closed-form curve. `curveControlPoints` below is that trace
+    /// (5%-of-width steps, read directly off a 5%-gridded crop of the
+    /// Reference, cross-checked against pixel brightness at each point).
+    ///
+    /// Two things that formula-based approach got structurally wrong, only
+    /// visible once actually plotted against the measured points:
+    /// 1. The curve is NOT a monotonic descend-then-flatten that spans the
+    ///    full width. It descends from (0, 0.695) to a shallow minimum
+    ///    around (0.65, 0.80), and its *glow itself fades out* well before
+    ///    the right edge — past x≈0.65 the Reference is close to plain
+    ///    background, confirmed by brightness sampling (peak brightness
+    ///    ~170-211 around x=0.3-0.5, down to ~50 by x=0.9, indistinguishable
+    ///    from the background floor). A curve that stays bright all the way
+    ///    across (this file's previous versions) is a different shape, not
+    ///    just a differently-tuned one.
+    /// 2. The mesh crosshatch fades out earlier still (by x≈0.35-0.45).
+    /// `curveY(at:)` interpolates `curveControlPoints` with a Catmull-Rom
+    /// spline (passes exactly through every measured point, unlike a
+    /// hand-fit sigmoid), and both the ridge curve and every mesh row/
+    /// diagonal read their vertical position through this one function —
+    /// so the mesh is geometrically locked to the curve's own measured
+    /// shape rather than an independent formula that happens to look
+    /// similar. Verified against the Reference with a Python
+    /// re-implementation (full_scene_v10_bezier2) before porting.
     private var mesh: some View {
         Canvas { context, size in
-            let rows = 16
-            let cols = 24
-            // topY/bottomY/sweep were 0.53/0.86/0.10 — a grid-overlaid
-            // crop of the Reference (10% gridlines) showed the bright
-            // ridge actually descends from ~69% to ~80% of full screen
-            // height, not the ~59-69% this produced; the mesh read as
-            // sitting too high and overlapping the candles because of it.
-            // Re-solved topY/bottomY/sweep so ridgeRow's own curve lands
-            // on that measured 69%→80% span.
-            let topY = size.height * 0.60
-            let bottomY = size.height * 0.93
-            let sweep = size.height * 0.14
-            let rippleAmplitude = size.height * 0.012
+            // Pixel-traced from the Reference at 5%-of-width steps
+            // (normalized x, y against the app's own display bounds, i.e.
+            // status bar to home indicator — not the phone mockup image).
+            // x stops at 0.65 because that's where the curve's own glow
+            // has already faded into the background; extrapolated flat
+            // beyond that since curveOpacity(t) suppresses it to ~0 there
+            // anyway.
+            let curveControlPoints: [CGPoint] = [
+                CGPoint(x: 0.00, y: 0.695), CGPoint(x: 0.05, y: 0.703),
+                CGPoint(x: 0.10, y: 0.715), CGPoint(x: 0.15, y: 0.725),
+                CGPoint(x: 0.20, y: 0.738), CGPoint(x: 0.25, y: 0.752),
+                CGPoint(x: 0.30, y: 0.763), CGPoint(x: 0.35, y: 0.772),
+                CGPoint(x: 0.40, y: 0.780), CGPoint(x: 0.45, y: 0.787),
+                CGPoint(x: 0.50, y: 0.792), CGPoint(x: 0.55, y: 0.796),
+                CGPoint(x: 0.60, y: 0.798), CGPoint(x: 0.65, y: 0.800),
+            ]
 
-            func descend(_ t: Double) -> Double {
-                1 / (1 + exp(-(t - 0.25) * 4.5))
+            // Catmull-Rom spline through curveControlPoints — passes
+            // exactly through every measured point (unlike a fitted
+            // sigmoid), with smooth (C1) tangents between them.
+            func curveY(at x: Double) -> Double {
+                let pts = curveControlPoints
+                let clampedX = min(max(x, 0), pts[pts.count - 1].x)
+                var i = 0
+                while i < pts.count - 2, pts[i + 1].x < clampedX { i += 1 }
+                let p0 = pts[max(i - 1, 0)]
+                let p1 = pts[i]
+                let p2 = pts[min(i + 1, pts.count - 1)]
+                let p3 = pts[min(i + 2, pts.count - 1)]
+                let segWidth = p2.x - p1.x
+                guard segWidth > 0 else { return p1.y }
+                let u = (clampedX - p1.x) / segWidth
+                let u2 = u * u, u3 = u2 * u
+                return 0.5 * (
+                    (2 * p1.y)
+                    + (-p0.y + p2.y) * u
+                    + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * u2
+                    + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * u3
+                )
             }
-            // Shared deformation for every weft row and warp diagonal: the
-            // overall down-then-flatten sweep, plus a small ripple whose
-            // phase shifts per row and whose amplitude fades toward the
-            // right — this is what keeps every line in the mesh curved,
-            // not just the row that happens to follow the base sigmoid.
-            func height(at t: Double, row: Int) -> Double {
-                let ripple = sin(t * 11.5 + Double(row) * 0.9) * rippleAmplitude * (0.4 + 0.6 * (1 - t))
-                return descend(t) * sweep + ripple
+
+            func smoothstep(_ edge0: Double, _ edge1: Double, _ x: Double) -> Double {
+                let t = min(max((x - edge0) / (edge1 - edge0), 0), 1)
+                return t * t * (3 - 2 * t)
             }
+            // Brightness envelope pixel-sampled alongside the curve's
+            // position: dim entering the frame, peaking x≈0.3-0.5, fading
+            // to background by x≈0.9 — not a constant-opacity line.
+            func curveOpacity(at t: Double) -> Double {
+                smoothstep(0.0, 0.15, t) * (1 - smoothstep(0.45, 0.90, t))
+            }
+            // The mesh crosshatch fades out earlier than the ridge curve
+            // itself (by x≈0.35-0.45 in the Reference, not 0.90).
+            func meshOpacity(at t: Double) -> Double {
+                smoothstep(0.0, 0.05, t) * (1 - smoothstep(0.22, 0.48, t))
+            }
+
+            let rows = 12
+            let rowSpacing = 0.022 // normalized fraction of height per row, below the ridge
             func rowY(_ r: Int, at t: Double) -> Double {
-                let f = Double(r) / Double(rows)
-                let base = topY + (bottomY - topY) * f
-                return base + height(at: t, row: r)
+                (curveY(at: t) + Double(r) * rowSpacing) * size.height
             }
 
-            var points: [[CGPoint]] = []
+            // Weft: every row reads its shape through the SAME curveY(at:)
+            // used by the ridge — geometrically the same curve, not an
+            // independently-tuned lookalike — offset downward per row and
+            // fading both by row distance and by meshOpacity(at:).
+            let cols = 40
             for r in 0...rows {
-                var rowPoints: [CGPoint] = []
-                for c in 0...cols {
+                let rowFade = max(0, 1 - Double(r) / Double(rows) * 1.1)
+                var previous = CGPoint(x: 0, y: rowY(r, at: 0))
+                for c in 1...cols {
                     let t = Double(c) / Double(cols)
-                    rowPoints.append(CGPoint(x: t * size.width, y: rowY(r, at: t)))
-                }
-                points.append(rowPoints)
-            }
-
-            let ridgeRow = rows / 5
-            let ridgeF = Double(ridgeRow) / Double(rows)
-
-            // Weft: soft wave lines clustering near the ridge row and
-            // fading both away from it vertically and toward the right
-            // horizontally, so the right two-thirds of the screen (behind
-            // the tagline and loading bar) stays close to plain background
-            // like the Reference, instead of a uniform grid everywhere.
-            for r in 0...rows {
-                let f = Double(r) / Double(rows)
-                let closeness = max(0, 1 - abs(f - ridgeF) * 2.0)
-                let baseOpacity = 0.05 + 0.28 * pow(closeness, 1.3)
-                for c in 0..<cols {
-                    let t = (Double(c) + 0.5) / Double(cols)
-                    let fade = max(0.22, 1.0 - t * 0.5)
-                    var segment = Path()
-                    segment.move(to: points[r][c])
-                    segment.addLine(to: points[r][c + 1])
-                    context.stroke(segment, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(baseOpacity * fade)), lineWidth: 0.8)
+                    let point = CGPoint(x: t * size.width, y: rowY(r, at: t))
+                    let midT = (Double(c) - 0.5) / Double(cols)
+                    let opacity = meshOpacity(at: midT) * 0.5 * rowFade
+                    if opacity > 0.004 {
+                        var segment = Path()
+                        segment.move(to: previous)
+                        segment.addLine(to: point)
+                        context.stroke(segment, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(opacity)), lineWidth: 0.8)
+                    }
+                    previous = point
                 }
             }
 
-            // Warp: sheared diagonals that ride the SAME height(at:row:)
-            // deformation as the weft rows, so they ripple with the mesh
-            // instead of cutting straight across it — a perspective floor
-            // grid concentrated bottom-left and fading out by roughly the
-            // midpoint of the screen, not full-strength across the whole
-            // width.
-            let shearPerRow = size.width / Double(cols) * 0.65
+            // Warp: sheared diagonals riding the same rowY(_:at:), so they
+            // curve with the mesh instead of cutting straight across it.
+            let shearPerRow = size.width / Double(cols) * 0.6
             for j in -cols...(cols * 2) {
                 var path = Path()
                 var started = false
@@ -126,7 +153,7 @@ struct SplashMarketTexture: View {
                 var tCount = 0.0
                 for r in 0...rows {
                     let x = Double(j) * (size.width / Double(cols)) + Double(r) * shearPerRow
-                    guard x >= -20, x <= size.width + 20 else { continue }
+                    guard x >= -20, x <= size.width * 0.58 else { continue }
                     let t = x / size.width
                     let y = rowY(r, at: t)
                     if !started {
@@ -139,25 +166,60 @@ struct SplashMarketTexture: View {
                     tCount += 1
                 }
                 guard started, tCount > 0 else { continue }
-                let concentration = max(0, 1.0 - (tSum / tCount) / 0.62)
-                let opacity = 0.24 * concentration
-                guard opacity > 0.006 else { continue }
+                let opacity = meshOpacity(at: tSum / tCount) * 0.45
+                guard opacity > 0.004 else { continue }
                 context.stroke(path, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(opacity)), lineWidth: 0.6)
             }
 
-            var ridgePath = Path()
-            ridgePath.move(to: points[ridgeRow][0])
-            for c in 1...cols { ridgePath.addLine(to: points[ridgeRow][c]) }
-
-            // Real Gaussian-blur bloom instead of a second wide/faint
-            // stroke standing in for a glow — matches the Reference's
-            // soft light spread around the bright core rather than a hard-
-            // edged halo.
-            context.drawLayer { layer in
-                layer.addFilter(.blur(radius: size.width * 0.018))
-                layer.stroke(ridgePath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.9)), lineWidth: 3)
+            // The ridge curve itself, split into three explicitly separate
+            // layers per HQ's instruction (base curve / bright core / soft
+            // glow), rather than one stroke standing in for all three:
+            let curveSamples = stride(from: 0.0, through: 1.0, by: 1.0 / 260.0).map { t in
+                (t: t, point: CGPoint(x: t * size.width, y: curveY(at: t) * size.height))
             }
-            context.stroke(ridgePath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.85)), lineWidth: 1.2)
+
+            // 1. Base: a wider, dim stroke underneath the glow.
+            var previousBase = curveSamples[0].point
+            for sample in curveSamples.dropFirst() {
+                let opacity = curveOpacity(at: sample.t) * 0.35
+                if opacity > 0.004 {
+                    var segment = Path()
+                    segment.move(to: previousBase)
+                    segment.addLine(to: sample.point)
+                    context.stroke(segment, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(opacity)), lineWidth: 6)
+                }
+                previousBase = sample.point
+            }
+
+            // 2. Soft glow: a real Gaussian blur layer, not a wide faint
+            // stroke standing in for one.
+            context.drawLayer { layer in
+                layer.addFilter(.blur(radius: size.width * 0.012))
+                var previousGlow = curveSamples[0].point
+                for sample in curveSamples.dropFirst() {
+                    let opacity = curveOpacity(at: sample.t)
+                    if opacity > 0.02 {
+                        var segment = Path()
+                        segment.move(to: previousGlow)
+                        segment.addLine(to: sample.point)
+                        layer.stroke(segment, with: .color(DesignTokens.Colors.accentCyan.opacity(opacity)), lineWidth: 3)
+                    }
+                    previousGlow = sample.point
+                }
+            }
+
+            // 3. Bright core line on top.
+            var previousCore = curveSamples[0].point
+            for sample in curveSamples.dropFirst() {
+                let opacity = curveOpacity(at: sample.t)
+                if opacity > 0.02 {
+                    var segment = Path()
+                    segment.move(to: previousCore)
+                    segment.addLine(to: sample.point)
+                    context.stroke(segment, with: .color(DesignTokens.Colors.accentCyan.opacity(min(1.0, opacity * 1.1))), lineWidth: 1.2)
+                }
+                previousCore = sample.point
+            }
         }
     }
 
