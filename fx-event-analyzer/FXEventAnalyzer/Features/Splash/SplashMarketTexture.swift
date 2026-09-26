@@ -27,25 +27,28 @@ struct SplashMarketTexture: View {
         .accessibilityHidden(true)
     }
 
-    /// A diagonally-woven wireframe mesh, sweeping down-right and
-    /// flattening out — NOT a flat horizontal grid (the previous version's
-    /// bug, flagged directly by the user: "why are the lines horizontal").
-    /// The sweep shape itself is not guessed: pixel-scanned the Reference
-    /// for the brightest point in each column to trace its actual ridge
-    /// line, which reads as a smooth one-directional descent from ~69% to
-    /// ~80% of screen height between x=0 and x≈60%, then staying flat —
-    /// a sigmoid, not a symmetric hump. The "weft" lines are parallel
-    /// copies of that same sigmoid at different vertical offsets; the
-    /// "warp" lines are sheared (not vertical) so they cross the weft
-    /// diagonally, producing the Reference's woven/draped-fabric look
-    /// instead of an axis-aligned grid.
+    /// A perspective floor-grid plus layered flowing wave lines — NOT a
+    /// uniform full-screen diagonal weave (that was this file's previous
+    /// version, flagged directly via a real-device side-by-side comparison:
+    /// the grid there was legible and equally strong across the *entire*
+    /// screen, including right through the tagline text and the loading
+    /// bar, where the Reference is nearly plain background). Zoomed into
+    /// the Reference directly: the fine crosshatch only reads clearly in
+    /// the lower-left, like a floor grid in perspective, and fades out
+    /// well before the right edge; a handful of soft wave lines cluster
+    /// near the one bright ridge curve and fade elsewhere, rather than all
+    /// rows being equally visible. This rewrite fades both the weft
+    /// (wave) rows and the warp (grid) diagonals by distance from the
+    /// ridge / from the left edge respectively, verified against the
+    /// Reference's actual lower-half crop before porting from a Python
+    /// re-implementation.
     private var mesh: some View {
         Canvas { context, size in
-            let rows = 12
-            let cols = 16
-            let topY = size.height * 0.56
-            let bottomY = size.height * 0.98
-            let sweep = size.height * 0.12
+            let rows = 14
+            let cols = 20
+            let topY = size.height * 0.53
+            let bottomY = size.height * 0.86
+            let sweep = size.height * 0.10
 
             func descend(_ t: Double) -> Double {
                 1 / (1 + exp(-(t - 0.25) * 4.5))
@@ -66,26 +69,39 @@ struct SplashMarketTexture: View {
                 points.append(rowPoints)
             }
 
-            // Weft: the sweeping rows themselves. Opacity roughly doubled
-            // from the first attempt — confirmed via a real device capture
-            // that 0.06-0.22 rendered as essentially invisible (only the
-            // bright ridge line below was visible at all), which is why it
-            // still read as "just one curve" rather than a mesh.
+            let ridgeRow = rows / 4
+            let ridgeF = Double(ridgeRow) / Double(rows)
+
+            // Weft: soft wave lines clustering near the ridge row and
+            // fading both away from it vertically and toward the right
+            // horizontally, so the right two-thirds of the screen (behind
+            // the tagline and loading bar) stays close to plain background
+            // like the Reference, instead of a uniform grid everywhere.
             for r in 0...rows {
                 let f = Double(r) / Double(rows)
-                var path = Path()
-                path.move(to: points[r][0])
-                for c in 1...cols { path.addLine(to: points[r][c]) }
-                context.stroke(path, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.12 + 0.32 * (1 - abs(f - 0.4)))), lineWidth: 0.8)
+                let closeness = max(0, 1 - abs(f - ridgeF) * 2.0)
+                let baseOpacity = 0.05 + 0.30 * pow(closeness, 1.3)
+                for c in 0..<cols {
+                    let t = (Double(c) + 0.5) / Double(cols)
+                    let fade = max(0.25, 1.0 - t * 0.45)
+                    var segment = Path()
+                    segment.move(to: points[r][c])
+                    segment.addLine(to: points[r][c + 1])
+                    context.stroke(segment, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(baseOpacity * fade)), lineWidth: 0.8)
+                }
             }
 
-            // Warp: sheared diagonals crossing the weft, not straight
-            // verticals — a vertical connector here would just be another
-            // horizontal-reading bar, the exact bug being fixed.
-            let shearPerRow = size.width / Double(cols) * 0.7
+            // Warp: fine sheared diagonals forming a perspective floor
+            // grid, concentrated bottom-left and fading out by roughly the
+            // midpoint of the screen — not straight verticals (a vertical
+            // connector here would just be another horizontal-reading
+            // bar), and not full-strength across the whole width.
+            let shearPerRow = size.width / Double(cols) * 0.65
             for j in -cols...(cols * 2) {
                 var path = Path()
                 var started = false
+                var tSum = 0.0
+                var tCount = 0.0
                 for r in 0...rows {
                     let x = Double(j) * (size.width / Double(cols)) + Double(r) * shearPerRow
                     guard x >= -20, x <= size.width + 20 else { continue }
@@ -97,13 +113,16 @@ struct SplashMarketTexture: View {
                     } else {
                         path.addLine(to: CGPoint(x: x, y: y))
                     }
+                    tSum += t
+                    tCount += 1
                 }
-                if started {
-                    context.stroke(path, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.22)), lineWidth: 0.7)
-                }
+                guard started, tCount > 0 else { continue }
+                let concentration = max(0, 1.0 - (tSum / tCount) / 0.65)
+                let opacity = 0.26 * concentration
+                guard opacity > 0.006 else { continue }
+                context.stroke(path, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(opacity)), lineWidth: 0.6)
             }
 
-            let ridgeRow = rows / 3
             var ridgePath = Path()
             ridgePath.move(to: points[ridgeRow][0])
             for c in 1...cols { ridgePath.addLine(to: points[ridgeRow][c]) }
@@ -141,25 +160,30 @@ struct SplashMarketTexture: View {
 
             let candleCount = 20
             let candleSlot = size.width / Double(candleCount)
-            // Raised from 0.34 — a real device capture showed the tallest
-            // candles climbing almost to the tagline text, well above the
-            // Reference's chart, which stays clear of the tagline. Kept
-            // the same bottomFraction.
-            let topFraction = 0.50
+            let topFraction = 0.53
             let bottomFraction = 0.86
             let glowRadius = size.width * 0.025
 
             var shapes: [CandleShape] = []
             var center = bottomFraction
+            // A second side-by-side comparison against the Reference showed
+            // the previous noise-dominant walk had no real trend: its
+            // "climax" candle landed a third of the way across instead of
+            // at the right edge. The Reference is an unmistakable rising
+            // staircase (echoing the logo mark's own upward arrow) with
+            // noise only as texture on top of that climb, not the primary
+            // driver — so drift now leads (scaled to the full topFraction/
+            // bottomFraction span, verified via a Python re-implementation
+            // to land the tallest candles at the far right) and noise is
+            // sized relative to a single drift step rather than as an
+            // independent fixed amplitude.
+            let totalRange = bottomFraction - topFraction
+            let driftBase = totalRange / Double(candleCount) * 1.15
             for index in 0..<candleCount {
                 let progress = Double(index) / Double(candleCount - 1)
-                // Noise nearly doubled and drift's share of the movement
-                // reduced — a real device capture read as too smooth/
-                // monotonic next to the Reference's sharper zigzag, where
-                // adjacent candles jump by a lot more than they drift.
-                let drift = (bottomFraction - topFraction) / Double(candleCount) * 0.55
-                let noise = (nextUnit() - 0.5) * 0.2
-                center -= drift * (0.4 + progress * 0.85) + noise
+                let drift = driftBase * (0.5 + progress * 1.0)
+                let noise = (nextUnit() - 0.5) * driftBase * 3.2
+                center -= drift + noise
                 center = min(max(center, topFraction), bottomFraction)
 
                 let centerY = center * size.height
