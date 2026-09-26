@@ -1,18 +1,18 @@
 import SwiftUI
 
-/// SCR-000 Splash's lower-background decoration. Candle bodies are
-/// pixel-sampled directly from the (earlier, phone-mockup) Reference:
-/// RGB(30,70,135) against a RGB(5,15,30)-ish background — dim, desaturated
-/// steel-blue, close to this app's own `accentDeepBlue` token. The
-/// curve/mesh below the candles is a different story: after several
-/// procedural (Bezier/Catmull-Rom, sigmoid, sine) reconstructions each
-/// kept drifting from the real shape/color/glow, HQ supplied the curve's
-/// own Reference image directly and asked for it used as an asset instead
-/// of redrawn — see `mesh`'s doc comment. Like Home's `HeroMapTexture`,
-/// this app has no real chart-data source to draw from at Splash time
-/// (nothing is fetched yet), so the candles remain a deliberate
-/// best-effort decorative approximation — a deterministic pattern, not
-/// real market data — disclosed as such rather than claimed pixel-exact.
+/// SCR-000 Splash's lower-background decoration. Both layers here are
+/// Reference art used as real image assets rather than redrawn — the same
+/// lesson learned twice over: procedural reconstruction (Bezier/
+/// Catmull-Rom, sigmoid, sine curves for the mesh; a tuned random walk for
+/// the candles) kept drifting from each Reference's actual shape, color,
+/// and glow no matter how many times it was re-measured, while the real
+/// pixels sidestep that class of error entirely. See `mesh`'s and
+/// `candles`'s doc comments for each asset's own Reference. Like Home's
+/// `HeroMapTexture`, this app has no real chart-data source to draw from
+/// at Splash time (nothing is fetched yet), so this whole background is a
+/// deliberate decorative illustration, not real market data — true of the
+/// Reference art itself, not something this file needs to disclaim on top
+/// of it.
 struct SplashMarketTexture: View {
     var body: some View {
         ZStack {
@@ -63,90 +63,48 @@ struct SplashMarketTexture: View {
         }
     }
 
-    /// Real candlesticks float at their own open/close range — the
-    /// Reference's bodies are NOT bottom-aligned to a shared floor (that
-    /// was this file's original bug, confirmed by directly comparing a CI
-    /// screenshot against the Reference: this file had been drawing a bar
-    /// chart growing from a fixed baseline, not floating candles). Each
-    /// body's vertical center now follows a noisy random walk with a
-    /// gentle upward drift instead, giving the Reference's irregular
-    /// rising-staircase look, with independent wicks above AND below each
-    /// body. Also matches the Reference's fade: candles read fainter on
-    /// the left (older) and brighter toward the right (recent), and its
-    /// color is a fairly uniform muted blue rather than a bright two-tone.
+    /// HQ instruction, this round: the same treatment as `mesh` — stop
+    /// re-tuning the procedural candle drawing (a random walk with drift,
+    /// noise, and a hand-picked glow) and use the Reference image itself.
+    /// The previous procedural version's irregular rising-staircase shape
+    /// was already a tuned approximation of an *earlier* Reference; this
+    /// round supplied a new, higher-fidelity Reference of the actual
+    /// candlesticks (1024x1536, unmodified — no logo/text/UI, only the
+    /// glowing candles and a faint crossing curve over a near-black
+    /// background) added directly to the asset catalog as `SplashCandles`.
+    /// An organic, irregularly-spaced climb like this is exactly the kind
+    /// of shape that kept drifting from its Reference under procedural
+    /// tuning no matter how it was re-measured (the same lesson `mesh`
+    /// already learned) — using the real pixels sidesteps that class of
+    /// error entirely.
+    ///
+    /// `.blendMode(.screen)` composites the image's own near-black
+    /// background as effectively transparent against `SplashView`'s
+    /// background underneath, the same technique `mesh` uses and for the
+    /// same reason: it removes any risk of a visible seam at the image's
+    /// edges without depending on the two dark colors matching exactly.
+    ///
+    /// Sized and positioned via `aspectRatio(contentMode: .fit)` at the
+    /// screen's own width (never stretched, so the Reference's true
+    /// proportions are preserved at any device size) and anchored so the
+    /// candles' own highest point (≈45% down the source image) lands at
+    /// the same screen fraction the previous procedural candles' tallest
+    /// candle used, keeping this round scoped to the candles themselves
+    /// rather than also re-deciding their on-screen placement.
     private var candles: some View {
-        Canvas { context, size in
-            var seed: UInt64 = 0xD1B5_4A32_9E77_1C03
-            func nextUnit() -> Double {
-                seed ^= seed << 13
-                seed ^= seed >> 7
-                seed ^= seed << 17
-                return Double(seed % 1000) / 1000
-            }
+        GeometryReader { geometry in
+            let imageWidth = geometry.size.width
+            let imageHeight = imageWidth * (1536.0 / 1024.0)
+            let topAnchorFraction = 0.53
+            let contentTopFraction = 0.454 // where the candles' own highest point enters the source image, top-to-bottom
+            let topOffset = topAnchorFraction * geometry.size.height - contentTopFraction * imageHeight
 
-            struct CandleShape {
-                let bodyPath: Path
-                let wickPath: Path
-                let fade: Double
-            }
-
-            let candleCount = 20
-            let candleSlot = size.width / Double(candleCount)
-            let topFraction = 0.53
-            let bottomFraction = 0.86
-            let glowRadius = size.width * 0.025
-
-            var shapes: [CandleShape] = []
-            var center = bottomFraction
-            // A second side-by-side comparison against the Reference showed
-            // the previous noise-dominant walk had no real trend: its
-            // "climax" candle landed a third of the way across instead of
-            // at the right edge. The Reference is an unmistakable rising
-            // staircase (echoing the logo mark's own upward arrow) with
-            // noise only as texture on top of that climb, not the primary
-            // driver — so drift now leads (scaled to the full topFraction/
-            // bottomFraction span, verified via a Python re-implementation
-            // to land the tallest candles at the far right) and noise is
-            // sized relative to a single drift step rather than as an
-            // independent fixed amplitude.
-            let totalRange = bottomFraction - topFraction
-            let driftBase = totalRange / Double(candleCount) * 1.15
-            for index in 0..<candleCount {
-                let progress = Double(index) / Double(candleCount - 1)
-                let drift = driftBase * (0.5 + progress * 1.0)
-                let noise = (nextUnit() - 0.5) * driftBase * 3.2
-                center -= drift + noise
-                center = min(max(center, topFraction), bottomFraction)
-
-                let centerY = center * size.height
-                let bodyHeight = size.height * (0.012 + nextUnit() * 0.035)
-                let x = candleSlot * (Double(index) + 0.5)
-                let bodyWidth = candleSlot * 0.42
-                let upperWick = bodyHeight * (0.4 + nextUnit() * 0.8)
-                let lowerWick = bodyHeight * (0.15 + nextUnit() * 0.5)
-
-                var wick = Path()
-                wick.move(to: CGPoint(x: x, y: centerY - bodyHeight / 2 - upperWick))
-                wick.addLine(to: CGPoint(x: x, y: centerY + bodyHeight / 2 + lowerWick))
-
-                let bodyRect = CGRect(x: x - bodyWidth / 2, y: centerY - bodyHeight / 2, width: bodyWidth, height: bodyHeight)
-                let bodyPath = Path(roundedRect: bodyRect, cornerRadius: 1.5)
-                let fade = 0.3 + progress * 0.7
-                shapes.append(CandleShape(bodyPath: bodyPath, wickPath: wick, fade: fade))
-            }
-
-            context.drawLayer { layer in
-                layer.addFilter(.blur(radius: glowRadius))
-                for shape in shapes {
-                    layer.fill(shape.bodyPath, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.5 * shape.fade)))
-                    layer.stroke(shape.wickPath, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.45 * shape.fade)), lineWidth: 2)
-                }
-            }
-
-            for shape in shapes {
-                context.stroke(shape.wickPath, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.6 * shape.fade)), lineWidth: 1)
-                context.fill(shape.bodyPath, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.75 * shape.fade)))
-            }
+            Image("SplashCandles")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: imageWidth, height: imageHeight)
+                .blendMode(.screen)
+                .offset(y: topOffset)
         }
     }
 }
