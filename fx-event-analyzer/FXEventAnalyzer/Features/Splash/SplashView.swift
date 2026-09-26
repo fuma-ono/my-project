@@ -81,15 +81,18 @@ struct SplashView: View {
                     bottomContent
                         .padding(.horizontal, DesignTokens.Spacing.lg)
                         .frame(width: geometry.size.width)
-                        // Was 0.06 — an aligned overlay of a real CI capture
-                        // against the Reference showed the loading bar
-                        // sitting at ~78% of screen height in the Reference
-                        // but ~88% here (measured via each row's brightness
-                        // peak in both images, not guessed), a ~10-point
-                        // gap that reproduces even on identical device
-                        // frames, so this was a real layout offset, not
-                        // device variance.
-                        .padding(.bottom, geometry.size.height * 0.16)
+                        // Was 0.16 — that earlier fix itself was measured
+                        // wrong: it mistook the mesh curve's own brightness
+                        // peak (at the time, sitting around 78% of screen
+                        // height) for the loading bar. Re-measured directly
+                        // off the Reference's brightest-row peak: the real
+                        // bar sits at 86.6% of screen height, not 78%. A
+                        // fresh CI capture at 0.16 put the bar at 78.3% —
+                        // almost exactly where the mesh curve used to be,
+                        // which is what caused the two to visibly overlap
+                        // once the mesh was separately corrected. 0.077
+                        // targets the real, re-verified 86.6%.
+                        .padding(.bottom, geometry.size.height * 0.077)
                 }
             }
         }
