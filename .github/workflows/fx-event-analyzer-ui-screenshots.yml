@@ -242,24 +242,29 @@ jobs:
           cd ..
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add ci-screenshots/iPhone
-          if ! git diff --cached --quiet; then
+          # Concurrent runs (a manual re-run, or a push/pull_request pair)
+          # can advance origin's branch at any point — confirmed via two
+          # real CI failures: a plain "fetch first" rejection, and later a
+          # rebase CONFLICT (rename/delete) once two runs' commits each
+          # replaced every file in this directory with freshly-named PNGs
+          # at the same time, which git's rename detection couldn't
+          # reconcile. Reset onto the latest tip and rebuild the commit
+          # fresh each attempt instead of rebasing an existing commit onto
+          # it — nothing about a prior attempt's commit needs preserving,
+          # only the final directory content (this run's own screenshots)
+          # does.
+          for attempt in 1 2 3; do
+            git fetch origin "${GITHUB_REF_NAME}"
+            git reset --mixed "origin/${GITHUB_REF_NAME}"
+            git add ci-screenshots/iPhone
+            if git diff --cached --quiet; then
+              echo "No screenshot changes to commit."
+              break
+            fi
             git commit -m "ci: update iPhone UI screenshots [skip ci]"
-            # A manual re-run (or a concurrent push/pull_request-triggered
-            # run) can advance origin's branch between this job's checkout
-            # and this push — confirmed via a real "! [rejected] ...
-            # (fetch first)" CI failure. Rebase onto the latest tip and
-            # retry: this commit only ever touches ci-screenshots/iPhone,
-            # so the rebase has nothing to conflict with in practice.
-            for attempt in 1 2 3; do
-              git push origin "HEAD:${GITHUB_REF_NAME}" && break
-              echo "Push attempt ${attempt} rejected, fetching and rebasing before retry."
-              git fetch origin "${GITHUB_REF_NAME}"
-              git rebase "origin/${GITHUB_REF_NAME}"
-            done
-          else
-            echo "No screenshot changes to commit."
-          fi
+            git push origin "HEAD:${GITHUB_REF_NAME}" && break
+            echo "Push attempt ${attempt} rejected, retrying."
+          done
 
       - name: Upload screenshots artifact
         if: always()
