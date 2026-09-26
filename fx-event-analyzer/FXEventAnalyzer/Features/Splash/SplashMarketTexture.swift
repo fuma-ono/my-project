@@ -27,36 +27,50 @@ struct SplashMarketTexture: View {
         .accessibilityHidden(true)
     }
 
-    /// A perspective floor-grid plus layered flowing wave lines — NOT a
-    /// uniform full-screen diagonal weave (that was this file's previous
-    /// version, flagged directly via a real-device side-by-side comparison:
-    /// the grid there was legible and equally strong across the *entire*
-    /// screen, including right through the tagline text and the loading
-    /// bar, where the Reference is nearly plain background). Zoomed into
-    /// the Reference directly: the fine crosshatch only reads clearly in
-    /// the lower-left, like a floor grid in perspective, and fades out
-    /// well before the right edge; a handful of soft wave lines cluster
-    /// near the one bright ridge curve and fade elsewhere, rather than all
-    /// rows being equally visible. This rewrite fades both the weft
-    /// (wave) rows and the warp (grid) diagonals by distance from the
-    /// ridge / from the left edge respectively, verified against the
-    /// Reference's actual lower-half crop before porting from a Python
-    /// re-implementation.
+    /// An organically-draped mesh, NOT a rigid straight-line grid — the
+    /// root cause behind a direct HQ instruction to stop treating this as a
+    /// coordinate/opacity tuning problem and instead fix the underlying
+    /// draw structure: both the weft (wave) rows *and* the warp (shear)
+    /// diagonals previously only bent through the single sigmoid dip, so
+    /// the warp lines in particular still read as straight diagonal grid
+    /// strokes once actually captured on a device — the Reference's
+    /// surface visibly ripples like draped cloth, not a flat plane bent
+    /// once. `height(at:row:)` is now the single source of vertical
+    /// deformation shared by every weft row *and* every warp diagonal: the
+    /// same sigmoid descent as before, plus a small multi-cycle ripple
+    /// (sine, phase-shifted per row) layered on top — so no line in the
+    /// mesh is ever straight, matching the Reference's woven/folded-fabric
+    /// look instead of a UV-mapped flat grid. The bright ridge line reuses
+    /// this deformation too, and now glows via a real Gaussian blur layer
+    /// (`context.drawLayer(...addFilter(.blur...))`) instead of a second
+    /// wide low-opacity stroke standing in for one. Verified against the
+    /// Reference's lower-half crop with a Python re-implementation
+    /// (full_scene_v7_organic) before porting.
     private var mesh: some View {
         Canvas { context, size in
-            let rows = 14
-            let cols = 20
+            let rows = 16
+            let cols = 24
             let topY = size.height * 0.53
             let bottomY = size.height * 0.86
             let sweep = size.height * 0.10
+            let rippleAmplitude = size.height * 0.012
 
             func descend(_ t: Double) -> Double {
                 1 / (1 + exp(-(t - 0.25) * 4.5))
             }
+            // Shared deformation for every weft row and warp diagonal: the
+            // overall down-then-flatten sweep, plus a small ripple whose
+            // phase shifts per row and whose amplitude fades toward the
+            // right — this is what keeps every line in the mesh curved,
+            // not just the row that happens to follow the base sigmoid.
+            func height(at t: Double, row: Int) -> Double {
+                let ripple = sin(t * 11.5 + Double(row) * 0.9) * rippleAmplitude * (0.4 + 0.6 * (1 - t))
+                return descend(t) * sweep + ripple
+            }
             func rowY(_ r: Int, at t: Double) -> Double {
                 let f = Double(r) / Double(rows)
                 let base = topY + (bottomY - topY) * f
-                return base + descend(t) * sweep
+                return base + height(at: t, row: r)
             }
 
             var points: [[CGPoint]] = []
@@ -69,7 +83,7 @@ struct SplashMarketTexture: View {
                 points.append(rowPoints)
             }
 
-            let ridgeRow = rows / 4
+            let ridgeRow = rows / 5
             let ridgeF = Double(ridgeRow) / Double(rows)
 
             // Weft: soft wave lines clustering near the ridge row and
@@ -80,10 +94,10 @@ struct SplashMarketTexture: View {
             for r in 0...rows {
                 let f = Double(r) / Double(rows)
                 let closeness = max(0, 1 - abs(f - ridgeF) * 2.0)
-                let baseOpacity = 0.05 + 0.30 * pow(closeness, 1.3)
+                let baseOpacity = 0.05 + 0.28 * pow(closeness, 1.3)
                 for c in 0..<cols {
                     let t = (Double(c) + 0.5) / Double(cols)
-                    let fade = max(0.25, 1.0 - t * 0.45)
+                    let fade = max(0.22, 1.0 - t * 0.5)
                     var segment = Path()
                     segment.move(to: points[r][c])
                     segment.addLine(to: points[r][c + 1])
@@ -91,11 +105,12 @@ struct SplashMarketTexture: View {
                 }
             }
 
-            // Warp: fine sheared diagonals forming a perspective floor
-            // grid, concentrated bottom-left and fading out by roughly the
-            // midpoint of the screen — not straight verticals (a vertical
-            // connector here would just be another horizontal-reading
-            // bar), and not full-strength across the whole width.
+            // Warp: sheared diagonals that ride the SAME height(at:row:)
+            // deformation as the weft rows, so they ripple with the mesh
+            // instead of cutting straight across it — a perspective floor
+            // grid concentrated bottom-left and fading out by roughly the
+            // midpoint of the screen, not full-strength across the whole
+            // width.
             let shearPerRow = size.width / Double(cols) * 0.65
             for j in -cols...(cols * 2) {
                 var path = Path()
@@ -117,8 +132,8 @@ struct SplashMarketTexture: View {
                     tCount += 1
                 }
                 guard started, tCount > 0 else { continue }
-                let concentration = max(0, 1.0 - (tSum / tCount) / 0.65)
-                let opacity = 0.26 * concentration
+                let concentration = max(0, 1.0 - (tSum / tCount) / 0.62)
+                let opacity = 0.24 * concentration
                 guard opacity > 0.006 else { continue }
                 context.stroke(path, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(opacity)), lineWidth: 0.6)
             }
@@ -126,8 +141,16 @@ struct SplashMarketTexture: View {
             var ridgePath = Path()
             ridgePath.move(to: points[ridgeRow][0])
             for c in 1...cols { ridgePath.addLine(to: points[ridgeRow][c]) }
-            context.stroke(ridgePath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.14)), lineWidth: 5)
-            context.stroke(ridgePath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.55)), lineWidth: 1.1)
+
+            // Real Gaussian-blur bloom instead of a second wide/faint
+            // stroke standing in for a glow — matches the Reference's
+            // soft light spread around the bright core rather than a hard-
+            // edged halo.
+            context.drawLayer { layer in
+                layer.addFilter(.blur(radius: size.width * 0.018))
+                layer.stroke(ridgePath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.9)), lineWidth: 3)
+            }
+            context.stroke(ridgePath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.85)), lineWidth: 1.2)
         }
     }
 
