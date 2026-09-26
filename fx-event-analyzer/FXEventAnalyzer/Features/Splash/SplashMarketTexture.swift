@@ -99,9 +99,13 @@ struct SplashMarketTexture: View {
             var center = bottomFraction
             for index in 0..<candleCount {
                 let progress = Double(index) / Double(candleCount - 1)
-                let drift = (bottomFraction - topFraction) / Double(candleCount) * 1.25
-                let noise = (nextUnit() - 0.5) * 0.055
-                center -= drift * (0.4 + progress * 0.85) + max(0, noise)
+                let drift = (bottomFraction - topFraction) / Double(candleCount) * 0.9
+                // Bidirectional, not `max(0, noise)`: a real random walk
+                // needs candles that dip below their predecessor too, or
+                // the result is a smooth monotonic ramp instead of the
+                // Reference's noisy up-and-down staircase.
+                let noise = (nextUnit() - 0.5) * 0.11
+                center -= drift * (0.4 + progress * 0.85) + noise
                 center = min(max(center, topFraction), bottomFraction)
 
                 let centerY = center * size.height
