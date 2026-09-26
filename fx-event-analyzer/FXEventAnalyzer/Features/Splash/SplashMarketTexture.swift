@@ -50,9 +50,16 @@ struct SplashMarketTexture: View {
         Canvas { context, size in
             let rows = 16
             let cols = 24
-            let topY = size.height * 0.53
-            let bottomY = size.height * 0.86
-            let sweep = size.height * 0.10
+            // topY/bottomY/sweep were 0.53/0.86/0.10 — a grid-overlaid
+            // crop of the Reference (10% gridlines) showed the bright
+            // ridge actually descends from ~69% to ~80% of full screen
+            // height, not the ~59-69% this produced; the mesh read as
+            // sitting too high and overlapping the candles because of it.
+            // Re-solved topY/bottomY/sweep so ridgeRow's own curve lands
+            // on that measured 69%→80% span.
+            let topY = size.height * 0.60
+            let bottomY = size.height * 0.93
+            let sweep = size.height * 0.14
             let rippleAmplitude = size.height * 0.012
 
             func descend(_ t: Double) -> Double {
