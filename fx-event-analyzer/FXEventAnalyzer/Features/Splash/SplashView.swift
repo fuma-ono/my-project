@@ -41,16 +41,21 @@ struct SplashView: View {
             // Every position and gap here was measured pixel-by-pixel off
             // the Reference (a real iPhone-aspect-ratio screenshot with
             // status bar, so its fractions translate directly): mark top
-            // ~24% of full screen height, width ~34% (BrandMark's own
-            // 132pt default), title-to-tagline gap ~3%. bottomContent is
-            // anchored from the bottom edge via Spacer rather than a
-            // computed top-offset — confirmed via a real CI screenshot
-            // that the earlier top-padding-percentage approach silently
-            // failed to render this block at all.
+            // ~24% of full screen height, title-to-tagline gap ~3%.
+            // bottomContent is anchored from the bottom edge via Spacer
+            // rather than a computed top-offset — confirmed via a real CI
+            // screenshot that the earlier top-padding-percentage approach
+            // silently failed to render this block at all.
             GeometryReader { geometry in
                 VStack(spacing: 0) {
                     VStack(spacing: DesignTokens.Spacing.xl) {
-                        BrandMark(glow: true)
+                        // Was BrandMark's 132pt default — assumed correct
+                        // from an earlier, coarser measurement. Directly
+                        // measuring the rendered mark's pixel width against
+                        // the Reference's (both in the same aligned frame)
+                        // showed it ~36% too wide (156pt vs 115pt); 97
+                        // closes that gap.
+                        BrandMark(width: 97, glow: true)
                         (
                             Text("FX")
                                 .foregroundStyle(DesignTokens.Colors.accentCyan)

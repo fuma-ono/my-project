@@ -163,7 +163,11 @@ enum DesignTokens {
         /// "FX Event Analyzer" no longer fits one line at the Reference's
         /// measured width ratio on an iPhone-width screen; `.lineLimit(1)`
         /// + `.minimumScaleFactor` at the call site is the real safety net.
-        static let splashTitle = Font.system(size: 30, weight: .bold, design: .rounded)
+        /// Raised from 30 — measuring the rendered title's actual pixel
+        /// width against the Reference's (both in the same aligned 600pt-
+        /// wide frame) showed the text ~11% narrower than the Reference
+        /// (372pt vs 419pt), not a rounding error; 34 closes that gap.
+        static let splashTitle = Font.system(size: 34, weight: .bold, design: .rounded)
 
         // Body / data — default (San Francisco) design reads as more
         // "serious financial app", per HQ's "専門的だが難しくない".
