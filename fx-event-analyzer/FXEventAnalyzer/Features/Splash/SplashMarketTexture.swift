@@ -1,10 +1,12 @@
 import SwiftUI
 
 /// SCR-000 Splash's lower-background decoration — the Reference shows a
-/// crisp, glowing two-tone candlestick chart (bright cyan "up" candles,
-/// darker blue "down" candles, bright cyan wicks — not blurred/blended)
-/// rising left-to-right, crossed by 2-3 bright flowing curve lines in an
-/// X pattern. Not a dense wireframe grid — a plainer, brighter
+/// muted, fairly uniform blue candlestick chart (real floating
+/// candlesticks: each body's own open/close range, never bottom-aligned
+/// to a shared floor, with thin wicks above AND below each body) noisily
+/// rising left-to-right across the full width, fading fainter toward the
+/// left (older) and brighter toward the right (recent), crossed by 2-3
+/// faint flowing curve lines. Not a dense wireframe grid — a plainer
 /// composition than that. Like Home's `HeroMapTexture`, this app has no
 /// real chart-data source to draw from at Splash time (nothing is
 /// fetched yet), so this is a deliberate best-effort decorative
@@ -60,14 +62,17 @@ struct SplashMarketTexture: View {
         }
     }
 
-    /// Pixel-sampled from the Reference (def9f700 crop, 852×510): a vertical
-    /// scan through a bright candle body reads near-pure cyan at the top
-    /// (~#00FAFF) softening toward the shared `accentCyan` by the bottom
-    /// edge, not one flat fill color — so each body gets its own top→bottom
-    /// gradient. The same scan found each body's brightness falling off
-    /// smoothly over roughly 30px either side (852px-wide crop) before
-    /// reaching background — a soft blur halo, not the earlier thin
-    /// fixed-width stroke this replaces.
+    /// Real candlesticks float at their own open/close range — the
+    /// Reference's bodies are NOT bottom-aligned to a shared floor (that
+    /// was this file's original bug, confirmed by directly comparing a CI
+    /// screenshot against the Reference: this file had been drawing a bar
+    /// chart growing from a fixed baseline, not floating candles). Each
+    /// body's vertical center now follows a noisy random walk with a
+    /// gentle upward drift instead, giving the Reference's irregular
+    /// rising-staircase look, with independent wicks above AND below each
+    /// body. Also matches the Reference's fade: candles read fainter on
+    /// the left (older) and brighter toward the right (recent), and its
+    /// color is a fairly uniform muted blue rather than a bright two-tone.
     private var candles: some View {
         Canvas { context, size in
             var seed: UInt64 = 0xD1B5_4A32_9E77_1C03
@@ -80,62 +85,53 @@ struct SplashMarketTexture: View {
 
             struct CandleShape {
                 let bodyPath: Path
-                let bodyBounds: CGRect
                 let wickPath: Path
-                let isBright: Bool
+                let fade: Double
             }
 
-            let candleCount = 16
+            let candleCount = 20
             let candleSlot = size.width / Double(candleCount)
-            let baseline = size.height * 0.87
-            let glowRadius = size.width * 0.035
+            let topFraction = 0.34
+            let bottomFraction = 0.86
+            let glowRadius = size.width * 0.025
 
             var shapes: [CandleShape] = []
+            var center = bottomFraction
             for index in 0..<candleCount {
                 let progress = Double(index) / Double(candleCount - 1)
-                let trendHeight = size.height * (0.03 + 0.2 * progress)
-                let jitter = (nextUnit() - 0.5) * size.height * 0.04
-                let bodyHeight = max(6, trendHeight + jitter)
+                let drift = (bottomFraction - topFraction) / Double(candleCount) * 1.25
+                let noise = (nextUnit() - 0.5) * 0.055
+                center -= drift * (0.4 + progress * 0.85) + max(0, noise)
+                center = min(max(center, topFraction), bottomFraction)
+
+                let centerY = center * size.height
+                let bodyHeight = size.height * (0.016 + nextUnit() * 0.022)
                 let x = candleSlot * (Double(index) + 0.5)
-                let bodyWidth = candleSlot * 0.4
-                let wickHeight = bodyHeight * (1.3 + nextUnit() * 0.4)
-                // Two-tone: mostly bright "up" candles on this rising
-                // trend, with some darker ones mixed in, per the
-                // Reference — decided per-candle, not fabricated data.
-                let isBright = nextUnit() > 0.35
+                let bodyWidth = candleSlot * 0.42
+                let upperWick = bodyHeight * (0.4 + nextUnit() * 0.8)
+                let lowerWick = bodyHeight * (0.15 + nextUnit() * 0.5)
 
                 var wick = Path()
-                wick.move(to: CGPoint(x: x, y: baseline))
-                wick.addLine(to: CGPoint(x: x, y: baseline - wickHeight))
+                wick.move(to: CGPoint(x: x, y: centerY - bodyHeight / 2 - upperWick))
+                wick.addLine(to: CGPoint(x: x, y: centerY + bodyHeight / 2 + lowerWick))
 
-                let bodyRect = CGRect(x: x - bodyWidth / 2, y: baseline - bodyHeight, width: bodyWidth, height: bodyHeight)
+                let bodyRect = CGRect(x: x - bodyWidth / 2, y: centerY - bodyHeight / 2, width: bodyWidth, height: bodyHeight)
                 let bodyPath = Path(roundedRect: bodyRect, cornerRadius: 1.5)
-                shapes.append(CandleShape(bodyPath: bodyPath, bodyBounds: bodyRect, wickPath: wick, isBright: isBright))
+                let fade = 0.3 + progress * 0.7
+                shapes.append(CandleShape(bodyPath: bodyPath, wickPath: wick, fade: fade))
             }
 
             context.drawLayer { layer in
                 layer.addFilter(.blur(radius: glowRadius))
                 for shape in shapes {
-                    let glowColor = shape.isBright ? DesignTokens.Colors.accentCyan : DesignTokens.Colors.accentPrimary
-                    layer.fill(shape.bodyPath, with: .color(glowColor.opacity(shape.isBright ? 0.9 : 0.55)))
-                    layer.stroke(shape.wickPath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.75)), lineWidth: 2)
+                    layer.fill(shape.bodyPath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.45 * shape.fade)))
+                    layer.stroke(shape.wickPath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.4 * shape.fade)), lineWidth: 2)
                 }
             }
 
             for shape in shapes {
-                context.stroke(shape.wickPath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.7)), lineWidth: 1)
-
-                let gradient = shape.isBright
-                    ? Gradient(colors: [Color(red: 0, green: 0.98, blue: 1.0), DesignTokens.Colors.accentCyan])
-                    : Gradient(colors: [DesignTokens.Colors.accentCyan.opacity(0.75), DesignTokens.Colors.accentPrimary])
-                context.fill(
-                    shape.bodyPath,
-                    with: .linearGradient(
-                        gradient,
-                        startPoint: CGPoint(x: shape.bodyBounds.midX, y: shape.bodyBounds.minY),
-                        endPoint: CGPoint(x: shape.bodyBounds.midX, y: shape.bodyBounds.maxY)
-                    )
-                )
+                context.stroke(shape.wickPath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.55 * shape.fade)), lineWidth: 1)
+                context.fill(shape.bodyPath, with: .color(DesignTokens.Colors.accentPrimary.opacity(0.7 * shape.fade)))
             }
         }
     }
