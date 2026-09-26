@@ -1,64 +1,79 @@
 import SwiftUI
 
-/// SCR-000 Splash's lower-background decoration — the Reference shows a
-/// muted, fairly uniform blue candlestick chart (real floating
-/// candlesticks: each body's own open/close range, never bottom-aligned
-/// to a shared floor, with thin wicks above AND below each body) noisily
-/// rising left-to-right across the full width, fading fainter toward the
-/// left (older) and brighter toward the right (recent), crossed by 2-3
-/// faint flowing curve lines. Not a dense wireframe grid — a plainer
-/// composition than that. Like Home's `HeroMapTexture`, this app has no
-/// real chart-data source to draw from at Splash time (nothing is
-/// fetched yet), so this is a deliberate best-effort decorative
-/// approximation — a deterministic candlestick/curve pattern, not real
-/// market data — disclosed as such rather than claimed pixel-exact.
+/// SCR-000 Splash's lower-background decoration. Pixel-sampled directly
+/// from the Reference (not guessed): candle bodies read around
+/// RGB(30,70,135) against a RGB(5,15,30)-ish background — dim, desaturated
+/// steel-blue, close to this app's own `accentDeepBlue` token, NOT the
+/// bright saturated `accentCyan` this file used earlier (confirmed wrong
+/// via direct pixel sampling after user feedback that the color looked
+/// "monotone" and too vivid next to the Reference's paler, background-
+/// blending look). Below the candles, the Reference has a glowing
+/// wireframe mesh — crossing rows and columns over an undulating surface
+/// with one brighter ridge line — not the 2-3 simple open curves this
+/// file drew before (also wrong per direct user feedback). Like Home's
+/// `HeroMapTexture`, this app has no real chart-data source to draw from
+/// at Splash time (nothing is fetched yet), so this remains a deliberate
+/// best-effort decorative approximation — a deterministic pattern, not
+/// real market data — disclosed as such rather than claimed pixel-exact.
 struct SplashMarketTexture: View {
     var body: some View {
         ZStack {
-            curves
+            mesh
             candles
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
-    /// Two to three bright flowing curves crossing in an X, not a dense
-    /// grid — matches the Reference's plainer, brighter composition.
-    private var curves: some View {
+    /// A wireframe grid over an undulating surface (rows + connecting
+    /// columns), with one brighter "ridge" row — replaces the earlier 2-3
+    /// simple crossing curves, which didn't read as a mesh at all.
+    private var mesh: some View {
         Canvas { context, size in
-            struct Curve {
-                let startY: Double
-                let endY: Double
-                let amplitude: Double
-                let phase: Double
-                let opacityCore: Double
-                let opacityGlow: Double
-                let width: CGFloat
-            }
-            let curveDefs = [
-                Curve(startY: 0.62, endY: 0.50, amplitude: 0.05, phase: 0, opacityCore: 0.55, opacityGlow: 0.18, width: 1.5),
-                Curve(startY: 0.82, endY: 0.55, amplitude: 0.07, phase: 1.6, opacityCore: 0.4, opacityGlow: 0.12, width: 1.2),
-                Curve(startY: 0.58, endY: 0.78, amplitude: 0.04, phase: 3.0, opacityCore: 0.25, opacityGlow: 0.08, width: 1),
-            ]
+            let rows = 11
+            let cols = 16
+            let topY = size.height * 0.60
+            let bottomY = size.height * 1.04
 
-            for curve in curveDefs {
-                var path = Path()
-                let steps = 40
-                for step in 0...steps {
-                    let t = Double(step) / Double(steps)
-                    let x = t * size.width
-                    let base = curve.startY + (curve.endY - curve.startY) * t
-                    let wave = sin(t * .pi * 1.3 + curve.phase) * curve.amplitude
-                    let y = (base + wave) * size.height
-                    if step == 0 {
-                        path.move(to: CGPoint(x: x, y: y))
-                    } else {
-                        path.addLine(to: CGPoint(x: x, y: y))
-                    }
-                }
-                context.stroke(path, with: .color(DesignTokens.Colors.accentCyan.opacity(curve.opacityGlow)), lineWidth: curve.width * 5)
-                context.stroke(path, with: .color(DesignTokens.Colors.accentCyan.opacity(curve.opacityCore)), lineWidth: curve.width)
+            func terrain(_ t: Double) -> Double {
+                sin((t - 0.08) * .pi * 0.95) * 0.5 + sin((t + 0.35) * .pi * 2.2) * 0.15
             }
+
+            var points: [[CGPoint]] = []
+            for r in 0...rows {
+                let f = Double(r) / Double(rows)
+                let rowY = topY + (bottomY - topY) * pow(f, 1.35)
+                let amplitude = size.height * 0.045 * (0.25 + f * 0.75)
+                var rowPoints: [CGPoint] = []
+                for c in 0...cols {
+                    let t = Double(c) / Double(cols)
+                    let x = t * size.width
+                    let y = rowY + terrain(t) * amplitude
+                    rowPoints.append(CGPoint(x: x, y: y))
+                }
+                points.append(rowPoints)
+            }
+
+            for r in 0...rows {
+                let f = Double(r) / Double(rows)
+                var path = Path()
+                path.move(to: points[r][0])
+                for c in 1...cols { path.addLine(to: points[r][c]) }
+                context.stroke(path, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.06 + 0.16 * f)), lineWidth: 0.6)
+            }
+            for c in 0...cols {
+                var path = Path()
+                path.move(to: points[0][c])
+                for r in 1...rows { path.addLine(to: points[r][c]) }
+                context.stroke(path, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.07)), lineWidth: 0.5)
+            }
+
+            let ridgeRow = Int(Double(rows) * 0.6)
+            var ridgePath = Path()
+            ridgePath.move(to: points[ridgeRow][0])
+            for c in 1...cols { ridgePath.addLine(to: points[ridgeRow][c]) }
+            context.stroke(ridgePath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.14)), lineWidth: 5)
+            context.stroke(ridgePath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.5)), lineWidth: 1.1)
         }
     }
 
@@ -128,14 +143,14 @@ struct SplashMarketTexture: View {
             context.drawLayer { layer in
                 layer.addFilter(.blur(radius: glowRadius))
                 for shape in shapes {
-                    layer.fill(shape.bodyPath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.45 * shape.fade)))
-                    layer.stroke(shape.wickPath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.4 * shape.fade)), lineWidth: 2)
+                    layer.fill(shape.bodyPath, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.5 * shape.fade)))
+                    layer.stroke(shape.wickPath, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.45 * shape.fade)), lineWidth: 2)
                 }
             }
 
             for shape in shapes {
-                context.stroke(shape.wickPath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.55 * shape.fade)), lineWidth: 1)
-                context.fill(shape.bodyPath, with: .color(DesignTokens.Colors.accentPrimary.opacity(0.7 * shape.fade)))
+                context.stroke(shape.wickPath, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.6 * shape.fade)), lineWidth: 1)
+                context.fill(shape.bodyPath, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.75 * shape.fade)))
             }
         }
     }
