@@ -78,11 +78,20 @@ struct SplashMarketTexture: View {
     /// already learned) — using the real pixels sidesteps that class of
     /// error entirely.
     ///
-    /// `.blendMode(.screen)` composites the image's own near-black
-    /// background as effectively transparent against `SplashView`'s
-    /// background underneath, the same technique `mesh` uses and for the
-    /// same reason: it removes any risk of a visible seam at the image's
-    /// edges without depending on the two dark colors matching exactly.
+    /// Unlike `mesh`'s Reference, this one's own background (~RGB 1,10,37)
+    /// reads measurably bluer than `SplashView`'s `backgroundPrimary`
+    /// (~RGB 10,14,26) — close enough for `mesh` that `.blendMode(.screen)`
+    /// alone hid the seam, but confirmed via a real CI capture to leave a
+    /// visible rectangular seam here (measured (10,14,26) just outside the
+    /// image's bounds against (11,27,64) just inside). So this Reference's
+    /// own alpha channel is authored here from its brightness (background
+    /// pixels near-transparent, the glowing candles/curve near-opaque,
+    /// with the source's own natural glow falloff preserved as a smooth
+    /// ramp rather than a hard cutoff) instead of relying on background
+    /// color matching the destination. `.blendMode(.screen)` is kept on
+    /// top of that real transparency so the glow still reads as light
+    /// adding onto `mesh` beneath it, without the opaque background that
+    /// caused the seam.
     ///
     /// Sized and positioned via `aspectRatio(contentMode: .fit)` at the
     /// screen's own width (never stretched, so the Reference's true
