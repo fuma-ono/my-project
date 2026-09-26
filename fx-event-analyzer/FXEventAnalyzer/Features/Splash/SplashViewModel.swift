@@ -61,6 +61,20 @@ final class SplashViewModel: ObservableObject {
         // Step 1: app initial-state check. Nothing beyond process launch to
         // verify in Phase 1.
 
+        // Test-only instrumentation: a 60s hold here previously broke
+        // XCUIApplication.launch() itself ("Timed out while launching
+        // application via Xcode" — confirmed via a real CI failure), so
+        // that approach was reverted to plain best-effort. Real CI runs
+        // since then show automation-session-setup latency as low as
+        // ~13s some runs, so a much shorter, safely-bounded hold — well
+        // under whatever pushed 60s over the launch timeout — should
+        // still catch Splash on faster runs without risking that failure
+        // again. Only when the screenshot test target sets this launch
+        // environment flag; never in the shipped app.
+        if ProcessInfo.processInfo.environment["UI_SCREENSHOT_HOLD_SPLASH"] != nil {
+            try? await Task.sleep(nanoseconds: 20_000_000_000)
+        }
+
         // Step 2 + 5: Supabase Auth session check / logged-in determination.
         let session: UserSession?
         do {

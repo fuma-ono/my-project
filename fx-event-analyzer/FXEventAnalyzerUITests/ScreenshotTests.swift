@@ -23,26 +23,28 @@ final class ScreenshotTests: XCTestCase {
         // on the first miss.
         continueAfterFailure = true
         app = XCUIApplication()
+        // Holds SplashViewModel for 20s (test-only; see its doc comment) —
+        // shorter than the 60s that previously broke app.launch() itself,
+        // but still longer than the fastest launch+automation-session-setup
+        // latency observed in real CI (~13s), so faster runs should still
+        // catch Splash below.
+        app.launchEnvironment["UI_SCREENSHOT_HOLD_SPLASH"] = "1"
         app.launch()
     }
 
     func testCaptureAllScreens() throws {
-        // SCR-000 Splash — bonus, not in HQ's required 7; the real init
-        // sequence (SplashViewModel) resolves in well under a second when
-        // there is no persisted session (a fresh Simulator install always
-        // starts this way), so this is best-effort only and may already
-        // show Login. A launch-environment-gated hold was tried to force
-        // this to reliably catch Splash, but a hold long enough to survive
-        // real CI's 13-46s launch+automation-session-setup latency (60s)
-        // made XCUIApplication.launch() itself time out ("Timed out while
-        // launching application via Xcode") — confirmed via a real CI
-        // failure — so that approach was reverted; this stays best-effort.
+        // SCR-000 Splash — bonus, not in HQ's required 7. See setUpWithError
+        // for the 20s hold; kept the "-bestEffort" name since a slower CI
+        // runner (automation-session-setup alone has been observed up to
+        // ~46s) can still miss it.
         capture("00-Splash-bestEffort", settle: 0)
 
         // SCR-010 Login — also bonus, but required to reach every other
-        // screen, so always exercised.
+        // screen, so always exercised. 35s, not 20s: up to the full 20s
+        // hold can still be outstanding here depending on how long
+        // automation-session-setup took before the Splash capture above.
         let emailField = app.textFields["メールアドレス"]
-        XCTAssertTrue(emailField.waitForExistence(timeout: 20), "Login screen did not appear")
+        XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
         capture("01-Login")
 
         emailField.tap()
