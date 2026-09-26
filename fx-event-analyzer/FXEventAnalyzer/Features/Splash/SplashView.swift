@@ -76,7 +76,15 @@ struct SplashView: View {
                     bottomContent
                         .padding(.horizontal, DesignTokens.Spacing.lg)
                         .frame(width: geometry.size.width)
-                        .padding(.bottom, geometry.size.height * 0.06)
+                        // Was 0.06 — an aligned overlay of a real CI capture
+                        // against the Reference showed the loading bar
+                        // sitting at ~78% of screen height in the Reference
+                        // but ~88% here (measured via each row's brightness
+                        // peak in both images, not guessed), a ~10-point
+                        // gap that reproduces even on identical device
+                        // frames, so this was a real layout offset, not
+                        // device variance.
+                        .padding(.bottom, geometry.size.height * 0.16)
                 }
             }
         }
@@ -87,7 +95,10 @@ struct SplashView: View {
     private var bottomContent: some View {
         switch viewModel.state {
         case .initializing:
-            VStack(spacing: DesignTokens.Spacing.sm) {
+            // Was .sm (8pt) — the same measurement showed a visibly larger
+            // gap between the bar and "Loading..." in the Reference than
+            // this rendered.
+            VStack(spacing: DesignTokens.Spacing.md) {
                 SplashLoadingBar()
                 Text("Loading...")
                     .font(DesignTokens.Typography.footnote)
