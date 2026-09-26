@@ -8,13 +8,15 @@ import SwiftUI
 /// via direct pixel sampling after user feedback that the color looked
 /// "monotone" and too vivid next to the Reference's paler, background-
 /// blending look). Below the candles, the Reference has a glowing
-/// wireframe mesh — crossing rows and columns over an undulating surface
-/// with one brighter ridge line — not the 2-3 simple open curves this
-/// file drew before (also wrong per direct user feedback). Like Home's
-/// `HeroMapTexture`, this app has no real chart-data source to draw from
-/// at Splash time (nothing is fetched yet), so this remains a deliberate
-/// best-effort decorative approximation — a deterministic pattern, not
-/// real market data — disclosed as such rather than claimed pixel-exact.
+/// wireframe mesh woven diagonally over a surface that sweeps down-right
+/// then flattens (pixel-traced by scanning each column for its brightest
+/// point, not guessed) — not a flat horizontal grid, which is what this
+/// file drew in its first mesh attempt and was directly flagged as wrong
+/// ("why are the lines horizontal"). Like Home's `HeroMapTexture`, this
+/// app has no real chart-data source to draw from at Splash time (nothing
+/// is fetched yet), so this remains a deliberate best-effort decorative
+/// approximation — a deterministic pattern, not real market data —
+/// disclosed as such rather than claimed pixel-exact.
 struct SplashMarketTexture: View {
     var body: some View {
         ZStack {
@@ -25,55 +27,84 @@ struct SplashMarketTexture: View {
         .accessibilityHidden(true)
     }
 
-    /// A wireframe grid over an undulating surface (rows + connecting
-    /// columns), with one brighter "ridge" row — replaces the earlier 2-3
-    /// simple crossing curves, which didn't read as a mesh at all.
+    /// A diagonally-woven wireframe mesh, sweeping down-right and
+    /// flattening out — NOT a flat horizontal grid (the previous version's
+    /// bug, flagged directly by the user: "why are the lines horizontal").
+    /// The sweep shape itself is not guessed: pixel-scanned the Reference
+    /// for the brightest point in each column to trace its actual ridge
+    /// line, which reads as a smooth one-directional descent from ~69% to
+    /// ~80% of screen height between x=0 and x≈60%, then staying flat —
+    /// a sigmoid, not a symmetric hump. The "weft" lines are parallel
+    /// copies of that same sigmoid at different vertical offsets; the
+    /// "warp" lines are sheared (not vertical) so they cross the weft
+    /// diagonally, producing the Reference's woven/draped-fabric look
+    /// instead of an axis-aligned grid.
     private var mesh: some View {
         Canvas { context, size in
-            let rows = 11
+            let rows = 12
             let cols = 16
-            let topY = size.height * 0.60
-            let bottomY = size.height * 1.04
+            let topY = size.height * 0.56
+            let bottomY = size.height * 0.98
+            let sweep = size.height * 0.12
 
-            func terrain(_ t: Double) -> Double {
-                sin((t - 0.08) * .pi * 0.95) * 0.5 + sin((t + 0.35) * .pi * 2.2) * 0.15
+            func descend(_ t: Double) -> Double {
+                1 / (1 + exp(-(t - 0.25) * 4.5))
+            }
+            func rowY(_ r: Int, at t: Double) -> Double {
+                let f = Double(r) / Double(rows)
+                let base = topY + (bottomY - topY) * f
+                return base + descend(t) * sweep
             }
 
             var points: [[CGPoint]] = []
             for r in 0...rows {
-                let f = Double(r) / Double(rows)
-                let rowY = topY + (bottomY - topY) * pow(f, 1.35)
-                let amplitude = size.height * 0.045 * (0.25 + f * 0.75)
                 var rowPoints: [CGPoint] = []
                 for c in 0...cols {
                     let t = Double(c) / Double(cols)
-                    let x = t * size.width
-                    let y = rowY + terrain(t) * amplitude
-                    rowPoints.append(CGPoint(x: x, y: y))
+                    rowPoints.append(CGPoint(x: t * size.width, y: rowY(r, at: t)))
                 }
                 points.append(rowPoints)
             }
 
+            // Weft: the sweeping rows themselves.
             for r in 0...rows {
                 let f = Double(r) / Double(rows)
                 var path = Path()
                 path.move(to: points[r][0])
                 for c in 1...cols { path.addLine(to: points[r][c]) }
-                context.stroke(path, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.06 + 0.16 * f)), lineWidth: 0.6)
-            }
-            for c in 0...cols {
-                var path = Path()
-                path.move(to: points[0][c])
-                for r in 1...rows { path.addLine(to: points[r][c]) }
-                context.stroke(path, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.07)), lineWidth: 0.5)
+                context.stroke(path, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.06 + 0.16 * (1 - abs(f - 0.4)))), lineWidth: 0.6)
             }
 
-            let ridgeRow = Int(Double(rows) * 0.6)
+            // Warp: sheared diagonals crossing the weft, not straight
+            // verticals — a vertical connector here would just be another
+            // horizontal-reading bar, the exact bug being fixed.
+            let shearPerRow = size.width / Double(cols) * 0.7
+            for j in -cols...(cols * 2) {
+                var path = Path()
+                var started = false
+                for r in 0...rows {
+                    let x = Double(j) * (size.width / Double(cols)) + Double(r) * shearPerRow
+                    guard x >= -20, x <= size.width + 20 else { continue }
+                    let t = x / size.width
+                    let y = rowY(r, at: t)
+                    if !started {
+                        path.move(to: CGPoint(x: x, y: y))
+                        started = true
+                    } else {
+                        path.addLine(to: CGPoint(x: x, y: y))
+                    }
+                }
+                if started {
+                    context.stroke(path, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.09)), lineWidth: 0.5)
+                }
+            }
+
+            let ridgeRow = rows / 3
             var ridgePath = Path()
             ridgePath.move(to: points[ridgeRow][0])
             for c in 1...cols { ridgePath.addLine(to: points[ridgeRow][c]) }
             context.stroke(ridgePath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.14)), lineWidth: 5)
-            context.stroke(ridgePath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.5)), lineWidth: 1.1)
+            context.stroke(ridgePath, with: .color(DesignTokens.Colors.accentCyan.opacity(0.55)), lineWidth: 1.1)
         }
     }
 
