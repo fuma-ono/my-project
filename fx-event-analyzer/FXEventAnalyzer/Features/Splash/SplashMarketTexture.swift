@@ -66,13 +66,17 @@ struct SplashMarketTexture: View {
                 points.append(rowPoints)
             }
 
-            // Weft: the sweeping rows themselves.
+            // Weft: the sweeping rows themselves. Opacity roughly doubled
+            // from the first attempt — confirmed via a real device capture
+            // that 0.06-0.22 rendered as essentially invisible (only the
+            // bright ridge line below was visible at all), which is why it
+            // still read as "just one curve" rather than a mesh.
             for r in 0...rows {
                 let f = Double(r) / Double(rows)
                 var path = Path()
                 path.move(to: points[r][0])
                 for c in 1...cols { path.addLine(to: points[r][c]) }
-                context.stroke(path, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.06 + 0.16 * (1 - abs(f - 0.4)))), lineWidth: 0.6)
+                context.stroke(path, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.12 + 0.32 * (1 - abs(f - 0.4)))), lineWidth: 0.8)
             }
 
             // Warp: sheared diagonals crossing the weft, not straight
@@ -95,7 +99,7 @@ struct SplashMarketTexture: View {
                     }
                 }
                 if started {
-                    context.stroke(path, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.09)), lineWidth: 0.5)
+                    context.stroke(path, with: .color(DesignTokens.Colors.accentDeepBlue.opacity(0.22)), lineWidth: 0.7)
                 }
             }
 
@@ -137,7 +141,11 @@ struct SplashMarketTexture: View {
 
             let candleCount = 20
             let candleSlot = size.width / Double(candleCount)
-            let topFraction = 0.34
+            // Raised from 0.34 — a real device capture showed the tallest
+            // candles climbing almost to the tagline text, well above the
+            // Reference's chart, which stays clear of the tagline. Kept
+            // the same bottomFraction.
+            let topFraction = 0.50
             let bottomFraction = 0.86
             let glowRadius = size.width * 0.025
 
@@ -145,17 +153,17 @@ struct SplashMarketTexture: View {
             var center = bottomFraction
             for index in 0..<candleCount {
                 let progress = Double(index) / Double(candleCount - 1)
-                let drift = (bottomFraction - topFraction) / Double(candleCount) * 0.9
-                // Bidirectional, not `max(0, noise)`: a real random walk
-                // needs candles that dip below their predecessor too, or
-                // the result is a smooth monotonic ramp instead of the
-                // Reference's noisy up-and-down staircase.
-                let noise = (nextUnit() - 0.5) * 0.11
+                // Noise nearly doubled and drift's share of the movement
+                // reduced — a real device capture read as too smooth/
+                // monotonic next to the Reference's sharper zigzag, where
+                // adjacent candles jump by a lot more than they drift.
+                let drift = (bottomFraction - topFraction) / Double(candleCount) * 0.55
+                let noise = (nextUnit() - 0.5) * 0.2
                 center -= drift * (0.4 + progress * 0.85) + noise
                 center = min(max(center, topFraction), bottomFraction)
 
                 let centerY = center * size.height
-                let bodyHeight = size.height * (0.016 + nextUnit() * 0.022)
+                let bodyHeight = size.height * (0.012 + nextUnit() * 0.035)
                 let x = candleSlot * (Double(index) + 0.5)
                 let bodyWidth = candleSlot * 0.42
                 let upperWick = bodyHeight * (0.4 + nextUnit() * 0.8)
