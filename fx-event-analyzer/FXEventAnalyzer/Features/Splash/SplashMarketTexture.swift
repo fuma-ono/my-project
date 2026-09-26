@@ -212,6 +212,19 @@ struct SplashMarketTexture: View {
             // opacity function — sampled across the FULL width (0...1), not
             // truncated, since curveY is now defined everywhere and the
             // opacity functions alone taper it to invisible.
+            //
+            // Color: measured directly at the curve's brightest pixels
+            // (x=0.35-0.50, the peak-brightness region) — RGB averaging
+            // ~(75, 150, 211), a blue-dominant azure. `accentCyan`
+            // (RGB 52, 209, 224 — G nearly equal to B) is a visibly
+            // different, more green-leaning hue; using it here was the
+            // confirmed, measured cause of the curve reading as "too
+            // cyan" against the Reference. `curveColor` below is this
+            // measured value, used only for this curve's core/glow — the
+            // shared `accentCyan` token (used elsewhere, e.g. the "FX"
+            // title accent) is untouched.
+            let curveColor = Color(red: 0.29, green: 0.58, blue: 0.83)
+
             let curveSamples = stride(from: 0.0, through: 1.0, by: 1.0 / 320.0).map { t in
                 (t: t, point: CGPoint(x: t * size.width, y: curveY(at: t) * size.height))
             }
@@ -230,10 +243,14 @@ struct SplashMarketTexture: View {
             }
 
             // 2. Soft glow: a real Gaussian blur layer, using its own
-            // curveGlowOpacity envelope, not a wide faint stroke standing
-            // in for one.
+            // curveGlowOpacity envelope. Widened (blur radius and stroke
+            // width both increased) and the core's own opacity/width eased
+            // back (below) — a direct side-by-side against the Reference
+            // showed this file's glow reading as a sharp, narrow cyan line
+            // with a thin halo, where the Reference's is a visibly wider,
+            // softer diffusion around a less dominant core.
             context.drawLayer { layer in
-                layer.addFilter(.blur(radius: size.width * 0.012))
+                layer.addFilter(.blur(radius: size.width * 0.02))
                 var previousGlow = curveSamples[0].point
                 for sample in curveSamples.dropFirst() {
                     let opacity = curveGlowOpacity(at: sample.t)
@@ -241,13 +258,15 @@ struct SplashMarketTexture: View {
                         var segment = Path()
                         segment.move(to: previousGlow)
                         segment.addLine(to: sample.point)
-                        layer.stroke(segment, with: .color(DesignTokens.Colors.accentCyan.opacity(opacity)), lineWidth: 3)
+                        layer.stroke(segment, with: .color(curveColor.opacity(opacity)), lineWidth: 5)
                     }
                     previousGlow = sample.point
                 }
             }
 
-            // 3. Bright core line on top, using curveCoreOpacity.
+            // 3. Bright core line on top, using curveCoreOpacity — thinner
+            // and less saturated than before so the glow (above) reads as
+            // the dominant effect, matching the Reference.
             var previousCore = curveSamples[0].point
             for sample in curveSamples.dropFirst() {
                 let opacity = curveCoreOpacity(at: sample.t)
@@ -255,7 +274,7 @@ struct SplashMarketTexture: View {
                     var segment = Path()
                     segment.move(to: previousCore)
                     segment.addLine(to: sample.point)
-                    context.stroke(segment, with: .color(DesignTokens.Colors.accentCyan.opacity(min(1.0, opacity * 1.05))), lineWidth: 1.2)
+                    context.stroke(segment, with: .color(curveColor.opacity(min(1.0, opacity * 0.85))), lineWidth: 1.0)
                 }
                 previousCore = sample.point
             }
