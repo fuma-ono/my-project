@@ -56,10 +56,14 @@ struct SplashMarketTexture: View {
     ///
     /// Sized and positioned via `aspectRatio(contentMode: .fit)` at the
     /// screen's own width (never stretched, so the Reference's true
-    /// proportions are preserved at any device size). `topAnchorFraction`
-    /// was 0.565 — user feedback that the curve/mesh sat too high was
-    /// confirmed by directly re-measuring where the mesh grid becomes
-    /// visible in `docs/projects/fx-event-analyzer/mockups/
+    /// proportions are preserved at any device size), scaled up by
+    /// `scaleFactor` per user feedback wanting the curve/mesh bigger —
+    /// widened beyond the screen and re-centered horizontally
+    /// (`horizontalOffset`) rather than left-anchored, so the extra size
+    /// grows symmetrically off both edges. `topAnchorFraction` was 0.565 —
+    /// user feedback that the curve/mesh sat too high was confirmed by
+    /// directly re-measuring where the mesh grid becomes visible in
+    /// `docs/projects/fx-event-analyzer/mockups/
     /// splash-screen-reference-v1.png` (still this screen's layout
     /// Reference even though the curve/mesh *art* itself now comes from
     /// `SplashCurveMesh`): ~68% down the screen, well below 0.565. Raised
@@ -67,18 +71,20 @@ struct SplashMarketTexture: View {
     /// the loading bar rather than chase the Reference's own crop exactly.
     private var mesh: some View {
         GeometryReader { geometry in
-            let imageWidth = geometry.size.width
+            let scaleFactor = 1.2
+            let imageWidth = geometry.size.width * scaleFactor
             let imageHeight = imageWidth * (877.0 / 1794.0)
             let topAnchorFraction = 0.66
             let curveStartFraction = 0.27 // where the main curve enters the source image, top-to-bottom
             let topOffset = topAnchorFraction * geometry.size.height - curveStartFraction * imageHeight
+            let horizontalOffset = (geometry.size.width - imageWidth) / 2
 
             Image("SplashCurveMesh")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: imageWidth, height: imageHeight)
                 .blendMode(.screen)
-                .offset(y: topOffset)
+                .offset(x: horizontalOffset, y: topOffset)
         }
     }
 
