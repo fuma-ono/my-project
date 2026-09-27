@@ -2047,4 +2047,16 @@ Apple App Store審査で「Guideline 2.1 - Information Needed」として差し�
 
 **疎通確認の結果**: `SUPABASE_URL`は設定済み。Expo(`eas whoami`→`fuma-ono`、`build:list`も取得可)はOK。**Supabase REST APIは`401 Invalid API key`**で、登録された鍵の値そのものが拒否されている(未送信なら`No API key found`になるため、ヘッダーは付与されている)。鍵を直すまで、毎日の自動対応は「接続できない」と報告するだけになる。
 
+**追記(2026-09-27、401解消・現状確認)**: `SUPABASE_SERVICE_ROLE_KEY`の登録し直しにより`scripts/feedback.sh check`は200 OKになった。新着フィードバックは0件。ただし**毎日自動で起こす仕組み(スケジュール)自体はまだ作成していない**(手順書とスクリプトを用意した段階で止まっていた)。また104回目のキーボード修正は、この時点でまだ一度もビルドされていなかった(最終ビルドは9/18の`202609080023`、コミット`4871c02`まで)。
+
+## Marketing URL用の1.1バージョン作成・言語表示の修正(106回目)
+
+②のAdMob対応(app-ads.txt)のため、App Store Connect側でオーナーが新しいバージョン「1.1」を作成し、マーケティングURL(`https://fuma-ono.github.io`)を下書き保存した。ここで2点、コード側の対応漏れが見つかった。
+
+**① `app.json`の`version`が`"1.0.0"`のまま**: `eas.json`は`appVersionSource: "remote"`だが、これはビルド番号(`buildNumber`)の自動採番のみを指し、マーケティングバージョン(`CFBundleShortVersionString`)自体は`app.json`の`version`がそのままビルドに使われる。このままビルドすると、App Store Connect側で作成済みの「1.1」バージョンにビルドを紐付けられない(バージョン不一致)。`version`を`"1.1"`に変更した。
+
+**② App Storeの「言語」欄がずっと「英語」と表示される**: kashikariは実質日本語がメインのアプリだが、`app.json`に一切ロケール設定が無かったため、Expo/Xcodeのデフォルトである`CFBundleDevelopmentRegion: "en"`のままビルドされていた。Appleは(明示的な追加ローカライズが無い場合)この開発リージョンの値をアプリの言語として店頭に表示するため、実態と異なり「英語」表示になっていた。`ios.infoPlist.CFBundleDevelopmentRegion`を`"ja"`に設定して修正した。
+
+`npx tsc --noEmit`はクリーン。②はネイティブのInfo.plistに影響する変更のため、**再ビルドしてストアに反映されるまでは表示は変わらない**。104回目(キーボード修正)・105回目(自動化の土台)と合わせて、次のビルド1回でまとめて反映する。
+
 **注意**: `eas submit`はApp Store Connectへのアップロードまでで、App Reviewへの提出(バージョン作成→「審査へ提出」)はASC APIキーがこの環境に無いため自動化できていない。また1.0.0はリリース済みのため、自動修正のたびに`app.json`の`version`のパッチ番号を上げる手順にしている。104回目のキーボード修正はまだビルドされていない(最終ビルドは9/18の`202609080023`)。
