@@ -167,7 +167,13 @@ enum DesignTokens {
         /// width against the Reference's (both in the same aligned 600pt-
         /// wide frame) showed the text ~11% narrower than the Reference
         /// (372pt vs 419pt), not a rounding error; 34 closes that gap.
-        static let splashTitle = Font.system(size: 34, weight: .bold, design: .rounded)
+        /// `design` was `.rounded` — user feedback comparing a real capture
+        /// against the App Icon Reference's own "FX Event Analyzer"
+        /// wordmark found the letterforms visibly different: the Reference
+        /// uses sharper, more geometric terminals, not SF Rounded's soft
+        /// bubble-like corners. Switched to `.default` (San Francisco Pro)
+        /// to match.
+        static let splashTitle = Font.system(size: 34, weight: .bold, design: .default)
 
         // Body / data — default (San Francisco) design reads as more
         // "serious financial app", per HQ's "専門的だが難しくない".
@@ -176,7 +182,9 @@ enum DesignTokens {
         static let caption = Font.system(size: 13, weight: .regular)
         static let captionEmphasized = Font.system(size: 13, weight: .semibold)
         static let footnote = Font.system(size: 11, weight: .medium)
-        static let tagline = Font.system(size: 16, weight: .medium, design: .rounded)
+        // Was 16 — user feedback on a real capture asked for the tagline
+        // noticeably bigger.
+        static let tagline = Font.system(size: 19, weight: .medium, design: .rounded)
 
         // Numeric — tabular figures so columns of prices/percentages align,
         // a standard financial-UI convention this app didn't have yet.

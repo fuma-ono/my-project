@@ -29,22 +29,23 @@ struct SplashView: View {
         _viewModel = StateObject(wrappedValue: viewModel())
     }
 
-    /// The previous version of this gradient (a flat +6/+16 delta
-    /// top-to-bottom) was confirmed via a real capture to be too subtle to
-    /// read as a gradient at all — user feedback wanted the effect
-    /// concentrated where it actually matters: a visible glow bleeding
-    /// upward from `SplashMarketTexture`'s own glowing curve/mesh/candles,
-    /// not a uniform wash. `backgroundGlow` below does that (a radial
-    /// bloom anchored near the imagery), so this vertical gradient now
-    /// only needs to keep the overall tone from reading as perfectly flat
-    /// above the glow — bumped from a barely-perceptible delta to a
-    /// clearly visible one.
+    /// The 2-stop version of this gradient (top-to-bottom, ending brighter)
+    /// was confirmed via a real capture to be too bright overall, and to
+    /// stay bright all the way to the bottom edge — user feedback wants it
+    /// darker, and wants the richening to reverse back toward dark again
+    /// starting a bit above the loading bar, mirroring the dark top. Now a
+    /// 4-stop vertical gradient: dark at the top, a dimmer richened tone
+    /// (dimmed from the previous version) through the imagery's own
+    /// neighborhood, then back down toward dark before `bottomContent`.
     private var backgroundGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                DesignTokens.Colors.backgroundPrimary,
-                Color(red: 14.0 / 255, green: 34.0 / 255, blue: 66.0 / 255)
-            ],
+        let richened = Color(red: 11.0 / 255, green: 24.0 / 255, blue: 46.0 / 255)
+        return LinearGradient(
+            gradient: Gradient(stops: [
+                .init(color: DesignTokens.Colors.backgroundPrimary, location: 0.0),
+                .init(color: richened, location: 0.55),
+                .init(color: richened, location: 0.78),
+                .init(color: DesignTokens.Colors.backgroundPrimary, location: 0.97)
+            ]),
             startPoint: .top,
             endPoint: .bottom
         )
@@ -61,14 +62,14 @@ struct SplashView: View {
     /// First attempt used `endRadius: height * 0.5` at 0.55/0.25 opacity —
     /// confirmed via a real capture to wash the *entire* screen blue,
     /// visibly tinting even the title block instead of staying localized.
-    /// Radius cut to 0.22 of height and both opacities roughly halved so
-    /// the bloom stays contained to the imagery's own neighborhood.
+    /// Radius cut to 0.22 of height. A second round of feedback ("too
+    /// bright, make it darker") dimmed both opacity stops further still.
     private var backgroundGlow: some View {
         GeometryReader { geometry in
             RadialGradient(
                 colors: [
-                    Color(red: 28.0 / 255, green: 110.0 / 255, blue: 210.0 / 255).opacity(0.28),
-                    Color(red: 20.0 / 255, green: 80.0 / 255, blue: 170.0 / 255).opacity(0.12),
+                    Color(red: 28.0 / 255, green: 110.0 / 255, blue: 210.0 / 255).opacity(0.18),
+                    Color(red: 20.0 / 255, green: 80.0 / 255, blue: 170.0 / 255).opacity(0.08),
                     Color.clear
                 ],
                 center: UnitPoint(x: 0.4, y: 0.72),
