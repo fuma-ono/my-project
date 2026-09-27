@@ -52,14 +52,20 @@ struct SplashMarketTexture: View {
     ///
     /// Sized and positioned via `aspectRatio(contentMode: .fit)` at the
     /// screen's own width (never stretched, so the Reference's true
-    /// proportions are preserved at any device size) and anchored so the
-    /// curve's start point (≈27% down the source image) lands just below
-    /// the candles.
+    /// proportions are preserved at any device size). `topAnchorFraction`
+    /// was 0.565 — user feedback that the curve/mesh sat too high was
+    /// confirmed by directly re-measuring where the mesh grid becomes
+    /// visible in `docs/projects/fx-event-analyzer/mockups/
+    /// splash-screen-reference-v1.png` (still this screen's layout
+    /// Reference even though the curve/mesh *art* itself now comes from
+    /// `SplashCurveMesh`): ~68% down the screen, well below 0.565. Raised
+    /// to 0.66 — not the full measured value, to keep some headroom above
+    /// the loading bar rather than chase the Reference's own crop exactly.
     private var mesh: some View {
         GeometryReader { geometry in
             let imageWidth = geometry.size.width
             let imageHeight = imageWidth * (877.0 / 1794.0)
-            let topAnchorFraction = 0.565
+            let topAnchorFraction = 0.66
             let curveStartFraction = 0.27 // where the main curve enters the source image, top-to-bottom
             let topOffset = topAnchorFraction * geometry.size.height - curveStartFraction * imageHeight
 
@@ -102,16 +108,19 @@ struct SplashMarketTexture: View {
     ///
     /// Sized and positioned via `aspectRatio(contentMode: .fit)` at the
     /// screen's own width (never stretched, so the Reference's true
-    /// proportions are preserved at any device size) and anchored so the
-    /// candles' own highest point (≈45% down the source image) lands at
-    /// the same screen fraction the previous procedural candles' tallest
-    /// candle used, keeping this round scoped to the candles themselves
-    /// rather than also re-deciding their on-screen placement.
+    /// proportions are preserved at any device size). `topAnchorFraction`
+    /// was 0.53, reused from the previous procedural candles without
+    /// re-checking it against this new Reference — user feedback that the
+    /// candles sat too high was confirmed by re-measuring the tallest
+    /// candle's own top edge in `docs/projects/fx-event-analyzer/mockups/
+    /// splash-screen-reference-v1.png` (still this screen's layout
+    /// Reference; see `mesh`'s doc comment): ~57% down the screen. Raised
+    /// to 0.57 to match.
     private var candles: some View {
         GeometryReader { geometry in
             let imageWidth = geometry.size.width
             let imageHeight = imageWidth * (1536.0 / 1024.0)
-            let topAnchorFraction = 0.53
+            let topAnchorFraction = 0.57
             let contentTopFraction = 0.454 // where the candles' own highest point enters the source image, top-to-bottom
             let topOffset = topAnchorFraction * geometry.size.height - contentTopFraction * imageHeight
 

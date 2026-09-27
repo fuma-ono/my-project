@@ -29,9 +29,43 @@ struct SplashView: View {
         _viewModel = StateObject(wrappedValue: viewModel())
     }
 
+    /// The Reference's own screen background is not perfectly flat — sampled
+    /// away from all content, it reads ~RGB(0,6,17) near the top and
+    /// ~RGB(0,12,33) near the bottom, a gentle vertical richening. Rendering
+    /// `backgroundPrimary` as a flat fill was fine while `mesh`/`candles`
+    /// composited seamlessly, but once those were fixed to key out their
+    /// own backgrounds via real transparency (see `SplashMarketTexture`),
+    /// a real device capture showed the flat fill next to their own subtly
+    /// graduated near-transparent edges read as a seam of its own — flat
+    /// meeting textured, not a color mismatch this time. Applying the same
+    /// delta the Reference shows (+6 green, +16 blue) on top of
+    /// `backgroundPrimary` gives this gradient's bottom stop, so the base
+    /// itself now carries a continuous tone for the imagery to blend into.
+    private var backgroundGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                DesignTokens.Colors.backgroundPrimary,
+                Color(red: 10.0 / 255, green: 20.0 / 255, blue: 42.0 / 255)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    /// "FX"'s own accent color, sampled directly off the Reference's
+    /// brightest letter pixels (~RGB 30,210,255) — a blue-dominant azure,
+    /// clearly more blue than `DesignTokens.Colors.accentCyan`
+    /// (RGB 52,209,224, where green and blue are nearly equal). Scoped
+    /// locally rather than changing the shared `accentCyan` token, which
+    /// other screens (e.g. Home's own accent) still rely on looking as it
+    /// currently does.
+    private var splashTitleAccent: Color {
+        Color(red: 30.0 / 255, green: 210.0 / 255, blue: 255.0 / 255)
+    }
+
     var body: some View {
         ZStack {
-            DesignTokens.Colors.backgroundPrimary
+            backgroundGradient
                 .ignoresSafeArea()
 
             SplashMarketTexture()
@@ -49,16 +83,21 @@ struct SplashView: View {
             GeometryReader { geometry in
                 VStack(spacing: 0) {
                     VStack(spacing: DesignTokens.Spacing.xl) {
-                        // Was BrandMark's 132pt default — assumed correct
-                        // from an earlier, coarser measurement. Directly
-                        // measuring the rendered mark's pixel width against
-                        // the Reference's (both in the same aligned frame)
-                        // showed it ~36% too wide (156pt vs 115pt); 97
-                        // closes that gap.
-                        BrandMark(width: 97, glow: true)
+                        // Was 97 — that earlier measurement compared the
+                        // BrandMark frame's own width directly against the
+                        // Reference, but `BrandMarkGraphic` has ~14% of
+                        // transparent padding baked into its own canvas
+                        // (measured via its alpha channel), so the actual
+                        // *visible* glyph rendered smaller than the
+                        // Reference's own mark. Re-measuring the
+                        // Reference's visible glyph width directly (not the
+                        // frame) puts it at ~22.6% of screen width; 106
+                        // closes that gap once the asset's own padding is
+                        // accounted for.
+                        BrandMark(width: 106, glow: true)
                         (
                             Text("FX")
-                                .foregroundStyle(DesignTokens.Colors.accentCyan)
+                                .foregroundStyle(splashTitleAccent)
                                 + Text(" Event Analyzer")
                                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                         )
