@@ -15,9 +15,13 @@ import SwiftUI
 /// of it.
 struct SplashMarketTexture: View {
     var body: some View {
+        // candles drawn before mesh — user feedback confirmed the two
+        // Reference images visibly cross where they overlap, and the
+        // mesh/curve should read as sitting in front of the candles, not
+        // behind them.
         ZStack {
-            mesh
             candles
+            mesh
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -109,18 +113,17 @@ struct SplashMarketTexture: View {
     /// Sized and positioned via `aspectRatio(contentMode: .fit)` at the
     /// screen's own width (never stretched, so the Reference's true
     /// proportions are preserved at any device size). `topAnchorFraction`
-    /// was 0.53, reused from the previous procedural candles without
-    /// re-checking it against this new Reference — user feedback that the
-    /// candles sat too high was confirmed by re-measuring the tallest
-    /// candle's own top edge in `docs/projects/fx-event-analyzer/mockups/
-    /// splash-screen-reference-v1.png` (still this screen's layout
-    /// Reference; see `mesh`'s doc comment): ~57% down the screen. Raised
-    /// to 0.57 to match.
+    /// went 0.53 → 0.57 last round (re-measured off the layout Reference's
+    /// tallest-candle position). User feedback on the resulting capture:
+    /// the curve/mesh position now reads correctly, but the candles
+    /// themselves should sit slightly higher — nudged back up to 0.54, a
+    /// smaller fraction (higher on screen) than 0.57 but still above the
+    /// original, too-high 0.53.
     private var candles: some View {
         GeometryReader { geometry in
             let imageWidth = geometry.size.width
             let imageHeight = imageWidth * (1536.0 / 1024.0)
-            let topAnchorFraction = 0.57
+            let topAnchorFraction = 0.54
             let contentTopFraction = 0.454 // where the candles' own highest point enters the source image, top-to-bottom
             let topOffset = topAnchorFraction * geometry.size.height - contentTopFraction * imageHeight
 

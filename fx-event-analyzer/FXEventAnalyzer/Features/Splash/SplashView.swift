@@ -29,44 +29,73 @@ struct SplashView: View {
         _viewModel = StateObject(wrappedValue: viewModel())
     }
 
-    /// The Reference's own screen background is not perfectly flat — sampled
-    /// away from all content, it reads ~RGB(0,6,17) near the top and
-    /// ~RGB(0,12,33) near the bottom, a gentle vertical richening. Rendering
-    /// `backgroundPrimary` as a flat fill was fine while `mesh`/`candles`
-    /// composited seamlessly, but once those were fixed to key out their
-    /// own backgrounds via real transparency (see `SplashMarketTexture`),
-    /// a real device capture showed the flat fill next to their own subtly
-    /// graduated near-transparent edges read as a seam of its own — flat
-    /// meeting textured, not a color mismatch this time. Applying the same
-    /// delta the Reference shows (+6 green, +16 blue) on top of
-    /// `backgroundPrimary` gives this gradient's bottom stop, so the base
-    /// itself now carries a continuous tone for the imagery to blend into.
+    /// The previous version of this gradient (a flat +6/+16 delta
+    /// top-to-bottom) was confirmed via a real capture to be too subtle to
+    /// read as a gradient at all — user feedback wanted the effect
+    /// concentrated where it actually matters: a visible glow bleeding
+    /// upward from `SplashMarketTexture`'s own glowing curve/mesh/candles,
+    /// not a uniform wash. `backgroundGlow` below does that (a radial
+    /// bloom anchored near the imagery), so this vertical gradient now
+    /// only needs to keep the overall tone from reading as perfectly flat
+    /// above the glow — bumped from a barely-perceptible delta to a
+    /// clearly visible one.
     private var backgroundGradient: LinearGradient {
         LinearGradient(
             colors: [
                 DesignTokens.Colors.backgroundPrimary,
-                Color(red: 10.0 / 255, green: 20.0 / 255, blue: 42.0 / 255)
+                Color(red: 14.0 / 255, green: 34.0 / 255, blue: 66.0 / 255)
             ],
             startPoint: .top,
             endPoint: .bottom
         )
     }
 
-    /// "FX"'s own accent color, sampled directly off the Reference's
-    /// brightest letter pixels (~RGB 30,210,255) — a blue-dominant azure,
-    /// clearly more blue than `DesignTokens.Colors.accentCyan`
-    /// (RGB 52,209,224, where green and blue are nearly equal). Scoped
-    /// locally rather than changing the shared `accentCyan` token, which
-    /// other screens (e.g. Home's own accent) still rely on looking as it
-    /// currently does.
-    private var splashTitleAccent: Color {
-        Color(red: 30.0 / 255, green: 210.0 / 255, blue: 255.0 / 255)
+    /// The "発光している感じ" (glowing feel) user feedback asked for near
+    /// the curve/mesh/candles: a soft radial bloom of the same blue family
+    /// as their own glow, anchored close to where `SplashMarketTexture`'s
+    /// `mesh` and `candles` sit (topAnchorFractions 0.66 / 0.54) and fading
+    /// out well before it reaches the title block above. Sits between the
+    /// flat gradient and the imagery in the ZStack so it reads as ambient
+    /// light the glowing art is casting, not a separate decoration.
+    private var backgroundGlow: some View {
+        GeometryReader { geometry in
+            RadialGradient(
+                colors: [
+                    Color(red: 28.0 / 255, green: 110.0 / 255, blue: 210.0 / 255).opacity(0.55),
+                    Color(red: 20.0 / 255, green: 80.0 / 255, blue: 170.0 / 255).opacity(0.25),
+                    Color.clear
+                ],
+                center: UnitPoint(x: 0.4, y: 0.66),
+                startRadius: 0,
+                endRadius: geometry.size.height * 0.5
+            )
+        }
+    }
+
+    /// "FX"'s own two-tone treatment, sampled directly off the App Icon
+    /// Reference (docs/projects/fx-event-analyzer/mockups/
+    /// app-icon-reference-v1.png) rather than this screen's own — user
+    /// feedback confirmed "F" and "X" are deliberately different colors
+    /// there (matching the brand mark graphic's own light-cyan-to-blue
+    /// gradient), not a single flat accent: F ~RGB(5,250,255), a near-pure
+    /// cyan; X ~RGB(5,170,255), a more saturated blue. Scoped locally
+    /// rather than changing any shared token.
+    private var splashTitleAccentF: Color {
+        Color(red: 5.0 / 255, green: 250.0 / 255, blue: 255.0 / 255)
+    }
+
+    private var splashTitleAccentX: Color {
+        Color(red: 5.0 / 255, green: 170.0 / 255, blue: 255.0 / 255)
     }
 
     var body: some View {
         ZStack {
             backgroundGradient
                 .ignoresSafeArea()
+
+            backgroundGlow
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
 
             SplashMarketTexture()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -83,21 +112,18 @@ struct SplashView: View {
             GeometryReader { geometry in
                 VStack(spacing: 0) {
                     VStack(spacing: DesignTokens.Spacing.xl) {
-                        // Was 97 — that earlier measurement compared the
-                        // BrandMark frame's own width directly against the
-                        // Reference, but `BrandMarkGraphic` has ~14% of
-                        // transparent padding baked into its own canvas
-                        // (measured via its alpha channel), so the actual
-                        // *visible* glyph rendered smaller than the
-                        // Reference's own mark. Re-measuring the
-                        // Reference's visible glyph width directly (not the
-                        // frame) puts it at ~22.6% of screen width; 106
-                        // closes that gap once the asset's own padding is
-                        // accounted for.
-                        BrandMark(width: 106, glow: true)
+                        // 106 (itself raised from 97 to correct for
+                        // `BrandMarkGraphic`'s own internal padding) still
+                        // read as too small per user feedback comparing
+                        // against a real capture — raised further to 140,
+                        // a clearly-visible increase rather than another
+                        // exact-measurement-driven micro-adjustment.
+                        BrandMark(width: 140, glow: true)
                         (
-                            Text("FX")
-                                .foregroundStyle(splashTitleAccent)
+                            Text("F")
+                                .foregroundStyle(splashTitleAccentF)
+                                + Text("X")
+                                .foregroundStyle(splashTitleAccentX)
                                 + Text(" Event Analyzer")
                                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                         )
