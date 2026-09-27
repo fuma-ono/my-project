@@ -57,17 +57,23 @@ struct SplashView: View {
     /// out well before it reaches the title block above. Sits between the
     /// flat gradient and the imagery in the ZStack so it reads as ambient
     /// light the glowing art is casting, not a separate decoration.
+    ///
+    /// First attempt used `endRadius: height * 0.5` at 0.55/0.25 opacity —
+    /// confirmed via a real capture to wash the *entire* screen blue,
+    /// visibly tinting even the title block instead of staying localized.
+    /// Radius cut to 0.22 of height and both opacities roughly halved so
+    /// the bloom stays contained to the imagery's own neighborhood.
     private var backgroundGlow: some View {
         GeometryReader { geometry in
             RadialGradient(
                 colors: [
-                    Color(red: 28.0 / 255, green: 110.0 / 255, blue: 210.0 / 255).opacity(0.55),
-                    Color(red: 20.0 / 255, green: 80.0 / 255, blue: 170.0 / 255).opacity(0.25),
+                    Color(red: 28.0 / 255, green: 110.0 / 255, blue: 210.0 / 255).opacity(0.28),
+                    Color(red: 20.0 / 255, green: 80.0 / 255, blue: 170.0 / 255).opacity(0.12),
                     Color.clear
                 ],
-                center: UnitPoint(x: 0.4, y: 0.66),
+                center: UnitPoint(x: 0.4, y: 0.72),
                 startRadius: 0,
-                endRadius: geometry.size.height * 0.5
+                endRadius: geometry.size.height * 0.22
             )
         }
     }
