@@ -34,12 +34,21 @@ struct SplashMarketTexture: View {
     /// color, and glow no matter how many times they were re-measured —
     /// using the real pixels sidesteps that class of error entirely.
     ///
-    /// `.blendMode(.screen)` makes the image's own near-black background
-    /// composite as effectively transparent against `SplashView`'s own
-    /// background color underneath (the two are close but not identical —
-    /// screen blending removes any risk of a visible seam at the image's
-    /// edges rather than relying on the colors matching exactly), while
-    /// the glowing curve/mesh content composites normally on top.
+    /// This Reference's own background (~RGB 0,10,22) is close to
+    /// `SplashView`'s `backgroundPrimary` (~RGB 10,14,26), but not
+    /// identical — relying on `.blendMode(.screen)` alone to hide that gap
+    /// (the original approach here) was confirmed via a real device
+    /// screenshot to leave a faint but visible seam at the image's top
+    /// edge, most noticeable crossing the tagline text right above it
+    /// (measured (10,14,26) just outside the image's bounds against
+    /// (11,23,47) just inside). Same fix as `candles` below: this
+    /// Reference's own alpha channel is authored here from its brightness
+    /// (background pixels near-transparent, the glowing curve/mesh
+    /// near-opaque, the source's own falloff kept as a smooth ramp) so the
+    /// background composites as genuinely transparent rather than merely
+    /// dark, and the seam no longer depends on the two colors matching.
+    /// `.blendMode(.screen)` is kept on top of that real transparency so
+    /// the glow still reads as light adding onto `SplashView`'s background.
     ///
     /// Sized and positioned via `aspectRatio(contentMode: .fit)` at the
     /// screen's own width (never stretched, so the Reference's true
@@ -78,20 +87,18 @@ struct SplashMarketTexture: View {
     /// already learned) — using the real pixels sidesteps that class of
     /// error entirely.
     ///
-    /// Unlike `mesh`'s Reference, this one's own background (~RGB 1,10,37)
-    /// reads measurably bluer than `SplashView`'s `backgroundPrimary`
-    /// (~RGB 10,14,26) — close enough for `mesh` that `.blendMode(.screen)`
-    /// alone hid the seam, but confirmed via a real CI capture to leave a
-    /// visible rectangular seam here (measured (10,14,26) just outside the
-    /// image's bounds against (11,27,64) just inside). So this Reference's
-    /// own alpha channel is authored here from its brightness (background
-    /// pixels near-transparent, the glowing candles/curve near-opaque,
-    /// with the source's own natural glow falloff preserved as a smooth
-    /// ramp rather than a hard cutoff) instead of relying on background
-    /// color matching the destination. `.blendMode(.screen)` is kept on
-    /// top of that real transparency so the glow still reads as light
-    /// adding onto `mesh` beneath it, without the opaque background that
-    /// caused the seam.
+    /// Same background-seam issue as `mesh` (see its doc comment), worse
+    /// here since this Reference's own background (~RGB 1,10,37) reads
+    /// measurably bluer than `SplashView`'s `backgroundPrimary`
+    /// (~RGB 10,14,26) — confirmed via a real CI capture as a clearly
+    /// visible rectangular seam (measured (10,14,26) just outside the
+    /// image's bounds against (11,27,64) just inside). Same fix: this
+    /// Reference's own alpha channel is authored here from its brightness
+    /// (background pixels near-transparent, the glowing candles/curve
+    /// near-opaque, the source's own falloff kept as a smooth ramp)
+    /// instead of relying on background color matching the destination.
+    /// `.blendMode(.screen)` is kept on top of that real transparency so
+    /// the glow still reads as light adding onto `mesh` beneath it.
     ///
     /// Sized and positioned via `aspectRatio(contentMode: .fit)` at the
     /// screen's own width (never stretched, so the Reference's true
