@@ -93,8 +93,13 @@ struct LoginView: View {
                         // User feedback (2026-09-28): the brand mark/title
                         // block still read as too close to the status bar —
                         // nudged its top offset down further (0.05 -> 0.08).
+                        // Still too much leftover blank space below "新規
+                        // 登録" per follow-up feedback — pushed once more
+                        // (0.08 -> 0.11) to absorb more of it, shifting the
+                        // whole content block (everything below is laid out
+                        // relative to this) further down the screen.
                         BrandMark(width: 140, glow: true)
-                            .padding(.top, geometry.size.height * 0.08)
+                            .padding(.top, geometry.size.height * 0.11)
 
                         titleText
                             .padding(.top, geometry.size.height * 0.015)
