@@ -154,7 +154,14 @@ struct SplashMarketTexture: View {
     /// a hard cutoff, instead of climbing out of a cluttered grid.
     private var candles: some View {
         GeometryReader { geometry in
-            let imageWidth = geometry.size.width
+            // User feedback (2026-09-28): the candlesticks read too small —
+            // enlarged the same way `mesh` above was, via a scale factor on
+            // top of the screen-width base rather than stretching. Left-
+            // anchored (no horizontal offset), matching `mesh`'s own fix,
+            // so growing the image doesn't crop the climbing candles off
+            // either edge.
+            let scaleFactor = 1.3
+            let imageWidth = geometry.size.width * scaleFactor
             let imageHeight = imageWidth * (1536.0 / 1024.0)
             let topAnchorFraction = 0.54
             let contentTopFraction = 0.454 // where the candles' own highest point enters the source image, top-to-bottom

@@ -107,7 +107,14 @@ struct SplashView: View {
             // silently failed to render this block at all.
             GeometryReader { geometry in
                 VStack(spacing: 0) {
-                    VStack(spacing: DesignTokens.Spacing.xl) {
+                    // User feedback (2026-09-28): the brand mark/title/
+                    // tagline block sat too low with too much air between
+                    // its own three elements — spacing cut from
+                    // `Spacing.xl` (40) to 18, a one-off tuned value rather
+                    // than reusing a shared token, since this is this
+                    // block's own internal rhythm, not spacing shared with
+                    // anything else on screen.
+                    VStack(spacing: 18) {
                         // 106 (itself raised from 97 to correct for
                         // `BrandMarkGraphic`'s own internal padding) still
                         // read as too small per user feedback comparing
@@ -123,7 +130,7 @@ struct SplashView: View {
                                 + Text(" Event Analyzer")
                                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                         )
-                        .font(DesignTokens.Typography.splashTitle)
+                        .font(DesignTokens.Typography.splashTitleLarge)
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
 
@@ -135,7 +142,11 @@ struct SplashView: View {
                     .padding(.horizontal, DesignTokens.Spacing.lg)
                     .frame(maxWidth: 480) // keeps brand elements from stretching oversized on iPad
                     .frame(width: geometry.size.width)
-                    .padding(.top, geometry.size.height * 0.24)
+                    // Was 0.24 (the Reference's own measurement) — user
+                    // feedback wants the whole block moved up further than
+                    // that, so this is now a deliberate deviation from the
+                    // Reference rather than a re-measurement.
+                    .padding(.top, geometry.size.height * 0.16)
 
                     Spacer(minLength: 0)
 

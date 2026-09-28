@@ -201,8 +201,18 @@ enum DesignTokens {
         /// wordmark found the letterforms visibly different: the Reference
         /// uses sharper, more geometric terminals, not SF Rounded's soft
         /// bubble-like corners. Switched to `.default` (San Francisco Pro)
-        /// to match.
+        /// to match. Also used as-is by Login's own "FX Event Analyzer"
+        /// wordmark (ui-screens.md SCR-010), which is why a further
+        /// Splash-only size bump (below) is its own token rather than
+        /// changed in place here.
         static let splashTitle = Font.system(size: 34, weight: .bold, design: .default)
+
+        /// Splash-only, further enlarged size for the same "FX Event
+        /// Analyzer" wordmark — user feedback (2026-09-28) wanted it bigger
+        /// on Splash specifically. Kept separate from `splashTitle` (used
+        /// as-is by Login) so that screen isn't affected by a Splash-only
+        /// request.
+        static let splashTitleLarge = Font.system(size: 40, weight: .bold, design: .default)
 
         // Body / data — default (San Francisco) design reads as more
         // "serious financial app", per HQ's "専門的だが難しくない".
