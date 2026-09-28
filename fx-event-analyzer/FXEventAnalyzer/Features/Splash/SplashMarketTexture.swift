@@ -71,7 +71,9 @@ struct SplashMarketTexture: View {
     /// the loading bar rather than chase the Reference's own crop exactly.
     private var mesh: some View {
         GeometryReader { geometry in
-            let scaleFactor = 1.2
+            // 1.2 still read as too small per follow-up user feedback on a
+            // real capture — raised further to 1.45.
+            let scaleFactor = 1.45
             let imageWidth = geometry.size.width * scaleFactor
             let imageHeight = imageWidth * (877.0 / 1794.0)
             let topAnchorFraction = 0.66
