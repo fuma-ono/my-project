@@ -124,7 +124,20 @@ struct LoginView: View {
             // below supplies the real label instead.
             ZStack(alignment: .leading) {
                 if viewModel.email.isEmpty {
-                    Text("example@domain.com")
+                    // `Text(verbatim:)`, not the default `Text(_:)` — a
+                    // real CI capture showed only this placeholder (of the
+                    // two on this screen) still rendering in the
+                    // environment's accent color even after the ZStack
+                    // restructuring, while "パスワードを入力" right below
+                    // it, built exactly the same way, rendered correctly.
+                    // The one difference: this string is shaped like an
+                    // email address. `Text(_:)` parses a string literal as
+                    // `LocalizedStringKey`, which on this OS version
+                    // evidently auto-detects and links email-shaped
+                    // substrings the same way system text views do —
+                    // `Text(verbatim:)` skips that parsing entirely and
+                    // renders the literal string with no such detection.
+                    Text(verbatim: "example@domain.com")
                         .font(DesignTokens.Typography.body)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                         .padding(.horizontal, DesignTokens.Spacing.md)
