@@ -132,8 +132,12 @@ struct LoginView: View {
                         // the brand mark gained (0.09 -> 0.06) so the form's
                         // absolute position on screen is unchanged from
                         // before either of those two nudges.
+                        //
+                        // Follow-up feedback: now move "Appleでサインイン"
+                        // and everything below it up further still — cut
+                        // this padding again (0.06 -> 0.03).
                         formPanel(controlHeight: geometry.size.height * 0.062)
-                            .padding(.top, geometry.size.height * 0.06)
+                            .padding(.top, geometry.size.height * 0.03)
                             .padding(.horizontal, DesignTokens.Spacing.lg)
                             .padding(.bottom, DesignTokens.Spacing.lg)
                     }

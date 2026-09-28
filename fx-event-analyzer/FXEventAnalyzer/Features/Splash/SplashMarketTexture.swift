@@ -154,15 +154,24 @@ struct SplashMarketTexture: View {
     /// a hard cutoff, instead of climbing out of a cluttered grid.
     private var candles: some View {
         GeometryReader { geometry in
-            // User feedback (2026-09-28): the candlesticks read too small —
-            // enlarged the same way `mesh` above was, via a scale factor on
-            // top of the screen-width base rather than stretching. Left-
-            // anchored (no horizontal offset), matching `mesh`'s own fix,
-            // so growing the image doesn't crop the climbing candles off
-            // either edge.
-            let scaleFactor = 1.3
+            // User feedback (2026-09-28), round 2: the first enlargement
+            // (left-anchored, no horizontal offset — same fix as `mesh`)
+            // read as "candles bunched on the right and still small". Root
+            // cause: the candle image's own alpha is fully transparent
+            // from x=0 through source x≈307 (feathered in to full opacity
+            // by ≈420 — see the alpha-zeroing note above), so left-
+            // anchoring the *whole* image, transparent margin included,
+            // wastes that ~30% of screen width as blank space on the left
+            // while pushing the tallest, rightmost candles off the right
+            // edge — the opposite of "spread across the width and big".
+            // Offsetting left by exactly that transparent fraction moves
+            // the real candle content to start at the screen's own left
+            // edge instead, so growing the scale factor enlarges the
+            // candles themselves rather than growing the wasted margin.
+            let scaleFactor = 1.6
             let imageWidth = geometry.size.width * scaleFactor
             let imageHeight = imageWidth * (1536.0 / 1024.0)
+            let contentStartFraction = 307.0 / 1024.0 // where the candle image's own alpha (real content) begins, left-to-right
             let topAnchorFraction = 0.54
             let contentTopFraction = 0.454 // where the candles' own highest point enters the source image, top-to-bottom
             let topOffset = topAnchorFraction * geometry.size.height - contentTopFraction * imageHeight
@@ -172,7 +181,7 @@ struct SplashMarketTexture: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: imageWidth, height: imageHeight)
                 .blendMode(.screen)
-                .offset(y: topOffset)
+                .offset(x: -contentStartFraction * imageWidth, y: topOffset)
         }
     }
 }
