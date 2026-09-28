@@ -107,7 +107,7 @@ struct LoginView: View {
             Text("メールアドレス")
                 .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
-            TextField("メールアドレス", text: $viewModel.email)
+            TextField("", text: $viewModel.email)
                 .textInputAutocapitalization(.never)
                 .keyboardType(.emailAddress)
                 .font(DesignTokens.Typography.body)
@@ -123,7 +123,14 @@ struct LoginView: View {
                     // environment's accent color regardless. A manual
                     // placeholder drawn in an overlay (hidden once real text
                     // exists, non-interactive so taps still reach the field
-                    // beneath) sidesteps that platform quirk entirely.
+                    // beneath) sidesteps that platform quirk entirely. The
+                    // titleKey above is "" rather than a real label — that
+                    // string doubles as the system's own built-in
+                    // placeholder, and a real value here was confirmed via a
+                    // real capture to render underneath this overlay,
+                    // ghosting through it in the environment's accent color.
+                    // The accessibility label below supplies the real label
+                    // instead, same as before this overlay existed.
                     if viewModel.email.isEmpty {
                         Text("example@domain.com")
                             .font(DesignTokens.Typography.body)
@@ -141,7 +148,7 @@ struct LoginView: View {
                 .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                 .padding(.top, 20)
-            SecureField("パスワード", text: $viewModel.password)
+            SecureField("", text: $viewModel.password)
                 .font(DesignTokens.Typography.body)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                 .padding(.horizontal, DesignTokens.Spacing.md)
