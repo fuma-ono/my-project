@@ -107,76 +107,79 @@ struct LoginView: View {
             Text("メールアドレス")
                 .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
-            TextField("", text: $viewModel.email)
-                .textInputAutocapitalization(.never)
-                .keyboardType(.emailAddress)
-                .font(DesignTokens.Typography.body)
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
-                .padding(.horizontal, DesignTokens.Spacing.md)
-                .frame(height: controlHeight)
-                .background(DesignTokens.Colors.backgroundElevated, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
-                .overlay(alignment: .leading) {
-                    // `TextField`'s own `prompt:` parameter, styled via
-                    // `.foregroundStyle` on its `Text`, was confirmed via two
-                    // independent real CI captures to have no effect on this
-                    // OS version — the placeholder still rendered in the
-                    // environment's accent color regardless. A manual
-                    // placeholder drawn in an overlay (hidden once real text
-                    // exists, non-interactive so taps still reach the field
-                    // beneath) sidesteps that platform quirk entirely. The
-                    // titleKey above is "" rather than a real label — that
-                    // string doubles as the system's own built-in
-                    // placeholder, and a real value here was confirmed via a
-                    // real capture to render underneath this overlay,
-                    // ghosting through it in the environment's accent color.
-                    // The accessibility label below supplies the real label
-                    // instead, same as before this overlay existed.
-                    if viewModel.email.isEmpty {
-                        Text("example@domain.com")
-                            .font(DesignTokens.Typography.body)
-                            .foregroundStyle(DesignTokens.Colors.textSecondary)
-                            .padding(.horizontal, DesignTokens.Spacing.md)
-                            .allowsHitTesting(false)
-                    }
+            // `TextField`'s own `prompt:` parameter, and later a manual
+            // placeholder attached via `.overlay` directly on the field,
+            // were both confirmed via real CI captures to render in the
+            // environment's accent color regardless of explicit
+            // `.foregroundStyle` — content layered directly onto this
+            // control's own modifier chain inherits its tint on this OS
+            // version no matter how it's styled. Placing the placeholder
+            // `Text` as a plain ZStack *sibling* of the TextField, instead
+            // of attached to it via `.overlay`, avoids that inheritance
+            // entirely: it renders in its own explicit style like any
+            // other Text. `TextField`'s own titleKey is "" rather than a
+            // real label — that string doubles as its built-in
+            // placeholder, which would otherwise render (in the same
+            // accent color) underneath this one — the accessibility label
+            // below supplies the real label instead.
+            ZStack(alignment: .leading) {
+                if viewModel.email.isEmpty {
+                    Text("example@domain.com")
+                        .font(DesignTokens.Typography.body)
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                        .padding(.horizontal, DesignTokens.Spacing.md)
+                        .allowsHitTesting(false)
                 }
-                .accessibilityLabel("メールアドレス")
-                .focused($focusedField, equals: .email)
-                .onTapGesture { focusedField = .email }
-                .padding(.top, 8)
+                TextField("", text: $viewModel.email)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.emailAddress)
+                    .font(DesignTokens.Typography.body)
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    // Kept directly on the TextField (not the ZStack
+                    // wrapper) so it stays an XCUITest `textFields[...]`
+                    // element rather than becoming an opaque `.other`.
+                    .accessibilityLabel("メールアドレス")
+                    .focused($focusedField, equals: .email)
+            }
+            .frame(height: controlHeight)
+            .background(DesignTokens.Colors.backgroundElevated, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
+            .onTapGesture { focusedField = .email }
+            .padding(.top, 8)
 
             Text("パスワード")
                 .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                 .padding(.top, 20)
-            SecureField("", text: $viewModel.password)
-                .font(DesignTokens.Typography.body)
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
-                .padding(.horizontal, DesignTokens.Spacing.md)
-                .frame(height: controlHeight)
-                .background(DesignTokens.Colors.backgroundElevated, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
-                .overlay(alignment: .leading) {
-                    if viewModel.password.isEmpty {
-                        Text("パスワードを入力")
-                            .font(DesignTokens.Typography.body)
-                            .foregroundStyle(DesignTokens.Colors.textSecondary)
-                            .padding(.horizontal, DesignTokens.Spacing.md)
-                            .allowsHitTesting(false)
-                    }
+            ZStack(alignment: .leading) {
+                if viewModel.password.isEmpty {
+                    Text("パスワードを入力")
+                        .font(DesignTokens.Typography.body)
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
+                        .padding(.horizontal, DesignTokens.Spacing.md)
+                        .allowsHitTesting(false)
                 }
-                .overlay(alignment: .trailing) {
-                    Button {
-                        pendingFeatureMessage = "この機能は準備中です。もうしばらくお待ちください。"
-                    } label: {
-                        Image(systemName: "camera.viewfinder")
-                            .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.trailing, DesignTokens.Spacing.md)
+                SecureField("", text: $viewModel.password)
+                    .font(DesignTokens.Typography.body)
+                    .foregroundStyle(DesignTokens.Colors.textPrimary)
+                    .padding(.horizontal, DesignTokens.Spacing.md)
+                    .accessibilityLabel("パスワード")
+                    .focused($focusedField, equals: .password)
+            }
+            .frame(height: controlHeight)
+            .background(DesignTokens.Colors.backgroundElevated, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
+            .overlay(alignment: .trailing) {
+                Button {
+                    pendingFeatureMessage = "この機能は準備中です。もうしばらくお待ちください。"
+                } label: {
+                    Image(systemName: "camera.viewfinder")
+                        .foregroundStyle(DesignTokens.Colors.textSecondary)
                 }
-                .accessibilityLabel("パスワード")
-                .focused($focusedField, equals: .password)
-                .onTapGesture { focusedField = .password }
-                .padding(.top, 8)
+                .buttonStyle(.plain)
+                .padding(.trailing, DesignTokens.Spacing.md)
+            }
+            .onTapGesture { focusedField = .password }
+            .padding(.top, 8)
 
             Button {
                 viewModel.submit()
