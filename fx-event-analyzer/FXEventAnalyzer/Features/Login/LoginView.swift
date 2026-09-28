@@ -183,7 +183,7 @@ struct LoginView: View {
             HStack(spacing: 12) {
                 Rectangle().fill(DesignTokens.Colors.borderSubtle).frame(height: 1)
                 Text("または")
-                    .font(DesignTokens.Typography.caption)
+                    .font(DesignTokens.Typography.loginCaption)
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
                     .fixedSize()
                 Rectangle().fill(DesignTokens.Colors.borderSubtle).frame(height: 1)
@@ -191,7 +191,7 @@ struct LoginView: View {
             .padding(.top, 16)
 
             Text("メールアドレス")
-                .font(DesignTokens.Typography.caption)
+                .font(DesignTokens.Typography.loginCaption)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                 .padding(.top, 16)
             // `TextField`'s own `prompt:` parameter, and later a manual
@@ -248,7 +248,7 @@ struct LoginView: View {
             .padding(.top, 6)
 
             Text("パスワード")
-                .font(DesignTokens.Typography.caption)
+                .font(DesignTokens.Typography.loginCaption)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                 .padding(.top, 14)
             ZStack(alignment: .leading) {
@@ -322,7 +322,7 @@ struct LoginView: View {
                 pendingFeatureMessage = "パスワードリセットは準備中です。もうしばらくお待ちください。"
             } label: {
                 Text("パスワードをお忘れの方")
-                    .font(DesignTokens.Typography.captionEmphasized)
+                    .font(DesignTokens.Typography.loginCaptionEmphasized)
                     .foregroundStyle(DesignTokens.Colors.accentCyan)
             }
             .buttonStyle(.plain)
@@ -335,7 +335,7 @@ struct LoginView: View {
                 .padding(.top, 14)
 
             Text("アカウントをお持ちでない方")
-                .font(DesignTokens.Typography.caption)
+                .font(DesignTokens.Typography.loginCaption)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 18)

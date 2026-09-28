@@ -221,6 +221,17 @@ enum DesignTokens {
         static let caption = Font.system(size: 13, weight: .regular)
         static let captionEmphasized = Font.system(size: 13, weight: .semibold)
         static let footnote = Font.system(size: 11, weight: .medium)
+
+        /// Login-only, enlarged versions of `caption`/`captionEmphasized`
+        /// (13 -> 15) — user feedback (2026-09-28) that Login's field
+        /// labels ("メールアドレス"/"パスワード"), "または", "パスワードを
+        /// お忘れの方", and "アカウントをお持ちでない方" read too small.
+        /// Kept separate from the shared `caption`/`captionEmphasized`
+        /// tokens, which `LoadingView`/`MetricTile`/`SectionHeader` and
+        /// Login's own session-expired banner and error message also use,
+        /// so this Login-specific request doesn't resize text elsewhere.
+        static let loginCaption = Font.system(size: 15, weight: .regular)
+        static let loginCaptionEmphasized = Font.system(size: 15, weight: .semibold)
         // Was 16 — user feedback on a real capture asked for the tagline
         // noticeably bigger.
         static let tagline = Font.system(size: 19, weight: .medium, design: .rounded)
