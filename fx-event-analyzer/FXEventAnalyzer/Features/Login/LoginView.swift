@@ -120,8 +120,20 @@ struct LoginView: View {
                         // margin up here instead, pushing the whole form
                         // block down toward the middle of that leftover
                         // space rather than leaving it all beneath.
+                        //
+                        // User feedback (2026-09-28): the brand mark's own
+                        // top offset was pushed down twice more after that
+                        // (0.05 -> 0.08 -> 0.11) to close the gap to the
+                        // status bar, which — since this padding stacks on
+                        // top of that in the same VStack — also dragged
+                        // "Appleでサインイン" and everything below it down
+                        // each time. Explicit follow-up: leave that block's
+                        // position alone. Cut this padding by the same 0.03
+                        // the brand mark gained (0.09 -> 0.06) so the form's
+                        // absolute position on screen is unchanged from
+                        // before either of those two nudges.
                         formPanel(controlHeight: geometry.size.height * 0.062)
-                            .padding(.top, geometry.size.height * 0.09)
+                            .padding(.top, geometry.size.height * 0.06)
                             .padding(.horizontal, DesignTokens.Spacing.lg)
                             .padding(.bottom, DesignTokens.Spacing.lg)
                     }
