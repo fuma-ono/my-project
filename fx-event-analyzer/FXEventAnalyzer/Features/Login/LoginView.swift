@@ -97,9 +97,12 @@ struct LoginView: View {
                         // 登録" per follow-up feedback — pushed once more
                         // (0.08 -> 0.11) to absorb more of it, shifting the
                         // whole content block (everything below is laid out
-                        // relative to this) further down the screen.
+                        // relative to this) further down the screen. Follow-
+                        // up: a small nudge back up (0.11 -> 0.09) — see
+                        // formPanel's own comment below for how its position
+                        // stays fixed despite this.
                         BrandMark(width: 140, glow: true)
-                            .padding(.top, geometry.size.height * 0.11)
+                            .padding(.top, geometry.size.height * 0.09)
 
                         titleText
                             .padding(.top, geometry.size.height * 0.015)
@@ -136,8 +139,15 @@ struct LoginView: View {
                         // Follow-up feedback: now move "Appleでサインイン"
                         // and everything below it up further still — cut
                         // this padding again (0.06 -> 0.03).
+                        //
+                        // User feedback (2026-09-28): brand mark nudged
+                        // back up slightly (0.11 -> 0.09, a 0.02 decrease).
+                        // Compensated here (0.03 -> 0.05, a 0.02 increase)
+                        // so only the brand mark/title move — "Appleで
+                        // サインイン" and everything below stays exactly
+                        // where it was, same compensation pattern as above.
                         formPanel(controlHeight: geometry.size.height * 0.062)
-                            .padding(.top, geometry.size.height * 0.03)
+                            .padding(.top, geometry.size.height * 0.05)
                             .padding(.horizontal, DesignTokens.Spacing.lg)
                             .padding(.bottom, DesignTokens.Spacing.lg)
                     }

@@ -154,34 +154,69 @@ struct SplashMarketTexture: View {
     /// a hard cutoff, instead of climbing out of a cluttered grid.
     private var candles: some View {
         GeometryReader { geometry in
-            // User feedback (2026-09-28), round 2: the first enlargement
-            // (left-anchored, no horizontal offset — same fix as `mesh`)
-            // read as "candles bunched on the right and still small". Root
-            // cause: the candle image's own alpha is fully transparent
-            // from x=0 through source x≈307 (feathered in to full opacity
-            // by ≈420 — see the alpha-zeroing note above), so left-
-            // anchoring the *whole* image, transparent margin included,
-            // wastes that ~30% of screen width as blank space on the left
-            // while pushing the tallest, rightmost candles off the right
-            // edge — the opposite of "spread across the width and big".
-            // Offsetting left by exactly that transparent fraction moves
-            // the real candle content to start at the screen's own left
-            // edge instead, so growing the scale factor enlarges the
-            // candles themselves rather than growing the wasted margin.
-            let scaleFactor = 1.6
+            // User feedback (2026-09-28), round 3, three asks together:
+            // (1) "still a bit broken/torn-looking" — round 2's
+            // `contentStartFraction` (307/1024) started the visible crop
+            // inside the alpha *feather* zone (fully transparent at 307,
+            // ramping to full opacity by ≈420 — see the alpha-zeroing note
+            // above). At this larger scale that gradual ramp doesn't read
+            // as a clean fade, it partially erases individual candle
+            // bodies unevenly, which is exactly what looked "broken".
+            // Starting at 420 instead (confirmed via the asset's own alpha
+            // channel: solid ≥200 alpha begins there) shows only fully
+            // opaque candles, no partial ones. (2) Right edge should align
+            // with the right edge of "into Trading Opportunities" —
+            // measured directly off a real capture at x≈932/1206 ≈ 0.773
+            // of screen width. (3) Move the whole group up. Re-solved
+            // scale/offset from two constraints — source x=420 (first full
+            // candle) lands at screen x=0, source x=1017 (last full
+            // candle column, alpha channel's own solid content ends here)
+            // lands at x=0.773 of screen width — rather than reusing round
+            // 2's arbitrary 1.6 scale factor.
+            let contentStartFraction = 420.0 / 1024.0 // first fully-opaque column (no more feather)
+            let contentEndFraction = 1017.0 / 1024.0 // last fully-opaque column
+            let rightAlignFraction = 0.773 // "into Trading Opportunities" own right edge, measured off a real capture
+            let scaleFactor = rightAlignFraction / (contentEndFraction - contentStartFraction)
             let imageWidth = geometry.size.width * scaleFactor
             let imageHeight = imageWidth * (1536.0 / 1024.0)
-            let contentStartFraction = 307.0 / 1024.0 // where the candle image's own alpha (real content) begins, left-to-right
-            let topAnchorFraction = 0.54
+            let offsetX = -contentStartFraction * imageWidth
+            // Was 0.54 — moved up per this round's feedback.
+            let topAnchorFraction = 0.47
             let contentTopFraction = 0.454 // where the candles' own highest point enters the source image, top-to-bottom
             let topOffset = topAnchorFraction * geometry.size.height - contentTopFraction * imageHeight
+
+            // The climb's early/left end is also its lowest-value end, so
+            // it sits furthest down the screen — still low enough to dip
+            // into `mesh`'s dense grid underneath even after the move up
+            // above. Explicit ask: delete the candlestick portion that
+            // overlaps the mesh. A vertical opacity fade (screen-space
+            // fractions, not image-local ones — computed into the image's
+            // own local fraction via `topOffset`/`imageHeight` below so it
+            // stays correct regardless of scale) removes just that lower
+            // slice; the higher, later/right candles this round pushed up
+            // stay clear of it and render unfaded.
+            let fadeStartScreenFraction = 0.68
+            let fadeEndScreenFraction = 0.85
+            let fadeStartLocal = min(1, max(0, (fadeStartScreenFraction * geometry.size.height - topOffset) / imageHeight))
+            let fadeEndLocal = min(1, max(fadeStartLocal, (fadeEndScreenFraction * geometry.size.height - topOffset) / imageHeight))
 
             Image("SplashCandles")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: imageWidth, height: imageHeight)
+                .mask(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white, location: fadeStartLocal),
+                            .init(color: .clear, location: fadeEndLocal)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(width: imageWidth, height: imageHeight)
+                )
                 .blendMode(.screen)
-                .offset(x: -contentStartFraction * imageWidth, y: topOffset)
+                .offset(x: offsetX, y: topOffset)
         }
     }
 }
