@@ -2067,3 +2067,23 @@ Apple App Store審査で「Guideline 2.1 - Information Needed」として差し�
 **オーナー側の残り作業(この環境では自動化できない)**: App Store Connectの1.1バージョン画面で、このビルド(`202609080024`)を選択して保存し、「審査へ提出」を押す(105回目に記録した通り、ASC APIキーがEAS側にしか無くApp Reviewへの提出操作自体は自動化できていない)。
 
 **注意**: `eas submit`はApp Store Connectへのアップロードまでで、App Reviewへの提出(バージョン作成→「審査へ提出」)はASC APIキーがこの環境に無いため自動化できていない。また1.0.0はリリース済みのため、自動修正のたびに`app.json`の`version`のパッチ番号を上げる手順にしている。104回目のキーボード修正はまだビルドされていない(最終ビルドは9/18の`202609080023`)。
+
+## 旧バージョンの更新促進・App Storeの対応言語を英語も含めるよう修正(107回目、次回リリースで反映)
+
+1.1リリース後、オーナーから2件の改善依頼があった。緊急ではなく「次のアップデートのタイミングでいい」とのことなので、コードだけ先に直しておく。
+
+**① 旧バージョンを開いていても更新に気付けない**: 起動時にiTunes Lookup API(`https://itunes.apple.com/lookup?id=6808062809`)でApp Store上の最新バージョンを取得し、手元のバージョン(`Constants.expoConfig.version`)より新しければアップデートを促すAlertを出すようにした。
+
+- **`src/lib/updateCheck.ts`(新規)**: `checkForAppUpdate()`。バージョン比較(ドット区切りの数値比較)→新しければ`Alert.alert`で「アップデート」ボタン(`itms-apps://`で開き、失敗時はhttps URLにフォールバック、`reviewPrompt.ts`と同じパターン)と「後で」ボタンを出す。通信失敗時は何もしない(ads.ts/sentry.tsと同じ「失敗してもアプリ本体は止めない」方針)。Androidは未リリースのため対象外(`Platform.OS !== 'ios'`で即return)
+- **`src/lib/reviewPrompt.ts`**: `IOS_APP_ID`を`export`し、`updateCheck.ts`と共有(App Store Connect App ID`6808062809`の重複管理を避ける)
+- **`App.tsx`**: サインインの有無に関係なく、起動時に1回だけ`checkForAppUpdate(t.updateCheck)`を呼ぶ`useEffect`を追加(デモモードでは呼ばない)
+- **`src/i18n/strings.ts`**: `updateCheck`(title/message/updateButton/laterButton)をja/en両方に追加
+
+**②「言語」欄が日本語だけになっている**: 106回目に`CFBundleDevelopmentRegion`を`ja`に直した際、他に何もローカライズ設定が無かったため、App Storeの「言語」欄が(英語から)日本語1件だけの表示に変わっていた。kashikariはアプリ内に日本語/English切り替え機能があるため、両方を対応言語として表示させる必要がある。
+
+- **`app.json`**: `expo.locales`に`ja`/`en`を追加(`config/locales/ja.json`・`en.json`を参照)。Expoのこの仕組みでネイティブ側の`.lproj`リソースが両言語分生成され、`CFBundleLocalizations`に`ja`・`en`の両方が含まれるようになる(=App Storeの「言語」欄に両方表示されるようになる)
+- **`config/locales/ja.json`・`en.json`(新規)**: カメラ・写真ライブラリの権限説明文をそれぞれの言語で用意(既存の日本語文言と、その英訳)
+
+`npx tsc --noEmit`はクリーン。`EXPO_PUBLIC_DEMO_MODE=1`のWeb版をPlaywrightで確認し、コンソールエラーが出ないことを確認した(`checkForAppUpdate`はiOS以外・デモモードでは即returnするため、Web版での動作確認はここまで)。
+
+**次のビルドで反映される**(今回は「次のアップデートのタイミングでいい」との指示のため、今すぐのビルド・提出は行わない)。②はネイティブのローカライズリソースに関わる変更のため、次にビルドしたタイミングで初めてApp Storeの「言語」欄に反映される。

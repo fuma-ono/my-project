@@ -18,7 +18,7 @@ const MAX_SHOWN_COUNT = 3;
 // App Store Connect App ID(77回目参照)。Android(Google Play)はまだ
 // 未公開のため、package名(app.json参照)は控えているが実際にストアの
 // レビューページが存在するのはリリース後になる。
-const IOS_APP_ID = '6808062809';
+export const IOS_APP_ID = '6808062809';
 const ANDROID_PACKAGE = 'com.kashikari.mobile';
 
 type State = { shownCount: number; lastShownAt: number | null; reviewed: boolean };

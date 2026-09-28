@@ -62,6 +62,10 @@
         }
       ]
     ],
+    "locales": {
+      "ja": "./config/locales/ja.json",
+      "en": "./config/locales/en.json"
+    },
     "owner": "fuma-ono",
     "extra": {
       "eas": {

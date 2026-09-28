@@ -457,6 +457,15 @@ export const ja = {
     joinDisabled: 'デモモードでは参加できません',
     inviteDisabled: 'デモモードでは招待できません',
   },
+  // 107回目: 古いバージョンを開いているユーザーが更新に気付けないという
+  // 指摘への対応。起動時にApp Storeの最新バージョンと比較し、古ければ
+  // このAlertを出す。
+  updateCheck: {
+    title: '新しいバージョンがあります',
+    message: '最新の不具合修正・改善を利用するため、App Storeでアップデートしてください。',
+    updateButton: 'アップデート',
+    laterButton: '後で',
+  },
 };
 
 export type Strings = typeof ja;
@@ -849,5 +858,11 @@ export const en: Strings = {
     createDisabled: "Can't create groups in demo mode",
     joinDisabled: "Can't join groups in demo mode",
     inviteDisabled: "Can't invite in demo mode",
+  },
+  updateCheck: {
+    title: 'A new version is available',
+    message: 'Please update from the App Store to get the latest fixes and improvements.',
+    updateButton: 'Update',
+    laterButton: 'Later',
   },
 };

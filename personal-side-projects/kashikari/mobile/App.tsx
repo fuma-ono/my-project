@@ -33,7 +33,7 @@ import { useGroupNotificationsSeen } from './src/hooks/useGroupNotificationsSeen
 import { useGroups } from './src/hooks/useGroups';
 import { useNotifications } from './src/hooks/useNotifications';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
-import { LanguageProvider } from './src/i18n';
+import { LanguageProvider, useT } from './src/i18n';
 import { requestTrackingPermission } from './src/lib/ads';
 import { getUsageStats, logEvent } from './src/lib/analytics';
 import { deleteAccount } from './src/lib/deleteAccount';
@@ -41,6 +41,7 @@ import { submitFeedback } from './src/lib/feedback';
 import { PremiumProvider } from './src/lib/premiumContext';
 import { SentryErrorBoundary } from './src/lib/sentry';
 import { isSupabaseConfigured } from './src/lib/supabase';
+import { checkForAppUpdate } from './src/lib/updateCheck';
 import type { Group } from './src/types';
 import markAsset from './assets/mark.png';
 
@@ -85,6 +86,7 @@ const DEMO_MODE = process.env.EXPO_PUBLIC_DEMO_MODE === '1';
 // LanguageProviderの内側でuseAuth/useGroups(どちらも文言を扱う)を呼ぶため、
 // 実体はAppInnerに分離し、下のdefault exportでProviderをかぶせている。
 function AppInner() {
+  const t = useT();
   const {
     loading: authLoading,
     userId,
@@ -228,6 +230,14 @@ function AppInner() {
     if (DEMO_MODE || !userId) return;
     requestTrackingPermission();
   }, [userId]);
+
+  // 「旧バージョンを開いていても気付かない」への対応(107回目)。サイン
+  // インの有無に関係なく、起動時に1回だけApp Storeの最新版と比較する。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (DEMO_MODE) return;
+    checkForAppUpdate(t.updateCheck);
+  }, []);
 
   // 通知をタップして開かれた場合、そのgroup_idの画面を直接開く。groupsの
   // 読み込みが間に合っていない場合はここで何もせず、groups更新のたびに
