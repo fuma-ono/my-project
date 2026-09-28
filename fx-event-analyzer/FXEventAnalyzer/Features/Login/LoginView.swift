@@ -33,6 +33,21 @@ import SwiftUI
 /// reproduced as `camera.viewfinder` (closest SF Symbol match) wired to
 /// the same "準備中" placeholder alert as "パスワードをお忘れの方"/
 /// "新規登録" below, since no such feature exists yet either.
+///
+/// User feedback round (2026-09-28), after the pixel-match above was
+/// confirmed: (1) background/brand-mark size/"FX" colors should match
+/// `SplashView` exactly, not just approximate it — moved the underlying
+/// values to shared `DesignTokens.Colors` tokens (`brandBackgroundGradient`,
+/// `brandTitleAccentF`/`X`) that both screens now reference, and the brand
+/// mark now uses Splash's fixed `140` width instead of a screen-fraction
+/// size. (2) The login button's `accentGradient` fill read too cyan next
+/// to the Reference's fairly uniform blue (measured (63,142,245)→
+/// (52,120,244), no real cyan pull) — switched to a flat `accentPrimary`
+/// fill. (3) Apple/Google sign-in, which the Reference doesn't show at
+/// all — added below the existing button, wired to the same "準備中"
+/// alert as every other not-yet-implemented action here, since
+/// `AuthServicing` has no social-auth method yet either (ui-screens.md:
+/// "認証方式は別途詳細設計で確定する").
 struct LoginView: View {
     @StateObject private var viewModel: LoginViewModel
     let sessionExpired: Bool
@@ -51,28 +66,36 @@ struct LoginView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                DesignTokens.Colors.backgroundPrimary.ignoresSafeArea()
+                DesignTokens.Colors.brandBackgroundGradient.ignoresSafeArea()
 
-                VStack(spacing: 0) {
-                    BrandMark(width: geometry.size.width * 0.238, glow: true)
-                        .padding(.top, geometry.size.height * 0.165)
+                // Adding Apple/Google sign-in meaningfully grew this
+                // screen's content height past what a fixed, non-scrolling
+                // VStack safely fits on shorter devices (iPhone SE-class) —
+                // wrapped in a ScrollView so everything stays reachable
+                // there instead of risking the bottom rows clipping off
+                // the visible screen. Still reads identically on taller
+                // devices, where the content fits without scrolling.
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        BrandMark(width: 140, glow: true)
+                            .padding(.top, geometry.size.height * 0.165)
 
-                    titleText
-                        .padding(.top, geometry.size.height * 0.028)
+                        titleText
+                            .padding(.top, geometry.size.height * 0.028)
 
-                    if sessionExpired {
-                        sessionExpiredBanner
-                            .padding(.top, geometry.size.height * 0.02)
+                        if sessionExpired {
+                            sessionExpiredBanner
+                                .padding(.top, geometry.size.height * 0.02)
+                                .padding(.horizontal, DesignTokens.Spacing.lg)
+                        }
+
+                        formPanel(controlHeight: geometry.size.height * 0.07)
+                            .padding(.top, geometry.size.height * 0.041)
                             .padding(.horizontal, DesignTokens.Spacing.lg)
+                            .padding(.bottom, DesignTokens.Spacing.xl)
                     }
-
-                    formPanel(controlHeight: geometry.size.height * 0.07)
-                        .padding(.top, geometry.size.height * 0.041)
-                        .padding(.horizontal, DesignTokens.Spacing.lg)
-
-                    Spacer(minLength: 0)
+                    .frame(width: geometry.size.width)
                 }
-                .frame(width: geometry.size.width)
             }
         }
         .preferredColorScheme(.dark)
@@ -92,8 +115,10 @@ struct LoginView: View {
 
     private var titleText: some View {
         (
-            Text("FX")
-                .foregroundStyle(DesignTokens.Colors.accentCyan)
+            Text("F")
+                .foregroundStyle(DesignTokens.Colors.brandTitleAccentF)
+                + Text("X")
+                .foregroundStyle(DesignTokens.Colors.brandTitleAccentX)
                 + Text(" Event Analyzer")
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
         )
@@ -208,7 +233,12 @@ struct LoginView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: controlHeight)
-                .background(DesignTokens.Colors.accentGradient, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
+                // Was `accentGradient` — a real capture showed it pulling
+                // visibly toward cyan next to the Reference's own button,
+                // which is a fairly uniform blue (measured (63,142,245) on
+                // the left down to (52,120,244) on the right, no real cyan
+                // shift). A flat `accentPrimary` fill matches that.
+                .background(DesignTokens.Colors.accentPrimary, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
             }
             .buttonStyle(.plain)
             .disabled(!viewModel.canSubmit)
@@ -237,6 +267,9 @@ struct LoginView: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 24)
 
+            socialSignInSection(controlHeight: controlHeight)
+                .padding(.top, 24)
+
             Rectangle()
                 .fill(DesignTokens.Colors.borderSubtle)
                 .frame(height: 1)
@@ -259,6 +292,58 @@ struct LoginView: View {
             .padding(.top, 6)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// Not in the Reference at all — added per explicit user request.
+    /// `AuthServicing` has no social-auth method yet (ui-screens.md: "認証
+    /// 方式は別途詳細設計で確定する"), so both buttons are wired to the
+    /// same "準備中" alert every other not-yet-implemented action on this
+    /// screen already uses, rather than silently doing nothing.
+    private func socialSignInSection(controlHeight: CGFloat) -> some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                Rectangle().fill(DesignTokens.Colors.borderSubtle).frame(height: 1)
+                Text("または")
+                    .font(DesignTokens.Typography.caption)
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    .fixedSize()
+                Rectangle().fill(DesignTokens.Colors.borderSubtle).frame(height: 1)
+            }
+
+            Button {
+                pendingFeatureMessage = "Appleでサインインは準備中です。もうしばらくお待ちください。"
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "apple.logo")
+                        .font(.system(size: 17, weight: .medium))
+                    Text("Appleでサインイン")
+                        .font(DesignTokens.Typography.bodyEmphasized)
+                }
+                .foregroundStyle(.black)
+                .frame(maxWidth: .infinity)
+                .frame(height: controlHeight)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                pendingFeatureMessage = "Googleでサインインは準備中です。もうしばらくお待ちください。"
+            } label: {
+                HStack(spacing: 8) {
+                    Text("G")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(DesignTokens.Colors.accentPrimary)
+                    Text("Googleでサインイン")
+                        .font(DesignTokens.Typography.bodyEmphasized)
+                        .foregroundStyle(DesignTokens.Colors.textPrimary)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: controlHeight)
+                .background(DesignTokens.Colors.backgroundElevated, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
+                .overlay(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero).stroke(DesignTokens.Colors.borderSubtle, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     private var sessionExpiredBanner: some View {

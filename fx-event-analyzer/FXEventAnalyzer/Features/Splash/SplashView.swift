@@ -37,18 +37,12 @@ struct SplashView: View {
     /// 4-stop vertical gradient: dark at the top, a dimmer richened tone
     /// (dimmed from the previous version) through the imagery's own
     /// neighborhood, then back down toward dark before `bottomContent`.
+    ///
+    /// Promoted to `DesignTokens.Colors.brandBackgroundGradient` so Login
+    /// (and future screens) share this exact background rather than each
+    /// approximating it — see that token's own doc comment.
     private var backgroundGradient: LinearGradient {
-        let richened = Color(red: 11.0 / 255, green: 24.0 / 255, blue: 46.0 / 255)
-        return LinearGradient(
-            gradient: Gradient(stops: [
-                .init(color: DesignTokens.Colors.backgroundPrimary, location: 0.0),
-                .init(color: richened, location: 0.55),
-                .init(color: richened, location: 0.78),
-                .init(color: DesignTokens.Colors.backgroundPrimary, location: 0.97)
-            ]),
-            startPoint: .top,
-            endPoint: .bottom
-        )
+        DesignTokens.Colors.brandBackgroundGradient
     }
 
     /// The "発光している感じ" (glowing feel) user feedback asked for near
@@ -81,19 +75,14 @@ struct SplashView: View {
 
     /// "FX"'s own two-tone treatment, sampled directly off the App Icon
     /// Reference (docs/projects/fx-event-analyzer/mockups/
-    /// app-icon-reference-v1.png) rather than this screen's own — user
-    /// feedback confirmed "F" and "X" are deliberately different colors
-    /// there (matching the brand mark graphic's own light-cyan-to-blue
-    /// gradient), not a single flat accent: F ~RGB(5,250,255), a near-pure
-    /// cyan; X ~RGB(5,170,255), a more saturated blue. Scoped locally
-    /// rather than changing any shared token.
-    private var splashTitleAccentF: Color {
-        Color(red: 5.0 / 255, green: 250.0 / 255, blue: 255.0 / 255)
-    }
-
-    private var splashTitleAccentX: Color {
-        Color(red: 5.0 / 255, green: 170.0 / 255, blue: 255.0 / 255)
-    }
+    /// app-icon-reference-v1.png) — user feedback confirmed "F" and "X"
+    /// are deliberately different colors there (matching the brand mark
+    /// graphic's own light-cyan-to-blue gradient), not a single flat
+    /// accent. Promoted to `DesignTokens.Colors.brandTitleAccentF`/`X` so
+    /// Login (and any future screen with this wordmark) uses the exact
+    /// same two colors.
+    private var splashTitleAccentF: Color { DesignTokens.Colors.brandTitleAccentF }
+    private var splashTitleAccentX: Color { DesignTokens.Colors.brandTitleAccentX }
 
     var body: some View {
         ZStack {

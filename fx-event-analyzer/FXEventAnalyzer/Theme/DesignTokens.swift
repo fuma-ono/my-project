@@ -70,6 +70,35 @@ enum DesignTokens {
             endPoint: .bottomTrailing
         )
 
+        /// Shared brand background — originally Splash-only, promoted here
+        /// per user feedback that every "brand moment" screen (Splash,
+        /// Login, and future screens as they're redone) should share one
+        /// background treatment rather than each defining its own. Dark at
+        /// the top and bottom, richened in the middle — see `SplashView`'s
+        /// original doc comment for the tuning history (2-stop → this
+        /// 4-stop version, dimmed after being confirmed too bright via a
+        /// real capture).
+        static let brandBackgroundGradient = LinearGradient(
+            gradient: Gradient(stops: [
+                .init(color: backgroundPrimary, location: 0.0),
+                .init(color: Color(red: 11.0 / 255, green: 24.0 / 255, blue: 46.0 / 255), location: 0.55),
+                .init(color: Color(red: 11.0 / 255, green: 24.0 / 255, blue: 46.0 / 255), location: 0.78),
+                .init(color: backgroundPrimary, location: 0.97)
+            ]),
+            startPoint: .top,
+            endPoint: .bottom
+        )
+
+        /// "FX"'s own two-tone treatment, sampled directly off the App Icon
+        /// Reference (docs/projects/fx-event-analyzer/mockups/
+        /// app-icon-reference-v1.png) — F ~RGB(5,250,255), a near-pure
+        /// cyan; X ~RGB(5,170,255), a more saturated blue. Originally
+        /// Splash-only, promoted here so Login (and any future screen
+        /// showing the "FX" wordmark) renders the exact same two colors
+        /// rather than each screen sampling its own approximation.
+        static let brandTitleAccentF = Color(red: 5.0 / 255, green: 250.0 / 255, blue: 255.0 / 255)
+        static let brandTitleAccentX = Color(red: 5.0 / 255, green: 170.0 / 255, blue: 255.0 / 255)
+
         /// Directional color for a signed financial value (Surprise, pips,
         /// change%, movement) — the one place `statusSuccess`/`statusError`
         /// are chosen dynamically rather than hardcoded per call site.
