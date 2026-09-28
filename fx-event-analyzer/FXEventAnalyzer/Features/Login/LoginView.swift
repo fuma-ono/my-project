@@ -2,35 +2,37 @@ import SwiftUI
 
 /// SCR-010 Login (ui-screens.md).
 ///
-/// HQ "V5 Pixel Frontend" integration (2026-09-24): visual content is HQ's
-/// `V5PixelFrontend.swift` `V5Login` (icon, wordmark, fixed-size field
-/// panel), reproduced as given. Adaptations, all wiring, not redesign:
-/// - HQ's fields are local `@State`; here they bind to the real
-///   `LoginViewModel`'s `$email`/`$password`. Accessibility labels are
-///   attached explicitly (`app.textFields["メールアドレス"]` etc.) since a
-///   bare `TextField` next to an unrelated `Text` label isn't associated
-///   automatically — the same fix the prior HQV5 integration needed.
-/// - HQ's "ログイン" is a plain `Text` with no action; wrapped in a real
-///   `Button` calling `viewModel.submit()`, swapping in a `ProgressView`
-///   while submitting — same visual shape otherwise.
-/// - HQ's "パスワードを忘れた"/"新規登録" are plain `Text` with no action —
-///   wired to the existing "準備中" alert this screen already used, since
-///   no password-reset or sign-up API exists.
-/// - `sessionExpired`/`viewModel.state == .error` (states HQ's static
-///   mock has no design for) are added as the minimum necessary: the
-///   session-expired banner sits above the fixed field panel (pushes it
-///   down within the same fixed 234×491 canvas, doesn't resize the panel);
-///   the error message is anchored just below the panel via `.overlay(
-///   alignment: .bottom)`, the same technique HQ's own `V5EventRow` uses
-///   to place its metric row outside a fixed box — so the panel's own
-///   204×139 frame and background are never resized to fit real content.
-/// - `V5Viewport` scales its fixed canvas via `.scaleEffect`, which is
-///   known to make XCUITest's synthesized tap land without actually
-///   moving keyboard focus onto a `TextField`/`SecureField` inside it
-///   (the tap itself resolves to the right place; the responder change
-///   doesn't follow) — a Simulator/XCUITest limitation, not a visual
-///   change. `@FocusState` + an explicit `.onTapGesture` on each field
-///   forces the focus assignment directly, working around it.
+/// Direction change (2026-09-28): rebuilt against a dedicated reference
+/// image (`docs/projects/fx-event-analyzer/mockups/login-screen-reference-v1.jpg`)
+/// the same way `SplashView` already was — literal reproduction, measured
+/// pixel-by-pixel off the Reference and expressed as fractions of screen
+/// width/height, not the fixed-canvas `V5Viewport`/`V5P` system the rest of
+/// the app (Home/Indicators/etc.) still uses. That system renders this
+/// screen's fields/button at a tiny virtual size (204×139pt canvas, 7–9pt
+/// fonts) and scales the whole thing up, which is also known to break
+/// XCUITest focus synthesis on `TextField`/`SecureField` — the
+/// `@FocusState` + `.onTapGesture` workaround below predates this rewrite
+/// and is kept for the same reason.
+///
+/// Reference measurements (of the 883×1579 reference image, as fractions):
+/// brand mark top 0.165 / width 0.238 (centered); title top 0.291; email
+/// field top 0.410 / height 0.069; password field top 0.527 (same height);
+/// button top 0.626 (same height); "パスワードをお忘れの方" ~0.741; divider
+/// ~0.776; "アカウントをお持ちでない方" ~0.823; "新規登録" ~0.868. Side
+/// margin measured at ~8.4% of width, close enough to `DesignTokens.
+/// Spacing.lg` (24pt) to reuse that shared token rather than a one-off
+/// value. Colors were sampled directly off the Reference and matched
+/// against existing `DesignTokens` colorsets rather than hardcoded
+/// literals where the match was close (accentCyan for the "FX"/link cyan,
+/// accentPrimary for the button's blue, backgroundElevated for the field
+/// fill) — the Reference's own glowing-text bloom reads brighter than the
+/// flat token, but that's the JPEG's bloom/blur, not a distinct color.
+///
+/// The Reference draws a small icon (reads as a stylized camera) inside
+/// the password field with no visible function of its own in the mockup —
+/// reproduced as `camera.viewfinder` (closest SF Symbol match) wired to
+/// the same "準備中" placeholder alert as "パスワードをお忘れの方"/
+/// "新規登録" below, since no such feature exists yet either.
 struct LoginView: View {
     @StateObject private var viewModel: LoginViewModel
     let sessionExpired: Bool
@@ -47,86 +49,31 @@ struct LoginView: View {
     }
 
     var body: some View {
-        V5Viewport {
-            V5TopStatus()
-            VStack(spacing: 0) {
-                Spacer().frame(height: 92)
-                Image(systemName: "chart.line.uptrend.xyaxis")
-                    .font(.system(size: 47, weight: .bold))
-                    .foregroundStyle(LinearGradient(colors: [V5P.blue, V5P.cyan], startPoint: .bottomLeading, endPoint: .topTrailing))
-                Text("FX Event Analyzer").font(.system(size: 20, weight: .medium)).foregroundStyle(.white).padding(.top, 8)
+        GeometryReader { geometry in
+            ZStack {
+                DesignTokens.Colors.backgroundPrimary.ignoresSafeArea()
 
-                if sessionExpired {
-                    sessionExpiredBanner.padding(.top, 10)
-                }
+                VStack(spacing: 0) {
+                    BrandMark(width: geometry.size.width * 0.238, glow: true)
+                        .padding(.top, geometry.size.height * 0.165)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("メールアドレス").font(.system(size: 7)).foregroundStyle(V5P.muted)
-                    TextField("example@domain.com", text: $viewModel.email)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.emailAddress)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 10).frame(height: 27)
-                        .background(V5P.bg0.opacity(0.8), in: Capsule())
-                        .accessibilityLabel("メールアドレス")
-                        .focused($focusedField, equals: .email)
-                        .onTapGesture { focusedField = .email }
-                    Text("パスワード").font(.system(size: 7)).foregroundStyle(V5P.muted)
-                    SecureField("パスワードを入力", text: $viewModel.password)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 10).frame(height: 27)
-                        .background(V5P.bg0.opacity(0.8), in: Capsule())
-                        .accessibilityLabel("パスワード")
-                        .focused($focusedField, equals: .password)
-                        .onTapGesture { focusedField = .password }
-                    Button {
-                        viewModel.submit()
-                    } label: {
-                        Group {
-                            if viewModel.state == .submitting {
-                                ProgressView().tint(.white)
-                            } else {
-                                Text("ログイン").font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
-                            }
-                        }
-                        .frame(maxWidth: .infinity).frame(height: 29)
-                        .background(LinearGradient(colors: [V5P.blue, V5P.cyan.opacity(0.8)], startPoint: .leading, endPoint: .trailing), in: RoundedRectangle(cornerRadius: 7))
+                    titleText
+                        .padding(.top, geometry.size.height * 0.028)
+
+                    if sessionExpired {
+                        sessionExpiredBanner
+                            .padding(.top, geometry.size.height * 0.02)
+                            .padding(.horizontal, DesignTokens.Spacing.lg)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(!viewModel.canSubmit)
-                    .opacity(viewModel.canSubmit ? 1 : 0.5)
-                    Button {
-                        pendingFeatureMessage = "パスワードリセットは準備中です。もうしばらくお待ちください。"
-                    } label: {
-                        Text("パスワードをお忘れの方").font(.system(size: 7, weight: .semibold)).foregroundStyle(V5P.cyan).frame(maxWidth: .infinity)
-                    }.buttonStyle(.plain)
-                    Text("アカウントをお持ちでない方").font(.system(size: 7)).foregroundStyle(V5P.muted).frame(maxWidth: .infinity)
-                    Button {
-                        pendingFeatureMessage = "新規登録は準備中です。もうしばらくお待ちください。"
-                    } label: {
-                        Text("新規登録").font(.system(size: 8, weight: .bold)).foregroundStyle(V5P.cyan).frame(maxWidth: .infinity)
-                    }.buttonStyle(.plain)
+
+                    formPanel(controlHeight: geometry.size.height * 0.07)
+                        .padding(.top, geometry.size.height * 0.041)
+                        .padding(.horizontal, DesignTokens.Spacing.lg)
+
+                    Spacer(minLength: 0)
                 }
-                .padding(9)
-                .frame(width: 204, height: 139)
-                .background(V5P.panel.opacity(0.9), in: RoundedRectangle(cornerRadius: 9))
-                .overlay(RoundedRectangle(cornerRadius: 9).stroke(V5P.line.opacity(0.7), lineWidth: 0.7))
-                .overlay(alignment: .bottom) {
-                    if case .error(let message) = viewModel.state {
-                        Text(message)
-                            .font(.system(size: 7))
-                            .foregroundStyle(V5P.red)
-                            .multilineTextAlignment(.center)
-                            .frame(width: 204)
-                            .offset(y: 16)
-                    }
-                }
-                .padding(.top, 18)
-                Spacer()
+                .frame(width: geometry.size.width)
             }
-            .frame(width: V5P.W, height: V5P.H)
         }
         .preferredColorScheme(.dark)
         .alert(
@@ -143,19 +90,141 @@ struct LoginView: View {
         }
     }
 
+    private var titleText: some View {
+        (
+            Text("FX")
+                .foregroundStyle(DesignTokens.Colors.accentCyan)
+                + Text(" Event Analyzer")
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+        )
+        .font(DesignTokens.Typography.splashTitle)
+        .lineLimit(1)
+        .minimumScaleFactor(0.6)
+    }
+
+    private func formPanel(controlHeight: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("メールアドレス")
+                .font(DesignTokens.Typography.caption)
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+            TextField("example@domain.com", text: $viewModel.email)
+                .textInputAutocapitalization(.never)
+                .keyboardType(.emailAddress)
+                .font(DesignTokens.Typography.body)
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+                .padding(.horizontal, DesignTokens.Spacing.md)
+                .frame(height: controlHeight)
+                .background(DesignTokens.Colors.backgroundElevated, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
+                .accessibilityLabel("メールアドレス")
+                .focused($focusedField, equals: .email)
+                .onTapGesture { focusedField = .email }
+                .padding(.top, 8)
+
+            Text("パスワード")
+                .font(DesignTokens.Typography.caption)
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+                .padding(.top, 20)
+            SecureField("パスワードを入力", text: $viewModel.password)
+                .font(DesignTokens.Typography.body)
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+                .padding(.horizontal, DesignTokens.Spacing.md)
+                .frame(height: controlHeight)
+                .background(DesignTokens.Colors.backgroundElevated, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
+                .overlay(alignment: .trailing) {
+                    Button {
+                        pendingFeatureMessage = "この機能は準備中です。もうしばらくお待ちください。"
+                    } label: {
+                        Image(systemName: "camera.viewfinder")
+                            .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, DesignTokens.Spacing.md)
+                }
+                .accessibilityLabel("パスワード")
+                .focused($focusedField, equals: .password)
+                .onTapGesture { focusedField = .password }
+                .padding(.top, 8)
+
+            Button {
+                viewModel.submit()
+            } label: {
+                Group {
+                    if viewModel.state == .submitting {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text("ログイン")
+                            .font(DesignTokens.Typography.bodyEmphasized)
+                            .foregroundStyle(.white)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: controlHeight)
+                .background(DesignTokens.Colors.accentGradient, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
+            }
+            .buttonStyle(.plain)
+            .disabled(!viewModel.canSubmit)
+            .opacity(viewModel.canSubmit ? 1 : 0.5)
+            .padding(.top, 28)
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: .bottom) {
+                if case .error(let message) = viewModel.state {
+                    Text(message)
+                        .font(DesignTokens.Typography.caption)
+                        .foregroundStyle(DesignTokens.Colors.statusError)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 6)
+                        .offset(y: controlHeight * 0.6)
+                }
+            }
+
+            Button {
+                pendingFeatureMessage = "パスワードリセットは準備中です。もうしばらくお待ちください。"
+            } label: {
+                Text("パスワードをお忘れの方")
+                    .font(DesignTokens.Typography.captionEmphasized)
+                    .foregroundStyle(DesignTokens.Colors.accentCyan)
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 24)
+
+            Rectangle()
+                .fill(DesignTokens.Colors.borderSubtle)
+                .frame(height: 1)
+                .padding(.top, 20)
+
+            Text("アカウントをお持ちでない方")
+                .font(DesignTokens.Typography.caption)
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 26)
+            Button {
+                pendingFeatureMessage = "新規登録は準備中です。もうしばらくお待ちください。"
+            } label: {
+                Text("新規登録")
+                    .font(DesignTokens.Typography.bodyEmphasized)
+                    .foregroundStyle(DesignTokens.Colors.accentCyan)
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 6)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     private var sessionExpiredBanner: some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 4) {
             Text("セッションの有効期限が切れています")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.white)
+                .font(DesignTokens.Typography.captionEmphasized)
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
             Text("再度ログインしてください")
-                .font(.system(size: 7))
-                .foregroundStyle(V5P.muted)
+                .font(DesignTokens.Typography.caption)
+                .foregroundStyle(DesignTokens.Colors.textSecondary)
         }
         .multilineTextAlignment(.center)
-        .padding(8)
-        .frame(width: 204)
-        .background(V5P.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(V5P.red.opacity(0.3), lineWidth: 0.6))
+        .frame(maxWidth: .infinity)
+        .padding(DesignTokens.Spacing.sm)
+        .background(DesignTokens.Colors.statusError.opacity(0.12), in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.control))
+        .overlay(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.control).stroke(DesignTokens.Colors.statusError.opacity(0.3), lineWidth: 1))
     }
 }

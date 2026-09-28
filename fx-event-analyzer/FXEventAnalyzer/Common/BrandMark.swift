@@ -12,9 +12,9 @@ import SwiftUI
 /// of it.
 struct BrandMark: View {
     var width: CGFloat = 132
-    /// Splash's Reference shows a soft glow behind the mark; Login's
-    /// (smaller, inline) usage doesn't have one — scoped per call site
-    /// rather than changing this shared component's look everywhere.
+    /// Splash's and Login's own References both show a soft glow behind
+    /// the mark; other, smaller inline usages don't — scoped per call
+    /// site rather than changing this shared component's look everywhere.
     var glow: Bool = false
 
     var body: some View {
