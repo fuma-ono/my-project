@@ -90,8 +90,11 @@ struct LoginView: View {
                 // to reach the bottom.
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
+                        // User feedback (2026-09-28): the brand mark/title
+                        // block still read as too close to the status bar —
+                        // nudged its top offset down further (0.05 -> 0.08).
                         BrandMark(width: 140, glow: true)
-                            .padding(.top, geometry.size.height * 0.05)
+                            .padding(.top, geometry.size.height * 0.08)
 
                         titleText
                             .padding(.top, geometry.size.height * 0.015)
