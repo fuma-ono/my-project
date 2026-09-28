@@ -44,10 +44,12 @@ import SwiftUI
 /// to the Reference's fairly uniform blue (measured (63,142,245)→
 /// (52,120,244), no real cyan pull) — switched to a flat `accentPrimary`
 /// fill. (3) Apple/Google sign-in, which the Reference doesn't show at
-/// all — added below the existing button, wired to the same "準備中"
-/// alert as every other not-yet-implemented action here, since
-/// `AuthServicing` has no social-auth method yet either (ui-screens.md:
-/// "認証方式は別途詳細設計で確定する").
+/// all — added, wired to the same "準備中" alert as every other
+/// not-yet-implemented action here, since `AuthServicing` has no
+/// social-auth method yet either (ui-screens.md: "認証方式は別途詳細設計で
+/// 確定する"). First placed below the email/password form; follow-up
+/// feedback moved it above instead — social sign-in first, an "または"
+/// divider, then the traditional email/password form below it.
 struct LoginView: View {
     @StateObject private var viewModel: LoginViewModel
     let sessionExpired: Bool
@@ -129,9 +131,28 @@ struct LoginView: View {
 
     private func formPanel(controlHeight: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 0) {
+            // User feedback (2026-09-28): social sign-in read oddly stuck
+            // at the bottom of the screen below everything else — moved to
+            // the top of the form, above the email/password fields, the
+            // more common placement for "or sign in with a provider"
+            // (decide fast with one tap, or fall through to the
+            // traditional form below).
+            socialSignInSection(controlHeight: controlHeight)
+
+            HStack(spacing: 12) {
+                Rectangle().fill(DesignTokens.Colors.borderSubtle).frame(height: 1)
+                Text("または")
+                    .font(DesignTokens.Typography.caption)
+                    .foregroundStyle(DesignTokens.Colors.textSecondary)
+                    .fixedSize()
+                Rectangle().fill(DesignTokens.Colors.borderSubtle).frame(height: 1)
+            }
+            .padding(.top, 24)
+
             Text("メールアドレス")
                 .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
+                .padding(.top, 28)
             // `TextField`'s own `prompt:` parameter, and later a manual
             // placeholder attached via `.overlay` directly on the field,
             // were both confirmed via real CI captures to render in the
@@ -267,9 +288,6 @@ struct LoginView: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 24)
 
-            socialSignInSection(controlHeight: controlHeight)
-                .padding(.top, 24)
-
             Rectangle()
                 .fill(DesignTokens.Colors.borderSubtle)
                 .frame(height: 1)
@@ -301,15 +319,6 @@ struct LoginView: View {
     /// screen already uses, rather than silently doing nothing.
     private func socialSignInSection(controlHeight: CGFloat) -> some View {
         VStack(spacing: 12) {
-            HStack(spacing: 12) {
-                Rectangle().fill(DesignTokens.Colors.borderSubtle).frame(height: 1)
-                Text("または")
-                    .font(DesignTokens.Typography.caption)
-                    .foregroundStyle(DesignTokens.Colors.textSecondary)
-                    .fixedSize()
-                Rectangle().fill(DesignTokens.Colors.borderSubtle).frame(height: 1)
-            }
-
             Button {
                 pendingFeatureMessage = "Appleでサインインは準備中です。もうしばらくお待ちください。"
             } label: {
