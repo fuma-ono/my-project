@@ -136,6 +136,22 @@ struct SplashMarketTexture: View {
     /// themselves should sit slightly higher — nudged back up to 0.54, a
     /// smaller fraction (higher on screen) than 0.57 but still above the
     /// original, too-high 0.53.
+    ///
+    /// User feedback on the mesh-enlargement fix's capture: the candles'
+    /// own lower-left cluster sits directly on top of `mesh`'s dense grid
+    /// lines (both layers use `.blendMode(.screen)`, which adds light
+    /// rather than occluding, so `mesh` being drawn after `candles` in the
+    /// ZStack never actually hid them) — the two visibly cross and clutter
+    /// each other. Asked to delete the candlestick portion that overlaps
+    /// the mesh. Fixed in the `SplashCandles` asset itself (not here):
+    /// re-measured on-screen where `candles`' own placement (this view's
+    /// math) overlaps `mesh`'s placement (`mesh`'s own math above) and
+    /// zeroed the candle image's alpha from its left edge through source
+    /// x≈300, feathering to full opacity by x≈420 — the source-image
+    /// x-range whose on-screen position falls inside the mesh's dense-grid
+    /// footprint. The chart now visibly begins right around where the
+    /// mesh's own bright curve crosses, reading as intentional rather than
+    /// a hard cutoff, instead of climbing out of a cluttered grid.
     private var candles: some View {
         GeometryReader { geometry in
             let imageWidth = geometry.size.width
