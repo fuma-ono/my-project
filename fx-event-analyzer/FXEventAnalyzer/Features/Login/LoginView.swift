@@ -102,8 +102,18 @@ struct LoginView: View {
                                 .padding(.horizontal, DesignTokens.Spacing.lg)
                         }
 
+                        // User feedback: the previous 0.02 tightening left
+                        // the whole form (Apple sign-in through 新規登録)
+                        // crammed right under the title, with a large empty
+                        // gap below it — everything fit on one screen, but
+                        // read badly balanced. Real capture showed roughly
+                        // a quarter of screen height sitting empty at the
+                        // bottom afterward; moved about a third of that
+                        // margin up here instead, pushing the whole form
+                        // block down toward the middle of that leftover
+                        // space rather than leaving it all beneath.
                         formPanel(controlHeight: geometry.size.height * 0.062)
-                            .padding(.top, geometry.size.height * 0.02)
+                            .padding(.top, geometry.size.height * 0.09)
                             .padding(.horizontal, DesignTokens.Spacing.lg)
                             .padding(.bottom, DesignTokens.Spacing.lg)
                     }
