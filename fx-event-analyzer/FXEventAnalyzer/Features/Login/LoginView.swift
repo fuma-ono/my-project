@@ -74,16 +74,27 @@ struct LoginView: View {
                 // screen's content height past what a fixed, non-scrolling
                 // VStack safely fits on shorter devices (iPhone SE-class) —
                 // wrapped in a ScrollView so everything stays reachable
-                // there instead of risking the bottom rows clipping off
-                // the visible screen. Still reads identically on taller
-                // devices, where the content fits without scrolling.
+                // there instead of risking the bottom rows clipping off.
+                //
+                // User feedback (2026-09-28): the top gap above the brand
+                // mark (0.165 — the Reference's own measurement, tuned back
+                // when this screen was just brand mark + form) read as too
+                // much empty space once Apple/Google sign-in made the form
+                // itself much taller, and pushed "新規登録" below the fold
+                // where it read as missing rather than just scrolled past.
+                // Cut every vertical gap on this screen (top offset, inter-
+                // element padding, control height) so the whole thing —
+                // brand mark through "新規登録" — fits in view without
+                // scrolling on ordinary devices; the ScrollView stays as a
+                // safety net for shorter ones instead of the primary way
+                // to reach the bottom.
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
                         BrandMark(width: 140, glow: true)
-                            .padding(.top, geometry.size.height * 0.165)
+                            .padding(.top, geometry.size.height * 0.05)
 
                         titleText
-                            .padding(.top, geometry.size.height * 0.028)
+                            .padding(.top, geometry.size.height * 0.015)
 
                         if sessionExpired {
                             sessionExpiredBanner
@@ -91,10 +102,10 @@ struct LoginView: View {
                                 .padding(.horizontal, DesignTokens.Spacing.lg)
                         }
 
-                        formPanel(controlHeight: geometry.size.height * 0.07)
-                            .padding(.top, geometry.size.height * 0.041)
+                        formPanel(controlHeight: geometry.size.height * 0.062)
+                            .padding(.top, geometry.size.height * 0.02)
                             .padding(.horizontal, DesignTokens.Spacing.lg)
-                            .padding(.bottom, DesignTokens.Spacing.xl)
+                            .padding(.bottom, DesignTokens.Spacing.lg)
                     }
                     .frame(width: geometry.size.width)
                 }
@@ -147,12 +158,12 @@ struct LoginView: View {
                     .fixedSize()
                 Rectangle().fill(DesignTokens.Colors.borderSubtle).frame(height: 1)
             }
-            .padding(.top, 24)
+            .padding(.top, 16)
 
             Text("メールアドレス")
                 .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
-                .padding(.top, 28)
+                .padding(.top, 16)
             // `TextField`'s own `prompt:` parameter, and later a manual
             // placeholder attached via `.overlay` directly on the field,
             // were both confirmed via real CI captures to render in the
@@ -204,12 +215,12 @@ struct LoginView: View {
             .frame(height: controlHeight)
             .background(DesignTokens.Colors.backgroundElevated, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
             .onTapGesture { focusedField = .email }
-            .padding(.top, 8)
+            .padding(.top, 6)
 
             Text("パスワード")
                 .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
-                .padding(.top, 20)
+                .padding(.top, 14)
             ZStack(alignment: .leading) {
                 if viewModel.password.isEmpty {
                     Text("パスワードを入力")
@@ -238,7 +249,7 @@ struct LoginView: View {
                 .padding(.trailing, DesignTokens.Spacing.md)
             }
             .onTapGesture { focusedField = .password }
-            .padding(.top, 8)
+            .padding(.top, 6)
 
             Button {
                 viewModel.submit()
@@ -264,7 +275,7 @@ struct LoginView: View {
             .buttonStyle(.plain)
             .disabled(!viewModel.canSubmit)
             .opacity(viewModel.canSubmit ? 1 : 0.5)
-            .padding(.top, 28)
+            .padding(.top, 20)
             .frame(maxWidth: .infinity)
             .overlay(alignment: .bottom) {
                 if case .error(let message) = viewModel.state {
@@ -286,18 +297,18 @@ struct LoginView: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
-            .padding(.top, 24)
+            .padding(.top, 16)
 
             Rectangle()
                 .fill(DesignTokens.Colors.borderSubtle)
                 .frame(height: 1)
-                .padding(.top, 20)
+                .padding(.top, 14)
 
             Text("アカウントをお持ちでない方")
                 .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                 .frame(maxWidth: .infinity)
-                .padding(.top, 26)
+                .padding(.top, 18)
             Button {
                 pendingFeatureMessage = "新規登録は準備中です。もうしばらくお待ちください。"
             } label: {
@@ -307,7 +318,7 @@ struct LoginView: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
-            .padding(.top, 6)
+            .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
     }
