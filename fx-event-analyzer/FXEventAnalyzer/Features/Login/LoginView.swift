@@ -107,7 +107,7 @@ struct LoginView: View {
             Text("メールアドレス")
                 .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
-            TextField("メールアドレス", text: $viewModel.email, prompt: Text("example@domain.com").foregroundStyle(DesignTokens.Colors.textSecondary))
+            TextField("メールアドレス", text: $viewModel.email)
                 .textInputAutocapitalization(.never)
                 .keyboardType(.emailAddress)
                 .font(DesignTokens.Typography.body)
@@ -115,6 +115,23 @@ struct LoginView: View {
                 .padding(.horizontal, DesignTokens.Spacing.md)
                 .frame(height: controlHeight)
                 .background(DesignTokens.Colors.backgroundElevated, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
+                .overlay(alignment: .leading) {
+                    // `TextField`'s own `prompt:` parameter, styled via
+                    // `.foregroundStyle` on its `Text`, was confirmed via two
+                    // independent real CI captures to have no effect on this
+                    // OS version — the placeholder still rendered in the
+                    // environment's accent color regardless. A manual
+                    // placeholder drawn in an overlay (hidden once real text
+                    // exists, non-interactive so taps still reach the field
+                    // beneath) sidesteps that platform quirk entirely.
+                    if viewModel.email.isEmpty {
+                        Text("example@domain.com")
+                            .font(DesignTokens.Typography.body)
+                            .foregroundStyle(DesignTokens.Colors.textSecondary)
+                            .padding(.horizontal, DesignTokens.Spacing.md)
+                            .allowsHitTesting(false)
+                    }
+                }
                 .accessibilityLabel("メールアドレス")
                 .focused($focusedField, equals: .email)
                 .onTapGesture { focusedField = .email }
@@ -124,12 +141,21 @@ struct LoginView: View {
                 .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                 .padding(.top, 20)
-            SecureField("パスワード", text: $viewModel.password, prompt: Text("パスワードを入力").foregroundStyle(DesignTokens.Colors.textSecondary))
+            SecureField("パスワード", text: $viewModel.password)
                 .font(DesignTokens.Typography.body)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                 .padding(.horizontal, DesignTokens.Spacing.md)
                 .frame(height: controlHeight)
                 .background(DesignTokens.Colors.backgroundElevated, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
+                .overlay(alignment: .leading) {
+                    if viewModel.password.isEmpty {
+                        Text("パスワードを入力")
+                            .font(DesignTokens.Typography.body)
+                            .foregroundStyle(DesignTokens.Colors.textSecondary)
+                            .padding(.horizontal, DesignTokens.Spacing.md)
+                            .allowsHitTesting(false)
+                    }
+                }
                 .overlay(alignment: .trailing) {
                     Button {
                         pendingFeatureMessage = "この機能は準備中です。もうしばらくお待ちください。"
