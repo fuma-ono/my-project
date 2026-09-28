@@ -394,9 +394,18 @@ struct LoginView: View {
                 pendingFeatureMessage = "Googleでサインインは準備中です。もうしばらくお待ちください。"
             } label: {
                 HStack(spacing: 8) {
-                    Text("G")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(DesignTokens.Colors.accentPrimary)
+                    // User-supplied reference (2026-09-28): the flat,
+                    // single-color "G" text read as an approximation, not
+                    // the real Google mark — replaced with the actual
+                    // multi-color Google "G" logo (cropped from the
+                    // reference image the user provided, transparent
+                    // background) as a real image asset, the same
+                    // literal-reproduction approach `BrandMark` already
+                    // uses, rather than a self-drawn stand-in.
+                    Image("GoogleLogo")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 18, height: 18)
                     Text("Googleでサインイン")
                         .font(DesignTokens.Typography.bodyEmphasized)
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
