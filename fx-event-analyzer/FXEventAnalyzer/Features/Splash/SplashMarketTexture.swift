@@ -235,17 +235,32 @@ struct SplashMarketTexture: View {
     /// either edge) so the whole climb is visible again; the vertical
     /// fade fractions below are screen-space and need no change — they
     /// still cut only the portion nearing `mesh`, regardless of scale.
+    ///
+    /// User feedback (2026-09-29), round 9: pasted a specific earlier
+    /// capture (matching commit f8dbef7 — `scaleFactor` 1.6,
+    /// `topAnchorFraction` 0.47, fade 0.58→0.67) and asked for the candles
+    /// to look like that again. Confirmed with them directly that this
+    /// capture is the same right-anchor-crops-the-left state round 8 just
+    /// reverted — they chose size/brightness over full-width visibility,
+    /// so `scaleFactor` is back to 1.6 and `topAnchorFraction` back to
+    /// 0.47 to match. Left the fade window at 0.55/0.64 rather than
+    /// copying 0.58/0.67 verbatim: those exact numbers were tuned for
+    /// `mesh` at its old `topAnchorFraction` (0.66), which has since
+    /// moved up to 0.63 (round 6, a separate request this round doesn't
+    /// touch) — reusing them as-is would let the candle glow extend past
+    /// mesh's new, higher starting point. 0.55/0.64 is the same fade
+    /// width shifted to match mesh's current position instead.
     private var candles: some View {
         GeometryReader { geometry in
-            let scaleFactor = 1.0
+            let scaleFactor = 1.6
             let imageWidth = geometry.size.width * scaleFactor
             let imageHeight = imageWidth * (868.0 / 1813.0)
-            let topAnchorFraction = 0.49
+            let topAnchorFraction = 0.47
             let contentTopFraction = 108.0 / 868.0 // where the candles' own highest point enters the source image, top-to-bottom
             let topOffset = topAnchorFraction * geometry.size.height - contentTopFraction * imageHeight
             let offsetX = geometry.size.width - imageWidth // pins the image's right edge to the screen's right edge
 
-            let fadeStartScreenFraction = 0.61
+            let fadeStartScreenFraction = 0.55
             let fadeEndScreenFraction = 0.64
             let fadeStartLocal = min(1, max(0, (fadeStartScreenFraction * geometry.size.height - topOffset) / imageHeight))
             let fadeEndLocal = min(1, max(fadeStartLocal, (fadeEndScreenFraction * geometry.size.height - topOffset) / imageHeight))
