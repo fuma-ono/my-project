@@ -87,12 +87,19 @@ struct SplashMarketTexture: View {
     /// stop the candle glow right where mesh begins) is shifted up by the
     /// same 0.03 alongside this so the two keep the same clearance instead
     /// of the candle glow now crossing into mesh's new, higher position.
+    ///
+    /// User feedback (2026-09-29), round 12: after several rounds of
+    /// candle/mesh geometry churn, reverted back to a specific earlier
+    /// capture (matching commit f8dbef7) they pasted as the reference —
+    /// `topAnchorFraction` 0.63 → 0.66. `SplashView`'s brand mark/title/
+    /// tagline block is explicitly excluded from this revert and stays at
+    /// its current (round-5) position.
     private var mesh: some View {
         GeometryReader { geometry in
             let scaleFactor = 1.45
             let imageWidth = geometry.size.width * scaleFactor
             let imageHeight = imageWidth * (877.0 / 1794.0)
-            let topAnchorFraction = 0.63
+            let topAnchorFraction = 0.66
             let curveStartFraction = 0.27 // where the main curve enters the source image, top-to-bottom
             let topOffset = topAnchorFraction * geometry.size.height - curveStartFraction * imageHeight
 
@@ -285,6 +292,15 @@ struct SplashMarketTexture: View {
     /// small early candles, with no ringing/halo artifacts introduced
     /// around the already-large peak candles. No SwiftUI code changed —
     /// only `SplashCandles.png` itself.
+    ///
+    /// User feedback (2026-09-29), round 12: reverted to match a specific
+    /// earlier reference capture (commit f8dbef7) alongside `mesh`'s own
+    /// revert above (0.63 → 0.66) — fade window back to 0.58/0.67 (from
+    /// 0.55/0.64), matching what those fractions were tuned for when mesh
+    /// last sat at 0.66. `scaleFactor`/`topAnchorFraction` here already
+    /// matched that reference from round 9 and are unchanged. The
+    /// underlying `SplashCandles.png` sharpening (round 11, directly
+    /// above) is unrelated to this position/fade revert and is kept.
     private var candles: some View {
         GeometryReader { geometry in
             let scaleFactor = 1.6
@@ -295,8 +311,8 @@ struct SplashMarketTexture: View {
             let topOffset = topAnchorFraction * geometry.size.height - contentTopFraction * imageHeight
             let offsetX = geometry.size.width - imageWidth // pins the image's right edge to the screen's right edge
 
-            let fadeStartScreenFraction = 0.55
-            let fadeEndScreenFraction = 0.64
+            let fadeStartScreenFraction = 0.58
+            let fadeEndScreenFraction = 0.67
             let fadeStartLocal = min(1, max(0, (fadeStartScreenFraction * geometry.size.height - topOffset) / imageHeight))
             let fadeEndLocal = min(1, max(fadeStartLocal, (fadeEndScreenFraction * geometry.size.height - topOffset) / imageHeight))
 
