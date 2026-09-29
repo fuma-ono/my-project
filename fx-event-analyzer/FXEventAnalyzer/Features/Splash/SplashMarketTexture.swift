@@ -81,12 +81,18 @@ struct SplashMarketTexture: View {
     /// `SplashCurveMesh`): ~68% down the screen, well below 0.565. Raised
     /// to 0.66 — not the full measured value, to keep some headroom above
     /// the loading bar rather than chase the Reference's own crop exactly.
+    ///
+    /// User feedback (2026-09-29): move the curve/mesh up slightly.
+    /// 0.66 → 0.63. `candles`'s fade-out window (screen-space, tuned to
+    /// stop the candle glow right where mesh begins) is shifted up by the
+    /// same 0.03 alongside this so the two keep the same clearance instead
+    /// of the candle glow now crossing into mesh's new, higher position.
     private var mesh: some View {
         GeometryReader { geometry in
             let scaleFactor = 1.45
             let imageWidth = geometry.size.width * scaleFactor
             let imageHeight = imageWidth * (877.0 / 1794.0)
-            let topAnchorFraction = 0.66
+            let topAnchorFraction = 0.63
             let curveStartFraction = 0.27 // where the main curve enters the source image, top-to-bottom
             let topOffset = topAnchorFraction * geometry.size.height - curveStartFraction * imageHeight
 
@@ -196,6 +202,12 @@ struct SplashMarketTexture: View {
     /// screen-space already (not relative to `topAnchorFraction`), so the
     /// mesh-overlap cutoff still lands at the same screen position with no
     /// further change needed.
+    ///
+    /// Round 6: this time `mesh` alone moves up (0.66 → 0.63; candles'
+    /// own `topAnchorFraction` here is untouched). The fade window is
+    /// shifted up by that same 0.03 (0.58→0.55, 0.67→0.64) so it still
+    /// stops the candle glow right at mesh's new, higher starting point
+    /// instead of now overlapping it.
     private var candles: some View {
         GeometryReader { geometry in
             let scaleFactor = 1.6
@@ -206,8 +218,8 @@ struct SplashMarketTexture: View {
             let topOffset = topAnchorFraction * geometry.size.height - contentTopFraction * imageHeight
             let offsetX = geometry.size.width - imageWidth // pins the image's right edge to the screen's right edge
 
-            let fadeStartScreenFraction = 0.58
-            let fadeEndScreenFraction = 0.67
+            let fadeStartScreenFraction = 0.55
+            let fadeEndScreenFraction = 0.64
             let fadeStartLocal = min(1, max(0, (fadeStartScreenFraction * geometry.size.height - topOffset) / imageHeight))
             let fadeEndLocal = min(1, max(fadeStartLocal, (fadeEndScreenFraction * geometry.size.height - topOffset) / imageHeight))
 
