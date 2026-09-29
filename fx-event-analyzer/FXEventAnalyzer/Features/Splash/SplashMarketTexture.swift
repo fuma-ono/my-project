@@ -208,6 +208,18 @@ struct SplashMarketTexture: View {
     /// shifted up by that same 0.03 (0.58→0.55, 0.67→0.64) so it still
     /// stops the candle glow right at mesh's new, higher starting point
     /// instead of now overlapping it.
+    ///
+    /// User feedback (2026-09-29), round 7: the candles looked hazy even
+    /// well above where they actually reach `mesh` — because at
+    /// `topAnchorFraction` 0.49, `fadeStartScreenFraction` 0.55 only left
+    /// ~0.06 of screen height fully opaque before the gradient began, so
+    /// most of the visible climb (not just the small tail actually
+    /// touching `mesh`) sat inside the fade and read as washed-out rather
+    /// than crisp. Narrowed the fade window itself — `fadeStartScreenFraction`
+    /// 0.55 → 0.61 (`fadeEndScreenFraction` unchanged at 0.64, already
+    /// confirmed via a real capture to cut cleanly right at mesh's bright
+    /// curve line) — so only the short stretch actually nearing mesh
+    /// fades, and everything above stays at full opacity.
     private var candles: some View {
         GeometryReader { geometry in
             let scaleFactor = 1.6
@@ -218,7 +230,7 @@ struct SplashMarketTexture: View {
             let topOffset = topAnchorFraction * geometry.size.height - contentTopFraction * imageHeight
             let offsetX = geometry.size.width - imageWidth // pins the image's right edge to the screen's right edge
 
-            let fadeStartScreenFraction = 0.55
+            let fadeStartScreenFraction = 0.61
             let fadeEndScreenFraction = 0.64
             let fadeStartLocal = min(1, max(0, (fadeStartScreenFraction * geometry.size.height - topOffset) / imageHeight))
             let fadeEndLocal = min(1, max(fadeStartLocal, (fadeEndScreenFraction * geometry.size.height - topOffset) / imageHeight))
