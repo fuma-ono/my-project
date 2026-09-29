@@ -250,6 +250,32 @@ struct SplashMarketTexture: View {
     /// touch) — reusing them as-is would let the candle glow extend past
     /// mesh's new, higher starting point. 0.55/0.64 is the same fade
     /// width shifted to match mesh's current position instead.
+    ///
+    /// User feedback (2026-09-29), round 10: the candles read hazy from
+    /// the left edge to roughly the middle. Root cause traced to the raw
+    /// Reference source (`8e57df2b-image.png`, still the same asset —
+    /// nothing new supplied this round) itself, not this view's geometry:
+    /// measuring its own brightness left-third vs right-third showed the
+    /// left genuinely has far fewer bright pixels (p95 brightness 64 vs
+    /// 120 on the right) — the artist's own glow intensity ramps up
+    /// toward the peak. `SplashCandles`'s alpha (authored earlier from
+    /// brightness, see above) used one GLOBAL floor/ceiling (35/190) for
+    /// the whole image, so pixels in that dimmer left region legitimately
+    /// fell well under the ceiling and got proportionally low alpha —
+    /// correct per-pixel, but the visible result reads as washed-out
+    /// across that whole region rather than "this candle is just a bit
+    /// dimmer than that one." Re-authored the alpha with a spatially
+    /// *adaptive* ceiling instead of one fixed value: for each column, a
+    /// windowed (150px), 95th-percentile-of-foreground-pixels brightness
+    /// estimate, smoothed across x (Gaussian, sigma 60) and clamped to
+    /// [70, 190], stands in for "how bright does content get around
+    /// here" — normalizing each region against its own local peak instead
+    /// of the whole image's. Verified via a rendered composite over the
+    /// real background gradient, side by side with the previous asset:
+    /// the left-to-trough region now reads at comparable brightness/
+    /// contrast to the peak region, with no visible banding or
+    /// over-brightened background from the adaptive ceiling. No SwiftUI
+    /// code changed here — only `SplashCandles.png` itself.
     private var candles: some View {
         GeometryReader { geometry in
             let scaleFactor = 1.6
