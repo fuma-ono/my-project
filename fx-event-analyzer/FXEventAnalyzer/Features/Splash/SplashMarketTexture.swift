@@ -164,14 +164,32 @@ struct SplashMarketTexture: View {
     /// Same explicit ask as last round: delete the candlestick portion
     /// that overlaps `mesh`. Widened the fade's end fraction (0.65 → 0.67)
     /// to reach this version's slightly-lower bottom edge.
+    ///
+    /// User feedback (2026-09-29), round 3: candles too small, wants them
+    /// bigger. `scaleFactor` 1.0 → 1.35 — same "just scale it up" lever
+    /// `mesh` already uses. Unlike `mesh`, this source's content already
+    /// spans the full image width (x≈0.0→0.998), so growing it needs a
+    /// horizontal anchor decision: left-anchoring (mesh's default, and what
+    /// no `offset(x:)` would do here) would push the climb's right-side
+    /// peak — the most prominent part of the shape — off the right edge as
+    /// it grows. Right-anchored instead via `offsetX`, pinning the image
+    /// frame's right edge to the screen's right edge at any scale, so
+    /// enlarging reads as zooming in on the peak while the flatter/smaller
+    /// left-side start of the climb is what runs off-canvas.
+    /// `topAnchorFraction`/`contentTopFraction` need no change: the
+    /// `topOffset` formula already keeps the tallest candle pinned to the
+    /// same screen fraction regardless of `imageHeight`, and the fade
+    /// fractions are screen-space (not image-space), so the mesh-overlap
+    /// cutoff still lands at the same screen position after the resize.
     private var candles: some View {
         GeometryReader { geometry in
-            let scaleFactor = 1.0
+            let scaleFactor = 1.35
             let imageWidth = geometry.size.width * scaleFactor
             let imageHeight = imageWidth * (868.0 / 1813.0)
             let topAnchorFraction = 0.47
             let contentTopFraction = 108.0 / 868.0 // where the candles' own highest point enters the source image, top-to-bottom
             let topOffset = topAnchorFraction * geometry.size.height - contentTopFraction * imageHeight
+            let offsetX = geometry.size.width - imageWidth // pins the image's right edge to the screen's right edge
 
             let fadeStartScreenFraction = 0.58
             let fadeEndScreenFraction = 0.67
@@ -194,7 +212,7 @@ struct SplashMarketTexture: View {
                     .frame(width: imageWidth, height: imageHeight)
                 )
                 .blendMode(.screen)
-                .offset(y: topOffset)
+                .offset(x: offsetX, y: topOffset)
         }
     }
 }
