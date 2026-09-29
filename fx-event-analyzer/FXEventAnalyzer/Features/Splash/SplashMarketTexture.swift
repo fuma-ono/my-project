@@ -187,12 +187,21 @@ struct SplashMarketTexture: View {
     /// via the round-3 capture already showing headroom between the peak
     /// and the tagline above it, so this is a safe further increase along
     /// the same lever rather than a new mechanism.
+    ///
+    /// User feedback (2026-09-29), round 5: move the candles down
+    /// slightly, alongside the same request for `SplashView`'s brand
+    /// mark/title/tagline block. `topAnchorFraction` 0.47 → 0.49 — the
+    /// `mesh` layer isn't part of this request and keeps its own
+    /// `topAnchorFraction` (0.66) unchanged; the fade fractions below are
+    /// screen-space already (not relative to `topAnchorFraction`), so the
+    /// mesh-overlap cutoff still lands at the same screen position with no
+    /// further change needed.
     private var candles: some View {
         GeometryReader { geometry in
             let scaleFactor = 1.6
             let imageWidth = geometry.size.width * scaleFactor
             let imageHeight = imageWidth * (868.0 / 1813.0)
-            let topAnchorFraction = 0.47
+            let topAnchorFraction = 0.49
             let contentTopFraction = 108.0 / 868.0 // where the candles' own highest point enters the source image, top-to-bottom
             let topOffset = topAnchorFraction * geometry.size.height - contentTopFraction * imageHeight
             let offsetX = geometry.size.width - imageWidth // pins the image's right edge to the screen's right edge

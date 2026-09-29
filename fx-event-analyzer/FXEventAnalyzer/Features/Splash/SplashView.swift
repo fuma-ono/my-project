@@ -146,7 +146,11 @@ struct SplashView: View {
                     // feedback wants the whole block moved up further than
                     // that, so this is now a deliberate deviation from the
                     // Reference rather than a re-measurement.
-                    .padding(.top, geometry.size.height * 0.16)
+                    //
+                    // User feedback (2026-09-29): mark/title/tagline (and
+                    // `SplashMarketTexture`'s candles, its own separate
+                    // layer) should move down slightly. 0.16 -> 0.18.
+                    .padding(.top, geometry.size.height * 0.18)
 
                     Spacer(minLength: 0)
 
