@@ -181,9 +181,15 @@ struct SplashMarketTexture: View {
     /// same screen fraction regardless of `imageHeight`, and the fade
     /// fractions are screen-space (not image-space), so the mesh-overlap
     /// cutoff still lands at the same screen position after the resize.
+    ///
+    /// Round 4: still too small — bumped again, 1.35 → 1.6. Same right-
+    /// anchor/top-anchor invariants apply at any `scaleFactor`, confirmed
+    /// via the round-3 capture already showing headroom between the peak
+    /// and the tagline above it, so this is a safe further increase along
+    /// the same lever rather than a new mechanism.
     private var candles: some View {
         GeometryReader { geometry in
-            let scaleFactor = 1.35
+            let scaleFactor = 1.6
             let imageWidth = geometry.size.width * scaleFactor
             let imageHeight = imageWidth * (868.0 / 1813.0)
             let topAnchorFraction = 0.47
