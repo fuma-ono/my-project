@@ -220,9 +220,24 @@ struct SplashMarketTexture: View {
     /// confirmed via a real capture to cut cleanly right at mesh's bright
     /// curve line) — so only the short stretch actually nearing mesh
     /// fades, and everything above stays at full opacity.
+    ///
+    /// User feedback (2026-09-29), round 8: candles were disappearing —
+    /// on the sharpened capture, the earlier/lower-value candles on the
+    /// left side of the source image were plainly missing, not just
+    /// faded. Root cause: `scaleFactor` 1.6 combined with the right-anchor
+    /// `offsetX` (introduced in round 3 so enlarging zooms toward the
+    /// peak) pushes the source image's own left ~38% off the left edge of
+    /// the screen entirely — real content, not the vertical mesh-overlap
+    /// fade, was responsible for that empty gap. Per this feedback, only
+    /// the actual mesh-overlap portion should ever be removed. Reverted
+    /// `scaleFactor` 1.6 → 1.0 (`offsetX` becomes a no-op at this scale,
+    /// content fills exactly the screen width with nothing cropped on
+    /// either edge) so the whole climb is visible again; the vertical
+    /// fade fractions below are screen-space and need no change — they
+    /// still cut only the portion nearing `mesh`, regardless of scale.
     private var candles: some View {
         GeometryReader { geometry in
-            let scaleFactor = 1.6
+            let scaleFactor = 1.0
             let imageWidth = geometry.size.width * scaleFactor
             let imageHeight = imageWidth * (868.0 / 1813.0)
             let topAnchorFraction = 0.49
