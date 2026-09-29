@@ -90,6 +90,29 @@ struct IndicatorDetailView: View {
                         .font(.system(size: 7)).foregroundStyle(V5P.muted).frame(width: 204, alignment: .leading).position(x: 117, y: 281)
                 }
 
+                if let primaryPair = relatedFxPairs.first {
+                    // 2026-09-29 HQ承認(2-c): ui-screens.mdが要求する「過去の
+                    // 発表を見る」→SCR-009 過去イベント比較への遷移(旧v1.2の
+                    // 時点から文書化されていたが未実装だった既存ギャップ)。
+                    // MovementDetail/HistoricalEventDetailと同じ手法(見た目の
+                    // ピクセルを一切変更しない)だが、あの2画面と違いここは
+                    // 単一のカードではなく独立した2要素(見出しTextと行)なので、
+                    // 両方の元の位置・見た目をそのまま維持しつつ、その領域だけ
+                    // を覆う透明なタップ層を追加する形にした(要素をVStackに
+                    // 包んで単一`.position`を付け直すと、位置がずれてしまう
+                    // ため)。
+                    NavigationLink(value: AppRoute.historicalComparison(
+                        indicatorId: indicator.id,
+                        indicatorName: indicator.name,
+                        fxPairId: primaryPair.fxPairId,
+                        fxPairSymbol: primaryPair.symbol
+                    )) {
+                        Color.clear
+                    }
+                    .accessibilityLabel("関連通貨ペア 過去の発表を見る")
+                    .frame(width: 214, height: 46)
+                    .position(x: 117, y: 316)
+                }
                 if !relatedFxPairs.isEmpty {
                     Text("関連通貨ペア").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 44, y: 307)
                     HStack(spacing: 5) {
