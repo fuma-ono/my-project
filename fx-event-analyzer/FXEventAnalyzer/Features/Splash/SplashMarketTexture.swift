@@ -252,30 +252,39 @@ struct SplashMarketTexture: View {
     /// width shifted to match mesh's current position instead.
     ///
     /// User feedback (2026-09-29), round 10: the candles read hazy from
-    /// the left edge to roughly the middle. Root cause traced to the raw
-    /// Reference source (`8e57df2b-image.png`, still the same asset —
-    /// nothing new supplied this round) itself, not this view's geometry:
-    /// measuring its own brightness left-third vs right-third showed the
-    /// left genuinely has far fewer bright pixels (p95 brightness 64 vs
-    /// 120 on the right) — the artist's own glow intensity ramps up
-    /// toward the peak. `SplashCandles`'s alpha (authored earlier from
-    /// brightness, see above) used one GLOBAL floor/ceiling (35/190) for
-    /// the whole image, so pixels in that dimmer left region legitimately
-    /// fell well under the ceiling and got proportionally low alpha —
-    /// correct per-pixel, but the visible result reads as washed-out
-    /// across that whole region rather than "this candle is just a bit
-    /// dimmer than that one." Re-authored the alpha with a spatially
-    /// *adaptive* ceiling instead of one fixed value: for each column, a
-    /// windowed (150px), 95th-percentile-of-foreground-pixels brightness
-    /// estimate, smoothed across x (Gaussian, sigma 60) and clamped to
-    /// [70, 190], stands in for "how bright does content get around
-    /// here" — normalizing each region against its own local peak instead
-    /// of the whole image's. Verified via a rendered composite over the
-    /// real background gradient, side by side with the previous asset:
-    /// the left-to-trough region now reads at comparable brightness/
-    /// contrast to the peak region, with no visible banding or
-    /// over-brightened background from the adaptive ceiling. No SwiftUI
-    /// code changed here — only `SplashCandles.png` itself.
+    /// the left edge to roughly the middle. First attempt diagnosed this
+    /// as a brightness problem (the raw source's own left-third vs
+    /// right-third pixel brightness genuinely differs) and re-authored
+    /// alpha with a spatially adaptive ceiling — but verifying that
+    /// attempt against a capture built with an *accurate on-screen
+    /// simulation* (replicating this view's exact resize/right-anchor-crop
+    /// math in Python, not just compositing the full source) showed almost
+    /// no visible change: the region that brightness fix most helped
+    /// (source x≈300-450) is the deep trough of the climb, which sits
+    /// entirely off-canvas at this `scaleFactor`/right-anchor — the
+    /// on-screen range is only source x∈[≈680,1813].
+    ///
+    /// Re-diagnosed by zooming into the raw source at matching pixel
+    /// scale, left cluster vs right/peak cluster: the real cause is
+    /// candle *size*, not brightness — the early candles are drawn
+    /// genuinely tiny (a handful of source pixels tall/wide) while the
+    /// peak candles are large and chunky, but the artwork's glow/blur
+    /// radius is the same fixed number of pixels everywhere. For a small
+    /// candle that fixed blur is a large fraction of its whole extent, so
+    /// it reads as a soft blob; for a large candle the same blur is a
+    /// thin rim around a solid core, so it reads crisp. This is a
+    /// resolution/sharpness problem, not an opacity one, and no amount of
+    /// floor/ceiling tuning fixes it.
+    ///
+    /// Fix: an unsharp mask (`ImageFilter.UnsharpMask`, radius 8, percent
+    /// 180, threshold 2) applied to the RGB source before deriving alpha
+    /// from brightness (floor/ceiling back to the original global 35/190
+    /// — no longer needed once the real cause is addressed). Verified via
+    /// the same accurate on-screen simulation: candle body edges read
+    /// visibly more defined throughout the visible range, including the
+    /// small early candles, with no ringing/halo artifacts introduced
+    /// around the already-large peak candles. No SwiftUI code changed —
+    /// only `SplashCandles.png` itself.
     private var candles: some View {
         GeometryReader { geometry in
             let scaleFactor = 1.6
