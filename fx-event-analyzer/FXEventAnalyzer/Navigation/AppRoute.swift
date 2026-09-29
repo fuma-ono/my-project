@@ -25,4 +25,26 @@ enum AppRoute: Hashable {
     /// user re-search the indicator (Phase 5 instruction).
     case movementDetail(eventId: String, indicatorId: String, fxPairId: String, symbol: String, indicatorName: String, releaseDatetime: Date)
     case historicalComparison(indicatorId: String, indicatorName: String, fxPairId: String, fxPairSymbol: String)
+
+    // MARK: - ui-screens.md v2.0 (2026-09-29 HQ承認, 2-b) 向けの新規ケース
+    //
+    // 新画面仕様(SCR-000〜SCR-028)のうち、実装本体がまだ存在しない画面への
+    // 遷移先。すべて`AppRouteDestinationView`で`PlaceholderScreenView`(仮画面)
+    // に解決される — デザインはまだ確定していないため、ここでは「遷移先と
+    // 引き継ぐパラメータ」だけを定義する(ui-screens.md v2.0 §4.1)。
+
+    /// SCR-011 チャート分析。ホームの通貨ペアカードから遷移する想定。
+    case chartAnalysis(fxPairId: String, fxPairSymbol: String)
+    /// SCR-012 経済指標カレンダー
+    case calendar
+    /// SCR-014 要人発言一覧(バックエンドAPI未実装、仮画面のみ)
+    case speechList
+    /// SCR-015 要人発言詳細(バックエンドAPI未実装、仮画面のみ)
+    case speechDetail(id: String)
+    /// SCR-028 ホーム通貨ペア編集(お気に入り通貨ペアAPI未実装、仮画面のみ)
+    case homeCurrencyPairEditor
+    /// SCR-002 新規会員登録(Loginから)
+    case signUp
+    /// SCR-003 パスワード再設定(Loginから)
+    case passwordReset
 }

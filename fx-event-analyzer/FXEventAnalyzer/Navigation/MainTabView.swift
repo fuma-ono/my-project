@@ -37,7 +37,8 @@ struct MainTabView: View {
         switch tabSelection {
         case 0: HomeView(apiClient: apiClient, path: $homePath, tabSelection: $tabSelection)
         case 1: IndicatorsView(apiClient: apiClient, path: $indicatorsPath, tabSelection: $tabSelection)
-        case 2: SearchView(apiClient: apiClient, tabSelection: $tabSelection)
+        case 2: AnalysisTabView(apiClient: apiClient, tabSelection: $tabSelection)
+        case 3: SearchView(apiClient: apiClient, tabSelection: $tabSelection)
         default: SettingsView(apiClient: apiClient, authService: authService, onSignOut: onSignOut, tabSelection: $tabSelection)
         }
     }
@@ -79,16 +80,21 @@ struct MainTabView: View {
 }
 
 enum FXTab: String, CaseIterable, Identifiable {
-    case home, indicators, search, settings
+    /// 2026-09-29 HQ承認(2-b): `.analysis`(SCR-011 チャート分析)を追加し
+    /// 5タブ構成に変更。宣言順が`index`(≒`tabSelection`/`V5BottomBar`の並び)を
+    /// 決めるため、ここでの並びをHQ指定の「ホーム/指標一覧/チャート分析/検索/
+    /// 設定」と一致させること。
+    case home, indicators, analysis, search, settings
     var id: String { rawValue }
 
-    /// Matches `V5BottomBar`'s fixed 0-3 tab order.
+    /// Matches `V5BottomBar`'s fixed 0-4 tab order.
     var index: Int { Self.allCases.firstIndex(of: self) ?? 0 }
 
     var title: String {
         switch self {
         case .home: return "ホーム"
         case .indicators: return "指標一覧"
+        case .analysis: return "チャート分析"
         case .search: return "検索"
         case .settings: return "設定"
         }
@@ -98,6 +104,7 @@ enum FXTab: String, CaseIterable, Identifiable {
         switch self {
         case .home: return "house.fill"
         case .indicators: return "chart.bar.xaxis"
+        case .analysis: return "chart.xyaxis.line"
         case .search: return "magnifyingglass"
         case .settings: return "gearshape.fill"
         }

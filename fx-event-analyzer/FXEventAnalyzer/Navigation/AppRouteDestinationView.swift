@@ -39,6 +39,37 @@ struct AppRouteDestinationView: View {
             )
         case .account:
             AccountView(apiClient: apiClient, tabSelection: $tabSelection)
+
+        // MARK: - 2026-09-29 HQ承認(2-b): 仮画面(PlaceholderScreenView)への解決。
+        // 実装本体はまだ存在せず、正式なUIは別途デザイン仕様確定後に実装する。
+        case .chartAnalysis(_, let fxPairSymbol):
+            PlaceholderScreenView(scrNumber: "SCR-011", screenName: "チャート分析", detail: "通貨ペア: \(fxPairSymbol)")
+                .navigationTitle("チャート分析")
+                .navigationBarTitleDisplayMode(.inline)
+        case .calendar:
+            PlaceholderScreenView(scrNumber: "SCR-012", screenName: "経済指標カレンダー")
+                .navigationTitle("経済指標カレンダー")
+                .navigationBarTitleDisplayMode(.inline)
+        case .speechList:
+            PlaceholderScreenView(scrNumber: "SCR-014", screenName: "要人発言一覧", detail: "バックエンドAPI未実装のため仮画面です。")
+                .navigationTitle("要人発言一覧")
+                .navigationBarTitleDisplayMode(.inline)
+        case .speechDetail(let id):
+            PlaceholderScreenView(scrNumber: "SCR-015", screenName: "要人発言詳細", detail: "発言ID: \(id)\nバックエンドAPI未実装のため仮画面です。")
+                .navigationTitle("要人発言詳細")
+                .navigationBarTitleDisplayMode(.inline)
+        case .homeCurrencyPairEditor:
+            PlaceholderScreenView(scrNumber: "SCR-028", screenName: "ホーム通貨ペア編集", detail: "お気に入り通貨ペアAPI未実装のため仮画面です。")
+                .navigationTitle("通貨ペア編集")
+                .navigationBarTitleDisplayMode(.inline)
+        case .signUp:
+            PlaceholderScreenView(scrNumber: "SCR-002", screenName: "新規会員登録")
+                .navigationTitle("新規会員登録")
+                .navigationBarTitleDisplayMode(.inline)
+        case .passwordReset:
+            PlaceholderScreenView(scrNumber: "SCR-003", screenName: "パスワード再設定")
+                .navigationTitle("パスワード再設定")
+                .navigationBarTitleDisplayMode(.inline)
         }
     }
 }

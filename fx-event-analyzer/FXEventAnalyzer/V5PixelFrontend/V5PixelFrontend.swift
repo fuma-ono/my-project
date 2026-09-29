@@ -175,14 +175,20 @@ struct V5TopStatus: View {
 
 struct V5BottomBar: View {
     @Binding var selected: Int
+    /// 2026-09-29 HQ承認(2-b): 5タブ構成(ホーム/指標一覧/チャート分析/検索/設定)
+    /// への拡張。既存4タブと同じ見た目の言語(同じアイコン+ラベルのスタイル)を
+    /// 保ったまま、5個目のタブが収まるようカプセル幅・各タブ幅を機械的に再計算
+    /// した(独自の再デザインではない)。タブの並び順は`FXTab`(Navigation/
+    /// MainTabView.swift)のcase順・`tabSelection`のindexと一致させること。
     var body: some View {
         HStack(spacing: 0) {
             tab(0, "house.fill", "ホーム")
             tab(1, "chart.bar.fill", "指標一覧")
-            tab(2, "magnifyingglass", "検索")
-            tab(3, "gearshape.fill", "設定")
+            tab(2, "chart.xyaxis.line", "分析")
+            tab(3, "magnifyingglass", "検索")
+            tab(4, "gearshape.fill", "設定")
         }
-        .frame(width: 208, height: 40)
+        .frame(width: 222, height: 40)
         .background(Color.black.opacity(0.52), in: Capsule())
         .overlay(Capsule().stroke(V5P.line.opacity(0.8), lineWidth: 0.6))
         .position(x: 117, y: 463)
@@ -192,11 +198,11 @@ struct V5BottomBar: View {
             selected = index
         } label: {
             VStack(spacing: 2) {
-                Image(systemName: icon).font(.system(size: 11, weight: .semibold))
+                Image(systemName: icon).font(.system(size: 10, weight: .semibold))
                 Text(title).font(.system(size: 6, weight: .semibold))
             }
             .foregroundStyle(index == selected ? V5P.cyan : .white.opacity(0.9))
-            .frame(width: 52, height: 34)
+            .frame(width: 44, height: 34)
             .background(index == selected ? V5P.blue.opacity(0.18) : .clear, in: Capsule())
         }
         .buttonStyle(.plain)

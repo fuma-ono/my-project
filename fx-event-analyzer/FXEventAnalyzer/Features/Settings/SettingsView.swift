@@ -24,6 +24,8 @@ struct SettingsView: View {
     private let authService: AuthServicing
     private let onSignOut: () -> Void
     @State private var pendingFeatureMessage: String?
+    /// 2026-09-29 HQ承認(2-b): SCR-027 ログアウト確認ダイアログ。
+    @State private var showLogoutConfirmation = false
     @Binding var tabSelection: Int
 
     init(apiClient: APIClient, authService: AuthServicing, onSignOut: @escaping () -> Void, tabSelection: Binding<Int>) {
@@ -40,12 +42,17 @@ struct SettingsView: View {
                 V5TopStatus()
                 V5Header(title: "設定", back: false, star: false)
 
-                settingRow("通知設定", y: 70) {
-                    pendingFeatureMessage = "通知設定は準備中です。もうしばらくお待ちください。"
-                }
-                settingRow("表示設定", y: 104) {
-                    pendingFeatureMessage = "表示設定は準備中です。もうしばらくお待ちください。"
-                }
+                // 2026-09-29 HQ承認(2-b): 既存の設定行をそのまま
+                // NavigationLinkに差し替え、対応するSCR-01x(仮画面)への遷移を
+                // 確認できるようにした。行の見た目(settingRowLabel)は変更して
+                // いない。データ取得設定は新画面仕様(ui-screens.md v2.0)に
+                // 対応するSCR番号がないため、従来通り"準備中"のまま。
+                NavigationLink(value: SettingsSubRoute.notificationSettings) {
+                    settingRowLabel("通知設定")
+                }.buttonStyle(.plain).position(x: 117, y: 70)
+                NavigationLink(value: SettingsSubRoute.displaySettings) {
+                    settingRowLabel("表示設定")
+                }.buttonStyle(.plain).position(x: 117, y: 104)
                 settingRow("データ取得設定", y: 138) {
                     pendingFeatureMessage = "データ取得設定は準備中です。もうしばらくお待ちください。"
                 }
@@ -53,18 +60,18 @@ struct SettingsView: View {
                     settingRowLabel("アカウント設定")
                 }.buttonStyle(.plain).position(x: 117, y: 172)
 
-                settingRow("ヘルプ・サポート", y: 225) {
-                    pendingFeatureMessage = "ヘルプ・サポートは準備中です。もうしばらくお待ちください。"
-                }
-                settingRow("利用規約", y: 259) {
-                    pendingFeatureMessage = "利用規約は準備中です。もうしばらくお待ちください。"
-                }
-                settingRow("プライバシーポリシー", y: 293) {
-                    pendingFeatureMessage = "プライバシーポリシーは準備中です。もうしばらくお待ちください。"
-                }
+                NavigationLink(value: SettingsSubRoute.help) {
+                    settingRowLabel("ヘルプ・サポート")
+                }.buttonStyle(.plain).position(x: 117, y: 225)
+                NavigationLink(value: SettingsSubRoute.terms) {
+                    settingRowLabel("利用規約")
+                }.buttonStyle(.plain).position(x: 117, y: 259)
+                NavigationLink(value: SettingsSubRoute.privacyPolicy) {
+                    settingRowLabel("プライバシーポリシー")
+                }.buttonStyle(.plain).position(x: 117, y: 293)
 
                 Button {
-                    viewModel.signOut()
+                    showLogoutConfirmation = true
                 } label: {
                     HStack {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
@@ -100,6 +107,10 @@ struct SettingsView: View {
                     AppRouteDestinationView(route: route, apiClient: apiClient, tabSelection: $tabSelection)
                 }
             }
+            // 2026-09-29 HQ承認(2-b): SCR-018〜026(仮画面)への遷移。
+            .navigationDestination(for: SettingsSubRoute.self) { route in
+                SettingsSubRouteDestinationView(route: route)
+            }
         }
         .alert(
             "準備中の機能です",
@@ -112,6 +123,16 @@ struct SettingsView: View {
             Button("OK", role: .cancel) {}
         } message: { message in
             Text(message)
+        }
+        // 2026-09-29 HQ承認(2-b): SCR-027 ログアウト確認ダイアログ。独立した
+        // フルスクリーン画面ではなくダイアログとする(ui-screens.md v2.0 §4.2)。
+        .confirmationDialog(
+            "ログアウトしますか？",
+            isPresented: $showLogoutConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("ログアウト", role: .destructive) { viewModel.signOut() }
+            Button("キャンセル", role: .cancel) {}
         }
     }
 

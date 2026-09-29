@@ -112,7 +112,14 @@ struct HomeView: View {
             if !mappedPairs.isEmpty {
                 Text("主要FX").font(.system(size: 11, weight: .bold)).foregroundStyle(.white).position(x: 35, y: 395)
                 HStack(spacing: 5) {
-                    ForEach(mappedPairs.prefix(3)) { pair in fxBox(pair) }
+                    // 2026-09-29 HQ承認(2-b): 既存の通貨ペアカードをそのまま
+                    // NavigationLinkでラップし、SCR-011 チャート分析(仮画面)への
+                    // 遷移を確認できるようにした。見た目(fxBox)は変更していない。
+                    ForEach(mappedPairs.prefix(3)) { pair in
+                        NavigationLink(value: AppRoute.chartAnalysis(fxPairId: pair.id, fxPairSymbol: pair.symbol)) {
+                            fxBox(pair)
+                        }.buttonStyle(.plain)
+                    }
                 }.frame(width: 214).position(x: 117, y: 421)
             }
 

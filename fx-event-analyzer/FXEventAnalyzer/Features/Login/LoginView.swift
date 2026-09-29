@@ -66,6 +66,10 @@ struct LoginView: View {
     }
 
     var body: some View {
+        // 2026-09-29 HQ承認(2-b): SCR-002/SCR-003(仮画面)への遷移を確認できる
+        // ようにするため、`NavigationStack`でラップした(ナビゲーションバーは
+        // 非表示のまま — 見た目は変更していない)。
+        NavigationStack {
         GeometryReader { geometry in
             ZStack {
                 DesignTokens.Colors.brandBackgroundGradient.ignoresSafeArea()
@@ -154,6 +158,22 @@ struct LoginView: View {
                     .frame(width: geometry.size.width)
                 }
             }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(for: AppRoute.self) { route in
+            switch route {
+            case .signUp:
+                PlaceholderScreenView(scrNumber: "SCR-002", screenName: "新規会員登録")
+                    .navigationTitle("新規会員登録")
+                    .navigationBarTitleDisplayMode(.inline)
+            case .passwordReset:
+                PlaceholderScreenView(scrNumber: "SCR-003", screenName: "パスワード再設定")
+                    .navigationTitle("パスワード再設定")
+                    .navigationBarTitleDisplayMode(.inline)
+            default:
+                EmptyView()
+            }
+        }
         }
         .preferredColorScheme(.dark)
         .alert(
@@ -332,9 +352,9 @@ struct LoginView: View {
                 }
             }
 
-            Button {
-                pendingFeatureMessage = "パスワードリセットは準備中です。もうしばらくお待ちください。"
-            } label: {
+            // 2026-09-29 HQ承認(2-b): SCR-003(仮画面)への遷移。ボタンの見た目は
+            // 変更していない(アクションを"準備中"アラートから画面遷移に変更のみ)。
+            NavigationLink(value: AppRoute.passwordReset) {
                 Text("パスワードをお忘れの方")
                     .font(DesignTokens.Typography.loginCaptionEmphasized)
                     .foregroundStyle(DesignTokens.Colors.accentCyan)
@@ -353,9 +373,9 @@ struct LoginView: View {
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 18)
-            Button {
-                pendingFeatureMessage = "新規登録は準備中です。もうしばらくお待ちください。"
-            } label: {
+            // 2026-09-29 HQ承認(2-b): SCR-002(仮画面)への遷移。ボタンの見た目は
+            // 変更していない(アクションを"準備中"アラートから画面遷移に変更のみ)。
+            NavigationLink(value: AppRoute.signUp) {
                 Text("新規登録")
                     .font(DesignTokens.Typography.bodyEmphasized)
                     .foregroundStyle(DesignTokens.Colors.accentCyan)

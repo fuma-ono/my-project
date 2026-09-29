@@ -19,6 +19,8 @@ import SwiftUI
 struct AccountView: View {
     @StateObject private var viewModel: AccountViewModel
     @State private var pendingFeatureMessage: String?
+    /// 2026-09-29 HQ承認(2-b): SCR-027 ログアウト確認ダイアログ。
+    @State private var showLogoutConfirmation = false
     @Binding var tabSelection: Int
     @Environment(\.dismiss) private var dismiss
 
@@ -43,6 +45,15 @@ struct AccountView: View {
             } message: { message in
                 Text(message)
             }
+            // 2026-09-29 HQ承認(2-b): SCR-027 ログアウト確認ダイアログ。
+            .confirmationDialog(
+                "ログアウトしますか？",
+                isPresented: $showLogoutConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("ログアウト", role: .destructive) { viewModel.signOut() }
+                Button("キャンセル", role: .cancel) {}
+            }
     }
 
     @ViewBuilder
@@ -61,17 +72,16 @@ struct AccountView: View {
                 Text("ユーザー \(account.userID.uuidString.prefix(8))").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 117, y: 145)
 
                 accountRow("person", "プラン", subscription.plan, 170, action: nil)
-                accountRow("bell", "通知設定", "", 205) {
-                    pendingFeatureMessage = "通知設定は準備中です。もうしばらくお待ちください。"
-                }
+                // 2026-09-29 HQ承認(2-b): 既存の行をそのままNavigationLinkに
+                // 差し替え、対応するSCR-01x(仮画面)への遷移を確認できるように
+                // した。行の見た目は変更していない。
+                accountNavRow("bell", "通知設定", 205, route: .notificationSettings)
                 accountRow("person", "アカウント情報", "", 240) {
                     pendingFeatureMessage = "登録日: \(ValueFormat.dateTime(account.createdAt))"
                 }
-                accountRow("creditcard", "サブスクリプション", "", 275) {
-                    pendingFeatureMessage = "サブスクリプション管理は準備中です。もうしばらくお待ちください。"
-                }
+                accountNavRow("creditcard", "サブスクリプション", 275, route: .subscriptionManagement)
                 Button {
-                    viewModel.signOut()
+                    showLogoutConfirmation = true
                 } label: {
                     HStack {
                         Image(systemName: "arrow.right.square").font(.system(size: 9))
@@ -116,20 +126,34 @@ struct AccountView: View {
         Button {
             action?()
         } label: {
-            HStack {
-                Image(systemName: icon).font(.system(size: 9))
-                Text(title).font(.system(size: 8))
-                Spacer()
-                if !trailing.isEmpty { Text(trailing).font(.system(size: 8)) }
-                Image(systemName: "chevron.right").font(.system(size: 7))
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 9).frame(width: 204, height: 30)
-            .background(V5P.panel, in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(V5P.line.opacity(0.5), lineWidth: 0.5))
+            accountRowLabel(icon, title, trailing)
         }
         .buttonStyle(.plain)
         .disabled(action == nil)
         .position(x: 117, y: y)
+    }
+
+    /// `accountRow`と同じ見た目で、`SettingsSubRoute`(仮画面)へのNavigationLink
+    /// になっているもの(2026-09-29 HQ承認、2-b)。
+    @ViewBuilder private func accountNavRow(_ icon: String, _ title: String, _ y: CGFloat, route: SettingsSubRoute) -> some View {
+        NavigationLink(value: route) {
+            accountRowLabel(icon, title, "")
+        }
+        .buttonStyle(.plain)
+        .position(x: 117, y: y)
+    }
+
+    private func accountRowLabel(_ icon: String, _ title: String, _ trailing: String) -> some View {
+        HStack {
+            Image(systemName: icon).font(.system(size: 9))
+            Text(title).font(.system(size: 8))
+            Spacer()
+            if !trailing.isEmpty { Text(trailing).font(.system(size: 8)) }
+            Image(systemName: "chevron.right").font(.system(size: 7))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 9).frame(width: 204, height: 30)
+        .background(V5P.panel, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(V5P.line.opacity(0.5), lineWidth: 0.5))
     }
 }
