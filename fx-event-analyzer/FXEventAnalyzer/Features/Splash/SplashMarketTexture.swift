@@ -137,45 +137,44 @@ struct SplashMarketTexture: View {
     /// smaller fraction (higher on screen) than 0.57 but still above the
     /// original, too-high 0.53.
     ///
-    /// User feedback (2026-09-29): replaced with an entirely new Reference
-    /// image (1813×868, a wide banner-style candlestick climb with its own
-    /// faint wave/curve underneath — unlike the previous 1024×1536
-    /// Reference, this one's real content already spans nearly the full
-    /// source width, x≈0.001 to 0.996, so unlike before there's no
-    /// transparent margin to crop past). Same treatment as every other
-    /// Reference asset here: this PNG's own alpha channel came in mostly
-    /// opaque throughout (a vignette, not a content mask), so the alpha
-    /// actually used is re-authored from the source's own brightness
-    /// (background near-black → near-transparent, the glowing candles/
-    /// curve → near-opaque, kept as a smooth ramp) exactly like `mesh` and
-    /// the previous `SplashCandles` asset both needed.
+    /// User feedback (2026-09-29), round 2: swapped again for another new
+    /// Reference image, still 1813×868 (content spans the full source
+    /// width just like the previous one, x≈0.0 to 0.998), but a cleaner
+    /// candlestick-only illustration — no embedded wave/curve underneath
+    /// this time, just the glowing candles on a plain dark background.
+    /// Same brightness-derived alpha treatment as every other Reference
+    /// asset here (this PNG also ships without a usable content-mask
+    /// alpha channel). One calibration difference from the previous
+    /// asset: a first pass reused that asset's brightness floor/ceiling
+    /// (25/110) and rendered the candles as one continuous smeared blob —
+    /// this source's inter-candle glow sits in a higher brightness band,
+    /// so that ceiling was blowing it out to full opacity along with the
+    /// candle bodies themselves. Raised to 35/190 (floor/ceiling), checked
+    /// against a cropped close-up of the raw source to confirm individual
+    /// candles read as distinct bars again, matching the source itself.
     ///
-    /// Measured directly off the new source: content spans the full image
-    /// width already (no horizontal crop/offset needed, `scaleFactor` 1.0
-    /// fits it exactly to screen width), and the tallest candle (top-
-    /// right) enters at source y≈173/868 ≈ 0.199 from the top.
-    /// `topAnchorFraction` reused at 0.47 from the previous Reference's
-    /// tuned position — still reads correctly below the tagline.
+    /// Measured directly off the new source: still full-width
+    /// (`scaleFactor` 1.0, no horizontal crop/offset), tallest candle
+    /// (top-right) enters at source y≈108/868 ≈ 0.124 from the top —
+    /// higher up than the previous asset's 0.199, so at the same
+    /// `topAnchorFraction` (0.47, reused unchanged) the whole image sits
+    /// slightly lower on screen and its bottom edge reaches a bit further
+    /// into `mesh`'s territory than before.
     ///
     /// Same explicit ask as last round: delete the candlestick portion
-    /// that overlaps `mesh`. This Reference is much shorter (aspect
-    /// 1813:868 vs the old 1024:1536), so at this placement its own
-    /// bottom edge only just reaches into `mesh`'s territory (screen
-    /// fraction ≈0.65, `mesh`'s own curve starts appearing ≈0.6) rather
-    /// than sprawling deep into it — a lighter vertical opacity fade
-    /// (screen-space 0.58 → 0.65, computed into the image's own local
-    /// fraction below) than last round's is enough to clear it.
+    /// that overlaps `mesh`. Widened the fade's end fraction (0.65 → 0.67)
+    /// to reach this version's slightly-lower bottom edge.
     private var candles: some View {
         GeometryReader { geometry in
             let scaleFactor = 1.0
             let imageWidth = geometry.size.width * scaleFactor
             let imageHeight = imageWidth * (868.0 / 1813.0)
             let topAnchorFraction = 0.47
-            let contentTopFraction = 173.0 / 868.0 // where the candles' own highest point enters the source image, top-to-bottom
+            let contentTopFraction = 108.0 / 868.0 // where the candles' own highest point enters the source image, top-to-bottom
             let topOffset = topAnchorFraction * geometry.size.height - contentTopFraction * imageHeight
 
             let fadeStartScreenFraction = 0.58
-            let fadeEndScreenFraction = 0.65
+            let fadeEndScreenFraction = 0.67
             let fadeStartLocal = min(1, max(0, (fadeStartScreenFraction * geometry.size.height - topOffset) / imageHeight))
             let fadeEndLocal = min(1, max(fadeStartLocal, (fadeEndScreenFraction * geometry.size.height - topOffset) / imageHeight))
 
