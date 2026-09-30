@@ -204,12 +204,30 @@ struct V5BottomBar: View {
     /// 参考画像との既知の差分: 「指標一覧」のアイコンは参考画像内のグラフィック
     /// がSF Symbols標準セットのどれとも完全一致しないため、最も近い形状
     /// (`chart.bar`/`chart.bar.fill`)を採用している(Loginのパスワード欄
-    /// アイコンと同じ「最も近い形状を採用する」慣例)。選択中タブのアイコン
-    /// 背後の淡いシアンの光彩とラベル下の短いアンダーラインは前回追加した
-    /// ものをそのまま踏襲。
+    /// アイコンと同じ「最も近い形状を採用する」慣例)。
+    ///
+    /// 再調整(2026-09-30、HQ指摘「画像と全く違う、少し立体的で単調な色では
+    /// ない」): 最初の実装はアイコン・文字を単色(白/シアン)で塗っていたが、
+    /// 参考画像をピクセル実測し直した結果、単色ではなく上が明るく(ほぼ白〜
+    /// 明るいシアン)下が暗い(青)方向の縦グラデーション(ガラス/金属的な
+    /// 光沢)だと判明した(実測値の例: ホームアイコン上端≈RGB(230,247,254)
+    /// →下端≈RGB(120,172,223)、選択中の下線バー上端≈RGB(1,234,251)→
+    /// 下端≈RGB(0,79,162))。これを`iconGradient`/`selectedIconGradient`
+    /// として反映し、アイコン・ラベル・選択インジケータ(グロー円・下線)
+    /// すべてに適用した。あわせてアイコンにごく薄い落影を付け、カプセル
+    /// 本体の塗りにも上下グラデーションを加えて、参考画像のガラスのような
+    /// 立体感に近づけている。
     private static let barHeight: CGFloat = 44
     private static let barWidth: CGFloat = 214
     private static let bottomMargin: CGFloat = 8
+    private static let iconGradient = LinearGradient(
+        colors: [Color(red: 0.88, green: 0.95, blue: 1.0), V5P.blue],
+        startPoint: .top, endPoint: .bottom
+    )
+    private static let selectedIconGradient = LinearGradient(
+        colors: [V5P.cyan, V5P.blue],
+        startPoint: .top, endPoint: .bottom
+    )
 
     var body: some View {
         HStack(spacing: 0) {
@@ -222,15 +240,17 @@ struct V5BottomBar: View {
         .frame(width: Self.barWidth, height: Self.barHeight)
         .background(
             RoundedRectangle(cornerRadius: Self.barHeight / 2)
-                .fill(V5P.panel.opacity(0.35))
+                .fill(LinearGradient(colors: [V5P.panel.opacity(0.6), V5P.panel2.opacity(0.25)],
+                                      startPoint: .top, endPoint: .bottom))
         )
         .overlay(
             RoundedRectangle(cornerRadius: Self.barHeight / 2)
                 .stroke(
-                    LinearGradient(colors: [V5P.blue.opacity(0.55), V5P.cyan.opacity(0.25), V5P.blue.opacity(0.55)],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing),
-                    lineWidth: 1
+                    LinearGradient(colors: [V5P.cyan.opacity(0.65), V5P.blue.opacity(0.35), V5P.cyan.opacity(0.55)],
+                                   startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1.3
                 )
+                .shadow(color: V5P.blue.opacity(0.5), radius: 3)
         )
         .position(x: V5P.W / 2, y: V5P.H - Self.bottomMargin - Self.barHeight / 2)
     }
@@ -242,23 +262,28 @@ struct V5BottomBar: View {
     /// 状態を表す見た目にした。
     @ViewBuilder func tab(_ index: Int, filled: String, outline: String, _ title: String) -> some View {
         let isSelected = index == selected
+        let gradient = isSelected ? Self.selectedIconGradient : Self.iconGradient
         VStack(spacing: 4) {
             Image(systemName: isSelected ? filled : outline)
                 .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(gradient)
+                .shadow(color: .black.opacity(0.35), radius: 1, y: 1)
                 .background(
                     Circle()
-                        .fill(RadialGradient(colors: [V5P.cyan.opacity(0.4), .clear], center: .center, startRadius: 1, endRadius: 13))
-                        .frame(width: 26, height: 26)
+                        .fill(RadialGradient(colors: [V5P.cyan.opacity(0.45), V5P.cyan.opacity(0.1), .clear],
+                                              center: .center, startRadius: 1, endRadius: 18))
+                        .overlay(Circle().stroke(V5P.cyan.opacity(0.35), lineWidth: 0.6))
+                        .frame(width: 34, height: 34)
                         .opacity(isSelected ? 1 : 0)
                 )
-            Text(title).font(.system(size: 7, weight: .semibold))
+            Text(title).font(.system(size: 7, weight: .semibold)).foregroundStyle(gradient)
         }
-        .foregroundStyle(isSelected ? V5P.cyan : .white.opacity(0.9))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .bottom) {
             Capsule()
-                .fill(V5P.cyan)
-                .frame(width: 14, height: 1.6)
+                .fill(LinearGradient(colors: [V5P.cyan, V5P.blue], startPoint: .top, endPoint: .bottom))
+                .frame(width: 16, height: 2.2)
+                .shadow(color: V5P.cyan.opacity(0.7), radius: 2)
                 .opacity(isSelected ? 1 : 0)
                 .padding(.bottom, 6)
         }
