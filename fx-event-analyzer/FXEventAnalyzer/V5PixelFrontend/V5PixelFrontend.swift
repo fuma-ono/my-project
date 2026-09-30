@@ -482,8 +482,8 @@ private struct V5BarsIcon: View {
 /// およそx:409-864・y:433-745、幅455×高さ312・アスペクト比≈1.46:1):
 /// - ジグザグ線: 尾(タブ)→山(peak)→谷(valley)→矢尻、の4点。各関節
 ///   (尾・山・谷)には線幅より一回り大きい丸い「ビーズ」が明確に存在する
-///   (実測: 線幅≈42px、ビーズ直径≈53〜60px、高さ312pxに対する比率は
-///   線幅≈0.135・ビーズ直径≈0.19)。
+///   (実測: 線幅≈42px、ビーズ直径≈76px、高さ312pxに対する比率は
+///   線幅≈0.135・ビーズ直径≈0.24)。
 /// - 矢尻: 単純な三角形ではなく、背面(軸に近い側)に1つの凹みがある
 ///   「旗」型の4頂点(上端≈(847,433)・先端≈(864,447)・下端≈(835,573)・
 ///   凹み≈(728,473))。以前の「丸い本体+バーブ」モデルは実在せず、
@@ -494,15 +494,28 @@ private struct V5BarsIcon: View {
 /// 統一している(個別に`.foregroundStyle(.foreground)`を解決させると
 /// 各図形が自分のジオメトリを基準にグラデーションを別々に解決し、
 /// 色や境界がずれる副作用が過去に判明したため)。
+///
+/// 再修正(2026-09-30、HQ指摘「矢印として成り立っていない、三角と線が
+/// ずれ過ぎている、丸の大きさや色味も全く違う」): 各点を高解像度画像で
+/// 1px単位のwidest-row/widest-col走査により再実測し直したところ、
+/// 2つの具体的な誤りが見つかった。
+/// 1. ビーズ直径の実測が誤っていた(前回は線に紛れて53〜60pxと過小
+///    評価していたが、正しくは尾ビーズの最大幅を直接実測すると76px
+///    あった=線幅の約1.8倍)。高さ比を0.19→0.24に修正。
+/// 2. `shaftJoint`(軸線の終点)を矢尻の凹み座標と混同しており、実際の
+///    軸線の傾き(尾→山→谷の実測点から算出)を延長した先とは全く
+///    異なる位置にあったため、線が矢尻と違う方向を向いて見えていた。
+///    軸線の傾きを矢尻の輪郭(凹み〜下端の辺)まで延長した交点を
+///    再計算し、shaftJointをそこに置き直した。
 private struct V5AnalysisIcon: View {
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
             let h = geo.size.height
-            let tail = CGPoint(x: 0.06 * w, y: 0.86 * h)
-            let peak = CGPoint(x: 0.38 * w, y: 0.38 * h)
-            let valley = CGPoint(x: 0.54 * w, y: 0.56 * h)
-            let shaftJoint = CGPoint(x: 0.72 * w, y: 0.20 * h)
+            let tail = CGPoint(x: 0.08 * w, y: 0.88 * h)
+            let peak = CGPoint(x: 0.38 * w, y: 0.47 * h)
+            let valley = CGPoint(x: 0.56 * w, y: 0.70 * h)
+            let shaftJoint = CGPoint(x: 0.78 * w, y: 0.36 * h)
 
             let headTop = CGPoint(x: 0.96 * w, y: 0.00 * h)
             let headTip = CGPoint(x: 1.00 * w, y: 0.04 * h)
@@ -510,7 +523,7 @@ private struct V5AnalysisIcon: View {
             let headNotch = CGPoint(x: 0.70 * w, y: 0.13 * h)
 
             let lineWidth = h * 0.135
-            let ballDiameter = h * 0.19
+            let ballDiameter = h * 0.24
 
             let shaftPath = Path { path in
                 path.move(to: tail)
