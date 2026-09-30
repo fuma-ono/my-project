@@ -271,7 +271,35 @@ struct V5BottomBar: View {
     /// ため`selectedIconGradient`を訂正。グロー円も参考画像を水平実測
     /// (明度が完全に背景に戻るまでの幅)した結果、カプセル高さに対する比率
     /// が測定し直すとやや大きめだったため、直径を40→46に拡大した。
-    private static let barHeight: CGFloat = 44
+    ///
+    /// 5回目の訂正(2026-09-30、HQ指摘「分析のアイコンがまだ違う」「設定の
+    /// 丸が小さい」「外枠の色が違う、もう少し横に長く」): 3点同時に修正。
+    /// 1. 分析アイコン: 前回のピクセル追跡が実はクロップ範囲の右端で
+    ///    カプセル自体のリム光彩(円弧)を矢尻の一部と誤認しており、境界
+    ///    ボックスを実際より大きく見誤っていた。明度スキャンを描画色
+    ///    (輝度しきい値90〜150)で厳密にやり直し、ジグザグ線の4点
+    ///    (尾→山→谷→矢尻手前の節)と矢尻自体の5頂点(凹みのある「旗」型、
+    ///    矢尻背面に切り欠きがある実際の輪郭)を再測定して座標を全面的に
+    ///    差し替えた。
+    /// 2. 設定アイコン: 参考画像のギアを中心から8方向(0°刻み45°)に
+    ///    放射状スキャンし、穴半径≈13px・歯の谷の外径≈22px・歯先の外径
+    ///    ≈29pxを実測(穴:歯先比≈0.45)。`gearshape.fill`のSF Symbolは
+    ///    これより明らかに小さい穴で描画されており、これがHQ指摘の原因
+    ///    だったため、リング(`Circle().stroke`、内径=穴・外径=歯の谷)+
+    ///    歯8枚(`RoundedRectangle`を45°間隔で放射状に回転配置)を自前
+    ///    描画する`V5GearIcon`に差し替え、実測比率をそのまま反映した。
+    /// 3. カプセル外枠: 選択グローの膨らみを除いた素のリムのみを実測した
+    ///    ところ、色は上(明るい青、実測平均RGB≈(42,103,173))→下(暗い青、
+    ///    実測平均RGB≈(16,75,146))の単純な2色グラデーションで、これまで
+    ///    の実装のようなシアンを含む対称グラデーションではなかったため
+    ///    実測値に置き換えた。高さについても、選択グローの膨らみを除いた
+    ///    カプセル本体のみ(アイコンの無い区間)を複数箇所で実測すると
+    ///    幅:高さ比≈6〜7:1で、既存実装の214:44(≈4.86:1)よりかなり細長い
+    ///    と判明。この参考画像は実機比率のモックアップではなく(既存doc
+    ///    コメント通り)234幅キャンバスに収まる範囲でしか再現できないため、
+    ///    横幅214(既存カードの左右余白10ptに合わせた上限)は変えず、
+    ///    高さを44→34に縮小して比率214:34(≈6.29:1)に近づけた。
+    private static let barHeight: CGFloat = 34
     private static let barWidth: CGFloat = 214
     private static let bottomMargin: CGFloat = 8
     private static let iconGradient = LinearGradient(
@@ -280,6 +308,13 @@ struct V5BottomBar: View {
     )
     private static let selectedIconGradient = LinearGradient(
         colors: [V5P.cyan, Color(red: 0.0, green: 0.48, blue: 0.945)],
+        startPoint: .top, endPoint: .bottom
+    )
+    /// カプセル外枠(リム)のグラデーション。参考画像から直接実測した色
+    /// (上端≈RGB(42,103,173)、下端≈RGB(16,75,146)、単純な2色・シアンなし)
+    /// — 詳細は本structのドキュメントコメント「5回目の訂正」参照。
+    private static let capsuleRimGradient = LinearGradient(
+        colors: [Color(red: 0.165, green: 0.404, blue: 0.678), Color(red: 0.063, green: 0.294, blue: 0.573)],
         startPoint: .top, endPoint: .bottom
     )
 
@@ -298,7 +333,7 @@ struct V5BottomBar: View {
                 Image(systemName: "magnifyingglass").font(.system(size: 13, weight: .semibold))
             }
             tab(4, "設定") { _ in
-                Image(systemName: "gearshape.fill").font(.system(size: 13, weight: .semibold))
+                V5GearIcon()
             }
         }
         .frame(width: Self.barWidth, height: Self.barHeight)
@@ -309,11 +344,7 @@ struct V5BottomBar: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: Self.barHeight / 2)
-                .stroke(
-                    LinearGradient(colors: [V5P.cyan.opacity(0.65), V5P.blue.opacity(0.35), V5P.cyan.opacity(0.55)],
-                                   startPoint: .top, endPoint: .bottom),
-                    lineWidth: 1.3
-                )
+                .stroke(Self.capsuleRimGradient, lineWidth: 1.3)
                 .shadow(color: V5P.blue.opacity(0.5), radius: 3)
         )
         .position(x: V5P.W / 2, y: V5P.H - Self.bottomMargin - Self.barHeight / 2)
@@ -384,40 +415,94 @@ private struct V5BarsIcon: View {
 /// には座標軸が一切無く、山谷のあるジグザグ線の先に矢尻が付いた形状のみが
 /// 描かれている。SF Symbolsの`chart.line.uptrend.xyaxis`はL字型の座標軸
 /// (縦線+横線)込みのグリフのため使わず、線の中心線をピクセル単位で追跡した
-/// 経路(谷スタート→山→谷→矢尻手前)をそのまま座標化した自前描画にしている。
-/// 矢尻は塗りつぶしの三角形(参考画像でも実測濃度が線本体より高い=塗り
-/// つぶしだったため)。色は`.foregroundStyle(.foreground)`で呼び出し側
-/// (`tab`)が設定したグラデーションをそのまま継承する。
+/// 経路を自前描画にしている。矢尻は塗りつぶし(参考画像でも実測濃度が線
+/// 本体より高い=塗りつぶしだったため)。色は`.foregroundStyle(.foreground)`
+/// で呼び出し側(`tab`)が設定したグラデーションをそのまま継承する。
+///
+/// 座標の再実測(2026-09-30、HQ指摘「分析のアイコンがまだ違う」):
+/// 前回の座標は、矢尻付近をクロップして測るときに実は視野の右端で
+/// カプセル本体のリム光彩(円弧、アイコンとは無関係)を拾ってしまい、
+/// 境界ボックスと矢尻の大きさを実際より大きく見誤っていた(誤:
+/// 幅125px相当/矢尻が全体の約半分 → 実際は幅81px相当)。輝度しきい値
+/// 90〜150で明度スキャンをやり直し、実際のグリフ境界(幅81×高さ53px、
+/// アスペクト比≈1.53:1)内でジグザグ線4点と、矢尻の背面に凹みのある
+/// 実際の5頂点輪郭を再追跡して座標を全面的に差し替えた。
 private struct V5AnalysisIcon: View {
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
             let h = geo.size.height
-            let p0 = CGPoint(x: 0.00 * w, y: 0.91 * h)
-            let p1 = CGPoint(x: 0.37 * w, y: 0.45 * h)
-            let p2 = CGPoint(x: 0.56 * w, y: 0.76 * h)
-            let p3 = CGPoint(x: 0.78 * w, y: 0.38 * h)
-            let tip = CGPoint(x: 1.00 * w, y: 0.02 * h)
-            let backA = CGPoint(x: 0.78 * w, y: 0.08 * h)
-            let backB = CGPoint(x: 0.97 * w, y: 0.33 * h)
+            let tail = CGPoint(x: 0.06 * w, y: 1.00 * h)
+            let peak = CGPoint(x: 0.31 * w, y: 0.32 * h)
+            let valley = CGPoint(x: 0.47 * w, y: 0.70 * h)
+            let shaftJoint = CGPoint(x: 0.65 * w, y: 0.47 * h)
+
+            // 矢尻: 背面(尾側)に凹みのある5頂点の「旗」型 — 参考画像の
+            // 矢尻は単純な三角形ではなく、軸(shaftJoint)に接する側に
+            // 凹みが1つある輪郭だったため、その形状通りに再現している。
+            let headTopBack = CGPoint(x: 0.77 * w, y: 0.02 * h)
+            let headTip = CGPoint(x: 1.00 * w, y: 0.04 * h)
+            let headRightBack = CGPoint(x: 0.98 * w, y: 0.34 * h)
+            let headBottomPoint = CGPoint(x: 0.64 * w, y: 0.49 * h)
+            let headNotch = CGPoint(x: 0.70 * w, y: 0.09 * h)
 
             Path { path in
-                path.move(to: p0)
-                path.addLine(to: p1)
-                path.addLine(to: p2)
-                path.addLine(to: p3)
+                path.move(to: tail)
+                path.addLine(to: peak)
+                path.addLine(to: valley)
+                path.addLine(to: shaftJoint)
             }
-            .stroke(.foreground, style: StrokeStyle(lineWidth: h * 0.15, lineCap: .round, lineJoin: .round))
+            .stroke(.foreground, style: StrokeStyle(lineWidth: h * 0.16, lineCap: .round, lineJoin: .round))
 
             Path { path in
-                path.move(to: backA)
-                path.addLine(to: tip)
-                path.addLine(to: backB)
+                path.move(to: headTopBack)
+                path.addLine(to: headTip)
+                path.addLine(to: headRightBack)
+                path.addLine(to: headBottomPoint)
+                path.addLine(to: headNotch)
                 path.closeSubpath()
             }
             .fill(.foreground)
         }
-        .frame(width: 15, height: 10)
+        .frame(width: 16, height: 10.5)
+    }
+}
+
+/// 「設定」タブのアイコン(2026-09-30、HQ指摘「真ん中の丸が小さいので
+/// もう少し大きくして」)。参考画像のギアを中心から放射状に8方向
+/// (45°刻み)実測したところ、穴半径≈13px・歯の谷の外径≈22px・歯先の
+/// 外径≈29px(穴:歯先比≈0.45)と、SF Symbolsの`gearshape.fill`が描く
+/// 穴よりも明らかに大きい比率だった。SF Symbolでは穴サイズを調整できない
+/// ため、リング(`Circle().stroke`、内径=穴・外径=歯の谷)+歯8枚
+/// (`RoundedRectangle`を45°間隔で放射状に回転配置)の自前描画に差し替え、
+/// 実測比率をそのまま反映した。色は`.foregroundStyle(.foreground)`で
+/// 呼び出し側(`tab`)が設定したグラデーションをそのまま継承する。
+private struct V5GearIcon: View {
+    private let size: CGFloat = 13
+    private let outerRadius: CGFloat = 6.5
+    private let ringOuterRadius: CGFloat = 4.93
+    private let holeRadius: CGFloat = 2.91
+
+    var body: some View {
+        let ringWidth = ringOuterRadius - holeRadius
+        let overlap = ringWidth * 0.4
+        let innerEdge = ringOuterRadius - overlap
+        let toothLength = outerRadius - innerEdge
+        let centerDistance = (innerEdge + outerRadius) / 2
+
+        ZStack {
+            Circle()
+                .stroke(.foreground, lineWidth: ringWidth)
+                .frame(width: ringOuterRadius + holeRadius, height: ringOuterRadius + holeRadius)
+            ForEach(0..<8, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 0.5)
+                    .fill(.foreground)
+                    .frame(width: size * 0.16, height: toothLength)
+                    .offset(y: -centerDistance)
+                    .rotationEffect(.degrees(Double(i) * 45))
+            }
+        }
+        .frame(width: size, height: size)
     }
 }
 
