@@ -358,7 +358,15 @@ struct V5BottomBar: View {
     @ViewBuilder func tab(_ index: Int, _ title: String, @ViewBuilder icon: (Bool) -> some View) -> some View {
         let isSelected = index == selected
         let gradient = isSelected ? Self.selectedIconGradient : Self.iconGradient
-        VStack(spacing: 4) {
+        // 下線(選択インジケータ)はVStackの一要素として常に領域を確保し
+        // opacityのみ切り替える構成にしている(2026-09-30訂正)。以前は
+        // `.overlay(alignment: .bottom)` + 固定`.padding(.bottom, 6)`で
+        // アイコンの高さと無関係にタブセル底部へ直接貼り付けていたため、
+        // 分析アイコンの高さを10.5pt→13ptに拡大した際にVStackの内容物が
+        // 伸びて下線が「分析」ラベルの文字に重なって表示される回帰が
+        // CIキャプチャで見つかった。VStackの通常の子要素にすることで、
+        // アイコンの高さに関わらずレイアウトが自動的に詰まらないようにした。
+        VStack(spacing: 3) {
             icon(isSelected)
                 .foregroundStyle(gradient)
                 .shadow(color: .black.opacity(0.35), radius: 1, y: 1)
@@ -370,16 +378,13 @@ struct V5BottomBar: View {
                         .opacity(isSelected ? 1 : 0)
                 )
             Text(title).font(.system(size: 7, weight: .semibold)).foregroundStyle(gradient)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .bottom) {
             Capsule()
                 .fill(LinearGradient(colors: [V5P.cyan, V5P.blue], startPoint: .top, endPoint: .bottom))
                 .frame(width: 16, height: 2.2)
                 .shadow(color: V5P.cyan.opacity(0.7), radius: 2)
                 .opacity(isSelected ? 1 : 0)
-                .padding(.bottom, 6)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .onTapGesture {
             selected = index
