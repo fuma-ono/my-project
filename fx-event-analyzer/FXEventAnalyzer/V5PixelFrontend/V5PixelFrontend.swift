@@ -427,15 +427,37 @@ private struct V5BarsIcon: View {
 /// 90〜150で明度スキャンをやり直し、実際のグリフ境界(幅81×高さ53px、
 /// アスペクト比≈1.53:1)内でジグザグ線4点と、矢尻の背面に凹みのある
 /// 実際の5頂点輪郭を再追跡して座標を全面的に差し替えた。
+///
+/// さらに再実測(2026-09-30、HQ指摘「分析アイコンがおかしい、選択の色も
+/// おかしい」): 上記の座標修正後も自分のCIキャプチャと参考画像を同じ
+/// 縮尺で並べて直接比較したところ、2つの実際の誤りが見つかった。
+/// 1. 線の太さ: 参考画像の線幅を谷→矢尻方向で垂直に実測すると
+///    ≈13px(アイコン全体の高さ53pxに対し約25%)あり、これまでの
+///    `lineWidth: h * 0.16`は明らかに細すぎた。太さ不足のせいで
+///    関節が丸い「ビーズ」状に見えず、グラデーションの明暗差も
+///    小さく見えて「色が違う」という指摘の一因になっていたため、
+///    `h * 0.25`に太くした。
+/// 2. 谷から矢尻への立ち上がり(shaftJoint): 参考画像を再度ピクセル
+///    追跡すると、谷(valley)からの3本目の線分は緩やかにではなく
+///    1本目の山(peak)とほぼ同じ高さまで急角度で立ち上がってから
+///    矢尻に接続していた。以前の座標(y比率0.47、峰の0.32よりかなり
+///    低い)はこの急な立ち上がりを反映できておらず、シルエット全体が
+///    間延びして見えていたため、y比率を0.26に修正した(矢尻側の凹み
+///    頂点`headNotch`/背面下端`headBottomPoint`は実測値のまま変更して
+///    いないが、太い線の丸端がこの新しい接続点で矢尻の塗り部分と
+///    十分重なるため、継ぎ目は視覚的に生じない)。あわせてアイコン
+///    自体が他のタブアイコン(13pt前後)よりかなり小さく(高さ10.5pt)
+///    描かれていたため、高さ13ptに拡大した(アスペクト比は実測値の
+///    ままなので幅も20ptに拡大)。
 private struct V5AnalysisIcon: View {
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
             let h = geo.size.height
             let tail = CGPoint(x: 0.06 * w, y: 1.00 * h)
-            let peak = CGPoint(x: 0.31 * w, y: 0.32 * h)
-            let valley = CGPoint(x: 0.47 * w, y: 0.70 * h)
-            let shaftJoint = CGPoint(x: 0.65 * w, y: 0.47 * h)
+            let peak = CGPoint(x: 0.30 * w, y: 0.30 * h)
+            let valley = CGPoint(x: 0.48 * w, y: 0.68 * h)
+            let shaftJoint = CGPoint(x: 0.75 * w, y: 0.26 * h)
 
             // 矢尻: 背面(尾側)に凹みのある5頂点の「旗」型 — 参考画像の
             // 矢尻は単純な三角形ではなく、軸(shaftJoint)に接する側に
@@ -452,7 +474,7 @@ private struct V5AnalysisIcon: View {
                 path.addLine(to: valley)
                 path.addLine(to: shaftJoint)
             }
-            .stroke(.foreground, style: StrokeStyle(lineWidth: h * 0.16, lineCap: .round, lineJoin: .round))
+            .stroke(.foreground, style: StrokeStyle(lineWidth: h * 0.25, lineCap: .round, lineJoin: .round))
 
             Path { path in
                 path.move(to: headTopBack)
@@ -464,7 +486,7 @@ private struct V5AnalysisIcon: View {
             }
             .fill(.foreground)
         }
-        .frame(width: 16, height: 10.5)
+        .frame(width: 20, height: 13)
     }
 }
 
