@@ -454,6 +454,14 @@ private struct V5BarsIcon: View {
 ///    自体が他のタブアイコン(13pt前後)よりかなり小さく(高さ10.5pt)
 ///    描かれていたため、高さ13ptに拡大した(アスペクト比は実測値の
 ///    ままなので幅も20ptに拡大)。
+///
+/// 角の丸め(2026-09-30、HQ指摘「矢印の先の部分がまだ変」): 拡大した
+/// CIキャプチャを参考画像とさらに拡大して見比べたところ、輪郭の座標
+/// 自体はおおむね合っているが、矢尻が直線の`addLine`だけで結んだ鋭い
+/// 多角形(宝石のような硬い角)になっており、参考画像の「角が丸い、
+/// なめらかな矢印」とは質感が異なっていたと判明。塗りつぶしPathと全く
+/// 同じ頂点を`lineJoin: .round`で重ねてストロークすることで頂点だけを
+/// 丸めている(ジグザグ線の丸い線端・関節と同じ丸みの質感に揃える狙い)。
 private struct V5AnalysisIcon: View {
     var body: some View {
         GeometryReader { geo in
@@ -473,6 +481,15 @@ private struct V5AnalysisIcon: View {
             let headBottomPoint = CGPoint(x: 0.64 * w, y: 0.49 * h)
             let headNotch = CGPoint(x: 0.70 * w, y: 0.09 * h)
 
+            let arrowhead = Path { path in
+                path.move(to: headTopBack)
+                path.addLine(to: headTip)
+                path.addLine(to: headRightBack)
+                path.addLine(to: headBottomPoint)
+                path.addLine(to: headNotch)
+                path.closeSubpath()
+            }
+
             Path { path in
                 path.move(to: tail)
                 path.addLine(to: peak)
@@ -481,15 +498,8 @@ private struct V5AnalysisIcon: View {
             }
             .stroke(.foreground, style: StrokeStyle(lineWidth: h * 0.25, lineCap: .round, lineJoin: .round))
 
-            Path { path in
-                path.move(to: headTopBack)
-                path.addLine(to: headTip)
-                path.addLine(to: headRightBack)
-                path.addLine(to: headBottomPoint)
-                path.addLine(to: headNotch)
-                path.closeSubpath()
-            }
-            .fill(.foreground)
+            arrowhead.fill(.foreground)
+            arrowhead.stroke(.foreground, style: StrokeStyle(lineWidth: h * 0.09, lineJoin: .round))
         }
         .frame(width: 20, height: 13)
     }
