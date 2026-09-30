@@ -507,6 +507,21 @@ private struct V5BarsIcon: View {
 ///    異なる位置にあったため、線が矢尻と違う方向を向いて見えていた。
 ///    軸線の傾きを矢尻の輪郭(凹み〜下端の辺)まで延長した交点を
 ///    再計算し、shaftJointをそこに置き直した。
+/// この修正を実機CIキャプチャで検証したところ、矢印としての可読性と
+/// 線/矢尻の接続は解消したことを確認した(接合部を拡大しても継ぎ目や
+/// ずれは見えない)。一方でビーズの直径:線幅比は実測(≈1.87)とほぼ
+/// 一致(実装≈1.78、CI実測≈1.9〜2.0)しており、サイズ自体は指摘ほど
+/// 大きくは外れていなかった。改めて参考画像のビーズ中心を垂直方向に
+/// 色サンプリングすると、上端付近がほぼ白に近い高輝度シアン
+/// (RGB≈(5,255,255))で、そこから下に向かって既存の2色グラデーション
+/// (シアン→青)へ急速に遷移する「光沢球」のハイライトがあると判明した。
+/// CIキャプチャを同様にサンプリングすると、ハイライトが存在せず単純な
+/// 線形グラデーションのみだったため、「色味が全く違う」という指摘の
+/// 主因はビーズの色相ではなく、このハイライトの欠落だったと結論した。
+/// そのため、各ビーズの上側に白系`RadialGradient`のハイライトを独立した
+/// レイヤーとして追加した(マスク対象には含めない。マスク対象に含めると
+/// 単一グラデーション基準の原則が崩れ、過去に発生した二重輪郭と同種の
+/// 副作用を招くため)。
 private struct V5AnalysisIcon: View {
     var body: some View {
         GeometryReader { geo in
@@ -540,20 +555,38 @@ private struct V5AnalysisIcon: View {
                 path.closeSubpath()
             }
 
-            Rectangle()
-                .fill(.foreground)
-                .mask(
-                    ZStack {
-                        shaftPath.stroke(style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
-                        Circle().frame(width: ballDiameter, height: ballDiameter).position(tail)
-                        Circle().frame(width: ballDiameter, height: ballDiameter).position(peak)
-                        Circle().frame(width: ballDiameter, height: ballDiameter).position(valley)
-                        arrowhead.fill()
-                        arrowhead.stroke(style: StrokeStyle(lineWidth: h * 0.07, lineJoin: .round))
-                    }
-                )
+            ZStack {
+                Rectangle()
+                    .fill(.foreground)
+                    .mask(
+                        ZStack {
+                            shaftPath.stroke(style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
+                            Circle().frame(width: ballDiameter, height: ballDiameter).position(tail)
+                            Circle().frame(width: ballDiameter, height: ballDiameter).position(peak)
+                            Circle().frame(width: ballDiameter, height: ballDiameter).position(valley)
+                            arrowhead.fill()
+                            arrowhead.stroke(style: StrokeStyle(lineWidth: h * 0.07, lineJoin: .round))
+                        }
+                    )
+                ballHighlight(center: tail, diameter: ballDiameter)
+                ballHighlight(center: peak, diameter: ballDiameter)
+                ballHighlight(center: valley, diameter: ballDiameter)
+            }
         }
         .frame(width: 19, height: 13)
+    }
+
+    @ViewBuilder private func ballHighlight(center: CGPoint, diameter: CGFloat) -> some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [.white.opacity(0.9), .white.opacity(0.0)],
+                    center: .center, startRadius: 0, endRadius: diameter * 0.4
+                )
+            )
+            .frame(width: diameter * 0.8, height: diameter * 0.8)
+            .position(x: center.x, y: center.y - diameter * 0.22)
+            .allowsHitTesting(false)
     }
 }
 
