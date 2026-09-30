@@ -201,11 +201,6 @@ struct V5BottomBar: View {
     /// せず、234幅のV5空間に収まる比率(既存カードの左右余白10pt=カード幅
     /// 214に揃える)で再構成している。
     ///
-    /// 参考画像との既知の差分: 「指標一覧」のアイコンは参考画像内のグラフィック
-    /// がSF Symbols標準セットのどれとも完全一致しないため、最も近い形状
-    /// (`chart.bar`/`chart.bar.fill`)を採用している(Loginのパスワード欄
-    /// アイコンと同じ「最も近い形状を採用する」慣例)。
-    ///
     /// 再調整(2026-09-30、HQ指摘「画像と全く違う、少し立体的で単調な色では
     /// ない」): 最初の実装はアイコン・文字を単色(白/シアン)で塗っていたが、
     /// 参考画像をピクセル実測し直した結果、単色ではなく上が明るく(ほぼ白〜
@@ -217,6 +212,24 @@ struct V5BottomBar: View {
     /// すべてに適用した。あわせてアイコンにごく薄い落影を付け、カプセル
     /// 本体の塗りにも上下グラデーションを加えて、参考画像のガラスのような
     /// 立体感に近づけている。
+    ///
+    /// さらに再調整(2026-09-30、HQ指摘「アイコンのデザインが参考画像と
+    /// どこが一緒か、完璧に再現して」): 参考画像を1px単位で再実測(ピクセル
+    /// 明度スキャン)し、5つのアイコンをそれぞれ検証した。
+    /// - ホーム/検索/設定は実測した輪郭(三角屋根+四角い胴体+ドア型の
+    ///   切り欠き/円+柄/歯車リング)がSF Symbolsの`house`/`magnifyingglass`/
+    ///   `gearshape`とほぼ一致しており、変更していない。
+    /// - 「指標一覧」は実測の結果、3本の縦棒(幅同一・下端揃え・高さ比≈
+    ///   0.40:0.68:1.0・棒間の隙間≈棒幅の半分)というシンプルな形状で、
+    ///   SF Symbolsの近似では棒の比率/間隔が実測値と食い違っていたため、
+    ///   `V5BarsIcon`として実測比率通りに自前描画するよう差し替えた。
+    /// - 「分析」は実測の結果、山谷のあるジグザグ線の先に矢尻が付く形状
+    ///   だったが、これまで使っていた`chart.xyaxis.line`はただの座標軸+
+    ///   波線(矢尻なし)であり、形状として全く別物だった(単純な選択ミス)。
+    ///   矢尻付きの上昇ジグザグ線を持つ`chart.line.uptrend.xyaxis`に差し
+    ///   替えた — 既知の差分として、このSF Symbolには軸の短い目盛り線が
+    ///   付随するが(参考画像のジグザグ矢印単体には無い)、13pt表示では
+    ///   ほぼ視認できない程度のため許容した。
     private static let barHeight: CGFloat = 44
     private static let barWidth: CGFloat = 214
     private static let bottomMargin: CGFloat = 8
@@ -231,11 +244,21 @@ struct V5BottomBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            tab(0, filled: "house.fill", outline: "house", "ホーム")
-            tab(1, filled: "chart.bar.fill", outline: "chart.bar", "指標一覧")
-            tab(2, filled: "chart.xyaxis.line", outline: "chart.xyaxis.line", "分析")
-            tab(3, filled: "magnifyingglass", outline: "magnifyingglass", "検索")
-            tab(4, filled: "gearshape.fill", outline: "gearshape", "設定")
+            tab(0, "ホーム") { isSelected in
+                Image(systemName: isSelected ? "house.fill" : "house").font(.system(size: 13, weight: .semibold))
+            }
+            tab(1, "指標一覧") { _ in
+                V5BarsIcon()
+            }
+            tab(2, "分析") { _ in
+                Image(systemName: "chart.line.uptrend.xyaxis").font(.system(size: 13, weight: .semibold))
+            }
+            tab(3, "検索") { _ in
+                Image(systemName: "magnifyingglass").font(.system(size: 13, weight: .semibold))
+            }
+            tab(4, "設定") { isSelected in
+                Image(systemName: isSelected ? "gearshape.fill" : "gearshape").font(.system(size: 13, weight: .semibold))
+            }
         }
         .frame(width: Self.barWidth, height: Self.barHeight)
         .background(
@@ -260,12 +283,11 @@ struct V5BottomBar: View {
     /// いた。ボタンとしての既定の見た目を一切持たない`.onTapGesture`に置き換
     /// えることで、参考画像通り背景なし・アイコンと文字の色/グリフのみで選択
     /// 状態を表す見た目にした。
-    @ViewBuilder func tab(_ index: Int, filled: String, outline: String, _ title: String) -> some View {
+    @ViewBuilder func tab(_ index: Int, _ title: String, @ViewBuilder icon: (Bool) -> some View) -> some View {
         let isSelected = index == selected
         let gradient = isSelected ? Self.selectedIconGradient : Self.iconGradient
         VStack(spacing: 4) {
-            Image(systemName: isSelected ? filled : outline)
-                .font(.system(size: 13, weight: .semibold))
+            icon(isSelected)
                 .foregroundStyle(gradient)
                 .shadow(color: .black.opacity(0.35), radius: 1, y: 1)
                 .background(
@@ -292,6 +314,29 @@ struct V5BottomBar: View {
             selected = index
         }
         .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// 「指標一覧」タブのアイコン。参考画像(`bottom-tabbar-reference-v2-capsule.png`)
+/// を1px単位で実測した結果(棒3本、幅同一、下端揃え、高さ比≈0.40:0.68:1.0、
+/// 棒間の隙間≈棒幅の半分)をそのまま座標化した自前描画。SF Symbolsの近似
+/// (`chart.bar`)では実測比率と食い違っていたため、V5BottomBarのドキュメント
+/// コメントに記載の通りこちらに差し替えた。色は`.foregroundStyle(.foreground)`
+/// で呼び出し側(`tab`)が設定したグラデーションをそのまま継承する。
+private struct V5BarsIcon: View {
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 1.5) {
+            bar(heightFraction: 0.40)
+            bar(heightFraction: 0.68)
+            bar(heightFraction: 1.0)
+        }
+        .frame(width: 14, height: 13, alignment: .bottom)
+    }
+
+    @ViewBuilder private func bar(heightFraction: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: 0.8)
+            .fill(.foreground)
+            .frame(width: 3, height: 13 * heightFraction)
     }
 }
 
