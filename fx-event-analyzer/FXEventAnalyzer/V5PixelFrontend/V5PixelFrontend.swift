@@ -175,35 +175,46 @@ struct V5TopStatus: View {
 
 struct V5BottomBar: View {
     @Binding var selected: Int
-    /// 2026-09-29 HQ承認(2-b): 5タブ構成(ホーム/指標一覧/チャート分析/検索/設定)
-    /// への拡張。既存4タブと同じ見た目の言語(同じアイコン+ラベルのスタイル)を
-    /// 保ったまま、5個目のタブが収まるようカプセル幅・各タブ幅を機械的に再計算
-    /// した(独自の再デザインではない)。タブの並び順は`FXTab`(Navigation/
-    /// MainTabView.swift)のcase順・`tabSelection`のindexと一致させること。
+    /// 方向転換(2026-09-30): HQより実装の起点となる参考画像
+    /// (`docs/projects/fx-event-analyzer/mockups/bottom-tabbar-reference-v1.png`)
+    /// が直接共有され、「タブバーを完全再現して」という明示指示のもと作り
+    /// 直した。旧デザイン(浮遊するカプセル、選択タブの背景ピル強調)から、
+    /// 画面幅いっぱいの帯+上端の区切り線のみ、選択タブは背景を付けず
+    /// アイコン/文字の色とグリフ(アウトライン⇄塗りつぶし)だけを変える方式
+    /// に変更。参考画像のピクセル明度を実測して座標化した(測定方法は
+    /// SettingsViewのドキュメントコメントと同じ)。
+    ///
+    /// 参考画像との既知の差分: 「指標一覧」のアイコンは参考画像内のグラフィック
+    /// がSF Symbols標準セットのどれとも完全一致しないため、最も近い形状
+    /// (`chart.bar`/`chart.bar.fill`)を採用している(Loginのパスワード欄
+    /// アイコンと同じ「最も近い形状を採用する」慣例)。
     var body: some View {
-        HStack(spacing: 0) {
-            tab(0, "house.fill", "ホーム")
-            tab(1, "chart.bar.fill", "指標一覧")
-            tab(2, "chart.xyaxis.line", "分析")
-            tab(3, "magnifyingglass", "検索")
-            tab(4, "gearshape.fill", "設定")
+        VStack(spacing: 0) {
+            Rectangle().fill(V5P.line.opacity(0.5)).frame(height: 0.6)
+            HStack(spacing: 0) {
+                tab(0, filled: "house.fill", outline: "house", "ホーム")
+                tab(1, filled: "chart.bar.fill", outline: "chart.bar", "指標一覧")
+                tab(2, filled: "chart.xyaxis.line", outline: "chart.xyaxis.line", "分析")
+                tab(3, filled: "magnifyingglass", outline: "magnifyingglass", "検索")
+                tab(4, filled: "gearshape.fill", outline: "gearshape", "設定")
+            }
+            .padding(.top, 7)
+            .padding(.bottom, 17)
         }
-        .frame(width: 222, height: 40)
-        .background(Color.black.opacity(0.52), in: Capsule())
-        .overlay(Capsule().stroke(V5P.line.opacity(0.8), lineWidth: 0.6))
-        .position(x: 117, y: 463)
+        .frame(width: V5P.W, height: 49)
+        .position(x: V5P.W / 2, y: V5P.H - 49 / 2)
     }
-    @ViewBuilder func tab(_ index: Int, _ icon: String, _ title: String) -> some View {
+    @ViewBuilder func tab(_ index: Int, filled: String, outline: String, _ title: String) -> some View {
+        let isSelected = index == selected
         Button {
             selected = index
         } label: {
-            VStack(spacing: 2) {
-                Image(systemName: icon).font(.system(size: 10, weight: .semibold))
-                Text(title).font(.system(size: 6, weight: .semibold))
+            VStack(spacing: 4) {
+                Image(systemName: isSelected ? filled : outline).font(.system(size: 13, weight: .semibold))
+                Text(title).font(.system(size: 7, weight: .semibold))
             }
-            .foregroundStyle(index == selected ? V5P.cyan : .white.opacity(0.9))
-            .frame(width: 44, height: 34)
-            .background(index == selected ? V5P.blue.opacity(0.18) : .clear, in: Capsule())
+            .foregroundStyle(isSelected ? V5P.cyan : .white.opacity(0.9))
+            .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
     }
