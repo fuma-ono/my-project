@@ -53,20 +53,30 @@ struct V5Viewport<Content: View>: View {
             .scaleEffect(scale)
             .frame(width: geo.size.width, height: geo.size.height)
         }
-        .background(V5P.bg0)
+        .background(DesignTokens.Colors.backgroundPrimary)
         .ignoresSafeArea()
     }
 }
 
 struct V5Background: View {
+    /// HQ指示(2026-09-30): タブバーの新しい参考画像を確認した際、「背景は
+    /// ログイン画面やスプラッシュ画面と同じか、違うなら合わせてほしい」と
+    /// 指摘された。実際、SplashView/LoginViewは`DesignTokens.Colors.
+    /// brandBackgroundGradient`を使う一方、この`V5Background`(V5Viewportを
+    /// 使う全画面 — Home/指標一覧/分析/検索/設定/各詳細画面)は独自の
+    /// `V5P.bg0/bg1`3色グラデーションを使っており、実際に色味が異なって
+    /// いた(brandBackgroundGradient側がやや明るく青みが強い)。HQへの
+    /// 確認の結果「タブバーだけでなく全画面の背景を揃える」との回答だった
+    /// ため、この行を`brandBackgroundGradient`に差し替えて統一した(同じ
+    /// 理由で、この単色グラデーションを個別に複製していたHome/Indicators/
+    /// EventDetail/IndicatorDetail/MovementDetail/HistoricalComparison/
+    /// HistoricalEventDetail/Accountの各`loadingScaffold`も同様に差し替え
+    /// 済み)。このグラデーション以外(下記の青いradial glow、外枠の光る
+    /// ストローク)はHQから変更の指示がないため変更していない。
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [V5P.bg0, V5P.bg1, V5P.bg0],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(width: V5P.W, height: V5P.H)
+            DesignTokens.Colors.brandBackgroundGradient
+                .frame(width: V5P.W, height: V5P.H)
 
             RadialGradient(
                 colors: [V5P.blue.opacity(0.12), .clear],
@@ -188,6 +198,19 @@ struct V5BottomBar: View {
     /// がSF Symbols標準セットのどれとも完全一致しないため、最も近い形状
     /// (`chart.bar`/`chart.bar.fill`)を採用している(Loginのパスワード欄
     /// アイコンと同じ「最も近い形状を採用する」慣例)。
+    ///
+    /// 追加調整(2026-09-30、HQより2枚目の参考画像): 浮遊するカプセル型
+    /// タブバーのモックアップが共有され、「選択中アイコンが画像のように
+    /// わかりやすくなるように」との指示だったため、選択中タブのアイコン
+    /// 背後に淡いシアンの光彩(グロー)と、ラベル下の短いアンダーラインを
+    /// 追加した(`tab(_:filled:outline:_:)`内、共に`.background`/
+    /// `.overlay`で追加しており、既存の実測済みレイアウト自体は動かして
+    /// いない)。同時に「周りの青い線は要らないから消して」との明示指示
+    /// があったため、画像内にあったカプセル全体を囲む光る枠線(ストローク)
+    /// は採用していない — 帯全体の形状(画面幅いっぱい・背景なし・上端の
+    /// 区切り線のみ)も変更していない(HQはこの2枚目の画像を「選択状態の
+    /// 見せ方」の参考としてのみ使うよう述べており、カプセル形状への転換を
+    /// 明示的に指示してはいないため)。
     var body: some View {
         VStack(spacing: 0) {
             Rectangle().fill(V5P.line.opacity(0.5)).frame(height: 0.6)
@@ -213,11 +236,25 @@ struct V5BottomBar: View {
     @ViewBuilder func tab(_ index: Int, filled: String, outline: String, _ title: String) -> some View {
         let isSelected = index == selected
         VStack(spacing: 4) {
-            Image(systemName: isSelected ? filled : outline).font(.system(size: 13, weight: .semibold))
+            Image(systemName: isSelected ? filled : outline)
+                .font(.system(size: 13, weight: .semibold))
+                .background(
+                    Circle()
+                        .fill(RadialGradient(colors: [V5P.cyan.opacity(0.4), .clear], center: .center, startRadius: 1, endRadius: 13))
+                        .frame(width: 26, height: 26)
+                        .opacity(isSelected ? 1 : 0)
+                )
             Text(title).font(.system(size: 7, weight: .semibold))
         }
         .foregroundStyle(isSelected ? V5P.cyan : .white.opacity(0.9))
         .frame(maxWidth: .infinity)
+        .overlay(alignment: .bottom) {
+            Capsule()
+                .fill(V5P.cyan)
+                .frame(width: 14, height: 1.6)
+                .opacity(isSelected ? 1 : 0)
+                .offset(y: 9)
+        }
         .contentShape(Rectangle())
         .onTapGesture {
             selected = index

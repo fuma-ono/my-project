@@ -147,7 +147,10 @@ struct MovementDetailView: View {
 
     @ViewBuilder private func loadingScaffold(@ViewBuilder content: () -> some View) -> some View {
         ZStack {
-            LinearGradient(colors: [V5P.bg0, V5P.bg1, V5P.bg0], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
+            // HQ指示(2026-09-30): Login/Splashと背景を揃えるため、V5固有の
+            // グラデーションから共有トークンに差し替えた(詳細はV5Background
+            // のドキュメントコメント参照)。
+            DesignTokens.Colors.brandBackgroundGradient.ignoresSafeArea()
             content()
         }
     }

@@ -69,7 +69,8 @@ struct HomeView: View {
 
     @ViewBuilder private func loadingScaffold(@ViewBuilder content: () -> some View) -> some View {
         ZStack {
-            LinearGradient(colors: [V5P.bg0, V5P.bg1, V5P.bg0], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
+            // HQ指示(2026-09-30): Login/Splashと背景を揃える(V5Backgroundのドキュメントコメント参照)。
+            DesignTokens.Colors.brandBackgroundGradient.ignoresSafeArea()
             content()
         }
     }
