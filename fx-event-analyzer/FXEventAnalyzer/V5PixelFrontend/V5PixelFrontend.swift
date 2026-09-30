@@ -466,6 +466,18 @@ private struct V5BarsIcon: View {
 /// な二重輪郭が出る副作用があった。塗り+丸め用ストロークの合成シルエット
 /// は`.mask`側に回し、色の決定はアイコン全体を覆う1枚の`Rectangle`だけに
 /// 担わせることで、単一のグラデーション基準に統一して解消している。
+///
+/// 矢尻の形状を全面的に再測定(2026-09-30、HQ指摘「これが一緒とは思えない、
+/// 完璧に再現して」): それまでの5頂点「凧型」の輪郭は、実は誤った形状
+/// モデルに基づいていたと判明した。参考画像を1px単位の行スキャン(輝度
+/// >110の連続区間=run)で再実測したところ、矢尻は次の実際の構造だった:
+/// 上部は横長の丸みを帯びた本体(左上角≈(784,438)・右上角≈(807,437)・
+/// 右辺はx≈806〜807でy=437〜454までほぼ垂直)。y=455から本体の下端が
+/// 二股に分かれ、左側は細い軸線(ジグザグ線)へそのまま連続し、右側だけ
+/// 小さな三角形の「返し(バーブ)」として独立して伸び、(803,459)付近で
+/// 尖って消える。つまり矢尻は単純な三角形でも旧来の凧型でもなく、丸い
+/// 本体+右下の小さな突起という6頂点の輪郭だった。この実測値をそのまま
+/// 座標化した。
 private struct V5AnalysisIcon: View {
     var body: some View {
         GeometryReader { geo in
@@ -476,21 +488,22 @@ private struct V5AnalysisIcon: View {
             let valley = CGPoint(x: 0.48 * w, y: 0.68 * h)
             let shaftJoint = CGPoint(x: 0.75 * w, y: 0.26 * h)
 
-            // 矢尻: 背面(尾側)に凹みのある5頂点の「旗」型 — 参考画像の
-            // 矢尻は単純な三角形ではなく、軸(shaftJoint)に接する側に
-            // 凹みが1つある輪郭だったため、その形状通りに再現している。
-            let headTopBack = CGPoint(x: 0.77 * w, y: 0.02 * h)
-            let headTip = CGPoint(x: 1.00 * w, y: 0.04 * h)
-            let headRightBack = CGPoint(x: 0.98 * w, y: 0.34 * h)
-            let headBottomPoint = CGPoint(x: 0.64 * w, y: 0.49 * h)
-            let headNotch = CGPoint(x: 0.70 * w, y: 0.09 * h)
+            // 矢尻: 丸みを帯びた本体+右下の小さな突起(バーブ)という
+            // 6頂点の輪郭(上記ドキュメントコメント参照)。
+            let bodyTopLeft = CGPoint(x: 0.72 * w, y: 0.04 * h)
+            let bodyTopRight = CGPoint(x: 1.00 * w, y: 0.04 * h)
+            let bodyRightBottom = CGPoint(x: 0.99 * w, y: 0.34 * h)
+            let barbTip = CGPoint(x: 0.95 * w, y: 0.43 * h)
+            let barbNotch = CGPoint(x: 0.86 * w, y: 0.36 * h)
+            let bodyBottomLeft = CGPoint(x: 0.72 * w, y: 0.34 * h)
 
             let arrowhead = Path { path in
-                path.move(to: headTopBack)
-                path.addLine(to: headTip)
-                path.addLine(to: headRightBack)
-                path.addLine(to: headBottomPoint)
-                path.addLine(to: headNotch)
+                path.move(to: bodyTopLeft)
+                path.addLine(to: bodyTopRight)
+                path.addLine(to: bodyRightBottom)
+                path.addLine(to: barbTip)
+                path.addLine(to: barbNotch)
+                path.addLine(to: bodyBottomLeft)
                 path.closeSubpath()
             }
 
