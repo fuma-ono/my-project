@@ -44,6 +44,14 @@ import SwiftUI
 /// に存在しないため削除した。旧デザインで"準備中"アラートを使っていた
 /// 行は全て実際の遷移に置き換わったため、`pendingFeatureMessage`/`.alert`
 /// はこの画面ではもう使われておらず削除した(未使用コードを残さない)。
+///
+/// HQ指示(2026-09-30、SCR-016最終調整): ログアウト行のアイコンを、参考
+/// 画像通りの"trash"(ゴミ箱、アカウント削除と誤認されうる)から
+/// "rectangle.portrait.and.arrow.right"(ログアウトを表す標準的な
+/// アイコン、旧デザインで使われていたものと同じ)に変更。右端のシェブロン
+/// はもともと付けていない(ナビゲーションではなくダイアログを開くボタン
+/// のため)。行全体がタップ対象・確認ダイアログ確定時のみサインアウトする
+/// 挙動は2-bから変更なし。
 struct SettingsView: View {
     @StateObject private var viewModel: SettingsViewModel
     private let apiClient: APIClient
@@ -176,7 +184,7 @@ struct SettingsView: View {
             showLogoutConfirmation = true
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: "trash").font(.system(size: 10))
+                Image(systemName: "rectangle.portrait.and.arrow.right").font(.system(size: 10))
                 if viewModel.state == .signingOut {
                     ProgressView().tint(V5P.red)
                 } else {
