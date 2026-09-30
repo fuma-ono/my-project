@@ -71,8 +71,13 @@ struct V5Background: View {
     /// 理由で、この単色グラデーションを個別に複製していたHome/Indicators/
     /// EventDetail/IndicatorDetail/MovementDetail/HistoricalComparison/
     /// HistoricalEventDetail/Accountの各`loadingScaffold`も同様に差し替え
-    /// 済み)。このグラデーション以外(下記の青いradial glow、外枠の光る
-    /// ストローク)はHQから変更の指示がないため変更していない。
+    /// 済み)。
+    ///
+    /// HQ指示(2026-09-30、追加): 画面全体を囲んでいた光る青い枠線
+    /// (`RoundedRectangle(cornerRadius: 12).stroke(...)`)について「いらない
+    /// から消して」との指摘。以前の指示(タブバー参考画像の件)もこの画面全体の
+    /// 枠線を指していたと判明したため、ここで完全に削除した。V5Viewportを
+    /// 使う全画面(Home/指標一覧/分析/検索/設定/各詳細画面)から一括で消える。
     var body: some View {
         ZStack {
             DesignTokens.Colors.brandBackgroundGradient
@@ -85,15 +90,6 @@ struct V5Background: View {
                 endRadius: 170
             )
             .frame(width: V5P.W, height: V5P.H)
-
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(
-                    LinearGradient(colors: [V5P.blue, V5P.cyan.opacity(0.35), V5P.blue],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing),
-                    lineWidth: 1.2
-                )
-                .shadow(color: V5P.blue.opacity(0.65), radius: 5)
-                .frame(width: V5P.W - 2, height: V5P.H - 2)
         }
     }
 }
@@ -185,47 +181,58 @@ struct V5TopStatus: View {
 
 struct V5BottomBar: View {
     @Binding var selected: Int
-    /// 方向転換(2026-09-30): HQより実装の起点となる参考画像
-    /// (`docs/projects/fx-event-analyzer/mockups/bottom-tabbar-reference-v1.png`)
-    /// が直接共有され、「タブバーを完全再現して」という明示指示のもと作り
-    /// 直した。旧デザイン(浮遊するカプセル、選択タブの背景ピル強調)から、
-    /// 画面幅いっぱいの帯+上端の区切り線のみ、選択タブは背景を付けず
-    /// アイコン/文字の色とグリフ(アウトライン⇄塗りつぶし)だけを変える方式
-    /// に変更。参考画像のピクセル明度を実測して座標化した(測定方法は
-    /// SettingsViewのドキュメントコメントと同じ)。
+    /// 方向転換(2026-09-30、HQより3枚目の参考画像
+    /// `docs/projects/fx-event-analyzer/mockups/bottom-tabbar-reference-v2-capsule.png`):
+    /// 「タブのデザインがダサい、画像を完全再現して」との明示指示を受け、
+    /// 前回(v1画像ベースの画面幅いっぱいの帯)から、この画像通りの浮遊する
+    /// カプセル(スタジアム型)に作り直した。前回「青い線はいらない」との
+    /// 指示を『カプセルを囲む枠線を消せ』の意味だと解釈していたが、実際は
+    /// `V5Background`が全画面に描いていた枠線(下記参照、そちらは削除済み)
+    /// を指していたと判明したため、このカプセル自体は画像通りの淡い縁の
+    /// 光彩(rim light)を再現している — これは「消してほしい枠線」とは別物
+    /// という前提。
+    ///
+    /// 参考画像をピクセル実測(測定方法はSettingsViewのドキュメントコメント
+    /// と同じ)した結果: カプセルは画面幅いっぱいではなく左右に余白を持って
+    /// 浮遊し、上下とも完全な半円(スタジアム型、角丸半径=高さ/2)。内部の
+    /// 塗りは背景とほぼ同化する程度に薄く、輪郭のみ淡く光る。この実測画像
+    /// 自体は横長の単体モックアップ(実機のアスペクト比ではない)のため、
+    /// 余白/角丸/選択時のグロー・アンダーラインは実測値をそのまま座標化
+    /// せず、234幅のV5空間に収まる比率(既存カードの左右余白10pt=カード幅
+    /// 214に揃える)で再構成している。
     ///
     /// 参考画像との既知の差分: 「指標一覧」のアイコンは参考画像内のグラフィック
     /// がSF Symbols標準セットのどれとも完全一致しないため、最も近い形状
     /// (`chart.bar`/`chart.bar.fill`)を採用している(Loginのパスワード欄
-    /// アイコンと同じ「最も近い形状を採用する」慣例)。
-    ///
-    /// 追加調整(2026-09-30、HQより2枚目の参考画像): 浮遊するカプセル型
-    /// タブバーのモックアップが共有され、「選択中アイコンが画像のように
-    /// わかりやすくなるように」との指示だったため、選択中タブのアイコン
-    /// 背後に淡いシアンの光彩(グロー)と、ラベル下の短いアンダーラインを
-    /// 追加した(`tab(_:filled:outline:_:)`内、共に`.background`/
-    /// `.overlay`で追加しており、既存の実測済みレイアウト自体は動かして
-    /// いない)。同時に「周りの青い線は要らないから消して」との明示指示
-    /// があったため、画像内にあったカプセル全体を囲む光る枠線(ストローク)
-    /// は採用していない — 帯全体の形状(画面幅いっぱい・背景なし・上端の
-    /// 区切り線のみ)も変更していない(HQはこの2枚目の画像を「選択状態の
-    /// 見せ方」の参考としてのみ使うよう述べており、カプセル形状への転換を
-    /// 明示的に指示してはいないため)。
+    /// アイコンと同じ「最も近い形状を採用する」慣例)。選択中タブのアイコン
+    /// 背後の淡いシアンの光彩とラベル下の短いアンダーラインは前回追加した
+    /// ものをそのまま踏襲。
+    private static let barHeight: CGFloat = 44
+    private static let barWidth: CGFloat = 214
+    private static let bottomMargin: CGFloat = 8
+
     var body: some View {
-        VStack(spacing: 0) {
-            Rectangle().fill(V5P.line.opacity(0.5)).frame(height: 0.6)
-            HStack(spacing: 0) {
-                tab(0, filled: "house.fill", outline: "house", "ホーム")
-                tab(1, filled: "chart.bar.fill", outline: "chart.bar", "指標一覧")
-                tab(2, filled: "chart.xyaxis.line", outline: "chart.xyaxis.line", "分析")
-                tab(3, filled: "magnifyingglass", outline: "magnifyingglass", "検索")
-                tab(4, filled: "gearshape.fill", outline: "gearshape", "設定")
-            }
-            .padding(.top, 7)
-            .padding(.bottom, 17)
+        HStack(spacing: 0) {
+            tab(0, filled: "house.fill", outline: "house", "ホーム")
+            tab(1, filled: "chart.bar.fill", outline: "chart.bar", "指標一覧")
+            tab(2, filled: "chart.xyaxis.line", outline: "chart.xyaxis.line", "分析")
+            tab(3, filled: "magnifyingglass", outline: "magnifyingglass", "検索")
+            tab(4, filled: "gearshape.fill", outline: "gearshape", "設定")
         }
-        .frame(width: V5P.W, height: 49)
-        .position(x: V5P.W / 2, y: V5P.H - 49 / 2)
+        .frame(width: Self.barWidth, height: Self.barHeight)
+        .background(
+            RoundedRectangle(cornerRadius: Self.barHeight / 2)
+                .fill(V5P.panel.opacity(0.35))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Self.barHeight / 2)
+                .stroke(
+                    LinearGradient(colors: [V5P.blue.opacity(0.55), V5P.cyan.opacity(0.25), V5P.blue.opacity(0.55)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                    lineWidth: 1
+                )
+        )
+        .position(x: V5P.W / 2, y: V5P.H - Self.bottomMargin - Self.barHeight / 2)
     }
     /// `Button`ではなく`.onTapGesture`を使っている理由: 実機相当のCIキャプチャ
     /// で確認したところ、`Button` + `.buttonStyle(.plain)`でも選択中タブの
@@ -247,13 +254,13 @@ struct V5BottomBar: View {
             Text(title).font(.system(size: 7, weight: .semibold))
         }
         .foregroundStyle(isSelected ? V5P.cyan : .white.opacity(0.9))
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .bottom) {
             Capsule()
                 .fill(V5P.cyan)
                 .frame(width: 14, height: 1.6)
                 .opacity(isSelected ? 1 : 0)
-                .offset(y: 9)
+                .padding(.bottom, 6)
         }
         .contentShape(Rectangle())
         .onTapGesture {
