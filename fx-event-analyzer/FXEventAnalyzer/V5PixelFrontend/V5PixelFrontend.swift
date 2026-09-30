@@ -468,73 +468,79 @@ private struct V5BarsIcon: View {
 /// 担わせることで、単一のグラデーション基準に統一して解消している。
 ///
 /// 矢尻の形状を全面的に再測定(2026-09-30、HQ指摘「これが一緒とは思えない、
-/// 完璧に再現して」): それまでの5頂点「凧型」の輪郭は、実は誤った形状
-/// モデルに基づいていたと判明した。参考画像を1px単位の行スキャン(輝度
-/// >110の連続区間=run)で再実測したところ、矢尻は次の実際の構造だった:
-/// 上部は横長の丸みを帯びた本体(左上角≈(784,438)・右上角≈(807,437)・
-/// 右辺はx≈806〜807でy=437〜454までほぼ垂直)。y=455から本体の下端が
-/// 二股に分かれ、左側は細い軸線(ジグザグ線)へそのまま連続し、右側だけ
-/// 小さな三角形の「返し(バーブ)」として独立して伸び、(803,459)付近で
-/// 尖って消える。つまり矢尻は単純な三角形でも旧来の凧型でもなく、丸い
-/// 本体+右下の小さな突起という6頂点の輪郭だった。この実測値をそのまま
-/// 座標化した。
+/// 完璧に再現して」): それまでの5頂点「凧型」の輪郭は誤った形状モデルに
+/// 基づいていたと判明し、6頂点(丸い本体+右下のバーブ)に差し替えたが、
+/// これも次の指摘で置き換えられた。
+///
+/// 決定版(2026-09-30、HQから単体アイコンの高解像度参考画像が提供された
+/// 「分析アイコンはこれです、完全再現してください」): これまでずっと
+/// タブバー全体のモックアップ画像の小さく不鮮明な一部分(周囲の光彩や
+/// カプセルのリムと重なり合い、輝度スキャンにノイズが多かった)から
+/// 矢尻の形状を推測していたが、この単体高解像度画像で1px単位の行/列
+/// スキャンをやり直した結果、これまでの形状モデルがすべて誤りだったと
+/// 判明した。実際の構造(1254×1254pxの画像、アイコン全体のbboxは
+/// およそx:409-864・y:433-745、幅455×高さ312・アスペクト比≈1.46:1):
+/// - ジグザグ線: 尾(タブ)→山(peak)→谷(valley)→矢尻、の4点。各関節
+///   (尾・山・谷)には線幅より一回り大きい丸い「ビーズ」が明確に存在する
+///   (実測: 線幅≈42px、ビーズ直径≈53〜60px、高さ312pxに対する比率は
+///   線幅≈0.135・ビーズ直径≈0.19)。
+/// - 矢尻: 単純な三角形ではなく、背面(軸に近い側)に1つの凹みがある
+///   「旗」型の4頂点(上端≈(847,433)・先端≈(864,447)・下端≈(835,573)・
+///   凹み≈(728,473))。以前の「丸い本体+バーブ」モデルは実在せず、
+///   単に不鮮明な画像のノイズを誤読していたと分かった。
+/// 塗り(ジグザグ線・3つのビーズ・矢尻の塗りと角丸めストローク)は
+/// すべて1つの`ZStack`にまとめてシルエット化し、アイコン全体を覆う
+/// 1枚の`Rectangle`の`.mask`に回すことで、単一のグラデーション基準に
+/// 統一している(個別に`.foregroundStyle(.foreground)`を解決させると
+/// 各図形が自分のジオメトリを基準にグラデーションを別々に解決し、
+/// 色や境界がずれる副作用が過去に判明したため)。
 private struct V5AnalysisIcon: View {
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
             let h = geo.size.height
-            let tail = CGPoint(x: 0.06 * w, y: 1.00 * h)
-            let peak = CGPoint(x: 0.30 * w, y: 0.30 * h)
-            let valley = CGPoint(x: 0.48 * w, y: 0.68 * h)
-            let shaftJoint = CGPoint(x: 0.75 * w, y: 0.26 * h)
+            let tail = CGPoint(x: 0.06 * w, y: 0.86 * h)
+            let peak = CGPoint(x: 0.38 * w, y: 0.38 * h)
+            let valley = CGPoint(x: 0.54 * w, y: 0.56 * h)
+            let shaftJoint = CGPoint(x: 0.72 * w, y: 0.20 * h)
 
-            // 矢尻: 丸みを帯びた本体+右下の小さな突起(バーブ)という
-            // 6頂点の輪郭(上記ドキュメントコメント参照)。
-            let bodyTopLeft = CGPoint(x: 0.72 * w, y: 0.04 * h)
-            let bodyTopRight = CGPoint(x: 1.00 * w, y: 0.04 * h)
-            let bodyRightBottom = CGPoint(x: 0.99 * w, y: 0.34 * h)
-            let barbTip = CGPoint(x: 0.95 * w, y: 0.43 * h)
-            let barbNotch = CGPoint(x: 0.86 * w, y: 0.36 * h)
-            let bodyBottomLeft = CGPoint(x: 0.72 * w, y: 0.34 * h)
+            let headTop = CGPoint(x: 0.96 * w, y: 0.00 * h)
+            let headTip = CGPoint(x: 1.00 * w, y: 0.04 * h)
+            let headBottom = CGPoint(x: 0.94 * w, y: 0.45 * h)
+            let headNotch = CGPoint(x: 0.70 * w, y: 0.13 * h)
 
-            let arrowhead = Path { path in
-                path.move(to: bodyTopLeft)
-                path.addLine(to: bodyTopRight)
-                path.addLine(to: bodyRightBottom)
-                path.addLine(to: barbTip)
-                path.addLine(to: barbNotch)
-                path.addLine(to: bodyBottomLeft)
-                path.closeSubpath()
-            }
+            let lineWidth = h * 0.135
+            let ballDiameter = h * 0.19
 
-            Path { path in
+            let shaftPath = Path { path in
                 path.move(to: tail)
                 path.addLine(to: peak)
                 path.addLine(to: valley)
                 path.addLine(to: shaftJoint)
             }
-            .stroke(.foreground, style: StrokeStyle(lineWidth: h * 0.25, lineCap: .round, lineJoin: .round))
 
-            // 角を丸めた塗り: `arrowhead.fill(.foreground)`と
-            // `arrowhead.stroke(.foreground, ...)`を単純に重ねると、
-            // fillとstrokeそれぞれが自分自身のジオメトリ(stroke側は
-            // 線幅の分だけ外側に広がった輪郭)を基準にグラデーションを
-            // 別々に解決してしまい、境界に不自然な縁取り(額縁のような
-            // 二重輪郭)が出てしまうとCIキャプチャで判明した。そのため
-            // 色の決定はアイコン全体を覆う1枚の`Rectangle`だけに担わせ、
-            // 塗り+丸め用ストロークの合成シルエットは`.mask`の側(色を
-            // 問わずアルファだけを使う)に回すことで、単一のグラデーション
-            // 基準に統一している。
+            let arrowhead = Path { path in
+                path.move(to: headTop)
+                path.addLine(to: headTip)
+                path.addLine(to: headBottom)
+                path.addLine(to: headNotch)
+                path.closeSubpath()
+            }
+
             Rectangle()
                 .fill(.foreground)
                 .mask(
                     ZStack {
+                        shaftPath.stroke(style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
+                        Circle().frame(width: ballDiameter, height: ballDiameter).position(tail)
+                        Circle().frame(width: ballDiameter, height: ballDiameter).position(peak)
+                        Circle().frame(width: ballDiameter, height: ballDiameter).position(valley)
                         arrowhead.fill()
-                        arrowhead.stroke(style: StrokeStyle(lineWidth: h * 0.09, lineJoin: .round))
+                        arrowhead.stroke(style: StrokeStyle(lineWidth: h * 0.07, lineJoin: .round))
                     }
                 )
         }
-        .frame(width: 20, height: 13)
+        .frame(width: 19, height: 13)
     }
 }
 
