@@ -230,22 +230,48 @@ struct V5BottomBar: View {
     ///   替えた — 既知の差分として、このSF Symbolには軸の短い目盛り線が
     ///   付随するが(参考画像のジグザグ矢印単体には無い)、13pt表示では
     ///   ほぼ視認できない程度のため許容した。
+    ///
+    /// 重大な訂正(2026-09-30、HQ指摘「ホーム/設定/分析のアイコンが全く違う、
+    /// 勝手に解釈しないで。○は参考画像にあるのか確認して。色も全然違う」):
+    /// 自分のCIキャプチャと参考画像を実際に並べて比較して初めて気づいた、
+    /// 3つの実際の誤り。
+    /// 1. アイコンの塗り: 「未選択時はアウトライン、選択時は塗りつぶし」
+    ///    という切り替えは旧v1参考画像(画面幅いっぱいの帯)の仕様であり、
+    ///    このv2カプセル参考画像には一切根拠がない — 参考画像のホーム/
+    ///    指標一覧/検索/設定は(非選択の状態で)すべて塗りつぶしの太い
+    ///    シルエットで描かれている。実際、CIキャプチャで確認すると非選択の
+    ///    `house`(アウトライン版)は屋根と胴体が視覚的に分離した細い線画に
+    ///    なっており、参考画像の「屋根と胴体が一体化した塗りつぶしの家」
+    ///    とは似ても似つかなかった。`house.fill`/`gearshape.fill`を常時
+    ///    使うよう修正した(選択状態による切り替えは色/グラデーションのみ)。
+    /// 2. 選択時の丸いグロー: 参考画像を水平方向にピクセル実測すると、
+    ///    アイコン中心から左右になだらかに明度が上下する連続的なグラデー
+    ///    ションであり、輪郭線(縁)は存在しない。しかし実装では
+    ///    `Circle().stroke(...)`で明確な円のリング線を追加していたため、
+    ///    CIキャプチャでは参考画像にはっきり見えない硬い円の輪郭線が
+    ///    目立っていた。このstrokeを削除し、境界の無い柔らかい
+    ///    RadialGradientのみにした。
+    /// 3. 色: アイコン/ラベルのグラデーション下端に、検証済みの
+    ///    `V5P.blue`(既存アプリの濃いアクセント青、RGB≈(5,140,255))を
+    ///    流用していたが、参考画像を複数アイコンで実測した下端の実際の
+    ///    色はもっと明るく彩度の低い青(未選択≈RGB(115,164,220)、選択中
+    ///    ≈RGB(0,79,162))だった。実測値に置き換えた。
     private static let barHeight: CGFloat = 44
     private static let barWidth: CGFloat = 214
     private static let bottomMargin: CGFloat = 8
     private static let iconGradient = LinearGradient(
-        colors: [Color(red: 0.88, green: 0.95, blue: 1.0), V5P.blue],
+        colors: [Color(red: 0.90, green: 0.97, blue: 1.0), Color(red: 0.45, green: 0.64, blue: 0.86)],
         startPoint: .top, endPoint: .bottom
     )
     private static let selectedIconGradient = LinearGradient(
-        colors: [V5P.cyan, V5P.blue],
+        colors: [V5P.cyan, Color(red: 0.0, green: 0.31, blue: 0.64)],
         startPoint: .top, endPoint: .bottom
     )
 
     var body: some View {
         HStack(spacing: 0) {
-            tab(0, "ホーム") { isSelected in
-                Image(systemName: isSelected ? "house.fill" : "house").font(.system(size: 13, weight: .semibold))
+            tab(0, "ホーム") { _ in
+                Image(systemName: "house.fill").font(.system(size: 13, weight: .semibold))
             }
             tab(1, "指標一覧") { _ in
                 V5BarsIcon()
@@ -256,8 +282,8 @@ struct V5BottomBar: View {
             tab(3, "検索") { _ in
                 Image(systemName: "magnifyingglass").font(.system(size: 13, weight: .semibold))
             }
-            tab(4, "設定") { isSelected in
-                Image(systemName: isSelected ? "gearshape.fill" : "gearshape").font(.system(size: 13, weight: .semibold))
+            tab(4, "設定") { _ in
+                Image(systemName: "gearshape.fill").font(.system(size: 13, weight: .semibold))
             }
         }
         .frame(width: Self.barWidth, height: Self.barHeight)
@@ -292,10 +318,9 @@ struct V5BottomBar: View {
                 .shadow(color: .black.opacity(0.35), radius: 1, y: 1)
                 .background(
                     Circle()
-                        .fill(RadialGradient(colors: [V5P.cyan.opacity(0.45), V5P.cyan.opacity(0.1), .clear],
-                                              center: .center, startRadius: 1, endRadius: 18))
-                        .overlay(Circle().stroke(V5P.cyan.opacity(0.35), lineWidth: 0.6))
-                        .frame(width: 34, height: 34)
+                        .fill(RadialGradient(colors: [V5P.cyan.opacity(0.4), V5P.cyan.opacity(0.15), .clear],
+                                              center: .center, startRadius: 1, endRadius: 20))
+                        .frame(width: 40, height: 40)
                         .opacity(isSelected ? 1 : 0)
                 )
             Text(title).font(.system(size: 7, weight: .semibold)).foregroundStyle(gradient)
