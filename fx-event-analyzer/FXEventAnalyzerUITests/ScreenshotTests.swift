@@ -108,6 +108,15 @@ final class ScreenshotTests: XCTestCase {
         tap(containing: "設定")
         XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load")
         capture("09-Settings")
+
+        // SCR-011 Analysis tab (bonus — added 2026-09-30 so the bottom tab
+        // bar's *selected*-state rendering for the "分析" tab has a real CI
+        // capture to verify against; no other capture in this test ever
+        // selects it, and HQ's feedback rounds on this tab specifically
+        // needed that state visible).
+        tap(containing: "分析")
+        XCTAssertTrue(waitForAnyElement(containing: "チャート分析", timeout: 15), "Analysis tab did not load")
+        capture("10-Analysis")
     }
 
     // MARK: - Helpers

@@ -256,6 +256,21 @@ struct V5BottomBar: View {
     ///    流用していたが、参考画像を複数アイコンで実測した下端の実際の
     ///    色はもっと明るく彩度の低い青(未選択≈RGB(115,164,220)、選択中
     ///    ≈RGB(0,79,162))だった。実測値に置き換えた。
+    ///
+    /// 4回目の訂正(2026-09-30、HQ指摘「分析のアイコンが全く違う、選択中の
+    /// 色が違う、○がもう少し大きい」): 自分のCIキャプチャの「分析」アイコン
+    /// を参考画像と並べて直接比較し、初めて気づいた。`chart.line.uptrend.
+    /// xyaxis`はL字型の座標軸(縦線+横線)込みのグリフであり、以前「13ptでは
+    /// ほぼ視認できない程度の差分」と判断していたのは誤りで、実際には軸線が
+    /// はっきり見える大きさで描画され、参考画像の「軸なし、ジグザグ矢印
+    /// 単体」とは輪郭が全く別物だった。参考画像をピクセル単位で線の中心線を
+    /// 追跡し(谷→山→谷→矢尻という経路)、`V5AnalysisIcon`として軸なしの
+    /// ジグザグ+矢尻のみを自前描画するよう差し替えた。あわせて、選択中の
+    /// 色をアンダーラインバーではなく「分析」アイコン自体から直接実測し
+    /// 直した結果、下端はRGB(0,79,162)ではなくRGB(0,123,241)寄りだった
+    /// ため`selectedIconGradient`を訂正。グロー円も参考画像を水平実測
+    /// (明度が完全に背景に戻るまでの幅)した結果、カプセル高さに対する比率
+    /// が測定し直すとやや大きめだったため、直径を40→46に拡大した。
     private static let barHeight: CGFloat = 44
     private static let barWidth: CGFloat = 214
     private static let bottomMargin: CGFloat = 8
@@ -264,7 +279,7 @@ struct V5BottomBar: View {
         startPoint: .top, endPoint: .bottom
     )
     private static let selectedIconGradient = LinearGradient(
-        colors: [V5P.cyan, Color(red: 0.0, green: 0.31, blue: 0.64)],
+        colors: [V5P.cyan, Color(red: 0.0, green: 0.48, blue: 0.945)],
         startPoint: .top, endPoint: .bottom
     )
 
@@ -277,7 +292,7 @@ struct V5BottomBar: View {
                 V5BarsIcon()
             }
             tab(2, "分析") { _ in
-                Image(systemName: "chart.line.uptrend.xyaxis").font(.system(size: 13, weight: .semibold))
+                V5AnalysisIcon()
             }
             tab(3, "検索") { _ in
                 Image(systemName: "magnifyingglass").font(.system(size: 13, weight: .semibold))
@@ -318,9 +333,9 @@ struct V5BottomBar: View {
                 .shadow(color: .black.opacity(0.35), radius: 1, y: 1)
                 .background(
                     Circle()
-                        .fill(RadialGradient(colors: [V5P.cyan.opacity(0.4), V5P.cyan.opacity(0.15), .clear],
-                                              center: .center, startRadius: 1, endRadius: 20))
-                        .frame(width: 40, height: 40)
+                        .fill(RadialGradient(colors: [V5P.cyan.opacity(0.42), V5P.cyan.opacity(0.16), .clear],
+                                              center: .center, startRadius: 1, endRadius: 23))
+                        .frame(width: 46, height: 46)
                         .opacity(isSelected ? 1 : 0)
                 )
             Text(title).font(.system(size: 7, weight: .semibold)).foregroundStyle(gradient)
@@ -362,6 +377,47 @@ private struct V5BarsIcon: View {
         RoundedRectangle(cornerRadius: 0.8)
             .fill(.foreground)
             .frame(width: 3, height: 13 * heightFraction)
+    }
+}
+
+/// 「分析」タブのアイコン。参考画像(`bottom-tabbar-reference-v2-capsule.png`)
+/// には座標軸が一切無く、山谷のあるジグザグ線の先に矢尻が付いた形状のみが
+/// 描かれている。SF Symbolsの`chart.line.uptrend.xyaxis`はL字型の座標軸
+/// (縦線+横線)込みのグリフのため使わず、線の中心線をピクセル単位で追跡した
+/// 経路(谷スタート→山→谷→矢尻手前)をそのまま座標化した自前描画にしている。
+/// 矢尻は塗りつぶしの三角形(参考画像でも実測濃度が線本体より高い=塗り
+/// つぶしだったため)。色は`.foregroundStyle(.foreground)`で呼び出し側
+/// (`tab`)が設定したグラデーションをそのまま継承する。
+private struct V5AnalysisIcon: View {
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            let p0 = CGPoint(x: 0.00 * w, y: 0.91 * h)
+            let p1 = CGPoint(x: 0.37 * w, y: 0.45 * h)
+            let p2 = CGPoint(x: 0.56 * w, y: 0.76 * h)
+            let p3 = CGPoint(x: 0.78 * w, y: 0.38 * h)
+            let tip = CGPoint(x: 1.00 * w, y: 0.02 * h)
+            let backA = CGPoint(x: 0.78 * w, y: 0.08 * h)
+            let backB = CGPoint(x: 0.97 * w, y: 0.33 * h)
+
+            Path { path in
+                path.move(to: p0)
+                path.addLine(to: p1)
+                path.addLine(to: p2)
+                path.addLine(to: p3)
+            }
+            .stroke(.foreground, style: StrokeStyle(lineWidth: h * 0.15, lineCap: .round, lineJoin: .round))
+
+            Path { path in
+                path.move(to: backA)
+                path.addLine(to: tip)
+                path.addLine(to: backB)
+                path.closeSubpath()
+            }
+            .fill(.foreground)
+        }
+        .frame(width: 15, height: 10)
     }
 }
 
