@@ -459,9 +459,13 @@ private struct V5BarsIcon: View {
 /// CIキャプチャを参考画像とさらに拡大して見比べたところ、輪郭の座標
 /// 自体はおおむね合っているが、矢尻が直線の`addLine`だけで結んだ鋭い
 /// 多角形(宝石のような硬い角)になっており、参考画像の「角が丸い、
-/// なめらかな矢印」とは質感が異なっていたと判明。塗りつぶしPathと全く
-/// 同じ頂点を`lineJoin: .round`で重ねてストロークすることで頂点だけを
-/// 丸めている(ジグザグ線の丸い線端・関節と同じ丸みの質感に揃える狙い)。
+/// なめらかな矢印」とは質感が異なっていたと判明。最初は塗りつぶしPathと
+/// 全く同じ頂点を`lineJoin: .round`で重ねてストロークする方法を試したが、
+/// CIキャプチャで確認すると、fillとstrokeがそれぞれ自分のジオメトリを
+/// 基準にグラデーションを別々に解決してしまい、境界に額縁のような不自然
+/// な二重輪郭が出る副作用があった。塗り+丸め用ストロークの合成シルエット
+/// は`.mask`側に回し、色の決定はアイコン全体を覆う1枚の`Rectangle`だけに
+/// 担わせることで、単一のグラデーション基準に統一して解消している。
 private struct V5AnalysisIcon: View {
     var body: some View {
         GeometryReader { geo in
@@ -498,8 +502,24 @@ private struct V5AnalysisIcon: View {
             }
             .stroke(.foreground, style: StrokeStyle(lineWidth: h * 0.25, lineCap: .round, lineJoin: .round))
 
-            arrowhead.fill(.foreground)
-            arrowhead.stroke(.foreground, style: StrokeStyle(lineWidth: h * 0.09, lineJoin: .round))
+            // 角を丸めた塗り: `arrowhead.fill(.foreground)`と
+            // `arrowhead.stroke(.foreground, ...)`を単純に重ねると、
+            // fillとstrokeそれぞれが自分自身のジオメトリ(stroke側は
+            // 線幅の分だけ外側に広がった輪郭)を基準にグラデーションを
+            // 別々に解決してしまい、境界に不自然な縁取り(額縁のような
+            // 二重輪郭)が出てしまうとCIキャプチャで判明した。そのため
+            // 色の決定はアイコン全体を覆う1枚の`Rectangle`だけに担わせ、
+            // 塗り+丸め用ストロークの合成シルエットは`.mask`の側(色を
+            // 問わずアルファだけを使う)に回すことで、単一のグラデーション
+            // 基準に統一している。
+            Rectangle()
+                .fill(.foreground)
+                .mask(
+                    ZStack {
+                        arrowhead.fill()
+                        arrowhead.stroke(style: StrokeStyle(lineWidth: h * 0.09, lineJoin: .round))
+                    }
+                )
         }
         .frame(width: 20, height: 13)
     }
