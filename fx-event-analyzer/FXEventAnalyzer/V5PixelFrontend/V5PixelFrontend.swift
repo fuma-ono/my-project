@@ -204,19 +204,25 @@ struct V5BottomBar: View {
         .frame(width: V5P.W, height: 49)
         .position(x: V5P.W / 2, y: V5P.H - 49 / 2)
     }
+    /// `Button`ではなく`.onTapGesture`を使っている理由: 実機相当のCIキャプチャ
+    /// で確認したところ、`Button` + `.buttonStyle(.plain)`でも選択中タブの
+    /// 背後にシステム既定のハイライト用カプセル(参考画像にはない)が写り込んで
+    /// いた。ボタンとしての既定の見た目を一切持たない`.onTapGesture`に置き換
+    /// えることで、参考画像通り背景なし・アイコンと文字の色/グリフのみで選択
+    /// 状態を表す見た目にした。
     @ViewBuilder func tab(_ index: Int, filled: String, outline: String, _ title: String) -> some View {
         let isSelected = index == selected
-        Button {
-            selected = index
-        } label: {
-            VStack(spacing: 4) {
-                Image(systemName: isSelected ? filled : outline).font(.system(size: 13, weight: .semibold))
-                Text(title).font(.system(size: 7, weight: .semibold))
-            }
-            .foregroundStyle(isSelected ? V5P.cyan : .white.opacity(0.9))
-            .frame(maxWidth: .infinity)
+        VStack(spacing: 4) {
+            Image(systemName: isSelected ? filled : outline).font(.system(size: 13, weight: .semibold))
+            Text(title).font(.system(size: 7, weight: .semibold))
         }
-        .buttonStyle(.plain)
+        .foregroundStyle(isSelected ? V5P.cyan : .white.opacity(0.9))
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selected = index
+        }
+        .accessibilityAddTraits(.isButton)
     }
 }
 
