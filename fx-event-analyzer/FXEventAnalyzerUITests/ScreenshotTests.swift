@@ -100,6 +100,14 @@ final class ScreenshotTests: XCTestCase {
         tap(containing: "米国CPI(消費者物価指数)")
         XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicator Detail did not load")
         capture("08-IndicatorDetail")
+
+        // SCR-016 Settings (bonus, not in HQ's original required 7 — added
+        // 2026-09-30 so HQ's reference-image-driven redesign of this screen
+        // has a real CI capture to verify against, the same "never trust
+        // build-succeeds alone" rule Splash/Login screenshots follow).
+        tap(containing: "設定")
+        XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load")
+        capture("09-Settings")
     }
 
     // MARK: - Helpers
