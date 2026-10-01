@@ -454,8 +454,10 @@ struct V5BottomBar: View {
         }
         .background(
             Circle()
-                .fill(RadialGradient(colors: [V5P.cyan.opacity(0.42), V5P.cyan.opacity(0.16), .clear],
-                                      center: .center, startRadius: 1, endRadius: 22))
+                .fill(LinearGradient(colors: [V5P.cyan.opacity(0.22), V5P.cyan.opacity(0.10)],
+                                      startPoint: .top, endPoint: .bottom))
+                .overlay(Circle().stroke(V5P.cyan.opacity(0.65), lineWidth: 1))
+                .shadow(color: V5P.cyan.opacity(0.55), radius: 5)
                 .frame(width: 44, height: 44)
                 .opacity(isSelected ? 1 : 0)
         )
