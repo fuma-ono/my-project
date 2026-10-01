@@ -101,9 +101,13 @@ struct HomeView: View {
         let logoHeight = V5P.ptToV5(24)
         let logoWidth = logoHeight * (805.0 / 480.0)
         // ★(star.fill, 12pt)と視覚的な大きさを揃えるための実測値。1巡目は
-        // 同じ12ptから出発し、CI実機キャプチャで実測して調整する。
-        let notifIconSize = V5P.ptToV5(12)
-        let accountIconSize = V5P.ptToV5(12)
+        // 同じ12ptから出発したが、CI実機キャプチャで実測した結果
+        // star.fillは12ptで約56px四方(bellは12ptで約37px、personは約34px)
+        // と、同じpt数でも外形サイズがSF Symbolごとに大きく異なっていた。
+        // star.fillの実測高さを基準に逆算した値(bell: 12×56/37≈18.2pt、
+        // person: 12×56/34≈19.8pt)に調整。
+        let notifIconSize = V5P.ptToV5(18.2)
+        let accountIconSize = V5P.ptToV5(19.8)
         return HStack(spacing: 0) {
             BrandMark(width: logoWidth)
             (
