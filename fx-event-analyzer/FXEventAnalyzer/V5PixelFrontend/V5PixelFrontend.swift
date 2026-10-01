@@ -369,6 +369,13 @@ struct V5BottomBar: View {
     ///    と食い違っていたためと判明。`icon(isSelected)`呼び出し直後に
     ///    `.frame(height:13)`を一律で追加し、5つのアイコンすべてのレイアウト上の
     ///    高さを強制的に統一することで解消した。
+    ///
+    /// HQ「V5 Bottom Bar 最終仕様」(2026-10-01、文字サイズ・位置の質問への回答を
+    /// 受けての確定仕様)に合わせ、アイコン高さ13→14pt(SF Symbolsも
+    /// フォントサイズ13→14に追従)、ラベル7→8pt・行高さを自動から10pt固定に
+    /// 変更。コンテンツ高さが従来の約30.2ptから約32.2ptに伸びるため、絶対条件
+    /// 「カプセル内寸40ptを超えないこと」を満たすか`padding.top`(初期値9pt)を
+    /// CI実機キャプチャで実測して確認する必要がある。
     private static let barHeight: CGFloat = 40
     private static let iconsWidth: CGFloat = 214
     private static let barWidth: CGFloat = 224
@@ -392,7 +399,7 @@ struct V5BottomBar: View {
     var body: some View {
         HStack(spacing: 0) {
             tab(0, "ホーム") { _ in
-                Image(systemName: "house.fill").font(.system(size: 13, weight: .semibold))
+                Image(systemName: "house.fill").font(.system(size: 14, weight: .semibold))
             }
             tab(1, "指標一覧") { _ in
                 V5BarsIcon()
@@ -401,7 +408,7 @@ struct V5BottomBar: View {
                 V5AnalysisIcon(isSelected: isSelected)
             }
             tab(3, "検索") { _ in
-                Image(systemName: "magnifyingglass").font(.system(size: 13, weight: .semibold))
+                Image(systemName: "magnifyingglass").font(.system(size: 14, weight: .semibold))
             }
             tab(4, "設定") { _ in
                 V5GearIcon()
@@ -449,10 +456,11 @@ struct V5BottomBar: View {
         // タブセル全体を背景として扱い、直径を`barHeight`に固定した。
         VStack(spacing: 3) {
             icon(isSelected)
-                .frame(height: 13)
+                .frame(height: 14)
                 .foregroundStyle(gradient)
                 .shadow(color: .black.opacity(0.35), radius: 1, y: 1)
-            Text(title).font(.system(size: 7, weight: .semibold)).foregroundStyle(gradient)
+            Text(title).font(.system(size: 8, weight: .semibold)).foregroundStyle(gradient)
+                .frame(height: 10)
             Capsule()
                 .fill(LinearGradient(colors: [V5P.cyan, V5P.blue], startPoint: .top, endPoint: .bottom))
                 .frame(width: 16, height: 2.2)
