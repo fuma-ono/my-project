@@ -75,13 +75,14 @@ struct HomeView: View {
         }
     }
 
-    /// HQ「ヘッダーのタイトルサイズ統一」最終仕様(2026-10-01)。Homeは他の
-    /// メインタブと違い独自レイアウト(ロゴ+タイトル+通知/アカウントアイコン)
-    /// を持つため`V5Header`は使わず、ここで直接組んでいる。既存アイコンの
-    /// 種類(ロゴ代わりの`chart.line.uptrend.xyaxis`、通知の`bell`)は変更
-    /// していない。アカウントアイコン(`person`、Settingsの「アカウント情報」
-    /// 行と同じSF Symbol)は仕様が明示的に要求しているため新規追加したが、
-    /// 今回はサイズ・レイアウトのみが指示範囲のため、タップ時の画面遷移は
+    /// HQ「ヘッダーのタイトルサイズ統一」最終仕様(2026-10-01、同日中に再調整:
+    /// CI実機キャプチャで16ptが視覚的に弱いと判断され18ptに引き上げ)。Homeは
+    /// 他のメインタブと違い独自レイアウト(ロゴ+タイトル+通知/アカウント
+    /// アイコン)を持つため`V5Header`は使わず、ここで直接組んでいる。既存
+    /// アイコンの種類(ロゴ代わりの`chart.line.uptrend.xyaxis`、通知の`bell`)
+    /// は変更していない。アカウントアイコン(`person`、Settingsの「アカウント
+    /// 情報」行と同じSF Symbol)は仕様が明示的に要求しているため新規追加した
+    /// が、今回はサイズ・レイアウトのみが指示範囲のため、タップ時の画面遷移は
     /// 配線していない(ベルアイコンも既存から非機能のまま)。
     private var homeHeader: some View {
         let logoTitleGap = V5P.ptToV5(6)
@@ -89,10 +90,10 @@ struct HomeView: View {
         let margin = V5P.ptToV5(16)
         return HStack(spacing: 0) {
             Image(systemName: "chart.line.uptrend.xyaxis")
-                .font(.system(size: V5P.ptToV5(16)))
+                .font(.system(size: V5P.ptToV5(18)))
                 .foregroundStyle(V5P.cyan)
             Text("FX Event Analyzer")
-                .font(.system(size: V5P.ptToV5(16), weight: .semibold))
+                .font(.system(size: V5P.ptToV5(18), weight: .semibold))
                 .padding(.leading, logoTitleGap)
             Spacer()
             Image(systemName: "bell").font(.system(size: V5P.ptToV5(15)))
