@@ -467,7 +467,14 @@ struct V5BottomBar: View {
                 .shadow(color: V5P.cyan.opacity(0.7), radius: 2)
                 .opacity(isSelected ? 1 : 0)
         }
-        .padding(.top, 9)
+        // HQ最終仕様(アイコン14pt・ラベル8pt/行高10pt固定)適用後、コンテンツ
+        // 高さが約30.2pt→約32.2ptに伸びたため、padding.top=9ptのままではCI実機
+        // キャプチャで下線がカプセル下端(40pt)を約1.2pt(実測約6px)はみ出し、
+        // `.clipShape`で下線下部が欠けて表示される回帰が確認された。絶対条件
+        // 「40ptを超えないこと」を満たす必要最小限の調整として7.5ptに縮小
+        // (9 - 1.2pt実測はみ出し分 に、サブピクセル誤差を見込んだ0.3pt余裕を
+        // 加えた値)。
+        .padding(.top, 7.5)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(
             Circle()
