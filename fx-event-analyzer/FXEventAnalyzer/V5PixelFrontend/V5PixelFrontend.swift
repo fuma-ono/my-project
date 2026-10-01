@@ -855,11 +855,19 @@ struct V5Header: View {
     /// (階層差2ptは一貫して維持)。ヘッダー高さ・マージン・chevronサイズ・
     /// 間隔は今回も変更対象外のため据え置き。実寸pt値は`V5P.ptToV5`でV5単位に
     /// 変換している。
+    ///
+    /// HQ指示(2026-10-01、追加調整)「戻るボタン＜が小さすぎる。縦はヘッダー
+    /// 文字の縦幅より少し大きいくらいに」: CI実機キャプチャで実測すると、
+    /// 旧chevronSize(14pt)は実測高さ37px、detailTitleSize(22pt)の「イベント
+    /// 詳細」の実測高さは63pxで、chevronがタイトルよりかなり小さく見えて
+    /// いた。chevronの高さはpt数にほぼ比例する(37px/14pt≈2.64px/pt)ため、
+    /// タイトル高さ(63px)より一回り大きい目安(約+10%、69px)から逆算した
+    /// 26ptに変更。
     private static let headerHeight = V5P.ptToV5(44)
     private static let headerMargin = V5P.ptToV5(16)
     private static let mainTabTitleSize = V5P.ptToV5(24)
     private static let detailTitleSize = V5P.ptToV5(22)
-    private static let chevronSize = V5P.ptToV5(14)
+    private static let chevronSize = V5P.ptToV5(26)
     private static let chevronTitleGap = V5P.ptToV5(8)
 
     var body: some View {
