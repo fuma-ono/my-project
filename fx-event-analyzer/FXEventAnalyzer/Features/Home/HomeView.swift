@@ -75,29 +75,39 @@ struct HomeView: View {
         }
     }
 
-    /// HQ「ヘッダーのタイトルサイズ統一」最終仕様(2026-10-01、同日中に再調整:
-    /// CI実機キャプチャで16ptが視覚的に弱いと判断され18ptに引き上げ)。Homeは
-    /// 他のメインタブと違い独自レイアウト(ロゴ+タイトル+通知/アカウント
-    /// アイコン)を持つため`V5Header`は使わず、ここで直接組んでいる。既存
-    /// アイコンの種類(ロゴ代わりの`chart.line.uptrend.xyaxis`、通知の`bell`)
-    /// は変更していない。アカウントアイコン(`person`、Settingsの「アカウント
-    /// 情報」行と同じSF Symbol)は仕様が明示的に要求しているため新規追加した
-    /// が、今回はサイズ・レイアウトのみが指示範囲のため、タップ時の画面遷移は
-    /// 配線していない(ベルアイコンも既存から非機能のまま)。
+    /// HQ「ヘッダー最終調整」(2026-10-01、3回目)。Homeは他のメインタブと
+    /// 違い独自レイアウト(ロゴ+タイトル+通知/アカウントアイコン)を持つため
+    /// `V5Header`は使わず、ここで直接組んでいる。
+    /// - ロゴは今回から、これまでの代用SF Symbol(`chart.line.uptrend.xyaxis`)
+    ///   をやめ、SplashView/LoginViewが使っている実物のブランドマーク
+    ///   `BrandMark`(`BrandMarkGraphic`画像アセット)をそのまま再利用する
+    ///   よう明示指示されたため切り替えた。画像の実寸比率(805:480)を保った
+    ///   まま目標の高さ(20pt相当)に合わせて`width`を逆算している。
+    /// - タイトルの「F」「X」は、Splash/Loginの「FX」ワードマークと同じ
+    ///   `DesignTokens.Colors.brandTitleAccentF`/`brandTitleAccentX`で着色
+    ///   し、Home独自の色は使っていない。
+    /// - アカウントアイコン(`person`、Settingsの「アカウント情報」行と同じ
+    ///   SF Symbol)は仕様が明示的に要求しているため新規追加したが、今回も
+    ///   サイズ・レイアウトのみが指示範囲のため、タップ時の画面遷移は配線
+    ///   していない(ベルアイコンも既存から非機能のまま)。
     private var homeHeader: some View {
         let logoTitleGap = V5P.ptToV5(6)
         let iconGap = V5P.ptToV5(12)
         let margin = V5P.ptToV5(16)
+        let logoHeight = V5P.ptToV5(20)
+        let logoWidth = logoHeight * (805.0 / 480.0)
         return HStack(spacing: 0) {
-            Image(systemName: "chart.line.uptrend.xyaxis")
-                .font(.system(size: V5P.ptToV5(18)))
-                .foregroundStyle(V5P.cyan)
-            Text("FX Event Analyzer")
-                .font(.system(size: V5P.ptToV5(18), weight: .semibold))
-                .padding(.leading, logoTitleGap)
+            BrandMark(width: logoWidth)
+            (
+                Text("F").foregroundStyle(DesignTokens.Colors.brandTitleAccentF)
+                + Text("X").foregroundStyle(DesignTokens.Colors.brandTitleAccentX)
+                + Text(" Event Analyzer").foregroundStyle(.white)
+            )
+            .font(.system(size: V5P.ptToV5(20), weight: .semibold))
+            .padding(.leading, logoTitleGap)
             Spacer()
-            Image(systemName: "bell").font(.system(size: V5P.ptToV5(15)))
-            Image(systemName: "person").font(.system(size: V5P.ptToV5(15))).padding(.leading, iconGap)
+            Image(systemName: "bell").font(.system(size: V5P.ptToV5(18)))
+            Image(systemName: "person").font(.system(size: V5P.ptToV5(18))).padding(.leading, iconGap)
         }
         .foregroundStyle(.white)
         .frame(width: V5P.W - margin * 2, height: V5P.ptToV5(44))

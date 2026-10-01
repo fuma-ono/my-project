@@ -790,16 +790,16 @@ struct V5Header: View {
     let star: Bool
     var onBack: (() -> Void)?
 
-    /// HQ「ヘッダーのタイトルサイズ統一」最終仕様(2026-10-01、同日中に再調整)。
-    /// 当初16pt/14ptで実装したが、CI実機キャプチャ上で文字が視覚的に弱いと
-    /// 判断され、メインタブ画面(`back == false`)は18pt Semibold、＜付き詳細
-    /// 画面(`back == true`)は16pt Semiboldに引き上げられた(階層差は18pt→16pt
-    /// の2ptで維持)。ヘッダー高さ・マージン・chevronサイズ・間隔は今回変更
-    /// 対象外のため据え置き。実寸pt値は`V5P.ptToV5`でV5単位に変換している。
+    /// HQ「ヘッダーのタイトルサイズ統一」最終仕様(2026-10-01、2回の再調整を
+    /// 経た最終値): 16pt/14pt→18pt/16pt→20pt/18ptの順でCI実機キャプチャを
+    /// 見ながら引き上げられた。メインタブ画面(`back == false`)は20pt
+    /// Semibold、＜付き詳細画面(`back == true`)は18pt Semibold(階層差2ptは
+    /// 一貫して維持)。ヘッダー高さ・マージン・chevronサイズ・間隔は今回も
+    /// 変更対象外のため据え置き。実寸pt値は`V5P.ptToV5`でV5単位に変換している。
     private static let headerHeight = V5P.ptToV5(44)
     private static let headerMargin = V5P.ptToV5(16)
-    private static let mainTabTitleSize = V5P.ptToV5(18)
-    private static let detailTitleSize = V5P.ptToV5(16)
+    private static let mainTabTitleSize = V5P.ptToV5(20)
+    private static let detailTitleSize = V5P.ptToV5(18)
     private static let chevronSize = V5P.ptToV5(14)
     private static let chevronTitleGap = V5P.ptToV5(8)
 
