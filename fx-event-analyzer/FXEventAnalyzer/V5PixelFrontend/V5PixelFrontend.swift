@@ -309,7 +309,24 @@ struct V5BottomBar: View {
     /// 背景・リム)だけをそれより広い`barWidth`(224)にして、アイコン列を
     /// その中央に配置することで、ホーム・設定アイコンと外枠の間にのみ
     /// 余白(約5pt)を追加した。
-    private static let barHeight: CGFloat = 34
+    ///
+    /// 縦方向の余白修正(2026-10-01、HQ指摘「アイコンの位置は固定で外枠の
+    /// 上の部分が狭い、下部分と余白の間隔は統一して。選択している丸の
+    /// 大きさは外枠をはみ出さないようにして」): CIキャプチャをピクセル単位
+    /// で実測したところ、アイコン上端からアンダーライン下端までの実際の
+    /// 描画高さがbarHeight(34)とほぼ一致しており(フォント/SF Symbolの
+    /// 行送りを含む実測高さ≈33.3)、上下の余白がほぼ0になっていたと判明した
+    /// (テキストの太いアイコン塊が詰まる上側がより窮屈に見える)。また
+    /// 選択時のグロー円(直径46)はbarHeight(34)そのものより大きく、
+    /// どう配置しても上下いずれかにはみ出さざるを得ない計算だった。
+    /// 対応として、(1) `barHeight`を34→39に拡大し、中身(アイコン・
+    /// ラベル・アンダーライン)の相対位置やサイズは変えずに
+    /// `.frame(maxHeight:.infinity)`の自動中央寄せで生まれる余白を
+    /// 上下均等に確保、(2) 選択グロー円を直径46→24に縮小して新しい
+    /// barHeight内に収まるようにし、(3) 念のためアイコン列全体に
+    /// `.clipShape`でカプセル形状のクリップを追加し、将来どんな値でも
+    /// 外枠をはみ出さないことを保証した。
+    private static let barHeight: CGFloat = 39
     private static let iconsWidth: CGFloat = 214
     private static let barWidth: CGFloat = 224
     private static let bottomMargin: CGFloat = 8
@@ -349,6 +366,7 @@ struct V5BottomBar: View {
         }
         .frame(width: Self.iconsWidth, height: Self.barHeight)
         .frame(width: Self.barWidth, height: Self.barHeight)
+        .clipShape(RoundedRectangle(cornerRadius: Self.barHeight / 2))
         .background(
             RoundedRectangle(cornerRadius: Self.barHeight / 2)
                 .fill(LinearGradient(colors: [V5P.panel.opacity(0.6), V5P.panel2.opacity(0.25)],
@@ -385,8 +403,8 @@ struct V5BottomBar: View {
                 .background(
                     Circle()
                         .fill(RadialGradient(colors: [V5P.cyan.opacity(0.42), V5P.cyan.opacity(0.16), .clear],
-                                              center: .center, startRadius: 1, endRadius: 23))
-                        .frame(width: 46, height: 46)
+                                              center: .center, startRadius: 1, endRadius: 12))
+                        .frame(width: 24, height: 24)
                         .opacity(isSelected ? 1 : 0)
                 )
             Text(title).font(.system(size: 7, weight: .semibold)).foregroundStyle(gradient)
