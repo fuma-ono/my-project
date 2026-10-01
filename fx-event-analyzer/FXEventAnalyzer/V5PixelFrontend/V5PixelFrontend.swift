@@ -299,8 +299,12 @@ struct V5BottomBar: View {
     ///    コメント通り)234幅キャンバスに収まる範囲でしか再現できないため、
     ///    横幅214(既存カードの左右余白10ptに合わせた上限)は変えず、
     ///    高さを44→34に縮小して比率214:34(≈6.29:1)に近づけた。
+    ///
+    /// 横幅の拡張(2026-10-01、HQ指摘「外枠をもう少し横に長く」): 左右
+    /// 余白を10pt→5ptに詰め、234幅キャンバスいっぱいまで使う形で
+    /// 214→224に拡大した。
     private static let barHeight: CGFloat = 34
-    private static let barWidth: CGFloat = 214
+    private static let barWidth: CGFloat = 224
     private static let bottomMargin: CGFloat = 8
     private static let iconGradient = LinearGradient(
         colors: [Color(red: 0.90, green: 0.97, blue: 1.0), Color(red: 0.45, green: 0.64, blue: 0.86)],
