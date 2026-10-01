@@ -345,9 +345,12 @@ struct V5BottomBar: View {
     ///   近い値ではあるが、不透明度ブレンドに頼ると背後の要素次第で
     ///   暗くなりすぎるため、実測値を直接色として指定する形に変更した。
     /// この実測に基づき、`.frame(maxHeight:.infinity)`による自動中央寄せを
-    /// やめ、`alignment:.top`+明示的な上パディング(6pt)に置き換えて
+    /// やめ、`alignment:.top`+明示的な上パディングに置き換えて
     /// 「上は広く・下はほぼゼロ」という実際の配分を再現し、グロー円を
     /// 直径24→30に拡大、カプセル塗りを実測色の直接指定に変更した。
+    /// 上パディングは最初6ptで試したが、CIキャプチャで実測すると上:下の
+    /// 比率が約1.3:1までしか開かず、参考画像の約10:1にはまだ遠かったため、
+    /// 9ptに再調整した(この時点ではまだCI未検証、次のラウンドで要確認)。
     private static let barHeight: CGFloat = 40
     private static let iconsWidth: CGFloat = 214
     private static let barWidth: CGFloat = 224
@@ -437,7 +440,7 @@ struct V5BottomBar: View {
                 .shadow(color: V5P.cyan.opacity(0.7), radius: 2)
                 .opacity(isSelected ? 1 : 0)
         }
-        .padding(.top, 6)
+        .padding(.top, 9)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .contentShape(Rectangle())
         .onTapGesture {
