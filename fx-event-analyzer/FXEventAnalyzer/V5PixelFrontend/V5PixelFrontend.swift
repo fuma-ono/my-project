@@ -372,7 +372,7 @@ struct V5BottomBar: View {
     private static let barHeight: CGFloat = 40
     private static let iconsWidth: CGFloat = 214
     private static let barWidth: CGFloat = 224
-    private static let bottomMargin: CGFloat = 8
+    private static let bottomMargin: CGFloat = 4
     private static let iconGradient = LinearGradient(
         colors: [Color(red: 0.90, green: 0.97, blue: 1.0), Color(red: 0.45, green: 0.64, blue: 0.86)],
         startPoint: .top, endPoint: .bottom
