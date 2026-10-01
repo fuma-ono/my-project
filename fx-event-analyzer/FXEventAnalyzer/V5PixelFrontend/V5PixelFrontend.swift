@@ -790,16 +790,17 @@ struct V5Header: View {
     let star: Bool
     var onBack: (() -> Void)?
 
-    /// HQ「ヘッダーのタイトルサイズ統一」最終仕様(2026-10-01、2回の再調整を
-    /// 経た最終値): 16pt/14pt→18pt/16pt→20pt/18ptの順でCI実機キャプチャを
-    /// 見ながら引き上げられた。メインタブ画面(`back == false`)は20pt
-    /// Semibold、＜付き詳細画面(`back == true`)は18pt Semibold(階層差2ptは
-    /// 一貫して維持)。ヘッダー高さ・マージン・chevronサイズ・間隔は今回も
-    /// 変更対象外のため据え置き。実寸pt値は`V5P.ptToV5`でV5単位に変換している。
+    /// HQ「ヘッダーのタイトルサイズ統一」最終仕様(2026-10-01、3回の再調整を
+    /// 経た最終値): 16pt/14pt→18pt/16pt→20pt/18pt→24pt/22ptの順でCI実機
+    /// キャプチャを見ながら引き上げられた。メインタブ画面(`back == false`)
+    /// は24pt Semibold、＜付き詳細画面(`back == true`)は22pt Semibold
+    /// (階層差2ptは一貫して維持)。ヘッダー高さ・マージン・chevronサイズ・
+    /// 間隔は今回も変更対象外のため据え置き。実寸pt値は`V5P.ptToV5`でV5単位に
+    /// 変換している。
     private static let headerHeight = V5P.ptToV5(44)
     private static let headerMargin = V5P.ptToV5(16)
-    private static let mainTabTitleSize = V5P.ptToV5(20)
-    private static let detailTitleSize = V5P.ptToV5(18)
+    private static let mainTabTitleSize = V5P.ptToV5(24)
+    private static let detailTitleSize = V5P.ptToV5(22)
     private static let chevronSize = V5P.ptToV5(14)
     private static let chevronTitleGap = V5P.ptToV5(8)
 
@@ -815,7 +816,9 @@ struct V5Header: View {
             }
             Text(title).font(.system(size: back ? Self.detailTitleSize : Self.mainTabTitleSize, weight: .semibold))
             Spacer()
-            if star { Image(systemName: "star.fill").font(.system(size: 12)).foregroundStyle(V5P.yellow) }
+            // HQ指示(2026-10-01、3回目のヘッダー調整): アイコンのウェイトを
+            // タイトルのSemiboldと揃える(以前は無指定＝regularだった)。
+            if star { Image(systemName: "star.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(V5P.yellow) }
         }
         .foregroundStyle(.white)
         .frame(width: V5P.W - Self.headerMargin * 2, height: Self.headerHeight)

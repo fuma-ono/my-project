@@ -75,17 +75,21 @@ struct HomeView: View {
         }
     }
 
-    /// HQ「ヘッダー最終調整」(2026-10-01、3回目)。Homeは他のメインタブと
+    /// HQ「ヘッダー最終調整」(2026-10-01、4回目)。Homeは他のメインタブと
     /// 違い独自レイアウト(ロゴ+タイトル+通知/アカウントアイコン)を持つため
     /// `V5Header`は使わず、ここで直接組んでいる。
-    /// - ロゴは今回から、これまでの代用SF Symbol(`chart.line.uptrend.xyaxis`)
-    ///   をやめ、SplashView/LoginViewが使っている実物のブランドマーク
-    ///   `BrandMark`(`BrandMarkGraphic`画像アセット)をそのまま再利用する
-    ///   よう明示指示されたため切り替えた。画像の実寸比率(805:480)を保った
-    ///   まま目標の高さ(20pt相当)に合わせて`width`を逆算している。
+    /// - ロゴはSplashView/LoginViewが使っている実物のブランドマーク
+    ///   `BrandMark`(`BrandMarkGraphic`画像アセット)をそのまま再利用する。
+    ///   画像の実寸比率(805:480)を保ったまま目標の高さ(24pt相当)に合わせて
+    ///   `width`を逆算している。
     /// - タイトルの「F」「X」は、Splash/Loginの「FX」ワードマークと同じ
     ///   `DesignTokens.Colors.brandTitleAccentF`/`brandTitleAccentX`で着色
     ///   し、Home独自の色は使っていない。
+    /// - 通知・アカウントアイコンは、単純な絶対pt値ではなく
+    ///   `V5Header`のお気に入り★(`star.fill`、12pt)と「見た目のサイズ」が
+    ///   揃うようCI実機キャプチャで実測調整した値(`notifIconSize`/
+    ///   `accountIconSize`)を使っている。SF Symbolはシンボルごとに外形が
+    ///   異なり単純に同じpt数を指定しても揃わないため。
     /// - アカウントアイコン(`person`、Settingsの「アカウント情報」行と同じ
     ///   SF Symbol)は仕様が明示的に要求しているため新規追加したが、今回も
     ///   サイズ・レイアウトのみが指示範囲のため、タップ時の画面遷移は配線
@@ -94,8 +98,12 @@ struct HomeView: View {
         let logoTitleGap = V5P.ptToV5(6)
         let iconGap = V5P.ptToV5(12)
         let margin = V5P.ptToV5(16)
-        let logoHeight = V5P.ptToV5(20)
+        let logoHeight = V5P.ptToV5(24)
         let logoWidth = logoHeight * (805.0 / 480.0)
+        // ★(star.fill, 12pt)と視覚的な大きさを揃えるための実測値。1巡目は
+        // 同じ12ptから出発し、CI実機キャプチャで実測して調整する。
+        let notifIconSize = V5P.ptToV5(12)
+        let accountIconSize = V5P.ptToV5(12)
         return HStack(spacing: 0) {
             BrandMark(width: logoWidth)
             (
@@ -103,11 +111,11 @@ struct HomeView: View {
                 + Text("X").foregroundStyle(DesignTokens.Colors.brandTitleAccentX)
                 + Text(" Event Analyzer").foregroundStyle(.white)
             )
-            .font(.system(size: V5P.ptToV5(20), weight: .semibold))
+            .font(.system(size: V5P.ptToV5(24), weight: .semibold))
             .padding(.leading, logoTitleGap)
             Spacer()
-            Image(systemName: "bell").font(.system(size: V5P.ptToV5(18)))
-            Image(systemName: "person").font(.system(size: V5P.ptToV5(18))).padding(.leading, iconGap)
+            Image(systemName: "bell").font(.system(size: notifIconSize, weight: .semibold))
+            Image(systemName: "person").font(.system(size: accountIconSize, weight: .semibold)).padding(.leading, iconGap)
         }
         .foregroundStyle(.white)
         .frame(width: V5P.W - margin * 2, height: V5P.ptToV5(44))
