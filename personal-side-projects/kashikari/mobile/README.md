@@ -2087,3 +2087,26 @@ Apple App Store審査で「Guideline 2.1 - Information Needed」として差し�
 `npx tsc --noEmit`はクリーン。`EXPO_PUBLIC_DEMO_MODE=1`のWeb版をPlaywrightで確認し、コンソールエラーが出ないことを確認した(`checkForAppUpdate`はiOS以外・デモモードでは即returnするため、Web版での動作確認はここまで)。
 
 **次のビルドで反映される**(今回は「次のアップデートのタイミングでいい」との指示のため、今すぐのビルド・提出は行わない)。②はネイティブのローカライズリソースに関わる変更のため、次にビルドしたタイミングで初めてApp Storeの「言語」欄に反映される。
+
+## Growth着手: Stage 1指標の確認・ランディングページ公開(108回目)
+
+1.1リリース後、オーナーから「kashikariをもっと多くの人に使ってもらうための活動を進めてほしい」と依頼された。まずCLAUDE.mdの判断フレーム(Install多い/少ない・Activation高い/低いの表)に沿って、Supabaseの実データ(`profiles`・`groups`・`analytics_events`)を直接確認した。
+
+**分かったこと**:
+- 登録ユーザー9人・グループ8件(2026-08-25〜09-20の間に発生)
+- **新規ユーザー登録は9/20を最後に11日間ゼロ**(確認時点)
+- 一方で使っているユーザーの行動は悪くない: `entry_created` 49件・`settlement_completed` 26件・**`premium_purchased` 2件**(9人中2人が課金)
+
+→ CLAUDE.mdの判断フレームで言う「Install少ない/Activation高い」のパターン。プロダクト自体は機能しており、ボトルネックは**新規ユーザーの獲得(Growth側)**と判断した。
+
+**対応①: `fuma-ono.github.io`(app-ads.txt用に106回目で用意したサイト)を紹介ランディングページ化**
+
+これまでapp-ads.txtを置くためだけの空サイトだったが、`docs/store-listing.md`(74回目に用意済みのストア掲載情報下書き)の文言をそのまま流用し、ブランドカラー(coral→plumグラデーション)・フォント(M PLUS Rounded 1c)もアプリ本体と揃えた簡単な紹介ページを追加した(App Storeへの導線付き)。`fuma-ono.github.io`リポジトリの`index.html`・`icon.png`として公開。
+
+**対応②: ASO(ストア掲載情報)の確認**
+
+新たにコピーを用意する前に確認したところ、サブタイトル・プロモーションテキスト・キーワード・説明文は**101回目で既にApp Store Connectに反映済み**だった。追加対応は不要と判断した。
+
+**対応③: 既存のコンテンツマーケティング基盤(note記事・Threads)への組み込み**
+
+この会社には既にnote記事・Threads投稿を自動生成するRoutineが稼働しているが、現在は別事業(BGM動画等)向けの設計になっている。kashikariを対象に加えるかはオーナー判断待ち(特にThreadsアカウントは過去に凍結された経緯があり、既存の助走期間ルールを崩さない範囲での組み込み方を検討する必要がある)。
