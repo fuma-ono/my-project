@@ -26,6 +26,19 @@ enum V5P {
     static let W: CGFloat = 234
     static let H: CGFloat = 491
 
+    /// HQ「V5 Bottom Bar / ヘッダー最終仕様」で与えられる数値(44pt・16ptなど)は
+    /// 実機上の実寸ポイントであり、V5キャンバス(234×491)の座標単位とは別物 —
+    /// そのままV5単位として使うと誤りになる、とHQ自身が明記している。
+    /// `V5Viewport`は`scale = min(geo.width/234, geo.height/491)`で一律拡大
+    /// しており、このプロジェクトのCI実機キャプチャ基準デバイス(iPhone 16 Pro、
+    /// 論理サイズ402×874pt)では234×491というキャンバス比(≈0.4766)がiPhoneの
+    /// 画面比(402/874≈0.460)より横長のため、常に幅基準(402/234)でスケールが
+    /// 決まる。この基準スケールを使い、実寸pt値をV5単位に逆算する
+    /// (V5単位 = 実寸pt ÷ 基準スケール)ことで、CI実機キャプチャ上で指定された
+    /// 実寸pt通りに検証できるようにしている。
+    static let headerRefScale: CGFloat = 402.0 / 234.0
+    static func ptToV5(_ realPt: CGFloat) -> CGFloat { realPt / headerRefScale }
+
     static let bg0 = Color(red: 0.004, green: 0.020, blue: 0.055)
     static let bg1 = Color(red: 0.006, green: 0.045, blue: 0.100)
     static let panel = Color(red: 0.010, green: 0.075, blue: 0.145)
@@ -776,22 +789,34 @@ struct V5Header: View {
     let back: Bool
     let star: Bool
     var onBack: (() -> Void)?
+
+    /// HQ「ヘッダーのタイトルサイズ統一」最終仕様(2026-10-01)。メインタブ画面
+    /// (`back == false`)は16pt Semibold、＜付き詳細画面(`back == true`)は
+    /// 14pt Semiboldで統一。実寸pt値は`V5P.ptToV5`でV5単位に変換している。
+    private static let headerHeight = V5P.ptToV5(44)
+    private static let headerMargin = V5P.ptToV5(16)
+    private static let mainTabTitleSize = V5P.ptToV5(16)
+    private static let detailTitleSize = V5P.ptToV5(14)
+    private static let chevronSize = V5P.ptToV5(14)
+    private static let chevronTitleGap = V5P.ptToV5(8)
+
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 0) {
             if back {
                 Button {
                     onBack?()
                 } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold))
+                    Image(systemName: "chevron.left").font(.system(size: Self.chevronSize, weight: .semibold))
                 }.buttonStyle(.plain)
+                .padding(.trailing, Self.chevronTitleGap)
             }
-            Text(title).font(.system(size: 14, weight: .bold))
+            Text(title).font(.system(size: back ? Self.detailTitleSize : Self.mainTabTitleSize, weight: .semibold))
             Spacer()
             if star { Image(systemName: "star.fill").font(.system(size: 12)).foregroundStyle(V5P.yellow) }
         }
         .foregroundStyle(.white)
-        .frame(width: 204, height: 24)
-        .position(x: 117, y: 40)
+        .frame(width: V5P.W - Self.headerMargin * 2, height: Self.headerHeight)
+        .position(x: V5P.W / 2, y: 40)
     }
 }
 

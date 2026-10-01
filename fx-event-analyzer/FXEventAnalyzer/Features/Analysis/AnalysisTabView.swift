@@ -21,6 +21,11 @@ struct AnalysisTabView: View {
         NavigationStack(path: $path) {
             V5Viewport {
                 PlaceholderScreenView(scrNumber: "SCR-011", screenName: "チャート分析")
+                // HQ「ヘッダーのタイトルサイズ統一」最終仕様(2026-10-01)はSCR-011
+                // 分析タブもメインタブ扱い(16pt Semibold)に含めているため、
+                // `V5BottomBar`と同じ要領でプレースホルダーの不透明背景の上に
+                // タイトルのみのヘッダーを重ねた(仮画面自体の内容は変更しない)。
+                V5Header(title: "分析", back: false, star: false)
                 V5BottomBar(selected: $tabSelection)
             }
             .toolbar(.hidden, for: .navigationBar)

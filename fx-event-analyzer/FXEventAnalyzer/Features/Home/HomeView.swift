@@ -75,18 +75,38 @@ struct HomeView: View {
         }
     }
 
+    /// HQ「ヘッダーのタイトルサイズ統一」最終仕様(2026-10-01)。Homeは他の
+    /// メインタブと違い独自レイアウト(ロゴ+タイトル+通知/アカウントアイコン)
+    /// を持つため`V5Header`は使わず、ここで直接組んでいる。既存アイコンの
+    /// 種類(ロゴ代わりの`chart.line.uptrend.xyaxis`、通知の`bell`)は変更
+    /// していない。アカウントアイコン(`person`、Settingsの「アカウント情報」
+    /// 行と同じSF Symbol)は仕様が明示的に要求しているため新規追加したが、
+    /// 今回はサイズ・レイアウトのみが指示範囲のため、タップ時の画面遷移は
+    /// 配線していない(ベルアイコンも既存から非機能のまま)。
+    private var homeHeader: some View {
+        let logoTitleGap = V5P.ptToV5(6)
+        let iconGap = V5P.ptToV5(12)
+        let margin = V5P.ptToV5(16)
+        return HStack(spacing: 0) {
+            Image(systemName: "chart.line.uptrend.xyaxis")
+                .font(.system(size: V5P.ptToV5(16)))
+                .foregroundStyle(V5P.cyan)
+            Text("FX Event Analyzer")
+                .font(.system(size: V5P.ptToV5(16), weight: .semibold))
+                .padding(.leading, logoTitleGap)
+            Spacer()
+            Image(systemName: "bell").font(.system(size: V5P.ptToV5(15)))
+            Image(systemName: "person").font(.system(size: V5P.ptToV5(15))).padding(.leading, iconGap)
+        }
+        .foregroundStyle(.white)
+        .frame(width: V5P.W - margin * 2, height: V5P.ptToV5(44))
+        .position(x: V5P.W / 2, y: 40)
+    }
+
     private var loadedScreen: some View {
         V5Viewport {
             V5TopStatus()
-            HStack {
-                Image(systemName: "chart.line.uptrend.xyaxis").foregroundStyle(V5P.cyan)
-                Text("FX Event Analyzer").font(.system(size: 12, weight: .bold))
-                Spacer()
-                Image(systemName: "bell").font(.system(size: 12))
-            }
-            .foregroundStyle(.white)
-            .frame(width: 204)
-            .position(x: 117, y: 40)
+            homeHeader
 
             if let hero = mappedEvents.upcoming.first {
                 NavigationLink(value: AppRoute.eventDetail(id: hero.id)) {
