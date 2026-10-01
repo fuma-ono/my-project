@@ -69,6 +69,12 @@ targets:
         SUPABASE_ANON_KEY: "$(SUPABASE_ANON_KEY)"
         # Read at runtime via URLSessionAPIClient.defaultBaseURLProvider.
         API_BASE_URL: "$(API_BASE_URL)"
+        # HQ指示(2026-10-01、「日本語のみNoto Sans JPへ変更」): 日本語テキスト
+        # 専用フォント。Resources/Fonts/配下はsourcesパス内のためXcodeGenが
+        # 自動でTarget Membershipを付与するが、iOSでカスタムフォントを実際に
+        # 読み込むにはUIAppFontsへのファイル名登録が別途必須。
+        UIAppFonts:
+          - NotoSansJP-SemiBold.ttf
     dependencies:
       - package: Supabase
         product: Auth

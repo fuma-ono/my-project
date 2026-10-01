@@ -53,6 +53,64 @@ enum V5P {
     static let yellow = Color(red: 1.0, green: 0.80, blue: 0.20)
 }
 
+/// HQ指示(2026-10-01、「日本語のみNoto Sans JPへ変更」)。
+/// 英数字は既存のシステムフォント(SF Pro)を維持し、日本語部分だけ
+/// Noto Sans JPに切り替える。`Font.custom(..., weight:)`という組み合わせは
+/// 存在しない(カスタムフォントのウェイトはファイル自体で決まる)ため、
+/// このプロジェクトのヘッダー/タブバーのラベルが一律Semiboldであることを
+/// 踏まえ、Google Fontsのバリアブルフォント`NotoSansJP[wght].ttf`から
+/// wght=600(SemiBold)を静的インスタンス化した`NotoSansJP-SemiBold.ttf`
+/// 一本だけをバンドルしている(`Resources/Fonts/`、`project.yml`の
+/// `UIAppFonts`に登録)。PostScript名は実際にインスタンス化したファイルを
+/// fontToolsで検査して確認した値(`NotoSansJP-SemiBold`)。
+enum V5JPFont {
+    private static let postScriptName = "NotoSansJP-SemiBold"
+
+    /// ひらがな・カタカナ・CJK統合漢字・和文記号(句読点「。」「、」や
+    /// 中点「・」を含む)・全角英数/半角カナのUnicodeレンジで日本語
+    /// 文字かどうかを判定する。英数字・半角記号・スペースは対象外。
+    private static func isJapanese(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x3000...0x303F, 0x3040...0x309F, 0x30A0...0x30FF,
+             0x4E00...0x9FFF, 0xFF00...0xFFEF:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// `string`を日本語/非日本語の連続区間に分割し、日本語部分だけ
+    /// `NotoSansJP-SemiBold`、それ以外は既存のシステムフォントを適用した
+    /// `Text`を連結して返す。文字列そのものを分割・改行させるような
+    /// レイアウト変更はしない — あくまで同一行内でのフォント切替。
+    static func text(_ string: String, size: CGFloat, weight: Font.Weight = .semibold) -> Text {
+        guard !string.isEmpty else { return Text(verbatim: "") }
+        var result: Text?
+        var runStart = string.startIndex
+        var runIsJapanese: Bool?
+        func flush(upTo end: String.Index) {
+            guard runStart < end else { return }
+            let run = String(string[runStart..<end])
+            let piece = (runIsJapanese == true)
+                ? Text(verbatim: run).font(.custom(postScriptName, size: size))
+                : Text(verbatim: run).font(.system(size: size, weight: weight))
+            result = (result.map { $0 + piece }) ?? piece
+        }
+        for index in string.indices {
+            let jp = string[index].unicodeScalars.contains(where: isJapanese)
+            if runIsJapanese == nil {
+                runIsJapanese = jp
+            } else if jp != runIsJapanese {
+                flush(upTo: index)
+                runStart = index
+                runIsJapanese = jp
+            }
+        }
+        flush(upTo: string.endIndex)
+        return result ?? Text(verbatim: string)
+    }
+}
+
 struct V5Viewport<Content: View>: View {
     @ViewBuilder let content: () -> Content
     var body: some View {
@@ -472,7 +530,7 @@ struct V5BottomBar: View {
                 .frame(height: 14)
                 .foregroundStyle(gradient)
                 .shadow(color: .black.opacity(0.35), radius: 1, y: 1)
-            Text(title).font(.system(size: 8, weight: .semibold)).foregroundStyle(gradient)
+            V5JPFont.text(title, size: 8).foregroundStyle(gradient)
                 .frame(height: 10)
             Capsule()
                 .fill(LinearGradient(colors: [V5P.cyan, V5P.blue], startPoint: .top, endPoint: .bottom))
@@ -814,7 +872,7 @@ struct V5Header: View {
                 }.buttonStyle(.plain)
                 .padding(.trailing, Self.chevronTitleGap)
             }
-            Text(title).font(.system(size: back ? Self.detailTitleSize : Self.mainTabTitleSize, weight: .semibold))
+            V5JPFont.text(title, size: back ? Self.detailTitleSize : Self.mainTabTitleSize)
             Spacer()
             // HQ指示(2026-10-01、3回目のヘッダー調整): アイコンのウェイトを
             // タイトルのSemiboldと揃える(以前は無指定＝regularだった)。
