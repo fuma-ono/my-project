@@ -440,6 +440,13 @@ struct V5BottomBar: View {
         // 伸びて下線が「分析」ラベルの文字に重なって表示される回帰が
         // CIキャプチャで見つかった。VStackの通常の子要素にすることで、
         // アイコンの高さに関わらずレイアウトが自動的に詰まらないようにした。
+        // グロー円は参考画像をピクセル実測した結果(2026-10-01訂正)、
+        // 外枠線は無く、中心から滑らかに透明へフェードする円で、直径は
+        // カプセルの内寸高さ(リム上端〜リム下端)とほぼ一致し、タブセル
+        // の上下中央(＝カプセル中央)を中心にしていると判明。そのため
+        // VStackコンテンツ(アイコン+文字+下線)の見かけの大きさに
+        // 合わせるのではなく、`.frame(maxHeight:.infinity)`適用後の
+        // タブセル全体を背景として扱い、直径を`barHeight`に固定した。
         VStack(spacing: 3) {
             icon(isSelected)
                 .frame(height: 13)
@@ -452,17 +459,15 @@ struct V5BottomBar: View {
                 .shadow(color: V5P.cyan.opacity(0.7), radius: 2)
                 .opacity(isSelected ? 1 : 0)
         }
-        .background(
-            Circle()
-                .fill(LinearGradient(colors: [V5P.cyan.opacity(0.22), V5P.cyan.opacity(0.10)],
-                                      startPoint: .top, endPoint: .bottom))
-                .overlay(Circle().stroke(V5P.cyan.opacity(0.65), lineWidth: 1))
-                .shadow(color: V5P.cyan.opacity(0.55), radius: 5)
-                .frame(width: 44, height: 44)
-                .opacity(isSelected ? 1 : 0)
-        )
         .padding(.top, 9)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(
+            Circle()
+                .fill(RadialGradient(colors: [V5P.cyan.opacity(0.42), V5P.cyan.opacity(0.16), .clear],
+                                      center: .center, startRadius: 1, endRadius: Self.barHeight / 2))
+                .frame(width: Self.barHeight, height: Self.barHeight)
+                .opacity(isSelected ? 1 : 0)
+        )
         .contentShape(Rectangle())
         .onTapGesture {
             selected = index
