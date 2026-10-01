@@ -522,55 +522,83 @@ private struct V5BarsIcon: View {
 /// レイヤーとして追加した(マスク対象には含めない。マスク対象に含めると
 /// 単一グラデーション基準の原則が崩れ、過去に発生した二重輪郭と同種の
 /// 副作用を招くため)。
+///
+/// 根本的な構造モデルの誤りが判明(2026-09-30、HQ指摘「三角と線の部分が
+/// 途切れている、丸の大きさが違う、グラデーションを再現できていない、
+/// 三角が綺麗な形になっていない、矢印として成り立っていない、位置も違う、
+/// ピクセル単位で測り完璧に再現して」): これまでの実装はすべて「太い線
+/// (stroke)+独立した円3つ+独立した矢尻ポリゴン」を`.mask`で合成する
+/// というモデルに基づいていたが、参考画像をOpenCV(`cv2.findContours`)で
+/// 輪郭追跡し直した結果、このモデル自体が誤りだったと判明した。実際の
+/// 形状は「尾から矢尻まで続く1本の、太さが変化するリボン状の輪郭」で
+/// あり、矢尻は独立した三角形ではなく、そのリボンが先端で末広がりに
+/// 広がった形(片側は丸いコーナー、反対側は鋭く凹んだノッチ)に過ぎない。
+/// 独立図形を輪郭だけ合わせて重ねる従来モデルでは、線の丸端と矢尻ポリゴン
+/// の境界が実測シルエットとは微妙に異なる形で結合してしまい、何度座標を
+/// 補正しても「継ぎ目」や「成り立っていない矢印」に見える原因になって
+/// いたと考えられる。
+///
+/// そのため今回、以下の手順で輪郭そのものを直接実測し、モデル全体を
+/// 差し替えた:
+/// 1. 参考画像を輝度しきい値で二値化し、周囲のカプセル光彩リング(細い円弧、
+///    アイコン本体より明るい箇所もあり誤って拾いやすい)を形態学的収縮
+///    (erosion)で除去してからグリフ本体の連結成分だけを再構成
+///    (morphological reconstruction)して分離。
+/// 2. `cv2.findContours`でグリフ全体(ジグザグ線+3つのビーズ+矢尻)の
+///    外輪郭を1本の連続した輪郭として抽出し、`cv2.approxPolyDP`で43点の
+///    多角形に単純化。この43点をそのままグリフのbbox(実測455×312px、
+///    アスペクト比≈1.458:1、既存の19×13pt枠≈1.462:1とほぼ一致)に対する
+///    相対座標に変換し、`outline`定数としてそのままPathの頂点に採用した
+///    (独立した線・円・矢尻ポリゴンを合成するのをやめ、実測シルエット
+///    そのものを1つの閉多角形としてfillする方式に変更)。
+/// 3. 3つのビーズの中心・直径は、形態学的オープニング(直径49pxの円形
+///    カーネル)で細い線を除去して3つの独立した円塊に分離した上で、各々の
+///    重心(centroid)とbboxから算出(尾≈(0.088,0.870)・山≈(0.377,0.479)・
+///    谷≈(0.560,0.690)、直径比≈h×0.266)。この中心に、既存のハイライト
+///    (白系`RadialGradient`)を引き続き重ねている。
+/// この新しい43点の実測輪郭をPIL上で実機想定解像度(57×39px相当)で
+/// レンダリングし、なめらかに矢印として繋がった形になることを確認して
+/// から反映した。
 private struct V5AnalysisIcon: View {
+    /// 参考画像から`cv2.findContours`+`approxPolyDP`で直接抽出した、
+    /// グリフ全体(尾ビーズ→線→山ビーズ→線→谷ビーズ→線→矢尻)の外輪郭。
+    /// グリフのbbox(実測455×312px)に対する相対座標(0...1)。
+    private static let outline: [(CGFloat, CGFloat)] = [
+        (0.9978, 0.0192), (0.9824, 0.0000), (0.9604, 0.0000), (0.7143, 0.0994),
+        (0.7011, 0.1250), (0.7033, 0.1506), (0.7758, 0.2404), (0.5582, 0.5705),
+        (0.5297, 0.5769), (0.4615, 0.4872), (0.4484, 0.4038), (0.4154, 0.3590),
+        (0.3714, 0.3462), (0.3319, 0.3654), (0.3011, 0.4135), (0.2923, 0.4968),
+        (0.1121, 0.7564), (0.0571, 0.7564), (0.0198, 0.7949), (0.0000, 0.8622),
+        (0.0110, 0.9391), (0.0352, 0.9776), (0.0637, 0.9968), (0.0945, 1.0000),
+        (0.1297, 0.9808), (0.1604, 0.9295), (0.1670, 0.8686), (0.3582, 0.5929),
+        (0.3978, 0.5897), (0.4659, 0.6795), (0.4835, 0.7660), (0.5143, 0.8141),
+        (0.5495, 0.8333), (0.6066, 0.8173), (0.6308, 0.7885), (0.6484, 0.7404),
+        (0.6505, 0.6731), (0.6440, 0.6442), (0.8505, 0.3429), (0.9231, 0.4487),
+        (0.9429, 0.4519), (0.9604, 0.4359), (0.9956, 0.1122),
+    ]
+    private static let tailCenter = (x: CGFloat(0.0875), y: CGFloat(0.8696))
+    private static let peakCenter = (x: CGFloat(0.3771), y: CGFloat(0.4792))
+    private static let valleyCenter = (x: CGFloat(0.5604), y: CGFloat(0.6904))
+    private static let ballDiameterRatio: CGFloat = 0.266
+
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
             let h = geo.size.height
-            let tail = CGPoint(x: 0.08 * w, y: 0.88 * h)
-            let peak = CGPoint(x: 0.38 * w, y: 0.47 * h)
-            let valley = CGPoint(x: 0.56 * w, y: 0.70 * h)
-            let shaftJoint = CGPoint(x: 0.78 * w, y: 0.36 * h)
+            let diameter = h * Self.ballDiameterRatio
 
-            let headTop = CGPoint(x: 0.96 * w, y: 0.00 * h)
-            let headTip = CGPoint(x: 1.00 * w, y: 0.04 * h)
-            let headBottom = CGPoint(x: 0.94 * w, y: 0.45 * h)
-            let headNotch = CGPoint(x: 0.70 * w, y: 0.13 * h)
-
-            let lineWidth = h * 0.135
-            let ballDiameter = h * 0.24
-
-            let shaftPath = Path { path in
-                path.move(to: tail)
-                path.addLine(to: peak)
-                path.addLine(to: valley)
-                path.addLine(to: shaftJoint)
-            }
-
-            let arrowhead = Path { path in
-                path.move(to: headTop)
-                path.addLine(to: headTip)
-                path.addLine(to: headBottom)
-                path.addLine(to: headNotch)
+            let glyph = Path { path in
+                path.addLines(Self.outline.map { CGPoint(x: $0.0 * w, y: $0.1 * h) })
                 path.closeSubpath()
             }
 
             ZStack {
                 Rectangle()
                     .fill(.foreground)
-                    .mask(
-                        ZStack {
-                            shaftPath.stroke(style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
-                            Circle().frame(width: ballDiameter, height: ballDiameter).position(tail)
-                            Circle().frame(width: ballDiameter, height: ballDiameter).position(peak)
-                            Circle().frame(width: ballDiameter, height: ballDiameter).position(valley)
-                            arrowhead.fill()
-                            arrowhead.stroke(style: StrokeStyle(lineWidth: h * 0.07, lineJoin: .round))
-                        }
-                    )
-                ballHighlight(center: tail, diameter: ballDiameter)
-                ballHighlight(center: peak, diameter: ballDiameter)
-                ballHighlight(center: valley, diameter: ballDiameter)
+                    .mask(glyph)
+                ballHighlight(center: CGPoint(x: Self.tailCenter.x * w, y: Self.tailCenter.y * h), diameter: diameter)
+                ballHighlight(center: CGPoint(x: Self.peakCenter.x * w, y: Self.peakCenter.y * h), diameter: diameter)
+                ballHighlight(center: CGPoint(x: Self.valleyCenter.x * w, y: Self.valleyCenter.y * h), diameter: diameter)
             }
         }
         .frame(width: 19, height: 13)
