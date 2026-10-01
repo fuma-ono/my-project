@@ -455,8 +455,8 @@ struct V5BottomBar: View {
         .background(
             Circle()
                 .fill(RadialGradient(colors: [V5P.cyan.opacity(0.42), V5P.cyan.opacity(0.16), .clear],
-                                      center: .center, startRadius: 1, endRadius: 17))
-                .frame(width: 34, height: 34)
+                                      center: .center, startRadius: 1, endRadius: 22))
+                .frame(width: 44, height: 44)
                 .opacity(isSelected ? 1 : 0)
         )
         .padding(.top, 9)
