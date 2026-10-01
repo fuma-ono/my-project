@@ -896,8 +896,14 @@ struct V5Header: View {
             Spacer()
             // HQ指示(2026-10-01、3回目のヘッダー調整): アイコンのウェイトを
             // タイトルのSemiboldと揃える(以前は無指定＝regularだった)。
+            // HQ確認(2026-10-01)「星を押さない場合のUIを見せて」: 星は
+            // お気に入り登録を表すが、現状は`IndicatorDetailView`の既存
+            // コメント通りお気に入りAPIが無く常時装飾表示のため、押下前
+            // (未登録)の初期状態として塗りつぶし無しの"star"を表示する。
+            // タップで実際にON/OFFが切り替わるわけではない(バックエンド
+            // 未実装のため従来通り非機能)。
             if star {
-                Image(systemName: "star.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(V5P.yellow)
+                Image(systemName: "star").font(.system(size: 12, weight: .semibold)).foregroundStyle(V5P.yellow)
                     .offset(y: Self.starVerticalCorrection)
             }
         }
