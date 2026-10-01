@@ -300,10 +300,17 @@ struct V5BottomBar: View {
     ///    横幅214(既存カードの左右余白10ptに合わせた上限)は変えず、
     ///    高さを44→34に縮小して比率214:34(≈6.29:1)に近づけた。
     ///
-    /// 横幅の拡張(2026-10-01、HQ指摘「外枠をもう少し横に長く」): 左右
-    /// 余白を10pt→5ptに詰め、234幅キャンバスいっぱいまで使う形で
-    /// 214→224に拡大した。
+    /// 横幅の拡張(2026-10-01、HQ指摘「外枠をもう少し横に長く」→その後
+    /// 「アイコン同士の間隔は参考画像と一致させて、外枠だけホームと設定の
+    /// 横にもう少し余白が欲しい」に訂正): 最初はアイコンを並べる`HStack`
+    /// 自体の幅を214→224に広げてしまい、アイコン同士の間隔まで一緒に
+    /// 広がってしまっていた。正しくは、アイコンの配置幅(`iconsWidth`)は
+    /// 参考画像の間隔に合わせた実測値214のまま変えず、外枠(カプセルの
+    /// 背景・リム)だけをそれより広い`barWidth`(224)にして、アイコン列を
+    /// その中央に配置することで、ホーム・設定アイコンと外枠の間にのみ
+    /// 余白(約5pt)を追加した。
     private static let barHeight: CGFloat = 34
+    private static let iconsWidth: CGFloat = 214
     private static let barWidth: CGFloat = 224
     private static let bottomMargin: CGFloat = 8
     private static let iconGradient = LinearGradient(
@@ -340,6 +347,7 @@ struct V5BottomBar: View {
                 V5GearIcon()
             }
         }
+        .frame(width: Self.iconsWidth, height: Self.barHeight)
         .frame(width: Self.barWidth, height: Self.barHeight)
         .background(
             RoundedRectangle(cornerRadius: Self.barHeight / 2)
