@@ -326,7 +326,29 @@ struct V5BottomBar: View {
     /// barHeight内に収まるようにし、(3) 念のためアイコン列全体に
     /// `.clipShape`でカプセル形状のクリップを追加し、将来どんな値でも
     /// 外枠をはみ出さないことを保証した。
-    private static let barHeight: CGFloat = 39
+    ///
+    /// HQから改めてタブバー単体の高解像度参考画像が提供され(2026-10-01、
+    /// 「外枠の色やグロー円、上下の余白が参考画像と全く違う」)、この画像を
+    /// ピクセル単位で実測し直した結果、前回の対応(上下均等な余白・グロー円
+    /// 直径24)は実は誤りだったと判明した。実測結果(リム上端y≈386・
+    /// リム下端y≈595、カプセル高さ≈209px換算):
+    /// - 上下の余白は均等ではなく、上側(リムからアイコン上端)≈52px・
+    ///   下側(アンダーライン下端からリム)≈5pxと、上側が圧倒的に広く
+    ///   下側はほぼゼロに近い比率(≈10:1)だった。アイコン・テキスト・
+    ///   アンダーラインという縦積み構成では、アイコンが一番上に来るため、
+    ///   グロー円を含むコンテンツ全体の視覚的重心が自然と上寄りになり、
+    ///   均等な余白にすると逆に実機と乖離することが分かった。
+    /// - 選択時のグロー円の直径はカプセル高さの約0.81倍(≈170px/209px)で、
+    ///   直径24(≈0.62倍)よりも一回り大きかった。
+    /// - カプセルの塗り(背景)は、アイコンの無い中立領域で実測すると
+    ///   (RGB≈(5,26,57)付近〜(2,16,42)付近)既存の`panel`/`panel2`に
+    ///   近い値ではあるが、不透明度ブレンドに頼ると背後の要素次第で
+    ///   暗くなりすぎるため、実測値を直接色として指定する形に変更した。
+    /// この実測に基づき、`.frame(maxHeight:.infinity)`による自動中央寄せを
+    /// やめ、`alignment:.top`+明示的な上パディング(6pt)に置き換えて
+    /// 「上は広く・下はほぼゼロ」という実際の配分を再現し、グロー円を
+    /// 直径24→30に拡大、カプセル塗りを実測色の直接指定に変更した。
+    private static let barHeight: CGFloat = 40
     private static let iconsWidth: CGFloat = 214
     private static let barWidth: CGFloat = 224
     private static let bottomMargin: CGFloat = 8
@@ -369,8 +391,9 @@ struct V5BottomBar: View {
         .clipShape(RoundedRectangle(cornerRadius: Self.barHeight / 2))
         .background(
             RoundedRectangle(cornerRadius: Self.barHeight / 2)
-                .fill(LinearGradient(colors: [V5P.panel.opacity(0.6), V5P.panel2.opacity(0.25)],
-                                      startPoint: .top, endPoint: .bottom))
+                .fill(LinearGradient(
+                    colors: [Color(red: 0.020, green: 0.102, blue: 0.224), Color(red: 0.008, green: 0.063, blue: 0.165)],
+                    startPoint: .top, endPoint: .bottom))
         )
         .overlay(
             RoundedRectangle(cornerRadius: Self.barHeight / 2)
@@ -403,8 +426,8 @@ struct V5BottomBar: View {
                 .background(
                     Circle()
                         .fill(RadialGradient(colors: [V5P.cyan.opacity(0.42), V5P.cyan.opacity(0.16), .clear],
-                                              center: .center, startRadius: 1, endRadius: 12))
-                        .frame(width: 24, height: 24)
+                                              center: .center, startRadius: 1, endRadius: 15))
+                        .frame(width: 30, height: 30)
                         .opacity(isSelected ? 1 : 0)
                 )
             Text(title).font(.system(size: 7, weight: .semibold)).foregroundStyle(gradient)
@@ -414,7 +437,8 @@ struct V5BottomBar: View {
                 .shadow(color: V5P.cyan.opacity(0.7), radius: 2)
                 .opacity(isSelected ? 1 : 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.top, 6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .contentShape(Rectangle())
         .onTapGesture {
             selected = index
