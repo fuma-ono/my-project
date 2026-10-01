@@ -326,8 +326,8 @@ struct V5BottomBar: View {
             tab(1, "指標一覧") { _ in
                 V5BarsIcon()
             }
-            tab(2, "分析") { _ in
-                V5AnalysisIcon()
+            tab(2, "分析") { isSelected in
+                V5AnalysisIcon(isSelected: isSelected)
             }
             tab(3, "検索") { _ in
                 Image(systemName: "magnifyingglass").font(.system(size: 13, weight: .semibold))
@@ -559,6 +559,28 @@ private struct V5BarsIcon: View {
 /// この新しい43点の実測輪郭をPIL上で実機想定解像度(57×39px相当)で
 /// レンダリングし、なめらかに矢印として繋がった形になることを確認して
 /// から反映した。
+///
+/// 色・グラデーションの再実測(2026-10-01、HQ指摘「矢印の先部分の色が違う、
+/// 参考画像はグラデーションっぽい、丸の白ハイライトは参考画像にない、
+/// 淡色っぽく見える」): ビーズ部分をさらに拡大して見比べたところ、参考
+/// 画像のビーズには光沢球のような白いハイライト「点」は存在せず、単に
+/// 周囲と同じ色をそのまま引き継いだ、ほぼ均一な円でしかなかったと判明。
+/// 前回追加した白`RadialGradient`の独立ハイライトは誤った解釈(存在しない
+/// 特徴を描き足してしまっていた)だったため削除した。
+/// また、グリフ内部の色を縦方向に複数地点でサンプリングし直すと
+/// (しきい値>400で二値化し近傍も前景の点のみ採用): 矢尻の先端付近
+/// (上端0%)は(190,251,251)とほぼ白に近い明るいシアンで、そこから急速に
+/// 赤成分が失われて約30%地点で(17,246,248)の純粋な明るいシアンになり、
+/// そこから下端にかけて赤成分ゼロのまま緑成分だけが(246→165)へ緩やかに
+/// 減少して青みの強い色に変化していた。既存の2色線形グラデーション
+/// (シアン(0,224,255)→青(0,122,241))は、この「上端が白っぽい」という
+/// 特徴を欠いており、矢尻が参考画像より単調な色に見えていた原因だった。
+/// そのため3色ストップの`LinearGradient`(上から順に実測値をそのまま採用)
+/// に置き換えた。このグラデーションはタブバー共通の`selectedIconGradient`
+/// とは別に分析アイコン専用の定数として持たせ(他アイコンは別の参考画像
+/// 領域から個別較正されているため、共通定数を書き換えると影響範囲が
+/// 広すぎる)、選択状態かどうかを`isSelected`として直接受け取るように
+/// 変更した。
 private struct V5AnalysisIcon: View {
     /// 参考画像から`cv2.findContours`+`approxPolyDP`で直接抽出した、
     /// グリフ全体(尾ビーズ→線→山ビーズ→線→谷ビーズ→線→矢尻)の外輪郭。
@@ -576,45 +598,40 @@ private struct V5AnalysisIcon: View {
         (0.6505, 0.6731), (0.6440, 0.6442), (0.8505, 0.3429), (0.9231, 0.4487),
         (0.9429, 0.4519), (0.9604, 0.4359), (0.9956, 0.1122),
     ]
-    private static let tailCenter = (x: CGFloat(0.0875), y: CGFloat(0.8696))
-    private static let peakCenter = (x: CGFloat(0.3771), y: CGFloat(0.4792))
-    private static let valleyCenter = (x: CGFloat(0.5604), y: CGFloat(0.6904))
-    private static let ballDiameterRatio: CGFloat = 0.266
+    /// 参考画像を縦方向に実測した3色グラデーション(上端≈(190,251,251)の
+    /// 白に近いシアン→30%地点≈(17,246,248)の明るいシアン→下端≈(0,165,253)
+    /// の青みのシアン)。ビーズ・矢尻・線すべてが同じグラデーションを
+    /// そのまま引き継ぐだけで、個別のハイライトは存在しない。
+    private static let selectedGradient = LinearGradient(
+        gradient: Gradient(stops: [
+            .init(color: Color(red: 0.745, green: 0.984, blue: 0.984), location: 0.0),
+            .init(color: Color(red: 0.067, green: 0.965, blue: 0.973), location: 0.3),
+            .init(color: Color(red: 0.0, green: 0.647, blue: 0.992), location: 1.0),
+        ]),
+        startPoint: .top, endPoint: .bottom
+    )
+
+    let isSelected: Bool
 
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
             let h = geo.size.height
-            let diameter = h * Self.ballDiameterRatio
 
             let glyph = Path { path in
                 path.addLines(Self.outline.map { CGPoint(x: $0.0 * w, y: $0.1 * h) })
                 path.closeSubpath()
             }
 
-            ZStack {
-                Rectangle()
-                    .fill(.foreground)
-                    .mask(glyph)
-                ballHighlight(center: CGPoint(x: Self.tailCenter.x * w, y: Self.tailCenter.y * h), diameter: diameter)
-                ballHighlight(center: CGPoint(x: Self.peakCenter.x * w, y: Self.peakCenter.y * h), diameter: diameter)
-                ballHighlight(center: CGPoint(x: Self.valleyCenter.x * w, y: Self.valleyCenter.y * h), diameter: diameter)
+            Group {
+                if isSelected {
+                    Rectangle().fill(Self.selectedGradient).mask(glyph)
+                } else {
+                    Rectangle().fill(.foreground).mask(glyph)
+                }
             }
         }
         .frame(width: 19, height: 13)
-    }
-
-    @ViewBuilder private func ballHighlight(center: CGPoint, diameter: CGFloat) -> some View {
-        Circle()
-            .fill(
-                RadialGradient(
-                    colors: [.white.opacity(0.9), .white.opacity(0.0)],
-                    center: .center, startRadius: 0, endRadius: diameter * 0.4
-                )
-            )
-            .frame(width: diameter * 0.8, height: diameter * 0.8)
-            .position(x: center.x, y: center.y - diameter * 0.22)
-            .allowsHitTesting(false)
     }
 }
 
