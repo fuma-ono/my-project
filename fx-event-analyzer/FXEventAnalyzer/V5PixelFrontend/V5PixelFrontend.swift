@@ -350,7 +350,25 @@ struct V5BottomBar: View {
     /// 直径24→30に拡大、カプセル塗りを実測色の直接指定に変更した。
     /// 上パディングは最初6ptで試したが、CIキャプチャで実測すると上:下の
     /// 比率が約1.3:1までしか開かず、参考画像の約10:1にはまだ遠かったため、
-    /// 9ptに再調整した(この時点ではまだCI未検証、次のラウンドで要確認)。
+    /// 9ptに再調整した。
+    ///
+    /// さらなる微調整(2026-10-01、HQ指摘「外枠の線が細い方がいい」「グロー円が
+    /// 下の線(アンダーライン)まで含んだきれいな円に」「指標一覧と設定の文字の
+    /// 位置が他と違う、揃えて」):
+    /// 1. カプセル外枠のストローク幅を1.3→0.9に細くした。
+    /// 2. グロー円をアイコン単体の背景からVStack全体(アイコン+ラベル+
+    ///    アンダーライン)の背景に移し、直径30→34に拡大。これにより円が
+    ///    アイコンだけでなく下のアンダーラインまで自然に内包する「きれいな
+    ///    円」になった。
+    /// 3. 「指標一覧」「設定」のラベルだけ他の3タブより上にずれて見える問題を
+    ///    CIキャプチャで実測したところ、実際に約17px(換算約3.3pt)分高い
+    ///    位置にずれていた。原因はSF Symbols(`house.fill`・`magnifyingglass`)
+    ///    には明示的な`.frame()`が無く、フォントサイズ13ptでもグリフの実際の
+    ///    バウンディングボックス高さが13ptちょうどにならず、自前描画アイコン
+    ///    (`V5BarsIcon`・`V5GearIcon`、どちらも`.frame(height:13)`で厳密に13pt)
+    ///    と食い違っていたためと判明。`icon(isSelected)`呼び出し直後に
+    ///    `.frame(height:13)`を一律で追加し、5つのアイコンすべてのレイアウト上の
+    ///    高さを強制的に統一することで解消した。
     private static let barHeight: CGFloat = 40
     private static let iconsWidth: CGFloat = 214
     private static let barWidth: CGFloat = 224
@@ -400,7 +418,7 @@ struct V5BottomBar: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: Self.barHeight / 2)
-                .stroke(Self.capsuleRimGradient, lineWidth: 1.3)
+                .stroke(Self.capsuleRimGradient, lineWidth: 0.9)
                 .shadow(color: V5P.blue.opacity(0.5), radius: 3)
         )
         .position(x: V5P.W / 2, y: V5P.H - Self.bottomMargin - Self.barHeight / 2)
@@ -424,15 +442,9 @@ struct V5BottomBar: View {
         // アイコンの高さに関わらずレイアウトが自動的に詰まらないようにした。
         VStack(spacing: 3) {
             icon(isSelected)
+                .frame(height: 13)
                 .foregroundStyle(gradient)
                 .shadow(color: .black.opacity(0.35), radius: 1, y: 1)
-                .background(
-                    Circle()
-                        .fill(RadialGradient(colors: [V5P.cyan.opacity(0.42), V5P.cyan.opacity(0.16), .clear],
-                                              center: .center, startRadius: 1, endRadius: 15))
-                        .frame(width: 30, height: 30)
-                        .opacity(isSelected ? 1 : 0)
-                )
             Text(title).font(.system(size: 7, weight: .semibold)).foregroundStyle(gradient)
             Capsule()
                 .fill(LinearGradient(colors: [V5P.cyan, V5P.blue], startPoint: .top, endPoint: .bottom))
@@ -440,6 +452,13 @@ struct V5BottomBar: View {
                 .shadow(color: V5P.cyan.opacity(0.7), radius: 2)
                 .opacity(isSelected ? 1 : 0)
         }
+        .background(
+            Circle()
+                .fill(RadialGradient(colors: [V5P.cyan.opacity(0.42), V5P.cyan.opacity(0.16), .clear],
+                                      center: .center, startRadius: 1, endRadius: 17))
+                .frame(width: 34, height: 34)
+                .opacity(isSelected ? 1 : 0)
+        )
         .padding(.top, 9)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .contentShape(Rectangle())
