@@ -870,6 +870,17 @@ struct V5Header: View {
     private static let chevronSize = V5P.ptToV5(26)
     private static let chevronTitleGap = V5P.ptToV5(8)
 
+    /// HQ指示(2026-10-01、追加調整)「＜の位置はタイトルの中心線上に」
+    /// 「星の位置も全て平行線で同じ位置に」。`HStack`の既定`.center`整列は
+    /// 各要素自身のレイアウト高さ(SF Symbolの意匠metrics／フォントの行高)
+    /// を基準に中心を取るため、要素ごとに「見た目のインク中心」とズレる。
+    /// CI実機キャプチャで実測した結果、タイトル中心を基準(y=256px)に
+    /// chevronがy=252px(4px上)、星がy=253px(3px上)にズレていた
+    /// (実機は3x retina、402pt論理幅のためpx÷3で実寸ptに換算)。その差分
+    /// だけ下に補正している。
+    private static let chevronVerticalCorrection = V5P.ptToV5(4.0 / 3.0)
+    private static let starVerticalCorrection = V5P.ptToV5(3.0 / 3.0)
+
     var body: some View {
         HStack(spacing: 0) {
             if back {
@@ -878,13 +889,17 @@ struct V5Header: View {
                 } label: {
                     Image(systemName: "chevron.left").font(.system(size: Self.chevronSize, weight: .semibold))
                 }.buttonStyle(.plain)
+                .offset(y: Self.chevronVerticalCorrection)
                 .padding(.trailing, Self.chevronTitleGap)
             }
             V5JPFont.text(title, size: back ? Self.detailTitleSize : Self.mainTabTitleSize)
             Spacer()
             // HQ指示(2026-10-01、3回目のヘッダー調整): アイコンのウェイトを
             // タイトルのSemiboldと揃える(以前は無指定＝regularだった)。
-            if star { Image(systemName: "star.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(V5P.yellow) }
+            if star {
+                Image(systemName: "star.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(V5P.yellow)
+                    .offset(y: Self.starVerticalCorrection)
+            }
         }
         .foregroundStyle(.white)
         .frame(width: V5P.W - Self.headerMargin * 2, height: Self.headerHeight)
