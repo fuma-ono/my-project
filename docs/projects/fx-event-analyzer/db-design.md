@@ -385,7 +385,15 @@ SCR-018 通知設定 / SCR-020 表示・地域設定 / SCR-021 チャート設�
 
 **通知について(HQ確定)**: MVPはPush通知を送信しない。本テーブルは「何を通知対象とするか」の保存のみ。Push基盤追加時は、デバイストークン等を別テーブル(例: `push_devices`)に持ち、送信判定で本テーブルを参照する。
 
-**重要度の段階について(要確認)**: `notify_min_importance`は仕様どおり★1〜★5の5段階だが、`EconomicIndicator.importance`/`EconomicEvent.importance`は`LOW`/`MEDIUM`/`HIGH`の3段階(3.4節)。Push送信判定を実装する際に、★と3段階の対応付け(またはimportanceの5段階化)をHQで確定する必要がある。
+**重要度の暫定マッピング(HQ確定 2026-10-02、Push通知実装時に最終確認)**: `notify_min_importance`は★1〜★5の5段階、`EconomicIndicator.importance`/`EconomicEvent.importance`は`LOW`/`MEDIUM`/`HIGH`の3段階(3.4節)のまま維持する。両者は以下の**暫定マッピング**で対応付ける(Backend実装: `src/domain/importance.ts`)。
+
+| importance | ★ |
+|---|---|
+| LOW | ★1 |
+| MEDIUM | ★3 |
+| HIGH | ★5 |
+
+送信判定は「イベントの★ ≥ `notify_min_importance`」。例: ★4を選ぶとHIGHのみ、★2を選ぶとMEDIUM・HIGHが対象。将来importanceを5段階化する可能性を残すため、`notify_min_importance`は1〜5の整数のまま保持し、5段階化した場合はマッピングのみ差し替える(DB変更不要)。
 
 **RLS**: `user_id = auth.uid()`の本人のみSELECT可。書き込みはservice_roleのみ(Backend経由)。
 

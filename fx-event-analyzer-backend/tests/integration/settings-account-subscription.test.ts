@@ -42,6 +42,36 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
     await ctx.app.close();
   });
 
+  function originalTransactionId(): string {
+    return `${Date.now()}${Math.floor(Math.random() * 1_000_000)}`;
+  }
+
+  async function verify(
+    headers: { authorization: string },
+    tx: Record<string, unknown>,
+    renewal: Record<string, unknown> | null,
+  ) {
+    return ctx.app.inject({
+      method: 'POST',
+      url: '/api/v1/subscription/verify',
+      headers,
+      payload: {
+        signed_transaction: await signAppStorePayload(tx),
+        ...(renewal ? { signed_renewal_info: await signAppStorePayload(renewal) } : {}),
+      },
+    });
+  }
+
+  async function advancedStatsEntitlement(userId: string) {
+    const { data } = await ctx.serviceClient
+      .from('entitlements')
+      .select('enabled')
+      .eq('user_id', userId)
+      .eq('feature_code', FEATURE_CODES.VIEW_ADVANCED_STATS)
+      .maybeSingle();
+    return data;
+  }
+
   describe('GET/PATCH /settings (api-design.md §24.4/§24.5)', () => {
     it('returns the column defaults on first access', async () => {
       const { headers } = await newUser();
@@ -103,6 +133,11 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
     it('deletes the auth user and everything that cascades from it', async () => {
       const { user, headers } = await newUser();
       await ctx.app.inject({ method: 'GET', url: '/api/v1/settings', headers }); // creates user_settings
+      const id = originalTransactionId();
+      expect((await verify(headers, transactionPayload(user.id, { originalTransactionId: id }), null)).statusCode).toBe(
+        200,
+      );
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: true }); // subscriptions + entitlements rows exist
 
       const response = await ctx.app.inject({ method: 'DELETE', url: '/api/v1/account', headers });
       expect(response.statusCode).toBe(204);
@@ -113,40 +148,14 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
       expect(profiles).toEqual([]);
       const { data: settings } = await ctx.serviceClient.from('user_settings').select('user_id').eq('user_id', user.id);
       expect(settings).toEqual([]);
+      const { data: subscriptions } = await ctx.serviceClient.from('subscriptions').select('id').eq('user_id', user.id);
+      expect(subscriptions).toEqual([]);
+      const { data: entitlements } = await ctx.serviceClient.from('entitlements').select('id').eq('user_id', user.id);
+      expect(entitlements).toEqual([]);
     });
   });
 
   describe('POST /subscription/verify (api-design.md §25.1)', () => {
-    function originalTransactionId(): string {
-      return `${Date.now()}${Math.floor(Math.random() * 1_000_000)}`;
-    }
-
-    async function verify(
-      headers: { authorization: string },
-      tx: Record<string, unknown>,
-      renewal: Record<string, unknown> | null,
-    ) {
-      return ctx.app.inject({
-        method: 'POST',
-        url: '/api/v1/subscription/verify',
-        headers,
-        payload: {
-          signed_transaction: await signAppStorePayload(tx),
-          ...(renewal ? { signed_renewal_info: await signAppStorePayload(renewal) } : {}),
-        },
-      });
-    }
-
-    async function advancedStatsEntitlement(userId: string) {
-      const { data } = await ctx.serviceClient
-        .from('entitlements')
-        .select('enabled')
-        .eq('user_id', userId)
-        .eq('feature_code', FEATURE_CODES.VIEW_ADVANCED_STATS)
-        .maybeSingle();
-      return data;
-    }
-
     it('stores an active Pro subscription and grants VIEW_ADVANCED_STATS', async () => {
       const { user, headers } = await newUser();
       const id = originalTransactionId();
@@ -160,6 +169,22 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
 
       const current = JSON.parse((await ctx.app.inject({ method: 'GET', url: '/api/v1/subscription', headers })).body);
       expect(current).toMatchObject({ plan: 'PRO', status: 'ACTIVE' });
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: true });
+    });
+
+    it('treats a free trial as current and grants VIEW_ADVANCED_STATS', async () => {
+      const { user, headers } = await newUser();
+      const id = originalTransactionId();
+      const response = await verify(
+        headers,
+        transactionPayload(user.id, { originalTransactionId: id, offerType: 1, offerDiscountType: 'FREE_TRIAL' }),
+        renewalInfoPayload({ originalTransactionId: id }),
+      );
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.body)).toMatchObject({ plan: 'PRO', status: 'TRIAL' });
+
+      const current = JSON.parse((await ctx.app.inject({ method: 'GET', url: '/api/v1/subscription', headers })).body);
+      expect(current).toMatchObject({ plan: 'PRO', status: 'TRIAL' });
       expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: true });
     });
 

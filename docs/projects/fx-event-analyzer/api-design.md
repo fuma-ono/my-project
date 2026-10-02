@@ -910,7 +910,7 @@ Email / PasswordはSupabase Auth側で管理する。Backend APIから直接Auth
 
 - `notifications`：**通知対象の保存のみ**。MVPではPush通知の送信そのものは実装しない(HQ確定)。Push基盤追加時は本設定を送信条件として参照し、デバイストークンは別テーブルで管理する想定
   - `pre_release`：重要指標の発表前通知 / `result`：重要指標の結果通知 / `favorites`：お気に入りイベント通知
-  - `min_importance`：通知する重要度の下限(★1〜★5の整数)
+  - `min_importance`：通知する重要度の下限(★1〜★5の整数)。指標のimportance(3段階)とは**暫定マッピング** LOW→★1 / MEDIUM→★3 / HIGH→★5 で対応付ける(Push通知実装時に最終確認、db-design.md §3.14)
 - `display.language`：`ja` / `en`、`display.region`：ISO 3166-1 alpha-2、`display.timezone`：IANA timezone名。Home等のRequestに渡すtimezoneの既定値としてiOSが利用する(6章の「Requestで明示的に受け取る」方針は変更しない)
 - `chart.default_fx_pair_symbol`：`fx_pairs.symbol`または`null`、`chart.default_timeframe`：`1m` / `5m` / `15m` / `30m` / `60m`
 
