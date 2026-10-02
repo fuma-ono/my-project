@@ -7,6 +7,10 @@ import Foundation
 /// 保持する — ログアウトやアンインストールで消える前提の軽量な実装。
 /// 指標とイベントのIDは別々の採番空間の可能性があるため、`"indicator:<id>"`
 /// / `"event:<id>"`という複合キーで型ごとに区別して保存する。
+///
+/// HQ指示(2026-10-02、追加)「ホーム画面にお気に入り(最大3件)」: Home側で
+/// 「直近登録した順」に表示する必要があるため、`Set`(順序なし)から配列
+/// (新しく登録したものを先頭に挿入)へ変更した。
 @MainActor
 final class FavoritesStore: ObservableObject {
     static let shared = FavoritesStore()
@@ -16,31 +20,42 @@ final class FavoritesStore: ObservableObject {
         case event
     }
 
-    @Published private(set) var favoriteKeys: Set<String>
+    struct Entry: Equatable {
+        let type: ItemType
+        let id: String
+    }
+
+    /// 新しく登録した順(先頭が最新)。
+    @Published private(set) var entries: [Entry]
 
     private let userDefaults: UserDefaults
     private let storageKey = "com.fumaono.fxeventanalyzer.favoriteKeys"
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
-        favoriteKeys = Set(userDefaults.stringArray(forKey: storageKey) ?? [])
+        entries = (userDefaults.stringArray(forKey: storageKey) ?? []).compactMap(Self.parse)
     }
 
     func isFavorite(_ type: ItemType, id: String) -> Bool {
-        favoriteKeys.contains(Self.key(type, id))
+        entries.contains { $0.type == type && $0.id == id }
     }
 
     func toggle(_ type: ItemType, id: String) {
-        let key = Self.key(type, id)
-        if favoriteKeys.contains(key) {
-            favoriteKeys.remove(key)
+        if let index = entries.firstIndex(where: { $0.type == type && $0.id == id }) {
+            entries.remove(at: index)
         } else {
-            favoriteKeys.insert(key)
+            entries.insert(Entry(type: type, id: id), at: 0)
         }
-        userDefaults.set(Array(favoriteKeys), forKey: storageKey)
+        userDefaults.set(entries.map(Self.key), forKey: storageKey)
     }
 
-    private static func key(_ type: ItemType, _ id: String) -> String {
-        "\(type.rawValue):\(id)"
+    private static func key(_ entry: Entry) -> String {
+        "\(entry.type.rawValue):\(entry.id)"
+    }
+
+    private static func parse(_ raw: String) -> Entry? {
+        let parts = raw.split(separator: ":", maxSplits: 1)
+        guard parts.count == 2, let type = ItemType(rawValue: String(parts[0])) else { return nil }
+        return Entry(type: type, id: String(parts[1]))
     }
 }

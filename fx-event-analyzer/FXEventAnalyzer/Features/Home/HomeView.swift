@@ -13,20 +13,34 @@ import SwiftUI
 ///   flow layout), hiding an absent element never shifts anything else —
 ///   so "no real data → hidden, never fabricated" is layout-safe by
 ///   construction, not a coordinate change.
-/// - The hero "Upcoming Events" card is real `HomeViewModel.upcomingEvents`
-///   `.first`, shown only `if let` (a real day can have none; HQ's demo
-///   always shows one).
-/// - HQ's 4 hardcoded "Recent Events" rows and 3 hardcoded "主要FX" boxes
-///   are real `ForEach`s bound to the real lists, `.prefix`-ed to the same
-///   4/3 slot counts HQ's fixed coordinates provision for (174+idx*53 for
-///   4 rows; 3 side-by-side boxes) — extra real items beyond that are not
-///   shown (Home is a preview; the full lists live on the Indicators tab
-///   and are not cut off there), fewer real items just leave the
-///   remaining fixed slots empty, never inventing rows to fill them.
 /// - `HQV5DemoRouter.push(...)` → real `AppRoute.eventDetail`
 ///   `NavigationLink`s.
 /// - `tabSelection`: a real `Binding<Int>` threaded from `MainTabView`, so
 ///   `V5BottomBar` switches tabs for real.
+///
+/// HQ指示(2026-10-02)「ホーム画面の構成」: 画面構成を4セクションに再編した
+/// (今日の重要イベント/通貨ペア/お気に入り/直近の要人発言)。固定のピクセル
+/// 参考画像は無いため、以下はこちらの判断で決めたレイアウトであり、HQの
+/// レビュー待ち:
+/// - 全セクション共通で最大3件表示(指示通り)。
+/// - 旧「Upcoming Events」の大きいヒーローカード(予想/結果/前回の数値付き)
+///   は廃止し、「今日の重要イベント」「お気に入り」はどちらも国旗/通貨/
+///   名称/重要度バッジだけのコンパクトな行にした — 非スクロールの固定
+///   234×491キャンバスに4セクション×3件を収めるため、数値メトリクス行の
+///   スペースが確保できなかった(詳細な予想/結果/前回はEvent Detail側で
+///   引き続き見られる)。
+/// - 各セクションは実際の件数ぶんだけ高さを使い、次のセクションへ続く
+///   (0件なら見出しごと非表示、3件未満なら空きスロットを残さず詰める) —
+///   お気に入りや通貨ペアは0件から始まり得るため、固定スロットを常に
+///   確保する旧方式ではなく動的スタッキングにした。
+/// - 「お気に入り」は`FavoritesStore`(端末ローカル)の登録順(新しい順)を
+///   `HomeViewModel`が購読し、最大3件を`GET /events/{id}`・
+///   `GET /indicators/{id}`で解決。指標/イベントどちらもタップで該当の
+///   詳細画面に遷移する。
+/// - 「直近の要人発言」はバックエンドAPIが存在しない(SCR-014/015は仮画面
+///   のみ、`docs/projects/fx-event-analyzer/api-design.md`にも該当エンド
+///   ポイントなし)。実データが無い項目を捏造しない方針のため、見出しと
+///   「準備中」の注記のみ表示し、ダミーの発言は一切表示していない。
 struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
     @Binding var path: NavigationPath
@@ -137,47 +151,124 @@ struct HomeView: View {
         .position(x: V5P.W / 2, y: 40)
     }
 
+    // レイアウト定数(HQの固定参考画像は無いため、4セクション×最大3件を
+    // 非スクロールの234×491キャンバスに収める目的で決めた値)。
+    private static let contentTop: CGFloat = 58
+    private static let headingGap: CGFloat = 12
+    private static let rowHeight: CGFloat = 30
+    private static let rowPitch: CGFloat = 34
+    private static let sectionGap: CGFloat = 14
+    private static let pairsBoxHeight: CGFloat = 55
+
+    /// `count`件のコンパクト行セクション(見出し+行)の下端yを返す。0件なら
+    /// 見出しごと非表示にするため、セクションの footprint は無し(`start`を
+    /// そのまま返す)。
+    private static func rowsSectionBottom(start: CGFloat, count: Int) -> CGFloat {
+        guard count > 0 else { return start }
+        let rowsTop = start + headingGap
+        return rowsTop + CGFloat(count - 1) * rowPitch + rowHeight
+    }
+
     private var loadedScreen: some View {
-        V5Viewport {
+        let topEvents = Array(mappedTodayEvents.prefix(3))
+        let pairs = Array(mappedPairs.prefix(3))
+        let favorites = Array(viewModel.favoriteItems.prefix(3))
+
+        let eventsHeadingY = Self.contentTop
+        let eventsBottomY = Self.rowsSectionBottom(start: eventsHeadingY, count: topEvents.count)
+
+        let pairsHeadingY = eventsBottomY + Self.sectionGap
+        let pairsBottomY = pairs.isEmpty ? pairsHeadingY : pairsHeadingY + Self.headingGap + Self.pairsBoxHeight
+
+        let favoritesHeadingY = pairsBottomY + Self.sectionGap
+        let favoritesBottomY = Self.rowsSectionBottom(start: favoritesHeadingY, count: favorites.count)
+
+        let speechesHeadingY = favoritesBottomY + Self.sectionGap
+
+        return V5Viewport {
             homeHeader
 
-            if let hero = mappedEvents.upcoming.first {
-                NavigationLink(value: AppRoute.eventDetail(id: hero.id)) {
-                    V5Card(CGRect(x: 10, y: 58, width: 214, height: 94)) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Upcoming Events").font(.system(size: 11, weight: .bold))
-                            Text("Today  \(ValueFormat.time(hero.releaseDatetime))").font(.system(size: 7)).foregroundStyle(V5P.muted)
-                            V5EventRow(home: hero)
+            if !topEvents.isEmpty {
+                sectionHeading("今日の重要イベント", y: eventsHeadingY)
+                ForEach(Array(topEvents.enumerated()), id: \.element.id) { idx, event in
+                    NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
+                        V5Card(CGRect(x: 10, y: eventsHeadingY + Self.headingGap + CGFloat(idx) * Self.rowPitch, width: 214, height: Self.rowHeight)) {
+                            compactRow(
+                                flag: CountryFlag.emoji(for: event.countryCode),
+                                code: event.currencyCode,
+                                name: event.indicatorName,
+                                badge: event.importance.rawValue.capitalized,
+                                badgeColor: event.importance.v5Color
+                            )
                         }
-                    }
-                }.buttonStyle(.plain)
+                    }.buttonStyle(.plain)
+                }
             }
 
-            Text("Recent Events").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
-                .position(x: 49, y: 162)
-            ForEach(Array(mappedEvents.rest.prefix(4).enumerated()), id: \.element.id) { idx, event in
-                NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
-                    V5Card(CGRect(x: 10, y: 174 + CGFloat(idx) * 53, width: 214, height: 48)) {
-                        V5EventRow(home: event)
-                    }
-                }.buttonStyle(.plain)
-            }
-
-            if !mappedPairs.isEmpty {
-                Text("主要FX").font(.system(size: 11, weight: .bold)).foregroundStyle(.white).position(x: 35, y: 395)
+            if !pairs.isEmpty {
+                sectionHeading("通貨ペア", y: pairsHeadingY)
                 HStack(spacing: 5) {
                     // 2026-09-29 HQ承認(2-b): 既存の通貨ペアカードをそのまま
                     // NavigationLinkでラップし、SCR-011 チャート分析(仮画面)への
                     // 遷移を確認できるようにした。見た目(fxBox)は変更していない。
-                    ForEach(mappedPairs.prefix(3)) { pair in
+                    ForEach(pairs) { pair in
                         NavigationLink(value: AppRoute.chartAnalysis(fxPairId: pair.id, fxPairSymbol: pair.symbol)) {
                             fxBox(pair)
                         }.buttonStyle(.plain)
                     }
-                }.frame(width: 214).position(x: 117, y: 421)
+                }.frame(width: 214).position(x: 117, y: pairsHeadingY + Self.headingGap + Self.pairsBoxHeight / 2)
             }
 
+            if !favorites.isEmpty {
+                sectionHeading("お気に入り", y: favoritesHeadingY)
+                ForEach(Array(favorites.enumerated()), id: \.element.id) { idx, item in
+                    favoriteRow(item, y: favoritesHeadingY + Self.headingGap + CGFloat(idx) * Self.rowPitch)
+                }
+            }
+
+            // 「直近の要人発言」: バックエンドAPIが無く(SCR-014/015は仮画面
+            // のみ)、実データを捏造できないため、見出しと準備中の注記のみ。
+            sectionHeading("直近の要人発言", y: speechesHeadingY)
+            Text("バックエンドAPI未実装のため準備中です").font(.system(size: 8)).foregroundStyle(V5P.muted)
+                .frame(width: 214, alignment: .leading).position(x: 117, y: speechesHeadingY + Self.headingGap)
+
             V5BottomBar(selected: $tabSelection)
+        }
+    }
+
+    @ViewBuilder private func sectionHeading(_ title: String, y: CGFloat) -> some View {
+        Text(title).font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+            .frame(width: 214, alignment: .leading).position(x: 117, y: y)
+    }
+
+    @ViewBuilder private func compactRow(flag: String, code: String, name: String, badge: String, badgeColor: Color) -> some View {
+        HStack(spacing: 5) {
+            Text(flag).font(.system(size: 13))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(code).font(.system(size: 7, weight: .bold))
+                Text(name).font(.system(size: 8, weight: .semibold)).lineLimit(1)
+            }
+            Spacer()
+            V5Badge(text: badge, color: badgeColor)
+            Image(systemName: "chevron.right").font(.system(size: 7)).foregroundStyle(V5P.muted)
+        }
+        .foregroundStyle(.white)
+    }
+
+    @ViewBuilder private func favoriteRow(_ item: HomeFavoriteItem, y: CGFloat) -> some View {
+        switch item {
+        case .event(let id, let countryCode, let currencyCode, let name, let importance):
+            NavigationLink(value: AppRoute.eventDetail(id: id)) {
+                V5Card(CGRect(x: 10, y: y, width: 214, height: Self.rowHeight)) {
+                    compactRow(flag: CountryFlag.emoji(for: countryCode), code: currencyCode, name: name, badge: importance.rawValue.capitalized, badgeColor: importance.v5Color)
+                }
+            }.buttonStyle(.plain)
+        case .indicator(let id, let countryCode, let currencyCode, let name, let importance):
+            NavigationLink(value: AppRoute.indicatorDetail(id: id)) {
+                V5Card(CGRect(x: 10, y: y, width: 214, height: Self.rowHeight)) {
+                    compactRow(flag: CountryFlag.emoji(for: countryCode), code: currencyCode, name: name, badge: importance.rawValue.capitalized, badgeColor: importance.v5Color)
+                }
+            }.buttonStyle(.plain)
         }
     }
 
@@ -193,11 +284,11 @@ struct HomeView: View {
         .overlay(RoundedRectangle(cornerRadius: 7).stroke(V5P.line.opacity(0.6), lineWidth: 0.5))
     }
 
-    private var mappedEvents: (upcoming: [HomeEventSummary], rest: [HomeEventSummary]) {
-        let upcoming = viewModel.upcomingEvents.sorted { $0.releaseDatetime < $1.releaseDatetime }
-        let rest = (viewModel.upcomingEvents.dropFirst() + viewModel.recentEvents)
-            .sorted { $0.releaseDatetime < $1.releaseDatetime }
-        return (upcoming, rest)
+    /// 「今日の重要イベント」: 当日のSCHEDULED/RELEASEDイベントを時刻順に
+    /// 結合した1本のリスト(旧「Upcoming Events」ヒーロー+「Recent Events」
+    /// リストの統合)。
+    private var mappedTodayEvents: [HomeEventSummary] {
+        (viewModel.upcomingEvents + viewModel.recentEvents).sorted { $0.releaseDatetime < $1.releaseDatetime }
     }
 
     private var mappedPairs: [FXPairUI] {
@@ -209,21 +300,6 @@ private extension HomeViewModel {
     var majorFxList: [MajorFxSummary] {
         guard case .loaded(_, let majorFx) = state else { return [] }
         return majorFx
-    }
-}
-
-extension V5EventRow {
-    init(home event: HomeEventSummary) {
-        self.init(
-            flag: CountryFlag.emoji(for: event.countryCode),
-            name: event.indicatorName,
-            code: event.currencyCode,
-            badge: event.importance.rawValue.capitalized,
-            badgeColor: event.importance.v5Color,
-            forecast: event.forecast.map { ValueFormat.number($0) } ?? "-",
-            actual: event.status == .released ? (event.actual.map { ValueFormat.number($0) } ?? "-") : "-",
-            previous: event.previous.map { ValueFormat.number($0) } ?? "-"
-        )
     }
 }
 
