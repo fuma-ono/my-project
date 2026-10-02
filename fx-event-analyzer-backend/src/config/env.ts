@@ -13,6 +13,9 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  // StoreKit 2 transactions are only accepted for this bundle id
+  // (POST /subscription/verify, api-design.md §25.1).
+  APP_STORE_BUNDLE_ID: z.string().min(1).default('com.fumaono.fxeventanalyzer'),
 });
 
 export type Env = z.infer<typeof envSchema>;

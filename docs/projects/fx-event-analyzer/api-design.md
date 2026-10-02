@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.3
+# FX Event Analyzer: API詳細設計書 v1.4
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -36,6 +36,12 @@
   - M-3: `max_upward_pips`/`max_downward_pips`をDB保存値としてそのまま返す方式に変更(旧: API応答時に都度計算。18.1節)
   - L-5: 30章の画面対応表にSCR-010(Login)を追加。Supabase Auth SDK直接利用のためBackend Endpointなしと明記
   - L-6: `event.revision_status`がDB保存値ではなくBackendによる動的算出値であることを明記(14.3節)
+- **v1.4**(今回): 設定サブ画面SCR-018〜026の正式仕様(HQ確定 2026-10-02)を反映
+  - `DELETE /account`を新設。物理削除(24.3節)
+  - `GET /settings`・`PATCH /settings`を新設。通知対象・表示・チャート設定の保存(24.4節・24.5節)
+  - `POST /subscription/verify`を新設。StoreKit 2の署名済みTransactionをBackendで検証し購読状態を保存(25.1節)
+  - Pro商品(月額・年額)とPRO Entitlement付与ルールを確定(25.2節・28章)
+  - 30章の画面対応表にSCR-018〜026を追加
 
 ---
 
@@ -868,6 +874,50 @@ Account情報を更新する。
 
 Email / PasswordはSupabase Auth側で管理する。Backend APIから直接Auth情報を変更しない。
 
+## 24.3 DELETE /api/v1/account(v1.4で追加)
+
+ログイン中のユーザーを**物理削除**する(SCR-026、HQ確定 2026-10-02)。
+
+- Supabase Authのユーザー(`auth.users`)をAdmin APIで削除し、`profiles`以下(`subscriptions` / `entitlements` / `user_settings`)はFKのON DELETE CASCADEで同時に削除される(db-design.md §7)
+- Response：`204 No Content`
+- App Storeの自動更新サブスクリプションはAppleが管理するため本APIでは解約されない。iOS側の削除画面で、事前にApp Storeで解約するよう案内する
+- 削除後、iOSはローカルのセッションを破棄してサインアウトする
+
+## 24.4 GET /api/v1/settings(v1.4で追加)
+
+ユーザー設定を取得する(SCR-018 通知設定 / SCR-020 表示・地域設定 / SCR-021 チャート設定)。初回アクセス時はDBの既定値で行を作成して返す。
+
+```json
+{
+  "notifications": {
+    "pre_release": true,
+    "result": true,
+    "favorites": true,
+    "min_importance": 3
+  },
+  "display": {
+    "language": "ja",
+    "region": "JP",
+    "timezone": "Asia/Tokyo"
+  },
+  "chart": {
+    "default_fx_pair_symbol": null,
+    "default_timeframe": "5m"
+  },
+  "updated_at": "2026-10-02T00:00:00Z"
+}
+```
+
+- `notifications`：**通知対象の保存のみ**。MVPではPush通知の送信そのものは実装しない(HQ確定)。Push基盤追加時は本設定を送信条件として参照し、デバイストークンは別テーブルで管理する想定
+  - `pre_release`：重要指標の発表前通知 / `result`：重要指標の結果通知 / `favorites`：お気に入りイベント通知
+  - `min_importance`：通知する重要度の下限(★1〜★5の整数)
+- `display.language`：`ja` / `en`、`display.region`：ISO 3166-1 alpha-2、`display.timezone`：IANA timezone名。Home等のRequestに渡すtimezoneの既定値としてiOSが利用する(6章の「Requestで明示的に受け取る」方針は変更しない)
+- `chart.default_fx_pair_symbol`：`fx_pairs.symbol`または`null`、`chart.default_timeframe`：`1m` / `5m` / `15m` / `30m` / `60m`
+
+## 24.5 PATCH /api/v1/settings(v1.4で追加)
+
+ユーザー設定を部分更新する。Bodyは24.4節と同じ構造で、**送ったフィールドのみ**更新する。未知のフィールドは`422 VALIDATION_ERROR`。存在しない`default_fx_pair_symbol`も`422`。Responseは更新後の24.4節と同じ形。
+
 ---
 
 # 25. Subscription API
@@ -881,6 +931,58 @@ Response：plan / status / started_at / expires_at
 Plan：FREE / PRO
 
 Status：ACTIVE / CANCELED / EXPIRED / TRIAL
+
+有効な(ACTIVE / TRIAL、または期限内のCANCELED)行がない場合は`plan: FREE`、他項目`null`を返す(404にはしない)。
+
+## 25.1 POST /api/v1/subscription/verify(v1.4で追加)
+
+StoreKit 2で購入・復元した購読をBackendで検証し、保存する(SCR-019、HQ確定 2026-10-02)。
+
+処理の流れ：
+
+1. iOSはStoreKit 2で購入する。購入時の`appAccountToken`にSupabaseのuser idを設定する
+2. iOSは`Transaction.jwsRepresentation`(と取得できれば`RenewalInfo.jwsRepresentation`)をBackendへ送る
+3. BackendがAppleの署名を検証する(下記)
+4. 検証済みの購読状態を`subscriptions`へ保存し、PRO Entitlementを同期する(1トランザクション)
+5. iOSは本APIまたは`GET /subscription` / `GET /entitlements`の結果でPro機能の可否を判断する(StoreKitの端末上の状態は使わない)
+
+Request：
+
+```json
+{
+  "signed_transaction": "<JWS>",
+  "signed_renewal_info": "<JWS, 任意>"
+}
+```
+
+Response：`GET /subscription`と同じ形(plan / status / started_at / expires_at)。
+
+署名検証(オフライン、Apple App Store Server Libraryと同等)：
+
+- JWSヘッダー`alg = ES256`、`x5c`の証明書チェーンが**Backendに固定したApple Root CA - G3**に連なること(`x5c`内のRootは信用しない)
+- 中間証明書・リーフ証明書にAppleのマーカー拡張(1.2.840.113635.100.6.2.1 / 1.2.840.113635.100.6.11.1)があること
+- リーフの公開鍵で署名が検証できること、`signedDate`時点で各証明書が有効であること
+
+Payload検証：
+
+- `bundleId`が本アプリ、`type = Auto-Renewable Subscription`、`productId`がPro商品(25.2節)であること → 違反は`422`
+- `appAccountToken`がリクエストユーザーのidと一致すること → 違反は`403`(他人の購入の流用を防ぐ)
+- 同じ購読(`originalTransactionId`)が別ユーザーに紐付いている場合 → `409 CONFLICT`
+
+状態の決定(26章)：取消(`revocationDate`あり)または`expiresDate`経過 → `EXPIRED`、自動更新OFF → `CANCELED`、無料トライアルの導入オファー → `TRIAL`、それ以外 → `ACTIVE`。
+
+**APIキー・秘密鍵はiOSアプリに含めない**。本APIはAppleの公開証明書のみで検証するため、App Store Connectの鍵も不要。
+
+MVP対象外(HQ確定)：App Store Server APIによる照会、App Store Server Notifications、OCSPによる証明書失効確認。将来、Notificationsの`signedPayload`も同じ署名検証と保存処理(`apply_app_store_subscription`)を再利用できる構造にしてある(自動更新状態・解約・更新失敗・返金の追跡)。
+
+## 25.2 Pro商品(v1.4で追加)
+
+自動更新サブスクリプション。Subscription Group：`FX Event Analyzer Pro`(月額・年額は同一Group内の選択肢)。App Store Connectへの商品登録はHQが行う。
+
+| 商品 | Product ID | 価格 |
+|---|---|---|
+| 月額 | `com.fumaono.fxeventanalyzer.pro.monthly` | ¥980/月 |
+| 年額 | `com.fumaono.fxeventanalyzer.pro.yearly` | ¥9,800/年 |
 
 ---
 
@@ -933,7 +1035,9 @@ FREE：VIEW_BASIC_EVENT / VIEW_HISTORICAL / VIEW_MARKET_REACTION
 
 PRO：VIEW_BASIC_EVENT / VIEW_HISTORICAL / VIEW_MARKET_REACTION / VIEW_ADVANCED_STATS
 
-ただし価格・正式な課金条件はBeta前に最終決定する。実際のStoreKit購入・更新・キャンセル・Receipt検証はBeta時期に実装する。
+~~ただし価格・正式な課金条件はBeta前に最終決定する。実際のStoreKit購入・更新・キャンセル・Receipt検証はBeta時期に実装する。~~ (v1.4で確定: 価格・商品は25.2節、購入検証は25.1節)
+
+PRO Entitlementの付与(v1.4): `POST /subscription/verify`の保存時に、FREEとの差分である`VIEW_ADVANCED_STATS`の`entitlements`行を、購読が有効(ACTIVE / TRIAL / 期限内CANCELED)なら`enabled = true`・`expires_at = 購読のexpires_at`、EXPIREDなら`enabled = false`で更新する。
 
 重要：課金制御をiOS側だけに依存しない。Backend側でもEntitlementを確認する(27.1節)。
 
@@ -969,6 +1073,12 @@ Backend APIはSupabase JWTを検証する。
 | SCR-009 Entitlements | GET /entitlements |
 | SCR-011 Account | GET /account |
 | SCR-011 Account Update | PATCH /account |
+| SCR-018 通知設定(v1.4で追加) | GET /settings、PATCH /settings |
+| SCR-019 プラン・購読管理(v1.4で追加) | GET /subscription、POST /subscription/verify |
+| SCR-020 表示・地域設定(v1.4で追加) | GET /settings、PATCH /settings |
+| SCR-021 チャート設定(v1.4で追加) | GET /settings、PATCH /settings |
+| SCR-022〜025 ヘルプ・規約・プライバシー・アプリ情報(v1.4で追加) | なし |
+| SCR-026 アカウント削除(v1.4で追加) | DELETE /account |
 
 ---
 
@@ -1190,4 +1300,4 @@ pg_trgm + GIN Indexの追加(23.2節)は、HQ指示に基づき**db-design.md側
 
 ---
 
-# API詳細設計書 v1.3 END
+# API詳細設計書 v1.4 END

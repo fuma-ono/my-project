@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { ApiError } from '../errors/ApiError.js';
-import { getProfile, updateProfile } from '../repositories/profilesRepository.js';
+import { deleteUserAccount, getProfile, updateProfile } from '../repositories/profilesRepository.js';
 import { updateAccountBodySchema } from '../schemas/account.js';
 
 /**
@@ -32,5 +32,14 @@ export function registerAccountRoutes(app: FastifyInstance): void {
       created_at: profile.created_at,
       updated_at: profile.updated_at,
     };
+  });
+
+  /** DELETE /account (api-design.md §24.3, SCR-026). Physical deletion of
+   * the user and everything that cascades from it. The App Store
+   * subscription itself is not cancellable from here (Apple owns it) — the
+   * client tells the user to cancel it in their Apple ID settings first. */
+  app.delete('/account', async (request, reply) => {
+    await deleteUserAccount(app.supabase, request.user!.id);
+    return reply.status(204).send();
   });
 }

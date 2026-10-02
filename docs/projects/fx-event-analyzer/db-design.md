@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.2
+# FX Event Analyzer: DB詳細設計 v4.3
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -22,6 +22,10 @@
   - 概要設計書・要件定義書に残る「EconomicEvent = EventSnapshot」等の旧仕様表現は、既にv1.4で修正済みであることを再確認(11章参照)
 - **v4.1**: API詳細設計レビュー(B-5)での確定事項を反映。Partial Match Search(部分一致検索)の性能を担保するため、`pg_trgm` + GIN Indexの追加方針を12章に明記(HQ確定、2026-09-16)。DB Migrationは実施していない(ドキュメント追記のみ)
 - **v4.2**(今回): 全設計横断監査(M-3)での確定事項を反映。`EventPriceReaction.max_upward_pips`/`max_downward_pips`をDBカラムとして追加し保存する方針に変更(旧: API応答時に都度計算する方針だったが、通常の`pips`列との保存方針の非対称性を解消するためDB保存に統一、HQ確定、2026-09-16)
+- **v4.3**(今回): 設定サブ画面SCR-018〜026の正式仕様(HQ確定、2026-10-02)を反映。Migration `20261002000001_user_settings.sql` / `20261002000002_subscriptions_app_store.sql`
+  - アカウント削除を**物理削除**に変更(旧: `Profile.deleted_at`によるソフトデリート)。3.1節・7章
+  - `Subscription`にApp Store検証用カラム(`product_id`/`provider_environment`/`last_transaction_id`/`auto_renew`/`revoked_at`/`last_verified_at`)と`UQ(provider, provider_subscription_id)`を追加。保存用関数`apply_app_store_subscription`を追加(3.2節)
+  - `UserSettings`を新設(3.14節)
 
 ---
 
@@ -42,6 +46,7 @@
 | `FxPrice` | FX価格ローソク足(イベント時間窓中心の保持) |
 | `EventPriceReaction` | イベント×通貨ペア×時間軸ごとの価格反応 |
 | `IngestionLog` | 外部データ取得・取り込みの運用ログ(FEAT-150) |
+| `UserSettings` | ユーザーごとの通知対象・表示・チャート設定(v4.3で追加) |
 
 将来拡張(P2、今回はテーブル設計対象外): `favorite_indicators` / `favorite_pairs` / `alert_settings` / `Person` / `SpeechEvent` / `SpeechPriceReaction` / Community関連。
 
@@ -53,7 +58,8 @@
 Profile
    │
    ├── Subscription[]
-   └── Entitlement[]
+   ├── Entitlement[]
+   └── UserSettings(0..1)
 
 EconomicIndicator
    │
@@ -83,11 +89,13 @@ IngestionLog(他Entityへの直接参照なし。provider/data_typeで対象を�
 |---|---|---|---|
 | id | uuid | PK | 認証基盤(Supabase `auth.users.id`)と同値 |
 | display_name | text | nullable | |
-| deleted_at | timestamptz | nullable | ソフトデリート。Apple 5.1.1(v)対応 |
+| deleted_at | timestamptz | nullable | v4.3で未使用化(アカウント削除は物理削除に変更、下記)。カラムは既存Migrationとの互換のため残す |
 | created_at | timestamptz | NN, DEF now() | |
 | updated_at | timestamptz | NN, DEF now() | |
 
 **RLS**: `id = auth.uid()`の本人のみSELECT/UPDATE可。INSERT/DELETEはservice_roleのみ(6章)。
+
+**アカウント削除(v4.3でHQ確定、2026-10-02)**: Apple 5.1.1(v)対応のアカウント削除(SCR-026、`DELETE /api/v1/account`)は**物理削除**とする。Backendが`auth.users`の行をSupabase Admin APIで削除し、`Profile`以下はFKのCASCADEで削除される(7章)。
 
 ### 3.2 Subscription(確定)
 
@@ -99,7 +107,13 @@ IngestionLog(他Entityへの直接参照なし。provider/data_typeで対象を�
 | status | text | NN, CHK: `status IN ('ACTIVE','CANCELED','EXPIRED','TRIAL')` | **HQ確定**。4状態に固定 |
 | provider | text | NN, DEF `APP_STORE` | |
 | provider_customer_id | text | nullable | |
-| provider_subscription_id | text | nullable | |
+| provider_subscription_id | text | nullable | App Storeでは`originalTransactionId`(更新しても変わらない購読の識別子) |
+| product_id | text | nullable | v4.3追加。App StoreのProduct ID(月額/年額) |
+| provider_environment | text | nullable, CHK: `IN ('Production','Sandbox')` | v4.3追加 |
+| last_transaction_id | text | nullable | v4.3追加。最後に検証したTransactionの`transactionId` |
+| auto_renew | boolean | nullable | v4.3追加。RenewalInfoの自動更新状態。未受領ならnull |
+| revoked_at | timestamptz | nullable | v4.3追加。返金等による取消日時 |
+| last_verified_at | timestamptz | nullable | v4.3追加。Backendが最後に署名検証した時刻 |
 | started_at | timestamptz | NN | |
 | expires_at | timestamptz | nullable | |
 | created_at | timestamptz | NN, DEF now() | |
@@ -107,8 +121,11 @@ IngestionLog(他Entityへの直接参照なし。provider/data_typeで対象を�
 
 IDX(user_id)
 UQ: `status = 'ACTIVE'`の行はuser_idにつき1件まで(部分UNIQUE index)。履歴として過去の契約行は複数残る。
+UQ(provider, provider_subscription_id) WHERE provider_subscription_id IS NOT NULL(v4.3追加)。1つのApp Store購読は1ユーザーにのみ紐付く。
 
 **RLS**: `user_id = auth.uid()`の本人のみSELECT可。書き込みはservice_role(決済処理)のみ。
+
+**保存処理(v4.3)**: `POST /api/v1/subscription/verify`(api-design.md §25.1)で検証済みの購読は、関数`apply_app_store_subscription(...)`(security definer、service_roleのみ実行可)で1トランザクションとして保存する: 他ユーザー所有なら例外(SQLSTATE `P0409`→409)、新しい購読がACTIVEなら同ユーザーの他のACTIVE行をEXPIREDにする、行をinsert/update、PRO用`Entitlement`(`VIEW_ADVANCED_STATS`)の`enabled`/`expires_at`を同期。将来のApp Store Server Notifications(更新・解約・更新失敗・返金)も同関数を再利用する想定。
 
 ### 3.3 Entitlement(確定: feature_codeを機能単位のコード体系に具体化)
 
@@ -347,6 +364,31 @@ IDX(event_id, fx_pair_id, timeframe)
 IDX(data_type, started_at DESC)
 IDX(status)
 
+### 3.14 UserSettings(v4.3で追加、HQ確定 2026-10-02)
+
+SCR-018 通知設定 / SCR-020 表示・地域設定 / SCR-021 チャート設定の保存先(api-design.md §24.4/§24.5)。行は初回の`GET /settings`でDB既定値により作成する。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| user_id | uuid | PK, FK→Profile.id ON DELETE CASCADE | ユーザーにつき1行 |
+| notify_pre_release | boolean | NN, DEF true | 重要指標の発表前通知 |
+| notify_result | boolean | NN, DEF true | 重要指標の結果通知 |
+| notify_favorites | boolean | NN, DEF true | お気に入りイベント通知 |
+| notify_min_importance | smallint | NN, DEF 3, CHK: `BETWEEN 1 AND 5` | 通知する重要度の下限(★1〜★5) |
+| display_language | text | NN, DEF `ja`, CHK: `IN ('ja','en')` | |
+| display_region | text | NN, DEF `JP`, CHK: `~ '^[A-Z]{2}$'` | ISO 3166-1 alpha-2 |
+| display_timezone | text | NN, DEF `Asia/Tokyo` | IANA timezone名(妥当性はBackendで検証) |
+| chart_default_fx_pair_symbol | text | nullable, FK→FxPair.symbol ON UPDATE CASCADE ON DELETE SET NULL | |
+| chart_default_timeframe | text | NN, DEF `5m`, CHK: `IN ('1m','5m','15m','30m','60m')` | |
+| created_at | timestamptz | NN, DEF now() | |
+| updated_at | timestamptz | NN, DEF now() | |
+
+**通知について(HQ確定)**: MVPはPush通知を送信しない。本テーブルは「何を通知対象とするか」の保存のみ。Push基盤追加時は、デバイストークン等を別テーブル(例: `push_devices`)に持ち、送信判定で本テーブルを参照する。
+
+**重要度の段階について(要確認)**: `notify_min_importance`は仕様どおり★1〜★5の5段階だが、`EconomicIndicator.importance`/`EconomicEvent.importance`は`LOW`/`MEDIUM`/`HIGH`の3段階(3.4節)。Push送信判定を実装する際に、★と3段階の対応付け(またはimportanceの5段階化)をHQで確定する必要がある。
+
+**RLS**: `user_id = auth.uid()`の本人のみSELECT可。書き込みはservice_roleのみ(Backend経由)。
+
 ---
 
 ## 4. Snapshot不変性・Revision管理(確定)
@@ -376,7 +418,7 @@ Supabase RLSを実装前提の設計条件として採用する。論理方針�
 
 | 区分 | 対象テーブル | 方針 |
 |---|---|---|
-| ユーザー固有 | `Profile` / `Subscription` / `Entitlement` | `auth.uid()`等を利用した本人のみSELECT可。INSERT/UPDATE/DELETEはservice_roleのみ |
+| ユーザー固有 | `Profile` / `Subscription` / `Entitlement` / `UserSettings` | `auth.uid()`等を利用した本人のみSELECT可。INSERT/UPDATE/DELETEはservice_roleのみ |
 | 共有データ | `EconomicIndicator` / `EconomicEvent` / `EventSnapshot` / `EventRevision` / `EventExplanation` / `IndicatorFxPair` / `FxPair` / `FxPrice` / `EventPriceReaction` | ユーザー単位のRLSを前提とせず、原則として全認証ユーザーからSELECT可能。INSERT/UPDATE/DELETEはservice_role(Ingestion Worker・管理者機能)のみ |
 | 運用ログ | `IngestionLog` | 一般ユーザーからは非公開。管理者機能・service_roleのみアクセス可 |
 
@@ -386,7 +428,7 @@ Supabase RLSを実装前提の設計条件として採用する。論理方針�
 
 - 歴史的record(`EconomicEvent`/`EventSnapshot`/`EventRevision`/`EventExplanation`/`EventPriceReaction`/`FxPrice`): 子から親への外部キーは`ON DELETE RESTRICT`。
 - マスタ系(`EconomicIndicator`/`FxPair`): `is_active`による論理無効化を優先し、物理削除は想定しない(`ON DELETE RESTRICT`)。
-- ユーザー系: `Profile`はソフトデリート(`deleted_at`)。`Subscription`/`Entitlement`は`Profile`への`ON DELETE CASCADE`(ユーザー削除時に契約情報も削除)。
+- ユーザー系(v4.3で変更): アカウント削除は物理削除。`auth.users`削除→`Profile`(`auth.users`への`ON DELETE CASCADE`)→`Subscription`/`Entitlement`/`UserSettings`(`Profile`への`ON DELETE CASCADE`)の順に連鎖して削除される。旧方針の`Profile`ソフトデリート(`deleted_at`)は使用しない。
 - 関連テーブル(`IndicatorFxPair`): 親(`EconomicIndicator`/`FxPair`)は物理削除を想定しないため、実質的にCASCADEが発火する場面はない。
 
 不要になったデータは削除ではなく`is_active`/`status`等による論理的な無効化を優先する。

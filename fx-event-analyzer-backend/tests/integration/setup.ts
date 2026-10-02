@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../../src/app.js';
 import type { Env } from '../../src/config/env.js';
 import { loadEnv } from '../../src/config/env.js';
+import type { SignedDataVerifier } from '../../src/storekit/signedDataVerifier.js';
 
 /**
  * These tests exercise the real app (src/app.ts) against a real local
@@ -46,11 +47,14 @@ export interface IntegrationContext {
   supabaseUrl: string;
 }
 
-export function buildIntegrationContext(integration: IntegrationEnv): IntegrationContext {
+export function buildIntegrationContext(
+  integration: IntegrationEnv,
+  options: { signedDataVerifier?: SignedDataVerifier } = {},
+): IntegrationContext {
   const serviceClient = createClient(integration.env.SUPABASE_URL, integration.env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  const app = buildApp({ env: integration.env, supabase: serviceClient, logger: false });
+  const app = buildApp({ env: integration.env, supabase: serviceClient, logger: false, ...options });
   return { app, serviceClient, anonKey: integration.anonKey, supabaseUrl: integration.env.SUPABASE_URL };
 }
 

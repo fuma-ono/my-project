@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { registerAuth } from '../auth/plugin.js';
 import { registerAccountRoutes } from './account.js';
+import { registerSettingsRoutes } from './settings.js';
 import { registerSubscriptionRoutes } from './subscription.js';
 import { registerEntitlementsRoutes } from './entitlements.js';
 import { registerIndicatorRoutes } from './indicators.js';
@@ -19,6 +20,7 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   registerAuth(app, app.env.SUPABASE_URL);
 
   await app.register(registerAccountRoutes);
+  await app.register(registerSettingsRoutes);
   await app.register(registerSubscriptionRoutes);
   await app.register(registerEntitlementsRoutes);
   await app.register(registerIndicatorRoutes);
