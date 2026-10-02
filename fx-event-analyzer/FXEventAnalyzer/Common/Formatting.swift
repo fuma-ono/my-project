@@ -100,6 +100,28 @@ enum CountryFlag {
         default: return countryCode.uppercased()
         }
     }
+
+    /// HQ指示(2026-10-02)「通貨ペアの2つの国旗を表示」: ISO 4217通貨コード
+    /// → 代表国のISO 3166コードという客観的な対応表(通貨と国の標準的な
+    /// 関係であり、推測や捏造ではない)経由でフラグ絵文字を返す。対応が無い
+    /// 通貨コードはそのまま`emoji(for:)`に渡す(2文字でないためフラグには
+    /// ならず、コード文字列がフォールバックとして返る)。
+    static func emoji(forCurrency currencyCode: String) -> String {
+        let country: String
+        switch currencyCode.uppercased() {
+        case "USD": country = "US"
+        case "JPY": country = "JP"
+        case "EUR": country = "EU"
+        case "GBP": country = "GB"
+        case "AUD": country = "AU"
+        case "CAD": country = "CA"
+        case "CNY": country = "CN"
+        case "NZD": country = "NZ"
+        case "CHF": country = "CH"
+        default: country = currencyCode
+        }
+        return emoji(for: country)
+    }
 }
 
 extension Importance {
