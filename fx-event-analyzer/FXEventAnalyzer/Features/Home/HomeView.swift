@@ -447,9 +447,18 @@ struct HomeView: View {
     /// より少し大きく描画してから`clipShape(Circle())`で円形に切り抜く
     /// 共通ヘルパーに差し替えた。
     @ViewBuilder private func circleFlag(_ emoji: String, diameter: CGFloat) -> some View {
-        Text(emoji)
-            .font(.system(size: diameter * 1.15))
+        // 最初の実装(フォントサイズ=直径×1.15のTextに直接`.frame`+
+        // `.clipShape`)はCI実機キャプチャで確認すると円にならず、絵文字
+        // 自体の角丸長方形の輪郭がほぼそのまま透けて見えていた — 絵文字の
+        // 実寸バウンディングボックスがフレームよりわずかに大きいだけだと
+        // 円がほとんどクリッピングを行わず、絵文字自身の形がそのまま見えて
+        // しまうため。`Color.clear`のフレームに`.overlay`で絵文字を重ねて
+        // 中央揃えを確定させたうえで、フォント倍率を1.15→1.9に引き上げて
+        // 絵文字の外形を円より確実に大きく描画させ、円が実際にクリッピング
+        // の主体になるようにした。
+        Color.clear
             .frame(width: diameter, height: diameter)
+            .overlay(Text(emoji).font(.system(size: diameter * 1.9)))
             .clipShape(Circle())
     }
 
