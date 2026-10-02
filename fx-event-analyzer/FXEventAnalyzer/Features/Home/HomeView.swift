@@ -216,6 +216,18 @@ struct HomeView: View {
         return formatter.string(from: Date())
     }
 
+    /// HQ指示(2026-10-02)「今日の重要イベントと通貨ペアを参考画像通りに」の
+    /// 確認で、CI実機キャプチャにて`ValueFormat.time`(端末ロケール依存の
+    /// `.timeStyle = .short`)がCIのロケールでは「11:21 AM」のように改行を
+    /// 伴う形式になり、時刻列が2行に割れていた(参考画像は「21:30」の24時間
+    /// 表記)。ロケールに依存しない24時間表記の専用フォーマッタに差し替えた。
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        formatter.timeZone = .current
+        return formatter
+    }()
+
     private var loadedScreen: some View {
         let topEvents = Array(mappedTodayEvents.prefix(3))
         let pairs = Array(mappedPairs.prefix(3))
@@ -338,9 +350,10 @@ struct HomeView: View {
 
     @ViewBuilder private func eventRow(_ event: HomeEventSummary) -> some View {
         HStack(alignment: .top, spacing: 6) {
-            Text(ValueFormat.time(event.releaseDatetime))
+            Text(Self.timeFormatter.string(from: event.releaseDatetime))
                 .font(.system(size: 8, weight: .medium))
                 .foregroundStyle(V5P.muted)
+                .fixedSize(horizontal: true, vertical: false)
                 .frame(width: 24, alignment: .leading)
 
             VStack(spacing: 2) {
@@ -380,18 +393,25 @@ struct HomeView: View {
     }
 
     @ViewBuilder private func pairRow(_ pair: FXPairUI) -> some View {
-        HStack(spacing: 8) {
-            HStack(spacing: -6) {
-                Text(CountryFlag.emoji(forCurrency: pair.baseCurrency)).font(.system(size: 14))
-                Text(CountryFlag.emoji(forCurrency: pair.quoteCurrency)).font(.system(size: 14))
+        // HQ指示(2026-10-02)「通貨ペアを参考画像通りに」の確認で、CI実機
+        // キャプチャにて価格("155.42"等)と変動率("+0.25%"等)が2行に
+        // 折り返されていた(カード幅214に対しシンボル/価格/変動率/chevron
+        // が収まりきらなかった)。折り返させたくないテキストに
+        // `.fixedSize(horizontal: true, vertical: false)`を付け、合わせて
+        // フォントサイズと間隔を詰めて実測で調整した。
+        HStack(spacing: 5) {
+            HStack(spacing: -7) {
+                Text(CountryFlag.emoji(forCurrency: pair.baseCurrency)).font(.system(size: 13))
+                Text(CountryFlag.emoji(forCurrency: pair.quoteCurrency)).font(.system(size: 13))
             }
-            Text(pair.displaySymbol).font(.system(size: 9, weight: .bold))
-            Spacer()
-            Text(pair.price).font(.system(size: 11, weight: .bold))
-            HStack(spacing: 2) {
+            Text(pair.displaySymbol).font(.system(size: 8, weight: .bold)).fixedSize(horizontal: true, vertical: false)
+            Spacer(minLength: 2)
+            Text(pair.price).font(.system(size: 10, weight: .bold)).fixedSize(horizontal: true, vertical: false)
+            HStack(spacing: 1) {
                 Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 6))
-                Text(pair.change).font(.system(size: 8, weight: .semibold))
+                Text(pair.change).font(.system(size: 7, weight: .semibold))
             }
+            .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
             Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
         }
@@ -448,9 +468,10 @@ struct HomeView: View {
     @ViewBuilder private func speechRow(_ speech: HomeSpeechSummary) -> some View {
         NavigationLink(value: AppRoute.speechDetail(id: speech.id)) {
             HStack(alignment: .top, spacing: 6) {
-                Text(ValueFormat.time(speech.statementDatetime))
+                Text(Self.timeFormatter.string(from: speech.statementDatetime))
                     .font(.system(size: 8, weight: .medium))
                     .foregroundStyle(V5P.muted)
+                    .fixedSize(horizontal: true, vertical: false)
                     .frame(width: 24, alignment: .leading)
                 Text(CountryFlag.emoji(for: speech.countryCode)).font(.system(size: 14))
                 VStack(alignment: .leading, spacing: 3) {
