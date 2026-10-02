@@ -43,6 +43,10 @@ enum AppRoute: Hashable {
     case speechDetail(id: String)
     /// SCR-028 ホーム通貨ペア編集(お気に入り通貨ペアAPI未実装、仮画面のみ)
     case homeCurrencyPairEditor
+    /// HQ指示(2026-10-02)「お気に入りはホームで最大3件、『すべて見る』から
+    /// 全件を確認できる構成に」。ui-screens.mdに該当SCR番号が無い新規画面
+    /// (指標・イベント・通貨ペアのお気に入りを横断する一覧)。
+    case favoritesList
     /// SCR-002 新規会員登録(Loginから)
     case signUp
     /// SCR-003 パスワード再設定(Loginから)

@@ -1,5 +1,33 @@
 import SwiftUI
 
+/// HQ指示(2026-10-02)「今日の重要イベントのイベント種別は経済指標/要人
+/// 発言/中央銀行をサポートする設計にする」。`HomeEventSummary`(指標発表
+/// イベントAPI)自体にカテゴリ情報が無いため、`HomeEventSummary.homeCategory`
+/// (このファイル下部)は常に`.economicIndicator`を返す — 他の2ケースは、
+/// 将来要人発言/中央銀行声明のデータソースが追加された時にそのまま使える
+/// 受け皿として定義している(存在しないデータを補完する目的ではない)。
+enum HomeEventCategory {
+    case economicIndicator
+    case vipStatement
+    case centralBank
+
+    var label: String {
+        switch self {
+        case .economicIndicator: return "経済指標"
+        case .vipStatement: return "要人発言"
+        case .centralBank: return "中央銀行"
+        }
+    }
+
+    var badgeColor: Color {
+        switch self {
+        case .economicIndicator: return Color(red: 150.0 / 255, green: 32.0 / 255, blue: 58.0 / 255)
+        case .vipStatement: return Color(red: 40.0 / 255, green: 93.0 / 255, blue: 170.0 / 255)
+        case .centralBank: return Color(red: 95.0 / 255, green: 48.0 / 255, blue: 212.0 / 255)
+        }
+    }
+}
+
 /// SCR-001 Home (ui-screens.md §5). Real `GET /home` data — SCHEDULED /
 /// RELEASED events, each tappable to SCR-004 Event Detail.
 ///
@@ -17,40 +45,47 @@ import SwiftUI
 /// - `tabSelection`: a real `Binding<Int>` threaded from `MainTabView`, so
 ///   `V5BottomBar` switches tabs for real.
 ///
-/// HQ指示(2026-10-02)「ホーム画面の構成」→ HQから参考画像が直接共有され
-/// 「UIはこれを再現してください」との指示(第2回)。画像は「今日の重要
-/// イベント」「通貨ペア」の2カードのみを示しており(各カード: アイコン+
-/// タイトル+右側アクションのヘッダー、区切り線付きの行リスト、最大3件)、
-/// この画像のカード/行デザインに合わせて作り直した。合わせて判断した点:
-/// - 画像の「今日の重要イベント」行は種別バッジ(経済指標=赤/要人発言=青/
-///   中央銀行=紫)を持つ。これは前回版で別セクションにしていた「直近の
-///   要人発言」を、別セクションではなくイベント行の種別タグとして統合する
-///   という意図だと判断し、独立した「直近の要人発言」セクションは廃止した。
-///   ただしバックエンドには指標発表イベントのAPIしか無く、要人発言/中央
-///   銀行声明そのものを表すデータは存在しない(SCR-014/015は仮画面のみ、
-///   `api-design.md`にも該当エンドポイントなし)ため、実際に表示される
-///   行は常に「経済指標」バッジのみ — 画像にある「FOMCメンバー発言」
-///   「ECB要人発言」のような行は実データが無く、捏造せず表示していない。
-///   バックエンド側にその種のデータが追加された時点でバッジが自然に
-///   増える設計。
-/// - 行の予想/前回の数値は画像では「%」付きだが、`HomeEventSummary`に
-///   単位情報が無く(指標によっては%でない値もあり得る)、他画面(Event
-///   Detail等)も単位を付けずに数値のみ表示しているため、ここでも数値の
-///   みとした(実際と異なる単位を捏造しないため)。
-/// - 「通貨ペア」の価格変動色は画像の実測に合わせて反転した(上昇=赤/
-///   下落=緑、日本の相場表示でよく使われる配色。既存の`fxBox`は逆
-///   (上昇=緑)だったため、このカードでは使っていない)。
-/// - 通貨ペアの2つの国旗は、画像にある「ベース通貨/決済通貨それぞれの
-///   国旗」を表示するため、主要通貨→代表国(ISO 4217↔3166の客観的対応、
-///   推測ではない)の変換を`CountryFlag.emoji(forCurrency:)`として追加。
-/// - 「お気に入り」は画像に写っていないが(画像はおそらく画面上部のみの
-///   抜粋)、同じカード/行デザインに揃えて残した(国旗+名称+重要度
-///   バッジ、画像にある種別バッジ・2行目の数値は無し — イベント/指標
-///   どちらも含むため種別を固定できない)。
+/// HQ指示(2026-10-02)「ホーム画面の構成」→ 参考画像共有「UIはこれを
+/// 再現してください」(第2回)→ HQ訂正(第3回、2026-10-02)「直近の要人
+/// 発言を今日の重要イベントに統合するのは誤り、4セクション構成を維持」。
+/// 最終的に以下4セクションで確定:
+/// 1. 今日の重要イベント — これから発生する重要イベント(経済指標/要人
+///    発言/中央銀行イベント)。`HomeViewModel.upcomingEvents`(SCHEDULED)
+///    のみで、既発表(RELEASED)のイベントは含まない。
+/// 2. 通貨ペア — ユーザーが確認したい通貨ペア。
+/// 3. お気に入り — ユーザーが保存した指標・イベント・通貨ペア。ホームは
+///    最大3件、ヘッダーの「すべて見る」から`AppRoute.favoritesList`
+///    (仮画面)へ。
+/// 4. 直近の要人発言 — すでに発生した要人発言とその後の値動き(「発言→
+///    値動き分析」への主要導線)。バックエンドに該当APIが無い
+///    (SCR-014/015は仮画面のみ)ため`HomeViewModel.recentSpeeches`は
+///    常に空 — 架空データは出さず、「現在表示できる要人発言はありません」
+///    という空状態を表示する(セクション自体は常に表示し、将来API追加時に
+///    そのまま埋まる構造)。
+///
+/// 参考画像由来のカード/行デザイン(アイコン+タイトル+右側アクションの
+/// ヘッダー、区切り線付きの行リスト、種別/重要度バッジ、国旗)は維持。
+/// 合わせて判断した点:
+/// - イベント種別は`HomeEventCategory`として経済指標/要人発言/中央銀行の
+///   3つをサポートする設計にしたが、`HomeEventSummary`(指標発表イベント
+///   API)にはカテゴリ情報自体が無いため、実際に表示される行は常に
+///   `.economicIndicator`のみ — 存在しないデータを補完・捏造していない。
+/// - 重要度はHIGH/MEDIUM/LOWをバッジで右側に表示(星表示は使用しない)。
+/// - 予想/前回の数値は単位を付けず数値のみ(`HomeEventSummary`に単位
+///   情報が無いため)。将来イベントデータから単位を取得できるようになれば
+///   `eventSubtitle`に反映する。
+/// - 「通貨ペア」の価格変動色は参考画像の実測に合わせて反転(上昇=赤/
+///   下落=緑、日本の相場表示でよく使われる配色)。通貨ペアの2つの国旗は
+///   主要通貨→代表国(ISO 4217↔3166の客観的対応)の変換
+///   `CountryFlag.emoji(forCurrency:)`で表示。
+/// - お気に入りは指標・イベントに加え通貨ペアも概念上は対象(
+///   `FavoritesStore.ItemType.fxPair`/`HomeFavoriteItem.fxPair`として型を
+///   用意済み)だが、通貨ペアを★登録できる画面も単体取得APIも現状どこにも
+///   無いため、実際にこの種類のお気に入りが生成されることはまだ無い。
 /// - カードは`V5Card`のような固定高さ矩形ではなく、内容に応じて自然に
 ///   高さが決まる`VStack`ベースの新カード(`homeCard`)にした — 行数や
 ///   2行テキストの実際の高さを事前に正確な数値で予測できないため。
-///   3カード全体をもう1つの`VStack`で縦に並べ、画面上部に固定オフセット
+///   4カード全体をもう1つの`VStack`で縦に並べ、画面上部に固定オフセット
 ///   で配置している(個々の絶対y座標を手計算する前回方式はやめた)。
 struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
@@ -162,9 +197,6 @@ struct HomeView: View {
         .position(x: V5P.W / 2, y: 40)
     }
 
-    // 参考画像から実測(Home画面全体のキャプチャに対する相対比率)。
-    private static let economicIndicatorLabel = "経済指標"
-    private static let economicIndicatorBadgeColor = Color(red: 150.0 / 255, green: 32.0 / 255, blue: 58.0 / 255)
     /// 日本の相場表示でよく使われる配色(上昇=赤/下落=緑)。既存の
     /// `Importance.v5Color`(他画面で使用中、変更していない)とは別に、
     /// このカード専用の重要度バッジ色として中程度だけ差し替える
@@ -229,10 +261,43 @@ struct HomeView: View {
 
                 if !favorites.isEmpty {
                     homeCard {
-                        cardHeader(icon: "star.fill", title: "お気に入り") { EmptyView() }
+                        cardHeader(icon: "star.fill", title: "お気に入り") {
+                            NavigationLink(value: AppRoute.favoritesList) {
+                                HStack(spacing: 2) {
+                                    Text("すべて見る").font(.system(size: 7)).foregroundStyle(V5P.muted)
+                                    Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
+                                }
+                            }
+                        }
                         ForEach(Array(favorites.enumerated()), id: \.element.id) { idx, item in
                             if idx > 0 { Divider().overlay(V5P.line.opacity(0.4)) }
                             favoriteRow(item)
+                        }
+                    }
+                }
+
+                // HQ指示(2026-10-02、訂正)「直近の要人発言は独立セクションの
+                // まま維持、架空データは絶対に表示しないこと」。
+                // `recentSpeeches`は常に空(`HomeSpeechSummary`参照)なので、
+                // このカードは常に表示した上で空状態を出す(セクション自体を
+                // 隠さない選択。「発言→値動き分析」への主要導線のため)。
+                homeCard {
+                    cardHeader(icon: "quote.bubble.fill", title: "直近の要人発言") {
+                        NavigationLink(value: AppRoute.speechList) {
+                            HStack(spacing: 2) {
+                                Text("すべて見る").font(.system(size: 7)).foregroundStyle(V5P.muted)
+                                Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
+                            }
+                        }
+                    }
+                    if viewModel.recentSpeeches.isEmpty {
+                        Text("現在表示できる要人発言はありません")
+                            .font(.system(size: 8)).foregroundStyle(V5P.muted)
+                            .padding(.vertical, 4)
+                    } else {
+                        ForEach(Array(viewModel.recentSpeeches.prefix(3).enumerated()), id: \.element.id) { idx, speech in
+                            if idx > 0 { Divider().overlay(V5P.line.opacity(0.4)) }
+                            speechRow(speech)
                         }
                     }
                 }
@@ -285,11 +350,11 @@ struct HomeView: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 5) {
-                    Text(Self.economicIndicatorLabel)
+                    Text(event.homeCategory.label)
                         .font(.system(size: 6, weight: .bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Self.economicIndicatorBadgeColor, in: Capsule())
+                        .background(event.homeCategory.badgeColor, in: Capsule())
                     Text(event.indicatorName).font(.system(size: 8, weight: .bold)).lineLimit(1)
                 }
                 if let subtitle = Self.eventSubtitle(event) {
@@ -343,6 +408,10 @@ struct HomeView: View {
             NavigationLink(value: AppRoute.indicatorDetail(id: id)) {
                 favoriteRowContent(countryCode: countryCode, currencyCode: currencyCode, name: name, importance: importance)
             }.buttonStyle(.plain)
+        case .fxPair(let id, let symbol, let price, let change, let isUp):
+            NavigationLink(value: AppRoute.chartAnalysis(fxPairId: id, fxPairSymbol: symbol)) {
+                favoriteFxPairRowContent(symbol: symbol, price: price, change: change, isUp: isUp)
+            }.buttonStyle(.plain)
         }
     }
 
@@ -360,11 +429,53 @@ struct HomeView: View {
         .foregroundStyle(.white)
     }
 
-    /// 「今日の重要イベント」: 当日のSCHEDULED/RELEASEDイベントを時刻順に
-    /// 結合した1本のリスト(旧「Upcoming Events」ヒーロー+「Recent Events」
-    /// リストの統合)。
+    /// `HomeFavoriteItem.fxPair`のドキュメントコメント参照 — 現状このtypeの
+    /// お気に入りは生成されないが、実装としては用意してある。
+    @ViewBuilder private func favoriteFxPairRowContent(symbol: String, price: String, change: String, isUp: Bool) -> some View {
+        HStack(spacing: 8) {
+            Text(symbol).font(.system(size: 9, weight: .bold))
+            Spacer()
+            Text(price).font(.system(size: 10, weight: .bold))
+            Text(change).font(.system(size: 8, weight: .semibold)).foregroundStyle(isUp ? Self.changeUpColor : Self.changeDownColor)
+            Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
+        }
+        .foregroundStyle(.white)
+    }
+
+    /// `HomeSpeechSummary`のドキュメントコメント参照 — 実データは一切流れて
+    /// 来ないため、CIキャプチャ等では描画されない。バックエンドに要人発言
+    /// APIが追加された時にそのまま使える受け皿として用意している。
+    @ViewBuilder private func speechRow(_ speech: HomeSpeechSummary) -> some View {
+        NavigationLink(value: AppRoute.speechDetail(id: speech.id)) {
+            HStack(alignment: .top, spacing: 6) {
+                Text(ValueFormat.time(speech.statementDatetime))
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundStyle(V5P.muted)
+                    .frame(width: 24, alignment: .leading)
+                Text(CountryFlag.emoji(for: speech.countryCode)).font(.system(size: 14))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(speech.speakerName).font(.system(size: 8, weight: .bold))
+                    Text(speech.headline).font(.system(size: 7)).foregroundStyle(V5P.muted).lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                if let symbol = speech.reactionFxSymbol, let change = speech.reactionChangePercent {
+                    VStack(spacing: 2) {
+                        Text(symbol).font(.system(size: 7, weight: .bold))
+                        Text(ValueFormat.percent(change, signed: true))
+                            .font(.system(size: 7, weight: .semibold))
+                            .foregroundStyle(change >= 0 ? Self.changeUpColor : Self.changeDownColor)
+                    }
+                }
+            }
+            .foregroundStyle(.white)
+        }.buttonStyle(.plain)
+    }
+
+    /// 「今日の重要イベント」: HQ指示(2026-10-02、訂正)「これから発生する
+    /// 重要イベント」— 既発表(RELEASED)は含めず、`upcomingEvents`
+    /// (SCHEDULED)のみを時刻順に並べる。
     private var mappedTodayEvents: [HomeEventSummary] {
-        (viewModel.upcomingEvents + viewModel.recentEvents).sorted { $0.releaseDatetime < $1.releaseDatetime }
+        viewModel.upcomingEvents.sorted { $0.releaseDatetime < $1.releaseDatetime }
     }
 
     private var mappedPairs: [FXPairUI] {
@@ -387,6 +498,12 @@ extension Importance {
         case .low: return V5P.blue
         }
     }
+}
+
+private extension HomeEventSummary {
+    /// `HomeEventCategory`のドキュメントコメント参照 — 指標発表イベント
+    /// APIにカテゴリ情報が無いため、常に経済指標として扱う。
+    var homeCategory: HomeEventCategory { .economicIndicator }
 }
 
 private extension FXPairUI {

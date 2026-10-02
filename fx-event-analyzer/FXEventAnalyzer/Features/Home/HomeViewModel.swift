@@ -16,13 +16,34 @@ enum HomeState: Equatable {
 enum HomeFavoriteItem: Identifiable, Equatable {
     case event(id: String, countryCode: String, currencyCode: String, name: String, importance: Importance)
     case indicator(id: String, countryCode: String, currencyCode: String, name: String, importance: Importance)
+    /// `FavoritesStore.ItemType.fxPair`と同じ理由で、まだ実際には生成
+    /// されない(通貨ペア単体取得APIも★も無い)が、型は先に揃えてある。
+    case fxPair(id: String, symbol: String, price: String, change: String, isUp: Bool)
 
     var id: String {
         switch self {
         case .event(let id, _, _, _, _): return "event:\(id)"
         case .indicator(let id, _, _, _, _): return "indicator:\(id)"
+        case .fxPair(let id, _, _, _, _): return "fxPair:\(id)"
         }
     }
+}
+
+/// HQ指示(2026-10-02)「直近の要人発言: すでに発生した要人発言と、その後の
+/// 値動き」。バックエンドに要人発言/中央銀行声明そのものを表すAPIが無い
+/// (SCR-014/015は仮画面のみ、`api-design.md`にも該当エンドポイントなし)
+/// ため、`HomeViewModel.recentSpeeches`は常に空配列。将来そのAPIが追加
+/// された時にそのままマッピングできるよう、想定されるフィールド(発言者・
+/// 発言日時・見出し・その後のFXペア反応)で仮に定義している — 実データは
+/// 一切含まない。
+struct HomeSpeechSummary: Identifiable, Equatable {
+    let id: String
+    let countryCode: String
+    let speakerName: String
+    let statementDatetime: Date
+    let headline: String
+    let reactionFxSymbol: String?
+    let reactionChangePercent: Double?
 }
 
 /// SCR-001 Home. Phase 3 §4: real `GET /home` connection —
@@ -42,6 +63,9 @@ enum HomeFavoriteItem: Identifiable, Equatable {
 final class HomeViewModel: ObservableObject {
     @Published private(set) var state: HomeState = .loading
     @Published private(set) var favoriteItems: [HomeFavoriteItem] = []
+    /// 常に空(`HomeSpeechSummary`のドキュメントコメント参照) — バックエンドに
+    /// 要人発言APIが追加されたら、ここを埋める`loadSpeeches()`相当を足す。
+    @Published private(set) var recentSpeeches: [HomeSpeechSummary] = []
 
     private let apiClient: APIClient
     private let favoritesStore: FavoritesStore
@@ -104,6 +128,11 @@ final class HomeViewModel: ObservableObject {
                 if let item = await fetchFavoriteIndicator(id: entry.id) {
                     items.append(item)
                 }
+            case .fxPair:
+                // `FavoritesStore.ItemType.fxPair`のドキュメントコメント参照
+                // — 単体取得APIも★も無いため、このtypeのエントリは実際には
+                // 存在しない。来たとしても黙ってスキップする(捏造しない)。
+                continue
             }
         }
         favoriteItems = items

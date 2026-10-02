@@ -18,6 +18,11 @@ final class FavoritesStore: ObservableObject {
     enum ItemType: String {
         case indicator
         case event
+        /// HQ指示(2026-10-02)「お気に入りは指標・イベント・通貨ペア」。
+        /// 通貨ペア単体を取得するAPIも、どの画面にも通貨ペアをお気に入り
+        /// 登録する★も現状無いため、このtypeのエントリは実際には発生しない
+        /// — 両方が揃った時にすぐ使えるよう型だけ先に用意している。
+        case fxPair
     }
 
     struct Entry: Equatable {
