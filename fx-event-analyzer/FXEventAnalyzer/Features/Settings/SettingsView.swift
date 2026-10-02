@@ -26,6 +26,11 @@ import SwiftUI
 /// 距離(19.5)で決めているため、ログアウトカードの下には参考画像より
 /// 広い余白が残る(キャンバスの縦横比の違いによるもの)。
 ///
+/// HQ指示(2026-10-02、実機スクリーンショット確認後): 文字・アイコン・
+/// シェブロン(特にシェブロン)を大きく、カードの塗りは参考画像の実測
+/// RGB(31-36, 46-52, 69-77)の中央値#213149に全カード統一。上記の
+/// 「カード#001A36」は置き換え済み。
+///
 /// 参考画像との既知の差分(意図的な妥協、完全な一致ではない箇所):
 /// - タイトル「設定」の縦位置: 参考画像の実測ではy≈4.2%(V5換算y≈21)だが、
 ///   `V5Header`は全画面共通でy=40固定。他タブとのヘッダー位置統一を優先し、
@@ -155,13 +160,13 @@ struct SettingsView: View {
 
     /// 参考画像から実測したカード・行の見た目(V5座標系)。
     private static let cornerRadius: CGFloat = 6.5
-    private static let cardFill = Color(red: 0.0, green: 0.102, blue: 0.212) // #001A36
+    private static let cardFill = Color(red: 33 / 255, green: 49 / 255, blue: 73 / 255) // #213149
     private static let logoutHeight: CGFloat = 31.5
-    private static let titleSize: CGFloat = 9.5
-    private static let iconSize: CGFloat = 12
-    private static let iconWidth: CGFloat = 16
-    /// アイコン列の右端から文字の左端まで(カード左端から文字まで39.3の実測値に合わせる)。
-    private static let iconTitleGap: CGFloat = 14.3
+    private static let titleSize: CGFloat = 10.5
+    private static let iconSize: CGFloat = 13.5
+    private static let iconWidth: CGFloat = 18
+    /// アイコン列の右端から文字の左端まで(カード左端から文字まで39.3の実測値を保つ)。
+    private static let iconTitleGap: CGFloat = 13.3
     private static let iconColor = Color(red: 0.80, green: 0.89, blue: 1.0)
     private static let chevronColor = Color(red: 0.62, green: 0.76, blue: 0.93)
 
@@ -209,9 +214,9 @@ struct SettingsView: View {
             rowIcon(icon).foregroundStyle(Self.iconColor)
             Text(title).font(.system(size: Self.titleSize, weight: .medium)).foregroundStyle(.white)
             Spacer()
-            Image(systemName: "chevron.right").font(.system(size: 7, weight: .semibold)).foregroundStyle(Self.chevronColor)
+            Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(Self.chevronColor)
         }
-        .padding(.leading, 9)
+        .padding(.leading, 8)
         .padding(.trailing, 10)
         .frame(width: Self.cardWidth, height: Self.rowHeight)
         // 行は背景を持たないため、これがないと`.plain`スタイルでは
@@ -235,7 +240,7 @@ struct SettingsView: View {
                 Spacer()
             }
             .foregroundStyle(V5P.red)
-            .padding(.leading, 9)
+            .padding(.leading, 8)
             .frame(width: Self.cardWidth, height: Self.logoutHeight)
             .background(card(height: Self.logoutHeight))
             .contentShape(Rectangle())
