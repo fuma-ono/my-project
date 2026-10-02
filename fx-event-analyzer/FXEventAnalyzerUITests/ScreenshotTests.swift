@@ -132,9 +132,31 @@ final class ScreenshotTests: XCTestCase {
         tap(containing: "ホーム")
         tap(containing: "設定")
         XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load before \(name)")
-        tap(containing: row)
+        tapByCoordinate(containing: row)
         XCTAssertTrue(waitForAnyElement(containing: text, timeout: 15), "\(name) did not load")
         capture(name)
+    }
+
+    /// SettingsView's rows sit on V5's scaled fixed canvas, where
+    /// XCUITest's `isHittable` came back false for them in CI (the first
+    /// run captured 11-13 as the untouched Settings list), so
+    /// `tap(containing:)` never tapped. Tap the element's center
+    /// coordinate instead, which is where it is actually drawn.
+    private func tapByCoordinate(containing text: String, timeout: TimeInterval = 10) {
+        let predicate = NSPredicate(format: "label CONTAINS[c] %@", text)
+        let collections: [XCUIElementQuery] = [app.buttons, app.cells, app.otherElements, app.staticTexts]
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            for collection in collections {
+                let element = collection.matching(predicate).firstMatch
+                if element.exists {
+                    element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+                    return
+                }
+            }
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        XCTFail("Could not find an element containing '\(text)' within \(timeout)s")
     }
 
     // MARK: - Helpers
