@@ -447,20 +447,27 @@ struct HomeView: View {
     /// より少し大きく描画してから`clipShape(Circle())`で円形に切り抜く
     /// 共通ヘルパーに差し替えた。
     @ViewBuilder private func circleFlag(_ emoji: String, diameter: CGFloat) -> some View {
-        // 3回続けてCI実機キャプチャのピクセル境界追跡で検証した結果、
-        // 真の原因が判明した: 倍率1.9倍時点で国旗絵文字の実際のインク幅
-        // (円が必要とする直径65px相当に対し実測約53px)がそもそも円の
-        // 直径より狭く、どれだけ左右位置を補正しても必ずどちらか片側で
-        // インクが円のクリップ境界まで届かず直線状に見えてしまう(2回目の
-        // 補正で左端のズレは解消したが、今度は右端が同じ理由で直線になっ
-        // た)。位置合わせ(`.offset`)でこの問題は原理的に解決できないため、
-        // 代わりに倍率を大幅に引き上げて(1.9→4.5)インク自体が全方向で
-        // 確実に円より大きくなるようにした — こうすれば絵文字の字送りが
-        // 多少左右非対称でも、円が実際にクリッピングの主体になり続ける。
-        Color.clear
-            .frame(width: diameter, height: diameter)
-            .overlay(Text(emoji).font(.system(size: diameter * 4.5)))
-            .clipShape(Circle())
+        // 4回目の修正(倍率4.5倍への引き上げ)後もCI実機キャプチャで確認
+        // すると円にならなかった。さらに不可解な実測結果として、倍率
+        // 1.9倍時点の右端クリップ位置と倍率4.5倍時点の右端クリップ位置が
+        // ピクセル単位で完全に同一だった一方、左端の位置はむしろ倍率を
+        // 上げた方が内側(字送り方向)にズレていた — インクの実寸だけが
+        // 原因ならあり得ない挙動だったため、`.overlay`で重ねた巨大な
+        // `Text`の「見た目はクリップされていても、レイアウト計算上の
+        // 実寸(クリップ前の巨大なサイズ)」が`Color.clear`の13×13フレーム
+        // を飛び越えて外側(行全体のHStack)のレイアウトに影響し、結果的に
+        // 行内の他要素の配置まで揺らいでいた可能性が高いと判断した。
+        // `GeometryReader`は子に渡すサイズ(`geo.size`)と自身が親へ
+        // 報告するサイズ(外側の`.frame`で固定)を完全に分離できるため、
+        // 内側の`Text`がどれだけ巨大でも親レイアウトには一切影響しない
+        // 構造に変更した。
+        GeometryReader { geo in
+            Text(emoji)
+                .font(.system(size: min(geo.size.width, geo.size.height) * 1.8))
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
+        }
+        .frame(width: diameter, height: diameter)
+        .clipShape(Circle())
     }
 
     private static func eventSubtitle(_ event: HomeEventSummary) -> String? {
