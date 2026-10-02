@@ -231,7 +231,36 @@ final class SettingsOptionTests: XCTestCase {
     }
 
     func testIncludingDoesNotDuplicateAListedValue() {
-        XCTAssertEqual(ChartSettingsView.fxPairs.including(nil) { _ in "" }.count, ChartSettingsView.fxPairs.count)
         XCTAssertEqual(ChartSettingsView.timeframes.including("5m") { $0 }.count, 5)
+    }
+}
+
+// MARK: - FX pair candidates (provisional static catalog)
+
+@MainActor
+final class FXPairOptionsTests: XCTestCase {
+    func testStaticCatalogMatchesTheBackendSeed() async throws {
+        let symbols = try await StaticFXPairCatalog().availableSymbols()
+
+        XCTAssertEqual(symbols, ["USDJPY", "EURUSD", "EURJPY"])
+    }
+
+    func testOptionsComeFromTheCatalogWithNoneFirst() {
+        let options = ChartSettingsView.fxPairOptions(symbols: ["GBPJPY", "AUDUSD"], current: "GBPJPY")
+
+        XCTAssertEqual(options.map(\.value), [nil, "GBPJPY", "AUDUSD"])
+        XCTAssertEqual(options.map(\.label), ["指定なし", "GBP/JPY", "AUD/USD"])
+    }
+
+    func testOptionsKeepASavedPairTheCatalogDoesNotList() {
+        let options = ChartSettingsView.fxPairOptions(symbols: [], current: "USDJPY")
+
+        XCTAssertEqual(options.map(\.value), [nil, "USDJPY"])
+        XCTAssertEqual(options.last?.label, "USD/JPY")
+    }
+
+    func testDisplayNameLeavesUnexpectedSymbolsAsIs() {
+        XCTAssertEqual(FXPairSymbol.displayName("EURUSD"), "EUR/USD")
+        XCTAssertEqual(FXPairSymbol.displayName("XAU"), "XAU")
     }
 }
