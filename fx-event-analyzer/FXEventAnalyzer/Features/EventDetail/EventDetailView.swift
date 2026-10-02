@@ -52,7 +52,6 @@ struct EventDetailView: View {
             loadingScaffold { FXEmptyState(icon: "lock.fill", title: "この情報はご利用いただけません", message: "現在のプランではこのイベント情報を閲覧できません。") }
         case .loaded(let response):
             V5Viewport {
-                V5TopStatus()
                 V5Header(
                     title: "イベント詳細", back: true,
                     isFavorite: favorites.isFavorite(.event, id: eventId),

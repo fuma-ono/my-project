@@ -49,7 +49,6 @@ struct SearchView: View {
     var body: some View {
         NavigationStack(path: $path) {
             V5Viewport {
-                V5TopStatus()
                 V5Header(title: "検索", back: false)
                 HStack {
                     Image(systemName: "magnifyingglass").foregroundStyle(V5P.muted)

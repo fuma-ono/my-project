@@ -64,7 +64,6 @@ struct HistoricalComparisonView: View {
             loadingScaffold { FXEmptyState(icon: "lock.fill", title: "この情報はご利用いただけません", message: "現在のプランでは過去の比較データを閲覧できません。") }
         case .loaded(let response):
             V5Viewport {
-                V5TopStatus()
                 V5Header(title: "過去の比較", back: true, onBack: { dismiss() })
 
                 HStack(spacing: 4) {

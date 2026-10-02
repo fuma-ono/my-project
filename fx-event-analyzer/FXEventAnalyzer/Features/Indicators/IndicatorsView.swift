@@ -63,7 +63,6 @@ struct IndicatorsView: View {
             loadingScaffold { FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "経済指標データはまだ利用できません。") }
         case .loaded(let indicators):
             V5Viewport {
-                V5TopStatus()
                 V5Header(title: "指標一覧", back: false)
                 HStack {
                     Image(systemName: "magnifyingglass").foregroundStyle(V5P.muted)

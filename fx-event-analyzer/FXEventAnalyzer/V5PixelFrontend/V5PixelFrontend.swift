@@ -234,22 +234,6 @@ struct V5Button: View {
     }
 }
 
-struct V5TopStatus: View {
-    var body: some View {
-        HStack {
-            Text("9:41").font(.system(size: 8, weight: .semibold)).foregroundStyle(.white)
-            Spacer()
-            HStack(spacing: 4) {
-                Image(systemName: "cellularbars").font(.system(size: 7))
-                Image(systemName: "wifi").font(.system(size: 8))
-                Image(systemName: "battery.100").font(.system(size: 9))
-            }.foregroundStyle(.white)
-        }
-        .frame(width: 204, height: 16)
-        .position(x: 117, y: 17)
-    }
-}
-
 struct V5BottomBar: View {
     @Binding var selected: Int
     /// 方向転換(2026-09-30、HQより3枚目の参考画像

@@ -68,7 +68,6 @@ struct MovementDetailView: View {
             loadingScaffold { FXEmptyState(icon: "lock.fill", title: "この情報はご利用いただけません", message: "現在のプランでは値動き情報を閲覧できません。") }
         case .loaded(let preReleasePrice, let reactions):
             V5Viewport {
-                V5TopStatus()
                 V5Header(title: "変動詳細", back: true, onBack: { dismiss() })
 
                 HStack {

@@ -65,7 +65,6 @@ struct AccountView: View {
             loadingScaffold { FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "アカウント情報はまだ利用できません。") }
         case .loaded(let account, let subscription):
             V5Viewport {
-                V5TopStatus()
                 V5Header(title: "アカウント", back: true, onBack: { dismiss() })
 
                 Image(systemName: "person.circle.fill").font(.system(size: 52)).foregroundStyle(.white).position(x: 117, y: 105)

@@ -51,7 +51,6 @@ struct IndicatorDetailView: View {
             loadingScaffold { FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "指標情報はまだ利用できません。") }
         case .loaded(let indicator, let relatedFxPairs, _, let nextScheduledEvent):
             V5Viewport {
-                V5TopStatus()
                 V5Header(
                     title: "指標詳細", back: true,
                     isFavorite: favorites.isFavorite(.indicator, id: indicatorId),

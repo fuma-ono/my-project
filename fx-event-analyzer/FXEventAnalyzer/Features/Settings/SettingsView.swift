@@ -10,7 +10,7 @@ import SwiftUI
 /// Frontendパッケージの固定座標ではなく、その参考画像を実測して再現する」
 /// という方針をこの画面にも適用している。
 ///
-/// 全体の外枠(`V5Viewport`/`V5TopStatus`/`V5Header`/`V5BottomBar`)は
+/// 全体の外枠(`V5Viewport`/`V5Header`/`V5BottomBar`)は
 /// 他の全タブ画面と共有しているため変更していない(タブ切り替え時に文字
 /// サイズが急に変わるような見た目の不整合を避けるため)。変更したのは
 /// リスト部分のみで、参考画像から実測したフラクション座標を234×491の
@@ -83,7 +83,6 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             V5Viewport {
-                V5TopStatus()
                 V5Header(title: "設定", back: false)
 
                 groupBackground(topY: group1Top, rowCount: 5)

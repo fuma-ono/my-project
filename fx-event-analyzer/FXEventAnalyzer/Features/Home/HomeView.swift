@@ -138,7 +138,6 @@ struct HomeView: View {
 
     private var loadedScreen: some View {
         V5Viewport {
-            V5TopStatus()
             homeHeader
 
             if let hero = mappedEvents.upcoming.first {

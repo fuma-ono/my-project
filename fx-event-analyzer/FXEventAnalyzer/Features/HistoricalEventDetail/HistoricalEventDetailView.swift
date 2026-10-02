@@ -57,7 +57,6 @@ struct HistoricalEventDetailView: View {
             loadingScaffold { FXEmptyState(icon: "lock.fill", title: "この情報はご利用いただけません", message: "現在のプランでは過去のイベント情報を閲覧できません。") }
         case .loaded(let response):
             V5Viewport {
-                V5TopStatus()
                 V5Header(title: "過去のイベント詳細", back: true, onBack: { dismiss() })
 
                 NavigationLink(value: AppRoute.indicatorDetail(id: response.indicatorId)) {
