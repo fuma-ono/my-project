@@ -84,9 +84,9 @@ export const ja = {
     fabNeedMemberHint: '記録するには、まず友達を招待してください',
     unknownMember: '不明',
     inviteMessage: (groupName: string, url: string, code: string) =>
-      `【${groupName}】\n割り勘と貸し借り管理をしています。\n\n下記リンクから参加してください。\n\n${url}\n\n(リンクが開けない場合は、アプリの「招待コードで参加」から「${code}」を入力してください)`,
+      `【${groupName}】\n割り勘と貸し借り管理をしています。\n\n下記リンクから参加してください。\n\n${url}\n\n(リンクが開けない場合は、アプリの「招待コードで参加」から「${code}」を入力してください)\n\n参加すると、2人とも7日間Premiumが無料になります🎁`,
     inviteModalTitle: '友達を招待',
-    inviteModalSubtitle: '一緒にお金の管理を始めよう!',
+    inviteModalSubtitle: '一緒にお金の管理を始めよう! 参加すると2人とも7日間Premiumが無料になります🎁',
     inviteModalNamePlaceholder: '招待する相手の名前を入力',
     inviteModalNameHint: '例: けんた',
     inviteModalNameRequiredError: '名前を入力してください',
@@ -382,6 +382,9 @@ export const ja = {
     subscribeButton: '購読する',
     restoreButton: '購入を復元',
     alreadySubscribedNote: '✓ Premiumに加入中です。いつもありがとうございます!',
+    // 108回目、招待インセンティブ。bonus_premium_untilによる期間限定の
+    // 特典中であることを、通常の契約中メッセージと区別して伝える。
+    bonusActiveNote: (days: number) => `✓ 友達紹介の特典でPremiumが使えます(あと${days}日)`,
     restoringNote: '確認中...',
     purchaseErrorTitle: '購入できませんでした',
     restoreErrorTitle: '復元できませんでした',
@@ -539,9 +542,9 @@ export const en: Strings = {
     fabNeedMemberHint: 'Invite a friend first — recording needs at least 2 people.',
     unknownMember: 'Unknown',
     inviteMessage: (groupName: string, url: string, code: string) =>
-      `[${groupName}]\nWe're using this to split bills and track who owes what.\n\nJoin using the link below.\n\n${url}\n\n(If the link doesn't open, use "Join with code" in the app and enter "${code}")`,
+      `[${groupName}]\nWe're using this to split bills and track who owes what.\n\nJoin using the link below.\n\n${url}\n\n(If the link doesn't open, use "Join with code" in the app and enter "${code}")\n\nJoin and you'll both get 7 days of Premium free 🎁`,
     inviteModalTitle: 'Invite a friend',
-    inviteModalSubtitle: "Let's start managing money together!",
+    inviteModalSubtitle: "Let's start managing money together! You'll both get 7 days of Premium free when they join 🎁",
     inviteModalNamePlaceholder: "Who are you inviting?",
     inviteModalNameHint: 'e.g. Alex',
     inviteModalNameRequiredError: 'Please enter a name',
@@ -797,6 +800,7 @@ export const en: Strings = {
     subscribeButton: 'Subscribe',
     restoreButton: 'Restore purchases',
     alreadySubscribedNote: "✓ You're subscribed to Premium. Thank you!",
+    bonusActiveNote: (days: number) => `✓ You have Premium from a referral bonus (${days} day${days === 1 ? '' : 's'} left)`,
     restoringNote: 'Checking...',
     purchaseErrorTitle: 'Purchase failed',
     restoreErrorTitle: 'Restore failed',

@@ -35,6 +35,20 @@ create table if not exists public.profiles (
 -- 列を追加できるようにしておく(初回作成時は上のcreate tableで既に入る)。
 alter table public.profiles add column if not exists avatar_emoji text;
 
+-- 招待インセンティブ(108回目)。招待した人・招待されて参加した人の
+-- 双方に、期間限定でPremium相当の特典を付与するための有効期限。
+-- 付与・延長はjoin_group RPC(security definer)内でのみ行う。
+alter table public.profiles add column if not exists bonus_premium_until timestamptz;
+
+-- 「users manage their own profile」ポリシー(全列のselect/insert/update/
+-- delete)はこの列にもそのまま適用されてしまうため、このままだと誰でも
+-- 自分のbonus_premium_untilを直接書き換えてPremiumを自作自演できて
+-- しまう。この列だけ一般ユーザーからのUPDATE権限を剥奪し、以後は
+-- security definer関数(join_group)経由でしか更新できないようにする
+-- (関数はその定義者の権限で実行されるため、この剥奪の影響を受けない)。
+-- SELECTは許可したまま(usePremium.tsが自分の特典期限を読む必要があるため)。
+revoke update (bonus_premium_until) on public.profiles from authenticated, anon;
+
 -- 「アイコンで自分の写真を使えるようにしてほしい」への対応。絵文字
 -- (avatar_emoji)と写真(avatar_photo_path、storageのavatarsバケット内の
 -- パス)は排他(どちらか一方だけが入る。片方を選んだらもう片方はnullに
@@ -378,6 +392,7 @@ as $$
 declare
   _group public.groups;
   _matched_invite_id uuid;
+  _inviter_id uuid;
 begin
   if auth.uid() is null then
     raise exception 'not authenticated';
@@ -414,6 +429,17 @@ begin
     if _matched_invite_id is not null then
       update public.entries set from_user = auth.uid(), from_invite = null where from_invite = _matched_invite_id;
       update public.entries set to_user = auth.uid(), to_invite = null where to_invite = _matched_invite_id;
+
+      -- 招待インセンティブ(108回目)。招待した人・参加した人の両方に
+      -- 7日間のPremium特典を付与する(付与済みの残り期間がある場合は
+      -- そこから7日延長。自己招待のような想定外の一致では何もしない)。
+      select created_by into _inviter_id from public.group_invites where id = _matched_invite_id;
+      if _inviter_id is not null and _inviter_id <> auth.uid() then
+        update public.profiles set bonus_premium_until = greatest(coalesce(bonus_premium_until, now()), now()) + interval '7 days'
+        where id = _inviter_id;
+        update public.profiles set bonus_premium_until = greatest(coalesce(bonus_premium_until, now()), now()) + interval '7 days'
+        where id = auth.uid();
+      end if;
     end if;
   end if;
 

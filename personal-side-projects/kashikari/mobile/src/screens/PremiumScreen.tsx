@@ -22,7 +22,7 @@ type Props = {
 // 経由で取得する(App.tsx/DemoApp.tsxのルートで配線済み)。
 export default function PremiumScreen({ onBack, onView, onPurchased }: Props) {
   const t = useT();
-  const { isPremium, loading, offering, purchase, restore } = usePremiumContext();
+  const { isPremium, loading, offering, purchase, restore, bonusPremiumUntil } = usePremiumContext();
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
 
@@ -36,6 +36,12 @@ export default function PremiumScreen({ onBack, onView, onPurchased }: Props) {
   // 明示する要件への対応。priceString自体は期間を含まないため)。
   const realPrice = offering?.availablePackages[0]?.product.priceString;
   const priceLabel = realPrice ? t.premium.priceWithPeriod(realPrice) : t.premium.price;
+
+  // 招待インセンティブ(108回目)。RevenueCatの実際の契約とは別に、
+  // bonus_premium_untilによる期間限定特典中かどうかを日数で出す。
+  const bonusDaysLeft = bonusPremiumUntil
+    ? Math.max(1, Math.ceil((new Date(bonusPremiumUntil).getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+    : null;
 
   const openTerms = () => Linking.openURL(TERMS_OF_USE_URL).catch(() => {});
   const openPrivacy = () => Linking.openURL(PRIVACY_POLICY_URL).catch(() => {});
@@ -93,7 +99,9 @@ export default function PremiumScreen({ onBack, onView, onPurchased }: Props) {
         {loading ? (
           <ActivityIndicator style={styles.loading} color={colors.plum} />
         ) : isPremium ? (
-          <Text style={styles.alreadySubscribedNote}>{t.premium.alreadySubscribedNote}</Text>
+          <Text style={styles.alreadySubscribedNote}>
+            {bonusDaysLeft ? t.premium.bonusActiveNote(bonusDaysLeft) : t.premium.alreadySubscribedNote}
+          </Text>
         ) : (
           <>
             <PrimaryButton

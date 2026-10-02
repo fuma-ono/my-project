@@ -2117,3 +2117,21 @@ Apple App Store審査で「Guideline 2.1 - Information Needed」として差し�
 2. **デザインの見直し**: 「背景のブロブがダサい」という指摘を受け、輪郭のはっきりしたSVGパス(ブロブ形状)を、`radial-gradient`+`blur`による輪郭の無い柔らかい光のにじみに差し替えた
 
 いずれもローカルでライト/ダーク両モードの表示を確認してからプッシュした。最終的にオーナー確認OK。
+
+## 招待インセンティブの実装(108回目)。**この回はスキーマ変更あり・SQL再実行が必要**
+
+Growth活動の一環で、「今いる9人自身を新規獲得チャネルにする」方針で招待インセンティブを実装した。X自動投稿・Google広告は、それぞれ(a)過去にThreadsアカウントが凍結された経緯がありリスクが高い、(b)¥0運用の今やるには時期尚早、と判断し見送った。note/Zennも検討したが、ターゲット層(大学生・友人グループ)とのズレが大きいと判断し、製品内の招待ループ強化を優先した。
+
+**設計**: 招待した人・招待されて参加した人の両方に、7日間のPremium相当特典を付与する。招待コード自体はグループ共通の1つしかないが、`group_invites`テーブル(招待ごとの記録、`created_by`で誰が招待したか分かる)と、既存の「先に招待した人から順に参加するはず」というFIFOマッチング(`join_group` RPC内に既にあった仕組み)を利用し、新規参加者とマッチした招待の`created_by`(招待した人)の両方にボーナスを付与する。
+
+- **`schema.sql`**: `profiles.bonus_premium_until`(timestamptz)を追加。この列は`join_group` RPC(security definer)内でのみ更新できるよう、`revoke update (bonus_premium_until) on public.profiles from authenticated, anon`で一般ユーザーからの直接書き込みを剥奪した(既存の「users manage their own profile」ポリシーのままだと、誰でも自分のこの列を直接書き換えてPremiumを自作自演できてしまうため)。`join_group`関数に、マッチした招待の`created_by`と参加者本人の両方に`bonus_premium_until`を7日分延長する処理を追加(既存の特典が残っていればそこから延長)
+- **`src/hooks/usePremium.ts`**: RevenueCatの契約状態(`rcPremium`)とは独立に、自分の`bonus_premium_until`を取得し、未来日時なら`isPremium`に合算するようにした。フックの戻り値に`bonusPremiumUntil`を追加(UI側が残り日数を出すため)
+- **`src/screens/PremiumScreen.tsx`**: 特典中は通常の「ご契約中です」ではなく「友達紹介の特典でPremiumが使えます(あとN日)」と出し分けるようにした
+- **`src/i18n/strings.ts`**: 招待モーダルの説明文・招待メッセージ本文に特典の案内(🎁参加すると2人とも7日間Premium無料)を追加。`premium.bonusActiveNote`を新規追加
+
+`npx tsc --noEmit`はクリーン。`EXPO_PUBLIC_DEMO_MODE=1`のWeb版をPlaywrightで確認し、招待モーダルに特典文言が正しく表示されること、コンソールエラーが出ないことを確認した(デモモードは実際の`join_group`呼び出しを行わないため、付与ロジック自体の動作確認は未実施)。
+
+**オーナー側の対応が必要**:
+1. `schema.sql`の全文をSupabaseのSQL Editorで再実行(`profiles.bonus_premium_until`列の追加、権限剥奪、`join_group`関数の更新を反映)
+2. 反映後、実際に招待→参加のフローを1回試して、招待した人・参加した人の両方に特典が付与されること(設定→Premium画面の表示が変わること)を確認してほしい
+3. 確認が取れたら、通常のアップデート手順(`eas build` → `eas submit` → バージョン作成・審査提出)で配信する
