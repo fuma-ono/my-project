@@ -197,17 +197,55 @@ struct HomeView: View {
         .position(x: V5P.W / 2, y: 40)
     }
 
-    /// 日本の相場表示でよく使われる配色(上昇=赤/下落=緑)。既存の
-    /// `Importance.v5Color`(他画面で使用中、変更していない)とは別に、
-    /// このカード専用の重要度バッジ色として中程度だけ差し替える
-    /// (HIGH/LOWは既存のred/blueのまま、MEDIUMだけ参考画像実測の琥珀色)。
-    private static let mediumImportanceBadgeColor = Color(red: 196.0 / 255, green: 148.0 / 255, blue: 58.0 / 255)
     private static let changeUpColor = Color(red: 214.0 / 255, green: 83.0 / 255, blue: 109.0 / 255)
     private static let changeDownColor = Color(red: 46.0 / 255, green: 170.0 / 255, blue: 120.0 / 255)
 
-    private static func importanceBadgeColor(_ importance: Importance) -> Color {
-        importance == .medium ? mediumImportanceBadgeColor : importance.v5Color
+    /// HQ指摘(2026-10-02、3回目)「HIGHの文字の色や大きさも全然違います」:
+    /// 旧実装は既存`V5Badge`(半透明塗り+枠線と同色の文字)を流用していたが、
+    /// 参考画像を再実測すると実際は「濃い塗り+白に近い太字」という別物
+    /// だった。このカード専用の塗りつぶしバッジ(`statusBadge`)に差し替え、
+    /// 色も実測値(HIGH塗り≈RGB(90,20,39)・枠≈RGB(165,45,75)、MEDIUM塗り≈
+    /// RGB(80,58,15)・枠≈RGB(170,125,35))に合わせた。LOWは参考画像に無い
+    /// ため、他画面の青系(`V5P.blue`)と統一感のある色を独自に起こした。
+    private static func importanceBadgeColors(_ importance: Importance) -> (fill: Color, border: Color) {
+        switch importance {
+        case .high:
+            return (Color(red: 90.0 / 255, green: 20.0 / 255, blue: 39.0 / 255), Color(red: 165.0 / 255, green: 45.0 / 255, blue: 75.0 / 255))
+        case .medium:
+            return (Color(red: 80.0 / 255, green: 58.0 / 255, blue: 15.0 / 255), Color(red: 170.0 / 255, green: 125.0 / 255, blue: 35.0 / 255))
+        case .low:
+            return (Color(red: 15.0 / 255, green: 42.0 / 255, blue: 85.0 / 255), Color(red: 50.0 / 255, green: 100.0 / 255, blue: 180.0 / 255))
+        }
     }
+
+    @ViewBuilder private func statusBadge(_ text: String, colors: (fill: Color, border: Color)) -> some View {
+        Text(text)
+            .font(.system(size: 8, weight: .heavy))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 7).padding(.vertical, 3)
+            .background(colors.fill, in: Capsule())
+            .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
+    }
+
+    /// 参考画像のカルーセル/通貨ペアアイコン実測(上端≈RGB(120,185,250)寄りの
+    /// 明るい水色→下端≈RGB(50,115,195)寄りの中間の青)。
+    private static let iconGradient = LinearGradient(
+        colors: [Color(red: 120.0 / 255, green: 185.0 / 255, blue: 250.0 / 255), Color(red: 50.0 / 255, green: 115.0 / 255, blue: 195.0 / 255)],
+        startPoint: .top, endPoint: .bottom
+    )
+
+    /// HQ指摘(2026-10-02、3回目)「枠の形と色が違います」: 参考画像を
+    /// Pythonでピクセル実測(カード幅938px≒V5の214ユニットから逆算した
+    /// スケール0.2282を使用)した結果、
+    /// - 色: 枠のピーク輝度ピクセルはRGB(31-36,46-52,69-77)という、
+    ///   彩度の低いくすんだ紺色だった。旧実装の`V5P.line.opacity(0.75)`
+    ///   (`V5P.line`=RGB(10,89,166)相当)をカード塗りに合成すると
+    ///   RGB(8,73,136)前後になり、実測よりかなり明るく青が強すぎていた。
+    /// - 角丸: 枠が直線から曲線に変わる地点を縦横それぞれでピクセル
+    ///   追跡すると半径≈12-13px(実測スケールでV5約2.9ユニット)しか
+    ///   なく、旧実装の`cornerRadius: 10`は実測よりかなり丸すぎていた。
+    private static let cardBorderColor = Color(red: 34.0 / 255, green: 49.0 / 255, blue: 73.0 / 255)
+    private static let cardCornerRadius: CGFloat = 3
 
     private static var todayLabel: String {
         let formatter = DateFormatter()
@@ -239,16 +277,18 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 10) {
                 if !topEvents.isEmpty {
                     homeCard {
-                        cardHeader(icon: "calendar", title: "今日の重要イベント") {
+                        cardHeader(title: "今日の重要イベント") {
+                            Image(systemName: "calendar").font(.system(size: 11, weight: .bold)).foregroundStyle(Self.iconGradient)
+                        } trailing: {
                             NavigationLink(value: AppRoute.calendar) {
                                 HStack(spacing: 2) {
-                                    Text(Self.todayLabel).font(.system(size: 7)).foregroundStyle(V5P.muted)
+                                    V5JPFont.text(Self.todayLabel, size: 7).foregroundStyle(V5P.muted)
                                     Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
                                 }
                             }
                         }
                         ForEach(Array(topEvents.enumerated()), id: \.element.id) { idx, event in
-                            if idx > 0 { Divider().overlay(V5P.line.opacity(0.4)) }
+                            if idx > 0 { Divider().overlay(Self.cardBorderColor) }
                             NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
                                 eventRow(event)
                             }.buttonStyle(.plain)
@@ -258,12 +298,16 @@ struct HomeView: View {
 
                 if !pairs.isEmpty {
                     homeCard {
-                        cardHeader(icon: "chart.line.uptrend.xyaxis", title: "通貨ペア") {
-                            Text("すべて見る").font(.system(size: 7)).foregroundStyle(V5P.muted)
-                            Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
+                        cardHeader(title: "通貨ペア") {
+                            HomeChartIcon().foregroundStyle(Self.iconGradient).frame(width: 13, height: 12)
+                        } trailing: {
+                            HStack(spacing: 2) {
+                                V5JPFont.text("すべて見る", size: 7).foregroundStyle(V5P.muted)
+                                Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
+                            }
                         }
                         ForEach(Array(pairs.enumerated()), id: \.element.id) { idx, pair in
-                            if idx > 0 { Divider().overlay(V5P.line.opacity(0.4)) }
+                            if idx > 0 { Divider().overlay(Self.cardBorderColor) }
                             NavigationLink(value: AppRoute.chartAnalysis(fxPairId: pair.id, fxPairSymbol: pair.symbol)) {
                                 pairRow(pair)
                             }.buttonStyle(.plain)
@@ -273,16 +317,18 @@ struct HomeView: View {
 
                 if !favorites.isEmpty {
                     homeCard {
-                        cardHeader(icon: "star.fill", title: "お気に入り") {
+                        cardHeader(title: "お気に入り") {
+                            Image(systemName: "star.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(V5P.cyan)
+                        } trailing: {
                             NavigationLink(value: AppRoute.favoritesList) {
                                 HStack(spacing: 2) {
-                                    Text("すべて見る").font(.system(size: 7)).foregroundStyle(V5P.muted)
+                                    V5JPFont.text("すべて見る", size: 7).foregroundStyle(V5P.muted)
                                     Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
                                 }
                             }
                         }
                         ForEach(Array(favorites.enumerated()), id: \.element.id) { idx, item in
-                            if idx > 0 { Divider().overlay(V5P.line.opacity(0.4)) }
+                            if idx > 0 { Divider().overlay(Self.cardBorderColor) }
                             favoriteRow(item)
                         }
                     }
@@ -294,21 +340,23 @@ struct HomeView: View {
                 // このカードは常に表示した上で空状態を出す(セクション自体を
                 // 隠さない選択。「発言→値動き分析」への主要導線のため)。
                 homeCard {
-                    cardHeader(icon: "quote.bubble.fill", title: "直近の要人発言") {
+                    cardHeader(title: "直近の要人発言") {
+                        Image(systemName: "quote.bubble.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(V5P.cyan)
+                    } trailing: {
                         NavigationLink(value: AppRoute.speechList) {
                             HStack(spacing: 2) {
-                                Text("すべて見る").font(.system(size: 7)).foregroundStyle(V5P.muted)
+                                V5JPFont.text("すべて見る", size: 7).foregroundStyle(V5P.muted)
                                 Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
                             }
                         }
                     }
                     if viewModel.recentSpeeches.isEmpty {
-                        Text("現在表示できる要人発言はありません")
-                            .font(.system(size: 8)).foregroundStyle(V5P.muted)
+                        V5JPFont.text("現在表示できる要人発言はありません", size: 8)
+                            .foregroundStyle(V5P.muted)
                             .padding(.vertical, 4)
                     } else {
                         ForEach(Array(viewModel.recentSpeeches.prefix(3).enumerated()), id: \.element.id) { idx, speech in
-                            if idx > 0 { Divider().overlay(V5P.line.opacity(0.4)) }
+                            if idx > 0 { Divider().overlay(Self.cardBorderColor) }
                             speechRow(speech)
                         }
                     }
@@ -332,57 +380,77 @@ struct HomeView: View {
         .padding(10)
         .frame(width: 214, alignment: .topLeading)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: Self.cardCornerRadius)
                 .fill(LinearGradient(colors: [V5P.panel2, V5P.panel], startPoint: .topLeading, endPoint: .bottomTrailing))
         )
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(V5P.line.opacity(0.75), lineWidth: 0.65))
+        .overlay(RoundedRectangle(cornerRadius: Self.cardCornerRadius).stroke(Self.cardBorderColor, lineWidth: 0.5))
     }
 
-    @ViewBuilder private func cardHeader(icon: String, title: String, @ViewBuilder trailing: () -> some View) -> some View {
+    /// HQ指摘(2026-10-02、3回目)「通貨ペアや今日の重要イベントのアイコンが
+    /// 全く違います」: アイコン名の`String`ではなく任意の`View`を受け取る形に
+    /// 変更した — 「今日の重要イベント」は引き続きSF Symbol`calendar`だが
+    /// `Self.iconGradient`で着色し直し、「通貨ペア」はSF Symbolに該当する
+    /// グリフが無い(参考画像実測: 棒グラフ3本+上昇矢印の合成アイコンで、
+    /// `chart.line.uptrend.xyaxis`のような座標軸は一切無い)ため、自前描画の
+    /// `HomeChartIcon`に差し替えた。タイトルも`V5JPFont.text`(フッター/
+    /// タブバーと同じ`NotoSansJP-SemiBold`)に統一。
+    @ViewBuilder private func cardHeader(title: String, @ViewBuilder icon: () -> some View, @ViewBuilder trailing: () -> some View) -> some View {
         HStack(spacing: 5) {
-            Image(systemName: icon).font(.system(size: 10, weight: .semibold)).foregroundStyle(V5P.cyan)
-            Text(title).font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
+            icon()
+            V5JPFont.text(title, size: 10, weight: .bold).foregroundStyle(.white)
             Spacer()
             trailing()
         }
-        Divider().overlay(V5P.line.opacity(0.4))
+        Divider().overlay(Self.cardBorderColor)
     }
 
     @ViewBuilder private func eventRow(_ event: HomeEventSummary) -> some View {
-        HStack(alignment: .top, spacing: 6) {
+        HStack(alignment: .top, spacing: 5) {
             Text(Self.timeFormatter.string(from: event.releaseDatetime))
-                .font(.system(size: 8, weight: .medium))
+                .font(.system(size: 7, weight: .medium))
                 .foregroundStyle(V5P.muted)
                 .fixedSize(horizontal: true, vertical: false)
-                .frame(width: 24, alignment: .leading)
+                .frame(width: 19, alignment: .leading)
 
             VStack(spacing: 2) {
-                Text(CountryFlag.emoji(for: event.countryCode)).font(.system(size: 14))
+                circleFlag(CountryFlag.emoji(for: event.countryCode), diameter: 13)
                 Text(event.currencyCode).font(.system(size: 6, weight: .semibold)).foregroundStyle(V5P.muted)
             }
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 5) {
-                    Text(event.homeCategory.label)
-                        .font(.system(size: 6, weight: .bold))
+                    V5JPFont.text(event.homeCategory.label, size: 6, weight: .bold)
                         .foregroundStyle(.white)
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(event.homeCategory.badgeColor, in: Capsule())
-                    Text(event.indicatorName).font(.system(size: 8, weight: .bold)).lineLimit(1)
+                    V5JPFont.text(event.indicatorName, size: 8, weight: .bold).lineLimit(1)
                 }
                 if let subtitle = Self.eventSubtitle(event) {
-                    Text(subtitle).font(.system(size: 6.5)).foregroundStyle(V5P.muted)
+                    V5JPFont.text(subtitle, size: 6.5, weight: .regular).foregroundStyle(V5P.muted)
                 }
             }
 
             Spacer(minLength: 4)
 
             VStack(spacing: 4) {
-                V5Badge(text: event.importance.rawValue, color: Self.importanceBadgeColor(event.importance))
+                statusBadge(event.importance.rawValue, colors: Self.importanceBadgeColors(event.importance))
                 Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
             }
         }
         .foregroundStyle(.white)
+    }
+
+    /// HQ指摘(2026-10-02、3回目)「国旗が参考画像は丸で表しているのに変え
+    /// ないでください」: 旧実装は国旗絵文字をそのまま`Text`で描画しており
+    /// (絵文字自体は正方形に近い)円形になっていなかった。参考画像を実測
+    /// すると国旗は完全な円(端でクロップ)だったため、絵文字を表示サイズ
+    /// より少し大きく描画してから`clipShape(Circle())`で円形に切り抜く
+    /// 共通ヘルパーに差し替えた。
+    @ViewBuilder private func circleFlag(_ emoji: String, diameter: CGFloat) -> some View {
+        Text(emoji)
+            .font(.system(size: diameter * 1.15))
+            .frame(width: diameter, height: diameter)
+            .clipShape(Circle())
     }
 
     private static func eventSubtitle(_ event: HomeEventSummary) -> String? {
@@ -400,9 +468,9 @@ struct HomeView: View {
         // `.fixedSize(horizontal: true, vertical: false)`を付け、合わせて
         // フォントサイズと間隔を詰めて実測で調整した。
         HStack(spacing: 5) {
-            HStack(spacing: -7) {
-                Text(CountryFlag.emoji(forCurrency: pair.baseCurrency)).font(.system(size: 13))
-                Text(CountryFlag.emoji(forCurrency: pair.quoteCurrency)).font(.system(size: 13))
+            HStack(spacing: -6) {
+                circleFlag(CountryFlag.emoji(forCurrency: pair.baseCurrency), diameter: 13)
+                circleFlag(CountryFlag.emoji(forCurrency: pair.quoteCurrency), diameter: 13)
             }
             Text(pair.displaySymbol).font(.system(size: 8, weight: .bold)).fixedSize(horizontal: true, vertical: false)
             Spacer(minLength: 2)
@@ -438,12 +506,12 @@ struct HomeView: View {
     @ViewBuilder private func favoriteRowContent(countryCode: String, currencyCode: String, name: String, importance: Importance) -> some View {
         HStack(spacing: 8) {
             VStack(spacing: 2) {
-                Text(CountryFlag.emoji(for: countryCode)).font(.system(size: 14))
+                circleFlag(CountryFlag.emoji(for: countryCode), diameter: 13)
                 Text(currencyCode).font(.system(size: 6, weight: .semibold)).foregroundStyle(V5P.muted)
             }
-            Text(name).font(.system(size: 9, weight: .semibold)).lineLimit(1)
+            V5JPFont.text(name, size: 9, weight: .semibold).lineLimit(1)
             Spacer()
-            V5Badge(text: importance.rawValue, color: Self.importanceBadgeColor(importance))
+            statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance))
             Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
         }
         .foregroundStyle(.white)
@@ -467,16 +535,16 @@ struct HomeView: View {
     /// APIが追加された時にそのまま使える受け皿として用意している。
     @ViewBuilder private func speechRow(_ speech: HomeSpeechSummary) -> some View {
         NavigationLink(value: AppRoute.speechDetail(id: speech.id)) {
-            HStack(alignment: .top, spacing: 6) {
+            HStack(alignment: .top, spacing: 5) {
                 Text(Self.timeFormatter.string(from: speech.statementDatetime))
-                    .font(.system(size: 8, weight: .medium))
+                    .font(.system(size: 7, weight: .medium))
                     .foregroundStyle(V5P.muted)
                     .fixedSize(horizontal: true, vertical: false)
-                    .frame(width: 24, alignment: .leading)
-                Text(CountryFlag.emoji(for: speech.countryCode)).font(.system(size: 14))
+                    .frame(width: 19, alignment: .leading)
+                circleFlag(CountryFlag.emoji(for: speech.countryCode), diameter: 13)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(speech.speakerName).font(.system(size: 8, weight: .bold))
-                    Text(speech.headline).font(.system(size: 7)).foregroundStyle(V5P.muted).lineLimit(1)
+                    V5JPFont.text(speech.speakerName, size: 8, weight: .bold)
+                    V5JPFont.text(speech.headline, size: 7, weight: .regular).foregroundStyle(V5P.muted).lineLimit(1)
                 }
                 Spacer(minLength: 4)
                 if let symbol = speech.reactionFxSymbol, let change = speech.reactionChangePercent {
@@ -501,6 +569,65 @@ struct HomeView: View {
 
     private var mappedPairs: [FXPairUI] {
         viewModel.majorFxList.map(FXPairUI.init(major:))
+    }
+}
+
+/// HQ指摘(2026-10-02、3回目)「通貨ペアや今日の重要イベントのアイコンが
+/// 全く違います」の通貨ペア側。参考画像を実測すると、座標軸の無い
+/// 「上昇する棒グラフ3本+その上に重なる上昇ジグザグ折れ線(先端が矢尻)」
+/// という合成グリフで、SF Symbolsに一致するものが無かった(以前`V5BottomBar`
+/// の「分析」タブアイコンで座標軸付きの`chart.line.uptrend.xyaxis`が却下
+/// された時と同じ理由)。`V5PixelFrontend.swift`の`V5BarsIcon`/
+/// `V5AnalysisIcon`と同じ発想(棒+ジグザグ矢印の自前描画)だが、どちらも
+/// その`private`なためこのファイルから再利用できず、Home専用に新規作成した。
+private struct HomeChartIcon: View {
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            HStack(alignment: .bottom, spacing: 1.3) {
+                bar(heightFraction: 0.38)
+                bar(heightFraction: 0.66)
+                bar(heightFraction: 1.0)
+            }
+            trendLine
+        }
+    }
+
+    @ViewBuilder private func bar(heightFraction: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: 0.6)
+            .fill(.foreground)
+            .frame(width: 2.6, height: 11 * heightFraction)
+    }
+
+    private var trendLine: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            let tail = CGPoint(x: 0, y: h * 0.66)
+            let peak = CGPoint(x: w * 0.38, y: h * 0.30)
+            let valley = CGPoint(x: w * 0.62, y: h * 0.46)
+            let tip = CGPoint(x: w * 1.05, y: h * -0.08)
+            let arrowBack = CGPoint(x: tip.x - w * 0.22, y: tip.y + h * 0.12)
+            let arrowBelow = CGPoint(x: tip.x - w * 0.05, y: tip.y + h * 0.30)
+
+            ZStack {
+                Path { path in
+                    path.move(to: tail)
+                    path.addLine(to: peak)
+                    path.addLine(to: valley)
+                    path.addLine(to: tip)
+                }
+                .stroke(.foreground, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+
+                Path { path in
+                    path.move(to: tip)
+                    path.addLine(to: arrowBack)
+                    path.addLine(to: arrowBelow)
+                    path.closeSubpath()
+                }
+                .fill(.foreground)
+            }
+        }
+        .frame(width: 13, height: 12)
     }
 }
 
