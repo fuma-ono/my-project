@@ -108,8 +108,15 @@ struct HomeView: View {
         // person: 12×56/34≈19.8pt)に調整。
         let notifIconSize = V5P.ptToV5(18.2)
         let accountIconSize = V5P.ptToV5(19.8)
+        // HQ指示(2026-10-02)「タブ遷移画面もタイトルの中心線に対してズレが
+        // ないか確認して」の一環でCI実機キャプチャを実測した結果、ロゴ単体の
+        // インク中心(y=250.5px)が「FX Event Analyzer」テキストの中心
+        // (y=258.0px)より7.5px(実寸2.5pt)上にズレていた。他画面のタイトルは
+        // 既に揃っていたが、Homeのロゴだけ補正が必要だったため追加。
+        let logoVerticalCorrection = V5P.ptToV5(2.5)
         return HStack(spacing: 0) {
             BrandMark(width: logoWidth)
+                .offset(y: logoVerticalCorrection)
             (
                 Text("F").foregroundStyle(DesignTokens.Colors.brandTitleAccentF)
                 + Text("X").foregroundStyle(DesignTokens.Colors.brandTitleAccentX)

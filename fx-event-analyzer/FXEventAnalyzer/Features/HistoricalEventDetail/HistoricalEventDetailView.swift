@@ -58,7 +58,7 @@ struct HistoricalEventDetailView: View {
         case .loaded(let response):
             V5Viewport {
                 V5TopStatus()
-                V5Header(title: "過去のイベント詳細", back: true, star: false, onBack: { dismiss() })
+                V5Header(title: "過去のイベント詳細", back: true, onBack: { dismiss() })
 
                 NavigationLink(value: AppRoute.indicatorDetail(id: response.indicatorId)) {
                     V5Card(CGRect(x: 10, y: 57, width: 214, height: 54)) {

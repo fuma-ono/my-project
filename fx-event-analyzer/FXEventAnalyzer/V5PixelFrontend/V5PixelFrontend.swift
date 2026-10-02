@@ -845,8 +845,13 @@ private struct V5GearIcon: View {
 struct V5Header: View {
     let title: String
     let back: Bool
-    let star: Bool
+    /// HQ指示(2026-10-02)「タップ時にオンオフに切り替えられて」でお気に入り
+    /// 星を実際にトグル可能にした。`nil`なら星を表示しない。非nilならお気に入り
+    /// 状態(true=登録済み/`star.fill`、false=未登録/`star`アウトライン)を表し、
+    /// タップで`onToggleFavorite`を呼ぶ。
+    var isFavorite: Bool?
     var onBack: (() -> Void)?
+    var onToggleFavorite: (() -> Void)?
 
     /// HQ「ヘッダーのタイトルサイズ統一」最終仕様(2026-10-01、3回の再調整を
     /// 経た最終値): 16pt/14pt→18pt/16pt→20pt/18pt→24pt/22ptの順でCI実機
@@ -896,15 +901,20 @@ struct V5Header: View {
             Spacer()
             // HQ指示(2026-10-01、3回目のヘッダー調整): アイコンのウェイトを
             // タイトルのSemiboldと揃える(以前は無指定＝regularだった)。
-            // HQ確認(2026-10-01)「星を押さない場合のUIを見せて」: 星は
-            // お気に入り登録を表すが、現状は`IndicatorDetailView`の既存
-            // コメント通りお気に入りAPIが無く常時装飾表示のため、押下前
-            // (未登録)の初期状態として塗りつぶし無しの"star"を表示する。
-            // タップで実際にON/OFFが切り替わるわけではない(バックエンド
-            // 未実装のため従来通り非機能)。
-            if star {
-                Image(systemName: "star").font(.system(size: 12, weight: .semibold)).foregroundStyle(V5P.yellow)
-                    .offset(y: Self.starVerticalCorrection)
+            // HQ指示(2026-10-02)「タップ時にオンオフに切り替えられて」:
+            // `FavoritesStore`(UserDefaults永続化)と連動する実際のトグルに
+            // した。バックエンドのお気に入りAPIは引き続き無いため、端末
+            // ローカルの状態のみ(ログアウト/再インストールで消える)。
+            if let isFavorite {
+                Button {
+                    onToggleFavorite?()
+                } label: {
+                    Image(systemName: isFavorite ? "star.fill" : "star")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(V5P.yellow)
+                }
+                .buttonStyle(.plain)
+                .offset(y: Self.starVerticalCorrection)
             }
         }
         .foregroundStyle(.white)

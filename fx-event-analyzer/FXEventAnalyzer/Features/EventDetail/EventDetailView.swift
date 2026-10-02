@@ -24,10 +24,13 @@ struct EventDetailView: View {
     @StateObject private var viewModel: EventDetailViewModel
     @Binding var tabSelection: Int
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var favorites = FavoritesStore.shared
+    private let eventId: String
 
     init(apiClient: APIClient, eventId: String, tabSelection: Binding<Int>) {
         _viewModel = StateObject(wrappedValue: EventDetailViewModel(apiClient: apiClient, eventId: eventId))
         _tabSelection = tabSelection
+        self.eventId = eventId
     }
 
     var body: some View {
@@ -50,7 +53,12 @@ struct EventDetailView: View {
         case .loaded(let response):
             V5Viewport {
                 V5TopStatus()
-                V5Header(title: "イベント詳細", back: true, star: true, onBack: { dismiss() })
+                V5Header(
+                    title: "イベント詳細", back: true,
+                    isFavorite: favorites.isFavorite(.event, id: eventId),
+                    onBack: { dismiss() },
+                    onToggleFavorite: { favorites.toggle(.event, id: eventId) }
+                )
 
                 V5Card(CGRect(x: 10, y: 57, width: 214, height: 55)) {
                     HStack {

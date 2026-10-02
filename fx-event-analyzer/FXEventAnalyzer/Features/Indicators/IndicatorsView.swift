@@ -64,7 +64,7 @@ struct IndicatorsView: View {
         case .loaded(let indicators):
             V5Viewport {
                 V5TopStatus()
-                V5Header(title: "指標一覧", back: false, star: false)
+                V5Header(title: "指標一覧", back: false)
                 HStack {
                     Image(systemName: "magnifyingglass").foregroundStyle(V5P.muted)
                     TextField("指標名・国名で検索", text: $viewModel.searchText)

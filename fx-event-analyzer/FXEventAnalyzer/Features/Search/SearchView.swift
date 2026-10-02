@@ -50,7 +50,7 @@ struct SearchView: View {
         NavigationStack(path: $path) {
             V5Viewport {
                 V5TopStatus()
-                V5Header(title: "検索", back: false, star: false)
+                V5Header(title: "検索", back: false)
                 HStack {
                     Image(systemName: "magnifyingglass").foregroundStyle(V5P.muted)
                     TextField("指標名・イベント・通貨ペアなどで検索", text: $viewModel.searchText)

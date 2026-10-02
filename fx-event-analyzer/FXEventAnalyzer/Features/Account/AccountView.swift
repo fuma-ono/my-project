@@ -66,7 +66,7 @@ struct AccountView: View {
         case .loaded(let account, let subscription):
             V5Viewport {
                 V5TopStatus()
-                V5Header(title: "アカウント", back: true, star: false, onBack: { dismiss() })
+                V5Header(title: "アカウント", back: true, onBack: { dismiss() })
 
                 Image(systemName: "person.circle.fill").font(.system(size: 52)).foregroundStyle(.white).position(x: 117, y: 105)
                 Text("ユーザー \(account.userID.uuidString.prefix(8))").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 117, y: 145)

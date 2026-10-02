@@ -15,7 +15,9 @@ import SwiftUI
 ///   SCHEDULED (not yet released) event cannot have one — the real
 ///   `surprise` is shown only `if let`, never fabricated for an event that
 ///   hasn't happened yet.
-/// - The favorite star stays decorative (no favoriting API exists).
+/// - HQ指示(2026-10-02): お気に入り星は`FavoritesStore`(端末ローカル、
+///   `UserDefaults`永続化)と連動する実際のトグルになった。バックエンドの
+///   お気に入りAPIは引き続き存在しない。
 /// - This design has no `ScrollView` (a fixed, non-scrolling 234×491
 ///   composition) and no "最近の発表結果"/"過去イベントを比較" section at
 ///   all, unlike the prior (scrolling) HQ UI Master v5 integration — kept
@@ -25,10 +27,13 @@ struct IndicatorDetailView: View {
     @StateObject private var viewModel: IndicatorDetailViewModel
     @Binding var tabSelection: Int
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var favorites = FavoritesStore.shared
+    private let indicatorId: String
 
     init(apiClient: APIClient, indicatorId: String, tabSelection: Binding<Int>) {
         _viewModel = StateObject(wrappedValue: IndicatorDetailViewModel(apiClient: apiClient, indicatorId: indicatorId))
         _tabSelection = tabSelection
+        self.indicatorId = indicatorId
     }
 
     var body: some View {
@@ -47,7 +52,12 @@ struct IndicatorDetailView: View {
         case .loaded(let indicator, let relatedFxPairs, _, let nextScheduledEvent):
             V5Viewport {
                 V5TopStatus()
-                V5Header(title: "指標詳細", back: true, star: true, onBack: { dismiss() })
+                V5Header(
+                    title: "指標詳細", back: true,
+                    isFavorite: favorites.isFavorite(.indicator, id: indicatorId),
+                    onBack: { dismiss() },
+                    onToggleFavorite: { favorites.toggle(.indicator, id: indicatorId) }
+                )
 
                 V5Card(CGRect(x: 10, y: 57, width: 214, height: 59)) {
                     HStack(spacing: 5) {

@@ -69,7 +69,7 @@ struct MovementDetailView: View {
         case .loaded(let preReleasePrice, let reactions):
             V5Viewport {
                 V5TopStatus()
-                V5Header(title: "変動詳細", back: true, star: false, onBack: { dismiss() })
+                V5Header(title: "変動詳細", back: true, onBack: { dismiss() })
 
                 HStack {
                     Text(viewModel.selectedTimeframe).font(.system(size: 8, weight: .bold)).foregroundStyle(.white)

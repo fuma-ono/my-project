@@ -25,7 +25,7 @@ struct AnalysisTabView: View {
                 // 分析タブもメインタブ扱い(16pt Semibold)に含めているため、
                 // `V5BottomBar`と同じ要領でプレースホルダーの不透明背景の上に
                 // タイトルのみのヘッダーを重ねた(仮画面自体の内容は変更しない)。
-                V5Header(title: "分析", back: false, star: false)
+                V5Header(title: "分析", back: false)
                 V5BottomBar(selected: $tabSelection)
             }
             .toolbar(.hidden, for: .navigationBar)

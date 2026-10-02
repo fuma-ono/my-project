@@ -84,7 +84,7 @@ struct SettingsView: View {
         NavigationStack {
             V5Viewport {
                 V5TopStatus()
-                V5Header(title: "設定", back: false, star: false)
+                V5Header(title: "設定", back: false)
 
                 groupBackground(topY: group1Top, rowCount: 5)
                 NavigationLink(value: AppRoute.account) {

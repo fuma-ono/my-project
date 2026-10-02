@@ -65,7 +65,7 @@ struct HistoricalComparisonView: View {
         case .loaded(let response):
             V5Viewport {
                 V5TopStatus()
-                V5Header(title: "過去の比較", back: true, star: false, onBack: { dismiss() })
+                V5Header(title: "過去の比較", back: true, onBack: { dismiss() })
 
                 HStack(spacing: 4) {
                     ForEach(ReactionTimeframe.all, id: \.self) { timeframe in
