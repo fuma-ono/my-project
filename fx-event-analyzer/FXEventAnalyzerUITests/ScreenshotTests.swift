@@ -123,40 +123,45 @@ final class ScreenshotTests: XCTestCase {
         // alone" rule). Between captures, switching to Home and back
         // rebuilds SettingsView and so resets its NavigationStack to the
         // root — no need to find V5Header's unlabeled back chevron.
-        captureSettingsSubScreen(row: "通知設定", waitFor: "重要指標の発表前通知", name: "11-NotificationSettings")
-        captureSettingsSubScreen(row: "表示・地域設定", waitFor: "タイムゾーン", name: "12-DisplaySettings")
-        captureSettingsSubScreen(row: "チャート設定", waitFor: "時間足", name: "13-ChartSettings")
+        captureSettingsSubScreen(row: "通知設定", rowIndex: 1, waitFor: "重要指標の発表前通知", name: "11-NotificationSettings")
+        captureSettingsSubScreen(row: "表示・地域設定", rowIndex: 3, waitFor: "タイムゾーン", name: "12-DisplaySettings")
+        captureSettingsSubScreen(row: "チャート設定", rowIndex: 4, waitFor: "時間足", name: "13-ChartSettings")
     }
 
-    private func captureSettingsSubScreen(row: String, waitFor text: String, name: String) {
+    /// Two CI runs captured 11-13 as the untouched Settings list: neither
+    /// `tap(containing:)` nor a tap at the matched element's own center
+    /// navigated, so the frame XCUITest reports for SettingsView's
+    /// `.position`ed rows evidently isn't where they're drawn. Tap where
+    /// the row is drawn instead — SettingsView's fixed V5 layout (group 1
+    /// top y=78, 31.5pt rows, centered at x=117) mapped through
+    /// V5Viewport's scale-to-fit. If that still doesn't navigate, attach a
+    /// screenshot whose name records what XCUITest reports for the row, so
+    /// the next run says why.
+    private func captureSettingsSubScreen(row: String, rowIndex: Int, waitFor text: String, name: String) {
         tap(containing: "ホーム")
         tap(containing: "設定")
         XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load before \(name)")
-        tapByCoordinate(containing: row)
-        XCTAssertTrue(waitForAnyElement(containing: text, timeout: 15), "\(name) did not load")
-        capture(name)
+        tapV5(x: 117, y: 78 + (CGFloat(rowIndex) + 0.5) * 31.5)
+        if waitForAnyElement(containing: text, timeout: 15) {
+            capture(name)
+        } else {
+            let element = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", row)).firstMatch
+            let f = element.exists ? element.frame : .zero
+            let w = app.frame
+            capture("\(name)-diag-exists\(element.exists)-hit\(element.exists && element.isHittable)-frame\(Int(f.minX))_\(Int(f.minY))_\(Int(f.width))_\(Int(f.height))-app\(Int(w.width))_\(Int(w.height))")
+            XCTFail("\(name) did not load")
+        }
     }
 
-    /// SettingsView's rows sit on V5's scaled fixed canvas, where
-    /// XCUITest's `isHittable` came back false for them in CI (the first
-    /// run captured 11-13 as the untouched Settings list), so
-    /// `tap(containing:)` never tapped. Tap the element's center
-    /// coordinate instead, which is where it is actually drawn.
-    private func tapByCoordinate(containing text: String, timeout: TimeInterval = 10) {
-        let predicate = NSPredicate(format: "label CONTAINS[c] %@", text)
-        let collections: [XCUIElementQuery] = [app.buttons, app.cells, app.otherElements, app.staticTexts]
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            for collection in collections {
-                let element = collection.matching(predicate).firstMatch
-                if element.exists {
-                    element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-                    return
-                }
-            }
-            Thread.sleep(forTimeInterval: 0.3)
-        }
-        XCTFail("Could not find an element containing '\(text)' within \(timeout)s")
+    /// Taps a point given in V5's 234×491 canvas coordinates, using the same
+    /// scale-to-fit and centering as `V5Viewport` (which ignores the safe
+    /// area, so it fills the whole app frame).
+    private func tapV5(x: CGFloat, y: CGFloat) {
+        let frame = app.frame
+        let scale = min(frame.width / 234, frame.height / 491)
+        let dx = (frame.width - 234 * scale) / 2 + x * scale
+        let dy = (frame.height - 491 * scale) / 2 + y * scale
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: dx, dy: dy)).tap()
     }
 
     // MARK: - Helpers
