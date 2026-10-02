@@ -16,10 +16,15 @@ struct Endpoint {
     let path: String
     let method: Method
     let queryItems: [URLQueryItem]
+    /// JSON request body (e.g. PATCH /settings, api-design.md §24.5).
+    /// Already encoded so `Endpoint` stays a plain value type;
+    /// `URLSessionAPIClient` sends it with `Content-Type: application/json`.
+    let body: Data?
 
-    init(path: String, method: Method = .get, queryItems: [URLQueryItem] = []) {
+    init(path: String, method: Method = .get, queryItems: [URLQueryItem] = [], body: Data? = nil) {
         self.path = path
         self.method = method
         self.queryItems = queryItems
+        self.body = body
     }
 }

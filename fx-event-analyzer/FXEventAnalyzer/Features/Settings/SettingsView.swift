@@ -129,7 +129,7 @@ struct SettingsView: View {
                 }
             }
             .navigationDestination(for: SettingsSubRoute.self) { route in
-                SettingsSubRouteDestinationView(route: route)
+                SettingsSubRouteDestinationView(route: route, apiClient: apiClient, tabSelection: $tabSelection)
             }
         }
         // 2026-09-29 HQ承認(2-b): SCR-027 ログアウト確認ダイアログ。独立した

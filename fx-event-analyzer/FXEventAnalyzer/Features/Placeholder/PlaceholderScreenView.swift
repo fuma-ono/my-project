@@ -45,14 +45,26 @@ struct PlaceholderScreenView: View {
     }
 }
 
-/// `SettingsSubRoute`(SCR-018〜026)を仮画面に解決する。`AppRouteDestinationView`
-/// と同じ役割の、設定配下サブ画面専用の解決ビュー。
+/// `SettingsSubRoute`(SCR-018〜026)を解決する。`AppRouteDestinationView`
+/// と同じ役割の、設定配下サブ画面専用の解決ビュー。実装済みの画面は実画面へ、
+/// 未実装の画面は仮画面へ振り分ける。
 struct SettingsSubRouteDestinationView: View {
     let route: SettingsSubRoute
+    let apiClient: APIClient
+    @Binding var tabSelection: Int
 
     var body: some View {
-        PlaceholderScreenView(scrNumber: route.scrNumber, screenName: route.title)
-            .navigationTitle(route.title)
-            .navigationBarTitleDisplayMode(.inline)
+        switch route {
+        case .notificationSettings:
+            NotificationSettingsView(apiClient: apiClient, tabSelection: $tabSelection)
+        case .displaySettings:
+            DisplaySettingsView(apiClient: apiClient, tabSelection: $tabSelection)
+        case .chartSettings:
+            ChartSettingsView(apiClient: apiClient, tabSelection: $tabSelection)
+        case .subscriptionManagement, .help, .terms, .privacyPolicy, .appInfo, .accountDeletion:
+            PlaceholderScreenView(scrNumber: route.scrNumber, screenName: route.title)
+                .navigationTitle(route.title)
+                .navigationBarTitleDisplayMode(.inline)
+        }
     }
 }

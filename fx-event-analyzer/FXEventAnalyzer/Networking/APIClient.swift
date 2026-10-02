@@ -60,6 +60,10 @@ final class URLSessionAPIClient: APIClient {
         var request = URLRequest(url: url)
         request.httpMethod = endpoint.method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let body = endpoint.body {
+            request.httpBody = body
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
         if let token = await authTokenProvider() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }

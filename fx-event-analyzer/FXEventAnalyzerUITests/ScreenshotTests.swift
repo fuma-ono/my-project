@@ -117,6 +117,24 @@ final class ScreenshotTests: XCTestCase {
         tap(containing: "分析")
         XCTAssertTrue(waitForAnyElement(containing: "チャート分析", timeout: 15), "Analysis tab did not load")
         capture("10-Analysis")
+
+        // SCR-018 / SCR-020 / SCR-021 (bonus — added 2026-10-02 with the
+        // real settings sub-screens, same "never trust build-succeeds
+        // alone" rule). Between captures, switching to Home and back
+        // rebuilds SettingsView and so resets its NavigationStack to the
+        // root — no need to find V5Header's unlabeled back chevron.
+        captureSettingsSubScreen(row: "通知設定", waitFor: "重要指標の発表前通知", name: "11-NotificationSettings")
+        captureSettingsSubScreen(row: "表示・地域設定", waitFor: "タイムゾーン", name: "12-DisplaySettings")
+        captureSettingsSubScreen(row: "チャート設定", waitFor: "時間足", name: "13-ChartSettings")
+    }
+
+    private func captureSettingsSubScreen(row: String, waitFor text: String, name: String) {
+        tap(containing: "ホーム")
+        tap(containing: "設定")
+        XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load before \(name)")
+        tap(containing: row)
+        XCTAssertTrue(waitForAnyElement(containing: text, timeout: 15), "\(name) did not load")
+        capture(name)
     }
 
     // MARK: - Helpers

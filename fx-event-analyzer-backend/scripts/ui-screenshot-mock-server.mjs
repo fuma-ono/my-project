@@ -531,11 +531,21 @@ function comparisonHandler(indicatorId, timeframe) {
   };
 }
 
+const settingsFixture = {
+  notifications: { pre_release: true, result: true, favorites: false, min_importance: 3 },
+  display: { language: 'ja', region: 'JP', timezone: 'Asia/Tokyo' },
+  chart: { default_fx_pair_symbol: 'USDJPY', default_timeframe: '5m' },
+  updated_at: '2026-10-02T00:00:00Z',
+};
+
 async function handleApi(req, res, pathname, searchParams) {
   const segments = pathname.replace(/^\/api\/v1\//, '').split('/').filter(Boolean);
 
   if (pathname === '/api/v1/home') return json(res, 200, homeHandler());
   if (pathname === '/api/v1/indicators') return json(res, 200, indicatorsListHandler());
+  // SCR-018/020/021 (api-design.md §24.4). PATCH answers with the same
+  // fixture — screenshots only need the screens to load.
+  if (pathname === '/api/v1/settings') return json(res, 200, settingsFixture);
 
   if (segments[0] === 'indicators' && segments.length === 2) {
     const detail = indicatorDetailHandler(segments[1]);
