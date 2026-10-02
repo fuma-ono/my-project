@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// SCR-018 / SCR-020 / SCR-021 の共通部品。V5の固定キャンバス(234×491)上に、
-/// AccountViewの行(204×30のパネル行)と同じ見た目で並べる。正式なUI画像を
+/// AccountViewの行(214×30のパネル行)と同じ見た目で並べる。正式なUI画像を
 /// HQから受け取るまでの暫定レイアウトで、共有コンポーネント
 /// (V5PixelFrontend.swift)には手を入れず、この3画面専用としてここに置く。
 
@@ -73,7 +73,7 @@ struct SettingsSectionScaffold<Section: SettingsSection, Content: View>: View {
                 V5Button(title: viewModel.saveState == .saving ? "" : "保存する")
                 if viewModel.saveState == .saving { ProgressView().tint(.white).scaleEffect(0.6) }
             }
-            .frame(width: 204)
+            .frame(width: 214)
             .opacity(viewModel.canSave || viewModel.saveState == .saving ? 1 : 0.4)
         }
         .buttonStyle(.plain)
@@ -88,7 +88,7 @@ struct SettingsSectionScaffold<Section: SettingsSection, Content: View>: View {
             }
             .font(.system(size: 6))
             .multilineTextAlignment(.center)
-            .frame(width: 204)
+            .frame(width: 214)
             .offset(y: 14)
         }
     }
@@ -108,7 +108,7 @@ struct SettingsCaption: View {
         Text(text)
             .font(.system(size: 7, weight: .semibold))
             .foregroundStyle(V5P.muted)
-            .frame(width: 200, alignment: .leading)
+            .frame(width: 210, alignment: .leading)
     }
 }
 
@@ -119,12 +119,12 @@ struct SettingsNote: View {
         Text(text)
             .font(.system(size: 6))
             .foregroundStyle(V5P.muted)
-            .frame(width: 200, alignment: .leading)
+            .frame(width: 210, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
     }
 }
 
-/// AccountViewの行と同じ204×30のパネル行。右端に操作部品を置く。
+/// AccountViewの行と同じ214×30のパネル行。右端に操作部品を置く。
 struct SettingsFormRow<Trailing: View>: View {
     let icon: String
     let title: String
@@ -138,7 +138,7 @@ struct SettingsFormRow<Trailing: View>: View {
             trailing()
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 9).frame(width: 204, height: 30)
+        .padding(.horizontal, 9).frame(width: 214, height: 30)
         .background(V5P.panel, in: RoundedRectangle(cornerRadius: 6))
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(V5P.line.opacity(0.5), lineWidth: 0.5))
     }
@@ -194,7 +194,7 @@ struct SettingsSegmentedPicker<Value: Hashable>: View {
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
-        .frame(width: 204)
+        .frame(width: 214)
     }
 }
 

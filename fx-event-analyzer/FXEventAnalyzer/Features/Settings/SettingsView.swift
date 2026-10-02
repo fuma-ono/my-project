@@ -27,9 +27,18 @@ import SwiftUI
 /// 広い余白が残る(キャンバスの縦横比の違いによるもの)。
 ///
 /// HQ指示(2026-10-02、実機スクリーンショット確認後): 文字・アイコン・
-/// シェブロン(特にシェブロン)を大きく、カードの塗りは参考画像の実測
-/// RGB(31-36, 46-52, 69-77)の中央値#213149に全カード統一。上記の
-/// 「カード#001A36」は置き換え済み。
+/// シェブロン(特にシェブロン)を大きくした。カードの塗りは一度
+/// RGB(31-36, 46-52, 69-77)の中央値#213149にしたが、「参考画像と色が
+/// 違う」との再指摘を受け、参考画像のカード内部を100点実測した最頻値
+/// #061A35(≈RGB 6,26,53)に全カード統一。上記の「カード#001A36」は
+/// 置き換え済み。
+///
+/// HQ指示(2026-10-02)「タイトルの文字開始位置とカード左の枠線の縦ライン
+/// をそろえて」: CI実機キャプチャで全画面のカード左端を実測すると、
+/// ホーム〜指標詳細(02-08)は他画面共通の`V5Card`(x=10・幅214)で
+/// `V5Header`の左余白(ptToV5(16)≈9.3)とすでに揃っており、ずれていたのは
+/// 幅204のカードを使う設定系(この画面・SCR-017/018/020/021)だけだった。
+/// 共通ヘッダーは変えず、設定系のカード幅を214に揃えている。
 ///
 /// 参考画像との既知の差分(意図的な妥協、完全な一致ではない箇所):
 /// - タイトル「設定」の縦位置: 参考画像の実測ではy≈4.2%(V5換算y≈21)だが、
@@ -77,7 +86,7 @@ struct SettingsView: View {
 
     /// 参考画像から実測した1行あたりの高さ(V5座標系、234×491)。
     private static let rowHeight: CGFloat = 28.2
-    private static let cardWidth: CGFloat = 204
+    private static let cardWidth: CGFloat = 214
 
     init(apiClient: APIClient, authService: AuthServicing, onSignOut: @escaping () -> Void, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
@@ -160,7 +169,7 @@ struct SettingsView: View {
 
     /// 参考画像から実測したカード・行の見た目(V5座標系)。
     private static let cornerRadius: CGFloat = 6.5
-    private static let cardFill = Color(red: 33 / 255, green: 49 / 255, blue: 73 / 255) // #213149
+    private static let cardFill = Color(red: 6 / 255, green: 26 / 255, blue: 53 / 255) // #061A35
     private static let logoutHeight: CGFloat = 31.5
     private static let titleSize: CGFloat = 10.5
     private static let iconSize: CGFloat = 13.5

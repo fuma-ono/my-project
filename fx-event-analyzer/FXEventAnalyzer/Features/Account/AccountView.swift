@@ -93,7 +93,7 @@ struct AccountView: View {
                         Image(systemName: "chevron.right").font(.system(size: 7))
                     }
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 9).frame(width: 204, height: 30)
+                    .padding(.horizontal, 9).frame(width: 214, height: 30)
                     .background(V5P.panel, in: RoundedRectangle(cornerRadius: 6))
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(V5P.line.opacity(0.5), lineWidth: 0.5))
                 }
@@ -102,7 +102,7 @@ struct AccountView: View {
                 .overlay(alignment: .bottom) {
                     if case .error(let message) = viewModel.signOutState {
                         Text(message).font(.system(size: 6)).foregroundStyle(V5P.red)
-                            .multilineTextAlignment(.center).frame(width: 204).offset(y: 14)
+                            .multilineTextAlignment(.center).frame(width: 214).offset(y: 14)
                     }
                 }
                 .position(x: 117, y: 320)
@@ -153,7 +153,7 @@ struct AccountView: View {
             Image(systemName: "chevron.right").font(.system(size: 7))
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 9).frame(width: 204, height: 30)
+        .padding(.horizontal, 9).frame(width: 214, height: 30)
         .background(V5P.panel, in: RoundedRectangle(cornerRadius: 6))
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(V5P.line.opacity(0.5), lineWidth: 0.5))
     }
