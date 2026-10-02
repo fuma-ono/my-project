@@ -156,19 +156,13 @@ struct V5Background: View {
     /// IndicatorDetail/MovementDetail/HistoricalComparison/
     /// HistoricalEventDetail/Accountの各`loadingScaffold`も同様に差し替え済み
     /// (読み込み中〜読み込み完了の切り替わりで背景が変わって見えないため)。
+    ///
+    /// HQ指示(2026-10-02、追加)「画面中央付近の淡い青の放射状グローをなくして」:
+    /// 単色化後も残っていた中央の`RadialGradient`装飾を削除し、完全な単色のみに
+    /// した。
     var body: some View {
-        ZStack {
-            DesignTokens.Colors.backgroundPrimary
-                .frame(width: V5P.W, height: V5P.H)
-
-            RadialGradient(
-                colors: [V5P.blue.opacity(0.12), .clear],
-                center: .center,
-                startRadius: 5,
-                endRadius: 170
-            )
+        DesignTokens.Colors.backgroundPrimary
             .frame(width: V5P.W, height: V5P.H)
-        }
     }
 }
 
