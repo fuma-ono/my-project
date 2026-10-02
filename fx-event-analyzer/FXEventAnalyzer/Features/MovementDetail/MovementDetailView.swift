@@ -146,10 +146,9 @@ struct MovementDetailView: View {
 
     @ViewBuilder private func loadingScaffold(@ViewBuilder content: () -> some View) -> some View {
         ZStack {
-            // HQ指示(2026-09-30): Login/Splashと背景を揃えるため、V5固有の
-            // グラデーションから共有トークンに差し替えた(詳細はV5Background
-            // のドキュメントコメント参照)。
-            DesignTokens.Colors.brandBackgroundGradient.ignoresSafeArea()
+            // HQ指示(2026-10-02): 中身の背景をSplash/Loginのグラデーションから切り離し、
+            // 単色(backgroundPrimary)に変更(詳細はV5Backgroundのドキュメントコメント参照)。
+            DesignTokens.Colors.backgroundPrimary.ignoresSafeArea()
             content()
         }
     }

@@ -138,20 +138,27 @@ struct V5Background: View {
     /// `V5P.bg0/bg1`3色グラデーションを使っており、実際に色味が異なって
     /// いた(brandBackgroundGradient側がやや明るく青みが強い)。HQへの
     /// 確認の結果「タブバーだけでなく全画面の背景を揃える」との回答だった
-    /// ため、この行を`brandBackgroundGradient`に差し替えて統一した(同じ
-    /// 理由で、この単色グラデーションを個別に複製していたHome/Indicators/
-    /// EventDetail/IndicatorDetail/MovementDetail/HistoricalComparison/
-    /// HistoricalEventDetail/Accountの各`loadingScaffold`も同様に差し替え
-    /// 済み)。
+    /// ため、この行を`brandBackgroundGradient`に差し替えて統一した。
     ///
     /// HQ指示(2026-09-30、追加): 画面全体を囲んでいた光る青い枠線
     /// (`RoundedRectangle(cornerRadius: 12).stroke(...)`)について「いらない
     /// から消して」との指摘。以前の指示(タブバー参考画像の件)もこの画面全体の
     /// 枠線を指していたと判明したため、ここで完全に削除した。V5Viewportを
     /// 使う全画面(Home/指標一覧/分析/検索/設定/各詳細画面)から一括で消える。
+    ///
+    /// HQ指示(2026-10-02)「中身を作成していく前に背景を変更する、今スプラッシュ
+    /// 画面に合わせているが、上部の暗い部分の単色に変えてほしい」: Splash/Login
+    /// はブランドの「見せ場」画面として`brandBackgroundGradient`のままだが、
+    /// それ以外のアプリ本体の画面(V5Viewportを使う全画面)はこのグラデーション
+    /// から切り離し、グラデーションの最も暗い色(`backgroundPrimary`、
+    /// グラデーションのy=0/0.97地点と同じ色)の単色塗りに変更した。同じ理由で、
+    /// この単色塗りを個別に複製していたHome/Indicators/EventDetail/
+    /// IndicatorDetail/MovementDetail/HistoricalComparison/
+    /// HistoricalEventDetail/Accountの各`loadingScaffold`も同様に差し替え済み
+    /// (読み込み中〜読み込み完了の切り替わりで背景が変わって見えないため)。
     var body: some View {
         ZStack {
-            DesignTokens.Colors.brandBackgroundGradient
+            DesignTokens.Colors.backgroundPrimary
                 .frame(width: V5P.W, height: V5P.H)
 
             RadialGradient(
