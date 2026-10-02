@@ -128,21 +128,20 @@ final class ScreenshotTests: XCTestCase {
         captureSettingsSubScreen(row: "チャート設定", rowIndex: 4, waitFor: "時間足", name: "13-ChartSettings")
     }
 
-    /// SettingsView's row labels have no background or contentShape, so
-    /// under `.buttonStyle(.plain)` only the icon, title and chevron take
-    /// touches — the Spacer between them doesn't. `tap(containing:)` and
-    /// every other center tap landed in that gap, and three CI runs
-    /// captured 11-13 as the untouched Settings list (the diagnostic run
-    /// confirmed the row existed, was hittable, and was where it's drawn).
-    /// Tap the title text instead: SettingsView's fixed V5 layout (group 1
-    /// top y=78, 31.5pt rows; titles start at x≈46) mapped through
-    /// V5Viewport's scale-to-fit. If that still doesn't navigate, attach a
-    /// screenshot whose name records what XCUITest reports for the row.
+    /// Taps the row's center through SettingsView's fixed V5 layout (group 1
+    /// top y=59.5, 28.2pt rows) mapped through V5Viewport's scale-to-fit.
+    /// Center taps used to land in the row's Spacer gap, which had no
+    /// contentShape and so ignored touches under `.buttonStyle(.plain)`
+    /// (three CI runs captured 11-13 as the untouched Settings list).
+    /// SettingsView now gives each row a contentShape, so tapping the
+    /// center deliberately also checks that the whole row is tappable. If
+    /// it doesn't navigate, attach a screenshot whose name records what
+    /// XCUITest reports for the row.
     private func captureSettingsSubScreen(row: String, rowIndex: Int, waitFor text: String, name: String) {
         tap(containing: "ホーム")
         tap(containing: "設定")
         XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load before \(name)")
-        tapV5(x: 55, y: 78 + (CGFloat(rowIndex) + 0.5) * 31.5)
+        tapV5(x: 117, y: 59.5 + (CGFloat(rowIndex) + 0.5) * 28.2)
         if waitForAnyElement(containing: text, timeout: 15) {
             capture(name)
         } else {
