@@ -60,14 +60,20 @@ final class ScreenshotTests: XCTestCase {
         // failure: "No matches found for Descendants matching type
         // TabBar"), so search broadly instead of assuming a container type.
         XCTAssertTrue(waitForAnyElement(containing: "ホーム", timeout: 20), "Home tab did not appear after login")
+        // HQ指示(2026-10-02、訂正)「今日の重要イベント→これから発生する
+        // 重要イベント」で`HomeViewModel.upcomingEvents`(SCHEDULED限定)に
+        // 絞り込んだため、このカードにはモックの2イベントのうちRELEASED
+        // (米国CPI)ではなくSCHEDULED(米国雇用統計)の方だけが表示される。
+        // 以前はCPI側を前提にこの先のEvent Detail遷移も組んでいたため、
+        // ここも実際に表示される雇用統計側に合わせて更新した。
         XCTAssertTrue(
-            waitForAnyElement(containing: "米国CPI", timeout: 15),
+            waitForAnyElement(containing: "米国雇用統計", timeout: 15),
             "Home did not load event data from the mock Backend"
         )
         capture("02-Home")
 
         // SCR-004 Event Detail (required #2, via Home's event card)
-        tap(containing: "米国CPI(消費者物価指数)")
+        tap(containing: "米国雇用統計(非農業部門雇用者数)")
         XCTAssertTrue(waitForAnyElement(containing: "発表日時", timeout: 15), "Event Detail did not load")
         capture("03-EventDetail")
 
