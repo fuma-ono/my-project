@@ -373,16 +373,22 @@ struct HomeView: View {
     /// のヘッダー、区切り線付きの行リスト)。`V5Card`と違い高さを固定値で
     /// 指定せず、中身(行数・2行テキストの実際の高さ)に応じて自然に決まる
     /// `VStack`にした。
+    /// HQ指摘(2026-10-02、4回目)「枠内の色が全然違うので参考画像と同じに
+    /// してください」: 並行セッション(`claude/fx-settings-screens`)が同じ
+    /// 参考画像のカード内部を100点実測して到達した最頻値`#061A35`
+    /// (≈RGB 6,26,53、Settings/Account系カードに統一済み)と同じ値に
+    /// 差し替えた。旧実装の`V5P.panel2→V5P.panel`グラデーション
+    /// (≈RGB(4,25,47)→(2.5,19,37))は実測よりだいぶ暗く、色味も違って
+    /// いた。
+    private static let cardFill = Color(red: 6.0 / 255, green: 26.0 / 255, blue: 53.0 / 255)
+
     @ViewBuilder private func homeCard(@ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             content()
         }
         .padding(10)
         .frame(width: 214, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: Self.cardCornerRadius)
-                .fill(LinearGradient(colors: [V5P.panel2, V5P.panel], startPoint: .topLeading, endPoint: .bottomTrailing))
-        )
+        .background(RoundedRectangle(cornerRadius: Self.cardCornerRadius).fill(Self.cardFill))
         .overlay(RoundedRectangle(cornerRadius: Self.cardCornerRadius).stroke(Self.cardBorderColor, lineWidth: 0.5))
     }
 
@@ -460,10 +466,17 @@ struct HomeView: View {
         // `GeometryReader`は子に渡すサイズ(`geo.size`)と自身が親へ
         // 報告するサイズ(外側の`.frame`で固定)を完全に分離できるため、
         // 内側の`Text`がどれだけ巨大でも親レイアウトには一切影響しない
-        // 構造に変更した。
+        // 構造に変更した — これでレイアウト漏れは解消したが、CI実機
+        // キャプチャをピクセル境界追跡で再検証すると、縦方向の半径
+        // (≈31px)に対し横方向(≈26.5px)がまだ一回り小さく、わずかに
+        // 縦長の楕円だった(絵文字自体の字送りが左右非対称なため、倍率
+        // 1.8倍では横方向のインクが円の直径まで届いていなかった)。HQ
+        // 指摘(2026-10-02、4回目)「国旗が丸になってません」を受け、倍率を
+        // 1.8→3.2に引き上げ、絵文字が横方向も含めあらゆる方向で円を
+        // 確実に超えるようにした。
         GeometryReader { geo in
             Text(emoji)
-                .font(.system(size: min(geo.size.width, geo.size.height) * 1.8))
+                .font(.system(size: min(geo.size.width, geo.size.height) * 3.2))
                 .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
         }
         .frame(width: diameter, height: diameter)
@@ -485,7 +498,10 @@ struct HomeView: View {
         // `.fixedSize(horizontal: true, vertical: false)`を付け、合わせて
         // フォントサイズと間隔を詰めて実測で調整した。
         HStack(spacing: 5) {
-            HStack(spacing: -6) {
+            // HQ指摘(2026-10-02、4回目)「通貨ペアの国旗は重なってるので
+            // 間隔を開けてください」: 負のスペーシング(-6)で2つの国旗が
+            // 重なっていたのを、正のスペーシングに変更して離した。
+            HStack(spacing: 3) {
                 circleFlag(CountryFlag.emoji(forCurrency: pair.baseCurrency), diameter: 13)
                 circleFlag(CountryFlag.emoji(forCurrency: pair.quoteCurrency), diameter: 13)
             }

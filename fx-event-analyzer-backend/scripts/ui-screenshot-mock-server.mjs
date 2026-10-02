@@ -41,7 +41,15 @@ const INDICATOR_ID_FOMC = '11111111-1111-1111-1111-111111111113'; // FOMC
 const INDICATOR_ID_JP_CPI = '11111111-1111-1111-1111-111111111114'; // 日本CPI
 const FX_PAIR_ID = '22222222-2222-2222-2222-222222222222'; // USDJPY
 const EVENT_ID = '33333333-3333-3333-3333-333333333333'; // 本日発表済み
-const EVENT_ID_UPCOMING = '44444444-4444-4444-4444-444444444444'; // 本日発表前
+const EVENT_ID_UPCOMING = '44444444-4444-4444-4444-444444444444'; // 本日発表前(NFP)
+// HQ指示(2026-10-02、4回目)「今日の重要指標は3つ表示してください」:
+// Homeの「今日の重要イベント」はSCHEDULED(本日発表前)のイベントのみを
+// 表示する(HomeViewModel.upcomingEvents)。このUIスクリーンショット用
+// フィクスチャにはSCHEDULEDイベントが1件(NFP)しか無かったため、同じ
+// 性質のテストデータとしてFOMC/日本CPIのSCHEDULEDイベントを2件追加し、
+// 参考画像(3件表示)と同じ件数をCIキャプチャで確認できるようにした。
+const EVENT_ID_UPCOMING_FOMC = '44444444-4444-4444-4444-444444444445'; // 本日発表前(FOMC)
+const EVENT_ID_UPCOMING_JP_CPI = '44444444-4444-4444-4444-444444444446'; // 本日発表前(日本CPI)
 const TEST_USER_ID = '99999999-9999-9999-9999-999999999999';
 const TEST_USER_EMAIL = 'ui-screenshot@example.com';
 
@@ -248,6 +256,42 @@ function homeHandler() {
         surprise: null,
         surprise_direction: null,
         related_fx_pairs: RELATED_FX_PAIRS,
+      },
+      {
+        event_id: EVENT_ID_UPCOMING_FOMC,
+        indicator_id: INDICATOR_ID_FOMC,
+        indicator_name: INDICATORS_LIST[2].name,
+        country_code: 'US',
+        currency_code: 'USD',
+        importance: 'HIGH',
+        release_datetime: isoPlusHours(2),
+        release_datetime_precision: 'EXACT',
+        status: 'SCHEDULED',
+        data_status: 'DATA_PENDING',
+        forecast: null,
+        actual: null,
+        previous: null,
+        surprise: null,
+        surprise_direction: null,
+        related_fx_pairs: RELATED_FX_PAIRS,
+      },
+      {
+        event_id: EVENT_ID_UPCOMING_JP_CPI,
+        indicator_id: INDICATOR_ID_JP_CPI,
+        indicator_name: INDICATORS_LIST[3].name,
+        country_code: 'JP',
+        currency_code: 'JPY',
+        importance: 'MEDIUM',
+        release_datetime: isoPlusHours(8),
+        release_datetime_precision: 'EXACT',
+        status: 'SCHEDULED',
+        data_status: 'DATA_PENDING',
+        forecast: 2.9,
+        actual: null,
+        previous: 2.8,
+        surprise: null,
+        surprise_direction: null,
+        related_fx_pairs: [],
       },
     ],
     major_fx: [
