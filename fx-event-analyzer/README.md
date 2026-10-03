@@ -40,8 +40,9 @@ completed API connection:
   AI-generated text) → 市場への影響 (related FX pairs' 5m reaction).
   Handles DATA_PENDING/DATA_UNAVAILABLE/NOT_ANALYZABLE and the entitlement-
   gated 403 case explicitly.
-- **SCR-007 Historical Event Detail** (`Features/HistoricalEventDetail/`):
-  `GET /events/{event_id}/history`, with the mandatory "指標詳細を見る" →
+- **SCR-007 Historical Event Detail** (`Features/HistoricalEventDetail/` —
+  **deleted 2026-10-03**, see the note after Phase 5 below): `GET
+  /events/{event_id}/history`, with the mandatory "指標詳細を見る" →
   SCR-003 navigation.
 - **Navigation**: 4-tab main navigation (Home/Indicators/Search/Settings,
   ui-screens.md §4 — Search/Settings are tab-slot placeholders only, their
@@ -105,6 +106,21 @@ screens or touching the Backend:
   Opportunities" to "Understand Economic Events & FX Reactions" — the
   original wording implied trading signals/advice, which this app
   explicitly does not provide.
+
+**2026-10-03 (HQ "画面構成・SCR番号の全面更新")**: `Features/HistoricalEventDetail/`
+(the "Historical Event Detail" screen referenced above, under its various
+historical SCR numbers) and `Features/Analysis/` (the "Analysis"/"チャート
+分析" tab) were both deleted as independent screens — their content is now
+folded into Movement Detail (renumbered SCR-008 相場反応詳細 under the new
+scheme; see `docs/projects/fx-event-analyzer/ui-screens.md` v3.0 for the
+current, authoritative screen numbering and §3.2/§8.5 for the full mapping
+from every prior numbering scheme). `HistoricalComparisonView`'s past-event
+rows now push straight to Movement Detail instead. The main tab bar's third
+slot is now `Features/Calendar/CalendarTabView.swift` instead of the
+deleted `AnalysisTabView`. Every SCR number cited by file/line in this
+README above this note reflects the numbering scheme in effect *when that
+phase shipped* — treat ui-screens.md, not this README, as the source of
+truth for current numbering.
 
 No real Supabase project is provisioned yet, and the Node.js Backend
 (`fx-event-analyzer-backend/`) has no deployment target — both `SUPABASE_URL`/
