@@ -506,11 +506,16 @@ struct V5BottomBar: View {
             tab(0, "ホーム") { _ in
                 Image(systemName: "house.fill").font(.system(size: 14, weight: .semibold))
             }
-            tab(1, "指標一覧") { _ in
+            tab(1, "指標") { _ in
                 V5BarsIcon()
             }
-            tab(2, "分析") { isSelected in
-                V5AnalysisIcon(isSelected: isSelected)
+            // HQ指示(2026-10-03、画面構成全面更新)「旧『分析』タブは廃止、
+            // 5タブは『ホーム/指標/カレンダー/検索/設定』」。旧`V5AnalysisIcon`
+            // (上記ドキュメントコメント参照)は使わず、暫定でSF Symbols
+            // `calendar`を使用(カレンダー専用の自前描画アイコンは今回のスコープ
+            // 外 — 画面内容自体がSCR-010としてまだプレースホルダーのため)。
+            tab(2, "カレンダー") { _ in
+                Image(systemName: "calendar").font(.system(size: 14, weight: .semibold))
             }
             tab(3, "検索") { _ in
                 Image(systemName: "magnifyingglass").font(.system(size: 14, weight: .semibold))
@@ -619,7 +624,14 @@ private struct V5BarsIcon: View {
     }
 }
 
-/// 「分析」タブのアイコン。参考画像(`bottom-tabbar-reference-v2-capsule.png`)
+/// 旧「分析」タブのアイコン。HQ指示(2026-10-03、画面構成全面更新)で
+/// タブ自体が「カレンダー」に置き換わったため`V5BottomBar.body`からの
+/// 呼び出しは削除し、暫定でSF Symbols `calendar`を使用している
+/// (`tab(2, ...)`呼び出し側参照)。このView自体は、参考画像を
+/// ピクセル単位で再現した自前描画の実装記録として残してある(削除しても
+/// 挙動に影響しないが、今回の変更は番号・名称・遷移が主眼のため、
+/// 価値のある実装記録を失わない形を優先した)。以下、旧ドキュメントコメント
+/// (未変更): 参考画像(`bottom-tabbar-reference-v2-capsule.png`)
 /// には座標軸が一切無く、山谷のあるジグザグ線の先に矢尻が付いた形状のみが
 /// 描かれている。SF Symbolsの`chart.line.uptrend.xyaxis`はL字型の座標軸
 /// (縦線+横線)込みのグリフのため使わず、線の中心線をピクセル単位で追跡した

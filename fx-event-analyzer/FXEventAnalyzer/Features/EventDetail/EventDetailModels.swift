@@ -1,6 +1,6 @@
 import Foundation
 
-/// `GET /api/v1/events/{event_id}` (api-design.md §14) — SCR-004's single
+/// `GET /api/v1/events/{event_id}` (api-design.md §14) — SCR-007's single
 /// API call. Field order in this file mirrors the Response JSON, not the
 /// display order (ui-screens.md §5 H-1 fixes the display order in the View).
 struct EventDetailResponse: Decodable, Equatable {

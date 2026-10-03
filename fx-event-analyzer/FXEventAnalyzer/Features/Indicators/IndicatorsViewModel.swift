@@ -8,7 +8,7 @@ enum IndicatorsState: Equatable {
     case error(String)
 }
 
-/// SCR-002 Indicators (ui-screens.md §5). `q` (name/code partial match) and
+/// SCR-005 指標一覧。`q` (name/code partial match) and
 /// `importance` are the only filters wired — HQ's Phase 3 instruction is
 /// explicit that no ad-hoc filter UI beyond what api-design.md §13.1
 /// already specifies should be added (frequency was already dropped from

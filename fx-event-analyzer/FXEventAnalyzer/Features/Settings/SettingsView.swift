@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// SCR-016 設定画面(ui-screens.md v2.0)。
+/// SCR-014 設定画面。
 ///
 /// 方向転換(2026-09-30): HQより実装の起点となる参考画像
 /// (`docs/projects/fx-event-analyzer/mockups/settings-screen-reference-v1.jpg`)
@@ -26,19 +26,27 @@ import SwiftUI
 ///   パスワード欄アイコンと同じ「最も近い形状を採用する」慣例に従った)。
 ///
 /// 行とAppRoute/SettingsSubRouteの対応(2026-09-29 HQ承認 2-b/2-cで
-/// 追加済みのルートをそのまま使用— 新しいルートは追加していない):
-/// アカウント情報→`.account`(SCR-017)、通知設定→`.notificationSettings`
-/// (SCR-018)、プラン・購読管理→`.subscriptionManagement`(SCR-019)、
-/// 表示・地域設定→`.displaySettings`(SCR-020)、チャート設定→
-/// `.chartSettings`(SCR-021)、ヘルプ・お問い合わせ→`.help`(SCR-022)、
-/// 利用規約→`.terms`(SCR-023)、プライバシーポリシー→`.privacyPolicy`
-/// (SCR-024)、アプリ情報→`.appInfo`(SCR-025)。チャート設定・アプリ情報は
+/// 追加済みのルートをそのまま使用。HQ指示2026-10-03の画面構成全面更新で
+/// SCR番号のみ更新 — 新しいルートは追加していない):
+/// アカウント情報→`.account`(SCR-015)、通知設定→`.notificationSettings`
+/// (SCR-016)、プラン・購読管理→`.subscriptionManagement`(SCR-017)、
+/// 表示・地域設定→`.displaySettings`(SCR-018)、チャート設定→
+/// `.chartSettings`(SCR-019)、ヘルプ・お問い合わせ→`.help`(SCR-020)、
+/// 利用規約→`.terms`(SCR-021)、プライバシーポリシー→`.privacyPolicy`
+/// (SCR-022)、アプリ情報→`.appInfo`(SCR-023)。チャート設定・アプリ情報は
 /// 2-c時点では対応する可視UIがなく未接続だったが、この画像でUIが示された
 /// ため今回接続した。
 ///
-/// 参考画像にはSCR-026(アカウント削除)の行が存在しない — 削除機能は
-/// SCR-017(アカウント情報)側に配置される可能性がある。独断で追加せず、
+/// 参考画像にはSCR-024(アカウント削除)の行が存在しない — 削除機能は
+/// SCR-015(アカウント情報)側に配置される可能性がある。独断で追加せず、
 /// 未接続のまま報告する。
+///
+/// HQ指示(2026-10-03、画面構成全面更新)で新たに定義されたSCR-026
+/// ホーム通貨ペア編集(`.homeCurrencyPairEditor`)も、この参考画像には
+/// 対応する行が存在しない(他の既存行と同じ理由)ため、同様に独断で追加
+/// せず未接続のまま報告する — どのグループに/どの位置に配置するかはHQの
+/// 判断を仰ぎたい。`AppRoute`・`AppRouteDestinationView`側の定義は既に
+/// 用意済みのため、位置さえ確定すればこの画面への行の追加のみで接続できる。
 ///
 /// 旧デザインの「データ取得設定」行(新画面仕様にSCR番号なし)は参考画像
 /// に存在しないため削除した。旧デザインで"準備中"アラートを使っていた
@@ -57,7 +65,7 @@ struct SettingsView: View {
     private let apiClient: APIClient
     private let authService: AuthServicing
     private let onSignOut: () -> Void
-    /// SCR-027 ログアウト確認ダイアログ(2026-09-29 HQ承認、2-b)。
+    /// SCR-025 ログアウト確認ダイアログ(2026-09-29 HQ承認、2-b)。
     @State private var showLogoutConfirmation = false
     @Binding var tabSelection: Int
 
@@ -132,7 +140,7 @@ struct SettingsView: View {
                 SettingsSubRouteDestinationView(route: route)
             }
         }
-        // 2026-09-29 HQ承認(2-b): SCR-027 ログアウト確認ダイアログ。独立した
+        // 2026-09-29 HQ承認(2-b): SCR-025 ログアウト確認ダイアログ。独立した
         // フルスクリーン画面ではなくダイアログとする(ui-screens.md v2.0 §4.2)。
         .confirmationDialog(
             "ログアウトしますか？",

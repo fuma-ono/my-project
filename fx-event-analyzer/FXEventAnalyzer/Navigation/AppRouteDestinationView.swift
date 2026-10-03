@@ -15,8 +15,6 @@ struct AppRouteDestinationView: View {
             IndicatorDetailView(apiClient: apiClient, indicatorId: id, tabSelection: $tabSelection)
         case .eventDetail(let id):
             EventDetailView(apiClient: apiClient, eventId: id, tabSelection: $tabSelection)
-        case .historicalEventDetail(let id):
-            HistoricalEventDetailView(apiClient: apiClient, eventId: id, tabSelection: $tabSelection)
         case .movementDetail(let eventId, let indicatorId, let fxPairId, let symbol, let indicatorName, let releaseDatetime):
             MovementDetailView(
                 apiClient: apiClient,
@@ -40,26 +38,23 @@ struct AppRouteDestinationView: View {
         case .account:
             AccountView(apiClient: apiClient, tabSelection: $tabSelection)
 
-        // MARK: - 2026-09-29 HQ承認(2-b): 仮画面(PlaceholderScreenView)への解決。
-        // 実装本体はまだ存在せず、正式なUIは別途デザイン仕様確定後に実装する。
-        case .chartAnalysis(_, let fxPairSymbol):
-            PlaceholderScreenView(scrNumber: "SCR-011", screenName: "チャート分析", detail: "通貨ペア: \(fxPairSymbol)")
-                .navigationTitle("チャート分析")
-                .navigationBarTitleDisplayMode(.inline)
+        // MARK: - 仮画面(PlaceholderScreenView)への解決。実装本体はまだ存在せず、
+        // 正式なUIは別途デザイン仕様確定後に実装する。SCR番号はHQ指示
+        // (2026-10-03、画面構成全面更新)の新27画面構成に準拠。
         case .calendar:
-            PlaceholderScreenView(scrNumber: "SCR-012", screenName: "経済指標カレンダー")
-                .navigationTitle("経済指標カレンダー")
+            PlaceholderScreenView(scrNumber: "SCR-010", screenName: "経済カレンダー")
+                .navigationTitle("経済カレンダー")
                 .navigationBarTitleDisplayMode(.inline)
         case .speechList:
-            PlaceholderScreenView(scrNumber: "SCR-014", screenName: "要人発言一覧", detail: "バックエンドAPI未実装のため仮画面です。")
+            PlaceholderScreenView(scrNumber: "SCR-012", screenName: "要人発言一覧", detail: "バックエンドAPI未実装のため仮画面です。")
                 .navigationTitle("要人発言一覧")
                 .navigationBarTitleDisplayMode(.inline)
         case .speechDetail(let id):
-            PlaceholderScreenView(scrNumber: "SCR-015", screenName: "要人発言詳細", detail: "発言ID: \(id)\nバックエンドAPI未実装のため仮画面です。")
+            PlaceholderScreenView(scrNumber: "SCR-013", screenName: "要人発言詳細", detail: "発言ID: \(id)\nバックエンドAPI未実装のため仮画面です。")
                 .navigationTitle("要人発言詳細")
                 .navigationBarTitleDisplayMode(.inline)
         case .homeCurrencyPairEditor:
-            PlaceholderScreenView(scrNumber: "SCR-028", screenName: "ホーム通貨ペア編集", detail: "お気に入り通貨ペアAPI未実装のため仮画面です。")
+            PlaceholderScreenView(scrNumber: "SCR-026", screenName: "ホーム通貨ペア編集", detail: "お気に入り通貨ペアAPI未実装のため仮画面です。")
                 .navigationTitle("通貨ペア編集")
                 .navigationBarTitleDisplayMode(.inline)
         case .favoritesList:

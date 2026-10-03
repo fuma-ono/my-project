@@ -1,8 +1,8 @@
 import Charts
 import SwiftUI
 
-/// SCR-006 Historical Comparison (ui-screens.md §5) — "今回だけでなく、
-/// 過去の同一指標発表時に相場がどう動いたか比較する".
+/// SCR-009 過去イベント比較 — "今回だけでなく、過去の同一指標発表時に相場が
+/// どう動いたか比較する".
 ///
 /// HQ "V5 Pixel Frontend" integration (2026-09-24): visual content is HQ's
 /// `V5PixelFrontend.swift` `V5HistoricalComparison` (fixed 234×491 canvas,
@@ -16,7 +16,7 @@ import SwiftUI
 /// Other adaptations, all wiring:
 /// - `ComparisonIndicatorSummary` carries no country code, unlike
 ///   Indicator/Event Detail — no flag is shown, omitted rather than
-///   invented (the same gap Historical Event Detail already has).
+///   invented.
 /// - "直近5回" is the real `response.events.count`.
 /// - HQ's 5 hardcoded table rows are manually space-padded single `Text`
 ///   lines in a non-monospaced font, which can't stay column-aligned for
@@ -24,7 +24,8 @@ import SwiftUI
 ///   fixed widths (55/38/38/45) the header directly above already
 ///   declares, at the same font size/color, `.prefix(5)`-ed to the 5 slots
 ///   HQ's fixed-height card provisions (no `ScrollView` exists here);
-///   each row is tappable to SCR-007 (unchanged real destination).
+///   each row is tappable to SCR-008 相場反応詳細(HQ指示2026-10-03で、
+///   旧「過去イベント詳細」独立画面からここへ遷移先を変更した)。
 /// - The 統計/詳細統計 cards this screen carried in the prior (scrolling)
 ///   HQ UI Master v5 round have no home in this fixed, non-scrolling
 ///   canvas and are not part of HQ's card — dropped rather than appended
@@ -103,7 +104,20 @@ struct HistoricalComparisonView: View {
                             Text("変動").frame(width: 45)
                         }.font(.system(size: 6)).foregroundStyle(V5P.muted)
                         ForEach(response.events.prefix(5)) { event in
-                            NavigationLink(value: AppRoute.historicalEventDetail(id: event.id)) {
+                            // HQ指示(2026-10-03、画面構成全面更新)「旧『過去
+                            // イベント詳細』の独立画面は作成しない...必要に応じて
+                            // SCR-008相場反応詳細へ集約する」: この行が持つ情報
+                            // (eventId/indicatorId/fxPairId/fxPairSymbol/
+                            // indicatorName/releaseDatetime)で、過去の発表回でも
+                            // SCR-008(`AppRoute.movementDetail`)へ直接遷移する。
+                            NavigationLink(value: AppRoute.movementDetail(
+                                eventId: event.id,
+                                indicatorId: viewModel.indicatorId,
+                                fxPairId: viewModel.fxPairId,
+                                symbol: viewModel.fxPairSymbol,
+                                indicatorName: viewModel.indicatorName,
+                                releaseDatetime: event.releaseDatetime
+                            )) {
                                 historyRow(event)
                             }.buttonStyle(.plain).accessibilityIdentifier("historyEventRow")
                         }

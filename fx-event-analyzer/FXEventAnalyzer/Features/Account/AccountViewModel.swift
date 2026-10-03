@@ -14,7 +14,7 @@ enum AccountSignOutState: Equatable {
     case error(String)
 }
 
-/// SCR-011 Account — HQ Frontend integration (2026-09-21): the delivered UI
+/// SCR-015 アカウント情報 — HQ Frontend integration (2026-09-21): the delivered UI
 /// package includes an Account screen with no ViewModel of its own (its
 /// `AccountView.swift` was static demo data). Wires it to `AccountService`/
 /// `SubscriptionService` (Networking/, Phase 2 — implemented but unused by

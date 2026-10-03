@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// SCR-011 Account, reached from Settings.
+/// SCR-015 アカウント情報、Settingsから遷移。
 ///
 /// HQ "V5 Pixel Frontend" integration (2026-09-24): visual content is HQ's
 /// `V5PixelFrontend.swift` `V5Account` (fixed 234×491 canvas, profile
@@ -19,7 +19,7 @@ import SwiftUI
 struct AccountView: View {
     @StateObject private var viewModel: AccountViewModel
     @State private var pendingFeatureMessage: String?
-    /// 2026-09-29 HQ承認(2-b): SCR-027 ログアウト確認ダイアログ。
+    /// 2026-09-29 HQ承認(2-b): SCR-025 ログアウト確認ダイアログ。
     @State private var showLogoutConfirmation = false
     @Binding var tabSelection: Int
     @Environment(\.dismiss) private var dismiss
@@ -45,7 +45,7 @@ struct AccountView: View {
             } message: { message in
                 Text(message)
             }
-            // 2026-09-29 HQ承認(2-b): SCR-027 ログアウト確認ダイアログ。
+            // 2026-09-29 HQ承認(2-b): SCR-025 ログアウト確認ダイアログ。
             .confirmationDialog(
                 "ログアウトしますか？",
                 isPresented: $showLogoutConfirmation,

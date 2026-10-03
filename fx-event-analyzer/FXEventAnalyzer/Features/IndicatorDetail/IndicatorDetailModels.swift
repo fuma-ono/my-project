@@ -12,8 +12,9 @@ struct IndicatorDetailResponse: Decodable {
 }
 
 /// `GET /api/v1/indicators/{id}/events` row (api-design.md §13.3) — used
-/// here filtered to `status=RELEASED` for SCR-003's "最近の発表結果" list,
-/// each row tappable to SCR-007 Historical Event Detail.
+/// here filtered to `status=RELEASED` for SCR-006's "最近の発表結果" list,
+/// each row tappable to SCR-007 イベント詳細(旧「過去イベント詳細」は
+/// HQ指示2026-10-03で削除、過去の発表回もイベント詳細に遷移する)。
 struct IndicatorEventSummary: Decodable, Identifiable, Equatable {
     let id: String
     let releaseDatetime: Date

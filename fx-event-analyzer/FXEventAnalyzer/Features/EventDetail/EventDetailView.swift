@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// SCR-004 Event Detail (ui-screens.md §5, H-1) — "予想と結果、その結果に
+/// SCR-007 イベント詳細 — "予想と結果、その結果に
 /// よる相場の反応を一画面で理解する".
 ///
 /// HQ "V5 Pixel Frontend" integration (2026-09-24): visual content is HQ's

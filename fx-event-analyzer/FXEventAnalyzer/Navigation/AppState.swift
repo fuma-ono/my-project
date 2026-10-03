@@ -3,7 +3,7 @@ import Foundation
 
 /// Drives which top-level screen `RootView` shows. Deliberately small — a
 /// single published phase, no generic routing/deep-link machinery, since
-/// Phase 1 only needs SCR-000 → SCR-010 / SCR-001 (design.md 15.1節).
+/// Phase 1 only needs SCR-000 → SCR-001 / SCR-004 (design.md 15.1節).
 @MainActor
 final class AppState: ObservableObject {
     enum Phase: Equatable {
@@ -54,9 +54,9 @@ final class AppState: ObservableObject {
 
     /// Starts listening for auth state changes that happen *after* launch —
     /// most importantly session expiry while the user is already on Home,
-    /// which must route back to SCR-010 with the "セッションの有効期限が
-    /// 切れています" message (ui-screens.md SCR-000 "Session Expired"
-    /// applies for the whole app session, not only at startup).
+    /// which must route back to SCR-001 (Login) with the "セッションの
+    /// 有効期限が切れています" message ("Session Expired" applies for the
+    /// whole app session, not only at startup).
     private func startObservingAuthStateIfNeeded() {
         guard observationTask == nil, authService.isConfigured else { return }
         observationTask = Task { [authService] in

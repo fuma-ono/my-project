@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Top-level screen switch: SCR-000 → SCR-010 / SCR-001
+/// Top-level screen switch: SCR-000 → SCR-001 / SCR-004
 /// (design.md 15.1節 起動フロー).
 struct RootView: View {
     @StateObject private var appState: AppState

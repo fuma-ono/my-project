@@ -1,8 +1,8 @@
 import Foundation
 
 /// `GET /api/v1/home`'s Event shape (api-design.md §12), in full —
-/// Phase 3 SCR-001 needs every field the card/state rules
-/// (ui-screens.md §5 SCR-001) reference: Forecast/Actual/Previous/Surprise,
+/// Phase 3 SCR-004 needs every field the card/state rules
+/// (ui-screens.md §5 SCR-004) reference: Forecast/Actual/Previous/Surprise,
 /// country/currency/importance for the card header, and related_fx_pairs
 /// for the "関連通貨ペア" row.
 struct HomeEventSummary: Decodable, Identifiable, Equatable {

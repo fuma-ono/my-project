@@ -19,7 +19,7 @@ enum MovementChartState: Equatable {
     case error(String)
 }
 
-/// SCR-005 Movement Detail (ui-screens.md §5, HQ Phase 4 instruction) —
+/// SCR-008 相場反応詳細 (HQ Phase 4 instruction) —
 /// "発表前後にFX相場が実際にどれくらい動いたのか確認する". Backend is the
 /// sole Source of Truth for pips/movement/max upward-downward
 /// (api-design.md §8); this view model never recomputes them. Fetches

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// SCR-001 Home (ui-screens.md §5). Real `GET /home` data.
+/// SCR-004 ホーム画面。Real `GET /home` data.
 ///
 /// HQ "V5 Pixel Frontend" integration (2026-09-24): visual content is HQ's
 /// `V5PixelFrontend.swift` `V5Home` (fixed 234×491 coordinate space via
@@ -20,12 +20,18 @@ import SwiftUI
 /// いる — 絶対pxをそのままSwiftUIに入れてはいない。各カードのwidth/
 /// height/corner radius等、変換後の値は各定数のコメントに記載。
 ///
-/// 「今日の重要イベント」削除に伴い、Home経由でSCR-004 Event Detailに
-/// 遷移する唯一の導線(Homeのイベント行)が無くなった。SCR-004は
+/// 「今日の重要イベント」削除に伴い、Home経由でSCR-007 イベント詳細に
+/// 遷移する唯一の導線(Homeのイベント行)が無くなった。SCR-007は
 /// ui-screens.mdの必須画面であり続けるため、`IndicatorDetailView`の
 /// 「次回発表予定」エリアから遷移できるよう新規配線した(実際に存在する
 /// `nextScheduledEvent.id`を使うだけで、イベントやそのデータを捏造しては
 /// いない)。UIの配線のみで、API/DB/ビジネスロジックは変更していない。
+///
+/// HQ指示(2026-10-03、画面構成全面更新)「Homeの通貨ペアカード/お気に入り
+/// 通貨ペア → 現時点では遷移なし」: 旧SCR-011チャート分析(削除済み)への
+/// 遷移を外し、表示のみの行にした(`pairRow`/`favoriteGridCard`の`.fxPair`
+/// ケース参照)。通貨ペアそのものの詳細画面は今回追加しない。Homeに表示
+/// する通貨ペアの編集はSCR-026(設定から遷移)で行う。
 struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
     @Binding var path: NavigationPath
@@ -296,9 +302,12 @@ struct HomeView: View {
             }
             ForEach(Array(pairs.enumerated()), id: \.element.id) { idx, pair in
                 if idx > 0 { Divider().overlay(Self.cardBorderColor) }
-                NavigationLink(value: AppRoute.chartAnalysis(fxPairId: pair.id, fxPairSymbol: pair.symbol)) {
-                    pairRow(pair)
-                }.buttonStyle(.plain)
+                // HQ指示(2026-10-03、画面構成全面更新)「Homeの通貨ペアカード
+                // → 現時点では遷移なし」: 旧`.chartAnalysis`(削除済み)への
+                // 遷移を外し、表示のみの行にした。通貨ペアそのものの詳細画面は
+                // 今回追加しない方針(SCR-026ホーム通貨ペア編集は表示する通貨
+                // ペアを選ぶ設定画面であり、通貨ペア詳細画面ではない)。
+                pairRow(pair)
             }
         }
     }
@@ -364,18 +373,20 @@ struct HomeView: View {
                     statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance))
                 }
             }.buttonStyle(.plain)
-        case .fxPair(let id, let symbol, let price, let change, let isUp):
-            NavigationLink(value: AppRoute.chartAnalysis(fxPairId: id, fxPairSymbol: symbol)) {
-                favoriteGridCardContent(countryCode: nil, name: symbol) {
-                    Text(price).font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
-                } footer: {
-                    HStack(spacing: 1) {
-                        Text(change).font(.system(size: 7, weight: .semibold))
-                        Image(systemName: isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 7))
-                    }
-                    .foregroundStyle(isUp ? Self.changeUpColor : Self.changeDownColor)
+        case .fxPair(_, let symbol, let price, let change, let isUp):
+            // HQ指示(2026-10-03、画面構成全面更新)「お気に入りの通貨ペア →
+            // 現時点では遷移なし」: 旧`.chartAnalysis`(削除済み)への遷移を
+            // 外した(このケース自体、`FavoritesStore.ItemType.fxPair`の
+            // ドキュメントコメント参照の通り単体取得API/★が無く現状未使用)。
+            favoriteGridCardContent(countryCode: nil, name: symbol) {
+                Text(price).font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+            } footer: {
+                HStack(spacing: 1) {
+                    Text(change).font(.system(size: 7, weight: .semibold))
+                    Image(systemName: isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 7))
                 }
-            }.buttonStyle(.plain)
+                .foregroundStyle(isUp ? Self.changeUpColor : Self.changeDownColor)
+            }
         }
     }
 

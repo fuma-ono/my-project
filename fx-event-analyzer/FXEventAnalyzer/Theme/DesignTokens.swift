@@ -124,7 +124,7 @@ enum DesignTokens {
         /// different colors in the Reference, not two uses of one color.
         static let accentDeepBlue = Color("AccentDeepBlue")
 
-        /// SCR-001 Home-only tokens (HQ's Reference-fidelity instruction,
+        /// SCR-004 Home-only tokens (HQ's Reference-fidelity instruction,
         /// 2026-09-18): Home may redefine its own semantic palette without
         /// touching the shared tokens above, which every other screen
         /// (Indicators/Event Detail/Movement Detail/Search/Settings — all
@@ -202,7 +202,7 @@ enum DesignTokens {
         /// uses sharper, more geometric terminals, not SF Rounded's soft
         /// bubble-like corners. Switched to `.default` (San Francisco Pro)
         /// to match. Also used as-is by Login's own "FX Event Analyzer"
-        /// wordmark (ui-screens.md SCR-010), which is why a further
+        /// wordmark (SCR-001), which is why a further
         /// Splash-only size bump (below) is its own token rather than
         /// changed in place here.
         static let splashTitle = Font.system(size: 34, weight: .bold, design: .default)

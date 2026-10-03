@@ -83,9 +83,10 @@ enum CountryFlag {
     }
 
     /// HQ UI Master v5's "米) 消費者物価指数" country-abbreviation prefix
-    /// (SCR-002/003/004) — a single-kanji short form, not the full country
-    /// name. Falls back to the raw country code for anything not in this
-    /// common set rather than guessing an abbreviation.
+    /// (SCR-005/006/007 指標一覧/指標詳細/イベント詳細) — a single-kanji
+    /// short form, not the full country name. Falls back to the raw country
+    /// code for anything not in this common set rather than guessing an
+    /// abbreviation.
     static func kanjiAbbreviation(for countryCode: String) -> String {
         switch countryCode.uppercased() {
         case "US": return "米"

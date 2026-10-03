@@ -45,7 +45,7 @@ struct PlaceholderScreenView: View {
     }
 }
 
-/// `SettingsSubRoute`(SCR-018〜026)を仮画面に解決する。`AppRouteDestinationView`
+/// `SettingsSubRoute`(SCR-016〜024)を仮画面に解決する。`AppRouteDestinationView`
 /// と同じ役割の、設定配下サブ画面専用の解決ビュー。
 struct SettingsSubRouteDestinationView: View {
     let route: SettingsSubRoute

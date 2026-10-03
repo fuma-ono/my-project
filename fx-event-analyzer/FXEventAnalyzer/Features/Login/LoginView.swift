@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// SCR-010 Login (ui-screens.md).
+/// SCR-001 ログイン画面。
 ///
 /// Direction change (2026-09-28): rebuilt against a dedicated reference
 /// image (`docs/projects/fx-event-analyzer/mockups/login-screen-reference-v1.jpg`)

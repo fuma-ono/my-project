@@ -10,7 +10,7 @@ enum HistoricalComparisonState: Equatable {
     case error(String)
 }
 
-/// SCR-006 Historical Comparison (ui-screens.md §5) — "今回だけでなく、
+/// SCR-009 過去イベント比較 — "今回だけでなく、
 /// 過去の同一指標発表時に相場がどう動いたか比較する". Statistics are the
 /// Backend's Source of Truth (api-design.md §22); this view model never
 /// computes an average/max/min itself, and Advanced Statistics follows the
@@ -27,10 +27,15 @@ final class HistoricalComparisonViewModel: ObservableObject {
 
     let indicatorName: String
     let fxPairSymbol: String
+    /// HQ指示(2026-10-03、画面構成全面更新)で旧「過去イベント詳細」独立
+    /// 画面が削除され、過去の発表行はSCR-008 相場反応詳細(`AppRoute.
+    /// movementDetail`)へ直接遷移するようになったため、その遷移先の構築に
+    /// 必要な`indicatorId`/`fxPairId`も(`indicatorName`/`fxPairSymbol`と
+    /// 同様に)Viewから読めるようにした。
+    let indicatorId: String
+    let fxPairId: String
 
     private let apiClient: APIClient
-    private let indicatorId: String
-    private let fxPairId: String
 
     init(apiClient: APIClient, indicatorId: String, indicatorName: String, fxPairId: String, fxPairSymbol: String) {
         self.apiClient = apiClient

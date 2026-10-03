@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// SCR-001 Home's hero card background — the Reference shows a faint
+/// SCR-004 ホーム画面's hero card background — the Reference shows a faint
 /// world-map silhouette rendered as a halftone/dot-matrix texture behind
 /// the "今日の注目イベント" title, with a couple of brighter "node" glows,
 /// fading out before the event rows start. This app has no map-image

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// SCR-003 Indicator Detail (ui-screens.md §5) — "指標そのものを理解する"。
+/// SCR-006 指標詳細 — "指標そのものを理解する"。
 ///
 /// HQ "V5 Pixel Frontend" integration (2026-09-24): visual content is HQ's
 /// `V5PixelFrontend.swift` `V5IndicatorDetail` (fixed 234×491 canvas,
@@ -23,6 +23,10 @@ import SwiftUI
 ///   all, unlike the prior (scrolling) HQ UI Master v5 integration — kept
 ///   out entirely rather than appended past HQ's fixed canvas, per this
 ///   round's explicit "don't break the coordinate system" instruction.
+///   HQ指示(2026-10-03、画面構成全面更新)のSCR-006仕様は「過去/次回の
+///   発表日一覧(各行SCR-007イベント詳細へ遷移)」を必須コンテンツとして
+///   求めているが、今回は番号・名称・遷移の整理のみがスコープのため、この
+///   一覧UI自体の追加は次回(005〜013のUI実装)に持ち越している。
 struct IndicatorDetailView: View {
     @StateObject private var viewModel: IndicatorDetailViewModel
     @Binding var tabSelection: Int
@@ -92,7 +96,7 @@ struct IndicatorDetailView: View {
                         }
                     }
                     // HQ指示(2026-10-03、9回目)「今日の重要イベントはホームから
-                    // 削除します」に伴い、Home経由でSCR-004 Event Detailに
+                    // 削除します」に伴い、Home経由でSCR-007 イベント詳細に
                     // 遷移する唯一の導線が無くなったため、ここ(次回発表予定
                     // カード)から新規配線した。`historicalComparison`リンク
                     // (このファイル下部)と同じ手法 — 見た目のピクセルは一切

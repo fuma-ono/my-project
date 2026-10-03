@@ -33,15 +33,15 @@ final class ScreenshotTests: XCTestCase {
     }
 
     func testCaptureAllScreens() throws {
-        // SCR-000 Splash — bonus, not in HQ's required 7. See setUpWithError
-        // for the 20s hold; kept the "-bestEffort" name since a slower CI
-        // runner (automation-session-setup alone has been observed up to
-        // ~46s) can still miss it.
+        // SCR-000 Splash — bonus. See setUpWithError for the 20s hold; kept
+        // the "-bestEffort" name since a slower CI runner
+        // (automation-session-setup alone has been observed up to ~46s) can
+        // still miss it.
         capture("00-Splash-bestEffort", settle: 0)
 
-        // SCR-010 Login — also bonus, but required to reach every other
-        // screen, so always exercised. 35s, not 20s: up to the full 20s
-        // hold can still be outstanding here depending on how long
+        // SCR-001 ログイン画面 — also bonus, but required to reach every
+        // other screen, so always exercised. 35s, not 20s: up to the full
+        // 20s hold can still be outstanding here depending on how long
         // automation-session-setup took before the Splash capture above.
         let emailField = app.textFields["メールアドレス"]
         XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
@@ -53,32 +53,31 @@ final class ScreenshotTests: XCTestCase {
         app.secureTextFields["パスワード"].typeText("ui-screenshot-password")
         app.buttons["ログイン"].tap()
 
-        // SCR-001 Home (required #1). Not app.tabBars.buttons["Home"] —
-        // iPadOS's adaptive tab bar (floating/sidebar depending on size
-        // class) doesn't always expose as a `TabBar`-typed accessibility
-        // element the way iPhone's bottom tab bar does (real iPad CI
-        // failure: "No matches found for Descendants matching type
-        // TabBar"), so search broadly instead of assuming a container type.
+        // SCR-004 ホーム画面. Not app.tabBars.buttons["Home"] — iPadOS's
+        // adaptive tab bar (floating/sidebar depending on size class)
+        // doesn't always expose as a `TabBar`-typed accessibility element
+        // the way iPhone's bottom tab bar does (real iPad CI failure: "No
+        // matches found for Descendants matching type TabBar"), so search
+        // broadly instead of assuming a container type.
         XCTAssertTrue(waitForAnyElement(containing: "ホーム", timeout: 20), "Home tab did not appear after login")
-        // HQ指示(2026-10-03、9回目)「今日の重要イベントはホームから削除
-        // します」により、Homeの最初に見えるカードは「通貨ペア」になった
-        // (以前の「米国雇用統計」待機は、その節が削除されたため使えない)。
         XCTAssertTrue(
             waitForAnyElement(containing: "通貨ペア", timeout: 15),
             "Home did not load major FX data from the mock Backend"
         )
 
-        // SCR-002 Indicators (required #6, via tab bar — independent nav
-        // path). Same reasoning as the Home tab wait above — use the
-        // broad-search helper, not a `tabBars`-typed query.
-        tap(containing: "指標一覧")
+        // SCR-005 指標一覧(via タブバー — independent nav path)。HQ指示
+        // (2026-10-03、画面構成全面更新)でタブラベルが「指標一覧」→
+        // 「指標」に変わった(画面タイトル自体は引き続き「指標一覧」)。
+        // Same reasoning as the Home tab wait above — use the broad-search
+        // helper, not a `tabBars`-typed query.
+        tap(containing: "指標")
         XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicators list did not load")
-        capture("07-Indicators")
+        capture("05-Indicators")
 
-        // SCR-003 Indicator Detail (required #7)
+        // SCR-006 指標詳細
         tap(containing: "米国CPI(消費者物価指数)")
         XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicator Detail did not load")
-        capture("08-IndicatorDetail")
+        capture("06-IndicatorDetail")
 
         // HQ指示(2026-10-03、6回目)「通貨ペアの下にお気に入りを作成して
         // ください」: Homeの「お気に入り」カードは`FavoritesStore`(端末
@@ -88,55 +87,55 @@ final class ScreenshotTests: XCTestCase {
         // (米国CPI)を実際にお気に入り登録する。
         tapIdentifier("v5HeaderFavoriteStar")
 
-        // SCR-004 Event Detail (required #2)。「今日の重要イベント」削除に
-        // 伴い、Home経由の導線が無くなったため、Indicator Detailの
-        // 「次回発表予定」エリア(2026-10-03、9回目の配線)から遷移する。
+        // SCR-007 イベント詳細。「今日の重要イベント」削除に伴い、Home経由
+        // の導線が無くなったため、Indicator Detailの「次回発表予定」エリア
+        // から遷移する。
         tap(containing: "次回発表予定")
         XCTAssertTrue(waitForAnyElement(containing: "発表日時", timeout: 15), "Event Detail did not load")
-        capture("03-EventDetail")
+        capture("07-EventDetail")
 
-        // SCR-005 Movement Detail (required #3, via Event Detail's related FX pair row)
+        // SCR-008 相場反応詳細(via Event Detail's related FX pair row)
         tap(containing: "USDJPY")
         XCTAssertTrue(waitForAnyElement(containing: "過去の値動きと比較する", timeout: 15), "Movement Detail did not load")
-        capture("04-MovementDetail")
+        capture("08-MovementDetail")
 
-        // SCR-006 Historical Comparison (required #4, via Movement Detail's link)
+        // SCR-009 過去イベント比較(via Movement Detail's link)
         tap(containing: "過去の値動きと比較する")
         XCTAssertTrue(waitForAnyElement(containing: "過去の発表一覧", timeout: 15), "Historical Comparison did not load")
-        capture("05-HistoricalComparison")
+        capture("09-HistoricalComparison")
 
-        // SCR-007 Historical Event Detail (required #5, via a comparison
-        // event row). Row text is variable mock data (dates/numbers), not a
-        // stable literal, so the row carries its own accessibility
-        // identifier for this tap instead of matching on displayed text.
+        // HQ指示(2026-10-03、画面構成全面更新)「旧『過去イベント詳細』の
+        // 独立画面は作成しない」により、過去の発表行は独立画面ではなく
+        // SCR-008 相場反応詳細(上で既に撮影済みの08と同じ画面構成)へ
+        // 直接遷移するようになった。ここでは遷移が壊れていないことだけを
+        // 確認し、視覚的に重複するスクリーンショットは撮らない。行の
+        // 文字は可変のモックデータ(日付・数値)のため、固定の
+        // accessibilityIdentifierでタップする。
         tapIdentifier("historyEventRow")
-        XCTAssertTrue(waitForAnyElement(containing: "指標詳細を見る", timeout: 15), "Historical Event Detail did not load")
-        capture("06-HistoricalEventDetail")
+        XCTAssertTrue(waitForAnyElement(containing: "過去の値動きと比較する", timeout: 15), "Historical Comparison row did not navigate to SCR-008")
 
-        // 02-Home (required #1の実キャプチャ)。上でお気に入り登録した
-        // 米国CPIが「お気に入り」カードに実際に表示された状態でHomeに戻って
-        // 撮る — 参考画像通りの3セクション(通貨ペア/お気に入り/直近の
-        // 要人発言)構成をそのまま確認できる。
+        // 04-Home(SCR-004の実キャプチャ)。上でお気に入り登録した米国CPIが
+        // 「お気に入り」カードに実際に表示された状態でHomeに戻って撮る —
+        // 参考画像通りの3セクション(通貨ペア/お気に入り/直近の要人発言)
+        // 構成をそのまま確認できる。
         tap(containing: "ホーム")
         XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Home did not show the newly-favorited indicator")
-        capture("02-Home")
+        capture("04-Home")
 
-        // SCR-016 Settings (bonus, not in HQ's original required 7 — added
-        // 2026-09-30 so HQ's reference-image-driven redesign of this screen
-        // has a real CI capture to verify against, the same "never trust
-        // build-succeeds alone" rule Splash/Login screenshots follow).
+        // SCR-014 設定画面(bonus — added 2026-09-30 so HQ's
+        // reference-image-driven redesign of this screen has a real CI
+        // capture to verify against, the same "never trust build-succeeds
+        // alone" rule Splash/Login screenshots follow).
         tap(containing: "設定")
         XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load")
-        capture("09-Settings")
+        capture("14-Settings")
 
-        // SCR-011 Analysis tab (bonus — added 2026-09-30 so the bottom tab
-        // bar's *selected*-state rendering for the "分析" tab has a real CI
-        // capture to verify against; no other capture in this test ever
-        // selects it, and HQ's feedback rounds on this tab specifically
-        // needed that state visible).
-        tap(containing: "分析")
-        XCTAssertTrue(waitForAnyElement(containing: "チャート分析", timeout: 15), "Analysis tab did not load")
-        capture("10-Analysis")
+        // SCR-010 経済カレンダー(bonus — HQ指示2026-10-03で旧「分析」タブ
+        // (SCR-011、削除済み)から置き換わった新タブ。選択状態の
+        // レンダリングを確認できるよう、タブ自体を撮る)。
+        tap(containing: "カレンダー")
+        XCTAssertTrue(waitForAnyElement(containing: "経済カレンダー", timeout: 15), "Calendar tab did not load")
+        capture("10-Calendar")
     }
 
     // MARK: - Helpers

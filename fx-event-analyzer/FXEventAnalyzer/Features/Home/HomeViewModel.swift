@@ -38,7 +38,7 @@ enum HomeFavoriteItem: Identifiable, Equatable {
 
 /// HQ指示(2026-10-02)「直近の要人発言: すでに発生した要人発言と、その後の
 /// 値動き」。バックエンドに要人発言/中央銀行声明そのものを表すAPIが無い
-/// (SCR-014/015は仮画面のみ、`api-design.md`にも該当エンドポイントなし)
+/// (SCR-012/013は仮画面のみ、`api-design.md`にも該当エンドポイントなし)
 /// ため、`HomeViewModel.recentSpeeches`は常に空配列。将来そのAPIが追加
 /// された時にそのままマッピングできるよう、想定されるフィールド(発言者・
 /// 発言日時・見出し・その後のFXペア反応)で仮に定義している — 実データは
@@ -53,7 +53,7 @@ struct HomeSpeechSummary: Identifiable, Equatable {
     let reactionChangePercent: Double?
 }
 
-/// SCR-001 Home. Phase 3 §4: real `GET /home` connection —
+/// SCR-004 ホーム画面. Phase 3 §4: real `GET /home` connection —
 /// `HomeView → HomeViewModel → APIClient → Backend API → DTO → UI`, no
 /// fake production data. Splits the single day-scoped `events` array into
 /// "今日の注目イベント" (mainly SCHEDULED) and "最近のイベント" (RELEASED)
