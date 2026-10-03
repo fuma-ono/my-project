@@ -19,9 +19,14 @@ enum HomeEventCategory {
         }
     }
 
+    /// HQ指摘(2026-10-03、6回目、新しい参考画像)で実測すると「経済指標」
+    /// バッジは赤系ではなく鮮やかな青(RGB(0,118,234)前後)だった。旧実装は
+    /// 別の参考画像を基準にしていたため赤系(RGB(150,32,58))になっていた —
+    /// 今回の実測値に差し替え。vipStatement/centralBankは参考画像に実例が
+    /// 無いため、economicIndicatorの実測トーンに合わせた色のまま維持。
     var badgeColor: Color {
         switch self {
-        case .economicIndicator: return Color(red: 150.0 / 255, green: 32.0 / 255, blue: 58.0 / 255)
+        case .economicIndicator: return Color(red: 0.0 / 255, green: 118.0 / 255, blue: 234.0 / 255)
         case .vipStatement: return Color(red: 40.0 / 255, green: 93.0 / 255, blue: 170.0 / 255)
         case .centralBank: return Color(red: 95.0 / 255, green: 48.0 / 255, blue: 212.0 / 255)
         }
@@ -203,24 +208,29 @@ struct HomeView: View {
     /// HQ指摘(2026-10-02、3回目)「HIGHの文字の色や大きさも全然違います」:
     /// 旧実装は既存`V5Badge`(半透明塗り+枠線と同色の文字)を流用していたが、
     /// 参考画像を再実測すると実際は「濃い塗り+白に近い太字」という別物
-    /// だった。このカード専用の塗りつぶしバッジ(`statusBadge`)に差し替え、
-    /// 色も実測値(HIGH塗り≈RGB(90,20,39)・枠≈RGB(165,45,75)、MEDIUM塗り≈
-    /// RGB(80,58,15)・枠≈RGB(170,125,35))に合わせた。LOWは参考画像に無い
-    /// ため、他画面の青系(`V5P.blue`)と統一感のある色を独自に起こした。
+    /// だった。このカード専用の塗りつぶしバッジ(`statusBadge`)に差し替えた。
+    /// HQ指摘(2026-10-03、6回目、新しい参考画像)「HIGHやMEDIUMの文字が
+    /// 大きいしフォントも違う」: 新しい参考画像を実測すると、塗り色自体も
+    /// 前回の実測(別の参考画像基準)よりかなり明るく鮮やかだった
+    /// (HIGH塗り≈RGB(185,13,60)、MEDIUM塗り≈RGB(190,135,20))。実測値に
+    /// 差し替え、枠線もそれぞれの塗りを薄く明るくした色にした。
     private static func importanceBadgeColors(_ importance: Importance) -> (fill: Color, border: Color) {
         switch importance {
         case .high:
-            return (Color(red: 90.0 / 255, green: 20.0 / 255, blue: 39.0 / 255), Color(red: 165.0 / 255, green: 45.0 / 255, blue: 75.0 / 255))
+            return (Color(red: 185.0 / 255, green: 13.0 / 255, blue: 60.0 / 255), Color(red: 230.0 / 255, green: 80.0 / 255, blue: 120.0 / 255))
         case .medium:
-            return (Color(red: 80.0 / 255, green: 58.0 / 255, blue: 15.0 / 255), Color(red: 170.0 / 255, green: 125.0 / 255, blue: 35.0 / 255))
+            return (Color(red: 190.0 / 255, green: 135.0 / 255, blue: 20.0 / 255), Color(red: 230.0 / 255, green: 180.0 / 255, blue: 70.0 / 255))
         case .low:
             return (Color(red: 15.0 / 255, green: 42.0 / 255, blue: 85.0 / 255), Color(red: 50.0 / 255, green: 100.0 / 255, blue: 180.0 / 255))
         }
     }
 
+    /// 新しい参考画像実測(2026-10-03、6回目): バッジ文字自体の高さは
+    /// 約18px≒V5換算5ユニットで、旧フォントサイズ8はそれよりかなり大きい
+    /// (ユーザー指摘「文字が大きい」と一致)。7に縮小。
     @ViewBuilder private func statusBadge(_ text: String, colors: (fill: Color, border: Color)) -> some View {
         Text(text)
-            .font(.system(size: 8, weight: .heavy))
+            .font(.system(size: 7, weight: .heavy))
             .foregroundStyle(.white)
             .padding(.horizontal, 7).padding(.vertical, 3)
             .background(colors.fill, in: Capsule())
@@ -236,16 +246,24 @@ struct HomeView: View {
 
     /// HQ指摘(2026-10-02、3回目)「枠の形と色が違います」: 参考画像を
     /// Pythonでピクセル実測(カード幅938px≒V5の214ユニットから逆算した
-    /// スケール0.2282を使用)した結果、
-    /// - 色: 枠のピーク輝度ピクセルはRGB(31-36,46-52,69-77)という、
-    ///   彩度の低いくすんだ紺色だった。旧実装の`V5P.line.opacity(0.75)`
-    ///   (`V5P.line`=RGB(10,89,166)相当)をカード塗りに合成すると
-    ///   RGB(8,73,136)前後になり、実測よりかなり明るく青が強すぎていた。
-    /// - 角丸: 枠が直線から曲線に変わる地点を縦横それぞれでピクセル
-    ///   追跡すると半径≈12-13px(実測スケールでV5約2.9ユニット)しか
-    ///   なく、旧実装の`cornerRadius: 10`は実測よりかなり丸すぎていた。
-    private static let cardBorderColor = Color(red: 34.0 / 255, green: 49.0 / 255, blue: 73.0 / 255)
-    private static let cardCornerRadius: CGFloat = 3
+    /// スケール0.2282を使用)した結果、枠のピーク輝度ピクセルはRGB(31-36,
+    /// 46-52,69-77)という彩度の低いくすんだ紺色だった — という過去の実測
+    /// だったが、HQ指摘(2026-10-03、6回目、新しい参考画像)「全体枠の形、
+    /// 枠内の色が全く違います」で改めて実測すると、実際は彩度の低い紺色では
+    /// なく発光する鮮やかなシアン系の枠線(ピーク≈RGB(0,116,168))だった。
+    /// 当時の参考画像の解像度/圧縮でくすんで見えていた可能性が高い。今回の
+    /// 実測値に差し替え、発光感を`.shadow`で近似した。
+    /// 角丸も再実測すると半径≈16px(V5換算4.4ユニット)あり、旧cornerRadius
+    /// 3はかなり角ばりすぎていた。5に変更。
+    private static let cardBorderColor = Color(red: 0.0 / 255, green: 140.0 / 255, blue: 210.0 / 255)
+    private static let cardCornerRadius: CGFloat = 5
+
+    /// ヘッダーの日付/"すべて見る"リンクや各行末尾の chevron で共通に使う、
+    /// 新しい参考画像実測の明るい水色(≈RGB(140,180,247))。旧実装は
+    /// `V5P.muted`(RGB(153,178,209)、くすんだグレー寄り)を流用していたが、
+    /// 実測するとどのchevron/リンクテキストも一貫してこの鮮やかな水色
+    /// だった。
+    private static let linkBlue = Color(red: 140.0 / 255, green: 180.0 / 255, blue: 247.0 / 255)
 
     private static var todayLabel: String {
         let formatter = DateFormatter()
@@ -278,13 +296,10 @@ struct HomeView: View {
                 if !topEvents.isEmpty {
                     homeCard {
                         cardHeader(title: "今日の重要イベント") {
-                            Image(systemName: "calendar").font(.system(size: 11, weight: .bold)).foregroundStyle(Self.iconGradient)
+                            Image(systemName: "calendar").font(.system(size: 11, weight: .bold)).foregroundStyle(Self.iconGradient).shadow(color: V5P.cyan.opacity(0.9), radius: 3)
                         } trailing: {
                             NavigationLink(value: AppRoute.calendar) {
-                                HStack(spacing: 2) {
-                                    V5JPFont.text(Self.todayLabel, size: 7).foregroundStyle(V5P.muted)
-                                    Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
-                                }
+                                headerLink(Self.todayLabel)
                             }
                         }
                         ForEach(Array(topEvents.enumerated()), id: \.element.id) { idx, event in
@@ -299,12 +314,9 @@ struct HomeView: View {
                 if !pairs.isEmpty {
                     homeCard {
                         cardHeader(title: "通貨ペア") {
-                            HomeChartIcon().foregroundStyle(Self.iconGradient).frame(width: 13, height: 12)
+                            HomeChartIcon().foregroundStyle(Self.iconGradient).frame(width: 13, height: 12).shadow(color: V5P.cyan.opacity(0.9), radius: 3)
                         } trailing: {
-                            HStack(spacing: 2) {
-                                V5JPFont.text("すべて見る", size: 7).foregroundStyle(V5P.muted)
-                                Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
-                            }
+                            headerLink("すべて見る")
                         }
                         ForEach(Array(pairs.enumerated()), id: \.element.id) { idx, pair in
                             if idx > 0 { Divider().overlay(Self.cardBorderColor) }
@@ -318,18 +330,22 @@ struct HomeView: View {
                 if !favorites.isEmpty {
                     homeCard {
                         cardHeader(title: "お気に入り") {
-                            Image(systemName: "star.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(V5P.cyan)
+                            Image(systemName: "star.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: V5P.cyan.opacity(0.9), radius: 3)
                         } trailing: {
                             NavigationLink(value: AppRoute.favoritesList) {
-                                HStack(spacing: 2) {
-                                    V5JPFont.text("すべて見る", size: 7).foregroundStyle(V5P.muted)
-                                    Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
-                                }
+                                headerLink("すべて見る")
                             }
                         }
-                        ForEach(Array(favorites.enumerated()), id: \.element.id) { idx, item in
-                            if idx > 0 { Divider().overlay(Self.cardBorderColor) }
-                            favoriteRow(item)
+                        // HQ指摘(2026-10-03、6回目、新しい参考画像)「お気に入りの
+                        // レイアウトが違う」: 参考画像は縦並びの行リストではなく、
+                        // カード内に国旗+アウトライン星+名称+日付/価格+バッジを
+                        // 持つ小カードを3列横並びにしたグリッドだった。
+                        // `favoriteRow`(行リスト)を`favoriteGridCard`(3列グリッド)
+                        // に差し替え。
+                        HStack(alignment: .top, spacing: 6) {
+                            ForEach(favorites) { item in
+                                favoriteGridCard(item)
+                            }
                         }
                     }
                 }
@@ -341,13 +357,10 @@ struct HomeView: View {
                 // 隠さない選択。「発言→値動き分析」への主要導線のため)。
                 homeCard {
                     cardHeader(title: "直近の要人発言") {
-                        Image(systemName: "quote.bubble.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(V5P.cyan)
+                        Image(systemName: "quote.bubble.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: V5P.cyan.opacity(0.9), radius: 3)
                     } trailing: {
                         NavigationLink(value: AppRoute.speechList) {
-                            HStack(spacing: 2) {
-                                V5JPFont.text("すべて見る", size: 7).foregroundStyle(V5P.muted)
-                                Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
-                            }
+                            headerLink("すべて見る")
                         }
                     }
                     if viewModel.recentSpeeches.isEmpty {
@@ -405,7 +418,11 @@ struct HomeView: View {
         .padding(10)
         .frame(width: Self.cardWidth, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: Self.cardCornerRadius).fill(Self.cardFill))
-        .overlay(RoundedRectangle(cornerRadius: Self.cardCornerRadius).stroke(Self.cardBorderColor, lineWidth: 0.5))
+        .overlay(
+            RoundedRectangle(cornerRadius: Self.cardCornerRadius)
+                .stroke(Self.cardBorderColor, lineWidth: 0.75)
+                .shadow(color: Self.cardBorderColor.opacity(0.8), radius: 2)
+        )
     }
 
     /// HQ指摘(2026-10-02、3回目)「通貨ペアや今日の重要イベントのアイコンが
@@ -416,23 +433,52 @@ struct HomeView: View {
     /// `chart.line.uptrend.xyaxis`のような座標軸は一切無い)ため、自前描画の
     /// `HomeChartIcon`に差し替えた。タイトルも`V5JPFont.text`(フッター/
     /// タブバーと同じ`NotoSansJP-SemiBold`)に統一。
+    /// HQ指摘(2026-10-03、6回目、新しい参考画像)「今日の重要イベントの
+    /// タイトルの文字の大きさが小さいです」: 実測するとタイトル文字の高さは
+    /// 約51px≒V5換算14ユニットで、旧フォントサイズ10よりかなり大きかった。
     @ViewBuilder private func cardHeader(title: String, @ViewBuilder icon: () -> some View, @ViewBuilder trailing: () -> some View) -> some View {
         HStack(spacing: 5) {
             icon()
-            V5JPFont.text(title, size: 10, weight: .bold).foregroundStyle(.white)
+            V5JPFont.text(title, size: 14, weight: .bold).foregroundStyle(.white)
             Spacer()
             trailing()
         }
         Divider().overlay(Self.cardBorderColor)
     }
 
+    /// HQ指摘(2026-10-03、6回目、新しい参考画像)「＞の大きさが全く違うので
+    /// 大きくしてください」: 日付・「すべて見る」のリンクテキストと末尾の
+    /// chevronをまとめた共通部品。実測するとchevronの見た目の高さは約24px
+    /// (V5換算6.6ユニット)で、SF Symbolの実寸比(フォントサイズの約7割)から
+    /// 逆算したフォントサイズは約9 — 旧6よりかなり大きい。色も旧`V5P.muted`
+    /// (くすんだグレー)ではなく、実測した鮮やかな水色`linkBlue`に統一。
+    @ViewBuilder private func headerLink(_ text: String) -> some View {
+        HStack(spacing: 2) {
+            V5JPFont.text(text, size: 7).foregroundStyle(Self.linkBlue)
+            Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Self.linkBlue)
+        }
+    }
+
+    /// HQ指摘(2026-10-03、6回目、新しい参考画像)で実測した修正4点:
+    /// - 時刻の位置が上寄りだった → `HStack(alignment: .top)`をやめ`.center`
+    ///   にし、行全体(国旗・カテゴリ/名称・バッジ)と縦中心を揃えた。
+    /// - 時刻の文字が小さく色もくすんでいた → 実測(白・太字・約8pt相当)に
+    ///   合わせ、色を`V5P.muted`→`.white`、ウェイトを`.medium`→`.heavy`に。
+    /// - 「経済指標」バッジの横幅が参考画像より広く、名称
+    ///   (「米国雇用統計(非農業部門雇用者数)」等)が`lineLimit(1)`で
+    ///   見切れていた → バッジの水平paddingを詰め、名称は折り返し許容
+    ///   (`lineLimit`指定なし)に変更して、どんなに長い指標名でも必ず全文字
+    ///   が見えるようにした(カードは`homeCard`が内容に応じて高さを自然に
+    ///   決めるVStackなので、行が増えても他要素に影響しない)。
+    /// - ＞の位置がHIGH/MEDIUMバッジの下ではなく右端の横並びだった →
+    ///   `VStack(badge, chevron)`から`HStack(badge, chevron)`に変更。
     @ViewBuilder private func eventRow(_ event: HomeEventSummary) -> some View {
-        HStack(alignment: .top, spacing: 5) {
+        HStack(alignment: .center, spacing: 5) {
             Text(Self.timeFormatter.string(from: event.releaseDatetime))
-                .font(.system(size: 7, weight: .medium))
-                .foregroundStyle(V5P.muted)
+                .font(.system(size: 8, weight: .heavy))
+                .foregroundStyle(.white)
                 .fixedSize(horizontal: true, vertical: false)
-                .frame(width: 19, alignment: .leading)
+                .frame(width: 26, alignment: .leading)
 
             VStack(spacing: 2) {
                 CountryFlagView(countryCode: event.countryCode, diameter: Self.flagDiameter)
@@ -443,9 +489,9 @@ struct HomeView: View {
                 HStack(spacing: 5) {
                     V5JPFont.text(event.homeCategory.label, size: 6, weight: .bold)
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .padding(.horizontal, 4).padding(.vertical, 2)
                         .background(event.homeCategory.badgeColor, in: Capsule())
-                    V5JPFont.text(event.indicatorName, size: 8, weight: .bold).lineLimit(1)
+                    V5JPFont.text(event.indicatorName, size: 9, weight: .bold)
                 }
                 if let subtitle = Self.eventSubtitle(event) {
                     V5JPFont.text(subtitle, size: 6.5, weight: .regular).foregroundStyle(V5P.muted)
@@ -454,9 +500,9 @@ struct HomeView: View {
 
             Spacer(minLength: 4)
 
-            VStack(spacing: 4) {
+            HStack(spacing: 6) {
                 statusBadge(event.importance.rawValue, colors: Self.importanceBadgeColors(event.importance))
-                Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
+                Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Self.linkBlue)
             }
         }
         .foregroundStyle(.white)
@@ -487,59 +533,99 @@ struct HomeView: View {
             Text(pair.displaySymbol).font(.system(size: 8, weight: .bold)).fixedSize(horizontal: true, vertical: false)
             Spacer(minLength: 2)
             Text(pair.price).font(.system(size: 10, weight: .bold)).fixedSize(horizontal: true, vertical: false)
+            // HQ指摘(2026-10-03、6回目、新しい参考画像)「🔺の位置は0.32%の
+            // 右にして大きさも違う」: 三角アイコンが変動率の前にあったのを
+            // 後ろに入れ替えた。
             HStack(spacing: 1) {
-                Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 6))
                 Text(pair.change).font(.system(size: 7, weight: .semibold))
+                Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 7))
             }
             .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
-            Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
+            Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Self.linkBlue)
         }
         .foregroundStyle(.white)
     }
 
-    @ViewBuilder private func favoriteRow(_ item: HomeFavoriteItem) -> some View {
+    /// HQ指摘(2026-10-03、6回目、新しい参考画像)「お気に入りのアイコンが
+    /// 全く違う」「通貨ペアの下にお気に入りを作成してください」: 参考画像の
+    /// お気に入りは行リストではなく、カード内に国旗+アウトライン星+名称+
+    /// 日付(または価格)+バッジ(または変動率)を持つ小カード3枚を横並びに
+    /// したグリッドだった。`favoriteGridCard`に全面差し替え。
+    /// お気に入り自体を表示させるには`FavoritesStore`(端末ローカル)に
+    /// 実際に1件以上登録されている必要がある — `ScreenshotTests.swift`で
+    /// 実際に★をタップしてから戻る操作を追加し、架空データではなく実在の
+    /// モックイベントを本当にお気に入り登録する形にした。
+    @ViewBuilder private func favoriteGridCard(_ item: HomeFavoriteItem) -> some View {
         switch item {
-        case .event(let id, let countryCode, let currencyCode, let name, let importance):
+        case .event(let id, let countryCode, _, let name, let importance, let releaseDatetime):
             NavigationLink(value: AppRoute.eventDetail(id: id)) {
-                favoriteRowContent(countryCode: countryCode, currencyCode: currencyCode, name: name, importance: importance)
+                favoriteGridCardContent(countryCode: countryCode, name: name) {
+                    dateRow(releaseDatetime)
+                } footer: {
+                    statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance))
+                }
             }.buttonStyle(.plain)
-        case .indicator(let id, let countryCode, let currencyCode, let name, let importance):
+        case .indicator(let id, let countryCode, _, let name, let importance):
             NavigationLink(value: AppRoute.indicatorDetail(id: id)) {
-                favoriteRowContent(countryCode: countryCode, currencyCode: currencyCode, name: name, importance: importance)
+                favoriteGridCardContent(countryCode: countryCode, name: name) {
+                    EmptyView()
+                } footer: {
+                    statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance))
+                }
             }.buttonStyle(.plain)
         case .fxPair(let id, let symbol, let price, let change, let isUp):
             NavigationLink(value: AppRoute.chartAnalysis(fxPairId: id, fxPairSymbol: symbol)) {
-                favoriteFxPairRowContent(symbol: symbol, price: price, change: change, isUp: isUp)
+                favoriteGridCardContent(countryCode: nil, name: symbol) {
+                    Text(price).font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                } footer: {
+                    HStack(spacing: 1) {
+                        Text(change).font(.system(size: 7, weight: .semibold))
+                        Image(systemName: isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 7))
+                    }
+                    .foregroundStyle(isUp ? Self.changeUpColor : Self.changeDownColor)
+                }
             }.buttonStyle(.plain)
         }
     }
 
-    @ViewBuilder private func favoriteRowContent(countryCode: String, currencyCode: String, name: String, importance: Importance) -> some View {
-        HStack(spacing: 8) {
-            VStack(spacing: 2) {
-                CountryFlagView(countryCode: countryCode, diameter: Self.flagDiameter)
-                Text(currencyCode).font(.system(size: 6, weight: .semibold)).foregroundStyle(V5P.muted)
-            }
-            V5JPFont.text(name, size: 9, weight: .semibold).lineLimit(1)
-            Spacer()
-            statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance))
-            Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
+    @ViewBuilder private func dateRow(_ date: Date) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "calendar").font(.system(size: 7)).foregroundStyle(V5P.muted)
+            Text(Self.favoriteDateFormatter.string(from: date)).font(.system(size: 7, weight: .medium)).foregroundStyle(V5P.muted)
         }
-        .foregroundStyle(.white)
     }
 
-    /// `HomeFavoriteItem.fxPair`のドキュメントコメント参照 — 現状このtypeの
-    /// お気に入りは生成されないが、実装としては用意してある。
-    @ViewBuilder private func favoriteFxPairRowContent(symbol: String, price: String, change: String, isUp: Bool) -> some View {
-        HStack(spacing: 8) {
-            Text(symbol).font(.system(size: 9, weight: .bold))
-            Spacer()
-            Text(price).font(.system(size: 10, weight: .bold))
-            Text(change).font(.system(size: 8, weight: .semibold)).foregroundStyle(isUp ? Self.changeUpColor : Self.changeDownColor)
-            Image(systemName: "chevron.right").font(.system(size: 6)).foregroundStyle(V5P.muted)
+    private static let favoriteDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M/d HH:mm"
+        formatter.timeZone = .current
+        return formatter
+    }()
+
+    @ViewBuilder private func favoriteGridCardContent(
+        countryCode: String?,
+        name: String,
+        @ViewBuilder subtitle: () -> some View,
+        @ViewBuilder footer: () -> some View
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                if let countryCode {
+                    CountryFlagView(countryCode: countryCode, diameter: Self.flagDiameter)
+                }
+                Spacer()
+                Image(systemName: "star").font(.system(size: 10)).foregroundStyle(V5P.muted)
+            }
+            V5JPFont.text(name, size: 8, weight: .bold).foregroundStyle(.white).lineLimit(1)
+            subtitle()
+            Spacer(minLength: 2)
+            footer()
         }
-        .foregroundStyle(.white)
+        .padding(7)
+        .frame(width: (Self.cardWidth - 20 - 12) / 3, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 4).fill(Self.cardFill))
+        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Self.cardBorderColor.opacity(0.7), lineWidth: 0.5))
     }
 
     /// `HomeSpeechSummary`のドキュメントコメント参照 — 実データは一切流れて

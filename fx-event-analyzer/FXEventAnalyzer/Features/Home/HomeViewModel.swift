@@ -14,7 +14,14 @@ enum HomeState: Equatable {
 /// 同じコンパクトな見た目(国旗/通貨/名称/重要度バッジ)で表示するため、
 /// 共通の最小限のフィールドだけを抜き出している。
 enum HomeFavoriteItem: Identifiable, Equatable {
-    case event(id: String, countryCode: String, currencyCode: String, name: String, importance: Importance)
+    /// HQ指摘(2026-10-03、6回目、新しい参考画像)「お気に入り」の小カードは
+    /// 日付も表示する(例:「10/13 21:30」)ため、`releaseDatetime`を追加した
+    /// — `EventDetailResponse.event.releaseDatetime`で既に取得済みの値を
+    /// そのまま使うだけで、追加のAPI呼び出しは不要。`.indicator`は
+    /// 「次回発表予定」に別APIコール(`/indicators/{id}/events`)が必要に
+    /// なるため今回は見送り、日付無しのカード(名称+バッジのみ)にして
+    /// 存在しないデータを捏造しない。
+    case event(id: String, countryCode: String, currencyCode: String, name: String, importance: Importance, releaseDatetime: Date)
     case indicator(id: String, countryCode: String, currencyCode: String, name: String, importance: Importance)
     /// `FavoritesStore.ItemType.fxPair`と同じ理由で、まだ実際には生成
     /// されない(通貨ペア単体取得APIも★も無い)が、型は先に揃えてある。
@@ -22,7 +29,7 @@ enum HomeFavoriteItem: Identifiable, Equatable {
 
     var id: String {
         switch self {
-        case .event(let id, _, _, _, _): return "event:\(id)"
+        case .event(let id, _, _, _, _, _): return "event:\(id)"
         case .indicator(let id, _, _, _, _): return "indicator:\(id)"
         case .fxPair(let id, _, _, _, _): return "fxPair:\(id)"
         }
@@ -146,7 +153,8 @@ final class HomeViewModel: ObservableObject {
                 countryCode: response.event.countryCode,
                 currencyCode: response.event.currencyCode,
                 name: response.event.indicatorName,
-                importance: response.event.importance
+                importance: response.event.importance,
+                releaseDatetime: response.event.releaseDatetime
             )
         } catch {
             return nil

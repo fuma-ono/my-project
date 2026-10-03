@@ -930,6 +930,7 @@ struct V5Header: View {
                 }.buttonStyle(.plain)
                 .offset(y: Self.chevronVerticalCorrection)
                 .padding(.trailing, Self.chevronTitleGap)
+                .accessibilityIdentifier("v5HeaderBack")
             }
             V5JPFont.text(title, size: back ? Self.detailTitleSize : Self.mainTabTitleSize)
             Spacer()
@@ -949,6 +950,7 @@ struct V5Header: View {
                 }
                 .buttonStyle(.plain)
                 .offset(y: Self.starVerticalCorrection)
+                .accessibilityIdentifier("v5HeaderFavoriteStar")
             }
         }
         .foregroundStyle(.white)

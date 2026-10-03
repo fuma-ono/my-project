@@ -70,6 +70,20 @@ final class ScreenshotTests: XCTestCase {
             waitForAnyElement(containing: "米国雇用統計", timeout: 15),
             "Home did not load event data from the mock Backend"
         )
+
+        // HQ指示(2026-10-03、6回目)「通貨ペアの下にお気に入りを作成して
+        // ください」: Homeの「お気に入り」カードは`FavoritesStore`(端末
+        // ローカル)が空だと非表示になる(`HomeView`の`if !favorites.isEmpty`)
+        // ため、参考画像通りカードを表示させるには実際に★を1件登録してから
+        // Homeに戻る必要がある。架空データを足すのではなく、実在のモック
+        // イベント(米国雇用統計)を実際にお気に入り登録する — この後の
+        // EventDetailキャプチャにも同じ操作の結果(★が塗りつぶされた状態)
+        // がそのまま反映される。
+        tap(containing: "米国雇用統計(非農業部門雇用者数)")
+        XCTAssertTrue(waitForAnyElement(containing: "発表日時", timeout: 15), "Event Detail did not load")
+        tapIdentifier("v5HeaderFavoriteStar")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "米国雇用統計", timeout: 15), "Home did not reappear after favoriting")
         capture("02-Home")
 
         // SCR-004 Event Detail (required #2, via Home's event card)
