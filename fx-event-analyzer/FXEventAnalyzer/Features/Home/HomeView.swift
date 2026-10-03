@@ -292,6 +292,17 @@ struct HomeView: View {
         return V5Viewport {
             homeHeader
 
+            // HQ指摘(2026-10-03、6回目)「お気に入りを作成してください」で
+            // 新規追加したグリッドカードにより、4カード合計の高さが
+            // `V5Viewport`の固定キャンバス(234×491、スクロール無し)に
+            // 収まりきらず、CI実機キャプチャで実際に「お気に入り」カードの
+            // 下側と「直近の要人発言」カードが`V5BottomBar`の裏に隠れて
+            // しまう不具合が実際に発生した(ピクセル実測で確認済み、数値上の
+            // 見積もりではない)。他画面にも影響する`V5Viewport`自体や
+            // `V5BottomBar`の仕様は変えず、Home固有のカード一覧だけを
+            // `ScrollView`に包み、ヘッダーとタブバーの間の実高さに収める形に
+            // した — ヘッダー/タブバーの位置・他画面の挙動は一切変えていない。
+            ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 10) {
                 if !topEvents.isEmpty {
                     homeCard {
@@ -375,6 +386,9 @@ struct HomeView: View {
                     }
                 }
             }
+            .padding(.bottom, 16)
+            }
+            .frame(width: V5P.W, height: Self.contentAreaHeight, alignment: .top)
             .padding(.top, 58)
             .frame(width: V5P.W, height: V5P.H, alignment: .top)
 
@@ -411,6 +425,12 @@ struct HomeView: View {
     /// イベント行・通貨ペア行・お気に入り行・要人発言行、全てこの値に統一。
     private static let flagDiameter: CGFloat = 17
 
+    /// `loadedScreen`のカード一覧`ScrollView`に割り当てる実高さ。ヘッダー
+    /// 下端(`padding(.top,58)`)から`V5BottomBar`上端(`V5P.H - bottomMargin
+    /// (4) - barHeight(40)` = 447、`V5PixelFrontend.swift`参照)までの間を
+    /// 使い、タブバーとの間に少し余白(5)を残す。
+    private static let contentAreaHeight: CGFloat = 447 - 58 - 5
+
     @ViewBuilder private func homeCard(@ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             content()
@@ -435,11 +455,19 @@ struct HomeView: View {
     /// タブバーと同じ`NotoSansJP-SemiBold`)に統一。
     /// HQ指摘(2026-10-03、6回目、新しい参考画像)「今日の重要イベントの
     /// タイトルの文字の大きさが小さいです」: 実測するとタイトル文字の高さは
-    /// 約51px≒V5換算14ユニットで、旧フォントサイズ10よりかなり大きかった。
+    /// 約51px≒V5換算14ユニットだったが、実機キャプチャで確認すると
+    /// サイズ14は日付/chevronと並んだ時にカード幅に収まりきらず、
+    /// `HStack`内の`Text`既定の挙動(折り返さず「...」で切り詰める)により
+    /// タイトル自体が「今日の重要イベ...」と見切れてしまっていた。
+    /// `.lineLimit(1).minimumScaleFactor(...)`で、収まりきらない時は
+    /// 自動縮小して全文字を必ず表示する(切り詰めない)方式にした。
     @ViewBuilder private func cardHeader(title: String, @ViewBuilder icon: () -> some View, @ViewBuilder trailing: () -> some View) -> some View {
         HStack(spacing: 5) {
             icon()
-            V5JPFont.text(title, size: 14, weight: .bold).foregroundStyle(.white)
+            V5JPFont.text(title, size: 14, weight: .bold)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Spacer()
             trailing()
         }
@@ -466,10 +494,18 @@ struct HomeView: View {
     ///   合わせ、色を`V5P.muted`→`.white`、ウェイトを`.medium`→`.heavy`に。
     /// - 「経済指標」バッジの横幅が参考画像より広く、名称
     ///   (「米国雇用統計(非農業部門雇用者数)」等)が`lineLimit(1)`で
-    ///   見切れていた → バッジの水平paddingを詰め、名称は折り返し許容
-    ///   (`lineLimit`指定なし)に変更して、どんなに長い指標名でも必ず全文字
-    ///   が見えるようにした(カードは`homeCard`が内容に応じて高さを自然に
-    ///   決めるVStackなので、行が増えても他要素に影響しない)。
+    ///   見切れていた → 最初`lineLimit`指定なしで折り返しを狙ったが、
+    ///   CI実機キャプチャで確認すると、バッジと同じ`HStack`内に置いた
+    ///   `Text`はSwiftUIの既定動作で折り返さず「...」に切り詰められる
+    ///   ままだった(`HStack`の子は、収まりきらない時デフォルトで折り返し
+    ///   ではなく省略記号を選ぶ)。バッジと名称は参考画像通り同じ行に
+    ///   残しつつ、名称側に`.fixedSize(horizontal: false, vertical: true)`
+    ///   を付けることで「幅を切り詰めて1行に収めようとせず、必要なら行を
+    ///   増やして折り返す」よう指示した — 短い名称は従来通り1行のまま、
+    ///   長い名称の時だけその行が2行に伸びる(バッジを別行に分離する案も
+    ///   試したが、全イベントの行が一律で高くなり`V5Viewport`の非スクロール
+    ///   な固定キャンバス(234×491)に収まりきらずタブバーと重なってしまった
+    ///   ため、高さへの影響が最小限なこちらを採用)。
     /// - ＞の位置がHIGH/MEDIUMバッジの下ではなく右端の横並びだった →
     ///   `VStack(badge, chevron)`から`HStack(badge, chevron)`に変更。
     @ViewBuilder private func eventRow(_ event: HomeEventSummary) -> some View {
@@ -486,12 +522,14 @@ struct HomeView: View {
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 5) {
+                HStack(alignment: .top, spacing: 5) {
                     V5JPFont.text(event.homeCategory.label, size: 6, weight: .bold)
                         .foregroundStyle(.white)
                         .padding(.horizontal, 4).padding(.vertical, 2)
                         .background(event.homeCategory.badgeColor, in: Capsule())
+                        .fixedSize()
                     V5JPFont.text(event.indicatorName, size: 9, weight: .bold)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if let subtitle = Self.eventSubtitle(event) {
                     V5JPFont.text(subtitle, size: 6.5, weight: .regular).foregroundStyle(V5P.muted)
