@@ -190,16 +190,26 @@ struct HomeView: View {
     /// y=491-4-40=447)までのキャンバス残り全域(447-53=394)。
     ///
     /// HQ指摘(2026-10-03、9回目キャプチャ後)「お気に入りの下、タブバーの
-    /// 上に大きな空白ができている」: 当初は「通貨ペア+お気に入りの合計
-    /// 高さちょうど」(約260)をこの値にしていたため、残りキャンバス394との
-    /// 差分(約134ユニット)がScrollViewの外側(表示領域の下)に何も描画
-    /// されない空白として残ってしまっていた。ここをキャンバス全域(394)に
-    /// 広げ、代わりに`loadedScreen`内の「通貨ペア+お気に入り」グループへ
-    /// `.frame(minHeight: contentAreaHeight, alignment: .top)`を付けて
-    /// そのグループ自体をこの高さまで引き伸ばすことで、「直近の要人発言」
-    /// を必ず折り返し線(fold)より下へ押し出し、スクロールしないと現れない
-    /// 構成を維持しつつ、空白をScrollView内の(スクロールで自然に続く)
-    /// 領域に変えた。
+    /// 上に大きな空白ができている」の調査で判明した構造的な制約:
+    /// 「通貨ペア+お気に入り」の合計高さ(256)はこのキャンバス残り全域
+    /// (394)よりかなり小さく、その差(138)は「直近の要人発言を折り返し線
+    /// より下に強制的に押し出す」限り、ScrollViewの内側・外側どちらに
+    /// 置いても実機キャプチャ(静止画)上は必ず同じ大きさの空白として見えて
+    /// しまう(ScrollViewの表示領域をキャンバス全域まで広げても、中身の
+    /// 高さを人為的に引き伸ばして同じ138を内側に移すだけで、見た目は一切
+    /// 変わらないことをピクセル比較で確認済み)。カードサイズ・セクション
+    /// 間余白は参考画像の実測値を優先して変更しないため、「直近の要人発言
+    /// を完全に隠す」と「空白を作らない」は両立できない。
+    ///
+    /// 空白(見た目上は壊れているように映る)の方が実害が大きいと判断し、
+    /// `loadedScreen`では高さを人為的に引き伸ばさず、3カードを自然な
+    /// 順序で流し込んでいる。ScrollViewの表示領域をキャンバス全域(394)
+    /// まで広げたことで、合計コンテンツ高さ(412、下部余白16込み)との差は
+    /// わずか18のみとなり、「直近の要人発言」はこのCI基準デバイスでは
+    /// ほぼ全体が初期表示時点で見えてしまう(厳密な「スクロールしないと
+    /// 現れない」は満たせていない)。現在このセクションは実データが常に
+    /// 空(`HomeSpeechSummary`参照)で空状態メッセージのみのため実害は
+    /// 小さいと判断したが、HQの意図と異なる場合は指示をいただきたい。
     private static let contentAreaHeight: CGFloat = 394
 
     private static let timeFormatter: DateFormatter = {
@@ -219,22 +229,12 @@ struct HomeView: View {
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: Self.sectionGap) {
-                    // 「通貨ペア+お気に入り」をこのVStackで1つのグループに
-                    // まとめ、`.frame(minHeight:)`でScrollViewの表示領域
-                    // (`contentAreaHeight`)いっぱいまで引き伸ばす — 中身の
-                    // 実際の高さが足りない分は下に余白が付くだけで、結果
-                    // として「直近の要人発言」が必ず折り返し線より下に
-                    // 配置され、スクロールしないと現れない。
-                    VStack(alignment: .leading, spacing: Self.sectionGap) {
-                        if !pairs.isEmpty {
-                            pairsCard(pairs)
-                        }
-                        if !favorites.isEmpty {
-                            favoritesCard(favorites)
-                        }
+                    if !pairs.isEmpty {
+                        pairsCard(pairs)
                     }
-                    .frame(minHeight: Self.contentAreaHeight, alignment: .top)
-
+                    if !favorites.isEmpty {
+                        favoritesCard(favorites)
+                    }
                     speechesCard(speeches)
                 }
                 .padding(.bottom, 16)
