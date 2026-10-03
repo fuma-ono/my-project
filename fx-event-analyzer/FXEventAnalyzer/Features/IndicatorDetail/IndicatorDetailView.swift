@@ -91,6 +91,18 @@ struct IndicatorDetailView: View {
                             }
                         }
                     }
+                    // HQ指示(2026-10-03、9回目)「今日の重要イベントはホームから
+                    // 削除します」に伴い、Home経由でSCR-004 Event Detailに
+                    // 遷移する唯一の導線が無くなったため、ここ(次回発表予定
+                    // カード)から新規配線した。`historicalComparison`リンク
+                    // (このファイル下部)と同じ手法 — 見た目のピクセルは一切
+                    // 変更せず、同じ領域だけを覆う透明なタップ層を追加する。
+                    NavigationLink(value: AppRoute.eventDetail(id: nextScheduledEvent.id)) {
+                        Color.clear
+                    }
+                    .accessibilityLabel("次回発表予定 イベント詳細を見る")
+                    .frame(width: 214, height: 95)
+                    .position(x: 117, y: 198.5)
                 }
 
                 if let description = indicator.description, !description.isEmpty {

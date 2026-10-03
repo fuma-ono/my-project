@@ -60,34 +60,38 @@ final class ScreenshotTests: XCTestCase {
         // failure: "No matches found for Descendants matching type
         // TabBar"), so search broadly instead of assuming a container type.
         XCTAssertTrue(waitForAnyElement(containing: "ホーム", timeout: 20), "Home tab did not appear after login")
-        // HQ指示(2026-10-02、訂正)「今日の重要イベント→これから発生する
-        // 重要イベント」で`HomeViewModel.upcomingEvents`(SCHEDULED限定)に
-        // 絞り込んだため、このカードにはモックの2イベントのうちRELEASED
-        // (米国CPI)ではなくSCHEDULED(米国雇用統計)の方だけが表示される。
-        // 以前はCPI側を前提にこの先のEvent Detail遷移も組んでいたため、
-        // ここも実際に表示される雇用統計側に合わせて更新した。
+        // HQ指示(2026-10-03、9回目)「今日の重要イベントはホームから削除
+        // します」により、Homeの最初に見えるカードは「通貨ペア」になった
+        // (以前の「米国雇用統計」待機は、その節が削除されたため使えない)。
         XCTAssertTrue(
-            waitForAnyElement(containing: "米国雇用統計", timeout: 15),
-            "Home did not load event data from the mock Backend"
+            waitForAnyElement(containing: "通貨ペア", timeout: 15),
+            "Home did not load major FX data from the mock Backend"
         )
+
+        // SCR-002 Indicators (required #6, via tab bar — independent nav
+        // path). Same reasoning as the Home tab wait above — use the
+        // broad-search helper, not a `tabBars`-typed query.
+        tap(containing: "指標一覧")
+        XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicators list did not load")
+        capture("07-Indicators")
+
+        // SCR-003 Indicator Detail (required #7)
+        tap(containing: "米国CPI(消費者物価指数)")
+        XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicator Detail did not load")
+        capture("08-IndicatorDetail")
 
         // HQ指示(2026-10-03、6回目)「通貨ペアの下にお気に入りを作成して
         // ください」: Homeの「お気に入り」カードは`FavoritesStore`(端末
         // ローカル)が空だと非表示になる(`HomeView`の`if !favorites.isEmpty`)
-        // ため、参考画像通りカードを表示させるには実際に★を1件登録してから
-        // Homeに戻る必要がある。架空データを足すのではなく、実在のモック
-        // イベント(米国雇用統計)を実際にお気に入り登録する — この後の
-        // EventDetailキャプチャにも同じ操作の結果(★が塗りつぶされた状態)
-        // がそのまま反映される。
-        tap(containing: "米国雇用統計(非農業部門雇用者数)")
-        XCTAssertTrue(waitForAnyElement(containing: "発表日時", timeout: 15), "Event Detail did not load")
+        // ため、参考画像通りカードを表示させるには実際に★を1件登録する
+        // 必要がある。架空データを足すのではなく、実在のモック指標
+        // (米国CPI)を実際にお気に入り登録する。
         tapIdentifier("v5HeaderFavoriteStar")
-        tapIdentifier("v5HeaderBack")
-        XCTAssertTrue(waitForAnyElement(containing: "米国雇用統計", timeout: 15), "Home did not reappear after favoriting")
-        capture("02-Home")
 
-        // SCR-004 Event Detail (required #2, via Home's event card)
-        tap(containing: "米国雇用統計(非農業部門雇用者数)")
+        // SCR-004 Event Detail (required #2)。「今日の重要イベント」削除に
+        // 伴い、Home経由の導線が無くなったため、Indicator Detailの
+        // 「次回発表予定」エリア(2026-10-03、9回目の配線)から遷移する。
+        tap(containing: "次回発表予定")
         XCTAssertTrue(waitForAnyElement(containing: "発表日時", timeout: 15), "Event Detail did not load")
         capture("03-EventDetail")
 
@@ -109,17 +113,13 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "指標詳細を見る", timeout: 15), "Historical Event Detail did not load")
         capture("06-HistoricalEventDetail")
 
-        // SCR-002 Indicators (required #6, via tab bar — independent nav
-        // path). Same reasoning as the Home tab wait above — use the
-        // broad-search helper, not a `tabBars`-typed query.
-        tap(containing: "指標一覧")
-        XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicators list did not load")
-        capture("07-Indicators")
-
-        // SCR-003 Indicator Detail (required #7)
-        tap(containing: "米国CPI(消費者物価指数)")
-        XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicator Detail did not load")
-        capture("08-IndicatorDetail")
+        // 02-Home (required #1の実キャプチャ)。上でお気に入り登録した
+        // 米国CPIが「お気に入り」カードに実際に表示された状態でHomeに戻って
+        // 撮る — 参考画像通りの3セクション(通貨ペア/お気に入り/直近の
+        // 要人発言)構成をそのまま確認できる。
+        tap(containing: "ホーム")
+        XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Home did not show the newly-favorited indicator")
+        capture("02-Home")
 
         // SCR-016 Settings (bonus, not in HQ's original required 7 — added
         // 2026-09-30 so HQ's reference-image-driven redesign of this screen
