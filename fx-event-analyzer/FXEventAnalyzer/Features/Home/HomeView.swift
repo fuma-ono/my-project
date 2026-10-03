@@ -228,6 +228,12 @@ struct HomeView: View {
     /// 新しい参考画像実測(2026-10-03、6回目): バッジ文字自体の高さは
     /// 約18px≒V5換算5ユニットで、旧フォントサイズ8はそれよりかなり大きい
     /// (ユーザー指摘「文字が大きい」と一致)。7に縮小。
+    /// HQ指摘(2026-10-03、8回目)実機キャプチャで発覚: `eventRow`の名称
+    /// `Text`に`.layoutPriority(1)`を付けた結果、相対的に優先度が下がった
+    /// このバッジが`HStack`の幅不足時に圧縮対象になり、"HIGH"が
+    /// "H/I/G/H"と1文字ずつ縦に折り返される致命的な見た目になっていた。
+    /// `.fixedSize()`を付け、幅を絶対に圧縮・折り返しさせないようにした
+    /// (「経済指標」バッジに付けているのと同じ対策)。
     @ViewBuilder private func statusBadge(_ text: String, colors: (fill: Color, border: Color)) -> some View {
         Text(text)
             .font(.system(size: 7, weight: .heavy))
@@ -235,14 +241,18 @@ struct HomeView: View {
             .padding(.horizontal, 7).padding(.vertical, 3)
             .background(colors.fill, in: Capsule())
             .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
+            .fixedSize()
     }
 
     /// 参考画像のカルーセル/通貨ペアアイコン実測(上端≈RGB(120,185,250)寄りの
-    /// 明るい水色→下端≈RGB(50,115,195)寄りの中間の青)。
-    private static let iconGradient = LinearGradient(
-        colors: [Color(red: 120.0 / 255, green: 185.0 / 255, blue: 250.0 / 255), Color(red: 50.0 / 255, green: 115.0 / 255, blue: 195.0 / 255)],
-        startPoint: .top, endPoint: .bottom
-    )
+    /// 明るい水色→下端≈RGB(50,115,195)寄りの中間の青) — という過去の実測
+    /// だったが、HQ指摘(2026-10-03、8回目)「アイコンの色が全然違う」で
+    /// 新しい参考画像のカレンダーアイコンを直接ピクセル実測すると、実際は
+    /// グラデーションではなく単色RGB(0,226,251)、`V5P.cyan`
+    /// (RGB(0,224,255))とほぼ完全一致する鮮やかなシアンだった。
+    /// カード見出しアイコン(カレンダー/通貨ペア/お気に入り/要人発言)は
+    /// 全て`V5P.cyan`の単色に統一した(詳細は各呼び出し箇所)。
+    private static let iconGlowShadow: (color: Color, radius: CGFloat) = (V5P.cyan.opacity(0.55), 1.2)
 
     /// HQ指摘(2026-10-02、3回目)「枠の形と色が違います」: 参考画像を
     /// Pythonでピクセル実測(カード幅938px≒V5の214ユニットから逆算した
@@ -307,7 +317,7 @@ struct HomeView: View {
                 if !topEvents.isEmpty {
                     homeCard {
                         cardHeader(title: "今日の重要イベント") {
-                            Image(systemName: "calendar").font(.system(size: 11, weight: .bold)).foregroundStyle(Self.iconGradient).shadow(color: V5P.cyan.opacity(0.9), radius: 3)
+                            Image(systemName: "calendar").font(.system(size: 11, weight: .bold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
                         } trailing: {
                             NavigationLink(value: AppRoute.calendar) {
                                 headerLink(Self.todayLabel)
@@ -325,7 +335,7 @@ struct HomeView: View {
                 if !pairs.isEmpty {
                     homeCard {
                         cardHeader(title: "通貨ペア") {
-                            HomeChartIcon().foregroundStyle(Self.iconGradient).frame(width: 13, height: 12).shadow(color: V5P.cyan.opacity(0.9), radius: 3)
+                            HomeChartIcon().foregroundStyle(V5P.cyan).frame(width: 13, height: 12).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
                         } trailing: {
                             headerLink("すべて見る")
                         }
@@ -341,7 +351,7 @@ struct HomeView: View {
                 if !favorites.isEmpty {
                     homeCard {
                         cardHeader(title: "お気に入り") {
-                            Image(systemName: "star.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: V5P.cyan.opacity(0.9), radius: 3)
+                            Image(systemName: "star.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
                         } trailing: {
                             NavigationLink(value: AppRoute.favoritesList) {
                                 headerLink("すべて見る")
@@ -368,7 +378,7 @@ struct HomeView: View {
                 // 隠さない選択。「発言→値動き分析」への主要導線のため)。
                 homeCard {
                     cardHeader(title: "直近の要人発言") {
-                        Image(systemName: "quote.bubble.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: V5P.cyan.opacity(0.9), radius: 3)
+                        Image(systemName: "quote.bubble.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
                     } trailing: {
                         NavigationLink(value: AppRoute.speechList) {
                             headerLink("すべて見る")
@@ -490,9 +500,14 @@ struct HomeView: View {
     /// (V5換算6.6ユニット)で、SF Symbolの実寸比(フォントサイズの約7割)から
     /// 逆算したフォントサイズは約9 — 旧6よりかなり大きい。色も旧`V5P.muted`
     /// (くすんだグレー)ではなく、実測した鮮やかな水色`linkBlue`に統一。
+    /// HQ指摘(2026-10-03、8回目)「10/3(土)が参考画像より小さい」: 実測
+    /// すると参考画像の日付文字高さは22-25px(V5換算6.0-6.9ユニット)だった
+    /// のに対し、旧フォントサイズ7での実際の描画高さは30px(V5換算5.8
+    /// ユニット)で範囲内ではあったが下限寄りだった。8に拡大し、実測範囲の
+    /// 中央寄りに合わせた。
     @ViewBuilder private func headerLink(_ text: String) -> some View {
         HStack(spacing: 2) {
-            V5JPFont.text(text, size: 7).foregroundStyle(Self.linkBlue)
+            V5JPFont.text(text, size: 8).foregroundStyle(Self.linkBlue)
             Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Self.linkBlue)
         }
     }
@@ -561,6 +576,7 @@ struct HomeView: View {
                 statusBadge(event.importance.rawValue, colors: Self.importanceBadgeColors(event.importance))
                 Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Self.linkBlue)
             }
+            .fixedSize()
         }
         .foregroundStyle(.white)
     }
