@@ -545,6 +545,15 @@ struct HomeView: View {
                     V5JPFont.text(subtitle, size: 6.5, weight: .regular).foregroundStyle(V5P.muted)
                 }
             }
+            // HQ指摘(2026-10-03、7回目)「きちんと計測し」を受けて実機
+            // キャプチャをピクセル実測したところ、「FOMC政策金利」のような
+            // 短い名称まで2行に折り返されていた。原因は`Spacer`が
+            // `HStack`のレイアウト計算で最優先的に残り幅を確保する
+            // ため、同じ優先度の名称`Text`が先に幅を切り詰められて
+            // いたこと(実測: 折り返し位置の右に、名称があと2-3文字入る
+            // 空白がそのまま空いていた)。この`VStack`に`.layoutPriority(1)`
+            // を付け、`Spacer`より先に必要幅を確保させた。
+            .layoutPriority(1)
 
             Spacer(minLength: 4)
 
