@@ -353,7 +353,7 @@ struct HomeView: View {
                         // 持つ小カードを3列横並びにしたグリッドだった。
                         // `favoriteRow`(行リスト)を`favoriteGridCard`(3列グリッド)
                         // に差し替え。
-                        HStack(alignment: .top, spacing: 6) {
+                        HStack(alignment: .top, spacing: 4) {
                             ForEach(favorites) { item in
                                 favoriteGridCard(item)
                             }
@@ -431,11 +431,21 @@ struct HomeView: View {
     /// 使い、タブバーとの間に少し余白(5)を残す。
     private static let contentAreaHeight: CGFloat = 447 - 58 - 5
 
+    /// HQ指摘(2026-10-03、7回目)「通貨ペアのタイトル部分の縦幅の枠が
+    /// 大きい」: 原因をピクセル実測で特定した。`cardHeader`はヘッダーの
+    /// `HStack`と`Divider()`を2つの別要素として返しており、これが
+    /// `homeCard`の`VStack(spacing: 8)`の直接の子になる。`VStack`の
+    /// `spacing`は子要素の「全ての」隣接ペアに効くため、区切り線1本につき
+    /// 上下で8+8=16ユニットもの間隔が付いていた(通貨ペアカードは区切り線
+    /// 3本分で間隔だけで48ユニット)。実際、参考画像をピクセル実測すると
+    /// 通貨ペアカードのヘッダー部(カード上端から最初の区切り線まで)は
+    /// 26.0ユニットなのに対し、旧実装は37.2ユニットあった。
+    /// `spacing`を3に縮め、`padding`も10→8に詰めて実測値に近づけた。
     @ViewBuilder private func homeCard(@ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 3) {
             content()
         }
-        .padding(10)
+        .padding(8)
         .frame(width: Self.cardWidth, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: Self.cardCornerRadius).fill(Self.cardFill))
         .overlay(
@@ -647,7 +657,7 @@ struct HomeView: View {
         @ViewBuilder subtitle: () -> some View,
         @ViewBuilder footer: () -> some View
     ) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 3) {
             HStack {
                 if let countryCode {
                     CountryFlagView(countryCode: countryCode, diameter: Self.flagDiameter)
@@ -657,11 +667,10 @@ struct HomeView: View {
             }
             V5JPFont.text(name, size: 8, weight: .bold).foregroundStyle(.white).lineLimit(1)
             subtitle()
-            Spacer(minLength: 2)
             footer()
         }
-        .padding(7)
-        .frame(width: (Self.cardWidth - 20 - 12) / 3, alignment: .topLeading)
+        .padding(5)
+        .frame(width: (Self.cardWidth - 16 - 8) / 3, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 4).fill(Self.cardFill))
         .overlay(RoundedRectangle(cornerRadius: 4).stroke(Self.cardBorderColor.opacity(0.7), lineWidth: 0.5))
     }
