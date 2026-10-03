@@ -25,7 +25,6 @@ type Props = {
   // AvatarPicker側で「写真から選ぶ」ボタン自体を出さない)。
   onChangeAvatarPhoto?: (uri: string) => Promise<{ error: string | null }>;
   onOpenPremium: () => void;
-  onOpenUsage: () => void;
   onOpenReport: () => void;
   // デモモードでは実際のSupabase認証が無い(全てローカルstate)ため、
   // 「アカウントを保護する」セクション自体を出さない。
@@ -48,7 +47,6 @@ export default function SettingsScreen({
   onChangeAvatar,
   onChangeAvatarPhoto,
   onOpenPremium,
-  onOpenUsage,
   onOpenReport,
   isDemo,
   onSignOut,
@@ -194,11 +192,6 @@ export default function SettingsScreen({
             見せておき、中身の出し分けはReportScreen側で行う。 */}
         <Pressable onPress={onOpenReport} style={[styles.premiumRow, styles.usageRow]}>
           <Text style={styles.usageRowText}>{t.settings.reportRow}</Text>
-          <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-        </Pressable>
-
-        <Pressable onPress={onOpenUsage} style={[styles.premiumRow, styles.usageRow]}>
-          <Text style={styles.usageRowText}>{t.settings.usageRow}</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.muted} />
         </Pressable>
 

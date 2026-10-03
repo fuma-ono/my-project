@@ -781,10 +781,14 @@ create policy "users can log their own analytics events"
   on public.analytics_events for insert
   with check (user_id = auth.uid() or user_id is null);
 
--- アプリ内の「利用状況」画面用。analytics_eventsに直接SELECTポリシーは
--- 与えず(他人の行動が個別に見えてしまうため)、event_typeごとの件数
--- だけを返すsecurity definer関数を経由させる。個々の行(誰が・いつ・
--- どのグループで)は一切外に出さない集計専用の窓口。
+-- 108回目で発覚: この関数はevent_typeごとの件数しか返さず個々の行は
+-- 見せない設計だったが、集計された件数自体もアプリ全体の経営指標
+-- (Premium購入数等)であり、一般ユーザーに見せてよいものではなかった。
+-- 元々はアプリ内の「利用状況」画面(21回目に開発中の内輪向けに追加、
+-- 公開後も見直されず残っていた)専用だったが、その画面ごと削除し、
+-- 代わりにオーナー・開発環境からSupabase SQL Editor/service role経由で
+-- 直接集計する運用に変更した。関数自体はその用途のために残すが、
+-- 一般ユーザー(authenticated)からは呼べないようにする。
 create or replace function public.get_usage_stats()
 returns table(event_type text, event_count bigint)
 language sql
@@ -797,7 +801,7 @@ as $$
   group by event_type;
 $$;
 
-grant execute on function public.get_usage_stats() to authenticated;
+revoke execute on function public.get_usage_stats() from authenticated, anon, public;
 
 -- ============================================================
 -- 8. push_tokens: プッシュ通知(Expoのプッシュトークン)

@@ -7,7 +7,6 @@ import NotificationsScreen from '../screens/NotificationsScreen';
 import PremiumScreen from '../screens/PremiumScreen';
 import ReportScreen from '../screens/ReportScreen';
 import SettingsScreen from '../screens/SettingsScreen';
-import UsageScreen from '../screens/UsageScreen';
 import { useT } from '../i18n';
 import type { Group, Profile } from '../types';
 import DemoGroupScreen from './DemoGroupScreen';
@@ -21,7 +20,6 @@ type Screen =
   | { name: 'group' }
   | { name: 'settings'; returnTo?: Screen }
   | { name: 'premium'; returnTo?: Screen }
-  | { name: 'usage'; returnTo?: Screen }
   | { name: 'report'; returnTo?: Screen }
   | { name: 'notifications'; returnTo?: Screen };
 
@@ -58,7 +56,6 @@ export default function DemoApp() {
           return { error: null };
         }}
         onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
-        onOpenUsage={() => setScreen({ name: 'usage', returnTo: screen })}
         onOpenReport={() => setScreen({ name: 'report', returnTo: screen })}
         isDemo
       />
@@ -70,11 +67,6 @@ export default function DemoApp() {
     // isPremium・購入処理はApp.tsx側でPremiumProvider(demo=true)を
     // 被せているので、ここでは何も渡さなくてよい(94回目)。
     return <PremiumScreen onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })} onView={() => {}} onPurchased={() => {}} />;
-  }
-
-  if (screen.name === 'usage') {
-    // デモモードには実データが無いため、常に空状態(実装④)を確認できる。
-    return <UsageScreen onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })} fetchStats={async () => ({})} />;
   }
 
   if (screen.name === 'report') {

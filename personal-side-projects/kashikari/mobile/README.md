@@ -2135,3 +2135,24 @@ Growth活動の一環で、「今いる9人自身を新規獲得チャネルに�
 1. `schema.sql`の全文をSupabaseのSQL Editorで再実行(`profiles.bonus_premium_until`列の追加、権限剥奪、`join_group`関数の更新を反映)
 2. 反映後、実際に招待→参加のフローを1回試して、招待した人・参加した人の両方に特典が付与されること(設定→Premium画面の表示が変わること)を確認してほしい
 3. 確認が取れたら、通常のアップデート手順(`eas build` → `eas submit` → バージョン作成・審査提出)で配信する
+
+## 「利用状況」画面を削除(109回目)。**この回もスキーマ変更あり(108回目と合わせて1回のSQL再実行でOK)**
+
+オーナーから「利用状況ってこれみんな見れる?」という指摘を受けて調査した結果、本来あってはいけない状態だと判明した。
+
+**問題**: `get_usage_stats()`はevent_typeごとの件数のみを返す設計で、個々の行(誰が・いつ・どのグループで)は見えないようになっていたが、**その集計件数自体がアプリ全体・全ユーザー分の経営指標**(グループ作成数・Premium購入数等)であり、特定ユーザーに絞り込まれていなかった。この関数は`authenticated`なら誰でも呼べる状態で、かつ設定画面に「📊 利用状況」として常設されていたため、**ログインしている人なら誰でもアプリ全体の指標(実質的な売上情報を含む)を見られる状態**になっていた。
+
+**経緯**: 21回目(開発初期、まだ使っているのが開発者自身のみだった段階)に「どこでユーザーが離脱するか素早く把握したい」という要望で追加された、開発中の内輪向けツール。個々の行が見えない設計にはなっていたが、「集計された数字自体も一般公開すべきでない」という点の考慮が漏れており、リリース後もそのまま見直されずに残っていた。
+
+**対応**: 画面自体を削除した。今はClaude Code環境からSupabaseに直接問い合わせて同じ指標を確認できるため、アプリ内に残す必要が無いと判断した。
+
+- `src/screens/UsageScreen.tsx`を削除
+- `App.tsx`・`src/demo/DemoApp.tsx`: `usage`画面への遷移・`UsageScreen`の読み込みを削除
+- `src/screens/SettingsScreen.tsx`: 「📊 利用状況」の行・`onOpenUsage` propを削除
+- `src/lib/analytics.ts`: `getUsageStats()`を削除(`logEvent`自体は引き続き使う)
+- `src/i18n/strings.ts`: `settings.usageRow`・`usage.*`一式を削除
+- `schema.sql`: `get_usage_stats()`関数自体はオーナーがSQL Editorから直接集計する用途のために残すが、`grant execute ... to authenticated`を`revoke execute ... from authenticated, anon, public`に変更し、アプリ(一般ユーザー)からは呼べないようにした
+
+`npx tsc --noEmit`はクリーン。`EXPO_PUBLIC_DEMO_MODE=1`のWeb版をPlaywrightで確認し、設定画面に「利用状況」の行が表示されなくなったこと、コンソールエラーが出ないことを確認した。
+
+**オーナー側の対応が必要**: `schema.sql`の全文をSupabaseのSQL Editorで再実行(108回目の招待インセンティブ分の変更と合わせて1回でOK)。**今回はビルド・提出は保留**(オーナー指示により、他の変更とまとめて後日ビルドする)。

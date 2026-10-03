@@ -23,7 +23,6 @@ import PremiumScreen from './src/screens/PremiumScreen';
 import ReportScreen from './src/screens/ReportScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import SplashScreen from './src/screens/SplashScreen';
-import UsageScreen from './src/screens/UsageScreen';
 import { useAllMoneyEntries } from './src/hooks/useAllMoneyEntries';
 import { useAuth } from './src/hooks/useAuth';
 import { useGroupDues } from './src/hooks/useGroupDues';
@@ -35,7 +34,7 @@ import { useNotifications } from './src/hooks/useNotifications';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { LanguageProvider, useT } from './src/i18n';
 import { requestTrackingPermission } from './src/lib/ads';
-import { getUsageStats, logEvent } from './src/lib/analytics';
+import { logEvent } from './src/lib/analytics';
 import { deleteAccount } from './src/lib/deleteAccount';
 import { submitFeedback } from './src/lib/feedback';
 import { PremiumProvider } from './src/lib/premiumContext';
@@ -62,7 +61,6 @@ type Screen =
   | { name: 'groupSettings'; group: Group; returnTo: { name: 'group'; group: Group; justCreated?: boolean } }
   | { name: 'settings'; returnTo?: Screen }
   | { name: 'premium'; returnTo?: Screen }
-  | { name: 'usage'; returnTo?: Screen }
   | { name: 'report'; returnTo?: Screen }
   // 「グループ内の通知は、そのグループのみを表示するようにした方が
   // いい」という指摘への対応(88回目)。groupId/groupNameを渡すと
@@ -425,7 +423,6 @@ function AppInner() {
           onChangeAvatar={updateAvatar}
           onChangeAvatarPhoto={updateAvatarPhoto}
           onOpenPremium={() => setScreen({ name: 'premium', returnTo: screen })}
-          onOpenUsage={() => setScreen({ name: 'usage', returnTo: screen })}
           onOpenReport={() => setScreen({ name: 'report', returnTo: screen })}
           onSignOut={signOut}
           onSubmitFeedback={userId ? (message) => submitFeedback(userId, message) : undefined}
@@ -438,9 +435,6 @@ function AppInner() {
           onView={() => logEvent('premium_view', { userId })}
           onPurchased={() => logEvent('premium_purchased', { userId })}
         />
-      )}
-      {screen.name === 'usage' && (
-        <UsageScreen onBack={() => setScreen(screen.returnTo ?? { name: 'settings' })} fetchStats={getUsageStats} />
       )}
       {screen.name === 'report' && (
         <ReportScreen

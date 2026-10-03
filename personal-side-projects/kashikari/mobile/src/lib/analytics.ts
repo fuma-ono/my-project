@@ -40,33 +40,3 @@ export function logEvent(event: AnalyticsEvent, opts: { userId?: string | null; 
     }
   })();
 }
-
-// 「利用状況」ダッシュボード用。event_typeごとの件数だけを返す
-// get_usage_stats() RPC(個々の行は見えない集計専用の窓口)を呼び、
-// 扱いやすい { イベント名: 件数 } の形にする。指定したevent_typeが
-// 1件も無ければ0を返す(呼び出し側でundefinedを気にしなくてよいように)。
-export async function getUsageStats(): Promise<Record<AnalyticsEvent, number>> {
-  const zeroed = {
-    group_created: 0,
-    invite_sent: 0,
-    invite_link_clicked: 0,
-    invite_joined: 0,
-    entry_created: 0,
-    reminder_sent: 0,
-    marked_paid: 0,
-    marked_confirmed: 0,
-    settlement_completed: 0,
-    premium_view: 0,
-    premium_purchased: 0,
-  } as Record<AnalyticsEvent, number>;
-
-  const { data, error } = await supabase.rpc('get_usage_stats');
-  if (error || !data) return zeroed;
-
-  for (const row of data as { event_type: string; event_count: number | string }[]) {
-    if (row.event_type in zeroed) {
-      zeroed[row.event_type as AnalyticsEvent] = Number(row.event_count);
-    }
-  }
-  return zeroed;
-}
