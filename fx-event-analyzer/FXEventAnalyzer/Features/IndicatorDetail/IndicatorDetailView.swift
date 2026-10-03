@@ -60,7 +60,7 @@ struct IndicatorDetailView: View {
 
                 V5Card(CGRect(x: 10, y: 57, width: 214, height: 59)) {
                     HStack(spacing: 5) {
-                        Text(CountryFlag.emoji(for: indicator.countryCode)).font(.system(size: 22))
+                        CountryFlagView(countryCode: indicator.countryCode, diameter: 22)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(CountryFlag.kanjiAbbreviation(for: indicator.countryCode))) \(indicator.name)").font(.system(size: 9, weight: .bold))
                             Text(indicator.currencyCode).font(.system(size: 7)).foregroundStyle(V5P.muted)

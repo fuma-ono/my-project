@@ -219,6 +219,55 @@ struct V5Badge: View {
     }
 }
 
+/// HQ指示(2026-10-02、4回目)「国旗はUnicode絵文字ではなく画像アセットと
+/// して扱ってください」。Home/イベント詳細/指標詳細/指標一覧など、国旗を
+/// 表示する全画面共通の実装 — `CountryFlag.imageName(for:)`で解決した
+/// Asset Catalog画像(`Resources/Assets.xcassets/FlagXX.imageset`、1:1の
+/// 正方形)を`.resizable().scaledToFill()`で指定サイズいっぱいに広げてから
+/// `clipShape(Circle())`で円形に切り抜く、どの国・通貨でも同一の処理。
+/// 特定の国旗だけフォントサイズやオフセットを個別調整する実装(絵文字
+/// ベースの旧実装で7回試して不安定だったアプローチ)は行わない。
+/// 対応する画像が無い国コードは、中立的な円(国コード頭文字)にフォール
+/// バックする — 存在しない国旗画像を捏造しない。
+struct CountryFlagView: View {
+    private let imageName: String?
+    private let fallbackLabel: String
+    private let diameter: CGFloat
+
+    init(countryCode: String, diameter: CGFloat) {
+        self.imageName = CountryFlag.imageName(for: countryCode)
+        self.fallbackLabel = countryCode
+        self.diameter = diameter
+    }
+
+    /// `pairRow`のように通貨コードから代表国を割り出して表示する場合向け。
+    init(currencyCode: String, diameter: CGFloat) {
+        self.imageName = CountryFlag.imageName(forCurrency: currencyCode)
+        self.fallbackLabel = currencyCode
+        self.diameter = diameter
+    }
+
+    var body: some View {
+        Group {
+            if let imageName {
+                Image(imageName)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Circle()
+                    .fill(V5P.panel2)
+                    .overlay(
+                        Text(fallbackLabel.prefix(2).uppercased())
+                            .font(.system(size: diameter * 0.4, weight: .bold))
+                            .foregroundStyle(V5P.muted)
+                    )
+            }
+        }
+        .frame(width: diameter, height: diameter)
+        .clipShape(Circle())
+    }
+}
+
 struct V5Button: View {
     let title: String
     var body: some View {

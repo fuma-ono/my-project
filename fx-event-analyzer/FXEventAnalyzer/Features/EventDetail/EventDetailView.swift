@@ -61,7 +61,7 @@ struct EventDetailView: View {
 
                 V5Card(CGRect(x: 10, y: 57, width: 214, height: 55)) {
                     HStack {
-                        Text(CountryFlag.emoji(for: response.event.countryCode)).font(.system(size: 22))
+                        CountryFlagView(countryCode: response.event.countryCode, diameter: 22)
                         VStack(alignment: .leading) {
                             Text("\(CountryFlag.kanjiAbbreviation(for: response.event.countryCode))) \(response.event.indicatorName)").font(.system(size: 9, weight: .bold))
                             Text(response.event.currencyCode).font(.system(size: 7)).foregroundStyle(V5P.muted)

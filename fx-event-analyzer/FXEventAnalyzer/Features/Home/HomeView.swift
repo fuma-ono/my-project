@@ -419,7 +419,7 @@ struct HomeView: View {
                 .frame(width: 19, alignment: .leading)
 
             VStack(spacing: 2) {
-                circleFlag(CountryFlag.emoji(for: event.countryCode), diameter: 13)
+                CountryFlagView(countryCode: event.countryCode, diameter: 13)
                 Text(event.currencyCode).font(.system(size: 6, weight: .semibold)).foregroundStyle(V5P.muted)
             }
 
@@ -446,53 +446,6 @@ struct HomeView: View {
         .foregroundStyle(.white)
     }
 
-    /// HQ指摘(2026-10-02、3回目)「国旗が参考画像は丸で表しているのに変え
-    /// ないでください」: 旧実装は国旗絵文字をそのまま`Text`で描画しており
-    /// (絵文字自体は正方形に近い)円形になっていなかった。参考画像を実測
-    /// すると国旗は完全な円(端でクロップ)だったため、絵文字を表示サイズ
-    /// より少し大きく描画してから`clipShape(Circle())`で円形に切り抜く
-    /// 共通ヘルパーに差し替えた。
-    @ViewBuilder private func circleFlag(_ emoji: String, diameter: CGFloat) -> some View {
-        // 4回目の修正(倍率4.5倍への引き上げ)後もCI実機キャプチャで確認
-        // すると円にならなかった。さらに不可解な実測結果として、倍率
-        // 1.9倍時点の右端クリップ位置と倍率4.5倍時点の右端クリップ位置が
-        // ピクセル単位で完全に同一だった一方、左端の位置はむしろ倍率を
-        // 上げた方が内側(字送り方向)にズレていた — インクの実寸だけが
-        // 原因ならあり得ない挙動だったため、`.overlay`で重ねた巨大な
-        // `Text`の「見た目はクリップされていても、レイアウト計算上の
-        // 実寸(クリップ前の巨大なサイズ)」が`Color.clear`の13×13フレーム
-        // を飛び越えて外側(行全体のHStack)のレイアウトに影響し、結果的に
-        // 行内の他要素の配置まで揺らいでいた可能性が高いと判断した。
-        // `GeometryReader`は子に渡すサイズ(`geo.size`)と自身が親へ
-        // 報告するサイズ(外側の`.frame`で固定)を完全に分離できるため、
-        // 内側の`Text`がどれだけ巨大でも親レイアウトには一切影響しない
-        // 構造に変更した — これでレイアウト漏れは解消したが、CI実機
-        // キャプチャをピクセル境界追跡で再検証すると、縦方向の半径
-        // (≈31px)に対し横方向(≈26.5px)がまだ一回り小さく、わずかに
-        // 縦長の楕円だった(絵文字自体の字送りが左右非対称なため、倍率
-        // 1.8倍では横方向のインクが円の直径まで届いていなかった)。HQ
-        // 指摘(2026-10-02、4回目)「国旗が丸になってません」を受け、倍率を
-        // 1.8→3.2に引き上げたところ、形は円になったが別の問題が発生
-        // した: CI実機キャプチャを拡大して中身まで確認すると、日本の
-        // 国旗(本来は白地に赤丸)が無地の白、EUの国旗(本来は青地に
-        // 星)が無地の青になっていた — 倍率を上げすぎたせいで絵文字を
-        // 実質的に「ズームインしすぎ」てしまい、円のクリップ窓が絵文字の
-        // 中心からズレた位置(字送りの偏りによる)にある結果、国旗の
-        // 特徴的な柄(赤丸や星)自体が円の外側に出てしまっていた
-        // (外形だけを見る円のピクセル境界追跡では検出できなかった)。
-        // 必要なのは「円を覆うギリギリの大きさ」であって「大きければ
-        // 大きいほど良い」わけではないと判断し、実測値(1.8倍で横方向の
-        // インク幅が直径の約82%)から逆算した最小限の倍率(およそ1.8×
-        // 65/53≈2.2倍に安全マージンを加えた2.4倍)に調整し直した。
-        GeometryReader { geo in
-            Text(emoji)
-                .font(.system(size: min(geo.size.width, geo.size.height) * 2.4))
-                .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
-        }
-        .frame(width: diameter, height: diameter)
-        .clipShape(Circle())
-    }
-
     private static func eventSubtitle(_ event: HomeEventSummary) -> String? {
         var parts: [String] = []
         if let forecast = event.forecast { parts.append("予想 \(ValueFormat.number(forecast))") }
@@ -512,8 +465,8 @@ struct HomeView: View {
             // 間隔を開けてください」: 負のスペーシング(-6)で2つの国旗が
             // 重なっていたのを、正のスペーシングに変更して離した。
             HStack(spacing: 3) {
-                circleFlag(CountryFlag.emoji(forCurrency: pair.baseCurrency), diameter: 13)
-                circleFlag(CountryFlag.emoji(forCurrency: pair.quoteCurrency), diameter: 13)
+                CountryFlagView(currencyCode: pair.baseCurrency, diameter: 13)
+                CountryFlagView(currencyCode: pair.quoteCurrency, diameter: 13)
             }
             Text(pair.displaySymbol).font(.system(size: 8, weight: .bold)).fixedSize(horizontal: true, vertical: false)
             Spacer(minLength: 2)
@@ -549,7 +502,7 @@ struct HomeView: View {
     @ViewBuilder private func favoriteRowContent(countryCode: String, currencyCode: String, name: String, importance: Importance) -> some View {
         HStack(spacing: 8) {
             VStack(spacing: 2) {
-                circleFlag(CountryFlag.emoji(for: countryCode), diameter: 13)
+                CountryFlagView(countryCode: countryCode, diameter: 13)
                 Text(currencyCode).font(.system(size: 6, weight: .semibold)).foregroundStyle(V5P.muted)
             }
             V5JPFont.text(name, size: 9, weight: .semibold).lineLimit(1)
@@ -584,7 +537,7 @@ struct HomeView: View {
                     .foregroundStyle(V5P.muted)
                     .fixedSize(horizontal: true, vertical: false)
                     .frame(width: 19, alignment: .leading)
-                circleFlag(CountryFlag.emoji(for: speech.countryCode), diameter: 13)
+                CountryFlagView(countryCode: speech.countryCode, diameter: 13)
                 VStack(alignment: .leading, spacing: 3) {
                     V5JPFont.text(speech.speakerName, size: 8, weight: .bold)
                     V5JPFont.text(speech.headline, size: 7, weight: .regular).foregroundStyle(V5P.muted).lineLimit(1)

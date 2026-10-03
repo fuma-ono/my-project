@@ -163,7 +163,7 @@ struct IndicatorsView: View {
 
     @ViewBuilder private func row(_ indicator: IndicatorSummary) -> some View {
         HStack(spacing: 5) {
-            Text(CountryFlag.emoji(for: indicator.countryCode)).font(.system(size: 14))
+            CountryFlagView(countryCode: indicator.countryCode, diameter: 14)
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(CountryFlag.kanjiAbbreviation(for: indicator.countryCode))) \(indicator.name)")
                     .font(.system(size: 8, weight: .semibold)).lineLimit(1)
