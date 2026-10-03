@@ -184,12 +184,23 @@ struct HomeView: View {
     /// 3.641で変換すると7.7-8.0ユニットで一貫している。
     private static let sectionGap: CGFloat = 8
 
-    /// `loadedScreen`のカード一覧`ScrollView`に割り当てる実高さ。HQ指示
-    /// 「画面を開いた時点で通貨ペア・お気に入りが見え、スクロールすると
-    /// 直近の要人発言が見える」を満たすよう、通貨ペア+間隔+お気に入りの
-    /// 合計がちょうど収まり、直近の要人発言はスクロールしないと現れない
-    /// 高さにしている。
-    private static let contentAreaHeight: CGFloat = pairsCardHeight + sectionGap + favoritesCardHeight + 4
+    /// `loadedScreen`のカード一覧`ScrollView`に割り当てる実高さ — ヘッダー
+    /// 下端(y=53、`padding(.top, 53)`と同じ値)からフッター上端
+    /// (`V5BottomBar`の`barHeight`(40)+`bottomMargin`(4)より
+    /// y=491-4-40=447)までのキャンバス残り全域(447-53=394)。
+    ///
+    /// HQ指摘(2026-10-03、9回目キャプチャ後)「お気に入りの下、タブバーの
+    /// 上に大きな空白ができている」: 当初は「通貨ペア+お気に入りの合計
+    /// 高さちょうど」(約260)をこの値にしていたため、残りキャンバス394との
+    /// 差分(約134ユニット)がScrollViewの外側(表示領域の下)に何も描画
+    /// されない空白として残ってしまっていた。ここをキャンバス全域(394)に
+    /// 広げ、代わりに`loadedScreen`内の「通貨ペア+お気に入り」グループへ
+    /// `.frame(minHeight: contentAreaHeight, alignment: .top)`を付けて
+    /// そのグループ自体をこの高さまで引き伸ばすことで、「直近の要人発言」
+    /// を必ず折り返し線(fold)より下へ押し出し、スクロールしないと現れない
+    /// 構成を維持しつつ、空白をScrollView内の(スクロールで自然に続く)
+    /// 領域に変えた。
+    private static let contentAreaHeight: CGFloat = 394
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -208,12 +219,22 @@ struct HomeView: View {
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: Self.sectionGap) {
-                    if !pairs.isEmpty {
-                        pairsCard(pairs)
+                    // 「通貨ペア+お気に入り」をこのVStackで1つのグループに
+                    // まとめ、`.frame(minHeight:)`でScrollViewの表示領域
+                    // (`contentAreaHeight`)いっぱいまで引き伸ばす — 中身の
+                    // 実際の高さが足りない分は下に余白が付くだけで、結果
+                    // として「直近の要人発言」が必ず折り返し線より下に
+                    // 配置され、スクロールしないと現れない。
+                    VStack(alignment: .leading, spacing: Self.sectionGap) {
+                        if !pairs.isEmpty {
+                            pairsCard(pairs)
+                        }
+                        if !favorites.isEmpty {
+                            favoritesCard(favorites)
+                        }
                     }
-                    if !favorites.isEmpty {
-                        favoritesCard(favorites)
-                    }
+                    .frame(minHeight: Self.contentAreaHeight, alignment: .top)
+
                     speechesCard(speeches)
                 }
                 .padding(.bottom, 16)
