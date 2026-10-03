@@ -380,14 +380,30 @@ struct HomeView: View {
     /// 差し替えた。旧実装の`V5P.panel2→V5P.panel`グラデーション
     /// (≈RGB(4,25,47)→(2.5,19,37))は実測よりだいぶ暗く、色味も違って
     /// いた。
-    private static let cardFill = Color(red: 6.0 / 255, green: 26.0 / 255, blue: 53.0 / 255)
+    /// HQ指摘(2026-10-03、5回目、新しい参考画像)「まだ枠内の色が参考画像と
+    /// 異なっています」: 新しい参考画像をPythonでピクセル実測した結果、
+    /// カード内部の最頻値は`#001730`(≈RGB 0,23,48、イベント/通貨ペア/
+    /// お気に入りの3カードで一貫)で、`#061A35`より赤成分が強く明るすぎた。
+    /// 実測値に差し替えた。
+    private static let cardFill = Color(red: 0.0 / 255, green: 23.0 / 255, blue: 48.0 / 255)
+
+    /// HQ指摘(2026-10-03、5回目)「サイズを合わせてください」: 新しい参考
+    /// 画像をピクセル実測(画面全幅852px≒V5の234ユニットからスケール
+    /// 3.64を算出し、カード実測幅806pxを逆算)すると、カード幅はV5換算で
+    /// 約221ユニットだった(画面端からの余白が従来の214より狭い)。
+    private static let cardWidth: CGFloat = 221
+
+    /// 同じ実測(2026-10-03、5回目)で、行内の国旗の直径を画面全幅スケール
+    /// から逆算すると約63px≒V5換算17ユニットで、従来の13より一回り大きい。
+    /// イベント行・通貨ペア行・お気に入り行・要人発言行、全てこの値に統一。
+    private static let flagDiameter: CGFloat = 17
 
     @ViewBuilder private func homeCard(@ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             content()
         }
         .padding(10)
-        .frame(width: 214, alignment: .topLeading)
+        .frame(width: Self.cardWidth, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: Self.cardCornerRadius).fill(Self.cardFill))
         .overlay(RoundedRectangle(cornerRadius: Self.cardCornerRadius).stroke(Self.cardBorderColor, lineWidth: 0.5))
     }
@@ -419,7 +435,7 @@ struct HomeView: View {
                 .frame(width: 19, alignment: .leading)
 
             VStack(spacing: 2) {
-                CountryFlagView(countryCode: event.countryCode, diameter: 13)
+                CountryFlagView(countryCode: event.countryCode, diameter: Self.flagDiameter)
                 Text(event.currencyCode).font(.system(size: 6, weight: .semibold)).foregroundStyle(V5P.muted)
             }
 
@@ -465,8 +481,8 @@ struct HomeView: View {
             // 間隔を開けてください」: 負のスペーシング(-6)で2つの国旗が
             // 重なっていたのを、正のスペーシングに変更して離した。
             HStack(spacing: 3) {
-                CountryFlagView(currencyCode: pair.baseCurrency, diameter: 13)
-                CountryFlagView(currencyCode: pair.quoteCurrency, diameter: 13)
+                CountryFlagView(currencyCode: pair.baseCurrency, diameter: Self.flagDiameter)
+                CountryFlagView(currencyCode: pair.quoteCurrency, diameter: Self.flagDiameter)
             }
             Text(pair.displaySymbol).font(.system(size: 8, weight: .bold)).fixedSize(horizontal: true, vertical: false)
             Spacer(minLength: 2)
@@ -502,7 +518,7 @@ struct HomeView: View {
     @ViewBuilder private func favoriteRowContent(countryCode: String, currencyCode: String, name: String, importance: Importance) -> some View {
         HStack(spacing: 8) {
             VStack(spacing: 2) {
-                CountryFlagView(countryCode: countryCode, diameter: 13)
+                CountryFlagView(countryCode: countryCode, diameter: Self.flagDiameter)
                 Text(currencyCode).font(.system(size: 6, weight: .semibold)).foregroundStyle(V5P.muted)
             }
             V5JPFont.text(name, size: 9, weight: .semibold).lineLimit(1)
@@ -537,7 +553,7 @@ struct HomeView: View {
                     .foregroundStyle(V5P.muted)
                     .fixedSize(horizontal: true, vertical: false)
                     .frame(width: 19, alignment: .leading)
-                CountryFlagView(countryCode: speech.countryCode, diameter: 13)
+                CountryFlagView(countryCode: speech.countryCode, diameter: Self.flagDiameter)
                 VStack(alignment: .leading, spacing: 3) {
                     V5JPFont.text(speech.speakerName, size: 8, weight: .bold)
                     V5JPFont.text(speech.headline, size: 7, weight: .regular).foregroundStyle(V5P.muted).lineLimit(1)
