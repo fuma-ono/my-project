@@ -250,61 +250,38 @@ struct HomeView: View {
         .position(x: V5P.W / 2, y: 34.9)
     }
 
-    /// 参考画像のヘッダー右上にある、斜めに流れる光の筋の装飾。
+    /// 参考画像のヘッダー右上にある、斜めに流れる光の筋を含むHome画面全体の
+    /// 背景。
     ///
-    /// 9回目の調整(2026-10-04、HQ「曲線もピクセル単位で再現して、色も
-    /// 全く違う」): 1回目の実装は上端・下端2点だけの単純な二次ベジェ曲線
-    /// (起点(623,0)・終点(509,160))で、実機キャプチャと比べると縦に詰まった
-    /// 「C字」寄りの曲線になっており、参考画像の「横に広く緩やかな弧」とは
-    /// 形が違っていた。参考画像をPythonで色フィルタ(シアン〜白寄りの画素の
-    /// みを抽出、ステータスバーの白アイコンや通知ドットの赤を除外)しながら
-    /// 1行ずつ最も明るいx座標を追跡し直した結果、実際の筋はy=0〜約100px
-    /// (原寸852幅)の範囲でx=607→438まで滑らかに移動する、横方向にずっと
-    /// 広い曲線だと判明(y=100を超えると背景に溶け込みほぼ見えなくなる)。
-    /// 8点の実測座標をV5座標に換算し折れ線で結び、ぼかしで滑らかに見せる
-    /// 方式に変更した(`HomeHeaderStreakShape`参照)。
+    /// 10回目の調整(2026-10-04、HQ「背景はこの画像にしてください」+実画像
+    /// 添付): 9回目まではSwiftUIの`Shape`+`LinearGradient`で曲線を手描きで
+    /// 近似していたが、HQから曲線・背景込みの実画像(852×1846、Home画面と
+    /// 同じ実寸比率)が直接提供されたため、近似をやめてこの画像をそのまま
+    /// `HomeHeaderGlow`アセットとして採用した。
     ///
-    /// 色も同じトレースで実測し直した。単純な「白→シアン→透明」の二色
-    /// グラデーションではなく、芯の最も明るい部分(y≈24px地点、実測RGB
-    /// (193,249,252)相当)が純白ではなくやや青みがかった白で、そこから
-    /// 下に向かって急速に彩度が上がり(y=60px実測RGB(0,149,248)、
-    /// `V5P.blue`とほぼ同値)、最終的に背景色へ溶け込むように暗くなって
-    /// 消えていく3段階のグラデーションだったため、ストロークのグラデー
-    /// ション停止点を4つに増やしてこの変化を反映した。
+    /// あわせてHQ指示「上の曲線の部分はタイトルにかかる部分は削除して
+    /// ください」に対応するため、画像自体をPythonで加工してから組み込んで
+    /// いる: 元画像の曲線は原寸y=0〜約210pxまで明るく伸びており、ヘッダーの
+    /// タイトル行(`homeHeader`のフレーム、V5座標で上端y≈22.1→原寸px換算
+    /// (×852/234)で約80px)と重なる範囲に入り込んでいた。y=60px(タイトル
+    /// 開始よりやや手前、自然な余白を残す)からy=200pxにかけて、各行を
+    /// その行自身の無地部分の背景色(x=30、曲線の軌跡から外れた位置)へ
+    /// 段階的にブレンドして消すことで、右上からの「差し込み」だけを残し
+    /// タイトル帯に曲線がかからないようにした(ハードエッジにならないよう
+    /// 滑らかにフェードさせている)。
     ///
-    /// ヘッダーより下のカード類と重ならないよう、`loadedScreen`内で
-    /// `homeHeader`の直前(＝背後のレイヤー)にのみ配置している —
-    /// 2026-10-02のHQ指示「アプリ本体の画面は単色背景」はこの装飾の対象外
-    /// として、ヘッダー領域に限定したスコープで追加している。
+    /// 画像は234×491のV5キャンバス全体を覆うサイズで配置し、`loadedScreen`
+    /// 内で`homeHeader`より手前(＝背後のレイヤー)に置いている。これに
+    /// よりHome画面は2026-10-02の「単色背景」方針から外れ、この画像を背景
+    /// として使う形になった(他画面の`V5Background`は単色のまま変更して
+    /// いない — スコープはHome画面のみ)。
     private var homeHeaderStreak: some View {
-        let coreGradient = LinearGradient(
-            stops: [
-                .init(color: Color(red: 0.62, green: 0.90, blue: 1.0), location: 0.0),
-                .init(color: Color(red: 0.86, green: 0.97, blue: 1.0), location: 0.22),
-                .init(color: V5P.blue, location: 0.65),
-                .init(color: V5P.blue.opacity(0.0), location: 1.0),
-            ],
-            startPoint: .top, endPoint: .bottom
-        )
-        let glowGradient = LinearGradient(
-            stops: [
-                .init(color: Color(red: 0.86, green: 0.97, blue: 1.0).opacity(0.55), location: 0.0),
-                .init(color: V5P.blue.opacity(0.4), location: 0.6),
-                .init(color: V5P.blue.opacity(0.0), location: 1.0),
-            ],
-            startPoint: .top, endPoint: .bottom
-        )
-        return ZStack {
-            HomeHeaderStreakShape()
-                .stroke(glowGradient, style: StrokeStyle(lineWidth: 12, lineCap: .round, lineJoin: .round))
-                .blur(radius: 7)
-            HomeHeaderStreakShape()
-                .stroke(coreGradient, style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
-                .blur(radius: 0.8)
-        }
-        .frame(width: V5P.W, height: 40, alignment: .top)
-        .position(x: V5P.W / 2, y: 20)
-        .allowsHitTesting(false)
+        Image("HomeHeaderGlow")
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(width: V5P.W, height: V5P.H)
+            .clipped()
+            .allowsHitTesting(false)
     }
 
     private static let changeUpColor = Color(red: 214.0 / 255, green: 83.0 / 255, blue: 109.0 / 255)
@@ -773,30 +750,3 @@ private extension FXPairUI {
     var displaySymbol: String { "\(baseCurrency)/\(quoteCurrency)" }
 }
 
-/// `homeHeaderStreak`が使う曲線。参考画像(852幅)を色フィルタで1行ずつ
-/// 追跡した実測点(x=607,0 / 594,12 / 575,28 / 560,40 / 530,60 / 501,76 /
-/// 474,88 / 438,100、詳細は`homeHeaderStreak`のドキュメントコメント参照)を
-/// V5座標(234幅、スケール402/852/1.718≈0.2747)に換算し折れ線で結んでいる
-/// — ぼかし(`blur`)で滑らかな曲線に見せる前提のため、頂点間は直線で良い。
-private struct HomeHeaderStreakShape: Shape {
-    private static let points: [CGPoint] = [
-        CGPoint(x: 170.1, y: -3.0),
-        CGPoint(x: 166.8, y: 0.0),
-        CGPoint(x: 163.2, y: 3.3),
-        CGPoint(x: 158.0, y: 7.7),
-        CGPoint(x: 153.8, y: 11.0),
-        CGPoint(x: 145.6, y: 16.5),
-        CGPoint(x: 137.6, y: 20.9),
-        CGPoint(x: 130.2, y: 24.2),
-        CGPoint(x: 120.3, y: 27.5),
-    ]
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: Self.points[0])
-        for point in Self.points.dropFirst() {
-            path.addLine(to: point)
-        }
-        return path
-    }
-}
