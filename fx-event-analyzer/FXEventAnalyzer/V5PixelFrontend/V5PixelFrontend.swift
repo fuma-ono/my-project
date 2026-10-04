@@ -574,14 +574,6 @@ struct V5BottomBar: View {
         colors: [V5P.cyan, Color(red: 0.0, green: 0.48, blue: 0.945)],
         startPoint: .top, endPoint: .bottom
     )
-    /// カプセル外枠(リム)のグラデーション。参考画像から直接実測した色
-    /// (上端≈RGB(42,103,173)、下端≈RGB(16,75,146)、単純な2色・シアンなし)
-    /// — 詳細は本structのドキュメントコメント「5回目の訂正」参照。
-    private static let capsuleRimGradient = LinearGradient(
-        colors: [Color(red: 0.165, green: 0.404, blue: 0.678), Color(red: 0.063, green: 0.294, blue: 0.573)],
-        startPoint: .top, endPoint: .bottom
-    )
-
     var body: some View {
         HStack(spacing: 0) {
             tab(0, "ホーム") { _ in
@@ -605,20 +597,15 @@ struct V5BottomBar: View {
                 V5GearIcon()
             }
         }
+        // 9回目の調整(2026-10-04、HQ「カプセルの縁取り・背景も参考画像の
+        // ような境界のないフラットな見た目に変えて」): カプセル本体の塗り
+        // (`.background`)と外枠線(`.overlay`の`capsuleRimGradient`
+        // ストローク)を削除し、アイコン・ラベルが背景に直接浮かぶ境界の
+        // 無い見た目にした。`clipShape`も背景が無くなり不要なため合わせて
+        // 削除。位置・間隔(`barWidth`/`barHeight`/`bottomMargin`)は今回の
+        // 対象外のため変更していない。
         .frame(width: Self.iconsWidth, height: Self.barHeight)
         .frame(width: Self.barWidth, height: Self.barHeight)
-        .clipShape(RoundedRectangle(cornerRadius: Self.barHeight / 2))
-        .background(
-            RoundedRectangle(cornerRadius: Self.barHeight / 2)
-                .fill(LinearGradient(
-                    colors: [Color(red: 0.020, green: 0.102, blue: 0.224), Color(red: 0.008, green: 0.063, blue: 0.165)],
-                    startPoint: .top, endPoint: .bottom))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Self.barHeight / 2)
-                .stroke(Self.capsuleRimGradient, lineWidth: 0.9)
-                .shadow(color: V5P.blue.opacity(0.5), radius: 3)
-        )
         .position(x: V5P.W / 2, y: V5P.H - Self.bottomMargin - Self.barHeight / 2)
     }
     /// `Button`ではなく`.onTapGesture`を使っている理由: 実機相当のCIキャプチャ
