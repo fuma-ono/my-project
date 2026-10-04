@@ -504,7 +504,22 @@ struct V5BottomBar: View {
     private static let barHeight: CGFloat = 34
     private static let iconsWidth: CGFloat = 214
     private static let barWidth: CGFloat = 224
-    private static let bottomMargin: CGFloat = 4
+    /// HQ指示(2026-10-04)「デザインは変えずに、この画像のヘッダーとタブの位置を
+    /// 固定としてください」で送付された新しいHome参考画像(852×1846、フル幅の
+    /// 旧スタイルタブバー)をPythonで実測。カプセル型(浮遊)と帯型(画面幅
+    /// いっぱい)という形状自体が別物のため、バー上端や内部アイコン位置を
+    /// そのまま突き合わせても意味がある比較にならない(実際、両方のランド
+    /// マークで逆方向の差分が出て矛盾した)。形状によらず両者に共通する指標
+    /// として「タブの一番下の可視コンテンツ(ラベル文字)から画面最下端まで
+    /// の余白」を採用した。参考画像: ラベル文字下端y≈1770・画像全体の高さ
+    /// 1846(原寸852幅、実機1206幅換算での全体高2613は実機キャプチャの2622と
+    /// 0.3%差で一致 — 全体のスケールは信頼できる)→ 余白76px(原寸)→実機
+    /// 換算35.9pt。現行実装(`barHeight`34・`bottomMargin`4での計算値)は
+    /// ラベル下端から画面最下端まで約32.5pt相当で、3.4pt足りなかったため、
+    /// その分だけ`bottomMargin`を4→6(V5単位+2 ≈ 実寸+3.4pt)に拡大し、
+    /// カプセル全体を画面下端からわずかに離した。`barHeight`(カプセル自体の
+    /// 縦横比)は今回の対象外のため変更していない。
+    private static let bottomMargin: CGFloat = 6
     private static let iconGradient = LinearGradient(
         colors: [Color(red: 0.90, green: 0.97, blue: 1.0), Color(red: 0.45, green: 0.64, blue: 0.86)],
         startPoint: .top, endPoint: .bottom
@@ -955,6 +970,23 @@ struct V5Header: View {
     private static let chevronVerticalCorrection = V5P.ptToV5(4.0 / 3.0)
     private static let starVerticalCorrection = V5P.ptToV5(3.0 / 3.0)
 
+    /// HQ指示(2026-10-04)「デザインは変えずに、この画像のヘッダーとタブの位置を
+    /// 固定としてください」で送付された新しいHome参考画像(852×1846)をPythonで
+    /// 実測。画像の絶対座標(status bar位置など)は作図上の余白が実機と一致する
+    /// 保証がないため使わず、両画像に共通して存在する信頼できるランドマーク
+    /// 「ヘッダー文字の中心」と「コンテンツ1枚目のカード上端(罫線)」の間隔
+    /// (これなら作図側の上端余白の有無に影響されない)を基準にした。
+    /// 参考画像: ヘッダー文字(「Event Analyzer」部分)中心y≈134、カード上端
+    /// y≈193(ともに原寸852幅)→ 間隔59px → 実機1206幅換算で83.5px(=27.8pt)。
+    /// 現行実装(CI実機キャプチャ`04-Home`で実測): ヘッダー「ホーム」文字
+    /// 中心y≈246.5、カード上端(`HomeView`の`padding(.top, 53)`に相当)
+    /// y≈319 → 間隔72.5px(=24.2pt)。差分27.8-24.2=3.6pt分、ヘッダーをさらに
+    /// 上(コンテンツから離す方向)へ寄せる必要があると判明したため、
+    /// `position(y:)`の40を3.6pt(=V5単位2.15)引いた37.8に変更した
+    /// (`headerHeight`自体・コンテンツ側の`padding.top`は変更していない —
+    /// どちらも参考画像とは別の実測・HQ既定値に基づくため)。
+    private static let headerCenterY: CGFloat = 37.8
+
     var body: some View {
         HStack(spacing: 0) {
             if back {
@@ -990,7 +1022,7 @@ struct V5Header: View {
         }
         .foregroundStyle(.white)
         .frame(width: V5P.W - Self.headerMargin * 2, height: Self.headerHeight)
-        .position(x: V5P.W / 2, y: 40)
+        .position(x: V5P.W / 2, y: Self.headerCenterY)
     }
 }
 
