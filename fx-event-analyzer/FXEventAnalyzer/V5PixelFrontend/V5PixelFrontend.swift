@@ -501,9 +501,29 @@ struct V5BottomBar: View {
     /// 「1:1」に近い — 選択時の下線はこの下側余白の中に収まって描かれており、
     /// 下側余白自体を追加で押し広げてはいない)。この実測に基づき、`tab`内の
     /// `padding.top`も均等配分前提に作り直した(詳細は下記`tab`のコメント)。
-    private static let barHeight: CGFloat = 34
+    /// 7回目の調整(2026-10-04、HQ「次はタブにいこう。参考画像と高さ、間隔、
+    /// 大きさを揃えて」): 新しいHome参考画像(852×1846、フル幅の旧スタイル
+    /// タブバー)の「ホーム/指標/検索/設定」4タブ(現行に無い「分析」タブは
+    /// 除外)をPythonでピクセル実測し、実機換算pt(852px=402pt換算)で現行
+    /// 実装(CI実機キャプチャ、1206px=402pt、3x)と比較した。
+    /// - アイコン高さ: 参考画像平均16.9pt vs 現行21.7pt(現行が約1.28倍大きい)
+    /// - ラベル高さ: 参考画像平均19.0pt vs 現行11.9pt(現行が約0.6倍、かなり
+    ///   小さい — 参考画像はラベルがアイコンとほぼ同等かやや大きい)
+    /// 現行はアイコンに対しラベルが著しく小さい比率だったため、アイコンを
+    /// 縮小・ラベルを拡大する方向で調整(`tabIconSize`/`tabLabelSize`参照)。
+    /// 新しいコンテンツ合計高さ(11+1+16+1+2.2=31.2)に対し、旧来の上下均等
+    /// 余白(1.9pt/1.9pt、下記`padding.top`)を維持するには`barHeight`を
+    /// 34→35に拡大する必要があった(31.2+1.9×2=35)。
+    private static let barHeight: CGFloat = 35
     private static let iconsWidth: CGFloat = 214
     private static let barWidth: CGFloat = 224
+    /// アイコンの表示サイズ(旧14→11、上記7回目の調整)。`scaleEffect`で
+    /// アイコンの種類(SF Symbols/`V5BarsIcon`/`V5GearIcon`)によらず一律に
+    /// 縮小する — 各カスタムアイコン内部の実測済み形状比率を壊さないため。
+    private static let tabIconSize: CGFloat = 11
+    private static let tabIconScale: CGFloat = tabIconSize / 14
+    /// ラベルの文字サイズ(旧8→13、上記7回目の調整)。
+    private static let tabLabelSize: CGFloat = 13
     /// HQ指示(2026-10-04)「デザインは変えずに、この画像のヘッダーとタブの位置を
     /// 固定としてください」で送付された新しいHome参考画像(852×1846、フル幅の
     /// 旧スタイルタブバー)をPythonで実測。カプセル型(浮遊)と帯型(画面幅
@@ -599,29 +619,26 @@ struct V5BottomBar: View {
         // VStackコンテンツ(アイコン+文字+下線)の見かけの大きさに
         // 合わせるのではなく、`.frame(maxHeight:.infinity)`適用後の
         // タブセル全体を背景として扱い、直径を`barHeight`に固定した。
-        VStack(spacing: 2) {
+        VStack(spacing: 1) {
             icon(isSelected)
-                .frame(height: 14)
+                .scaleEffect(Self.tabIconScale, anchor: .bottom)
+                .frame(height: Self.tabIconSize)
                 .foregroundStyle(gradient)
                 .shadow(color: .black.opacity(0.35), radius: 1, y: 1)
-            V5JPFont.text(title, size: 8).foregroundStyle(gradient)
-                .frame(height: 10)
+            V5JPFont.text(title, size: Self.tabLabelSize).foregroundStyle(gradient)
+                .frame(height: 16)
             Capsule()
                 .fill(LinearGradient(colors: [V5P.cyan, V5P.blue], startPoint: .top, endPoint: .bottom))
                 .frame(width: 16, height: 2.2)
                 .shadow(color: V5P.cyan.opacity(0.7), radius: 2)
                 .opacity(isSelected ? 1 : 0)
         }
-        // HQ指示(2026-10-04)「フッターの改修、参考画像と高さを合わせて」を受け
-        // `barHeight`を40→34に縮小(`barHeight`のドキュメントコメント参照)した
-        // ため、従来のアイコン14pt・ラベル8pt/行高10pt固定のまま`VStack(spacing:
-        // 3)`だと中身の高さが約32.2ptとなり、34pt中にほぼ収まらない(上下
-        // 合計で1.8ptしか余白が残らず、サブピクセル誤差で下線がクリップされる
-        // リスクが高い)。HQの文字サイズ最終仕様(アイコン14pt・ラベル8pt)自体は
-        // 変えず、要素間の`spacing`のみ3→2に詰めてコンテンツ高さを約30.2ptへ
-        // 縮小し、34pt中に残る余白(約3.8pt)を参考画像の実測(上の余白:下の
-        // 余白≈1:1、上記`barHeight`コメント参照)に合わせて上下均等に近い
-        // 1.9ptへ割り振った。
+        // 7回目の調整(2026-10-04、`barHeight`のドキュメントコメント参照)で
+        // アイコン14→11・ラベル8→13(行高10→16)・`spacing`2→1に変更した結果、
+        // コンテンツ高さは11+1+16+1+2.2=31.2pt。上の余白:下の余白≈1:1(参考
+        // 画像実測、`barHeight`コメント参照)を維持するため、`barHeight`35に
+        // 対して上下余白を均等配分した1.9ptをそのまま維持している(偶然にも
+        // 前回値と同じになった)。
         .padding(.top, 1.9)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(
