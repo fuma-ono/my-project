@@ -163,21 +163,28 @@ struct HomeView: View {
     private static let accountIconColor = Color(red: 133.0 / 255, green: 175.0 / 255, blue: 233.0 / 255)
     private static let notificationDotColor = Color(red: 252.0 / 255, green: 40.0 / 255, blue: 85.0 / 255)
 
+    /// 8回目の調整(2026-10-04、HQ「ロゴ削除・FXの文字を大きく、Event
+    /// Analyzerを少し小さく・ヘッダー部分の背景を同じにして」): 参考画像を
+    /// 見直すと、「FX」の左にあった山形チャートのロゴマーク(`BrandMark`)は
+    /// 実在せず、「FX」の文字自体(グラデーション)がロゴを兼ねていると
+    /// 判明したため削除した。あわせて参考画像を改めてピクセル実測
+    /// (FX文字高さ61px→28.8pt、Event Analyzer文字高さ36px→17.0pt、
+    /// 比率≈1.69倍 — 4回目の調整時の実測1.68倍とほぼ一致)した結果に基づき、
+    /// 5回目の調整で統一した「FX・Event Analyzerとも44pt」をやめ、
+    /// FXを44→56pt・Event Analyzerを44→34ptに変更した(ロゴ削除で空いた
+    /// 幅も活用)。背景の斜めの光の筋はヘッダー部分専用の装飾として
+    /// `homeHeaderStreak`を新設し、ヘッダーの背後(カード類より下のレイヤー)
+    /// に重ねている(アプリ全体の背景は2026-10-02のHQ指示により単色のまま
+    /// — ヘッダーのみのスコープとして実装)。
     private var homeHeader: some View {
-        let logoTitleGap = V5P.ptToV5(4)
         let iconGap = V5P.ptToV5(8)
         let margin = V5P.ptToV5(12)
-        let logoHeight = V5P.ptToV5(40.0)
-        let logoWidth = logoHeight * (805.0 / 480.0)
-        let fxTextSize = V5P.ptToV5(44.0)
-        let titleTextSize = V5P.ptToV5(44.0)
+        let fxTextSize = V5P.ptToV5(56.0)
+        let titleTextSize = V5P.ptToV5(34.0)
         let notifIconSize = V5P.ptToV5(25.0)
         let accountIconSize = V5P.ptToV5(23.6)
         let notificationDotSize = V5P.ptToV5(9.4)
-        let logoVerticalCorrection = V5P.ptToV5(-11.0 / 6.0)
         return HStack(spacing: 0) {
-            BrandMark(width: logoWidth)
-                .offset(y: logoVerticalCorrection)
             (
                 Text("F").font(.system(size: fxTextSize, weight: .heavy)).foregroundStyle(DesignTokens.Colors.brandTitleAccentF)
                 + Text("X").font(.system(size: fxTextSize, weight: .heavy)).foregroundStyle(DesignTokens.Colors.brandTitleAccentX)
@@ -185,7 +192,6 @@ struct HomeView: View {
             )
             .lineLimit(1)
             .minimumScaleFactor(0.55)
-            .padding(.leading, logoTitleGap)
             Spacer()
             Image(systemName: "bell")
                 .font(.system(size: notifIconSize, weight: .semibold))
@@ -206,6 +212,35 @@ struct HomeView: View {
         .foregroundStyle(.white)
         .frame(width: V5P.W - margin * 2, height: V5P.ptToV5(44))
         .position(x: V5P.W / 2, y: 34.9)
+    }
+
+    /// 参考画像のヘッダー右上にある、斜めに流れる光の筋の装飾。参考画像を
+    /// ピクセル実測(起点≈(623,0)、終点≈(509,160)、原寸852幅)し、V5座標
+    /// (234幅)に換算した値で二次ベジェ曲線を描いている。真のモーション
+    /// ブラー調の先細りまでは再現していない簡易近似(構成: 太く淡いグロー
+    /// 用のストローク+細く明るい芯のストロークを重ねてぼかす)。ヘッダー
+    /// より下のカード類と重ならないよう、`loadedScreen`内で`homeHeader`の
+    /// 直前(＝背後のレイヤー)にのみ配置している — 2026-10-02のHQ指示
+    /// 「アプリ本体の画面は単色背景」はこの装飾の対象外として、ヘッダー
+    /// 領域に限定したスコープで追加した。
+    private var homeHeaderStreak: some View {
+        ZStack {
+            HomeHeaderStreakShape()
+                .stroke(
+                    LinearGradient(colors: [V5P.cyan.opacity(0.5), .clear], startPoint: .top, endPoint: .bottom),
+                    style: StrokeStyle(lineWidth: 16, lineCap: .round)
+                )
+                .blur(radius: 9)
+            HomeHeaderStreakShape()
+                .stroke(
+                    LinearGradient(colors: [.white, V5P.cyan, .clear], startPoint: .top, endPoint: .bottom),
+                    style: StrokeStyle(lineWidth: 2, lineCap: .round)
+                )
+                .blur(radius: 1)
+        }
+        .frame(width: V5P.W, height: 62, alignment: .top)
+        .position(x: V5P.W / 2, y: 31)
+        .allowsHitTesting(false)
     }
 
     private static let changeUpColor = Color(red: 214.0 / 255, green: 83.0 / 255, blue: 109.0 / 255)
@@ -326,6 +361,7 @@ struct HomeView: View {
         let speeches = Array(viewModel.recentSpeeches.prefix(3))
 
         return V5Viewport {
+            homeHeaderStreak
             homeHeader
 
             ScrollView(.vertical, showsIndicators: false) {
@@ -671,4 +707,15 @@ private extension FXPairUI {
     var baseCurrency: String { String(symbol.prefix(3)) }
     var quoteCurrency: String { String(symbol.suffix(3)) }
     var displaySymbol: String { "\(baseCurrency)/\(quoteCurrency)" }
+}
+
+/// `homeHeaderStreak`が使う曲線。座標は`homeHeaderStreak`のドキュメント
+/// コメント参照(参考画像実測→V5座標換算済み)。
+private struct HomeHeaderStreakShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: 173, y: -6))
+        path.addQuadCurve(to: CGPoint(x: 138, y: 56), control: CGPoint(x: 200, y: 18))
+        return path
+    }
 }
