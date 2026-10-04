@@ -481,7 +481,27 @@ struct V5BottomBar: View {
     /// 変更。コンテンツ高さが従来の約30.2ptから約32.2ptに伸びるため、絶対条件
     /// 「カプセル内寸40ptを超えないこと」を満たすか`padding.top`(初期値9pt)を
     /// CI実機キャプチャで実測して確認する必要がある。
-    private static let barHeight: CGFloat = 40
+    ///
+    /// HQ指示(2026-10-04)「フッターの改修から入ろう、参考画像と高さを合わせて」
+    /// を受け、`bottom-tabbar-reference-v2-capsule.png`を改めてPythonで座標
+    /// 実測し直した(カプセル本体のみ、選択グローの膨らみや前回の高解像度
+    /// 参考画像の記憶値には頼らず、リポジトリに現存するこの1枚から直接測定)。
+    /// 結果: リム上端y≈392・下端y≈598(カプセル高さ≈206px)、左端x≈85・
+    /// 右端x≈1450(カプセル幅≈1365px) — 幅:高さ比≈6.63:1。これは前回の
+    /// 「6〜7:1」という粗い近似よりも細長い側の値で、既存のbarWidth:barHeight=
+    /// 224:40(≈5.6:1)は参考画像よりかなり寸胴(高さが相対的に大きすぎる)
+    /// だったと判明した。横幅224(既存カードの左右余白10ptに合わせた基準)は
+    /// 変えず、比率を合わせる形で高さのみ40→34(224/6.63≈33.8)に再縮小した。
+    ///
+    /// あわせて、選択タブ(「分析」相当、現在は最初のタブ=ホームで代用して
+    /// 実測)と非選択タブ(「ホーム」)の双方をズームして実測し直したところ、
+    /// 旧ドキュメントコメントに記録されていた「上の余白:下の余白≈10:1」という
+    /// 値は誤りだったと判明した(どの参考画像から得た数値か特定できず、
+    /// 現存するこの1枚を直接測り直すと上≈45〜47px・下≈45〜50pxでほぼ均等
+    /// 「1:1」に近い — 選択時の下線はこの下側余白の中に収まって描かれており、
+    /// 下側余白自体を追加で押し広げてはいない)。この実測に基づき、`tab`内の
+    /// `padding.top`も均等配分前提に作り直した(詳細は下記`tab`のコメント)。
+    private static let barHeight: CGFloat = 34
     private static let iconsWidth: CGFloat = 214
     private static let barWidth: CGFloat = 224
     private static let bottomMargin: CGFloat = 4
@@ -564,7 +584,7 @@ struct V5BottomBar: View {
         // VStackコンテンツ(アイコン+文字+下線)の見かけの大きさに
         // 合わせるのではなく、`.frame(maxHeight:.infinity)`適用後の
         // タブセル全体を背景として扱い、直径を`barHeight`に固定した。
-        VStack(spacing: 3) {
+        VStack(spacing: 2) {
             icon(isSelected)
                 .frame(height: 14)
                 .foregroundStyle(gradient)
@@ -577,14 +597,17 @@ struct V5BottomBar: View {
                 .shadow(color: V5P.cyan.opacity(0.7), radius: 2)
                 .opacity(isSelected ? 1 : 0)
         }
-        // HQ最終仕様(アイコン14pt・ラベル8pt/行高10pt固定)適用後、コンテンツ
-        // 高さが約30.2pt→約32.2ptに伸びたため、padding.top=9ptのままではCI実機
-        // キャプチャで下線がカプセル下端(40pt)を約1.2pt(実測約6px)はみ出し、
-        // `.clipShape`で下線下部が欠けて表示される回帰が確認された。絶対条件
-        // 「40ptを超えないこと」を満たす必要最小限の調整として7.5ptに縮小
-        // (9 - 1.2pt実測はみ出し分 に、サブピクセル誤差を見込んだ0.3pt余裕を
-        // 加えた値)。
-        .padding(.top, 7.5)
+        // HQ指示(2026-10-04)「フッターの改修、参考画像と高さを合わせて」を受け
+        // `barHeight`を40→34に縮小(`barHeight`のドキュメントコメント参照)した
+        // ため、従来のアイコン14pt・ラベル8pt/行高10pt固定のまま`VStack(spacing:
+        // 3)`だと中身の高さが約32.2ptとなり、34pt中にほぼ収まらない(上下
+        // 合計で1.8ptしか余白が残らず、サブピクセル誤差で下線がクリップされる
+        // リスクが高い)。HQの文字サイズ最終仕様(アイコン14pt・ラベル8pt)自体は
+        // 変えず、要素間の`spacing`のみ3→2に詰めてコンテンツ高さを約30.2ptへ
+        // 縮小し、34pt中に残る余白(約3.8pt)を参考画像の実測(上の余白:下の
+        // 余白≈1:1、上記`barHeight`コメント参照)に合わせて上下均等に近い
+        // 1.9ptへ割り振った。
+        .padding(.top, 1.9)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(
             Circle()
