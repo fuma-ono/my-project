@@ -1,0 +1,288 @@
+name: FX Event Analyzer UI Screenshots
+
+# HQ instruction "FX Event Analyzer UIスクリーンショット取得" (2026-09-18):
+# this environment cannot run an iOS Simulator (Linux sandbox, no Xcode),
+# so real-screen UI review has to happen through CI. This workflow reuses
+# the existing macOS iOS Build & Test setup (Xcode select / XcodeGen /
+# Simulator select) as much as possible, then:
+#   1. starts fx-event-analyzer-backend/scripts/ui-screenshot-mock-server.mjs
+#      — a small, dependency-free Node process that stands in for both
+#      Supabase Auth and the Backend Read API (GitHub-hosted macOS runners
+#      cannot run `supabase start`: no Docker support, so the real local
+#      Supabase stack fx-event-analyzer-backend-ci.yml uses on
+#      ubuntu-latest is not an option here). It is UI-screenshot-only
+#      fixture data, never used by production code or any other test.
+#   2. builds and runs the FXEventAnalyzerUIScreenshots scheme (a new,
+#      separate scheme/target — project.yml — from the FXEventAnalyzer
+#      scheme fx-event-analyzer-ios-build.yml uses, so that workflow is
+#      completely unaffected), which drives the real, unmodified app
+#      through Login and the 7 required screens and captures an
+#      XCTAttachment screenshot of each.
+#   3. exports those screenshots from the .xcresult bundle and uploads
+#      them as a GitHub Actions Artifact for HQ to download.
+#
+# No app UI code, DB, API, or existing test/workflow is touched by this
+# workflow — see docs/projects/fx-event-analyzer/README.md and this
+# workflow's own commit message for the full "何を変えていないか" list.
+
+on:
+  push:
+    paths:
+      - "fx-event-analyzer/**"
+      - "fx-event-analyzer-backend/scripts/ui-screenshot-mock-server.mjs"
+      - ".github/workflows/fx-event-analyzer-ui-screenshots.yml"
+  pull_request:
+    paths:
+      - "fx-event-analyzer/**"
+      - "fx-event-analyzer-backend/scripts/ui-screenshot-mock-server.mjs"
+      - ".github/workflows/fx-event-analyzer-ui-screenshots.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  screenshots:
+    runs-on: macos-15
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: fx-event-analyzer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project from project.yml
+        run: xcodegen generate
+
+      - name: Cache Swift Package Manager artifacts
+        uses: actions/cache@v4
+        with:
+          path: fx-event-analyzer/DerivedData/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('fx-event-analyzer/project.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Resolve Swift Package dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project FXEventAnalyzer.xcodeproj \
+            -scheme FXEventAnalyzerUIScreenshots \
+            -derivedDataPath DerivedData
+
+      - name: Select an available iPhone Simulator
+        id: iphone
+        run: |
+          DEVICE_NAME=$(xcrun simctl list devices available -j \
+            | jq -r '.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name | startswith("iPhone")) | .name' \
+            | head -n1)
+          if [ -z "$DEVICE_NAME" ]; then
+            echo "No available iPhone simulator found on this runner image." >&2
+            exit 1
+          fi
+          echo "Using iPhone simulator: $DEVICE_NAME"
+          echo "device_name=$DEVICE_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Select an available iPad Simulator
+        id: ipad
+        run: |
+          DEVICE_NAME=$(xcrun simctl list devices available -j \
+            | jq -r '.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name | startswith("iPad")) | .name' \
+            | head -n1)
+          echo "Using iPad simulator: ${DEVICE_NAME:-<none found>}"
+          echo "device_name=$DEVICE_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Start UI-screenshot mock server (Auth + Backend fixture)
+        working-directory: fx-event-analyzer-backend
+        run: |
+          node scripts/ui-screenshot-mock-server.mjs 8090 > /tmp/ui-screenshot-mock-server.log 2>&1 &
+          echo $! > /tmp/ui-screenshot-mock-server.pid
+          for _ in $(seq 1 30); do
+            if curl -sf "http://127.0.0.1:8090/api/v1/home" > /dev/null; then
+              echo "Mock server is up."
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "::error::Mock server did not become ready." >&2
+          cat /tmp/ui-screenshot-mock-server.log >&2
+          exit 1
+
+      - name: Build for testing
+        env:
+          SUPABASE_URL: "http://127.0.0.1:8090"
+          SUPABASE_ANON_KEY: "ui-screenshot-mock-anon-key"
+          API_BASE_URL: "http://127.0.0.1:8090/api/v1"
+        run: |
+          xcodebuild build-for-testing \
+            -project FXEventAnalyzer.xcodeproj \
+            -scheme FXEventAnalyzerUIScreenshots \
+            -destination "platform=iOS Simulator,name=${{ steps.iphone.outputs.device_name }}" \
+            -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            SUPABASE_URL="$SUPABASE_URL" \
+            SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            API_BASE_URL="$API_BASE_URL"
+
+      - name: Run UI tests + capture screenshots (iPhone)
+        run: |
+          xcodebuild test-without-building \
+            -project FXEventAnalyzer.xcodeproj \
+            -scheme FXEventAnalyzerUIScreenshots \
+            -destination "platform=iOS Simulator,name=${{ steps.iphone.outputs.device_name }}" \
+            -derivedDataPath DerivedData \
+            -resultBundlePath DerivedData/iPhone.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Run UI tests + capture screenshots (iPad)
+        if: steps.ipad.outputs.device_name != ''
+        run: |
+          xcodebuild test-without-building \
+            -project FXEventAnalyzer.xcodeproj \
+            -scheme FXEventAnalyzerUIScreenshots \
+            -destination "platform=iOS Simulator,name=${{ steps.ipad.outputs.device_name }}" \
+            -derivedDataPath DerivedData \
+            -resultBundlePath DerivedData/iPad.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Stop UI-screenshot mock server
+        if: always()
+        run: kill "$(cat /tmp/ui-screenshot-mock-server.pid)" 2>/dev/null || true
+
+      - name: Export screenshots from iPhone .xcresult
+        if: always()
+        run: |
+          mkdir -p Screenshots/iPhone-raw
+          if [ -d "DerivedData/iPhone.xcresult" ]; then
+            xcrun xcresulttool export attachments \
+              --path DerivedData/iPhone.xcresult \
+              --output-path Screenshots/iPhone-raw \
+              | tee Screenshots/iPhone-raw/export.log \
+              || echo "::warning::xcresulttool export attachments failed for iPhone; raw .xcresult is still uploaded."
+          else
+            echo "::warning::No iPhone .xcresult bundle was produced (test run likely failed before producing results)."
+          fi
+
+      - name: Export screenshots from iPad .xcresult
+        if: always() && steps.ipad.outputs.device_name != ''
+        run: |
+          mkdir -p Screenshots/iPad-raw
+          if [ -d "DerivedData/iPad.xcresult" ]; then
+            xcrun xcresulttool export attachments \
+              --path DerivedData/iPad.xcresult \
+              --output-path Screenshots/iPad-raw \
+              | tee Screenshots/iPad-raw/export.log \
+              || echo "::warning::xcresulttool export attachments failed for iPad; raw .xcresult is still uploaded."
+          else
+            echo "::warning::No iPad .xcresult bundle was produced."
+          fi
+
+      # `xcresulttool export attachments`'s manifest.json schema isn't
+      # documented and doesn't match the key names ("name" / "exportedFileName")
+      # this step originally guessed at (confirmed via a real CI run: the
+      # rename loop silently matched zero attachments, so Screenshots/iPhone
+      # was never created). Its own stdout is a stable, observed format
+      # instead ("File: <uuid>.png, suggested name: "<name>.png""), captured
+      # to export.log by the export steps above — parse that instead of the
+      # manifest.
+      - name: Rename exported screenshots to their attachment names (best-effort)
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, shutil
+
+          pattern = re.compile(r'^File: (\S+), suggested name: "(.+)"$')
+
+          for platform in ("iPhone", "iPad"):
+              raw = pathlib.Path(f"Screenshots/{platform}-raw")
+              log = raw / "export.log"
+              if not log.exists():
+                  continue
+              out = pathlib.Path(f"Screenshots/{platform}")
+              out.mkdir(parents=True, exist_ok=True)
+              for line in log.read_text().splitlines():
+                  m = pattern.match(line.strip())
+                  if not m:
+                      continue
+                  filename, name = m.group(1), m.group(2)
+                  src = raw / filename
+                  if not src.exists() or not name.endswith(".png"):
+                      continue
+                  safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in name)
+                  dest = out / safe_name
+                  shutil.copyfile(src, dest)
+                  print(f"{src} -> {dest}")
+          PY
+
+      # GitHub Actions Artifacts are served through the Actions API's
+      # redirect to Azure Blob Storage; Claude's sandboxed review session
+      # cannot reach that host through its network policy, so it can never
+      # download the artifact above itself — every prior round required a
+      # human to download and re-upload the zip by hand. Committing just
+      # the iPhone PNGs into the repo (outside fx-event-analyzer/**, so
+      # this push doesn't retrigger this or any other path-filtered
+      # workflow; [skip ci] as a second guard) makes them reachable via the
+      # ordinary Git Contents API instead, which is not blocked — no human
+      # download/upload round-trip needed to review a screen.
+      - name: Commit iPhone screenshots into the repo for direct review
+        if: always() && github.event_name == 'push'
+        run: |
+          mkdir -p ../ci-screenshots/iPhone
+          rm -f ../ci-screenshots/iPhone/*.png
+          if [ -d "Screenshots/iPhone" ]; then
+            cp Screenshots/iPhone/*.png ../ci-screenshots/iPhone/ 2>/dev/null || true
+          fi
+          cd ..
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Concurrent runs (a manual re-run, or a push/pull_request pair)
+          # can advance origin's branch at any point — confirmed via two
+          # real CI failures: a plain "fetch first" rejection, and later a
+          # rebase CONFLICT (rename/delete) once two runs' commits each
+          # replaced every file in this directory with freshly-named PNGs
+          # at the same time, which git's rename detection couldn't
+          # reconcile. Reset onto the latest tip and rebuild the commit
+          # fresh each attempt instead of rebasing an existing commit onto
+          # it — nothing about a prior attempt's commit needs preserving,
+          # only the final directory content (this run's own screenshots)
+          # does.
+          for attempt in 1 2 3; do
+            git fetch origin "${GITHUB_REF_NAME}"
+            git reset --mixed "origin/${GITHUB_REF_NAME}"
+            git add ci-screenshots/iPhone
+            if git diff --cached --quiet; then
+              echo "No screenshot changes to commit."
+              break
+            fi
+            git commit -m "ci: update iPhone UI screenshots [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}" && break
+            echo "Push attempt ${attempt} rejected, retrying."
+          done
+
+      - name: Upload screenshots artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fx-event-analyzer-ui-screenshots
+          path: |
+            fx-event-analyzer/Screenshots/**
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload raw .xcresult bundles (fallback for manual inspection)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fx-event-analyzer-ui-screenshots-xcresult
+          path: |
+            fx-event-analyzer/DerivedData/iPhone.xcresult
+            fx-event-analyzer/DerivedData/iPad.xcresult
+          if-no-files-found: ignore
+          retention-days: 30

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+
+# Secrets — never commit. See .env.example for what's required.
+.env
+.env.*
+!.env.example
+
+# Supabase CLI local state
+supabase/.branches/
+supabase/.temp/
