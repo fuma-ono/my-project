@@ -151,20 +151,29 @@ struct HomeView: View {
     /// `.minimumScaleFactor`を0.8→0.55に広げ、必要な分だけ自動的に等比
     /// 縮小されるようにした(アイコン側は固定サイズのため、CI実機キャプチャ
     /// で実際に収まっているか要確認)。
+    ///
+    /// 6回目の調整(2026-10-04、HQ「通知アイコンとアカウントアイコンは
+    /// 大きくしなくて良かった、戻して」「FX Event Analyzerは少し大きく」):
+    /// ベル・アカウントは拡大前の、参考画像実測に基づく値(notifIconSize
+    /// 25.0pt・accountIconSize 23.6pt、通知ドットも9.4ptへ)に戻した
+    /// (ロゴアイコンは名指しされていないため40ptのまま)。逆にタイトル文字は
+    /// (FX・Event Analyzerとも)40→44ptへ拡大。アイコン縮小で空いた幅を
+    /// 活かし、左右マージン(8→12pt)・ロゴ/タイトル間隔(2→4pt)・
+    /// ベル/アカウント間隔(4→8pt)も少し広げ直した。
     private static let accountIconColor = Color(red: 133.0 / 255, green: 175.0 / 255, blue: 233.0 / 255)
     private static let notificationDotColor = Color(red: 252.0 / 255, green: 40.0 / 255, blue: 85.0 / 255)
 
     private var homeHeader: some View {
-        let logoTitleGap = V5P.ptToV5(2)
-        let iconGap = V5P.ptToV5(4)
-        let margin = V5P.ptToV5(8)
+        let logoTitleGap = V5P.ptToV5(4)
+        let iconGap = V5P.ptToV5(8)
+        let margin = V5P.ptToV5(12)
         let logoHeight = V5P.ptToV5(40.0)
         let logoWidth = logoHeight * (805.0 / 480.0)
-        let fxTextSize = V5P.ptToV5(40.0)
-        let titleTextSize = V5P.ptToV5(40.0)
-        let notifIconSize = V5P.ptToV5(40.0)
-        let accountIconSize = V5P.ptToV5(40.0)
-        let notificationDotSize = V5P.ptToV5(12.0)
+        let fxTextSize = V5P.ptToV5(44.0)
+        let titleTextSize = V5P.ptToV5(44.0)
+        let notifIconSize = V5P.ptToV5(25.0)
+        let accountIconSize = V5P.ptToV5(23.6)
+        let notificationDotSize = V5P.ptToV5(9.4)
         let logoVerticalCorrection = V5P.ptToV5(-11.0 / 6.0)
         return HStack(spacing: 0) {
             BrandMark(width: logoWidth)
