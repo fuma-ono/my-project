@@ -119,6 +119,18 @@ struct HomeView: View {
     /// がtrueの時だけ表示するよう変更した。通知機能自体はバックエンド未実装
     /// (`NotificationsStore`のドキュメントコメント参照)のため、現時点では
     /// 常にfalse=非表示のままになる。
+    ///
+    /// 4回目の調整(2026-10-04、HQ「アイコンとタイトルと通知マークとアイコン
+    /// マークを参考画像と同じ位置に、もう少し上」「アイコンの大きさをもっと
+    /// 大きく」「FXの文字が小さく見えるので大きく」): 参考画像を見直すと、
+    /// 「FX」は「Event Analyzer」と同じ文字サイズの色違いではなく、はるかに
+    /// 大きい独立したロゴ文字だった(実測: FX文字高さ64px→30.2pt、Event
+    /// Analyzer文字高さ38px→17.9pt、比率≈1.68倍)。これまで両方とも同じ
+    /// `.font()`を1回だけ適用していたため、「FX」が実際より小さく表示されて
+    /// いた。Text連結の各セグメントに個別の`.font()`を付けられるSwiftUIの
+    /// 性質を使い、「FX」だけ大きい専用フォントサイズに分離した。あわせて
+    /// ベル・アカウント・ロゴアイコンも一回り拡大し、ヘッダー全体の位置も
+    /// さらに2pt(V5単位1.16)上へ寄せた(36.1→34.9)。
     private static let accountIconColor = Color(red: 133.0 / 255, green: 175.0 / 255, blue: 233.0 / 255)
     private static let notificationDotColor = Color(red: 252.0 / 255, green: 40.0 / 255, blue: 85.0 / 255)
 
@@ -126,21 +138,22 @@ struct HomeView: View {
         let logoTitleGap = V5P.ptToV5(6)
         let iconGap = V5P.ptToV5(12)
         let margin = V5P.ptToV5(16)
-        let logoHeight = V5P.ptToV5(24)
+        let logoHeight = V5P.ptToV5(30)
         let logoWidth = logoHeight * (805.0 / 480.0)
-        let notifIconSize = V5P.ptToV5(25.0)
-        let accountIconSize = V5P.ptToV5(23.6)
+        let fxTextSize = V5P.ptToV5(40.0)
+        let titleTextSize = V5P.ptToV5(24.0)
+        let notifIconSize = V5P.ptToV5(30.0)
+        let accountIconSize = V5P.ptToV5(28.0)
         let notificationDotSize = V5P.ptToV5(9.4)
         let logoVerticalCorrection = V5P.ptToV5(-11.0 / 6.0)
         return HStack(spacing: 0) {
             BrandMark(width: logoWidth)
                 .offset(y: logoVerticalCorrection)
             (
-                Text("F").foregroundStyle(DesignTokens.Colors.brandTitleAccentF)
-                + Text("X").foregroundStyle(DesignTokens.Colors.brandTitleAccentX)
-                + Text(" Event Analyzer").foregroundStyle(.white)
+                Text("F").font(.system(size: fxTextSize, weight: .heavy)).foregroundStyle(DesignTokens.Colors.brandTitleAccentF)
+                + Text("X").font(.system(size: fxTextSize, weight: .heavy)).foregroundStyle(DesignTokens.Colors.brandTitleAccentX)
+                + Text(" Event Analyzer").font(.system(size: titleTextSize, weight: .semibold)).foregroundStyle(.white)
             )
-            .font(.system(size: V5P.ptToV5(24), weight: .semibold))
             .padding(.leading, logoTitleGap)
             Spacer()
             Image(systemName: "bell")
@@ -161,7 +174,7 @@ struct HomeView: View {
         }
         .foregroundStyle(.white)
         .frame(width: V5P.W - margin * 2, height: V5P.ptToV5(44))
-        .position(x: V5P.W / 2, y: 36.1)
+        .position(x: V5P.W / 2, y: 34.9)
     }
 
     private static let changeUpColor = Color(red: 214.0 / 255, green: 83.0 / 255, blue: 109.0 / 255)

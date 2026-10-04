@@ -990,7 +990,10 @@ struct V5Header: View {
     /// 37.8でもまだ低いとのフィードバックを受け、Home画面の`homeHeader`
     /// (`HomeView.swift`、全く同じ実測根拠を共有)と同じ量だけ追加で
     /// 3pt(V5単位1.75)引き上げ、36.1に変更した。
-    private static let headerCenterY: CGFloat = 36.1
+    ///
+    /// さらに追加調整(2026-10-04、HQ「もう少し上」): `homeHeader`と同じ量
+    /// だけ追加で2pt(V5単位1.16)引き上げ、34.9に変更した。
+    private static let headerCenterY: CGFloat = 34.9
 
     var body: some View {
         HStack(spacing: 0) {
