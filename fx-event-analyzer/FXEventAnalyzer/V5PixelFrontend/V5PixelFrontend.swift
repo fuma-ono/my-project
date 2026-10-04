@@ -967,6 +967,12 @@ struct V5Header: View {
     private static let detailTitleSize = V5P.ptToV5(44)
     private static let chevronSize = V5P.ptToV5(26)
     private static let chevronTitleGap = V5P.ptToV5(8)
+    /// HQ指示(2026-10-04)「FX Event Analyzerと＜が付く画面を除くヘッダーは
+    /// 文字の開始をもう少し右側にしてください」: Home(`homeHeader`、別実装)
+    /// と＜付き詳細画面(`back == true`)は対象外、戻るボタンの無いメインタブ
+    /// 画面(指標一覧・検索・設定・カレンダー等)のみタイトル先頭に余白を追加。
+    /// CI実機キャプチャで確認しながら調整する前提の初期値として8pt。
+    private static let mainTabTitleLeadingInset = V5P.ptToV5(8)
 
     /// HQ指示(2026-10-01、追加調整)「＜の位置はタイトルの中心線上に」
     /// 「星の位置も全て平行線で同じ位置に」。`HStack`の既定`.center`整列は
@@ -1019,6 +1025,7 @@ struct V5Header: View {
             V5JPFont.text(title, size: back ? Self.detailTitleSize : Self.mainTabTitleSize)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
+                .padding(.leading, back ? 0 : Self.mainTabTitleLeadingInset)
             Spacer()
             // HQ指示(2026-10-01、3回目のヘッダー調整): アイコンのウェイトを
             // タイトルのSemiboldと揃える(以前は無指定＝regularだった)。
