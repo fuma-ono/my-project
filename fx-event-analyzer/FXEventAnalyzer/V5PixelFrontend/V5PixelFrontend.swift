@@ -321,8 +321,117 @@ struct V5Button: View {
 
 struct V5BottomBar: View {
     @Binding var selected: Int
-    /// 方向転換(2026-09-30、HQより3枚目の参考画像
-    /// `docs/projects/fx-event-analyzer/mockups/bottom-tabbar-reference-v2-capsule.png`):
+
+    /// 10回目の全面刷新(2026-10-04、HQより新しい参考画像が提供され
+    /// 「タブはこのデザインにして」): これまでの「浮遊するカプセル」形状
+    /// (下記、旧ドキュメントコメントに記録)を廃止し、画面幅いっぱいの帯
+    /// (フローティングではなく左右マージン無し)+上端のうっすらした
+    /// 区切り線、という新しいデザインに全面的に作り直した。
+    ///
+    /// 参考画像(1806×871、ホームタブ選択中)をPythonでピクセル実測した
+    /// 結果(デバイス幅402pt基準、スケール402/1806≒0.2226pt/px):
+    /// - 5タブは等間隔(タブセル幅361px≒80.4pt)で画面全幅に並んでおり、
+    ///   左右マージンや浮遊する外枠は無い。
+    /// - 上端の区切り線はごく淡い(背景RGB(0,17,38)に対しピーク
+    ///   RGB(1,26,55)程度の控えめなハイライト)。
+    /// - 選択中(ホーム)のアイコン色はほぼ純粋なシアン(実測コア値
+    ///   RGB(0,236-238,253-255)、既存`V5P.cyan`とほぼ一致)で、アイコン・
+    ///   ラベル双方の周囲に柔らかい発光(グロー)が広がっている。
+    /// - 非選択(指標・カレンダー・検索・設定)のアイコン・ラベルは単色の
+    ///   淡いラベンダー寄りの水色(実測RGB(115-130,160-178,214-233)、
+    ///   上下グラデーションでは無く平坦な単色)で、グローは無い。
+    /// - 旧実装にあった選択インジケータの下線(Capsule)は、この参考画像
+    ///   には存在しない(選択状態はアイコン・ラベルの色とグローのみで
+    ///   表現されている)ため削除した。
+    /// - アイコン形状: ホームは塗りつぶしの家(`house.fill`、変更無し)。
+    ///   指標一覧は従来の塗りつぶし棒グラフから一転して、アウトライン
+    ///   (線画)の棒グラフだったため`V5BarsIcon`を`.stroke`ベースに変更
+    ///   した。カレンダー・検索・設定は従来通りアウトライン寄りの形状
+    ///   (`calendar`/`magnifyingglass`/自前`V5GearIcon`)のままで大きな
+    ///   齟齬は無かったため形状自体は維持している。
+    /// - 縦方向の実測(区切り線を基準に、アイコン上端までの余白28px≒6.2pt、
+    ///   アイコン高さ≈85px≒18.9pt、アイコン〜ラベル間21px≒4.7pt、
+    ///   ラベル高さ≈40px≒8.9pt、ラベル下端〜画面最下端113px≒25.1pt)から、
+    ///   帯全体の高さ(区切り線〜画面最下端)≈302px≒67.2pt→V5単位
+    ///   `ptToV5(67.2)≒39.1`を算出し、`barHeight`を採用した。帯は画面下端に
+    ///   フラッシュするため`bottomMargin`は無し(0)にした。
+    private static let barHeight: CGFloat = 39
+    private static let topPadding: CGFloat = V5P.ptToV5(6.2)
+    private static let iconLabelGap: CGFloat = V5P.ptToV5(4.7)
+    /// SF Symbolsベースのアイコン(`.font(.system(size:14,...))`で描画)と、
+    /// 独自描画アイコン(`V5BarsIcon`/`V5GearIcon`、内部は実測済みの固定pt値)
+    /// の両方を同じ最終サイズに正規化するための比率。旧実装からそのまま
+    /// 踏襲している仕組み(詳細は`tab`内コメント参照)。
+    private static let tabIconSize: CGFloat = V5P.ptToV5(19)
+    private static let tabIconScale: CGFloat = tabIconSize / 14
+    private static let tabLabelSize: CGFloat = V5P.ptToV5(9)
+    private static let selectedColor = V5P.cyan
+    private static let unselectedColor = Color(red: 128.0 / 255, green: 174.0 / 255, blue: 228.0 / 255)
+    private static let dividerColor = Color(red: 0.35, green: 0.62, blue: 0.92).opacity(0.3)
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Rectangle().fill(Self.dividerColor).frame(height: 0.6)
+            HStack(spacing: 0) {
+                tab(0, "ホーム") { _ in
+                    Image(systemName: "house.fill").font(.system(size: 14, weight: .semibold))
+                }
+                tab(1, "指標") { _ in
+                    V5BarsIcon()
+                }
+                tab(2, "カレンダー") { _ in
+                    Image(systemName: "calendar").font(.system(size: 14, weight: .semibold))
+                }
+                tab(3, "検索") { _ in
+                    Image(systemName: "magnifyingglass").font(.system(size: 14, weight: .semibold))
+                }
+                tab(4, "設定") { _ in
+                    V5GearIcon()
+                }
+            }
+        }
+        .frame(width: V5P.W, height: Self.barHeight, alignment: .top)
+        .position(x: V5P.W / 2, y: V5P.H - Self.barHeight / 2)
+    }
+
+    /// `Button`ではなく`.onTapGesture`を使っている理由(旧実装から踏襲):
+    /// 実機相当のCIキャプチャで確認したところ、`Button` + `.buttonStyle(.plain)`
+    /// でも選択中タブの背後にシステム既定のハイライト用カプセルが写り込んで
+    /// いたため。
+    @ViewBuilder func tab(_ index: Int, _ title: String, @ViewBuilder icon: (Bool) -> some View) -> some View {
+        let isSelected = index == selected
+        let color = isSelected ? Self.selectedColor : Self.unselectedColor
+        VStack(spacing: Self.iconLabelGap) {
+            icon(isSelected)
+                .scaleEffect(Self.tabIconScale, anchor: .bottom)
+                .frame(height: Self.tabIconSize)
+                .foregroundStyle(color)
+                .shadow(color: isSelected ? color.opacity(0.9) : .clear, radius: isSelected ? 5 : 0)
+                .shadow(color: isSelected ? color.opacity(0.6) : .clear, radius: isSelected ? 10 : 0)
+            V5JPFont.text(title, size: Self.tabLabelSize)
+                .foregroundStyle(color)
+                .shadow(color: isSelected ? color.opacity(0.7) : .clear, radius: isSelected ? 4 : 0)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .padding(.top, Self.topPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selected = index
+        }
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// 旧実装(2026-09-30〜2026-10-04、浮遊するカプセル形状)の変遷記録。
+/// 2026-10-04の全面刷新(上記`V5BottomBar`冒頭コメント参照)でこの形状
+/// 自体は廃止されたが、各アイコン(`V5BarsIcon`/`V5AnalysisIcon`/
+/// `V5GearIcon`)のピクセル実測に基づく自前描画という成果物自体は今回も
+/// (一部`.stroke`化以外は)引き継いでいるため、実装記録として残している。
+///
+/// 方向転換(2026-09-30、HQより3枚目の参考画像
+/// `docs/projects/fx-event-analyzer/mockups/bottom-tabbar-reference-v2-capsule.png`):
     /// 「タブのデザインがダサい、画像を完全再現して」との明示指示を受け、
     /// 前回(v1画像ベースの画面幅いっぱいの帯)から、この画像通りの浮遊する
     /// カプセル(スタジアム型)に作り直した。前回「青い線はいらない」との
@@ -570,17 +679,7 @@ struct V5BottomBar: View {
     /// `bottomMargin`を6→3に縮小した。新しいコンテンツ合計高さ
     /// (11+1+11+1+2.2=26.2)に対し上下均等余白1.9pt/1.9ptを維持する形で
     /// `barHeight`を33→30に調整した(26.2+1.9×2=30)。
-    private static let barHeight: CGFloat = 30
-    private static let iconsWidth: CGFloat = 214
-    private static let barWidth: CGFloat = 224
-    /// アイコンの表示サイズ(旧14→11、7回目の調整)。`scaleEffect`で
-    /// アイコンの種類(SF Symbols/`V5BarsIcon`/`V5GearIcon`)によらず一律に
-    /// 縮小する — 各カスタムアイコン内部の実測済み形状比率を壊さないため。
-    private static let tabIconSize: CGFloat = 11
-    private static let tabIconScale: CGFloat = tabIconSize / 14
-    /// ラベルの文字サイズ(8回目の調整、上記`barHeight`コメント参照、
-    /// 9→7が最終値)。
-    private static let tabLabelSize: CGFloat = 7
+    ///
     /// HQ指示(2026-10-04)「デザインは変えずに、この画像のヘッダーとタブの位置を
     /// 固定としてください」で送付された新しいHome参考画像(852×1846、フル幅の
     /// 旧スタイルタブバー)をPythonで実測。カプセル型(浮遊)と帯型(画面幅
@@ -600,122 +699,19 @@ struct V5BottomBar: View {
     /// 8回目の調整(2026-10-04、HQ「参考画像の方がもっと低いから下げて」、
     /// `barHeight`のドキュメントコメント参照)で6→3に縮小し、カプセルを
     /// 画面下端に近づけた。
-    private static let bottomMargin: CGFloat = 3
-    private static let iconGradient = LinearGradient(
-        colors: [Color(red: 0.90, green: 0.97, blue: 1.0), Color(red: 0.45, green: 0.64, blue: 0.86)],
-        startPoint: .top, endPoint: .bottom
-    )
-    private static let selectedIconGradient = LinearGradient(
-        colors: [V5P.cyan, Color(red: 0.0, green: 0.48, blue: 0.945)],
-        startPoint: .top, endPoint: .bottom
-    )
-    var body: some View {
-        HStack(spacing: 0) {
-            tab(0, "ホーム") { _ in
-                Image(systemName: "house.fill").font(.system(size: 14, weight: .semibold))
-            }
-            tab(1, "指標") { _ in
-                V5BarsIcon()
-            }
-            // HQ指示(2026-10-03、画面構成全面更新)「旧『分析』タブは廃止、
-            // 5タブは『ホーム/指標/カレンダー/検索/設定』」。旧`V5AnalysisIcon`
-            // (上記ドキュメントコメント参照)は使わず、暫定でSF Symbols
-            // `calendar`を使用(カレンダー専用の自前描画アイコンは今回のスコープ
-            // 外 — 画面内容自体がSCR-010としてまだプレースホルダーのため)。
-            tab(2, "カレンダー") { _ in
-                Image(systemName: "calendar").font(.system(size: 14, weight: .semibold))
-            }
-            tab(3, "検索") { _ in
-                Image(systemName: "magnifyingglass").font(.system(size: 14, weight: .semibold))
-            }
-            tab(4, "設定") { _ in
-                V5GearIcon()
-            }
-        }
-        // 9回目の調整(2026-10-04、HQ「カプセルの縁取り・背景も参考画像の
-        // ような境界のないフラットな見た目に変えて」): カプセル本体の塗り
-        // (`.background`)と外枠線(`.overlay`の`capsuleRimGradient`
-        // ストローク)を削除し、アイコン・ラベルが背景に直接浮かぶ境界の
-        // 無い見た目にした。`clipShape`も背景が無くなり不要なため合わせて
-        // 削除。位置・間隔(`barWidth`/`barHeight`/`bottomMargin`)は今回の
-        // 対象外のため変更していない。
-        .frame(width: Self.iconsWidth, height: Self.barHeight)
-        .frame(width: Self.barWidth, height: Self.barHeight)
-        .position(x: V5P.W / 2, y: V5P.H - Self.bottomMargin - Self.barHeight / 2)
-    }
-    /// `Button`ではなく`.onTapGesture`を使っている理由: 実機相当のCIキャプチャ
-    /// で確認したところ、`Button` + `.buttonStyle(.plain)`でも選択中タブの
-    /// 背後にシステム既定のハイライト用カプセル(参考画像にはない)が写り込んで
-    /// いた。ボタンとしての既定の見た目を一切持たない`.onTapGesture`に置き換
-    /// えることで、参考画像通り背景なし・アイコンと文字の色/グリフのみで選択
-    /// 状態を表す見た目にした。
-    @ViewBuilder func tab(_ index: Int, _ title: String, @ViewBuilder icon: (Bool) -> some View) -> some View {
-        let isSelected = index == selected
-        let gradient = isSelected ? Self.selectedIconGradient : Self.iconGradient
-        // 下線(選択インジケータ)はVStackの一要素として常に領域を確保し
-        // opacityのみ切り替える構成にしている(2026-09-30訂正)。以前は
-        // `.overlay(alignment: .bottom)` + 固定`.padding(.bottom, 6)`で
-        // アイコンの高さと無関係にタブセル底部へ直接貼り付けていたため、
-        // 分析アイコンの高さを10.5pt→13ptに拡大した際にVStackの内容物が
-        // 伸びて下線が「分析」ラベルの文字に重なって表示される回帰が
-        // CIキャプチャで見つかった。VStackの通常の子要素にすることで、
-        // アイコンの高さに関わらずレイアウトが自動的に詰まらないようにした。
-        // グロー円は参考画像をピクセル実測した結果(2026-10-01訂正)、
-        // 外枠線は無く、中心から滑らかに透明へフェードする円で、直径は
-        // カプセルの内寸高さ(リム上端〜リム下端)とほぼ一致し、タブセル
-        // の上下中央(＝カプセル中央)を中心にしていると判明。そのため
-        // VStackコンテンツ(アイコン+文字+下線)の見かけの大きさに
-        // 合わせるのではなく、`.frame(maxHeight:.infinity)`適用後の
-        // タブセル全体を背景として扱い、直径を`barHeight`に固定した。
-        VStack(spacing: 1) {
-            icon(isSelected)
-                .scaleEffect(Self.tabIconScale, anchor: .bottom)
-                .frame(height: Self.tabIconSize)
-                .foregroundStyle(gradient)
-                .shadow(color: .black.opacity(0.35), radius: 1, y: 1)
-            // 「カレンダー」切れ回帰の教訓(上記`barHeight`コメント参照)から
-            // 安全策として追加。通常の4タブはこのサイズのまま1行に収まる
-            // ため見た目への影響は無く、万一レイアウトが変わって再び収まら
-            // なくなった場合に省略記号ではなく縮小で逃げるようにしている。
-            V5JPFont.text(title, size: Self.tabLabelSize).foregroundStyle(gradient)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .frame(height: 11)
-            Capsule()
-                .fill(LinearGradient(colors: [V5P.cyan, V5P.blue], startPoint: .top, endPoint: .bottom))
-                .frame(width: 16, height: 2.2)
-                .shadow(color: V5P.cyan.opacity(0.7), radius: 2)
-                .opacity(isSelected ? 1 : 0)
-        }
-        // 7〜8回目の調整(2026-10-04、`barHeight`のドキュメントコメント参照)で
-        // アイコン14→11・ラベル8→7(行高10→11)・`spacing`2→1に変更した結果、
-        // コンテンツ高さは11+1+11+1+2.2=26.2pt。上の余白:下の余白≈1:1(参考
-        // 画像実測、`barHeight`コメント参照)を維持するため、`barHeight`30に
-        // 対して上下余白を均等配分した1.9ptをそのまま維持している(偶然にも
-        // 前回値と同じになった)。
-        .padding(.top, 1.9)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(
-            Circle()
-                .fill(RadialGradient(colors: [V5P.cyan.opacity(0.42), V5P.cyan.opacity(0.16), .clear],
-                                      center: .center, startRadius: 1, endRadius: Self.barHeight / 2))
-                .frame(width: Self.barHeight, height: Self.barHeight)
-                .opacity(isSelected ? 1 : 0)
-        )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            selected = index
-        }
-        .accessibilityAddTraits(.isButton)
-    }
-}
+    ///
+    /// (2026-10-04、10回目の全面刷新でこのカプセル形状自体を廃止したため、
+    /// 上記の実装コードは削除した — 新しい実装は`V5BottomBar`冒頭の
+    /// ドキュメントコメントと、その直後の`body`/`tab`を参照。)
 
-/// 「指標一覧」タブのアイコン。参考画像(`bottom-tabbar-reference-v2-capsule.png`)
-/// を1px単位で実測した結果(棒3本、幅同一、下端揃え、高さ比≈0.40:0.68:1.0、
-/// 棒間の隙間≈棒幅の半分)をそのまま座標化した自前描画。SF Symbolsの近似
-/// (`chart.bar`)では実測比率と食い違っていたため、V5BottomBarのドキュメント
-/// コメントに記載の通りこちらに差し替えた。色は`.foregroundStyle(.foreground)`
-/// で呼び出し側(`tab`)が設定したグラデーションをそのまま継承する。
+/// 「指標一覧」タブのアイコン。棒3本・幅同一・下端揃え・高さ比
+/// (0.40:0.68:1.0)・棒間の隙間(棒幅の半分)という比率自体は旧参考画像
+/// (`bottom-tabbar-reference-v2-capsule.png`)の実測値をそのまま踏襲しているが
+/// (塗りつぶし→アウトラインの違いを除けば同じ比率で違和感が無かったため)、
+/// 塗り方自体は10回目の全面刷新(2026-10-04、`V5BottomBar`冒頭コメント参照)
+/// で提供された新しい参考画像で見ると明確にアウトライン(線画)だったため、
+/// `.fill`から`.stroke`に変更した。色は`.foregroundStyle(.foreground)`で
+/// 呼び出し側(`tab`)が設定した色をそのまま継承する。
 private struct V5BarsIcon: View {
     var body: some View {
         HStack(alignment: .bottom, spacing: 1.5) {
@@ -728,7 +724,7 @@ private struct V5BarsIcon: View {
 
     @ViewBuilder private func bar(heightFraction: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: 0.8)
-            .fill(.foreground)
+            .stroke(.foreground, lineWidth: 1.1)
             .frame(width: 3, height: 13 * heightFraction)
     }
 }
