@@ -139,20 +139,32 @@ struct HomeView: View {
     /// それぞれ詰めて必要な幅を確保した上、`.lineLimit(1)`+
     /// `.minimumScaleFactor(0.8)`を安全策として追加し、万一まだ収まらない
     /// 場合も省略記号ではなく等比縮小で収まるようにした。
+    ///
+    /// 5回目の調整(2026-10-04、HQ「アイコンもEvent AnalyzerもFXと同じ
+    /// 大きさにして」): 参考画像の実測比率(FXがEvent Analyzerの約1.68倍)
+    /// よりも、見た目の統一感を優先したいとのご指示のため、実測値ベースの
+    /// 差を付けるのをやめ、タイトル文字(FX・Event Analyzerとも40pt)と
+    /// アイコン(ベル・アカウント・ロゴとも40pt相当)を全て揃えた。402pt幅の
+    /// ヘッダーに収めるため、左右マージン(12→8pt)・ロゴ/タイトル間隔
+    /// (4→2pt)・ベル/アカウント間隔(8→4pt)をさらに詰めている。それでも
+    /// 文字列全体(「FX Event Analyzer」)は40pt均一だと幅が足りないため、
+    /// `.minimumScaleFactor`を0.8→0.55に広げ、必要な分だけ自動的に等比
+    /// 縮小されるようにした(アイコン側は固定サイズのため、CI実機キャプチャ
+    /// で実際に収まっているか要確認)。
     private static let accountIconColor = Color(red: 133.0 / 255, green: 175.0 / 255, blue: 233.0 / 255)
     private static let notificationDotColor = Color(red: 252.0 / 255, green: 40.0 / 255, blue: 85.0 / 255)
 
     private var homeHeader: some View {
-        let logoTitleGap = V5P.ptToV5(4)
-        let iconGap = V5P.ptToV5(8)
-        let margin = V5P.ptToV5(12)
-        let logoHeight = V5P.ptToV5(22)
+        let logoTitleGap = V5P.ptToV5(2)
+        let iconGap = V5P.ptToV5(4)
+        let margin = V5P.ptToV5(8)
+        let logoHeight = V5P.ptToV5(40.0)
         let logoWidth = logoHeight * (805.0 / 480.0)
         let fxTextSize = V5P.ptToV5(40.0)
-        let titleTextSize = V5P.ptToV5(24.0)
-        let notifIconSize = V5P.ptToV5(30.0)
-        let accountIconSize = V5P.ptToV5(28.0)
-        let notificationDotSize = V5P.ptToV5(9.4)
+        let titleTextSize = V5P.ptToV5(40.0)
+        let notifIconSize = V5P.ptToV5(40.0)
+        let accountIconSize = V5P.ptToV5(40.0)
+        let notificationDotSize = V5P.ptToV5(12.0)
         let logoVerticalCorrection = V5P.ptToV5(-11.0 / 6.0)
         return HStack(spacing: 0) {
             BrandMark(width: logoWidth)
@@ -163,7 +175,7 @@ struct HomeView: View {
                 + Text(" Event Analyzer").font(.system(size: titleTextSize, weight: .semibold)).foregroundStyle(.white)
             )
             .lineLimit(1)
-            .minimumScaleFactor(0.8)
+            .minimumScaleFactor(0.55)
             .padding(.leading, logoTitleGap)
             Spacer()
             Image(systemName: "bell")
