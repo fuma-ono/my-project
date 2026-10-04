@@ -96,14 +96,34 @@ struct HomeView: View {
     /// 実測根拠(ヘッダー文字中心とコンテンツ1枚目カード上端の間隔、
     /// 参考画像27.8pt vs 旧実装24.2pt)のため、同じ量(-2.2pt=V5単位-2.15)
     /// だけ`position(y:)`を40→37.8に補正した。
+    ///
+    /// 追加調整(2026-10-04、HQ「ヘッダーをもう少し上に上げて欲しい」
+    /// 「通知・アカウントアイコンを参考画像と同じデザイン・同じ大きさに」):
+    /// 1. 位置: 37.8でもまだ参考画像より低いとのフィードバックを受け、
+    ///    追加で3pt(V5単位1.75)引き上げて36.1に変更。
+    /// 2. アイコン: 参考画像をPythonでピクセル実測した結果、
+    ///    - ベルは白ではなくシアン(実測平均RGB(2,198,239)≒`V5P.cyan`)で、
+    ///      右上に赤い通知ドット(実測平均RGB(252,40,85)、直径実測20px→
+    ///      9.4pt)が付いている。現行実装は白一色・ドット無しだったため、
+    ///      両方を追加した。
+    ///    - サイズも実測し直した結果、ベル(実測高さ53px→25.0pt)の方が
+    ///      アカウント(実測高さ50px→23.6pt)よりわずかに大きく、現行実装
+    ///      (notifIconSize 18.2pt < accountIconSize 19.8pt、大小関係が逆)
+    ///      とは大小関係ごと異なっていたため、両方の数値を実測値に置き換えた。
+    ///    - アカウントアイコンの色も実測(平均RGB(133,175,233))すると白
+    ///      ではなく薄い水色寄りだったため、専用の色に差し替えた。
+    private static let accountIconColor = Color(red: 133.0 / 255, green: 175.0 / 255, blue: 233.0 / 255)
+    private static let notificationDotColor = Color(red: 252.0 / 255, green: 40.0 / 255, blue: 85.0 / 255)
+
     private var homeHeader: some View {
         let logoTitleGap = V5P.ptToV5(6)
         let iconGap = V5P.ptToV5(12)
         let margin = V5P.ptToV5(16)
         let logoHeight = V5P.ptToV5(24)
         let logoWidth = logoHeight * (805.0 / 480.0)
-        let notifIconSize = V5P.ptToV5(18.2)
-        let accountIconSize = V5P.ptToV5(19.8)
+        let notifIconSize = V5P.ptToV5(25.0)
+        let accountIconSize = V5P.ptToV5(23.6)
+        let notificationDotSize = V5P.ptToV5(9.4)
         let logoVerticalCorrection = V5P.ptToV5(-11.0 / 6.0)
         return HStack(spacing: 0) {
             BrandMark(width: logoWidth)
@@ -116,12 +136,23 @@ struct HomeView: View {
             .font(.system(size: V5P.ptToV5(24), weight: .semibold))
             .padding(.leading, logoTitleGap)
             Spacer()
-            Image(systemName: "bell").font(.system(size: notifIconSize, weight: .semibold))
-            Image(systemName: "person").font(.system(size: accountIconSize, weight: .semibold)).padding(.leading, iconGap)
+            Image(systemName: "bell")
+                .font(.system(size: notifIconSize, weight: .semibold))
+                .foregroundStyle(V5P.cyan)
+                .overlay(alignment: .topTrailing) {
+                    Circle()
+                        .fill(Self.notificationDotColor)
+                        .frame(width: notificationDotSize, height: notificationDotSize)
+                        .offset(x: notificationDotSize * 0.3, y: -notificationDotSize * 0.1)
+                }
+            Image(systemName: "person")
+                .font(.system(size: accountIconSize, weight: .semibold))
+                .foregroundStyle(Self.accountIconColor)
+                .padding(.leading, iconGap)
         }
         .foregroundStyle(.white)
         .frame(width: V5P.W - margin * 2, height: V5P.ptToV5(44))
-        .position(x: V5P.W / 2, y: 37.8)
+        .position(x: V5P.W / 2, y: 36.1)
     }
 
     private static let changeUpColor = Color(red: 214.0 / 255, green: 83.0 / 255, blue: 109.0 / 255)
