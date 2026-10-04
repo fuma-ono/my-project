@@ -36,6 +36,7 @@ struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
     @Binding var path: NavigationPath
     @Binding var tabSelection: Int
+    @ObservedObject private var notifications = NotificationsStore.shared
     private let apiClient: APIClient
 
     init(apiClient: APIClient, path: Binding<NavigationPath>, tabSelection: Binding<Int>) {
@@ -112,6 +113,12 @@ struct HomeView: View {
     ///      とは大小関係ごと異なっていたため、両方の数値を実測値に置き換えた。
     ///    - アカウントアイコンの色も実測(平均RGB(133,175,233))すると白
     ///      ではなく薄い水色寄りだったため、専用の色に差し替えた。
+    ///
+    /// さらに追加(2026-10-04、HQ「通知があった場合に赤バッチがつく仕組みに
+    /// して」): 常時表示だったドットを、`NotificationsStore.shared.hasUnread`
+    /// がtrueの時だけ表示するよう変更した。通知機能自体はバックエンド未実装
+    /// (`NotificationsStore`のドキュメントコメント参照)のため、現時点では
+    /// 常にfalse=非表示のままになる。
     private static let accountIconColor = Color(red: 133.0 / 255, green: 175.0 / 255, blue: 233.0 / 255)
     private static let notificationDotColor = Color(red: 252.0 / 255, green: 40.0 / 255, blue: 85.0 / 255)
 
@@ -140,10 +147,12 @@ struct HomeView: View {
                 .font(.system(size: notifIconSize, weight: .semibold))
                 .foregroundStyle(V5P.cyan)
                 .overlay(alignment: .topTrailing) {
-                    Circle()
-                        .fill(Self.notificationDotColor)
-                        .frame(width: notificationDotSize, height: notificationDotSize)
-                        .offset(x: notificationDotSize * 0.3, y: -notificationDotSize * 0.1)
+                    if notifications.hasUnread {
+                        Circle()
+                            .fill(Self.notificationDotColor)
+                            .frame(width: notificationDotSize, height: notificationDotSize)
+                            .offset(x: notificationDotSize * 0.3, y: -notificationDotSize * 0.1)
+                    }
                 }
             Image(systemName: "person")
                 .font(.system(size: accountIconSize, weight: .semibold))
