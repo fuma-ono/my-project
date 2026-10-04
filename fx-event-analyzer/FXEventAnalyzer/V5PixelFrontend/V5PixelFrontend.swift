@@ -954,8 +954,17 @@ struct V5Header: View {
     /// 26ptに変更。
     private static let headerHeight = V5P.ptToV5(44)
     private static let headerMargin = V5P.ptToV5(16)
-    private static let mainTabTitleSize = V5P.ptToV5(24)
-    private static let detailTitleSize = V5P.ptToV5(22)
+    /// 6回目の調整(2026-10-04、HQ「他のヘッダーも同じ位置にし、同じ大きさに
+    /// して」): Home画面の`homeHeader`で最終的に44ptへ統一したタイトル文字
+    /// サイズに、他の全画面のヘッダー(`V5Header`)も揃えた。従来の
+    /// 「メインタブ24pt/詳細22pt」という2pt階層も今回は廃止し、両方とも
+    /// 44ptにしている。「過去イベント比較」のような6文字のタイトルは戻る
+    /// シェブロン・星アイコンと合わせて402pt幅に収まらない可能性があるため、
+    /// `.lineLimit(1)` + `.minimumScaleFactor(0.6)`を安全策として追加した
+    /// (Home側で実際に省略記号の回帰が起きた教訓から、今回は事前に入れて
+    /// おく)。
+    private static let mainTabTitleSize = V5P.ptToV5(44)
+    private static let detailTitleSize = V5P.ptToV5(44)
     private static let chevronSize = V5P.ptToV5(26)
     private static let chevronTitleGap = V5P.ptToV5(8)
 
@@ -1008,6 +1017,8 @@ struct V5Header: View {
                 .accessibilityIdentifier("v5HeaderBack")
             }
             V5JPFont.text(title, size: back ? Self.detailTitleSize : Self.mainTabTitleSize)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
             Spacer()
             // HQ指示(2026-10-01、3回目のヘッダー調整): アイコンのウェイトを
             // タイトルのSemiboldと揃える(以前は無指定＝regularだった)。
