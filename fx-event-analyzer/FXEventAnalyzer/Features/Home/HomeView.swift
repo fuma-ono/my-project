@@ -208,15 +208,38 @@ struct HomeView: View {
     ///   無いため、ここでは変更していない(新しい光の筋の装飾が近くに
     ///   表示されるようになったことで、対比効果により視覚的な印象が変わった
     ///   可能性がある)。
+    /// 11回目の調整(2026-10-04、HQ「通知マークとアイコンマークをもう少し
+    /// 大きくして」「アイコンマークを通知マークに近づけて」「通知マークの
+    /// 位置は固定」): ベル・アカウントとも20.8→23.0ptへ拡大し、間隔を
+    /// 23.6→14.0ptへ詰めた。
+    ///
+    /// 「通知マークの位置は固定」の対応として、レイアウト構造を変更した。
+    /// 旧実装は`HStack`内で`Spacer()`の後にベル→アカウントの順に並べ、
+    /// 末尾のアカウントがフレーム右端にフラッシュする形で両者まとめて
+    /// 右寄せされていた — この構成だと、間隔(`iconGap`)やアカウントの
+    /// サイズを変えるとベルの位置もフレーム右端からの相対距離が変わって
+    /// 一緒に動いてしまう(Spacerが伸縮して全体を押し出すため)。
+    /// ベルだけ位置を固定したまま間隔だけ詰めるには、両者を独立して
+    /// 右端からの距離で配置する必要があるため、タイトル行の`HStack`からは
+    /// 完全に切り離し、`.overlay(alignment: .trailing)`配下の
+    /// `ZStack(alignment: .trailing)`で各アイコンに個別の
+    /// `.padding(.trailing:)`を与える方式に変更した。`bellTrailingMargin`
+    /// (旧間隔23.6pt+旧アカウントサイズ20.8pt=44.4pt、フレーム右端から
+    /// ベル右端までの距離)は拡大前と完全に同じ値のまま変えていないため、
+    /// ベルの画面上の位置(右端)は今回のサイズ変更・間隔変更の影響を受けず
+    /// 固定されている。アカウント側は`bellTrailingMargin`から新しい間隔・
+    /// 新しいサイズを差し引いた値を使い、結果としてベルに近づく形になる。
     private var homeHeader: some View {
         let xToTitleGap = V5P.ptToV5(7.4)
-        let iconGap = V5P.ptToV5(23.6)
         let margin = V5P.ptToV5(12)
         let fxTextSize = V5P.ptToV5(56.0)
         let titleTextSize = V5P.ptToV5(25.0)
-        let notifIconSize = V5P.ptToV5(20.8)
-        let accountIconSize = V5P.ptToV5(20.8)
+        let notifIconSize = V5P.ptToV5(23.0)
+        let accountIconSize = V5P.ptToV5(23.0)
         let notificationDotSize = V5P.ptToV5(9.4)
+        let bellTrailingMargin = V5P.ptToV5(44.4)
+        let iconGap = V5P.ptToV5(14.0)
+        let accountTrailingMargin = bellTrailingMargin - iconGap - accountIconSize
         return HStack(alignment: .center, spacing: 0) {
             (
                 Text("F").font(.system(size: fxTextSize, weight: .heavy)).foregroundStyle(DesignTokens.Colors.brandTitleAccentF)
@@ -227,26 +250,31 @@ struct HomeView: View {
                 .foregroundStyle(.white)
                 .padding(.leading, xToTitleGap)
             Spacer()
-            Image(systemName: "bell")
-                .font(.system(size: notifIconSize, weight: .semibold))
-                .foregroundStyle(V5P.cyan)
-                .overlay(alignment: .topTrailing) {
-                    if notifications.hasUnread {
-                        Circle()
-                            .fill(Self.notificationDotColor)
-                            .frame(width: notificationDotSize, height: notificationDotSize)
-                            .offset(x: notificationDotSize * 0.3, y: -notificationDotSize * 0.1)
-                    }
-                }
-            Image(systemName: "person")
-                .font(.system(size: accountIconSize, weight: .semibold))
-                .foregroundStyle(Self.accountIconColor)
-                .padding(.leading, iconGap)
         }
         .lineLimit(1)
         .minimumScaleFactor(0.55)
         .foregroundStyle(.white)
         .frame(width: V5P.W - margin * 2, height: V5P.ptToV5(44))
+        .overlay(alignment: .trailing) {
+            ZStack(alignment: .trailing) {
+                Image(systemName: "bell")
+                    .font(.system(size: notifIconSize, weight: .semibold))
+                    .foregroundStyle(V5P.cyan)
+                    .overlay(alignment: .topTrailing) {
+                        if notifications.hasUnread {
+                            Circle()
+                                .fill(Self.notificationDotColor)
+                                .frame(width: notificationDotSize, height: notificationDotSize)
+                                .offset(x: notificationDotSize * 0.3, y: -notificationDotSize * 0.1)
+                        }
+                    }
+                    .padding(.trailing, bellTrailingMargin)
+                Image(systemName: "person")
+                    .font(.system(size: accountIconSize, weight: .semibold))
+                    .foregroundStyle(Self.accountIconColor)
+                    .padding(.trailing, accountTrailingMargin)
+            }
+        }
         .position(x: V5P.W / 2, y: 34.9)
     }
 
@@ -270,18 +298,40 @@ struct HomeView: View {
     /// タイトル帯に曲線がかからないようにした(ハードエッジにならないよう
     /// 滑らかにフェードさせている)。
     ///
-    /// 画像は234×491のV5キャンバス全体を覆うサイズで配置し、`loadedScreen`
-    /// 内で`homeHeader`より手前(＝背後のレイヤー)に置いている。これに
-    /// よりHome画面は2026-10-02の「単色背景」方針から外れ、この画像を背景
-    /// として使う形になった(他画面の`V5Background`は単色のまま変更して
-    /// いない — スコープはHome画面のみ)。
+    /// 11回目の調整(2026-10-04、HQ「ヘッダーの下に明らかに線が入ってて、
+    /// そこから色が変わっている」「ヘッダーとその下の境目がないように」
+    /// 「曲線はタイトルより下は削除して」):
+    ///
+    /// 1. 継ぎ目の修正: 当初はこの画像をV5キャンバス(234×491)サイズに収めて
+    ///    `loadedScreen`の最初の要素として`content()`側に置いていたが、
+    ///    これだと`V5Viewport`のレターボックス処理(縦横比の差で生じる上下の
+    ///    隙間)の影響を受け、画面最上部・最下部に単色背景との継ぎ目が1px差の
+    ///    くっきりした線として現れてしまっていた(詳細は
+    ///    `V5Viewport.fullBleedBackground`のコメント参照)。対応として、
+    ///    この画像を`V5Viewport(fullBleedBackground:)`経由で渡すように変更し、
+    ///    V5キャンバスのスケールを経由せず画面全体(`geo.size`)にそのまま
+    ///    敷くようにした。そのため自前の`GeometryReader`でサイズを取るだけの
+    ///    単純な構成に変更している(呼び出し側の`V5Viewport`が実際の
+    ///    フレームを渡してくる)。
+    ///
+    /// 2. 曲線の残存トレースの修正: 画像をPythonで再実測したところ、前回
+    ///    (10回目)のトリミングは原寸y=60→200pxにかけてのフェードのみで、
+    ///    タイトル帯を抜けた直後のy≈200〜230px付近に、フェード対象から
+    ///    漏れていた「2本目の明るい筋」(実測maxブライトネス合計値279、
+    ///    RGB(1,87,191)程度)が残っていたと判明した — これが「タイトルより
+    ///    下」に見えていた残存トレースの正体。フェードの完全クリーン化
+    ///    開始を200→150pxへ前倒しし、完全クリーン化の終了も200→260pxへ
+    ///    延長して2本目の筋も確実に覆うようにした上で、元画像から作り直した
+    ///    (前回の加工済みファイルに重ねて加工すると劣化するため)。
     private var homeHeaderStreak: some View {
-        Image("HomeHeaderGlow")
-            .resizable()
-            .aspectRatio(contentMode: .fill)
-            .frame(width: V5P.W, height: V5P.H)
-            .clipped()
-            .allowsHitTesting(false)
+        GeometryReader { geo in
+            Image("HomeHeaderGlow")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: geo.size.width, height: geo.size.height)
+                .clipped()
+        }
+        .allowsHitTesting(false)
     }
 
     private static let changeUpColor = Color(red: 214.0 / 255, green: 83.0 / 255, blue: 109.0 / 255)
@@ -401,8 +451,7 @@ struct HomeView: View {
         let favorites = Array(viewModel.favoriteItems.prefix(3))
         let speeches = Array(viewModel.recentSpeeches.prefix(3))
 
-        return V5Viewport {
-            homeHeaderStreak
+        return V5Viewport(fullBleedBackground: AnyView(homeHeaderStreak)) {
             homeHeader
 
             ScrollView(.vertical, showsIndicators: false) {

@@ -112,16 +112,51 @@ enum V5JPFont {
 }
 
 struct V5Viewport<Content: View>: View {
+    /// HQ指示(2026-10-04、11回目)「ヘッダーの下に明らかに線が入ってて、
+    /// そこから色が変わっている」の原因調査で判明した構造的な問題への対応。
+    ///
+    /// `V5Viewport`は実機の画面縦横比(iPhoneはおよそ0.460)とV5キャンバスの
+    /// 縦横比(234/491≒0.4766)がわずかに異なるため、`scale = min(...)`
+    /// (幅基準)でスケールすると、縦方向にキャンバスがscreen全体を埋め
+    /// きれず、上下に隙間(実測約15.3pt=46px@3x)ができる。この隙間には
+    /// この`ZStack`の外側にある`.background(backgroundPrimary)`の単色が
+    /// そのまま見えるため、通常(内側の`V5Background()`も同じ単色)は
+    /// 隙間と中身の境目が同色で見分けられず問題にならなかった。
+    ///
+    /// しかしHome画面だけは単色`V5Background()`の代わりに実画像
+    /// (`HomeHeaderGlow`、`HomeView.homeHeaderStreak`)を背景として使うように
+    /// なったため、画像の縁の色が単色の隙間と食い違い、画面最上部/最下部に
+    /// 「そこだけ色が変わる」くっきりした横線として見えてしまっていた
+    /// (実機キャプチャで両端とも実測、上端：y=45で(1,21,41)→y=46で
+    /// (1,32,63)に1px差で変化。下端も対称に同じ現象を確認)。
+    ///
+    /// 修正: 背景だけ`content()`とは別に`fullBleedBackground`として受け取り、
+    /// V5キャンバスのスケール・レターボックスを経由せず`geo.size`(実機の
+    /// 画面全体、隙間を含む)にそのまま合わせて敷く。`content()`(ヘッダー・
+    /// カード・タブバー等、V5絶対座標に依存する要素)は従来通りレターボックス
+    /// される側に残す — 背景画像だけが画面全体を継ぎ目なく覆うことで、
+    /// 隙間と中身が同じ1枚の画像になり境目が消える。`fullBleedBackground`を
+    /// 渡さない既存の全呼び出し元(Home以外の全画面)は`nil`がデフォルトのため
+    /// 従来通り単色`V5Background()`のまま、挙動は変化しない。
+    var fullBleedBackground: AnyView? = nil
     @ViewBuilder let content: () -> Content
     var body: some View {
         GeometryReader { geo in
             let scale = min(geo.size.width / V5P.W, geo.size.height / V5P.H)
             ZStack {
-                V5Background()
-                content()
+                if let fullBleedBackground {
+                    fullBleedBackground
+                        .frame(width: geo.size.width, height: geo.size.height)
+                }
+                ZStack {
+                    if fullBleedBackground == nil {
+                        V5Background()
+                    }
+                    content()
+                }
+                .frame(width: V5P.W, height: V5P.H)
+                .scaleEffect(scale)
             }
-            .frame(width: V5P.W, height: V5P.H)
-            .scaleEffect(scale)
             .frame(width: geo.size.width, height: geo.size.height)
         }
         .background(DesignTokens.Colors.backgroundPrimary)
