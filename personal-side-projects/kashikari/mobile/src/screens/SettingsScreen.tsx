@@ -153,21 +153,25 @@ export default function SettingsScreen({
         </Pressable>
 
         <Text style={styles.sectionLabel}>{t.settings.displayName}</Text>
-        <TextInput
-          value={name}
-          onChangeText={(v) => {
-            setName(v);
-            setNameError(null);
-            setSavedNote(false);
-          }}
-          placeholder={t.settings.displayNamePlaceholder}
-          placeholderTextColor={colors.muted}
-          maxLength={20}
-          style={styles.input}
-        />
+        {/* 「保存ボタンの位置が気になる」という指摘への対応。入力欄の
+            下に離れて浮いていた保存ボタンを、入力欄と同じ行に並べた。 */}
+        <View style={styles.nameRow}>
+          <TextInput
+            value={name}
+            onChangeText={(v) => {
+              setName(v);
+              setNameError(null);
+              setSavedNote(false);
+            }}
+            placeholder={t.settings.displayNamePlaceholder}
+            placeholderTextColor={colors.muted}
+            maxLength={20}
+            style={[styles.input, styles.nameInput]}
+          />
+          <PrimaryButton title={t.common.save} onPress={saveName} loading={saving} disabled={!nameDirty} compact />
+        </View>
         {nameError && <Text style={styles.error}>{nameError}</Text>}
         {savedNote && !nameError && <Text style={styles.savedNote}>{t.settings.savedNote}</Text>}
-        <PrimaryButton title={t.common.save} onPress={saveName} loading={saving} disabled={!nameDirty} style={styles.saveButton} />
 
         {/* 「アカウントは今どう作られている？Google/Apple/LINE/メールで
             ログインできるようにした方がいい」という提案への対応。今は
@@ -300,10 +304,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.ink,
   },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  // flex:1だけだと、Web版(react-native-web)では中身のテキストが長い時に
+  // 行自体が画面幅を超えてボタンがはみ出すことがある(flexアイテムの
+  // デフォルトmin-width:autoによるCSSの既知の挙動)。minWidthを0にして
+  // 確実に縮むようにする。
+  nameInput: { flex: 1, minWidth: 0 },
   error: { color: colors.danger, ...fonts.body, fontSize: 13, marginTop: 8 },
   authDescription: { ...fonts.body, fontSize: 13, color: colors.muted, lineHeight: 19, marginBottom: 10 },
   savedNote: { color: colors.positive, ...fonts.body, fontSize: 13, marginTop: 8 },
-  saveButton: { marginTop: 14, alignSelf: 'flex-start', paddingHorizontal: 28 },
   premiumRow: {
     flexDirection: 'row',
     alignItems: 'center',
