@@ -131,14 +131,22 @@ struct HomeView: View {
     /// 性質を使い、「FX」だけ大きい専用フォントサイズに分離した。あわせて
     /// ベル・アカウント・ロゴアイコンも一回り拡大し、ヘッダー全体の位置も
     /// さらに2pt(V5単位1.16)上へ寄せた(36.1→34.9)。
+    ///
+    /// 直後に修正(2026-10-04、CI実機キャプチャで発覚): 上記の拡大で幅が
+    /// 不足し、「Event Analyzer」が「Event Analy...」と省略記号で切れる
+    /// 回帰が発生した。ロゴアイコン(30→22pt)・左右マージン(16→12pt)・
+    /// ロゴとタイトルの間隔(6→4pt)・ベルとアカウントの間隔(12→8pt)を
+    /// それぞれ詰めて必要な幅を確保した上、`.lineLimit(1)`+
+    /// `.minimumScaleFactor(0.8)`を安全策として追加し、万一まだ収まらない
+    /// 場合も省略記号ではなく等比縮小で収まるようにした。
     private static let accountIconColor = Color(red: 133.0 / 255, green: 175.0 / 255, blue: 233.0 / 255)
     private static let notificationDotColor = Color(red: 252.0 / 255, green: 40.0 / 255, blue: 85.0 / 255)
 
     private var homeHeader: some View {
-        let logoTitleGap = V5P.ptToV5(6)
-        let iconGap = V5P.ptToV5(12)
-        let margin = V5P.ptToV5(16)
-        let logoHeight = V5P.ptToV5(30)
+        let logoTitleGap = V5P.ptToV5(4)
+        let iconGap = V5P.ptToV5(8)
+        let margin = V5P.ptToV5(12)
+        let logoHeight = V5P.ptToV5(22)
         let logoWidth = logoHeight * (805.0 / 480.0)
         let fxTextSize = V5P.ptToV5(40.0)
         let titleTextSize = V5P.ptToV5(24.0)
@@ -154,6 +162,8 @@ struct HomeView: View {
                 + Text("X").font(.system(size: fxTextSize, weight: .heavy)).foregroundStyle(DesignTokens.Colors.brandTitleAccentX)
                 + Text(" Event Analyzer").font(.system(size: titleTextSize, weight: .semibold)).foregroundStyle(.white)
             )
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
             .padding(.leading, logoTitleGap)
             Spacer()
             Image(systemName: "bell")
