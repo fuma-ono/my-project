@@ -511,10 +511,23 @@ struct V5BottomBar: View {
     ///   小さい — 参考画像はラベルがアイコンとほぼ同等かやや大きい)
     /// 現行はアイコンに対しラベルが著しく小さい比率だったため、アイコンを
     /// 縮小・ラベルを拡大する方向で調整(`tabIconSize`/`tabLabelSize`参照)。
-    /// 新しいコンテンツ合計高さ(11+1+16+1+2.2=31.2)に対し、旧来の上下均等
+    ///
+    /// 訂正(同日): 最初はラベルを8→13まで拡大したが、CI実機キャプチャで
+    /// 確認すると「カレンダー」(5文字)だけが省略記号で「カレ...」に切れる
+    /// 回帰が発生した。参考画像の英字ラベル("Indicators"等)は文字が細い
+    /// ため同じ見た目の文字高さでも横幅に余裕があるが、日本語ラベルは
+    /// 正方形に近い全角文字のため同じ文字高さだとずっと横幅を食う —
+    /// 英字基準の文字高さをそのまま日本語に適用すると幅が破綻すると判明。
+    /// CI実機キャプチャから2文字ラベル(指標/検索/設定)の実測文字幅
+    /// (1文字あたり実測約19.6pt@size13)を使い、5文字の「カレンダー」が
+    /// 1タブ分の幅(約77pt)に余裕を持って収まるサイズを逆算し、8→9(控えめ
+    /// な拡大)に修正した。あわせて今後の回帰に備え、ラベルに`.lineLimit(1)`
+    /// +`.minimumScaleFactor`を安全策として追加している(詳細は`tab`内
+    /// コメント参照)。
+    /// 新しいコンテンツ合計高さ(11+1+14+1+2.2=29.2)に対し、旧来の上下均等
     /// 余白(1.9pt/1.9pt、下記`padding.top`)を維持するには`barHeight`を
-    /// 34→35に拡大する必要があった(31.2+1.9×2=35)。
-    private static let barHeight: CGFloat = 35
+    /// 34→33に調整した(29.2+1.9×2=33)。
+    private static let barHeight: CGFloat = 33
     private static let iconsWidth: CGFloat = 214
     private static let barWidth: CGFloat = 224
     /// アイコンの表示サイズ(旧14→11、上記7回目の調整)。`scaleEffect`で
@@ -522,8 +535,8 @@ struct V5BottomBar: View {
     /// 縮小する — 各カスタムアイコン内部の実測済み形状比率を壊さないため。
     private static let tabIconSize: CGFloat = 11
     private static let tabIconScale: CGFloat = tabIconSize / 14
-    /// ラベルの文字サイズ(旧8→13、上記7回目の調整)。
-    private static let tabLabelSize: CGFloat = 13
+    /// ラベルの文字サイズ(旧8→9、上記7回目の調整の訂正後の最終値)。
+    private static let tabLabelSize: CGFloat = 9
     /// HQ指示(2026-10-04)「デザインは変えずに、この画像のヘッダーとタブの位置を
     /// 固定としてください」で送付された新しいHome参考画像(852×1846、フル幅の
     /// 旧スタイルタブバー)をPythonで実測。カプセル型(浮遊)と帯型(画面幅
@@ -625,20 +638,26 @@ struct V5BottomBar: View {
                 .frame(height: Self.tabIconSize)
                 .foregroundStyle(gradient)
                 .shadow(color: .black.opacity(0.35), radius: 1, y: 1)
+            // 「カレンダー」切れ回帰の教訓(上記`barHeight`コメント参照)から
+            // 安全策として追加。通常の4タブはこのサイズのまま1行に収まる
+            // ため見た目への影響は無く、万一レイアウトが変わって再び収まら
+            // なくなった場合に省略記号ではなく縮小で逃げるようにしている。
             V5JPFont.text(title, size: Self.tabLabelSize).foregroundStyle(gradient)
-                .frame(height: 16)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(height: 14)
             Capsule()
                 .fill(LinearGradient(colors: [V5P.cyan, V5P.blue], startPoint: .top, endPoint: .bottom))
                 .frame(width: 16, height: 2.2)
                 .shadow(color: V5P.cyan.opacity(0.7), radius: 2)
                 .opacity(isSelected ? 1 : 0)
         }
-        // 7回目の調整(2026-10-04、`barHeight`のドキュメントコメント参照)で
-        // アイコン14→11・ラベル8→13(行高10→16)・`spacing`2→1に変更した結果、
-        // コンテンツ高さは11+1+16+1+2.2=31.2pt。上の余白:下の余白≈1:1(参考
-        // 画像実測、`barHeight`コメント参照)を維持するため、`barHeight`35に
-        // 対して上下余白を均等配分した1.9ptをそのまま維持している(偶然にも
-        // 前回値と同じになった)。
+        // 7回目の調整とその訂正(2026-10-04、`barHeight`のドキュメントコメント
+        // 参照)でアイコン14→11・ラベル8→9(行高10→14)・`spacing`2→1に変更
+        // した結果、コンテンツ高さは11+1+14+1+2.2=29.2pt。上の余白:下の余白
+        // ≈1:1(参考画像実測、`barHeight`コメント参照)を維持するため、
+        // `barHeight`33に対して上下余白を均等配分した1.9ptをそのまま維持
+        // している(偶然にも前回値と同じになった)。
         .padding(.top, 1.9)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(
