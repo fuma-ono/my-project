@@ -85,6 +85,17 @@ struct HomeView: View {
     /// 変更せず維持(HQ指示(2026-10-03、9回目)「既存のSplash/Login/
     /// Header/Footerのデザインルールと矛盾する部分がある場合は、既存の
     /// 正式仕様を優先してください」に従う)。
+    ///
+    /// HQ指示(2026-10-04)「デザインは変えずに、この画像のヘッダーとタブの
+    /// 位置を固定としてください」: 新しいHome参考画像実測に基づき
+    /// `V5PixelFrontend.swift`の`V5Header`側は`position(y:)`を40→37.8に
+    /// 既に補正済みだが、Home画面はこの共有`V5Header`を使わず、ここの
+    /// `homeHeader`という独自実装(ロゴ+ベル+アカウントアイコン)を持って
+    /// おり、見落として未反映のままだった(実機キャプチャで「ホーム画面の
+    /// ヘッダーだけ動いていない」ことに気づき修正)。`V5Header`と全く同じ
+    /// 実測根拠(ヘッダー文字中心とコンテンツ1枚目カード上端の間隔、
+    /// 参考画像27.8pt vs 旧実装24.2pt)のため、同じ量(-2.2pt=V5単位-2.15)
+    /// だけ`position(y:)`を40→37.8に補正した。
     private var homeHeader: some View {
         let logoTitleGap = V5P.ptToV5(6)
         let iconGap = V5P.ptToV5(12)
@@ -110,7 +121,7 @@ struct HomeView: View {
         }
         .foregroundStyle(.white)
         .frame(width: V5P.W - margin * 2, height: V5P.ptToV5(44))
-        .position(x: V5P.W / 2, y: 40)
+        .position(x: V5P.W / 2, y: 37.8)
     }
 
     private static let changeUpColor = Color(red: 214.0 / 255, green: 83.0 / 255, blue: 109.0 / 255)
