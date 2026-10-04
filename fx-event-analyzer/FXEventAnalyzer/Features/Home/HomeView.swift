@@ -176,22 +176,56 @@ struct HomeView: View {
     /// `homeHeaderStreak`を新設し、ヘッダーの背後(カード類より下のレイヤー)
     /// に重ねている(アプリ全体の背景は2026-10-02のHQ指示により単色のまま
     /// — ヘッダーのみのスコープとして実装)。
+    ///
+    /// 9回目の調整(2026-10-04、HQ「Event Analyzerが参考画像より大きい」
+    /// 「Event AnalyzerをFXの中心に」「Xの後にスペース」「通知・アカウント
+    /// アイコンのサイズを揃えて、間隔も広げて」「背景色を揃えて」): 参考画像
+    /// をCI実機キャプチャと同じ手法で再実測し、ズレを数値で特定した。
+    /// - FX:Event Analyzerの高さ比は参考画像で1.69倍だが、実機キャプチャでは
+    ///   1.26倍(Event Analyzerが相対的に大きすぎた)。FXは変えず、Event
+    ///   Analyzerのみ34→25ptに縮小して比率を揃えた。
+    /// - 文字の連結(`Text`の`+`演算子)は共通ベースラインで揃うため、
+    ///   フォントサイズの違う「FX」と「Event Analyzer」を混ぜると
+    ///   Event Analyzerの見た目の中心がFXより下にずれる(実測20pxのズレ)。
+    ///   `HStack(alignment: .center)`で別々の`Text`に分離し、各要素の中心を
+    ///   揃える構成に変更した。
+    /// - X-Event Analyzer間の間隔は参考画像実測27px→12.7pt(V5単位7.4)。
+    ///   文字列内の半角スペース1文字ではなく、明示的な`.padding(.leading)`
+    ///   に置き換えた。
+    /// - ベル・アカウントアイコンは参考画像実測で高さ44px・幅40pxと完全に
+    ///   同一(実測25.0pt/23.6ptという従来値は別の参考画像由来の誤差だった)。
+    ///   実測値20.8ptに統一。間隔も実測50px→23.6pt(旧8ptから大幅に拡大)。
+    /// - 背景色は参考画像実測RGB(1,21,41)に対し、現行`BackgroundPrimary`
+    ///   (ダークモード)はRGB(10,14,26)で明確に異なっていたため、色定義
+    ///   (`Resources/Assets.xcassets/BackgroundPrimary.colorset`)を実測値に
+    ///   更新した(全画面共通のためHome以外にも反映される — 2026-10-02の
+    ///   「単色背景にする」方針自体は変更せず、その単色の値を実測し直した
+    ///   という位置づけ)。
+    /// - 「FXの文字色がSplash画面と違う気がする」との指摘は、実機キャプチャの
+    ///   ピクセル値を比較した結果、HomeとLogin/Splashの「FX」は
+    ///   `brandTitleAccentF`/`X`トークンを共有しており実測RGB値も完全一致
+    ///   (F=(5,250,255)、X側も一致)していることを確認した。コード上の相違は
+    ///   無いため、ここでは変更していない(新しい光の筋の装飾が近くに
+    ///   表示されるようになったことで、対比効果により視覚的な印象が変わった
+    ///   可能性がある)。
     private var homeHeader: some View {
-        let iconGap = V5P.ptToV5(8)
+        let xToTitleGap = V5P.ptToV5(7.4)
+        let iconGap = V5P.ptToV5(23.6)
         let margin = V5P.ptToV5(12)
         let fxTextSize = V5P.ptToV5(56.0)
-        let titleTextSize = V5P.ptToV5(34.0)
-        let notifIconSize = V5P.ptToV5(25.0)
-        let accountIconSize = V5P.ptToV5(23.6)
+        let titleTextSize = V5P.ptToV5(25.0)
+        let notifIconSize = V5P.ptToV5(20.8)
+        let accountIconSize = V5P.ptToV5(20.8)
         let notificationDotSize = V5P.ptToV5(9.4)
-        return HStack(spacing: 0) {
+        return HStack(alignment: .center, spacing: 0) {
             (
                 Text("F").font(.system(size: fxTextSize, weight: .heavy)).foregroundStyle(DesignTokens.Colors.brandTitleAccentF)
                 + Text("X").font(.system(size: fxTextSize, weight: .heavy)).foregroundStyle(DesignTokens.Colors.brandTitleAccentX)
-                + Text(" Event Analyzer").font(.system(size: titleTextSize, weight: .semibold)).foregroundStyle(.white)
             )
-            .lineLimit(1)
-            .minimumScaleFactor(0.55)
+            Text("Event Analyzer")
+                .font(.system(size: titleTextSize, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.leading, xToTitleGap)
             Spacer()
             Image(systemName: "bell")
                 .font(.system(size: notifIconSize, weight: .semibold))
@@ -209,37 +243,67 @@ struct HomeView: View {
                 .foregroundStyle(Self.accountIconColor)
                 .padding(.leading, iconGap)
         }
+        .lineLimit(1)
+        .minimumScaleFactor(0.55)
         .foregroundStyle(.white)
         .frame(width: V5P.W - margin * 2, height: V5P.ptToV5(44))
         .position(x: V5P.W / 2, y: 34.9)
     }
 
-    /// 参考画像のヘッダー右上にある、斜めに流れる光の筋の装飾。参考画像を
-    /// ピクセル実測(起点≈(623,0)、終点≈(509,160)、原寸852幅)し、V5座標
-    /// (234幅)に換算した値で二次ベジェ曲線を描いている。真のモーション
-    /// ブラー調の先細りまでは再現していない簡易近似(構成: 太く淡いグロー
-    /// 用のストローク+細く明るい芯のストロークを重ねてぼかす)。ヘッダー
-    /// より下のカード類と重ならないよう、`loadedScreen`内で`homeHeader`の
-    /// 直前(＝背後のレイヤー)にのみ配置している — 2026-10-02のHQ指示
-    /// 「アプリ本体の画面は単色背景」はこの装飾の対象外として、ヘッダー
-    /// 領域に限定したスコープで追加した。
+    /// 参考画像のヘッダー右上にある、斜めに流れる光の筋の装飾。
+    ///
+    /// 9回目の調整(2026-10-04、HQ「曲線もピクセル単位で再現して、色も
+    /// 全く違う」): 1回目の実装は上端・下端2点だけの単純な二次ベジェ曲線
+    /// (起点(623,0)・終点(509,160))で、実機キャプチャと比べると縦に詰まった
+    /// 「C字」寄りの曲線になっており、参考画像の「横に広く緩やかな弧」とは
+    /// 形が違っていた。参考画像をPythonで色フィルタ(シアン〜白寄りの画素の
+    /// みを抽出、ステータスバーの白アイコンや通知ドットの赤を除外)しながら
+    /// 1行ずつ最も明るいx座標を追跡し直した結果、実際の筋はy=0〜約100px
+    /// (原寸852幅)の範囲でx=607→438まで滑らかに移動する、横方向にずっと
+    /// 広い曲線だと判明(y=100を超えると背景に溶け込みほぼ見えなくなる)。
+    /// 8点の実測座標をV5座標に換算し折れ線で結び、ぼかしで滑らかに見せる
+    /// 方式に変更した(`HomeHeaderStreakShape`参照)。
+    ///
+    /// 色も同じトレースで実測し直した。単純な「白→シアン→透明」の二色
+    /// グラデーションではなく、芯の最も明るい部分(y≈24px地点、実測RGB
+    /// (193,249,252)相当)が純白ではなくやや青みがかった白で、そこから
+    /// 下に向かって急速に彩度が上がり(y=60px実測RGB(0,149,248)、
+    /// `V5P.blue`とほぼ同値)、最終的に背景色へ溶け込むように暗くなって
+    /// 消えていく3段階のグラデーションだったため、ストロークのグラデー
+    /// ション停止点を4つに増やしてこの変化を反映した。
+    ///
+    /// ヘッダーより下のカード類と重ならないよう、`loadedScreen`内で
+    /// `homeHeader`の直前(＝背後のレイヤー)にのみ配置している —
+    /// 2026-10-02のHQ指示「アプリ本体の画面は単色背景」はこの装飾の対象外
+    /// として、ヘッダー領域に限定したスコープで追加している。
     private var homeHeaderStreak: some View {
-        ZStack {
+        let coreGradient = LinearGradient(
+            stops: [
+                .init(color: Color(red: 0.62, green: 0.90, blue: 1.0), location: 0.0),
+                .init(color: Color(red: 0.86, green: 0.97, blue: 1.0), location: 0.22),
+                .init(color: V5P.blue, location: 0.65),
+                .init(color: V5P.blue.opacity(0.0), location: 1.0),
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
+        let glowGradient = LinearGradient(
+            stops: [
+                .init(color: Color(red: 0.86, green: 0.97, blue: 1.0).opacity(0.55), location: 0.0),
+                .init(color: V5P.blue.opacity(0.4), location: 0.6),
+                .init(color: V5P.blue.opacity(0.0), location: 1.0),
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
+        return ZStack {
             HomeHeaderStreakShape()
-                .stroke(
-                    LinearGradient(colors: [V5P.cyan.opacity(0.5), .clear], startPoint: .top, endPoint: .bottom),
-                    style: StrokeStyle(lineWidth: 16, lineCap: .round)
-                )
-                .blur(radius: 9)
+                .stroke(glowGradient, style: StrokeStyle(lineWidth: 12, lineCap: .round, lineJoin: .round))
+                .blur(radius: 7)
             HomeHeaderStreakShape()
-                .stroke(
-                    LinearGradient(colors: [.white, V5P.cyan, .clear], startPoint: .top, endPoint: .bottom),
-                    style: StrokeStyle(lineWidth: 2, lineCap: .round)
-                )
-                .blur(radius: 1)
+                .stroke(coreGradient, style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
+                .blur(radius: 0.8)
         }
-        .frame(width: V5P.W, height: 62, alignment: .top)
-        .position(x: V5P.W / 2, y: 31)
+        .frame(width: V5P.W, height: 40, alignment: .top)
+        .position(x: V5P.W / 2, y: 20)
         .allowsHitTesting(false)
     }
 
@@ -709,13 +773,30 @@ private extension FXPairUI {
     var displaySymbol: String { "\(baseCurrency)/\(quoteCurrency)" }
 }
 
-/// `homeHeaderStreak`が使う曲線。座標は`homeHeaderStreak`のドキュメント
-/// コメント参照(参考画像実測→V5座標換算済み)。
+/// `homeHeaderStreak`が使う曲線。参考画像(852幅)を色フィルタで1行ずつ
+/// 追跡した実測点(x=607,0 / 594,12 / 575,28 / 560,40 / 530,60 / 501,76 /
+/// 474,88 / 438,100、詳細は`homeHeaderStreak`のドキュメントコメント参照)を
+/// V5座標(234幅、スケール402/852/1.718≈0.2747)に換算し折れ線で結んでいる
+/// — ぼかし(`blur`)で滑らかな曲線に見せる前提のため、頂点間は直線で良い。
 private struct HomeHeaderStreakShape: Shape {
+    private static let points: [CGPoint] = [
+        CGPoint(x: 170.1, y: -3.0),
+        CGPoint(x: 166.8, y: 0.0),
+        CGPoint(x: 163.2, y: 3.3),
+        CGPoint(x: 158.0, y: 7.7),
+        CGPoint(x: 153.8, y: 11.0),
+        CGPoint(x: 145.6, y: 16.5),
+        CGPoint(x: 137.6, y: 20.9),
+        CGPoint(x: 130.2, y: 24.2),
+        CGPoint(x: 120.3, y: 27.5),
+    ]
+
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        path.move(to: CGPoint(x: 173, y: -6))
-        path.addQuadCurve(to: CGPoint(x: 138, y: 56), control: CGPoint(x: 200, y: 18))
+        path.move(to: Self.points[0])
+        for point in Self.points.dropFirst() {
+            path.addLine(to: point)
+        }
         return path
     }
 }
