@@ -527,16 +527,25 @@ struct V5BottomBar: View {
     /// 新しいコンテンツ合計高さ(11+1+14+1+2.2=29.2)に対し、旧来の上下均等
     /// 余白(1.9pt/1.9pt、下記`padding.top`)を維持するには`barHeight`を
     /// 34→33に調整した(29.2+1.9×2=33)。
-    private static let barHeight: CGFloat = 33
+    ///
+    /// 8回目の調整(2026-10-04、HQ「高さが全然違う、参考画像の方がもっと
+    /// 低いから下げて。文字が大きいので小さくして」): 7回目の調整後も
+    /// なおHQから見て差が大きいとの指摘。ラベルを9→7にさらに縮小(行高
+    /// 14→11)し、カプセル全体も下(画面下端寄り)に移動するため
+    /// `bottomMargin`を6→3に縮小した。新しいコンテンツ合計高さ
+    /// (11+1+11+1+2.2=26.2)に対し上下均等余白1.9pt/1.9ptを維持する形で
+    /// `barHeight`を33→30に調整した(26.2+1.9×2=30)。
+    private static let barHeight: CGFloat = 30
     private static let iconsWidth: CGFloat = 214
     private static let barWidth: CGFloat = 224
-    /// アイコンの表示サイズ(旧14→11、上記7回目の調整)。`scaleEffect`で
+    /// アイコンの表示サイズ(旧14→11、7回目の調整)。`scaleEffect`で
     /// アイコンの種類(SF Symbols/`V5BarsIcon`/`V5GearIcon`)によらず一律に
     /// 縮小する — 各カスタムアイコン内部の実測済み形状比率を壊さないため。
     private static let tabIconSize: CGFloat = 11
     private static let tabIconScale: CGFloat = tabIconSize / 14
-    /// ラベルの文字サイズ(旧8→9、上記7回目の調整の訂正後の最終値)。
-    private static let tabLabelSize: CGFloat = 9
+    /// ラベルの文字サイズ(8回目の調整、上記`barHeight`コメント参照、
+    /// 9→7が最終値)。
+    private static let tabLabelSize: CGFloat = 7
     /// HQ指示(2026-10-04)「デザインは変えずに、この画像のヘッダーとタブの位置を
     /// 固定としてください」で送付された新しいHome参考画像(852×1846、フル幅の
     /// 旧スタイルタブバー)をPythonで実測。カプセル型(浮遊)と帯型(画面幅
@@ -552,7 +561,11 @@ struct V5BottomBar: View {
     /// その分だけ`bottomMargin`を4→6(V5単位+2 ≈ 実寸+3.4pt)に拡大し、
     /// カプセル全体を画面下端からわずかに離した。`barHeight`(カプセル自体の
     /// 縦横比)は今回の対象外のため変更していない。
-    private static let bottomMargin: CGFloat = 6
+    ///
+    /// 8回目の調整(2026-10-04、HQ「参考画像の方がもっと低いから下げて」、
+    /// `barHeight`のドキュメントコメント参照)で6→3に縮小し、カプセルを
+    /// 画面下端に近づけた。
+    private static let bottomMargin: CGFloat = 3
     private static let iconGradient = LinearGradient(
         colors: [Color(red: 0.90, green: 0.97, blue: 1.0), Color(red: 0.45, green: 0.64, blue: 0.86)],
         startPoint: .top, endPoint: .bottom
@@ -645,19 +658,19 @@ struct V5BottomBar: View {
             V5JPFont.text(title, size: Self.tabLabelSize).foregroundStyle(gradient)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-                .frame(height: 14)
+                .frame(height: 11)
             Capsule()
                 .fill(LinearGradient(colors: [V5P.cyan, V5P.blue], startPoint: .top, endPoint: .bottom))
                 .frame(width: 16, height: 2.2)
                 .shadow(color: V5P.cyan.opacity(0.7), radius: 2)
                 .opacity(isSelected ? 1 : 0)
         }
-        // 7回目の調整とその訂正(2026-10-04、`barHeight`のドキュメントコメント
-        // 参照)でアイコン14→11・ラベル8→9(行高10→14)・`spacing`2→1に変更
-        // した結果、コンテンツ高さは11+1+14+1+2.2=29.2pt。上の余白:下の余白
-        // ≈1:1(参考画像実測、`barHeight`コメント参照)を維持するため、
-        // `barHeight`33に対して上下余白を均等配分した1.9ptをそのまま維持
-        // している(偶然にも前回値と同じになった)。
+        // 7〜8回目の調整(2026-10-04、`barHeight`のドキュメントコメント参照)で
+        // アイコン14→11・ラベル8→7(行高10→11)・`spacing`2→1に変更した結果、
+        // コンテンツ高さは11+1+11+1+2.2=26.2pt。上の余白:下の余白≈1:1(参考
+        // 画像実測、`barHeight`コメント参照)を維持するため、`barHeight`30に
+        // 対して上下余白を均等配分した1.9ptをそのまま維持している(偶然にも
+        // 前回値と同じになった)。
         .padding(.top, 1.9)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(
