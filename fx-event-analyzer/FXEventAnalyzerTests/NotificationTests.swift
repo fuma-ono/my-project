@@ -117,6 +117,16 @@ final class NotificationsStoreTests: XCTestCase {
         XCTAssertEqual(store.entries.map(\.targetID), ["past", "new"])
     }
 
+    func testDeliveredTargetIsNotListedTwiceWhenItsTimeShifts() {
+        let store = makeStore()
+        store.record([entry("cpi", minutesFromBase: -5)], now: base)
+
+        store.record([entry("cpi", minutesFromBase: -4), entry("cpi", minutesFromBase: 10)], now: base)
+
+        XCTAssertEqual(store.entries.count, 1)
+        XCTAssertEqual(store.entries.first?.notifyAt, base.addingTimeInterval(-5 * 60))
+    }
+
     func testDeliveredEntriesAreNewestFirstAndCapped() {
         let store = makeStore()
         let many = (0..<(NotificationsStore.deliveredLimit + 5)).map { entry("\($0)", minutesFromBase: -Double(100 - $0)) }
@@ -332,11 +342,14 @@ final class NotificationSettingsViewModelTests: XCTestCase {
 
         viewModel.setFxPairs(["GBPJPY", "USDJPY"])
         XCTAssertEqual(viewModel.settings.fxPairs, ["USDJPY", "GBPJPY"])
-        XCTAssertEqual(viewModel.fxPairsLabel, "USD/JPY・GBP/JPY")
+        XCTAssertEqual(viewModel.fxPairsLabel, "2ペア")
+
+        viewModel.setFxPairs(["GBPJPY"])
+        XCTAssertEqual(viewModel.fxPairsLabel, "GBP/JPY")
 
         viewModel.setFxPairs([])
         XCTAssertNil(viewModel.settings.fxPairs)
-        XCTAssertEqual(viewModel.fxPairsLabel, "すべての通貨ペア")
+        XCTAssertEqual(viewModel.fxPairsLabel, "すべて")
     }
 
     func testTurningPushOnAsksForPermission() async {

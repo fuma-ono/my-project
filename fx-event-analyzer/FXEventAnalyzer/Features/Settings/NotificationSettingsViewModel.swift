@@ -101,10 +101,10 @@ final class NotificationSettingsViewModel: ObservableObject {
 
     // MARK: - 表示
 
+    /// 行の右端は幅が狭いので短く出す(「すべて」「USD/JPY」「3ペア」)。
     var fxPairsLabel: String {
-        guard let pairs = settings.fxPairs, !pairs.isEmpty else { return "すべての通貨ペア" }
-        let names = pairs.map(FXPairSymbol.displayName)
-        return names.count <= 2 ? names.joined(separator: "・") : "\(names[0]) ほか\(names.count - 1)件"
+        guard let pairs = settings.fxPairs, !pairs.isEmpty else { return "すべて" }
+        return pairs.count == 1 ? FXPairSymbol.displayName(pairs[0]) : "\(pairs.count)ペア"
     }
 
     var importancesLabel: String {
@@ -113,6 +113,11 @@ final class NotificationSettingsViewModel: ObservableObject {
 
     static func leadLabel(_ minutes: Int) -> String {
         minutes == 0 ? "発表時" : "発表の\(minutes)分前"
+    }
+
+    /// 行の右端用(「5分前」)。
+    static func shortLeadLabel(_ minutes: Int) -> String {
+        minutes == 0 ? "発表時" : "\(minutes)分前"
     }
 
     // MARK: - 保存

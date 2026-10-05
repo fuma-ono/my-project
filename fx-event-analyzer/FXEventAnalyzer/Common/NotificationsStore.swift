@@ -43,8 +43,10 @@ final class NotificationsStore: ObservableObject {
     /// 予定は`upcoming`で置き換える(設定の変更や発表時刻の変更に追従する)。
     func record(_ upcoming: [NotificationEntry], now: Date = Date()) {
         let delivered = entries.filter { $0.notifyAt <= now }
-        let deliveredIDs = Set(delivered.map(\.id))
-        let merged = delivered + upcoming.filter { !deliveredIDs.contains($0.id) }
+        // 届いた指標・発言は、取り直して通知時刻がずれても(発表時刻の変更など)
+        // 二重に並べない。
+        let deliveredTargets = Set(delivered.map(\.targetKey))
+        let merged = delivered + upcoming.filter { !deliveredTargets.contains($0.targetKey) }
         var sorted = merged.sorted { $0.notifyAt < $1.notifyAt }
         let deliveredCount = sorted.filter { $0.notifyAt <= now }.count
         if deliveredCount > Self.deliveredLimit {
@@ -109,6 +111,8 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
 
     /// 同じ指標・発言でも、通知タイミングを変えると別の通知になる。
     var id: String { "\(kind.rawValue).\(targetID).\(Int(notifyAt.timeIntervalSince1970))" }
+    /// 通知の対象(指標・発言)。1つの対象は一度だけ届ける。
+    var targetKey: String { "\(kind.rawValue).\(targetID)" }
 
     init(kind: UpcomingNotification.Kind, targetID: String, title: String, body: String, notifyAt: Date, scheduledAt: Date, importance: String) {
         self.kind = kind

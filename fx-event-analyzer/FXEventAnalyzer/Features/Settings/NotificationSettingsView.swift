@@ -32,12 +32,19 @@ struct NotificationSettingsView: View {
             case .error(let message):
                 centered { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() }) }
             case .loaded:
-                VStack(spacing: 8) {
-                    kindsCard
-                    conditionsCard
-                    aboutCard
+                // 端末の文字幅で収まらない場合もタブバーに重ならないよう、
+                // ヘッダー下〜タブバー上の範囲でスクロールさせる。
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 6) {
+                        kindsCard
+                        conditionsCard
+                        aboutCard
+                    }
+                    .padding(.top, 5)
+                    .frame(width: V5P.W)
                 }
-                .accountPinned(top: 59, height: 392)
+                .frame(width: V5P.W, height: 398)
+                .position(x: V5P.W / 2, y: 54 + 398 / 2)
             }
             V5BottomBar(selected: $tabSelection)
         }
@@ -103,7 +110,7 @@ struct NotificationSettingsView: View {
             NotificationValueRow(
                 icon: "clock.fill", title: "通知のタイミング",
                 subtitle: "発表の何分前に通知するかを設定します。",
-                value: NotificationSettingsViewModel.leadLabel(viewModel.settings.leadMinutes)
+                value: NotificationSettingsViewModel.shortLeadLabel(viewModel.settings.leadMinutes)
             ) { picker = .timing }
         }
         .dimmed(!viewModel.settings.push)
@@ -112,7 +119,7 @@ struct NotificationSettingsView: View {
     // MARK: - 通知について
 
     private var aboutCard: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 3) {
             AccountInfoCard(
                 icon: "info.circle.fill",
                 title: "通知について",
@@ -194,8 +201,11 @@ private enum NotificationLayout {
     static let width: CGFloat = 214
     static let sectionTitleSize: CGFloat = 9.5
     static let rowTitleSize: CGFloat = 8.5
-    static let subtitleSize: CGFloat = 6.5
-    static let valueSize: CGFloat = 7.5
+    static let subtitleSize: CGFloat = 6
+    static let valueSize: CGFloat = 7
+    /// 行のアイコン・文字・右端の間隔。
+    static let rowSpacing: CGFloat = 6
+    static let rowVerticalPadding: CGFloat = 5
 }
 
 /// 丸いアイコン・見出し・説明の下に、枠で囲んだ行を並べるカード。
@@ -222,7 +232,7 @@ private struct NotificationCard<Rows: View>: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 10)
-            .frame(height: 36)
+            .frame(height: 32)
 
             VStack(spacing: 0) { rows() }
                 .background(
@@ -267,6 +277,9 @@ private struct NotificationRowText: View {
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        // 右端(スイッチ・値)以外の幅をすべて文字に使い、折り返しを減らす。
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .layoutPriority(1)
     }
 }
 
@@ -281,10 +294,9 @@ private struct NotificationToggleRow: View {
 
     var body: some View {
         Button { onChange(!isOn) } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: NotificationLayout.rowSpacing) {
                 NotificationIconTile(icon: icon)
                 NotificationRowText(title: title, subtitle: subtitle)
-                Spacer(minLength: 4)
                 Capsule()
                     .fill(isOn ? V5P.blue : V5P.panel2)
                     .overlay(Capsule().stroke(isOn ? V5P.blue : V5P.line, lineWidth: 0.5))
@@ -295,7 +307,7 @@ private struct NotificationToggleRow: View {
                     .animation(.easeInOut(duration: 0.15), value: isOn)
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 7)
+            .padding(.vertical, NotificationLayout.rowVerticalPadding)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -316,21 +328,19 @@ private struct NotificationValueRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: NotificationLayout.rowSpacing) {
                 NotificationIconTile(icon: icon)
                 NotificationRowText(title: title, subtitle: subtitle)
-                    .frame(width: 98, alignment: .leading)
-                Spacer(minLength: 2)
                 V5JPFont.text(value, size: NotificationLayout.valueSize, weight: .regular)
                     .foregroundStyle(SettingsCardStyle.chevronColor)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .fixedSize()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 7.5, weight: .semibold))
                     .foregroundStyle(SettingsCardStyle.chevronColor)
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 7)
+            .padding(.vertical, NotificationLayout.rowVerticalPadding)
             .contentShape(Rectangle())
         }
         .buttonStyle(SettingsRowPressStyle())

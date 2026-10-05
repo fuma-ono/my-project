@@ -105,7 +105,8 @@ final class LocalNotificationScheduler: LocalNotificationScheduling {
         case .authorized, .provisional, .ephemeral: break
         default: return
         }
-        for entry in entries.filter({ $0.notifyAt > current }).prefix(Self.maxPendingRequests) {
+        // 記録に残った今後の分だけを予約する(既に届いた対象は除かれている)。
+        for entry in store.entries.filter({ $0.notifyAt > current }).prefix(Self.maxPendingRequests) {
             try? await center.add(Self.request(for: entry))
         }
     }
