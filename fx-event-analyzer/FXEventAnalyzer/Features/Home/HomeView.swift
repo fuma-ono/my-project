@@ -270,18 +270,24 @@ struct HomeView: View {
         .frame(width: V5P.W - margin * 2, height: V5P.ptToV5(44))
         .overlay(alignment: .trailing) {
             ZStack(alignment: .trailing) {
-                Image(systemName: "bell")
-                    .font(.system(size: notifIconSize, weight: .semibold))
-                    .foregroundStyle(V5P.cyan)
-                    .overlay(alignment: .topTrailing) {
-                        if notifications.hasUnread {
-                            Circle()
-                                .fill(Self.notificationDotColor)
-                                .frame(width: notificationDotSize, height: notificationDotSize)
-                                .offset(x: notificationDotSize * 0.3, y: -notificationDotSize * 0.1)
+                // HQ指示(2026-10-05): ベルから通知一覧を開く。
+                NavigationLink(value: AppRoute.notifications) {
+                    Image(systemName: "bell")
+                        .font(.system(size: notifIconSize, weight: .semibold))
+                        .foregroundStyle(V5P.cyan)
+                        .overlay(alignment: .topTrailing) {
+                            if notifications.hasUnread {
+                                Circle()
+                                    .fill(Self.notificationDotColor)
+                                    .frame(width: notificationDotSize, height: notificationDotSize)
+                                    .offset(x: notificationDotSize * 0.3, y: -notificationDotSize * 0.1)
+                            }
                         }
-                    }
-                    .padding(.trailing, bellTrailingMargin)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("通知")
+                .accessibilityValue(notifications.hasUnread ? "未読あり" : "")
+                .padding(.trailing, bellTrailingMargin)
                 Image(systemName: "person")
                     .font(.system(size: accountIconSize, weight: .semibold))
                     .foregroundStyle(Self.accountIconColor)

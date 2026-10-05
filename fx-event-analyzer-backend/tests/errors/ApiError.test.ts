@@ -15,6 +15,7 @@ describe('ApiError', () => {
     expect(new ApiError('EVENT_NOT_FOUND', 'x').statusCode).toBe(404);
     expect(new ApiError('INDICATOR_NOT_FOUND', 'x').statusCode).toBe(404);
     expect(new ApiError('FX_PAIR_NOT_FOUND', 'x').statusCode).toBe(404);
+    expect(new ApiError('SPEECH_NOT_FOUND', 'x').statusCode).toBe(404);
   });
 
   it('carries the code and message through for the error handler to read', () => {

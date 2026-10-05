@@ -64,4 +64,7 @@ enum AppRoute: Hashable {
     case signUp
     /// SCR-003 パスワード再設定(Loginから)。
     case passwordReset
+    /// 通知一覧。ホームの通知ベルから開く(HQ指示 2026-10-05)。ui-screens.md
+    /// に該当SCR番号が無い新規画面。
+    case notifications
 }

@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.5
+# FX Event Analyzer: API詳細設計書 v1.6
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -43,6 +43,11 @@
   - Pro商品(月額・年額)とPRO Entitlement付与ルールを確定(25.2節・28章)
   - 30章の画面対応表にSCR-018〜026を追加
 - **v1.5**(2026-10-05): SCR-015 アカウント情報(HQ参考画像)の実装に伴い、`GET/PATCH /account`に`display_name`・`birth_date`を追加(24.1節・24.2節)
+- **v1.6**(2026-10-05): SCR-016 通知設定の作り直しと要人発言(HQ指示 2026-10-05)
+  - `GET/PATCH /settings`の`notifications`を新形状に変更(24.4節・24.5節)。通知は「保存のみ」から端末内ローカル通知へ
+  - `GET /notifications/upcoming`を新設(24.6節)
+  - `GET /speeches`・`GET /speeches/{speech_id}`を新設(14.4節・14.5節)。Error Code `SPEECH_NOT_FOUND`を追加
+  - `GET /fx-pairs`を新設(13.5節)
 
 ---
 
@@ -171,6 +176,7 @@ service_role credentialはClientへ絶対に公開しない。db-design.md 6章�
 - EVENT_NOT_FOUND
 - INDICATOR_NOT_FOUND
 - FX_PAIR_NOT_FOUND
+- SPEECH_NOT_FOUND(v1.6で追加)
 - SUBSCRIPTION_REQUIRED
 - FEATURE_NOT_ENTITLED
 
@@ -442,6 +448,18 @@ Response：fx_pair_id / symbol / priority / is_active
 
 priorityの小さいものを優先対象とする。
 
+## 13.5 GET /api/v1/fx-pairs(v1.6で追加)
+
+有効な通貨ペアのマスタ一覧を返す(SCR-016「対象通貨ペア」の選択肢)。認証済みであればfeature_code不要(Indicatorsと同じ扱い)。Paginationなし、`symbol`昇順。
+
+```json
+{
+  "data": [
+    { "fx_pair_id": "20000000-0000-0000-0000-000000000001", "symbol": "USDJPY", "base_currency": "USD", "quote_currency": "JPY" }
+  ]
+}
+```
+
 ---
 
 # 14. Event API
@@ -519,6 +537,40 @@ Movement Chart等の比較的重いデータ、および特定timeframe・特定
 **算出方法(v1.3で明記、L-6)**: `revision_status`はDBに保存された列ではなく、`EventRevision`の存在有無(`event_id`に紐づく行数)からBackendが都度動的に算出する値である。RELEASE Snapshotの値自体は一切変更しない。
 
 詳細な改定履歴(誰が・いつ・どの値を、等)が必要な場合は、16.1節の`GET /events/{event_id}/revisions`を別途呼び出す。Event Detail API自体には改定履歴の全件を含めない(Responseの肥大化を避けるため)。
+
+## 14.4 GET /api/v1/speeches(v1.6で追加)
+
+要人発言の一覧(HQ指示 2026-10-05)。必要なfeature_code：`VIEW_BASIC_EVENT`。
+
+Query：`from` / `to`(ISO 8601。fromはinclusive、toはexclusive) / `importance`(`LOW` / `MEDIUM` / `HIGH`) / `currency`(発言者の通貨、ISO 4217の英大文字3桁) / `page` / `limit`。`statement_datetime`降順。
+
+Response：`{ "data": SpeechSummary[], "meta": { page, limit, total, has_next } }`
+
+```json
+{
+  "speech_id": "50000000-0000-0000-0000-000000000001",
+  "speaker": {
+    "speaker_id": "40000000-0000-0000-0000-000000000001",
+    "name": "ジェローム・パウエル",
+    "title": "FRB議長",
+    "organization": "FRB",
+    "country_code": "US",
+    "currency_code": "USD"
+  },
+  "title": "FOMC後の記者会見",
+  "summary": "政策金利の据え置きを説明し、今後の判断はデータ次第との認識を示した。",
+  "statement_datetime": "2026-09-17T18:30:00+00:00",
+  "importance": "HIGH",
+  "status": "DELIVERED"
+}
+```
+
+- `summary`：出典に基づく事実の要約。未発言・未作成は`null`
+- `status`：`SCHEDULED` / `DELIVERED` / `CANCELLED`
+
+## 14.5 GET /api/v1/speeches/{speech_id}(v1.6で追加)
+
+要人発言1件(SpeechSummary、14.4節と同じ形)。`speech_id`がUUID形式でなければ`422 VALIDATION_ERROR`、存在しなければ`404 SPEECH_NOT_FOUND`。必要なfeature_code：`VIEW_BASIC_EVENT`。
 
 ---
 
@@ -897,15 +949,17 @@ Email / PasswordはSupabase Auth側で管理する。Backend APIから直接Auth
 
 ## 24.4 GET /api/v1/settings(v1.4で追加)
 
-ユーザー設定を取得する(SCR-018 通知設定 / SCR-020 表示・地域設定 / SCR-021 チャート設定)。初回アクセス時はDBの既定値で行を作成して返す。
+ユーザー設定を取得する(SCR-016 通知設定 / SCR-020 表示・地域設定 / SCR-021 チャート設定)。初回アクセス時はDBの既定値で行を作成して返す。
 
 ```json
 {
   "notifications": {
-    "pre_release": true,
-    "result": true,
-    "favorites": true,
-    "min_importance": 3
+    "push": true,
+    "indicators": true,
+    "speeches": true,
+    "fx_pairs": null,
+    "importances": ["HIGH", "MEDIUM"],
+    "lead_minutes": 5
   },
   "display": {
     "language": "ja",
@@ -920,15 +974,72 @@ Email / PasswordはSupabase Auth側で管理する。Backend APIから直接Auth
 }
 ```
 
-- `notifications`：**通知対象の保存のみ**。MVPではPush通知の送信そのものは実装しない(HQ確定)。Push基盤追加時は本設定を送信条件として参照し、デバイストークンは別テーブルで管理する想定
-  - `pre_release`：重要指標の発表前通知 / `result`：重要指標の結果通知 / `favorites`：お気に入りイベント通知
-  - `min_importance`：通知する重要度の下限(★1〜★5の整数)。指標のimportance(3段階)とは**暫定マッピング** LOW→★1 / MEDIUM→★3 / HIGH→★5 で対応付ける(Push通知実装時に最終確認、db-design.md §3.14)
+- `notifications`(v1.6で全面変更、SCR-016 通知設定、HQ指示 2026-10-05)：iOSは本設定に基づく24.6節の結果から**端末内のローカル通知**を予約する。旧方針「MVPは通知対象の保存のみ・Push送信なし」(HQ確定 2026-10-02)は本指示で置き換え。Backendからのリモートpush送信・デバイストークン管理は引き続き行わない
+  - `push`：プッシュ通知(全体のON/OFF)。`false`なら他の項目に関わらず通知しない
+  - `indicators`：重要な経済指標の通知 / `speeches`：要人発言の通知
+  - `fx_pairs`：対象通貨ペア(`fx_pairs.symbol`の配列)。`null` = すべての通貨ペア
+  - `importances`：通知する重要度(`HIGH` / `MEDIUM` / `LOW`の1件以上)。Responseは常に`HIGH`→`MEDIUM`→`LOW`の順
+  - `lead_minutes`：通知タイミング。`0`(発表時) / `5` / `10` / `15` / `30` / `60`(分前)
+  - 旧フィールド`pre_release` / `result` / `favorites` / `min_importance`は削除(既存値の移行はdb-design.md §3.14)
 - `display.language`：`ja` / `en`、`display.region`：ISO 3166-1 alpha-2、`display.timezone`：IANA timezone名。Home等のRequestに渡すtimezoneの既定値としてiOSが利用する(6章の「Requestで明示的に受け取る」方針は変更しない)
 - `chart.default_fx_pair_symbol`：`fx_pairs.symbol`または`null`、`chart.default_timeframe`：`1m` / `5m` / `15m` / `30m` / `60m`
 
 ## 24.5 PATCH /api/v1/settings(v1.4で追加)
 
 ユーザー設定を部分更新する。Bodyは24.4節と同じ構造で、**送ったフィールドのみ**更新する。未知のフィールドは`422 VALIDATION_ERROR`。存在しない`default_fx_pair_symbol`も`422`。Responseは更新後の24.4節と同じ形。
+
+`notifications`のValidation(v1.6)。違反はいずれも`422 VALIDATION_ERROR`：
+
+- `importances`：1件以上。重複は除去して保存する
+- `fx_pairs`：`null`、または1件以上・重複なしの配列。`fx_pairs`テーブルに存在しない(または無効な)symbolを含む場合は`422`
+- `lead_minutes`：`0` / `5` / `10` / `15` / `30` / `60`以外は`422`
+
+## 24.6 GET /api/v1/notifications/upcoming(v1.6で追加)
+
+ローカル通知の予約対象を返す(SCR-016、HQ指示 2026-10-05)。呼び出しユーザーの保存済み設定(24.4節)で絞り込む。必要なfeature_code：`VIEW_BASIC_EVENT`。
+
+Query：
+
+- `from`(任意、ISO 8601。既定: 現在時刻)
+- `to`(任意、ISO 8601。既定: `from` + 7日)
+- `to <= from`、または期間が14日を超える場合は`422 VALIDATION_ERROR`
+
+Response：
+
+```json
+{
+  "lead_minutes": 5,
+  "items": [
+    {
+      "kind": "SPEECH",
+      "id": "50000000-0000-0000-0000-000000000004",
+      "title": "経済見通しに関する講演",
+      "speaker_name": "ジェローム・パウエル",
+      "importance": "HIGH",
+      "scheduled_at": "2026-10-14T16:00:00Z",
+      "notify_at": "2026-10-14T15:55:00Z",
+      "country_code": "US",
+      "currency_code": "USD",
+      "related_fx_pairs": ["EURUSD", "USDJPY"]
+    }
+  ]
+}
+```
+
+- `kind`：`INDICATOR`(`id` = `economic_events.id`、`title` = 指標名) / `SPEECH`(`id` = `speech_events.id`、`title` = 発言タイトル)
+- `speaker_name`：SPEECHのみ。INDICATORは`null`
+- `scheduled_at`：`release_datetime` / `statement_datetime`。`notify_at` = `scheduled_at` − `lead_minutes`。いずれも秒精度のUTC(`Z`、小数秒なし)
+- `related_fx_pairs`：INDICATOR = `indicator_fx_pairs`のsymbol(priority順)、SPEECH = 発言者の通貨をbaseまたはquoteに含む有効な`fx_pairs`のsymbol(symbol順)
+
+抽出ルール(Backend実装: `src/domain/notifications.ts`)：
+
+1. `push = false`なら`items`は空
+2. `indicators = true`なら経済指標、`speeches = true`なら要人発言を対象にする
+3. `status = SCHEDULED`のみ。経済指標は`release_datetime_precision = EXACT`のみ(時刻が確定していないものは「N分前」を決められないため)
+4. `importance`が`importances`に含まれること
+5. `fx_pairs`が`null`でなければ、`related_fx_pairs`と1件以上共通すること
+6. `notify_at >= from`かつ`scheduled_at <= to`
+7. `notify_at`昇順、最大60件(iOSのローカル通知予約上限64件に余裕を持たせる)
 
 ---
 
@@ -1030,8 +1141,10 @@ Backend側の各Endpointが要求するEntitlementを以下の通り確定する
 | Historical Comparison(Advanced Statistics) | `GET /indicators/{id}/comparison`の`advanced_statistics` | `VIEW_ADVANCED_STATS`(21.3節参照。403にはせず`available:false`で表現) |
 | Market Reaction | `GET /events/{id}/reaction`、`GET /events/{id}/reaction/chart` | `VIEW_MARKET_REACTION` |
 | Historical Event Detail | `GET /events/{id}/history` | `VIEW_HISTORICAL` |
+| 要人発言(v1.6で追加) | `GET /speeches`、`GET /speeches/{id}` | `VIEW_BASIC_EVENT` |
+| 通知予約対象(v1.6で追加) | `GET /notifications/upcoming` | `VIEW_BASIC_EVENT` |
 
-Home / Indicators / Indicator Detail / Search / Account / Subscription / Entitlement APIは、認証済みであれば全ユーザーがアクセス可能とし、特定feature_codeを要求しない。
+Home / Indicators / Indicator Detail / FX Pairs(v1.6) / Search / Account / Settings / Subscription / Entitlement APIは、認証済みであれば全ユーザーがアクセス可能とし、特定feature_codeを要求しない。
 
 **Event Revision APIについて(HQ確定、v1.2)**: `GET /events/{id}/revisions`はMVPではEntitlement制限を設けない。認証済みユーザーであれば取得可能とする。理由: Revisionは課金対象となる高度分析そのものではなく、イベントデータの履歴・事実情報であるため。
 
@@ -1085,7 +1198,7 @@ Backend APIはSupabase JWTを検証する。
 | SCR-009 Entitlements | GET /entitlements |
 | SCR-011 Account | GET /account |
 | SCR-011 Account Update | PATCH /account |
-| SCR-018 通知設定(v1.4で追加) | GET /settings、PATCH /settings |
+| SCR-016 通知設定(v1.4で追加、v1.6で更新) | GET /settings、PATCH /settings、GET /fx-pairs、GET /notifications/upcoming |
 | SCR-019 プラン・購読管理(v1.4で追加) | GET /subscription、POST /subscription/verify |
 | SCR-020 表示・地域設定(v1.4で追加) | GET /settings、PATCH /settings |
 | SCR-021 チャート設定(v1.4で追加) | GET /settings、PATCH /settings |

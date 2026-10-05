@@ -1,12 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ApiError } from '../errors/ApiError.js';
+import type { Importance } from '../domain/importance.js';
 import { ensureProfile } from './profilesRepository.js';
 
 export interface UserSettingsRow {
-  notify_pre_release: boolean;
-  notify_result: boolean;
-  notify_favorites: boolean;
-  notify_min_importance: number;
+  notify_push: boolean;
+  notify_indicators: boolean;
+  notify_speeches: boolean;
+  /** null = すべての通貨ペア */
+  notify_fx_pair_symbols: string[] | null;
+  notify_importances: Importance[];
+  /** 0 / 5 / 10 / 15 / 30 / 60 (DB CHECK) */
+  notify_lead_minutes: number;
   display_language: string;
   display_region: string;
   display_timezone: string;
@@ -18,7 +23,7 @@ export interface UserSettingsRow {
 export type UserSettingsUpdate = Partial<Omit<UserSettingsRow, 'updated_at'>>;
 
 const COLUMNS =
-  'notify_pre_release, notify_result, notify_favorites, notify_min_importance, display_language, display_region, display_timezone, chart_default_fx_pair_symbol, chart_default_timeframe, updated_at';
+  'notify_push, notify_indicators, notify_speeches, notify_fx_pair_symbols, notify_importances, notify_lead_minutes, display_language, display_region, display_timezone, chart_default_fx_pair_symbol, chart_default_timeframe, updated_at';
 
 /** Postgres foreign_key_violation — only chart_default_fx_pair_symbol has an
  * FK a client value can break (an fx_pairs.symbol that doesn't exist). */

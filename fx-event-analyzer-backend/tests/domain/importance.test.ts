@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { IMPORTANCE_STARS, meetsNotificationThreshold } from '../../src/domain/importance.js';
+import { IMPORTANCE_STARS, meetsNotificationThreshold, sortImportancesDesc } from '../../src/domain/importance.js';
 
 describe('IMPORTANCE_STARS (provisional mapping)', () => {
   it('maps LOW/MEDIUM/HIGH to ★1/★3/★5', () => {
@@ -17,5 +17,12 @@ describe('meetsNotificationThreshold', () => {
   it('excludes importance below the threshold', () => {
     expect(meetsNotificationThreshold('MEDIUM', 4)).toBe(false);
     expect(meetsNotificationThreshold('LOW', 2)).toBe(false);
+  });
+});
+
+describe('sortImportancesDesc', () => {
+  it('dedupes and orders HIGH, MEDIUM, LOW', () => {
+    expect(sortImportancesDesc(['LOW', 'HIGH', 'LOW', 'MEDIUM'])).toEqual(['HIGH', 'MEDIUM', 'LOW']);
+    expect(sortImportancesDesc(['MEDIUM'])).toEqual(['MEDIUM']);
   });
 });

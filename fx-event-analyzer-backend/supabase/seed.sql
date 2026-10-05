@@ -95,3 +95,22 @@ insert into event_snapshots (event_id, snapshot_type, forecast, actual, previous
 
 insert into economic_events (id, indicator_id, provider, provider_event_id, release_datetime, release_datetime_precision, importance, status, data_status) values
   ('30000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000002', 'seed', 'seed-us-nfp-2026-10', '2026-10-03T12:30:00Z', 'EXACT', 'HIGH', 'SCHEDULED', 'PENDING');
+
+-- ---------------------------------------------------------------------
+-- 要人発言 (HQ指示 2026-10-05): speakers / speech_events. Past ones are
+-- DELIVERED with a fact-only summary; future ones are SCHEDULED so
+-- GET /notifications/upcoming has speech candidates. Euro area uses
+-- country_code 'EU' (same alpha-2 style as economic_indicators).
+-- ---------------------------------------------------------------------
+
+insert into speakers (id, name, title, organization, country_code, currency_code) values
+  ('40000000-0000-0000-0000-000000000001', 'ジェローム・パウエル', 'FRB議長', 'FRB', 'US', 'USD'),
+  ('40000000-0000-0000-0000-000000000002', '植田和男', '日本銀行総裁', '日本銀行', 'JP', 'JPY'),
+  ('40000000-0000-0000-0000-000000000003', 'クリスティーヌ・ラガルド', 'ECB総裁', 'ECB', 'EU', 'EUR');
+
+insert into speech_events (id, speaker_id, provider, provider_event_id, title, summary, statement_datetime, importance, status) values
+  ('50000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', 'seed', 'seed-powell-2026-09-17', 'FOMC後の記者会見', '政策金利の据え置きを説明し、今後の判断はデータ次第との認識を示した。', '2026-09-17T18:30:00Z', 'HIGH', 'DELIVERED'),
+  ('50000000-0000-0000-0000-000000000002', '40000000-0000-0000-0000-000000000002', 'seed', 'seed-ueda-2026-09-19', '金融政策決定会合後の記者会見', '現行の金融緩和の枠組みを維持する方針を説明した。', '2026-09-19T06:30:00Z', 'HIGH', 'DELIVERED'),
+  ('50000000-0000-0000-0000-000000000003', '40000000-0000-0000-0000-000000000003', 'seed', 'seed-lagarde-2026-09-24', '欧州議会での証言', 'ユーロ圏のインフレ動向について説明した。', '2026-09-24T13:00:00Z', 'MEDIUM', 'DELIVERED'),
+  ('50000000-0000-0000-0000-000000000004', '40000000-0000-0000-0000-000000000001', 'seed', 'seed-powell-2026-10-14', '経済見通しに関する講演', null, '2026-10-14T16:00:00Z', 'HIGH', 'SCHEDULED'),
+  ('50000000-0000-0000-0000-000000000005', '40000000-0000-0000-0000-000000000002', 'seed', 'seed-ueda-2026-10-16', '国会答弁', null, '2026-10-16T01:00:00Z', 'MEDIUM', 'SCHEDULED');

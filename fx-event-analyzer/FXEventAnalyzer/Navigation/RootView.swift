@@ -4,6 +4,7 @@ import SwiftUI
 /// (design.md 15.1節 起動フロー).
 struct RootView: View {
     @StateObject private var appState: AppState
+    @Environment(\.scenePhase) private var scenePhase
     private let authService: AuthServicing
     private let apiClient: APIClient
 
@@ -31,7 +32,19 @@ struct RootView: View {
                 )
             case .loggedIn:
                 MainTabView(apiClient: apiClient, authService: authService) {
+                    // ログアウト・アカウント削除: 前のユーザーの通知を残さない。
+                    LocalNotificationScheduler(apiClient: apiClient).reset()
                     appState.handleSignOut()
+                }
+                .task(id: scenePhase) {
+                    // 起動時・フォアグラウンド復帰時にローカル通知を予約し直し、
+                    // 表示中は通知時刻を過ぎた分をベルの赤バッジに反映する。
+                    guard scenePhase == .active else { return }
+                    await LocalNotificationScheduler(apiClient: apiClient).refresh()
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .seconds(30))
+                        NotificationsStore.shared.refreshUnread()
+                    }
                 }
             }
         }

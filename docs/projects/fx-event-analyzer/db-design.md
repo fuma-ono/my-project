@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.3
+# FX Event Analyzer: DB詳細設計 v4.4
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -26,6 +26,9 @@
   - アカウント削除を**物理削除**に変更(旧: `Profile.deleted_at`によるソフトデリート)。3.1節・7章
   - `Subscription`にApp Store検証用カラム(`product_id`/`provider_environment`/`last_transaction_id`/`auto_renew`/`revoked_at`/`last_verified_at`)と`UQ(provider, provider_subscription_id)`を追加。保存用関数`apply_app_store_subscription`を追加(3.2節)
   - `UserSettings`を新設(3.14節)
+- **v4.4**(2026-10-05): SCR-016 通知設定の作り直しと要人発言(HQ指示 2026-10-05)。Migration `20261005000002_notification_settings_v2.sql` / `20261005000003_speeches.sql`
+  - `UserSettings`の通知カラムを新形状に変更(3.14節)
+  - `Speaker` / `SpeechEvent`を新設(3.15節・3.16節)。旧版でP2・対象外としていた`Person` / `SpeechEvent`を前倒し
 
 ---
 
@@ -47,8 +50,10 @@
 | `EventPriceReaction` | イベント×通貨ペア×時間軸ごとの価格反応 |
 | `IngestionLog` | 外部データ取得・取り込みの運用ログ(FEAT-150) |
 | `UserSettings` | ユーザーごとの通知対象・表示・チャート設定(v4.3で追加) |
+| `Speaker` | 要人(発言者)マスタ(v4.4で追加) |
+| `SpeechEvent` | 要人発言(v4.4で追加) |
 
-将来拡張(P2、今回はテーブル設計対象外): `favorite_indicators` / `favorite_pairs` / `alert_settings` / `Person` / `SpeechEvent` / `SpeechPriceReaction` / Community関連。
+将来拡張(P2、今回はテーブル設計対象外): `favorite_indicators` / `favorite_pairs` / `alert_settings` / `SpeechPriceReaction` / Community関連。(`Person` / `SpeechEvent`はHQ指示 2026-10-05により`Speaker` / `SpeechEvent`としてv4.4で追加)
 
 ---
 
@@ -367,15 +372,17 @@ IDX(status)
 
 ### 3.14 UserSettings(v4.3で追加、HQ確定 2026-10-02)
 
-SCR-018 通知設定 / SCR-020 表示・地域設定 / SCR-021 チャート設定の保存先(api-design.md §24.4/§24.5)。行は初回の`GET /settings`でDB既定値により作成する。
+SCR-016 通知設定 / SCR-020 表示・地域設定 / SCR-021 チャート設定の保存先(api-design.md §24.4/§24.5)。行は初回の`GET /settings`でDB既定値により作成する。
 
 | カラム | 型 | 制約 | 備考 |
 |---|---|---|---|
 | user_id | uuid | PK, FK→Profile.id ON DELETE CASCADE | ユーザーにつき1行 |
-| notify_pre_release | boolean | NN, DEF true | 重要指標の発表前通知 |
-| notify_result | boolean | NN, DEF true | 重要指標の結果通知 |
-| notify_favorites | boolean | NN, DEF true | お気に入りイベント通知 |
-| notify_min_importance | smallint | NN, DEF 3, CHK: `BETWEEN 1 AND 5` | 通知する重要度の下限(★1〜★5) |
+| notify_push | boolean | NN, DEF true | プッシュ通知(全体のON/OFF)(v4.4) |
+| notify_indicators | boolean | NN, DEF true | 重要な経済指標の通知(v4.4) |
+| notify_speeches | boolean | NN, DEF true | 要人発言の通知(v4.4) |
+| notify_fx_pair_symbols | text[] | nullable, CHK: NULLまたは1件以上 | 対象通貨ペア(`FxPair.symbol`)。NULL = すべて。配列のためFKなし、存在確認はBackend(v4.4) |
+| notify_importances | text[] | NN, DEF `{HIGH,MEDIUM}`, CHK: 1件以上かつ`<@ {LOW,MEDIUM,HIGH}` | 通知する重要度(v4.4) |
+| notify_lead_minutes | smallint | NN, DEF 5, CHK: `IN (0,5,10,15,30,60)` | 発表の何分前に通知するか。0 = 発表時(v4.4) |
 | display_language | text | NN, DEF `ja`, CHK: `IN ('ja','en')` | |
 | display_region | text | NN, DEF `JP`, CHK: `~ '^[A-Z]{2}$'` | ISO 3166-1 alpha-2 |
 | display_timezone | text | NN, DEF `Asia/Tokyo` | IANA timezone名(妥当性はBackendで検証) |
@@ -384,19 +391,50 @@ SCR-018 通知設定 / SCR-020 表示・地域設定 / SCR-021 チャート設�
 | created_at | timestamptz | NN, DEF now() | |
 | updated_at | timestamptz | NN, DEF now() | |
 
-**通知について(HQ確定)**: MVPはPush通知を送信しない。本テーブルは「何を通知対象とするか」の保存のみ。Push基盤追加時は、デバイストークン等を別テーブル(例: `push_devices`)に持ち、送信判定で本テーブルを参照する。
+**通知について(v4.4で変更、HQ指示 2026-10-05)**: 旧方針「MVPはPush通知を送信しない・保存のみ」(HQ確定 2026-10-02)を置き換え、iOSが`GET /notifications/upcoming`(api-design.md §24.6)の結果から端末内のローカル通知を予約する。Backendからのリモートpush・デバイストークン用テーブルは引き続き不要。
 
-**重要度の暫定マッピング(HQ確定 2026-10-02、Push通知実装時に最終確認)**: `notify_min_importance`は★1〜★5の5段階、`EconomicIndicator.importance`/`EconomicEvent.importance`は`LOW`/`MEDIUM`/`HIGH`の3段階(3.4節)のまま維持する。両者は以下の**暫定マッピング**で対応付ける(Backend実装: `src/domain/importance.ts`)。
-
-| importance | ★ |
-|---|---|
-| LOW | ★1 |
-| MEDIUM | ★3 |
-| HIGH | ★5 |
-
-送信判定は「イベントの★ ≥ `notify_min_importance`」。例: ★4を選ぶとHIGHのみ、★2を選ぶとMEDIUM・HIGHが対象。将来importanceを5段階化する可能性を残すため、`notify_min_importance`は1〜5の整数のまま保持し、5段階化した場合はマッピングのみ差し替える(DB変更不要)。
+**旧カラムの移行(Migration `20261005000002_notification_settings_v2.sql`)**: `notify_pre_release` / `notify_result` / `notify_favorites` / `notify_min_importance`は削除。既存行は`notify_indicators = notify_pre_release OR notify_result`、`notify_importances` = 旧`notify_min_importance`以上の★を持つ重要度(暫定マッピング LOW→★1 / MEDIUM→★3 / HIGH→★5、`src/domain/importance.ts`。例: ★3→`{HIGH,MEDIUM}`、★4→`{HIGH}`)で移行した。移行時は`updated_at`を更新しない。
 
 **RLS**: `user_id = auth.uid()`の本人のみSELECT可。書き込みはservice_roleのみ(Backend経由)。
+
+### 3.15 Speaker(v4.4で追加、HQ指示 2026-10-05)
+
+要人(発言者)マスタ。旧版でP2・設計対象外としていた`Person`を、要人発言の通知・一覧のために前倒しで追加(Migration `20261005000003_speeches.sql`)。テーブル名は`speakers`。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK, DEF gen_random_uuid() | |
+| name | text | NN | 例: ジェローム・パウエル |
+| title | text | NN | 役職。例: FRB議長 |
+| organization | text | NN | 例: FRB |
+| country_code | text | NN | `EconomicIndicator`と同じ形式。ユーロ圏は`EU` |
+| currency_code | text | NN | `EconomicIndicator`と同じ形式。関連通貨ペアの判定に使う |
+| created_at / updated_at | timestamptz | NN, DEF now() | |
+
+IDX(currency_code)
+
+### 3.16 SpeechEvent(v4.4で追加、HQ指示 2026-10-05)
+
+要人発言1件。テーブル名は`speech_events`。`SpeechPriceReaction`は引き続き対象外。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK, DEF gen_random_uuid() | |
+| speaker_id | uuid | NN, FK→Speaker.id ON DELETE CASCADE | |
+| provider | text | NN | |
+| provider_event_id | text | NN | |
+| title | text | NN | |
+| summary | text | nullable | 出典に基づく事実の要約 |
+| statement_datetime | timestamptz | NN | 発言(予定)日時 |
+| importance | text | NN, CHK: `IN ('LOW','MEDIUM','HIGH')` | |
+| status | text | NN, DEF `SCHEDULED`, CHK: `IN ('SCHEDULED','DELIVERED','CANCELLED')` | |
+| created_at / updated_at | timestamptz | NN, DEF now() | |
+
+UQ(provider, provider_event_id)、IDX(statement_datetime)、IDX(speaker_id)
+
+関連通貨ペアは保存せず、`Speaker.currency_code`をbaseまたはquoteに含む`FxPair`をBackendが導出する(api-design.md §24.6)。
+
+**RLS**: `EconomicIndicator` / `EconomicEvent`と同じ共有データ扱い(全認証ユーザーSELECT可、書き込みはservice_roleのみ)。
 
 ---
 
@@ -428,7 +466,7 @@ Supabase RLSを実装前提の設計条件として採用する。論理方針�
 | 区分 | 対象テーブル | 方針 |
 |---|---|---|
 | ユーザー固有 | `Profile` / `Subscription` / `Entitlement` / `UserSettings` | `auth.uid()`等を利用した本人のみSELECT可。INSERT/UPDATE/DELETEはservice_roleのみ |
-| 共有データ | `EconomicIndicator` / `EconomicEvent` / `EventSnapshot` / `EventRevision` / `EventExplanation` / `IndicatorFxPair` / `FxPair` / `FxPrice` / `EventPriceReaction` | ユーザー単位のRLSを前提とせず、原則として全認証ユーザーからSELECT可能。INSERT/UPDATE/DELETEはservice_role(Ingestion Worker・管理者機能)のみ |
+| 共有データ | `EconomicIndicator` / `EconomicEvent` / `Speaker` / `SpeechEvent`(v4.4) / `EventSnapshot` / `EventRevision` / `EventExplanation` / `IndicatorFxPair` / `FxPair` / `FxPrice` / `EventPriceReaction` | ユーザー単位のRLSを前提とせず、原則として全認証ユーザーからSELECT可能。INSERT/UPDATE/DELETEはservice_role(Ingestion Worker・管理者機能)のみ |
 | 運用ログ | `IngestionLog` | 一般ユーザーからは非公開。管理者機能・service_roleのみアクセス可 |
 
 ## 7. Delete / Cascade方針(確定)

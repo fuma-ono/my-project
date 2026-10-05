@@ -575,12 +575,190 @@ function comparisonHandler(indicatorId, timeframe) {
   };
 }
 
+// SCR-016 通知設定 v2 (HQ指示 2026-10-05) — same shape as the real
+// GET /settings (src/domain/userSettings.ts).
 const settingsFixture = {
-  notifications: { pre_release: true, result: true, favorites: false, min_importance: 3 },
+  notifications: {
+    push: true,
+    indicators: true,
+    speeches: true,
+    fx_pairs: null,
+    importances: ['HIGH', 'MEDIUM'],
+    lead_minutes: 5,
+  },
   display: { language: 'ja', region: 'JP', timezone: 'Asia/Tokyo' },
   chart: { default_fx_pair_symbol: 'USDJPY', default_timeframe: '5m' },
   updated_at: '2026-10-02T00:00:00Z',
 };
+
+const IMPORTANCE_ORDER = ['HIGH', 'MEDIUM', 'LOW'];
+
+/** PATCH /settings: merge each group present in the body into the fixture
+ * (no validation — the real Backend does that) and return the result, so
+ * toggles made during a screenshot run stick when the screen reloads. */
+function patchSettings(rawBody) {
+  let body;
+  try {
+    body = rawBody ? JSON.parse(rawBody) : {};
+  } catch {
+    return null;
+  }
+  for (const group of ['notifications', 'display', 'chart']) {
+    if (body && typeof body[group] === 'object' && body[group] !== null) {
+      Object.assign(settingsFixture[group], body[group]);
+    }
+  }
+  settingsFixture.notifications.importances = IMPORTANCE_ORDER.filter((level) =>
+    settingsFixture.notifications.importances.includes(level),
+  );
+  settingsFixture.updated_at = isoSeconds(now());
+  return settingsFixture;
+}
+
+// ---------------------------------------------------------------------------
+// FX pairs / 要人発言 / upcoming notifications (HQ指示 2026-10-05). Dates
+// are relative to now and formatted WITHOUT fractional seconds — the iOS
+// app decodes with JSONDecoder's .iso8601 strategy, which rejects them.
+
+const isoSeconds = (date) => date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+const isoSecondsPlusMinutes = (minutes) => isoSeconds(new Date(now().getTime() + minutes * 60_000));
+
+const FX_PAIRS = [
+  { fx_pair_id: '22222222-2222-2222-2222-222222222226', symbol: 'AUDJPY', base_currency: 'AUD', quote_currency: 'JPY' },
+  { fx_pair_id: '22222222-2222-2222-2222-222222222224', symbol: 'EURJPY', base_currency: 'EUR', quote_currency: 'JPY' },
+  { fx_pair_id: '22222222-2222-2222-2222-222222222223', symbol: 'EURUSD', base_currency: 'EUR', quote_currency: 'USD' },
+  { fx_pair_id: '22222222-2222-2222-2222-222222222225', symbol: 'GBPJPY', base_currency: 'GBP', quote_currency: 'JPY' },
+  { fx_pair_id: FX_PAIR_ID, symbol: 'USDJPY', base_currency: 'USD', quote_currency: 'JPY' },
+];
+
+const SPEAKERS = {
+  powell: {
+    speaker_id: '66666666-6666-6666-6666-666666666661',
+    name: 'ジェローム・パウエル',
+    title: 'FRB議長',
+    organization: 'FRB',
+    country_code: 'US',
+    currency_code: 'USD',
+  },
+  ueda: {
+    speaker_id: '66666666-6666-6666-6666-666666666662',
+    name: '植田和男',
+    title: '日本銀行総裁',
+    organization: '日本銀行',
+    country_code: 'JP',
+    currency_code: 'JPY',
+  },
+  lagarde: {
+    speaker_id: '66666666-6666-6666-6666-666666666663',
+    name: 'クリスティーヌ・ラガルド',
+    title: 'ECB総裁',
+    organization: 'ECB',
+    country_code: 'EU',
+    currency_code: 'EUR',
+  },
+};
+
+const SPEECH_ID_POWELL_UPCOMING = '77777777-7777-7777-7777-777777777771';
+const SPEECH_ID_UEDA_UPCOMING = '77777777-7777-7777-7777-777777777772';
+const SPEECH_ID_UEDA_SOON = '77777777-7777-7777-7777-777777777776';
+
+function speechesFixture() {
+  return [
+    {
+      speech_id: SPEECH_ID_POWELL_UPCOMING,
+      speaker: SPEAKERS.powell,
+      title: '経済見通しに関する講演',
+      summary: null,
+      statement_datetime: isoSecondsPlusMinutes(26 * 60),
+      importance: 'HIGH',
+      status: 'SCHEDULED',
+    },
+    {
+      speech_id: SPEECH_ID_UEDA_UPCOMING,
+      speaker: SPEAKERS.ueda,
+      title: '国会答弁',
+      summary: null,
+      statement_datetime: isoSecondsPlusMinutes(8 * 60),
+      importance: 'MEDIUM',
+      status: 'SCHEDULED',
+    },
+    {
+      speech_id: SPEECH_ID_UEDA_SOON,
+      speaker: SPEAKERS.ueda,
+      title: '金融経済懇談会での講演',
+      summary: null,
+      statement_datetime: isoSecondsPlusMinutes(2),
+      importance: 'MEDIUM',
+      status: 'SCHEDULED',
+    },
+    {
+      speech_id: '77777777-7777-7777-7777-777777777773',
+      speaker: SPEAKERS.lagarde,
+      title: '欧州議会での証言',
+      summary: 'ユーロ圏のインフレ動向について説明した。',
+      statement_datetime: isoSecondsPlusMinutes(-2 * 24 * 60),
+      importance: 'MEDIUM',
+      status: 'DELIVERED',
+    },
+    {
+      speech_id: '77777777-7777-7777-7777-777777777774',
+      speaker: SPEAKERS.ueda,
+      title: '金融政策決定会合後の記者会見',
+      summary: '現行の金融緩和の枠組みを維持する方針を説明した。',
+      statement_datetime: isoSecondsPlusMinutes(-5 * 24 * 60),
+      importance: 'HIGH',
+      status: 'DELIVERED',
+    },
+    {
+      speech_id: '77777777-7777-7777-7777-777777777775',
+      speaker: SPEAKERS.powell,
+      title: 'FOMC後の記者会見',
+      summary: '政策金利の据え置きを説明し、今後の判断はデータ次第との認識を示した。',
+      statement_datetime: isoSecondsPlusMinutes(-9 * 24 * 60),
+      importance: 'HIGH',
+      status: 'DELIVERED',
+    },
+  ].sort((a, b) => b.statement_datetime.localeCompare(a.statement_datetime));
+}
+
+function speechesListHandler() {
+  const data = speechesFixture();
+  return { data, meta: { page: 1, limit: 20, total: data.length, has_next: false } };
+}
+
+/**
+ * GET /notifications/upcoming. Deliberately ignores the real API's
+ * notify_at >= from rule: the first two items' notify_at is a few minutes
+ * in the PAST so the iOS in-app notification list has content in
+ * screenshots; the last two are in the future.
+ */
+function upcomingNotificationsHandler() {
+  const lead = settingsFixture.notifications.lead_minutes;
+  const item = (kind, id, title, speakerName, importance, scheduledInMinutes, country, currency, pairs) => ({
+    kind,
+    id,
+    title,
+    speaker_name: speakerName,
+    importance,
+    scheduled_at: isoSecondsPlusMinutes(scheduledInMinutes),
+    notify_at: isoSecondsPlusMinutes(scheduledInMinutes - lead),
+    country_code: country,
+    currency_code: currency,
+    related_fx_pairs: pairs,
+  });
+  const jpyPairs = ['AUDJPY', 'EURJPY', 'GBPJPY', 'USDJPY'];
+  return {
+    lead_minutes: lead,
+    items: [
+      // notify_at = now - 10 min / now - 1 min (past)
+      item('INDICATOR', EVENT_ID_UPCOMING_JP_CPI, 'Japan Consumer Price Index (YoY)', null, 'HIGH', lead - 10, 'JP', 'JPY', ['USDJPY', 'EURJPY']),
+      item('SPEECH', SPEECH_ID_UEDA_SOON, '金融経済懇談会での講演', '植田和男', 'MEDIUM', lead - 1, 'JP', 'JPY', jpyPairs),
+      // future
+      item('INDICATOR', EVENT_ID_UPCOMING, 'US Non-Farm Payrolls', null, 'HIGH', 5 * 60, 'US', 'USD', ['USDJPY', 'EURUSD']),
+      item('SPEECH', SPEECH_ID_POWELL_UPCOMING, '経済見通しに関する講演', 'ジェローム・パウエル', 'HIGH', 26 * 60, 'US', 'USD', ['EURUSD', 'USDJPY']),
+    ],
+  };
+}
 
 const accountFixture = () => ({
   user_id: TEST_USER_ID,
@@ -590,14 +768,29 @@ const accountFixture = () => ({
   updated_at: isoMinusDays(1),
 });
 
-async function handleApi(req, res, pathname, searchParams) {
+async function handleApi(req, res, pathname, searchParams, rawBody) {
   const segments = pathname.replace(/^\/api\/v1\//, '').split('/').filter(Boolean);
 
   if (pathname === '/api/v1/home') return json(res, 200, homeHandler());
   if (pathname === '/api/v1/indicators') return json(res, 200, indicatorsListHandler());
-  // SCR-018/020/021 (api-design.md §24.4). PATCH answers with the same
-  // fixture — screenshots only need the screens to load.
-  if (pathname === '/api/v1/settings') return json(res, 200, settingsFixture);
+  // SCR-016/018/020/021 (api-design.md §24.4/§24.5). PATCH merges the body
+  // into the fixture and answers with the result.
+  if (pathname === '/api/v1/settings') {
+    if (req.method === 'PATCH') {
+      const updated = patchSettings(rawBody);
+      if (!updated) return json(res, 422, { error: { code: 'VALIDATION_ERROR', message: 'Invalid JSON body.' } });
+      return json(res, 200, updated);
+    }
+    return json(res, 200, settingsFixture);
+  }
+  if (pathname === '/api/v1/fx-pairs') return json(res, 200, { data: FX_PAIRS });
+  if (pathname === '/api/v1/speeches') return json(res, 200, speechesListHandler());
+  if (segments[0] === 'speeches' && segments.length === 2) {
+    const speech = speechesFixture().find((row) => row.speech_id === segments[1]);
+    if (!speech) return json(res, 404, { error: { code: 'SPEECH_NOT_FOUND', message: 'Speech not found.' } });
+    return json(res, 200, speech);
+  }
+  if (pathname === '/api/v1/notifications/upcoming') return json(res, 200, upcomingNotificationsHandler());
   // SCR-015 アカウント情報 (api-design.md §24.1-§24.3). PATCH answers with
   // the same fixture; DELETE is never exercised by the screenshot run.
   if (pathname === '/api/v1/account') {
@@ -644,14 +837,14 @@ async function handleApi(req, res, pathname, searchParams) {
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://127.0.0.1');
-  await readBody(req); // drain request body (unused — this fixture never validates input)
+  const rawBody = await readBody(req); // only PATCH /settings reads it — this fixture never validates input
   console.log(`[mock] ${req.method} ${url.pathname}${url.search}`);
 
   if (url.pathname.startsWith('/auth/v1/')) {
     return handleAuth(req, res, url.pathname);
   }
   if (url.pathname.startsWith('/api/v1/')) {
-    return handleApi(req, res, url.pathname, url.searchParams);
+    return handleApi(req, res, url.pathname, url.searchParams, rawBody);
   }
   json(res, 404, { error: { code: 'NOT_FOUND', message: 'No fixture route.' } });
 });

@@ -16,7 +16,7 @@ private func jsonObject(_ data: Data?) throws -> [String: Any] {
 }
 
 private let sampleSettings = SettingsResponse(
-    notifications: NotificationSettings(preRelease: true, result: false, favorites: true, minImportance: 4),
+    notifications: NotificationSettings(push: true, indicators: false, speeches: true, fxPairs: ["USDJPY", "EURJPY"], importances: ["HIGH"], leadMinutes: 15),
     display: DisplaySettings(language: "en", region: "US", timezone: "America/New_York"),
     chart: ChartSettings(defaultFxPairSymbol: "USDJPY", defaultTimeframe: "15m")
 )
@@ -27,7 +27,7 @@ final class SettingsModelsTests: XCTestCase {
     func testDecodesTheSettingsResponseShape() throws {
         let json = """
         {
-          "notifications": { "pre_release": true, "result": false, "favorites": true, "min_importance": 4 },
+          "notifications": { "push": true, "indicators": false, "speeches": true, "fx_pairs": ["USDJPY", "EURJPY"], "importances": ["HIGH"], "lead_minutes": 15 },
           "display": { "language": "en", "region": "US", "timezone": "America/New_York" },
           "chart": { "default_fx_pair_symbol": "USDJPY", "default_timeframe": "15m" },
           "updated_at": "2026-10-02T01:23:45.678901+00:00"
@@ -40,7 +40,7 @@ final class SettingsModelsTests: XCTestCase {
     func testDecodesANullFxPair() throws {
         let json = """
         {
-          "notifications": { "pre_release": true, "result": true, "favorites": true, "min_importance": 3 },
+          "notifications": { "push": true, "indicators": true, "speeches": true, "fx_pairs": null, "importances": ["HIGH", "MEDIUM"], "lead_minutes": 5 },
           "display": { "language": "ja", "region": "JP", "timezone": "Asia/Tokyo" },
           "chart": { "default_fx_pair_symbol": null, "default_timeframe": "5m" },
           "updated_at": "2026-10-02T00:00:00Z"
@@ -58,9 +58,18 @@ final class SettingsModelsTests: XCTestCase {
 
         XCTAssertEqual(Set(body.keys), ["notifications"])
         let notifications = try XCTUnwrap(body["notifications"] as? [String: Any])
-        XCTAssertEqual(notifications["pre_release"] as? Bool, true)
-        XCTAssertEqual(notifications["result"] as? Bool, false)
-        XCTAssertEqual(notifications["min_importance"] as? Int, 4)
+        XCTAssertEqual(notifications["push"] as? Bool, true)
+        XCTAssertEqual(notifications["indicators"] as? Bool, false)
+        XCTAssertEqual(notifications["fx_pairs"] as? [String], ["USDJPY", "EURJPY"])
+        XCTAssertEqual(notifications["importances"] as? [String], ["HIGH"])
+        XCTAssertEqual(notifications["lead_minutes"] as? Int, 15)
+    }
+
+    func testUpdateSendsAnExplicitNullForAllFxPairs() throws {
+        let body = try jsonObject(JSONEncoder().encode(SettingsUpdate(notifications: .defaults)))
+
+        let notifications = try XCTUnwrap(body["notifications"] as? [String: Any])
+        XCTAssertTrue(notifications["fx_pairs"] is NSNull, "nil (all pairs) must be sent as null, not omitted")
     }
 
     func testUpdateSendsAnExplicitNullToClearTheFxPair() throws {
@@ -104,9 +113,9 @@ final class SettingsServiceTests: XCTestCase {
 
 @MainActor
 final class SettingsSectionViewModelTests: XCTestCase {
-    private func loadedViewModel(_ apiClient: MockAPIClient) async -> SettingsSectionViewModel<NotificationSettings> {
+    private func loadedViewModel(_ apiClient: MockAPIClient) async -> SettingsSectionViewModel<ChartSettings> {
         apiClient.result = .success(sampleSettings)
-        let viewModel = SettingsSectionViewModel<NotificationSettings>(apiClient: apiClient)
+        let viewModel = SettingsSectionViewModel<ChartSettings>(apiClient: apiClient)
         viewModel.load()
         await waitUntil { viewModel.loadState != .loading }
         return viewModel
@@ -116,7 +125,7 @@ final class SettingsSectionViewModelTests: XCTestCase {
         let viewModel = await loadedViewModel(MockAPIClient())
 
         XCTAssertEqual(viewModel.loadState, .loaded)
-        XCTAssertEqual(viewModel.draft, sampleSettings.notifications)
+        XCTAssertEqual(viewModel.draft, sampleSettings.chart)
         XCTAssertFalse(viewModel.hasChanges)
         XCTAssertFalse(viewModel.canSave)
     }
@@ -159,35 +168,35 @@ final class SettingsSectionViewModelTests: XCTestCase {
     func testSaveSendsOnlyThisSectionAndAdoptsTheResponse() async throws {
         let apiClient = MockAPIClient()
         let viewModel = await loadedViewModel(apiClient)
-        viewModel.draft.minImportance = 5
+        viewModel.draft.defaultTimeframe = "60m"
         XCTAssertTrue(viewModel.canSave)
 
         var stored = sampleSettings
-        stored.notifications.minImportance = 5
+        stored.chart.defaultTimeframe = "60m"
         apiClient.result = .success(stored)
         viewModel.save()
         await waitUntil { viewModel.saveState != .saving }
 
         XCTAssertEqual(apiClient.lastEndpoint?.method, .patch)
         let body = try jsonObject(apiClient.lastEndpoint?.body)
-        XCTAssertEqual(Set(body.keys), ["notifications"])
+        XCTAssertEqual(Set(body.keys), ["chart"])
         XCTAssertEqual(viewModel.saveState, .saved)
-        XCTAssertEqual(viewModel.saved, stored.notifications)
+        XCTAssertEqual(viewModel.saved, stored.chart)
         XCTAssertFalse(viewModel.hasChanges)
     }
 
     func testEditingAfterSavingClearsTheSavedMessage() async {
         let apiClient = MockAPIClient()
         let viewModel = await loadedViewModel(apiClient)
-        viewModel.draft.result = true
+        viewModel.draft.defaultTimeframe = "1m"
         var stored = sampleSettings
-        stored.notifications.result = true
+        stored.chart.defaultTimeframe = "1m"
         apiClient.result = .success(stored)
         viewModel.save()
         await waitUntil { viewModel.saveState != .saving }
         XCTAssertEqual(viewModel.saveState, .saved)
 
-        viewModel.draft.favorites = false
+        viewModel.draft.defaultFxPairSymbol = nil
 
         XCTAssertEqual(viewModel.saveState, .idle)
     }
@@ -205,7 +214,7 @@ final class SettingsSectionViewModelTests: XCTestCase {
     func testValidationErrorKeepsTheDraft() async {
         let apiClient = MockAPIClient()
         let viewModel = await loadedViewModel(apiClient)
-        viewModel.draft.preRelease = false
+        viewModel.draft.defaultTimeframe = "30m"
         apiClient.result = .failure(APIError.server(code: .validationError, message: "Invalid.", httpStatus: 422))
 
         viewModel.save()
@@ -214,7 +223,7 @@ final class SettingsSectionViewModelTests: XCTestCase {
         guard case .error = viewModel.saveState else {
             return XCTFail("Expected .error, got \(viewModel.saveState)")
         }
-        XCTAssertFalse(viewModel.draft.preRelease)
+        XCTAssertEqual(viewModel.draft.defaultTimeframe, "30m")
         XCTAssertTrue(viewModel.hasChanges)
     }
 }

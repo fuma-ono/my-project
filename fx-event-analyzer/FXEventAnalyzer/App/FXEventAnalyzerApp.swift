@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct FXEventAnalyzerApp: App {
@@ -19,6 +20,8 @@ struct FXEventAnalyzerApp: App {
         apiClient = URLSessionAPIClient(authTokenProvider: {
             try? await authService.currentSession()?.accessToken
         })
+        // 通知設定(SCR-016)のローカル通知を、アプリ表示中もバナーで出す。
+        UNUserNotificationCenter.current().delegate = NotificationPresenter.shared
     }
 
     var body: some Scene {

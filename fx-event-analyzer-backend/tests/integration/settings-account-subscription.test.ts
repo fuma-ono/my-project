@@ -78,7 +78,14 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
       const response = await ctx.app.inject({ method: 'GET', url: '/api/v1/settings', headers });
       expect(response.statusCode).toBe(200);
       expect(JSON.parse(response.body)).toMatchObject({
-        notifications: { pre_release: true, result: true, favorites: true, min_importance: 3 },
+        notifications: {
+          push: true,
+          indicators: true,
+          speeches: true,
+          fx_pairs: null,
+          importances: ['HIGH', 'MEDIUM'],
+          lead_minutes: 5,
+        },
         display: { language: 'ja', region: 'JP', timezone: 'Asia/Tokyo' },
         chart: { default_fx_pair_symbol: null, default_timeframe: '5m' },
       });
@@ -90,12 +97,22 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
         method: 'PATCH',
         url: '/api/v1/settings',
         headers,
-        payload: { notifications: { result: false, min_importance: 5 }, chart: { default_fx_pair_symbol: 'USDJPY' } },
+        payload: {
+          notifications: { speeches: false, importances: ['LOW', 'HIGH'], lead_minutes: 30, fx_pairs: ['USDJPY'] },
+          chart: { default_fx_pair_symbol: 'USDJPY' },
+        },
       });
       expect(patch.statusCode).toBe(200);
 
       const body = JSON.parse((await ctx.app.inject({ method: 'GET', url: '/api/v1/settings', headers })).body);
-      expect(body.notifications).toEqual({ pre_release: true, result: false, favorites: true, min_importance: 5 });
+      expect(body.notifications).toEqual({
+        push: true,
+        indicators: true,
+        speeches: false,
+        fx_pairs: ['USDJPY'],
+        importances: ['HIGH', 'LOW'],
+        lead_minutes: 30,
+      });
       expect(body.chart.default_fx_pair_symbol).toBe('USDJPY');
       expect(body.display.timezone).toBe('Asia/Tokyo');
     });
@@ -112,15 +129,50 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
       expect(JSON.parse(response.body).error.code).toBe('VALIDATION_ERROR');
     });
 
-    it('rejects an out-of-range min_importance with 422', async () => {
+    it('rejects an unsupported lead_minutes or empty importances with 422', async () => {
+      const { headers } = await newUser();
+      for (const notifications of [{ lead_minutes: 7 }, { importances: [] }, { fx_pairs: ['USDJPY', 'USDJPY'] }]) {
+        const response = await ctx.app.inject({
+          method: 'PATCH',
+          url: '/api/v1/settings',
+          headers,
+          payload: { notifications },
+        });
+        expect(response.statusCode).toBe(422);
+      }
+    });
+
+    it('rejects an unknown notification FX pair symbol with 422 and saves nothing', async () => {
       const { headers } = await newUser();
       const response = await ctx.app.inject({
         method: 'PATCH',
         url: '/api/v1/settings',
         headers,
-        payload: { notifications: { min_importance: 6 } },
+        payload: { notifications: { fx_pairs: ['USDJPY', 'XXXYYY'], speeches: false } },
       });
       expect(response.statusCode).toBe(422);
+      expect(JSON.parse(response.body).error.code).toBe('VALIDATION_ERROR');
+
+      const body = JSON.parse((await ctx.app.inject({ method: 'GET', url: '/api/v1/settings', headers })).body);
+      expect(body.notifications).toMatchObject({ fx_pairs: null, speeches: true });
+    });
+
+    it('resets fx_pairs to null (= all pairs)', async () => {
+      const { headers } = await newUser();
+      await ctx.app.inject({
+        method: 'PATCH',
+        url: '/api/v1/settings',
+        headers,
+        payload: { notifications: { fx_pairs: ['EURUSD'] } },
+      });
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/api/v1/settings',
+        headers,
+        payload: { notifications: { fx_pairs: null } },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.body).notifications.fx_pairs).toBeNull();
     });
 
     it('requires authentication', async () => {

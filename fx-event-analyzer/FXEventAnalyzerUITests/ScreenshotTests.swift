@@ -120,6 +120,15 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Home did not show the newly-favorited indicator")
         capture("04-Home")
 
+        // 通知一覧(HQ指示 2026-10-05「通知はホーム画面の通知マークを押したら
+        // そこで確認できる仕様にして」)。ログイン時に`RootView`が
+        // `GET /notifications/upcoming`を取り込み、モックの通知時刻を過ぎた
+        // 2件が一覧に並ぶ。
+        let bell = app.buttons["通知"]
+        if bell.waitForExistence(timeout: 5) { bell.tap() } else { tap(containing: "通知") }
+        XCTAssertTrue(waitForAnyElement(containing: "分前です", timeout: 15), "Notification list did not load")
+        capture("04a-Notifications")
+
         // SCR-014 設定画面(bonus — added 2026-09-30 so HQ's
         // reference-image-driven redesign of this screen has a real CI
         // capture to verify against, the same "never trust build-succeeds
@@ -140,7 +149,7 @@ final class ScreenshotTests: XCTestCase {
         // alone" rule). Between captures, switching to Home and back
         // rebuilds SettingsView and so resets its NavigationStack to the
         // root — no need to find V5Header's unlabeled back chevron.
-        captureSettingsSubScreen(row: "通知設定", rowIndex: 1, waitFor: "重要指標の発表前通知", name: "16-NotificationSettings")
+        captureSettingsSubScreen(row: "通知設定", rowIndex: 1, waitFor: "要人発言の通知", name: "16-NotificationSettings")
         captureSettingsSubScreen(row: "表示・地域設定", rowIndex: 3, waitFor: "タイムゾーン", name: "18-DisplaySettings")
         captureSettingsSubScreen(row: "チャート設定", rowIndex: 4, waitFor: "時間足", name: "19-ChartSettings")
         // SCR-015 アカウント情報 (added 2026-10-05 with the reference-image

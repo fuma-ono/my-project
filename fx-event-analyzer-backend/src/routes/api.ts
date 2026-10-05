@@ -9,6 +9,9 @@ import { registerEventRoutes } from './events.js';
 import { registerHistoricalRoutes } from './historical.js';
 import { registerSearchRoutes } from './search.js';
 import { registerHomeRoutes } from './home.js';
+import { registerSpeechRoutes } from './speeches.js';
+import { registerFxPairRoutes } from './fxPairs.js';
+import { registerNotificationRoutes } from './notifications.js';
 
 /**
  * Everything under /api/v1 requires a valid Supabase Auth JWT — Home /
@@ -28,4 +31,7 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   await app.register(registerHistoricalRoutes);
   await app.register(registerSearchRoutes);
   await app.register(registerHomeRoutes);
+  await app.register(registerSpeechRoutes);
+  await app.register(registerFxPairRoutes);
+  await app.register(registerNotificationRoutes);
 }

@@ -15,7 +15,7 @@ enum SettingsSectionSaveState: Equatable {
     case error(String)
 }
 
-/// SCR-016 / SCR-018 / SCR-019 共通: `GET /settings`で読み込み、画面が担当する
+/// SCR-018 / SCR-019 共通(SCR-016は自動保存のため`NotificationSettingsViewModel`): `GET /settings`で読み込み、画面が担当する
 /// 1セクションを`draft`として編集し、「保存する」で`PATCH /settings`へその
 /// セクションだけを送る(ui-screens.md: 保存後は同じ画面に留まる)。
 ///
@@ -82,12 +82,6 @@ final class SettingsSectionViewModel<Section: SettingsSection>: ObservableObject
     private func apply(_ response: SettingsResponse) {
         saved = response[keyPath: section]
         draft = saved
-    }
-}
-
-extension SettingsSectionViewModel where Section == NotificationSettings {
-    convenience init(apiClient: APIClient) {
-        self.init(apiClient: apiClient, section: \.notifications) { SettingsUpdate(notifications: $0) }
     }
 }
 

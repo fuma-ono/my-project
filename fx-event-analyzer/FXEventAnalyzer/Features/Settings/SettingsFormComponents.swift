@@ -223,25 +223,3 @@ struct SettingsMenuPicker<Value: Hashable>: View {
         }
     }
 }
-
-/// 通知する重要度の下限(★1〜★5)。
-struct SettingsStarPicker: View {
-    @Binding var minimum: Int
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(NotificationSettings.importanceRange, id: \.self) { stars in
-                Button { minimum = stars } label: {
-                    Image(systemName: stars <= minimum ? "star.fill" : "star")
-                        .font(.system(size: 9))
-                        .foregroundStyle(stars <= minimum ? V5P.yellow : V5P.muted)
-                        .frame(width: 13, height: 20)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("★\(stars)以上")
-                .accessibilityAddTraits(stars == minimum ? .isSelected : [])
-            }
-        }
-    }
-}

@@ -5,16 +5,56 @@ const parse = (body: unknown) => updateSettingsBodySchema.safeParse(body).succes
 
 describe('updateSettingsBodySchema', () => {
   it('accepts a partial body', () => {
-    expect(parse({ notifications: { result: false } })).toBe(true);
+    expect(parse({ notifications: { push: false } })).toBe(true);
     expect(parse({})).toBe(true);
   });
 
-  it('accepts min_importance 1-5 only, as integers', () => {
-    expect(parse({ notifications: { min_importance: 1 } })).toBe(true);
-    expect(parse({ notifications: { min_importance: 5 } })).toBe(true);
-    expect(parse({ notifications: { min_importance: 0 } })).toBe(false);
-    expect(parse({ notifications: { min_importance: 6 } })).toBe(false);
-    expect(parse({ notifications: { min_importance: 2.5 } })).toBe(false);
+  it('accepts the full SCR-016 notifications shape', () => {
+    expect(
+      parse({
+        notifications: {
+          push: true,
+          indicators: true,
+          speeches: false,
+          fx_pairs: ['USDJPY', 'EURUSD'],
+          importances: ['HIGH', 'MEDIUM'],
+          lead_minutes: 10,
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('accepts lead_minutes 0/5/10/15/30/60 only', () => {
+    for (const minutes of [0, 5, 10, 15, 30, 60]) {
+      expect(parse({ notifications: { lead_minutes: minutes } })).toBe(true);
+    }
+    expect(parse({ notifications: { lead_minutes: 1 } })).toBe(false);
+    expect(parse({ notifications: { lead_minutes: 120 } })).toBe(false);
+    expect(parse({ notifications: { lead_minutes: '5' } })).toBe(false);
+  });
+
+  it('requires at least one importance and only known levels', () => {
+    expect(parse({ notifications: { importances: [] } })).toBe(false);
+    expect(parse({ notifications: { importances: ['CRITICAL'] } })).toBe(false);
+    expect(parse({ notifications: { importances: ['LOW'] } })).toBe(true);
+  });
+
+  it('dedupes importances and orders them HIGH, MEDIUM, LOW', () => {
+    const result = updateSettingsBodySchema.parse({ notifications: { importances: ['LOW', 'HIGH', 'LOW'] } });
+    expect(result.notifications?.importances).toEqual(['HIGH', 'LOW']);
+  });
+
+  it('accepts fx_pairs null (= all) or a non-empty array of unique symbols', () => {
+    expect(parse({ notifications: { fx_pairs: null } })).toBe(true);
+    expect(parse({ notifications: { fx_pairs: ['USDJPY'] } })).toBe(true);
+    expect(parse({ notifications: { fx_pairs: [] } })).toBe(false);
+    expect(parse({ notifications: { fx_pairs: ['USDJPY', 'USDJPY'] } })).toBe(false);
+    expect(parse({ notifications: { fx_pairs: [''] } })).toBe(false);
+  });
+
+  it('rejects the removed v1 notification fields', () => {
+    expect(parse({ notifications: { pre_release: true } })).toBe(false);
+    expect(parse({ notifications: { min_importance: 3 } })).toBe(false);
   });
 
   it('validates display values', () => {

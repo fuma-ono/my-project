@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { sortImportancesDesc } from '../domain/importance.js';
+import { NOTIFICATION_LEAD_MINUTES } from '../domain/notifications.js';
 
 /** IANA zone names only — rejects anything `Intl` can't resolve, so a bad
  * value never reaches timezone-scoped APIs like Home (api-design.md §6). */
@@ -17,10 +19,22 @@ export const updateSettingsBodySchema = z
   .object({
     notifications: z
       .object({
-        pre_release: z.boolean(),
-        result: z.boolean(),
-        favorites: z.boolean(),
-        min_importance: z.number().int().min(1).max(5),
+        push: z.boolean(),
+        indicators: z.boolean(),
+        speeches: z.boolean(),
+        // null = すべての通貨ペア. Whether each symbol exists in fx_pairs is
+        // checked against the DB by the route (422 on an unknown one).
+        fx_pairs: z
+          .array(z.string().min(1))
+          .min(1)
+          .refine((symbols) => new Set(symbols).size === symbols.length, 'must not contain duplicate symbols')
+          .nullable(),
+        // Duplicates are harmless here, so they are folded rather than rejected.
+        importances: z
+          .array(z.enum(['HIGH', 'MEDIUM', 'LOW']))
+          .min(1)
+          .transform(sortImportancesDesc),
+        lead_minutes: z.literal(NOTIFICATION_LEAD_MINUTES),
       })
       .partial()
       .strict()
