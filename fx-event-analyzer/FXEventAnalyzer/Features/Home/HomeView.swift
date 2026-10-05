@@ -679,15 +679,17 @@ struct HomeView: View {
                     if let subtitle = Self.eventSubtitle(event) {
                         // HQ再指摘(2026-10-05、3回目)「予想と前回の文字は
                         // 途切れず、折り返さず全て表示できるようにして」:
-                        // `.lineLimit(1)`のみだと幅が足りない時に末尾が
-                        // "..."で省略されていた。`.fixedSize(horizontal:
-                        // true, vertical: false)`に変更し、折り返しは
-                        // させず(vertical: false)、横方向は内容の自然な
-                        // 幅をそのまま使う(horizontal: true)ことで、
-                        // 省略されず全文表示されるようにした。
+                        // `.fixedSize(horizontal: true, vertical: false)`を
+                        // 試したが、行全体の幅が足りない場合はそれでも
+                        // "..."で省略されたままだった(親の`HStack`が確保
+                        // できる幅を超えると、`.fixedSize`だけでは防げない)。
+                        // `.lineLimit(1)`を保持したまま`.minimumScaleFactor`
+                        // を追加し、幅が足りない時は省略せず文字を縮小して
+                        // 必ず全文1行で収まるようにした。
                         V5JPFont.text(subtitle, size: 6, weight: .regular)
                             .foregroundStyle(V5P.muted)
-                            .fixedSize(horizontal: true, vertical: false)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
                     }
                 }
             }
