@@ -610,7 +610,15 @@ struct HomeView: View {
     @ViewBuilder private func todayEventsCard(_ events: [HomeEventSummary]) -> some View {
         cardShell(height: Self.todayEventsCardHeight) {
             cardHeaderRow(title: "今日の重要イベント", height: Self.todayEventsHeaderHeight) {
+                // HQ再指摘(2026-10-05、6回目)「通貨ペアのタイトルの開始を
+                // 他と縦を合わせて」: 各カードのアイコン自体の幅(SF Symbolの
+                // calendar/star/quote.bubbleと自前描画のHomeChartIconとで
+                // 幅が異なる)がそのままタイトルの開始位置の差になっていた
+                // ため、4カード共通で`.frame(width: 16, alignment: .center)`
+                // の箱に揃え、箱の中でアイコンを中央揃えにすることでタイトル
+                // の開始位置を統一した。
                 Image(systemName: "calendar").font(.system(size: 14, weight: .bold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
+                    .frame(width: 16, alignment: .center)
             } trailing: {
                 // HQ指示(2026-10-05)「日付10/5(月)の文字を大きくして」でいったん
                 // 10に拡大したが、再指摘(2026-10-05)「10/5(月)文字サイズを0.5
@@ -663,51 +671,52 @@ struct HomeView: View {
                 Text(event.currencyCode).font(.system(size: 7, weight: .semibold)).foregroundStyle(.white)
             }
 
-            // HQ再指摘(2026-10-05)「予想前回が治らない。参考画像は日本CPIの
-            // 下にあるからそこにしろ」: 旧実装は「経済指標」バッジ+タイトルの
-            // `HStack`全体をVStackで包み、予想/前回をその下に置いていたため、
-            // 左端がバッジの左端(タイトルの左端ではない)に揃ってしまっていた。
-            // バッジは1行目だけに留め、タイトル+予想/前回を別のVStackに
-            // まとめることで、予想/前回の左端をタイトル(例:日本CPI)の左端に
-            // 正確に揃えた。
-            HStack(alignment: .top, spacing: 4) {
+            // HQ再指摘(2026-10-05、6回目)「経済指標の下に指標名でその下に
+            // 予想と前回として並びを変えてみて、縦幅を大きくしてはいけ
+            // ない」: 「経済指標」バッジ+タイトルを横に並べていた構成を
+            // やめ、バッジ→指標名→予想/前回を縦3行に積む構成に変更した。
+            // `eventRowHeight`(行全体の高さ)自体は変えず、3行分の高さが
+            // 国旗+通貨コードの高さ(flagDiameter+通貨コード1行)とほぼ
+            // 同じ範囲に収まるよう、バッジの文字間隔・外枠も合わせて
+            // 詰めた(「経済指標の文字間隔を狭めて、外枠の横幅も少し
+            // 狭めて」: tracking追加、パディング4/2→3/1.5)。
+            VStack(alignment: .leading, spacing: 1) {
                 V5JPFont.text("経済指標", size: 5.5, weight: .semibold)
+                    .tracking(-0.3)
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 4).padding(.vertical, 2)
+                    .padding(.horizontal, 3).padding(.vertical, 1.5)
                     .background(Self.economicIndicatorBadgeColor, in: Capsule())
                     .fixedSize()
 
-                VStack(alignment: .leading, spacing: 2) {
-                    // HQ指示(2026-10-05、23回目)「今日の重要イベント内の
-                    // タイトル（FOMC政策など）が大きいし、太いので参考画像と
-                    // 同じくらいにして」: 参考画像に本カードの直接の実測対象が
-                    // 無いため、同じ参考画像のお気に入りカードに実在する同種の
-                    // テキスト(イベント/指標名、「FOMC」)をカード幅基準スケール
-                    // (3.786px/ユニット)で代わりに実測(22px→5.84ユニット)し、
-                    // 現行実装(size 9)の実機キャプチャ実測(33px/5.1488px/
-                    // ユニット→6.41ユニット、9pt→0.712ユニット/pt)から逆算
-                    // (5.84/0.712≒8.2)して9→8に縮小。太さも.bold→.semibold。
-                    V5JPFont.text(event.indicatorName, size: 8, weight: .semibold)
-                        .foregroundStyle(.white)
+                // HQ指示(2026-10-05、23回目)「今日の重要イベント内の
+                // タイトル（FOMC政策など）が大きいし、太いので参考画像と
+                // 同じくらいにして」: 参考画像に本カードの直接の実測対象が
+                // 無いため、同じ参考画像のお気に入りカードに実在する同種の
+                // テキスト(イベント/指標名、「FOMC」)をカード幅基準スケール
+                // (3.786px/ユニット)で代わりに実測(22px→5.84ユニット)し、
+                // 現行実装(size 9)の実機キャプチャ実測(33px/5.1488px/
+                // ユニット→6.41ユニット、9pt→0.712ユニット/pt)から逆算
+                // (5.84/0.712≒8.2)して9→8に縮小。太さも.bold→.semibold。
+                V5JPFont.text(event.indicatorName, size: 8, weight: .semibold)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                if let subtitle = Self.eventSubtitle(event) {
+                    // HQ再指摘(2026-10-05、3回目)「予想と前回の文字は
+                    // 途切れず、折り返さず全て表示できるようにして」:
+                    // `.fixedSize(horizontal: true, vertical: false)`を
+                    // 試したが、行全体の幅が足りない場合はそれでも
+                    // "..."で省略されたままだった(親の`HStack`が確保
+                    // できる幅を超えると、`.fixedSize`だけでは防げない)。
+                    // `.lineLimit(1)`を保持したまま`.minimumScaleFactor`
+                    // を追加し、幅が足りない時は省略せず文字を縮小して
+                    // 必ず全文1行で収まるようにした。
+                    V5JPFont.text(subtitle, size: 6, weight: .regular)
+                        .foregroundStyle(V5P.muted)
                         .lineLimit(1)
-                    if let subtitle = Self.eventSubtitle(event) {
-                        // HQ再指摘(2026-10-05、3回目)「予想と前回の文字は
-                        // 途切れず、折り返さず全て表示できるようにして」:
-                        // `.fixedSize(horizontal: true, vertical: false)`を
-                        // 試したが、行全体の幅が足りない場合はそれでも
-                        // "..."で省略されたままだった(親の`HStack`が確保
-                        // できる幅を超えると、`.fixedSize`だけでは防げない)。
-                        // `.lineLimit(1)`を保持したまま`.minimumScaleFactor`
-                        // を追加し、幅が足りない時は省略せず文字を縮小して
-                        // 必ず全文1行で収まるようにした。
-                        V5JPFont.text(subtitle, size: 6, weight: .regular)
-                            .foregroundStyle(V5P.muted)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                    }
+                        .minimumScaleFactor(0.6)
                 }
-                .frame(minHeight: 22, alignment: .top)
             }
+            .frame(minHeight: 28, alignment: .top)
             .layoutPriority(1)
 
             Spacer(minLength: 4)
@@ -735,7 +744,10 @@ struct HomeView: View {
     @ViewBuilder private func pairsCard(_ pairs: [FXPairUI]) -> some View {
         cardShell(height: Self.pairsCardHeight) {
             cardHeaderRow(title: "通貨ペア", height: Self.pairsHeaderHeight) {
-                HomeChartIcon().foregroundStyle(V5P.cyan).frame(width: 14, height: 13).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
+                // HQ再指摘(2026-10-05、6回目)「通貨ペアのアイコンをもう少し
+                // 大きくして」: 14×13→16×15に拡大(他カードとのタイトル
+                // 開始位置の共通箱16幅ともちょうど合う)。
+                HomeChartIcon().foregroundStyle(V5P.cyan).frame(width: 16, height: 15).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
             } trailing: {
                 headerLink("すべて見る")
             }
@@ -788,7 +800,10 @@ struct HomeView: View {
             // 詰めて幅だけ狭くした。それに合わせて各列の固定幅(frame)も
             // 46/40/44→42/36/40に縮小。
             Text(pair.displaySymbol).font(.system(size: 9.5, weight: .semibold)).tracking(-0.4).frame(width: 42, alignment: .leading)
-            Text(pair.price).font(.system(size: 9.5, weight: .semibold)).tracking(-0.4).monospacedDigit().frame(width: 36, alignment: .center)
+            // HQ再指摘(2026-10-05、6回目)「155.42のサイズを0.5だけ大きく
+            // して、もう少し右に寄せて」: 9.5→10に拡大し、列内の配置を
+            // 中央揃えから右(変化率側)揃えに変更。
+            Text(pair.price).font(.system(size: 10, weight: .semibold)).tracking(-0.4).monospacedDigit().frame(width: 36, alignment: .trailing)
             // HQ再指摘(2026-10-05、5回目)「+0.25%▲>は右に寄せて」:
             // 固定幅の列を並べただけだと行の合計幅がカード幅より短くなり、
             // 左詰め(`cardShell`のVStackが`alignment: .leading`)のため
@@ -808,8 +823,13 @@ struct HomeView: View {
             // 「-0.14%のグローが強いから無くして」: 前回追加したグロー
             // (`.shadow`)を削除。
             Spacer(minLength: 4)
+            // HQ再指摘(2026-10-05、6回目)「%を半角で表示して」: 元の文字列
+            // 自体は常に半角の"%"(U+0025)だったが、`.monospacedDigit()`の
+            // フォント機能が%記号の字形にも適用され、全角のように幅広く
+            // 見えていた。`.monospacedDigit()`を削除し、通常のプロポー
+            // ショナル字形に戻した。
             HStack(spacing: 1) {
-                Text(pair.change).font(.system(size: 9.5, weight: .semibold)).tracking(-0.6).monospacedDigit().lineLimit(1)
+                Text(pair.change).font(.system(size: 9.5, weight: .semibold)).tracking(-0.6).lineLimit(1)
                 Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 9.5))
             }
             .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
@@ -828,6 +848,7 @@ struct HomeView: View {
         cardShell(height: Self.favoritesCardHeight) {
             cardHeaderRow(title: "お気に入り", height: Self.favoritesHeaderHeight, showDivider: false) {
                 Image(systemName: "star.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
+                    .frame(width: 16, alignment: .center)
             } trailing: {
                 NavigationLink(value: AppRoute.favoritesList) {
                     headerLink("すべて見る")
@@ -923,6 +944,7 @@ struct HomeView: View {
         cardShell(height: Self.speechesCardHeight) {
             cardHeaderRow(title: "直近の要人発言", height: Self.speechesHeaderHeight) {
                 Image(systemName: "quote.bubble.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
+                    .frame(width: 16, alignment: .center)
             } trailing: {
                 NavigationLink(value: AppRoute.speechList) {
                     headerLink("すべて見る")
