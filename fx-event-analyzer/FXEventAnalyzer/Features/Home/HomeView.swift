@@ -320,21 +320,17 @@ struct HomeView: View {
         }
     }
 
-    /// HQ指示(2026-10-05、23回目)「HIGHTとMEDIUMの文字と枠が横に大きいので
-    /// 小さくして。フォントも太くしないで」に続き、再指摘(2026-10-05)
-    /// 「何度も言っているが改善されない」: 1回目の縮小(size 7→6・.heavy→
-    /// .bold・横パディング7→5.5・縦パディング3→2)後の実機キャプチャを
-    /// 改めて実測すると147×61px(5.1488px/ユニット→28.6×11.9ユニット)と、
-    /// 参考画像実測値(29.85×11.6ユニット)にほぼ一致していた。数値上は
-    /// 合っていたが見た目の指摘が続いたため、周囲のテキストが軒並み縮小した
-    /// 今回の変更後は相対的にバッジが目立って見える可能性を踏まえ、安全側で
-    /// さらに一段階縮小(size 6→5.5・.bold→.semibold・横パディング
-    /// 5.5→4・縦パディング2→1.5)した。
+    /// HQ再指摘(2026-10-05)「文字サイズを小さくするのではなく間隔を狭めて
+    /// 外枠を短くしてと言っている」: それまでの2回はフォントサイズ自体を
+    /// 縮小(7→6→5.5)していたが、それは指摘の意図ではなかった。文字サイズは
+    /// 判読できる大きさ(7/.bold、最初の値)に戻し、外枠(カプセル)だけを
+    /// 左右パディングの圧縮(5.5→2.5)で短くする方針に変更した。縦パディング
+    /// も合わせて詰めた(2→1.5)。
     @ViewBuilder private func statusBadge(_ text: String, colors: (fill: Color, border: Color)) -> some View {
         Text(text)
-            .font(.system(size: 5.5, weight: .semibold))
+            .font(.system(size: 7, weight: .bold))
             .foregroundStyle(.white)
-            .padding(.horizontal, 4).padding(.vertical, 1.5)
+            .padding(.horizontal, 2.5).padding(.vertical, 1.5)
             .background(colors.fill, in: Capsule())
             .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
             .fixedSize()
@@ -357,7 +353,8 @@ struct HomeView: View {
     /// 角丸22px→6.04≒6(3カード共通)。
     private static let cardCornerRadius: CGFloat = 6
 
-    private static let flagDiameter: CGFloat = 15
+    /// HQ再指摘(2026-10-05)「国旗の丸をもう少し大きくして」: 15→19に拡大。
+    private static let flagDiameter: CGFloat = 19
 
     // MARK: 通貨ペアカード (x=26,y=180,width=782,height=527 → height 527/3.641≒145)
 
@@ -702,8 +699,11 @@ struct HomeView: View {
             // 偏って(=右端に張り付いて)いたため、前後に`Spacer()`を置き
             // シンボル右端とchevron左端の中間に来るよう変更した。
             Spacer(minLength: 4)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(pair.price).font(.system(size: 8, weight: .semibold)).fixedSize()
+            // HQ再指摘(2026-10-05)「155.42　+0.25%と横並びにしてください」:
+            // 価格と変化率を上下2段の`VStack`にしていたが、1段のHStackに
+            // まとめ横並びにした。
+            HStack(spacing: 5) {
+                Text(pair.price).font(.system(size: 8, weight: .semibold))
                 HStack(spacing: 1) {
                     Text(pair.change).font(.system(size: 6, weight: .semibold))
                     Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 6))
