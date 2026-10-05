@@ -430,6 +430,15 @@ struct V5BottomBar: View {
     /// 実機相当のCIキャプチャで確認したところ、`Button` + `.buttonStyle(.plain)`
     /// でも選択中タブの背後にシステム既定のハイライト用カプセルが写り込んで
     /// いたため。
+    /// 12回目の調整(2026-10-05、HQ「タブのグローの範囲をアイコンと名前だけに
+    /// して」「今はみ出しているから」「選択して光るのはアイコンと文字だけ」):
+    /// それまでアイコン側に`radius:5`+`radius:10`の二重`.shadow`、ラベル側に
+    /// `radius:4`の`.shadow`を重ねていたため、ぼかしが実際のアイコン・文字の
+    /// 輪郭をはるかに超えて四角く大きく滲み、区切り線や隣の「指標」タブの
+    /// 領域近くまで光がはみ出して見えていた。アイコン`radius:2`、ラベル
+    /// `radius:1.5`の控えめな単発`.shadow`に差し替え、グローがアイコン・
+    /// 文字の輪郭のすぐ周囲だけに留まり、それ以外の背景やタブセルの余白には
+    /// 光が及ばないようにした。
     @ViewBuilder func tab(_ index: Int, _ title: String, @ViewBuilder icon: (Bool) -> some View) -> some View {
         let isSelected = index == selected
         let color = isSelected ? Self.selectedColor : Self.unselectedColor
@@ -438,11 +447,10 @@ struct V5BottomBar: View {
                 .scaleEffect(Self.tabIconScale, anchor: .bottom)
                 .frame(height: Self.tabIconSize)
                 .foregroundStyle(color)
-                .shadow(color: isSelected ? color.opacity(0.9) : .clear, radius: isSelected ? 5 : 0)
-                .shadow(color: isSelected ? color.opacity(0.6) : .clear, radius: isSelected ? 10 : 0)
+                .shadow(color: isSelected ? color.opacity(0.8) : .clear, radius: isSelected ? 2 : 0)
             V5JPFont.text(title, size: Self.tabLabelSize)
                 .foregroundStyle(color)
-                .shadow(color: isSelected ? color.opacity(0.7) : .clear, radius: isSelected ? 4 : 0)
+                .shadow(color: isSelected ? color.opacity(0.6) : .clear, radius: isSelected ? 1.5 : 0)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
