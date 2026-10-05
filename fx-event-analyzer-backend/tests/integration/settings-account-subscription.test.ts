@@ -17,7 +17,7 @@ import {
 
 const integration = loadIntegrationEnv();
 
-/** SCR-018〜026 Backend (HQ確定 2026-10-02): /settings, DELETE /account,
+/** SCR-018〜026 Backend (HQ確定 2026-10-02): /settings, GET/PATCH/DELETE /account,
  * POST /subscription/verify. StoreKit data is signed by
  * the throwaway chain from tests/helpers/storekitFixtures.ts, which this
  * app instance is told to trust. */
@@ -126,6 +126,39 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
     it('requires authentication', async () => {
       const response = await ctx.app.inject({ method: 'GET', url: '/api/v1/settings' });
       expect(response.statusCode).toBe(401);
+    });
+  });
+
+  describe('GET/PATCH /account (api-design.md §24.1/§24.2)', () => {
+    it('returns an empty profile for a brand-new user instead of 404', async () => {
+      const { user, headers } = await newUser();
+      const response = await ctx.app.inject({ method: 'GET', url: '/api/v1/account', headers });
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.body)).toMatchObject({ user_id: user.id, display_name: null, birth_date: null });
+    });
+
+    it('saves display_name and birth_date', async () => {
+      const { headers } = await newUser();
+      const patch = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/api/v1/account',
+        headers,
+        payload: { display_name: '山田 太郎', birth_date: '1990-01-01' },
+      });
+      expect(patch.statusCode).toBe(200);
+      const get = await ctx.app.inject({ method: 'GET', url: '/api/v1/account', headers });
+      expect(JSON.parse(get.body)).toMatchObject({ display_name: '山田 太郎', birth_date: '1990-01-01' });
+    });
+
+    it('rejects an impossible birth_date with 422', async () => {
+      const { headers } = await newUser();
+      const response = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/api/v1/account',
+        headers,
+        payload: { birth_date: '1990-02-30' },
+      });
+      expect(response.statusCode).toBe(422);
     });
   });
 

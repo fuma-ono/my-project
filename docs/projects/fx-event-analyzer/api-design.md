@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.4
+# FX Event Analyzer: API詳細設計書 v1.5
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -42,6 +42,7 @@
   - `POST /subscription/verify`を新設。StoreKit 2の署名済みTransactionをBackendで検証し購読状態を保存(25.1節)
   - Pro商品(月額・年額)とPRO Entitlement付与ルールを確定(25.2節・28章)
   - 30章の画面対応表にSCR-018〜026を追加
+- **v1.5**(2026-10-05): SCR-015 アカウント情報(HQ参考画像)の実装に伴い、`GET/PATCH /account`に`display_name`・`birth_date`を追加(24.1節・24.2節)
 
 ---
 
@@ -861,14 +862,25 @@ MVPでは部分一致検索。Full Text SearchはMVP対象外。
 Response：
 
 - user_id
+- display_name(v1.5で追加。未設定は`null`)
+- birth_date(v1.5で追加。`YYYY-MM-DD`の暦日、タイムゾーンなし。未設定は`null`)
 - created_at
 - updated_at
+
+ProfileはSupabase Authのユーザー作成時には作られないため、GET/PATCHとも先にProfileを作成(既存なら何もしない)してから処理する。
 
 **(v1.1で変更、A-4)**: `timezone`をResponseから削除した。timezoneはProfileに永続化せず、必要なEndpoint(Home等)でRequestごとに明示的に受け取る方式に変更したため(6章参照)。
 
 ## 24.2 PATCH /api/v1/account
 
 Account情報を更新する。
+
+Body(v1.5、いずれも省略可・送ったフィールドのみ更新。未知のフィールドは`422 VALIDATION_ERROR`):
+
+- display_name: 1〜200文字(前後の空白は除去)、または`null`で未設定に戻す
+- birth_date: `YYYY-MM-DD`の実在する日付で1900-01-01〜今日(UTC)、または`null`
+
+Responseは24.1節と同じ形。
 
 **(v1.1で変更、A-4)**: `timezone`の更新機能を削除した。Account APIはDBの`Profile`テーブルに実在するカラムのみを更新対象とする。
 

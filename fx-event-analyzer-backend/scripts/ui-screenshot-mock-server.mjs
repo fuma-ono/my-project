@@ -582,6 +582,14 @@ const settingsFixture = {
   updated_at: '2026-10-02T00:00:00Z',
 };
 
+const accountFixture = () => ({
+  user_id: TEST_USER_ID,
+  display_name: '山田 太郎',
+  birth_date: '1990-01-01',
+  created_at: isoMinusDays(30),
+  updated_at: isoMinusDays(1),
+});
+
 async function handleApi(req, res, pathname, searchParams) {
   const segments = pathname.replace(/^\/api\/v1\//, '').split('/').filter(Boolean);
 
@@ -590,6 +598,18 @@ async function handleApi(req, res, pathname, searchParams) {
   // SCR-018/020/021 (api-design.md §24.4). PATCH answers with the same
   // fixture — screenshots only need the screens to load.
   if (pathname === '/api/v1/settings') return json(res, 200, settingsFixture);
+  // SCR-015 アカウント情報 (api-design.md §24.1-§24.3). PATCH answers with
+  // the same fixture; DELETE is never exercised by the screenshot run.
+  if (pathname === '/api/v1/account') {
+    if (req.method === 'DELETE') {
+      res.writeHead(204);
+      return res.end();
+    }
+    return json(res, 200, accountFixture());
+  }
+  if (pathname === '/api/v1/subscription') {
+    return json(res, 200, { plan: 'FREE', status: null, started_at: null, expires_at: null });
+  }
 
   if (segments[0] === 'indicators' && segments.length === 2) {
     const detail = indicatorDetailHandler(segments[1]);

@@ -88,7 +88,8 @@ IngestionLog(他Entityへの直接参照なし。provider/data_typeで対象を�
 | カラム | 型 | 制約 | 備考 |
 |---|---|---|---|
 | id | uuid | PK | 認証基盤(Supabase `auth.users.id`)と同値 |
-| display_name | text | nullable | |
+| display_name | text | nullable | SCR-015で編集(API v1.5) |
+| birth_date | date | nullable, CHK >= 1900-01-01 | SCR-015の生年月日(2026-10-05追加、Migration `20261005000001_profiles_birth_date.sql`)。暦日のためタイムゾーンを持たない`date`型 |
 | deleted_at | timestamptz | nullable | v4.3で未使用化(アカウント削除は物理削除に変更、下記)。カラムは既存Migrationとの互換のため残す |
 | created_at | timestamptz | NN, DEF now() | |
 | updated_at | timestamptz | NN, DEF now() | |

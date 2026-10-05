@@ -1,52 +1,47 @@
 import Combine
 import Foundation
 
+/// SCR-015 アカウント情報に表示する内容。`GET /account`(名前・生年月日)、
+/// Supabase Authのセッション(メールアドレス)、`GET /settings`の
+/// `display.region`(国・地域)を1つにまとめたもの。
+struct AccountInfo: Equatable {
+    var account: AccountResponse
+    /// セッションにメールアドレスが無い(Backend未設定など)場合は`nil`。
+    var email: String?
+    /// ISO 3166-1 alpha-2。設定の取得に失敗した場合は`nil`(画面全体は
+    /// エラーにせず、この行だけ「—」にする)。
+    var regionCode: String?
+}
+
 enum AccountState: Equatable {
     case loading
     case backendNotConfigured
-    case loaded(account: AccountResponse, subscription: SubscriptionResponse)
+    case loaded(AccountInfo)
     case error(String)
 }
 
-enum AccountSignOutState: Equatable {
-    case idle
-    case signingOut
-    case error(String)
-}
-
-/// SCR-015 アカウント情報 — HQ Frontend integration (2026-09-21): the delivered UI
-/// package includes an Account screen with no ViewModel of its own (its
-/// `AccountView.swift` was static demo data). Wires it to `AccountService`/
-/// `SubscriptionService` (Networking/, Phase 2 — implemented but unused by
-/// any screen until now) the same way every other screen's ViewModel talks
-/// to its own endpoint, via the same `apiClient` `RootView` already
-/// constructs.
+/// SCR-015 アカウント情報(HQ参考画像 2026-10-05、
+/// `docs/projects/fx-event-analyzer/mockups/account-screen-reference-v1.png`)。
 ///
-/// HQ UI Master v5 integration (2026-09-22): `Assets/Reference/SCR-011.png`
-/// shows its own "ログアウト" row (in addition to Settings' existing one).
-/// Rather than duplicating sign-out logic, this ViewModel reuses the same
-/// real `AuthServicing.signOut()`/`onSignOut` callback `SettingsViewModel`
-/// already drives — a second consumer of an existing capability, not a new
-/// one.
+/// 旧画面にあった「プラン」「通知設定」「サブスクリプション」「ログアウト」は、
+/// 新しい参考画像に無く、それぞれSCR-016/SCR-017/SCR-014へ分かれたため
+/// この画面からは外した(`GET /subscription`もここでは呼ばない)。
 @MainActor
 final class AccountViewModel: ObservableObject {
     @Published private(set) var state: AccountState = .loading
-    @Published private(set) var signOutState: AccountSignOutState = .idle
 
     private let accountService: AccountService
-    private let subscriptionService: SubscriptionService
+    private let settingsService: SettingsService
     /// Optional so `AppRouteDestinationView`'s unreachable-in-practice
     /// `.account` case (real navigation always goes through Settings' own
-    /// override, which supplies both) can still construct this ViewModel
+    /// override, which supplies one) can still construct this ViewModel
     /// without inventing an `AuthServicing` it doesn't have.
     private let authService: AuthServicing?
-    private let onSignOut: () -> Void
 
-    init(apiClient: APIClient, authService: AuthServicing? = nil, onSignOut: @escaping () -> Void = {}) {
+    init(apiClient: APIClient, authService: AuthServicing? = nil) {
         self.accountService = AccountService(apiClient: apiClient)
-        self.subscriptionService = SubscriptionService(apiClient: apiClient)
+        self.settingsService = SettingsService(apiClient: apiClient)
         self.authService = authService
-        self.onSignOut = onSignOut
     }
 
     func load() {
@@ -54,30 +49,33 @@ final class AccountViewModel: ObservableObject {
         Task { await fetch() }
     }
 
-    func signOut() {
-        guard let authService else { return }
-        guard signOutState != .signingOut else { return }
-        signOutState = .signingOut
-        Task {
-            do {
-                try await authService.signOut()
-                signOutState = .idle
-                onSignOut()
-            } catch {
-                signOutState = .error("ログアウトに失敗しました。もう一度お試しください。")
-            }
-        }
+    /// サブ画面から戻ったときの再取得。表示中の内容は残したまま差し替える
+    /// (読み込み中の表示に戻すと、戻るたびに画面がちらつくため)。
+    func refresh() {
+        guard case .loaded = state else { return load() }
+        Task { await fetch() }
+    }
+
+    /// プロフィール編集の保存結果を、再取得を待たずに反映する。
+    func apply(_ account: AccountResponse) {
+        guard case .loaded(var info) = state else { return }
+        info.account = account
+        state = .loaded(info)
     }
 
     private func fetch() async {
         do {
-            async let account: AccountResponse = accountService.fetchAccount()
-            async let subscription: SubscriptionResponse = subscriptionService.fetchSubscription()
-            let (accountResponse, subscriptionResponse) = try await (account, subscription)
-            state = .loaded(account: accountResponse, subscription: subscriptionResponse)
+            async let accountRequest = accountService.fetchAccount()
+            async let settingsRequest = try? settingsService.fetchSettings()
+            let session = try? await authService?.currentSession()
+            let account = try await accountRequest
+            let settings = await settingsRequest
+            state = .loaded(AccountInfo(account: account, email: session?.email, regionCode: settings?.display.region))
         } catch let error as APIError where error.isNotConfigured {
             state = .backendNotConfigured
         } catch {
+            // 表示中の内容がある再取得の失敗は、そのまま表示を残す。
+            if case .loaded = state { return }
             state = .error("アカウント情報の取得に失敗しました。")
         }
     }

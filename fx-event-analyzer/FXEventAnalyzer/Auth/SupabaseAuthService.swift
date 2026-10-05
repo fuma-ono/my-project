@@ -65,6 +65,40 @@ final class SupabaseAuthService: AuthServicing {
         }
     }
 
+    func updateEmail(_ newEmail: String) async throws {
+        guard let client else { throw AuthServiceError.notConfigured }
+        do {
+            _ = try await client.update(user: UserAttributes(email: newEmail))
+        } catch {
+            throw AuthServiceError.unknown(error.localizedDescription)
+        }
+    }
+
+    func updatePassword(currentPassword: String, newPassword: String) async throws {
+        guard let client else { throw AuthServiceError.notConfigured }
+        let session: Session
+        do {
+            session = try await client.session
+        } catch {
+            throw AuthServiceError.network(error.localizedDescription)
+        }
+        guard let email = session.user.email else {
+            throw AuthServiceError.unknown("No email on the current user.")
+        }
+        // Re-authenticate with the current password first; a wrong one
+        // must never reach the update call.
+        do {
+            _ = try await client.signIn(email: email, password: currentPassword)
+        } catch {
+            throw AuthServiceError.invalidCredentials
+        }
+        do {
+            _ = try await client.update(user: UserAttributes(password: newPassword))
+        } catch {
+            throw AuthServiceError.unknown(error.localizedDescription)
+        }
+    }
+
     func authStateChanges() -> AsyncStream<AuthEvent> {
         guard let client else {
             return AsyncStream { $0.finish() }
@@ -88,7 +122,8 @@ final class SupabaseAuthService: AuthServicing {
         UserSession(
             userID: session.user.id,
             accessToken: session.accessToken,
-            expiresAt: Date(timeIntervalSince1970: session.expiresAt)
+            expiresAt: Date(timeIntervalSince1970: session.expiresAt),
+            email: session.user.email
         )
     }
 

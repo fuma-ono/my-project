@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { ApiError } from '../errors/ApiError.js';
-import { deleteUserAccount, getProfile, updateProfile } from '../repositories/profilesRepository.js';
+import { deleteUserAccount, ensureProfile, getProfile, updateProfile } from '../repositories/profilesRepository.js';
 import { updateAccountBodySchema } from '../schemas/account.js';
 
 /**
@@ -10,14 +10,20 @@ import { updateAccountBodySchema } from '../schemas/account.js';
  * structurally never address anyone else's Profile.
  */
 export function registerAccountRoutes(app: FastifyInstance): void {
+  // Profiles are created lazily (see ensureProfile), so a user who has never
+  // written anything yet still gets a profile here instead of a 404 — the
+  // first screen to read it is SCR-015, right after sign-up.
   app.get('/account', async (request) => {
     const userId = request.user!.id;
+    await ensureProfile(app.supabase, userId);
     const profile = await getProfile(app.supabase, userId);
     if (!profile) {
       throw ApiError.notFound('Profile not found.');
     }
     return {
       user_id: profile.id,
+      display_name: profile.display_name,
+      birth_date: profile.birth_date,
       created_at: profile.created_at,
       updated_at: profile.updated_at,
     };
@@ -26,9 +32,12 @@ export function registerAccountRoutes(app: FastifyInstance): void {
   app.patch('/account', async (request) => {
     const userId = request.user!.id;
     const parsed = updateAccountBodySchema.parse(request.body);
+    await ensureProfile(app.supabase, userId);
     const profile = await updateProfile(app.supabase, userId, parsed);
     return {
       user_id: profile.id,
+      display_name: profile.display_name,
+      birth_date: profile.birth_date,
       created_at: profile.created_at,
       updated_at: profile.updated_at,
     };

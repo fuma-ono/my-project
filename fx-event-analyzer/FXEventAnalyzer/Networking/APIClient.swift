@@ -82,6 +82,9 @@ final class URLSessionAPIClient: APIClient {
 
         switch httpResponse.statusCode {
         case 200...299:
+            if data.isEmpty, let empty = EmptyResponse() as? T {
+                return empty
+            }
             do {
                 return try decoder.decode(T.self, from: data)
             } catch {
@@ -96,3 +99,7 @@ final class URLSessionAPIClient: APIClient {
         }
     }
 }
+
+/// Response type for endpoints that answer `204 No Content` (e.g.
+/// `DELETE /account`), whose empty body `JSONDecoder` can't decode.
+struct EmptyResponse: Decodable, Equatable {}

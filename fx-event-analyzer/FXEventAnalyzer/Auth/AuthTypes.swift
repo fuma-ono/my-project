@@ -7,6 +7,10 @@ struct UserSession: Equatable {
     let userID: UUID
     let accessToken: String
     let expiresAt: Date
+    /// Supabase Auth's email for the user (SCR-015 shows it). Not part of
+    /// `GET /account` — email/password are owned by Supabase Auth
+    /// (api-design.md §24.2), so it comes from the session itself.
+    var email: String? = nil
 
     var isExpired: Bool {
         expiresAt <= Date()
@@ -45,6 +49,16 @@ protocol AuthServicing {
     func signIn(email: String, password: String) async throws -> UserSession
 
     func signOut() async throws
+
+    /// Requests an email change (SCR-015). Supabase Auth sends a
+    /// confirmation link to the new address; the change takes effect only
+    /// once that link is opened, so the session's email is unchanged here.
+    func updateEmail(_ newEmail: String) async throws
+
+    /// Changes the password after re-checking the current one (SCR-015),
+    /// so an unattended unlocked device can't be used to take the account
+    /// over. Throws `.invalidCredentials` when `currentPassword` is wrong.
+    func updatePassword(currentPassword: String, newPassword: String) async throws
 
     /// Ongoing auth state changes, primarily used to detect session expiry
     /// while the app is already past Splash (ui-screens.md SCR-000

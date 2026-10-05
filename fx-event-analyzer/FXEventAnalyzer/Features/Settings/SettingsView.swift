@@ -199,10 +199,9 @@ struct SettingsView: View {
 
     /// 参考画像v2から実測したカード・行の見た目(V5座標系)。横方向の位置は
     /// 参考画像のカード幅(385px)に対する比率で、このカード幅に換算している。
-    private static let cornerRadius: CGFloat = 7.5
-    private static let cardFill = Color(red: 0 / 255, green: 34 / 255, blue: 69 / 255) // #002245
-    private static let cardBorder = Color(red: 11 / 255, green: 76 / 255, blue: 142 / 255) // #0B4C8E
-    private static let separator = Color(red: 0 / 255, green: 67 / 255, blue: 129 / 255) // #004381
+    /// カード・区切り線・シェブロンの色はSCR-015と共有(`SettingsCardStyle`)。
+    private static let cardFill = SettingsCardStyle.cardFill
+    private static let separator = SettingsCardStyle.separator
     private static let titleSize: CGFloat = 10.5
     /// アイコンを囲む丸(参考画像の直径44px)と、その中の白いアイコン。
     private static let badgeSize: CGFloat = 22
@@ -217,18 +216,11 @@ struct SettingsView: View {
     /// カード左端→丸の左端(参考画像26px)、丸の右端→文字(参考画像19px)。
     private static let badgeLeading: CGFloat = 8.6
     private static let badgeTitleGap: CGFloat = 10.7
-    private static let chevronColor = Color(red: 170 / 255, green: 198 / 255, blue: 245 / 255) // #AAC6F5
+    private static let chevronColor = SettingsCardStyle.chevronColor
 
     /// 行グループ・ログアウトで共通のカード(塗り＋縁取り)。
     private func card(height: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: Self.cornerRadius)
-            .fill(Self.cardFill)
-            .overlay(
-                RoundedRectangle(cornerRadius: Self.cornerRadius)
-                    .stroke(Self.cardBorder, lineWidth: 0.7)
-                    .shadow(color: Self.cardBorder.opacity(0.5), radius: 1.5)
-            )
-            .frame(width: Self.cardWidth, height: height)
+        SettingsCardStyle.card(width: Self.cardWidth, height: height)
     }
 
     /// 行グループの背景(角丸カード)と、行と行の間の区切り線。個々の行
@@ -331,28 +323,5 @@ struct SettingsView: View {
             }
         }
         .position(x: 117, y: Self.logoutTop + Self.rowHeight / 2)
-    }
-}
-
-/// 設定の各行を押している間だけ、参考画像v2の「ホーム通貨ペア編集」行と同じ
-/// シアンの枠・明るい塗りで光らせる。HQ指示(2026-10-05): 参考画像の強調は
-/// 選択時の表現と判断し、常時表示の強調をやめてタップ中の演出にした。
-private struct SettingsRowPressStyle: ButtonStyle {
-    private static let border = Color(red: 0 / 255, green: 201 / 255, blue: 234 / 255) // #00C9EA
-    private static let fill = Color(red: 0 / 255, green: 48 / 255, blue: 90 / 255) // #00305A
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background {
-                if configuration.isPressed {
-                    RoundedRectangle(cornerRadius: 7.5)
-                        .fill(Self.fill)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 7.5)
-                                .stroke(Self.border, lineWidth: 0.9)
-                                .shadow(color: Self.border.opacity(0.8), radius: 2.5)
-                        )
-                }
-            }
     }
 }
