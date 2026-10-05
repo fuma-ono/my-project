@@ -782,15 +782,18 @@ struct HomeView: View {
             // 46/40/44→42/36/40に縮小。
             Text(pair.displaySymbol).font(.system(size: 9.5, weight: .semibold)).tracking(-0.4).frame(width: 42, alignment: .leading)
             Text(pair.price).font(.system(size: 9.5, weight: .semibold)).tracking(-0.4).monospacedDigit().frame(width: 36, alignment: .center)
-            // バグ修正(2026-10-05): 変化率の幅を狭めるために列幅を縮小した際、
-            // `Text`に`.fixedSize`を付けていなかったため"+0.25%"が
-            // "+0.25"/"%"の2行に折り返されてしまっていた。`.fixedSize
-            // (horizontal: true, vertical: false)`を付けて1行を強制。
+            // バグ修正(2026-10-05、2回目): `.fixedSize(horizontal: true,
+            // vertical: false)`を試したが、実機キャプチャでは依然として
+            // "+0.25"/"%"の2行に折り返されたままだった(行全体の幅が
+            // タイトなため、`.fixedSize`だけでは`.frame(width: 40)`による
+            // 圧縮を防げなかった)。`Text`に直接`.lineLimit(1)`を付け、
+            // 外側の`.frame`を固定幅(width)ではなく最小幅(minWidth)に
+            // 変更することで、必要な時は40を超えて広がれるようにし、
+            // 折り返しを確実に防いだ。
             HStack(spacing: 1) {
-                Text(pair.change).font(.system(size: 9.5, weight: .semibold)).tracking(-0.4).monospacedDigit()
+                Text(pair.change).font(.system(size: 9.5, weight: .semibold)).tracking(-0.4).monospacedDigit().lineLimit(1)
                 Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 9.5))
             }
-            .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
             // HQ再指摘(2026-10-05、4回目)「+0.25%の赤文字と緑文字をもう少し
             // 発行(発光)色みたいに明るくさせて、薄くさせるのではない」:
@@ -799,7 +802,7 @@ struct HomeView: View {
             // 出すため同色のシャドウ(グロー)も追加した(他画面のアイコンで
             // 使っている`iconGlowShadow`と同じ手法)。
             .shadow(color: (pair.isUp ? Self.changeUpColor : Self.changeDownColor).opacity(0.7), radius: 2)
-            .frame(width: 40, alignment: .trailing)
+            .frame(minWidth: 40, alignment: .trailing)
             Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
         }
         .foregroundStyle(.white)
