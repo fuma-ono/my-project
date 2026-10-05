@@ -47,10 +47,8 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
         capture("01-Login")
 
-        emailField.tap()
-        emailField.typeText("ui-screenshot@example.com")
-        app.secureTextFields["パスワード"].tap()
-        app.secureTextFields["パスワード"].typeText("ui-screenshot-password")
+        type("ui-screenshot@example.com", into: emailField)
+        type("ui-screenshot-password", into: app.secureTextFields["パスワード"])
         app.buttons["ログイン"].tap()
 
         // SCR-004 ホーム画面. Not app.tabBars.buttons["Home"] — iPadOS's
@@ -184,6 +182,18 @@ final class ScreenshotTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    /// Taps a text field and types into it only once the keyboard is up.
+    /// A single tap occasionally doesn't give the field keyboard focus in
+    /// time (real CI failure on 01-Login: "Neither element nor any
+    /// descendant has keyboard focus"), so retry the tap a few times first.
+    private func type(_ text: String, into field: XCUIElement) {
+        for _ in 0..<3 {
+            field.tap()
+            if app.keyboards.firstMatch.waitForExistence(timeout: 5) { break }
+        }
+        field.typeText(text)
+    }
 
     private func capture(_ name: String, settle: TimeInterval = 0.6) {
         if settle > 0 {
