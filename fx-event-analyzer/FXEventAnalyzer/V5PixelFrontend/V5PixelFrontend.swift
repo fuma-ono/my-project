@@ -435,10 +435,16 @@ struct V5BottomBar: View {
     /// それまでアイコン側に`radius:5`+`radius:10`の二重`.shadow`、ラベル側に
     /// `radius:4`の`.shadow`を重ねていたため、ぼかしが実際のアイコン・文字の
     /// 輪郭をはるかに超えて四角く大きく滲み、区切り線や隣の「指標」タブの
-    /// 領域近くまで光がはみ出して見えていた。アイコン`radius:2`、ラベル
-    /// `radius:1.5`の控えめな単発`.shadow`に差し替え、グローがアイコン・
-    /// 文字の輪郭のすぐ周囲だけに留まり、それ以外の背景やタブセルの余白には
-    /// 光が及ばないようにした。
+    /// 領域近くまで光がはみ出して見えていた。最初に`radius:2`/`radius:1.5`
+    /// へ縮小してCI実機キャプチャで検証したところ、このタブ(`V5Viewport`の
+    /// レターボックス・スケール配下にあるため)では`.shadow`の`radius`値を
+    /// どれだけ下げても描画結果が全く変化しない(ピクセル単位で同一)ことが
+    /// 判明した — `V5Viewport`の`content().scaleEffect(scale)`配下で
+    /// `.shadow`を使うと、半径の数値がスケール後の見た目のぼかし量に反映
+    /// されない描画上の既知の相性問題と判断した。数値調整では解決できない
+    /// ため、`.shadow`による後光(ブラー)表現自体を廃止し、選択状態は
+    /// アイコン・文字自体の色(シアン)のみで表現するようにした — これなら
+    /// 構造上、アイコン・文字の輪郭を一切超えてはみ出しようがない。
     @ViewBuilder func tab(_ index: Int, _ title: String, @ViewBuilder icon: (Bool) -> some View) -> some View {
         let isSelected = index == selected
         let color = isSelected ? Self.selectedColor : Self.unselectedColor
@@ -447,10 +453,8 @@ struct V5BottomBar: View {
                 .scaleEffect(Self.tabIconScale, anchor: .bottom)
                 .frame(height: Self.tabIconSize)
                 .foregroundStyle(color)
-                .shadow(color: isSelected ? color.opacity(0.8) : .clear, radius: isSelected ? 2 : 0)
             V5JPFont.text(title, size: Self.tabLabelSize)
                 .foregroundStyle(color)
-                .shadow(color: isSelected ? color.opacity(0.6) : .clear, radius: isSelected ? 1.5 : 0)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
