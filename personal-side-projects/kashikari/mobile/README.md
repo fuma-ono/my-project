@@ -2165,3 +2165,20 @@ Growth活動の一環で、「今いる9人自身を新規獲得チャネルに�
 - 実装時、Web版(react-native-web)で入力文字数が多いとボタンが画面外にはみ出す不具合が出た。`flex: 1`の子要素はCSSのデフォルト`min-width: auto`により中身の幅より縮まないという既知の挙動が原因で、`minWidth: 0`を明示して解消した
 
 `npx tsc --noEmit`はクリーン。Web版をPlaywrightで、未入力時(ボタン無効)・文字入力時(ボタン有効、長い文字列でもはみ出さない)の両方を確認した。**今回もビルド・提出は保留**(108・109回目とまとめて後日ビルドする)。
+
+## 1.2ビルド・App Store Connectへの提出完了(111回目)
+
+108〜110回目(招待インセンティブ・利用状況画面削除・保存ボタン位置修正)をまとめてビルド・提出した。事前にオーナー側で`schema.sql`の再実行が完了し、`profiles.bonus_premium_until`列を確認済みだったため着手した。`app.json`の`version`は1.2に変更済み、`npx tsc --noEmit`もクリーンな状態だった。
+
+- `npx eas-cli whoami` でログイン済み(`fuma-ono`、EXPO_TOKEN経由)を確認
+- `eas build --platform ios --profile production --non-interactive`
+  - 初回は`node_modules`未インストールのため`expo-image-picker`のプラグイン解決に失敗(`npm ci`で解消)
+  - buildNumberは自動的に202609080024→202609080025にインクリメント
+  - ビルド成功: https://expo.dev/accounts/fuma-ono/projects/kashikari/builds/c14fef0a-0430-4619-a1f0-599a6bda95e5
+- `eas submit --platform ios --latest --non-interactive`
+  - App Store Connectへのアップロード成功(Build 202609080025 / Version 1.2)
+  - 提出詳細: https://expo.dev/accounts/fuma-ono/projects/kashikari/submissions/2c017cce-9020-4a16-accc-b0e622e39a3c
+
+**注意**: 今回の課金枠(EAS Buildの無料枠)は既に超過しており($14.00分の追加利用が発生)、pay-as-you-goで課金された。
+
+**オーナー側の対応が必要**: `eas submit`はApp Store Connectへのアップロードまでで、App Reviewへの提出(バージョン作成→「審査へ提出」)はASC APIキーがこの環境に無いため自動化できていない。Appleの処理完了(アップロード後5〜10分程度)を待ってから、App Store Connect(https://appstoreconnect.apple.com/apps/6808062809/testflight/ios )でこのビルド(202609080025)をバージョン1.2に紐付け、審査へ提出してほしい。
