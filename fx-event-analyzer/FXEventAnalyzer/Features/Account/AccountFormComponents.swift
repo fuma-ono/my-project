@@ -56,6 +56,9 @@ struct AccountInfoCard: View {
     var textColor: Color = SettingsCardStyle.subtitleColor
     var fill: Color = SettingsCardStyle.cardFill
     var border: Color = SettingsCardStyle.cardBorder
+    /// 箇条書きの点をアイコンの下まで左に寄せ、カード幅いっぱいに使う
+    /// (メールアドレス変更のみ。HQ指示 2026-10-05)。
+    var flushBullets = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
@@ -72,13 +75,22 @@ struct AccountInfoCard: View {
                     AccountNote(text: text, color: textColor, width: 168)
                         .padding(.top, title == nil ? 2 : 0)
                 }
+                if !flushBullets {
+                    ForEach(bullets, id: \.self) { bullet in
+                        HStack(alignment: .top, spacing: 1) {
+                            V5JPFont.text("・", size: AccountLayout.noteSize, weight: .regular).foregroundStyle(textColor)
+                                .fixedSize()
+                            AccountNote(text: bullet, color: textColor, width: 158)
+                        }
+                    }
+                }
             }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 10)
         .padding(.top, 9)
-        .padding(.bottom, bullets.isEmpty ? 9 : 0)
-        .modifier(BulletList(bullets: bullets, color: textColor))
+        .padding(.bottom, flushBullets && !bullets.isEmpty ? 0 : 9)
+        .modifier(BulletList(bullets: flushBullets ? bullets : [], color: textColor))
         .background(AccountCardBackground(fill: fill, border: border))
     }
 }
@@ -151,8 +163,7 @@ struct AccountFormScaffold<Content: View>: View {
     }
 }
 
-/// 入力欄の上の小さな見出し。
-/// 情報カードの箇条書き。「入力したメールアドレス宛に確認メールを送信
+/// 情報カードの左寄せの箇条書き(`flushBullets`)。「入力したメールアドレス宛に確認メールを送信
 /// します。」が1行に収まるよう、点をアイコンの下まで左に寄せ、カード幅
 /// いっぱいに使う(HQ指示 2026-10-05)。
 private struct BulletList: ViewModifier {
@@ -181,6 +192,7 @@ private struct BulletList: ViewModifier {
     }
 }
 
+/// 入力欄の上の小さな見出し。
 struct AccountFieldCaption: View {
     let text: String
     var body: some View {
