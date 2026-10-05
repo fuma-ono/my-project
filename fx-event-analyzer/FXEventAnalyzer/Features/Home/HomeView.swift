@@ -367,6 +367,12 @@ struct HomeView: View {
     /// HQ再指摘(2026-10-05)「国旗の丸をもう少し大きくして」: 15→19に拡大。
     private static let flagDiameter: CGFloat = 19
 
+    /// HQ再指摘(2026-10-05)「お気に入り内の国旗の丸のサイズは少し小さく
+    /// して」: お気に入りの小カードは幅68と他カードの行より狭く、共通の
+    /// `flagDiameter`(19)のままだと窮屈だったため、お気に入り専用の
+    /// 少し小さいサイズを別途定義した。
+    private static let favoriteFlagDiameter: CGFloat = 15
+
     // MARK: 通貨ペアカード (x=26,y=180,width=782,height=527 → height 527/3.641≒145)
 
     /// HQ再指摘(2026-10-05)「通貨ペアの各行の縦幅をもう少し狭めて」で
@@ -514,23 +520,42 @@ struct HomeView: View {
     /// 10.62ユニットに必要なsizeは10.62/0.929≒11.4→11に縮小。太さも.bold→
     /// .semibold(V5JPFontは日本語ランを常にSemiBoldで描画するため、英数字
     /// ランの太さをそれに揃える目的)。
-    @ViewBuilder private func cardHeaderRow(title: String, height: CGFloat, @ViewBuilder icon: () -> some View, @ViewBuilder trailing: () -> some View) -> some View {
+    /// HQ再指摘(2026-10-05)「各アイコンをもう少し右に移動させ、サイズを
+    /// 大きくして」「文字もアイコンと同様に右に移動し、少しサイズを大きく
+    /// して」: アイコン・タイトルとも同じ`HStack`内にあるため、先頭に
+    /// `.padding(.leading, 4)`を加えることで両方まとめて右へ移動させた
+    /// (個別にではなく「アイコンと同様に」という指示通り、同じ移動量で
+    /// 揃う)。タイトルサイズは11→12に拡大(各アイコン自体のサイズは
+    /// 呼び出し側=todayEventsCard/pairsCard/favoritesCard/speechesCardで
+    /// それぞれ拡大)。
+    ///
+    /// HQ再指摘(2026-10-05)「お気に入りの文字の下の線はいらない」: 全カード
+    /// 共通で表示していたヘッダー下の`Divider()`を、呼び出し側から
+    /// `showDivider: false`を渡せるようにしてお気に入りカードだけ非表示に
+    /// できるようにした(他3カードは`showDivider`省略でこれまで通り表示)。
+    @ViewBuilder private func cardHeaderRow(title: String, height: CGFloat, showDivider: Bool = true, @ViewBuilder icon: () -> some View, @ViewBuilder trailing: () -> some View) -> some View {
         HStack(spacing: 5) {
             icon()
-            V5JPFont.text(title, size: 11, weight: .semibold)
+            V5JPFont.text(title, size: 12, weight: .semibold)
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Spacer()
             trailing()
         }
+        .padding(.leading, 4)
         .frame(height: height, alignment: .center)
-        Divider().overlay(Self.cardBorderColor)
+        if showDivider {
+            Divider().overlay(Self.cardBorderColor)
+        }
     }
 
+    /// HQ再指摘(2026-10-05)「すべて見るの文字サイズを10/5(月)と同じサイズに
+    /// して」: `todayEventsDateFormatter`側のテキストサイズ(9.5、同じく
+    /// この回に10→9.5へ調整)に合わせ、7→9.5に拡大した。
     @ViewBuilder private func headerLink(_ text: String) -> some View {
         HStack(spacing: 2) {
-            V5JPFont.text(text, size: 7).foregroundStyle(Self.linkBlue)
+            V5JPFont.text(text, size: 9.5).foregroundStyle(Self.linkBlue)
             Image(systemName: "chevron.right").font(.system(size: 8, weight: .semibold)).foregroundStyle(Self.linkBlue)
         }
     }
@@ -573,16 +598,16 @@ struct HomeView: View {
     @ViewBuilder private func todayEventsCard(_ events: [HomeEventSummary]) -> some View {
         cardShell(height: Self.todayEventsCardHeight) {
             cardHeaderRow(title: "今日の重要イベント", height: Self.todayEventsHeaderHeight) {
-                Image(systemName: "calendar").font(.system(size: 11, weight: .bold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
+                Image(systemName: "calendar").font(.system(size: 13, weight: .bold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
             } trailing: {
-                // HQ再指摘(2026-10-05)「日付10/5(月)の文字を大きくして。参考
-                // 画像より小さい」: 他カードの`headerLink`(size 7)をそのまま
-                // 流用していたため小さすぎた。日付はこのカードだけの固有表示
-                // のため専用サイズ(10/太字)に引き上げた。
+                // HQ指示(2026-10-05)「日付10/5(月)の文字を大きくして」でいったん
+                // 10に拡大したが、再指摘(2026-10-05)「10/5(月)文字サイズを0.5
+                // 下げて」で10→9.5に調整(「すべて見る」もこのサイズに統一、
+                // `headerLink`参照)。
                 NavigationLink(value: AppRoute.calendar) {
                     HStack(spacing: 2) {
                         Text(Self.todayEventsDateFormatter.string(from: Date()))
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.system(size: 9.5, weight: .semibold))
                             .foregroundStyle(Self.linkBlue)
                         Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
                     }
@@ -675,7 +700,7 @@ struct HomeView: View {
     @ViewBuilder private func pairsCard(_ pairs: [FXPairUI]) -> some View {
         cardShell(height: Self.pairsCardHeight) {
             cardHeaderRow(title: "通貨ペア", height: Self.pairsHeaderHeight) {
-                HomeChartIcon().foregroundStyle(V5P.cyan).frame(width: 13, height: 12).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
+                HomeChartIcon().foregroundStyle(V5P.cyan).frame(width: 15, height: 14).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
             } trailing: {
                 headerLink("すべて見る")
             }
@@ -735,8 +760,8 @@ struct HomeView: View {
 
     @ViewBuilder private func favoritesCard(_ favorites: [HomeFavoriteItem]) -> some View {
         cardShell(height: Self.favoritesCardHeight) {
-            cardHeaderRow(title: "お気に入り", height: Self.favoritesHeaderHeight) {
-                Image(systemName: "star.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
+            cardHeaderRow(title: "お気に入り", height: Self.favoritesHeaderHeight, showDivider: false) {
+                Image(systemName: "star.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
             } trailing: {
                 NavigationLink(value: AppRoute.favoritesList) {
                     headerLink("すべて見る")
@@ -809,7 +834,7 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack {
                 if let countryCode {
-                    CountryFlagView(countryCode: countryCode, diameter: Self.flagDiameter)
+                    CountryFlagView(countryCode: countryCode, diameter: Self.favoriteFlagDiameter)
                 }
                 Spacer()
                 Image(systemName: "star").font(.system(size: 10)).foregroundStyle(V5P.muted)
@@ -832,7 +857,7 @@ struct HomeView: View {
     @ViewBuilder private func speechesCard(_ speeches: [HomeSpeechSummary]) -> some View {
         cardShell(height: Self.speechesCardHeight) {
             cardHeaderRow(title: "直近の要人発言", height: Self.speechesHeaderHeight) {
-                Image(systemName: "quote.bubble.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
+                Image(systemName: "quote.bubble.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
             } trailing: {
                 NavigationLink(value: AppRoute.speechList) {
                     headerLink("すべて見る")
