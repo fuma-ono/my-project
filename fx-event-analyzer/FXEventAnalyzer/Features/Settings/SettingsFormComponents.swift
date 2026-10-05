@@ -81,12 +81,11 @@ struct SettingsSectionScaffold<Section: SettingsSection, Content: View>: View {
         .overlay(alignment: .bottom) {
             Group {
                 switch viewModel.saveState {
-                case .saved: Text("保存しました").foregroundStyle(V5P.green)
-                case .error(let message): Text(message).foregroundStyle(V5P.red)
+                case .saved: V5JPFont.text("保存しました", size: 6, weight: .regular).foregroundStyle(V5P.green)
+                case .error(let message): V5JPFont.text(message, size: 6, weight: .regular).foregroundStyle(V5P.red)
                 case .idle, .saving: EmptyView()
                 }
             }
-            .font(.system(size: 6))
             .multilineTextAlignment(.center)
             .frame(width: 214)
             .offset(y: 14)
@@ -105,19 +104,20 @@ struct SettingsSectionScaffold<Section: SettingsSection, Content: View>: View {
 struct SettingsCaption: View {
     let text: String
     var body: some View {
-        Text(text)
-            .font(.system(size: 7, weight: .semibold))
+        V5JPFont.text(text, size: 7)
             .foregroundStyle(V5P.muted)
             .frame(width: 210, alignment: .leading)
     }
 }
 
 /// 補足説明(複数行可)。
+///
+/// この画面群の日本語は、HQ指示(2026-10-05「フォントが日本語っぽくない」)
+/// により他画面と同じ`V5JPFont`(日本語部分のみNoto Sans JP)で描いている。
 struct SettingsNote: View {
     let text: String
     var body: some View {
-        Text(text)
-            .font(.system(size: 6))
+        V5JPFont.text(text, size: 6, weight: .regular)
             .foregroundStyle(V5P.muted)
             .frame(width: 210, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
@@ -133,7 +133,7 @@ struct SettingsFormRow<Trailing: View>: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: icon).font(.system(size: 9)).frame(width: 12)
-            Text(title).font(.system(size: 8))
+            V5JPFont.text(title, size: 8, weight: .regular)
             Spacer(minLength: 4)
             trailing()
         }
@@ -183,8 +183,7 @@ struct SettingsSegmentedPicker<Value: Hashable>: View {
             ForEach(options) { option in
                 let selected = option.value == selection
                 Button { selection = option.value } label: {
-                    Text(option.label)
-                        .font(.system(size: 7, weight: selected ? .bold : .regular))
+                    V5JPFont.text(option.label, size: 7, weight: selected ? .bold : .regular)
                         .foregroundStyle(selected ? V5P.cyan : V5P.muted)
                         .frame(maxWidth: .infinity, minHeight: 20)
                         .background(selected ? V5P.cyan.opacity(0.16) : V5P.panel, in: RoundedRectangle(cornerRadius: 5))
@@ -210,8 +209,7 @@ struct SettingsMenuPicker<Value: Hashable>: View {
             }
         } label: {
             HStack(spacing: 3) {
-                Text(options.first { $0.value == selection }?.label ?? "")
-                    .font(.system(size: 7))
+                V5JPFont.text(options.first { $0.value == selection }?.label ?? "", size: 7, weight: .regular)
                     .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down").font(.system(size: 6))
             }

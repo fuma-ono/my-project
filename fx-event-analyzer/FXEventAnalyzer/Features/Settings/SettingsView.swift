@@ -135,19 +135,19 @@ struct SettingsView: View {
                 let g1 = Self.group1Top
                 groupBackground(topY: g1, rowCount: 6)
                 NavigationLink(value: AppRoute.account) {
-                    rowLabel("person.fill", "アカウント情報")
+                    rowLabel("person.fill", "アカウント情報", nudge: CGSize(width: 0, height: -0.75))
                 }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g1, index: 0))
                 NavigationLink(value: SettingsSubRoute.notificationSettings) {
                     rowLabel("bell.fill", "通知設定")
                 }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g1, index: 1))
                 NavigationLink(value: SettingsSubRoute.subscriptionManagement) {
-                    rowLabel("crown.fill", "プラン・購読管理")
+                    rowLabel("crown.fill", "プラン・購読管理", nudge: CGSize(width: 0, height: -0.5))
                 }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g1, index: 2))
                 NavigationLink(value: SettingsSubRoute.displaySettings) {
                     rowLabel("globe", "表示・地域設定")
                 }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g1, index: 3))
                 NavigationLink(value: SettingsSubRoute.chartSettings) {
-                    rowLabel("chart.bar.fill", "チャート設定")
+                    rowLabel("chart.bar.fill", "チャート設定", nudge: CGSize(width: 0, height: -0.4))
                 }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g1, index: 4))
                 NavigationLink(value: AppRoute.homeCurrencyPairEditor) {
                     rowLabel("arrow.left.arrow.right", "ホーム通貨ペア編集", highlighted: true)
@@ -159,10 +159,10 @@ struct SettingsView: View {
                     rowLabel("questionmark.circle.fill", "ヘルプ・お問い合わせ")
                 }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g2, index: 0))
                 NavigationLink(value: SettingsSubRoute.terms) {
-                    rowLabel("doc.text.fill", "利用規約")
+                    rowLabel("doc.text.fill", "利用規約", nudge: CGSize(width: 0.5, height: -0.35))
                 }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g2, index: 1))
                 NavigationLink(value: SettingsSubRoute.privacyPolicy) {
-                    rowLabel("checkmark.shield.fill", "プライバシーポリシー")
+                    rowLabel("checkmark.shield.fill", "プライバシーポリシー", nudge: CGSize(width: 0, height: 0.25))
                 }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g2, index: 2))
                 NavigationLink(value: SettingsSubRoute.appInfo) {
                     rowLabel("info.circle.fill", "アプリ情報")
@@ -248,22 +248,38 @@ struct SettingsView: View {
     }
 
     /// 参考画像どおりの、青い丸の中に白いアイコン。ログアウトだけは赤。
-    private func rowBadge(_ icon: String, tint: Color? = nil) -> some View {
+    ///
+    /// HQ指示(2026-10-05)「アイコンが中心になっていない項目がある」: CI実機
+    /// キャプチャで測ると字形の外接矩形は丸の中心から0.4pt以内に収まって
+    /// いたが、人型・王冠・棒グラフは下側、書類は左側に重さが偏っていて
+    /// 視覚的にずれて見える。`nudge`で、実測した字形の重心のずれの約6割を
+    /// 打ち消す方向へ動かしている(外接矩形の中心と重心の中間＝目で見た中心)。
+    ///
+    /// 同日「ログアウトのアイコンがぼやけている」: 赤みを帯びた半透明の
+    /// 塗りの上に赤い線を描いていたため輪郭のコントラストが低かった。塗りを
+    /// カードと同じ紺にし、赤い線を太くしている(同じ紺の上の赤い文字
+    /// 「ログアウト」がくっきり見えているのと同じ条件)。
+    private func rowBadge(_ icon: String, tint: Color? = nil, nudge: CGSize = .zero) -> some View {
         ZStack {
             Circle()
-                .fill(tint.map { $0.opacity(0.18) } ?? Self.badgeFill)
-                .overlay(Circle().stroke(tint ?? Self.badgeBorder, lineWidth: 0.5))
+                .fill(tint == nil ? Self.badgeFill : Self.cardFill)
+                .overlay(Circle().stroke(tint ?? Self.badgeBorder, lineWidth: tint == nil ? 0.5 : 0.8))
             Image(systemName: icon)
-                .font(.system(size: Self.iconSize, weight: .semibold))
+                .font(.system(size: tint == nil ? Self.iconSize : 10, weight: tint == nil ? .semibold : .bold))
                 .foregroundStyle(tint ?? Self.iconColor)
+                .offset(nudge)
         }
         .frame(width: Self.badgeSize, height: Self.badgeSize)
     }
 
-    private func rowLabel(_ icon: String, _ title: String, highlighted: Bool = false) -> some View {
+    private func rowLabel(_ icon: String, _ title: String, highlighted: Bool = false, nudge: CGSize = .zero) -> some View {
         HStack(spacing: Self.badgeTitleGap) {
-            rowBadge(icon)
-            Text(title).font(.system(size: Self.titleSize, weight: .medium)).foregroundStyle(.white)
+            rowBadge(icon, nudge: nudge)
+            // HQ指示(2026-10-05)「フォントが日本語っぽくない(編・約など)」:
+            // システムフォントのままだとシミュレーター(英語環境)では漢字が
+            // 中国語字形で描かれていた。他画面と同じ`V5JPFont`(日本語部分のみ
+            // Noto Sans JP)に揃えている。
+            V5JPFont.text(title, size: Self.titleSize, weight: .medium).foregroundStyle(.white)
             Spacer()
             Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(Self.chevronColor)
         }
@@ -297,7 +313,7 @@ struct SettingsView: View {
                 if viewModel.state == .signingOut {
                     ProgressView().tint(V5P.red)
                 } else {
-                    Text("ログアウト").font(.system(size: Self.titleSize, weight: .semibold))
+                    V5JPFont.text("ログアウト", size: Self.titleSize)
                 }
                 Spacer()
             }
@@ -311,7 +327,7 @@ struct SettingsView: View {
         .disabled(viewModel.state == .signingOut)
         .overlay(alignment: .bottom) {
             if case .error(let message) = viewModel.state {
-                Text(message).font(.system(size: 6)).foregroundStyle(V5P.red)
+                V5JPFont.text(message, size: 6, weight: .regular).foregroundStyle(V5P.red)
                     .multilineTextAlignment(.center).frame(width: Self.cardWidth).offset(y: 9)
             }
         }

@@ -68,7 +68,7 @@ struct AccountView: View {
                 V5Header(title: "アカウント", back: true, onBack: { dismiss() })
 
                 Image(systemName: "person.circle.fill").font(.system(size: 52)).foregroundStyle(.white).position(x: 117, y: 105)
-                Text("ユーザー \(account.userID.uuidString.prefix(8))").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 117, y: 145)
+                V5JPFont.text("ユーザー \(account.userID.uuidString.prefix(8))", size: 9, weight: .bold).foregroundStyle(.white).position(x: 117, y: 145)
 
                 accountRow("person", "プラン", subscription.plan, 170, action: nil)
                 // 2026-09-29 HQ承認(2-b): 既存の行をそのままNavigationLinkに
@@ -87,7 +87,7 @@ struct AccountView: View {
                         if viewModel.signOutState == .signingOut {
                             ProgressView().tint(.white)
                         } else {
-                            Text("ログアウト").font(.system(size: 8))
+                            V5JPFont.text("ログアウト", size: 8, weight: .regular)
                         }
                         Spacer()
                         Image(systemName: "chevron.right").font(.system(size: 7))
@@ -101,7 +101,7 @@ struct AccountView: View {
                 .disabled(viewModel.signOutState == .signingOut)
                 .overlay(alignment: .bottom) {
                     if case .error(let message) = viewModel.signOutState {
-                        Text(message).font(.system(size: 6)).foregroundStyle(V5P.red)
+                        V5JPFont.text(message, size: 6, weight: .regular).foregroundStyle(V5P.red)
                             .multilineTextAlignment(.center).frame(width: 214).offset(y: 14)
                     }
                 }
@@ -147,9 +147,9 @@ struct AccountView: View {
     private func accountRowLabel(_ icon: String, _ title: String, _ trailing: String) -> some View {
         HStack {
             Image(systemName: icon).font(.system(size: 9))
-            Text(title).font(.system(size: 8))
+            V5JPFont.text(title, size: 8, weight: .regular)
             Spacer()
-            if !trailing.isEmpty { Text(trailing).font(.system(size: 8)) }
+            if !trailing.isEmpty { V5JPFont.text(trailing, size: 8, weight: .regular) }
             Image(systemName: "chevron.right").font(.system(size: 7))
         }
         .foregroundStyle(.white)
