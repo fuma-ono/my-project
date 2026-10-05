@@ -150,9 +150,13 @@ final class ScreenshotTests: XCTestCase {
         // Captured before SCR-026: that placeholder has no tab bar, so the
         // next captureSettingsSubScreen couldn't get back to Settings from it.
         captureSettingsSubScreen(row: "アカウント情報", rowIndex: 0, waitFor: "プロフィール編集", name: "15-Account")
-        tapV5(x: 117, y: 342.9 + 33.9 / 2)
-        XCTAssertTrue(waitForAnyElement(containing: "アカウントを削除しますか", timeout: 15), "Account deletion did not load")
-        capture("24-AccountDeletion")
+        // SCR-015's sub-screens, each reached afresh from Settings (row
+        // centers from AccountView's V5 layout: group 1 top 120.7 with rows
+        // 30.6/41.3/32.6, deletion card 342.9+33.9/2).
+        captureAccountSubScreen(y: 120.7 + 30.6 / 2, waitFor: "保存する", name: "15a-ProfileEdit")
+        captureAccountSubScreen(y: 120.7 + 30.6 + 41.3 / 2, waitFor: "確認メールを送信", name: "15b-EmailChange")
+        captureAccountSubScreen(y: 120.7 + 30.6 + 41.3 + 32.6 / 2, waitFor: "変更する", name: "15c-PasswordChange")
+        captureAccountSubScreen(y: 342.9 + 33.9 / 2, waitFor: "アカウントを削除しますか", name: "24-AccountDeletion")
         // SCR-026 (added 2026-10-05 as Settings' 6th row). Wait for the
         // placeholder's detail text, not the screen name, which the
         // Settings row itself also shows.
@@ -182,6 +186,18 @@ final class ScreenshotTests: XCTestCase {
             capture("\(name)-diag-exists\(element.exists)-hit\(element.exists && element.isHittable)-frame\(Int(f.minX))_\(Int(f.minY))_\(Int(f.width))_\(Int(f.height))-app\(Int(w.width))_\(Int(w.height))")
             XCTFail("\(name) did not load")
         }
+    }
+
+    /// Opens SCR-015 from Settings, then taps the row at V5 `y` in it.
+    private func captureAccountSubScreen(y: CGFloat, waitFor text: String, name: String) {
+        tap(containing: "ホーム")
+        tap(containing: "設定")
+        XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load before \(name)")
+        tapV5(x: 117, y: 54.5 + 0.5 * 34)
+        XCTAssertTrue(waitForAnyElement(containing: "プロフィール編集", timeout: 15), "Account did not load before \(name)")
+        tapV5(x: 117, y: y)
+        XCTAssertTrue(waitForAnyElement(containing: text, timeout: 15), "\(name) did not load")
+        capture(name)
     }
 
     /// Taps a point given in V5's 234×491 canvas coordinates, using the same

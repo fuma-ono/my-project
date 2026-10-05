@@ -92,10 +92,16 @@ struct SettingsSectionScaffold<Section: SettingsSection, Content: View>: View {
         }
     }
 
-    @ViewBuilder private func scaffold(@ViewBuilder content: () -> some View) -> some View {
-        ZStack {
-            DesignTokens.Colors.backgroundPrimary.ignoresSafeArea()
+    /// 読み込み中・エラー・未設定状態も`.loaded`と同じ外枠(`V5Viewport`の
+    /// 背景画像・ヘッダー・タブバー)に載せる。HQ指示(2026-10-05)「背景画像と
+    /// ヘッダーとタブを全画面に反映して」に合わせた、他画面と同じ形。
+    @ViewBuilder private func scaffold(@ViewBuilder content: @escaping () -> some View) -> some View {
+        V5Viewport {
+            V5Header(title: title, back: true, onBack: { dismiss() })
             content()
+                .frame(width: V5P.W, height: V5P.H - 92, alignment: .center)
+                .padding(.top, 53)
+            V5BottomBar(selected: $tabSelection)
         }
     }
 }
