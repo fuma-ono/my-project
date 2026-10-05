@@ -8,24 +8,37 @@ import SwiftUI
 ///
 /// HQ指示(2026-10-03、9回目、新しい参考画像+詳細レイアウト仕様)「今回の
 /// ホーム画面UIは添付した参考画像を基準に実装してください」「今日の重要
-/// イベントはホームから削除します」: これまでの4セクション構成(今日の
-/// 重要イベント/通貨ペア/お気に入り/直近の要人発言)から「今日の重要
-/// イベント」を完全に削除し、3セクション構成に変更した:
-/// 1. 通貨ペア
-/// 2. お気に入り
-/// 3. 直近の要人発言(スクロール後に表示)
+/// イベントはホームから削除します」: 当時はこれまでの4セクション構成
+/// (今日の重要イベント/通貨ペア/お気に入り/直近の要人発言)から「今日の
+/// 重要イベント」を完全に削除し、3セクション構成に変更していた。
+///
+/// HQ指示(2026-10-06、15回目)「ホーム画面での上からの表示順は今日の重要
+/// イベントと通貨ペアとお気に入り、直近の要人発言が来るようにして
+/// ください」: 「今日の重要イベント」セクションを復元し、4セクション構成
+/// に戻した。
+/// 1. 今日の重要イベント — これから発生する重要イベント(`HomeViewModel.
+///    upcomingEvents`、SCHEDULEDのみ)。
+/// 2. 通貨ペア
+/// 3. お気に入り
+/// 4. 直近の要人発言(スクロール後に表示)
+///
+/// `HomeViewModel.upcomingEvents`自体は9回目の変更時もView側が参照を
+/// やめただけで削除されておらず、データ層は変更していない(新規API呼び出し
+/// 無し)。行のデザイン(時刻・国旗・種別バッジ・名称・予想/前回・重要度
+/// バッジ・chevron)は削除前の実装を、現行のカード共通部品(`cardShell`/
+/// `cardHeaderRow`)に合わせて再構成した。タップでSCR-007 イベント詳細
+/// (`AppRoute.eventDetail`)へ遷移する導線も復元した — 9回目の変更で
+/// `IndicatorDetailView`の「次回発表予定」エリアに新設した遷移はそのまま
+/// 残しており、Home側の行が2つ目の実在する導線として追加される形になる
+/// (片方を置き換えるものではない)。
 ///
 /// HQ指定の参考画像(852×1846px)のレイアウト値を、画面全幅852px≒V5の
 /// 234ユニットから算出したスケール3.641(852/234)で比例変換して反映して
 /// いる — 絶対pxをそのままSwiftUIに入れてはいない。各カードのwidth/
-/// height/corner radius等、変換後の値は各定数のコメントに記載。
-///
-/// 「今日の重要イベント」削除に伴い、Home経由でSCR-007 イベント詳細に
-/// 遷移する唯一の導線(Homeのイベント行)が無くなった。SCR-007は
-/// ui-screens.mdの必須画面であり続けるため、`IndicatorDetailView`の
-/// 「次回発表予定」エリアから遷移できるよう新規配線した(実際に存在する
-/// `nextScheduledEvent.id`を使うだけで、イベントやそのデータを捏造しては
-/// いない)。UIの配線のみで、API/DB/ビジネスロジックは変更していない。
+/// height/corner radius等、変換後の値は各定数のコメントに記載。「今日の
+/// 重要イベント」カードは9回目の削除時点で参考画像に対応する実測値が
+/// 存在しなかったため、他3カードの実測値(ヘッダー高さ28、行の縦積み
+/// テキストを収める行高さ)に合わせて再構成した数値を使っている。
 ///
 /// HQ指示(2026-10-03、画面構成全面更新)「Homeの通貨ペアカード/お気に入り
 /// 通貨ペア → 現時点では遷移なし」: 旧SCR-011チャート分析(削除済み)への
@@ -374,13 +387,16 @@ struct HomeView: View {
     /// おけば、スクロール位置の厳密な調整(何が初期表示で見えるか)は
     /// 今回求めない」というもの。
     ///
-    /// そのため`loadedScreen`では高さを人為的に引き伸ばさず、3カードを
+    /// そのため`loadedScreen`では高さを人為的に引き伸ばさず、カードを
     /// 自然な順序で流し込んでいる。ScrollViewの表示領域はキャンバス全域
-    /// (394)まで広げてあり、合計コンテンツ高さ(412、下部余白16込み)との
-    /// 差はわずか18のみ — 将来お気に入りが3件に増える、直近の要人発言API
-    /// が実装されて行数が増える等でコンテンツがこの高さを超えた場合は、
-    /// このScrollViewがそのまま正しくスクロール可能になる(寸法は常に
-    /// 現在のカードデザイン通りで変化しない)。
+    /// (394)まで広げてあるため、将来コンテンツがこの高さを超えた場合も
+    /// そのまま正しくスクロール可能になる(寸法は常に現在のカードデザイン
+    /// 通りで変化しない)。
+    ///
+    /// 15回目の変更(2026-10-06、「今日の重要イベント」復元)でカードが
+    /// 3枚→4枚に増えたことで合計コンテンツ高さは`contentAreaHeight`を
+    /// 上回るようになったが、上記の通り元々スクロール前提の設計のため
+    /// 挙動は変わらない(4枚目以降は下にスクロールして閲覧する)。
     private static let contentAreaHeight: CGFloat = 394
 
     private static let timeFormatter: DateFormatter = {
@@ -391,6 +407,7 @@ struct HomeView: View {
     }()
 
     private var loadedScreen: some View {
+        let topEvents = Array(mappedTodayEvents.prefix(3))
         let pairs = Array(mappedPairs.prefix(3))
         let favorites = Array(viewModel.favoriteItems.prefix(3))
         let speeches = Array(viewModel.recentSpeeches.prefix(3))
@@ -400,6 +417,9 @@ struct HomeView: View {
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: Self.sectionGap) {
+                    if !topEvents.isEmpty {
+                        todayEventsCard(topEvents)
+                    }
                     if !pairs.isEmpty {
                         pairsCard(pairs)
                     }
@@ -454,6 +474,90 @@ struct HomeView: View {
             V5JPFont.text(text, size: 8).foregroundStyle(Self.linkBlue)
             Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Self.linkBlue)
         }
+    }
+
+    // MARK: - 今日の重要イベントカード
+
+    /// 15回目の変更(2026-10-06)で復元。ヘッダー高さ(28)は他3カードの実測値
+    /// (`pairsHeaderHeight`等)と揃え、行高さ(44)は時刻+国旗+種別バッジ+
+    /// 名称+予想/前回を2行で収める実装上の必要値として設定した(この
+    /// カード自体は9回目の削除時点で参考画像の実測対象から外れており、
+    /// 対応する実測値が存在しないため)。
+    private static let todayEventsCardHeight: CGFloat = 28 + 3 * 44
+    private static let todayEventsHeaderHeight: CGFloat = 28
+    private static let eventRowHeight: CGFloat = 44
+
+    /// `HomeEventSummary`(指標発表イベントAPI)にはイベント種別そのものを
+    /// 表すフィールドが無く、このAPIが返す行は実質的にすべて経済指標発表
+    /// イベントのため、バッジは固定で「経済指標」を表示する(削除前の実装が
+    /// 持っていた`HomeEventCategory`列挙型は要人発言/中央銀行の2ケースを
+    /// 実データ無しで備えていただけだったため、実在する種別分だけに単純化
+    /// して復元した)。色は削除前の実測値(RGB(0,118,234))をそのまま流用。
+    private static let economicIndicatorBadgeColor = Color(red: 0.0 / 255, green: 118.0 / 255, blue: 234.0 / 255)
+
+    @ViewBuilder private func todayEventsCard(_ events: [HomeEventSummary]) -> some View {
+        cardShell(height: Self.todayEventsCardHeight) {
+            cardHeaderRow(title: "今日の重要イベント", height: Self.todayEventsHeaderHeight) {
+                Image(systemName: "calendar").font(.system(size: 11, weight: .bold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
+            } trailing: {
+                NavigationLink(value: AppRoute.calendar) {
+                    headerLink("すべて見る")
+                }
+            }
+            ForEach(Array(events.enumerated()), id: \.element.id) { idx, event in
+                if idx > 0 { Divider().overlay(Self.cardBorderColor) }
+                NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
+                    eventRow(event)
+                }.buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder private func eventRow(_ event: HomeEventSummary) -> some View {
+        HStack(spacing: 5) {
+            Text(Self.timeFormatter.string(from: event.releaseDatetime))
+                .font(.system(size: 8, weight: .heavy))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(width: 22, alignment: .leading)
+
+            CountryFlagView(countryCode: event.countryCode, diameter: Self.flagDiameter)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .top, spacing: 4) {
+                    V5JPFont.text("経済指標", size: 6, weight: .bold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4).padding(.vertical, 2)
+                        .background(Self.economicIndicatorBadgeColor, in: Capsule())
+                        .fixedSize()
+                    V5JPFont.text(event.indicatorName, size: 9, weight: .bold)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                }
+                if let subtitle = Self.eventSubtitle(event) {
+                    V5JPFont.text(subtitle, size: 6.5, weight: .regular).foregroundStyle(V5P.muted).lineLimit(1)
+                }
+            }
+            .layoutPriority(1)
+
+            Spacer(minLength: 4)
+
+            HStack(spacing: 6) {
+                statusBadge(event.importance.rawValue, colors: Self.importanceBadgeColors(event.importance))
+                Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(Self.linkBlue)
+            }
+            .fixedSize()
+        }
+        .foregroundStyle(.white)
+        .frame(height: Self.eventRowHeight)
+    }
+
+    /// 予想・前回のみ(`HomeEventSummary`に単位情報が無いため数値のみ)。
+    private static func eventSubtitle(_ event: HomeEventSummary) -> String? {
+        var parts: [String] = []
+        if let forecast = event.forecast { parts.append("予想 \(ValueFormat.number(forecast))") }
+        if let previous = event.previous { parts.append("前回 \(ValueFormat.number(previous))") }
+        return parts.isEmpty ? nil : parts.joined(separator: "　|　")
     }
 
     // MARK: - 通貨ペアカード
@@ -648,6 +752,14 @@ struct HomeView: View {
             .foregroundStyle(.white)
             .frame(height: Self.speechRowHeight)
         }.buttonStyle(.plain)
+    }
+
+    /// 「今日の重要イベント」: これから発生する重要イベント — 既発表
+    /// (RELEASED)は含めず、`upcomingEvents`(SCHEDULED)のみを時刻順に
+    /// 並べる(9回目の削除時点から`HomeViewModel.upcomingEvents`自体は
+    /// 存在し続けている)。
+    private var mappedTodayEvents: [HomeEventSummary] {
+        viewModel.upcomingEvents.sorted { $0.releaseDatetime < $1.releaseDatetime }
     }
 
     private var mappedPairs: [FXPairUI] {
