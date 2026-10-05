@@ -53,9 +53,10 @@ struct AccountInfoCard: View {
                     AccountNote(text: text, color: textColor, width: 176)
                 }
                 ForEach(bullets, id: \.self) { bullet in
-                    HStack(alignment: .top, spacing: 2) {
+                    HStack(alignment: .top, spacing: 1) {
                         V5JPFont.text("・", size: 6.5, weight: .regular).foregroundStyle(textColor)
-                        AccountNote(text: bullet, color: textColor, width: 168)
+                            .fixedSize()
+                        AccountNote(text: bullet, color: textColor, width: 160)
                     }
                 }
             }

@@ -300,7 +300,8 @@ struct AccountDeletionView: View {
             V5JPFont.text("アカウントを削除しますか？", size: 11, weight: .bold)
                 .foregroundStyle(AccountPalette.destructive)
                 .position(x: 117, y: 108)
-            AccountLead(text: "アカウントを削除すると、以下のデータがすべて削除され、復元することはできません。")
+            AccountLead(text: "アカウントを削除すると、以下のデータがすべて
+削除され、復元することはできません。")
                 .accountPinned(top: 120, height: 30)
 
             VStack(alignment: .leading, spacing: 0) {
