@@ -60,7 +60,7 @@ struct ProfileEditView: View {
             .accessibilityLabel("生年月日")
             .position(x: 117, y: Self.birthTop + Self.cardHeight / 2)
 
-            AccountInfoCard(icon: "info.circle", text: "名前は入力欄をタップして変更できます。生年月日を変更する場合は、「生年月日」の項目をタップしてください。")
+            AccountInfoCard(icon: "info.circle", text: "名前は入力欄をタップして変更できます。\n生年月日を変更する場合は、「生年月日」の項目をタップしてください。")
                 .accountPinned(top: Self.birthTop + Self.cardHeight + 10)
 
             AccountStatusText(state: viewModel.state).accountPinned(top: 392, height: 20)
@@ -187,16 +187,16 @@ struct EmailChangeView: View {
             AccountLead(text: "新しいメールアドレスを入力してください。\n確認メールを送信します。")
                 .accountPinned(top: Self.leadTop, height: 32)
 
-            AccountFieldCaption(text: "新しいメールアドレス").position(x: 117, y: 162)
+            AccountFieldCaption(text: "新しいメールアドレス").position(x: 117, y: 168)
             AccountTextField(label: "新しいメールアドレス", placeholder: "例）example@domain.com", text: $viewModel.email, keyboard: .emailAddress)
-                .position(x: 117, y: 186)
+                .position(x: 117, y: 191)
 
             AccountPrimaryButton(title: "確認メールを送信", isLoading: viewModel.state == .submitting, isEnabled: viewModel.canSubmit) {
                 Task { await viewModel.submit() }
             }
-            .position(x: 117, y: 224)
+            .position(x: 117, y: 229)
             AccountStatusText(state: viewModel.state, validation: viewModel.validationMessage)
-                .accountPinned(top: 243, height: 22)
+                .accountPinned(top: 248, height: 22)
 
             AccountInfoCard(
                 icon: "envelope.circle.fill",
@@ -207,7 +207,7 @@ struct EmailChangeView: View {
                     "メールが届かない場合は、迷惑メールフォルダもご確認ください。",
                 ]
             )
-            .accountPinned(top: 268)
+            .accountPinned(top: 273)
         }
     }
 
@@ -311,7 +311,8 @@ struct AccountDeletionView: View {
                 .position(x: 117, y: AccountLayout.heroY)
             V5JPFont.text("アカウントを削除しますか？", size: 12, weight: .bold)
                 .foregroundStyle(AccountPalette.destructive)
-                .position(x: 117, y: EmailChangeView.leadTop + 7)
+                // 上の三角と下の案内文の、見た目の間隔が揃う位置。
+                .position(x: 117, y: EmailChangeView.leadTop + 3)
             AccountLead(text: "アカウントを削除すると、以下のデータがすべて\n削除され、復元することはできません。")
                 .accountPinned(top: EmailChangeView.leadTop + 20, height: 32)
 
@@ -322,7 +323,7 @@ struct AccountDeletionView: View {
                             .font(.system(size: 11))
                             .foregroundStyle(SettingsCardStyle.chevronColor)
                             .frame(width: 16)
-                        V5JPFont.text(item.label, size: AccountLayout.titleSize, weight: .regular).foregroundStyle(.white)
+                        V5JPFont.text(item.label, size: AccountLayout.captionSize, weight: .regular).foregroundStyle(.white)
                         Spacer(minLength: 0)
                     }
                     .frame(height: 21)

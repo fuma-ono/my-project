@@ -25,6 +25,8 @@ enum AccountLayout {
     static let noteSize: CGFloat = 7.5
     /// アイコン下の案内文。
     static let leadSize: CGFloat = 8.5
+    /// 入力欄の見出し・削除データの一覧(HQ指示 2026-10-05で少し小さくした)。
+    static let captionSize: CGFloat = 8.5
     /// メール・パスワード変更・アカウント削除の上部アイコンの中心と大きさ。
     /// 3画面で同じ位置に揃える。
     static let heroY: CGFloat = 86
@@ -69,19 +71,13 @@ struct AccountInfoCard: View {
                     AccountNote(text: text, color: textColor, width: 168)
                         .padding(.top, title == nil ? 2 : 0)
                 }
-                ForEach(bullets, id: \.self) { bullet in
-                    HStack(alignment: .top, spacing: 1) {
-                        V5JPFont.text("・", size: AccountLayout.noteSize, weight: .regular).foregroundStyle(textColor)
-                            .fixedSize()
-                        AccountNote(text: bullet, color: textColor, width: 158)
-                    }
-                }
             }
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 9)
         .padding(.horizontal, 10)
-        .frame(width: 214, alignment: .leading)
+        .padding(.top, 9)
+        .padding(.bottom, bullets.isEmpty ? 9 : 0)
+        .modifier(BulletList(bullets: bullets, color: textColor))
         .background(AccountCardBackground(fill: fill, border: border))
     }
 }
@@ -155,10 +151,39 @@ struct AccountFormScaffold<Content: View>: View {
 }
 
 /// 入力欄の上の小さな見出し。
+/// 情報カードの箇条書き。「入力したメールアドレス宛に確認メールを送信
+/// します。」が1行に収まるよう、点をアイコンの下まで左に寄せ、カード幅
+/// いっぱいに使う(HQ指示 2026-10-05)。
+private struct BulletList: ViewModifier {
+    let bullets: [String]
+    let color: Color
+
+    func body(content: Content) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            content
+            if !bullets.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(bullets, id: \.self) { bullet in
+                        HStack(alignment: .top, spacing: 2) {
+                            Circle().fill(color)
+                                .frame(width: 2.4, height: 2.4)
+                                .frame(width: 4, height: 11)
+                            AccountNote(text: bullet, color: color, width: 196, tracking: -0.2)
+                        }
+                    }
+                }
+                .padding(.leading, 8)
+                .padding(.bottom, 9)
+            }
+        }
+        .frame(width: 214, alignment: .leading)
+    }
+}
+
 struct AccountFieldCaption: View {
     let text: String
     var body: some View {
-        V5JPFont.text(text, size: AccountLayout.titleSize)
+        V5JPFont.text(text, size: AccountLayout.captionSize)
             .foregroundStyle(.white)
             .frame(width: 210, alignment: .leading)
     }
@@ -169,8 +194,10 @@ struct AccountNote: View {
     let text: String
     var color: Color = V5P.muted
     var width: CGFloat = 206
+    var tracking: CGFloat = 0
     var body: some View {
         V5JPFont.text(text, size: AccountLayout.noteSize, weight: .regular)
+            .tracking(tracking)
             .foregroundStyle(color)
             .lineSpacing(2)
             .frame(width: width, alignment: .leading)
