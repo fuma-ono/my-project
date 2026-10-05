@@ -155,7 +155,7 @@ struct MovementDetailView: View {
     /// HQ指示(2026-10-05、22回目)「背景画像とヘッダーとタブを全画面に反映して」:
     /// 読み込み中・エラー・未設定状態が単色背景のみで`V5Viewport`(背景画像)・
     /// ヘッダー・タブバーを経由していなかったため、`.loaded`状態と同じ外枠に揃えた。
-    @ViewBuilder private func loadingScaffold(@ViewBuilder content: () -> some View) -> some View {
+    @ViewBuilder private func loadingScaffold(@ViewBuilder content: @escaping () -> some View) -> some View {
         V5Viewport {
             V5Header(title: "変動詳細", back: true, onBack: { dismiss() })
             content()

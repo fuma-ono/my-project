@@ -93,7 +93,7 @@ struct HomeView: View {
     /// 反映されていなかった)。`homeHeader`はロード済みデータに依存しないため
     /// そのまま使い回し、`V5Viewport`/`V5BottomBar`で`loadedScreen`と同じ外枠に
     /// 揃えた。
-    @ViewBuilder private func loadingScaffold(@ViewBuilder content: () -> some View) -> some View {
+    @ViewBuilder private func loadingScaffold(@ViewBuilder content: @escaping () -> some View) -> some View {
         V5Viewport {
             homeHeader
             content()
