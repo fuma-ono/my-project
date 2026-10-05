@@ -346,9 +346,19 @@ struct V5BottomBar: View {
     /// - アイコン形状: ホームは塗りつぶしの家(`house.fill`、変更無し)。
     ///   指標一覧は従来の塗りつぶし棒グラフから一転して、アウトライン
     ///   (線画)の棒グラフだったため`V5BarsIcon`を`.stroke`ベースに変更
-    ///   した。カレンダー・検索・設定は従来通りアウトライン寄りの形状
-    ///   (`calendar`/`magnifyingglass`/自前`V5GearIcon`)のままで大きな
-    ///   齟齬は無かったため形状自体は維持している。
+    ///   した。カレンダー・検索は従来通りアウトライン寄りの形状
+    ///   (`calendar`/`magnifyingglass`)のままで大きな齟齬は無かったため
+    ///   形状自体は維持している。設定の歯車は当初、旧参考画像向けに自前
+    ///   描画した`V5GearIcon`(ギアの輪とギア歯を別々に塗りつぶす実装)を
+    ///   そのまま流用していたが、HQ指摘(11回目、2026-10-04)「設定の歯車
+    ///   マークを塗りつぶしではなく参考画像と同じにしてください」で見直す
+    ///   と、この参考画像の歯車は全体が同じ太さの1本の輪郭線で描かれた
+    ///   中空のアウトラインで、`V5GearIcon`の「塗りつぶした輪+塗りつぶした
+    ///   歯」とは質感が異なっていた。`calendar`/`magnifyingglass`と同じく
+    ///   SF Symbolsの標準アウトライングリフ`gearshape`(`.fill`を付けない
+    ///   通常ウェイト)に差し替えることで、他のアウトラインアイコンと同じ
+    ///   仕組みで自然に中空の輪郭線になるようにした(`V5GearIcon`自体は
+    ///   旧カプセルUI向けの実装記録として残してあるが、呼び出しは無くなった)。
     /// - 縦方向の実測(区切り線を基準に、アイコン上端までの余白28px≒6.2pt、
     ///   アイコン高さ≈85px≒18.9pt、アイコン〜ラベル間21px≒4.7pt、
     ///   ラベル高さ≈40px≒8.9pt、ラベル下端〜画面最下端113px≒25.1pt)から、
@@ -356,15 +366,22 @@ struct V5BottomBar: View {
     ///   `ptToV5(67.2)≒39.1`を算出し、`barHeight`を採用した。帯は画面下端に
     ///   フラッシュするため`bottomMargin`は無し(0)にした。
     private static let barHeight: CGFloat = 39
-    private static let topPadding: CGFloat = V5P.ptToV5(6.2)
+    /// 11回目の調整(2026-10-04、HQ「タブのアイコンと文字をもう少し下げて
+    /// ください」「タブの文字をもう少しサイズを大きくしてください」):
+    /// `topPadding`を6.2→11pt、`tabLabelSize`を9→11ptへそれぞれ拡大した。
+    /// `barHeight`(39)に対しコンテンツ合計(新`topPadding`
+    /// `ptToV5(11)≈6.4` + アイコン`ptToV5(19)≈11.1` + 間隔`ptToV5(4.7)≈2.7` +
+    /// ラベル`ptToV5(11)≈6.4`)は26.6V5単位で、下側に12V5単位程度の余白が
+    /// 残るため、はみ出しの心配は無い。
+    private static let topPadding: CGFloat = V5P.ptToV5(11)
     private static let iconLabelGap: CGFloat = V5P.ptToV5(4.7)
     /// SF Symbolsベースのアイコン(`.font(.system(size:14,...))`で描画)と、
-    /// 独自描画アイコン(`V5BarsIcon`/`V5GearIcon`、内部は実測済みの固定pt値)
-    /// の両方を同じ最終サイズに正規化するための比率。旧実装からそのまま
-    /// 踏襲している仕組み(詳細は`tab`内コメント参照)。
+    /// 独自描画アイコン(`V5BarsIcon`、内部は実測済みの固定pt値)の両方を
+    /// 同じ最終サイズに正規化するための比率。旧実装からそのまま踏襲している
+    /// 仕組み(詳細は`tab`内コメント参照)。
     private static let tabIconSize: CGFloat = V5P.ptToV5(19)
     private static let tabIconScale: CGFloat = tabIconSize / 14
-    private static let tabLabelSize: CGFloat = V5P.ptToV5(9)
+    private static let tabLabelSize: CGFloat = V5P.ptToV5(11)
     private static let selectedColor = V5P.cyan
     private static let unselectedColor = Color(red: 128.0 / 255, green: 174.0 / 255, blue: 228.0 / 255)
     private static let dividerColor = Color(red: 0.35, green: 0.62, blue: 0.92).opacity(0.3)
@@ -386,7 +403,7 @@ struct V5BottomBar: View {
                     Image(systemName: "magnifyingglass").font(.system(size: 14, weight: .semibold))
                 }
                 tab(4, "設定") { _ in
-                    V5GearIcon()
+                    Image(systemName: "gearshape").font(.system(size: 14, weight: .semibold))
                 }
             }
         }
