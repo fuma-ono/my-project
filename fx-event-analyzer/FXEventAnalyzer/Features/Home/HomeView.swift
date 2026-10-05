@@ -321,18 +321,20 @@ struct HomeView: View {
     }
 
     /// HQ指示(2026-10-05、23回目)「HIGHTとMEDIUMの文字と枠が横に大きいので
-    /// 小さくして。フォントも太くしないで」: 参考画像のお気に入りカードの
-    /// HIGHバッジをピクセル実測(113×44px、カード幅基準スケール3.786px/
-    /// ユニット→23.7×11.6ユニット)し、現行実装(size 7/.heavy/横7・縦3
-    /// パディング)の実機キャプチャ実測(172×73px、スケール5.1488px/
-    /// ユニット→33.4×14.2ユニット)と比較。縦横とも参考画像の方が約70%
-    /// 小さいため、font size 7→6・weight .heavy→.bold・横パディング
-    /// 7→5.5・縦パディング3→2に縮小した。
+    /// 小さくして。フォントも太くしないで」に続き、再指摘(2026-10-05)
+    /// 「何度も言っているが改善されない」: 1回目の縮小(size 7→6・.heavy→
+    /// .bold・横パディング7→5.5・縦パディング3→2)後の実機キャプチャを
+    /// 改めて実測すると147×61px(5.1488px/ユニット→28.6×11.9ユニット)と、
+    /// 参考画像実測値(29.85×11.6ユニット)にほぼ一致していた。数値上は
+    /// 合っていたが見た目の指摘が続いたため、周囲のテキストが軒並み縮小した
+    /// 今回の変更後は相対的にバッジが目立って見える可能性を踏まえ、安全側で
+    /// さらに一段階縮小(size 6→5.5・.bold→.semibold・横パディング
+    /// 5.5→4・縦パディング2→1.5)した。
     @ViewBuilder private func statusBadge(_ text: String, colors: (fill: Color, border: Color)) -> some View {
         Text(text)
-            .font(.system(size: 6, weight: .bold))
+            .font(.system(size: 5.5, weight: .semibold))
             .foregroundStyle(.white)
-            .padding(.horizontal, 5.5).padding(.vertical, 2)
+            .padding(.horizontal, 4).padding(.vertical, 1.5)
             .background(colors.fill, in: Capsule())
             .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
             .fixedSize()
@@ -562,8 +564,17 @@ struct HomeView: View {
             cardHeaderRow(title: "今日の重要イベント", height: Self.todayEventsHeaderHeight) {
                 Image(systemName: "calendar").font(.system(size: 11, weight: .bold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
             } trailing: {
+                // HQ再指摘(2026-10-05)「日付10/5(月)の文字を大きくして。参考
+                // 画像より小さい」: 他カードの`headerLink`(size 7)をそのまま
+                // 流用していたため小さすぎた。日付はこのカードだけの固有表示
+                // のため専用サイズ(10/太字)に引き上げた。
                 NavigationLink(value: AppRoute.calendar) {
-                    headerLink(Self.todayEventsDateFormatter.string(from: Date()))
+                    HStack(spacing: 2) {
+                        Text(Self.todayEventsDateFormatter.string(from: Date()))
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Self.linkBlue)
+                        Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
+                    }
                 }
             }
             ForEach(Array(events.enumerated()), id: \.element.id) { idx, event in
@@ -577,26 +588,36 @@ struct HomeView: View {
 
     @ViewBuilder private func eventRow(_ event: HomeEventSummary) -> some View {
         HStack(spacing: 5) {
+            // HQ再指摘(2026-10-05)「時刻の文字が小さい」: 7→9へ拡大。
             Text(Self.timeFormatter.string(from: event.releaseDatetime))
-                .font(.system(size: 7, weight: .bold))
+                .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: true, vertical: false)
-                .frame(width: 22, alignment: .leading)
+                .frame(width: 26, alignment: .leading)
 
             // HQ指示(2026-10-05、23回目)「今日の重要指標の国旗の下にUSDや
-            // JPYなどを記載して」: 国旗の下に`currencyCode`(例: USD)を追加。
+            // JPYなどを記載して」。HQ再指摘(2026-10-05)「USDやJPYの文字が
+            // 小さい」: 5.5→7へ拡大。
             VStack(spacing: 1) {
                 CountryFlagView(countryCode: event.countryCode, diameter: Self.flagDiameter)
-                Text(event.currencyCode).font(.system(size: 5.5, weight: .semibold)).foregroundStyle(V5P.muted)
+                Text(event.currencyCode).font(.system(size: 7, weight: .semibold)).foregroundStyle(V5P.muted)
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .top, spacing: 4) {
-                    V5JPFont.text("経済指標", size: 5.5, weight: .semibold)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 4).padding(.vertical, 2)
-                        .background(Self.economicIndicatorBadgeColor, in: Capsule())
-                        .fixedSize()
+            // HQ再指摘(2026-10-05)「予想前回が治らない。参考画像は日本CPIの
+            // 下にあるからそこにしろ」: 旧実装は「経済指標」バッジ+タイトルの
+            // `HStack`全体をVStackで包み、予想/前回をその下に置いていたため、
+            // 左端がバッジの左端(タイトルの左端ではない)に揃ってしまっていた。
+            // バッジは1行目だけに留め、タイトル+予想/前回を別のVStackに
+            // まとめることで、予想/前回の左端をタイトル(例:日本CPI)の左端に
+            // 正確に揃えた。
+            HStack(alignment: .top, spacing: 4) {
+                V5JPFont.text("経済指標", size: 5.5, weight: .semibold)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4).padding(.vertical, 2)
+                    .background(Self.economicIndicatorBadgeColor, in: Capsule())
+                    .fixedSize()
+
+                VStack(alignment: .leading, spacing: 2) {
                     // HQ指示(2026-10-05、23回目)「今日の重要イベント内の
                     // タイトル（FOMC政策など）が大きいし、太いので参考画像と
                     // 同じくらいにして」: 参考画像に本カードの直接の実測対象が
@@ -609,16 +630,11 @@ struct HomeView: View {
                     V5JPFont.text(event.indicatorName, size: 8, weight: .semibold)
                         .foregroundStyle(.white)
                         .lineLimit(1)
-                }
-                if let subtitle = Self.eventSubtitle(event) {
-                    // HQ指示(2026-10-05、23回目)「今日の重要イベントの予想や
-                    // 前回の位置を参考画像と同じ位置にして、もう少し右だよ」:
-                    // 本カードは参考画像に直接の実測対象が無いため、左に小さく
-                    // 揃えていた位置から右へ軽くオフセットした。
-                    V5JPFont.text(subtitle, size: 6, weight: .regular)
-                        .foregroundStyle(V5P.muted)
-                        .lineLimit(1)
-                        .padding(.leading, 6)
+                    if let subtitle = Self.eventSubtitle(event) {
+                        V5JPFont.text(subtitle, size: 6, weight: .regular)
+                            .foregroundStyle(V5P.muted)
+                            .lineLimit(1)
+                    }
                 }
             }
             .layoutPriority(1)
@@ -681,6 +697,10 @@ struct HomeView: View {
                 CountryFlagView(currencyCode: pair.quoteCurrency, diameter: Self.flagDiameter)
             }
             Text(pair.displaySymbol).font(.system(size: 8, weight: .semibold)).fixedSize()
+            // HQ再指摘(2026-10-05)「通貨ペアの数字(155.42)の位置を真ん中に
+            // して」: 価格ブロックがシンボルとchevronの間でchevron側に
+            // 偏って(=右端に張り付いて)いたため、前後に`Spacer()`を置き
+            // シンボル右端とchevron左端の中間に来るよう変更した。
             Spacer(minLength: 4)
             VStack(alignment: .trailing, spacing: 2) {
                 Text(pair.price).font(.system(size: 8, weight: .semibold)).fixedSize()
@@ -691,6 +711,7 @@ struct HomeView: View {
                 .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
             }
             .fixedSize()
+            Spacer(minLength: 4)
             Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
         }
         .foregroundStyle(.white)
