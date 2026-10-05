@@ -73,11 +73,12 @@ import SwiftUI
 /// `docs/projects/fx-event-analyzer/mockups/settings-screen-reference-v2.png`
 /// 「この画像のように設定の中身を変えて」): 1つ目のカードの末尾に
 /// SCR-026 ホーム通貨ペア編集(`.homeCurrencyPairEditor`、遷移先は既存の
-/// 仮画面)を追加し、画像どおりシアンの枠で強調している。アイコンは青い
-/// 丸の中の白いアイコンに変更し、色・余白は画像v2の実測値に合わせた。
-/// 画像v2にはログアウトが写っていないため、指示どおりアプリ情報の
-/// カードの下に赤い文字・赤い枠で置き、全行の高さを詰めてタブバーの上に
-/// 収めている。上記の旧参考画像に基づく行高・色・アイコンの記述は、
+/// 仮画面)を追加した。画像でこの行を囲むシアンの枠は選択時の表現と判断し、
+/// HQ確認のうえ全行共通の「押している間だけ光る」演出にしている
+/// (`SettingsRowPressStyle`)。アイコンは青い丸の中の白いアイコンに変更し、
+/// 色・余白は画像v2の実測値に合わせた。画像v2にはログアウトが写って
+/// いないため、指示どおりアプリ情報のカードの下に赤い文字で置き(枠は他の
+/// カードと同じ青)、全行の高さを詰めてタブバーの上に収めている。上記の旧参考画像に基づく行高・色・アイコンの記述は、
 /// この変更で置き換え済み。
 ///
 /// 旧デザインの「データ取得設定」行(新画面仕様にSCR番号なし)は参考画像
@@ -136,37 +137,37 @@ struct SettingsView: View {
                 groupBackground(topY: g1, rowCount: 6)
                 NavigationLink(value: AppRoute.account) {
                     rowLabel("person.fill", "アカウント情報", nudge: CGSize(width: 0, height: -0.75))
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g1, index: 0))
+                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 0))
                 NavigationLink(value: SettingsSubRoute.notificationSettings) {
                     rowLabel("bell.fill", "通知設定")
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g1, index: 1))
+                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 1))
                 NavigationLink(value: SettingsSubRoute.subscriptionManagement) {
                     rowLabel("crown.fill", "プラン・購読管理", nudge: CGSize(width: 0, height: -0.5))
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g1, index: 2))
+                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 2))
                 NavigationLink(value: SettingsSubRoute.displaySettings) {
                     rowLabel("globe", "表示・地域設定")
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g1, index: 3))
+                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 3))
                 NavigationLink(value: SettingsSubRoute.chartSettings) {
                     rowLabel("chart.bar.fill", "チャート設定", nudge: CGSize(width: 0, height: -0.4))
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g1, index: 4))
+                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 4))
                 NavigationLink(value: AppRoute.homeCurrencyPairEditor) {
-                    rowLabel("arrow.left.arrow.right", "ホーム通貨ペア編集", highlighted: true)
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g1, index: 5))
+                    rowLabel("arrow.left.arrow.right", "ホーム通貨ペア編集")
+                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 5))
 
                 let g2 = Self.group2Top
                 groupBackground(topY: g2, rowCount: 4)
                 NavigationLink(value: SettingsSubRoute.help) {
                     rowLabel("questionmark.circle.fill", "ヘルプ・お問い合わせ")
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g2, index: 0))
+                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g2, index: 0))
                 NavigationLink(value: SettingsSubRoute.terms) {
                     rowLabel("doc.text.fill", "利用規約", nudge: CGSize(width: 0.5, height: -0.35))
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g2, index: 1))
+                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g2, index: 1))
                 NavigationLink(value: SettingsSubRoute.privacyPolicy) {
                     rowLabel("checkmark.shield.fill", "プライバシーポリシー", nudge: CGSize(width: 0, height: 0.25))
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g2, index: 2))
+                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g2, index: 2))
                 NavigationLink(value: SettingsSubRoute.appInfo) {
                     rowLabel("info.circle.fill", "アプリ情報")
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g2, index: 3))
+                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g2, index: 3))
 
                 logoutButton
 
@@ -213,18 +214,18 @@ struct SettingsView: View {
     private static let badgeLeading: CGFloat = 8.6
     private static let badgeTitleGap: CGFloat = 10.7
     private static let chevronColor = Color(red: 170 / 255, green: 198 / 255, blue: 245 / 255) // #AAC6F5
-    /// 「ホーム通貨ペア編集」行のシアンの枠と、少し明るい塗り。
-    private static let highlightBorder = Color(red: 0 / 255, green: 201 / 255, blue: 234 / 255) // #00C9EA
-    private static let highlightFill = Color(red: 0 / 255, green: 48 / 255, blue: 90 / 255) // #00305A
+    /// ログアウトの文字・アイコンの赤。`V5P.red`(#FF3861)は紺のカードとの
+    /// 明るさの差が小さく輪郭がにじんで見えたため、明度を上げた赤にしている。
+    private static let logoutRed = Color(red: 255 / 255, green: 110 / 255, blue: 128 / 255) // #FF6E80
 
     /// 行グループ・ログアウトで共通のカード(塗り＋縁取り)。
-    private func card(height: CGFloat, border: Color = Self.cardBorder) -> some View {
+    private func card(height: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: Self.cornerRadius)
             .fill(Self.cardFill)
             .overlay(
                 RoundedRectangle(cornerRadius: Self.cornerRadius)
-                    .stroke(border, lineWidth: 0.7)
-                    .shadow(color: border.opacity(0.5), radius: 1.5)
+                    .stroke(Self.cardBorder, lineWidth: 0.7)
+                    .shadow(color: Self.cardBorder.opacity(0.5), radius: 1.5)
             )
             .frame(width: Self.cardWidth, height: height)
     }
@@ -247,7 +248,7 @@ struct SettingsView: View {
         topY + (CGFloat(index) + 0.5) * Self.rowHeight
     }
 
-    /// 参考画像どおりの、青い丸の中に白いアイコン。ログアウトだけは赤。
+    /// 参考画像どおりの、青い丸の中に白いアイコン。ログアウトだけは紺の丸に赤。
     ///
     /// HQ指示(2026-10-05)「アイコンが中心になっていない項目がある」: CI実機
     /// キャプチャで測ると字形の外接矩形は丸の中心から0.4pt以内に収まって
@@ -255,15 +256,15 @@ struct SettingsView: View {
     /// 視覚的にずれて見える。`nudge`で、実測した字形の重心のずれの約6割を
     /// 打ち消す方向へ動かしている(外接矩形の中心と重心の中間＝目で見た中心)。
     ///
-    /// 同日「ログアウトのアイコンがぼやけている」: 赤みを帯びた半透明の
-    /// 塗りの上に赤い線を描いていたため輪郭のコントラストが低かった。塗りを
-    /// カードと同じ紺にし、赤い線を太くしている(同じ紺の上の赤い文字
-    /// 「ログアウト」がくっきり見えているのと同じ条件)。
+    /// 同日「ログアウトのアイコンがぼやけている」(2回): 赤みを帯びた半透明の
+    /// 塗り・赤い輪の上に赤い線を描いていたため輪郭のコントラストが低かった。
+    /// 塗りをカードと同じ紺、輪を他の行と同じ青にし、線は明るい赤
+    /// (`logoutRed`)の太字にしている。
     private func rowBadge(_ icon: String, tint: Color? = nil, nudge: CGSize = .zero) -> some View {
         ZStack {
             Circle()
                 .fill(tint == nil ? Self.badgeFill : Self.cardFill)
-                .overlay(Circle().stroke(tint ?? Self.badgeBorder, lineWidth: tint == nil ? 0.5 : 0.8))
+                .overlay(Circle().stroke(Self.badgeBorder, lineWidth: 0.5))
             Image(systemName: icon)
                 .font(.system(size: tint == nil ? Self.iconSize : 10, weight: tint == nil ? .semibold : .bold))
                 .foregroundStyle(tint ?? Self.iconColor)
@@ -272,7 +273,7 @@ struct SettingsView: View {
         .frame(width: Self.badgeSize, height: Self.badgeSize)
     }
 
-    private func rowLabel(_ icon: String, _ title: String, highlighted: Bool = false, nudge: CGSize = .zero) -> some View {
+    private func rowLabel(_ icon: String, _ title: String, nudge: CGSize = .zero) -> some View {
         HStack(spacing: Self.badgeTitleGap) {
             rowBadge(icon, nudge: nudge)
             // HQ指示(2026-10-05)「フォントが日本語っぽくない(編・約など)」:
@@ -286,44 +287,37 @@ struct SettingsView: View {
         .padding(.leading, Self.badgeLeading)
         .padding(.trailing, 10)
         .frame(width: Self.cardWidth, height: Self.rowHeight)
-        .background {
-            if highlighted {
-                RoundedRectangle(cornerRadius: Self.cornerRadius)
-                    .fill(Self.highlightFill)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Self.cornerRadius)
-                            .stroke(Self.highlightBorder, lineWidth: 0.9)
-                            .shadow(color: Self.highlightBorder.opacity(0.8), radius: 2.5)
-                    )
-            }
-        }
-        // 行は(強調行以外)背景を持たないため、これがないと`.plain`スタイルでは
+        // 行は(押している間以外)背景を持たないため、これがないと`.plain`スタイルでは
         // アイコン・文字・シェブロン以外(行の中央の空白)がタップに反応しない。
         .contentShape(Rectangle())
     }
 
     /// 参考画像v2にログアウトは写っていないため、HQ指示どおりアプリ情報の
-    /// カードの下に、赤い文字・赤い枠のカードとして置いている。
+    /// カードの下に置いている。HQ指示(2026-10-05)「赤枠で囲まなくていい、
+    /// 上と同じ枠でいい」により、カードの枠は他のグループと同じ青で、
+    /// 赤いのは文字とアイコンだけ。
     private var logoutButton: some View {
         Button {
             showLogoutConfirmation = true
         } label: {
             HStack(spacing: Self.badgeTitleGap) {
-                rowBadge("rectangle.portrait.and.arrow.right", tint: V5P.red)
+                rowBadge("rectangle.portrait.and.arrow.right", tint: Self.logoutRed)
                 if viewModel.state == .signingOut {
-                    ProgressView().tint(V5P.red)
+                    ProgressView().tint(Self.logoutRed)
                 } else {
                     V5JPFont.text("ログアウト", size: Self.titleSize)
                 }
                 Spacer()
             }
-            .foregroundStyle(V5P.red)
+            .foregroundStyle(Self.logoutRed)
             .padding(.leading, Self.badgeLeading)
             .frame(width: Self.cardWidth, height: Self.rowHeight)
-            .background(card(height: Self.rowHeight, border: V5P.red))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SettingsRowPressStyle())
+        // カードはボタンの外側に置く(内側だと、押している間の光る背景が
+        // カードの塗りの下に隠れる)。
+        .background(card(height: Self.rowHeight))
         .disabled(viewModel.state == .signingOut)
         .overlay(alignment: .bottom) {
             if case .error(let message) = viewModel.state {
@@ -332,5 +326,28 @@ struct SettingsView: View {
             }
         }
         .position(x: 117, y: Self.logoutTop + Self.rowHeight / 2)
+    }
+}
+
+/// 設定の各行を押している間だけ、参考画像v2の「ホーム通貨ペア編集」行と同じ
+/// シアンの枠・明るい塗りで光らせる。HQ指示(2026-10-05): 参考画像の強調は
+/// 選択時の表現と判断し、常時表示の強調をやめてタップ中の演出にした。
+private struct SettingsRowPressStyle: ButtonStyle {
+    private static let border = Color(red: 0 / 255, green: 201 / 255, blue: 234 / 255) // #00C9EA
+    private static let fill = Color(red: 0 / 255, green: 48 / 255, blue: 90 / 255) // #00305A
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                if configuration.isPressed {
+                    RoundedRectangle(cornerRadius: 7.5)
+                        .fill(Self.fill)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7.5)
+                                .stroke(Self.border, lineWidth: 0.9)
+                                .shadow(color: Self.border.opacity(0.8), radius: 2.5)
+                        )
+                }
+            }
     }
 }
