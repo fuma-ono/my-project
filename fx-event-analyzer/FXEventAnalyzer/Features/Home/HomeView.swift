@@ -307,7 +307,8 @@ struct HomeView: View {
     /// (2026-10-05、4回目)「もう少し発行(発光)色みたいに明るくさせて、
     /// 薄くさせるのではない」で方向転換: 「濃い=暗い」ではなく「明るい・
     /// 鮮やか」を求めていたと判明したため、ネオンのような高輝度の色に
-    /// 変更し(`pairRow`側で同色のグローシャドウも追加)。
+    /// 変更した(`pairRow`側に追加したグローシャドウは、HQ再指摘
+    /// (2026-10-05、5回目)「-0.14%のグローが強いから無くして」で削除済み)。
     private static let changeUpColor = Color(red: 255.0 / 255, green: 45.0 / 255, blue: 95.0 / 255)
     private static let changeDownColor = Color(red: 20.0 / 255, green: 235.0 / 255, blue: 165.0 / 255)
 
@@ -534,12 +535,11 @@ struct HomeView: View {
     /// ランの太さをそれに揃える目的)。
     /// HQ再指摘(2026-10-05)「各アイコンをもう少し右に移動させ、サイズを
     /// 大きくして」「文字もアイコンと同様に右に移動し、少しサイズを大きく
-    /// して」: アイコン・タイトルとも同じ`HStack`内にあるため、先頭に
-    /// `.padding(.leading, 4)`を加えることで両方まとめて右へ移動させた
-    /// (個別にではなく「アイコンと同様に」という指示通り、同じ移動量で
-    /// 揃う)。タイトルサイズは11→12に拡大(各アイコン自体のサイズは
-    /// 呼び出し側=todayEventsCard/pairsCard/favoritesCard/speechesCardで
-    /// それぞれ拡大)。
+    /// して」でいったん`.padding(.leading, 4)`を追加したが、HQ再指摘
+    /// (2026-10-05、5回目)「各カードのアイコンのサイズを1大きくして、左の
+    /// 空白付近に来るように揃えて」でアイコンを左の余白(カードの
+    /// パディング)付近に揃え直したいとの指示を受け、その`.padding(.leading,
+    /// 4)`を削除した(アイコンサイズは呼び出し側で13→14にさらに拡大)。
     ///
     /// HQ再指摘(2026-10-05)「お気に入りの文字の下の線はいらない」: 全カード
     /// 共通で表示していたヘッダー下の`Divider()`を、呼び出し側から
@@ -555,7 +555,6 @@ struct HomeView: View {
             Spacer()
             trailing()
         }
-        .padding(.leading, 4)
         .frame(height: height, alignment: .center)
         if showDivider {
             Divider().overlay(Self.cardBorderColor)
@@ -611,7 +610,7 @@ struct HomeView: View {
     @ViewBuilder private func todayEventsCard(_ events: [HomeEventSummary]) -> some View {
         cardShell(height: Self.todayEventsCardHeight) {
             cardHeaderRow(title: "今日の重要イベント", height: Self.todayEventsHeaderHeight) {
-                Image(systemName: "calendar").font(.system(size: 13, weight: .bold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
+                Image(systemName: "calendar").font(.system(size: 14, weight: .bold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
             } trailing: {
                 // HQ指示(2026-10-05)「日付10/5(月)の文字を大きくして」でいったん
                 // 10に拡大したが、再指摘(2026-10-05)「10/5(月)文字サイズを0.5
@@ -637,11 +636,18 @@ struct HomeView: View {
 
     @ViewBuilder private func eventRow(_ event: HomeEventSummary) -> some View {
         HStack(spacing: 5) {
-            // HQ再指摘(2026-10-05、3回目)「時刻14:30の縦幅を大きくし、文字の
-            // 間隔を狭めて」: フォントサイズを9→11に拡大(=縦幅拡大)しつつ、
-            // `.tracking(-0.6)`で字間を詰め、26幅の列に収まるようにした。
+            // HQ再指摘(2026-10-05、5回目)「今日の重要イベントの時刻の位置が
+            // 上下でバラバラなので縦はきちんと揃えて、サイズを10に下げて」:
+            // サイズは11→10に調整。位置のバラつきは、予想/前回の有無で
+            // タイトル+予想/前回の`VStack`の高さが行ごとに変わり(1行 or
+            // 2行)、それに伴い行全体の自然な高さも変わって、固定高さ
+            // (`eventRowHeight`)の中でのセンタリング位置が行ごとにズレて
+            // いたことが原因だった。この`VStack`に`.frame(minHeight:
+            // ..., alignment: .top)`を付け、予想/前回が無い行でも2行分の
+            // 高さを確保することで、行全体の自然な高さを常に一定にし、
+            // 時刻を含む他の要素の縦位置が行によってズレないようにした。
             Text(Self.timeFormatter.string(from: event.releaseDatetime))
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(size: 10, weight: .bold))
                 .tracking(-0.6)
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: true, vertical: false)
@@ -700,6 +706,7 @@ struct HomeView: View {
                             .minimumScaleFactor(0.6)
                     }
                 }
+                .frame(minHeight: 22, alignment: .top)
             }
             .layoutPriority(1)
 
@@ -728,7 +735,7 @@ struct HomeView: View {
     @ViewBuilder private func pairsCard(_ pairs: [FXPairUI]) -> some View {
         cardShell(height: Self.pairsCardHeight) {
             cardHeaderRow(title: "通貨ペア", height: Self.pairsHeaderHeight) {
-                HomeChartIcon().foregroundStyle(V5P.cyan).frame(width: 13, height: 12).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
+                HomeChartIcon().foregroundStyle(V5P.cyan).frame(width: 14, height: 13).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
             } trailing: {
                 headerLink("すべて見る")
             }
@@ -782,28 +789,34 @@ struct HomeView: View {
             // 46/40/44→42/36/40に縮小。
             Text(pair.displaySymbol).font(.system(size: 9.5, weight: .semibold)).tracking(-0.4).frame(width: 42, alignment: .leading)
             Text(pair.price).font(.system(size: 9.5, weight: .semibold)).tracking(-0.4).monospacedDigit().frame(width: 36, alignment: .center)
-            // バグ修正(2026-10-05、2回目): `.fixedSize(horizontal: true,
-            // vertical: false)`を試したが、実機キャプチャでは依然として
-            // "+0.25"/"%"の2行に折り返されたままだった(行全体の幅が
-            // タイトなため、`.fixedSize`だけでは`.frame(width: 40)`による
-            // 圧縮を防げなかった)。`Text`に直接`.lineLimit(1)`を付け、
-            // 外側の`.frame`を固定幅(width)ではなく最小幅(minWidth)に
-            // 変更することで、必要な時は40を超えて広がれるようにし、
-            // 折り返しを確実に防いだ。
+            // HQ再指摘(2026-10-05、5回目)「+0.25%▲>は右に寄せて」:
+            // 固定幅の列を並べただけだと行の合計幅がカード幅より短くなり、
+            // 左詰め(`cardShell`のVStackが`alignment: .leading`)のため
+            // 右側に余白が残っていた。`Spacer(minLength: 4)`を変化率の前に
+            // 入れ、余白をすべて吸収させて変化率+chevronをカード右端まで
+            // 押し出した。
+            //
+            // 「+0.25%の文字幅をもう少し狭めて」: tracking -0.4→-0.6に強化。
+            //
+            // 「>の高さの位置は全て同じで」: 上/下矢印アイコン
+            // (arrowtriangle.up/down.fill)のグリフ自体の縦方向の重心が
+            // 微妙に異なり、それを含む`HStack`の実測の高さが行によって
+            // わずかに変わって、chevronとの共通センターラインが行ごとに
+            // ズレていた。変化率`HStack`とchevronの両方に同じ固定高さ
+            // (`flagDiameter`)を与えて揃えた。
+            //
+            // 「-0.14%のグローが強いから無くして」: 前回追加したグロー
+            // (`.shadow`)を削除。
+            Spacer(minLength: 4)
             HStack(spacing: 1) {
-                Text(pair.change).font(.system(size: 9.5, weight: .semibold)).tracking(-0.4).monospacedDigit().lineLimit(1)
+                Text(pair.change).font(.system(size: 9.5, weight: .semibold)).tracking(-0.6).monospacedDigit().lineLimit(1)
                 Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 9.5))
             }
             .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
-            // HQ再指摘(2026-10-05、4回目)「+0.25%の赤文字と緑文字をもう少し
-            // 発行(発光)色みたいに明るくさせて、薄くさせるのではない」:
-            // 前回濃くした専用色(210,18,55)/(0,160,125)がむしろ暗く見えた
-            // ため、より明るく鮮やかな色に変更し、ネオンのような発光感を
-            // 出すため同色のシャドウ(グロー)も追加した(他画面のアイコンで
-            // 使っている`iconGlowShadow`と同じ手法)。
-            .shadow(color: (pair.isUp ? Self.changeUpColor : Self.changeDownColor).opacity(0.7), radius: 2)
-            .frame(minWidth: 40, alignment: .trailing)
+            .frame(height: Self.flagDiameter, alignment: .center)
+            .fixedSize()
             Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
+                .frame(height: Self.flagDiameter, alignment: .center)
         }
         .foregroundStyle(.white)
         .frame(height: Self.pairRowHeight)
@@ -814,7 +827,7 @@ struct HomeView: View {
     @ViewBuilder private func favoritesCard(_ favorites: [HomeFavoriteItem]) -> some View {
         cardShell(height: Self.favoritesCardHeight) {
             cardHeaderRow(title: "お気に入り", height: Self.favoritesHeaderHeight, showDivider: false) {
-                Image(systemName: "star.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
+                Image(systemName: "star.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
             } trailing: {
                 NavigationLink(value: AppRoute.favoritesList) {
                     headerLink("すべて見る")
@@ -909,7 +922,7 @@ struct HomeView: View {
     @ViewBuilder private func speechesCard(_ speeches: [HomeSpeechSummary]) -> some View {
         cardShell(height: Self.speechesCardHeight) {
             cardHeaderRow(title: "直近の要人発言", height: Self.speechesHeaderHeight) {
-                Image(systemName: "quote.bubble.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
+                Image(systemName: "quote.bubble.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
             } trailing: {
                 NavigationLink(value: AppRoute.speechList) {
                     headerLink("すべて見る")
