@@ -100,7 +100,9 @@ struct SettingsView: View {
 
     /// 参考画像から実測した1行あたりの高さ(V5座標系、234×491)。
     private static let rowHeight: CGFloat = 28.2
-    private static let cardWidth: CGFloat = V5P.W - 2 * V5P.ptToV5(16 + 8)
+    /// タイトル枠の先頭ptToV5(16+8)に、CI実機キャプチャで実測した「設定」の
+    /// 字形の左余白(5px@3x≈1.7pt)を足した位置にカード左端を合わせる。
+    private static let cardWidth: CGFloat = V5P.W - 2 * V5P.ptToV5(16 + 8 + 1.7)
 
     init(apiClient: APIClient, authService: AuthServicing, onSignOut: @escaping () -> Void, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
