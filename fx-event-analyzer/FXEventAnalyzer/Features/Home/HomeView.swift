@@ -496,11 +496,16 @@ struct HomeView: View {
     /// カードの外枠(塗り・枠線・角丸)。高さは呼び出し側が明示的に固定値で
     /// 渡す(HQ仕様のカードサイズをそのまま反映するため、内容に応じて
     /// 自然に伸縮する旧`homeCard`とは異なる)。
+    ///
+    /// HQ再指摘(2026-10-05、2回目)「各カードの枠内の左右の余白をもう少し
+    /// 広げて、それに合わせて内側に寄せて」: 左右パディングを4→8に拡大
+    /// (中身は全てこの`content()`経由で配置されるため、パディングを
+    /// 広げるだけで内側の要素も自動的に内側へ寄る)。
     @ViewBuilder private func cardShell(height: CGFloat, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             content()
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, 8)
         .frame(width: Self.cardWidth, height: height, alignment: .top)
         .background(RoundedRectangle(cornerRadius: Self.cardCornerRadius).fill(Self.cardFill))
         .overlay(
@@ -726,30 +731,35 @@ struct HomeView: View {
     /// (シンボル・変化率も合わせて縮小・.semibold化)。色は
     /// `changeUpColor`/`changeDownColor`(上で`V5P.red`/`V5P.green`に統一済み)
     /// を使用。
-    /// HQ再指摘(2026-10-05)の3点を反映:
-    /// 1.「USD/JPY等、155.42 +0.25%の文字サイズを大きく」: シンボル8→9、
-    ///    価格8→10、変化率6→7に拡大。
-    /// 2.「+0.25%▲＞となるように右に寄せて」: 前回追加した価格ブロック
-    ///    後ろの`Spacer()`を削除し、chevronに隣接する(右寄せの)配置に
-    ///    戻した。
-    /// 3.「各行の縦幅をもう少し狭めて」: `pairRowHeight`39→33。
+    /// HQ再指摘(2026-10-05、2回目)の4点を反映:
+    /// 1.「USD/JPYの文字サイズを0.5大きく」「USD/JPY 155.42 +0.25%▲の
+    ///    全て文字サイズを同一にして」: シンボル・価格・変化率をすべて
+    ///    9.5に統一(シンボルは9→9.5)。
+    /// 2.「155.42の文字の位置をUSD/JPYと+0.25%の等間隔に配置し、縦の
+    ///    155.42と1.0821と168.24の位置はきちんとそろえて」「+0.25%▲の
+    ///    文字の位置をもう少し右に寄せて」: それまでは`Spacer()`と
+    ///    `.fixedSize()`の組み合わせで各行ごとに価格ブロックの位置が
+    ///    テキスト幅に応じて微妙にズレていた(シンボル・価格とも文字数は
+    ///    同じでも、プロポーショナルフォントでは字形幅が文字種によって
+    ///    異なるため)。シンボル/価格/変化率の3列をそれぞれ固定幅の
+    ///    `.frame(width:)`スロットにし(価格は`.monospacedDigit()`も追加)、
+    ///    価格を中央揃え・変化率を右(chevron側)揃えにすることで、行ごとの
+    ///    文字幅に関係なく価格が常にシンボルと変化率の中間に来て、かつ
+    ///    3行とも同じx位置に揃うようにした。
     @ViewBuilder private func pairRow(_ pair: FXPairUI) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             HStack(spacing: 3) {
                 CountryFlagView(currencyCode: pair.baseCurrency, diameter: Self.flagDiameter)
                 CountryFlagView(currencyCode: pair.quoteCurrency, diameter: Self.flagDiameter)
             }
-            Text(pair.displaySymbol).font(.system(size: 9, weight: .semibold)).fixedSize()
-            Spacer(minLength: 4)
-            HStack(spacing: 5) {
-                Text(pair.price).font(.system(size: 10, weight: .semibold))
-                HStack(spacing: 1) {
-                    Text(pair.change).font(.system(size: 7, weight: .semibold))
-                    Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 7))
-                }
-                .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
+            Text(pair.displaySymbol).font(.system(size: 9.5, weight: .semibold)).frame(width: 46, alignment: .leading)
+            Text(pair.price).font(.system(size: 9.5, weight: .semibold)).monospacedDigit().frame(width: 40, alignment: .center)
+            HStack(spacing: 1) {
+                Text(pair.change).font(.system(size: 9.5, weight: .semibold)).monospacedDigit()
+                Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 9.5))
             }
-            .fixedSize()
+            .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
+            .frame(width: 44, alignment: .trailing)
             Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
         }
         .foregroundStyle(.white)
