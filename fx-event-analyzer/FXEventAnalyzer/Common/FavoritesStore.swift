@@ -54,6 +54,13 @@ final class FavoritesStore: ObservableObject {
         userDefaults.set(entries.map(Self.key), forKey: storageKey)
     }
 
+    /// すべてのお気に入りを消す。SCR-024 アカウント削除で、サーバー側の
+    /// データと一緒に端末のお気に入りも消すために使う(HQ指示 2026-10-05)。
+    func removeAll() {
+        entries = []
+        userDefaults.removeObject(forKey: storageKey)
+    }
+
     private static func key(_ entry: Entry) -> String {
         "\(entry.type.rawValue):\(entry.id)"
     }

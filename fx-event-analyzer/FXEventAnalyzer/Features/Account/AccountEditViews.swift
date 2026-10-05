@@ -283,16 +283,17 @@ struct AccountDeletionView: View {
         _tabSelection = tabSelection
     }
 
-    /// 削除されるデータ。参考画像の「お気に入り情報」「取引履歴・データ」は
-    /// 実際と合わないため置き換えた — お気に入りは端末内(`FavoritesStore`)
-    /// でBackendに無く、取引履歴の機能も無い。`DELETE /account`で消えるのは
-    /// `profiles`・`user_settings`・`subscriptions`/`entitlements`
-    /// (api-design.md §24.3)。
+    /// 削除されるデータ(参考画像の5行)。`DELETE /account`で`profiles`・
+    /// `user_settings`・`subscriptions`/`entitlements`が消え(api-design.md
+    /// §24.3)、お気に入りは端末側で`AccountDeletionViewModel`が消す。
+    /// 参考画像の「取引履歴・データ」は該当する機能が無いため、実際に消える
+    /// 購読の記録に置き換えた。
     private static let deletedData: [DeletedItem] = [
         DeletedItem(icon: "person.fill", label: "プロフィール情報"),
-        DeletedItem(icon: "gearshape.fill", label: "設定情報（通知・表示・チャート）"),
+        DeletedItem(icon: "gearshape.fill", label: "設定情報"),
+        DeletedItem(icon: "heart.fill", label: "お気に入り情報"),
         DeletedItem(icon: "creditcard.fill", label: "購入・購読の記録"),
-        DeletedItem(icon: "tray.full.fill", label: "その他すべてのデータ"),
+        DeletedItem(icon: "externaldrive.fill", label: "その他すべてのデータ"),
     ]
 
     private struct DeletedItem {
@@ -324,7 +325,7 @@ struct AccountDeletionView: View {
                         V5JPFont.text(item.label, size: AccountLayout.titleSize, weight: .regular).foregroundStyle(.white)
                         Spacer(minLength: 0)
                     }
-                    .frame(height: 22)
+                    .frame(height: 21)
                 }
             }
             .padding(.horizontal, 11)
@@ -341,15 +342,15 @@ struct AccountDeletionView: View {
                 fill: AccountPalette.warningFill,
                 border: AccountPalette.warningBorder
             )
-            .accountPinned(top: 284)
+            .accountPinned(top: 301)
 
-            AccountStatusText(state: viewModel.state).accountPinned(top: 352, height: 20)
+            AccountStatusText(state: viewModel.state).accountPinned(top: 366, height: 16)
             AccountPrimaryButton(title: "アカウントを削除する", isLoading: viewModel.state == .submitting, destructive: true) {
                 showConfirmation = true
             }
-            .position(x: 117, y: 388)
+            .position(x: 117, y: 396)
             AccountSecondaryButton(title: "キャンセル") { dismiss() }
-                .position(x: 117, y: 422)
+                .position(x: 117, y: 428)
         }
         .confirmationDialog("本当にアカウントを削除しますか？", isPresented: $showConfirmation, titleVisibility: .visible) {
             Button("削除する", role: .destructive) { Task { await viewModel.delete() } }

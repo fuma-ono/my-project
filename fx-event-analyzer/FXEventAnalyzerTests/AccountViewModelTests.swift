@@ -316,17 +316,26 @@ final class PasswordChangeViewModelTests: XCTestCase {
 
 @MainActor
 final class AccountDeletionViewModelTests: XCTestCase {
+    private func makeFavorites() -> FavoritesStore {
+        let store = FavoritesStore(userDefaults: UserDefaults(suiteName: "AccountDeletionTests-\(UUID().uuidString)")!)
+        store.toggle(.indicator, id: "1")
+        store.toggle(.event, id: "2")
+        return store
+    }
+
     func testDeleteSignsOutAndReturnsToLogin() async {
         let apiClient = MockAPIClient()
         apiClient.result = .success(EmptyResponse())
         let auth = MockAuthService(isConfigured: true)
+        let favorites = makeFavorites()
         var signOutCallCount = 0
-        let viewModel = AccountDeletionViewModel(apiClient: apiClient, authService: auth) { signOutCallCount += 1 }
+        let viewModel = AccountDeletionViewModel(apiClient: apiClient, authService: auth, favoritesStore: favorites) { signOutCallCount += 1 }
 
         await viewModel.delete()
 
         XCTAssertEqual(apiClient.lastEndpoint?.method, .delete)
         XCTAssertEqual(signOutCallCount, 1)
+        XCTAssertTrue(favorites.entries.isEmpty)
     }
 
     func testLocalSignOutFailureStillReturnsToLogin() async {
@@ -335,7 +344,7 @@ final class AccountDeletionViewModelTests: XCTestCase {
         let auth = MockAuthService(isConfigured: true)
         auth.signOutError = AuthServiceError.network("offline")
         var signOutCallCount = 0
-        let viewModel = AccountDeletionViewModel(apiClient: apiClient, authService: auth) { signOutCallCount += 1 }
+        let viewModel = AccountDeletionViewModel(apiClient: apiClient, authService: auth, favoritesStore: makeFavorites()) { signOutCallCount += 1 }
 
         await viewModel.delete()
 
@@ -346,11 +355,13 @@ final class AccountDeletionViewModelTests: XCTestCase {
         let apiClient = MockAPIClient()
         apiClient.result = .failure(APIError.server(code: .internalError, message: "boom", httpStatus: 500))
         var signOutCallCount = 0
-        let viewModel = AccountDeletionViewModel(apiClient: apiClient, authService: MockAuthService(isConfigured: true)) { signOutCallCount += 1 }
+        let favorites = makeFavorites()
+        let viewModel = AccountDeletionViewModel(apiClient: apiClient, authService: MockAuthService(isConfigured: true), favoritesStore: favorites) { signOutCallCount += 1 }
 
         await viewModel.delete()
 
         XCTAssertEqual(signOutCallCount, 0)
+        XCTAssertEqual(favorites.entries.count, 2)
         guard case .error = viewModel.state else { return XCTFail("Expected .error, got \(viewModel.state)") }
     }
 }

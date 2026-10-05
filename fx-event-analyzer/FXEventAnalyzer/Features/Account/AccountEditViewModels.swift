@@ -189,18 +189,21 @@ final class PasswordChangeViewModel: ObservableObject {
 // MARK: - SCR-024 アカウント削除
 
 /// `DELETE /account`(物理削除、api-design.md §24.3)のあと、端末の
-/// セッションも破棄してログイン画面へ戻す。
+/// お気に入り(`FavoritesStore`、Backendには無い)とセッションも破棄して
+/// ログイン画面へ戻す。
 @MainActor
 final class AccountDeletionViewModel: ObservableObject {
     @Published private(set) var state: AccountFormState = .idle
 
     private let accountService: AccountService
     private let authService: AuthServicing?
+    private let favoritesStore: FavoritesStore
     private let onSignOut: () -> Void
 
-    init(apiClient: APIClient, authService: AuthServicing?, onSignOut: @escaping () -> Void) {
+    init(apiClient: APIClient, authService: AuthServicing?, favoritesStore: FavoritesStore = .shared, onSignOut: @escaping () -> Void) {
         self.accountService = AccountService(apiClient: apiClient)
         self.authService = authService
+        self.favoritesStore = favoritesStore
         self.onSignOut = onSignOut
     }
 
@@ -216,6 +219,7 @@ final class AccountDeletionViewModel: ObservableObject {
             state = .error("アカウントの削除に失敗しました。時間をおいて再度お試しください。")
             return
         }
+        favoritesStore.removeAll()
         // サーバー側のユーザーは削除済みなので、サインアウトの失敗
         // (トークン失効済みなど)ではログイン画面へ戻るのを止めない。
         try? await authService?.signOut()
