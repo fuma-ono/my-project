@@ -10,7 +10,7 @@ enum EventDetailState: Equatable {
     case error(String)
 }
 
-/// SCR-004 Event Detail (ui-screens.md §5, H-1 order) — the central screen:
+/// SCR-007 イベント詳細 (H-1 order) — the central screen:
 /// Forecast/Actual/Previous → Surprise → 乖離理由 → 市場への影響 → 関連FX
 /// ペア/Reaction, all from a single `GET /events/{event_id}` call. Backend
 /// is the sole Source of Truth for Surprise/Reaction (api-design.md §8) —

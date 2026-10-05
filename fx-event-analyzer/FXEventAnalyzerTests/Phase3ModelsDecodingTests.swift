@@ -277,56 +277,10 @@ final class Phase3ModelsDecodingTests: XCTestCase {
         XCTAssertTrue(response.relatedFxPairs.isEmpty)
     }
 
-    // MARK: - Historical Event Detail (src/routes/historical.ts)
-
-    func testHistoricalEventDetailResponseDecodesRealBackendShape() throws {
-        let json = """
-        {
-          "indicator_id": "10000000-0000-0000-0000-000000000001",
-          "event": {
-            "id": "30000000-0000-0000-0000-000000000001",
-            "indicator_name": "US Consumer Price Index (YoY)",
-            "release_datetime": "2026-09-10T12:30:00.000Z",
-            "importance": "HIGH"
-          },
-          "snapshot": {
-            "forecast": 3.1, "actual": 3.3, "previous": 3.0, "surprise": 0.2, "surprise_direction": "POSITIVE"
-          },
-          "explanation": {
-            "summary": "Headline CPI rose 3.3% YoY versus a forecast of 3.1%.",
-            "source": "U.S. Bureau of Labor Statistics",
-            "source_url": "https://www.bls.gov/cpi/"
-          },
-          "related_fx_pairs": [
-            {
-              "fx_pair_id": "20000000-0000-0000-0000-000000000001",
-              "symbol": "USDJPY",
-              "reactions": [
-                {
-                  "timeframe": "1m",
-                  "pre_release_price": 147.20,
-                  "post_release_price": 147.48,
-                  "movement": 0.28,
-                  "pips": 28.0,
-                  "change_percent": 0.19,
-                  "max_upward": 0.30,
-                  "max_downward": -0.05,
-                  "max_upward_pips": 30.0,
-                  "max_downward_pips": -5.0,
-                  "analysis_status": "READY"
-                }
-              ]
-            }
-          ]
-        }
-        """.data(using: .utf8)!
-
-        let response = try makeDecoder().decode(HistoricalEventDetailResponse.self, from: json)
-
-        XCTAssertEqual(response.indicatorId, "10000000-0000-0000-0000-000000000001")
-        XCTAssertEqual(response.snapshot?.surprise, 0.2)
-        let reaction = response.relatedFxPairs.first?.reactions.first
-        XCTAssertEqual(reaction?.analysisStatus, .ready)
-        XCTAssertEqual(reaction?.pips, 28.0)
-    }
+    // Historical Event Detail (`HistoricalEventDetailResponse`等)のデコードテストは、
+    // HQ指示(2026-10-03、画面構成全面更新)でこの画面自体
+    // (`HistoricalEventDetailView`/旧SCR-010)が独立画面として削除されたため、
+    // テスト対象の型ごと削除した。過去の発表回の値動き詳細はSCR-008
+    // 相場反応詳細(`MovementDetailResponse`、別のテストで既にカバー済み)に
+    // 集約されている。
 }

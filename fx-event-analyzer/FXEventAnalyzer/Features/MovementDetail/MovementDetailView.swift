@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// SCR-005 Movement Detail (ui-screens.md §5) — "発表前後にFX相場が実際に
+/// SCR-008 相場反応詳細 — "発表前後にFX相場が実際に
 /// どれくらい動いたのか確認する". Timeframe Segmented Control drives both
 /// the Reaction figures (fetched once, every timeframe) and the Chart
 /// (re-fetched per timeframe).
@@ -31,6 +31,14 @@ import SwiftUI
 ///   with the required phrase appended to its accessibility label only —
 ///   sighted users see zero pixel change; VoiceOver users hear the real
 ///   metric readout plus the destination, never just the phrase alone.
+///
+/// HQ指示(2026-10-03、画面構成全面更新)でこの画面がSCR-008 相場反応詳細に
+/// 改称され、旧「過去イベント詳細」(削除済み)の役割も集約された
+/// (`HistoricalComparisonView`の過去回タップもここへ遷移するようになった、
+/// `AppRoute.movementDetail`参照)。HQ新仕様が求める追加コンテンツ
+/// (値動きの分析・背景・市場の織り込み状況・予想と結果の差・金利/債券
+/// 関連情報・Sell the Fact等)はまだ未実装 — 今回は番号・名称・遷移の整理
+/// のみがスコープのため、次回(005〜013のUI実装)に持ち越している。
 struct MovementDetailView: View {
     @StateObject private var viewModel: MovementDetailViewModel
     @Binding var tabSelection: Int

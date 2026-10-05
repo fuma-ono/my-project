@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// SCR-020 表示・地域設定(ui-screens.md v2.0 §3、api-design.md §24.4)。
+/// SCR-018 表示・地域設定(ui-screens.md v2.0 §3、api-design.md §24.4)。
 ///
 /// 言語は`ja`/`en`の2択(Backendの許可値と同じ)。地域・タイムゾーンは主要
 /// 市場の候補から選ぶ。Backendに候補外の値が保存されていても、そのまま

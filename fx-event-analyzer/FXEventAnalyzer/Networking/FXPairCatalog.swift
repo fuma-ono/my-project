@@ -6,7 +6,7 @@ import Foundation
 /// `fx_pairs`シードと同じ固定値を返す`StaticFXPairCatalog`を使う。最終仕様では
 /// ホーム画面の「通貨ペア」からユーザーが表示ペアを編集できるようになるので、
 /// 一覧APIが追加されたら`APIClient`で取得する実装をこのプロトコルに準拠させて
-/// 差し替える。利用側(SCR-021 チャート設定など)は候補の出どころを知らない。
+/// 差し替える。利用側(SCR-019 チャート設定など)は候補の出どころを知らない。
 protocol FXPairCatalog {
     func availableSymbols() async throws -> [String]
 }

@@ -7,7 +7,7 @@ enum LoginState: Equatable {
     case error(String)
 }
 
-/// SCR-010 Login. Per ui-screens.md: "メールアドレス / パスワード / ログイン /
+/// SCR-001 ログイン画面。Per ui-screens.md: "メールアドレス / パスワード / ログイン /
 /// パスワードリセット / 新規登録導線。認証方式は別途詳細設計で確定する" —
 /// Sign Up / Password Reset are navigation stubs only in Phase 1 (no screen
 /// spec exists for them yet).

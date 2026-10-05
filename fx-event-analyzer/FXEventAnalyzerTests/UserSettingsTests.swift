@@ -100,7 +100,7 @@ final class SettingsServiceTests: XCTestCase {
     }
 }
 
-// MARK: - SettingsSectionViewModel (SCR-018 / SCR-020 / SCR-021)
+// MARK: - SettingsSectionViewModel (SCR-016 / SCR-018 / SCR-019)
 
 @MainActor
 final class SettingsSectionViewModelTests: XCTestCase {

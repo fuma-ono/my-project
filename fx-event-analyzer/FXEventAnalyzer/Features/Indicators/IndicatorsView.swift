@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// SCR-002 Indicators (ui-screens.md §5): browse indicators, tap through to
-/// SCR-003 Indicator Detail.
+/// SCR-005 指標一覧: browse indicators, tap through to
+/// SCR-006 指標詳細.
 ///
 /// HQ "V5 Pixel Frontend" integration (2026-09-24): visual content is HQ's
 /// `V5PixelFrontend.swift` `V5Indicators` (fixed 234×491 canvas, search
@@ -163,7 +163,7 @@ struct IndicatorsView: View {
 
     @ViewBuilder private func row(_ indicator: IndicatorSummary) -> some View {
         HStack(spacing: 5) {
-            Text(CountryFlag.emoji(for: indicator.countryCode)).font(.system(size: 14))
+            CountryFlagView(countryCode: indicator.countryCode, diameter: 14)
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(CountryFlag.kanjiAbbreviation(for: indicator.countryCode))) \(indicator.name)")
                     .font(.system(size: 8, weight: .semibold)).lineLimit(1)

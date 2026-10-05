@@ -83,9 +83,10 @@ enum CountryFlag {
     }
 
     /// HQ UI Master v5's "米) 消費者物価指数" country-abbreviation prefix
-    /// (SCR-002/003/004) — a single-kanji short form, not the full country
-    /// name. Falls back to the raw country code for anything not in this
-    /// common set rather than guessing an abbreviation.
+    /// (SCR-005/006/007 指標一覧/指標詳細/イベント詳細) — a single-kanji
+    /// short form, not the full country name. Falls back to the raw country
+    /// code for anything not in this common set rather than guessing an
+    /// abbreviation.
     static func kanjiAbbreviation(for countryCode: String) -> String {
         switch countryCode.uppercased() {
         case "US": return "米"
@@ -99,6 +100,44 @@ enum CountryFlag {
         case "CH": return "瑞"
         default: return countryCode.uppercased()
         }
+    }
+
+    /// ISO 4217通貨コード → 代表国のISO 3166コードという客観的な対応表
+    /// (通貨と国の標準的な関係であり、推測や捏造ではない)。`imageName
+    /// (forCurrency:)`から再利用する。
+    private static func representativeCountry(forCurrency currencyCode: String) -> String {
+        switch currencyCode.uppercased() {
+        case "USD": return "US"
+        case "JPY": return "JP"
+        case "EUR": return "EU"
+        case "GBP": return "GB"
+        case "AUD": return "AU"
+        case "CAD": return "CA"
+        case "CNY": return "CN"
+        case "NZD": return "NZ"
+        case "CHF": return "CH"
+        default: return currencyCode
+        }
+    }
+
+    /// HQ指示(2026-10-02、4回目)「国旗はUnicode絵文字ではなく画像アセット
+    /// として扱ってください」: 絵文字フォントのレンダリング特性(字送りの
+    /// 左右非対称・サイズごとの挙動不一致)に合わせてフォントサイズ/
+    /// オフセットを個別調整し続けるアプローチを7回試しても国旗ごとに
+    /// 結果が不安定だったため、Asset Catalogの正方形画像(`FlagXX`、
+    /// `CountryFlagView`参照)に切り替えた。実装しているのは通貨ペア一覧
+    /// (`emoji(forCurrency:)`時代と同じ9通貨)に対応する代表国のみ —
+    /// 対応が無い国コードは`nil`を返し、呼び出し側(`CountryFlagView`)が
+    /// 中立的なフォールバック表示にする(存在しない画像を補完・捏造しない)。
+    static func imageName(for countryCode: String) -> String? {
+        let supported: Set<String> = ["US", "JP", "EU", "GB", "AU", "CA", "CN", "NZ", "CH"]
+        let code = countryCode.uppercased()
+        guard supported.contains(code) else { return nil }
+        return "Flag\(code)"
+    }
+
+    static func imageName(forCurrency currencyCode: String) -> String? {
+        imageName(for: representativeCountry(forCurrency: currencyCode))
     }
 }
 

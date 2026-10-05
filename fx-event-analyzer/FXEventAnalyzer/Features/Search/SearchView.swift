@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// SCR-008 Search (ui-screens.md §4) — no dedicated ViewModel/endpoint
+/// SCR-011 検索 — no dedicated ViewModel/endpoint
 /// exists for search, but `IndicatorsViewModel` already does real
 /// server-side `q`-search against `GET /indicators` (used by the
 /// Indicators tab). This screen reuses that same, already-existing
@@ -17,7 +17,10 @@ import SwiftUI
 /// - Empty query: the 4 rows are real on-device recent-search history
 ///   (unchanged from the prior integration), tapping fills the field.
 /// - Active query, すべて/指標 filter: the 4 rows are the real top
-///   indicator matches, tapping pushes to SCR-003.
+///   indicator matches, tapping pushes to SCR-006 指標詳細。HQ新仕様
+///   (2026-10-03)は要人発言の検索結果もSCR-013へ遷移させることを求めて
+///   いるが、要人発言の検索自体が未実装のため次回(005〜013のUI実装)に
+///   持ち越している。
 /// - Active query, イベント/通貨ペア filter: no real search exists for
 ///   those types, so the rows are simply empty (never fabricated) rather
 ///   than showing an invented empty-state message this canvas has no room
@@ -134,7 +137,7 @@ private enum SearchFilter: String, CaseIterable, Identifiable {
     }
 }
 
-/// On-device "最近の検索" history (SCR-008) — no server-side search-history
+/// On-device "最近の検索" history (SCR-011) — no server-side search-history
 /// endpoint exists, so this is genuinely local, per-device state: it
 /// records indicators the user has actually tapped from real search
 /// results.

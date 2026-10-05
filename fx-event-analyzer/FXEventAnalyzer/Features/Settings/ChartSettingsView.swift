@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// SCR-021 チャート設定(ui-screens.md v2.0 §3、api-design.md §24.4)。
+/// SCR-019 チャート設定(ui-screens.md v2.0 §3、api-design.md §24.4)。
 ///
 /// 通貨ペアの候補は`FXPairCatalog`から取得する。通貨ペア一覧APIがまだない
 /// ため、現状はBackendの`fx_pairs`シードと同じ固定値(`StaticFXPairCatalog`)で、

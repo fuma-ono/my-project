@@ -1,7 +1,7 @@
 import Foundation
 
 /// `GET/PATCH /api/v1/settings` response shape (api-design.md §24.4) —
-/// SCR-018 通知設定 / SCR-020 表示・地域設定 / SCR-021 チャート設定.
+/// SCR-016 通知設定 / SCR-018 表示・地域設定 / SCR-019 チャート設定.
 /// `updated_at` is deliberately not decoded: no screen uses it.
 struct SettingsResponse: Decodable, Equatable {
     var notifications: NotificationSettings

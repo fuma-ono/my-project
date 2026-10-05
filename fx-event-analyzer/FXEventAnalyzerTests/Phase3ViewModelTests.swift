@@ -189,50 +189,8 @@ final class EventDetailViewModelTests: XCTestCase {
     }
 }
 
-// MARK: - HistoricalEventDetailViewModel (SCR-007)
-
-@MainActor
-final class HistoricalEventDetailViewModelTests: XCTestCase {
-    func testLoadSuccessShowsLoadedResponseWithIndicatorId() async {
-        let apiClient = MockAPIClient()
-        let response = HistoricalEventDetailResponse(
-            indicatorId: "ind_1",
-            event: HistoricalEventSummary(id: "evt_1", indicatorName: "US CPI", releaseDatetime: Date(), importance: .high),
-            snapshot: HistoricalSnapshot(forecast: 3.1, actual: 3.3, previous: 3.0, surprise: 0.2, surpriseDirection: .positive),
-            explanation: nil,
-            relatedFxPairs: []
-        )
-        apiClient.result = .success(response)
-
-        let viewModel = HistoricalEventDetailViewModel(apiClient: apiClient, eventId: "evt_1")
-        viewModel.load()
-        await waitUntil { viewModel.state != .loading }
-
-        XCTAssertEqual(viewModel.state, .loaded(response))
-        XCTAssertEqual(apiClient.lastEndpoint?.path, "events/evt_1/history")
-    }
-
-    func testLoadFeatureNotEntitledShowsNotEntitledState() async {
-        let apiClient = MockAPIClient()
-        apiClient.result = .failure(
-            APIError.server(code: .subscriptionRequired, message: "VIEW_HISTORICAL required.", httpStatus: 403)
-        )
-
-        let viewModel = HistoricalEventDetailViewModel(apiClient: apiClient, eventId: "evt_1")
-        viewModel.load()
-        await waitUntil { viewModel.state != .loading }
-
-        XCTAssertEqual(viewModel.state, .notEntitled)
-    }
-
-    func testLoadNotFoundShowsNotFoundState() async {
-        let apiClient = MockAPIClient()
-        apiClient.result = .failure(APIError.server(code: .eventNotFound, message: "Event not found.", httpStatus: 404))
-
-        let viewModel = HistoricalEventDetailViewModel(apiClient: apiClient, eventId: "missing")
-        viewModel.load()
-        await waitUntil { viewModel.state != .loading }
-
-        XCTAssertEqual(viewModel.state, .notFound)
-    }
-}
+// HistoricalEventDetailViewModelのテスト(旧SCR-007、後にv2.0でSCR-010)は、
+// HQ指示(2026-10-03、画面構成全面更新)でこの画面自体が独立画面として
+// 削除されたため、テスト対象の型(`HistoricalEventDetailViewModel`等)
+// ごと削除した。過去の発表回の値動き詳細はSCR-008 相場反応詳細
+// (`MovementDetailViewModel`、別のテストで既にカバー済み)に集約されている。

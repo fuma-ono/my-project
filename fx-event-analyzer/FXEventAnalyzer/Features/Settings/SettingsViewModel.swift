@@ -7,7 +7,7 @@ enum SettingsSignOutState: Equatable {
     case error(String)
 }
 
-/// SCR-009 Settings — Phase 5 §2 minimum: a working ログアウト導線, not a
+/// SCR-014 設定画面 — Phase 5 §2 minimum: a working ログアウト導線, not a
 /// full Settings screen. Guards against double-tap re-entrancy and never
 /// leaves the user stuck if `signOut()` fails.
 @MainActor

@@ -15,7 +15,7 @@ enum SettingsSectionSaveState: Equatable {
     case error(String)
 }
 
-/// SCR-018 / SCR-020 / SCR-021 共通: `GET /settings`で読み込み、画面が担当する
+/// SCR-016 / SCR-018 / SCR-019 共通: `GET /settings`で読み込み、画面が担当する
 /// 1セクションを`draft`として編集し、「保存する」で`PATCH /settings`へその
 /// セクションだけを送る(ui-screens.md: 保存後は同じ画面に留まる)。
 ///

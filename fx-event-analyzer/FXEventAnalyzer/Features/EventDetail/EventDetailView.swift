@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// SCR-004 Event Detail (ui-screens.md §5, H-1) — "予想と結果、その結果に
+/// SCR-007 イベント詳細 — "予想と結果、その結果に
 /// よる相場の反応を一画面で理解する".
 ///
 /// HQ "V5 Pixel Frontend" integration (2026-09-24): visual content is HQ's
@@ -61,7 +61,7 @@ struct EventDetailView: View {
 
                 V5Card(CGRect(x: 10, y: 57, width: 214, height: 55)) {
                     HStack {
-                        Text(CountryFlag.emoji(for: response.event.countryCode)).font(.system(size: 22))
+                        CountryFlagView(countryCode: response.event.countryCode, diameter: 22)
                         VStack(alignment: .leading) {
                             Text("\(CountryFlag.kanjiAbbreviation(for: response.event.countryCode))) \(response.event.indicatorName)").font(.system(size: 9, weight: .bold))
                             Text(response.event.currencyCode).font(.system(size: 7)).foregroundStyle(V5P.muted)

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// SCR-018 通知設定(ui-screens.md v2.0 §3、api-design.md §24.4)。
+/// SCR-016 通知設定(ui-screens.md v2.0 §3、api-design.md §24.4)。
 ///
 /// HQ確定(2026-10-02): MVPでは通知対象の保存のみ行い、Push通知は送らない。
 /// 重要度★と指標のLOW/MEDIUM/HIGHの対応は暫定マッピング(db-design.md §3.14)

@@ -8,11 +8,12 @@ enum IndicatorDetailState: Equatable {
     case error(String)
 }
 
-/// SCR-003 Indicator Detail (ui-screens.md §5) — "指標そのものを理解する"
-///画面。Deliberately distinct from SCR-004 Event Detail: this screen never
-/// shows a single event's Surprise/explanation as its primary content,
-/// only the indicator's own metadata plus a list of its recent released
-/// events (each tapping through to SCR-007).
+/// SCR-006 指標詳細 — "指標そのものを理解する"画面。Deliberately distinct
+/// from SCR-007 イベント詳細: this screen never shows a single event's
+/// Surprise/explanation as its primary content, only the indicator's own
+/// metadata plus a list of its recent released events (each tapping
+/// through to SCR-007 — not yet rendered as a tappable list in the View,
+/// see `IndicatorDetailView`'s doc comment).
 @MainActor
 final class IndicatorDetailViewModel: ObservableObject {
     @Published private(set) var state: IndicatorDetailState = .loading
@@ -44,7 +45,7 @@ final class IndicatorDetailViewModel: ObservableObject {
                     ]
                 )
             )
-            // HQ UI Master v5's SCR-003 header shows the indicator's next
+            // HQ UI Master v5's SCR-006 header shows the indicator's next
             // scheduled release (date/forecast) — the same
             // `/indicators/{id}/events` endpoint the RELEASED fetch above
             // already uses, just with its existing `status` parameter set
