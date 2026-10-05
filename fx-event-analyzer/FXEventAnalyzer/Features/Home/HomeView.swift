@@ -629,19 +629,24 @@ struct HomeView: View {
 
     @ViewBuilder private func eventRow(_ event: HomeEventSummary) -> some View {
         HStack(spacing: 5) {
-            // HQ再指摘(2026-10-05)「時刻の文字が小さい」: 7→9へ拡大。
+            // HQ再指摘(2026-10-05、3回目)「時刻14:30の縦幅を大きくし、文字の
+            // 間隔を狭めて」: フォントサイズを9→11に拡大(=縦幅拡大)しつつ、
+            // `.tracking(-0.6)`で字間を詰め、26幅の列に収まるようにした。
             Text(Self.timeFormatter.string(from: event.releaseDatetime))
-                .font(.system(size: 9, weight: .bold))
+                .font(.system(size: 11, weight: .bold))
+                .tracking(-0.6)
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: true, vertical: false)
                 .frame(width: 26, alignment: .leading)
 
             // HQ指示(2026-10-05、23回目)「今日の重要指標の国旗の下にUSDや
             // JPYなどを記載して」。HQ再指摘(2026-10-05)「USDやJPYの文字が
-            // 小さい」: 5.5→7へ拡大。
+            // 小さい」で5.5→7へ拡大。さらにHQ再指摘(2026-10-05、3回目)
+            // 「USDやJPYの文字色を白にして」でグレー(`V5P.muted`)から
+            // 白に変更。
             VStack(spacing: 1) {
                 CountryFlagView(countryCode: event.countryCode, diameter: Self.flagDiameter)
-                Text(event.currencyCode).font(.system(size: 7, weight: .semibold)).foregroundStyle(V5P.muted)
+                Text(event.currencyCode).font(.system(size: 7, weight: .semibold)).foregroundStyle(.white)
             }
 
             // HQ再指摘(2026-10-05)「予想前回が治らない。参考画像は日本CPIの
@@ -672,9 +677,17 @@ struct HomeView: View {
                         .foregroundStyle(.white)
                         .lineLimit(1)
                     if let subtitle = Self.eventSubtitle(event) {
+                        // HQ再指摘(2026-10-05、3回目)「予想と前回の文字は
+                        // 途切れず、折り返さず全て表示できるようにして」:
+                        // `.lineLimit(1)`のみだと幅が足りない時に末尾が
+                        // "..."で省略されていた。`.fixedSize(horizontal:
+                        // true, vertical: false)`に変更し、折り返しは
+                        // させず(vertical: false)、横方向は内容の自然な
+                        // 幅をそのまま使う(horizontal: true)ことで、
+                        // 省略されず全文表示されるようにした。
                         V5JPFont.text(subtitle, size: 6, weight: .regular)
                             .foregroundStyle(V5P.muted)
-                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                 }
             }

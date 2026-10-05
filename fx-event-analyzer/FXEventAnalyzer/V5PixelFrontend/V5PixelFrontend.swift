@@ -404,9 +404,15 @@ struct CountryFlagView: View {
     var body: some View {
         Group {
             if let imageName {
+                // HQ再指摘(2026-10-05、Home画面3回目)「国旗の色をもう少し
+                // 鮮やかにして」: 元画像アセットの彩度・コントラストをやや
+                // 持ち上げて鮮やかに見えるようにした(アセット自体の差し替え
+                // ではなく表示側の調整)。
                 Image(imageName)
                     .resizable()
                     .scaledToFill()
+                    .saturation(1.35)
+                    .contrast(1.08)
             } else {
                 Circle()
                     .fill(V5P.panel2)
