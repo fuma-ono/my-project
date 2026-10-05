@@ -263,15 +263,21 @@ final class PasswordChangeViewModelTests: XCTestCase {
     func testValidation() {
         let viewModel = PasswordChangeViewModel(authService: MockAuthService(isConfigured: true))
 
-        viewModel.currentPassword = "oldpass12"
+        viewModel.currentPassword = "OldPass12"
         viewModel.newPassword = "short"
         XCTAssertEqual(viewModel.validationMessage, "新しいパスワードは8文字以上にしてください。")
-        viewModel.newPassword = "oldpass12"
-        XCTAssertEqual(viewModel.validationMessage, "現在のパスワードと異なるものにしてください。")
         viewModel.newPassword = "newpass12"
-        viewModel.confirmation = "newpass13"
+        XCTAssertEqual(viewModel.validationMessage, "英字の大文字・小文字と数字をそれぞれ含めてください。")
+        viewModel.newPassword = "NEWPASS12"
+        XCTAssertEqual(viewModel.validationMessage, "英字の大文字・小文字と数字をそれぞれ含めてください。")
+        viewModel.newPassword = "NewPassword"
+        XCTAssertEqual(viewModel.validationMessage, "英字の大文字・小文字と数字をそれぞれ含めてください。")
+        viewModel.newPassword = "OldPass12"
+        XCTAssertEqual(viewModel.validationMessage, "現在のパスワードと異なるものにしてください。")
+        viewModel.newPassword = "NewPass12"
+        viewModel.confirmation = "NewPass13"
         XCTAssertEqual(viewModel.validationMessage, "確認用のパスワードが一致しません。")
-        viewModel.confirmation = "newpass12"
+        viewModel.confirmation = "NewPass12"
         XCTAssertNil(viewModel.validationMessage)
         XCTAssertTrue(viewModel.canSubmit)
     }
@@ -279,14 +285,14 @@ final class PasswordChangeViewModelTests: XCTestCase {
     func testSubmitChangesAndClearsTheFields() async {
         let auth = MockAuthService(isConfigured: true)
         let viewModel = PasswordChangeViewModel(authService: auth)
-        viewModel.currentPassword = "oldpass12"
-        viewModel.newPassword = "newpass12"
-        viewModel.confirmation = "newpass12"
+        viewModel.currentPassword = "OldPass12"
+        viewModel.newPassword = "NewPass12"
+        viewModel.confirmation = "NewPass12"
 
         await viewModel.submit()
 
-        XCTAssertEqual(auth.updatedPassword?.current, "oldpass12")
-        XCTAssertEqual(auth.updatedPassword?.new, "newpass12")
+        XCTAssertEqual(auth.updatedPassword?.current, "OldPass12")
+        XCTAssertEqual(auth.updatedPassword?.new, "NewPass12")
         XCTAssertEqual(viewModel.currentPassword, "")
         XCTAssertEqual(viewModel.state, .done("パスワードを変更しました。"))
     }
@@ -296,13 +302,13 @@ final class PasswordChangeViewModelTests: XCTestCase {
         auth.updatePasswordError = AuthServiceError.invalidCredentials
         let viewModel = PasswordChangeViewModel(authService: auth)
         viewModel.currentPassword = "wrongpass"
-        viewModel.newPassword = "newpass12"
-        viewModel.confirmation = "newpass12"
+        viewModel.newPassword = "NewPass12"
+        viewModel.confirmation = "NewPass12"
 
         await viewModel.submit()
 
         XCTAssertEqual(viewModel.state, .error("現在のパスワードが正しくありません。"))
-        XCTAssertEqual(viewModel.newPassword, "newpass12")
+        XCTAssertEqual(viewModel.newPassword, "NewPass12")
     }
 }
 

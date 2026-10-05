@@ -137,9 +137,17 @@ final class PasswordChangeViewModel: ObservableObject {
         self.authService = authService
     }
 
+    /// SCR-027の「パスワードの条件」: 英字の大文字・小文字と数字を含む。
+    static func meetsCharacterRule(_ password: String) -> Bool {
+        password.contains(where: \.isUppercase) && password.contains(where: \.isLowercase) && password.contains(where: \.isNumber)
+    }
+
     var validationMessage: String? {
         if !newPassword.isEmpty, newPassword.count < Self.minimumLength {
             return "新しいパスワードは\(Self.minimumLength)文字以上にしてください。"
+        }
+        if !newPassword.isEmpty, !Self.meetsCharacterRule(newPassword) {
+            return "英字の大文字・小文字と数字をそれぞれ含めてください。"
         }
         if !newPassword.isEmpty, newPassword == currentPassword {
             return "現在のパスワードと異なるものにしてください。"

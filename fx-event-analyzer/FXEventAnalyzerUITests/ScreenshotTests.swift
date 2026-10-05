@@ -153,7 +153,7 @@ final class ScreenshotTests: XCTestCase {
         // SCR-015's sub-screens, each reached afresh from Settings (row
         // centers from AccountView's V5 layout: group 1 top 120.7 with rows
         // 30.6/41.3/32.6, deletion card 342.9+33.9/2).
-        captureAccountSubScreen(y: 120.7 + 30.6 / 2, waitFor: "保存する", name: "15a-ProfileEdit")
+        captureAccountSubScreen(y: 120.7 + 30.6 / 2, waitFor: "生年月日を変更する場合", name: "15a-ProfileEdit")
         captureAccountSubScreen(y: 120.7 + 30.6 + 41.3 / 2, waitFor: "確認メールを送信", name: "15b-EmailChange")
         captureAccountSubScreen(y: 120.7 + 30.6 + 41.3 + 32.6 / 2, waitFor: "変更する", name: "15c-PasswordChange")
         captureAccountSubScreen(y: 342.9 + 33.9 / 2, waitFor: "アカウントを削除しますか", name: "24-AccountDeletion")

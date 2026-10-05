@@ -122,7 +122,7 @@ struct AccountView: View {
 
     private func profileCard(_ info: AccountInfo) -> some View {
         HStack(spacing: 10) {
-            avatar
+            AccountAvatar(diameter: 43)
             VStack(alignment: .leading, spacing: 5) {
                 V5JPFont.text(info.account.displayName ?? "未設定", size: 10).foregroundStyle(.white).lineLimit(1)
                 V5JPFont.text(info.email ?? "—", size: Self.subtitleSize, weight: .regular)
@@ -134,26 +134,6 @@ struct AccountView: View {
         .frame(width: Self.cardWidth, height: Self.profileHeight)
         .background(SettingsCardStyle.card(width: Self.cardWidth, height: Self.profileHeight))
         .position(x: 117, y: Self.profileTop + Self.profileHeight / 2)
-    }
-
-    /// 参考画像の、明るい青の縁で光る丸に、紺の人型が下へはみ出して切れる
-    /// アバター(直径42px→43)。
-    private var avatar: some View {
-        ZStack {
-            Circle().fill(LinearGradient(
-                colors: [Color(red: 92 / 255, green: 150 / 255, blue: 222 / 255), Color(red: 38 / 255, green: 92 / 255, blue: 168 / 255)],
-                startPoint: .top, endPoint: .bottom
-            ))
-            Image(systemName: "person.fill")
-                .resizable().scaledToFit()
-                .frame(width: 30, height: 30)
-                .foregroundStyle(Color(red: 14 / 255, green: 44 / 255, blue: 86 / 255))
-                .offset(y: 8)
-        }
-        .frame(width: 43, height: 43)
-        .clipShape(Circle())
-        .overlay(Circle().stroke(Color(red: 96 / 255, green: 168 / 255, blue: 245 / 255), lineWidth: 1.2))
-        .shadow(color: Color(red: 64 / 255, green: 150 / 255, blue: 245 / 255).opacity(0.7), radius: 3)
     }
 
     // MARK: - 行グループ
@@ -194,21 +174,22 @@ struct AccountView: View {
     }
 
     /// 参考画像どおり、赤いゴミ箱アイコンと赤い文字の「アカウント削除」。
+    /// 赤は`AccountPalette.destructive`(`V5P.red`だと文字がにじんで見えた)。
     private var deleteRow: some View {
         NavigationLink(value: AccountSubRoute.accountDeletion) {
             HStack(spacing: 0) {
                 Image(systemName: "trash")
                     .resizable().scaledToFit()
                     .fontWeight(.semibold)
-                    .frame(width: 10, height: 10)
-                    .frame(width: 11.6)
+                    .frame(width: 14, height: 14)
+                    .frame(width: 15)
                 V5JPFont.text("アカウント削除", size: Self.titleSize)
-                    .padding(.leading, 13.5)
+                    .padding(.leading, 11)
                 Spacer()
                 chevron
             }
-            .foregroundStyle(V5P.red)
-            .padding(.leading, 11.8)
+            .foregroundStyle(AccountPalette.destructive)
+            .padding(.leading, 10)
             .padding(.trailing, Self.chevronTrailing)
             .frame(width: Self.cardWidth, height: Self.deleteHeight)
             .contentShape(Rectangle())
