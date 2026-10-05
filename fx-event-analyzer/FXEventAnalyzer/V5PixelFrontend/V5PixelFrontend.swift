@@ -120,42 +120,47 @@ struct V5Viewport<Content: View>: View {
     /// (幅基準)でスケールすると、縦方向にキャンバスがscreen全体を埋め
     /// きれず、上下に隙間(実測約15.3pt=46px@3x)ができる。この隙間には
     /// この`ZStack`の外側にある`.background(backgroundPrimary)`の単色が
-    /// そのまま見えるため、通常(内側の`V5Background()`も同じ単色)は
-    /// 隙間と中身の境目が同色で見分けられず問題にならなかった。
+    /// そのまま見えるため、背景が単色のうちは隙間と中身の境目が同色で
+    /// 見分けられず問題にならなかった。
     ///
-    /// しかしHome画面だけは単色`V5Background()`の代わりに実画像
-    /// (`HomeHeaderGlow`、`HomeView.homeHeaderStreak`)を背景として使うように
-    /// なったため、画像の縁の色が単色の隙間と食い違い、画面最上部/最下部に
-    /// 「そこだけ色が変わる」くっきりした横線として見えてしまっていた
-    /// (実機キャプチャで両端とも実測、上端：y=45で(1,21,41)→y=46で
-    /// (1,32,63)に1px差で変化。下端も対称に同じ現象を確認)。
+    /// しかしHome画面だけ単色`V5Background`の代わりに実画像
+    /// (`V5GlowBackground`、当時は`HomeHeaderGlow`という名前でHome専用
+    /// だった)を背景として使うようにした際、画像の縁の色が単色の隙間と
+    /// 食い違い、画面最上部/最下部に「そこだけ色が変わる」くっきりした
+    /// 横線として見えてしまっていた(実機キャプチャで両端とも実測、上端：
+    /// y=45で(1,21,41)→y=46で(1,32,63)に1px差で変化。下端も対称に同じ
+    /// 現象を確認)。
     ///
-    /// 修正: 背景だけ`content()`とは別に`fullBleedBackground`として受け取り、
-    /// V5キャンバスのスケール・レターボックスを経由せず`geo.size`(実機の
-    /// 画面全体、隙間を含む)にそのまま合わせて敷く。`content()`(ヘッダー・
-    /// カード・タブバー等、V5絶対座標に依存する要素)は従来通りレターボックス
+    /// 対応: 背景を`content()`とは別の層にし、V5キャンバスのスケール・
+    /// レターボックスを経由せず`geo.size`(実機の画面全体、隙間を含む)に
+    /// そのまま合わせて敷くようにした。`content()`(ヘッダー・カード・
+    /// タブバー等、V5絶対座標に依存する要素)は従来通りレターボックス
     /// される側に残す — 背景画像だけが画面全体を継ぎ目なく覆うことで、
-    /// 隙間と中身が同じ1枚の画像になり境目が消える。`fullBleedBackground`を
-    /// 渡さない既存の全呼び出し元(Home以外の全画面)は`nil`がデフォルトのため
-    /// 従来通り単色`V5Background()`のまま、挙動は変化しない。
-    var fullBleedBackground: AnyView? = nil
+    /// 隙間と中身が同じ1枚の画像になり境目が消える。
+    ///
+    /// 12回目(2026-10-05、HQ「背景画像をHome以外の全画面にも広げて」):
+    /// それまでHomeだけ`fullBleedBackground`という呼び出し元指定の
+    /// オーバーライドで個別に渡していたが、Home以外の全画面(スプラッシュ・
+    /// ログインを除く — この2画面はそもそも`V5Viewport`を使わず別の
+    /// `brandBackgroundGradient`)にも同じ背景を広げる指示を受け、
+    /// オーバーライドの仕組みごと廃止して`V5GlowBackground`を
+    /// `V5Viewport`の唯一の背景として常時描画するよう変更した。これに伴い
+    /// 単色だけを描いていた`V5Background`構造体は全呼び出し元を失い削除、
+    /// アセット名も`HomeHeaderGlow`→`V5GlowBackground`へ改名して
+    /// Home専用ではないことを明示した(画像の中身・トリミングは変更なし
+    /// — Homeのヘッダー帯に合わせてトリミングした曲線のため、ヘッダー位置が
+    /// 異なる他画面では曲線の見え方が多少変わる可能性がある。CI実機
+    /// キャプチャで確認の上、見え方に問題があれば画面ごとに再調整する)。
     @ViewBuilder let content: () -> Content
     var body: some View {
         GeometryReader { geo in
             let scale = min(geo.size.width / V5P.W, geo.size.height / V5P.H)
             ZStack {
-                if let fullBleedBackground {
-                    fullBleedBackground
-                        .frame(width: geo.size.width, height: geo.size.height)
-                }
-                ZStack {
-                    if fullBleedBackground == nil {
-                        V5Background()
-                    }
-                    content()
-                }
-                .frame(width: V5P.W, height: V5P.H)
-                .scaleEffect(scale)
+                V5GlowBackground()
+                    .frame(width: geo.size.width, height: geo.size.height)
+                content()
+                    .frame(width: V5P.W, height: V5P.H)
+                    .scaleEffect(scale)
             }
             .frame(width: geo.size.width, height: geo.size.height)
         }
@@ -164,40 +169,50 @@ struct V5Viewport<Content: View>: View {
     }
 }
 
-struct V5Background: View {
-    /// HQ指示(2026-09-30): タブバーの新しい参考画像を確認した際、「背景は
-    /// ログイン画面やスプラッシュ画面と同じか、違うなら合わせてほしい」と
-    /// 指摘された。実際、SplashView/LoginViewは`DesignTokens.Colors.
-    /// brandBackgroundGradient`を使う一方、この`V5Background`(V5Viewportを
-    /// 使う全画面 — Home/指標一覧/分析/検索/設定/各詳細画面)は独自の
-    /// `V5P.bg0/bg1`3色グラデーションを使っており、実際に色味が異なって
-    /// いた(brandBackgroundGradient側がやや明るく青みが強い)。HQへの
-    /// 確認の結果「タブバーだけでなく全画面の背景を揃える」との回答だった
-    /// ため、この行を`brandBackgroundGradient`に差し替えて統一した。
-    ///
-    /// HQ指示(2026-09-30、追加): 画面全体を囲んでいた光る青い枠線
-    /// (`RoundedRectangle(cornerRadius: 12).stroke(...)`)について「いらない
-    /// から消して」との指摘。以前の指示(タブバー参考画像の件)もこの画面全体の
-    /// 枠線を指していたと判明したため、ここで完全に削除した。V5Viewportを
-    /// 使う全画面(Home/指標一覧/分析/検索/設定/各詳細画面)から一括で消える。
-    ///
-    /// HQ指示(2026-10-02)「中身を作成していく前に背景を変更する、今スプラッシュ
-    /// 画面に合わせているが、上部の暗い部分の単色に変えてほしい」: Splash/Login
-    /// はブランドの「見せ場」画面として`brandBackgroundGradient`のままだが、
-    /// それ以外のアプリ本体の画面(V5Viewportを使う全画面)はこのグラデーション
-    /// から切り離し、グラデーションの最も暗い色(`backgroundPrimary`、
-    /// グラデーションのy=0/0.97地点と同じ色)の単色塗りに変更した。同じ理由で、
-    /// この単色塗りを個別に複製していたHome/Indicators/EventDetail/
-    /// IndicatorDetail/MovementDetail/HistoricalComparison/
-    /// HistoricalEventDetail/Accountの各`loadingScaffold`も同様に差し替え済み
-    /// (読み込み中〜読み込み完了の切り替わりで背景が変わって見えないため)。
-    ///
-    /// HQ指示(2026-10-02、追加)「画面中央付近の淡い青の放射状グローをなくして」:
-    /// 単色化後も残っていた中央の`RadialGradient`装飾を削除し、完全な単色のみに
-    /// した。
+/// `V5Viewport`を使う全画面(スプラッシュ・ログインを除く)共通の背景。
+/// 斜めに流れる光の筋を含む実画像(`V5GlowBackground`アセット)を画面
+/// 全体にフルブリードで敷く。フルブリード化の経緯は`V5Viewport`冒頭の
+/// ドキュメントコメント参照。
+///
+/// 画像自体の加工経緯(元はHome画面専用`HomeHeaderGlow`として導入、
+/// 12回目の変更で全画面共通の`V5GlowBackground`へ改名・統合 — 画像の
+/// 中身・トリミング内容は変更していない):
+///
+/// 1. HQ「背景はこの画像にしてください」+実画像添付(2026-10-04、10回目):
+///    それまでSwiftUIの`Shape`+`LinearGradient`で曲線を手描きで近似して
+///    いたが、HQから曲線・背景込みの実画像(852×1846、実機と同じ実寸
+///    比率)が直接提供されたため、近似をやめてこの画像をそのまま採用した。
+/// 2. HQ「上の曲線の部分はタイトルにかかる部分は削除してください」
+///    (同日): 元画像の曲線は原寸y=0〜約210pxまで明るく伸びており、Home
+///    ヘッダーのタイトル行(V5座標で上端y≈22.1→原寸px換算で約80px)と
+///    重なる範囲に入り込んでいたため、y=60px(タイトル開始よりやや
+///    手前)からy=200pxにかけて、各行をその行自身の無地部分の背景色
+///    (x=30、曲線の軌跡から外れた位置)へ段階的にブレンドして消し、
+///    右上からの「差し込み」だけを残した(ハードエッジにならないよう
+///    滑らかにフェード)。
+/// 3. HQ「曲線はタイトルより下は削除して」(2026-10-04、11回目): 画像を
+///    Pythonで再実測したところ、2.のトリミングはy=60→200pxのフェード
+///    のみで、タイトル帯を抜けた直後のy≈200〜230px付近に、フェード対象
+///    から漏れていた「2本目の明るい筋」(実測maxブライトネス合計値279、
+///    RGB(1,87,191)程度)が残っていたと判明した。フェードの完全クリーン化
+///    開始を200→150pxへ前倒しし、完全クリーン化の終了も200→260pxへ延長
+///    して2本目の筋も確実に覆うようにした上で、元画像から作り直した
+///    (加工済みファイルに重ねて加工すると劣化するため)。
+///
+/// このトリミングはHomeヘッダーの位置を基準に調整したものなので、
+/// ヘッダー位置が異なる他画面(共通`V5Header`を使う画面など)では曲線の
+/// 見え方が多少変わる可能性がある — CI実機キャプチャで確認の上、問題が
+/// あれば画面ごとに再調整する。
+struct V5GlowBackground: View {
     var body: some View {
-        DesignTokens.Colors.backgroundPrimary
-            .frame(width: V5P.W, height: V5P.H)
+        GeometryReader { geo in
+            Image("V5GlowBackground")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: geo.size.width, height: geo.size.height)
+                .clipped()
+        }
+        .allowsHitTesting(false)
     }
 }
 

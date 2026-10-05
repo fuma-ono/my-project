@@ -278,62 +278,6 @@ struct HomeView: View {
         .position(x: V5P.W / 2, y: 34.9)
     }
 
-    /// 参考画像のヘッダー右上にある、斜めに流れる光の筋を含むHome画面全体の
-    /// 背景。
-    ///
-    /// 10回目の調整(2026-10-04、HQ「背景はこの画像にしてください」+実画像
-    /// 添付): 9回目まではSwiftUIの`Shape`+`LinearGradient`で曲線を手描きで
-    /// 近似していたが、HQから曲線・背景込みの実画像(852×1846、Home画面と
-    /// 同じ実寸比率)が直接提供されたため、近似をやめてこの画像をそのまま
-    /// `HomeHeaderGlow`アセットとして採用した。
-    ///
-    /// あわせてHQ指示「上の曲線の部分はタイトルにかかる部分は削除して
-    /// ください」に対応するため、画像自体をPythonで加工してから組み込んで
-    /// いる: 元画像の曲線は原寸y=0〜約210pxまで明るく伸びており、ヘッダーの
-    /// タイトル行(`homeHeader`のフレーム、V5座標で上端y≈22.1→原寸px換算
-    /// (×852/234)で約80px)と重なる範囲に入り込んでいた。y=60px(タイトル
-    /// 開始よりやや手前、自然な余白を残す)からy=200pxにかけて、各行を
-    /// その行自身の無地部分の背景色(x=30、曲線の軌跡から外れた位置)へ
-    /// 段階的にブレンドして消すことで、右上からの「差し込み」だけを残し
-    /// タイトル帯に曲線がかからないようにした(ハードエッジにならないよう
-    /// 滑らかにフェードさせている)。
-    ///
-    /// 11回目の調整(2026-10-04、HQ「ヘッダーの下に明らかに線が入ってて、
-    /// そこから色が変わっている」「ヘッダーとその下の境目がないように」
-    /// 「曲線はタイトルより下は削除して」):
-    ///
-    /// 1. 継ぎ目の修正: 当初はこの画像をV5キャンバス(234×491)サイズに収めて
-    ///    `loadedScreen`の最初の要素として`content()`側に置いていたが、
-    ///    これだと`V5Viewport`のレターボックス処理(縦横比の差で生じる上下の
-    ///    隙間)の影響を受け、画面最上部・最下部に単色背景との継ぎ目が1px差の
-    ///    くっきりした線として現れてしまっていた(詳細は
-    ///    `V5Viewport.fullBleedBackground`のコメント参照)。対応として、
-    ///    この画像を`V5Viewport(fullBleedBackground:)`経由で渡すように変更し、
-    ///    V5キャンバスのスケールを経由せず画面全体(`geo.size`)にそのまま
-    ///    敷くようにした。そのため自前の`GeometryReader`でサイズを取るだけの
-    ///    単純な構成に変更している(呼び出し側の`V5Viewport`が実際の
-    ///    フレームを渡してくる)。
-    ///
-    /// 2. 曲線の残存トレースの修正: 画像をPythonで再実測したところ、前回
-    ///    (10回目)のトリミングは原寸y=60→200pxにかけてのフェードのみで、
-    ///    タイトル帯を抜けた直後のy≈200〜230px付近に、フェード対象から
-    ///    漏れていた「2本目の明るい筋」(実測maxブライトネス合計値279、
-    ///    RGB(1,87,191)程度)が残っていたと判明した — これが「タイトルより
-    ///    下」に見えていた残存トレースの正体。フェードの完全クリーン化
-    ///    開始を200→150pxへ前倒しし、完全クリーン化の終了も200→260pxへ
-    ///    延長して2本目の筋も確実に覆うようにした上で、元画像から作り直した
-    ///    (前回の加工済みファイルに重ねて加工すると劣化するため)。
-    private var homeHeaderStreak: some View {
-        GeometryReader { geo in
-            Image("HomeHeaderGlow")
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: geo.size.width, height: geo.size.height)
-                .clipped()
-        }
-        .allowsHitTesting(false)
-    }
-
     private static let changeUpColor = Color(red: 214.0 / 255, green: 83.0 / 255, blue: 109.0 / 255)
     private static let changeDownColor = Color(red: 46.0 / 255, green: 170.0 / 255, blue: 120.0 / 255)
 
@@ -451,7 +395,7 @@ struct HomeView: View {
         let favorites = Array(viewModel.favoriteItems.prefix(3))
         let speeches = Array(viewModel.recentSpeeches.prefix(3))
 
-        return V5Viewport(fullBleedBackground: AnyView(homeHeaderStreak)) {
+        return V5Viewport {
             homeHeader
 
             ScrollView(.vertical, showsIndicators: false) {
