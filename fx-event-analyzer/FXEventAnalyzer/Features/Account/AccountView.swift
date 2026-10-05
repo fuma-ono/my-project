@@ -124,7 +124,7 @@ struct AccountView: View {
         HStack(spacing: 10) {
             AccountAvatar(diameter: 43)
             VStack(alignment: .leading, spacing: 5) {
-                V5JPFont.text(info.account.displayName ?? "未設定", size: 10).foregroundStyle(.white).lineLimit(1)
+                V5JPFont.text(info.account.displayName ?? "未設定", size: 12).foregroundStyle(.white).lineLimit(1)
                 V5JPFont.text(info.email ?? "—", size: Self.subtitleSize, weight: .regular)
                     .foregroundStyle(SettingsCardStyle.subtitleColor).lineLimit(1)
             }
@@ -174,13 +174,13 @@ struct AccountView: View {
     }
 
     /// 参考画像どおり、赤いゴミ箱アイコンと赤い文字の「アカウント削除」。
-    /// 赤は`AccountPalette.destructive`(`V5P.red`だと文字がにじんで見えた)。
+    /// 赤は`AccountPalette.destructive`。
     private var deleteRow: some View {
         NavigationLink(value: AccountSubRoute.accountDeletion) {
             HStack(spacing: 0) {
                 Image(systemName: "trash")
                     .resizable().scaledToFit()
-                    .fontWeight(.semibold)
+                    .fontWeight(.bold)
                     .frame(width: 14, height: 14)
                     .frame(width: 15)
                 V5JPFont.text("アカウント削除", size: Self.titleSize)

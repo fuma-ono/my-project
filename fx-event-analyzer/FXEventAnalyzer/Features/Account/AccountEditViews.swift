@@ -25,29 +25,31 @@ struct ProfileEditView: View {
         AccountFormScaffold(title: "プロフィール編集", tabSelection: $tabSelection) {
             // 参考画像のカメラバッジ付きアバター。写真のアップロードは未実装の
             // ため、バッジは飾りでタップしても何も起きない。
-            AccountAvatar(diameter: 50)
+            AccountAvatar(diameter: 52)
                 .overlay(alignment: .bottomTrailing) {
                     Image(systemName: "camera.fill")
-                        .font(.system(size: 6.5))
+                        .font(.system(size: 7))
                         .foregroundStyle(.white)
-                        .frame(width: 14, height: 14)
+                        .frame(width: 15, height: 15)
                         .background(Circle().fill(SettingsCardStyle.cardFill))
                         .overlay(Circle().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
                         .offset(x: 2, y: 1)
                 }
                 .position(x: 117, y: 88)
-            V5JPFont.text("プロフィール画像は後から変更できます。", size: 7, weight: .regular)
+            V5JPFont.text("プロフィール画像は後から変更できます。", size: AccountLayout.noteSize, weight: .regular)
                 .foregroundStyle(SettingsCardStyle.chevronColor)
-                .position(x: 117, y: 126)
+                .position(x: 117, y: 127)
 
-            fieldCard(title: "名前", showsChevron: false) {
+            // 名前は下段の入力欄を直接タップして編集する。分かるよう見出しの
+            // 右に鉛筆マークを出す(HQ指示 2026-10-05「名前はどこで編集するのか」)。
+            fieldCard(title: "名前", trailingIcon: "pencil") {
                 AccountTextField(label: "名前", placeholder: "名前を入力", text: $viewModel.displayName, framed: false)
             }
             .position(x: 117, y: Self.nameTop + Self.cardHeight / 2)
 
             Button { showDatePicker = true } label: {
-                fieldCard(title: "生年月日", showsChevron: true) {
-                    V5JPFont.text(birthDateText ?? "未設定", size: 8.5, weight: .regular)
+                fieldCard(title: "生年月日", trailingIcon: "chevron.right") {
+                    V5JPFont.text(birthDateText ?? "未設定", size: AccountLayout.titleSize, weight: .regular)
                         .foregroundStyle(birthDateText == nil ? V5P.muted : .white)
                         .padding(.horizontal, 10)
                         .frame(width: 214, height: 30, alignment: .leading)
@@ -58,7 +60,7 @@ struct ProfileEditView: View {
             .accessibilityLabel("生年月日")
             .position(x: 117, y: Self.birthTop + Self.cardHeight / 2)
 
-            AccountInfoCard(icon: "info.circle", text: "生年月日を変更する場合は、「生年月日」の項目をタップしてください。")
+            AccountInfoCard(icon: "info.circle", text: "名前は入力欄をタップして変更できます。生年月日を変更する場合は、「生年月日」の項目をタップしてください。")
                 .accountPinned(top: Self.birthTop + Self.cardHeight + 10)
 
             AccountStatusText(state: viewModel.state).accountPinned(top: 392, height: 20)
@@ -78,29 +80,27 @@ struct ProfileEditView: View {
     }
 
     private static let nameTop: CGFloat = 142
-    private static let birthTop: CGFloat = 200
-    /// 見出し行22 + 値の行30。
-    private static let cardHeight: CGFloat = 52
+    private static let birthTop: CGFloat = 206
+    /// 見出し行25 + 値の行30。
+    private static let cardHeight: CGFloat = 55
 
     /// 参考画像の「1990/01/01」表記。
     private var birthDateText: String? {
         viewModel.birthDate.map { BirthDate.string(from: $0).replacingOccurrences(of: "-", with: "/") }
     }
 
-    /// 見出し行(+シェブロン)と区切り線の下に値の行を持つカード。
-    private func fieldCard(title: String, showsChevron: Bool, @ViewBuilder value: () -> some View) -> some View {
+    /// 見出し行(+右端のアイコン)と区切り線の下に値の行を持つカード。
+    private func fieldCard(title: String, trailingIcon: String, @ViewBuilder value: () -> some View) -> some View {
         VStack(spacing: 0) {
             HStack {
-                V5JPFont.text(title, size: 8, weight: .bold).foregroundStyle(.white)
+                V5JPFont.text(title, size: AccountLayout.titleSize, weight: .bold).foregroundStyle(.white)
                 Spacer()
-                if showsChevron {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 7.5, weight: .semibold))
-                        .foregroundStyle(SettingsCardStyle.chevronColor)
-                }
+                Image(systemName: trailingIcon)
+                    .font(.system(size: 8.5, weight: .semibold))
+                    .foregroundStyle(SettingsCardStyle.chevronColor)
             }
             .padding(.horizontal, 10)
-            .frame(width: 214, height: 22)
+            .frame(width: 214, height: 25)
             Rectangle().fill(SettingsCardStyle.separator).frame(width: 214, height: 0.6)
             value()
         }
@@ -161,7 +161,7 @@ private struct BirthDatePickerSheet: View {
 private struct AccountLead: View {
     let text: String
     var body: some View {
-        V5JPFont.text(text, size: 7.5, weight: .regular)
+        V5JPFont.text(text, size: AccountLayout.leadSize, weight: .regular)
             .foregroundStyle(.white.opacity(0.9))
             .multilineTextAlignment(.center)
             .lineSpacing(3)
@@ -183,20 +183,20 @@ struct EmailChangeView: View {
 
     var body: some View {
         AccountFormScaffold(title: "メールアドレス変更", tabSelection: $tabSelection) {
-            AccountHeroIcon(systemName: "envelope").position(x: 117, y: 82)
+            AccountHeroIcon(systemName: "envelope").position(x: 117, y: AccountLayout.heroY)
             AccountLead(text: "新しいメールアドレスを入力してください。\n確認メールを送信します。")
-                .accountPinned(top: 108, height: 30)
+                .accountPinned(top: Self.leadTop, height: 32)
 
-            AccountFieldCaption(text: "新しいメールアドレス").position(x: 117, y: 150)
+            AccountFieldCaption(text: "新しいメールアドレス").position(x: 117, y: 162)
             AccountTextField(label: "新しいメールアドレス", placeholder: "例）example@domain.com", text: $viewModel.email, keyboard: .emailAddress)
-                .position(x: 117, y: 171)
+                .position(x: 117, y: 186)
 
             AccountPrimaryButton(title: "確認メールを送信", isLoading: viewModel.state == .submitting, isEnabled: viewModel.canSubmit) {
                 Task { await viewModel.submit() }
             }
-            .position(x: 117, y: 210)
+            .position(x: 117, y: 224)
             AccountStatusText(state: viewModel.state, validation: viewModel.validationMessage)
-                .accountPinned(top: 229, height: 20)
+                .accountPinned(top: 243, height: 22)
 
             AccountInfoCard(
                 icon: "envelope.circle.fill",
@@ -207,9 +207,12 @@ struct EmailChangeView: View {
                     "メールが届かない場合は、迷惑メールフォルダもご確認ください。",
                 ]
             )
-            .accountPinned(top: 252)
+            .accountPinned(top: 268)
         }
     }
+
+    /// 上部アイコンの下端から少し空けた案内文の上端(3画面共通)。
+    static let leadTop = AccountLayout.heroY + AccountLayout.heroSize / 2 + 9
 }
 
 // MARK: - パスワード変更
@@ -223,37 +226,44 @@ struct PasswordChangeView: View {
         _tabSelection = tabSelection
     }
 
+    private static let firstFieldY: CGFloat = 186
+    /// 入力欄どうしの間隔(HQ指示 2026-10-05「詰まり過ぎている」で広げた)。
+    private static let fieldPitch: CGFloat = 52
+
+    private var fields: [(caption: String, placeholder: String, text: Binding<String>)] {
+        [
+            ("現在のパスワード", "現在のパスワードを入力", $viewModel.currentPassword),
+            ("新しいパスワード", "\(PasswordChangeViewModel.minimumLength)文字以上のパスワードを入力", $viewModel.newPassword),
+            ("新しいパスワード（再入力）", "新しいパスワードを再入力", $viewModel.confirmation),
+        ]
+    }
+
     var body: some View {
         AccountFormScaffold(title: "パスワード変更", tabSelection: $tabSelection) {
-            AccountHeroIcon(systemName: "lock.fill").position(x: 117, y: 80)
+            AccountHeroIcon(systemName: "lock.fill").position(x: 117, y: AccountLayout.heroY)
             AccountLead(text: "現在のパスワードを入力してから、\n新しいパスワードを設定してください。")
-                .accountPinned(top: 106, height: 30)
+                .accountPinned(top: EmailChangeView.leadTop, height: 32)
 
-            AccountFieldCaption(text: "現在のパスワード").position(x: 117, y: 146)
-            AccountTextField(label: "現在のパスワード", placeholder: "現在のパスワードを入力", text: $viewModel.currentPassword, isSecure: true)
-                .position(x: 117, y: 167)
-
-            AccountFieldCaption(text: "新しいパスワード").position(x: 117, y: 192)
-            AccountTextField(label: "新しいパスワード", placeholder: "\(PasswordChangeViewModel.minimumLength)文字以上のパスワードを入力", text: $viewModel.newPassword, isSecure: true)
-                .position(x: 117, y: 213)
-
-            AccountFieldCaption(text: "新しいパスワード（再入力）").position(x: 117, y: 238)
-            AccountTextField(label: "新しいパスワード（再入力）", placeholder: "新しいパスワードを再入力", text: $viewModel.confirmation, isSecure: true)
-                .position(x: 117, y: 259)
+            ForEach(Array(fields.enumerated()), id: \.offset) { index, field in
+                let center = Self.firstFieldY + CGFloat(index) * Self.fieldPitch
+                AccountFieldCaption(text: field.caption).position(x: 117, y: center - 24)
+                AccountTextField(label: field.caption, placeholder: field.placeholder, text: field.text, isSecure: true)
+                    .position(x: 117, y: center)
+            }
 
             AccountInfoCard(
                 icon: "info.circle.fill",
                 title: "パスワードの条件",
                 bullets: ["\(PasswordChangeViewModel.minimumLength)文字以上", "英字（大文字・小文字）", "数字を含む"]
             )
-            .accountPinned(top: 284)
+            .accountPinned(top: Self.firstFieldY + 2 * Self.fieldPitch + 26)
 
+            AccountStatusText(state: viewModel.state, validation: viewModel.validationMessage)
+                .accountPinned(top: 394, height: 18)
             AccountPrimaryButton(title: "変更する", isLoading: viewModel.state == .submitting, isEnabled: viewModel.canSubmit) {
                 Task { await viewModel.submit() }
             }
-            .position(x: 117, y: 384)
-            AccountStatusText(state: viewModel.state, validation: viewModel.validationMessage)
-                .accountPinned(top: 404, height: 30)
+            .position(x: 117, y: 428)
         }
     }
 }
@@ -295,32 +305,33 @@ struct AccountDeletionView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .symbolRenderingMode(.palette)
                 .foregroundStyle(Color.white, AccountPalette.destructiveFill)
-                .font(.system(size: 28))
-                .position(x: 117, y: 78)
-            V5JPFont.text("アカウントを削除しますか？", size: 11, weight: .bold)
+                .font(.system(size: 36))
+                .frame(width: AccountLayout.heroSize, height: AccountLayout.heroSize)
+                .position(x: 117, y: AccountLayout.heroY)
+            V5JPFont.text("アカウントを削除しますか？", size: 12, weight: .bold)
                 .foregroundStyle(AccountPalette.destructive)
-                .position(x: 117, y: 108)
+                .position(x: 117, y: EmailChangeView.leadTop + 7)
             AccountLead(text: "アカウントを削除すると、以下のデータがすべて\n削除され、復元することはできません。")
-                .accountPinned(top: 120, height: 30)
+                .accountPinned(top: EmailChangeView.leadTop + 20, height: 32)
 
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Self.deletedData, id: \.label) { item in
                     HStack(spacing: 8) {
                         Image(systemName: item.icon)
-                            .font(.system(size: 9))
+                            .font(.system(size: 11))
                             .foregroundStyle(SettingsCardStyle.chevronColor)
-                            .frame(width: 13)
-                        V5JPFont.text(item.label, size: 8, weight: .regular).foregroundStyle(.white)
+                            .frame(width: 16)
+                        V5JPFont.text(item.label, size: AccountLayout.titleSize, weight: .regular).foregroundStyle(.white)
                         Spacer(minLength: 0)
                     }
-                    .frame(height: 20)
+                    .frame(height: 22)
                 }
             }
             .padding(.horizontal, 11)
             .padding(.vertical, 6)
             .frame(width: 214)
             .background(AccountCardBackground())
-            .accountPinned(top: 156)
+            .accountPinned(top: 176)
 
             AccountInfoCard(
                 icon: "exclamationmark.circle.fill",
@@ -330,15 +341,15 @@ struct AccountDeletionView: View {
                 fill: AccountPalette.warningFill,
                 border: AccountPalette.warningBorder
             )
-            .accountPinned(top: 260)
+            .accountPinned(top: 284)
 
-            AccountStatusText(state: viewModel.state).accountPinned(top: 326, height: 30)
+            AccountStatusText(state: viewModel.state).accountPinned(top: 352, height: 20)
             AccountPrimaryButton(title: "アカウントを削除する", isLoading: viewModel.state == .submitting, destructive: true) {
                 showConfirmation = true
             }
-            .position(x: 117, y: 384)
+            .position(x: 117, y: 388)
             AccountSecondaryButton(title: "キャンセル") { dismiss() }
-                .position(x: 117, y: 420)
+                .position(x: 117, y: 422)
         }
         .confirmationDialog("本当にアカウントを削除しますか？", isPresented: $showConfirmation, titleVisibility: .visible) {
             Button("削除する", role: .destructive) { Task { await viewModel.delete() } }

@@ -6,9 +6,9 @@ import SwiftUI
 /// (`V5JPFont`)で描く。行は呼び出し側で`.position`する。
 
 enum AccountPalette {
-    /// 削除系の赤。`V5P.red`は紺のカードの上だと明るさの差が小さく、文字の
-    /// 輪郭がにじんで見えるため、明度を上げた赤を使う。
-    static let destructive = Color(red: 1.0, green: 0.37, blue: 0.47)
+    /// 削除系の文字・アイコンの赤。HQ指示(2026-10-05)で「ぼやける」→明度を
+    /// 上げた赤にしたところ「薄い」となったため、彩度の高い濃い赤にした。
+    static let destructive = Color(red: 1.0, green: 0.17, blue: 0.33)
     /// 削除ボタンの塗り。
     static let destructiveFill = Color(red: 232 / 255, green: 28 / 255, blue: 84 / 255)
     /// SCR-024の注意カード(赤みのある背景と縁)。
@@ -16,15 +16,30 @@ enum AccountPalette {
     static let warningBorder = Color(red: 140 / 255, green: 32 / 255, blue: 64 / 255)
 }
 
+/// サブ画面共通の寸法。文字の大きさはSCR-015 アカウント情報に揃える
+/// (HQ指示 2026-10-05「サブ画面の文字をアカウント情報画面と同じ大きさに」)。
+enum AccountLayout {
+    /// 見出し・入力・ボタン・リスト項目(SCR-015の行タイトルと同じ)。
+    static let titleSize: CGFloat = 9.5
+    /// 補足・箇条書き・結果メッセージ(SCR-015の行の値と同じ)。
+    static let noteSize: CGFloat = 7.5
+    /// アイコン下の案内文。
+    static let leadSize: CGFloat = 8.5
+    /// メール・パスワード変更・アカウント削除の上部アイコンの中心と大きさ。
+    /// 3画面で同じ位置に揃える。
+    static let heroY: CGFloat = 86
+    static let heroSize: CGFloat = 46
+}
+
 /// 画面上部の、角丸の四角に入ったアイコン(メール・鍵)。
 struct AccountHeroIcon: View {
     let systemName: String
     var body: some View {
         Image(systemName: systemName)
-            .font(.system(size: 17, weight: .semibold))
+            .font(.system(size: 22, weight: .semibold))
             .foregroundStyle(V5P.cyan)
-            .frame(width: 40, height: 40)
-            .background(SettingsCardStyle.card(width: 40, height: 40))
+            .frame(width: AccountLayout.heroSize, height: AccountLayout.heroSize)
+            .background(SettingsCardStyle.card(width: AccountLayout.heroSize, height: AccountLayout.heroSize))
     }
 }
 
@@ -42,21 +57,23 @@ struct AccountInfoCard: View {
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
             Image(systemName: icon)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(tint)
-                .frame(width: 12, height: 12)
+                .frame(width: 16, height: 16)
             VStack(alignment: .leading, spacing: 4) {
                 if let title {
-                    V5JPFont.text(title, size: 8, weight: .bold).foregroundStyle(.white)
+                    V5JPFont.text(title, size: AccountLayout.titleSize, weight: .bold).foregroundStyle(.white)
+                        .frame(height: 16)
                 }
                 if let text {
-                    AccountNote(text: text, color: textColor, width: 176)
+                    AccountNote(text: text, color: textColor, width: 168)
+                        .padding(.top, title == nil ? 2 : 0)
                 }
                 ForEach(bullets, id: \.self) { bullet in
                     HStack(alignment: .top, spacing: 1) {
-                        V5JPFont.text("・", size: 6.5, weight: .regular).foregroundStyle(textColor)
+                        V5JPFont.text("・", size: AccountLayout.noteSize, weight: .regular).foregroundStyle(textColor)
                             .fixedSize()
-                        AccountNote(text: bullet, color: textColor, width: 160)
+                        AccountNote(text: bullet, color: textColor, width: 158)
                     }
                 }
             }
@@ -141,8 +158,8 @@ struct AccountFormScaffold<Content: View>: View {
 struct AccountFieldCaption: View {
     let text: String
     var body: some View {
-        V5JPFont.text(text, size: 7.5)
-            .foregroundStyle(SettingsCardStyle.subtitleColor)
+        V5JPFont.text(text, size: AccountLayout.titleSize)
+            .foregroundStyle(.white)
             .frame(width: 210, alignment: .leading)
     }
 }
@@ -153,9 +170,9 @@ struct AccountNote: View {
     var color: Color = V5P.muted
     var width: CGFloat = 206
     var body: some View {
-        V5JPFont.text(text, size: 6.5, weight: .regular)
+        V5JPFont.text(text, size: AccountLayout.noteSize, weight: .regular)
             .foregroundStyle(color)
-            .lineSpacing(1.5)
+            .lineSpacing(2)
             .frame(width: width, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -195,9 +212,9 @@ struct AccountTextField: View {
             if isSecure {
                 Button { revealed.toggle() } label: {
                     Image(systemName: revealed ? "eye" : "eye.slash")
-                        .font(.system(size: 8.5))
+                        .font(.system(size: 10))
                         .foregroundStyle(SettingsCardStyle.chevronColor)
-                        .frame(width: 16, height: 24)
+                        .frame(width: 18, height: 24)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -218,7 +235,7 @@ struct AccountTextField: View {
     private var field: some View {
         ZStack(alignment: .leading) {
             if text.isEmpty {
-                V5JPFont.text(placeholder, size: 8.5, weight: .regular)
+                V5JPFont.text(placeholder, size: AccountLayout.titleSize, weight: .regular)
                     .foregroundStyle(V5P.muted.opacity(0.75))
                     .allowsHitTesting(false)
             }
@@ -238,7 +255,7 @@ struct AccountTextField: View {
                         .autocorrectionDisabled(keyboard == .emailAddress)
                 }
             }
-            .font(.system(size: 8.5))
+            .font(.system(size: AccountLayout.titleSize))
             .foregroundStyle(.white)
             .tint(V5P.cyan)
             .accessibilityLabel(label)
@@ -263,7 +280,7 @@ struct AccountPrimaryButton: View {
                 if isLoading {
                     ProgressView().tint(.white).scaleEffect(0.6)
                 } else {
-                    V5JPFont.text(title, size: 9, weight: .bold).foregroundStyle(.white)
+                    V5JPFont.text(title, size: AccountLayout.titleSize, weight: .bold).foregroundStyle(.white)
                 }
             }
             .frame(width: 214, height: 29)
@@ -285,7 +302,7 @@ struct AccountSecondaryButton: View {
 
     var body: some View {
         Button(action: action) {
-            V5JPFont.text(title, size: 9, weight: .bold)
+            V5JPFont.text(title, size: AccountLayout.titleSize, weight: .bold)
                 .foregroundStyle(.white)
                 .frame(width: 214, height: 29)
                 .background(SettingsCardStyle.card(width: 214, height: 29))
