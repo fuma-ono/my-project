@@ -208,15 +208,16 @@ struct SettingsView: View {
     private static let badgeSize: CGFloat = 22
     private static let badgeFill = Color(red: 22 / 255, green: 81 / 255, blue: 129 / 255) // #165181
     private static let badgeBorder = Color(red: 44 / 255, green: 108 / 255, blue: 168 / 255)
-    private static let iconSize: CGFloat = 11
+    /// アイコンを収める正方形の一辺。SF Symbolsは字形ごとに縦横の大きさが
+    /// 違う(同じフォントサイズでも王冠・棒グラフは人型より約1.5倍横に広い)
+    /// ため、HQ指示(2026-10-05)「各アイコンのサイズが異なっている」により、
+    /// フォントサイズではなくこの枠に収まる大きさへ揃えている。
+    private static let iconBox: CGFloat = 11
     private static let iconColor = Color(red: 233 / 255, green: 240 / 255, blue: 255 / 255) // #E9F0FF
     /// カード左端→丸の左端(参考画像26px)、丸の右端→文字(参考画像19px)。
     private static let badgeLeading: CGFloat = 8.6
     private static let badgeTitleGap: CGFloat = 10.7
     private static let chevronColor = Color(red: 170 / 255, green: 198 / 255, blue: 245 / 255) // #AAC6F5
-    /// ログアウトの文字・アイコンの赤。`V5P.red`(#FF3861)は紺のカードとの
-    /// 明るさの差が小さく輪郭がにじんで見えたため、明度を上げた赤にしている。
-    private static let logoutRed = Color(red: 255 / 255, green: 110 / 255, blue: 128 / 255) // #FF6E80
 
     /// 行グループ・ログアウトで共通のカード(塗り＋縁取り)。
     private func card(height: CGFloat) -> some View {
@@ -258,15 +259,18 @@ struct SettingsView: View {
     ///
     /// 同日「ログアウトのアイコンがぼやけている」(2回): 赤みを帯びた半透明の
     /// 塗り・赤い輪の上に赤い線を描いていたため輪郭のコントラストが低かった。
-    /// 塗りをカードと同じ紺、輪を他の行と同じ青にし、線は明るい赤
-    /// (`logoutRed`)の太字にしている。
+    /// 塗りをカードと同じ紺、輪を他の行と同じ青にし、線を太字にしている
+    /// (赤は一度明るくしたが、HQ指示で元の`V5P.red`に戻した)。
     private func rowBadge(_ icon: String, tint: Color? = nil, nudge: CGSize = .zero) -> some View {
         ZStack {
             Circle()
                 .fill(tint == nil ? Self.badgeFill : Self.cardFill)
                 .overlay(Circle().stroke(Self.badgeBorder, lineWidth: 0.5))
             Image(systemName: icon)
-                .font(.system(size: tint == nil ? Self.iconSize : 10, weight: tint == nil ? .semibold : .bold))
+                .resizable()
+                .scaledToFit()
+                .fontWeight(tint == nil ? .semibold : .bold)
+                .frame(width: Self.iconBox, height: Self.iconBox)
                 .foregroundStyle(tint ?? Self.iconColor)
                 .offset(nudge)
         }
@@ -301,15 +305,16 @@ struct SettingsView: View {
             showLogoutConfirmation = true
         } label: {
             HStack(spacing: Self.badgeTitleGap) {
-                rowBadge("rectangle.portrait.and.arrow.right", tint: Self.logoutRed)
+                // 扉(左)側に字形の重さが寄って左にずれて見えるため、右へ寄せる。
+                rowBadge("rectangle.portrait.and.arrow.right", tint: V5P.red, nudge: CGSize(width: 0.7, height: 0))
                 if viewModel.state == .signingOut {
-                    ProgressView().tint(Self.logoutRed)
+                    ProgressView().tint(V5P.red)
                 } else {
                     V5JPFont.text("ログアウト", size: Self.titleSize)
                 }
                 Spacer()
             }
-            .foregroundStyle(Self.logoutRed)
+            .foregroundStyle(V5P.red)
             .padding(.leading, Self.badgeLeading)
             .frame(width: Self.cardWidth, height: Self.rowHeight)
             .contentShape(Rectangle())
