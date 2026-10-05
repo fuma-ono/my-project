@@ -301,13 +301,15 @@ struct HomeView: View {
     }
 
     /// HQ指示(2026-10-05、23回目)「赤文字と緑文字が薄いので参考画像にして」
-    /// で一旦`V5P.red`/`V5P.green`(アプリ共通トークン)に統一したが、HQ
-    /// 再指摘(2026-10-05)「+0.25%の赤文字と緑文字を濃くして」を受け、この
-    /// 2色よりさらに濃い(暗い)専用色に変更。`V5P.red`/`V5P.green`は他画面
-    /// (バッジ等)でも使う共通トークンのため、ここだけ濃くする目的で
-    /// Home専用の値に戻した(他画面への影響を避けるため)。
-    private static let changeUpColor = Color(red: 210.0 / 255, green: 18.0 / 255, blue: 55.0 / 255)
-    private static let changeDownColor = Color(red: 0.0 / 255, green: 160.0 / 255, blue: 125.0 / 255)
+    /// で一旦`V5P.red`/`V5P.green`(アプリ共通トークン)に統一し、続くHQ
+    /// 再指摘(2026-10-05)「+0.25%の赤文字と緑文字を濃くして」でさらに濃い
+    /// (暗い)専用色(210,18,55)/(0,160,125)に変更していたが、HQ再指摘
+    /// (2026-10-05、4回目)「もう少し発行(発光)色みたいに明るくさせて、
+    /// 薄くさせるのではない」で方向転換: 「濃い=暗い」ではなく「明るい・
+    /// 鮮やか」を求めていたと判明したため、ネオンのような高輝度の色に
+    /// 変更し(`pairRow`側で同色のグローシャドウも追加)。
+    private static let changeUpColor = Color(red: 255.0 / 255, green: 45.0 / 255, blue: 95.0 / 255)
+    private static let changeDownColor = Color(red: 20.0 / 255, green: 235.0 / 255, blue: 165.0 / 255)
 
     private static func importanceBadgeColors(_ importance: Importance) -> (fill: Color, border: Color) {
         switch importance {
@@ -388,7 +390,12 @@ struct HomeView: View {
 
     private static let favoritesCardHeight: CGFloat = 103
     /// ヘッダー約114px→31.3≒31。
-    private static let favoritesHeaderHeight: CGFloat = 31
+    /// HQ再指摘(2026-10-05、4回目)「お気に入りタイトルの下に空白があるから
+    /// 下の米国CPIの枠を上にあげて」: ヘッダー下の`Divider()`を非表示にした
+    /// (`showDivider: false`)際、区切り線の分だけ空いていた余白をこの
+    /// ヘッダー高さ自体はそのままにしていたため、タイトルとミニカードの間に
+    /// 不要な空白が残っていた。31→27に縮小して詰めた。
+    private static let favoritesHeaderHeight: CGFloat = 27
     /// カード間約16px→4.4。
     private static let favoriteCardGap: CGFloat = 4.4
     /// 各カードwidth≈247px→67.8≒68、height≈242px→66.5≒66、
@@ -556,11 +563,12 @@ struct HomeView: View {
     }
 
     /// HQ再指摘(2026-10-05)「すべて見るの文字サイズを10/5(月)と同じサイズに
-    /// して」: `todayEventsDateFormatter`側のテキストサイズ(9.5、同じく
-    /// この回に10→9.5へ調整)に合わせ、7→9.5に拡大した。
+    /// して」でいったん7→9.5に拡大したが、再指摘(2026-10-05、4回目)
+    /// 「すべて見るのサイズを8にして」で8へ調整(「10/5(月)」も同回に
+    /// 9.5→9へ調整、`todayEventsDateFormatter`呼び出し側参照)。
     @ViewBuilder private func headerLink(_ text: String) -> some View {
         HStack(spacing: 2) {
-            V5JPFont.text(text, size: 9.5).foregroundStyle(Self.linkBlue)
+            V5JPFont.text(text, size: 8).foregroundStyle(Self.linkBlue)
             Image(systemName: "chevron.right").font(.system(size: 8, weight: .semibold)).foregroundStyle(Self.linkBlue)
         }
     }
@@ -612,7 +620,7 @@ struct HomeView: View {
                 NavigationLink(value: AppRoute.calendar) {
                     HStack(spacing: 2) {
                         Text(Self.todayEventsDateFormatter.string(from: Date()))
-                            .font(.system(size: 9.5, weight: .semibold))
+                            .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(Self.linkBlue)
                         Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
                     }
@@ -720,7 +728,7 @@ struct HomeView: View {
     @ViewBuilder private func pairsCard(_ pairs: [FXPairUI]) -> some View {
         cardShell(height: Self.pairsCardHeight) {
             cardHeaderRow(title: "通貨ペア", height: Self.pairsHeaderHeight) {
-                HomeChartIcon().foregroundStyle(V5P.cyan).frame(width: 15, height: 14).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
+                HomeChartIcon().foregroundStyle(V5P.cyan).frame(width: 13, height: 12).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
             } trailing: {
                 headerLink("すべて見る")
             }
@@ -767,14 +775,26 @@ struct HomeView: View {
                 CountryFlagView(currencyCode: pair.baseCurrency, diameter: Self.flagDiameter)
                 CountryFlagView(currencyCode: pair.quoteCurrency, diameter: Self.flagDiameter)
             }
-            Text(pair.displaySymbol).font(.system(size: 9.5, weight: .semibold)).frame(width: 46, alignment: .leading)
-            Text(pair.price).font(.system(size: 9.5, weight: .semibold)).monospacedDigit().frame(width: 40, alignment: .center)
+            // HQ再指摘(2026-10-05、4回目)「USD/JPYの文字の幅、155.42の文字の
+            // 幅、+0.25%の文字の幅いずれも狭めて」: HIGH/MEDIUMバッジの時と
+            // 同じく、文字サイズ(9.5)はそのままに`.tracking(-0.4)`で字間を
+            // 詰めて幅だけ狭くした。それに合わせて各列の固定幅(frame)も
+            // 46/40/44→42/36/40に縮小。
+            Text(pair.displaySymbol).font(.system(size: 9.5, weight: .semibold)).tracking(-0.4).frame(width: 42, alignment: .leading)
+            Text(pair.price).font(.system(size: 9.5, weight: .semibold)).tracking(-0.4).monospacedDigit().frame(width: 36, alignment: .center)
             HStack(spacing: 1) {
-                Text(pair.change).font(.system(size: 9.5, weight: .semibold)).monospacedDigit()
+                Text(pair.change).font(.system(size: 9.5, weight: .semibold)).tracking(-0.4).monospacedDigit()
                 Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 9.5))
             }
             .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
-            .frame(width: 44, alignment: .trailing)
+            // HQ再指摘(2026-10-05、4回目)「+0.25%の赤文字と緑文字をもう少し
+            // 発行(発光)色みたいに明るくさせて、薄くさせるのではない」:
+            // 前回濃くした専用色(210,18,55)/(0,160,125)がむしろ暗く見えた
+            // ため、より明るく鮮やかな色に変更し、ネオンのような発光感を
+            // 出すため同色のシャドウ(グロー)も追加した(他画面のアイコンで
+            // 使っている`iconGlowShadow`と同じ手法)。
+            .shadow(color: (pair.isUp ? Self.changeUpColor : Self.changeDownColor).opacity(0.7), radius: 2)
+            .frame(width: 40, alignment: .trailing)
             Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
         }
         .foregroundStyle(.white)
@@ -786,7 +806,7 @@ struct HomeView: View {
     @ViewBuilder private func favoritesCard(_ favorites: [HomeFavoriteItem]) -> some View {
         cardShell(height: Self.favoritesCardHeight) {
             cardHeaderRow(title: "お気に入り", height: Self.favoritesHeaderHeight, showDivider: false) {
-                Image(systemName: "star.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
+                Image(systemName: "star.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
             } trailing: {
                 NavigationLink(value: AppRoute.favoritesList) {
                     headerLink("すべて見る")
@@ -797,7 +817,6 @@ struct HomeView: View {
                     favoriteGridCard(item)
                 }
             }
-            .padding(.top, 3)
         }
     }
 
@@ -882,7 +901,7 @@ struct HomeView: View {
     @ViewBuilder private func speechesCard(_ speeches: [HomeSpeechSummary]) -> some View {
         cardShell(height: Self.speechesCardHeight) {
             cardHeaderRow(title: "直近の要人発言", height: Self.speechesHeaderHeight) {
-                Image(systemName: "quote.bubble.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
+                Image(systemName: "quote.bubble.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
             } trailing: {
                 NavigationLink(value: AppRoute.speechList) {
                     headerLink("すべて見る")
