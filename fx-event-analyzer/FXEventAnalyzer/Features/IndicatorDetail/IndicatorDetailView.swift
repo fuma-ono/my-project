@@ -161,12 +161,16 @@ struct IndicatorDetailView: View {
         }
     }
 
+    /// HQ指示(2026-10-05、22回目)「背景画像とヘッダーとタブを全画面に反映して」:
+    /// 読み込み中・エラー・未設定状態が単色背景のみで`V5Viewport`(背景画像)・
+    /// ヘッダー・タブバーを経由していなかったため、`.loaded`状態と同じ外枠に揃えた。
     @ViewBuilder private func loadingScaffold(@ViewBuilder content: () -> some View) -> some View {
-        ZStack {
-            // HQ指示(2026-10-02): 中身の背景をSplash/Loginのグラデーションから切り離し、
-            // 単色(backgroundPrimary)に変更(詳細はV5Backgroundのドキュメントコメント参照)。
-            DesignTokens.Colors.backgroundPrimary.ignoresSafeArea()
+        V5Viewport {
+            V5Header(title: "指標詳細", back: true, onBack: { dismiss() })
             content()
+                .frame(width: V5P.W, height: V5P.H - 92, alignment: .center)
+                .padding(.top, 53)
+            V5BottomBar(selected: $tabSelection)
         }
     }
 

@@ -86,12 +86,21 @@ struct HomeView: View {
         }
     }
 
+    /// HQ指示(2026-10-05、22回目)「背景画像とヘッダーとタブを全画面に反映して」:
+    /// 読み込み中・エラー・未設定状態は単色(`backgroundPrimary`)のみで
+    /// `V5Viewport`(背景画像)・ヘッダー・タブバーを経由しておらず、`.loaded`
+    /// 状態とは見た目が分断されていた(12回目の全画面背景展開がこの分岐には
+    /// 反映されていなかった)。`homeHeader`はロード済みデータに依存しないため
+    /// そのまま使い回し、`V5Viewport`/`V5BottomBar`で`loadedScreen`と同じ外枠に
+    /// 揃えた。
     @ViewBuilder private func loadingScaffold(@ViewBuilder content: () -> some View) -> some View {
-        ZStack {
-            // HQ指示(2026-10-02): 中身の背景をSplash/Loginのグラデーションから切り離し、
-            // 単色(backgroundPrimary)に変更(詳細はV5Backgroundのドキュメントコメント参照)。
-            DesignTokens.Colors.backgroundPrimary.ignoresSafeArea()
+        V5Viewport {
+            homeHeader
             content()
+                .frame(width: V5P.W, height: Self.contentAreaHeight, alignment: .center)
+                .padding(.top, 53)
+                .frame(width: V5P.W, height: V5P.H, alignment: .top)
+            V5BottomBar(selected: $tabSelection)
         }
     }
 
