@@ -143,10 +143,14 @@ final class ScreenshotTests: XCTestCase {
         captureSettingsSubScreen(row: "通知設定", rowIndex: 1, waitFor: "重要指標の発表前通知", name: "16-NotificationSettings")
         captureSettingsSubScreen(row: "表示・地域設定", rowIndex: 3, waitFor: "タイムゾーン", name: "18-DisplaySettings")
         captureSettingsSubScreen(row: "チャート設定", rowIndex: 4, waitFor: "時間足", name: "19-ChartSettings")
+        // SCR-026 (added 2026-10-05 as Settings' 6th row). Wait for the
+        // placeholder's detail text, not the screen name, which the
+        // Settings row itself also shows.
+        captureSettingsSubScreen(row: "ホーム通貨ペア編集", rowIndex: 5, waitFor: "お気に入り通貨ペアAPI未実装", name: "26-HomeCurrencyPairEditor")
     }
 
     /// Taps the row's center through SettingsView's fixed V5 layout (group 1
-    /// top y=59.5, 28.2pt rows) mapped through V5Viewport's scale-to-fit.
+    /// top y=54.5, 34pt rows) mapped through V5Viewport's scale-to-fit.
     /// Center taps used to land in the row's Spacer gap, which had no
     /// contentShape and so ignored touches under `.buttonStyle(.plain)`
     /// (three CI runs captured 11-13 as the untouched Settings list).
@@ -158,7 +162,7 @@ final class ScreenshotTests: XCTestCase {
         tap(containing: "ホーム")
         tap(containing: "設定")
         XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load before \(name)")
-        tapV5(x: 117, y: 59.5 + (CGFloat(rowIndex) + 0.5) * 28.2)
+        tapV5(x: 117, y: 54.5 + (CGFloat(rowIndex) + 0.5) * 34)
         if waitForAnyElement(containing: text, timeout: 15) {
             capture(name)
         } else {

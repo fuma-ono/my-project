@@ -47,9 +47,8 @@ import SwiftUI
 /// (戻るボタン付きのサブ画面はシェブロン位置ptToV5(16)に合う214のまま)。
 ///
 /// 参考画像との既知の差分(意図的な妥協、完全な一致ではない箇所):
-/// - タイトル「設定」の縦位置: 参考画像の実測ではy≈4.2%(V5換算y≈21)だが、
-///   `V5Header`は全画面共通でy=40固定。他タブとのヘッダー位置統一を優先し、
-///   ここだけ動かしていない。
+/// - タイトル「設定」の位置は全画面共通の`V5Header`のまま動かしていない
+///   (他タブとのヘッダー位置統一を優先)。
 /// - 各アイコンはSF Symbolsの中から最も近い形状のものを選んでいる(参考
 ///   画像のアイコンはSF Symbols標準セットそのものではないため、Loginの
 ///   パスワード欄アイコンと同じ「最も近い形状を採用する」慣例に従った)。
@@ -70,12 +69,16 @@ import SwiftUI
 /// SCR-015(アカウント情報)側に配置される可能性がある。独断で追加せず、
 /// 未接続のまま報告する。
 ///
-/// HQ指示(2026-10-03、画面構成全面更新)で新たに定義されたSCR-026
-/// ホーム通貨ペア編集(`.homeCurrencyPairEditor`)も、この参考画像には
-/// 対応する行が存在しない(他の既存行と同じ理由)ため、同様に独断で追加
-/// せず未接続のまま報告する — どのグループに/どの位置に配置するかはHQの
-/// 判断を仰ぎたい。`AppRoute`・`AppRouteDestinationView`側の定義は既に
-/// 用意済みのため、位置さえ確定すればこの画面への行の追加のみで接続できる。
+/// HQ指示(2026-10-05、参考画像v2
+/// `docs/projects/fx-event-analyzer/mockups/settings-screen-reference-v2.png`
+/// 「この画像のように設定の中身を変えて」): 1つ目のカードの末尾に
+/// SCR-026 ホーム通貨ペア編集(`.homeCurrencyPairEditor`、遷移先は既存の
+/// 仮画面)を追加し、画像どおりシアンの枠で強調している。アイコンは青い
+/// 丸の中の白いアイコンに変更し、色・余白は画像v2の実測値に合わせた。
+/// 画像v2にはログアウトが写っていないため、指示どおりアプリ情報の
+/// カードの下に赤い文字・赤い枠で置き、全行の高さを詰めてタブバーの上に
+/// 収めている。上記の旧参考画像に基づく行高・色・アイコンの記述は、
+/// この変更で置き換え済み。
 ///
 /// 旧デザインの「データ取得設定」行(新画面仕様にSCR番号なし)は参考画像
 /// に存在しないため削除した。旧デザインで"準備中"アラートを使っていた
@@ -98,8 +101,9 @@ struct SettingsView: View {
     @State private var showLogoutConfirmation = false
     @Binding var tabSelection: Int
 
-    /// 参考画像から実測した1行あたりの高さ(V5座標系、234×491)。
-    private static let rowHeight: CGFloat = 28.2
+    /// 1行あたりの高さ(V5座標系、234×491)。参考画像v2の実測は約36.8だが、
+    /// 画像に無いログアウト行をタブバーの上に収めるため34に詰めている。
+    private static let rowHeight: CGFloat = 34
     /// タイトル枠の先頭ptToV5(16+8)に、CI実機キャプチャで実測した「設定」の
     /// 字形の左余白(5px@3x≈1.7pt)を足した位置にカード左端を合わせる。
     private static let cardWidth: CGFloat = V5P.W - 2 * V5P.ptToV5(16 + 8 + 1.7)
@@ -112,48 +116,57 @@ struct SettingsView: View {
         _tabSelection = tabSelection
     }
 
-    /// グループ1(アカウント情報〜チャート設定)のカード上端y。
-    private let group1Top: CGFloat = 59.5
+    /// グループ1(アカウント情報〜ホーム通貨ペア編集)のカード上端y。
+    /// 参考画像v2のタイトル中心→カード上端の実測距離(≈19.8)を
+    /// `V5Header`のタイトル中心y=34.9に足した位置。
+    private static let group1Top: CGFloat = 54.5
+    /// カード間の余白(参考画像v2の実測≈9.5を行高と同じ割合で詰めた値)。
+    private static let groupGap: CGFloat = 8
     /// グループ2(ヘルプ・お問い合わせ〜アプリ情報)のカード上端y。
-    private let group2Top: CGFloat = 211.1
+    private static let group2Top: CGFloat = group1Top + 6 * rowHeight + groupGap
     /// ログアウトカードの上端y。
-    private let logoutTop: CGFloat = 333.5
+    private static let logoutTop: CGFloat = group2Top + 4 * rowHeight + groupGap
 
     var body: some View {
         NavigationStack {
             V5Viewport {
                 V5Header(title: "設定", back: false)
 
-                groupBackground(topY: group1Top, rowCount: 5)
+                let g1 = Self.group1Top
+                groupBackground(topY: g1, rowCount: 6)
                 NavigationLink(value: AppRoute.account) {
-                    rowLabel("person", "アカウント情報")
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: group1Top, index: 0))
+                    rowLabel("person.fill", "アカウント情報")
+                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g1, index: 0))
                 NavigationLink(value: SettingsSubRoute.notificationSettings) {
                     rowLabel("bell.fill", "通知設定")
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: group1Top, index: 1))
+                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g1, index: 1))
                 NavigationLink(value: SettingsSubRoute.subscriptionManagement) {
-                    rowLabel("globe.asia.australia.fill", "プラン・購読管理")
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: group1Top, index: 2))
+                    rowLabel("crown.fill", "プラン・購読管理")
+                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g1, index: 2))
                 NavigationLink(value: SettingsSubRoute.displaySettings) {
-                    rowLabel("camera.aperture", "表示・地域設定")
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: group1Top, index: 3))
+                    rowLabel("globe", "表示・地域設定")
+                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g1, index: 3))
                 NavigationLink(value: SettingsSubRoute.chartSettings) {
-                    rowLabel("chart.xyaxis.line", "チャート設定")
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: group1Top, index: 4))
+                    rowLabel("chart.bar.fill", "チャート設定")
+                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g1, index: 4))
+                NavigationLink(value: AppRoute.homeCurrencyPairEditor) {
+                    rowLabel("arrow.left.arrow.right", "ホーム通貨ペア編集", highlighted: true)
+                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g1, index: 5))
 
-                groupBackground(topY: group2Top, rowCount: 4)
+                let g2 = Self.group2Top
+                groupBackground(topY: g2, rowCount: 4)
                 NavigationLink(value: SettingsSubRoute.help) {
-                    rowLabel("questionmark.circle", "ヘルプ・お問い合わせ")
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: group2Top, index: 0))
+                    rowLabel("questionmark.circle.fill", "ヘルプ・お問い合わせ")
+                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g2, index: 0))
                 NavigationLink(value: SettingsSubRoute.terms) {
-                    rowLabel("list.bullet.rectangle.portrait", "利用規約")
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: group2Top, index: 1))
+                    rowLabel("doc.text.fill", "利用規約")
+                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g2, index: 1))
                 NavigationLink(value: SettingsSubRoute.privacyPolicy) {
-                    rowLabel("doc.richtext", "プライバシーポリシー")
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: group2Top, index: 2))
+                    rowLabel("checkmark.shield.fill", "プライバシーポリシー")
+                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g2, index: 2))
                 NavigationLink(value: SettingsSubRoute.appInfo) {
-                    rowLabel("info.circle", "アプリ情報")
-                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: group2Top, index: 3))
+                    rowLabel("info.circle.fill", "アプリ情報")
+                }.buttonStyle(.plain).position(x: 117, y: rowY(topY: g2, index: 3))
 
                 logoutButton
 
@@ -183,41 +196,48 @@ struct SettingsView: View {
         }
     }
 
-    /// 参考画像から実測したカード・行の見た目(V5座標系)。
-    private static let cornerRadius: CGFloat = 6.5
-    private static let cardFill = Color(red: 6 / 255, green: 26 / 255, blue: 53 / 255) // #061A35
-    private static let logoutHeight: CGFloat = 31.5
+    /// 参考画像v2から実測したカード・行の見た目(V5座標系)。横方向の位置は
+    /// 参考画像のカード幅(385px)に対する比率で、このカード幅に換算している。
+    private static let cornerRadius: CGFloat = 7.5
+    private static let cardFill = Color(red: 0 / 255, green: 34 / 255, blue: 69 / 255) // #002245
+    private static let cardBorder = Color(red: 11 / 255, green: 76 / 255, blue: 142 / 255) // #0B4C8E
+    private static let separator = Color(red: 0 / 255, green: 67 / 255, blue: 129 / 255) // #004381
     private static let titleSize: CGFloat = 10.5
-    private static let iconSize: CGFloat = 13.5
-    private static let iconWidth: CGFloat = 18
-    /// アイコン列の右端から文字の左端まで(カード左端から文字まで39.3の実測値を保つ)。
-    private static let iconTitleGap: CGFloat = 13.3
-    private static let iconColor = Color(red: 0.80, green: 0.89, blue: 1.0)
-    private static let chevronColor = Color(red: 0.62, green: 0.76, blue: 0.93)
+    /// アイコンを囲む丸(参考画像の直径44px)と、その中の白いアイコン。
+    private static let badgeSize: CGFloat = 22
+    private static let badgeFill = Color(red: 22 / 255, green: 81 / 255, blue: 129 / 255) // #165181
+    private static let badgeBorder = Color(red: 44 / 255, green: 108 / 255, blue: 168 / 255)
+    private static let iconSize: CGFloat = 11
+    private static let iconColor = Color(red: 233 / 255, green: 240 / 255, blue: 255 / 255) // #E9F0FF
+    /// カード左端→丸の左端(参考画像26px)、丸の右端→文字(参考画像19px)。
+    private static let badgeLeading: CGFloat = 8.6
+    private static let badgeTitleGap: CGFloat = 10.7
+    private static let chevronColor = Color(red: 170 / 255, green: 198 / 255, blue: 245 / 255) // #AAC6F5
+    /// 「ホーム通貨ペア編集」行のシアンの枠と、少し明るい塗り。
+    private static let highlightBorder = Color(red: 0 / 255, green: 201 / 255, blue: 234 / 255) // #00C9EA
+    private static let highlightFill = Color(red: 0 / 255, green: 48 / 255, blue: 90 / 255) // #00305A
 
-    /// 行グループ・ログアウトで共通のカード(塗り＋青い縁取り)。
-    private func card(height: CGFloat) -> some View {
+    /// 行グループ・ログアウトで共通のカード(塗り＋縁取り)。
+    private func card(height: CGFloat, border: Color = Self.cardBorder) -> some View {
         RoundedRectangle(cornerRadius: Self.cornerRadius)
             .fill(Self.cardFill)
             .overlay(
                 RoundedRectangle(cornerRadius: Self.cornerRadius)
-                    .stroke(V5P.line.opacity(0.6), lineWidth: 0.65)
-                    .shadow(color: V5P.blue.opacity(0.35), radius: 1.5)
+                    .stroke(border, lineWidth: 0.7)
+                    .shadow(color: border.opacity(0.5), radius: 1.5)
             )
             .frame(width: Self.cardWidth, height: height)
     }
 
     /// 行グループの背景(角丸カード)と、行と行の間の区切り線。個々の行
-    /// 自体は背景を持たず、この上に重ねて描画する(参考画像の「1つの
-    /// カードの中に複数行、行間は細い区切り線のみ」という見た目のため)。
-    /// 区切り線は参考画像の実測どおりカードの全幅。
+    /// 自体は背景を持たず、この上に重ねて描画する。区切り線はカードの全幅。
     @ViewBuilder private func groupBackground(topY: CGFloat, rowCount: Int) -> some View {
         let height = CGFloat(rowCount) * Self.rowHeight
         card(height: height)
             .position(x: 117, y: topY + height / 2)
         ForEach(1..<rowCount, id: \.self) { i in
             Rectangle()
-                .fill(V5P.line.opacity(0.35))
+                .fill(Self.separator)
                 .frame(width: Self.cardWidth, height: 0.6)
                 .position(x: 117, y: topY + CGFloat(i) * Self.rowHeight)
         }
@@ -227,36 +247,53 @@ struct SettingsView: View {
         topY + (CGFloat(index) + 0.5) * Self.rowHeight
     }
 
-    private func rowIcon(_ icon: String, glow: Color = V5P.blue) -> some View {
-        Image(systemName: icon)
-            .font(.system(size: Self.iconSize))
-            .frame(width: Self.iconWidth)
-            .shadow(color: glow.opacity(0.6), radius: 1.5)
+    /// 参考画像どおりの、青い丸の中に白いアイコン。ログアウトだけは赤。
+    private func rowBadge(_ icon: String, tint: Color? = nil) -> some View {
+        ZStack {
+            Circle()
+                .fill(tint.map { $0.opacity(0.18) } ?? Self.badgeFill)
+                .overlay(Circle().stroke(tint ?? Self.badgeBorder, lineWidth: 0.5))
+            Image(systemName: icon)
+                .font(.system(size: Self.iconSize, weight: .semibold))
+                .foregroundStyle(tint ?? Self.iconColor)
+        }
+        .frame(width: Self.badgeSize, height: Self.badgeSize)
     }
 
-    private func rowLabel(_ icon: String, _ title: String) -> some View {
-        HStack(spacing: Self.iconTitleGap) {
-            rowIcon(icon).foregroundStyle(Self.iconColor)
+    private func rowLabel(_ icon: String, _ title: String, highlighted: Bool = false) -> some View {
+        HStack(spacing: Self.badgeTitleGap) {
+            rowBadge(icon)
             Text(title).font(.system(size: Self.titleSize, weight: .medium)).foregroundStyle(.white)
             Spacer()
             Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(Self.chevronColor)
         }
-        .padding(.leading, 8)
+        .padding(.leading, Self.badgeLeading)
         .padding(.trailing, 10)
         .frame(width: Self.cardWidth, height: Self.rowHeight)
-        // 行は背景を持たないため、これがないと`.plain`スタイルでは
+        .background {
+            if highlighted {
+                RoundedRectangle(cornerRadius: Self.cornerRadius)
+                    .fill(Self.highlightFill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Self.cornerRadius)
+                            .stroke(Self.highlightBorder, lineWidth: 0.9)
+                            .shadow(color: Self.highlightBorder.opacity(0.8), radius: 2.5)
+                    )
+            }
+        }
+        // 行は(強調行以外)背景を持たないため、これがないと`.plain`スタイルでは
         // アイコン・文字・シェブロン以外(行の中央の空白)がタップに反応しない。
         .contentShape(Rectangle())
     }
 
-    /// 参考画像どおり、カードは行グループと同じ青い縁取りで、赤いのは
-    /// アイコンと文字だけ(以前は赤い縁取り・赤みの背景だった)。
+    /// 参考画像v2にログアウトは写っていないため、HQ指示どおりアプリ情報の
+    /// カードの下に、赤い文字・赤い枠のカードとして置いている。
     private var logoutButton: some View {
         Button {
             showLogoutConfirmation = true
         } label: {
-            HStack(spacing: Self.iconTitleGap) {
-                rowIcon("rectangle.portrait.and.arrow.right", glow: V5P.red)
+            HStack(spacing: Self.badgeTitleGap) {
+                rowBadge("rectangle.portrait.and.arrow.right", tint: V5P.red)
                 if viewModel.state == .signingOut {
                     ProgressView().tint(V5P.red)
                 } else {
@@ -265,9 +302,9 @@ struct SettingsView: View {
                 Spacer()
             }
             .foregroundStyle(V5P.red)
-            .padding(.leading, 8)
-            .frame(width: Self.cardWidth, height: Self.logoutHeight)
-            .background(card(height: Self.logoutHeight))
+            .padding(.leading, Self.badgeLeading)
+            .frame(width: Self.cardWidth, height: Self.rowHeight)
+            .background(card(height: Self.rowHeight, border: V5P.red))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -275,9 +312,9 @@ struct SettingsView: View {
         .overlay(alignment: .bottom) {
             if case .error(let message) = viewModel.state {
                 Text(message).font(.system(size: 6)).foregroundStyle(V5P.red)
-                    .multilineTextAlignment(.center).frame(width: Self.cardWidth).offset(y: 14)
+                    .multilineTextAlignment(.center).frame(width: Self.cardWidth).offset(y: 9)
             }
         }
-        .position(x: 117, y: logoutTop + Self.logoutHeight / 2)
+        .position(x: 117, y: Self.logoutTop + Self.rowHeight / 2)
     }
 }
