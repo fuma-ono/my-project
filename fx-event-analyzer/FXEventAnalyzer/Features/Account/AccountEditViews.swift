@@ -208,13 +208,18 @@ struct AccountDeletionView: View {
                 ForEach(Self.notes, id: \.self) { note in
                     HStack(alignment: .top, spacing: 4) {
                         V5JPFont.text("・", size: 6.5, weight: .regular).foregroundStyle(V5P.muted)
-                        AccountNote(text: note).frame(width: 190, alignment: .leading)
+                        AccountNote(text: note, width: 180)
                     }
                 }
             }
-            .padding(10)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 11)
             .frame(width: 214, alignment: .leading)
-            .background(SettingsCardStyle.card(width: 214, height: 92))
+            .background(
+                RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
+                    .fill(SettingsCardStyle.cardFill)
+                    .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
+            )
             .position(x: 117, y: 182)
 
             AccountPrimaryButton(title: "アカウントを削除する", isLoading: viewModel.state == .submitting, destructive: true) {

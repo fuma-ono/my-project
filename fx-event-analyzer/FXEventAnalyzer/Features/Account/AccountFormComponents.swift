@@ -42,11 +42,12 @@ struct AccountFieldCaption: View {
 struct AccountNote: View {
     let text: String
     var color: Color = V5P.muted
+    var width: CGFloat = 206
     var body: some View {
         V5JPFont.text(text, size: 6.5, weight: .regular)
             .foregroundStyle(color)
             .lineSpacing(1.5)
-            .frame(width: 206, alignment: .leading)
+            .frame(width: width, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
     }
 }
