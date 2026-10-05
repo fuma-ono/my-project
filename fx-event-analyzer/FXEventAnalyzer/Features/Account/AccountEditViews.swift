@@ -49,7 +49,7 @@ struct ProfileEditView: View {
 
             Button { showDatePicker = true } label: {
                 fieldCard(title: "生年月日", trailingIcon: "chevron.right") {
-                    V5JPFont.text(birthDateText ?? "未設定", size: AccountLayout.titleSize, weight: .regular)
+                    V5JPFont.text(birthDateText ?? "未設定", size: AccountLayout.captionSize, weight: .regular)
                         .foregroundStyle(birthDateText == nil ? V5P.muted : .white)
                         .padding(.horizontal, 10)
                         .frame(width: 214, height: 30, alignment: .leading)
@@ -93,7 +93,7 @@ struct ProfileEditView: View {
     private func fieldCard(title: String, trailingIcon: String, @ViewBuilder value: () -> some View) -> some View {
         VStack(spacing: 0) {
             HStack {
-                V5JPFont.text(title, size: AccountLayout.titleSize, weight: .bold).foregroundStyle(.white)
+                V5JPFont.text(title, size: AccountLayout.captionSize, weight: .bold).foregroundStyle(.white)
                 Spacer()
                 Image(systemName: trailingIcon)
                     .font(.system(size: 8.5, weight: .semibold))

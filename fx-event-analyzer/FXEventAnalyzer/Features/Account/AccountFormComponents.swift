@@ -25,7 +25,8 @@ enum AccountLayout {
     static let noteSize: CGFloat = 7.5
     /// アイコン下の案内文。
     static let leadSize: CGFloat = 8.5
-    /// 入力欄の見出し・削除データの一覧(HQ指示 2026-10-05で少し小さくした)。
+    /// 入力欄の見出し・入力欄の文字・削除データの一覧(HQ指示 2026-10-05で
+    /// 少し小さくした)。
     static let captionSize: CGFloat = 8.5
     /// メール・パスワード変更・アカウント削除の上部アイコンの中心と大きさ。
     /// 3画面で同じ位置に揃える。
@@ -262,7 +263,7 @@ struct AccountTextField: View {
     private var field: some View {
         ZStack(alignment: .leading) {
             if text.isEmpty {
-                V5JPFont.text(placeholder, size: AccountLayout.titleSize, weight: .regular)
+                V5JPFont.text(placeholder, size: AccountLayout.captionSize, weight: .regular)
                     .foregroundStyle(V5P.muted.opacity(0.75))
                     .allowsHitTesting(false)
             }
@@ -282,7 +283,7 @@ struct AccountTextField: View {
                         .autocorrectionDisabled(keyboard == .emailAddress)
                 }
             }
-            .font(.system(size: AccountLayout.titleSize))
+            .font(.system(size: AccountLayout.captionSize))
             .foregroundStyle(.white)
             .tint(V5P.cyan)
             .accessibilityLabel(label)
