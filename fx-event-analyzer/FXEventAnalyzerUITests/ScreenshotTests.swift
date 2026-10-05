@@ -143,18 +143,20 @@ final class ScreenshotTests: XCTestCase {
         captureSettingsSubScreen(row: "通知設定", rowIndex: 1, waitFor: "重要指標の発表前通知", name: "16-NotificationSettings")
         captureSettingsSubScreen(row: "表示・地域設定", rowIndex: 3, waitFor: "タイムゾーン", name: "18-DisplaySettings")
         captureSettingsSubScreen(row: "チャート設定", rowIndex: 4, waitFor: "時間足", name: "19-ChartSettings")
-        // SCR-026 (added 2026-10-05 as Settings' 6th row). Wait for the
-        // placeholder's detail text, not the screen name, which the
-        // Settings row itself also shows.
-        captureSettingsSubScreen(row: "ホーム通貨ペア編集", rowIndex: 5, waitFor: "お気に入り通貨ペアAPI未実装", name: "26-HomeCurrencyPairEditor")
         // SCR-015 アカウント情報 (added 2026-10-05 with the reference-image
         // rebuild) and SCR-024 アカウント削除, opened from SCR-015's
         // bottom row (V5 card top 342.9, height 33.9). The deletion screen
         // is only captured — its button opens a confirmation dialog first.
+        // Captured before SCR-026: that placeholder has no tab bar, so the
+        // next captureSettingsSubScreen couldn't get back to Settings from it.
         captureSettingsSubScreen(row: "アカウント情報", rowIndex: 0, waitFor: "プロフィール編集", name: "15-Account")
         tapV5(x: 117, y: 342.9 + 33.9 / 2)
         XCTAssertTrue(waitForAnyElement(containing: "アカウントを削除しますか", timeout: 15), "Account deletion did not load")
         capture("24-AccountDeletion")
+        // SCR-026 (added 2026-10-05 as Settings' 6th row). Wait for the
+        // placeholder's detail text, not the screen name, which the
+        // Settings row itself also shows.
+        captureSettingsSubScreen(row: "ホーム通貨ペア編集", rowIndex: 5, waitFor: "お気に入り通貨ペアAPI未実装", name: "26-HomeCurrencyPairEditor")
     }
 
     /// Taps the row's center through SettingsView's fixed V5 layout (group 1
