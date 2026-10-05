@@ -329,15 +329,22 @@ struct HomeView: View {
     /// さらにHQ再指摘(2026-10-05)「MEDIUMとHIGHの文字間隔を狭めて、縦幅を
     /// 少し広くして」: `.tracking(-0.4)`で字間を詰めて横幅をさらに短縮し、
     /// 縦パディングを1.5→3に広げた。
+    ///
+    /// 続くHQ指示(AskUserQuestionでの確認、2026-10-05)「HIGHと同じ大きさに
+    /// 揃えて」: それまでは`.fixedSize()`で各バッジが自身のテキスト幅に
+    /// ぴったり合わせていたため、"HIGH"(4文字)より"MEDIUM"(6文字)の方が
+    /// 明らかに横長になっていた。`.fixedSize()`をやめ、"MEDIUM"が収まる
+    /// 固定幅(32)を両方に与えてテキストを中央揃えにすることで、HIGH/
+    /// MEDIUM/LOWのバッジが同じ横幅になるようにした。
     @ViewBuilder private func statusBadge(_ text: String, colors: (fill: Color, border: Color)) -> some View {
         Text(text)
             .font(.system(size: 7, weight: .bold))
             .tracking(-0.4)
             .foregroundStyle(.white)
-            .padding(.horizontal, 2.5).padding(.vertical, 3)
+            .frame(width: 32)
+            .padding(.vertical, 3)
             .background(colors.fill, in: Capsule())
             .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
-            .fixedSize()
     }
 
     /// HQ指摘(2026-10-03、8回目)「アイコンの色が全然違う」の実測値
