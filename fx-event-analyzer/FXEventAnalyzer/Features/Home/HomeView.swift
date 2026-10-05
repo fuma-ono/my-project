@@ -300,14 +300,14 @@ struct HomeView: View {
         .position(x: V5P.W / 2, y: 34.9)
     }
 
-    /// HQ指示(2026-10-05、23回目)「赤文字と緑文字が薄いので参考画像にして」:
-    /// 参考画像の上昇/下降率テキストをピクセル実測すると赤≒RGB(235,40,74)・
-    /// 緑(実際はティール)≒RGB(0,228,200)で、どちらも既存の`V5P.red`
-    /// (255,56,97)・`V5P.green`(26,224,184)とほぼ一致していた。このHome
-    /// 画面専用に別で定義していた薄い色(214,83,109)/(46,170,120)が実測値
-    /// から外れていた原因のため、専用定義をやめてアプリ共通トークンに統一。
-    private static let changeUpColor = V5P.red
-    private static let changeDownColor = V5P.green
+    /// HQ指示(2026-10-05、23回目)「赤文字と緑文字が薄いので参考画像にして」
+    /// で一旦`V5P.red`/`V5P.green`(アプリ共通トークン)に統一したが、HQ
+    /// 再指摘(2026-10-05)「+0.25%の赤文字と緑文字を濃くして」を受け、この
+    /// 2色よりさらに濃い(暗い)専用色に変更。`V5P.red`/`V5P.green`は他画面
+    /// (バッジ等)でも使う共通トークンのため、ここだけ濃くする目的で
+    /// Home専用の値に戻した(他画面への影響を避けるため)。
+    private static let changeUpColor = Color(red: 210.0 / 255, green: 18.0 / 255, blue: 55.0 / 255)
+    private static let changeDownColor = Color(red: 0.0 / 255, green: 160.0 / 255, blue: 125.0 / 255)
 
     private static func importanceBadgeColors(_ importance: Importance) -> (fill: Color, border: Color) {
         switch importance {
@@ -324,13 +324,17 @@ struct HomeView: View {
     /// 外枠を短くしてと言っている」: それまでの2回はフォントサイズ自体を
     /// 縮小(7→6→5.5)していたが、それは指摘の意図ではなかった。文字サイズは
     /// 判読できる大きさ(7/.bold、最初の値)に戻し、外枠(カプセル)だけを
-    /// 左右パディングの圧縮(5.5→2.5)で短くする方針に変更した。縦パディング
-    /// も合わせて詰めた(2→1.5)。
+    /// 左右パディングの圧縮(5.5→2.5)で短くする方針に変更した。
+    ///
+    /// さらにHQ再指摘(2026-10-05)「MEDIUMとHIGHの文字間隔を狭めて、縦幅を
+    /// 少し広くして」: `.tracking(-0.4)`で字間を詰めて横幅をさらに短縮し、
+    /// 縦パディングを1.5→3に広げた。
     @ViewBuilder private func statusBadge(_ text: String, colors: (fill: Color, border: Color)) -> some View {
         Text(text)
             .font(.system(size: 7, weight: .bold))
+            .tracking(-0.4)
             .foregroundStyle(.white)
-            .padding(.horizontal, 2.5).padding(.vertical, 1.5)
+            .padding(.horizontal, 2.5).padding(.vertical, 3)
             .background(colors.fill, in: Capsule())
             .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
             .fixedSize()
@@ -358,11 +362,14 @@ struct HomeView: View {
 
     // MARK: 通貨ペアカード (x=26,y=180,width=782,height=527 → height 527/3.641≒145)
 
-    private static let pairsCardHeight: CGFloat = 145
+    /// HQ再指摘(2026-10-05)「通貨ペアの各行の縦幅をもう少し狭めて」で
+    /// `pairRowHeight`を39→33に縮小したのに合わせ、カード全体の高さも
+    /// ヘッダー(28)+行×3(33×3=99)=127に再計算(元の145のままだと行の下に
+    /// 余白が残ってしまうため)。
+    private static let pairsCardHeight: CGFloat = 127
     /// ヘッダー約102px→28.0。
     private static let pairsHeaderHeight: CGFloat = 28
-    /// (527-102)px/3行/3.641≒38.9≒39。
-    private static let pairRowHeight: CGFloat = 39
+    private static let pairRowHeight: CGFloat = 33
 
     // MARK: お気に入りカード (y=735,height=375 → 375/3.641≒103)
 
@@ -687,31 +694,30 @@ struct HomeView: View {
     /// (シンボル・変化率も合わせて縮小・.semibold化)。色は
     /// `changeUpColor`/`changeDownColor`(上で`V5P.red`/`V5P.green`に統一済み)
     /// を使用。
+    /// HQ再指摘(2026-10-05)の3点を反映:
+    /// 1.「USD/JPY等、155.42 +0.25%の文字サイズを大きく」: シンボル8→9、
+    ///    価格8→10、変化率6→7に拡大。
+    /// 2.「+0.25%▲＞となるように右に寄せて」: 前回追加した価格ブロック
+    ///    後ろの`Spacer()`を削除し、chevronに隣接する(右寄せの)配置に
+    ///    戻した。
+    /// 3.「各行の縦幅をもう少し狭めて」: `pairRowHeight`39→33。
     @ViewBuilder private func pairRow(_ pair: FXPairUI) -> some View {
         HStack(spacing: 6) {
             HStack(spacing: 3) {
                 CountryFlagView(currencyCode: pair.baseCurrency, diameter: Self.flagDiameter)
                 CountryFlagView(currencyCode: pair.quoteCurrency, diameter: Self.flagDiameter)
             }
-            Text(pair.displaySymbol).font(.system(size: 8, weight: .semibold)).fixedSize()
-            // HQ再指摘(2026-10-05)「通貨ペアの数字(155.42)の位置を真ん中に
-            // して」: 価格ブロックがシンボルとchevronの間でchevron側に
-            // 偏って(=右端に張り付いて)いたため、前後に`Spacer()`を置き
-            // シンボル右端とchevron左端の中間に来るよう変更した。
+            Text(pair.displaySymbol).font(.system(size: 9, weight: .semibold)).fixedSize()
             Spacer(minLength: 4)
-            // HQ再指摘(2026-10-05)「155.42　+0.25%と横並びにしてください」:
-            // 価格と変化率を上下2段の`VStack`にしていたが、1段のHStackに
-            // まとめ横並びにした。
             HStack(spacing: 5) {
-                Text(pair.price).font(.system(size: 8, weight: .semibold))
+                Text(pair.price).font(.system(size: 10, weight: .semibold))
                 HStack(spacing: 1) {
-                    Text(pair.change).font(.system(size: 6, weight: .semibold))
-                    Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 6))
+                    Text(pair.change).font(.system(size: 7, weight: .semibold))
+                    Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 7))
                 }
                 .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
             }
             .fixedSize()
-            Spacer(minLength: 4)
             Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
         }
         .foregroundStyle(.white)
