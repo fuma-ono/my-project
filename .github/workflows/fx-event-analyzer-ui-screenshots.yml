@@ -184,6 +184,23 @@ jobs:
             echo "::warning::No iPad .xcresult bundle was produced."
           fi
 
+      # Job logs and artifacts need a signed-in GitHub session, but check-run
+      # annotations are readable through the public API — surface test
+      # failure messages and diagnostic screenshot names as annotations so a
+      # failed run can be diagnosed without downloading the .xcresult.
+      - name: Report UI test failures as annotations
+        if: always()
+        run: |
+          for platform in iPhone iPad; do
+            bundle="DerivedData/$platform.xcresult"
+            [ -d "$bundle" ] || continue
+            xcrun xcresulttool get test-results summary --path "$bundle" --format json 2>/dev/null \
+              | jq -r '.testFailures[]? | "\(.testName): \(.failureText)"' \
+              | while IFS= read -r line; do echo "::error title=$platform UI test failure::$line"; done || true
+          done
+          grep -ho 'suggested name: "[^"]*diag[^"]*"' Screenshots/*-raw/export.log 2>/dev/null \
+            | while IFS= read -r line; do echo "::error title=diagnostic capture::$line"; done || true
+
       # `xcresulttool export attachments`'s manifest.json schema isn't
       # documented and doesn't match the key names ("name" / "exportedFileName")
       # this step originally guessed at (confirmed via a real CI run: the
