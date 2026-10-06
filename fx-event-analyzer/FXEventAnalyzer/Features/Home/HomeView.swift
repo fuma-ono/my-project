@@ -398,7 +398,7 @@ struct HomeView: View {
 
     // MARK: お気に入りカード (y=735,height=375 → 375/3.641≒103)
 
-    private static let favoritesCardHeight: CGFloat = 103
+    private static let favoritesCardHeight: CGFloat = 97
     /// ヘッダー約114px→31.3≒31。
     /// HQ再指摘(2026-10-05、4回目)「お気に入りタイトルの下に空白があるから
     /// 下の米国CPIの枠を上にあげて」: ヘッダー下の`Divider()`を非表示にした
@@ -411,7 +411,7 @@ struct HomeView: View {
     /// 各カードwidth≈247px→67.8≒68、height≈242px→66.5≒66、
     /// corner radius≈18px→4.9≒5。
     private static let favoriteSubCardWidth: CGFloat = 68
-    private static let favoriteSubCardHeight: CGFloat = 66
+    private static let favoriteSubCardHeight: CGFloat = 60
     private static let favoriteSubCardCornerRadius: CGFloat = 5
 
     // MARK: 直近の要人発言 (y=1139,height=481 → 481/3.641≒132)
@@ -970,10 +970,19 @@ struct HomeView: View {
         }
     }
 
+    // HQ指摘(2026-10-06、参考画像との実測比較)「お気に入り内の日時の文字
+    // 間隔を狭めて、文字の色を参考画像と同じにして」: 参考画像の
+    // "10/13 21:30"を実測すると明るい水色(RGB≒138,191,246)で、既存の
+    // `Self.linkBlue`(140,180,247)とほぼ同一だった — 現在の`V5P.muted`
+    // (くすんだグレー、153,178,209)とは別の色だったので差し替えた。
+    // 文字間隔は、参考画像の1文字あたりの幅/高さ比(0.42)が実装側(0.59)
+    // より詰まっていたため、`.tracking(-1.0)`を追加して詰めた(文字サイズ
+    // 自体は今回変更していない — 下の「上下の間隔を狭めて1画面に収める」
+    // 要望と逆行するため)。
     @ViewBuilder private func dateRow(_ date: Date) -> some View {
         HStack(spacing: 3) {
-            Image(systemName: "calendar").font(.system(size: 7)).foregroundStyle(V5P.muted)
-            Text(Self.favoriteDateFormatter.string(from: date)).font(.system(size: 7, weight: .medium)).foregroundStyle(V5P.muted)
+            Image(systemName: "calendar").font(.system(size: 7)).foregroundStyle(Self.linkBlue)
+            Text(Self.favoriteDateFormatter.string(from: date)).font(.system(size: 7, weight: .medium)).tracking(-1.0).foregroundStyle(Self.linkBlue)
         }
     }
 
@@ -984,13 +993,17 @@ struct HomeView: View {
         return formatter
     }()
 
+    // HQ指摘(2026-10-06)「上下の間隔を狭めてお気に入りの枠全体が1画面に
+    // 収まること」: ミニカード内の縦方向の余白(行間spacing・外側padding)
+    // を詰めて1枚あたりの高さを縮小した(spacing 3→2、padding 5→4、それに
+    // 合わせて`favoriteSubCardHeight`66→60、`favoritesCardHeight`103→97)。
     @ViewBuilder private func favoriteGridCardContent(
         countryCode: String?,
         name: String,
         @ViewBuilder subtitle: () -> some View,
         @ViewBuilder footer: () -> some View
     ) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 2) {
             HStack {
                 if let countryCode {
                     CountryFlagView(countryCode: countryCode, diameter: Self.favoriteFlagDiameter)
@@ -1002,7 +1015,7 @@ struct HomeView: View {
             subtitle()
             footer()
         }
-        .padding(5)
+        .padding(4)
         .frame(width: Self.favoriteSubCardWidth, height: Self.favoriteSubCardHeight, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: Self.favoriteSubCardCornerRadius).fill(Self.cardFill))
         .overlay(RoundedRectangle(cornerRadius: Self.favoriteSubCardCornerRadius).stroke(Self.cardBorderColor.opacity(0.7), lineWidth: 0.5))
