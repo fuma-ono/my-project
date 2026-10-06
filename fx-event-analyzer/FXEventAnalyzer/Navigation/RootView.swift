@@ -40,6 +40,8 @@ struct RootView: View {
                     // 起動時・フォアグラウンド復帰時にローカル通知を予約し直し、
                     // 表示中は通知時刻を過ぎた分をベルの赤バッジに反映する。
                     guard scenePhase == .active else { return }
+                    // SCR-017: 自動更新・解約などの購読の変化をBackendへ送る。
+                    SubscriptionSync.shared.start(apiClient: apiClient)
                     await LocalNotificationScheduler(apiClient: apiClient).refresh()
                     while !Task.isCancelled {
                         try? await Task.sleep(for: .seconds(30))

@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.7
+# FX Event Analyzer: API詳細設計書 v1.8
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -49,6 +49,7 @@
   - `GET /speeches`・`GET /speeches/{speech_id}`を新設(14.4節・14.5節)。Error Code `SPEECH_NOT_FOUND`を追加
   - `GET /fx-pairs`を新設(13.5節)
 - **v1.7**(2026-10-06): SCR-016 通知設定に「通知しない時間帯」を追加。`GET/PATCH /settings`の`notifications`に`quiet_hours_enabled`・`quiet_start`・`quiet_end`を追加し(24.4節・24.5節)、`GET /notifications/upcoming`で該当時間帯の通知を除外する(24.6節)
+- **v1.8**(2026-10-06): SCR-017 プラン・購読管理の画面実装に合わせ、`GET /subscription`のResponseに`product_id`(月額・年額の商品)を追加(25章)
 
 ---
 
@@ -1057,7 +1058,9 @@ Response：
 
 現在のSubscription状態を取得する。
 
-Response：plan / status / started_at / expires_at
+Response：plan / status / started_at / expires_at / product_id
+
+`product_id`(v1.8で追加)：購読中のApp Store商品(25.2節の月額・年額)。SCR-017で「月額 / 年額」と価格を出すのに使う。FREEは`null`。
 
 Plan：FREE / PRO
 

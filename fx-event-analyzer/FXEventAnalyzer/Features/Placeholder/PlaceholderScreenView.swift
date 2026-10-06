@@ -61,7 +61,9 @@ struct SettingsSubRouteDestinationView: View {
             DisplaySettingsView(apiClient: apiClient, tabSelection: $tabSelection)
         case .chartSettings:
             ChartSettingsView(apiClient: apiClient, tabSelection: $tabSelection)
-        case .subscriptionManagement, .help, .terms, .privacyPolicy, .appInfo, .accountDeletion:
+        case .subscriptionManagement:
+            SubscriptionManagementView(apiClient: apiClient, tabSelection: $tabSelection)
+        case .help, .terms, .privacyPolicy, .appInfo, .accountDeletion:
             PlaceholderScreenView(scrNumber: route.scrNumber, screenName: route.title)
                 .navigationTitle(route.title)
                 .navigationBarTitleDisplayMode(.inline)

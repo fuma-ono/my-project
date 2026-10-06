@@ -7,6 +7,8 @@ export interface SubscriptionRow {
   status: string;
   started_at: string;
   expires_at: string | null;
+  /** App Store product (月額/年額). SCR-017 shows it; absent from the verify RPC result. */
+  product_id?: string | null;
 }
 
 /**
@@ -21,7 +23,7 @@ export interface SubscriptionRow {
 export async function getActiveSubscription(supabase: SupabaseClient, userId: string): Promise<SubscriptionRow | null> {
   const { data, error } = await supabase
     .from('subscriptions')
-    .select('plan, status, started_at, expires_at')
+    .select('plan, status, started_at, expires_at, product_id')
     .eq('user_id', userId)
     .in('status', ['ACTIVE', 'TRIAL', 'CANCELED'])
     .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)

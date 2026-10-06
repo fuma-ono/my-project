@@ -18,7 +18,7 @@ export function registerSubscriptionRoutes(app: FastifyInstance): void {
       // implicit FREE tier rather than a 404 (this is not an error state).
       // Flagged as a minor design-clarification candidate in the Phase 2
       // report, not applied as a silent spec change.
-      return { plan: 'FREE', status: null, started_at: null, expires_at: null };
+      return { plan: 'FREE', status: null, started_at: null, expires_at: null, product_id: null };
     }
 
     return subscription;

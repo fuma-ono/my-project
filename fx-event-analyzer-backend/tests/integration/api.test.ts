@@ -290,7 +290,7 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
     it('reports plan FREE, not a 404, for a user with no subscriptions row', async () => {
       const response = await ctx.app.inject({ method: 'GET', url: '/api/v1/subscription', headers: authHeader });
       expect(response.statusCode).toBe(200);
-      expect(JSON.parse(response.body).plan).toBe('FREE');
+      expect(JSON.parse(response.body)).toMatchObject({ plan: 'FREE', product_id: null });
     });
   });
 });

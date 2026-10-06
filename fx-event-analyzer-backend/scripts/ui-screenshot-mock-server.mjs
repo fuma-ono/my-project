@@ -807,8 +807,15 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
     }
     return json(res, 200, accountFixture());
   }
+  // SCR-017 プラン・購読管理: 参考画像(HQ指示 2026-10-06)と同じく有料プラン加入中の状態で撮る。
   if (pathname === '/api/v1/subscription') {
-    return json(res, 200, { plan: 'FREE', status: null, started_at: null, expires_at: null });
+    return json(res, 200, {
+      plan: 'PRO',
+      status: 'ACTIVE',
+      started_at: '2026-09-06T03:00:00Z',
+      expires_at: '2026-11-06T03:00:00Z',
+      product_id: 'com.fumaono.fxeventanalyzer.pro.monthly',
+    });
   }
 
   if (segments[0] === 'indicators' && segments.length === 2) {

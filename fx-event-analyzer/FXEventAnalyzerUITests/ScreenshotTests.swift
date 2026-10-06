@@ -166,6 +166,7 @@ final class ScreenshotTests: XCTestCase {
         if waitForAnyElement(containing: "開始", timeout: 10) {
             capture("16b-NotificationQuietHours")
         }
+        captureSettingsSubScreen(row: "プラン・購読管理", rowIndex: 2, waitFor: "特典内容の確認", name: "17-Subscription")
         captureSettingsSubScreen(row: "表示・地域設定", rowIndex: 3, waitFor: "タイムゾーン", name: "18-DisplaySettings")
         captureSettingsSubScreen(row: "チャート設定", rowIndex: 4, waitFor: "時間足", name: "19-ChartSettings")
         // SCR-015 アカウント情報 (added 2026-10-05 with the reference-image
