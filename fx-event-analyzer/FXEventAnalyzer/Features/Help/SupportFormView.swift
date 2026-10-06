@@ -56,7 +56,7 @@ struct SupportFormView: View {
         SettingsListSection(title: kind == .inquiry ? "お問い合わせ内容" : "ご意見・ご要望") {
             ZStack(alignment: .topLeading) {
                 if viewModel.body.isEmpty {
-                    V5JPFont.text(placeholder, size: 8.5, weight: .regular)
+                    NotoText.text(placeholder, size: 8.5)
                         .foregroundStyle(V5P.muted.opacity(0.8))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 8)
@@ -74,7 +74,7 @@ struct SupportFormView: View {
             .frame(height: 130)
         }
         HStack {
-            V5JPFont.text(note, size: 7, weight: .regular)
+            NotoText.text(note, size: 7)
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 4)
@@ -83,7 +83,7 @@ struct SupportFormView: View {
         }
         .frame(width: 214)
         if case .error(let message) = viewModel.sendState {
-            V5JPFont.text(message, size: 7.5, weight: .regular).foregroundStyle(V5P.red).frame(width: 214)
+            NotoText.text(message, size: 7.5).foregroundStyle(V5P.red).frame(width: 214)
         }
         AccountPrimaryButton(title: "送信する", isLoading: viewModel.sendState == .sending, isEnabled: viewModel.canSend) {
             editorFocused = false
@@ -173,7 +173,7 @@ struct SupportHistoryView: View {
     private func row(_ request: SupportRequest) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                V5JPFont.text(request.kind == .feedback ? "フィードバック" : SupportCategory.label(request.category), size: 7, weight: .bold)
+                NotoText.text(request.kind == .feedback ? "フィードバック" : SupportCategory.label(request.category), size: 7)
                     .foregroundStyle(.white)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1.5)
@@ -182,7 +182,7 @@ struct SupportHistoryView: View {
                 NotoText.text("\(preferences.dateString(request.createdAt)) \(preferences.timeString(request.createdAt))", size: 7)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
             }
-            V5JPFont.text(request.body, size: 8.5, weight: .medium)
+            NotoText.text(request.body, size: 8.5)
                 .foregroundStyle(.white)
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
@@ -190,7 +190,7 @@ struct SupportHistoryView: View {
                 Image(systemName: "arrowshape.turn.up.left.fill")
                     .font(.system(size: 7))
                     .foregroundStyle(V5P.cyan)
-                V5JPFont.text(SupportViewModel.replyText(request), size: 8, weight: .regular)
+                NotoText.text(SupportViewModel.replyText(request), size: 8)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                     .fixedSize(horizontal: false, vertical: true)
             }

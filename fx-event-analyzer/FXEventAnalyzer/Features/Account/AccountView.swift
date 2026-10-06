@@ -124,8 +124,8 @@ struct AccountView: View {
         HStack(spacing: 10) {
             AccountAvatar(diameter: 43)
             VStack(alignment: .leading, spacing: 5) {
-                V5JPFont.text(info.account.displayName ?? "未設定", size: 12).foregroundStyle(.white).lineLimit(1)
-                V5JPFont.text(info.email ?? "—", size: Self.subtitleSize, weight: .regular)
+                NotoText.text(info.account.displayName ?? "未設定", size: 12).foregroundStyle(.white).lineLimit(1)
+                NotoText.text(info.email ?? "—", size: Self.subtitleSize)
                     .foregroundStyle(SettingsCardStyle.subtitleColor).lineLimit(1)
             }
             Spacer(minLength: 0)
@@ -183,7 +183,7 @@ struct AccountView: View {
                     .fontWeight(.bold)
                     .frame(width: 14, height: 14)
                     .frame(width: 15)
-                V5JPFont.text("アカウント削除", size: Self.titleSize)
+                NotoText.text("アカウント削除", size: Self.titleSize)
                     .padding(.leading, 11)
                 Spacer()
                 chevron
@@ -206,14 +206,14 @@ struct AccountView: View {
     private func rowLabel(_ title: String, value: String? = nil, valueStyle: ValueStyle = .muted, height: CGFloat) -> some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: valueStyle == .muted ? 4 : 3) {
-                V5JPFont.text(title, size: Self.titleSize, weight: .medium).foregroundStyle(.white)
+                NotoText.text(title, size: Self.titleSize).foregroundStyle(.white)
                 if let value {
                     switch valueStyle {
                     case .muted:
-                        V5JPFont.text(value, size: Self.subtitleSize, weight: .regular)
+                        NotoText.text(value, size: Self.subtitleSize)
                             .foregroundStyle(SettingsCardStyle.subtitleColor).lineLimit(1)
                     case .prominent:
-                        V5JPFont.text(value, size: Self.titleSize, weight: .medium)
+                        NotoText.text(value, size: Self.titleSize)
                             .foregroundStyle(.white.opacity(0.92)).lineLimit(1)
                     }
                 }

@@ -3,7 +3,7 @@ import SwiftUI
 /// SCR-015 アカウント情報のサブ画面(プロフィール編集・メールアドレス変更・
 /// パスワード変更・SCR-024 アカウント削除)の共通部品。HQ指示(2026-10-05)の
 /// 4画面の参考画像に合わせ、SCR-015と同じカード(`SettingsCardStyle`)・文字
-/// (`V5JPFont`)で描く。行は呼び出し側で`.position`する。
+/// (`NotoText`、英字も含めてNoto Sans JP)で描く。行は呼び出し側で`.position`する。
 
 enum AccountPalette {
     /// 削除系の文字・アイコンの赤。HQ指示(2026-10-05)で「ぼやける」→明度を
@@ -70,7 +70,7 @@ struct AccountInfoCard: View {
                 .frame(width: 16, height: 16)
             VStack(alignment: .leading, spacing: 4) {
                 if let title {
-                    V5JPFont.text(title, size: AccountLayout.titleSize, weight: .bold).foregroundStyle(.white)
+                    NotoText.text(title, size: AccountLayout.titleSize).foregroundStyle(.white)
                         .frame(height: 16)
                 }
                 if let text {
@@ -80,7 +80,7 @@ struct AccountInfoCard: View {
                 if !flushBullets {
                     ForEach(bullets, id: \.self) { bullet in
                         HStack(alignment: .top, spacing: 1) {
-                            V5JPFont.text("・", size: AccountLayout.noteSize, weight: .regular).foregroundStyle(textColor)
+                            NotoText.text("・", size: AccountLayout.noteSize).foregroundStyle(textColor)
                                 .fixedSize()
                             AccountNote(text: bullet, color: textColor, width: 158)
                         }
@@ -200,7 +200,7 @@ struct AccountFieldCaption: View {
     let text: String
     var body: some View {
         // メールアドレス変更・パスワード変更の入力欄の見出し(HQ指示 2026-10-06で9.5)。
-        V5JPFont.text(text, size: AccountLayout.titleSize)
+        NotoText.text(text, size: AccountLayout.titleSize)
             .foregroundStyle(.white)
             .frame(width: 210, alignment: .leading)
     }
@@ -214,7 +214,7 @@ struct AccountNote: View {
     var tracking: CGFloat = 0
     var size: CGFloat = AccountLayout.noteSize
     var body: some View {
-        V5JPFont.text(text, size: size, weight: .regular)
+        NotoText.text(text, size: size)
             .tracking(tracking)
             .foregroundStyle(color)
             .lineSpacing(2)
@@ -286,7 +286,7 @@ struct AccountTextField: View {
     private var field: some View {
         ZStack(alignment: .leading) {
             if text.isEmpty {
-                V5JPFont.text(placeholder, size: textSize, weight: .regular)
+                NotoText.text(placeholder, size: textSize)
                     .foregroundStyle(V5P.muted.opacity(0.75))
                     .allowsHitTesting(false)
             }
@@ -316,7 +316,7 @@ struct AccountTextField: View {
     }
 }
 
-/// 主ボタン(214×29)。参考画像どおりの青の塗りで、日本語は`V5JPFont`で
+/// 主ボタン(214×29)。参考画像どおりの青の塗りで、文字は`NotoText`で
 /// 描く。`destructive`はアカウント削除用の赤。
 struct AccountPrimaryButton: View {
     let title: String
@@ -331,7 +331,7 @@ struct AccountPrimaryButton: View {
                 if isLoading {
                     ProgressView().tint(.white).scaleEffect(0.6)
                 } else {
-                    V5JPFont.text(title, size: AccountLayout.titleSize, weight: .bold).foregroundStyle(.white)
+                    NotoText.text(title, size: AccountLayout.titleSize).foregroundStyle(.white)
                 }
             }
             .frame(width: 214, height: 29)
@@ -353,7 +353,7 @@ struct AccountSecondaryButton: View {
 
     var body: some View {
         Button(action: action) {
-            V5JPFont.text(title, size: AccountLayout.titleSize, weight: .bold)
+            NotoText.text(title, size: AccountLayout.titleSize)
                 .foregroundStyle(.white)
                 .frame(width: 214, height: 29)
                 .background(SettingsCardStyle.card(width: 214, height: 29))

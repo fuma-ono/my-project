@@ -36,7 +36,7 @@ struct ProfileEditView: View {
                         .offset(x: 2, y: 1)
                 }
                 .position(x: 117, y: 88)
-            V5JPFont.text("プロフィール画像は後から変更できます。", size: Self.noteSize, weight: .regular)
+            NotoText.text("プロフィール画像は後から変更できます。", size: Self.noteSize)
                 .foregroundStyle(SettingsCardStyle.chevronColor)
                 .position(x: 117, y: 127)
 
@@ -49,7 +49,7 @@ struct ProfileEditView: View {
 
             Button { showDatePicker = true } label: {
                 fieldCard(title: "生年月日", trailingIcon: "chevron.right") {
-                    V5JPFont.text(birthDateText ?? "未設定", size: Self.fieldSize, weight: .regular)
+                    NotoText.text(birthDateText ?? "未設定", size: Self.fieldSize)
                         .foregroundStyle(birthDateText == nil ? V5P.muted : .white)
                         .padding(.horizontal, 10)
                         .frame(width: 214, height: 30, alignment: .leading)
@@ -96,7 +96,7 @@ struct ProfileEditView: View {
     private func fieldCard(title: String, trailingIcon: String, @ViewBuilder value: () -> some View) -> some View {
         VStack(spacing: 0) {
             HStack {
-                V5JPFont.text(title, size: Self.fieldSize, weight: .bold).foregroundStyle(.white)
+                NotoText.text(title, size: Self.fieldSize).foregroundStyle(.white)
                 Spacer()
                 // 右端のアイコン(鉛筆・「＞」)も見出しと同じ大きさ。
                 Image(systemName: trailingIcon)
@@ -165,7 +165,7 @@ private struct BirthDatePickerSheet: View {
 private struct AccountLead: View {
     let text: String
     var body: some View {
-        V5JPFont.text(text, size: AccountLayout.leadSize, weight: .regular)
+        NotoText.text(text, size: AccountLayout.leadSize)
             .foregroundStyle(.white.opacity(0.9))
             .multilineTextAlignment(.center)
             .lineSpacing(3)
@@ -316,7 +316,7 @@ struct AccountDeletionView: View {
                 .font(.system(size: 36))
                 .frame(width: AccountLayout.heroSize, height: AccountLayout.heroSize)
                 .position(x: 117, y: AccountLayout.heroY)
-            V5JPFont.text("アカウントを削除しますか？", size: 12, weight: .bold)
+            NotoText.text("アカウントを削除しますか？", size: 12)
                 .foregroundStyle(AccountPalette.destructive)
                 // 上の三角と下の案内文の、見た目の間隔が揃う位置。
                 .position(x: 117, y: EmailChangeView.leadTop + 3)
@@ -330,7 +330,7 @@ struct AccountDeletionView: View {
                             .font(.system(size: 11))
                             .foregroundStyle(SettingsCardStyle.chevronColor)
                             .frame(width: 16)
-                        V5JPFont.text(item.label, size: AccountLayout.captionSize, weight: .regular).foregroundStyle(.white)
+                        NotoText.text(item.label, size: AccountLayout.captionSize).foregroundStyle(.white)
                         Spacer(minLength: 0)
                     }
                     .frame(height: 21)

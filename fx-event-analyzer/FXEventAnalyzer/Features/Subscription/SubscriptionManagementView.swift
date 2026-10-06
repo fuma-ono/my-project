@@ -74,7 +74,7 @@ struct SubscriptionManagementView: View {
             // (HQ指示 2026-10-06)。
             CrownBadge(fill: viewModel.subscription.isPro ? SubscriptionPalette.gold : .white, diameter: 36)
             VStack(alignment: .leading, spacing: 4) {
-                V5JPFont.text(viewModel.planTitle, size: 12, weight: .bold)
+                NotoText.text(viewModel.planTitle, size: 12)
                     .foregroundStyle(viewModel.subscription.isPro ? SubscriptionPalette.gold : .white)
                 NotoText.text(viewModel.priceLabel, size: viewModel.subscription.isPro ? 11.5 : 9)
                     .foregroundStyle(.white)
@@ -105,23 +105,23 @@ struct SubscriptionManagementView: View {
     /// 通知・設定などは無料でも使えるので、文言は実際の特典(高度な統計)に合わせた。
     private var upgradeSection: some View {
         VStack(alignment: .leading, spacing: 5) {
-            V5JPFont.text("プレミアムプランでできること", size: 8.5, weight: .bold)
+            NotoText.text("プレミアムプランでできること", size: 8.5)
                 .foregroundStyle(SubscriptionPalette.heading)
                 .padding(.leading, 4)
             HStack(alignment: .top, spacing: 8) {
                 // プレミアムプランのカードと同じ、金色の丸の王冠。
                 CrownBadge(fill: SubscriptionPalette.gold, diameter: 24)
                 VStack(alignment: .leading, spacing: 3) {
-                    V5JPFont.text("より多くの機能を利用するには", size: 7.5, weight: .bold).foregroundStyle(.white)
-                    V5JPFont.text("プレミアムプランにご登録ください。", size: 7.5, weight: .bold).foregroundStyle(V5P.cyan)
-                    V5JPFont.text("過去の発表時の詳しい値動き統計など、すべての機能が利用可能になります。", size: 7, weight: .regular)
+                    NotoText.text("より多くの機能を利用するには", size: 7.5).foregroundStyle(.white)
+                    NotoText.text("プレミアムプランにご登録ください。", size: 7.5).foregroundStyle(V5P.cyan)
+                    NotoText.text("過去の発表時の詳しい値動き統計など、すべての機能が利用可能になります。", size: 7)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .fixedSize(horizontal: false, vertical: true)
                     // ボタンは文の下に置き、文を横幅いっぱいに使う(折り返しを減らす)。
                     HStack {
                         Spacer(minLength: 0)
                         Button { sheet = .plans } label: {
-                            V5JPFont.text("プランを確認する", size: 6.5, weight: .bold)
+                            NotoText.text("プランを確認する", size: 6.5)
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 10)
                                 .frame(height: 19)
@@ -141,7 +141,7 @@ struct SubscriptionManagementView: View {
                 Image(systemName: "info.circle.fill")
                     .font(.system(size: 12))
                     .foregroundStyle(V5P.blue)
-                V5JPFont.text("無料プランは、いつでもプレミアムプランにアップグレードできます。アップグレード後は、すぐにすべての機能をご利用いただけます。", size: 7, weight: .regular)
+                NotoText.text("無料プランは、いつでもプレミアムプランにアップグレードできます。アップグレード後は、すぐにすべての機能をご利用いただけます。", size: 7)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -348,7 +348,7 @@ private struct SubscriptionMenuRow: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(tint == .white ? V5P.cyan : tint)
                     .frame(width: 16)
-                V5JPFont.text(title, size: 9.5, weight: .medium).foregroundStyle(tint)
+                NotoText.text(title, size: 9.5).foregroundStyle(tint)
                 Spacer(minLength: 4)
                 // 「＞」は項目名と同じ大きさ(HQ指示 2026-10-06)。
                 Image(systemName: "chevron.right")

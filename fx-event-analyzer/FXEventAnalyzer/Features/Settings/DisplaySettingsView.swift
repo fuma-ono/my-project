@@ -169,7 +169,7 @@ struct SettingsSaveError: View {
 
     var body: some View {
         if case .error(let message) = state {
-            V5JPFont.text(message, size: 7, weight: .regular)
+            NotoText.text(message, size: 7)
                 .foregroundStyle(V5P.red)
                 .frame(width: 214)
         }

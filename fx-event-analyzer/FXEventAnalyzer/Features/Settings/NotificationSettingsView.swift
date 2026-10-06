@@ -139,14 +139,14 @@ struct NotificationSettingsView: View {
                     UIApplication.shared.open(url)
                 }
             } label: {
-                V5JPFont.text("端末の通知がオフです。タップして設定を開く", size: 6.5, weight: .regular)
+                NotoText.text("端末の通知がオフです。タップして設定を開く", size: 6.5)
                     .foregroundStyle(V5P.yellow)
                     .underline()
             }
             .buttonStyle(.plain)
         } else {
             switch viewModel.saveState {
-            case .error(let message): V5JPFont.text(message, size: 6.5, weight: .regular).foregroundStyle(V5P.red)
+            case .error(let message): NotoText.text(message, size: 6.5).foregroundStyle(V5P.red)
             // 保存できたときは何も出さない(HQ指示 2026-10-06)。失敗だけ知らせる。
             case .idle, .saving, .saved: EmptyView()
             }

@@ -81,7 +81,7 @@ struct NotificationListView: View {
     private func filterChip(label: String, kind: NotificationEntry.Kind?) -> some View {
         let isSelected = filter == kind
         return Button { filter = kind } label: {
-            V5JPFont.text(label, size: 8, weight: isSelected ? .bold : .medium)
+            NotoText.text(label, size: 8)
                 .foregroundStyle(isSelected ? .white : SettingsCardStyle.subtitleColor)
                 .frame(maxWidth: .infinity)
                 .frame(height: 20)
@@ -182,7 +182,7 @@ private struct NotificationRow: View {
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
             // 説明の行を6.5にしても枠の高さが変わらないよう、行の間を詰めている。
             VStack(alignment: .leading, spacing: 0.5) {
-                V5JPFont.text(entry.kind.label, size: 5.5, weight: .bold)
+                NotoText.text(entry.kind.label, size: 5.5)
                     .foregroundStyle(.white)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
@@ -214,7 +214,7 @@ private struct NotificationRow: View {
         .background(AccountCardBackground())
         // 受信日時はカードの右上(シェブロンの上)に、字間を詰めて置く。
         .overlay(alignment: .topTrailing) {
-            V5JPFont.text(receivedText, size: 7, weight: .regular)
+            NotoText.text(receivedText, size: 7)
                 .tracking(-0.3)
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
                 .padding(.top, 4)
@@ -278,23 +278,17 @@ private struct NotificationHeadline: View {
     private static let width: CGFloat = 196 - 24 - 16 - NotificationRowLayout.trailingWidth
 
     var body: some View {
-        V5JPFont.text(Self.fitsInOneLine(full) ? full : short, size: Self.size, weight: .bold)
+        NotoText.text(Self.fitsInOneLine(full) ? full : short, size: Self.size)
             .foregroundStyle(.white)
             .lineLimit(1)
             .minimumScaleFactor(0.7)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// `V5JPFont`と同じく、日本語はNoto Sans JP・それ以外はシステムの太字で
-    /// 組んだときに1行に収まるか。
+    /// 表示と同じく、全体をNoto Sans JPで組んだときに1行に収まるか。
     static func fitsInOneLine(_ text: String) -> Bool {
-        let japanese = UIFont(name: "NotoSansJP-SemiBold", size: size) ?? .systemFont(ofSize: size, weight: .semibold)
-        let latin = UIFont.systemFont(ofSize: size, weight: .bold)
-        let attributed = NSMutableAttributedString()
-        for character in text {
-            let isJapanese = character.unicodeScalars.contains { $0.value >= 0x3000 }
-            attributed.append(NSAttributedString(string: String(character), attributes: [.font: isJapanese ? japanese : latin]))
-        }
+        let font = UIFont(name: "NotoSansJP-SemiBold", size: size) ?? .systemFont(ofSize: size, weight: .semibold)
+        let attributed = NSAttributedString(string: text, attributes: [.font: font])
         return attributed.size().width <= width
     }
 }

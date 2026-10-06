@@ -277,9 +277,9 @@ struct SettingsView: View {
             rowBadge(icon, nudge: nudge)
             // HQ指示(2026-10-05)「フォントが日本語っぽくない(編・約など)」:
             // システムフォントのままだとシミュレーター(英語環境)では漢字が
-            // 中国語字形で描かれていた。他画面と同じ`V5JPFont`(日本語部分のみ
-            // Noto Sans JP)に揃えている。
-            V5JPFont.text(title, size: Self.titleSize, weight: .medium).foregroundStyle(.white)
+            // 中国語字形で描かれていた。英字も含めてNoto Sans JPで組む(`NotoText`、
+            // HQ指示 2026-10-06「フォントの違いが目立つ」)。
+            NotoText.text(title, size: Self.titleSize).foregroundStyle(.white)
             Spacer()
             // 「＞」は項目名と同じ大きさ(HQ指示 2026-10-06)。
             Image(systemName: "chevron.right").font(.system(size: Self.titleSize, weight: .semibold)).foregroundStyle(Self.chevronColor)
@@ -306,7 +306,7 @@ struct SettingsView: View {
                 if viewModel.state == .signingOut {
                     ProgressView().tint(AccountPalette.destructive)
                 } else {
-                    V5JPFont.text("ログアウト", size: Self.titleSize)
+                    NotoText.text("ログアウト", size: Self.titleSize)
                 }
                 Spacer()
             }
@@ -323,7 +323,7 @@ struct SettingsView: View {
         .disabled(viewModel.state == .signingOut)
         .overlay(alignment: .bottom) {
             if case .error(let message) = viewModel.state {
-                V5JPFont.text(message, size: 6, weight: .regular).foregroundStyle(V5P.red)
+                NotoText.text(message, size: 6).foregroundStyle(V5P.red)
                     .multilineTextAlignment(.center).frame(width: Self.cardWidth).offset(y: 9)
             }
         }

@@ -24,7 +24,7 @@ struct SettingsListSection<Rows: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            V5JPFont.text(title, size: SettingsListLayout.sectionTitleSize, weight: .bold)
+            NotoText.text(title, size: SettingsListLayout.sectionTitleSize)
                 .foregroundStyle(SettingsListLayout.sectionTitleColor)
                 .padding(.leading, 4)
             VStack(spacing: 0) { rows() }
@@ -51,7 +51,7 @@ struct SettingsListToggleRow: View {
     var body: some View {
         Button { onChange(!isOn) } label: {
             HStack(spacing: 6) {
-                V5JPFont.text(title, size: SettingsListLayout.rowTitleSize, weight: .medium).foregroundStyle(.white)
+                NotoText.text(title, size: SettingsListLayout.rowTitleSize).foregroundStyle(.white)
                 Spacer(minLength: 4)
                 Capsule()
                     .fill(isOn ? V5P.blue : V5P.panel2)
@@ -84,7 +84,7 @@ struct SettingsListValueRow: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 // 長い項目名(デフォルトのチャートタイプなど)は値を切らずに、名前の方を少し縮める。
-                V5JPFont.text(title, size: SettingsListLayout.rowTitleSize, weight: .medium).foregroundStyle(.white)
+                NotoText.text(title, size: SettingsListLayout.rowTitleSize).foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
                 Spacer(minLength: 4)

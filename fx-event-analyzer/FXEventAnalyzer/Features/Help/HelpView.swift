@@ -26,7 +26,7 @@ struct HelpView: View {
                     contactCard(icon: "square.and.pencil", title: "フィードバックを送る", subtitle: "ご意見・ご要望をお聞かせください") { form = .feedback }
                     Button { showsHistory = true } label: {
                         HStack(spacing: 4) {
-                            V5JPFont.text("お問い合わせ履歴", size: 8.5, weight: .medium)
+                            NotoText.text("お問い合わせ履歴", size: 8.5)
                             Image(systemName: "chevron.right").font(.system(size: 8.5, weight: .semibold))
                         }
                         .foregroundStyle(SettingsListLayout.sectionTitleColor)
@@ -67,7 +67,7 @@ struct HelpView: View {
         let results = HelpFAQ.search(keyword)
         return SettingsListSection(title: "検索結果") {
             if results.isEmpty {
-                V5JPFont.text("該当する質問が見つかりませんでした。お問い合わせからお送りください。", size: 8, weight: .regular)
+                NotoText.text("該当する質問が見つかりませんでした。お問い合わせからお送りください。", size: 8)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(10)
@@ -90,8 +90,8 @@ struct HelpView: View {
                     .frame(width: 26, height: 26)
                     .background(RoundedRectangle(cornerRadius: 6).fill(V5P.blue))
                 VStack(alignment: .leading, spacing: 2) {
-                    V5JPFont.text(title, size: 9.5, weight: .bold).foregroundStyle(.white)
-                    V5JPFont.text(subtitle, size: 7.5, weight: .regular).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    NotoText.text(title, size: 9.5).foregroundStyle(.white)
+                    NotoText.text(subtitle, size: 7.5).foregroundStyle(SettingsCardStyle.subtitleColor)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
@@ -120,7 +120,7 @@ private struct HelpSearchField: View {
                 .foregroundStyle(SettingsCardStyle.chevronColor)
             ZStack(alignment: .leading) {
                 if text.isEmpty {
-                    V5JPFont.text("キーワードで検索", size: 9, weight: .regular)
+                    NotoText.text("キーワードで検索", size: 9)
                         .foregroundStyle(V5P.muted.opacity(0.8))
                         .allowsHitTesting(false)
                 }
@@ -154,8 +154,8 @@ struct HelpFAQAnswerRow: View {
         Button { withAnimation(.easeInOut(duration: 0.15)) { isOpen.toggle() } } label: {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(alignment: .top, spacing: 6) {
-                    V5JPFont.text("Q", size: 9.5, weight: .bold).foregroundStyle(V5P.cyan)
-                    V5JPFont.text(item.question, size: 9, weight: .medium)
+                    NotoText.text("Q", size: 9.5).foregroundStyle(V5P.cyan)
+                    NotoText.text(item.question, size: 9)
                         .foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 4)
@@ -164,7 +164,7 @@ struct HelpFAQAnswerRow: View {
                         .foregroundStyle(SettingsCardStyle.chevronColor)
                 }
                 if isOpen {
-                    V5JPFont.text(item.answer, size: 8, weight: .regular)
+                    NotoText.text(item.answer, size: 8)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
