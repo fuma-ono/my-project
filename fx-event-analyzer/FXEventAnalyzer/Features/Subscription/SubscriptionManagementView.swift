@@ -111,7 +111,7 @@ struct SubscriptionManagementView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     V5JPFont.text("より多くの機能を利用するには", size: 7.5, weight: .bold).foregroundStyle(.white)
                     V5JPFont.text("プレミアムプランにご登録ください。", size: 7.5, weight: .bold).foregroundStyle(V5P.cyan)
-                    V5JPFont.text("過去の発表時の詳しい値動き統計など、すべての機能が利用可能になります。", size: 6, weight: .regular)
+                    V5JPFont.text("過去の発表時の詳しい値動き統計など、すべての機能が利用可能になります。", size: 7, weight: .regular)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .fixedSize(horizontal: false, vertical: true)
                     // ボタンは文の下に置き、文を横幅いっぱいに使う(折り返しを減らす)。
@@ -138,7 +138,7 @@ struct SubscriptionManagementView: View {
                 Image(systemName: "info.circle.fill")
                     .font(.system(size: 12))
                     .foregroundStyle(V5P.blue)
-                V5JPFont.text("無料プランは、いつでもプレミアムプランにアップグレードできます。アップグレード後は、すぐにすべての機能をご利用いただけます。", size: 6, weight: .regular)
+                V5JPFont.text("無料プランは、いつでもプレミアムプランにアップグレードできます。アップグレード後は、すぐにすべての機能をご利用いただけます。", size: 7, weight: .regular)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                     .fixedSize(horizontal: false, vertical: true)
             }
