@@ -713,7 +713,10 @@ struct HomeView: View {
                 // 2行目無しでも、またこのイベントに予想/前回が無くても、
                 // 必ず同じ38の高さとして扱われるため、`eventRowHeight`
                 // (44)を一切変えずに済み、行ごとの縦位置のズレも起きない。
-                V5JPFont.text(event.indicatorName, size: 8, weight: .semibold)
+                // `V5JPFont.text`(フォント別Text連結)は複数行折り返しが
+                // 効かない実機バグがあるため(詳細は`V5JPFont.wrappingText`
+                // のドキュメントコメント参照)、ここは`wrappingText`を使う。
+                V5JPFont.wrappingText(event.indicatorName, size: 8, weight: .semibold)
                     .foregroundStyle(.white)
                     .lineLimit(2)
                 if let subtitle = Self.eventSubtitle(event) {
