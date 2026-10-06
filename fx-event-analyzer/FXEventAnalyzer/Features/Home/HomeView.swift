@@ -1297,13 +1297,39 @@ struct HomeView: View {
                             .tracking(-0.4)
                             .foregroundStyle(Self.linkBlue)
                         speechPriceRow(label: "発言前", value: speech.reactionPriceBefore, symbol: symbol)
+                        // HQ再指摘(2026-10-06、CIキャプチャで再発確認)「現在の
+                        // 価格がまた'...'で切れている」: `speechPriceRow`
+                        // (ラベル+価格のHStack)をpipsと一緒にもう1つ外側の
+                        // HStackへネストしていたため、価格に付けた
+                        // `.layoutPriority(1)`は内側HStackの直接の兄弟
+                        // (ラベルのみ)としか比較されず、外側のpipsとは
+                        // 比較されないまま価格側が真っ先に潰れていた
+                        // (`.layoutPriority`は直接の兄弟間でしか効かない)。
+                        // ラベル・価格・pipsを1段のHStackに展開し、優先度を
+                        // 価格(2)>pips(1)>ラベル(0、デフォルト)の順にして、
+                        // 窮屈な時はラベルが先に縮むようにした。ラベルの
+                        // `minWidth`も外した(固定下限があるとラベルが
+                        // 必要以上に幅を確保し、優先度に関わらず価格/pips
+                        // 側の余白を奪っていたため)。
                         HStack(spacing: 1) {
-                            speechPriceRow(label: "現在", value: speech.reactionPriceAfter, symbol: symbol)
+                            Text("現在")
+                                .font(.system(size: 6, weight: .medium))
+                                .tracking(-0.4)
+                                .foregroundStyle(Self.linkBlue)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                            Text(Self.speechPriceText(speech.reactionPriceAfter, symbol: symbol))
+                                .font(.system(size: 6, weight: .bold))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                                .layoutPriority(2)
                             if let pips = speech.reactionPips {
                                 NotoText.text(ValueFormat.pips(pips), size: 5.5)
                                     .foregroundStyle(pips >= 0 ? Self.changeUpColor : Self.changeDownColor)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.7)
+                                    .layoutPriority(1)
                             }
                         }
                     }
