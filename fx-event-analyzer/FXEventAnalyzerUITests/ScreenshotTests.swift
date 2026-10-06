@@ -152,7 +152,9 @@ final class ScreenshotTests: XCTestCase {
         captureSettingsSubScreen(row: "通知設定", rowIndex: 1, waitFor: "要人発言の通知", name: "16-NotificationSettings")
         // 通知しない時間帯をONにすると開始・終了の行が増える。それでも1画面に
         // 収まることを確かめる(HQ指示 2026-10-06)。
-        tap(containing: "通知しない時間帯")
+        // V5Viewport内のボタンは文字では押せないため、行の位置(V5座標、
+        // 通知時間帯カードの1行目・中心y≈289)を直接タップする。
+        tapV5(x: 117, y: 289)
         XCTAssertTrue(waitForAnyElement(containing: "開始", timeout: 10), "Quiet hours rows did not appear")
         capture("16b-NotificationQuietHours")
         captureSettingsSubScreen(row: "表示・地域設定", rowIndex: 3, waitFor: "タイムゾーン", name: "18-DisplaySettings")
