@@ -339,13 +339,18 @@ struct HomeView: View {
     /// 明らかに横長になっていた。`.fixedSize()`をやめ、"MEDIUM"が収まる
     /// 固定幅(32)を両方に与えてテキストを中央揃えにすることで、HIGH/
     /// MEDIUM/LOWのバッジが同じ横幅になるようにした。
-    @ViewBuilder private func statusBadge(_ text: String, colors: (fill: Color, border: Color)) -> some View {
+    ///
+    /// HQ指摘(2026-10-06)「お気に入り内のHIGHの枠の縦幅をもう少し短く
+    /// して」: `verticalPadding`を追加し、お気に入りの小カード(`favoriteGridCard`)
+    /// からだけ3→2で呼び出す — 今日の重要イベント(`eventRow`)側のバッジは
+    /// 対象外のためデフォルト値(3)のまま変更していない。
+    @ViewBuilder private func statusBadge(_ text: String, colors: (fill: Color, border: Color), verticalPadding: CGFloat = 3) -> some View {
         Text(text)
             .font(.system(size: 7, weight: .bold))
             .tracking(-0.4)
             .foregroundStyle(.white)
             .frame(width: 32)
-            .padding(.vertical, 3)
+            .padding(.vertical, verticalPadding)
             .background(colors.fill, in: Capsule())
             .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
     }
@@ -1046,7 +1051,7 @@ struct HomeView: View {
                 favoriteGridCardContent(countryCode: countryCode, name: name) {
                     dateRow(releaseDatetime)
                 } footer: {
-                    statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance))
+                    statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance), verticalPadding: 2)
                 }
             }.buttonStyle(.plain)
         // HQ指示(2026-10-06)「お気に入り欄の米国CPIの下にカレンダーアイコン
@@ -1065,7 +1070,7 @@ struct HomeView: View {
                         EmptyView()
                     }
                 } footer: {
-                    statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance))
+                    statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance), verticalPadding: 2)
                 }
             }.buttonStyle(.plain)
         case .fxPair(_, let symbol, let price, let change, let isUp):
@@ -1207,6 +1212,14 @@ struct HomeView: View {
     /// 全テキストに付けた — 本当に入りきらない時は(基本サイズ7を保った
     /// まま)わずかに縮小して全文を表示し、二度と”...”で情報が消えない
     /// ようにする。
+    ///
+    /// HQ指摘(2026-10-06、4回目)「文字サイズを1下げて」「149.2 +28pipsの
+    /// 文字間隔を狭めて」「縦線をもう少し右側に」: 発言者名(speakerName)
+    /// 以外のテキスト(発言要約・日時/中央銀行・USD/JPY・発言前/現在の
+    /// ラベルと数字)を7→6(pipsは6.5→5.5)へ一段階縮小。「現在」の数字と
+    /// pipsの間のHStack spacingを3→1に詰めた。縦線(Divider)は左ブロックが
+    /// 固定幅ではなくなった(上記3回目の対応)ため、`.padding(.leading, 5)`
+    /// で右へ寄せている。
     @ViewBuilder private func speechRow(_ speech: HomeSpeechSummary) -> some View {
         NavigationLink(value: AppRoute.speechDetail(id: speech.id)) {
             HStack(spacing: 6) {
@@ -1215,33 +1228,33 @@ struct HomeView: View {
                     V5JPFont.text(speech.speakerName, size: 7, weight: .semibold)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                    V5JPFont.text(speech.headline, size: 7, weight: .regular)
+                    V5JPFont.text(speech.headline, size: 6, weight: .regular)
                         .tracking(-0.4)
                         .foregroundStyle(Self.linkBlue)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                     Text(Self.speechDateOrgText(speech))
-                        .font(.system(size: 7, weight: .medium))
+                        .font(.system(size: 6, weight: .medium))
                         .tracking(-0.4)
                         .foregroundStyle(Self.linkBlue)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                 }
 
-                Divider().overlay(Self.cardBorderColor).frame(height: 25)
+                Divider().overlay(Self.cardBorderColor).frame(height: 25).padding(.leading, 5)
 
                 if let symbol = speech.reactionFxSymbol {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(symbol)
-                            .font(.system(size: 7, weight: .medium))
+                            .font(.system(size: 6, weight: .medium))
                             .tracking(-0.4)
                             .foregroundStyle(Self.linkBlue)
                         speechPriceRow(label: "発言前", value: speech.reactionPriceBefore, symbol: symbol)
-                        HStack(spacing: 3) {
+                        HStack(spacing: 1) {
                             speechPriceRow(label: "現在", value: speech.reactionPriceAfter, symbol: symbol)
                             if let pips = speech.reactionPips {
                                 Text(ValueFormat.pips(pips))
-                                    .font(.system(size: 6.5, weight: .bold))
+                                    .font(.system(size: 5.5, weight: .bold))
                                     .foregroundStyle(pips >= 0 ? Self.changeUpColor : Self.changeDownColor)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.7)
@@ -1267,14 +1280,14 @@ struct HomeView: View {
     @ViewBuilder private func speechPriceRow(label: String, value: Double?, symbol: String) -> some View {
         HStack(spacing: 3) {
             Text(label)
-                .font(.system(size: 7, weight: .medium))
+                .font(.system(size: 6, weight: .medium))
                 .tracking(-0.4)
                 .foregroundStyle(Self.linkBlue)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-                .frame(minWidth: 22, alignment: .leading)
+                .frame(minWidth: 20, alignment: .leading)
             Text(Self.speechPriceText(value, symbol: symbol))
-                .font(.system(size: 7, weight: .bold))
+                .font(.system(size: 6, weight: .bold))
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
