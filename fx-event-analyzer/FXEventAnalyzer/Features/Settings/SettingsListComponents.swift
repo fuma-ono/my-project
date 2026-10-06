@@ -81,15 +81,17 @@ struct SettingsListValueRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
+                // 長い項目名(デフォルトのチャートタイプなど)は値を切らずに、名前の方を少し縮める。
                 V5JPFont.text(title, size: SettingsListLayout.rowTitleSize, weight: .medium).foregroundStyle(.white)
-                    .layoutPriority(1)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 Spacer(minLength: 4)
                 // 「23:00」などの数字も日本語の値と同じ大きさに見えるよう、
                 // 全体をNoto Sans JPで組む(HQ指示 2026-10-06)。
                 NotoText.text(value, size: SettingsListLayout.valueSize)
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .fixedSize()
                 Image(systemName: "chevron.right")
                     .font(.system(size: SettingsListLayout.rowTitleSize, weight: .semibold))
                     .foregroundStyle(SettingsCardStyle.chevronColor)
