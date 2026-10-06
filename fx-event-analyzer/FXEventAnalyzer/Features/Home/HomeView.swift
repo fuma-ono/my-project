@@ -1309,45 +1309,32 @@ struct HomeView: View {
 
                 if let symbol = speech.reactionFxSymbol {
                     VStack(alignment: .leading, spacing: 2) {
-                        NotoText.text(symbol, size: 6)
-                            .tracking(-0.4)
-                            .foregroundStyle(Self.linkBlue)
-                        speechPriceRow(label: "発言前", value: speech.reactionPriceBefore, symbol: symbol)
-                        // HQ再指摘(2026-10-06、CIキャプチャで再発確認)「現在の
-                        // 価格がまた'...'で切れている」: `speechPriceRow`
-                        // (ラベル+価格のHStack)をpipsと一緒にもう1つ外側の
-                        // HStackへネストしていたため、価格に付けた
-                        // `.layoutPriority(1)`は内側HStackの直接の兄弟
-                        // (ラベルのみ)としか比較されず、外側のpipsとは
-                        // 比較されないまま価格側が真っ先に潰れていた
-                        // (`.layoutPriority`は直接の兄弟間でしか効かない)。
-                        // ラベル・価格・pipsを1段のHStackに展開し、優先度を
-                        // 価格(2)>pips(1)>ラベル(0、デフォルト)の順にして、
-                        // 窮屈な時はラベルが先に縮むようにした。ラベルの
-                        // `minWidth`も外した(固定下限があるとラベルが
-                        // 必要以上に幅を確保し、優先度に関わらず価格/pips
-                        // 側の余白を奪っていたため)。
-                        HStack(spacing: 1) {
-                            Text("現在")
-                                .font(.system(size: 6, weight: .medium))
+                        // HQ再指摘(2026-10-06、3回目、CIキャプチャで再々確認)
+                        // 「現在の価格がまだ'149...'のように切れている」:
+                        // ラベル・価格・pipsを1段のHStackに展開する対応
+                        // (直前のコミット)は優先度の問題自体は解消したが、
+                        // 3つ分の絶対的な横幅が行の残り幅に対してそもそも
+                        // 足りていなかった(優先度はどれが先に縮むかを
+                        // 決めるだけで、無から幅を作れない)。pipsを
+                        // 「現在」行から1行目のシンボル行へ移した — シンボル
+                        // ("USD/JPY")はこれまでも単独で十分な余白を持って
+                        // 表示できていたため、pipsと同居させても窮屈に
+                        // ならない。これで「発言前」「現在」は共にラベル+
+                        // 価格だけの2要素となり、既に問題なく全文表示できて
+                        // いた「発言前」と全く同じ構成になる。
+                        HStack(spacing: 4) {
+                            NotoText.text(symbol, size: 6)
                                 .tracking(-0.4)
                                 .foregroundStyle(Self.linkBlue)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                            Text(Self.speechPriceText(speech.reactionPriceAfter, symbol: symbol))
-                                .font(.system(size: 6, weight: .bold))
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                                .layoutPriority(2)
                             if let pips = speech.reactionPips {
                                 NotoText.text(ValueFormat.pips(pips), size: 5.5)
                                     .foregroundStyle(pips >= 0 ? Self.changeUpColor : Self.changeDownColor)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.7)
-                                    .layoutPriority(1)
                             }
                         }
+                        speechPriceRow(label: "発言前", value: speech.reactionPriceBefore, symbol: symbol)
+                        speechPriceRow(label: "現在", value: speech.reactionPriceAfter, symbol: symbol)
                     }
                     .lineLimit(1)
                 }
