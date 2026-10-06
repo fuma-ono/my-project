@@ -59,6 +59,8 @@ struct AccountInfoCard: View {
     /// 箇条書きの点をアイコンの下まで左に寄せ、カード幅いっぱいに使う
     /// (メールアドレス変更のみ。HQ指示 2026-10-05)。
     var flushBullets = false
+    /// 本文・箇条書きの文字サイズ。
+    var textSize: CGFloat = AccountLayout.noteSize
 
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
@@ -72,7 +74,7 @@ struct AccountInfoCard: View {
                         .frame(height: 16)
                 }
                 if let text {
-                    AccountNote(text: text, color: textColor, width: 168)
+                    AccountNote(text: text, color: textColor, width: 168, size: textSize)
                         .padding(.top, title == nil ? 2 : 0)
                 }
                 if !flushBullets {
@@ -90,7 +92,7 @@ struct AccountInfoCard: View {
         .padding(.horizontal, 10)
         .padding(.top, 9)
         .padding(.bottom, flushBullets && !bullets.isEmpty ? 0 : 9)
-        .modifier(BulletList(bullets: flushBullets ? bullets : [], color: textColor))
+        .modifier(BulletList(bullets: flushBullets ? bullets : [], color: textColor, size: textSize))
         .background(AccountCardBackground(fill: fill, border: border))
     }
 }
@@ -169,6 +171,7 @@ struct AccountFormScaffold<Content: View>: View {
 private struct BulletList: ViewModifier {
     let bullets: [String]
     let color: Color
+    let size: CGFloat
 
     func body(content: Content) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -179,8 +182,8 @@ private struct BulletList: ViewModifier {
                         HStack(alignment: .top, spacing: 2) {
                             Circle().fill(color)
                                 .frame(width: 2.4, height: 2.4)
-                                .frame(width: 4, height: 11)
-                            AccountNote(text: bullet, color: color, width: 196, tracking: -0.2)
+                                .frame(width: 4, height: size + 3.5)
+                            AccountNote(text: bullet, color: color, width: 196, tracking: -0.2, size: size)
                         }
                     }
                 }
@@ -208,8 +211,9 @@ struct AccountNote: View {
     var color: Color = V5P.muted
     var width: CGFloat = 206
     var tracking: CGFloat = 0
+    var size: CGFloat = AccountLayout.noteSize
     var body: some View {
-        V5JPFont.text(text, size: AccountLayout.noteSize, weight: .regular)
+        V5JPFont.text(text, size: size, weight: .regular)
             .tracking(tracking)
             .foregroundStyle(color)
             .lineSpacing(2)

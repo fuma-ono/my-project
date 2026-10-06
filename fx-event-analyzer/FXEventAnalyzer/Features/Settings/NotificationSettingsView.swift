@@ -123,7 +123,9 @@ struct NotificationSettingsView: View {
             AccountInfoCard(
                 icon: "info.circle.fill",
                 title: "通知について",
-                text: "通知は、選択した通貨ペア・重要度・タイミングの条件に基づいて配信されます。プッシュ通知の設定は、端末の通知設定もご確認ください。"
+                text: "通知は、選択した通貨ペア・重要度・タイミングの条件に基づいて配信されます。プッシュ通知の設定は、端末の通知設定もご確認ください。",
+                // 「受け取りたい通知を選択してください。」と同じ大きさ(HQ指示 2026-10-06)。
+                textSize: NotificationLayout.subtitleSize
             )
             statusLine
                 .frame(width: 214, height: 12)
