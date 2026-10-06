@@ -37,7 +37,7 @@ enum HomeFavoriteItem: Identifiable, Equatable {
     var id: String {
         switch self {
         case .event(let id, _, _, _, _, _): return "event:\(id)"
-        case .indicator(let id, _, _, _, _): return "indicator:\(id)"
+        case .indicator(let id, _, _, _, _, _): return "indicator:\(id)"
         case .fxPair(let id, _, _, _, _): return "fxPair:\(id)"
         }
     }
