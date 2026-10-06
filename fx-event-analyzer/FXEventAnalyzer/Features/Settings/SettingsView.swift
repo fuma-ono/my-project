@@ -202,8 +202,8 @@ struct SettingsView: View {
     /// カード・区切り線・シェブロンの色はSCR-015と共有(`SettingsCardStyle`)。
     private static let cardFill = SettingsCardStyle.cardFill
     private static let separator = SettingsCardStyle.separator
-    /// 通知設定の行(「プッシュ通知」など)と同じ大きさ(HQ指示 2026-10-06)。
-    private static let titleSize: CGFloat = 8.5
+    /// プラン・購読管理の行(「プランを変更」など)と同じ大きさ(HQ指示 2026-10-06)。
+    private static let titleSize: CGFloat = 9.5
     /// アイコンを囲む丸(参考画像の直径44px)と、その中の白いアイコン。
     private static let badgeSize: CGFloat = 22
     private static let badgeFill = Color(red: 22 / 255, green: 81 / 255, blue: 129 / 255) // #165181

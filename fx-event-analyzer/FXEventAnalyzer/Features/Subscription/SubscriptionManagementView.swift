@@ -71,11 +71,11 @@ struct SubscriptionManagementView: View {
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(viewModel.subscription.isPro ? SubscriptionPalette.gold : V5P.cyan)
                 .frame(width: 36, height: 36)
-                // 王冠は丸の中に置く(HQ指示 2026-10-06)。
+                // 王冠は丸の中に置き、丸の線はプラン名と同じ色にする(HQ指示 2026-10-06)。
                 .background(Circle().fill(Color.black.opacity(0.18)))
-                .overlay(Circle().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
+                .overlay(Circle().stroke(viewModel.subscription.isPro ? SubscriptionPalette.gold : SettingsCardStyle.cardBorder, lineWidth: 1))
             VStack(alignment: .leading, spacing: 4) {
-                V5JPFont.text(viewModel.planTitle, size: 10.5, weight: .bold)
+                V5JPFont.text(viewModel.planTitle, size: 12, weight: .bold)
                     .foregroundStyle(viewModel.subscription.isPro ? SubscriptionPalette.gold : .white)
                 NotoText.text(viewModel.priceLabel, size: viewModel.subscription.isPro ? 11.5 : 8)
                     .foregroundStyle(.white)

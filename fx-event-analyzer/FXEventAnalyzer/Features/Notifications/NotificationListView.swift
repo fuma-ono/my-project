@@ -182,7 +182,8 @@ private struct NotificationRow: View {
                 .frame(width: 24, height: 24)
                 .background(RoundedRectangle(cornerRadius: 6).fill(SettingsCardStyle.cardFill))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
-            VStack(alignment: .leading, spacing: 1) {
+            // 説明の行を6.5にしても枠の高さが変わらないよう、行の間を詰めている。
+            VStack(alignment: .leading, spacing: 0.5) {
                 V5JPFont.text(entry.kind.label, size: 5.5, weight: .bold)
                     .foregroundStyle(.white)
                     .padding(.horizontal, 4)
@@ -191,7 +192,7 @@ private struct NotificationRow: View {
                 NotificationHeadline(full: headline, short: shortHeadline)
                 ForEach(lines, id: \.self) { line in
                     // 時刻の数字も日本語と同じフォント・大きさで揃える(HQ指示 2026-10-06)。
-                    NotoText.text(line, size: 6)
+                    NotoText.text(line, size: 6.5)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .lineLimit(1)
                 }
@@ -232,12 +233,13 @@ private struct NotificationRow: View {
 }
 
 private enum NotificationRowLayout {
-    /// 右端の列(重要度バッジ「MEDIUM」+間隔+「＞」)の幅。
-    static let trailingWidth: CGFloat = 46
+    /// 右端の列(重要度バッジ(幅32)+間隔+「＞」)の幅。
+    static let trailingWidth: CGFloat = 42
 }
 
-/// 重要度のバッジ。ホーム画面と同じ「HIGH / MEDIUM / LOW」の表記と色
-/// (HQ指示 2026-10-06)。色の値はHomeViewの`importanceBadgeColors`と同じ。
+/// 重要度のバッジ。ホーム画面と同じ「HIGH / MEDIUM / LOW」の表記・色・形
+/// (HQ指示 2026-10-06)。色・形はHomeViewの`importanceBadgeColors` /
+/// `statusBadge`と同じ(幅32で揃え、字間を詰めた太字)。
 private struct ImportanceBadge: View {
     let importance: String
 
@@ -254,13 +256,13 @@ private struct ImportanceBadge: View {
 
     var body: some View {
         Text(importance)
-            .font(.system(size: 5.5, weight: .heavy))
+            .font(.system(size: 7, weight: .bold))
+            .tracking(-0.4)
             .foregroundStyle(.white)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1.5)
+            .frame(width: 32)
+            .padding(.vertical, 3)
             .background(colors.fill, in: Capsule())
-            .overlay(Capsule().stroke(colors.border, lineWidth: 0.5))
-            .fixedSize()
+            .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
     }
 }
 

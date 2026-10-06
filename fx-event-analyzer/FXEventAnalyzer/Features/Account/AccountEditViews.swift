@@ -207,8 +207,8 @@ struct EmailChangeView: View {
                     "メールが届かない場合は、迷惑メールフォルダもご確認ください。",
                 ],
                 flushBullets: true,
-                // 通知設定のカード見出し下の説明文と同じ大きさ(HQ指示 2026-10-06)。
-                textSize: 6
+                // HQ指示(2026-10-06)で7に。
+                textSize: 7
             )
             .accountPinned(top: 273)
         }
