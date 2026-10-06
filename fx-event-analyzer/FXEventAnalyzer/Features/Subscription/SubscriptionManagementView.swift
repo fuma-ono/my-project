@@ -33,7 +33,7 @@ struct SubscriptionManagementView: View {
             case .error(let message):
                 centered { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { Task { await viewModel.load() } }) }
             case .loaded:
-                VStack(spacing: 14) {
+                VStack(spacing: viewModel.subscription.isPro ? 14 : 10) {
                     planCard
                     if !viewModel.subscription.isPro { upgradeSection }
                     menuCard
@@ -86,7 +86,8 @@ struct SubscriptionManagementView: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
-        .frame(width: 214, height: 86)
+        // 無料プランは下に案内が入るので、カードを低くして1画面に収める。
+        .frame(width: 214, height: viewModel.subscription.isPro ? 86 : 62)
         .background(
             RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
                 .fill(SettingsCardStyle.cardFill)
@@ -104,41 +105,43 @@ struct SubscriptionManagementView: View {
             V5JPFont.text("プレミアムプランでできること", size: 8.5, weight: .bold)
                 .foregroundStyle(SubscriptionPalette.heading)
                 .padding(.leading, 4)
-            HStack(spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "crown.fill")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 22, height: 22)
                     .background(Circle().fill(V5P.blue.opacity(0.45)))
                 VStack(alignment: .leading, spacing: 3) {
-                    V5JPFont.text("より多くの機能を利用するには", size: 6.5, weight: .bold).foregroundStyle(.white)
-                        .fixedSize(horizontal: false, vertical: true)
-                    V5JPFont.text("プレミアムプランにご登録ください。", size: 6.5, weight: .bold).foregroundStyle(V5P.cyan)
-                        .fixedSize(horizontal: false, vertical: true)
-                    V5JPFont.text("過去の発表時の詳しい値動き統計など、すべての機能が利用可能になります。", size: 5.5, weight: .regular)
+                    V5JPFont.text("より多くの機能を利用するには", size: 7.5, weight: .bold).foregroundStyle(.white)
+                    V5JPFont.text("プレミアムプランにご登録ください。", size: 7.5, weight: .bold).foregroundStyle(V5P.cyan)
+                    V5JPFont.text("過去の発表時の詳しい値動き統計など、すべての機能が利用可能になります。", size: 6, weight: .regular)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .fixedSize(horizontal: false, vertical: true)
+                    // ボタンは文の下に置き、文を横幅いっぱいに使う(折り返しを減らす)。
+                    HStack {
+                        Spacer(minLength: 0)
+                        Button { sheet = .plans } label: {
+                            V5JPFont.text("プランを確認する", size: 6.5, weight: .bold)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 10)
+                                .frame(height: 19)
+                                .background(Capsule().fill(V5P.blue))
+                                .fixedSize()
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.top, 2)
                 }
-                Spacer(minLength: 0)
-                Button { sheet = .plans } label: {
-                    V5JPFont.text("プランを確認する", size: 6, weight: .bold)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 7)
-                        .frame(height: 20)
-                        .fixedSize()
-                        .background(Capsule().fill(V5P.blue))
-                }
-                .buttonStyle(.plain)
             }
             .padding(.horizontal, 9)
-            .padding(.vertical, 9)
+            .padding(.vertical, 8)
             .frame(width: 214)
             .background(AccountCardBackground())
             HStack(alignment: .top, spacing: 6) {
                 Image(systemName: "info.circle.fill")
                     .font(.system(size: 9))
                     .foregroundStyle(V5P.blue)
-                V5JPFont.text("無料プランは、いつでもプレミアムプランにアップグレードできます。アップグレード後は、すぐにすべての機能をご利用いただけます。", size: 5.5, weight: .regular)
+                V5JPFont.text("無料プランは、いつでもプレミアムプランにアップグレードできます。アップグレード後は、すぐにすべての機能をご利用いただけます。", size: 6, weight: .regular)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                     .fixedSize(horizontal: false, vertical: true)
             }
