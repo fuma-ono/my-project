@@ -127,12 +127,22 @@ final class ScreenshotTests: XCTestCase {
         // スクロールして閲覧する設計は`contentAreaHeight`のドキュメント
         // コメント通りそのまま)。HQがCIで内容を確認できるよう、一番下まで
         // スクロールした状態のキャプチャを追加する。
+        //
+        // `waitForAnyElement`の`.exists`判定は使えない — SwiftUIの
+        // `ScrollView`はLazy系と違い中身を即座に全部レンダリングするため、
+        // 画面外にあっても要素は最初から`.exists`=trueになってしまう
+        // (実際に1回目の実装で、スワイプが一度も起きないままキャプチャが
+        // スクロール前と同一になる形で露見した)。実際に画面内に入ったかは
+        // `isHittable`で判定する必要がある。
+        let speechesHeader = [app.staticTexts, app.buttons, app.cells, app.otherElements]
+            .map { $0.matching(NSPredicate(format: "label CONTAINS[c] %@", "直近の要人発言")).firstMatch }
+            .first { $0.exists } ?? app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "直近の要人発言")).firstMatch
         var speechSwipes = 0
-        while !waitForAnyElement(containing: "直近の要人発言", timeout: 0.1) && speechSwipes < 6 {
+        while !speechesHeader.isHittable && speechSwipes < 6 {
             app.swipeUp()
             speechSwipes += 1
         }
-        XCTAssertTrue(waitForAnyElement(containing: "直近の要人発言", timeout: 5), "Home did not scroll to reveal 直近の要人発言")
+        XCTAssertTrue(speechesHeader.isHittable, "Home did not scroll to reveal 直近の要人発言")
         capture("04b-Home-Speeches")
 
         // SCR-014 設定画面(bonus — added 2026-09-30 so HQ's
