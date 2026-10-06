@@ -716,9 +716,21 @@ struct HomeView: View {
                 // `V5JPFont.text`(フォント別Text連結)は複数行折り返しが
                 // 効かない実機バグがあるため(詳細は`V5JPFont.wrappingText`
                 // のドキュメントコメント参照)、ここは`wrappingText`を使う。
+                // それでも実機キャプチャでは1行+省略記号のままだった —
+                // 原因は、このVStackが`HStack`内で`Spacer`と競合する
+                // フレキシブルな子であるため、`Text`が自身の「理想サイズ」を
+                // 問い合わせられた際に折り返し後の複数行ではなく1行分の
+                // サイズを報告してしまっていたこと(HStack内でSpacerと
+                // 隣り合うTextが`.lineLimit(n>1)`を設定していても折り返さず
+                // 切り詰められる、という既知のSwiftUIの挙動)。
+                // `.fixedSize(horizontal: false, vertical: true)`を追加し、
+                // 「横幅は親から提案された分だけ使い、縦幅はその横幅で
+                // 折り返した結果の行数に応じて決める」よう明示することで
+                // 解決した。
                 V5JPFont.wrappingText(event.indicatorName, size: 8, weight: .semibold)
                     .foregroundStyle(.white)
                     .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let subtitle = Self.eventSubtitle(event) {
                     // HQ再指摘(2026-10-05、3回目)「予想と前回の文字は
                     // 途切れず、折り返さず全て表示できるようにして」:
