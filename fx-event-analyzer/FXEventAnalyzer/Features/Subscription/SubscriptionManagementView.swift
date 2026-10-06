@@ -75,6 +75,9 @@ struct SubscriptionManagementView: View {
                     .foregroundStyle(viewModel.subscription.isPro ? SubscriptionPalette.gold : .white)
                 NotoText.text(viewModel.priceLabel, size: viewModel.subscription.isPro ? 11.5 : 9)
                     .foregroundStyle(.white)
+                    // 「基本機能をお試しいただけます。」が途中で折り返さないよう1行に収める。
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 if let renewal = viewModel.renewalLabel {
                     NotoText.text(renewal, size: 7.5)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
