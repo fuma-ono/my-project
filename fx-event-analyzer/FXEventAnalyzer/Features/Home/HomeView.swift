@@ -970,7 +970,29 @@ struct HomeView: View {
             // 同じく、文字サイズ(9.5)はそのままに`.tracking(-0.4)`で字間を
             // 詰めて幅だけ狭くした。それに合わせて各列の固定幅(frame)も
             // 46/40/44→42/36/40に縮小。
-            Text(pair.displaySymbol).font(.system(size: 9.5, weight: .semibold)).tracking(-0.4).frame(width: 42, alignment: .leading)
+            //
+            // HQ指示(2026-10-06)「USD/JPYの下に米ドル/円と記載して。
+            // 文字色とサイズはお気に入りの日付/時刻と同サイズ(7)・同色・
+            // 同trackingにして」: 2行目(`displayName`)を追加するため列幅を
+            // 42→54に拡大(直前の実装で固定`frame(width:)`+`lineLimit(1)`
+            // だけで安全弁が無いまま要人発言セクションが実機キャプチャで
+            // 丸ごと省略記号に潰れた教訓から、ここも`minimumScaleFactor`を
+            // 安全弁として付けた)。右側のSpacer(minLength: 4)が吸収する
+            // 余白はまだ十分残っているため、他の列幅は変更していない。
+            VStack(alignment: .leading, spacing: 1) {
+                Text(pair.displaySymbol)
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .tracking(-0.4)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text(pair.displayName)
+                    .font(.system(size: 7, weight: .medium))
+                    .tracking(-0.4)
+                    .foregroundStyle(Self.linkBlue)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(width: 54, alignment: .leading)
             // HQ再指摘(2026-10-05、6回目)「155.42のサイズを0.5だけ大きく
             // して、もう少し右に寄せて」: 9.5→10に拡大し、列内の配置を
             // 中央揃えから右(変化率側)揃えに変更。HQ再指摘(2026-10-06)
@@ -1409,5 +1431,9 @@ private extension FXPairUI {
     var baseCurrency: String { String(symbol.prefix(3)) }
     var quoteCurrency: String { String(symbol.suffix(3)) }
     var displaySymbol: String { "\(baseCurrency)/\(quoteCurrency)" }
+    /// HQ指示(2026-10-06)「通貨ペア内のUSD/JPYの下に米ドル/円と記載して」。
+    var displayName: String {
+        "\(CountryFlag.japaneseName(forCurrency: baseCurrency))/\(CountryFlag.japaneseName(forCurrency: quoteCurrency))"
+    }
 }
 
