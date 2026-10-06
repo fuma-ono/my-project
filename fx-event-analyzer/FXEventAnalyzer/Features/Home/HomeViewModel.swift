@@ -17,12 +17,19 @@ enum HomeFavoriteItem: Identifiable, Equatable {
     /// HQ指摘(2026-10-03、6回目、新しい参考画像)「お気に入り」の小カードは
     /// 日付も表示する(例:「10/13 21:30」)ため、`releaseDatetime`を追加した
     /// — `EventDetailResponse.event.releaseDatetime`で既に取得済みの値を
-    /// そのまま使うだけで、追加のAPI呼び出しは不要。`.indicator`は
-    /// 「次回発表予定」に別APIコール(`/indicators/{id}/events`)が必要に
-    /// なるため今回は見送り、日付無しのカード(名称+バッジのみ)にして
-    /// 存在しないデータを捏造しない。
+    /// そのまま使うだけで、追加のAPI呼び出しは不要。
+    ///
+    /// `.indicator`の`nextReleaseDatetime`はHQ指示(2026-10-06)「お気に入り
+    /// 欄の米国CPIの下にカレンダーアイコン 10/13 21:30みたいに書いて」で
+    /// 追加。当初(2026-10-03)は「次回発表予定」に別APIコール
+    /// (`/indicators/{id}/events`)が必要なため見送っていたが、
+    /// `IndicatorDetailViewModel`が全く同じ目的で既に叩いている
+    /// `/indicators/{id}/events?status=SCHEDULED&limit=1`をそのまま
+    /// `fetchFavoriteIndicator`からも呼ぶようにした(新規エンドポイントは
+    /// 追加していない)。該当イベントが無ければnilのままで、架空の日時は
+    /// 表示しない。
     case event(id: String, countryCode: String, currencyCode: String, name: String, importance: Importance, releaseDatetime: Date)
-    case indicator(id: String, countryCode: String, currencyCode: String, name: String, importance: Importance)
+    case indicator(id: String, countryCode: String, currencyCode: String, name: String, importance: Importance, nextReleaseDatetime: Date?)
     /// `FavoritesStore.ItemType.fxPair`と同じ理由で、まだ実際には生成
     /// されない(通貨ペア単体取得APIも★も無い)が、型は先に揃えてある。
     case fxPair(id: String, symbol: String, price: String, change: String, isUp: Bool)
@@ -163,13 +170,24 @@ final class HomeViewModel: ObservableObject {
 
     private func fetchFavoriteIndicator(id: String) async -> HomeFavoriteItem? {
         do {
-            let response: IndicatorDetailResponse = try await apiClient.send(Endpoint(path: "indicators/\(id)"))
+            async let detail: IndicatorDetailResponse = apiClient.send(Endpoint(path: "indicators/\(id)"))
+            async let scheduled: IndicatorEventsListResponse = apiClient.send(
+                Endpoint(
+                    path: "indicators/\(id)/events",
+                    queryItems: [
+                        URLQueryItem(name: "status", value: "SCHEDULED"),
+                        URLQueryItem(name: "limit", value: "1"),
+                    ]
+                )
+            )
+            let (response, scheduledResponse) = try await (detail, scheduled)
             return .indicator(
                 id: response.indicator.id,
                 countryCode: response.indicator.countryCode,
                 currencyCode: response.indicator.currencyCode,
                 name: response.indicator.name,
-                importance: response.indicator.importance
+                importance: response.indicator.importance,
+                nextReleaseDatetime: scheduledResponse.data.first?.releaseDatetime
             )
         } catch {
             return nil

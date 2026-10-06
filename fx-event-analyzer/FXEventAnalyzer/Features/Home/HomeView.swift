@@ -697,9 +697,25 @@ struct HomeView: View {
                 // 現行実装(size 9)の実機キャプチャ実測(33px/5.1488px/
                 // ユニット→6.41ユニット、9pt→0.712ユニット/pt)から逆算
                 // (5.84/0.712≒8.2)して9→8に縮小。太さも.bold→.semibold。
+                // HQ質問(2026-10-06)「日本CPI（消費者物価...」のような
+                // 途中切れはNG、指標名は最大2行で表示、ただし枠の縦幅は
+                // 変えたくない。どうすればいい?」への回答: `.lineLimit(1)`
+                // (1行打ち切り+省略記号)を`.lineLimit(2)`に変え、2行まで
+                //折り返せるようにした。ただしこれだけだと、タイトルが
+                // 実際に1行で収まる行と2行に折り返す行とで、このVStack
+                // 全体の自然な高さが行ごとに変わってしまい(以前の時刻の
+                // 縦ズレと同じ原因のバグが再発する)、`eventRowHeight`
+                // 自体は変えたくないとの要望とも矛盾する。そこで、
+                // 「バッジ+タイトル2行+予想前回」というあり得る最大の
+                // 組み合わせの高さをあらかじめ計算し(バッジ行9+タイトル
+                // 2行19+予想前回8+行間2≒38)、下の`.frame(minHeight: 38,
+                // ...)`で常にその高さを確保する — タイトルが実際には1行や
+                // 2行目無しでも、またこのイベントに予想/前回が無くても、
+                // 必ず同じ38の高さとして扱われるため、`eventRowHeight`
+                // (44)を一切変えずに済み、行ごとの縦位置のズレも起きない。
                 V5JPFont.text(event.indicatorName, size: 8, weight: .semibold)
                     .foregroundStyle(.white)
-                    .lineLimit(1)
+                    .lineLimit(2)
                 if let subtitle = Self.eventSubtitle(event) {
                     // HQ再指摘(2026-10-05、3回目)「予想と前回の文字は
                     // 途切れず、折り返さず全て表示できるようにして」:
@@ -716,7 +732,7 @@ struct HomeView: View {
                         .minimumScaleFactor(0.6)
                 }
             }
-            .frame(minHeight: 28, alignment: .top)
+            .frame(minHeight: 38, alignment: .top)
             .layoutPriority(1)
 
             Spacer(minLength: 4)
@@ -802,8 +818,10 @@ struct HomeView: View {
             Text(pair.displaySymbol).font(.system(size: 9.5, weight: .semibold)).tracking(-0.4).frame(width: 42, alignment: .leading)
             // HQ再指摘(2026-10-05、6回目)「155.42のサイズを0.5だけ大きく
             // して、もう少し右に寄せて」: 9.5→10に拡大し、列内の配置を
-            // 中央揃えから右(変化率側)揃えに変更。
-            Text(pair.price).font(.system(size: 10, weight: .semibold)).tracking(-0.4).monospacedDigit().frame(width: 36, alignment: .trailing)
+            // 中央揃えから右(変化率側)揃えに変更。HQ再指摘(2026-10-06)
+            // 「もう1つ右に寄せて」: 右揃えのまま列の幅自体を36→40に
+            // 広げ、右端をさらに右へ。
+            Text(pair.price).font(.system(size: 10, weight: .semibold)).tracking(-0.4).monospacedDigit().frame(width: 40, alignment: .trailing)
             // HQ再指摘(2026-10-05、5回目)「+0.25%▲>は右に寄せて」:
             // 固定幅の列を並べただけだと行の合計幅がカード幅より短くなり、
             // 左詰め(`cardShell`のVStackが`alignment: .leading`)のため
@@ -872,10 +890,21 @@ struct HomeView: View {
                     statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance))
                 }
             }.buttonStyle(.plain)
-        case .indicator(let id, let countryCode, _, let name, let importance):
+        // HQ指示(2026-10-06)「お気に入り欄の米国CPIの下にカレンダーアイコン
+        // 10/13 21:30みたいに書いて」: `.event`ケースと同じ`dateRow`を
+        // 表示するため、`nextReleaseDatetime`(次回発表予定、無ければnil)
+        // を追加した。`fetchFavoriteIndicator`で`IndicatorDetailView`と
+        // 同じ`/indicators/{id}/events?status=SCHEDULED`を追加で叩いて
+        // 取得した実データで、架空の日時は表示しない(無ければ日付無しの
+        // まま)。
+        case .indicator(let id, let countryCode, _, let name, let importance, let nextReleaseDatetime):
             NavigationLink(value: AppRoute.indicatorDetail(id: id)) {
                 favoriteGridCardContent(countryCode: countryCode, name: name) {
-                    EmptyView()
+                    if let nextReleaseDatetime {
+                        dateRow(nextReleaseDatetime)
+                    } else {
+                        EmptyView()
+                    }
                 } footer: {
                     statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance))
                 }
