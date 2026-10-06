@@ -1135,13 +1135,17 @@ struct HomeView: View {
 
     // MARK: - 直近の要人発言
 
-    /// `HomeSpeechSummary`のドキュメントコメント参照 — `recentSpeeches`は
-    /// バックエンドに該当APIが無いため常に空。このセクションは常に表示した
-    /// 上で空状態を出す(架空データは出さない)。
+    /// `HomeSpeechSummary`/`HomeResponse.speeches`のドキュメントコメント参照
+    /// — 本番バックエンドには該当APIが無いため`recentSpeeches`は常に空の
+    /// まま(空状態表示)。CIのUIスクリーンショット用モックサーバーの応答
+    /// にだけ値が入っており、このセクションは常に表示した上でデータが
+    /// 無ければ空状態を出す(架空データを本番向けに出すことはない)。
     @ViewBuilder private func speechesCard(_ speeches: [HomeSpeechSummary]) -> some View {
         cardShell(height: Self.speechesCardHeight) {
             cardHeaderRow(title: "直近の要人発言", height: Self.speechesHeaderHeight) {
-                Image(systemName: "quote.bubble.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
+                // HQ指摘(2026-10-06)「アイコンが違うから参考画像と同じように」:
+                // 参考画像は吹き出しではなくスピーカー(メガホン+音波)アイコン。
+                Image(systemName: "speaker.wave.2.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
                     .frame(width: 16, alignment: .center)
             } trailing: {
                 NavigationLink(value: AppRoute.speechList) {

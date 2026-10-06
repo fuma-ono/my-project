@@ -45,12 +45,16 @@ enum HomeFavoriteItem: Identifiable, Equatable {
 
 /// HQ指示(2026-10-02)「直近の要人発言: すでに発生した要人発言と、その後の
 /// 値動き」。バックエンドに要人発言/中央銀行声明そのものを表すAPIが無い
-/// (SCR-012/013は仮画面のみ、`api-design.md`にも該当エンドポイントなし)
-/// ため、`HomeViewModel.recentSpeeches`は常に空配列。将来そのAPIが追加
-/// された時にそのままマッピングできるよう、想定されるフィールド(発言者・
-/// 発言日時・見出し・その後のFXペア反応)で仮に定義している — 実データは
-/// 一切含まない。
-struct HomeSpeechSummary: Identifiable, Equatable {
+/// (SCR-012/013は仮画面のみ、`api-design.md`にも該当エンドポイントなし、
+/// `SpeechEvent`はdb-design.md/features.mdでP2指定)ため、実際の本番
+/// バックエンドは`HomeResponse.speeches`を返さず、`recentSpeeches`は
+/// 空配列のままになる(空状態表示)。
+///
+/// HQ指示(2026-10-06)「何か表示されるようにして」に伴い`Decodable`を追加
+/// — CIのUIスクリーンショット用モックサーバーのみがこのフィールドを含む
+/// 応答を返し、HomeのCIキャプチャで見た目を確認できるようにした。本番
+/// バックエンドの挙動・データモデルは変更していない。
+struct HomeSpeechSummary: Decodable, Identifiable, Equatable {
     let id: String
     let countryCode: String
     let speakerName: String
@@ -58,6 +62,16 @@ struct HomeSpeechSummary: Identifiable, Equatable {
     let headline: String
     let reactionFxSymbol: String?
     let reactionChangePercent: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "speech_id"
+        case countryCode = "country_code"
+        case speakerName = "speaker_name"
+        case statementDatetime = "statement_datetime"
+        case headline
+        case reactionFxSymbol = "reaction_fx_symbol"
+        case reactionChangePercent = "reaction_change_percent"
+    }
 }
 
 /// SCR-004 ホーム画面. Phase 3 §4: real `GET /home` connection —
@@ -77,8 +91,10 @@ struct HomeSpeechSummary: Identifiable, Equatable {
 final class HomeViewModel: ObservableObject {
     @Published private(set) var state: HomeState = .loading
     @Published private(set) var favoriteItems: [HomeFavoriteItem] = []
-    /// 常に空(`HomeSpeechSummary`のドキュメントコメント参照) — バックエンドに
-    /// 要人発言APIが追加されたら、ここを埋める`loadSpeeches()`相当を足す。
+    /// `HomeResponse.speeches`のドキュメントコメント参照 — 本番バックエンドは
+    /// このフィールドを返さないため、実際のユーザーには引き続き常に空配列
+    /// (空状態表示)。CIのUIスクリーンショット用モックサーバーの応答にだけ
+    /// 値が入っている。
     @Published private(set) var recentSpeeches: [HomeSpeechSummary] = []
 
     private let apiClient: APIClient
@@ -123,6 +139,7 @@ final class HomeViewModel: ObservableObject {
         do {
             let response: HomeResponse = try await apiClient.send(endpoint)
             state = .loaded(events: response.events, majorFx: response.majorFx)
+            recentSpeeches = response.speeches ?? []
         } catch let error as APIError where error.isNotConfigured {
             state = .backendNotConfigured
         } catch {

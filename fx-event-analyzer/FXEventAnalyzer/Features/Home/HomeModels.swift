@@ -72,11 +72,29 @@ struct HomeResponse: Decodable {
     let timezone: String
     let events: [HomeEventSummary]
     let majorFx: [MajorFxSummary]
+    /// HQ指示(2026-10-06)「直近の要人発言に何か表示されるようにして」:
+    /// `SpeechEvent`はdb-design.md/features.mdでP2(今回のテーブル設計対象外)
+    /// と明示されており、実際の`/home`ルート(src/routes/*.ts)はこの
+    /// フィールドを返さない — そのためoptionalで、欠けていれば`nil`のまま
+    /// (`HomeViewModel.recentSpeeches`は引き続き空配列)。CIのUI
+    /// スクリーンショット用モックサーバー(`ui-screenshot-mock-server.mjs`)
+    /// だけがこのフィールドを含む応答を返し、本番のバックエンドの挙動は
+    /// 変えていない。
+    let speeches: [HomeSpeechSummary]?
+
+    init(date: String, timezone: String, events: [HomeEventSummary], majorFx: [MajorFxSummary], speeches: [HomeSpeechSummary]? = nil) {
+        self.date = date
+        self.timezone = timezone
+        self.events = events
+        self.majorFx = majorFx
+        self.speeches = speeches
+    }
 
     enum CodingKeys: String, CodingKey {
         case date
         case timezone
         case events
         case majorFx = "major_fx"
+        case speeches
     }
 }
