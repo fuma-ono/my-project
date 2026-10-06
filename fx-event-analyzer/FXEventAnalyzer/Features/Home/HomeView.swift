@@ -714,6 +714,20 @@ struct HomeView: View {
             // 詰めた(「経済指標の文字間隔を狭めて、外枠の横幅も少し
             // 狭めて」: tracking追加、パディング4/2→3/1.5)。
             VStack(alignment: .leading, spacing: 1) {
+                let subtitle = Self.eventSubtitle(event)
+                let parenSplit = Self.splitParenthetical(event.indicatorName)
+                // HQ指示(2026-10-06)「米国雇用統計のように（）部分を2行目に
+                // し、文字を少し小さくして米国雇用統計をその分少し大きく
+                // して」: 指標名が長く(16文字超)カッコを含む場合は自動折り
+                // 返しに任せず、本文とカッコ注記を明示的に2行へ分け、本文を
+                // 大きく・カッコ注記を小さくする。「日本CPI(消費者物価
+                // 指数)」(14文字)はこの閾値に届かないため対象外のまま1行
+                // 表示(下のelse節)になる。
+                let isLongSplit = parenSplit != nil && event.indicatorName.count > 16
+                // HQ指示(2026-10-06)「日本CPIのように1行で収まる場合は
+                // 経済指標を少し上にあげ」: バッジに`.offset(y: -1)`。
+                let isShortCombined = subtitle != nil && !isLongSplit
+
                 // HQ指示(2026-10-06)「すべて参考画像と同じに」: 参考画像の
                 // 「経済指標」バッジの実測(高さ5.05/幅20.2ユニット、
                 // こちらは5.24/22.53)に基づきサイズ5.5→5.3、
@@ -726,6 +740,7 @@ struct HomeView: View {
                     .padding(.horizontal, 3).padding(.vertical, 1.5)
                     .background(Self.economicIndicatorBadgeColor, in: Capsule())
                     .fixedSize()
+                    .offset(y: isShortCombined ? -1 : 0)
 
                 // HQ指示(2026-10-05、23回目)「今日の重要イベント内の
                 // タイトル（FOMC政策など）が大きいし、太いので参考画像と
@@ -779,12 +794,40 @@ struct HomeView: View {
                 // なくて良い分、指標名のフォントを6.6→7.8に拡大した
                 // (`minHeight: 38`の予算には元々余裕があるため、この
                 // ケースでも収まる)。
-                let subtitle = Self.eventSubtitle(event)
-                V5JPFont.wrappingText(event.indicatorName, size: subtitle == nil ? 7.8 : 6.6, weight: .semibold)
+                // HQ再指摘(2026-10-06)「日本CPIのように1行で収まる場合は
+                // 文字を少し大きくして、米国雇用統計の場合は（）部分を
+                // 2行目にし文字を少し小さくして本文をその分大きくして」:
+                // 上で計算した`isLongSplit`に応じて2通りに分岐。
+                //   ・isLongSplit=true(例: 米国雇用統計): 本文(main)を
+                //     7.5、カッコ注記(paren)を5.6で別々の行として明示的に
+                //     描画。本文1行(≒9)+カッコ注記1行(≒7)+バッジ9+予想前回
+                //     8+行間2≒35で`minHeight: 38`に収まる計算。
+                //   ・isLongSplit=false(例: 日本CPI、FOMC): 従来通り1つの
+                //     `Text`に任せる。予想/前回が無ければ7.8、ある場合は
+                //     カッコを含む指標名(例: 日本CPI)なら少し拡大して7.2、
+                //     含まない場合は従来の6.6のまま。
+                if isLongSplit, let parenSplit {
+                    VStack(alignment: .leading, spacing: 0) {
+                        V5JPFont.wrappingText(parenSplit.main, size: 7.5, weight: .semibold)
+                            .tracking(-0.3)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        V5JPFont.wrappingText(parenSplit.paren, size: 5.6, weight: .semibold)
+                            .tracking(-0.3)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                    }
+                } else {
+                    V5JPFont.wrappingText(
+                        event.indicatorName,
+                        size: subtitle == nil ? 7.8 : (parenSplit != nil ? 7.2 : 6.6),
+                        weight: .semibold
+                    )
                     .tracking(-0.3)
                     .foregroundStyle(.white)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+                }
                 if let subtitle {
                     // HQ再指摘(2026-10-05、3回目)「予想と前回の文字は
                     // 途切れず、折り返さず全て表示できるようにして」:
@@ -798,9 +841,13 @@ struct HomeView: View {
                     // HQ再指摘(2026-10-06)「予想と前回の文字の間隔も広い
                     // から狭めて」: 実測に基づき`.tracking(0.8)`まで広げて
                     // いたが、実機では広すぎるとの指摘を受け0.2まで詰めた。
+                    // HQ再指摘(2026-10-06)「予想と前回の色をお気に入り内の
+                    // 日付と時刻の色と同じにして」: `V5P.muted`(グレー)
+                    // から`Self.linkBlue`(お気に入りの`dateRow`と同じ色)へ
+                    // 変更。
                     V5JPFont.text(subtitle, size: 5.9, weight: .regular)
                         .tracking(0.2)
-                        .foregroundStyle(V5P.muted)
+                        .foregroundStyle(Self.linkBlue)
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                 }
@@ -837,6 +884,16 @@ struct HomeView: View {
         if let forecast = event.forecast { parts.append("予想 \(ValueFormat.number(forecast))") }
         if let previous = event.previous { parts.append("前回 \(ValueFormat.number(previous))") }
         return parts.isEmpty ? nil : parts.joined(separator: "　|　")
+    }
+
+    /// HQ指示(2026-10-06)「米国雇用統計の場合は（）部分を2行目にし」:
+    /// 指標名を最初の全角/半角開き括弧の直前で本文/カッコ注記に分割する。
+    /// 括弧が無ければnil。
+    private static func splitParenthetical(_ name: String) -> (main: String, paren: String)? {
+        guard let openIndex = name.firstIndex(where: { $0 == "(" || $0 == "（" }) else { return nil }
+        let main = String(name[name.startIndex..<openIndex])
+        let paren = String(name[openIndex...])
+        return (main, paren)
     }
 
     // MARK: - 通貨ペアカード
@@ -1028,10 +1085,12 @@ struct HomeView: View {
     // より詰まっていたため、`.tracking(-1.0)`を追加して詰めた(文字サイズ
     // 自体は今回変更していない — 下の「上下の間隔を狭めて1画面に収める」
     // 要望と逆行するため)。
+    // HQ再指摘(2026-10-06)「日付と時刻の文字間隔が詰めすぎている」:
+    // -1.0は詰めすぎだったため、-0.4まで緩めた。
     @ViewBuilder private func dateRow(_ date: Date) -> some View {
         HStack(spacing: 3) {
             Image(systemName: "calendar").font(.system(size: 7)).foregroundStyle(Self.linkBlue)
-            Text(Self.favoriteDateFormatter.string(from: date)).font(.system(size: 7, weight: .medium)).tracking(-1.0).foregroundStyle(Self.linkBlue)
+            Text(Self.favoriteDateFormatter.string(from: date)).font(.system(size: 7, weight: .medium)).tracking(-0.4).foregroundStyle(Self.linkBlue)
         }
     }
 
