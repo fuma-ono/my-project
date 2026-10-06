@@ -186,7 +186,7 @@ private enum NotificationLayout {
     static let rowTitleSize: CGFloat = 8.5
     static let valueSize: CGFloat = 8
     static let rowHeight: CGFloat = 25
-    static let aboutTextSize: CGFloat = 6
+    static let aboutTextSize: CGFloat = 7.5
 }
 
 /// カードの上に見出しを置いたまとまり。
