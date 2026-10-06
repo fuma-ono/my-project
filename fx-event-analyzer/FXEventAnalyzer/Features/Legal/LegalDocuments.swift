@@ -4,9 +4,10 @@ import Foundation
 /// HQの原案を、今のアプリ・Backendの構成(Supabase認証・データ保存、App Storeの
 /// 自動更新サブスクリプション、不具合報告のGitHub Issue登録、端末内のローカル
 /// 通知、分析・広告SDKなし、サーバーはGoogle Cloud Run・Supabaseとも東京
-/// リージョン)に合わせて直した版。運営者は個人(大野楓真)のため「当社」ではなく
-/// 「運営者」とし、住所・電話番号は請求に応じて開示する(個人情報保護法32条・
-/// 特定商取引法11条ただし書き)。制定日は公開日に合わせて更新する。
+/// リージョン)に合わせて直した版。運営者は個人のため「当社」ではなく「運営者」と
+/// し、HQ指示(2026-10-06「大野楓真は載せないで」)により氏名・住所・電話番号は
+/// 請求に応じて開示する形にする(個人情報保護法32条・特定商取引法11条ただし書き)。
+/// 制定日は公開日に合わせて更新する。
 struct LegalDocument: Identifiable, Hashable {
     struct Section: Hashable {
         let heading: String
@@ -23,7 +24,6 @@ struct LegalDocument: Identifiable, Hashable {
 }
 
 enum LegalDocuments {
-    static let operatorName = "大野楓真"
 
     static let terms = LegalDocument(
         id: "terms",
@@ -31,7 +31,7 @@ enum LegalDocuments {
         title: "FX Event Analyzer 利用規約",
         sections: [
             .init(heading: "第1条（適用）", items: [
-                "本利用規約（以下「本規約」といいます。）は、\(operatorName)（以下「運営者」といいます。）が提供するアプリ「FX Event Analyzer」（以下「本サービス」といいます。）の利用条件を定めるものです。",
+                "本利用規約（以下「本規約」といいます。）は、本サービスの運営者（以下「運営者」といいます。）が提供するアプリ「FX Event Analyzer」（以下「本サービス」といいます。）の利用条件を定めるものです。",
                 "ユーザーは、本規約に同意の上、本サービスを利用するものとします。",
                 "未成年のユーザーは、親権者等の法定代理人の同意を得た上で本サービスを利用するものとします。",
             ]),
@@ -82,14 +82,14 @@ enum LegalDocuments {
                 "本規約は日本法に準拠します。本サービスに関して紛争が生じた場合、運営者の住所地を管轄する地方裁判所を第一審の専属的合意管轄裁判所とします。",
             ]),
         ],
-        footer: ["制定日：2026年10月6日", "\(operatorName)"]
+        footer: ["制定日：2026年10月6日"]
     )
 
     static let privacy = LegalDocument(
         id: "privacy",
         screenTitle: "プライバシーポリシー",
-        title: "FX Event Analyzer プライバシーポリシー",
-        preamble: "\(operatorName)（以下「運営者」といいます。）は、アプリ「FX Event Analyzer」（以下「本サービス」といいます。）における利用者の個人情報を、個人情報の保護に関する法律その他の法令に従い、以下のとおり取り扱います。",
+        title: "FX Event Analyzer"+"\n"+"プライバシーポリシー",
+        preamble: "本サービスの運営者（以下「運営者」といいます。）は、アプリ「FX Event Analyzer」（以下「本サービス」といいます。）における利用者の個人情報を、個人情報の保護に関する法律その他の法令に従い、以下のとおり取り扱います。",
         sections: [
             .init(heading: "第1条（取得する情報）", lead: "運営者は、本サービスの提供に必要な範囲で、以下の情報を取得します。", items: [
                 "アカウント情報：メールアドレス、パスワード（暗号化して保存し、運営者も内容を知ることはできません）、名前、生年月日",
@@ -148,11 +148,10 @@ enum LegalDocuments {
             ]),
             .init(heading: "第12条（お問い合わせ窓口）", items: [
                 "個人情報の取扱いに関するお問い合わせは、アプリ内の「ヘルプ・お問い合わせ」からご連絡ください。",
-                "個人情報取扱事業者：\(operatorName)（個人）",
-                "住所：ご請求いただいた場合には、遅滞なく回答します。",
+                "個人情報取扱事業者の氏名および住所は、ご請求いただいた場合には、遅滞なく回答します。",
             ]),
         ],
-        footer: ["制定日：2026年10月6日", "\(operatorName)"]
+        footer: ["制定日：2026年10月6日"]
     )
 
     /// 特定商取引法に基づく表記(有料プランの申込画面から開く)。
@@ -161,8 +160,8 @@ enum LegalDocuments {
         screenTitle: "特定商取引法に基づく表記",
         title: "特定商取引法に基づく表記",
         sections: [
-            .init(heading: "販売事業者", items: [operatorName]),
-            .init(heading: "運営責任者", items: [operatorName]),
+            .init(heading: "販売事業者", items: ["ご請求いただいた場合には、遅滞なく開示します。"]),
+            .init(heading: "運営責任者", items: ["ご請求いただいた場合には、遅滞なく開示します。"]),
             .init(heading: "所在地", items: ["ご請求いただいた場合には、遅滞なく開示します。"]),
             .init(heading: "電話番号", items: ["ご請求いただいた場合には、遅滞なく開示します。"]),
             .init(heading: "お問い合わせ", items: ["アプリ内の「ヘルプ・お問い合わせ」からご連絡ください。"]),

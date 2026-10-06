@@ -34,8 +34,12 @@ struct LegalDocumentContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10 * scale) {
-            V5JPFont.text(document.title, size: 11.5 * scale, weight: .bold)
+            // 文書名は13.5(HQ指示 2026-10-06)。改行の位置は本文側で指定し、
+            // 1行の文書名は折り返さずに収める。
+            V5JPFont.text(document.title, size: 13.5 * scale, weight: .bold)
                 .foregroundStyle(.white)
+                .lineLimit(document.title.contains("\n") ? nil : 1)
+                .minimumScaleFactor(0.85)
                 .fixedSize(horizontal: false, vertical: true)
             if let preamble = document.preamble {
                 paragraph(preamble)
