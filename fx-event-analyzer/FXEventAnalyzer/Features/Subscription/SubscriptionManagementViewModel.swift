@@ -52,7 +52,7 @@ final class SubscriptionManagementViewModel: ObservableObject {
     var planTitle: String { subscription.isPro ? "プレミアムプラン" : "無料プラン" }
 
     var priceLabel: String {
-        guard let product = currentProduct else { return "Proで高度な統計が使えます" }
+        guard let product = currentProduct else { return "基本機能をお試しいただけます。" }
         return "\(product.period.label) \(product.displayPrice)"
     }
 

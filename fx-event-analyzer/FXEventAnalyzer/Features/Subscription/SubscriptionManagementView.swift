@@ -67,17 +67,13 @@ struct SubscriptionManagementView: View {
 
     private var planCard: some View {
         HStack(spacing: 12) {
-            Image(systemName: viewModel.subscription.isPro ? "crown.fill" : "person.crop.circle")
-                .font(.system(size: 17, weight: .semibold))
-                // 有料プランは金色の丸の中に、カードと同じ紺色で王冠を抜く(HQ指示 2026-10-06)。
-                .foregroundStyle(viewModel.subscription.isPro ? SettingsCardStyle.cardFill : V5P.cyan)
-                .frame(width: 36, height: 36)
-                .background(Circle().fill(viewModel.subscription.isPro ? SubscriptionPalette.gold : Color.black.opacity(0.18)))
-                .overlay(Circle().stroke(viewModel.subscription.isPro ? Color.clear : SettingsCardStyle.cardBorder, lineWidth: 1))
+            // 丸の中に、カードと同じ紺色で王冠を抜く。有料は金色、無料は白の丸
+            // (HQ指示 2026-10-06)。
+            CrownBadge(fill: viewModel.subscription.isPro ? SubscriptionPalette.gold : .white, diameter: 36)
             VStack(alignment: .leading, spacing: 4) {
                 V5JPFont.text(viewModel.planTitle, size: 12, weight: .bold)
                     .foregroundStyle(viewModel.subscription.isPro ? SubscriptionPalette.gold : .white)
-                NotoText.text(viewModel.priceLabel, size: viewModel.subscription.isPro ? 11.5 : 8)
+                NotoText.text(viewModel.priceLabel, size: viewModel.subscription.isPro ? 11.5 : 9)
                     .foregroundStyle(.white)
                 if let renewal = viewModel.renewalLabel {
                     NotoText.text(renewal, size: 7.5)
@@ -107,11 +103,8 @@ struct SubscriptionManagementView: View {
                 .foregroundStyle(SubscriptionPalette.heading)
                 .padding(.leading, 4)
             HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "crown.fill")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 22, height: 22)
-                    .background(Circle().fill(V5P.blue.opacity(0.45)))
+                // プレミアムプランのカードと同じ、金色の丸の王冠。
+                CrownBadge(fill: SubscriptionPalette.gold, diameter: 24)
                 VStack(alignment: .leading, spacing: 3) {
                     V5JPFont.text("より多くの機能を利用するには", size: 7.5, weight: .bold).foregroundStyle(.white)
                     V5JPFont.text("プレミアムプランにご登録ください。", size: 7.5, weight: .bold).foregroundStyle(V5P.cyan)
@@ -140,7 +133,7 @@ struct SubscriptionManagementView: View {
             .background(AccountCardBackground())
             HStack(alignment: .top, spacing: 6) {
                 Image(systemName: "info.circle.fill")
-                    .font(.system(size: 9))
+                    .font(.system(size: 12))
                     .foregroundStyle(V5P.blue)
                 V5JPFont.text("無料プランは、いつでもプレミアムプランにアップグレードできます。アップグレード後は、すぐにすべての機能をご利用いただけます。", size: 6, weight: .regular)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
@@ -300,6 +293,20 @@ private enum SubscriptionPalette {
     static let gold = Color(red: 1.0, green: 0.80, blue: 0.36)
     /// 参考画像の見出し「プレミアムプランでできること」の水色。
     static let heading = Color(red: 0.55, green: 0.78, blue: 1.0)
+}
+
+/// 丸の中に、カードと同じ紺色で王冠を抜いたアイコン。
+private struct CrownBadge: View {
+    let fill: Color
+    let diameter: CGFloat
+
+    var body: some View {
+        Image(systemName: "crown.fill")
+            .font(.system(size: diameter * 0.47, weight: .semibold))
+            .foregroundStyle(SettingsCardStyle.cardFill)
+            .frame(width: diameter, height: diameter)
+            .background(Circle().fill(fill))
+    }
 }
 
 private struct SubscriptionSeparator: View {
