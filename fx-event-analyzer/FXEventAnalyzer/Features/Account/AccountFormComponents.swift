@@ -183,11 +183,11 @@ private struct BulletList: ViewModifier {
                             Circle().fill(color)
                                 .frame(width: 2.4, height: 2.4)
                                 .frame(width: 4, height: size + 3.5)
-                            AccountNote(text: bullet, color: color, width: 196, tracking: -0.2, size: size)
+                            AccountNote(text: bullet, color: color, width: 190, tracking: -0.2, size: size)
                         }
                     }
                 }
-                .padding(.leading, 8)
+                .padding(.leading, 14)
                 .padding(.bottom, 9)
             }
         }
