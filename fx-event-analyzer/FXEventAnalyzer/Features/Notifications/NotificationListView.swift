@@ -19,7 +19,8 @@ struct NotificationListView: View {
     @State private var filter: NotificationEntry.Kind?
     @Environment(\.dismiss) private var dismiss
 
-    private static let listTop: CGFloat = 80
+    /// 絞り込み(下端75)との間を空ける(HQ指示 2026-10-06)。
+    private static let listTop: CGFloat = 85
 
     var body: some View {
         let delivered = store.delivered(now: now).filter { filter == nil || $0.kind == filter }
@@ -121,12 +122,6 @@ private struct NotificationRow: View {
         return formatter
     }
 
-    /// 参考画像の「米) CPI」の国の略記。
-    private static let countryPrefixes: [String: String] = [
-        "US": "米", "JP": "日", "EU": "ユーロ圏", "EA": "ユーロ圏", "GB": "英", "UK": "英",
-        "AU": "豪", "NZ": "NZ", "CA": "加", "CH": "スイス", "CN": "中", "DE": "独",
-    ]
-
     private var icon: String {
         switch entry.kind {
         case .indicator: return "calendar"
@@ -145,10 +140,9 @@ private struct NotificationRow: View {
 
     private var headline: String {
         switch entry.kind {
+        // 国名の略記(「米)」など)は付けない(HQ指示 2026-10-06)。
         case .indicator:
-            let name = entry.subject ?? entry.title
-            guard let code = entry.countryCode, let prefix = Self.countryPrefixes[code] else { return name }
-            return "\(prefix)) \(name)"
+            return entry.subject ?? entry.title
         case .speech:
             return entry.speakerName.map { "\($0) 発言" } ?? entry.title
         case .system:
@@ -156,7 +150,7 @@ private struct NotificationRow: View {
         }
     }
 
-    /// 2行に収まらないときだけ使う短い表示名(詳細画面は正式名称のまま)。
+    /// 1行に収まらないときだけ使う短い表示名(詳細画面は正式名称のまま)。
     private var shortHeadline: String {
         entry.kind == .indicator ? IndicatorShortName.shorten(headline) : headline
     }
@@ -190,17 +184,12 @@ private struct NotificationRow: View {
                 .frame(width: 24, height: 24)
                 .background(RoundedRectangle(cornerRadius: 6).fill(SettingsCardStyle.cardFill))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
-            VStack(alignment: .leading, spacing: 1.5) {
-                HStack(spacing: 4) {
-                    V5JPFont.text(entry.kind.label, size: 5.5, weight: .bold)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1.5)
-                        .background(Capsule().fill(badgeColor))
-                    Spacer(minLength: 0)
-                    V5JPFont.text(Self.receivedFormatter.string(from: entry.notifyAt), size: 7, weight: .regular)
-                        .foregroundStyle(SettingsCardStyle.subtitleColor)
-                }
+            VStack(alignment: .leading, spacing: 1) {
+                V5JPFont.text(entry.kind.label, size: 5.5, weight: .bold)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(badgeColor))
                 NotificationHeadline(full: headline, short: shortHeadline)
                 ForEach(lines, id: \.self) { line in
                     V5JPFont.text(line, size: 6.5, weight: .regular)
@@ -213,9 +202,17 @@ private struct NotificationRow: View {
                 .foregroundStyle(SettingsCardStyle.chevronColor)
         }
         .padding(.horizontal, 9)
-        .padding(.vertical, 5)
+        .padding(.vertical, 4)
         .frame(width: 214, alignment: .leading)
         .background(AccountCardBackground())
+        // 受信日時はカードの右上(シェブロンの上)に、字間を詰めて置く。
+        .overlay(alignment: .topTrailing) {
+            V5JPFont.text(Self.receivedFormatter.string(from: entry.notifyAt), size: 7, weight: .regular)
+                .tracking(-0.3)
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                .padding(.top, 4)
+                .padding(.trailing, 8)
+        }
         .overlay(alignment: .topLeading) {
             if isUnread {
                 Circle().fill(V5P.red).frame(width: 5, height: 5).offset(x: 4, y: 4)
@@ -227,8 +224,9 @@ private struct NotificationRow: View {
     }
 }
 
-/// 指標名などの見出し。HQ指示(2026-10-06)「最大2行・省略しない。2行でも
-/// 収まらない極端に長い名称だけ短い表示名に変換。…で途中を切るのは原則なし」。
+/// 指標名などの見出し。HQ指示(2026-10-06)「文字が長い場合は2行にしなくて
+/// いい」「…で途中を切るのは原則なし」。1行に収まらない名称だけ短い表示名に
+/// 変換し、それでも収まらなければ少し縮める。
 private struct NotificationHeadline: View {
     let full: String
     let short: String
@@ -239,18 +237,16 @@ private struct NotificationHeadline: View {
     private static let width: CGFloat = 150
 
     var body: some View {
-        V5JPFont.text(Self.fitsInTwoLines(full) ? full : short, size: Self.size, weight: .bold)
+        V5JPFont.text(Self.fitsInOneLine(full) ? full : short, size: Self.size, weight: .bold)
             .foregroundStyle(.white)
-            .lineLimit(2)
-            // 短い表示名でも収まらない場合だけ、少し縮めて2行に収める。
-            .minimumScaleFactor(0.8)
-            .fixedSize(horizontal: false, vertical: true)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// `V5JPFont`と同じく、日本語はNoto Sans JP・それ以外はシステムの太字で
-    /// 組んだときに2行以内に収まるか。
-    static func fitsInTwoLines(_ text: String) -> Bool {
+    /// 組んだときに1行に収まるか。
+    static func fitsInOneLine(_ text: String) -> Bool {
         let japanese = UIFont(name: "NotoSansJP-SemiBold", size: size) ?? .systemFont(ofSize: size, weight: .semibold)
         let latin = UIFont.systemFont(ofSize: size, weight: .bold)
         let attributed = NSMutableAttributedString()
@@ -258,12 +254,7 @@ private struct NotificationHeadline: View {
             let isJapanese = character.unicodeScalars.contains { $0.value >= 0x3000 }
             attributed.append(NSAttributedString(string: String(character), attributes: [.font: isJapanese ? japanese : latin]))
         }
-        let height = attributed.boundingRect(
-            with: CGSize(width: width, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            context: nil
-        ).height
-        return height <= max(japanese.lineHeight, latin.lineHeight) * 2 + 0.5
+        return attributed.size().width <= width
     }
 }
 
