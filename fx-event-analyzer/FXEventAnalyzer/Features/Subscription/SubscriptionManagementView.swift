@@ -35,6 +35,7 @@ struct SubscriptionManagementView: View {
             case .loaded:
                 VStack(spacing: 14) {
                     planCard
+                    if !viewModel.subscription.isPro { upgradeSection }
                     menuCard
                     if viewModel.canCancel { cancelCard }
                 }
@@ -92,6 +93,59 @@ struct SubscriptionManagementView: View {
                 .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(V5P.blue.opacity(0.8), lineWidth: 0.8))
                 .shadow(color: V5P.blue.opacity(0.35), radius: 6)
         )
+    }
+
+    // MARK: - 無料プランの案内
+
+    /// 無料プランのときだけ出す、プレミアムプランの案内(HQ指示 2026-10-06の参考画像)。
+    /// 通知・設定などは無料でも使えるので、文言は実際の特典(高度な統計)に合わせた。
+    private var upgradeSection: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            V5JPFont.text("プレミアムプランでできること", size: 8.5, weight: .bold)
+                .foregroundStyle(SubscriptionPalette.heading)
+                .padding(.leading, 4)
+            HStack(spacing: 8) {
+                Image(systemName: "crown.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(V5P.blue.opacity(0.45)))
+                VStack(alignment: .leading, spacing: 3) {
+                    V5JPFont.text("より多くの機能を利用するには", size: 6.5, weight: .bold).foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                    V5JPFont.text("プレミアムプランにご登録ください。", size: 6.5, weight: .bold).foregroundStyle(V5P.cyan)
+                        .fixedSize(horizontal: false, vertical: true)
+                    V5JPFont.text("過去の発表時の詳しい値動き統計など、すべての機能が利用可能になります。", size: 5.5, weight: .regular)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Button { sheet = .plans } label: {
+                    V5JPFont.text("プランを確認する", size: 6, weight: .bold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 7)
+                        .frame(height: 20)
+                        .fixedSize()
+                        .background(Capsule().fill(V5P.blue))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 9)
+            .frame(width: 214)
+            .background(AccountCardBackground())
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: "info.circle.fill")
+                    .font(.system(size: 9))
+                    .foregroundStyle(V5P.blue)
+                V5JPFont.text("無料プランは、いつでもプレミアムプランにアップグレードできます。アップグレード後は、すぐにすべての機能をご利用いただけます。", size: 5.5, weight: .regular)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 6)
+            .padding(.top, 2)
+        }
+        .frame(width: 214, alignment: .leading)
     }
 
     // MARK: - 操作
@@ -240,6 +294,8 @@ struct SubscriptionManagementView: View {
 private enum SubscriptionPalette {
     /// 参考画像の王冠・プラン名の金色。
     static let gold = Color(red: 1.0, green: 0.80, blue: 0.36)
+    /// 参考画像の見出し「プレミアムプランでできること」の水色。
+    static let heading = Color(red: 0.55, green: 0.78, blue: 1.0)
 }
 
 private struct SubscriptionSeparator: View {

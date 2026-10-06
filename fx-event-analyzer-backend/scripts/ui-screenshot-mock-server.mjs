@@ -775,6 +775,9 @@ const accountFixture = () => ({
   updated_at: isoMinusDays(1),
 });
 
+/** SCR-017の撮影用。`/__mock/subscription-plan`で切り替える(PRO / FREE)。 */
+let mockSubscriptionPlan = 'PRO';
+
 async function handleApi(req, res, pathname, searchParams, rawBody) {
   const segments = pathname.replace(/^\/api\/v1\//, '').split('/').filter(Boolean);
 
@@ -808,7 +811,11 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
     return json(res, 200, accountFixture());
   }
   // SCR-017 プラン・購読管理: 参考画像(HQ指示 2026-10-06)と同じく有料プラン加入中の状態で撮る。
+  // 無料プランの画面は、UIテストが`POST /__mock/subscription-plan?plan=FREE`で切り替えてから撮る。
   if (pathname === '/api/v1/subscription') {
+    if (mockSubscriptionPlan === 'FREE') {
+      return json(res, 200, { plan: 'FREE', status: null, started_at: null, expires_at: null, product_id: null });
+    }
     return json(res, 200, {
       plan: 'PRO',
       status: 'ACTIVE',
@@ -859,6 +866,10 @@ const server = createServer(async (req, res) => {
   }
   if (url.pathname.startsWith('/api/v1/')) {
     return handleApi(req, res, url.pathname, url.searchParams, rawBody);
+  }
+  if (url.pathname === '/__mock/subscription-plan' && req.method === 'POST') {
+    mockSubscriptionPlan = url.searchParams.get('plan') === 'FREE' ? 'FREE' : 'PRO';
+    return json(res, 200, { plan: mockSubscriptionPlan });
   }
   json(res, 404, { error: { code: 'NOT_FOUND', message: 'No fixture route.' } });
 });

@@ -167,6 +167,11 @@ final class ScreenshotTests: XCTestCase {
             capture("16b-NotificationQuietHours")
         }
         captureSettingsSubScreen(row: "プラン・購読管理", rowIndex: 2, waitFor: "特典内容の確認", name: "17-Subscription")
+        // 無料プランの表示(HQ指示 2026-10-06)。モックの購読をFREEに切り替えてから撮る。
+        if setMockSubscriptionPlan("FREE") {
+            captureSettingsSubScreen(row: "プラン・購読管理", rowIndex: 2, waitFor: "プランを確認する", name: "17b-SubscriptionFree")
+            _ = setMockSubscriptionPlan("PRO")
+        }
         captureSettingsSubScreen(row: "表示・地域設定", rowIndex: 3, waitFor: "タイムゾーン", name: "18-DisplaySettings")
         captureSettingsSubScreen(row: "チャート設定", rowIndex: 4, waitFor: "時間足", name: "19-ChartSettings")
         // SCR-015 アカウント情報 (added 2026-10-05 with the reference-image
@@ -229,6 +234,22 @@ final class ScreenshotTests: XCTestCase {
     /// Taps a point given in V5's 234×491 canvas coordinates, using the same
     /// scale-to-fit and centering as `V5Viewport` (which ignores the safe
     /// area, so it fills the whole app frame).
+    /// スクショ用モックサーバー(CIでは127.0.0.1:8090、シミュレーターから届く)の
+    /// 購読プランを切り替える。届かなければfalse(その撮影だけ飛ばす)。
+    private func setMockSubscriptionPlan(_ plan: String) -> Bool {
+        guard let url = URL(string: "http://127.0.0.1:8090/__mock/subscription-plan?plan=\(plan)") else { return false }
+        var request = URLRequest(url: url, timeoutInterval: 5)
+        request.httpMethod = "POST"
+        let done = DispatchSemaphore(value: 0)
+        var succeeded = false
+        URLSession.shared.dataTask(with: request) { _, response, _ in
+            succeeded = (response as? HTTPURLResponse)?.statusCode == 200
+            done.signal()
+        }.resume()
+        _ = done.wait(timeout: .now() + 6)
+        return succeeded
+    }
+
     private func tapV5(x: CGFloat, y: CGFloat) {
         let frame = app.frame
         let scale = min(frame.width / 234, frame.height / 491)
