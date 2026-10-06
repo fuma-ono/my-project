@@ -344,9 +344,14 @@ struct HomeView: View {
     /// して」: `verticalPadding`を追加し、お気に入りの小カード(`favoriteGridCard`)
     /// からだけ3→2で呼び出す — 今日の重要イベント(`eventRow`)側のバッジは
     /// 対象外のためデフォルト値(3)のまま変更していない。
+    ///
+    /// HQ指示(2026-10-06)「英字を含む文字もNotoText(Common/NotoText.swift)
+    /// で表示して」: "HIGH"/"MEDIUM"/"LOW"は英字のみだが対象に含め、
+    /// `NotoText.text`に変更した。`NotoText`はウェイト指定を持たない
+    /// (`NotoSansJP-SemiBold`固定、`V5JPFont`と同じ制約)ため、元の
+    /// `.bold`から見た目のウェイトがやや軽いSemiBoldに変わる。
     @ViewBuilder private func statusBadge(_ text: String, colors: (fill: Color, border: Color), verticalPadding: CGFloat = 3) -> some View {
-        Text(text)
-            .font(.system(size: 7, weight: .bold))
+        NotoText.text(text, size: 7)
             .tracking(-0.4)
             .foregroundStyle(.white)
             .frame(width: 32)
@@ -715,7 +720,8 @@ struct HomeView: View {
             // 白に変更。
             VStack(spacing: 1) {
                 CountryFlagView(countryCode: event.countryCode, diameter: Self.flagDiameter)
-                Text(event.currencyCode).font(.system(size: 7, weight: .semibold)).foregroundStyle(.white)
+                // HQ指示(2026-10-06)「英字を含む文字もNotoTextで表示して」
+                NotoText.text(event.currencyCode, size: 7).foregroundStyle(.white)
             }
 
             // HQ再指摘(2026-10-05、6回目)「経済指標の下に指標名でその下に
@@ -980,8 +986,8 @@ struct HomeView: View {
             // 安全弁として付けた)。右側のSpacer(minLength: 4)が吸収する
             // 余白はまだ十分残っているため、他の列幅は変更していない。
             VStack(alignment: .leading, spacing: 1) {
-                Text(pair.displaySymbol)
-                    .font(.system(size: 9.5, weight: .semibold))
+                // HQ指示(2026-10-06)「英字を含む文字もNotoTextで表示して」
+                NotoText.text(pair.displaySymbol, size: 9.5)
                     .tracking(-0.4)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -1159,7 +1165,11 @@ struct HomeView: View {
                 Image(systemName: "star").font(.system(size: 8.5)).foregroundStyle(V5P.muted)
                     .offset(x: 1.5, y: -1.5)
             }
-            V5JPFont.text(name, size: 7, weight: .semibold).foregroundStyle(.white).lineLimit(1)
+            // HQ指示(2026-10-06)「英字を含む文字もNotoTextで表示して」:
+            // "FOMC"等の英字を含む指標名や、通貨ペアの"USD/JPY"もこの
+            // `name`経由で表示されるため、`V5JPFont.text`(日本語部分だけ
+            // Noto)から`NotoText`(全体をNoto)へ変更した。
+            NotoText.text(name, size: 7).foregroundStyle(.white).lineLimit(1)
             subtitle()
             footer()
         }
@@ -1246,8 +1256,13 @@ struct HomeView: View {
         NavigationLink(value: AppRoute.speechDetail(id: speech.id)) {
             HStack(spacing: 6) {
                 CountryFlagView(countryCode: speech.countryCode, diameter: Self.speechFlagDiameter)
+                // HQ指示(2026-10-06)「英字を含む文字もNotoTextで表示して」:
+                // 発言者名("パウエルFRB議長"のように英字を含む)・日時/
+                // 中央銀行行("10/6 08:15 | FRB")・通貨ペア("USD/JPY")・
+                // pips("+28 pips")を`NotoText`に変更した。発言要約
+                // (`headline`)は日本語のみのため`V5JPFont.text`のまま。
                 VStack(alignment: .leading, spacing: 2) {
-                    V5JPFont.text(speech.speakerName, size: 7, weight: .semibold)
+                    NotoText.text(speech.speakerName, size: 7)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                     V5JPFont.text(speech.headline, size: 6, weight: .regular)
@@ -1255,8 +1270,7 @@ struct HomeView: View {
                         .foregroundStyle(Self.linkBlue)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
-                    Text(Self.speechDateOrgText(speech))
-                        .font(.system(size: 6, weight: .medium))
+                    NotoText.text(Self.speechDateOrgText(speech), size: 6)
                         .tracking(-0.4)
                         .foregroundStyle(Self.linkBlue)
                         .lineLimit(1)
@@ -1267,16 +1281,14 @@ struct HomeView: View {
 
                 if let symbol = speech.reactionFxSymbol {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(symbol)
-                            .font(.system(size: 6, weight: .medium))
+                        NotoText.text(symbol, size: 6)
                             .tracking(-0.4)
                             .foregroundStyle(Self.linkBlue)
                         speechPriceRow(label: "発言前", value: speech.reactionPriceBefore, symbol: symbol)
                         HStack(spacing: 1) {
                             speechPriceRow(label: "現在", value: speech.reactionPriceAfter, symbol: symbol)
                             if let pips = speech.reactionPips {
-                                Text(ValueFormat.pips(pips))
-                                    .font(.system(size: 5.5, weight: .bold))
+                                NotoText.text(ValueFormat.pips(pips), size: 5.5)
                                     .foregroundStyle(pips >= 0 ? Self.changeUpColor : Self.changeDownColor)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.7)
