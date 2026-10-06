@@ -1,9 +1,9 @@
 import SwiftUI
 import UIKit
 
-/// SCR-016 通知設定(api-design.md §24.4)。HQ指示(2026-10-05)の参考画像
-/// (「通知の種類」「通知の条件」「通知について」の3枚のカード)の配置を、
-/// ヘッダー下〜タブバー上(V5座標の約54〜452)に換算した。保存ボタンは
+/// SCR-016 通知設定(api-design.md §24.4)。HQ指示(2026-10-06)の参考画像
+/// (見出し+項目名と右端のスイッチ・値だけの行)に合わせ、「通知の種類」
+/// 「通知の条件」「通知について」を並べる(参考画像のニュース速報は不要)。保存ボタンは
 /// 無く、変更はその場で保存される(`NotificationSettingsViewModel`)。
 struct NotificationSettingsView: View {
     @StateObject private var viewModel: NotificationSettingsViewModel
@@ -35,12 +35,12 @@ struct NotificationSettingsView: View {
                 // 端末の文字幅で収まらない場合もタブバーに重ならないよう、
                 // ヘッダー下〜タブバー上の範囲でスクロールさせる。
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 6) {
+                    VStack(spacing: 10) {
                         kindsCard
                         conditionsCard
                         aboutCard
                     }
-                    .padding(.top, 5)
+                    .padding(.top, 6)
                     .frame(width: V5P.W)
                 }
                 .frame(width: V5P.W, height: 398)
@@ -68,49 +68,28 @@ struct NotificationSettingsView: View {
     // MARK: - 通知の種類
 
     private var kindsCard: some View {
-        NotificationCard(icon: "bell.fill", title: "通知の種類", subtitle: "受け取りたい通知を選択してください。") {
-            NotificationToggleRow(
-                icon: "iphone.radiowaves.left.and.right", title: "プッシュ通知",
-                subtitle: "アプリからの各種通知を受け取ります。",
-                isOn: viewModel.settings.push, onChange: { viewModel.setPush($0) }
-            )
+        NotificationSection(title: "通知の種類") {
+            NotificationToggleRow(title: "プッシュ通知", isOn: viewModel.settings.push, onChange: { viewModel.setPush($0) })
             NotificationSeparator()
-            NotificationToggleRow(
-                icon: "chart.bar.fill", title: "重要な経済指標の通知",
-                subtitle: "指定した通貨ペアの重要な経済指標の発表をお知らせします。",
-                isOn: viewModel.settings.indicators, onChange: { viewModel.setIndicators($0) }
-            )
-            .dimmed(!viewModel.settings.push)
+            NotificationToggleRow(title: "重要な経済指標の通知", isOn: viewModel.settings.indicators, onChange: { viewModel.setIndicators($0) })
+                .dimmed(!viewModel.settings.push)
             NotificationSeparator()
-            NotificationToggleRow(
-                icon: "person.wave.2.fill", title: "要人発言の通知",
-                subtitle: "主要な金融当局者の発言をお知らせします。",
-                isOn: viewModel.settings.speeches, onChange: { viewModel.setSpeeches($0) }
-            )
-            .dimmed(!viewModel.settings.push)
+            NotificationToggleRow(title: "要人発言の通知", isOn: viewModel.settings.speeches, onChange: { viewModel.setSpeeches($0) })
+                .dimmed(!viewModel.settings.push)
         }
     }
 
     // MARK: - 通知の条件
 
     private var conditionsCard: some View {
-        NotificationCard(icon: "gearshape.fill", title: "通知の条件", subtitle: "通知の詳細な条件を設定できます。") {
-            NotificationValueRow(
-                icon: "globe", title: "対象通貨ペア",
-                subtitle: "通知を受け取る通貨ペアを選択してください。",
-                value: viewModel.fxPairsLabel
-            ) { picker = .fxPairs }
+        NotificationSection(title: "通知の条件") {
+            NotificationValueRow(title: "対象通貨ペア", value: viewModel.fxPairsLabel) { picker = .fxPairs }
+            NotificationSeparator()
+            NotificationValueRow(title: "重要度", value: viewModel.importancesLabel) { picker = .importances }
             NotificationSeparator()
             NotificationValueRow(
-                icon: "star.fill", title: "重要度",
-                subtitle: "重要度の高いイベントのみ通知します。",
-                value: viewModel.importancesLabel
-            ) { picker = .importances }
-            NotificationSeparator()
-            NotificationValueRow(
-                icon: "clock.fill", title: "通知のタイミング",
-                subtitle: "発表の何分前に通知するかを設定します。",
-                value: NotificationSettingsViewModel.shortLeadLabel(viewModel.settings.leadMinutes)
+                title: "通知のタイミング",
+                value: NotificationSettingsViewModel.leadLabel(viewModel.settings.leadMinutes)
             ) { picker = .timing }
         }
         .dimmed(!viewModel.settings.push)
@@ -124,8 +103,8 @@ struct NotificationSettingsView: View {
                 icon: "info.circle.fill",
                 title: "通知について",
                 text: "通知は、選択した通貨ペア・重要度・タイミングの条件に基づいて配信されます。プッシュ通知の設定は、端末の通知設定もご確認ください。",
-                // 「受け取りたい通知を選択してください。」と同じ大きさ(HQ指示 2026-10-06)。
-                textSize: NotificationLayout.subtitleSize
+                // HQ指示(2026-10-06)で指定した大きさ。
+                textSize: NotificationLayout.aboutTextSize
             )
             statusLine
                 .frame(width: 214, height: 12)
@@ -199,54 +178,32 @@ struct NotificationSettingsView: View {
 
 // MARK: - 部品
 
+/// HQ指示(2026-10-06)の参考画像: 見出しはカードの外に文字だけで置き、
+/// カードの中は項目名と右端のスイッチ・値だけの行を並べる。
 private enum NotificationLayout {
     static let width: CGFloat = 214
-    static let sectionTitleSize: CGFloat = 9.5
+    static let sectionTitleSize: CGFloat = 8.5
     static let rowTitleSize: CGFloat = 8.5
-    static let subtitleSize: CGFloat = 6
-    static let valueSize: CGFloat = 7
-    /// 行のアイコン・文字・右端の間隔。
-    static let rowSpacing: CGFloat = 6
-    static let rowVerticalPadding: CGFloat = 5
+    static let valueSize: CGFloat = 8
+    static let rowHeight: CGFloat = 25
+    static let aboutTextSize: CGFloat = 6
 }
 
-/// 丸いアイコン・見出し・説明の下に、枠で囲んだ行を並べるカード。
-private struct NotificationCard<Rows: View>: View {
-    let icon: String
+/// カードの上に見出しを置いたまとまり。
+private struct NotificationSection<Rows: View>: View {
     let title: String
-    let subtitle: String
     @ViewBuilder let rows: () -> Rows
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(V5P.cyan)
-                    .frame(width: 22, height: 22)
-                    .background(Circle().fill(V5P.cyan.opacity(0.14)))
-                    .overlay(Circle().stroke(V5P.cyan.opacity(0.45), lineWidth: 0.6))
-                VStack(alignment: .leading, spacing: 2) {
-                    V5JPFont.text(title, size: NotificationLayout.sectionTitleSize, weight: .bold).foregroundStyle(.white)
-                    V5JPFont.text(subtitle, size: NotificationLayout.subtitleSize, weight: .regular)
-                        .foregroundStyle(SettingsCardStyle.subtitleColor)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 10)
-            .frame(height: 32)
-
+        VStack(alignment: .leading, spacing: 5) {
+            V5JPFont.text(title, size: NotificationLayout.sectionTitleSize, weight: .bold)
+                .foregroundStyle(.white)
+                .padding(.leading, 4)
             VStack(spacing: 0) { rows() }
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.black.opacity(0.14))
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(SettingsCardStyle.separator, lineWidth: 0.6))
-                )
-                .padding(.horizontal, 6)
-                .padding(.bottom, 6)
+                .frame(width: NotificationLayout.width)
+                .background(AccountCardBackground())
         }
-        .frame(width: NotificationLayout.width)
-        .background(AccountCardBackground())
+        .frame(width: NotificationLayout.width, alignment: .leading)
     }
 }
 
@@ -256,49 +213,18 @@ private struct NotificationSeparator: View {
     }
 }
 
-/// 角丸の四角に入った行のアイコン。
-private struct NotificationIconTile: View {
-    let icon: String
-    var body: some View {
-        Image(systemName: icon)
-            .font(.system(size: 9.5, weight: .semibold))
-            .foregroundStyle(V5P.cyan)
-            .frame(width: 20, height: 20)
-            .background(RoundedRectangle(cornerRadius: 5).fill(SettingsCardStyle.cardFill))
-            .overlay(RoundedRectangle(cornerRadius: 5).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
-    }
-}
-
-private struct NotificationRowText: View {
-    let title: String
-    let subtitle: String
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            V5JPFont.text(title, size: NotificationLayout.rowTitleSize, weight: .bold).foregroundStyle(.white)
-            V5JPFont.text(subtitle, size: NotificationLayout.subtitleSize, weight: .regular)
-                .foregroundStyle(SettingsCardStyle.subtitleColor)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        // 右端(スイッチ・値)以外の幅をすべて文字に使い、折り返しを減らす。
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .layoutPriority(1)
-    }
-}
-
 /// ON/OFFの行。標準Toggleは固定キャンバスに対して大きすぎるため、V5の
 /// 寸法でスイッチを描き、VoiceOverには切り替えスイッチとして見せる。
 private struct NotificationToggleRow: View {
-    let icon: String
     let title: String
-    let subtitle: String
     let isOn: Bool
     let onChange: (Bool) -> Void
 
     var body: some View {
         Button { onChange(!isOn) } label: {
-            HStack(spacing: NotificationLayout.rowSpacing) {
-                NotificationIconTile(icon: icon)
-                NotificationRowText(title: title, subtitle: subtitle)
+            HStack(spacing: 6) {
+                V5JPFont.text(title, size: NotificationLayout.rowTitleSize, weight: .medium).foregroundStyle(.white)
+                Spacer(minLength: 4)
                 Capsule()
                     .fill(isOn ? V5P.blue : V5P.panel2)
                     .overlay(Capsule().stroke(isOn ? V5P.blue : V5P.line, lineWidth: 0.5))
@@ -308,8 +234,8 @@ private struct NotificationToggleRow: View {
                     }
                     .animation(.easeInOut(duration: 0.15), value: isOn)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, NotificationLayout.rowVerticalPadding)
+            .padding(.horizontal, 10)
+            .frame(height: NotificationLayout.rowHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -322,27 +248,26 @@ private struct NotificationToggleRow: View {
 
 /// 現在の値とシェブロンを右端に出し、タップで選択シートを開く行。
 private struct NotificationValueRow: View {
-    let icon: String
     let title: String
-    let subtitle: String
     let value: String
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: NotificationLayout.rowSpacing) {
-                NotificationIconTile(icon: icon)
-                NotificationRowText(title: title, subtitle: subtitle)
+            HStack(spacing: 6) {
+                V5JPFont.text(title, size: NotificationLayout.rowTitleSize, weight: .medium).foregroundStyle(.white)
+                    .layoutPriority(1)
+                Spacer(minLength: 4)
                 V5JPFont.text(value, size: NotificationLayout.valueSize, weight: .regular)
-                    .foregroundStyle(SettingsCardStyle.chevronColor)
+                    .foregroundStyle(.white)
                     .lineLimit(1)
-                    .fixedSize()
+                    .minimumScaleFactor(0.8)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 7.5, weight: .semibold))
                     .foregroundStyle(SettingsCardStyle.chevronColor)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, NotificationLayout.rowVerticalPadding)
+            .padding(.horizontal, 10)
+            .frame(height: NotificationLayout.rowHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(SettingsRowPressStyle())

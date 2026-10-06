@@ -373,14 +373,11 @@ final class NotificationSettingsViewModelTests: XCTestCase {
 
         viewModel.setFxPairs(["GBPJPY", "USDJPY"])
         XCTAssertEqual(viewModel.settings.fxPairs, ["USDJPY", "GBPJPY"])
-        XCTAssertEqual(viewModel.fxPairsLabel, "2ペア")
-
-        viewModel.setFxPairs(["GBPJPY"])
-        XCTAssertEqual(viewModel.fxPairsLabel, "GBP/JPY")
+        XCTAssertEqual(viewModel.fxPairsLabel, "USD/JPY・GBP/JPY")
 
         viewModel.setFxPairs([])
         XCTAssertNil(viewModel.settings.fxPairs)
-        XCTAssertEqual(viewModel.fxPairsLabel, "すべて")
+        XCTAssertEqual(viewModel.fxPairsLabel, "すべての通貨ペア")
     }
 
     func testTurningPushOnAsksForPermission() async {
