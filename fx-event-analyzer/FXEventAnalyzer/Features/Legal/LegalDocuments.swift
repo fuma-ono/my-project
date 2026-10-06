@@ -4,7 +4,7 @@ import Foundation
 /// HQの原案を、今のアプリ・Backendの構成(Supabase認証・データ保存、App Storeの
 /// 自動更新サブスクリプション、不具合報告のGitHub Issue登録、端末内のローカル
 /// 通知、分析・広告SDKなし、サーバーはGoogle Cloud Run・Supabaseとも東京
-/// リージョン)に合わせて直した版。運営者は個人(大野楓真)のため「運営者」ではなく
+/// リージョン)に合わせて直した版。運営者は個人(大野楓真)のため「当社」ではなく
 /// 「運営者」とし、住所・電話番号は請求に応じて開示する(個人情報保護法32条・
 /// 特定商取引法11条ただし書き)。制定日は公開日に合わせて更新する。
 struct LegalDocument: Identifiable, Hashable {
