@@ -985,6 +985,18 @@ struct HomeView: View {
             // 丸ごと省略記号に潰れた教訓から、ここも`minimumScaleFactor`を
             // 安全弁として付けた)。右側のSpacer(minLength: 4)が吸収する
             // 余白はまだ十分残っているため、他の列幅は変更していない。
+            //
+            // HQ再指摘(2026-10-06、CIキャプチャで確認)「米ドル/円が表示
+            // されていない」: `.frame(width: 54, alignment: .leading)`
+            // (幅を固定値ぴったりに強制)をこのVStack自体に付けていた
+            // ところ、2行目が実機キャプチャで完全に消えていた(真因は
+            // 未特定だが、`speechRow`の右側VStack(symbol/発言前/現在、
+            // 3行)はこの固定`width:`を付けずに自然なサイズ決めで問題なく
+            // 表示できている実例と構成が異なっていた点が唯一の違い)。
+            // `width:`(厳密な固定値)ではなく`minWidth:`(下限のみ、
+            // 自然なサイズがそれより大きければ縮めない)に変更し、3行
+            // とも価格列の開始位置を揃える効果は保ちつつ、内容を強制的に
+            // 狭い幅へ押し込めることによる不具合を避けるようにした。
             VStack(alignment: .leading, spacing: 1) {
                 // HQ指示(2026-10-06)「英字を含む文字もNotoTextで表示して」
                 NotoText.text(pair.displaySymbol, size: 9.5)
@@ -998,7 +1010,7 @@ struct HomeView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .frame(width: 54, alignment: .leading)
+            .frame(minWidth: 54, alignment: .leading)
             // HQ再指摘(2026-10-05、6回目)「155.42のサイズを0.5だけ大きく
             // して、もう少し右に寄せて」: 9.5→10に拡大し、列内の配置を
             // 中央揃えから右(変化率側)揃えに変更。HQ再指摘(2026-10-06)
