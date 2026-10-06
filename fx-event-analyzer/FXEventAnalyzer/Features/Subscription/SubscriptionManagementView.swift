@@ -9,6 +9,9 @@ struct SubscriptionManagementView: View {
     @StateObject private var viewModel: SubscriptionManagementViewModel
     @Binding var tabSelection: Int
     @State private var sheet: Sheet?
+    /// 購入シートから開く利用規約・プライバシーポリシー(App Storeの審査で、
+    /// 自動更新サブスクリプションの購入画面に必要)。
+    @State private var legalDocument: LegalDocument?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
@@ -234,6 +237,15 @@ struct SubscriptionManagementView: View {
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
                 .padding(.horizontal, 24)
                 .padding(.top, 10)
+
+            HStack(spacing: 18) {
+                Button("利用規約") { legalDocument = LegalDocuments.terms }
+                Button("プライバシーポリシー") { legalDocument = LegalDocuments.privacy }
+            }
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(V5P.cyan)
+            .padding(.top, 10)
+            .sheet(item: $legalDocument) { LegalDocumentSheet(document: $0) }
         }
     }
 

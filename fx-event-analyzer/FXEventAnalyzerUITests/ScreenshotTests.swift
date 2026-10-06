@@ -176,6 +176,8 @@ final class ScreenshotTests: XCTestCase {
         captureSettingsSubScreen(row: "チャート設定", rowIndex: 4, waitFor: "時間足", name: "19-ChartSettings")
         // SCR-020 ヘルプ・お問い合わせは2つ目のまとまりの先頭(1つ目6行+間隔8)。
         captureSettingsSubScreen(row: "ヘルプ・お問い合わせ", rowIndex: 6, extraOffset: 8, waitFor: "よくある質問", name: "20-Help")
+        captureSettingsSubScreen(row: "利用規約", rowIndex: 7, extraOffset: 8, waitFor: "第1条", name: "21-Terms")
+        captureSettingsSubScreen(row: "プライバシーポリシー", rowIndex: 8, extraOffset: 8, waitFor: "第1条", name: "22-PrivacyPolicy")
         // SCR-015 アカウント情報 (added 2026-10-05 with the reference-image
         // rebuild) and SCR-024 アカウント削除, opened from SCR-015's
         // bottom row (V5 card top 342.9, height 33.9). The deletion screen
