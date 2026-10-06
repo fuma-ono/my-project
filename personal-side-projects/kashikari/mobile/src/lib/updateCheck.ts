@@ -38,7 +38,12 @@ export async function checkForAppUpdate(t: UpdateCheckStrings): Promise<void> {
     if (!res.ok) return;
     const json = (await res.json()) as { results?: Array<{ version?: string }> };
     const remoteVersion = json.results?.[0]?.version;
-    const localVersion = Constants.expoConfig?.version;
+    // 111回目: Constants.expoConfig?.versionは本番(standalone)ビルドで
+    // nullになることがあり(JS側の設定マニフェストに依存するため)、
+    // 1.2をリリースしても実機でアラートが出ない不具合があった。ネイティブ
+    // バイナリに埋め込まれた実際のバージョン文字列を直接読む
+    // Constants.nativeAppVersionに切り替える。
+    const localVersion = Constants.nativeAppVersion;
     if (!remoteVersion || !localVersion || !isNewerVersion(remoteVersion, localVersion)) return;
     Alert.alert(t.title, t.message, [
       { text: t.laterButton, style: 'cancel' },
