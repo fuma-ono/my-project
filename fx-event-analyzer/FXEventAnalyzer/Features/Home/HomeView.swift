@@ -1195,26 +1195,38 @@ struct HomeView: View {
     ///   (Backend計算済み値をそのまま表示する既存の方針、`HomeSpeechSummary`
     ///   のドキュメントコメント参照)で符号に応じて`changeUpColor`/
     ///   `changeDownColor`に色分け。
+    /// HQ再指摘(2026-10-06、3回目)「現在の価格が'...'で切れている」:
+    /// 参考画像をピクセル実測して固定したleft/right幅(103等)は、参考
+    /// 画像自体のフォントと実機の`V5JPFont`/システムフォントの文字幅が
+    /// 想定より違っていたため、実機CIキャプチャでは発言要約・現在価格が
+    /// 丸ごと省略記号になって消えるという明確な破綻を起こした(この回の
+    /// 前の実装では固定`frame(width:)`+`lineLimit(1)`だけで安全弁が無く、
+    /// 入りきらない分がまるごと”...”に潰れていた)。
+    /// 対策として固定幅を廃止し、内容に応じた自然なサイズ決めに戻した
+    /// 上で、`lineLimit(1)`に加えて`minimumScaleFactor`を安全弁として
+    /// 全テキストに付けた — 本当に入りきらない時は(基本サイズ7を保った
+    /// まま)わずかに縮小して全文を表示し、二度と”...”で情報が消えない
+    /// ようにする。
     @ViewBuilder private func speechRow(_ speech: HomeSpeechSummary) -> some View {
         NavigationLink(value: AppRoute.speechDetail(id: speech.id)) {
             HStack(spacing: 6) {
-                HStack(spacing: 6) {
-                    CountryFlagView(countryCode: speech.countryCode, diameter: Self.speechFlagDiameter)
-                    VStack(alignment: .leading, spacing: 2) {
-                        V5JPFont.text(speech.speakerName, size: 7, weight: .semibold)
-                            .lineLimit(1)
-                        V5JPFont.text(speech.headline, size: 7, weight: .regular)
-                            .tracking(-0.4)
-                            .foregroundStyle(Self.linkBlue)
-                            .lineLimit(1)
-                        Text(Self.speechDateOrgText(speech))
-                            .font(.system(size: 7, weight: .medium))
-                            .tracking(-0.4)
-                            .foregroundStyle(Self.linkBlue)
-                            .lineLimit(1)
-                    }
+                CountryFlagView(countryCode: speech.countryCode, diameter: Self.speechFlagDiameter)
+                VStack(alignment: .leading, spacing: 2) {
+                    V5JPFont.text(speech.speakerName, size: 7, weight: .semibold)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    V5JPFont.text(speech.headline, size: 7, weight: .regular)
+                        .tracking(-0.4)
+                        .foregroundStyle(Self.linkBlue)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    Text(Self.speechDateOrgText(speech))
+                        .font(.system(size: 7, weight: .medium))
+                        .tracking(-0.4)
+                        .foregroundStyle(Self.linkBlue)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                 }
-                .frame(width: 103, alignment: .leading)
 
                 Divider().overlay(Self.cardBorderColor).frame(height: 25)
 
@@ -1225,12 +1237,14 @@ struct HomeView: View {
                             .tracking(-0.4)
                             .foregroundStyle(Self.linkBlue)
                         speechPriceRow(label: "発言前", value: speech.reactionPriceBefore, symbol: symbol)
-                        HStack(spacing: 4) {
+                        HStack(spacing: 3) {
                             speechPriceRow(label: "現在", value: speech.reactionPriceAfter, symbol: symbol)
                             if let pips = speech.reactionPips {
                                 Text(ValueFormat.pips(pips))
-                                    .font(.system(size: 7, weight: .bold))
+                                    .font(.system(size: 6.5, weight: .bold))
                                     .foregroundStyle(pips >= 0 ? Self.changeUpColor : Self.changeDownColor)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
                             }
                         }
                     }
@@ -1244,18 +1258,27 @@ struct HomeView: View {
         }.buttonStyle(.plain)
     }
 
-    /// `speechRow`の「発言前」「現在」行 — ラベル部分を固定幅にして、
-    /// 2行の価格(`149.20`/`149.48`)の開始x位置を揃えている。
+    /// `speechRow`の「発言前」「現在」行 — ラベル部分に`minWidth`を設けて
+    /// 2行の価格(`149.20`/`149.48`)の開始x位置をおおよそ揃えている
+    /// (`width`固定ではなく`minWidth`なので、万一ラベルがそれより広い
+    /// 幅を必要としても切れない)。価格本体(`Text`側)は`.layoutPriority(1)`
+    /// で、行が窮屈な時にラベルより先に縮まないようにしている(数字が
+    /// 消えるより、ラベルが少し縮む方を優先)。
     @ViewBuilder private func speechPriceRow(label: String, value: Double?, symbol: String) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 3) {
             Text(label)
                 .font(.system(size: 7, weight: .medium))
                 .tracking(-0.4)
                 .foregroundStyle(Self.linkBlue)
-                .frame(width: 22, alignment: .leading)
-            Text(ValueFormat.number(value, fractionDigits: symbol.contains("JPY") ? 2 : 4))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(minWidth: 22, alignment: .leading)
+            Text(Self.speechPriceText(value, symbol: symbol))
                 .font(.system(size: 7, weight: .bold))
                 .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .layoutPriority(1)
         }
     }
 
@@ -1263,6 +1286,15 @@ struct HomeView: View {
         let dateText = Self.favoriteDateFormatter.string(from: speech.statementDatetime)
         guard let organization = speech.organization else { return dateText }
         return "\(dateText) | \(organization)"
+    }
+
+    /// `ValueFormat.number`はminimumFractionDigits=0のため末尾の0が消える
+    /// (149.20→149.2)。参考画像通りの桁数(JPYペア2桁・それ以外4桁)を
+    /// 常に保つため、この行専用に固定桁数でフォーマットする。
+    private static func speechPriceText(_ value: Double?, symbol: String) -> String {
+        guard let value else { return "--" }
+        let digits = symbol.contains("JPY") ? 2 : 4
+        return String(format: "%.\(digits)f", value)
     }
 
     /// 「今日の重要イベント」: これから発生する重要イベント — 既発表
