@@ -12,7 +12,7 @@ struct NotificationSettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     private enum OptionPicker: String, Identifiable {
-        case fxPairs, importances, timing
+        case fxPairs, importances, timing, quietStart, quietEnd
         var id: String { rawValue }
     }
 
@@ -35,12 +35,13 @@ struct NotificationSettingsView: View {
                 // 端末の文字幅で収まらない場合もタブバーに重ならないよう、
                 // ヘッダー下〜タブバー上の範囲でスクロールさせる。
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 10) {
+                    VStack(spacing: 8) {
                         kindsCard
                         conditionsCard
+                        quietHoursCard
                         aboutCard
                     }
-                    .padding(.top, 6)
+                    .padding(.top, 4)
                     .frame(width: V5P.W)
                 }
                 .frame(width: V5P.W, height: 398)
@@ -55,6 +56,10 @@ struct NotificationSettingsView: View {
             case .fxPairs: fxPairSheet
             case .importances: importanceSheet
             case .timing: timingSheet
+            case .quietStart:
+                quietTimeSheet(title: "開始", selection: viewModel.settings.quietStart) { viewModel.setQuietStart($0) }
+            case .quietEnd:
+                quietTimeSheet(title: "終了", selection: viewModel.settings.quietEnd) { viewModel.setQuietEnd($0) }
             }
         }
     }
@@ -91,6 +96,22 @@ struct NotificationSettingsView: View {
                 title: "通知のタイミング",
                 value: NotificationSettingsViewModel.leadLabel(viewModel.settings.leadMinutes)
             ) { picker = .timing }
+        }
+        .dimmed(!viewModel.settings.push)
+    }
+
+    // MARK: - 通知時間帯
+
+    /// HQ指示(2026-10-06)「通知しない時間帯 OFF / ONにした場合 開始 23:00 終了 7:00」。
+    private var quietHoursCard: some View {
+        NotificationSection(title: "通知時間帯") {
+            NotificationToggleRow(title: "通知しない時間帯", isOn: viewModel.settings.quietHoursEnabled, onChange: { viewModel.setQuietHours($0) })
+            if viewModel.settings.quietHoursEnabled {
+                NotificationSeparator()
+                NotificationValueRow(title: "開始", value: NotificationSettingsViewModel.timeLabel(viewModel.settings.quietStart)) { picker = .quietStart }
+                NotificationSeparator()
+                NotificationValueRow(title: "終了", value: NotificationSettingsViewModel.timeLabel(viewModel.settings.quietEnd)) { picker = .quietEnd }
+            }
         }
         .dimmed(!viewModel.settings.push)
     }
@@ -157,6 +178,17 @@ struct NotificationSettingsView: View {
                     label: NotificationImportance.label(importance),
                     isSelected: viewModel.settings.importances.contains(importance)
                 ) { viewModel.toggleImportance(importance) }
+            }
+        }
+    }
+
+    private func quietTimeSheet(title: String, selection: String, onSelect: @escaping (String) -> Void) -> some View {
+        NotificationOptionSheet(title: title, footer: "開始から終了までの間は通知しません。") {
+            ForEach(NotificationSettings.quietTimeOptions, id: \.self) { time in
+                NotificationOptionRow(label: NotificationSettingsViewModel.timeLabel(time), isSelected: selection == time) {
+                    onSelect(time)
+                    picker = nil
+                }
             }
         }
     }

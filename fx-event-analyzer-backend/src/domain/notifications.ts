@@ -20,6 +20,23 @@ export const MAX_UPCOMING_WINDOW_DAYS = 14;
 const DAY_MS = 86_400_000;
 const MINUTE_MS = 60_000;
 
+/** 通知しない時間帯の時刻: "HH:MM" (24時間制, 00:00〜23:59). */
+export const NOTIFICATION_TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+
+/** display_timezone が解決できない場合の判定用タイムゾーン. */
+export const DEFAULT_NOTIFICATION_TIME_ZONE = 'Asia/Tokyo';
+
+/**
+ * 通知しない時間帯 (2026-10-06). start/end are "HH:MM" local times in the
+ * user's display timezone; the range is [start, end). end < start wraps
+ * midnight (the default 23:00〜07:00); start == end suppresses nothing.
+ */
+export interface QuietHours {
+  enabled: boolean;
+  start: string;
+  end: string;
+}
+
 export interface NotificationPreferences {
   push: boolean;
   indicators: boolean;
@@ -28,6 +45,9 @@ export interface NotificationPreferences {
   fxPairSymbols: readonly string[] | null;
   importances: readonly Importance[];
   leadMinutes: number;
+  quietHours: QuietHours;
+  /** IANA zone quiet hours are evaluated in (display.timezone). */
+  timeZone: string;
 }
 
 interface CandidateBase {
@@ -107,6 +127,55 @@ export function fxPairsForCurrency(
     .map((pair) => pair.symbol);
 }
 
+/** "HH:MM" → minutes since local midnight. */
+function minutesOfDay(time: string): number {
+  const [hours = '0', minutes = '0'] = time.split(':');
+  return Number(hours) * 60 + Number(minutes);
+}
+
+const localTimeFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function createLocalTimeFormatter(timeZone: string): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat('en-US', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+}
+
+/** Cached per zone; an empty or unknown zone falls back to Asia/Tokyo. */
+function localTimeFormatter(timeZone: string): Intl.DateTimeFormat {
+  let formatter = localTimeFormatters.get(timeZone);
+  if (!formatter) {
+    try {
+      formatter = createLocalTimeFormatter(timeZone || DEFAULT_NOTIFICATION_TIME_ZONE);
+    } catch {
+      formatter = createLocalTimeFormatter(DEFAULT_NOTIFICATION_TIME_ZONE);
+    }
+    localTimeFormatters.set(timeZone, formatter);
+  }
+  return formatter;
+}
+
+/** Minutes since local midnight of `instant` in `timeZone` (seconds are dropped). */
+export function localMinutesOfDay(instant: Date, timeZone: string): number {
+  const parts = localTimeFormatter(timeZone).formatToParts(instant);
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value ?? 0) % 24;
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value ?? 0);
+  return hour * 60 + minute;
+}
+
+/**
+ * True when `notifyAt`, as a local time in `timeZone` (fallback Asia/Tokyo),
+ * falls inside the enabled quiet hours [start, end). end < start wraps
+ * midnight; start == end or enabled = false never suppresses.
+ */
+export function isInQuietHours(notifyAt: Date, quietHours: QuietHours, timeZone: string): boolean {
+  if (!quietHours.enabled) return false;
+  const start = minutesOfDay(quietHours.start);
+  const end = minutesOfDay(quietHours.end);
+  if (start === end) return false;
+
+  const local = localMinutesOfDay(notifyAt, timeZone);
+  return start < end ? local >= start && local < end : local >= start || local < end;
+}
+
 function isEligible(candidate: NotificationCandidate, prefs: NotificationPreferences): boolean {
   if (candidate.status !== 'SCHEDULED') return false;
   if (candidate.kind === 'INDICATOR') {
@@ -129,7 +198,8 @@ function isEligible(candidate: NotificationCandidate, prefs: NotificationPrefere
  * push off → nothing; per-kind switches; SCHEDULED only; indicators need
  * an EXACT release time; importance ∈ importances; fx_pairs (when set)
  * must intersect related_fx_pairs; notify_at >= from and scheduled_at <=
- * to. Sorted by notify_at ascending and capped at 60.
+ * to; notify_at outside the quiet hours (when enabled, in prefs.timeZone).
+ * Sorted by notify_at ascending and capped at 60 (after filtering).
  */
 export function buildUpcomingNotifications(
   prefs: NotificationPreferences,
@@ -150,6 +220,7 @@ export function buildUpcomingNotifications(
     if (Number.isNaN(scheduledAtMs)) continue;
     const notifyAtMs = scheduledAtMs - leadMs;
     if (notifyAtMs < fromMs || scheduledAtMs > toMs) continue;
+    if (isInQuietHours(new Date(notifyAtMs), prefs.quietHours, prefs.timeZone)) continue;
 
     items.push({
       notifyAtMs,

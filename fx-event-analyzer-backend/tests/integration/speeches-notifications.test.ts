@@ -215,6 +215,51 @@ describe.skipIf(!integration)('Speeches / FX pairs / upcoming notifications', ()
       expect(body.items[0].notify_at).toBe('2026-10-16T00:00:00Z');
     });
 
+    async function patchSettings(headers: { authorization: string }, payload: object) {
+      const response = await ctx.app.inject({ method: 'PATCH', url: '/api/v1/settings', headers, payload });
+      expect(response.statusCode).toBe(200);
+    }
+
+    it('drops items whose notify_at is in the quiet hours (23:00〜07:00 in Asia/Tokyo)', async () => {
+      const headers = await newUser();
+      await patchSettings(headers, { notifications: { quiet_hours_enabled: true } });
+      const body = JSON.parse((await upcoming(headers)).body);
+      const ids = body.items.map((item: { id: string }) => item.id);
+      // Powell notify_at 2026-10-14T15:55Z = 00:55 JST → suppressed.
+      expect(ids).not.toContain(POWELL_SCHEDULED_SPEECH_ID);
+      // Ueda 00:55Z = 09:55 JST, the JP CPI event 23:25Z = 08:25 JST → kept.
+      expect(ids).toContain(UEDA_SCHEDULED_SPEECH_ID);
+      expect(ids).toContain(EXACT_EVENT_ID);
+      for (const item of body.items as { notify_at: string }[]) {
+        const jstHour = (new Date(item.notify_at).getUTCHours() + 9) % 24;
+        expect(jstHour >= 7 && jstHour < 23).toBe(true);
+      }
+    });
+
+    it('evaluates quiet hours in the saved display timezone', async () => {
+      const headers = await newUser();
+      await patchSettings(headers, {
+        notifications: { quiet_hours_enabled: true, quiet_start: '19:00', quiet_end: '20:00' },
+        display: { timezone: 'America/New_York' },
+      });
+      const ids = JSON.parse((await upcoming(headers)).body).items.map((item: { id: string }) => item.id);
+      // EDT (UTC-4): JP CPI 23:25Z = 19:25 → suppressed; Powell 15:55Z = 11:55, Ueda 00:55Z = 20:55 → kept.
+      expect(ids).not.toContain(EXACT_EVENT_ID);
+      expect(ids).toContain(POWELL_SCHEDULED_SPEECH_ID);
+      expect(ids).toContain(UEDA_SCHEDULED_SPEECH_ID);
+    });
+
+    it('suppresses nothing when quiet_start == quiet_end', async () => {
+      const headers = await newUser();
+      await patchSettings(headers, {
+        notifications: { quiet_hours_enabled: true, quiet_start: '07:00', quiet_end: '07:00' },
+      });
+      const ids = JSON.parse((await upcoming(headers)).body).items.map((item: { id: string }) => item.id);
+      expect(ids).toContain(POWELL_SCHEDULED_SPEECH_ID);
+      expect(ids).toContain(UEDA_SCHEDULED_SPEECH_ID);
+      expect(ids).toContain(EXACT_EVENT_ID);
+    });
+
     it('returns no items when push is off', async () => {
       const headers = await newUser();
       await ctx.app.inject({

@@ -16,6 +16,12 @@ export interface SettingsResponse {
     /** Always ordered HIGH, MEDIUM, LOW. */
     importances: Importance[];
     lead_minutes: NotificationLeadMinutes;
+    /** 通知しない時間帯 (2026-10-06). Default off, 23:00〜07:00. */
+    quiet_hours_enabled: boolean;
+    /** "HH:MM", local time in display.timezone (inclusive). */
+    quiet_start: string;
+    /** "HH:MM" (exclusive). Earlier than quiet_start = wraps midnight; equal = no suppression. */
+    quiet_end: string;
   };
   display: {
     language: string;
@@ -39,6 +45,9 @@ export function toSettingsResponse(row: UserSettingsRow): SettingsResponse {
       importances: sortImportancesDesc(row.notify_importances),
       // Guaranteed by the DB CHECK (0, 5, 10, 15, 30, 60).
       lead_minutes: row.notify_lead_minutes as NotificationLeadMinutes,
+      quiet_hours_enabled: row.notify_quiet_hours_enabled,
+      quiet_start: row.notify_quiet_start,
+      quiet_end: row.notify_quiet_end,
     },
     display: {
       language: row.display_language,
@@ -65,6 +74,11 @@ export function toSettingsUpdate(body: UpdateSettingsBody): UserSettingsUpdate {
   if (notifications?.fx_pairs !== undefined) update.notify_fx_pair_symbols = notifications.fx_pairs;
   if (notifications?.importances !== undefined) update.notify_importances = notifications.importances;
   if (notifications?.lead_minutes !== undefined) update.notify_lead_minutes = notifications.lead_minutes;
+  if (notifications?.quiet_hours_enabled !== undefined) {
+    update.notify_quiet_hours_enabled = notifications.quiet_hours_enabled;
+  }
+  if (notifications?.quiet_start !== undefined) update.notify_quiet_start = notifications.quiet_start;
+  if (notifications?.quiet_end !== undefined) update.notify_quiet_end = notifications.quiet_end;
 
   if (display?.language !== undefined) update.display_language = display.language;
   if (display?.region !== undefined) update.display_region = display.region;

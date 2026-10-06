@@ -10,6 +10,7 @@ import { upcomingNotificationsQuerySchema } from '../schemas/notifications.js';
  * GET /notifications/upcoming (api-design.md §24.6, HQ指示 2026-10-05).
  * iOS schedules on-device local notifications from this list, filtered by
  * the caller's saved SCR-016 通知設定 — there is no server-side push.
+ * 通知しない時間帯 is evaluated in the saved display.timezone.
  */
 export function registerNotificationRoutes(app: FastifyInstance): void {
   app.get('/notifications/upcoming', async (request) => {
@@ -18,7 +19,7 @@ export function registerNotificationRoutes(app: FastifyInstance): void {
 
     const query = upcomingNotificationsQuerySchema.parse(request.query);
     const window = resolveUpcomingWindow(query, new Date());
-    const { notifications } = toSettingsResponse(await getOrCreateUserSettings(app.supabase, userId));
+    const { notifications, display } = toSettingsResponse(await getOrCreateUserSettings(app.supabase, userId));
 
     if (!notifications.push) {
       return { lead_minutes: notifications.lead_minutes, items: [] };
@@ -39,6 +40,12 @@ export function registerNotificationRoutes(app: FastifyInstance): void {
         fxPairSymbols: notifications.fx_pairs,
         importances: notifications.importances,
         leadMinutes: notifications.lead_minutes,
+        quietHours: {
+          enabled: notifications.quiet_hours_enabled,
+          start: notifications.quiet_start,
+          end: notifications.quiet_end,
+        },
+        timeZone: display.timezone,
       },
       candidates,
       window,

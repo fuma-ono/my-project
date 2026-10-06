@@ -101,6 +101,9 @@ final class NotificationSettingsViewModel: ObservableObject {
     }
 
     func setLeadMinutes(_ minutes: Int) { update { $0.leadMinutes = minutes } }
+    func setQuietHours(_ isOn: Bool) { update { $0.quietHoursEnabled = isOn } }
+    func setQuietStart(_ time: String) { update { $0.quietStart = time } }
+    func setQuietEnd(_ time: String) { update { $0.quietEnd = time } }
 
     // MARK: - 表示
 
@@ -116,6 +119,11 @@ final class NotificationSettingsViewModel: ObservableObject {
 
     static func leadLabel(_ minutes: Int) -> String {
         minutes == 0 ? "発表時" : "発表の\(minutes)分前"
+    }
+
+    /// "07:00" → "7:00"
+    static func timeLabel(_ time: String) -> String {
+        time.hasPrefix("0") && time.count == 5 ? String(time.dropFirst()) : time
     }
 
     // MARK: - 保存

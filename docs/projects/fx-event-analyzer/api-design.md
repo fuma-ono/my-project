@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.6
+# FX Event Analyzer: API詳細設計書 v1.7
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -48,6 +48,7 @@
   - `GET /notifications/upcoming`を新設(24.6節)
   - `GET /speeches`・`GET /speeches/{speech_id}`を新設(14.4節・14.5節)。Error Code `SPEECH_NOT_FOUND`を追加
   - `GET /fx-pairs`を新設(13.5節)
+- **v1.7**(2026-10-06): SCR-016 通知設定に「通知しない時間帯」を追加。`GET/PATCH /settings`の`notifications`に`quiet_hours_enabled`・`quiet_start`・`quiet_end`を追加し(24.4節・24.5節)、`GET /notifications/upcoming`で該当時間帯の通知を除外する(24.6節)
 
 ---
 
@@ -959,7 +960,10 @@ Email / PasswordはSupabase Auth側で管理する。Backend APIから直接Auth
     "speeches": true,
     "fx_pairs": null,
     "importances": ["HIGH", "MEDIUM"],
-    "lead_minutes": 5
+    "lead_minutes": 5,
+    "quiet_hours_enabled": false,
+    "quiet_start": "23:00",
+    "quiet_end": "07:00"
   },
   "display": {
     "language": "ja",
@@ -980,6 +984,7 @@ Email / PasswordはSupabase Auth側で管理する。Backend APIから直接Auth
   - `fx_pairs`：対象通貨ペア(`fx_pairs.symbol`の配列)。`null` = すべての通貨ペア
   - `importances`：通知する重要度(`HIGH` / `MEDIUM` / `LOW`の1件以上)。Responseは常に`HIGH`→`MEDIUM`→`LOW`の順
   - `lead_minutes`：通知タイミング。`0`(発表時) / `5` / `10` / `15` / `30` / `60`(分前)
+  - `quiet_hours_enabled` / `quiet_start` / `quiet_end`(v1.7で追加)：通知しない時間帯。既定はOFF・`23:00`〜`07:00`。時刻は`"HH:MM"`(24時間制、`00:00`〜`23:59`)で、`display.timezone`の現地時刻として扱う。`quiet_start`を含み`quiet_end`を含まない`[quiet_start, quiet_end)`。`quiet_end < quiet_start`は日付をまたぐ(既定の23:00〜07:00)。`quiet_start = quiet_end`は抑止なし。適用は24.6節
   - 旧フィールド`pre_release` / `result` / `favorites` / `min_importance`は削除(既存値の移行はdb-design.md §3.14)
 - `display.language`：`ja` / `en`、`display.region`：ISO 3166-1 alpha-2、`display.timezone`：IANA timezone名。Home等のRequestに渡すtimezoneの既定値としてiOSが利用する(6章の「Requestで明示的に受け取る」方針は変更しない)
 - `chart.default_fx_pair_symbol`：`fx_pairs.symbol`または`null`、`chart.default_timeframe`：`1m` / `5m` / `15m` / `30m` / `60m`
@@ -993,6 +998,8 @@ Email / PasswordはSupabase Auth側で管理する。Backend APIから直接Auth
 - `importances`：1件以上。重複は除去して保存する
 - `fx_pairs`：`null`、または1件以上・重複なしの配列。`fx_pairs`テーブルに存在しない(または無効な)symbolを含む場合は`422`
 - `lead_minutes`：`0` / `5` / `10` / `15` / `30` / `60`以外は`422`
+- `quiet_hours_enabled`：真偽値のみ(v1.7)
+- `quiet_start` / `quiet_end`：`"HH:MM"`(`00:00`〜`23:59`、時・分とも2桁)以外は`422`。`"7:00"`・`"24:00"`・秒付き`"23:00:00"`も`422`。`quiet_start = quiet_end`は許容する(抑止なし)(v1.7)
 
 ## 24.6 GET /api/v1/notifications/upcoming(v1.6で追加)
 
@@ -1039,7 +1046,8 @@ Response：
 4. `importance`が`importances`に含まれること
 5. `fx_pairs`が`null`でなければ、`related_fx_pairs`と1件以上共通すること
 6. `notify_at >= from`かつ`scheduled_at <= to`
-7. `notify_at`昇順、最大60件(iOSのローカル通知予約上限64件に余裕を持たせる)
+7. `quiet_hours_enabled = true`なら、`notify_at`を`display.timezone`(IANA名。解決できない場合は`Asia/Tokyo`)の現地時刻に直した値が`[quiet_start, quiet_end)`に入る項目を除外する(v1.7)。判定は`scheduled_at`ではなく`notify_at`で行う。`quiet_start = quiet_end`なら除外しない
+8. `notify_at`昇順、最大60件(iOSのローカル通知予約上限64件に余裕を持たせる)。上限は上記の除外後に適用する
 
 ---
 
@@ -1198,7 +1206,7 @@ Backend APIはSupabase JWTを検証する。
 | SCR-009 Entitlements | GET /entitlements |
 | SCR-011 Account | GET /account |
 | SCR-011 Account Update | PATCH /account |
-| SCR-016 通知設定(v1.4で追加、v1.6で更新) | GET /settings、PATCH /settings、GET /fx-pairs、GET /notifications/upcoming |
+| SCR-016 通知設定(v1.4で追加、v1.6・v1.7で更新) | GET /settings、PATCH /settings、GET /fx-pairs、GET /notifications/upcoming |
 | SCR-019 プラン・購読管理(v1.4で追加) | GET /subscription、POST /subscription/verify |
 | SCR-020 表示・地域設定(v1.4で追加) | GET /settings、PATCH /settings |
 | SCR-021 チャート設定(v1.4で追加) | GET /settings、PATCH /settings |

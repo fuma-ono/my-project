@@ -585,6 +585,12 @@ const settingsFixture = {
     fx_pairs: null,
     importances: ['HIGH', 'MEDIUM'],
     lead_minutes: 5,
+    // 通知しない時間帯 (2026-10-06). The mock never applies it to
+    // /notifications/upcoming — screenshot runs happen at arbitrary times
+    // and the list must stay populated.
+    quiet_hours_enabled: false,
+    quiet_start: '23:00',
+    quiet_end: '07:00',
   },
   display: { language: 'ja', region: 'JP', timezone: 'Asia/Tokyo' },
   chart: { default_fx_pair_symbol: 'USDJPY', default_timeframe: '5m' },
@@ -730,7 +736,8 @@ function speechesListHandler() {
  * GET /notifications/upcoming. Deliberately ignores the real API's
  * notify_at >= from rule: the first two items' notify_at is a few minutes
  * in the PAST so the iOS in-app notification list has content in
- * screenshots; the last two are in the future.
+ * screenshots; the last two are in the future. Quiet hours
+ * (quiet_hours_enabled / quiet_start / quiet_end) are never applied either.
  */
 function upcomingNotificationsHandler() {
   const lead = settingsFixture.notifications.lead_minutes;

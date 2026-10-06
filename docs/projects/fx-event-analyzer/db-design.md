@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.4
+# FX Event Analyzer: DB詳細設計 v4.5
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -29,6 +29,7 @@
 - **v4.4**(2026-10-05): SCR-016 通知設定の作り直しと要人発言(HQ指示 2026-10-05)。Migration `20261005000002_notification_settings_v2.sql` / `20261005000003_speeches.sql`
   - `UserSettings`の通知カラムを新形状に変更(3.14節)
   - `Speaker` / `SpeechEvent`を新設(3.15節・3.16節)。旧版でP2・対象外としていた`Person` / `SpeechEvent`を前倒し
+- **v4.5**(2026-10-06): SCR-016 通知設定に「通知しない時間帯」を追加。`UserSettings`に`notify_quiet_hours_enabled` / `notify_quiet_start` / `notify_quiet_end`を追加(3.14節)。Migration `20261006000001_notification_quiet_hours.sql`
 
 ---
 
@@ -383,6 +384,9 @@ SCR-016 通知設定 / SCR-020 表示・地域設定 / SCR-021 チャート設�
 | notify_fx_pair_symbols | text[] | nullable, CHK: NULLまたは1件以上 | 対象通貨ペア(`FxPair.symbol`)。NULL = すべて。配列のためFKなし、存在確認はBackend(v4.4) |
 | notify_importances | text[] | NN, DEF `{HIGH,MEDIUM}`, CHK: 1件以上かつ`<@ {LOW,MEDIUM,HIGH}` | 通知する重要度(v4.4) |
 | notify_lead_minutes | smallint | NN, DEF 5, CHK: `IN (0,5,10,15,30,60)` | 発表の何分前に通知するか。0 = 発表時(v4.4) |
+| notify_quiet_hours_enabled | boolean | NN, DEF false | 通知しない時間帯を使うか(v4.5) |
+| notify_quiet_start | time | NN, DEF `23:00`, CHK: 秒 = 0 | 通知しない時間帯の開始(含む)。`display_timezone`の現地時刻(v4.5) |
+| notify_quiet_end | time | NN, DEF `07:00`, CHK: 秒 = 0 | 通知しない時間帯の終了(含まない)。開始より前なら日付をまたぐ、開始と同じなら抑止なし(v4.5) |
 | display_language | text | NN, DEF `ja`, CHK: `IN ('ja','en')` | |
 | display_region | text | NN, DEF `JP`, CHK: `~ '^[A-Z]{2}$'` | ISO 3166-1 alpha-2 |
 | display_timezone | text | NN, DEF `Asia/Tokyo` | IANA timezone名(妥当性はBackendで検証) |
@@ -392,6 +396,8 @@ SCR-016 通知設定 / SCR-020 表示・地域設定 / SCR-021 チャート設�
 | updated_at | timestamptz | NN, DEF now() | |
 
 **通知について(v4.4で変更、HQ指示 2026-10-05)**: 旧方針「MVPはPush通知を送信しない・保存のみ」(HQ確定 2026-10-02)を置き換え、iOSが`GET /notifications/upcoming`(api-design.md §24.6)の結果から端末内のローカル通知を予約する。Backendからのリモートpush・デバイストークン用テーブルは引き続き不要。
+
+**通知しない時間帯(v4.5、Migration `20261006000001_notification_quiet_hours.sql`)**: `notify_quiet_*`はAPIでは`"HH:MM"`として受け渡しし、Postgresの`time`値(`"23:00:00"`)との変換はBackend(`src/repositories/userSettingsRepository.ts`)で行う。`notify_quiet_hours_enabled = true`のとき、`GET /notifications/upcoming`は`notify_at`を`display_timezone`(解決できない場合は`Asia/Tokyo`)の現地時刻に直して判定し、該当する項目を除外する(api-design.md §24.6)。既存行は列既定値(OFF)で埋まるためデータ移行は不要。
 
 **旧カラムの移行(Migration `20261005000002_notification_settings_v2.sql`)**: `notify_pre_release` / `notify_result` / `notify_favorites` / `notify_min_importance`は削除。既存行は`notify_indicators = notify_pre_release OR notify_result`、`notify_importances` = 旧`notify_min_importance`以上の★を持つ重要度(暫定マッピング LOW→★1 / MEDIUM→★3 / HIGH→★5、`src/domain/importance.ts`。例: ★3→`{HIGH,MEDIUM}`、★4→`{HIGH}`)で移行した。移行時は`updated_at`を更新しない。
 

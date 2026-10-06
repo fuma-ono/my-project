@@ -9,6 +9,9 @@ const row: UserSettingsRow = {
   notify_fx_pair_symbols: ['USDJPY', 'EURUSD'],
   notify_importances: ['LOW', 'HIGH'],
   notify_lead_minutes: 15,
+  notify_quiet_hours_enabled: true,
+  notify_quiet_start: '22:30',
+  notify_quiet_end: '06:00',
   display_language: 'ja',
   display_region: 'JP',
   display_timezone: 'Asia/Tokyo',
@@ -27,6 +30,9 @@ describe('toSettingsResponse', () => {
         fx_pairs: ['USDJPY', 'EURUSD'],
         importances: ['HIGH', 'LOW'],
         lead_minutes: 15,
+        quiet_hours_enabled: true,
+        quiet_start: '22:30',
+        quiet_end: '06:00',
       },
       display: { language: 'ja', region: 'JP', timezone: 'Asia/Tokyo' },
       chart: { default_fx_pair_symbol: 'USDJPY', default_timeframe: '5m' },
@@ -73,6 +79,17 @@ describe('toSettingsUpdate', () => {
     });
   });
 
+  it('maps the quiet hours fields', () => {
+    expect(
+      toSettingsUpdate({ notifications: { quiet_hours_enabled: true, quiet_start: '22:00', quiet_end: '06:30' } }),
+    ).toEqual({
+      notify_quiet_hours_enabled: true,
+      notify_quiet_start: '22:00',
+      notify_quiet_end: '06:30',
+    });
+    expect(toSettingsUpdate({ notifications: { quiet_end: '08:00' } })).toEqual({ notify_quiet_end: '08:00' });
+  });
+
   it('maps false booleans and lead_minutes 0 instead of dropping them as falsy', () => {
     expect(
       toSettingsUpdate({ notifications: { push: false, indicators: false, speeches: false, lead_minutes: 0 } }),
@@ -81,6 +98,9 @@ describe('toSettingsUpdate', () => {
       notify_indicators: false,
       notify_speeches: false,
       notify_lead_minutes: 0,
+    });
+    expect(toSettingsUpdate({ notifications: { quiet_hours_enabled: false } })).toEqual({
+      notify_quiet_hours_enabled: false,
     });
   });
 });

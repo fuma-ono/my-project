@@ -85,6 +85,9 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
           fx_pairs: null,
           importances: ['HIGH', 'MEDIUM'],
           lead_minutes: 5,
+          quiet_hours_enabled: false,
+          quiet_start: '23:00',
+          quiet_end: '07:00',
         },
         display: { language: 'ja', region: 'JP', timezone: 'Asia/Tokyo' },
         chart: { default_fx_pair_symbol: null, default_timeframe: '5m' },
@@ -112,9 +115,52 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
         fx_pairs: ['USDJPY'],
         importances: ['HIGH', 'LOW'],
         lead_minutes: 30,
+        quiet_hours_enabled: false,
+        quiet_start: '23:00',
+        quiet_end: '07:00',
       });
       expect(body.chart.default_fx_pair_symbol).toBe('USDJPY');
       expect(body.display.timezone).toBe('Asia/Tokyo');
+    });
+
+    it('saves quiet hours and returns them as HH:MM', async () => {
+      const { headers } = await newUser();
+      const patch = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/api/v1/settings',
+        headers,
+        payload: { notifications: { quiet_hours_enabled: true, quiet_start: '22:30', quiet_end: '06:00' } },
+      });
+      expect(patch.statusCode).toBe(200);
+      expect(JSON.parse(patch.body).notifications).toMatchObject({
+        quiet_hours_enabled: true,
+        quiet_start: '22:30',
+        quiet_end: '06:00',
+      });
+
+      // Partial update: only quiet_end changes, the rest is kept.
+      await ctx.app.inject({
+        method: 'PATCH',
+        url: '/api/v1/settings',
+        headers,
+        payload: { notifications: { quiet_end: '07:15' } },
+      });
+      const body = JSON.parse((await ctx.app.inject({ method: 'GET', url: '/api/v1/settings', headers })).body);
+      expect(body.notifications).toMatchObject({ quiet_hours_enabled: true, quiet_start: '22:30', quiet_end: '07:15' });
+    });
+
+    it('rejects a quiet_start / quiet_end that is not HH:MM with 422', async () => {
+      const { headers } = await newUser();
+      for (const notifications of [{ quiet_start: '24:00' }, { quiet_end: '7:00' }, { quiet_start: '23:00:00' }]) {
+        const response = await ctx.app.inject({
+          method: 'PATCH',
+          url: '/api/v1/settings',
+          headers,
+          payload: { notifications },
+        });
+        expect(response.statusCode).toBe(422);
+        expect(JSON.parse(response.body).error.code).toBe('VALIDATION_ERROR');
+      }
     });
 
     it('rejects an unknown FX pair symbol with 422', async () => {

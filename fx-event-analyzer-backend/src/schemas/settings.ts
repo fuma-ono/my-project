@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { sortImportancesDesc } from '../domain/importance.js';
-import { NOTIFICATION_LEAD_MINUTES } from '../domain/notifications.js';
+import { NOTIFICATION_LEAD_MINUTES, NOTIFICATION_TIME_PATTERN } from '../domain/notifications.js';
 
 /** IANA zone names only — rejects anything `Intl` can't resolve, so a bad
  * value never reaches timezone-scoped APIs like Home (api-design.md §6). */
@@ -35,6 +35,11 @@ export const updateSettingsBodySchema = z
           .min(1)
           .transform(sortImportancesDesc),
         lead_minutes: z.literal(NOTIFICATION_LEAD_MINUTES),
+        // 通知しない時間帯. "HH:MM" local time in display.timezone; start ==
+        // end is allowed (= suppresses nothing).
+        quiet_hours_enabled: z.boolean(),
+        quiet_start: z.string().regex(NOTIFICATION_TIME_PATTERN, 'must be HH:MM (00:00-23:59)'),
+        quiet_end: z.string().regex(NOTIFICATION_TIME_PATTERN, 'must be HH:MM (00:00-23:59)'),
       })
       .partial()
       .strict()

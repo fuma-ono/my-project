@@ -19,6 +19,9 @@ describe('updateSettingsBodySchema', () => {
           fx_pairs: ['USDJPY', 'EURUSD'],
           importances: ['HIGH', 'MEDIUM'],
           lead_minutes: 10,
+          quiet_hours_enabled: true,
+          quiet_start: '23:00',
+          quiet_end: '07:00',
         },
       }),
     ).toBe(true);
@@ -31,6 +34,26 @@ describe('updateSettingsBodySchema', () => {
     expect(parse({ notifications: { lead_minutes: 1 } })).toBe(false);
     expect(parse({ notifications: { lead_minutes: 120 } })).toBe(false);
     expect(parse({ notifications: { lead_minutes: '5' } })).toBe(false);
+  });
+
+  it('accepts quiet_start / quiet_end as HH:MM (00:00-23:59) only', () => {
+    for (const time of ['00:00', '06:30', '07:00', '12:05', '23:00', '23:59']) {
+      expect(parse({ notifications: { quiet_start: time, quiet_end: time } })).toBe(true);
+    }
+    for (const time of ['24:00', '7:00', '07:0', '07:60', '07:00:00', '0700', ' 07:00', '', 700, null]) {
+      expect(parse({ notifications: { quiet_start: time } })).toBe(false);
+      expect(parse({ notifications: { quiet_end: time } })).toBe(false);
+    }
+  });
+
+  it('accepts each quiet hours field on its own, and only a boolean for quiet_hours_enabled', () => {
+    expect(parse({ notifications: { quiet_hours_enabled: false } })).toBe(true);
+    expect(parse({ notifications: { quiet_end: '06:00' } })).toBe(true);
+    // Wrapping midnight and start == end (= no suppression) are both valid.
+    expect(parse({ notifications: { quiet_start: '22:00', quiet_end: '06:00' } })).toBe(true);
+    expect(parse({ notifications: { quiet_start: '07:00', quiet_end: '07:00' } })).toBe(true);
+    expect(parse({ notifications: { quiet_hours_enabled: 'true' } })).toBe(false);
+    expect(parse({ notifications: { quiet_hours_enabled: null } })).toBe(false);
   });
 
   it('requires at least one importance and only known levels', () => {

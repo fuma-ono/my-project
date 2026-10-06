@@ -3,10 +3,14 @@ import {
   buildUpcomingNotifications,
   formatIsoSeconds,
   fxPairsForCurrency,
+  isInQuietHours,
+  localMinutesOfDay,
   MAX_UPCOMING_NOTIFICATIONS,
+  NOTIFICATION_TIME_PATTERN,
   resolveUpcomingWindow,
   type IndicatorNotificationCandidate,
   type NotificationPreferences,
+  type QuietHours,
   type SpeechNotificationCandidate,
 } from '../../src/domain/notifications.js';
 import { ApiError } from '../../src/errors/ApiError.js';
@@ -20,6 +24,9 @@ const prefs: NotificationPreferences = {
   fxPairSymbols: null,
   importances: ['HIGH', 'MEDIUM'],
   leadMinutes: 5,
+  // The column defaults: off, 23:00〜07:00.
+  quietHours: { enabled: false, start: '23:00', end: '07:00' },
+  timeZone: 'Asia/Tokyo',
 };
 
 function indicator(overrides: Partial<IndicatorNotificationCandidate> = {}): IndicatorNotificationCandidate {
@@ -176,6 +183,56 @@ describe('buildUpcomingNotifications', () => {
     expect(items.at(-1)?.id).toBe('event-59');
   });
 
+  describe('quiet hours', () => {
+    const quiet: QuietHours = { enabled: true, start: '23:00', end: '07:00' };
+
+    it('ignores quiet hours while they are disabled (the default)', () => {
+      // speech-1 notify_at 2026-10-07T15:55Z = 00:55 JST — inside 23:00〜07:00.
+      expect(ids(buildUpcomingNotifications(prefs, [indicator(), speech()], window))).toEqual(['event-1', 'speech-1']);
+    });
+
+    it('drops items whose notify_at falls in the quiet hours of the display timezone', () => {
+      // event-1 notify_at 12:25Z = 21:25 JST (kept), speech-1 15:55Z = 00:55 JST (dropped).
+      const tokyo = { ...prefs, quietHours: quiet };
+      expect(ids(buildUpcomingNotifications(tokyo, [indicator(), speech()], window))).toEqual(['event-1']);
+      // The same instants in New York (EDT) are 08:25 and 11:55 — both outside.
+      const newYork = { ...prefs, quietHours: quiet, timeZone: 'America/New_York' };
+      expect(ids(buildUpcomingNotifications(newYork, [indicator(), speech()], window))).toEqual([
+        'event-1',
+        'speech-1',
+      ]);
+    });
+
+    it('judges by notify_at (after lead_minutes), not scheduled_at', () => {
+      // Scheduled 07:05 JST: 5 minutes before = 07:00 (kept), 10 minutes before = 06:55 (dropped).
+      const candidates = [indicator({ scheduled_at: '2026-10-06T22:05:00Z' })];
+      const quietPrefs = { ...prefs, quietHours: quiet };
+      expect(buildUpcomingNotifications(quietPrefs, candidates, window)).toHaveLength(1);
+      expect(buildUpcomingNotifications({ ...quietPrefs, leadMinutes: 10 }, candidates, window)).toEqual([]);
+    });
+
+    it('applies the 60-item cap after the quiet hours filter', () => {
+      // 100 items notified one per minute from 22:30 JST; quiet 23:00〜23:30 removes index 30..59,
+      // leaving 70 — the cap then keeps 0..29 and 60..89.
+      const start = new Date('2026-10-06T13:35:00Z').getTime();
+      const candidates = Array.from({ length: 100 }, (_, index) =>
+        indicator({
+          id: `event-${String(index).padStart(2, '0')}`,
+          scheduled_at: new Date(start + index * 60_000).toISOString(),
+        }),
+      );
+      const items = buildUpcomingNotifications(
+        { ...prefs, quietHours: { enabled: true, start: '23:00', end: '23:30' } },
+        candidates,
+        window,
+      );
+      expect(items).toHaveLength(MAX_UPCOMING_NOTIFICATIONS);
+      expect(items[29]?.id).toBe('event-29');
+      expect(items[30]?.id).toBe('event-60');
+      expect(items.at(-1)?.id).toBe('event-89');
+    });
+  });
+
   it('never emits fractional seconds (iOS .iso8601 decoding rejects them)', () => {
     const [item] = buildUpcomingNotifications(prefs, [indicator({ scheduled_at: '2026-10-06T12:30:00.123Z' })], window);
     expect(item?.notify_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
@@ -235,5 +292,86 @@ describe('resolveUpcomingWindow', () => {
         expect((error as ApiError).statusCode).toBe(422);
       }
     }
+  });
+});
+
+describe('NOTIFICATION_TIME_PATTERN', () => {
+  it('accepts HH:MM from 00:00 to 23:59 only', () => {
+    for (const value of ['00:00', '07:00', '09:05', '23:00', '23:59']) {
+      expect(NOTIFICATION_TIME_PATTERN.test(value)).toBe(true);
+    }
+    for (const value of ['24:00', '7:00', '07:0', '07:60', '07:00:00', '0700', ' 07:00', '07:00 ', '']) {
+      expect(NOTIFICATION_TIME_PATTERN.test(value)).toBe(false);
+    }
+  });
+});
+
+describe('localMinutesOfDay', () => {
+  it('returns minutes since local midnight, with midnight as 0 (not 24:00)', () => {
+    expect(localMinutesOfDay(new Date('2026-10-06T15:00:00Z'), 'Asia/Tokyo')).toBe(0);
+    expect(localMinutesOfDay(new Date('2026-10-06T14:59:59Z'), 'Asia/Tokyo')).toBe(23 * 60 + 59);
+    expect(localMinutesOfDay(new Date('2026-10-06T00:30:00Z'), 'UTC')).toBe(30);
+  });
+
+  it('follows DST in the given zone', () => {
+    // 03:30Z = 23:30 EDT (UTC-4) in October, 22:30 EST (UTC-5) in December.
+    expect(localMinutesOfDay(new Date('2026-10-06T03:30:00Z'), 'America/New_York')).toBe(23 * 60 + 30);
+    expect(localMinutesOfDay(new Date('2026-12-06T03:30:00Z'), 'America/New_York')).toBe(22 * 60 + 30);
+  });
+
+  it('falls back to Asia/Tokyo for an empty or unknown zone', () => {
+    const instant = new Date('2026-10-06T14:00:00Z'); // 23:00 JST
+    expect(localMinutesOfDay(instant, 'Mars/Olympus')).toBe(23 * 60);
+    expect(localMinutesOfDay(instant, '')).toBe(23 * 60);
+  });
+});
+
+describe('isInQuietHours', () => {
+  // 既定値 23:00〜07:00. Times in the comments are JST (UTC+9, no DST).
+  const overnight: QuietHours = { enabled: true, start: '23:00', end: '07:00' };
+  const at = (utc: string) => new Date(utc);
+
+  it('never suppresses while disabled', () => {
+    expect(isInQuietHours(at('2026-10-06T15:00:00Z'), { ...overnight, enabled: false }, 'Asia/Tokyo')).toBe(false);
+  });
+
+  it('wraps midnight when end < start: [23:00, 07:00)', () => {
+    expect(isInQuietHours(at('2026-10-06T13:59:00Z'), overnight, 'Asia/Tokyo')).toBe(false); // 22:59
+    expect(isInQuietHours(at('2026-10-06T14:00:00Z'), overnight, 'Asia/Tokyo')).toBe(true); // 23:00
+    expect(isInQuietHours(at('2026-10-06T15:00:00Z'), overnight, 'Asia/Tokyo')).toBe(true); // 00:00
+    expect(isInQuietHours(at('2026-10-06T21:59:00Z'), overnight, 'Asia/Tokyo')).toBe(true); // 06:59
+    expect(isInQuietHours(at('2026-10-06T22:00:00Z'), overnight, 'Asia/Tokyo')).toBe(false); // 07:00
+    expect(isInQuietHours(at('2026-10-06T03:00:00Z'), overnight, 'Asia/Tokyo')).toBe(false); // 12:00
+  });
+
+  it('is a same-day range when start < end: [12:00, 13:00)', () => {
+    const lunch: QuietHours = { enabled: true, start: '12:00', end: '13:00' };
+    expect(isInQuietHours(at('2026-10-06T02:59:00Z'), lunch, 'Asia/Tokyo')).toBe(false); // 11:59
+    expect(isInQuietHours(at('2026-10-06T03:00:00Z'), lunch, 'Asia/Tokyo')).toBe(true); // 12:00
+    expect(isInQuietHours(at('2026-10-06T03:59:59Z'), lunch, 'Asia/Tokyo')).toBe(true); // 12:59:59
+    expect(isInQuietHours(at('2026-10-06T04:00:00Z'), lunch, 'Asia/Tokyo')).toBe(false); // 13:00
+    expect(isInQuietHours(at('2026-10-06T15:00:00Z'), lunch, 'Asia/Tokyo')).toBe(false); // 00:00
+  });
+
+  it('suppresses nothing when start == end', () => {
+    const same: QuietHours = { enabled: true, start: '07:00', end: '07:00' };
+    for (const utc of ['2026-10-06T22:00:00Z', '2026-10-06T15:00:00Z', '2026-10-06T03:00:00Z']) {
+      expect(isInQuietHours(at(utc), same, 'Asia/Tokyo')).toBe(false);
+    }
+  });
+
+  it('evaluates the local time of the given timezone, including DST', () => {
+    const instant = at('2026-10-06T03:30:00Z'); // 12:30 JST, 23:30 EDT, 03:30 UTC
+    expect(isInQuietHours(instant, overnight, 'Asia/Tokyo')).toBe(false);
+    expect(isInQuietHours(instant, overnight, 'America/New_York')).toBe(true);
+    expect(isInQuietHours(instant, overnight, 'UTC')).toBe(true);
+    // The same UTC time in December is 22:30 EST — outside.
+    expect(isInQuietHours(at('2026-12-06T03:30:00Z'), overnight, 'America/New_York')).toBe(false);
+  });
+
+  it('falls back to Asia/Tokyo for an empty or unknown timezone', () => {
+    const instant = at('2026-10-06T14:00:00Z'); // 23:00 JST, 14:00 UTC
+    expect(isInQuietHours(instant, overnight, 'Mars/Olympus')).toBe(true);
+    expect(isInQuietHours(instant, overnight, '')).toBe(true);
   });
 });

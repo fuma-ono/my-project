@@ -59,6 +59,15 @@ final class NotificationModelsTests: XCTestCase {
         XCTAssertEqual(response.items.first?.relatedFxPairs, ["USDJPY", "EURUSD"])
     }
 
+    func testSettingsWithoutQuietHoursDecodeWithDefaults() throws {
+        let json = Data(#"{"push":true,"indicators":true,"speeches":false,"fx_pairs":null,"importances":["HIGH"],"lead_minutes":5}"#.utf8)
+        let settings = try JSONDecoder().decode(NotificationSettings.self, from: json)
+        XCTAssertFalse(settings.quietHoursEnabled)
+        XCTAssertEqual(settings.quietStart, "23:00")
+        XCTAssertEqual(settings.quietEnd, "07:00")
+        XCTAssertNil(settings.fxPairs)
+    }
+
     func testEntryBodyDescribesTimingAndImportance() {
         let tokyo = TimeZone(identifier: "Asia/Tokyo")!
         let scheduled = ISO8601DateFormatter().date(from: "2026-10-06T12:30:00Z")!
@@ -354,6 +363,24 @@ final class NotificationSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.settings, stored.notifications)
         XCTAssertEqual(scheduler.refreshCount, 1)
         XCTAssertEqual(store.delivered().map(\.title), ["通知設定を更新しました"])
+    }
+
+    func testQuietHoursAreSavedWithTheirTimes() async throws {
+        let apiClient = MockAPIClient()
+        let viewModel = await loadedViewModel(apiClient, scheduler: MockScheduler())
+        XCTAssertFalse(viewModel.settings.quietHoursEnabled)
+
+        viewModel.setQuietHours(true)
+        viewModel.setQuietStart("22:00")
+        await waitUntil { viewModel.saveState == .saved }
+
+        let body = try jsonObject(apiClient.lastEndpoint?.body)
+        let notifications = try XCTUnwrap(body["notifications"] as? [String: Any])
+        XCTAssertEqual(notifications["quiet_hours_enabled"] as? Bool, true)
+        XCTAssertEqual(notifications["quiet_start"] as? String, "22:00")
+        XCTAssertEqual(notifications["quiet_end"] as? String, "07:00")
+        XCTAssertEqual(NotificationSettingsViewModel.timeLabel("07:00"), "7:00")
+        XCTAssertEqual(NotificationSettingsViewModel.timeLabel("23:00"), "23:00")
     }
 
     func testImportanceKeepsAtLeastOneAndStaysOrdered() async {
