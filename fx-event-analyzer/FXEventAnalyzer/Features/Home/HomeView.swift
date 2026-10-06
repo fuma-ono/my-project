@@ -663,9 +663,20 @@ struct HomeView: View {
             // ..., alignment: .top)`を付け、予想/前回が無い行でも2行分の
             // 高さを確保することで、行全体の自然な高さを常に一定にし、
             // 時刻を含む他の要素の縦位置が行によってズレないようにした。
+            // HQ指示(2026-10-06)「すべて参考画像と同じに、文字間隔も」:
+            // 参考画像のCPI行("21:30")とこちらの実機("07:10")をどちらも
+            // カード幅(215ユニット)基準でピクセル実測(高さ測定時に国旗の
+            // 白い縞を誤って含めてしまう計測ミスを修正した後の値)すると、
+            // 高さは参考画像6.64ユニットに対しこちら7.38ユニット(1.11倍)、
+            // かつ幅は参考画像23.65ユニットに対しこちら(同じ.tracking(-0.6)
+            // 込みで)15.54ユニットと、高さの比率だけでは説明できないほど
+            // 幅が狭かった — 参考画像は文字間隔が広い「デジタル時計」風の
+            // 組み方だと判断。高さを合わせるため10→9に縮小した上で、幅が
+            // 参考画像と一致するよう`.tracking`を-0.6→+1.9(詰めるのでは
+            // なく広げる)に変更した。
             Text(Self.timeFormatter.string(from: event.releaseDatetime))
-                .font(.system(size: 10, weight: .bold))
-                .tracking(-0.6)
+                .font(.system(size: 9, weight: .bold))
+                .tracking(1.9)
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: true, vertical: false)
                 .frame(width: 26, alignment: .leading)
@@ -690,8 +701,13 @@ struct HomeView: View {
             // 詰めた(「経済指標の文字間隔を狭めて、外枠の横幅も少し
             // 狭めて」: tracking追加、パディング4/2→3/1.5)。
             VStack(alignment: .leading, spacing: 1) {
-                V5JPFont.text("経済指標", size: 5.5, weight: .semibold)
-                    .tracking(-0.3)
+                // HQ指示(2026-10-06)「すべて参考画像と同じに」: 参考画像の
+                // 「経済指標」バッジを実測すると高さ5.05ユニット・幅20.2
+                // ユニット(こちらは5.24/22.53)だった。高さ比(1.038)から
+                // サイズ5.5→5.3に縮小し、幅がそれでも参考画像よりまだ広い
+                // 分を`.tracking`-0.3→-0.8でさらに詰めた。
+                V5JPFont.text("経済指標", size: 5.3, weight: .semibold)
+                    .tracking(-0.8)
                     .foregroundStyle(.white)
                     .padding(.horizontal, 3).padding(.vertical, 1.5)
                     .background(Self.economicIndicatorBadgeColor, in: Capsule())
@@ -736,7 +752,14 @@ struct HomeView: View {
                 // 「横幅は親から提案された分だけ使い、縦幅はその横幅で
                 // 折り返した結果の行数に応じて決める」よう明示することで
                 // 解決した。
-                V5JPFont.wrappingText(event.indicatorName, size: 8, weight: .semibold)
+                // HQ指示(2026-10-06)「すべて参考画像と同じに、文字間隔も」:
+                // 参考画像の指標名("CPI（消費者物価指数）」、12文字)と
+                // こちら("FOMC政策金利"、8文字)は文字列が違うため、1文字
+                // あたりの幅で比較した。高さ比(6.11/7.38≒0.828)からサイズ
+                // 8→6.6に縮小し、その上でこちらの1文字あたり幅がまだ参考
+                // 画像より広かった分を`.tracking(-0.6)`で詰めた。
+                V5JPFont.wrappingText(event.indicatorName, size: 6.6, weight: .semibold)
+                    .tracking(-0.6)
                     .foregroundStyle(.white)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -750,7 +773,15 @@ struct HomeView: View {
                     // `.lineLimit(1)`を保持したまま`.minimumScaleFactor`
                     // を追加し、幅が足りない時は省略せず文字を縮小して
                     // 必ず全文1行で収まるようにした。
-                    V5JPFont.text(subtitle, size: 6, weight: .regular)
+                    // HQ指示(2026-10-06)「すべて参考画像と同じに、文字間隔
+                    // も」: 参考画像の「予想 3.2　|　前回 3.1」とこちらの
+                    // 「予想180　|　前回175」は文字数が同じ(15文字)なので
+                    // 直接比較できた。高さはほぼ一致(5.58 vs 5.63ユニット、
+                    // サイズはほぼ変更不要)していたが、幅は参考画像の方が
+                    // 明らかに広かった(56.08 vs 44.47ユニット)ため、
+                    // `.tracking(0.8)`を追加して広げた。
+                    V5JPFont.text(subtitle, size: 5.9, weight: .regular)
+                        .tracking(0.8)
                         .foregroundStyle(V5P.muted)
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
