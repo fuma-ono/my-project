@@ -155,8 +155,6 @@ private struct NotificationRow: View {
         entry.kind == .indicator ? IndicatorShortName.shorten(headline) : headline
     }
 
-    private var importance: String { NotificationImportance.label(entry.importance) }
-
     /// 発表の何分前に届いたか(「発表の5分前です」)。
     private var timing: String {
         let noun = entry.kind == .speech ? "発言" : "発表"
@@ -168,7 +166,7 @@ private struct NotificationRow: View {
         let time = Self.japanTimeFormatter.string(from: entry.scheduledAt)
         switch entry.kind {
         case .indicator:
-            return ["発表時刻：\(time)（日本時間）", "\(timing)（重要度 \(importance)）"]
+            return ["発表時刻：\(time)（日本時間）", timing]
         case .speech:
             return ["「\(entry.subject ?? entry.title)」", "発言時刻：\(time)（日本時間）"]
         case .system:
@@ -185,11 +183,16 @@ private struct NotificationRow: View {
                 .background(RoundedRectangle(cornerRadius: 6).fill(SettingsCardStyle.cardFill))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
             VStack(alignment: .leading, spacing: 1) {
-                V5JPFont.text(entry.kind.label, size: 5.5, weight: .bold)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(Capsule().fill(badgeColor))
+                HStack(spacing: 3) {
+                    V5JPFont.text(entry.kind.label, size: 5.5, weight: .bold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(badgeColor))
+                    if entry.kind != .system {
+                        ImportanceBadge(importance: entry.importance)
+                    }
+                }
                 NotificationHeadline(full: headline, short: shortHeadline)
                 ForEach(lines, id: \.self) { line in
                     // 時刻の数字も日本語と同じフォント・大きさで揃える(HQ指示 2026-10-06)。
@@ -222,6 +225,34 @@ private struct NotificationRow: View {
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint(isUnread ? "未読" : "")
+    }
+}
+
+/// 重要度のバッジ。ホーム画面と同じ「HIGH / MEDIUM / LOW」の表記と色
+/// (HQ指示 2026-10-06)。色の値はHomeViewの`importanceBadgeColors`と同じ。
+private struct ImportanceBadge: View {
+    let importance: String
+
+    private var colors: (fill: Color, border: Color) {
+        switch importance {
+        case "HIGH":
+            return (Color(red: 185.0 / 255, green: 13.0 / 255, blue: 60.0 / 255), Color(red: 230.0 / 255, green: 80.0 / 255, blue: 120.0 / 255))
+        case "MEDIUM":
+            return (Color(red: 190.0 / 255, green: 135.0 / 255, blue: 20.0 / 255), Color(red: 230.0 / 255, green: 180.0 / 255, blue: 70.0 / 255))
+        default:
+            return (Color(red: 15.0 / 255, green: 42.0 / 255, blue: 85.0 / 255), Color(red: 50.0 / 255, green: 100.0 / 255, blue: 180.0 / 255))
+        }
+    }
+
+    var body: some View {
+        Text(importance)
+            .font(.system(size: 5.5, weight: .heavy))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1.5)
+            .background(colors.fill, in: Capsule())
+            .overlay(Capsule().stroke(colors.border, lineWidth: 0.5))
+            .fixedSize()
     }
 }
 
