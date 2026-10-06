@@ -242,6 +242,10 @@ struct SubscriptionManagementView: View {
                 Button("利用規約") { legalDocument = LegalDocuments.terms }
                 Button("プライバシーポリシー") { legalDocument = LegalDocuments.privacy }
             }
+            Button("特定商取引法に基づく表記") { legalDocument = LegalDocuments.commerce }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(V5P.cyan)
+                .padding(.top, 8)
             .font(.footnote.weight(.semibold))
             .foregroundStyle(V5P.cyan)
             .padding(.top, 10)
