@@ -122,6 +122,19 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Home did not show the newly-favorited indicator")
         capture("04-Home")
 
+        // HQ指示(2026-10-06)「直近の要人発言が見えるようにして」: 本番の
+        // 挙動は変えない(4枚目のカードが初期表示の折り返し線より下にあり、
+        // スクロールして閲覧する設計は`contentAreaHeight`のドキュメント
+        // コメント通りそのまま)。HQがCIで内容を確認できるよう、一番下まで
+        // スクロールした状態のキャプチャを追加する。
+        var speechSwipes = 0
+        while !waitForAnyElement(containing: "直近の要人発言", timeout: 0.1) && speechSwipes < 6 {
+            app.swipeUp()
+            speechSwipes += 1
+        }
+        XCTAssertTrue(waitForAnyElement(containing: "直近の要人発言", timeout: 5), "Home did not scroll to reveal 直近の要人発言")
+        capture("04b-Home-Speeches")
+
         // SCR-014 設定画面(bonus — added 2026-09-30 so HQ's
         // reference-image-driven redesign of this screen has a real CI
         // capture to verify against, the same "never trust build-succeeds
