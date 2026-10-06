@@ -54,14 +54,30 @@ enum HomeFavoriteItem: Identifiable, Equatable {
 /// — CIのUIスクリーンショット用モックサーバーのみがこのフィールドを含む
 /// 応答を返し、HomeのCIキャプチャで見た目を確認できるようにした。本番
 /// バックエンドの挙動・データモデルは変更していない。
+/// HQ指摘(2026-10-06、2回目、参考画像をピクセル単位で再確認)「発言前と
+/// 現在それぞれの数字を付けて」「07:29ではなく10/2 07:29 | FRBのように」:
+/// 1回目の実装時(上のコメント参照)は「存在しないデータを捏造しない」
+/// 原則から`organization`/発言前後の実価格を省いていたが、この要人発言
+/// セクション自体がCIのUIスクリーンショット用モックサーバーにのみ値を
+/// 返させる方針(本番は常に空)である以上、他のフィールドと同列にモック
+/// データとして追加しても原則には反しない(本番バックエンドの挙動・
+/// データモデルは変わらない)。`reactionChangePercent`は発言前後の実価格
+/// (`reactionPriceBefore`/`reactionPriceAfter`)と、Backendが計算済みの値
+/// をそのまま表示する既存の`pips`系フィールド群(`EventDetailModels.swift`
+/// 等)と同じ考え方の`reactionPips`に置き換えた — pipsをクライアント側で
+/// 価格差から再計算しない(`Formatting.swift`冒頭コメント「iOS側でこれらを
+/// 再計算して表示することを前提としない」に合わせた)。
 struct HomeSpeechSummary: Decodable, Identifiable, Equatable {
     let id: String
     let countryCode: String
     let speakerName: String
     let statementDatetime: Date
     let headline: String
+    let organization: String?
     let reactionFxSymbol: String?
-    let reactionChangePercent: Double?
+    let reactionPriceBefore: Double?
+    let reactionPriceAfter: Double?
+    let reactionPips: Double?
 
     enum CodingKeys: String, CodingKey {
         case id = "speech_id"
@@ -69,8 +85,11 @@ struct HomeSpeechSummary: Decodable, Identifiable, Equatable {
         case speakerName = "speaker_name"
         case statementDatetime = "statement_datetime"
         case headline
+        case organization
         case reactionFxSymbol = "reaction_fx_symbol"
-        case reactionChangePercent = "reaction_change_percent"
+        case reactionPriceBefore = "reaction_price_before"
+        case reactionPriceAfter = "reaction_price_after"
+        case reactionPips = "reaction_pips"
     }
 }
 

@@ -387,6 +387,15 @@ struct HomeView: View {
     /// 少し小さいサイズを別途定義した。
     private static let favoriteFlagDiameter: CGFloat = 15
 
+    /// HQ指摘(2026-10-06、要人発言をピクセル単位で再確認)「国旗サイズを
+    /// 小さくして(お気に入りの国旗マークより少し大きめ)」: それまでは
+    /// 共通の`flagDiameter`(21.5)を使っていたが、参考画像を実測すると
+    /// 要人発言の国旗(直径約61px)は`favoriteFlagDiameter`相当の
+    /// お気に入りの国旗(約58px)とほぼ同じで、`flagDiameter`(21.5)は
+    /// 3割近く大きすぎた。`favoriteFlagDiameter`(15)より一回り大きい
+    /// 専用サイズを別途定義した。
+    private static let speechFlagDiameter: CGFloat = 16
+
     // MARK: 通貨ペアカード (x=26,y=180,width=782,height=527 → height 527/3.641≒145)
 
     /// HQ再指摘(2026-10-05)「通貨ペアの各行の縦幅をもう少し狭めて」で
@@ -1165,34 +1174,95 @@ struct HomeView: View {
         }
     }
 
-    /// 表示内容は参考画像指定(左:国旗/発言者/発言要約/日時、右:対象通貨
-    /// ペア/値動き/chevron)のうち、`HomeSpeechSummary`に実在するフィールド
-    /// のみを使っている。「発言前価格」「現在価格」「中央銀行」は現在の
-    /// モデルに無く、この回はAPI/DB/ビジネスロジックを変更しない方針の
-    /// ため追加していない(存在しないデータを捏造しない原則を優先)。
+    /// HQ指摘(2026-10-06、2回目、参考画像をピクセル単位で再確認「全然
+    /// あっていない」)に合わせて全面的に実測し直した:
+    /// - 国旗: `flagDiameter`(21.5)→`speechFlagDiameter`(16、定義コメント
+    ///   参照)。
+    /// - 発言要約(`headline`)・日時行: お気に入りの日付/時刻行
+    ///   (`dateRow`)と実測したピクセル高さがほぼ同じだったため、同じ
+    ///   サイズ(7)・同じ色(`linkBlue`)・同じtracking(-0.4)に揃えた
+    ///   (元は6.5/6で`V5P.muted`、お気に入りより小さく色も違っていた)。
+    /// - 日時行は「07:29」のような時刻のみではなく、参考画像通り
+    ///   「10/2 07:29 | FRB」(日付+時刻+中央銀行)にした。
+    /// - 左ブロック(国旗+発言者/要約/日時)は内容量に関わらず固定幅にして
+    ///   いる — 参考画像では3行とも縦線(下記)がカード内の同じx位置に
+    ///   揃っており、要約文の長さで縦線の位置がぶれてはいけないため。
+    /// - 左右ブロックの間の縦線: 参考画像で各行に実在すると確認した
+    ///   (行の上下に少し余白を取った高さで、行の途中に浮いている)。
+    /// - 右ブロック(USD/JPY・発言前・現在): ラベル(通貨ペア名・
+    ///   「発言前」「現在」)はお気に入りの日付/時刻と同サイズ・同色、
+    ///   実際の価格(149.20等)は白の太字、pipsは既存の`ValueFormat.pips`
+    ///   (Backend計算済み値をそのまま表示する既存の方針、`HomeSpeechSummary`
+    ///   のドキュメントコメント参照)で符号に応じて`changeUpColor`/
+    ///   `changeDownColor`に色分け。
     @ViewBuilder private func speechRow(_ speech: HomeSpeechSummary) -> some View {
         NavigationLink(value: AppRoute.speechDetail(id: speech.id)) {
             HStack(spacing: 6) {
-                CountryFlagView(countryCode: speech.countryCode, diameter: Self.flagDiameter)
-                VStack(alignment: .leading, spacing: 2) {
-                    V5JPFont.text(speech.speakerName, size: 7, weight: .semibold)
-                    V5JPFont.text(speech.headline, size: 6.5, weight: .regular).foregroundStyle(V5P.muted).lineLimit(1)
-                    Text(Self.timeFormatter.string(from: speech.statementDatetime)).font(.system(size: 6, weight: .medium)).foregroundStyle(V5P.muted)
-                }
-                Spacer(minLength: 4)
-                if let symbol = speech.reactionFxSymbol, let change = speech.reactionChangePercent {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(symbol).font(.system(size: 6, weight: .semibold))
-                        Text(ValueFormat.percent(change, signed: true))
-                            .font(.system(size: 6, weight: .semibold))
-                            .foregroundStyle(change >= 0 ? Self.changeUpColor : Self.changeDownColor)
+                HStack(spacing: 6) {
+                    CountryFlagView(countryCode: speech.countryCode, diameter: Self.speechFlagDiameter)
+                    VStack(alignment: .leading, spacing: 2) {
+                        V5JPFont.text(speech.speakerName, size: 7, weight: .semibold)
+                            .lineLimit(1)
+                        V5JPFont.text(speech.headline, size: 7, weight: .regular)
+                            .tracking(-0.4)
+                            .foregroundStyle(Self.linkBlue)
+                            .lineLimit(1)
+                        Text(Self.speechDateOrgText(speech))
+                            .font(.system(size: 7, weight: .medium))
+                            .tracking(-0.4)
+                            .foregroundStyle(Self.linkBlue)
+                            .lineLimit(1)
                     }
                 }
+                .frame(width: 103, alignment: .leading)
+
+                Divider().overlay(Self.cardBorderColor).frame(height: 25)
+
+                if let symbol = speech.reactionFxSymbol {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(symbol)
+                            .font(.system(size: 7, weight: .medium))
+                            .tracking(-0.4)
+                            .foregroundStyle(Self.linkBlue)
+                        speechPriceRow(label: "発言前", value: speech.reactionPriceBefore, symbol: symbol)
+                        HStack(spacing: 4) {
+                            speechPriceRow(label: "現在", value: speech.reactionPriceAfter, symbol: symbol)
+                            if let pips = speech.reactionPips {
+                                Text(ValueFormat.pips(pips))
+                                    .font(.system(size: 7, weight: .bold))
+                                    .foregroundStyle(pips >= 0 ? Self.changeUpColor : Self.changeDownColor)
+                            }
+                        }
+                    }
+                    .lineLimit(1)
+                }
+
                 Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
             }
             .foregroundStyle(.white)
             .frame(height: Self.speechRowHeight)
         }.buttonStyle(.plain)
+    }
+
+    /// `speechRow`の「発言前」「現在」行 — ラベル部分を固定幅にして、
+    /// 2行の価格(`149.20`/`149.48`)の開始x位置を揃えている。
+    @ViewBuilder private func speechPriceRow(label: String, value: Double?, symbol: String) -> some View {
+        HStack(spacing: 4) {
+            Text(label)
+                .font(.system(size: 7, weight: .medium))
+                .tracking(-0.4)
+                .foregroundStyle(Self.linkBlue)
+                .frame(width: 22, alignment: .leading)
+            Text(ValueFormat.number(value, fractionDigits: symbol.contains("JPY") ? 2 : 4))
+                .font(.system(size: 7, weight: .bold))
+                .foregroundStyle(.white)
+        }
+    }
+
+    private static func speechDateOrgText(_ speech: HomeSpeechSummary) -> String {
+        let dateText = Self.favoriteDateFormatter.string(from: speech.statementDatetime)
+        guard let organization = speech.organization else { return dateText }
+        return "\(dateText) | \(organization)"
     }
 
     /// 「今日の重要イベント」: これから発生する重要イベント — 既発表

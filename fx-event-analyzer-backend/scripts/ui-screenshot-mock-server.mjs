@@ -322,6 +322,12 @@ function homeHandler() {
     // 参考画像内容を再現したUIスクリーンショット専用フィクスチャ — ファイル
     // 冒頭コメントの「documented exception」参照。本番`/home`ルートは
     // このフィールドを返さない。
+    //
+    // HQ再指摘(2026-10-06、2回目、参考画像をピクセル単位で再確認)
+    // 「発言前と現在それぞれの数字を付けて」に伴い、organization/
+    // reaction_price_before/reaction_price_after/reaction_pipsを追加
+    // (参考画像の表示値をそのまま採用 — 149.48-149.20=+28pips等、全て
+    // 整合する値)。
     speeches: [
       {
         speech_id: SPEECH_IDS[0],
@@ -329,8 +335,11 @@ function homeHandler() {
         speaker_name: 'パウエルFRB議長',
         statement_datetime: isoMinusHours(3),
         headline: 'インフレ率は依然として高い',
+        organization: 'FRB',
         reaction_fx_symbol: 'USD/JPY',
-        reaction_change_percent: 0.19,
+        reaction_price_before: 149.20,
+        reaction_price_after: 149.48,
+        reaction_pips: 28,
       },
       {
         speech_id: SPEECH_IDS[1],
@@ -338,8 +347,11 @@ function homeHandler() {
         speaker_name: 'ラガルドECB総裁',
         statement_datetime: isoMinusHours(9),
         headline: '金利は十分な制約的な水準にある',
+        organization: 'ECB',
         reaction_fx_symbol: 'EUR/USD',
-        reaction_change_percent: -0.15,
+        reaction_price_before: 1.1760,
+        reaction_price_after: 1.1742,
+        reaction_pips: -18,
       },
       {
         speech_id: SPEECH_IDS[2],
@@ -347,8 +359,11 @@ function homeHandler() {
         speaker_name: 'ベイリーBOE総裁',
         statement_datetime: isoMinusHours(14),
         headline: '金融政策は引き締め的なスタンスを維持',
+        organization: 'BOE',
         reaction_fx_symbol: 'GBP/USD',
-        reaction_change_percent: -0.16,
+        reaction_price_before: 1.3350,
+        reaction_price_after: 1.3328,
+        reaction_pips: -22,
       },
     ],
   };
