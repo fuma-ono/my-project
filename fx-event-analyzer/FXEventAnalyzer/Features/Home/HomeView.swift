@@ -735,7 +735,18 @@ struct HomeView: View {
                         .minimumScaleFactor(0.6)
                 }
             }
-            .frame(minHeight: 38, alignment: .top)
+            // HQ再指摘(2026-10-06)「FOMCみたいに予想と前回がない場合は下の
+            // 余白が目立つから調整して」: この38はあくまで「バッジ+タイトル
+            // 2行+予想前回」という最大ケースの高さを確保するためのもので、
+            // FOMCのように予想/前回が無く(`eventSubtitle`がnil)タイトルも
+            // 1行で収まる行では、実際の中身(バッジ+タイトル1行)は38よりずっと
+            // 低く、`alignment: .top`だとその差分がすべて下側の余白として
+            // 目立っていた。ここを`.center`にすると、`.frame(minHeight:)`が
+            // 確保する高さ自体(常に38固定 — 時刻ラベルの縦ズレ防止はこの
+            // 「高さが行ごとに変わらないこと」で成立しているので、`.top`→
+            // `.center`に変えても高さの固定自体は崩れない)は変えずに、中身が
+            // 短い行では上下均等な余白になり、不自然な片寄りが無くなる。
+            .frame(minHeight: 38, alignment: .center)
             .layoutPriority(1)
 
             Spacer(minLength: 4)
