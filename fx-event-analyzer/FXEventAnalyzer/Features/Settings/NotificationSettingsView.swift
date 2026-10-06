@@ -146,9 +146,9 @@ struct NotificationSettingsView: View {
             .buttonStyle(.plain)
         } else {
             switch viewModel.saveState {
-            case .saved: V5JPFont.text("保存しました", size: 6.5, weight: .regular).foregroundStyle(V5P.green)
             case .error(let message): V5JPFont.text(message, size: 6.5, weight: .regular).foregroundStyle(V5P.red)
-            case .idle, .saving: EmptyView()
+            // 保存できたときは何も出さない(HQ指示 2026-10-06)。失敗だけ知らせる。
+            case .idle, .saving, .saved: EmptyView()
             }
         }
     }
