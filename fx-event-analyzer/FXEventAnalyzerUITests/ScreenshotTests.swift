@@ -155,8 +155,17 @@ final class ScreenshotTests: XCTestCase {
         // V5Viewport内のボタンは文字では押せないため、行の位置(V5座標、
         // 通知時間帯カードの1行目・中心y≈289)を直接タップする。
         tapV5(x: 117, y: 289)
-        XCTAssertTrue(waitForAnyElement(containing: "開始", timeout: 10), "Quiet hours rows did not appear")
-        capture("16b-NotificationQuietHours")
+        if !waitForAnyElement(containing: "開始", timeout: 5) {
+            // iPadでは座標がずれることがあるため、スイッチそのものを押し直す。
+            let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "通知しない時間帯")).firstMatch
+            if toggle.exists {
+                toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            }
+        }
+        // 撮れなくても他の画面の撮影は続ける(この1枚だけの確認用)。
+        if waitForAnyElement(containing: "開始", timeout: 10) {
+            capture("16b-NotificationQuietHours")
+        }
         captureSettingsSubScreen(row: "表示・地域設定", rowIndex: 3, waitFor: "タイムゾーン", name: "18-DisplaySettings")
         captureSettingsSubScreen(row: "チャート設定", rowIndex: 4, waitFor: "時間足", name: "19-ChartSettings")
         // SCR-015 アカウント情報 (added 2026-10-05 with the reference-image

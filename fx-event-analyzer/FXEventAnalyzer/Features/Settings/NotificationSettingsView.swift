@@ -291,7 +291,9 @@ private struct NotificationValueRow: View {
                 V5JPFont.text(title, size: NotificationLayout.rowTitleSize, weight: .medium).foregroundStyle(.white)
                     .layoutPriority(1)
                 Spacer(minLength: 4)
-                V5JPFont.text(value, size: NotificationLayout.valueSize, weight: .regular)
+                // 「23:00」などの数字も日本語の値と同じ大きさに見えるよう、
+                // 全体をNoto Sans JPで組む(HQ指示 2026-10-06)。
+                NotoText.text(value, size: NotificationLayout.valueSize)
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)

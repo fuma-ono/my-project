@@ -192,7 +192,8 @@ private struct NotificationRow: View {
                     .background(Capsule().fill(badgeColor))
                 NotificationHeadline(full: headline, short: shortHeadline)
                 ForEach(lines, id: \.self) { line in
-                    V5JPFont.text(line, size: 6.5, weight: .regular)
+                    // 時刻の数字も日本語と同じフォント・大きさで揃える(HQ指示 2026-10-06)。
+                    NotoText.text(line, size: 6)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .lineLimit(1)
                 }
