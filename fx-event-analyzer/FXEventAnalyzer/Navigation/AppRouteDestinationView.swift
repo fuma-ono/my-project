@@ -41,6 +41,8 @@ struct AppRouteDestinationView: View {
             NotificationListView(apiClient: apiClient, tabSelection: $tabSelection)
         case .notificationSettings:
             NotificationSettingsView(apiClient: apiClient, tabSelection: $tabSelection)
+        case .supportHistory:
+            SupportHistoryView(apiClient: apiClient, tabSelection: $tabSelection)
 
         // MARK: - 仮画面(PlaceholderScreenView)への解決。実装本体はまだ存在せず、
         // 正式なUIは別途デザイン仕様確定後に実装する。SCR番号はHQ指示

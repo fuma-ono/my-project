@@ -33,7 +33,7 @@ export async function ensureProfile(supabase: SupabaseClient, userId: string): P
  * Permanently deletes the user (SCR-026, HQ確定 2026-10-02: physical
  * deletion, not the soft delete db-design.md §3.1 originally described).
  * Deleting the auth.users row cascades to profiles, and from there to
- * subscriptions / entitlements / user_settings (db-design.md §7).
+ * subscriptions / entitlements / user_settings / support_requests (db-design.md §7).
  */
 export async function deleteUserAccount(supabase: SupabaseClient, userId: string): Promise<void> {
   const { error } = await supabase.auth.admin.deleteUser(userId);

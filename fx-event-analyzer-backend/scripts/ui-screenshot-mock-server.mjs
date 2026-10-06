@@ -800,6 +800,76 @@ const accountFixture = () => ({
   updated_at: isoMinusDays(1),
 });
 
+// ---------------------------------------------------------------------------
+// SCR-020 ヘルプ・お問い合わせ (api-design.md §24.7/§24.8). In-memory, with a
+// much simpler version of src/domain/support.ts: very short bodies get no
+// reply (IGNORED), BUG category or a bug keyword gets the bug reply
+// (ESCALATED — no GitHub Issue here), everything else a template reply.
+
+const SUPPORT_KINDS = ['INQUIRY', 'FEEDBACK'];
+const SUPPORT_CATEGORIES = ['ACCOUNT', 'BILLING', 'NOTIFICATION', 'CHART', 'DATA', 'BUG', 'OTHER'];
+const SUPPORT_BUG_KEYWORDS = ['落ちる', '落ちた', 'クラッシュ', '不具合', 'バグ', 'エラー', '動かない', '表示されない', '固まる', 'フリーズ'];
+const SUPPORT_BUG_REPLY =
+  '不具合のご報告ありがとうございます。開発チームで確認し、修正対象として登録しました。修正まで今しばらくお待ちいただけますと幸いです。';
+const SUPPORT_FEEDBACK_REPLY =
+  'ご意見ありがとうございます。いただいた内容は開発チームで確認し、今後の改善の参考にさせていただきます。';
+const SUPPORT_INQUIRY_REPLY =
+  'お問い合わせありがとうございます。内容を確認いたしました。よくある質問もあわせてご覧いただけますと幸いです。';
+
+/** Newest first. Seeded with one answered inquiry so the history list has content. */
+const supportRequests = [
+  {
+    id: '88888888-8888-8888-8888-888888888881',
+    kind: 'INQUIRY',
+    category: 'NOTIFICATION',
+    body: '通知が届く時間を変更できますか?',
+    status: 'REPLIED',
+    reply_body:
+      'お問い合わせありがとうございます。通知の対象や時間は、設定画面の「通知設定」から変更できます。通知が届かない場合は、iPhoneの「設定」アプリ > 通知で、本アプリの通知が許可されているかもご確認ください。',
+    replied_at: isoSeconds(new Date(now().getTime() - 2 * 86_400_000)),
+    created_at: isoSeconds(new Date(now().getTime() - 2 * 86_400_000)),
+  },
+];
+let supportRequestCounter = 1;
+
+function createSupportRequest(rawBody) {
+  let body;
+  try {
+    body = rawBody ? JSON.parse(rawBody) : {};
+  } catch {
+    return { error: 'Invalid JSON body.' };
+  }
+  const text = typeof body?.body === 'string' ? body.body.trim() : '';
+  if (!SUPPORT_KINDS.includes(body?.kind)) return { error: 'kind: invalid value' };
+  if (!SUPPORT_CATEGORIES.includes(body?.category)) return { error: 'category: invalid value' };
+  if (text.length < 1 || text.length > 2000) return { error: 'body: must be 1-2000 characters' };
+
+  let status = 'REPLIED';
+  let reply = body.kind === 'FEEDBACK' ? SUPPORT_FEEDBACK_REPLY : SUPPORT_INQUIRY_REPLY;
+  if (Array.from(text).length < 5) {
+    status = 'IGNORED';
+    reply = null;
+  } else if (body.category === 'BUG' || SUPPORT_BUG_KEYWORDS.some((keyword) => text.includes(keyword))) {
+    status = 'ESCALATED';
+    reply = SUPPORT_BUG_REPLY;
+  }
+
+  supportRequestCounter += 1;
+  const createdAt = isoSeconds(now());
+  const row = {
+    id: `88888888-8888-8888-8888-${String(supportRequestCounter).padStart(12, '0')}`,
+    kind: body.kind,
+    category: body.category,
+    body: text,
+    status,
+    reply_body: reply,
+    replied_at: reply === null ? null : createdAt,
+    created_at: createdAt,
+  };
+  supportRequests.unshift(row);
+  return { row };
+}
+
 /** SCR-017の撮影用。`/__mock/subscription-plan`で切り替える(PRO / FREE)。 */
 let mockSubscriptionPlan = 'PRO';
 
@@ -850,6 +920,16 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
     });
   }
 
+  // SCR-020 ヘルプ・お問い合わせ (api-design.md §24.7/§24.8).
+  if (pathname === '/api/v1/support/requests') {
+    if (req.method === 'POST') {
+      const result = createSupportRequest(rawBody);
+      if (result.error) return json(res, 422, { error: { code: 'VALIDATION_ERROR', message: result.error } });
+      return json(res, 201, result.row);
+    }
+    return json(res, 200, { data: supportRequests.slice(0, 50) });
+  }
+
   if (segments[0] === 'indicators' && segments.length === 2) {
     const detail = indicatorDetailHandler(segments[1]);
     if (!detail) return json(res, 404, { error: { code: 'INDICATOR_NOT_FOUND', message: 'Indicator not found.' } });
@@ -883,7 +963,7 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://127.0.0.1');
-  const rawBody = await readBody(req); // only PATCH /settings reads it — this fixture never validates input
+  const rawBody = await readBody(req); // only PATCH /settings and POST /support/requests read it
   console.log(`[mock] ${req.method} ${url.pathname}${url.search}`);
 
   if (url.pathname.startsWith('/auth/v1/')) {

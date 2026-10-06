@@ -70,4 +70,6 @@ enum AppRoute: Hashable {
     /// SCR-016 通知設定。通知一覧の「システム」通知(通知設定を更新しました)
     /// から開く。設定タブからは`SettingsSubRoute.notificationSettings`。
     case notificationSettings
+    /// SCR-020 お問い合わせ履歴。通知一覧の「お問い合わせに返信しました」から開く。
+    case supportHistory
 }

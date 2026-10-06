@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.9
+# FX Event Analyzer: API詳細設計書 v1.10
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -51,6 +51,7 @@
 - **v1.7**(2026-10-06): SCR-016 通知設定に「通知しない時間帯」を追加。`GET/PATCH /settings`の`notifications`に`quiet_hours_enabled`・`quiet_start`・`quiet_end`を追加し(24.4節・24.5節)、`GET /notifications/upcoming`で該当時間帯の通知を除外する(24.6節)
 - **v1.8**(2026-10-06): SCR-017 プラン・購読管理の画面実装に合わせ、`GET /subscription`のResponseに`product_id`(月額・年額の商品)を追加(25章)
 - **v1.9**(2026-10-06): SCR-018 表示・地域設定 / SCR-019 チャート設定(画面番号はui-screens.mdに合わせる。30章の表は旧番号SCR-020 / SCR-021のまま)の項目を追加。`GET/PATCH /settings`の`display`に`theme`・`text_size`・`date_format`・`time_format`・`currency`・`week_start`、`chart`に`chart_type`・`show_indicators`・`indicator_ma`・`indicator_bollinger`・`indicator_macd`・`indicator_rsi`・`indicator_stochastic`・`crosshair`・`price_line`を追加(24.4節・24.5節)
+- **v1.10**(2026-10-06): SCR-020 ヘルプ・お問い合わせ(画面番号はui-screens.md)のSupport APIを追加。`POST /support/requests`・`GET /support/requests`を新設(24.7節・24.8節)。問い合わせ・フィードバックを保存し、ルールとテンプレートで自動返信する(LLMは使わない)。意味のない内容・迷惑な内容には返信しない。不具合の報告はBackendがGitHub Issueとして登録する。1ユーザー1時間あたり5件を超えると`429 RATE_LIMITED`(35章)。Backend環境変数`GITHUB_ISSUES_TOKEN`・`GITHUB_ISSUES_REPO`を追加(任意、サーバーのみ)
 
 ---
 
@@ -1085,6 +1086,104 @@ Response：
 7. `quiet_hours_enabled = true`なら、`notify_at`を`display.timezone`(IANA名。解決できない場合は`Asia/Tokyo`)の現地時刻に直した値が`[quiet_start, quiet_end)`に入る項目を除外する(v1.7)。判定は`scheduled_at`ではなく`notify_at`で行う。`quiet_start = quiet_end`なら除外しない
 8. `notify_at`昇順、最大60件(iOSのローカル通知予約上限64件に余裕を持たせる)。上限は上記の除外後に適用する
 
+## 24.7 POST /api/v1/support/requests(v1.10で追加)
+
+お問い合わせ・フィードバックを送信する(SCR-020 ヘルプ・お問い合わせ)。認証済みであれば全ユーザーが利用でき、特定feature_codeを要求しない。送信内容はすべて`support_requests`(db-design.md §3.17)に保存し、ルールとテンプレートで自動返信する(LLMは使わない。Backend実装: `src/domain/support.ts`)。
+
+Request：
+
+```json
+{
+  "kind": "INQUIRY",
+  "category": "NOTIFICATION",
+  "body": "通知が届く時間を変更できますか?",
+  "app_version": "1.0.0",
+  "os_version": "iOS 18.0",
+  "device_model": "iPhone16,1"
+}
+```
+
+- `kind`(必須)：`INQUIRY`(お問い合わせ) / `FEEDBACK`(ご意見・ご要望)
+- `category`(必須)：`ACCOUNT` / `BILLING` / `NOTIFICATION` / `CHART` / `DATA` / `BUG`(不具合の報告) / `OTHER`。FEEDBACKのiOSは`OTHER`を送る
+- `body`(必須)：前後の空白を除いて1〜2000文字。保存・返却は前後の空白を除いた値
+- `app_version` / `os_version` / `device_model`(任意、各100文字以内、`null`可)：不具合調査用の端末情報。空文字は`null`として保存する。個人を特定する情報は送らない
+- 上記以外のフィールドは`422 VALIDATION_ERROR`。意味のない内容は`422`にせず受け付ける(下記の判定で返信しない)
+
+Response：`201 Created`
+
+```json
+{
+  "id": "0d6f3c2e-5b1a-4c8e-9f4e-2a7b6c1d9e01",
+  "kind": "INQUIRY",
+  "category": "NOTIFICATION",
+  "body": "通知が届く時間を変更できますか?",
+  "status": "REPLIED",
+  "reply_body": "お問い合わせありがとうございます。通知の対象や時間は、設定画面の「通知設定」から変更できます。通知が届かない場合は、iPhoneの「設定」アプリ > 通知で、本アプリの通知が許可されているかもご確認ください。",
+  "replied_at": "2026-10-06T03:00:00Z",
+  "created_at": "2026-10-06T03:00:00Z"
+}
+```
+
+- `status`：`REPLIED`(返信あり) / `ESCALATED`(不具合として登録・返信あり) / `IGNORED`(返信しない)
+- `reply_body` / `replied_at`：`IGNORED`は`null`。iOSは`IGNORED`のとき「受け付けました」とだけ表示する
+- `replied_at` / `created_at`：秒精度のUTC(`Z`、小数秒なし)
+- 判定結果(`classification`)とGitHub Issueの情報はクライアントに返さない
+
+判定(上から順に最初に当てはまったもの。`kind`に関わらず同じルール)：
+
+| 判定 | 条件 | status | 返信 |
+|---|---|---|---|
+| `SPAM` | URLだけの本文 / URLが3件以上 / 禁止語(暴言・広告の定型語の短いリスト)を含む | `IGNORED` | なし |
+| `NONSENSE` | 5文字未満 / 文字(かな・漢字・英字等)を含まない(数字・記号・絵文字のみ) / 1種類の文字が80%以上(「ああああああ」等) / 英字のみでキーボード連打とみなせる(「asdfghjkl」等、子音6文字以上の連続またはキー配列の並び) | `IGNORED` | なし |
+| `BUG` | `category = BUG`、または本文に不具合の語(落ちる / 落ちた / クラッシュ / 不具合 / バグ / エラー / 動かない / 表示されない / 固まる / フリーズ / crash / bug / error)を含む | `ESCALATED` | 不具合受付のテンプレート + GitHub Issue作成 |
+| `VALID` | 上記以外 | `REPLIED` | INQUIRYは`category`ごとのテンプレート、FEEDBACKはご意見用のテンプレート |
+
+返信テンプレート(日本語・2〜4文)：
+
+- `ACCOUNT`：設定画面の「アカウント情報」「アカウント削除」を案内
+- `BILLING`：プランの支払いはApp Storeのサブスクリプションで管理され、解約・変更はiPhoneの「設定」アプリ > Apple ID > サブスクリプションから行う旨を案内
+- `NOTIFICATION`：設定画面の「通知設定」と、端末の通知設定(本アプリの通知の許可)を案内
+- `CHART`：設定画面の「チャート設定」を案内
+- `DATA`：表示している値の出典と、発表直後の反映について案内
+- `OTHER`：受付のお礼と、よくある質問の案内
+- FEEDBACK：「ご意見ありがとうございます。…今後の改善の参考にさせていただきます。」
+- BUG：「不具合のご報告ありがとうございます。開発チームで確認し、修正対象として登録しました。…」
+
+GitHub Issue(`BUG`のみ)：
+
+- Backend環境変数`GITHUB_ISSUES_TOKEN`(GitHubのトークン)・`GITHUB_ISSUES_REPO`(`owner/name`)が両方設定されている場合だけ、`POST https://api.github.com/repos/{GITHUB_ISSUES_REPO}/issues`で作成する。未設定なら作成しない(保存・返信は通常どおり)
+- タイトル：`[アプリ不具合報告] ` + 本文先頭40文字。ラベル：`bug`、`from-app`
+- 本文：受付ID(`support_requests.id`)・種別・カテゴリ・アプリバージョン・OS・端末と、本文。**`user_id`・メールアドレスは含めない**。本文と端末情報からメールアドレス・電話番号(日本の形式)・8桁以上の数字列を`[削除済み]`に置き換えてから送る
+- 作成に失敗しても(GitHubの障害・トークン不正等)利用者へのResponseは`201`のまま。ログに記録し、`status = ESCALATED`、Issue番号・URLは`null`のままとする
+- **`GITHUB_ISSUES_TOKEN`はBackend(サーバー)だけに設定し、iOSアプリには含めない**。対象リポジトリのIssues書き込みだけを許可したfine-grained tokenを推奨する
+
+送信回数の上限：1ユーザーにつき直近1時間で5件まで(`support_requests`の行数で判定。`IGNORED`も数える)。超えた場合は`429 RATE_LIMITED`(保存しない)。
+
+## 24.8 GET /api/v1/support/requests(v1.10で追加)
+
+呼び出しユーザー本人の送信履歴を新しい順に最大50件返す(SCR-020)。他ユーザーの行は返さない。
+
+Response：
+
+```json
+{
+  "data": [
+    {
+      "id": "0d6f3c2e-5b1a-4c8e-9f4e-2a7b6c1d9e01",
+      "kind": "INQUIRY",
+      "category": "NOTIFICATION",
+      "body": "通知が届く時間を変更できますか?",
+      "status": "REPLIED",
+      "reply_body": "お問い合わせありがとうございます。…",
+      "replied_at": "2026-10-06T03:00:00Z",
+      "created_at": "2026-10-06T03:00:00Z"
+    }
+  ]
+}
+```
+
+各要素は24.7節のResponseと同じ形。Paginationなし。
+
 ---
 
 # 25. Subscription API
@@ -1189,6 +1288,7 @@ Backend側の各Endpointが要求するEntitlementを以下の通り確定する
 | Historical Event Detail | `GET /events/{id}/history` | `VIEW_HISTORICAL` |
 | 要人発言(v1.6で追加) | `GET /speeches`、`GET /speeches/{id}` | `VIEW_BASIC_EVENT` |
 | 通知予約対象(v1.6で追加) | `GET /notifications/upcoming` | `VIEW_BASIC_EVENT` |
+| お問い合わせ(v1.10で追加) | `POST /support/requests`、`GET /support/requests` | **Authentication Required / Entitlementなし** |
 
 Home / Indicators / Indicator Detail / FX Pairs(v1.6) / Search / Account / Settings / Subscription / Entitlement APIは、認証済みであれば全ユーザーがアクセス可能とし、特定feature_codeを要求しない。
 
@@ -1250,6 +1350,7 @@ Backend APIはSupabase JWTを検証する。
 | SCR-021 チャート設定(v1.4で追加) | GET /settings、PATCH /settings |
 | SCR-022〜025 ヘルプ・規約・プライバシー・アプリ情報(v1.4で追加) | なし |
 | SCR-026 アカウント削除(v1.4で追加) | DELETE /account |
+| SCR-020 ヘルプ・お問い合わせ(v1.10で追加。番号はui-screens.md。上のSCR-022〜025は旧番号) | POST /support/requests、GET /support/requests |
 
 ---
 
@@ -1329,6 +1430,8 @@ MVPの初期値として、通常API：60 requests / minute / user、Search：30
 
 超過時：HTTP 429
 
+お問い合わせ(`POST /support/requests`、v1.10)：1ユーザーにつき直近1時間で5件まで。超過時は`429 RATE_LIMITED`(24.7節)。
+
 Rate Limit値は将来的に実測値に基づいて調整可能とする。
 
 ---
@@ -1356,6 +1459,7 @@ Breaking Changeが発生する場合は`/api/v2`を作成する。既存v1を破
 - ユーザー固有データへのアクセス制御
 - IDOR対策
 - 不正なPagination / Filter値の拒否
+- 外部サービスの秘密情報(`SUPABASE_SERVICE_ROLE_KEY`、`GITHUB_ISSUES_TOKEN`(v1.10)等)はBackendの環境変数だけに置き、iOSアプリ・Response・ログに含めない
 
 ユーザー固有データは必ず認証ユーザー本人のものだけを取得できるようにする。
 

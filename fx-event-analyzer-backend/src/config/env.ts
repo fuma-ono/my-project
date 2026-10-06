@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+/** An optional variable, where an empty value (`NAME=` in .env) also counts as unset. */
+function optionalString(schema: z.ZodString) {
+  return z.preprocess((value) => (value === '' ? undefined : value), schema.optional());
+}
+
 /**
  * Required server configuration. Unlike the iOS client (which must run
  * safely with no Supabase project configured — Phase 1), the Backend
@@ -16,6 +21,12 @@ const envSchema = z.object({
   // StoreKit 2 transactions are only accepted for this bundle id
   // (POST /subscription/verify, api-design.md §25.1).
   APP_STORE_BUNDLE_ID: z.string().min(1).default('com.fumaono.fxeventanalyzer'),
+  // SCR-020 不具合報告 → GitHub Issue (api-design.md §24.7). Optional: when
+  // either is unset, bug reports are still stored and auto-replied, just
+  // without an Issue. Server-only — never shipped in the iOS app.
+  GITHUB_ISSUES_TOKEN: optionalString(z.string().min(1)),
+  // "owner/name"
+  GITHUB_ISSUES_REPO: optionalString(z.string().regex(/^[\w.-]+\/[\w.-]+$/, 'must be "owner/name"')),
 });
 
 export type Env = z.infer<typeof envSchema>;

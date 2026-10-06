@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.6
+# FX Event Analyzer: DB詳細設計 v4.7
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -31,6 +31,7 @@
   - `Speaker` / `SpeechEvent`を新設(3.15節・3.16節)。旧版でP2・対象外としていた`Person` / `SpeechEvent`を前倒し
 - **v4.5**(2026-10-06): SCR-016 通知設定に「通知しない時間帯」を追加。`UserSettings`に`notify_quiet_hours_enabled` / `notify_quiet_start` / `notify_quiet_end`を追加(3.14節)。Migration `20261006000001_notification_quiet_hours.sql`
 - **v4.6**(2026-10-06): SCR-018 表示・地域設定 / SCR-019 チャート設定の項目を追加。`UserSettings`に`display_theme` / `display_text_size` / `display_date_format` / `display_time_format` / `display_currency` / `display_week_start`、`chart_type` / `chart_show_indicators` / `chart_indicator_ma` / `chart_indicator_bollinger` / `chart_indicator_macd` / `chart_indicator_rsi` / `chart_indicator_stochastic` / `chart_crosshair` / `chart_price_line`を追加(3.14節)。Migration `20261006000002_display_chart_settings_v2.sql`
+- **v4.7**(2026-10-06): SCR-020 ヘルプ・お問い合わせ(画面番号はui-screens.md)。お問い合わせ・フィードバックの保存先`SupportRequest`(`support_requests`)を新設(3.17節)。自動返信の判定結果・返信文・不具合として登録したGitHub Issueを記録する。Migration `20261006000003_support_requests.sql`
 
 ---
 
@@ -54,6 +55,7 @@
 | `UserSettings` | ユーザーごとの通知対象・表示・チャート設定(v4.3で追加) |
 | `Speaker` | 要人(発言者)マスタ(v4.4で追加) |
 | `SpeechEvent` | 要人発言(v4.4で追加) |
+| `SupportRequest` | お問い合わせ・フィードバックと自動返信(v4.7で追加) |
 
 将来拡張(P2、今回はテーブル設計対象外): `favorite_indicators` / `favorite_pairs` / `alert_settings` / `SpeechPriceReaction` / Community関連。(`Person` / `SpeechEvent`はHQ指示 2026-10-05により`Speaker` / `SpeechEvent`としてv4.4で追加)
 
@@ -66,7 +68,8 @@ Profile
    │
    ├── Subscription[]
    ├── Entitlement[]
-   └── UserSettings(0..1)
+   ├── UserSettings(0..1)
+   └── SupportRequest[](v4.7)
 
 EconomicIndicator
    │
@@ -460,6 +463,36 @@ UQ(provider, provider_event_id)、IDX(statement_datetime)、IDX(speaker_id)
 
 **RLS**: `EconomicIndicator` / `EconomicEvent`と同じ共有データ扱い(全認証ユーザーSELECT可、書き込みはservice_roleのみ)。
 
+### 3.17 SupportRequest(v4.7で追加)
+
+SCR-020 ヘルプ・お問い合わせから送られたお問い合わせ・フィードバック(api-design.md §24.7/§24.8)。テーブル名は`support_requests`。Migration `20261006000003_support_requests.sql`。返信はルールとテンプレートでBackendが決める(LLMは使わない。`src/domain/support.ts`)。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK, DEF gen_random_uuid() | 受付ID。GitHub Issueにも記載する |
+| user_id | uuid | NN, FK→Profile.id ON DELETE CASCADE | 送信者。GitHub Issueには含めない |
+| kind | text | NN, CHK: `IN ('INQUIRY','FEEDBACK')` | お問い合わせ / ご意見・ご要望 |
+| category | text | NN, CHK: `IN ('ACCOUNT','BILLING','NOTIFICATION','CHART','DATA','BUG','OTHER')` | |
+| body | text | NN, CHK: 1〜2000文字 | 前後の空白を除いて保存 |
+| app_version | text | nullable, CHK: 100文字以内 | 不具合調査用の端末情報(任意) |
+| os_version | text | nullable, CHK: 100文字以内 | 同上 |
+| device_model | text | nullable, CHK: 100文字以内 | 同上 |
+| classification | text | NN, CHK: `IN ('VALID','BUG','NONSENSE','SPAM')` | 自動判定の結果。APIでは返さない |
+| status | text | NN, CHK: `IN ('REPLIED','IGNORED','ESCALATED')` | VALID→REPLIED、BUG→ESCALATED、NONSENSE / SPAM→IGNORED |
+| reply_body | text | nullable | 自動返信の本文。IGNOREDはNULL |
+| replied_at | timestamptz | nullable | 返信日時。IGNOREDはNULL |
+| github_issue_number | int | nullable | BUGで作成したGitHub Issueの番号。未設定・作成失敗はNULL。APIでは返さない |
+| github_issue_url | text | nullable | 同IssueのURL。APIでは返さない |
+| created_at | timestamptz | NN, DEF now() | |
+
+CHK: `(status = 'IGNORED') = (reply_body IS NULL)`、`(reply_body IS NULL) = (replied_at IS NULL)`。IDX(user_id, created_at DESC)(履歴の取得と送信回数の上限判定)。
+
+**送信回数の上限**: 1ユーザーにつき直近1時間で5件まで。この行数で判定するため、IGNOREDの行も削除しない(api-design.md §24.7、超過時`429 RATE_LIMITED`)。
+
+**GitHub Issue**: BUGの行は、Backend環境変数`GITHUB_ISSUES_TOKEN` / `GITHUB_ISSUES_REPO`が設定されていればGitHub Issueを作成し、番号とURLを記録する。Issueに送るのは受付ID・種別・カテゴリ・端末情報と、メールアドレス・電話番号・8桁以上の数字列を除いた本文のみ(`user_id`・メールアドレスは送らない)。トークンはBackend(サーバー)だけに置き、iOSアプリやDBには保存しない。
+
+**RLS**: `user_id = auth.uid()`の本人のみSELECT可。書き込みはservice_roleのみ(Backend経由)。
+
 ---
 
 ## 4. Snapshot不変性・Revision管理(確定)
@@ -489,7 +522,7 @@ Supabase RLSを実装前提の設計条件として採用する。論理方針�
 
 | 区分 | 対象テーブル | 方針 |
 |---|---|---|
-| ユーザー固有 | `Profile` / `Subscription` / `Entitlement` / `UserSettings` | `auth.uid()`等を利用した本人のみSELECT可。INSERT/UPDATE/DELETEはservice_roleのみ |
+| ユーザー固有 | `Profile` / `Subscription` / `Entitlement` / `UserSettings` / `SupportRequest`(v4.7) | `auth.uid()`等を利用した本人のみSELECT可。INSERT/UPDATE/DELETEはservice_roleのみ |
 | 共有データ | `EconomicIndicator` / `EconomicEvent` / `Speaker` / `SpeechEvent`(v4.4) / `EventSnapshot` / `EventRevision` / `EventExplanation` / `IndicatorFxPair` / `FxPair` / `FxPrice` / `EventPriceReaction` | ユーザー単位のRLSを前提とせず、原則として全認証ユーザーからSELECT可能。INSERT/UPDATE/DELETEはservice_role(Ingestion Worker・管理者機能)のみ |
 | 運用ログ | `IngestionLog` | 一般ユーザーからは非公開。管理者機能・service_roleのみアクセス可 |
 
@@ -499,7 +532,7 @@ Supabase RLSを実装前提の設計条件として採用する。論理方針�
 
 - 歴史的record(`EconomicEvent`/`EventSnapshot`/`EventRevision`/`EventExplanation`/`EventPriceReaction`/`FxPrice`): 子から親への外部キーは`ON DELETE RESTRICT`。
 - マスタ系(`EconomicIndicator`/`FxPair`): `is_active`による論理無効化を優先し、物理削除は想定しない(`ON DELETE RESTRICT`)。
-- ユーザー系(v4.3で変更): アカウント削除は物理削除。`auth.users`削除→`Profile`(`auth.users`への`ON DELETE CASCADE`)→`Subscription`/`Entitlement`/`UserSettings`(`Profile`への`ON DELETE CASCADE`)の順に連鎖して削除される。旧方針の`Profile`ソフトデリート(`deleted_at`)は使用しない。
+- ユーザー系(v4.3で変更): アカウント削除は物理削除。`auth.users`削除→`Profile`(`auth.users`への`ON DELETE CASCADE`)→`Subscription`/`Entitlement`/`UserSettings`/`SupportRequest`(v4.7)(`Profile`への`ON DELETE CASCADE`)の順に連鎖して削除される。旧方針の`Profile`ソフトデリート(`deleted_at`)は使用しない。
 - 関連テーブル(`IndicatorFxPair`): 親(`EconomicIndicator`/`FxPair`)は物理削除を想定しないため、実質的にCASCADEが発火する場面はない。
 
 不要になったデータは削除ではなく`is_active`/`status`等による論理的な無効化を優先する。

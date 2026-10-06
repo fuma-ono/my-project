@@ -101,7 +101,9 @@ struct NotificationListView: View {
         switch entry.kind {
         case .indicator: return .eventDetail(id: entry.targetID)
         case .speech: return .speechDetail(id: entry.targetID)
-        case .system: return .notificationSettings
+        case .system:
+            // お問い合わせへの返信は履歴へ、それ以外(通知設定の更新)は通知設定へ。
+            return entry.targetID.hasPrefix(SupportViewModel.notificationTargetPrefix) ? .supportHistory : .notificationSettings
         }
     }
 }

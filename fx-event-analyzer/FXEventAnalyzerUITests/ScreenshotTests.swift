@@ -174,6 +174,8 @@ final class ScreenshotTests: XCTestCase {
         }
         captureSettingsSubScreen(row: "表示・地域設定", rowIndex: 3, waitFor: "タイムゾーン", name: "18-DisplaySettings")
         captureSettingsSubScreen(row: "チャート設定", rowIndex: 4, waitFor: "時間足", name: "19-ChartSettings")
+        // SCR-020 ヘルプ・お問い合わせは2つ目のまとまりの先頭(1つ目6行+間隔8)。
+        captureSettingsSubScreen(row: "ヘルプ・お問い合わせ", rowIndex: 6, extraOffset: 8, waitFor: "よくある質問", name: "20-Help")
         // SCR-015 アカウント情報 (added 2026-10-05 with the reference-image
         // rebuild) and SCR-024 アカウント削除, opened from SCR-015's
         // bottom row (V5 card top 342.9, height 33.9). The deletion screen
@@ -203,11 +205,11 @@ final class ScreenshotTests: XCTestCase {
     /// center deliberately also checks that the whole row is tappable. If
     /// it doesn't navigate, attach a screenshot whose name records what
     /// XCUITest reports for the row.
-    private func captureSettingsSubScreen(row: String, rowIndex: Int, waitFor text: String, name: String) {
+    private func captureSettingsSubScreen(row: String, rowIndex: Int, extraOffset: CGFloat = 0, waitFor text: String, name: String) {
         tap(containing: "ホーム")
         tap(containing: "設定")
         XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load before \(name)")
-        tapV5(x: 117, y: 54.5 + (CGFloat(rowIndex) + 0.5) * 31)
+        tapV5(x: 117, y: 54.5 + (CGFloat(rowIndex) + 0.5) * 31 + extraOffset)
         if waitForAnyElement(containing: text, timeout: 15) {
             capture(name)
         } else {

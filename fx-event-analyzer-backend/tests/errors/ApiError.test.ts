@@ -8,6 +8,8 @@ describe('ApiError', () => {
     expect(ApiError.notFound().statusCode).toBe(404);
     expect(ApiError.validation('bad input').statusCode).toBe(422);
     expect(ApiError.featureNotEntitled().statusCode).toBe(403);
+    expect(ApiError.rateLimited().statusCode).toBe(429);
+    expect(ApiError.rateLimited().code).toBe('RATE_LIMITED');
     expect(ApiError.internal().statusCode).toBe(500);
   });
 

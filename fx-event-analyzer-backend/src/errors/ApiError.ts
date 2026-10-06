@@ -71,6 +71,10 @@ export class ApiError extends Error {
     return new ApiError('FEATURE_NOT_ENTITLED', message);
   }
 
+  static rateLimited(message = 'Too many requests. Please try again later.'): ApiError {
+    return new ApiError('RATE_LIMITED', message);
+  }
+
   static internal(message = 'Internal server error.'): ApiError {
     return new ApiError('INTERNAL_ERROR', message);
   }
