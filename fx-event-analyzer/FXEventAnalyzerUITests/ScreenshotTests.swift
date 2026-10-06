@@ -150,6 +150,11 @@ final class ScreenshotTests: XCTestCase {
         // rebuilds SettingsView and so resets its NavigationStack to the
         // root — no need to find V5Header's unlabeled back chevron.
         captureSettingsSubScreen(row: "通知設定", rowIndex: 1, waitFor: "要人発言の通知", name: "16-NotificationSettings")
+        // 通知しない時間帯をONにすると開始・終了の行が増える。それでも1画面に
+        // 収まることを確かめる(HQ指示 2026-10-06)。
+        tap(containing: "通知しない時間帯")
+        XCTAssertTrue(waitForAnyElement(containing: "開始", timeout: 10), "Quiet hours rows did not appear")
+        capture("16b-NotificationQuietHours")
         captureSettingsSubScreen(row: "表示・地域設定", rowIndex: 3, waitFor: "タイムゾーン", name: "18-DisplaySettings")
         captureSettingsSubScreen(row: "チャート設定", rowIndex: 4, waitFor: "時間足", name: "19-ChartSettings")
         // SCR-015 アカウント情報 (added 2026-10-05 with the reference-image

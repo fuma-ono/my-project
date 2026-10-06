@@ -123,7 +123,7 @@ struct NotificationSettingsView: View {
             AccountInfoCard(
                 icon: "info.circle.fill",
                 title: "通知について",
-                text: "通知は、選択した通貨ペア・重要度・タイミングの条件に基づいて配信されます。プッシュ通知の設定は、端末の通知設定もご確認ください。",
+                text: "選択した通貨ペア・重要度・タイミングの条件で配信されます。端末の通知設定もご確認ください。",
                 // HQ指示(2026-10-06)で指定した大きさ。
                 textSize: NotificationLayout.aboutTextSize
             )
@@ -217,7 +217,8 @@ private enum NotificationLayout {
     static let sectionTitleSize: CGFloat = 8.5
     static let rowTitleSize: CGFloat = 8.5
     static let valueSize: CGFloat = 8
-    static let rowHeight: CGFloat = 25
+    /// 通知しない時間帯をONにしても1画面に収まる高さ(HQ指示 2026-10-06)。
+    static let rowHeight: CGFloat = 24
     static let aboutTextSize: CGFloat = 7.5
 }
 
@@ -227,7 +228,7 @@ private struct NotificationSection<Rows: View>: View {
     @ViewBuilder let rows: () -> Rows
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 4) {
             V5JPFont.text(title, size: NotificationLayout.sectionTitleSize, weight: .bold)
                 .foregroundStyle(.white)
                 .padding(.leading, 4)
