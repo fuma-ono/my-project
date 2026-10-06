@@ -71,15 +71,16 @@ struct SubscriptionManagementView: View {
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(viewModel.subscription.isPro ? SubscriptionPalette.gold : V5P.cyan)
                 .frame(width: 36, height: 36)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color.black.opacity(0.18)))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
+                // 王冠は丸の中に置く(HQ指示 2026-10-06)。
+                .background(Circle().fill(Color.black.opacity(0.18)))
+                .overlay(Circle().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
             VStack(alignment: .leading, spacing: 4) {
                 V5JPFont.text(viewModel.planTitle, size: 10.5, weight: .bold)
                     .foregroundStyle(viewModel.subscription.isPro ? SubscriptionPalette.gold : .white)
-                NotoText.text(viewModel.priceLabel, size: viewModel.subscription.isPro ? 10 : 7.5)
+                NotoText.text(viewModel.priceLabel, size: viewModel.subscription.isPro ? 11.5 : 8)
                     .foregroundStyle(.white)
                 if let renewal = viewModel.renewalLabel {
-                    NotoText.text(renewal, size: 6.5)
+                    NotoText.text(renewal, size: 7.5)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                 }
             }
@@ -318,10 +319,10 @@ private struct SubscriptionMenuRow: View {
         Button(action: action) {
             HStack(spacing: 9) {
                 Image(systemName: icon)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(tint == .white ? V5P.cyan : tint)
-                    .frame(width: 14)
-                V5JPFont.text(title, size: 8.5, weight: .medium).foregroundStyle(tint)
+                    .frame(width: 16)
+                V5JPFont.text(title, size: 9.5, weight: .medium).foregroundStyle(tint)
                 Spacer(minLength: 4)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 7.5, weight: .semibold))

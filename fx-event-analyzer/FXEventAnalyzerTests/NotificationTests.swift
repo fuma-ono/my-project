@@ -444,7 +444,10 @@ final class NotificationSettingsViewModelTests: XCTestCase {
 final class IndicatorShortNameTests: XCTestCase {
     func testLongOfficialNamesBecomeCommonAbbreviations() {
         XCTAssertEqual(IndicatorShortName.shorten("Japan Consumer Price Index (YoY)"), "Japan CPI (YoY)")
-        XCTAssertEqual(IndicatorShortName.shorten("英) 国内総生産（前期比）"), "英) GDP（前期比）")
+        XCTAssertEqual(IndicatorShortName.shorten("英国内総生産"), "英GDP")
+        // 日本語の補足のかっこは外す(「日本CPI(CPI)」にしない)。
+        XCTAssertEqual(IndicatorShortName.shorten("日本CPI(消費者物価指数)"), "日本CPI")
+        XCTAssertEqual(IndicatorShortName.shorten("米国雇用統計(非農業部門雇用者数)"), "米国雇用統計")
         XCTAssertEqual(IndicatorShortName.shorten("ECB Interest Rate Decision"), "ECB Rate Decision")
     }
 

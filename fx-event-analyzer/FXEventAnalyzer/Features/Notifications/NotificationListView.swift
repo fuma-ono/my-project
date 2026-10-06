@@ -183,16 +183,11 @@ private struct NotificationRow: View {
                 .background(RoundedRectangle(cornerRadius: 6).fill(SettingsCardStyle.cardFill))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
             VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 3) {
-                    V5JPFont.text(entry.kind.label, size: 5.5, weight: .bold)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(Capsule().fill(badgeColor))
-                    if entry.kind != .system {
-                        ImportanceBadge(importance: entry.importance)
-                    }
-                }
+                V5JPFont.text(entry.kind.label, size: 5.5, weight: .bold)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(badgeColor))
                 NotificationHeadline(full: headline, short: shortHeadline)
                 ForEach(lines, id: \.self) { line in
                     // 時刻の数字も日本語と同じフォント・大きさで揃える(HQ指示 2026-10-06)。
@@ -201,9 +196,17 @@ private struct NotificationRow: View {
                         .lineLimit(1)
                 }
             }
-            Image(systemName: "chevron.right")
-                .font(.system(size: 7.5, weight: .semibold))
-                .foregroundStyle(SettingsCardStyle.chevronColor)
+            // 重要度は「＞」の横に置く(HQ指示 2026-10-06)。列の幅を固定して
+            // 見出しの幅(`NotificationHeadline.width`)を一定にする。
+            HStack(spacing: 4) {
+                if entry.kind != .system {
+                    ImportanceBadge(importance: entry.importance)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 7.5, weight: .semibold))
+                    .foregroundStyle(SettingsCardStyle.chevronColor)
+            }
+            .frame(width: NotificationRowLayout.trailingWidth, alignment: .trailing)
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 4)
@@ -226,6 +229,11 @@ private struct NotificationRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityHint(isUnread ? "未読" : "")
     }
+}
+
+private enum NotificationRowLayout {
+    /// 右端の列(重要度バッジ「MEDIUM」+間隔+「＞」)の幅。
+    static let trailingWidth: CGFloat = 46
 }
 
 /// 重要度のバッジ。ホーム画面と同じ「HIGH / MEDIUM / LOW」の表記と色
@@ -265,8 +273,8 @@ private struct NotificationHeadline: View {
 
     private static let size: CGFloat = 8.5
     /// 見出しに使える幅。行の幅214から、左右の余白(9×2)・アイコン(24)・
-    /// 間隔(8×2)・シェブロン(約5)を引いた値。
-    private static let width: CGFloat = 150
+    /// 間隔(8×2)・右端の重要度と「＞」の列を引いた値。
+    private static let width: CGFloat = 196 - 24 - 16 - NotificationRowLayout.trailingWidth
 
     var body: some View {
         V5JPFont.text(Self.fitsInOneLine(full) ? full : short, size: Self.size, weight: .bold)
@@ -315,7 +323,10 @@ enum IndicatorShortName {
     ]
 
     static func shorten(_ name: String) -> String {
-        replacements.reduce(name) { result, pair in
+        // 「日本CPI(消費者物価指数)」のような日本語の補足のかっこは外す
+        // (略称に置き換えると「日本CPI(CPI)」になってしまうため)。
+        let trimmed = name.replacingOccurrences(of: #"\s*[(（][^)）]*\p{Han}[^)）]*[)）]"#, with: "", options: .regularExpression)
+        return replacements.reduce(trimmed) { result, pair in
             result.replacingOccurrences(of: pair.0, with: pair.1, options: .caseInsensitive)
         }
     }
