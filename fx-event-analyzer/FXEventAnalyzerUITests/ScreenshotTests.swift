@@ -195,7 +195,7 @@ final class ScreenshotTests: XCTestCase {
     }
 
     /// Taps the row's center through SettingsView's fixed V5 layout (group 1
-    /// top y=54.5, 34pt rows) mapped through V5Viewport's scale-to-fit.
+    /// top y=54.5, 31pt rows — SettingsView.rowHeight) mapped through V5Viewport's scale-to-fit.
     /// Center taps used to land in the row's Spacer gap, which had no
     /// contentShape and so ignored touches under `.buttonStyle(.plain)`
     /// (three CI runs captured 11-13 as the untouched Settings list).
@@ -207,7 +207,7 @@ final class ScreenshotTests: XCTestCase {
         tap(containing: "ホーム")
         tap(containing: "設定")
         XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load before \(name)")
-        tapV5(x: 117, y: 54.5 + (CGFloat(rowIndex) + 0.5) * 34)
+        tapV5(x: 117, y: 54.5 + (CGFloat(rowIndex) + 0.5) * 31)
         if waitForAnyElement(containing: text, timeout: 15) {
             capture(name)
         } else {
@@ -224,7 +224,7 @@ final class ScreenshotTests: XCTestCase {
         tap(containing: "ホーム")
         tap(containing: "設定")
         XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load before \(name)")
-        tapV5(x: 117, y: 54.5 + 0.5 * 34)
+        tapV5(x: 117, y: 54.5 + 0.5 * 31)
         XCTAssertTrue(waitForAnyElement(containing: "プロフィール編集", timeout: 15), "Account did not load before \(name)")
         tapV5(x: 117, y: y)
         XCTAssertTrue(waitForAnyElement(containing: text, timeout: 15), "\(name) did not load")

@@ -19,15 +19,15 @@ struct NotificationListView: View {
     @State private var filter: NotificationEntry.Kind?
     @Environment(\.dismiss) private var dismiss
 
-    /// 絞り込み(下端75)との間を空ける(HQ指示 2026-10-06)。
-    private static let listTop: CGFloat = 85
+    /// 絞り込み(下端78.5)との間を空ける(HQ指示 2026-10-06)。
+    private static let listTop: CGFloat = 89
 
     var body: some View {
         let delivered = store.delivered(now: now).filter { filter == nil || $0.kind == filter }
         V5Viewport {
             V5Header(title: "通知", back: true, onBack: { dismiss() })
             filterBar
-                .position(x: V5P.W / 2, y: 67)
+                .position(x: V5P.W / 2, y: 68.5)
             if delivered.isEmpty {
                 FXEmptyState(
                     icon: "bell.slash",
@@ -81,10 +81,10 @@ struct NotificationListView: View {
     private func filterChip(label: String, kind: NotificationEntry.Kind?) -> some View {
         let isSelected = filter == kind
         return Button { filter = kind } label: {
-            V5JPFont.text(label, size: 7, weight: isSelected ? .bold : .medium)
+            V5JPFont.text(label, size: 8, weight: isSelected ? .bold : .medium)
                 .foregroundStyle(isSelected ? .white : SettingsCardStyle.subtitleColor)
                 .frame(maxWidth: .infinity)
-                .frame(height: 16)
+                .frame(height: 20)
                 .background(
                     Capsule().fill(isSelected ? V5P.blue : SettingsCardStyle.cardFill)
                 )

@@ -69,11 +69,11 @@ struct SubscriptionManagementView: View {
         HStack(spacing: 12) {
             Image(systemName: viewModel.subscription.isPro ? "crown.fill" : "person.crop.circle")
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(viewModel.subscription.isPro ? SubscriptionPalette.gold : V5P.cyan)
+                // 有料プランは金色の丸の中に、カードと同じ紺色で王冠を抜く(HQ指示 2026-10-06)。
+                .foregroundStyle(viewModel.subscription.isPro ? SettingsCardStyle.cardFill : V5P.cyan)
                 .frame(width: 36, height: 36)
-                // 王冠は丸の中に置き、丸の線はプラン名と同じ色にする(HQ指示 2026-10-06)。
-                .background(Circle().fill(Color.black.opacity(0.18)))
-                .overlay(Circle().stroke(viewModel.subscription.isPro ? SubscriptionPalette.gold : SettingsCardStyle.cardBorder, lineWidth: 1))
+                .background(Circle().fill(viewModel.subscription.isPro ? SubscriptionPalette.gold : Color.black.opacity(0.18)))
+                .overlay(Circle().stroke(viewModel.subscription.isPro ? Color.clear : SettingsCardStyle.cardBorder, lineWidth: 1))
             VStack(alignment: .leading, spacing: 4) {
                 V5JPFont.text(viewModel.planTitle, size: 12, weight: .bold)
                     .foregroundStyle(viewModel.subscription.isPro ? SubscriptionPalette.gold : .white)

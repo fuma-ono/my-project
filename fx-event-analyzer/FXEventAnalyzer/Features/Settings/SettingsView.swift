@@ -104,7 +104,9 @@ struct SettingsView: View {
 
     /// 1行あたりの高さ(V5座標系、234×491)。参考画像v2の実測は約36.8だが、
     /// 画像に無いログアウト行をタブバーの上に収めるため34に詰めている。
-    private static let rowHeight: CGFloat = 34
+    /// HQ指示(2026-10-06)「各項目の縦幅の間隔を少し狭めて」で34→31。
+    /// ScreenshotTestsの行の座標も同じ値を使う。
+    private static let rowHeight: CGFloat = 31
     /// タイトル枠の先頭ptToV5(16+8)に、CI実機キャプチャで実測した「設定」の
     /// 字形の左余白(5px@3x≈1.7pt)を足した位置にカード左端を合わせる。
     private static let cardWidth: CGFloat = V5P.W - 2 * V5P.ptToV5(16 + 8 + 1.7)
