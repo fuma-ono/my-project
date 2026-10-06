@@ -299,15 +299,16 @@ struct SettingsView: View {
         } label: {
             HStack(spacing: Self.badgeTitleGap) {
                 // 扉(左)側に字形の重さが寄って左にずれて見えるため、右へ寄せる。
-                rowBadge("rectangle.portrait.and.arrow.right", tint: V5P.red, nudge: CGSize(width: 0.7, height: 0))
+                rowBadge("rectangle.portrait.and.arrow.right", tint: AccountPalette.destructive, nudge: CGSize(width: 0.7, height: 0))
                 if viewModel.state == .signingOut {
-                    ProgressView().tint(V5P.red)
+                    ProgressView().tint(AccountPalette.destructive)
                 } else {
                     V5JPFont.text("ログアウト", size: Self.titleSize)
                 }
                 Spacer()
             }
-            .foregroundStyle(V5P.red)
+            // プラン・購読管理の「購読を解約」と同じ赤(HQ指示 2026-10-06)。
+            .foregroundStyle(AccountPalette.destructive)
             .padding(.leading, Self.badgeLeading)
             .frame(width: Self.cardWidth, height: Self.rowHeight)
             .contentShape(Rectangle())
