@@ -398,7 +398,13 @@ struct HomeView: View {
 
     // MARK: お気に入りカード (y=735,height=375 → 375/3.641≒103)
 
-    private static let favoritesCardHeight: CGFloat = 97
+    // HQ再指摘(2026-10-06)「お気に入りのHIGHの下に少し余白を設けて、
+    // そしてお気に入りの下枠との余白を狭めて」: ミニカード内のHIGHバッジ
+    // 下の余白を確保するため`favoriteSubCardHeight`を60→65に広げ(中身は
+    // `.topLeading`なので増えた分はそのまま下側の余白になる)、それに伴い
+    // カード全体とミニカード下端の間の余白が広がりすぎないよう
+    // `favoritesCardHeight`も97→95に詰めた。
+    private static let favoritesCardHeight: CGFloat = 95
     /// ヘッダー約114px→31.3≒31。
     /// HQ再指摘(2026-10-05、4回目)「お気に入りタイトルの下に空白があるから
     /// 下の米国CPIの枠を上にあげて」: ヘッダー下の`Divider()`を非表示にした
@@ -411,7 +417,7 @@ struct HomeView: View {
     /// 各カードwidth≈247px→67.8≒68、height≈242px→66.5≒66、
     /// corner radius≈18px→4.9≒5。
     private static let favoriteSubCardWidth: CGFloat = 68
-    private static let favoriteSubCardHeight: CGFloat = 60
+    private static let favoriteSubCardHeight: CGFloat = 65
     private static let favoriteSubCardCornerRadius: CGFloat = 5
 
     // MARK: 直近の要人発言 (y=1139,height=481 → 481/3.641≒132)
@@ -663,19 +669,22 @@ struct HomeView: View {
             // ..., alignment: .top)`を付け、予想/前回が無い行でも2行分の
             // 高さを確保することで、行全体の自然な高さを常に一定にし、
             // 時刻を含む他の要素の縦位置が行によってズレないようにした。
-            // HQ指示(2026-10-06)「すべて参考画像と同じに、文字間隔も」:
-            // 参考画像のCPI行("21:30")とこちらの実機("07:10")の実測比較
-            // (詳細経緯は上のコミット参照)から、参考画像の方が文字間隔が
-            // 広いと判断し`.tracking`を-0.6→+1.9まで広げてみたが、実機
-            // キャプチャで国旗と衝突することが判明した(計算上の予測幅と
-            // 実際の描画幅が一致しなかった)。tracking値を+0.5まで戻し、
-            // 衝突の再発を防ぐため列の幅も26→30に広げた。
+            // HQ再指摘(2026-10-06)「時刻の文字間隔が広すぎるから狭めて、
+            // 縦が揃っていない」: 文字間隔は+0.5でもまだ広いとの指摘を受け
+            // -0.2まで詰めた。縦のズレは、この`Text`が`.fixedSize`+
+            // `.frame(width:)`(横幅のみ指定)だったため、行全体の実高さが
+            // タイトル列の`minHeight: 38`の影響で間接的にしか決まらず、
+            // 行ごとに時刻の中心位置が微妙にブレていたことが原因だった。
+            // `.frame(height: Self.eventRowHeight, alignment: .center)`を
+            // 明示することで、タイトル列の高さ計算とは独立に、常に行全体
+            // (44)の中央に揃うようにした。
             Text(Self.timeFormatter.string(from: event.releaseDatetime))
                 .font(.system(size: 9, weight: .bold))
-                .tracking(0.5)
+                .tracking(-0.2)
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: true, vertical: false)
                 .frame(width: 30, alignment: .leading)
+                .frame(height: Self.eventRowHeight, alignment: .center)
 
             // HQ指示(2026-10-05、23回目)「今日の重要指標の国旗の下にUSDや
             // JPYなどを記載して」。HQ再指摘(2026-10-05)「USDやJPYの文字が
@@ -770,15 +779,11 @@ struct HomeView: View {
                     // `.lineLimit(1)`を保持したまま`.minimumScaleFactor`
                     // を追加し、幅が足りない時は省略せず文字を縮小して
                     // 必ず全文1行で収まるようにした。
-                    // HQ指示(2026-10-06)「すべて参考画像と同じに、文字間隔
-                    // も」: 参考画像の「予想 3.2　|　前回 3.1」とこちらの
-                    // 「予想180　|　前回175」は文字数が同じ(15文字)なので
-                    // 直接比較できた。高さはほぼ一致(5.58 vs 5.63ユニット、
-                    // サイズはほぼ変更不要)していたが、幅は参考画像の方が
-                    // 明らかに広かった(56.08 vs 44.47ユニット)ため、
-                    // `.tracking(0.8)`を追加して広げた。
+                    // HQ再指摘(2026-10-06)「予想と前回の文字の間隔も広い
+                    // から狭めて」: 実測に基づき`.tracking(0.8)`まで広げて
+                    // いたが、実機では広すぎるとの指摘を受け0.2まで詰めた。
                     V5JPFont.text(subtitle, size: 5.9, weight: .regular)
-                        .tracking(0.8)
+                        .tracking(0.2)
                         .foregroundStyle(V5P.muted)
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
