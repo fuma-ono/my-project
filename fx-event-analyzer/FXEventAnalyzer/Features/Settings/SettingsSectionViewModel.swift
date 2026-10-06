@@ -15,9 +15,11 @@ enum SettingsSectionSaveState: Equatable {
     case error(String)
 }
 
-/// SCR-018 / SCR-019 共通(SCR-016は自動保存のため`NotificationSettingsViewModel`): `GET /settings`で読み込み、画面が担当する
-/// 1セクションを`draft`として編集し、「保存する」で`PATCH /settings`へその
-/// セクションだけを送る(ui-screens.md: 保存後は同じ画面に留まる)。
+/// SCR-018 / SCR-019 共通(SCR-016は`NotificationSettingsViewModel`): `GET /settings`で読み込み、画面が担当する
+/// 1セクションを`draft`として編集し、`PATCH /settings`へそのセクションだけを送る。
+/// HQ指示(2026-10-06)の参考画像に保存ボタンが無いため、`update(_:)`で変えると
+/// 少し待ってから自動で保存する(連続した変更は1回にまとめる)。保存・読み込み
+/// のたびに`AppPreferences`へ反映する。
 ///
 /// 3画面とも読み込み〜保存の流れは同じで、違うのは編集するセクションだけな
 /// ので、セクションの型で特殊化した1つのViewModelにしている。
@@ -35,10 +37,18 @@ final class SettingsSectionViewModel<Section: SettingsSection>: ObservableObject
     private let service: SettingsService
     private let section: KeyPath<SettingsResponse, Section>
     private let makeUpdate: (Section) -> SettingsUpdate
+    private let debounce: Duration
+    private var autoSaveTask: Task<Void, Never>?
 
-    init(apiClient: APIClient, section: KeyPath<SettingsResponse, Section>, makeUpdate: @escaping (Section) -> SettingsUpdate) {
+    init(
+        apiClient: APIClient,
+        section: KeyPath<SettingsResponse, Section>,
+        debounce: Duration = .milliseconds(400),
+        makeUpdate: @escaping (Section) -> SettingsUpdate
+    ) {
         self.service = SettingsService(apiClient: apiClient)
         self.section = section
+        self.debounce = debounce
         self.makeUpdate = makeUpdate
     }
 
@@ -53,13 +63,34 @@ final class SettingsSectionViewModel<Section: SettingsSection>: ObservableObject
     func save() {
         guard canSave else { return }
         saveState = .saving
-        let update = makeUpdate(draft)
-        Task { await send(update) }
+        let sent = draft
+        Task { await send(sent) }
+    }
+
+    /// 画面からの変更。少し待ってから自動で保存する。
+    func update(_ change: (inout Section) -> Void) {
+        guard loadState == .loaded else { return }
+        var next = draft
+        change(&next)
+        guard next != draft else { return }
+        draft = next
+        scheduleAutoSave()
+    }
+
+    private func scheduleAutoSave() {
+        autoSaveTask?.cancel()
+        autoSaveTask = Task { [debounce] in
+            try? await Task.sleep(for: debounce)
+            guard !Task.isCancelled else { return }
+            save()
+        }
     }
 
     private func fetch() async {
         do {
-            apply(try await service.fetchSettings())
+            let settings = try await service.fetchSettings()
+            AppPreferences.shared.apply(settings)
+            apply(settings)
             loadState = .loaded
         } catch let error as APIError where error.isNotConfigured {
             loadState = .backendNotConfigured
@@ -68,9 +99,17 @@ final class SettingsSectionViewModel<Section: SettingsSection>: ObservableObject
         }
     }
 
-    private func send(_ update: SettingsUpdate) async {
+    private func send(_ sent: Section) async {
         do {
-            apply(try await service.updateSettings(update))
+            let response = try await service.updateSettings(makeUpdate(sent))
+            AppPreferences.shared.apply(response)
+            saved = response[keyPath: section]
+            if draft == sent {
+                draft = saved
+            } else {
+                // 送信中に次の変更が入ったら、それも続けて保存する。
+                scheduleAutoSave()
+            }
             saveState = .saved
         } catch APIError.server(code: .validationError, message: _, httpStatus: _) {
             saveState = .error("入力内容を保存できませんでした。値を確認してください。")

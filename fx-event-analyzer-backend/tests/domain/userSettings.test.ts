@@ -15,8 +15,23 @@ const row: UserSettingsRow = {
   display_language: 'ja',
   display_region: 'JP',
   display_timezone: 'Asia/Tokyo',
+  display_theme: 'DARK',
+  display_text_size: 'LARGE',
+  display_date_format: 'YYYY年M月D日',
+  display_time_format: '12H',
+  display_currency: 'USD',
+  display_week_start: 'SUNDAY',
   chart_default_fx_pair_symbol: 'USDJPY',
   chart_default_timeframe: '5m',
+  chart_type: 'LINE',
+  chart_show_indicators: true,
+  chart_indicator_ma: false,
+  chart_indicator_bollinger: true,
+  chart_indicator_macd: false,
+  chart_indicator_rsi: true,
+  chart_indicator_stochastic: true,
+  chart_crosshair: false,
+  chart_price_line: true,
   updated_at: '2026-10-02T00:00:00.000Z',
 };
 
@@ -34,8 +49,30 @@ describe('toSettingsResponse', () => {
         quiet_start: '22:30',
         quiet_end: '06:00',
       },
-      display: { language: 'ja', region: 'JP', timezone: 'Asia/Tokyo' },
-      chart: { default_fx_pair_symbol: 'USDJPY', default_timeframe: '5m' },
+      display: {
+        language: 'ja',
+        region: 'JP',
+        timezone: 'Asia/Tokyo',
+        theme: 'DARK',
+        text_size: 'LARGE',
+        date_format: 'YYYY年M月D日',
+        time_format: '12H',
+        currency: 'USD',
+        week_start: 'SUNDAY',
+      },
+      chart: {
+        default_fx_pair_symbol: 'USDJPY',
+        default_timeframe: '5m',
+        chart_type: 'LINE',
+        show_indicators: true,
+        indicator_ma: false,
+        indicator_bollinger: true,
+        indicator_macd: false,
+        indicator_rsi: true,
+        indicator_stochastic: true,
+        crosshair: false,
+        price_line: true,
+      },
       updated_at: '2026-10-02T00:00:00.000Z',
     });
   });
@@ -88,6 +125,86 @@ describe('toSettingsUpdate', () => {
       notify_quiet_end: '06:30',
     });
     expect(toSettingsUpdate({ notifications: { quiet_end: '08:00' } })).toEqual({ notify_quiet_end: '08:00' });
+  });
+
+  it('maps the SCR-018 display fields', () => {
+    expect(
+      toSettingsUpdate({
+        display: {
+          theme: 'LIGHT',
+          text_size: 'SMALL',
+          date_format: 'MM/DD/YYYY',
+          time_format: '12H',
+          currency: 'EUR',
+          week_start: 'SUNDAY',
+        },
+      }),
+    ).toEqual({
+      display_theme: 'LIGHT',
+      display_text_size: 'SMALL',
+      display_date_format: 'MM/DD/YYYY',
+      display_time_format: '12H',
+      display_currency: 'EUR',
+      display_week_start: 'SUNDAY',
+    });
+    expect(toSettingsUpdate({ display: { date_format: 'YYYY年M月D日' } })).toEqual({
+      display_date_format: 'YYYY年M月D日',
+    });
+  });
+
+  it('maps the SCR-019 chart fields (chart_type stays chart_type)', () => {
+    expect(
+      toSettingsUpdate({
+        chart: {
+          chart_type: 'BAR',
+          show_indicators: true,
+          indicator_ma: true,
+          indicator_bollinger: true,
+          indicator_macd: true,
+          indicator_rsi: true,
+          indicator_stochastic: true,
+          crosshair: true,
+          price_line: true,
+        },
+      }),
+    ).toEqual({
+      chart_type: 'BAR',
+      chart_show_indicators: true,
+      chart_indicator_ma: true,
+      chart_indicator_bollinger: true,
+      chart_indicator_macd: true,
+      chart_indicator_rsi: true,
+      chart_indicator_stochastic: true,
+      chart_crosshair: true,
+      chart_price_line: true,
+    });
+    expect(toSettingsUpdate({ chart: { indicator_rsi: true } })).toEqual({ chart_indicator_rsi: true });
+  });
+
+  it('maps false chart booleans instead of dropping them as falsy', () => {
+    expect(
+      toSettingsUpdate({
+        chart: {
+          show_indicators: false,
+          indicator_ma: false,
+          indicator_bollinger: false,
+          indicator_macd: false,
+          indicator_rsi: false,
+          indicator_stochastic: false,
+          crosshair: false,
+          price_line: false,
+        },
+      }),
+    ).toEqual({
+      chart_show_indicators: false,
+      chart_indicator_ma: false,
+      chart_indicator_bollinger: false,
+      chart_indicator_macd: false,
+      chart_indicator_rsi: false,
+      chart_indicator_stochastic: false,
+      chart_crosshair: false,
+      chart_price_line: false,
+    });
   });
 
   it('maps false booleans and lead_minutes 0 instead of dropping them as falsy', () => {

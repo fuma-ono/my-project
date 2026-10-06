@@ -1,6 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ApiError } from '../errors/ApiError.js';
 import type { Importance } from '../domain/importance.js';
+import type {
+  ChartType,
+  DisplayCurrency,
+  DisplayDateFormat,
+  DisplayTextSize,
+  DisplayTheme,
+  DisplayTimeFormat,
+  DisplayWeekStart,
+} from '../schemas/settings.js';
 import { ensureProfile } from './profilesRepository.js';
 
 export interface UserSettingsRow {
@@ -20,15 +29,32 @@ export interface UserSettingsRow {
   display_language: string;
   display_region: string;
   display_timezone: string;
+  // SCR-018 / SCR-019 (2026-10-06). Values are guaranteed by the DB CHECKs.
+  display_theme: DisplayTheme;
+  display_text_size: DisplayTextSize;
+  display_date_format: DisplayDateFormat;
+  display_time_format: DisplayTimeFormat;
+  display_currency: DisplayCurrency;
+  display_week_start: DisplayWeekStart;
   chart_default_fx_pair_symbol: string | null;
   chart_default_timeframe: string;
+  /** API `chart.chart_type` (not chart_chart_type). */
+  chart_type: ChartType;
+  chart_show_indicators: boolean;
+  chart_indicator_ma: boolean;
+  chart_indicator_bollinger: boolean;
+  chart_indicator_macd: boolean;
+  chart_indicator_rsi: boolean;
+  chart_indicator_stochastic: boolean;
+  chart_crosshair: boolean;
+  chart_price_line: boolean;
   updated_at: string;
 }
 
 export type UserSettingsUpdate = Partial<Omit<UserSettingsRow, 'updated_at'>>;
 
 const COLUMNS =
-  'notify_push, notify_indicators, notify_speeches, notify_fx_pair_symbols, notify_importances, notify_lead_minutes, notify_quiet_hours_enabled, notify_quiet_start, notify_quiet_end, display_language, display_region, display_timezone, chart_default_fx_pair_symbol, chart_default_timeframe, updated_at';
+  'notify_push, notify_indicators, notify_speeches, notify_fx_pair_symbols, notify_importances, notify_lead_minutes, notify_quiet_hours_enabled, notify_quiet_start, notify_quiet_end, display_language, display_region, display_timezone, display_theme, display_text_size, display_date_format, display_time_format, display_currency, display_week_start, chart_default_fx_pair_symbol, chart_default_timeframe, chart_type, chart_show_indicators, chart_indicator_ma, chart_indicator_bollinger, chart_indicator_macd, chart_indicator_rsi, chart_indicator_stochastic, chart_crosshair, chart_price_line, updated_at';
 
 /** Postgres foreign_key_violation — only chart_default_fx_pair_symbol has an
  * FK a client value can break (an fx_pairs.symbol that doesn't exist). */

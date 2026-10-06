@@ -95,6 +95,8 @@ extension NotificationSettings {
     }
 }
 
+/// SCR-018 表示・地域設定(HQ指示 2026-10-06の参考画像で項目を追加)。
+/// 反映先は`AppPreferences`。
 struct DisplaySettings: SettingsSection {
     /// `ja` / `en`
     var language: String
@@ -102,21 +104,82 @@ struct DisplaySettings: SettingsSection {
     var region: String
     /// IANA timezone名
     var timezone: String
+    /// `SYSTEM` / `DARK` / `LIGHT`
+    var theme: String = "SYSTEM"
+    /// `SMALL` / `STANDARD` / `LARGE`
+    var textSize: String = "STANDARD"
+    /// `YYYY/MM/DD` / `YYYY-MM-DD` / `MM/DD/YYYY` / `YYYY年M月D日`
+    var dateFormat: String = "YYYY/MM/DD"
+    /// `24H` / `12H`
+    var timeFormat: String = "24H"
+    /// ISO 4217
+    var currency: String = "JPY"
+    /// `SUNDAY` / `MONDAY`
+    var weekStart: String = "MONDAY"
 
     static let defaults = DisplaySettings(language: "ja", region: "JP", timezone: "Asia/Tokyo")
+
+    enum CodingKeys: String, CodingKey {
+        case language, region, timezone, theme, currency
+        case textSize = "text_size"
+        case dateFormat = "date_format"
+        case timeFormat = "time_format"
+        case weekStart = "week_start"
+    }
 }
 
+extension DisplaySettings {
+    /// 項目追加前のBackendの応答は、追加分を既定値で読む(拡張に置くのは、
+    /// メンバーごとの初期化子を残すため)。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = DisplaySettings.defaults
+        self.init(
+            language: try c.decode(String.self, forKey: .language),
+            region: try c.decode(String.self, forKey: .region),
+            timezone: try c.decode(String.self, forKey: .timezone),
+            theme: try c.decodeIfPresent(String.self, forKey: .theme) ?? fallback.theme,
+            textSize: try c.decodeIfPresent(String.self, forKey: .textSize) ?? fallback.textSize,
+            dateFormat: try c.decodeIfPresent(String.self, forKey: .dateFormat) ?? fallback.dateFormat,
+            timeFormat: try c.decodeIfPresent(String.self, forKey: .timeFormat) ?? fallback.timeFormat,
+            currency: try c.decodeIfPresent(String.self, forKey: .currency) ?? fallback.currency,
+            weekStart: try c.decodeIfPresent(String.self, forKey: .weekStart) ?? fallback.weekStart
+        )
+    }
+}
+
+/// SCR-019 チャート設定(HQ指示 2026-10-06の参考画像で項目を追加)。
 struct ChartSettings: SettingsSection {
     /// `fx_pairs.symbol`、`nil`は「指定なし」
     var defaultFxPairSymbol: String?
     /// `1m` / `5m` / `15m` / `30m` / `60m`
     var defaultTimeframe: String
+    /// `CANDLE` / `LINE` / `BAR`
+    var chartType: String = "CANDLE"
+    /// テクニカル指標を表示(個々の指標の前提)
+    var showIndicators: Bool = true
+    var indicatorMA: Bool = true
+    var indicatorBollinger: Bool = false
+    var indicatorMACD: Bool = true
+    var indicatorRSI: Bool = false
+    var indicatorStochastic: Bool = false
+    var crosshair: Bool = true
+    var priceLine: Bool = true
 
     static let defaults = ChartSettings(defaultFxPairSymbol: nil, defaultTimeframe: "5m")
 
     enum CodingKeys: String, CodingKey {
         case defaultFxPairSymbol = "default_fx_pair_symbol"
         case defaultTimeframe = "default_timeframe"
+        case chartType = "chart_type"
+        case showIndicators = "show_indicators"
+        case indicatorMA = "indicator_ma"
+        case indicatorBollinger = "indicator_bollinger"
+        case indicatorMACD = "indicator_macd"
+        case indicatorRSI = "indicator_rsi"
+        case indicatorStochastic = "indicator_stochastic"
+        case crosshair
+        case priceLine = "price_line"
     }
 
     /// Hand-written so `nil` is sent as an explicit JSON `null` (clears the
@@ -126,6 +189,35 @@ struct ChartSettings: SettingsSection {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(defaultFxPairSymbol, forKey: .defaultFxPairSymbol)
         try container.encode(defaultTimeframe, forKey: .defaultTimeframe)
+        try container.encode(chartType, forKey: .chartType)
+        try container.encode(showIndicators, forKey: .showIndicators)
+        try container.encode(indicatorMA, forKey: .indicatorMA)
+        try container.encode(indicatorBollinger, forKey: .indicatorBollinger)
+        try container.encode(indicatorMACD, forKey: .indicatorMACD)
+        try container.encode(indicatorRSI, forKey: .indicatorRSI)
+        try container.encode(indicatorStochastic, forKey: .indicatorStochastic)
+        try container.encode(crosshair, forKey: .crosshair)
+        try container.encode(priceLine, forKey: .priceLine)
+    }
+}
+
+extension ChartSettings {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = ChartSettings.defaults
+        self.init(
+            defaultFxPairSymbol: try c.decodeIfPresent(String.self, forKey: .defaultFxPairSymbol),
+            defaultTimeframe: try c.decode(String.self, forKey: .defaultTimeframe),
+            chartType: try c.decodeIfPresent(String.self, forKey: .chartType) ?? fallback.chartType,
+            showIndicators: try c.decodeIfPresent(Bool.self, forKey: .showIndicators) ?? fallback.showIndicators,
+            indicatorMA: try c.decodeIfPresent(Bool.self, forKey: .indicatorMA) ?? fallback.indicatorMA,
+            indicatorBollinger: try c.decodeIfPresent(Bool.self, forKey: .indicatorBollinger) ?? fallback.indicatorBollinger,
+            indicatorMACD: try c.decodeIfPresent(Bool.self, forKey: .indicatorMACD) ?? fallback.indicatorMACD,
+            indicatorRSI: try c.decodeIfPresent(Bool.self, forKey: .indicatorRSI) ?? fallback.indicatorRSI,
+            indicatorStochastic: try c.decodeIfPresent(Bool.self, forKey: .indicatorStochastic) ?? fallback.indicatorStochastic,
+            crosshair: try c.decodeIfPresent(Bool.self, forKey: .crosshair) ?? fallback.crosshair,
+            priceLine: try c.decodeIfPresent(Bool.self, forKey: .priceLine) ?? fallback.priceLine
+        )
     }
 }
 

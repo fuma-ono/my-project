@@ -59,25 +59,24 @@ final class SubscriptionManagementViewModel: ObservableObject {
     /// 「次回更新日 2026/11/06 (金)」。自動更新オフなら有効期限。
     var renewalLabel: String? {
         guard subscription.isPro, let expiresAt = subscription.expiresAt else { return nil }
-        let date = Self.dateFormatter.string(from: expiresAt)
+        // 曜日は表示形式に関わらず添える(参考画像の「2025/04/10 (木)」)。
+        let date = AppPreferences.shared.dateString(expiresAt) + " (" + Self.weekdayFormatter.string(from: expiresAt) + ")"
         return subscription.isCanceled ? "有効期限 \(date)（自動更新オフ）" : "次回更新日 \(date)"
     }
 
     /// 解約できるのは自動更新中のProだけ。
     var canCancel: Bool { subscription.isPro && !subscription.isCanceled }
 
-    private static let dateFormatter: DateFormatter = {
+    private static let weekdayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "yyyy/MM/dd (E)"
+        formatter.dateFormat = "E"
         return formatter
     }()
 
     static func historyDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "yyyy/MM/dd HH:mm"
-        return formatter.string(from: date)
+        let preferences = AppPreferences.shared
+        return "\(preferences.dateString(date)) \(preferences.timeString(date))"
     }
 
     // MARK: - 操作

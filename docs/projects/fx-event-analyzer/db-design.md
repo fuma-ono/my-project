@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.5
+# FX Event Analyzer: DB詳細設計 v4.6
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -30,6 +30,7 @@
   - `UserSettings`の通知カラムを新形状に変更(3.14節)
   - `Speaker` / `SpeechEvent`を新設(3.15節・3.16節)。旧版でP2・対象外としていた`Person` / `SpeechEvent`を前倒し
 - **v4.5**(2026-10-06): SCR-016 通知設定に「通知しない時間帯」を追加。`UserSettings`に`notify_quiet_hours_enabled` / `notify_quiet_start` / `notify_quiet_end`を追加(3.14節)。Migration `20261006000001_notification_quiet_hours.sql`
+- **v4.6**(2026-10-06): SCR-018 表示・地域設定 / SCR-019 チャート設定の項目を追加。`UserSettings`に`display_theme` / `display_text_size` / `display_date_format` / `display_time_format` / `display_currency` / `display_week_start`、`chart_type` / `chart_show_indicators` / `chart_indicator_ma` / `chart_indicator_bollinger` / `chart_indicator_macd` / `chart_indicator_rsi` / `chart_indicator_stochastic` / `chart_crosshair` / `chart_price_line`を追加(3.14節)。Migration `20261006000002_display_chart_settings_v2.sql`
 
 ---
 
@@ -373,7 +374,7 @@ IDX(status)
 
 ### 3.14 UserSettings(v4.3で追加、HQ確定 2026-10-02)
 
-SCR-016 通知設定 / SCR-020 表示・地域設定 / SCR-021 チャート設定の保存先(api-design.md §24.4/§24.5)。行は初回の`GET /settings`でDB既定値により作成する。
+SCR-016 通知設定 / SCR-018 表示・地域設定 / SCR-019 チャート設定(api-design.md 30章では旧番号SCR-020 / SCR-021)の保存先(api-design.md §24.4/§24.5)。行は初回の`GET /settings`でDB既定値により作成する。
 
 | カラム | 型 | 制約 | 備考 |
 |---|---|---|---|
@@ -390,14 +391,31 @@ SCR-016 通知設定 / SCR-020 表示・地域設定 / SCR-021 チャート設�
 | display_language | text | NN, DEF `ja`, CHK: `IN ('ja','en')` | |
 | display_region | text | NN, DEF `JP`, CHK: `~ '^[A-Z]{2}$'` | ISO 3166-1 alpha-2 |
 | display_timezone | text | NN, DEF `Asia/Tokyo` | IANA timezone名(妥当性はBackendで検証) |
+| display_theme | text | NN, DEF `SYSTEM`, CHK: `IN ('SYSTEM','DARK','LIGHT')` | テーマ。SYSTEM = 端末の設定に従う(v4.6) |
+| display_text_size | text | NN, DEF `STANDARD`, CHK: `IN ('SMALL','STANDARD','LARGE')` | 文字サイズ(v4.6) |
+| display_date_format | text | NN, DEF `YYYY/MM/DD`, CHK: `IN ('YYYY/MM/DD','YYYY-MM-DD','MM/DD/YYYY','YYYY年M月D日')` | 日付の表示形式(v4.6) |
+| display_time_format | text | NN, DEF `24H`, CHK: `IN ('24H','12H')` | 時刻の表示形式(v4.6) |
+| display_currency | text | NN, DEF `JPY`, CHK: `IN ('JPY','USD','EUR','GBP','AUD','CAD','CHF','NZD')` | 表示通貨(v4.6) |
+| display_week_start | text | NN, DEF `MONDAY`, CHK: `IN ('SUNDAY','MONDAY')` | 週の始まり(v4.6) |
 | chart_default_fx_pair_symbol | text | nullable, FK→FxPair.symbol ON UPDATE CASCADE ON DELETE SET NULL | |
 | chart_default_timeframe | text | NN, DEF `5m`, CHK: `IN ('1m','5m','15m','30m','60m')` | |
+| chart_type | text | NN, DEF `CANDLE`, CHK: `IN ('CANDLE','LINE','BAR')` | チャートの種類(v4.6)。APIは`chart.chart_type` |
+| chart_show_indicators | boolean | NN, DEF true | テクニカル指標の表示(全体のON/OFF)。falseなら`chart_indicator_*`に関わらず表示しない(v4.6) |
+| chart_indicator_ma | boolean | NN, DEF true | 移動平均線(v4.6) |
+| chart_indicator_bollinger | boolean | NN, DEF false | ボリンジャーバンド(v4.6) |
+| chart_indicator_macd | boolean | NN, DEF true | MACD(v4.6) |
+| chart_indicator_rsi | boolean | NN, DEF false | RSI(v4.6) |
+| chart_indicator_stochastic | boolean | NN, DEF false | ストキャスティクス(v4.6) |
+| chart_crosshair | boolean | NN, DEF true | クロスヘア(十字カーソル)の表示(v4.6) |
+| chart_price_line | boolean | NN, DEF true | 現在値ラインの表示(v4.6) |
 | created_at | timestamptz | NN, DEF now() | |
 | updated_at | timestamptz | NN, DEF now() | |
 
 **通知について(v4.4で変更、HQ指示 2026-10-05)**: 旧方針「MVPはPush通知を送信しない・保存のみ」(HQ確定 2026-10-02)を置き換え、iOSが`GET /notifications/upcoming`(api-design.md §24.6)の結果から端末内のローカル通知を予約する。Backendからのリモートpush・デバイストークン用テーブルは引き続き不要。
 
 **通知しない時間帯(v4.5、Migration `20261006000001_notification_quiet_hours.sql`)**: `notify_quiet_*`はAPIでは`"HH:MM"`として受け渡しし、Postgresの`time`値(`"23:00:00"`)との変換はBackend(`src/repositories/userSettingsRepository.ts`)で行う。`notify_quiet_hours_enabled = true`のとき、`GET /notifications/upcoming`は`notify_at`を`display_timezone`(解決できない場合は`Asia/Tokyo`)の現地時刻に直して判定し、該当する項目を除外する(api-design.md §24.6)。既存行は列既定値(OFF)で埋まるためデータ移行は不要。
+
+**表示・チャート設定の追加(v4.6、Migration `20261006000002_display_chart_settings_v2.sql`)**: APIのフィールド名は列名から`display_` / `chart_`を除いたもの(例: `display_text_size` ⇔ `display.text_size`、`chart_indicator_ma` ⇔ `chart.indicator_ma`)。`chart_type`のみ`chart_chart_type`とせず、列名のまま`chart.chart_type`に対応させる。列挙の妥当性はBackend(`src/schemas/settings.ts`、違反は`422`)とCHECKの両方で担保する。既存行は列既定値で埋まるためデータ移行は不要。
 
 **旧カラムの移行(Migration `20261005000002_notification_settings_v2.sql`)**: `notify_pre_release` / `notify_result` / `notify_favorites` / `notify_min_importance`は削除。既存行は`notify_indicators = notify_pre_release OR notify_result`、`notify_importances` = 旧`notify_min_importance`以上の★を持つ重要度(暫定マッピング LOW→★1 / MEDIUM→★3 / HIGH→★5、`src/domain/importance.ts`。例: ★3→`{HIGH,MEDIUM}`、★4→`{HIGH}`)で移行した。移行時は`updated_at`を更新しない。
 

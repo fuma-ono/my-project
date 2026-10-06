@@ -592,8 +592,33 @@ const settingsFixture = {
     quiet_start: '23:00',
     quiet_end: '07:00',
   },
-  display: { language: 'ja', region: 'JP', timezone: 'Asia/Tokyo' },
-  chart: { default_fx_pair_symbol: 'USDJPY', default_timeframe: '5m' },
+  // SCR-018 表示・地域設定 / SCR-019 チャート設定 (2026-10-06): the new
+  // fields carry the DB column defaults
+  // (supabase/migrations/20261006000002_display_chart_settings_v2.sql).
+  display: {
+    language: 'ja',
+    region: 'JP',
+    timezone: 'Asia/Tokyo',
+    theme: 'SYSTEM',
+    text_size: 'STANDARD',
+    date_format: 'YYYY/MM/DD',
+    time_format: '24H',
+    currency: 'JPY',
+    week_start: 'MONDAY',
+  },
+  chart: {
+    default_fx_pair_symbol: 'USDJPY',
+    default_timeframe: '5m',
+    chart_type: 'CANDLE',
+    show_indicators: true,
+    indicator_ma: true,
+    indicator_bollinger: false,
+    indicator_macd: true,
+    indicator_rsi: false,
+    indicator_stochastic: false,
+    crosshair: true,
+    price_line: true,
+  },
   updated_at: '2026-10-02T00:00:00Z',
 };
 

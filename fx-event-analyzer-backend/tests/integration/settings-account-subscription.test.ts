@@ -17,6 +17,32 @@ import {
 
 const integration = loadIntegrationEnv();
 
+/** A new user's display / chart settings (DB column defaults). */
+const DEFAULT_DISPLAY = {
+  language: 'ja',
+  region: 'JP',
+  timezone: 'Asia/Tokyo',
+  theme: 'SYSTEM',
+  text_size: 'STANDARD',
+  date_format: 'YYYY/MM/DD',
+  time_format: '24H',
+  currency: 'JPY',
+  week_start: 'MONDAY',
+};
+const DEFAULT_CHART = {
+  default_fx_pair_symbol: null,
+  default_timeframe: '5m',
+  chart_type: 'CANDLE',
+  show_indicators: true,
+  indicator_ma: true,
+  indicator_bollinger: false,
+  indicator_macd: true,
+  indicator_rsi: false,
+  indicator_stochastic: false,
+  crosshair: true,
+  price_line: true,
+};
+
 /** SCR-018〜026 Backend (HQ確定 2026-10-02): /settings, GET/PATCH/DELETE /account,
  * POST /subscription/verify. StoreKit data is signed by
  * the throwaway chain from tests/helpers/storekitFixtures.ts, which this
@@ -89,9 +115,10 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
           quiet_start: '23:00',
           quiet_end: '07:00',
         },
-        display: { language: 'ja', region: 'JP', timezone: 'Asia/Tokyo' },
-        chart: { default_fx_pair_symbol: null, default_timeframe: '5m' },
       });
+      // SCR-018 / SCR-019 (20261006000002_display_chart_settings_v2.sql).
+      expect(JSON.parse(response.body).display).toEqual(DEFAULT_DISPLAY);
+      expect(JSON.parse(response.body).chart).toEqual(DEFAULT_CHART);
     });
 
     it('updates only the fields sent and persists them', async () => {
@@ -147,6 +174,76 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
       });
       const body = JSON.parse((await ctx.app.inject({ method: 'GET', url: '/api/v1/settings', headers })).body);
       expect(body.notifications).toMatchObject({ quiet_hours_enabled: true, quiet_start: '22:30', quiet_end: '07:15' });
+    });
+
+    it('saves the SCR-018 display / SCR-019 chart fields and keeps the rest on a partial PATCH', async () => {
+      const { headers } = await newUser();
+      const display = {
+        theme: 'DARK',
+        text_size: 'LARGE',
+        date_format: 'YYYY年M月D日',
+        time_format: '12H',
+        currency: 'USD',
+        week_start: 'SUNDAY',
+      };
+      const chart = {
+        chart_type: 'LINE',
+        show_indicators: false,
+        indicator_ma: false,
+        indicator_bollinger: true,
+        indicator_macd: false,
+        indicator_rsi: true,
+        indicator_stochastic: true,
+        crosshair: false,
+        price_line: false,
+      };
+      const patch = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/api/v1/settings',
+        headers,
+        payload: { display, chart },
+      });
+      expect(patch.statusCode).toBe(200);
+      expect(JSON.parse(patch.body).display).toEqual({ ...DEFAULT_DISPLAY, ...display });
+      expect(JSON.parse(patch.body).chart).toEqual({ ...DEFAULT_CHART, ...chart });
+
+      // Partial update: only theme and indicator_ma change, the rest is kept.
+      const partial = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/api/v1/settings',
+        headers,
+        payload: { display: { theme: 'LIGHT' }, chart: { indicator_ma: true } },
+      });
+      expect(partial.statusCode).toBe(200);
+      const body = JSON.parse((await ctx.app.inject({ method: 'GET', url: '/api/v1/settings', headers })).body);
+      expect(body.display).toEqual({ ...DEFAULT_DISPLAY, ...display, theme: 'LIGHT' });
+      expect(body.chart).toEqual({ ...DEFAULT_CHART, ...chart, indicator_ma: true });
+      expect(body.notifications.quiet_hours_enabled).toBe(false);
+    });
+
+    it('rejects invalid display / chart values with 422 and saves nothing', async () => {
+      const { headers } = await newUser();
+      for (const payload of [
+        { display: { theme: 'dark' } },
+        { display: { text_size: 'MEDIUM' } },
+        { display: { date_format: 'DD/MM/YYYY' } },
+        { display: { time_format: '24h' } },
+        { display: { currency: 'CNY' } },
+        { display: { week_start: 'SATURDAY' } },
+        { chart: { chart_type: 'AREA' } },
+        { chart: { show_indicators: 'true' } },
+        { chart: { indicator_rsi: 1 } },
+        { chart: { price_line: null } },
+        { display: { theme: 'DARK', currency: 'CNY' } },
+      ]) {
+        const response = await ctx.app.inject({ method: 'PATCH', url: '/api/v1/settings', headers, payload });
+        expect(response.statusCode).toBe(422);
+        expect(JSON.parse(response.body).error.code).toBe('VALIDATION_ERROR');
+      }
+
+      const body = JSON.parse((await ctx.app.inject({ method: 'GET', url: '/api/v1/settings', headers })).body);
+      expect(body.display).toEqual(DEFAULT_DISPLAY);
+      expect(body.chart).toEqual(DEFAULT_CHART);
     });
 
     it('rejects a quiet_start / quiet_end that is not HH:MM with 422', async () => {

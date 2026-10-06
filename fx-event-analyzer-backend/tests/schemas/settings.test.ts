@@ -87,10 +87,106 @@ describe('updateSettingsBodySchema', () => {
     expect(parse({ display: { timezone: 'Mars/Olympus' } })).toBe(false);
   });
 
+  it('accepts the full SCR-018 display shape', () => {
+    expect(
+      parse({
+        display: {
+          language: 'ja',
+          region: 'JP',
+          timezone: 'Asia/Tokyo',
+          theme: 'DARK',
+          text_size: 'LARGE',
+          date_format: 'YYYY年M月D日',
+          time_format: '12H',
+          currency: 'USD',
+          week_start: 'SUNDAY',
+        },
+      }),
+    ).toBe(true);
+  });
+
+  const displayEnums: { field: string; valid: string[]; invalid: unknown[] }[] = [
+    { field: 'theme', valid: ['SYSTEM', 'DARK', 'LIGHT'], invalid: ['dark', 'AUTO'] },
+    { field: 'text_size', valid: ['SMALL', 'STANDARD', 'LARGE'], invalid: ['MEDIUM', 'standard'] },
+    {
+      field: 'date_format',
+      valid: ['YYYY/MM/DD', 'YYYY-MM-DD', 'MM/DD/YYYY', 'YYYY年M月D日'],
+      invalid: ['DD/MM/YYYY', 'yyyy/mm/dd', 'YYYY年MM月DD日'],
+    },
+    { field: 'time_format', valid: ['24H', '12H'], invalid: ['24h', '24'] },
+    { field: 'currency', valid: ['JPY', 'USD', 'EUR', 'GBP', 'AUD', 'CAD', 'CHF', 'NZD'], invalid: ['jpy', 'CNY'] },
+    { field: 'week_start', valid: ['SUNDAY', 'MONDAY'], invalid: ['SATURDAY', 'monday'] },
+  ];
+
+  it.each(displayEnums)('accepts only the listed display.$field values', ({ field, valid, invalid }) => {
+    for (const value of valid) {
+      expect(parse({ display: { [field]: value } })).toBe(true);
+    }
+    for (const value of [...invalid, '', null, 1, true]) {
+      expect(parse({ display: { [field]: value } })).toBe(false);
+    }
+  });
+
   it('validates chart values', () => {
     expect(parse({ chart: { default_fx_pair_symbol: null, default_timeframe: '60m' } })).toBe(true);
     expect(parse({ chart: { default_timeframe: '4h' } })).toBe(false);
     expect(parse({ chart: { default_fx_pair_symbol: '' } })).toBe(false);
+  });
+
+  it('accepts the full SCR-019 chart shape', () => {
+    expect(
+      parse({
+        chart: {
+          default_fx_pair_symbol: 'USDJPY',
+          default_timeframe: '5m',
+          chart_type: 'LINE',
+          show_indicators: false,
+          indicator_ma: true,
+          indicator_bollinger: true,
+          indicator_macd: false,
+          indicator_rsi: true,
+          indicator_stochastic: true,
+          crosshair: false,
+          price_line: false,
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('accepts only CANDLE / LINE / BAR for chart.chart_type', () => {
+    for (const value of ['CANDLE', 'LINE', 'BAR']) {
+      expect(parse({ chart: { chart_type: value } })).toBe(true);
+    }
+    for (const value of ['candle', 'AREA', '', null, 1]) {
+      expect(parse({ chart: { chart_type: value } })).toBe(false);
+    }
+  });
+
+  const chartBooleans = [
+    'show_indicators',
+    'indicator_ma',
+    'indicator_bollinger',
+    'indicator_macd',
+    'indicator_rsi',
+    'indicator_stochastic',
+    'crosshair',
+    'price_line',
+  ];
+
+  it.each(chartBooleans)('accepts only a boolean for chart.%s', (field) => {
+    expect(parse({ chart: { [field]: true } })).toBe(true);
+    expect(parse({ chart: { [field]: false } })).toBe(true);
+    for (const value of ['true', 1, 0, null]) {
+      expect(parse({ chart: { [field]: value } })).toBe(false);
+    }
+  });
+
+  it('rejects unknown display / chart fields', () => {
+    expect(parse({ display: { dark_mode: true } })).toBe(false);
+    expect(parse({ chart: { indicator_ichimoku: true } })).toBe(false);
+    // The new fields belong to their own group only.
+    expect(parse({ chart: { theme: 'DARK' } })).toBe(false);
+    expect(parse({ display: { chart_type: 'LINE' } })).toBe(false);
   });
 
   it('rejects unknown fields at every level', () => {

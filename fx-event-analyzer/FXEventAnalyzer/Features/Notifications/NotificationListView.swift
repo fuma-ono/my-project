@@ -110,16 +110,11 @@ private struct NotificationRow: View {
     let entry: NotificationEntry
     let isUnread: Bool
 
-    private static let receivedFormatter = formatter("MM/dd HH:mm")
-    /// 参考画像の「発表時刻：21:30（日本時間）」。端末の地域によらず日本時間。
-    private static let japanTimeFormatter = formatter("H:mm", timeZone: TimeZone(identifier: "Asia/Tokyo"))
+    /// 日付・時刻の表示形式とタイムゾーンは表示・地域設定(SCR-018)に従う。
+    @ObservedObject private var preferences = AppPreferences.shared
 
-    private static func formatter(_ format: String, timeZone: TimeZone? = nil) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        if let timeZone { formatter.timeZone = timeZone }
-        formatter.dateFormat = format
-        return formatter
+    private var receivedText: String {
+        "\(preferences.shortDateString(entry.notifyAt)) \(preferences.timeString(entry.notifyAt))"
     }
 
     private var icon: String {
@@ -163,12 +158,13 @@ private struct NotificationRow: View {
     }
 
     private var lines: [String] {
-        let time = Self.japanTimeFormatter.string(from: entry.scheduledAt)
+        // 参考画像の「発表時刻：21:30（日本時間）」。
+        let time = preferences.timeString(entry.scheduledAt) + preferences.timeZoneNote
         switch entry.kind {
         case .indicator:
-            return ["発表時刻：\(time)（日本時間）", timing]
+            return ["発表時刻：\(time)", timing]
         case .speech:
-            return ["「\(entry.subject ?? entry.title)」", "発言時刻：\(time)（日本時間）"]
+            return ["「\(entry.subject ?? entry.title)」", "発言時刻：\(time)"]
         case .system:
             return [entry.body]
         }
@@ -215,7 +211,7 @@ private struct NotificationRow: View {
         .background(AccountCardBackground())
         // 受信日時はカードの右上(シェブロンの上)に、字間を詰めて置く。
         .overlay(alignment: .topTrailing) {
-            V5JPFont.text(Self.receivedFormatter.string(from: entry.notifyAt), size: 7, weight: .regular)
+            V5JPFont.text(receivedText, size: 7, weight: .regular)
                 .tracking(-0.3)
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
                 .padding(.top, 4)

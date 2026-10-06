@@ -13,6 +13,25 @@ function isValidTimeZone(value: string): boolean {
   }
 }
 
+// SCR-018 表示・地域設定 / SCR-019 チャート設定 (2026-10-06). The same lists
+// are enforced by the DB CHECKs in
+// supabase/migrations/20261006000002_display_chart_settings_v2.sql.
+export const DISPLAY_THEMES = ['SYSTEM', 'DARK', 'LIGHT'] as const;
+export const DISPLAY_TEXT_SIZES = ['SMALL', 'STANDARD', 'LARGE'] as const;
+export const DISPLAY_DATE_FORMATS = ['YYYY/MM/DD', 'YYYY-MM-DD', 'MM/DD/YYYY', 'YYYY年M月D日'] as const;
+export const DISPLAY_TIME_FORMATS = ['24H', '12H'] as const;
+export const DISPLAY_CURRENCIES = ['JPY', 'USD', 'EUR', 'GBP', 'AUD', 'CAD', 'CHF', 'NZD'] as const;
+export const DISPLAY_WEEK_STARTS = ['SUNDAY', 'MONDAY'] as const;
+export const CHART_TYPES = ['CANDLE', 'LINE', 'BAR'] as const;
+
+export type DisplayTheme = (typeof DISPLAY_THEMES)[number];
+export type DisplayTextSize = (typeof DISPLAY_TEXT_SIZES)[number];
+export type DisplayDateFormat = (typeof DISPLAY_DATE_FORMATS)[number];
+export type DisplayTimeFormat = (typeof DISPLAY_TIME_FORMATS)[number];
+export type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number];
+export type DisplayWeekStart = (typeof DISPLAY_WEEK_STARTS)[number];
+export type ChartType = (typeof CHART_TYPES)[number];
+
 /** PATCH /settings body (api-design.md §24.4). Every field is optional —
  * only the fields present are changed — and unknown fields are rejected. */
 export const updateSettingsBodySchema = z
@@ -49,6 +68,12 @@ export const updateSettingsBodySchema = z
         language: z.enum(['ja', 'en']),
         region: z.string().regex(/^[A-Z]{2}$/, 'must be an ISO 3166-1 alpha-2 code'),
         timezone: z.string().min(1).refine(isValidTimeZone, 'must be a valid IANA time zone'),
+        theme: z.enum(DISPLAY_THEMES),
+        text_size: z.enum(DISPLAY_TEXT_SIZES),
+        date_format: z.enum(DISPLAY_DATE_FORMATS),
+        time_format: z.enum(DISPLAY_TIME_FORMATS),
+        currency: z.enum(DISPLAY_CURRENCIES),
+        week_start: z.enum(DISPLAY_WEEK_STARTS),
       })
       .partial()
       .strict()
@@ -57,6 +82,16 @@ export const updateSettingsBodySchema = z
       .object({
         default_fx_pair_symbol: z.string().min(1).nullable(),
         default_timeframe: z.enum(['1m', '5m', '15m', '30m', '60m']),
+        chart_type: z.enum(CHART_TYPES),
+        // false hides every indicator regardless of the indicator_* flags.
+        show_indicators: z.boolean(),
+        indicator_ma: z.boolean(),
+        indicator_bollinger: z.boolean(),
+        indicator_macd: z.boolean(),
+        indicator_rsi: z.boolean(),
+        indicator_stochastic: z.boolean(),
+        crosshair: z.boolean(),
+        price_line: z.boolean(),
       })
       .partial()
       .strict()

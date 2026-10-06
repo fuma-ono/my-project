@@ -5,6 +5,7 @@ import SwiftUI
 struct RootView: View {
     @StateObject private var appState: AppState
     @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var preferences = AppPreferences.shared
     private let authService: AuthServicing
     private let apiClient: APIClient
 
@@ -43,6 +44,8 @@ struct RootView: View {
                         NotificationBackgroundRefresh.schedule()
                     }
                     guard scenePhase == .active else { return }
+                    // SCR-018 / SCR-019の設定(表示形式など)を読み込む。
+                    await AppPreferences.shared.load(apiClient: apiClient)
                     // SCR-017: 自動更新・解約などの購読の変化をBackendへ送る。
                     SubscriptionSync.shared.start(apiClient: apiClient)
                     await LocalNotificationScheduler(apiClient: apiClient).refresh()
@@ -53,6 +56,8 @@ struct RootView: View {
                 }
             }
         }
+        // SCR-018の文字サイズ(iOS標準の部品に効く)。
+        .dynamicTypeSize(preferences.dynamicTypeSize)
         .preferredColorScheme(.dark) // MVP baseline theme (ui-screens.md 5.0節); see DesignTokens.swift
     }
 }

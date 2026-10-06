@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.8
+# FX Event Analyzer: API詳細設計書 v1.9
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -50,6 +50,7 @@
   - `GET /fx-pairs`を新設(13.5節)
 - **v1.7**(2026-10-06): SCR-016 通知設定に「通知しない時間帯」を追加。`GET/PATCH /settings`の`notifications`に`quiet_hours_enabled`・`quiet_start`・`quiet_end`を追加し(24.4節・24.5節)、`GET /notifications/upcoming`で該当時間帯の通知を除外する(24.6節)
 - **v1.8**(2026-10-06): SCR-017 プラン・購読管理の画面実装に合わせ、`GET /subscription`のResponseに`product_id`(月額・年額の商品)を追加(25章)
+- **v1.9**(2026-10-06): SCR-018 表示・地域設定 / SCR-019 チャート設定(画面番号はui-screens.mdに合わせる。30章の表は旧番号SCR-020 / SCR-021のまま)の項目を追加。`GET/PATCH /settings`の`display`に`theme`・`text_size`・`date_format`・`time_format`・`currency`・`week_start`、`chart`に`chart_type`・`show_indicators`・`indicator_ma`・`indicator_bollinger`・`indicator_macd`・`indicator_rsi`・`indicator_stochastic`・`crosshair`・`price_line`を追加(24.4節・24.5節)
 
 ---
 
@@ -951,7 +952,7 @@ Email / PasswordはSupabase Auth側で管理する。Backend APIから直接Auth
 
 ## 24.4 GET /api/v1/settings(v1.4で追加)
 
-ユーザー設定を取得する(SCR-016 通知設定 / SCR-020 表示・地域設定 / SCR-021 チャート設定)。初回アクセス時はDBの既定値で行を作成して返す。
+ユーザー設定を取得する(SCR-016 通知設定 / SCR-018 表示・地域設定 / SCR-019 チャート設定。30章の表では旧番号SCR-020 / SCR-021)。初回アクセス時はDBの既定値で行を作成して返す。
 
 ```json
 {
@@ -969,11 +970,26 @@ Email / PasswordはSupabase Auth側で管理する。Backend APIから直接Auth
   "display": {
     "language": "ja",
     "region": "JP",
-    "timezone": "Asia/Tokyo"
+    "timezone": "Asia/Tokyo",
+    "theme": "SYSTEM",
+    "text_size": "STANDARD",
+    "date_format": "YYYY/MM/DD",
+    "time_format": "24H",
+    "currency": "JPY",
+    "week_start": "MONDAY"
   },
   "chart": {
     "default_fx_pair_symbol": null,
-    "default_timeframe": "5m"
+    "default_timeframe": "5m",
+    "chart_type": "CANDLE",
+    "show_indicators": true,
+    "indicator_ma": true,
+    "indicator_bollinger": false,
+    "indicator_macd": true,
+    "indicator_rsi": false,
+    "indicator_stochastic": false,
+    "crosshair": true,
+    "price_line": true
   },
   "updated_at": "2026-10-02T00:00:00Z"
 }
@@ -988,7 +1004,21 @@ Email / PasswordはSupabase Auth側で管理する。Backend APIから直接Auth
   - `quiet_hours_enabled` / `quiet_start` / `quiet_end`(v1.7で追加)：通知しない時間帯。既定はOFF・`23:00`〜`07:00`。時刻は`"HH:MM"`(24時間制、`00:00`〜`23:59`)で、`display.timezone`の現地時刻として扱う。`quiet_start`を含み`quiet_end`を含まない`[quiet_start, quiet_end)`。`quiet_end < quiet_start`は日付をまたぐ(既定の23:00〜07:00)。`quiet_start = quiet_end`は抑止なし。適用は24.6節
   - 旧フィールド`pre_release` / `result` / `favorites` / `min_importance`は削除(既存値の移行はdb-design.md §3.14)
 - `display.language`：`ja` / `en`、`display.region`：ISO 3166-1 alpha-2、`display.timezone`：IANA timezone名。Home等のRequestに渡すtimezoneの既定値としてiOSが利用する(6章の「Requestで明示的に受け取る」方針は変更しない)
+- `display`の表示項目(v1.9で追加、SCR-018 表示・地域設定)。値は以下の列挙のみ(大文字小文字も一致)
+  - `theme`：テーマ。`SYSTEM`(端末の設定に従う) / `DARK` / `LIGHT`。既定は`SYSTEM`
+  - `text_size`：文字サイズ。`SMALL` / `STANDARD` / `LARGE`。既定は`STANDARD`
+  - `date_format`：日付の表示形式。`YYYY/MM/DD` / `YYYY-MM-DD` / `MM/DD/YYYY` / `YYYY年M月D日`。既定は`YYYY/MM/DD`
+  - `time_format`：時刻の表示形式。`24H`(24時間制) / `12H`(12時間制)。既定は`24H`
+  - `currency`：表示通貨。`JPY` / `USD` / `EUR` / `GBP` / `AUD` / `CAD` / `CHF` / `NZD`。既定は`JPY`
+  - `week_start`：週の始まり。`SUNDAY` / `MONDAY`。既定は`MONDAY`
+  - いずれもiOSの表示に使う設定値で、Backendの他APIのResponse(日時はISO 8601のまま等)は変えない
 - `chart.default_fx_pair_symbol`：`fx_pairs.symbol`または`null`、`chart.default_timeframe`：`1m` / `5m` / `15m` / `30m` / `60m`
+- `chart`の表示項目(v1.9で追加、SCR-019 チャート設定)
+  - `chart_type`：チャートの種類。`CANDLE`(ローソク足) / `LINE`(ライン) / `BAR`(バー)。既定は`CANDLE`
+  - `show_indicators`：テクニカル指標を表示するか(全体のON/OFF)。既定は`true`。`false`なら`indicator_*`の値に関わらず表示しない(`indicator_*`の値は保持する)
+  - `indicator_ma`(移動平均線、既定`true`) / `indicator_bollinger`(ボリンジャーバンド、既定`false`) / `indicator_macd`(MACD、既定`true`) / `indicator_rsi`(RSI、既定`false`) / `indicator_stochastic`(ストキャスティクス、既定`false`)：各テクニカル指標の表示
+  - `crosshair`：クロスヘア(十字カーソル)の表示。既定は`true`
+  - `price_line`：現在値ラインの表示。既定は`true`
 
 ## 24.5 PATCH /api/v1/settings(v1.4で追加)
 
@@ -1001,6 +1031,11 @@ Email / PasswordはSupabase Auth側で管理する。Backend APIから直接Auth
 - `lead_minutes`：`0` / `5` / `10` / `15` / `30` / `60`以外は`422`
 - `quiet_hours_enabled`：真偽値のみ(v1.7)
 - `quiet_start` / `quiet_end`：`"HH:MM"`(`00:00`〜`23:59`、時・分とも2桁)以外は`422`。`"7:00"`・`"24:00"`・秒付き`"23:00:00"`も`422`。`quiet_start = quiet_end`は許容する(抑止なし)(v1.7)
+
+`display` / `chart`のValidation(v1.9)。違反はいずれも`422 VALIDATION_ERROR`で、Body全体を保存しない：
+
+- `display.theme` / `text_size` / `date_format` / `time_format` / `currency` / `week_start`、`chart.chart_type`：24.4節の列挙以外は`422`。小文字(`"dark"`・`"24h"`等)や`null`も`422`
+- `chart.show_indicators` / `indicator_ma` / `indicator_bollinger` / `indicator_macd` / `indicator_rsi` / `indicator_stochastic` / `crosshair` / `price_line`：真偽値のみ。`"true"`・`1`・`null`は`422`
 
 ## 24.6 GET /api/v1/notifications/upcoming(v1.6で追加)
 

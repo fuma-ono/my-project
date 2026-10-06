@@ -105,7 +105,11 @@ final class SettingsServiceTests: XCTestCase {
         XCTAssertEqual(apiClient.lastEndpoint?.path, "settings")
         XCTAssertEqual(apiClient.lastEndpoint?.method, .patch)
         let body = try jsonObject(apiClient.lastEndpoint?.body)
-        XCTAssertEqual(body["display"] as? [String: String], ["language": "en", "region": "US", "timezone": "America/New_York"])
+        XCTAssertEqual(body["display"] as? [String: String], [
+            "language": "en", "region": "US", "timezone": "America/New_York",
+            "theme": "SYSTEM", "text_size": "STANDARD", "date_format": "YYYY/MM/DD",
+            "time_format": "24H", "currency": "JPY", "week_start": "MONDAY",
+        ])
     }
 }
 
@@ -271,5 +275,75 @@ final class FXPairOptionsTests: XCTestCase {
     func testDisplayNameLeavesUnexpectedSymbolsAsIs() {
         XCTAssertEqual(FXPairSymbol.displayName("EURUSD"), "EUR/USD")
         XCTAssertEqual(FXPairSymbol.displayName("XAU"), "XAU")
+    }
+}
+
+// MARK: - SCR-018 / SCR-019 v2(HQ指示 2026-10-06)
+
+final class DisplayChartSettingsV2Tests: XCTestCase {
+    func testDecodesTheNewDisplayAndChartFields() throws {
+        let json = Data(#"""
+        {"language":"ja","region":"JP","timezone":"Asia/Tokyo","theme":"DARK","text_size":"LARGE","date_format":"YYYY年M月D日","time_format":"12H","currency":"USD","week_start":"SUNDAY"}
+        """#.utf8)
+        let display = try JSONDecoder().decode(DisplaySettings.self, from: json)
+        XCTAssertEqual(display.theme, "DARK")
+        XCTAssertEqual(display.textSize, "LARGE")
+        XCTAssertEqual(display.dateFormat, "YYYY年M月D日")
+        XCTAssertEqual(display.timeFormat, "12H")
+        XCTAssertEqual(display.currency, "USD")
+        XCTAssertEqual(display.weekStart, "SUNDAY")
+
+        let chart = try JSONDecoder().decode(ChartSettings.self, from: Data(#"{"default_fx_pair_symbol":null,"default_timeframe":"60m","chart_type":"LINE","show_indicators":false,"indicator_rsi":true}"#.utf8))
+        XCTAssertEqual(chart.chartType, "LINE")
+        XCTAssertFalse(chart.showIndicators)
+        XCTAssertTrue(chart.indicatorRSI)
+        XCTAssertTrue(chart.indicatorMA, "a missing field falls back to its default")
+    }
+
+    func testChartEncodesEveryField() throws {
+        let body = try jsonObject(JSONEncoder().encode(ChartSettings.defaults))
+        XCTAssertEqual(Set(body.keys), [
+            "default_fx_pair_symbol", "default_timeframe", "chart_type", "show_indicators", "indicator_ma",
+            "indicator_bollinger", "indicator_macd", "indicator_rsi", "indicator_stochastic", "crosshair", "price_line",
+        ])
+        XCTAssertTrue(body["default_fx_pair_symbol"] is NSNull)
+    }
+
+    func testDateAndTimeFormats() {
+        let date = Date(timeIntervalSince1970: 1_711_983_600) // 2024-04-01T15:00:00Z = 4/2 0:00 JST
+        let tokyo = TimeZone(identifier: "Asia/Tokyo")!
+        XCTAssertEqual(AppPreferences.format(date, pattern: AppPreferences.datePattern("YYYY/MM/DD", withYear: true), timeZone: tokyo), "2024/04/02")
+        XCTAssertEqual(AppPreferences.format(date, pattern: AppPreferences.datePattern("MM/DD/YYYY", withYear: true), timeZone: tokyo), "04/02/2024")
+        XCTAssertEqual(AppPreferences.format(date, pattern: AppPreferences.datePattern("YYYY年M月D日", withYear: false), timeZone: tokyo), "4月2日")
+        XCTAssertEqual(AppPreferences.timeZoneLabel("Asia/Tokyo"), "(UTC+9) 東京")
+        XCTAssertEqual(AppPreferences.cityName("Asia/Tokyo"), "日本")
+        XCTAssertEqual(AppPreferences.colorScheme("SYSTEM"), nil)
+        XCTAssertEqual(AppPreferences.dynamicTypeSize("LARGE"), .xLarge)
+    }
+}
+
+@MainActor
+final class SettingsAutoSaveTests: XCTestCase {
+    func testUpdateSavesAutomaticallyAndUpdatesPreferences() async throws {
+        let apiClient = MockAPIClient()
+        apiClient.result = .success(sampleSettings)
+        let viewModel = SettingsSectionViewModel<ChartSettings>(apiClient: apiClient, section: \.chart, debounce: .milliseconds(20)) {
+            SettingsUpdate(chart: $0)
+        }
+        viewModel.load()
+        await waitUntil { viewModel.loadState == .loaded }
+        var stored = sampleSettings
+        stored.chart.indicatorRSI = true
+        apiClient.result = .success(stored)
+
+        viewModel.update { $0.indicatorRSI = true }
+        await waitUntil { viewModel.saveState == .saved }
+
+        XCTAssertEqual(apiClient.lastEndpoint?.method, .patch)
+        let body = try jsonObject(apiClient.lastEndpoint?.body)
+        let chart = try XCTUnwrap(body["chart"] as? [String: Any])
+        XCTAssertEqual(chart["indicator_rsi"] as? Bool, true)
+        XCTAssertTrue(AppPreferences.shared.chart.indicatorRSI)
+        AppPreferences.shared.apply(SettingsResponse(notifications: .defaults, display: .defaults, chart: .defaults))
     }
 }
