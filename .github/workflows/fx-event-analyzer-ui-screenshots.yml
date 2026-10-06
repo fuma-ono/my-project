@@ -116,6 +116,14 @@ jobs:
           cat /tmp/ui-screenshot-mock-server.log >&2
           exit 1
 
+      # "Failed to get launch progress ... Timed out" kept failing runs at
+      # random: the simulator was still booting when XCUITest launched the
+      # app. Boot it up front and wait until it is fully up.
+      - name: Boot the iPhone Simulator
+        run: |
+          xcrun simctl boot "${{ steps.iphone.outputs.device_name }}" || true
+          xcrun simctl bootstatus "${{ steps.iphone.outputs.device_name }}" -b
+
       - name: Build for testing
         env:
           SUPABASE_URL: "http://127.0.0.1:8090"
