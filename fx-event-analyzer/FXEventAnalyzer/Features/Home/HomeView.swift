@@ -368,16 +368,18 @@ struct HomeView: View {
     private static let cardCornerRadius: CGFloat = 6
 
     /// HQ再指摘(2026-10-05)「国旗の丸をもう少し大きくして」: 15→19に拡大。
-    private static let flagDiameter: CGFloat = 19
-
+    ///
     /// HQ指摘(2026-10-06、参考画像との実測比較)「国旗の位置や余白が違う」
     /// への調査で判明: 参考画像の通貨ペア行の国旗直径はカード幅(215ユニット)
     /// 基準で実測すると約22.6ユニット(85px/カード幅809pxから逆算)なのに
     /// 対し、実装の`flagDiameter`(19)は実機キャプチャで同様に実測すると
-    /// 約20ユニットと、約13%小さかった。`flagDiameter`は`eventRow`とも
-    /// 共用でそちらは今回未検証のため、`pairRow`専用の値として分離し、
-    /// 19×1.13≒21.5に拡大。
-    private static let pairFlagDiameter: CGFloat = 21.5
+    /// 約20ユニットと、約13%小さかった。当初`pairRow`専用の
+    /// `pairFlagDiameter`として分離し19×1.13≒21.5に拡大したが、HQ指示
+    /// (2026-10-06)「通貨ペア内の国旗マークも今日の重要イベントの国旗
+    /// マークとサイズをそろえて」により、共通の`flagDiameter`自体を21.5に
+    /// 引き上げて`eventRow`/`pairRow`両方で揃えた(`pairFlagDiameter`は
+    /// 廃止)。
+    private static let flagDiameter: CGFloat = 21.5
 
     /// HQ再指摘(2026-10-05)「お気に入り内の国旗の丸のサイズは少し小さく
     /// して」: お気に入りの小カードは幅68と他カードの行より狭く、共通の
@@ -678,12 +680,18 @@ struct HomeView: View {
             // `.frame(height: Self.eventRowHeight, alignment: .center)`を
             // 明示することで、タイトル列の高さ計算とは独立に、常に行全体
             // (44)の中央に揃うようにした。
+            // HQ指示(2026-10-06)「国旗マーク、USD、経済指標、指標名、予想、
+            // 前回をまとめてもう少し左に配置して」: 時刻の文字間隔を詰めた
+            // ことで実際の文字幅には余裕があるため、時刻列の固定幅を
+            // 30→26に縮め、後続の国旗+内容のグループ全体を左に寄せた
+            // (内部の間隔(`HStack(spacing: 5)`や`VStack`内の間隔)は
+            // 変えていない)。
             Text(Self.timeFormatter.string(from: event.releaseDatetime))
                 .font(.system(size: 9, weight: .bold))
                 .tracking(-0.2)
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: true, vertical: false)
-                .frame(width: 30, alignment: .leading)
+                .frame(width: 26, alignment: .leading)
                 .frame(height: Self.eventRowHeight, alignment: .center)
 
             // HQ指示(2026-10-05、23回目)「今日の重要指標の国旗の下にUSDや
@@ -764,12 +772,20 @@ struct HomeView: View {
                 // あたりの幅で比較した。高さ比(6.11/7.38≒0.828)からサイズ
                 // 8→6.6に縮小し、その上でこちらの1文字あたり幅がまだ参考
                 // 画像より広かった分を`.tracking(-0.6)`で詰めた。
-                V5JPFont.wrappingText(event.indicatorName, size: 6.6, weight: .semibold)
-                    .tracking(-0.6)
+                // HQ再指摘(2026-10-06)「FOMC政策金利の文字を詰めすぎてる
+                // から少し離して、また予想と前回がない場合の指標名は少し
+                // フォントを大きくして」: tracking -0.6→-0.3に緩め、
+                // 予想/前回が無い行(例: FOMC)は`subtitle`分の高さを使わ
+                // なくて良い分、指標名のフォントを6.6→7.8に拡大した
+                // (`minHeight: 38`の予算には元々余裕があるため、この
+                // ケースでも収まる)。
+                let subtitle = Self.eventSubtitle(event)
+                V5JPFont.wrappingText(event.indicatorName, size: subtitle == nil ? 7.8 : 6.6, weight: .semibold)
+                    .tracking(-0.3)
                     .foregroundStyle(.white)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
-                if let subtitle = Self.eventSubtitle(event) {
+                if let subtitle {
                     // HQ再指摘(2026-10-05、3回目)「予想と前回の文字は
                     // 途切れず、折り返さず全て表示できるようにして」:
                     // `.fixedSize(horizontal: true, vertical: false)`を
@@ -875,8 +891,8 @@ struct HomeView: View {
     @ViewBuilder private func pairRow(_ pair: FXPairUI) -> some View {
         HStack(spacing: 4) {
             HStack(spacing: 3) {
-                CountryFlagView(currencyCode: pair.baseCurrency, diameter: Self.pairFlagDiameter)
-                CountryFlagView(currencyCode: pair.quoteCurrency, diameter: Self.pairFlagDiameter)
+                CountryFlagView(currencyCode: pair.baseCurrency, diameter: Self.flagDiameter)
+                CountryFlagView(currencyCode: pair.quoteCurrency, diameter: Self.flagDiameter)
             }
             // HQ再指摘(2026-10-05、4回目)「USD/JPYの文字の幅、155.42の文字の
             // 幅、+0.25%の文字の幅いずれも狭めて」: HIGH/MEDIUMバッジの時と
@@ -928,10 +944,10 @@ struct HomeView: View {
                 Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 8.2))
             }
             .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
-            .frame(height: Self.pairFlagDiameter, alignment: .center)
+            .frame(height: Self.flagDiameter, alignment: .center)
             .fixedSize()
             Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
-                .frame(height: Self.pairFlagDiameter, alignment: .center)
+                .frame(height: Self.flagDiameter, alignment: .center)
         }
         .foregroundStyle(.white)
         .frame(height: Self.pairRowHeight)
@@ -1042,7 +1058,11 @@ struct HomeView: View {
                     CountryFlagView(countryCode: countryCode, diameter: Self.favoriteFlagDiameter)
                 }
                 Spacer()
-                Image(systemName: "star").font(.system(size: 10)).foregroundStyle(V5P.muted)
+                // HQ指示(2026-10-06)「お気に入りの☆のサイズを少し小さく
+                // して、すこし右上に移動させて」: サイズ10→8.5に縮小し、
+                // `.offset`で右上方向に少しずらした。
+                Image(systemName: "star").font(.system(size: 8.5)).foregroundStyle(V5P.muted)
+                    .offset(x: 1.5, y: -1.5)
             }
             V5JPFont.text(name, size: 7, weight: .semibold).foregroundStyle(.white).lineLimit(1)
             subtitle()
