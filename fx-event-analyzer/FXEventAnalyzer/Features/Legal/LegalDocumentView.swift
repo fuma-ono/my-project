@@ -28,6 +28,9 @@ struct LegalDocumentView: View {
 
 /// 本文。V5の画面(`scale` 1)と、購入シートから開く通常サイズの表示(`scale`
 /// 約1.7)で共通にする。
+///
+/// 英字(FX Event Analyzer・App Store など)が日本語と違うフォントで浮いて見えないよう、
+/// 全体をNoto Sans JPで組む(HQ指示 2026-10-06)。
 struct LegalDocumentContent: View {
     let document: LegalDocument
     var scale: CGFloat = 1
@@ -36,7 +39,7 @@ struct LegalDocumentContent: View {
         VStack(alignment: .leading, spacing: 10 * scale) {
             // 文書名は13.5(HQ指示 2026-10-06)。改行の位置は本文側で指定し、
             // 1行の文書名は折り返さずに収める。
-            V5JPFont.text(document.title, size: 13.5 * scale, weight: .bold)
+            NotoText.text(document.title, size: 13.5 * scale)
                 .foregroundStyle(.white)
                 .lineLimit(document.title.contains("\n") ? nil : 1)
                 .minimumScaleFactor(0.85)
@@ -46,7 +49,7 @@ struct LegalDocumentContent: View {
             }
             ForEach(document.sections, id: \.self) { section in
                 VStack(alignment: .leading, spacing: 4 * scale) {
-                    V5JPFont.text(section.heading, size: 9.5 * scale, weight: .bold)
+                    NotoText.text(section.heading, size: 9.5 * scale)
                         .foregroundStyle(SettingsListLayout.sectionTitleColor)
                     if let lead = section.lead { paragraph(lead) }
                     if section.items.count == 1 && section.lead == nil {
@@ -65,7 +68,7 @@ struct LegalDocumentContent: View {
             }
             VStack(alignment: .trailing, spacing: 2 * scale) {
                 ForEach(document.footer, id: \.self) { line in
-                    V5JPFont.text(line, size: 7.5 * scale, weight: .regular).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    NotoText.text(line, size: 7.5 * scale).foregroundStyle(SettingsCardStyle.subtitleColor)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -74,7 +77,7 @@ struct LegalDocumentContent: View {
     }
 
     private func paragraph(_ text: String) -> some View {
-        V5JPFont.text(text, size: 8 * scale, weight: .regular)
+        NotoText.text(text, size: 8 * scale)
             .foregroundStyle(.white.opacity(0.88))
             .lineSpacing(2.5 * scale)
             .fixedSize(horizontal: false, vertical: true)
