@@ -329,6 +329,8 @@ struct V5Viewport<Content: View>: View {
 ///     地点140px、smoothstep)のCI実機キャプチャと完全一致したため、
 ///     フェード開始地点を90→60pxへ戻し、9.の状態(境目なし、伸長も
 ///     なしのシンプルな構成)にそのまま復元した。
+/// 13. ヘッダー下端の明るさの谷を縦方向にぼかしてつなぎ、下の地の
+///     グラデーションの横縞を微小なディザで解消(28e922d、HQ確定)。
 struct V5GlowBackground: View {
     var body: some View {
         GeometryReader { geo in
