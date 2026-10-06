@@ -3,7 +3,8 @@ import SwiftUI
 /// SCR-019 チャート設定(api-design.md §24.4)。HQ指示(2026-10-06)の参考画像
 /// (「チャートの基本設定」「テクニカル指標の設定」「チャートの表示設定」)に
 /// 合わせた。保存ボタンは無く、変えるとその場で保存する。参考画像に無い
-/// 「デフォルトの通貨ペア」も、既存の設定項目なので基本設定の先頭に残している。
+/// 「通貨ペア」も、既存の設定項目なので基本設定の先頭に残している。行の名前は
+/// 値が切れないよう「デフォルトの」を省いた(HQ指示 2026-10-06)。
 ///
 /// 通貨ペアの候補は`FXPairCatalog`から取得する。存在しない記号はBackendが422で弾く。
 struct ChartSettingsView: View {
@@ -103,13 +104,13 @@ struct ChartSettingsView: View {
     private var basicSection: some View {
         SettingsListSection(title: "チャートの基本設定") {
             SettingsListValueRow(
-                title: "デフォルトの通貨ペア",
+                title: "通貨ペア",
                 value: settings.defaultFxPairSymbol.map(FXPairSymbol.displayName) ?? "指定なし"
             ) { picker = .fxPair }
             SettingsListSeparator()
-            SettingsListValueRow(title: "デフォルトの時間足", value: label(Self.timeframes, settings.defaultTimeframe)) { picker = .timeframe }
+            SettingsListValueRow(title: "時間足", value: label(Self.timeframes, settings.defaultTimeframe)) { picker = .timeframe }
             SettingsListSeparator()
-            SettingsListValueRow(title: "デフォルトのチャートタイプ", value: label(Self.chartTypes, settings.chartType)) { picker = .chartType }
+            SettingsListValueRow(title: "チャートタイプ", value: label(Self.chartTypes, settings.chartType)) { picker = .chartType }
             SettingsListSeparator()
             toggle("テクニカル指標を表示", \.showIndicators)
         }

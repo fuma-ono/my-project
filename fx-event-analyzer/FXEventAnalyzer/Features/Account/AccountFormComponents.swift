@@ -199,7 +199,8 @@ private struct BulletList: ViewModifier {
 struct AccountFieldCaption: View {
     let text: String
     var body: some View {
-        V5JPFont.text(text, size: AccountLayout.captionSize)
+        // メールアドレス変更・パスワード変更の入力欄の見出し(HQ指示 2026-10-06で9.5)。
+        V5JPFont.text(text, size: AccountLayout.titleSize)
             .foregroundStyle(.white)
             .frame(width: 210, alignment: .leading)
     }

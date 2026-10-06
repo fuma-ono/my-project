@@ -60,7 +60,7 @@ struct ProfileEditView: View {
             .accessibilityLabel("生年月日")
             .position(x: 117, y: Self.birthTop + Self.cardHeight / 2)
 
-            AccountInfoCard(icon: "info.circle", text: "名前は入力欄をタップして変更できます。\n生年月日を変更する場合は、「生年月日」の項目をタップしてください。")
+            AccountInfoCard(icon: "info.circle.fill", text: "名前は入力欄をタップして変更できます。\n生年月日を変更する場合は、「生年月日」の項目をタップしてください。")
                 .accountPinned(top: Self.birthTop + Self.cardHeight + 10)
 
             AccountStatusText(state: viewModel.state).accountPinned(top: 392, height: 20)
