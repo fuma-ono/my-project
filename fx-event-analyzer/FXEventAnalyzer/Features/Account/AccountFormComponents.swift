@@ -56,9 +56,6 @@ struct AccountInfoCard: View {
     var textColor: Color = SettingsCardStyle.subtitleColor
     var fill: Color = SettingsCardStyle.cardFill
     var border: Color = SettingsCardStyle.cardBorder
-    /// 箇条書きの点をアイコンの下まで左に寄せ、カード幅いっぱいに使う
-    /// (メールアドレス変更のみ。HQ指示 2026-10-05)。
-    var flushBullets = false
     /// 本文・箇条書きの文字サイズ。
     var textSize: CGFloat = AccountLayout.noteSize
 
@@ -77,22 +74,20 @@ struct AccountInfoCard: View {
                     AccountNote(text: text, color: textColor, width: 168, size: textSize)
                         .padding(.top, title == nil ? 2 : 0)
                 }
-                if !flushBullets {
-                    ForEach(bullets, id: \.self) { bullet in
-                        HStack(alignment: .top, spacing: 1) {
-                            V5JPFont.text("・", size: AccountLayout.noteSize, weight: .regular).foregroundStyle(textColor)
-                                .fixedSize()
-                            AccountNote(text: bullet, color: textColor, width: 158)
-                        }
+                ForEach(bullets, id: \.self) { bullet in
+                    HStack(alignment: .top, spacing: 1) {
+                        // 点は本文の大きさによらず同じ幅にし、どの画面でも同じ位置に揃える。
+                        V5JPFont.text("・", size: AccountLayout.noteSize, weight: .regular).foregroundStyle(textColor)
+                            .fixedSize()
+                        AccountNote(text: bullet, color: textColor, width: 158, size: textSize)
                     }
                 }
             }
             Spacer(minLength: 0)
         }
+        .padding(.vertical, 9)
         .padding(.horizontal, 10)
-        .padding(.top, 9)
-        .padding(.bottom, flushBullets && !bullets.isEmpty ? 0 : 9)
-        .modifier(BulletList(bullets: flushBullets ? bullets : [], color: textColor, size: textSize))
+        .frame(width: 214, alignment: .leading)
         .background(AccountCardBackground(fill: fill, border: border))
     }
 }
@@ -165,36 +160,6 @@ struct AccountFormScaffold<Content: View>: View {
     }
 }
 
-/// 情報カードの左寄せの箇条書き(`flushBullets`)。「入力したメールアドレス宛に確認メールを送信
-/// します。」が1行に収まるよう、点をアイコンの下まで左に寄せ、カード幅
-/// いっぱいに使う(HQ指示 2026-10-05)。
-private struct BulletList: ViewModifier {
-    let bullets: [String]
-    let color: Color
-    let size: CGFloat
-
-    func body(content: Content) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            content
-            if !bullets.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(bullets, id: \.self) { bullet in
-                        HStack(alignment: .top, spacing: 2) {
-                            Circle().fill(color)
-                                .frame(width: 2.4, height: 2.4)
-                                .frame(width: 4, height: size + 3.5)
-                            AccountNote(text: bullet, color: color, width: 196, tracking: -0.2, size: size)
-                        }
-                    }
-                }
-                .padding(.leading, 8)
-                .padding(.bottom, 9)
-            }
-        }
-        .frame(width: 214, alignment: .leading)
-    }
-}
-
 /// 入力欄の上の小さな見出し。
 struct AccountFieldCaption: View {
     let text: String
@@ -210,11 +175,9 @@ struct AccountNote: View {
     let text: String
     var color: Color = V5P.muted
     var width: CGFloat = 206
-    var tracking: CGFloat = 0
     var size: CGFloat = AccountLayout.noteSize
     var body: some View {
         V5JPFont.text(text, size: size, weight: .regular)
-            .tracking(tracking)
             .foregroundStyle(color)
             .lineSpacing(2)
             .frame(width: width, alignment: .leading)
