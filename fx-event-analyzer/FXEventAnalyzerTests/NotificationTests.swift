@@ -414,3 +414,17 @@ final class NotificationSettingsViewModelTests: XCTestCase {
         if case .error = viewModel.saveState {} else { XCTFail("expected a save error") }
     }
 }
+
+// MARK: - 通知一覧の短い表示名
+
+final class IndicatorShortNameTests: XCTestCase {
+    func testLongOfficialNamesBecomeCommonAbbreviations() {
+        XCTAssertEqual(IndicatorShortName.shorten("Japan Consumer Price Index (YoY)"), "Japan CPI (YoY)")
+        XCTAssertEqual(IndicatorShortName.shorten("英) 国内総生産（前期比）"), "英) GDP（前期比）")
+        XCTAssertEqual(IndicatorShortName.shorten("ECB Interest Rate Decision"), "ECB Rate Decision")
+    }
+
+    func testNamesWithoutAKnownAbbreviationStayAsIs() {
+        XCTAssertEqual(IndicatorShortName.shorten("日銀短観"), "日銀短観")
+    }
+}

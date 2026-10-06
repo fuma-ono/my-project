@@ -36,7 +36,7 @@ struct NotificationListView: View {
                 .position(x: V5P.W / 2, y: (Self.listTop + 452) / 2)
             } else {
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 5) {
+                    VStack(spacing: 4) {
                         ForEach(delivered) { entry in
                             NavigationLink(value: Self.route(for: entry)) {
                                 NotificationRow(entry: entry, isUnread: unreadIDs.contains(entry.id))
@@ -155,6 +155,11 @@ private struct NotificationRow: View {
         }
     }
 
+    /// 2行に収まらないときだけ使う短い表示名(詳細画面は正式名称のまま)。
+    private var shortHeadline: String {
+        entry.kind == .indicator ? IndicatorShortName.shorten(headline) : headline
+    }
+
     private var importance: String { NotificationImportance.label(entry.importance) }
 
     /// 発表の何分前に届いたか(「発表の5分前です」)。
@@ -179,12 +184,12 @@ private struct NotificationRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
             Image(systemName: icon)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(V5P.cyan)
                 .frame(width: 24, height: 24)
                 .background(RoundedRectangle(cornerRadius: 6).fill(SettingsCardStyle.cardFill))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
-            VStack(alignment: .leading, spacing: 2.5) {
+            VStack(alignment: .leading, spacing: 1.5) {
                 HStack(spacing: 4) {
                     V5JPFont.text(entry.kind.label, size: 5.5, weight: .bold)
                         .foregroundStyle(.white)
@@ -192,12 +197,10 @@ private struct NotificationRow: View {
                         .padding(.vertical, 1.5)
                         .background(Capsule().fill(badgeColor))
                     Spacer(minLength: 0)
-                    V5JPFont.text(Self.receivedFormatter.string(from: entry.notifyAt), size: 6, weight: .regular)
+                    V5JPFont.text(Self.receivedFormatter.string(from: entry.notifyAt), size: 7, weight: .regular)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                 }
-                V5JPFont.text(headline, size: 8.5, weight: .bold)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
+                NotificationHeadline(full: headline, short: shortHeadline)
                 ForEach(lines, id: \.self) { line in
                     V5JPFont.text(line, size: 6.5, weight: .regular)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
@@ -209,7 +212,7 @@ private struct NotificationRow: View {
                 .foregroundStyle(SettingsCardStyle.chevronColor)
         }
         .padding(.horizontal, 9)
-        .padding(.vertical, 8)
+        .padding(.vertical, 5)
         .frame(width: 214, alignment: .leading)
         .background(AccountCardBackground())
         .overlay(alignment: .topLeading) {
@@ -220,5 +223,64 @@ private struct NotificationRow: View {
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint(isUnread ? "未読" : "")
+    }
+}
+
+/// 指標名などの見出し。HQ指示(2026-10-06)「最大2行・省略しない。2行でも
+/// 収まらない極端に長い名称だけ短い表示名に変換。…で途中を切るのは原則なし」。
+private struct NotificationHeadline: View {
+    let full: String
+    let short: String
+
+    private static let size: CGFloat = 8.5
+    /// 2行分の高さ(Noto Sans JPの行の高さは文字の約1.45倍)。
+    private static let twoLines: CGFloat = 26
+
+    var body: some View {
+        ViewThatFits(in: .vertical) {
+            line(full)
+            if short != full { line(short) }
+            // 短い表示名でも収まらない場合だけ、少し縮めて2行に収める。
+            line(short).lineLimit(2).minimumScaleFactor(0.8)
+        }
+        .frame(maxHeight: Self.twoLines, alignment: .topLeading)
+    }
+
+    private func line(_ text: String) -> some View {
+        V5JPFont.text(text, size: Self.size, weight: .bold)
+            .foregroundStyle(.white)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// 長い指標の正式名称を、一般的な略称に置き換える。
+enum IndicatorShortName {
+    private static let replacements: [(String, String)] = [
+        ("Consumer Price Index", "CPI"),
+        ("Producer Price Index", "PPI"),
+        ("Gross Domestic Product", "GDP"),
+        ("Purchasing Managers' Index", "PMI"),
+        ("Purchasing Managers Index", "PMI"),
+        ("Personal Consumption Expenditures", "PCE"),
+        ("Nonfarm Payrolls", "NFP"),
+        ("Non-Farm Payrolls", "NFP"),
+        ("Federal Open Market Committee", "FOMC"),
+        ("Interest Rate Decision", "Rate Decision"),
+        ("Year over Year", "YoY"),
+        ("Month over Month", "MoM"),
+        ("消費者物価指数", "CPI"),
+        ("生産者物価指数", "PPI"),
+        ("国内総生産", "GDP"),
+        ("購買担当者景気指数", "PMI"),
+        ("個人消費支出", "PCE"),
+        ("非農業部門雇用者数", "雇用統計"),
+        ("政策金利発表", "政策金利"),
+    ]
+
+    static func shorten(_ name: String) -> String {
+        replacements.reduce(name) { result, pair in
+            result.replacingOccurrences(of: pair.0, with: pair.1, options: .caseInsensitive)
+        }
     }
 }
