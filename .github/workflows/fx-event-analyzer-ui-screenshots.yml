@@ -90,14 +90,15 @@ jobs:
           echo "Using iPhone simulator: $DEVICE_NAME"
           echo "device_name=$DEVICE_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Select an available iPad Simulator
+      # iPad is paused (HQ 2026-10-06): the iPad layout will get its own tab
+      # bar / header positions later, so only iPhone is captured for now.
+      # Leaving device_name empty skips every iPad step below; to resume,
+      # restore the simctl lookup (see git history).
+      - name: Select an available iPad Simulator (paused)
         id: ipad
         run: |
-          DEVICE_NAME=$(xcrun simctl list devices available -j \
-            | jq -r '.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name | startswith("iPad")) | .name' \
-            | head -n1)
-          echo "Using iPad simulator: ${DEVICE_NAME:-<none found>}"
-          echo "device_name=$DEVICE_NAME" >> "$GITHUB_OUTPUT"
+          echo "iPad screenshots are paused; iPhone only."
+          echo "device_name=" >> "$GITHUB_OUTPUT"
 
       - name: Start UI-screenshot mock server (Auth + Backend fixture)
         working-directory: fx-event-analyzer-backend

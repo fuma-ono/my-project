@@ -13,11 +13,11 @@
 -- ---------------------------------------------------------------------
 
 insert into economic_indicators (id, code, name, country_code, currency_code, importance, description, frequency, unit, source, favorable_direction) values
-  ('10000000-0000-0000-0000-000000000001', 'US_CPI', 'US Consumer Price Index (YoY)', 'US', 'USD', 'HIGH', 'US headline inflation rate, year-over-year.', 'MONTHLY', '%', 'U.S. Bureau of Labor Statistics', 'HIGHER_IS_POSITIVE'),
-  ('10000000-0000-0000-0000-000000000002', 'US_NFP', 'US Non-Farm Payrolls', 'US', 'USD', 'HIGH', 'Change in the number of employed people, excluding the farming industry.', 'MONTHLY', 'K', 'U.S. Bureau of Labor Statistics', 'HIGHER_IS_POSITIVE'),
-  ('10000000-0000-0000-0000-000000000003', 'US_FOMC', 'FOMC Interest Rate Decision', 'US', 'USD', 'HIGH', 'Federal Open Market Committee target rate decision.', 'IRREGULAR', '%', 'Federal Reserve', 'NEUTRAL'),
-  ('10000000-0000-0000-0000-000000000004', 'JP_CPI', 'Japan Consumer Price Index (YoY)', 'JP', 'JPY', 'HIGH', 'Japan headline inflation rate, year-over-year.', 'MONTHLY', '%', 'Statistics Bureau of Japan', 'HIGHER_IS_POSITIVE'),
-  ('10000000-0000-0000-0000-000000000005', 'BOJ_RATE', 'BOJ Policy Rate Decision', 'JP', 'JPY', 'HIGH', 'Bank of Japan monetary policy rate decision.', 'IRREGULAR', '%', 'Bank of Japan', 'NEUTRAL');
+  ('10000000-0000-0000-0000-000000000001', 'US_CPI', '米国CPI(消費者物価指数)', 'US', 'USD', 'HIGH', 'US headline inflation rate, year-over-year.', 'MONTHLY', '%', 'U.S. Bureau of Labor Statistics', 'HIGHER_IS_POSITIVE'),
+  ('10000000-0000-0000-0000-000000000002', 'US_NFP', '米国雇用統計(非農業部門雇用者数)', 'US', 'USD', 'HIGH', 'Change in the number of employed people, excluding the farming industry.', 'MONTHLY', 'K', 'U.S. Bureau of Labor Statistics', 'HIGHER_IS_POSITIVE'),
+  ('10000000-0000-0000-0000-000000000003', 'US_FOMC', 'FOMC政策金利', 'US', 'USD', 'HIGH', 'Federal Open Market Committee target rate decision.', 'IRREGULAR', '%', 'Federal Reserve', 'NEUTRAL'),
+  ('10000000-0000-0000-0000-000000000004', 'JP_CPI', '日本CPI(消費者物価指数)', 'JP', 'JPY', 'HIGH', 'Japan headline inflation rate, year-over-year.', 'MONTHLY', '%', 'Statistics Bureau of Japan', 'HIGHER_IS_POSITIVE'),
+  ('10000000-0000-0000-0000-000000000005', 'BOJ_RATE', '日銀政策金利', 'JP', 'JPY', 'HIGH', 'Bank of Japan monetary policy rate decision.', 'IRREGULAR', '%', 'Bank of Japan', 'NEUTRAL');
 
 -- ---------------------------------------------------------------------
 -- FX pairs

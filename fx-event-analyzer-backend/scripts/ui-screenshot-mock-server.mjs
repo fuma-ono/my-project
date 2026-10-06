@@ -758,10 +758,10 @@ function upcomingNotificationsHandler() {
     lead_minutes: lead,
     items: [
       // notify_at = now - 10 min / now - 1 min (past)
-      item('INDICATOR', EVENT_ID_UPCOMING_JP_CPI, 'Japan Consumer Price Index (YoY)', null, 'HIGH', lead - 10, 'JP', 'JPY', ['USDJPY', 'EURJPY']),
+      item('INDICATOR', EVENT_ID_UPCOMING_JP_CPI, '日本CPI(消費者物価指数)', null, 'HIGH', lead - 10, 'JP', 'JPY', ['USDJPY', 'EURJPY']),
       item('SPEECH', SPEECH_ID_UEDA_SOON, '金融経済懇談会での講演', '植田和男', 'MEDIUM', lead - 1, 'JP', 'JPY', jpyPairs),
       // future
-      item('INDICATOR', EVENT_ID_UPCOMING, 'US Non-Farm Payrolls', null, 'HIGH', 5 * 60, 'US', 'USD', ['USDJPY', 'EURUSD']),
+      item('INDICATOR', EVENT_ID_UPCOMING, '米国雇用統計(非農業部門雇用者数)', null, 'HIGH', 5 * 60, 'US', 'USD', ['USDJPY', 'EURUSD']),
       item('SPEECH', SPEECH_ID_POWELL_UPCOMING, '経済見通しに関する講演', 'ジェローム・パウエル', 'HIGH', 26 * 60, 'US', 'USD', ['EURUSD', 'USDJPY']),
     ],
   };

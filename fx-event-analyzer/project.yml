@@ -75,6 +75,13 @@ targets:
         # 読み込むにはUIAppFontsへのファイル名登録が別途必須。
         UIAppFonts:
           - NotoSansJP-SemiBold.ttf
+        # HQ指示(2026-10-06)「バックグラウンド更新を入れて」: アプリを開かない
+        # 間も、通知の予約を定期的に取り直す(NotificationBackgroundRefresh)。
+        # BGTaskSchedulerは、ここに無い識別子を登録すると起動時に落ちる。
+        UIBackgroundModes:
+          - fetch
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.fumaono.fxeventanalyzer.notification-refresh
     dependencies:
       - package: Supabase
         product: Auth

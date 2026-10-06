@@ -1,3 +1,4 @@
+import BackgroundTasks
 import Foundation
 import UserNotifications
 
@@ -131,6 +132,41 @@ final class LocalNotificationScheduler: LocalNotificationScheduling {
         let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: entry.notifyAt)
         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
         return UNNotificationRequest(identifier: identifierPrefix + entry.id, content: content, trigger: trigger)
+    }
+}
+
+/// アプリを開かない間も通知の予約を取り直す(HQ指示 2026-10-06「バックグラウンド
+/// 更新を入れて」)。予約はアプリを開いたときにしか更新されず、何日も開かないと
+/// 新しく追加された指標が通知されなかった。iOSが空き時間に起こしてくれる
+/// `BGAppRefreshTask`で`refresh()`を呼ぶ(実行の頻度・時刻はiOSが決める)。
+enum NotificationBackgroundRefresh {
+    /// `project.yml`の`BGTaskSchedulerPermittedIdentifiers`と同じ値。
+    static let identifier = "com.fumaono.fxeventanalyzer.notification-refresh"
+    /// 次に起こしてもらう最短の間隔。
+    static let interval: TimeInterval = 3 * 60 * 60
+
+    /// アプリの起動処理中(`App.init`)に一度だけ呼ぶ。
+    static func register(apiClient: APIClient) {
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: nil) { task in
+            guard let task = task as? BGAppRefreshTask else {
+                task.setTaskCompleted(success: false)
+                return
+            }
+            // 次の回も予約しておく(1回ごとの予約しかできない)。
+            schedule()
+            let work = Task { @MainActor in
+                await LocalNotificationScheduler(apiClient: apiClient).refresh()
+                task.setTaskCompleted(success: !Task.isCancelled)
+            }
+            task.expirationHandler = { work.cancel() }
+        }
+    }
+
+    /// アプリが裏に回ったときに呼ぶ。
+    static func schedule() {
+        let request = BGAppRefreshTaskRequest(identifier: identifier)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: interval)
+        try? BGTaskScheduler.shared.submit(request)
     }
 }
 

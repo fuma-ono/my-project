@@ -22,6 +22,8 @@ struct FXEventAnalyzerApp: App {
         })
         // 通知設定(SCR-016)のローカル通知を、アプリ表示中もバナーで出す。
         UNUserNotificationCenter.current().delegate = NotificationPresenter.shared
+        // アプリを開かない間も通知の予約を取り直す(起動処理中に登録が必要)。
+        NotificationBackgroundRefresh.register(apiClient: apiClient)
     }
 
     var body: some Scene {
