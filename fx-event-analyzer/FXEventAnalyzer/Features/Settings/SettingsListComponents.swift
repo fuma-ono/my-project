@@ -7,9 +7,10 @@ import SwiftUI
 /// SCR-018 表示・地域設定・SCR-019 チャート設定で共通。
 enum SettingsListLayout {
     static let width: CGFloat = 214
-    static let sectionTitleSize: CGFloat = 8.5
-    static let rowTitleSize: CGFloat = 8.5
-    static let valueSize: CGFloat = 8
+    /// HQ指示(2026-10-06)で見出し・項目名9.5、値9に。「＞」は項目名と同じ大きさ。
+    static let sectionTitleSize: CGFloat = 9.5
+    static let rowTitleSize: CGFloat = 9.5
+    static let valueSize: CGFloat = 9
     /// 通知しない時間帯をONにしても1画面に収まる高さ(HQ指示 2026-10-06)。
     static let rowHeight: CGFloat = 24
 }
@@ -90,7 +91,7 @@ struct SettingsListValueRow: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 7.5, weight: .semibold))
+                    .font(.system(size: SettingsListLayout.rowTitleSize, weight: .semibold))
                     .foregroundStyle(SettingsCardStyle.chevronColor)
             }
             .padding(.horizontal, 10)

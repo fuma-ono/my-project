@@ -238,16 +238,22 @@ struct AccountTextField: View {
     var keyboard: UIKeyboardType = .default
     /// falseならカード背景を付けない(プロフィール編集の「名前」カード内で使う)。
     var framed = true
+    /// 入力欄の文字(と入力例)の大きさ。プロフィール編集は9.5。
+    var textSize: CGFloat = AccountLayout.captionSize
     @FocusState private var focused: Bool
     @State private var revealed = false
 
-    init(label: String, placeholder: String, text: Binding<String>, isSecure: Bool = false, keyboard: UIKeyboardType = .default, framed: Bool = true) {
+    init(
+        label: String, placeholder: String, text: Binding<String>, isSecure: Bool = false,
+        keyboard: UIKeyboardType = .default, framed: Bool = true, textSize: CGFloat = AccountLayout.captionSize
+    ) {
         self.label = label
         self.placeholder = placeholder
         _text = text
         self.isSecure = isSecure
         self.keyboard = keyboard
         self.framed = framed
+        self.textSize = textSize
     }
 
     var body: some View {
@@ -279,7 +285,7 @@ struct AccountTextField: View {
     private var field: some View {
         ZStack(alignment: .leading) {
             if text.isEmpty {
-                V5JPFont.text(placeholder, size: AccountLayout.captionSize, weight: .regular)
+                V5JPFont.text(placeholder, size: textSize, weight: .regular)
                     .foregroundStyle(V5P.muted.opacity(0.75))
                     .allowsHitTesting(false)
             }
@@ -299,7 +305,7 @@ struct AccountTextField: View {
                         .autocorrectionDisabled(keyboard == .emailAddress)
                 }
             }
-            .font(.system(size: AccountLayout.captionSize))
+            .font(.system(size: textSize))
             .foregroundStyle(.white)
             .tint(V5P.cyan)
             .accessibilityLabel(label)

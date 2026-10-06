@@ -281,7 +281,8 @@ struct SettingsView: View {
             // Noto Sans JP)に揃えている。
             V5JPFont.text(title, size: Self.titleSize, weight: .medium).foregroundStyle(.white)
             Spacer()
-            Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(Self.chevronColor)
+            // 「＞」は項目名と同じ大きさ(HQ指示 2026-10-06)。
+            Image(systemName: "chevron.right").font(.system(size: Self.titleSize, weight: .semibold)).foregroundStyle(Self.chevronColor)
         }
         .padding(.leading, Self.badgeLeading)
         .padding(.trailing, 10)

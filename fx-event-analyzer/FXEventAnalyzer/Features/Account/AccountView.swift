@@ -229,7 +229,8 @@ struct AccountView: View {
     }
 
     private var chevron: some View {
-        Image(systemName: "chevron.right").font(.system(size: 8.5, weight: .semibold)).foregroundStyle(SettingsCardStyle.chevronColor)
+        // 「＞」は項目名と同じ大きさ(HQ指示 2026-10-06)。
+        Image(systemName: "chevron.right").font(.system(size: Self.titleSize, weight: .semibold)).foregroundStyle(SettingsCardStyle.chevronColor)
     }
 
     @ViewBuilder

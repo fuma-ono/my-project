@@ -199,8 +199,9 @@ private struct NotificationRow: View {
                 if entry.kind != .system {
                     ImportanceBadge(importance: entry.importance)
                 }
+                // 「＞」は見出し(8.5)と同じ大きさ(HQ指示 2026-10-06)。
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 7.5, weight: .semibold))
+                    .font(.system(size: 8.5, weight: .semibold))
                     .foregroundStyle(SettingsCardStyle.chevronColor)
             }
             .frame(width: NotificationRowLayout.trailingWidth, alignment: .trailing)

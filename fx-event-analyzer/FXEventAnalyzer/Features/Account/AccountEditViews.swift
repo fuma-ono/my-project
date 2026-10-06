@@ -36,20 +36,20 @@ struct ProfileEditView: View {
                         .offset(x: 2, y: 1)
                 }
                 .position(x: 117, y: 88)
-            V5JPFont.text("プロフィール画像は後から変更できます。", size: AccountLayout.noteSize, weight: .regular)
+            V5JPFont.text("プロフィール画像は後から変更できます。", size: Self.noteSize, weight: .regular)
                 .foregroundStyle(SettingsCardStyle.chevronColor)
                 .position(x: 117, y: 127)
 
             // 名前は下段の入力欄を直接タップして編集する。分かるよう見出しの
             // 右に鉛筆マークを出す(HQ指示 2026-10-05「名前はどこで編集するのか」)。
             fieldCard(title: "名前", trailingIcon: "pencil") {
-                AccountTextField(label: "名前", placeholder: "名前を入力", text: $viewModel.displayName, framed: false)
+                AccountTextField(label: "名前", placeholder: "名前を入力", text: $viewModel.displayName, framed: false, textSize: Self.fieldSize)
             }
             .position(x: 117, y: Self.nameTop + Self.cardHeight / 2)
 
             Button { showDatePicker = true } label: {
                 fieldCard(title: "生年月日", trailingIcon: "chevron.right") {
-                    V5JPFont.text(birthDateText ?? "未設定", size: AccountLayout.captionSize, weight: .regular)
+                    V5JPFont.text(birthDateText ?? "未設定", size: Self.fieldSize, weight: .regular)
                         .foregroundStyle(birthDateText == nil ? V5P.muted : .white)
                         .padding(.horizontal, 10)
                         .frame(width: 214, height: 30, alignment: .leading)
@@ -83,6 +83,9 @@ struct ProfileEditView: View {
     private static let birthTop: CGFloat = 206
     /// 見出し行25 + 値の行30。
     private static let cardHeight: CGFloat = 55
+    /// HQ指示(2026-10-06): 見出し・値は9.5、上の案内は8。
+    private static let fieldSize: CGFloat = 9.5
+    private static let noteSize: CGFloat = 8
 
     /// 参考画像の「1990/01/01」表記。
     private var birthDateText: String? {
@@ -93,10 +96,11 @@ struct ProfileEditView: View {
     private func fieldCard(title: String, trailingIcon: String, @ViewBuilder value: () -> some View) -> some View {
         VStack(spacing: 0) {
             HStack {
-                V5JPFont.text(title, size: AccountLayout.captionSize, weight: .bold).foregroundStyle(.white)
+                V5JPFont.text(title, size: Self.fieldSize, weight: .bold).foregroundStyle(.white)
                 Spacer()
+                // 右端のアイコン(鉛筆・「＞」)も見出しと同じ大きさ。
                 Image(systemName: trailingIcon)
-                    .font(.system(size: 8.5, weight: .semibold))
+                    .font(.system(size: Self.fieldSize, weight: .semibold))
                     .foregroundStyle(SettingsCardStyle.chevronColor)
             }
             .padding(.horizontal, 10)

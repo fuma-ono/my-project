@@ -324,8 +324,9 @@ private struct SubscriptionMenuRow: View {
                     .frame(width: 16)
                 V5JPFont.text(title, size: 9.5, weight: .medium).foregroundStyle(tint)
                 Spacer(minLength: 4)
+                // 「＞」は項目名と同じ大きさ(HQ指示 2026-10-06)。
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 7.5, weight: .semibold))
+                    .font(.system(size: 9.5, weight: .semibold))
                     .foregroundStyle(SettingsCardStyle.chevronColor)
             }
             .padding(.horizontal, 11)
