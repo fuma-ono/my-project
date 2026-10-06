@@ -16,7 +16,7 @@ private func jsonObject(_ data: Data?) throws -> [String: Any] {
 
 private let base = Date(timeIntervalSince1970: 1_790_000_000)
 
-private func entry(_ id: String, minutesFromBase: Double, kind: UpcomingNotification.Kind = .indicator) -> NotificationEntry {
+private func entry(_ id: String, minutesFromBase: Double, kind: NotificationEntry.Kind = .indicator) -> NotificationEntry {
     let notifyAt = base.addingTimeInterval(minutesFromBase * 60)
     return NotificationEntry(kind: kind, targetID: id, title: "指標\(id)", body: "本文", notifyAt: notifyAt, scheduledAt: notifyAt.addingTimeInterval(300), importance: "HIGH")
 }
@@ -72,12 +72,17 @@ final class NotificationModelsTests: XCTestCase {
 
         XCTAssertEqual(entry.body, "発表の5分前です（10/6 21:30発表・重要度 高）")
         XCTAssertEqual(entry.targetID, "e1")
+        XCTAssertEqual(entry.kind, .indicator)
+        XCTAssertEqual(entry.subject, "米雇用統計")
+        XCTAssertEqual(entry.countryCode, "US")
     }
 
     func testSpeechEntryPrefixesTheSpeaker() {
         let item = upcoming("s1", kind: .speech, notifyAt: base)
         let entry = NotificationEntry(item, leadMinutes: 0)
         XCTAssertEqual(entry.title, "パウエル議長：米雇用統計")
+        XCTAssertEqual(entry.kind, .speech)
+        XCTAssertEqual(entry.speakerName, "パウエル議長")
         XCTAssertTrue(entry.body.hasPrefix("まもなく発言です"))
     }
 }
@@ -145,6 +150,29 @@ final class NotificationsStoreTests: XCTestCase {
         let reloaded = NotificationsStore(userDefaults: defaults)
 
         XCTAssertEqual(reloaded.entries.map(\.targetID), ["a"])
+    }
+
+    func testSystemEntryIsDeliveredAtOnceAndReplacesThePreviousOne() {
+        let store = makeStore()
+        store.markAllRead(now: base.addingTimeInterval(-60))
+
+        store.recordSystem(targetID: "settings", title: "通知設定を更新しました", body: "1", now: base)
+        store.recordSystem(targetID: "settings", title: "通知設定を更新しました", body: "2", now: base.addingTimeInterval(30))
+
+        let delivered = store.delivered(now: base.addingTimeInterval(30))
+        XCTAssertEqual(delivered.map(\.body), ["2"])
+        XCTAssertEqual(delivered.first?.kind, .system)
+        XCTAssertTrue(store.hasUnread)
+
+        store.record([entry("cpi", minutesFromBase: 10)], now: base.addingTimeInterval(30))
+        XCTAssertEqual(store.entries.filter { $0.kind == .system }.count, 1, "refreshing upcoming items keeps system entries")
+    }
+
+    func testEntriesStoredBeforeTheDisplayFieldsStillDecode() throws {
+        let json = Data(#"[{"kind":"SPEECH","targetID":"s1","title":"t","body":"b","notifyAt":0,"scheduledAt":300,"importance":"HIGH"}]"#.utf8)
+        let entries = try JSONDecoder().decode([NotificationEntry].self, from: json)
+        XCTAssertEqual(entries.first?.kind, .speech)
+        XCTAssertNil(entries.first?.subject)
     }
 
     func testRemoveAllForgetsEverything() {
@@ -291,10 +319,12 @@ final class NotificationSettingsViewModelTests: XCTestCase {
         chart: ChartSettings.defaults
     )
 
+    private lazy var store = makeStore()
+
     private func loadedViewModel(_ apiClient: MockAPIClient, scheduler: MockScheduler) async -> NotificationSettingsViewModel {
         apiClient.result = .success(settings)
         apiClient.results["fx-pairs"] = .success(FXPairListResponse(data: [FXPairResponse(symbol: "USDJPY"), FXPairResponse(symbol: "GBPJPY")]))
-        let viewModel = NotificationSettingsViewModel(apiClient: apiClient, scheduler: scheduler, debounce: .milliseconds(30))
+        let viewModel = NotificationSettingsViewModel(apiClient: apiClient, scheduler: scheduler, debounce: .milliseconds(30), store: store)
         viewModel.load()
         await waitUntil { viewModel.loadState == .loaded && viewModel.fxPairSymbols == ["USDJPY", "GBPJPY"] }
         return viewModel
@@ -323,6 +353,7 @@ final class NotificationSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(notifications["speeches"] as? Bool, false)
         XCTAssertEqual(viewModel.settings, stored.notifications)
         XCTAssertEqual(scheduler.refreshCount, 1)
+        XCTAssertEqual(store.delivered().map(\.title), ["通知設定を更新しました"])
     }
 
     func testImportanceKeepsAtLeastOneAndStaysOrdered() async {
@@ -359,7 +390,7 @@ final class NotificationSettingsViewModelTests: XCTestCase {
         apiClient.result = .success(off)
         let scheduler = MockScheduler()
         scheduler.authorizationResult = false
-        let viewModel = NotificationSettingsViewModel(apiClient: apiClient, scheduler: scheduler, debounce: .milliseconds(30))
+        let viewModel = NotificationSettingsViewModel(apiClient: apiClient, scheduler: scheduler, debounce: .milliseconds(30), store: store)
         viewModel.load()
         await waitUntil { viewModel.loadState == .loaded }
 

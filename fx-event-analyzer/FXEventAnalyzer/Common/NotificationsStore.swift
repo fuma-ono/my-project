@@ -57,6 +57,17 @@ final class NotificationsStore: ObservableObject {
         refreshUnread(now: now)
     }
 
+    /// アプリ内の出来事(通知設定の保存など)を、届いた通知として一覧に残す。
+    /// 同じ`targetID`の前の記録は置き換える(続けて保存しても1件にまとめる)。
+    func recordSystem(targetID: String, title: String, body: String, now: Date = Date()) {
+        let item = NotificationEntry(kind: .system, targetID: targetID, title: title, body: body, notifyAt: now, scheduledAt: now, importance: "LOW")
+        entries.removeAll { $0.targetKey == item.targetKey }
+        entries.append(item)
+        entries.sort { $0.notifyAt < $1.notifyAt }
+        persist()
+        refreshUnread(now: now)
+    }
+
     /// 届いた通知(新しい順)。
     func delivered(now: Date = Date()) -> [NotificationEntry] {
         entries.filter { $0.notifyAt <= now }.reversed()
@@ -99,7 +110,30 @@ final class NotificationsStore: ObservableObject {
 
 /// 通知1件。ローカル通知の本文と、一覧の1行を兼ねる。
 struct NotificationEntry: Codable, Equatable, Identifiable {
-    let kind: UpcomingNotification.Kind
+    /// 一覧の絞り込み(すべて/経済指標/要人発言/システム)の単位。
+    enum Kind: String, Codable, CaseIterable {
+        case indicator = "INDICATOR"
+        case speech = "SPEECH"
+        /// アプリ内の出来事(通知設定の更新など)。ローカル通知は出さない。
+        case system = "SYSTEM"
+
+        init(_ kind: UpcomingNotification.Kind) {
+            switch kind {
+            case .indicator: self = .indicator
+            case .speech: self = .speech
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .indicator: return "経済指標"
+            case .speech: return "要人発言"
+            case .system: return "システム"
+            }
+        }
+    }
+
+    let kind: Kind
     /// 指標・発言のID(一覧から詳細画面を開く)。
     let targetID: String
     let title: String
@@ -108,14 +142,25 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
     let scheduledAt: Date
     /// HIGH / MEDIUM / LOW
     let importance: String
+    /// 一覧の表示用(以前の記録には無いので任意)。要人発言の発言者、
+    /// 指標・発言の名前(`title`は発言者付き)、国コード。
+    var speakerName: String?
+    var subject: String?
+    var countryCode: String?
 
     /// 同じ指標・発言でも、通知タイミングを変えると別の通知になる。
     var id: String { "\(kind.rawValue).\(targetID).\(Int(notifyAt.timeIntervalSince1970))" }
     /// 通知の対象(指標・発言)。1つの対象は一度だけ届ける。
     var targetKey: String { "\(kind.rawValue).\(targetID)" }
 
-    init(kind: UpcomingNotification.Kind, targetID: String, title: String, body: String, notifyAt: Date, scheduledAt: Date, importance: String) {
+    init(
+        kind: Kind, targetID: String, title: String, body: String, notifyAt: Date, scheduledAt: Date, importance: String,
+        speakerName: String? = nil, subject: String? = nil, countryCode: String? = nil
+    ) {
         self.kind = kind
+        self.speakerName = speakerName
+        self.subject = subject
+        self.countryCode = countryCode
         self.targetID = targetID
         self.title = title
         self.body = body
@@ -138,13 +183,16 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
             title = "\(speaker)：\(title)"
         }
         self.init(
-            kind: item.kind,
+            kind: Kind(item.kind),
             targetID: item.id,
             title: title,
             body: "\(timing)（\(formatter.string(from: item.scheduledAt))\(noun)・重要度 \(level)）",
             notifyAt: item.notifyAt,
             scheduledAt: item.scheduledAt,
-            importance: item.importance
+            importance: item.importance,
+            speakerName: item.speakerName,
+            subject: item.title,
+            countryCode: item.countryCode
         )
     }
 }

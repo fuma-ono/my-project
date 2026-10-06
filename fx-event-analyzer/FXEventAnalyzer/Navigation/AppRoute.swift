@@ -67,4 +67,7 @@ enum AppRoute: Hashable {
     /// 通知一覧。ホームの通知ベルから開く(HQ指示 2026-10-05)。ui-screens.md
     /// に該当SCR番号が無い新規画面。
     case notifications
+    /// SCR-016 通知設定。通知一覧の「システム」通知(通知設定を更新しました)
+    /// から開く。設定タブからは`SettingsSubRoute.notificationSettings`。
+    case notificationSettings
 }

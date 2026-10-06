@@ -19,13 +19,16 @@ final class NotificationSettingsViewModel: ObservableObject {
     private var saveTask: Task<Void, Never>?
     /// 送信中に次の変更が入ったら、古い応答で画面を戻さない。
     private var revision = 0
+    private let store: NotificationsStore
 
     init(
         apiClient: APIClient,
         scheduler: LocalNotificationScheduling? = nil,
         catalog: FXPairCatalog? = nil,
-        debounce: Duration = .milliseconds(400)
+        debounce: Duration = .milliseconds(400),
+        store: NotificationsStore? = nil
     ) {
+        self.store = store ?? .shared
         self.service = SettingsService(apiClient: apiClient)
         self.catalog = catalog ?? RemoteFXPairCatalog(apiClient: apiClient)
         self.scheduler = scheduler ?? LocalNotificationScheduler(apiClient: apiClient)
@@ -141,6 +144,8 @@ final class NotificationSettingsViewModel: ObservableObject {
             guard target == revision else { return }
             settings = response.notifications
             saveState = .saved
+            // 参考画像(HQ指示 2026-10-06)の「システム」通知。
+            store.recordSystem(targetID: "notification-settings", title: "通知設定を更新しました", body: "通知の設定が正常に変更されました。")
             await scheduler.refresh()
         } catch {
             guard target == revision else { return }
