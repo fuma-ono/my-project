@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// 通知一覧。ホームの通知ベルから開く(HQ指示 2026-10-05「通知はホーム画面の
 /// 通知マークを押したらそこで確認できる仕様にして」)。端末に届いた
@@ -233,24 +234,36 @@ private struct NotificationHeadline: View {
     let short: String
 
     private static let size: CGFloat = 8.5
-    /// 2行分の高さ(Noto Sans JPの行の高さは文字の約1.45倍)。
-    private static let twoLines: CGFloat = 26
+    /// 見出しに使える幅。行の幅214から、左右の余白(9×2)・アイコン(24)・
+    /// 間隔(8×2)・シェブロン(約5)を引いた値。
+    private static let width: CGFloat = 150
 
     var body: some View {
-        ViewThatFits(in: .vertical) {
-            line(full)
-            if short != full { line(short) }
-            // 短い表示名でも収まらない場合だけ、少し縮めて2行に収める。
-            line(short).lineLimit(2).minimumScaleFactor(0.8)
-        }
-        .frame(maxHeight: Self.twoLines, alignment: .topLeading)
-    }
-
-    private func line(_ text: String) -> some View {
-        V5JPFont.text(text, size: Self.size, weight: .bold)
+        V5JPFont.text(Self.fitsInTwoLines(full) ? full : short, size: Self.size, weight: .bold)
             .foregroundStyle(.white)
+            .lineLimit(2)
+            // 短い表示名でも収まらない場合だけ、少し縮めて2行に収める。
+            .minimumScaleFactor(0.8)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// `V5JPFont`と同じく、日本語はNoto Sans JP・それ以外はシステムの太字で
+    /// 組んだときに2行以内に収まるか。
+    static func fitsInTwoLines(_ text: String) -> Bool {
+        let japanese = UIFont(name: "NotoSansJP-SemiBold", size: size) ?? .systemFont(ofSize: size, weight: .semibold)
+        let latin = UIFont.systemFont(ofSize: size, weight: .bold)
+        let attributed = NSMutableAttributedString()
+        for character in text {
+            let isJapanese = character.unicodeScalars.contains { $0.value >= 0x3000 }
+            attributed.append(NSAttributedString(string: String(character), attributes: [.font: isJapanese ? japanese : latin]))
+        }
+        let height = attributed.boundingRect(
+            with: CGSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            context: nil
+        ).height
+        return height <= max(japanese.lineHeight, latin.lineHeight) * 2 + 0.5
     }
 }
 
