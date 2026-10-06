@@ -997,18 +997,34 @@ struct HomeView: View {
             // 自然なサイズがそれより大きければ縮めない)に変更し、3行
             // とも価格列の開始位置を揃える効果は保ちつつ、内容を強制的に
             // 狭い幅へ押し込めることによる不具合を避けるようにした。
+            // HQ再指摘(2026-10-06、2回目、CIキャプチャで再確認)「米ドル/円が
+            // まだ表示されていない」: `frame(width:)`→`frame(minWidth:)`
+            // (直前の対応)でも解消しなかった — 横幅の制約方式は無関係
+            // だったことになる。残る仮説は縦方向: `NotoText`
+            // (`NotoSansJP-SemiBold`)は和文フォントのため、欧文中心の
+            // システムフォントよりも1行あたりの行送り(ascent+descent)が
+            // 大きく取られている可能性があり、1行目(symbol、9.5pt)の
+            // 「自然な高さ」だけで2行分の縦スペース予算を使い切り、2行目
+            // (displayName)に残る高さがほぼ0になっていたと推測される
+            // (`.minimumScaleFactor`は横方向の縮小にしか効かず、縦方向の
+            // 圧迫に対する安全弁が無いため、潰れる時は縮小ではなく消失に
+            // なる)。各行に明示的な`.frame(height:)`を付けて行送りを
+            // フォント任せにせず固定し、1行目が2行目の分まで占有しない
+            // ようにした。
             VStack(alignment: .leading, spacing: 1) {
                 // HQ指示(2026-10-06)「英字を含む文字もNotoTextで表示して」
                 NotoText.text(pair.displaySymbol, size: 9.5)
                     .tracking(-0.4)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
+                    .frame(height: 11, alignment: .leading)
                 Text(pair.displayName)
                     .font(.system(size: 7, weight: .medium))
                     .tracking(-0.4)
                     .foregroundStyle(Self.linkBlue)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
+                    .frame(height: 8, alignment: .leading)
             }
             .frame(minWidth: 54, alignment: .leading)
             // HQ再指摘(2026-10-05、6回目)「155.42のサイズを0.5だけ大きく
