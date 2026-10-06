@@ -170,7 +170,7 @@ private struct NotificationRow: View {
         case .indicator:
             return ["発表時刻：\(time)（日本時間）", "\(timing)（重要度 \(importance)）"]
         case .speech:
-            return ["「\(entry.subject ?? entry.title)」", "発言時刻：\(time)（日本時間）・\(timing)"]
+            return ["「\(entry.subject ?? entry.title)」", "発言時刻：\(time)（日本時間）"]
         case .system:
             return [entry.body]
         }
