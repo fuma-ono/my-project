@@ -370,6 +370,15 @@ struct HomeView: View {
     /// HQ再指摘(2026-10-05)「国旗の丸をもう少し大きくして」: 15→19に拡大。
     private static let flagDiameter: CGFloat = 19
 
+    /// HQ指摘(2026-10-06、参考画像との実測比較)「国旗の位置や余白が違う」
+    /// への調査で判明: 参考画像の通貨ペア行の国旗直径はカード幅(215ユニット)
+    /// 基準で実測すると約22.6ユニット(85px/カード幅809pxから逆算)なのに
+    /// 対し、実装の`flagDiameter`(19)は実機キャプチャで同様に実測すると
+    /// 約20ユニットと、約13%小さかった。`flagDiameter`は`eventRow`とも
+    /// 共用でそちらは今回未検証のため、`pairRow`専用の値として分離し、
+    /// 19×1.13≒21.5に拡大。
+    private static let pairFlagDiameter: CGFloat = 21.5
+
     /// HQ再指摘(2026-10-05)「お気に入り内の国旗の丸のサイズは少し小さく
     /// して」: お気に入りの小カードは幅68と他カードの行より狭く、共通の
     /// `flagDiameter`(19)のままだと窮屈だったため、お気に入り専用の
@@ -833,8 +842,8 @@ struct HomeView: View {
     @ViewBuilder private func pairRow(_ pair: FXPairUI) -> some View {
         HStack(spacing: 4) {
             HStack(spacing: 3) {
-                CountryFlagView(currencyCode: pair.baseCurrency, diameter: Self.flagDiameter)
-                CountryFlagView(currencyCode: pair.quoteCurrency, diameter: Self.flagDiameter)
+                CountryFlagView(currencyCode: pair.baseCurrency, diameter: Self.pairFlagDiameter)
+                CountryFlagView(currencyCode: pair.quoteCurrency, diameter: Self.pairFlagDiameter)
             }
             // HQ再指摘(2026-10-05、4回目)「USD/JPYの文字の幅、155.42の文字の
             // 幅、+0.25%の文字の幅いずれも狭めて」: HIGH/MEDIUMバッジの時と
@@ -872,15 +881,24 @@ struct HomeView: View {
             // フォント機能が%記号の字形にも適用され、全角のように幅広く
             // 見えていた。`.monospacedDigit()`を削除し、通常のプロポー
             // ショナル字形に戻した。
+            // HQ指摘(2026-10-06、参考画像との実測比較)「+0.25%が参考画像
+            // より横に長く感じる」: 参考画像(852×1846px)と実機キャプチャを
+            // それぞれ自身のカード幅(215ユニット)基準でピクセル実測した
+            // ところ、"+0.32%▲"ブロックの幅/高さが参考画像側で約
+            // 36.4/6.4ユニットなのに対し、実装側(当時9.5pt)は約42.5/7.4
+            // ユニットと、幅・高さとも約15〜17%大きかった(字間
+            // `.tracking`だけの問題なら幅だけ変わるはずだが、高さも同程度
+            // 拡大していたため、文字サイズそのものが大きすぎたと判断)。
+            // 9.5×(36.4/42.5)≒8.14と9.5×(6.4/7.4)≒8.21の平均から8.2に縮小。
             HStack(spacing: 1) {
-                Text(pair.change).font(.system(size: 9.5, weight: .semibold)).tracking(-0.6).lineLimit(1)
-                Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 9.5))
+                Text(pair.change).font(.system(size: 8.2, weight: .semibold)).tracking(-0.6).lineLimit(1)
+                Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 8.2))
             }
             .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
-            .frame(height: Self.flagDiameter, alignment: .center)
+            .frame(height: Self.pairFlagDiameter, alignment: .center)
             .fixedSize()
             Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
-                .frame(height: Self.flagDiameter, alignment: .center)
+                .frame(height: Self.pairFlagDiameter, alignment: .center)
         }
         .foregroundStyle(.white)
         .frame(height: Self.pairRowHeight)
