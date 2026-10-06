@@ -1,6 +1,6 @@
 {
   "ok": false,
-  "checked_at": "2026-10-06T11:17:15.007034+00:00",
-  "error": "HTTP 400 Bad Request: {\"error\":{\"message\":\"Error validating access token: Session key is malformed because of invalid user id.\",\"type\":\"OAuthException\",\"code\":190,\"error_subcode\":0,\"fbtrace_id\":\"AW8GE3PgUb_z1HbZMczc9s2\"}}",
+  "checked_at": "2026-10-06T18:22:56.124036+00:00",
+  "error": "HTTP 400 Bad Request: {\"error\":{\"message\":\"Error validating access token: Session key is malformed because of invalid user id.\",\"type\":\"OAuthException\",\"code\":190,\"error_subcode\":0,\"fbtrace_id\":\"AkqxpGWEbs2RpTfxcRReY21\"}}",
   "notified": true
 }
