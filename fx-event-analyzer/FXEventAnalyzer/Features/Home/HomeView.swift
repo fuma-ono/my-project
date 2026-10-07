@@ -1356,6 +1356,8 @@ struct HomeView: View {
                             NotoText.text(symbol, size: 6)
                                 .tracking(-0.4)
                                 .foregroundStyle(Self.linkBlue)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
                             if let pips = speech.reactionPips {
                                 NotoText.text(ValueFormat.pips(pips), size: 5.5)
                                     .foregroundStyle(pips >= 0 ? Self.changeUpColor : Self.changeDownColor)
@@ -1367,7 +1369,22 @@ struct HomeView: View {
                         speechPriceRow(label: "現在", value: speech.reactionPriceAfter, symbol: symbol)
                     }
                     .lineLimit(1)
+                    // HQ再指摘(2026-10-07)「USD/...となっている、縦線から
+                    // 右側(＞以外)をもう少し左にして」: 左ブロックを固定幅
+                    // 100にした対応(直前のコミット)で3行の縦線のx位置は
+                    // 揃ったが、その分USD/JPY側に残る横幅が減り、symbol
+                    // ("USD/JPY")だけ`minimumScaleFactor`が無かったため
+                    // "USD/..."と省略記号で切れていた。安全弁(上記)に加え、
+                    // 縦線との間隔を`padding(.leading, 6)`相当から詰めて
+                    // 右ブロックを左に寄せ、その分の余白を確保した。
+                    .padding(.leading, -3)
                 }
+
+                // chevron(＞)は今回の調整対象外(HQ指示)。右ブロックを左へ
+                // 詰めた分、chevronまでの間が空くことになるが、Spacerで
+                // カード右端に固定することでchevron自体の位置は動かさない
+                // (pairRowの`Spacer(minLength: 4)`と同じパターン)。
+                Spacer(minLength: 4)
 
                 Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
                     .frame(height: Self.speechRowHeight, alignment: .center)
