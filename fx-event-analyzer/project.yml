@@ -38,7 +38,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.fumaono.fxeventanalyzer
         PRODUCT_NAME: FXEventAnalyzer
-        MARKETING_VERSION: "0.1.0"
+        MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1,2" # iPhone + iPad
         SUPPORTS_MACCATALYST: NO
@@ -53,6 +53,10 @@ targets:
       path: FXEventAnalyzer/Resources/Info.plist
       properties:
         UILaunchScreen: {}
+        # XcodeGen's generated Info.plist otherwise hard-codes "1.0" / "1";
+        # read the build settings so SCR-023 アプリ情報 shows the real version.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft

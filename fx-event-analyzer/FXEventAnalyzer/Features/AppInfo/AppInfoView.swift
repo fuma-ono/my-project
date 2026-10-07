@@ -3,10 +3,12 @@ import SwiftUI
 
 /// SCR-023 アプリ情報(HQ指示 2026-10-07の参考画像)。アイコンは本アプリのもの
 /// (参考画像のアイコンは使わない)。X(Twitter)の公式アカウントは無いので行ごと
-/// 外し、公式サイトはURLが決まるまで出さない(`AppInfo.websiteURL`)。
+/// 外す。公式サイトの行は出しておき、URLが決まるまでは準備中と知らせる
+/// (`AppInfo.websiteURL`)。
 struct AppInfoView: View {
     @Binding var tabSelection: Int
     @State private var page: Page?
+    @State private var showsWebsitePending = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.requestReview) private var requestReview
@@ -49,10 +51,10 @@ struct AppInfoView: View {
                 .background(AccountCardBackground())
 
                 VStack(spacing: 0) {
-                    if let url = AppInfo.websiteURL {
-                        linkRow("公式サイトを開く") { openURL(url) }
-                        SettingsListSeparator()
+                    linkRow("公式サイトを開く") {
+                        if let url = AppInfo.websiteURL { openURL(url) } else { showsWebsitePending = true }
                     }
+                    SettingsListSeparator()
                     linkRow("アプリを評価する") { requestReview() }
                 }
                 .frame(width: 214)
@@ -62,6 +64,9 @@ struct AppInfoView: View {
             V5BottomBar(selected: $tabSelection)
         }
         .toolbar(.hidden, for: .navigationBar)
+        .alert("公式サイトは準備中です", isPresented: $showsWebsitePending) {
+            Button("OK", role: .cancel) {}
+        }
         .navigationDestination(item: $page) { page in
             switch page {
             case .license: LegalDocumentView(document: AppInfo.licenseDocument, tabSelection: $tabSelection)
@@ -89,7 +94,7 @@ struct AppInfoView: View {
 enum AppInfo {
     static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-" }
     static var build: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "-" }
-    /// 公式サイトのURL。決まったら入れると「公式サイトを開く」が出る。
+    /// 公式サイトのURL。決まったら入れると「公式サイトを開く」で開く。
     static let websiteURL: URL? = nil
 
     struct Library: Identifiable {
