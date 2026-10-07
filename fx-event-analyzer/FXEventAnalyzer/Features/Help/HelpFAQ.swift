@@ -20,14 +20,14 @@ enum HelpFAQ {
         HelpFAQCategory(id: "account", title: "アカウントについて", icon: "person.fill", items: [
             HelpFAQItem(question: "名前や生年月日を変更したい", answer: "設定 → アカウント情報 → プロフィール編集 から変更できます。名前は入力欄をタップし、生年月日は「生年月日」の項目をタップしてください。"),
             HelpFAQItem(question: "メールアドレスを変更したい", answer: "設定 → アカウント情報 → メールアドレス から新しいアドレスを入力してください。届いた確認メールのリンクを開くと変更が完了します。"),
-            HelpFAQItem(question: "パスワードを忘れた・変更したい", answer: "ログイン画面の「パスワードをお忘れの方」から再設定できます。ログイン中の場合は、設定 → アカウント情報 → パスワード変更 から変更できます。"),
+            HelpFAQItem(question: "パスワードを変更したい", answer: "設定 → アカウント情報 → パスワード変更 から変更できます。パスワードを忘れてログインできない場合は、お手数ですがお問い合わせください。"),
             HelpFAQItem(question: "アカウントを削除したい", answer: "設定 → アカウント情報 → アカウント削除 から削除できます。削除すると、プロフィール・設定・お気に入りなどのデータは復元できません。App Storeのサブスクリプションは自動では解約されないため、先に解約してください。"),
         ]),
         HelpFAQCategory(id: "billing", title: "プラン・支払いについて", icon: "creditcard", items: [
             HelpFAQItem(question: "プレミアムプランでできることは？", answer: "過去の同じ指標の発表時に、為替がどう動いたかの詳しい統計(高度な統計)を見られます。無料プランの機能もすべて使えます。"),
             HelpFAQItem(question: "料金はいくらですか？", answer: "月額プランと年額プランがあります。料金は 設定 → プラン・購読管理 → プランを選ぶ で確認できます。お支払いはApple IDに請求されます。"),
             HelpFAQItem(question: "解約したい", answer: "設定 → プラン・購読管理 → 購読を解約 から、App Storeのサブスクリプション管理を開いて解約してください。期間終了の24時間前までに解約しないと自動で更新されます。解約しても期間の終わりまではプレミアムプランを使えます。"),
-            HelpFAQItem(question: "機種変更したらプランが消えた", answer: "設定 → プラン・購読管理 → プランを選ぶ の「購入を復元」をお試しください。購入したときと同じApple IDでサインインしている必要があります。"),
+            HelpFAQItem(question: "機種変更したらプランが消えた", answer: "購入したときと同じアカウントでログインし、同じApple IDでApp Storeにサインインしたうえで、設定 → プラン・購読管理 → プランを選ぶ の「購入を復元」をお試しください。"),
             HelpFAQItem(question: "返金してほしい", answer: "お支払いはAppleが管理しているため、返金はAppleのサポート(reportaproblem.apple.com)から申請してください。"),
         ]),
         HelpFAQCategory(id: "notification", title: "通知について", icon: "bell.fill", items: [

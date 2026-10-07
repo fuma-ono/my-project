@@ -14,6 +14,8 @@ struct NotificationListView: View {
     @Binding var tabSelection: Int
     @ObservedObject private var store = NotificationsStore.shared
     @State private var unreadIDs: Set<String> = []
+    /// 詳細画面から戻ったときに未読の印を消さないよう、最初の表示時だけ数える。
+    @State private var didCaptureUnread = false
     @State private var now = Date()
     /// `nil`は「すべて」。
     @State private var filter: NotificationEntry.Kind?
@@ -57,7 +59,10 @@ struct NotificationListView: View {
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
             now = Date()
-            unreadIDs = Set(store.delivered(now: now).filter { store.isUnread($0) }.map(\.id))
+            if !didCaptureUnread {
+                unreadIDs = Set(store.delivered(now: now).filter { store.isUnread($0) }.map(\.id))
+                didCaptureUnread = true
+            }
             store.markAllRead(now: now)
         }
         .task {
@@ -227,7 +232,7 @@ private struct NotificationRow: View {
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityHint(isUnread ? "未読" : "")
+        .accessibilityValue(isUnread ? "未読" : "")
     }
 }
 

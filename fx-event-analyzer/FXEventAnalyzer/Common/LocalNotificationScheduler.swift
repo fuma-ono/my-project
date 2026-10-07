@@ -26,6 +26,8 @@ protocol LocalNotificationScheduling: AnyObject {
     func isAuthorizationDenied() async -> Bool
     /// 通知予定を取り直して、端末のローカル通知を予約し直す。
     func refresh() async
+    /// プッシュ通知をオフにしたとき、通信の成否に関わらず予約済みの通知を消す。
+    func removeUpcoming() async
 }
 
 /// HQ指示(2026-10-05)「通知の設定画面を…機能も一緒に作成して」。
@@ -49,7 +51,6 @@ final class LocalNotificationScheduler: LocalNotificationScheduling {
     private let center: UserNotificationCentering
     private let store: NotificationsStore
     private let now: () -> Date
-    private var isRefreshing = false
 
     init(
         apiClient: APIClient,
@@ -80,11 +81,35 @@ final class LocalNotificationScheduler: LocalNotificationScheduling {
         await center.authorizationStatus() == .denied
     }
 
-    func refresh() async {
-        guard !isRefreshing else { return }
-        isRefreshing = true
-        defer { isRefreshing = false }
+    /// 予約し直しはアプリ全体で1つずつ行う(画面・起動時・バックグラウンドの
+    /// 各インスタンスが同時に走ると、古い取得結果で予約が上書きされ、プッシュ
+    /// 通知をオフにした後も通知が届くことがあった)。実行中に呼ばれたら、
+    /// 終わってからもう一度だけ最新の内容で取り直す。
+    private static var isRefreshingAny = false
+    private static var needsRerun = false
 
+    func refresh() async {
+        if Self.isRefreshingAny {
+            Self.needsRerun = true
+            return
+        }
+        Self.isRefreshingAny = true
+        defer { Self.isRefreshingAny = false }
+        repeat {
+            Self.needsRerun = false
+            await refreshOnce()
+        } while Self.needsRerun
+    }
+
+    func removeUpcoming() async {
+        store.removeUpcoming(now: now())
+        let ours = await center.pendingNotificationRequests()
+            .map(\.identifier)
+            .filter { $0.hasPrefix(Self.identifierPrefix) }
+        center.removePendingNotificationRequests(withIdentifiers: ours)
+    }
+
+    private func refreshOnce() async {
         let response: UpcomingNotificationsResponse
         do {
             response = try await service.fetchUpcoming()
@@ -94,7 +119,9 @@ final class LocalNotificationScheduler: LocalNotificationScheduling {
             return
         }
         let current = now()
-        let entries = response.items.map { NotificationEntry($0, leadMinutes: response.leadMinutes) }
+        // 本文の時刻は表示・地域設定(SCR-018)のタイムゾーンで書く。
+        let timeZone = AppPreferences.shared.timeZone
+        let entries = response.items.map { NotificationEntry($0, leadMinutes: response.leadMinutes, timeZone: timeZone) }
         store.record(entries, now: current)
 
         let ours = await center.pendingNotificationRequests()
@@ -129,7 +156,8 @@ final class LocalNotificationScheduler: LocalNotificationScheduling {
         content.body = entry.body
         content.sound = .default
         content.userInfo = ["kind": entry.kind.rawValue, "id": entry.targetID]
-        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: entry.notifyAt)
+        // タイムゾーンも入れて、端末のタイムゾーンが変わっても同じ時点に届くようにする。
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second, .timeZone], from: entry.notifyAt)
         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
         return UNNotificationRequest(identifier: identifierPrefix + entry.id, content: content, trigger: trigger)
     }

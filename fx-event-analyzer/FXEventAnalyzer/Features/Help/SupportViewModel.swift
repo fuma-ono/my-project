@@ -55,7 +55,7 @@ final class SupportViewModel: ObservableObject {
                     body: reply
                 )
             }
-        } catch APIError.server(code: _, message: _, httpStatus: 429) {
+        } catch APIError.server(code: _, message: _, httpStatus: 429), APIError.unexpectedStatus(429) {
             sendState = .error("短い時間に何度も送信されています。しばらくしてからお試しください。")
         } catch {
             sendState = .error("送信できませんでした。通信環境を確認して、もう一度お試しください。")

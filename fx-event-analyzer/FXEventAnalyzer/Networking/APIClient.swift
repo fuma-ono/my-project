@@ -29,7 +29,7 @@ final class URLSessionAPIClient: APIClient {
         self.baseURLProvider = baseURLProvider
         self.authTokenProvider = authTokenProvider
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom(BackendDate.decode)
         self.decoder = decoder
     }
 
@@ -103,3 +103,32 @@ final class URLSessionAPIClient: APIClient {
 /// Response type for endpoints that answer `204 No Content` (e.g.
 /// `DELETE /account`), whose empty body `JSONDecoder` can't decode.
 struct EmptyResponse: Decodable, Equatable {}
+
+/// Backendの日時。`.iso8601`は秒の小数(`…45.123456+00:00`、Postgresの
+/// `timestamptz`をそのまま返す`/account`・`/subscription`など)を読めず、
+/// 本番ではアカウント情報・購入が読み込みに失敗していた。小数を外して読み、
+/// 小数分を足す(桁数は問わない)。
+enum BackendDate {
+    static func decode(_ decoder: Decoder) throws -> Date {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        guard let date = parse(raw) else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid ISO 8601 date: \(raw)")
+        }
+        return date
+    }
+
+    static func parse(_ raw: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        guard let dot = raw.firstIndex(of: "."), raw.distance(from: raw.startIndex, to: dot) >= 19 else {
+            return formatter.date(from: raw)
+        }
+        let digits = raw[raw.index(after: dot)...].prefix { $0.isNumber }
+        guard !digits.isEmpty else { return formatter.date(from: raw) }
+        let rest = raw[raw.index(dot, offsetBy: digits.count + 1)...]
+        guard let whole = formatter.date(from: String(raw[..<dot]) + rest),
+              let fraction = Double("0." + digits) else { return nil }
+        return whole.addingTimeInterval(fraction)
+    }
+}

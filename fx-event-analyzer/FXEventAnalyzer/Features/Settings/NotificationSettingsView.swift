@@ -10,6 +10,7 @@ struct NotificationSettingsView: View {
     @Binding var tabSelection: Int
     @State private var picker: OptionPicker?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     private enum OptionPicker: String, Identifiable {
         case fxPairs, importances, timing, quietStart, quietEnd
@@ -51,6 +52,9 @@ struct NotificationSettingsView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .task { viewModel.load() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { viewModel.recheckAuthorization() }
+        }
         .sheet(item: $picker) { picker in
             switch picker {
             case .fxPairs: fxPairSheet

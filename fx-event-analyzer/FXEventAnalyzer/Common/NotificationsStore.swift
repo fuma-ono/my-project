@@ -68,6 +68,12 @@ final class NotificationsStore: ObservableObject {
         refreshUnread(now: now)
     }
 
+    /// まだ届いていない予定だけを消す(プッシュ通知をオフにしたとき)。
+    func removeUpcoming(now: Date = Date()) {
+        entries.removeAll { $0.notifyAt > now }
+        persist()
+    }
+
     /// 届いた通知(新しい順)。
     func delivered(now: Date = Date()) -> [NotificationEntry] {
         entries.filter { $0.notifyAt <= now }.reversed()

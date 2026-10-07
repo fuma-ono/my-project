@@ -21,6 +21,12 @@ final class AppPreferences: ObservableObject {
         chart = settings.chart
     }
 
+    /// ログアウト・セッション切れで、前のユーザーの設定を残さない。
+    func reset() {
+        display = .defaults
+        chart = .defaults
+    }
+
     func load(apiClient: APIClient) async {
         if let settings = try? await SettingsService(apiClient: apiClient).fetchSettings() {
             apply(settings)

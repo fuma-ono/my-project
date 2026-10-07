@@ -31,10 +31,20 @@ struct RootView: View {
                     },
                     sessionExpired: sessionExpired
                 )
+                .onAppear {
+                    // セッション切れでログイン画面に戻った場合も、前のユーザーの
+                    // 通知の予約・一覧と表示設定を残さない。
+                    LocalNotificationScheduler(apiClient: apiClient).reset()
+                    AppPreferences.shared.reset()
+                    if sessionExpired { FavoritesStore.shared.removeAll() }
+                }
             case .loggedIn:
                 MainTabView(apiClient: apiClient, authService: authService) {
-                    // ログアウト・アカウント削除: 前のユーザーの通知を残さない。
+                    // ログアウト・アカウント削除: 前のユーザーの通知・お気に入り・
+                    // 表示設定を残さない。
                     LocalNotificationScheduler(apiClient: apiClient).reset()
+                    FavoritesStore.shared.removeAll()
+                    AppPreferences.shared.reset()
                     appState.handleSignOut()
                 }
                 .task(id: scenePhase) {

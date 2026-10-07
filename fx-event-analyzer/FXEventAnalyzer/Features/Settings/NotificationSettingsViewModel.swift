@@ -57,6 +57,12 @@ final class NotificationSettingsViewModel: ObservableObject {
         }
     }
 
+    /// 端末の設定アプリから戻ったとき、通知の許可の状態を見直す。
+    func recheckAuthorization() {
+        guard loadState == .loaded, settings.push else { return }
+        Task { authorizationDenied = await scheduler.isAuthorizationDenied() }
+    }
+
     func update(_ change: (inout NotificationSettings) -> Void) {
         guard loadState == .loaded else { return }
         let wasPushOn = settings.push
@@ -65,7 +71,11 @@ final class NotificationSettingsViewModel: ObservableObject {
         guard next != settings else { return }
         settings = next
         if !wasPushOn, next.push {
-            Task { authorizationDenied = !(await scheduler.requestAuthorization()) }
+            Task {
+                let granted = await scheduler.requestAuthorization()
+                // 許可を待つ間にプッシュ通知をまたオフにしていたら、注意書きは出さない。
+                if settings.push { authorizationDenied = !granted }
+            }
         } else if !next.push {
             authorizationDenied = false
         }
@@ -149,6 +159,10 @@ final class NotificationSettingsViewModel: ObservableObject {
             saveState = .saved
             // 参考画像(HQ指示 2026-10-06)の「システム」通知。
             store.recordSystem(targetID: "notification-settings", title: "通知設定を更新しました", body: "通知の設定が正常に変更されました。")
+            if !settings.push {
+                // 予定の取り直しに失敗しても、オフにした後に通知が届かないよう先に消す。
+                await scheduler.removeUpcoming()
+            }
             await scheduler.refresh()
         } catch {
             guard target == revision else { return }

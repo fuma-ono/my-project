@@ -318,6 +318,8 @@ private final class MockScheduler: LocalNotificationScheduling {
 
     func isAuthorizationDenied() async -> Bool { denied }
     func refresh() async { refreshCount += 1 }
+    private(set) var removeUpcomingCount = 0
+    func removeUpcoming() async { removeUpcomingCount += 1 }
 }
 
 @MainActor

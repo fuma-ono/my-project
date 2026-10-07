@@ -39,16 +39,20 @@ final class SettingsSectionViewModel<Section: SettingsSection>: ObservableObject
     private let makeUpdate: (Section) -> SettingsUpdate
     private let debounce: Duration
     private var autoSaveTask: Task<Void, Never>?
+    /// 保存できたときの後処理(変更前, 変更後)。
+    private let onSaved: ((Section, Section) -> Void)?
 
     init(
         apiClient: APIClient,
         section: KeyPath<SettingsResponse, Section>,
         debounce: Duration = .milliseconds(400),
+        onSaved: ((Section, Section) -> Void)? = nil,
         makeUpdate: @escaping (Section) -> SettingsUpdate
     ) {
         self.service = SettingsService(apiClient: apiClient)
         self.section = section
         self.debounce = debounce
+        self.onSaved = onSaved
         self.makeUpdate = makeUpdate
     }
 
@@ -103,7 +107,9 @@ final class SettingsSectionViewModel<Section: SettingsSection>: ObservableObject
         do {
             let response = try await service.updateSettings(makeUpdate(sent))
             AppPreferences.shared.apply(response)
+            let previous = saved
             saved = response[keyPath: section]
+            onSaved?(previous, saved)
             if draft == sent {
                 draft = saved
             } else {
@@ -113,9 +119,17 @@ final class SettingsSectionViewModel<Section: SettingsSection>: ObservableObject
             saveState = .saved
         } catch APIError.server(code: .validationError, message: _, httpStatus: _) {
             saveState = .error("入力内容を保存できませんでした。値を確認してください。")
+            retryPendingEdit(after: sent)
         } catch {
             saveState = .error("保存に失敗しました。もう一度お試しください。")
+            retryPendingEdit(after: sent)
         }
+    }
+
+    /// 保存の失敗中に次の変更が入っていたら、その変更を保存し直す(一度だけ。
+    /// 同じ内容でまた失敗したら、ここでは繰り返さない)。
+    private func retryPendingEdit(after sent: Section) {
+        if draft != sent { scheduleAutoSave() }
     }
 
     private func apply(_ response: SettingsResponse) {
@@ -126,7 +140,16 @@ final class SettingsSectionViewModel<Section: SettingsSection>: ObservableObject
 
 extension SettingsSectionViewModel where Section == DisplaySettings {
     convenience init(apiClient: APIClient) {
-        self.init(apiClient: apiClient, section: \.display) { SettingsUpdate(display: $0) }
+        self.init(
+            apiClient: apiClient,
+            section: \.display,
+            // 通知しない時間帯と通知の本文の時刻はタイムゾーンに従うので、
+            // タイムゾーンを変えたら通知を予約し直す。
+            onSaved: { previous, saved in
+                guard previous.timezone != saved.timezone else { return }
+                Task { await LocalNotificationScheduler(apiClient: apiClient).refresh() }
+            }
+        ) { SettingsUpdate(display: $0) }
     }
 }
 

@@ -48,6 +48,10 @@ struct SubscriptionManagementView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.load() }
+        // 承認待ちの購入が承認されたときなど、購読の変化を画面にも反映する。
+        .onReceive(NotificationCenter.default.publisher(for: .subscriptionDidChange)) { _ in
+            Task { await viewModel.load() }
+        }
         .sheet(item: $sheet) { sheet in
             switch sheet {
             case .plans: planSheet
@@ -218,11 +222,19 @@ struct SubscriptionManagementView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .disabled(isCurrent)
+                    .disabled(isCurrent || (!viewModel.subscription.isPro && !viewModel.productsAvailable))
                 }
             }
             .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.06)))
             .padding(.horizontal, 16)
+
+            if !viewModel.productsAvailable && !viewModel.subscription.isPro {
+                Text("App Storeから価格を取得できませんでした。通信環境を確認して、時間をおいてもう一度お試しください。")
+                    .font(.footnote)
+                    .foregroundStyle(V5P.yellow)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 10)
+            }
 
             Button("購入を復元") {
                 Task { await viewModel.restore() }
@@ -242,6 +254,9 @@ struct SubscriptionManagementView: View {
                 Button("利用規約") { legalDocument = LegalDocuments.terms }
                 Button("プライバシーポリシー") { legalDocument = LegalDocuments.privacy }
             }
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(V5P.cyan)
+            .padding(.top, 10)
             Button("特定商取引法に基づく表記") { legalDocument = LegalDocuments.commerce }
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(V5P.cyan)

@@ -93,7 +93,7 @@ final class StoreKitPurchaseClient: PurchaseClient {
         switch try await product.purchase(options: [.appAccountToken(appAccountToken)]) {
         case .success(let result):
             guard case .verified(let transaction) = result else { throw PurchaseError.unverified }
-            let signed = SignedPurchase(transaction: result.jwsRepresentation, renewalInfo: await Self.renewalInfo(for: product))
+            let signed = SignedPurchase(transaction: result.jwsRepresentation, renewalInfo: await Self.renewalInfo(for: product, originalID: transaction.originalID))
             // 端末上の状態は使わず、Backendの検証結果で判定する(§25.1)。
             // finishしても有効な購読は`currentEntitlements`に残るので、送り直せる。
             await transaction.finish()
@@ -110,11 +110,7 @@ final class StoreKitPurchaseClient: PurchaseClient {
     func currentSubscription() async -> SignedPurchase? {
         for await result in Transaction.currentEntitlements {
             guard case .verified(let transaction) = result, ProProduct.ids.contains(transaction.productID) else { continue }
-            var renewalInfo: String?
-            if let product = try? await Product.products(for: [transaction.productID]).first {
-                renewalInfo = await Self.renewalInfo(for: product)
-            }
-            return SignedPurchase(transaction: result.jwsRepresentation, renewalInfo: renewalInfo)
+            return SignedPurchase(transaction: result.jwsRepresentation, renewalInfo: await Self.renewalInfo(productID: transaction.productID, originalID: transaction.originalID))
         }
         return nil
     }
@@ -144,14 +140,21 @@ final class StoreKitPurchaseClient: PurchaseClient {
         try? await AppStore.showManageSubscriptions(in: scene)
     }
 
-    private static func renewalInfo(for product: Product) async -> String? {
+    static func renewalInfo(productID: String, originalID: UInt64) async -> String? {
+        guard let product = try? await Product.products(for: [productID]).first else { return nil }
+        return await renewalInfo(for: product, originalID: originalID)
+    }
+
+    /// 同じ購読(`originalID`)の更新情報だけを返す。別の購読(ファミリー共有など)の
+    /// 情報を送るとBackendの検証で弾かれるため、見つからなければ送らない。
+    private static func renewalInfo(for product: Product, originalID: UInt64) async -> String? {
         guard let statuses = try? await product.subscription?.status else { return nil }
         for status in statuses {
-            if case .verified(let transaction) = status.transaction, transaction.productID == product.id {
+            if case .verified(let transaction) = status.transaction, transaction.originalID == originalID {
                 return status.renewalInfo.jwsRepresentation
             }
         }
-        return statuses.first?.renewalInfo.jwsRepresentation
+        return nil
     }
 
     private static func priceText(_ transaction: Transaction) -> String? {
@@ -167,19 +170,33 @@ final class SubscriptionSync {
     static let shared = SubscriptionSync()
     private var updatesTask: Task<Void, Never>?
 
+    /// フォアグラウンドに戻るたびに呼ぶ。端末で有効な購読は毎回送り直し(ユーザーが
+    /// 入れ替わった場合や、更新・解約の反映)、更新の受け取りは一度だけ始める。
     func start(apiClient: APIClient) {
-        guard updatesTask == nil else { return }
         let service = SubscriptionService(apiClient: apiClient)
-        updatesTask = Task {
-            // 起動時に、端末で有効な購読を一度送り直す(更新・解約の反映)。
+        Task {
             if let current = await StoreKitPurchaseClient().currentSubscription() {
                 _ = try? await service.verify(current.request)
             }
+        }
+        guard updatesTask == nil else { return }
+        updatesTask = Task {
             for await result in Transaction.updates {
                 guard case .verified(let transaction) = result, ProProduct.ids.contains(transaction.productID) else { continue }
-                _ = try? await service.verify(SubscriptionVerifyRequest(signedTransaction: result.jwsRepresentation, signedRenewalInfo: nil))
-                await transaction.finish()
+                let renewalInfo = await StoreKitPurchaseClient.renewalInfo(productID: transaction.productID, originalID: transaction.originalID)
+                do {
+                    _ = try await service.verify(SubscriptionVerifyRequest(signedTransaction: result.jwsRepresentation, signedRenewalInfo: renewalInfo))
+                    await transaction.finish()
+                } catch {
+                    // 送れなかった(ログアウト中など)ときは終わらせずに残し、次の起動で送り直す。
+                }
+                NotificationCenter.default.post(name: .subscriptionDidChange, object: nil)
             }
         }
     }
+}
+
+extension Notification.Name {
+    /// 購読の更新(承認待ちの完了・自動更新など)をBackendへ送った。
+    static let subscriptionDidChange = Notification.Name("FXEA.subscriptionDidChange")
 }

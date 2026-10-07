@@ -1,3 +1,4 @@
+import StoreKit
 import Foundation
 
 /// SCR-017 プラン・購読管理(HQ指示 2026-10-06の参考画像)。購読状態は
@@ -9,6 +10,9 @@ final class SubscriptionManagementViewModel: ObservableObject {
     @Published private(set) var loadState: SettingsSectionLoadState = .loading
     @Published private(set) var subscription: SubscriptionResponse = .free
     @Published private(set) var products: [ProProduct] = ProProduct.fallback
+    /// App Storeから価格を取得できた(購入できる)か。取得できない間は表示用の
+    /// 予定価格のまま、購入は受け付けない。
+    @Published private(set) var productsAvailable = false
     @Published private(set) var history: [PurchaseRecord] = []
     @Published private(set) var isWorking = false
     /// 購入・復元などの結果を知らせる一言(成功・失敗)。
@@ -38,21 +42,23 @@ final class SubscriptionManagementViewModel: ObservableObject {
         }
         if let loaded = try? await purchases.products(), !loaded.isEmpty {
             products = ProProduct.fallback.map { fallback in loaded.first { $0.id == fallback.id } ?? fallback }
+            productsAvailable = true
         }
     }
 
     // MARK: - 表示
 
     var currentProduct: ProProduct? {
-        guard subscription.isPro else { return nil }
-        let id = subscription.productId ?? ProProduct.monthlyID
+        guard subscription.isPro, let id = subscription.productId else { return nil }
         return products.first { $0.id == id }
     }
 
     var planTitle: String { subscription.isPro ? "プレミアムプラン" : "無料プラン" }
 
     var priceLabel: String {
-        guard let product = currentProduct else { return "基本機能をお試しいただけます。" }
+        guard let product = currentProduct else {
+            return subscription.isPro ? "ご利用中" : "基本機能をお試しいただけます。"
+        }
         return "\(product.period.label) \(product.displayPrice)"
     }
 
@@ -60,6 +66,8 @@ final class SubscriptionManagementViewModel: ObservableObject {
     var renewalLabel: String? {
         guard subscription.isPro, let expiresAt = subscription.expiresAt else { return nil }
         // 曜日は表示形式に関わらず添える(参考画像の「2025/04/10 (木)」)。
+        // 曜日も日付と同じタイムゾーンで出す。
+        Self.weekdayFormatter.timeZone = AppPreferences.shared.timeZone
         let date = AppPreferences.shared.dateString(expiresAt) + " (" + Self.weekdayFormatter.string(from: expiresAt) + ")"
         return subscription.isCanceled ? "有効期限 \(date)（自動更新オフ）" : "次回更新日 \(date)"
     }
@@ -107,6 +115,7 @@ final class SubscriptionManagementViewModel: ObservableObject {
 
     /// App Storeの管理画面(解約・プラン変更)から戻ったら、状態を送り直す。
     func manageSubscription() async {
+        guard !isWorking else { return }
         await purchases.showManageSubscriptions()
         await perform {
             if let signed = await self.purchases.currentSubscription() {
@@ -134,6 +143,12 @@ final class SubscriptionManagementViewModel: ObservableObject {
         defer { isWorking = false }
         do {
             if let message = try await action() { notice = message }
+        } catch StoreKitError.userCancelled {
+            // Apple IDの確認を自分で閉じた(復元のキャンセルなど)。
+        } catch APIError.server(code: _, message: _, httpStatus: 403) {
+            notice = "別のアカウントで購入された購読のため、このアカウントでは利用できません。"
+        } catch APIError.server(code: _, message: _, httpStatus: 409) {
+            notice = "この購読は別のアカウントに登録されています。購入したアカウントでログインしてください。"
         } catch {
             notice = "処理に失敗しました。時間をおいてもう一度お試しください。"
         }

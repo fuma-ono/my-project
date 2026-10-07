@@ -291,6 +291,8 @@ struct SettingsView: View {
         .padding(.leading, Self.badgeLeading)
         .padding(.trailing, 10)
         .frame(width: Self.cardWidth, height: Self.rowHeight)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
         // 行は(押している間以外)背景を持たないため、これがないと`.plain`スタイルでは
         // アイコン・文字・シェブロン以外(行の中央の空白)がタップに反応しない。
         .contentShape(Rectangle())
