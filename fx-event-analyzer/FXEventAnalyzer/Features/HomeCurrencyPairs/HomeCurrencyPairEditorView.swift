@@ -1,13 +1,16 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// SCR-026 ホーム通貨ペア編集(HQ指示 2026-10-07の参考画像)。上に表示する通貨
-/// ペア(最大3つ、番号・並べ替え・外す)、下にその他の通貨ペア(追加)、最後に
-/// 保存ボタン。国旗はホーム画面と同じく、基軸通貨と決済通貨の2つを並べる。
+/// SCR-026 ホーム通貨ペア編集(HQ指示 2026-10-07の参考画像)。選択中の通貨
+/// ペア(最大3つ、ドラッグで並べ替え)と「通貨ペアを追加する」、保存ボタン。
+/// 追加・外すは遷移先の`HomeCurrencyPairPickerView`で行い、同じViewModelを
+/// 共有するので、戻ってから「保存」でまとめて送る。国旗はホーム画面と同じく、
+/// 基軸通貨と決済通貨の2つを並べる。
 struct HomeCurrencyPairEditorView: View {
     @StateObject private var viewModel: HomeCurrencyPairEditorViewModel
     @Binding var tabSelection: Int
     @State private var dragging: String?
+    @State private var showsPicker = false
     @Environment(\.dismiss) private var dismiss
 
     init(apiClient: APIClient, tabSelection: Binding<Int>) {
@@ -28,20 +31,20 @@ struct HomeCurrencyPairEditorView: View {
             case .loaded:
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 8) {
-                        NotoText.text("ホーム画面に表示する通貨ペアを選択・並び替えできます。\n※ ホーム画面には最大3つまで表示されます。", size: 7.5)
+                        NotoText.text("ホーム画面に表示する通貨ペアを選択・並べ替えできます。\n最大\(HomeSettings.maxPairs)つまで設定できます。", size: 7.5)
                             .foregroundStyle(SettingsCardStyle.subtitleColor)
                             .lineSpacing(2)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 4)
                         selectedSection
-                        othersSection
+                        addButton
                         if case .error(let message) = viewModel.saveState {
                             NotoText.text(message, size: 7.5).foregroundStyle(V5P.red).frame(width: 214)
                         }
                         AccountPrimaryButton(title: "保存", isLoading: viewModel.saveState == .saving, isEnabled: viewModel.canSave) {
                             Task { if await viewModel.save() { dismiss() } }
                         }
-                        .padding(.top, 4)
+                        .padding(.top, 10)
                     }
                     .frame(width: 214)
                     .padding(.vertical, 6)
@@ -54,6 +57,9 @@ struct HomeCurrencyPairEditorView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.load() }
+        .navigationDestination(isPresented: $showsPicker) {
+            HomeCurrencyPairPickerView(viewModel: viewModel, tabSelection: $tabSelection)
+        }
     }
 
     private func centered(@ViewBuilder _ content: () -> some View) -> some View {
@@ -62,27 +68,22 @@ struct HomeCurrencyPairEditorView: View {
             .padding(.top, 53)
     }
 
-    // MARK: - 表示する通貨ペア
+    // MARK: - 選択中の通貨ペア
 
     private var selectedSection: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                NotoText.text("表示する通貨ペア（最大\(HomeSettings.maxPairs)つ）", size: 10.5)
-                    .foregroundStyle(SettingsListLayout.sectionTitleColor)
-                Spacer()
-                NotoText.text("\(viewModel.selected.count)/\(HomeSettings.maxPairs)", size: 8.5)
-                    .foregroundStyle(SettingsCardStyle.subtitleColor)
-            }
-            .padding(.horizontal, 4)
+            NotoText.text("選択中の通貨ペア（\(viewModel.selected.count)/\(HomeSettings.maxPairs)）", size: 10.5)
+                .foregroundStyle(SettingsListLayout.sectionTitleColor)
+                .padding(.horizontal, 4)
             VStack(spacing: 0) {
                 if viewModel.selected.isEmpty {
-                    NotoText.text("下の一覧から追加してください。", size: 8)
+                    NotoText.text("「通貨ペアを追加する」から選んでください。", size: 8)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .frame(maxWidth: .infinity, minHeight: 34)
                 }
                 ForEach(Array(viewModel.selected.enumerated()), id: \.element) { index, symbol in
                     if index > 0 { SettingsListSeparator() }
-                    selectedRow(index: index, symbol: symbol)
+                    selectedRow(symbol)
                 }
             }
             .frame(width: 214)
@@ -90,13 +91,8 @@ struct HomeCurrencyPairEditorView: View {
         }
     }
 
-    private func selectedRow(index: Int, symbol: String) -> some View {
+    private func selectedRow(_ symbol: String) -> some View {
         HStack(spacing: 7) {
-            NotoText.text("\(index + 1)", size: 8)
-                .foregroundStyle(.white)
-                .frame(width: 15, height: 15)
-                .background(Circle().fill(Color.white.opacity(0.08)))
-                .overlay(Circle().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
             PairFlags(symbol: symbol)
             PairLabels(symbol: symbol)
             Spacer(minLength: 4)
@@ -107,15 +103,6 @@ struct HomeCurrencyPairEditorView: View {
                 .frame(width: 20, height: 24)
                 .contentShape(Rectangle())
                 .accessibilityLabel("\(FXPairSymbol.displayName(symbol))を並べ替え")
-            Button { viewModel.remove(symbol) } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 6.5, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 15, height: 15)
-                    .background(Circle().fill(Color.white.opacity(0.12)))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("\(FXPairSymbol.displayName(symbol))を外す")
         }
         .padding(.horizontal, 9)
         .frame(height: 34)
@@ -128,45 +115,131 @@ struct HomeCurrencyPairEditorView: View {
         .onDrop(of: [UTType.text], delegate: PairReorderDelegate(target: symbol, dragging: $dragging, viewModel: viewModel))
     }
 
-    // MARK: - その他の通貨ペア
+    /// 参考画像の枠線だけの「⊕ 通貨ペアを追加する」。
+    private var addButton: some View {
+        Button { showsPicker = true } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "plus.circle")
+                    .font(.system(size: 10, weight: .semibold))
+                NotoText.text("通貨ペアを追加する", size: AccountLayout.leadSize)
+            }
+            .foregroundStyle(.white)
+            .frame(width: 214, height: 29)
+            .background(
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(SettingsCardStyle.cardFill)
+                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(V5P.cyan.opacity(0.7), lineWidth: 0.8))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SettingsRowPressStyle())
+    }
+}
 
-    private var othersSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            NotoText.text("その他の通貨ペア", size: 10.5)
-                .foregroundStyle(SettingsListLayout.sectionTitleColor)
-                .padding(.horizontal, 4)
-            VStack(spacing: 0) {
-                ForEach(Array(viewModel.others.enumerated()), id: \.element) { index, symbol in
-                    if index > 0 { SettingsListSeparator() }
-                    HStack(spacing: 7) {
-                        PairFlags(symbol: symbol)
-                        PairLabels(symbol: symbol)
-                        Spacer(minLength: 4)
-                        Button { viewModel.add(symbol) } label: {
-                            Image(systemName: "plus")
-                                .font(.system(size: 7.5, weight: .bold))
-                                .foregroundStyle(.white)
-                                .frame(width: 16, height: 16)
-                                .background(Circle().fill(Color.white.opacity(0.12)))
+/// SCR-026の遷移先「通貨ペアを追加」(参考画像の右側)。検索欄と絞り込み、
+/// 選べる通貨ペアの一覧。選択中は✓、それ以外は＋で、行のタップで外す・追加する。
+struct HomeCurrencyPairPickerView: View {
+    @ObservedObject var viewModel: HomeCurrencyPairEditorViewModel
+    @Binding var tabSelection: Int
+    @State private var query = ""
+    @State private var category: HomeCurrencyPairEditorViewModel.PairCategory = .all
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        V5Viewport {
+            V5Header(title: "通貨ペアを追加", back: true, onBack: { dismiss() })
+            VStack(alignment: .leading, spacing: 7) {
+                HelpSearchField(text: $query, placeholder: "通貨ペアを検索")
+                categoryBar
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        pairList
+                        if !viewModel.canAdd {
+                            NotoText.text("表示できるのは\(HomeSettings.maxPairs)つまでです。入れ替える場合は、チェックを外してから選んでください。", size: 7)
+                                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.horizontal, 4)
                         }
-                        .buttonStyle(.plain)
-                        .disabled(!viewModel.canAdd)
-                        .opacity(viewModel.canAdd ? 1 : 0.35)
-                        .accessibilityLabel("\(FXPairSymbol.displayName(symbol))を追加")
                     }
-                    .padding(.horizontal, 9)
-                    .frame(height: 32)
+                    .padding(.bottom, 6)
                 }
             }
             .frame(width: 214)
-            .background(AccountCardBackground())
-            if !viewModel.canAdd {
-                NotoText.text("表示できるのは\(HomeSettings.maxPairs)つまでです。入れ替える場合は、上の一覧から外してください。", size: 7)
-                    .foregroundStyle(SettingsCardStyle.subtitleColor)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 4)
+            .padding(.top, 6)
+            .frame(width: V5P.W, height: 398, alignment: .top)
+            .position(x: V5P.W / 2, y: 54 + 398 / 2)
+            V5BottomBar(selected: $tabSelection)
+        }
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var categoryBar: some View {
+        HStack(spacing: 4) {
+            ForEach(HomeCurrencyPairEditorViewModel.PairCategory.allCases, id: \.self) { item in
+                let isSelected = category == item
+                Button { category = item } label: {
+                    NotoText.text(item.label, size: 8)
+                        .foregroundStyle(isSelected ? .white : SettingsCardStyle.subtitleColor)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 20)
+                        .background(Capsule().fill(isSelected ? V5P.blue : SettingsCardStyle.cardFill))
+                        .overlay(Capsule().stroke(isSelected ? V5P.blue : SettingsCardStyle.cardBorder, lineWidth: 0.6))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
+    }
+
+    private var pairList: some View {
+        let pairs = viewModel.pairs(in: category, matching: query)
+        return VStack(spacing: 0) {
+            if pairs.isEmpty {
+                NotoText.text("該当する通貨ペアはありません。", size: 8)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .frame(maxWidth: .infinity, minHeight: 34)
+            }
+            ForEach(Array(pairs.enumerated()), id: \.element) { index, symbol in
+                if index > 0 { SettingsListSeparator() }
+                pairRow(symbol)
+            }
+        }
+        .frame(width: 214)
+        .background(AccountCardBackground())
+    }
+
+    private func pairRow(_ symbol: String) -> some View {
+        let isSelected = viewModel.selected.contains(symbol)
+        let isEnabled = isSelected || viewModel.canAdd
+        return Button { viewModel.toggle(symbol) } label: {
+            HStack(spacing: 7) {
+                PairFlags(symbol: symbol)
+                PairLabels(symbol: symbol)
+                Spacer(minLength: 4)
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 16, height: 16)
+                        .background(Circle().fill(V5P.cyan.opacity(0.9)))
+                } else {
+                    Image(systemName: "plus")
+                        .font(.system(size: 7.5, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 16, height: 16)
+                        .overlay(Circle().stroke(Color.white.opacity(0.7), lineWidth: 0.8))
+                        .opacity(isEnabled ? 1 : 0.35)
+                }
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 32)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .accessibilityLabel("\(FXPairSymbol.displayName(symbol))を\(isSelected ? "外す" : "追加")")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -194,7 +267,7 @@ private struct PairLabels: View {
     }
 }
 
-/// 表示する通貨ペアのドラッグでの並べ替え。
+/// 選択中の通貨ペアのドラッグでの並べ替え。
 @MainActor
 private struct PairReorderDelegate: DropDelegate {
     let target: String

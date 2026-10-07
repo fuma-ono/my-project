@@ -109,9 +109,10 @@ struct HelpView: View {
     }
 }
 
-/// 「キーワードで検索」欄。
-private struct HelpSearchField: View {
+/// 「キーワードで検索」欄。SCR-026の通貨ペア追加でも案内文を変えて使う。
+struct HelpSearchField: View {
     @Binding var text: String
+    var placeholder = "キーワードで検索"
 
     var body: some View {
         HStack(spacing: 6) {
@@ -120,7 +121,7 @@ private struct HelpSearchField: View {
                 .foregroundStyle(SettingsCardStyle.chevronColor)
             ZStack(alignment: .leading) {
                 if text.isEmpty {
-                    NotoText.text("キーワードで検索", size: 9)
+                    NotoText.text(placeholder, size: 9)
                         .foregroundStyle(V5P.muted.opacity(0.8))
                         .allowsHitTesting(false)
                 }
@@ -129,7 +130,7 @@ private struct HelpSearchField: View {
                     .foregroundStyle(.white)
                     .tint(V5P.cyan)
                     .submitLabel(.search)
-                    .accessibilityLabel("キーワードで検索")
+                    .accessibilityLabel(placeholder)
             }
             if !text.isEmpty {
                 Button { text = "" } label: {

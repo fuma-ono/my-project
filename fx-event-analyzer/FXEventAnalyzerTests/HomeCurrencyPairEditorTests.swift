@@ -42,6 +42,27 @@ final class HomeCurrencyPairEditorTests: XCTestCase {
         XCTAssertTrue(viewModel.canSave)
     }
 
+    func testPickerTogglesAndStopsAtTheMaximum() async {
+        let viewModel = await loaded(MockAPIClient(), home: ["USDJPY", "EURUSD"])
+        viewModel.toggle("GBPJPY")
+        viewModel.toggle("AUDUSD") // 3つ選んでいるので追加されない
+        XCTAssertEqual(viewModel.selected, ["USDJPY", "EURUSD", "GBPJPY"])
+        viewModel.toggle("USDJPY")
+        XCTAssertEqual(viewModel.selected, ["EURUSD", "GBPJPY"])
+    }
+
+    func testPickerCategoriesAndSearch() async {
+        let viewModel = await loaded(MockAPIClient(), home: nil)
+        XCTAssertEqual(viewModel.pairs(in: .all, matching: ""), all)
+        XCTAssertEqual(viewModel.pairs(in: .major, matching: ""), ["USDJPY", "EURUSD", "AUDUSD"])
+        XCTAssertEqual(viewModel.pairs(in: .crossYen, matching: ""), ["EURJPY", "GBPJPY"])
+        XCTAssertEqual(viewModel.pairs(in: .other, matching: ""), [])
+        XCTAssertEqual(HomeCurrencyPairEditorViewModel.category(of: "EURGBP"), .other)
+        XCTAssertEqual(viewModel.pairs(in: .all, matching: "eur/j"), ["EURJPY"])
+        XCTAssertEqual(viewModel.pairs(in: .all, matching: "豪ドル"), ["AUDUSD"])
+        XCTAssertEqual(viewModel.pairs(in: .crossYen, matching: "ユーロ"), ["EURJPY"])
+    }
+
     func testSaveSendsOnlyTheHomeSection() async throws {
         let apiClient = MockAPIClient()
         let viewModel = await loaded(apiClient, home: nil)
