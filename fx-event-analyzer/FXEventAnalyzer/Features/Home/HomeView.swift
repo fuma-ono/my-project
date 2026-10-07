@@ -344,6 +344,8 @@ struct HomeView: View {
     /// して」: `verticalPadding`を追加し、お気に入りの小カード(`favoriteGridCard`)
     /// からだけ3→2で呼び出す — 今日の重要イベント(`eventRow`)側のバッジは
     /// 対象外のためデフォルト値(3)のまま変更していない。
+    /// HQ再指摘(2026-10-07、CIキャプチャで再確認)「もう少し短くして」:
+    /// 2→1へさらに縮小。
     ///
     /// HQ指示(2026-10-06)「英字を含む文字もNotoText(Common/NotoText.swift)
     /// で表示して」: "HIGH"/"MEDIUM"/"LOW"は英字のみだが対象に含め、
@@ -1107,7 +1109,7 @@ struct HomeView: View {
                 favoriteGridCardContent(countryCode: countryCode, name: name) {
                     dateRow(releaseDatetime)
                 } footer: {
-                    statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance), verticalPadding: 2)
+                    statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance), verticalPadding: 1)
                 }
             }.buttonStyle(.plain)
         // HQ指示(2026-10-06)「お気に入り欄の米国CPIの下にカレンダーアイコン
@@ -1126,7 +1128,7 @@ struct HomeView: View {
                         EmptyView()
                     }
                 } footer: {
-                    statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance), verticalPadding: 2)
+                    statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance), verticalPadding: 1)
                 }
             }.buttonStyle(.plain)
         case .fxPair(_, let symbol, let price, let change, let isUp):
@@ -1280,6 +1282,10 @@ struct HomeView: View {
     /// pipsの間のHStack spacingを3→1に詰めた。縦線(Divider)は左ブロックが
     /// 固定幅ではなくなった(上記3回目の対応)ため、`.padding(.leading, 5)`
     /// で右へ寄せている。
+    ///
+    /// HQ指摘(2026-10-07、5回目、CIキャプチャで再確認)「パウエルFRB議長の
+    /// 3行の間隔を狭めるように」: 左ブロックのVStack spacingを2→0に縮小
+    /// (Divider/chevronの修正内容は下のコメント参照)。
     @ViewBuilder private func speechRow(_ speech: HomeSpeechSummary) -> some View {
         NavigationLink(value: AppRoute.speechDetail(id: speech.id)) {
             HStack(spacing: 6) {
@@ -1289,7 +1295,7 @@ struct HomeView: View {
                 // 中央銀行行("10/6 08:15 | FRB")・通貨ペア("USD/JPY")・
                 // pips("+28 pips")を`NotoText`に変更した。発言要約
                 // (`headline`)は日本語のみのため`V5JPFont.text`のまま。
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 0) {
                     NotoText.text(speech.speakerName, size: 7)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -1305,7 +1311,18 @@ struct HomeView: View {
                         .minimumScaleFactor(0.7)
                 }
 
-                Divider().overlay(Self.cardBorderColor).frame(height: 25).padding(.leading, 5)
+                // HQ指摘(2026-10-07、CIキャプチャで再確認)「縦線を上下で
+                // そろえるように」「＞も上下でそろえるように」: 固定
+                // `height: 25`は右ブロック(USD/JPY・発言前・現在)の自然な
+                // 高さとはほぼ一致していたが、左ブロック(発言者名/要約/
+                // 日時、NotoSansJPで組んでいる)は実測で一回り高く、線の
+                // 上端/下端がどちらの内容にも揃っていなかった。`maxHeight:
+                // .infinity`で行全体の高さ(`speechRowHeight`、外側の
+                // `.frame(height:)`で確定)まで伸ばし、両ブロックに対して
+                // 常に同じ上下位置になるようにした。＞も同様に明示的な
+                // `frame(height:alignment:)`で行の中央に固定し、左右の
+                // コンテンツ量に依存しないようにした。
+                Divider().overlay(Self.cardBorderColor).frame(maxHeight: .infinity).padding(.vertical, 2).padding(.leading, 5)
 
                 if let symbol = speech.reactionFxSymbol {
                     VStack(alignment: .leading, spacing: 2) {
@@ -1340,6 +1357,7 @@ struct HomeView: View {
                 }
 
                 Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
+                    .frame(height: Self.speechRowHeight, alignment: .center)
             }
             .foregroundStyle(.white)
             .frame(height: Self.speechRowHeight)
@@ -1370,10 +1388,15 @@ struct HomeView: View {
         }
     }
 
+    /// HQ指摘(2026-10-07、CIキャプチャで再確認)「10:12 | FRBの｜の両サイド
+    /// をもう少し広げて」: `tracking(-0.4)`が通常の半角スペース1個分の
+    /// 字送りも強く詰めてしまい、"10/6 10:12|FRB"のように｜の前後がほぼ
+    /// くっついて見えていたため、｜の両側に半角スペースを2個ずつ入れて
+    /// 見た目の余白を確保した。
     private static func speechDateOrgText(_ speech: HomeSpeechSummary) -> String {
         let dateText = Self.favoriteDateFormatter.string(from: speech.statementDatetime)
         guard let organization = speech.organization else { return dateText }
-        return "\(dateText) | \(organization)"
+        return "\(dateText)  |  \(organization)"
     }
 
     /// `ValueFormat.number`はminimumFractionDigits=0のため末尾の0が消える
