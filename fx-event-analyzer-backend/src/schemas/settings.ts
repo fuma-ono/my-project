@@ -32,6 +32,22 @@ export type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number];
 export type DisplayWeekStart = (typeof DISPLAY_WEEK_STARTS)[number];
 export type ChartType = (typeof CHART_TYPES)[number];
 
+/** SCR-026 ホーム通貨ペア編集 (2026-10-07): ホームに表示する通貨ペアの上限。
+ * Same limit as the DB CHECK in
+ * supabase/migrations/20261007000003_home_fx_pairs.sql. */
+export const HOME_FX_PAIRS_MAX = 3;
+
+/** Non-empty, duplicate-free list of fx_pairs.symbol. Whether each symbol
+ * is an active fx_pairs.symbol is checked against the DB by the route
+ * (422 on an unknown one). */
+function fxPairSymbolsSchema(max?: number) {
+  const base = z.array(z.string().min(1)).min(1);
+  return (max === undefined ? base : base.max(max)).refine(
+    (symbols) => new Set(symbols).size === symbols.length,
+    'must not contain duplicate symbols',
+  );
+}
+
 /** PATCH /settings body (api-design.md §24.4). Every field is optional —
  * only the fields present are changed — and unknown fields are rejected. */
 export const updateSettingsBodySchema = z
@@ -41,13 +57,8 @@ export const updateSettingsBodySchema = z
         push: z.boolean(),
         indicators: z.boolean(),
         speeches: z.boolean(),
-        // null = すべての通貨ペア. Whether each symbol exists in fx_pairs is
-        // checked against the DB by the route (422 on an unknown one).
-        fx_pairs: z
-          .array(z.string().min(1))
-          .min(1)
-          .refine((symbols) => new Set(symbols).size === symbols.length, 'must not contain duplicate symbols')
-          .nullable(),
+        // null = すべての通貨ペア.
+        fx_pairs: fxPairSymbolsSchema().nullable(),
         // Duplicates are harmless here, so they are folded rather than rejected.
         importances: z
           .array(z.enum(['HIGH', 'MEDIUM', 'LOW']))
@@ -92,6 +103,15 @@ export const updateSettingsBodySchema = z
         indicator_stochastic: z.boolean(),
         crosshair: z.boolean(),
         price_line: z.boolean(),
+      })
+      .partial()
+      .strict()
+      .optional(),
+    // SCR-026 ホーム通貨ペア編集. Order = display order on Home; null =
+    // default (USDJPY, EURUSD, EURJPY).
+    home: z
+      .object({
+        fx_pairs: fxPairSymbolsSchema(HOME_FX_PAIRS_MAX).nullable(),
       })
       .partial()
       .strict()

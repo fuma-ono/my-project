@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.8
+# FX Event Analyzer: DB詳細設計 v4.9
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -33,6 +33,7 @@
 - **v4.6**(2026-10-06): SCR-018 表示・地域設定 / SCR-019 チャート設定の項目を追加。`UserSettings`に`display_theme` / `display_text_size` / `display_date_format` / `display_time_format` / `display_currency` / `display_week_start`、`chart_type` / `chart_show_indicators` / `chart_indicator_ma` / `chart_indicator_bollinger` / `chart_indicator_macd` / `chart_indicator_rsi` / `chart_indicator_stochastic` / `chart_crosshair` / `chart_price_line`を追加(3.14節)。Migration `20261006000002_display_chart_settings_v2.sql`
 - **v4.7**(2026-10-06): SCR-020 ヘルプ・お問い合わせ(画面番号はui-screens.md)。お問い合わせ・フィードバックの保存先`SupportRequest`(`support_requests`)を新設(3.17節)。自動返信の判定結果・返信文・不具合として登録したGitHub Issueを記録する。Migration `20261006000003_support_requests.sql`
 - **v4.8**(2026-10-07): レビュー指摘の修正。`SupportRequest`の送信回数の上限を、件数の確認と保存を1つのDB関数`insert_support_request`で行う方式に変更(同時送信で上限を超えない)。`SupportRequest`のクライアント向けSELECTポリシーを削除し、anon / authenticatedの権限を取り消した(`classification` / `github_issue_*`をクライアントから読めないようにする。参照はBackend経由のみ)(3.17節・6章)。`apply_app_store_subscription`の戻り値に`product_id`を追加(3.2節)。Migration `20261007000001_support_requests_rate_limit.sql`・`20261007000002_apply_app_store_subscription_product_id.sql`
+- **v4.9**(2026-10-07): SCR-026 ホーム通貨ペア編集。`UserSettings`に`home_fx_pairs`(ホームに表示する通貨ペア、1〜3件・配列の順 = 表示順、NULL = 既定)を追加(3.14節)。Migration `20261007000003_home_fx_pairs.sql`。開発用seed(`supabase/seed.sql`)の`FxPair`に`GBPJPY` / `AUDUSD` / `GBPUSD` / `USDCHF` / `AUDJPY` / `CADJPY`を追加(価格データなし)
 
 ---
 
@@ -378,7 +379,7 @@ IDX(status)
 
 ### 3.14 UserSettings(v4.3で追加、HQ確定 2026-10-02)
 
-SCR-016 通知設定 / SCR-018 表示・地域設定 / SCR-019 チャート設定(api-design.md 30章では旧番号SCR-020 / SCR-021)の保存先(api-design.md §24.4/§24.5)。行は初回の`GET /settings`でDB既定値により作成する。
+SCR-016 通知設定 / SCR-018 表示・地域設定 / SCR-019 チャート設定(api-design.md 30章では旧番号SCR-020 / SCR-021) / SCR-026 ホーム通貨ペア編集の保存先(api-design.md §24.4/§24.5)。行は初回の`GET /settings`でDB既定値により作成する。
 
 | カラム | 型 | 制約 | 備考 |
 |---|---|---|---|
@@ -412,6 +413,7 @@ SCR-016 通知設定 / SCR-018 表示・地域設定 / SCR-019 チャート設�
 | chart_indicator_stochastic | boolean | NN, DEF false | ストキャスティクス(v4.6) |
 | chart_crosshair | boolean | NN, DEF true | クロスヘア(十字カーソル)の表示(v4.6) |
 | chart_price_line | boolean | NN, DEF true | 現在値ラインの表示(v4.6) |
+| home_fx_pairs | text[] | nullable, CHK: NULLまたは1〜3件 | ホームに表示する通貨ペア(`FxPair.symbol`)。配列の順 = 表示順。NULL = 既定(USDJPY・EURUSD・EURJPY)。配列のためFKなし、存在確認・重複の確認はBackend(v4.9) |
 | created_at | timestamptz | NN, DEF now() | |
 | updated_at | timestamptz | NN, DEF now() | |
 
@@ -420,6 +422,8 @@ SCR-016 通知設定 / SCR-018 表示・地域設定 / SCR-019 チャート設�
 **通知しない時間帯(v4.5、Migration `20261006000001_notification_quiet_hours.sql`)**: `notify_quiet_*`はAPIでは`"HH:MM"`として受け渡しし、Postgresの`time`値(`"23:00:00"`)との変換はBackend(`src/repositories/userSettingsRepository.ts`)で行う。`notify_quiet_hours_enabled = true`のとき、`GET /notifications/upcoming`は`notify_at`を`display_timezone`(解決できない場合は`Asia/Tokyo`)の現地時刻に直して判定し、該当する項目を除外する(api-design.md §24.6)。既存行は列既定値(OFF)で埋まるためデータ移行は不要。
 
 **表示・チャート設定の追加(v4.6、Migration `20261006000002_display_chart_settings_v2.sql`)**: APIのフィールド名は列名から`display_` / `chart_`を除いたもの(例: `display_text_size` ⇔ `display.text_size`、`chart_indicator_ma` ⇔ `chart.indicator_ma`)。`chart_type`のみ`chart_chart_type`とせず、列名のまま`chart.chart_type`に対応させる。列挙の妥当性はBackend(`src/schemas/settings.ts`、違反は`422`)とCHECKの両方で担保する。既存行は列既定値で埋まるためデータ移行は不要。
+
+**ホーム通貨ペア(v4.9、Migration `20261007000003_home_fx_pairs.sql`)**: APIの`home.fx_pairs`に対応する(api-design.md §24.4/§24.5)。要素が有効な`FxPair.symbol`か・重複がないかは`notify_fx_pair_symbols`と同じくBackendが確認する(違反は`422`)。`GET /home`の`major_fx`はこの列の通貨ペアをその順で返し、NULL(または行がない)ときは既定の3件を返す(api-design.md 12章)。`GET /home`は設定の行を作らず読むだけ。既存行はNULL(= 既定)のためデータ移行は不要。
 
 **旧カラムの移行(Migration `20261005000002_notification_settings_v2.sql`)**: `notify_pre_release` / `notify_result` / `notify_favorites` / `notify_min_importance`は削除。既存行は`notify_indicators = notify_pre_release OR notify_result`、`notify_importances` = 旧`notify_min_importance`以上の★を持つ重要度(暫定マッピング LOW→★1 / MEDIUM→★3 / HIGH→★5、`src/domain/importance.ts`。例: ★3→`{HIGH,MEDIUM}`、★4→`{HIGH}`)で移行した。移行時は`updated_at`を更新しない。
 

@@ -32,6 +32,7 @@ const row: UserSettingsRow = {
   chart_indicator_stochastic: true,
   chart_crosshair: false,
   chart_price_line: true,
+  home_fx_pairs: ['EURJPY', 'USDJPY'],
   updated_at: '2026-10-02T00:00:00.000Z',
 };
 
@@ -73,6 +74,9 @@ describe('toSettingsResponse', () => {
         crosshair: false,
         price_line: true,
       },
+      home: {
+        fx_pairs: ['EURJPY', 'USDJPY'],
+      },
       updated_at: '2026-10-02T00:00:00.000Z',
     });
   });
@@ -84,6 +88,15 @@ describe('toSettingsResponse', () => {
 
   it('keeps fx_pairs null (= all pairs)', () => {
     expect(toSettingsResponse({ ...row, notify_fx_pair_symbols: null }).notifications.fx_pairs).toBeNull();
+  });
+
+  it('keeps home.fx_pairs null (= default) and the saved order otherwise', () => {
+    expect(toSettingsResponse({ ...row, home_fx_pairs: null }).home.fx_pairs).toBeNull();
+    expect(toSettingsResponse({ ...row, home_fx_pairs: ['GBPJPY', 'AUDUSD', 'USDJPY'] }).home.fx_pairs).toEqual([
+      'GBPJPY',
+      'AUDUSD',
+      'USDJPY',
+    ]);
   });
 });
 
@@ -114,6 +127,14 @@ describe('toSettingsUpdate', () => {
       notify_fx_pair_symbols: ['USDJPY'],
       notify_importances: ['HIGH'],
     });
+  });
+
+  it('maps home.fx_pairs to home_fx_pairs, including null (= back to default)', () => {
+    expect(toSettingsUpdate({ home: { fx_pairs: ['EURJPY', 'USDJPY'] } })).toEqual({
+      home_fx_pairs: ['EURJPY', 'USDJPY'],
+    });
+    expect(toSettingsUpdate({ home: { fx_pairs: null } })).toEqual({ home_fx_pairs: null });
+    expect(toSettingsUpdate({ home: {} })).toEqual({});
   });
 
   it('maps the quiet hours fields', () => {

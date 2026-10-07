@@ -48,13 +48,15 @@ export interface UserSettingsRow {
   chart_indicator_stochastic: boolean;
   chart_crosshair: boolean;
   chart_price_line: boolean;
+  /** SCR-026 (2026-10-07). 1〜3 fx_pairs.symbol in Home display order; null = default. */
+  home_fx_pairs: string[] | null;
   updated_at: string;
 }
 
 export type UserSettingsUpdate = Partial<Omit<UserSettingsRow, 'updated_at'>>;
 
 const COLUMNS =
-  'notify_push, notify_indicators, notify_speeches, notify_fx_pair_symbols, notify_importances, notify_lead_minutes, notify_quiet_hours_enabled, notify_quiet_start, notify_quiet_end, display_language, display_region, display_timezone, display_theme, display_text_size, display_date_format, display_time_format, display_currency, display_week_start, chart_default_fx_pair_symbol, chart_default_timeframe, chart_type, chart_show_indicators, chart_indicator_ma, chart_indicator_bollinger, chart_indicator_macd, chart_indicator_rsi, chart_indicator_stochastic, chart_crosshair, chart_price_line, updated_at';
+  'notify_push, notify_indicators, notify_speeches, notify_fx_pair_symbols, notify_importances, notify_lead_minutes, notify_quiet_hours_enabled, notify_quiet_start, notify_quiet_end, display_language, display_region, display_timezone, display_theme, display_text_size, display_date_format, display_time_format, display_currency, display_week_start, chart_default_fx_pair_symbol, chart_default_timeframe, chart_type, chart_show_indicators, chart_indicator_ma, chart_indicator_bollinger, chart_indicator_macd, chart_indicator_rsi, chart_indicator_stochastic, chart_crosshair, chart_price_line, home_fx_pairs, updated_at';
 
 /** Postgres foreign_key_violation — only chart_default_fx_pair_symbol has an
  * FK a client value can break (an fx_pairs.symbol that doesn't exist). */
@@ -91,6 +93,21 @@ export async function getOrCreateUserSettings(supabase: SupabaseClient, userId: 
   const { data, error } = await supabase.from('user_settings').select(COLUMNS).eq('user_id', userId).single();
   if (error) throw error;
   return toUserSettingsRow(data);
+}
+
+/**
+ * SCR-026: the user's saved Home FX pairs (null = default) for GET /home.
+ * Read-only on purpose — unlike getOrCreateUserSettings it does not create
+ * the settings row, so a user who never opened 設定 just gets the default.
+ */
+export async function getHomeFxPairSymbols(supabase: SupabaseClient, userId: string): Promise<string[] | null> {
+  const { data, error } = await supabase
+    .from('user_settings')
+    .select('home_fx_pairs')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.home_fx_pairs ?? null;
 }
 
 export async function updateUserSettings(

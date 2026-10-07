@@ -120,6 +120,8 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
       // SCR-018 / SCR-019 (20261006000002_display_chart_settings_v2.sql).
       expect(JSON.parse(response.body).display).toEqual(DEFAULT_DISPLAY);
       expect(JSON.parse(response.body).chart).toEqual(DEFAULT_CHART);
+      // SCR-026 (20261007000003_home_fx_pairs.sql): null = default.
+      expect(JSON.parse(response.body).home).toEqual({ fx_pairs: null });
     });
 
     it('updates only the fields sent and persists them', async () => {
@@ -322,6 +324,94 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
     it('requires authentication', async () => {
       const response = await ctx.app.inject({ method: 'GET', url: '/api/v1/settings' });
       expect(response.statusCode).toBe(401);
+    });
+  });
+
+  describe('SCR-026 ホーム通貨ペア編集 (settings.home.fx_pairs → GET /home major_fx)', () => {
+    const HOME_URL = '/api/v1/home?date=2026-09-10&timezone=UTC';
+
+    async function majorFxSymbols(headers: { authorization: string }): Promise<string[]> {
+      const response = await ctx.app.inject({ method: 'GET', url: HOME_URL, headers });
+      expect(response.statusCode).toBe(200);
+      return JSON.parse(response.body).major_fx.map((row: { symbol: string }) => row.symbol);
+    }
+
+    it('shows USDJPY, EURUSD, EURJPY by default, with the unchanged row shape', async () => {
+      const { headers } = await newUser();
+      expect(await majorFxSymbols(headers)).toEqual(['USDJPY', 'EURUSD', 'EURJPY']);
+
+      const body = JSON.parse((await ctx.app.inject({ method: 'GET', url: HOME_URL, headers })).body);
+      expect(Object.keys(body.major_fx[0]).sort()).toEqual(
+        ['change', 'change_percent', 'fx_pair_id', 'price', 'symbol', 'timestamp'].sort(),
+      );
+      expect(body.major_fx[0]).toMatchObject({ fx_pair_id: '20000000-0000-0000-0000-000000000001', symbol: 'USDJPY' });
+    });
+
+    it('returns exactly the saved pairs in the saved order, and null resets to the default', async () => {
+      const { headers } = await newUser();
+      const patch = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/api/v1/settings',
+        headers,
+        payload: { home: { fx_pairs: ['GBPJPY', 'USDJPY', 'AUDUSD'] } },
+      });
+      expect(patch.statusCode).toBe(200);
+      expect(JSON.parse(patch.body).home).toEqual({ fx_pairs: ['GBPJPY', 'USDJPY', 'AUDUSD'] });
+      expect(await majorFxSymbols(headers)).toEqual(['GBPJPY', 'USDJPY', 'AUDUSD']);
+
+      // A pair without price data reports nulls; USDJPY keeps its seed candle.
+      const body = JSON.parse((await ctx.app.inject({ method: 'GET', url: HOME_URL, headers })).body);
+      expect(body.major_fx[0]).toEqual({
+        fx_pair_id: '20000000-0000-0000-0000-000000000004',
+        symbol: 'GBPJPY',
+        price: null,
+        change: null,
+        change_percent: null,
+        timestamp: null,
+      });
+      expect(body.major_fx[1].price).not.toBeNull();
+
+      // Partial PATCH of another section keeps home.fx_pairs.
+      await ctx.app.inject({
+        method: 'PATCH',
+        url: '/api/v1/settings',
+        headers,
+        payload: { display: { theme: 'DARK' } },
+      });
+      expect(await majorFxSymbols(headers)).toEqual(['GBPJPY', 'USDJPY', 'AUDUSD']);
+
+      const reset = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/api/v1/settings',
+        headers,
+        payload: { home: { fx_pairs: null } },
+      });
+      expect(reset.statusCode).toBe(200);
+      expect(JSON.parse(reset.body).home.fx_pairs).toBeNull();
+      expect(await majorFxSymbols(headers)).toEqual(['USDJPY', 'EURUSD', 'EURJPY']);
+    });
+
+    it('rejects an empty / >3 / duplicate / unknown home.fx_pairs with 422 and saves nothing', async () => {
+      const { headers } = await newUser();
+      for (const fx_pairs of [
+        [],
+        ['USDJPY', 'EURUSD', 'EURJPY', 'GBPJPY'],
+        ['USDJPY', 'USDJPY'],
+        ['USDJPY', 'XXXYYY'],
+      ]) {
+        const response = await ctx.app.inject({
+          method: 'PATCH',
+          url: '/api/v1/settings',
+          headers,
+          payload: { home: { fx_pairs }, display: { theme: 'DARK' } },
+        });
+        expect(response.statusCode).toBe(422);
+        expect(JSON.parse(response.body).error.code).toBe('VALIDATION_ERROR');
+      }
+
+      const body = JSON.parse((await ctx.app.inject({ method: 'GET', url: '/api/v1/settings', headers })).body);
+      expect(body.home).toEqual({ fx_pairs: null });
+      expect(body.display.theme).toBe('SYSTEM');
     });
   });
 

@@ -294,12 +294,34 @@ function homeHandler() {
         related_fx_pairs: [],
       },
     ],
-    major_fx: [
-      { fx_pair_id: FX_PAIR_ID, symbol: 'USDJPY', price: 155.42, change: 0.38, change_percent: 0.25, timestamp: isoMinusHours(1) },
-      { fx_pair_id: '22222222-2222-2222-2222-222222222223', symbol: 'EURUSD', price: 1.0821, change: -0.0015, change_percent: -0.14, timestamp: isoMinusHours(1) },
-      { fx_pair_id: '22222222-2222-2222-2222-222222222224', symbol: 'EURJPY', price: 168.24, change: 0.12, change_percent: 0.07, timestamp: isoMinusHours(1) },
-    ],
+    major_fx: majorFxRows(),
   };
+}
+
+// SCR-026 ホーム通貨ペア編集: fake quotes for every pair in FX_PAIRS.
+const MOCK_FX_QUOTES = {
+  USDJPY: { price: 155.42, change: 0.38, change_percent: 0.25 },
+  EURUSD: { price: 1.0821, change: -0.0015, change_percent: -0.14 },
+  EURJPY: { price: 168.24, change: 0.12, change_percent: 0.07 },
+  GBPJPY: { price: 197.65, change: -0.42, change_percent: -0.21 },
+  AUDUSD: { price: 0.6634, change: 0.0021, change_percent: 0.32 },
+  GBPUSD: { price: 1.2718, change: -0.0034, change_percent: -0.27 },
+  USDCHF: { price: 0.8842, change: 0.0012, change_percent: 0.14 },
+  AUDJPY: { price: 103.11, change: 0.27, change_percent: 0.26 },
+  CADJPY: { price: 113.58, change: -0.09, change_percent: -0.08 },
+};
+const DEFAULT_HOME_FX_PAIR_SYMBOLS = ['USDJPY', 'EURUSD', 'EURJPY'];
+
+/** GET /home major_fx: the saved settings.home.fx_pairs in that order, else
+ * the default 3 (src/domain/homeFxPairs.ts). Unknown symbols are skipped. */
+function majorFxRows() {
+  const symbols = settingsFixture.home.fx_pairs ?? DEFAULT_HOME_FX_PAIR_SYMBOLS;
+  return symbols.flatMap((symbol) => {
+    const pair = FX_PAIRS.find((row) => row.symbol === symbol);
+    if (!pair) return [];
+    const quote = MOCK_FX_QUOTES[symbol] ?? { price: 100, change: 0, change_percent: 0 };
+    return [{ fx_pair_id: pair.fx_pair_id, symbol, ...quote, timestamp: isoMinusHours(1) }];
+  });
 }
 
 function indicatorsListHandler() {
@@ -619,6 +641,10 @@ const settingsFixture = {
     crosshair: true,
     price_line: true,
   },
+  // SCR-026 ホーム通貨ペア編集 (2026-10-07). null = default (USDJPY, EURUSD, EURJPY).
+  home: {
+    fx_pairs: null,
+  },
   updated_at: '2026-10-02T00:00:00Z',
 };
 
@@ -634,7 +660,7 @@ function patchSettings(rawBody) {
   } catch {
     return null;
   }
-  for (const group of ['notifications', 'display', 'chart']) {
+  for (const group of ['notifications', 'display', 'chart', 'home']) {
     if (body && typeof body[group] === 'object' && body[group] !== null) {
       Object.assign(settingsFixture[group], body[group]);
     }
@@ -656,9 +682,13 @@ const isoSecondsPlusMinutes = (minutes) => isoSeconds(new Date(now().getTime() +
 
 const FX_PAIRS = [
   { fx_pair_id: '22222222-2222-2222-2222-222222222226', symbol: 'AUDJPY', base_currency: 'AUD', quote_currency: 'JPY' },
+  { fx_pair_id: '22222222-2222-2222-2222-222222222227', symbol: 'AUDUSD', base_currency: 'AUD', quote_currency: 'USD' },
+  { fx_pair_id: '22222222-2222-2222-2222-222222222228', symbol: 'CADJPY', base_currency: 'CAD', quote_currency: 'JPY' },
   { fx_pair_id: '22222222-2222-2222-2222-222222222224', symbol: 'EURJPY', base_currency: 'EUR', quote_currency: 'JPY' },
   { fx_pair_id: '22222222-2222-2222-2222-222222222223', symbol: 'EURUSD', base_currency: 'EUR', quote_currency: 'USD' },
   { fx_pair_id: '22222222-2222-2222-2222-222222222225', symbol: 'GBPJPY', base_currency: 'GBP', quote_currency: 'JPY' },
+  { fx_pair_id: '22222222-2222-2222-2222-222222222229', symbol: 'GBPUSD', base_currency: 'GBP', quote_currency: 'USD' },
+  { fx_pair_id: '22222222-2222-2222-2222-22222222222a', symbol: 'USDCHF', base_currency: 'USD', quote_currency: 'CHF' },
   { fx_pair_id: FX_PAIR_ID, symbol: 'USDJPY', base_currency: 'USD', quote_currency: 'JPY' },
 ];
 
@@ -778,7 +808,7 @@ function upcomingNotificationsHandler() {
     currency_code: currency,
     related_fx_pairs: pairs,
   });
-  const jpyPairs = ['AUDJPY', 'EURJPY', 'GBPJPY', 'USDJPY'];
+  const jpyPairs = ['AUDJPY', 'CADJPY', 'EURJPY', 'GBPJPY', 'USDJPY'];
   return {
     lead_minutes: lead,
     items: [
@@ -787,7 +817,7 @@ function upcomingNotificationsHandler() {
       item('SPEECH', SPEECH_ID_UEDA_SOON, '金融経済懇談会での講演', '植田和男', 'MEDIUM', lead - 1, 'JP', 'JPY', jpyPairs),
       // future
       item('INDICATOR', EVENT_ID_UPCOMING, '米国雇用統計(非農業部門雇用者数)', null, 'HIGH', 5 * 60, 'US', 'USD', ['USDJPY', 'EURUSD']),
-      item('SPEECH', SPEECH_ID_POWELL_UPCOMING, '経済見通しに関する講演', 'ジェローム・パウエル', 'HIGH', 26 * 60, 'US', 'USD', ['EURUSD', 'USDJPY']),
+      item('SPEECH', SPEECH_ID_POWELL_UPCOMING, '経済見通しに関する講演', 'ジェローム・パウエル', 'HIGH', 26 * 60, 'US', 'USD', ['AUDUSD', 'EURUSD', 'GBPUSD', 'USDCHF', 'USDJPY']),
     ],
   };
 }

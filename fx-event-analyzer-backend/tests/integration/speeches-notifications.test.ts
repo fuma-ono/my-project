@@ -186,7 +186,8 @@ describe.skipIf(!integration)('Speeches / FX pairs / upcoming notifications', ()
         notify_at: '2026-10-14T15:55:00Z',
         country_code: 'US',
         currency_code: 'USD',
-        related_fx_pairs: ['EURUSD', 'USDJPY'],
+        // Every active USD pair by symbol (seed.sql has 9 pairs since SCR-026).
+        related_fx_pairs: ['AUDUSD', 'EURUSD', 'GBPUSD', 'USDCHF', 'USDJPY'],
       });
       expect(body.items.find((item: { id: string }) => item.id === EXACT_EVENT_ID)).toMatchObject({
         kind: 'INDICATOR',

@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.11
+# FX Event Analyzer: API詳細設計書 v1.12
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -53,6 +53,7 @@
 - **v1.9**(2026-10-06): SCR-018 表示・地域設定 / SCR-019 チャート設定(画面番号はui-screens.mdに合わせる。30章の表は旧番号SCR-020 / SCR-021のまま)の項目を追加。`GET/PATCH /settings`の`display`に`theme`・`text_size`・`date_format`・`time_format`・`currency`・`week_start`、`chart`に`chart_type`・`show_indicators`・`indicator_ma`・`indicator_bollinger`・`indicator_macd`・`indicator_rsi`・`indicator_stochastic`・`crosshair`・`price_line`を追加(24.4節・24.5節)
 - **v1.10**(2026-10-06): SCR-020 ヘルプ・お問い合わせ(画面番号はui-screens.md)のSupport APIを追加。`POST /support/requests`・`GET /support/requests`を新設(24.7節・24.8節)。問い合わせ・フィードバックを保存し、ルールとテンプレートで自動返信する(LLMは使わない)。意味のない内容・迷惑な内容には返信しない。不具合の報告はBackendがGitHub Issueとして登録する。1ユーザー1時間あたり5件を超えると`429 RATE_LIMITED`(35章)。Backend環境変数`GITHUB_ISSUES_TOKEN`・`GITHUB_ISSUES_REPO`を追加(任意、サーバーのみ)
 - **v1.11**(2026-10-07): レビュー指摘の修正。`POST /support/requests`の判定ルールを調整(NFKC正規化、丁寧語・短い日本語の扱い、相場の「落ちた」や否定表現を不具合にしない、画像共有URLは件数に数えない、禁止語の誤判定の削減)、送信回数の上限を保存と同時に判定する方式に変更(同時送信で上限を超えない)、GitHub Issueで削除する個人情報にカード番号・7桁以上の数字列を追加(24.7節)。`POST /subscription/verify`のResponseに`product_id`を追加し`GET /subscription`と同じ形にそろえた(25.1節)
+- **v1.12**(2026-10-07): SCR-026 ホーム通貨ペア編集を追加。`GET/PATCH /settings`に`home.fx_pairs`(ホームに表示する通貨ペア。最大3件・配列の順 = 表示順、`null` = 既定)を追加(24.4節・24.5節)。`GET /home`の`major_fx`は`home.fx_pairs`の通貨ペアをその順で返し、未設定なら既定の`USDJPY`・`EURUSD`・`EURJPY`を返す(12章)。`major_fx`の各行の形は変えない
 
 ---
 
@@ -415,6 +416,13 @@ Eventには以下を含む。
 
 major_fxにはHomeで表示する主要FX Pairの最新情報を含める。想定項目：fx_pair_id / symbol / price / change / change_percent / timestamp。実際の価格データProviderには依存しない。
 
+**major_fxの通貨ペアと順序(v1.12で追加、SCR-026 ホーム通貨ペア編集)**: 最大3件。
+
+- ユーザーの`settings.home.fx_pairs`(24.4節)が設定済み：その通貨ペアを**保存した順**で返す。保存後に無効になった通貨ペアは除く(1件も残らない場合は既定と同じ)
+- 未設定(`null`、または設定の行がない)：既定の`USDJPY` → `EURUSD` → `EURJPY`。既定の通貨ペアが無効な場合は、残りの有効な通貨ペアを`symbol`順で足して3件まで
+- 各行の形(`fx_pair_id` / `symbol` / `price` / `change` / `change_percent` / `timestamp`)は従来と同じ。価格データのない通貨ペアは`price`等が`null`
+- 価格を取得するのは表示する通貨ペア(最大3件)だけ。v1.11までは有効な通貨ペアをすべて返していた
+
 **「今日の注目イベント」と「最近のイベント」の扱い(v1.3で確定、H-2)**: `events`は`date`でスコープされた当日分の一覧であり、「最近のイベント」は**当日中に`status = RELEASED`になったイベント**を指す(複数日にまたがる履歴ではない)。専用APIや`recent_events`フィールドは追加せず、Clientが`events`配列を`status`(`SCHEDULED`/`RELEASED`/`CANCELLED`)で「今日の注目イベント」(主にSCHEDULED)と「最近のイベント」(RELEASED)に表示分けする。
 
 ---
@@ -455,7 +463,7 @@ priorityの小さいものを優先対象とする。
 
 ## 13.5 GET /api/v1/fx-pairs(v1.6で追加)
 
-有効な通貨ペアのマスタ一覧を返す(SCR-016「対象通貨ペア」の選択肢)。認証済みであればfeature_code不要(Indicatorsと同じ扱い)。Paginationなし、`symbol`昇順。
+有効な通貨ペアのマスタ一覧を返す(SCR-016「対象通貨ペア」・SCR-026 ホーム通貨ペア編集(v1.12)の選択肢)。認証済みであればfeature_code不要(Indicatorsと同じ扱い)。Paginationなし、`symbol`昇順。
 
 ```json
 {
@@ -993,6 +1001,9 @@ Email / PasswordはSupabase Auth側で管理する。Backend APIから直接Auth
     "crosshair": true,
     "price_line": true
   },
+  "home": {
+    "fx_pairs": null
+  },
   "updated_at": "2026-10-02T00:00:00Z"
 }
 ```
@@ -1021,6 +1032,9 @@ Email / PasswordはSupabase Auth側で管理する。Backend APIから直接Auth
   - `indicator_ma`(移動平均線、既定`true`) / `indicator_bollinger`(ボリンジャーバンド、既定`false`) / `indicator_macd`(MACD、既定`true`) / `indicator_rsi`(RSI、既定`false`) / `indicator_stochastic`(ストキャスティクス、既定`false`)：各テクニカル指標の表示
   - `crosshair`：クロスヘア(十字カーソル)の表示。既定は`true`
   - `price_line`：現在値ラインの表示。既定は`true`
+- `home`(v1.12で追加、SCR-026 ホーム通貨ペア編集)
+  - `fx_pairs`：ホームの主要通貨ペア欄に表示する通貨ペア(`fx_pairs.symbol`の配列、1〜3件)。配列の順 = 表示順。`null` = 既定(`USDJPY`・`EURUSD`・`EURJPY`の順)。設定例：`{ "fx_pairs": ["USDJPY", "EURUSD", "EURJPY"] }`。`GET /home`での使い方は12章
+  - 選択肢は13.5節`GET /fx-pairs`の一覧
 
 ## 24.5 PATCH /api/v1/settings(v1.4で追加)
 
@@ -1038,6 +1052,11 @@ Email / PasswordはSupabase Auth側で管理する。Backend APIから直接Auth
 
 - `display.theme` / `text_size` / `date_format` / `time_format` / `currency` / `week_start`、`chart.chart_type`：24.4節の列挙以外は`422`。小文字(`"dark"`・`"24h"`等)や`null`も`422`
 - `chart.show_indicators` / `indicator_ma` / `indicator_bollinger` / `indicator_macd` / `indicator_rsi` / `indicator_stochastic` / `crosshair` / `price_line`：真偽値のみ。`"true"`・`1`・`null`は`422`
+
+`home`のValidation(v1.12)。違反はいずれも`422 VALIDATION_ERROR`で、Body全体を保存しない：
+
+- `home.fx_pairs`：`null`、または1〜3件・重複なしの配列。空配列・4件以上・重複は`422`。`fx_pairs`テーブルに存在しない(または無効な)symbolを含む場合も`422`(`notifications.fx_pairs`と同じ確認)
+- `home: { "fx_pairs": null }`で既定に戻す。`home`を送らない場合は保存済みの値を変えない
 
 ## 24.6 GET /api/v1/notifications/upcoming(v1.6で追加)
 

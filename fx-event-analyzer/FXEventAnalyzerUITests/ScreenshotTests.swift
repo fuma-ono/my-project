@@ -200,10 +200,9 @@ final class ScreenshotTests: XCTestCase {
         captureAccountSubScreen(y: 120.7 + 30.6 + 41.3 / 2, waitFor: "確認メールを送信", name: "15b-EmailChange")
         captureAccountSubScreen(y: 120.7 + 30.6 + 41.3 + 32.6 / 2, waitFor: "変更する", name: "15c-PasswordChange")
         captureAccountSubScreen(y: 342.9 + 33.9 / 2, waitFor: "アカウントを削除しますか", name: "24-AccountDeletion")
-        // SCR-026 (added 2026-10-05 as Settings' 6th row). Wait for the
-        // placeholder's detail text, not the screen name, which the
-        // Settings row itself also shows.
-        captureSettingsSubScreen(row: "ホーム通貨ペア編集", rowIndex: 5, waitFor: "お気に入り通貨ペアAPI未実装", name: "26-HomeCurrencyPairEditor")
+        // SCR-026 (Settings' 6th row). Wait for the editor's own section
+        // title, not the screen name, which the Settings row also shows.
+        captureSettingsSubScreen(row: "ホーム通貨ペア編集", rowIndex: 5, waitFor: "その他の通貨ペア", name: "26-HomeCurrencyPairEditor")
     }
 
     /// Taps the row's center through SettingsView's fixed V5 layout (group 1

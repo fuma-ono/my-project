@@ -75,6 +75,26 @@ describe('updateSettingsBodySchema', () => {
     expect(parse({ notifications: { fx_pairs: [''] } })).toBe(false);
   });
 
+  it('accepts home.fx_pairs null (= default) or 1..3 unique symbols (SCR-026)', () => {
+    expect(parse({ home: {} })).toBe(true);
+    expect(parse({ home: { fx_pairs: null } })).toBe(true);
+    expect(parse({ home: { fx_pairs: ['GBPJPY'] } })).toBe(true);
+    expect(parse({ home: { fx_pairs: ['USDJPY', 'EURUSD', 'EURJPY'] } })).toBe(true);
+    expect(parse({ home: { fx_pairs: [] } })).toBe(false);
+    expect(parse({ home: { fx_pairs: ['USDJPY', 'EURUSD', 'EURJPY', 'GBPJPY'] } })).toBe(false);
+    expect(parse({ home: { fx_pairs: ['USDJPY', 'EURUSD', 'USDJPY'] } })).toBe(false);
+    expect(parse({ home: { fx_pairs: [''] } })).toBe(false);
+    expect(parse({ home: { fx_pairs: 'USDJPY' } })).toBe(false);
+    expect(parse({ home: { fx_pairs: [1] } })).toBe(false);
+    expect(parse({ home: { pairs: ['USDJPY'] } })).toBe(false);
+    expect(parse({ home: null })).toBe(false);
+  });
+
+  it('keeps the saved home.fx_pairs order', () => {
+    const result = updateSettingsBodySchema.parse({ home: { fx_pairs: ['EURJPY', 'USDJPY', 'AUDUSD'] } });
+    expect(result.home?.fx_pairs).toEqual(['EURJPY', 'USDJPY', 'AUDUSD']);
+  });
+
   it('rejects the removed v1 notification fields', () => {
     expect(parse({ notifications: { pre_release: true } })).toBe(false);
     expect(parse({ notifications: { min_importance: 3 } })).toBe(false);

@@ -67,6 +67,11 @@ export interface SettingsResponse {
     /** Default true. */
     price_line: boolean;
   };
+  /** SCR-026 ホーム通貨ペア編集 (2026-10-07). */
+  home: {
+    /** 1〜3 symbols in Home display order. null = default (USDJPY, EURUSD, EURJPY). */
+    fx_pairs: string[] | null;
+  };
   updated_at: string;
 }
 
@@ -108,6 +113,9 @@ export function toSettingsResponse(row: UserSettingsRow): SettingsResponse {
       crosshair: row.chart_crosshair,
       price_line: row.chart_price_line,
     },
+    home: {
+      fx_pairs: row.home_fx_pairs,
+    },
     updated_at: row.updated_at,
   };
 }
@@ -116,7 +124,7 @@ export function toSettingsResponse(row: UserSettingsRow): SettingsResponse {
  * fields keep their stored value. */
 export function toSettingsUpdate(body: UpdateSettingsBody): UserSettingsUpdate {
   const update: UserSettingsUpdate = {};
-  const { notifications, display, chart } = body;
+  const { notifications, display, chart, home } = body;
 
   if (notifications?.push !== undefined) update.notify_push = notifications.push;
   if (notifications?.indicators !== undefined) update.notify_indicators = notifications.indicators;
@@ -151,6 +159,8 @@ export function toSettingsUpdate(body: UpdateSettingsBody): UserSettingsUpdate {
   if (chart?.indicator_stochastic !== undefined) update.chart_indicator_stochastic = chart.indicator_stochastic;
   if (chart?.crosshair !== undefined) update.chart_crosshair = chart.crosshair;
   if (chart?.price_line !== undefined) update.chart_price_line = chart.price_line;
+
+  if (home?.fx_pairs !== undefined) update.home_fx_pairs = home.fx_pairs;
 
   return update;
 }

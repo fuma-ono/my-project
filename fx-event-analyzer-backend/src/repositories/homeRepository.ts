@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { selectHomeFxPairs } from '../domain/homeFxPairs.js';
 
 export interface HomeEventRow {
   id: string;
@@ -120,13 +121,22 @@ export interface MajorFxRow {
  * this reports the most recent stored candle per pair and, when a prior
  * one exists, the change against it. A pair with no price data at all
  * returns nulls rather than a fabricated value.
+ *
+ * SCR-026: which pairs (and in which order) is decided by
+ * selectHomeFxPairs from the user's home.fx_pairs (null = default), so at
+ * most HOME_FX_PAIRS_MAX (3) pairs are priced — one fx_pairs query plus
+ * one fx_prices query per shown pair.
  */
-export async function listMajorFx(supabase: SupabaseClient): Promise<MajorFxRow[]> {
-  const { data: pairs, error } = await supabase.from('fx_pairs').select('id, symbol').eq('is_active', true);
+export async function listMajorFx(
+  supabase: SupabaseClient,
+  homeFxPairSymbols: readonly string[] | null,
+): Promise<MajorFxRow[]> {
+  const { data: activePairs, error } = await supabase.from('fx_pairs').select('id, symbol').eq('is_active', true);
   if (error) throw error;
+  const pairs = selectHomeFxPairs<{ id: string; symbol: string }>(activePairs ?? [], homeFxPairSymbols);
 
   return Promise.all(
-    (pairs ?? []).map(async (pair) => {
+    pairs.map(async (pair) => {
       const { data: prices, error: priceError } = await supabase
         .from('fx_prices')
         .select('close, timestamp')

@@ -7,6 +7,44 @@ struct SettingsResponse: Decodable, Equatable {
     var notifications: NotificationSettings
     var display: DisplaySettings
     var chart: ChartSettings
+    /// SCR-026 ホーム通貨ペア編集(項目追加前のBackendは既定値)。
+    var home: HomeSettings = .defaults
+
+    enum CodingKeys: String, CodingKey {
+        case notifications, display, chart, home
+    }
+}
+
+extension SettingsResponse {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            notifications: try c.decode(NotificationSettings.self, forKey: .notifications),
+            display: try c.decode(DisplaySettings.self, forKey: .display),
+            chart: try c.decode(ChartSettings.self, forKey: .chart),
+            home: try c.decodeIfPresent(HomeSettings.self, forKey: .home) ?? .defaults
+        )
+    }
+}
+
+/// SCR-026 ホーム通貨ペア編集(HQ指示 2026-10-07)。ホームに出す通貨ペア(最大3つ、
+/// 並び順どおり)。`nil`はBackendの既定(USD/JPY・EUR/USD・EUR/JPY)。
+struct HomeSettings: SettingsSection {
+    var fxPairs: [String]?
+
+    static let defaults = HomeSettings(fxPairs: nil)
+    static let maxPairs = 3
+    static let defaultPairs = ["USDJPY", "EURUSD", "EURJPY"]
+
+    enum CodingKeys: String, CodingKey {
+        case fxPairs = "fx_pairs"
+    }
+
+    /// `nil`(既定に戻す)を明示的な`null`で送る。
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(fxPairs, forKey: .fxPairs)
+    }
 }
 
 /// One editable group of `SettingsResponse`. Each settings screen edits
@@ -227,4 +265,5 @@ struct SettingsUpdate: Encodable, Equatable {
     var notifications: NotificationSettings?
     var display: DisplaySettings?
     var chart: ChartSettings?
+    var home: HomeSettings?
 }
