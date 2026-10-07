@@ -136,6 +136,13 @@ final class ScreenshotTests: XCTestCase {
         tap(containing: "設定")
         XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load")
         capture("14-Settings")
+        // ログアウトの確認(HQ指示 2026-10-07)。ログアウト行(V5座標の中心y≈396)を
+        // 押して撮り、背景をタップして閉じる(ログアウトはしない)。
+        tapV5(x: 117, y: 396)
+        if waitForAnyElement(containing: "ログアウトしますか", timeout: 5) {
+            capture("14b-LogoutConfirmation")
+            tapV5(x: 117, y: 80)
+        }
 
         // SCR-010 経済カレンダー(bonus — HQ指示2026-10-03で旧「分析」タブ
         // (SCR-011、削除済み)から置き換わった新タブ。選択状態の

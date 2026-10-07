@@ -174,7 +174,19 @@ struct SettingsView: View {
                 logoutButton
 
                 V5BottomBar(selected: $tabSelection)
+
+                if showLogoutConfirmation {
+                    LogoutConfirmationDialog(
+                        onLogout: {
+                            showLogoutConfirmation = false
+                            viewModel.signOut()
+                        },
+                        onCancel: { showLogoutConfirmation = false }
+                    )
+                    .transition(.opacity)
+                }
             }
+            .animation(.easeInOut(duration: 0.15), value: showLogoutConfirmation)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: AppRoute.self) { route in
                 if route == .account {
@@ -189,14 +201,6 @@ struct SettingsView: View {
         }
         // 2026-09-29 HQ承認(2-b): SCR-025 ログアウト確認ダイアログ。独立した
         // フルスクリーン画面ではなくダイアログとする(ui-screens.md v2.0 §4.2)。
-        .confirmationDialog(
-            "ログアウトしますか？",
-            isPresented: $showLogoutConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("ログアウト", role: .destructive) { viewModel.signOut() }
-            Button("キャンセル", role: .cancel) {}
-        }
     }
 
     /// 参考画像v2から実測したカード・行の見た目(V5座標系)。横方向の位置は
