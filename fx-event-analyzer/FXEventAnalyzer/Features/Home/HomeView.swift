@@ -1295,6 +1295,18 @@ struct HomeView: View {
                 // 中央銀行行("10/6 08:15 | FRB")・通貨ペア("USD/JPY")・
                 // pips("+28 pips")を`NotoText`に変更した。発言要約
                 // (`headline`)は日本語のみのため`V5JPFont.text`のまま。
+                // HQ再指摘(2026-10-07)「縦線をそろえてというのは上下(高さ)
+                // ではなく、パウエル行・ラガルド行・ベイリー行で3本の縦線が
+                // 横方向に同じx位置に並ぶように、ということ」: 3回目の対応
+                // (上のコメント参照)で「内容に応じた自然な幅」に戻して以来、
+                // 発言者名/要約/日時の実際のテキスト幅が行ごとに違う分だけ
+                // 縦線のx位置もばらついていた(実測でパウエル行636px・
+                // ラガルド行694px・ベイリー行735px — 揃っていなかった)。
+                // 固定幅に戻すが、3回目の教訓(固定幅だけでは実機フォントの
+                // 幅誤差で文字が"..."に潰れた)を踏まえ、`lineLimit(1)` +
+                // `minimumScaleFactor(0.7)`という安全弁は残したまま、現状の
+                // 3件の中で最も幅が必要なベイリー行(約98)より少し余裕を
+                // 持たせた100に固定した。
                 VStack(alignment: .leading, spacing: 0) {
                     NotoText.text(speech.speakerName, size: 7)
                         .lineLimit(1)
@@ -1310,6 +1322,7 @@ struct HomeView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                 }
+                .frame(width: 100, alignment: .leading)
 
                 // HQ指摘(2026-10-07、CIキャプチャで再確認)「縦線を上下で
                 // そろえるように」「＞も上下でそろえるように」: 固定
@@ -1508,8 +1521,12 @@ private extension FXPairUI {
     var quoteCurrency: String { String(symbol.suffix(3)) }
     var displaySymbol: String { "\(baseCurrency)/\(quoteCurrency)" }
     /// HQ指示(2026-10-06)「通貨ペア内のUSD/JPYの下に米ドル/円と記載して」。
+    /// HQ再指摘(2026-10-07)「米ドル/円の/の両サイドに少し間隔をあけて」:
+    /// `speechDateOrgText`の「|」と同じ理由(`tracking(-0.4)`が半角スペース
+    /// 1個分の字送りも強く詰めてしまう)で「/」の前後がほぼくっついて
+    /// 見えていたため、両側に半角スペースを1個ずつ入れた。
     var displayName: String {
-        "\(CountryFlag.japaneseName(forCurrency: baseCurrency))/\(CountryFlag.japaneseName(forCurrency: quoteCurrency))"
+        "\(CountryFlag.japaneseName(forCurrency: baseCurrency)) / \(CountryFlag.japaneseName(forCurrency: quoteCurrency))"
     }
 }
 
