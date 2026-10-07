@@ -78,6 +78,8 @@ struct SettingsListToggleRow: View {
 struct SettingsListValueRow: View {
     let title: String
     let value: String
+    /// 行の高さ(アプリ情報はプラン・購読管理の行と同じ33)。
+    var height: CGFloat = SettingsListLayout.rowHeight
     let action: () -> Void
 
     var body: some View {
@@ -99,7 +101,7 @@ struct SettingsListValueRow: View {
                     .foregroundStyle(SettingsCardStyle.chevronColor)
             }
             .padding(.horizontal, 10)
-            .frame(height: SettingsListLayout.rowHeight)
+            .frame(height: height)
             .contentShape(Rectangle())
         }
         .buttonStyle(SettingsRowPressStyle())

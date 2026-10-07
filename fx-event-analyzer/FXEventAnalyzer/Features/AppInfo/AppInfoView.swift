@@ -13,6 +13,9 @@ struct AppInfoView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.requestReview) private var requestReview
 
+    /// 行の高さ(HQ指示 2026-10-07「プラン購読管理の各カードの縦幅くらいに」)。
+    private static let rowHeight: CGFloat = 33
+
     enum Page: String, Identifiable, Hashable {
         case license, openSource, libraries
         var id: String { rawValue }
@@ -39,11 +42,11 @@ struct AppInfoView: View {
                 .padding(.bottom, 4)
 
                 VStack(spacing: 0) {
-                    SettingsListValueRow(title: "ライセンス情報", value: "") { page = .license }
+                    SettingsListValueRow(title: "ライセンス情報", value: "", height: Self.rowHeight) { page = .license }
                     SettingsListSeparator()
-                    SettingsListValueRow(title: "オープンソースライセンス", value: "") { page = .openSource }
+                    SettingsListValueRow(title: "オープンソースライセンス", value: "", height: Self.rowHeight) { page = .openSource }
                     SettingsListSeparator()
-                    SettingsListValueRow(title: "利用しているライブラリ", value: "") { page = .libraries }
+                    SettingsListValueRow(title: "利用しているライブラリ", value: "", height: Self.rowHeight) { page = .libraries }
                 }
                 .frame(width: 214)
                 .background(AccountCardBackground())
@@ -80,7 +83,7 @@ struct AppInfoView: View {
             NotoText.text(title, size: SettingsListLayout.rowTitleSize)
                 .foregroundStyle(V5P.cyan)
                 .padding(.horizontal, 10)
-                .frame(width: 214, height: 31, alignment: .leading)
+                .frame(width: 214, height: Self.rowHeight, alignment: .leading)
                 .contentShape(Rectangle())
         }
         .buttonStyle(SettingsRowPressStyle())
