@@ -9,6 +9,7 @@ Web版プロトタイプ(`../app/index.html`、Claude Artifacts)は「1URL=1つ�
 次のビルド・提出に含める必要がある、まだストアに反映されていない変更。反映したら各項目を消すこと。
 
 - **112回目**: アップデート促進アラートが実機で出ない不具合の修正(`Constants.expoConfig?.version`→`Constants.nativeAppVersion`)。スキーマ変更なし。詳細は末尾の「アップデート促進アラートが実機で出ない不具合を修正(112回目)」参照。
+- **113回目**: EASの`EXPO_PUBLIC_ADMOB_BANNER_IOS`/`EXPO_PUBLIC_ADMOB_INTERSTITIAL_IOS`を正しいAdMobアカウント(`pub-3010509317015477`)の広告ユニットIDに更新済み(`eas env:set`、コード変更なし)。**次にビルドし直すだけで反映される**(環境変数はビルド時に埋め込まれるため)。詳細は末尾の「Googleの広告が出ない不具合を修正(113回目)」参照。
 
 ## セットアップ(オーナー向け、初回のみ)
 
@@ -2206,3 +2207,11 @@ Growth活動の一環で、「今いる9人自身を新規獲得チャネルに�
 **対応**: `Constants.expoConfig?.version`を、ネイティブバイナリに直接埋め込まれた値を返す`Constants.nativeAppVersion`に差し替えた。
 
 `npx tsc --noEmit`はクリーン。この修正自体はアプリのJSコードの変更のみ(スキーマ変更なし)なので、次のビルド・提出で反映される。
+
+## Googleの広告が出ない不具合を修正(113回目)
+
+AdMobのapp-ads.txt確認・アプリレベル審査が完了してから数日経っても、オーナーから「Googleの広告が付かない」という報告があった。
+
+**調査**: `eas env:list`でEASに登録済みの広告ユニットIDを確認したところ、`EXPO_PUBLIC_ADMOB_BANNER_IOS`/`EXPO_PUBLIC_ADMOB_INTERSTITIAL_IOS`が`pub-2883804418673610`という発行者IDになっていた。一方、`app.json`の`react-native-google-mobile-ads`プラグイン設定(App ID、SDK初期化用)とapp-ads.txtはどちらも`pub-3010509317015477`。**広告ユニットがApp IDと別のAdMobアカウントのものになっていた**(AdMobは広告ユニットがApp IDと同じアカウント・同じアプリに属していないと読み込みに失敗する)。Android側の広告ユニット(`EXPO_PUBLIC_ADMOB_BANNER_ANDROID`等)は元々`pub-3010509317015477`のままだったため、iOS側だけの問題だった。no-fillのような一時的な現象ではなく設定ミスだったので、いくら待っても直らない状態だった。
+
+**対応**: オーナーに`pub-3010509317015477`のAdMobアカウントでバナー・インタースティシャルの広告ユニットを新規発行してもらい、`eas env:set`で`EXPO_PUBLIC_ADMOB_BANNER_IOS`/`EXPO_PUBLIC_ADMOB_INTERSTITIAL_IOS`を正しい値に更新した。コード変更は無し、EAS側の環境変数のみの修正。次にビルドし直した時点で反映される(環境変数はビルド時にアプリへ埋め込まれるため)。
