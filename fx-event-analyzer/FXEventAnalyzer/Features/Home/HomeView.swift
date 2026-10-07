@@ -1288,7 +1288,22 @@ struct HomeView: View {
     /// (Divider/chevronの修正内容は下のコメント参照)。
     @ViewBuilder private func speechRow(_ speech: HomeSpeechSummary) -> some View {
         NavigationLink(value: AppRoute.speechDetail(id: speech.id)) {
-            HStack(spacing: 6) {
+            // HQ再指摘(2026-10-07、2回目)「USD/JPYや149.20や発言前などの
+            // 文字サイズを変えないで。元に戻して。縦線から右側をもう少し
+            // 左に持ってきてと言っている」: 前回の対応(symbolに
+            // `minimumScaleFactor`を追加 + `padding(.leading, -3)`)は
+            // 実際には全く足りておらず、右ブロック3行(symbol+pips/発言前/
+            // 現在)がすべて`minimumScaleFactor`の下限(0.7)まで縮んで
+            // 表示されていた — ちょうど本来の約70%のサイズで、HQが
+            // 指摘した「文字サイズが変わっている」の実体そのもの。原因は
+            // HStackの一律`spacing: 6`が縦線の前後にも効いていて、
+            // 右ブロックに渡る余白を削っていたこと。`spacing: 0`に変えて
+            // 必要な間隔だけを各要素に明示的な`padding(.leading:)`で
+            // 持たせることで、左側(国旗〜縦線)の間隔は完全に元のまま
+            // 保ちつつ、縦線から右側(chevronの手前まで)の間隔だけを
+            // 詰めて右ブロックに渡す余白を広げた — 文字サイズ自体
+            // (フォントsize指定)は一切変更していない。
+            HStack(spacing: 0) {
                 CountryFlagView(countryCode: speech.countryCode, diameter: Self.speechFlagDiameter)
                 // HQ指示(2026-10-06)「英字を含む文字もNotoTextで表示して」:
                 // 発言者名("パウエルFRB議長"のように英字を含む)・日時/
@@ -1322,6 +1337,7 @@ struct HomeView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                 }
+                .padding(.leading, 6)
                 .frame(width: 100, alignment: .leading)
 
                 // HQ指摘(2026-10-07、CIキャプチャで再確認)「縦線を上下で
@@ -1335,7 +1351,7 @@ struct HomeView: View {
                 // 常に同じ上下位置になるようにした。＞も同様に明示的な
                 // `frame(height:alignment:)`で行の中央に固定し、左右の
                 // コンテンツ量に依存しないようにした。
-                Divider().overlay(Self.cardBorderColor).frame(maxHeight: .infinity).padding(.vertical, 2).padding(.leading, 5)
+                Divider().overlay(Self.cardBorderColor).frame(maxHeight: .infinity).padding(.vertical, 2).padding(.leading, 11)
 
                 if let symbol = speech.reactionFxSymbol {
                     VStack(alignment: .leading, spacing: 2) {
@@ -1369,22 +1385,13 @@ struct HomeView: View {
                         speechPriceRow(label: "現在", value: speech.reactionPriceAfter, symbol: symbol)
                     }
                     .lineLimit(1)
-                    // HQ再指摘(2026-10-07)「USD/...となっている、縦線から
-                    // 右側(＞以外)をもう少し左にして」: 左ブロックを固定幅
-                    // 100にした対応(直前のコミット)で3行の縦線のx位置は
-                    // 揃ったが、その分USD/JPY側に残る横幅が減り、symbol
-                    // ("USD/JPY")だけ`minimumScaleFactor`が無かったため
-                    // "USD/..."と省略記号で切れていた。安全弁(上記)に加え、
-                    // 縦線との間隔を`padding(.leading, 6)`相当から詰めて
-                    // 右ブロックを左に寄せ、その分の余白を確保した。
-                    .padding(.leading, -3)
+                    .padding(.leading, 2)
                 }
 
-                // chevron(＞)は今回の調整対象外(HQ指示)。右ブロックを左へ
-                // 詰めた分、chevronまでの間が空くことになるが、Spacerで
-                // カード右端に固定することでchevron自体の位置は動かさない
-                // (pairRowの`Spacer(minLength: 4)`と同じパターン)。
-                Spacer(minLength: 4)
+                // chevron(＞)はHQ指示により調整対象外。pairRowと同じ
+                // `Spacer`パターンでカード右端に固定し、右ブロックを
+                // 左に詰めてもchevron自体の位置は動かない。
+                Spacer(minLength: 2)
 
                 Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
                     .frame(height: Self.speechRowHeight, alignment: .center)
