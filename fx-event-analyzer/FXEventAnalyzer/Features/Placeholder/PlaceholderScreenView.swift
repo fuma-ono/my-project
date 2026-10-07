@@ -69,7 +69,9 @@ struct SettingsSubRouteDestinationView: View {
             LegalDocumentView(document: LegalDocuments.terms, tabSelection: $tabSelection)
         case .privacyPolicy:
             LegalDocumentView(document: LegalDocuments.privacy, tabSelection: $tabSelection)
-        case .appInfo, .accountDeletion:
+        case .appInfo:
+            AppInfoView(tabSelection: $tabSelection)
+        case .accountDeletion:
             PlaceholderScreenView(scrNumber: route.scrNumber, screenName: route.title)
                 .navigationTitle(route.title)
                 .navigationBarTitleDisplayMode(.inline)
