@@ -804,17 +804,30 @@ const accountFixture = () => ({
 // SCR-020 ヘルプ・お問い合わせ (api-design.md §24.7/§24.8). In-memory, with a
 // much simpler version of src/domain/support.ts: very short bodies get no
 // reply (IGNORED), BUG category or a bug keyword gets the bug reply
-// (ESCALATED — no GitHub Issue here), everything else a template reply.
+// (ESCALATED — no GitHub Issue here), everything else the category's
+// template reply (shortened versions of the real templates).
 
 const SUPPORT_KINDS = ['INQUIRY', 'FEEDBACK'];
 const SUPPORT_CATEGORIES = ['ACCOUNT', 'BILLING', 'NOTIFICATION', 'CHART', 'DATA', 'BUG', 'OTHER'];
-const SUPPORT_BUG_KEYWORDS = ['落ちる', '落ちた', 'クラッシュ', '不具合', 'バグ', 'エラー', '動かない', '表示されない', '固まる', 'フリーズ'];
+const SUPPORT_BUG_PATTERN =
+  /落ち(?:る|た|ます)|クラッシュ|不具合|バグ|エラー|フリーズ|強制終了|固ま(?:る|り)|動かない|(?:表示|反映)され(?:ない|ません)|(?:起動|ログイン)(?:し|でき)(?:ない|ません)|読み込めない/;
 const SUPPORT_BUG_REPLY =
   '不具合のご報告ありがとうございます。開発チームで確認し、修正対象として登録しました。修正まで今しばらくお待ちいただけますと幸いです。';
 const SUPPORT_FEEDBACK_REPLY =
   'ご意見ありがとうございます。いただいた内容は開発チームで確認し、今後の改善の参考にさせていただきます。';
-const SUPPORT_INQUIRY_REPLY =
-  'お問い合わせありがとうございます。内容を確認いたしました。よくある質問もあわせてご覧いただけますと幸いです。';
+const SUPPORT_INQUIRY_REPLIES = {
+  ACCOUNT:
+    'お問い合わせありがとうございます。アカウント情報の確認・変更は、設定画面の「アカウント情報」から行えます。',
+  BILLING:
+    'お問い合わせありがとうございます。プランのお支払いはApp Storeのサブスクリプションで管理されています。解約や変更は、iPhoneの「設定」アプリ > Apple ID > サブスクリプションから行えます。',
+  NOTIFICATION:
+    'お問い合わせありがとうございます。通知の対象や時間は、設定画面の「通知設定」から変更できます。',
+  CHART:
+    'お問い合わせありがとうございます。チャートの種類や表示するテクニカル指標は、設定画面の「チャート設定」から変更できます。',
+  DATA: 'お問い合わせありがとうございます。各指標の値は発表元の公表値をもとに表示しています。発表直後は反映までお時間をいただく場合があります。',
+  OTHER:
+    'お問い合わせありがとうございます。内容を確認いたしました。よくある質問もあわせてご覧いただけますと幸いです。',
+};
 
 /** Newest first. Seeded with one answered inquiry so the history list has content. */
 const supportRequests = [
@@ -845,11 +858,11 @@ function createSupportRequest(rawBody) {
   if (text.length < 1 || text.length > 2000) return { error: 'body: must be 1-2000 characters' };
 
   let status = 'REPLIED';
-  let reply = body.kind === 'FEEDBACK' ? SUPPORT_FEEDBACK_REPLY : SUPPORT_INQUIRY_REPLY;
-  if (Array.from(text).length < 5) {
+  let reply = body.kind === 'FEEDBACK' ? SUPPORT_FEEDBACK_REPLY : SUPPORT_INQUIRY_REPLIES[body.category];
+  if (Array.from(text).length < 2) {
     status = 'IGNORED';
     reply = null;
-  } else if (body.category === 'BUG' || SUPPORT_BUG_KEYWORDS.some((keyword) => text.includes(keyword))) {
+  } else if (body.category === 'BUG' || SUPPORT_BUG_PATTERN.test(text)) {
     status = 'ESCALATED';
     reply = SUPPORT_BUG_REPLY;
   }
@@ -872,6 +885,20 @@ function createSupportRequest(rawBody) {
 
 /** SCR-017の撮影用。`/__mock/subscription-plan`で切り替える(PRO / FREE)。 */
 let mockSubscriptionPlan = 'PRO';
+
+/** GET /subscription and POST /subscription/verify (api-design.md §25/§25.1). */
+function subscriptionFixture() {
+  if (mockSubscriptionPlan === 'FREE') {
+    return { plan: 'FREE', status: null, started_at: null, expires_at: null, product_id: null };
+  }
+  return {
+    plan: 'PRO',
+    status: 'ACTIVE',
+    started_at: '2026-09-06T03:00:00Z',
+    expires_at: '2026-11-06T03:00:00Z',
+    product_id: 'com.fumaono.fxeventanalyzer.pro.monthly',
+  };
+}
 
 async function handleApi(req, res, pathname, searchParams, rawBody) {
   const segments = pathname.replace(/^\/api\/v1\//, '').split('/').filter(Boolean);
@@ -908,16 +935,12 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
   // SCR-017 プラン・購読管理: 参考画像(HQ指示 2026-10-06)と同じく有料プラン加入中の状態で撮る。
   // 無料プランの画面は、UIテストが`POST /__mock/subscription-plan?plan=FREE`で切り替えてから撮る。
   if (pathname === '/api/v1/subscription') {
-    if (mockSubscriptionPlan === 'FREE') {
-      return json(res, 200, { plan: 'FREE', status: null, started_at: null, expires_at: null, product_id: null });
-    }
-    return json(res, 200, {
-      plan: 'PRO',
-      status: 'ACTIVE',
-      started_at: '2026-09-06T03:00:00Z',
-      expires_at: '2026-11-06T03:00:00Z',
-      product_id: 'com.fumaono.fxeventanalyzer.pro.monthly',
-    });
+    return json(res, 200, subscriptionFixture());
+  }
+  // api-design.md §25.1: same shape as GET /subscription. No signature check
+  // here — the screenshot run never sends a real StoreKit transaction.
+  if (pathname === '/api/v1/subscription/verify' && req.method === 'POST') {
+    return json(res, 200, subscriptionFixture());
   }
 
   // SCR-020 ヘルプ・お問い合わせ (api-design.md §24.7/§24.8).

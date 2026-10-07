@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.7
+# FX Event Analyzer: DB詳細設計 v4.8
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -32,6 +32,7 @@
 - **v4.5**(2026-10-06): SCR-016 通知設定に「通知しない時間帯」を追加。`UserSettings`に`notify_quiet_hours_enabled` / `notify_quiet_start` / `notify_quiet_end`を追加(3.14節)。Migration `20261006000001_notification_quiet_hours.sql`
 - **v4.6**(2026-10-06): SCR-018 表示・地域設定 / SCR-019 チャート設定の項目を追加。`UserSettings`に`display_theme` / `display_text_size` / `display_date_format` / `display_time_format` / `display_currency` / `display_week_start`、`chart_type` / `chart_show_indicators` / `chart_indicator_ma` / `chart_indicator_bollinger` / `chart_indicator_macd` / `chart_indicator_rsi` / `chart_indicator_stochastic` / `chart_crosshair` / `chart_price_line`を追加(3.14節)。Migration `20261006000002_display_chart_settings_v2.sql`
 - **v4.7**(2026-10-06): SCR-020 ヘルプ・お問い合わせ(画面番号はui-screens.md)。お問い合わせ・フィードバックの保存先`SupportRequest`(`support_requests`)を新設(3.17節)。自動返信の判定結果・返信文・不具合として登録したGitHub Issueを記録する。Migration `20261006000003_support_requests.sql`
+- **v4.8**(2026-10-07): レビュー指摘の修正。`SupportRequest`の送信回数の上限を、件数の確認と保存を1つのDB関数`insert_support_request`で行う方式に変更(同時送信で上限を超えない)。`SupportRequest`のクライアント向けSELECTポリシーを削除し、anon / authenticatedの権限を取り消した(`classification` / `github_issue_*`をクライアントから読めないようにする。参照はBackend経由のみ)(3.17節・6章)。`apply_app_store_subscription`の戻り値に`product_id`を追加(3.2節)。Migration `20261007000001_support_requests_rate_limit.sql`・`20261007000002_apply_app_store_subscription_product_id.sql`
 
 ---
 
@@ -136,7 +137,7 @@ UQ(provider, provider_subscription_id) WHERE provider_subscription_id IS NOT NUL
 
 **RLS**: `user_id = auth.uid()`の本人のみSELECT可。書き込みはservice_role(決済処理)のみ。
 
-**保存処理(v4.3)**: `POST /api/v1/subscription/verify`(api-design.md §25.1)で検証済みの購読は、関数`apply_app_store_subscription(...)`(security definer、service_roleのみ実行可)で1トランザクションとして保存する: 他ユーザー所有なら例外(SQLSTATE `P0409`→409)、新しい購読がACTIVEなら同ユーザーの他のACTIVE行をEXPIREDにする、行をinsert/update、PRO用`Entitlement`(`VIEW_ADVANCED_STATS`)の`enabled`/`expires_at`を同期。将来のApp Store Server Notifications(更新・解約・更新失敗・返金)も同関数を再利用する想定。
+**保存処理(v4.3)**: `POST /api/v1/subscription/verify`(api-design.md §25.1)で検証済みの購読は、関数`apply_app_store_subscription(...)`(security definer、service_roleのみ実行可)で1トランザクションとして保存する: 他ユーザー所有なら例外(SQLSTATE `P0409`→409)、新しい購読がACTIVEなら同ユーザーの他のACTIVE行をEXPIREDにする、行をinsert/update、PRO用`Entitlement`(`VIEW_ADVANCED_STATS`)の`enabled`/`expires_at`を同期。将来のApp Store Server Notifications(更新・解約・更新失敗・返金)も同関数を再利用する想定。戻り値はplan / status / started_at / expires_at / product_id(v4.8で`product_id`を追加。`GET /subscription`と同じ形)。
 
 ### 3.3 Entitlement(確定: feature_codeを機能単位のコード体系に具体化)
 
@@ -487,11 +488,11 @@ SCR-020 ヘルプ・お問い合わせから送られたお問い合わせ・フ
 
 CHK: `(status = 'IGNORED') = (reply_body IS NULL)`、`(reply_body IS NULL) = (replied_at IS NULL)`。IDX(user_id, created_at DESC)(履歴の取得と送信回数の上限判定)。
 
-**送信回数の上限**: 1ユーザーにつき直近1時間で5件まで。この行数で判定するため、IGNOREDの行も削除しない(api-design.md §24.7、超過時`429 RATE_LIMITED`)。
+**送信回数の上限**: 1ユーザーにつき直近1時間で5件まで。この行数で判定するため、IGNOREDの行も削除しない(api-design.md §24.7、超過時`429 RATE_LIMITED`)。v4.8: 保存は関数`insert_support_request(...)`(security definer、`search_path`固定、service_roleのみ実行可)で行う。関数はユーザーごとのadvisory lock(`pg_advisory_xact_lock(hashtext(user_id::text))`)を取ってから直近1時間の件数を数え、上限に達していればSQLSTATE `P0429`(Backendが`429`に変換。保存しない)、そうでなければinsertして行を返す。同じユーザーの同時送信は順番に処理されるため上限を超えない。
 
-**GitHub Issue**: BUGの行は、Backend環境変数`GITHUB_ISSUES_TOKEN` / `GITHUB_ISSUES_REPO`が設定されていればGitHub Issueを作成し、番号とURLを記録する。Issueに送るのは受付ID・種別・カテゴリ・端末情報と、メールアドレス・電話番号・8桁以上の数字列を除いた本文のみ(`user_id`・メールアドレスは送らない)。トークンはBackend(サーバー)だけに置き、iOSアプリやDBには保存しない。
+**GitHub Issue**: BUGの行は、Backend環境変数`GITHUB_ISSUES_TOKEN` / `GITHUB_ISSUES_REPO`が設定されていればGitHub Issueを作成し、番号とURLを記録する。Issueに送るのは受付ID・種別・カテゴリ・端末情報と、メールアドレス・電話番号・カード番号・7桁以上の数字列を除いた本文のみ(v4.8でカード番号・7桁に変更)(`user_id`・メールアドレスは送らない)。トークンはBackend(サーバー)だけに置き、iOSアプリやDBには保存しない。
 
-**RLS**: `user_id = auth.uid()`の本人のみSELECT可。書き込みはservice_roleのみ(Backend経由)。
+**RLS**: RLSは有効だがポリシーなし(v4.8)。anon / authenticatedの権限も取り消しており、クライアントからは読み書きできない。参照・書き込みはservice_role(Backendの`GET` / `POST /support/requests`)のみ。v4.7の「本人のみSELECT可」のポリシーでは`classification` / `github_issue_*`がクライアントから読めたため削除した。
 
 ---
 
@@ -522,7 +523,8 @@ Supabase RLSを実装前提の設計条件として採用する。論理方針�
 
 | 区分 | 対象テーブル | 方針 |
 |---|---|---|
-| ユーザー固有 | `Profile` / `Subscription` / `Entitlement` / `UserSettings` / `SupportRequest`(v4.7) | `auth.uid()`等を利用した本人のみSELECT可。INSERT/UPDATE/DELETEはservice_roleのみ |
+| ユーザー固有 | `Profile` / `Subscription` / `Entitlement` / `UserSettings` | `auth.uid()`等を利用した本人のみSELECT可。INSERT/UPDATE/DELETEはservice_roleのみ |
+| ユーザー固有(Backend経由のみ、v4.8) | `SupportRequest`(v4.7) | クライアントからは読み書き不可(ポリシーなし、anon / authenticatedの権限なし)。内部情報の列(`classification` / `github_issue_*`)を含むため、参照もservice_role(Backend)経由のみ |
 | 共有データ | `EconomicIndicator` / `EconomicEvent` / `Speaker` / `SpeechEvent`(v4.4) / `EventSnapshot` / `EventRevision` / `EventExplanation` / `IndicatorFxPair` / `FxPair` / `FxPrice` / `EventPriceReaction` | ユーザー単位のRLSを前提とせず、原則として全認証ユーザーからSELECT可能。INSERT/UPDATE/DELETEはservice_role(Ingestion Worker・管理者機能)のみ |
 | 運用ログ | `IngestionLog` | 一般ユーザーからは非公開。管理者機能・service_roleのみアクセス可 |
 

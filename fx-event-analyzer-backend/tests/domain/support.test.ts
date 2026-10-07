@@ -58,8 +58,94 @@ describe('classifySupportRequest', () => {
       expect(classify('たまにフリーズすることがあります', 'OTHER', 'FEEDBACK')).toBe('BUG');
     });
 
-    it('matches English keywords at a word start only ("debug" is not a bug report)', () => {
+    it('matches English keywords as whole words only ("debug", "Bugatti" are not bug reports)', () => {
       expect(classify('Please add a debug log view')).toBe('VALID');
+      expect(classify('I drive a Bugatti and love this app')).toBe('VALID');
+      expect(classify('Errorless experience, great app')).toBe('VALID');
+    });
+
+    it.each([
+      'チャートが表示されません',
+      'アプリを起動するとすぐ落ちます',
+      '画面が固まります',
+      'アプリが起動しません',
+      '反映されない',
+      'ログインできない',
+      '読み込めない',
+      '強制終了',
+      'ボタンが動きません',
+      'アプリが開きません',
+    ])('detects polite / short bug forms: %s', (body) => {
+      expect(classify(body)).toBe('BUG');
+    });
+
+    it('detects full-width (NFKC) English keywords', () => {
+      expect(classify('Ｔｈｅ ａｐｐ ｃｒａｓｈｅｓ')).toBe('BUG');
+    });
+
+    it.each([
+      'ドル円が急に落ちた時に通知してほしいです',
+      'ユーロが落ちるタイミングを知りたいです',
+      'USD/JPYのレートが落ちたら知らせてほしい',
+    ])('does not treat a falling price as a bug: %s', (body) => {
+      expect(classify(body)).toBe('VALID');
+    });
+
+    it('treats 落ち- with an app word as a bug even near a price word', () => {
+      expect(classify('ドル円の画面を開くと落ちる')).toBe('BUG');
+    });
+
+    it('does not treat 落ち着く as a bug', () => {
+      expect(classify('落ち着いたデザインで気に入っています', 'OTHER', 'FEEDBACK')).toBe('VALID');
+    });
+
+    it.each([
+      '不具合ではないのですが、チャートの色を変えたいです',
+      'バグじゃないと思いますが、通知の時間を教えてください',
+      'エラーが出ないように入力チェックがあると嬉しいです',
+      '指標名が表示されないようにしたいです',
+    ])('ignores denied / avoided bug keywords: %s', (body) => {
+      expect(classify(body)).toBe('VALID');
+    });
+
+    it('still detects a real bug next to a denied keyword', () => {
+      expect(classify('エラーは出ませんがアプリが落ちます')).toBe('BUG');
+    });
+
+    it('counts the BUG category even when the text denies a bug', () => {
+      expect(classify('不具合ではないかもしれません', 'BUG')).toBe('BUG');
+    });
+
+    it('is BUG for a 3-screenshot report (image hosts do not count as spam links)', () => {
+      const body =
+        '起動するとクラッシュします https://i.imgur.com/a1.png https://gyazo.com/b2 https://drive.google.com/file/d/c3';
+      expect(classify(body)).toBe('BUG');
+      expect(classify(`${body} https://photos.app.goo.gl/d4 https://imgur.com/e5`)).toBe('BUG');
+    });
+
+    it('is BUG for a single profanity in a genuine report', () => {
+      expect(classify('this shit keeps crashing on launch')).toBe('BUG');
+    });
+  });
+
+  describe('short Japanese inquiries', () => {
+    it.each(['返金希望', '解約方法', 'ログイン'])('is VALID: %s', (body) => {
+      expect(classify(body, 'BILLING')).toBe('VALID');
+    });
+
+    it('is BUG with the BUG category', () => {
+      expect(classify('落ちます', 'BUG')).toBe('BUG');
+      expect(classify('バグ', 'BUG')).toBe('BUG');
+    });
+  });
+
+  describe('keyboard mashing vs currency pairs', () => {
+    it.each(['GBPCHF', 'NZDCHF', 'GBPCHF NZDCHF chart', 'gbpchf'])('is not NONSENSE: %s', (body) => {
+      expect(classify(body)).toBe('VALID');
+    });
+
+    it('still flags consonant runs that are not currency codes', () => {
+      expect(classify('GBPXQZ')).toBe('NONSENSE');
     });
   });
 
@@ -86,6 +172,34 @@ describe('classifySupportRequest', () => {
       expect(classify('I like shiitake mushrooms')).toBe('VALID');
     });
 
+    it('treats 氏ね as abuse only when it is not after a name / kanji', () => {
+      expect(classify('パウエル氏ねぇ、発言の和訳が欲しいです')).toBe('VALID');
+      expect(classify('日銀総裁氏ねえ、発言の要約がほしい')).toBe('VALID');
+      expect(classify('このアプリまじ氏ね')).toBe('SPAM');
+      expect(classify('氏ね')).toBe('SPAM');
+    });
+
+    it('treats profanity as SPAM only with little else said or with a link', () => {
+      expect(classify('this shit keeps crashing on launch')).not.toBe('SPAM');
+      expect(classify('fuck you')).toBe('SPAM');
+      expect(classify('shit app, see https://promo.example.com')).toBe('SPAM');
+    });
+
+    it('is SPAM with 3 or more non-image links', () => {
+      expect(
+        classify('起動するとクラッシュします https://a.example.com https://b.example.com https://i.imgur.com/x.png'),
+      ).toBe('BUG');
+      expect(classify('見て https://a.example.com https://b.example.com https://c.example.com')).toBe('SPAM');
+    });
+
+    it('is SPAM when the body is only image links', () => {
+      expect(classify('https://i.imgur.com/a.png https://gyazo.com/b')).toBe('SPAM');
+    });
+
+    it('normalizes full-width input (NFKC) before matching', () => {
+      expect(classify('Ｖｉｓｉｔ ｏｕｒ ｃａｓｉｎｏ ｎｏｗ')).toBe('SPAM');
+    });
+
     it('wins over NONSENSE and BUG', () => {
       expect(classify('https://x.io')).toBe('SPAM');
       expect(classify('バグだ死ね', 'BUG')).toBe('SPAM');
@@ -93,10 +207,14 @@ describe('classifySupportRequest', () => {
   });
 
   describe('NONSENSE', () => {
-    it('is NONSENSE when shorter than 5 characters after trimming', () => {
+    it('is NONSENSE when a Latin-only text is shorter than 5 characters after trimming', () => {
       expect(classify('abc')).toBe('NONSENSE');
-      expect(classify('   あいう   ')).toBe('NONSENSE');
-      expect(classify('バグ', 'BUG')).toBe('NONSENSE');
+      expect(classify('  help  ')).toBe('NONSENSE');
+    });
+
+    it('is NONSENSE when a Japanese text is shorter than 2 characters', () => {
+      expect(classify('   あ   ')).toBe('NONSENSE');
+      expect(classify('落', 'BUG')).toBe('NONSENSE');
     });
 
     it('is NONSENSE without any letter', () => {
@@ -199,13 +317,33 @@ describe('sanitizeForIssue', () => {
     },
   );
 
-  it('redacts digit sequences of 8 or more', () => {
+  it('redacts "(03)1234-5678" style phone numbers', () => {
+    expect(sanitizeForIssue('電話: (03)1234-5678 まで')).toBe('電話: [削除済み] まで');
+    expect(sanitizeForIssue('電話: (0120) 123-456 まで')).toBe('電話: [削除済み] まで');
+  });
+
+  it('redacts digit sequences of 7 or more (account numbers)', () => {
     expect(sanitizeForIssue('会員番号12345678で')).toBe('会員番号[削除済み]で');
     expect(sanitizeForIssue('09012345678')).toBe('[削除済み]');
+    expect(sanitizeForIssue('口座番号 1234567 です')).toBe('口座番号 [削除済み] です');
+  });
+
+  it.each(['4111 1111 1111 1111', '4111-1111-1111-1111', '3782 822463 10005', '4111-1111 1111-1111'])(
+    'redacts a card number with spaces / hyphens: %s',
+    (card) => {
+      expect(sanitizeForIssue(`カード ${card} で購入`)).toBe('カード [削除済み] で購入');
+    },
+  );
+
+  it('normalizes full-width input (NFKC) before redacting', () => {
+    expect(sanitizeForIssue('連絡先は ｔａｒｏ＠ｅｘａｍｐｌｅ．ｃｏｍ です')).toBe('連絡先は [削除済み] です');
+    expect(sanitizeForIssue('電話: ０９０－１２３４－５６７８ まで')).toBe('電話: [削除済み] まで');
+    expect(sanitizeForIssue('電話: 090ー1234ー5678 まで')).toBe('電話: [削除済み] まで');
+    expect(sanitizeForIssue('カード ４１１１　１１１１　１１１１　１１１１ で')).toBe('カード [削除済み] で');
   });
 
   it('keeps dates, times, versions and short numbers', () => {
-    const text = '2026-10-06 09:30 にv1.2.3で、1234567回目の起動時';
+    const text = '2026-10-06 09:30 にv1.2.3で、123456回目の起動時。期間は2026-10-06 2026-10-07';
     expect(sanitizeForIssue(text)).toBe(text);
   });
 });

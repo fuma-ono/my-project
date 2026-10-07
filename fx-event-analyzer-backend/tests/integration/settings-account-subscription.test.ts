@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FEATURE_CODES } from '../../src/authorization/entitlements.js';
 import {
   createTestSignedDataVerifier,
+  MONTHLY_PRODUCT_ID,
   renewalInfoPayload,
   signAppStorePayload,
   transactionPayload,
@@ -393,10 +394,14 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
         renewalInfoPayload({ originalTransactionId: id }),
       );
       expect(response.statusCode).toBe(200);
-      expect(JSON.parse(response.body)).toMatchObject({ plan: 'PRO', status: 'ACTIVE' });
+      const verified = JSON.parse(response.body);
+      expect(verified).toMatchObject({ plan: 'PRO', status: 'ACTIVE', product_id: MONTHLY_PRODUCT_ID });
 
       const current = JSON.parse((await ctx.app.inject({ method: 'GET', url: '/api/v1/subscription', headers })).body);
       expect(current).toMatchObject({ plan: 'PRO', status: 'ACTIVE' });
+      // Same shape as GET /subscription (api-design.md §25.1, v1.11).
+      expect(Object.keys(verified).sort()).toEqual(Object.keys(current).sort());
+      expect(verified.product_id).toBe(current.product_id);
       expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: true });
     });
 

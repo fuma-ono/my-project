@@ -1,9 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import { ApiError } from '../errors/ApiError.js';
 import { formatIsoSeconds } from '../domain/notifications.js';
 import { buildAutoReply, buildBugIssue, classifySupportRequest, statusForClassification } from '../domain/support.js';
 import {
-  countSupportRequestsSince,
   insertSupportRequest,
   listSupportRequests,
   setSupportRequestIssue,
@@ -11,9 +9,9 @@ import {
 } from '../repositories/supportRequestsRepository.js';
 import { createSupportRequestBodySchema } from '../schemas/support.js';
 
-/** At most this many requests per user in any rolling hour (IGNORED ones included). */
+/** At most this many requests per user in any rolling hour (IGNORED ones
+ * included). Checked atomically with the insert (insert_support_request()). */
 export const SUPPORT_REQUESTS_PER_HOUR = 5;
-const HOUR_MS = 60 * 60 * 1000;
 
 /** Timestamps without fractional seconds — iOS decodes with `.iso8601`. */
 function toSupportRequestResponse(row: SupportRequestRow): SupportRequestRow {
@@ -42,29 +40,25 @@ export function registerSupportRoutes(app: FastifyInstance): void {
     const body = createSupportRequestBodySchema.parse(request.body);
 
     const now = new Date();
-    const recent = await countSupportRequestsSince(
-      app.supabase,
-      userId,
-      new Date(now.getTime() - HOUR_MS).toISOString(),
-    );
-    if (recent >= SUPPORT_REQUESTS_PER_HOUR) {
-      throw ApiError.rateLimited('Too many support requests. Please try again later.');
-    }
-
     const classification = classifySupportRequest(body);
     const replyBody = buildAutoReply(classification, body.kind, body.category);
-    const row = await insertSupportRequest(app.supabase, userId, {
-      kind: body.kind,
-      category: body.category,
-      body: body.body,
-      app_version: body.app_version,
-      os_version: body.os_version,
-      device_model: body.device_model,
-      classification,
-      status: statusForClassification(classification),
-      reply_body: replyBody,
-      replied_at: replyBody === null ? null : now.toISOString(),
-    });
+    const row = await insertSupportRequest(
+      app.supabase,
+      userId,
+      {
+        kind: body.kind,
+        category: body.category,
+        body: body.body,
+        app_version: body.app_version,
+        os_version: body.os_version,
+        device_model: body.device_model,
+        classification,
+        status: statusForClassification(classification),
+        reply_body: replyBody,
+        replied_at: replyBody === null ? null : now.toISOString(),
+      },
+      SUPPORT_REQUESTS_PER_HOUR,
+    );
 
     if (classification === 'BUG') {
       // Best effort: the report is already stored and replied to, so a

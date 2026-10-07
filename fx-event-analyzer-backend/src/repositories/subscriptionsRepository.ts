@@ -7,8 +7,9 @@ export interface SubscriptionRow {
   status: string;
   started_at: string;
   expires_at: string | null;
-  /** App Store product (月額/年額). SCR-017 shows it; absent from the verify RPC result. */
-  product_id?: string | null;
+  /** App Store product (月額/年額). SCR-017 shows it. Also returned by the
+   * verify RPC since 20261007000002_apply_app_store_subscription_product_id.sql. */
+  product_id: string | null;
 }
 
 /**
@@ -39,7 +40,8 @@ export async function getActiveSubscription(supabase: SupabaseClient, userId: st
 const SUBSCRIPTION_OWNED_BY_ANOTHER_USER = 'P0409';
 
 /** Stores a verified App Store subscription and syncs the PRO entitlements,
- * atomically (supabase/migrations/…_subscriptions_app_store.sql). */
+ * atomically (supabase/migrations/…_subscriptions_app_store.sql, return
+ * value extended with product_id in …_apply_app_store_subscription_product_id.sql). */
 export async function applyAppStoreSubscription(
   supabase: SupabaseClient,
   userId: string,

@@ -46,6 +46,24 @@ describe.skipIf(!integration)('Support requests', () => {
     return ctx.app.inject({ method: 'POST', url: '/api/v1/support/requests', headers, payload });
   }
 
+  /** Arguments for calling insert_support_request() directly. */
+  function rpcArgs(userId: string, text: string) {
+    return {
+      p_user_id: userId,
+      p_kind: 'INQUIRY',
+      p_category: 'OTHER',
+      p_body: text,
+      p_app_version: null,
+      p_os_version: null,
+      p_device_model: null,
+      p_classification: 'VALID',
+      p_status: 'REPLIED',
+      p_reply_body: 'テスト返信です。',
+      p_replied_at: new Date().toISOString(),
+      p_max_per_hour: 5,
+    };
+  }
+
   async function storedRow(id: string) {
     const { data, error } = await unconfigured.serviceClient
       .from('support_requests')
@@ -275,6 +293,60 @@ describe.skipIf(!integration)('Support requests', () => {
       expect(otherResponse.statusCode).toBe(201);
     });
 
+    it('429: concurrent requests cannot exceed the limit (count + insert are atomic)', async () => {
+      const { user, headers } = await newUser();
+      const responses = await Promise.all(
+        Array.from({ length: 8 }, (_, index) =>
+          post(unconfigured, headers, { kind: 'INQUIRY', category: 'OTHER', body: `同時送信の質問${index + 1}です` }),
+        ),
+      );
+      const statuses = responses.map((response) => response.statusCode).sort();
+      expect(statuses).toEqual([201, 201, 201, 201, 201, 429, 429, 429]);
+      for (const response of responses.filter((r) => r.statusCode === 429)) {
+        expect(JSON.parse(response.body).error.code).toBe('RATE_LIMITED');
+      }
+
+      const { count } = await unconfigured.serviceClient
+        .from('support_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+      expect(count).toBe(5);
+    });
+
+    it('429: a rate-limited BUG report creates no GitHub Issue', async () => {
+      const { headers } = await newUser();
+      for (let index = 1; index <= 5; index += 1) {
+        const response = await post(configured, headers, {
+          kind: 'INQUIRY',
+          category: 'OTHER',
+          body: `質問その${index}です`,
+        });
+        expect(response.statusCode).toBe(201);
+      }
+      const sixth = await post(configured, headers, {
+        kind: 'INQUIRY',
+        category: 'BUG',
+        body: '起動するとアプリが落ちる',
+      });
+      expect(sixth.statusCode).toBe(429);
+      expect(configuredFetch).not.toHaveBeenCalled();
+    });
+
+    it('insert_support_request raises P0429 at the limit (service_role)', async () => {
+      const { user } = await newUser();
+      for (let index = 1; index <= 5; index += 1) {
+        const { error } = await unconfigured.serviceClient
+          .rpc('insert_support_request', rpcArgs(user.id, `質問その${index}です`))
+          .single();
+        expect(error).toBeNull();
+      }
+      const { data, error } = await unconfigured.serviceClient
+        .rpc('insert_support_request', rpcArgs(user.id, '質問その6です'))
+        .single();
+      expect(data).toBeNull();
+      expect(error?.code).toBe('P0429');
+    });
+
     it('401 without a token', async () => {
       const response = await configured.app.inject({
         method: 'POST',
@@ -314,18 +386,22 @@ describe.skipIf(!integration)('Support requests', () => {
       expect(JSON.parse(response.body)).toEqual({ data: [] });
     });
 
-    it('RLS: a user can SELECT only their own rows directly', async () => {
+    it('RLS: app users cannot read or write support_requests directly (only via the Backend)', async () => {
       const a = await newUser();
-      const b = await newUser();
-      await post(unconfigured, a.headers, { kind: 'INQUIRY', category: 'DATA', body: '前回値の意味を教えてください' });
-      await post(unconfigured, b.headers, { kind: 'INQUIRY', category: 'DATA', body: '予想値の出典を教えてください' });
+      const created = await post(unconfigured, a.headers, {
+        kind: 'INQUIRY',
+        category: 'DATA',
+        body: '前回値の意味を教えてください',
+      });
+      expect(created.statusCode).toBe(201);
 
       const asUserA = createClient(unconfigured.supabaseUrl, unconfigured.anonKey, {
         global: { headers: { Authorization: `Bearer ${a.user.accessToken}` } },
       });
-      const { data, error } = await asUserA.from('support_requests').select('user_id');
-      expect(error).toBeNull();
-      expect(data).toEqual([{ user_id: a.user.id }]);
+      // classification / github_issue_* must not be readable from the client.
+      const select = await asUserA.from('support_requests').select('user_id, classification, github_issue_url');
+      expect(select.error).not.toBeNull();
+      expect(select.data).toBeNull();
 
       const insert = await asUserA.from('support_requests').insert({
         user_id: a.user.id,
@@ -336,6 +412,10 @@ describe.skipIf(!integration)('Support requests', () => {
         status: 'IGNORED',
       });
       expect(insert.error).not.toBeNull();
+
+      // Nor can they call the insert function and skip the rate limit.
+      const rpc = await asUserA.rpc('insert_support_request', rpcArgs(a.user.id, '直接呼べないこと'));
+      expect(rpc.error).not.toBeNull();
     });
   });
 });
