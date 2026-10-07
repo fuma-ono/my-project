@@ -8,8 +8,7 @@ Web版プロトタイプ(`../app/index.html`、Claude Artifacts)は「1URL=1つ�
 
 次のビルド・提出に含める必要がある、まだストアに反映されていない変更。反映したら各項目を消すこと。
 
-- **112回目**: アップデート促進アラートが実機で出ない不具合の修正(`Constants.expoConfig?.version`→`Constants.nativeAppVersion`)。スキーマ変更なし。詳細は末尾の「アップデート促進アラートが実機で出ない不具合を修正(112回目)」参照。
-- **113回目**: EASの`EXPO_PUBLIC_ADMOB_BANNER_IOS`/`EXPO_PUBLIC_ADMOB_INTERSTITIAL_IOS`を正しいAdMobアカウント(`pub-3010509317015477`)の広告ユニットIDに更新済み(`eas env:set`、コード変更なし)。**次にビルドし直すだけで反映される**(環境変数はビルド時に埋め込まれるため)。詳細は末尾の「Googleの広告が出ない不具合を修正(113回目)」参照。
+(現在なし。112・113回目は1.2.1として提出済み)
 
 ## セットアップ(オーナー向け、初回のみ)
 
@@ -2215,3 +2214,17 @@ AdMobのapp-ads.txt確認・アプリレベル審査が完了してから数日�
 **調査**: `eas env:list`でEASに登録済みの広告ユニットIDを確認したところ、`EXPO_PUBLIC_ADMOB_BANNER_IOS`/`EXPO_PUBLIC_ADMOB_INTERSTITIAL_IOS`が`pub-2883804418673610`という発行者IDになっていた。一方、`app.json`の`react-native-google-mobile-ads`プラグイン設定(App ID、SDK初期化用)とapp-ads.txtはどちらも`pub-3010509317015477`。**広告ユニットがApp IDと別のAdMobアカウントのものになっていた**(AdMobは広告ユニットがApp IDと同じアカウント・同じアプリに属していないと読み込みに失敗する)。Android側の広告ユニット(`EXPO_PUBLIC_ADMOB_BANNER_ANDROID`等)は元々`pub-3010509317015477`のままだったため、iOS側だけの問題だった。no-fillのような一時的な現象ではなく設定ミスだったので、いくら待っても直らない状態だった。
 
 **対応**: オーナーに`pub-3010509317015477`のAdMobアカウントでバナー・インタースティシャルの広告ユニットを新規発行してもらい、`eas env:set`で`EXPO_PUBLIC_ADMOB_BANNER_IOS`/`EXPO_PUBLIC_ADMOB_INTERSTITIAL_IOS`を正しい値に更新した。コード変更は無し、EAS側の環境変数のみの修正。次にビルドし直した時点で反映される(環境変数はビルド時にアプリへ埋め込まれるため)。
+
+## 1.2.1ビルド・App Store Connectへの提出完了(114回目)
+
+112回目(アップデート促進アラートの不具合修正)・113回目(AdMob広告ユニットIDの修正)をまとめてビルド・提出した。1.2は既にリリース済みのため、`app.json`の`version`を`1.2.1`に変更してから着手した(バグ修正のみのためパッチ版)。
+
+- `eas build --platform ios --profile production --non-interactive`
+  - 途中Apple側のプロビジョニングプロファイル検証で一時的な403が発生したが、EAS CLI側のリトライで自動回復(ビルド自体には影響なし)
+  - buildNumberは自動的に202609080025→202609080026にインクリメント
+  - ビルド成功: https://expo.dev/accounts/fuma-ono/projects/kashikari/builds/6176e5e5-fbb5-4caa-8203-11424d1b942e
+- `eas submit --platform ios --latest --non-interactive`
+  - App Store Connectへのアップロード成功(Build 202609080026 / Version 1.2.1)
+  - 提出詳細: https://expo.dev/accounts/fuma-ono/projects/kashikari/submissions/6d9d23cf-b549-4450-bcc3-d3d98031df40
+
+**オーナー側の対応が必要**: Appleの処理完了(アップロード後5〜10分程度)を待ってから、App Store Connect(https://appstoreconnect.apple.com/apps/6808062809/testflight/ios )で新しいバージョン(1.2.1)を作成し、このビルド(202609080026)を紐付けて審査へ提出してほしい。審査が通ったら、①1.1以前のバージョンを開いてアップデート促進アラートが出ること、②広告(バナー・精算完了時のインタースティシャル)が実際に表示されることの両方を実機で確認してほしい。
