@@ -52,10 +52,11 @@ final class HomeCurrencyPairEditorTests: XCTestCase {
     }
 
     func testPickerCategoriesAndSearch() async {
-        let viewModel = await loaded(MockAPIClient(), home: nil)
-        XCTAssertEqual(viewModel.pairs(in: .all, matching: ""), all)
+        let viewModel = await loaded(MockAPIClient(), home: ["GBPJPY", "USDJPY"])
+        // 選択中を選んだ順で上に、残りはその下に。
+        XCTAssertEqual(viewModel.pairs(in: .all, matching: ""), ["GBPJPY", "USDJPY", "EURUSD", "EURJPY", "AUDUSD"])
         XCTAssertEqual(viewModel.pairs(in: .major, matching: ""), ["USDJPY", "EURUSD", "AUDUSD"])
-        XCTAssertEqual(viewModel.pairs(in: .crossYen, matching: ""), ["EURJPY", "GBPJPY"])
+        XCTAssertEqual(viewModel.pairs(in: .crossYen, matching: ""), ["GBPJPY", "EURJPY"])
         XCTAssertEqual(viewModel.pairs(in: .other, matching: ""), [])
         XCTAssertEqual(HomeCurrencyPairEditorViewModel.category(of: "EURGBP"), .other)
         XCTAssertEqual(viewModel.pairs(in: .all, matching: "eur/j"), ["EURJPY"])

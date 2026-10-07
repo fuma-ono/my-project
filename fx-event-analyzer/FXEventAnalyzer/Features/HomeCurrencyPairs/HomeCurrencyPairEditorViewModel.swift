@@ -60,11 +60,11 @@ final class HomeCurrencyPairEditorViewModel: ObservableObject {
         if selected.contains(symbol) { remove(symbol) } else { add(symbol) }
     }
 
-    /// 追加画面に出す通貨ペア。`query`は「usd/jpy」「ドル」のように記号・
-    /// 日本語名のどちらでも探せる。
+    /// 追加画面に出す通貨ペア。選択中を選んだ順で上にまとめ、その下に残りを
+    /// 並べる。`query`は「usd/jpy」「ドル」のように記号・日本語名のどちらでも探せる。
     func pairs(in category: PairCategory, matching query: String) -> [String] {
         let keyword = Self.searchKey(query)
-        return available.filter { symbol in
+        return (selected + others).filter { symbol in
             (category == .all || Self.category(of: symbol) == category)
                 && (keyword.isEmpty || Self.searchKey(symbol + Self.names(symbol)).contains(keyword))
         }

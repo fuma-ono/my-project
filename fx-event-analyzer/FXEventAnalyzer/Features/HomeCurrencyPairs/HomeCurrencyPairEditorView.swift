@@ -92,7 +92,7 @@ struct HomeCurrencyPairEditorView: View {
     }
 
     private func selectedRow(_ symbol: String) -> some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 9) {
             PairFlags(symbol: symbol)
             PairLabels(symbol: symbol)
             Spacer(minLength: 4)
@@ -105,7 +105,7 @@ struct HomeCurrencyPairEditorView: View {
                 .accessibilityLabel("\(FXPairSymbol.displayName(symbol))を並べ替え")
         }
         .padding(.horizontal, 9)
-        .frame(height: 34)
+        .frame(height: 37)
         .contentShape(Rectangle())
         .opacity(dragging == symbol ? 0.5 : 1)
         .onDrag {
@@ -137,7 +137,8 @@ struct HomeCurrencyPairEditorView: View {
 }
 
 /// SCR-026の遷移先「通貨ペアを追加」(参考画像の右側)。検索欄と絞り込み、
-/// 選べる通貨ペアの一覧。選択中は✓、それ以外は＋で、行のタップで外す・追加する。
+/// 選べる通貨ペアの一覧(選択中を上にまとめる)。選択中は✓と外枠、それ以外は＋で、
+/// 行のタップで外す・追加する。
 struct HomeCurrencyPairPickerView: View {
     @ObservedObject var viewModel: HomeCurrencyPairEditorViewModel
     @Binding var tabSelection: Int
@@ -213,7 +214,7 @@ struct HomeCurrencyPairPickerView: View {
         let isSelected = viewModel.selected.contains(symbol)
         let isEnabled = isSelected || viewModel.canAdd
         return Button { viewModel.toggle(symbol) } label: {
-            HStack(spacing: 7) {
+            HStack(spacing: 9) {
                 PairFlags(symbol: symbol)
                 PairLabels(symbol: symbol)
                 Spacer(minLength: 4)
@@ -233,11 +234,22 @@ struct HomeCurrencyPairPickerView: View {
                 }
             }
             .padding(.horizontal, 9)
-            .frame(height: 32)
+            .frame(height: 34)
+            .background {
+                // 選択中の行は水色の外枠で囲む。
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(V5P.cyan.opacity(0.08))
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(V5P.cyan.opacity(0.85), lineWidth: 0.8))
+                        .padding(.horizontal, 3)
+                        .padding(.vertical, 2)
+                }
+            }
             .contentShape(Rectangle())
         }
+        // `.disabled`は行の文字まで暗くするので使わない。上限のときは
+        // ViewModelの`add`が受け付けず、＋だけを薄くする。
         .buttonStyle(.plain)
-        .disabled(!isEnabled)
         .accessibilityLabel("\(FXPairSymbol.displayName(symbol))を\(isSelected ? "外す" : "追加")")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -249,8 +261,8 @@ private struct PairFlags: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            CountryFlagView(currencyCode: String(symbol.prefix(3)), diameter: 13)
-            CountryFlagView(currencyCode: String(symbol.suffix(3)), diameter: 13)
+            CountryFlagView(currencyCode: String(symbol.prefix(3)), diameter: 16)
+            CountryFlagView(currencyCode: String(symbol.suffix(3)), diameter: 16)
         }
         .accessibilityHidden(true)
     }
