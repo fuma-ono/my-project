@@ -150,8 +150,13 @@ struct LoginView: View {
                         // so only the brand mark/title move — "Appleで
                         // サインイン" and everything below stays exactly
                         // where it was, same compensation pattern as above.
+                        //
+                        // User feedback (2026-10-07): after switching the
+                        // form's text to Noto Sans JP (taller line height)
+                        // the block sat lower — move "Appleでサインイン" and
+                        // everything below it up a little (0.05 -> 0.03).
                         formPanel(controlHeight: geometry.size.height * 0.062)
-                            .padding(.top, geometry.size.height * 0.05)
+                            .padding(.top, geometry.size.height * 0.03)
                             .padding(.horizontal, DesignTokens.Spacing.lg)
                             .padding(.bottom, DesignTokens.Spacing.lg)
                     }
