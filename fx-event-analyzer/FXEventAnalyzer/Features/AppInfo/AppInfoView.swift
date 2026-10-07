@@ -35,8 +35,6 @@ struct AppInfoView: View {
                         .padding(.top, 4)
                     NotoText.text("バージョン \(AppInfo.version)", size: 8.5)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
-                    NotoText.text("(\(AppInfo.build))", size: 8)
-                        .foregroundStyle(SettingsCardStyle.subtitleColor)
                 }
                 .padding(.bottom, 4)
 
@@ -93,7 +91,6 @@ struct AppInfoView: View {
 /// アプリの版・リンク・ライセンスの情報。
 enum AppInfo {
     static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-" }
-    static var build: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "-" }
     /// 公式サイトのURL。決まったら入れると「公式サイトを開く」で開く。
     static let websiteURL: URL? = nil
 
