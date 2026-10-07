@@ -427,7 +427,12 @@ struct HomeView: View {
     // `.topLeading`なので増えた分はそのまま下側の余白になる)、それに伴い
     // カード全体とミニカード下端の間の余白が広がりすぎないよう
     // `favoritesCardHeight`も97→95に詰めた。
-    private static let favoritesCardHeight: CGFloat = 95
+    // HQ再指摘(2026-10-07)「米国CPI枠線の下部分をもう少しHIGH側に寄せて」:
+    // CIキャプチャ実測でHIGHバッジ下端からミニカード下端の枠線まで約8.5
+    // ユニット(意図していた下パディング4の倍以上)空いていたため、
+    // `favoriteSubCardHeight`を65→61に詰めた。ミニカード下端の空きが
+    // 広がりすぎないよう`favoritesCardHeight`も95→91に合わせて詰めた。
+    private static let favoritesCardHeight: CGFloat = 91
     /// ヘッダー約114px→31.3≒31。
     /// HQ再指摘(2026-10-05、4回目)「お気に入りタイトルの下に空白があるから
     /// 下の米国CPIの枠を上にあげて」: ヘッダー下の`Divider()`を非表示にした
@@ -440,7 +445,7 @@ struct HomeView: View {
     /// 各カードwidth≈247px→67.8≒68、height≈242px→66.5≒66、
     /// corner radius≈18px→4.9≒5。
     private static let favoriteSubCardWidth: CGFloat = 68
-    private static let favoriteSubCardHeight: CGFloat = 65
+    private static let favoriteSubCardHeight: CGFloat = 61
     private static let favoriteSubCardCornerRadius: CGFloat = 5
 
     // MARK: 直近の要人発言 (y=1139,height=481 → 481/3.641≒132)
@@ -1430,8 +1435,13 @@ struct HomeView: View {
     /// 字送りも強く詰めてしまい、"10/6 10:12|FRB"のように｜の前後がほぼ
     /// くっついて見えていたため、｜の両側に半角スペースを2個ずつ入れて
     /// 見た目の余白を確保した。
+    /// HQ再指摘(2026-10-07、2回目)「10/07 00:17の07と00の間をもう少し
+    /// 広げて」: 同じ理由(`tracking(-0.4)`によるスペース圧縮)で、
+    /// `favoriteDateFormatter`("M/d HH:mm")が内部で使う半角スペース1個も
+    /// 日付と時刻がほぼくっついて見えていたため、置換で2個に広げた。
     private static func speechDateOrgText(_ speech: HomeSpeechSummary) -> String {
         let dateText = Self.favoriteDateFormatter.string(from: speech.statementDatetime)
+            .replacingOccurrences(of: " ", with: "  ")
         guard let organization = speech.organization else { return dateText }
         return "\(dateText)  |  \(organization)"
     }
