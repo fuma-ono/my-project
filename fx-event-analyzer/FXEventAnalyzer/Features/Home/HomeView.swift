@@ -398,6 +398,11 @@ struct HomeView: View {
     /// 引き上げて`eventRow`/`pairRow`両方で揃えた(`pairFlagDiameter`は
     /// 廃止)。
     private static let flagDiameter: CGFloat = 21.5
+    /// HQ指示(2026-10-08)「ホームの通貨ペアとホーム通貨ペア編集画面の国旗と
+    /// USD/JPYの大きさを編集画面にそろえて、ただし枠の縦幅は変えないで」:
+    /// 通貨ペア行だけ編集画面(SCR-026の`PairFlags`)と同じ16にした。今日の
+    /// 重要イベントの国旗は`flagDiameter`(21.5)のまま。
+    private static let pairFlagDiameter: CGFloat = 16
 
     /// HQ再指摘(2026-10-05)「お気に入り内の国旗の丸のサイズは少し小さく
     /// して」: お気に入りの小カードは幅68と他カードの行より狭く、共通の
@@ -984,10 +989,12 @@ struct HomeView: View {
     ///    3行とも同じx位置に揃うようにした。
     @ViewBuilder private func pairRow(_ pair: FXPairUI) -> some View {
         HStack(spacing: 4) {
-            HStack(spacing: 3) {
-                CountryFlagView(currencyCode: pair.baseCurrency, diameter: Self.flagDiameter)
-                CountryFlagView(currencyCode: pair.quoteCurrency, diameter: Self.flagDiameter)
+            // 国旗の間隔(2)と通貨ペア名までの間隔(4+5=9)も編集画面と同じ。
+            HStack(spacing: 2) {
+                CountryFlagView(currencyCode: pair.baseCurrency, diameter: Self.pairFlagDiameter)
+                CountryFlagView(currencyCode: pair.quoteCurrency, diameter: Self.pairFlagDiameter)
             }
+            .padding(.trailing, 5)
             // HQ再指摘(2026-10-05、4回目)「USD/JPYの文字の幅、155.42の文字の
             // 幅、+0.25%の文字の幅いずれも狭めて」: HIGH/MEDIUMバッジの時と
             // 同じく、文字サイズ(9.5)はそのままに`.tracking(-0.4)`で字間を
@@ -1028,20 +1035,21 @@ struct HomeView: View {
             // なる)。各行に明示的な`.frame(height:)`を付けて行送りを
             // フォント任せにせず固定し、1行目が2行目の分まで占有しない
             // ようにした。
+            // HQ指示(2026-10-08)で編集画面(SCR-026の`PairLabels`)と同じ
+            // NotoTextの9.5/7・字間詰めなしにそろえた。以前の固定高さ11/8は
+            // Notoの行送りより低く、文字が縮んで小さく見えていたため、
+            // 行送りが収まる14/10に広げた(合計25で行の高さ33に収まる)。
             VStack(alignment: .leading, spacing: 1) {
                 // HQ指示(2026-10-06)「英字を含む文字もNotoTextで表示して」
                 NotoText.text(pair.displaySymbol, size: 9.5)
-                    .tracking(-0.4)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                    .frame(height: 11, alignment: .leading)
-                Text(pair.displayName)
-                    .font(.system(size: 7, weight: .medium))
-                    .tracking(-0.4)
+                    .frame(height: 14, alignment: .leading)
+                NotoText.text(pair.displayName, size: 7)
                     .foregroundStyle(Self.linkBlue)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                    .frame(height: 8, alignment: .leading)
+                    .frame(height: 10, alignment: .leading)
             }
             .frame(minWidth: 54, alignment: .leading)
             // HQ再指摘(2026-10-05、6回目)「155.42のサイズを0.5だけ大きく
@@ -1088,7 +1096,7 @@ struct HomeView: View {
                 Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 8.2))
             }
             .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
-            .frame(height: Self.flagDiameter, alignment: .center)
+            .frame(height: Self.pairFlagDiameter, alignment: .center)
             .fixedSize()
             // HQ指示(2026-10-08)「>はいらない、消して」: 行は遷移しないので
             // chevronを削除。行の中身がカードの内側幅(215-左右8)より約10pt
