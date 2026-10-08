@@ -1017,7 +1017,7 @@ struct HomeView: View {
         switch item {
         case .event(let id, let countryCode, _, let name, let importance, let releaseDatetime):
             NavigationLink(value: AppRoute.eventDetail(id: id)) {
-                favoriteGridCardContent(countryCode: countryCode, name: name) {
+                favoriteGridCardContent(countryCode: countryCode, name: Self.shortIndicatorName(name)) {
                     dateRow(releaseDatetime)
                 } footer: {
                     statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance), verticalPadding: 1)
@@ -1032,7 +1032,7 @@ struct HomeView: View {
         // まま)。
         case .indicator(let id, let countryCode, _, let name, let importance, let nextReleaseDatetime):
             NavigationLink(value: AppRoute.indicatorDetail(id: id)) {
-                favoriteGridCardContent(countryCode: countryCode, name: name) {
+                favoriteGridCardContent(countryCode: countryCode, name: Self.shortIndicatorName(name)) {
                     if let nextReleaseDatetime {
                         dateRow(nextReleaseDatetime)
                     } else {
@@ -1094,6 +1094,9 @@ struct HomeView: View {
         @ViewBuilder subtitle: () -> some View,
         @ViewBuilder footer: () -> some View
     ) -> some View {
+        // HQ指示(2026-10-08)「お気に入りも米国CPIだけの表示にして」: 指標・
+        // イベントの名前は、今日の重要イベントと同じくカッコの前までにする
+        // (呼び出し側で`shortIndicatorName`を通す)。
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 if let countryCode {
