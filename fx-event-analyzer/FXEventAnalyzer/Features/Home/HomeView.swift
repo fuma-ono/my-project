@@ -939,7 +939,11 @@ struct HomeView: View {
                 // 開始位置の共通箱16幅ともちょうど合う)。
                 HomeChartIcon().foregroundStyle(V5P.cyan).frame(width: 16, height: 15).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
             } trailing: {
-                headerLink("すべて見る")
+                // HQ指示(2026-10-08)「すべて見るは通貨ペア編集画面へつないで」:
+                // SCR-026 ホーム通貨ペア編集へ遷移する。
+                NavigationLink(value: AppRoute.homeCurrencyPairEditor) {
+                    headerLink("すべて見る")
+                }
             }
             ForEach(Array(pairs.enumerated()), id: \.element.id) { idx, pair in
                 if idx > 0 { Divider().overlay(Self.cardBorderColor) }
@@ -1086,8 +1090,10 @@ struct HomeView: View {
             .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
             .frame(height: Self.flagDiameter, alignment: .center)
             .fixedSize()
-            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
-                .frame(height: Self.flagDiameter, alignment: .center)
+            // HQ指示(2026-10-08)「>はいらない、消して」: 行は遷移しないので
+            // chevronを削除。行の中身がカードの内側幅(215-左右8)より約10pt
+            // 広く、はみ出した分だけカード全体の左右の余白が他のカードより
+            // 狭くなっていたのも、この幅が空くことで解消する。
         }
         .foregroundStyle(.white)
         .frame(height: Self.pairRowHeight)
@@ -1203,7 +1209,9 @@ struct HomeView: View {
                 // HQ指示(2026-10-06)「お気に入りの☆のサイズを少し小さく
                 // して、すこし右上に移動させて」: サイズ10→8.5に縮小し、
                 // `.offset`で右上方向に少しずらした。
-                Image(systemName: "star").font(.system(size: 8.5)).foregroundStyle(V5P.muted)
+                // HQ指示(2026-10-08)「塗りつぶしにして」: お気に入り登録済みの
+                // 項目なので、白抜き(未登録に見える)から塗りつぶしの★にした。
+                Image(systemName: "star.fill").font(.system(size: 8.5)).foregroundStyle(V5P.cyan)
                     .offset(x: 1.5, y: -1.5)
             }
             // HQ指示(2026-10-06)「英字を含む文字もNotoTextで表示して」:
