@@ -197,12 +197,16 @@ private struct CalendarDayList: View {
                 .font(.system(size: 8.5, weight: .bold))
                 .monospacedDigit()
                 .foregroundStyle(.white)
-                .frame(width: 26, alignment: .leading)
+                // 幅26では「08:5／0」と折り返していたので、1行に固定して幅を広げた。
+                .lineLimit(1)
+                .fixedSize()
+                .frame(width: 28, alignment: .leading)
             CountryFlagView(countryCode: item.countryCode, diameter: 14)
             NotoText.text(item.currencyCode, size: 7)
                 .foregroundStyle(.white)
                 .frame(width: 20, alignment: .leading)
-            NotoText.text(item.title, size: 8)
+            // 指標名はホームと同じくカッコの前まで(正式名は詳細画面)。
+            NotoText.text(item.kind == .indicator ? HomeView.shortIndicatorName(item.title) : item.title, size: 8)
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
