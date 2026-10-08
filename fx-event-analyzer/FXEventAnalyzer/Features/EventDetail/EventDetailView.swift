@@ -27,7 +27,12 @@ struct EventDetailView: View {
     @ObservedObject private var favorites = FavoritesStore.shared
     private let eventId: String
 
+    private let apiClient: APIClient
+    @ObservedObject private var plan = PlanStore.shared
+    @State private var planPrompt: String?
+
     init(apiClient: APIClient, eventId: String, tabSelection: Binding<Int>) {
+        self.apiClient = apiClient
         _viewModel = StateObject(wrappedValue: EventDetailViewModel(apiClient: apiClient, eventId: eventId))
         _tabSelection = tabSelection
         self.eventId = eventId
@@ -37,6 +42,7 @@ struct EventDetailView: View {
         content
             .toolbar(.hidden, for: .navigationBar)
             .task { viewModel.load() }
+            .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
     }
 
     @ViewBuilder
@@ -56,7 +62,14 @@ struct EventDetailView: View {
                     title: "イベント詳細", back: true,
                     isFavorite: favorites.isFavorite(.event, id: eventId),
                     onBack: { dismiss() },
-                    onToggleFavorite: { favorites.toggle(.event, id: eventId) }
+                    onToggleFavorite: {
+                        // 無料プランはお気に入り件まで(HQ指示 2026-10-08)。
+                        guard favorites.canToggle(.event, id: eventId, max: plan.limits.favoritesMax) else {
+                            planPrompt = "無料プランのお気に入りは\(plan.limits.favoritesMax ?? 0)件までです。プレミアムプランなら件数の制限なく登録できます。"
+                            return
+                        }
+                        favorites.toggle(.event, id: eventId)
+                    }
                 )
 
                 V5Card(CGRect(x: 10, y: 57, width: 214, height: 55)) {

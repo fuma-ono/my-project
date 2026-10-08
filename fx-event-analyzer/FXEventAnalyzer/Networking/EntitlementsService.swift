@@ -1,11 +1,13 @@
 import Foundation
 
-/// Talks to `GET /api/v1/entitlements` (api-design.md §27). No screen
-/// consumes this yet — see `AccountService`'s doc comment for why.
+/// Talks to `GET /api/v1/entitlements` (api-design.md §27). `PlanStore` reads
+/// the plan and its limits from it (v1.15).
 struct EntitlementsService {
     let apiClient: APIClient
 
-    func fetchEntitlements() async throws -> EntitlementsResponse {
-        try await apiClient.send(Endpoint(path: "entitlements"))
+    /// `timezone`はカレンダーの範囲(月初・年初)を計算するタイムゾーン。
+    func fetchEntitlements(timezone: String? = nil) async throws -> EntitlementsResponse {
+        let query = timezone.map { [URLQueryItem(name: "timezone", value: $0)] } ?? []
+        return try await apiClient.send(Endpoint(path: "entitlements", queryItems: query))
     }
 }

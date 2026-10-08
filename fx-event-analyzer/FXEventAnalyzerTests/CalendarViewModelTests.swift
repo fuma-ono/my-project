@@ -9,6 +9,12 @@ final class CalendarViewModelTests: XCTestCase {
         return calendar
     }
 
+    private var proPlan: PlanStore {
+        let plan = PlanStore()
+        plan.set(plan: .pro, limits: .pro(now: date(2026, 10, 8), calendar: calendar))
+        return plan
+    }
+
     private func date(_ y: Int, _ m: Int, _ d: Int, _ h: Int = 0, _ min: Int = 0) -> Date {
         calendar.date(from: DateComponents(year: y, month: m, day: d, hour: h, minute: min))!
     }
@@ -20,7 +26,7 @@ final class CalendarViewModelTests: XCTestCase {
 
     func testGridStartsOnMondayAndHasSixWeeks() {
         // 2026-10-01 is a Thursday, so the grid starts on Monday 9/28.
-        let viewModel = CalendarViewModel(apiClient: MockAPIClient(), today: date(2026, 10, 8), calendar: calendar)
+        let viewModel = CalendarViewModel(apiClient: MockAPIClient(), today: date(2026, 10, 8), calendar: calendar, plan: proPlan)
         XCTAssertEqual(viewModel.gridDays.count, 42)
         XCTAssertEqual(viewModel.gridDays.first, date(2026, 9, 28))
         XCTAssertEqual(viewModel.weekdaySymbols, ["月", "火", "水", "木", "金", "土", "日"])
@@ -35,7 +41,7 @@ final class CalendarViewModelTests: XCTestCase {
             item("b", .speech, .high, at: date(2026, 10, 8, 15, 0)),
             item("c", .indicator, .low, at: date(2026, 10, 9, 21, 30)),
         ]))
-        let viewModel = CalendarViewModel(apiClient: apiClient, today: date(2026, 10, 8), calendar: calendar)
+        let viewModel = CalendarViewModel(apiClient: apiClient, today: date(2026, 10, 8), calendar: calendar, plan: proPlan)
         await viewModel.load()
 
         XCTAssertEqual(viewModel.loadState, .loaded)
@@ -45,22 +51,55 @@ final class CalendarViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.items(on: date(2026, 10, 8))[1].route, .speechDetail(id: "b"))
         let query = try XCTUnwrap(apiClient.lastEndpoint?.queryItems)
         XCTAssertEqual(apiClient.lastEndpoint?.path, "calendar")
-        XCTAssertEqual(query.map(\.name), ["from", "to"])
+        XCTAssertEqual(query.map(\.name), ["from", "to", "timezone"])
     }
 
     func testMoveMonthSelectsTheFirstDay() async {
         let apiClient = MockAPIClient()
         apiClient.result = .success(CalendarResponse(items: []))
-        let viewModel = CalendarViewModel(apiClient: apiClient, today: date(2026, 10, 8), calendar: calendar)
+        let viewModel = CalendarViewModel(apiClient: apiClient, today: date(2026, 10, 8), calendar: calendar, plan: proPlan)
         await viewModel.moveMonth(by: 1)
         XCTAssertEqual(viewModel.monthTitle, "2026年11月")
         XCTAssertEqual(viewModel.selectedDate, date(2026, 11, 1))
     }
 
+    func testFreePlanCanGoBackOneMonthAndProFiveYears() {
+        let today = date(2026, 10, 8)
+        let free = PlanStore()
+        free.set(plan: .free, limits: .free(now: today, calendar: calendar))
+        let viewModel = CalendarViewModel(apiClient: MockAPIClient(), today: today, calendar: calendar, plan: free)
+        XCTAssertEqual(viewModel.moveAvailability(by: -1), .allowed, "9月は見られる")
+        XCTAssertEqual(viewModel.availability(of: date(2026, 8, 31)), .needsPro)
+        XCTAssertEqual(viewModel.moveAvailability(by: -12), .needsPro)
+        XCTAssertEqual(viewModel.moveAvailability(by: 12), .allowed, "来年は見られる")
+        XCTAssertEqual(viewModel.availability(of: date(2028, 1, 1)), .unavailable)
+        XCTAssertEqual(viewModel.availability(of: date(2020, 12, 31)), .unavailable)
+
+        let pro = PlanStore()
+        pro.set(plan: .pro, limits: .pro(now: today, calendar: calendar))
+        let proModel = CalendarViewModel(apiClient: MockAPIClient(), today: today, calendar: calendar, plan: pro)
+        XCTAssertEqual(proModel.availability(of: date(2021, 1, 1)), .allowed)
+        XCTAssertEqual(proModel.availability(of: date(2020, 12, 31)), .unavailable)
+    }
+
+    func testLoadOnlyRequestsTheAllowedRange() async throws {
+        let today = date(2026, 10, 8)
+        let free = PlanStore()
+        free.set(plan: .free, limits: .free(now: today, calendar: calendar))
+        let apiClient = MockAPIClient()
+        apiClient.result = .success(CalendarResponse(items: []))
+        let viewModel = CalendarViewModel(apiClient: apiClient, today: today, calendar: calendar, plan: free)
+        await viewModel.moveMonth(by: -1)
+        // 9月のカレンダーは8/31から始まるが、無料プランは9/1から。
+        let from = try XCTUnwrap(apiClient.lastEndpoint?.queryItems.first { $0.name == "from" }?.value)
+        let formatter = ISO8601DateFormatter()
+        XCTAssertEqual(formatter.date(from: from), date(2026, 9, 1))
+    }
+
     func testMoveYear() async {
         let apiClient = MockAPIClient()
         apiClient.result = .success(CalendarResponse(items: []))
-        let viewModel = CalendarViewModel(apiClient: apiClient, today: date(2026, 10, 8), calendar: calendar)
+        let viewModel = CalendarViewModel(apiClient: apiClient, today: date(2026, 10, 8), calendar: calendar, plan: proPlan)
         await viewModel.moveMonth(by: -12)
         XCTAssertEqual(viewModel.monthTitle, "2025年10月")
     }

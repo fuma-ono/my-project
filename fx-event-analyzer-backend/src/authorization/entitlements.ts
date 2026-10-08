@@ -16,10 +16,16 @@ export const FEATURE_CODES = {
 
 export type FeatureCode = (typeof FEATURE_CODES)[keyof typeof FEATURE_CODES];
 
-function isActive(row: { enabled: boolean; expires_at: string | null }): boolean {
+export function isActive(row: { enabled: boolean; expires_at: string | null }): boolean {
   if (!row.enabled) return false;
   if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) return false;
   return true;
+}
+
+/** The user's currently active feature_codes (enabled, not expired). */
+export async function listActiveFeatureCodes(supabase: SupabaseClient, userId: string): Promise<string[]> {
+  const rows = await listEntitlements(supabase, userId);
+  return rows.filter(isActive).map((row) => row.feature_code);
 }
 
 export async function hasEntitlement(

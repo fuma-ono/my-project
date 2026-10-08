@@ -11,6 +11,7 @@ import {
   buildIntegrationContext,
   createTestUser,
   deleteTestUser,
+  grantEntitlement,
   loadIntegrationEnv,
   type IntegrationContext,
   type TestUser,
@@ -52,9 +53,14 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
   let ctx: IntegrationContext;
   const users: TestUser[] = [];
 
-  async function newUser(): Promise<{ user: TestUser; headers: { authorization: string } }> {
+  /** FREE by default. `pro` grants VIEW_ADVANCED_STATS (= PRO, api-design.md
+   * §28.1) for tests that save notification settings FREE can't. */
+  async function newUser(
+    options: { pro?: boolean } = {},
+  ): Promise<{ user: TestUser; headers: { authorization: string } }> {
     const user = await createTestUser(ctx);
     users.push(user);
+    if (options.pro) await grantEntitlement(ctx, user.id, FEATURE_CODES.VIEW_ADVANCED_STATS);
     return { user, headers: { authorization: `Bearer ${user.accessToken}` } };
   }
 
@@ -125,7 +131,7 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
     });
 
     it('updates only the fields sent and persists them', async () => {
-      const { headers } = await newUser();
+      const { headers } = await newUser({ pro: true });
       const patch = await ctx.app.inject({
         method: 'PATCH',
         url: '/api/v1/settings',
@@ -289,6 +295,7 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
     });
 
     it('rejects an unknown notification FX pair symbol with 422 and saves nothing', async () => {
+      // FREE on purpose: validation (422) comes before the plan check (403).
       const { headers } = await newUser();
       const response = await ctx.app.inject({
         method: 'PATCH',
@@ -304,7 +311,7 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
     });
 
     it('resets fx_pairs to null (= all pairs)', async () => {
-      const { headers } = await newUser();
+      const { headers } = await newUser({ pro: true });
       await ctx.app.inject({
         method: 'PATCH',
         url: '/api/v1/settings',

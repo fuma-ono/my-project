@@ -162,17 +162,31 @@ struct SettingsListOptionSheet<Rows: View>: View {
 struct SettingsListOptionRow: View {
     let label: String
     let isSelected: Bool
+    /// 無料プランでは選べない項目。チェックの代わりに「Pro」の印を出す
+    /// (押したときの案内は`action`側で出す)。
+    var isLocked = false
     let action: () -> Void
+
+    init(label: String, isSelected: Bool, isLocked: Bool = false, action: @escaping () -> Void) {
+        self.label = label
+        self.isSelected = isSelected
+        self.isLocked = isLocked
+        self.action = action
+    }
 
     var body: some View {
         Button(action: action) {
             HStack {
-                Text(label).foregroundStyle(.white)
+                Text(label).foregroundStyle(isLocked ? V5P.muted : .white)
                 Spacer()
-                Image(systemName: "checkmark")
-                    .fontWeight(.semibold)
-                    .foregroundStyle(V5P.cyan)
-                    .opacity(isSelected ? 1 : 0)
+                if isLocked {
+                    ProBadge()
+                } else {
+                    Image(systemName: "checkmark")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(V5P.cyan)
+                        .opacity(isSelected ? 1 : 0)
+                }
             }
             .padding(.horizontal, 16)
             .frame(height: 46)

@@ -9,6 +9,8 @@ struct NotificationSettingsView: View {
     @StateObject private var viewModel: NotificationSettingsViewModel
     @Binding var tabSelection: Int
     @State private var picker: OptionPicker?
+    @State private var planPrompt: String?
+    private let apiClient: APIClient
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
@@ -18,6 +20,7 @@ struct NotificationSettingsView: View {
     }
 
     init(apiClient: APIClient, tabSelection: Binding<Int>) {
+        self.apiClient = apiClient
         _viewModel = StateObject(wrappedValue: NotificationSettingsViewModel(apiClient: apiClient))
         _tabSelection = tabSelection
     }
@@ -55,6 +58,7 @@ struct NotificationSettingsView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { viewModel.recheckAuthorization() }
         }
+        .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
         .sheet(item: $picker) { picker in
             switch picker {
             case .fxPairs: fxPairSheet
@@ -157,19 +161,30 @@ struct NotificationSettingsView: View {
         }
     }
 
+    /// 選択シートを閉じてから案内を出す(シートの上にはアラートを重ねられないため)。
+    private func showPlanPrompt(_ message: String) {
+        picker = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { planPrompt = message }
+    }
+
     // MARK: - 選択シート
 
     private var fxPairSheet: some View {
         let selected = viewModel.settings.fxPairs
-        return SettingsListOptionSheet(title: "対象通貨ペア", footer: "選択しない場合は、すべての通貨ペアが対象になります。") {
-            SettingsListOptionRow(label: "すべての通貨ペア", isSelected: selected == nil) {
-                viewModel.setFxPairs(nil)
+        let footer = viewModel.isAllPairsLocked
+            ? "無料プランでは1つの通貨ペアを選べます。"
+            : "選択しない場合は、すべての通貨ペアが対象になります。"
+        return SettingsListOptionSheet(title: "対象通貨ペア", footer: footer) {
+            SettingsListOptionRow(label: "すべての通貨ペア", isSelected: selected == nil, isLocked: viewModel.isAllPairsLocked) {
+                if viewModel.isAllPairsLocked {
+                    showPlanPrompt("無料プランの通知は、通貨ペア1つまでです。プレミアムプランなら複数・すべての通貨ペアを対象にできます。")
+                } else {
+                    viewModel.setFxPairs(nil)
+                }
             }
             ForEach(viewModel.fxPairSymbols, id: \.self) { symbol in
                 SettingsListOptionRow(label: FXPairSymbol.displayName(symbol), isSelected: selected?.contains(symbol) == true) {
-                    var next = selected ?? []
-                    if let index = next.firstIndex(of: symbol) { next.remove(at: index) } else { next.append(symbol) }
-                    viewModel.setFxPairs(next)
+                    viewModel.tapFxPair(symbol)
                 }
             }
         }
@@ -180,8 +195,15 @@ struct NotificationSettingsView: View {
             ForEach(NotificationSettings.importanceOrder, id: \.self) { importance in
                 SettingsListOptionRow(
                     label: NotificationImportance.label(importance),
-                    isSelected: viewModel.settings.importances.contains(importance)
-                ) { viewModel.toggleImportance(importance) }
+                    isSelected: viewModel.settings.importances.contains(importance),
+                    isLocked: viewModel.isLocked(importance: importance)
+                ) {
+                    if viewModel.isLocked(importance: importance) {
+                        showPlanPrompt("無料プランの通知は、重要度「高」だけです。プレミアムプランなら「中」「低」も選べます。")
+                    } else {
+                        viewModel.toggleImportance(importance)
+                    }
+                }
             }
         }
     }

@@ -46,12 +46,21 @@ export interface ReleasedEventIdRow {
   id: string;
 }
 
-export async function listAllReleasedEventIds(supabase: SupabaseClient, indicatorId: string): Promise<string[]> {
+/** The `limit` most recent RELEASED event ids for an indicator — the set
+ * Historical Comparison stats are computed over (capped per plan,
+ * api-design.md §21 / §28.1). */
+export async function listRecentReleasedEventIds(
+  supabase: SupabaseClient,
+  indicatorId: string,
+  limit: number,
+): Promise<string[]> {
   const { data, error } = await supabase
     .from('economic_events')
     .select('id')
     .eq('indicator_id', indicatorId)
-    .eq('status', 'RELEASED');
+    .eq('status', 'RELEASED')
+    .order('release_datetime', { ascending: false })
+    .limit(limit);
   if (error) throw error;
   return (data ?? []).map((row: ReleasedEventIdRow) => row.id);
 }

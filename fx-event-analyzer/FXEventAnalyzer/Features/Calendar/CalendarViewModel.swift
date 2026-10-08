@@ -19,12 +19,14 @@ final class CalendarViewModel: ObservableObject {
     @Published private(set) var itemsByDay: [Date: [CalendarItem]] = [:]
 
     private let service: CalendarService
+    private let plan: PlanStore
     let calendar: Calendar
     /// 前月・翌月への切り替えが重なったとき、古い結果で上書きしない。
     private var revision = 0
 
-    init(apiClient: APIClient, today: Date = Date(), calendar: Calendar = CalendarViewModel.makeCalendar()) {
+    init(apiClient: APIClient, today: Date = Date(), calendar: Calendar = CalendarViewModel.makeCalendar(), plan: PlanStore? = nil) {
         service = CalendarService(apiClient: apiClient)
+        self.plan = plan ?? .shared
         self.calendar = calendar
         let day = calendar.startOfDay(for: today)
         selectedDate = day
@@ -68,8 +70,16 @@ final class CalendarViewModel: ObservableObject {
         revision += 1
         let current = revision
         let days = gridDays
-        guard let first = days.first, let last = days.last,
-              let end = calendar.date(byAdding: .day, value: 1, to: last) else { return }
+        guard let gridFirst = days.first, let last = days.last,
+              let gridEnd = calendar.date(byAdding: .day, value: 1, to: last) else { return }
+        // プランで見られる範囲の外(前後の月の日)はBackendが403を返すので、範囲内だけ取る。
+        let first = max(gridFirst, plan.limits.calendarEarliestFrom)
+        let end = min(gridEnd, plan.limits.calendarLatestTo)
+        guard first < end else {
+            itemsByDay = [:]
+            loadState = .loaded
+            return
+        }
         if itemsByDay.isEmpty { loadState = .loading }
         do {
             let response = try await service.fetch(from: first, to: end)
@@ -101,6 +111,37 @@ final class CalendarViewModel: ObservableObject {
         selectedDate = next
         await load()
     }
+
+    // MARK: - プランで見られる範囲(HQ指示 2026-10-08)
+
+    enum Availability: Equatable {
+        case allowed
+        /// 無料プランでは見られないが、プレミアムプランなら見られる。
+        case needsPro
+        /// どのプランでも見られない(5年より前・来年より先)。
+        case unavailable
+    }
+
+    /// その日(または月)を見られるか。
+    func availability(of day: Date) -> Availability {
+        let limits = plan.limits
+        if day >= limits.calendarLatestTo { return .unavailable }
+        if day >= limits.calendarEarliestFrom { return .allowed }
+        if !plan.isPro, day >= PlanLimits.pro(calendar: calendar).calendarEarliestFrom { return .needsPro }
+        return .unavailable
+    }
+
+    /// 「‹ ›」(±1)・「« »」(±12)で移る先の月を見られるか。月の最後の日で判定するので、
+    /// 範囲の始まりが月の途中でもその月には移れる。
+    func moveAvailability(by value: Int) -> Availability {
+        guard let target = calendar.date(byAdding: .month, value: value, to: month),
+              let next = calendar.date(byAdding: .month, value: 1, to: target),
+              let lastDay = calendar.date(byAdding: .day, value: -1, to: next) else { return .unavailable }
+        return value < 0 ? availability(of: lastDay) : availability(of: target)
+    }
+
+    /// 無料プランの範囲を超えたときの案内文。
+    static let needsProMessage = "無料プランの経済カレンダーは、先月の1日から見られます。プレミアムプランなら5年前までさかのぼれます。"
 
     // MARK: - 表示
 

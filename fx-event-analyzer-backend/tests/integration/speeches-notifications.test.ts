@@ -31,10 +31,15 @@ describe.skipIf(!integration)('Speeches / FX pairs / upcoming notifications', ()
   let ctx: IntegrationContext;
   const users: TestUser[] = [];
 
+  // PRO (VIEW_ADVANCED_STATS) so the saved settings apply as stored — FREE's
+  // limits on /notifications/upcoming are covered in plan-limits.test.ts.
   async function newUser(entitled = true): Promise<{ authorization: string }> {
     const user = await createTestUser(ctx);
     users.push(user);
-    if (entitled) await grantEntitlement(ctx, user.id, FEATURE_CODES.VIEW_BASIC_EVENT);
+    if (entitled) {
+      await grantEntitlement(ctx, user.id, FEATURE_CODES.VIEW_BASIC_EVENT);
+      await grantEntitlement(ctx, user.id, FEATURE_CODES.VIEW_ADVANCED_STATS);
+    }
     return { authorization: `Bearer ${user.accessToken}` };
   }
 

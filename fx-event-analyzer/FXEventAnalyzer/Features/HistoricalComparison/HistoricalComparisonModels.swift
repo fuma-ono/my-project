@@ -12,8 +12,26 @@ struct ComparisonResponse: Decodable, Equatable {
     let advancedStatistics: AdvancedStatistics
     let events: [ComparisonEventSummary]
     let meta: PaginationMeta
+    /// 比べた回数の上限(api-design v1.15、無料5回・プレミアム20回)。古いBackendではnil。
+    var historyLimit: HistoryLimit? = nil
+
+    struct HistoryLimit: Decodable, Equatable {
+        let applied: Int
+        let maxForPlan: Int
+        let proMax: Int
+
+        enum CodingKeys: String, CodingKey {
+            case applied
+            case maxForPlan = "max_for_plan"
+            case proMax = "pro_max"
+        }
+
+        /// 今のプランの上限がプレミアムより少ない(無料プラン)。
+        var isLimited: Bool { maxForPlan < proMax }
+    }
 
     enum CodingKeys: String, CodingKey {
+        case historyLimit = "history_limit"
         case indicator
         case fxPairId = "fx_pair_id"
         case timeframe

@@ -624,8 +624,15 @@ function comparisonEventsList() {
 
 function comparisonHandler(indicatorId, timeframe) {
   const indicator = INDICATORS_LIST.find((row) => row.id === indicatorId) ?? INDICATOR_US_CPI;
-  const events = comparisonEventsList();
+  // api-design.md §21 / §28.1: only the plan's history_events_max most recent releases.
+  const maxForPlan = MOCK_PLAN_LIMITS[mockSubscriptionPlan].history_events_max;
+  const events = comparisonEventsList().slice(0, maxForPlan);
   const meta = { page: 1, limit: 20, total: events.length, has_next: false };
+  const historyLimit = {
+    applied: events.length,
+    max_for_plan: maxForPlan,
+    pro_max: MOCK_PLAN_LIMITS.PRO.history_events_max,
+  };
   const advanced = { average_absolute_movement: 0.184, average_absolute_pips: 18.4 };
 
   if (timeframe === 'all') {
@@ -650,6 +657,7 @@ function comparisonHandler(indicatorId, timeframe) {
       stats_by_timeframe: statsByTimeframe,
       events,
       meta,
+      history_limit: historyLimit,
     };
   }
 
@@ -672,6 +680,7 @@ function comparisonHandler(indicatorId, timeframe) {
     advanced_statistics: { available: true, required_entitlement: null, data: advanced },
     events,
     meta,
+    history_limit: historyLimit,
   };
 }
 
@@ -1236,6 +1245,127 @@ function subscriptionFixture() {
   };
 }
 
+// FREE / PRO usage limits (api-design.md §28.1, HQ決定 2026-10-08) — same
+// numbers as src/domain/planLimits.ts, following the /__mock/subscription-plan switch.
+const MOCK_PLAN_LIMITS = {
+  FREE: {
+    calendar_past: { unit: 'MONTHS', count: 1 },
+    favorites_max: 3,
+    notification_importances: ['HIGH'],
+    notification_fx_pairs_max: 1,
+    history_events_max: 5,
+  },
+  PRO: {
+    calendar_past: { unit: 'YEARS', count: 5 },
+    favorites_max: null,
+    notification_importances: ['HIGH', 'MEDIUM', 'LOW'],
+    notification_fx_pairs_max: null,
+    history_events_max: 20,
+  },
+};
+const MOCK_CALENDAR_FUTURE_YEARS = 2;
+
+/** UTC offset (ms) at `instant`: of `timeZone` when the request names one,
+ * otherwise of this server's local timezone (like calendarFixture). */
+function mockOffsetMs(instant, timeZone) {
+  if (!timeZone) return -new Date(instant).getTimezoneOffset() * 60_000;
+  const name = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' })
+    .formatToParts(new Date(instant))
+    .find((part) => part.type === 'timeZoneName')?.value;
+  const match = /GMT([+-])(\d{2}):(\d{2})/.exec(name ?? '');
+  if (!match) return 0;
+  return (match[1] === '-' ? -1 : 1) * (Number(match[2]) * 60 + Number(match[3])) * 60_000;
+}
+
+function mockValidTimeZone(timeZone) {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 00:00 local on year/month(1-based, may overflow)/day, as a Date. */
+function mockLocalMidnight(year, month, day, timeZone) {
+  const wall = Date.UTC(year, month - 1, day);
+  return new Date(wall - mockOffsetMs(wall - mockOffsetMs(wall, timeZone), timeZone));
+}
+
+function mockCalendarBounds(plan, timeZone) {
+  const local = new Date(now().getTime() + mockOffsetMs(now().getTime(), timeZone));
+  const year = local.getUTCFullYear();
+  const month = local.getUTCMonth() + 1;
+  const earliest = (past) =>
+    past.unit === 'MONTHS'
+      ? mockLocalMidnight(year, month - past.count, 1, timeZone)
+      : mockLocalMidnight(year - past.count, 1, 1, timeZone);
+  return {
+    earliestFrom: earliest(MOCK_PLAN_LIMITS[plan].calendar_past),
+    proEarliestFrom: earliest(MOCK_PLAN_LIMITS.PRO.calendar_past),
+    latestTo: mockLocalMidnight(year + MOCK_CALENDAR_FUTURE_YEARS, 1, 1, timeZone),
+  };
+}
+
+/** GET /entitlements (api-design.md §27): features + plan + limits. */
+function entitlementsHandler(searchParams) {
+  const timeZone = searchParams.get('timezone') || undefined;
+  const plan = mockSubscriptionPlan;
+  const limits = MOCK_PLAN_LIMITS[plan];
+  const bounds = mockCalendarBounds(plan, timeZone);
+  const features = ['VIEW_BASIC_EVENT', 'VIEW_HISTORICAL', 'VIEW_MARKET_REACTION'];
+  if (plan === 'PRO') features.push('VIEW_ADVANCED_STATS');
+  return {
+    features,
+    plan,
+    limits: {
+      calendar_earliest_from: isoSeconds(bounds.earliestFrom),
+      calendar_latest_to: isoSeconds(bounds.latestTo),
+      favorites_max: limits.favorites_max,
+      notification_importances: limits.notification_importances,
+      notification_fx_pairs_max: limits.notification_fx_pairs_max,
+      history_events_max: limits.history_events_max,
+    },
+  };
+}
+
+/** GET /calendar's plan range rule (api-design.md §14.6): null when allowed,
+ * otherwise [status, error body]. */
+function calendarPlanError(searchParams) {
+  const timeZone = searchParams.get('timezone') || undefined;
+  if (timeZone && !mockValidTimeZone(timeZone)) {
+    return [422, { error: { code: 'VALIDATION_ERROR', message: 'timezone: must be a valid IANA time zone' } }];
+  }
+  const fromMs = Date.parse(searchParams.get('from') ?? '');
+  const toMs = Date.parse(searchParams.get('to') ?? '');
+  const bounds = mockCalendarBounds(mockSubscriptionPlan, timeZone);
+  if (!Number.isNaN(toMs) && toMs > bounds.latestTo.getTime()) {
+    return [
+      422,
+      { error: { code: 'VALIDATION_ERROR', message: `to: must be ${isoSeconds(bounds.latestTo)} or earlier.` } },
+    ];
+  }
+  if (!Number.isNaN(fromMs) && fromMs < bounds.earliestFrom.getTime()) {
+    if (fromMs >= bounds.proEarliestFrom.getTime()) {
+      return [
+        403,
+        {
+          error: {
+            code: 'PLAN_LIMIT_EXCEEDED',
+            message: `from: the ${mockSubscriptionPlan} plan can go back to ${isoSeconds(bounds.earliestFrom)}.`,
+            required_plan: 'PRO',
+          },
+        },
+      ];
+    }
+    return [
+      422,
+      { error: { code: 'VALIDATION_ERROR', message: `from: must be ${isoSeconds(bounds.earliestFrom)} or later.` } },
+    ];
+  }
+  return null;
+}
+
 async function handleApi(req, res, pathname, searchParams, rawBody) {
   const segments = pathname
     .replace(/^\/api\/v1\//, '')
@@ -1263,7 +1393,13 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
   }
   if (pathname === '/api/v1/notifications/upcoming') return json(res, 200, upcomingNotificationsHandler());
   // SCR-010 経済カレンダー (api-design.md §14.6).
-  if (pathname === '/api/v1/calendar') return json(res, 200, calendarHandler(searchParams));
+  if (pathname === '/api/v1/calendar') {
+    const planError = calendarPlanError(searchParams);
+    if (planError) return json(res, ...planError);
+    return json(res, 200, calendarHandler(searchParams));
+  }
+  // api-design.md §27 / §28.1: follows the /__mock/subscription-plan switch.
+  if (pathname === '/api/v1/entitlements') return json(res, 200, entitlementsHandler(searchParams));
   // SCR-015 アカウント情報 (api-design.md §24.1-§24.3). PATCH answers with
   // the same fixture; DELETE is never exercised by the screenshot run.
   if (pathname === '/api/v1/account') {

@@ -56,6 +56,8 @@ struct RootView: View {
                     guard scenePhase == .active else { return }
                     // SCR-018 / SCR-019の設定(表示形式など)を読み込む。
                     await AppPreferences.shared.load(apiClient: apiClient)
+                    // 無料プラン・プレミアムプランの使える範囲(カレンダー・お気に入りなど)。
+                    await PlanStore.shared.load(apiClient: apiClient)
                     // SCR-017: 自動更新・解約などの購読の変化をBackendへ送る。
                     SubscriptionSync.shared.start(apiClient: apiClient)
                     await LocalNotificationScheduler(apiClient: apiClient).refresh()

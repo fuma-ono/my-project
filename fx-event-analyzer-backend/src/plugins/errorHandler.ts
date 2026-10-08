@@ -9,7 +9,7 @@ import { ApiError } from '../errors/ApiError.js';
 export function registerErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((error: FastifyError, request, reply) => {
     if (error instanceof ApiError) {
-      reply.status(error.statusCode).send({ error: { code: error.code, message: error.message } });
+      reply.status(error.statusCode).send({ error: { code: error.code, message: error.message, ...error.details } });
       return;
     }
 

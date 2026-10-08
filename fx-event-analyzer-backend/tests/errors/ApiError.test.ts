@@ -27,3 +27,17 @@ describe('ApiError', () => {
     expect(error).toBeInstanceOf(Error);
   });
 });
+
+describe('ApiError.planLimitExceeded', () => {
+  it('is a 403 PLAN_LIMIT_EXCEEDED carrying required_plan in details', () => {
+    const error = ApiError.planLimitExceeded('from: too far back.', 'PRO');
+    expect(error.statusCode).toBe(403);
+    expect(error.code).toBe('PLAN_LIMIT_EXCEEDED');
+    expect(error.message).toBe('from: too far back.');
+    expect(error.details).toEqual({ required_plan: 'PRO' });
+  });
+
+  it('has no details for the other codes', () => {
+    expect(ApiError.validation('x').details).toBeUndefined();
+  });
+});

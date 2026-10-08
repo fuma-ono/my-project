@@ -18,7 +18,8 @@ export type ApiErrorCode =
   | 'FX_PAIR_NOT_FOUND'
   | 'SPEECH_NOT_FOUND'
   | 'SUBSCRIPTION_REQUIRED'
-  | 'FEATURE_NOT_ENTITLED';
+  | 'FEATURE_NOT_ENTITLED'
+  | 'PLAN_LIMIT_EXCEEDED';
 
 const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   UNAUTHORIZED: 401,
@@ -35,20 +36,25 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   SPEECH_NOT_FOUND: 404,
   SUBSCRIPTION_REQUIRED: 403,
   FEATURE_NOT_ENTITLED: 403,
+  PLAN_LIMIT_EXCEEDED: 403,
 };
 
 /** Thrown anywhere in the request lifecycle; the global error handler
  * (src/plugins/errorHandler.ts) maps it to api-design.md §4's
- * `{ error: { code, message } }` body and the matching HTTP status. */
+ * `{ error: { code, message } }` body and the matching HTTP status.
+ * `details` are extra fields merged into that `error` object (e.g.
+ * PLAN_LIMIT_EXCEEDED's `required_plan`). */
 export class ApiError extends Error {
   readonly code: ApiErrorCode;
   readonly statusCode: number;
+  readonly details: Readonly<Record<string, unknown>> | undefined;
 
-  constructor(code: ApiErrorCode, message: string) {
+  constructor(code: ApiErrorCode, message: string, details?: Record<string, unknown>) {
     super(message);
     this.name = 'ApiError';
     this.code = code;
     this.statusCode = STATUS_BY_CODE[code];
+    this.details = details;
   }
 
   static unauthorized(message = 'Authentication required.'): ApiError {
@@ -69,6 +75,12 @@ export class ApiError extends Error {
 
   static featureNotEntitled(message = 'This feature requires a higher plan.'): ApiError {
     return new ApiError('FEATURE_NOT_ENTITLED', message);
+  }
+
+  /** 403: the user's plan doesn't allow this, but `requiredPlan` would
+   * (api-design.md §4 / §28.1). */
+  static planLimitExceeded(message: string, requiredPlan: string): ApiError {
+    return new ApiError('PLAN_LIMIT_EXCEEDED', message, { required_plan: requiredPlan });
   }
 
   static rateLimited(message = 'Too many requests. Please try again later.'): ApiError {

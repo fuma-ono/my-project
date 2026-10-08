@@ -12,6 +12,8 @@ struct CalendarTabView: View {
     @Binding var tabSelection: Int
     @State private var path = NavigationPath()
     @StateObject private var viewModel: CalendarViewModel
+    @ObservedObject private var plan = PlanStore.shared
+    @State private var planPrompt: String?
 
     init(apiClient: APIClient, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
@@ -29,6 +31,9 @@ struct CalendarTabView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .task { await viewModel.load() }
+            // 購入・解約でプランが変わったら、見られる範囲で取り直す。
+            .onChange(of: plan.plan) { _, _ in Task { await viewModel.load() } }
+            .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
             .navigationDestination(for: AppRoute.self) { route in
                 AppRouteDestinationView(route: route, apiClient: apiClient, tabSelection: $tabSelection)
             }
@@ -45,7 +50,7 @@ struct CalendarTabView: View {
             centered { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { Task { await viewModel.load() } }) }
         case .loaded:
             VStack(alignment: .leading, spacing: 8) {
-                CalendarMonthCard(viewModel: viewModel)
+                CalendarMonthCard(viewModel: viewModel) { planPrompt = CalendarViewModel.needsProMessage }
                 NotoText.text(viewModel.selectedTitle, size: 10)
                     .foregroundStyle(SettingsListLayout.sectionTitleColor)
                     .padding(.horizontal, 4)
@@ -75,6 +80,8 @@ struct CalendarTabView: View {
 /// 水色の丸、今日は水色の枠。
 private struct CalendarMonthCard: View {
     @ObservedObject var viewModel: CalendarViewModel
+    /// 無料プランの範囲の外を押したとき。
+    let onNeedsPro: () -> Void
     // 保存プロパティを`private`にすると自動の`init(viewModel:)`も`private`になり、
     // 外から作れなくなるので計算プロパティにしている。
     private var columns: [GridItem] { Array(repeating: GridItem(.flexible(), spacing: 2), count: 7) }
@@ -111,15 +118,26 @@ private struct CalendarMonthCard: View {
         .background(AccountCardBackground())
     }
 
+    /// 範囲の端では薄くして押せなくする。無料プランの範囲の外(プレミアムなら
+    /// 見られる)は押せるままにして、押したらプランの案内を出す。
     private func monthButton(systemName: String, label: String, value: Int) -> some View {
-        Button { Task { await viewModel.moveMonth(by: value) } } label: {
+        let availability = viewModel.moveAvailability(by: value)
+        return Button {
+            switch availability {
+            case .allowed: Task { await viewModel.moveMonth(by: value) }
+            case .needsPro: onNeedsPro()
+            case .unavailable: break
+            }
+        } label: {
             Image(systemName: systemName)
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(V5P.cyan)
                 .frame(width: 24, height: 20)
                 .contentShape(Rectangle())
+                .opacity(availability == .allowed ? 1 : 0.3)
         }
         .buttonStyle(.plain)
+        .disabled(availability == .unavailable)
         .accessibilityLabel(label)
     }
 
@@ -130,7 +148,14 @@ private struct CalendarMonthCard: View {
         let inMonth = viewModel.isInMonth(day)
         let column = (calendar.component(.weekday, from: day) - calendar.firstWeekday + 7) % 7
         let dots = viewModel.dots(on: day)
-        return Button { viewModel.select(day) } label: {
+        let availability = viewModel.availability(of: day)
+        return Button {
+            switch availability {
+            case .allowed: viewModel.select(day)
+            case .needsPro: onNeedsPro()
+            case .unavailable: break
+            }
+        } label: {
             VStack(spacing: 2) {
                 Text("\(calendar.component(.day, from: day))")
                     .font(.system(size: 8.5, weight: .semibold))
@@ -153,7 +178,7 @@ private struct CalendarMonthCard: View {
                     .fill(Color.white.opacity(0.03))
                     .overlay(RoundedRectangle(cornerRadius: 3).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.5))
             )
-            .opacity(inMonth ? 1 : 0.35)
+            .opacity(availability != .allowed ? 0.15 : inMonth ? 1 : 0.35)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

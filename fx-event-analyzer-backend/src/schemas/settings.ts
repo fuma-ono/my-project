@@ -1,17 +1,9 @@
 import { z } from 'zod';
 import { sortImportancesDesc } from '../domain/importance.js';
 import { NOTIFICATION_LEAD_MINUTES, NOTIFICATION_TIME_PATTERN } from '../domain/notifications.js';
-
-/** IANA zone names only — rejects anything `Intl` can't resolve, so a bad
- * value never reaches timezone-scoped APIs like Home (api-design.md §6). */
-function isValidTimeZone(value: string): boolean {
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
-}
+// IANA zone names only, so a bad value never reaches timezone-scoped APIs
+// like Home (api-design.md §6).
+import { isValidTimeZone } from '../domain/timezone.js';
 
 // SCR-018 表示・地域設定 / SCR-019 チャート設定 (2026-10-06). The same lists
 // are enforced by the DB CHECKs in

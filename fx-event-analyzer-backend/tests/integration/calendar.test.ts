@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FEATURE_CODES } from '../../src/authorization/entitlements.js';
+import { calendarEarliestFrom, calendarLatestTo } from '../../src/domain/planLimits.js';
 import {
   buildIntegrationContext,
   createTestUser,
@@ -40,10 +41,14 @@ describe.skipIf(!integration)('GET /calendar', () => {
   let ctx: IntegrationContext;
   const users: TestUser[] = [];
 
-  async function newUser(entitled = true): Promise<{ authorization: string }> {
+  // PRO by default so the fixed October 2026 ranges below stay inside the
+  // plan's past limit whatever day CI runs on (FREE only reaches back to the
+  // 1st of last month — see 'plan limits' below).
+  async function newUser(entitled = true, plan: 'FREE' | 'PRO' = 'PRO'): Promise<{ authorization: string }> {
     const user = await createTestUser(ctx);
     users.push(user);
     if (entitled) await grantEntitlement(ctx, user.id, FEATURE_CODES.VIEW_BASIC_EVENT);
+    if (plan === 'PRO') await grantEntitlement(ctx, user.id, FEATURE_CODES.VIEW_ADVANCED_STATS);
     return { authorization: `Bearer ${user.accessToken}` };
   }
 
@@ -145,5 +150,68 @@ describe.skipIf(!integration)('GET /calendar', () => {
       expect(response.statusCode).toBe(422);
       expect(JSON.parse(response.body).error.code).toBe('VALIDATION_ERROR');
     }
+  });
+
+  describe('plan limits (api-design.md §14.6 / §28.1)', () => {
+    const DAY_MS = 86_400_000;
+    const iso = (date: Date) => date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+    const rangeQuery = (from: Date, to: Date, timeZone?: string) =>
+      `from=${encodeURIComponent(iso(from))}&to=${encodeURIComponent(iso(to))}${timeZone ? `&timezone=${encodeURIComponent(timeZone)}` : ''}`;
+
+    async function get(headers: { authorization: string }, query: string) {
+      const response = await ctx.app.inject({ method: 'GET', url: `/api/v1/calendar?${query}`, headers });
+      return { status: response.statusCode, body: JSON.parse(response.body) };
+    }
+
+    it('FREE reaches back to the 1st of last month (inclusive); one second earlier is 403 with required_plan PRO', async () => {
+      const headers = await newUser(true, 'FREE');
+      const earliest = calendarEarliestFrom('FREE', new Date(), 'UTC');
+      expect((await get(headers, rangeQuery(earliest, new Date(earliest.getTime() + 30 * DAY_MS)))).status).toBe(200);
+
+      const tooEarly = new Date(earliest.getTime() - 1000);
+      const denied = await get(headers, rangeQuery(tooEarly, new Date(earliest.getTime() + 30 * DAY_MS)));
+      expect(denied.status).toBe(403);
+      expect(denied.body.error).toMatchObject({ code: 'PLAN_LIMIT_EXCEEDED', required_plan: 'PRO' });
+    });
+
+    it('computes the FREE bound in the timezone query parameter (default UTC)', async () => {
+      const headers = await newUser(true, 'FREE');
+      const tokyoEarliest = calendarEarliestFrom('FREE', new Date(), 'Asia/Tokyo');
+      const to = new Date(tokyoEarliest.getTime() + 30 * DAY_MS);
+      // 00:00 JST on the 1st is 15:00 UTC the day before — earlier than the UTC bound.
+      expect((await get(headers, rangeQuery(tokyoEarliest, to, 'Asia/Tokyo'))).status).toBe(200);
+      expect((await get(headers, rangeQuery(tokyoEarliest, to))).status).toBe(403);
+    });
+
+    it('PRO reaches back to Jan 1st of (current year - 5); earlier is 422 for every plan', async () => {
+      const headers = await newUser();
+      const earliest = calendarEarliestFrom('PRO', new Date(), 'UTC');
+      expect((await get(headers, rangeQuery(earliest, new Date(earliest.getTime() + 31 * DAY_MS)))).status).toBe(200);
+
+      const tooEarly = new Date(earliest.getTime() - 1000);
+      for (const user of [headers, await newUser(true, 'FREE')]) {
+        const response = await get(user, rangeQuery(tooEarly, new Date(earliest.getTime() + 31 * DAY_MS)));
+        expect(response.status).toBe(422);
+        expect(response.body.error.code).toBe('VALIDATION_ERROR');
+      }
+    });
+
+    it('to may reach Jan 1st of (current year + 2) on both plans, not beyond (422)', async () => {
+      const latest = calendarLatestTo('FREE', new Date(), 'UTC');
+      for (const headers of [await newUser(), await newUser(true, 'FREE')]) {
+        expect((await get(headers, rangeQuery(new Date(latest.getTime() - 31 * DAY_MS), latest))).status).toBe(200);
+        const response = await get(
+          headers,
+          rangeQuery(new Date(latest.getTime() - 31 * DAY_MS), new Date(latest.getTime() + 1000)),
+        );
+        expect(response.status).toBe(422);
+        expect(response.body.error.code).toBe('VALIDATION_ERROR');
+      }
+    });
+
+    it('422s an unknown timezone', async () => {
+      const headers = await newUser();
+      expect((await get(headers, `${OCTOBER}&timezone=Mars%2FOlympus`)).status).toBe(422);
+    });
   });
 });

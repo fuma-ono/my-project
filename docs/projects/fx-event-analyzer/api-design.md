@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.14
+# FX Event Analyzer: API詳細設計書 v1.15
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -56,6 +56,7 @@
 - **v1.13**(2026-10-08): `GET /home`の`events`の各行に`unit`(指標の単位。`economic_indicators.unit`、未登録は`null`)を追加(12章)。ホームの「予想・前回」を単位付きで表示するため
 - **v1.12**(2026-10-07): SCR-026 ホーム通貨ペア編集を追加。`GET/PATCH /settings`に`home.fx_pairs`(ホームに表示する通貨ペア。最大3件・配列の順 = 表示順、`null` = 既定)を追加(24.4節・24.5節)。`GET /home`の`major_fx`は`home.fx_pairs`の通貨ペアをその順で返し、未設定なら既定の`USDJPY`・`EURUSD`・`EURJPY`を返す(12章)。`major_fx`の各行の形は変えない
 - **v1.14**(2026-10-08): SCR-010 経済カレンダー(画面番号はui-screens.md)のAPIを追加。`GET /calendar`を新設(14.6節)。期間内の経済指標イベントと要人発言を1つの一覧(`items`)にまとめ、日時の昇順で返す。期間は62日以内・Paginationなし。必要なfeature_codeは`VIEW_BASIC_EVENT`(27.1節)
+- **v1.15**(2026-10-08): 無料プラン(FREE)と有料プラン(PRO)の利用上限(HQ決定 2026-10-08)を追加(28.1節)。`GET /entitlements`に`plan`・`limits`と`timezone` Queryを追加(27章)。`GET /calendar`に`timezone` Queryを追加し、プランの期間外は`403 PLAN_LIMIT_EXCEEDED`(PROなら見られる場合)/ `422 VALIDATION_ERROR`(どのプランでも見られない場合)にする(14.6節)。`PATCH /settings`で無料プランの通知の重要度・通貨ペアの上限を確認する(24.5節)。`GET /notifications/upcoming`は保存済みの設定に無料プランの上限を当てはめて絞り込む(24.6節)。`GET /indicators/{id}/comparison`は過去の発表回をプランの上限件数(直近から)に絞り、`history_limit`を返す(21章)。Error Code `PLAN_LIMIT_EXCEEDED`を追加(4章)
 
 ---
 
@@ -187,6 +188,19 @@ service_role credentialはClientへ絶対に公開しない。db-design.md 6章�
 - SPEECH_NOT_FOUND(v1.6で追加)
 - SUBSCRIPTION_REQUIRED
 - FEATURE_NOT_ENTITLED
+- PLAN_LIMIT_EXCEEDED(v1.15で追加。403)
+
+**`PLAN_LIMIT_EXCEEDED`(v1.15)**: 今のプランの利用上限(28.1節)を超えるが、上のプランなら使える場合に返す。`error`に`required_plan`(使えるプラン。MVPでは常に`"PRO"`)を追加する。どのプランでも使えない値は`422 VALIDATION_ERROR`にする。
+
+```json
+{
+  "error": {
+    "code": "PLAN_LIMIT_EXCEEDED",
+    "message": "from: the FREE plan can go back to 2026-09-01T00:00:00Z (UTC).",
+    "required_plan": "PRO"
+  }
+}
+```
 
 **(v1.1で変更、A-7)**: `DATA_PENDING`/`DATA_UNAVAILABLE`/`ANALYSIS_NOT_AVAILABLE`をError Codeから削除した。これらは「Resourceは存在するがデータがまだ準備できていない状態」であり、HTTPエラーとしては扱わない。**HTTP 200 + Response Body内のstatus field(`data_status`/`analysis_status`等)で表現する。** 詳細は7章参照。
 
@@ -194,7 +208,7 @@ HTTPエラーとして扱うのは以下のケースに限定する:
 
 - Resource不存在(`EVENT_NOT_FOUND`等)
 - Authentication failure(`UNAUTHORIZED`)
-- Authorization failure(`FORBIDDEN`, `SUBSCRIPTION_REQUIRED`, `FEATURE_NOT_ENTITLED`)
+- Authorization failure(`FORBIDDEN`, `SUBSCRIPTION_REQUIRED`, `FEATURE_NOT_ENTITLED`, `PLAN_LIMIT_EXCEEDED`)
 - Validation error(`VALIDATION_ERROR`)
 - Conflict(`CONFLICT`)
 - Rate Limit(`RATE_LIMITED`)
@@ -596,6 +610,13 @@ Query：
 - `from` / `to`(必須。ISO 8601。fromはinclusive、toはexclusive)。`to`が`from`以前、または期間が62日を超える場合は`422 VALIDATION_ERROR`
 - `importance`(任意。`LOW` / `MEDIUM` / `HIGH`。1つだけ指定。14.4節と同じ)
 - `currency`(任意。ISO 4217の英大文字3桁。指標は指標の通貨、要人発言は発言者の通貨で絞り込む)
+- `timezone`(任意、v1.15。IANA名。既定`UTC`)。プランの期間の上限(下記)を計算するタイムゾーン。`from` / `to`の解釈は変えない。解決できない名前は`422 VALIDATION_ERROR`
+
+プランの期間の上限(v1.15、28.1節)。62日以内の確認の後に判定する：
+
+- `from`が`limits.calendar_earliest_from`(27章。FREEは先月1日 00:00、PROは5年前の1月1日 00:00。いずれも`timezone`の現地時刻)より前：PROなら見られる場合は`403 PLAN_LIMIT_EXCEEDED`(`required_plan: "PRO"`)、PROでも見られない場合は`422 VALIDATION_ERROR`
+- `to`が`limits.calendar_latest_to`(両プラン共通。2年後の1月1日 00:00 = 来年末まで)より後：`422 VALIDATION_ERROR`(PROでも変わらないため)
+- 境界ちょうど(`from` = `calendar_earliest_from`、`to` = `calendar_latest_to`)は許可する
 
 Paginationなし(期間の上限で件数を抑える)。
 
@@ -791,6 +812,20 @@ Query：
 - timeframe(1m / 5m / 15m / 30m / 60m / all。**v1.1で`all`追加、A-8**)
 - from / to
 - page / limit(**v1.1で追加、B-4**。default = 20、max = 100。Statisticsはページング対象外)
+
+**過去の発表回の上限(v1.15、28.1節)**: 使う過去の発表回(`RELEASED`)は、直近から`history_events_max`件(FREE 5件・PRO 20件)だけ。`stats` / `stats_by_timeframe`・`total_events`・`analyzable_events`・`events`・`meta.total`はすべてこの件数の中で数える(上限より後のページは`events: []`)。Responseに`history_limit`を追加する(timeframe単一指定・`all`の両方)：
+
+```json
+{
+  "history_limit": { "applied": 5, "max_for_plan": 5, "pro_max": 20 }
+}
+```
+
+- `applied`：実際に使った過去の発表回の件数(= min(発表済みの件数, `max_for_plan`))
+- `max_for_plan`：呼び出しユーザーのプランの上限
+- `pro_max`：PROの上限(「PROなら20回分」の表示用)
+
+`GET /events/{event_id}/history`(20章)は1回分の発表を返すAPIで、過去の発表回の一覧を使わないため、上限の対象外(変更なし)。
 
 ### 21.1 Response(timeframe単一指定時)
 
@@ -1099,6 +1134,11 @@ Email / PasswordはSupabase Auth側で管理する。Backend APIから直接Auth
 - `home.fx_pairs`：`null`、または1〜3件・重複なしの配列。空配列・4件以上・重複は`422`。`fx_pairs`テーブルに存在しない(または無効な)symbolを含む場合も`422`(`notifications.fx_pairs`と同じ確認)
 - `home: { "fx_pairs": null }`で既定に戻す。`home`を送らない場合は保存済みの値を変えない
 
+プランの上限(v1.15、28.1節)。上記のValidation(`422`)の後に判定し、違反は`403 PLAN_LIMIT_EXCEEDED`(`required_plan: "PRO"`)で、Body全体を保存しない。**送ったフィールドだけ**確認する(保存済みの値が上限より広くても、送らなければエラーにしない)。PROは制限なし：
+
+- FREEの`notifications.importances`：`["HIGH"]`のみ。`MEDIUM` / `LOW`を含むと`403`
+- FREEの`notifications.fx_pairs`：1件の配列のみ。`null`(すべての通貨ペア)・2件以上は`403`
+
 ## 24.6 GET /api/v1/notifications/upcoming(v1.6で追加)
 
 ローカル通知の予約対象を返す(SCR-016、HQ指示 2026-10-05)。呼び出しユーザーの保存済み設定(24.4節)で絞り込む。必要なfeature_code：`VIEW_BASIC_EVENT`。
@@ -1146,6 +1186,12 @@ Response：
 6. `notify_at >= from`かつ`scheduled_at <= to`
 7. `quiet_hours_enabled = true`なら、`notify_at`を`display.timezone`(IANA名。解決できない場合は`Asia/Tokyo`)の現地時刻に直した値が`[quiet_start, quiet_end)`に入る項目を除外する(v1.7)。判定は`scheduled_at`ではなく`notify_at`で行う。`quiet_start = quiet_end`なら除外しない
 8. `notify_at`昇順、最大60件(iOSのローカル通知予約上限64件に余裕を持たせる)。上限は上記の除外後に適用する
+
+プランの上限(v1.15、28.1節)。4・5の判定の前に、保存済みの`importances` / `fx_pairs`へ呼び出し時点のプランの上限を当てはめる(PROの間に保存した広い設定が、FREEに戻った後も効かないようにするため。保存済みの値は書き換えない)：
+
+- FREEの`importances`：`HIGH`だけ残す。`HIGH`を含まない場合は`["HIGH"]`として扱う
+- FREEの`fx_pairs`：保存済みの先頭1件だけ使う。`null`(すべての通貨ペア)は`["USDJPY"]`として扱う
+- PROは保存済みの値をそのまま使う
 
 ## 24.7 POST /api/v1/support/requests(v1.10で追加)
 
@@ -1329,6 +1375,33 @@ CANCELEDは、「ユーザーが継続をキャンセルした状態」を表す
 
 現在ユーザーが利用可能なFeatureを取得する。
 
+Query(v1.15)：`timezone`(任意。IANA名。既定`UTC`。解決できない名前は`422 VALIDATION_ERROR`)。`limits`の日時を計算するタイムゾーン。
+
+Response(v1.15で`plan`・`limits`を追加。`features`は変更なし)：
+
+```json
+{
+  "features": ["VIEW_BASIC_EVENT", "VIEW_HISTORICAL", "VIEW_MARKET_REACTION"],
+  "plan": "FREE",
+  "limits": {
+    "calendar_earliest_from": "2026-08-31T15:00:00Z",
+    "calendar_latest_to": "2027-12-31T15:00:00Z",
+    "favorites_max": 3,
+    "notification_importances": ["HIGH"],
+    "notification_fx_pairs_max": 1,
+    "history_events_max": 5
+  }
+}
+```
+
+(例は`timezone=Asia/Tokyo`、2026-10-08に呼んだ場合)
+
+- `features`：有効な(`enabled = true`かつ期限内の)feature_codeのみ
+- `plan`：`FREE` / `PRO`。判定は28.1節
+- `limits`：28.1節の表の値。`calendar_earliest_from` / `calendar_latest_to`はUTCの秒精度(`Z`、小数秒なし)で、`GET /calendar`(14.6節)の`from`の下限(含む)と`to`の上限
+- `favorites_max` / `notification_fx_pairs_max`：`null` = 上限なし
+- `notification_importances`：通知に使える重要度(`HIGH`, `MEDIUM`, `LOW`の順)
+
 MVP：VIEW_BASIC_EVENT / VIEW_HISTORICAL / VIEW_MARKET_REACTION / VIEW_ADVANCED_STATS
 
 将来：AI_ANALYSIS / SPEECH_ANALYSIS / ALERT
@@ -1373,6 +1446,23 @@ PRO：VIEW_BASIC_EVENT / VIEW_HISTORICAL / VIEW_MARKET_REACTION / VIEW_ADVANCED_
 PRO Entitlementの付与(v1.4): `POST /subscription/verify`の保存時に、FREEとの差分である`VIEW_ADVANCED_STATS`の`entitlements`行を、購読が有効(ACTIVE / TRIAL / 期限内CANCELED)なら`enabled = true`・`expires_at = 購読のexpires_at`、EXPIREDなら`enabled = false`で更新する。
 
 重要：課金制御をiOS側だけに依存しない。Backend側でもEntitlementを確認する(27.1節)。
+
+## 28.1 プラン別の利用上限(v1.15で追加、HQ決定 2026-10-08)
+
+プランの判定：有効な(`enabled = true`かつ期限内の)`VIEW_ADVANCED_STATS`を持つユーザーが`PRO`、それ以外の認証済みユーザーが`FREE`。`VIEW_ADVANCED_STATS`は`POST /subscription/verify`が購読の状態に合わせて付け外しする(上記)。プラン名をDBに保存する列は追加しない。
+
+| 上限 | FREE | PRO | 使うAPI |
+|---|---|---|---|
+| カレンダーの過去(`calendar_earliest_from`) | 先月1日 00:00から | 5年前の1月1日 00:00から | `GET /calendar`(14.6節) |
+| カレンダーの未来(`calendar_latest_to`) | 2年後の1月1日 00:00まで(= 来年末まで) | 同左 | `GET /calendar`(14.6節) |
+| お気に入りの件数(`favorites_max`) | 3件 | 上限なし(`null`) | なし(お気に入りは端末内に保存。Backendは上限の値を返すだけ) |
+| 通知の重要度(`notification_importances`) | `HIGH`のみ | `HIGH` / `MEDIUM` / `LOW` | `PATCH /settings`(24.5節)、`GET /notifications/upcoming`(24.6節) |
+| 通知の通貨ペア(`notification_fx_pairs_max`) | 1件(`null` = すべての通貨ペアは不可。保存済みの`null`は`USDJPY`として扱う) | 上限なし(`null`) | `PATCH /settings`(24.5節)、`GET /notifications/upcoming`(24.6節) |
+| 過去イベント比較の発表回(`history_events_max`) | 直近5回 | 直近20回 | `GET /indicators/{id}/comparison`(21章) |
+
+- カレンダーの日時は、Requestの`timezone`(既定`UTC`)の現地時刻で計算する(「先月」「今年」もそのタイムゾーンで決める)
+- 上限の値はBackendの`src/domain/planLimits.ts`だけで定義する。iOSは`GET /entitlements`の`limits`で受け取り、端末に値を持たない
+- 上限を超える操作は`403 PLAN_LIMIT_EXCEEDED`(`required_plan`付き、4章)。どのプランでも許されない値は`422 VALIDATION_ERROR`
 
 ---
 

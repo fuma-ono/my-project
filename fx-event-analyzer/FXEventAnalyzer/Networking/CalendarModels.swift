@@ -60,6 +60,8 @@ struct CalendarService {
             queryItems: [
                 URLQueryItem(name: "from", value: formatter.string(from: from)),
                 URLQueryItem(name: "to", value: formatter.string(from: to)),
+                // 範囲の上限(先月の1日など)をこの端末のタイムゾーンで判定してもらう(v1.15)。
+                URLQueryItem(name: "timezone", value: TimeZone.current.identifier),
             ]
         ))
     }

@@ -36,3 +36,17 @@ describe('calendarQuerySchema', () => {
     expect(parse({ ...range, currency: 'usd' })).toBe(false);
   });
 });
+
+describe('calendarQuerySchema timezone', () => {
+  const range = { from: '2026-10-01T00:00:00Z', to: '2026-11-01T00:00:00Z' };
+
+  it('defaults to UTC', () => {
+    expect(calendarQuerySchema.parse(range).timezone).toBe('UTC');
+  });
+
+  it('accepts an IANA zone and rejects an unknown one', () => {
+    expect(calendarQuerySchema.parse({ ...range, timezone: 'Asia/Tokyo' }).timezone).toBe('Asia/Tokyo');
+    expect(calendarQuerySchema.safeParse({ ...range, timezone: 'Mars/Olympus' }).success).toBe(false);
+    expect(calendarQuerySchema.safeParse({ ...range, timezone: '' }).success).toBe(false);
+  });
+});

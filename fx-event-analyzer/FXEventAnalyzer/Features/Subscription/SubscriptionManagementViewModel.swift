@@ -22,7 +22,10 @@ final class SubscriptionManagementViewModel: ObservableObject {
     private let accountService: AccountService
     private let purchases: PurchaseClient
 
+    private let apiClient: APIClient
+
     init(apiClient: APIClient, purchases: PurchaseClient? = nil) {
+        self.apiClient = apiClient
         service = SubscriptionService(apiClient: apiClient)
         accountService = AccountService(apiClient: apiClient)
         self.purchases = purchases ?? StoreKitPurchaseClient()
@@ -135,6 +138,8 @@ final class SubscriptionManagementViewModel: ObservableObject {
         _ = try await service.verify(signed.request)
         // verifyの応答には商品が無いので、取り直して月額・年額も揃える。
         subscription = try await service.fetchSubscription()
+        // 購入・復元・解約の結果を、カレンダーなどの使える範囲にもすぐ反映する。
+        await PlanStore.shared.load(apiClient: apiClient)
     }
 
     private func perform(_ action: @escaping () async throws -> String?) async {

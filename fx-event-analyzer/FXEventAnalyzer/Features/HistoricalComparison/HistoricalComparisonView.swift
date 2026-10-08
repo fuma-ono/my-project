@@ -33,9 +33,12 @@ import SwiftUI
 struct HistoricalComparisonView: View {
     @StateObject private var viewModel: HistoricalComparisonViewModel
     @Binding var tabSelection: Int
+    private let apiClient: APIClient
+    @State private var planPrompt: String?
     @Environment(\.dismiss) private var dismiss
 
     init(apiClient: APIClient, indicatorId: String, indicatorName: String, fxPairId: String, fxPairSymbol: String, tabSelection: Binding<Int>) {
+        self.apiClient = apiClient
         _viewModel = StateObject(wrappedValue: HistoricalComparisonViewModel(
             apiClient: apiClient,
             indicatorId: indicatorId,
@@ -50,6 +53,7 @@ struct HistoricalComparisonView: View {
         content
             .toolbar(.hidden, for: .navigationBar)
             .task { viewModel.load() }
+            .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
     }
 
     @ViewBuilder
@@ -85,6 +89,22 @@ struct HistoricalComparisonView: View {
                             Spacer()
                             Text("直近\(response.events.count)回⌄").font(.system(size: 7)).foregroundStyle(.white).padding(5).background(V5P.panel2, in: Capsule())
                         }
+                        // HQ指示(2026-10-08): 無料プランは直近5回分。押すとプランの案内。
+                        if let limit = response.historyLimit, limit.isLimited {
+                            Button {
+                                planPrompt = "無料プランで比べられるのは、直近\(limit.maxForPlan)回分です。プレミアムプランなら\(limit.proMax)回分(約5年)と比べられます。"
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "lock.fill").font(.system(size: 5.5))
+                                    Text("無料プランは直近\(limit.maxForPlan)回分です。プレミアムなら\(limit.proMax)回分")
+                                    Image(systemName: "chevron.right").font(.system(size: 5.5, weight: .semibold))
+                                }
+                                .font(.system(size: 6))
+                                .foregroundStyle(V5P.cyan)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 2)
+                        }
                         if !response.events.isEmpty {
                             Chart(response.events) { event in
                                 BarMark(
@@ -94,7 +114,7 @@ struct HistoricalComparisonView: View {
                             }
                             .chartXAxis(.hidden)
                             .chartYAxis(.hidden)
-                            .frame(height: 82).padding(.top, 3)
+                            .frame(height: response.historyLimit?.isLimited == true ? 72 : 82).padding(.top, 3)
                         }
                         Text("過去の発表一覧").font(.system(size: 8, weight: .bold)).foregroundStyle(.white).padding(.top, 3)
                         HStack {

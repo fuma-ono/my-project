@@ -332,10 +332,17 @@ final class NotificationSettingsViewModelTests: XCTestCase {
 
     private lazy var store = makeStore()
 
+    /// プランに関係ない動きのテストは、制限のないプレミアムプランで動かす。
+    private lazy var proPlan: PlanStore = {
+        let plan = PlanStore()
+        plan.set(plan: .pro, limits: .pro())
+        return plan
+    }()
+
     private func loadedViewModel(_ apiClient: MockAPIClient, scheduler: MockScheduler) async -> NotificationSettingsViewModel {
         apiClient.result = .success(settings)
         apiClient.results["fx-pairs"] = .success(FXPairListResponse(data: [FXPairResponse(symbol: "USDJPY"), FXPairResponse(symbol: "GBPJPY")]))
-        let viewModel = NotificationSettingsViewModel(apiClient: apiClient, scheduler: scheduler, debounce: .milliseconds(30), store: store)
+        let viewModel = NotificationSettingsViewModel(apiClient: apiClient, scheduler: scheduler, debounce: .milliseconds(30), store: store, plan: proPlan)
         viewModel.load()
         await waitUntil { viewModel.loadState == .loaded && viewModel.fxPairSymbols == ["USDJPY", "GBPJPY"] }
         return viewModel
@@ -409,6 +416,29 @@ final class NotificationSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.fxPairsLabel, "すべての通貨ペア")
     }
 
+    func testFreePlanAllowsOnlyHighAndOnePair() async {
+        let apiClient = MockAPIClient()
+        apiClient.result = .success(settings)
+        apiClient.results["fx-pairs"] = .success(FXPairListResponse(data: [FXPairResponse(symbol: "USDJPY"), FXPairResponse(symbol: "GBPJPY")]))
+        let free = PlanStore()
+        free.set(plan: .free, limits: .free())
+        let viewModel = NotificationSettingsViewModel(apiClient: apiClient, scheduler: MockScheduler(), debounce: .milliseconds(30), store: store, plan: free)
+        viewModel.load()
+        await waitUntil { viewModel.loadState == .loaded && viewModel.fxPairSymbols == ["USDJPY", "GBPJPY"] }
+
+        // 保存済みの設定が広くても、無料プランの範囲にそろえて表示する。
+        XCTAssertEqual(viewModel.settings.importances, ["HIGH"])
+        XCTAssertEqual(viewModel.settings.fxPairs, ["USDJPY"])
+        XCTAssertTrue(viewModel.isLocked(importance: "MEDIUM"))
+        XCTAssertFalse(viewModel.isLocked(importance: "HIGH"))
+        XCTAssertTrue(viewModel.isAllPairsLocked)
+
+        viewModel.toggleImportance("MEDIUM")
+        XCTAssertEqual(viewModel.settings.importances, ["HIGH"])
+        viewModel.tapFxPair("GBPJPY")
+        XCTAssertEqual(viewModel.settings.fxPairs, ["GBPJPY"], "選び直しで1つだけ")
+    }
+
     func testTurningPushOnAsksForPermission() async {
         let apiClient = MockAPIClient()
         var off = settings
@@ -416,7 +446,7 @@ final class NotificationSettingsViewModelTests: XCTestCase {
         apiClient.result = .success(off)
         let scheduler = MockScheduler()
         scheduler.authorizationResult = false
-        let viewModel = NotificationSettingsViewModel(apiClient: apiClient, scheduler: scheduler, debounce: .milliseconds(30), store: store)
+        let viewModel = NotificationSettingsViewModel(apiClient: apiClient, scheduler: scheduler, debounce: .milliseconds(30), store: store, plan: proPlan)
         viewModel.load()
         await waitUntil { viewModel.loadState == .loaded }
 

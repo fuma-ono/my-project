@@ -20,15 +20,18 @@ final class NotificationSettingsViewModel: ObservableObject {
     /// 送信中に次の変更が入ったら、古い応答で画面を戻さない。
     private var revision = 0
     private let store: NotificationsStore
+    private let plan: PlanStore
 
     init(
         apiClient: APIClient,
         scheduler: LocalNotificationScheduling? = nil,
         catalog: FXPairCatalog? = nil,
         debounce: Duration = .milliseconds(400),
-        store: NotificationsStore? = nil
+        store: NotificationsStore? = nil,
+        plan: PlanStore? = nil
     ) {
         self.store = store ?? .shared
+        self.plan = plan ?? .shared
         self.service = SettingsService(apiClient: apiClient)
         self.catalog = catalog ?? RemoteFXPairCatalog(apiClient: apiClient)
         self.scheduler = scheduler ?? LocalNotificationScheduler(apiClient: apiClient)
@@ -40,6 +43,10 @@ final class NotificationSettingsViewModel: ObservableObject {
         Task {
             do {
                 settings = try await service.fetchSettings().notifications
+                // 無料プランで使えない重要度・通貨ペアが残っていたら(プレミアムを
+                // やめたときなど)、使える範囲にそろえて表示する。Backendも通知の
+                // 対象を同じ範囲で絞る(api-design v1.15)。
+                settings = Self.fitted(settings, to: plan.limits, defaultPair: fxPairSymbols.first ?? "USDJPY")
                 loadState = .loaded
             } catch let error as APIError where error.isNotConfigured {
                 loadState = .backendNotConfigured
@@ -89,6 +96,44 @@ final class NotificationSettingsViewModel: ObservableObject {
     func setSpeeches(_ isOn: Bool) { update { $0.speeches = isOn } }
 
     /// 空(すべて外した)は「すべての通貨ペア」として扱う。
+    // MARK: - 無料プランの範囲(HQ指示 2026-10-08)
+
+    /// 無料プランで選べない重要度か(無料はHIGHだけ)。
+    func isLocked(importance: String) -> Bool {
+        !plan.limits.notificationImportances.contains(importance)
+    }
+
+    /// 「すべての通貨ペア」は上限のあるプランでは選べない。
+    var isAllPairsLocked: Bool { plan.limits.notificationFxPairsMax != nil }
+
+    /// 通貨ペアの行のタップ。上限1なら選び直し(1つだけ)、上限なしなら複数選べる。
+    func tapFxPair(_ symbol: String) {
+        if plan.limits.notificationFxPairsMax == 1 {
+            setFxPairs([symbol])
+            return
+        }
+        var next = settings.fxPairs ?? []
+        if let index = next.firstIndex(of: symbol) {
+            next.remove(at: index)
+        } else {
+            if let max = plan.limits.notificationFxPairsMax, next.count >= max { return }
+            next.append(symbol)
+        }
+        setFxPairs(next)
+    }
+
+    static func fitted(_ settings: NotificationSettings, to limits: PlanLimits, defaultPair: String) -> NotificationSettings {
+        var next = settings
+        let allowed = limits.notificationImportances
+        let importances = next.importances.filter(allowed.contains)
+        next.importances = importances.isEmpty ? NotificationSettings.importanceOrder.filter(allowed.contains) : importances
+        if let max = limits.notificationFxPairsMax {
+            let pairs = next.fxPairs ?? [defaultPair]
+            next.fxPairs = Array((pairs.isEmpty ? [defaultPair] : pairs).prefix(max))
+        }
+        return next
+    }
+
     func setFxPairs(_ symbols: [String]?) {
         update { settings in
             guard let symbols, !symbols.isEmpty else { settings.fxPairs = nil; return }
@@ -100,6 +145,7 @@ final class NotificationSettingsViewModel: ObservableObject {
     func toggleImportance(_ importance: String) {
         update { settings in
             var set = Set(settings.importances)
+            if isLocked(importance: importance), !set.contains(importance) { return }
             if set.contains(importance) {
                 guard set.count > 1 else { return }
                 set.remove(importance)

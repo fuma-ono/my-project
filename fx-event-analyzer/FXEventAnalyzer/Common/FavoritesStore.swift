@@ -45,6 +45,13 @@ final class FavoritesStore: ObservableObject {
         entries.contains { $0.type == type && $0.id == id }
     }
 
+    /// 無料プランの上限(`PlanLimits.favoritesMax`、nilは無制限)で、まだ追加できるか。
+    /// 登録済みの項目を外す操作は常にできる。
+    func canToggle(_ type: ItemType, id: String, max: Int?) -> Bool {
+        guard let max, !isFavorite(type, id: id) else { return true }
+        return entries.count < max
+    }
+
     func toggle(_ type: ItemType, id: String) {
         if let index = entries.firstIndex(where: { $0.type == type && $0.id == id }) {
             entries.remove(at: index)
