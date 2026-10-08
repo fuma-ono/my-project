@@ -32,7 +32,7 @@ final class CalendarViewModel: ObservableObject {
     }
 
     /// 参考画像どおり月曜始まり。
-    static func makeCalendar() -> Calendar {
+    nonisolated static func makeCalendar() -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = Locale(identifier: "ja_JP")
         calendar.timeZone = .current

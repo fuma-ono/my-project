@@ -365,7 +365,7 @@ function homeHandler() {
         headline: '金融政策は引き締め的なスタンスを維持',
         organization: 'BOE',
         reaction_fx_symbol: 'GBP/USD',
-        reaction_price_before: 1.2740,
+        reaction_price_before: 1.274,
         reaction_price_after: 1.2718,
         reaction_pips: -22,
       },
@@ -413,7 +413,10 @@ function indicatorDetailHandler(indicatorId) {
     indicator,
     favorable_direction: indicator.favorable_direction,
     related_fx_pairs: indicatorId === INDICATOR_ID ? RELATED_FX_PAIRS : [],
-    latest_event: indicatorId === INDICATOR_ID ? { id: EVENT_ID, release_datetime: EVENT_RELEASE_DATETIME, status: 'RELEASED' } : null,
+    latest_event:
+      indicatorId === INDICATOR_ID
+        ? { id: EVENT_ID, release_datetime: EVENT_RELEASE_DATETIME, status: 'RELEASED' }
+        : null,
   };
 }
 
@@ -548,7 +551,7 @@ function reactionChartHandler(eventId, timeframe) {
     const minutesFromRelease = (t - releaseMs) / 60_000;
     const drift = minutesFromRelease < 0 ? 0 : Math.min(0.123, 0.123 * (minutesFromRelease / 30));
     const wobble = Math.sin(t / 900_000) * 0.02;
-    const open = Number((price).toFixed(3));
+    const open = Number(price.toFixed(3));
     price = Number((155.1 + drift + wobble).toFixed(3));
     const close = price;
     const high = Number(Math.max(open, close) + 0.01).toFixed(3);
@@ -888,11 +891,37 @@ function upcomingNotificationsHandler() {
     lead_minutes: lead,
     items: [
       // notify_at = now - 10 min / now - 1 min (past)
-      item('INDICATOR', EVENT_ID_UPCOMING_JP_CPI, '日本CPI(消費者物価指数)', null, 'HIGH', lead - 10, 'JP', 'JPY', ['USDJPY', 'EURJPY']),
-      item('SPEECH', SPEECH_ID_UEDA_SOON, '金融経済懇談会での講演', '植田和男', 'MEDIUM', lead - 1, 'JP', 'JPY', jpyPairs),
+      item('INDICATOR', EVENT_ID_UPCOMING_JP_CPI, '日本CPI(消費者物価指数)', null, 'HIGH', lead - 10, 'JP', 'JPY', [
+        'USDJPY',
+        'EURJPY',
+      ]),
+      item(
+        'SPEECH',
+        SPEECH_ID_UEDA_SOON,
+        '金融経済懇談会での講演',
+        '植田和男',
+        'MEDIUM',
+        lead - 1,
+        'JP',
+        'JPY',
+        jpyPairs,
+      ),
       // future
-      item('INDICATOR', EVENT_ID_UPCOMING, '米国雇用統計(非農業部門雇用者数)', null, 'HIGH', 5 * 60, 'US', 'USD', ['USDJPY', 'EURUSD']),
-      item('SPEECH', SPEECH_ID_POWELL_UPCOMING, '経済見通しに関する講演', 'ジェローム・パウエル', 'HIGH', 26 * 60, 'US', 'USD', ['AUDUSD', 'EURUSD', 'GBPUSD', 'USDCHF', 'USDJPY']),
+      item('INDICATOR', EVENT_ID_UPCOMING, '米国雇用統計(非農業部門雇用者数)', null, 'HIGH', 5 * 60, 'US', 'USD', [
+        'USDJPY',
+        'EURUSD',
+      ]),
+      item(
+        'SPEECH',
+        SPEECH_ID_POWELL_UPCOMING,
+        '経済見通しに関する講演',
+        'ジェローム・パウエル',
+        'HIGH',
+        26 * 60,
+        'US',
+        'USD',
+        ['AUDUSD', 'EURUSD', 'GBPUSD', 'USDCHF', 'USDJPY'],
+      ),
     ],
   };
 }
@@ -900,10 +929,12 @@ function upcomingNotificationsHandler() {
 // ---------------------------------------------------------------------------
 // SCR-010 経済カレンダー — GET /calendar (api-design.md §14.6、v1.14).
 // HQ指示(2026-10-08): 月のマス目に重要度の点が並び、選んだ日の一覧に指標と
-// 要人発言が時刻順で混ざって出るよう、撮影した月(Asia/Tokyo)の約15日に
+// 要人発言が時刻順で混ざって出るよう、撮影した月の約15日に
 // 1〜4件ずつ並べる。本日は参考画像と同じ4件(08:50 国内企業物価指数 /
 // 15:00 FOMCメンバー発言 / 20:35 ECB要人発言 / 21:30 雇用統計)にする。
-// 時刻は日本時間で書き、UTCに直して返す。発表済み・発言済みかは撮影時刻で決める。
+// 時刻はこのサーバーのタイムゾーン(CIはシミュレーターと同じUTC、手元は日本時間)
+// の時刻として書き、UTCに直して返す。日本時間で固定すると、UTCのシミュレーター
+// では時刻がずれて別の日に分かれてしまうため。発表済み・発言済みかは撮影時刻で決める。
 // 既存のフィクスチャと同じ指標(米国CPI・NFP・FOMC・日本CPI)は同じevent_idを
 // 使い、タップ先の詳細画面が出るようにした。要人発言はGET /speeches/{id}が
 // このカレンダー用の発言も返す(handleApi参照)。
@@ -1000,14 +1031,13 @@ const CALENDAR_OTHER_DAYS = {
   ],
 };
 
-const JST_OFFSET_MS = 9 * 3_600_000;
-
-/** 撮影した月(日本時間)の全項目。kind・idはGET /calendarと同じ形。 */
+/** 撮影した月(このサーバーのタイムゾーン)の全項目。kind・idはGET /calendarと同じ形。 */
 function calendarFixture() {
-  const jstNow = new Date(now().getTime() + JST_OFFSET_MS);
-  const year = jstNow.getUTCFullYear();
-  const month = jstNow.getUTCMonth();
-  const today = jstNow.getUTCDate();
+  const offsetMs = -now().getTimezoneOffset() * 60_000;
+  const localNow = new Date(now().getTime() + offsetMs);
+  const year = localNow.getUTCFullYear();
+  const month = localNow.getUTCMonth();
+  const today = localNow.getUTCDate();
   const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 
   const days = [[today, CALENDAR_TODAY_ITEMS]];
@@ -1019,7 +1049,7 @@ function calendarFixture() {
   for (const [day, specs] of days) {
     specs.forEach((spec, index) => {
       const [hours, minutes] = spec[1].split(':').map(Number);
-      const at = new Date(Date.UTC(year, month, day, hours, minutes) - JST_OFFSET_MS);
+      const at = new Date(Date.UTC(year, month, day, hours, minutes) - offsetMs);
       const past = at.getTime() <= now().getTime();
       const serial = String(day * 10 + index).padStart(12, '0');
       if (spec[0] === 'I') {
@@ -1125,17 +1155,14 @@ const SUPPORT_BUG_REPLY =
 const SUPPORT_FEEDBACK_REPLY =
   'ご意見ありがとうございます。いただいた内容は開発チームで確認し、今後の改善の参考にさせていただきます。';
 const SUPPORT_INQUIRY_REPLIES = {
-  ACCOUNT:
-    'お問い合わせありがとうございます。アカウント情報の確認・変更は、設定画面の「アカウント情報」から行えます。',
+  ACCOUNT: 'お問い合わせありがとうございます。アカウント情報の確認・変更は、設定画面の「アカウント情報」から行えます。',
   BILLING:
     'お問い合わせありがとうございます。プランのお支払いはApp Storeのサブスクリプションで管理されています。解約や変更は、iPhoneの「設定」アプリ > Apple ID > サブスクリプションから行えます。',
-  NOTIFICATION:
-    'お問い合わせありがとうございます。通知の対象や時間は、設定画面の「通知設定」から変更できます。',
+  NOTIFICATION: 'お問い合わせありがとうございます。通知の対象や時間は、設定画面の「通知設定」から変更できます。',
   CHART:
     'お問い合わせありがとうございます。チャートの種類や表示するテクニカル指標は、設定画面の「チャート設定」から変更できます。',
   DATA: 'お問い合わせありがとうございます。各指標の値は発表元の公表値をもとに表示しています。発表直後は反映までお時間をいただく場合があります。',
-  OTHER:
-    'お問い合わせありがとうございます。内容を確認いたしました。よくある質問もあわせてご覧いただけますと幸いです。',
+  OTHER: 'お問い合わせありがとうございます。内容を確認いたしました。よくある質問もあわせてご覧いただけますと幸いです。',
 };
 
 /** Newest first. Seeded with one answered inquiry so the history list has content. */
@@ -1210,7 +1237,10 @@ function subscriptionFixture() {
 }
 
 async function handleApi(req, res, pathname, searchParams, rawBody) {
-  const segments = pathname.replace(/^\/api\/v1\//, '').split('/').filter(Boolean);
+  const segments = pathname
+    .replace(/^\/api\/v1\//, '')
+    .split('/')
+    .filter(Boolean);
 
   if (pathname === '/api/v1/home') return json(res, 200, homeHandler());
   if (pathname === '/api/v1/indicators') return json(res, 200, indicatorsListHandler());
@@ -1227,8 +1257,7 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
   if (pathname === '/api/v1/fx-pairs') return json(res, 200, { data: FX_PAIRS });
   if (pathname === '/api/v1/speeches') return json(res, 200, speechesListHandler());
   if (segments[0] === 'speeches' && segments.length === 2) {
-    const speech =
-      speechesFixture().find((row) => row.speech_id === segments[1]) ?? calendarSpeechSummary(segments[1]);
+    const speech = speechesFixture().find((row) => row.speech_id === segments[1]) ?? calendarSpeechSummary(segments[1]);
     if (!speech) return json(res, 404, { error: { code: 'SPEECH_NOT_FOUND', message: 'Speech not found.' } });
     return json(res, 200, speech);
   }

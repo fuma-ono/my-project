@@ -76,35 +76,31 @@ export function buildCalendarItems(
   speeches: readonly CalendarSpeech[],
   filters: CalendarFilters = {},
 ): CalendarItem[] {
-  const indicatorItems = events.map(
-    (event): CalendarItem => ({
-      kind: 'INDICATOR',
-      id: event.id,
-      title: event.indicator_name,
-      speaker_name: null,
-      country_code: event.country_code,
-      currency_code: event.currency_code,
-      importance: event.importance,
-      datetime: event.release_datetime,
-      datetime_precision: event.release_datetime_precision,
-      status: event.status,
-    }),
-  );
+  const indicatorItems = events.map((event): CalendarItem => ({
+    kind: 'INDICATOR',
+    id: event.id,
+    title: event.indicator_name,
+    speaker_name: null,
+    country_code: event.country_code,
+    currency_code: event.currency_code,
+    importance: event.importance,
+    datetime: event.release_datetime,
+    datetime_precision: event.release_datetime_precision,
+    status: event.status,
+  }));
   const speechItems = speeches
     .filter((speech) => speech.status !== 'CANCELLED')
-    .map(
-      (speech): CalendarItem => ({
-        kind: 'SPEECH',
-        id: speech.speech_id,
-        title: speech.title,
-        speaker_name: speech.speaker.name,
-        country_code: speech.speaker.country_code,
-        currency_code: speech.speaker.currency_code,
-        importance: speech.importance,
-        datetime: speech.statement_datetime,
-        datetime_precision: 'EXACT',
-        status: speech.status,
-      }),
-    );
+    .map((speech): CalendarItem => ({
+      kind: 'SPEECH',
+      id: speech.speech_id,
+      title: speech.title,
+      speaker_name: speech.speaker.name,
+      country_code: speech.speaker.country_code,
+      currency_code: speech.speaker.currency_code,
+      importance: speech.importance,
+      datetime: speech.statement_datetime,
+      datetime_precision: 'EXACT',
+      status: speech.status,
+    }));
   return [...indicatorItems, ...speechItems].filter((item) => matches(item, filters)).sort(compareCalendarItems);
 }

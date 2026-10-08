@@ -73,7 +73,9 @@ struct CalendarTabView: View {
 /// 「‹ 2026年10月 ›」、曜日、6週分の日付。選んだ日は水色の丸、今日は水色の枠。
 private struct CalendarMonthCard: View {
     @ObservedObject var viewModel: CalendarViewModel
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 7)
+    // 保存プロパティを`private`にすると自動の`init(viewModel:)`も`private`になり、
+    // 外から作れなくなるので計算プロパティにしている。
+    private var columns: [GridItem] { Array(repeating: GridItem(.flexible(), spacing: 0), count: 7) }
 
     var body: some View {
         VStack(spacing: 4) {
