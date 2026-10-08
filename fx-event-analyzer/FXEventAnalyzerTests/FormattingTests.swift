@@ -97,6 +97,14 @@ final class ValueFormatUnitTests: XCTestCase {
     }
 }
 
+final class HomeShortIndicatorNameTests: XCTestCase {
+    func testDropsTheParenthetical() {
+        XCTAssertEqual(HomeView.shortIndicatorName("米国雇用統計(非農業部門雇用者数)"), "米国雇用統計")
+        XCTAssertEqual(HomeView.shortIndicatorName("日本CPI（消費者物価指数）"), "日本CPI")
+        XCTAssertEqual(HomeView.shortIndicatorName("FOMC政策金利"), "FOMC政策金利")
+    }
+}
+
 final class EventCommonModelsDisplayTests: XCTestCase {
     func testImportanceStarDisplayReflectsLevel() {
         XCTAssertEqual(Importance.high.starDisplay, "★★★")

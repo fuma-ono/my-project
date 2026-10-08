@@ -751,156 +751,31 @@ struct HomeView: View {
             // 同じ範囲に収まるよう、バッジの文字間隔・外枠も合わせて
             // 詰めた(「経済指標の文字間隔を狭めて、外枠の横幅も少し
             // 狭めて」: tracking追加、パディング4/2→3/1.5)。
-            VStack(alignment: .leading, spacing: 1) {
+            // HQ指示(2026-10-08、案B)「ホームでは短い名前だけ出す。その分見やすい
+            // ように文字サイズを調整して」: 指標名はカッコの前まで(「米国雇用統計」
+            // 「日本CPI」。正式名は詳細画面)にし、1行に収まるので名前を8.5、
+            // 予想・前回を6.3に大きくした。以前のカッコを2行目に分ける形と、
+            // 名前の長さで文字サイズを変える分岐はなくした。
+            VStack(alignment: .leading, spacing: 1.5) {
                 let subtitle = Self.eventSubtitle(event)
-                let parenSplit = Self.splitParenthetical(event.indicatorName)
-                // HQ指示(2026-10-06)「米国雇用統計のように（）部分を2行目に
-                // し、文字を少し小さくして米国雇用統計をその分少し大きく
-                // して」: 指標名が長く(16文字超)カッコを含む場合は自動折り
-                // 返しに任せず、本文とカッコ注記を明示的に2行へ分け、本文を
-                // 大きく・カッコ注記を小さくする。「日本CPI(消費者物価
-                // 指数)」(14文字)はこの閾値に届かないため対象外のまま1行
-                // 表示(下のelse節)になる。
-                let isLongSplit = parenSplit != nil && event.indicatorName.count > 16
-                // HQ指示(2026-10-06)「日本CPIのように1行で収まる場合は
-                // 経済指標を少し上にあげ」: バッジに`.offset(y: -1)`。
-                let isShortCombined = subtitle != nil && !isLongSplit
-
-                // HQ指示(2026-10-06)「すべて参考画像と同じに」: 参考画像の
-                // 「経済指標」バッジの実測(高さ5.05/幅20.2ユニット、
-                // こちらは5.24/22.53)に基づきサイズ5.5→5.3、
-                // `.tracking`-0.3→-0.8に変更したが、実機キャプチャでは
-                // この小さいサイズで-0.8は字が潰れて重なって見えたため、
-                // -0.4まで戻した(詰め過ぎを緩和)。
                 V5JPFont.text("経済指標", size: 5.3, weight: .semibold)
                     .tracking(-0.4)
                     .foregroundStyle(.white)
                     .padding(.horizontal, 3).padding(.vertical, 1.5)
                     .background(Self.economicIndicatorBadgeColor, in: Capsule())
                     .fixedSize()
-                    .offset(y: isShortCombined ? -1 : 0)
-
-                // HQ指示(2026-10-05、23回目)「今日の重要イベント内の
-                // タイトル（FOMC政策など）が大きいし、太いので参考画像と
-                // 同じくらいにして」: 参考画像に本カードの直接の実測対象が
-                // 無いため、同じ参考画像のお気に入りカードに実在する同種の
-                // テキスト(イベント/指標名、「FOMC」)をカード幅基準スケール
-                // (3.786px/ユニット)で代わりに実測(22px→5.84ユニット)し、
-                // 現行実装(size 9)の実機キャプチャ実測(33px/5.1488px/
-                // ユニット→6.41ユニット、9pt→0.712ユニット/pt)から逆算
-                // (5.84/0.712≒8.2)して9→8に縮小。太さも.bold→.semibold。
-                // HQ質問(2026-10-06)「日本CPI（消費者物価...」のような
-                // 途中切れはNG、指標名は最大2行で表示、ただし枠の縦幅は
-                // 変えたくない。どうすればいい?」への回答: `.lineLimit(1)`
-                // (1行打ち切り+省略記号)を`.lineLimit(2)`に変え、2行まで
-                //折り返せるようにした。ただしこれだけだと、タイトルが
-                // 実際に1行で収まる行と2行に折り返す行とで、このVStack
-                // 全体の自然な高さが行ごとに変わってしまい(以前の時刻の
-                // 縦ズレと同じ原因のバグが再発する)、`eventRowHeight`
-                // 自体は変えたくないとの要望とも矛盾する。そこで、
-                // 「バッジ+タイトル2行+予想前回」というあり得る最大の
-                // 組み合わせの高さをあらかじめ計算し(バッジ行9+タイトル
-                // 2行19+予想前回8+行間2≒38)、下の`.frame(minHeight: 38,
-                // ...)`で常にその高さを確保する — タイトルが実際には1行や
-                // 2行目無しでも、またこのイベントに予想/前回が無くても、
-                // 必ず同じ38の高さとして扱われるため、`eventRowHeight`
-                // (44)を一切変えずに済み、行ごとの縦位置のズレも起きない。
-                // `V5JPFont.text`(フォント別Text連結)は複数行折り返しが
-                // 効かない実機バグがあるため(詳細は`V5JPFont.wrappingText`
-                // のドキュメントコメント参照)、ここは`wrappingText`を使う。
-                // それでも実機キャプチャでは1行+省略記号のままだった —
-                // 原因は、このVStackが`HStack`内で`Spacer`と競合する
-                // フレキシブルな子であるため、`Text`が自身の「理想サイズ」を
-                // 問い合わせられた際に折り返し後の複数行ではなく1行分の
-                // サイズを報告してしまっていたこと(HStack内でSpacerと
-                // 隣り合うTextが`.lineLimit(n>1)`を設定していても折り返さず
-                // 切り詰められる、という既知のSwiftUIの挙動)。
-                // `.fixedSize(horizontal: false, vertical: true)`を追加し、
-                // 「横幅は親から提案された分だけ使い、縦幅はその横幅で
-                // 折り返した結果の行数に応じて決める」よう明示することで
-                // 解決した。
-                // HQ指示(2026-10-06)「すべて参考画像と同じに、文字間隔も」:
-                // 参考画像の指標名("CPI（消費者物価指数）」、12文字)と
-                // こちら("FOMC政策金利"、8文字)は文字列が違うため、1文字
-                // あたりの幅で比較した。高さ比(6.11/7.38≒0.828)からサイズ
-                // 8→6.6に縮小し、その上でこちらの1文字あたり幅がまだ参考
-                // 画像より広かった分を`.tracking(-0.6)`で詰めた。
-                // HQ再指摘(2026-10-06)「FOMC政策金利の文字を詰めすぎてる
-                // から少し離して、また予想と前回がない場合の指標名は少し
-                // フォントを大きくして」: tracking -0.6→-0.3に緩め、
-                // 予想/前回が無い行(例: FOMC)は`subtitle`分の高さを使わ
-                // なくて良い分、指標名のフォントを6.6→7.8に拡大した
-                // (`minHeight: 38`の予算には元々余裕があるため、この
-                // ケースでも収まる)。
-                // HQ再指摘(2026-10-06)「日本CPIのように1行で収まる場合は
-                // 文字を少し大きくして、米国雇用統計の場合は（）部分を
-                // 2行目にし文字を少し小さくして本文をその分大きくして」:
-                // 上で計算した`isLongSplit`に応じて2通りに分岐。
-                //   ・isLongSplit=true(例: 米国雇用統計): 本文(main)を
-                //     7.5、カッコ注記(paren)を5.6で別々の行として明示的に
-                //     描画。本文1行(≒9)+カッコ注記1行(≒7)+バッジ9+予想前回
-                //     8+行間2≒35で`minHeight: 38`に収まる計算。
-                //   ・isLongSplit=false(例: 日本CPI、FOMC): 従来通り1つの
-                //     `Text`に任せる。予想/前回が無ければ7.8、ある場合は
-                //     カッコを含む指標名(例: 日本CPI)なら少し拡大して7.2、
-                //     含まない場合は従来の6.6のまま。
-                if isLongSplit, let parenSplit {
-                    VStack(alignment: .leading, spacing: 0) {
-                        V5JPFont.wrappingText(parenSplit.main, size: 7.5, weight: .semibold)
-                            .tracking(-0.3)
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                        V5JPFont.wrappingText(parenSplit.paren, size: 5.6, weight: .semibold)
-                            .tracking(-0.3)
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                    }
-                } else {
-                    V5JPFont.wrappingText(
-                        event.indicatorName,
-                        size: subtitle == nil ? 7.8 : (parenSplit != nil ? 7.2 : 6.6),
-                        weight: .semibold
-                    )
+                V5JPFont.text(Self.shortIndicatorName(event.indicatorName), size: 8.5, weight: .semibold)
                     .tracking(-0.3)
                     .foregroundStyle(.white)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 if let subtitle {
-                    // HQ再指摘(2026-10-05、3回目)「予想と前回の文字は
-                    // 途切れず、折り返さず全て表示できるようにして」:
-                    // `.fixedSize(horizontal: true, vertical: false)`を
-                    // 試したが、行全体の幅が足りない場合はそれでも
-                    // "..."で省略されたままだった(親の`HStack`が確保
-                    // できる幅を超えると、`.fixedSize`だけでは防げない)。
-                    // `.lineLimit(1)`を保持したまま`.minimumScaleFactor`
-                    // を追加し、幅が足りない時は省略せず文字を縮小して
-                    // 必ず全文1行で収まるようにした。
-                    // HQ再指摘(2026-10-06)「予想と前回の文字の間隔も広い
-                    // から狭めて」: 実測に基づき`.tracking(0.8)`まで広げて
-                    // いたが、実機では広すぎるとの指摘を受け0.2まで詰めた。
-                    // HQ再指摘(2026-10-06)「予想と前回の色をお気に入り内の
-                    // 日付と時刻の色と同じにして」: `V5P.muted`(グレー)
-                    // から`Self.linkBlue`(お気に入りの`dateRow`と同じ色)へ
-                    // 変更。
-                    V5JPFont.text(subtitle, size: 5.9, weight: .regular)
-                        .tracking(0.2)
+                    V5JPFont.text(subtitle, size: 6.3, weight: .regular)
                         .foregroundStyle(Self.linkBlue)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.6)
+                        .minimumScaleFactor(0.7)
                 }
             }
-            // HQ再指摘(2026-10-06)「FOMCみたいに予想と前回がない場合は下の
-            // 余白が目立つから調整して」: この38はあくまで「バッジ+タイトル
-            // 2行+予想前回」という最大ケースの高さを確保するためのもので、
-            // FOMCのように予想/前回が無く(`eventSubtitle`がnil)タイトルも
-            // 1行で収まる行では、実際の中身(バッジ+タイトル1行)は38よりずっと
-            // 低く、`alignment: .top`だとその差分がすべて下側の余白として
-            // 目立っていた。ここを`.center`にすると、`.frame(minHeight:)`が
-            // 確保する高さ自体(常に38固定 — 時刻ラベルの縦ズレ防止はこの
-            // 「高さが行ごとに変わらないこと」で成立しているので、`.top`→
-            // `.center`に変えても高さの固定自体は崩れない)は変えずに、中身が
-            // 短い行では上下均等な余白になり、不自然な片寄りが無くなる。
             .frame(minHeight: 38, alignment: .center)
             .layoutPriority(1)
 
@@ -922,7 +797,15 @@ struct HomeView: View {
         // HQ指示(2026-10-08)「予想・前回に単位を付けて」: APIの`unit`で表示する。
         if let forecast = event.forecast { parts.append("予想 \(ValueFormat.withUnit(forecast, unit: event.unit))") }
         if let previous = event.previous { parts.append("前回 \(ValueFormat.withUnit(previous, unit: event.unit))") }
-        return parts.isEmpty ? nil : parts.joined(separator: "　|　")
+        // 単位が付いて長くなった分、区切りの全角スペースを半角にした。
+        return parts.isEmpty ? nil : parts.joined(separator: " | ")
+    }
+
+    /// ホームに出す短い指標名。「米国雇用統計(非農業部門雇用者数)」→「米国雇用統計」。
+    static func shortIndicatorName(_ name: String) -> String {
+        guard let split = splitParenthetical(name) else { return name }
+        let main = split.main.trimmingCharacters(in: .whitespaces)
+        return main.isEmpty ? name : main
     }
 
     /// HQ指示(2026-10-06)「米国雇用統計の場合は（）部分を2行目にし」:
