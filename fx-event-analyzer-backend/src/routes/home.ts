@@ -46,6 +46,7 @@ export function registerHomeRoutes(app: FastifyInstance): void {
           indicator_name: event.indicator_name,
           country_code: event.country_code,
           currency_code: event.currency_code,
+          unit: event.unit,
           importance: event.importance,
           release_datetime: event.release_datetime,
           release_datetime_precision: event.release_datetime_precision,

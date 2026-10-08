@@ -81,6 +81,22 @@ final class CountryFlagTests: XCTestCase {
     }
 }
 
+final class ValueFormatUnitTests: XCTestCase {
+    func testWithUnit() {
+        XCTAssertEqual(ValueFormat.withUnit(2.9, unit: "%"), "2.9%")
+        XCTAssertEqual(ValueFormat.withUnit(180, unit: "千人"), "18.0万人")
+        XCTAssertEqual(ValueFormat.withUnit(175, unit: "K"), "17.5万人")
+        XCTAssertEqual(ValueFormat.withUnit(4.5, unit: nil), "4.5")
+    }
+
+    func testHomeEventWithoutUnitDecodesToNil() throws {
+        let json = Data(#"{"event_id":"e","indicator_id":"i","indicator_name":"n","country_code":"US","currency_code":"USD","importance":"HIGH","release_datetime":"2026-10-08T00:00:00Z","release_datetime_precision":"EXACT","status":"SCHEDULED","data_status":"DATA_PENDING","forecast":null,"actual":null,"previous":null,"surprise":null,"surprise_direction":null,"related_fx_pairs":[]}"#.utf8)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom(BackendDate.decode)
+        XCTAssertNil(try decoder.decode(HomeEventSummary.self, from: json).unit)
+    }
+}
+
 final class EventCommonModelsDisplayTests: XCTestCase {
     func testImportanceStarDisplayReflectsLevel() {
         XCTAssertEqual(Importance.high.starDisplay, "★★★")

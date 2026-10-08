@@ -5,6 +5,22 @@ import Foundation
 /// presentation of values the Backend already computed (api-design.md §8:
 /// "iOS側でこれらを再計算して表示することを前提としない").
 enum ValueFormat {
+    /// 単位付きの値(ホームの「予想 18.0万人」「予想 2.9%」)。`千人`は読みやすい
+    /// 万人にそろえる(180千人 → 18.0万人)。seedの雇用統計は`K`(千人)なので同じ扱い。
+    /// 単位が無ければ数値だけ。
+    static func withUnit(_ value: Double, unit: String?) -> String {
+        switch unit?.trimmingCharacters(in: .whitespaces) {
+        case nil, "": return number(value)
+        case "千人", "K":
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            formatter.minimumFractionDigits = 1
+            formatter.maximumFractionDigits = 1
+            return (formatter.string(from: NSNumber(value: value / 10)) ?? number(value / 10)) + "万人"
+        case let unit?: return number(value) + unit
+        }
+    }
+
     static func number(_ value: Double?, fractionDigits: Int = 2, signed: Bool = false) -> String {
         guard let value else { return "--" }
         let formatter = NumberFormatter()

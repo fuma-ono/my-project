@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.12
+# FX Event Analyzer: API詳細設計書 v1.13
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -53,6 +53,7 @@
 - **v1.9**(2026-10-06): SCR-018 表示・地域設定 / SCR-019 チャート設定(画面番号はui-screens.mdに合わせる。30章の表は旧番号SCR-020 / SCR-021のまま)の項目を追加。`GET/PATCH /settings`の`display`に`theme`・`text_size`・`date_format`・`time_format`・`currency`・`week_start`、`chart`に`chart_type`・`show_indicators`・`indicator_ma`・`indicator_bollinger`・`indicator_macd`・`indicator_rsi`・`indicator_stochastic`・`crosshair`・`price_line`を追加(24.4節・24.5節)
 - **v1.10**(2026-10-06): SCR-020 ヘルプ・お問い合わせ(画面番号はui-screens.md)のSupport APIを追加。`POST /support/requests`・`GET /support/requests`を新設(24.7節・24.8節)。問い合わせ・フィードバックを保存し、ルールとテンプレートで自動返信する(LLMは使わない)。意味のない内容・迷惑な内容には返信しない。不具合の報告はBackendがGitHub Issueとして登録する。1ユーザー1時間あたり5件を超えると`429 RATE_LIMITED`(35章)。Backend環境変数`GITHUB_ISSUES_TOKEN`・`GITHUB_ISSUES_REPO`を追加(任意、サーバーのみ)
 - **v1.11**(2026-10-07): レビュー指摘の修正。`POST /support/requests`の判定ルールを調整(NFKC正規化、丁寧語・短い日本語の扱い、相場の「落ちた」や否定表現を不具合にしない、画像共有URLは件数に数えない、禁止語の誤判定の削減)、送信回数の上限を保存と同時に判定する方式に変更(同時送信で上限を超えない)、GitHub Issueで削除する個人情報にカード番号・7桁以上の数字列を追加(24.7節)。`POST /subscription/verify`のResponseに`product_id`を追加し`GET /subscription`と同じ形にそろえた(25.1節)
+- **v1.13**(2026-10-08): `GET /home`の`events`の各行に`unit`(指標の単位。`economic_indicators.unit`、未登録は`null`)を追加(12章)。ホームの「予想・前回」を単位付きで表示するため
 - **v1.12**(2026-10-07): SCR-026 ホーム通貨ペア編集を追加。`GET/PATCH /settings`に`home.fx_pairs`(ホームに表示する通貨ペア。最大3件・配列の順 = 表示順、`null` = 既定)を追加(24.4節・24.5節)。`GET /home`の`major_fx`は`home.fx_pairs`の通貨ペアをその順で返し、未設定なら既定の`USDJPY`・`EURUSD`・`EURJPY`を返す(12章)。`major_fx`の各行の形は変えない
 
 ---
@@ -402,6 +403,7 @@ Eventには以下を含む。
 - indicator_name
 - country_code
 - currency_code
+- unit(v1.13で追加。指標の単位、例: `%`・`千人`。未登録は`null`)
 - importance
 - release_datetime
 - release_datetime_precision

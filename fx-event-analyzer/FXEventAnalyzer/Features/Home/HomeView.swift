@@ -397,12 +397,12 @@ struct HomeView: View {
     /// マークとサイズをそろえて」により、共通の`flagDiameter`自体を21.5に
     /// 引き上げて`eventRow`/`pairRow`両方で揃えた(`pairFlagDiameter`は
     /// 廃止)。
-    private static let flagDiameter: CGFloat = 21.5
+    ///
     /// HQ指示(2026-10-08)「ホームの通貨ペアとホーム通貨ペア編集画面の国旗と
-    /// USD/JPYの大きさを編集画面にそろえて、ただし枠の縦幅は変えないで」:
-    /// 通貨ペア行だけ編集画面(SCR-026の`PairFlags`)と同じ16にした。今日の
-    /// 重要イベントの国旗は`flagDiameter`(21.5)のまま。
-    private static let pairFlagDiameter: CGFloat = 16
+    /// USD/JPYの大きさを編集画面にそろえて」で通貨ペア行を16にし、続けて
+    /// 「今日の重要イベントの国旗も合わせて」で共通の`flagDiameter`自体を
+    /// 21.5→16にした(SCR-026の`PairFlags`と同じ。行の高さは変えない)。
+    private static let flagDiameter: CGFloat = 16
 
     /// HQ再指摘(2026-10-05)「お気に入り内の国旗の丸のサイズは少し小さく
     /// して」: お気に入りの小カードは幅68と他カードの行より狭く、共通の
@@ -919,8 +919,9 @@ struct HomeView: View {
     /// 予想・前回のみ(`HomeEventSummary`に単位情報が無いため数値のみ)。
     private static func eventSubtitle(_ event: HomeEventSummary) -> String? {
         var parts: [String] = []
-        if let forecast = event.forecast { parts.append("予想 \(ValueFormat.number(forecast))") }
-        if let previous = event.previous { parts.append("前回 \(ValueFormat.number(previous))") }
+        // HQ指示(2026-10-08)「予想・前回に単位を付けて」: APIの`unit`で表示する。
+        if let forecast = event.forecast { parts.append("予想 \(ValueFormat.withUnit(forecast, unit: event.unit))") }
+        if let previous = event.previous { parts.append("前回 \(ValueFormat.withUnit(previous, unit: event.unit))") }
         return parts.isEmpty ? nil : parts.joined(separator: "　|　")
     }
 
@@ -991,8 +992,8 @@ struct HomeView: View {
         HStack(spacing: 4) {
             // 国旗の間隔(2)と通貨ペア名までの間隔(4+5=9)も編集画面と同じ。
             HStack(spacing: 2) {
-                CountryFlagView(currencyCode: pair.baseCurrency, diameter: Self.pairFlagDiameter)
-                CountryFlagView(currencyCode: pair.quoteCurrency, diameter: Self.pairFlagDiameter)
+                CountryFlagView(currencyCode: pair.baseCurrency, diameter: Self.flagDiameter)
+                CountryFlagView(currencyCode: pair.quoteCurrency, diameter: Self.flagDiameter)
             }
             .padding(.trailing, 5)
             // HQ再指摘(2026-10-05、4回目)「USD/JPYの文字の幅、155.42の文字の
@@ -1098,7 +1099,7 @@ struct HomeView: View {
                 Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 8.2))
             }
             .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
-            .frame(height: Self.pairFlagDiameter, alignment: .center)
+            .frame(height: Self.flagDiameter, alignment: .center)
             .fixedSize()
             // HQ指示(2026-10-08)「>はいらない、消して」: 行は遷移しないので
             // chevronを削除。行の中身がカードの内側幅(215-左右8)より約10pt

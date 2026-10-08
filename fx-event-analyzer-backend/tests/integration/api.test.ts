@@ -273,6 +273,8 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(cpiEvent.related_fx_pairs.some((pair: { symbol: string }) => pair.symbol === 'USDJPY')).toBe(true);
       // §7.1: the API contract value (READY), never the raw DB data_status (AVAILABLE).
       expect(cpiEvent.data_status).toBe('READY');
+      // v1.13: the indicator's unit, for Home's 予想/前回.
+      expect(cpiEvent.unit).toBe('%');
     });
 
     it('does not return the event for an unrelated day', async () => {
