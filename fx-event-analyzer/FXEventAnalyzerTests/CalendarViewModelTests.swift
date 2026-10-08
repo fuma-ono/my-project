@@ -56,4 +56,12 @@ final class CalendarViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.monthTitle, "2026年11月")
         XCTAssertEqual(viewModel.selectedDate, date(2026, 11, 1))
     }
+
+    func testMoveYear() async {
+        let apiClient = MockAPIClient()
+        apiClient.result = .success(CalendarResponse(items: []))
+        let viewModel = CalendarViewModel(apiClient: apiClient, today: date(2026, 10, 8), calendar: calendar)
+        await viewModel.moveMonth(by: -12)
+        XCTAssertEqual(viewModel.monthTitle, "2025年10月")
+    }
 }

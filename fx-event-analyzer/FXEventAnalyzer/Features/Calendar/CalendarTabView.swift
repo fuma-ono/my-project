@@ -70,23 +70,27 @@ struct CalendarTabView: View {
 
 // MARK: - 月のカレンダー
 
-/// 「‹ 2026年10月 ›」、曜日、6週分の日付。選んだ日は水色の丸、今日は水色の枠。
+/// 「« ‹ 2026年10月 › »」、曜日、6週分の日付。«»は1年、‹›は1か月移動する
+/// (HQ指示 2026-10-08)。日付は参考画像どおり1日ずつ細い枠で区切る。選んだ日は
+/// 水色の丸、今日は水色の枠。
 private struct CalendarMonthCard: View {
     @ObservedObject var viewModel: CalendarViewModel
     // 保存プロパティを`private`にすると自動の`init(viewModel:)`も`private`になり、
     // 外から作れなくなるので計算プロパティにしている。
-    private var columns: [GridItem] { Array(repeating: GridItem(.flexible(), spacing: 0), count: 7) }
+    private var columns: [GridItem] { Array(repeating: GridItem(.flexible(), spacing: 2), count: 7) }
 
     var body: some View {
         VStack(spacing: 4) {
-            HStack {
+            HStack(spacing: 0) {
+                monthButton(systemName: "chevron.left.2", label: "前の年", value: -12)
                 monthButton(systemName: "chevron.left", label: "前の月", value: -1)
                 Spacer()
                 NotoText.text(viewModel.monthTitle, size: 10.5).foregroundStyle(.white)
                 Spacer()
                 monthButton(systemName: "chevron.right", label: "次の月", value: 1)
+                monthButton(systemName: "chevron.right.2", label: "次の年", value: 12)
             }
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 2)
             .frame(height: 20)
             HStack(spacing: 0) {
                 ForEach(Array(viewModel.weekdaySymbols.enumerated()), id: \.offset) { index, symbol in
@@ -95,7 +99,7 @@ private struct CalendarMonthCard: View {
                         .frame(maxWidth: .infinity)
                 }
             }
-            LazyVGrid(columns: columns, spacing: 1) {
+            LazyVGrid(columns: columns, spacing: 2) {
                 ForEach(viewModel.gridDays, id: \.self) { day in
                     dayCell(day)
                 }
@@ -144,6 +148,11 @@ private struct CalendarMonthCard: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 23)
+            .background(
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Color.white.opacity(0.03))
+                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.5))
+            )
             .opacity(inMonth ? 1 : 0.35)
             .contentShape(Rectangle())
         }

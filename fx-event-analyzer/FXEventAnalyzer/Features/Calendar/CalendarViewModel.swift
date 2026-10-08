@@ -94,7 +94,7 @@ final class CalendarViewModel: ObservableObject {
         }
     }
 
-    /// 前月(-1)・翌月(+1)へ。選んでいる日はその月の1日にする。
+    /// 前月(-1)・翌月(+1)、前年(-12)・翌年(+12)へ。選んでいる日はその月の1日にする。
     func moveMonth(by value: Int) async {
         guard let next = calendar.date(byAdding: .month, value: value, to: month) else { return }
         month = next
