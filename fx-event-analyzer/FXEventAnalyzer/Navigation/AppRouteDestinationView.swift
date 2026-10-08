@@ -57,6 +57,10 @@ struct AppRouteDestinationView: View {
             PlaceholderScreenView(scrNumber: "SCR-026", screenName: "ホーム通貨ペア編集", detail: "お気に入り通貨ペアAPI未実装のため仮画面です。")
                 .navigationTitle("通貨ペア編集")
                 .navigationBarTitleDisplayMode(.inline)
+        case .notifications:
+            PlaceholderScreenView(scrNumber: "未採番", screenName: "通知一覧", detail: "バックエンドAPI未実装のため仮画面です。")
+                .navigationTitle("通知")
+                .navigationBarTitleDisplayMode(.inline)
         case .favoritesList:
             PlaceholderScreenView(scrNumber: "未採番", screenName: "お気に入り一覧", detail: "指標・イベント・通貨ペアのお気に入りを横断する一覧です。")
                 .navigationTitle("お気に入り")

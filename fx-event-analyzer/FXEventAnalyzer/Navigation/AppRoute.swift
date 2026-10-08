@@ -56,6 +56,9 @@ enum AppRoute: Hashable {
     /// そのものの詳細画面ではない)。お気に入り通貨ペアAPI未実装のため
     /// 仮画面のみ。
     case homeCurrencyPairEditor
+    /// 通知一覧。ホームの通知ベルから開く(HQ指示 2026-10-05)。ui-screens.md
+    /// に該当SCR番号が無い新規画面(バックエンドAPI未実装、仮画面のみ)。
+    case notifications
     /// HQ指示(2026-10-02)「お気に入りはホームで最大3件、『すべて見る』から
     /// 全件を確認できる構成に」。ui-screens.mdに該当SCR番号が無い新規画面
     /// (指標・イベント・通貨ペアのお気に入りを横断する一覧)。

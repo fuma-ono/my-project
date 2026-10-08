@@ -279,18 +279,24 @@ struct HomeView: View {
         .frame(width: V5P.W - margin * 2, height: V5P.ptToV5(44))
         .overlay(alignment: .trailing) {
             ZStack(alignment: .trailing) {
-                Image(systemName: "bell")
-                    .font(.system(size: notifIconSize, weight: .semibold))
-                    .foregroundStyle(V5P.cyan)
-                    .overlay(alignment: .topTrailing) {
-                        if notifications.hasUnread {
-                            Circle()
-                                .fill(Self.notificationDotColor)
-                                .frame(width: notificationDotSize, height: notificationDotSize)
-                                .offset(x: notificationDotSize * 0.3, y: -notificationDotSize * 0.1)
+                // HQ指示(2026-10-05): ベルから通知一覧を開く。
+                NavigationLink(value: AppRoute.notifications) {
+                    Image(systemName: "bell")
+                        .font(.system(size: notifIconSize, weight: .semibold))
+                        .foregroundStyle(V5P.cyan)
+                        .overlay(alignment: .topTrailing) {
+                            if notifications.hasUnread {
+                                Circle()
+                                    .fill(Self.notificationDotColor)
+                                    .frame(width: notificationDotSize, height: notificationDotSize)
+                                    .offset(x: notificationDotSize * 0.3, y: -notificationDotSize * 0.1)
+                            }
                         }
-                    }
-                    .padding(.trailing, bellTrailingMargin)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("通知")
+                .accessibilityValue(notifications.hasUnread ? "未読あり" : "")
+                .padding(.trailing, bellTrailingMargin)
                 Image(systemName: "person")
                     .font(.system(size: accountIconSize, weight: .semibold))
                     .foregroundStyle(Self.accountIconColor)
@@ -312,7 +318,7 @@ struct HomeView: View {
     private static let changeUpColor = Color(red: 255.0 / 255, green: 45.0 / 255, blue: 95.0 / 255)
     private static let changeDownColor = Color(red: 20.0 / 255, green: 235.0 / 255, blue: 165.0 / 255)
 
-    private static func importanceBadgeColors(_ importance: Importance) -> (fill: Color, border: Color) {
+    static func importanceBadgeColors(_ importance: Importance) -> (fill: Color, border: Color) {
         switch importance {
         case .high:
             return (Color(red: 185.0 / 255, green: 13.0 / 255, blue: 60.0 / 255), Color(red: 230.0 / 255, green: 80.0 / 255, blue: 120.0 / 255))
@@ -391,7 +397,12 @@ struct HomeView: View {
     /// マークとサイズをそろえて」により、共通の`flagDiameter`自体を21.5に
     /// 引き上げて`eventRow`/`pairRow`両方で揃えた(`pairFlagDiameter`は
     /// 廃止)。
-    private static let flagDiameter: CGFloat = 21.5
+    ///
+    /// HQ指示(2026-10-08)「ホームの通貨ペアとホーム通貨ペア編集画面の国旗と
+    /// USD/JPYの大きさを編集画面にそろえて」で通貨ペア行を16にし、続けて
+    /// 「今日の重要イベントの国旗も合わせて」で共通の`flagDiameter`自体を
+    /// 21.5→16にした(SCR-026の`PairFlags`と同じ。行の高さは変えない)。
+    private static let flagDiameter: CGFloat = 16
 
     /// HQ再指摘(2026-10-05)「お気に入り内の国旗の丸のサイズは少し小さく
     /// して」: お気に入りの小カードは幅68と他カードの行より狭く、共通の
@@ -740,156 +751,31 @@ struct HomeView: View {
             // 同じ範囲に収まるよう、バッジの文字間隔・外枠も合わせて
             // 詰めた(「経済指標の文字間隔を狭めて、外枠の横幅も少し
             // 狭めて」: tracking追加、パディング4/2→3/1.5)。
-            VStack(alignment: .leading, spacing: 1) {
+            // HQ指示(2026-10-08、案B)「ホームでは短い名前だけ出す。その分見やすい
+            // ように文字サイズを調整して」: 指標名はカッコの前まで(「米国雇用統計」
+            // 「日本CPI」。正式名は詳細画面)にし、1行に収まるので名前を8.5、
+            // 予想・前回を6.3に大きくした。以前のカッコを2行目に分ける形と、
+            // 名前の長さで文字サイズを変える分岐はなくした。
+            VStack(alignment: .leading, spacing: 1.5) {
                 let subtitle = Self.eventSubtitle(event)
-                let parenSplit = Self.splitParenthetical(event.indicatorName)
-                // HQ指示(2026-10-06)「米国雇用統計のように（）部分を2行目に
-                // し、文字を少し小さくして米国雇用統計をその分少し大きく
-                // して」: 指標名が長く(16文字超)カッコを含む場合は自動折り
-                // 返しに任せず、本文とカッコ注記を明示的に2行へ分け、本文を
-                // 大きく・カッコ注記を小さくする。「日本CPI(消費者物価
-                // 指数)」(14文字)はこの閾値に届かないため対象外のまま1行
-                // 表示(下のelse節)になる。
-                let isLongSplit = parenSplit != nil && event.indicatorName.count > 16
-                // HQ指示(2026-10-06)「日本CPIのように1行で収まる場合は
-                // 経済指標を少し上にあげ」: バッジに`.offset(y: -1)`。
-                let isShortCombined = subtitle != nil && !isLongSplit
-
-                // HQ指示(2026-10-06)「すべて参考画像と同じに」: 参考画像の
-                // 「経済指標」バッジの実測(高さ5.05/幅20.2ユニット、
-                // こちらは5.24/22.53)に基づきサイズ5.5→5.3、
-                // `.tracking`-0.3→-0.8に変更したが、実機キャプチャでは
-                // この小さいサイズで-0.8は字が潰れて重なって見えたため、
-                // -0.4まで戻した(詰め過ぎを緩和)。
                 V5JPFont.text("経済指標", size: 5.3, weight: .semibold)
                     .tracking(-0.4)
                     .foregroundStyle(.white)
                     .padding(.horizontal, 3).padding(.vertical, 1.5)
                     .background(Self.economicIndicatorBadgeColor, in: Capsule())
                     .fixedSize()
-                    .offset(y: isShortCombined ? -1 : 0)
-
-                // HQ指示(2026-10-05、23回目)「今日の重要イベント内の
-                // タイトル（FOMC政策など）が大きいし、太いので参考画像と
-                // 同じくらいにして」: 参考画像に本カードの直接の実測対象が
-                // 無いため、同じ参考画像のお気に入りカードに実在する同種の
-                // テキスト(イベント/指標名、「FOMC」)をカード幅基準スケール
-                // (3.786px/ユニット)で代わりに実測(22px→5.84ユニット)し、
-                // 現行実装(size 9)の実機キャプチャ実測(33px/5.1488px/
-                // ユニット→6.41ユニット、9pt→0.712ユニット/pt)から逆算
-                // (5.84/0.712≒8.2)して9→8に縮小。太さも.bold→.semibold。
-                // HQ質問(2026-10-06)「日本CPI（消費者物価...」のような
-                // 途中切れはNG、指標名は最大2行で表示、ただし枠の縦幅は
-                // 変えたくない。どうすればいい?」への回答: `.lineLimit(1)`
-                // (1行打ち切り+省略記号)を`.lineLimit(2)`に変え、2行まで
-                //折り返せるようにした。ただしこれだけだと、タイトルが
-                // 実際に1行で収まる行と2行に折り返す行とで、このVStack
-                // 全体の自然な高さが行ごとに変わってしまい(以前の時刻の
-                // 縦ズレと同じ原因のバグが再発する)、`eventRowHeight`
-                // 自体は変えたくないとの要望とも矛盾する。そこで、
-                // 「バッジ+タイトル2行+予想前回」というあり得る最大の
-                // 組み合わせの高さをあらかじめ計算し(バッジ行9+タイトル
-                // 2行19+予想前回8+行間2≒38)、下の`.frame(minHeight: 38,
-                // ...)`で常にその高さを確保する — タイトルが実際には1行や
-                // 2行目無しでも、またこのイベントに予想/前回が無くても、
-                // 必ず同じ38の高さとして扱われるため、`eventRowHeight`
-                // (44)を一切変えずに済み、行ごとの縦位置のズレも起きない。
-                // `V5JPFont.text`(フォント別Text連結)は複数行折り返しが
-                // 効かない実機バグがあるため(詳細は`V5JPFont.wrappingText`
-                // のドキュメントコメント参照)、ここは`wrappingText`を使う。
-                // それでも実機キャプチャでは1行+省略記号のままだった —
-                // 原因は、このVStackが`HStack`内で`Spacer`と競合する
-                // フレキシブルな子であるため、`Text`が自身の「理想サイズ」を
-                // 問い合わせられた際に折り返し後の複数行ではなく1行分の
-                // サイズを報告してしまっていたこと(HStack内でSpacerと
-                // 隣り合うTextが`.lineLimit(n>1)`を設定していても折り返さず
-                // 切り詰められる、という既知のSwiftUIの挙動)。
-                // `.fixedSize(horizontal: false, vertical: true)`を追加し、
-                // 「横幅は親から提案された分だけ使い、縦幅はその横幅で
-                // 折り返した結果の行数に応じて決める」よう明示することで
-                // 解決した。
-                // HQ指示(2026-10-06)「すべて参考画像と同じに、文字間隔も」:
-                // 参考画像の指標名("CPI（消費者物価指数）」、12文字)と
-                // こちら("FOMC政策金利"、8文字)は文字列が違うため、1文字
-                // あたりの幅で比較した。高さ比(6.11/7.38≒0.828)からサイズ
-                // 8→6.6に縮小し、その上でこちらの1文字あたり幅がまだ参考
-                // 画像より広かった分を`.tracking(-0.6)`で詰めた。
-                // HQ再指摘(2026-10-06)「FOMC政策金利の文字を詰めすぎてる
-                // から少し離して、また予想と前回がない場合の指標名は少し
-                // フォントを大きくして」: tracking -0.6→-0.3に緩め、
-                // 予想/前回が無い行(例: FOMC)は`subtitle`分の高さを使わ
-                // なくて良い分、指標名のフォントを6.6→7.8に拡大した
-                // (`minHeight: 38`の予算には元々余裕があるため、この
-                // ケースでも収まる)。
-                // HQ再指摘(2026-10-06)「日本CPIのように1行で収まる場合は
-                // 文字を少し大きくして、米国雇用統計の場合は（）部分を
-                // 2行目にし文字を少し小さくして本文をその分大きくして」:
-                // 上で計算した`isLongSplit`に応じて2通りに分岐。
-                //   ・isLongSplit=true(例: 米国雇用統計): 本文(main)を
-                //     7.5、カッコ注記(paren)を5.6で別々の行として明示的に
-                //     描画。本文1行(≒9)+カッコ注記1行(≒7)+バッジ9+予想前回
-                //     8+行間2≒35で`minHeight: 38`に収まる計算。
-                //   ・isLongSplit=false(例: 日本CPI、FOMC): 従来通り1つの
-                //     `Text`に任せる。予想/前回が無ければ7.8、ある場合は
-                //     カッコを含む指標名(例: 日本CPI)なら少し拡大して7.2、
-                //     含まない場合は従来の6.6のまま。
-                if isLongSplit, let parenSplit {
-                    VStack(alignment: .leading, spacing: 0) {
-                        V5JPFont.wrappingText(parenSplit.main, size: 7.5, weight: .semibold)
-                            .tracking(-0.3)
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                        V5JPFont.wrappingText(parenSplit.paren, size: 5.6, weight: .semibold)
-                            .tracking(-0.3)
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                    }
-                } else {
-                    V5JPFont.wrappingText(
-                        event.indicatorName,
-                        size: subtitle == nil ? 7.8 : (parenSplit != nil ? 7.2 : 6.6),
-                        weight: .semibold
-                    )
+                V5JPFont.text(Self.shortIndicatorName(event.indicatorName), size: 8.5, weight: .semibold)
                     .tracking(-0.3)
                     .foregroundStyle(.white)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 if let subtitle {
-                    // HQ再指摘(2026-10-05、3回目)「予想と前回の文字は
-                    // 途切れず、折り返さず全て表示できるようにして」:
-                    // `.fixedSize(horizontal: true, vertical: false)`を
-                    // 試したが、行全体の幅が足りない場合はそれでも
-                    // "..."で省略されたままだった(親の`HStack`が確保
-                    // できる幅を超えると、`.fixedSize`だけでは防げない)。
-                    // `.lineLimit(1)`を保持したまま`.minimumScaleFactor`
-                    // を追加し、幅が足りない時は省略せず文字を縮小して
-                    // 必ず全文1行で収まるようにした。
-                    // HQ再指摘(2026-10-06)「予想と前回の文字の間隔も広い
-                    // から狭めて」: 実測に基づき`.tracking(0.8)`まで広げて
-                    // いたが、実機では広すぎるとの指摘を受け0.2まで詰めた。
-                    // HQ再指摘(2026-10-06)「予想と前回の色をお気に入り内の
-                    // 日付と時刻の色と同じにして」: `V5P.muted`(グレー)
-                    // から`Self.linkBlue`(お気に入りの`dateRow`と同じ色)へ
-                    // 変更。
-                    V5JPFont.text(subtitle, size: 5.9, weight: .regular)
-                        .tracking(0.2)
+                    V5JPFont.text(subtitle, size: 6.3, weight: .regular)
                         .foregroundStyle(Self.linkBlue)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.6)
+                        .minimumScaleFactor(0.7)
                 }
             }
-            // HQ再指摘(2026-10-06)「FOMCみたいに予想と前回がない場合は下の
-            // 余白が目立つから調整して」: この38はあくまで「バッジ+タイトル
-            // 2行+予想前回」という最大ケースの高さを確保するためのもので、
-            // FOMCのように予想/前回が無く(`eventSubtitle`がnil)タイトルも
-            // 1行で収まる行では、実際の中身(バッジ+タイトル1行)は38よりずっと
-            // 低く、`alignment: .top`だとその差分がすべて下側の余白として
-            // 目立っていた。ここを`.center`にすると、`.frame(minHeight:)`が
-            // 確保する高さ自体(常に38固定 — 時刻ラベルの縦ズレ防止はこの
-            // 「高さが行ごとに変わらないこと」で成立しているので、`.top`→
-            // `.center`に変えても高さの固定自体は崩れない)は変えずに、中身が
-            // 短い行では上下均等な余白になり、不自然な片寄りが無くなる。
             .frame(minHeight: 38, alignment: .center)
             .layoutPriority(1)
 
@@ -908,9 +794,18 @@ struct HomeView: View {
     /// 予想・前回のみ(`HomeEventSummary`に単位情報が無いため数値のみ)。
     private static func eventSubtitle(_ event: HomeEventSummary) -> String? {
         var parts: [String] = []
-        if let forecast = event.forecast { parts.append("予想 \(ValueFormat.number(forecast))") }
-        if let previous = event.previous { parts.append("前回 \(ValueFormat.number(previous))") }
-        return parts.isEmpty ? nil : parts.joined(separator: "　|　")
+        // HQ指示(2026-10-08)「予想・前回に単位を付けて」: APIの`unit`で表示する。
+        if let forecast = event.forecast { parts.append("予想 \(ValueFormat.withUnit(forecast, unit: event.unit))") }
+        if let previous = event.previous { parts.append("前回 \(ValueFormat.withUnit(previous, unit: event.unit))") }
+        // 単位が付いて長くなった分、区切りの全角スペースを半角にした。
+        return parts.isEmpty ? nil : parts.joined(separator: " | ")
+    }
+
+    /// ホームに出す短い指標名。「米国雇用統計(非農業部門雇用者数)」→「米国雇用統計」。
+    static func shortIndicatorName(_ name: String) -> String {
+        guard let split = splitParenthetical(name) else { return name }
+        let main = split.main.trimmingCharacters(in: .whitespaces)
+        return main.isEmpty ? name : main
     }
 
     /// HQ指示(2026-10-06)「米国雇用統計の場合は（）部分を2行目にし」:
@@ -933,7 +828,11 @@ struct HomeView: View {
                 // 開始位置の共通箱16幅ともちょうど合う)。
                 HomeChartIcon().foregroundStyle(V5P.cyan).frame(width: 16, height: 15).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
             } trailing: {
-                headerLink("すべて見る")
+                // HQ指示(2026-10-08)「すべて見るは通貨ペア編集画面へつないで」:
+                // SCR-026 ホーム通貨ペア編集へ遷移する。
+                NavigationLink(value: AppRoute.homeCurrencyPairEditor) {
+                    headerLink("すべて見る")
+                }
             }
             ForEach(Array(pairs.enumerated()), id: \.element.id) { idx, pair in
                 if idx > 0 { Divider().overlay(Self.cardBorderColor) }
@@ -974,10 +873,12 @@ struct HomeView: View {
     ///    3行とも同じx位置に揃うようにした。
     @ViewBuilder private func pairRow(_ pair: FXPairUI) -> some View {
         HStack(spacing: 4) {
-            HStack(spacing: 3) {
+            // 国旗の間隔(2)と通貨ペア名までの間隔(4+5=9)も編集画面と同じ。
+            HStack(spacing: 2) {
                 CountryFlagView(currencyCode: pair.baseCurrency, diameter: Self.flagDiameter)
                 CountryFlagView(currencyCode: pair.quoteCurrency, diameter: Self.flagDiameter)
             }
+            .padding(.trailing, 5)
             // HQ再指摘(2026-10-05、4回目)「USD/JPYの文字の幅、155.42の文字の
             // 幅、+0.25%の文字の幅いずれも狭めて」: HIGH/MEDIUMバッジの時と
             // 同じく、文字サイズ(9.5)はそのままに`.tracking(-0.4)`で字間を
@@ -1018,20 +919,21 @@ struct HomeView: View {
             // なる)。各行に明示的な`.frame(height:)`を付けて行送りを
             // フォント任せにせず固定し、1行目が2行目の分まで占有しない
             // ようにした。
+            // HQ指示(2026-10-08)で編集画面(SCR-026の`PairLabels`)と同じ
+            // NotoTextの9.5/7・字間詰めなしにそろえた。以前の固定高さ11/8は
+            // Notoの行送りより低く、文字が縮んで小さく見えていたため、
+            // 行送りが収まる14/10に広げた(合計25で行の高さ33に収まる)。
             VStack(alignment: .leading, spacing: 1) {
                 // HQ指示(2026-10-06)「英字を含む文字もNotoTextで表示して」
                 NotoText.text(pair.displaySymbol, size: 9.5)
-                    .tracking(-0.4)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                    .frame(height: 11, alignment: .leading)
-                Text(pair.displayName)
-                    .font(.system(size: 7, weight: .medium))
-                    .tracking(-0.4)
+                    .frame(height: 14, alignment: .leading)
+                NotoText.text(pair.displayName, size: 7)
                     .foregroundStyle(Self.linkBlue)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                    .frame(height: 8, alignment: .leading)
+                    .frame(height: 10, alignment: .leading)
             }
             .frame(minWidth: 54, alignment: .leading)
             // HQ再指摘(2026-10-05、6回目)「155.42のサイズを0.5だけ大きく
@@ -1039,7 +941,9 @@ struct HomeView: View {
             // 中央揃えから右(変化率側)揃えに変更。HQ再指摘(2026-10-06)
             // 「もう1つ右に寄せて」: 右揃えのまま列の幅自体を36→40に
             // 広げ、右端をさらに右へ。
-            Text(pair.price).font(.system(size: 10, weight: .semibold)).tracking(-0.4).monospacedDigit().frame(width: 40, alignment: .trailing)
+            // HQ指示(2026-10-08)「155.42ももう少し大きくして」: 10→11に拡大し、
+            // 列幅も40→44に広げた(国旗の縮小とchevronの削除で横幅に余裕がある)。
+            Text(pair.price).font(.system(size: 11, weight: .semibold)).tracking(-0.4).monospacedDigit().frame(width: 44, alignment: .trailing)
             // HQ再指摘(2026-10-05、5回目)「+0.25%▲>は右に寄せて」:
             // 固定幅の列を並べただけだと行の合計幅がカード幅より短くなり、
             // 左詰め(`cardShell`のVStackが`alignment: .leading`)のため
@@ -1080,8 +984,10 @@ struct HomeView: View {
             .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
             .frame(height: Self.flagDiameter, alignment: .center)
             .fixedSize()
-            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
-                .frame(height: Self.flagDiameter, alignment: .center)
+            // HQ指示(2026-10-08)「>はいらない、消して」: 行は遷移しないので
+            // chevronを削除。行の中身がカードの内側幅(215-左右8)より約10pt
+            // 広く、はみ出した分だけカード全体の左右の余白が他のカードより
+            // 狭くなっていたのも、この幅が空くことで解消する。
         }
         .foregroundStyle(.white)
         .frame(height: Self.pairRowHeight)
@@ -1111,7 +1017,7 @@ struct HomeView: View {
         switch item {
         case .event(let id, let countryCode, _, let name, let importance, let releaseDatetime):
             NavigationLink(value: AppRoute.eventDetail(id: id)) {
-                favoriteGridCardContent(countryCode: countryCode, name: name) {
+                favoriteGridCardContent(countryCode: countryCode, name: Self.shortIndicatorName(name)) {
                     dateRow(releaseDatetime)
                 } footer: {
                     statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance), verticalPadding: 1)
@@ -1126,7 +1032,7 @@ struct HomeView: View {
         // まま)。
         case .indicator(let id, let countryCode, _, let name, let importance, let nextReleaseDatetime):
             NavigationLink(value: AppRoute.indicatorDetail(id: id)) {
-                favoriteGridCardContent(countryCode: countryCode, name: name) {
+                favoriteGridCardContent(countryCode: countryCode, name: Self.shortIndicatorName(name)) {
                     if let nextReleaseDatetime {
                         dateRow(nextReleaseDatetime)
                     } else {
@@ -1188,6 +1094,9 @@ struct HomeView: View {
         @ViewBuilder subtitle: () -> some View,
         @ViewBuilder footer: () -> some View
     ) -> some View {
+        // HQ指示(2026-10-08)「お気に入りも米国CPIだけの表示にして」: 指標・
+        // イベントの名前は、今日の重要イベントと同じくカッコの前までにする
+        // (呼び出し側で`shortIndicatorName`を通す)。
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 if let countryCode {
@@ -1197,7 +1106,9 @@ struct HomeView: View {
                 // HQ指示(2026-10-06)「お気に入りの☆のサイズを少し小さく
                 // して、すこし右上に移動させて」: サイズ10→8.5に縮小し、
                 // `.offset`で右上方向に少しずらした。
-                Image(systemName: "star").font(.system(size: 8.5)).foregroundStyle(V5P.muted)
+                // HQ指示(2026-10-08)「塗りつぶしにして」: お気に入り登録済みの
+                // 項目なので、白抜き(未登録に見える)から塗りつぶしの★にした。
+                Image(systemName: "star.fill").font(.system(size: 8.5)).foregroundStyle(V5P.cyan)
                     .offset(x: 1.5, y: -1.5)
             }
             // HQ指示(2026-10-06)「英字を含む文字もNotoTextで表示して」:
