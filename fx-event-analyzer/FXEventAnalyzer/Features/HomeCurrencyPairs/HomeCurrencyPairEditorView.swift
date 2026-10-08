@@ -152,17 +152,17 @@ struct HomeCurrencyPairPickerView: View {
             VStack(alignment: .leading, spacing: 7) {
                 HelpSearchField(text: $query, placeholder: "通貨ペアを検索")
                 categoryBar
+                // 上限の案内は一覧の上に1行で(一覧の下だとタブバーに隠れるため)。
+                if !viewModel.canAdd {
+                    NotoText.text("最大\(HomeSettings.maxPairs)つまでです。入れ替える場合はチェックを外してください。", size: 7)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .padding(.horizontal, 4)
+                }
                 ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        pairList
-                        if !viewModel.canAdd {
-                            NotoText.text("表示できるのは\(HomeSettings.maxPairs)つまでです。入れ替える場合は、チェックを外してから選んでください。", size: 7)
-                                .foregroundStyle(SettingsCardStyle.subtitleColor)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .padding(.horizontal, 4)
-                        }
-                    }
-                    .padding(.bottom, 6)
+                    pairList
+                        .padding(.bottom, 6)
                 }
             }
             .frame(width: 214)
