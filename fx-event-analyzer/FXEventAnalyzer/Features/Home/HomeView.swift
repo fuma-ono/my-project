@@ -1057,7 +1057,9 @@ struct HomeView: View {
             // 中央揃えから右(変化率側)揃えに変更。HQ再指摘(2026-10-06)
             // 「もう1つ右に寄せて」: 右揃えのまま列の幅自体を36→40に
             // 広げ、右端をさらに右へ。
-            Text(pair.price).font(.system(size: 10, weight: .semibold)).tracking(-0.4).monospacedDigit().frame(width: 40, alignment: .trailing)
+            // HQ指示(2026-10-08)「155.42ももう少し大きくして」: 10→11に拡大し、
+            // 列幅も40→44に広げた(国旗の縮小とchevronの削除で横幅に余裕がある)。
+            Text(pair.price).font(.system(size: 11, weight: .semibold)).tracking(-0.4).monospacedDigit().frame(width: 44, alignment: .trailing)
             // HQ再指摘(2026-10-05、5回目)「+0.25%▲>は右に寄せて」:
             // 固定幅の列を並べただけだと行の合計幅がカード幅より短くなり、
             // 左詰め(`cardShell`のVStackが`alignment: .leading`)のため
