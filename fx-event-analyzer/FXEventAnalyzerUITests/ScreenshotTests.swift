@@ -60,8 +60,14 @@ final class ScreenshotTests: XCTestCase {
         // matches found for Descendants matching type TabBar"), so search
         // broadly instead of assuming a container type.
         XCTAssertTrue(waitForAnyElement(containing: "ホーム", timeout: 20), "Home tab did not appear after login")
+        // HQ指示(2026-10-08)「ホーム画面は別アカで作った方を採用して」で
+        // 採用したHome実装がCIで時々15秒を超えて読み込む(実測: 遅いCI実行で
+        // タイムアウトし、`continueAfterFailure=true`によりテスト自体は
+        // 後続の04-Home/04b-Home-Speechesキャプチャまで成功していた —
+        // ロジックの不具合ではなく純粋なタイムアウト猶予不足)。タブ出現
+        // 待ち(20秒)より余裕を持たせ、25秒に広げた。
         XCTAssertTrue(
-            waitForAnyElement(containing: "通貨ペア", timeout: 15),
+            waitForAnyElement(containing: "通貨ペア", timeout: 25),
             "Home did not load major FX data from the mock Backend"
         )
 
