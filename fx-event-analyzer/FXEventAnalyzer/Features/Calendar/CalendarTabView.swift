@@ -1,34 +1,222 @@
 import SwiftUI
 
-/// SCR-010 経済カレンダー。HQ指示(2026-10-03、画面構成全面更新)「旧『分析』
-/// タブは廃止、5タブはホーム/指標/カレンダー/検索/設定」を受け、タブ3番目を
-/// `AnalysisTabView`(旧SCR-011 チャート分析、削除済み)から置き換えた新設の
-/// タブルート。実装本体はまだ存在しないため、タブの中身は
-/// `PlaceholderScreenView`(仮画面)。構造は旧`AnalysisTabView`と同一(`V5Viewport`
-/// は仮画面の位置合わせのためだけに再利用しており、ビジュアルデザインの流用では
-/// ない)。
+/// SCR-010 経済カレンダー(タブ3番目のルート)。HQ指示(2026-10-08)の参考画像
+/// どおり、上に月のカレンダー(月曜始まり、日付の下に重要度の点)、下に選んだ
+/// 日の経済指標・要人発言の一覧(時刻・国旗・通貨・名前・重要度)を並べる。
+/// 行をタップすると指標はSCR-007 イベント詳細、発言は要人発言詳細へ移る。
 ///
-/// SCR-005 経済指標カレンダー画面(ui-screens.md旧番号)に相当 — 「今日・明日・
-/// 今後、何が発表されるか」を時系列で確認する画面で、SCR-005 指標一覧(指標
-/// そのものを探す画面)とは役割が異なる(HQ指示の区別に従う)。
+/// SCR-005 指標一覧(指標そのものを探す画面)とは役割が違い、「いつ何が
+/// 発表されるか」を日付から確認する画面(HQ指示の区別に従う)。
 struct CalendarTabView: View {
     let apiClient: APIClient
     @Binding var tabSelection: Int
     @State private var path = NavigationPath()
+    @StateObject private var viewModel: CalendarViewModel
+
+    init(apiClient: APIClient, tabSelection: Binding<Int>) {
+        self.apiClient = apiClient
+        _tabSelection = tabSelection
+        _viewModel = StateObject(wrappedValue: CalendarViewModel(apiClient: apiClient))
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
             V5Viewport {
-                PlaceholderScreenView(scrNumber: "SCR-010", screenName: "経済カレンダー")
-                // 他のタブルート(Home/Indicators/Search/Settings)と同じ「メインタブ
-                // 扱い」のヘッダー仕様(16pt Semibold、戻るボタンなし)。
-                V5Header(title: "カレンダー", back: false)
+                // 他のタブルートと同じ「メインタブ扱い」のヘッダー(戻るボタンなし)。
+                V5Header(title: "経済カレンダー", back: false)
+                content
                 V5BottomBar(selected: $tabSelection)
             }
             .toolbar(.hidden, for: .navigationBar)
+            .task { await viewModel.load() }
             .navigationDestination(for: AppRoute.self) { route in
                 AppRouteDestinationView(route: route, apiClient: apiClient, tabSelection: $tabSelection)
             }
         }
+    }
+
+    @ViewBuilder private var content: some View {
+        switch viewModel.loadState {
+        case .loading:
+            centered { LoadingView(caption: "読み込み中...") }
+        case .backendNotConfigured:
+            centered { FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "カレンダーはまだ利用できません。") }
+        case .error(let message):
+            centered { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { Task { await viewModel.load() } }) }
+        case .loaded:
+            VStack(alignment: .leading, spacing: 8) {
+                CalendarMonthCard(viewModel: viewModel)
+                NotoText.text(viewModel.selectedTitle, size: 10)
+                    .foregroundStyle(SettingsListLayout.sectionTitleColor)
+                    .padding(.horizontal, 4)
+                ScrollView(showsIndicators: false) {
+                    CalendarDayList(items: viewModel.selectedItems)
+                        .padding(.bottom, 6)
+                }
+            }
+            .frame(width: 214)
+            .padding(.top, 6)
+            .frame(width: V5P.W, height: 398, alignment: .top)
+            .position(x: V5P.W / 2, y: 54 + 398 / 2)
+        }
+    }
+
+    private func centered(@ViewBuilder _ content: () -> some View) -> some View {
+        content()
+            .frame(width: V5P.W, height: V5P.H - 92, alignment: .center)
+            .padding(.top, 53)
+    }
+}
+
+// MARK: - 月のカレンダー
+
+/// 「‹ 2026年10月 ›」、曜日、6週分の日付。選んだ日は水色の丸、今日は水色の枠。
+private struct CalendarMonthCard: View {
+    @ObservedObject var viewModel: CalendarViewModel
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 7)
+
+    var body: some View {
+        VStack(spacing: 4) {
+            HStack {
+                monthButton(systemName: "chevron.left", label: "前の月", value: -1)
+                Spacer()
+                NotoText.text(viewModel.monthTitle, size: 10.5).foregroundStyle(.white)
+                Spacer()
+                monthButton(systemName: "chevron.right", label: "次の月", value: 1)
+            }
+            .padding(.horizontal, 6)
+            .frame(height: 20)
+            HStack(spacing: 0) {
+                ForEach(Array(viewModel.weekdaySymbols.enumerated()), id: \.offset) { index, symbol in
+                    NotoText.text(symbol, size: 7)
+                        .foregroundStyle(Self.weekdayColor(column: index))
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            LazyVGrid(columns: columns, spacing: 1) {
+                ForEach(viewModel.gridDays, id: \.self) { day in
+                    dayCell(day)
+                }
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 5)
+        .frame(width: 214)
+        .background(AccountCardBackground())
+    }
+
+    private func monthButton(systemName: String, label: String, value: Int) -> some View {
+        Button { Task { await viewModel.moveMonth(by: value) } } label: {
+            Image(systemName: systemName)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(V5P.cyan)
+                .frame(width: 24, height: 20)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    private func dayCell(_ day: Date) -> some View {
+        let calendar = viewModel.calendar
+        let isSelected = calendar.isDate(day, inSameDayAs: viewModel.selectedDate)
+        let isToday = calendar.isDateInToday(day)
+        let inMonth = viewModel.isInMonth(day)
+        let column = (calendar.component(.weekday, from: day) - calendar.firstWeekday + 7) % 7
+        let dots = viewModel.dots(on: day)
+        return Button { viewModel.select(day) } label: {
+            VStack(spacing: 2) {
+                Text("\(calendar.component(.day, from: day))")
+                    .font(.system(size: 8.5, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(isSelected ? .white : Self.weekdayColor(column: column))
+                    .frame(width: 17, height: 17)
+                    .background(Circle().fill(isSelected ? V5P.cyan.opacity(0.85) : .clear))
+                    .overlay(Circle().stroke(V5P.cyan.opacity(isToday && !isSelected ? 0.8 : 0), lineWidth: 0.8))
+                HStack(spacing: 1.5) {
+                    ForEach(Array(dots.enumerated()), id: \.offset) { _, importance in
+                        Circle().fill(HomeView.importanceBadgeColors(importance).border).frame(width: 3, height: 3)
+                    }
+                }
+                .frame(height: 3)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 23)
+            .opacity(inMonth ? 1 : 0.35)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(calendar.component(.month, from: day))月\(calendar.component(.day, from: day))日、イベント\(viewModel.items(on: day).count)件")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// 月曜始まりの列番号(0〜6)。土曜は青、日曜は赤。
+    static func weekdayColor(column: Int) -> Color {
+        switch column {
+        case 5: return Color(red: 120.0 / 255, green: 170.0 / 255, blue: 1.0)
+        case 6: return Color(red: 1.0, green: 110.0 / 255, blue: 130.0 / 255)
+        default: return .white
+        }
+    }
+}
+
+// MARK: - 選んだ日の一覧
+
+private struct CalendarDayList: View {
+    let items: [CalendarItem]
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        formatter.timeZone = .current
+        return formatter
+    }()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if items.isEmpty {
+                NotoText.text("この日のイベントはありません。", size: 8)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+            }
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                if index > 0 { SettingsListSeparator() }
+                NavigationLink(value: item.route) { row(item) }
+                    .buttonStyle(SettingsRowPressStyle())
+            }
+        }
+        .frame(width: 214)
+        .background(AccountCardBackground())
+    }
+
+    private func row(_ item: CalendarItem) -> some View {
+        HStack(spacing: 6) {
+            Text(item.hasTime ? Self.timeFormatter.string(from: item.datetime) : "未定")
+                .font(.system(size: 8.5, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(.white)
+                .frame(width: 26, alignment: .leading)
+            CountryFlagView(countryCode: item.countryCode, diameter: 14)
+            NotoText.text(item.currencyCode, size: 7)
+                .foregroundStyle(.white)
+                .frame(width: 20, alignment: .leading)
+            NotoText.text(item.title, size: 8)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Spacer(minLength: 4)
+            let colors = HomeView.importanceBadgeColors(item.importance)
+            NotoText.text(item.importance.rawValue, size: 6.5)
+                .tracking(-0.4)
+                .foregroundStyle(.white)
+                .frame(width: 34)
+                .padding(.vertical, 2.5)
+                .background(colors.fill, in: Capsule())
+                .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
+        }
+        .padding(.horizontal, 9)
+        .frame(height: 28)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 }

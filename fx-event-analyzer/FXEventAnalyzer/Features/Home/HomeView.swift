@@ -318,7 +318,7 @@ struct HomeView: View {
     private static let changeUpColor = Color(red: 255.0 / 255, green: 45.0 / 255, blue: 95.0 / 255)
     private static let changeDownColor = Color(red: 20.0 / 255, green: 235.0 / 255, blue: 165.0 / 255)
 
-    private static func importanceBadgeColors(_ importance: Importance) -> (fill: Color, border: Color) {
+    static func importanceBadgeColors(_ importance: Importance) -> (fill: Color, border: Color) {
         switch importance {
         case .high:
             return (Color(red: 185.0 / 255, green: 13.0 / 255, blue: 60.0 / 255), Color(red: 230.0 / 255, green: 80.0 / 255, blue: 120.0 / 255))

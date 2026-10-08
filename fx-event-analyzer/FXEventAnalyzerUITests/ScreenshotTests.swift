@@ -167,11 +167,10 @@ final class ScreenshotTests: XCTestCase {
             tapV5(x: 117, y: 80)
         }
 
-        // SCR-010 経済カレンダー(bonus — HQ指示2026-10-03で旧「分析」タブ
-        // (SCR-011、削除済み)から置き換わった新タブ。選択状態の
-        // レンダリングを確認できるよう、タブ自体を撮る)。
+        // SCR-010 経済カレンダー(HQ指示2026-10-08で仮画面から実装)。ヘッダーの
+        // 画面名ではなく、読み込み後に出る「〜のイベント」(今日の一覧の見出し)を待つ。
         tap(containing: "カレンダー")
-        XCTAssertTrue(waitForAnyElement(containing: "経済カレンダー", timeout: 15), "Calendar tab did not load")
+        XCTAssertTrue(waitForAnyElement(containing: "のイベント", timeout: 15), "Calendar tab did not load")
         capture("10-Calendar")
 
         // SCR-016 / SCR-018 / SCR-019 (bonus — added 2026-10-02 with the

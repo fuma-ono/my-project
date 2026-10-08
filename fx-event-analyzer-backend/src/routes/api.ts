@@ -10,6 +10,7 @@ import { registerHistoricalRoutes } from './historical.js';
 import { registerSearchRoutes } from './search.js';
 import { registerHomeRoutes } from './home.js';
 import { registerSpeechRoutes } from './speeches.js';
+import { registerCalendarRoutes } from './calendar.js';
 import { registerFxPairRoutes } from './fxPairs.js';
 import { registerNotificationRoutes } from './notifications.js';
 import { registerSupportRoutes } from './support.js';
@@ -33,6 +34,7 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   await app.register(registerSearchRoutes);
   await app.register(registerHomeRoutes);
   await app.register(registerSpeechRoutes);
+  await app.register(registerCalendarRoutes);
   await app.register(registerFxPairRoutes);
   await app.register(registerNotificationRoutes);
   await app.register(registerSupportRoutes);

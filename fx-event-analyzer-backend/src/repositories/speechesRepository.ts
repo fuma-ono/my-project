@@ -113,3 +113,21 @@ export async function listScheduledSpeechesInRange(
   if (error) throw error;
   return (data ?? []).map((row) => toSpeechSummary(row as SpeechDbRow));
 }
+
+/** Every speech in [from, to) regardless of status — GET /calendar
+ * (CANCELLED ones are dropped by buildCalendarItems). Oldest first. */
+export async function listSpeechesInRange(
+  supabase: SupabaseClient,
+  fromIso: string,
+  toIso: string,
+): Promise<SpeechSummary[]> {
+  const { data, error } = await supabase
+    .from('speech_events')
+    .select(SPEECH_COLUMNS)
+    .gte('statement_datetime', fromIso)
+    .lt('statement_datetime', toIso)
+    .order('statement_datetime', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((row) => toSpeechSummary(row as SpeechDbRow));
+}

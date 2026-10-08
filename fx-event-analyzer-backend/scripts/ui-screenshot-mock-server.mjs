@@ -897,6 +897,210 @@ function upcomingNotificationsHandler() {
   };
 }
 
+// ---------------------------------------------------------------------------
+// SCR-010 経済カレンダー — GET /calendar (api-design.md §14.6、v1.14).
+// HQ指示(2026-10-08): 月のマス目に重要度の点が並び、選んだ日の一覧に指標と
+// 要人発言が時刻順で混ざって出るよう、撮影した月(Asia/Tokyo)の約15日に
+// 1〜4件ずつ並べる。本日は参考画像と同じ4件(08:50 国内企業物価指数 /
+// 15:00 FOMCメンバー発言 / 20:35 ECB要人発言 / 21:30 雇用統計)にする。
+// 時刻は日本時間で書き、UTCに直して返す。発表済み・発言済みかは撮影時刻で決める。
+// 既存のフィクスチャと同じ指標(米国CPI・NFP・FOMC・日本CPI)は同じevent_idを
+// 使い、タップ先の詳細画面が出るようにした。要人発言はGET /speeches/{id}が
+// このカレンダー用の発言も返す(handleApi参照)。
+
+const CALENDAR_SPEAKERS = {
+  powell: SPEAKERS.powell,
+  ueda: SPEAKERS.ueda,
+  lagarde: SPEAKERS.lagarde,
+  waller: {
+    speaker_id: '66666666-6666-6666-6666-666666666664',
+    name: 'クリストファー・ウォラー',
+    title: 'FRB理事',
+    organization: 'FRB',
+    country_code: 'US',
+    currency_code: 'USD',
+  },
+  schnabel: {
+    speaker_id: '66666666-6666-6666-6666-666666666665',
+    name: 'イザベル・シュナーベル',
+    title: 'ECB専務理事',
+    organization: 'ECB',
+    country_code: 'EU',
+    currency_code: 'EUR',
+  },
+  bailey: {
+    speaker_id: '66666666-6666-6666-6666-666666666666',
+    name: 'アンドリュー・ベイリー',
+    title: 'BOE総裁',
+    organization: 'BOE',
+    country_code: 'GB',
+    currency_code: 'GBP',
+  },
+};
+
+// 指標: ['I', 'HH:MM'(日本時間), 指標名, country, currency, importance, event_id(任意)]
+// 発言: ['S', 'HH:MM'(日本時間), 題名, CALENDAR_SPEAKERSのキー, importance]
+const CALENDAR_TODAY_ITEMS = [
+  ['I', '08:50', '国内企業物価指数', 'JP', 'JPY', 'HIGH'],
+  ['S', '15:00', 'FOMCメンバー発言', 'waller', 'HIGH'],
+  ['S', '20:35', 'ECB要人発言', 'schnabel', 'MEDIUM'],
+  ['I', '21:30', '雇用統計(非農業部門雇用者数)', 'US', 'USD', 'HIGH', EVENT_ID_UPCOMING],
+];
+
+/** 日(1〜31) → その日の項目。本日と重なる日・その月に無い日(31日等)は使わない。 */
+const CALENDAR_OTHER_DAYS = {
+  1: [
+    ['I', '08:50', '日銀短観(大企業製造業業況判断)', 'JP', 'JPY', 'HIGH'],
+    ['I', '23:00', '米国ISM製造業景況指数', 'US', 'USD', 'HIGH'],
+  ],
+  2: [['I', '18:00', 'ユーロ圏消費者物価指数(速報値)', 'EU', 'EUR', 'HIGH']],
+  3: [
+    ['I', '21:30', '米国新規失業保険申請件数', 'US', 'USD', 'MEDIUM'],
+    ['S', '23:00', 'FRB議長発言', 'powell', 'HIGH'],
+  ],
+  6: [
+    ['I', '12:30', '豪州RBA政策金利', 'AU', 'AUD', 'HIGH'],
+    ['I', '17:30', '英国サービス業PMI', 'GB', 'GBP', 'LOW'],
+  ],
+  9: [
+    ['I', '08:50', '国内総生産(GDP)改定値', 'JP', 'JPY', 'MEDIUM'],
+    ['S', '16:00', 'BOE総裁発言', 'bailey', 'MEDIUM'],
+    ['I', '21:30', INDICATOR_US_CPI.name, 'US', 'USD', 'HIGH', EVENT_ID],
+  ],
+  12: [['I', '15:00', '英国GDP(月次)', 'GB', 'GBP', 'MEDIUM']],
+  14: [
+    ['I', '18:00', 'ユーロ圏GDP(改定値)', 'EU', 'EUR', 'LOW'],
+    ['I', '21:30', '米国小売売上高', 'US', 'USD', 'HIGH'],
+    ['S', '22:00', 'ECB総裁発言', 'lagarde', 'HIGH'],
+  ],
+  16: [['I', '09:30', '豪州雇用統計(失業率)', 'AU', 'AUD', 'HIGH']],
+  17: [['I', '08:30', INDICATORS_LIST[3].name, 'JP', 'JPY', 'MEDIUM', EVENT_ID_UPCOMING_JP_CPI]],
+  20: [
+    ['S', '10:00', '日銀総裁発言', 'ueda', 'MEDIUM'],
+    ['I', '21:30', '米国住宅着工件数', 'US', 'USD', 'LOW'],
+  ],
+  22: [
+    ['I', '17:30', '英国小売売上高', 'GB', 'GBP', 'MEDIUM'],
+    ['I', '22:45', '米国製造業PMI(速報値)', 'US', 'USD', 'MEDIUM'],
+  ],
+  24: [
+    ['I', '12:00', '日銀金融政策決定会合(政策金利)', 'JP', 'JPY', 'HIGH'],
+    ['S', '15:30', '日銀総裁会見', 'ueda', 'HIGH'],
+    ['I', '21:15', 'ECB政策金利', 'EU', 'EUR', 'HIGH'],
+    ['S', '21:45', 'ECB総裁会見', 'lagarde', 'HIGH'],
+  ],
+  27: [
+    ['I', '03:00', INDICATORS_LIST[2].name, 'US', 'USD', 'HIGH', EVENT_ID_UPCOMING_FOMC],
+    ['S', '03:30', 'FRB議長会見', 'powell', 'HIGH'],
+  ],
+  29: [['I', '21:30', '米国PCEデフレーター', 'US', 'USD', 'HIGH']],
+  30: [
+    ['I', '08:30', '東京都区部CPI', 'JP', 'JPY', 'LOW'],
+    ['I', '10:30', '豪州小売売上高', 'AU', 'AUD', 'MEDIUM'],
+  ],
+};
+
+const JST_OFFSET_MS = 9 * 3_600_000;
+
+/** 撮影した月(日本時間)の全項目。kind・idはGET /calendarと同じ形。 */
+function calendarFixture() {
+  const jstNow = new Date(now().getTime() + JST_OFFSET_MS);
+  const year = jstNow.getUTCFullYear();
+  const month = jstNow.getUTCMonth();
+  const today = jstNow.getUTCDate();
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+
+  const days = [[today, CALENDAR_TODAY_ITEMS]];
+  for (const [day, specs] of Object.entries(CALENDAR_OTHER_DAYS)) {
+    if (Number(day) !== today && Number(day) <= daysInMonth) days.push([Number(day), specs]);
+  }
+
+  const items = [];
+  for (const [day, specs] of days) {
+    specs.forEach((spec, index) => {
+      const [hours, minutes] = spec[1].split(':').map(Number);
+      const at = new Date(Date.UTC(year, month, day, hours, minutes) - JST_OFFSET_MS);
+      const past = at.getTime() <= now().getTime();
+      const serial = String(day * 10 + index).padStart(12, '0');
+      if (spec[0] === 'I') {
+        const [, , title, country, currency, importance, eventId] = spec;
+        items.push({
+          kind: 'INDICATOR',
+          id: eventId ?? `cccccccc-cccc-cccc-cccc-${serial}`,
+          title,
+          speaker_name: null,
+          country_code: country,
+          currency_code: currency,
+          importance,
+          datetime: isoSeconds(at),
+          datetime_precision: 'EXACT',
+          status: past ? 'RELEASED' : 'SCHEDULED',
+        });
+      } else {
+        const [, , title, speakerKey, importance] = spec;
+        const speaker = CALENDAR_SPEAKERS[speakerKey];
+        items.push({
+          kind: 'SPEECH',
+          id: `dddddddd-dddd-dddd-dddd-${serial}`,
+          title,
+          speaker_name: speaker.name,
+          country_code: speaker.country_code,
+          currency_code: speaker.currency_code,
+          importance,
+          datetime: isoSeconds(at),
+          datetime_precision: 'EXACT',
+          status: past ? 'DELIVERED' : 'SCHEDULED',
+          speaker, // GET /speeches/{id}用。GET /calendarのResponseからは外す
+        });
+      }
+    });
+  }
+  return items;
+}
+
+/** GET /speeches/{id}: カレンダー用の発言をSpeechSummaryの形で返す。 */
+function calendarSpeechSummary(speechId) {
+  const item = calendarFixture().find((row) => row.kind === 'SPEECH' && row.id === speechId);
+  if (!item) return null;
+  return {
+    speech_id: item.id,
+    speaker: item.speaker,
+    title: item.title,
+    summary: null,
+    statement_datetime: item.datetime,
+    importance: item.importance,
+    status: item.status,
+  };
+}
+
+/** GET /calendar: from(含む)〜to(含まない)、importance・currencyで絞り、
+ * 日時 → INDICATORが先 → idの順。 */
+function calendarHandler(searchParams) {
+  const from = searchParams.get('from');
+  const to = searchParams.get('to');
+  const importance = searchParams.get('importance');
+  const currency = searchParams.get('currency');
+  const fromMs = from ? Date.parse(from) : -Infinity;
+  const toMs = to ? Date.parse(to) : Infinity;
+  const kindOrder = { INDICATOR: 0, SPEECH: 1 };
+  const items = calendarFixture()
+    .filter((item) => {
+      const at = Date.parse(item.datetime);
+      if (at < fromMs || at >= toMs) return false;
+      if (importance && item.importance !== importance) return false;
+      if (currency && item.currency_code !== currency) return false;
+      return true;
+    })
+    .sort(
+      (a, b) =>
+        Date.parse(a.datetime) - Date.parse(b.datetime) ||
+        kindOrder[a.kind] - kindOrder[b.kind] ||
+        a.id.localeCompare(b.id),
+    )
+    .map(({ speaker: _speaker, ...item }) => item);
+  return { from, to, items };
+}
+
 const accountFixture = () => ({
   user_id: TEST_USER_ID,
   display_name: '山田 太郎',
@@ -1023,11 +1227,14 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
   if (pathname === '/api/v1/fx-pairs') return json(res, 200, { data: FX_PAIRS });
   if (pathname === '/api/v1/speeches') return json(res, 200, speechesListHandler());
   if (segments[0] === 'speeches' && segments.length === 2) {
-    const speech = speechesFixture().find((row) => row.speech_id === segments[1]);
+    const speech =
+      speechesFixture().find((row) => row.speech_id === segments[1]) ?? calendarSpeechSummary(segments[1]);
     if (!speech) return json(res, 404, { error: { code: 'SPEECH_NOT_FOUND', message: 'Speech not found.' } });
     return json(res, 200, speech);
   }
   if (pathname === '/api/v1/notifications/upcoming') return json(res, 200, upcomingNotificationsHandler());
+  // SCR-010 経済カレンダー (api-design.md §14.6).
+  if (pathname === '/api/v1/calendar') return json(res, 200, calendarHandler(searchParams));
   // SCR-015 アカウント情報 (api-design.md §24.1-§24.3). PATCH answers with
   // the same fixture; DELETE is never exercised by the screenshot run.
   if (pathname === '/api/v1/account') {

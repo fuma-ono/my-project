@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.13
+# FX Event Analyzer: API詳細設計書 v1.14
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -55,6 +55,7 @@
 - **v1.11**(2026-10-07): レビュー指摘の修正。`POST /support/requests`の判定ルールを調整(NFKC正規化、丁寧語・短い日本語の扱い、相場の「落ちた」や否定表現を不具合にしない、画像共有URLは件数に数えない、禁止語の誤判定の削減)、送信回数の上限を保存と同時に判定する方式に変更(同時送信で上限を超えない)、GitHub Issueで削除する個人情報にカード番号・7桁以上の数字列を追加(24.7節)。`POST /subscription/verify`のResponseに`product_id`を追加し`GET /subscription`と同じ形にそろえた(25.1節)
 - **v1.13**(2026-10-08): `GET /home`の`events`の各行に`unit`(指標の単位。`economic_indicators.unit`、未登録は`null`)を追加(12章)。ホームの「予想・前回」を単位付きで表示するため
 - **v1.12**(2026-10-07): SCR-026 ホーム通貨ペア編集を追加。`GET/PATCH /settings`に`home.fx_pairs`(ホームに表示する通貨ペア。最大3件・配列の順 = 表示順、`null` = 既定)を追加(24.4節・24.5節)。`GET /home`の`major_fx`は`home.fx_pairs`の通貨ペアをその順で返し、未設定なら既定の`USDJPY`・`EURUSD`・`EURJPY`を返す(12章)。`major_fx`の各行の形は変えない
+- **v1.14**(2026-10-08): SCR-010 経済カレンダー(画面番号はui-screens.md)のAPIを追加。`GET /calendar`を新設(14.6節)。期間内の経済指標イベントと要人発言を1つの一覧(`items`)にまとめ、日時の昇順で返す。期間は62日以内・Paginationなし。必要なfeature_codeは`VIEW_BASIC_EVENT`(27.1節)
 
 ---
 
@@ -586,6 +587,44 @@ Response：`{ "data": SpeechSummary[], "meta": { page, limit, total, has_next } 
 ## 14.5 GET /api/v1/speeches/{speech_id}(v1.6で追加)
 
 要人発言1件(SpeechSummary、14.4節と同じ形)。`speech_id`がUUID形式でなければ`422 VALIDATION_ERROR`、存在しなければ`404 SPEECH_NOT_FOUND`。必要なfeature_code：`VIEW_BASIC_EVENT`。
+
+## 14.6 GET /api/v1/calendar(v1.14で追加)
+
+SCR-010 経済カレンダー(画面番号はui-screens.md)。期間内の経済指標イベントと要人発言を1つの一覧で返す。iOSは月のマス目(日ごとに重要度の色の点)と、選んだ日の一覧(時刻順)の両方をこのResponseから作る。必要なfeature_code：`VIEW_BASIC_EVENT`。
+
+Query：
+- `from` / `to`(必須。ISO 8601。fromはinclusive、toはexclusive)。`to`が`from`以前、または期間が62日を超える場合は`422 VALIDATION_ERROR`
+- `importance`(任意。`LOW` / `MEDIUM` / `HIGH`。1つだけ指定。14.4節と同じ)
+- `currency`(任意。ISO 4217の英大文字3桁。指標は指標の通貨、要人発言は発言者の通貨で絞り込む)
+
+Paginationなし(期間の上限で件数を抑える)。
+
+Response：`{ "from": string, "to": string, "items": CalendarItem[] }`(`from` / `to`はRequestの値をそのまま返す)
+
+```json
+{
+  "kind": "INDICATOR",
+  "id": "30000000-0000-0000-0000-000000000003",
+  "title": "米国雇用統計(非農業部門雇用者数)",
+  "speaker_name": null,
+  "country_code": "US",
+  "currency_code": "USD",
+  "importance": "HIGH",
+  "datetime": "2026-10-08T12:30:00+00:00",
+  "datetime_precision": "EXACT",
+  "status": "SCHEDULED"
+}
+```
+
+- `kind`：`INDICATOR`(経済指標イベント)/ `SPEECH`(要人発言)
+- `id`：`INDICATOR`は`event_id`(14.1節で詳細を取得)、`SPEECH`は`speech_id`(14.5節で詳細を取得)
+- `title`：`INDICATOR`は指標名、`SPEECH`は発言の題名(`speech_events.title`)。`GET /notifications/upcoming`(24.6節)と同じ付け方
+- `speaker_name`：`SPEECH`だけ。発言者の表示名。`INDICATOR`は`null`
+- `country_code` / `currency_code`：`INDICATOR`は指標の値、`SPEECH`は発言者の値
+- `datetime`：`INDICATOR`は`release_datetime`、`SPEECH`は`statement_datetime`
+- `datetime_precision`：`INDICATOR`は`release_datetime_precision`(6章)、`SPEECH`は常に`EXACT`
+- `status`：`INDICATOR`はイベントの`status`(`SCHEDULED` / `RELEASED` / `CANCELLED`)、`SPEECH`は発言の`status`(`SCHEDULED` / `DELIVERED`)。**`CANCELLED`の要人発言は返さない**
+- 並び順：`datetime`昇順 → 同時刻は`INDICATOR`が先 → `id`昇順
 
 ---
 
@@ -1309,6 +1348,7 @@ Backend側の各Endpointが要求するEntitlementを以下の通り確定する
 | Market Reaction | `GET /events/{id}/reaction`、`GET /events/{id}/reaction/chart` | `VIEW_MARKET_REACTION` |
 | Historical Event Detail | `GET /events/{id}/history` | `VIEW_HISTORICAL` |
 | 要人発言(v1.6で追加) | `GET /speeches`、`GET /speeches/{id}` | `VIEW_BASIC_EVENT` |
+| 経済カレンダー(v1.14で追加) | `GET /calendar` | `VIEW_BASIC_EVENT` |
 | 通知予約対象(v1.6で追加) | `GET /notifications/upcoming` | `VIEW_BASIC_EVENT` |
 | お問い合わせ(v1.10で追加) | `POST /support/requests`、`GET /support/requests` | **Authentication Required / Entitlementなし** |
 
@@ -1373,6 +1413,7 @@ Backend APIはSupabase JWTを検証する。
 | SCR-022〜025 ヘルプ・規約・プライバシー・アプリ情報(v1.4で追加) | なし |
 | SCR-026 アカウント削除(v1.4で追加) | DELETE /account |
 | SCR-020 ヘルプ・お問い合わせ(v1.10で追加。番号はui-screens.md。上のSCR-022〜025は旧番号) | POST /support/requests、GET /support/requests |
+| SCR-010 経済カレンダー(v1.14で追加。番号はui-screens.md。上のSCR-010 Loginは旧番号) | GET /calendar |
 
 ---
 
