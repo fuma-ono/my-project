@@ -15,6 +15,16 @@
 // FX pair flavor), but does not read seed.sql or touch any real Supabase
 // project.
 //
+// One documented exception: `/api/v1/home`'s `speeches` field (HQ
+// instruction 2026-10-06, "直近の要人発言に何か表示されるようにして").
+// `SpeechEvent` is explicitly P2/out of scope for the real Backend
+// (db-design.md, features.md), so `src/routes/home.ts` does not and will
+// not return this field — it exists only here, so HQ can review the
+// Home screen's 直近の要人発言 card layout via CI screenshots. The iOS
+// app's `HomeResponse.speeches` is optional for exactly this reason: a
+// real Backend response (this field absent) still decodes fine and the
+// card still renders its empty state, unchanged.
+//
 // Usage: node scripts/ui-screenshot-mock-server.mjs [port]
 // Serves BOTH:
 //   - /auth/v1/*  (minimal GoTrue-compatible surface for supabase-swift's
@@ -60,6 +70,15 @@ const HISTORICAL_EVENT_IDS = [
   '55555555-5555-5555-5555-555555555554',
   '55555555-5555-5555-5555-555555555555',
   '55555555-5555-5555-5555-555555555556',
+];
+
+// HQ指示(2026-10-06)「直近の要人発言に何か表示されるようにして」参考画像
+// 固定ID — 本番Backendには対応するSpeechEventテーブル・APIが無い
+// (ui-screenshot-mock-server.mjsの冒頭コメント参照)。
+const SPEECH_IDS = [
+  '66666666-6666-6666-6666-666666666661',
+  '66666666-6666-6666-6666-666666666662',
+  '66666666-6666-6666-6666-666666666663',
 ];
 
 const now = () => new Date();
@@ -295,6 +314,57 @@ function homeHandler() {
       },
     ],
     major_fx: majorFxRows(),
+    // HQ指示(2026-10-06)「直近の要人発言に何か表示されるようにして」の
+    // 参考画像内容を再現したUIスクリーンショット専用フィクスチャ — ファイル
+    // 冒頭コメントの「documented exception」参照。本番`/home`ルートは
+    // このフィールドを返さない。
+    //
+    // HQ再指摘(2026-10-06、2回目、参考画像をピクセル単位で再確認)
+    // 「発言前と現在それぞれの数字を付けて」に伴い、organization/
+    // reaction_price_before/reaction_price_after/reaction_pipsを追加
+    // (参考画像の表示値をそのまま採用 — 155.42-155.14=+28pips等、全て
+    // 整合する値)。
+    //
+    // HQ指示(2026-10-08)「データを合わせて」: 「現在」は通貨ペアカードと同じ
+    // `MOCK_FX_QUOTES`の価格にし、「発言前」はpipsが合うよう逆算した値にした。
+    speeches: [
+      {
+        speech_id: SPEECH_IDS[0],
+        country_code: 'US',
+        speaker_name: 'パウエルFRB議長',
+        statement_datetime: isoMinusHours(3),
+        headline: 'インフレ率は依然として高い',
+        organization: 'FRB',
+        reaction_fx_symbol: 'USD/JPY',
+        reaction_price_before: 155.14,
+        reaction_price_after: 155.42,
+        reaction_pips: 28,
+      },
+      {
+        speech_id: SPEECH_IDS[1],
+        country_code: 'EU',
+        speaker_name: 'ラガルドECB総裁',
+        statement_datetime: isoMinusHours(9),
+        headline: '金利は十分な制約的な水準にある',
+        organization: 'ECB',
+        reaction_fx_symbol: 'EUR/USD',
+        reaction_price_before: 1.0839,
+        reaction_price_after: 1.0821,
+        reaction_pips: -18,
+      },
+      {
+        speech_id: SPEECH_IDS[2],
+        country_code: 'GB',
+        speaker_name: 'ベイリーBOE総裁',
+        statement_datetime: isoMinusHours(14),
+        headline: '金融政策は引き締め的なスタンスを維持',
+        organization: 'BOE',
+        reaction_fx_symbol: 'GBP/USD',
+        reaction_price_before: 1.2740,
+        reaction_price_after: 1.2718,
+        reaction_pips: -22,
+      },
+    ],
   };
 }
 

@@ -109,6 +109,28 @@ enum V5JPFont {
         flush(upTo: string.endIndex)
         return result ?? Text(verbatim: string)
     }
+
+    /// HQ質問(2026-10-06)「日本CPI（消費者物価...」のような途中切れはNG、
+    /// 指標名は最大2行で表示したい」への対応中に判明した実機バグ: `text(_:
+    /// size:weight:)`は日本語/非日本語の混在文字列(例:
+    /// 「日本CPI(消費者物価指数)」)で複数の`Text`を`+`連結するが、SwiftUIの
+    /// 既知の制限でこの連結された(フォント混在の)`Text`は`.lineLimit(n)`
+    /// (n>1)を付けても折り返さず、常に1行+末尾省略記号になってしまう
+    /// (実機スクリーンショットで確認済み — `.lineLimit(2)`を付けても
+    /// 「日本CPI(消費者物価...」のまま変化が無かった)。複数行への折り返しが
+    /// 必要な箇所では代わりにこちらを使う — 文字列を分割せず単一の`Text`
+    /// のまま(日本語を含むなら全体にNotoSansJPを、含まなければ全体に
+    /// システムフォントを)適用することで、SwiftUIが単一`Text`として
+    /// 正しく折り返し計算できるようにする(英数字部分のフォントが本来の
+    /// システムフォントではなくNotoSansJPになる、という見た目上のトレード
+    /// オフはある)。
+    static func wrappingText(_ string: String, size: CGFloat, weight: Font.Weight = .semibold) -> Text {
+        guard !string.isEmpty else { return Text(verbatim: "") }
+        let containsJapanese = string.unicodeScalars.contains(where: isJapanese)
+        return containsJapanese
+            ? Text(verbatim: string).font(.custom(postScriptName, size: size))
+            : Text(verbatim: string).font(.system(size: size, weight: weight))
+    }
 }
 
 struct V5Viewport<Content: View>: View {
@@ -307,6 +329,8 @@ struct V5Viewport<Content: View>: View {
 ///     地点140px、smoothstep)のCI実機キャプチャと完全一致したため、
 ///     フェード開始地点を90→60pxへ戻し、9.の状態(境目なし、伸長も
 ///     なしのシンプルな構成)にそのまま復元した。
+/// 13. ヘッダー下端の明るさの谷を縦方向にぼかしてつなぎ、下の地の
+///     グラデーションの横縞を微小なディザで解消(28e922d、HQ確定)。
 struct V5GlowBackground: View {
     var body: some View {
         GeometryReader { geo in
@@ -404,9 +428,15 @@ struct CountryFlagView: View {
     var body: some View {
         Group {
             if let imageName {
+                // HQ再指摘(2026-10-05、Home画面3回目)「国旗の色をもう少し
+                // 鮮やかにして」: 元画像アセットの彩度・コントラストをやや
+                // 持ち上げて鮮やかに見えるようにした(アセット自体の差し替え
+                // ではなく表示側の調整)。
                 Image(imageName)
                     .resizable()
                     .scaledToFill()
+                    .saturation(1.35)
+                    .contrast(1.08)
             } else {
                 Circle()
                     .fill(V5P.panel2)

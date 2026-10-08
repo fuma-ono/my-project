@@ -102,6 +102,25 @@ enum CountryFlag {
         }
     }
 
+    /// ISO 4217通貨コード → 日本語の通貨名。HQ指示(2026-10-06)「通貨ペア
+    /// 内のUSD/JPYの下に米ドル/円と記載して」で追加。`representativeCountry
+    /// (forCurrency:)`と同じ9通貨のみ対応し、対応が無ければ通貨コードを
+    /// そのまま返す(存在しない名称を捏造しない)。
+    static func japaneseName(forCurrency currencyCode: String) -> String {
+        switch currencyCode.uppercased() {
+        case "USD": return "米ドル"
+        case "JPY": return "円"
+        case "EUR": return "ユーロ"
+        case "GBP": return "ポンド"
+        case "AUD": return "豪ドル"
+        case "CAD": return "加ドル"
+        case "CNY": return "人民元"
+        case "NZD": return "NZドル"
+        case "CHF": return "スイスフラン"
+        default: return currencyCode.uppercased()
+        }
+    }
+
     /// ISO 4217通貨コード → 代表国のISO 3166コードという客観的な対応表
     /// (通貨と国の標準的な関係であり、推測や捏造ではない)。`imageName
     /// (forCurrency:)`から再利用する。
