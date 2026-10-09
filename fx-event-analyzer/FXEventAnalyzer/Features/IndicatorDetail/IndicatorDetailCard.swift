@@ -44,10 +44,9 @@ struct IndicatorDetailCard: View {
             separator
             infoTable
             separator
-            linkRow("過去の発表日", value: AppRoute.indicatorReleases(id: indicator.id, name: indicator.name))
-            // HQ指示(2026-10-09)「過去イベント比較画面の遷移元は指標詳細」。
+            // HQ指示(2026-10-09)「過去イベント比較画面の遷移元は指標詳細」。「過去の発表日」の行は
+            // 過去イベント比較で分かるので消した。
             if let pair = comparisonPair {
-                separator
                 linkRow("過去イベント比較", value: AppRoute.historicalComparison(
                     indicatorId: indicator.id,
                     indicatorName: indicator.name,

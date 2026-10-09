@@ -98,11 +98,14 @@ struct MovementDetailView: View {
                             .monospacedDigit()
                             .foregroundStyle(change >= 0 ? V5P.green : V5P.red)
                     }
+                    Spacer(minLength: 0)
+                    NotoText.text("発表\(MovementAnalysisText.label(latest.timeframe))後", size: 6.5)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
                 }
             }
             timeframeTabs
             chartSection
-                .frame(height: 100)
+                .frame(height: 138)
         }
         .padding(8)
         .frame(width: 214, alignment: .leading)
@@ -159,7 +162,7 @@ struct MovementDetailView: View {
                     .lineSpacing(1.5)
                     .fixedSize(horizontal: false, vertical: true)
                 // 1画面に収めるため、価格の説明もここにまとめた(HQ指示 2026-10-09)。
-                NotoText.text("※ 価格は発表60分後。文は数値と一般的な見方から作成し、理由を断定するものではない。", size: 6)
+                NotoText.text("※ 一般的な見方で、今回の値動きの理由を断定するものではない。", size: 6)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -195,6 +198,15 @@ private struct CandleChart: View {
             return (release.addingTimeInterval(-10 * 60), release.addingTimeInterval(20 * 60))
         }
         return (release.addingTimeInterval(-30 * 60), release.addingTimeInterval(60 * 60))
+    }
+
+    /// 足1本の秒数。端の足が枠にかからないよう、表示範囲の左右をこの分だけ広げる。
+    private var stepSeconds: TimeInterval {
+        switch timeframe {
+        case "1m": return 60
+        case "5m": return 300
+        default: return 900
+        }
     }
 
     private var labelMinutes: Int {
@@ -233,9 +245,18 @@ private struct CandleChart: View {
         let pad = max((maxY - minY) * 0.08, 0.0001)
         let width = candleWidth
         Chart {
+            // HQ指示(2026-10-09)「縦の点線を、発表や発表時刻と分かるように」。
             RuleMark(x: .value("発表", chart.releaseDatetime))
-                .foregroundStyle(V5P.cyan.opacity(0.7))
+                .foregroundStyle(V5P.cyan.opacity(0.8))
                 .lineStyle(StrokeStyle(lineWidth: 0.8, dash: [3, 2]))
+                .annotation(position: .top, alignment: .center, spacing: 1) {
+                    Text("発表 \(AppPreferences.shared.timeString(chart.releaseDatetime))")
+                        .font(.system(size: 6, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 3)
+                        .padding(.vertical, 1)
+                        .background(V5P.cyan.opacity(0.35), in: Capsule())
+                }
             ForEach(points) { point in
                 let color = point.close >= point.open ? V5P.green : V5P.red
                 RuleMark(
@@ -255,7 +276,7 @@ private struct CandleChart: View {
             }
         }
         .chartYScale(domain: (minY - pad)...(maxY + pad))
-        .chartXScale(domain: window.from...window.to)
+        .chartXScale(domain: window.from.addingTimeInterval(-stepSeconds)...window.to.addingTimeInterval(stepSeconds))
         // HQ指示(2026-10-09)「数字ではなくローソク足の部分を枠で囲んで」: 目盛りの数字・時刻の
         // 外側ではなく、描画領域だけに角のない枠を付ける。
         .chartPlotStyle { plot in
@@ -295,9 +316,9 @@ private struct CandleChart: View {
         .accessibilityLabel("ローソク足チャート")
     }
 
-    /// 本数に合わせた足の幅(画面幅160ほどに収める)。
+    /// 本数に合わせた足の幅。描画領域(約160)を本数+2で割った6割で、すき間を詰める。
     private var candleWidth: CGFloat {
-        let count = max(points.count, 1)
-        return max(1, min(5, 110 / CGFloat(count)))
+        let count = max(points.count, 1) + 2
+        return max(1.5, min(9, 160 / CGFloat(count) * 0.6))
     }
 }
