@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { chartWindow } from '../domain/chartWindow.js';
 import { ApiError } from '../errors/ApiError.js';
 import { requireEntitlement, FEATURE_CODES } from '../authorization/entitlements.js';
 import {
@@ -237,9 +238,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
       }
 
       // MVP Chart Window: release -30min to +60min (api-design.md §19).
-      const releaseTime = new Date(event.release_datetime);
-      const from = new Date(releaseTime.getTime() - 30 * 60_000).toISOString();
-      const to = new Date(releaseTime.getTime() + 60 * 60_000).toISOString();
+      // 時間足ごとに、発表時刻を基準にした表示範囲(domain/chartWindow.ts)。
+      const { from, to } = chartWindow(event.release_datetime, timeframe);
 
       const prices = await listChartPrices(app.supabase, fxPairId, timeframe, from, to);
 
@@ -248,6 +248,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
         fx_pair_id: fxPairId,
         timeframe,
         release_datetime: event.release_datetime,
+        window_from: from,
+        window_to: to,
         prices,
       };
     },

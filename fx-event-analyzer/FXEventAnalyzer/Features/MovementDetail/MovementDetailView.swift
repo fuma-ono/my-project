@@ -136,9 +136,10 @@ struct MovementDetailView: View {
     private var chartSection: some View {
         switch viewModel.chartState {
         case .loading:
-            LoadingView(caption: "チャートを読み込み中...")
+            LoadingView(caption: "データ取得中...")
         case .empty:
-            FXEmptyState(icon: "chart.xyaxis.line", title: "チャートデータがありません", message: "この時間軸のチャートデータはまだ取得されていません。")
+            // HQ指示(2026-10-09): データが無いときは架空の足を出さず「データなし」。
+            FXEmptyState(icon: "chart.xyaxis.line", title: "データなし", message: "この時間足の価格データはまだありません。")
         case .error(let message):
             ErrorView(title: "チャート取得に失敗しました", message: message, onRetry: { viewModel.retryChart() })
         case .loaded(let chart):
@@ -189,15 +190,14 @@ private struct CandleChart: View {
     let digits: Int
     let timeframe: String
 
-    /// HQ指示(2026-10-09)「時刻を5分ごとに」: 1分足は発表の10分前〜20分後を出し、
-    /// 時刻は5分ごと。5分足・15分足は30分前〜60分後のままなので、5分ごとだと
-    /// 文字が重なるため15分・30分ごとにする。
+    /// HQ指示(2026-10-09)の表示範囲: 発表時刻を基準に、1分足は前後15分(初動)、5分足は
+    /// 前後60分(短期の流れ)、15分足は前後3時間(全体の流れ)。Backendの`window_from`/`window_to`
+    /// を使い、無い古いBackendだけ同じ規則で計算する。データが無い部分に足は補わない。
     private var window: (from: Date, to: Date) {
+        if let from = chart.windowFrom, let to = chart.windowTo { return (from, to) }
         let release = chart.releaseDatetime
-        if timeframe == "1m" {
-            return (release.addingTimeInterval(-10 * 60), release.addingTimeInterval(20 * 60))
-        }
-        return (release.addingTimeInterval(-30 * 60), release.addingTimeInterval(60 * 60))
+        let minutes: Double = timeframe == "1m" ? 15 : timeframe == "5m" ? 60 : 180
+        return (release.addingTimeInterval(-minutes * 60), release.addingTimeInterval(minutes * 60))
     }
 
     /// 足1本の秒数。端の足が枠にかからないよう、表示範囲の左右をこの分だけ広げる。
@@ -209,11 +209,12 @@ private struct CandleChart: View {
         }
     }
 
+    /// 時刻の目盛りの間隔。1分足は5分、5分足は20分、15分足は1時間ごと(重ならない数にする)。
     private var labelMinutes: Int {
         switch timeframe {
         case "1m": return 5
-        case "5m": return 15
-        default: return 30
+        case "5m": return 20
+        default: return 60
         }
     }
 

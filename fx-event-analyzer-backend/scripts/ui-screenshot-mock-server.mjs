@@ -1137,11 +1137,12 @@ function oneMinuteCandles(fixture, fxPairId) {
   };
   const candles = [];
   let previousClose = preReleasePrice;
-  for (let minute = -30; minute < 60; minute += 1) {
+  for (let minute = -180; minute < 180; minute += 1) {
     const after = minute >= 0;
     // 発表直後ほど振れ幅が大きく、時間とともに落ち着く。
     const noisePips = after ? 1.2 + 6 * Math.exp(-minute / 6) : 0.9;
-    const base = after ? targetAt(minute + 1) : (random() - 0.5) * 2.5;
+    // 発表前はゆるやかに上下する(3時間前でも平らになりすぎないよう、ゆっくりした波を足す)。
+    const base = after ? targetAt(minute + 1) : Math.sin(minute / 25) * 4 + (random() - 0.5) * 2.5;
     const closePips = base + (random() - 0.5) * noisePips;
     const close = preReleasePrice + closePips * pipSize;
     const open = previousClose;
@@ -1163,7 +1164,12 @@ function reactionChartHandler(eventId, timeframe, fxPairId) {
   const digits = fixture.pipSize < 0.01 ? 5 : 3;
   const round = (value) => Number(value.toFixed(digits));
   const stepMinutes = { '1m': 1, '5m': 5, '15m': 15, '30m': 30, '60m': 60 }[timeframe] ?? 5;
-  const minutes = oneMinuteCandles(fixture, fxPairId);
+  // 本番と同じく、発表時刻を基準に時間足ごとの範囲(1m 前後15分・5m 前後60分・15m 前後3時間)。
+  const releaseMs = new Date(EVENT_RELEASE_DATETIME).getTime();
+  const windowMinutes = { '1m': [15, 15], '5m': [60, 60], '15m': [180, 180] }[timeframe] ?? [30, 60];
+  const fromMs = releaseMs - windowMinutes[0] * 60_000;
+  const toMs = releaseMs + windowMinutes[1] * 60_000;
+  const minutes = oneMinuteCandles(fixture, fxPairId).filter((c) => c.t >= fromMs && c.t < toMs);
   const prices = [];
   for (let i = 0; i < minutes.length; i += stepMinutes) {
     const group = minutes.slice(i, i + stepMinutes);
@@ -1176,7 +1182,15 @@ function reactionChartHandler(eventId, timeframe, fxPairId) {
       volume: null,
     });
   }
-  return { event_id: eventId, fx_pair_id: fxPairId, timeframe, release_datetime: EVENT_RELEASE_DATETIME, prices };
+  return {
+    event_id: eventId,
+    fx_pair_id: fxPairId,
+    timeframe,
+    release_datetime: EVENT_RELEASE_DATETIME,
+    window_from: new Date(fromMs).toISOString(),
+    window_to: new Date(toMs).toISOString(),
+    prices,
+  };
 }
 
 function eventHistoryHandler(eventId) {

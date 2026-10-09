@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.18
+# FX Event Analyzer: API詳細設計書 v1.19
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -59,6 +59,7 @@
 - **v1.15**(2026-10-08): 無料プラン(FREE)と有料プラン(PRO)の利用上限(HQ決定 2026-10-08)を追加(28.1節)。`GET /entitlements`に`plan`・`limits`と`timezone` Queryを追加(27章)。`GET /calendar`に`timezone` Queryを追加し、プランの期間外は`403 PLAN_LIMIT_EXCEEDED`(PROなら見られる場合)/ `422 VALIDATION_ERROR`(どのプランでも見られない場合)にする(14.6節)。`PATCH /settings`で無料プランの通知の重要度・通貨ペアの上限を確認する(24.5節)。`GET /notifications/upcoming`は保存済みの設定に無料プランの上限を当てはめて絞り込む(24.6節)。`GET /indicators/{id}/comparison`は過去の発表回をプランの上限件数(直近から)に絞り、`history_limit`を返す(21章)。Error Code `PLAN_LIMIT_EXCEEDED`を追加(4章)
 - **v1.16**(2026-10-09): SCR-006 指標詳細の再デザイン(HQ指示 2026-10-09)。`GET /indicators`・`GET /indicators/{id}`の`indicator`に`name_en`(英語名、未登録は`null`)と`key_points`(注目される理由の短文の配列、未登録は`[]`)を追加し、`description`(概要)は日本語1〜2文とした(13章)。`GET /calendar`の各行に`indicator_id`(`INDICATOR`はイベントの指標ID、`SPEECH`は`null`)を追加し、カレンダーから指標詳細を開けるようにした(14.6節)
 - **v1.17**(2026-10-09): SCR-007 イベント詳細の再デザイン(HQ指示 2026-10-09)。`GET /events/{id}`に`major_fx_reactions`(主要通貨ペアの値動き。イベントの通貨を含む通貨ペア最大4件 × `1m`・`5m`・`15m`の`pips`・`change_percent`・`analysis_status`)を追加(14.1節)。`related_fx_pairs`は変えない。必要なfeature_codeは`related_fx_pairs[].reaction`と同じく`VIEW_BASIC_EVENT`のみ
+- **v1.19**(2026-10-09): `GET /events/{event_id}/reaction/chart`の表示範囲を時間足ごとに(1m 前後15分・5m 前後60分・15m 前後3時間)。Responseに`window_from` / `window_to`を追加
 - **v1.18**(2026-10-09): SCR-008 相場反応詳細の「一般的な見方」(HQ決定 2026-10-09)。`GET /indicators`・`GET /indicators/{id}`の`indicator`に`market_view_above`(結果が予想を上回ったときの一般的な見方)・`market_view_below`(下回ったとき)を追加(13.2節)。人が書いた日本語1文の定型文(AI生成ではない)で、未登録は`null`
 
 ---
@@ -832,7 +833,7 @@ Chart表示用の価格データを取得する。
 
 Query：fx_pair_id / timeframe
 
-MVP Chart Window：Release前30分 + Release後60分
+Chart Window(v1.19で時間足ごとに変更、HQ指示 2026-10-09)：発表時刻を基準に、`1m`は前後15分(初動)、`5m`は前後60分(短期の流れ)、`15m`は前後3時間(全体の流れ)。それ以外の`timeframe`は従来どおりRelease前30分 + Release後60分。Responseに`window_from` / `window_to`(表示範囲、ISO 8601)を含め、Clientはこの範囲で横軸を描く。データが存在する範囲だけ`prices`に入り、足りない分を補った架空の足は返さない
 
 ResponseにはChart描画に必要なOHLCデータを含める。想定項目：timestamp / open / high / low / close / volume。
 
