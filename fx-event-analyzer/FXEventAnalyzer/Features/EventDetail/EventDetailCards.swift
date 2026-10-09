@@ -190,13 +190,13 @@ struct EventDetailCards: View {
                 cell(width: Self.pairColumnWidth) { Color.clear }
                 ForEach(["1分", "5分", "15分"], id: \.self) { label in
                     cell(width: Self.valueColumnWidth) {
-                        NotoText.text(label, size: 9.5).foregroundStyle(.white.opacity(0.9))
+                        NotoText.text(label, size: 9.5).foregroundStyle(SettingsCardStyle.subtitleColor)
                     }
                 }
             }
             .frame(height: Self.headerHeight)
-            // HQ指示(2026-10-09)「単一の一色ではなく表みたいに、見出しは少し濃くしてグラデーションを」。
-            .background(Self.headerGradient)
+            // HQ指示(2026-10-09)「見出し行だけ少し濃く」: 見出しの行は本文より少し濃い一色。
+            .background(Self.headerFill)
             ForEach(pairs) { pair in
                 HStack(spacing: 0) {
                     cell(width: Self.pairColumnWidth, alignment: .leading) {
@@ -231,11 +231,8 @@ struct EventDetailCards: View {
         .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }
 
-    /// 見出しの行: 本文より濃い青の、上から下へのグラデーション。
-    private static let headerGradient = LinearGradient(
-        colors: [Color(red: 0.05, green: 0.22, blue: 0.45), Color(red: 0.02, green: 0.13, blue: 0.30)],
-        startPoint: .top, endPoint: .bottom
-    )
+    /// 見出しの行: 本文より少しだけ濃い青。
+    private static let headerFill = Color(red: 0.0, green: 0.07, blue: 0.16)
     /// 本文: カードの色から少し明るい青へ、上から下へのゆるいグラデーション。
     private static let bodyGradient = LinearGradient(
         colors: [SettingsCardStyle.cardFill, Color(red: 0.03, green: 0.14, blue: 0.27)],
