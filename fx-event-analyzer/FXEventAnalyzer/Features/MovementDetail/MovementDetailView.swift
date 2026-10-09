@@ -97,10 +97,15 @@ struct MovementDetailView: View {
                             .font(.system(size: 13, weight: .semibold))
                             .monospacedDigit()
                             .foregroundStyle(change >= 0 ? V5P.green : V5P.red)
+                            // 横幅が足りないと「(-0.25%)」が2行目に折り返していたので1行に固定する。
+                            .lineLimit(1)
+                            .fixedSize()
                     }
                     Spacer(minLength: 0)
-                    NotoText.text("発表\(MovementAnalysisText.label(latest.timeframe))後", size: 6.5)
+                    NotoText.text("発表\(MovementAnalysisText.label(latest.timeframe))後", size: 6)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .lineLimit(1)
+                        .fixedSize()
                 }
             }
             timeframeTabs
@@ -143,7 +148,9 @@ struct MovementDetailView: View {
         case .error(let message):
             ErrorView(title: "チャート取得に失敗しました", message: message, onRetry: { viewModel.retryChart() })
         case .loaded(let chart):
+            // 上の「発表 16:58」のラベルがタブに重ならないよう、少し間を空ける。
             CandleChart(chart: chart, digits: viewModel.symbol.hasSuffix("JPY") ? 2 : 4, timeframe: viewModel.selectedTimeframe)
+                .padding(.top, 9)
         }
     }
 
