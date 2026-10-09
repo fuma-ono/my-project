@@ -68,8 +68,13 @@ final class ScreenshotTests: XCTestCase {
         // 「指標」に変わった(画面タイトル自体は引き続き「指標一覧」)。
         // Same reasoning as the Home tab wait above — use the broad-search
         // helper, not a `tabBars`-typed query.
-        tap(containing: "指標")
-        XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicators list did not load")
+        // 2026-10-09: 「指標」の文字ではホームの「経済指標」の行を押すことがあったので、
+        // タブの目印(V5BottomBarの`v5Tab1`)で押す。
+        tapIdentifier("v5Tab1")
+        if !waitForAnyElement(containing: "米国CPI", timeout: 15) {
+            capture("05-Indicators-diag")
+            XCTFail("Indicators list did not load")
+        }
         capture("05-Indicators")
 
         // SCR-006 指標詳細

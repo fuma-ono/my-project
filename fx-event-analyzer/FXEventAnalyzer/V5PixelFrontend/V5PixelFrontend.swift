@@ -598,7 +598,11 @@ struct V5BottomBar: View {
         .onTapGesture {
             selected = index
         }
+        // UIテストが画面内の同じ文字(ホームの「経済指標」など)と取り違えないよう、
+        // タブ1つを1つの要素にまとめて目印を付ける(2026-10-09)。
+        .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("v5Tab\(index)")
     }
 }
 
