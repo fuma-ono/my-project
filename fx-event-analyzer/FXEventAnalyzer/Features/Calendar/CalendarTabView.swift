@@ -170,7 +170,10 @@ private struct CalendarMonthCard: View {
                     .foregroundStyle(isSelected ? .white : Self.weekdayColor(column: column))
                 HStack(spacing: 1.5) {
                     ForEach(Array(dots.enumerated()), id: \.offset) { _, importance in
-                        Circle().fill(HomeView.importanceBadgeColors(importance).border).frame(width: 3, height: 3)
+                        // 選んだ日は水色の円と重なって見えにくいので、白くふちどる(HQ指示 2026-10-08)。
+                        Circle().fill(HomeView.importanceBadgeColors(importance).border)
+                            .overlay(Circle().stroke(Color.white, lineWidth: isSelected ? 0.6 : 0))
+                            .frame(width: 3, height: 3)
                     }
                 }
                 .offset(y: 7.5)
