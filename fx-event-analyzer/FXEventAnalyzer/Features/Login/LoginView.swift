@@ -55,6 +55,16 @@ struct LoginView: View {
     let sessionExpired: Bool
     @State private var pendingFeatureMessage: String?
     @FocusState private var focusedField: Field?
+    // HQ指示(2026-10-09、SignUp/PasswordReset本実装で判明): このスクリーン
+    // だけ`NavigationStack(path:)`に明示的なpathを束縛しておらず(他の全画面は
+    // `NavigationStack(path: $path)`で自前の`NavigationPath`を持つ ——
+    // HomeView/IndicatorsView/SearchView/CalendarTabView参照)、実機CIの
+    // XCUITestで「新規登録」NavigationLinkをタップしてもタップ自体は成功
+    // 扱いになる一方、実際には画面遷移が一度も発生しないことが判明した
+    // (失敗時に撮れたスクリーンショットがLogin画面のまま)。コードベースで
+    // 唯一NavigationLink(value:)によるpushを一度も自動テストされていなかった
+    // 画面がこの非束縛パターンだったため、既に実績のある束縛パターンに揃えた。
+    @State private var path = NavigationPath()
 
     private enum Field {
         case email, password
@@ -71,7 +81,7 @@ struct LoginView: View {
         // のまま — 見た目は変更していない)。両画面は当初`PlaceholderScreenView`
         // だったが、HQ指示(2026-10-09)で`SignUpView`/`PasswordResetView`の
         // 本実装に置き換えた。
-        NavigationStack {
+        NavigationStack(path: $path) {
         GeometryReader { geometry in
             ZStack {
                 DesignTokens.Colors.brandBackgroundGradient.ignoresSafeArea()

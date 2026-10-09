@@ -50,9 +50,15 @@ final class ScreenshotTests: XCTestCase {
         // SCR-002 新規会員登録 / SCR-003 パスワード再設定(HQ指示
         // 2026-10-09「新規会員登録画面とパスワード再設定画面を作成して」で
         // placeholderから本実装に切り替わったため、他の実装済み画面と同様に
-        // 撮影する)。どちらもLoginと同じNavigationStackにpushされる通常の
-        // ナビゲーションバー付き画面なので、戻るボタンは
-        // `navigationBars.buttons`の先頭要素(システム標準のBackボタン)。
+        // 撮影する)。実CI実行(commit 7bcb496)で一度失敗: 「新規登録」
+        // NavigationLinkのタップはSynthesize成功と報告されるのに実際には
+        // 画面遷移が一度も起きていなかった(失敗時のスクリーンショットが
+        // Login画面のままだった)。原因は`LoginView`だけが`NavigationStack`に
+        // 明示的な`NavigationPath`を束縛していなかったこと(Home/Indicators/
+        // Search/Calendarは全て`NavigationStack(path: $path)`)と判明し、
+        // `LoginView`に`path`を追加して揃えた(`LoginView.swift`のコメント
+        // 参照)。戻るボタンは`navigationBars.buttons`の先頭要素(システム
+        // 標準のBackボタン)。
         tap(containing: "新規登録")
         XCTAssertTrue(waitForAnyElement(containing: "パスワード(確認)", timeout: 15), "Sign Up screen did not load")
         capture("02-SignUp")
