@@ -139,16 +139,21 @@ enum CountryFlag {
         }
     }
 
-    /// ISO 3166-1 alpha-2国コード → 日本語の国名/地域名。SCR-011検索結果
-    /// 行のサブタイトル(「米国 | 経済指標」)用に追加(HQ指示 2026-10-09)。
-    /// `imageName(for:)`と同じ9つの対応国コードのみ扱い、対応が無ければ
-    /// 国コードをそのまま返す(存在しない国名を捏造しない)。
-    static func japaneseName(for countryCode: String) -> String {
+    /// 国・地域コード → 日本語名(SCR-006の「対象国・地域」)。対応が無ければコードのまま。
+    /// SCR-011検索結果行のサブタイトル(「米国 | 経済指標」)にも使う
+    /// (HQ指示 2026-10-09)。別アカウント(claude/fx-settings-screens)の
+    /// 実装と関数名・対応表を揃えた(HQ指示「文字サイズのルールとかを
+    /// 別アカウントのクロードコードから引き継いで」)。
+    static func japaneseName(forCountry countryCode: String) -> String {
         switch countryCode.uppercased() {
         case "US": return "米国"
         case "JP": return "日本"
-        case "EU": return "ユーロ圏"
         case "GB": return "英国"
+        case "EU", "EA": return "ユーロ圏"
+        case "DE": return "ドイツ"
+        case "FR": return "フランス"
+        case "IT": return "イタリア"
+        case "ES": return "スペイン"
         case "AU": return "豪州"
         case "CA": return "カナダ"
         case "CN": return "中国"

@@ -38,6 +38,19 @@ import SwiftUI
 ///   Simulator/XCUITest limitation, not a visual change) — `@FocusState`
 ///   + an explicit `.onTapGesture` forces the focus assignment, the same
 ///   fix Login needed.
+///
+/// HQ指摘(2026-10-09、5回目)「文字サイズのルールとかを別アカウントの
+/// クロードコードから引き継いで」「全体的にサイズが小さい」: 初版は
+/// 旧`SearchView`(最初の7〜9pt中心)の値をそのまま踏襲していたが、
+/// `claude/fx-settings-screens`ブランチが指標詳細(SCR-006)等で確立した
+/// 「名前10.5・見出し9.5・本文/サブタイトル8.5・印7前後」という文字サイズ
+/// 体系と、数字・英字混在の見た目の揺れを無くす`NotoText.text(_:size:)`
+/// (日本語だけNotoにする`V5JPFont`と違い、文字列全体をNoto Sans JPで
+/// 統一する — 時刻のような数字と日本語が並ぶ行でサイズがちぐはぐに
+/// 見える問題の対策、`NotoText.swift`参照)に合わせて全面的に引き上げた。
+/// `CountryFlag.japaneseName(forCountry:)`も同ブランチの関数名・対応表に
+/// 揃えた(元は本画面実装時に`japaneseName(for:)`という別名・簡略版の
+/// 対応表で独自に追加していた)。
 struct SearchView: View {
     @StateObject private var viewModel: IndicatorsViewModel
     @State private var path = NavigationPath()
@@ -88,14 +101,13 @@ struct SearchView: View {
         HStack {
             Image(systemName: "magnifyingglass").foregroundStyle(V5P.muted)
             TextField("", text: $viewModel.searchText)
-                .font(.system(size: 7))
+                .font(.system(size: 8.5))
                 .foregroundStyle(.white)
                 .accessibilityLabel("検索")
                 .focused($searchFieldFocused)
                 .onTapGesture { searchFieldFocused = true }
                 .placeholder(when: viewModel.searchText.isEmpty) {
-                    Text("指標名・通貨・キーワードで検索")
-                        .font(.system(size: 7))
+                    NotoText.text("指標名・通貨・キーワードで検索", size: 8.5)
                         .foregroundStyle(V5P.muted)
                         .allowsHitTesting(false)
                 }
@@ -112,7 +124,7 @@ struct SearchView: View {
         HStack(spacing: 5) {
             ForEach(SearchFilter.allCases) { filter in
                 Button { selectedFilter = filter } label: {
-                    Text(filter.title).font(.system(size: 7, weight: .semibold)).foregroundStyle(.white)
+                    NotoText.text(filter.title, size: 8).foregroundStyle(.white)
                         .padding(.horizontal, 10).padding(.vertical, 5)
                         .background(selectedFilter == filter ? V5P.blue : V5P.panel2, in: Capsule())
                 }.buttonStyle(.plain)
@@ -144,8 +156,7 @@ struct SearchView: View {
 
     private var popularKeywordsPanel: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("人気の検索キーワード")
-                .font(.system(size: 9, weight: .bold))
+            NotoText.text("人気の検索キーワード", size: 9.5)
                 .foregroundStyle(.white)
 
             let rows = Self.popularKeywords.chunked(into: 4)
@@ -155,8 +166,7 @@ struct SearchView: View {
                         Button {
                             viewModel.searchText = keyword
                         } label: {
-                            Text(keyword)
-                                .font(.system(size: 7, weight: .semibold))
+                            NotoText.text(keyword, size: 8)
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 6)
@@ -177,8 +187,7 @@ struct SearchView: View {
 
     private var recentSearchSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("最近の検索履歴")
-                .font(.system(size: 9, weight: .bold))
+            NotoText.text("最近の検索履歴", size: 9.5)
                 .foregroundStyle(.white)
 
             ForEach(recentSearches.prefix(4)) { entry in
@@ -193,13 +202,13 @@ struct SearchView: View {
 
     private func historyRow(_ entry: RecentSearchEntry) -> some View {
         HStack(spacing: 8) {
-            CountryFlagView(countryCode: entry.countryCode, diameter: 20)
-            Text(entry.term).font(.system(size: 8)).foregroundStyle(.white).lineLimit(1)
+            CountryFlagView(countryCode: entry.countryCode, diameter: 22)
+            NotoText.text(entry.term, size: 9.5).foregroundStyle(.white).lineLimit(1)
             Spacer()
-            Image(systemName: "chevron.right").font(.system(size: 8, weight: .semibold)).foregroundStyle(V5P.muted)
+            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(V5P.muted)
         }
         .padding(.horizontal, 8)
-        .frame(height: 32)
+        .frame(height: 36)
         .background(V5P.panel, in: RoundedRectangle(cornerRadius: 6))
     }
 
@@ -229,22 +238,21 @@ struct SearchView: View {
 
     private func resultRow(_ indicator: IndicatorSummary) -> some View {
         HStack(spacing: 8) {
-            CountryFlagView(countryCode: indicator.countryCode, diameter: 26)
+            CountryFlagView(countryCode: indicator.countryCode, diameter: 28)
             VStack(alignment: .leading, spacing: 2) {
-                Text(indicator.name).font(.system(size: 8, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                NotoText.text(indicator.name, size: 10.5).foregroundStyle(.white).lineLimit(1)
                 HStack(spacing: 4) {
-                    Text(CountryFlag.japaneseName(for: indicator.countryCode))
-                    Text("|")
-                    Text("経済指標")
+                    NotoText.text(CountryFlag.japaneseName(forCountry: indicator.countryCode), size: 8.5)
+                    NotoText.text("|", size: 8.5)
+                    NotoText.text("経済指標", size: 8.5)
                 }
-                .font(.system(size: 6.5))
                 .foregroundStyle(V5P.muted)
             }
             Spacer()
-            Image(systemName: "chevron.right").font(.system(size: 8, weight: .semibold)).foregroundStyle(V5P.muted)
+            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(V5P.muted)
         }
         .padding(.horizontal, 8)
-        .frame(height: 40)
+        .frame(height: 44)
         .background(V5P.panel, in: RoundedRectangle(cornerRadius: 6))
     }
 }
