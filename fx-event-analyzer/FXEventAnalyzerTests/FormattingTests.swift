@@ -98,38 +98,23 @@ final class ValueFormatUnitTests: XCTestCase {
 }
 
 final class MovementAnalysisTextTests: XCTestCase {
-    private func entry(_ timeframe: String, _ pips: Double?, up: Double? = nil, down: Double? = nil, status: DataQualityStatus = .ready) -> ReactionTimeframeEntry {
+    private func entry(_ timeframe: String, _ pips: Double?, status: DataQualityStatus = .ready) -> ReactionTimeframeEntry {
         ReactionTimeframeEntry(timeframe: timeframe, postReleasePrice: nil, movement: nil, pips: pips, changePercent: nil,
-                               maxUpward: nil, maxDownward: nil, maxUpwardPips: up, maxDownwardPips: down, analysisStatus: status)
+                               maxUpward: nil, maxDownward: nil, maxUpwardPips: nil, maxDownwardPips: nil, analysisStatus: status)
     }
 
-    func testDescribesOnlyTheNumbers() {
+    func testShortTextWithTheGeneralView() {
         let text = MovementAnalysisText.build(
-            reactions: [entry("1m", -8.2), entry("5m", -24.5), entry("15m", -41.3), entry("60m", -52, up: 3, down: -55.1)],
-            actual: 3.1, forecast: 3.2, unit: "%"
-        )
-        XCTAssertEqual(text, "結果は予想を0.1%下回った。発表後1分で8.2pips下落した。その後も下落が続き、15分後には41.3pips下落、60分後には52pips下落した。60分間の最大の上昇幅は+3pips、最大の下落幅は-55.1pipsだった。")
-    }
-
-    func testAddsTheGeneralViewForTheDirectionOfTheSurprise() {
-        let text = MovementAnalysisText.build(
-            reactions: [entry("1m", -8.2)], actual: 3.1, forecast: 3.2, unit: "%",
+            reactions: [entry("1m", -8.2), entry("5m", -24.5), entry("15m", -41.3), entry("60m", -38.9)],
+            actual: 3.1, forecast: 3.2, unit: "%",
             marketViewAbove: "上回るとドルが買われやすいとされる。", marketViewBelow: "下回るとドルが売られやすいとされる。"
         )
-        XCTAssertEqual(text, "結果は予想を0.1%下回った。下回るとドルが売られやすいとされる。発表後1分で8.2pips下落した。")
-    }
-
-    func testPartialRecoveryAfterFifteenMinutes() {
-        let text = MovementAnalysisText.build(
-            reactions: [entry("1m", -8.2), entry("15m", -41.3), entry("60m", -38.9, up: 4.1, down: -43.6)],
-            actual: nil, forecast: nil, unit: nil
-        )
-        XCTAssertEqual(text, "発表後1分で8.2pips下落した。その後も下落が続き、15分後には41.3pips下落したが、60分後には38.9pipsまで戻した。60分間の最大の上昇幅は+4.1pips、最大の下落幅は-43.6pipsだった。")
+        XCTAssertEqual(text, "結果は予想を0.1%下回った。下回るとドルが売られやすいとされる。発表後1分で8.2pips、15分で41.3pips下落した。")
     }
 
     func testReversalAndMissingData() {
         let text = MovementAnalysisText.build(reactions: [entry("1m", 5), entry("15m", -3)], actual: nil, forecast: nil, unit: nil)
-        XCTAssertEqual(text, "発表後1分で5pips上昇した。その後は反対の方向に動き、15分後には3pips下落した。")
+        XCTAssertEqual(text, "発表後1分で5pips上昇したが、15分後には3pips下落した。")
         XCTAssertNil(MovementAnalysisText.build(reactions: [entry("1m", nil, status: .dataPending)], actual: 1, forecast: 1, unit: nil))
     }
 }

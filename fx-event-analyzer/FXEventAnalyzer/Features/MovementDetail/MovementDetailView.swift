@@ -75,8 +75,8 @@ struct MovementDetailView: View {
         return VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 7) {
                 HStack(spacing: -4) {
-                    CountryFlagView(currencyCode: String(symbol.prefix(3)), diameter: 17)
-                    CountryFlagView(currencyCode: String(symbol.suffix(3)), diameter: 17)
+                    CountryFlagView(currencyCode: String(symbol.prefix(3)), diameter: 20)
+                    CountryFlagView(currencyCode: String(symbol.suffix(3)), diameter: 20)
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     NotoText.text(FXPairSymbol.displayName(symbol), size: 11).foregroundStyle(.white)
@@ -139,12 +139,7 @@ struct MovementDetailView: View {
         case .error(let message):
             ErrorView(title: "チャート取得に失敗しました", message: message, onRetry: { viewModel.retryChart() })
         case .loaded(let chart):
-            // HQ指示(2026-10-09)「参考画像のように外枠で囲んで」。
             CandleChart(chart: chart, digits: viewModel.symbol.hasSuffix("JPY") ? 2 : 4, timeframe: viewModel.selectedTimeframe)
-                .padding(.leading, 4)
-                .padding(.vertical, 5)
-                .background(Rectangle().fill(Color.black.opacity(0.18)))
-                .overlay(Rectangle().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.8))
         }
     }
 
@@ -164,7 +159,7 @@ struct MovementDetailView: View {
                     .lineSpacing(1.5)
                     .fixedSize(horizontal: false, vertical: true)
                 // 1画面に収めるため、価格の説明もここにまとめた(HQ指示 2026-10-09)。
-                NotoText.text("※ 上の価格は発表60分後、変化は発表直前との比較。文は値動きの数値と指標の一般的な見方から作成しており、今回の値動きの理由を断定するものではない。", size: 6)
+                NotoText.text("※ 価格は発表60分後。文は数値と一般的な見方から作成し、理由を断定するものではない。", size: 6)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -261,6 +256,13 @@ private struct CandleChart: View {
         }
         .chartYScale(domain: (minY - pad)...(maxY + pad))
         .chartXScale(domain: window.from...window.to)
+        // HQ指示(2026-10-09)「数字ではなくローソク足の部分を枠で囲んで」: 目盛りの数字・時刻の
+        // 外側ではなく、描画領域だけに角のない枠を付ける。
+        .chartPlotStyle { plot in
+            plot
+                .background(Color.black.opacity(0.18))
+                .overlay(Rectangle().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.8))
+        }
         .chartYAxis {
             AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { value in
                 // HQ指示(2026-10-09)「縦線横線がしっかり見えるように」。
