@@ -2228,3 +2228,5 @@ AdMobのapp-ads.txt確認・アプリレベル審査が完了してから数日�
   - 提出詳細: https://expo.dev/accounts/fuma-ono/projects/kashikari/submissions/6d9d23cf-b549-4450-bcc3-d3d98031df40
 
 **オーナー側の対応が必要**: Appleの処理完了(アップロード後5〜10分程度)を待ってから、App Store Connect(https://appstoreconnect.apple.com/apps/6808062809/testflight/ios )で新しいバージョン(1.2.1)を作成し、このビルド(202609080026)を紐付けて審査へ提出してほしい。審査が通ったら、①1.1以前のバージョンを開いてアップデート促進アラートが出ること、②広告(バナー・精算完了時のインタースティシャル)が実際に表示されることの両方を実機で確認してほしい。
+
+**追記**: オーナーが審査へ提出した。結果待ち。
