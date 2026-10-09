@@ -13,7 +13,10 @@ import SwiftUI
 /// 非表示を切り替える(参考画像のアイコンが示唆する通りの実機能)。
 /// ブランドマーク+タイトルは当初参考画像通り上部に表示していたが、HQ指示
 /// (2026-10-09、4回目)「アイコンとタイトルはなくして、その分上にあげて」
-/// で削除し、見出しをその分上に詰めた。
+/// で削除し、見出しをその分上に詰めた。サブタイトルは一度1行化したが
+/// (HQ指示 2026-10-09、3回目)、HQ指示(2026-10-09、5回目)「アカウントを
+/// 作成して、の部分で改行を入れて」で参考画像通りの2行に戻し、見出しの
+/// 上部余白は`PasswordResetView`と揃えて縦位置を一致させた。
 struct SignUpView: View {
     @StateObject private var viewModel: SignUpViewModel
     @FocusState private var focusedField: Field?
@@ -45,7 +48,7 @@ struct SignUpView: View {
                                 .padding(.horizontal, DesignTokens.Spacing.lg)
                         } else {
                             headingBlock
-                                .padding(.top, 16)
+                                .padding(.top, 20)
                             formPanel
                                 .padding(.top, 18)
                                 .padding(.horizontal, DesignTokens.Spacing.lg)
@@ -94,12 +97,10 @@ struct SignUpView: View {
             Text("新規会員登録")
                 .font(DesignTokens.Typography.title)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
-            Text("アカウントを作成して、すべての機能を利用しましょう")
+            Text("アカウントを作成して、\nすべての機能を利用しましょう")
                 .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .padding(.horizontal, DesignTokens.Spacing.lg)
+                .multilineTextAlignment(.center)
         }
     }
 
