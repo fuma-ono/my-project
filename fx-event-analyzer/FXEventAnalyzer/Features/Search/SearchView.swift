@@ -161,16 +161,18 @@ struct SearchView: View {
 
             let rows = Self.popularKeywords.chunked(into: 4)
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                HStack(spacing: 6) {
+                HStack(spacing: 5) {
                     ForEach(row, id: \.self) { keyword in
                         Button {
                             viewModel.searchText = keyword
                         } label: {
                             NotoText.text(keyword, size: 8)
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 8)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .padding(.horizontal, 5)
                                 .padding(.vertical, 6)
                                 .frame(maxWidth: .infinity)
+                                .foregroundStyle(.white)
                                 .background(V5P.panel2, in: Capsule())
                                 .overlay(Capsule().stroke(V5P.line.opacity(0.5), lineWidth: 1))
                         }.buttonStyle(.plain)
@@ -237,10 +239,18 @@ struct SearchView: View {
     }
 
     private func resultRow(_ indicator: IndicatorSummary) -> some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             CountryFlagView(countryCode: indicator.countryCode, diameter: 28)
             VStack(alignment: .leading, spacing: 2) {
-                NotoText.text(indicator.name, size: 10.5).foregroundStyle(.white).lineLimit(1)
+                // 長い指標名が`.lineLimit(1)`だと末尾切れになるため2行まで
+                // 許可する。`NotoText.text`は(`V5JPFont.text`と違い)文字列を
+                // 日本語/非日本語ランに分割して`Text`を連結したりしない
+                // 単一の`Text`なので、`V5JPFont`で必要だった
+                // `wrappingText`回避策は不要 — 普通に`.lineLimit(2)`で
+                // 折り返せる。
+                NotoText.text(indicator.name, size: 10.5)
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
                 HStack(spacing: 4) {
                     NotoText.text(CountryFlag.japaneseName(forCountry: indicator.countryCode), size: 8.5)
                     NotoText.text("|", size: 8.5)
@@ -252,7 +262,7 @@ struct SearchView: View {
             Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(V5P.muted)
         }
         .padding(.horizontal, 8)
-        .frame(height: 44)
+        .padding(.vertical, 8)
         .background(V5P.panel, in: RoundedRectangle(cornerRadius: 6))
     }
 }
