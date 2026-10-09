@@ -84,7 +84,7 @@ private struct CalendarMonthCard: View {
     let onNeedsPro: () -> Void
     // 保存プロパティを`private`にすると自動の`init(viewModel:)`も`private`になり、
     // 外から作れなくなるので計算プロパティにしている。
-    private var columns: [GridItem] { Array(repeating: GridItem(.flexible(), spacing: 2), count: 7) }
+    private var columns: [GridItem] { Array(repeating: GridItem(.flexible(), spacing: 0), count: 7) }
 
     var body: some View {
         VStack(spacing: 4) {
@@ -101,12 +101,12 @@ private struct CalendarMonthCard: View {
             .frame(height: 20)
             HStack(spacing: 0) {
                 ForEach(Array(viewModel.weekdaySymbols.enumerated()), id: \.offset) { index, symbol in
-                    NotoText.text(symbol, size: 7)
+                    NotoText.text(symbol, size: 8.5)
                         .foregroundStyle(Self.weekdayColor(column: index))
                         .frame(maxWidth: .infinity)
                 }
             }
-            LazyVGrid(columns: columns, spacing: 2) {
+            LazyVGrid(columns: columns, spacing: 0) {
                 ForEach(viewModel.gridDays, id: \.self) { day in
                     dayCell(day)
                 }
@@ -173,12 +173,11 @@ private struct CalendarMonthCard: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 23)
-            .background(
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(Color.white.opacity(0.03))
-                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.5))
-            )
             .opacity(availability != .allowed ? 0.15 : inMonth ? 1 : 0.35)
+            // HQ指示(2026-10-08)「カレンダーのように縦線と横線を交わるように」: 各マスの
+            // 枠を間を空けずに並べ、隣どうしの線を重ねて1本の罫線にする。薄くした
+            // マスでも線の濃さは変えない(`opacity`の後に付ける)。
+            .overlay(Rectangle().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.5))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -226,24 +225,24 @@ private struct CalendarDayList: View {
     }
 
     private func row(_ item: CalendarItem) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
             Text(item.hasTime ? Self.timeFormatter.string(from: item.datetime) : "未定")
-                .font(.system(size: 8.5, weight: .bold))
+                .font(.system(size: 9.5, weight: .bold))
                 .monospacedDigit()
                 .foregroundStyle(.white)
                 // 幅26では「08:5／0」と折り返していたので、1行に固定して幅を広げた。
                 .lineLimit(1)
                 .fixedSize()
-                .frame(width: 28, alignment: .leading)
+                .frame(width: 31, alignment: .leading)
             CountryFlagView(countryCode: item.countryCode, diameter: 14)
-            NotoText.text(item.currencyCode, size: 7)
+            NotoText.text(item.currencyCode, size: 8)
                 .foregroundStyle(.white)
-                .frame(width: 20, alignment: .leading)
+                .frame(width: 23, alignment: .leading)
             // 指標名はホームと同じくカッコの前まで(正式名は詳細画面)。
-            NotoText.text(item.kind == .indicator ? HomeView.shortIndicatorName(item.title) : item.title, size: 8)
+            NotoText.text(item.kind == .indicator ? HomeView.shortIndicatorName(item.title) : item.title, size: 9)
                 .foregroundStyle(.white)
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(0.8)
             Spacer(minLength: 4)
             let colors = HomeView.importanceBadgeColors(item.importance)
             NotoText.text(item.importance.rawValue, size: 6.5)
