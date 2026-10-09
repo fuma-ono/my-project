@@ -93,10 +93,7 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 15), "Event Detail did not load")
         capture("07-EventDetail")
 
-        // SCR-008 相場反応詳細。2026-10-09の作り直しで、「通貨ペアを選択して詳細を
-        // 見る」で開く一覧の「USD/JPYの相場反応を見る」から進む。
-        tap(containing: "通貨ペアを選択して詳細を見る")
-        XCTAssertTrue(waitForAnyElement(containing: "USD/JPYの相場反応を見る", timeout: 10), "Pair list did not open")
+        // SCR-008 相場反応詳細。2026-10-09から、値動きの表のUSD/JPYの行から直接進む。
         tap(containing: "USD/JPYの相場反応を見る")
         XCTAssertTrue(waitForAnyElement(containing: "過去の値動きと比較する", timeout: 15), "Movement Detail did not load")
         capture("08-MovementDetail")
