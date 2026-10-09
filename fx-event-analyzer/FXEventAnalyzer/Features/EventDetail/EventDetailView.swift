@@ -58,19 +58,8 @@ struct EventDetailView: View {
             loadingScaffold { FXEmptyState(icon: "lock.fill", title: "この情報はご利用いただけません", message: "現在のプランではこのイベント情報を閲覧できません。") }
         case .loaded(let response):
             V5Viewport {
-                V5Header(
-                    title: "イベント詳細", back: true,
-                    isFavorite: favorites.isFavorite(.event, id: eventId),
-                    onBack: { dismiss() },
-                    onToggleFavorite: {
-                        // 無料プランはお気に入り件まで(HQ指示 2026-10-08)。
-                        guard favorites.canToggle(.event, id: eventId, max: plan.limits.favoritesMax) else {
-                            planPrompt = "無料プランのお気に入りは\(plan.limits.favoritesMax ?? 0)件までです。プレミアムプランなら件数の制限なく登録できます。"
-                            return
-                        }
-                        favorites.toggle(.event, id: eventId)
-                    }
-                )
+                // HQ指示(2026-10-09)「お気に入りの☆はここでは消して」。
+                V5Header(title: "イベント詳細", back: true, onBack: { dismiss() })
 
                 // HQ指示(2026-10-09)の参考画像で作り直した本体(EventDetailCards)。
                 ScrollView(showsIndicators: false) {

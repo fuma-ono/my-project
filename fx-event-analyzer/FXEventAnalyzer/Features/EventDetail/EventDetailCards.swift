@@ -16,19 +16,19 @@ struct EventDetailCards: View {
         VStack(alignment: .leading, spacing: 8) {
             header
             results
-            NotoText.text("主要通貨ペアの値動き（pips）", size: 9.5)
+            NotoText.text("主要通貨ペアの値動き（pips）", size: 11)
                 .foregroundStyle(.white)
                 .padding(.horizontal, 4)
                 .padding(.top, 2)
             reactionTable
             Button { withAnimation(.easeInOut(duration: 0.2)) { showsPairs.toggle() } } label: {
                 HStack(spacing: 5) {
-                    NotoText.text("通貨ペアを選択して詳細を見る", size: 8.5)
+                    NotoText.text("通貨ペアを選択して詳細を見る", size: 10)
                     Image(systemName: showsPairs ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 7, weight: .semibold))
+                        .font(.system(size: 8, weight: .semibold))
                 }
-                    .foregroundStyle(.white)
-                    .frame(width: 214, height: 29)
+                    .foregroundStyle(V5P.cyan)
+                    .frame(width: 214, height: 32)
                     .background(
                         RoundedRectangle(cornerRadius: 7)
                             .fill(SettingsCardStyle.cardFill)
@@ -105,7 +105,7 @@ struct EventDetailCards: View {
             }
             Spacer(minLength: 4)
             VStack(alignment: .trailing, spacing: 5) {
-                NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 6.5)
+                NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 8)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                     .fixedSize()
                 let colors = HomeView.importanceBadgeColors(event.importance)
@@ -142,25 +142,26 @@ struct EventDetailCards: View {
     }
 
     private var divider: some View {
-        Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 0.5, height: 38)
+        Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 0.5, height: 50)
     }
 
     private func resultColumn(_ title: String, value: Double?, unit: String?, note: String?) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            NotoText.text(title, size: 7.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+        // HQ指示(2026-10-09)「結果、予想、前回と数字、前回比を大きく中央に」。
+        VStack(alignment: .center, spacing: 3) {
+            NotoText.text(title, size: 9).foregroundStyle(SettingsCardStyle.subtitleColor)
             Text(value.map { ValueFormat.withUnit($0, unit: unit) } ?? "--")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 17, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-            NotoText.text(note ?? " ", size: 6)
+            NotoText.text(note ?? " ", size: 7.5)
                 .foregroundStyle(SettingsListLayout.sectionTitleColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
-        .padding(.horizontal, 9)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     /// 「(前回比 -0.2%)」。結果と前回がそろっているときだけ。
@@ -181,67 +182,74 @@ struct EventDetailCards: View {
         return response.relatedFxPairs.map { EventMajorFxReaction(fxPairId: $0.fxPairId, symbol: $0.symbol, reactions: [$0.reaction]) }
     }
 
+    /// HQ指示(2026-10-09)「縦線と横線を交わらせたきれいな表に」: どのマスも同じ幅・
+    /// 高さの枠で囲み、隣どうしの線を重ねて1本の罫線にする(経済カレンダーと同じ作り)。
     private var reactionTable: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                Color.clear.frame(width: Self.pairColumnWidth)
+                cell(width: Self.pairColumnWidth) { Color.clear }
                 ForEach(["1分", "5分", "15分"], id: \.self) { label in
-                    NotoText.text(label, size: 7.5)
-                        .foregroundStyle(SettingsCardStyle.subtitleColor)
-                        .frame(maxWidth: .infinity)
-                        .overlay(alignment: .leading) { gridLine }
+                    cell(width: Self.valueColumnWidth) {
+                        NotoText.text(label, size: 9).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    }
                 }
             }
-            .frame(height: 20)
+            .frame(height: Self.headerHeight)
             ForEach(pairs) { pair in
-                Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
                 HStack(spacing: 0) {
-                    HStack(spacing: 5) {
-                        HStack(spacing: -3) {
-                            CountryFlagView(currencyCode: String(pair.symbol.prefix(3)), diameter: 11)
-                            CountryFlagView(currencyCode: String(pair.symbol.suffix(3)), diameter: 11)
+                    cell(width: Self.pairColumnWidth, alignment: .leading) {
+                        HStack(spacing: 5) {
+                            HStack(spacing: -3) {
+                                CountryFlagView(currencyCode: String(pair.symbol.prefix(3)), diameter: 12)
+                                CountryFlagView(currencyCode: String(pair.symbol.suffix(3)), diameter: 12)
+                            }
+                            NotoText.text(FXPairSymbol.displayName(pair.symbol), size: 9.5)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                         }
-                        NotoText.text(FXPairSymbol.displayName(pair.symbol), size: 8)
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .fixedSize()
+                        .padding(.leading, 7)
                     }
-                    .frame(width: Self.pairColumnWidth, alignment: .leading)
-                    .padding(.leading, 8)
                     ForEach(Self.timeframes, id: \.self) { timeframe in
-                        pipsText(pair.reaction(for: timeframe))
-                            .frame(maxWidth: .infinity)
-                            .overlay(alignment: .leading) { gridLine }
+                        cell(width: Self.valueColumnWidth) { pipsText(pair.reaction(for: timeframe)) }
                     }
                 }
-                .frame(height: 25)
+                .frame(height: Self.rowHeight)
             }
             if pairs.isEmpty {
-                Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
-                NotoText.text("値動きのデータはまだありません。", size: 8)
+                NotoText.text("値動きのデータはまだありません。", size: 8.5)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
-                    .frame(maxWidth: .infinity, minHeight: 32)
+                    .frame(width: 214, height: 34)
+                    .overlay(Rectangle().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.5))
             }
         }
         .frame(width: 214)
-        .background(AccountCardBackground())
+        .background(SettingsCardStyle.cardFill)
+        .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
+        .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }
 
-    private static let pairColumnWidth: CGFloat = 70
+    private static let pairColumnWidth: CGFloat = 80
+    private static let valueColumnWidth: CGFloat = (214 - 80) / 3
+    private static let headerHeight: CGFloat = 22
+    private static let rowHeight: CGFloat = 28
 
-    private var gridLine: some View {
-        Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 0.5).frame(maxHeight: .infinity)
+    private func cell(width: CGFloat, alignment: Alignment = .center, @ViewBuilder _ content: () -> some View) -> some View {
+        content()
+            .frame(width: width, alignment: alignment)
+            .frame(maxHeight: .infinity)
+            .overlay(Rectangle().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.5))
     }
 
     @ViewBuilder private func pipsText(_ reaction: EventReactionSummary?) -> some View {
         if let reaction, reaction.analysisStatus == .ready, let pips = reaction.pips {
             Text(ValueFormat.number(pips, fractionDigits: 1, signed: true))
-                .font(.system(size: 8.5, weight: .semibold))
+                .font(.system(size: 10, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(.white)
         } else {
             Text("--")
-                .font(.system(size: 8.5, weight: .semibold))
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
         }
     }
