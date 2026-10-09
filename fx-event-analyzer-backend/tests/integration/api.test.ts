@@ -70,6 +70,28 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       }
     });
 
+    it('includes market_view_above / market_view_below on every listed indicator (v1.18)', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/api/v1/indicators?limit=100',
+        headers: authHeader,
+      });
+      expect(response.statusCode).toBe(200);
+      const rows: Array<{ code: string; market_view_above: unknown; market_view_below: unknown }> = JSON.parse(
+        response.body,
+      ).data;
+      for (const row of rows) {
+        expect(row).toHaveProperty('market_view_above');
+        expect(row).toHaveProperty('market_view_below');
+      }
+      const seeded = rows.filter((row) => ['US_CPI', 'US_NFP', 'US_FOMC', 'JP_CPI', 'BOJ_RATE'].includes(row.code));
+      expect(seeded).toHaveLength(5);
+      for (const row of seeded) {
+        expect(row.market_view_above).toMatch(/予想を上回る|予想より高い/);
+        expect(row.market_view_below).toMatch(/予想を下回る|予想より低い/);
+      }
+    });
+
     it('filters by q (partial match, ILIKE)', async () => {
       const response = await ctx.app.inject({ method: 'GET', url: '/api/v1/indicators?q=CPI', headers: authHeader });
       const body = JSON.parse(response.body);
@@ -94,6 +116,13 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
         '金融政策への影響が大きい',
         '為替や株式市場に大きな影響を与える',
       ]);
+      // v1.18 (SCR-008): 一般的な見方 (結果が予想を上回った / 下回ったとき)。
+      expect(body.indicator.market_view_above).toBe(
+        '米国CPIが予想を上回ると、インフレの高止まりから利下げが遠のくとの見方が強まり、ドルが買われやすいとされる。',
+      );
+      expect(body.indicator.market_view_below).toBe(
+        '米国CPIが予想を下回ると、インフレの落ち着きから利下げが意識され、ドルが売られやすいとされる。',
+      );
       expect(body.related_fx_pairs.some((pair: { symbol: string }) => pair.symbol === 'USDJPY')).toBe(true);
     });
 

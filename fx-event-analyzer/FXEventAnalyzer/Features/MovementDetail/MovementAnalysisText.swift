@@ -11,7 +11,9 @@ enum MovementAnalysisText {
         reactions: [ReactionTimeframeEntry],
         actual: Double?,
         forecast: Double?,
-        unit: String?
+        unit: String?,
+        marketViewAbove: String? = nil,
+        marketViewBelow: String? = nil
     ) -> String? {
         func ready(_ timeframe: String) -> ReactionTimeframeEntry? {
             reactions.first { $0.timeframe == timeframe && $0.analysisStatus == .ready && $0.pips != nil }
@@ -26,6 +28,11 @@ enum MovementAnalysisText {
             } else {
                 let amount = ValueFormat.withUnit(abs(diff), unit: unit)
                 sentences.append("結果は予想を\(amount)\(diff > 0 ? "上回った" : "下回った")。")
+                // HQ指示(2026-10-09)「なぜ下落したのかを表示したい」: AIは使わず、指標ごとに
+                // 人が書いた「一般的な見方」を、上振れ・下振れに合わせて添える。
+                if let view = diff > 0 ? marketViewAbove : marketViewBelow, !view.isEmpty {
+                    sentences.append(view.hasSuffix("。") ? view : view + "。")
+                }
             }
         }
 

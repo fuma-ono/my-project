@@ -166,6 +166,9 @@ const INDICATOR_US_CPI = {
   source: 'U.S. Bureau of Labor Statistics',
   source_url: 'https://www.bls.gov/cpi/',
   favorable_direction: 'HIGHER_IS_POSITIVE',
+  market_view_above:
+    '米国CPIが予想を上回ると、インフレの高止まりから利下げが遠のくとの見方が強まり、ドルが買われやすいとされる。',
+  market_view_below: '米国CPIが予想を下回ると、インフレの落ち着きから利下げが意識され、ドルが売られやすいとされる。',
 };
 
 const INDICATORS_LIST = [
@@ -186,6 +189,10 @@ const INDICATORS_LIST = [
     source: 'U.S. Bureau of Labor Statistics',
     source_url: 'https://www.bls.gov/ces/',
     favorable_direction: 'HIGHER_IS_POSITIVE',
+    market_view_above:
+      '米国の非農業部門雇用者数が予想を上回ると、雇用の底堅さから利下げが遠のくとの見方が強まり、ドルが買われやすいとされる。',
+    market_view_below:
+      '米国の非農業部門雇用者数が予想を下回ると、雇用の減速から利下げが意識され、ドルが売られやすいとされる。',
   },
   {
     id: INDICATOR_ID_FOMC,
@@ -208,6 +215,10 @@ const INDICATORS_LIST = [
     source: 'Federal Reserve',
     source_url: 'https://www.federalreserve.gov/',
     favorable_direction: 'NEUTRAL',
+    market_view_above:
+      'FOMCの政策金利が予想より高い水準に決まると、米国の金利が高止まりするとの見方が強まり、ドルが買われやすいとされる。',
+    market_view_below:
+      'FOMCの政策金利が予想より低い水準に決まると、米国の金融緩和が進むとの見方が強まり、ドルが売られやすいとされる。',
   },
   {
     id: INDICATOR_ID_JP_CPI,
@@ -225,6 +236,9 @@ const INDICATORS_LIST = [
     source: '総務省統計局',
     source_url: 'https://www.stat.go.jp/',
     favorable_direction: 'HIGHER_IS_POSITIVE',
+    market_view_above: '日本CPIが予想を上回ると、物価の上昇から日銀の利上げ観測が強まり、円が買われやすいとされる。',
+    market_view_below:
+      '日本CPIが予想を下回ると、物価の伸び悩みから日銀の利上げが遠のくとの見方が強まり、円が売られやすいとされる。',
   },
 ];
 
@@ -252,6 +266,10 @@ const CALENDAR_INDICATORS = {
     source: '日本銀行',
     source_url: 'https://www.boj.or.jp/',
     favorable_direction: 'HIGHER_IS_POSITIVE',
+    market_view_above:
+      '国内企業物価指数が予想を上回ると、消費者物価への波及から日銀の利上げ観測が意識され、円が買われやすいとされる。',
+    market_view_below:
+      '国内企業物価指数が予想を下回ると、物価上昇の鈍化から日銀の利上げが遠のくとの見方が出て、円が売られやすいとされる。',
   },
   JP_TANKAN: {
     id: '11111111-1111-1111-1111-111111111202',
@@ -269,6 +287,10 @@ const CALENDAR_INDICATORS = {
     source: '日本銀行',
     source_url: 'https://www.boj.or.jp/',
     favorable_direction: 'HIGHER_IS_POSITIVE',
+    market_view_above:
+      '日銀短観の業況判断が予想を上回ると、景況感の改善から日銀の利上げ観測が意識され、円が買われやすいとされる。',
+    market_view_below:
+      '日銀短観の業況判断が予想を下回ると、景況感の悪化から日銀の利上げが遠のくとの見方が出て、円が売られやすいとされる。',
   },
   US_ISM_MFG: {
     id: '11111111-1111-1111-1111-111111111203',
@@ -290,6 +312,10 @@ const CALENDAR_INDICATORS = {
     source: 'Institute for Supply Management',
     source_url: 'https://www.ismworld.org/',
     favorable_direction: 'HIGHER_IS_POSITIVE',
+    market_view_above:
+      '米国ISM製造業景況指数が予想を上回ると、景気の底堅さから利下げが遠のくとの見方が出て、ドルが買われやすいとされる。',
+    market_view_below:
+      '米国ISM製造業景況指数が予想を下回ると、景気の減速懸念から利下げが意識され、ドルが売られやすいとされる。',
   },
   EU_HICP_FLASH: {
     id: '11111111-1111-1111-1111-111111111204',
@@ -307,6 +333,10 @@ const CALENDAR_INDICATORS = {
     source: 'Eurostat',
     source_url: 'https://ec.europa.eu/eurostat',
     favorable_direction: 'HIGHER_IS_POSITIVE',
+    market_view_above:
+      'ユーロ圏消費者物価指数が予想を上回ると、インフレの高止まりからECBの利下げが遠のくとの見方が強まり、ユーロが買われやすいとされる。',
+    market_view_below:
+      'ユーロ圏消費者物価指数が予想を下回ると、インフレの落ち着きからECBの利下げが意識され、ユーロが売られやすいとされる。',
   },
   US_JOBLESS_CLAIMS: {
     id: '11111111-1111-1111-1111-111111111205',
@@ -328,6 +358,10 @@ const CALENDAR_INDICATORS = {
     source: 'U.S. Department of Labor',
     source_url: 'https://www.dol.gov/',
     favorable_direction: 'LOWER_IS_POSITIVE',
+    market_view_above:
+      '米国新規失業保険申請件数が予想を上回ると、雇用の悪化懸念から利下げが意識され、ドルが売られやすいとされる。',
+    market_view_below:
+      '米国新規失業保険申請件数が予想を下回ると、雇用の底堅さから利下げが遠のくとの見方が出て、ドルが買われやすいとされる。',
   },
   AU_RBA_RATE: {
     id: '11111111-1111-1111-1111-111111111206',
@@ -345,6 +379,10 @@ const CALENDAR_INDICATORS = {
     source: 'Reserve Bank of Australia',
     source_url: 'https://www.rba.gov.au/',
     favorable_direction: 'NEUTRAL',
+    market_view_above:
+      'RBAの政策金利が予想より高い水準に決まると、金融引き締めが進むとの見方が強まり、豪ドルが買われやすいとされる。',
+    market_view_below:
+      'RBAの政策金利が予想より低い水準に決まると、金融緩和が進むとの見方が強まり、豪ドルが売られやすいとされる。',
   },
   GB_SERVICES_PMI: {
     id: '11111111-1111-1111-1111-111111111207',
@@ -366,6 +404,10 @@ const CALENDAR_INDICATORS = {
     source: 'S&P Global',
     source_url: 'https://www.pmi.spglobal.com/',
     favorable_direction: 'HIGHER_IS_POSITIVE',
+    market_view_above:
+      '英国サービス業PMIが予想を上回ると、景気の底堅さからBOEの利下げが遠のくとの見方が出て、ポンドが買われやすいとされる。',
+    market_view_below:
+      '英国サービス業PMIが予想を下回ると、景気の減速懸念からBOEの利下げが意識され、ポンドが売られやすいとされる。',
   },
   JP_GDP: {
     id: '11111111-1111-1111-1111-111111111208',
@@ -383,6 +425,10 @@ const CALENDAR_INDICATORS = {
     source: '内閣府',
     source_url: 'https://www.esri.cao.go.jp/',
     favorable_direction: 'HIGHER_IS_POSITIVE',
+    market_view_above:
+      '日本のGDP改定値が予想を上回ると、景気の底堅さから日銀の利上げ観測が意識され、円が買われやすいとされる。',
+    market_view_below:
+      '日本のGDP改定値が予想を下回ると、景気の弱さから日銀の利上げが遠のくとの見方が出て、円が売られやすいとされる。',
   },
   GB_GDP_MONTHLY: {
     id: '11111111-1111-1111-1111-111111111209',
@@ -400,6 +446,10 @@ const CALENDAR_INDICATORS = {
     source: 'Office for National Statistics',
     source_url: 'https://www.ons.gov.uk/',
     favorable_direction: 'HIGHER_IS_POSITIVE',
+    market_view_above:
+      '英国の月次GDPが予想を上回ると、景気の底堅さからBOEの利下げが遠のくとの見方が出て、ポンドが買われやすいとされる。',
+    market_view_below:
+      '英国の月次GDPが予想を下回ると、景気の減速懸念からBOEの利下げが意識され、ポンドが売られやすいとされる。',
   },
   EU_GDP: {
     id: '11111111-1111-1111-1111-111111111210',
@@ -417,6 +467,10 @@ const CALENDAR_INDICATORS = {
     source: 'Eurostat',
     source_url: 'https://ec.europa.eu/eurostat',
     favorable_direction: 'HIGHER_IS_POSITIVE',
+    market_view_above:
+      'ユーロ圏GDP改定値が予想を上回ると、景気の底堅さからECBの利下げが遠のくとの見方が出て、ユーロが買われやすいとされる。',
+    market_view_below:
+      'ユーロ圏GDP改定値が予想を下回ると、景気の減速懸念からECBの利下げが意識され、ユーロが売られやすいとされる。',
   },
   US_RETAIL_SALES: {
     id: '11111111-1111-1111-1111-111111111211',
@@ -434,6 +488,10 @@ const CALENDAR_INDICATORS = {
     source: 'U.S. Census Bureau',
     source_url: 'https://www.census.gov/retail/',
     favorable_direction: 'HIGHER_IS_POSITIVE',
+    market_view_above:
+      '米国小売売上高が予想を上回ると、個人消費の強さから利下げが遠のくとの見方が出て、ドルが買われやすいとされる。',
+    market_view_below:
+      '米国小売売上高が予想を下回ると、個人消費の弱さから利下げが意識され、ドルが売られやすいとされる。',
   },
   AU_EMPLOYMENT: {
     id: '11111111-1111-1111-1111-111111111212',
@@ -451,6 +509,10 @@ const CALENDAR_INDICATORS = {
     source: 'Australian Bureau of Statistics',
     source_url: 'https://www.abs.gov.au/',
     favorable_direction: 'LOWER_IS_POSITIVE',
+    market_view_above:
+      '豪州の失業率が予想を上回ると、雇用の悪化からRBAの利下げが意識され、豪ドルが売られやすいとされる。',
+    market_view_below:
+      '豪州の失業率が予想を下回ると、雇用の底堅さからRBAの利下げが遠のくとの見方が出て、豪ドルが買われやすいとされる。',
   },
   US_HOUSING_STARTS: {
     id: '11111111-1111-1111-1111-111111111213',
@@ -468,6 +530,8 @@ const CALENDAR_INDICATORS = {
     source: 'U.S. Census Bureau',
     source_url: 'https://www.census.gov/construction/nrc/',
     favorable_direction: 'HIGHER_IS_POSITIVE',
+    market_view_above: null,
+    market_view_below: null,
   },
   GB_RETAIL_SALES: {
     id: '11111111-1111-1111-1111-111111111214',
@@ -485,6 +549,10 @@ const CALENDAR_INDICATORS = {
     source: 'Office for National Statistics',
     source_url: 'https://www.ons.gov.uk/',
     favorable_direction: 'HIGHER_IS_POSITIVE',
+    market_view_above:
+      '英国小売売上高が予想を上回ると、個人消費の強さからBOEの利下げが遠のくとの見方が出て、ポンドが買われやすいとされる。',
+    market_view_below:
+      '英国小売売上高が予想を下回ると、個人消費の弱さからBOEの利下げが意識され、ポンドが売られやすいとされる。',
   },
   US_MFG_PMI_FLASH: {
     id: '11111111-1111-1111-1111-111111111215',
@@ -506,6 +574,10 @@ const CALENDAR_INDICATORS = {
     source: 'S&P Global',
     source_url: 'https://www.pmi.spglobal.com/',
     favorable_direction: 'HIGHER_IS_POSITIVE',
+    market_view_above:
+      '米国製造業PMI速報値が予想を上回ると、景気の底堅さから利下げが遠のくとの見方が出て、ドルが買われやすいとされる。',
+    market_view_below:
+      '米国製造業PMI速報値が予想を下回ると、景気の減速懸念から利下げが意識され、ドルが売られやすいとされる。',
   },
   BOJ_RATE: {
     id: '11111111-1111-1111-1111-111111111216',
@@ -523,6 +595,10 @@ const CALENDAR_INDICATORS = {
     source: '日本銀行',
     source_url: 'https://www.boj.or.jp/',
     favorable_direction: 'NEUTRAL',
+    market_view_above:
+      '日銀の政策金利が予想より高い水準に決まると、金融引き締めが進むとの見方が強まり、円が買われやすいとされる。',
+    market_view_below:
+      '日銀の政策金利が予想より低い水準に決まると、金融緩和的な姿勢が続くとの見方が強まり、円が売られやすいとされる。',
   },
   ECB_RATE: {
     id: '11111111-1111-1111-1111-111111111217',
@@ -544,6 +620,10 @@ const CALENDAR_INDICATORS = {
     source: 'European Central Bank',
     source_url: 'https://www.ecb.europa.eu/',
     favorable_direction: 'NEUTRAL',
+    market_view_above:
+      'ECBの政策金利が予想より高い水準に決まると、金融引き締めが進むとの見方が強まり、ユーロが買われやすいとされる。',
+    market_view_below:
+      'ECBの政策金利が予想より低い水準に決まると、金融緩和が進むとの見方が強まり、ユーロが売られやすいとされる。',
   },
   US_PCE: {
     id: '11111111-1111-1111-1111-111111111218',
@@ -561,6 +641,10 @@ const CALENDAR_INDICATORS = {
     source: 'U.S. Bureau of Economic Analysis',
     source_url: 'https://www.bea.gov/',
     favorable_direction: 'HIGHER_IS_POSITIVE',
+    market_view_above:
+      '米国PCEデフレーターが予想を上回ると、インフレの高止まりから利下げが遠のくとの見方が強まり、ドルが買われやすいとされる。',
+    market_view_below:
+      '米国PCEデフレーターが予想を下回ると、インフレの落ち着きから利下げが意識され、ドルが売られやすいとされる。',
   },
   JP_TOKYO_CPI: {
     id: '11111111-1111-1111-1111-111111111219',
@@ -578,6 +662,10 @@ const CALENDAR_INDICATORS = {
     source: '総務省統計局',
     source_url: 'https://www.stat.go.jp/',
     favorable_direction: 'HIGHER_IS_POSITIVE',
+    market_view_above:
+      '東京都区部CPIが予想を上回ると、全国の物価上昇を先取りする形で日銀の利上げ観測が意識され、円が買われやすいとされる。',
+    market_view_below:
+      '東京都区部CPIが予想を下回ると、物価の伸び悩みから日銀の利上げが遠のくとの見方が出て、円が売られやすいとされる。',
   },
   AU_RETAIL_SALES: {
     id: '11111111-1111-1111-1111-111111111220',
@@ -595,6 +683,10 @@ const CALENDAR_INDICATORS = {
     source: 'Australian Bureau of Statistics',
     source_url: 'https://www.abs.gov.au/',
     favorable_direction: 'HIGHER_IS_POSITIVE',
+    market_view_above:
+      '豪州小売売上高が予想を上回ると、個人消費の強さからRBAの利下げが遠のくとの見方が出て、豪ドルが買われやすいとされる。',
+    market_view_below:
+      '豪州小売売上高が予想を下回ると、個人消費の弱さからRBAの利下げが意識され、豪ドルが売られやすいとされる。',
   },
 };
 

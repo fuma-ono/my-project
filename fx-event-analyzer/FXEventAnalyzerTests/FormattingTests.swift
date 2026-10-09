@@ -111,6 +111,14 @@ final class MovementAnalysisTextTests: XCTestCase {
         XCTAssertEqual(text, "結果は予想を0.1%下回った。発表後1分で8.2pips下落した。その後も下落が続き、15分後には41.3pips下落、60分後には52pips下落した。60分間の最大の上昇幅は+3pips、最大の下落幅は-55.1pipsだった。")
     }
 
+    func testAddsTheGeneralViewForTheDirectionOfTheSurprise() {
+        let text = MovementAnalysisText.build(
+            reactions: [entry("1m", -8.2)], actual: 3.1, forecast: 3.2, unit: "%",
+            marketViewAbove: "上回るとドルが買われやすいとされる。", marketViewBelow: "下回るとドルが売られやすいとされる。"
+        )
+        XCTAssertEqual(text, "結果は予想を0.1%下回った。下回るとドルが売られやすいとされる。発表後1分で8.2pips下落した。")
+    }
+
     func testPartialRecoveryAfterFifteenMinutes() {
         let text = MovementAnalysisText.build(
             reactions: [entry("1m", -8.2), entry("15m", -41.3), entry("60m", -38.9, up: 4.1, down: -43.6)],

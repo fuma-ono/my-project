@@ -20,8 +20,14 @@ struct IndicatorSummary: Decodable, Identifiable, Equatable {
     var nameEn: String? = nil
     /// 注目される理由(SCR-006の箇条書き)。古いBackendではnil。
     var keyPoints: [String]? = nil
+    /// 一般的な見方(api-design v1.18、SCR-008の分析)。結果が予想を上回った/下回ったときに
+    /// 一般にどう動きやすいとされるか。人が書いた文で、今回の原因と断定するものではない。
+    var marketViewAbove: String? = nil
+    var marketViewBelow: String? = nil
 
     enum CodingKeys: String, CodingKey {
+        case marketViewAbove = "market_view_above"
+        case marketViewBelow = "market_view_below"
         case nameEn = "name_en"
         case keyPoints = "key_points"
         case id

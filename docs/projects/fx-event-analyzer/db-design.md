@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.10
+# FX Event Analyzer: DB詳細設計 v4.11
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -35,6 +35,7 @@
 - **v4.8**(2026-10-07): レビュー指摘の修正。`SupportRequest`の送信回数の上限を、件数の確認と保存を1つのDB関数`insert_support_request`で行う方式に変更(同時送信で上限を超えない)。`SupportRequest`のクライアント向けSELECTポリシーを削除し、anon / authenticatedの権限を取り消した(`classification` / `github_issue_*`をクライアントから読めないようにする。参照はBackend経由のみ)(3.17節・6章)。`apply_app_store_subscription`の戻り値に`product_id`を追加(3.2節)。Migration `20261007000001_support_requests_rate_limit.sql`・`20261007000002_apply_app_store_subscription_product_id.sql`
 - **v4.9**(2026-10-07): SCR-026 ホーム通貨ペア編集。`UserSettings`に`home_fx_pairs`(ホームに表示する通貨ペア、1〜3件・配列の順 = 表示順、NULL = 既定)を追加(3.14節)。Migration `20261007000003_home_fx_pairs.sql`。開発用seed(`supabase/seed.sql`)の`FxPair`に`GBPJPY` / `AUDUSD` / `GBPUSD` / `USDCHF` / `AUDJPY` / `CADJPY`を追加(価格データなし)
 - **v4.10**(2026-10-09): SCR-006 指標詳細の再デザイン。`EconomicIndicator`に`name_en`(英語名)と`key_points`(注目される理由の短文の配列、0〜6件・NULL要素と空文字は不可)を追加し、`description`は「概要」として日本語1〜2文で持つと明記した(3.4節)。Migration `20261009000001_economic_indicators_name_en_key_points.sql`。開発用seed(`supabase/seed.sql`)の5指標に`name_en`・`key_points`と日本語の`description`を入れた。API(api-design.md v1.16)では`key_points`のNULLを`[]`として返す
+- **v4.11**(2026-10-09): SCR-008 相場反応詳細の「一般的な見方」。`EconomicIndicator`に`market_view_above`(結果が予想を上回ったときの一般的な見方)・`market_view_below`(下回ったとき)を追加(3.4節)。人が書いた日本語1文(200文字以内・空白だけは不可)、NULL = 未登録。Migration `20261009000002_economic_indicators_market_views.sql`。開発用seedの5指標に両方を入れた。API(api-design.md v1.18)ではNULLを`null`のまま返す
 
 ---
 
@@ -189,6 +190,8 @@ IDX(user_id)
 | source | text | nullable | |
 | source_url | text | nullable | |
 | favorable_direction | text | NN, CHK: `favorable_direction IN ('HIGHER_IS_POSITIVE','LOWER_IS_POSITIVE','NEUTRAL')` | Surpriseの符号・方向性判定(9章) |
+| market_view_above | text | nullable, CHK: `market_view_above IS NULL OR (btrim(market_view_above) <> '' AND char_length(market_view_above) <= 200)` | v4.11。SCR-008「一般的な見方」(結果が予想を上回ったとき)。人が書いた日本語1文。実際の値動きの原因とは断定しない。NULL = 未登録 |
+| market_view_below | text | nullable, CHK: `market_view_below IS NULL OR (btrim(market_view_below) <> '' AND char_length(market_view_below) <= 200)` | v4.11。同上(結果が予想を下回ったとき) |
 | is_active | boolean | NN, DEF true | 論理削除相当 |
 | created_at | timestamptz | NN, DEF now() | |
 | updated_at | timestamptz | NN, DEF now() | |

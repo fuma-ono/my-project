@@ -48,7 +48,7 @@ struct MovementDetailView: View {
             V5Viewport {
                 V5Header(title: "相場反応詳細", back: true, onBack: { dismiss() })
                 ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 6) {
                         priceCard(preReleasePrice: preReleasePrice, reactions: reactions)
                         analysisCard(reactions: reactions)
                         comparisonLink
@@ -72,11 +72,11 @@ struct MovementDetailView: View {
         let symbol = viewModel.symbol
         let latest = reactions.last { $0.analysisStatus == .ready && $0.postReleasePrice != nil }
         let digits = symbol.hasSuffix("JPY") ? 2 : 4
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 7) {
                 HStack(spacing: -4) {
-                    CountryFlagView(currencyCode: String(symbol.prefix(3)), diameter: 20)
-                    CountryFlagView(currencyCode: String(symbol.suffix(3)), diameter: 20)
+                    CountryFlagView(currencyCode: String(symbol.prefix(3)), diameter: 17)
+                    CountryFlagView(currencyCode: String(symbol.suffix(3)), diameter: 17)
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     NotoText.text(FXPairSymbol.displayName(symbol), size: 11).foregroundStyle(.white)
@@ -102,14 +102,9 @@ struct MovementDetailView: View {
             }
             timeframeTabs
             chartSection
-                .frame(height: 112)
-            if let latest, latest.postReleasePrice != nil {
-                // HQ指示(2026-10-09): 価格の意味の説明は価格の横ではなくチャートの下に置く。
-                NotoText.text("※ 価格は発表\(MovementAnalysisText.label(latest.timeframe))後、変化は発表直前との比較です。", size: 6.5)
-                    .foregroundStyle(SettingsCardStyle.subtitleColor)
-            }
+                .frame(height: 100)
         }
-        .padding(10)
+        .padding(8)
         .frame(width: 214, alignment: .leading)
         .background(AccountCardBackground())
     }
@@ -148,8 +143,8 @@ struct MovementDetailView: View {
             CandleChart(chart: chart, digits: viewModel.symbol.hasSuffix("JPY") ? 2 : 4, timeframe: viewModel.selectedTimeframe)
                 .padding(.leading, 4)
                 .padding(.vertical, 5)
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.18)))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.8))
+                .background(Rectangle().fill(Color.black.opacity(0.18)))
+                .overlay(Rectangle().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.8))
         }
     }
 
@@ -158,18 +153,22 @@ struct MovementDetailView: View {
     @ViewBuilder
     private func analysisCard(reactions: [ReactionTimeframeEntry]) -> some View {
         let result = viewModel.eventSnapshot
-        if let text = MovementAnalysisText.build(reactions: reactions, actual: result?.actual, forecast: result?.forecast, unit: result?.unit) {
-            VStack(alignment: .leading, spacing: 5) {
+        if let text = MovementAnalysisText.build(
+            reactions: reactions, actual: result?.actual, forecast: result?.forecast, unit: result?.unit,
+            marketViewAbove: viewModel.indicator?.marketViewAbove, marketViewBelow: viewModel.indicator?.marketViewBelow
+        ) {
+            VStack(alignment: .leading, spacing: 4) {
                 NotoText.text("値動きの分析", size: 11).foregroundStyle(.white)
-                NotoText.text(text, size: 8)
+                NotoText.text(text, size: 7.5)
                     .foregroundStyle(.white.opacity(0.85))
-                    .lineSpacing(2)
+                    .lineSpacing(1.5)
                     .fixedSize(horizontal: false, vertical: true)
-                NotoText.text("※ 実際の値動きの数値から自動で作成しています。値動きの理由の推測は含みません。", size: 6.5)
+                // 1画面に収めるため、価格の説明もここにまとめた(HQ指示 2026-10-09)。
+                NotoText.text("※ 上の価格は発表60分後、変化は発表直前との比較。文は値動きの数値と指標の一般的な見方から作成しており、今回の値動きの理由を断定するものではない。", size: 6)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(10)
+            .padding(8)
             .frame(width: 214, alignment: .leading)
             .background(AccountCardBackground())
         }
@@ -191,7 +190,7 @@ struct MovementDetailView: View {
                     .foregroundStyle(SettingsCardStyle.chevronColor)
             }
             .padding(.horizontal, 10)
-            .frame(width: 214, height: 30)
+            .frame(width: 214, height: 26)
             .background(AccountCardBackground())
             .contentShape(Rectangle())
         }
@@ -252,12 +251,6 @@ private struct CandleChart: View {
         chart.prices.filter { $0.timestamp >= window.from && $0.timestamp <= window.to }
     }
 
-    private static let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        formatter.timeZone = .current
-        return formatter
-    }()
 
     var body: some View {
         let points = points
@@ -311,7 +304,9 @@ private struct CandleChart: View {
                 // 文字の中心を縦線に合わせる(既定では線の右に寄ってずれて見えた)。
                 AxisValueLabel(centered: false, anchor: .top) {
                     if let date = value.as(Date.self) {
-                        Text(Self.timeFormatter.string(from: date))
+                        // イベント詳細の発表日時と同じく、アプリの設定の時間帯(SCR-018)で出す。
+                        // 端末の時間帯で出していたため、発表14:07なのに05:55〜と出ていた。
+                        Text(AppPreferences.shared.timeString(date))
                             .font(.system(size: 6))
                             .foregroundStyle(SettingsCardStyle.subtitleColor)
                     }

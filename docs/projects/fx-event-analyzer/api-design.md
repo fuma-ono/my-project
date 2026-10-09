@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.17
+# FX Event Analyzer: API詳細設計書 v1.18
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -59,6 +59,7 @@
 - **v1.15**(2026-10-08): 無料プラン(FREE)と有料プラン(PRO)の利用上限(HQ決定 2026-10-08)を追加(28.1節)。`GET /entitlements`に`plan`・`limits`と`timezone` Queryを追加(27章)。`GET /calendar`に`timezone` Queryを追加し、プランの期間外は`403 PLAN_LIMIT_EXCEEDED`(PROなら見られる場合)/ `422 VALIDATION_ERROR`(どのプランでも見られない場合)にする(14.6節)。`PATCH /settings`で無料プランの通知の重要度・通貨ペアの上限を確認する(24.5節)。`GET /notifications/upcoming`は保存済みの設定に無料プランの上限を当てはめて絞り込む(24.6節)。`GET /indicators/{id}/comparison`は過去の発表回をプランの上限件数(直近から)に絞り、`history_limit`を返す(21章)。Error Code `PLAN_LIMIT_EXCEEDED`を追加(4章)
 - **v1.16**(2026-10-09): SCR-006 指標詳細の再デザイン(HQ指示 2026-10-09)。`GET /indicators`・`GET /indicators/{id}`の`indicator`に`name_en`(英語名、未登録は`null`)と`key_points`(注目される理由の短文の配列、未登録は`[]`)を追加し、`description`(概要)は日本語1〜2文とした(13章)。`GET /calendar`の各行に`indicator_id`(`INDICATOR`はイベントの指標ID、`SPEECH`は`null`)を追加し、カレンダーから指標詳細を開けるようにした(14.6節)
 - **v1.17**(2026-10-09): SCR-007 イベント詳細の再デザイン(HQ指示 2026-10-09)。`GET /events/{id}`に`major_fx_reactions`(主要通貨ペアの値動き。イベントの通貨を含む通貨ペア最大4件 × `1m`・`5m`・`15m`の`pips`・`change_percent`・`analysis_status`)を追加(14.1節)。`related_fx_pairs`は変えない。必要なfeature_codeは`related_fx_pairs[].reaction`と同じく`VIEW_BASIC_EVENT`のみ
+- **v1.18**(2026-10-09): SCR-008 相場反応詳細の「一般的な見方」(HQ決定 2026-10-09)。`GET /indicators`・`GET /indicators/{id}`の`indicator`に`market_view_above`(結果が予想を上回ったときの一般的な見方)・`market_view_below`(下回ったとき)を追加(13.2節)。人が書いた日本語1文の定型文(AI生成ではない)で、未登録は`null`
 
 ---
 
@@ -464,7 +465,7 @@ Responseには以下を含む：indicator / favorable_direction / related_fx_pai
 
 Indicator Detailでは、name / code / country / currency / importance / description / frequency / unit / source / source_url / favorable_direction などを取得可能とする。
 
-**indicatorオブジェクトの項目(v1.16で`name_en`・`key_points`を追加)**: 13.1の一覧の各行と13.2の`indicator`は同じ形：
+**indicatorオブジェクトの項目(v1.16で`name_en`・`key_points`、v1.18で`market_view_above`・`market_view_below`を追加)**: 13.1の一覧の各行と13.2の`indicator`は同じ形：
 
 ```json
 {
@@ -481,13 +482,16 @@ Indicator Detailでは、name / code / country / currency / importance / descrip
   "unit": "%",
   "source": "U.S. Bureau of Labor Statistics",
   "source_url": null,
-  "favorable_direction": "HIGHER_IS_POSITIVE"
+  "favorable_direction": "HIGHER_IS_POSITIVE",
+  "market_view_above": "米国CPIが予想を上回ると、インフレの高止まりから利下げが遠のくとの見方が強まり、ドルが買われやすいとされる。",
+  "market_view_below": "米国CPIが予想を下回ると、インフレの落ち着きから利下げが意識され、ドルが売られやすいとされる。"
 }
 ```
 
 - `name_en`(v1.16)：指標の英語名(`economic_indicators.name_en`)。SCR-006で日本語名の下に表示する。未登録は`null`
 - `description`：SCR-006の「概要」。日本語1〜2文(v1.16でseedを日本語化)。未登録は`null`
 - `key_points`(v1.16)：SCR-006の「注目される理由」。日本語の短文の配列(2〜4件程度、DB上の上限6件)、配列順 = 表示順。**未登録(DBの`NULL`)は`[]`で返し、`null`にはしない**
+- `market_view_above` / `market_view_below`(v1.18)：一般的な見方。SCR-008で結果と予想の差に応じて表示(結果が予想を上回ったら`market_view_above`、下回ったら`market_view_below`)。実際の値動きの原因と断定する表示はしない。人が書いた日本語1文(200文字以内、AI生成ではない)。未登録は`null`(画面側で項目を出さない)
 
 ## 13.3 GET /api/v1/indicators/{indicator_id}/events
 

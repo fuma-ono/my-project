@@ -14,27 +14,39 @@
 
 -- name_en / key_points / 日本語の description は SCR-006 指標詳細の
 -- 英語名・注目される理由・概要 (HQ指示 2026-10-09)。
-insert into economic_indicators (id, code, name, name_en, country_code, currency_code, importance, description, key_points, frequency, unit, source, favorable_direction) values
+-- market_view_above / market_view_below は SCR-008 相場反応詳細の
+-- 「一般的な見方」(結果が予想を上回った / 下回ったとき。人が書いた定型文)。
+insert into economic_indicators (id, code, name, name_en, country_code, currency_code, importance, description, key_points, frequency, unit, source, favorable_direction, market_view_above, market_view_below) values
   ('10000000-0000-0000-0000-000000000001', 'US_CPI', '米国CPI(消費者物価指数)', 'Consumer Price Index', 'US', 'USD', 'HIGH',
     '消費者物価指数（CPI）は、消費者が購入するモノやサービスの価格の変動を測定する指標です。インフレの動向を示す重要な指標であり、金融政策の判断材料として注目されます。',
     array['インフレの動向を把握できる', '金融政策への影響が大きい', '為替や株式市場に大きな影響を与える'],
-    'MONTHLY', '%', 'U.S. Bureau of Labor Statistics', 'HIGHER_IS_POSITIVE'),
+    'MONTHLY', '%', 'U.S. Bureau of Labor Statistics', 'HIGHER_IS_POSITIVE',
+    '米国CPIが予想を上回ると、インフレの高止まりから利下げが遠のくとの見方が強まり、ドルが買われやすいとされる。',
+    '米国CPIが予想を下回ると、インフレの落ち着きから利下げが意識され、ドルが売られやすいとされる。'),
   ('10000000-0000-0000-0000-000000000002', 'US_NFP', '米国雇用統計(非農業部門雇用者数)', 'Nonfarm Payrolls', 'US', 'USD', 'HIGH',
     '非農業部門雇用者数（NFP）は、農業部門を除く米国の雇用者数が前月から何人増減したかを示す指標です。米国の景気や雇用の強さを測る代表的な指標として注目されます。',
     array['米国の景気の強さを把握できる', 'FRBの金融政策判断に影響する', '発表直後に為替が大きく動きやすい'],
-    'MONTHLY', 'K', 'U.S. Bureau of Labor Statistics', 'HIGHER_IS_POSITIVE'),
+    'MONTHLY', 'K', 'U.S. Bureau of Labor Statistics', 'HIGHER_IS_POSITIVE',
+    '米国の非農業部門雇用者数が予想を上回ると、雇用の底堅さから利下げが遠のくとの見方が強まり、ドルが買われやすいとされる。',
+    '米国の非農業部門雇用者数が予想を下回ると、雇用の減速から利下げが意識され、ドルが売られやすいとされる。'),
   ('10000000-0000-0000-0000-000000000003', 'US_FOMC', 'FOMC政策金利', 'FOMC Interest Rate Decision', 'US', 'USD', 'HIGH',
     'FOMC（連邦公開市場委員会）が決定する、米国の政策金利（フェデラル・ファンド金利の誘導目標）です。米国の金融政策の方向性を示し、世界の金融市場に大きな影響を与えます。',
     array['米国の金融政策の方向性がわかる', '米ドルの金利水準を直接左右する', '声明や会見で今後の見通しが示される', '世界の株式・債券市場にも影響する'],
-    'IRREGULAR', '%', 'Federal Reserve', 'NEUTRAL'),
+    'IRREGULAR', '%', 'Federal Reserve', 'NEUTRAL',
+    'FOMCの政策金利が予想より高い水準に決まると、米国の金利が高止まりするとの見方が強まり、ドルが買われやすいとされる。',
+    'FOMCの政策金利が予想より低い水準に決まると、米国の金融緩和が進むとの見方が強まり、ドルが売られやすいとされる。'),
   ('10000000-0000-0000-0000-000000000004', 'JP_CPI', '日本CPI(消費者物価指数)', 'Japan Consumer Price Index', 'JP', 'JPY', 'HIGH',
     '日本の消費者物価指数（CPI）は、国内の消費者が購入するモノやサービスの価格の変動を前年同月比で示す指標です。日本のインフレの動向を示し、日銀の金融政策の判断材料として注目されます。',
     array['日本のインフレの動向を把握できる', '日銀の金融政策の判断材料になる', '円相場の方向性に影響する'],
-    'MONTHLY', '%', 'Statistics Bureau of Japan', 'HIGHER_IS_POSITIVE'),
+    'MONTHLY', '%', 'Statistics Bureau of Japan', 'HIGHER_IS_POSITIVE',
+    '日本CPIが予想を上回ると、物価の上昇から日銀の利上げ観測が強まり、円が買われやすいとされる。',
+    '日本CPIが予想を下回ると、物価の伸び悩みから日銀の利上げが遠のくとの見方が強まり、円が売られやすいとされる。'),
   ('10000000-0000-0000-0000-000000000005', 'BOJ_RATE', '日銀政策金利', 'BOJ Interest Rate Decision', 'JP', 'JPY', 'HIGH',
     '日本銀行が金融政策決定会合で決定する政策金利です。日本の金融政策の方向性を示し、円の金利水準や為替相場に大きな影響を与えます。',
     array['日本の金融政策の方向性がわかる', '円の金利水準を直接左右する', '総裁会見の発言で相場が動きやすい'],
-    'IRREGULAR', '%', 'Bank of Japan', 'NEUTRAL');
+    'IRREGULAR', '%', 'Bank of Japan', 'NEUTRAL',
+    '日銀の政策金利が予想より高い水準に決まると、金融引き締めが進むとの見方が強まり、円が買われやすいとされる。',
+    '日銀の政策金利が予想より低い水準に決まると、金融緩和的な姿勢が続くとの見方が強まり、円が売られやすいとされる。');
 
 -- ---------------------------------------------------------------------
 -- FX pairs

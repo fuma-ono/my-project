@@ -20,12 +20,16 @@ export interface IndicatorRow {
   source: string | null;
   source_url: string | null;
   favorable_direction: string;
+  /** SCR-008 結果が予想を上回ったときの一般的な見方 (人が書いた定型文)。未登録はnull。 */
+  market_view_above: string | null;
+  /** SCR-008 結果が予想を下回ったときの一般的な見方 (人が書いた定型文)。未登録はnull。 */
+  market_view_below: string | null;
 }
 
 type IndicatorDbRow = Omit<IndicatorRow, 'key_points'> & { key_points: string[] | null };
 
 const INDICATOR_COLUMNS =
-  'id, code, name, name_en, country_code, currency_code, importance, description, key_points, frequency, unit, source, source_url, favorable_direction';
+  'id, code, name, name_en, country_code, currency_code, importance, description, key_points, frequency, unit, source, source_url, favorable_direction, market_view_above, market_view_below';
 
 function toIndicatorRow(row: IndicatorDbRow): IndicatorRow {
   return { ...row, key_points: normalizeKeyPoints(row.key_points) };
