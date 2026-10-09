@@ -197,6 +197,74 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(JSON.parse(response.body).error.code).toBe('EVENT_NOT_FOUND');
     });
 
+    it('returns major_fx_reactions: event-currency pairs, related first, 1m/5m/15m (SCR-007, v1.17)', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/v1/events/${US_CPI_EVENT_ID}`,
+        headers: authHeader,
+      });
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      // Seed: USD pairs are USDJPY/EURUSD (related, priority 1/2), then GBPUSD/AUDUSD/USDCHF by the major order.
+      expect(body.major_fx_reactions.map((p: { symbol: string }) => p.symbol)).toEqual([
+        'USDJPY',
+        'EURUSD',
+        'GBPUSD',
+        'AUDUSD',
+      ]);
+      const usdjpy = body.major_fx_reactions[0];
+      expect(usdjpy.fx_pair_id).toBe(USDJPY_FX_PAIR_ID);
+      expect(usdjpy.reactions.map((r: { timeframe: string }) => r.timeframe)).toEqual(['1m', '5m', '15m']);
+      // Same stored values GET /events/{id}/reaction returns (seed: 28 / 56 / 85 pips).
+      expect(usdjpy.reactions.map((r: { pips: number }) => Number(r.pips))).toEqual([28, 56, 85]);
+      expect(Number(usdjpy.reactions[0].change_percent)).toBeCloseTo(0.1902);
+      expect(usdjpy.reactions.every((r: { analysis_status: string }) => r.analysis_status === 'READY')).toBe(true);
+      // No price data for EURUSD in the seed.
+      expect(body.major_fx_reactions[1].reactions[0]).toEqual({
+        timeframe: '1m',
+        pips: null,
+        change_percent: null,
+        analysis_status: 'DATA_PENDING',
+      });
+      // related_fx_pairs is unchanged (5m summary).
+      expect(body.related_fx_pairs[0].reaction.timeframe).toBe('5m');
+      expect(Number(body.related_fx_pairs[0].reaction.pips)).toBeCloseTo(56.0);
+    });
+
+    it('major_fx_reactions of a scheduled event are null pips with DATA_PENDING', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/v1/events/${NFP_EVENT_ID}`,
+        headers: authHeader,
+      });
+      const body = JSON.parse(response.body);
+      expect(body.major_fx_reactions).toHaveLength(4);
+      for (const pair of body.major_fx_reactions) {
+        for (const reaction of pair.reactions) {
+          expect(reaction.pips).toBeNull();
+          expect(reaction.change_percent).toBeNull();
+          expect(reaction.analysis_status).toBe('DATA_PENDING');
+        }
+      }
+    });
+
+    it('major_fx_reactions marks 1m NOT_ANALYZABLE for an APPROXIMATE release', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/v1/events/${BOJ_EVENT_ID}`,
+        headers: authHeader,
+      });
+      const body = JSON.parse(response.body);
+      // JPY pairs: USDJPY (related) first, then EURJPY/GBPJPY/AUDJPY by the major order.
+      expect(body.major_fx_reactions.map((p: { symbol: string }) => p.symbol)).toEqual([
+        'USDJPY',
+        'EURJPY',
+        'GBPJPY',
+        'AUDJPY',
+      ]);
+      expect(body.major_fx_reactions[0].reactions[0].analysis_status).toBe('NOT_ANALYZABLE');
+    });
+
     it('lists revisions for an event, paginated', async () => {
       const response = await ctx.app.inject({
         method: 'GET',

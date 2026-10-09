@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.16
+# FX Event Analyzer: API詳細設計書 v1.17
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -58,6 +58,7 @@
 - **v1.14**(2026-10-08): SCR-010 経済カレンダー(画面番号はui-screens.md)のAPIを追加。`GET /calendar`を新設(14.6節)。期間内の経済指標イベントと要人発言を1つの一覧(`items`)にまとめ、日時の昇順で返す。期間は62日以内・Paginationなし。必要なfeature_codeは`VIEW_BASIC_EVENT`(27.1節)
 - **v1.15**(2026-10-08): 無料プラン(FREE)と有料プラン(PRO)の利用上限(HQ決定 2026-10-08)を追加(28.1節)。`GET /entitlements`に`plan`・`limits`と`timezone` Queryを追加(27章)。`GET /calendar`に`timezone` Queryを追加し、プランの期間外は`403 PLAN_LIMIT_EXCEEDED`(PROなら見られる場合)/ `422 VALIDATION_ERROR`(どのプランでも見られない場合)にする(14.6節)。`PATCH /settings`で無料プランの通知の重要度・通貨ペアの上限を確認する(24.5節)。`GET /notifications/upcoming`は保存済みの設定に無料プランの上限を当てはめて絞り込む(24.6節)。`GET /indicators/{id}/comparison`は過去の発表回をプランの上限件数(直近から)に絞り、`history_limit`を返す(21章)。Error Code `PLAN_LIMIT_EXCEEDED`を追加(4章)
 - **v1.16**(2026-10-09): SCR-006 指標詳細の再デザイン(HQ指示 2026-10-09)。`GET /indicators`・`GET /indicators/{id}`の`indicator`に`name_en`(英語名、未登録は`null`)と`key_points`(注目される理由の短文の配列、未登録は`[]`)を追加し、`description`(概要)は日本語1〜2文とした(13章)。`GET /calendar`の各行に`indicator_id`(`INDICATOR`はイベントの指標ID、`SPEECH`は`null`)を追加し、カレンダーから指標詳細を開けるようにした(14.6節)
+- **v1.17**(2026-10-09): SCR-007 イベント詳細の再デザイン(HQ指示 2026-10-09)。`GET /events/{id}`に`major_fx_reactions`(主要通貨ペアの値動き。イベントの通貨を含む通貨ペア最大4件 × `1m`・`5m`・`15m`の`pips`・`change_percent`・`analysis_status`)を追加(14.1節)。`related_fx_pairs`は変えない。必要なfeature_codeは`related_fx_pairs[].reaction`と同じく`VIEW_BASIC_EVENT`のみ
 
 ---
 
@@ -550,6 +551,17 @@ Response：
       }
     }
   ],
+  "major_fx_reactions": [
+    {
+      "fx_pair_id": "xxx",
+      "symbol": "USDJPY",
+      "reactions": [
+        { "timeframe": "1m", "pips": -8.2, "change_percent": -0.0551, "analysis_status": "READY" },
+        { "timeframe": "5m", "pips": -24.5, "change_percent": -0.1646, "analysis_status": "READY" },
+        { "timeframe": "15m", "pips": -41.3, "change_percent": -0.2775, "analysis_status": "READY" }
+      ]
+    }
+  ],
   "available_timeframes": [
     "1m",
     "5m",
@@ -571,6 +583,14 @@ Event Detailでは以下を1回のAPIで取得可能とする。
 - 改定の有無を判定できる情報(下記14.3参照)
 
 Movement Chart等の比較的重いデータ、および特定timeframe・特定ペアの詳細Reaction、全revision履歴は別APIで取得する。
+
+**`major_fx_reactions`(v1.17で追加)**: SCR-007「主要通貨ペアの値動き(pips)」の表。行 = 通貨ペア、列 = `1m`・`5m`・`15m`。「通貨ペアを選択して詳細を見る」で選んだ行の`fx_pair_id`・`symbol`でSCR-008 相場反応詳細(18章)を開く。
+
+- 対象の通貨ペア：有効な(`is_active`)通貨ペアのうち、基軸通貨または決済通貨がイベントの通貨(`currency_code`)と同じもの。最大4件
+- 並び順：指標の`related_fx_pairs`に含まれるペアを`priority`順で先に、残りは固定の主要順(`USDJPY`・`EURUSD`・`GBPUSD`・`AUDUSD`・`USDCHF`・`USDCAD`・`EURJPY`・`GBPJPY`・`AUDJPY`・`CADJPY`)、それ以外は`symbol`順
+- イベントの通貨を含む通貨ペアが1件もない場合は、`related_fx_pairs`の通貨ペア(`priority`順、最大4件)を返す。どちらもなければ`[]`
+- `reactions`は常に`1m`・`5m`・`15m`の3件(この順)。値は`event_price_reactions`の保存値で、14.2節の`reaction`・18章と同じ(10章の計算式)。発表前・価格データがないときは`pips`・`change_percent`が`null`で`analysis_status`が`DATA_PENDING`。`release_datetime_precision`で対象外のtimeframe(11.1節)は`NOT_ANALYZABLE`
+- feature_code：`related_fx_pairs[].reaction`と同じく`VIEW_BASIC_EVENT`のみ(`VIEW_MARKET_REACTION`は不要)。SCR-008で使う`GET /events/{id}/reaction`は従来どおり`VIEW_MARKET_REACTION`が必要
 
 ## 14.2 related_fx_pairsのMarket Reaction Summary(v1.1で追加、A-2)
 

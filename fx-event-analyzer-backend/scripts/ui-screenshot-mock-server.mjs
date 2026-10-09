@@ -601,23 +601,24 @@ const CALENDAR_INDICATORS = {
 /** GET /indicators/{id} が返せる全指標 (一覧の4指標 + カレンダー用)。 */
 const ALL_MOCK_INDICATORS = [...INDICATORS_LIST, ...Object.values(CALENDAR_INDICATORS)];
 
+// SCR-007 イベント詳細の参考画像 (HQ指示 2026-10-09): 結果 3.1 / 予想 3.2 / 前回 3.3。
+// ホーム・指標詳細・過去比較・過去イベント詳細もこの値を参照する。
 const RELEASE_SNAPSHOT = {
-  forecast: 3.1,
-  actual: 3.3,
-  previous: 3.0,
+  forecast: 3.2,
+  actual: 3.1,
+  previous: 3.3,
   unit: '%',
   source: 'U.S. Bureau of Labor Statistics',
   source_url: 'https://www.bls.gov/cpi/',
   captured_at: EVENT_RELEASE_DATETIME,
-  surprise: 0.2,
-  surprise_direction: 'POSITIVE',
+  surprise: -0.1,
+  surprise_direction: 'NEGATIVE',
 };
 
 const EXPLANATION = {
   version: 1,
   explanation_type: 'FACT_SUMMARY',
-  summary:
-    'エネルギー価格の上昇と住居費の高止まりが市場予想を上回る要因となった。前月からのコア指数の伸びも継続している。',
+  summary: 'エネルギー価格の下落と中古車価格の低下が市場予想を下回る要因となった。住居費の伸びも前月から鈍化している。',
   source: 'U.S. Bureau of Labor Statistics',
   source_url: 'https://www.bls.gov/cpi/',
   published_at: EVENT_RELEASE_DATETIME,
@@ -879,11 +880,82 @@ function eventDetailHandler(eventId) {
         priority: 1,
         reaction: isUpcoming
           ? { timeframe: '5m', pips: null, change_percent: null, analysis_status: 'DATA_PENDING' }
-          : { timeframe: '5m', pips: 12.3, change_percent: 0.08, analysis_status: 'READY' },
+          : { timeframe: '5m', ...pairReactionValues('USDJPY', '5m'), analysis_status: 'READY' },
       },
     ],
+    major_fx_reactions: majorFxReactions(isUpcoming),
     available_timeframes: ['1m', '5m', '15m', '30m', '60m'],
   };
+}
+
+// SCR-007「主要通貨ペアの値動き(pips)」/ SCR-008 相場反応詳細 (HQ指示 2026-10-09)。
+// 1m/5m/15m は米国CPIの参考画像の値。30m/60m は SCR-008 用のもっともらしい値。
+// change_percent は pips × pip_size ÷ 発表直前価格 × 100 (src/domain/reaction.ts と同じ式)。
+const MAJOR_FX_REACTION_FIXTURES = {
+  USDJPY: {
+    preReleasePrice: 155.1,
+    pipSize: 0.01,
+    pips: { '1m': -8.2, '5m': -24.5, '15m': -41.3, '30m': -45.6, '60m': -38.9 },
+  },
+  EURUSD: {
+    preReleasePrice: 1.079,
+    pipSize: 0.0001,
+    pips: { '1m': 6.4, '5m': 18.7, '15m': 32.1, '30m': 35.0, '60m': 29.8 },
+  },
+  GBPUSD: {
+    preReleasePrice: 1.269,
+    pipSize: 0.0001,
+    pips: { '1m': 4.7, '5m': 12.3, '15m': 20.8, '30m': 23.1, '60m': 19.5 },
+  },
+  AUDUSD: {
+    preReleasePrice: 0.661,
+    pipSize: 0.0001,
+    pips: { '1m': 3.2, '5m': 9.6, '15m': 16.2, '30m': 17.9, '60m': 15.0 },
+  },
+};
+const MAJOR_FX_REACTION_SYMBOLS = ['USDJPY', 'EURUSD', 'GBPUSD', 'AUDUSD'];
+const MAJOR_FX_REACTION_TIMEFRAMES = ['1m', '5m', '15m'];
+
+function pairReactionValues(symbol, timeframe) {
+  const fixture = MAJOR_FX_REACTION_FIXTURES[symbol];
+  const pips = fixture.pips[timeframe];
+  const changePercent = ((pips * fixture.pipSize) / fixture.preReleasePrice) * 100;
+  return { pips, change_percent: Number(changePercent.toFixed(2)) };
+}
+
+/** GET /events/{id} major_fx_reactions (src/domain/majorFxReactions.ts): USD のイベントなので
+ * 関連ペア USDJPY → 主要順の EURUSD → GBPUSD → AUDUSD。発表前は pips null / DATA_PENDING。 */
+function majorFxReactions(isUpcoming) {
+  return MAJOR_FX_REACTION_SYMBOLS.map((symbol) => ({
+    fx_pair_id: FX_PAIRS.find((pair) => pair.symbol === symbol).fx_pair_id,
+    symbol,
+    reactions: MAJOR_FX_REACTION_TIMEFRAMES.map((timeframe) =>
+      isUpcoming
+        ? { timeframe, pips: null, change_percent: null, analysis_status: 'DATA_PENDING' }
+        : { timeframe, ...pairReactionValues(symbol, timeframe), analysis_status: 'READY' },
+    ),
+  }));
+}
+
+/** SCR-008: fx_pair_id の通貨ペアの反応。MAJOR_FX_REACTION_FIXTURES に無いペアは従来の
+ * TIMEFRAME_REACTIONS (USDJPY 相当の値) で答える。 */
+function pairReactionFixture(fxPairId) {
+  const symbol = FX_PAIRS.find((pair) => pair.fx_pair_id === fxPairId)?.symbol;
+  const fixture = symbol ? MAJOR_FX_REACTION_FIXTURES[symbol] : undefined;
+  if (!fixture) return LEGACY_REACTION_FIXTURE;
+  const rows = {};
+  for (const [timeframe, pips] of Object.entries(fixture.pips)) {
+    // 発表方向の最大値は pips より少し先まで行き、逆方向は少しだけ戻した値。
+    const sign = pips < 0 ? -1 : 1;
+    const favorable = Number((pips * 1.12).toFixed(1));
+    const adverse = Number((-sign * (1.0 + Math.abs(pips) * 0.08)).toFixed(1));
+    rows[timeframe] = {
+      ...pairReactionValues(symbol, timeframe),
+      max_upward_pips: sign > 0 ? favorable : adverse,
+      max_downward_pips: sign > 0 ? adverse : favorable,
+    };
+  }
+  return { preReleasePrice: fixture.preReleasePrice, pipSize: fixture.pipSize, rows, chartTargetPips: null };
 }
 
 const TIMEFRAME_REACTIONS = {
@@ -894,56 +966,71 @@ const TIMEFRAME_REACTIONS = {
   '60m': { pips: 19.9, change_percent: 0.13, max_upward_pips: 25.1, max_downward_pips: -6.2 },
 };
 
-function reactionRow(timeframe) {
-  const base = TIMEFRAME_REACTIONS[timeframe];
-  const preReleasePrice = 155.1;
-  const pipSize = 0.01;
-  const postReleasePrice = Number((preReleasePrice + base.pips * pipSize).toFixed(3));
+/** 過去イベント詳細・過去比較・未知の fx_pair_id 用: 従来の TIMEFRAME_REACTIONS の値のまま。 */
+const LEGACY_REACTION_FIXTURE = {
+  preReleasePrice: 155.1,
+  pipSize: 0.01,
+  rows: TIMEFRAME_REACTIONS,
+  chartTargetPips: 12.3,
+};
+
+function reactionRow(timeframe, fixture = LEGACY_REACTION_FIXTURE) {
+  const base = fixture.rows[timeframe];
+  const { preReleasePrice, pipSize } = fixture;
+  const digits = pipSize < 0.01 ? 5 : 3;
+  const postReleasePrice = Number((preReleasePrice + base.pips * pipSize).toFixed(digits));
   return {
     timeframe,
     post_release_price: postReleasePrice,
-    movement: Number((base.pips * pipSize).toFixed(3)),
+    movement: Number((base.pips * pipSize).toFixed(digits)),
     pips: base.pips,
     change_percent: base.change_percent,
-    max_upward: Number((base.max_upward_pips * pipSize).toFixed(3)),
-    max_downward: Number((base.max_downward_pips * pipSize).toFixed(3)),
+    max_upward: Number((base.max_upward_pips * pipSize).toFixed(digits)),
+    max_downward: Number((base.max_downward_pips * pipSize).toFixed(digits)),
     max_upward_pips: base.max_upward_pips,
     max_downward_pips: base.max_downward_pips,
     analysis_status: 'READY',
   };
 }
 
-function reactionAllHandler(eventId) {
+function reactionAllHandler(eventId, fxPairId) {
+  const fixture = pairReactionFixture(fxPairId);
   return {
     event_id: eventId,
-    fx_pair_id: FX_PAIR_ID,
-    pre_release_price: 155.1,
-    reactions: Object.keys(TIMEFRAME_REACTIONS).map(reactionRow),
+    fx_pair_id: fxPairId,
+    pre_release_price: fixture.preReleasePrice,
+    reactions: Object.keys(fixture.rows).map((tf) => reactionRow(tf, fixture)),
   };
 }
 
-function reactionSingleHandler(eventId, timeframe) {
-  const row = reactionRow(timeframe);
-  return { event_id: eventId, fx_pair_id: FX_PAIR_ID, pre_release_price: 155.1, ...row };
+function reactionSingleHandler(eventId, timeframe, fxPairId) {
+  const fixture = pairReactionFixture(fxPairId);
+  const row = reactionRow(timeframe, fixture);
+  return { event_id: eventId, fx_pair_id: fxPairId, pre_release_price: fixture.preReleasePrice, ...row };
 }
 
-function reactionChartHandler(eventId, timeframe) {
+function reactionChartHandler(eventId, timeframe, fxPairId) {
+  const fixture = pairReactionFixture(fxPairId);
+  const { preReleasePrice, pipSize } = fixture;
+  const digits = pipSize < 0.01 ? 5 : 3;
+  // 発表30分後に 30m の反応 (従来の USDJPY は +12.3pips) へ届く。
+  const target = (fixture.chartTargetPips ?? fixture.rows['30m'].pips) * pipSize;
   const releaseMs = new Date(EVENT_RELEASE_DATETIME).getTime();
   const stepMinutes = { '1m': 1, '5m': 5, '15m': 15, '30m': 30, '60m': 60 }[timeframe] ?? 5;
   const fromMs = releaseMs - 30 * 60_000;
   const toMs = releaseMs + 60 * 60_000;
   const prices = [];
-  let price = 155.1;
+  let price = preReleasePrice;
   for (let t = fromMs; t <= toMs; t += stepMinutes * 60_000) {
-    // deterministic gentle walk: flat before release, step up around it.
+    // deterministic gentle walk: flat before release, moves toward the reaction after it.
     const minutesFromRelease = (t - releaseMs) / 60_000;
-    const drift = minutesFromRelease < 0 ? 0 : Math.min(0.123, 0.123 * (minutesFromRelease / 30));
-    const wobble = Math.sin(t / 900_000) * 0.02;
-    const open = Number(price.toFixed(3));
-    price = Number((155.1 + drift + wobble).toFixed(3));
+    const drift = minutesFromRelease < 0 ? 0 : target * Math.min(1, minutesFromRelease / 30);
+    const wobble = Math.sin(t / 900_000) * 2 * pipSize;
+    const open = Number(price.toFixed(digits));
+    price = Number((preReleasePrice + drift + wobble).toFixed(digits));
     const close = price;
-    const high = Number(Math.max(open, close) + 0.01).toFixed(3);
-    const low = Number(Math.min(open, close) - 0.01).toFixed(3);
+    const high = Number(Math.max(open, close) + pipSize).toFixed(digits);
+    const low = Number(Math.min(open, close) - pipSize).toFixed(digits);
     prices.push({
       timestamp: new Date(t).toISOString(),
       open,
@@ -953,7 +1040,7 @@ function reactionChartHandler(eventId, timeframe) {
       volume: null,
     });
   }
-  return { event_id: eventId, fx_pair_id: FX_PAIR_ID, timeframe, release_datetime: EVENT_RELEASE_DATETIME, prices };
+  return { event_id: eventId, fx_pair_id: fxPairId, timeframe, release_datetime: EVENT_RELEASE_DATETIME, prices };
 }
 
 function eventHistoryHandler(eventId) {
@@ -1843,12 +1930,14 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
   }
   if (segments[0] === 'events' && segments[2] === 'reaction' && segments.length === 3) {
     const timeframe = searchParams.get('timeframe') ?? 'all';
-    if (timeframe === 'all') return json(res, 200, reactionAllHandler(segments[1]));
-    return json(res, 200, reactionSingleHandler(segments[1], timeframe));
+    const fxPairId = searchParams.get('fx_pair_id') ?? FX_PAIR_ID;
+    if (timeframe === 'all') return json(res, 200, reactionAllHandler(segments[1], fxPairId));
+    return json(res, 200, reactionSingleHandler(segments[1], timeframe, fxPairId));
   }
   if (segments[0] === 'events' && segments[2] === 'reaction' && segments[3] === 'chart') {
     const timeframe = searchParams.get('timeframe') ?? '5m';
-    return json(res, 200, reactionChartHandler(segments[1], timeframe));
+    const fxPairId = searchParams.get('fx_pair_id') ?? FX_PAIR_ID;
+    return json(res, 200, reactionChartHandler(segments[1], timeframe, fxPairId));
   }
 
   json(res, 404, { error: { code: 'NOT_FOUND', message: `No UI-screenshot fixture for ${pathname}` } });

@@ -90,11 +90,14 @@ final class ScreenshotTests: XCTestCase {
         // の導線が無くなったため、Indicator Detailの「次回発表予定」エリア
         // から遷移する。
         tap(containing: "次回発表予定")
-        XCTAssertTrue(waitForAnyElement(containing: "発表日時", timeout: 15), "Event Detail did not load")
+        XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 15), "Event Detail did not load")
         capture("07-EventDetail")
 
-        // SCR-008 相場反応詳細(via Event Detail's related FX pair row)
-        tap(containing: "USDJPY")
+        // SCR-008 相場反応詳細。2026-10-09の作り直しで、「通貨ペアを選択して詳細を
+        // 見る」→ 通貨ペアの選択シート → USD/JPY の順に進む。
+        tap(containing: "通貨ペアを選択して詳細を見る")
+        XCTAssertTrue(waitForAnyElement(containing: "相場反応の詳細を表示", timeout: 10), "Pair picker did not open")
+        tap(containing: "USD/JPY")
         XCTAssertTrue(waitForAnyElement(containing: "過去の値動きと比較する", timeout: 15), "Movement Detail did not load")
         capture("08-MovementDetail")
 

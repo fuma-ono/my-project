@@ -10,8 +10,11 @@ struct EventDetailResponse: Decodable, Equatable {
     let explanation: EventExplanationDetail?
     let relatedFxPairs: [EventRelatedFxPair]
     let availableTimeframes: [String]
+    /// 主要通貨ペアの1分・5分・15分の値動き(api-design v1.17、SCR-007の表)。古いBackendではnil。
+    var majorFxReactions: [EventMajorFxReaction]? = nil
 
     enum CodingKeys: String, CodingKey {
+        case majorFxReactions = "major_fx_reactions"
         case event
         case snapshot
         case analysis
@@ -123,5 +126,24 @@ struct EventRelatedFxPair: Decodable, Identifiable, Equatable {
         case symbol
         case priority
         case reaction
+    }
+}
+
+/// `major_fx_reactions`の1行(通貨ペア1つ × 時間軸ごとの値動き)。
+struct EventMajorFxReaction: Decodable, Identifiable, Equatable {
+    let fxPairId: String
+    let symbol: String
+    let reactions: [EventReactionSummary]
+
+    var id: String { fxPairId }
+
+    func reaction(for timeframe: String) -> EventReactionSummary? {
+        reactions.first { $0.timeframe == timeframe }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case fxPairId = "fx_pair_id"
+        case symbol
+        case reactions
     }
 }

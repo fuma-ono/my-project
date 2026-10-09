@@ -30,6 +30,8 @@ struct EventDetailView: View {
     private let apiClient: APIClient
     @ObservedObject private var plan = PlanStore.shared
     @State private var planPrompt: String?
+    @State private var showsPairPicker = false
+    @State private var selectedRoute: AppRoute?
 
     init(apiClient: APIClient, eventId: String, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
@@ -43,6 +45,9 @@ struct EventDetailView: View {
             .toolbar(.hidden, for: .navigationBar)
             .task { viewModel.load() }
             .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
+            .navigationDestination(item: $selectedRoute) { route in
+                AppRouteDestinationView(route: route, apiClient: apiClient, tabSelection: $tabSelection)
+            }
     }
 
     @ViewBuilder
@@ -72,97 +77,30 @@ struct EventDetailView: View {
                     }
                 )
 
-                V5Card(CGRect(x: 10, y: 57, width: 214, height: 55)) {
-                    HStack {
-                        CountryFlagView(countryCode: response.event.countryCode, diameter: 22)
-                        VStack(alignment: .leading) {
-                            Text("\(CountryFlag.kanjiAbbreviation(for: response.event.countryCode))) \(response.event.indicatorName)").font(.system(size: 9, weight: .bold))
-                            Text(response.event.currencyCode).font(.system(size: 7)).foregroundStyle(V5P.muted)
-                        }
-                        Spacer()
-                        V5Badge(text: response.event.importance.rawValue.capitalized, color: response.event.importance.v5Color)
-                    }.foregroundStyle(.white)
+                // HQ指示(2026-10-09)の参考画像で作り直した本体(EventDetailCards)。
+                ScrollView(showsIndicators: false) {
+                    EventDetailCards(response: response) { showsPairPicker = true }
+                        .padding(.vertical, 6)
+                        .frame(width: V5P.W)
                 }
-
-                HStack {
-                    Text("発表日時").font(.system(size: 7)).foregroundStyle(.white)
-                    Spacer()
-                    Text(ValueFormat.dateTime(response.event.releaseDatetime)).font(.system(size: 8, weight: .bold)).foregroundStyle(.white)
-                }.frame(width: 204).position(x: 117, y: 126)
-
-                V5Card(CGRect(x: 10, y: 136, width: 214, height: 95)) {
-                    switch response.event.dataStatus {
-                    case .dataPending, .dataUnavailable:
-                        Text(response.event.dataStatus.label).font(.system(size: 9)).foregroundStyle(V5P.muted)
-                    default:
-                        VStack(spacing: 6) {
-                            HStack {
-                                metric("予想", ValueFormat.number(response.snapshot?.forecast))
-                                metric("結果", response.event.status == .released ? ValueFormat.number(response.snapshot?.actual) : "-")
-                                metric("前回", ValueFormat.number(response.snapshot?.previous))
-                            }
-                            if response.event.status == .released, response.event.dataStatus == .ready {
-                                Divider().overlay(V5P.line)
-                                HStack {
-                                    Text("サプライズ\n(予想比)").font(.system(size: 8)).foregroundStyle(.white)
-                                    Spacer()
-                                    if let surprise = response.analysis.surprise {
-                                        Text(ValueFormat.percent(surprise, signed: true)).font(.system(size: 13, weight: .bold)).foregroundStyle(V5P.red)
-                                        Text("›").foregroundStyle(V5P.red)
-                                    } else {
-                                        Text("分析対象外").font(.system(size: 8)).foregroundStyle(V5P.muted)
-                                    }
-                                }
+                .frame(width: V5P.W, height: 398)
+                .position(x: V5P.W / 2, y: 54 + 398 / 2)
+                .sheet(isPresented: $showsPairPicker) {
+                    SettingsListOptionSheet(title: "通貨ペアを選択", footer: "選んだ通貨ペアの相場反応の詳細を表示します。") {
+                        ForEach(EventDetailCards(response: response, onSelectPairs: {}).pairs) { pair in
+                            SettingsListOptionRow(label: FXPairSymbol.displayName(pair.symbol), isSelected: false) {
+                                showsPairPicker = false
+                                selectedRoute = .movementDetail(
+                                    eventId: response.event.id,
+                                    indicatorId: response.event.indicatorId,
+                                    fxPairId: pair.fxPairId,
+                                    symbol: pair.symbol,
+                                    indicatorName: response.event.indicatorName,
+                                    releaseDatetime: response.event.releaseDatetime
+                                )
                             }
                         }
                     }
-                }
-
-                if !response.relatedFxPairs.isEmpty {
-                    Text("市場への影響（想定）").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 53, y: 244)
-                    ForEach(Array(response.relatedFxPairs.prefix(3).enumerated()), id: \.element.id) { i, pair in
-                        NavigationLink(value: AppRoute.movementDetail(
-                            eventId: response.event.id,
-                            indicatorId: response.event.indicatorId,
-                            fxPairId: pair.fxPairId,
-                            symbol: pair.symbol,
-                            indicatorName: response.event.indicatorName,
-                            releaseDatetime: response.event.releaseDatetime
-                        )) {
-                            HStack {
-                                Image(systemName: "bubble.left").font(.system(size: 8))
-                                Text(pair.symbol).font(.system(size: 8))
-                                Spacer()
-                                reactionValue(pair)
-                            }
-                            .foregroundStyle(.white)
-                            .frame(width: 204, height: 22).padding(.horizontal, 7)
-                            .background(V5P.panel, in: RoundedRectangle(cornerRadius: 5))
-                        }
-                        .buttonStyle(.plain)
-                        .position(x: 117, y: 266 + CGFloat(i) * 23)
-                    }
-
-                    if let primaryPair = response.relatedFxPairs.first {
-                        NavigationLink(value: AppRoute.movementDetail(
-                            eventId: response.event.id,
-                            indicatorId: response.event.indicatorId,
-                            fxPairId: primaryPair.fxPairId,
-                            symbol: primaryPair.symbol,
-                            indicatorName: response.event.indicatorName,
-                            releaseDatetime: response.event.releaseDatetime
-                        )) {
-                            V5Button(title: "関連する通貨ペアを見る")
-                        }
-                        .buttonStyle(.plain)
-                        .frame(width: 204).position(x: 117, y: 337)
-                    }
-                }
-
-                if let explanation = response.explanation {
-                    Text("詳細情報").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 32, y: 360)
-                    Text(explanation.summary ?? "公式発表の内容はデータソース連携後に表示されます。推測による説明は表示しません。")
-                        .font(.system(size: 7)).foregroundStyle(V5P.muted).frame(width: 204, alignment: .leading).position(x: 117, y: 386)
                 }
 
                 V5BottomBar(selected: $tabSelection)
@@ -185,18 +123,5 @@ struct EventDetailView: View {
         }
     }
 
-    @ViewBuilder private func metric(_ a: String, _ b: String) -> some View {
-        VStack(spacing: 2) { Text(a).font(.system(size: 6)).foregroundStyle(V5P.muted); Text(b).font(.system(size: 10, weight: .bold)).foregroundStyle(.white) }.frame(maxWidth: .infinity)
-    }
 
-    @ViewBuilder private func reactionValue(_ pair: EventRelatedFxPair) -> some View {
-        switch pair.reaction.analysisStatus {
-        case .ready:
-            Text(ValueFormat.percent(pair.reaction.changePercent, signed: true))
-                .font(.system(size: 8, weight: .bold))
-                .foregroundStyle((pair.reaction.changePercent ?? 0) >= 0 ? V5P.green : V5P.red)
-        default:
-            Text(pair.reaction.analysisStatus.label).font(.system(size: 7)).foregroundStyle(V5P.muted)
-        }
-    }
 }
