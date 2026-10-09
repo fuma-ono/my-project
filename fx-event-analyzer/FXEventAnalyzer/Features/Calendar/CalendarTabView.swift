@@ -156,23 +156,27 @@ private struct CalendarMonthCard: View {
             case .unavailable: break
             }
         } label: {
-            VStack(spacing: 2) {
+            // HQ指示(2026-10-08): 日付はマスの中心に置き、重要度の点は日付のすぐ下に
+            // 寄せる。選んだ日はマスいっぱいの正円(高さ-2の直径)で囲む。今日は同じ
+            // 大きさの円の枠。
+            ZStack {
+                Circle()
+                    .fill(isSelected ? V5P.cyan.opacity(0.85) : .clear)
+                    .overlay(Circle().stroke(V5P.cyan.opacity(isToday && !isSelected ? 0.8 : 0), lineWidth: 0.8))
+                    .frame(width: Self.cellHeight - 2, height: Self.cellHeight - 2)
                 Text("\(calendar.component(.day, from: day))")
                     .font(.system(size: 8.5, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(isSelected ? .white : Self.weekdayColor(column: column))
-                    .frame(width: 17, height: 17)
-                    .background(Circle().fill(isSelected ? V5P.cyan.opacity(0.85) : .clear))
-                    .overlay(Circle().stroke(V5P.cyan.opacity(isToday && !isSelected ? 0.8 : 0), lineWidth: 0.8))
                 HStack(spacing: 1.5) {
                     ForEach(Array(dots.enumerated()), id: \.offset) { _, importance in
                         Circle().fill(HomeView.importanceBadgeColors(importance).border).frame(width: 3, height: 3)
                     }
                 }
-                .frame(height: 3)
+                .offset(y: 7.5)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 23)
+            .frame(height: Self.cellHeight)
             .opacity(availability != .allowed ? 0.15 : inMonth ? 1 : 0.35)
             // HQ指示(2026-10-08)「カレンダーのように縦線と横線を交わるように」: 各マスの
             // 枠を間を空けずに並べ、隣どうしの線を重ねて1本の罫線にする。薄くした
@@ -184,6 +188,9 @@ private struct CalendarMonthCard: View {
         .accessibilityLabel("\(calendar.component(.month, from: day))月\(calendar.component(.day, from: day))日、イベント\(viewModel.items(on: day).count)件")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
+
+    /// マスの高さ。週の数が月によって4〜6週に変わるので、6週でも収まる高さにする。
+    static let cellHeight: CGFloat = 25
 
     /// 月曜始まりの列番号(0〜6)。土曜は青、日曜は赤。
     static func weekdayColor(column: Int) -> Color {

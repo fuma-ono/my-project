@@ -42,12 +42,15 @@ final class CalendarViewModel: ObservableObject {
         return calendar
     }
 
-    /// カレンダーに並べる42日(6週)。先頭は月の1日を含む週の月曜。
+    /// カレンダーに並べる日。先頭は月の1日を含む週の月曜で、月の最後の日を含む週まで
+    /// (HQ指示 2026-10-08「11/2〜8の週は不要」。月によって4〜6週)。
     var gridDays: [Date] {
         let weekday = calendar.component(.weekday, from: month)
         let offset = (weekday - calendar.firstWeekday + 7) % 7
+        let daysInMonth = calendar.range(of: .day, in: .month, for: month)?.count ?? 30
+        let weeks = (offset + daysInMonth + 6) / 7
         guard let start = calendar.date(byAdding: .day, value: -offset, to: month) else { return [] }
-        return (0..<42).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
+        return (0..<(weeks * 7)).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
     }
 
     func isInMonth(_ day: Date) -> Bool {

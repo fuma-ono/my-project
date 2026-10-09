@@ -24,11 +24,19 @@ final class CalendarViewModelTests: XCTestCase {
                      importance: importance, datetime: datetime, datetimePrecision: .exact, status: "SCHEDULED")
     }
 
-    func testGridStartsOnMondayAndHasSixWeeks() {
-        // 2026-10-01 is a Thursday, so the grid starts on Monday 9/28.
+    func testGridStartsOnMondayAndEndsWithTheMonthsLastWeek() {
+        // 2026-10-01 is a Thursday, so the grid starts on Monday 9/28 and ends
+        // on Sunday 11/1 (5 weeks) — the 11/2〜8 week is not shown.
         let viewModel = CalendarViewModel(apiClient: MockAPIClient(), today: date(2026, 10, 8), calendar: calendar, plan: proPlan)
-        XCTAssertEqual(viewModel.gridDays.count, 42)
+        XCTAssertEqual(viewModel.gridDays.count, 35)
         XCTAssertEqual(viewModel.gridDays.first, date(2026, 9, 28))
+        XCTAssertEqual(viewModel.gridDays.last, date(2026, 11, 1))
+        // 2026-02 starts on Sunday and has 28 days: 2/1 is alone in the first week.
+        let february = CalendarViewModel(apiClient: MockAPIClient(), today: date(2026, 2, 10), calendar: calendar, plan: proPlan)
+        XCTAssertEqual(february.gridDays.count, 35)
+        // 2026-03 starts on Sunday and has 31 days: 6 weeks.
+        let march = CalendarViewModel(apiClient: MockAPIClient(), today: date(2026, 3, 10), calendar: calendar, plan: proPlan)
+        XCTAssertEqual(march.gridDays.count, 42)
         XCTAssertEqual(viewModel.weekdaySymbols, ["月", "火", "水", "木", "金", "土", "日"])
         XCTAssertEqual(viewModel.monthTitle, "2026年10月")
         XCTAssertEqual(viewModel.selectedTitle, "10/8(木)のイベント")
