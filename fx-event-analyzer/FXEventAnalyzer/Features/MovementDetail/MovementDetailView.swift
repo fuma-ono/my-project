@@ -229,6 +229,19 @@ private struct CandleChart: View {
         }
     }
 
+    /// 時刻の目盛り。表示範囲の始まりからではなく、5分・15分・30分ちょうどの時刻
+    /// (05:40、05:45…)に置く。
+    private var axisDates: [Date] {
+        let step = TimeInterval(labelMinutes * 60)
+        var date = Date(timeIntervalSince1970: (window.from.timeIntervalSince1970 / step).rounded(.up) * step)
+        var dates: [Date] = []
+        while date <= window.to {
+            dates.append(date)
+            date = date.addingTimeInterval(step)
+        }
+        return dates
+    }
+
     private var points: [ChartPricePoint] {
         chart.prices.filter { $0.timestamp >= window.from && $0.timestamp <= window.to }
     }
@@ -286,7 +299,7 @@ private struct CandleChart: View {
             }
         }
         .chartXAxis {
-            AxisMarks(values: .stride(by: .minute, count: labelMinutes)) { value in
+            AxisMarks(values: axisDates) { value in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6)).foregroundStyle(SettingsCardStyle.cardBorder.opacity(0.9))
                 AxisValueLabel {
                     if let date = value.as(Date.self) {
