@@ -354,6 +354,7 @@ struct LoginView: View {
                     .foregroundStyle(DesignTokens.Colors.accentCyan)
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("passwordResetLink")
             .frame(maxWidth: .infinity)
             .padding(.top, 16)
 
@@ -375,6 +376,7 @@ struct LoginView: View {
                     .foregroundStyle(DesignTokens.Colors.accentCyan)
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("signUpLink")
             .frame(maxWidth: .infinity)
             .padding(.top, 4)
         }
