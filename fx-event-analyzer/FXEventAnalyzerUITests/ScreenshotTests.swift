@@ -83,7 +83,8 @@ final class ScreenshotTests: XCTestCase {
         // ため、参考画像通りカードを表示させるには実際に★を1件登録する
         // 必要がある。架空データを足すのではなく、実在のモック指標
         // (米国CPI)を実際にお気に入り登録する。
-        tapIdentifier("v5HeaderFavoriteStar")
+        // 2026-10-09: 指標詳細の星はヘッダーからカードの右上へ移った。
+        tapIdentifier("indicatorFavoriteStar")
 
         // SCR-007 イベント詳細。「今日の重要イベント」削除に伴い、Home経由
         // の導線が無くなったため、Indicator Detailの「次回発表予定」エリア

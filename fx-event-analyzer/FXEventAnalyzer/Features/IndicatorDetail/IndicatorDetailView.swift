@@ -61,26 +61,24 @@ struct IndicatorDetailView: View {
             loadingScaffold { FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "指標情報はまだ利用できません。") }
         case .loaded(let indicator, _, _, let nextScheduledEvent):
             V5Viewport {
-                V5Header(
-                    title: "指標詳細", back: true,
-                    isFavorite: favorites.isFavorite(.indicator, id: indicatorId),
-                    onBack: { dismiss() },
-                    onToggleFavorite: {
-                        // 無料プランはお気に入り件まで(HQ指示 2026-10-08)。
-                        guard favorites.canToggle(.indicator, id: indicatorId, max: plan.limits.favoritesMax) else {
-                            planPrompt = "無料プランのお気に入りは\(plan.limits.favoritesMax ?? 0)件までです。プレミアムプランなら件数の制限なく登録できます。"
-                            return
-                        }
-                        favorites.toggle(.indicator, id: indicatorId)
-                    }
-                )
+                // HQ指示(2026-10-09)「星マークはヘッダーではなく、指標枠の右上に」。
+                V5Header(title: "指標詳細", back: true, onBack: { dismiss() })
 
                 // HQ指示(2026-10-09)の参考画像: 1枚のカードに、名前(日本語・英語)と
                 // 国・通貨・重要度、概要、注目される理由、項目の表、過去の発表日を並べる。
                 ScrollView(showsIndicators: false) {
                     IndicatorDetailCard(
                         indicator: indicator,
-                        nextScheduledEvent: nextScheduledEvent
+                        nextScheduledEvent: nextScheduledEvent,
+                        isFavorite: favorites.isFavorite(.indicator, id: indicatorId),
+                        onToggleFavorite: {
+                            // 無料プランはお気に入りの件数に上限がある(HQ指示 2026-10-08)。
+                            guard favorites.canToggle(.indicator, id: indicatorId, max: plan.limits.favoritesMax) else {
+                                planPrompt = "無料プランのお気に入りは\(plan.limits.favoritesMax ?? 0)件までです。プレミアムプランなら件数の制限なく登録できます。"
+                                return
+                            }
+                            favorites.toggle(.indicator, id: indicatorId)
+                        }
                     )
                     .padding(.vertical, 6)
                     .frame(width: V5P.W)
