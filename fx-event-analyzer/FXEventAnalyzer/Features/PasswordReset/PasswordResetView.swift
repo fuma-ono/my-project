@@ -4,9 +4,11 @@ import SwiftUI
 ///
 /// `SignUpView`と同じ理由(HQ指示 2026-10-09、2回目、参考画像提供)で
 /// 「このUIを完全再現して」の指示に基づき再構築した。構成要素は
-/// `SignUpView`と共通のブランドマーク+タイトル、見出し+サブタイトル、
-/// 単体のシェブロン戻るボタン(`.toolbar(.hidden, for: .navigationBar)` +
-/// `@Environment(\.dismiss)`)。
+/// `SignUpView`と共通の見出し+サブタイトル、単体のシェブロン戻るボタン
+/// (`.toolbar(.hidden, for: .navigationBar)` + `@Environment(\.dismiss)`)。
+/// ブランドマーク+タイトルは当初参考画像通り上部に表示していたが、HQ指示
+/// (2026-10-09、4回目)「アイコンとタイトルはなくして、その分上にあげて」
+/// で削除し、見出しをその分上に詰めた。
 struct PasswordResetView: View {
     @StateObject private var viewModel: PasswordResetViewModel
     @FocusState private var emailFieldFocused: Bool
@@ -25,18 +27,13 @@ struct PasswordResetView: View {
 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
-                        BrandMark(width: 100, glow: true)
-                            .padding(.top, 28)
-                        BrandTitleText()
-                            .padding(.top, 10)
-
                         if viewModel.state == .sent {
                             sentPanel
                                 .padding(.top, DesignTokens.Spacing.xl)
                                 .padding(.horizontal, DesignTokens.Spacing.lg)
                         } else {
                             headingBlock
-                                .padding(.top, 28)
+                                .padding(.top, 20)
                             formPanel
                                 .padding(.top, 24)
                                 .padding(.horizontal, DesignTokens.Spacing.lg)

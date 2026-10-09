@@ -3,17 +3,17 @@ import SwiftUI
 /// SCR-002 新規会員登録。`LoginView`と同じ`NavigationStack`にpushされる。
 ///
 /// HQ指示(2026-10-09、2回目)でこの画面専用の参考画像が提供され、
-/// 「このUIを完全再現して」と再構築を指示された。見た目は参考画像の測定
-/// (1023×1020の合成画像から左側の画面を抽出・2倍拡大して測定): ブランド
-/// マーク幅は画面幅の約0.26(`BrandMark(width: 100)`)、戻るボタンは
-/// システムのナビゲーションバーではなく単体のシェブロンアイコン(他の
-/// プッシュ画面と同じ`.toolbar(.hidden, for: .navigationBar)` +
-/// `@Environment(\.dismiss)`パターン — `IndicatorDetailView`等参照)。
-/// Apple/Google登録ボタンの塗りは`LoginView.socialSignInSection`と揃えた
-/// (HQ指示 2026-10-09、3回目「枠内の色をログイン画面と揃えてほしい」—
-/// 当初は参考画像通り枠線のみのアウトラインボタンだった)。パスワード欄の
-/// 目アイコンは実際に表示・非表示を切り替える(参考画像のアイコンが示唆
-/// する通りの実機能)。
+/// 「このUIを完全再現して」と再構築を指示された。戻るボタンはシステムの
+/// ナビゲーションバーではなく単体のシェブロンアイコン(他のプッシュ画面と
+/// 同じ`.toolbar(.hidden, for: .navigationBar)` + `@Environment(\.dismiss)`
+/// パターン — `IndicatorDetailView`等参照)。Apple/Google登録ボタンの塗りは
+/// `LoginView.socialSignInSection`と揃えた(HQ指示 2026-10-09、3回目「枠内の
+/// 色をログイン画面と揃えてほしい」— 当初は参考画像通り枠線のみの
+/// アウトラインボタンだった)。パスワード欄の目アイコンは実際に表示・
+/// 非表示を切り替える(参考画像のアイコンが示唆する通りの実機能)。
+/// ブランドマーク+タイトルは当初参考画像通り上部に表示していたが、HQ指示
+/// (2026-10-09、4回目)「アイコンとタイトルはなくして、その分上にあげて」
+/// で削除し、見出しをその分上に詰めた。
 struct SignUpView: View {
     @StateObject private var viewModel: SignUpViewModel
     @FocusState private var focusedField: Field?
@@ -39,18 +39,13 @@ struct SignUpView: View {
 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
-                        BrandMark(width: 100, glow: true)
-                            .padding(.top, 28)
-                        BrandTitleText()
-                            .padding(.top, 10)
-
                         if viewModel.state == .confirmationRequired {
                             confirmationRequiredPanel
                                 .padding(.top, DesignTokens.Spacing.xl)
                                 .padding(.horizontal, DesignTokens.Spacing.lg)
                         } else {
                             headingBlock
-                                .padding(.top, 20)
+                                .padding(.top, 16)
                             formPanel
                                 .padding(.top, 18)
                                 .padding(.horizontal, DesignTokens.Spacing.lg)
