@@ -33,7 +33,11 @@ enum MovementAnalysisText {
         sentences.append("発表後\(firstLabel)で\(pips(abs(firstPips)))\(direction(firstPips))しました。")
 
         let later = ["15m", "60m"].compactMap(ready).filter { $0.timeframe != first.timeframe }
-        if let last = later.last, let lastPips = last.pips {
+        // 15分後より60分後のほうが動きが小さい(戻した)ときは、そう書き分ける。
+        if later.count == 2, let mid = later[0].pips, let end = later[1].pips,
+           mid != 0, end != 0, (mid > 0) == (end > 0), (firstPips > 0) == (mid > 0), abs(end) < abs(mid), abs(mid) > abs(firstPips) {
+            sentences.append("その後も\(direction(firstPips))が続き、15分後には\(pips(abs(mid)))\(direction(mid))しましたが、60分後には\(pips(abs(end)))まで戻しました。")
+        } else if let last = later.last, let lastPips = last.pips {
             let parts = later.compactMap { entry -> String? in
                 guard let value = entry.pips else { return nil }
                 return "\(label(entry.timeframe))後には\(pips(abs(value)))\(direction(value))"

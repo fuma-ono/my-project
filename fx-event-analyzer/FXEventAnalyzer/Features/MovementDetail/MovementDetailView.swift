@@ -72,7 +72,7 @@ struct MovementDetailView: View {
         let symbol = viewModel.symbol
         let latest = reactions.last { $0.analysisStatus == .ready && $0.postReleasePrice != nil }
         let digits = symbol.hasSuffix("JPY") ? 2 : 4
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 7) {
                 HStack(spacing: -4) {
                     CountryFlagView(currencyCode: String(symbol.prefix(3)), diameter: 20)
@@ -94,17 +94,20 @@ struct MovementDetailView: View {
                         let change = price - pre
                         let percent = pre == 0 ? 0 : change / pre * 100
                         Text("\(ValueFormat.number(change, fractionDigits: digits, signed: true)) (\(ValueFormat.number(percent, fractionDigits: 2, signed: true))%)")
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.system(size: 11, weight: .semibold))
                             .monospacedDigit()
                             .foregroundStyle(change >= 0 ? V5P.green : V5P.red)
                     }
                 }
-                NotoText.text("発表\(MovementAnalysisText.label(latest.timeframe))後の価格と、発表前からの変化", size: 6.5)
-                    .foregroundStyle(SettingsCardStyle.subtitleColor)
             }
             timeframeTabs
             chartSection
-                .frame(height: 150)
+                .frame(height: 112)
+            if let latest, latest.postReleasePrice != nil {
+                // HQ指示(2026-10-09): 価格の意味の説明は価格の横ではなくチャートの下に置く。
+                NotoText.text("※ 価格は発表\(MovementAnalysisText.label(latest.timeframe))後、変化は発表直前との比較です。", size: 6.5)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+            }
         }
         .padding(10)
         .frame(width: 214, alignment: .leading)
@@ -141,7 +144,7 @@ struct MovementDetailView: View {
         case .error(let message):
             ErrorView(title: "チャート取得に失敗しました", message: message, onRetry: { viewModel.retryChart() })
         case .loaded(let chart):
-            CandleChart(chart: chart, digits: viewModel.symbol.hasSuffix("JPY") ? 2 : 4)
+            CandleChart(chart: chart, digits: viewModel.symbol.hasSuffix("JPY") ? 2 : 4, timeframe: viewModel.selectedTimeframe)
         }
     }
 
@@ -152,7 +155,7 @@ struct MovementDetailView: View {
         let result = viewModel.eventSnapshot
         if let text = MovementAnalysisText.build(reactions: reactions, actual: result?.actual, forecast: result?.forecast, unit: result?.unit) {
             VStack(alignment: .leading, spacing: 5) {
-                NotoText.text("値動きの分析", size: 9.5).foregroundStyle(.white)
+                NotoText.text("値動きの分析", size: 11).foregroundStyle(.white)
                 NotoText.text(text, size: 8)
                     .foregroundStyle(.white.opacity(0.85))
                     .lineSpacing(2)
@@ -205,6 +208,30 @@ struct MovementDetailView: View {
 private struct CandleChart: View {
     let chart: ChartResponse
     let digits: Int
+    let timeframe: String
+
+    /// HQ指示(2026-10-09)「時刻を5分ごとに」: 1分足は発表の10分前〜20分後を出し、
+    /// 時刻は5分ごと。5分足・15分足は30分前〜60分後のままなので、5分ごとだと
+    /// 文字が重なるため15分・30分ごとにする。
+    private var window: (from: Date, to: Date) {
+        let release = chart.releaseDatetime
+        if timeframe == "1m" {
+            return (release.addingTimeInterval(-10 * 60), release.addingTimeInterval(20 * 60))
+        }
+        return (release.addingTimeInterval(-30 * 60), release.addingTimeInterval(60 * 60))
+    }
+
+    private var labelMinutes: Int {
+        switch timeframe {
+        case "1m": return 5
+        case "5m": return 15
+        default: return 30
+        }
+    }
+
+    private var points: [ChartPricePoint] {
+        chart.prices.filter { $0.timestamp >= window.from && $0.timestamp <= window.to }
+    }
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -214,8 +241,9 @@ private struct CandleChart: View {
     }()
 
     var body: some View {
-        let lows = chart.prices.map(\.low)
-        let highs = chart.prices.map(\.high)
+        let points = points
+        let lows = points.map(\.low)
+        let highs = points.map(\.high)
         let minY = lows.min() ?? 0
         let maxY = highs.max() ?? 1
         let pad = max((maxY - minY) * 0.08, 0.0001)
@@ -224,7 +252,7 @@ private struct CandleChart: View {
             RuleMark(x: .value("発表", chart.releaseDatetime))
                 .foregroundStyle(V5P.cyan.opacity(0.7))
                 .lineStyle(StrokeStyle(lineWidth: 0.8, dash: [3, 2]))
-            ForEach(chart.prices) { point in
+            ForEach(points) { point in
                 let color = point.close >= point.open ? V5P.green : V5P.red
                 RuleMark(
                     x: .value("時刻", point.timestamp),
@@ -243,9 +271,11 @@ private struct CandleChart: View {
             }
         }
         .chartYScale(domain: (minY - pad)...(maxY + pad))
+        .chartXScale(domain: window.from...window.to)
         .chartYAxis {
             AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { value in
-                AxisGridLine().foregroundStyle(SettingsCardStyle.cardBorder.opacity(0.5))
+                // HQ指示(2026-10-09)「縦線横線がしっかり見えるように」。
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6)).foregroundStyle(SettingsCardStyle.cardBorder.opacity(0.9))
                 AxisValueLabel {
                     if let price = value.as(Double.self) {
                         Text(ValueFormat.number(price, fractionDigits: digits))
@@ -256,8 +286,8 @@ private struct CandleChart: View {
             }
         }
         .chartXAxis {
-            AxisMarks(values: .automatic(desiredCount: 4)) { value in
-                AxisGridLine().foregroundStyle(SettingsCardStyle.cardBorder.opacity(0.3))
+            AxisMarks(values: .stride(by: .minute, count: labelMinutes)) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6)).foregroundStyle(SettingsCardStyle.cardBorder.opacity(0.9))
                 AxisValueLabel {
                     if let date = value.as(Date.self) {
                         Text(Self.timeFormatter.string(from: date))
@@ -270,9 +300,9 @@ private struct CandleChart: View {
         .accessibilityLabel("ローソク足チャート")
     }
 
-    /// 本数に合わせた足の幅(画面幅194ほどに収める)。
+    /// 本数に合わせた足の幅(画面幅160ほどに収める)。
     private var candleWidth: CGFloat {
-        let count = max(chart.prices.count, 1)
-        return max(1, min(5, 150 / CGFloat(count)))
+        let count = max(points.count, 1)
+        return max(1, min(5, 110 / CGFloat(count)))
     }
 }

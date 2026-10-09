@@ -1009,34 +1009,78 @@ function reactionSingleHandler(eventId, timeframe, fxPairId) {
   return { event_id: eventId, fx_pair_id: fxPairId, pre_release_price: fixture.preReleasePrice, ...row };
 }
 
+// HQ指示(2026-10-09)「チャートがおかしいのできれいなデータを」: 本物らしいローソク足に
+// する。1分足を作ってから5分足・15分足にまとめる。発表前は小さく上下し、発表後は
+// 1m/5m/15m/30m/60m の反応(pairReactionFixture の rows)を通るように大きく動いてから
+// 落ち着く。乱数は通貨ペアIDから決まる種で作るので、毎回同じ形になる。
+function seededRandom(seedText) {
+  let seed = 0;
+  for (const ch of seedText) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+  return () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+}
+
+function oneMinuteCandles(fixture, fxPairId) {
+  const { preReleasePrice, pipSize, rows } = fixture;
+  const random = seededRandom(String(fxPairId));
+  const releaseMs = new Date(EVENT_RELEASE_DATETIME).getTime();
+  // 発表後の目標(分 → pips)。0分は発表直前の価格。
+  const anchors = [
+    [0, 0],
+    [1, rows['1m']?.pips ?? 0],
+    [5, rows['5m']?.pips ?? 0],
+    [15, rows['15m']?.pips ?? 0],
+    [30, rows['30m']?.pips ?? rows['15m']?.pips ?? 0],
+    [60, rows['60m']?.pips ?? rows['30m']?.pips ?? 0],
+  ];
+  const targetAt = (minute) => {
+    for (let i = 1; i < anchors.length; i += 1) {
+      const [m0, p0] = anchors[i - 1];
+      const [m1, p1] = anchors[i];
+      if (minute <= m1) return p0 + ((p1 - p0) * (minute - m0)) / (m1 - m0);
+    }
+    return anchors[anchors.length - 1][1];
+  };
+  const candles = [];
+  let previousClose = preReleasePrice;
+  for (let minute = -30; minute < 60; minute += 1) {
+    const after = minute >= 0;
+    // 発表直後ほど振れ幅が大きく、時間とともに落ち着く。
+    const noisePips = after ? 1.2 + 6 * Math.exp(-minute / 6) : 0.9;
+    const base = after ? targetAt(minute + 1) : (random() - 0.5) * 2.5;
+    const closePips = base + (random() - 0.5) * noisePips;
+    const close = preReleasePrice + closePips * pipSize;
+    const open = previousClose;
+    const wick = (0.3 + random() * (after ? noisePips * 0.6 : 0.8)) * pipSize;
+    candles.push({
+      t: releaseMs + minute * 60_000,
+      open,
+      high: Math.max(open, close) + wick * random(),
+      low: Math.min(open, close) - wick * random(),
+      close,
+    });
+    previousClose = close;
+  }
+  return candles;
+}
+
 function reactionChartHandler(eventId, timeframe, fxPairId) {
   const fixture = pairReactionFixture(fxPairId);
-  const { preReleasePrice, pipSize } = fixture;
-  const digits = pipSize < 0.01 ? 5 : 3;
-  // 発表30分後に 30m の反応 (従来の USDJPY は +12.3pips) へ届く。
-  const target = (fixture.chartTargetPips ?? fixture.rows['30m'].pips) * pipSize;
-  const releaseMs = new Date(EVENT_RELEASE_DATETIME).getTime();
+  const digits = fixture.pipSize < 0.01 ? 5 : 3;
+  const round = (value) => Number(value.toFixed(digits));
   const stepMinutes = { '1m': 1, '5m': 5, '15m': 15, '30m': 30, '60m': 60 }[timeframe] ?? 5;
-  const fromMs = releaseMs - 30 * 60_000;
-  const toMs = releaseMs + 60 * 60_000;
+  const minutes = oneMinuteCandles(fixture, fxPairId);
   const prices = [];
-  let price = preReleasePrice;
-  for (let t = fromMs; t <= toMs; t += stepMinutes * 60_000) {
-    // deterministic gentle walk: flat before release, moves toward the reaction after it.
-    const minutesFromRelease = (t - releaseMs) / 60_000;
-    const drift = minutesFromRelease < 0 ? 0 : target * Math.min(1, minutesFromRelease / 30);
-    const wobble = Math.sin(t / 900_000) * 2 * pipSize;
-    const open = Number(price.toFixed(digits));
-    price = Number((preReleasePrice + drift + wobble).toFixed(digits));
-    const close = price;
-    const high = Number(Math.max(open, close) + pipSize).toFixed(digits);
-    const low = Number(Math.min(open, close) - pipSize).toFixed(digits);
+  for (let i = 0; i < minutes.length; i += stepMinutes) {
+    const group = minutes.slice(i, i + stepMinutes);
     prices.push({
-      timestamp: new Date(t).toISOString(),
-      open,
-      high: Number(high),
-      low: Number(low),
-      close,
+      timestamp: new Date(group[0].t).toISOString(),
+      open: round(group[0].open),
+      high: round(Math.max(...group.map((c) => c.high))),
+      low: round(Math.min(...group.map((c) => c.low))),
+      close: round(group[group.length - 1].close),
       volume: null,
     });
   }
