@@ -18,8 +18,8 @@ enum EventDetailState: Equatable {
 @MainActor
 final class EventDetailViewModel: ObservableObject {
     @Published private(set) var state: EventDetailState = .loading
-    /// 「相場反応の分析」の一般的な見方に使う指標(取れなくても画面は出す)。
-    @Published private(set) var indicator: IndicatorSummary?
+    /// この指標の次回発表予定(画面下の表示)。取れなくても画面は出す。
+    @Published private(set) var nextRelease: Date?
 
     private let apiClient: APIClient
     private let eventId: String
@@ -31,8 +31,18 @@ final class EventDetailViewModel: ObservableObject {
 
     /// 画面側がイベントを読み込んだ後に呼ぶ(`load`の通信の順番は変えない)。
     func loadIndicator(id: String) async {
-        let response: IndicatorDetailResponse? = try? await apiClient.send(Endpoint(path: "indicators/\(id)"))
-        indicator = response?.indicator
+        let response: IndicatorEventsListResponse? = try? await apiClient.send(Endpoint(
+            path: "indicators/\(id)/events",
+            queryItems: [
+                URLQueryItem(name: "status", value: "SCHEDULED"),
+                URLQueryItem(name: "limit", value: "2"),
+            ]
+        ))
+        // このイベント自体が発表前なら、それより後の回を次回とする。
+        nextRelease = response?.data
+            .filter { $0.id != eventId && $0.releaseDatetime > Date() }
+            .map(\.releaseDatetime)
+            .min()
     }
 
     func load() {

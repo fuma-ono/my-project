@@ -7,8 +7,8 @@ import SwiftUI
 /// (`NavigationLink(value:)`)から直接進む形にした。
 struct EventDetailCards: View {
     let response: EventDetailResponse
-    /// 発表後の「相場反応の分析」の文(呼び出し側で作る)。
-    let analysisText: String?
+    /// この指標の次回発表予定(呼び出し側で読む)。無ければ表示しない。
+    var nextRelease: Date? = nil
 
     /// HQ指示(2026-10-09)の表: 発表前は結果「未発表」、値動き「発表後に表示」、分析「発表後に分析」。
     var isReleased: Bool { response.event.status == .released }
@@ -19,18 +19,12 @@ struct EventDetailCards: View {
         VStack(alignment: .leading, spacing: 8) {
             header
             results
-            NotoText.text("主要通貨ペアの値動き（pips）", size: 11)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 4)
-                .padding(.top, 2)
+            // HQ指示(2026-10-09)の2枚目の参考画像: 見出しは表のカードの中、その下に
+            // 「相場反応詳細」「過去イベント比較」のボタンと次回発表予定。分析の欄はなくした。
             reactionTable
-            if !pairs.isEmpty, isReleased {
-                NotoText.text("通貨ペアを押すと、相場反応の詳細を表示します。", size: 7.5)
-                    .foregroundStyle(SettingsCardStyle.subtitleColor)
-                    .padding(.horizontal, 4)
-            }
-            analysisCard
+            movementLink
             comparisonLink
+            nextReleaseFooter
         }
         .frame(width: 214)
     }
@@ -139,6 +133,12 @@ struct EventDetailCards: View {
     /// 高さの枠で囲み、隣どうしの線を重ねて1本の罫線にする(経済カレンダーと同じ作り)。
     private var reactionTable: some View {
         VStack(spacing: 0) {
+            NotoText.text("主要通貨ペアの値動き（pips）", size: 10.5)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .frame(height: 24)
+                .overlay(alignment: .bottom) { Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5) }
             HStack(spacing: 0) {
                 cell(width: Self.pairColumnWidth) { Color.clear }
                 ForEach(["1分", "5分", "15分"], id: \.self) { label in
@@ -206,10 +206,8 @@ struct EventDetailCards: View {
 
     private func pairLabel(_ pair: EventMajorFxReaction) -> some View {
         HStack(spacing: 5) {
-            HStack(spacing: -3) {
-                CountryFlagView(currencyCode: String(pair.symbol.prefix(3)), diameter: 12)
-                CountryFlagView(currencyCode: String(pair.symbol.suffix(3)), diameter: 12)
-            }
+            // 参考画像どおり、国旗は基軸通貨の1つ。
+            CountryFlagView(currencyCode: String(pair.symbol.prefix(3)), diameter: 13)
             NotoText.text(FXPairSymbol.displayName(pair.symbol), size: 9.5)
                 .foregroundStyle(.white)
                 .lineLimit(1)
@@ -218,27 +216,41 @@ struct EventDetailCards: View {
         .padding(.leading, 7)
     }
 
-    // MARK: - 相場反応の分析・過去イベント比較
+    // MARK: - 相場反応詳細・過去イベント比較・次回発表予定
 
-    private var analysisCard: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            NotoText.text("相場反応の分析", size: 11).foregroundStyle(.white)
-            if !isReleased {
-                NotoText.text("発表後に分析します。", size: 8).foregroundStyle(SettingsCardStyle.subtitleColor)
-            } else if let analysisText {
-                NotoText.text(analysisText, size: 7.5)
-                    .foregroundStyle(.white.opacity(0.85))
-                    .lineSpacing(1.5)
-                    .fixedSize(horizontal: false, vertical: true)
-                NotoText.text("※ 一般的な見方で、今回の値動きの理由を断定するものではない。", size: 6)
-                    .foregroundStyle(SettingsCardStyle.subtitleColor)
-            } else {
-                NotoText.text("分析できる値動きのデータがまだありません。", size: 8).foregroundStyle(SettingsCardStyle.subtitleColor)
-            }
+    private func linkCard(icon: String, title: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(V5P.cyan)
+                .frame(width: 18)
+            NotoText.text(title, size: 10).foregroundStyle(.white)
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(V5P.cyan)
         }
-        .padding(8)
-        .frame(width: 214, alignment: .leading)
+        .padding(.horizontal, 10)
+        .frame(width: 214, height: 32)
         .background(AccountCardBackground())
+        .contentShape(Rectangle())
+    }
+
+    /// 先頭の通貨ペアのSCR-008 相場反応詳細へ(発表後だけ)。
+    @ViewBuilder private var movementLink: some View {
+        if isReleased, let pair = pairs.first {
+            NavigationLink(value: AppRoute.movementDetail(
+                eventId: response.event.id,
+                indicatorId: response.event.indicatorId,
+                fxPairId: pair.fxPairId,
+                symbol: pair.symbol,
+                indicatorName: response.event.indicatorName,
+                releaseDatetime: response.event.releaseDatetime
+            )) {
+                linkCard(icon: "chart.bar.xaxis", title: "相場反応詳細")
+            }
+            .buttonStyle(SettingsRowPressStyle())
+        }
     }
 
     /// HQ指示(2026-10-09)「イベント詳細には過去イベント比較ボタンを」。
@@ -252,19 +264,25 @@ struct EventDetailCards: View {
                 fxPairId: pairId,
                 fxPairSymbol: symbol
             )) {
-                HStack {
-                    NotoText.text("過去イベント比較", size: 9.5).foregroundStyle(.white)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(SettingsCardStyle.chevronColor)
-                }
-                .padding(.horizontal, 10)
-                .frame(width: 214, height: 30)
-                .background(AccountCardBackground())
-                .contentShape(Rectangle())
+                linkCard(icon: "clock.arrow.circlepath", title: "過去イベント比較")
             }
             .buttonStyle(SettingsRowPressStyle())
+        }
+    }
+
+    @ViewBuilder private var nextReleaseFooter: some View {
+        if let nextRelease {
+            HStack(spacing: 6) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(V5P.cyan)
+                NotoText.text("次回発表予定", size: 8).foregroundStyle(SettingsCardStyle.subtitleColor)
+                NotoText.text(IndicatorDetailCard.releaseLabel(nextRelease), size: 8.5).foregroundStyle(.white)
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .frame(width: 214, height: 26)
+            .background(AccountCardBackground())
         }
     }
 

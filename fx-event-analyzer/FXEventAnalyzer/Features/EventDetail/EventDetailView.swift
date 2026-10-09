@@ -63,7 +63,7 @@ struct EventDetailView: View {
 
                 // HQ指示(2026-10-09)の参考画像で作り直した本体(EventDetailCards)。
                 ScrollView(showsIndicators: false) {
-                    EventDetailCards(response: response, analysisText: analysisText(response))
+                    EventDetailCards(response: response, nextRelease: viewModel.nextRelease)
                         .padding(.vertical, 6)
                         .frame(width: V5P.W)
                 }
@@ -81,23 +81,6 @@ struct EventDetailView: View {
     /// HQ指示(2026-10-05、22回目)「背景画像とヘッダーとタブを全画面に反映して」:
     /// 読み込み中・エラー・未設定状態が単色背景のみで`V5Viewport`(背景画像)・
     /// ヘッダー・タブバーを経由していなかったため、`.loaded`状態と同じ外枠に揃えた。
-    /// 発表後の「相場反応の分析」。先頭の通貨ペアの値動きと、結果・予想、一般的な見方から作る
-    /// (相場反応詳細と同じ`MovementAnalysisText`。AIは使わない)。
-    private func analysisText(_ response: EventDetailResponse) -> String? {
-        guard let pair = EventDetailCards(response: response, analysisText: nil).pairs.first else { return nil }
-        let entries = pair.reactions.map {
-            ReactionTimeframeEntry(timeframe: $0.timeframe, postReleasePrice: nil, movement: nil, pips: $0.pips,
-                                   changePercent: $0.changePercent, maxUpward: nil, maxDownward: nil,
-                                   maxUpwardPips: nil, maxDownwardPips: nil, analysisStatus: $0.analysisStatus)
-        }
-        return MovementAnalysisText.build(
-            reactions: entries, actual: response.snapshot?.actual, forecast: response.snapshot?.forecast,
-            unit: response.snapshot?.unit,
-            marketViewAbove: viewModel.indicator?.marketViewAbove, marketViewBelow: viewModel.indicator?.marketViewBelow,
-            subject: FXPairSymbol.displayName(pair.symbol)
-        )
-    }
-
     @ViewBuilder private func loadingScaffold(@ViewBuilder content: @escaping () -> some View) -> some View {
         V5Viewport {
             V5Header(title: "イベント詳細", back: true, onBack: { dismiss() })

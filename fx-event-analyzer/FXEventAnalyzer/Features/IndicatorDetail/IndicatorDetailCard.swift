@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// SCR-006 指標詳細の本体(HQ指示 2026-10-09の参考画像)。1枚のカードに、
-/// 国旗・名前(日本語・英語)・国/通貨/重要度、概要、注目される理由、項目の表
-/// (対象国・地域、通貨、重要度、発表頻度、次回発表予定)、過去の発表日を並べる。
+/// SCR-006 指標詳細の本体(HQ指示 2026-10-09の参考画像)。カードに国旗・名前(日本語・英語)・
+/// 国/通貨/重要度、概要、項目の表(対象国・地域、通貨、重要度、発表頻度)を並べ、その下に
+/// 「次回発表予定」と「過去イベント比較」の移動用のカードを置く。
 /// お気に入りの星はカードの右上(HQ指示 2026-10-09)。文字の大きさは同日のHQ指定:
 /// 名前10.5、英語名と印7、見出しと「過去の発表日」9.5、本文・表8.5。
 struct IndicatorDetailCard: View {
@@ -14,6 +14,62 @@ struct IndicatorDetailCard: View {
     let onToggleFavorite: () -> Void
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            mainCard
+            // HQ指示(2026-10-09)の1枚目の参考画像: カードの下に「次回発表予定 ›」と
+            // 「過去イベント比較 ›」の見出しと、それぞれの小さなカード。
+            if let next = nextScheduledEvent {
+                NavigationLink(value: AppRoute.eventDetail(id: next.id)) {
+                    linkSection(title: "次回発表予定") {
+                        HStack(spacing: 8) {
+                            Image(systemName: "calendar")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(V5P.cyan)
+                            VStack(alignment: .leading, spacing: 2) {
+                                NotoText.text(Self.releaseLabel(next.releaseDatetime), size: 9.5).foregroundStyle(.white)
+                                NotoText.text("\(indicator.name)　|　\(CountryFlag.japaneseName(forCountry: indicator.countryCode))", size: 7)
+                                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                            }
+                            Spacer(minLength: 4)
+                            importanceBadge(width: 32)
+                        }
+                    }
+                }
+                .buttonStyle(SettingsRowPressStyle())
+            }
+            if let pair = comparisonPair {
+                NavigationLink(value: AppRoute.historicalComparison(
+                    indicatorId: indicator.id,
+                    indicatorName: indicator.name,
+                    fxPairId: pair.fxPairId,
+                    fxPairSymbol: pair.symbol
+                )) {
+                    linkSection(title: "過去イベント比較") {
+                        HStack(spacing: 8) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(V5P.cyan)
+                            VStack(alignment: .leading, spacing: 2) {
+                                NotoText.text("過去\(PlanStore.shared.limits.historyEventsMax)回のデータを表示", size: 9.5).foregroundStyle(.white)
+                                NotoText.text("過去の結果・予想・前回と為替の動きを比較できます", size: 7)
+                                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+                .buttonStyle(SettingsRowPressStyle())
+            }
+        }
+        .frame(width: 214)
+    }
+
+    /// 名前・国/通貨/重要度、概要、項目の表のカード。「注目される理由」はHQ指示(2026-10-09)で外した。
+    private var mainCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
                 .padding(.bottom, 8)
@@ -26,47 +82,43 @@ struct IndicatorDetailCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            if let points = indicator.keyPoints, !points.isEmpty {
-                separator
-                section("注目される理由") {
-                    VStack(alignment: .leading, spacing: 1.5) {
-                        ForEach(points, id: \.self) { point in
-                            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                                NotoText.text("•", size: 8.5).foregroundStyle(.white)
-                                NotoText.text(point, size: 8.5)
-                                    .foregroundStyle(.white.opacity(0.85))
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                    }
-                }
-            }
             separator
             infoTable
-            separator
-            // HQ指示(2026-10-09)「過去イベント比較画面の遷移元は指標詳細」。「過去の発表日」の行は
-            // 過去イベント比較で分かるので消した。
-            // HQ指示(2026-10-09)「指標詳細には次回発表予定と過去イベント比較を」: どちらも移動用の行。
-            // スクショのテストは「次回発表予定」からSCR-007へ進む。
-            if let next = nextScheduledEvent {
-                linkRow("次回発表予定", detail: "\(AppPreferences.shared.dateString(next.releaseDatetime)) \(AppPreferences.shared.timeString(next.releaseDatetime))",
-                        value: AppRoute.eventDetail(id: next.id))
-                if comparisonPair != nil { separator }
-            }
-            if let pair = comparisonPair {
-                linkRow("過去イベント比較", value: AppRoute.historicalComparison(
-                    indicatorId: indicator.id,
-                    indicatorName: indicator.name,
-                    fxPairId: pair.fxPairId,
-                    fxPairSymbol: pair.symbol
-                ))
-            }
         }
         .padding(.horizontal, 10)
         .padding(.top, 10)
-        .padding(.bottom, 2)
+        .padding(.bottom, 4)
         .frame(width: 214)
         .background(AccountCardBackground())
+    }
+
+    /// 見出し(「次回発表予定 ›」)とその下の小さなカード。全体で1つのボタン。
+    private func linkSection(title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                NotoText.text(title, size: 10.5).foregroundStyle(.white)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(SettingsCardStyle.chevronColor)
+            }
+            .padding(.horizontal, 4)
+            content()
+                .padding(.horizontal, 10)
+                .frame(width: 214, height: 38, alignment: .leading)
+                .background(AccountCardBackground())
+        }
+        .contentShape(Rectangle())
+    }
+
+    /// 「2025/10/15(水) 21:30」。
+    @MainActor static func releaseLabel(_ date: Date) -> String {
+        let preferences = AppPreferences.shared
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = preferences.timeZone
+        calendar.locale = Locale(identifier: "ja_JP")
+        let weekday = calendar.shortWeekdaySymbols[calendar.component(.weekday, from: date) - 1]
+        return "\(preferences.dateString(date))(\(weekday)) \(preferences.timeString(date))"
     }
 
     private func linkRow(_ title: String, detail: String? = nil, value: AppRoute) -> some View {

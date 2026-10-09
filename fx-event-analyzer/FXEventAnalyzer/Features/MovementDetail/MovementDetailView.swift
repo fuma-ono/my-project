@@ -84,33 +84,37 @@ struct MovementDetailView: View {
                 }
                 Spacer()
             }
+            // HQ指示(2026-10-09)「価格情報を整理する」: 比較時点の小さなラベル → 価格(最も目立たせる)と
+            // 変動幅・変動率を同じ行 → 変動の基準価格、の順。
             if let latest, let price = latest.postReleasePrice {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(ValueFormat.number(price, fractionDigits: digits))
-                        .font(.system(size: 17, weight: .semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(.white)
-                    if let pre = preReleasePrice {
-                        let change = price - pre
-                        let percent = pre == 0 ? 0 : change / pre * 100
-                        Text("\(ValueFormat.number(change, fractionDigits: digits, signed: true)) (\(ValueFormat.number(percent, fractionDigits: 2, signed: true))%)")
-                            .font(.system(size: 13, weight: .semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(change >= 0 ? V5P.green : V5P.red)
-                            // 横幅が足りないと「(-0.25%)」が2行目に折り返していたので1行に固定する。
-                            .lineLimit(1)
-                            .fixedSize()
-                    }
-                    Spacer(minLength: 0)
-                    NotoText.text("発表\(MovementAnalysisText.label(latest.timeframe))後", size: 6)
+                VStack(alignment: .leading, spacing: 1) {
+                    NotoText.text("発表\(MovementAnalysisText.label(latest.timeframe))後の価格", size: 6.5)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
-                        .lineLimit(1)
-                        .fixedSize()
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(ValueFormat.number(price, fractionDigits: digits))
+                            .font(.system(size: 18, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(.white)
+                        if let pre = preReleasePrice {
+                            let change = price - pre
+                            let percent = pre == 0 ? 0 : change / pre * 100
+                            Text("\(ValueFormat.number(change, fractionDigits: digits, signed: true)) (\(ValueFormat.number(percent, fractionDigits: 2, signed: true))%)")
+                                .font(.system(size: 12, weight: .semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(change >= 0 ? V5P.green : V5P.red)
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
+                    }
+                    if let pre = preReleasePrice {
+                        NotoText.text("発表直前 \(String(format: "%.\(digits)f", pre)) との比較", size: 6.5)
+                            .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    }
                 }
             }
             timeframeTabs
             chartSection
-                .frame(height: 138)
+                .frame(height: 128)
         }
         .padding(8)
         .frame(width: 214, alignment: .leading)
@@ -149,7 +153,13 @@ struct MovementDetailView: View {
             ErrorView(title: "チャート取得に失敗しました", message: message, onRetry: { viewModel.retryChart() })
         case .loaded(let chart):
             // 上の「発表 16:58」のラベルがタブに重ならないよう、少し間を空ける。
-            CandleChart(chart: chart, digits: viewModel.symbol.hasSuffix("JPY") ? 2 : 4, timeframe: viewModel.selectedTimeframe)
+            CandleChart(
+                chart: chart,
+                digits: viewModel.symbol.hasSuffix("JPY") ? 2 : 4,
+                timeframe: viewModel.selectedTimeframe,
+                preReleasePrice: viewModel.preReleasePrice,
+                pipSize: viewModel.symbol.hasSuffix("JPY") ? 0.01 : 0.0001
+            )
                 .padding(.top, 9)
         }
     }
@@ -159,20 +169,36 @@ struct MovementDetailView: View {
     @ViewBuilder
     private func analysisCard(reactions: [ReactionTimeframeEntry]) -> some View {
         let result = viewModel.eventSnapshot
-        if let text = MovementAnalysisText.build(
+        if let summary = MovementAnalysisText.summary(
             reactions: reactions, actual: result?.actual, forecast: result?.forecast, unit: result?.unit,
             marketViewAbove: viewModel.indicator?.marketViewAbove, marketViewBelow: viewModel.indicator?.marketViewBelow
         ) {
-            VStack(alignment: .leading, spacing: 4) {
+            // HQ指示(2026-10-09)「要点を分けて表示」「値動きの事実と相場の解釈は分ける」。
+            VStack(alignment: .leading, spacing: 5) {
                 NotoText.text("値動きの分析", size: 11).foregroundStyle(.white)
-                NotoText.text(text, size: 7.5)
-                    .foregroundStyle(.white.opacity(0.85))
-                    .lineSpacing(1.5)
-                    .fixedSize(horizontal: false, vertical: true)
-                // 1画面に収めるため、価格の説明もここにまとめた(HQ指示 2026-10-09)。
-                NotoText.text("※ 一般的な見方で、今回の値動きの理由を断定するものではない。", size: 6)
-                    .foregroundStyle(SettingsCardStyle.subtitleColor)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(spacing: 3) {
+                    ForEach(summary.facts, id: \.label) { row in
+                        HStack {
+                            NotoText.text(row.label, size: 8).foregroundStyle(SettingsCardStyle.subtitleColor)
+                            Spacer()
+                            NotoText.text(row.value, size: row.sign == nil ? 8.5 : 10)
+                                .foregroundStyle(row.sign.map { $0 >= 0 ? V5P.green : V5P.red } ?? .white)
+                        }
+                    }
+                }
+                if let interpretation = summary.interpretation {
+                    VStack(alignment: .leading, spacing: 2) {
+                        NotoText.text("解釈（一般的な見方）", size: 7.5).foregroundStyle(V5P.cyan)
+                        NotoText.text(interpretation, size: 7.5)
+                            .foregroundStyle(.white.opacity(0.85))
+                            .fixedSize(horizontal: false, vertical: true)
+                        NotoText.text("※ 値動きの原因を断定するものではない。", size: 6)
+                            .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    }
+                    .padding(6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 5).fill(V5P.cyan.opacity(0.08)))
+                }
             }
             .padding(8)
             .frame(width: 214, alignment: .leading)
@@ -196,6 +222,9 @@ private struct CandleChart: View {
     let chart: ChartResponse
     let digits: Int
     let timeframe: String
+    /// 発表直前の価格。基準線を引き、最後の足に「発表時点からの変動幅(pips)」を出す。
+    let preReleasePrice: Double?
+    let pipSize: Double
 
     /// HQ指示(2026-10-09)の表示範囲: 発表時刻を基準に、1分足は前後15分(初動)、5分足は
     /// 前後60分(短期の流れ)、15分足は前後3時間(全体の流れ)。Backendの`window_from`/`window_to`
@@ -265,6 +294,12 @@ private struct CandleChart: View {
                         .padding(.vertical, 1)
                         .background(V5P.cyan.opacity(0.35), in: Capsule())
                 }
+            // HQ指示(2026-10-09)「発表時点からの変動幅(pips)を確認しやすく」: 発表直前の価格に基準線。
+            if let pre = preReleasePrice {
+                RuleMark(y: .value("発表直前", pre))
+                    .foregroundStyle(Color.white.opacity(0.45))
+                    .lineStyle(StrokeStyle(lineWidth: 0.6, dash: [2, 2]))
+            }
             ForEach(points) { point in
                 let color = point.close >= point.open ? V5P.green : V5P.red
                 RuleMark(
@@ -281,6 +316,18 @@ private struct CandleChart: View {
                     width: .fixed(width)
                 )
                 .foregroundStyle(color)
+            }
+            if let pre = preReleasePrice, let last = points.last {
+                let pips = (last.close - pre) / pipSize
+                PointMark(x: .value("時刻", last.timestamp), y: .value("終値", last.close))
+                    .symbolSize(10)
+                    .foregroundStyle(.white)
+                    .annotation(position: pips >= 0 ? .top : .bottom, alignment: .trailing, spacing: 2) {
+                        Text("\(ValueFormat.number(pips, fractionDigits: 1, signed: true)) pips")
+                            .font(.system(size: 6.5, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(pips >= 0 ? V5P.green : V5P.red)
+                    }
             }
         }
         .chartYScale(domain: (minY - pad)...(maxY + pad))

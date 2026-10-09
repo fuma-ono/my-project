@@ -35,6 +35,12 @@ final class MovementDetailViewModel: ObservableObject {
     @Published private(set) var eventSnapshot: EventSnapshotDetail?
     /// 指標の一般的な見方(上振れ・下振れ)。取れなくても画面は出す。
     @Published private(set) var indicator: IndicatorSummary?
+
+    /// 発表直前の価格(チャートの基準線)。
+    var preReleasePrice: Double? {
+        if case .loaded(let price, _) = state { return price }
+        return nil
+    }
     @Published var selectedTimeframe: String = ReactionTimeframe.default {
         didSet {
             guard oldValue != selectedTimeframe, case .loaded = state else { return }

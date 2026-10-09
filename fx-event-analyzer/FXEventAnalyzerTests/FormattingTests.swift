@@ -112,6 +112,16 @@ final class MovementAnalysisTextTests: XCTestCase {
         XCTAssertEqual(text, "結果は予想を0.1%下回った。下回るとドルが売られやすいとされる。発表後1分で8.2pips、15分で41.3pips下落した。")
     }
 
+    func testSummarySeparatesFactsAndInterpretation() {
+        let summary = MovementAnalysisText.summary(
+            reactions: [entry("1m", -8.2), entry("15m", -41.3)], actual: 3.1, forecast: 3.2, unit: "%",
+            marketViewAbove: "上", marketViewBelow: "下回るとドルが売られやすいとされる。"
+        )
+        XCTAssertEqual(summary?.facts.map(\.label), ["発表結果", "初動（1分）", "15分後"])
+        XCTAssertEqual(summary?.facts.map(\.value), ["予想を0.1ポイント下回る", "-8.2 pips", "-41.3 pips"])
+        XCTAssertEqual(summary?.interpretation, "下回るとドルが売られやすいとされる。")
+    }
+
     func testReversalAndMissingData() {
         let text = MovementAnalysisText.build(reactions: [entry("1m", 5), entry("15m", -3)], actual: nil, forecast: nil, unit: nil)
         XCTAssertEqual(text, "発表後1分で5pips上昇したが、15分後には3pips下落した。")
