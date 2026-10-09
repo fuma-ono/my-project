@@ -9,9 +9,11 @@ import SwiftUI
 /// システムのナビゲーションバーではなく単体のシェブロンアイコン(他の
 /// プッシュ画面と同じ`.toolbar(.hidden, for: .navigationBar)` +
 /// `@Environment(\.dismiss)`パターン — `IndicatorDetailView`等参照)。
-/// Apple/Google登録ボタンはLoginの塗りつぶしスタイルと違い、枠線のみの
-/// アウトラインボタン(参考画像通り)。パスワード欄の目アイコンは実際に
-/// 表示・非表示を切り替える(参考画像のアイコンが示唆する通りの実機能)。
+/// Apple/Google登録ボタンの塗りは`LoginView.socialSignInSection`と揃えた
+/// (HQ指示 2026-10-09、3回目「枠内の色をログイン画面と揃えてほしい」—
+/// 当初は参考画像通り枠線のみのアウトラインボタンだった)。パスワード欄の
+/// 目アイコンは実際に表示・非表示を切り替える(参考画像のアイコンが示唆
+/// する通りの実機能)。
 struct SignUpView: View {
     @StateObject private var viewModel: SignUpViewModel
     @FocusState private var focusedField: Field?
@@ -38,6 +40,7 @@ struct SignUpView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
                         BrandMark(width: 100, glow: true)
+                            .padding(.top, 28)
                         BrandTitleText()
                             .padding(.top, 10)
 
@@ -96,10 +99,12 @@ struct SignUpView: View {
             Text("新規会員登録")
                 .font(DesignTokens.Typography.title)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
-            Text("アカウントを作成して、\nすべての機能を利用しましょう")
+            Text("アカウントを作成して、すべての機能を利用しましょう")
                 .font(DesignTokens.Typography.caption)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
-                .multilineTextAlignment(.center)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .padding(.horizontal, DesignTokens.Spacing.lg)
         }
     }
 
@@ -283,13 +288,13 @@ struct SignUpView: View {
         .onTapGesture { focusedField = field }
     }
 
-    /// Not in the Reference's own screenshot for this screen in detail, but
-    /// matches the outlined (not filled) style the Reference shows for
-    /// these two buttons here — distinct from `LoginView`'s solid-white
-    /// Apple button. `AuthServicing` has no social-auth method yet
-    /// (ui-screens.md: "認証方式は別途詳細設計で確定する"), so both are
-    /// wired to the same "準備中" alert every other not-yet-implemented
-    /// action in this app already uses.
+    /// HQ指示(2026-10-09、3回目)「Appleで登録、Googleで登録の枠内の色を
+    /// ログイン画面と揃えてほしい」— 参考画像の枠線のみのスタイルから、
+    /// `LoginView.socialSignInSection`と全く同じ塗り(Apple=白塗りつぶし+
+    /// 黒文字、Google=`backgroundElevated`塗りつぶし+`borderSubtle`枠線)に
+    /// 揃えた。`AuthServicing`に社会的ログインのAPIはまだ無いため
+    /// (ui-screens.md: "認証方式は別途詳細設計で確定する")、Loginと同じ
+    /// "準備中"アラートに繋いでいる。
     private var socialSignUpSection: some View {
         VStack(spacing: 12) {
             Button {
@@ -301,10 +306,10 @@ struct SignUpView: View {
                     Text("Appleで登録")
                         .font(DesignTokens.Typography.bodyEmphasized)
                 }
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
+                .foregroundStyle(.black)
                 .frame(maxWidth: .infinity)
                 .frame(height: fieldHeight)
-                .overlay(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero).stroke(DesignTokens.Colors.borderSubtle, lineWidth: 1))
+                .background(Color.white, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
             }
             .buttonStyle(.plain)
 
@@ -322,6 +327,7 @@ struct SignUpView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: fieldHeight)
+                .background(DesignTokens.Colors.backgroundElevated, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
                 .overlay(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero).stroke(DesignTokens.Colors.borderSubtle, lineWidth: 1))
             }
             .buttonStyle(.plain)

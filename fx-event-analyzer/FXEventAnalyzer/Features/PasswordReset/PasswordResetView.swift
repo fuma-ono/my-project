@@ -26,6 +26,7 @@ struct PasswordResetView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
                         BrandMark(width: 100, glow: true)
+                            .padding(.top, 28)
                         BrandTitleText()
                             .padding(.top, 10)
 
