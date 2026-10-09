@@ -114,7 +114,7 @@ struct MovementDetailView: View {
             }
             timeframeTabs
             chartSection
-                .frame(height: 128)
+                .frame(height: 114)
         }
         .padding(8)
         .frame(width: 214, alignment: .leading)
@@ -322,7 +322,7 @@ private struct CandleChart: View {
                 PointMark(x: .value("時刻", last.timestamp), y: .value("終値", last.close))
                     .symbolSize(10)
                     .foregroundStyle(.white)
-                    .annotation(position: pips >= 0 ? .top : .bottom, alignment: .trailing, spacing: 2) {
+                    .annotation(position: .topLeading, alignment: .trailing, spacing: 2) {
                         Text("\(ValueFormat.number(pips, fractionDigits: 1, signed: true)) pips")
                             .font(.system(size: 6.5, weight: .bold))
                             .monospacedDigit()
