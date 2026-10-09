@@ -139,6 +139,25 @@ enum CountryFlag {
         }
     }
 
+    /// ISO 3166-1 alpha-2国コード → 日本語の国名/地域名。SCR-011検索結果
+    /// 行のサブタイトル(「米国 | 経済指標」)用に追加(HQ指示 2026-10-09)。
+    /// `imageName(for:)`と同じ9つの対応国コードのみ扱い、対応が無ければ
+    /// 国コードをそのまま返す(存在しない国名を捏造しない)。
+    static func japaneseName(for countryCode: String) -> String {
+        switch countryCode.uppercased() {
+        case "US": return "米国"
+        case "JP": return "日本"
+        case "EU": return "ユーロ圏"
+        case "GB": return "英国"
+        case "AU": return "豪州"
+        case "CA": return "カナダ"
+        case "CN": return "中国"
+        case "NZ": return "ニュージーランド"
+        case "CH": return "スイス"
+        default: return countryCode.uppercased()
+        }
+    }
+
     /// ISO 4217通貨コード → 代表国のISO 3166コードという客観的な対応表
     /// (通貨と国の標準的な関係であり、推測や捏造ではない)。`imageName
     /// (forCurrency:)`から再利用する。

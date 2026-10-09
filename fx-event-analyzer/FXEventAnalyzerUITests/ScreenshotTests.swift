@@ -199,6 +199,20 @@ final class ScreenshotTests: XCTestCase {
         tap(containing: "カレンダー")
         XCTAssertTrue(waitForAnyElement(containing: "経済カレンダー", timeout: 15), "Calendar tab did not load")
         capture("10-Calendar")
+
+        // SCR-011 検索(HQ指示 2026-10-09、参考画像を基に完全再現 —
+        // 「人気の検索キーワード」パネル+「最近の検索履歴」の初期表示と、
+        // 検索後の結果一覧の両方を撮る)。
+        tap(containing: "検索")
+        XCTAssertTrue(waitForAnyElement(containing: "人気の検索キーワード", timeout: 15), "Search tab did not load")
+        capture("11-Search")
+
+        let searchField = app.textFields["検索"]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 10), "Search field did not appear")
+        searchField.tap()
+        searchField.typeText("CPI")
+        XCTAssertTrue(waitForAnyElement(containing: "消費者物価指数", timeout: 15), "Search results for CPI did not load")
+        capture("11b-Search-Results")
     }
 
     // MARK: - Helpers
