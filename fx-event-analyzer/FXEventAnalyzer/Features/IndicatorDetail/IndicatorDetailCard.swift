@@ -101,6 +101,8 @@ struct IndicatorDetailCard: View {
 
     private func chip(@ViewBuilder _ content: () -> some View) -> some View {
         content()
+            // 横幅が足りないと「米国」が「米」に切れていたので、文字の幅で固定する。
+            .fixedSize()
             .foregroundStyle(.white)
             .padding(.horizontal, 7)
             .frame(height: 17)
