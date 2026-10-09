@@ -51,6 +51,13 @@ import SwiftUI
 /// `CountryFlag.japaneseName(forCountry:)`も同ブランチの関数名・対応表に
 /// 揃えた(元は本画面実装時に`japaneseName(for:)`という別名・簡略版の
 /// 対応表で独自に追加していた)。
+///
+/// HQ指摘(2026-10-09、6回目): (1)検索欄とフィルターpill行の間隔を拡大、
+/// (2)検索欄の塗り色を明確化、(3)「人気の検索キーワード」見出し・
+/// キーワードpillの文字サイズをそれぞれ+0.5、(4)外枠とpillの塗り色を
+/// 別トーンにしてpillの方を明るく、(5)「最近の検索履歴」見出し・行の
+/// 文字サイズを+0.5、(6)「最近の検索履歴」の開始位置を「人気の検索
+/// キーワード」の開始位置(パネル内パディング分)に揃える — 以上を反映。
 struct SearchView: View {
     @StateObject private var viewModel: IndicatorsViewModel
     @State private var path = NavigationPath()
@@ -91,11 +98,18 @@ struct SearchView: View {
         }
     }
 
-    // 検索バー上端53・高さ28(y=67中心)、フィルターpill(y=94・高さ約20)が
-    // クリアできる余白を見て112に設定。V5BottomBarの帯高さ(39)と合わせて
-    // 491-112-39=340をScrollViewの実高さとした。
-    private static let contentTopOffset: CGFloat = 112
+    // 検索バー上端53・高さ28(y=67中心)、フィルターpill(y=100・高さ約20)との
+    // 間隔をHQ指示(2026-10-09、6回目)「検索欄とすべてや指標の間にスペースを
+    // もう少し広げて」で3pt→9ptに拡大。クリアできる余白を見て118に設定。
+    // V5BottomBarの帯高さ(39)と合わせて491-118-39=334をScrollViewの実高さとした。
+    private static let contentTopOffset: CGFloat = 118
     private static let contentAreaHeight: CGFloat = V5P.H - contentTopOffset - 39
+
+    /// HQ指示(2026-10-09、6回目)「検索欄の枠の中は色をつけて」: `V5P.panel2`
+    /// 単体だと背景グラデーション(`V5P.bg0`/`bg1`)との明度差が小さく、縮小表示
+    /// された実機キャプチャでは塗りが入っていないように見えていたため、枠内
+    /// だけ明確に明るい色を専用トークンとして定義した。
+    private static let searchFieldFill = Color(red: 0.035, green: 0.15, blue: 0.28)
 
     private var searchBar: some View {
         HStack {
@@ -115,7 +129,7 @@ struct SearchView: View {
         }
         .padding(.horizontal, 10)
         .frame(width: 204, height: 28)
-        .background(V5P.panel2, in: Capsule())
+        .background(Self.searchFieldFill, in: Capsule())
         .overlay(Capsule().stroke(V5P.line, lineWidth: 1))
         .position(x: 117, y: 67)
     }
@@ -129,7 +143,7 @@ struct SearchView: View {
                         .background(selectedFilter == filter ? V5P.blue : V5P.panel2, in: Capsule())
                 }.buttonStyle(.plain)
             }
-        }.position(x: 117, y: 94)
+        }.position(x: 117, y: 100)
     }
 
     @ViewBuilder private var scrollableContent: some View {
@@ -154,9 +168,17 @@ struct SearchView: View {
     /// (冒頭のドキュメントコメント参照)。
     private static let popularKeywords = ["FOMC", "雇用統計", "CPI", "ECB", "日銀", "GDP", "インフレ", "金利"]
 
+    /// HQ指示(2026-10-09、6回目)「人気の検索枠とFOMC枠に色をつけて、同じ色
+    /// ではなくFOMCの方が明るく」: 従来は`V5P.panel`(外枠)/`V5P.panel2`
+    /// (キーワードpill)という隣接トークンを使っていたが、実機キャプチャ上では
+    /// 明度差が小さく塗りがほぼ同じ色に見えていたため、差が明確な専用トークン
+    /// を定義した(外枠 < pillの明るさ)。
+    private static let popularPanelFill = Color(red: 0.025, green: 0.12, blue: 0.22)
+    private static let keywordPillFill = Color(red: 0.07, green: 0.24, blue: 0.42)
+
     private var popularKeywordsPanel: some View {
         VStack(alignment: .leading, spacing: 8) {
-            NotoText.text("人気の検索キーワード", size: 9.5)
+            NotoText.text("人気の検索キーワード", size: 10)
                 .foregroundStyle(.white)
 
             let rows = Self.popularKeywords.chunked(into: 4)
@@ -166,14 +188,14 @@ struct SearchView: View {
                         Button {
                             viewModel.searchText = keyword
                         } label: {
-                            NotoText.text(keyword, size: 8)
+                            NotoText.text(keyword, size: 8.5)
                                 .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                                .padding(.horizontal, 5)
+                                .minimumScaleFactor(0.7)
+                                .padding(.horizontal, 4)
                                 .padding(.vertical, 6)
                                 .frame(maxWidth: .infinity)
                                 .foregroundStyle(.white)
-                                .background(V5P.panel2, in: Capsule())
+                                .background(Self.keywordPillFill, in: Capsule())
                                 .overlay(Capsule().stroke(V5P.line.opacity(0.5), lineWidth: 1))
                         }.buttonStyle(.plain)
                     }
@@ -181,15 +203,19 @@ struct SearchView: View {
             }
         }
         .padding(10)
-        .background(V5P.panel, in: RoundedRectangle(cornerRadius: 10))
+        .background(Self.popularPanelFill, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(V5P.line.opacity(0.3), lineWidth: 1))
     }
 
     // MARK: - 最近の検索履歴
 
     private var recentSearchSection: some View {
+        // HQ指示(2026-10-09、6回目)「最近の検索の文字開始を人気の検索の開始と
+        // 位置を揃えて」: 「人気の検索キーワード」は`popularKeywordsPanel`の
+        // 枠線内パディング10pt分、scrollableContentの左パディング10ptより
+        // さらに右から始まる。同じ10ptをここにも足して開始位置を揃える。
         VStack(alignment: .leading, spacing: 8) {
-            NotoText.text("最近の検索履歴", size: 9.5)
+            NotoText.text("最近の検索履歴", size: 10)
                 .foregroundStyle(.white)
 
             ForEach(recentSearches.prefix(4)) { entry in
@@ -200,12 +226,13 @@ struct SearchView: View {
                 }.buttonStyle(.plain)
             }
         }
+        .padding(.leading, 10)
     }
 
     private func historyRow(_ entry: RecentSearchEntry) -> some View {
         HStack(spacing: 8) {
             CountryFlagView(countryCode: entry.countryCode, diameter: 22)
-            NotoText.text(entry.term, size: 9.5).foregroundStyle(.white).lineLimit(1)
+            NotoText.text(entry.term, size: 10).foregroundStyle(.white).lineLimit(1)
             Spacer()
             Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(V5P.muted)
         }
