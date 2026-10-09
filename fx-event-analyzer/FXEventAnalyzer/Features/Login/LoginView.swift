@@ -66,9 +66,11 @@ struct LoginView: View {
     }
 
     var body: some View {
-        // 2026-09-29 HQ承認(2-b): SCR-002/SCR-003(仮画面)への遷移を確認できる
-        // ようにするため、`NavigationStack`でラップした(ナビゲーションバーは
-        // 非表示のまま — 見た目は変更していない)。
+        // 2026-09-29 HQ承認(2-b): SCR-002/SCR-003への遷移を確認できるように
+        // するため、`NavigationStack`でラップした(ナビゲーションバーは非表示
+        // のまま — 見た目は変更していない)。両画面は当初`PlaceholderScreenView`
+        // だったが、HQ指示(2026-10-09)で`SignUpView`/`PasswordResetView`の
+        // 本実装に置き換えた。
         NavigationStack {
         GeometryReader { geometry in
             ZStack {
@@ -163,13 +165,9 @@ struct LoginView: View {
         .navigationDestination(for: AppRoute.self) { route in
             switch route {
             case .signUp:
-                PlaceholderScreenView(scrNumber: "SCR-002", screenName: "新規会員登録")
-                    .navigationTitle("新規会員登録")
-                    .navigationBarTitleDisplayMode(.inline)
+                SignUpView(viewModel: SignUpViewModel(authService: viewModel.authService, onSuccess: viewModel.onSuccess))
             case .passwordReset:
-                PlaceholderScreenView(scrNumber: "SCR-003", screenName: "パスワード再設定")
-                    .navigationTitle("パスワード再設定")
-                    .navigationBarTitleDisplayMode(.inline)
+                PasswordResetView(viewModel: PasswordResetViewModel(authService: viewModel.authService))
             default:
                 EmptyView()
             }
@@ -352,8 +350,8 @@ struct LoginView: View {
                 }
             }
 
-            // 2026-09-29 HQ承認(2-b): SCR-003(仮画面)への遷移。ボタンの見た目は
-            // 変更していない(アクションを"準備中"アラートから画面遷移に変更のみ)。
+            // 2026-09-29 HQ承認(2-b): SCR-003への遷移。HQ指示(2026-10-09)で
+            // `PasswordResetView`を本実装、ボタンの見た目は変更していない。
             NavigationLink(value: AppRoute.passwordReset) {
                 Text("パスワードをお忘れの方")
                     .font(DesignTokens.Typography.loginCaptionEmphasized)
@@ -373,8 +371,8 @@ struct LoginView: View {
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 18)
-            // 2026-09-29 HQ承認(2-b): SCR-002(仮画面)への遷移。ボタンの見た目は
-            // 変更していない(アクションを"準備中"アラートから画面遷移に変更のみ)。
+            // 2026-09-29 HQ承認(2-b): SCR-002への遷移。HQ指示(2026-10-09)で
+            // `SignUpView`を本実装、ボタンの見た目は変更していない。
             NavigationLink(value: AppRoute.signUp) {
                 Text("新規登録")
                     .font(DesignTokens.Typography.bodyEmphasized)

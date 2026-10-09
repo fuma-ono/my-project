@@ -47,6 +47,24 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
         capture("01-Login")
 
+        // SCR-002 新規会員登録 / SCR-003 パスワード再設定(HQ指示
+        // 2026-10-09「新規会員登録画面とパスワード再設定画面を作成して」で
+        // placeholderから本実装に切り替わったため、他の実装済み画面と同様に
+        // 撮影する)。どちらもLoginと同じNavigationStackにpushされる通常の
+        // ナビゲーションバー付き画面なので、戻るボタンは
+        // `navigationBars.buttons`の先頭要素(システム標準のBackボタン)。
+        tap(containing: "新規登録")
+        XCTAssertTrue(waitForAnyElement(containing: "パスワード(確認)", timeout: 15), "Sign Up screen did not load")
+        capture("02-SignUp")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(emailField.waitForExistence(timeout: 10), "Did not return to Login screen from Sign Up")
+
+        tap(containing: "パスワードをお忘れの方")
+        XCTAssertTrue(waitForAnyElement(containing: "再設定メールを送信", timeout: 15), "Password Reset screen did not load")
+        capture("03-PasswordReset")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(emailField.waitForExistence(timeout: 10), "Did not return to Login screen from Password Reset")
+
         emailField.tap()
         emailField.typeText("ui-screenshot@example.com")
         app.secureTextFields["パスワード"].tap()

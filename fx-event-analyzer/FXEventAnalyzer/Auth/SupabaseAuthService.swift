@@ -56,6 +56,32 @@ final class SupabaseAuthService: AuthServicing {
         }
     }
 
+    @discardableResult
+    func signUp(email: String, password: String) async throws -> SignUpResult {
+        guard let client else { throw AuthServiceError.notConfigured }
+        do {
+            switch try await client.signUp(email: email, password: password) {
+            case .session(let session):
+                return .signedIn(Self.mapSession(session))
+            case .user:
+                return .confirmationRequired
+            }
+        } catch let error as AuthError {
+            throw Self.mapSignUpError(error)
+        } catch {
+            throw AuthServiceError.network(error.localizedDescription)
+        }
+    }
+
+    func resetPassword(email: String) async throws {
+        guard let client else { throw AuthServiceError.notConfigured }
+        do {
+            try await client.resetPasswordForEmail(email)
+        } catch {
+            throw AuthServiceError.network(error.localizedDescription)
+        }
+    }
+
     func signOut() async throws {
         guard let client else { throw AuthServiceError.notConfigured }
         do {
@@ -90,6 +116,22 @@ final class SupabaseAuthService: AuthServicing {
             accessToken: session.accessToken,
             expiresAt: Date(timeIntervalSince1970: session.expiresAt)
         )
+    }
+
+    /// `signUp`'s two named failure modes (already-registered email, a
+    /// password Supabase Auth's own policy rejects) map to their own
+    /// `AuthServiceError` cases so the UI can say something more useful
+    /// than "通信に失敗しました"; anything else falls back to that generic
+    /// message like every other unclassified auth error does.
+    private static func mapSignUpError(_ error: AuthError) -> AuthServiceError {
+        switch error {
+        case .weakPassword(let message, _):
+            return .weakPassword(message)
+        case .api(_, let errorCode, _, _) where errorCode == .userAlreadyExists:
+            return .emailAlreadyInUse
+        default:
+            return .network(error.localizedDescription)
+        }
     }
 
     private static func isMissingSessionError(_ error: Error) -> Bool {

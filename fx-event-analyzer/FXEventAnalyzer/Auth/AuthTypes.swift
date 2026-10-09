@@ -26,8 +26,23 @@ enum AuthServiceError: Error, Equatable {
     /// No Supabase project is configured yet (expected throughout Phase 1).
     case notConfigured
     case invalidCredentials
+    /// Sign up with an email that already has an account (Supabase
+    /// `user_already_exists`).
+    case emailAlreadyInUse
+    /// Sign up with a password Supabase Auth's own policy rejects
+    /// (`AuthError.weakPassword`) — the message already explains why.
+    case weakPassword(String)
     case network(String)
     case unknown(String)
+}
+
+/// `AuthServicing.signUp`'s outcome — Supabase Auth returns a full session
+/// only when the project has email confirmation turned off; otherwise it
+/// returns just the created user and the session arrives later, once the
+/// user taps the confirmation link in their email.
+enum SignUpResult: Equatable {
+    case signedIn(UserSession)
+    case confirmationRequired
 }
 
 /// Abstraction over Supabase Auth so the rest of the app depends on this
@@ -43,6 +58,15 @@ protocol AuthServicing {
 
     @discardableResult
     func signIn(email: String, password: String) async throws -> UserSession
+
+    /// SCR-002 新規会員登録. See `SignUpResult`'s doc comment for why this
+    /// doesn't just return `UserSession` the way `signIn` does.
+    @discardableResult
+    func signUp(email: String, password: String) async throws -> SignUpResult
+
+    /// SCR-003 パスワード再設定. Sends Supabase's own reset-password email;
+    /// completing the reset happens on the link inside it, not in this app.
+    func resetPassword(email: String) async throws
 
     func signOut() async throws
 

@@ -4,6 +4,8 @@ final class MockAuthService: AuthServicing {
     var isConfigured: Bool
     var sessionResult: Result<UserSession?, Error> = .success(nil)
     var signInResult: Result<UserSession, Error>?
+    var signUpResult: Result<SignUpResult, Error>?
+    var resetPasswordError: Error?
     var signOutError: Error?
 
     private let stream: AsyncStream<AuthEvent>
@@ -34,6 +36,24 @@ final class MockAuthService: AuthServicing {
             return session
         case .failure(let error):
             throw error
+        }
+    }
+
+    func signUp(email: String, password: String) async throws -> SignUpResult {
+        guard let signUpResult else {
+            throw AuthServiceError.unknown("MockAuthService.signUpResult not configured")
+        }
+        switch signUpResult {
+        case .success(let result):
+            return result
+        case .failure(let error):
+            throw error
+        }
+    }
+
+    func resetPassword(email: String) async throws {
+        if let resetPasswordError {
+            throw resetPasswordError
         }
     }
 

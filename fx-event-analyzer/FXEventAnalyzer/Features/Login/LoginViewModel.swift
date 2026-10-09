@@ -8,17 +8,22 @@ enum LoginState: Equatable {
 }
 
 /// SCR-001 ログイン画面。Per ui-screens.md: "メールアドレス / パスワード / ログイン /
-/// パスワードリセット / 新規登録導線。認証方式は別途詳細設計で確定する" —
-/// Sign Up / Password Reset are navigation stubs only in Phase 1 (no screen
-/// spec exists for them yet).
+/// パスワードリセット / 新規登録導線。認証方式は別途詳細設計で確定する"。
+/// 新規登録(SCR-002)・パスワード再設定(SCR-003)は`LoginView`がこの画面と
+/// 同じ`NavigationStack`に本実装(`SignUpView`/`PasswordResetView`)を
+/// push する(HQ指示 2026-10-09)。
 @MainActor
 final class LoginViewModel: ObservableObject {
     @Published var email: String = ""
     @Published var password: String = ""
     @Published private(set) var state: LoginState = .idle
 
-    private let authService: AuthServicing
-    private let onSuccess: (UserSession) -> Void
+    // Not `private` — `LoginView` reuses both to build `SignUpViewModel`
+    // (same auto-sign-in-on-success callback as Login itself) and
+    // `PasswordResetViewModel` (same `authService`) for the screens it
+    // pushes onto its `NavigationStack`.
+    let authService: AuthServicing
+    let onSuccess: (UserSession) -> Void
 
     init(authService: AuthServicing, onSuccess: @escaping (UserSession) -> Void) {
         self.authService = authService
@@ -57,7 +62,10 @@ final class LoginViewModel: ObservableObject {
             return "認証機能は現在準備中です(Supabaseプロジェクト未接続)。"
         case .invalidCredentials:
             return "メールアドレスまたはパスワードが正しくありません。"
-        case .network, .unknown:
+        // `.emailAlreadyInUse`/`.weakPassword` are `signUp`-only outcomes —
+        // `signIn` never throws them — so they fall back to the generic
+        // message here just like `.network`/`.unknown`.
+        case .emailAlreadyInUse, .weakPassword, .network, .unknown:
             return "通信に失敗しました。もう一度お試しください。"
         }
     }
