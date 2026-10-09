@@ -235,7 +235,8 @@ private struct CandleChart: View {
         let step = TimeInterval(labelMinutes * 60)
         var date = Date(timeIntervalSince1970: (window.from.timeIntervalSince1970 / step).rounded(.up) * step)
         var dates: [Date] = []
-        while date <= window.to {
+        // 右端に近すぎる目盛りは文字が切れる(「06:…」)ので出さない。
+        while date <= window.to.addingTimeInterval(-step / 2) {
             dates.append(date)
             date = date.addingTimeInterval(step)
         }
