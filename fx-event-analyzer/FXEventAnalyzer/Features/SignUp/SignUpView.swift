@@ -47,13 +47,13 @@ struct SignUpView: View {
                                 .padding(.horizontal, DesignTokens.Spacing.lg)
                         } else {
                             headingBlock
-                                .padding(.top, 28)
+                                .padding(.top, 20)
                             formPanel
-                                .padding(.top, 24)
+                                .padding(.top, 18)
                                 .padding(.horizontal, DesignTokens.Spacing.lg)
                         }
                     }
-                    .padding(.bottom, DesignTokens.Spacing.lg)
+                    .padding(.bottom, DesignTokens.Spacing.sm)
                 }
             }
         }
