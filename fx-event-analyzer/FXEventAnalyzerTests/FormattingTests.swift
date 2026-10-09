@@ -97,6 +97,14 @@ final class ValueFormatUnitTests: XCTestCase {
     }
 }
 
+final class IndicatorDetailNameTests: XCTestCase {
+    func testSplitsBeforeTheParenthesis() {
+        XCTAssertEqual(IndicatorDetailCard.splitName("米国CPI(消費者物価指数)").main, "米国CPI")
+        XCTAssertEqual(IndicatorDetailCard.splitName("米国CPI(消費者物価指数)").paren, "(消費者物価指数)")
+        XCTAssertNil(IndicatorDetailCard.splitName("FOMC政策金利").paren)
+    }
+}
+
 final class HomeShortIndicatorNameTests: XCTestCase {
     func testDropsTheParenthetical() {
         XCTAssertEqual(HomeView.shortIndicatorName("米国雇用統計(非農業部門雇用者数)"), "米国雇用統計")

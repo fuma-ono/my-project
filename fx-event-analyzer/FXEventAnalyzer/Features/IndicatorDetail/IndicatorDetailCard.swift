@@ -41,6 +41,7 @@ struct IndicatorDetailCard: View {
             }
             separator
             infoTable
+            separator
             NavigationLink(value: AppRoute.indicatorReleases(id: indicator.id, name: indicator.name)) {
                 HStack {
                     NotoText.text("過去の発表日", size: 9.5).foregroundStyle(.white)
@@ -67,9 +68,7 @@ struct IndicatorDetailCard: View {
         HStack(alignment: .top, spacing: 8) {
             CountryFlagView(countryCode: indicator.countryCode, diameter: 34)
             VStack(alignment: .leading, spacing: 2) {
-                NotoText.text(indicator.name, size: 10.5)
-                    .foregroundStyle(.white)
-                    .fixedSize(horizontal: false, vertical: true)
+                nameText
                 if let nameEn = indicator.nameEn, !nameEn.isEmpty {
                     NotoText.text(nameEn, size: 7)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
@@ -98,6 +97,30 @@ struct IndicatorDetailCard: View {
             .accessibilityLabel(isFavorite ? "お気に入りから外す" : "お気に入りに追加")
             .accessibilityIdentifier("indicatorFavoriteStar")
         }
+    }
+
+    /// HQ指示(2026-10-09)「名前を途中で折り返さないように、(で折り返すとか」: 1行に
+    /// 入ればそのまま、入らなければカッコの前で改行する(「米国CPI」/「(消費者物価指数)」)。
+    private var nameText: some View {
+        let parts = Self.splitName(indicator.name)
+        return ViewThatFits(in: .horizontal) {
+            NotoText.text(indicator.name, size: 10.5).lineLimit(1).fixedSize()
+            VStack(alignment: .leading, spacing: 1) {
+                NotoText.text(parts.main, size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
+                if let paren = parts.paren {
+                    NotoText.text(paren, size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
+                }
+            }
+        }
+        .foregroundStyle(.white)
+    }
+
+    /// 「米国CPI(消費者物価指数)」→ ("米国CPI", "(消費者物価指数)")。カッコが無ければ全体を1行目に。
+    static func splitName(_ name: String) -> (main: String, paren: String?) {
+        guard let index = name.firstIndex(where: { $0 == "(" || $0 == "（" }), index != name.startIndex else {
+            return (name, nil)
+        }
+        return (String(name[..<index]), String(name[index...]))
     }
 
     private func chip(@ViewBuilder _ content: () -> some View) -> some View {
@@ -160,7 +183,7 @@ struct IndicatorDetailCard: View {
                 .buttonStyle(SettingsRowPressStyle())
             }
         }
-        .padding(.top, 2)
+        .padding(.vertical, 3)
     }
 
     private func infoRow(_ label: String, @ViewBuilder value: () -> some View) -> some View {
@@ -172,8 +195,6 @@ struct IndicatorDetailCard: View {
             Spacer(minLength: 0)
         }
         .frame(height: 22)
-        // HQ指示(2026-10-09)「対象国・地域〜次回発表の各枠の下に線を」。
-        .overlay(alignment: .bottom) { separator }
     }
 
     private func value(_ text: String) -> some View {
