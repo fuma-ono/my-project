@@ -90,17 +90,17 @@ struct EventDetailCards: View {
             CountryFlagView(countryCode: event.countryCode, diameter: 28)
             VStack(alignment: .leading, spacing: 3) {
                 ViewThatFits(in: .horizontal) {
-                    NotoText.text(event.indicatorName, size: 11.5).lineLimit(1).fixedSize()
+                    NotoText.text(event.indicatorName, size: 10.5).lineLimit(1).fixedSize()
                     VStack(alignment: .leading, spacing: 1) {
                         let parts = IndicatorDetailCard.splitName(event.indicatorName)
-                        NotoText.text(parts.main, size: 11.5).lineLimit(1).minimumScaleFactor(0.8)
+                        NotoText.text(parts.main, size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
                         if let paren = parts.paren {
-                            NotoText.text(paren, size: 11.5).lineLimit(1).minimumScaleFactor(0.8)
+                            NotoText.text(paren, size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
                         }
                     }
                 }
                 .foregroundStyle(.white)
-                NotoText.text("\(CountryFlag.japaneseName(forCountry: event.countryCode))　|　\(event.currencyCode)", size: 9)
+                NotoText.text("\(CountryFlag.japaneseName(forCountry: event.countryCode))　|　\(event.currencyCode)", size: 8.5)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
             }
             Spacer(minLength: 4)
@@ -231,8 +231,8 @@ struct EventDetailCards: View {
         .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }
 
-    /// 見出しの行: 本文より少しだけ濃い青。
-    private static let headerFill = Color(red: 0.0, green: 0.07, blue: 0.16)
+    /// 見出しの行: 本文と見分けがつく、少し明るい青(HQ指示 2026-10-09「もう少し明るく」)。
+    private static let headerFill = Color(red: 0.04, green: 0.18, blue: 0.36)
     /// 本文: カードの色から少し明るい青へ、上から下へのゆるいグラデーション。
     private static let bodyGradient = LinearGradient(
         colors: [SettingsCardStyle.cardFill, Color(red: 0.03, green: 0.14, blue: 0.27)],
