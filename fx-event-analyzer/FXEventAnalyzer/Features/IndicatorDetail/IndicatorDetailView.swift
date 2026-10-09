@@ -59,7 +59,7 @@ struct IndicatorDetailView: View {
             loadingScaffold { LoadingView(caption: "読み込み中...") }
         case .backendNotConfigured:
             loadingScaffold { FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "指標情報はまだ利用できません。") }
-        case .loaded(let indicator, _, _, let nextScheduledEvent):
+        case .loaded(let indicator, let relatedFxPairs, _, let nextScheduledEvent):
             V5Viewport {
                 // HQ指示(2026-10-09)「星マークはヘッダーではなく、指標枠の右上に」。
                 V5Header(title: "指標詳細", back: true, onBack: { dismiss() })
@@ -70,6 +70,7 @@ struct IndicatorDetailView: View {
                     IndicatorDetailCard(
                         indicator: indicator,
                         nextScheduledEvent: nextScheduledEvent,
+                        comparisonPair: relatedFxPairs.first,
                         isFavorite: favorites.isFavorite(.indicator, id: indicatorId),
                         onToggleFavorite: {
                             // 無料プランはお気に入りの件数に上限がある(HQ指示 2026-10-08)。

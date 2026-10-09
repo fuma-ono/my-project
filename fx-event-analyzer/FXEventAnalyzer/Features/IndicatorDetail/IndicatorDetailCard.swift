@@ -8,6 +8,8 @@ import SwiftUI
 struct IndicatorDetailCard: View {
     let indicator: IndicatorSummary
     let nextScheduledEvent: IndicatorEventSummary?
+    /// 過去イベント比較(SCR-009)に使う通貨ペア(関連通貨ペアの先頭)。無ければ行を出さない。
+    let comparisonPair: RelatedFxPairSummary?
     let isFavorite: Bool
     let onToggleFavorite: () -> Void
 
@@ -42,24 +44,38 @@ struct IndicatorDetailCard: View {
             separator
             infoTable
             separator
-            NavigationLink(value: AppRoute.indicatorReleases(id: indicator.id, name: indicator.name)) {
-                HStack {
-                    NotoText.text("過去の発表日", size: 9.5).foregroundStyle(.white)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(SettingsCardStyle.chevronColor)
-                }
-                .frame(height: 32)
-                .contentShape(Rectangle())
+            linkRow("過去の発表日", value: AppRoute.indicatorReleases(id: indicator.id, name: indicator.name))
+            // HQ指示(2026-10-09)「過去イベント比較画面の遷移元は指標詳細」。
+            if let pair = comparisonPair {
+                separator
+                linkRow("過去イベント比較", value: AppRoute.historicalComparison(
+                    indicatorId: indicator.id,
+                    indicatorName: indicator.name,
+                    fxPairId: pair.fxPairId,
+                    fxPairSymbol: pair.symbol
+                ))
             }
-            .buttonStyle(SettingsRowPressStyle())
         }
         .padding(.horizontal, 10)
         .padding(.top, 10)
         .padding(.bottom, 2)
         .frame(width: 214)
         .background(AccountCardBackground())
+    }
+
+    private func linkRow(_ title: String, value: AppRoute) -> some View {
+        NavigationLink(value: value) {
+            HStack {
+                NotoText.text(title, size: 9.5).foregroundStyle(.white)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(SettingsCardStyle.chevronColor)
+            }
+            .frame(height: 32)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SettingsRowPressStyle())
     }
 
     // MARK: - 名前・国・通貨・重要度

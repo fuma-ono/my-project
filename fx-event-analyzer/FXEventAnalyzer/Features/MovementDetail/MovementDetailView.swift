@@ -4,7 +4,8 @@ import SwiftUI
 /// SCR-008 相場反応詳細(HQ指示 2026-10-09の参考画像で作り直し)。上から、通貨ペアの
 /// カード(国旗・USD/JPY・米ドル/円、発表60分後の価格と発表前からの変化)、
 /// 1分足・5分足・15分足のローソク足チャート(発表の30分前〜60分後、発表時刻に縦線)、
-/// 「値動きの分析」(数値から決まった型で作る文。AIの推測は使わない)、SCR-009への導線。
+/// 「値動きの分析」(数値から決まった型で作る文。AIの推測は使わない)。SCR-009への導線は
+/// 指標詳細にある(HQ指示 2026-10-09「過去イベント比較の遷移元は指標詳細」)。
 struct MovementDetailView: View {
     @StateObject private var viewModel: MovementDetailViewModel
     @Binding var tabSelection: Int
@@ -51,7 +52,6 @@ struct MovementDetailView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         priceCard(preReleasePrice: preReleasePrice, reactions: reactions)
                         analysisCard(reactions: reactions)
-                        comparisonLink
                     }
                     .frame(width: 214)
                     .padding(.vertical, 6)
@@ -172,29 +172,6 @@ struct MovementDetailView: View {
             .frame(width: 214, alignment: .leading)
             .background(AccountCardBackground())
         }
-    }
-
-    /// SCR-009 過去の比較へ(スクショのテストはこの行から進む)。
-    private var comparisonLink: some View {
-        NavigationLink(value: AppRoute.historicalComparison(
-            indicatorId: viewModel.indicatorId,
-            indicatorName: viewModel.indicatorName,
-            fxPairId: viewModel.fxPairId,
-            fxPairSymbol: viewModel.symbol
-        )) {
-            HStack {
-                NotoText.text("過去の値動きと比較する", size: 9).foregroundStyle(.white)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(SettingsCardStyle.chevronColor)
-            }
-            .padding(.horizontal, 10)
-            .frame(width: 214, height: 26)
-            .background(AccountCardBackground())
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(SettingsRowPressStyle())
     }
 
     @ViewBuilder private func loadingScaffold(@ViewBuilder content: @escaping () -> some View) -> some View {

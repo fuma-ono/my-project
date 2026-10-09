@@ -100,11 +100,16 @@ final class ScreenshotTests: XCTestCase {
 
         // SCR-008 相場反応詳細。2026-10-09から、値動きの表のUSD/JPYの行から直接進む。
         tap(containing: "USD/JPYの相場反応を見る")
-        XCTAssertTrue(waitForAnyElement(containing: "過去の値動きと比較する", timeout: 15), "Movement Detail did not load")
+        XCTAssertTrue(waitForAnyElement(containing: "値動きの分析", timeout: 15), "Movement Detail did not load")
         capture("08-MovementDetail")
 
-        // SCR-009 過去イベント比較(via Movement Detail's link)
-        tap(containing: "過去の値動きと比較する")
+        // SCR-009 過去イベント比較。2026-10-09から遷移元は指標詳細なので、
+        // 相場反応詳細 → イベント詳細 → 指標詳細 と戻ってから進む。
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 10), "Did not go back to Event Detail")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 10), "Did not go back to Indicator Detail")
+        tap(containing: "過去イベント比較")
         XCTAssertTrue(waitForAnyElement(containing: "過去の発表一覧", timeout: 15), "Historical Comparison did not load")
         capture("09-HistoricalComparison")
 
@@ -116,7 +121,7 @@ final class ScreenshotTests: XCTestCase {
         // 文字は可変のモックデータ(日付・数値)のため、固定の
         // accessibilityIdentifierでタップする。
         tapIdentifier("historyEventRow")
-        XCTAssertTrue(waitForAnyElement(containing: "過去の値動きと比較する", timeout: 15), "Historical Comparison row did not navigate to SCR-008")
+        XCTAssertTrue(waitForAnyElement(containing: "相場反応詳細", timeout: 15), "Historical Comparison row did not navigate to SCR-008")
 
         // 04-Home(SCR-004の実キャプチャ)。上でお気に入り登録した米国CPIが
         // 「お気に入り」カードに実際に表示された状態でHomeに戻って撮る —
