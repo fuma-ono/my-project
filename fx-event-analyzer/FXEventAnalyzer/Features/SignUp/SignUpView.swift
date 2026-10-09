@@ -213,10 +213,10 @@ struct SignUpView: View {
                     .fixedSize()
                 Rectangle().fill(DesignTokens.Colors.borderSubtle).frame(height: 1)
             }
-            .padding(.top, 20)
+            .padding(.top, 16)
 
             socialSignUpSection
-                .padding(.top, 16)
+                .padding(.top, 12)
 
             VStack(spacing: 4) {
                 Text("すでにアカウントをお持ちの方は")
@@ -232,7 +232,7 @@ struct SignUpView: View {
                 .buttonStyle(.plain)
             }
             .frame(maxWidth: .infinity)
-            .padding(.top, 22)
+            .padding(.top, 14)
         }
         .frame(maxWidth: .infinity)
     }
