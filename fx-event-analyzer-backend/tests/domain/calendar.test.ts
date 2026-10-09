@@ -4,6 +4,7 @@ import { buildCalendarItems, type CalendarIndicatorEvent, type CalendarSpeech } 
 function event(overrides: Partial<CalendarIndicatorEvent> = {}): CalendarIndicatorEvent {
   return {
     id: 'e1',
+    indicator_id: 'i1',
     indicator_name: '米国雇用統計(非農業部門雇用者数)',
     country_code: 'US',
     currency_code: 'USD',
@@ -34,6 +35,7 @@ describe('buildCalendarItems', () => {
       {
         kind: 'SPEECH',
         id: 's1',
+        indicator_id: null,
         title: '経済見通しに関する講演',
         speaker_name: 'ジェローム・パウエル',
         country_code: 'US',
@@ -46,6 +48,7 @@ describe('buildCalendarItems', () => {
       {
         kind: 'INDICATOR',
         id: 'e1',
+        indicator_id: 'i1',
         title: '米国雇用統計(非農業部門雇用者数)',
         speaker_name: null,
         country_code: 'US',
@@ -97,6 +100,18 @@ describe('buildCalendarItems', () => {
     expect(ids({ importance: 'HIGH' })).toEqual(['s1', 'e1']);
     expect(ids({ currency: 'JPY' })).toEqual(['s1', 'e2']);
     expect(ids({ importance: 'MEDIUM', currency: 'USD' })).toEqual(['s2']);
+  });
+
+  it('carries each event’s indicator_id on INDICATOR items and null on SPEECH items', () => {
+    const items = buildCalendarItems(
+      [event({ id: 'e1', indicator_id: 'i-cpi' }), event({ id: 'e2', indicator_id: 'i-nfp' })],
+      [speech({ speech_id: 's1', statement_datetime: '2026-10-08T13:00:00Z' })],
+    );
+    expect(items.map((item) => [item.kind, item.id, item.indicator_id])).toEqual([
+      ['INDICATOR', 'e1', 'i-cpi'],
+      ['INDICATOR', 'e2', 'i-nfp'],
+      ['SPEECH', 's1', null],
+    ]);
   });
 
   it('returns an empty list for an empty range', () => {

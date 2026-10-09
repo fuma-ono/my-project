@@ -12,12 +12,29 @@
 -- Economic indicators
 -- ---------------------------------------------------------------------
 
-insert into economic_indicators (id, code, name, country_code, currency_code, importance, description, frequency, unit, source, favorable_direction) values
-  ('10000000-0000-0000-0000-000000000001', 'US_CPI', '米国CPI(消費者物価指数)', 'US', 'USD', 'HIGH', 'US headline inflation rate, year-over-year.', 'MONTHLY', '%', 'U.S. Bureau of Labor Statistics', 'HIGHER_IS_POSITIVE'),
-  ('10000000-0000-0000-0000-000000000002', 'US_NFP', '米国雇用統計(非農業部門雇用者数)', 'US', 'USD', 'HIGH', 'Change in the number of employed people, excluding the farming industry.', 'MONTHLY', 'K', 'U.S. Bureau of Labor Statistics', 'HIGHER_IS_POSITIVE'),
-  ('10000000-0000-0000-0000-000000000003', 'US_FOMC', 'FOMC政策金利', 'US', 'USD', 'HIGH', 'Federal Open Market Committee target rate decision.', 'IRREGULAR', '%', 'Federal Reserve', 'NEUTRAL'),
-  ('10000000-0000-0000-0000-000000000004', 'JP_CPI', '日本CPI(消費者物価指数)', 'JP', 'JPY', 'HIGH', 'Japan headline inflation rate, year-over-year.', 'MONTHLY', '%', 'Statistics Bureau of Japan', 'HIGHER_IS_POSITIVE'),
-  ('10000000-0000-0000-0000-000000000005', 'BOJ_RATE', '日銀政策金利', 'JP', 'JPY', 'HIGH', 'Bank of Japan monetary policy rate decision.', 'IRREGULAR', '%', 'Bank of Japan', 'NEUTRAL');
+-- name_en / key_points / 日本語の description は SCR-006 指標詳細の
+-- 英語名・注目される理由・概要 (HQ指示 2026-10-09)。
+insert into economic_indicators (id, code, name, name_en, country_code, currency_code, importance, description, key_points, frequency, unit, source, favorable_direction) values
+  ('10000000-0000-0000-0000-000000000001', 'US_CPI', '米国CPI(消費者物価指数)', 'Consumer Price Index', 'US', 'USD', 'HIGH',
+    '消費者物価指数（CPI）は、消費者が購入するモノやサービスの価格の変動を測定する指標です。インフレの動向を示す重要な指標であり、金融政策の判断材料として注目されます。',
+    array['インフレの動向を把握できる', '金融政策への影響が大きい', '為替や株式市場に大きな影響を与える'],
+    'MONTHLY', '%', 'U.S. Bureau of Labor Statistics', 'HIGHER_IS_POSITIVE'),
+  ('10000000-0000-0000-0000-000000000002', 'US_NFP', '米国雇用統計(非農業部門雇用者数)', 'Nonfarm Payrolls', 'US', 'USD', 'HIGH',
+    '非農業部門雇用者数（NFP）は、農業部門を除く米国の雇用者数が前月から何人増減したかを示す指標です。米国の景気や雇用の強さを測る代表的な指標として注目されます。',
+    array['米国の景気の強さを把握できる', 'FRBの金融政策判断に影響する', '発表直後に為替が大きく動きやすい'],
+    'MONTHLY', 'K', 'U.S. Bureau of Labor Statistics', 'HIGHER_IS_POSITIVE'),
+  ('10000000-0000-0000-0000-000000000003', 'US_FOMC', 'FOMC政策金利', 'FOMC Interest Rate Decision', 'US', 'USD', 'HIGH',
+    'FOMC（連邦公開市場委員会）が決定する、米国の政策金利（フェデラル・ファンド金利の誘導目標）です。米国の金融政策の方向性を示し、世界の金融市場に大きな影響を与えます。',
+    array['米国の金融政策の方向性がわかる', '米ドルの金利水準を直接左右する', '声明や会見で今後の見通しが示される', '世界の株式・債券市場にも影響する'],
+    'IRREGULAR', '%', 'Federal Reserve', 'NEUTRAL'),
+  ('10000000-0000-0000-0000-000000000004', 'JP_CPI', '日本CPI(消費者物価指数)', 'Japan Consumer Price Index', 'JP', 'JPY', 'HIGH',
+    '日本の消費者物価指数（CPI）は、国内の消費者が購入するモノやサービスの価格の変動を前年同月比で示す指標です。日本のインフレの動向を示し、日銀の金融政策の判断材料として注目されます。',
+    array['日本のインフレの動向を把握できる', '日銀の金融政策の判断材料になる', '円相場の方向性に影響する'],
+    'MONTHLY', '%', 'Statistics Bureau of Japan', 'HIGHER_IS_POSITIVE'),
+  ('10000000-0000-0000-0000-000000000005', 'BOJ_RATE', '日銀政策金利', 'BOJ Interest Rate Decision', 'JP', 'JPY', 'HIGH',
+    '日本銀行が金融政策決定会合で決定する政策金利です。日本の金融政策の方向性を示し、円の金利水準や為替相場に大きな影響を与えます。',
+    array['日本の金融政策の方向性がわかる', '円の金利水準を直接左右する', '総裁会見の発言で相場が動きやすい'],
+    'IRREGULAR', '%', 'Bank of Japan', 'NEUTRAL');
 
 -- ---------------------------------------------------------------------
 -- FX pairs

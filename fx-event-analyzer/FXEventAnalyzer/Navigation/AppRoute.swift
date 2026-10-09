@@ -72,4 +72,6 @@ enum AppRoute: Hashable {
     case notificationSettings
     /// SCR-020 お問い合わせ履歴。通知一覧の「お問い合わせに返信しました」から開く。
     case supportHistory
+    /// SCR-006 指標詳細の「過去の発表日」。その指標の発表済みの回の一覧(HQ指示 2026-10-09)。
+    case indicatorReleases(id: String, name: String)
 }

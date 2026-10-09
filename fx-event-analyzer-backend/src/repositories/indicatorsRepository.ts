@@ -1,14 +1,20 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { rangeFor, type PaginationParams } from '../utils/pagination.js';
+import { normalizeKeyPoints } from '../domain/indicators.js';
 
 export interface IndicatorRow {
   id: string;
   code: string;
   name: string;
+  /** SCR-006 英語名 (例: `Consumer Price Index`)。未登録はnull。 */
+  name_en: string | null;
   country_code: string;
   currency_code: string;
   importance: string;
+  /** SCR-006 概要 (日本語1〜2文)。 */
   description: string | null;
+  /** SCR-006 注目される理由。DBのNULL(未登録)は `[]` で返す。 */
+  key_points: string[];
   frequency: string;
   unit: string | null;
   source: string | null;
@@ -16,8 +22,14 @@ export interface IndicatorRow {
   favorable_direction: string;
 }
 
+type IndicatorDbRow = Omit<IndicatorRow, 'key_points'> & { key_points: string[] | null };
+
 const INDICATOR_COLUMNS =
-  'id, code, name, country_code, currency_code, importance, description, frequency, unit, source, source_url, favorable_direction';
+  'id, code, name, name_en, country_code, currency_code, importance, description, key_points, frequency, unit, source, source_url, favorable_direction';
+
+function toIndicatorRow(row: IndicatorDbRow): IndicatorRow {
+  return { ...row, key_points: normalizeKeyPoints(row.key_points) };
+}
 
 export interface ListIndicatorsFilters {
   q?: string | undefined;
@@ -46,7 +58,7 @@ export async function listIndicators(
   const { data, error, count } = await query.order(filters.sort, { ascending: true }).range(from, to);
   if (error) throw error;
 
-  return { rows: data ?? [], total: count ?? 0 };
+  return { rows: ((data ?? []) as IndicatorDbRow[]).map(toIndicatorRow), total: count ?? 0 };
 }
 
 export async function getIndicatorById(supabase: SupabaseClient, indicatorId: string): Promise<IndicatorRow | null> {
@@ -57,7 +69,7 @@ export async function getIndicatorById(supabase: SupabaseClient, indicatorId: st
     .eq('is_active', true)
     .maybeSingle();
   if (error) throw error;
-  return data;
+  return data ? toIndicatorRow(data) : null;
 }
 
 export interface RelatedFxPairRow {

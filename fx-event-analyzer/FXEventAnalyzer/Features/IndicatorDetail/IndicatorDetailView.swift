@@ -59,7 +59,7 @@ struct IndicatorDetailView: View {
             loadingScaffold { LoadingView(caption: "読み込み中...") }
         case .backendNotConfigured:
             loadingScaffold { FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "指標情報はまだ利用できません。") }
-        case .loaded(let indicator, let relatedFxPairs, _, let nextScheduledEvent):
+        case .loaded(let indicator, _, _, let nextScheduledEvent):
             V5Viewport {
                 V5Header(
                     title: "指標詳細", back: true,
@@ -75,97 +75,18 @@ struct IndicatorDetailView: View {
                     }
                 )
 
-                V5Card(CGRect(x: 10, y: 57, width: 214, height: 59)) {
-                    HStack(spacing: 5) {
-                        CountryFlagView(countryCode: indicator.countryCode, diameter: 22)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(CountryFlag.kanjiAbbreviation(for: indicator.countryCode))) \(indicator.name)").font(.system(size: 9, weight: .bold))
-                            Text(indicator.currencyCode).font(.system(size: 7)).foregroundStyle(V5P.muted)
-                        }
-                        Spacer()
-                        V5Badge(text: "重要度 \(indicator.importance.rawValue.capitalized)", color: indicator.importance.v5Color)
-                    }.foregroundStyle(.white)
+                // HQ指示(2026-10-09)の参考画像: 1枚のカードに、名前(日本語・英語)と
+                // 国・通貨・重要度、概要、注目される理由、項目の表、過去の発表日を並べる。
+                ScrollView(showsIndicators: false) {
+                    IndicatorDetailCard(
+                        indicator: indicator,
+                        nextScheduledEvent: nextScheduledEvent
+                    )
+                    .padding(.vertical, 6)
+                    .frame(width: V5P.W)
                 }
-
-                if let nextScheduledEvent {
-                    Text("次回発表予定").font(.system(size: 7)).foregroundStyle(V5P.muted).position(x: 39, y: 128)
-                    Text(ValueFormat.dateTime(nextScheduledEvent.releaseDatetime)).font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 95, y: 140)
-                    V5Card(CGRect(x: 10, y: 151, width: 214, height: 95)) {
-                        VStack(spacing: 6) {
-                            HStack {
-                                metric("予想", ValueFormat.number(nextScheduledEvent.forecast))
-                                metric("結果", nextScheduledEvent.actual.map { ValueFormat.number($0) } ?? "-")
-                                metric("前回", ValueFormat.number(nextScheduledEvent.previous))
-                            }
-                            if let surprise = nextScheduledEvent.surprise {
-                                Divider().overlay(V5P.line)
-                                HStack {
-                                    Text("サプライズ\n(予想比)").font(.system(size: 8)).foregroundStyle(.white)
-                                    Spacer()
-                                    Text(ValueFormat.percent(surprise, signed: true)).font(.system(size: 13, weight: .bold)).foregroundStyle(V5P.red)
-                                    Image(systemName: "chevron.right").foregroundStyle(V5P.red)
-                                }
-                            }
-                        }
-                    }
-                    // HQ指示(2026-10-03、9回目)「今日の重要イベントはホームから
-                    // 削除します」に伴い、Home経由でSCR-007 イベント詳細に
-                    // 遷移する唯一の導線が無くなったため、ここ(次回発表予定
-                    // カード)から新規配線した。`historicalComparison`リンク
-                    // (このファイル下部)と同じ手法 — 見た目のピクセルは一切
-                    // 変更せず、同じ領域だけを覆う透明なタップ層を追加する。
-                    NavigationLink(value: AppRoute.eventDetail(id: nextScheduledEvent.id)) {
-                        Color.clear
-                    }
-                    .accessibilityLabel("次回発表予定 イベント詳細を見る")
-                    .frame(width: 214, height: 95)
-                    .position(x: 117, y: 198.5)
-                }
-
-                if let description = indicator.description, !description.isEmpty {
-                    Text("この指標の影響").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 43, y: 260)
-                    Text(description)
-                        .font(.system(size: 7)).foregroundStyle(V5P.muted).frame(width: 204, alignment: .leading).position(x: 117, y: 281)
-                }
-
-                if let primaryPair = relatedFxPairs.first {
-                    // 2026-09-29 HQ承認(2-c): ui-screens.mdが要求する「過去の
-                    // 発表を見る」→SCR-009 過去イベント比較への遷移(旧v1.2の
-                    // 時点から文書化されていたが未実装だった既存ギャップ)。
-                    // MovementDetail/HistoricalEventDetailと同じ手法(見た目の
-                    // ピクセルを一切変更しない)だが、あの2画面と違いここは
-                    // 単一のカードではなく独立した2要素(見出しTextと行)なので、
-                    // 両方の元の位置・見た目をそのまま維持しつつ、その領域だけ
-                    // を覆う透明なタップ層を追加する形にした(要素をVStackに
-                    // 包んで単一`.position`を付け直すと、位置がずれてしまう
-                    // ため)。
-                    NavigationLink(value: AppRoute.historicalComparison(
-                        indicatorId: indicator.id,
-                        indicatorName: indicator.name,
-                        fxPairId: primaryPair.fxPairId,
-                        fxPairSymbol: primaryPair.symbol
-                    )) {
-                        Color.clear
-                    }
-                    .accessibilityLabel("関連通貨ペア 過去の発表を見る")
-                    .frame(width: 214, height: 46)
-                    .position(x: 117, y: 316)
-                }
-                if !relatedFxPairs.isEmpty {
-                    Text("関連通貨ペア").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 44, y: 307)
-                    HStack(spacing: 5) {
-                        ForEach(relatedFxPairs) { pair in smallPill(pair.symbol) }
-                    }.position(x: 117, y: 326)
-                }
-
-                if let source = indicator.source {
-                    Text("出典").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 25, y: 352)
-                    if let urlString = indicator.sourceUrl, let url = URL(string: urlString) {
-                        Link(source, destination: url).font(.system(size: 8)).foregroundStyle(V5P.cyan).position(x: 44, y: 366)
-                    } else {
-                        Text(source).font(.system(size: 8)).foregroundStyle(V5P.cyan).position(x: 44, y: 366)
-                    }
-                }
+                .frame(width: V5P.W, height: 398)
+                .position(x: V5P.W / 2, y: 54 + 398 / 2)
 
                 V5BottomBar(selected: $tabSelection)
             }
@@ -187,11 +108,4 @@ struct IndicatorDetailView: View {
         }
     }
 
-    @ViewBuilder private func metric(_ a: String, _ b: String) -> some View {
-        VStack(spacing: 2) { Text(a).font(.system(size: 6)).foregroundStyle(V5P.muted); Text(b).font(.system(size: 10, weight: .bold)).foregroundStyle(.white) }.frame(maxWidth: .infinity)
-    }
-
-    @ViewBuilder private func smallPill(_ t: String) -> some View {
-        Text(t).font(.system(size: 7, weight: .semibold)).foregroundStyle(.white).padding(.horizontal, 7).padding(.vertical, 5).background(V5P.panel2, in: Capsule())
-    }
 }

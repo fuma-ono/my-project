@@ -14,6 +14,8 @@ export interface CalendarItem {
   kind: CalendarItemKind;
   /** event_id (INDICATOR) or speech_id (SPEECH). */
   id: string;
+  /** INDICATOR: the event's indicator_id (opens SCR-006 指標詳細). SPEECH: always null. */
+  indicator_id: string | null;
   title: string;
   /** SPEECH only. */
   speaker_name: string | null;
@@ -29,6 +31,7 @@ export interface CalendarItem {
 
 export interface CalendarIndicatorEvent {
   id: string;
+  indicator_id: string;
   indicator_name: string;
   country_code: string;
   currency_code: string;
@@ -79,6 +82,7 @@ export function buildCalendarItems(
   const indicatorItems = events.map((event): CalendarItem => ({
     kind: 'INDICATOR',
     id: event.id,
+    indicator_id: event.indicator_id,
     title: event.indicator_name,
     speaker_name: null,
     country_code: event.country_code,
@@ -93,6 +97,7 @@ export function buildCalendarItems(
     .map((speech): CalendarItem => ({
       kind: 'SPEECH',
       id: speech.speech_id,
+      indicator_id: null,
       title: speech.title,
       speaker_name: speech.speaker.name,
       country_code: speech.speaker.country_code,

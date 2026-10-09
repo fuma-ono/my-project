@@ -14,6 +14,8 @@ struct CalendarItem: Decodable, Equatable, Identifiable {
 
     let kind: Kind
     let id: String
+    /// 指標の行の指標ID(api-design v1.16)。発言と古いBackendではnil。
+    var indicatorId: String? = nil
     let title: String
     let speakerName: String?
     let countryCode: String
@@ -28,6 +30,7 @@ struct CalendarItem: Decodable, Equatable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case kind, id, title, importance, datetime, status
         case speakerName = "speaker_name"
+        case indicatorId = "indicator_id"
         case countryCode = "country_code"
         case currencyCode = "currency_code"
         case datetimePrecision = "datetime_precision"
@@ -35,7 +38,9 @@ struct CalendarItem: Decodable, Equatable, Identifiable {
 
     var route: AppRoute {
         switch kind {
-        case .indicator: return .eventDetail(id: id)
+        // HQ指示(2026-10-09)「指標詳細へは経済カレンダーからも」: 指標の行は指標詳細へ。
+        // 指標IDを返さない古いBackendでは、今までどおりイベント詳細へ。
+        case .indicator: return indicatorId.map { .indicatorDetail(id: $0) } ?? .eventDetail(id: id)
         case .speech: return .speechDetail(id: id)
         }
     }

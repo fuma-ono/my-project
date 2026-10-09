@@ -16,8 +16,14 @@ struct IndicatorSummary: Decodable, Identifiable, Equatable {
     let source: String?
     let sourceUrl: String?
     let favorableDirection: FavorableDirection
+    /// 英語名(api-design v1.16、SCR-006の名前の下)。古いBackendではnil。
+    var nameEn: String? = nil
+    /// 注目される理由(SCR-006の箇条書き)。古いBackendではnil。
+    var keyPoints: [String]? = nil
 
     enum CodingKeys: String, CodingKey {
+        case nameEn = "name_en"
+        case keyPoints = "key_points"
         case id
         case code
         case name

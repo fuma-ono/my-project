@@ -154,10 +154,13 @@ const INDICATOR_US_CPI = {
   id: INDICATOR_ID,
   code: 'US_CPI',
   name: '米国CPI(消費者物価指数)',
+  name_en: 'Consumer Price Index',
   country_code: 'US',
   currency_code: 'USD',
   importance: 'HIGH',
-  description: '米国労働省が毎月発表する消費者物価指数。インフレ動向を示す代表的指標。',
+  description:
+    '消費者物価指数（CPI）は、消費者が購入するモノやサービスの価格の変動を測定する指標です。インフレの動向を示す重要な指標であり、金融政策の判断材料として注目されます。',
+  key_points: ['インフレの動向を把握できる', '金融政策への影響が大きい', '為替や株式市場に大きな影響を与える'],
   frequency: 'MONTHLY',
   unit: '%',
   source: 'U.S. Bureau of Labor Statistics',
@@ -171,10 +174,13 @@ const INDICATORS_LIST = [
     id: INDICATOR_ID_NFP,
     code: 'US_NFP',
     name: '米国雇用統計(非農業部門雇用者数)',
+    name_en: 'Nonfarm Payrolls',
     country_code: 'US',
     currency_code: 'USD',
     importance: 'HIGH',
-    description: '米国労働省が毎月発表する非農業部門の雇用者数増減。',
+    description:
+      '非農業部門雇用者数（NFP）は、農業部門を除く米国の雇用者数が前月から何人増減したかを示す指標です。米国の景気や雇用の強さを測る代表的な指標として注目されます。',
+    key_points: ['米国の景気の強さを把握できる', 'FRBの金融政策判断に影響する', '発表直後に為替が大きく動きやすい'],
     frequency: 'MONTHLY',
     unit: '千人',
     source: 'U.S. Bureau of Labor Statistics',
@@ -185,10 +191,18 @@ const INDICATORS_LIST = [
     id: INDICATOR_ID_FOMC,
     code: 'US_FOMC',
     name: 'FOMC政策金利',
+    name_en: 'FOMC Interest Rate Decision',
     country_code: 'US',
     currency_code: 'USD',
     importance: 'HIGH',
-    description: '米国連邦公開市場委員会が決定する政策金利。',
+    description:
+      'FOMC（連邦公開市場委員会）が決定する、米国の政策金利（フェデラル・ファンド金利の誘導目標）です。米国の金融政策の方向性を示し、世界の金融市場に大きな影響を与えます。',
+    key_points: [
+      '米国の金融政策の方向性がわかる',
+      '米ドルの金利水準を直接左右する',
+      '声明や会見で今後の見通しが示される',
+      '世界の株式・債券市場にも影響する',
+    ],
     frequency: 'IRREGULAR',
     unit: '%',
     source: 'Federal Reserve',
@@ -199,10 +213,13 @@ const INDICATORS_LIST = [
     id: INDICATOR_ID_JP_CPI,
     code: 'JP_CPI',
     name: '日本CPI(消費者物価指数)',
+    name_en: 'Japan Consumer Price Index',
     country_code: 'JP',
     currency_code: 'JPY',
     importance: 'MEDIUM',
-    description: '総務省統計局が毎月発表する日本の消費者物価指数。',
+    description:
+      '日本の消費者物価指数（CPI）は、国内の消費者が購入するモノやサービスの価格の変動を前年同月比で示す指標です。日本のインフレの動向を示し、日銀の金融政策の判断材料として注目されます。',
+    key_points: ['日本のインフレの動向を把握できる', '日銀の金融政策の判断材料になる', '円相場の方向性に影響する'],
     frequency: 'MONTHLY',
     unit: '%',
     source: '総務省統計局',
@@ -212,6 +229,377 @@ const INDICATORS_LIST = [
 ];
 
 const RELATED_FX_PAIRS = [{ fx_pair_id: FX_PAIR_ID, symbol: 'USDJPY', priority: 1 }];
+
+// SCR-006 指標詳細 (HQ指示 2026-10-09): GET /calendar の指標行は indicator_id を
+// 持ち、タップで GET /indicators/{id} を開く。上の4指標に当たらないカレンダー
+// 用の指標はここに置く (GET /indicators の一覧には出さず、詳細だけ返す)。
+// 米国新規失業保険申請件数は週次だが、frequency は DB の値 (MONTHLY /
+// QUARTERLY / IRREGULAR) に合わせて IRREGULAR にしている。
+const CALENDAR_INDICATORS = {
+  JP_PPI: {
+    id: '11111111-1111-1111-1111-111111111201',
+    code: 'JP_PPI',
+    name: '国内企業物価指数',
+    name_en: 'Corporate Goods Price Index',
+    country_code: 'JP',
+    currency_code: 'JPY',
+    importance: 'HIGH',
+    description:
+      '国内企業物価指数は、企業間で取引されるモノの価格の変動を測定する指標です。消費者物価の先行指標として、インフレの動向を占う材料になります。',
+    key_points: ['消費者物価の先行きを占える', '原材料やエネルギー価格の影響がわかる', '日銀の物価判断の材料になる'],
+    frequency: 'MONTHLY',
+    unit: '%',
+    source: '日本銀行',
+    source_url: 'https://www.boj.or.jp/',
+    favorable_direction: 'HIGHER_IS_POSITIVE',
+  },
+  JP_TANKAN: {
+    id: '11111111-1111-1111-1111-111111111202',
+    code: 'JP_TANKAN',
+    name: '日銀短観(大企業製造業業況判断)',
+    name_en: 'Tankan Large Manufacturers Index',
+    country_code: 'JP',
+    currency_code: 'JPY',
+    importance: 'HIGH',
+    description:
+      '日銀短観は、日本銀行が全国の企業に景況感などを尋ねる調査で、大企業製造業の業況判断DIが特に注目されます。日本の景気の現状と先行きを示す代表的な指標です。',
+    key_points: ['企業の景況感を把握できる', '日本の景気の方向性がわかる', '日銀の金融政策の判断材料になる'],
+    frequency: 'QUARTERLY',
+    unit: null,
+    source: '日本銀行',
+    source_url: 'https://www.boj.or.jp/',
+    favorable_direction: 'HIGHER_IS_POSITIVE',
+  },
+  US_ISM_MFG: {
+    id: '11111111-1111-1111-1111-111111111203',
+    code: 'US_ISM_MFG',
+    name: '米国ISM製造業景況指数',
+    name_en: 'ISM Manufacturing PMI',
+    country_code: 'US',
+    currency_code: 'USD',
+    importance: 'HIGH',
+    description:
+      'ISM製造業景況指数は、米国の製造業の購買担当者へのアンケートをもとに景況感を示す指標です。50を上回ると景気拡大、下回ると景気縮小を示すとされます。',
+    key_points: [
+      '米国の製造業の景況感がわかる',
+      '50を境に景気の拡大・縮小を判断できる',
+      '雇用統計の前に発表され先行指標として注目される',
+    ],
+    frequency: 'MONTHLY',
+    unit: null,
+    source: 'Institute for Supply Management',
+    source_url: 'https://www.ismworld.org/',
+    favorable_direction: 'HIGHER_IS_POSITIVE',
+  },
+  EU_HICP_FLASH: {
+    id: '11111111-1111-1111-1111-111111111204',
+    code: 'EU_HICP_FLASH',
+    name: 'ユーロ圏消費者物価指数(速報値)',
+    name_en: 'Eurozone CPI Flash Estimate',
+    country_code: 'EU',
+    currency_code: 'EUR',
+    importance: 'HIGH',
+    description:
+      'ユーロ圏消費者物価指数（HICP）の速報値は、ユーロ圏の消費者が購入するモノやサービスの価格の変動を示す指標です。ECBの金融政策の判断材料として注目されます。',
+    key_points: ['ユーロ圏のインフレの動向を把握できる', 'ECBの金融政策に影響する', 'ユーロ相場が動きやすい'],
+    frequency: 'MONTHLY',
+    unit: '%',
+    source: 'Eurostat',
+    source_url: 'https://ec.europa.eu/eurostat',
+    favorable_direction: 'HIGHER_IS_POSITIVE',
+  },
+  US_JOBLESS_CLAIMS: {
+    id: '11111111-1111-1111-1111-111111111205',
+    code: 'US_JOBLESS_CLAIMS',
+    name: '米国新規失業保険申請件数',
+    name_en: 'Initial Jobless Claims',
+    country_code: 'US',
+    currency_code: 'USD',
+    importance: 'MEDIUM',
+    description:
+      '新規失業保険申請件数は、米国で新たに失業保険の給付を申請した人の数を示す指標です。毎週発表されるため、雇用情勢の変化をいち早くつかむ材料として注目されます。',
+    key_points: [
+      '雇用情勢の変化をいち早くつかめる',
+      '件数の増加は景気減速のサインとされる',
+      '雇用統計の予想の手がかりになる',
+    ],
+    frequency: 'IRREGULAR',
+    unit: '千件',
+    source: 'U.S. Department of Labor',
+    source_url: 'https://www.dol.gov/',
+    favorable_direction: 'LOWER_IS_POSITIVE',
+  },
+  AU_RBA_RATE: {
+    id: '11111111-1111-1111-1111-111111111206',
+    code: 'AU_RBA_RATE',
+    name: '豪州RBA政策金利',
+    name_en: 'RBA Interest Rate Decision',
+    country_code: 'AU',
+    currency_code: 'AUD',
+    importance: 'HIGH',
+    description:
+      '豪州準備銀行（RBA）が金融政策会合で決定する政策金利です。豪州の金融政策の方向性を示し、豪ドル相場に大きな影響を与えます。',
+    key_points: ['豪州の金融政策の方向性がわかる', '豪ドルの金利水準を直接左右する', '声明文の内容で相場が動きやすい'],
+    frequency: 'IRREGULAR',
+    unit: '%',
+    source: 'Reserve Bank of Australia',
+    source_url: 'https://www.rba.gov.au/',
+    favorable_direction: 'NEUTRAL',
+  },
+  GB_SERVICES_PMI: {
+    id: '11111111-1111-1111-1111-111111111207',
+    code: 'GB_SERVICES_PMI',
+    name: '英国サービス業PMI',
+    name_en: 'UK Services PMI',
+    country_code: 'GB',
+    currency_code: 'GBP',
+    importance: 'LOW',
+    description:
+      '英国サービス業PMIは、サービス業の購買担当者へのアンケートをもとに景況感を示す指標です。英国経済の大部分を占めるサービス業の動向を把握できます。',
+    key_points: [
+      '英国のサービス業の景況感がわかる',
+      '50を境に景気の拡大・縮小を判断できる',
+      '英国経済の先行指標として使われる',
+    ],
+    frequency: 'MONTHLY',
+    unit: null,
+    source: 'S&P Global',
+    source_url: 'https://www.pmi.spglobal.com/',
+    favorable_direction: 'HIGHER_IS_POSITIVE',
+  },
+  JP_GDP: {
+    id: '11111111-1111-1111-1111-111111111208',
+    code: 'JP_GDP',
+    name: '国内総生産(GDP)改定値',
+    name_en: 'Japan GDP (Revised)',
+    country_code: 'JP',
+    currency_code: 'JPY',
+    importance: 'MEDIUM',
+    description:
+      '国内総生産（GDP）は、一定期間に国内で生み出されたモノやサービスの付加価値の合計で、改定値は速報値に新しい統計を反映して見直したものです。日本経済の成長の度合いを示す最も基本的な指標です。',
+    key_points: ['日本経済の成長の度合いがわかる', '速報値からの修正幅が注目される', '日銀の景気判断の材料になる'],
+    frequency: 'QUARTERLY',
+    unit: '%',
+    source: '内閣府',
+    source_url: 'https://www.esri.cao.go.jp/',
+    favorable_direction: 'HIGHER_IS_POSITIVE',
+  },
+  GB_GDP_MONTHLY: {
+    id: '11111111-1111-1111-1111-111111111209',
+    code: 'GB_GDP_MONTHLY',
+    name: '英国GDP(月次)',
+    name_en: 'UK GDP (Monthly)',
+    country_code: 'GB',
+    currency_code: 'GBP',
+    importance: 'MEDIUM',
+    description:
+      '英国GDP（月次）は、英国国家統計局が毎月発表する国内総生産の前月比の伸び率です。四半期GDPより早く英国経済の動きをつかめる指標として注目されます。',
+    key_points: ['英国経済の動きを毎月つかめる', 'BOEの金融政策の判断材料になる', 'ポンド相場に影響する'],
+    frequency: 'MONTHLY',
+    unit: '%',
+    source: 'Office for National Statistics',
+    source_url: 'https://www.ons.gov.uk/',
+    favorable_direction: 'HIGHER_IS_POSITIVE',
+  },
+  EU_GDP: {
+    id: '11111111-1111-1111-1111-111111111210',
+    code: 'EU_GDP',
+    name: 'ユーロ圏GDP(改定値)',
+    name_en: 'Eurozone GDP (Revised)',
+    country_code: 'EU',
+    currency_code: 'EUR',
+    importance: 'LOW',
+    description:
+      'ユーロ圏GDPは、ユーロ圏で一定期間に生み出されたモノやサービスの付加価値の合計を示す指標で、改定値は速報値を見直したものです。ユーロ圏経済の成長の度合いを把握できます。',
+    key_points: ['ユーロ圏経済の成長の度合いがわかる', '速報値からの修正幅が注目される', 'ECBの景気判断の材料になる'],
+    frequency: 'QUARTERLY',
+    unit: '%',
+    source: 'Eurostat',
+    source_url: 'https://ec.europa.eu/eurostat',
+    favorable_direction: 'HIGHER_IS_POSITIVE',
+  },
+  US_RETAIL_SALES: {
+    id: '11111111-1111-1111-1111-111111111211',
+    code: 'US_RETAIL_SALES',
+    name: '米国小売売上高',
+    name_en: 'Retail Sales',
+    country_code: 'US',
+    currency_code: 'USD',
+    importance: 'HIGH',
+    description:
+      '小売売上高は、米国の小売業の売上高の前月からの変化を示す指標です。米国経済の約7割を占める個人消費の動向を把握する材料として注目されます。',
+    key_points: ['個人消費の動向を把握できる', '米国の景気の強さがわかる', '予想との差で為替が動きやすい'],
+    frequency: 'MONTHLY',
+    unit: '%',
+    source: 'U.S. Census Bureau',
+    source_url: 'https://www.census.gov/retail/',
+    favorable_direction: 'HIGHER_IS_POSITIVE',
+  },
+  AU_EMPLOYMENT: {
+    id: '11111111-1111-1111-1111-111111111212',
+    code: 'AU_EMPLOYMENT',
+    name: '豪州雇用統計(失業率)',
+    name_en: 'Australia Unemployment Rate',
+    country_code: 'AU',
+    currency_code: 'AUD',
+    importance: 'HIGH',
+    description:
+      '豪州雇用統計は、豪州統計局が毎月発表する雇用の状況で、失業率や雇用者数の増減が注目されます。豪州の景気やRBAの金融政策の行方を占う材料になります。',
+    key_points: ['豪州の雇用情勢を把握できる', 'RBAの金融政策の判断材料になる', '豪ドル相場が動きやすい'],
+    frequency: 'MONTHLY',
+    unit: '%',
+    source: 'Australian Bureau of Statistics',
+    source_url: 'https://www.abs.gov.au/',
+    favorable_direction: 'LOWER_IS_POSITIVE',
+  },
+  US_HOUSING_STARTS: {
+    id: '11111111-1111-1111-1111-111111111213',
+    code: 'US_HOUSING_STARTS',
+    name: '米国住宅着工件数',
+    name_en: 'Housing Starts',
+    country_code: 'US',
+    currency_code: 'USD',
+    importance: 'LOW',
+    description:
+      '住宅着工件数は、米国で新たに建設が始まった住宅の戸数を示す指標です。金利の影響を受けやすい住宅市場の動向から、景気の先行きを占う材料になります。',
+    key_points: ['住宅市場の動向を把握できる', '金利の変化の影響が表れやすい', '景気の先行指標として使われる'],
+    frequency: 'MONTHLY',
+    unit: '千件',
+    source: 'U.S. Census Bureau',
+    source_url: 'https://www.census.gov/construction/nrc/',
+    favorable_direction: 'HIGHER_IS_POSITIVE',
+  },
+  GB_RETAIL_SALES: {
+    id: '11111111-1111-1111-1111-111111111214',
+    code: 'GB_RETAIL_SALES',
+    name: '英国小売売上高',
+    name_en: 'UK Retail Sales',
+    country_code: 'GB',
+    currency_code: 'GBP',
+    importance: 'MEDIUM',
+    description:
+      '英国小売売上高は、英国の小売業の売上高の前月からの変化を示す指標です。英国の個人消費の動向を把握する材料として注目されます。',
+    key_points: ['英国の個人消費の動向を把握できる', 'BOEの金融政策の判断材料になる', 'ポンド相場に影響する'],
+    frequency: 'MONTHLY',
+    unit: '%',
+    source: 'Office for National Statistics',
+    source_url: 'https://www.ons.gov.uk/',
+    favorable_direction: 'HIGHER_IS_POSITIVE',
+  },
+  US_MFG_PMI_FLASH: {
+    id: '11111111-1111-1111-1111-111111111215',
+    code: 'US_MFG_PMI_FLASH',
+    name: '米国製造業PMI(速報値)',
+    name_en: 'S&P Global US Manufacturing PMI (Flash)',
+    country_code: 'US',
+    currency_code: 'USD',
+    importance: 'MEDIUM',
+    description:
+      '米国製造業PMIの速報値は、製造業の購買担当者へのアンケートをもとに景況感を示す指標です。月の途中までの回答で集計されるため、景気の変化をいち早くつかめます。',
+    key_points: [
+      '米国の製造業の景況感がわかる',
+      '50を境に景気の拡大・縮小を判断できる',
+      '月内の早い時期に景気の変化をつかめる',
+    ],
+    frequency: 'MONTHLY',
+    unit: null,
+    source: 'S&P Global',
+    source_url: 'https://www.pmi.spglobal.com/',
+    favorable_direction: 'HIGHER_IS_POSITIVE',
+  },
+  BOJ_RATE: {
+    id: '11111111-1111-1111-1111-111111111216',
+    code: 'BOJ_RATE',
+    name: '日銀金融政策決定会合(政策金利)',
+    name_en: 'BOJ Interest Rate Decision',
+    country_code: 'JP',
+    currency_code: 'JPY',
+    importance: 'HIGH',
+    description:
+      '日本銀行が金融政策決定会合で決定する政策金利です。日本の金融政策の方向性を示し、円の金利水準や為替相場に大きな影響を与えます。',
+    key_points: ['日本の金融政策の方向性がわかる', '円の金利水準を直接左右する', '総裁会見の発言で相場が動きやすい'],
+    frequency: 'IRREGULAR',
+    unit: '%',
+    source: '日本銀行',
+    source_url: 'https://www.boj.or.jp/',
+    favorable_direction: 'NEUTRAL',
+  },
+  ECB_RATE: {
+    id: '11111111-1111-1111-1111-111111111217',
+    code: 'ECB_RATE',
+    name: 'ECB政策金利',
+    name_en: 'ECB Interest Rate Decision',
+    country_code: 'EU',
+    currency_code: 'EUR',
+    importance: 'HIGH',
+    description:
+      '欧州中央銀行（ECB）が理事会で決定する政策金利です。ユーロ圏の金融政策の方向性を示し、ユーロ相場に大きな影響を与えます。',
+    key_points: [
+      'ユーロ圏の金融政策の方向性がわかる',
+      'ユーロの金利水準を直接左右する',
+      '総裁会見の発言で相場が動きやすい',
+    ],
+    frequency: 'IRREGULAR',
+    unit: '%',
+    source: 'European Central Bank',
+    source_url: 'https://www.ecb.europa.eu/',
+    favorable_direction: 'NEUTRAL',
+  },
+  US_PCE: {
+    id: '11111111-1111-1111-1111-111111111218',
+    code: 'US_PCE',
+    name: '米国PCEデフレーター',
+    name_en: 'PCE Price Index',
+    country_code: 'US',
+    currency_code: 'USD',
+    importance: 'HIGH',
+    description:
+      'PCEデフレーターは、米国の個人消費支出（PCE）にかかわる価格の変動を示す物価指標です。FRBが物価目標の基準としているため、金融政策の判断材料として特に注目されます。',
+    key_points: ['FRBが重視する物価指標である', 'インフレの動向を把握できる', '金融政策の見通しに影響する'],
+    frequency: 'MONTHLY',
+    unit: '%',
+    source: 'U.S. Bureau of Economic Analysis',
+    source_url: 'https://www.bea.gov/',
+    favorable_direction: 'HIGHER_IS_POSITIVE',
+  },
+  JP_TOKYO_CPI: {
+    id: '11111111-1111-1111-1111-111111111219',
+    code: 'JP_TOKYO_CPI',
+    name: '東京都区部CPI',
+    name_en: 'Tokyo Consumer Price Index',
+    country_code: 'JP',
+    currency_code: 'JPY',
+    importance: 'LOW',
+    description:
+      '東京都区部CPIは、東京23区の消費者物価指数で、全国CPIより約1か月早く発表されます。全国の物価の動向を先取りする指標として注目されます。',
+    key_points: ['全国CPIの先行指標になる', '日本のインフレの動向をいち早くつかめる', '日銀の金融政策の判断材料になる'],
+    frequency: 'MONTHLY',
+    unit: '%',
+    source: '総務省統計局',
+    source_url: 'https://www.stat.go.jp/',
+    favorable_direction: 'HIGHER_IS_POSITIVE',
+  },
+  AU_RETAIL_SALES: {
+    id: '11111111-1111-1111-1111-111111111220',
+    code: 'AU_RETAIL_SALES',
+    name: '豪州小売売上高',
+    name_en: 'Australia Retail Sales',
+    country_code: 'AU',
+    currency_code: 'AUD',
+    importance: 'MEDIUM',
+    description:
+      '豪州小売売上高は、豪州の小売業の売上高の前月からの変化を示す指標です。豪州の個人消費の動向を把握する材料として注目されます。',
+    key_points: ['豪州の個人消費の動向を把握できる', 'RBAの金融政策の判断材料になる', '豪ドル相場に影響する'],
+    frequency: 'MONTHLY',
+    unit: '%',
+    source: 'Australian Bureau of Statistics',
+    source_url: 'https://www.abs.gov.au/',
+    favorable_direction: 'HIGHER_IS_POSITIVE',
+  },
+};
+
+/** GET /indicators/{id} が返せる全指標 (一覧の4指標 + カレンダー用)。 */
+const ALL_MOCK_INDICATORS = [...INDICATORS_LIST, ...Object.values(CALENDAR_INDICATORS)];
 
 const RELEASE_SNAPSHOT = {
   forecast: 3.1,
@@ -407,7 +795,7 @@ function indicatorsListHandler() {
 }
 
 function indicatorDetailHandler(indicatorId) {
-  const indicator = INDICATORS_LIST.find((row) => row.id === indicatorId);
+  const indicator = ALL_MOCK_INDICATORS.find((row) => row.id === indicatorId);
   if (!indicator) return null;
   return {
     indicator,
@@ -978,65 +1366,68 @@ const CALENDAR_SPEAKERS = {
   },
 };
 
-// 指標: ['I', 'HH:MM'(日本時間), 指標名, country, currency, importance, event_id(任意)]
+// 指標: ['I', 'HH:MM'(日本時間), 指標名, country, currency, importance, event_id(nullは自動採番), indicator_id]
+// indicator_id は GET /indicators/{id} が200を返す指標 (INDICATORS_LIST か CALENDAR_INDICATORS)。
 // 発言: ['S', 'HH:MM'(日本時間), 題名, CALENDAR_SPEAKERSのキー, importance]
 const CALENDAR_TODAY_ITEMS = [
-  ['I', '08:50', '国内企業物価指数', 'JP', 'JPY', 'HIGH'],
+  ['I', '08:50', '国内企業物価指数', 'JP', 'JPY', 'HIGH', null, CALENDAR_INDICATORS.JP_PPI.id],
   ['S', '15:00', 'FOMCメンバー発言', 'waller', 'HIGH'],
   ['S', '20:35', 'ECB要人発言', 'schnabel', 'MEDIUM'],
-  ['I', '21:30', '雇用統計(非農業部門雇用者数)', 'US', 'USD', 'HIGH', EVENT_ID_UPCOMING],
+  ['I', '21:30', '雇用統計(非農業部門雇用者数)', 'US', 'USD', 'HIGH', EVENT_ID_UPCOMING, INDICATOR_ID_NFP],
 ];
 
 /** 日(1〜31) → その日の項目。本日と重なる日・その月に無い日(31日等)は使わない。 */
 const CALENDAR_OTHER_DAYS = {
   1: [
-    ['I', '08:50', '日銀短観(大企業製造業業況判断)', 'JP', 'JPY', 'HIGH'],
-    ['I', '23:00', '米国ISM製造業景況指数', 'US', 'USD', 'HIGH'],
+    ['I', '08:50', '日銀短観(大企業製造業業況判断)', 'JP', 'JPY', 'HIGH', null, CALENDAR_INDICATORS.JP_TANKAN.id],
+    ['I', '23:00', '米国ISM製造業景況指数', 'US', 'USD', 'HIGH', null, CALENDAR_INDICATORS.US_ISM_MFG.id],
   ],
-  2: [['I', '18:00', 'ユーロ圏消費者物価指数(速報値)', 'EU', 'EUR', 'HIGH']],
+  2: [
+    ['I', '18:00', 'ユーロ圏消費者物価指数(速報値)', 'EU', 'EUR', 'HIGH', null, CALENDAR_INDICATORS.EU_HICP_FLASH.id],
+  ],
   3: [
-    ['I', '21:30', '米国新規失業保険申請件数', 'US', 'USD', 'MEDIUM'],
+    ['I', '21:30', '米国新規失業保険申請件数', 'US', 'USD', 'MEDIUM', null, CALENDAR_INDICATORS.US_JOBLESS_CLAIMS.id],
     ['S', '23:00', 'FRB議長発言', 'powell', 'HIGH'],
   ],
   6: [
-    ['I', '12:30', '豪州RBA政策金利', 'AU', 'AUD', 'HIGH'],
-    ['I', '17:30', '英国サービス業PMI', 'GB', 'GBP', 'LOW'],
+    ['I', '12:30', '豪州RBA政策金利', 'AU', 'AUD', 'HIGH', null, CALENDAR_INDICATORS.AU_RBA_RATE.id],
+    ['I', '17:30', '英国サービス業PMI', 'GB', 'GBP', 'LOW', null, CALENDAR_INDICATORS.GB_SERVICES_PMI.id],
   ],
   9: [
-    ['I', '08:50', '国内総生産(GDP)改定値', 'JP', 'JPY', 'MEDIUM'],
+    ['I', '08:50', '国内総生産(GDP)改定値', 'JP', 'JPY', 'MEDIUM', null, CALENDAR_INDICATORS.JP_GDP.id],
     ['S', '16:00', 'BOE総裁発言', 'bailey', 'MEDIUM'],
-    ['I', '21:30', INDICATOR_US_CPI.name, 'US', 'USD', 'HIGH', EVENT_ID],
+    ['I', '21:30', INDICATOR_US_CPI.name, 'US', 'USD', 'HIGH', EVENT_ID, INDICATOR_ID],
   ],
-  12: [['I', '15:00', '英国GDP(月次)', 'GB', 'GBP', 'MEDIUM']],
+  12: [['I', '15:00', '英国GDP(月次)', 'GB', 'GBP', 'MEDIUM', null, CALENDAR_INDICATORS.GB_GDP_MONTHLY.id]],
   14: [
-    ['I', '18:00', 'ユーロ圏GDP(改定値)', 'EU', 'EUR', 'LOW'],
-    ['I', '21:30', '米国小売売上高', 'US', 'USD', 'HIGH'],
+    ['I', '18:00', 'ユーロ圏GDP(改定値)', 'EU', 'EUR', 'LOW', null, CALENDAR_INDICATORS.EU_GDP.id],
+    ['I', '21:30', '米国小売売上高', 'US', 'USD', 'HIGH', null, CALENDAR_INDICATORS.US_RETAIL_SALES.id],
     ['S', '22:00', 'ECB総裁発言', 'lagarde', 'HIGH'],
   ],
-  16: [['I', '09:30', '豪州雇用統計(失業率)', 'AU', 'AUD', 'HIGH']],
-  17: [['I', '08:30', INDICATORS_LIST[3].name, 'JP', 'JPY', 'MEDIUM', EVENT_ID_UPCOMING_JP_CPI]],
+  16: [['I', '09:30', '豪州雇用統計(失業率)', 'AU', 'AUD', 'HIGH', null, CALENDAR_INDICATORS.AU_EMPLOYMENT.id]],
+  17: [['I', '08:30', INDICATORS_LIST[3].name, 'JP', 'JPY', 'MEDIUM', EVENT_ID_UPCOMING_JP_CPI, INDICATOR_ID_JP_CPI]],
   20: [
     ['S', '10:00', '日銀総裁発言', 'ueda', 'MEDIUM'],
-    ['I', '21:30', '米国住宅着工件数', 'US', 'USD', 'LOW'],
+    ['I', '21:30', '米国住宅着工件数', 'US', 'USD', 'LOW', null, CALENDAR_INDICATORS.US_HOUSING_STARTS.id],
   ],
   22: [
-    ['I', '17:30', '英国小売売上高', 'GB', 'GBP', 'MEDIUM'],
-    ['I', '22:45', '米国製造業PMI(速報値)', 'US', 'USD', 'MEDIUM'],
+    ['I', '17:30', '英国小売売上高', 'GB', 'GBP', 'MEDIUM', null, CALENDAR_INDICATORS.GB_RETAIL_SALES.id],
+    ['I', '22:45', '米国製造業PMI(速報値)', 'US', 'USD', 'MEDIUM', null, CALENDAR_INDICATORS.US_MFG_PMI_FLASH.id],
   ],
   24: [
-    ['I', '12:00', '日銀金融政策決定会合(政策金利)', 'JP', 'JPY', 'HIGH'],
+    ['I', '12:00', '日銀金融政策決定会合(政策金利)', 'JP', 'JPY', 'HIGH', null, CALENDAR_INDICATORS.BOJ_RATE.id],
     ['S', '15:30', '日銀総裁会見', 'ueda', 'HIGH'],
-    ['I', '21:15', 'ECB政策金利', 'EU', 'EUR', 'HIGH'],
+    ['I', '21:15', 'ECB政策金利', 'EU', 'EUR', 'HIGH', null, CALENDAR_INDICATORS.ECB_RATE.id],
     ['S', '21:45', 'ECB総裁会見', 'lagarde', 'HIGH'],
   ],
   27: [
-    ['I', '03:00', INDICATORS_LIST[2].name, 'US', 'USD', 'HIGH', EVENT_ID_UPCOMING_FOMC],
+    ['I', '03:00', INDICATORS_LIST[2].name, 'US', 'USD', 'HIGH', EVENT_ID_UPCOMING_FOMC, INDICATOR_ID_FOMC],
     ['S', '03:30', 'FRB議長会見', 'powell', 'HIGH'],
   ],
-  29: [['I', '21:30', '米国PCEデフレーター', 'US', 'USD', 'HIGH']],
+  29: [['I', '21:30', '米国PCEデフレーター', 'US', 'USD', 'HIGH', null, CALENDAR_INDICATORS.US_PCE.id]],
   30: [
-    ['I', '08:30', '東京都区部CPI', 'JP', 'JPY', 'LOW'],
-    ['I', '10:30', '豪州小売売上高', 'AU', 'AUD', 'MEDIUM'],
+    ['I', '08:30', '東京都区部CPI', 'JP', 'JPY', 'LOW', null, CALENDAR_INDICATORS.JP_TOKYO_CPI.id],
+    ['I', '10:30', '豪州小売売上高', 'AU', 'AUD', 'MEDIUM', null, CALENDAR_INDICATORS.AU_RETAIL_SALES.id],
   ],
 };
 
@@ -1062,10 +1453,11 @@ function calendarFixture() {
       const past = at.getTime() <= now().getTime();
       const serial = String(day * 10 + index).padStart(12, '0');
       if (spec[0] === 'I') {
-        const [, , title, country, currency, importance, eventId] = spec;
+        const [, , title, country, currency, importance, eventId, indicatorId] = spec;
         items.push({
           kind: 'INDICATOR',
           id: eventId ?? `cccccccc-cccc-cccc-cccc-${serial}`,
+          indicator_id: indicatorId,
           title,
           speaker_name: null,
           country_code: country,
@@ -1081,6 +1473,7 @@ function calendarFixture() {
         items.push({
           kind: 'SPEECH',
           id: `dddddddd-dddd-dddd-dddd-${serial}`,
+          indicator_id: null,
           title,
           speaker_name: speaker.name,
           country_code: speaker.country_code,

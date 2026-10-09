@@ -50,6 +50,26 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(body.meta.total).toBeGreaterThanOrEqual(5);
     });
 
+    it('includes name_en and a key_points array on every listed indicator (v1.16)', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/api/v1/indicators?limit=100',
+        headers: authHeader,
+      });
+      expect(response.statusCode).toBe(200);
+      const rows: Array<{ code: string; name_en: unknown; key_points: unknown }> = JSON.parse(response.body).data;
+      for (const row of rows) {
+        expect(row).toHaveProperty('name_en');
+        expect(Array.isArray(row.key_points)).toBe(true);
+      }
+      const seeded = rows.filter((row) => ['US_CPI', 'US_NFP', 'US_FOMC', 'JP_CPI', 'BOJ_RATE'].includes(row.code));
+      expect(seeded).toHaveLength(5);
+      for (const row of seeded) {
+        expect(typeof row.name_en).toBe('string');
+        expect((row.key_points as string[]).length).toBeGreaterThanOrEqual(2);
+      }
+    });
+
     it('filters by q (partial match, ILIKE)', async () => {
       const response = await ctx.app.inject({ method: 'GET', url: '/api/v1/indicators?q=CPI', headers: authHeader });
       const body = JSON.parse(response.body);
@@ -66,6 +86,14 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.indicator.code).toBe('US_CPI');
+      // v1.16 (SCR-006): English name, Japanese 概要, and 注目される理由.
+      expect(body.indicator.name_en).toBe('Consumer Price Index');
+      expect(body.indicator.description).toMatch(/^消費者物価指数（CPI）は/);
+      expect(body.indicator.key_points).toEqual([
+        'インフレの動向を把握できる',
+        '金融政策への影響が大きい',
+        '為替や株式市場に大きな影響を与える',
+      ]);
       expect(body.related_fx_pairs.some((pair: { symbol: string }) => pair.symbol === 'USDJPY')).toBe(true);
     });
 

@@ -118,6 +118,26 @@ enum CountryFlag {
         }
     }
 
+    /// 国・地域コード → 日本語名(SCR-006の「対象国・地域」)。対応が無ければコードのまま。
+    static func japaneseName(forCountry countryCode: String) -> String {
+        switch countryCode.uppercased() {
+        case "US": return "米国"
+        case "JP": return "日本"
+        case "GB": return "英国"
+        case "EU", "EA": return "ユーロ圏"
+        case "DE": return "ドイツ"
+        case "FR": return "フランス"
+        case "IT": return "イタリア"
+        case "ES": return "スペイン"
+        case "AU": return "豪州"
+        case "CA": return "カナダ"
+        case "CN": return "中国"
+        case "NZ": return "ニュージーランド"
+        case "CH": return "スイス"
+        default: return countryCode.uppercased()
+        }
+    }
+
     /// ISO 4217通貨コード → 日本語の通貨名。HQ指示(2026-10-06)「通貨ペア
     /// 内のUSD/JPYの下に米ドル/円と記載して」で追加。`representativeCountry
     /// (forCurrency:)`と同じ9通貨のみ対応し、対応が無ければ通貨コードを

@@ -15,6 +15,7 @@ const integration = loadIntegrationEnv();
 
 // Seed fixtures (supabase/seed.sql).
 const US_NFP_EVENT_ID = '30000000-0000-0000-0000-000000000003'; // 2026-10-03T12:30Z, HIGH, USD, SCHEDULED
+const US_NFP_INDICATOR_ID = '10000000-0000-0000-0000-000000000002';
 const POWELL_SCHEDULED_SPEECH_ID = '50000000-0000-0000-0000-000000000004'; // 2026-10-14T16:00Z, HIGH, USD
 const UEDA_SCHEDULED_SPEECH_ID = '50000000-0000-0000-0000-000000000005'; // 2026-10-16T01:00Z, MEDIUM, JPY
 const LAGARDE_SPEAKER_ID = '40000000-0000-0000-0000-000000000003';
@@ -27,6 +28,7 @@ const OCTOBER = 'from=2026-10-01T00:00:00Z&to=2026-11-01T00:00:00Z';
 interface CalendarItemBody {
   kind: string;
   id: string;
+  indicator_id: string | null;
   title: string;
   speaker_name: string | null;
   currency_code: string;
@@ -107,6 +109,7 @@ describe.skipIf(!integration)('GET /calendar', () => {
 
     expect(items.find((item) => item.id === US_NFP_EVENT_ID)).toMatchObject({
       kind: 'INDICATOR',
+      indicator_id: US_NFP_INDICATOR_ID,
       speaker_name: null,
       currency_code: 'USD',
       importance: 'HIGH',
@@ -115,6 +118,7 @@ describe.skipIf(!integration)('GET /calendar', () => {
     });
     expect(items.find((item) => item.id === UEDA_SCHEDULED_SPEECH_ID)).toMatchObject({
       kind: 'SPEECH',
+      indicator_id: null,
       title: '国会答弁',
       speaker_name: '植田和男',
       currency_code: 'JPY',
