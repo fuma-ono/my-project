@@ -120,7 +120,7 @@ struct LoginView: View {
                         BrandMark(width: 140, glow: true)
                             .padding(.top, geometry.size.height * 0.09)
 
-                        titleText
+                        BrandTitleText()
                             .padding(.top, geometry.size.height * 0.015)
 
                         if sessionExpired {
@@ -196,20 +196,6 @@ struct LoginView: View {
         } message: { message in
             Text(message)
         }
-    }
-
-    private var titleText: some View {
-        (
-            Text("F")
-                .foregroundStyle(DesignTokens.Colors.brandTitleAccentF)
-                + Text("X")
-                .foregroundStyle(DesignTokens.Colors.brandTitleAccentX)
-                + Text(" Event Analyzer")
-                .foregroundStyle(DesignTokens.Colors.textPrimary)
-        )
-        .font(DesignTokens.Typography.splashTitle)
-        .lineLimit(1)
-        .minimumScaleFactor(0.6)
     }
 
     private func formPanel(controlHeight: CGFloat) -> some View {

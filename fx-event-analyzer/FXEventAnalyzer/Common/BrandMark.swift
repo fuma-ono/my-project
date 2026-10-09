@@ -26,3 +26,25 @@ struct BrandMark: View {
             .accessibilityLabel("FX Event Analyzer")
     }
 }
+
+/// The "FX Event Analyzer" wordmark that sits below `BrandMark` on every
+/// screen that shows the full brand lockup (Splash, Login, SignUp,
+/// PasswordReset) — same accent-colored "F"/"X" + primary-colored
+/// " Event Analyzer" treatment everywhere, factored out of `LoginView`
+/// (HQ指示 2026-10-09、SignUp/PasswordReset画面のReference再現) so the
+/// three screens share one definition instead of three copies.
+struct BrandTitleText: View {
+    var body: some View {
+        (
+            Text("F")
+                .foregroundStyle(DesignTokens.Colors.brandTitleAccentF)
+                + Text("X")
+                .foregroundStyle(DesignTokens.Colors.brandTitleAccentX)
+                + Text(" Event Analyzer")
+                .foregroundStyle(DesignTokens.Colors.textPrimary)
+        )
+        .font(DesignTokens.Typography.splashTitle)
+        .lineLimit(1)
+        .minimumScaleFactor(0.6)
+    }
+}

@@ -48,27 +48,26 @@ final class ScreenshotTests: XCTestCase {
         capture("01-Login")
 
         // SCR-002 新規会員登録 / SCR-003 パスワード再設定(HQ指示
-        // 2026-10-09「新規会員登録画面とパスワード再設定画面を作成して」で
-        // placeholderから本実装に切り替わったため、他の実装済み画面と同様に
-        // 撮影する)。実CI実行(commit 7bcb496)で一度失敗: 「新規登録」
-        // NavigationLinkのタップはSynthesize成功と報告されるのに実際には
-        // 画面遷移が一度も起きていなかった(失敗時のスクリーンショットが
-        // Login画面のままだった)。原因は`LoginView`だけが`NavigationStack`に
-        // 明示的な`NavigationPath`を束縛していなかったこと(Home/Indicators/
-        // Search/Calendarは全て`NavigationStack(path: $path)`)と判明し、
-        // `LoginView`に`path`を追加して揃えた(`LoginView.swift`のコメント
-        // 参照)。戻るボタンは`navigationBars.buttons`の先頭要素(システム
-        // 標準のBackボタン)。
+        // 2026-10-09、2回目: 参考画像を基に完全再現 — ブランドマーク+タイトル、
+        // 見出し+サブタイトル、Apple/Google登録のアウトラインボタン等を追加。
+        // システムのナビゲーションバーは使わず(`.toolbar(.hidden, for:
+        // .navigationBar)`)、単体のシェブロン戻るボタンに変更したため、戻るは
+        // `navigationBars.buttons`ではなくaccessibilityIdentifierでタップする。
+        // 1回目の実装(実CI commit 7bcb496)では「新規登録」NavigationLinkの
+        // タップがSynthesize成功と報告されるのに実際には画面遷移が一度も
+        // 起きていなかった問題があり、原因は`LoginView`だけが`NavigationStack`
+        // に明示的な`NavigationPath`を束縛していなかったことだったため、既に
+        // `LoginView.swift`で修正済み(`path`を追加)。
         tap(containing: "新規登録")
-        XCTAssertTrue(waitForAnyElement(containing: "パスワード(確認)", timeout: 15), "Sign Up screen did not load")
+        XCTAssertTrue(waitForAnyElement(containing: "パスワード(確認用)", timeout: 15), "Sign Up screen did not load")
         capture("02-SignUp")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        tapIdentifier("signUpBackButton")
         XCTAssertTrue(emailField.waitForExistence(timeout: 10), "Did not return to Login screen from Sign Up")
 
         tap(containing: "パスワードをお忘れの方")
         XCTAssertTrue(waitForAnyElement(containing: "再設定メールを送信", timeout: 15), "Password Reset screen did not load")
         capture("03-PasswordReset")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        tapIdentifier("passwordResetBackButton")
         XCTAssertTrue(emailField.waitForExistence(timeout: 10), "Did not return to Login screen from Password Reset")
 
         emailField.tap()
