@@ -90,22 +90,22 @@ struct EventDetailCards: View {
             CountryFlagView(countryCode: event.countryCode, diameter: 28)
             VStack(alignment: .leading, spacing: 3) {
                 ViewThatFits(in: .horizontal) {
-                    NotoText.text(event.indicatorName, size: 10.5).lineLimit(1).fixedSize()
+                    NotoText.text(event.indicatorName, size: 11.5).lineLimit(1).fixedSize()
                     VStack(alignment: .leading, spacing: 1) {
                         let parts = IndicatorDetailCard.splitName(event.indicatorName)
-                        NotoText.text(parts.main, size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
+                        NotoText.text(parts.main, size: 11.5).lineLimit(1).minimumScaleFactor(0.8)
                         if let paren = parts.paren {
-                            NotoText.text(paren, size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
+                            NotoText.text(paren, size: 11.5).lineLimit(1).minimumScaleFactor(0.8)
                         }
                     }
                 }
                 .foregroundStyle(.white)
-                NotoText.text("\(CountryFlag.japaneseName(forCountry: event.countryCode))　|　\(event.currencyCode)", size: 7.5)
+                NotoText.text("\(CountryFlag.japaneseName(forCountry: event.countryCode))　|　\(event.currencyCode)", size: 9)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
             }
             Spacer(minLength: 4)
             VStack(alignment: .trailing, spacing: 5) {
-                NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 8)
+                NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 7)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                     .fixedSize()
                 let colors = HomeView.importanceBadgeColors(event.importance)
@@ -148,14 +148,14 @@ struct EventDetailCards: View {
     private func resultColumn(_ title: String, value: Double?, unit: String?, note: String?) -> some View {
         // HQ指示(2026-10-09)「結果、予想、前回と数字、前回比を大きく中央に」。
         VStack(alignment: .center, spacing: 3) {
-            NotoText.text(title, size: 9).foregroundStyle(SettingsCardStyle.subtitleColor)
+            NotoText.text(title, size: 9.5).foregroundStyle(SettingsCardStyle.subtitleColor)
             Text(value.map { ValueFormat.withUnit($0, unit: unit) } ?? "--")
                 .font(.system(size: 17, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-            NotoText.text(note ?? " ", size: 7.5)
+            NotoText.text(note ?? " ", size: 8)
                 .foregroundStyle(SettingsListLayout.sectionTitleColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -190,11 +190,13 @@ struct EventDetailCards: View {
                 cell(width: Self.pairColumnWidth) { Color.clear }
                 ForEach(["1分", "5分", "15分"], id: \.self) { label in
                     cell(width: Self.valueColumnWidth) {
-                        NotoText.text(label, size: 9).foregroundStyle(SettingsCardStyle.subtitleColor)
+                        NotoText.text(label, size: 9.5).foregroundStyle(.white.opacity(0.9))
                     }
                 }
             }
             .frame(height: Self.headerHeight)
+            // HQ指示(2026-10-09)「単一の一色ではなく表みたいに、見出しは少し濃くしてグラデーションを」。
+            .background(Self.headerGradient)
             ForEach(pairs) { pair in
                 HStack(spacing: 0) {
                     cell(width: Self.pairColumnWidth, alignment: .leading) {
@@ -224,10 +226,21 @@ struct EventDetailCards: View {
             }
         }
         .frame(width: 214)
-        .background(SettingsCardStyle.cardFill)
+        .background(Self.bodyGradient)
         .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
         .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }
+
+    /// 見出しの行: 本文より濃い青の、上から下へのグラデーション。
+    private static let headerGradient = LinearGradient(
+        colors: [Color(red: 0.05, green: 0.22, blue: 0.45), Color(red: 0.02, green: 0.13, blue: 0.30)],
+        startPoint: .top, endPoint: .bottom
+    )
+    /// 本文: カードの色から少し明るい青へ、上から下へのゆるいグラデーション。
+    private static let bodyGradient = LinearGradient(
+        colors: [SettingsCardStyle.cardFill, Color(red: 0.03, green: 0.14, blue: 0.27)],
+        startPoint: .top, endPoint: .bottom
+    )
 
     private static let pairColumnWidth: CGFloat = 80
     private static let valueColumnWidth: CGFloat = (214 - 80) / 3
