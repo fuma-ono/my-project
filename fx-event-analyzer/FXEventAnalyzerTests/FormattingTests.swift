@@ -97,6 +97,27 @@ final class ValueFormatUnitTests: XCTestCase {
     }
 }
 
+final class MovementAnalysisTextTests: XCTestCase {
+    private func entry(_ timeframe: String, _ pips: Double?, up: Double? = nil, down: Double? = nil, status: DataQualityStatus = .ready) -> ReactionTimeframeEntry {
+        ReactionTimeframeEntry(timeframe: timeframe, postReleasePrice: nil, movement: nil, pips: pips, changePercent: nil,
+                               maxUpward: nil, maxDownward: nil, maxUpwardPips: up, maxDownwardPips: down, analysisStatus: status)
+    }
+
+    func testDescribesOnlyTheNumbers() {
+        let text = MovementAnalysisText.build(
+            reactions: [entry("1m", -8.2), entry("5m", -24.5), entry("15m", -41.3), entry("60m", -52, up: 3, down: -55.1)],
+            actual: 3.1, forecast: 3.2, unit: "%"
+        )
+        XCTAssertEqual(text, "結果は予想を0.1%下回りました。発表後1分で8.2pips下落しました。その後も下落が続き、15分後には41.3pips下落、60分後には52pips下落しました。60分間の最大の上昇幅は+3pips、最大の下落幅は-55.1pipsでした。")
+    }
+
+    func testReversalAndMissingData() {
+        let text = MovementAnalysisText.build(reactions: [entry("1m", 5), entry("15m", -3)], actual: nil, forecast: nil, unit: nil)
+        XCTAssertEqual(text, "発表後1分で5pips上昇しました。その後は反対の方向に動き、15分後には3pips下落しました。")
+        XCTAssertNil(MovementAnalysisText.build(reactions: [entry("1m", nil, status: .dataPending)], actual: 1, forecast: 1, unit: nil))
+    }
+}
+
 final class IndicatorDetailNameTests: XCTestCase {
     func testSplitsBeforeTheParenthesis() {
         XCTAssertEqual(IndicatorDetailCard.splitName("米国CPI(消費者物価指数)").main, "米国CPI")

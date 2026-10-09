@@ -31,6 +31,8 @@ enum MovementChartState: Equatable {
 final class MovementDetailViewModel: ObservableObject {
     @Published private(set) var state: MovementDetailState = .loading
     @Published private(set) var chartState: MovementChartState = .loading
+    /// 発表の結果・予想(「値動きの分析」の1文目)。取れなくても画面は出す。
+    @Published private(set) var eventSnapshot: EventSnapshotDetail?
     @Published var selectedTimeframe: String = ReactionTimeframe.default {
         didSet {
             guard oldValue != selectedTimeframe, case .loaded = state else { return }
@@ -47,8 +49,9 @@ final class MovementDetailViewModel: ObservableObject {
     private let apiClient: APIClient
     private let eventId: String
 
-    init(apiClient: APIClient, eventId: String, indicatorId: String, fxPairId: String, symbol: String, indicatorName: String, releaseDatetime: Date) {
+    init(apiClient: APIClient, eventId: String, indicatorId: String, fxPairId: String, symbol: String, indicatorName: String, releaseDatetime: Date, initialTimeframe: String = ReactionTimeframe.default) {
         self.apiClient = apiClient
+        _selectedTimeframe = Published(initialValue: initialTimeframe)
         self.eventId = eventId
         self.indicatorId = indicatorId
         self.fxPairId = fxPairId
@@ -60,6 +63,8 @@ final class MovementDetailViewModel: ObservableObject {
     func load() {
         state = .loading
         Task {
+            // 結果・予想は分析の文にだけ使う。チャートより先に取り終える(最後の通信がチャートになる)。
+            await fetchEventSnapshot()
             await fetchReactions()
             if case .loaded = state {
                 loadChart()
@@ -101,6 +106,11 @@ final class MovementDetailViewModel: ObservableObject {
         } catch {
             state = .error("値動き情報の取得に失敗しました。")
         }
+    }
+
+    private func fetchEventSnapshot() async {
+        let response: EventDetailResponse? = try? await apiClient.send(Endpoint(path: "events/\(eventId)"))
+        eventSnapshot = response?.snapshot
     }
 
     private func loadChart() {
