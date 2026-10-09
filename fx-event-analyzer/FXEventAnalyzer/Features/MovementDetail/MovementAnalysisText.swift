@@ -1,12 +1,12 @@
 import Foundation
 
 /// SCR-008「値動きの分析」の文(HQ指示 2026-10-09)。AIは使わず、実際の値動きの数値と
-/// 発表の結果・予想だけから、決まった型で文を作る。値動きの理由(金利見通しなど)は
-/// 数値から確かめられないので書かない(要件定義書12章「推測による説明は表示しない」)。
+/// 発表の結果・予想、指標ごとに人が書いた「一般的な見方」だけから、決まった型で作る。
+/// 今回の値動きの理由を断定する文は作らない(要件定義書12章)。HQ指示で敬語ではなく
+/// 「〜した」の形、同日の「分析が長い」で3文までに短くした。
 enum MovementAnalysisText {
-    /// 例:「結果は予想を0.1%下回った。発表後1分で8.2pips下落した。その後も下落が続き、
-    /// 15分後には41.3pips下落、60分後には52pips下落した。…」(HQ指示 2026-10-09で
-    /// 敬語ではなく「〜した」の形に)。データが足りなければnil(欄ごと出さない)。
+    /// 例:「結果は予想を0.1%下回った。米国CPIが予想を下回ると、…ドルが売られやすいとされる。
+    /// 発表後1分で8.2pips、15分で41.3pips下落した。」データが足りなければnil(欄ごと出さない)。
     static func build(
         reactions: [ReactionTimeframeEntry],
         actual: Double?,
@@ -28,8 +28,8 @@ enum MovementAnalysisText {
             } else {
                 let amount = ValueFormat.withUnit(abs(diff), unit: unit)
                 sentences.append("結果は予想を\(amount)\(diff > 0 ? "上回った" : "下回った")。")
-                // HQ指示(2026-10-09)「なぜ下落したのかを表示したい」: AIは使わず、指標ごとに
-                // 人が書いた「一般的な見方」を、上振れ・下振れに合わせて添える。
+                // HQ指示(2026-10-09)「なぜ下落したのかを表示したい」: 指標ごとに人が書いた
+                // 「一般的な見方」を、上振れ・下振れに合わせて添える。
                 if let view = diff > 0 ? marketViewAbove : marketViewBelow, !view.isEmpty {
                     sentences.append(view.hasSuffix("。") ? view : view + "。")
                 }
@@ -37,32 +37,14 @@ enum MovementAnalysisText {
         }
 
         let firstLabel = label(first.timeframe)
-        sentences.append("発表後\(firstLabel)で\(pips(abs(firstPips)))\(direction(firstPips))した。")
-
-        let later = ["15m", "60m"].compactMap(ready).filter { $0.timeframe != first.timeframe }
-        // 15分後より60分後のほうが動きが小さい(戻した)ときは、そう書き分ける。
-        if later.count == 2, let mid = later[0].pips, let end = later[1].pips,
-           mid != 0, end != 0, (mid > 0) == (end > 0), (firstPips > 0) == (mid > 0), abs(end) < abs(mid), abs(mid) > abs(firstPips) {
-            sentences.append("その後も\(direction(firstPips))が続き、15分後には\(pips(abs(mid)))\(direction(mid))したが、60分後には\(pips(abs(end)))まで戻した。")
-        } else if let last = later.last, let lastPips = last.pips {
-            let parts = later.compactMap { entry -> String? in
-                guard let value = entry.pips else { return nil }
-                return "\(label(entry.timeframe))後には\(pips(abs(value)))\(direction(value))"
-            }
-            let flow: String
-            if firstPips == 0 || lastPips == 0 || (firstPips > 0) != (lastPips > 0) {
-                flow = "その後は反対の方向に動き、"
-            } else if abs(lastPips) > abs(firstPips) {
-                flow = "その後も\(direction(firstPips))が続き、"
+        if let later = ready("15m"), later.timeframe != first.timeframe, let laterPips = later.pips {
+            if laterPips != 0, (laterPips > 0) == (firstPips > 0) {
+                sentences.append("発表後\(firstLabel)で\(pips(abs(firstPips)))、15分で\(pips(abs(laterPips)))\(direction(firstPips))した。")
             } else {
-                flow = "その後は動きが小さくなり、"
+                sentences.append("発表後\(firstLabel)で\(pips(abs(firstPips)))\(direction(firstPips))したが、15分後には\(pips(abs(laterPips)))\(direction(laterPips))した。")
             }
-            sentences.append(flow + parts.joined(separator: "、") + "した。")
-        }
-
-        let widest = ready("60m") ?? later.last ?? first
-        if let up = widest.maxUpwardPips, let down = widest.maxDownwardPips {
-            sentences.append("\(label(widest.timeframe))間の最大の上昇幅は\(signedPips(up))、最大の下落幅は\(signedPips(-abs(down)))だった。")
+        } else {
+            sentences.append("発表後\(firstLabel)で\(pips(abs(firstPips)))\(direction(firstPips))した。")
         }
         return sentences.joined()
     }
@@ -77,9 +59,5 @@ enum MovementAnalysisText {
 
     private static func pips(_ value: Double) -> String {
         "\(ValueFormat.number(value, fractionDigits: 1))pips"
-    }
-
-    private static func signedPips(_ value: Double) -> String {
-        "\(ValueFormat.number(value, fractionDigits: 1, signed: true))pips"
     }
 }
