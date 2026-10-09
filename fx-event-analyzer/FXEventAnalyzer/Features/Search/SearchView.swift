@@ -58,6 +58,13 @@ import SwiftUI
 /// 別トーンにしてpillの方を明るく、(5)「最近の検索履歴」見出し・行の
 /// 文字サイズを+0.5、(6)「最近の検索履歴」の開始位置を「人気の検索
 /// キーワード」の開始位置(パネル内パディング分)に揃える — 以上を反映。
+///
+/// HQ指摘(2026-10-09、7回目): (1)フィルターpill(すべて/指標等)の文字
+/// サイズをキーワードpill(雇用統計等)と同じ8.5に、(2)検索欄より下の
+/// 領域(フィルターpill行・コンテンツ)をさらに下げる、(3)キーワードpillの
+/// 縦パディングを6→4に縮小、(4)「最近の検索履歴」の表示状態を確認できる
+/// よう`ScreenshotTests`に実データ記録キャプチャを追加(検索結果の行を
+/// 実際にタップして`RecentSearchStore`に記録させる — 捏造データではない)。
 struct SearchView: View {
     @StateObject private var viewModel: IndicatorsViewModel
     @State private var path = NavigationPath()
@@ -98,11 +105,12 @@ struct SearchView: View {
         }
     }
 
-    // 検索バー上端53・高さ28(y=67中心)、フィルターpill(y=100・高さ約20)との
+    // 検索バー上端53・高さ28(y=67中心)、フィルターpill(y=104・高さ約20)との
     // 間隔をHQ指示(2026-10-09、6回目)「検索欄とすべてや指標の間にスペースを
-    // もう少し広げて」で3pt→9ptに拡大。クリアできる余白を見て118に設定。
-    // V5BottomBarの帯高さ(39)と合わせて491-118-39=334をScrollViewの実高さとした。
-    private static let contentTopOffset: CGFloat = 118
+    // もう少し広げて」で3pt→9ptに拡大した後、7回目「検索枠から下を少し
+    // 下げて」でさらに+4pt(計13pt)に拡大。クリアできる余白を見て122に設定。
+    // V5BottomBarの帯高さ(39)と合わせて491-122-39=330をScrollViewの実高さとした。
+    private static let contentTopOffset: CGFloat = 122
     private static let contentAreaHeight: CGFloat = V5P.H - contentTopOffset - 39
 
     /// HQ指示(2026-10-09、6回目)「検索欄の枠の中は色をつけて」: `V5P.panel2`
@@ -138,12 +146,14 @@ struct SearchView: View {
         HStack(spacing: 5) {
             ForEach(SearchFilter.allCases) { filter in
                 Button { selectedFilter = filter } label: {
-                    NotoText.text(filter.title, size: 8).foregroundStyle(.white)
+                    // HQ指示(2026-10-09、7回目)「フィルターの文字サイズを
+                    // 雇用統計と同じサイズにして」: キーワードpill(8.5)と揃えた。
+                    NotoText.text(filter.title, size: 8.5).foregroundStyle(.white)
                         .padding(.horizontal, 10).padding(.vertical, 5)
                         .background(selectedFilter == filter ? V5P.blue : V5P.panel2, in: Capsule())
                 }.buttonStyle(.plain)
             }
-        }.position(x: 117, y: 100)
+        }.position(x: 117, y: 104)
     }
 
     @ViewBuilder private var scrollableContent: some View {
@@ -188,11 +198,13 @@ struct SearchView: View {
                         Button {
                             viewModel.searchText = keyword
                         } label: {
+                            // HQ指示(2026-10-09、7回目)「FOMCの枠の縦幅を
+                            // 少し短くして」: 上下パディングを6→4に。
                             NotoText.text(keyword, size: 8.5)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.7)
                                 .padding(.horizontal, 4)
-                                .padding(.vertical, 6)
+                                .padding(.vertical, 4)
                                 .frame(maxWidth: .infinity)
                                 .foregroundStyle(.white)
                                 .background(Self.keywordPillFill, in: Capsule())

@@ -213,6 +213,19 @@ final class ScreenshotTests: XCTestCase {
         searchField.typeText("CPI")
         XCTAssertTrue(waitForAnyElement(containing: "消費者物価指数", timeout: 15), "Search results for CPI did not load")
         capture("11b-Search-Results")
+
+        // 「最近の検索履歴」にデータが入った状態(HQ指示 2026-10-09、7回目
+        // 「最近の検索お表示見たいから何か1つデータを入れて」)。架空データは
+        // 作らず、実際に検索結果の行をタップして`RecentSearchStore`へ実データ
+        // (実在のモック指標)を記録させてから検索欄を空に戻し、その状態を撮る。
+        tap(containing: "米国CPI(消費者物価指数)")
+        XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicator Detail did not load from Search")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(searchField.waitForExistence(timeout: 10), "Did not return to Search from Indicator Detail")
+        searchField.tap()
+        searchField.typeText(String(repeating: "\u{8}", count: 10))
+        XCTAssertTrue(waitForAnyElement(containing: "米国CPI(消費者物価指数)", timeout: 10), "Recent search history did not record the tapped indicator")
+        capture("11c-Search-RecentHistory")
     }
 
     // MARK: - Helpers
