@@ -130,14 +130,9 @@ struct HistoricalComparisonView: View {
                             // (eventId/indicatorId/fxPairId/fxPairSymbol/
                             // indicatorName/releaseDatetime)で、過去の発表回でも
                             // SCR-008(`AppRoute.movementDetail`)へ直接遷移する。
-                            NavigationLink(value: AppRoute.movementDetail(
-                                eventId: event.id,
-                                indicatorId: viewModel.indicatorId,
-                                fxPairId: viewModel.fxPairId,
-                                symbol: viewModel.fxPairSymbol,
-                                indicatorName: viewModel.indicatorName,
-                                releaseDatetime: event.releaseDatetime
-                            )) {
+                            // HQ指示(2026-10-09)の動線: 各回の行はその回のSCR-007 イベント詳細へ
+                            // (そこから相場反応詳細へ進む)。
+                            NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
                                 historyRow(event)
                             }.buttonStyle(.plain).accessibilityIdentifier("historyEventRow")
                         }

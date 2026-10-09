@@ -13,7 +13,8 @@ enum MovementAnalysisText {
         forecast: Double?,
         unit: String?,
         marketViewAbove: String? = nil,
-        marketViewBelow: String? = nil
+        marketViewBelow: String? = nil,
+        subject: String? = nil
     ) -> String? {
         func ready(_ timeframe: String) -> ReactionTimeframeEntry? {
             reactions.first { $0.timeframe == timeframe && $0.analysisStatus == .ready && $0.pips != nil }
@@ -37,14 +38,16 @@ enum MovementAnalysisText {
         }
 
         let firstLabel = label(first.timeframe)
+        // イベント詳細では「USD/JPYは発表後…」と、どの通貨ペアの値動きかを書く。
+        let lead = subject.map { "\($0)は" } ?? ""
         if let later = ready("15m"), later.timeframe != first.timeframe, let laterPips = later.pips {
             if laterPips != 0, (laterPips > 0) == (firstPips > 0) {
-                sentences.append("発表後\(firstLabel)で\(pips(abs(firstPips)))、15分で\(pips(abs(laterPips)))\(direction(firstPips))した。")
+                sentences.append("\(lead)発表後\(firstLabel)で\(pips(abs(firstPips)))、15分で\(pips(abs(laterPips)))\(direction(firstPips))した。")
             } else {
-                sentences.append("発表後\(firstLabel)で\(pips(abs(firstPips)))\(direction(firstPips))したが、15分後には\(pips(abs(laterPips)))\(direction(laterPips))した。")
+                sentences.append("\(lead)発表後\(firstLabel)で\(pips(abs(firstPips)))\(direction(firstPips))したが、15分後には\(pips(abs(laterPips)))\(direction(laterPips))した。")
             }
         } else {
-            sentences.append("発表後\(firstLabel)で\(pips(abs(firstPips)))\(direction(firstPips))した。")
+            sentences.append("\(lead)発表後\(firstLabel)で\(pips(abs(firstPips)))\(direction(firstPips))した。")
         }
         return sentences.joined()
     }

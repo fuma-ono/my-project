@@ -7,6 +7,11 @@ import SwiftUI
 /// (`NavigationLink(value:)`)から直接進む形にした。
 struct EventDetailCards: View {
     let response: EventDetailResponse
+    /// 発表後の「相場反応の分析」の文(呼び出し側で作る)。
+    let analysisText: String?
+
+    /// HQ指示(2026-10-09)の表: 発表前は結果「未発表」、値動き「発表後に表示」、分析「発表後に分析」。
+    var isReleased: Bool { response.event.status == .released }
 
     static let timeframes = ["1m", "5m", "15m"]
 
@@ -19,11 +24,13 @@ struct EventDetailCards: View {
                 .padding(.horizontal, 4)
                 .padding(.top, 2)
             reactionTable
-            if !pairs.isEmpty {
+            if !pairs.isEmpty, isReleased {
                 NotoText.text("通貨ペアを押すと、相場反応の詳細を表示します。", size: 7.5)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                     .padding(.horizontal, 4)
             }
+            analysisCard
+            comparisonLink
         }
         .frame(width: 214)
     }
@@ -76,7 +83,7 @@ struct EventDetailCards: View {
         let released = response.event.status == .released
         let actual = released ? snapshot?.actual : nil
         return HStack(spacing: 0) {
-            resultColumn("結果", value: actual, unit: unit, note: nil)
+            resultColumn("結果", value: actual, unit: unit, note: nil, placeholder: released ? "--" : "未発表")
             divider
             resultColumn("予想", value: snapshot?.forecast, unit: unit, note: nil)
             divider
@@ -91,11 +98,11 @@ struct EventDetailCards: View {
         Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 0.5, height: 50)
     }
 
-    private func resultColumn(_ title: String, value: Double?, unit: String?, note: String?) -> some View {
+    private func resultColumn(_ title: String, value: Double?, unit: String?, note: String?, placeholder: String = "--") -> some View {
         // HQ指示(2026-10-09)「結果、予想、前回と数字、前回比を大きく中央に」。
         VStack(alignment: .center, spacing: 3) {
             NotoText.text(title, size: 9.5).foregroundStyle(SettingsCardStyle.subtitleColor)
-            Text(value.map { ValueFormat.withUnit($0, unit: unit) } ?? "--")
+            Text(value.map { ValueFormat.withUnit($0, unit: unit) } ?? placeholder)
                 .font(.system(size: 17, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(.white)
@@ -144,6 +151,7 @@ struct EventDetailCards: View {
             // HQ指示(2026-10-09)「見出し行だけ少し濃く」: 見出しの行は本文より少し濃い一色。
             .background(Self.headerFill)
             ForEach(pairs) { pair in
+                if isReleased {
                 NavigationLink(value: AppRoute.movementDetail(
                     eventId: response.event.id,
                     indicatorId: response.event.indicatorId,
@@ -153,19 +161,7 @@ struct EventDetailCards: View {
                     releaseDatetime: response.event.releaseDatetime
                 )) {
                 HStack(spacing: 0) {
-                    cell(width: Self.pairColumnWidth, alignment: .leading) {
-                        HStack(spacing: 5) {
-                            HStack(spacing: -3) {
-                                CountryFlagView(currencyCode: String(pair.symbol.prefix(3)), diameter: 12)
-                                CountryFlagView(currencyCode: String(pair.symbol.suffix(3)), diameter: 12)
-                            }
-                            NotoText.text(FXPairSymbol.displayName(pair.symbol), size: 9.5)
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                        }
-                        .padding(.leading, 7)
-                    }
+                    cell(width: Self.pairColumnWidth, alignment: .leading) { pairLabel(pair) }
                     ForEach(Self.timeframes, id: \.self) { timeframe in
                         cell(width: Self.valueColumnWidth) { pipsText(pair.reaction(for: timeframe)) }
                     }
@@ -177,6 +173,15 @@ struct EventDetailCards: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("\(FXPairSymbol.displayName(pair.symbol))の相場反応を見る")
                 .accessibilityAddTraits(.isButton)
+                } else {
+                    HStack(spacing: 0) {
+                        cell(width: Self.pairColumnWidth, alignment: .leading) { pairLabel(pair) }
+                        cell(width: Self.valueColumnWidth * 3) {
+                            NotoText.text("発表後に表示", size: 8.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                        }
+                    }
+                    .frame(height: Self.rowHeight)
+                }
             }
             if pairs.isEmpty {
                 NotoText.text("値動きのデータはまだありません。", size: 8.5)
@@ -198,6 +203,70 @@ struct EventDetailCards: View {
         colors: [SettingsCardStyle.cardFill, Color(red: 0.03, green: 0.14, blue: 0.27)],
         startPoint: .top, endPoint: .bottom
     )
+
+    private func pairLabel(_ pair: EventMajorFxReaction) -> some View {
+        HStack(spacing: 5) {
+            HStack(spacing: -3) {
+                CountryFlagView(currencyCode: String(pair.symbol.prefix(3)), diameter: 12)
+                CountryFlagView(currencyCode: String(pair.symbol.suffix(3)), diameter: 12)
+            }
+            NotoText.text(FXPairSymbol.displayName(pair.symbol), size: 9.5)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .padding(.leading, 7)
+    }
+
+    // MARK: - 相場反応の分析・過去イベント比較
+
+    private var analysisCard: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            NotoText.text("相場反応の分析", size: 11).foregroundStyle(.white)
+            if !isReleased {
+                NotoText.text("発表後に分析します。", size: 8).foregroundStyle(SettingsCardStyle.subtitleColor)
+            } else if let analysisText {
+                NotoText.text(analysisText, size: 7.5)
+                    .foregroundStyle(.white.opacity(0.85))
+                    .lineSpacing(1.5)
+                    .fixedSize(horizontal: false, vertical: true)
+                NotoText.text("※ 一般的な見方で、今回の値動きの理由を断定するものではない。", size: 6)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+            } else {
+                NotoText.text("分析できる値動きのデータがまだありません。", size: 8).foregroundStyle(SettingsCardStyle.subtitleColor)
+            }
+        }
+        .padding(8)
+        .frame(width: 214, alignment: .leading)
+        .background(AccountCardBackground())
+    }
+
+    /// HQ指示(2026-10-09)「イベント詳細には過去イベント比較ボタンを」。
+    @ViewBuilder private var comparisonLink: some View {
+        let symbol = response.relatedFxPairs.first?.symbol ?? pairs.first?.symbol
+        let pairId = response.relatedFxPairs.first?.fxPairId ?? pairs.first?.fxPairId
+        if let symbol, let pairId {
+            NavigationLink(value: AppRoute.historicalComparison(
+                indicatorId: response.event.indicatorId,
+                indicatorName: response.event.indicatorName,
+                fxPairId: pairId,
+                fxPairSymbol: symbol
+            )) {
+                HStack {
+                    NotoText.text("過去イベント比較", size: 9.5).foregroundStyle(.white)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(SettingsCardStyle.chevronColor)
+                }
+                .padding(.horizontal, 10)
+                .frame(width: 214, height: 30)
+                .background(AccountCardBackground())
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(SettingsRowPressStyle())
+        }
+    }
 
     private static let pairColumnWidth: CGFloat = 80
     private static let valueColumnWidth: CGFloat = (214 - 80) / 3

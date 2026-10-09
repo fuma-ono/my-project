@@ -46,6 +46,13 @@ struct IndicatorDetailCard: View {
             separator
             // HQ指示(2026-10-09)「過去イベント比較画面の遷移元は指標詳細」。「過去の発表日」の行は
             // 過去イベント比較で分かるので消した。
+            // HQ指示(2026-10-09)「指標詳細には次回発表予定と過去イベント比較を」: どちらも移動用の行。
+            // スクショのテストは「次回発表予定」からSCR-007へ進む。
+            if let next = nextScheduledEvent {
+                linkRow("次回発表予定", detail: "\(AppPreferences.shared.dateString(next.releaseDatetime)) \(AppPreferences.shared.timeString(next.releaseDatetime))",
+                        value: AppRoute.eventDetail(id: next.id))
+                if comparisonPair != nil { separator }
+            }
             if let pair = comparisonPair {
                 linkRow("過去イベント比較", value: AppRoute.historicalComparison(
                     indicatorId: indicator.id,
@@ -62,11 +69,14 @@ struct IndicatorDetailCard: View {
         .background(AccountCardBackground())
     }
 
-    private func linkRow(_ title: String, value: AppRoute) -> some View {
+    private func linkRow(_ title: String, detail: String? = nil, value: AppRoute) -> some View {
         NavigationLink(value: value) {
             HStack {
                 NotoText.text(title, size: 9.5).foregroundStyle(.white)
                 Spacer()
+                if let detail {
+                    NotoText.text(detail, size: 8.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                }
                 Image(systemName: "chevron.right")
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(SettingsCardStyle.chevronColor)
@@ -182,21 +192,6 @@ struct IndicatorDetailCard: View {
             infoRow("通貨") { value(indicator.currencyCode) }
             infoRow("重要度") { importanceBadge(width: 34) }
             infoRow("発表頻度") { value(Self.frequencyLabel(indicator.frequency)) }
-            if let next = nextScheduledEvent {
-                // スクショのテストはこの行(「次回発表予定」)からSCR-007へ進む。
-                NavigationLink(value: AppRoute.eventDetail(id: next.id)) {
-                    infoRow("次回発表予定") {
-                        HStack(spacing: 4) {
-                            value("\(AppPreferences.shared.dateString(next.releaseDatetime)) \(AppPreferences.shared.timeString(next.releaseDatetime))")
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 7, weight: .semibold))
-                                .foregroundStyle(SettingsCardStyle.chevronColor)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(SettingsRowPressStyle())
-            }
         }
         .padding(.vertical, 3)
     }

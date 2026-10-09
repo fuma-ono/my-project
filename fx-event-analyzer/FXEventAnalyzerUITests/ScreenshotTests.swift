@@ -121,7 +121,7 @@ final class ScreenshotTests: XCTestCase {
         // 文字は可変のモックデータ(日付・数値)のため、固定の
         // accessibilityIdentifierでタップする。
         tapIdentifier("historyEventRow")
-        XCTAssertTrue(waitForAnyElement(containing: "相場反応詳細", timeout: 15), "Historical Comparison row did not navigate to SCR-008")
+        XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 15), "Historical Comparison row did not navigate to SCR-007")
 
         // 04-Home(SCR-004の実キャプチャ)。上でお気に入り登録した米国CPIが
         // 「お気に入り」カードに実際に表示された状態でHomeに戻って撮る —
