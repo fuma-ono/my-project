@@ -4,9 +4,9 @@ import Foundation
 /// 発表の結果・予想だけから、決まった型で文を作る。値動きの理由(金利見通しなど)は
 /// 数値から確かめられないので書かない(要件定義書12章「推測による説明は表示しない」)。
 enum MovementAnalysisText {
-    /// 例:「結果は予想を0.1%下回りました。発表後1分で8.2pips下落し、その後も下落が続き、
-    /// 15分後には41.3pips、60分後には52.0pips下落しました。60分間の最大の上昇幅は+3.0pips、
-    /// 最大の下落幅は-55.1pipsでした。」データが足りなければnil(欄ごと出さない)。
+    /// 例:「結果は予想を0.1%下回った。発表後1分で8.2pips下落した。その後も下落が続き、
+    /// 15分後には41.3pips下落、60分後には52pips下落した。…」(HQ指示 2026-10-09で
+    /// 敬語ではなく「〜した」の形に)。データが足りなければnil(欄ごと出さない)。
     static func build(
         reactions: [ReactionTimeframeEntry],
         actual: Double?,
@@ -22,21 +22,21 @@ enum MovementAnalysisText {
         if let actual, let forecast {
             let diff = actual - forecast
             if diff == 0 {
-                sentences.append("結果は予想どおりでした。")
+                sentences.append("結果は予想どおりだった。")
             } else {
                 let amount = ValueFormat.withUnit(abs(diff), unit: unit)
-                sentences.append("結果は予想を\(amount)\(diff > 0 ? "上回りました" : "下回りました")。")
+                sentences.append("結果は予想を\(amount)\(diff > 0 ? "上回った" : "下回った")。")
             }
         }
 
         let firstLabel = label(first.timeframe)
-        sentences.append("発表後\(firstLabel)で\(pips(abs(firstPips)))\(direction(firstPips))しました。")
+        sentences.append("発表後\(firstLabel)で\(pips(abs(firstPips)))\(direction(firstPips))した。")
 
         let later = ["15m", "60m"].compactMap(ready).filter { $0.timeframe != first.timeframe }
         // 15分後より60分後のほうが動きが小さい(戻した)ときは、そう書き分ける。
         if later.count == 2, let mid = later[0].pips, let end = later[1].pips,
            mid != 0, end != 0, (mid > 0) == (end > 0), (firstPips > 0) == (mid > 0), abs(end) < abs(mid), abs(mid) > abs(firstPips) {
-            sentences.append("その後も\(direction(firstPips))が続き、15分後には\(pips(abs(mid)))\(direction(mid))しましたが、60分後には\(pips(abs(end)))まで戻しました。")
+            sentences.append("その後も\(direction(firstPips))が続き、15分後には\(pips(abs(mid)))\(direction(mid))したが、60分後には\(pips(abs(end)))まで戻した。")
         } else if let last = later.last, let lastPips = last.pips {
             let parts = later.compactMap { entry -> String? in
                 guard let value = entry.pips else { return nil }
@@ -50,12 +50,12 @@ enum MovementAnalysisText {
             } else {
                 flow = "その後は動きが小さくなり、"
             }
-            sentences.append(flow + parts.joined(separator: "、") + "しました。")
+            sentences.append(flow + parts.joined(separator: "、") + "した。")
         }
 
         let widest = ready("60m") ?? later.last ?? first
         if let up = widest.maxUpwardPips, let down = widest.maxDownwardPips {
-            sentences.append("\(label(widest.timeframe))間の最大の上昇幅は\(signedPips(up))、最大の下落幅は\(signedPips(-abs(down)))でした。")
+            sentences.append("\(label(widest.timeframe))間の最大の上昇幅は\(signedPips(up))、最大の下落幅は\(signedPips(-abs(down)))だった。")
         }
         return sentences.joined()
     }

@@ -94,7 +94,7 @@ struct MovementDetailView: View {
                         let change = price - pre
                         let percent = pre == 0 ? 0 : change / pre * 100
                         Text("\(ValueFormat.number(change, fractionDigits: digits, signed: true)) (\(ValueFormat.number(percent, fractionDigits: 2, signed: true))%)")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                             .monospacedDigit()
                             .foregroundStyle(change >= 0 ? V5P.green : V5P.red)
                     }
@@ -144,7 +144,12 @@ struct MovementDetailView: View {
         case .error(let message):
             ErrorView(title: "チャート取得に失敗しました", message: message, onRetry: { viewModel.retryChart() })
         case .loaded(let chart):
+            // HQ指示(2026-10-09)「参考画像のように外枠で囲んで」。
             CandleChart(chart: chart, digits: viewModel.symbol.hasSuffix("JPY") ? 2 : 4, timeframe: viewModel.selectedTimeframe)
+                .padding(.leading, 4)
+                .padding(.vertical, 5)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.18)))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.8))
         }
     }
 
@@ -292,7 +297,8 @@ private struct CandleChart: View {
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6)).foregroundStyle(SettingsCardStyle.cardBorder.opacity(0.9))
                 AxisValueLabel {
                     if let price = value.as(Double.self) {
-                        Text(ValueFormat.number(price, fractionDigits: digits))
+                        // 「155」ではなく「155.00」のように小数点以下の桁をそろえる。
+                        Text(String(format: "%.\(digits)f", price))
                             .font(.system(size: 6))
                             .foregroundStyle(SettingsCardStyle.subtitleColor)
                     }
@@ -302,7 +308,8 @@ private struct CandleChart: View {
         .chartXAxis {
             AxisMarks(values: axisDates) { value in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6)).foregroundStyle(SettingsCardStyle.cardBorder.opacity(0.9))
-                AxisValueLabel {
+                // 文字の中心を縦線に合わせる(既定では線の右に寄ってずれて見えた)。
+                AxisValueLabel(centered: false, anchor: .top) {
                     if let date = value.as(Date.self) {
                         Text(Self.timeFormatter.string(from: date))
                             .font(.system(size: 6))
