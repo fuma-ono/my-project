@@ -58,17 +58,24 @@ final class ScreenshotTests: XCTestCase {
         // 起きていなかった問題があり、原因は`LoginView`だけが`NavigationStack`
         // に明示的な`NavigationPath`を束縛していなかったことだったため、既に
         // `LoginView.swift`で修正済み(`path`を追加)。
+        //
+        // CI実行(commit 942e590、pull_requestトリガー)でiPadのみ失敗: 同じ
+        // テストコードでiPhoneは問題なく成功した一方、iPad側はこの画面実行に
+        // 339秒かかっており(iPhoneは219秒)、15秒の待ちが単純に足りなかった
+        // 可能性が高い(Home「通貨ペア」の時と同様のCI実行速度差によるマージン
+        // 不足で、ナビゲーション自体の不具合ではないと判断)。iPad分の余裕を
+        // 見て30秒に広げた。
         tap(containing: "新規登録")
-        XCTAssertTrue(waitForAnyElement(containing: "パスワード(確認用)", timeout: 15), "Sign Up screen did not load")
+        XCTAssertTrue(waitForAnyElement(containing: "パスワード(確認用)", timeout: 30), "Sign Up screen did not load")
         capture("02-SignUp")
-        tapIdentifier("signUpBackButton")
-        XCTAssertTrue(emailField.waitForExistence(timeout: 10), "Did not return to Login screen from Sign Up")
+        tapIdentifier("signUpBackButton", timeout: 20)
+        XCTAssertTrue(emailField.waitForExistence(timeout: 20), "Did not return to Login screen from Sign Up")
 
         tap(containing: "パスワードをお忘れの方")
-        XCTAssertTrue(waitForAnyElement(containing: "再設定メールを送信", timeout: 15), "Password Reset screen did not load")
+        XCTAssertTrue(waitForAnyElement(containing: "再設定メールを送信", timeout: 30), "Password Reset screen did not load")
         capture("03-PasswordReset")
-        tapIdentifier("passwordResetBackButton")
-        XCTAssertTrue(emailField.waitForExistence(timeout: 10), "Did not return to Login screen from Password Reset")
+        tapIdentifier("passwordResetBackButton", timeout: 20)
+        XCTAssertTrue(emailField.waitForExistence(timeout: 20), "Did not return to Login screen from Password Reset")
 
         emailField.tap()
         emailField.typeText("ui-screenshot@example.com")
