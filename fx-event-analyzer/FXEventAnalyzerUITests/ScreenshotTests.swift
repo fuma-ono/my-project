@@ -223,6 +223,13 @@ final class ScreenshotTests: XCTestCase {
         tapIdentifier("v5HeaderBack")
         XCTAssertTrue(searchField.waitForExistence(timeout: 10), "Did not return to Search from Indicator Detail")
         searchField.tap()
+        // iOS's one-time "slide to type" keyboard tip can appear on this
+        // second focus of the field and cover the bottom of the screen —
+        // dismiss it before typing/capturing if it shows up.
+        let continueButton = app.buttons["Continue"]
+        if continueButton.waitForExistence(timeout: 2) {
+            continueButton.tap()
+        }
         searchField.typeText(String(repeating: "\u{8}", count: 10))
         XCTAssertTrue(waitForAnyElement(containing: "米国CPI(消費者物価指数)", timeout: 10), "Recent search history did not record the tapped indicator")
         capture("11c-Search-RecentHistory")
