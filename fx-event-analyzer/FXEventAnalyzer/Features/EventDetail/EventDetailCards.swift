@@ -3,10 +3,12 @@ import SwiftUI
 /// SCR-007 イベント詳細の本体(HQ指示 2026-10-09の参考画像)。上から、指標の
 /// カード(国旗・名前・国|通貨・発表日時・重要度)、結果/予想/前回のカード、
 /// 「主要通貨ペアの値動き(pips)」の表(1分・5分・15分)、通貨ペアを選んで
-/// SCR-008 相場反応詳細へ進むボタン。
+/// SCR-008 相場反応詳細へ進むボタン。ボタンを押すと下に通貨ペアの一覧が開き、
+/// 行(`NavigationLink(value:)`)から進む。選択シートから画面を開くと、その先の
+/// SCR-009への遷移が効かなくなったため(2026-10-09のCI)、ほかの画面と同じ遷移にした。
 struct EventDetailCards: View {
     let response: EventDetailResponse
-    let onSelectPairs: () -> Void
+    @State private var showsPairs = false
 
     static let timeframes = ["1m", "5m", "15m"]
 
@@ -19,8 +21,12 @@ struct EventDetailCards: View {
                 .padding(.horizontal, 4)
                 .padding(.top, 2)
             reactionTable
-            Button(action: onSelectPairs) {
-                NotoText.text("通貨ペアを選択して詳細を見る", size: 8.5)
+            Button { withAnimation(.easeInOut(duration: 0.2)) { showsPairs.toggle() } } label: {
+                HStack(spacing: 5) {
+                    NotoText.text("通貨ペアを選択して詳細を見る", size: 8.5)
+                    Image(systemName: showsPairs ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 7, weight: .semibold))
+                }
                     .foregroundStyle(.white)
                     .frame(width: 214, height: 29)
                     .background(
@@ -34,8 +40,46 @@ struct EventDetailCards: View {
             .disabled(pairs.isEmpty)
             .opacity(pairs.isEmpty ? 0.4 : 1)
             .padding(.top, 4)
+            if showsPairs { pairLinks }
         }
         .frame(width: 214)
+    }
+
+    /// 選べる通貨ペアの一覧。行からSCR-008 相場反応詳細へ。
+    private var pairLinks: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(pairs.enumerated()), id: \.element.id) { index, pair in
+                if index > 0 { SettingsListSeparator() }
+                NavigationLink(value: AppRoute.movementDetail(
+                    eventId: response.event.id,
+                    indicatorId: response.event.indicatorId,
+                    fxPairId: pair.fxPairId,
+                    symbol: pair.symbol,
+                    indicatorName: response.event.indicatorName,
+                    releaseDatetime: response.event.releaseDatetime
+                )) {
+                    HStack(spacing: 6) {
+                        HStack(spacing: -3) {
+                            CountryFlagView(currencyCode: String(pair.symbol.prefix(3)), diameter: 12)
+                            CountryFlagView(currencyCode: String(pair.symbol.suffix(3)), diameter: 12)
+                        }
+                        NotoText.text(FXPairSymbol.displayName(pair.symbol), size: 8.5).foregroundStyle(.white)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(SettingsCardStyle.chevronColor)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(height: 28)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(SettingsRowPressStyle())
+                .accessibilityLabel("\(FXPairSymbol.displayName(pair.symbol))の相場反応を見る")
+            }
+        }
+        .frame(width: 214)
+        .background(AccountCardBackground())
+        .transition(.opacity)
     }
 
     // MARK: - 指標のカード

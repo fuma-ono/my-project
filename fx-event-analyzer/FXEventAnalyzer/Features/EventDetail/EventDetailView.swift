@@ -30,8 +30,6 @@ struct EventDetailView: View {
     private let apiClient: APIClient
     @ObservedObject private var plan = PlanStore.shared
     @State private var planPrompt: String?
-    @State private var showsPairPicker = false
-    @State private var selectedRoute: AppRoute?
 
     init(apiClient: APIClient, eventId: String, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
@@ -45,9 +43,6 @@ struct EventDetailView: View {
             .toolbar(.hidden, for: .navigationBar)
             .task { viewModel.load() }
             .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
-            .navigationDestination(item: $selectedRoute) { route in
-                AppRouteDestinationView(route: route, apiClient: apiClient, tabSelection: $tabSelection)
-            }
     }
 
     @ViewBuilder
@@ -79,29 +74,12 @@ struct EventDetailView: View {
 
                 // HQ指示(2026-10-09)の参考画像で作り直した本体(EventDetailCards)。
                 ScrollView(showsIndicators: false) {
-                    EventDetailCards(response: response) { showsPairPicker = true }
+                    EventDetailCards(response: response)
                         .padding(.vertical, 6)
                         .frame(width: V5P.W)
                 }
                 .frame(width: V5P.W, height: 398)
                 .position(x: V5P.W / 2, y: 54 + 398 / 2)
-                .sheet(isPresented: $showsPairPicker) {
-                    SettingsListOptionSheet(title: "通貨ペアを選択", footer: "選んだ通貨ペアの相場反応の詳細を表示します。") {
-                        ForEach(EventDetailCards(response: response, onSelectPairs: {}).pairs) { pair in
-                            SettingsListOptionRow(label: FXPairSymbol.displayName(pair.symbol), isSelected: false) {
-                                showsPairPicker = false
-                                selectedRoute = .movementDetail(
-                                    eventId: response.event.id,
-                                    indicatorId: response.event.indicatorId,
-                                    fxPairId: pair.fxPairId,
-                                    symbol: pair.symbol,
-                                    indicatorName: response.event.indicatorName,
-                                    releaseDatetime: response.event.releaseDatetime
-                                )
-                            }
-                        }
-                    }
-                }
 
                 V5BottomBar(selected: $tabSelection)
             }
