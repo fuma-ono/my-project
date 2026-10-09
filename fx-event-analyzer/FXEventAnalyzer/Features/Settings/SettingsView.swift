@@ -126,7 +126,8 @@ struct SettingsView: View {
     /// カード間の余白(参考画像v2の実測≈9.5を行高と同じ割合で詰めた値)。
     private static let groupGap: CGFloat = 8
     /// グループ2(ヘルプ・お問い合わせ〜アプリ情報)のカード上端y。
-    private static let group2Top: CGFloat = group1Top + 6 * rowHeight + groupGap
+    // HQ指示(2026-10-09)「チャート分析画面がなくなったので、チャート設定はなくして」で1グループ目は5行。
+    private static let group2Top: CGFloat = group1Top + 5 * rowHeight + groupGap
     /// ログアウトカードの上端y。
     private static let logoutTop: CGFloat = group2Top + 4 * rowHeight + groupGap
 
@@ -136,7 +137,7 @@ struct SettingsView: View {
                 V5Header(title: "設定", back: false)
 
                 let g1 = Self.group1Top
-                groupBackground(topY: g1, rowCount: 6)
+                groupBackground(topY: g1, rowCount: 5)
                 NavigationLink(value: AppRoute.account) {
                     rowLabel("person.fill", "アカウント情報", nudge: CGSize(width: 0, height: -0.75))
                 }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 0))
@@ -149,12 +150,9 @@ struct SettingsView: View {
                 NavigationLink(value: SettingsSubRoute.displaySettings) {
                     rowLabel("globe", "表示・地域設定")
                 }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 3))
-                NavigationLink(value: SettingsSubRoute.chartSettings) {
-                    rowLabel("chart.bar.fill", "チャート設定", nudge: CGSize(width: 0, height: -0.4))
-                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 4))
                 NavigationLink(value: AppRoute.homeCurrencyPairEditor) {
                     rowLabel("arrow.left.arrow.right", "ホーム通貨ペア編集")
-                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 5))
+                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 4))
 
                 let g2 = Self.group2Top
                 groupBackground(topY: g2, rowCount: 4)

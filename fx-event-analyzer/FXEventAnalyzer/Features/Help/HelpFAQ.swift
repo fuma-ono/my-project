@@ -37,8 +37,6 @@ enum HelpFAQ {
             HelpFAQItem(question: "届いた通知はどこで見られますか？", answer: "ホーム画面右上のベルのマークから、届いた通知の一覧を見られます。未読があるとベルに赤い印が付きます。"),
         ]),
         HelpFAQCategory(id: "chart", title: "チャートの使い方", icon: "chart.xyaxis.line", items: [
-            HelpFAQItem(question: "最初に表示する時間足を変えたい", answer: "設定 → チャート設定 → 時間足 で、1分足〜1時間足から選べます。"),
-            HelpFAQItem(question: "テクニカル指標を表示したい", answer: "設定 → チャート設定 の「テクニカル指標を表示」をオンにして、表示したい指標(移動平均線・ボリンジャーバンド・MACD・RSI・ストキャスティクス)を選んでください。"),
             HelpFAQItem(question: "変動詳細の見方", answer: "指標の発表前後で為替がどれだけ動いたかを、時間足ごとに表示しています。発表時刻の線より右が発表後の動きです。"),
         ]),
         HelpFAQCategory(id: "data", title: "データの見方", icon: "doc.text.magnifyingglass", items: [

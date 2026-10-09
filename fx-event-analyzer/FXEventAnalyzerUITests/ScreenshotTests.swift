@@ -172,7 +172,8 @@ final class ScreenshotTests: XCTestCase {
         capture("14-Settings")
         // ログアウトの確認(HQ指示 2026-10-07)。ログアウト行(V5座標の中心y≈396)を
         // 押して撮り、背景をタップして閉じる(ログアウトはしない)。
-        tapV5(x: 117, y: 396)
+        // 2026-10-09: チャート設定の行がなくなり、ログアウトは1行分(31)上がった。
+        tapV5(x: 117, y: 365)
         if waitForAnyElement(containing: "ログアウトしますか", timeout: 5) {
             capture("14b-LogoutConfirmation")
             tapV5(x: 117, y: 80)
@@ -213,12 +214,11 @@ final class ScreenshotTests: XCTestCase {
             _ = setMockSubscriptionPlan("PRO")
         }
         captureSettingsSubScreen(row: "表示・地域設定", rowIndex: 3, waitFor: "タイムゾーン", name: "18-DisplaySettings")
-        captureSettingsSubScreen(row: "チャート設定", rowIndex: 4, waitFor: "時間足", name: "19-ChartSettings")
         // SCR-020 ヘルプ・お問い合わせは2つ目のまとまりの先頭(1つ目6行+間隔8)。
-        captureSettingsSubScreen(row: "ヘルプ・お問い合わせ", rowIndex: 6, extraOffset: 8, waitFor: "よくある質問", name: "20-Help")
-        captureSettingsSubScreen(row: "利用規約", rowIndex: 7, extraOffset: 8, waitFor: "第1条", name: "21-Terms")
-        captureSettingsSubScreen(row: "プライバシーポリシー", rowIndex: 8, extraOffset: 8, waitFor: "第1条", name: "22-PrivacyPolicy")
-        captureSettingsSubScreen(row: "アプリ情報", rowIndex: 9, extraOffset: 8, waitFor: "利用しているライブラリ", name: "23-AppInfo")
+        captureSettingsSubScreen(row: "ヘルプ・お問い合わせ", rowIndex: 5, extraOffset: 8, waitFor: "よくある質問", name: "20-Help")
+        captureSettingsSubScreen(row: "利用規約", rowIndex: 6, extraOffset: 8, waitFor: "第1条", name: "21-Terms")
+        captureSettingsSubScreen(row: "プライバシーポリシー", rowIndex: 7, extraOffset: 8, waitFor: "第1条", name: "22-PrivacyPolicy")
+        captureSettingsSubScreen(row: "アプリ情報", rowIndex: 8, extraOffset: 8, waitFor: "利用しているライブラリ", name: "23-AppInfo")
         // SCR-015 アカウント情報 (added 2026-10-05 with the reference-image
         // rebuild) and SCR-024 アカウント削除, opened from SCR-015's
         // bottom row (V5 card top 342.9, height 33.9). The deletion screen
@@ -236,7 +236,7 @@ final class ScreenshotTests: XCTestCase {
         // SCR-026 (Settings' 6th row). Wait for the editor's own button,
         // not the screen name, which the Settings row also shows. Then open
         // its picker through that button.
-        captureSettingsSubScreen(row: "ホーム通貨ペア編集", rowIndex: 5, waitFor: "通貨ペアを追加する", name: "26-HomeCurrencyPairEditor")
+        captureSettingsSubScreen(row: "ホーム通貨ペア編集", rowIndex: 4, waitFor: "通貨ペアを追加する", name: "26-HomeCurrencyPairEditor")
         tap(containing: "通貨ペアを追加する")
         XCTAssertTrue(waitForAnyElement(containing: "クロス円", timeout: 15), "26a-HomeCurrencyPairPicker did not load")
         capture("26a-HomeCurrencyPairPicker")

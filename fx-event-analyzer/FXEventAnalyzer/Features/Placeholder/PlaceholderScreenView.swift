@@ -59,8 +59,6 @@ struct SettingsSubRouteDestinationView: View {
             NotificationSettingsView(apiClient: apiClient, tabSelection: $tabSelection)
         case .displaySettings:
             DisplaySettingsView(apiClient: apiClient, tabSelection: $tabSelection)
-        case .chartSettings:
-            ChartSettingsView(apiClient: apiClient, tabSelection: $tabSelection)
         case .subscriptionManagement:
             SubscriptionManagementView(apiClient: apiClient, tabSelection: $tabSelection)
         case .help:
