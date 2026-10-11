@@ -58,9 +58,7 @@ struct AppRouteDestinationView: View {
                 .navigationTitle("要人発言一覧")
                 .navigationBarTitleDisplayMode(.inline)
         case .speechDetail(let id):
-            PlaceholderScreenView(scrNumber: "SCR-013", screenName: "要人発言詳細", detail: "発言ID: \(id)\nバックエンドAPI未実装のため仮画面です。")
-                .navigationTitle("要人発言詳細")
-                .navigationBarTitleDisplayMode(.inline)
+            SpeechDetailView(apiClient: apiClient, speechId: id, tabSelection: $tabSelection)
         case .homeCurrencyPairEditor:
             HomeCurrencyPairEditorView(apiClient: apiClient, tabSelection: $tabSelection)
         case .favoritesList:

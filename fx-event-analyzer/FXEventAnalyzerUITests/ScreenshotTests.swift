@@ -225,6 +225,15 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "のイベント", timeout: 15), "Calendar tab did not load")
         capture("10-Calendar")
 
+        // SCR-013 要人発言詳細(HQ指示2026-10-11で仮画面から実装)。今日の
+        // カレンダー項目(モックサーバーの`CALENDAR_TODAY_ITEMS`)に固定で
+        // 含まれる発言行からタップする。
+        tap(containing: "FOMCメンバー発言")
+        XCTAssertTrue(waitForAnyElement(containing: "クリストファー・ウォラー", timeout: 15), "Speech Detail did not load from Calendar")
+        capture("13-SpeechDetail")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "のイベント", timeout: 10), "Did not return to Calendar from Speech Detail")
+
         // SCR-011 検索(HQ指示 2026-10-09、参考画像を基に完全再現 —
         // 「人気の検索キーワード」パネル+「最近の検索履歴」の初期表示と、
         // 検索後の結果一覧の両方を撮る)。

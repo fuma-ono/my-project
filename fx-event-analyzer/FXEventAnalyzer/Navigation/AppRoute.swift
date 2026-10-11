@@ -48,7 +48,8 @@ enum AppRoute: Hashable {
     case calendar
     /// SCR-012 要人発言一覧(バックエンドAPI未実装、仮画面のみ)。
     case speechList
-    /// SCR-013 要人発言詳細(バックエンドAPI未実装、仮画面のみ)。
+    /// SCR-013 要人発言詳細。`GET /speeches/{id}`(api-design.md §14.5)で
+    /// 実装済み(`SpeechDetailView`)。
     case speechDetail(id: String)
     /// SCR-026 ホーム通貨ペア編集。HQ指示(2026-10-03)により「設定→
     /// ホーム通貨ペア編集→表示する通貨ペアを選択→Homeの『通貨ペア』
