@@ -45,14 +45,41 @@ struct PlaceholderScreenView: View {
     }
 }
 
-/// `SettingsSubRoute`(SCR-016〜024)を仮画面に解決する。`AppRouteDestinationView`
-/// と同じ役割の、設定配下サブ画面専用の解決ビュー。
+/// `SettingsSubRoute`(SCR-016〜024)を解決する。`AppRouteDestinationView`
+/// と同じ役割の、設定配下サブ画面専用の解決ビュー。実装済みの画面は実画面へ、
+/// 未実装の画面は仮画面へ振り分ける。
+///
+/// HQ指示(Calendar/Settings/Accountのみ移植): `.subscriptionManagement`
+/// (サブスクリプション購入・管理、別途対象外)と`.accountDeletion`
+/// (`SettingsSubRoute`側の経路 — 実際のアカウント削除は`AccountView`自身の
+/// `AccountSubRoute.accountDeletion`から行う、`AccountView.swift`のコメント
+/// 参照)は仮画面のまま。`.chartSettings`(SCR-019)は他ブランチの
+/// `SettingsSubRoute`にはもう無いケースだが、`claude/fx-event-analyzer`側は
+/// 残しているため(SCR-019の削除は今回の依頼に含まれない)、ここに仮画面の
+/// 振り分け先として追加した。
 struct SettingsSubRouteDestinationView: View {
     let route: SettingsSubRoute
+    let apiClient: APIClient
+    @Binding var tabSelection: Int
 
     var body: some View {
-        PlaceholderScreenView(scrNumber: route.scrNumber, screenName: route.title)
-            .navigationTitle(route.title)
-            .navigationBarTitleDisplayMode(.inline)
+        switch route {
+        case .notificationSettings:
+            NotificationSettingsView(apiClient: apiClient, tabSelection: $tabSelection)
+        case .displaySettings:
+            DisplaySettingsView(apiClient: apiClient, tabSelection: $tabSelection)
+        case .help:
+            HelpView(apiClient: apiClient, tabSelection: $tabSelection)
+        case .terms:
+            LegalDocumentView(document: LegalDocuments.terms, tabSelection: $tabSelection)
+        case .privacyPolicy:
+            LegalDocumentView(document: LegalDocuments.privacy, tabSelection: $tabSelection)
+        case .appInfo:
+            AppInfoView(tabSelection: $tabSelection)
+        case .subscriptionManagement, .chartSettings, .accountDeletion:
+            PlaceholderScreenView(scrNumber: route.scrNumber, screenName: route.title)
+                .navigationTitle(route.title)
+                .navigationBarTitleDisplayMode(.inline)
+        }
     }
 }
