@@ -1,58 +1,78 @@
 import SwiftUI
 
-/// SCR-015 アカウント情報、Settingsから遷移。
+/// SCR-015 アカウント情報のサブ画面。SCR-014のNavigationStackの上に積む。
+/// アカウント削除(SCR-024)もここから開く — 削除にはサインアウト処理
+/// (`AuthServicing`/`onSignOut`)が必要で、それを持っているのがこの画面のため
+/// (`SettingsSubRoute.accountDeletion`の仮画面経路は使わない)。
+enum AccountSubRoute: Hashable {
+    case profileEdit        // プロフィール編集(名前・生年月日)
+    case emailChange        // メールアドレス変更
+    case passwordChange     // パスワード変更
+    case accountDeletion    // SCR-024 アカウント削除
+}
+
+/// SCR-015 アカウント情報、SCR-014 設定から遷移。
 ///
-/// HQ "V5 Pixel Frontend" integration (2026-09-24): visual content is HQ's
-/// `V5PixelFrontend.swift` `V5Account` (fixed 234×491 canvas, profile
-/// icon, grouped rows, a ログアウト row), reproduced as given. Adaptations,
-/// all wiring, not redesign, carried over unchanged from both prior
-/// integrations' own reasoning:
-/// - HQ's "user@example.com" → `AccountResponse` carries no email field
-///   (api-design.md §24; `UserSession`/`AuthServicing` don't either), so a
-///   real, non-fabricated identifier (a shortened `userID`) is shown
-///   instead of a fabricated address.
-/// - "通知設定" and "サブスクリプション" have no real settings/management
-///   API behind them (only a read-only `GET /subscription`) — the
-///   existing "準備中" alert treatment.
-/// - "プラン" trailing text is real (`subscription.plan`), not "Free".
-/// - `tabSelection`: a real `Binding<Int>` threaded from `MainTabView`.
+/// HQ指示(2026-10-05): 参考画像
+/// `docs/projects/fx-event-analyzer/mockups/account-screen-reference-v1.png`
+/// (233×340、ヘッダー・タブバーを含まないリスト部分の切り抜き)を再現した。
+/// 座標は参考画像のカード幅(210px)をV5の214に合わせた倍率(×1.019)で
+/// 換算し、カード上端はSCR-014と同じタイトル中心からの距離(54.5)に揃えて
+/// いる。カード・区切り線・押下時の光り方はSCR-014と同じ
+/// (`SettingsCardStyle`/`SettingsRowPressStyle`)。
+///
+/// 表示する値はすべて実データ(架空の値は出さない):
+/// - 名前・生年月日: `GET /account`の`display_name`/`birth_date`。未登録なら
+///   「未設定」。
+/// - メールアドレス: Supabase Authのセッション(`UserSession.email`)。
+///   メール/パスワードはSupabase Auth管理で`GET /account`には無いため
+///   (api-design.md §24.2)。
+/// - 国・地域: `GET /settings`の`display.region`(SCR-018と同じ値)。行の
+///   タップ先もSCR-018 表示・地域設定。
+///
+/// 参考画像との意図的な差分: アバターは写真のアップロード機能が無いため、
+/// 画像と同じ人型のシルエットを常に表示している。
 struct AccountView: View {
     @StateObject private var viewModel: AccountViewModel
-    @State private var pendingFeatureMessage: String?
-    /// 2026-09-29 HQ承認(2-b): SCR-025 ログアウト確認ダイアログ。
-    @State private var showLogoutConfirmation = false
+    private let apiClient: APIClient
+    private let authService: AuthServicing?
+    private let onSignOut: () -> Void
     @Binding var tabSelection: Int
     @Environment(\.dismiss) private var dismiss
 
     init(apiClient: APIClient, authService: AuthServicing? = nil, onSignOut: @escaping () -> Void = {}, tabSelection: Binding<Int>) {
-        _viewModel = StateObject(wrappedValue: AccountViewModel(apiClient: apiClient, authService: authService, onSignOut: onSignOut))
+        _viewModel = StateObject(wrappedValue: AccountViewModel(apiClient: apiClient, authService: authService))
+        self.apiClient = apiClient
+        self.authService = authService
+        self.onSignOut = onSignOut
         _tabSelection = tabSelection
     }
+
+    /// 参考画像から換算したレイアウト(V5座標系)。
+    private static let cardWidth: CGFloat = 214
+    private static let profileTop: CGFloat = 54.5
+    private static let profileHeight: CGFloat = 56
+    private static let group1Top: CGFloat = 120.7
+    /// プロフィール編集 / メールアドレス / パスワード変更
+    private static let group1Rows: [CGFloat] = [30.6, 41.3, 32.6]
+    private static let group2Top: CGFloat = 236.7
+    /// 生年月日 / 国・地域
+    private static let group2Rows: [CGFloat] = [47.1, 48.4]
+    private static let deleteTop: CGFloat = 342.9
+    private static let deleteHeight: CGFloat = 33.9
+    /// カード左端→行の文字(参考画像11.75px)、シェブロンの右余白。
+    private static let textLeading: CGFloat = 12
+    private static let chevronTrailing: CGFloat = 11
+    private static let titleSize: CGFloat = 9.5
+    private static let subtitleSize: CGFloat = 7.5
 
     var body: some View {
         content
             .toolbar(.hidden, for: .navigationBar)
             .task { viewModel.load() }
-            .alert(
-                "準備中の機能です",
-                isPresented: Binding(
-                    get: { pendingFeatureMessage != nil },
-                    set: { isPresented in if !isPresented { pendingFeatureMessage = nil } }
-                ),
-                presenting: pendingFeatureMessage
-            ) { _ in
-                Button("OK", role: .cancel) {}
-            } message: { message in
-                Text(message)
-            }
-            // 2026-09-29 HQ承認(2-b): SCR-025 ログアウト確認ダイアログ。
-            .confirmationDialog(
-                "ログアウトしますか？",
-                isPresented: $showLogoutConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("ログアウト", role: .destructive) { viewModel.signOut() }
-                Button("キャンセル", role: .cancel) {}
+            .onAppear { viewModel.refresh() }
+            .navigationDestination(for: AccountSubRoute.self) { route in
+                destination(route)
             }
     }
 
@@ -63,98 +83,189 @@ struct AccountView: View {
             loadingScaffold { LoadingView(caption: "読み込み中...") }
         case .backendNotConfigured:
             loadingScaffold { FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "アカウント情報はまだ利用できません。") }
-        case .loaded(let account, let subscription):
-            V5Viewport {
-                V5Header(title: "アカウント", back: true, onBack: { dismiss() })
-
-                Image(systemName: "person.circle.fill").font(.system(size: 52)).foregroundStyle(.white).position(x: 117, y: 105)
-                Text("ユーザー \(account.userID.uuidString.prefix(8))").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 117, y: 145)
-
-                accountRow("person", "プラン", subscription.plan, 170, action: nil)
-                // 2026-09-29 HQ承認(2-b): 既存の行をそのままNavigationLinkに
-                // 差し替え、対応するSCR-01x(仮画面)への遷移を確認できるように
-                // した。行の見た目は変更していない。
-                accountNavRow("bell", "通知設定", 205, route: .notificationSettings)
-                accountRow("person", "アカウント情報", "", 240) {
-                    pendingFeatureMessage = "登録日: \(ValueFormat.dateTime(account.createdAt))"
-                }
-                accountNavRow("creditcard", "サブスクリプション", 275, route: .subscriptionManagement)
-                Button {
-                    showLogoutConfirmation = true
-                } label: {
-                    HStack {
-                        Image(systemName: "arrow.right.square").font(.system(size: 9))
-                        if viewModel.signOutState == .signingOut {
-                            ProgressView().tint(.white)
-                        } else {
-                            Text("ログアウト").font(.system(size: 8))
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right").font(.system(size: 7))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 9).frame(width: 204, height: 30)
-                    .background(V5P.panel, in: RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(V5P.line.opacity(0.5), lineWidth: 0.5))
-                }
-                .buttonStyle(.plain)
-                .disabled(viewModel.signOutState == .signingOut)
-                .overlay(alignment: .bottom) {
-                    if case .error(let message) = viewModel.signOutState {
-                        Text(message).font(.system(size: 6)).foregroundStyle(V5P.red)
-                            .multilineTextAlignment(.center).frame(width: 204).offset(y: 14)
-                    }
-                }
-                .position(x: 117, y: 320)
-
-                V5BottomBar(selected: $tabSelection)
-            }
         case .error(let message):
             loadingScaffold { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() }) }
+        case .loaded(let info):
+            V5Viewport {
+                V5Header(title: "アカウント情報", back: true, onBack: { dismiss() })
+                profileCard(info)
+                group1(info)
+                group2(info)
+                deleteRow
+                V5BottomBar(selected: $tabSelection)
+            }
         }
     }
 
-    @ViewBuilder private func loadingScaffold(@ViewBuilder content: () -> some View) -> some View {
-        ZStack {
-            // HQ指示(2026-10-02): 中身の背景をSplash/Loginのグラデーションから切り離し、
-            // 単色(backgroundPrimary)に変更(詳細はV5Backgroundのドキュメントコメント参照)。
-            DesignTokens.Colors.backgroundPrimary.ignoresSafeArea()
-            content()
+    @ViewBuilder
+    private func destination(_ route: AccountSubRoute) -> some View {
+        switch route {
+        case .profileEdit:
+            if case .loaded(let info) = viewModel.state {
+                ProfileEditView(apiClient: apiClient, account: info.account, tabSelection: $tabSelection) { viewModel.apply($0) }
+            }
+        case .emailChange:
+            EmailChangeView(authService: authService, currentEmail: currentEmail, tabSelection: $tabSelection)
+        case .passwordChange:
+            PasswordChangeView(authService: authService, tabSelection: $tabSelection)
+        case .accountDeletion:
+            AccountDeletionView(apiClient: apiClient, authService: authService, onSignOut: onSignOut, tabSelection: $tabSelection)
         }
     }
 
-    @ViewBuilder private func accountRow(_ icon: String, _ title: String, _ trailing: String, _ y: CGFloat, action: (() -> Void)?) -> some View {
-        Button {
-            action?()
-        } label: {
-            accountRowLabel(icon, title, trailing)
-        }
-        .buttonStyle(.plain)
-        .disabled(action == nil)
-        .position(x: 117, y: y)
+    private var currentEmail: String? {
+        if case .loaded(let info) = viewModel.state { return info.email }
+        return nil
     }
 
-    /// `accountRow`と同じ見た目で、`SettingsSubRoute`(仮画面)へのNavigationLink
-    /// になっているもの(2026-09-29 HQ承認、2-b)。
-    @ViewBuilder private func accountNavRow(_ icon: String, _ title: String, _ y: CGFloat, route: SettingsSubRoute) -> some View {
-        NavigationLink(value: route) {
-            accountRowLabel(icon, title, "")
+    // MARK: - プロフィール(アバター・名前・メールアドレス)
+
+    private func profileCard(_ info: AccountInfo) -> some View {
+        HStack(spacing: 10) {
+            AccountAvatar(diameter: 43)
+            VStack(alignment: .leading, spacing: 5) {
+                NotoText.text(info.account.displayName ?? "未設定", size: 12).foregroundStyle(.white).lineLimit(1)
+                NotoText.text(info.email ?? "—", size: Self.subtitleSize)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor).lineLimit(1)
+            }
+            Spacer(minLength: 0)
         }
-        .buttonStyle(.plain)
-        .position(x: 117, y: y)
+        .padding(.leading, 7.5)
+        .frame(width: Self.cardWidth, height: Self.profileHeight)
+        .background(SettingsCardStyle.card(width: Self.cardWidth, height: Self.profileHeight))
+        .position(x: 117, y: Self.profileTop + Self.profileHeight / 2)
     }
 
-    private func accountRowLabel(_ icon: String, _ title: String, _ trailing: String) -> some View {
-        HStack {
-            Image(systemName: icon).font(.system(size: 9))
-            Text(title).font(.system(size: 8))
+    // MARK: - 行グループ
+
+    @ViewBuilder
+    private func group1(_ info: AccountInfo) -> some View {
+        groupBackground(top: Self.group1Top, rows: Self.group1Rows)
+        NavigationLink(value: AccountSubRoute.profileEdit) {
+            rowLabel("プロフィール編集", height: Self.group1Rows[0])
+        }
+        .buttonStyle(SettingsRowPressStyle())
+        .position(x: 117, y: rowCenter(top: Self.group1Top, rows: Self.group1Rows, index: 0))
+        NavigationLink(value: AccountSubRoute.emailChange) {
+            rowLabel("メールアドレス", value: info.email ?? "—", valueStyle: .muted, height: Self.group1Rows[1])
+        }
+        .buttonStyle(SettingsRowPressStyle())
+        .position(x: 117, y: rowCenter(top: Self.group1Top, rows: Self.group1Rows, index: 1))
+        NavigationLink(value: AccountSubRoute.passwordChange) {
+            rowLabel("パスワード変更", height: Self.group1Rows[2])
+        }
+        .buttonStyle(SettingsRowPressStyle())
+        .position(x: 117, y: rowCenter(top: Self.group1Top, rows: Self.group1Rows, index: 2))
+    }
+
+    @ViewBuilder
+    private func group2(_ info: AccountInfo) -> some View {
+        groupBackground(top: Self.group2Top, rows: Self.group2Rows)
+        NavigationLink(value: AccountSubRoute.profileEdit) {
+            rowLabel("生年月日", value: info.account.birthDate.flatMap(BirthDate.display) ?? "未設定", valueStyle: .prominent, height: Self.group2Rows[0])
+        }
+        .buttonStyle(SettingsRowPressStyle())
+        .position(x: 117, y: rowCenter(top: Self.group2Top, rows: Self.group2Rows, index: 0))
+        NavigationLink(value: SettingsSubRoute.displaySettings) {
+            rowLabel("国・地域", value: regionLabel(info.regionCode), valueStyle: .prominent, height: Self.group2Rows[1])
+        }
+        .buttonStyle(SettingsRowPressStyle())
+        .position(x: 117, y: rowCenter(top: Self.group2Top, rows: Self.group2Rows, index: 1))
+    }
+
+    /// 参考画像どおり、赤いゴミ箱アイコンと赤い文字の「アカウント削除」。
+    /// 赤は`AccountPalette.destructive`。
+    private var deleteRow: some View {
+        NavigationLink(value: AccountSubRoute.accountDeletion) {
+            HStack(spacing: 0) {
+                Image(systemName: "trash")
+                    .resizable().scaledToFit()
+                    .fontWeight(.bold)
+                    .frame(width: 14, height: 14)
+                    .frame(width: 15)
+                NotoText.text("アカウント削除", size: Self.titleSize)
+                    .padding(.leading, 11)
+                Spacer()
+                chevron
+            }
+            .foregroundStyle(AccountPalette.destructive)
+            .padding(.leading, 10)
+            .padding(.trailing, Self.chevronTrailing)
+            .frame(width: Self.cardWidth, height: Self.deleteHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SettingsRowPressStyle())
+        .background(SettingsCardStyle.card(width: Self.cardWidth, height: Self.deleteHeight))
+        .position(x: 117, y: Self.deleteTop + Self.deleteHeight / 2)
+    }
+
+    private enum ValueStyle { case muted, prominent }
+
+    /// 参考画像の行: 左にタイトル、その下に値(メールアドレスは小さく薄い色、
+    /// 生年月日・国・地域はタイトルと同じ大きさの白)、右端にシェブロン。
+    private func rowLabel(_ title: String, value: String? = nil, valueStyle: ValueStyle = .muted, height: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: valueStyle == .muted ? 4 : 3) {
+                NotoText.text(title, size: Self.titleSize).foregroundStyle(.white)
+                if let value {
+                    switch valueStyle {
+                    case .muted:
+                        NotoText.text(value, size: Self.subtitleSize)
+                            .foregroundStyle(SettingsCardStyle.subtitleColor).lineLimit(1)
+                    case .prominent:
+                        NotoText.text(value, size: Self.titleSize)
+                            .foregroundStyle(.white.opacity(0.92)).lineLimit(1)
+                    }
+                }
+            }
             Spacer()
-            if !trailing.isEmpty { Text(trailing).font(.system(size: 8)) }
-            Image(systemName: "chevron.right").font(.system(size: 7))
+            chevron
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 9).frame(width: 204, height: 30)
-        .background(V5P.panel, in: RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).stroke(V5P.line.opacity(0.5), lineWidth: 0.5))
+        .padding(.leading, Self.textLeading)
+        .padding(.trailing, Self.chevronTrailing)
+        .frame(width: Self.cardWidth, height: height)
+        // 背景を持たない行でも、行全体(中央の空白を含む)をタップ可能にする。
+        .contentShape(Rectangle())
+    }
+
+    private var chevron: some View {
+        // 「＞」は項目名と同じ大きさ(HQ指示 2026-10-06)。
+        Image(systemName: "chevron.right").font(.system(size: Self.titleSize, weight: .semibold)).foregroundStyle(SettingsCardStyle.chevronColor)
+    }
+
+    @ViewBuilder
+    private func groupBackground(top: CGFloat, rows: [CGFloat]) -> some View {
+        let height = rows.reduce(0, +)
+        SettingsCardStyle.card(width: Self.cardWidth, height: height)
+            .position(x: 117, y: top + height / 2)
+        ForEach(1..<rows.count, id: \.self) { i in
+            Rectangle()
+                .fill(SettingsCardStyle.separator)
+                .frame(width: Self.cardWidth, height: 0.6)
+                .position(x: 117, y: top + rows[..<i].reduce(0, +))
+        }
+    }
+
+    private func rowCenter(top: CGFloat, rows: [CGFloat], index: Int) -> CGFloat {
+        top + rows[..<index].reduce(0, +) + rows[index] / 2
+    }
+
+    /// SCR-018と同じ候補の表示名。候補外のコードはそのまま表示する。
+    private func regionLabel(_ code: String?) -> String {
+        guard let code else { return "—" }
+        return DisplaySettingsView.regions.first { $0.value == code }?.label ?? code
+    }
+
+    /// 読み込み中・エラー・未設定状態も`.loaded`と同じ外枠(`V5Viewport`の
+    /// 背景画像・ヘッダー・タブバー)に載せる。HQ指示(2026-10-05)「背景画像と
+    /// ヘッダーとタブを全画面に反映して」に合わせた、他画面と同じ形。
+    @ViewBuilder private func loadingScaffold(@ViewBuilder content: @escaping () -> some View) -> some View {
+        V5Viewport {
+            V5Header(title: "アカウント情報", back: true, onBack: { dismiss() })
+            content()
+                .frame(width: V5P.W, height: V5P.H - 92, alignment: .center)
+                .padding(.top, 53)
+            V5BottomBar(selected: $tabSelection)
+        }
     }
 }
