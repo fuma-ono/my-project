@@ -756,8 +756,9 @@ struct HomeView: View {
             // 「日本CPI」。正式名は詳細画面)にし、1行に収まるので名前を8.5、
             // 予想・前回を6.3に大きくした。以前のカッコを2行目に分ける形と、
             // 名前の長さで文字サイズを変える分岐はなくした。
-            VStack(alignment: .leading, spacing: 1.5) {
+            VStack(alignment: .leading, spacing: 1) {
                 let subtitle = Self.eventSubtitle(event)
+                let display = CountryFlag.indicatorDisplayName(event.indicatorName, countryCode: event.countryCode)
                 V5JPFont.text("経済指標", size: 5.3, weight: .semibold)
                     .tracking(-0.4)
                     .foregroundStyle(.white)
@@ -772,11 +773,24 @@ struct HomeView: View {
                 // 原因)。英字を含みうるこの指標名は`NotoText`で統一する。
                 // HQ指示(2026-10-11、12回目)「FOMC政策金利の文字サイズを
                 // 0.5大きくして」: 8.5→9.0。
-                NotoText.text(Self.eventIndicatorDisplayName(event.indicatorName, countryCode: event.countryCode), size: 9.0)
+                // HQ指示(2026-10-11、13回目)「カードの高さを変えず()を2行目に
+                // 表示して、()の文字サイズを小さくして調整して」:
+                // 「非農業部門雇用者数(雇用統計)」のように略称を足した分
+                // 長くなった名前が1行の縮小表示では収まりきらなかったため、
+                // 名前本体と(略称)を分け、(略称)だけ小さいフォントで2行目に
+                // 表示する(`eventRowHeight`/`todayEventsCardHeight`自体は
+                // 変えない)。
+                NotoText.text(display.main, size: 9.0)
                     .tracking(-0.3)
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
+                if let abbreviation = display.abbreviation {
+                    NotoText.text("(\(abbreviation))", size: 6.0)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
                 if let subtitle {
                     V5JPFont.text(subtitle, size: 6.3, weight: .regular)
                         .foregroundStyle(Self.linkBlue)
@@ -811,25 +825,14 @@ struct HomeView: View {
 
     /// ホームに出す短い指標名。「米国雇用統計(非農業部門雇用者数)」→「米国雇用統計」。
     /// `favoritesCard`/`CalendarTabView`と共有しているため、この関数自体は
-    /// 変更しない(`eventIndicatorDisplayName`参照)。
+    /// 変更しない。「今日の重要イベント」(`eventRow`)は代わりに
+    /// `CountryFlag.indicatorDisplayName`(検索結果の行とも共有)を使う —
+    /// カッコの前(「米国CPI」「米国雇用統計」)を残すこちらとは逆に、国名を
+    /// 除いた正式名+略称を返す(HQ指示: イベント名表示ルール統一)。
     static func shortIndicatorName(_ name: String) -> String {
         guard let split = splitParenthetical(name) else { return name }
         let main = split.main.trimmingCharacters(in: .whitespaces)
         return main.isEmpty ? name : main
-    }
-
-    /// 「今日の重要イベント」専用の指標名(HQ指示: イベント名表示ルール統一
-    /// 「イベント名には原則として国名を付けず、指標名・発言名そのものを
-    /// 表示する」、2026-10-11、11回目「(CPI)をつけて」)。`shortIndicatorName`
-    /// はカッコの前(「米国CPI」「米国雇用統計」)を残す逆の切り方で、お気に
-    /// 入りカード・カレンダータブと共有しているため流用できない — このカード
-    /// 専用に、`CountryFlag.indicatorDisplayName`(検索結果の行とも共有)を
-    /// 使う。国・地域の識別は国旗+通貨コード(`event.countryCode`/
-    /// `currencyCode`)側に既に分離されているため、ここでの重複表記は不要。
-    private static func eventIndicatorDisplayName(_ name: String, countryCode: String) -> String {
-        let display = CountryFlag.indicatorDisplayName(name, countryCode: countryCode)
-        guard let abbreviation = display.abbreviation else { return display.main }
-        return "\(display.main)(\(abbreviation))"
     }
 
     /// HQ指示(2026-10-06)「米国雇用統計の場合は（）部分を2行目にし」:
