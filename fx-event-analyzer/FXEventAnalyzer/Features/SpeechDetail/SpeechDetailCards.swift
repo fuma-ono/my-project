@@ -38,10 +38,25 @@ struct SpeechDetailCards: View {
         return HStack(alignment: .top, spacing: 8) {
             CountryFlagView(countryCode: speaker.countryCode, diameter: 28)
             VStack(alignment: .leading, spacing: 3) {
-                NotoText.text("\(speaker.name)　\(speaker.title)", size: 10.5)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                // 名前+役職が1行に収まらない場合だけ2行に分ける
+                // (Home/検索の指標名と同じ`ViewThatFits`の考え方) —
+                // 固定の`minimumScaleFactor`だけでは長い名前(「クリスト
+                // ファー・ウォラー」等)が省略記号で切れてしまっていた。
+                ViewThatFits(in: .horizontal) {
+                    NotoText.text("\(speaker.name)　\(speaker.title)", size: 10.5)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 1) {
+                        NotoText.text(speaker.name, size: 10.5)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        NotoText.text(speaker.title, size: 8.5)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                }
                 NotoText.text("\(CountryFlag.japaneseName(forCountry: speaker.countryCode))　|　\(speaker.organization)", size: 8.5)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
             }
