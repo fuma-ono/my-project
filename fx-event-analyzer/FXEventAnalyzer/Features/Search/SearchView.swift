@@ -132,8 +132,10 @@ struct SearchView: View {
     private var searchBar: some View {
         HStack {
             Image(systemName: "magnifyingglass").foregroundStyle(V5P.muted)
+            // HQ指示(2026-10-11、18回目)「検索欄に入るCPIの文字サイズを
+            // 大きくして」: 入力文字のみ8.5→11(プレースホルダーは据え置き)。
             TextField("", text: $viewModel.searchText)
-                .font(.system(size: 8.5))
+                .font(.system(size: 11))
                 .foregroundStyle(.white)
                 .accessibilityLabel("検索")
                 .focused($searchFieldFocused)
