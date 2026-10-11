@@ -13,7 +13,6 @@ enum SettingsSubRoute: String, CaseIterable, Hashable {
     case notificationSettings   // SCR-016 通知設定
     case subscriptionManagement // SCR-017 プラン・購読管理
     case displaySettings        // SCR-018 表示・地域設定
-    case chartSettings          // SCR-019 チャート設定
     case help                   // SCR-020 ヘルプ・お問い合わせ
     case terms                  // SCR-021 利用規約
     case privacyPolicy          // SCR-022 プライバシーポリシー
@@ -25,7 +24,6 @@ enum SettingsSubRoute: String, CaseIterable, Hashable {
         case .notificationSettings: return "SCR-016"
         case .subscriptionManagement: return "SCR-017"
         case .displaySettings: return "SCR-018"
-        case .chartSettings: return "SCR-019"
         case .help: return "SCR-020"
         case .terms: return "SCR-021"
         case .privacyPolicy: return "SCR-022"
@@ -39,7 +37,6 @@ enum SettingsSubRoute: String, CaseIterable, Hashable {
         case .notificationSettings: return "通知設定"
         case .subscriptionManagement: return "プラン・購読管理"
         case .displaySettings: return "表示・地域設定"
-        case .chartSettings: return "チャート設定"
         case .help: return "ヘルプ・お問い合わせ"
         case .terms: return "利用規約"
         case .privacyPolicy: return "プライバシーポリシー"

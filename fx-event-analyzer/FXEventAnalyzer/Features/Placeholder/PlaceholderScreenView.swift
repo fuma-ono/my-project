@@ -53,10 +53,9 @@ struct PlaceholderScreenView: View {
 /// `SubscriptionManagementView`へ実配線した。`.accountDeletion`
 /// (`SettingsSubRoute`側の経路 — 実際のアカウント削除は`AccountView`自身の
 /// `AccountSubRoute.accountDeletion`から行う、`AccountView.swift`のコメント
-/// 参照)は仮画面のまま。`.chartSettings`(SCR-019)は他ブランチの
-/// `SettingsSubRoute`にはもう無いケースだが、`claude/fx-event-analyzer`側は
-/// 残しているため(SCR-019の削除は今回の依頼に含まれない)、ここに仮画面の
-/// 振り分け先として追加した。
+/// 参照)は仮画面のまま。`.chartSettings`(SCR-019、HQ指示2026-10-09「チャート
+/// 分析画面がなくなったので、チャート設定はなくして」で不要になった)は
+/// `SettingsSubRoute`からcase自体を削除した。
 struct SettingsSubRouteDestinationView: View {
     let route: SettingsSubRoute
     let apiClient: APIClient
@@ -78,7 +77,7 @@ struct SettingsSubRouteDestinationView: View {
             LegalDocumentView(document: LegalDocuments.privacy, tabSelection: $tabSelection)
         case .appInfo:
             AppInfoView(tabSelection: $tabSelection)
-        case .chartSettings, .accountDeletion:
+        case .accountDeletion:
             PlaceholderScreenView(scrNumber: route.scrNumber, screenName: route.title)
                 .navigationTitle(route.title)
                 .navigationBarTitleDisplayMode(.inline)
