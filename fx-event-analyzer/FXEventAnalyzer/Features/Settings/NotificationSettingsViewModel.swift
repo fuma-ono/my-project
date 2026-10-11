@@ -192,3 +192,18 @@ final class NotificationSettingsViewModel: ObservableObject {
         }
     }
 }
+
+/// HIGH/MEDIUM/LOWの日本語表示。他ブランチでは`Common/NotificationsStore.swift`
+/// (端末内ローカル通知の一覧・バッジ基盤、今回のポート対象外)にしか無かったが、
+/// この型自体は通知のスケジューリングと無関係な汎用の表示ラベルなので、使う側
+/// (このファイルと`NotificationSettingsView.swift`)にそのまま移した。
+enum NotificationImportance {
+    static func label(_ raw: String) -> String {
+        switch raw {
+        case "HIGH": return "高"
+        case "MEDIUM": return "中"
+        case "LOW": return "低"
+        default: return raw
+        }
+    }
+}
