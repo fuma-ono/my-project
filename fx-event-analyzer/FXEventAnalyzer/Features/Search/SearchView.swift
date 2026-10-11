@@ -356,6 +356,14 @@ struct SearchView: View {
                     }
                 }
                 .frame(minHeight: 27, alignment: .topLeading)
+                // 括弧を2行目に分けたことで、タイトルのaccessibility labelも
+                // 「米国CPI」「(消費者物価指数)」の2要素に分かれてしまい、
+                // UIテストの`tap(containing: "米国CPI(消費者物価指数)")`が
+                // 検索結果行を見つけられなくなった(CI screenshots job、commit
+                // 9dbe5e9で検出)。見た目は2行のまま、検索可能な名前は元の
+                // 1つの文字列に明示的に戻す。
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(indicator.name)
                 HStack(spacing: 4) {
                     NotoText.text(CountryFlag.japaneseName(forCountry: indicator.countryCode), size: 8.5)
                         .foregroundStyle(V5P.muted)
