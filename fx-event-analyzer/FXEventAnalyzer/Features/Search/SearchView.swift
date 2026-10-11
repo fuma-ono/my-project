@@ -65,6 +65,16 @@ import SwiftUI
 /// 縦パディングを6→4に縮小、(4)「最近の検索履歴」の表示状態を確認できる
 /// よう`ScreenshotTests`に実データ記録キャプチャを追加(検索結果の行を
 /// 実際にタップして`RecentSearchStore`に記録させる — 捏造データではない)。
+///
+/// HQ指摘(2026-10-11、8回目): (1)「人気の検索キーワード」pillの文字
+/// サイズ+1、(2)「最近の検索履歴」見出し・行の文字サイズ+0.5、(3)同履歴行の
+/// 国旗を指標一覧(`IndicatorsView`)の経済指標リストと同じ14ptに縮小、
+/// (4)同履歴行の「＞」をエントリ文字サイズと揃え、枠線を追加、(5)検索結果
+/// (「CPI」検索後)の行も「＞」をタイトル文字サイズに揃え、(6)カテゴリの
+/// 「経済指標」をプレーン文字ではなく`HomeView`の経済指標バッジと同じ
+/// 見た目(青いカプセル)に、(7)検索結果行の国旗を28→24に縮小、(8)検索結果
+/// 一覧を個々の行カードではなく、1枚の外枠カード+行間の区切り線という
+/// 構成に変更。
 struct SearchView: View {
     @StateObject private var viewModel: IndicatorsViewModel
     @State private var path = NavigationPath()
@@ -200,7 +210,9 @@ struct SearchView: View {
                         } label: {
                             // HQ指示(2026-10-09、7回目)「FOMCの枠の縦幅を
                             // 少し短くして」: 上下パディングを6→4に。
-                            NotoText.text(keyword, size: 8.5)
+                            // HQ指示(2026-10-11、8回目)「人気の検索ワードの
+                            // 文字サイズを1大きくして」: 8.5→9.5。
+                            NotoText.text(keyword, size: 9.5)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.7)
                                 .padding(.horizontal, 4)
@@ -227,7 +239,9 @@ struct SearchView: View {
         // 枠線内パディング10pt分、scrollableContentの左パディング10ptより
         // さらに右から始まる。同じ10ptをここにも足して開始位置を揃える。
         VStack(alignment: .leading, spacing: 8) {
-            NotoText.text("最近の検索履歴", size: 10)
+            // HQ指示(2026-10-11、8回目)「最近の検索履歴の文字サイズを0.5
+            // 大きくして」: 10→10.5。
+            NotoText.text("最近の検索履歴", size: 10.5)
                 .foregroundStyle(.white)
 
             ForEach(recentSearches.prefix(4)) { entry in
@@ -243,17 +257,30 @@ struct SearchView: View {
 
     private func historyRow(_ entry: RecentSearchEntry) -> some View {
         HStack(spacing: 8) {
-            CountryFlagView(countryCode: entry.countryCode, diameter: 22)
-            NotoText.text(entry.term, size: 10).foregroundStyle(.white).lineLimit(1)
+            // HQ指示(2026-10-11、8回目)「国旗マークの大きさを経済指標、
+            // カレンダーと同じにして」: `IndicatorsView`の経済指標リスト行と
+            // 同じ14ptに縮小(22→14)。
+            CountryFlagView(countryCode: entry.countryCode, diameter: 14)
+            NotoText.text(entry.term, size: 10.5).foregroundStyle(.white).lineLimit(1)
             Spacer()
-            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(V5P.muted)
+            // HQ指示(2026-10-11、8回目)「＞の文字サイズを米国CPIと同じに」:
+            // エントリ文字サイズ(10.5)に揃えた。
+            Image(systemName: "chevron.right").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(V5P.muted)
         }
         .padding(.horizontal, 8)
         .frame(height: 36)
         .background(V5P.panel, in: RoundedRectangle(cornerRadius: 6))
+        // HQ指示(2026-10-11、8回目)「米国CPIを枠で囲って」: 枠線を追加。
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(V5P.line.opacity(0.4), lineWidth: 1))
     }
 
     // MARK: - 検索結果(実データのみ — 冒頭のドキュメントコメント参照)
+
+    /// `HomeView`の「経済指標」バッジ(`economicIndicatorBadgeColor`)と
+    /// 同じ色。HQ指示(2026-10-11、8回目)「経済指標や要人発言のマークを
+    /// ホーム画面と同じに」で、プレーン文字だったカテゴリ表示をホームと
+    /// 同じ見た目のバッジに揃えた。
+    private static let economicIndicatorBadgeColor = Color(red: 0.0 / 255, green: 118.0 / 255, blue: 234.0 / 255)
 
     @ViewBuilder private var resultsSection: some View {
         switch viewModel.state {
@@ -263,23 +290,34 @@ struct SearchView: View {
             EmptyView()
         case .loaded(let indicators):
             if selectedFilter == .all || selectedFilter == .indicator {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(indicators) { indicator in
+                // HQ指示(2026-10-11、8回目)「CPIを検索した後の画面のカード
+                // 全体を枠を囲って、線で各行を表して」: 行ごとに別々の
+                // カードを並べる構成から、1枚の外枠カード+行間の区切り線
+                // という構成に変更した。
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(indicators.enumerated()), id: \.element.id) { index, indicator in
                         NavigationLink(value: AppRoute.indicatorDetail(id: indicator.id)) {
                             resultRow(indicator)
                         }.buttonStyle(.plain)
                             .simultaneousGesture(TapGesture().onEnded {
                                 recentSearches = RecentSearchStore.record(term: indicator.name, countryCode: indicator.countryCode)
                             })
+                        if index < indicators.count - 1 {
+                            Rectangle().fill(V5P.line.opacity(0.3)).frame(height: 1)
+                        }
                     }
                 }
+                .background(V5P.panel, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(V5P.line.opacity(0.3), lineWidth: 1))
             }
         }
     }
 
     private func resultRow(_ indicator: IndicatorSummary) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            CountryFlagView(countryCode: indicator.countryCode, diameter: 28)
+            // HQ指示(2026-10-11、8回目)「CPIを検索した後の画面の国旗マーク
+            // を少し小さくして」: 28→24。
+            CountryFlagView(countryCode: indicator.countryCode, diameter: 24)
             VStack(alignment: .leading, spacing: 2) {
                 // 長い指標名が`.lineLimit(1)`だと末尾切れになるため2行まで
                 // 許可する。`NotoText.text`は(`V5JPFont.text`と違い)文字列を
@@ -292,17 +330,23 @@ struct SearchView: View {
                     .lineLimit(2)
                 HStack(spacing: 4) {
                     NotoText.text(CountryFlag.japaneseName(forCountry: indicator.countryCode), size: 8.5)
+                        .foregroundStyle(V5P.muted)
                     NotoText.text("|", size: 8.5)
-                    NotoText.text("経済指標", size: 8.5)
+                        .foregroundStyle(V5P.muted)
+                    NotoText.text("経済指標", size: 5.3)
+                        .tracking(-0.4)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 3).padding(.vertical, 1.5)
+                        .background(Self.economicIndicatorBadgeColor, in: Capsule())
                 }
-                .foregroundStyle(V5P.muted)
             }
             Spacer()
-            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(V5P.muted)
+            // HQ指示(2026-10-11、8回目)「CPIを検索した後の画面で＞を米国CPI
+            // と同じ大きさに」: 指標名の文字サイズ(10.5)に揃えた。
+            Image(systemName: "chevron.right").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(V5P.muted)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 8)
-        .background(V5P.panel, in: RoundedRectangle(cornerRadius: 6))
     }
 }
 
