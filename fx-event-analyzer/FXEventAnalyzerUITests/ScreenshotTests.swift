@@ -259,6 +259,16 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "米国CPI(消費者物価指数)", timeout: 10), "Recent search history did not record the tapped indicator")
         capture("11c-Search-RecentHistory")
 
+        // 検索欄にまだフォーカス・キーボードが残ったまま次のタブ(設定)へ
+        // 進むと、V5Viewportのスケール計算がキーボード表示中のものに
+        // ずれたままタブバーのタップ座標が解決され、実際には検索画面内の
+        // 別要素(フィルターのピルなど)を押してしまう実障害を確認した
+        // (CI screenshots job、commit 2a5e605で検出 — 診断スクリーン
+        // ショットが検索画面のまま「要人発言」フィルターが選択された状態
+        // を示していた)。改行で入力を終えてキーボードを閉じてから進む。
+        searchField.typeText("\n")
+        Thread.sleep(forTimeInterval: 0.5)
+
         // SCR-016 / SCR-018 / SCR-019 (bonus — added 2026-10-02 with the
         // real settings sub-screens, same "never trust build-succeeds
         // alone" rule). Between captures, switching to Home and back
