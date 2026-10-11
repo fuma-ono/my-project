@@ -764,7 +764,13 @@ struct HomeView: View {
                     .padding(.horizontal, 3).padding(.vertical, 1.5)
                     .background(Self.economicIndicatorBadgeColor, in: Capsule())
                     .fixedSize()
-                V5JPFont.text(Self.eventIndicatorDisplayName(event.indicatorName), size: 8.5, weight: .semibold)
+                // HQ指示(2026-10-11、11回目)「FOMCの文字が小さく見える」:
+                // `V5JPFont.text`は日本語の範囲だけNotoSansJPを当て、
+                // "FOMC"のような英字部分はシステムフォントのまま残るため、
+                // 隣の漢字より小さく見えていた(`NotoText`のドキュメント
+                // コメント「数字が日本語より小さく浮いて見える」と同じ
+                // 原因)。英字を含みうるこの指標名は`NotoText`で統一する。
+                NotoText.text(Self.eventIndicatorDisplayName(event.indicatorName, countryCode: event.countryCode), size: 8.5)
                     .tracking(-0.3)
                     .foregroundStyle(.white)
                     .lineLimit(1)
@@ -812,20 +818,16 @@ struct HomeView: View {
 
     /// 「今日の重要イベント」専用の指標名(HQ指示: イベント名表示ルール統一
     /// 「イベント名には原則として国名を付けず、指標名・発言名そのものを
-    /// 表示する」)。`shortIndicatorName`はカッコの前(「米国CPI」「米国雇用
-    /// 統計」)を残す逆の切り方で、お気に入りカード・カレンダータブと
-    /// 共有しているため流用できない — このカード専用に新設し、カッコの
-    /// 中(「消費者物価指数」「非農業部門雇用者数」)を正式名として表示する。
-    /// 国・地域の識別は国旗+通貨コード(`event.countryCode`/`currencyCode`)
-    /// 側に既に分離されているため、ここでの重複表記は不要。カッコが無い
-    /// 名前(「FOMC政策金利」「日銀政策金利」)はそのまま表示する — 国名の
-    /// 単純な接頭辞ではなく、指標そのものの正式な呼称のため。
-    private static func eventIndicatorDisplayName(_ name: String) -> String {
-        guard let split = splitParenthetical(name) else { return name }
-        let paren = split.paren
-            .trimmingCharacters(in: CharacterSet(charactersIn: "()（）"))
-            .trimmingCharacters(in: .whitespaces)
-        return paren.isEmpty ? name : paren
+    /// 表示する」、2026-10-11、11回目「(CPI)をつけて」)。`shortIndicatorName`
+    /// はカッコの前(「米国CPI」「米国雇用統計」)を残す逆の切り方で、お気に
+    /// 入りカード・カレンダータブと共有しているため流用できない — このカード
+    /// 専用に、`CountryFlag.indicatorDisplayName`(検索結果の行とも共有)を
+    /// 使う。国・地域の識別は国旗+通貨コード(`event.countryCode`/
+    /// `currencyCode`)側に既に分離されているため、ここでの重複表記は不要。
+    private static func eventIndicatorDisplayName(_ name: String, countryCode: String) -> String {
+        let display = CountryFlag.indicatorDisplayName(name, countryCode: countryCode)
+        guard let abbreviation = display.abbreviation else { return display.main }
+        return "\(display.main)(\(abbreviation))"
     }
 
     /// HQ指示(2026-10-06)「米国雇用統計の場合は（）部分を2行目にし」:

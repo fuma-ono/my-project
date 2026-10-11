@@ -324,18 +324,12 @@ struct SearchView: View {
         }
     }
 
-    /// 指標名の括弧部分("消費者物価指数"など)をHQ指示(2026-10-11、9回目)
-    /// 「()は2行目にして」どおり必ず2行目に分ける。`(`が無い名前(「FOMC政策
-    /// 金利」など)は`paren`が`nil`になり1行のまま。
-    private static func splitParenthetical(_ name: String) -> (main: String, paren: String?) {
-        guard let openIndex = name.firstIndex(of: "(") else { return (name, nil) }
-        let main = String(name[name.startIndex..<openIndex]).trimmingCharacters(in: .whitespaces)
-        let paren = String(name[openIndex...])
-        return (main, paren)
-    }
-
     private func resultRow(_ indicator: IndicatorSummary) -> some View {
-        let parts = Self.splitParenthetical(indicator.name)
+        // HQ指示(2026-10-11、11回目)「検索画面は米国CPIのままになっている
+        // ので修正して」: Homeの「今日の重要イベント」と同じ
+        // `CountryFlag.indicatorDisplayName`を使い、国名接頭辞を除いた
+        // 正式名(+英数字の略称があれば2行目に「(CPI)」)を表示する。
+        let display = CountryFlag.indicatorDisplayName(indicator.name, countryCode: indicator.countryCode)
         return HStack(alignment: .top, spacing: 8) {
             // HQ指示(2026-10-11、8回目)「CPIを検索した後の画面の国旗マーク
             // を少し小さくして」: 28→24。
@@ -349,23 +343,24 @@ struct SearchView: View {
                 // 括弧が無い名前(1行)でも、ある名前(2行)と同じ高さを
                 // 確保するため、タイトル部分に2行分の`minHeight`を与えた。
                 VStack(alignment: .leading, spacing: 0) {
-                    NotoText.text(parts.main, size: 10.5)
+                    NotoText.text(display.main, size: 10.5)
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-                    if let paren = parts.paren {
-                        NotoText.text(paren, size: 10.5)
+                    if let abbreviation = display.abbreviation {
+                        NotoText.text("(\(abbreviation))", size: 10.5)
                             .foregroundStyle(.white)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
                 }
                 // HQ指示(2026-10-11、10回目)「FOMC政策金利の下の余白が気に
-                // なります。折り返さない場合は中央にしてください」: 括弧が
-                // 無く1行で終わる名前(「FOMC政策金利」など)は2行分の
-                // `minHeight`の中で上揃えのままだと下に空白が目立つため、
-                // その場合だけ縦中央に揃える(括弧ありの2行表示は従来通り上揃え)。
-                .frame(minHeight: 27, alignment: parts.paren == nil ? .leading : .topLeading)
+                // なります。折り返さない場合は中央にしてください」: 2行目の
+                // 略称が無く1行で終わる名前(「FOMC政策金利」「非農業部門
+                // 雇用者数」など)は2行分の`minHeight`の中で上揃えのままだと
+                // 下に空白が目立つため、その場合だけ縦中央に揃える(略称が
+                // ある2行表示は従来通り上揃え)。
+                .frame(minHeight: 27, alignment: display.abbreviation == nil ? .leading : .topLeading)
                 // 括弧を2行目に分けたことで、タイトルのaccessibility labelも
                 // 「米国CPI」「(消費者物価指数)」の2要素に分かれてしまい、
                 // UIテストの`tap(containing: "米国CPI(消費者物価指数)")`が
