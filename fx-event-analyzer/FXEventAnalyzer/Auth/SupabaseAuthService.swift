@@ -82,6 +82,40 @@ final class SupabaseAuthService: AuthServicing {
         }
     }
 
+    func updateEmail(_ newEmail: String) async throws {
+        guard let client else { throw AuthServiceError.notConfigured }
+        do {
+            _ = try await client.update(user: UserAttributes(email: newEmail))
+        } catch {
+            throw AuthServiceError.unknown(error.localizedDescription)
+        }
+    }
+
+    func updatePassword(currentPassword: String, newPassword: String) async throws {
+        guard let client else { throw AuthServiceError.notConfigured }
+        let session: Session
+        do {
+            session = try await client.session
+        } catch {
+            throw AuthServiceError.network(error.localizedDescription)
+        }
+        guard let email = session.user.email else {
+            throw AuthServiceError.unknown("No email on the current user.")
+        }
+        // Re-authenticate with the current password first; a wrong one
+        // must never reach the update call.
+        do {
+            _ = try await client.signIn(email: email, password: currentPassword)
+        } catch {
+            throw AuthServiceError.invalidCredentials
+        }
+        do {
+            _ = try await client.update(user: UserAttributes(password: newPassword))
+        } catch {
+            throw AuthServiceError.unknown(error.localizedDescription)
+        }
+    }
+
     func signOut() async throws {
         guard let client else { throw AuthServiceError.notConfigured }
         do {
@@ -114,7 +148,8 @@ final class SupabaseAuthService: AuthServicing {
         UserSession(
             userID: session.user.id,
             accessToken: session.accessToken,
-            expiresAt: Date(timeIntervalSince1970: session.expiresAt)
+            expiresAt: Date(timeIntervalSince1970: session.expiresAt),
+            email: session.user.email
         )
     }
 
@@ -123,6 +158,11 @@ final class SupabaseAuthService: AuthServicing {
     /// `AuthServiceError` cases so the UI can say something more useful
     /// than "通信に失敗しました"; anything else falls back to that generic
     /// message like every other unclassified auth error does.
+    // HQ指示(Calendar/Settings/Accountのみ移植): mapSignUpErrorは
+    // claude/fx-settings-screens側のSupabaseAuthService.swiftには無い
+    // (signUp自体が対象のAuthServicingに無いため) — claude/fx-event-analyzer側の
+    // SignUp画面はこれに依存しているので、追加したupdateEmail/updatePasswordと
+    // 一緒にそのまま残す。
     private static func mapSignUpError(_ error: AuthError) -> AuthServiceError {
         switch error {
         case .weakPassword(let message, _):

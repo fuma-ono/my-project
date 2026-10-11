@@ -7,6 +7,10 @@ final class MockAuthService: AuthServicing {
     var signUpResult: Result<SignUpResult, Error>?
     var resetPasswordError: Error?
     var signOutError: Error?
+    var updateEmailError: Error?
+    var updatePasswordError: Error?
+    private(set) var updatedEmail: String?
+    private(set) var updatedPassword: (current: String, new: String)?
 
     private let stream: AsyncStream<AuthEvent>
     private let continuation: AsyncStream<AuthEvent>.Continuation
@@ -61,6 +65,16 @@ final class MockAuthService: AuthServicing {
         if let signOutError {
             throw signOutError
         }
+    }
+
+    func updateEmail(_ newEmail: String) async throws {
+        if let updateEmailError { throw updateEmailError }
+        updatedEmail = newEmail
+    }
+
+    func updatePassword(currentPassword: String, newPassword: String) async throws {
+        if let updatePasswordError { throw updatePasswordError }
+        updatedPassword = (currentPassword, newPassword)
     }
 
     func authStateChanges() -> AsyncStream<AuthEvent> {
