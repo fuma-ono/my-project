@@ -315,8 +315,9 @@ struct HomeView: View {
     /// 鮮やか」を求めていたと判明したため、ネオンのような高輝度の色に
     /// 変更した(`pairRow`側に追加したグローシャドウは、HQ再指摘
     /// (2026-10-05、5回目)「-0.14%のグローが強いから無くして」で削除済み)。
-    private static let changeUpColor = Color(red: 255.0 / 255, green: 45.0 / 255, blue: 95.0 / 255)
-    private static let changeDownColor = Color(red: 20.0 / 255, green: 235.0 / 255, blue: 165.0 / 255)
+    // `private`を外した(SpeechDetailCardsが同じ色分けの仮データ表で再利用)。
+    static let changeUpColor = Color(red: 255.0 / 255, green: 45.0 / 255, blue: 95.0 / 255)
+    static let changeDownColor = Color(red: 20.0 / 255, green: 235.0 / 255, blue: 165.0 / 255)
 
     static func importanceBadgeColors(_ importance: Importance) -> (fill: Color, border: Color) {
         switch importance {

@@ -14,8 +14,11 @@ import SwiftUI
 ///   `GET /events/{id}`のフィールド、api-design.md v1.17)に相当するものが
 ///   存在しない(DBマイグレーション`20261005000003_speeches.sql`のコメント
 ///   「SpeechPriceReaction は引き続き対象外」)。
-/// そのため値動きの表は常に、`EventDetailCards`の「値動きのデータは
-/// まだありません」と同じ空状態で表示する(実在しない数値を捏造しない)。
+/// HQ指示(2026-10-11)「値動きは仮のデータでいいから表示させて」: 上記の
+/// 事情を説明した上で、実データが無くても参考画像どおりの見た目を仮の値で
+/// 表示する方針に確定。`placeholderReactions`はこのファイル内に閉じた表示
+/// 専用の固定値で、APIレスポンス(`SpeechDetailResponse`)には含まれない
+/// ——Backendからの実データであるかのようには見せない。
 struct SpeechDetailCards: View {
     let response: SpeechDetailResponse
 
@@ -83,8 +86,25 @@ struct SpeechDetailCards: View {
 
     // MARK: - 通貨ペア別の値動き(pips)
 
+    /// 表示専用の仮データ(上部のドキュメントコメント参照)。4大通貨ペア×
+    /// 1分/5分/15分。
+    private struct PlaceholderReaction: Identifiable {
+        let symbol: String
+        let oneMinute: Double
+        let fiveMinute: Double
+        let fifteenMinute: Double
+        var id: String { symbol }
+    }
+
+    private static let placeholderReactions: [PlaceholderReaction] = [
+        PlaceholderReaction(symbol: "USD/JPY", oneMinute: -5.2, fiveMinute: -18.4, fifteenMinute: -32.7),
+        PlaceholderReaction(symbol: "EUR/USD", oneMinute: 2.1, fiveMinute: 8.6, fifteenMinute: 14.2),
+        PlaceholderReaction(symbol: "GBP/USD", oneMinute: 1.4, fiveMinute: 6.2, fifteenMinute: 11.8),
+        PlaceholderReaction(symbol: "AUD/USD", oneMinute: 0.8, fiveMinute: 4.3, fifteenMinute: 7.6),
+    ]
+
     /// `EventDetailCards.reactionTable`と同じ枠組み(見出し行・列ヘッダー・
-    /// 空状態メッセージ)。要人発言にはデータがまだ無いため、常に空状態。
+    /// 行の罫線)。
     private var reactionTable: some View {
         VStack(spacing: 0) {
             NotoText.text("通貨ペア別の値動き（pips）", size: 10.5)
@@ -103,15 +123,40 @@ struct SpeechDetailCards: View {
             }
             .frame(height: Self.headerHeight)
             .background(Self.headerFill)
-            NotoText.text("値動きのデータはまだありません。", size: 8.5)
-                .foregroundStyle(SettingsCardStyle.subtitleColor)
-                .frame(width: 214, height: 34)
-                .overlay(Rectangle().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.5))
+            ForEach(Self.placeholderReactions) { reaction in
+                HStack(spacing: 0) {
+                    cell(width: Self.pairColumnWidth, alignment: .leading) { pairLabel(reaction.symbol) }
+                    cell(width: Self.valueColumnWidth) { pipsText(reaction.oneMinute) }
+                    cell(width: Self.valueColumnWidth) { pipsText(reaction.fiveMinute) }
+                    cell(width: Self.valueColumnWidth) { pipsText(reaction.fifteenMinute) }
+                }
+                .frame(height: Self.rowHeight)
+            }
         }
         .frame(width: 214)
         .background(Self.bodyGradient)
         .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
         .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
+    }
+
+    private func pairLabel(_ symbol: String) -> some View {
+        HStack(spacing: 5) {
+            CountryFlagView(currencyCode: String(symbol.prefix(3)), diameter: 13)
+            NotoText.text(FXPairSymbol.displayName(symbol), size: 9.5)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .padding(.leading, 7)
+    }
+
+    /// `HomeView.speechRow`の`reactionPips`と同じ色分け(pips >= 0は
+    /// `changeUpColor`、負は`changeDownColor`)に揃える。
+    private func pipsText(_ pips: Double) -> some View {
+        Text(ValueFormat.number(pips, fractionDigits: 1, signed: true))
+            .font(.system(size: 10, weight: .semibold))
+            .monospacedDigit()
+            .foregroundStyle(pips >= 0 ? HomeView.changeUpColor : HomeView.changeDownColor)
     }
 
     private static let headerFill = Color(red: 0.04, green: 0.18, blue: 0.36)
@@ -123,6 +168,7 @@ struct SpeechDetailCards: View {
     private static let pairColumnWidth: CGFloat = 80
     private static let valueColumnWidth: CGFloat = (214 - 80) / 3
     private static let headerHeight: CGFloat = 22
+    private static let rowHeight: CGFloat = 28
 
     private func cell(width: CGFloat, alignment: Alignment = .center, @ViewBuilder _ content: () -> some View) -> some View {
         content()
