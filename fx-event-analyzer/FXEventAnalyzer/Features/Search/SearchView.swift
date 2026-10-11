@@ -359,11 +359,13 @@ struct SearchView: View {
                 // 都合で「(雇用」「用統計)」のように括弧の途中で割れることが
                 // あったため、名前本体と(略称)を明示的に分けた2行版に戻す
                 // (Homeの`eventRow`と同じ考え方)。
+                // HQ指示(2026-10-11、17回目)「各カードの縦幅も少し短くして」:
+                // 見出しを9.5ptに縮めた分、2行分の予約も22→19に詰めた。
                 ViewThatFits(in: .horizontal) {
                     NotoText.text(displayName, size: 9.5)
                         .foregroundStyle(.white)
                         .lineLimit(1)
-                        .frame(minHeight: 22, alignment: .leading)
+                        .frame(minHeight: 19, alignment: .leading)
                     VStack(alignment: .leading, spacing: 0) {
                         NotoText.text(display.main, size: 9.5)
                             .foregroundStyle(.white)
@@ -376,7 +378,7 @@ struct SearchView: View {
                                 .minimumScaleFactor(0.8)
                         }
                     }
-                    .frame(minHeight: 22, alignment: .topLeading)
+                    .frame(minHeight: 19, alignment: .topLeading)
                 }
                 // 括弧を2行目に分けたことで、タイトルのaccessibility labelも
                 // 「米国CPI」「(消費者物価指数)」の2要素に分かれてしまい、
@@ -405,8 +407,10 @@ struct SearchView: View {
         .padding(.horizontal, 8)
         // HQ指示(2026-10-11、16回目)「検索画面の各カードの縦幅をまだ短く
         // して」: 6→4、52→46。
-        .padding(.vertical, 4)
-        .frame(minHeight: 46, alignment: .top)
+        // HQ指示(2026-10-11、17回目)「各カードの縦幅も少し短くして」:
+        // 4→3、46→42。
+        .padding(.vertical, 3)
+        .frame(minHeight: 42, alignment: .top)
         // HQ指示(2026-10-11、9回目)「>の位置は枠の右端の中心にして」: 行の
         // 内容(`alignment: .top`)から独立して、行全体の高さの中央・右端に
         // オーバーレイで置く。
