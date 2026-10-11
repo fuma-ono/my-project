@@ -275,9 +275,11 @@ struct SearchView: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 36)
-        .background(V5P.panel, in: RoundedRectangle(cornerRadius: 6))
-        // HQ指示(2026-10-11、8回目)「米国CPIを枠で囲って」: 枠線を追加。
-        .overlay(RoundedRectangle(cornerRadius: 6).stroke(V5P.line.opacity(0.4), lineWidth: 1))
+        // HQ指示(2026-10-11、10回目)「最近の検索結果の枠の色を人気の検索
+        // キーワードと同じにして」: `popularKeywordsPanel`と同じ
+        // `popularPanelFill`/枠線不透明度0.3に揃えた。
+        .background(Self.popularPanelFill, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(V5P.line.opacity(0.3), lineWidth: 1))
     }
 
     // MARK: - 検索結果(実データのみ — 冒頭のドキュメントコメント参照)
@@ -313,7 +315,10 @@ struct SearchView: View {
                         }
                     }
                 }
-                .background(V5P.panel, in: RoundedRectangle(cornerRadius: 10))
+                // HQ指示(2026-10-11、10回目)「検索結果の米国CPI等の枠の色も
+                // 同じにして」: `popularKeywordsPanel`と同じ`popularPanelFill`
+                // に揃えた(枠線の不透明度0.3は元々同じ)。
+                .background(Self.popularPanelFill, in: RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(V5P.line.opacity(0.3), lineWidth: 1))
             }
         }
@@ -355,7 +360,12 @@ struct SearchView: View {
                             .minimumScaleFactor(0.8)
                     }
                 }
-                .frame(minHeight: 27, alignment: .topLeading)
+                // HQ指示(2026-10-11、10回目)「FOMC政策金利の下の余白が気に
+                // なります。折り返さない場合は中央にしてください」: 括弧が
+                // 無く1行で終わる名前(「FOMC政策金利」など)は2行分の
+                // `minHeight`の中で上揃えのままだと下に空白が目立つため、
+                // その場合だけ縦中央に揃える(括弧ありの2行表示は従来通り上揃え)。
+                .frame(minHeight: 27, alignment: parts.paren == nil ? .leading : .topLeading)
                 // 括弧を2行目に分けたことで、タイトルのaccessibility labelも
                 // 「米国CPI」「(消費者物価指数)」の2要素に分かれてしまい、
                 // UIテストの`tap(containing: "米国CPI(消費者物価指数)")`が
