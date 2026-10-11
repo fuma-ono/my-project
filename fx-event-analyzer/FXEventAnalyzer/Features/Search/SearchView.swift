@@ -360,17 +360,17 @@ struct SearchView: View {
                 // あったため、名前本体と(略称)を明示的に分けた2行版に戻す
                 // (Homeの`eventRow`と同じ考え方)。
                 ViewThatFits(in: .horizontal) {
-                    NotoText.text(displayName, size: 10.5)
+                    NotoText.text(displayName, size: 9.5)
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .frame(minHeight: 22, alignment: .leading)
                     VStack(alignment: .leading, spacing: 0) {
-                        NotoText.text(display.main, size: 10.5)
+                        NotoText.text(display.main, size: 9.5)
                             .foregroundStyle(.white)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                         if let abbreviation = display.abbreviation {
-                            NotoText.text("(\(abbreviation))", size: 10.5)
+                            NotoText.text("(\(abbreviation))", size: 9.5)
                                 .foregroundStyle(.white)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.8)
