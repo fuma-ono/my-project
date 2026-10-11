@@ -348,16 +348,18 @@ struct SearchView: View {
                 // 採用し、収まらない場合だけ2行版(上揃え)にフォールバック
                 // する — HQ指示(2026-10-11、10回目)「折り返さない場合は
                 // 中央にしてください」をデータに依らず実現する。
+                // HQ指示(2026-10-11、15回目)「各枠の縦幅をもう少し短くして」:
+                // 2行分の予約を27→22に縮め、行全体の余白も合わせて詰めた。
                 ViewThatFits(in: .horizontal) {
                     NotoText.text(displayName, size: 10.5)
                         .foregroundStyle(.white)
                         .lineLimit(1)
-                        .frame(minHeight: 27, alignment: .leading)
+                        .frame(minHeight: 22, alignment: .leading)
                     NotoText.text(displayName, size: 10.5)
                         .foregroundStyle(.white)
                         .lineLimit(2)
                         .minimumScaleFactor(0.8)
-                        .frame(minHeight: 27, alignment: .topLeading)
+                        .frame(minHeight: 22, alignment: .topLeading)
                 }
                 // 括弧を2行目に分けたことで、タイトルのaccessibility labelも
                 // 「米国CPI」「(消費者物価指数)」の2要素に分かれてしまい、
@@ -384,8 +386,9 @@ struct SearchView: View {
             Spacer(minLength: 20)
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 8)
-        .frame(minHeight: 60, alignment: .top)
+        .padding(.vertical, 6)
+        // HQ指示(2026-10-11、15回目)「各枠の縦幅をもう少し短くして」: 60→52。
+        .frame(minHeight: 52, alignment: .top)
         // HQ指示(2026-10-11、9回目)「>の位置は枠の右端の中心にして」: 行の
         // 内容(`alignment: .top`)から独立して、行全体の高さの中央・右端に
         // オーバーレイで置く。
