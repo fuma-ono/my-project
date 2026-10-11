@@ -8,6 +8,10 @@ import { registerEventRoutes } from './events.js';
 import { registerHistoricalRoutes } from './historical.js';
 import { registerSearchRoutes } from './search.js';
 import { registerHomeRoutes } from './home.js';
+import { registerSettingsRoutes } from './settings.js';
+import { registerCalendarRoutes } from './calendar.js';
+import { registerFxPairRoutes } from './fxPairs.js';
+import { registerSupportRoutes } from './support.js';
 
 /**
  * Everything under /api/v1 requires a valid Supabase Auth JWT — Home /
@@ -26,4 +30,12 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   await app.register(registerHistoricalRoutes);
   await app.register(registerSearchRoutes);
   await app.register(registerHomeRoutes);
+  await app.register(registerSettingsRoutes);
+  await app.register(registerCalendarRoutes);
+  await app.register(registerFxPairRoutes);
+  await app.register(registerSupportRoutes);
+  // registerSpeechRoutes (GET /speeches, IndicatorReleasesView) と
+  // registerNotificationRoutes (GET /notifications/upcoming, 端末内ローカル
+  // 通知の予約) はHQ指示によりCalendar/Settings/Accountのみを移植する今回の
+  // 対象外 (Home/指標詳細の機能、および通知のスケジューリング基盤そのもの)。
 }
