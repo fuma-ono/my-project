@@ -770,7 +770,9 @@ struct HomeView: View {
                 // 隣の漢字より小さく見えていた(`NotoText`のドキュメント
                 // コメント「数字が日本語より小さく浮いて見える」と同じ
                 // 原因)。英字を含みうるこの指標名は`NotoText`で統一する。
-                NotoText.text(Self.eventIndicatorDisplayName(event.indicatorName, countryCode: event.countryCode), size: 8.5)
+                // HQ指示(2026-10-11、12回目)「FOMC政策金利の文字サイズを
+                // 0.5大きくして」: 8.5→9.0。
+                NotoText.text(Self.eventIndicatorDisplayName(event.indicatorName, countryCode: event.countryCode), size: 9.0)
                     .tracking(-0.3)
                     .foregroundStyle(.white)
                     .lineLimit(1)

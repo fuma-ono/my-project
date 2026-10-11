@@ -328,39 +328,37 @@ struct SearchView: View {
         // HQ指示(2026-10-11、11回目)「検索画面は米国CPIのままになっている
         // ので修正して」: Homeの「今日の重要イベント」と同じ
         // `CountryFlag.indicatorDisplayName`を使い、国名接頭辞を除いた
-        // 正式名(+英数字の略称があれば2行目に「(CPI)」)を表示する。
+        // 正式名+略称(「消費者物価指数(CPI)」等)を表示する。
         let display = CountryFlag.indicatorDisplayName(indicator.name, countryCode: indicator.countryCode)
+        // HQ指示(2026-10-11、12回目)「消費者物価指数(CPI)は改行しないで。
+        // 改行する条件は1行で入り切らない場合にして」: 以前は略称の有無で
+        // 機械的に2行へ分けていたが、1つの文字列として組み立て、1行で
+        // 収まる限りは1行のまま・収まらない場合だけ自然に2行目へ折り返す
+        // ようにする。
+        let displayName = display.abbreviation.map { "\(display.main)(\($0))" } ?? display.main
         return HStack(alignment: .top, spacing: 8) {
             // HQ指示(2026-10-11、8回目)「CPIを検索した後の画面の国旗マーク
             // を少し小さくして」: 28→24。
             CountryFlagView(countryCode: indicator.countryCode, diameter: 24)
             VStack(alignment: .leading, spacing: 2) {
-                // HQ指示(2026-10-11、9回目)「()は2行目にして」: 以前は
-                // `.lineLimit(2)`の自動折り返しに任せており、括弧の途中で
-                // 改行されることがあった(例:「米国雇用統計(非農業部門\n
-                // 雇用者数)」)。括弧の前後で明示的に2行に分ける。
                 // HQ指示(2026-10-11、9回目)「枠線の高さは全て揃えて」:
-                // 括弧が無い名前(1行)でも、ある名前(2行)と同じ高さを
-                // 確保するため、タイトル部分に2行分の`minHeight`を与えた。
-                VStack(alignment: .leading, spacing: 0) {
-                    NotoText.text(display.main, size: 10.5)
+                // 1行で収まる名前でも、2行に折り返す名前と同じ高さを確保
+                // するため、タイトル部分に2行分の`minHeight`を与えた。
+                // `ViewThatFits`で、1行で収まる場合は1行版(縦中央揃え)を
+                // 採用し、収まらない場合だけ2行版(上揃え)にフォールバック
+                // する — HQ指示(2026-10-11、10回目)「折り返さない場合は
+                // 中央にしてください」をデータに依らず実現する。
+                ViewThatFits(in: .horizontal) {
+                    NotoText.text(displayName, size: 10.5)
                         .foregroundStyle(.white)
                         .lineLimit(1)
+                        .frame(minHeight: 27, alignment: .leading)
+                    NotoText.text(displayName, size: 10.5)
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
                         .minimumScaleFactor(0.8)
-                    if let abbreviation = display.abbreviation {
-                        NotoText.text("(\(abbreviation))", size: 10.5)
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                    }
+                        .frame(minHeight: 27, alignment: .topLeading)
                 }
-                // HQ指示(2026-10-11、10回目)「FOMC政策金利の下の余白が気に
-                // なります。折り返さない場合は中央にしてください」: 2行目の
-                // 略称が無く1行で終わる名前(「FOMC政策金利」「非農業部門
-                // 雇用者数」など)は2行分の`minHeight`の中で上揃えのままだと
-                // 下に空白が目立つため、その場合だけ縦中央に揃える(略称が
-                // ある2行表示は従来通り上揃え)。
-                .frame(minHeight: 27, alignment: display.abbreviation == nil ? .leading : .topLeading)
                 // 括弧を2行目に分けたことで、タイトルのaccessibility labelも
                 // 「米国CPI」「(消費者物価指数)」の2要素に分かれてしまい、
                 // UIテストの`tap(containing: "米国CPI(消費者物価指数)")`が

@@ -166,19 +166,18 @@ enum CountryFlag {
     /// 指標の正式名(DBの`indicator.name`、「米国CPI(消費者物価指数)」の
     /// ような「国名接頭辞+略称(正式名)」形式)から、国名接頭辞を除いた
     /// 表示名を組み立てる(HQ指示: イベント名表示ルール統一「イベント名
-    /// には原則として国名を付けず、指標名・発言名そのものを表示する」)。
+    /// には原則として国名を付けず、指標名・発言名そのものを表示する」、
+    /// 2026-10-11、12回目「それだけではなく()で表される指標名は表示して」)。
     /// Home「今日の重要イベント」・検索結果の両方で使う共通ロジック —
     /// 国情報は既に国旗・通貨コード表示に分離されているため、ここでの
     /// 国名表記は不要。カッコ内の正式名を`main`として返し、カッコの前
-    /// (接頭辞)から国名を取り除いた残りが英数字の略称("CPI"等)であれば
-    /// `abbreviation`として一緒に返す — 「米国CPI(消費者物価指数)」→
-    /// main: "消費者物価指数", abbreviation: "CPI"。「米国雇用統計(非農業
-    /// 部門雇用者数)」は接頭辞除去後が"雇用統計"(略称ではない日本語)の
-    /// ため abbreviation は nil のまま(main: "非農業部門雇用者数"だけ)。
-    /// カッコが無い名前(「FOMC政策金利」等)は main に名前そのものを返す。
-    /// 国名の判定はこのファイルの`japaneseName(forCountry:)`(捏造のない
-    /// 既存の対応表)を再利用し、指標名の文字列だけから国や種別を推測
-    /// しない。
+    /// (接頭辞)から国名を取り除いた残りが有れば`abbreviation`として一緒に
+    /// 返す — 「米国CPI(消費者物価指数)」→ main: "消費者物価指数",
+    /// abbreviation: "CPI"。「米国雇用統計(非農業部門雇用者数)」→
+    /// main: "非農業部門雇用者数", abbreviation: "雇用統計"。カッコが無い
+    /// 名前(「FOMC政策金利」等)は main に名前そのものを返す。国名の判定は
+    /// このファイルの`japaneseName(forCountry:)`(捏造のない既存の対応表)
+    /// を再利用し、指標名の文字列だけから国や種別を推測しない。
     static func indicatorDisplayName(_ name: String, countryCode: String) -> (main: String, abbreviation: String?) {
         guard let openIndex = name.firstIndex(where: { $0 == "(" || $0 == "（" }) else {
             return (name, nil)
@@ -192,8 +191,7 @@ enum CountryFlag {
         let countryPrefix = japaneseName(forCountry: countryCode)
         guard prefix.hasPrefix(countryPrefix) else { return (preciseName, nil) }
         let remainder = String(prefix.dropFirst(countryPrefix.count))
-        let isAcronym = !remainder.isEmpty && remainder.allSatisfy { $0.isASCII && $0.isLetter }
-        return (preciseName, isAcronym ? remainder : nil)
+        return (preciseName, remainder.isEmpty ? nil : remainder)
     }
 
     /// ISO 4217通貨コード → 代表国のISO 3166コードという客観的な対応表
