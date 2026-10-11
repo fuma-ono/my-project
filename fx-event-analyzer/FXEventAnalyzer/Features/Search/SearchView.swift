@@ -336,11 +336,15 @@ struct SearchView: View {
         // 収まる限りは1行のまま・収まらない場合だけ自然に2行目へ折り返す
         // ようにする。
         let displayName = display.abbreviation.map { "\(display.main)(\($0))" } ?? display.main
-        return HStack(alignment: .top, spacing: 8) {
+        // HQ指示(2026-10-11、16回目)「国旗マークはカードの縦幅の中心に
+        // くるように」: 行全体を上揃え(`.top`)にしていたのをやめ、国旗・
+        // タイトルブロックの両方を行の中央に揃える。
+        return HStack(alignment: .center, spacing: 8) {
             // HQ指示(2026-10-11、8回目)「CPIを検索した後の画面の国旗マーク
             // を少し小さくして」: 28→24。
             CountryFlagView(countryCode: indicator.countryCode, diameter: 24)
-            VStack(alignment: .leading, spacing: 2) {
+            // HQ指示(2026-10-11、16回目)「カード内の行間を短くして」: 2→1。
+            VStack(alignment: .leading, spacing: 1) {
                 // HQ指示(2026-10-11、9回目)「枠線の高さは全て揃えて」:
                 // 1行で収まる名前でも、2行に折り返す名前と同じ高さを確保
                 // するため、タイトル部分に2行分の`minHeight`を与えた。
@@ -350,16 +354,29 @@ struct SearchView: View {
                 // 中央にしてください」をデータに依らず実現する。
                 // HQ指示(2026-10-11、15回目)「各枠の縦幅をもう少し短くして」:
                 // 2行分の予約を27→22に縮め、行全体の余白も合わせて詰めた。
+                // HQ指示(2026-10-11、16回目)「非農業部門雇用者数は()が2行目に
+                // くるようにして」: `.lineLimit(2)`の自然な折り返しだと幅の
+                // 都合で「(雇用」「用統計)」のように括弧の途中で割れることが
+                // あったため、名前本体と(略称)を明示的に分けた2行版に戻す
+                // (Homeの`eventRow`と同じ考え方)。
                 ViewThatFits(in: .horizontal) {
                     NotoText.text(displayName, size: 10.5)
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .frame(minHeight: 22, alignment: .leading)
-                    NotoText.text(displayName, size: 10.5)
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.8)
-                        .frame(minHeight: 22, alignment: .topLeading)
+                    VStack(alignment: .leading, spacing: 0) {
+                        NotoText.text(display.main, size: 10.5)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        if let abbreviation = display.abbreviation {
+                            NotoText.text("(\(abbreviation))", size: 10.5)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                    }
+                    .frame(minHeight: 22, alignment: .topLeading)
                 }
                 // 括弧を2行目に分けたことで、タイトルのaccessibility labelも
                 // 「米国CPI」「(消費者物価指数)」の2要素に分かれてしまい、
@@ -386,9 +403,10 @@ struct SearchView: View {
             Spacer(minLength: 20)
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        // HQ指示(2026-10-11、15回目)「各枠の縦幅をもう少し短くして」: 60→52。
-        .frame(minHeight: 52, alignment: .top)
+        // HQ指示(2026-10-11、16回目)「検索画面の各カードの縦幅をまだ短く
+        // して」: 6→4、52→46。
+        .padding(.vertical, 4)
+        .frame(minHeight: 46, alignment: .top)
         // HQ指示(2026-10-11、9回目)「>の位置は枠の右端の中心にして」: 行の
         // 内容(`alignment: .top`)から独立して、行全体の高さの中央・右端に
         // オーバーレイで置く。

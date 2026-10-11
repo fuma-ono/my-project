@@ -760,12 +760,15 @@ struct HomeView: View {
                 let subtitle = Self.eventSubtitle(event)
                 let display = CountryFlag.indicatorDisplayName(event.indicatorName, countryCode: event.countryCode)
                 let combinedName = display.abbreviation.map { "\(display.main)(\($0))" } ?? display.main
+                // HQ指示(2026-10-11、16回目)「非農業部門雇用者数の経済指標
+                // マークをもう少し下げて」: バッジだけ少し下にずらす。
                 V5JPFont.text("経済指標", size: 5.3, weight: .semibold)
                     .tracking(-0.4)
                     .foregroundStyle(.white)
                     .padding(.horizontal, 3).padding(.vertical, 1.5)
                     .background(Self.economicIndicatorBadgeColor, in: Capsule())
                     .fixedSize()
+                    .padding(.top, 1.5)
                 // HQ指示(2026-10-11、11回目)「FOMCの文字が小さく見える」:
                 // `V5JPFont.text`は日本語の範囲だけNotoSansJPを当て、
                 // "FOMC"のような英字部分はシステムフォントのまま残るため、
