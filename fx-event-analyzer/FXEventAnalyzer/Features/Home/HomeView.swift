@@ -759,6 +759,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 1) {
                 let subtitle = Self.eventSubtitle(event)
                 let display = CountryFlag.indicatorDisplayName(event.indicatorName, countryCode: event.countryCode)
+                let combinedName = display.abbreviation.map { "\(display.main)(\($0))" } ?? display.main
                 V5JPFont.text("経済指標", size: 5.3, weight: .semibold)
                     .tracking(-0.4)
                     .foregroundStyle(.white)
@@ -774,22 +775,29 @@ struct HomeView: View {
                 // HQ指示(2026-10-11、12回目)「FOMC政策金利の文字サイズを
                 // 0.5大きくして」: 8.5→9.0。
                 // HQ指示(2026-10-11、13回目)「カードの高さを変えず()を2行目に
-                // 表示して、()の文字サイズを小さくして調整して」:
-                // 「非農業部門雇用者数(雇用統計)」のように略称を足した分
-                // 長くなった名前が1行の縮小表示では収まりきらなかったため、
-                // 名前本体と(略称)を分け、(略称)だけ小さいフォントで2行目に
-                // 表示する(`eventRowHeight`/`todayEventsCardHeight`自体は
-                // 変えない)。
-                NotoText.text(display.main, size: 9.0)
-                    .tracking(-0.3)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                if let abbreviation = display.abbreviation {
-                    NotoText.text("(\(abbreviation))", size: 6.0)
+                // 表示して、()の文字サイズを小さくして調整して」、14回目
+                // 「(CPI)は1行で収まるでしょ？1行で収まる時は1行で表示して」:
+                // 「消費者物価指数(CPI)」のように1行に収まる名前はそのまま
+                // 1行で表示し、「非農業部門雇用者数(雇用統計)」のように収まら
+                // ない名前だけ、名前本体+小さいフォントの(略称)という2行に
+                // 分ける(`eventRowHeight`/`todayEventsCardHeight`自体は
+                // 変えない) — 検索結果の行(`ViewThatFits`)と同じ考え方。
+                ViewThatFits(in: .horizontal) {
+                    NotoText.text(combinedName, size: 9.0)
+                        .tracking(-0.3)
                         .foregroundStyle(.white)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                    VStack(alignment: .leading, spacing: 0) {
+                        NotoText.text(display.main, size: 9.0)
+                            .tracking(-0.3)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        if let abbreviation = display.abbreviation {
+                            NotoText.text("(\(abbreviation))", size: 6.0)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                        }
+                    }
                 }
                 if let subtitle {
                     V5JPFont.text(subtitle, size: 6.3, weight: .regular)
