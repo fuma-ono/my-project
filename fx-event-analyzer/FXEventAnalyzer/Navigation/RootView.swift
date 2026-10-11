@@ -59,7 +59,15 @@ struct RootView: View {
                     // 無料プラン・プレミアムプランの使える範囲(カレンダー・お気に入りなど)。
                     await PlanStore.shared.load(apiClient: apiClient)
                     // SCR-017: 自動更新・解約などの購読の変化をBackendへ送る。
-                    SubscriptionSync.shared.start(apiClient: apiClient)
+                    // UIスクリーンショットCIではApp Store Connectのサンドボックス
+                    // アカウントが無く、StoreKitの`Product.products(for:)`/
+                    // `Transaction.updates`が実サーバーへの到達を試みて数分間
+                    // ハング — その間メインタブの画面遷移が全て止まり、設定画面
+                    // 以降のキャプチャが軒並み失敗する実障害を確認したため、
+                    // このテスト実行中はStoreKitに触れない。
+                    if ProcessInfo.processInfo.environment["UI_SCREENSHOT_HOLD_SPLASH"] == nil {
+                        SubscriptionSync.shared.start(apiClient: apiClient)
+                    }
                     await LocalNotificationScheduler(apiClient: apiClient).refresh()
                     while !Task.isCancelled {
                         try? await Task.sleep(for: .seconds(30))

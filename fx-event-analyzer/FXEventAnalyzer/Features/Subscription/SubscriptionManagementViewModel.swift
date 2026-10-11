@@ -43,6 +43,11 @@ final class SubscriptionManagementViewModel: ObservableObject {
             loadState = .error("購読情報の取得に失敗しました。")
             return
         }
+        // UIスクリーンショットCIではApp Store Connectのサンドボックスアカウントが
+        // 無く、`Product.products(for:)`が実サーバーへの到達を試みて数分間ハング
+        // する実障害を確認したため、このテスト実行中は呼ばない — 元々価格が
+        // 取得できない場合と同じ、予定価格(`ProProduct.fallback`)のままになる。
+        guard ProcessInfo.processInfo.environment["UI_SCREENSHOT_HOLD_SPLASH"] == nil else { return }
         if let loaded = try? await purchases.products(), !loaded.isEmpty {
             products = ProProduct.fallback.map { fallback in loaded.first { $0.id == fallback.id } ?? fallback }
             productsAvailable = true
