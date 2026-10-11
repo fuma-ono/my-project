@@ -237,12 +237,18 @@ struct SearchView: View {
         // HQ指示(2026-10-09、6回目)「最近の検索の文字開始を人気の検索の開始と
         // 位置を揃えて」: 「人気の検索キーワード」は`popularKeywordsPanel`の
         // 枠線内パディング10pt分、scrollableContentの左パディング10ptより
-        // さらに右から始まる。同じ10ptをここにも足して開始位置を揃える。
+        // さらに右から始まる。
+        // HQ指示(2026-10-11、9回目)「最近の検索履歴の米国CPIの枠を人気の検索
+        // キーワードの枠と横の長さを揃えて」: 以前はこの揃え用の10ptを
+        // VStack全体(見出し+行)にかけていたため、行のカード自体も10pt
+        // 狭くなってしまっていた。見出しテキストにだけ掛けるようにし、
+        // 行のカードはpopularKeywordsPanelと同じ全幅のままにした。
         VStack(alignment: .leading, spacing: 8) {
             // HQ指示(2026-10-11、8回目)「最近の検索履歴の文字サイズを0.5
             // 大きくして」: 10→10.5。
             NotoText.text("最近の検索履歴", size: 10.5)
                 .foregroundStyle(.white)
+                .padding(.leading, 10)
 
             ForEach(recentSearches.prefix(4)) { entry in
                 Button {
@@ -252,15 +258,15 @@ struct SearchView: View {
                 }.buttonStyle(.plain)
             }
         }
-        .padding(.leading, 10)
     }
 
     private func historyRow(_ entry: RecentSearchEntry) -> some View {
         HStack(spacing: 8) {
             // HQ指示(2026-10-11、8回目)「国旗マークの大きさを経済指標、
             // カレンダーと同じにして」: `IndicatorsView`の経済指標リスト行と
-            // 同じ14ptに縮小(22→14)。
-            CountryFlagView(countryCode: entry.countryCode, diameter: 14)
+            // 同じ14ptに縮小(22→14)。HQ指示(2026-10-11、9回目)「国旗マークを
+            // 少し大きくして」で14→16に微調整。
+            CountryFlagView(countryCode: entry.countryCode, diameter: 16)
             NotoText.text(entry.term, size: 10.5).foregroundStyle(.white).lineLimit(1)
             Spacer()
             // HQ指示(2026-10-11、8回目)「＞の文字サイズを米国CPIと同じに」:
@@ -313,40 +319,71 @@ struct SearchView: View {
         }
     }
 
+    /// 指標名の括弧部分("消費者物価指数"など)をHQ指示(2026-10-11、9回目)
+    /// 「()は2行目にして」どおり必ず2行目に分ける。`(`が無い名前(「FOMC政策
+    /// 金利」など)は`paren`が`nil`になり1行のまま。
+    private static func splitParenthetical(_ name: String) -> (main: String, paren: String?) {
+        guard let openIndex = name.firstIndex(of: "(") else { return (name, nil) }
+        let main = String(name[name.startIndex..<openIndex]).trimmingCharacters(in: .whitespaces)
+        let paren = String(name[openIndex...])
+        return (main, paren)
+    }
+
     private func resultRow(_ indicator: IndicatorSummary) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        let parts = Self.splitParenthetical(indicator.name)
+        return HStack(alignment: .top, spacing: 8) {
             // HQ指示(2026-10-11、8回目)「CPIを検索した後の画面の国旗マーク
             // を少し小さくして」: 28→24。
             CountryFlagView(countryCode: indicator.countryCode, diameter: 24)
             VStack(alignment: .leading, spacing: 2) {
-                // 長い指標名が`.lineLimit(1)`だと末尾切れになるため2行まで
-                // 許可する。`NotoText.text`は(`V5JPFont.text`と違い)文字列を
-                // 日本語/非日本語ランに分割して`Text`を連結したりしない
-                // 単一の`Text`なので、`V5JPFont`で必要だった
-                // `wrappingText`回避策は不要 — 普通に`.lineLimit(2)`で
-                // 折り返せる。
-                NotoText.text(indicator.name, size: 10.5)
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
+                // HQ指示(2026-10-11、9回目)「()は2行目にして」: 以前は
+                // `.lineLimit(2)`の自動折り返しに任せており、括弧の途中で
+                // 改行されることがあった(例:「米国雇用統計(非農業部門\n
+                // 雇用者数)」)。括弧の前後で明示的に2行に分ける。
+                // HQ指示(2026-10-11、9回目)「枠線の高さは全て揃えて」:
+                // 括弧が無い名前(1行)でも、ある名前(2行)と同じ高さを
+                // 確保するため、タイトル部分に2行分の`minHeight`を与えた。
+                VStack(alignment: .leading, spacing: 0) {
+                    NotoText.text(parts.main, size: 10.5)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    if let paren = parts.paren {
+                        NotoText.text(paren, size: 10.5)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                }
+                .frame(minHeight: 27, alignment: .topLeading)
                 HStack(spacing: 4) {
                     NotoText.text(CountryFlag.japaneseName(forCountry: indicator.countryCode), size: 8.5)
                         .foregroundStyle(V5P.muted)
                     NotoText.text("|", size: 8.5)
                         .foregroundStyle(V5P.muted)
-                    NotoText.text("経済指標", size: 5.3)
+                    // HQ指示(2026-10-11、9回目)「経済指標のマークを大きく
+                    // して」: 5.3→6.5、パディングも比例して広げた。
+                    NotoText.text("経済指標", size: 6.5)
                         .tracking(-0.4)
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 3).padding(.vertical, 1.5)
+                        .padding(.horizontal, 4).padding(.vertical, 2)
                         .background(Self.economicIndicatorBadgeColor, in: Capsule())
                 }
             }
-            Spacer()
-            // HQ指示(2026-10-11、8回目)「CPIを検索した後の画面で＞を米国CPI
-            // と同じ大きさに」: 指標名の文字サイズ(10.5)に揃えた。
-            Image(systemName: "chevron.right").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(V5P.muted)
+            Spacer(minLength: 20)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 8)
+        .frame(minHeight: 60, alignment: .top)
+        // HQ指示(2026-10-11、9回目)「>の位置は枠の右端の中心にして」: 行の
+        // 内容(`alignment: .top`)から独立して、行全体の高さの中央・右端に
+        // オーバーレイで置く。
+        .overlay(alignment: .trailing) {
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(V5P.muted)
+                .padding(.trailing, 8)
+        }
     }
 }
 
