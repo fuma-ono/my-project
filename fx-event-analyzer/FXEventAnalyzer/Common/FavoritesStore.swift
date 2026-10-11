@@ -54,6 +54,13 @@ final class FavoritesStore: ObservableObject {
         userDefaults.set(entries.map(Self.key), forKey: storageKey)
     }
 
+    /// ログアウト・アカウント削除で前のユーザーのお気に入りを残さないための
+    /// 全削除。
+    func removeAll() {
+        entries = []
+        userDefaults.removeObject(forKey: storageKey)
+    }
+
     private static func key(_ entry: Entry) -> String {
         "\(entry.type.rawValue):\(entry.id)"
     }
