@@ -1,15 +1,12 @@
 import SwiftUI
 
 /// お問い合わせ・フィードバックの送信画面。送ると、その場で自動返信を表示する。
-///
-/// HQ指示(Calendar/Settings/Accountのみ移植): 送信後の「お問い合わせ履歴を見る」
-/// (`SupportHistoryView`)への導線は削除した — `SupportHistoryView`は対象外として
-/// 明示的に除外されている画面のため。送信とその場の自動返信表示はそのまま使える。
 struct SupportFormView: View {
     let kind: SupportRequest.Kind
     @StateObject private var viewModel: SupportViewModel
     @Binding var tabSelection: Int
     @State private var showsCategories = false
+    @State private var showsHistory = false
     @FocusState private var editorFocused: Bool
     @Environment(\.dismiss) private var dismiss
     private let apiClient: APIClient
@@ -43,6 +40,9 @@ struct SupportFormView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showsCategories) { categorySheet }
+        .navigationDestination(isPresented: $showsHistory) {
+            SupportHistoryView(apiClient: apiClient, tabSelection: $tabSelection)
+        }
     }
 
     // MARK: - 入力
@@ -123,7 +123,80 @@ struct SupportFormView: View {
                 tint: V5P.green,
                 textSize: 8
             )
+            AccountPrimaryButton(title: "お問い合わせ履歴を見る") { showsHistory = true }
             AccountSecondaryButton(title: "閉じる") { dismiss() }
         }
+    }
+}
+
+/// お問い合わせ履歴(自分が送った内容と自動返信)。
+struct SupportHistoryView: View {
+    @StateObject private var viewModel: SupportViewModel
+    @Binding var tabSelection: Int
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var preferences = AppPreferences.shared
+
+    init(apiClient: APIClient, tabSelection: Binding<Int>) {
+        _viewModel = StateObject(wrappedValue: SupportViewModel(apiClient: apiClient))
+        _tabSelection = tabSelection
+    }
+
+    var body: some View {
+        V5Viewport {
+            V5Header(title: "お問い合わせ履歴", back: true, onBack: { dismiss() })
+            Group {
+                switch viewModel.historyState {
+                case .loading:
+                    LoadingView(caption: "読み込み中...")
+                case .error(let message):
+                    ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { Task { await viewModel.loadHistory() } })
+                case .loaded(let requests) where requests.isEmpty:
+                    FXEmptyState(icon: "tray", title: "お問い合わせはまだありません", message: "ヘルプ・お問い合わせから送ることができます。")
+                case .loaded(let requests):
+                    ScrollView(showsIndicators: false) {
+                        VStack(spacing: 6) {
+                            ForEach(requests) { row($0) }
+                        }
+                        .padding(.vertical, 6)
+                        .frame(width: V5P.W)
+                    }
+                }
+            }
+            .frame(width: V5P.W, height: 398)
+            .position(x: V5P.W / 2, y: 54 + 398 / 2)
+            V5BottomBar(selected: $tabSelection)
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .task { await viewModel.loadHistory() }
+    }
+
+    private func row(_ request: SupportRequest) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                NotoText.text(request.kind == .feedback ? "フィードバック" : SupportCategory.label(request.category), size: 7)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1.5)
+                    .background(Capsule().fill(V5P.blue))
+                Spacer()
+                NotoText.text("\(preferences.dateString(request.createdAt)) \(preferences.timeString(request.createdAt))", size: 7)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+            }
+            NotoText.text(request.body, size: 8.5)
+                .foregroundStyle(.white)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .top, spacing: 5) {
+                Image(systemName: "arrowshape.turn.up.left.fill")
+                    .font(.system(size: 7))
+                    .foregroundStyle(V5P.cyan)
+                NotoText.text(SupportViewModel.replyText(request), size: 8)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .frame(width: 214, alignment: .leading)
+        .background(AccountCardBackground())
     }
 }

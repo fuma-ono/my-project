@@ -5,6 +5,7 @@ import {
   listRelatedFxPairsForIndicators,
   listSnapshotsForEvents,
 } from '../repositories/homeRepository.js';
+import { getHomeFxPairSymbols } from '../repositories/userSettingsRepository.js';
 import { resolveDayRangeUtc } from '../domain/timezone.js';
 import { homeQuerySchema } from '../schemas/home.js';
 import { mapEventDataStatus, type EconomicEventDbStatus } from '../domain/dataQuality.js';
@@ -30,7 +31,9 @@ export function registerHomeRoutes(app: FastifyInstance): void {
       events.map((event) => event.indicator_id),
     );
 
-    const majorFx = await listMajorFx(app.supabase);
+    // SCR-026: the user's home.fx_pairs (in that order), else the default 3.
+    const homeFxPairSymbols = await getHomeFxPairSymbols(app.supabase, request.user!.id);
+    const majorFx = await listMajorFx(app.supabase, homeFxPairSymbols);
 
     return {
       date: query.date,
@@ -43,6 +46,7 @@ export function registerHomeRoutes(app: FastifyInstance): void {
           indicator_name: event.indicator_name,
           country_code: event.country_code,
           currency_code: event.currency_code,
+          unit: event.unit,
           importance: event.importance,
           release_datetime: event.release_datetime,
           release_datetime_precision: event.release_datetime_precision,

@@ -16,6 +16,7 @@ export type ApiErrorCode =
   | 'EVENT_NOT_FOUND'
   | 'INDICATOR_NOT_FOUND'
   | 'FX_PAIR_NOT_FOUND'
+  | 'SPEECH_NOT_FOUND'
   | 'SUBSCRIPTION_REQUIRED'
   | 'FEATURE_NOT_ENTITLED'
   | 'PLAN_LIMIT_EXCEEDED';
@@ -32,6 +33,7 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   EVENT_NOT_FOUND: 404,
   INDICATOR_NOT_FOUND: 404,
   FX_PAIR_NOT_FOUND: 404,
+  SPEECH_NOT_FOUND: 404,
   SUBSCRIPTION_REQUIRED: 403,
   FEATURE_NOT_ENTITLED: 403,
   PLAN_LIMIT_EXCEEDED: 403,
@@ -75,10 +77,6 @@ export class ApiError extends Error {
     return new ApiError('FEATURE_NOT_ENTITLED', message);
   }
 
-  static internal(message = 'Internal server error.'): ApiError {
-    return new ApiError('INTERNAL_ERROR', message);
-  }
-
   /** 403: the user's plan doesn't allow this, but `requiredPlan` would
    * (api-design.md §4 / §28.1). */
   static planLimitExceeded(message: string, requiredPlan: string): ApiError {
@@ -87,5 +85,9 @@ export class ApiError extends Error {
 
   static rateLimited(message = 'Too many requests. Please try again later.'): ApiError {
     return new ApiError('RATE_LIMITED', message);
+  }
+
+  static internal(message = 'Internal server error.'): ApiError {
+    return new ApiError('INTERNAL_ERROR', message);
   }
 }

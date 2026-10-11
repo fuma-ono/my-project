@@ -139,14 +139,17 @@ final class SettingsSectionViewModel<Section: SettingsSection>: ObservableObject
 }
 
 extension SettingsSectionViewModel where Section == DisplaySettings {
-    /// HQ指示(Calendar/Settings/Accountのみ移植): 元の実装はタイムゾーンを
-    /// 変えたときの`onSaved`フックで`LocalNotificationScheduler.refresh()`
-    /// (通知しない時間帯・通知本文の時刻の再計算)を呼んでいたが、その
-    /// スケジューリング基盤自体が今回のポート対象外のため呼ばない —
-    /// 表示・地域設定の保存自体(`AppPreferences`への反映を含む)は通常どおり
-    /// 行われる。
     convenience init(apiClient: APIClient) {
-        self.init(apiClient: apiClient, section: \.display) { SettingsUpdate(display: $0) }
+        self.init(
+            apiClient: apiClient,
+            section: \.display,
+            // 通知しない時間帯と通知の本文の時刻はタイムゾーンに従うので、
+            // タイムゾーンを変えたら通知を予約し直す。
+            onSaved: { previous, saved in
+                guard previous.timezone != saved.timezone else { return }
+                Task { await LocalNotificationScheduler(apiClient: apiClient).refresh() }
+            }
+        ) { SettingsUpdate(display: $0) }
     }
 }
 

@@ -1,0 +1,333 @@
+import SwiftUI
+import UIKit
+
+/// 通知一覧。ホームの通知ベルから開く(HQ指示 2026-10-05「通知はホーム画面の
+/// 通知マークを押したらそこで確認できる仕様にして」)。端末に届いた
+/// ローカル通知(`NotificationsStore`)を新しい順に並べ、タップで指標の
+/// イベント詳細・要人発言詳細・通知設定へ進む。開いた時点で既読にし、ベルの
+/// 赤バッジを消す(この画面を開いている間は、開く前に未読だった行に印を残す)。
+///
+/// HQ指示(2026-10-06)の参考画像に合わせ、上部に種類の絞り込み、各行に種類の
+/// バッジ・発表時刻(日本時間)・受信日時を出す。
+struct NotificationListView: View {
+    let apiClient: APIClient
+    @Binding var tabSelection: Int
+    @ObservedObject private var store = NotificationsStore.shared
+    @State private var unreadIDs: Set<String> = []
+    /// 詳細画面から戻ったときに未読の印を消さないよう、最初の表示時だけ数える。
+    @State private var didCaptureUnread = false
+    @State private var now = Date()
+    /// `nil`は「すべて」。
+    @State private var filter: NotificationEntry.Kind?
+    @Environment(\.dismiss) private var dismiss
+
+    /// 絞り込み(下端78.5)との間を空ける(HQ指示 2026-10-06)。
+    private static let listTop: CGFloat = 89
+
+    var body: some View {
+        let delivered = store.delivered(now: now).filter { filter == nil || $0.kind == filter }
+        V5Viewport {
+            V5Header(title: "通知", back: true, onBack: { dismiss() })
+            filterBar
+                .position(x: V5P.W / 2, y: 68.5)
+            if delivered.isEmpty {
+                FXEmptyState(
+                    icon: "bell.slash",
+                    title: "通知はまだありません",
+                    message: "通知設定の条件に合う経済指標・要人発言の発表前にお知らせします。"
+                )
+                .frame(width: V5P.W, height: 452 - Self.listTop, alignment: .center)
+                .position(x: V5P.W / 2, y: (Self.listTop + 452) / 2)
+            } else {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 4) {
+                        ForEach(delivered) { entry in
+                            NavigationLink(value: Self.route(for: entry)) {
+                                NotificationRow(entry: entry, isUnread: unreadIDs.contains(entry.id))
+                            }
+                            .buttonStyle(SettingsRowPressStyle())
+                        }
+                    }
+                    .padding(.bottom, 4)
+                    .frame(width: V5P.W)
+                }
+                .frame(width: V5P.W, height: 452 - Self.listTop)
+                .position(x: V5P.W / 2, y: (Self.listTop + 452) / 2)
+            }
+            V5BottomBar(selected: $tabSelection)
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .onAppear {
+            now = Date()
+            if !didCaptureUnread {
+                unreadIDs = Set(store.delivered(now: now).filter { store.isUnread($0) }.map(\.id))
+                didCaptureUnread = true
+            }
+            store.markAllRead(now: now)
+        }
+        .task {
+            // 開いている間に一覧を取り直す(新しく届いた分も並べる)。
+            await LocalNotificationScheduler(apiClient: apiClient).refresh()
+            now = Date()
+            store.markAllRead(now: now)
+        }
+    }
+
+    private var filterBar: some View {
+        HStack(spacing: 4) {
+            filterChip(label: "すべて", kind: nil)
+            ForEach(NotificationEntry.Kind.allCases, id: \.self) { kind in
+                filterChip(label: kind.label, kind: kind)
+            }
+        }
+        .frame(width: 214)
+    }
+
+    private func filterChip(label: String, kind: NotificationEntry.Kind?) -> some View {
+        let isSelected = filter == kind
+        return Button { filter = kind } label: {
+            NotoText.text(label, size: 8)
+                .foregroundStyle(isSelected ? .white : SettingsCardStyle.subtitleColor)
+                .frame(maxWidth: .infinity)
+                .frame(height: 20)
+                .background(
+                    Capsule().fill(isSelected ? V5P.blue : SettingsCardStyle.cardFill)
+                )
+                .overlay(
+                    Capsule().stroke(isSelected ? V5P.blue : SettingsCardStyle.cardBorder, lineWidth: 0.6)
+                )
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    static func route(for entry: NotificationEntry) -> AppRoute {
+        switch entry.kind {
+        case .indicator: return .eventDetail(id: entry.targetID)
+        case .speech: return .speechDetail(id: entry.targetID)
+        case .system:
+            // お問い合わせへの返信は履歴へ、それ以外(通知設定の更新)は通知設定へ。
+            return entry.targetID.hasPrefix(SupportViewModel.notificationTargetPrefix) ? .supportHistory : .notificationSettings
+        }
+    }
+}
+
+private struct NotificationRow: View {
+    let entry: NotificationEntry
+    let isUnread: Bool
+
+    /// 日付・時刻の表示形式とタイムゾーンは表示・地域設定(SCR-018)に従う。
+    @ObservedObject private var preferences = AppPreferences.shared
+
+    private var receivedText: String {
+        "\(preferences.shortDateString(entry.notifyAt)) \(preferences.timeString(entry.notifyAt))"
+    }
+
+    private var icon: String {
+        switch entry.kind {
+        case .indicator: return "calendar"
+        case .speech: return "person.fill"
+        case .system: return "bell.fill"
+        }
+    }
+
+    private var badgeColor: Color {
+        switch entry.kind {
+        case .indicator: return V5P.blue
+        case .speech: return Color(red: 0.42, green: 0.30, blue: 0.92)
+        case .system: return Color(red: 0.05, green: 0.58, blue: 0.42)
+        }
+    }
+
+    private var headline: String {
+        switch entry.kind {
+        // 国名の略記(「米)」など)は付けない(HQ指示 2026-10-06)。
+        case .indicator:
+            return entry.subject ?? entry.title
+        case .speech:
+            return entry.speakerName.map { "\($0) 発言" } ?? entry.title
+        case .system:
+            return entry.title
+        }
+    }
+
+    /// 1行に収まらないときだけ使う短い表示名(詳細画面は正式名称のまま)。
+    private var shortHeadline: String {
+        entry.kind == .indicator ? IndicatorShortName.shorten(headline) : headline
+    }
+
+    /// 発表の何分前に届いたか(「発表の5分前です」)。
+    private var timing: String {
+        let noun = entry.kind == .speech ? "発言" : "発表"
+        let minutes = Int((entry.scheduledAt.timeIntervalSince(entry.notifyAt) / 60).rounded())
+        return minutes <= 0 ? "まもなく\(noun)です" : "\(noun)の\(minutes)分前です"
+    }
+
+    private var lines: [String] {
+        // 参考画像の「発表時刻：21:30（日本時間）」。
+        let time = preferences.timeString(entry.scheduledAt) + preferences.timeZoneNote
+        switch entry.kind {
+        case .indicator:
+            return ["発表時刻：\(time)", timing]
+        case .speech:
+            return ["「\(entry.subject ?? entry.title)」", "発言時刻：\(time)"]
+        case .system:
+            return [entry.body]
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(V5P.cyan)
+                .frame(width: 24, height: 24)
+                .background(RoundedRectangle(cornerRadius: 6).fill(SettingsCardStyle.cardFill))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
+            // 説明の行を6.5にしても枠の高さが変わらないよう、行の間を詰めている。
+            VStack(alignment: .leading, spacing: 0.5) {
+                NotoText.text(entry.kind.label, size: 5.5)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(badgeColor))
+                NotificationHeadline(full: headline, short: shortHeadline)
+                ForEach(lines, id: \.self) { line in
+                    // 時刻の数字も日本語と同じフォント・大きさで揃える(HQ指示 2026-10-06)。
+                    NotoText.text(line, size: 6.5)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .lineLimit(1)
+                }
+            }
+            // 重要度は「＞」の横に置く(HQ指示 2026-10-06)。列の幅を固定して
+            // 見出しの幅(`NotificationHeadline.width`)を一定にする。
+            HStack(spacing: 4) {
+                if entry.kind != .system {
+                    ImportanceBadge(importance: entry.importance)
+                }
+                // 「＞」は見出し(8.5)と同じ大きさ(HQ指示 2026-10-06)。
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8.5, weight: .semibold))
+                    .foregroundStyle(SettingsCardStyle.chevronColor)
+            }
+            .frame(width: NotificationRowLayout.trailingWidth, alignment: .trailing)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .frame(width: 214, alignment: .leading)
+        .background(AccountCardBackground())
+        // 受信日時はカードの右上(シェブロンの上)に、字間を詰めて置く。
+        .overlay(alignment: .topTrailing) {
+            NotoText.text(receivedText, size: 7)
+                .tracking(-0.3)
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                .padding(.top, 4)
+                .padding(.trailing, 8)
+        }
+        .overlay(alignment: .topLeading) {
+            if isUnread {
+                Circle().fill(V5P.red).frame(width: 5, height: 5).offset(x: 4, y: 4)
+            }
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(isUnread ? "未読" : "")
+    }
+}
+
+private enum NotificationRowLayout {
+    /// 右端の列(重要度バッジ(幅32)+間隔+「＞」)の幅。
+    static let trailingWidth: CGFloat = 42
+}
+
+/// 重要度のバッジ。ホーム画面と同じ「HIGH / MEDIUM / LOW」の表記・色・形
+/// (HQ指示 2026-10-06)。色・形はHomeViewの`importanceBadgeColors` /
+/// `statusBadge`と同じ(幅32で揃え、字間を詰めた太字)。
+private struct ImportanceBadge: View {
+    let importance: String
+
+    private var colors: (fill: Color, border: Color) {
+        switch importance {
+        case "HIGH":
+            return (Color(red: 185.0 / 255, green: 13.0 / 255, blue: 60.0 / 255), Color(red: 230.0 / 255, green: 80.0 / 255, blue: 120.0 / 255))
+        case "MEDIUM":
+            return (Color(red: 190.0 / 255, green: 135.0 / 255, blue: 20.0 / 255), Color(red: 230.0 / 255, green: 180.0 / 255, blue: 70.0 / 255))
+        default:
+            return (Color(red: 15.0 / 255, green: 42.0 / 255, blue: 85.0 / 255), Color(red: 50.0 / 255, green: 100.0 / 255, blue: 180.0 / 255))
+        }
+    }
+
+    var body: some View {
+        Text(importance)
+            .font(.system(size: 7, weight: .bold))
+            .tracking(-0.4)
+            .foregroundStyle(.white)
+            .frame(width: 32)
+            .padding(.vertical, 3)
+            .background(colors.fill, in: Capsule())
+            .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
+    }
+}
+
+/// 指標名などの見出し。HQ指示(2026-10-06)「文字が長い場合は2行にしなくて
+/// いい」「…で途中を切るのは原則なし」。1行に収まらない名称だけ短い表示名に
+/// 変換し、それでも収まらなければ少し縮める。
+private struct NotificationHeadline: View {
+    let full: String
+    let short: String
+
+    private static let size: CGFloat = 8.5
+    /// 見出しに使える幅。行の幅214から、左右の余白(9×2)・アイコン(24)・
+    /// 間隔(8×2)・右端の重要度と「＞」の列を引いた値。
+    private static let width: CGFloat = 196 - 24 - 16 - NotificationRowLayout.trailingWidth
+
+    var body: some View {
+        NotoText.text(Self.fitsInOneLine(full) ? full : short, size: Self.size)
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 表示と同じく、全体をNoto Sans JPで組んだときに1行に収まるか。
+    static func fitsInOneLine(_ text: String) -> Bool {
+        let font = UIFont(name: "NotoSansJP-SemiBold", size: size) ?? .systemFont(ofSize: size, weight: .semibold)
+        let attributed = NSAttributedString(string: text, attributes: [.font: font])
+        return attributed.size().width <= width
+    }
+}
+
+/// 長い指標の正式名称を、一般的な略称に置き換える。
+enum IndicatorShortName {
+    private static let replacements: [(String, String)] = [
+        ("Consumer Price Index", "CPI"),
+        ("Producer Price Index", "PPI"),
+        ("Gross Domestic Product", "GDP"),
+        ("Purchasing Managers' Index", "PMI"),
+        ("Purchasing Managers Index", "PMI"),
+        ("Personal Consumption Expenditures", "PCE"),
+        ("Nonfarm Payrolls", "NFP"),
+        ("Non-Farm Payrolls", "NFP"),
+        ("Federal Open Market Committee", "FOMC"),
+        ("Interest Rate Decision", "Rate Decision"),
+        ("Year over Year", "YoY"),
+        ("Month over Month", "MoM"),
+        ("消費者物価指数", "CPI"),
+        ("生産者物価指数", "PPI"),
+        ("国内総生産", "GDP"),
+        ("購買担当者景気指数", "PMI"),
+        ("個人消費支出", "PCE"),
+        ("非農業部門雇用者数", "雇用統計"),
+        ("政策金利発表", "政策金利"),
+    ]
+
+    static func shorten(_ name: String) -> String {
+        // 「日本CPI(消費者物価指数)」のような日本語の補足のかっこは外す
+        // (略称に置き換えると「日本CPI(CPI)」になってしまうため)。
+        let trimmed = name.replacingOccurrences(of: #"\s*[(（][^)）]*\p{Han}[^)）]*[)）]"#, with: "", options: .regularExpression)
+        return replacements.reduce(trimmed) { result, pair in
+            result.replacingOccurrences(of: pair.0, with: pair.1, options: .caseInsensitive)
+        }
+    }
+}

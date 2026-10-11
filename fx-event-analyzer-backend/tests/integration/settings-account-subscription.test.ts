@@ -1,6 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FEATURE_CODES } from '../../src/authorization/entitlements.js';
 import {
+  createTestSignedDataVerifier,
+  MONTHLY_PRODUCT_ID,
+  renewalInfoPayload,
+  signAppStorePayload,
+  transactionPayload,
+} from '../helpers/storekitFixtures.js';
+import {
   buildIntegrationContext,
   createTestUser,
   deleteTestUser,
@@ -38,22 +45,11 @@ const DEFAULT_CHART = {
   price_line: true,
 };
 
-/**
- * SCR-018〜026 Backend (HQ確定 2026-10-02): /settings, GET/PATCH/DELETE /account.
- *
- * HQ指示 (Calendar/Settings/Accountのみ移植): 元ファイル名の末尾
- * "-subscription" が示す `POST /subscription/verify` 一式(StoreKit署名検証、
- * tests/helpers/storekitFixtures.ts)はこのポートの対象外(サブスクリプション
- * 購入機能は別途除外)のため削除した。同じ理由で「SCR-026 ホーム通貨ペア編集
- * (settings.home.fx_pairs → GET /home major_fx)」ブロックも削除した —
- * settings.home.fx_pairsの保存自体はここでテストするsettings.homeの
- * レスポンスで検証できるが、GET /homeがそれを実際に反映するにはroutes/home.ts
- * 側の変更(homeFxPairs domain)が必要で、それはHome機能の範囲のため今回は
- * 手を付けていない。DELETE /accountのカスケード削除テストは
- * subscriptions/entitlementsの存在を検証する点は保ちつつ、StoreKit検証の
- * 代わりにservice_role経由で直接1行挿入する形に書き換えた。
- */
-describe.skipIf(!integration)('Settings / account', () => {
+/** SCR-018〜026 Backend (HQ確定 2026-10-02): /settings, GET/PATCH/DELETE /account,
+ * POST /subscription/verify. StoreKit data is signed by
+ * the throwaway chain from tests/helpers/storekitFixtures.ts, which this
+ * app instance is told to trust. */
+describe.skipIf(!integration)('Settings / account deletion / App Store subscription', () => {
   let ctx: IntegrationContext;
   const users: TestUser[] = [];
 
@@ -69,7 +65,7 @@ describe.skipIf(!integration)('Settings / account', () => {
   }
 
   beforeAll(() => {
-    ctx = buildIntegrationContext(integration!);
+    ctx = buildIntegrationContext(integration!, { signedDataVerifier: createTestSignedDataVerifier() });
   });
 
   afterAll(async () => {
@@ -78,6 +74,36 @@ describe.skipIf(!integration)('Settings / account', () => {
     }
     await ctx.app.close();
   });
+
+  function originalTransactionId(): string {
+    return `${Date.now()}${Math.floor(Math.random() * 1_000_000)}`;
+  }
+
+  async function verify(
+    headers: { authorization: string },
+    tx: Record<string, unknown>,
+    renewal: Record<string, unknown> | null,
+  ) {
+    return ctx.app.inject({
+      method: 'POST',
+      url: '/api/v1/subscription/verify',
+      headers,
+      payload: {
+        signed_transaction: await signAppStorePayload(tx),
+        ...(renewal ? { signed_renewal_info: await signAppStorePayload(renewal) } : {}),
+      },
+    });
+  }
+
+  async function advancedStatsEntitlement(userId: string) {
+    const { data } = await ctx.serviceClient
+      .from('entitlements')
+      .select('enabled')
+      .eq('user_id', userId)
+      .eq('feature_code', FEATURE_CODES.VIEW_ADVANCED_STATS)
+      .maybeSingle();
+    return data;
+  }
 
   describe('GET/PATCH /settings (api-design.md §24.4/§24.5)', () => {
     it('returns the column defaults on first access', async () => {
@@ -100,9 +126,7 @@ describe.skipIf(!integration)('Settings / account', () => {
       // SCR-018 / SCR-019 (20261006000002_display_chart_settings_v2.sql).
       expect(JSON.parse(response.body).display).toEqual(DEFAULT_DISPLAY);
       expect(JSON.parse(response.body).chart).toEqual(DEFAULT_CHART);
-      // SCR-026 (20261007000003_home_fx_pairs.sql): null = default. GET /home
-      // does not yet read this value back (Home機能側は対象外、上記参照) —
-      // ここでは保存ができることだけを検証する。
+      // SCR-026 (20261007000003_home_fx_pairs.sql): null = default.
       expect(JSON.parse(response.body).home).toEqual({ fx_pairs: null });
     });
 
@@ -310,6 +334,94 @@ describe.skipIf(!integration)('Settings / account', () => {
     });
   });
 
+  describe('SCR-026 ホーム通貨ペア編集 (settings.home.fx_pairs → GET /home major_fx)', () => {
+    const HOME_URL = '/api/v1/home?date=2026-09-10&timezone=UTC';
+
+    async function majorFxSymbols(headers: { authorization: string }): Promise<string[]> {
+      const response = await ctx.app.inject({ method: 'GET', url: HOME_URL, headers });
+      expect(response.statusCode).toBe(200);
+      return JSON.parse(response.body).major_fx.map((row: { symbol: string }) => row.symbol);
+    }
+
+    it('shows USDJPY, EURUSD, EURJPY by default, with the unchanged row shape', async () => {
+      const { headers } = await newUser();
+      expect(await majorFxSymbols(headers)).toEqual(['USDJPY', 'EURUSD', 'EURJPY']);
+
+      const body = JSON.parse((await ctx.app.inject({ method: 'GET', url: HOME_URL, headers })).body);
+      expect(Object.keys(body.major_fx[0]).sort()).toEqual(
+        ['change', 'change_percent', 'fx_pair_id', 'price', 'symbol', 'timestamp'].sort(),
+      );
+      expect(body.major_fx[0]).toMatchObject({ fx_pair_id: '20000000-0000-0000-0000-000000000001', symbol: 'USDJPY' });
+    });
+
+    it('returns exactly the saved pairs in the saved order, and null resets to the default', async () => {
+      const { headers } = await newUser();
+      const patch = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/api/v1/settings',
+        headers,
+        payload: { home: { fx_pairs: ['GBPJPY', 'USDJPY', 'AUDUSD'] } },
+      });
+      expect(patch.statusCode).toBe(200);
+      expect(JSON.parse(patch.body).home).toEqual({ fx_pairs: ['GBPJPY', 'USDJPY', 'AUDUSD'] });
+      expect(await majorFxSymbols(headers)).toEqual(['GBPJPY', 'USDJPY', 'AUDUSD']);
+
+      // A pair without price data reports nulls; USDJPY keeps its seed candle.
+      const body = JSON.parse((await ctx.app.inject({ method: 'GET', url: HOME_URL, headers })).body);
+      expect(body.major_fx[0]).toEqual({
+        fx_pair_id: '20000000-0000-0000-0000-000000000004',
+        symbol: 'GBPJPY',
+        price: null,
+        change: null,
+        change_percent: null,
+        timestamp: null,
+      });
+      expect(body.major_fx[1].price).not.toBeNull();
+
+      // Partial PATCH of another section keeps home.fx_pairs.
+      await ctx.app.inject({
+        method: 'PATCH',
+        url: '/api/v1/settings',
+        headers,
+        payload: { display: { theme: 'DARK' } },
+      });
+      expect(await majorFxSymbols(headers)).toEqual(['GBPJPY', 'USDJPY', 'AUDUSD']);
+
+      const reset = await ctx.app.inject({
+        method: 'PATCH',
+        url: '/api/v1/settings',
+        headers,
+        payload: { home: { fx_pairs: null } },
+      });
+      expect(reset.statusCode).toBe(200);
+      expect(JSON.parse(reset.body).home.fx_pairs).toBeNull();
+      expect(await majorFxSymbols(headers)).toEqual(['USDJPY', 'EURUSD', 'EURJPY']);
+    });
+
+    it('rejects an empty / >3 / duplicate / unknown home.fx_pairs with 422 and saves nothing', async () => {
+      const { headers } = await newUser();
+      for (const fx_pairs of [
+        [],
+        ['USDJPY', 'EURUSD', 'EURJPY', 'GBPJPY'],
+        ['USDJPY', 'USDJPY'],
+        ['USDJPY', 'XXXYYY'],
+      ]) {
+        const response = await ctx.app.inject({
+          method: 'PATCH',
+          url: '/api/v1/settings',
+          headers,
+          payload: { home: { fx_pairs }, display: { theme: 'DARK' } },
+        });
+        expect(response.statusCode).toBe(422);
+        expect(JSON.parse(response.body).error.code).toBe('VALIDATION_ERROR');
+      }
+
+      const body = JSON.parse((await ctx.app.inject({ method: 'GET', url: '/api/v1/settings', headers })).body);
+      expect(body.home).toEqual({ fx_pairs: null });
+      expect(body.display.theme).toBe('SYSTEM');
+    });
+  });
+
   describe('GET/PATCH /account (api-design.md §24.1/§24.2)', () => {
     it('returns an empty profile for a brand-new user instead of 404', async () => {
       const { user, headers } = await newUser();
@@ -347,13 +459,11 @@ describe.skipIf(!integration)('Settings / account', () => {
     it('deletes the auth user and everything that cascades from it', async () => {
       const { user, headers } = await newUser();
       await ctx.app.inject({ method: 'GET', url: '/api/v1/settings', headers }); // creates user_settings
-      // StoreKit検証(POST /subscription/verify)は対象外のため、
-      // subscriptions/entitlementsの行はservice_role経由で直接作る。
-      const subscription = await ctx.serviceClient
-        .from('subscriptions')
-        .insert({ user_id: user.id, status: 'ACTIVE', started_at: new Date().toISOString() });
-      expect(subscription.error).toBeNull();
-      await grantEntitlement(ctx, user.id, FEATURE_CODES.VIEW_ADVANCED_STATS);
+      const id = originalTransactionId();
+      expect((await verify(headers, transactionPayload(user.id, { originalTransactionId: id }), null)).statusCode).toBe(
+        200,
+      );
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: true }); // subscriptions + entitlements rows exist
 
       const response = await ctx.app.inject({ method: 'DELETE', url: '/api/v1/account', headers });
       expect(response.statusCode).toBe(204);
@@ -368,6 +478,118 @@ describe.skipIf(!integration)('Settings / account', () => {
       expect(subscriptions).toEqual([]);
       const { data: entitlements } = await ctx.serviceClient.from('entitlements').select('id').eq('user_id', user.id);
       expect(entitlements).toEqual([]);
+    });
+  });
+
+  describe('POST /subscription/verify (api-design.md §25.1)', () => {
+    it('stores an active Pro subscription and grants VIEW_ADVANCED_STATS', async () => {
+      const { user, headers } = await newUser();
+      const id = originalTransactionId();
+      const response = await verify(
+        headers,
+        transactionPayload(user.id, { originalTransactionId: id }),
+        renewalInfoPayload({ originalTransactionId: id }),
+      );
+      expect(response.statusCode).toBe(200);
+      const verified = JSON.parse(response.body);
+      expect(verified).toMatchObject({ plan: 'PRO', status: 'ACTIVE', product_id: MONTHLY_PRODUCT_ID });
+
+      const current = JSON.parse((await ctx.app.inject({ method: 'GET', url: '/api/v1/subscription', headers })).body);
+      expect(current).toMatchObject({ plan: 'PRO', status: 'ACTIVE' });
+      // Same shape as GET /subscription (api-design.md §25.1, v1.11).
+      expect(Object.keys(verified).sort()).toEqual(Object.keys(current).sort());
+      expect(verified.product_id).toBe(current.product_id);
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: true });
+    });
+
+    it('treats a free trial as current and grants VIEW_ADVANCED_STATS', async () => {
+      const { user, headers } = await newUser();
+      const id = originalTransactionId();
+      const response = await verify(
+        headers,
+        transactionPayload(user.id, { originalTransactionId: id, offerType: 1, offerDiscountType: 'FREE_TRIAL' }),
+        renewalInfoPayload({ originalTransactionId: id }),
+      );
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.body)).toMatchObject({ plan: 'PRO', status: 'TRIAL' });
+
+      const current = JSON.parse((await ctx.app.inject({ method: 'GET', url: '/api/v1/subscription', headers })).body);
+      expect(current).toMatchObject({ plan: 'PRO', status: 'TRIAL' });
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: true });
+    });
+
+    it('is idempotent for the same subscription and keeps PRO while CANCELED', async () => {
+      const { user, headers } = await newUser();
+      const id = originalTransactionId();
+      const tx = transactionPayload(user.id, { originalTransactionId: id });
+      expect((await verify(headers, tx, renewalInfoPayload({ originalTransactionId: id }))).statusCode).toBe(200);
+
+      const canceled = await verify(headers, tx, renewalInfoPayload({ originalTransactionId: id, autoRenewStatus: 0 }));
+      expect(canceled.statusCode).toBe(200);
+      expect(JSON.parse(canceled.body).status).toBe('CANCELED');
+
+      const current = JSON.parse((await ctx.app.inject({ method: 'GET', url: '/api/v1/subscription', headers })).body);
+      expect(current).toMatchObject({ plan: 'PRO', status: 'CANCELED' });
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: true });
+
+      const { count } = await ctx.serviceClient
+        .from('subscriptions')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+      expect(count).toBe(1);
+    });
+
+    it('revokes PRO when the subscription has expired', async () => {
+      const { user, headers } = await newUser();
+      const id = originalTransactionId();
+      await verify(headers, transactionPayload(user.id, { originalTransactionId: id }), null);
+
+      const expired = await verify(
+        headers,
+        transactionPayload(user.id, { originalTransactionId: id, expiresDate: Date.now() - 1000 }),
+        null,
+      );
+      expect(expired.statusCode).toBe(200);
+      expect(JSON.parse(expired.body).status).toBe('EXPIRED');
+
+      const current = JSON.parse((await ctx.app.inject({ method: 'GET', url: '/api/v1/subscription', headers })).body);
+      expect(current.plan).toBe('FREE');
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: false });
+    });
+
+    it('rejects a transaction bought by another account with 403', async () => {
+      const { headers } = await newUser();
+      const { user: other } = await newUser();
+      const response = await verify(
+        headers,
+        transactionPayload(other.id, { originalTransactionId: originalTransactionId() }),
+        null,
+      );
+      expect(response.statusCode).toBe(403);
+    });
+
+    it('rejects a subscription already linked to another account with 409', async () => {
+      const { user: first, headers: firstHeaders } = await newUser();
+      const { user: second, headers: secondHeaders } = await newUser();
+      const id = originalTransactionId();
+      expect(
+        (await verify(firstHeaders, transactionPayload(first.id, { originalTransactionId: id }), null)).statusCode,
+      ).toBe(200);
+
+      const response = await verify(secondHeaders, transactionPayload(second.id, { originalTransactionId: id }), null);
+      expect(response.statusCode).toBe(409);
+      expect(JSON.parse(response.body).error.code).toBe('CONFLICT');
+    });
+
+    it('rejects data not signed by the trusted chain with 422', async () => {
+      const { headers } = await newUser();
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/api/v1/subscription/verify',
+        headers,
+        payload: { signed_transaction: 'not-a-jws' },
+      });
+      expect(response.statusCode).toBe(422);
     });
   });
 });

@@ -12,17 +12,25 @@ import {
 
 const integration = loadIntegrationEnv();
 
-/**
- * FREE / PRO usage limits (HQ決定 2026-10-08, api-design.md §28.1).
- *
- * HQ指示 (Calendar/Settings/Accountのみ移植): 元ファイルにあった
- * `GET /notifications/upcoming`(端末内ローカル通知の予約基盤、対象外)と
- * `GET /indicators/{id}/comparison history_limit`(SCR-009 過去イベント比較、
- * Home/指標詳細側、今回のポート対象外でroutes/historical.ts等は未変更)の
- * 2ブロックは移植しない。history_limit用の履歴イベントseed(beforeAll)も
- * それ専用だったため合わせて削除した。GET /entitlements と
- * PATCH /settings notifications の2ブロックは対象 (Settings/Account)。
- */
+// Seed fixtures (supabase/seed.sql).
+const US_NFP_INDICATOR_ID = '10000000-0000-0000-0000-000000000002'; // no RELEASED event in seed.sql
+const USDJPY_FX_PAIR_ID = '20000000-0000-0000-0000-000000000001';
+const POWELL_SCHEDULED_SPEECH_ID = '50000000-0000-0000-0000-000000000004'; // 2026-10-14T16:00Z, HIGH, USD
+const UEDA_SCHEDULED_SPEECH_ID = '50000000-0000-0000-0000-000000000005'; // 2026-10-16T01:00Z, MEDIUM, JPY
+
+// Test-only RELEASED US NFP events, 2015-01 … 2015-07 (one per month).
+// RELEASE snapshots are immutable (DB trigger), so these rows are never
+// deleted — upserted with ignoreDuplicates so a rerun against the same
+// local DB still works. CI starts from a fresh `supabase db reset`.
+const HISTORY_EVENTS = Array.from({ length: 7 }, (_, index) => ({
+  id: `3d000000-0000-0000-0000-00000000000${index + 1}`,
+  release_datetime: `2015-0${index + 1}-09T13:30:00Z`,
+}));
+const MOST_RECENT_FIRST = [...HISTORY_EVENTS].reverse().map((event) => event.id);
+
+const WINDOW = 'from=2026-10-13T00:00:00Z&to=2026-10-20T00:00:00Z';
+
+/** FREE / PRO usage limits (HQ決定 2026-10-08, api-design.md §28.1). */
 describe.skipIf(!integration)('Plan limits (FREE / PRO)', () => {
   let ctx: IntegrationContext;
   const users: TestUser[] = [];
@@ -43,8 +51,57 @@ describe.skipIf(!integration)('Plan limits (FREE / PRO)', () => {
     return { status: response.statusCode, body: JSON.parse(response.body) };
   }
 
-  beforeAll(() => {
+  beforeAll(async () => {
     ctx = buildIntegrationContext(integration!);
+    const events = await ctx.serviceClient.from('economic_events').upsert(
+      HISTORY_EVENTS.map((event, index) => ({
+        id: event.id,
+        indicator_id: US_NFP_INDICATOR_ID,
+        provider: 'integration-test',
+        provider_event_id: `plan-limits-history-${index + 1}`,
+        release_datetime: event.release_datetime,
+        release_datetime_precision: 'EXACT',
+        importance: 'HIGH',
+        status: 'RELEASED',
+        data_status: 'AVAILABLE',
+      })),
+      { onConflict: 'id', ignoreDuplicates: true },
+    );
+    if (events.error) throw new Error(`Failed to insert history events: ${events.error.message}`);
+
+    const snapshots = await ctx.serviceClient.from('event_snapshots').upsert(
+      HISTORY_EVENTS.map((event, index) => ({
+        event_id: event.id,
+        snapshot_type: 'RELEASE',
+        forecast: 200 + index,
+        actual: 210 + index,
+        previous: 190 + index,
+        unit: 'K',
+        source: 'integration-test',
+        captured_at: event.release_datetime,
+        surprise: 10,
+        surprise_direction: 'POSITIVE',
+      })),
+      { onConflict: 'event_id,snapshot_type', ignoreDuplicates: true },
+    );
+    if (snapshots.error) throw new Error(`Failed to insert history snapshots: ${snapshots.error.message}`);
+
+    const reactions = await ctx.serviceClient.from('event_price_reactions').upsert(
+      HISTORY_EVENTS.map((event, index) => ({
+        event_id: event.id,
+        fx_pair_id: USDJPY_FX_PAIR_ID,
+        timeframe: '5m',
+        pre_release_price: 120,
+        post_release_price: 120.1 + index * 0.01,
+        movement: 0.1 + index * 0.01,
+        pips: 10 + index,
+        change_percent: 0.08,
+        data_status: 'AVAILABLE',
+        calculated_at: event.release_datetime,
+      })),
+      { onConflict: 'event_id,fx_pair_id,timeframe', ignoreDuplicates: true },
+    );
+    if (reactions.error) throw new Error(`Failed to insert history reactions: ${reactions.error.message}`);
   });
 
   afterAll(async () => {
@@ -141,6 +198,95 @@ describe.skipIf(!integration)('Plan limits (FREE / PRO)', () => {
       expect(status).toBe(200);
       expect(body.notifications.importances).toEqual(['HIGH', 'MEDIUM', 'LOW']);
       expect((await request('PATCH', '/settings', headers, { notifications: { fx_pairs: null } })).status).toBe(200);
+    });
+  });
+
+  describe('GET /notifications/upcoming', () => {
+    type Item = { id: string; importance: string; related_fx_pairs: string[] };
+    const ids = (items: Item[]) => items.map((item) => item.id);
+
+    it('FREE with the default settings: HIGH only, USDJPY only', async () => {
+      const { headers } = await newUser('FREE');
+      const { status, body } = await request('GET', `/notifications/upcoming?${WINDOW}`, headers);
+      expect(status).toBe(200);
+      const items: Item[] = body.items;
+      expect(ids(items)).toContain(POWELL_SCHEDULED_SPEECH_ID);
+      expect(ids(items)).not.toContain(UEDA_SCHEDULED_SPEECH_ID);
+      expect(items.every((item) => item.importance === 'HIGH' && item.related_fx_pairs.includes('USDJPY'))).toBe(true);
+    });
+
+    it('PRO with the default settings also gets MEDIUM', async () => {
+      const { headers } = await newUser('PRO');
+      const { body } = await request('GET', `/notifications/upcoming?${WINDOW}`, headers);
+      expect(ids(body.items)).toEqual(expect.arrayContaining([POWELL_SCHEDULED_SPEECH_ID, UEDA_SCHEDULED_SPEECH_ID]));
+    });
+
+    it('a lapsed PRO user is evaluated with the FREE limits, whatever is stored', async () => {
+      const { user, headers } = await newUser('PRO');
+      const saved = await request('PATCH', '/settings', headers, {
+        notifications: { importances: ['MEDIUM'], fx_pairs: ['EURJPY', 'USDJPY'] },
+      });
+      expect(saved.status).toBe(200);
+      await ctx.serviceClient
+        .from('entitlements')
+        .update({ enabled: false })
+        .eq('user_id', user.id)
+        .eq('feature_code', FEATURE_CODES.VIEW_ADVANCED_STATS);
+
+      const { body } = await request('GET', `/notifications/upcoming?${WINDOW}`, headers);
+      const items: Item[] = body.items;
+      // MEDIUM → HIGH; only the first stored pair (EURJPY) — Powell's USD pairs don't include it.
+      expect(ids(items)).not.toContain(UEDA_SCHEDULED_SPEECH_ID);
+      expect(ids(items)).not.toContain(POWELL_SCHEDULED_SPEECH_ID);
+      expect(items.every((item) => item.importance === 'HIGH' && item.related_fx_pairs.includes('EURJPY'))).toBe(true);
+      // The stored settings themselves are untouched.
+      expect((await request('GET', '/settings', headers)).body.notifications).toMatchObject({
+        importances: ['MEDIUM'],
+        fx_pairs: ['EURJPY', 'USDJPY'],
+      });
+    });
+  });
+
+  describe('GET /indicators/{id}/comparison history_limit', () => {
+    const url = (query: string) =>
+      `/indicators/${US_NFP_INDICATOR_ID}/comparison?fx_pair_id=${USDJPY_FX_PAIR_ID}&${query}`;
+    const historyFeatures = [FEATURE_CODES.VIEW_HISTORICAL];
+
+    it('FREE uses only the 5 most recent releases, for stats and events alike', async () => {
+      const { headers } = await newUser('FREE', historyFeatures);
+      const { status, body } = await request('GET', url('timeframe=5m'), headers);
+      expect(status).toBe(200);
+      expect(body.total_events).toBe(5);
+      expect(body.analyzable_events).toBe(5);
+      expect(body.stats.upward_count).toBe(5);
+      expect(body.events.map((event: { event_id: string }) => event.event_id)).toEqual(MOST_RECENT_FIRST.slice(0, 5));
+      expect(body.meta).toEqual({ page: 1, limit: 20, total: 5, has_next: false });
+      expect(body.history_limit).toEqual({ applied: 5, max_for_plan: 5, pro_max: 20 });
+    });
+
+    it('FREE pagination stops at the cap', async () => {
+      const { headers } = await newUser('FREE', historyFeatures);
+      const second = await request('GET', url('timeframe=5m&page=2&limit=3'), headers);
+      expect(second.body.events.map((event: { event_id: string }) => event.event_id)).toEqual(
+        MOST_RECENT_FIRST.slice(3, 5),
+      );
+      expect(second.body.meta).toEqual({ page: 2, limit: 3, total: 5, has_next: false });
+
+      const third = await request('GET', url('timeframe=5m&page=3&limit=3'), headers);
+      expect(third.body.events).toEqual([]);
+      expect(third.body.meta.total).toBe(5);
+    });
+
+    it('PRO uses every release up to 20 (timeframe=all too)', async () => {
+      const { headers } = await newUser('PRO', historyFeatures);
+      const single = await request('GET', url('timeframe=5m'), headers);
+      expect(single.body.total_events).toBe(7);
+      expect(single.body.events).toHaveLength(7);
+      expect(single.body.history_limit).toEqual({ applied: 7, max_for_plan: 20, pro_max: 20 });
+
+      const all = await request('GET', url('timeframe=all'), headers);
+      expect(all.status).toBe(200);
+      expect(all.body.history_limit).toEqual({ applied: 7, max_for_plan: 20, pro_max: 20 });
     });
   });
 });

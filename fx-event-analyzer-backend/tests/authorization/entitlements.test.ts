@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { FEATURE_CODES, hasEntitlement, requireEntitlement } from '../../src/authorization/entitlements.js';
+import {
+  FEATURE_CODES,
+  hasEntitlement,
+  listActiveFeatureCodes,
+  requireEntitlement,
+} from '../../src/authorization/entitlements.js';
+import { resolvePlan } from '../../src/authorization/plan.js';
 import { ApiError } from '../../src/errors/ApiError.js';
 import { fakeSupabaseClient } from '../helpers/fakeSupabaseClient.js';
 
@@ -83,5 +89,43 @@ describe('requireEntitlement', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(ApiError);
     }
+  });
+});
+
+describe('listActiveFeatureCodes / resolvePlan', () => {
+  it('lists only active rows', async () => {
+    const supabase = fakeSupabaseClient({
+      entitlements: [
+        { user_id: USER, feature_code: 'VIEW_BASIC_EVENT', enabled: true, expires_at: null },
+        { user_id: USER, feature_code: 'VIEW_HISTORICAL', enabled: false, expires_at: null },
+        { user_id: USER, feature_code: 'VIEW_MARKET_REACTION', enabled: true, expires_at: '2020-01-01T00:00:00Z' },
+      ],
+    });
+    await expect(listActiveFeatureCodes(supabase, USER)).resolves.toEqual(['VIEW_BASIC_EVENT']);
+  });
+
+  it('is PRO with an active VIEW_ADVANCED_STATS, FREE otherwise (disabled / expired / none)', async () => {
+    const row = (enabled: boolean, expires_at: string | null) => ({
+      user_id: USER,
+      feature_code: 'VIEW_ADVANCED_STATS',
+      enabled,
+      expires_at,
+    });
+    await expect(resolvePlan(fakeSupabaseClient({ entitlements: [row(true, null)] }), USER)).resolves.toBe('PRO');
+    await expect(
+      resolvePlan(fakeSupabaseClient({ entitlements: [row(true, '2099-01-01T00:00:00Z')] }), USER),
+    ).resolves.toBe('PRO');
+    await expect(resolvePlan(fakeSupabaseClient({ entitlements: [row(false, null)] }), USER)).resolves.toBe('FREE');
+    await expect(
+      resolvePlan(fakeSupabaseClient({ entitlements: [row(true, '2020-01-01T00:00:00Z')] }), USER),
+    ).resolves.toBe('FREE');
+    await expect(resolvePlan(fakeSupabaseClient({ entitlements: [] }), USER)).resolves.toBe('FREE');
+  });
+
+  it('never picks up another user’s PRO row', async () => {
+    const supabase = fakeSupabaseClient({
+      entitlements: [{ user_id: OTHER_USER, feature_code: 'VIEW_ADVANCED_STATS', enabled: true, expires_at: null }],
+    });
+    await expect(resolvePlan(supabase, USER)).resolves.toBe('FREE');
   });
 });

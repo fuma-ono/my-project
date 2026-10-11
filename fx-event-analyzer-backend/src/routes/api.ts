@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { registerAuth } from '../auth/plugin.js';
 import { registerAccountRoutes } from './account.js';
+import { registerSettingsRoutes } from './settings.js';
 import { registerSubscriptionRoutes } from './subscription.js';
 import { registerEntitlementsRoutes } from './entitlements.js';
 import { registerIndicatorRoutes } from './indicators.js';
@@ -8,9 +9,10 @@ import { registerEventRoutes } from './events.js';
 import { registerHistoricalRoutes } from './historical.js';
 import { registerSearchRoutes } from './search.js';
 import { registerHomeRoutes } from './home.js';
-import { registerSettingsRoutes } from './settings.js';
+import { registerSpeechRoutes } from './speeches.js';
 import { registerCalendarRoutes } from './calendar.js';
 import { registerFxPairRoutes } from './fxPairs.js';
+import { registerNotificationRoutes } from './notifications.js';
 import { registerSupportRoutes } from './support.js';
 
 /**
@@ -23,6 +25,7 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   registerAuth(app, app.env.SUPABASE_URL);
 
   await app.register(registerAccountRoutes);
+  await app.register(registerSettingsRoutes);
   await app.register(registerSubscriptionRoutes);
   await app.register(registerEntitlementsRoutes);
   await app.register(registerIndicatorRoutes);
@@ -30,12 +33,9 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   await app.register(registerHistoricalRoutes);
   await app.register(registerSearchRoutes);
   await app.register(registerHomeRoutes);
-  await app.register(registerSettingsRoutes);
+  await app.register(registerSpeechRoutes);
   await app.register(registerCalendarRoutes);
   await app.register(registerFxPairRoutes);
+  await app.register(registerNotificationRoutes);
   await app.register(registerSupportRoutes);
-  // registerSpeechRoutes (GET /speeches, IndicatorReleasesView) と
-  // registerNotificationRoutes (GET /notifications/upcoming, 端末内ローカル
-  // 通知の予約) はHQ指示によりCalendar/Settings/Accountのみを移植する今回の
-  // 対象外 (Home/指標詳細の機能、および通知のスケジューリング基盤そのもの)。
 }

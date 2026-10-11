@@ -31,22 +31,40 @@ struct RootView: View {
                     },
                     sessionExpired: sessionExpired
                 )
+                .onAppear {
+                    // セッション切れでログイン画面に戻った場合も、前のユーザーの
+                    // 通知の予約・一覧と表示設定を残さない。
+                    LocalNotificationScheduler(apiClient: apiClient).reset()
+                    AppPreferences.shared.reset()
+                    if sessionExpired { FavoritesStore.shared.removeAll() }
+                }
             case .loggedIn:
                 MainTabView(apiClient: apiClient, authService: authService) {
+                    // ログアウト・アカウント削除: 前のユーザーの通知・お気に入り・
+                    // 表示設定を残さない。
+                    LocalNotificationScheduler(apiClient: apiClient).reset()
+                    FavoritesStore.shared.removeAll()
+                    AppPreferences.shared.reset()
                     appState.handleSignOut()
                 }
                 .task(id: scenePhase) {
-                    // HQ指示(Calendar/Settings/Accountのみ移植): 元の実装は
-                    // ここで通知の予約し直し(LocalNotificationScheduler)・
-                    // バックグラウンド更新(NotificationBackgroundRefresh)・
-                    // 購読の同期(SubscriptionSync)・未読バッジのポーリング
-                    // (NotificationsStore)も行っていたが、それらの基盤自体は
-                    // 今回のポート対象外のため呼ばない。表示・地域設定
-                    // (SCR-018/019)とプラン上限(カレンダーの無料枠など)の
-                    // 読み込みだけ行う。
+                    // 起動時・フォアグラウンド復帰時にローカル通知を予約し直し、
+                    // 表示中は通知時刻を過ぎた分をベルの赤バッジに反映する。
+                    if scenePhase == .background {
+                        NotificationBackgroundRefresh.schedule()
+                    }
                     guard scenePhase == .active else { return }
+                    // SCR-018 / SCR-019の設定(表示形式など)を読み込む。
                     await AppPreferences.shared.load(apiClient: apiClient)
+                    // 無料プラン・プレミアムプランの使える範囲(カレンダー・お気に入りなど)。
                     await PlanStore.shared.load(apiClient: apiClient)
+                    // SCR-017: 自動更新・解約などの購読の変化をBackendへ送る。
+                    SubscriptionSync.shared.start(apiClient: apiClient)
+                    await LocalNotificationScheduler(apiClient: apiClient).refresh()
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .seconds(30))
+                        NotificationsStore.shared.refreshUnread()
+                    }
                 }
             }
         }

@@ -1,15 +1,10 @@
 import SwiftUI
+import UIKit
 
 /// SCR-016 通知設定(api-design.md §24.4)。HQ指示(2026-10-06)の参考画像
 /// (見出し+項目名と右端のスイッチ・値だけの行)に合わせ、「通知の種類」
 /// 「通知の条件」「通知について」を並べる(参考画像のニュース速報は不要)。保存ボタンは
 /// 無く、変更はその場で保存される(`NotificationSettingsViewModel`)。
-///
-/// HQ指示(Calendar/Settings/Accountのみ移植): 元画面にあった、端末の通知
-/// 許可が切れていることを知らせる案内(`viewModel.authorizationDenied`、
-/// `scenePhase`監視での再チェック、設定アプリへのディープリンク)は、
-/// それを検出する主体の`LocalNotificationScheduler`自体が今回のポート
-/// 対象外のため削除した。保存の成否(`saveState`)の案内だけ残している。
 struct NotificationSettingsView: View {
     @StateObject private var viewModel: NotificationSettingsViewModel
     @Binding var tabSelection: Int
@@ -17,6 +12,7 @@ struct NotificationSettingsView: View {
     @State private var planPrompt: String?
     private let apiClient: APIClient
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     private enum OptionPicker: String, Identifiable {
         case fxPairs, importances, timing, quietStart, quietEnd
@@ -59,6 +55,9 @@ struct NotificationSettingsView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .task { viewModel.load() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { viewModel.recheckAuthorization() }
+        }
         .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
         .sheet(item: $picker) { picker in
             switch picker {
@@ -142,10 +141,23 @@ struct NotificationSettingsView: View {
     }
 
     @ViewBuilder private var statusLine: some View {
-        switch viewModel.saveState {
-        case .error(let message): NotoText.text(message, size: 6.5).foregroundStyle(V5P.red)
-        // 保存できたときは何も出さない(HQ指示 2026-10-06)。失敗だけ知らせる。
-        case .idle, .saving, .saved: EmptyView()
+        if viewModel.authorizationDenied {
+            Button {
+                if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                NotoText.text("端末の通知がオフです。タップして設定を開く", size: 6.5)
+                    .foregroundStyle(V5P.yellow)
+                    .underline()
+            }
+            .buttonStyle(.plain)
+        } else {
+            switch viewModel.saveState {
+            case .error(let message): NotoText.text(message, size: 6.5).foregroundStyle(V5P.red)
+            // 保存できたときは何も出さない(HQ指示 2026-10-06)。失敗だけ知らせる。
+            case .idle, .saving, .saved: EmptyView()
+            }
         }
     }
 

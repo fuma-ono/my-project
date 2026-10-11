@@ -53,8 +53,13 @@ struct ChartResponse: Decodable, Equatable {
     let timeframe: String
     let releaseDatetime: Date
     let prices: [ChartPricePoint]
+    /// 表示範囲(api-design v1.19)。古いBackendではnil(端末で同じ規則を計算する)。
+    var windowFrom: Date? = nil
+    var windowTo: Date? = nil
 
     enum CodingKeys: String, CodingKey {
+        case windowFrom = "window_from"
+        case windowTo = "window_to"
         case eventId = "event_id"
         case fxPairId = "fx_pair_id"
         case timeframe

@@ -67,4 +67,11 @@ enum AppRoute: Hashable {
     case signUp
     /// SCR-003 パスワード再設定(Loginから)。
     case passwordReset
+    /// SCR-016 通知設定。通知一覧の「システム」通知(通知設定を更新しました)
+    /// から開く。設定タブからは`SettingsSubRoute.notificationSettings`。
+    case notificationSettings
+    /// SCR-020 お問い合わせ履歴。通知一覧の「お問い合わせに返信しました」から開く。
+    case supportHistory
+    /// SCR-006 指標詳細の「過去の発表日」。その指標の発表済みの回の一覧(HQ指示 2026-10-09)。
+    case indicatorReleases(id: String, name: String)
 }

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { chartWindow } from '../domain/chartWindow.js';
 import { ApiError } from '../errors/ApiError.js';
 import { requireEntitlement, FEATURE_CODES } from '../authorization/entitlements.js';
 import {
@@ -9,13 +10,16 @@ import {
   listRevisions,
 } from '../repositories/eventsRepository.js';
 import { listRelatedFxPairs } from '../repositories/indicatorsRepository.js';
+import { listActiveFxPairs } from '../repositories/fxPairsRepository.js';
 import {
   getFxPairById,
   getReaction,
   listChartPrices,
   listReactionsForPair,
+  listReactionsForPairsAndTimeframes,
   listReactionsForTimeframe,
 } from '../repositories/reactionsRepository.js';
+import { buildMajorFxReactions, MAJOR_FX_REACTION_TIMEFRAMES, selectMajorFxPairs } from '../domain/majorFxReactions.js';
 import {
   availableTimeframes,
   mapEventDataStatus,
@@ -47,19 +51,29 @@ export function registerEventRoutes(app: FastifyInstance): void {
 
     const precision = event.release_datetime_precision as ReleaseDatetimePrecision;
 
-    const [snapshot, explanation, revisionCount, relatedFxPairs] = await Promise.all([
+    const [snapshot, explanation, revisionCount, relatedFxPairs, activeFxPairs] = await Promise.all([
       getReleaseSnapshot(app.supabase, eventId),
       getLatestExplanation(app.supabase, eventId),
       countRevisions(app.supabase, eventId),
       listRelatedFxPairs(app.supabase, event.indicator_id),
+      listActiveFxPairs(app.supabase),
     ]);
 
-    const reactions = await listReactionsForTimeframe(
-      app.supabase,
-      eventId,
-      relatedFxPairs.map((pair) => pair.fx_pair_id),
-      RELATED_FX_PAIR_SUMMARY_TIMEFRAME,
-    );
+    const majorFxPairs = selectMajorFxPairs(activeFxPairs, relatedFxPairs, event.currency_code);
+    const [reactions, majorReactionRows] = await Promise.all([
+      listReactionsForTimeframe(
+        app.supabase,
+        eventId,
+        relatedFxPairs.map((pair) => pair.fx_pair_id),
+        RELATED_FX_PAIR_SUMMARY_TIMEFRAME,
+      ),
+      listReactionsForPairsAndTimeframes(
+        app.supabase,
+        eventId,
+        majorFxPairs.map((pair) => pair.fx_pair_id),
+        MAJOR_FX_REACTION_TIMEFRAMES,
+      ),
+    ]);
     const reactionByFxPairId = new Map(reactions.map((reaction) => [reaction.fx_pair_id, reaction]));
 
     return {
@@ -100,6 +114,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
           },
         };
       }),
+      major_fx_reactions: buildMajorFxReactions(majorFxPairs, majorReactionRows, precision),
       available_timeframes: availableTimeframes(precision),
     };
   });
@@ -223,9 +238,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
       }
 
       // MVP Chart Window: release -30min to +60min (api-design.md §19).
-      const releaseTime = new Date(event.release_datetime);
-      const from = new Date(releaseTime.getTime() - 30 * 60_000).toISOString();
-      const to = new Date(releaseTime.getTime() + 60 * 60_000).toISOString();
+      // 時間足ごとに、発表時刻を基準にした表示範囲(domain/chartWindow.ts)。
+      const { from, to } = chartWindow(event.release_datetime, timeframe);
 
       const prices = await listChartPrices(app.supabase, fxPairId, timeframe, from, to);
 
@@ -234,6 +248,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
         fx_pair_id: fxPairId,
         timeframe,
         release_datetime: event.release_datetime,
+        window_from: from,
+        window_to: to,
         prices,
       };
     },

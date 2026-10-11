@@ -18,6 +18,9 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  // StoreKit 2 transactions are only accepted for this bundle id
+  // (POST /subscription/verify, api-design.md §25.1).
+  APP_STORE_BUNDLE_ID: z.string().min(1).default('com.fumaono.fxeventanalyzer'),
   // SCR-020 不具合報告 → GitHub Issue (api-design.md §24.7). Optional: when
   // either is unset, bug reports are still stored and auto-replied, just
   // without an Issue. Server-only — never shipped in the iOS app.

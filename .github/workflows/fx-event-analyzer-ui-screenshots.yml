@@ -90,14 +90,15 @@ jobs:
           echo "Using iPhone simulator: $DEVICE_NAME"
           echo "device_name=$DEVICE_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Select an available iPad Simulator
+      # iPad is paused (HQ 2026-10-06): the iPad layout will get its own tab
+      # bar / header positions later, so only iPhone is captured for now.
+      # Leaving device_name empty skips every iPad step below; to resume,
+      # restore the simctl lookup (see git history).
+      - name: Select an available iPad Simulator (paused)
         id: ipad
         run: |
-          DEVICE_NAME=$(xcrun simctl list devices available -j \
-            | jq -r '.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name | startswith("iPad")) | .name' \
-            | head -n1)
-          echo "Using iPad simulator: ${DEVICE_NAME:-<none found>}"
-          echo "device_name=$DEVICE_NAME" >> "$GITHUB_OUTPUT"
+          echo "iPad screenshots are paused; iPhone only."
+          echo "device_name=" >> "$GITHUB_OUTPUT"
 
       - name: Start UI-screenshot mock server (Auth + Backend fixture)
         working-directory: fx-event-analyzer-backend
@@ -114,6 +115,14 @@ jobs:
           echo "::error::Mock server did not become ready." >&2
           cat /tmp/ui-screenshot-mock-server.log >&2
           exit 1
+
+      # "Failed to get launch progress ... Timed out" kept failing runs at
+      # random: the simulator was still booting when XCUITest launched the
+      # app. Boot it up front and wait until it is fully up.
+      - name: Boot the iPhone Simulator
+        run: |
+          xcrun simctl boot "${{ steps.iphone.outputs.device_name }}" || true
+          xcrun simctl bootstatus "${{ steps.iphone.outputs.device_name }}" -b
 
       - name: Build for testing
         env:
@@ -183,6 +192,23 @@ jobs:
           else
             echo "::warning::No iPad .xcresult bundle was produced."
           fi
+
+      # Job logs and artifacts need a signed-in GitHub session, but check-run
+      # annotations are readable through the public API — surface test
+      # failure messages and diagnostic screenshot names as annotations so a
+      # failed run can be diagnosed without downloading the .xcresult.
+      - name: Report UI test failures as annotations
+        if: always()
+        run: |
+          for platform in iPhone iPad; do
+            bundle="DerivedData/$platform.xcresult"
+            [ -d "$bundle" ] || continue
+            xcrun xcresulttool get test-results summary --path "$bundle" --format json 2>/dev/null \
+              | jq -r '.testFailures[]? | "\(.testName): \(.failureText)"' \
+              | while IFS= read -r line; do echo "::error title=$platform UI test failure::$line"; done || true
+          done
+          grep -ho 'suggested name: "[^"]*diag[^"]*"' Screenshots/*-raw/export.log 2>/dev/null \
+            | while IFS= read -r line; do echo "::error title=diagnostic capture::$line"; done || true
 
       # `xcresulttool export attachments`'s manifest.json schema isn't
       # documented and doesn't match the key names ("name" / "exportedFileName")

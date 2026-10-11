@@ -1,21 +1,67 @@
 import Foundation
 
-/// HQ指示(Calendar/Settings/Accountのみ移植): 元ファイルには
-/// `GET /api/v1/notifications/upcoming`用の`UpcomingNotificationsResponse`/
-/// `UpcomingNotification`/`NotificationService`(端末内ローカル通知の予約
-/// 基盤、`LocalNotificationScheduler`が使う)も定義されていたが、その基盤
-/// 自体は今回のポート対象外のため含めていない。ここに残すのは
-/// `GET /api/v1/fx-pairs`(api-design.md §25.2)関連の型だけで、これは
-/// SCR-016 通知設定の対象通貨ペアピッカー(`RemoteFXPairCatalog`、
-/// `FXPairCatalog.swift`)が使う。
+/// `GET /api/v1/notifications/upcoming`(api-design.md §25.1)。通知設定
+/// (SCR-016)の条件に合う、これから通知すべき経済指標・要人発言を
+/// `notify_at`(発表の`lead_minutes`分前)の昇順で返す。プッシュ通知が
+/// オフなら`items`は空。
+struct UpcomingNotificationsResponse: Decodable, Equatable {
+    let leadMinutes: Int
+    let items: [UpcomingNotification]
 
-/// `GET /api/v1/fx-pairs`の1件。
+    enum CodingKeys: String, CodingKey {
+        case leadMinutes = "lead_minutes"
+        case items
+    }
+}
+
+struct UpcomingNotification: Decodable, Equatable {
+    enum Kind: String, Codable {
+        case indicator = "INDICATOR"
+        case speech = "SPEECH"
+    }
+
+    let kind: Kind
+    /// 指標は`economic_events.economic_event_id`、発言は`speech_events.speech_event_id`。
+    let id: String
+    let title: String
+    let speakerName: String?
+    /// HIGH / MEDIUM / LOW
+    let importance: String
+    let scheduledAt: Date
+    let notifyAt: Date
+    let countryCode: String?
+    let currencyCode: String?
+    let relatedFxPairs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case kind
+        case id
+        case title
+        case speakerName = "speaker_name"
+        case importance
+        case scheduledAt = "scheduled_at"
+        case notifyAt = "notify_at"
+        case countryCode = "country_code"
+        case currencyCode = "currency_code"
+        case relatedFxPairs = "related_fx_pairs"
+    }
+}
+
+/// `GET /api/v1/fx-pairs`(api-design.md §25.2)の1件。
 struct FXPairResponse: Decodable, Equatable {
     let symbol: String
 }
 
 struct FXPairListResponse: Decodable, Equatable {
     let data: [FXPairResponse]
+}
+
+struct NotificationService {
+    let apiClient: APIClient
+
+    func fetchUpcoming() async throws -> UpcomingNotificationsResponse {
+        try await apiClient.send(Endpoint(path: "notifications/upcoming"))
+    }
 }
 
 /// `GET /fx-pairs`で通貨ペアの候補を取る`FXPairCatalog`。一覧APIが使えない

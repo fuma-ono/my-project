@@ -2,18 +2,13 @@ import SwiftUI
 
 /// SCR-020 ヘルプ・お問い合わせ(HQ指示 2026-10-06の参考画像)。キーワード検索・
 /// よくある質問(6分類)・お問い合わせ・フィードバックを並べる。
-///
-/// HQ指示(Calendar/Settings/Accountのみ移植): 元画面にあった「お問い合わせ履歴」
-/// (`SupportHistoryView`、`GET /support/requests`の一覧を見る画面)への導線は
-/// 削除した — `SupportHistoryView`はこのポートの対象外として明示的に除外
-/// されている画面のため。問い合わせの送信・自動返信そのものは
-/// `SupportFormView`から利用できる。
 struct HelpView: View {
     let apiClient: APIClient
     @Binding var tabSelection: Int
     @State private var keyword = ""
     @State private var openedCategory: HelpFAQCategory?
     @State private var form: SupportRequest.Kind?
+    @State private var showsHistory = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -29,6 +24,15 @@ struct HelpView: View {
                     }
                     contactCard(icon: "bubble.left.and.text.bubble.right", title: "お問い合わせ", subtitle: "フォームから問い合わせ") { form = .inquiry }
                     contactCard(icon: "square.and.pencil", title: "フィードバックを送る", subtitle: "ご意見・ご要望をお聞かせください") { form = .feedback }
+                    Button { showsHistory = true } label: {
+                        HStack(spacing: 4) {
+                            NotoText.text("お問い合わせ履歴", size: 8.5)
+                            Image(systemName: "chevron.right").font(.system(size: 8.5, weight: .semibold))
+                        }
+                        .foregroundStyle(SettingsListLayout.sectionTitleColor)
+                        .frame(width: 214, alignment: .trailing)
+                    }
+                    .buttonStyle(.plain)
                 }
                 .padding(.top, 6)
                 .padding(.bottom, 8)
@@ -44,6 +48,9 @@ struct HelpView: View {
         }
         .navigationDestination(item: $form) { kind in
             SupportFormView(apiClient: apiClient, kind: kind, tabSelection: $tabSelection)
+        }
+        .navigationDestination(isPresented: $showsHistory) {
+            SupportHistoryView(apiClient: apiClient, tabSelection: $tabSelection)
         }
     }
 

@@ -2,41 +2,39 @@ import Foundation
 
 /// SCR-016 通知設定。参考画像(HQ指示 2026-10-05)に保存ボタンが無いため、
 /// 変更のたびに少し待ってから`PATCH /settings`へ`notifications`だけを送る
-/// (連続したタップは1回にまとめる)。
-///
-/// HQ指示(Calendar/Settings/Accountのみ移植): 元の実装はここで保存後に
-/// `LocalNotificationScheduler`(端末内ローカル通知の予約)と
-/// `NotificationsStore`(通知一覧への「システム」通知の記録)も呼んでいたが、
-/// どちらも通知のスケジューリング/一覧・バッジ基盤そのものであり今回の
-/// ポート対象外(HQ指示: 設定の保存はするが、スケジューリング機構は作らない)
-/// のため、その呼び出しは行わない — `settings.push`等をBackendへ保存する
-/// ところまでがこのViewModelの責務。同じ理由で、端末の通知許可状態
-/// (`authorizationDenied`)もここでは扱わない(許可を求める主体である
-/// スケジューラ自体が存在しないため)。
+/// (連続したタップは1回にまとめる)。保存できたら通知の予約をやり直す。
 @MainActor
 final class NotificationSettingsViewModel: ObservableObject {
     @Published private(set) var loadState: SettingsSectionLoadState = .loading
     @Published private(set) var saveState: SettingsSectionSaveState = .idle
     @Published private(set) var settings: NotificationSettings = .defaults
     @Published private(set) var fxPairSymbols: [String] = StaticFXPairCatalog.seededSymbols
+    /// 端末の通知が許可されていない(届かない)ことを画面で知らせる。
+    @Published private(set) var authorizationDenied = false
 
     private let service: SettingsService
     private let catalog: FXPairCatalog
+    private let scheduler: LocalNotificationScheduling
     private let debounce: Duration
     private var saveTask: Task<Void, Never>?
     /// 送信中に次の変更が入ったら、古い応答で画面を戻さない。
     private var revision = 0
+    private let store: NotificationsStore
     private let plan: PlanStore
 
     init(
         apiClient: APIClient,
+        scheduler: LocalNotificationScheduling? = nil,
         catalog: FXPairCatalog? = nil,
         debounce: Duration = .milliseconds(400),
+        store: NotificationsStore? = nil,
         plan: PlanStore? = nil
     ) {
+        self.store = store ?? .shared
         self.plan = plan ?? .shared
         self.service = SettingsService(apiClient: apiClient)
         self.catalog = catalog ?? RemoteFXPairCatalog(apiClient: apiClient)
+        self.scheduler = scheduler ?? LocalNotificationScheduler(apiClient: apiClient)
         self.debounce = debounce
     }
 
@@ -60,15 +58,34 @@ final class NotificationSettingsViewModel: ObservableObject {
             if let symbols = try? await catalog.availableSymbols(), !symbols.isEmpty {
                 fxPairSymbols = symbols
             }
+            if settings.push {
+                authorizationDenied = await scheduler.isAuthorizationDenied()
+            }
         }
+    }
+
+    /// 端末の設定アプリから戻ったとき、通知の許可の状態を見直す。
+    func recheckAuthorization() {
+        guard loadState == .loaded, settings.push else { return }
+        Task { authorizationDenied = await scheduler.isAuthorizationDenied() }
     }
 
     func update(_ change: (inout NotificationSettings) -> Void) {
         guard loadState == .loaded else { return }
+        let wasPushOn = settings.push
         var next = settings
         change(&next)
         guard next != settings else { return }
         settings = next
+        if !wasPushOn, next.push {
+            Task {
+                let granted = await scheduler.requestAuthorization()
+                // 許可を待つ間にプッシュ通知をまたオフにしていたら、注意書きは出さない。
+                if settings.push { authorizationDenied = !granted }
+            }
+        } else if !next.push {
+            authorizationDenied = false
+        }
         scheduleSave()
     }
 
@@ -186,24 +203,16 @@ final class NotificationSettingsViewModel: ObservableObject {
             guard target == revision else { return }
             settings = response.notifications
             saveState = .saved
+            // 参考画像(HQ指示 2026-10-06)の「システム」通知。
+            store.recordSystem(targetID: "notification-settings", title: "通知設定を更新しました", body: "通知の設定が正常に変更されました。")
+            if !settings.push {
+                // 予定の取り直しに失敗しても、オフにした後に通知が届かないよう先に消す。
+                await scheduler.removeUpcoming()
+            }
+            await scheduler.refresh()
         } catch {
             guard target == revision else { return }
             saveState = .error("保存に失敗しました。通信環境を確認してください。")
-        }
-    }
-}
-
-/// HIGH/MEDIUM/LOWの日本語表示。他ブランチでは`Common/NotificationsStore.swift`
-/// (端末内ローカル通知の一覧・バッジ基盤、今回のポート対象外)にしか無かったが、
-/// この型自体は通知のスケジューリングと無関係な汎用の表示ラベルなので、使う側
-/// (このファイルと`NotificationSettingsView.swift`)にそのまま移した。
-enum NotificationImportance {
-    static func label(_ raw: String) -> String {
-        switch raw {
-        case "HIGH": return "高"
-        case "MEDIUM": return "中"
-        case "LOW": return "低"
-        default: return raw
         }
     }
 }

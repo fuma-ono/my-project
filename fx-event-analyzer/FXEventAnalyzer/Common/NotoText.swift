@@ -8,6 +8,8 @@ enum NotoText {
     private static let postScriptName = "NotoSansJP-SemiBold"
 
     static func text(_ string: String, size: CGFloat) -> Text {
-        Text(verbatim: string).font(.custom(postScriptName, size: size))
+        // 端末・アプリの文字サイズ設定で大きくならないよう固定の大きさにする
+        // (V5の画面は固定キャンバスで、拡大すると枠からはみ出すため)。
+        Text(verbatim: string).font(.custom(postScriptName, fixedSize: size))
     }
 }

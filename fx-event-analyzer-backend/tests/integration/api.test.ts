@@ -50,6 +50,48 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(body.meta.total).toBeGreaterThanOrEqual(5);
     });
 
+    it('includes name_en and a key_points array on every listed indicator (v1.16)', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/api/v1/indicators?limit=100',
+        headers: authHeader,
+      });
+      expect(response.statusCode).toBe(200);
+      const rows: Array<{ code: string; name_en: unknown; key_points: unknown }> = JSON.parse(response.body).data;
+      for (const row of rows) {
+        expect(row).toHaveProperty('name_en');
+        expect(Array.isArray(row.key_points)).toBe(true);
+      }
+      const seeded = rows.filter((row) => ['US_CPI', 'US_NFP', 'US_FOMC', 'JP_CPI', 'BOJ_RATE'].includes(row.code));
+      expect(seeded).toHaveLength(5);
+      for (const row of seeded) {
+        expect(typeof row.name_en).toBe('string');
+        expect((row.key_points as string[]).length).toBeGreaterThanOrEqual(2);
+      }
+    });
+
+    it('includes market_view_above / market_view_below on every listed indicator (v1.18)', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/api/v1/indicators?limit=100',
+        headers: authHeader,
+      });
+      expect(response.statusCode).toBe(200);
+      const rows: Array<{ code: string; market_view_above: unknown; market_view_below: unknown }> = JSON.parse(
+        response.body,
+      ).data;
+      for (const row of rows) {
+        expect(row).toHaveProperty('market_view_above');
+        expect(row).toHaveProperty('market_view_below');
+      }
+      const seeded = rows.filter((row) => ['US_CPI', 'US_NFP', 'US_FOMC', 'JP_CPI', 'BOJ_RATE'].includes(row.code));
+      expect(seeded).toHaveLength(5);
+      for (const row of seeded) {
+        expect(row.market_view_above).toMatch(/予想を上回る|予想より高い/);
+        expect(row.market_view_below).toMatch(/予想を下回る|予想より低い/);
+      }
+    });
+
     it('filters by q (partial match, ILIKE)', async () => {
       const response = await ctx.app.inject({ method: 'GET', url: '/api/v1/indicators?q=CPI', headers: authHeader });
       const body = JSON.parse(response.body);
@@ -66,6 +108,21 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.indicator.code).toBe('US_CPI');
+      // v1.16 (SCR-006): English name, Japanese 概要, and 注目される理由.
+      expect(body.indicator.name_en).toBe('Consumer Price Index');
+      expect(body.indicator.description).toMatch(/^消費者物価指数（CPI）は/);
+      expect(body.indicator.key_points).toEqual([
+        'インフレの動向を把握できる',
+        '金融政策への影響が大きい',
+        '為替や株式市場に大きな影響を与える',
+      ]);
+      // v1.18 (SCR-008): 一般的な見方 (結果が予想を上回った / 下回ったとき)。
+      expect(body.indicator.market_view_above).toBe(
+        '米国CPIが予想を上回ると、インフレの高止まりから利下げが遠のくとの見方が強まり、ドルが買われやすいとされる。',
+      );
+      expect(body.indicator.market_view_below).toBe(
+        '米国CPIが予想を下回ると、インフレの落ち着きから利下げが意識され、ドルが売られやすいとされる。',
+      );
       expect(body.related_fx_pairs.some((pair: { symbol: string }) => pair.symbol === 'USDJPY')).toBe(true);
     });
 
@@ -167,6 +224,74 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       });
       expect(response.statusCode).toBe(404);
       expect(JSON.parse(response.body).error.code).toBe('EVENT_NOT_FOUND');
+    });
+
+    it('returns major_fx_reactions: event-currency pairs, related first, 1m/5m/15m (SCR-007, v1.17)', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/v1/events/${US_CPI_EVENT_ID}`,
+        headers: authHeader,
+      });
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      // Seed: USD pairs are USDJPY/EURUSD (related, priority 1/2), then GBPUSD/AUDUSD/USDCHF by the major order.
+      expect(body.major_fx_reactions.map((p: { symbol: string }) => p.symbol)).toEqual([
+        'USDJPY',
+        'EURUSD',
+        'GBPUSD',
+        'AUDUSD',
+      ]);
+      const usdjpy = body.major_fx_reactions[0];
+      expect(usdjpy.fx_pair_id).toBe(USDJPY_FX_PAIR_ID);
+      expect(usdjpy.reactions.map((r: { timeframe: string }) => r.timeframe)).toEqual(['1m', '5m', '15m']);
+      // Same stored values GET /events/{id}/reaction returns (seed: 28 / 56 / 85 pips).
+      expect(usdjpy.reactions.map((r: { pips: number }) => Number(r.pips))).toEqual([28, 56, 85]);
+      expect(Number(usdjpy.reactions[0].change_percent)).toBeCloseTo(0.1902);
+      expect(usdjpy.reactions.every((r: { analysis_status: string }) => r.analysis_status === 'READY')).toBe(true);
+      // No price data for EURUSD in the seed.
+      expect(body.major_fx_reactions[1].reactions[0]).toEqual({
+        timeframe: '1m',
+        pips: null,
+        change_percent: null,
+        analysis_status: 'DATA_PENDING',
+      });
+      // related_fx_pairs is unchanged (5m summary).
+      expect(body.related_fx_pairs[0].reaction.timeframe).toBe('5m');
+      expect(Number(body.related_fx_pairs[0].reaction.pips)).toBeCloseTo(56.0);
+    });
+
+    it('major_fx_reactions of a scheduled event are null pips with DATA_PENDING', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/v1/events/${NFP_EVENT_ID}`,
+        headers: authHeader,
+      });
+      const body = JSON.parse(response.body);
+      expect(body.major_fx_reactions).toHaveLength(4);
+      for (const pair of body.major_fx_reactions) {
+        for (const reaction of pair.reactions) {
+          expect(reaction.pips).toBeNull();
+          expect(reaction.change_percent).toBeNull();
+          expect(reaction.analysis_status).toBe('DATA_PENDING');
+        }
+      }
+    });
+
+    it('major_fx_reactions marks 1m NOT_ANALYZABLE for an APPROXIMATE release', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/v1/events/${BOJ_EVENT_ID}`,
+        headers: authHeader,
+      });
+      const body = JSON.parse(response.body);
+      // JPY pairs: USDJPY (related) first, then EURJPY/GBPJPY/AUDJPY by the major order.
+      expect(body.major_fx_reactions.map((p: { symbol: string }) => p.symbol)).toEqual([
+        'USDJPY',
+        'EURJPY',
+        'GBPJPY',
+        'AUDJPY',
+      ]);
+      expect(body.major_fx_reactions[0].reactions[0].analysis_status).toBe('NOT_ANALYZABLE');
     });
 
     it('lists revisions for an event, paginated', async () => {
@@ -273,6 +398,8 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(cpiEvent.related_fx_pairs.some((pair: { symbol: string }) => pair.symbol === 'USDJPY')).toBe(true);
       // §7.1: the API contract value (READY), never the raw DB data_status (AVAILABLE).
       expect(cpiEvent.data_status).toBe('READY');
+      // v1.13: the indicator's unit, for Home's 予想/前回.
+      expect(cpiEvent.unit).toBe('%');
     });
 
     it('does not return the event for an unrelated day', async () => {
@@ -290,7 +417,7 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
     it('reports plan FREE, not a 404, for a user with no subscriptions row', async () => {
       const response = await ctx.app.inject({ method: 'GET', url: '/api/v1/subscription', headers: authHeader });
       expect(response.statusCode).toBe(200);
-      expect(JSON.parse(response.body).plan).toBe('FREE');
+      expect(JSON.parse(response.body)).toMatchObject({ plan: 'FREE', product_id: null });
     });
   });
 });

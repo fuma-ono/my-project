@@ -1,6 +1,13 @@
 import XCTest
 @testable import FXEventAnalyzer
 
+private func waitUntil(_ condition: @escaping () -> Bool) async {
+    for _ in 0..<100 {
+        if condition() { return }
+        try? await Task.sleep(nanoseconds: 10_000_000)
+    }
+}
+
 final class HelpFAQTests: XCTestCase {
     func testEveryCategoryHasQuestions() {
         XCTAssertEqual(HelpFAQ.categories.map(\.title), ["アカウントについて", "プラン・支払いについて", "通知について", "チャートの使い方", "データの見方", "その他"])
@@ -15,13 +22,12 @@ final class HelpFAQTests: XCTestCase {
     }
 }
 
-/// HQ指示(Calendar/Settings/Accountのみ移植): 元のテストは送信成功後に
-/// `NotificationsStore`へ「システム」通知を記録することも検証していたが、
-/// 通知一覧・バッジ基盤自体がこのポートの対象外(`SupportViewModel`からその
-/// 呼び出しを削除済み)のため、その検証は外した。送信・検証・自動返信表示の
-/// 挙動はそのまま確認する。
 @MainActor
 final class SupportViewModelTests: XCTestCase {
+    private func makeStore() -> NotificationsStore {
+        NotificationsStore(userDefaults: UserDefaults(suiteName: "SupportTests-\(UUID().uuidString)")!)
+    }
+
     private func request(status: SupportRequest.Status, reply: String?) -> SupportRequest {
         SupportRequest(id: "r1", kind: .inquiry, category: "BUG", body: "アプリが落ちます", status: status, replyBody: reply, repliedAt: nil, createdAt: Date())
     }
@@ -37,17 +43,18 @@ final class SupportViewModelTests: XCTestCase {
     }
 
     func testTooShortBodiesCannotBeSent() {
-        let viewModel = SupportViewModel(apiClient: MockAPIClient())
+        let viewModel = SupportViewModel(apiClient: MockAPIClient(), store: makeStore())
         viewModel.body = " あ "
         XCTAssertFalse(viewModel.canSend)
         viewModel.body = "通知が届きません"
         XCTAssertTrue(viewModel.canSend)
     }
 
-    func testSendingPostsTheRequestAndShowsTheReply() async throws {
+    func testSendingPostsTheRequestAndRecordsTheReply() async throws {
         let apiClient = MockAPIClient()
         apiClient.result = .success(request(status: .escalated, reply: "不具合のご報告ありがとうございます。"))
-        let viewModel = SupportViewModel(apiClient: apiClient)
+        let store = makeStore()
+        let viewModel = SupportViewModel(apiClient: apiClient, store: store)
         viewModel.category = "BUG"
         viewModel.body = "アプリが落ちます"
 
@@ -60,32 +67,28 @@ final class SupportViewModelTests: XCTestCase {
         XCTAssertEqual(body["category"] as? String, "BUG")
         XCTAssertNotNil(body["os_version"])
         XCTAssertEqual(viewModel.body, "")
-        if case .sent(let sent) = viewModel.sendState {
-            XCTAssertEqual(sent.replyBody, "不具合のご報告ありがとうございます。")
-        } else {
-            XCTFail("expected .sent")
-        }
+        let entry = try XCTUnwrap(store.entries.first)
+        XCTAssertEqual(entry.kind, .system)
+        XCTAssertEqual(NotificationListView.route(for: entry), .supportHistory)
     }
 
-    func testIgnoredRequestsStillShowTheGenericAcknowledgement() async {
+    func testIgnoredRequestsDoNotCreateANotification() async {
         let apiClient = MockAPIClient()
         apiClient.result = .success(request(status: .ignored, reply: nil))
-        let viewModel = SupportViewModel(apiClient: apiClient)
+        let store = makeStore()
+        let viewModel = SupportViewModel(apiClient: apiClient, store: store)
         viewModel.body = "ああああああ"
 
         await viewModel.send(kind: .feedback)
 
-        if case .sent(let sent) = viewModel.sendState {
-            XCTAssertEqual(SupportViewModel.replyText(sent), "お問い合わせを受け付けました。")
-        } else {
-            XCTFail("expected .sent")
-        }
+        XCTAssertTrue(store.entries.isEmpty)
+        if case .sent = viewModel.sendState {} else { XCTFail("expected .sent") }
     }
 
     func testRateLimitShowsAFriendlyMessage() async {
         let apiClient = MockAPIClient()
         apiClient.result = .failure(APIError.server(code: .validationError, message: "Too many", httpStatus: 429))
-        let viewModel = SupportViewModel(apiClient: apiClient)
+        let viewModel = SupportViewModel(apiClient: apiClient, store: makeStore())
         viewModel.body = "通知が届きません"
 
         await viewModel.send(kind: .inquiry)

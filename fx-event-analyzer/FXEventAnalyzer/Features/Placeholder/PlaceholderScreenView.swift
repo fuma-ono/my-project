@@ -49,8 +49,8 @@ struct PlaceholderScreenView: View {
 /// と同じ役割の、設定配下サブ画面専用の解決ビュー。実装済みの画面は実画面へ、
 /// 未実装の画面は仮画面へ振り分ける。
 ///
-/// HQ指示(Calendar/Settings/Accountのみ移植): `.subscriptionManagement`
-/// (サブスクリプション購入・管理、別途対象外)と`.accountDeletion`
+/// HQ指示(別アカウントの完成分を引き継ぎ): `.subscriptionManagement`は
+/// `SubscriptionManagementView`へ実配線した。`.accountDeletion`
 /// (`SettingsSubRoute`側の経路 — 実際のアカウント削除は`AccountView`自身の
 /// `AccountSubRoute.accountDeletion`から行う、`AccountView.swift`のコメント
 /// 参照)は仮画面のまま。`.chartSettings`(SCR-019)は他ブランチの
@@ -68,6 +68,8 @@ struct SettingsSubRouteDestinationView: View {
             NotificationSettingsView(apiClient: apiClient, tabSelection: $tabSelection)
         case .displaySettings:
             DisplaySettingsView(apiClient: apiClient, tabSelection: $tabSelection)
+        case .subscriptionManagement:
+            SubscriptionManagementView(apiClient: apiClient, tabSelection: $tabSelection)
         case .help:
             HelpView(apiClient: apiClient, tabSelection: $tabSelection)
         case .terms:
@@ -76,7 +78,7 @@ struct SettingsSubRouteDestinationView: View {
             LegalDocumentView(document: LegalDocuments.privacy, tabSelection: $tabSelection)
         case .appInfo:
             AppInfoView(tabSelection: $tabSelection)
-        case .subscriptionManagement, .chartSettings, .accountDeletion:
+        case .chartSettings, .accountDeletion:
             PlaceholderScreenView(scrNumber: route.scrNumber, screenName: route.title)
                 .navigationTitle(route.title)
                 .navigationBarTitleDisplayMode(.inline)

@@ -68,6 +68,25 @@ export async function listReactionsForTimeframe(
   return data ?? [];
 }
 
+/** Used for Event Detail's major_fx_reactions (api-design.md §14.1):
+ * several pairs × several timeframes in one query. */
+export async function listReactionsForPairsAndTimeframes(
+  supabase: SupabaseClient,
+  eventId: string,
+  fxPairIds: string[],
+  timeframes: readonly string[],
+): Promise<ReactionRow[]> {
+  if (fxPairIds.length === 0 || timeframes.length === 0) return [];
+  const { data, error } = await supabase
+    .from('event_price_reactions')
+    .select(REACTION_COLUMNS)
+    .eq('event_id', eventId)
+    .in('fx_pair_id', fxPairIds)
+    .in('timeframe', [...timeframes]);
+  if (error) throw error;
+  return data ?? [];
+}
+
 export interface FxPairRow {
   id: string;
   symbol: string;

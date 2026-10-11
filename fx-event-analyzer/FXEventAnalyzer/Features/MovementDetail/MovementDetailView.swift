@@ -1,48 +1,18 @@
+import Charts
 import SwiftUI
 
-/// SCR-008 相場反応詳細 — "発表前後にFX相場が実際に
-/// どれくらい動いたのか確認する". Timeframe Segmented Control drives both
-/// the Reaction figures (fetched once, every timeframe) and the Chart
-/// (re-fetched per timeframe).
-///
-/// HQ "V5 Pixel Frontend" integration (2026-09-24): visual content is HQ's
-/// `V5PixelFrontend.swift` `V5MovementDetail` (fixed 234×491 canvas,
-/// timeframe pill rows, chart, 発表前/発表後/変動幅 metric card, "主要指標"
-/// metric card), reproduced as given, with one necessary substitution:
-/// HQ's `V5CandleChart()` here draws a fixed, hardcoded candle series with
-/// no real data binding — the real price series (`FXPriceChart` fed
-/// `ChartResponse.prices`, unchanged since the original HQ Frontend
-/// integration) is kept in the exact same 204×135 frame/position instead
-/// of a chart that would show invented candles, the same rule already
-/// applied to this screen's chart in the prior HQ UI Master v5 round.
-/// Other adaptations, all wiring:
-/// - Both timeframe pill rows are real, bound to
-///   `viewModel.selectedTimeframe` over `ReactionTimeframe.all`.
-/// - 発表前/発表後/変動幅/最大上昇幅/最大下落幅 use the real
-///   `ReactionTimeframeEntry` for the selected timeframe. HQ's demo's
-///   two-line 変動幅 ("+0.33\n(+0.22%)") and third "主要指標" slot
-///   ("平均変動幅") have no backing percent/average field on this model —
-///   shown as a single line / omitted rather than fabricated.
-/// - ui-screens.md's required screen flow (and the pre-existing UI test)
-///   needs a real path from here to Historical Comparison, but HQ's fixed
-///   canvas has no button for it. Rather than draw new visible UI, the
-///   existing "発表前後の変動" card (always present, unlike "主要指標"
-///   which only shows when analysis is ready) becomes the tap target,
-///   with the required phrase appended to its accessibility label only —
-///   sighted users see zero pixel change; VoiceOver users hear the real
-///   metric readout plus the destination, never just the phrase alone.
-///
-/// HQ指示(2026-10-03、画面構成全面更新)でこの画面がSCR-008 相場反応詳細に
-/// 改称され、旧「過去イベント詳細」(削除済み)の役割も集約された
-/// (`HistoricalComparisonView`の過去回タップもここへ遷移するようになった、
-/// `AppRoute.movementDetail`参照)。HQ新仕様が求める追加コンテンツ
-/// (値動きの分析・背景・市場の織り込み状況・予想と結果の差・金利/債券
-/// 関連情報・Sell the Fact等)はまだ未実装 — 今回は番号・名称・遷移の整理
-/// のみがスコープのため、次回(005〜013のUI実装)に持ち越している。
+/// SCR-008 相場反応詳細(HQ指示 2026-10-09の参考画像で作り直し)。上から、通貨ペアの
+/// カード(国旗・USD/JPY・米ドル/円、発表60分後の価格と発表前からの変化)、
+/// 1分足・5分足・15分足のローソク足チャート(発表の30分前〜60分後、発表時刻に縦線)、
+/// 「値動きの分析」(数値から決まった型で作る文。AIの推測は使わない)。SCR-009への導線は
+/// 指標詳細にある(HQ指示 2026-10-09「過去イベント比較の遷移元は指標詳細」)。
 struct MovementDetailView: View {
     @StateObject private var viewModel: MovementDetailViewModel
     @Binding var tabSelection: Int
     @Environment(\.dismiss) private var dismiss
+
+    /// チャートの足の種類(参考画像のタブ)。
+    static let candleTimeframes = ["1m", "5m", "15m"]
 
     init(apiClient: APIClient, eventId: String, indicatorId: String, fxPairId: String, symbol: String, indicatorName: String, releaseDatetime: Date, tabSelection: Binding<Int>) {
         _viewModel = StateObject(wrappedValue: MovementDetailViewModel(
@@ -52,7 +22,8 @@ struct MovementDetailView: View {
             fxPairId: fxPairId,
             symbol: symbol,
             indicatorName: indicatorName,
-            releaseDatetime: releaseDatetime
+            releaseDatetime: releaseDatetime,
+            initialTimeframe: "1m"
         ))
         _tabSelection = tabSelection
     }
@@ -76,61 +47,18 @@ struct MovementDetailView: View {
             loadingScaffold { FXEmptyState(icon: "lock.fill", title: "この情報はご利用いただけません", message: "現在のプランでは値動き情報を閲覧できません。") }
         case .loaded(let preReleasePrice, let reactions):
             V5Viewport {
-                V5Header(title: "変動詳細", back: true, onBack: { dismiss() })
-
-                HStack {
-                    Text(viewModel.selectedTimeframe).font(.system(size: 8, weight: .bold)).foregroundStyle(.white)
-                        .padding(.horizontal, 9).padding(.vertical, 5).background(V5P.blue, in: Capsule())
-                    Text(viewModel.symbol).font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
-                    Spacer()
-                }
-                .frame(width: 204, height: 27).padding(.horizontal, 7).background(V5P.panel2, in: Capsule()).position(x: 117, y: 66)
-
-                HStack(spacing: 4) {
-                    ForEach(ReactionTimeframe.all, id: \.self) { timeframe in
-                        Button { viewModel.selectedTimeframe = timeframe } label: {
-                            Text(timeframe).font(.system(size: 7)).foregroundStyle(.white)
-                                .padding(.horizontal, 10).padding(.vertical, 4)
-                                .background(timeframe == viewModel.selectedTimeframe ? V5P.blue : V5P.panel2, in: Capsule())
-                        }.buttonStyle(.plain)
+                V5Header(title: "相場反応詳細", back: true, onBack: { dismiss() })
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        priceCard(preReleasePrice: preReleasePrice, reactions: reactions)
+                        analysisCard(reactions: reactions)
                     }
-                }.position(x: 117, y: 91)
-
-                chartSection.frame(width: 204, height: 135).position(x: 117, y: 165)
-
-                Text("発表前後の変動").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 48, y: 247)
-                NavigationLink(value: AppRoute.historicalComparison(
-                    indicatorId: viewModel.indicatorId,
-                    indicatorName: viewModel.indicatorName,
-                    fxPairId: viewModel.fxPairId,
-                    fxPairSymbol: viewModel.symbol
-                )) {
-                    V5Card(CGRect(x: 10, y: 257, width: 214, height: 64)) {
-                        let selected = reactions.first(where: { $0.timeframe == viewModel.selectedTimeframe })
-                        HStack {
-                            metric("発表前", ValueFormat.number(preReleasePrice, fractionDigits: 3))
-                            if let selected, selected.analysisStatus == .ready {
-                                metric("発表後", ValueFormat.number(selected.postReleasePrice, fractionDigits: 3))
-                                metric("変動幅", ValueFormat.number(selected.movement, fractionDigits: 3, signed: true))
-                            } else {
-                                metric("発表後", selected?.analysisStatus.label ?? "--")
-                            }
-                        }
-                    }
+                    .frame(width: 214)
+                    .padding(.vertical, 6)
+                    .frame(width: V5P.W)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("発表前後の変動 過去の値動きと比較する")
-
-                if let selected = reactions.first(where: { $0.timeframe == viewModel.selectedTimeframe }), selected.analysisStatus == .ready {
-                    Text("主要指標").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).position(x: 39, y: 335)
-                    V5Card(CGRect(x: 10, y: 345, width: 214, height: 58)) {
-                        HStack {
-                            metric("最大上昇幅", ValueFormat.number(selected.maxUpward, fractionDigits: 3, signed: true))
-                            metric("最大下落幅", ValueFormat.number(selected.maxDownward, fractionDigits: 3, signed: true))
-                        }
-                    }
-                }
-
+                .frame(width: V5P.W, height: 398)
+                .position(x: V5P.W / 2, y: 54 + 398 / 2)
                 V5BottomBar(selected: $tabSelection)
             }
         case .error(let message):
@@ -138,50 +66,314 @@ struct MovementDetailView: View {
         }
     }
 
+    // MARK: - 通貨ペア・価格・チャート
+
+    private func priceCard(preReleasePrice: Double?, reactions: [ReactionTimeframeEntry]) -> some View {
+        let symbol = viewModel.symbol
+        let latest = reactions.last { $0.analysisStatus == .ready && $0.postReleasePrice != nil }
+        let digits = symbol.hasSuffix("JPY") ? 2 : 4
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 7) {
+                HStack(spacing: -4) {
+                    CountryFlagView(currencyCode: String(symbol.prefix(3)), diameter: 20)
+                    CountryFlagView(currencyCode: String(symbol.suffix(3)), diameter: 20)
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    NotoText.text(FXPairSymbol.displayName(symbol), size: 11).foregroundStyle(.white)
+                    NotoText.text(HomeCurrencyPairEditorViewModel.names(symbol), size: 7.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                }
+                Spacer()
+            }
+            // HQ指示(2026-10-09)「価格情報を整理する」: 比較時点の小さなラベル → 価格(最も目立たせる)と
+            // 変動幅・変動率を同じ行 → 変動の基準価格、の順。
+            if let latest, let price = latest.postReleasePrice {
+                VStack(alignment: .leading, spacing: 1) {
+                    NotoText.text("発表\(MovementAnalysisText.label(latest.timeframe))後の価格", size: 6.5)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(ValueFormat.number(price, fractionDigits: digits))
+                            .font(.system(size: 18, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(.white)
+                        if let pre = preReleasePrice {
+                            let change = price - pre
+                            let percent = pre == 0 ? 0 : change / pre * 100
+                            Text("\(ValueFormat.number(change, fractionDigits: digits, signed: true)) (\(ValueFormat.number(percent, fractionDigits: 2, signed: true))%)")
+                                .font(.system(size: 12, weight: .semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(change >= 0 ? V5P.green : V5P.red)
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
+                    }
+                    if let pre = preReleasePrice {
+                        NotoText.text("発表直前 \(String(format: "%.\(digits)f", pre)) との比較", size: 6.5)
+                            .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    }
+                }
+            }
+            timeframeTabs
+            chartSection
+                .frame(height: 114)
+        }
+        .padding(8)
+        .frame(width: 214, alignment: .leading)
+        .background(AccountCardBackground())
+    }
+
+    private var timeframeTabs: some View {
+        HStack(spacing: 0) {
+            ForEach(Self.candleTimeframes, id: \.self) { timeframe in
+                let isSelected = viewModel.selectedTimeframe == timeframe
+                Button { viewModel.selectedTimeframe = timeframe } label: {
+                    NotoText.text(MovementAnalysisText.label(timeframe), size: 8.5)
+                        .foregroundStyle(isSelected ? .white : SettingsCardStyle.subtitleColor)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 20)
+                        .background(RoundedRectangle(cornerRadius: 5).fill(isSelected ? V5P.blue : .clear))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(RoundedRectangle(cornerRadius: 7).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
+    }
+
     @ViewBuilder
     private var chartSection: some View {
         switch viewModel.chartState {
         case .loading:
-            LoadingView(caption: "チャートを読み込み中...")
+            LoadingView(caption: "データ取得中...")
         case .empty:
-            FXEmptyState(icon: "chart.xyaxis.line", title: "チャートデータがありません", message: "この時間軸のチャートデータはまだ取得されていません。")
+            // HQ指示(2026-10-09): データが無いときは架空の足を出さず「データなし」。
+            FXEmptyState(icon: "chart.xyaxis.line", title: "データなし", message: "この時間足の価格データはまだありません。")
         case .error(let message):
             ErrorView(title: "チャート取得に失敗しました", message: message, onRetry: { viewModel.retryChart() })
         case .loaded(let chart):
-            FXPriceChart(points: mappedPoints(chart), releaseIndex: releaseIndex(chart))
+            // 上の「発表 16:58」のラベルがタブに重ならないよう、少し間を空ける。
+            CandleChart(
+                chart: chart,
+                digits: viewModel.symbol.hasSuffix("JPY") ? 2 : 4,
+                timeframe: viewModel.selectedTimeframe,
+                preReleasePrice: viewModel.preReleasePrice,
+                pipSize: viewModel.symbol.hasSuffix("JPY") ? 0.01 : 0.0001
+            )
+                .padding(.top, 9)
         }
     }
 
-    /// HQ指示(2026-10-05、22回目)「背景画像とヘッダーとタブを全画面に反映して」:
-    /// 読み込み中・エラー・未設定状態が単色背景のみで`V5Viewport`(背景画像)・
-    /// ヘッダー・タブバーを経由していなかったため、`.loaded`状態と同じ外枠に揃えた。
+    // MARK: - 値動きの分析
+
+    @ViewBuilder
+    private func analysisCard(reactions: [ReactionTimeframeEntry]) -> some View {
+        let result = viewModel.eventSnapshot
+        if let summary = MovementAnalysisText.summary(
+            reactions: reactions, actual: result?.actual, forecast: result?.forecast, unit: result?.unit,
+            marketViewAbove: viewModel.indicator?.marketViewAbove, marketViewBelow: viewModel.indicator?.marketViewBelow
+        ) {
+            // HQ指示(2026-10-09)「要点を分けて表示」「値動きの事実と相場の解釈は分ける」。
+            VStack(alignment: .leading, spacing: 5) {
+                NotoText.text("値動きの分析", size: 11).foregroundStyle(.white)
+                VStack(spacing: 3) {
+                    ForEach(summary.facts, id: \.label) { row in
+                        HStack {
+                            NotoText.text(row.label, size: 8).foregroundStyle(SettingsCardStyle.subtitleColor)
+                            Spacer()
+                            NotoText.text(row.value, size: row.sign == nil ? 8.5 : 10)
+                                .foregroundStyle(row.sign.map { $0 >= 0 ? V5P.green : V5P.red } ?? .white)
+                        }
+                    }
+                }
+                if let interpretation = summary.interpretation {
+                    VStack(alignment: .leading, spacing: 2) {
+                        NotoText.text("解釈（一般的な見方）", size: 7.5).foregroundStyle(V5P.cyan)
+                        NotoText.text(interpretation, size: 7.5)
+                            .foregroundStyle(.white.opacity(0.85))
+                            .fixedSize(horizontal: false, vertical: true)
+                        NotoText.text("※ 値動きの原因を断定するものではない。", size: 6)
+                            .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    }
+                    .padding(6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 5).fill(V5P.cyan.opacity(0.08)))
+                }
+            }
+            .padding(8)
+            .frame(width: 214, alignment: .leading)
+            .background(AccountCardBackground())
+        }
+    }
+
     @ViewBuilder private func loadingScaffold(@ViewBuilder content: @escaping () -> some View) -> some View {
         V5Viewport {
-            V5Header(title: "変動詳細", back: true, onBack: { dismiss() })
+            V5Header(title: "相場反応詳細", back: true, onBack: { dismiss() })
             content()
                 .frame(width: V5P.W, height: V5P.H - 92, alignment: .center)
                 .padding(.top, 53)
             V5BottomBar(selected: $tabSelection)
         }
     }
+}
 
-    @ViewBuilder private func metric(_ a: String, _ b: String) -> some View {
-        VStack(spacing: 2) {
-            Text(a).font(.system(size: 6)).foregroundStyle(V5P.muted)
-            Text(b).font(.system(size: 10, weight: .bold)).foregroundStyle(b.hasPrefix("-") ? V5P.red : (b.hasPrefix("+") ? V5P.green : .white))
-        }.frame(maxWidth: .infinity)
+/// ローソク足(上昇は緑、下落は赤)と、発表時刻の縦線。価格は右側、時刻は下に出す。
+private struct CandleChart: View {
+    let chart: ChartResponse
+    let digits: Int
+    let timeframe: String
+    /// 発表直前の価格。基準線を引き、最後の足に「発表時点からの変動幅(pips)」を出す。
+    let preReleasePrice: Double?
+    let pipSize: Double
+
+    /// HQ指示(2026-10-09)の表示範囲: 発表時刻を基準に、1分足は前後15分(初動)、5分足は
+    /// 前後60分(短期の流れ)、15分足は前後3時間(全体の流れ)。Backendの`window_from`/`window_to`
+    /// を使い、無い古いBackendだけ同じ規則で計算する。データが無い部分に足は補わない。
+    private var window: (from: Date, to: Date) {
+        if let from = chart.windowFrom, let to = chart.windowTo { return (from, to) }
+        let release = chart.releaseDatetime
+        let minutes: Double = timeframe == "1m" ? 15 : timeframe == "5m" ? 60 : 180
+        return (release.addingTimeInterval(-minutes * 60), release.addingTimeInterval(minutes * 60))
     }
 
-    private func mappedPoints(_ chart: ChartResponse) -> [ChartPoint] {
-        chart.prices.map { ChartPoint(time: $0.timestamp, value: $0.close) }
-    }
-
-    private func releaseIndex(_ chart: ChartResponse) -> Int? {
-        guard !chart.prices.isEmpty else { return nil }
-        let target = chart.releaseDatetime
-        if let exact = chart.prices.firstIndex(where: { $0.timestamp >= target }) {
-            return exact
+    /// 足1本の秒数。端の足が枠にかからないよう、表示範囲の左右をこの分だけ広げる。
+    private var stepSeconds: TimeInterval {
+        switch timeframe {
+        case "1m": return 60
+        case "5m": return 300
+        default: return 900
         }
-        return chart.prices.count - 1
+    }
+
+    /// 時刻の目盛りの間隔。1分足は5分、5分足は20分、15分足は1時間ごと(重ならない数にする)。
+    private var labelMinutes: Int {
+        switch timeframe {
+        case "1m": return 5
+        case "5m": return 20
+        default: return 60
+        }
+    }
+
+    /// 時刻の目盛り。表示範囲の始まりからではなく、5分・15分・30分ちょうどの時刻
+    /// (05:40、05:45…)に置く。
+    private var axisDates: [Date] {
+        let step = TimeInterval(labelMinutes * 60)
+        var date = Date(timeIntervalSince1970: (window.from.timeIntervalSince1970 / step).rounded(.up) * step)
+        var dates: [Date] = []
+        // 右端に近すぎる目盛りは文字が切れる(「06:…」)ので出さない。
+        while date <= window.to.addingTimeInterval(-step / 2) {
+            dates.append(date)
+            date = date.addingTimeInterval(step)
+        }
+        return dates
+    }
+
+    private var points: [ChartPricePoint] {
+        chart.prices.filter { $0.timestamp >= window.from && $0.timestamp <= window.to }
+    }
+
+
+    var body: some View {
+        let points = points
+        let lows = points.map(\.low)
+        let highs = points.map(\.high)
+        let minY = lows.min() ?? 0
+        let maxY = highs.max() ?? 1
+        let pad = max((maxY - minY) * 0.08, 0.0001)
+        let width = candleWidth
+        Chart {
+            // HQ指示(2026-10-09)「縦の点線を、発表や発表時刻と分かるように」。
+            RuleMark(x: .value("発表", chart.releaseDatetime))
+                .foregroundStyle(V5P.cyan.opacity(0.8))
+                .lineStyle(StrokeStyle(lineWidth: 0.8, dash: [3, 2]))
+                .annotation(position: .top, alignment: .center, spacing: 1) {
+                    Text("発表 \(AppPreferences.shared.timeString(chart.releaseDatetime))")
+                        .font(.system(size: 6, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 3)
+                        .padding(.vertical, 1)
+                        .background(V5P.cyan.opacity(0.35), in: Capsule())
+                }
+            // HQ指示(2026-10-09)「発表時点からの変動幅(pips)を確認しやすく」: 発表直前の価格に基準線。
+            if let pre = preReleasePrice {
+                RuleMark(y: .value("発表直前", pre))
+                    .foregroundStyle(Color.white.opacity(0.45))
+                    .lineStyle(StrokeStyle(lineWidth: 0.6, dash: [2, 2]))
+            }
+            ForEach(points) { point in
+                let color = point.close >= point.open ? V5P.green : V5P.red
+                RuleMark(
+                    x: .value("時刻", point.timestamp),
+                    yStart: .value("安値", point.low),
+                    yEnd: .value("高値", point.high)
+                )
+                .lineStyle(StrokeStyle(lineWidth: 0.7))
+                .foregroundStyle(color)
+                RectangleMark(
+                    x: .value("時刻", point.timestamp),
+                    yStart: .value("始値", min(point.open, point.close)),
+                    yEnd: .value("終値", max(point.open, point.close) + (point.open == point.close ? pad * 0.05 : 0)),
+                    width: .fixed(width)
+                )
+                .foregroundStyle(color)
+            }
+            if let pre = preReleasePrice, let last = points.last {
+                let pips = (last.close - pre) / pipSize
+                PointMark(x: .value("時刻", last.timestamp), y: .value("終値", last.close))
+                    .symbolSize(10)
+                    .foregroundStyle(.white)
+                    .annotation(position: .topLeading, alignment: .trailing, spacing: 2) {
+                        Text("\(ValueFormat.number(pips, fractionDigits: 1, signed: true)) pips")
+                            .font(.system(size: 6.5, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(pips >= 0 ? V5P.green : V5P.red)
+                    }
+            }
+        }
+        .chartYScale(domain: (minY - pad)...(maxY + pad))
+        .chartXScale(domain: window.from.addingTimeInterval(-stepSeconds)...window.to.addingTimeInterval(stepSeconds))
+        // HQ指示(2026-10-09)「数字ではなくローソク足の部分を枠で囲んで」: 目盛りの数字・時刻の
+        // 外側ではなく、描画領域だけに角のない枠を付ける。
+        .chartPlotStyle { plot in
+            plot
+                .background(Color.black.opacity(0.18))
+                .overlay(Rectangle().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.8))
+        }
+        .chartYAxis {
+            AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { value in
+                // HQ指示(2026-10-09)「縦線横線がしっかり見えるように」。
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6)).foregroundStyle(SettingsCardStyle.cardBorder.opacity(0.9))
+                AxisValueLabel {
+                    if let price = value.as(Double.self) {
+                        // 「155」ではなく「155.00」のように小数点以下の桁をそろえる。
+                        Text(String(format: "%.\(digits)f", price))
+                            .font(.system(size: 6))
+                            .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    }
+                }
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: axisDates) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6)).foregroundStyle(SettingsCardStyle.cardBorder.opacity(0.9))
+                // 文字の中心を縦線に合わせる(既定では線の右に寄ってずれて見えた)。
+                AxisValueLabel(centered: false, anchor: .top) {
+                    if let date = value.as(Date.self) {
+                        // イベント詳細の発表日時と同じく、アプリの設定の時間帯(SCR-018)で出す。
+                        // 端末の時間帯で出していたため、発表14:07なのに05:55〜と出ていた。
+                        Text(AppPreferences.shared.timeString(date))
+                            .font(.system(size: 6))
+                            .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    }
+                }
+            }
+        }
+        .accessibilityLabel("ローソク足チャート")
+    }
+
+    /// 本数に合わせた足の幅。描画領域(約160)を本数+2で割った6割で、すき間を詰める。
+    private var candleWidth: CGFloat {
+        let count = max(points.count, 1) + 2
+        return max(1.5, min(9, 160 / CGFloat(count) * 0.6))
     }
 }

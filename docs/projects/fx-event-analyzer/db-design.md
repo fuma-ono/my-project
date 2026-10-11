@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.2
+# FX Event Analyzer: DB詳細設計 v4.11
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -22,6 +22,20 @@
   - 概要設計書・要件定義書に残る「EconomicEvent = EventSnapshot」等の旧仕様表現は、既にv1.4で修正済みであることを再確認(11章参照)
 - **v4.1**: API詳細設計レビュー(B-5)での確定事項を反映。Partial Match Search(部分一致検索)の性能を担保するため、`pg_trgm` + GIN Indexの追加方針を12章に明記(HQ確定、2026-09-16)。DB Migrationは実施していない(ドキュメント追記のみ)
 - **v4.2**(今回): 全設計横断監査(M-3)での確定事項を反映。`EventPriceReaction.max_upward_pips`/`max_downward_pips`をDBカラムとして追加し保存する方針に変更(旧: API応答時に都度計算する方針だったが、通常の`pips`列との保存方針の非対称性を解消するためDB保存に統一、HQ確定、2026-09-16)
+- **v4.3**(今回): 設定サブ画面SCR-018〜026の正式仕様(HQ確定、2026-10-02)を反映。Migration `20261002000001_user_settings.sql` / `20261002000002_subscriptions_app_store.sql`
+  - アカウント削除を**物理削除**に変更(旧: `Profile.deleted_at`によるソフトデリート)。3.1節・7章
+  - `Subscription`にApp Store検証用カラム(`product_id`/`provider_environment`/`last_transaction_id`/`auto_renew`/`revoked_at`/`last_verified_at`)と`UQ(provider, provider_subscription_id)`を追加。保存用関数`apply_app_store_subscription`を追加(3.2節)
+  - `UserSettings`を新設(3.14節)
+- **v4.4**(2026-10-05): SCR-016 通知設定の作り直しと要人発言(HQ指示 2026-10-05)。Migration `20261005000002_notification_settings_v2.sql` / `20261005000003_speeches.sql`
+  - `UserSettings`の通知カラムを新形状に変更(3.14節)
+  - `Speaker` / `SpeechEvent`を新設(3.15節・3.16節)。旧版でP2・対象外としていた`Person` / `SpeechEvent`を前倒し
+- **v4.5**(2026-10-06): SCR-016 通知設定に「通知しない時間帯」を追加。`UserSettings`に`notify_quiet_hours_enabled` / `notify_quiet_start` / `notify_quiet_end`を追加(3.14節)。Migration `20261006000001_notification_quiet_hours.sql`
+- **v4.6**(2026-10-06): SCR-018 表示・地域設定 / SCR-019 チャート設定の項目を追加。`UserSettings`に`display_theme` / `display_text_size` / `display_date_format` / `display_time_format` / `display_currency` / `display_week_start`、`chart_type` / `chart_show_indicators` / `chart_indicator_ma` / `chart_indicator_bollinger` / `chart_indicator_macd` / `chart_indicator_rsi` / `chart_indicator_stochastic` / `chart_crosshair` / `chart_price_line`を追加(3.14節)。Migration `20261006000002_display_chart_settings_v2.sql`
+- **v4.7**(2026-10-06): SCR-020 ヘルプ・お問い合わせ(画面番号はui-screens.md)。お問い合わせ・フィードバックの保存先`SupportRequest`(`support_requests`)を新設(3.17節)。自動返信の判定結果・返信文・不具合として登録したGitHub Issueを記録する。Migration `20261006000003_support_requests.sql`
+- **v4.8**(2026-10-07): レビュー指摘の修正。`SupportRequest`の送信回数の上限を、件数の確認と保存を1つのDB関数`insert_support_request`で行う方式に変更(同時送信で上限を超えない)。`SupportRequest`のクライアント向けSELECTポリシーを削除し、anon / authenticatedの権限を取り消した(`classification` / `github_issue_*`をクライアントから読めないようにする。参照はBackend経由のみ)(3.17節・6章)。`apply_app_store_subscription`の戻り値に`product_id`を追加(3.2節)。Migration `20261007000001_support_requests_rate_limit.sql`・`20261007000002_apply_app_store_subscription_product_id.sql`
+- **v4.9**(2026-10-07): SCR-026 ホーム通貨ペア編集。`UserSettings`に`home_fx_pairs`(ホームに表示する通貨ペア、1〜3件・配列の順 = 表示順、NULL = 既定)を追加(3.14節)。Migration `20261007000003_home_fx_pairs.sql`。開発用seed(`supabase/seed.sql`)の`FxPair`に`GBPJPY` / `AUDUSD` / `GBPUSD` / `USDCHF` / `AUDJPY` / `CADJPY`を追加(価格データなし)
+- **v4.10**(2026-10-09): SCR-006 指標詳細の再デザイン。`EconomicIndicator`に`name_en`(英語名)と`key_points`(注目される理由の短文の配列、0〜6件・NULL要素と空文字は不可)を追加し、`description`は「概要」として日本語1〜2文で持つと明記した(3.4節)。Migration `20261009000001_economic_indicators_name_en_key_points.sql`。開発用seed(`supabase/seed.sql`)の5指標に`name_en`・`key_points`と日本語の`description`を入れた。API(api-design.md v1.16)では`key_points`のNULLを`[]`として返す
+- **v4.11**(2026-10-09): SCR-008 相場反応詳細の「一般的な見方」。`EconomicIndicator`に`market_view_above`(結果が予想を上回ったときの一般的な見方)・`market_view_below`(下回ったとき)を追加(3.4節)。人が書いた日本語1文(200文字以内・空白だけは不可)、NULL = 未登録。Migration `20261009000002_economic_indicators_market_views.sql`。開発用seedの5指標に両方を入れた。API(api-design.md v1.18)ではNULLを`null`のまま返す
 
 ---
 
@@ -42,8 +56,12 @@
 | `FxPrice` | FX価格ローソク足(イベント時間窓中心の保持) |
 | `EventPriceReaction` | イベント×通貨ペア×時間軸ごとの価格反応 |
 | `IngestionLog` | 外部データ取得・取り込みの運用ログ(FEAT-150) |
+| `UserSettings` | ユーザーごとの通知対象・表示・チャート設定(v4.3で追加) |
+| `Speaker` | 要人(発言者)マスタ(v4.4で追加) |
+| `SpeechEvent` | 要人発言(v4.4で追加) |
+| `SupportRequest` | お問い合わせ・フィードバックと自動返信(v4.7で追加) |
 
-将来拡張(P2、今回はテーブル設計対象外): `favorite_indicators` / `favorite_pairs` / `alert_settings` / `Person` / `SpeechEvent` / `SpeechPriceReaction` / Community関連。
+将来拡張(P2、今回はテーブル設計対象外): `favorite_indicators` / `favorite_pairs` / `alert_settings` / `SpeechPriceReaction` / Community関連。(`Person` / `SpeechEvent`はHQ指示 2026-10-05により`Speaker` / `SpeechEvent`としてv4.4で追加)
 
 ---
 
@@ -53,7 +71,9 @@
 Profile
    │
    ├── Subscription[]
-   └── Entitlement[]
+   ├── Entitlement[]
+   ├── UserSettings(0..1)
+   └── SupportRequest[](v4.7)
 
 EconomicIndicator
    │
@@ -82,12 +102,15 @@ IngestionLog(他Entityへの直接参照なし。provider/data_typeで対象を�
 | カラム | 型 | 制約 | 備考 |
 |---|---|---|---|
 | id | uuid | PK | 認証基盤(Supabase `auth.users.id`)と同値 |
-| display_name | text | nullable | |
-| deleted_at | timestamptz | nullable | ソフトデリート。Apple 5.1.1(v)対応 |
+| display_name | text | nullable | SCR-015で編集(API v1.5) |
+| birth_date | date | nullable, CHK >= 1900-01-01 | SCR-015の生年月日(2026-10-05追加、Migration `20261005000001_profiles_birth_date.sql`)。暦日のためタイムゾーンを持たない`date`型 |
+| deleted_at | timestamptz | nullable | v4.3で未使用化(アカウント削除は物理削除に変更、下記)。カラムは既存Migrationとの互換のため残す |
 | created_at | timestamptz | NN, DEF now() | |
 | updated_at | timestamptz | NN, DEF now() | |
 
 **RLS**: `id = auth.uid()`の本人のみSELECT/UPDATE可。INSERT/DELETEはservice_roleのみ(6章)。
+
+**アカウント削除(v4.3でHQ確定、2026-10-02)**: Apple 5.1.1(v)対応のアカウント削除(SCR-026、`DELETE /api/v1/account`)は**物理削除**とする。Backendが`auth.users`の行をSupabase Admin APIで削除し、`Profile`以下はFKのCASCADEで削除される(7章)。
 
 ### 3.2 Subscription(確定)
 
@@ -99,7 +122,13 @@ IngestionLog(他Entityへの直接参照なし。provider/data_typeで対象を�
 | status | text | NN, CHK: `status IN ('ACTIVE','CANCELED','EXPIRED','TRIAL')` | **HQ確定**。4状態に固定 |
 | provider | text | NN, DEF `APP_STORE` | |
 | provider_customer_id | text | nullable | |
-| provider_subscription_id | text | nullable | |
+| provider_subscription_id | text | nullable | App Storeでは`originalTransactionId`(更新しても変わらない購読の識別子) |
+| product_id | text | nullable | v4.3追加。App StoreのProduct ID(月額/年額) |
+| provider_environment | text | nullable, CHK: `IN ('Production','Sandbox')` | v4.3追加 |
+| last_transaction_id | text | nullable | v4.3追加。最後に検証したTransactionの`transactionId` |
+| auto_renew | boolean | nullable | v4.3追加。RenewalInfoの自動更新状態。未受領ならnull |
+| revoked_at | timestamptz | nullable | v4.3追加。返金等による取消日時 |
+| last_verified_at | timestamptz | nullable | v4.3追加。Backendが最後に署名検証した時刻 |
 | started_at | timestamptz | NN | |
 | expires_at | timestamptz | nullable | |
 | created_at | timestamptz | NN, DEF now() | |
@@ -107,8 +136,11 @@ IngestionLog(他Entityへの直接参照なし。provider/data_typeで対象を�
 
 IDX(user_id)
 UQ: `status = 'ACTIVE'`の行はuser_idにつき1件まで(部分UNIQUE index)。履歴として過去の契約行は複数残る。
+UQ(provider, provider_subscription_id) WHERE provider_subscription_id IS NOT NULL(v4.3追加)。1つのApp Store購読は1ユーザーにのみ紐付く。
 
 **RLS**: `user_id = auth.uid()`の本人のみSELECT可。書き込みはservice_role(決済処理)のみ。
+
+**保存処理(v4.3)**: `POST /api/v1/subscription/verify`(api-design.md §25.1)で検証済みの購読は、関数`apply_app_store_subscription(...)`(security definer、service_roleのみ実行可)で1トランザクションとして保存する: 他ユーザー所有なら例外(SQLSTATE `P0409`→409)、新しい購読がACTIVEなら同ユーザーの他のACTIVE行をEXPIREDにする、行をinsert/update、PRO用`Entitlement`(`VIEW_ADVANCED_STATS`)の`enabled`/`expires_at`を同期。将来のApp Store Server Notifications(更新・解約・更新失敗・返金)も同関数を再利用する想定。戻り値はplan / status / started_at / expires_at / product_id(v4.8で`product_id`を追加。`GET /subscription`と同じ形)。
 
 ### 3.3 Entitlement(確定: feature_codeを機能単位のコード体系に具体化)
 
@@ -147,15 +179,19 @@ IDX(user_id)
 | id | uuid | PK | |
 | code | text | UQ, NN | 内部コード(Provider非依存) |
 | name | text | NN | |
+| name_en | text | nullable | v4.10。英語名(例: `Consumer Price Index`)。SCR-006で表示。NULL = 未登録 |
 | country_code | text | NN | ISO 3166-1 alpha-2を想定 |
 | currency_code | text | NN | ISO 4217を想定(参照テーブルなし) |
 | importance | text | NN, CHK: `importance IN ('LOW','MEDIUM','HIGH')` | **HQ確定**。3段階 |
-| description | text | nullable | |
+| description | text | nullable | SCR-006の「概要」。日本語1〜2文(v4.10で明記) |
+| key_points | text[] | nullable, CHK: `key_points IS NULL OR (cardinality(key_points) <= 6 AND array_position(key_points, NULL) IS NULL AND '' <> ALL (key_points))` | v4.10。SCR-006の「注目される理由」(日本語の短文、配列順 = 表示順、2〜4件程度)。NULL = 未登録(APIでは`[]`) |
 | frequency | text | NN, CHK: `frequency IN ('MONTHLY','QUARTERLY','IRREGULAR')` | |
 | unit | text | nullable | |
 | source | text | nullable | |
 | source_url | text | nullable | |
 | favorable_direction | text | NN, CHK: `favorable_direction IN ('HIGHER_IS_POSITIVE','LOWER_IS_POSITIVE','NEUTRAL')` | Surpriseの符号・方向性判定(9章) |
+| market_view_above | text | nullable, CHK: `market_view_above IS NULL OR (btrim(market_view_above) <> '' AND char_length(market_view_above) <= 200)` | v4.11。SCR-008「一般的な見方」(結果が予想を上回ったとき)。人が書いた日本語1文。実際の値動きの原因とは断定しない。NULL = 未登録 |
+| market_view_below | text | nullable, CHK: `market_view_below IS NULL OR (btrim(market_view_below) <> '' AND char_length(market_view_below) <= 200)` | v4.11。同上(結果が予想を下回ったとき) |
 | is_active | boolean | NN, DEF true | 論理削除相当 |
 | created_at | timestamptz | NN, DEF now() | |
 | updated_at | timestamptz | NN, DEF now() | |
@@ -347,6 +383,127 @@ IDX(event_id, fx_pair_id, timeframe)
 IDX(data_type, started_at DESC)
 IDX(status)
 
+### 3.14 UserSettings(v4.3で追加、HQ確定 2026-10-02)
+
+SCR-016 通知設定 / SCR-018 表示・地域設定 / SCR-019 チャート設定(api-design.md 30章では旧番号SCR-020 / SCR-021) / SCR-026 ホーム通貨ペア編集の保存先(api-design.md §24.4/§24.5)。行は初回の`GET /settings`でDB既定値により作成する。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| user_id | uuid | PK, FK→Profile.id ON DELETE CASCADE | ユーザーにつき1行 |
+| notify_push | boolean | NN, DEF true | プッシュ通知(全体のON/OFF)(v4.4) |
+| notify_indicators | boolean | NN, DEF true | 重要な経済指標の通知(v4.4) |
+| notify_speeches | boolean | NN, DEF true | 要人発言の通知(v4.4) |
+| notify_fx_pair_symbols | text[] | nullable, CHK: NULLまたは1件以上 | 対象通貨ペア(`FxPair.symbol`)。NULL = すべて。配列のためFKなし、存在確認はBackend(v4.4) |
+| notify_importances | text[] | NN, DEF `{HIGH,MEDIUM}`, CHK: 1件以上かつ`<@ {LOW,MEDIUM,HIGH}` | 通知する重要度(v4.4) |
+| notify_lead_minutes | smallint | NN, DEF 5, CHK: `IN (0,5,10,15,30,60)` | 発表の何分前に通知するか。0 = 発表時(v4.4) |
+| notify_quiet_hours_enabled | boolean | NN, DEF false | 通知しない時間帯を使うか(v4.5) |
+| notify_quiet_start | time | NN, DEF `23:00`, CHK: 秒 = 0 | 通知しない時間帯の開始(含む)。`display_timezone`の現地時刻(v4.5) |
+| notify_quiet_end | time | NN, DEF `07:00`, CHK: 秒 = 0 | 通知しない時間帯の終了(含まない)。開始より前なら日付をまたぐ、開始と同じなら抑止なし(v4.5) |
+| display_language | text | NN, DEF `ja`, CHK: `IN ('ja','en')` | |
+| display_region | text | NN, DEF `JP`, CHK: `~ '^[A-Z]{2}$'` | ISO 3166-1 alpha-2 |
+| display_timezone | text | NN, DEF `Asia/Tokyo` | IANA timezone名(妥当性はBackendで検証) |
+| display_theme | text | NN, DEF `SYSTEM`, CHK: `IN ('SYSTEM','DARK','LIGHT')` | テーマ。SYSTEM = 端末の設定に従う(v4.6) |
+| display_text_size | text | NN, DEF `STANDARD`, CHK: `IN ('SMALL','STANDARD','LARGE')` | 文字サイズ(v4.6) |
+| display_date_format | text | NN, DEF `YYYY/MM/DD`, CHK: `IN ('YYYY/MM/DD','YYYY-MM-DD','MM/DD/YYYY','YYYY年M月D日')` | 日付の表示形式(v4.6) |
+| display_time_format | text | NN, DEF `24H`, CHK: `IN ('24H','12H')` | 時刻の表示形式(v4.6) |
+| display_currency | text | NN, DEF `JPY`, CHK: `IN ('JPY','USD','EUR','GBP','AUD','CAD','CHF','NZD')` | 表示通貨(v4.6) |
+| display_week_start | text | NN, DEF `MONDAY`, CHK: `IN ('SUNDAY','MONDAY')` | 週の始まり(v4.6) |
+| chart_default_fx_pair_symbol | text | nullable, FK→FxPair.symbol ON UPDATE CASCADE ON DELETE SET NULL | |
+| chart_default_timeframe | text | NN, DEF `5m`, CHK: `IN ('1m','5m','15m','30m','60m')` | |
+| chart_type | text | NN, DEF `CANDLE`, CHK: `IN ('CANDLE','LINE','BAR')` | チャートの種類(v4.6)。APIは`chart.chart_type` |
+| chart_show_indicators | boolean | NN, DEF true | テクニカル指標の表示(全体のON/OFF)。falseなら`chart_indicator_*`に関わらず表示しない(v4.6) |
+| chart_indicator_ma | boolean | NN, DEF true | 移動平均線(v4.6) |
+| chart_indicator_bollinger | boolean | NN, DEF false | ボリンジャーバンド(v4.6) |
+| chart_indicator_macd | boolean | NN, DEF true | MACD(v4.6) |
+| chart_indicator_rsi | boolean | NN, DEF false | RSI(v4.6) |
+| chart_indicator_stochastic | boolean | NN, DEF false | ストキャスティクス(v4.6) |
+| chart_crosshair | boolean | NN, DEF true | クロスヘア(十字カーソル)の表示(v4.6) |
+| chart_price_line | boolean | NN, DEF true | 現在値ラインの表示(v4.6) |
+| home_fx_pairs | text[] | nullable, CHK: NULLまたは1〜3件 | ホームに表示する通貨ペア(`FxPair.symbol`)。配列の順 = 表示順。NULL = 既定(USDJPY・EURUSD・EURJPY)。配列のためFKなし、存在確認・重複の確認はBackend(v4.9) |
+| created_at | timestamptz | NN, DEF now() | |
+| updated_at | timestamptz | NN, DEF now() | |
+
+**通知について(v4.4で変更、HQ指示 2026-10-05)**: 旧方針「MVPはPush通知を送信しない・保存のみ」(HQ確定 2026-10-02)を置き換え、iOSが`GET /notifications/upcoming`(api-design.md §24.6)の結果から端末内のローカル通知を予約する。Backendからのリモートpush・デバイストークン用テーブルは引き続き不要。
+
+**通知しない時間帯(v4.5、Migration `20261006000001_notification_quiet_hours.sql`)**: `notify_quiet_*`はAPIでは`"HH:MM"`として受け渡しし、Postgresの`time`値(`"23:00:00"`)との変換はBackend(`src/repositories/userSettingsRepository.ts`)で行う。`notify_quiet_hours_enabled = true`のとき、`GET /notifications/upcoming`は`notify_at`を`display_timezone`(解決できない場合は`Asia/Tokyo`)の現地時刻に直して判定し、該当する項目を除外する(api-design.md §24.6)。既存行は列既定値(OFF)で埋まるためデータ移行は不要。
+
+**表示・チャート設定の追加(v4.6、Migration `20261006000002_display_chart_settings_v2.sql`)**: APIのフィールド名は列名から`display_` / `chart_`を除いたもの(例: `display_text_size` ⇔ `display.text_size`、`chart_indicator_ma` ⇔ `chart.indicator_ma`)。`chart_type`のみ`chart_chart_type`とせず、列名のまま`chart.chart_type`に対応させる。列挙の妥当性はBackend(`src/schemas/settings.ts`、違反は`422`)とCHECKの両方で担保する。既存行は列既定値で埋まるためデータ移行は不要。
+
+**ホーム通貨ペア(v4.9、Migration `20261007000003_home_fx_pairs.sql`)**: APIの`home.fx_pairs`に対応する(api-design.md §24.4/§24.5)。要素が有効な`FxPair.symbol`か・重複がないかは`notify_fx_pair_symbols`と同じくBackendが確認する(違反は`422`)。`GET /home`の`major_fx`はこの列の通貨ペアをその順で返し、NULL(または行がない)ときは既定の3件を返す(api-design.md 12章)。`GET /home`は設定の行を作らず読むだけ。既存行はNULL(= 既定)のためデータ移行は不要。
+
+**旧カラムの移行(Migration `20261005000002_notification_settings_v2.sql`)**: `notify_pre_release` / `notify_result` / `notify_favorites` / `notify_min_importance`は削除。既存行は`notify_indicators = notify_pre_release OR notify_result`、`notify_importances` = 旧`notify_min_importance`以上の★を持つ重要度(暫定マッピング LOW→★1 / MEDIUM→★3 / HIGH→★5、`src/domain/importance.ts`。例: ★3→`{HIGH,MEDIUM}`、★4→`{HIGH}`)で移行した。移行時は`updated_at`を更新しない。
+
+**RLS**: `user_id = auth.uid()`の本人のみSELECT可。書き込みはservice_roleのみ(Backend経由)。
+
+### 3.15 Speaker(v4.4で追加、HQ指示 2026-10-05)
+
+要人(発言者)マスタ。旧版でP2・設計対象外としていた`Person`を、要人発言の通知・一覧のために前倒しで追加(Migration `20261005000003_speeches.sql`)。テーブル名は`speakers`。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK, DEF gen_random_uuid() | |
+| name | text | NN | 例: ジェローム・パウエル |
+| title | text | NN | 役職。例: FRB議長 |
+| organization | text | NN | 例: FRB |
+| country_code | text | NN | `EconomicIndicator`と同じ形式。ユーロ圏は`EU` |
+| currency_code | text | NN | `EconomicIndicator`と同じ形式。関連通貨ペアの判定に使う |
+| created_at / updated_at | timestamptz | NN, DEF now() | |
+
+IDX(currency_code)
+
+### 3.16 SpeechEvent(v4.4で追加、HQ指示 2026-10-05)
+
+要人発言1件。テーブル名は`speech_events`。`SpeechPriceReaction`は引き続き対象外。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK, DEF gen_random_uuid() | |
+| speaker_id | uuid | NN, FK→Speaker.id ON DELETE CASCADE | |
+| provider | text | NN | |
+| provider_event_id | text | NN | |
+| title | text | NN | |
+| summary | text | nullable | 出典に基づく事実の要約 |
+| statement_datetime | timestamptz | NN | 発言(予定)日時 |
+| importance | text | NN, CHK: `IN ('LOW','MEDIUM','HIGH')` | |
+| status | text | NN, DEF `SCHEDULED`, CHK: `IN ('SCHEDULED','DELIVERED','CANCELLED')` | |
+| created_at / updated_at | timestamptz | NN, DEF now() | |
+
+UQ(provider, provider_event_id)、IDX(statement_datetime)、IDX(speaker_id)
+
+関連通貨ペアは保存せず、`Speaker.currency_code`をbaseまたはquoteに含む`FxPair`をBackendが導出する(api-design.md §24.6)。
+
+**RLS**: `EconomicIndicator` / `EconomicEvent`と同じ共有データ扱い(全認証ユーザーSELECT可、書き込みはservice_roleのみ)。
+
+### 3.17 SupportRequest(v4.7で追加)
+
+SCR-020 ヘルプ・お問い合わせから送られたお問い合わせ・フィードバック(api-design.md §24.7/§24.8)。テーブル名は`support_requests`。Migration `20261006000003_support_requests.sql`。返信はルールとテンプレートでBackendが決める(LLMは使わない。`src/domain/support.ts`)。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK, DEF gen_random_uuid() | 受付ID。GitHub Issueにも記載する |
+| user_id | uuid | NN, FK→Profile.id ON DELETE CASCADE | 送信者。GitHub Issueには含めない |
+| kind | text | NN, CHK: `IN ('INQUIRY','FEEDBACK')` | お問い合わせ / ご意見・ご要望 |
+| category | text | NN, CHK: `IN ('ACCOUNT','BILLING','NOTIFICATION','CHART','DATA','BUG','OTHER')` | |
+| body | text | NN, CHK: 1〜2000文字 | 前後の空白を除いて保存 |
+| app_version | text | nullable, CHK: 100文字以内 | 不具合調査用の端末情報(任意) |
+| os_version | text | nullable, CHK: 100文字以内 | 同上 |
+| device_model | text | nullable, CHK: 100文字以内 | 同上 |
+| classification | text | NN, CHK: `IN ('VALID','BUG','NONSENSE','SPAM')` | 自動判定の結果。APIでは返さない |
+| status | text | NN, CHK: `IN ('REPLIED','IGNORED','ESCALATED')` | VALID→REPLIED、BUG→ESCALATED、NONSENSE / SPAM→IGNORED |
+| reply_body | text | nullable | 自動返信の本文。IGNOREDはNULL |
+| replied_at | timestamptz | nullable | 返信日時。IGNOREDはNULL |
+| github_issue_number | int | nullable | BUGで作成したGitHub Issueの番号。未設定・作成失敗はNULL。APIでは返さない |
+| github_issue_url | text | nullable | 同IssueのURL。APIでは返さない |
+| created_at | timestamptz | NN, DEF now() | |
+
+CHK: `(status = 'IGNORED') = (reply_body IS NULL)`、`(reply_body IS NULL) = (replied_at IS NULL)`。IDX(user_id, created_at DESC)(履歴の取得と送信回数の上限判定)。
+
+**送信回数の上限**: 1ユーザーにつき直近1時間で5件まで。この行数で判定するため、IGNOREDの行も削除しない(api-design.md §24.7、超過時`429 RATE_LIMITED`)。v4.8: 保存は関数`insert_support_request(...)`(security definer、`search_path`固定、service_roleのみ実行可)で行う。関数はユーザーごとのadvisory lock(`pg_advisory_xact_lock(hashtext(user_id::text))`)を取ってから直近1時間の件数を数え、上限に達していればSQLSTATE `P0429`(Backendが`429`に変換。保存しない)、そうでなければinsertして行を返す。同じユーザーの同時送信は順番に処理されるため上限を超えない。
+
+**GitHub Issue**: BUGの行は、Backend環境変数`GITHUB_ISSUES_TOKEN` / `GITHUB_ISSUES_REPO`が設定されていればGitHub Issueを作成し、番号とURLを記録する。Issueに送るのは受付ID・種別・カテゴリ・端末情報と、メールアドレス・電話番号・カード番号・7桁以上の数字列を除いた本文のみ(v4.8でカード番号・7桁に変更)(`user_id`・メールアドレスは送らない)。トークンはBackend(サーバー)だけに置き、iOSアプリやDBには保存しない。
+
+**RLS**: RLSは有効だがポリシーなし(v4.8)。anon / authenticatedの権限も取り消しており、クライアントからは読み書きできない。参照・書き込みはservice_role(Backendの`GET` / `POST /support/requests`)のみ。v4.7の「本人のみSELECT可」のポリシーでは`classification` / `github_issue_*`がクライアントから読めたため削除した。
+
 ---
 
 ## 4. Snapshot不変性・Revision管理(確定)
@@ -376,8 +533,9 @@ Supabase RLSを実装前提の設計条件として採用する。論理方針�
 
 | 区分 | 対象テーブル | 方針 |
 |---|---|---|
-| ユーザー固有 | `Profile` / `Subscription` / `Entitlement` | `auth.uid()`等を利用した本人のみSELECT可。INSERT/UPDATE/DELETEはservice_roleのみ |
-| 共有データ | `EconomicIndicator` / `EconomicEvent` / `EventSnapshot` / `EventRevision` / `EventExplanation` / `IndicatorFxPair` / `FxPair` / `FxPrice` / `EventPriceReaction` | ユーザー単位のRLSを前提とせず、原則として全認証ユーザーからSELECT可能。INSERT/UPDATE/DELETEはservice_role(Ingestion Worker・管理者機能)のみ |
+| ユーザー固有 | `Profile` / `Subscription` / `Entitlement` / `UserSettings` | `auth.uid()`等を利用した本人のみSELECT可。INSERT/UPDATE/DELETEはservice_roleのみ |
+| ユーザー固有(Backend経由のみ、v4.8) | `SupportRequest`(v4.7) | クライアントからは読み書き不可(ポリシーなし、anon / authenticatedの権限なし)。内部情報の列(`classification` / `github_issue_*`)を含むため、参照もservice_role(Backend)経由のみ |
+| 共有データ | `EconomicIndicator` / `EconomicEvent` / `Speaker` / `SpeechEvent`(v4.4) / `EventSnapshot` / `EventRevision` / `EventExplanation` / `IndicatorFxPair` / `FxPair` / `FxPrice` / `EventPriceReaction` | ユーザー単位のRLSを前提とせず、原則として全認証ユーザーからSELECT可能。INSERT/UPDATE/DELETEはservice_role(Ingestion Worker・管理者機能)のみ |
 | 運用ログ | `IngestionLog` | 一般ユーザーからは非公開。管理者機能・service_roleのみアクセス可 |
 
 ## 7. Delete / Cascade方針(確定)
@@ -386,7 +544,7 @@ Supabase RLSを実装前提の設計条件として採用する。論理方針�
 
 - 歴史的record(`EconomicEvent`/`EventSnapshot`/`EventRevision`/`EventExplanation`/`EventPriceReaction`/`FxPrice`): 子から親への外部キーは`ON DELETE RESTRICT`。
 - マスタ系(`EconomicIndicator`/`FxPair`): `is_active`による論理無効化を優先し、物理削除は想定しない(`ON DELETE RESTRICT`)。
-- ユーザー系: `Profile`はソフトデリート(`deleted_at`)。`Subscription`/`Entitlement`は`Profile`への`ON DELETE CASCADE`(ユーザー削除時に契約情報も削除)。
+- ユーザー系(v4.3で変更): アカウント削除は物理削除。`auth.users`削除→`Profile`(`auth.users`への`ON DELETE CASCADE`)→`Subscription`/`Entitlement`/`UserSettings`/`SupportRequest`(v4.7)(`Profile`への`ON DELETE CASCADE`)の順に連鎖して削除される。旧方針の`Profile`ソフトデリート(`deleted_at`)は使用しない。
 - 関連テーブル(`IndicatorFxPair`): 親(`EconomicIndicator`/`FxPair`)は物理削除を想定しないため、実質的にCASCADEが発火する場面はない。
 
 不要になったデータは削除ではなく`is_active`/`status`等による論理的な無効化を優先する。

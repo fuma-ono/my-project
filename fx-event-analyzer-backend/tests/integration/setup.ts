@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../../src/app.js';
 import type { Env } from '../../src/config/env.js';
 import { loadEnv } from '../../src/config/env.js';
+import type { SignedDataVerifier } from '../../src/storekit/signedDataVerifier.js';
 
 /**
  * These tests exercise the real app (src/app.ts) against a real local
@@ -49,6 +50,7 @@ export interface IntegrationContext {
 export function buildIntegrationContext(
   integration: IntegrationEnv,
   options: {
+    signedDataVerifier?: SignedDataVerifier;
     /** Fake fetch for GitHub Issue creation (SCR-020) — nothing reaches GitHub. */
     githubFetch?: typeof fetch;
     /** Extra env, e.g. GITHUB_ISSUES_TOKEN / GITHUB_ISSUES_REPO. */

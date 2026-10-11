@@ -5,12 +5,6 @@ import SwiftUI
 /// 有料機能からSCR-017への導線(2026-10-06の積み残し)もこれで兼ねる。
 ///
 /// 使う側は`message`に理由を入れるだけ。NavigationStackの中で使う。
-///
-/// HQ指示(Calendar/Settings/Accountのみ移植): 遷移先は本来
-/// `SubscriptionManagementView(apiClient:tabSelection:)`(サブスクリプション
-///購入・管理機能、今回のポート対象外)だが、それはこのブランチにまだ無いため、
-/// `claude/fx-event-analyzer`の他の未実装`SettingsSubRoute`と同じ仮画面
-/// (`PlaceholderScreenView`、SCR-017)に差し替えている。
 struct PlanLimitPrompt: ViewModifier {
     @Binding var message: String?
     let apiClient: APIClient
@@ -29,9 +23,7 @@ struct PlanLimitPrompt: ViewModifier {
                 Text(message ?? "")
             }
             .navigationDestination(isPresented: $showsPlans) {
-                PlaceholderScreenView(scrNumber: "SCR-017", screenName: "プラン・購読管理")
-                    .navigationTitle("プラン・購読管理")
-                    .navigationBarTitleDisplayMode(.inline)
+                SubscriptionManagementView(apiClient: apiClient, tabSelection: $tabSelection)
             }
     }
 }

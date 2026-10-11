@@ -1,17 +1,18 @@
 import type { FastifyInstance } from 'fastify';
 import { ApiError } from '../errors/ApiError.js';
-import { FEATURE_CODES, hasEntitlement, requireEntitlement } from '../authorization/entitlements.js';
+import { FEATURE_CODES, listActiveFeatureCodes, requireEntitlement } from '../authorization/entitlements.js';
 import { getEventById, getLatestExplanation, getReleaseSnapshot } from '../repositories/eventsRepository.js';
 import { getIndicatorById, listRelatedFxPairs } from '../repositories/indicatorsRepository.js';
 import {
-  listAllReleasedEventIds,
   listAvailableReactionsForComparison,
+  listRecentReleasedEventIds,
   listReleasedEventsForIndicator,
 } from '../repositories/historicalRepository.js';
 import { listReactionsForPair } from '../repositories/reactionsRepository.js';
 import { computeAdvancedHistoricalStats, computeHistoricalStats } from '../domain/historicalStatistics.js';
 import { gateAdvancedStatistics } from '../domain/advancedStatistics.js';
 import { resolveTimeframeAnalysisStatus, type ReleaseDatetimePrecision } from '../domain/dataQuality.js';
+import { capRowRange, historyLimitFor, planFromFeatures, planLimitsFor } from '../domain/planLimits.js';
 import { comparisonQuerySchema } from '../schemas/historical.js';
 import { buildMeta, parsePagination, rangeFor } from '../utils/pagination.js';
 
@@ -72,7 +73,9 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
     };
   });
 
-  // GET /indicators/{indicator_id}/comparison — api-design.md §21.
+  // GET /indicators/{indicator_id}/comparison — api-design.md §21. Only the
+  // plan's history_events_max most recent releases are used — for stats and
+  // for the paginated `events` alike (§28.1); `history_limit` reports the cap.
   app.get<{ Params: { indicator_id: string } }>('/indicators/:indicator_id/comparison', async (request) => {
     const userId = request.user!.id;
     await requireEntitlement(app.supabase, userId, FEATURE_CODES.VIEW_HISTORICAL);
@@ -85,14 +88,18 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
 
     const query = comparisonQuerySchema.parse(request.query);
     const pagination = parsePagination(query);
-    const hasAdvanced = await hasEntitlement(app.supabase, userId, FEATURE_CODES.VIEW_ADVANCED_STATS);
+    const features = await listActiveFeatureCodes(app.supabase, userId);
+    const hasAdvanced = features.includes(FEATURE_CODES.VIEW_ADVANCED_STATS);
+    const plan = planFromFeatures(features);
+    const historyMax = planLimitsFor(plan).history_events_max;
 
-    const { rows: events, total } = await listReleasedEventsForIndicator(
-      app.supabase,
-      indicatorId,
-      rangeFor(pagination.page, pagination.limit),
-    );
-    const allEventIds = await listAllReleasedEventIds(app.supabase, indicatorId);
+    const allEventIds = await listRecentReleasedEventIds(app.supabase, indicatorId, historyMax);
+    const pageRange = capRowRange(rangeFor(pagination.page, pagination.limit), historyMax);
+    const { rows: events, total: releasedTotal } = pageRange
+      ? await listReleasedEventsForIndicator(app.supabase, indicatorId, pageRange)
+      : { rows: [], total: allEventIds.length };
+    const total = Math.min(releasedTotal, historyMax);
+    const historyLimit = historyLimitFor(plan, allEventIds.length);
 
     const timeframes = query.timeframe === 'all' ? [...ALL_TIMEFRAMES] : [query.timeframe];
     const reactionRows = await listAvailableReactionsForComparison(
@@ -126,6 +133,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
         advanced_statistics: gateAdvancedStatistics(hasAdvanced, advanced),
         events,
         meta: buildMeta(pagination.page, pagination.limit, total),
+        history_limit: historyLimit,
       };
     }
 
@@ -148,6 +156,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
       stats_by_timeframe: statsByTimeframe,
       events,
       meta: buildMeta(pagination.page, pagination.limit, total),
+      history_limit: historyLimit,
     };
   });
 }

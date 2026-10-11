@@ -162,8 +162,13 @@ struct LoginView: View {
                         // so only the brand mark/title move — "Appleで
                         // サインイン" and everything below stays exactly
                         // where it was, same compensation pattern as above.
+                        //
+                        // User feedback (2026-10-07): after switching the
+                        // form's text to Noto Sans JP (taller line height)
+                        // the block sat lower — move "Appleでサインイン" and
+                        // everything below it up a little (0.05 -> 0.03).
                         formPanel(controlHeight: geometry.size.height * 0.062)
-                            .padding(.top, geometry.size.height * 0.05)
+                            .padding(.top, geometry.size.height * 0.03)
                             .padding(.horizontal, DesignTokens.Spacing.lg)
                             .padding(.bottom, DesignTokens.Spacing.lg)
                     }
@@ -210,16 +215,14 @@ struct LoginView: View {
 
             HStack(spacing: 12) {
                 Rectangle().fill(DesignTokens.Colors.borderSubtle).frame(height: 1)
-                Text("または")
-                    .font(DesignTokens.Typography.loginCaption)
+                NotoText.text("または", size: 15)
                     .foregroundStyle(DesignTokens.Colors.textSecondary)
                     .fixedSize()
                 Rectangle().fill(DesignTokens.Colors.borderSubtle).frame(height: 1)
             }
             .padding(.top, 16)
 
-            Text("メールアドレス")
-                .font(DesignTokens.Typography.loginCaption)
+            NotoText.text("メールアドレス", size: 15)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                 .padding(.top, 16)
             // `TextField`'s own `prompt:` parameter, and later a manual
@@ -275,14 +278,12 @@ struct LoginView: View {
             .onTapGesture { focusedField = .email }
             .padding(.top, 6)
 
-            Text("パスワード")
-                .font(DesignTokens.Typography.loginCaption)
+            NotoText.text("パスワード", size: 15)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
                 .padding(.top, 14)
             ZStack(alignment: .leading) {
                 if viewModel.password.isEmpty {
-                    Text("パスワードを入力")
-                        .font(DesignTokens.Typography.body)
+                    NotoText.text("パスワードを入力", size: 16)
                         .foregroundStyle(DesignTokens.Colors.textSecondary)
                         .padding(.horizontal, DesignTokens.Spacing.md)
                         .allowsHitTesting(false)
@@ -316,8 +317,7 @@ struct LoginView: View {
                     if viewModel.state == .submitting {
                         ProgressView().tint(.white)
                     } else {
-                        Text("ログイン")
-                            .font(DesignTokens.Typography.bodyEmphasized)
+                        NotoText.text("ログイン", size: 16)
                             .foregroundStyle(.white)
                     }
                 }
@@ -337,8 +337,7 @@ struct LoginView: View {
             .frame(maxWidth: .infinity)
             .overlay(alignment: .bottom) {
                 if case .error(let message) = viewModel.state {
-                    Text(message)
-                        .font(DesignTokens.Typography.caption)
+                    NotoText.text(message, size: 13)
                         .foregroundStyle(DesignTokens.Colors.statusError)
                         .multilineTextAlignment(.center)
                         .padding(.top, 6)
@@ -349,8 +348,7 @@ struct LoginView: View {
             // 2026-09-29 HQ承認(2-b): SCR-003への遷移。HQ指示(2026-10-09)で
             // `PasswordResetView`を本実装、ボタンの見た目は変更していない。
             NavigationLink(value: AppRoute.passwordReset) {
-                Text("パスワードをお忘れの方")
-                    .font(DesignTokens.Typography.loginCaptionEmphasized)
+                NotoText.text("パスワードをお忘れの方", size: 15)
                     .foregroundStyle(DesignTokens.Colors.accentCyan)
             }
             .buttonStyle(.plain)
@@ -363,16 +361,14 @@ struct LoginView: View {
                 .frame(height: 1)
                 .padding(.top, 14)
 
-            Text("アカウントをお持ちでない方")
-                .font(DesignTokens.Typography.loginCaption)
+            NotoText.text("アカウントをお持ちでない方", size: 15)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 18)
             // 2026-09-29 HQ承認(2-b): SCR-002への遷移。HQ指示(2026-10-09)で
             // `SignUpView`を本実装、ボタンの見た目は変更していない。
             NavigationLink(value: AppRoute.signUp) {
-                Text("新規登録")
-                    .font(DesignTokens.Typography.bodyEmphasized)
+                NotoText.text("新規登録", size: 16)
                     .foregroundStyle(DesignTokens.Colors.accentCyan)
             }
             .buttonStyle(.plain)
@@ -396,8 +392,7 @@ struct LoginView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "apple.logo")
                         .font(.system(size: 17, weight: .medium))
-                    Text("Appleでサインイン")
-                        .font(DesignTokens.Typography.bodyEmphasized)
+                    NotoText.text("Appleでサインイン", size: 16)
                 }
                 .foregroundStyle(.black)
                 .frame(maxWidth: .infinity)
@@ -422,8 +417,7 @@ struct LoginView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 18, height: 18)
-                    Text("Googleでサインイン")
-                        .font(DesignTokens.Typography.bodyEmphasized)
+                    NotoText.text("Googleでサインイン", size: 16)
                         .foregroundStyle(DesignTokens.Colors.textPrimary)
                 }
                 .frame(maxWidth: .infinity)
@@ -437,11 +431,9 @@ struct LoginView: View {
 
     private var sessionExpiredBanner: some View {
         VStack(spacing: 4) {
-            Text("セッションの有効期限が切れています")
-                .font(DesignTokens.Typography.captionEmphasized)
+            NotoText.text("セッションの有効期限が切れています", size: 13)
                 .foregroundStyle(DesignTokens.Colors.textPrimary)
-            Text("再度ログインしてください")
-                .font(DesignTokens.Typography.caption)
+            NotoText.text("再度ログインしてください", size: 13)
                 .foregroundStyle(DesignTokens.Colors.textSecondary)
         }
         .multilineTextAlignment(.center)

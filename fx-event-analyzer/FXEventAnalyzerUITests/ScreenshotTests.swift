@@ -81,10 +81,8 @@ final class ScreenshotTests: XCTestCase {
         tapIdentifier("passwordResetBackButton", timeout: 20)
         XCTAssertTrue(emailField.waitForExistence(timeout: 20), "Did not return to Login screen from Password Reset")
 
-        emailField.tap()
-        emailField.typeText("ui-screenshot@example.com")
-        app.secureTextFields["パスワード"].tap()
-        app.secureTextFields["パスワード"].typeText("ui-screenshot-password")
+        type("ui-screenshot@example.com", into: emailField)
+        type("ui-screenshot-password", into: app.secureTextFields["パスワード"])
         app.buttons["ログイン"].tap()
 
         // SCR-004 ホーム画面. Not app.tabBars.buttons["Home"] — iPadOS's
@@ -110,8 +108,13 @@ final class ScreenshotTests: XCTestCase {
         // 「指標」に変わった(画面タイトル自体は引き続き「指標一覧」)。
         // Same reasoning as the Home tab wait above — use the broad-search
         // helper, not a `tabBars`-typed query.
-        tap(containing: "指標")
-        XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicators list did not load")
+        // 2026-10-09: 「指標」の文字ではホームの「経済指標」の行を押すことがあったので、
+        // タブの目印(V5BottomBarの`v5Tab1`)で押す。
+        tapIdentifier("v5Tab1")
+        if !waitForAnyElement(containing: "米国CPI", timeout: 15) {
+            capture("05-Indicators-diag")
+            XCTFail("Indicators list did not load")
+        }
         capture("05-Indicators")
 
         // SCR-006 指標詳細
@@ -125,22 +128,28 @@ final class ScreenshotTests: XCTestCase {
         // ため、参考画像通りカードを表示させるには実際に★を1件登録する
         // 必要がある。架空データを足すのではなく、実在のモック指標
         // (米国CPI)を実際にお気に入り登録する。
-        tapIdentifier("v5HeaderFavoriteStar")
+        // 2026-10-09: 指標詳細の星はヘッダーからカードの右上へ移った。
+        tapIdentifier("indicatorFavoriteStar")
 
         // SCR-007 イベント詳細。「今日の重要イベント」削除に伴い、Home経由
         // の導線が無くなったため、Indicator Detailの「次回発表予定」エリア
         // から遷移する。
         tap(containing: "次回発表予定")
-        XCTAssertTrue(waitForAnyElement(containing: "発表日時", timeout: 15), "Event Detail did not load")
+        XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 15), "Event Detail did not load")
         capture("07-EventDetail")
 
-        // SCR-008 相場反応詳細(via Event Detail's related FX pair row)
-        tap(containing: "USDJPY")
-        XCTAssertTrue(waitForAnyElement(containing: "過去の値動きと比較する", timeout: 15), "Movement Detail did not load")
+        // SCR-008 相場反応詳細。2026-10-09から、値動きの表のUSD/JPYの行から直接進む。
+        tap(containing: "USD/JPYの相場反応を見る")
+        XCTAssertTrue(waitForAnyElement(containing: "値動きの分析", timeout: 15), "Movement Detail did not load")
         capture("08-MovementDetail")
 
-        // SCR-009 過去イベント比較(via Movement Detail's link)
-        tap(containing: "過去の値動きと比較する")
+        // SCR-009 過去イベント比較。2026-10-09から遷移元は指標詳細なので、
+        // 相場反応詳細 → イベント詳細 → 指標詳細 と戻ってから進む。
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 10), "Did not go back to Event Detail")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 10), "Did not go back to Indicator Detail")
+        tap(containing: "過去イベント比較")
         XCTAssertTrue(waitForAnyElement(containing: "過去の発表一覧", timeout: 15), "Historical Comparison did not load")
         capture("09-HistoricalComparison")
 
@@ -152,7 +161,7 @@ final class ScreenshotTests: XCTestCase {
         // 文字は可変のモックデータ(日付・数値)のため、固定の
         // accessibilityIdentifierでタップする。
         tapIdentifier("historyEventRow")
-        XCTAssertTrue(waitForAnyElement(containing: "過去の値動きと比較する", timeout: 15), "Historical Comparison row did not navigate to SCR-008")
+        XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 15), "Historical Comparison row did not navigate to SCR-007")
 
         // 04-Home(SCR-004の実キャプチャ)。上でお気に入り登録した米国CPIが
         // 「お気に入り」カードに実際に表示された状態でHomeに戻って撮る —
@@ -185,6 +194,15 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(speechesHeader.isHittable, "Home did not scroll to reveal 直近の要人発言")
         capture("04b-Home-Speeches")
 
+        // 通知一覧(HQ指示 2026-10-05「通知はホーム画面の通知マークを押したら
+        // そこで確認できる仕様にして」)。ログイン時に`RootView`が
+        // `GET /notifications/upcoming`を取り込み、モックの通知時刻を過ぎた
+        // 2件が一覧に並ぶ。
+        let bell = app.buttons["通知"]
+        if bell.waitForExistence(timeout: 5) { bell.tap() } else { tap(containing: "通知") }
+        XCTAssertTrue(waitForAnyElement(containing: "分前です", timeout: 15), "Notification list did not load")
+        capture("04a-Notifications")
+
         // SCR-014 設定画面(bonus — added 2026-09-30 so HQ's
         // reference-image-driven redesign of this screen has a real CI
         // capture to verify against, the same "never trust build-succeeds
@@ -192,12 +210,19 @@ final class ScreenshotTests: XCTestCase {
         tap(containing: "設定")
         XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load")
         capture("14-Settings")
+        // ログアウトの確認(HQ指示 2026-10-07)。ログアウト行(V5座標の中心y≈396)を
+        // 押して撮り、背景をタップして閉じる(ログアウトはしない)。
+        // 2026-10-09: チャート設定の行がなくなり、ログアウトは1行分(31)上がった。
+        tapV5(x: 117, y: 365)
+        if waitForAnyElement(containing: "ログアウトしますか", timeout: 5) {
+            capture("14b-LogoutConfirmation")
+            tapV5(x: 117, y: 80)
+        }
 
-        // SCR-010 経済カレンダー(bonus — HQ指示2026-10-03で旧「分析」タブ
-        // (SCR-011、削除済み)から置き換わった新タブ。選択状態の
-        // レンダリングを確認できるよう、タブ自体を撮る)。
+        // SCR-010 経済カレンダー(HQ指示2026-10-08で仮画面から実装)。ヘッダーの
+        // 画面名ではなく、読み込み後に出る「〜のイベント」(今日の一覧の見出し)を待つ。
         tap(containing: "カレンダー")
-        XCTAssertTrue(waitForAnyElement(containing: "経済カレンダー", timeout: 15), "Calendar tab did not load")
+        XCTAssertTrue(waitForAnyElement(containing: "のイベント", timeout: 15), "Calendar tab did not load")
         capture("10-Calendar")
 
         // SCR-011 検索(HQ指示 2026-10-09、参考画像を基に完全再現 —
@@ -233,9 +258,141 @@ final class ScreenshotTests: XCTestCase {
         searchField.typeText(String(repeating: "\u{8}", count: 10))
         XCTAssertTrue(waitForAnyElement(containing: "米国CPI(消費者物価指数)", timeout: 10), "Recent search history did not record the tapped indicator")
         capture("11c-Search-RecentHistory")
+
+        // SCR-016 / SCR-018 / SCR-019 (bonus — added 2026-10-02 with the
+        // real settings sub-screens, same "never trust build-succeeds
+        // alone" rule). Between captures, switching to Home and back
+        // rebuilds SettingsView and so resets its NavigationStack to the
+        // root — no need to find V5Header's unlabeled back chevron.
+        captureSettingsSubScreen(row: "通知設定", rowIndex: 1, waitFor: "要人発言の通知", name: "16-NotificationSettings")
+        // 通知しない時間帯をONにすると開始・終了の行が増える。それでも1画面に
+        // 収まることを確かめる(HQ指示 2026-10-06)。
+        // V5Viewport内のボタンは文字では押せないため、行の位置(V5座標、
+        // 通知時間帯カードの1行目・中心y≈289)を直接タップする。
+        tapV5(x: 117, y: 289)
+        if !waitForAnyElement(containing: "開始", timeout: 5) {
+            // iPadでは座標がずれることがあるため、スイッチそのものを押し直す。
+            let toggle = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "通知しない時間帯")).firstMatch
+            if toggle.exists {
+                toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            }
+        }
+        // 撮れなくても他の画面の撮影は続ける(この1枚だけの確認用)。
+        if waitForAnyElement(containing: "開始", timeout: 10) {
+            capture("16b-NotificationQuietHours")
+        }
+        captureSettingsSubScreen(row: "プラン・購読管理", rowIndex: 2, waitFor: "特典内容の確認", name: "17-Subscription")
+        // 無料プランの表示(HQ指示 2026-10-06)。モックの購読をFREEに切り替えてから撮る。
+        if setMockSubscriptionPlan("FREE") {
+            captureSettingsSubScreen(row: "プラン・購読管理", rowIndex: 2, waitFor: "プランを確認する", name: "17b-SubscriptionFree")
+            _ = setMockSubscriptionPlan("PRO")
+        }
+        captureSettingsSubScreen(row: "表示・地域設定", rowIndex: 3, waitFor: "タイムゾーン", name: "18-DisplaySettings")
+        // SCR-020 ヘルプ・お問い合わせは2つ目のまとまりの先頭(1つ目6行+間隔8)。
+        captureSettingsSubScreen(row: "ヘルプ・お問い合わせ", rowIndex: 5, extraOffset: 8, waitFor: "よくある質問", name: "20-Help")
+        captureSettingsSubScreen(row: "利用規約", rowIndex: 6, extraOffset: 8, waitFor: "第1条", name: "21-Terms")
+        captureSettingsSubScreen(row: "プライバシーポリシー", rowIndex: 7, extraOffset: 8, waitFor: "第1条", name: "22-PrivacyPolicy")
+        captureSettingsSubScreen(row: "アプリ情報", rowIndex: 8, extraOffset: 8, waitFor: "利用しているライブラリ", name: "23-AppInfo")
+        // SCR-015 アカウント情報 (added 2026-10-05 with the reference-image
+        // rebuild) and SCR-024 アカウント削除, opened from SCR-015's
+        // bottom row (V5 card top 342.9, height 33.9). The deletion screen
+        // is only captured — its button opens a confirmation dialog first.
+        // Captured before SCR-026: that placeholder has no tab bar, so the
+        // next captureSettingsSubScreen couldn't get back to Settings from it.
+        captureSettingsSubScreen(row: "アカウント情報", rowIndex: 0, waitFor: "プロフィール編集", name: "15-Account")
+        // SCR-015's sub-screens, each reached afresh from Settings (row
+        // centers from AccountView's V5 layout: group 1 top 120.7 with rows
+        // 30.6/41.3/32.6, deletion card 342.9+33.9/2).
+        captureAccountSubScreen(y: 120.7 + 30.6 / 2, waitFor: "生年月日を変更する場合", name: "15a-ProfileEdit")
+        captureAccountSubScreen(y: 120.7 + 30.6 + 41.3 / 2, waitFor: "確認メールを送信", name: "15b-EmailChange")
+        captureAccountSubScreen(y: 120.7 + 30.6 + 41.3 + 32.6 / 2, waitFor: "変更する", name: "15c-PasswordChange")
+        captureAccountSubScreen(y: 342.9 + 33.9 / 2, waitFor: "アカウントを削除しますか", name: "24-AccountDeletion")
+        // SCR-026 (Settings' 6th row). Wait for the editor's own button,
+        // not the screen name, which the Settings row also shows. Then open
+        // its picker through that button.
+        captureSettingsSubScreen(row: "ホーム通貨ペア編集", rowIndex: 4, waitFor: "通貨ペアを追加する", name: "26-HomeCurrencyPairEditor")
+        tap(containing: "通貨ペアを追加する")
+        XCTAssertTrue(waitForAnyElement(containing: "クロス円", timeout: 15), "26a-HomeCurrencyPairPicker did not load")
+        capture("26a-HomeCurrencyPairPicker")
+    }
+
+    /// Taps the row's center through SettingsView's fixed V5 layout (group 1
+    /// top y=54.5, 31pt rows — SettingsView.rowHeight) mapped through V5Viewport's scale-to-fit.
+    /// Center taps used to land in the row's Spacer gap, which had no
+    /// contentShape and so ignored touches under `.buttonStyle(.plain)`
+    /// (three CI runs captured 11-13 as the untouched Settings list).
+    /// SettingsView now gives each row a contentShape, so tapping the
+    /// center deliberately also checks that the whole row is tappable. If
+    /// it doesn't navigate, attach a screenshot whose name records what
+    /// XCUITest reports for the row.
+    private func captureSettingsSubScreen(row: String, rowIndex: Int, extraOffset: CGFloat = 0, waitFor text: String, name: String) {
+        tap(containing: "ホーム")
+        tap(containing: "設定")
+        XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load before \(name)")
+        tapV5(x: 117, y: 54.5 + (CGFloat(rowIndex) + 0.5) * 31 + extraOffset)
+        if waitForAnyElement(containing: text, timeout: 15) {
+            capture(name)
+        } else {
+            let element = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", row)).firstMatch
+            let f = element.exists ? element.frame : .zero
+            let w = app.frame
+            capture("\(name)-diag-exists\(element.exists)-hit\(element.exists && element.isHittable)-frame\(Int(f.minX))_\(Int(f.minY))_\(Int(f.width))_\(Int(f.height))-app\(Int(w.width))_\(Int(w.height))")
+            XCTFail("\(name) did not load")
+        }
+    }
+
+    /// Opens SCR-015 from Settings, then taps the row at V5 `y` in it.
+    private func captureAccountSubScreen(y: CGFloat, waitFor text: String, name: String) {
+        tap(containing: "ホーム")
+        tap(containing: "設定")
+        XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load before \(name)")
+        tapV5(x: 117, y: 54.5 + 0.5 * 31)
+        XCTAssertTrue(waitForAnyElement(containing: "プロフィール編集", timeout: 15), "Account did not load before \(name)")
+        tapV5(x: 117, y: y)
+        XCTAssertTrue(waitForAnyElement(containing: text, timeout: 15), "\(name) did not load")
+        capture(name)
+    }
+
+    /// Taps a point given in V5's 234×491 canvas coordinates, using the same
+    /// scale-to-fit and centering as `V5Viewport` (which ignores the safe
+    /// area, so it fills the whole app frame).
+    /// スクショ用モックサーバー(CIでは127.0.0.1:8090、シミュレーターから届く)の
+    /// 購読プランを切り替える。届かなければfalse(その撮影だけ飛ばす)。
+    private func setMockSubscriptionPlan(_ plan: String) -> Bool {
+        guard let url = URL(string: "http://127.0.0.1:8090/__mock/subscription-plan?plan=\(plan)") else { return false }
+        var request = URLRequest(url: url, timeoutInterval: 5)
+        request.httpMethod = "POST"
+        let done = DispatchSemaphore(value: 0)
+        var succeeded = false
+        URLSession.shared.dataTask(with: request) { _, response, _ in
+            succeeded = (response as? HTTPURLResponse)?.statusCode == 200
+            done.signal()
+        }.resume()
+        _ = done.wait(timeout: .now() + 6)
+        return succeeded
+    }
+
+    private func tapV5(x: CGFloat, y: CGFloat) {
+        let frame = app.frame
+        let scale = min(frame.width / 234, frame.height / 491)
+        let dx = (frame.width - 234 * scale) / 2 + x * scale
+        let dy = (frame.height - 491 * scale) / 2 + y * scale
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: dx, dy: dy)).tap()
     }
 
     // MARK: - Helpers
+
+    /// Taps a text field and types into it only once the keyboard is up.
+    /// A single tap occasionally doesn't give the field keyboard focus in
+    /// time (real CI failure on 01-Login: "Neither element nor any
+    /// descendant has keyboard focus"), so retry the tap a few times first.
+    private func type(_ text: String, into field: XCUIElement) {
+        for _ in 0..<3 {
+            field.tap()
+            if app.keyboards.firstMatch.waitForExistence(timeout: 5) { break }
+        }
+        field.typeText(text)
+    }
 
     private func capture(_ name: String, settle: TimeInterval = 0.6) {
         if settle > 0 {
