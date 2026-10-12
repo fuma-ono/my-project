@@ -187,10 +187,9 @@ struct EventDetailCards: View {
     /// 高さの枠で囲み、隣どうしの線を重ねて1本の罫線にする(経済カレンダーと同じ作り)。
     private var reactionTable: some View {
         VStack(spacing: 0) {
-            // HQ指示(2026-10-12、4回目、参考画像)「主要通貨ペアの値動きの
-            // 文字サイズ」: 他カードの見出し(`HomeView.cardHeaderRow`)と
-            // 同じ12・semiboldに揃えた。
-            V5JPFont.text("主要通貨ペアの値動き（pips）", size: 12, weight: .semibold)
+            // HQ指示(2026-10-12、5回目、参考画像)「文字がデカすぎる、2くらい
+            // 下げて」: 前回12にしたのは大きすぎたため10に戻した。
+            V5JPFont.text("主要通貨ペアの値動き（pips）", size: 10, weight: .semibold)
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 8)
@@ -253,11 +252,12 @@ struct EventDetailCards: View {
         // されてる、そこを無くして」: 表全体のグラデーション塗り
         // (`bodyGradient`)を外し、カード背景にそのまま溶け込ませた
         // (マス目の罫線・見出し行の色は残す)。
-        // HQ指示(2026-10-12、4回目、参考画像)「値動きの外枠の角」:
-        // 塗りを外した際に角の丸みも一緒に外れていたため、他カードと
-        // 同じ角丸+枠線をクリップ/オーバーレイで戻した(塗りは付けない)。
+        // HQ指示(2026-10-12、5回目、参考画像)「また外枠がついている、角を
+        // 丸くしてと言っている」: 前回追加した`.overlay(...).stroke(...)`が
+        // マス目の罫線とは別の「外枠」に見えてしまっていたため削除し、
+        // 角を丸めるための`.clipShape`だけ残した(マス目自体の罫線の角が
+        // 丸く見えるだけで、新たな枠線は描かない)。
         .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
-        .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }
 
     /// 見出しの行: 本文と見分けがつく、少し明るい青(HQ指示 2026-10-09「もう少し明るく」)。
