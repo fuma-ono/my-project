@@ -42,6 +42,9 @@ struct SpeechDetailCards: View {
                 // (Home/検索の指標名と同じ`ViewThatFits`の考え方) —
                 // 固定の`minimumScaleFactor`だけでは長い名前(「クリスト
                 // ファー・ウォラー」等)が省略記号で切れてしまっていた。
+                // さらに、名前側に`.layoutPriority(1)`を与え、日時側の
+                // `.fixedSize()`を外して縮小可能にすることで、長い人名が
+                // 日時表示に横幅を奪われないようにした。
                 ViewThatFits(in: .horizontal) {
                     NotoText.text("\(speaker.name)　\(speaker.title)", size: 10.5)
                         .foregroundStyle(.white)
@@ -50,21 +53,23 @@ struct SpeechDetailCards: View {
                         NotoText.text(speaker.name, size: 10.5)
                             .foregroundStyle(.white)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.8)
+                            .minimumScaleFactor(0.6)
                         NotoText.text(speaker.title, size: 8.5)
                             .foregroundStyle(.white)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.8)
+                            .minimumScaleFactor(0.6)
                     }
                 }
                 NotoText.text("\(CountryFlag.japaneseName(forCountry: speaker.countryCode))　|　\(speaker.organization)", size: 8.5)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
             }
+            .layoutPriority(1)
             Spacer(minLength: 4)
             VStack(alignment: .trailing, spacing: 5) {
                 NotoText.text("\(AppPreferences.shared.dateString(response.statementDatetime)) \(AppPreferences.shared.timeString(response.statementDatetime))", size: 7)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
-                    .fixedSize()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                 let colors = HomeView.importanceBadgeColors(response.importance)
                 NotoText.text(response.importance.rawValue, size: 7)
                     .tracking(-0.3)
