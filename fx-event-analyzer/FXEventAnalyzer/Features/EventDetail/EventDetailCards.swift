@@ -20,8 +20,10 @@ struct EventDetailCards: View {
         // 間隔が詰まりすぎ」: header→resultsだけ詰め、それ以降のカード間は
         // 元の8に戻した(8→4の一律縮小だと他のカードまで詰まりすぎていた)。
         // HQ再指摘(2026-10-12、2回目)「まだ上に上げて」でさらに0まで詰めた。
+        // HQ再指摘(2026-10-12、6回目)「結果、予想、前回の枠を少し下げて」:
+        // 詰めすぎていたため0→4に戻した。
         VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
                 header
                 results
             }
@@ -54,10 +56,13 @@ struct EventDetailCards: View {
         let display = CountryFlag.indicatorDisplayName(event.indicatorName, countryCode: event.countryCode)
         let combinedName = display.abbreviation.map { "\(display.main)(\($0))" } ?? display.main
         return HStack(alignment: .top, spacing: 8) {
-            CountryFlagView(countryCode: event.countryCode, diameter: 28)
-            // HQ指示(2026-10-12、3回目、参考画像)「経済指標」の種別バッジを
-            // 追加: 国|通貨の行と日時の行を分け、日時の行に`categoryBadge`を
-            // 並べる3行構成にした。
+            // HQ指示(2026-10-12、6回目)「経済指標や要人発言の位置を国旗
+            // マークの下にして」: 日時の行にあった`categoryBadge`を、国旗の
+            // 下に移した。
+            VStack(spacing: 4) {
+                CountryFlagView(countryCode: event.countryCode, diameter: 28)
+                categoryBadge
+            }
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .top, spacing: 6) {
                     // 1行に収まる場合はそのまま、収まらない場合だけ
@@ -80,15 +85,16 @@ struct EventDetailCards: View {
                         .frame(width: 34, height: 15)
                         .background(colors.fill, in: Capsule())
                         .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
+                        // HQ指示(2026-10-12、6回目)「HIGHの位置を少し下げて」。
+                        .padding(.top, 2)
                 }
-                NotoText.text("\(CountryFlag.japaneseName(forCountry: event.countryCode))　|　\(event.currencyCode)", size: 8.5)
-                    .foregroundStyle(SettingsCardStyle.subtitleColor)
                 HStack(spacing: 6) {
-                    categoryBadge
+                    NotoText.text("\(CountryFlag.japaneseName(forCountry: event.countryCode))　|　\(event.currencyCode)", size: 8.5)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
                     Spacer(minLength: 4)
-                    // HQ指示(2026-10-12、4回目、参考画像)「日時の文字サイズの
-                    // 違い」: 7→8.5(国|通貨の行と同じ大きさ)に、色も白に揃えた。
-                    NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 8.5)
+                    // HQ指示(2026-10-12、6回目)「日時の文字サイズを0.5下げて」:
+                    // 8.5→8。
+                    NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 8)
                         .foregroundStyle(.white)
                         .lineLimit(1)
                 }
@@ -252,11 +258,13 @@ struct EventDetailCards: View {
         // されてる、そこを無くして」: 表全体のグラデーション塗り
         // (`bodyGradient`)を外し、カード背景にそのまま溶け込ませた
         // (マス目の罫線・見出し行の色は残す)。
-        // HQ指示(2026-10-12、5回目、参考画像)「また外枠がついている、角を
-        // 丸くしてと言っている」: 前回追加した`.overlay(...).stroke(...)`が
-        // マス目の罫線とは別の「外枠」に見えてしまっていたため削除し、
-        // 角を丸めるための`.clipShape`だけ残した(マス目自体の罫線の角が
-        // 丸く見えるだけで、新たな枠線は描かない)。
+        // HQ指示(2026-10-12、6回目)「だから表の角を丸くしてと言っている」:
+        // タイトル行には塗りが無いため、`.clipShape`だけでは切り取る対象が
+        // 無く丸みが見えていなかった。他のカードと同じ中立なカード背景
+        // (`AccountCardBackground`、以前消したのは特別な青いグラデーション
+        // (`bodyGradient`)であってこの中立な背景ではない)を敷いた上で
+        // クリップし、角丸をきちんと見えるようにした。
+        .background(AccountCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
     }
 
@@ -365,12 +373,15 @@ struct EventDetailCards: View {
             .overlay(Rectangle().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.5))
     }
 
+    /// HQ指示(2026-10-12、6回目)「イベント詳細画面もプラスなら赤文字、
+    /// マイナスなら緑で表現して」: `SpeechDetailCards.pipsText`(`HomeView.
+    /// speechRow`の色分けに合わせた仮データ表)と同じ配色に揃えた。
     @ViewBuilder private func pipsText(_ reaction: EventReactionSummary?) -> some View {
         if let reaction, reaction.analysisStatus == .ready, let pips = reaction.pips {
             Text(ValueFormat.number(pips, fractionDigits: 1, signed: true))
                 .font(.system(size: 10, weight: .semibold))
                 .monospacedDigit()
-                .foregroundStyle(.white)
+                .foregroundStyle(pips >= 0 ? HomeView.changeUpColor : HomeView.changeDownColor)
         } else {
             Text("--")
                 .font(.system(size: 10, weight: .semibold))

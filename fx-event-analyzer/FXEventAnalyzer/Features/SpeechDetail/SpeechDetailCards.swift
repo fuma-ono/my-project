@@ -51,14 +51,16 @@ struct SpeechDetailCards: View {
             // 国旗は国を表すもので話者本人を表すものではないため、人物を
             // 表す汎用アイコンに変更した。実在の写真データは無く、捏造も
             // しないため、国情報は下の「国|組織」の行にテキストで残す。
-            Image(systemName: "person.crop.circle.fill")
-                .resizable()
-                .foregroundStyle(V5P.cyan)
-                .frame(width: 28, height: 28)
-            // HQ指示(2026-10-12、3回目、参考画像)「経済指標」相当の種別
-            // バッジを追加: 国|組織の行と日時の行を分け、日時の行に
-            // `categoryBadge`を並べる3行構成にした(`EventDetailCards.header`
-            // と同じ構成)。
+            // HQ指示(2026-10-12、6回目)「経済指標や要人発言の位置を国旗
+            // マークの下にして」: 日時の行にあった`categoryBadge`を、
+            // アイコンの下に移した(`EventDetailCards.header`と同じ)。
+            VStack(spacing: 4) {
+                Image(systemName: "person.crop.circle.fill")
+                    .resizable()
+                    .foregroundStyle(V5P.cyan)
+                    .frame(width: 28, height: 28)
+                categoryBadge
+            }
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .top, spacing: 6) {
                     // 長い実名(「クリストファー・ウォラー」等)でも省略
@@ -74,15 +76,16 @@ struct SpeechDetailCards: View {
                         .frame(width: 34, height: 15)
                         .background(colors.fill, in: Capsule())
                         .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
+                        // HQ指示(2026-10-12、6回目)「HIGHの位置を少し下げて」。
+                        .padding(.top, 2)
                 }
-                NotoText.text("\(CountryFlag.japaneseName(forCountry: speaker.countryCode))　|　\(speaker.organization)", size: 8.5)
-                    .foregroundStyle(SettingsCardStyle.subtitleColor)
                 HStack(spacing: 6) {
-                    categoryBadge
+                    NotoText.text("\(CountryFlag.japaneseName(forCountry: speaker.countryCode))　|　\(speaker.organization)", size: 8.5)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
                     Spacer(minLength: 4)
-                    // HQ指示(2026-10-12、4回目、参考画像)「日時の文字サイズの
-                    // 違い」: 7→8.5(国|組織の行と同じ大きさ)に、色も白に揃えた。
-                    NotoText.text("\(AppPreferences.shared.dateString(response.statementDatetime)) \(AppPreferences.shared.timeString(response.statementDatetime))", size: 8.5)
+                    // HQ指示(2026-10-12、6回目)「日時の文字サイズを0.5下げて」:
+                    // 8.5→8。
+                    NotoText.text("\(AppPreferences.shared.dateString(response.statementDatetime)) \(AppPreferences.shared.timeString(response.statementDatetime))", size: 8)
                         .foregroundStyle(.white)
                         .lineLimit(1)
                 }
@@ -198,11 +201,14 @@ struct SpeechDetailCards: View {
         // されてる、そこを無くして」: 表全体のグラデーション塗り
         // (`bodyGradient`)を外し、カード背景にそのまま溶け込ませた
         // (マス目の罫線・見出し行の色は残す)。
-        // HQ指示(2026-10-12、5回目、参考画像)「また外枠がついている、角を
-        // 丸くしてと言っている」: 前回追加した`.overlay(...).stroke(...)`が
-        // マス目の罫線とは別の「外枠」に見えてしまっていたため削除し、
-        // 角を丸めるための`.clipShape`だけ残した(マス目自体の罫線の角が
-        // 丸く見えるだけで、新たな枠線は描かない)。
+        // HQ指示(2026-10-12、6回目)「だから表の角を丸くしてと言っている」:
+        // タイトル行には塗りが無いため、`.clipShape`だけでは切り取る対象が
+        // 無く丸みが見えていなかった。他のカードと同じ中立なカード背景
+        // (`AccountCardBackground`、以前消したのは特別な青いグラデーション
+        // (`bodyGradient`)であってこの中立な背景ではない)を敷いた上で
+        // クリップし、角丸をきちんと見えるようにした
+        // (`EventDetailCards.reactionTable`と同じ変更)。
+        .background(AccountCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
     }
 
