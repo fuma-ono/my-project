@@ -58,18 +58,20 @@ struct EventDetailCards: View {
         return HStack(alignment: .top, spacing: 8) {
             // HQ指示(2026-10-12、6回目)「経済指標や要人発言の位置を国旗
             // マークの下にして」: 日時の行にあった`categoryBadge`を、国旗の
-            // 下に移した。バッジ(「経済指標」)は国旗(28pt)より横幅が広い
-            // ため、`VStack`で兄弟として並べるとその分だけ右の名前列の
-            // 横幅が狭くなり、「CPIの部分は折り返さないで」が再び崩れて
-            // いた。`.overlay`で国旗の下に重ねることで、レイアウト上の
-            // 幅は国旗の28ptのまま保ち、名前列の横幅を変えずに済むように
-            // した。
-            CountryFlagView(countryCode: event.countryCode, diameter: 28)
-                .overlay(alignment: .top) {
-                    categoryBadge
-                        .fixedSize()
-                        .offset(y: 28 + 4)
-                }
+            // 下に移した。`.overlay`で重ねる案も試したが、`.overlay`は親の
+            // レイアウト上の高さに算入されないため、バッジが結果/予想/前回
+            // カードと縦に重なってしまった(CI screenshotで発覚)。兄弟として
+            // 並べる今の形に戻し、高さがきちんと確保されるようにした。
+            // バッジの横幅の分だけ名前列が少し狭くなるが、それによる
+            // 「消費者物価指数(CPI)」の2行化は元々のHQ指示(2026-10-12)
+            // 「折り返す条件は（）の途中が1行で入り切らない場合に（）を
+            // 2行目にすること」が許容する正しいフォールバックそのもの
+            // (名前本体と「(CPI)」をきれいに2行に分けるだけで、単語の
+            // 途中では割れない)。
+            VStack(spacing: 4) {
+                CountryFlagView(countryCode: event.countryCode, diameter: 28)
+                categoryBadge
+            }
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .top, spacing: 6) {
                     // 1行に収まる場合はそのまま、収まらない場合だけ

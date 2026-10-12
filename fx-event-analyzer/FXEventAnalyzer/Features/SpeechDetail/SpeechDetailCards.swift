@@ -53,20 +53,18 @@ struct SpeechDetailCards: View {
             // しないため、国情報は下の「国|組織」の行にテキストで残す。
             // HQ指示(2026-10-12、6回目)「経済指標や要人発言の位置を国旗
             // マークの下にして」: 日時の行にあった`categoryBadge`を、
-            // アイコンの下に移した(`EventDetailCards.header`と同じ)。
-            // バッジ(「要人発言」)はアイコン(28pt)より横幅が広いため、
-            // `VStack`で兄弟として並べるとその分だけ右の名前列が狭くなる
-            // (`EventDetailCards.header`と同じ理由)。`.overlay`でアイコンの
-            // 下に重ね、レイアウト上の幅はアイコンの28ptのまま保った。
-            Image(systemName: "person.crop.circle.fill")
-                .resizable()
-                .foregroundStyle(V5P.cyan)
-                .frame(width: 28, height: 28)
-                .overlay(alignment: .top) {
-                    categoryBadge
-                        .fixedSize()
-                        .offset(y: 28 + 4)
-                }
+            // アイコンの下に移した。`.overlay`で重ねる案も試したが、
+            // `.overlay`は親のレイアウト上の高さに算入されないため、バッジが
+            // 発言カードと縦に重なってしまった(CI screenshotで発覚、
+            // `EventDetailCards.header`と同じ問題)。兄弟として並べる今の形に
+            // 戻し、高さがきちんと確保されるようにした。
+            VStack(spacing: 4) {
+                Image(systemName: "person.crop.circle.fill")
+                    .resizable()
+                    .foregroundStyle(V5P.cyan)
+                    .frame(width: 28, height: 28)
+                categoryBadge
+            }
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .top, spacing: 6) {
                     // 長い実名(「クリストファー・ウォラー」等)でも省略
