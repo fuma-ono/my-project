@@ -55,7 +55,11 @@ struct SpeechDetailCards: View {
                 .resizable()
                 .foregroundStyle(V5P.cyan)
                 .frame(width: 28, height: 28)
-            VStack(alignment: .leading, spacing: 3) {
+            // HQ指示(2026-10-12、3回目、参考画像)「経済指標」相当の種別
+            // バッジを追加: 国|組織の行と日時の行を分け、日時の行に
+            // `categoryBadge`を並べる3行構成にした(`EventDetailCards.header`
+            // と同じ構成)。
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .top, spacing: 6) {
                     // 長い実名(「クリストファー・ウォラー」等)でも省略
                     // されないよう、1行に収まらなければ自然に2行へ折り返す。
@@ -71,9 +75,10 @@ struct SpeechDetailCards: View {
                         .background(colors.fill, in: Capsule())
                         .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
                 }
+                NotoText.text("\(CountryFlag.japaneseName(forCountry: speaker.countryCode))　|　\(speaker.organization)", size: 8.5)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
                 HStack(spacing: 6) {
-                    NotoText.text("\(CountryFlag.japaneseName(forCountry: speaker.countryCode))　|　\(speaker.organization)", size: 8.5)
-                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    categoryBadge
                     Spacer(minLength: 4)
                     NotoText.text("\(AppPreferences.shared.dateString(response.statementDatetime)) \(AppPreferences.shared.timeString(response.statementDatetime))", size: 7)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
@@ -91,6 +96,22 @@ struct SpeechDetailCards: View {
         .padding(.trailing, 4)
         .frame(width: 214, alignment: .leading)
     }
+
+    /// `NotificationListView`の要人発言の色(紫)・アイコン(`person.fill`)に
+    /// 合わせた(`EventDetailCards.categoryBadge`の「経済指標」と対になる
+    /// 要人発言の種別バッジ)。
+    private var categoryBadge: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "person.fill").font(.system(size: 6.5, weight: .semibold))
+            NotoText.text("要人発言", size: 7).tracking(-0.3)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2.5)
+        .background(Self.categoryBadgeColor, in: Capsule())
+    }
+
+    private static let categoryBadgeColor = Color(red: 0.42, green: 0.30, blue: 0.92)
 
     // MARK: - 発言内容
 

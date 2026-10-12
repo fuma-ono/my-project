@@ -55,7 +55,10 @@ struct EventDetailCards: View {
         let combinedName = display.abbreviation.map { "\(display.main)(\($0))" } ?? display.main
         return HStack(alignment: .top, spacing: 8) {
             CountryFlagView(countryCode: event.countryCode, diameter: 28)
-            VStack(alignment: .leading, spacing: 3) {
+            // HQ指示(2026-10-12、3回目、参考画像)「経済指標」の種別バッジを
+            // 追加: 国|通貨の行と日時の行を分け、日時の行に`categoryBadge`を
+            // 並べる3行構成にした。
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .top, spacing: 6) {
                     // 1行に収まる場合はそのまま、収まらない場合だけ
                     // 名前本体と(略称)を2行に分ける。
@@ -78,9 +81,10 @@ struct EventDetailCards: View {
                         .background(colors.fill, in: Capsule())
                         .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
                 }
+                NotoText.text("\(CountryFlag.japaneseName(forCountry: event.countryCode))　|　\(event.currencyCode)", size: 8.5)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
                 HStack(spacing: 6) {
-                    NotoText.text("\(CountryFlag.japaneseName(forCountry: event.countryCode))　|　\(event.currencyCode)", size: 8.5)
-                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    categoryBadge
                     Spacer(minLength: 4)
                     NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 7)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
@@ -98,6 +102,22 @@ struct EventDetailCards: View {
         .padding(.trailing, 4)
         .frame(width: 214, alignment: .leading)
     }
+
+    /// `HomeView`/`SearchView`の「経済指標」バッジ(`economicIndicatorBadgeColor`)
+    /// と同じ色。アイコンは`NotificationListView.icon(for:)`の指標種別
+    /// (`calendar`)に合わせた。
+    private var categoryBadge: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "calendar").font(.system(size: 6.5, weight: .semibold))
+            NotoText.text("経済指標", size: 7).tracking(-0.3)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2.5)
+        .background(Self.categoryBadgeColor, in: Capsule())
+    }
+
+    private static let categoryBadgeColor = Color(red: 0.0 / 255, green: 118.0 / 255, blue: 234.0 / 255)
 
     // MARK: - 結果・予想・前回
 
