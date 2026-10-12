@@ -35,40 +35,42 @@ struct SpeechDetailCards: View {
 
     private var header: some View {
         let speaker = response.speaker
-        return HStack(alignment: .top, spacing: 8) {
-            CountryFlagView(countryCode: speaker.countryCode, diameter: 28)
-            VStack(alignment: .leading, spacing: 3) {
-                // 名前+役職が1行に収まらない場合だけ2行に分ける
-                // (Home/検索の指標名と同じ`ViewThatFits`の考え方) —
-                // 固定の`minimumScaleFactor`だけでは長い名前(「クリスト
-                // ファー・ウォラー」等)が省略記号で切れてしまっていた。
-                ViewThatFits(in: .horizontal) {
-                    NotoText.text("\(speaker.name)　\(speaker.title)", size: 10.5)
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    VStack(alignment: .leading, spacing: 1) {
-                        NotoText.text(speaker.name, size: 10.5)
+        // 名前(「クリストファー・ウォラー」等、長さが読めない実在の人名)と
+        // 日時+重要度バッジを同じ行で横に並べると、どちらかが必ず省略
+        // されてしまう(3回試行錯誤した結果の結論)。EventDetailCardsの
+        // 指標名のような比較的短い語と違い、人名は全角12文字超もあり得る
+        // ため、横の取り合いをやめて縦に分け、どちらも行全体の横幅を
+        // 使えるようにする。
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 8) {
+                CountryFlagView(countryCode: speaker.countryCode, diameter: 28)
+                VStack(alignment: .leading, spacing: 3) {
+                    // 名前+役職が1行に収まらない場合だけ2行に分ける
+                    // (Home/検索の指標名と同じ`ViewThatFits`の考え方)。
+                    ViewThatFits(in: .horizontal) {
+                        NotoText.text("\(speaker.name)　\(speaker.title)", size: 10.5)
                             .foregroundStyle(.white)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                        NotoText.text(speaker.title, size: 8.5)
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
+                        VStack(alignment: .leading, spacing: 1) {
+                            NotoText.text(speaker.name, size: 10.5)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                            NotoText.text(speaker.title, size: 8.5)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                        }
                     }
+                    NotoText.text("\(CountryFlag.japaneseName(forCountry: speaker.countryCode))　|　\(speaker.organization)", size: 8.5)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
                 }
-                NotoText.text("\(CountryFlag.japaneseName(forCountry: speaker.countryCode))　|　\(speaker.organization)", size: 8.5)
-                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 4)
-            // 日時+重要度バッジの列に固定幅を確保し、名前側の2行フォール
-            // バックが伸びても日時側(「2026/10/12 0:00」)が省略されない
-            // ようにする(前回の`.layoutPriority`方式は逆に日時側が切れた)。
-            VStack(alignment: .trailing, spacing: 5) {
+            HStack(spacing: 6) {
                 NotoText.text("\(AppPreferences.shared.dateString(response.statementDatetime)) \(AppPreferences.shared.timeString(response.statementDatetime))", size: 7)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                Spacer(minLength: 4)
                 let colors = HomeView.importanceBadgeColors(response.importance)
                 NotoText.text(response.importance.rawValue, size: 7)
                     .tracking(-0.3)
@@ -77,7 +79,6 @@ struct SpeechDetailCards: View {
                     .background(colors.fill, in: Capsule())
                     .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
             }
-            .frame(minWidth: 72, alignment: .trailing)
         }
         .padding(10)
         .frame(width: 214, alignment: .leading)
