@@ -19,8 +19,9 @@ struct EventDetailCards: View {
         // HQ指示(2026-10-12)「結果予想などをもう少し上に上げて」「各カードの
         // 間隔が詰まりすぎ」: header→resultsだけ詰め、それ以降のカード間は
         // 元の8に戻した(8→4の一律縮小だと他のカードまで詰まりすぎていた)。
+        // HQ再指摘(2026-10-12、2回目)「まだ上に上げて」でさらに0まで詰めた。
         VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 0) {
                 header
                 results
             }
@@ -36,6 +37,13 @@ struct EventDetailCards: View {
 
     // MARK: - 指標のカード
 
+    /// HQ指示(2026-10-12)「CPIの部分は折り返さないで。折り返す条件は
+    /// （）の途中が1行で入り切らない場合に（）を2行目にすること」:
+    /// 名前と日付+バッジを同じ行で横に並べると、「消費者物価指数(CPI)」の
+    /// ような長めの名前が確実に収まるだけの横幅を保証できない(要人発言の
+    /// 名前と同じ理由で3回試行錯誤した末の結論、`SpeechDetailCards.header`
+    /// 参照)。名前の行と日付+バッジの行を分け、名前側が1行全体の横幅を
+    /// 使えるようにした。
     private var header: some View {
         let event = response.event
         // HQ指示(2026-10-12)「タイトルが前回言ったことが治っていない
@@ -48,35 +56,43 @@ struct EventDetailCards: View {
         return HStack(alignment: .top, spacing: 8) {
             CountryFlagView(countryCode: event.countryCode, diameter: 28)
             VStack(alignment: .leading, spacing: 3) {
-                ViewThatFits(in: .horizontal) {
-                    NotoText.text(combinedName, size: 10.5).lineLimit(1)
-                    VStack(alignment: .leading, spacing: 1) {
-                        NotoText.text(display.main, size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
-                        if let abbreviation = display.abbreviation {
-                            NotoText.text("(\(abbreviation))", size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
+                HStack(alignment: .top, spacing: 6) {
+                    // 1行に収まる場合はそのまま、収まらない場合だけ
+                    // 名前本体と(略称)を2行に分ける。
+                    ViewThatFits(in: .horizontal) {
+                        NotoText.text(combinedName, size: 10.5).lineLimit(1)
+                        VStack(alignment: .leading, spacing: 1) {
+                            NotoText.text(display.main, size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
+                            if let abbreviation = display.abbreviation {
+                                NotoText.text("(\(abbreviation))", size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
+                            }
                         }
                     }
-                }
-                .foregroundStyle(.white)
-                NotoText.text("\(CountryFlag.japaneseName(forCountry: event.countryCode))　|　\(event.currencyCode)", size: 8.5)
-                    .foregroundStyle(SettingsCardStyle.subtitleColor)
-            }
-            Spacer(minLength: 4)
-            VStack(alignment: .trailing, spacing: 5) {
-                NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 7)
-                    .foregroundStyle(SettingsCardStyle.subtitleColor)
-                    .fixedSize()
-                let colors = HomeView.importanceBadgeColors(event.importance)
-                NotoText.text(event.importance.rawValue, size: 7)
-                    .tracking(-0.3)
                     .foregroundStyle(.white)
-                    .frame(width: 34, height: 15)
-                    .background(colors.fill, in: Capsule())
-                    .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
+                    Spacer(minLength: 4)
+                    let colors = HomeView.importanceBadgeColors(event.importance)
+                    NotoText.text(event.importance.rawValue, size: 7)
+                        .tracking(-0.3)
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 15)
+                        .background(colors.fill, in: Capsule())
+                        .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
+                }
+                HStack(spacing: 6) {
+                    NotoText.text("\(CountryFlag.japaneseName(forCountry: event.countryCode))　|　\(event.currencyCode)", size: 8.5)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    Spacer(minLength: 4)
+                    NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 7)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .lineLimit(1)
+                }
             }
         }
         .padding(.leading, 10)
-        .padding(.vertical, 10)
+        .padding(.top, 10)
+        // HQ指示(2026-10-12)「結果予想前回の枠をまだ上に上げて」:
+        // 下側のパディングを縮め、resultsカードとの間隔をさらに詰めた。
+        .padding(.bottom, 4)
         // HQ指示(2026-10-12)「HIGHと日時をもう少し右側に」: 右側だけ
         // パディングを縮め、カード右端に寄せた。
         .padding(.trailing, 4)
@@ -162,6 +178,9 @@ struct EventDetailCards: View {
                 }
             }
             .frame(height: Self.headerHeight)
+            // HQ指示(2026-10-12、2回目)「1分5分とかの見出しの色は戻して」:
+            // 前回この見出し行の色を消したのは誤りだったため戻した。
+            .background(Self.headerFill)
             ForEach(pairs) { pair in
                 if isReleased {
                 NavigationLink(value: AppRoute.movementDetail(
@@ -203,18 +222,14 @@ struct EventDetailCards: View {
             }
         }
         .frame(width: 214)
-        .background(Self.bodyGradient)
-        // HQ指示(2026-10-12)「値動き部分の外枠はいらないから外して」:
-        // 外周の角丸ストロークのみ削除。表内のマス目の罫線(`cell`)・
-        // 背景の塗りはそのまま残す。
-        .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
+        // HQ指示(2026-10-12、2回目)「主要通貨ペアの値動きの部分が色付け
+        // されてる、そこを無くして」: 表全体のグラデーション塗り
+        // (`bodyGradient`)を外し、カード背景にそのまま溶け込ませた
+        // (マス目の罫線・見出し行の色は残す)。
     }
 
-    /// 本文: カードの色から少し明るい青へ、上から下へのゆるいグラデーション。
-    private static let bodyGradient = LinearGradient(
-        colors: [SettingsCardStyle.cardFill, Color(red: 0.03, green: 0.14, blue: 0.27)],
-        startPoint: .top, endPoint: .bottom
-    )
+    /// 見出しの行: 本文と見分けがつく、少し明るい青(HQ指示 2026-10-09「もう少し明るく」)。
+    private static let headerFill = Color(red: 0.04, green: 0.18, blue: 0.36)
 
     private func pairLabel(_ pair: EventMajorFxReaction) -> some View {
         HStack(spacing: 5) {

@@ -25,9 +25,13 @@ struct SpeechDetailCards: View {
     let response: SpeechDetailResponse
 
     var body: some View {
+        // HQ指示(2026-10-12、2回目)「発言部分の枠もまだ上に上げて」:
+        // header→statementCardだけ詰め、それ以降は通常の間隔(8)のまま。
         VStack(alignment: .leading, spacing: 8) {
-            header
-            statementCard
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                statementCard
+            }
             reactionTable
             movementLink
             comparisonLink
@@ -78,7 +82,10 @@ struct SpeechDetailCards: View {
             }
         }
         .padding(.leading, 10)
-        .padding(.vertical, 10)
+        .padding(.top, 10)
+        // HQ指示(2026-10-12)「発言部分の枠もまだ上に上げて」: 下側の
+        // パディングを縮め、発言カードとの間隔をさらに詰めた。
+        .padding(.bottom, 4)
         // HQ指示(2026-10-12)「HIGHと日時をもう少し右側に」: 右側だけ
         // パディングを縮め、カード右端に寄せた。
         .padding(.trailing, 4)
@@ -98,8 +105,9 @@ struct SpeechDetailCards: View {
             } else if response.status == .cancelled {
                 NotoText.text("この発言は中止されました。", size: 9).foregroundStyle(SettingsCardStyle.subtitleColor)
             } else if let summary = response.summary {
-                // HQ指示(2026-10-12)「発言の部分の文字を1大きくして」: 9.5→10.5。
-                NotoText.text("「\(summary)」", size: 10.5).foregroundStyle(.white)
+                // HQ指示(2026-10-12)「発言の部分の文字サイズを相場反応詳細の
+                // 文字サイズと同じに」: `linkCard`のタイトル(10)に合わせた。
+                NotoText.text("「\(summary)」", size: 10).foregroundStyle(.white)
             } else {
                 NotoText.text("要約はまだ用意されていません。", size: 9).foregroundStyle(SettingsCardStyle.subtitleColor)
             }
@@ -147,6 +155,9 @@ struct SpeechDetailCards: View {
                 }
             }
             .frame(height: Self.headerHeight)
+            // HQ指示(2026-10-12、2回目)「1分5分とかの見出しの色は戻して」:
+            // 前回この見出し行の色を消したのは誤りだったため戻した。
+            .background(Self.headerFill)
             ForEach(Self.placeholderReactions) { reaction in
                 HStack(spacing: 0) {
                     cell(width: Self.pairColumnWidth, alignment: .leading) { pairLabel(reaction.symbol) }
@@ -158,11 +169,10 @@ struct SpeechDetailCards: View {
             }
         }
         .frame(width: 214)
-        .background(Self.bodyGradient)
-        // HQ指示(2026-10-12)「値動き部分の外枠はいらないから外して」:
-        // 外周の角丸ストロークのみ削除。表内のマス目の罫線(`cell`)・
-        // 背景の塗りはそのまま残す。
-        .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
+        // HQ指示(2026-10-12、2回目)「主要通貨ペアの値動きの部分が色付け
+        // されてる、そこを無くして」: 表全体のグラデーション塗り
+        // (`bodyGradient`)を外し、カード背景にそのまま溶け込ませた
+        // (マス目の罫線・見出し行の色は残す)。
     }
 
     // MARK: - 相場反応詳細・過去イベント比較
@@ -242,10 +252,8 @@ struct SpeechDetailCards: View {
             .foregroundStyle(pips >= 0 ? HomeView.changeUpColor : HomeView.changeDownColor)
     }
 
-    private static let bodyGradient = LinearGradient(
-        colors: [SettingsCardStyle.cardFill, Color(red: 0.03, green: 0.14, blue: 0.27)],
-        startPoint: .top, endPoint: .bottom
-    )
+    /// 見出しの行: 本文と見分けがつく、少し明るい青(HQ指示 2026-10-09「もう少し明るく」)。
+    private static let headerFill = Color(red: 0.04, green: 0.18, blue: 0.36)
 
     private static let pairColumnWidth: CGFloat = 80
     private static let valueColumnWidth: CGFloat = (214 - 80) / 3
