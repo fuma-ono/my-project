@@ -80,8 +80,10 @@ struct SpeechDetailCards: View {
                 HStack(spacing: 6) {
                     categoryBadge
                     Spacer(minLength: 4)
-                    NotoText.text("\(AppPreferences.shared.dateString(response.statementDatetime)) \(AppPreferences.shared.timeString(response.statementDatetime))", size: 7)
-                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    // HQ指示(2026-10-12、4回目、参考画像)「日時の文字サイズの
+                    // 違い」: 7→8.5(国|組織の行と同じ大きさ)に、色も白に揃えた。
+                    NotoText.text("\(AppPreferences.shared.dateString(response.statementDatetime)) \(AppPreferences.shared.timeString(response.statementDatetime))", size: 8.5)
+                        .foregroundStyle(.white)
                         .lineLimit(1)
                 }
             }
@@ -161,7 +163,10 @@ struct SpeechDetailCards: View {
     /// 行の罫線)。
     private var reactionTable: some View {
         VStack(spacing: 0) {
-            NotoText.text("通貨ペア別の値動き（pips）", size: 10.5)
+            // HQ指示(2026-10-12、4回目、参考画像)「主要通貨ペアの値動きの
+            // 文字サイズ」: 他カードの見出し(`HomeView.cardHeaderRow`)と
+            // 同じ12・semiboldに揃えた。
+            V5JPFont.text("通貨ペア別の値動き（pips）", size: 12, weight: .semibold)
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 8)
@@ -194,6 +199,11 @@ struct SpeechDetailCards: View {
         // されてる、そこを無くして」: 表全体のグラデーション塗り
         // (`bodyGradient`)を外し、カード背景にそのまま溶け込ませた
         // (マス目の罫線・見出し行の色は残す)。
+        // HQ指示(2026-10-12、4回目、参考画像)「値動きの外枠の角」:
+        // 塗りを外した際に角の丸みも一緒に外れていたため、他カードと
+        // 同じ角丸+枠線をクリップ/オーバーレイで戻した(塗りは付けない)。
+        .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
+        .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }
 
     // MARK: - 相場反応詳細・過去イベント比較
@@ -205,6 +215,10 @@ struct SpeechDetailCards: View {
     /// 捏造して実在するかのように見せるより、`speechId`(実在はするが
     /// 別の種類のリソース)を代わりに渡し、遷移先のBackend呼び出しが正直に
     /// 「見つかりません」(各画面が既に持つ空状態)になる方を選んだ。
+    /// HQ指示(2026-10-12、4回目、参考画像)「相場反応詳細の外枠のグラデー
+    /// ション」: 他カードと同じ単色の枠線(`AccountCardBackground`)ではなく、
+    /// `V5Button`と同じ青→シアンのグラデーションを枠線に使う
+    /// (`EventDetailCards.linkCard`と同じ変更)。
     private func linkCard(icon: String, title: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
@@ -219,7 +233,11 @@ struct SpeechDetailCards: View {
         }
         .padding(.horizontal, 10)
         .frame(width: 214, height: 32)
-        .background(AccountCardBackground())
+        .background(SettingsCardStyle.cardFill, in: RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
+                .stroke(LinearGradient(colors: [V5P.cyan, V5P.blue.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.9)
+        )
         .contentShape(Rectangle())
     }
 

@@ -86,8 +86,10 @@ struct EventDetailCards: View {
                 HStack(spacing: 6) {
                     categoryBadge
                     Spacer(minLength: 4)
-                    NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 7)
-                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    // HQ指示(2026-10-12、4回目、参考画像)「日時の文字サイズの
+                    // 違い」: 7→8.5(国|通貨の行と同じ大きさ)に、色も白に揃えた。
+                    NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 8.5)
+                        .foregroundStyle(.white)
                         .lineLimit(1)
                 }
             }
@@ -133,7 +135,9 @@ struct EventDetailCards: View {
             divider
             resultColumn("前回", value: snapshot?.previous, unit: unit, note: Self.changeFromPrevious(actual: actual, previous: snapshot?.previous, unit: unit))
         }
-        .padding(.vertical, 8)
+        // HQ指示(2026-10-12、4回目、参考画像)「結果予想の縦幅の違い」:
+        // 8→6に詰めてカードの高さを参考画像に合わせた。
+        .padding(.vertical, 6)
         .frame(width: 214)
         .background(AccountCardBackground())
     }
@@ -183,7 +187,10 @@ struct EventDetailCards: View {
     /// 高さの枠で囲み、隣どうしの線を重ねて1本の罫線にする(経済カレンダーと同じ作り)。
     private var reactionTable: some View {
         VStack(spacing: 0) {
-            NotoText.text("主要通貨ペアの値動き（pips）", size: 10.5)
+            // HQ指示(2026-10-12、4回目、参考画像)「主要通貨ペアの値動きの
+            // 文字サイズ」: 他カードの見出し(`HomeView.cardHeaderRow`)と
+            // 同じ12・semiboldに揃えた。
+            V5JPFont.text("主要通貨ペアの値動き（pips）", size: 12, weight: .semibold)
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 8)
@@ -246,6 +253,11 @@ struct EventDetailCards: View {
         // されてる、そこを無くして」: 表全体のグラデーション塗り
         // (`bodyGradient`)を外し、カード背景にそのまま溶け込ませた
         // (マス目の罫線・見出し行の色は残す)。
+        // HQ指示(2026-10-12、4回目、参考画像)「値動きの外枠の角」:
+        // 塗りを外した際に角の丸みも一緒に外れていたため、他カードと
+        // 同じ角丸+枠線をクリップ/オーバーレイで戻した(塗りは付けない)。
+        .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
+        .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }
 
     /// 見出しの行: 本文と見分けがつく、少し明るい青(HQ指示 2026-10-09「もう少し明るく」)。
@@ -266,6 +278,9 @@ struct EventDetailCards: View {
 
     // MARK: - 相場反応詳細・過去イベント比較・次回発表予定
 
+    /// HQ指示(2026-10-12、4回目、参考画像)「相場反応詳細の外枠のグラデー
+    /// ション」: 他カードと同じ単色の枠線(`AccountCardBackground`)ではなく、
+    /// `V5Button`と同じ青→シアンのグラデーションを枠線に使う。
     private func linkCard(icon: String, title: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
@@ -280,7 +295,11 @@ struct EventDetailCards: View {
         }
         .padding(.horizontal, 10)
         .frame(width: 214, height: 32)
-        .background(AccountCardBackground())
+        .background(SettingsCardStyle.cardFill, in: RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
+                .stroke(LinearGradient(colors: [V5P.cyan, V5P.blue.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.9)
+        )
         .contentShape(Rectangle())
     }
 
