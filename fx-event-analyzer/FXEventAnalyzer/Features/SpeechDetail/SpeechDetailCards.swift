@@ -66,10 +66,14 @@ struct SpeechDetailCards: View {
             .layoutPriority(1)
             Spacer(minLength: 4)
             VStack(alignment: .trailing, spacing: 5) {
-                NotoText.text("\(AppPreferences.shared.dateString(response.statementDatetime)) \(AppPreferences.shared.timeString(response.statementDatetime))", size: 7)
-                    .foregroundStyle(SettingsCardStyle.subtitleColor)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                // HQ指示の名前優先対応で日付側の横幅が狭くなったため、
+                // 「日付 時刻」の1行ではなく日付・時刻を2行に分けて収める。
+                VStack(alignment: .trailing, spacing: 0) {
+                    NotoText.text(AppPreferences.shared.dateString(response.statementDatetime), size: 7)
+                    NotoText.text(AppPreferences.shared.timeString(response.statementDatetime), size: 7)
+                }
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                .lineLimit(1)
                 let colors = HomeView.importanceBadgeColors(response.importance)
                 NotoText.text(response.importance.rawValue, size: 7)
                     .tracking(-0.3)
