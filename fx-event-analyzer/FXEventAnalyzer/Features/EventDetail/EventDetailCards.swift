@@ -16,7 +16,10 @@ struct EventDetailCards: View {
     static let timeframes = ["1m", "5m", "15m"]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // HQ指示(2026-10-12)「タイトルの枠が無くなった部分を結果予想などの
+        // 枠を上に上げて調整して」: headerが枠(AccountCardBackground)を
+        // 失ったことに合わせ、間隔を8→4に詰めて全体を上に寄せた。
+        VStack(alignment: .leading, spacing: 4) {
             header
             results
             // HQ指示(2026-10-09)の2枚目の参考画像: 見出しは表のカードの中、その下に
@@ -66,7 +69,6 @@ struct EventDetailCards: View {
         }
         .padding(10)
         .frame(width: 214, alignment: .leading)
-        .background(AccountCardBackground())
     }
 
     // MARK: - 結果・予想・前回
@@ -192,8 +194,10 @@ struct EventDetailCards: View {
         }
         .frame(width: 214)
         .background(Self.bodyGradient)
+        // HQ指示(2026-10-12)「値動き部分の外枠はいらないから外して」:
+        // 外周の角丸ストロークのみ削除。表内のマス目の罫線(`cell`)・
+        // 背景の塗りはそのまま残す。
         .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
-        .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }
 
     /// 見出しの行: 本文と見分けがつく、少し明るい青(HQ指示 2026-10-09「もう少し明るく」)。
@@ -206,8 +210,9 @@ struct EventDetailCards: View {
 
     private func pairLabel(_ pair: EventMajorFxReaction) -> some View {
         HStack(spacing: 5) {
-            // 参考画像どおり、国旗は基軸通貨の1つ。
-            CountryFlagView(currencyCode: String(pair.symbol.prefix(3)), diameter: 13)
+            // HQ指示(2026-10-12)「USD/JPYの国旗は2ついると思う、重なるように
+            // 表示して」: 基軸通貨1つだけでなく、両方の通貨の国旗を重ねる。
+            OverlappingPairFlags(symbol: pair.symbol, diameter: 13)
             NotoText.text(FXPairSymbol.displayName(pair.symbol), size: 9.5)
                 .foregroundStyle(.white)
                 .lineLimit(1)

@@ -452,6 +452,30 @@ struct CountryFlagView: View {
     }
 }
 
+/// 通貨ペアの2通貨を重ねて表示する国旗(HQ指示 2026-10-12「値動きの
+/// USD/JPYの国旗は2ついると思う、重なるように表示して」)。`EventDetailCards`
+/// ・`SpeechDetailCards`の値動き(pips)表、通貨ペア1行の国旗に使う —
+/// Homeの通貨ペア一覧(`HomeView.pairRow`、国旗を隣接させるだけ)とは
+/// 別の見た目として新設した。背面の国旗を右下にずらして重ね、前面との
+/// 境界が分かるよう前面の国旗にカード背景色の縁取りを入れる。
+struct OverlappingPairFlags: View {
+    let symbol: String
+    var diameter: CGFloat = 13
+
+    private var baseCurrency: String { String(symbol.prefix(3)) }
+    private var quoteCurrency: String { String(symbol.suffix(3)) }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            CountryFlagView(currencyCode: baseCurrency, diameter: diameter)
+            CountryFlagView(currencyCode: quoteCurrency, diameter: diameter)
+                .overlay(Circle().stroke(SettingsCardStyle.cardFill, lineWidth: 1))
+                .offset(x: diameter * 0.6, y: diameter * 0.6)
+        }
+        .frame(width: diameter * 1.6, height: diameter * 1.6, alignment: .topLeading)
+    }
+}
+
 struct V5Button: View {
     let title: String
     var body: some View {
