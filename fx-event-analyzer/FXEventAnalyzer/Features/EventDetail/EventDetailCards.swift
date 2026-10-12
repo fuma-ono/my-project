@@ -55,24 +55,17 @@ struct EventDetailCards: View {
         // (国名接頭辞を取り除く)に揃えた。
         let display = CountryFlag.indicatorDisplayName(event.indicatorName, countryCode: event.countryCode)
         let combinedName = display.abbreviation.map { "\(display.main)(\($0))" } ?? display.main
-        return HStack(alignment: .top, spacing: 8) {
-            // HQ指示(2026-10-12、6回目)「経済指標や要人発言の位置を国旗
-            // マークの下にして」: 日時の行にあった`categoryBadge`を、国旗の
-            // 下に移した。`.overlay`で重ねる案も試したが、`.overlay`は親の
-            // レイアウト上の高さに算入されないため、バッジが結果/予想/前回
-            // カードと縦に重なってしまった(CI screenshotで発覚)。兄弟として
-            // 並べる今の形に戻し、高さがきちんと確保されるようにした。
-            // バッジの横幅の分だけ名前列が少し狭くなるが、それによる
-            // 「消費者物価指数(CPI)」の2行化は元々のHQ指示(2026-10-12)
-            // 「折り返す条件は（）の途中が1行で入り切らない場合に（）を
-            // 2行目にすること」が許容する正しいフォールバックそのもの
-            // (名前本体と「(CPI)」をきれいに2行に分けるだけで、単語の
-            // 途中では割れない)。
-            VStack(spacing: 4) {
+        // HQ指示(2026-10-12、7回目)「経済指標の位置は米国と横のラインを
+        // 揃えて」: 1行目=国旗+名前+HIGH、2行目=categoryBadge+国|通貨+日時、
+        // という2行のVStackに作り直した。`categoryBadge`と「米国|USD」が
+        // 同じHStackの兄弟になるため、縦位置が自然に揃う。副次効果として、
+        // 1行目の名前列の横幅は国旗(28pt)だけで決まり`categoryBadge`の
+        // 横幅に影響されなくなった(以前`VStack`で縦に並べていたときに
+        // 発生していた「CPIの部分が余分に折り返される」問題も合わせて
+        // 解消)。
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 8) {
                 CountryFlagView(countryCode: event.countryCode, diameter: 28)
-                categoryBadge
-            }
-            VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .top, spacing: 6) {
                     // 1行に収まる場合はそのまま、収まらない場合だけ
                     // 名前本体と(略称)を2行に分ける。
@@ -97,6 +90,9 @@ struct EventDetailCards: View {
                         // HQ指示(2026-10-12、6回目)「HIGHの位置を少し下げて」。
                         .padding(.top, 2)
                 }
+            }
+            HStack(alignment: .center, spacing: 8) {
+                categoryBadge
                 HStack(spacing: 6) {
                     NotoText.text("\(CountryFlag.japaneseName(forCountry: event.countryCode))　|　\(event.currencyCode)", size: 8.5)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
@@ -201,15 +197,21 @@ struct EventDetailCards: View {
     /// HQ指示(2026-10-09)「縦線と横線を交わらせたきれいな表に」: どのマスも同じ幅・
     /// 高さの枠で囲み、隣どうしの線を重ねて1本の罫線にする(経済カレンダーと同じ作り)。
     private var reactionTable: some View {
-        VStack(spacing: 0) {
-            // HQ指示(2026-10-12、5回目、参考画像)「文字がデカすぎる、2くらい
-            // 下げて」: 前回12にしたのは大きすぎたため10に戻した。
+        // HQ指示(2026-10-12、7回目)「文字部分に背景色がある/枠があるので
+        // 消して」: 見出しを表の枠(角丸カード)の外に出し、下線も外した
+        // プレーンな見出しテキストに戻した。表(見出し行〜各通貨ペアの行)
+        // 側のクリップ用背景(`AccountCardBackground`)は見出しの外に
+        // あるため、見出し自体には色も枠も付かない。
+        VStack(alignment: .leading, spacing: 6) {
             V5JPFont.text("主要通貨ペアの値動き（pips）", size: 10, weight: .semibold)
                 .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 8)
-                .frame(height: 24)
-                .overlay(alignment: .bottom) { Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5) }
+            grid
+        }
+        .frame(width: 214, alignment: .leading)
+    }
+
+    private var grid: some View {
+        VStack(spacing: 0) {
             HStack(spacing: 0) {
                 cell(width: Self.pairColumnWidth) { Color.clear }
                 ForEach(["1分", "5分", "15分"], id: \.self) { label in

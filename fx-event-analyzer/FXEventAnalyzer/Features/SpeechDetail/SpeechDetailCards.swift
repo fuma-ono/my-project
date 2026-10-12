@@ -46,26 +46,22 @@ struct SpeechDetailCards: View {
     /// ——「HIGHの下に日時がある」の並びに合わせた。
     private var header: some View {
         let speaker = response.speaker
-        return HStack(alignment: .top, spacing: 8) {
-            // HQ指示(2026-10-12)「要人発言者は国旗マークでいいのか？」:
-            // 国旗は国を表すもので話者本人を表すものではないため、人物を
-            // 表す汎用アイコンに変更した。実在の写真データは無く、捏造も
-            // しないため、国情報は下の「国|組織」の行にテキストで残す。
-            // HQ指示(2026-10-12、6回目)「経済指標や要人発言の位置を国旗
-            // マークの下にして」: 日時の行にあった`categoryBadge`を、
-            // アイコンの下に移した。`.overlay`で重ねる案も試したが、
-            // `.overlay`は親のレイアウト上の高さに算入されないため、バッジが
-            // 発言カードと縦に重なってしまった(CI screenshotで発覚、
-            // `EventDetailCards.header`と同じ問題)。兄弟として並べる今の形に
-            // 戻し、高さがきちんと確保されるようにした。
-            VStack(spacing: 4) {
+        // HQ指示(2026-10-12、7回目)「経済指標の位置は米国と横のラインを
+        // 揃えて」(要人発言も同様に揃える): 1行目=アイコン+名前+HIGH、
+        // 2行目=categoryBadge+国|組織+日時、という2行のVStackに作り直した。
+        // `categoryBadge`と「米国|FRB」が同じHStackの兄弟になるため、
+        // 縦位置が自然に揃う(`EventDetailCards.header`と同じ構成)。
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 8) {
+                // HQ指示(2026-10-12)「要人発言者は国旗マークでいいのか？」:
+                // 国旗は国を表すもので話者本人を表すものではないため、
+                // 人物を表す汎用アイコンに変更した。実在の写真データは無く、
+                // 捏造もしないため、国情報は下の「国|組織」の行にテキストで
+                // 残す。
                 Image(systemName: "person.crop.circle.fill")
                     .resizable()
                     .foregroundStyle(V5P.cyan)
                     .frame(width: 28, height: 28)
-                categoryBadge
-            }
-            VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .top, spacing: 6) {
                     // 長い実名(「クリストファー・ウォラー」等)でも省略
                     // されないよう、1行に収まらなければ自然に2行へ折り返す。
@@ -83,6 +79,9 @@ struct SpeechDetailCards: View {
                         // HQ指示(2026-10-12、6回目)「HIGHの位置を少し下げて」。
                         .padding(.top, 2)
                 }
+            }
+            HStack(alignment: .center, spacing: 8) {
+                categoryBadge
                 HStack(spacing: 6) {
                     NotoText.text("\(CountryFlag.japaneseName(forCountry: speaker.countryCode))　|　\(speaker.organization)", size: 8.5)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
@@ -171,15 +170,21 @@ struct SpeechDetailCards: View {
     /// `EventDetailCards.reactionTable`と同じ枠組み(見出し行・列ヘッダー・
     /// 行の罫線)。
     private var reactionTable: some View {
-        VStack(spacing: 0) {
-            // HQ指示(2026-10-12、5回目、参考画像)「文字がデカすぎる、2くらい
-            // 下げて」: 前回12にしたのは大きすぎたため10に戻した。
+        // HQ指示(2026-10-12、7回目)「文字部分に背景色がある/枠があるので
+        // 消して」: 見出しを表の枠(角丸カード)の外に出し、下線も外した
+        // プレーンな見出しテキストに戻した(`EventDetailCards.reactionTable`
+        // と同じ構成、「要人発言の通貨ペアはイベント詳細と同じ位置にして」
+        // にも合わせて揃えた)。
+        VStack(alignment: .leading, spacing: 6) {
             V5JPFont.text("通貨ペア別の値動き（pips）", size: 10, weight: .semibold)
                 .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 8)
-                .frame(height: 24)
-                .overlay(alignment: .bottom) { Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5) }
+            grid
+        }
+        .frame(width: 214, alignment: .leading)
+    }
+
+    private var grid: some View {
+        VStack(spacing: 0) {
             HStack(spacing: 0) {
                 cell(width: Self.pairColumnWidth) { Color.clear }
                 ForEach(["1分", "5分", "15分"], id: \.self) { label in
