@@ -16,12 +16,14 @@ struct EventDetailCards: View {
     static let timeframes = ["1m", "5m", "15m"]
 
     var body: some View {
-        // HQ指示(2026-10-12)「タイトルの枠が無くなった部分を結果予想などの
-        // 枠を上に上げて調整して」: headerが枠(AccountCardBackground)を
-        // 失ったことに合わせ、間隔を8→4に詰めて全体を上に寄せた。
-        VStack(alignment: .leading, spacing: 4) {
-            header
-            results
+        // HQ指示(2026-10-12)「結果予想などをもう少し上に上げて」「各カードの
+        // 間隔が詰まりすぎ」: header→resultsだけ詰め、それ以降のカード間は
+        // 元の8に戻した(8→4の一律縮小だと他のカードまで詰まりすぎていた)。
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                header
+                results
+            }
             // HQ指示(2026-10-09)の2枚目の参考画像: 見出しは表のカードの中、その下に
             // 「相場反応詳細」「過去イベント比較」のボタンと次回発表予定。分析の欄はなくした。
             reactionTable
@@ -36,16 +38,22 @@ struct EventDetailCards: View {
 
     private var header: some View {
         let event = response.event
+        // HQ指示(2026-10-12)「タイトルが前回言ったことが治っていない
+        // CPIの件」: ここだけ`IndicatorDetailCard.splitName`(国名接頭辞を
+        // 残したまま括弧で割るだけ)を使っていたため「米国CPI」が消えて
+        // いなかった。Home/検索と同じ`CountryFlag.indicatorDisplayName`
+        // (国名接頭辞を取り除く)に揃えた。
+        let display = CountryFlag.indicatorDisplayName(event.indicatorName, countryCode: event.countryCode)
+        let combinedName = display.abbreviation.map { "\(display.main)(\($0))" } ?? display.main
         return HStack(alignment: .top, spacing: 8) {
             CountryFlagView(countryCode: event.countryCode, diameter: 28)
             VStack(alignment: .leading, spacing: 3) {
                 ViewThatFits(in: .horizontal) {
-                    NotoText.text(event.indicatorName, size: 10.5).lineLimit(1).fixedSize()
+                    NotoText.text(combinedName, size: 10.5).lineLimit(1)
                     VStack(alignment: .leading, spacing: 1) {
-                        let parts = IndicatorDetailCard.splitName(event.indicatorName)
-                        NotoText.text(parts.main, size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
-                        if let paren = parts.paren {
-                            NotoText.text(paren, size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
+                        NotoText.text(display.main, size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
+                        if let abbreviation = display.abbreviation {
+                            NotoText.text("(\(abbreviation))", size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
                         }
                     }
                 }
@@ -67,7 +75,11 @@ struct EventDetailCards: View {
                     .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
             }
         }
-        .padding(10)
+        .padding(.leading, 10)
+        .padding(.vertical, 10)
+        // HQ指示(2026-10-12)「HIGHと日時をもう少し右側に」: 右側だけ
+        // パディングを縮め、カード右端に寄せた。
+        .padding(.trailing, 4)
         .frame(width: 214, alignment: .leading)
     }
 
@@ -150,8 +162,6 @@ struct EventDetailCards: View {
                 }
             }
             .frame(height: Self.headerHeight)
-            // HQ指示(2026-10-09)「見出し行だけ少し濃く」: 見出しの行は本文より少し濃い一色。
-            .background(Self.headerFill)
             ForEach(pairs) { pair in
                 if isReleased {
                 NavigationLink(value: AppRoute.movementDetail(
@@ -200,8 +210,6 @@ struct EventDetailCards: View {
         .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
     }
 
-    /// 見出しの行: 本文と見分けがつく、少し明るい青(HQ指示 2026-10-09「もう少し明るく」)。
-    private static let headerFill = Color(red: 0.04, green: 0.18, blue: 0.36)
     /// 本文: カードの色から少し明るい青へ、上から下へのゆるいグラデーション。
     private static let bodyGradient = LinearGradient(
         colors: [SettingsCardStyle.cardFill, Color(red: 0.03, green: 0.14, blue: 0.27)],

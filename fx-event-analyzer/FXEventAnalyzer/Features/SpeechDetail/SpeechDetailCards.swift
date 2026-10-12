@@ -29,6 +29,8 @@ struct SpeechDetailCards: View {
             header
             statementCard
             reactionTable
+            movementLink
+            comparisonLink
         }
         .frame(width: 214)
     }
@@ -75,7 +77,11 @@ struct SpeechDetailCards: View {
                 }
             }
         }
-        .padding(10)
+        .padding(.leading, 10)
+        .padding(.vertical, 10)
+        // HQ指示(2026-10-12)「HIGHと日時をもう少し右側に」: 右側だけ
+        // パディングを縮め、カード右端に寄せた。
+        .padding(.trailing, 4)
         .frame(width: 214, alignment: .leading)
     }
 
@@ -92,7 +98,8 @@ struct SpeechDetailCards: View {
             } else if response.status == .cancelled {
                 NotoText.text("この発言は中止されました。", size: 9).foregroundStyle(SettingsCardStyle.subtitleColor)
             } else if let summary = response.summary {
-                NotoText.text("「\(summary)」", size: 9.5).foregroundStyle(.white)
+                // HQ指示(2026-10-12)「発言の部分の文字を1大きくして」: 9.5→10.5。
+                NotoText.text("「\(summary)」", size: 10.5).foregroundStyle(.white)
             } else {
                 NotoText.text("要約はまだ用意されていません。", size: 9).foregroundStyle(SettingsCardStyle.subtitleColor)
             }
@@ -140,7 +147,6 @@ struct SpeechDetailCards: View {
                 }
             }
             .frame(height: Self.headerHeight)
-            .background(Self.headerFill)
             ForEach(Self.placeholderReactions) { reaction in
                 HStack(spacing: 0) {
                     cell(width: Self.pairColumnWidth, alignment: .leading) { pairLabel(reaction.symbol) }
@@ -157,6 +163,61 @@ struct SpeechDetailCards: View {
         // 外周の角丸ストロークのみ削除。表内のマス目の罫線(`cell`)・
         // 背景の塗りはそのまま残す。
         .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
+    }
+
+    // MARK: - 相場反応詳細・過去イベント比較
+
+    /// HQ指示(2026-10-12)「要人発言にも相場反応と過去イベントをつけて
+    /// 遷移させるように」。`EventDetailCards`と違い、要人発言には遷移先が
+    /// 必要とする本物の`eventId`/`indicatorId`/`fxPairId`が存在しない
+    /// (上部のドキュメントコメント参照、pipsと同じ理由)。存在しないIDを
+    /// 捏造して実在するかのように見せるより、`speechId`(実在はするが
+    /// 別の種類のリソース)を代わりに渡し、遷移先のBackend呼び出しが正直に
+    /// 「見つかりません」(各画面が既に持つ空状態)になる方を選んだ。
+    private func linkCard(icon: String, title: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(V5P.cyan)
+                .frame(width: 18)
+            NotoText.text(title, size: 10).foregroundStyle(.white)
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(V5P.cyan)
+        }
+        .padding(.horizontal, 10)
+        .frame(width: 214, height: 32)
+        .background(AccountCardBackground())
+        .contentShape(Rectangle())
+    }
+
+    private var movementLink: some View {
+        let pair = Self.placeholderReactions[0]
+        return NavigationLink(value: AppRoute.movementDetail(
+            eventId: response.speechId,
+            indicatorId: response.speechId,
+            fxPairId: response.speechId,
+            symbol: pair.symbol,
+            indicatorName: response.title,
+            releaseDatetime: response.statementDatetime
+        )) {
+            linkCard(icon: "chart.bar.xaxis", title: "相場反応詳細")
+        }
+        .buttonStyle(SettingsRowPressStyle())
+    }
+
+    private var comparisonLink: some View {
+        let pair = Self.placeholderReactions[0]
+        return NavigationLink(value: AppRoute.historicalComparison(
+            indicatorId: response.speechId,
+            indicatorName: response.title,
+            fxPairId: response.speechId,
+            fxPairSymbol: pair.symbol
+        )) {
+            linkCard(icon: "clock.arrow.circlepath", title: "過去イベント比較")
+        }
+        .buttonStyle(SettingsRowPressStyle())
     }
 
     private func pairLabel(_ symbol: String) -> some View {
@@ -181,7 +242,6 @@ struct SpeechDetailCards: View {
             .foregroundStyle(pips >= 0 ? HomeView.changeUpColor : HomeView.changeDownColor)
     }
 
-    private static let headerFill = Color(red: 0.04, green: 0.18, blue: 0.36)
     private static let bodyGradient = LinearGradient(
         colors: [SettingsCardStyle.cardFill, Color(red: 0.03, green: 0.14, blue: 0.27)],
         startPoint: .top, endPoint: .bottom
