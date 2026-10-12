@@ -42,9 +42,6 @@ struct SpeechDetailCards: View {
                 // (Home/検索の指標名と同じ`ViewThatFits`の考え方) —
                 // 固定の`minimumScaleFactor`だけでは長い名前(「クリスト
                 // ファー・ウォラー」等)が省略記号で切れてしまっていた。
-                // さらに、名前側に`.layoutPriority(1)`を与え、日時側の
-                // `.fixedSize()`を外して縮小可能にすることで、長い人名が
-                // 日時表示に横幅を奪われないようにした。
                 ViewThatFits(in: .horizontal) {
                     NotoText.text("\(speaker.name)　\(speaker.title)", size: 10.5)
                         .foregroundStyle(.white)
@@ -63,17 +60,15 @@ struct SpeechDetailCards: View {
                 NotoText.text("\(CountryFlag.japaneseName(forCountry: speaker.countryCode))　|　\(speaker.organization)", size: 8.5)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
             }
-            .layoutPriority(1)
             Spacer(minLength: 4)
+            // 日時+重要度バッジの列に固定幅を確保し、名前側の2行フォール
+            // バックが伸びても日時側(「2026/10/12 0:00」)が省略されない
+            // ようにする(前回の`.layoutPriority`方式は逆に日時側が切れた)。
             VStack(alignment: .trailing, spacing: 5) {
-                // HQ指示の名前優先対応で日付側の横幅が狭くなったため、
-                // 「日付 時刻」の1行ではなく日付・時刻を2行に分けて収める。
-                VStack(alignment: .trailing, spacing: 0) {
-                    NotoText.text(AppPreferences.shared.dateString(response.statementDatetime), size: 7)
-                    NotoText.text(AppPreferences.shared.timeString(response.statementDatetime), size: 7)
-                }
-                .foregroundStyle(SettingsCardStyle.subtitleColor)
-                .lineLimit(1)
+                NotoText.text("\(AppPreferences.shared.dateString(response.statementDatetime)) \(AppPreferences.shared.timeString(response.statementDatetime))", size: 7)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                 let colors = HomeView.importanceBadgeColors(response.importance)
                 NotoText.text(response.importance.rawValue, size: 7)
                     .tracking(-0.3)
@@ -82,6 +77,7 @@ struct SpeechDetailCards: View {
                     .background(colors.fill, in: Capsule())
                     .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
             }
+            .frame(minWidth: 72, alignment: .trailing)
         }
         .padding(10)
         .frame(width: 214, alignment: .leading)
