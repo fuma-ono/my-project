@@ -138,7 +138,9 @@ struct SpeechDetailCards: View {
                 NotoText.text("要約はまだ用意されていません。", size: 9).foregroundStyle(SettingsCardStyle.subtitleColor)
             }
         }
-        .padding(10)
+        // HQ指示(2026-10-12、7回目)「発言の枠をもう少し大きくして」:
+        // パディングを10→14に広げた。
+        .padding(14)
         .frame(width: 214, alignment: .leading)
         .background(AccountCardBackground())
     }
