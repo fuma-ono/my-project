@@ -58,11 +58,18 @@ struct EventDetailCards: View {
         return HStack(alignment: .top, spacing: 8) {
             // HQ指示(2026-10-12、6回目)「経済指標や要人発言の位置を国旗
             // マークの下にして」: 日時の行にあった`categoryBadge`を、国旗の
-            // 下に移した。
-            VStack(spacing: 4) {
-                CountryFlagView(countryCode: event.countryCode, diameter: 28)
-                categoryBadge
-            }
+            // 下に移した。バッジ(「経済指標」)は国旗(28pt)より横幅が広い
+            // ため、`VStack`で兄弟として並べるとその分だけ右の名前列の
+            // 横幅が狭くなり、「CPIの部分は折り返さないで」が再び崩れて
+            // いた。`.overlay`で国旗の下に重ねることで、レイアウト上の
+            // 幅は国旗の28ptのまま保ち、名前列の横幅を変えずに済むように
+            // した。
+            CountryFlagView(countryCode: event.countryCode, diameter: 28)
+                .overlay(alignment: .top) {
+                    categoryBadge
+                        .fixedSize()
+                        .offset(y: 28 + 4)
+                }
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .top, spacing: 6) {
                     // 1行に収まる場合はそのまま、収まらない場合だけ
