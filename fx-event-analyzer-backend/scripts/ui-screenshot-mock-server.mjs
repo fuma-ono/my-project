@@ -1654,6 +1654,115 @@ function upcomingNotificationsHandler() {
 }
 
 // ---------------------------------------------------------------------------
+// アプリ内の通知一覧 — GET /notifications, POST /notifications/{id}/read,
+// POST /notifications/read-all (api-design.md §24.9-§24.11). In memory: each
+// GET adds the /notifications/upcoming items above whose notify_at has
+// passed (the JP CPI indicator and the 植田和男 speech, both unread), keyed
+// like the table's unique (kind, target_id, trigger) so they are added only
+// once. read / read-all mutate this state for the rest of the run.
+
+const NOTIFICATION_RETENTION_DAYS = { INDICATOR: 30, SPEECH: 30, RATE_ALERT: 7, CALENDAR_UPDATE: 7, SYSTEM: 30 };
+const NOTIFICATION_INBOX_KINDS = Object.keys(NOTIFICATION_RETENTION_DAYS);
+const IMPORTANCE_LABELS = { HIGH: '高', MEDIUM: '中', LOW: '低' };
+/** key "kind|target_id|trigger" → row */
+const notificationInbox = new Map();
+let notificationInboxSeq = 0;
+
+function notificationTrigger(leadMinutes) {
+  return leadMinutes === 0 ? 'AT_RELEASE' : `LEAD_${leadMinutes}`;
+}
+
+function leadMinutesFromTrigger(trigger) {
+  if (trigger === 'AT_RELEASE') return 0;
+  const match = /^LEAD_(\d+)$/.exec(trigger);
+  return match ? Number(match[1]) : null;
+}
+
+/** 「発表の5分前です（10/16 8:30発表・重要度 高）」 in Asia/Tokyo, like src/domain/notificationInbox.ts. */
+function notificationBody(kind, scheduledAt, importance, leadMinutes) {
+  const noun = kind === 'SPEECH' ? '発言' : '発表';
+  const timing = leadMinutes === 0 ? `まもなく${noun}です` : `${noun}の${leadMinutes}分前です`;
+  const jst = new Date(Date.parse(scheduledAt) + 9 * 3_600_000);
+  const when = `${jst.getUTCMonth() + 1}/${jst.getUTCDate()} ${jst.getUTCHours()}:${String(jst.getUTCMinutes()).padStart(2, '0')}`;
+  return `${timing}（${when}${noun}・重要度 ${IMPORTANCE_LABELS[importance] ?? importance}）`;
+}
+
+function materializeNotificationInbox() {
+  const { lead_minutes: lead, items } = upcomingNotificationsHandler();
+  const trigger = notificationTrigger(lead);
+  const nowMs = now().getTime();
+  for (const item of items) {
+    if (Date.parse(item.notify_at) > nowMs) continue;
+    const key = `${item.kind}|${item.id}|${trigger}`;
+    if (notificationInbox.has(key)) continue;
+    notificationInboxSeq += 1;
+    notificationInbox.set(key, {
+      id: `88888888-8888-8888-8888-${String(notificationInboxSeq).padStart(12, '0')}`,
+      kind: item.kind,
+      target_id: item.id,
+      trigger,
+      title: item.title,
+      body: notificationBody(item.kind, item.scheduled_at, item.importance, lead),
+      display_name: item.display_name,
+      speaker_name: item.speaker_name,
+      country_code: item.country_code,
+      importance: item.importance,
+      scheduled_at: item.scheduled_at,
+      notify_at: item.notify_at,
+      read_at: null,
+      expires_at: isoSeconds(
+        new Date(Date.parse(item.notify_at) + NOTIFICATION_RETENTION_DAYS[item.kind] * 86_400_000),
+      ),
+    });
+  }
+  for (const [key, row] of notificationInbox) {
+    if (Date.parse(row.expires_at) <= nowMs) notificationInbox.delete(key);
+  }
+}
+
+function notificationInboxHandler(searchParams) {
+  const order = searchParams.get('order') ?? 'desc';
+  const kind = searchParams.get('kind');
+  if (order !== 'desc' && order !== 'asc') {
+    return [422, { error: { code: 'VALIDATION_ERROR', message: 'order: must be desc or asc' } }];
+  }
+  if (kind !== null && !NOTIFICATION_INBOX_KINDS.includes(kind)) {
+    return [
+      422,
+      { error: { code: 'VALIDATION_ERROR', message: `kind: must be one of ${NOTIFICATION_INBOX_KINDS.join(', ')}` } },
+    ];
+  }
+  materializeNotificationInbox();
+  const rows = [...notificationInbox.values()];
+  const items = rows
+    .filter((row) => kind === null || row.kind === kind)
+    .sort(
+      (a, b) =>
+        (order === 'asc' ? 1 : -1) * (Date.parse(a.notify_at) - Date.parse(b.notify_at) || a.id.localeCompare(b.id)),
+    )
+    .map((row) => ({ ...row, lead_minutes: leadMinutesFromTrigger(row.trigger) }));
+  return [200, { items, unread_count: rows.filter((row) => row.read_at === null).length }];
+}
+
+function markNotificationRead(id) {
+  const row = [...notificationInbox.values()].find((entry) => entry.id === id);
+  if (!row) return null;
+  row.read_at ??= isoSeconds(now());
+  return { id: row.id, read_at: row.read_at };
+}
+
+function markAllNotificationsRead() {
+  let updated = 0;
+  for (const row of notificationInbox.values()) {
+    if (row.read_at === null) {
+      row.read_at = isoSeconds(now());
+      updated += 1;
+    }
+  }
+  return { updated };
+}
+
+// ---------------------------------------------------------------------------
 // SCR-010 経済カレンダー — GET /calendar (api-design.md §14.6、v1.14).
 // HQ指示(2026-10-08): 月のマス目に重要度の点が並び、選んだ日の一覧に指標と
 // 要人発言が時刻順で混ざって出るよう、撮影した月の約15日に
@@ -2121,6 +2230,18 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
     return json(res, 200, speech);
   }
   if (pathname === '/api/v1/notifications/upcoming') return json(res, 200, upcomingNotificationsHandler());
+  // アプリ内の通知一覧 (api-design.md §24.9-§24.11).
+  if (pathname === '/api/v1/notifications' && req.method === 'GET') {
+    return json(res, ...notificationInboxHandler(searchParams));
+  }
+  if (pathname === '/api/v1/notifications/read-all' && req.method === 'POST') {
+    return json(res, 200, markAllNotificationsRead());
+  }
+  if (segments[0] === 'notifications' && segments[2] === 'read' && segments.length === 3 && req.method === 'POST') {
+    const result = markNotificationRead(segments[1]);
+    if (!result) return json(res, 404, { error: { code: 'NOT_FOUND', message: 'Notification not found.' } });
+    return json(res, 200, result);
+  }
   // SCR-010 経済カレンダー (api-design.md §14.6).
   if (pathname === '/api/v1/calendar') {
     const planError = calendarPlanError(searchParams);

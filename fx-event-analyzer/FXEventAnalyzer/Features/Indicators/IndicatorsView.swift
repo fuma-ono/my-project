@@ -211,9 +211,10 @@ struct IndicatorsView: View {
                 .frame(width: 36, height: 14)
                 .background(colors.fill, in: Capsule())
                 .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
+            // HQ指示(2026-10-13)「＞は10.5にそろえる」: 検索結果の＞と同じ大きさ・色。
             Image(systemName: "chevron.right")
-                .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(SettingsCardStyle.chevronColor)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(V5P.muted)
         }
         .padding(.leading, 9)
         .padding(.trailing, 7)

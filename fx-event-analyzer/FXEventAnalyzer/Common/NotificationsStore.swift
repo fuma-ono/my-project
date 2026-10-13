@@ -68,6 +68,26 @@ final class NotificationsStore: ObservableObject {
         refreshUnread(now: now)
     }
 
+    /// サーバーの通知一覧(既読・保存期間はサーバーが管理)で、届いた経済指標・要人発言を置き換える。
+    /// これから届く予定の通知と、端末だけのシステム通知はそのまま残す。
+    func applyInbox(_ items: [InboxNotification], now: Date = Date()) {
+        let server = items.compactMap { NotificationEntry($0) }
+        let serverKeys = Set(server.map(\.targetKey))
+        let kept = entries.filter { entry in
+            if entry.notifyAt > now { return !serverKeys.contains(entry.targetKey) }
+            return entry.kind == .system && entry.serverID == nil && !serverKeys.contains(entry.targetKey)
+        }
+        entries = (kept + server).sorted { $0.notifyAt < $1.notifyAt }
+        for item in items {
+            guard let entry = server.first(where: { $0.serverID == item.id }) else { continue }
+            if item.readAt != nil { readIDs.insert(entry.id) }
+        }
+        userDefaults.set(Array(readIDs), forKey: readIDsKey)
+        persist()
+        objectWillChange.send()
+        refreshUnread(now: now)
+    }
+
     /// 保存期間を過ぎた通知を外す(アプリを開いたとき・一覧を開いたとき)。
     func pruneExpired(now: Date = Date()) {
         let kept = entries.filter { !$0.isExpired(now: now) }
@@ -206,6 +226,8 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
     /// 通知の種類(発表の何分前か。0は発表時)。同じイベントでも種類が違えば別の通知として残す。
     /// 古い記録と、種類の無いシステム通知はnil。
     var leadMinutes: Int?
+    /// サーバーの通知一覧から来たものはそのID(既読をサーバーへ送るのに使う)。端末だけの記録はnil。
+    var serverID: String?
 
     var id: String { "\(kind.rawValue).\(targetID).\(Int(notifyAt.timeIntervalSince1970))" }
     /// 重複を防ぐ単位(同じイベント・同じ通知の種類で1件)。
@@ -243,7 +265,11 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
         let noun = item.kind == .speech ? "発言" : "発表"
         let timing = leadMinutes == 0 ? "まもなく\(noun)です" : "\(noun)の\(leadMinutes)分前です"
         let level = NotificationImportance.label(item.importance)
-        var title = item.title
+        // HQ指示(2026-10-13)「通知の名前も消費者物価指数（CPI）にそろえて」: 指標は全画面共通の表示名にする。
+        let subject = item.kind == .indicator
+            ? CountryFlag.indicatorDisplayText(item.title, countryCode: item.countryCode ?? "", displayName: item.displayName)
+            : item.title
+        var title = subject
         if item.kind == .speech, let speaker = item.speakerName, !title.contains(speaker) {
             title = "\(speaker)：\(title)"
         }
@@ -256,10 +282,38 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
             scheduledAt: item.scheduledAt,
             importance: item.importance,
             speakerName: item.speakerName,
-            subject: item.title,
+            subject: subject,
             countryCode: item.countryCode,
             leadMinutes: leadMinutes
         )
+    }
+
+    /// サーバーの通知一覧(`GET /notifications`)の1件から作る。アプリで扱わない種類はnil。
+    init?(_ item: InboxNotification) {
+        let kind: Kind
+        switch item.kind {
+        case "INDICATOR": kind = .indicator
+        case "SPEECH": kind = .speech
+        case "SYSTEM": kind = .system
+        default: return nil
+        }
+        let subject = kind == .indicator
+            ? CountryFlag.indicatorDisplayText(item.title, countryCode: item.countryCode ?? "", displayName: item.displayName)
+            : item.title
+        self.init(
+            kind: kind,
+            targetID: item.targetId,
+            title: subject,
+            body: item.body ?? "",
+            notifyAt: item.notifyAt,
+            scheduledAt: item.scheduledAt ?? item.notifyAt,
+            importance: item.importance ?? "LOW",
+            speakerName: item.speakerName,
+            subject: subject,
+            countryCode: item.countryCode,
+            leadMinutes: item.leadMinutes
+        )
+        serverID = item.id
     }
 }
 

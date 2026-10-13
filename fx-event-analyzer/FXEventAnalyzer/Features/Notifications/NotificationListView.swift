@@ -50,7 +50,7 @@ struct NotificationListView: View {
                             }
                             .buttonStyle(SettingsRowPressStyle())
                             // 開いた通知だけ既読にする(HQ指示 2026-10-13)。
-                            .simultaneousGesture(TapGesture().onEnded { store.markRead(entry) })
+                            .simultaneousGesture(TapGesture().onEnded { markRead(entry) })
                         }
                     }
                     .padding(.bottom, 4)
@@ -70,8 +70,27 @@ struct NotificationListView: View {
         }
         .task {
             await LocalNotificationScheduler(apiClient: apiClient).refresh()
+            await loadInbox()
             now = Date()
         }
+    }
+
+    /// サーバーの通知一覧を取り込む(HQ指示 2026-10-13「既読や保存期間をサーバーで持つ形」)。
+    /// 古いBackendなどで読めないときは、端末の記録のまま表示する。
+    private func loadInbox() async {
+        guard let response: InboxNotificationsResponse = try? await apiClient.send(Endpoint(path: "notifications")) else { return }
+        store.applyInbox(response.items)
+    }
+
+    private func markRead(_ entry: NotificationEntry) {
+        store.markRead(entry)
+        guard let serverID = entry.serverID else { return }
+        Task { let _: InboxReadResponse? = try? await apiClient.send(Endpoint(path: "notifications/\(serverID)/read", method: .post)) }
+    }
+
+    private func markAllRead() {
+        store.markAllRead(now: Date())
+        Task { let _: InboxReadResponse? = try? await apiClient.send(Endpoint(path: "notifications/read-all", method: .post)) }
     }
 
     /// HQ指示(2026-10-13)「上部に未読件数と右上に新しい順/古い順の並び替え。すべて既読ボタンを付けて」。
@@ -84,7 +103,7 @@ struct NotificationListView: View {
                     .foregroundStyle(.white)
             }
             Spacer()
-            Button { store.markAllRead(now: Date()) } label: {
+            Button { markAllRead() } label: {
                 NotoText.text("すべて既読", size: 7.5)
                     .foregroundStyle(unread > 0 ? V5P.cyan : SettingsCardStyle.subtitleColor.opacity(0.6))
             }
@@ -184,8 +203,10 @@ private struct NotificationRow: View {
     }
 
     /// 1行に収まらないときだけ使う短い表示名(詳細画面は正式名称のまま)。
+    /// 指標は全画面共通の表示名(「消費者物価指数（CPI）」)なので、そのまま出す(入らなければ少し縮める)。
+    /// 表示名になる前に記録された通知だけ、従来どおり略す。
     private var shortHeadline: String {
-        entry.kind == .indicator ? IndicatorShortName.shorten(headline) : headline
+        entry.kind == .indicator && entry.leadMinutes == nil && entry.serverID == nil ? IndicatorShortName.shorten(headline) : headline
     }
 
     /// 発表の何分前に届いたか(「発表の5分前です」)。

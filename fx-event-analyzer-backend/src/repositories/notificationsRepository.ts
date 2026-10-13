@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { fxPairsForCurrency, type NotificationCandidate } from '../domain/notifications.js';
 import { listActiveFxPairs } from './fxPairsRepository.js';
 import { listRelatedFxPairsForIndicators } from './homeRepository.js';
-import { listScheduledSpeechesInRange } from './speechesRepository.js';
+import { listScheduledSpeechesInRange, listSpeechesInRange } from './speechesRepository.js';
 
 /**
  * Fetches GET /notifications/upcoming candidates (api-design.md §24.6) for
@@ -10,16 +10,23 @@ import { listScheduledSpeechesInRange } from './speechesRepository.js';
  * (SCHEDULED, time range); every user-setting rule is applied afterwards
  * by buildUpcomingNotifications (src/domain/notifications.ts) so it stays
  * unit-testable without a DB.
+ *
+ * `includePast` (the in-app inbox, GET /notifications) also fetches events
+ * that are no longer SCHEDULED (RELEASED / DELIVERED / CANCELLED) — an
+ * event notified 5 minutes before its release is usually RELEASED by the
+ * time the inbox is opened. The domain then drops CANCELLED.
  */
 export async function listNotificationCandidates(
   supabase: SupabaseClient,
   fromIso: string,
   toIso: string,
   kinds: { indicators: boolean; speeches: boolean },
+  options: { includePast?: boolean } = {},
 ): Promise<NotificationCandidate[]> {
+  const includePast = options.includePast ?? false;
   const [indicatorCandidates, speechCandidates] = await Promise.all([
-    kinds.indicators ? listIndicatorCandidates(supabase, fromIso, toIso) : Promise.resolve([]),
-    kinds.speeches ? listSpeechCandidates(supabase, fromIso, toIso) : Promise.resolve([]),
+    kinds.indicators ? listIndicatorCandidates(supabase, fromIso, toIso, includePast) : Promise.resolve([]),
+    kinds.speeches ? listSpeechCandidates(supabase, fromIso, toIso, includePast) : Promise.resolve([]),
   ]);
   return [...indicatorCandidates, ...speechCandidates];
 }
@@ -28,13 +35,15 @@ async function listIndicatorCandidates(
   supabase: SupabaseClient,
   fromIso: string,
   toIso: string,
+  includePast: boolean,
 ): Promise<NotificationCandidate[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from('economic_events')
     .select(
       'id, indicator_id, release_datetime, release_datetime_precision, importance, status, economic_indicators!inner(name, display_name, country_code, currency_code)',
-    )
-    .eq('status', 'SCHEDULED')
+    );
+  if (!includePast) query = query.eq('status', 'SCHEDULED');
+  const { data, error } = await query
     .gte('release_datetime', fromIso)
     .lte('release_datetime', toIso)
     .order('release_datetime', { ascending: true });
@@ -73,9 +82,12 @@ async function listSpeechCandidates(
   supabase: SupabaseClient,
   fromIso: string,
   toIso: string,
+  includePast: boolean,
 ): Promise<NotificationCandidate[]> {
   const [speeches, fxPairs] = await Promise.all([
-    listScheduledSpeechesInRange(supabase, fromIso, toIso),
+    includePast
+      ? listSpeechesInRange(supabase, fromIso, toIso)
+      : listScheduledSpeechesInRange(supabase, fromIso, toIso),
     listActiveFxPairs(supabase),
   ]);
 

@@ -66,6 +66,22 @@ cp .env.example .env   # fill in SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
 npm run dev             # tsx watch src/server.ts
 ```
 
+## Jobs
+
+```sh
+npm run jobs:cleanup-notifications   # tsx src/jobs/cleanupNotifications.ts
+node dist/jobs/cleanupNotifications.js   # same, after `npm run build`
+```
+
+Deletes every user's expired `notification_inbox` rows (`expires_at <= now()`,
+via the `delete_expired_notification_inbox()` SQL function). Run it once a day
+from cron, e.g. `15 3 * * * cd /path/to/fx-event-analyzer-backend && npm run jobs:cleanup-notifications`.
+It reads `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` from the environment (or
+`.env`) like the server, prints one JSON line (`{"job":"cleanup-notifications","deleted":N,...}`)
+and exits non-zero on failure. `GET /notifications` already deletes the
+caller's own expired rows, so the job only matters for users who stop opening
+the app (api-design.md §24.9).
+
 ## Quality gates
 
 ```sh

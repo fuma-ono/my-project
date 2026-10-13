@@ -32,11 +32,14 @@ struct UpcomingNotification: Decodable, Equatable {
     let countryCode: String?
     let currencyCode: String?
     let relatedFxPairs: [String]
+    /// 指標の一覧表示名(api-design v1.22)。発言と古いBackendではnil。
+    var displayName: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case kind
         case id
         case title
+        case displayName = "display_name"
         case speakerName = "speaker_name"
         case importance
         case scheduledAt = "scheduled_at"
@@ -46,6 +49,54 @@ struct UpcomingNotification: Decodable, Equatable {
         case relatedFxPairs = "related_fx_pairs"
     }
 }
+
+/// `GET /api/v1/notifications`(api-design v1.23)。サーバーが持つアプリ内の通知一覧。
+/// 既読(`read_at`)と保存期間(`expires_at`)はサーバーが管理し、期限切れは返らない。
+struct InboxNotificationsResponse: Decodable, Equatable {
+    let items: [InboxNotification]
+    let unreadCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case items
+        case unreadCount = "unread_count"
+    }
+}
+
+struct InboxNotification: Decodable, Equatable {
+    let id: String
+    /// INDICATOR / SPEECH / RATE_ALERT / CALENDAR_UPDATE / SYSTEM
+    let kind: String
+    let targetId: String
+    /// 例: LEAD_5(発表5分前)、AT_RELEASE(発表時)
+    let trigger: String
+    let leadMinutes: Int?
+    let title: String
+    let body: String?
+    let displayName: String?
+    let speakerName: String?
+    let countryCode: String?
+    let importance: String?
+    let scheduledAt: Date?
+    let notifyAt: Date
+    let readAt: Date?
+    let expiresAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, trigger, title, body, importance
+        case targetId = "target_id"
+        case leadMinutes = "lead_minutes"
+        case displayName = "display_name"
+        case speakerName = "speaker_name"
+        case countryCode = "country_code"
+        case scheduledAt = "scheduled_at"
+        case notifyAt = "notify_at"
+        case readAt = "read_at"
+        case expiresAt = "expires_at"
+    }
+}
+
+/// `POST /api/v1/notifications/{id}/read`・`POST /api/v1/notifications/read-all` の応答(中身は使わない)。
+struct InboxReadResponse: Decodable {}
 
 /// `GET /api/v1/fx-pairs`(api-design.md §25.2)の1件。
 struct FXPairResponse: Decodable, Equatable {

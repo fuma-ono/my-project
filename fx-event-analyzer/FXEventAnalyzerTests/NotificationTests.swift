@@ -74,7 +74,7 @@ final class NotificationModelsTests: XCTestCase {
         let item = UpcomingNotification(
             kind: .indicator, id: "e1", title: "米雇用統計", speakerName: nil, importance: "HIGH",
             scheduledAt: scheduled, notifyAt: scheduled.addingTimeInterval(-300),
-            countryCode: "US", currencyCode: "USD", relatedFxPairs: []
+            countryCode: "US", currencyCode: "USD", relatedFxPairs: [], displayName: "非農業部門雇用者数（NFP）"
         )
 
         let entry = NotificationEntry(item, leadMinutes: 5, timeZone: tokyo)
@@ -82,7 +82,9 @@ final class NotificationModelsTests: XCTestCase {
         XCTAssertEqual(entry.body, "発表の5分前です（10/6 21:30発表・重要度 高）")
         XCTAssertEqual(entry.targetID, "e1")
         XCTAssertEqual(entry.kind, .indicator)
-        XCTAssertEqual(entry.subject, "米雇用統計")
+        // 指標の名前は全画面共通の表示名(HQ指示 2026-10-13)。
+        XCTAssertEqual(entry.subject, "非農業部門雇用者数（NFP）")
+        XCTAssertEqual(entry.leadMinutes, 5)
         XCTAssertEqual(entry.countryCode, "US")
     }
 
@@ -217,6 +219,28 @@ final class NotificationsStoreTests: XCTestCase {
         store.record([fiveBefore, atRelease], now: base)
 
         XCTAssertEqual(store.delivered(now: base).map(\.body), ["発表時", "5分前"])
+    }
+
+    func testServerInboxReplacesDeliveredEntriesAndKeepsItsReadState() throws {
+        let store = makeStore()
+        store.record([entry("cpi", minutesFromBase: -5), entry("later", minutesFromBase: 30)], now: base)
+        let json = Data(#"""
+        {"unread_count":1,"items":[
+          {"id":"n1","kind":"INDICATOR","target_id":"cpi","trigger":"LEAD_5","lead_minutes":5,"title":"日本CPI(消費者物価指数)","body":null,"display_name":"消費者物価指数（CPI）","speaker_name":null,"country_code":"JP","importance":"HIGH","scheduled_at":"2026-09-21T14:00:00Z","notify_at":"2026-09-21T13:55:00Z","read_at":null,"expires_at":"2026-10-21T13:55:00Z"},
+          {"id":"n2","kind":"SPEECH","target_id":"s1","trigger":"LEAD_5","lead_minutes":5,"title":"講演","body":null,"display_name":null,"speaker_name":"植田和男","country_code":"JP","importance":"MEDIUM","scheduled_at":"2026-09-21T14:00:00Z","notify_at":"2026-09-21T13:50:00Z","read_at":"2026-09-21T13:58:00Z","expires_at":"2026-10-21T13:50:00Z"}
+        ]}
+        """#.utf8)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(InboxNotificationsResponse.self, from: json)
+
+        store.applyInbox(response.items, now: base)
+
+        let delivered = store.delivered(now: base)
+        XCTAssertEqual(delivered.map(\.serverID), ["n1", "n2"])
+        XCTAssertEqual(delivered.first?.subject, "消費者物価指数（CPI）")
+        XCTAssertEqual(store.unreadCount(now: base), 1)
+        XCTAssertEqual(store.entries.filter { $0.notifyAt > base }.map(\.targetID), ["later"], "upcoming entries stay")
     }
 
     func testRemoveAllForgetsEverything() {

@@ -180,8 +180,22 @@ export function isInQuietHours(notifyAt: Date, quietHours: QuietHours, timeZone:
   return start < end ? local >= start && local < end : local >= start || local < end;
 }
 
-function isEligible(candidate: NotificationCandidate, prefs: NotificationPreferences): boolean {
-  if (candidate.status !== 'SCHEDULED') return false;
+/** GET /notifications/upcoming only schedules events that haven't happened yet. */
+export const UPCOMING_CANDIDATE_STATUSES = ['SCHEDULED'] as const;
+
+export interface BuildNotificationsOptions {
+  /** Candidate statuses that may be notified (default: SCHEDULED only). */
+  statuses?: readonly string[];
+  /** Max items after filtering (default 60); null = no cap. */
+  limit?: number | null;
+}
+
+function isEligible(
+  candidate: NotificationCandidate,
+  prefs: NotificationPreferences,
+  statuses: readonly string[],
+): boolean {
+  if (!statuses.includes(candidate.status)) return false;
   if (candidate.kind === 'INDICATOR') {
     if (!prefs.indicators) return false;
     // Only an exact release time can be notified "N minutes before".
@@ -204,13 +218,19 @@ function isEligible(candidate: NotificationCandidate, prefs: NotificationPrefere
  * must intersect related_fx_pairs; notify_at >= from and scheduled_at <=
  * to; notify_at outside the quiet hours (when enabled, in prefs.timeZone).
  * Sorted by notify_at ascending and capped at 60 (after filtering).
+ * The in-app inbox (src/domain/notificationInbox.ts) reuses this with
+ * `options` widening the statuses (already released/delivered events
+ * stay notifiable) and lifting the cap.
  */
 export function buildUpcomingNotifications(
   prefs: NotificationPreferences,
   candidates: readonly NotificationCandidate[],
   window: NotificationWindow,
+  options: BuildNotificationsOptions = {},
 ): UpcomingNotificationItem[] {
   if (!prefs.push) return [];
+  const statuses = options.statuses ?? UPCOMING_CANDIDATE_STATUSES;
+  const limit = options.limit === undefined ? MAX_UPCOMING_NOTIFICATIONS : options.limit;
 
   const leadMs = prefs.leadMinutes * MINUTE_MS;
   const fromMs = window.from.getTime();
@@ -218,7 +238,7 @@ export function buildUpcomingNotifications(
 
   const items: Array<{ notifyAtMs: number; scheduledAtMs: number; item: UpcomingNotificationItem }> = [];
   for (const candidate of candidates) {
-    if (!isEligible(candidate, prefs)) continue;
+    if (!isEligible(candidate, prefs, statuses)) continue;
 
     const scheduledAtMs = new Date(candidate.scheduled_at).getTime();
     if (Number.isNaN(scheduledAtMs)) continue;
@@ -252,5 +272,6 @@ export function buildUpcomingNotifications(
       a.item.kind.localeCompare(b.item.kind) ||
       a.item.id.localeCompare(b.item.id),
   );
-  return items.slice(0, MAX_UPCOMING_NOTIFICATIONS).map((entry) => entry.item);
+  const kept = limit === null ? items : items.slice(0, limit);
+  return kept.map((entry) => entry.item);
 }

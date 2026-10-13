@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.22
+# FX Event Analyzer: API詳細設計書 v1.23
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -64,6 +64,7 @@
 - **v1.20**(2026-10-13): SCR-005 指標一覧の次回発表(HQ指示 2026-10-13)。`GET /indicators`の各行と`GET /indicators/{id}`の`indicator`に`next_release_datetime`(次回発表日時。現在以降で最も早い`status = SCHEDULED`のEvent、無ければ`null`)・`next_event_id`(そのEventのID、無ければ`null`)・`latest_release_datetime`(最新の`status = RELEASED`のEventの発表日時、無ければ`null`。次回発表が無いときの表示用)を追加(13.2節)。`GET /indicators`の`sort`に`next_release`(次回発表の昇順、次回発表が無い指標は後ろ、同じなら名前順)を追加(13.1節)。既定の並び順(`name`)は変えない
 - **v1.21**(2026-10-13): 指標の一覧画面の表示名(HQ指示 2026-10-13)。`GET /indicators`の各行と`GET /indicators/{id}`の`indicator`に`display_name`(一覧画面の表示名。例: `消費者物価指数（CPI）`・`FOMC政策金利`。HQの表示名ルール(indicator-display-names.md)に従って人が登録した短い名前、未登録は`null`)を追加(13.2節)。同じ名前をどの画面でも使えるよう、`GET /calendar`の`INDICATOR`の行(14.6節、`SPEECH`は`null`)と`GET /home`の`events`(12章)にも`display_name`を追加。`name`・`title`・`indicator_name`は変えない
 - **v1.22**(2026-10-13): 指標の表示名をすべての画面に(HQ指示 2026-10-13)。v1.21の`display_name`(`economic_indicators.display_name`、未登録は`null`)を次にも追加: `GET /events/{event_id}`の`event`(14.1節)、`GET /events/{event_id}/history`の`event`(20章)、`GET /indicators/{indicator_id}/comparison`の`indicator`(21章、timeframe単一指定・`all`の両方)、`GET /notifications/upcoming`の各`items`(24.6節、`INDICATOR`のみ。`SPEECH`は`null`)、`GET /search`の`indicators`の各行と`events`の各行(23章)。`GET /indicators/{indicator_id}/events`の各行は指標名を持たないため追加しない。`name`・`title`・`indicator_name`は変えない
+- **v1.23**(2026-10-13): アプリ内の通知一覧(HQ指示 2026-10-13「おすすめの通知仕様」、notification-inbox-spec.md 6章)。`GET /notifications`(24.9節。`GET /notifications/upcoming`と同じ条件で選んだ通知のうち通知時刻を過ぎたものをサーバーに記録して返す。`order=desc|asc`・`kind`、`{ items, unread_count }`)、`POST /notifications/{id}/read`(24.10節、`{ id, read_at }`)、`POST /notifications/read-all`(24.11節、`{ updated }`)を追加。テーブル`notification_inbox`(一意制約`(user_id, kind, target_id, trigger)`、保存期間 INDICATOR/SPEECH/SYSTEM 30日・RATE_ALERT/CALENDAR_UPDATE 7日)と、期限切れを消す日次ジョブ`npm run jobs:cleanup-notifications`を追加。`GET /notifications/upcoming`は変えない
 
 ---
 
@@ -1376,6 +1377,114 @@ Response：
 
 各要素は24.7節のResponseと同じ形。Paginationなし。
 
+## 24.9 GET /api/v1/notifications(v1.23で追加)
+
+アプリ内の通知一覧(ホームの通知ベル → 通知一覧、notification-inbox-spec.md)。サーバーに記録した呼び出しユーザー本人の通知を返す。必要なfeature_code：`VIEW_BASIC_EVENT`(24.6節と同じ)。
+
+Query：
+
+- `order`(任意):`desc`(既定、`notify_at`の新しい順) / `asc`(古い順)。同じ`notify_at`は記録した順
+- `kind`(任意):`INDICATOR` / `SPEECH` / `RATE_ALERT` / `CALENDAR_UPDATE` / `SYSTEM`。`items`だけを絞り込む
+- それ以外の値は`422 VALIDATION_ERROR`
+
+Response：
+
+```json
+{
+  "items": [
+    {
+      "id": "6f1c0a3e-2d4b-4c1a-9e7f-3b2a1c0d9e8f",
+      "kind": "INDICATOR",
+      "target_id": "3a000000-0000-0000-0000-000000000001",
+      "trigger": "LEAD_5",
+      "lead_minutes": 5,
+      "title": "日本CPI(消費者物価指数)",
+      "body": "発表の5分前です（10/16 8:30発表・重要度 高）",
+      "display_name": "消費者物価指数（CPI）",
+      "speaker_name": null,
+      "country_code": "JP",
+      "importance": "HIGH",
+      "scheduled_at": "2026-10-15T23:30:00Z",
+      "notify_at": "2026-10-15T23:25:00Z",
+      "read_at": null,
+      "expires_at": "2026-11-14T23:25:00Z"
+    }
+  ],
+  "unread_count": 1
+}
+```
+
+- `id`：通知一覧の行のID(24.10節で使う)。イベントのIDは`target_id`
+- `kind` / `target_id`：`INDICATOR`は`economic_events.id`、`SPEECH`は`speech_events.id`(24.6節の`id`)。`RATE_ALERT` / `CALENDAR_UPDATE` / `SYSTEM`はまだ作られない(将来用)
+- `trigger`：通知の種類。発表の何分前か(`lead_minutes`)が N のとき`LEAD_N`、0のとき`AT_RELEASE`
+- `lead_minutes`：`trigger`から求めた何分前か(`AT_RELEASE` = 0)。それ以外の`trigger`(システム通知など)は`null`
+- `title`：24.6節の`title`(指標の正式名・発言のタイトル)。`display_name`・`speaker_name`も24.6節と同じ(INDICATORの`speaker_name`、SPEECHの`display_name`は`null`)
+- `body`：本文。アプリのローカル通知と同じ書き方で、時刻は`display.timezone`(解決できない場合は`Asia/Tokyo`)。「発表の5分前です（M/d H:mm発表・重要度 高）」、0分前は「まもなく発表です（…）」、SPEECHは「発表」が「発言」
+- `scheduled_at` / `notify_at` / `read_at` / `expires_at`：秒精度のUTC(`Z`、小数秒なし)。`read_at = null`は未読
+- `expires_at` = `notify_at` + 保存期間(INDICATOR / SPEECH / SYSTEM 30日、RATE_ALERT / CALENDAR_UPDATE 7日。Backend実装: `src/domain/notificationInbox.ts`の`NOTIFICATION_RETENTION_DAYS`)
+- `unread_count`：期限切れでない未読の件数。`kind`では絞り込まない(通知ベルのバッジ用)
+- Paginationなし(保存期間で件数が限られるため)
+
+呼び出しのたびに次の順で処理する：
+
+1. **記録**：24.6節の抽出ルール(通知設定・プランの上限・`lead_minutes`・通知しない時間帯)で選んだ通知のうち、`notify_at <= 現在時刻`かつ期限切れでないものを`notification_inbox`に入れる。24.6節との違いは次のとおり
+   - `status`は`SCHEDULED`に加えて発表済み(`RELEASED`)・発言済み(`DELIVERED`)も対象(5分前に通知した指標は、一覧を開くころには発表済みのことが多いため)。`CANCELLED`は対象外
+   - 60件の上限なし
+   - さかのぼるのは保存期間(30日)まで、かつ通知設定を最後に保存した時刻(`user_settings.updated_at`)まで。初めて使う人や`lead_minutes`を変えた人に、受け取る設定ではなかった過去の通知を並べないため
+   - 同じ`(kind, target_id, trigger)`の行があれば何もしない(重複しない)。`LEAD_5`と`AT_RELEASE`は別の行
+   - `push = false`のときは記録しない(記録済みの行は返す)
+2. **期限切れの削除**：呼び出しユーザーの`expires_at <= 現在時刻`の行を消す
+3. **返す**：`expires_at > 現在時刻`の行だけを返す
+
+設定を変えても記録済みの行は変わらない。発表時刻が変わったイベントは、記録済みの行の時刻のまま残る。
+
+**テーブル`notification_inbox`**(`supabase/migrations/20261013000002_notification_inbox.sql`)：
+
+| 列 | 型 | 内容 |
+|---|---|---|
+| `id` | uuid | 主キー(`gen_random_uuid()`) |
+| `user_id` | uuid not null | `profiles(id)`、`on delete cascade` |
+| `kind` | text not null | `INDICATOR` / `SPEECH` / `RATE_ALERT` / `CALENDAR_UPDATE` / `SYSTEM`(CHECK) |
+| `target_id` | text not null | イベントIDなど |
+| `trigger` | text not null | `LEAD_5` / `AT_RELEASE` など |
+| `title` | text not null | 見出し |
+| `body` | text | 本文 |
+| `display_name` / `speaker_name` / `country_code` / `importance` | text | 24.6節の同名の項目 |
+| `scheduled_at` | timestamptz | 発表・発言の時刻 |
+| `notify_at` | timestamptz not null | 通知の時刻 |
+| `read_at` | timestamptz | 既読にした時刻(未読は`null`) |
+| `expires_at` | timestamptz not null | `notify_at` + 保存期間 |
+| `created_at` | timestamptz | 既定`now()` |
+
+- 一意制約`(user_id, kind, target_id, trigger)`、インデックス`(user_id, expires_at)`と`(expires_at)`
+- RLS：本人は自分の行だけSELECT可。書き込みはBackend(service_role)だけ(`user_settings`と同じ形)
+- 期限切れの削除(全員分)：SQL関数`delete_expired_notification_inbox()`(削除件数を返す。service_roleのみ実行可)を、日次ジョブ`npm run jobs:cleanup-notifications`(`src/jobs/cleanupNotifications.ts`、ビルド後は`node dist/jobs/cleanupNotifications.js`)がcronから呼ぶ。成功で終了コード0、失敗で1
+
+## 24.10 POST /api/v1/notifications/{id}/read(v1.23で追加)
+
+通知一覧の1件を既読にする(行を開いたとき)。Authentication Required / Entitlementなし。Request bodyなし。
+
+Response：
+
+```json
+{ "id": "6f1c0a3e-2d4b-4c1a-9e7f-3b2a1c0d9e8f", "read_at": "2026-10-15T23:40:12Z" }
+```
+
+- 何度呼んでもよい。既読の行は最初の`read_at`のまま返す
+- 他のユーザーの行・存在しない行・期限切れの行は`404 NOT_FOUND`。`id`がUUIDでなければ`422 VALIDATION_ERROR`
+
+## 24.11 POST /api/v1/notifications/read-all(v1.23で追加)
+
+呼び出しユーザーの期限切れでない未読をすべて既読にする(「すべて既読」)。Authentication Required / Entitlementなし。Request bodyなし。
+
+Response：
+
+```json
+{ "updated": 2 }
+```
+
+- `updated`：既読にした件数(未読が無ければ0)。他のユーザーの行は変えない
+
 ---
 
 # 25. Subscription API
@@ -1508,6 +1617,8 @@ Backend側の各Endpointが要求するEntitlementを以下の通り確定する
 | 要人発言(v1.6で追加) | `GET /speeches`、`GET /speeches/{id}` | `VIEW_BASIC_EVENT` |
 | 経済カレンダー(v1.14で追加) | `GET /calendar` | `VIEW_BASIC_EVENT` |
 | 通知予約対象(v1.6で追加) | `GET /notifications/upcoming` | `VIEW_BASIC_EVENT` |
+| 通知一覧(v1.23で追加) | `GET /notifications` | `VIEW_BASIC_EVENT` |
+| 通知の既読(v1.23で追加) | `POST /notifications/{id}/read`、`POST /notifications/read-all` | **Authentication Required / Entitlementなし** |
 | お問い合わせ(v1.10で追加) | `POST /support/requests`、`GET /support/requests` | **Authentication Required / Entitlementなし** |
 
 Home / Indicators / Indicator Detail / FX Pairs(v1.6) / Search / Account / Settings / Subscription / Entitlement APIは、認証済みであれば全ユーザーがアクセス可能とし、特定feature_codeを要求しない。
