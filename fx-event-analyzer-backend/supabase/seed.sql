@@ -154,10 +154,11 @@ insert into economic_events (id, indicator_id, provider, provider_event_id, rele
 -- economic_indicators).
 -- ---------------------------------------------------------------------
 
-insert into speakers (id, name, title, organization, country_code, currency_code) values
-  ('40000000-0000-0000-0000-000000000001', 'ジェローム・パウエル', 'FRB議長', 'FRB', 'US', 'USD'),
-  ('40000000-0000-0000-0000-000000000002', '植田和男', '日本銀行総裁', '日本銀行', 'JP', 'JPY'),
-  ('40000000-0000-0000-0000-000000000003', 'クリスティーヌ・ラガルド', 'ECB総裁', 'ECB', 'EU', 'EUR');
+-- photo_url は自由に使える公式写真だけ(FRB理事: 米国政府の著作物)。それ以外は null(アプリが頭文字で表示)。
+insert into speakers (id, name, title, organization, country_code, currency_code, photo_url) values
+  ('40000000-0000-0000-0000-000000000001', 'ジェローム・パウエル', 'FRB議長', 'FRB', 'US', 'USD', 'https://www.federalreserve.gov/aboutthefed/images/Powell_Jerome_Aug_16_22-674_8x10_rdax_130x162s.jpg'),
+  ('40000000-0000-0000-0000-000000000002', '植田和男', '日本銀行総裁', '日本銀行', 'JP', 'JPY', null),
+  ('40000000-0000-0000-0000-000000000003', 'クリスティーヌ・ラガルド', 'ECB総裁', 'ECB', 'EU', 'EUR', null);
 
 insert into speech_events (id, speaker_id, provider, provider_event_id, title, summary, statement_datetime, importance, status) values
   ('50000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', 'seed', 'seed-powell-2026-09-17', 'FOMC後の記者会見', '政策金利の据え置きを説明し、今後の判断はデータ次第との認識を示した。', '2026-09-17T18:30:00Z', 'HIGH', 'DELIVERED'),

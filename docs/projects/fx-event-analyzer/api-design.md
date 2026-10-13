@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.23
+# FX Event Analyzer: API詳細設計書 v1.24
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -64,6 +64,7 @@
 - **v1.20**(2026-10-13): SCR-005 指標一覧の次回発表(HQ指示 2026-10-13)。`GET /indicators`の各行と`GET /indicators/{id}`の`indicator`に`next_release_datetime`(次回発表日時。現在以降で最も早い`status = SCHEDULED`のEvent、無ければ`null`)・`next_event_id`(そのEventのID、無ければ`null`)・`latest_release_datetime`(最新の`status = RELEASED`のEventの発表日時、無ければ`null`。次回発表が無いときの表示用)を追加(13.2節)。`GET /indicators`の`sort`に`next_release`(次回発表の昇順、次回発表が無い指標は後ろ、同じなら名前順)を追加(13.1節)。既定の並び順(`name`)は変えない
 - **v1.21**(2026-10-13): 指標の一覧画面の表示名(HQ指示 2026-10-13)。`GET /indicators`の各行と`GET /indicators/{id}`の`indicator`に`display_name`(一覧画面の表示名。例: `消費者物価指数（CPI）`・`FOMC政策金利`。HQの表示名ルール(indicator-display-names.md)に従って人が登録した短い名前、未登録は`null`)を追加(13.2節)。同じ名前をどの画面でも使えるよう、`GET /calendar`の`INDICATOR`の行(14.6節、`SPEECH`は`null`)と`GET /home`の`events`(12章)にも`display_name`を追加。`name`・`title`・`indicator_name`は変えない
 - **v1.22**(2026-10-13): 指標の表示名をすべての画面に(HQ指示 2026-10-13)。v1.21の`display_name`(`economic_indicators.display_name`、未登録は`null`)を次にも追加: `GET /events/{event_id}`の`event`(14.1節)、`GET /events/{event_id}/history`の`event`(20章)、`GET /indicators/{indicator_id}/comparison`の`indicator`(21章、timeframe単一指定・`all`の両方)、`GET /notifications/upcoming`の各`items`(24.6節、`INDICATOR`のみ。`SPEECH`は`null`)、`GET /search`の`indicators`の各行と`events`の各行(23章)。`GET /indicators/{indicator_id}/events`の各行は指標名を持たないため追加しない。`name`・`title`・`indicator_name`は変えない
+- **v1.24**(2026-10-13): 要人の公式写真(HQ指示 2026-10-13「FRBは公式写真で、そのほかは頭文字と機関の色で」)。`speakers.photo_url`(text, null可)を追加し、`GET /speeches`・`GET /speeches/{id}`の`speaker`に`photo_url`(string|null)を追加。入れてよいのは自由に使える公式写真だけ(FRB理事の公式写真は米国政府の著作物でパブリックドメイン)。null の要人はアプリが名前の頭文字と機関の色で表示する
 - **v1.23**(2026-10-13): アプリ内の通知一覧(HQ指示 2026-10-13「おすすめの通知仕様」、notification-inbox-spec.md 6章)。`GET /notifications`(24.9節。`GET /notifications/upcoming`と同じ条件で選んだ通知のうち通知時刻を過ぎたものをサーバーに記録して返す。`order=desc|asc`・`kind`、`{ items, unread_count }`)、`POST /notifications/{id}/read`(24.10節、`{ id, read_at }`)、`POST /notifications/read-all`(24.11節、`{ updated }`)を追加。テーブル`notification_inbox`(一意制約`(user_id, kind, target_id, trigger)`、保存期間 INDICATOR/SPEECH/SYSTEM 30日・RATE_ALERT/CALENDAR_UPDATE 7日)と、期限切れを消す日次ジョブ`npm run jobs:cleanup-notifications`を追加。`GET /notifications/upcoming`は変えない
 
 ---

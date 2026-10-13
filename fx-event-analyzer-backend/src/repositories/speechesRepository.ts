@@ -8,6 +8,8 @@ export interface SpeakerSummary {
   organization: string;
   country_code: string;
   currency_code: string;
+  /** 公式写真のURL(FRB理事のみ。無ければ null、アプリは頭文字で表示)。 */
+  photo_url: string | null;
 }
 
 /** GET /speeches item (api-design.md §14.4). */
@@ -22,7 +24,7 @@ export interface SpeechSummary {
 }
 
 const SPEECH_COLUMNS =
-  'id, title, summary, statement_datetime, importance, status, speakers!inner(id, name, title, organization, country_code, currency_code)';
+  'id, title, summary, statement_datetime, importance, status, speakers!inner(id, name, title, organization, country_code, currency_code, photo_url)';
 
 interface SpeechDbRow {
   id: string;
@@ -42,6 +44,7 @@ function toSpeechSummary(row: SpeechDbRow): SpeechSummary {
     organization: string;
     country_code: string;
     currency_code: string;
+    photo_url?: string | null;
   };
   return {
     speech_id: row.id,
@@ -52,6 +55,7 @@ function toSpeechSummary(row: SpeechDbRow): SpeechSummary {
       organization: speaker.organization,
       country_code: speaker.country_code,
       currency_code: speaker.currency_code,
+      photo_url: speaker.photo_url ?? null,
     },
     title: row.title,
     summary: row.summary,

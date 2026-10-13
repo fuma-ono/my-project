@@ -1502,6 +1502,8 @@ const SPEAKERS = {
     organization: 'FRB',
     country_code: 'US',
     currency_code: 'USD',
+    // FRB理事の公式写真(米国政府の著作物、パブリックドメイン)。
+    photo_url: 'https://www.federalreserve.gov/aboutthefed/images/Powell_Jerome_Aug_16_22-674_8x10_rdax_130x162s.jpg',
   },
   ueda: {
     speaker_id: '66666666-6666-6666-6666-666666666662',
@@ -1786,6 +1788,8 @@ const CALENDAR_SPEAKERS = {
     organization: 'FRB',
     country_code: 'US',
     currency_code: 'USD',
+    photo_url:
+      'https://www.federalreserve.gov/aboutthefed/images/waller_christopher_September_01_2025-1022_highres_rdax_130x163s.jpg',
   },
   schnabel: {
     speaker_id: '66666666-6666-6666-6666-666666666665',

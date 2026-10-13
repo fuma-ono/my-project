@@ -143,6 +143,9 @@ final class IndicatorDisplayNameTests: XCTestCase {
 
     func testNoAbbreviationWhenThereIsNoParenthesis() {
         XCTAssertNil(CountryFlag.indicatorDisplayName("FOMC政策金利", countryCode: "US").abbreviation)
+        // 要人の頭文字: 「・」区切りは姓の1文字目、それ以外は1文字目。
+        XCTAssertEqual(SpeakerAvatar.initial(of: "クリストファー・ウォラー"), "ウ")
+        XCTAssertEqual(SpeakerAvatar.initial(of: "植田和男"), "植")
         // 表示名(DBのdisplay_name)があればそれを優先する。
         XCTAssertEqual(CountryFlag.indicatorDisplayText("米国雇用統計(非農業部門雇用者数)", countryCode: "US", displayName: "非農業部門雇用者数（NFP）"), "非農業部門雇用者数（NFP）")
         XCTAssertEqual(CountryFlag.indicatorDisplayName("x", countryCode: "US", displayName: "非農業部門雇用者数（NFP）").abbreviation, "NFP")

@@ -62,10 +62,8 @@ struct SpeechDetailCards: View {
             // 捏造もしないため、国情報は下の「国|組織」の行にテキストで
             // 残す。人物アイコンの大きさは指標詳細のヘッダー国旗と
             // 同じ34ptに揃えた(HQ指示 2026-10-13)。
-            Image(systemName: "person.crop.circle.fill")
-                .resizable()
-                .foregroundStyle(V5P.cyan)
-                .frame(width: 34, height: 34)
+            // HQ指示(2026-10-13)「FRBは公式写真で、そのほかは頭文字と機関の色で」。
+            SpeakerAvatar(name: speaker.name, organization: speaker.organization, countryCode: speaker.countryCode, photoURL: speaker.photoURL, size: 34)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .top, spacing: 6) {
                     // 長い実名(「クリストファー・ウォラー」等)でも省略

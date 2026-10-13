@@ -31,8 +31,11 @@ struct SpeechSpeaker: Decodable, Equatable {
     let organization: String
     let countryCode: String
     let currencyCode: String
+    /// 公式写真のURL(FRB理事のみ、api-design v1.24)。無ければ頭文字と機関の色で表示する。
+    var photoURL: String? = nil
 
     enum CodingKeys: String, CodingKey {
+        case photoURL = "photo_url"
         case speakerId = "speaker_id"
         case name
         case title
