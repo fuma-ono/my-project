@@ -9,21 +9,31 @@ import Foundation
 /// `record(_:now:)`で渡し、通知時刻(`notifyAt`)を過ぎたものが「届いた通知」
 /// として一覧に並ぶ。端末の通知許可が無くても一覧には残るので、ベルから確認
 /// できる。`lastReadAt`より後に届いたものがあれば未読(赤バッジ)。
+///
+/// HQ指示(2026-10-13)の通知仕様(docs/projects/fx-event-analyzer/notification-inbox-spec.md):
+/// - 既読は1件ずつ(行を開いたとき)と「すべて既読」。画面を開いただけでは既読にしない。
+/// - 種類ごとの保存期間(`NotificationEntry.Kind.retentionDays`)を過ぎた通知は一覧から外す。
+///   既読にしても保存期間内は残す。
+/// - 同じイベント・同じ通知の種類(「発表5分前」と「発表時」は別の種類)は1件だけ残す(`targetKey`)。
+/// - 端末のプッシュ通知(通知センター)とは別に持つので、プッシュを消しても既読・保存には影響しない。
 @MainActor
 final class NotificationsStore: ObservableObject {
     static let shared = NotificationsStore()
 
-    /// 一覧に残す、届いた通知の上限。
-    static let deliveredLimit = 50
+    /// 一覧に残す、届いた通知の上限(保存期間とは別の、端末の容量のための上限)。
+    static let deliveredLimit = 200
 
     @Published private(set) var hasUnread: Bool = false
     /// 届いた通知と、これから届く予定の通知(`notifyAt`の昇順)。
     @Published private(set) var entries: [NotificationEntry] = []
     private(set) var lastReadAt: Date?
+    /// 1件ずつ既読にした通知(`NotificationEntry.id`)。
+    private(set) var readIDs: Set<String> = []
 
     private let userDefaults: UserDefaults
     private let entriesKey = "notifications.entries"
     private let lastReadKey = "notifications.lastReadAt"
+    private let readIDsKey = "notifications.readIDs"
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
@@ -32,6 +42,7 @@ final class NotificationsStore: ObservableObject {
             entries = stored
         }
         lastReadAt = userDefaults.object(forKey: lastReadKey) as? Date
+        readIDs = Set(userDefaults.stringArray(forKey: readIDsKey) ?? [])
         refreshUnread()
     }
 
@@ -52,7 +63,17 @@ final class NotificationsStore: ObservableObject {
         if deliveredCount > Self.deliveredLimit {
             sorted.removeFirst(deliveredCount - Self.deliveredLimit)
         }
-        entries = sorted
+        entries = sorted.filter { !$0.isExpired(now: now) }
+        persist()
+        refreshUnread(now: now)
+    }
+
+    /// 保存期間を過ぎた通知を外す(アプリを開いたとき・一覧を開いたとき)。
+    func pruneExpired(now: Date = Date()) {
+        let kept = entries.filter { !$0.isExpired(now: now) }
+        guard kept.count != entries.count else { return }
+        entries = kept
+        readIDs.formIntersection(kept.map(\.id))
         persist()
         refreshUnread(now: now)
     }
@@ -76,18 +97,37 @@ final class NotificationsStore: ObservableObject {
 
     /// 届いた通知(新しい順)。
     func delivered(now: Date = Date()) -> [NotificationEntry] {
-        entries.filter { $0.notifyAt <= now }.reversed()
+        entries.filter { $0.notifyAt <= now && !$0.isExpired(now: now) }.reversed()
+    }
+
+    /// 届いた通知のうち未読の件数。
+    func unreadCount(now: Date = Date()) -> Int {
+        delivered(now: now).filter { isUnread($0) }.count
     }
 
     func isUnread(_ entry: NotificationEntry) -> Bool {
+        if readIDs.contains(entry.id) { return false }
         guard let lastReadAt else { return true }
         return entry.notifyAt > lastReadAt
+    }
+
+    /// 1件だけ既読にする(一覧の行を開いたとき)。
+    func markRead(_ entry: NotificationEntry, now: Date = Date()) {
+        guard isUnread(entry) else { return }
+        readIDs.insert(entry.id)
+        userDefaults.set(Array(readIDs), forKey: readIDsKey)
+        objectWillChange.send()
+        refreshUnread(now: now)
     }
 
     /// 一覧を開いたときに呼ぶ。
     func markAllRead(now: Date = Date()) {
         lastReadAt = now
         userDefaults.set(now, forKey: lastReadKey)
+        // `lastReadAt`より前のものは全部既読になるので、1件ずつの記録は要らない。
+        readIDs = []
+        userDefaults.removeObject(forKey: readIDsKey)
+        objectWillChange.send()
         refreshUnread(now: now)
     }
 
@@ -102,7 +142,9 @@ final class NotificationsStore: ObservableObject {
     func removeAll() {
         entries = []
         lastReadAt = nil
+        readIDs = []
         hasUnread = false
+        userDefaults.removeObject(forKey: readIDsKey)
         userDefaults.removeObject(forKey: entriesKey)
         userDefaults.removeObject(forKey: lastReadKey)
     }
@@ -137,6 +179,14 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
             case .system: return "システム"
             }
         }
+
+        /// 保存期間(日)。HQ指示(2026-10-13)の初期案。レートアラート・カレンダー更新(7日)は
+        /// 通知自体がまだ無いので、足すときにここへ加える。
+        var retentionDays: Int {
+            switch self {
+            case .indicator, .speech, .system: return 30
+            }
+        }
     }
 
     let kind: Kind
@@ -153,17 +203,26 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
     var speakerName: String?
     var subject: String?
     var countryCode: String?
+    /// 通知の種類(発表の何分前か。0は発表時)。同じイベントでも種類が違えば別の通知として残す。
+    /// 古い記録と、種類の無いシステム通知はnil。
+    var leadMinutes: Int?
 
-    /// 同じ指標・発言でも、通知タイミングを変えると別の通知になる。
     var id: String { "\(kind.rawValue).\(targetID).\(Int(notifyAt.timeIntervalSince1970))" }
-    /// 通知の対象(指標・発言)。1つの対象は一度だけ届ける。
-    var targetKey: String { "\(kind.rawValue).\(targetID)" }
+    /// 重複を防ぐ単位(同じイベント・同じ通知の種類で1件)。
+    var targetKey: String {
+        leadMinutes.map { "\(kind.rawValue).\(targetID).\($0)" } ?? "\(kind.rawValue).\(targetID)"
+    }
+
+    func isExpired(now: Date) -> Bool {
+        now.timeIntervalSince(notifyAt) > Double(kind.retentionDays) * 24 * 60 * 60
+    }
 
     init(
         kind: Kind, targetID: String, title: String, body: String, notifyAt: Date, scheduledAt: Date, importance: String,
-        speakerName: String? = nil, subject: String? = nil, countryCode: String? = nil
+        speakerName: String? = nil, subject: String? = nil, countryCode: String? = nil, leadMinutes: Int? = nil
     ) {
         self.kind = kind
+        self.leadMinutes = leadMinutes
         self.speakerName = speakerName
         self.subject = subject
         self.countryCode = countryCode
@@ -198,7 +257,8 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
             importance: item.importance,
             speakerName: item.speakerName,
             subject: item.title,
-            countryCode: item.countryCode
+            countryCode: item.countryCode,
+            leadMinutes: leadMinutes
         )
     }
 }

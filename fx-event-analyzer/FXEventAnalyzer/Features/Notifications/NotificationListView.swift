@@ -13,23 +13,26 @@ struct NotificationListView: View {
     let apiClient: APIClient
     @Binding var tabSelection: Int
     @ObservedObject private var store = NotificationsStore.shared
-    @State private var unreadIDs: Set<String> = []
-    /// 詳細画面から戻ったときに未読の印を消さないよう、最初の表示時だけ数える。
-    @State private var didCaptureUnread = false
     @State private var now = Date()
+    /// HQ指示(2026-10-13)「右上に新しい順/古い順の並び替え」。
+    @State private var newestFirst = true
     /// `nil`は「すべて」。
     @State private var filter: NotificationEntry.Kind?
     @Environment(\.dismiss) private var dismiss
 
     /// 絞り込み(下端78.5)との間を空ける(HQ指示 2026-10-06)。
-    private static let listTop: CGFloat = 89
+    /// 2026-10-13: 絞り込みの下に未読件数の行(83..97)を置いたので、一覧は101から。
+    private static let listTop: CGFloat = 101
 
     var body: some View {
-        let delivered = store.delivered(now: now).filter { filter == nil || $0.kind == filter }
+        let newestFirstList = store.delivered(now: now).filter { filter == nil || $0.kind == filter }
+        let delivered = newestFirst ? newestFirstList : Array(newestFirstList.reversed())
         V5Viewport {
             V5Header(title: "通知", back: true, onBack: { dismiss() })
             filterBar
                 .position(x: V5P.W / 2, y: 68.5)
+            statusBar
+                .position(x: V5P.W / 2, y: 90)
             if delivered.isEmpty {
                 FXEmptyState(
                     icon: "bell.slash",
@@ -43,9 +46,11 @@ struct NotificationListView: View {
                     VStack(spacing: 4) {
                         ForEach(delivered) { entry in
                             NavigationLink(value: Self.route(for: entry)) {
-                                NotificationRow(entry: entry, isUnread: unreadIDs.contains(entry.id))
+                                NotificationRow(entry: entry, isUnread: store.isUnread(entry))
                             }
                             .buttonStyle(SettingsRowPressStyle())
+                            // 開いた通知だけ既読にする(HQ指示 2026-10-13)。
+                            .simultaneousGesture(TapGesture().onEnded { store.markRead(entry) })
                         }
                     }
                     .padding(.bottom, 4)
@@ -59,18 +64,44 @@ struct NotificationListView: View {
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
             now = Date()
-            if !didCaptureUnread {
-                unreadIDs = Set(store.delivered(now: now).filter { store.isUnread($0) }.map(\.id))
-                didCaptureUnread = true
-            }
-            store.markAllRead(now: now)
+            // 保存期間(経済指標・要人発言・システムは30日)を過ぎた通知を外す。画面を開いただけでは
+            // 既読にしない(既読は行を開いたときと「すべて既読」)。
+            store.pruneExpired(now: now)
         }
         .task {
-            // 開いている間に一覧を取り直す(新しく届いた分も並べる)。
             await LocalNotificationScheduler(apiClient: apiClient).refresh()
             now = Date()
-            store.markAllRead(now: now)
         }
+    }
+
+    /// HQ指示(2026-10-13)「上部に未読件数と右上に新しい順/古い順の並び替え。すべて既読ボタンを付けて」。
+    private var statusBar: some View {
+        let unread = store.unreadCount(now: now)
+        return HStack(spacing: 6) {
+            HStack(spacing: 3) {
+                Circle().fill(unread > 0 ? V5P.red : SettingsCardStyle.subtitleColor).frame(width: 5, height: 5)
+                NotoText.text("未読 \(unread)件", size: 8)
+                    .foregroundStyle(.white)
+            }
+            Spacer()
+            Button { store.markAllRead(now: Date()) } label: {
+                NotoText.text("すべて既読", size: 7.5)
+                    .foregroundStyle(unread > 0 ? V5P.cyan : SettingsCardStyle.subtitleColor.opacity(0.6))
+            }
+            .buttonStyle(.plain)
+            .disabled(unread == 0)
+            Menu {
+                Button("新しい順") { newestFirst = true }
+                Button("古い順") { newestFirst = false }
+            } label: {
+                HStack(spacing: 2) {
+                    NotoText.text(newestFirst ? "新しい順" : "古い順", size: 7.5)
+                    Image(systemName: "chevron.down").font(.system(size: 5.5, weight: .bold))
+                }
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+            }
+        }
+        .frame(width: 210, height: 14)
     }
 
     private var filterBar: some View {

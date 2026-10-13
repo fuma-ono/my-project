@@ -184,6 +184,41 @@ final class NotificationsStoreTests: XCTestCase {
         XCTAssertNil(entries.first?.subject)
     }
 
+    func testOpeningOneEntryMarksOnlyThatEntryRead() {
+        let store = makeStore()
+        store.record([entry("a", minutesFromBase: -5), entry("b", minutesFromBase: -3)], now: base)
+        XCTAssertEqual(store.unreadCount(now: base), 2)
+
+        store.markRead(store.delivered(now: base)[0], now: base)
+
+        XCTAssertEqual(store.unreadCount(now: base), 1)
+        XCTAssertTrue(store.hasUnread)
+        store.markAllRead(now: base)
+        XCTAssertEqual(store.unreadCount(now: base), 0)
+    }
+
+    func testEntriesPastTheRetentionPeriodAreRemoved() {
+        let store = makeStore()
+        let day: Double = 24 * 60
+        store.record([entry("old", minutesFromBase: -31 * day), entry("recent", minutesFromBase: -29 * day)], now: base)
+
+        XCTAssertEqual(store.delivered(now: base).map(\.targetID), ["recent"])
+
+        store.pruneExpired(now: base.addingTimeInterval(2 * day * 60))
+        XCTAssertTrue(store.entries.isEmpty)
+    }
+
+    func testBeforeAndAtReleaseNotificationsOfTheSameEventAreKeptSeparately() {
+        let store = makeStore()
+        let fiveBefore = NotificationEntry(kind: .indicator, targetID: "cpi", title: "CPI", body: "5分前", notifyAt: base.addingTimeInterval(-10 * 60), scheduledAt: base.addingTimeInterval(-5 * 60), importance: "HIGH", leadMinutes: 5)
+        let atRelease = NotificationEntry(kind: .indicator, targetID: "cpi", title: "CPI", body: "発表時", notifyAt: base.addingTimeInterval(-5 * 60), scheduledAt: base.addingTimeInterval(-5 * 60), importance: "HIGH", leadMinutes: 0)
+        store.record([fiveBefore, atRelease], now: base)
+        // 同じ種類をもう一度受け取っても重複させない。
+        store.record([fiveBefore, atRelease], now: base)
+
+        XCTAssertEqual(store.delivered(now: base).map(\.body), ["発表時", "5分前"])
+    }
+
     func testRemoveAllForgetsEverything() {
         let store = makeStore()
         store.record([entry("a", minutesFromBase: -1)], now: base)
