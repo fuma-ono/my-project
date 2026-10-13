@@ -205,12 +205,22 @@ private struct CalendarMonthCard: View {
             }
         } label: {
             // HQ指示(2026-10-08): 日付はマスの中心に置き、重要度の点は日付のすぐ下に
-            // 寄せる。選んだ日はマスいっぱいの正円(高さ-2の直径)で囲む。今日は同じ
-            // 大きさの円の枠。
+            // 寄せる。選んだ日はマスいっぱいの角丸四角で囲む。今日は同じ大きさの
+            // 角丸四角の枠。
+            // HQ指示(2026-10-13、3回目)「13日の選択グローを参考画像をピクセル単位で
+            // 再現して。丸ではなく四角(角は丸く)。色はもう少し青く」: 参考画像を
+            // ピクセルサンプリングすると、選択マーカーは正円ではなく角丸四角(角丸
+            // 比率は1辺の約1/4)で、塗りはシアンより青寄りの色(概ねV5P.blueに近い)
+            // だった。円から角丸四角(cornerRadius 6、continuousカーブ)に変更し、
+            // 色もV5P.cyanからV5P.blueへ、周囲にうっすら光彩(shadow)も追加した。
             ZStack {
-                Circle()
-                    .fill(isSelected ? V5P.cyan.opacity(0.85) : .clear)
-                    .overlay(Circle().stroke(V5P.cyan.opacity(isToday && !isSelected ? 0.8 : 0), lineWidth: 0.8))
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isSelected ? V5P.blue : .clear)
+                    .shadow(color: isSelected ? V5P.blue.opacity(0.7) : .clear, radius: 4)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(V5P.blue.opacity(isToday && !isSelected ? 0.8 : 0), lineWidth: 0.8)
+                    )
                     .frame(width: Self.cellHeight - 2, height: Self.cellHeight - 2)
                 Text("\(calendar.component(.day, from: day))")
                     .font(.system(size: 8.5, weight: .semibold))
@@ -269,7 +279,9 @@ private struct CalendarDayList: View {
         // HQ指示(2026-10-13、2回目)「各イベントカードが全然違います。
         // 一つで1枠あり角は丸いです」: 1つの連続リスト(区切り線)ではなく、
         // イベントごとに独立した角丸カードにし、カード間に隙間を空けた。
-        VStack(spacing: 6) {
+        // HQ指示(2026-10-13、3回目)「各イベントの枠をもう少し短くして
+        // 4つのカードは1画面で表示できるようにして」: カード間の隙間を詰めた。
+        VStack(spacing: 4) {
             if items.isEmpty {
                 NotoText.text("この日のイベントはありません。", size: 8)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
@@ -294,7 +306,7 @@ private struct CalendarDayList: View {
         return HStack(spacing: 0) {
             Rectangle().fill(colors.border).frame(width: 3)
             HStack(spacing: 6) {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(item.hasTime ? Self.timeFormatter.string(from: item.datetime) : "未定")
                         .font(.system(size: 9, weight: .bold))
                         .monospacedDigit()
@@ -304,8 +316,10 @@ private struct CalendarDayList: View {
                     Circle().fill(colors.border).frame(width: 5, height: 5)
                 }
                 .frame(width: 28, alignment: .leading)
+                // HQ指示(2026-10-13、3回目)「枠をもう少し短くして」: 国旗を
+                // 16→14に縮め、カード全体の高さを決めている縦積み部分を詰めた。
                 VStack(spacing: 1) {
-                    CountryFlagView(countryCode: item.countryCode, diameter: 16)
+                    CountryFlagView(countryCode: item.countryCode, diameter: 14)
                     NotoText.text(item.currencyCode, size: 6.5).foregroundStyle(.white)
                 }
                 // HQ指示(2026-10-13、2回目)「見出しの指標名が途切れることなく
@@ -330,7 +344,7 @@ private struct CalendarDayList: View {
                     .foregroundStyle(SettingsCardStyle.chevronColor)
             }
             .padding(.horizontal, 7)
-            .padding(.vertical, 6)
+            .padding(.vertical, 4)
         }
         .frame(width: 214)
         .background(AccountCardBackground())
