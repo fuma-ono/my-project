@@ -186,6 +186,7 @@ describe.skipIf(!integration)('Speeches / FX pairs / upcoming notifications', ()
         id: POWELL_SCHEDULED_SPEECH_ID,
         title: '経済見通しに関する講演',
         speaker_name: 'ジェローム・パウエル',
+        display_name: null,
         importance: 'HIGH',
         scheduled_at: '2026-10-14T16:00:00Z',
         notify_at: '2026-10-14T15:55:00Z',

@@ -759,6 +759,7 @@ struct HomeView: View {
             // 名前の長さで文字サイズを変える分岐はなくした。
             VStack(alignment: .leading, spacing: 1) {
                 let subtitle = Self.eventSubtitle(event)
+                let display = CountryFlag.indicatorDisplayName(event.indicatorName, countryCode: event.countryCode, displayName: event.displayName)
                 let combinedName = CountryFlag.indicatorDisplayText(event.indicatorName, countryCode: event.countryCode, displayName: event.displayName)
                 // HQ指示(2026-10-11、16回目)「非農業部門雇用者数の経済指標
                 // マークをもう少し下げて」: バッジだけ少し下にずらす。
