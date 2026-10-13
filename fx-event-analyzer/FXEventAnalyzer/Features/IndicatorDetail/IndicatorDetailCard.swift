@@ -93,6 +93,31 @@ struct IndicatorDetailCard: View {
         .padding(.bottom, 4)
         .frame(width: 214)
         .background(AccountCardBackground())
+        // HQ指示(2026-10-13、3回目)「消費者物価指数（CPI）は折り返さないで」
+        // がまだ直っていない件: 星をヘッダーのHStackの兄弟(Spacer越しに
+        // 右端へ寄せる形)に置いていたため、名前の横幅が星の分(24pt+spacing)
+        // だけ狭いままだった。星を`mainCard`全体へのoverlayに変え(HQ指示
+        // 2026-10-09の原指示「星マークは指標枠の右上に」にも合う)、
+        // `header`のHStackから完全に外すことで、名前の列が使える横幅を
+        // 大きく広げた。
+        .overlay(alignment: .topTrailing) {
+            favoriteStar
+                .padding(.top, 10)
+                .padding(.trailing, 10)
+        }
+    }
+
+    private var favoriteStar: some View {
+        Button(action: onToggleFavorite) {
+            Image(systemName: isFavorite ? "star.fill" : "star")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(V5P.yellow)
+                .frame(width: 24, height: 24, alignment: .topTrailing)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isFavorite ? "お気に入りから外す" : "お気に入りに追加")
+        .accessibilityIdentifier("indicatorFavoriteStar")
     }
 
     /// 見出し(「次回発表予定 ›」)とその下の小さなカード。全体で1つのボタン。
@@ -148,13 +173,17 @@ struct IndicatorDetailCard: View {
         HStack(alignment: .top, spacing: 8) {
             CountryFlagView(countryCode: indicator.countryCode, diameter: 34)
             VStack(alignment: .leading, spacing: 2) {
+                // 星は`mainCard`のoverlayに移したため、ここでは右上の星と
+                // 重ならないよう名前の行だけ軽く余白を確保する(下のnameEn・
+                // chipsの行は星の高さより下にあるため全幅を使える)。
                 nameText
+                    .padding(.trailing, 26)
                 if let nameEn = indicator.nameEn, !nameEn.isEmpty {
                     // HQ指示(2026-10-13、2回目)「英語も同じ(折り返さない)」。
                     NotoText.text(nameEn, size: 7)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                        .minimumScaleFactor(0.6)
                 }
                 HStack(spacing: 4) {
                     chip {
@@ -168,17 +197,6 @@ struct IndicatorDetailCard: View {
                 }
                 .padding(.top, 3)
             }
-            Spacer(minLength: 0)
-            Button(action: onToggleFavorite) {
-                Image(systemName: isFavorite ? "star.fill" : "star")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(V5P.yellow)
-                    .frame(width: 24, height: 24, alignment: .topTrailing)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isFavorite ? "お気に入りから外す" : "お気に入りに追加")
-            .accessibilityIdentifier("indicatorFavoriteStar")
         }
     }
 
