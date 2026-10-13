@@ -273,7 +273,8 @@ private struct CalendarDayList: View {
             if items.isEmpty {
                 NotoText.text("この日のイベントはありません。", size: 8)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
-                    .frame(width: 214, minHeight: 40)
+                    .frame(minHeight: 40)
+                    .frame(width: 214)
                     .background(AccountCardBackground())
                     .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
             }
