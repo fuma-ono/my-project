@@ -128,7 +128,8 @@ struct IndicatorDetailCard: View {
     /// の中、右端に移した(`linkChevron`、各カードのHStackの末尾)。
     private func linkSection(title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            NotoText.text(title, size: 10.5).foregroundStyle(.white)
+            // HQ指示(2026-10-13、5回目)「見出しの文字サイズは10にして」: 10.5→10。
+            NotoText.text(title, size: 10).foregroundStyle(.white)
                 .padding(.horizontal, 4)
             content()
                 .padding(.horizontal, 10)
@@ -139,8 +140,9 @@ struct IndicatorDetailCard: View {
     }
 
     private var linkChevron: some View {
+        // HQ指示(2026-10-13、5回目)「＞の文字サイズは10にして」: 9→10。
         Image(systemName: "chevron.right")
-            .font(.system(size: 9, weight: .semibold))
+            .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(SettingsCardStyle.chevronColor)
     }
 
