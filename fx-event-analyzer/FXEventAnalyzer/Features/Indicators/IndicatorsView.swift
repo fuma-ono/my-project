@@ -154,59 +154,50 @@ struct IndicatorsView: View {
         let date = indicator.nextReleaseDatetime ?? indicator.latestReleaseDatetime
         let isNext = indicator.nextReleaseDatetime != nil
         let name = Self.listName(indicator.name, countryCode: indicator.countryCode)
-        return HStack(spacing: 7) {
-            VStack(alignment: .leading, spacing: 1) {
+        // HQ指示(2026-10-13): 参考画像どおり、1行目に日時、2行目に左端の国旗・名前・国・重要度。
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
                 if let date {
                     Text(Self.dateString(date))
-                        .font(.system(size: 8.5, weight: .semibold))
-                        .monospacedDigit()
                     Text(Self.timeString(date))
-                        .font(.system(size: 7.5))
-                        .monospacedDigit()
-                        .foregroundStyle(SettingsCardStyle.subtitleColor)
                 } else {
-                    Text("--").font(.system(size: 8.5, weight: .semibold))
+                    Text("--")
                 }
             }
-            .foregroundStyle(isNext ? .white : SettingsCardStyle.subtitleColor)
-            .frame(width: 30, alignment: .leading)
-            CountryFlagView(countryCode: indicator.countryCode, diameter: 16)
-            VStack(alignment: .leading, spacing: 1) {
-                NotoText.text(name, size: 8.5)
+            .font(.system(size: 7.5, weight: .semibold))
+            .monospacedDigit()
+            .foregroundStyle(isNext ? SettingsCardStyle.subtitleColor : SettingsCardStyle.subtitleColor.opacity(0.6))
+            HStack(spacing: 7) {
+                CountryFlagView(countryCode: indicator.countryCode, diameter: 17)
+                VStack(alignment: .leading, spacing: 1) {
+                    NotoText.text(name, size: 8.5)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    NotoText.text(CountryFlag.japaneseName(forCountry: indicator.countryCode), size: 7)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                }
+                Spacer(minLength: 4)
+                let colors = HomeView.importanceBadgeColors(indicator.importance)
+                NotoText.text(indicator.importance.rawValue, size: 6.5)
+                    .tracking(-0.3)
                     .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                NotoText.text(CountryFlag.japaneseName(forCountry: indicator.countryCode), size: 7)
-                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .frame(width: 36, height: 14)
+                    .background(colors.fill, in: Capsule())
+                    .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
             }
-            Spacer(minLength: 4)
-            let colors = HomeView.importanceBadgeColors(indicator.importance)
-            NotoText.text(indicator.importance.rawValue, size: 6.5)
-                .tracking(-0.3)
-                .foregroundStyle(.white)
-                .frame(width: 36, height: 14)
-                .background(colors.fill, in: Capsule())
-                .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
         }
         .padding(.horizontal, 9)
-        .frame(height: 36)
+        .padding(.vertical, 5)
         .contentShape(Rectangle())
     }
 
-    /// 一覧の名前。国名を外し、「CPI(消費者物価指数)」のように英字の略称+長い正式名のときだけ
-    /// 「消費者物価指数（CPI）」と入れ替える(参考画像)。「雇用統計(非農業部門雇用者数)」
-    /// 「GDP(改定値)」「製造業PMI(速報値)」などは入れ替えると意味が変わるので、元の順のまま。
+    /// 一覧の名前。指標詳細・検索と同じ規則(`CountryFlag.indicatorDisplayName`)で、カッコの中の
+    /// 正式名+カッコの前の略称にする(HQ指示 2026-10-13「非農業部門雇用者数（雇用統計）の形に、
+    /// 他もそのように」)。例: 「米国CPI(消費者物価指数)」→「消費者物価指数（CPI）」。
     static func listName(_ name: String, countryCode: String) -> String {
-        var body = name
-        let country = CountryFlag.japaneseName(forCountry: countryCode)
-        if body.hasPrefix(country) { body = String(body.dropFirst(country.count)) }
-        guard let open = body.firstIndex(where: { $0 == "(" || $0 == "（" }),
-              let close = body.lastIndex(where: { $0 == ")" || $0 == "）" }), open < close else { return body }
-        let head = String(body[..<open]).trimmingCharacters(in: .whitespaces)
-        let inner = String(body[body.index(after: open)..<close]).trimmingCharacters(in: .whitespaces)
-        guard !head.isEmpty, !inner.isEmpty else { return body }
-        let isAcronym = head.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
-        return isAcronym && inner.count >= 4 ? "\(inner)（\(head)）" : "\(head)（\(inner)）"
+        let display = CountryFlag.indicatorDisplayName(name, countryCode: countryCode)
+        return display.abbreviation.map { "\(display.main)（\($0)）" } ?? display.main
     }
 
     private static let timeFormatter: DateFormatter = {
