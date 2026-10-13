@@ -49,22 +49,30 @@ struct SpeechDetailCards: View {
         // HQ指示(2026-10-13)「要人発言バッジはいらない、その分米国と
         // FRBと時刻を上にあげて」: categoryBadgeを削除し、2行目は国|組織
         // +日時だけにした。
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .top, spacing: 8) {
-                // HQ指示(2026-10-12)「要人発言者は国旗マークでいいのか？」:
-                // 国旗は国を表すもので話者本人を表すものではないため、
-                // 人物を表す汎用アイコンに変更した。実在の写真データは無く、
-                // 捏造もしないため、国情報は下の「国|組織」の行にテキストで
-                // 残す。人物アイコンの大きさは指標詳細のヘッダー国旗と
-                // 同じ34ptに揃えた(HQ指示 2026-10-13)。
-                Image(systemName: "person.crop.circle.fill")
-                    .resizable()
-                    .foregroundStyle(V5P.cyan)
-                    .frame(width: 34, height: 34)
+        // HQ指示(2026-10-13、2回目)「米国|FRBの位置が指標名の下になる
+        // ように」: アイコン(34pt)と同じHStackの兄弟として2行目を置くと、
+        // アイコンの高さ分2行目の位置が名前の直下からずれる。アイコンは
+        // カラムとして分離し、名前+2行目(国|組織+日時)を1つのVStackに
+        // まとめることで、アイコンの高さに関係なく2行目が常に名前テキスト
+        // の直下に来るようにした(`EventDetailCards.header`と同じ構成)。
+        return HStack(alignment: .top, spacing: 8) {
+            // HQ指示(2026-10-12)「要人発言者は国旗マークでいいのか？」:
+            // 国旗は国を表すもので話者本人を表すものではないため、
+            // 人物を表す汎用アイコンに変更した。実在の写真データは無く、
+            // 捏造もしないため、国情報は下の「国|組織」の行にテキストで
+            // 残す。人物アイコンの大きさは指標詳細のヘッダー国旗と
+            // 同じ34ptに揃えた(HQ指示 2026-10-13)。
+            Image(systemName: "person.crop.circle.fill")
+                .resizable()
+                .foregroundStyle(V5P.cyan)
+                .frame(width: 34, height: 34)
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .top, spacing: 6) {
                     // 長い実名(「クリストファー・ウォラー」等)でも省略
                     // されないよう、1行に収まらなければ自然に2行へ折り返す。
-                    NotoText.text("\(speaker.name)　\(speaker.title)", size: 10.5)
+                    // HQ指示(2026-10-13、2回目)「消費者物価指数の文字サイズは
+                    // 11にして」(イベント詳細と同じサイズに揃える): 10.5→11。
+                    NotoText.text("\(speaker.name)　\(speaker.title)", size: 11)
                         .foregroundStyle(.white)
                         .lineLimit(2)
                     Spacer(minLength: 4)
@@ -78,16 +86,16 @@ struct SpeechDetailCards: View {
                         // HQ指示(2026-10-12、6回目)「HIGHの位置を少し下げて」。
                         .padding(.top, 2)
                 }
-            }
-            HStack(spacing: 6) {
-                NotoText.text("\(CountryFlag.japaneseName(forCountry: speaker.countryCode))　|　\(speaker.organization)", size: 8.5)
-                    .foregroundStyle(SettingsCardStyle.subtitleColor)
-                Spacer(minLength: 4)
-                // HQ指示(2026-10-12、6回目)「日時の文字サイズを0.5下げて」:
-                // 8.5→8。
-                NotoText.text("\(AppPreferences.shared.dateString(response.statementDatetime)) \(AppPreferences.shared.timeString(response.statementDatetime))", size: 8)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    NotoText.text("\(CountryFlag.japaneseName(forCountry: speaker.countryCode))　|　\(speaker.organization)", size: 8.5)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    Spacer(minLength: 4)
+                    // HQ指示(2026-10-12、6回目)「日時の文字サイズを0.5下げて」:
+                    // 8.5→8。
+                    NotoText.text("\(AppPreferences.shared.dateString(response.statementDatetime)) \(AppPreferences.shared.timeString(response.statementDatetime))", size: 8)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                }
             }
         }
         .padding(.leading, 10)
@@ -114,16 +122,21 @@ struct SpeechDetailCards: View {
             } else if response.status == .cancelled {
                 NotoText.text("この発言は中止されました。", size: 9).foregroundStyle(SettingsCardStyle.subtitleColor)
             } else if let summary = response.summary {
-                // HQ指示(2026-10-12)「発言の部分の文字サイズを相場反応詳細の
-                // 文字サイズと同じに」: `linkCard`のタイトル(10)に合わせた。
-                NotoText.text("「\(summary)」", size: 10).foregroundStyle(.white)
+                // HQ指示(2026-10-13、2回目)「発言の文字サイズは通貨ペアの
+                // 値動き表記(pipsText、10)より0.5大きくして」: 10→10.5。
+                NotoText.text("「\(summary)」", size: 10.5).foregroundStyle(.white)
             } else {
                 NotoText.text("要約はまだ用意されていません。", size: 9).foregroundStyle(SettingsCardStyle.subtitleColor)
             }
         }
         // HQ指示(2026-10-12、7回目)「発言の枠をもう少し大きくして」:
         // パディングを10→14に広げた。
-        .padding(14)
+        // HQ指示(2026-10-13、2回目)「発言の枠がまだ大きいから縦幅を
+        // 小さくして。枠は2行入る想定の高さにして」: 14→10に縮め、
+        // `summaryCardMinHeight`を2行分の高さを想定した値に下げた
+        // (`results`側の縦パディングも合わせて詰め、両カードが同じ
+        // 高さになるようにしている)。
+        .padding(10)
         // HQ指示(2026-10-12、8回目)「要人発言の通貨ペアはイベント詳細と
         // 同じ位置にして」: この`statementCard`(発言内容、特に「この発言は
         // まだ行われていません。」のような1行の状態文)は`EventDetailCards.
@@ -291,9 +304,11 @@ struct SpeechDetailCards: View {
     /// `HomeView.speechRow`の`reactionPips`と同じ色分け(pips >= 0は
     /// `changeUpColor`、負は`changeDownColor`)に揃える。
     private func pipsText(_ pips: Double) -> some View {
+        // HQ指示(2026-10-13、2回目)「-5.2の文字間隔をもう少し詰めて」。
         Text(ValueFormat.number(pips, fractionDigits: 1, signed: true))
             .font(.system(size: 10, weight: .semibold))
             .monospacedDigit()
+            .tracking(-0.3)
             .foregroundStyle(pips >= 0 ? HomeView.changeUpColor : HomeView.changeDownColor)
     }
 

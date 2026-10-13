@@ -150,8 +150,11 @@ struct IndicatorDetailCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 nameText
                 if let nameEn = indicator.nameEn, !nameEn.isEmpty {
+                    // HQ指示(2026-10-13、2回目)「英語も同じ(折り返さない)」。
                     NotoText.text(nameEn, size: 7)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                 }
                 HStack(spacing: 4) {
                     chip {
@@ -182,21 +185,20 @@ struct IndicatorDetailCard: View {
     /// HQ指示(2026-10-13)「指標名が米国CPIのままになっているから修正して」:
     /// 国名接頭辞を残したまま括弧で割るだけの独自ロジックだったため「米国CPI」が
     /// 消えていなかった。Home/検索/イベント詳細と同じ`CountryFlag.
-    /// indicatorDisplayName`(国名接頭辞を取り除く)に揃えた — 1行に入れば
-    /// そのまま、入らなければ略称の前で改行する。
+    /// indicatorDisplayName`(国名接頭辞を取り除く)に揃えた。
+    /// HQ指示(2026-10-13、2回目)「消費者物価指数（CPI）は折り返さないで。
+    /// 文字サイズは11にして」: イベント詳細/要人発言詳細と違い、この画面は
+    /// お気に入り星の分だけ横幅が狭く、2行フォールバック(`ViewThatFits`)
+    /// だと折り返りが発生していた。折り返さない方針が明示されたため、常に
+    /// 1行(`lineLimit(1)`)にし、収まらない場合だけ`minimumScaleFactor`で
+    /// 縮小するようにした。
     private var nameText: some View {
         let display = CountryFlag.indicatorDisplayName(indicator.name, countryCode: indicator.countryCode)
         let combinedName = display.abbreviation.map { "\(display.main)(\($0))" } ?? display.main
-        return ViewThatFits(in: .horizontal) {
-            NotoText.text(combinedName, size: 10.5).lineLimit(1)
-            VStack(alignment: .leading, spacing: 1) {
-                NotoText.text(display.main, size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
-                if let abbreviation = display.abbreviation {
-                    NotoText.text("(\(abbreviation))", size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
-                }
-            }
-        }
-        .foregroundStyle(.white)
+        return NotoText.text(combinedName, size: 11)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .foregroundStyle(.white)
     }
 
     private func chip(@ViewBuilder _ content: () -> some View) -> some View {
