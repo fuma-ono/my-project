@@ -113,6 +113,9 @@ struct SearchView: View {
                 AppRouteDestinationView(route: route, apiClient: apiClient, tabSelection: $tabSelection)
             }
         }
+        // 2026-10-13: IndicatorsViewModelは一覧を1回読み込み、検索語では端末の中で絞り込む
+        // 形になった(入力のたびの通信はしない)ので、最初に読み込む。
+        .task { viewModel.load() }
     }
 
     // 検索バー上端53・高さ28(y=67中心)、フィルターpill(y=104・高さ約20)との
@@ -303,7 +306,9 @@ struct SearchView: View {
             EmptyView()
         case .backendNotConfigured, .error:
             EmptyView()
-        case .loaded(let indicators):
+        case .loaded:
+            // 検索語(指標名・国・通貨ペア)で絞り込んだ結果(SCR-005と同じ規則)。
+            let indicators = viewModel.filtered
             if selectedFilter == .all || selectedFilter == .indicator {
                 // HQ指示(2026-10-11、8回目)「CPIを検索した後の画面のカード
                 // 全体を枠を囲って、線で各行を表して」: 行ごとに別々の
