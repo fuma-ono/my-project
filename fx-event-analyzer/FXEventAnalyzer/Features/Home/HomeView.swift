@@ -797,7 +797,7 @@ struct HomeView: View {
                             .foregroundStyle(.white)
                             .lineLimit(1)
                         if let abbreviation = display.abbreviation {
-                            NotoText.text("(\(abbreviation))", size: 6.0)
+                            NotoText.text("（\(abbreviation)）", size: 6.0)
                                 .foregroundStyle(.white)
                                 .lineLimit(1)
                         }

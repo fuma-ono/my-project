@@ -74,7 +74,7 @@ struct EventDetailCards: View {
                         VStack(alignment: .leading, spacing: 1) {
                             NotoText.text(display.main, size: 11).lineLimit(1).minimumScaleFactor(0.8)
                             if let abbreviation = display.abbreviation {
-                                NotoText.text("(\(abbreviation))", size: 11).lineLimit(1).minimumScaleFactor(0.8)
+                                NotoText.text("（\(abbreviation)）", size: 11).lineLimit(1).minimumScaleFactor(0.8)
                             }
                         }
                     }
