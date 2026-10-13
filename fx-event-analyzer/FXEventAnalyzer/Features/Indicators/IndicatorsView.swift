@@ -119,16 +119,19 @@ struct IndicatorsView: View {
     private var list: some View {
         let indicators = viewModel.filtered
         return ScrollView(showsIndicators: false) {
-            VStack(spacing: 0) {
+            // HQ指示(2026-10-13)「画像のように各カードの外枠を変更して。中の配置は変更しない」:
+            // 1枚の枠に区切り線で並べていたのを、1件ずつ別のカードにし、左端に重要度の色の帯を付けた。
+            VStack(spacing: 5) {
                 if indicators.isEmpty {
                     NotoText.text("条件に合う指標はありません。", size: 8)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .frame(maxWidth: .infinity, minHeight: 40)
+                        .background(AccountCardBackground())
                 }
-                ForEach(Array(indicators.enumerated()), id: \.element.id) { index, indicator in
-                    if index > 0 { SettingsListSeparator() }
+                ForEach(indicators, id: \.id) { indicator in
                     NavigationLink(value: AppRoute.indicatorDetail(id: indicator.id)) {
                         row(indicator)
+                            .background(rowCard(indicator.importance))
                     }
                     .buttonStyle(SettingsRowPressStyle())
                     // スクショのテストは正式名(「米国CPI(消費者物価指数)」)で押す。
@@ -138,8 +141,26 @@ struct IndicatorsView: View {
                 }
             }
             .frame(width: 214)
-            .background(AccountCardBackground())
             .padding(.bottom, 6)
+        }
+    }
+
+    /// 1件分のカード。左端の帯は重要度の色(HIGHは赤、MEDIUMは黄、LOWは青)。
+    private func rowCard(_ importance: Importance) -> some View {
+        let shape = RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
+        return shape.fill(SettingsCardStyle.cardFill)
+            .overlay(alignment: .leading) {
+                Rectangle().fill(Self.accentColor(importance)).frame(width: 3)
+            }
+            .clipShape(shape)
+            .overlay(shape.stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
+    }
+
+    private static func accentColor(_ importance: Importance) -> Color {
+        switch importance {
+        case .high: return HomeView.changeUpColor
+        case .medium: return HomeView.importanceBadgeColors(.medium).border
+        case .low: return V5P.blue
         }
     }
 
