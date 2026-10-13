@@ -153,15 +153,14 @@ struct IndicatorsView: View {
         // 次回発表があればその日時、無ければ前回の発表日時を薄く出す。
         let date = indicator.nextReleaseDatetime ?? indicator.latestReleaseDatetime
         let isNext = indicator.nextReleaseDatetime != nil
-        let display = CountryFlag.indicatorDisplayName(indicator.name, countryCode: indicator.countryCode)
-        let name = display.abbreviation.map { "\(display.main)（\($0)）" } ?? display.main
+        let name = Self.listName(indicator.name, countryCode: indicator.countryCode)
         return HStack(spacing: 7) {
             VStack(alignment: .leading, spacing: 1) {
                 if let date {
                     Text(Self.dateString(date))
                         .font(.system(size: 8.5, weight: .semibold))
                         .monospacedDigit()
-                    Text(AppPreferences.shared.timeString(date))
+                    Text(Self.timeString(date))
                         .font(.system(size: 7.5))
                         .monospacedDigit()
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
@@ -192,6 +191,34 @@ struct IndicatorsView: View {
         .padding(.horizontal, 9)
         .frame(height: 36)
         .contentShape(Rectangle())
+    }
+
+    /// 一覧の名前。国名を外し、「CPI(消費者物価指数)」のように英字の略称+長い正式名のときだけ
+    /// 「消費者物価指数（CPI）」と入れ替える(参考画像)。「雇用統計(非農業部門雇用者数)」
+    /// 「GDP(改定値)」「製造業PMI(速報値)」などは入れ替えると意味が変わるので、元の順のまま。
+    static func listName(_ name: String, countryCode: String) -> String {
+        var body = name
+        let country = CountryFlag.japaneseName(forCountry: countryCode)
+        if body.hasPrefix(country) { body = String(body.dropFirst(country.count)) }
+        guard let open = body.firstIndex(where: { $0 == "(" || $0 == "（" }),
+              let close = body.lastIndex(where: { $0 == ")" || $0 == "）" }), open < close else { return body }
+        let head = String(body[..<open]).trimmingCharacters(in: .whitespaces)
+        let inner = String(body[body.index(after: open)..<close]).trimmingCharacters(in: .whitespaces)
+        guard !head.isEmpty, !inner.isEmpty else { return body }
+        let isAcronym = head.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
+        return isAcronym && inner.count >= 4 ? "\(inner)（\(head)）" : "\(head)（\(inner)）"
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
+    /// 「06:30」(桁をそろえる)。アプリの設定の時間帯で。
+    @MainActor private static func timeString(_ date: Date) -> String {
+        timeFormatter.timeZone = AppPreferences.shared.timeZone
+        return timeFormatter.string(from: date)
     }
 
     /// 「10/03」。アプリの設定の時間帯で。
