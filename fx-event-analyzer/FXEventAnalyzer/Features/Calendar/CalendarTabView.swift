@@ -278,20 +278,14 @@ private struct CalendarDayList: View {
                 CountryFlagView(countryCode: item.countryCode, diameter: 14)
                 NotoText.text(item.currencyCode, size: 8)
                     .foregroundStyle(.white)
-<<<<<<< .merge_file_I9Ew0f
-                    .frame(width: 23, alignment: .leading)
-                // 表示名は全画面統一(HQ指示 2026-10-13)。
-                NotoText.text(item.kind == .indicator ? CountryFlag.indicatorDisplayText(item.title, countryCode: item.countryCode, displayName: item.displayName) : item.title, size: 9)
-=======
                     .frame(width: 20, alignment: .leading)
-                // 指標名はホームと同じくカッコの前まで(正式名は詳細画面)。
                 // HQ指示(2026-10-13)「経済指標カレンダー画面を画像のように
                 // して」で左の色帯・右の＞を足した分、名前の横幅が狭くなり
                 // 「国内企業物...」のように省略されていた(CI screenshotで
                 // 確認)。他の余白も詰めた上で、省略ではなく縮小で収まる
                 // ようminimumScaleFactorを0.8→0.6に広げた。
-                NotoText.text(item.kind == .indicator ? HomeView.shortIndicatorName(item.title) : item.title, size: 9)
->>>>>>> .merge_file_b7rB6x
+                // 表示名は全画面統一(HQ指示 2026-10-13)。
+                NotoText.text(item.kind == .indicator ? CountryFlag.indicatorDisplayText(item.title, countryCode: item.countryCode, displayName: item.displayName) : item.title, size: 9)
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
