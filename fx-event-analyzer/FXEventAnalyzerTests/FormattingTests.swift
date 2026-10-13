@@ -129,11 +129,20 @@ final class MovementAnalysisTextTests: XCTestCase {
     }
 }
 
-final class IndicatorDetailNameTests: XCTestCase {
-    func testSplitsBeforeTheParenthesis() {
-        XCTAssertEqual(IndicatorDetailCard.splitName("米国CPI(消費者物価指数)").main, "米国CPI")
-        XCTAssertEqual(IndicatorDetailCard.splitName("米国CPI(消費者物価指数)").paren, "(消費者物価指数)")
-        XCTAssertNil(IndicatorDetailCard.splitName("FOMC政策金利").paren)
+/// `IndicatorDetailCard`は以前、独自の`splitName`(国名接頭辞を残したまま
+/// 括弧で割るだけ)を使っていたため指標名が「米国CPI」のまま表示される
+/// 不具合があった(HQ指示 2026-10-13)。Home/検索/イベント詳細と同じ
+/// `CountryFlag.indicatorDisplayName`(国名接頭辞を取り除く)に揃えたため、
+/// このテストもそちらを検証する。
+final class IndicatorDisplayNameTests: XCTestCase {
+    func testStripsCountryPrefixAndSplitsAbbreviation() {
+        let display = CountryFlag.indicatorDisplayName("米国CPI(消費者物価指数)", countryCode: "US")
+        XCTAssertEqual(display.main, "消費者物価指数")
+        XCTAssertEqual(display.abbreviation, "CPI")
+    }
+
+    func testNoAbbreviationWhenThereIsNoParenthesis() {
+        XCTAssertNil(CountryFlag.indicatorDisplayName("FOMC政策金利", countryCode: "US").abbreviation)
     }
 }
 
