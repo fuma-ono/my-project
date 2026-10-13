@@ -261,36 +261,6 @@ private struct CalendarDayList: View {
     }
 
     private func row(_ item: CalendarItem) -> some View {
-<<<<<<< HEAD
-        HStack(spacing: 5) {
-            Text(item.hasTime ? Self.timeFormatter.string(from: item.datetime) : "未定")
-                .font(.system(size: 9.5, weight: .bold))
-                .monospacedDigit()
-                .foregroundStyle(.white)
-                // 幅26では「08:5／0」と折り返していたので、1行に固定して幅を広げた。
-                .lineLimit(1)
-                .fixedSize()
-                .frame(width: 31, alignment: .leading)
-            CountryFlagView(countryCode: item.countryCode, diameter: 14)
-            NotoText.text(item.currencyCode, size: 8)
-                .foregroundStyle(.white)
-                .frame(width: 23, alignment: .leading)
-            // 指標名はホームと同じくカッコの前まで(正式名は詳細画面)。
-            // 表示名は全画面統一(HQ指示 2026-10-13)。
-            NotoText.text(item.kind == .indicator ? CountryFlag.indicatorDisplayText(item.title, countryCode: item.countryCode, displayName: item.displayName) : item.title, size: 9)
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            Spacer(minLength: 4)
-            let colors = HomeView.importanceBadgeColors(item.importance)
-            NotoText.text(item.importance.rawValue, size: 6.5)
-                .tracking(-0.4)
-                .foregroundStyle(.white)
-                .frame(width: 34)
-                .padding(.vertical, 2.5)
-                .background(colors.fill, in: Capsule())
-                .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
-=======
         let colors = HomeView.importanceBadgeColors(item.importance)
         return HStack(spacing: 0) {
             // HQ指示(2026-10-13)「経済指標カレンダー画面を画像のようにして」:
@@ -309,8 +279,8 @@ private struct CalendarDayList: View {
                 NotoText.text(item.currencyCode, size: 8)
                     .foregroundStyle(.white)
                     .frame(width: 23, alignment: .leading)
-                // 指標名はホームと同じくカッコの前まで(正式名は詳細画面)。
-                NotoText.text(item.kind == .indicator ? HomeView.shortIndicatorName(item.title) : item.title, size: 9)
+                // 表示名は全画面統一(HQ指示 2026-10-13)。
+                NotoText.text(item.kind == .indicator ? CountryFlag.indicatorDisplayText(item.title, countryCode: item.countryCode, displayName: item.displayName) : item.title, size: 9)
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -327,7 +297,6 @@ private struct CalendarDayList: View {
                     .foregroundStyle(SettingsCardStyle.chevronColor)
             }
             .padding(.horizontal, 9)
->>>>>>> origin/claude/fx-event-analyzer
         }
         .frame(height: 28)
         .contentShape(Rectangle())
