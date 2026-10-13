@@ -30,6 +30,7 @@ interface CalendarItemBody {
   id: string;
   indicator_id: string | null;
   title: string;
+  display_name: string | null;
   speaker_name: string | null;
   currency_code: string;
   importance: string;
@@ -110,6 +111,7 @@ describe.skipIf(!integration)('GET /calendar', () => {
     expect(items.find((item) => item.id === US_NFP_EVENT_ID)).toMatchObject({
       kind: 'INDICATOR',
       indicator_id: US_NFP_INDICATOR_ID,
+      display_name: '非農業部門雇用者数（NFP）',
       speaker_name: null,
       currency_code: 'USD',
       importance: 'HIGH',
@@ -120,6 +122,7 @@ describe.skipIf(!integration)('GET /calendar', () => {
       kind: 'SPEECH',
       indicator_id: null,
       title: '国会答弁',
+      display_name: null,
       speaker_name: '植田和男',
       currency_code: 'JPY',
       importance: 'MEDIUM',

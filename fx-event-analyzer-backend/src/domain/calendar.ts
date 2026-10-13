@@ -17,6 +17,8 @@ export interface CalendarItem {
   /** INDICATOR: the event's indicator_id (opens SCR-006 指標詳細). SPEECH: always null. */
   indicator_id: string | null;
   title: string;
+  /** INDICATOR: the indicator's 一覧画面の表示名 (null when not registered). SPEECH: always null. */
+  display_name: string | null;
   /** SPEECH only. */
   speaker_name: string | null;
   country_code: string;
@@ -33,6 +35,7 @@ export interface CalendarIndicatorEvent {
   id: string;
   indicator_id: string;
   indicator_name: string;
+  indicator_display_name?: string | null | undefined;
   country_code: string;
   currency_code: string;
   importance: string;
@@ -84,6 +87,7 @@ export function buildCalendarItems(
     id: event.id,
     indicator_id: event.indicator_id,
     title: event.indicator_name,
+    display_name: event.indicator_display_name ?? null,
     speaker_name: null,
     country_code: event.country_code,
     currency_code: event.currency_code,
@@ -99,6 +103,7 @@ export function buildCalendarItems(
       id: speech.speech_id,
       indicator_id: null,
       title: speech.title,
+      display_name: null,
       speaker_name: speech.speaker.name,
       country_code: speech.speaker.country_code,
       currency_code: speech.speaker.currency_code,

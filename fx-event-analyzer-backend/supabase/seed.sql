@@ -48,6 +48,18 @@ insert into economic_indicators (id, code, name, name_en, country_code, currency
     '日銀の政策金利が予想より高い水準に決まると、金融引き締めが進むとの見方が強まり、円が買われやすいとされる。',
     '日銀の政策金利が予想より低い水準に決まると、金融緩和的な姿勢が続くとの見方が強まり、円が売られやすいとされる。');
 
+-- display_name は一覧画面の表示名 (HQ指示 2026-10-13、表示名ルールは
+-- docs/projects/fx-event-analyzer/indicator-display-names.md)。
+update economic_indicators set display_name = v.display_name
+from (values
+  ('US_CPI', '消費者物価指数（CPI）'),
+  ('US_NFP', '非農業部門雇用者数（NFP）'),
+  ('US_FOMC', 'FOMC政策金利'),
+  ('JP_CPI', '消費者物価指数（CPI）'),
+  ('BOJ_RATE', '日銀政策金利')
+) as v(code, display_name)
+where economic_indicators.code = v.code;
+
 -- ---------------------------------------------------------------------
 -- FX pairs
 -- ---------------------------------------------------------------------

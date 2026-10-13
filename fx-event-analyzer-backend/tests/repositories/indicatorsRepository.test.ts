@@ -11,6 +11,7 @@ function dbRow(overrides: Record<string, unknown> = {}) {
     id: 'i1',
     code: 'US_CPI',
     name: '米国CPI(消費者物価指数)',
+    display_name: '消費者物価指数（CPI）',
     name_en: 'Consumer Price Index',
     country_code: 'US',
     currency_code: 'USD',
@@ -83,6 +84,20 @@ describe('getIndicatorById (SCR-006 fields)', () => {
     await getIndicatorById(supabase, 'i1');
     expect(selected[0]).toContain('market_view_above');
     expect(selected[0]).toContain('market_view_below');
+    expect(selected[0]).toContain('display_name');
+  });
+
+  it('returns display_name as stored (一覧画面の表示名)', async () => {
+    const supabase = fakeSupabaseClient({ economic_indicators: [dbRow()] });
+    const indicator = await getIndicatorById(supabase, 'i1');
+    expect(indicator?.display_name).toBe('消費者物価指数（CPI）');
+  });
+
+  it('returns display_name null when it is not registered', async () => {
+    const supabase = fakeSupabaseClient({ economic_indicators: [dbRow({ display_name: null })] });
+    expect((await getIndicatorById(supabase, 'i1'))?.display_name).toBeNull();
+    const { rows } = await listIndicators(supabase, { sort: 'name' }, { page: 1, limit: 20 });
+    expect(rows[0]?.display_name).toBeNull();
   });
 
   it('returns null for an unknown or inactive indicator', async () => {

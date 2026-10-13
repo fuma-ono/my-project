@@ -92,6 +92,20 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       }
     });
 
+    it('includes display_name on every listed indicator (v1.21)', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/api/v1/indicators?limit=100',
+        headers: authHeader,
+      });
+      expect(response.statusCode).toBe(200);
+      const rows: Array<{ code: string; display_name: unknown }> = JSON.parse(response.body).data;
+      for (const row of rows) expect(row).toHaveProperty('display_name');
+      const byCode = Object.fromEntries(rows.map((row) => [row.code, row.display_name]));
+      expect(byCode.US_CPI).toBe('消費者物価指数（CPI）');
+      expect(byCode.US_NFP).toBe('非農業部門雇用者数（NFP）');
+    });
+
     it('filters by q (partial match, ILIKE)', async () => {
       const response = await ctx.app.inject({ method: 'GET', url: '/api/v1/indicators?q=CPI', headers: authHeader });
       const body = JSON.parse(response.body);
@@ -110,6 +124,8 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(body.indicator.code).toBe('US_CPI');
       // v1.16 (SCR-006): English name, Japanese 概要, and 注目される理由.
       expect(body.indicator.name_en).toBe('Consumer Price Index');
+      // v1.21: 一覧画面の表示名。
+      expect(body.indicator.display_name).toBe('消費者物価指数（CPI）');
       expect(body.indicator.description).toMatch(/^消費者物価指数（CPI）は/);
       expect(body.indicator.key_points).toEqual([
         'インフレの動向を把握できる',

@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.11
+# FX Event Analyzer: DB詳細設計 v4.12
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -36,6 +36,7 @@
 - **v4.9**(2026-10-07): SCR-026 ホーム通貨ペア編集。`UserSettings`に`home_fx_pairs`(ホームに表示する通貨ペア、1〜3件・配列の順 = 表示順、NULL = 既定)を追加(3.14節)。Migration `20261007000003_home_fx_pairs.sql`。開発用seed(`supabase/seed.sql`)の`FxPair`に`GBPJPY` / `AUDUSD` / `GBPUSD` / `USDCHF` / `AUDJPY` / `CADJPY`を追加(価格データなし)
 - **v4.10**(2026-10-09): SCR-006 指標詳細の再デザイン。`EconomicIndicator`に`name_en`(英語名)と`key_points`(注目される理由の短文の配列、0〜6件・NULL要素と空文字は不可)を追加し、`description`は「概要」として日本語1〜2文で持つと明記した(3.4節)。Migration `20261009000001_economic_indicators_name_en_key_points.sql`。開発用seed(`supabase/seed.sql`)の5指標に`name_en`・`key_points`と日本語の`description`を入れた。API(api-design.md v1.16)では`key_points`のNULLを`[]`として返す
 - **v4.11**(2026-10-09): SCR-008 相場反応詳細の「一般的な見方」。`EconomicIndicator`に`market_view_above`(結果が予想を上回ったときの一般的な見方)・`market_view_below`(下回ったとき)を追加(3.4節)。人が書いた日本語1文(200文字以内・空白だけは不可)、NULL = 未登録。Migration `20261009000002_economic_indicators_market_views.sql`。開発用seedの5指標に両方を入れた。API(api-design.md v1.18)ではNULLを`null`のまま返す
+- **v4.12**(2026-10-13): 指標の一覧画面の表示名(HQ指示 2026-10-13)。`EconomicIndicator`に`display_name`(一覧画面の表示名。HQの表示名ルール indicator-display-names.md に従う。40文字以内・空白だけは不可)を追加(3.4節)。NULL = 未登録。Migration `20261013000001_economic_indicators_display_name.sql`。開発用seedの5指標に入れた(`US_CPI` 消費者物価指数（CPI）・`US_NFP` 非農業部門雇用者数（NFP）・`US_FOMC` FOMC政策金利・`JP_CPI` 消費者物価指数（CPI）・`BOJ_RATE` 日銀政策金利)。API(api-design.md v1.21)ではNULLを`null`のまま返す
 
 ---
 
@@ -179,6 +180,7 @@ IDX(user_id)
 | id | uuid | PK | |
 | code | text | UQ, NN | 内部コード(Provider非依存) |
 | name | text | NN | |
+| display_name | text | nullable, CHK: `display_name IS NULL OR (btrim(display_name) <> '' AND char_length(display_name) <= 40)` | v4.12。一覧画面の表示名(例: `消費者物価指数（CPI）`・`FOMC政策金利`)。HQの表示名ルール(indicator-display-names.md)に従って人が登録する。SCR-005・SCR-010・ホームで表示。NULL = 未登録(画面側は`name`を表示) |
 | name_en | text | nullable | v4.10。英語名(例: `Consumer Price Index`)。SCR-006で表示。NULL = 未登録 |
 | country_code | text | NN | ISO 3166-1 alpha-2を想定 |
 | currency_code | text | NN | ISO 4217を想定(参照テーブルなし) |

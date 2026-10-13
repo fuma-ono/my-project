@@ -29,6 +29,9 @@ struct IndicatorSummary: Decodable, Identifiable, Equatable {
     var nextEventId: String? = nil
     /// 前回の発表日時(次回が無いときに薄く出す)。
     var latestReleaseDatetime: Date? = nil
+    /// 一覧画面の表示名(api-design v1.21、HQの表示名ルール
+    /// docs/projects/fx-event-analyzer/indicator-display-names.md)。未登録はnil。
+    var displayName: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case marketViewAbove = "market_view_above"
@@ -36,6 +39,7 @@ struct IndicatorSummary: Decodable, Identifiable, Equatable {
         case nextReleaseDatetime = "next_release_datetime"
         case nextEventId = "next_event_id"
         case latestReleaseDatetime = "latest_release_datetime"
+        case displayName = "display_name"
         case nameEn = "name_en"
         case keyPoints = "key_points"
         case id

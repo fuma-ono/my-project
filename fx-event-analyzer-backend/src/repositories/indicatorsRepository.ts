@@ -12,6 +12,8 @@ export interface IndicatorRow {
   id: string;
   code: string;
   name: string;
+  /** 一覧画面の表示名 (HQの表示名ルール、例: `消費者物価指数（CPI）`)。未登録はnull。 */
+  display_name: string | null;
   /** SCR-006 英語名 (例: `Consumer Price Index`)。未登録はnull。 */
   name_en: string | null;
   country_code: string;
@@ -35,10 +37,10 @@ export interface IndicatorRow {
 type IndicatorDbRow = Omit<IndicatorRow, 'key_points'> & { key_points: string[] | null };
 
 const INDICATOR_COLUMNS =
-  'id, code, name, name_en, country_code, currency_code, importance, description, key_points, frequency, unit, source, source_url, favorable_direction, market_view_above, market_view_below';
+  'id, code, name, display_name, name_en, country_code, currency_code, importance, description, key_points, frequency, unit, source, source_url, favorable_direction, market_view_above, market_view_below';
 
 function toIndicatorRow(row: IndicatorDbRow): IndicatorRow {
-  return { ...row, key_points: normalizeKeyPoints(row.key_points) };
+  return { ...row, display_name: row.display_name ?? null, key_points: normalizeKeyPoints(row.key_points) };
 }
 
 export interface ListIndicatorsFilters {

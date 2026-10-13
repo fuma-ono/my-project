@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.20
+# FX Event Analyzer: API詳細設計書 v1.21
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -62,6 +62,7 @@
 - **v1.19**(2026-10-09): `GET /events/{event_id}/reaction/chart`の表示範囲を時間足ごとに(1m 前後15分・5m 前後60分・15m 前後3時間)。Responseに`window_from` / `window_to`を追加
 - **v1.18**(2026-10-09): SCR-008 相場反応詳細の「一般的な見方」(HQ決定 2026-10-09)。`GET /indicators`・`GET /indicators/{id}`の`indicator`に`market_view_above`(結果が予想を上回ったときの一般的な見方)・`market_view_below`(下回ったとき)を追加(13.2節)。人が書いた日本語1文の定型文(AI生成ではない)で、未登録は`null`
 - **v1.20**(2026-10-13): SCR-005 指標一覧の次回発表(HQ指示 2026-10-13)。`GET /indicators`の各行と`GET /indicators/{id}`の`indicator`に`next_release_datetime`(次回発表日時。現在以降で最も早い`status = SCHEDULED`のEvent、無ければ`null`)・`next_event_id`(そのEventのID、無ければ`null`)・`latest_release_datetime`(最新の`status = RELEASED`のEventの発表日時、無ければ`null`。次回発表が無いときの表示用)を追加(13.2節)。`GET /indicators`の`sort`に`next_release`(次回発表の昇順、次回発表が無い指標は後ろ、同じなら名前順)を追加(13.1節)。既定の並び順(`name`)は変えない
+- **v1.21**(2026-10-13): 指標の一覧画面の表示名(HQ指示 2026-10-13)。`GET /indicators`の各行と`GET /indicators/{id}`の`indicator`に`display_name`(一覧画面の表示名。例: `消費者物価指数（CPI）`・`FOMC政策金利`。HQの表示名ルール(indicator-display-names.md)に従って人が登録した短い名前、未登録は`null`)を追加(13.2節)。同じ名前をどの画面でも使えるよう、`GET /calendar`の`INDICATOR`の行(14.6節、`SPEECH`は`null`)と`GET /home`の`events`(12章)にも`display_name`を追加。`name`・`title`・`indicator_name`は変えない
 
 ---
 
@@ -421,6 +422,7 @@ Eventには以下を含む。
 - event_id
 - indicator_id
 - indicator_name
+- display_name(v1.21で追加。指標の一覧画面の表示名、13.2節。未登録は`null`)
 - country_code
 - currency_code
 - unit(v1.13で追加。指標の単位、例: `%`・`千人`。未登録は`null`)
@@ -471,13 +473,14 @@ Responseには以下を含む：indicator / favorable_direction / related_fx_pai
 
 Indicator Detailでは、name / code / country / currency / importance / description / frequency / unit / source / source_url / favorable_direction などを取得可能とする。
 
-**indicatorオブジェクトの項目(v1.16で`name_en`・`key_points`、v1.18で`market_view_above`・`market_view_below`、v1.20で`next_release_datetime`・`next_event_id`・`latest_release_datetime`を追加)**: 13.1の一覧の各行と13.2の`indicator`は同じ形：
+**indicatorオブジェクトの項目(v1.16で`name_en`・`key_points`、v1.18で`market_view_above`・`market_view_below`、v1.20で`next_release_datetime`・`next_event_id`・`latest_release_datetime`、v1.21で`display_name`を追加)**: 13.1の一覧の各行と13.2の`indicator`は同じ形：
 
 ```json
 {
   "id": "10000000-0000-0000-0000-000000000001",
   "code": "US_CPI",
   "name": "米国CPI(消費者物価指数)",
+  "display_name": "消費者物価指数（CPI）",
   "name_en": "Consumer Price Index",
   "country_code": "US",
   "currency_code": "USD",
@@ -497,6 +500,7 @@ Indicator Detailでは、name / code / country / currency / importance / descrip
 }
 ```
 
+- `display_name`(v1.21)：一覧画面の表示名(`economic_indicators.display_name`)。HQの表示名ルール(indicator-display-names.md。例: 短い日本語名はそのまま`小売売上高`、定着した略称は併記`消費者物価指数（CPI）`、政策金利は機関名を残す`FOMC政策金利`、発表区分が重要なものは`GDP（改定値）`)に従って人が登録した40文字以内の名前。SCR-005 指標一覧・SCR-010 カレンダー・ホームで指標名として表示する。未登録は`null`(画面側は`name`を表示する)。`name`(正式名)は変えない
 - `name_en`(v1.16)：指標の英語名(`economic_indicators.name_en`)。SCR-006で日本語名の下に表示する。未登録は`null`
 - `description`：SCR-006の「概要」。日本語1〜2文(v1.16でseedを日本語化)。未登録は`null`
 - `key_points`(v1.16)：SCR-006の「注目される理由」。日本語の短文の配列(2〜4件程度、DB上の上限6件)、配列順 = 表示順。**未登録(DBの`NULL`)は`[]`で返し、`null`にはしない**
@@ -690,6 +694,7 @@ Response：`{ "from": string, "to": string, "items": CalendarItem[] }`(`from` / 
   "id": "30000000-0000-0000-0000-000000000003",
   "indicator_id": "10000000-0000-0000-0000-000000000002",
   "title": "米国雇用統計(非農業部門雇用者数)",
+  "display_name": "非農業部門雇用者数（NFP）",
   "speaker_name": null,
   "country_code": "US",
   "currency_code": "USD",
@@ -704,6 +709,7 @@ Response：`{ "from": string, "to": string, "items": CalendarItem[] }`(`from` / 
 - `id`：`INDICATOR`は`event_id`(14.1節で詳細を取得)、`SPEECH`は`speech_id`(14.5節で詳細を取得)
 - `indicator_id`(v1.16)：`INDICATOR`はイベントの指標ID(13.2節で指標詳細 SCR-006 を取得)、`SPEECH`は常に`null`
 - `title`：`INDICATOR`は指標名、`SPEECH`は発言の題名(`speech_events.title`)。`GET /notifications/upcoming`(24.6節)と同じ付け方
+- `display_name`(v1.21)：`INDICATOR`は指標の一覧画面の表示名(13.2節の`display_name`、未登録は`null`)、`SPEECH`は常に`null`
 - `speaker_name`：`SPEECH`だけ。発言者の表示名。`INDICATOR`は`null`
 - `country_code` / `currency_code`：`INDICATOR`は指標の値、`SPEECH`は発言者の値
 - `datetime`：`INDICATOR`は`release_datetime`、`SPEECH`は`statement_datetime`

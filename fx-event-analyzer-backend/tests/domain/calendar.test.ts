@@ -6,6 +6,7 @@ function event(overrides: Partial<CalendarIndicatorEvent> = {}): CalendarIndicat
     id: 'e1',
     indicator_id: 'i1',
     indicator_name: '米国雇用統計(非農業部門雇用者数)',
+    indicator_display_name: '非農業部門雇用者数（NFP）',
     country_code: 'US',
     currency_code: 'USD',
     importance: 'HIGH',
@@ -29,6 +30,12 @@ function speech(overrides: Partial<CalendarSpeech> = {}): CalendarSpeech {
 }
 
 describe('buildCalendarItems', () => {
+  it('returns display_name null for an indicator without one (未登録)', () => {
+    const [item] = buildCalendarItems([event({ indicator_display_name: null })], []);
+    expect(item?.display_name).toBeNull();
+    expect(item?.title).toBe('米国雇用統計(非農業部門雇用者数)');
+  });
+
   it('maps indicators and speeches into one item shape', () => {
     const items = buildCalendarItems([event({ release_datetime_precision: 'DATE_ONLY' })], [speech()]);
     expect(items).toEqual([
@@ -37,6 +44,7 @@ describe('buildCalendarItems', () => {
         id: 's1',
         indicator_id: null,
         title: '経済見通しに関する講演',
+        display_name: null,
         speaker_name: 'ジェローム・パウエル',
         country_code: 'US',
         currency_code: 'USD',
@@ -50,6 +58,7 @@ describe('buildCalendarItems', () => {
         id: 'e1',
         indicator_id: 'i1',
         title: '米国雇用統計(非農業部門雇用者数)',
+        display_name: '非農業部門雇用者数（NFP）',
         speaker_name: null,
         country_code: 'US',
         currency_code: 'USD',

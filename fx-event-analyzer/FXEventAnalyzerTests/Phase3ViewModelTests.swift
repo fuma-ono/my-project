@@ -50,6 +50,10 @@ final class IndicatorsViewModelTests: XCTestCase {
         XCTAssertEqual(IndicatorsView.listName("FOMC政策金利", countryCode: "US"), "FOMC政策金利")
         XCTAssertEqual(IndicatorsView.listName("米国小売売上高", countryCode: "US"), "小売売上高")
         XCTAssertEqual(IndicatorsView.listName("国内企業物価指数", countryCode: "JP"), "国内企業物価指数")
+        // DBの表示名(HQの表示名ルール)があればそれを使う。
+        XCTAssertEqual(IndicatorsView.listName("米国雇用統計(非農業部門雇用者数)", countryCode: "US", displayName: "非農業部門雇用者数（NFP）"), "非農業部門雇用者数（NFP）")
+        XCTAssertEqual(IndicatorsView.listNameParts("x", countryCode: "US", displayName: "GDP（改定値）").suffix, "改定値")
+        XCTAssertNil(IndicatorsView.listNameParts("x", countryCode: "US", displayName: "コアCPI").suffix)
     }
 
     func testTimeBands() {
