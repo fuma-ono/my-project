@@ -205,12 +205,22 @@ private struct CalendarMonthCard: View {
             }
         } label: {
             // HQ指示(2026-10-08): 日付はマスの中心に置き、重要度の点は日付のすぐ下に
-            // 寄せる。選んだ日はマスいっぱいの正円(高さ-2の直径)で囲む。今日は同じ
-            // 大きさの円の枠。
+            // 寄せる。選んだ日はマスいっぱいの角丸四角で囲む。今日は同じ大きさの
+            // 角丸四角の枠。
+            // HQ指示(2026-10-13、3回目)「13日の選択グローを参考画像をピクセル単位で
+            // 再現して。丸ではなく四角(角は丸く)。色はもう少し青く」: 参考画像を
+            // ピクセルサンプリングすると、選択マーカーは正円ではなく角丸四角(角丸
+            // 比率は1辺の約1/4)で、塗りはシアンより青寄りの色(概ねV5P.blueに近い)
+            // だった。円から角丸四角(cornerRadius 6、continuousカーブ)に変更し、
+            // 色もV5P.cyanからV5P.blueへ、周囲にうっすら光彩(shadow)も追加した。
             ZStack {
-                Circle()
-                    .fill(isSelected ? V5P.cyan.opacity(0.85) : .clear)
-                    .overlay(Circle().stroke(V5P.cyan.opacity(isToday && !isSelected ? 0.8 : 0), lineWidth: 0.8))
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isSelected ? V5P.blue : .clear)
+                    .shadow(color: isSelected ? V5P.blue.opacity(0.7) : .clear, radius: 4)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(V5P.blue.opacity(isToday && !isSelected ? 0.8 : 0), lineWidth: 0.8)
+                    )
                     .frame(width: Self.cellHeight - 2, height: Self.cellHeight - 2)
                 Text("\(calendar.component(.day, from: day))")
                     .font(.system(size: 8.5, weight: .semibold))
