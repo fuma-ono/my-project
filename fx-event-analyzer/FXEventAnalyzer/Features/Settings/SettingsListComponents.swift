@@ -96,9 +96,10 @@ struct SettingsListValueRow: View {
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .fixedSize()
+                // HQ指示(2026-10-13)「＞は10.5pt・少し明るめのグレー」(指標一覧・検索結果と同じ)。
                 Image(systemName: "chevron.right")
-                    .font(.system(size: SettingsListLayout.rowTitleSize, weight: .semibold))
-                    .foregroundStyle(SettingsCardStyle.chevronColor)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(V5P.muted)
             }
             .padding(.horizontal, 10)
             .frame(height: height)

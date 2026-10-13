@@ -246,8 +246,9 @@ struct SpeechDetailCards: View {
                 .frame(width: 18)
             NotoText.text(title, size: 10).foregroundStyle(.white)
             Spacer()
+            // HQ指示(2026-10-13)「＞は10.5pt」。ボタンの枠に合わせて色は水色のまま。
             Image(systemName: "chevron.right")
-                .font(.system(size: 8, weight: .semibold))
+                .font(.system(size: 10.5, weight: .semibold))
                 .foregroundStyle(V5P.cyan)
         }
         .padding(.horizontal, 10)

@@ -141,9 +141,10 @@ struct IndicatorDetailCard: View {
 
     private var linkChevron: some View {
         // HQ指示(2026-10-13、5回目)「＞の文字サイズは10にして」: 9→10。
+        // HQ指示(2026-10-13)「＞は10.5pt・少し明るめのグレー」(指標一覧・検索結果と同じ)。
         Image(systemName: "chevron.right")
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(SettingsCardStyle.chevronColor)
+            .font(.system(size: 10.5, weight: .semibold))
+            .foregroundStyle(V5P.muted)
     }
 
     /// 「2025/10/15(水) 21:30」。
@@ -165,8 +166,8 @@ struct IndicatorDetailCard: View {
                     NotoText.text(detail, size: 8.5).foregroundStyle(SettingsCardStyle.subtitleColor)
                 }
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(SettingsCardStyle.chevronColor)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(V5P.muted)
             }
             .frame(height: 32)
             .contentShape(Rectangle())

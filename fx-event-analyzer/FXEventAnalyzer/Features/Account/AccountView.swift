@@ -230,7 +230,8 @@ struct AccountView: View {
 
     private var chevron: some View {
         // 「＞」は項目名と同じ大きさ(HQ指示 2026-10-06)。
-        Image(systemName: "chevron.right").font(.system(size: Self.titleSize, weight: .semibold)).foregroundStyle(SettingsCardStyle.chevronColor)
+        // HQ指示(2026-10-13)「＞は10.5pt・少し明るめのグレー」(指標一覧・検索結果と同じ)。
+        Image(systemName: "chevron.right").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(V5P.muted)
     }
 
     @ViewBuilder

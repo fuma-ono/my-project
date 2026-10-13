@@ -99,9 +99,10 @@ struct ProfileEditView: View {
                 NotoText.text(title, size: Self.fieldSize).foregroundStyle(.white)
                 Spacer()
                 // 右端のアイコン(鉛筆・「＞」)も見出しと同じ大きさ。
+                // 「＞」だけはHQ指示(2026-10-13)の10.5pt・少し明るめのグレー。鉛筆は見出しと同じ大きさ。
                 Image(systemName: trailingIcon)
-                    .font(.system(size: Self.fieldSize, weight: .semibold))
-                    .foregroundStyle(SettingsCardStyle.chevronColor)
+                    .font(.system(size: trailingIcon == "chevron.right" ? 10.5 : Self.fieldSize, weight: .semibold))
+                    .foregroundStyle(trailingIcon == "chevron.right" ? V5P.muted : SettingsCardStyle.chevronColor)
             }
             .padding(.horizontal, 10)
             .frame(width: 214, height: 25)
