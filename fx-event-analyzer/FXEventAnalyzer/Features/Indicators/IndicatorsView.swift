@@ -175,41 +175,49 @@ struct IndicatorsView: View {
         let date = indicator.nextReleaseDatetime ?? indicator.latestReleaseDatetime
         let isNext = indicator.nextReleaseDatetime != nil
         let parts = Self.listNameParts(indicator.name, countryCode: indicator.countryCode, displayName: indicator.displayName)
-        // HQ指示(2026-10-13): 参考画像どおり、1行目に日時、2行目に左端の国旗・名前・国・重要度。
-        return VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                if let date {
-                    Text(Self.dateString(date))
-                    Text(Self.timeString(date))
-                } else {
-                    Text("--")
+        // HQ指示(2026-10-13): 参考画像どおり、1行目に日時、2行目に左端の国旗・名前・国。
+        // 2026-10-13(2回目)「日時と指標名との間の余白を詰めて縦幅を狭めて」「HIGHは枠の右側の中心に、＞を付けて」:
+        // 日時と名前の間を3→0、上下の余白を5→4にし、重要度と＞は左側全体の縦の中心に置いた。
+        let colors = HomeView.importanceBadgeColors(indicator.importance)
+        return HStack(spacing: 5) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 6) {
+                    if let date {
+                        Text(Self.dateString(date))
+                        Text(Self.timeString(date))
+                    } else {
+                        Text("--")
+                    }
                 }
-            }
-            .font(.system(size: 7.5, weight: .semibold))
-            .monospacedDigit()
-            .foregroundStyle(isNext ? SettingsCardStyle.subtitleColor : SettingsCardStyle.subtitleColor.opacity(0.6))
-            HStack(spacing: 7) {
-                CountryFlagView(countryCode: indicator.countryCode, diameter: 17)
-                VStack(alignment: .leading, spacing: 1) {
-                    nameText(parts)
-                    NotoText.text(CountryFlag.japaneseName(forCountry: indicator.countryCode), size: 7)
-                        .foregroundStyle(SettingsCardStyle.subtitleColor)
-                        .frame(height: 9, alignment: .leading)
+                .font(.system(size: 7.5, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(isNext ? SettingsCardStyle.subtitleColor : SettingsCardStyle.subtitleColor.opacity(0.6))
+                HStack(spacing: 7) {
+                    CountryFlagView(countryCode: indicator.countryCode, diameter: 17)
+                    VStack(alignment: .leading, spacing: 1) {
+                        nameText(parts)
+                        NotoText.text(CountryFlag.japaneseName(forCountry: indicator.countryCode), size: 7)
+                            .foregroundStyle(SettingsCardStyle.subtitleColor)
+                            .frame(height: 9, alignment: .leading)
+                    }
                 }
-                Spacer(minLength: 4)
-                let colors = HomeView.importanceBadgeColors(indicator.importance)
-                NotoText.text(indicator.importance.rawValue, size: 6.5)
-                    .tracking(-0.3)
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 14)
-                    .background(colors.fill, in: Capsule())
-                    .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
+                // 名前は1行なので、行の高さは名前14+国名9でそろう。
+                .frame(height: 24)
             }
-            // 名前は1行なので、行の高さは名前14+国名9でそろう。
-            .frame(height: 24)
+            Spacer(minLength: 4)
+            NotoText.text(indicator.importance.rawValue, size: 6.5)
+                .tracking(-0.3)
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 14)
+                .background(colors.fill, in: Capsule())
+                .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
+            Image(systemName: "chevron.right")
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(SettingsCardStyle.chevronColor)
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
+        .padding(.leading, 9)
+        .padding(.trailing, 7)
+        .padding(.vertical, 4)
         .contentShape(Rectangle())
     }
 
