@@ -123,52 +123,70 @@ struct SearchView: View {
     // もう少し広げて」で3pt→9ptに拡大した後、7回目「検索枠から下を少し
     // 下げて」でさらに+4pt(計13pt)に拡大。クリアできる余白を見て122に設定。
     // V5BottomBarの帯高さ(39)と合わせて491-122-39=330をScrollViewの実高さとした。
-    private static let contentTopOffset: CGFloat = 122
+    // 2026-10-13: 指標一覧と同じ並び(検索欄60..86・絞り込み93..113)にしたので、一覧は7pt下の120から。
+    private static let contentTopOffset: CGFloat = 120
     private static let contentAreaHeight: CGFloat = V5P.H - contentTopOffset - 39
 
-    /// HQ指示(2026-10-09、6回目)「検索欄の枠の中は色をつけて」: `V5P.panel2`
-    /// 単体だと背景グラデーション(`V5P.bg0`/`bg1`)との明度差が小さく、縮小表示
-    /// された実機キャプチャでは塗りが入っていないように見えていたため、枠内
-    /// だけ明確に明るい色を専用トークンとして定義した。
-    private static let searchFieldFill = Color(red: 0.035, green: 0.15, blue: 0.28)
-
+    /// HQ指示(2026-10-13)「検索画面の検索入力とフィルターを指標一覧と同じデザインに」:
+    /// 指標一覧の`HelpSearchField`と同じ見た目(幅214・高さ26・カード背景)。ただし
+    /// `V5Viewport`の中ではタップでフォーカスが移らない問題の回避策(`@FocusState`)と、
+    /// UIテストが使う「検索」のラベルを残すため、ここで組み立てる。
     private var searchBar: some View {
-        HStack {
-            Image(systemName: "magnifyingglass").foregroundStyle(V5P.muted)
-            // HQ指示(2026-10-11、18回目)「検索欄に入るCPIの文字サイズを
-            // 大きくして」: 入力文字のみ8.5→11(プレースホルダーは据え置き)。
-            TextField("", text: $viewModel.searchText)
-                .font(.system(size: 11))
-                .foregroundStyle(.white)
-                .accessibilityLabel("検索")
-                .focused($searchFieldFocused)
-                .onTapGesture { searchFieldFocused = true }
-                .placeholder(when: viewModel.searchText.isEmpty) {
-                    NotoText.text("指標名・通貨・キーワードで検索", size: 8.5)
-                        .foregroundStyle(V5P.muted)
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(SettingsCardStyle.chevronColor)
+            ZStack(alignment: .leading) {
+                if viewModel.searchText.isEmpty {
+                    NotoText.text("指標名・通貨・キーワードで検索", size: 9)
+                        .foregroundStyle(V5P.muted.opacity(0.8))
                         .allowsHitTesting(false)
                 }
-            Spacer()
+                TextField("", text: $viewModel.searchText)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.white)
+                    .tint(V5P.cyan)
+                    .submitLabel(.search)
+                    .accessibilityLabel("検索")
+                    .focused($searchFieldFocused)
+                    .onTapGesture { searchFieldFocused = true }
+            }
+            if !viewModel.searchText.isEmpty {
+                Button { viewModel.searchText = "" } label: {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 9)).foregroundStyle(V5P.muted)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("検索を消す")
+            }
         }
         .padding(.horizontal, 10)
-        .frame(width: 204, height: 28)
-        .background(Self.searchFieldFill, in: Capsule())
-        .overlay(Capsule().stroke(V5P.line, lineWidth: 1))
-        .position(x: 117, y: 67)
+        .frame(width: 214, height: 26)
+        .background(AccountCardBackground())
+        // 指標一覧と同じ位置(上端60)。
+        .position(x: 117, y: 73)
     }
 
+    /// 指標一覧の絞り込みと同じカプセル(高さ20・7.5・選択中は青で塗る)。
     private var filterPills: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             ForEach(SearchFilter.allCases) { filter in
+                let active = selectedFilter == filter
                 Button { selectedFilter = filter } label: {
-                    // HQ指示(2026-10-09、7回目)「フィルターの文字サイズを
-                    // 雇用統計と同じサイズにして」: キーワードpill(8.5)と揃えた。
-                    NotoText.text(filter.title, size: 8.5).foregroundStyle(.white)
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(selectedFilter == filter ? V5P.blue : V5P.panel2, in: Capsule())
-                }.buttonStyle(.plain)
+                    NotoText.text(filter.title, size: 7.5)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .foregroundStyle(active ? .white : SettingsCardStyle.subtitleColor)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 20)
+                        .background(Capsule().fill(active ? V5P.blue : SettingsCardStyle.cardFill))
+                        .overlay(Capsule().stroke(active ? V5P.blue : SettingsCardStyle.cardBorder, lineWidth: 0.6))
+                }
+                .buttonStyle(.plain)
             }
-        }.position(x: 117, y: 104)
+        }
+        .frame(width: 214)
+        // 指標一覧と同じく検索欄の7pt下。
+        .position(x: 117, y: 103)
     }
 
     @ViewBuilder private var scrollableContent: some View {
@@ -341,13 +359,13 @@ struct SearchView: View {
         // ので修正して」: Homeの「今日の重要イベント」と同じ
         // `CountryFlag.indicatorDisplayName`を使い、国名接頭辞を除いた
         // 正式名+略称(「消費者物価指数(CPI)」等)を表示する。
-        let display = CountryFlag.indicatorDisplayName(indicator.name, countryCode: indicator.countryCode)
+        let display = CountryFlag.indicatorDisplayName(indicator.name, countryCode: indicator.countryCode, displayName: indicator.displayName)
         // HQ指示(2026-10-11、12回目)「消費者物価指数(CPI)は改行しないで。
         // 改行する条件は1行で入り切らない場合にして」: 以前は略称の有無で
         // 機械的に2行へ分けていたが、1つの文字列として組み立て、1行で
         // 収まる限りは1行のまま・収まらない場合だけ自然に2行目へ折り返す
         // ようにする。
-        let displayName = display.abbreviation.map { "\(display.main)(\($0))" } ?? display.main
+        let displayName = CountryFlag.indicatorDisplayText(indicator.name, countryCode: indicator.countryCode, displayName: indicator.displayName)
         // HQ指示(2026-10-11、16回目)「国旗マークはカードの縦幅の中心に
         // くるように」: 行全体を上揃え(`.top`)にしていたのをやめ、国旗・
         // タイトルブロックの両方を行の中央に揃える。
@@ -384,7 +402,7 @@ struct SearchView: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                         if let abbreviation = display.abbreviation {
-                            NotoText.text("(\(abbreviation))", size: 9.5)
+                            NotoText.text("（\(abbreviation)）", size: 9.5)
                                 .foregroundStyle(.white)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.8)

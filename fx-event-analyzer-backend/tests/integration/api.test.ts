@@ -315,6 +315,8 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.event.revision_status).toBe('REVISED');
+      // v1.22: HQ's 一覧表示名 next to indicator_name.
+      expect(body.event.display_name).toBe('消費者物価指数（CPI）');
       // §7.1: the API contract value (READY), never the raw DB data_status (AVAILABLE).
       expect(body.event.data_status).toBe('READY');
       expect(body.explanation).not.toBeNull();
@@ -450,12 +452,39 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.indicator_id).toBe(US_CPI_INDICATOR_ID);
+      expect(body.event.display_name).toBe('消費者物価指数（CPI）');
       expect(Number(body.snapshot.surprise)).toBeCloseTo(0.2);
 
       const usdjpy = body.related_fx_pairs.find((pair: { symbol: string }) => pair.symbol === 'USDJPY');
       const oneMin = usdjpy.reactions.find((r: { timeframe: string }) => r.timeframe === '1m');
       expect(oneMin.analysis_status).toBe('READY');
       expect(oneMin.data_status).toBeUndefined();
+    });
+  });
+
+  describe('Historical Comparison display_name (api-design.md §21, v1.22)', () => {
+    // Own user: entitlements are unique per (user_id, feature_code), and the
+    // shared user's VIEW_HISTORICAL is granted by another test.
+    let historicalUser: TestUser;
+
+    beforeAll(async () => {
+      historicalUser = await createTestUser(ctx);
+      await grantEntitlement(ctx, historicalUser.id, FEATURE_CODES.VIEW_HISTORICAL);
+    });
+
+    afterAll(async () => {
+      await deleteTestUser(ctx, historicalUser.id);
+    });
+
+    it.each(['5m', 'all'])('returns indicator.display_name for timeframe=%s', async (timeframe) => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/v1/indicators/${US_CPI_INDICATOR_ID}/comparison?fx_pair_id=${USDJPY_FX_PAIR_ID}&timeframe=${timeframe}`,
+        headers: { authorization: `Bearer ${historicalUser.accessToken}` },
+      });
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.indicator).toMatchObject({ code: 'US_CPI', display_name: '消費者物価指数（CPI）' });
     });
   });
 
@@ -493,7 +522,9 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
         headers: authHeader,
       });
       const body = JSON.parse(response.body);
-      expect(body.indicators.some((row: { code: string }) => row.code === 'US_CPI')).toBe(true);
+      const cpi = body.indicators.find((row: { code: string }) => row.code === 'US_CPI');
+      expect(cpi).toBeDefined();
+      expect(cpi.display_name).toBe('消費者物価指数（CPI）');
       expect(body.events).toBeUndefined();
     });
 

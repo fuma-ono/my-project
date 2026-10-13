@@ -9,6 +9,8 @@ export interface EventRow {
   status: string;
   data_status: string;
   indicator_name: string;
+  /** 一覧表示名(`economic_indicators.display_name`)。未登録はnull。 */
+  indicator_display_name: string | null;
   country_code: string;
   currency_code: string;
   favorable_direction: string;
@@ -18,7 +20,7 @@ export async function getEventById(supabase: SupabaseClient, eventId: string): P
   const { data, error } = await supabase
     .from('economic_events')
     .select(
-      'id, indicator_id, release_datetime, release_datetime_precision, importance, status, data_status, economic_indicators!inner(name, country_code, currency_code, favorable_direction)',
+      'id, indicator_id, release_datetime, release_datetime_precision, importance, status, data_status, economic_indicators!inner(name, display_name, country_code, currency_code, favorable_direction)',
     )
     .eq('id', eventId)
     .maybeSingle();
@@ -27,6 +29,7 @@ export async function getEventById(supabase: SupabaseClient, eventId: string): P
 
   const indicator = data.economic_indicators as unknown as {
     name: string;
+    display_name?: string | null;
     country_code: string;
     currency_code: string;
     favorable_direction: string;
@@ -41,6 +44,7 @@ export async function getEventById(supabase: SupabaseClient, eventId: string): P
     status: data.status,
     data_status: data.data_status,
     indicator_name: indicator.name,
+    indicator_display_name: indicator.display_name ?? null,
     country_code: indicator.country_code,
     currency_code: indicator.currency_code,
     favorable_direction: indicator.favorable_direction,

@@ -34,6 +34,7 @@ function indicator(overrides: Partial<IndicatorNotificationCandidate> = {}): Ind
     kind: 'INDICATOR',
     id: 'event-1',
     title: 'US Non-Farm Payrolls',
+    display_name: '非農業部門雇用者数（NFP）',
     importance: 'HIGH',
     status: 'SCHEDULED',
     scheduled_at: '2026-10-06T12:30:00+00:00',
@@ -70,6 +71,7 @@ describe('buildUpcomingNotifications', () => {
         kind: 'INDICATOR',
         id: 'event-1',
         title: 'US Non-Farm Payrolls',
+        display_name: '非農業部門雇用者数（NFP）',
         speaker_name: null,
         importance: 'HIGH',
         scheduled_at: '2026-10-06T12:30:00Z',
@@ -82,6 +84,7 @@ describe('buildUpcomingNotifications', () => {
         kind: 'SPEECH',
         id: 'speech-1',
         title: '経済見通しに関する講演',
+        display_name: null,
         speaker_name: 'ジェローム・パウエル',
         importance: 'HIGH',
         scheduled_at: '2026-10-07T16:00:00Z',
@@ -91,6 +94,12 @@ describe('buildUpcomingNotifications', () => {
         related_fx_pairs: ['EURUSD', 'USDJPY'],
       },
     ]);
+  });
+
+  it('returns display_name null for an indicator without a registered display name', () => {
+    const [item] = buildUpcomingNotifications(prefs, [indicator({ display_name: null })], window);
+    expect(item?.display_name).toBeNull();
+    expect(item?.title).toBe('US Non-Farm Payrolls');
   });
 
   it('returns nothing when push is off', () => {

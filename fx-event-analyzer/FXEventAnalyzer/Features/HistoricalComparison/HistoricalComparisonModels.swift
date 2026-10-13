@@ -48,6 +48,13 @@ struct ComparisonIndicatorSummary: Decodable, Equatable {
     let id: String
     let code: String
     let name: String
+    /// 一覧表示名(api-design v1.22)。古いBackendではnil。
+    var displayName: String? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case id, code, name
+        case displayName = "display_name"
+    }
 }
 
 /// api-design.md §22 — Backend-computed only; DATA_PENDING/DATA_UNAVAILABLE/

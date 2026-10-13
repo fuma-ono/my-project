@@ -36,8 +36,11 @@ struct EventDetailEvent: Decodable, Equatable {
     let status: EventStatus
     let dataStatus: DataQualityStatus
     let revisionStatus: RevisionStatus
+    /// 指標の一覧表示名(api-design v1.22)。古いBackendではnil。
+    var displayName: String? = nil
 
     enum CodingKeys: String, CodingKey {
+        case displayName = "display_name"
         case id
         case indicatorId = "indicator_id"
         case indicatorName = "indicator_name"

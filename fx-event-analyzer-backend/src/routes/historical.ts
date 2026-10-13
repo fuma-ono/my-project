@@ -64,6 +64,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
       event: {
         id: event.id,
         indicator_name: event.indicator_name,
+        display_name: event.indicator_display_name,
         release_datetime: event.release_datetime,
         importance: event.importance,
       },
@@ -116,7 +117,12 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
       const advanced = computeAdvancedHistoricalStats(rowsForStats);
 
       return {
-        indicator: { id: indicator.id, code: indicator.code, name: indicator.name },
+        indicator: {
+          id: indicator.id,
+          code: indicator.code,
+          name: indicator.name,
+          display_name: indicator.display_name,
+        },
         fx_pair_id: query.fx_pair_id,
         timeframe: query.timeframe,
         total_events: allEventIds.length,
@@ -149,7 +155,12 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
     });
 
     return {
-      indicator: { id: indicator.id, code: indicator.code, name: indicator.name },
+      indicator: {
+        id: indicator.id,
+        code: indicator.code,
+        name: indicator.name,
+        display_name: indicator.display_name,
+      },
       fx_pair_id: query.fx_pair_id,
       total_events: allEventIds.length,
       analyzable_events: analyzableEventIds.size,

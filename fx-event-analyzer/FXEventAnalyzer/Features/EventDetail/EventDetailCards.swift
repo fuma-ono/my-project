@@ -53,8 +53,7 @@ struct EventDetailCards: View {
         // 残したまま括弧で割るだけ)を使っていたため「米国CPI」が消えて
         // いなかった。Home/検索と同じ`CountryFlag.indicatorDisplayName`
         // (国名接頭辞を取り除く)に揃えた。
-        let display = CountryFlag.indicatorDisplayName(event.indicatorName, countryCode: event.countryCode)
-        let combinedName = display.abbreviation.map { "\(display.main)(\($0))" } ?? display.main
+        let combinedName = CountryFlag.indicatorDisplayText(event.indicatorName, countryCode: event.countryCode, displayName: event.displayName)
         // HQ指示(2026-10-13、2回目)「米国|USDの位置が指標名の下になるように」:
         // 国旗(34pt)と同じHStackの兄弟として2行目を置くと、国旗の高さ分
         // 2行目の位置が名前の直下からずれる。国旗はカラムとして分離し、

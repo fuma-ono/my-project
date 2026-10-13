@@ -759,8 +759,7 @@ struct HomeView: View {
             // 名前の長さで文字サイズを変える分岐はなくした。
             VStack(alignment: .leading, spacing: 1) {
                 let subtitle = Self.eventSubtitle(event)
-                let display = CountryFlag.indicatorDisplayName(event.indicatorName, countryCode: event.countryCode)
-                let combinedName = display.abbreviation.map { "\(display.main)(\($0))" } ?? display.main
+                let combinedName = CountryFlag.indicatorDisplayText(event.indicatorName, countryCode: event.countryCode, displayName: event.displayName)
                 // HQ指示(2026-10-11、16回目)「非農業部門雇用者数の経済指標
                 // マークをもう少し下げて」: バッジだけ少し下にずらす。
                 V5JPFont.text("経済指標", size: 5.3, weight: .semibold)
@@ -1056,7 +1055,7 @@ struct HomeView: View {
         switch item {
         case .event(let id, let countryCode, _, let name, let importance, let releaseDatetime):
             NavigationLink(value: AppRoute.eventDetail(id: id)) {
-                favoriteGridCardContent(countryCode: countryCode, name: Self.shortIndicatorName(name)) {
+                favoriteGridCardContent(countryCode: countryCode, name: name) {
                     dateRow(releaseDatetime)
                 } footer: {
                     statusBadge(importance.rawValue, colors: Self.importanceBadgeColors(importance), verticalPadding: 1)
@@ -1071,7 +1070,7 @@ struct HomeView: View {
         // まま)。
         case .indicator(let id, let countryCode, _, let name, let importance, let nextReleaseDatetime):
             NavigationLink(value: AppRoute.indicatorDetail(id: id)) {
-                favoriteGridCardContent(countryCode: countryCode, name: Self.shortIndicatorName(name)) {
+                favoriteGridCardContent(countryCode: countryCode, name: name) {
                     if let nextReleaseDatetime {
                         dateRow(nextReleaseDatetime)
                     } else {

@@ -27,7 +27,7 @@ struct IndicatorDetailCard: View {
                                 .foregroundStyle(V5P.cyan)
                             VStack(alignment: .leading, spacing: 2) {
                                 NotoText.text(Self.releaseLabel(next.releaseDatetime), size: 9.5).foregroundStyle(.white)
-                                NotoText.text("\(indicator.name)　|　\(CountryFlag.japaneseName(forCountry: indicator.countryCode))", size: 7)
+                                NotoText.text("\(CountryFlag.indicatorDisplayText(indicator.name, countryCode: indicator.countryCode, displayName: indicator.displayName))　|　\(CountryFlag.japaneseName(forCountry: indicator.countryCode))", size: 7)
                                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.8)
@@ -218,8 +218,7 @@ struct IndicatorDetailCard: View {
     /// 1行(`lineLimit(1)`)にし、収まらない場合だけ`minimumScaleFactor`で
     /// 縮小するようにした。
     private var nameText: some View {
-        let display = CountryFlag.indicatorDisplayName(indicator.name, countryCode: indicator.countryCode)
-        let combinedName = display.abbreviation.map { "\(display.main)(\($0))" } ?? display.main
+        let combinedName = CountryFlag.indicatorDisplayText(indicator.name, countryCode: indicator.countryCode, displayName: indicator.displayName)
         // `minimumScaleFactor`は指定した下限まで縮小しても入りきらない場合は
         // 「…」で省略してしまう(CI screenshotで確認、「消費者物価指数…」と
         // なり「(CPI)」が消えていた)。星マークの分だけ横幅が狭いこの画面

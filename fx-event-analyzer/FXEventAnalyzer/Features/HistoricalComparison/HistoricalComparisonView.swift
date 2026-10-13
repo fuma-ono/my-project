@@ -85,7 +85,8 @@ struct HistoricalComparisonView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         Text("過去の同一指標との比較").font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
                         HStack {
-                            Text("\(viewModel.indicatorName) (\(response.indicator.code))").font(.system(size: 8, weight: .semibold)).foregroundStyle(.white)
+                            // 表示名は全画面統一(HQ指示 2026-10-13)。
+                            Text(response.indicator.displayName ?? viewModel.indicatorName).font(.system(size: 8, weight: .semibold)).foregroundStyle(.white)
                             Spacer()
                             Text("直近\(response.events.count)回⌄").font(.system(size: 7)).foregroundStyle(.white).padding(5).background(V5P.panel2, in: Capsule())
                         }

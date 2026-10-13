@@ -22,11 +22,14 @@ struct HomeEventSummary: Decodable, Identifiable, Equatable {
     let surprise: Double?
     let surpriseDirection: SurpriseDirection?
     let relatedFxPairs: [RelatedFxPairSummary]
+    /// 一覧表示名(api-design v1.21)。古いBackendではnil。
+    var displayName: String? = nil
     /// 指標の単位(API v1.13、例: `%`・`千人`)。返さない古いBackendではnil。
     var unit: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case unit
+        case displayName = "display_name"
         case id = "event_id"
         case indicatorId = "indicator_id"
         case indicatorName = "indicator_name"

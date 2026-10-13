@@ -32,7 +32,7 @@ async function listIndicatorCandidates(
   const { data, error } = await supabase
     .from('economic_events')
     .select(
-      'id, indicator_id, release_datetime, release_datetime_precision, importance, status, economic_indicators!inner(name, country_code, currency_code)',
+      'id, indicator_id, release_datetime, release_datetime_precision, importance, status, economic_indicators!inner(name, display_name, country_code, currency_code)',
     )
     .eq('status', 'SCHEDULED')
     .gte('release_datetime', fromIso)
@@ -49,6 +49,7 @@ async function listIndicatorCandidates(
   return rows.map((row) => {
     const indicator = row.economic_indicators as unknown as {
       name: string;
+      display_name?: string | null;
       country_code: string;
       currency_code: string;
     };
@@ -56,6 +57,7 @@ async function listIndicatorCandidates(
       kind: 'INDICATOR' as const,
       id: row.id,
       title: indicator.name,
+      display_name: indicator.display_name ?? null,
       importance: row.importance,
       status: row.status,
       scheduled_at: row.release_datetime,

@@ -64,6 +64,8 @@ interface CandidateBase {
 export interface IndicatorNotificationCandidate extends CandidateBase {
   kind: 'INDICATOR';
   release_datetime_precision: string;
+  /** 一覧表示名(`economic_indicators.display_name`)。未登録はnull。 */
+  display_name?: string | null | undefined;
 }
 
 export interface SpeechNotificationCandidate extends CandidateBase {
@@ -77,6 +79,8 @@ export interface UpcomingNotificationItem {
   kind: 'INDICATOR' | 'SPEECH';
   id: string;
   title: string;
+  /** INDICATOR: 一覧表示名(未登録はnull)。SPEECH: 常にnull。 */
+  display_name: string | null;
   speaker_name: string | null;
   importance: string;
   scheduled_at: string;
@@ -229,6 +233,7 @@ export function buildUpcomingNotifications(
         kind: candidate.kind,
         id: candidate.id,
         title: candidate.title,
+        display_name: candidate.kind === 'INDICATOR' ? (candidate.display_name ?? null) : null,
         speaker_name: candidate.kind === 'SPEECH' ? candidate.speaker_name : null,
         importance: candidate.importance,
         scheduled_at: formatIsoSeconds(new Date(scheduledAtMs)),

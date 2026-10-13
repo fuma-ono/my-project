@@ -143,6 +143,10 @@ final class IndicatorDisplayNameTests: XCTestCase {
 
     func testNoAbbreviationWhenThereIsNoParenthesis() {
         XCTAssertNil(CountryFlag.indicatorDisplayName("FOMC政策金利", countryCode: "US").abbreviation)
+        // 表示名(DBのdisplay_name)があればそれを優先する。
+        XCTAssertEqual(CountryFlag.indicatorDisplayText("米国雇用統計(非農業部門雇用者数)", countryCode: "US", displayName: "非農業部門雇用者数（NFP）"), "非農業部門雇用者数（NFP）")
+        XCTAssertEqual(CountryFlag.indicatorDisplayName("x", countryCode: "US", displayName: "非農業部門雇用者数（NFP）").abbreviation, "NFP")
+        XCTAssertEqual(CountryFlag.indicatorDisplayText("米国CPI(消費者物価指数)", countryCode: "US", displayName: nil), "消費者物価指数（CPI）")
     }
 }
 

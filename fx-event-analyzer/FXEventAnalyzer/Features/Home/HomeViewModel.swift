@@ -195,7 +195,8 @@ final class HomeViewModel: ObservableObject {
                 id: response.event.id,
                 countryCode: response.event.countryCode,
                 currencyCode: response.event.currencyCode,
-                name: response.event.indicatorName,
+                // 表示名は全画面統一(HQ指示 2026-10-13)。
+                name: CountryFlag.indicatorDisplayText(response.event.indicatorName, countryCode: response.event.countryCode, displayName: response.event.displayName),
                 importance: response.event.importance,
                 releaseDatetime: response.event.releaseDatetime
             )
@@ -221,7 +222,7 @@ final class HomeViewModel: ObservableObject {
                 id: response.indicator.id,
                 countryCode: response.indicator.countryCode,
                 currencyCode: response.indicator.currencyCode,
-                name: response.indicator.name,
+                name: CountryFlag.indicatorDisplayText(response.indicator.name, countryCode: response.indicator.countryCode, displayName: response.indicator.displayName),
                 importance: response.indicator.importance,
                 nextReleaseDatetime: scheduledResponse.data.first?.releaseDatetime
             )

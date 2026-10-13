@@ -8,6 +8,7 @@ export interface IndicatorSearchRow {
   id: string;
   code: string;
   name: string;
+  display_name: string | null;
   country_code: string;
   currency_code: string;
 }
@@ -20,18 +21,19 @@ export async function searchIndicators(
   const escaped = escapeIlike(q);
   const { data, error } = await supabase
     .from('economic_indicators')
-    .select('id, code, name, country_code, currency_code')
+    .select('id, code, name, display_name, country_code, currency_code')
     .eq('is_active', true)
     .or(`name.ilike.%${escaped}%,code.ilike.%${escaped}%`)
     .limit(limit);
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).map((row) => ({ ...row, display_name: row.display_name ?? null }));
 }
 
 export interface EventSearchRow {
   id: string;
   indicator_id: string;
   indicator_name: string;
+  display_name: string | null;
   release_datetime: string;
   status: string;
 }
@@ -57,11 +59,12 @@ export async function searchEventsByIndicator(
     .limit(limit);
   if (error) throw error;
 
-  const nameById = new Map(indicators.map((indicator) => [indicator.id, indicator.name]));
+  const indicatorById = new Map(indicators.map((indicator) => [indicator.id, indicator]));
   return (data ?? []).map((row) => ({
     id: row.id,
     indicator_id: row.indicator_id,
-    indicator_name: nameById.get(row.indicator_id) ?? '',
+    indicator_name: indicatorById.get(row.indicator_id)?.name ?? '',
+    display_name: indicatorById.get(row.indicator_id)?.display_name ?? null,
     release_datetime: row.release_datetime,
     status: row.status,
   }));

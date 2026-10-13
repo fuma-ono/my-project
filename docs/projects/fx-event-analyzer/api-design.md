@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.21
+# FX Event Analyzer: API詳細設計書 v1.22
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -63,6 +63,7 @@
 - **v1.18**(2026-10-09): SCR-008 相場反応詳細の「一般的な見方」(HQ決定 2026-10-09)。`GET /indicators`・`GET /indicators/{id}`の`indicator`に`market_view_above`(結果が予想を上回ったときの一般的な見方)・`market_view_below`(下回ったとき)を追加(13.2節)。人が書いた日本語1文の定型文(AI生成ではない)で、未登録は`null`
 - **v1.20**(2026-10-13): SCR-005 指標一覧の次回発表(HQ指示 2026-10-13)。`GET /indicators`の各行と`GET /indicators/{id}`の`indicator`に`next_release_datetime`(次回発表日時。現在以降で最も早い`status = SCHEDULED`のEvent、無ければ`null`)・`next_event_id`(そのEventのID、無ければ`null`)・`latest_release_datetime`(最新の`status = RELEASED`のEventの発表日時、無ければ`null`。次回発表が無いときの表示用)を追加(13.2節)。`GET /indicators`の`sort`に`next_release`(次回発表の昇順、次回発表が無い指標は後ろ、同じなら名前順)を追加(13.1節)。既定の並び順(`name`)は変えない
 - **v1.21**(2026-10-13): 指標の一覧画面の表示名(HQ指示 2026-10-13)。`GET /indicators`の各行と`GET /indicators/{id}`の`indicator`に`display_name`(一覧画面の表示名。例: `消費者物価指数（CPI）`・`FOMC政策金利`。HQの表示名ルール(indicator-display-names.md)に従って人が登録した短い名前、未登録は`null`)を追加(13.2節)。同じ名前をどの画面でも使えるよう、`GET /calendar`の`INDICATOR`の行(14.6節、`SPEECH`は`null`)と`GET /home`の`events`(12章)にも`display_name`を追加。`name`・`title`・`indicator_name`は変えない
+- **v1.22**(2026-10-13): 指標の表示名をすべての画面に(HQ指示 2026-10-13)。v1.21の`display_name`(`economic_indicators.display_name`、未登録は`null`)を次にも追加: `GET /events/{event_id}`の`event`(14.1節)、`GET /events/{event_id}/history`の`event`(20章)、`GET /indicators/{indicator_id}/comparison`の`indicator`(21章、timeframe単一指定・`all`の両方)、`GET /notifications/upcoming`の各`items`(24.6節、`INDICATOR`のみ。`SPEECH`は`null`)、`GET /search`の`indicators`の各行と`events`の各行(23章)。`GET /indicators/{indicator_id}/events`の各行は指標名を持たないため追加しない。`name`・`title`・`indicator_name`は変えない
 
 ---
 
@@ -550,6 +551,10 @@ Response：
 ```json
 {
   "event": {
+    "id": "xxx",
+    "indicator_id": "xxx",
+    "indicator_name": "米国CPI(消費者物価指数)",
+    "display_name": "消費者物価指数（CPI）",
     "revision_status": "NONE"
   },
   "snapshot": {},
@@ -603,6 +608,8 @@ Event Detailでは以下を1回のAPIで取得可能とする。
 - 改定の有無を判定できる情報(下記14.3参照)
 
 Movement Chart等の比較的重いデータ、および特定timeframe・特定ペアの詳細Reaction、全revision履歴は別APIで取得する。
+
+**`event.display_name`(v1.22で追加)**: 指標の一覧画面の表示名(13.2節の`display_name`、未登録は`null`)。画面は`display_name`を指標名として表示し、`null`なら`indicator_name`(正式名)を表示する。`indicator_name`は変えない。
 
 **`major_fx_reactions`(v1.17で追加)**: SCR-007「主要通貨ペアの値動き(pips)」の表。行 = 通貨ペア、列 = `1m`・`5m`・`15m`。「通貨ペアを選択して詳細を見る」で選んだ行の`fx_pair_id`・`symbol`でSCR-008 相場反応詳細(18章)を開く。
 
@@ -868,6 +875,8 @@ Release時刻をChart上のEvent Markerとして表示できるデータ構造�
 
 Release時点のSnapshotを使用して過去イベントを再現する。Historical Event DetailからIndicator Detailへ遷移できるよう、`indicator_id`を必ず返す。
 
+`event`は`id`・`indicator_name`・`display_name`(v1.22で追加。13.2節の`display_name`、未登録は`null`)・`release_datetime`・`importance`。
+
 ---
 
 # 21. Historical Comparison API
@@ -897,11 +906,13 @@ Query：
 
 `GET /events/{event_id}/history`(20章)は1回分の発表を返すAPIで、過去の発表回の一覧を使わないため、上限の対象外(変更なし)。
 
+`indicator`は`id`・`code`・`name`・`display_name`(v1.22で追加。13.2節の`display_name`、未登録は`null`)。timeframe単一指定・`all`の両方で同じ形。
+
 ### 21.1 Response(timeframe単一指定時)
 
 ```json
 {
-  "indicator": {},
+  "indicator": { "id": "xxx", "code": "US_CPI", "name": "米国CPI(消費者物価指数)", "display_name": "消費者物価指数（CPI）" },
   "fx_pair": {},
   "timeframe": "5m",
   "total_events": 20,
@@ -939,7 +950,7 @@ Query：
 
 ```json
 {
-  "indicator": {},
+  "indicator": { "id": "xxx", "code": "US_CPI", "name": "米国CPI(消費者物価指数)", "display_name": "消費者物価指数（CPI）" },
   "fx_pair": {},
   "total_events": 20,
   "analyzable_events": 18,
@@ -1047,6 +1058,8 @@ type：all / indicator / event / fx_pair / currency
 **Currency**(v1.1で修正、A-5): `currency_code`(DB上のSource of Truth)に加え、**アプリケーション側の静的なCode→Nameマッピング**(例: `USD → US Dollar`、`JPY → Japanese Yen`、`EUR → Euro`)を用いてcurrency nameでも検索可能にする。DBに`currencies`マスタテーブルは追加しない。将来Currency情報が大幅に増える場合のみマスタテーブル化を再検討する。
 
 MVPでは部分一致検索。Full Text SearchはMVP対象外。
+
+**表示名(v1.22で追加)**: `indicators`の各行(`id`・`code`・`name`・`display_name`・`country_code`・`currency_code`)と`events`の各行(`id`・`indicator_id`・`indicator_name`・`display_name`・`release_datetime`・`status`)に`display_name`(13.2節、未登録は`null`)を返す。検索対象は変えない(`display_name`では検索しない)。
 
 ### 23.2 Search Index方針(v1.2で確定、B-5)
 
@@ -1229,6 +1242,7 @@ Response：
       "kind": "SPEECH",
       "id": "50000000-0000-0000-0000-000000000004",
       "title": "経済見通しに関する講演",
+      "display_name": null,
       "speaker_name": "ジェローム・パウエル",
       "importance": "HIGH",
       "scheduled_at": "2026-10-14T16:00:00Z",
@@ -1242,6 +1256,7 @@ Response：
 ```
 
 - `kind`：`INDICATOR`(`id` = `economic_events.id`、`title` = 指標名) / `SPEECH`(`id` = `speech_events.id`、`title` = 発言タイトル)
+- `display_name`(v1.22で追加)：INDICATORは指標の一覧画面の表示名(13.2節の`display_name`、未登録は`null`)、SPEECHは常に`null`。`title`(指標の正式名)は変えない
 - `speaker_name`：SPEECHのみ。INDICATORは`null`
 - `scheduled_at`：`release_datetime` / `statement_datetime`。`notify_at` = `scheduled_at` − `lead_minutes`。いずれも秒精度のUTC(`Z`、小数秒なし)
 - `related_fx_pairs`：INDICATOR = `indicator_fx_pairs`のsymbol(priority順)、SPEECH = 発言者の通貨をbaseまたはquoteに含む有効な`fx_pairs`のsymbol(symbol順)

@@ -178,6 +178,27 @@ enum CountryFlag {
     /// 名前(「FOMC政策金利」等)は main に名前そのものを返す。国名の判定は
     /// このファイルの`japaneseName(forCountry:)`(捏造のない既存の対応表)
     /// を再利用し、指標名の文字列だけから国や種別を推測しない。
+    /// HQ指示(2026-10-13)「表示名は全画面統一」: `displayName`(DBのdisplay_name、HQの表示名ルール
+    /// docs/projects/fx-event-analyzer/indicator-display-names.md)があればそれを使い、「（」の前と
+    /// カッコの中に分けて返す(「非農業部門雇用者数（NFP）」→ main「非農業部門雇用者数」/
+    /// abbreviation「NFP」)。無ければ、下の正式名からの規則で作る。
+    static func indicatorDisplayName(_ name: String, countryCode: String, displayName: String?) -> (main: String, abbreviation: String?) {
+        guard let displayName, !displayName.isEmpty else { return indicatorDisplayName(name, countryCode: countryCode) }
+        guard let open = displayName.firstIndex(where: { $0 == "（" || $0 == "(" }),
+              let close = displayName.lastIndex(where: { $0 == "）" || $0 == ")" }), open < close else {
+            return (displayName, nil)
+        }
+        let main = String(displayName[..<open])
+        let inner = String(displayName[displayName.index(after: open)..<close])
+        return main.isEmpty || inner.isEmpty ? (displayName, nil) : (main, inner)
+    }
+
+    /// 1つの文字列にした表示名(「消費者物価指数（CPI）」)。カッコは全角。
+    static func indicatorDisplayText(_ name: String, countryCode: String, displayName: String?) -> String {
+        let display = indicatorDisplayName(name, countryCode: countryCode, displayName: displayName)
+        return display.abbreviation.map { "\(display.main)（\($0)）" } ?? display.main
+    }
+
     static func indicatorDisplayName(_ name: String, countryCode: String) -> (main: String, abbreviation: String?) {
         guard let openIndex = name.firstIndex(where: { $0 == "(" || $0 == "（" }) else {
             return (name, nil)

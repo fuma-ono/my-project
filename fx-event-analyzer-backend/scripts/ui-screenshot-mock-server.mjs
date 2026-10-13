@@ -1038,6 +1038,7 @@ function eventDetailHandler(eventId) {
       id: eventId,
       indicator_id: INDICATOR_ID,
       indicator_name: INDICATOR_US_CPI.name,
+      display_name: INDICATOR_US_CPI.display_name,
       country_code: 'US',
       currency_code: 'USD',
       release_datetime: isUpcoming ? EVENT_UPCOMING_RELEASE_DATETIME : EVENT_RELEASE_DATETIME,
@@ -1287,6 +1288,7 @@ function eventHistoryHandler(eventId) {
     event: {
       id: eventId,
       indicator_name: INDICATOR_US_CPI.name,
+      display_name: INDICATOR_US_CPI.display_name,
       release_datetime: EVENT_RELEASE_DATETIME,
       importance: 'HIGH',
     },
@@ -1363,7 +1365,7 @@ function comparisonHandler(indicatorId, timeframe) {
       advanced_statistics: { available: true, required_entitlement: null, data: advanced },
     }));
     return {
-      indicator: { id: indicator.id, code: indicator.code, name: indicator.name },
+      indicator: { id: indicator.id, code: indicator.code, name: indicator.name, display_name: indicator.display_name },
       fx_pair_id: FX_PAIR_ID,
       total_events: events.length,
       analyzable_events: events.length,
@@ -1376,7 +1378,7 @@ function comparisonHandler(indicatorId, timeframe) {
 
   const base = TIMEFRAME_REACTIONS[timeframe] ?? TIMEFRAME_REACTIONS['5m'];
   return {
-    indicator: { id: indicator.id, code: indicator.code, name: indicator.name },
+    indicator: { id: indicator.id, code: indicator.code, name: indicator.name, display_name: indicator.display_name },
     fx_pair_id: FX_PAIR_ID,
     timeframe,
     total_events: events.length,
@@ -1600,6 +1602,9 @@ function upcomingNotificationsHandler() {
     kind,
     id,
     title,
+    // INDICATOR: 一覧表示名(economic_indicators.display_name)。SPEECH: 常にnull。
+    display_name:
+      kind === 'INDICATOR' ? (ALL_MOCK_INDICATORS.find((row) => row.name === title)?.display_name ?? null) : null,
     speaker_name: speakerName,
     importance,
     scheduled_at: isoSecondsPlusMinutes(scheduledInMinutes),

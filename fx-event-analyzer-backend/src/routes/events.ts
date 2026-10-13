@@ -81,6 +81,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
         id: event.id,
         indicator_id: event.indicator_id,
         indicator_name: event.indicator_name,
+        display_name: event.indicator_display_name,
         country_code: event.country_code,
         currency_code: event.currency_code,
         release_datetime: event.release_datetime,

@@ -250,7 +250,8 @@ private struct CalendarDayList: View {
                 .foregroundStyle(.white)
                 .frame(width: 23, alignment: .leading)
             // 指標名はホームと同じくカッコの前まで(正式名は詳細画面)。
-            NotoText.text(item.kind == .indicator ? HomeView.shortIndicatorName(item.title) : item.title, size: 9)
+            // 表示名は全画面統一(HQ指示 2026-10-13)。
+            NotoText.text(item.kind == .indicator ? CountryFlag.indicatorDisplayText(item.title, countryCode: item.countryCode, displayName: item.displayName) : item.title, size: 9)
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)

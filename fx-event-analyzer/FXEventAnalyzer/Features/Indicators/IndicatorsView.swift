@@ -184,8 +184,8 @@ struct IndicatorsView: View {
                     .background(colors.fill, in: Capsule())
                     .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
             }
-            // 名前は1行なので、行の高さは名前12+国名9でそろう。
-            .frame(height: 22)
+            // 名前は1行なので、行の高さは名前14+国名9でそろう。
+            .frame(height: 24)
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 5)
@@ -199,28 +199,20 @@ struct IndicatorsView: View {
         return NotoText.text(full, size: 9.5)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
-            .frame(height: 12, alignment: .leading)
+            // 高さ12では9.5の文字の行の高さに足りず、どの名前も縮んでいた(2026-10-13)。
+            .frame(height: 14, alignment: .leading)
             .foregroundStyle(.white)
     }
 
     /// 名前と、カッコに入れる部分(無ければnil)。カッコの無い名前は先頭の国名を外す
     /// (下に国名を出すので。「米国小売売上高」→「小売売上高」)。
     static func listNameParts(_ name: String, countryCode: String, displayName: String? = nil) -> (main: String, suffix: String?) {
-        // HQの表示名ルールの名前(DBのdisplay_name)があればそれを使い、カッコで2つに分ける。
-        if let displayName, !displayName.isEmpty {
-            guard let open = displayName.firstIndex(where: { $0 == "（" || $0 == "(" }),
-                  let close = displayName.lastIndex(where: { $0 == "）" || $0 == ")" }), open < close else {
-                return (displayName, nil)
-            }
-            let main = String(displayName[..<open])
-            let suffix = String(displayName[displayName.index(after: open)..<close])
-            return main.isEmpty || suffix.isEmpty ? (displayName, nil) : (main, suffix)
-        }
-        let display = CountryFlag.indicatorDisplayName(name, countryCode: countryCode)
-        if let abbreviation = display.abbreviation { return (display.main, abbreviation) }
+        let display = CountryFlag.indicatorDisplayName(name, countryCode: countryCode, displayName: displayName)
+        if display.abbreviation != nil { return (display.main, display.abbreviation) }
+        // カッコの無い名前は先頭の国名を外す(下に国名を出すので。「米国小売売上高」→「小売売上高」)。
         let country = CountryFlag.japaneseName(forCountry: countryCode)
         var main = display.main
-        if main.hasPrefix(country), main.count > country.count { main = String(main.dropFirst(country.count)) }
+        if displayName == nil, main.hasPrefix(country), main.count > country.count { main = String(main.dropFirst(country.count)) }
         return (main, nil)
     }
 

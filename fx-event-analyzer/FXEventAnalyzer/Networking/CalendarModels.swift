@@ -16,6 +16,8 @@ struct CalendarItem: Decodable, Equatable, Identifiable {
     let id: String
     /// 指標の行の指標ID(api-design v1.16)。発言と古いBackendではnil。
     var indicatorId: String? = nil
+    /// 指標の一覧表示名(api-design v1.21)。発言と古いBackendではnil。
+    var displayName: String? = nil
     let title: String
     let speakerName: String?
     let countryCode: String
@@ -31,6 +33,7 @@ struct CalendarItem: Decodable, Equatable, Identifiable {
         case kind, id, title, importance, datetime, status
         case speakerName = "speaker_name"
         case indicatorId = "indicator_id"
+        case displayName = "display_name"
         case countryCode = "country_code"
         case currencyCode = "currency_code"
         case datetimePrecision = "datetime_precision"
