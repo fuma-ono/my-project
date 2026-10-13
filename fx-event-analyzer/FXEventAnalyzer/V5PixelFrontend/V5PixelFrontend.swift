@@ -1237,9 +1237,11 @@ struct V5Header: View {
     /// (Home側で実際に省略記号の回帰が起きた教訓から、今回は事前に入れて
     /// おく)。
     private static let mainTabTitleSize = V5P.ptToV5(44)
-    private static let detailTitleSize = V5P.ptToV5(44)
+    // HQ指示(2026-10-13)「＜が付く画面は...文字サイズを2つ小さくして」: 44→42。
+    private static let detailTitleSize = V5P.ptToV5(42)
     private static let chevronSize = V5P.ptToV5(26)
-    private static let chevronTitleGap = V5P.ptToV5(8)
+    /// HQ指示(2026-10-13)「＜戻るとする」の「戻る」の文字サイズ。
+    private static let backLabelSize = V5P.ptToV5(18)
     /// HQ指示(2026-10-04)「FX Event Analyzerと＜が付く画面を除くヘッダーは
     /// 文字の開始をもう少し右側にしてください」: Home(`homeHeader`、別実装)
     /// と＜付き詳細画面(`back == true`)は対象外、戻るボタンの無いメインタブ
@@ -1283,40 +1285,62 @@ struct V5Header: View {
     /// だけ追加で2pt(V5単位1.16)引き上げ、34.9に変更した。
     private static let headerCenterY: CGFloat = 34.9
 
+    /// HQ指示(2026-10-13)「＜戻るとする」「＜が付く画面は中央ぞろえにして
+    /// 文字サイズを2つ小さくして」「＜戻るは水色文字で」: 戻るボタン付き
+    /// 画面(`back == true`)は、タイトルを戻るボタン・星の有無に関係なく
+    /// ヘッダー全幅の中央に置きたいため、タイトルと左右のコントロール
+    /// (戻るボタン/星)を別レイヤー(ZStack)にした。メインタブ画面
+    /// (`back == false`)は対象外のため、従来どおり左寄せのHStackのまま。
     var body: some View {
-        HStack(spacing: 0) {
+        ZStack {
             if back {
-                Button {
-                    onBack?()
-                } label: {
-                    Image(systemName: "chevron.left").font(.system(size: Self.chevronSize, weight: .semibold))
-                }.buttonStyle(.plain)
-                .offset(y: Self.chevronVerticalCorrection)
-                .padding(.trailing, Self.chevronTitleGap)
-                .accessibilityIdentifier("v5HeaderBack")
-            }
-            V5JPFont.text(title, size: back ? Self.detailTitleSize : Self.mainTabTitleSize)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .padding(.leading, back ? 0 : Self.mainTabTitleLeadingInset)
-            Spacer()
-            // HQ指示(2026-10-01、3回目のヘッダー調整): アイコンのウェイトを
-            // タイトルのSemiboldと揃える(以前は無指定＝regularだった)。
-            // HQ指示(2026-10-02)「タップ時にオンオフに切り替えられて」:
-            // `FavoritesStore`(UserDefaults永続化)と連動する実際のトグルに
-            // した。バックエンドのお気に入りAPIは引き続き無いため、端末
-            // ローカルの状態のみ(ログアウト/再インストールで消える)。
-            if let isFavorite {
-                Button {
-                    onToggleFavorite?()
-                } label: {
-                    Image(systemName: isFavorite ? "star.fill" : "star")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(V5P.yellow)
+                V5JPFont.text(title, size: Self.detailTitleSize)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            } else {
+                HStack(spacing: 0) {
+                    V5JPFont.text(title, size: Self.mainTabTitleSize)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .padding(.leading, Self.mainTabTitleLeadingInset)
+                    Spacer(minLength: 0)
                 }
-                .buttonStyle(.plain)
-                .offset(y: Self.starVerticalCorrection)
-                .accessibilityIdentifier("v5HeaderFavoriteStar")
+            }
+            HStack(spacing: 0) {
+                if back {
+                    Button {
+                        onBack?()
+                    } label: {
+                        HStack(spacing: 2) {
+                            Image(systemName: "chevron.left").font(.system(size: Self.chevronSize, weight: .semibold))
+                            V5JPFont.text("戻る", size: Self.backLabelSize)
+                        }
+                        .foregroundStyle(V5P.cyan)
+                    }
+                    .buttonStyle(.plain)
+                    .offset(y: Self.chevronVerticalCorrection)
+                    .accessibilityIdentifier("v5HeaderBack")
+                }
+                Spacer(minLength: 0)
+                // HQ指示(2026-10-01、3回目のヘッダー調整): アイコンのウェイトを
+                // タイトルのSemiboldと揃える(以前は無指定＝regularだった)。
+                // HQ指示(2026-10-02)「タップ時にオンオフに切り替えられて」:
+                // `FavoritesStore`(UserDefaults永続化)と連動する実際のトグルに
+                // した。バックエンドのお気に入りAPIは引き続き無いため、端末
+                // ローカルの状態のみ(ログアウト/再インストールで消える)。
+                if let isFavorite {
+                    Button {
+                        onToggleFavorite?()
+                    } label: {
+                        Image(systemName: isFavorite ? "star.fill" : "star")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(V5P.yellow)
+                    }
+                    .buttonStyle(.plain)
+                    .offset(y: Self.starVerticalCorrection)
+                    .accessibilityIdentifier("v5HeaderFavoriteStar")
+                }
             }
         }
         .foregroundStyle(.white)
