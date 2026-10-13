@@ -143,7 +143,7 @@ final class NotificationsStoreTests: XCTestCase {
 
     func testDeliveredEntriesAreNewestFirstAndCapped() {
         let store = makeStore()
-        let many = (0..<(NotificationsStore.deliveredLimit + 5)).map { entry("\($0)", minutesFromBase: -Double(100 - $0)) }
+        let many = (0..<(NotificationsStore.deliveredLimit + 5)).map { entry("\($0)", minutesFromBase: -Double(1000 - $0)) }
 
         store.record(many, now: base)
 
