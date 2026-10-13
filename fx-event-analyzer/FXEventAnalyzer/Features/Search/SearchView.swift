@@ -200,7 +200,9 @@ struct SearchView: View {
 
     private var popularKeywordsPanel: some View {
         VStack(alignment: .leading, spacing: 8) {
-            NotoText.text("人気の検索キーワード", size: 10)
+            // HQ指示(2026-10-13)「人気の検索キーワードの文字サイズを1
+            // 大きくして」: 10→11。
+            NotoText.text("人気の検索キーワード", size: 11)
                 .foregroundStyle(.white)
 
             let rows = Self.popularKeywords.chunked(into: 4)
@@ -269,14 +271,17 @@ struct SearchView: View {
             // 同じ14ptに縮小(22→14)。HQ指示(2026-10-11、9回目)「国旗マークを
             // 少し大きくして」で14→16に微調整。
             CountryFlagView(countryCode: entry.countryCode, diameter: 16)
-            NotoText.text(entry.term, size: 10.5).foregroundStyle(.white).lineLimit(1)
+            // HQ指示(2026-10-13)「最近の検索履歴の米国CPIの文字サイズを
+            // 0.5小さくして」: 10.5→10。
+            NotoText.text(entry.term, size: 10).foregroundStyle(.white).lineLimit(1)
             Spacer()
             // HQ指示(2026-10-11、8回目)「＞の文字サイズを米国CPIと同じに」:
-            // エントリ文字サイズ(10.5)に揃えた。
-            Image(systemName: "chevron.right").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(V5P.muted)
+            // エントリ文字サイズに揃えた。
+            Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(V5P.muted)
         }
         .padding(.horizontal, 8)
-        .frame(height: 36)
+        // HQ指示(2026-10-13)「枠の高さも少し小さくして」: 36→32。
+        .frame(height: 32)
         // HQ指示(2026-10-11、10回目)「最近の検索結果の枠の色を人気の検索
         // キーワードと同じにして」: `popularKeywordsPanel`と同じ
         // `popularPanelFill`/枠線不透明度0.3に揃えた。

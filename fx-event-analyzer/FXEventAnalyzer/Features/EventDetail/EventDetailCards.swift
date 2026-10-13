@@ -55,17 +55,12 @@ struct EventDetailCards: View {
         // (国名接頭辞を取り除く)に揃えた。
         let display = CountryFlag.indicatorDisplayName(event.indicatorName, countryCode: event.countryCode)
         let combinedName = display.abbreviation.map { "\(display.main)(\($0))" } ?? display.main
-        // HQ指示(2026-10-12、7回目)「経済指標の位置は米国と横のラインを
-        // 揃えて」: 1行目=国旗+名前+HIGH、2行目=categoryBadge+国|通貨+日時、
-        // という2行のVStackに作り直した。`categoryBadge`と「米国|USD」が
-        // 同じHStackの兄弟になるため、縦位置が自然に揃う。副次効果として、
-        // 1行目の名前列の横幅は国旗(28pt)だけで決まり`categoryBadge`の
-        // 横幅に影響されなくなった(以前`VStack`で縦に並べていたときに
-        // 発生していた「CPIの部分が余分に折り返される」問題も合わせて
-        // 解消)。
+        // HQ指示(2026-10-13)「経済指標バッジはいらない、その分米国と
+        // USDと時刻を上にあげて」: categoryBadgeを削除し、2行目は国|通貨
+        // +日時だけにした。国旗は指標詳細のヘッダーと同じ34ptに揃えた。
         return VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top, spacing: 8) {
-                CountryFlagView(countryCode: event.countryCode, diameter: 28)
+                CountryFlagView(countryCode: event.countryCode, diameter: 34)
                 HStack(alignment: .top, spacing: 6) {
                     // 1行に収まる場合はそのまま、収まらない場合だけ
                     // 名前本体と(略称)を2行に分ける。
@@ -91,18 +86,15 @@ struct EventDetailCards: View {
                         .padding(.top, 2)
                 }
             }
-            HStack(alignment: .center, spacing: 8) {
-                categoryBadge
-                HStack(spacing: 6) {
-                    NotoText.text("\(CountryFlag.japaneseName(forCountry: event.countryCode))　|　\(event.currencyCode)", size: 8.5)
-                        .foregroundStyle(SettingsCardStyle.subtitleColor)
-                    Spacer(minLength: 4)
-                    // HQ指示(2026-10-12、6回目)「日時の文字サイズを0.5下げて」:
-                    // 8.5→8。
-                    NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 8)
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                }
+            HStack(spacing: 6) {
+                NotoText.text("\(CountryFlag.japaneseName(forCountry: event.countryCode))　|　\(event.currencyCode)", size: 8.5)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                Spacer(minLength: 4)
+                // HQ指示(2026-10-12、6回目)「日時の文字サイズを0.5下げて」:
+                // 8.5→8。
+                NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 8)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
             }
         }
         .padding(.leading, 10)
@@ -115,22 +107,6 @@ struct EventDetailCards: View {
         .padding(.trailing, 4)
         .frame(width: 214, alignment: .leading)
     }
-
-    /// `HomeView`/`SearchView`の「経済指標」バッジ(`economicIndicatorBadgeColor`)
-    /// と同じ色。アイコンは`NotificationListView.icon(for:)`の指標種別
-    /// (`calendar`)に合わせた。
-    private var categoryBadge: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "calendar").font(.system(size: 6.5, weight: .semibold))
-            NotoText.text("経済指標", size: 7).tracking(-0.3)
-        }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 5)
-        .padding(.vertical, 2.5)
-        .background(Self.categoryBadgeColor, in: Capsule())
-    }
-
-    private static let categoryBadgeColor = Color(red: 0.0 / 255, green: 118.0 / 255, blue: 234.0 / 255)
 
     // MARK: - 結果・予想・前回
 
@@ -148,7 +124,13 @@ struct EventDetailCards: View {
         }
         // HQ指示(2026-10-12、4回目、参考画像)「結果予想の縦幅の違い」:
         // 8→6に詰めてカードの高さを参考画像に合わせた。
-        .padding(.vertical, 6)
+        // HQ指示(2026-10-13)「要人発言の発言枠が広すぎるから縦幅をもう
+        // 少し小さくして」: 6→4にさらに詰め、`summaryCardMinHeight`も
+        // 合わせて下げた(このカードの内容自体は新しいminHeightより
+        // わずかに低いだけなので、この縮小をしないと従来どおり
+        // `results`側だけ元の高さのまま残り、`statementCard`との位置が
+        // また揃わなくなる)。
+        .padding(.vertical, 4)
         // HQ指示(2026-10-12、8回目)「要人発言の通貨ペアはイベント詳細と
         // 同じ位置にして」: 要人発言側の`statementCard`(発言内容)はこの
         // `results`より内容が短く縦幅が小さいため、値動き表の開始位置が
@@ -166,7 +148,7 @@ struct EventDetailCards: View {
     /// の両方に使う共通の最低高さ。内容の短い方(通常は`statementCard`)を
     /// 底上げし、後に続く値動き表の開始位置を画面間で揃える。別ファイルの
     /// `SpeechDetailCards`から参照するため`private`にしない。
-    static let summaryCardMinHeight: CGFloat = 60
+    static let summaryCardMinHeight: CGFloat = 56
 
     private var divider: some View {
         Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 0.5, height: 50)

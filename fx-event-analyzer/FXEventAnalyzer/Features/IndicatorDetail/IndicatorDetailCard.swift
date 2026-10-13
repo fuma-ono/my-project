@@ -76,8 +76,11 @@ struct IndicatorDetailCard: View {
             if let description = indicator.description, !description.isEmpty {
                 separator
                 section("概要") {
+                    // HQ指示(2026-10-13)「概要の文字の色を対象国・地域と
+                    // 同じ色にして」: `.white.opacity(0.85)`から、infoTableの
+                    // `value()`(対象国・地域など)と同じ`.white`に揃えた。
                     NotoText.text(description, size: 8.5)
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(.white)
                         .lineSpacing(1)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -176,28 +179,24 @@ struct IndicatorDetailCard: View {
         }
     }
 
-    /// HQ指示(2026-10-09)「名前を途中で折り返さないように、(で折り返すとか」: 1行に
-    /// 入ればそのまま、入らなければカッコの前で改行する(「米国CPI」/「(消費者物価指数)」)。
+    /// HQ指示(2026-10-13)「指標名が米国CPIのままになっているから修正して」:
+    /// 国名接頭辞を残したまま括弧で割るだけの独自ロジックだったため「米国CPI」が
+    /// 消えていなかった。Home/検索/イベント詳細と同じ`CountryFlag.
+    /// indicatorDisplayName`(国名接頭辞を取り除く)に揃えた — 1行に入れば
+    /// そのまま、入らなければ略称の前で改行する。
     private var nameText: some View {
-        let parts = Self.splitName(indicator.name)
+        let display = CountryFlag.indicatorDisplayName(indicator.name, countryCode: indicator.countryCode)
+        let combinedName = display.abbreviation.map { "\(display.main)(\($0))" } ?? display.main
         return ViewThatFits(in: .horizontal) {
-            NotoText.text(indicator.name, size: 10.5).lineLimit(1).fixedSize()
+            NotoText.text(combinedName, size: 10.5).lineLimit(1)
             VStack(alignment: .leading, spacing: 1) {
-                NotoText.text(parts.main, size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
-                if let paren = parts.paren {
-                    NotoText.text(paren, size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
+                NotoText.text(display.main, size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
+                if let abbreviation = display.abbreviation {
+                    NotoText.text("(\(abbreviation))", size: 10.5).lineLimit(1).minimumScaleFactor(0.8)
                 }
             }
         }
         .foregroundStyle(.white)
-    }
-
-    /// 「米国CPI(消費者物価指数)」→ ("米国CPI", "(消費者物価指数)")。カッコが無ければ全体を1行目に。
-    static func splitName(_ name: String) -> (main: String, paren: String?) {
-        guard let index = name.firstIndex(where: { $0 == "(" || $0 == "（" }), index != name.startIndex else {
-            return (name, nil)
-        }
-        return (String(name[..<index]), String(name[index...]))
     }
 
     private func chip(@ViewBuilder _ content: () -> some View) -> some View {

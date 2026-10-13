@@ -92,7 +92,8 @@ private struct CalendarMonthCard: View {
                 monthButton(systemName: "chevron.left.2", label: "前の年", value: -12)
                 monthButton(systemName: "chevron.left", label: "前の月", value: -1)
                 Spacer()
-                NotoText.text(viewModel.monthTitle, size: 10.5).foregroundStyle(.white)
+                // HQ指示(2026-10-13)「2026年10月の文字サイズを1大きくして」: 10.5→11.5。
+                NotoText.text(viewModel.monthTitle, size: 11.5).foregroundStyle(.white)
                 Spacer()
                 monthButton(systemName: "chevron.right", label: "次の月", value: 1)
                 monthButton(systemName: "chevron.right.2", label: "次の年", value: 12)

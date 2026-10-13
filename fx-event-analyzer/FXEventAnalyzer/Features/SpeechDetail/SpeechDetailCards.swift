@@ -46,22 +46,21 @@ struct SpeechDetailCards: View {
     /// ——「HIGHの下に日時がある」の並びに合わせた。
     private var header: some View {
         let speaker = response.speaker
-        // HQ指示(2026-10-12、7回目)「経済指標の位置は米国と横のラインを
-        // 揃えて」(要人発言も同様に揃える): 1行目=アイコン+名前+HIGH、
-        // 2行目=categoryBadge+国|組織+日時、という2行のVStackに作り直した。
-        // `categoryBadge`と「米国|FRB」が同じHStackの兄弟になるため、
-        // 縦位置が自然に揃う(`EventDetailCards.header`と同じ構成)。
+        // HQ指示(2026-10-13)「要人発言バッジはいらない、その分米国と
+        // FRBと時刻を上にあげて」: categoryBadgeを削除し、2行目は国|組織
+        // +日時だけにした。
         return VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .top, spacing: 8) {
                 // HQ指示(2026-10-12)「要人発言者は国旗マークでいいのか？」:
                 // 国旗は国を表すもので話者本人を表すものではないため、
                 // 人物を表す汎用アイコンに変更した。実在の写真データは無く、
                 // 捏造もしないため、国情報は下の「国|組織」の行にテキストで
-                // 残す。
+                // 残す。人物アイコンの大きさは指標詳細のヘッダー国旗と
+                // 同じ34ptに揃えた(HQ指示 2026-10-13)。
                 Image(systemName: "person.crop.circle.fill")
                     .resizable()
                     .foregroundStyle(V5P.cyan)
-                    .frame(width: 28, height: 28)
+                    .frame(width: 34, height: 34)
                 HStack(alignment: .top, spacing: 6) {
                     // 長い実名(「クリストファー・ウォラー」等)でも省略
                     // されないよう、1行に収まらなければ自然に2行へ折り返す。
@@ -80,18 +79,15 @@ struct SpeechDetailCards: View {
                         .padding(.top, 2)
                 }
             }
-            HStack(alignment: .center, spacing: 8) {
-                categoryBadge
-                HStack(spacing: 6) {
-                    NotoText.text("\(CountryFlag.japaneseName(forCountry: speaker.countryCode))　|　\(speaker.organization)", size: 8.5)
-                        .foregroundStyle(SettingsCardStyle.subtitleColor)
-                    Spacer(minLength: 4)
-                    // HQ指示(2026-10-12、6回目)「日時の文字サイズを0.5下げて」:
-                    // 8.5→8。
-                    NotoText.text("\(AppPreferences.shared.dateString(response.statementDatetime)) \(AppPreferences.shared.timeString(response.statementDatetime))", size: 8)
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                }
+            HStack(spacing: 6) {
+                NotoText.text("\(CountryFlag.japaneseName(forCountry: speaker.countryCode))　|　\(speaker.organization)", size: 8.5)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                Spacer(minLength: 4)
+                // HQ指示(2026-10-12、6回目)「日時の文字サイズを0.5下げて」:
+                // 8.5→8。
+                NotoText.text("\(AppPreferences.shared.dateString(response.statementDatetime)) \(AppPreferences.shared.timeString(response.statementDatetime))", size: 8)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
             }
         }
         .padding(.leading, 10)
@@ -104,22 +100,6 @@ struct SpeechDetailCards: View {
         .padding(.trailing, 4)
         .frame(width: 214, alignment: .leading)
     }
-
-    /// `NotificationListView`の要人発言の色(紫)・アイコン(`person.fill`)に
-    /// 合わせた(`EventDetailCards.categoryBadge`の「経済指標」と対になる
-    /// 要人発言の種別バッジ)。
-    private var categoryBadge: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "person.fill").font(.system(size: 6.5, weight: .semibold))
-            NotoText.text("要人発言", size: 7).tracking(-0.3)
-        }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 5)
-        .padding(.vertical, 2.5)
-        .background(Self.categoryBadgeColor, in: Capsule())
-    }
-
-    private static let categoryBadgeColor = Color(red: 0.42, green: 0.30, blue: 0.92)
 
     // MARK: - 発言内容
 
