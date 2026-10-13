@@ -149,9 +149,21 @@ struct EventDetailCards: View {
         // HQ指示(2026-10-12、4回目、参考画像)「結果予想の縦幅の違い」:
         // 8→6に詰めてカードの高さを参考画像に合わせた。
         .padding(.vertical, 6)
-        .frame(width: 214)
+        // HQ指示(2026-10-12、8回目)「要人発言の通貨ペアはイベント詳細と
+        // 同じ位置にして」: 要人発言側の`statementCard`(発言内容)はこの
+        // `results`より内容が短く縦幅が小さいため、値動き表の開始位置が
+        // 画面間でずれていた。両方に同じ`summaryCardMinHeight`を与え、
+        // ヘッダーの下のカードの高さを揃えることで値動き表の位置も揃えた
+        // (`SpeechDetailCards.statementCard`と対になる変更)。
+        .frame(width: 214, minHeight: Self.summaryCardMinHeight)
         .background(AccountCardBackground())
     }
+
+    /// `results`(イベント詳細)と`SpeechDetailCards.statementCard`(要人発言)
+    /// の両方に使う共通の最低高さ。内容の短い方(通常は`statementCard`)を
+    /// 底上げし、後に続く値動き表の開始位置を画面間で揃える。別ファイルの
+    /// `SpeechDetailCards`から参照するため`private`にしない。
+    static let summaryCardMinHeight: CGFloat = 60
 
     private var divider: some View {
         Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 0.5, height: 50)

@@ -144,7 +144,13 @@ struct SpeechDetailCards: View {
         // HQ指示(2026-10-12、7回目)「発言の枠をもう少し大きくして」:
         // パディングを10→14に広げた。
         .padding(14)
-        .frame(width: 214, alignment: .leading)
+        // HQ指示(2026-10-12、8回目)「要人発言の通貨ペアはイベント詳細と
+        // 同じ位置にして」: この`statementCard`(発言内容、特に「この発言は
+        // まだ行われていません。」のような1行の状態文)は`EventDetailCards.
+        // results`(結果/予想/前回カード)より内容が短く縦幅が小さいため、
+        // 値動き表の開始位置が画面間でずれていた。`EventDetailCards.
+        // summaryCardMinHeight`と同じ最低高さを与えて揃えた。
+        .frame(width: 214, minHeight: EventDetailCards.summaryCardMinHeight, alignment: .leading)
         .background(AccountCardBackground())
     }
 
