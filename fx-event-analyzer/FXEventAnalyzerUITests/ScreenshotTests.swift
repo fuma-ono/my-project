@@ -249,7 +249,10 @@ final class ScreenshotTests: XCTestCase {
         capture("11b-Search-Results")
         // 2026-10-13: 検索欄を指標一覧と同じ見た目にした後、キーボードが出たままだと
         // 結果の行が押せる状態と判定されずタップに失敗したので、先にキーボードを閉じる。
-        searchField.typeText("\n")
+        // iPadはキーボードを出したままで押せていて、閉じると逆に押せなくなったのでiPhoneだけ。
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            searchField.typeText("\n")
+        }
 
         // 「最近の検索履歴」にデータが入った状態(HQ指示 2026-10-09、7回目
         // 「最近の検索お表示見たいから何か1つデータを入れて」)。架空データは
