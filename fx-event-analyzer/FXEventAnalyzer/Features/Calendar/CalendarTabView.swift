@@ -213,6 +213,9 @@ private struct CalendarMonthCard: View {
             // 比率は1辺の約1/4)で、塗りはシアンより青寄りの色(概ねV5P.blueに近い)
             // だった。円から角丸四角(cornerRadius 6、continuousカーブ)に変更し、
             // 色もV5P.cyanからV5P.blueへ、周囲にうっすら光彩(shadow)も追加した。
+            // HQ指示(2026-10-13、4回目)「もう少し広げて。13日の枠いっぱいに」:
+            // 固定サイズ(cellHeight-2の正方形)ではなく、マスの幅いっぱい・高さ
+            // いっぱい(ごく薄い余白のみ)に広げた。
             ZStack {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(isSelected ? V5P.blue : .clear)
@@ -221,7 +224,8 @@ private struct CalendarMonthCard: View {
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .stroke(V5P.blue.opacity(isToday && !isSelected ? 0.8 : 0), lineWidth: 0.8)
                     )
-                    .frame(width: Self.cellHeight - 2, height: Self.cellHeight - 2)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(1)
                 Text("\(calendar.component(.day, from: day))")
                     .font(.system(size: 8.5, weight: .semibold))
                     .monospacedDigit()
