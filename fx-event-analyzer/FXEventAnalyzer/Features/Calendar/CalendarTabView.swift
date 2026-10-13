@@ -51,6 +51,14 @@ struct CalendarTabView: View {
         case .loaded:
             VStack(alignment: .leading, spacing: 8) {
                 CalendarMonthCard(viewModel: viewModel) { planPrompt = CalendarViewModel.needsProMessage }
+                // HQ指示(2026-10-13)「経済指標カレンダー画面を画像のようにして」:
+                // カレンダーの点と同じ意味(重要度)の凡例を追加した。画像の
+                // 「経済指標/要人発言/中央銀行」という3分類は実データ(kind/
+                // organization)から判定するルールが定まらなかったため、
+                // HQ回答「色は今のままのルールでいい」に従い、色分けの基準
+                // (重要度 高/中/低)はそのまま変えず、ラベルだけ実態に
+                // 合わせた。
+                importanceLegend
                 NotoText.text(viewModel.selectedTitle, size: 10)
                     .foregroundStyle(SettingsListLayout.sectionTitleColor)
                     .padding(.horizontal, 4)
@@ -63,6 +71,23 @@ struct CalendarTabView: View {
             .padding(.top, 6)
             .frame(width: V5P.W, height: 398, alignment: .top)
             .position(x: V5P.W / 2, y: 54 + 398 / 2)
+        }
+    }
+
+    /// カレンダーの点と同じ色(`HomeView.importanceBadgeColors`)の凡例。
+    private var importanceLegend: some View {
+        HStack(spacing: 10) {
+            legendItem(label: "重要度高", color: HomeView.importanceBadgeColors(.high).border)
+            legendItem(label: "重要度中", color: HomeView.importanceBadgeColors(.medium).border)
+            legendItem(label: "重要度低", color: HomeView.importanceBadgeColors(.low).border)
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private func legendItem(label: String, color: Color) -> some View {
+        HStack(spacing: 3) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            NotoText.text(label, size: 7.5).foregroundStyle(SettingsListLayout.sectionTitleColor)
         }
     }
 
@@ -236,35 +261,43 @@ private struct CalendarDayList: View {
     }
 
     private func row(_ item: CalendarItem) -> some View {
-        HStack(spacing: 5) {
-            Text(item.hasTime ? Self.timeFormatter.string(from: item.datetime) : "未定")
-                .font(.system(size: 9.5, weight: .bold))
-                .monospacedDigit()
-                .foregroundStyle(.white)
-                // 幅26では「08:5／0」と折り返していたので、1行に固定して幅を広げた。
-                .lineLimit(1)
-                .fixedSize()
-                .frame(width: 31, alignment: .leading)
-            CountryFlagView(countryCode: item.countryCode, diameter: 14)
-            NotoText.text(item.currencyCode, size: 8)
-                .foregroundStyle(.white)
-                .frame(width: 23, alignment: .leading)
-            // 指標名はホームと同じくカッコの前まで(正式名は詳細画面)。
-            NotoText.text(item.kind == .indicator ? HomeView.shortIndicatorName(item.title) : item.title, size: 9)
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            Spacer(minLength: 4)
-            let colors = HomeView.importanceBadgeColors(item.importance)
-            NotoText.text(item.importance.rawValue, size: 6.5)
-                .tracking(-0.4)
-                .foregroundStyle(.white)
-                .frame(width: 34)
-                .padding(.vertical, 2.5)
-                .background(colors.fill, in: Capsule())
-                .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
+        let colors = HomeView.importanceBadgeColors(item.importance)
+        return HStack(spacing: 0) {
+            // HQ指示(2026-10-13)「経済指標カレンダー画面を画像のようにして」:
+            // 行の左端に重要度の色帯を追加した(点・凡例と同じ色)。
+            Rectangle().fill(colors.border).frame(width: 3)
+            HStack(spacing: 5) {
+                Text(item.hasTime ? Self.timeFormatter.string(from: item.datetime) : "未定")
+                    .font(.system(size: 9.5, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                    // 幅26では「08:5／0」と折り返していたので、1行に固定して幅を広げた。
+                    .lineLimit(1)
+                    .fixedSize()
+                    .frame(width: 31, alignment: .leading)
+                CountryFlagView(countryCode: item.countryCode, diameter: 14)
+                NotoText.text(item.currencyCode, size: 8)
+                    .foregroundStyle(.white)
+                    .frame(width: 23, alignment: .leading)
+                // 指標名はホームと同じくカッコの前まで(正式名は詳細画面)。
+                NotoText.text(item.kind == .indicator ? HomeView.shortIndicatorName(item.title) : item.title, size: 9)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 4)
+                NotoText.text(item.importance.rawValue, size: 6.5)
+                    .tracking(-0.4)
+                    .foregroundStyle(.white)
+                    .frame(width: 34)
+                    .padding(.vertical, 2.5)
+                    .background(colors.fill, in: Capsule())
+                    .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(SettingsCardStyle.chevronColor)
+            }
+            .padding(.horizontal, 9)
         }
-        .padding(.horizontal, 9)
         .frame(height: 28)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
