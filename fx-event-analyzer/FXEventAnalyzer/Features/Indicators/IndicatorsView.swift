@@ -184,35 +184,23 @@ struct IndicatorsView: View {
                     .background(colors.fill, in: Capsule())
                     .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
             }
-            // HQ指示(2026-10-13)「各カードの縦幅は変えないで」「全体の高さを低く」: 名前が2行に
-            // なっても同じ高さ(名前11+カッコ7+国名9)。
-            .frame(height: 28)
+            // 名前は1行なので、行の高さは名前12+国名9でそろう。
+            .frame(height: 22)
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 5)
         .contentShape(Rectangle())
     }
 
-    /// HQ指示(2026-10-13): 名前は9.5。1行に入らないときは「（NFP）」などを2行目に小さく送る
-    /// (行の高さは変えない)。
-    @ViewBuilder private func nameText(_ parts: (main: String, suffix: String?)) -> some View {
+    /// HQ指示(2026-10-13)「指標名は1行分だけ。どうしても切れる場合は、最小限の文字サイズの変更で
+    /// 自動調整」: 1行に固定し、入りきらないときだけ必要な分だけ縮める(下限は9.5の8割)。
+    private func nameText(_ parts: (main: String, suffix: String?)) -> some View {
         let full = parts.suffix.map { "\(parts.main)（\($0)）" } ?? parts.main
-        // 「非農業部門雇用者数（NFP）」は幅がちょうど境目だったので、先に9で1行を試し、
-        // それでも入らないときだけカッコを2行目に送る。
-        ViewThatFits(in: .horizontal) {
-            NotoText.text(full, size: 9.5).lineLimit(1).fixedSize()
-            NotoText.text(full, size: 9).lineLimit(1).fixedSize()
-            VStack(alignment: .leading, spacing: 0) {
-                NotoText.text(parts.main, size: 9.5).lineLimit(1).minimumScaleFactor(0.8)
-                    .frame(height: 11, alignment: .leading)
-                if let suffix = parts.suffix {
-                    NotoText.text("（\(suffix)）", size: 6).lineLimit(1)
-                        .frame(height: 7, alignment: .leading)
-                }
-            }
-        }
-        .frame(minHeight: 11)
-        .foregroundStyle(.white)
+        return NotoText.text(full, size: 9.5)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .frame(height: 12, alignment: .leading)
+            .foregroundStyle(.white)
     }
 
     /// 名前と、カッコに入れる部分(無ければnil)。カッコの無い名前は先頭の国名を外す
