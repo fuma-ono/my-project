@@ -119,7 +119,7 @@ final class ScreenshotTests: XCTestCase {
 
         // SCR-006 指標詳細
         tap(containing: "米国CPI(消費者物価指数)")
-        XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicator Detail did not load")
+        XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 15), "Indicator Detail did not load")
         capture("06-IndicatorDetail")
 
         // HQ指示(2026-10-03、6回目)「通貨ペアの下にお気に入りを作成して
@@ -168,7 +168,7 @@ final class ScreenshotTests: XCTestCase {
         // 参考画像通りの3セクション(通貨ペア/お気に入り/直近の要人発言)
         // 構成をそのまま確認できる。
         tap(containing: "ホーム")
-        XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Home did not show the newly-favorited indicator")
+        XCTAssertTrue(waitForAnyElement(containing: "消費者物価指数（CPI）", timeout: 15), "Home did not show the newly-favorited indicator")
         capture("04-Home")
 
         // HQ指示(2026-10-06)「直近の要人発言が見えるようにして」: 本番の
@@ -256,7 +256,7 @@ final class ScreenshotTests: XCTestCase {
         // 作らず、実際に検索結果の行をタップして`RecentSearchStore`へ実データ
         // (実在のモック指標)を記録させてから検索欄を空に戻し、その状態を撮る。
         tap(containing: "米国CPI(消費者物価指数)")
-        XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicator Detail did not load from Search")
+        XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 15), "Indicator Detail did not load from Search")
         tapIdentifier("v5HeaderBack")
         XCTAssertTrue(searchField.waitForExistence(timeout: 10), "Did not return to Search from Indicator Detail")
         searchField.tap()
