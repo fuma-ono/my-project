@@ -48,6 +48,8 @@ final class IndicatorsViewModelTests: XCTestCase {
         XCTAssertEqual(IndicatorsView.listName("米国CPI(消費者物価指数)", countryCode: "US"), "消費者物価指数（CPI）")
         XCTAssertEqual(IndicatorsView.listName("米国雇用統計(非農業部門雇用者数)", countryCode: "US"), "非農業部門雇用者数（雇用統計）")
         XCTAssertEqual(IndicatorsView.listName("FOMC政策金利", countryCode: "US"), "FOMC政策金利")
+        XCTAssertEqual(IndicatorsView.listName("米国小売売上高", countryCode: "US"), "小売売上高")
+        XCTAssertEqual(IndicatorsView.listName("国内企業物価指数", countryCode: "JP"), "国内企業物価指数")
     }
 
     func testTimeBands() {

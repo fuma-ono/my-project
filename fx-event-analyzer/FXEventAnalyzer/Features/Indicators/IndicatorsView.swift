@@ -153,7 +153,7 @@ struct IndicatorsView: View {
         // 次回発表があればその日時、無ければ前回の発表日時を薄く出す。
         let date = indicator.nextReleaseDatetime ?? indicator.latestReleaseDatetime
         let isNext = indicator.nextReleaseDatetime != nil
-        let name = Self.listName(indicator.name, countryCode: indicator.countryCode)
+        let parts = Self.listNameParts(indicator.name, countryCode: indicator.countryCode)
         // HQ指示(2026-10-13): 参考画像どおり、1行目に日時、2行目に左端の国旗・名前・国・重要度。
         return VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
@@ -170,10 +170,7 @@ struct IndicatorsView: View {
             HStack(spacing: 7) {
                 CountryFlagView(countryCode: indicator.countryCode, diameter: 17)
                 VStack(alignment: .leading, spacing: 1) {
-                    NotoText.text(name, size: 8.5)
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
+                    nameText(parts)
                     NotoText.text(CountryFlag.japaneseName(forCountry: indicator.countryCode), size: 7)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                 }
@@ -192,12 +189,38 @@ struct IndicatorsView: View {
         .contentShape(Rectangle())
     }
 
+    /// HQ指示(2026-10-13): 名前は9.5。1行に入らないときは「（雇用統計）」を2行目に送る。
+    @ViewBuilder private func nameText(_ parts: (main: String, suffix: String?)) -> some View {
+        let full = parts.suffix.map { "\(parts.main)（\($0)）" } ?? parts.main
+        ViewThatFits(in: .horizontal) {
+            NotoText.text(full, size: 9.5).lineLimit(1).fixedSize()
+            VStack(alignment: .leading, spacing: 0) {
+                NotoText.text(parts.main, size: 9.5).lineLimit(1).minimumScaleFactor(0.8)
+                if let suffix = parts.suffix {
+                    NotoText.text("（\(suffix)）", size: 9.5).lineLimit(1).minimumScaleFactor(0.8)
+                }
+            }
+        }
+        .foregroundStyle(.white)
+    }
+
+    /// 名前と、カッコに入れる部分(無ければnil)。カッコの無い名前は先頭の国名を外す
+    /// (下に国名を出すので。「米国小売売上高」→「小売売上高」)。
+    static func listNameParts(_ name: String, countryCode: String) -> (main: String, suffix: String?) {
+        let display = CountryFlag.indicatorDisplayName(name, countryCode: countryCode)
+        if let abbreviation = display.abbreviation { return (display.main, abbreviation) }
+        let country = CountryFlag.japaneseName(forCountry: countryCode)
+        var main = display.main
+        if main.hasPrefix(country), main.count > country.count { main = String(main.dropFirst(country.count)) }
+        return (main, nil)
+    }
+
     /// 一覧の名前。指標詳細・検索と同じ規則(`CountryFlag.indicatorDisplayName`)で、カッコの中の
     /// 正式名+カッコの前の略称にする(HQ指示 2026-10-13「非農業部門雇用者数（雇用統計）の形に、
     /// 他もそのように」)。例: 「米国CPI(消費者物価指数)」→「消費者物価指数（CPI）」。
     static func listName(_ name: String, countryCode: String) -> String {
-        let display = CountryFlag.indicatorDisplayName(name, countryCode: countryCode)
-        return display.abbreviation.map { "\(display.main)（\($0)）" } ?? display.main
+        let parts = listNameParts(name, countryCode: countryCode)
+        return parts.suffix.map { "\(parts.main)（\($0)）" } ?? parts.main
     }
 
     private static let timeFormatter: DateFormatter = {
