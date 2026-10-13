@@ -21,6 +21,8 @@ export interface CalendarItem {
   display_name: string | null;
   /** SPEECH only. */
   speaker_name: string | null;
+  /** SPEECH only: the speaker's official photo URL (absolute) or null (initials). INDICATOR: always null. */
+  speaker_photo_url: string | null;
   country_code: string;
   currency_code: string;
   importance: string;
@@ -47,7 +49,8 @@ export interface CalendarIndicatorEvent {
 export interface CalendarSpeech {
   speech_id: string;
   title: string;
-  speaker: { name: string; country_code: string; currency_code: string };
+  /** photo_url: already resolved to an absolute URL (domain/speakerPhotos.ts) or null. */
+  speaker: { name: string; country_code: string; currency_code: string; photo_url?: string | null | undefined };
   importance: string;
   statement_datetime: string;
   status: string;
@@ -89,6 +92,7 @@ export function buildCalendarItems(
     title: event.indicator_name,
     display_name: event.indicator_display_name ?? null,
     speaker_name: null,
+    speaker_photo_url: null,
     country_code: event.country_code,
     currency_code: event.currency_code,
     importance: event.importance,
@@ -105,6 +109,7 @@ export function buildCalendarItems(
       title: speech.title,
       display_name: null,
       speaker_name: speech.speaker.name,
+      speaker_photo_url: speech.speaker.photo_url ?? null,
       country_code: speech.speaker.country_code,
       currency_code: speech.speaker.currency_code,
       importance: speech.importance,

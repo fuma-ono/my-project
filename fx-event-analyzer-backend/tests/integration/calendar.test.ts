@@ -32,6 +32,7 @@ interface CalendarItemBody {
   title: string;
   display_name: string | null;
   speaker_name: string | null;
+  speaker_photo_url: string | null;
   currency_code: string;
   importance: string;
   datetime: string;
@@ -129,6 +130,15 @@ describe.skipIf(!integration)('GET /calendar', () => {
       datetime_precision: 'EXACT',
       status: 'SCHEDULED',
     });
+  });
+
+  it("carries the speaker's photo URL on speech rows (absolute for FRB, null otherwise)", async () => {
+    const items = await getItems(OCTOBER);
+    expect(items.find((item) => item.id === POWELL_SCHEDULED_SPEECH_ID)?.speaker_photo_url).toMatch(
+      /^http:\/\/[^/]+\/api\/v1\/speaker-photos\/powell\.jpg$/,
+    );
+    expect(items.find((item) => item.id === UEDA_SCHEDULED_SPEECH_ID)?.speaker_photo_url).toBeNull();
+    expect(items.find((item) => item.id === US_NFP_EVENT_ID)?.speaker_photo_url).toBeNull();
   });
 
   it('treats from as inclusive and to as exclusive', async () => {

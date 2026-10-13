@@ -1259,7 +1259,9 @@ struct HomeView: View {
             // 詰めて右ブロックに渡す余白を広げた — 文字サイズ自体
             // (フォントsize指定)は一切変更していない。
             HStack(spacing: 0) {
-                CountryFlagView(countryCode: speech.countryCode, diameter: Self.speechFlagDiameter)
+                // HQ指示(2026-10-13)「要人発言一覧と要人発言詳細で同じ人物の表示を統一」: 国旗を要人の顔
+                // (FRB理事は公式写真、それ以外は機関の色の丸に頭文字)にした。大きさは国旗と同じ。
+                SpeakerAvatar(name: speech.speakerName, organization: speech.organization ?? "", countryCode: speech.countryCode, photoURL: speech.speakerPhotoURL, size: Self.speechFlagDiameter)
                 // HQ指示(2026-10-06)「英字を含む文字もNotoTextで表示して」:
                 // 発言者名("パウエルFRB議長"のように英字を含む)・日時/
                 // 中央銀行行("10/6 08:15 | FRB")・通貨ペア("USD/JPY")・

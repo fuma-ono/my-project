@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.24
+# FX Event Analyzer: API詳細設計書 v1.25
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -66,6 +66,7 @@
 - **v1.22**(2026-10-13): 指標の表示名をすべての画面に(HQ指示 2026-10-13)。v1.21の`display_name`(`economic_indicators.display_name`、未登録は`null`)を次にも追加: `GET /events/{event_id}`の`event`(14.1節)、`GET /events/{event_id}/history`の`event`(20章)、`GET /indicators/{indicator_id}/comparison`の`indicator`(21章、timeframe単一指定・`all`の両方)、`GET /notifications/upcoming`の各`items`(24.6節、`INDICATOR`のみ。`SPEECH`は`null`)、`GET /search`の`indicators`の各行と`events`の各行(23章)。`GET /indicators/{indicator_id}/events`の各行は指標名を持たないため追加しない。`name`・`title`・`indicator_name`は変えない
 - **v1.24**(2026-10-13): 要人の公式写真(HQ指示 2026-10-13「FRBは公式写真で、そのほかは頭文字と機関の色で」)。`speakers.photo_url`(text, null可)を追加し、`GET /speeches`・`GET /speeches/{id}`の`speaker`に`photo_url`(string|null)を追加。入れてよいのは自由に使える公式写真だけ(FRB理事の公式写真は米国政府の著作物でパブリックドメイン)。null の要人はアプリが名前の頭文字と機関の色で表示する
 - **v1.23**(2026-10-13): アプリ内の通知一覧(HQ指示 2026-10-13「おすすめの通知仕様」、notification-inbox-spec.md 6章)。`GET /notifications`(24.9節。`GET /notifications/upcoming`と同じ条件で選んだ通知のうち通知時刻を過ぎたものをサーバーに記録して返す。`order=desc|asc`・`kind`、`{ items, unread_count }`)、`POST /notifications/{id}/read`(24.10節、`{ id, read_at }`)、`POST /notifications/read-all`(24.11節、`{ updated }`)を追加。テーブル`notification_inbox`(一意制約`(user_id, kind, target_id, trigger)`、保存期間 INDICATOR/SPEECH/SYSTEM 30日・RATE_ALERT/CALENDAR_UPDATE 7日)と、期限切れを消す日次ジョブ`npm run jobs:cleanup-notifications`を追加。`GET /notifications/upcoming`は変えない
+- **v1.25**(2026-10-13): 要人の写真を自前で配信。federalreserve.gov の利用条件(特に断りがなければパブリックドメインで許可なく複製・配布可、出典として FRB を示す。リンクは可だがフレーム内表示は不可)に従い、直リンクをやめて Backend が複製を配信する。`GET /api/v1/speaker-photos/{file}`(14.7節。**認証なし**、`Cache-Control: public, max-age=86400`)を追加。`speakers.photo_url`は`null` / 絶対URL / key`speaker-photos/<file>`のいずれかを持ち、APIは常に**絶対URL**(key は`${PUBLIC_BASE_URL}/api/v1/speaker-photos/<file>`。環境変数`PUBLIC_BASE_URL`が未設定ならリクエストの`protocol://host`)か`null`で返す(`GET /speeches`・`GET /speeches/{id}`の`speaker.photo_url`)。`GET /calendar`の各行に`speaker_photo_url`(SPEECHは発言者の写真、INDICATORと写真の無い要人は`null`)を追加。FRB理事会の現メンバーに合わせ、パウエル氏の役職を「FRB理事」に直し、ケビン・ウォーシュ(FRB議長)・フィリップ・ジェファーソン(FRB副議長)・ミシェル・ボウマン(FRB副議長（金融監督担当）)・マイケル・バー(FRB理事)・リサ・クック(FRB理事)を追加(Migration `20261013000004_frb_speakers_self_hosted_photos.sql`)。写真を入れるのは FRB の要人だけ(ほかの機関は利用条件が未確認のため`null`)。`GET /home`は要人発言を返さないため変更なし(UIスクリーンショット用モックの`speeches`の各行には`speaker_photo_url`を追加)。`GET /search`は要人を返さないため変更なし
 
 ---
 
@@ -657,10 +658,11 @@ Response：`{ "data": SpeechSummary[], "meta": { page, limit, total, has_next } 
   "speaker": {
     "speaker_id": "40000000-0000-0000-0000-000000000001",
     "name": "ジェローム・パウエル",
-    "title": "FRB議長",
+    "title": "FRB理事",
     "organization": "FRB",
     "country_code": "US",
-    "currency_code": "USD"
+    "currency_code": "USD",
+    "photo_url": "https://api.example.com/api/v1/speaker-photos/powell.jpg"
   },
   "title": "FOMC後の記者会見",
   "summary": "政策金利の据え置きを説明し、今後の判断はデータ次第との認識を示した。",
@@ -672,6 +674,7 @@ Response：`{ "data": SpeechSummary[], "meta": { page, limit, total, has_next } 
 
 - `summary`：出典に基づく事実の要約。未発言・未作成は`null`
 - `status`：`SCHEDULED` / `DELIVERED` / `CANCELLED`
+- `speaker.photo_url`(v1.24、v1.25で絶対URLに統一)：要人の公式写真の**絶対URL**、無ければ`null`(アプリは頭文字と機関の色で表示)。14.7節
 
 ## 14.5 GET /api/v1/speeches/{speech_id}(v1.6で追加)
 
@@ -705,6 +708,7 @@ Response：`{ "from": string, "to": string, "items": CalendarItem[] }`(`from` / 
   "title": "米国雇用統計(非農業部門雇用者数)",
   "display_name": "非農業部門雇用者数（NFP）",
   "speaker_name": null,
+  "speaker_photo_url": null,
   "country_code": "US",
   "currency_code": "USD",
   "importance": "HIGH",
@@ -720,11 +724,35 @@ Response：`{ "from": string, "to": string, "items": CalendarItem[] }`(`from` / 
 - `title`：`INDICATOR`は指標名、`SPEECH`は発言の題名(`speech_events.title`)。`GET /notifications/upcoming`(24.6節)と同じ付け方
 - `display_name`(v1.21)：`INDICATOR`は指標の一覧画面の表示名(13.2節の`display_name`、未登録は`null`)、`SPEECH`は常に`null`
 - `speaker_name`：`SPEECH`だけ。発言者の表示名。`INDICATOR`は`null`
+- `speaker_photo_url`(v1.25)：`SPEECH`だけ。発言者の公式写真の絶対URL(14.7節、14.4節の`speaker.photo_url`と同じ値)。写真の無い要人と`INDICATOR`は`null`
 - `country_code` / `currency_code`：`INDICATOR`は指標の値、`SPEECH`は発言者の値
 - `datetime`：`INDICATOR`は`release_datetime`、`SPEECH`は`statement_datetime`
 - `datetime_precision`：`INDICATOR`は`release_datetime_precision`(6章)、`SPEECH`は常に`EXACT`
 - `status`：`INDICATOR`はイベントの`status`(`SCHEDULED` / `RELEASED` / `CANCELLED`)、`SPEECH`は発言の`status`(`SCHEDULED` / `DELIVERED`)。**`CANCELLED`の要人発言は返さない**
 - 並び順：`datetime`昇順 → 同時刻は`INDICATOR`が先 → `id`昇順
+
+## 14.7 GET /api/v1/speaker-photos/{file}(v1.25で追加)
+
+要人の公式写真の画像ファイル。14.4節の`speaker.photo_url`・14.6節の`speaker_photo_url`が指す先。**認証なし**(画像の読み込みにはJWTを付けない)。Entitlementなし。
+
+- `file`：`^[a-z0-9-]+\.(jpg|png)$`に合うファイル名だけを受け付ける(`/`・`..`・大文字などを含む名前は読まない)。合わない名前・存在しないファイルは`404 NOT_FOUND`
+- Response：画像そのもの。`Content-Type`は`.jpg`が`image/jpeg`、`.png`が`image/png`。`Cache-Control: public, max-age=86400`
+- ファイルは Backend の`assets/speaker-photos/`に置く。出典・取得日・利用条件は同じ場所の`SOURCES.md`
+
+写真の扱い：
+
+- 置くのは FRB の公式写真だけ(federalreserve.gov、2026-10-13取得)。利用条件(https://www.federalreserve.gov/disclaimer.htm)は「特に断りがなければパブリックドメインで、許可なく複製・配布できる。出典として FRB を示す」。リンクは可だがフレーム内表示は不可のため、直リンクせず複製を自前で配信する
+- 写真を表示する画面では「出典: 米国連邦準備制度理事会(FRB)」を示す
+- ほかの機関の要人の写真は利用条件を確かめていないので置かない(`photo_url`は`null`、アプリは頭文字と機関の色で表示)
+
+`speakers.photo_url`(DB)からResponseの値への変換：
+
+| DBの値 | Responseの値 |
+|---|---|
+| `null` | `null` |
+| 絶対URL(`https://…`) | そのまま |
+| `speaker-photos/<file>`(`<file>`は上の形式) | `${base}/api/v1/speaker-photos/<file>`。`base`は環境変数`PUBLIC_BASE_URL`(末尾の`/`は除く)、未設定ならリクエストの`protocol://host` |
+| それ以外 | `null`(壊れたリンクを返さない) |
 
 ---
 
@@ -1620,6 +1648,7 @@ Backend側の各Endpointが要求するEntitlementを以下の通り確定する
 | 通知予約対象(v1.6で追加) | `GET /notifications/upcoming` | `VIEW_BASIC_EVENT` |
 | 通知一覧(v1.23で追加) | `GET /notifications` | `VIEW_BASIC_EVENT` |
 | 通知の既読(v1.23で追加) | `POST /notifications/{id}/read`、`POST /notifications/read-all` | **Authentication Required / Entitlementなし** |
+| 要人の写真(v1.25で追加) | `GET /speaker-photos/{file}` | **認証なし / Entitlementなし**(14.7節) |
 | お問い合わせ(v1.10で追加) | `POST /support/requests`、`GET /support/requests` | **Authentication Required / Entitlementなし** |
 
 Home / Indicators / Indicator Detail / FX Pairs(v1.6) / Search / Account / Settings / Subscription / Entitlement APIは、認証済みであれば全ユーザーがアクセス可能とし、特定feature_codeを要求しない。
@@ -1809,6 +1838,7 @@ Breaking Changeが発生する場合は`/api/v2`を作成する。既存v1を破
 - ユーザー固有データへのアクセス制御
 - IDOR対策
 - 不正なPagination / Filter値の拒否
+- 要人の写真の配信(`GET /speaker-photos/{file}`、v1.25、14.7節)は認証なしだが、ファイル名を`^[a-z0-9-]+\.(jpg|png)$`に限り、`assets/speaker-photos/`の外は読めない
 - 外部サービスの秘密情報(`SUPABASE_SERVICE_ROLE_KEY`、`GITHUB_ISSUES_TOKEN`(v1.10)等)はBackendの環境変数だけに置き、iOSアプリ・Response・ログに含めない
 
 ユーザー固有データは必ず認証ユーザー本人のものだけを取得できるようにする。

@@ -8,6 +8,7 @@ import { calendarQuerySchema } from '../schemas/calendar.js';
 import { buildCalendarItems } from '../domain/calendar.js';
 import { formatIsoSeconds } from '../domain/notifications.js';
 import { checkCalendarRange } from '../domain/planLimits.js';
+import { resolvePublicBaseUrl, withResolvedSpeakerPhoto } from '../domain/speakerPhotos.js';
 
 /** SCR-010 経済指標カレンダー — GET /calendar (api-design.md §14.6).
  * Same Entitlement as GET /speeches. The range is capped at 62 days, so
@@ -42,10 +43,15 @@ export function registerCalendarRoutes(app: FastifyInstance): void {
       listSpeechesInRange(app.supabase, query.from, query.to),
     ]);
 
+    const baseUrl = resolvePublicBaseUrl(app.env.PUBLIC_BASE_URL, request);
     return {
       from: query.from,
       to: query.to,
-      items: buildCalendarItems(events, speeches, { importance: query.importance, currency: query.currency }),
+      items: buildCalendarItems(
+        events,
+        speeches.map((speech) => withResolvedSpeakerPhoto(speech, baseUrl)),
+        { importance: query.importance, currency: query.currency },
+      ),
     };
   });
 }

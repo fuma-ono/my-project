@@ -28,7 +28,7 @@ private func makeStore() -> NotificationsStore {
 
 private func upcoming(_ id: String, kind: UpcomingNotification.Kind, notifyAt: Date) -> UpcomingNotification {
     UpcomingNotification(
-        kind: kind, id: id, title: "米雇用統計", speakerName: kind == .speech ? "パウエル議長" : nil,
+        kind: kind, id: id, title: "米雇用統計", speakerName: kind == .speech ? "パウエル理事" : nil,
         importance: "HIGH", scheduledAt: notifyAt.addingTimeInterval(300), notifyAt: notifyAt,
         countryCode: "US", currencyCode: "USD", relatedFxPairs: ["USDJPY"]
     )
@@ -42,7 +42,7 @@ final class NotificationModelsTests: XCTestCase {
         {
           "lead_minutes": 5,
           "items": [{
-            "kind": "SPEECH", "id": "s1", "title": "議会証言", "speaker_name": "パウエル議長",
+            "kind": "SPEECH", "id": "s1", "title": "議会証言", "speaker_name": "パウエル理事",
             "importance": "HIGH", "scheduled_at": "2026-10-06T14:00:00Z", "notify_at": "2026-10-06T13:55:00Z",
             "country_code": "US", "currency_code": "USD", "related_fx_pairs": ["USDJPY", "EURUSD"]
           }]
@@ -55,7 +55,7 @@ final class NotificationModelsTests: XCTestCase {
 
         XCTAssertEqual(response.leadMinutes, 5)
         XCTAssertEqual(response.items.first?.kind, .speech)
-        XCTAssertEqual(response.items.first?.speakerName, "パウエル議長")
+        XCTAssertEqual(response.items.first?.speakerName, "パウエル理事")
         XCTAssertEqual(response.items.first?.relatedFxPairs, ["USDJPY", "EURUSD"])
     }
 
@@ -91,9 +91,9 @@ final class NotificationModelsTests: XCTestCase {
     func testSpeechEntryPrefixesTheSpeaker() {
         let item = upcoming("s1", kind: .speech, notifyAt: base)
         let entry = NotificationEntry(item, leadMinutes: 0)
-        XCTAssertEqual(entry.title, "パウエル議長：米雇用統計")
+        XCTAssertEqual(entry.title, "パウエル理事：米雇用統計")
         XCTAssertEqual(entry.kind, .speech)
-        XCTAssertEqual(entry.speakerName, "パウエル議長")
+        XCTAssertEqual(entry.speakerName, "パウエル理事")
         XCTAssertTrue(entry.body.hasPrefix("まもなく発言です"))
     }
 }

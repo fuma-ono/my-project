@@ -36,7 +36,10 @@
 // (both http://127.0.0.1:<port>, API_BASE_URL with an /api/v1 suffix)
 // points the app at this one process.
 
+import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const PORT = Number(process.argv[2] ?? process.env.PORT ?? 8090);
 
@@ -96,6 +99,37 @@ function json(res, status, body) {
     'content-length': Buffer.byteLength(payload),
   });
   res.end(payload);
+}
+
+// 要人の公式写真(FRBのみ。パブリックドメイン、出典: 米国連邦準備制度理事会(FRB)。
+// assets/speaker-photos/SOURCES.md)。本番の GET /api/v1/speaker-photos/{file} と同じく
+// assets/speaker-photos/ のファイルを配信し、photo_url はリクエストのホストで絶対URLにする
+// (シミュレーターから見えるホスト = アプリが叩いた http://<host>)。
+const SPEAKER_PHOTOS_DIR = fileURLToPath(new URL('../assets/speaker-photos/', import.meta.url));
+const SPEAKER_PHOTO_FILE_PATTERN = /^[a-z0-9-]+\.(jpg|png)$/;
+/** 処理中のリクエストの http://<host>。createServer のハンドラが毎回入れ直す。 */
+let requestOrigin = `http://127.0.0.1:${PORT}`;
+
+function speakerPhotoUrl(file) {
+  return `${requestOrigin}/api/v1/speaker-photos/${file}`;
+}
+
+async function serveSpeakerPhoto(res, file) {
+  if (!SPEAKER_PHOTO_FILE_PATTERN.test(file)) {
+    return json(res, 404, { error: { code: 'NOT_FOUND', message: 'Speaker photo not found.' } });
+  }
+  let body;
+  try {
+    body = await readFile(join(SPEAKER_PHOTOS_DIR, file));
+  } catch {
+    return json(res, 404, { error: { code: 'NOT_FOUND', message: 'Speaker photo not found.' } });
+  }
+  res.writeHead(200, {
+    'content-type': file.endsWith('.png') ? 'image/png' : 'image/jpeg',
+    'content-length': body.length,
+    'cache-control': 'public, max-age=86400',
+  });
+  res.end(body);
 }
 
 function readBody(req) {
@@ -845,7 +879,8 @@ function homeHandler() {
       {
         speech_id: SPEECH_IDS[0],
         country_code: 'US',
-        speaker_name: 'パウエルFRB議長',
+        speaker_name: 'パウエルFRB理事',
+        speaker_photo_url: SPEAKERS.powell.photo_url,
         statement_datetime: isoMinusHours(3),
         headline: 'インフレ率は依然として高い',
         organization: 'FRB',
@@ -858,6 +893,7 @@ function homeHandler() {
         speech_id: SPEECH_IDS[1],
         country_code: 'EU',
         speaker_name: 'ラガルドECB総裁',
+        speaker_photo_url: null,
         statement_datetime: isoMinusHours(9),
         headline: '金利は十分な制約的な水準にある',
         organization: 'ECB',
@@ -870,6 +906,7 @@ function homeHandler() {
         speech_id: SPEECH_IDS[2],
         country_code: 'GB',
         speaker_name: 'ベイリーBOE総裁',
+        speaker_photo_url: null,
         statement_datetime: isoMinusHours(14),
         headline: '金融政策は引き締め的なスタンスを維持',
         organization: 'BOE',
@@ -1498,12 +1535,14 @@ const SPEAKERS = {
   powell: {
     speaker_id: '66666666-6666-6666-6666-666666666661',
     name: 'ジェローム・パウエル',
-    title: 'FRB議長',
+    title: 'FRB理事',
     organization: 'FRB',
     country_code: 'US',
     currency_code: 'USD',
-    // FRB理事の公式写真(米国政府の著作物、パブリックドメイン)。
-    photo_url: 'https://www.federalreserve.gov/aboutthefed/images/Powell_Jerome_Aug_16_22-674_8x10_rdax_130x162s.jpg',
+    // FRBの公式写真(パブリックドメイン)。このサーバーが配信する(serveSpeakerPhoto)。
+    get photo_url() {
+      return speakerPhotoUrl('powell.jpg');
+    },
   },
   ueda: {
     speaker_id: '66666666-6666-6666-6666-666666666662',
@@ -1512,6 +1551,7 @@ const SPEAKERS = {
     organization: '日本銀行',
     country_code: 'JP',
     currency_code: 'JPY',
+    photo_url: null,
   },
   lagarde: {
     speaker_id: '66666666-6666-6666-6666-666666666663',
@@ -1520,6 +1560,7 @@ const SPEAKERS = {
     organization: 'ECB',
     country_code: 'EU',
     currency_code: 'EUR',
+    photo_url: null,
   },
 };
 
@@ -1788,8 +1829,9 @@ const CALENDAR_SPEAKERS = {
     organization: 'FRB',
     country_code: 'US',
     currency_code: 'USD',
-    photo_url:
-      'https://www.federalreserve.gov/aboutthefed/images/waller_christopher_September_01_2025-1022_highres_rdax_130x163s.jpg',
+    get photo_url() {
+      return speakerPhotoUrl('waller.jpg');
+    },
   },
   schnabel: {
     speaker_id: '66666666-6666-6666-6666-666666666665',
@@ -1798,6 +1840,7 @@ const CALENDAR_SPEAKERS = {
     organization: 'ECB',
     country_code: 'EU',
     currency_code: 'EUR',
+    photo_url: null,
   },
   bailey: {
     speaker_id: '66666666-6666-6666-6666-666666666666',
@@ -1806,8 +1849,40 @@ const CALENDAR_SPEAKERS = {
     organization: 'BOE',
     country_code: 'GB',
     currency_code: 'GBP',
+    photo_url: null,
   },
+  // FRB理事会の現メンバー(2026-10-13、federalreserve.gov で確認)。
+  warsh: frbSpeaker('66666666-6666-6666-6666-666666666667', 'ケビン・ウォーシュ', 'FRB議長', 'warsh.png'),
+  jefferson: frbSpeaker(
+    '66666666-6666-6666-6666-666666666668',
+    'フィリップ・ジェファーソン',
+    'FRB副議長',
+    'jefferson.jpg',
+  ),
+  bowman: frbSpeaker(
+    '66666666-6666-6666-6666-666666666669',
+    'ミシェル・ボウマン',
+    'FRB副議長（金融監督担当）',
+    'bowman.jpg',
+  ),
+  barr: frbSpeaker('66666666-6666-6666-6666-66666666666a', 'マイケル・バー', 'FRB理事', 'barr.jpg'),
+  cook: frbSpeaker('66666666-6666-6666-6666-66666666666b', 'リサ・クック', 'FRB理事', 'cook.jpg'),
 };
+
+/** FRBの要人(写真はこのサーバーが配信する公式写真)。 */
+function frbSpeaker(speakerId, name, title, photoFile) {
+  return {
+    speaker_id: speakerId,
+    name,
+    title,
+    organization: 'FRB',
+    country_code: 'US',
+    currency_code: 'USD',
+    get photo_url() {
+      return speakerPhotoUrl(photoFile);
+    },
+  };
+}
 
 // 指標: ['I', 'HH:MM'(日本時間), 指標名, country, currency, importance, event_id(nullは自動採番), indicator_id]
 // indicator_id は GET /indicators/{id} が200を返す指標 (INDICATORS_LIST か CALENDAR_INDICATORS)。
@@ -1830,7 +1905,7 @@ const CALENDAR_OTHER_DAYS = {
   ],
   3: [
     ['I', '21:30', '米国新規失業保険申請件数', 'US', 'USD', 'MEDIUM', null, CALENDAR_INDICATORS.US_JOBLESS_CLAIMS.id],
-    ['S', '23:00', 'FRB議長発言', 'powell', 'HIGH'],
+    ['S', '23:00', 'FRB議長発言', 'warsh', 'HIGH'],
   ],
   6: [
     ['I', '12:30', '豪州RBA政策金利', 'AU', 'AUD', 'HIGH', null, CALENDAR_INDICATORS.AU_RBA_RATE.id],
@@ -1865,7 +1940,7 @@ const CALENDAR_OTHER_DAYS = {
   ],
   27: [
     ['I', '03:00', INDICATORS_LIST[2].name, 'US', 'USD', 'HIGH', EVENT_ID_UPCOMING_FOMC, INDICATOR_ID_FOMC],
-    ['S', '03:30', 'FRB議長会見', 'powell', 'HIGH'],
+    ['S', '03:30', 'FRB議長会見', 'warsh', 'HIGH'],
   ],
   29: [['I', '21:30', '米国PCEデフレーター', 'US', 'USD', 'HIGH', null, CALENDAR_INDICATORS.US_PCE.id]],
   30: [
@@ -1908,6 +1983,7 @@ function calendarFixture(monthOffset = 0) {
           title,
           display_name: ALL_MOCK_INDICATORS.find((row) => row.id === indicatorId)?.display_name ?? null,
           speaker_name: null,
+          speaker_photo_url: null,
           country_code: country,
           currency_code: currency,
           importance,
@@ -1925,6 +2001,7 @@ function calendarFixture(monthOffset = 0) {
           title,
           display_name: null,
           speaker_name: speaker.name,
+          speaker_photo_url: speaker.photo_url,
           country_code: speaker.country_code,
           currency_code: speaker.currency_code,
           importance,
@@ -2321,6 +2398,14 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://127.0.0.1');
   const rawBody = await readBody(req); // only PATCH /settings and POST /support/requests read it
   console.log(`[mock] ${req.method} ${url.pathname}${url.search}`);
+  requestOrigin = `http://${req.headers.host ?? `127.0.0.1:${PORT}`}`;
+
+  // 本番と同じく認証なしで配信する(画像の読み込みにはトークンが付かない)。
+  const photoMatch = /^\/api\/v1\/speaker-photos\/([^/]+)$/.exec(url.pathname);
+  if (photoMatch && req.method === 'GET') {
+    // デコードしない: %2F 等を含む名前はファイル名の制限(英小文字・数字・-)で404になる。
+    return serveSpeakerPhoto(res, photoMatch[1]);
+  }
 
   if (url.pathname.startsWith('/auth/v1/')) {
     return handleAuth(req, res, url.pathname);

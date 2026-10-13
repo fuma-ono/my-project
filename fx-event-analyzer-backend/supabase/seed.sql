@@ -154,9 +154,12 @@ insert into economic_events (id, indicator_id, provider, provider_event_id, rele
 -- economic_indicators).
 -- ---------------------------------------------------------------------
 
--- photo_url は自由に使える公式写真だけ(FRB理事: 米国政府の著作物)。それ以外は null(アプリが頭文字で表示)。
+-- photo_url は自由に使える公式写真だけ(FRB理事: パブリックドメイン、出典 FRB)。Backend が配信する
+-- ファイルの key 'speaker-photos/<file>'(assets/speaker-photos/)。それ以外は null(アプリが頭文字で表示)。
+-- FRBの議長・副議長・理事(ウォーシュ・ジェファーソン・ボウマン・バー・クック)は
+-- migration 20261013000004 が追加する(migration は seed より先に流れるため、ここでは入れない)。
 insert into speakers (id, name, title, organization, country_code, currency_code, photo_url) values
-  ('40000000-0000-0000-0000-000000000001', 'ジェローム・パウエル', 'FRB議長', 'FRB', 'US', 'USD', 'https://www.federalreserve.gov/aboutthefed/images/Powell_Jerome_Aug_16_22-674_8x10_rdax_130x162s.jpg'),
+  ('40000000-0000-0000-0000-000000000001', 'ジェローム・パウエル', 'FRB理事', 'FRB', 'US', 'USD', 'speaker-photos/powell.jpg'),
   ('40000000-0000-0000-0000-000000000002', '植田和男', '日本銀行総裁', '日本銀行', 'JP', 'JPY', null),
   ('40000000-0000-0000-0000-000000000003', 'クリスティーヌ・ラガルド', 'ECB総裁', 'ECB', 'EU', 'EUR', null);
 

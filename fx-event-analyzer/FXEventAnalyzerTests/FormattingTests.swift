@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import FXEventAnalyzer
 
@@ -146,6 +147,19 @@ final class IndicatorDisplayNameTests: XCTestCase {
         // 要人の頭文字: 「・」区切りは姓の1文字目、それ以外は1文字目。
         XCTAssertEqual(SpeakerAvatar.initial(of: "クリストファー・ウォラー"), "ウ")
         XCTAssertEqual(SpeakerAvatar.initial(of: "植田和男"), "植")
+        XCTAssertEqual(SpeakerAvatar.initial(of: "パウエルFRB理事"), "パ")
+        // 写真のURLが無い・正しくないときは頭文字。
+        XCTAssertEqual(SpeakerAvatar.content(photoURL: nil, phase: nil), .initials)
+        XCTAssertEqual(SpeakerAvatar.content(photoURL: "", phase: nil), .initials)
+        XCTAssertEqual(SpeakerAvatar.content(photoURL: "speaker-photos/powell.jpg", phase: nil), .initials)
+        // 読み込み中・読み込み失敗も頭文字、読み込めたときだけ写真。
+        let url = "https://example.com/api/v1/speaker-photos/powell.jpg"
+        XCTAssertEqual(SpeakerAvatar.content(photoURL: url, phase: .empty), .initials)
+        XCTAssertEqual(SpeakerAvatar.content(photoURL: url, phase: .failure(URLError(.notConnectedToInternet))), .initials)
+        XCTAssertEqual(SpeakerAvatar.content(photoURL: url, phase: .success(Image(systemName: "person"))), .photo)
+        // 小さい表示(ホームの要人発言 16pt)では国旗の印を付けない。
+        XCTAssertFalse(SpeakerAvatar.showsFlagBadge(size: 16))
+        XCTAssertTrue(SpeakerAvatar.showsFlagBadge(size: 34))
         // 表示名(DBのdisplay_name)があればそれを優先する。
         XCTAssertEqual(CountryFlag.indicatorDisplayText("米国雇用統計(非農業部門雇用者数)", countryCode: "US", displayName: "非農業部門雇用者数（NFP）"), "非農業部門雇用者数（NFP）")
         XCTAssertEqual(CountryFlag.indicatorDisplayName("x", countryCode: "US", displayName: "非農業部門雇用者数（NFP）").abbreviation, "NFP")

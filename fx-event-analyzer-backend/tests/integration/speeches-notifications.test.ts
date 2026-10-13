@@ -141,6 +141,69 @@ describe.skipIf(!integration)('Speeches / FX pairs / upcoming notifications', ()
       expect(invalid.statusCode).toBe(422);
     });
 
+    it('returns Powell as FRB理事 with an absolute, servable photo URL (self-hosted)', async () => {
+      const headers = await newUser();
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/v1/speeches/${POWELL_DELIVERED_SPEECH_ID}`,
+        headers: { ...headers, host: 'api.test.local' },
+      });
+      expect(response.statusCode).toBe(200);
+      const { speaker } = JSON.parse(response.body);
+      expect(speaker).toMatchObject({ name: 'ジェローム・パウエル', title: 'FRB理事', organization: 'FRB' });
+      expect(speaker.photo_url).toBe('http://api.test.local/api/v1/speaker-photos/powell.jpg');
+
+      const photo = await ctx.app.inject({ method: 'GET', url: new URL(speaker.photo_url).pathname });
+      expect(photo.statusCode).toBe(200);
+      expect(photo.headers['content-type']).toBe('image/jpeg');
+
+      // Other institutions' speakers have no photo (the app shows initials).
+      const ueda = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/v1/speeches/${UEDA_SCHEDULED_SPEECH_ID}`,
+        headers,
+      });
+      expect(JSON.parse(ueda.body).speaker.photo_url).toBeNull();
+    });
+
+    it('uses PUBLIC_BASE_URL for the photo URL when configured', async () => {
+      const configured = buildIntegrationContext(integration!, { env: { PUBLIC_BASE_URL: 'https://api.example.com' } });
+      try {
+        const headers = await newUser();
+        const response = await configured.app.inject({
+          method: 'GET',
+          url: `/api/v1/speeches/${POWELL_DELIVERED_SPEECH_ID}`,
+          headers,
+        });
+        expect(JSON.parse(response.body).speaker.photo_url).toBe(
+          'https://api.example.com/api/v1/speaker-photos/powell.jpg',
+        );
+      } finally {
+        await configured.app.close();
+      }
+    });
+
+    it('has the current FRB Board members exactly once each, with photo keys (migration 20261013000004)', async () => {
+      const expected: Record<string, { title: string; photo_url: string }> = {
+        ケビン・ウォーシュ: { title: 'FRB議長', photo_url: 'speaker-photos/warsh.png' },
+        フィリップ・ジェファーソン: { title: 'FRB副議長', photo_url: 'speaker-photos/jefferson.jpg' },
+        ミシェル・ボウマン: { title: 'FRB副議長（金融監督担当）', photo_url: 'speaker-photos/bowman.jpg' },
+        マイケル・バー: { title: 'FRB理事', photo_url: 'speaker-photos/barr.jpg' },
+        リサ・クック: { title: 'FRB理事', photo_url: 'speaker-photos/cook.jpg' },
+        ジェローム・パウエル: { title: 'FRB理事', photo_url: 'speaker-photos/powell.jpg' },
+      };
+      const { data, error } = await ctx.serviceClient
+        .from('speakers')
+        .select('name, title, organization, country_code, currency_code, photo_url')
+        .eq('organization', 'FRB')
+        .in('name', Object.keys(expected));
+      expect(error).toBeNull();
+      expect(data).toHaveLength(Object.keys(expected).length);
+      for (const row of data ?? []) {
+        expect(row).toMatchObject({ country_code: 'US', currency_code: 'USD', ...expected[row.name] });
+      }
+    });
+
     it('403s without VIEW_BASIC_EVENT', async () => {
       const headers = await newUser(false);
       const response = await ctx.app.inject({ method: 'GET', url: '/api/v1/speeches', headers });

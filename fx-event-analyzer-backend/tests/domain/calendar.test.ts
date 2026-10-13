@@ -37,7 +37,19 @@ describe('buildCalendarItems', () => {
   });
 
   it('maps indicators and speeches into one item shape', () => {
-    const items = buildCalendarItems([event({ release_datetime_precision: 'DATE_ONLY' })], [speech()]);
+    const items = buildCalendarItems(
+      [event({ release_datetime_precision: 'DATE_ONLY' })],
+      [
+        speech({
+          speaker: {
+            name: 'ジェローム・パウエル',
+            country_code: 'US',
+            currency_code: 'USD',
+            photo_url: 'https://api.example.com/api/v1/speaker-photos/powell.jpg',
+          },
+        }),
+      ],
+    );
     expect(items).toEqual([
       {
         kind: 'SPEECH',
@@ -46,6 +58,7 @@ describe('buildCalendarItems', () => {
         title: '経済見通しに関する講演',
         display_name: null,
         speaker_name: 'ジェローム・パウエル',
+        speaker_photo_url: 'https://api.example.com/api/v1/speaker-photos/powell.jpg',
         country_code: 'US',
         currency_code: 'USD',
         importance: 'HIGH',
@@ -60,6 +73,7 @@ describe('buildCalendarItems', () => {
         title: '米国雇用統計(非農業部門雇用者数)',
         display_name: '非農業部門雇用者数（NFP）',
         speaker_name: null,
+        speaker_photo_url: null,
         country_code: 'US',
         currency_code: 'USD',
         importance: 'HIGH',

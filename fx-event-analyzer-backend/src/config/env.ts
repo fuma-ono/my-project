@@ -27,6 +27,10 @@ const envSchema = z.object({
   GITHUB_ISSUES_TOKEN: optionalString(z.string().min(1)),
   // "owner/name"
   GITHUB_ISSUES_REPO: optionalString(z.string().regex(/^[\w.-]+\/[\w.-]+$/, 'must be "owner/name"')),
+  // Public origin of this API (e.g. "https://api.example.com"), used to build
+  // absolute URLs such as speaker photo URLs (api-design.md §14.7). Optional:
+  // when unset, the request's own protocol://host is used.
+  PUBLIC_BASE_URL: optionalString(z.string().url()),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -4,6 +4,7 @@ import type { Env } from './config/env.js';
 import { createGitHubBugIssueCreator, type BugIssueCreator } from './integrations/githubIssues.js';
 import { registerErrorHandler } from './plugins/errorHandler.js';
 import { registerApiRoutes } from './routes/api.js';
+import { registerSpeakerPhotoRoutes } from './routes/speakerPhotos.js';
 import { APPLE_ROOT_CA_G3_PEM } from './storekit/appleRootCertificates.js';
 import { createSignedDataVerifier, type SignedDataVerifier } from './storekit/signedDataVerifier.js';
 
@@ -42,6 +43,14 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.get('/health', () => ({ status: 'ok' }));
 
   app.register(registerApiRoutes, { prefix: '/api/v1' });
+  // Public (no JWT): a sibling context, so registerApiRoutes' auth hook does not apply.
+  app.register(
+    (photos, _options, done) => {
+      registerSpeakerPhotoRoutes(photos);
+      done();
+    },
+    { prefix: '/api/v1' },
+  );
 
   return app;
 }

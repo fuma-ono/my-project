@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.12
+# FX Event Analyzer: DB詳細設計 v4.13
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -37,6 +37,7 @@
 - **v4.10**(2026-10-09): SCR-006 指標詳細の再デザイン。`EconomicIndicator`に`name_en`(英語名)と`key_points`(注目される理由の短文の配列、0〜6件・NULL要素と空文字は不可)を追加し、`description`は「概要」として日本語1〜2文で持つと明記した(3.4節)。Migration `20261009000001_economic_indicators_name_en_key_points.sql`。開発用seed(`supabase/seed.sql`)の5指標に`name_en`・`key_points`と日本語の`description`を入れた。API(api-design.md v1.16)では`key_points`のNULLを`[]`として返す
 - **v4.11**(2026-10-09): SCR-008 相場反応詳細の「一般的な見方」。`EconomicIndicator`に`market_view_above`(結果が予想を上回ったときの一般的な見方)・`market_view_below`(下回ったとき)を追加(3.4節)。人が書いた日本語1文(200文字以内・空白だけは不可)、NULL = 未登録。Migration `20261009000002_economic_indicators_market_views.sql`。開発用seedの5指標に両方を入れた。API(api-design.md v1.18)ではNULLを`null`のまま返す
 - **v4.12**(2026-10-13): 指標の一覧画面の表示名(HQ指示 2026-10-13)。`EconomicIndicator`に`display_name`(一覧画面の表示名。HQの表示名ルール indicator-display-names.md に従う。40文字以内・空白だけは不可)を追加(3.4節)。NULL = 未登録。Migration `20261013000001_economic_indicators_display_name.sql`。開発用seedの5指標に入れた(`US_CPI` 消費者物価指数（CPI）・`US_NFP` 非農業部門雇用者数（NFP）・`US_FOMC` FOMC政策金利・`JP_CPI` 消費者物価指数（CPI）・`BOJ_RATE` 日銀政策金利)。API(api-design.md v1.21)ではNULLを`null`のまま返す
+- **v4.13**(2026-10-13): 要人の公式写真(HQ指示 2026-10-13「FRBは公式写真で、そのほかは頭文字と機関の色で」)。`Speaker`に`photo_url`(nullable)を追加(3.15節。Migration `20261013000003_speakers_photo_url.sql`)。値は`null` / 絶対URL / Backendが配信するファイルのkey `speaker-photos/<file>`で、APIが絶対URLに直して返す(api-design.md v1.25、14.7節)。FRBのサイトの写真はパブリックドメインだがフレーム内表示は不可のため、直リンクせず複製を`assets/speaker-photos/`に置いて自前で配信する(出典「米国連邦準備制度理事会(FRB)」、出典・取得日は同じ場所の`SOURCES.md`)。Migration `20261013000004_frb_speakers_self_hosted_photos.sql`でFRB理事会の現メンバーに合わせ、パウエル氏の役職を「FRB理事」に直し、ケビン・ウォーシュ(FRB議長)・フィリップ・ジェファーソン(FRB副議長)・ミシェル・ボウマン(FRB副議長（金融監督担当）)・マイケル・バー・リサ・クック(FRB理事)を追加(同じ名前・機関の要人がいれば追加しない)し、FRBの要人の`photo_url`をkeyにした。ほかの機関の要人は`null`。開発用seedのパウエル氏も「FRB理事」・`speaker-photos/powell.jpg`にした(5人の追加はseedより先に流れるMigrationで行う)
 
 ---
 
@@ -449,6 +450,7 @@ SCR-016 通知設定 / SCR-018 表示・地域設定 / SCR-019 チャート設�
 | organization | text | NN | 例: FRB |
 | country_code | text | NN | `EconomicIndicator`と同じ形式。ユーロ圏は`EU` |
 | currency_code | text | NN | `EconomicIndicator`と同じ形式。関連通貨ペアの判定に使う |
+| photo_url | text | nullable | v4.13。要人の公式写真。`null` / 絶対URL(`https://…`) / Backendが配信するファイルのkey `speaker-photos/<file>`(`<file>`は英小文字・数字・`-`と拡張子`.jpg`/`.png`だけ、ファイルは`assets/speaker-photos/`)のいずれか。APIは常に絶対URLか`null`で返す(api-design.md 14.7節)。入れてよいのは自由に使える公式写真だけ: FRBの要人の写真(federalreserve.gov、パブリックドメイン。出典「米国連邦準備制度理事会(FRB)」を示す。フレーム内表示は不可のため直リンクせず自前で配信)。ほかの機関は利用条件が未確認のため`null`(アプリは頭文字と機関の色で表示) |
 | created_at / updated_at | timestamptz | NN, DEF now() | |
 
 IDX(currency_code)

@@ -12,11 +12,31 @@ struct SpeakerAvatar: View {
     let photoURL: String?
     var size: CGFloat = 34
 
+    /// 何を出すか。写真のURLが無い・正しくない → 頭文字。読み込み中・失敗 → 頭文字。
+    enum Content: Equatable {
+        case photo
+        case initials
+    }
+
+    static func photoURL(from string: String?) -> URL? {
+        guard let string, !string.isEmpty, let url = URL(string: string), url.scheme == "https" || url.scheme == "http" else { return nil }
+        return url
+    }
+
+    static func content(photoURL: String?, phase: AsyncImagePhase?) -> Content {
+        guard Self.photoURL(from: photoURL) != nil, let phase else { return .initials }
+        if case .success = phase { return .photo }
+        return .initials
+    }
+
+    /// 国旗の印は、頭文字が読める大きさのときだけ付ける。
+    static func showsFlagBadge(size: CGFloat) -> Bool { size >= 24 }
+
     var body: some View {
         Group {
-            if let photoURL, let url = URL(string: photoURL) {
+            if let url = Self.photoURL(from: photoURL) {
                 AsyncImage(url: url) { phase in
-                    if let image = phase.image {
+                    if Self.content(photoURL: photoURL, phase: phase) == .photo, let image = phase.image {
                         image
                             .resizable()
                             .scaledToFill()
@@ -45,9 +65,11 @@ struct SpeakerAvatar: View {
                         .foregroundStyle(.white)
                 )
                 .frame(width: size, height: size)
-            CountryFlagView(countryCode: countryCode, diameter: size * 0.38)
-                .overlay(Circle().stroke(V5P.bg0, lineWidth: 1))
-                .offset(x: size * 0.04, y: size * 0.04)
+            if Self.showsFlagBadge(size: size) {
+                CountryFlagView(countryCode: countryCode, diameter: size * 0.38)
+                    .overlay(Circle().stroke(V5P.bg0, lineWidth: 1))
+                    .offset(x: size * 0.04, y: size * 0.04)
+            }
         }
     }
 

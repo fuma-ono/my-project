@@ -78,8 +78,11 @@ struct HomeSpeechSummary: Decodable, Identifiable, Equatable {
     let reactionPriceBefore: Double?
     let reactionPriceAfter: Double?
     let reactionPips: Double?
+    /// 要人の公式写真のURL(FRB理事のみ、api-design v1.25)。無ければ頭文字で表示する。
+    var speakerPhotoURL: String? = nil
 
     enum CodingKeys: String, CodingKey {
+        case speakerPhotoURL = "speaker_photo_url"
         case id = "speech_id"
         case countryCode = "country_code"
         case speakerName = "speaker_name"

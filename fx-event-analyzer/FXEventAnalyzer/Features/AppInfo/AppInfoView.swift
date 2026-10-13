@@ -60,6 +60,13 @@ struct AppInfoView: View {
                 }
                 .frame(width: 214)
                 .background(AccountCardBackground())
+
+                // HQ指示(2026-10-13): FRB理事の公式写真はFRBのサイトの規約で「出典はFRBと書く」ことに
+                // なっているので、ここに出典を書く(写真の出所は backend の assets/speaker-photos/SOURCES.md)。
+                NotoText.text("要人の写真: 米国連邦準備制度理事会（FRB）", size: 7)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .frame(width: 214, alignment: .leading)
+                    .padding(.leading, 4)
             }
             .accountPinned(top: 64, height: 380)
             V5BottomBar(selected: $tabSelection)
