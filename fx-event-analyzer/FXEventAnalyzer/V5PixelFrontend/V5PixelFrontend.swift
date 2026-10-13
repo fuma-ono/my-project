@@ -1236,13 +1236,13 @@ struct V5Header: View {
     /// `.lineLimit(1)` + `.minimumScaleFactor(0.6)`を安全策として追加した
     /// (Home側で実際に省略記号の回帰が起きた教訓から、今回は事前に入れて
     /// おく)。
-    // HQ指示(2026-10-13、6回目)「もう一つのヘッダーも...ホーム画面は除く
-    // 文字サイズは28pt」: 戻るボタンの無いメインタブ画面(指標一覧・検索・
-    // 設定・カレンダー等、ホームは`homeHeader`という別実装のため対象外)の
-    // タイトルサイズを44→28。
-    private static let mainTabTitleSize = V5P.ptToV5(28)
-    // HQ指示(2026-10-13、5回目)「見出し：26pt」: 30→26。
-    private static let detailTitleSize = V5P.ptToV5(26)
+    // HQ指示(2026-10-13、7回目)「もう一つのヘッダーの文字サイズを26ptに
+    // して」: 戻るボタンの無いメインタブ画面(指標一覧・検索・設定・
+    // カレンダー等、ホームは`homeHeader`という別実装のため対象外)の
+    // タイトルサイズを28→26。
+    private static let mainTabTitleSize = V5P.ptToV5(26)
+    // HQ指示(2026-10-13、7回目)「＜の画面の見出しの文字サイズを24pt」: 26→24。
+    private static let detailTitleSize = V5P.ptToV5(24)
     // HQ指示(2026-10-13、5回目)「＜：26pt」: 30→26。
     private static let chevronSize = V5P.ptToV5(26)
     /// HQ指示(2026-10-13、5回目)「戻る：18pt」: 20→18。
