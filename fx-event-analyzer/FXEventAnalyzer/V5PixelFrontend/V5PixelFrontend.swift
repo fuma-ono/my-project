@@ -1237,11 +1237,12 @@ struct V5Header: View {
     /// (Home側で実際に省略記号の回帰が起きた教訓から、今回は事前に入れて
     /// おく)。
     private static let mainTabTitleSize = V5P.ptToV5(44)
-    // HQ指示(2026-10-13)「＜が付く画面は...文字サイズを2つ小さくして」: 44→42。
-    private static let detailTitleSize = V5P.ptToV5(42)
-    private static let chevronSize = V5P.ptToV5(26)
-    /// HQ指示(2026-10-13)「＜戻るとする」の「戻る」の文字サイズ。
-    private static let backLabelSize = V5P.ptToV5(18)
+    // HQ指示(2026-10-13、2回目)「見出しと＜を30ptにして」: 42→30。
+    private static let detailTitleSize = V5P.ptToV5(30)
+    // HQ指示(2026-10-13、2回目)「見出しと＜を30ptにして」: 26→30。
+    private static let chevronSize = V5P.ptToV5(30)
+    /// HQ指示(2026-10-13、2回目)「戻るを20ptにして」: 18→20。
+    private static let backLabelSize = V5P.ptToV5(20)
     /// HQ指示(2026-10-04)「FX Event Analyzerと＜が付く画面を除くヘッダーは
     /// 文字の開始をもう少し右側にしてください」: Home(`homeHeader`、別実装)
     /// と＜付き詳細画面(`back == true`)は対象外、戻るボタンの無いメインタブ
