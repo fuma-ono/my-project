@@ -195,9 +195,14 @@ struct IndicatorDetailCard: View {
     private var nameText: some View {
         let display = CountryFlag.indicatorDisplayName(indicator.name, countryCode: indicator.countryCode)
         let combinedName = display.abbreviation.map { "\(display.main)(\($0))" } ?? display.main
+        // `minimumScaleFactor`は指定した下限まで縮小しても入りきらない場合は
+        // 「…」で省略してしまう(CI screenshotで確認、「消費者物価指数…」と
+        // なり「(CPI)」が消えていた)。星マークの分だけ横幅が狭いこの画面
+        // では0.75では不十分だったため、省略が発生しないよう0.5まで縮小を
+        // 許容するようにした。
         return NotoText.text(combinedName, size: 11)
             .lineLimit(1)
-            .minimumScaleFactor(0.75)
+            .minimumScaleFactor(0.5)
             .foregroundStyle(.white)
     }
 
