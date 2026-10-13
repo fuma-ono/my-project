@@ -34,6 +34,7 @@ struct IndicatorDetailCard: View {
                             }
                             Spacer(minLength: 4)
                             importanceBadge(width: 32)
+                            linkChevron
                         }
                     }
                 }
@@ -58,7 +59,8 @@ struct IndicatorDetailCard: View {
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.8)
                             }
-                            Spacer(minLength: 0)
+                            Spacer(minLength: 4)
+                            linkChevron
                         }
                     }
                 }
@@ -120,23 +122,26 @@ struct IndicatorDetailCard: View {
         .accessibilityIdentifier("indicatorFavoriteStar")
     }
 
-    /// 見出し(「次回発表予定 ›」)とその下の小さなカード。全体で1つのボタン。
+    /// 見出し(「次回発表予定」)とその下の小さなカード。全体で1つのボタン。
+    /// HQ指示(2026-10-13、4回目)「次回発表予定と過去イベント比較の＞は
+    /// 枠内の右側にして」: 見出し行(枠の外)にあった「＞」を外し、枠(カード)
+    /// の中、右端に移した(`linkChevron`、各カードのHStackの末尾)。
     private func linkSection(title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                NotoText.text(title, size: 10.5).foregroundStyle(.white)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(SettingsCardStyle.chevronColor)
-            }
-            .padding(.horizontal, 4)
+            NotoText.text(title, size: 10.5).foregroundStyle(.white)
+                .padding(.horizontal, 4)
             content()
                 .padding(.horizontal, 10)
                 .frame(width: 214, height: 38, alignment: .leading)
                 .background(AccountCardBackground())
         }
         .contentShape(Rectangle())
+    }
+
+    private var linkChevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(SettingsCardStyle.chevronColor)
     }
 
     /// 「2025/10/15(水) 21:30」。
