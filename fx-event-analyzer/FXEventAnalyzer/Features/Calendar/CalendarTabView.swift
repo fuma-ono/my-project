@@ -269,7 +269,9 @@ private struct CalendarDayList: View {
         // HQ指示(2026-10-13、2回目)「各イベントカードが全然違います。
         // 一つで1枠あり角は丸いです」: 1つの連続リスト(区切り線)ではなく、
         // イベントごとに独立した角丸カードにし、カード間に隙間を空けた。
-        VStack(spacing: 6) {
+        // HQ指示(2026-10-13、3回目)「各イベントの枠をもう少し短くして
+        // 4つのカードは1画面で表示できるようにして」: カード間の隙間を詰めた。
+        VStack(spacing: 4) {
             if items.isEmpty {
                 NotoText.text("この日のイベントはありません。", size: 8)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
@@ -294,7 +296,7 @@ private struct CalendarDayList: View {
         return HStack(spacing: 0) {
             Rectangle().fill(colors.border).frame(width: 3)
             HStack(spacing: 6) {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(item.hasTime ? Self.timeFormatter.string(from: item.datetime) : "未定")
                         .font(.system(size: 9, weight: .bold))
                         .monospacedDigit()
@@ -304,8 +306,10 @@ private struct CalendarDayList: View {
                     Circle().fill(colors.border).frame(width: 5, height: 5)
                 }
                 .frame(width: 28, alignment: .leading)
+                // HQ指示(2026-10-13、3回目)「枠をもう少し短くして」: 国旗を
+                // 16→14に縮め、カード全体の高さを決めている縦積み部分を詰めた。
                 VStack(spacing: 1) {
-                    CountryFlagView(countryCode: item.countryCode, diameter: 16)
+                    CountryFlagView(countryCode: item.countryCode, diameter: 14)
                     NotoText.text(item.currencyCode, size: 6.5).foregroundStyle(.white)
                 }
                 // 指標名はホームと同じくカッコの前まで(正式名は詳細画面)。
@@ -330,7 +334,7 @@ private struct CalendarDayList: View {
                     .foregroundStyle(SettingsCardStyle.chevronColor)
             }
             .padding(.horizontal, 7)
-            .padding(.vertical, 6)
+            .padding(.vertical, 4)
         }
         .frame(width: 214)
         .background(AccountCardBackground())
