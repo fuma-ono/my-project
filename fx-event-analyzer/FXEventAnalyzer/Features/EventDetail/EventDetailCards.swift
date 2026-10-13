@@ -155,7 +155,10 @@ struct EventDetailCards: View {
         // 画面間でずれていた。両方に同じ`summaryCardMinHeight`を与え、
         // ヘッダーの下のカードの高さを揃えることで値動き表の位置も揃えた
         // (`SpeechDetailCards.statementCard`と対になる変更)。
-        .frame(width: 214, minHeight: Self.summaryCardMinHeight)
+        // `width:`(固定)と`minHeight:`(可変)は`frame`の別のオーバーロード
+        // であり同じ呼び出しに混在できないため、`.frame`を2回に分けた。
+        .frame(minHeight: Self.summaryCardMinHeight)
+        .frame(width: 214)
         .background(AccountCardBackground())
     }
 

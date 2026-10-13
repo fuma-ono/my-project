@@ -150,7 +150,10 @@ struct SpeechDetailCards: View {
         // results`(結果/予想/前回カード)より内容が短く縦幅が小さいため、
         // 値動き表の開始位置が画面間でずれていた。`EventDetailCards.
         // summaryCardMinHeight`と同じ最低高さを与えて揃えた。
-        .frame(width: 214, minHeight: EventDetailCards.summaryCardMinHeight, alignment: .leading)
+        // `width:`(固定)と`minHeight:`(可変)は`frame`の別のオーバーロード
+        // であり同じ呼び出しに混在できないため、`.frame`を2回に分けた。
+        .frame(minHeight: EventDetailCards.summaryCardMinHeight, alignment: .top)
+        .frame(width: 214, alignment: .leading)
         .background(AccountCardBackground())
     }
 
