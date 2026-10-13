@@ -80,6 +80,7 @@ struct SearchView: View {
     @State private var path = NavigationPath()
     @State private var selectedFilter: SearchFilter = .all
     @State private var recentSearches: [RecentSearchEntry] = RecentSearchStore.load()
+    @State private var selectedSort: SearchSort = .relevance
     @FocusState private var searchFieldFocused: Bool
     @Binding var tabSelection: Int
     private let apiClient: APIClient
@@ -326,8 +327,10 @@ struct SearchView: View {
             EmptyView()
         case .loaded:
             // 検索語(指標名・国・通貨ペア)で絞り込んだ結果(SCR-005と同じ規則)。
-            let indicators = viewModel.filtered
+            let indicators = sortedResults(viewModel.filtered)
             if selectedFilter == .all || selectedFilter == .indicator {
+                resultsHeader(count: indicators.count)
+                    .padding(.bottom, -8)
                 // HQ指示(2026-10-11、8回目)「CPIを検索した後の画面のカード
                 // 全体を枠を囲って、線で各行を表して」: 行ごとに別々の
                 // カードを並べる構成から、1枚の外枠カード+行間の区切り線
@@ -354,6 +357,63 @@ struct SearchView: View {
         }
     }
 
+    /// HQ指示(2026-10-13)「参考画像のように検索結果何件と関連度順のようなものもあるといい」。
+    private func resultsHeader(count: Int) -> some View {
+        HStack {
+            NotoText.text("検索結果 \(count)件", size: 8)
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+            Spacer()
+            Menu {
+                ForEach(SearchSort.allCases) { sort in
+                    Button(sort.title) { selectedSort = sort }
+                }
+            } label: {
+                HStack(spacing: 2) {
+                    NotoText.text(selectedSort.title, size: 8)
+                    Image(systemName: "chevron.down").font(.system(size: 6, weight: .bold))
+                }
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+            }
+        }
+        .padding(.horizontal, 2)
+    }
+
+    /// 並び順。関連度は、略称や名前が検索語と同じもの → 名前が検索語で始まるもの →
+    /// 名前に含むもの → 正式名に含むもの → それ以外(国・通貨で当たったもの)の順。同じ順位の中は元の順。
+    private func sortedResults(_ indicators: [IndicatorSummary]) -> [IndicatorSummary] {
+        switch selectedSort {
+        case .relevance:
+            let query = trimmedQuery.lowercased()
+            func score(_ indicator: IndicatorSummary) -> Int {
+                let display = CountryFlag.indicatorDisplayName(indicator.name, countryCode: indicator.countryCode, displayName: indicator.displayName)
+                let main = display.main.lowercased()
+                if main == query || display.abbreviation?.lowercased() == query { return 0 }
+                if main.hasPrefix(query) { return 1 }
+                if main.contains(query) || (display.abbreviation?.lowercased().contains(query) ?? false) { return 2 }
+                if indicator.name.lowercased().contains(query) { return 3 }
+                return 4
+            }
+            return indicators.enumerated()
+                .sorted { (score($0.element), $0.offset) < (score($1.element), $1.offset) }
+                .map(\.element)
+        case .releaseDate:
+            return indicators.enumerated()
+                .sorted { ($0.element.nextReleaseDatetime ?? .distantFuture, $0.offset) < ($1.element.nextReleaseDatetime ?? .distantFuture, $1.offset) }
+                .map(\.element)
+        case .importance:
+            func rank(_ importance: Importance) -> Int {
+                switch importance {
+                case .high: return 0
+                case .medium: return 1
+                case .low: return 2
+                }
+            }
+            return indicators.enumerated()
+                .sorted { (rank($0.element.importance), $0.offset) < (rank($1.element.importance), $1.offset) }
+                .map(\.element)
+        }
+    }
+
     private func resultRow(_ indicator: IndicatorSummary) -> some View {
         // HQ指示(2026-10-11、11回目)「検索画面は米国CPIのままになっている
         // ので修正して」: Homeの「今日の重要イベント」と同じ
@@ -372,7 +432,8 @@ struct SearchView: View {
         return HStack(alignment: .center, spacing: 8) {
             // HQ指示(2026-10-11、8回目)「CPIを検索した後の画面の国旗マーク
             // を少し小さくして」: 28→24。
-            CountryFlagView(countryCode: indicator.countryCode, diameter: 24)
+            // HQ指示(2026-10-13)「国旗マークを少し小さく」: 24→20。
+            CountryFlagView(countryCode: indicator.countryCode, diameter: 20)
             // HQ指示(2026-10-11、16回目)「カード内の行間を短くして」: 2→1。
             VStack(alignment: .leading, spacing: 1) {
                 // HQ指示(2026-10-11、9回目)「枠線の高さは全て揃えて」:
@@ -392,23 +453,23 @@ struct SearchView: View {
                 // HQ指示(2026-10-11、17回目)「各カードの縦幅も少し短くして」:
                 // 見出しを9.5ptに縮めた分、2行分の予約も22→19に詰めた。
                 ViewThatFits(in: .horizontal) {
-                    NotoText.text(displayName, size: 9.5)
+                    NotoText.text(displayName, size: 9)
                         .foregroundStyle(.white)
                         .lineLimit(1)
-                        .frame(minHeight: 19, alignment: .leading)
+                        .frame(minHeight: 16, alignment: .leading)
                     VStack(alignment: .leading, spacing: 0) {
-                        NotoText.text(display.main, size: 9.5)
+                        NotoText.text(display.main, size: 9)
                             .foregroundStyle(.white)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                         if let abbreviation = display.abbreviation {
-                            NotoText.text("（\(abbreviation)）", size: 9.5)
+                            NotoText.text("（\(abbreviation)）", size: 9)
                                 .foregroundStyle(.white)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.8)
                         }
                     }
-                    .frame(minHeight: 19, alignment: .topLeading)
+                    .frame(minHeight: 16, alignment: .topLeading)
                 }
                 // 括弧を2行目に分けたことで、タイトルのaccessibility labelも
                 // 「米国CPI」「(消費者物価指数)」の2要素に分かれてしまい、
@@ -419,9 +480,9 @@ struct SearchView: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(indicator.name)
                 HStack(spacing: 4) {
-                    NotoText.text(CountryFlag.japaneseName(forCountry: indicator.countryCode), size: 8.5)
+                    NotoText.text(CountryFlag.japaneseName(forCountry: indicator.countryCode), size: 8)
                         .foregroundStyle(V5P.muted)
-                    NotoText.text("|", size: 8.5)
+                    NotoText.text("|", size: 8)
                         .foregroundStyle(V5P.muted)
                     // HQ指示(2026-10-11、9回目)「経済指標のマークを大きく
                     // して」: 5.3→6.5、パディングも比例して広げた。
@@ -439,8 +500,11 @@ struct SearchView: View {
         // して」: 6→4、52→46。
         // HQ指示(2026-10-11、17回目)「各カードの縦幅も少し短くして」:
         // 4→3、46→42。
-        .padding(.vertical, 3)
-        .frame(minHeight: 42, alignment: .top)
+        // HQ指示(2026-10-13)「1件あたりの高さがやや大きい。上下の余白を少し減らせば、キーボード
+        // 表示中でも多くの結果を確認できる」「消費者物価指数と日本の文字サイズを0.5小さく」:
+        // 名前9.5→9・国名8.5→8にし、行の高さを42→34に詰めた。
+        .padding(.vertical, 2)
+        .frame(minHeight: 34, alignment: .center)
         // HQ指示(2026-10-11、9回目)「>の位置は枠の右端の中心にして」: 行の
         // 内容(`alignment: .top`)から独立して、行全体の高さの中央・右端に
         // オーバーレイで置く。
@@ -449,6 +513,18 @@ struct SearchView: View {
                 .font(.system(size: 10.5, weight: .semibold))
                 .foregroundStyle(V5P.muted)
                 .padding(.trailing, 8)
+        }
+    }
+}
+
+private enum SearchSort: String, CaseIterable, Identifiable {
+    case relevance, releaseDate, importance
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .relevance: return "関連度順"
+        case .releaseDate: return "発表日順"
+        case .importance: return "重要度順"
         }
     }
 }
