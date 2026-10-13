@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.19
+# FX Event Analyzer: API詳細設計書 v1.20
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -61,6 +61,7 @@
 - **v1.17**(2026-10-09): SCR-007 イベント詳細の再デザイン(HQ指示 2026-10-09)。`GET /events/{id}`に`major_fx_reactions`(主要通貨ペアの値動き。イベントの通貨を含む通貨ペア最大4件 × `1m`・`5m`・`15m`の`pips`・`change_percent`・`analysis_status`)を追加(14.1節)。`related_fx_pairs`は変えない。必要なfeature_codeは`related_fx_pairs[].reaction`と同じく`VIEW_BASIC_EVENT`のみ
 - **v1.19**(2026-10-09): `GET /events/{event_id}/reaction/chart`の表示範囲を時間足ごとに(1m 前後15分・5m 前後60分・15m 前後3時間)。Responseに`window_from` / `window_to`を追加
 - **v1.18**(2026-10-09): SCR-008 相場反応詳細の「一般的な見方」(HQ決定 2026-10-09)。`GET /indicators`・`GET /indicators/{id}`の`indicator`に`market_view_above`(結果が予想を上回ったときの一般的な見方)・`market_view_below`(下回ったとき)を追加(13.2節)。人が書いた日本語1文の定型文(AI生成ではない)で、未登録は`null`
+- **v1.20**(2026-10-13): SCR-005 指標一覧の次回発表(HQ指示 2026-10-13)。`GET /indicators`の各行と`GET /indicators/{id}`の`indicator`に`next_release_datetime`(次回発表日時。現在以降で最も早い`status = SCHEDULED`のEvent、無ければ`null`)・`next_event_id`(そのEventのID、無ければ`null`)・`latest_release_datetime`(最新の`status = RELEASED`のEventの発表日時、無ければ`null`。次回発表が無いときの表示用)を追加(13.2節)。`GET /indicators`の`sort`に`next_release`(次回発表の昇順、次回発表が無い指標は後ろ、同じなら名前順)を追加(13.1節)。既定の並び順(`name`)は変えない
 
 ---
 
@@ -458,6 +459,10 @@ Query：q / country_code / currency_code / importance / page / limit / sort
 
 qはIndicator name / codeの部分一致検索に使用する。
 
+sort：`name`(既定)/ `importance` / `created_at` / `next_release`(v1.20)。`next_release`は`next_release_datetime`の昇順で、`next_release_datetime`が`null`の指標は後ろに置き、同じ日時(または両方`null`)は`name`順。Paginationは並べ替えた後に掛ける。SCR-005 指標一覧は`sort=next_release&limit=100`で呼ぶ。
+
+各行は13.2の`indicator`オブジェクトと同じ形(`next_release_datetime` / `next_event_id` / `latest_release_datetime`を含む)。
+
 ## 13.2 GET /api/v1/indicators/{indicator_id}
 
 経済指標詳細を取得する。
@@ -466,7 +471,7 @@ Responseには以下を含む：indicator / favorable_direction / related_fx_pai
 
 Indicator Detailでは、name / code / country / currency / importance / description / frequency / unit / source / source_url / favorable_direction などを取得可能とする。
 
-**indicatorオブジェクトの項目(v1.16で`name_en`・`key_points`、v1.18で`market_view_above`・`market_view_below`を追加)**: 13.1の一覧の各行と13.2の`indicator`は同じ形：
+**indicatorオブジェクトの項目(v1.16で`name_en`・`key_points`、v1.18で`market_view_above`・`market_view_below`、v1.20で`next_release_datetime`・`next_event_id`・`latest_release_datetime`を追加)**: 13.1の一覧の各行と13.2の`indicator`は同じ形：
 
 ```json
 {
@@ -485,7 +490,10 @@ Indicator Detailでは、name / code / country / currency / importance / descrip
   "source_url": null,
   "favorable_direction": "HIGHER_IS_POSITIVE",
   "market_view_above": "米国CPIが予想を上回ると、インフレの高止まりから利下げが遠のくとの見方が強まり、ドルが買われやすいとされる。",
-  "market_view_below": "米国CPIが予想を下回ると、インフレの落ち着きから利下げが意識され、ドルが売られやすいとされる。"
+  "market_view_below": "米国CPIが予想を下回ると、インフレの落ち着きから利下げが意識され、ドルが売られやすいとされる。",
+  "next_release_datetime": "2026-11-10T13:30:00Z",
+  "next_event_id": "30000000-0000-0000-0000-000000000011",
+  "latest_release_datetime": "2026-09-10T12:30:00Z"
 }
 ```
 
@@ -493,6 +501,9 @@ Indicator Detailでは、name / code / country / currency / importance / descrip
 - `description`：SCR-006の「概要」。日本語1〜2文(v1.16でseedを日本語化)。未登録は`null`
 - `key_points`(v1.16)：SCR-006の「注目される理由」。日本語の短文の配列(2〜4件程度、DB上の上限6件)、配列順 = 表示順。**未登録(DBの`NULL`)は`[]`で返し、`null`にはしない**
 - `market_view_above` / `market_view_below`(v1.18)：一般的な見方。SCR-008で結果と予想の差に応じて表示(結果が予想を上回ったら`market_view_above`、下回ったら`market_view_below`)。実際の値動きの原因と断定する表示はしない。人が書いた日本語1文(200文字以内、AI生成ではない)。未登録は`null`(画面側で項目を出さない)
+- `next_release_datetime` / `next_event_id`(v1.20)：SCR-005の次回発表。その指標の`economic_events`のうち`status = SCHEDULED`かつ`release_datetime`が現在以降で最も早いEvent(同時刻はEvent IDの小さい方)の`release_datetime`とID。該当が無ければ両方`null`。発表時刻を過ぎてもまだ`SCHEDULED`のEvent(取り込み待ち)と`CANCELLED`は次回発表にしない
+- `latest_release_datetime`(v1.20)：最新の`status = RELEASED`のEventの`release_datetime`。無ければ`null`。次回発表が無い指標で「前回発表」として表示する。13.2の`latest_event`(状態を問わず最新のEvent)とは別の項目
+- 3項目は一覧の1ページ分をまとめて求める(指標ごとに問い合わせない)
 
 ## 13.3 GET /api/v1/indicators/{indicator_id}/events
 

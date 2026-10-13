@@ -24,10 +24,18 @@ struct IndicatorSummary: Decodable, Identifiable, Equatable {
     /// 一般にどう動きやすいとされるか。人が書いた文で、今回の原因と断定するものではない。
     var marketViewAbove: String? = nil
     var marketViewBelow: String? = nil
+    /// 次回発表(api-design v1.20、SCR-005の並びと日時)。古いBackendではnil。
+    var nextReleaseDatetime: Date? = nil
+    var nextEventId: String? = nil
+    /// 前回の発表日時(次回が無いときに薄く出す)。
+    var latestReleaseDatetime: Date? = nil
 
     enum CodingKeys: String, CodingKey {
         case marketViewAbove = "market_view_above"
         case marketViewBelow = "market_view_below"
+        case nextReleaseDatetime = "next_release_datetime"
+        case nextEventId = "next_event_id"
+        case latestReleaseDatetime = "latest_release_datetime"
         case nameEn = "name_en"
         case keyPoints = "key_points"
         case id

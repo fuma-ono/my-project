@@ -7,7 +7,7 @@ export const listIndicatorsQuerySchema = z.object({
   importance: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
-  sort: z.enum(['name', 'importance', 'created_at']).optional(),
+  sort: z.enum(['name', 'importance', 'created_at', 'next_release']).optional(),
 });
 
 export const listIndicatorEventsQuerySchema = z.object({

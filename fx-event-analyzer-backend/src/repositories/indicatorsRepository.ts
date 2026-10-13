@@ -1,6 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { rangeFor, type PaginationParams } from '../utils/pagination.js';
-import { normalizeKeyPoints } from '../domain/indicators.js';
+import {
+  EMPTY_RELEASE_SUMMARY,
+  buildReleaseSummaries,
+  compareByNextRelease,
+  normalizeKeyPoints,
+  type IndicatorReleaseSummary,
+} from '../domain/indicators.js';
 
 export interface IndicatorRow {
   id: string;
@@ -40,14 +46,18 @@ export interface ListIndicatorsFilters {
   countryCode?: string | undefined;
   currencyCode?: string | undefined;
   importance?: string | undefined;
-  sort: 'name' | 'importance' | 'created_at';
+  sort: 'name' | 'importance' | 'created_at' | 'next_release';
 }
+
+/** §13.1 list item: the indicator plus its next / latest release (v1.20). */
+export type IndicatorListRow = IndicatorRow & IndicatorReleaseSummary;
 
 export async function listIndicators(
   supabase: SupabaseClient,
   filters: ListIndicatorsFilters,
   pagination: PaginationParams,
-): Promise<{ rows: IndicatorRow[]; total: number }> {
+  now: Date = new Date(),
+): Promise<{ rows: IndicatorListRow[]; total: number }> {
   let query = supabase.from('economic_indicators').select(INDICATOR_COLUMNS, { count: 'exact' }).eq('is_active', true);
 
   if (filters.q) {
@@ -59,10 +69,92 @@ export async function listIndicators(
   if (filters.importance) query = query.eq('importance', filters.importance);
 
   const { from, to } = rangeFor(pagination.page, pagination.limit);
+
+  if (filters.sort === 'next_release') {
+    // The sort key lives on economic_events, not economic_indicators, so the
+    // whole (filtered, active) indicator set is fetched, summarised, sorted
+    // and then paged here. The active indicator master is small (tens of
+    // rows), so this stays 1 + 2 queries regardless of page.
+    const { data, error, count } = await query.order('name', { ascending: true });
+    if (error) throw error;
+    const indicators = ((data ?? []) as IndicatorDbRow[]).map(toIndicatorRow);
+    const summaries = await getIndicatorReleaseSummaries(
+      supabase,
+      indicators.map((row) => row.id),
+      now,
+    );
+    const rows = withSummaries(indicators, summaries).sort(compareByNextRelease);
+    return { rows: rows.slice(from, to + 1), total: count ?? rows.length };
+  }
+
   const { data, error, count } = await query.order(filters.sort, { ascending: true }).range(from, to);
   if (error) throw error;
 
-  return { rows: ((data ?? []) as IndicatorDbRow[]).map(toIndicatorRow), total: count ?? 0 };
+  const indicators = ((data ?? []) as IndicatorDbRow[]).map(toIndicatorRow);
+  const summaries = await getIndicatorReleaseSummaries(
+    supabase,
+    indicators.map((row) => row.id),
+    now,
+  );
+  return { rows: withSummaries(indicators, summaries), total: count ?? 0 };
+}
+
+function withSummaries(
+  indicators: IndicatorRow[],
+  summaries: Map<string, IndicatorReleaseSummary>,
+): IndicatorListRow[] {
+  return indicators.map((row) => ({ ...row, ...(summaries.get(row.id) ?? EMPTY_RELEASE_SUMMARY) }));
+}
+
+/** PostgREST `in.(...)` goes in the URL — keep each request's id list short. */
+const RELEASE_SUMMARY_ID_CHUNK = 100;
+
+/**
+ * SCR-005 指標一覧 (§13.1 / §13.2, v1.20): next SCHEDULED release (at/after
+ * `now`) and latest RELEASED release per indicator, for a whole page in two
+ * queries (one per status) — never one query per indicator.
+ */
+export async function getIndicatorReleaseSummaries(
+  supabase: SupabaseClient,
+  indicatorIds: readonly string[],
+  now: Date = new Date(),
+): Promise<Map<string, IndicatorReleaseSummary>> {
+  if (indicatorIds.length === 0) return new Map();
+
+  const chunks: string[][] = [];
+  for (let index = 0; index < indicatorIds.length; index += RELEASE_SUMMARY_ID_CHUNK) {
+    chunks.push(indicatorIds.slice(index, index + RELEASE_SUMMARY_ID_CHUNK));
+  }
+
+  const [scheduled, released] = await Promise.all([
+    Promise.all(
+      chunks.map(async (ids) => {
+        const { data, error } = await supabase
+          .from('economic_events')
+          .select('id, indicator_id, release_datetime')
+          .in('indicator_id', ids)
+          .eq('status', 'SCHEDULED')
+          .gte('release_datetime', now.toISOString())
+          .order('release_datetime', { ascending: true });
+        if (error) throw error;
+        return data ?? [];
+      }),
+    ),
+    Promise.all(
+      chunks.map(async (ids) => {
+        const { data, error } = await supabase
+          .from('economic_events')
+          .select('id, indicator_id, release_datetime')
+          .in('indicator_id', ids)
+          .eq('status', 'RELEASED')
+          .order('release_datetime', { ascending: false });
+        if (error) throw error;
+        return data ?? [];
+      }),
+    ),
+  ]);
+
+  return buildReleaseSummaries(indicatorIds, scheduled.flat(), released.flat(), now);
 }
 
 export async function getIndicatorById(supabase: SupabaseClient, indicatorId: string): Promise<IndicatorRow | null> {

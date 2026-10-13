@@ -30,6 +30,27 @@ final class IndicatorsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.state, .loaded([indicator]))
     }
 
+    func testSearchMatchesNamesCountriesAndCurrencyPairs() {
+        let cpi = IndicatorSummary(
+            id: "a", code: "US_CPI", name: "米国CPI(消費者物価指数)", countryCode: "US", currencyCode: "USD",
+            importance: .high, description: nil, frequency: "MONTHLY", unit: "%", source: nil,
+            sourceUrl: nil, favorableDirection: .higherIsPositive
+        )
+        XCTAssertTrue(IndicatorsViewModel.matchesSearch(cpi, query: "消費者"))
+        XCTAssertTrue(IndicatorsViewModel.matchesSearch(cpi, query: "米国"))
+        XCTAssertTrue(IndicatorsViewModel.matchesSearch(cpi, query: "USD/JPY"))
+        XCTAssertTrue(IndicatorsViewModel.matchesSearch(cpi, query: "eurusd"))
+        XCTAssertFalse(IndicatorsViewModel.matchesSearch(cpi, query: "GBP/JPY"))
+        XCTAssertFalse(IndicatorsViewModel.matchesSearch(cpi, query: "日本"))
+    }
+
+    func testTimeBands() {
+        XCTAssertEqual(IndicatorsViewModel.TimeBand.of(hour: 3), .earlyMorning)
+        XCTAssertEqual(IndicatorsViewModel.TimeBand.of(hour: 8), .morning)
+        XCTAssertEqual(IndicatorsViewModel.TimeBand.of(hour: 13), .afternoon)
+        XCTAssertEqual(IndicatorsViewModel.TimeBand.of(hour: 21), .night)
+    }
+
     func testLoadBackendNotConfigured() async {
         let apiClient = MockAPIClient()
         apiClient.result = .failure(APIError.notConfigured)

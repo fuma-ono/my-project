@@ -246,7 +246,7 @@ const RELATED_FX_PAIRS = [{ fx_pair_id: FX_PAIR_ID, symbol: 'USDJPY', priority: 
 
 // SCR-006 指標詳細 (HQ指示 2026-10-09): GET /calendar の指標行は indicator_id を
 // 持ち、タップで GET /indicators/{id} を開く。上の4指標に当たらないカレンダー
-// 用の指標はここに置く (GET /indicators の一覧には出さず、詳細だけ返す)。
+// 用の指標はここに置く (v1.20 から GET /indicators の一覧にも出す)。
 // 米国新規失業保険申請件数は週次だが、frequency は DB の値 (MONTHLY /
 // QUARTERLY / IRREGULAR) に合わせて IRREGULAR にしている。
 const CALENDAR_INDICATORS = {
@@ -880,10 +880,70 @@ function majorFxRows() {
   });
 }
 
-function indicatorsListHandler() {
+/**
+ * SCR-005 指標一覧 (api-design.md §13.1, v1.20): 指標ごとの次回発表
+ * (現在以降で最も早いSCHEDULED) と前回発表 (最新のRELEASED)。カレンダー
+ * フィクスチャ (前月・当月・翌月) の指標行から求めるので、月末に撮っても
+ * 全指標に次回発表がある。
+ */
+function indicatorReleaseSummary(indicatorId) {
+  const nowMs = now().getTime();
+  let next = null;
+  let latest = null;
+  for (const item of [-1, 0, 1].flatMap((offset) => calendarFixture(offset))) {
+    if (item.kind !== 'INDICATOR' || item.indicator_id !== indicatorId) continue;
+    const at = Date.parse(item.datetime);
+    if (item.status === 'SCHEDULED' && at >= nowMs && (!next || at < Date.parse(next.datetime))) next = item;
+    if (item.status === 'RELEASED' && (!latest || at > Date.parse(latest.datetime))) latest = item;
+  }
   return {
-    data: INDICATORS_LIST,
-    meta: { page: 1, limit: 20, total: INDICATORS_LIST.length, has_next: false },
+    next_release_datetime: next?.datetime ?? null,
+    next_event_id: next?.id ?? null,
+    latest_release_datetime: latest?.datetime ?? null,
+  };
+}
+
+function withReleaseSummary(indicator) {
+  return { ...indicator, ...indicatorReleaseSummary(indicator.id) };
+}
+
+/** GET /indicators: 一覧の4指標 + カレンダー用の指標すべて。q (名前/コードの部分一致)・
+ * importance・country_code・currency_code で絞り、sort (name既定 / importance /
+ * next_release) で並べ、page・limit で切る。 */
+function indicatorsListHandler(searchParams) {
+  const q = searchParams.get('q')?.toLowerCase();
+  const importance = searchParams.get('importance');
+  const countryCode = searchParams.get('country_code');
+  const currencyCode = searchParams.get('currency_code');
+  const sort = searchParams.get('sort') ?? 'name';
+  const rawLimit = Number(searchParams.get('limit'));
+  const limit = Number.isFinite(rawLimit) && rawLimit >= 1 ? Math.min(100, Math.floor(rawLimit)) : 20;
+  const rawPage = Number(searchParams.get('page'));
+  const page = Number.isFinite(rawPage) && rawPage >= 1 ? Math.floor(rawPage) : 1;
+
+  const byName = (a, b) => (a.name === b.name ? (a.id < b.id ? -1 : 1) : a.name < b.name ? -1 : 1);
+  const importanceRank = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+  const time = (row) => (row.next_release_datetime === null ? Infinity : Date.parse(row.next_release_datetime));
+  const comparators = {
+    name: byName,
+    importance: (a, b) => importanceRank[a.importance] - importanceRank[b.importance] || byName(a, b),
+    next_release: (a, b) => time(a) - time(b) || byName(a, b),
+  };
+
+  const rows = ALL_MOCK_INDICATORS.filter((row) => {
+    if (q && !row.name.toLowerCase().includes(q) && !row.code.toLowerCase().includes(q)) return false;
+    if (importance && row.importance !== importance) return false;
+    if (countryCode && row.country_code !== countryCode) return false;
+    if (currencyCode && row.currency_code !== currencyCode) return false;
+    return true;
+  })
+    .map(withReleaseSummary)
+    .sort(comparators[sort] ?? byName);
+
+  const start = (page - 1) * limit;
+  return {
+    data: rows.slice(start, start + limit),
+    meta: { page, limit, total: rows.length, has_next: page * limit < rows.length },
   };
 }
 
@@ -891,7 +951,7 @@ function indicatorDetailHandler(indicatorId) {
   const indicator = ALL_MOCK_INDICATORS.find((row) => row.id === indicatorId);
   if (!indicator) return null;
   return {
-    indicator,
+    indicator: withReleaseSummary(indicator),
     favorable_direction: indicator.favorable_direction,
     related_fx_pairs: indicatorId === INDICATOR_ID ? RELATED_FX_PAIRS : [],
     latest_event:
@@ -1668,16 +1728,20 @@ const CALENDAR_OTHER_DAYS = {
   ],
 };
 
-/** 撮影した月(このサーバーのタイムゾーン)の全項目。kind・idはGET /calendarと同じ形。 */
-function calendarFixture() {
+/** 撮影した月(このサーバーのタイムゾーン)の全項目。kind・idはGET /calendarと同じ形。
+ * monthOffset (前月 -1 / 翌月 +1) は GET /indicators の次回発表・前回発表の算出用:
+ * 同じ日付パターンを前後の月にも置き、固定IDは使わず月ごとに別のIDを振る。 */
+function calendarFixture(monthOffset = 0) {
   const offsetMs = -now().getTimezoneOffset() * 60_000;
   const localNow = new Date(now().getTime() + offsetMs);
   const year = localNow.getUTCFullYear();
-  const month = localNow.getUTCMonth();
+  const month = localNow.getUTCMonth() + monthOffset;
   const today = localNow.getUTCDate();
   const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const idGroup = monthOffset === 0 ? 'cccc' : monthOffset < 0 ? 'ccc0' : 'ccc2';
+  const speechIdGroup = monthOffset === 0 ? 'dddd' : monthOffset < 0 ? 'ddd0' : 'ddd2';
 
-  const days = [[today, CALENDAR_TODAY_ITEMS]];
+  const days = today <= daysInMonth ? [[today, CALENDAR_TODAY_ITEMS]] : [];
   for (const [day, specs] of Object.entries(CALENDAR_OTHER_DAYS)) {
     if (Number(day) !== today && Number(day) <= daysInMonth) days.push([Number(day), specs]);
   }
@@ -1693,7 +1757,7 @@ function calendarFixture() {
         const [, , title, country, currency, importance, eventId, indicatorId] = spec;
         items.push({
           kind: 'INDICATOR',
-          id: eventId ?? `cccccccc-cccc-cccc-cccc-${serial}`,
+          id: (monthOffset === 0 ? eventId : null) ?? `cccccccc-cccc-cccc-${idGroup}-${serial}`,
           indicator_id: indicatorId,
           title,
           speaker_name: null,
@@ -1709,7 +1773,7 @@ function calendarFixture() {
         const speaker = CALENDAR_SPEAKERS[speakerKey];
         items.push({
           kind: 'SPEECH',
-          id: `dddddddd-dddd-dddd-dddd-${serial}`,
+          id: `dddddddd-dddd-dddd-${speechIdGroup}-${serial}`,
           indicator_id: null,
           title,
           speaker_name: speaker.name,
@@ -2003,7 +2067,7 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
     .filter(Boolean);
 
   if (pathname === '/api/v1/home') return json(res, 200, homeHandler());
-  if (pathname === '/api/v1/indicators') return json(res, 200, indicatorsListHandler());
+  if (pathname === '/api/v1/indicators') return json(res, 200, indicatorsListHandler(searchParams));
   // SCR-016/018/020/021 (api-design.md §24.4/§24.5). PATCH merges the body
   // into the fixture and answers with the result.
   if (pathname === '/api/v1/settings') {

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { ApiError } from '../errors/ApiError.js';
 import {
   getIndicatorById,
+  getIndicatorReleaseSummaries,
   getLatestEvent,
   listEventsForIndicator,
   listIndicators,
@@ -9,9 +10,11 @@ import {
 } from '../repositories/indicatorsRepository.js';
 import { listIndicatorEventsQuerySchema, listIndicatorsQuerySchema } from '../schemas/indicators.js';
 import { buildMeta, parsePagination, resolveSort } from '../utils/pagination.js';
+import { EMPTY_RELEASE_SUMMARY } from '../domain/indicators.js';
 import { mapEventDataStatus, type EconomicEventDbStatus } from '../domain/dataQuality.js';
 
-const SORT_ALLOWLIST = ['name', 'importance', 'created_at'] as const;
+// `next_release` (v1.20, SCR-005): next SCHEDULED release ascending, none last, then name.
+const SORT_ALLOWLIST = ['name', 'importance', 'created_at', 'next_release'] as const;
 
 export function registerIndicatorRoutes(app: FastifyInstance): void {
   app.get('/indicators', async (request) => {
@@ -41,13 +44,14 @@ export function registerIndicatorRoutes(app: FastifyInstance): void {
       throw new ApiError('INDICATOR_NOT_FOUND', 'Indicator not found.');
     }
 
-    const [relatedFxPairs, latestEvent] = await Promise.all([
+    const [relatedFxPairs, latestEvent, releaseSummaries] = await Promise.all([
       listRelatedFxPairs(app.supabase, indicatorId),
       getLatestEvent(app.supabase, indicatorId),
+      getIndicatorReleaseSummaries(app.supabase, [indicatorId]),
     ]);
 
     return {
-      indicator,
+      indicator: { ...indicator, ...(releaseSummaries.get(indicatorId) ?? EMPTY_RELEASE_SUMMARY) },
       favorable_direction: indicator.favorable_direction,
       related_fx_pairs: relatedFxPairs,
       latest_event: latestEvent,

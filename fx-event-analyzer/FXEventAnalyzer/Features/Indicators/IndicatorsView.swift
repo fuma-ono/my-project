@@ -1,40 +1,13 @@
 import SwiftUI
 
-/// SCR-005 指標一覧: browse indicators, tap through to
-/// SCR-006 指標詳細.
-///
-/// HQ "V5 Pixel Frontend" integration (2026-09-24): visual content is HQ's
-/// `V5PixelFrontend.swift` `V5Indicators` (fixed 234×491 canvas, search
-/// bar, filter pills, 6 absolute-positioned `V5Card` rows), reproduced as
-/// given. Adaptations, all wiring, not redesign:
-/// - HQ's search bar is a static `Text` placeholder — made a real
-///   `TextField` bound to `viewModel.searchText`, same visual shape.
-/// - HQ's filter pills (すべて/重要度/国・地域/通貨ペア) have no tap action —
-///   wrapped in `Menu`/`Button` wired to the existing real filters
-///   (`viewModel.importanceFilter` server-side; 国・地域/通貨ペア
-///   client-side over the already-fetched list), same visual shape.
-/// - HQ's 6 hardcoded rows → a real `ForEach` over the filtered indicator
-///   list, `.prefix(6)`-ed to the 6 fixed slots HQ's coordinates provision
-///   (y = 106 + i×52) — there is no `ScrollView` in this screen's design
-///   at all, so a 7th+ real match simply isn't shown here (it's still
-///   reachable via search), never inventing extra rows to break the fixed
-///   coordinate system.
-/// - HQ's per-row release time ("21:30") has no equivalent field on
-///   `IndicatorSummary` (Indicators is metadata, not a scheduled event) —
-///   hidden rather than fabricated, per instruction.
-/// - `V5Viewport`'s `.scaleEffect` is known to make a synthesized tap land
-///   without moving keyboard focus onto a `TextField` inside it —
-///   `@FocusState` + an explicit `.onTapGesture` forces the focus
-///   assignment, the same fix Login needed.
+/// SCR-005 指標一覧(HQ指示 2026-10-13の参考画像)。上に検索欄と絞り込み(すべて/重要度/
+/// 国・地域/時間帯)、下に指標を次回発表の近い順に並べる。各行は発表日・時刻、国旗、
+/// 指標名、国名、重要度で、押すとSCR-006 指標詳細へ移る。
 struct IndicatorsView: View {
     @StateObject private var viewModel: IndicatorsViewModel
     @Binding var path: NavigationPath
     @Binding var tabSelection: Int
     private let apiClient: APIClient
-
-    @State private var countryFilter: String?
-    @State private var currencyFilter: String?
-    @FocusState private var searchFieldFocused: Bool
 
     init(apiClient: APIClient, path: Binding<NavigationPath>, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
@@ -61,65 +34,18 @@ struct IndicatorsView: View {
             loadingScaffold { LoadingView(caption: "読み込み中...") }
         case .backendNotConfigured:
             loadingScaffold { FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "経済指標データはまだ利用できません。") }
-        case .loaded(let indicators):
+        case .loaded:
             V5Viewport {
                 V5Header(title: "指標一覧", back: false)
-                HStack {
-                    Image(systemName: "magnifyingglass").foregroundStyle(V5P.muted)
-                    TextField("指標名・国名で検索", text: $viewModel.searchText)
-                        .font(.system(size: 8))
-                        .foregroundStyle(.white)
-                        .focused($searchFieldFocused)
-                        .onTapGesture { searchFieldFocused = true }
+                VStack(alignment: .leading, spacing: 7) {
+                    HelpSearchField(text: $viewModel.searchText, placeholder: "指標名・国・通貨ペアで検索")
+                    filterBar
+                    list
                 }
-                .padding(7).frame(width: 204, height: 27, alignment: .leading)
-                .background(V5P.panel2, in: Capsule()).position(x: 117, y: 66)
-
-                HStack(spacing: 5) {
-                    filterPill(text: "すべて", active: viewModel.importanceFilter == nil && countryFilter == nil && currencyFilter == nil) {
-                        viewModel.importanceFilter = nil
-                        countryFilter = nil
-                        currencyFilter = nil
-                    }
-                    Menu {
-                        Button("すべて") { viewModel.importanceFilter = nil }
-                        Button("重要度: 高") { viewModel.importanceFilter = .high }
-                        Button("重要度: 中") { viewModel.importanceFilter = .medium }
-                        Button("重要度: 低") { viewModel.importanceFilter = .low }
-                    } label: {
-                        pillLabel(text: "重要度", active: viewModel.importanceFilter != nil)
-                    }
-                    Menu {
-                        Button("すべて") { countryFilter = nil }
-                        ForEach(availableCountries(indicators), id: \.self) { code in
-                            Button("\(CountryFlag.emoji(for: code)) \(code)") { countryFilter = code }
-                        }
-                    } label: {
-                        pillLabel(text: "国・地域", active: countryFilter != nil)
-                    }
-                    Menu {
-                        Button("すべて") { currencyFilter = nil }
-                        ForEach(availableCurrencies(indicators), id: \.self) { code in
-                            Button(code) { currencyFilter = code }
-                        }
-                    } label: {
-                        pillLabel(text: "通貨ペア", active: currencyFilter != nil)
-                    }
-                }.position(x: 117, y: 91)
-
-                let filtered = applyLocalFilters(indicators)
-                if filtered.isEmpty {
-                    FXEmptyState(icon: "magnifyingglass", title: "指標が見つかりません", message: "条件に一致する経済指標がありません。")
-                        .frame(width: 204).position(x: 117, y: 260)
-                } else {
-                    ForEach(Array(filtered.prefix(6).enumerated()), id: \.element.id) { i, indicator in
-                        NavigationLink(value: AppRoute.indicatorDetail(id: indicator.id)) {
-                            V5Card(CGRect(x: 10, y: 106 + CGFloat(i) * 52, width: 214, height: 46)) {
-                                row(indicator)
-                            }
-                        }.buttonStyle(.plain)
-                    }
-                }
+                .frame(width: 214)
+                .padding(.top, 6)
+                .frame(width: V5P.W, height: 398, alignment: .top)
+                .position(x: V5P.W / 2, y: 54 + 398 / 2)
                 V5BottomBar(selected: $tabSelection)
             }
         case .error(let message):
@@ -127,9 +53,6 @@ struct IndicatorsView: View {
         }
     }
 
-    /// HQ指示(2026-10-05、22回目)「背景画像とヘッダーとタブを全画面に反映して」:
-    /// 読み込み中・エラー・未設定状態が単色背景のみで`V5Viewport`(背景画像)・
-    /// ヘッダー・タブバーを経由していなかったため、`.loaded`状態と同じ外枠に揃えた。
     @ViewBuilder private func loadingScaffold(@ViewBuilder content: @escaping () -> some View) -> some View {
         V5Viewport {
             V5Header(title: "指標一覧", back: false)
@@ -140,42 +63,140 @@ struct IndicatorsView: View {
         }
     }
 
-    @ViewBuilder private func filterPill(text: String, active: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) { pillLabel(text: text, active: active) }.buttonStyle(.plain)
-    }
+    // MARK: - 絞り込み
 
-    private func pillLabel(text: String, active: Bool) -> some View {
-        Text(text).font(.system(size: 7, weight: .semibold)).foregroundStyle(.white)
-            .padding(.horizontal, 8).padding(.vertical, 5)
-            .background(active ? V5P.blue : V5P.panel2, in: Capsule())
-    }
-
-    private func availableCountries(_ indicators: [IndicatorSummary]) -> [String] {
-        Array(Set(indicators.map(\.countryCode))).sorted()
-    }
-
-    private func availableCurrencies(_ indicators: [IndicatorSummary]) -> [String] {
-        Array(Set(indicators.map(\.currencyCode))).sorted()
-    }
-
-    private func applyLocalFilters(_ indicators: [IndicatorSummary]) -> [IndicatorSummary] {
-        indicators.filter { indicator in
-            (countryFilter == nil || indicator.countryCode == countryFilter)
-                && (currencyFilter == nil || indicator.currencyCode == currencyFilter)
-        }
-    }
-
-    @ViewBuilder private func row(_ indicator: IndicatorSummary) -> some View {
-        HStack(spacing: 5) {
-            CountryFlagView(countryCode: indicator.countryCode, diameter: 14)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(CountryFlag.kanjiAbbreviation(for: indicator.countryCode))) \(indicator.name)")
-                    .font(.system(size: 8, weight: .semibold)).lineLimit(1)
-                Text(indicator.currencyCode).font(.system(size: 7)).foregroundStyle(V5P.muted)
+    private var filterBar: some View {
+        HStack(spacing: 4) {
+            Button { viewModel.clearFilters() } label: {
+                chip("すべて", active: !viewModel.hasFilters, dropdown: false)
             }
-            Spacer()
-            V5Badge(text: indicator.importance.rawValue.capitalized, color: indicator.importance.v5Color)
+            .buttonStyle(.plain)
+            Menu {
+                Button("すべて") { viewModel.importanceFilter = nil }
+                Button("HIGH") { viewModel.importanceFilter = .high }
+                Button("MEDIUM") { viewModel.importanceFilter = .medium }
+                Button("LOW") { viewModel.importanceFilter = .low }
+            } label: {
+                chip(viewModel.importanceFilter?.rawValue ?? "重要度", active: viewModel.importanceFilter != nil, dropdown: true)
+            }
+            Menu {
+                Button("すべて") { viewModel.countryFilter = nil }
+                ForEach(viewModel.countries, id: \.self) { code in
+                    Button(CountryFlag.japaneseName(forCountry: code)) { viewModel.countryFilter = code }
+                }
+            } label: {
+                chip(viewModel.countryFilter.map { CountryFlag.japaneseName(forCountry: $0) } ?? "国・地域", active: viewModel.countryFilter != nil, dropdown: true)
+            }
+            Menu {
+                Button("すべて") { viewModel.timeBandFilter = nil }
+                ForEach(IndicatorsViewModel.TimeBand.allCases) { band in
+                    Button(band.label) { viewModel.timeBandFilter = band }
+                }
+            } label: {
+                chip(viewModel.timeBandFilter.map { String($0.label.prefix(2)) } ?? "時間帯", active: viewModel.timeBandFilter != nil, dropdown: true)
+            }
         }
-        .foregroundStyle(.white)
+    }
+
+    private func chip(_ title: String, active: Bool, dropdown: Bool) -> some View {
+        HStack(spacing: 2) {
+            NotoText.text(title, size: 7.5)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            if dropdown {
+                Image(systemName: "chevron.down").font(.system(size: 5.5, weight: .bold))
+            }
+        }
+        .foregroundStyle(active ? .white : SettingsCardStyle.subtitleColor)
+        .frame(maxWidth: .infinity)
+        .frame(height: 20)
+        .background(Capsule().fill(active ? V5P.blue : SettingsCardStyle.cardFill))
+        .overlay(Capsule().stroke(active ? V5P.blue : SettingsCardStyle.cardBorder, lineWidth: 0.6))
+    }
+
+    // MARK: - 一覧
+
+    private var list: some View {
+        let indicators = viewModel.filtered
+        return ScrollView(showsIndicators: false) {
+            VStack(spacing: 0) {
+                if indicators.isEmpty {
+                    NotoText.text("条件に合う指標はありません。", size: 8)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .frame(maxWidth: .infinity, minHeight: 40)
+                }
+                ForEach(Array(indicators.enumerated()), id: \.element.id) { index, indicator in
+                    if index > 0 { SettingsListSeparator() }
+                    NavigationLink(value: AppRoute.indicatorDetail(id: indicator.id)) {
+                        row(indicator)
+                    }
+                    .buttonStyle(SettingsRowPressStyle())
+                    // スクショのテストは正式名(「米国CPI(消費者物価指数)」)で押す。
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(indicator.name)
+                    .accessibilityAddTraits(.isButton)
+                }
+            }
+            .frame(width: 214)
+            .background(AccountCardBackground())
+            .padding(.bottom, 6)
+        }
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MM/dd"
+        return formatter
+    }()
+
+    private func row(_ indicator: IndicatorSummary) -> some View {
+        // 次回発表があればその日時、無ければ前回の発表日時を薄く出す。
+        let date = indicator.nextReleaseDatetime ?? indicator.latestReleaseDatetime
+        let isNext = indicator.nextReleaseDatetime != nil
+        let display = CountryFlag.indicatorDisplayName(indicator.name, countryCode: indicator.countryCode)
+        let name = display.abbreviation.map { "\(display.main)（\($0)）" } ?? display.main
+        return HStack(spacing: 7) {
+            VStack(alignment: .leading, spacing: 1) {
+                if let date {
+                    Text(Self.dateString(date))
+                        .font(.system(size: 8.5, weight: .semibold))
+                        .monospacedDigit()
+                    Text(AppPreferences.shared.timeString(date))
+                        .font(.system(size: 7.5))
+                        .monospacedDigit()
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                } else {
+                    Text("--").font(.system(size: 8.5, weight: .semibold))
+                }
+            }
+            .foregroundStyle(isNext ? .white : SettingsCardStyle.subtitleColor)
+            .frame(width: 30, alignment: .leading)
+            CountryFlagView(countryCode: indicator.countryCode, diameter: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                NotoText.text(name, size: 8.5)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                NotoText.text(CountryFlag.japaneseName(forCountry: indicator.countryCode), size: 7)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+            }
+            Spacer(minLength: 4)
+            let colors = HomeView.importanceBadgeColors(indicator.importance)
+            NotoText.text(indicator.importance.rawValue, size: 6.5)
+                .tracking(-0.3)
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 14)
+                .background(colors.fill, in: Capsule())
+                .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
+        }
+        .padding(.horizontal, 9)
+        .frame(height: 36)
+        .contentShape(Rectangle())
+    }
+
+    /// 「10/03」。アプリの設定の時間帯で。
+    @MainActor private static func dateString(_ date: Date) -> String {
+        dateFormatter.timeZone = AppPreferences.shared.timeZone
+        return dateFormatter.string(from: date)
     }
 }

@@ -170,6 +170,123 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(response.statusCode).toBe(404);
       expect(JSON.parse(response.body).error.code).toBe('INDICATOR_NOT_FOUND');
     });
+
+    // v1.20 (SCR-005): next_release_datetime / next_event_id / latest_release_datetime
+    // and sort=next_release. The seeded NFP event (2026-10-03) is SCHEDULED
+    // but already in the past, so it is not a "next" release; BOJ gets
+    // far-future events here (2099 — outside every calendar/notification
+    // window other tests use) so a real next release exists.
+    describe('next / latest release (v1.20)', () => {
+      const BOJ_INDICATOR_ID = '10000000-0000-0000-0000-000000000005';
+      const NFP_INDICATOR_ID = '10000000-0000-0000-0000-000000000002';
+      const BOJ_NEXT_EVENT_ID = '30000000-0000-0000-0000-0000000020a1';
+      const BOJ_LATER_EVENT_ID = '30000000-0000-0000-0000-0000000020a2';
+      const BOJ_CANCELLED_EVENT_ID = '30000000-0000-0000-0000-0000000020a3';
+      const insertedIds = [BOJ_NEXT_EVENT_ID, BOJ_LATER_EVENT_ID, BOJ_CANCELLED_EVENT_ID];
+
+      type ReleaseFields = {
+        id: string;
+        next_release_datetime: string | null;
+        next_event_id: string | null;
+        latest_release_datetime: string | null;
+      };
+      const time = (value: string | null) => (value === null ? null : Date.parse(value));
+
+      beforeAll(async () => {
+        const base = {
+          indicator_id: BOJ_INDICATOR_ID,
+          provider: 'integration-test',
+          release_datetime_precision: 'EXACT',
+          importance: 'HIGH',
+        };
+        const { error } = await ctx.serviceClient.from('economic_events').insert([
+          {
+            ...base,
+            id: BOJ_LATER_EVENT_ID,
+            provider_event_id: 'next-release-later',
+            release_datetime: '2099-03-19T03:00:00Z',
+            status: 'SCHEDULED',
+          },
+          {
+            ...base,
+            id: BOJ_NEXT_EVENT_ID,
+            provider_event_id: 'next-release-next',
+            release_datetime: '2099-01-23T03:00:00Z',
+            status: 'SCHEDULED',
+          },
+          {
+            ...base,
+            id: BOJ_CANCELLED_EVENT_ID,
+            provider_event_id: 'next-release-cancelled',
+            release_datetime: '2099-01-01T03:00:00Z',
+            status: 'CANCELLED',
+          },
+        ]);
+        if (error) throw new Error(`Failed to insert test events: ${error.message}`);
+      });
+
+      afterAll(async () => {
+        await ctx.serviceClient.from('economic_events').delete().in('id', insertedIds);
+      });
+
+      it('adds the three fields to every listed indicator, derived from economic_events', async () => {
+        const response = await ctx.app.inject({
+          method: 'GET',
+          url: '/api/v1/indicators?limit=100',
+          headers: authHeader,
+        });
+        expect(response.statusCode).toBe(200);
+        const rows: ReleaseFields[] = JSON.parse(response.body).data;
+        for (const row of rows) {
+          expect(row).toHaveProperty('next_release_datetime');
+          expect(row).toHaveProperty('next_event_id');
+          expect(row).toHaveProperty('latest_release_datetime');
+        }
+        const byId = Object.fromEntries(rows.map((row) => [row.id, row]));
+        // BOJ: earliest future SCHEDULED (the CANCELLED one is ignored); latest RELEASED is the seed's 2026-09-12.
+        expect(byId[BOJ_INDICATOR_ID]!.next_event_id).toBe(BOJ_NEXT_EVENT_ID);
+        expect(time(byId[BOJ_INDICATOR_ID]!.next_release_datetime)).toBe(Date.parse('2099-01-23T03:00:00Z'));
+        expect(time(byId[BOJ_INDICATOR_ID]!.latest_release_datetime)).toBe(Date.parse('2026-09-12T03:00:00Z'));
+        // US CPI: no future SCHEDULED event, latest RELEASED is 2026-09-10.
+        expect(byId[US_CPI_INDICATOR_ID]).toMatchObject({ next_release_datetime: null, next_event_id: null });
+        expect(time(byId[US_CPI_INDICATOR_ID]!.latest_release_datetime)).toBe(Date.parse('2026-09-10T12:30:00Z'));
+        // NFP: its only event is SCHEDULED but in the past, and nothing was RELEASED.
+        expect(byId[NFP_INDICATOR_ID]).toMatchObject({
+          next_release_datetime: null,
+          next_event_id: null,
+          latest_release_datetime: null,
+        });
+      });
+
+      it('includes the same fields on GET /indicators/{id}', async () => {
+        const response = await ctx.app.inject({
+          method: 'GET',
+          url: `/api/v1/indicators/${BOJ_INDICATOR_ID}`,
+          headers: authHeader,
+        });
+        expect(response.statusCode).toBe(200);
+        const { indicator } = JSON.parse(response.body) as { indicator: ReleaseFields };
+        expect(indicator.next_event_id).toBe(BOJ_NEXT_EVENT_ID);
+        expect(time(indicator.next_release_datetime)).toBe(Date.parse('2099-01-23T03:00:00Z'));
+        expect(time(indicator.latest_release_datetime)).toBe(Date.parse('2026-09-12T03:00:00Z'));
+      });
+
+      it('sort=next_release puts indicators with a next release first, ascending, then the rest', async () => {
+        const response = await ctx.app.inject({
+          method: 'GET',
+          url: '/api/v1/indicators?sort=next_release&limit=100',
+          headers: authHeader,
+        });
+        expect(response.statusCode).toBe(200);
+        const rows: ReleaseFields[] = JSON.parse(response.body).data;
+        const firstNull = rows.findIndex((row) => row.next_release_datetime === null);
+        const withNext = firstNull === -1 ? rows : rows.slice(0, firstNull);
+        expect(rows.slice(withNext.length).every((row) => row.next_release_datetime === null)).toBe(true);
+        const times = withNext.map((row) => time(row.next_release_datetime)!);
+        expect(times).toEqual([...times].sort((a, b) => a - b));
+        expect(withNext.some((row) => row.id === BOJ_INDICATOR_ID)).toBe(true);
+      });
+    });
   });
 
   describe('Events', () => {
