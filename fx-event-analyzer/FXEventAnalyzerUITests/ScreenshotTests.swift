@@ -143,14 +143,6 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "値動きの分析", timeout: 15), "Movement Detail did not load")
         capture("08-MovementDetail")
 
-        // HQ確認用(2026-10-14、一時追加): チャート右上のpipsバッジが時間足ごとに
-        // 正しく再計算されるか確認するため、5分足・15分足タブのスクリーンショットも
-        // 一時的に撮る(恒久的なスクリーン一覧には含まれない、確認専用)。
-        tap(containing: "5分")
-        capture("08b-MovementDetail-5m")
-        tap(containing: "15分")
-        capture("08c-MovementDetail-15m")
-
         // SCR-009 過去イベント比較。2026-10-09から遷移元は指標詳細なので、
         // 相場反応詳細 → イベント詳細 → 指標詳細 と戻ってから進む。
         tapIdentifier("v5HeaderBack")
