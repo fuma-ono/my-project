@@ -73,7 +73,7 @@ struct MovementDetailView: View {
         let latest = reactions.last { $0.analysisStatus == .ready && $0.postReleasePrice != nil }
         let digits = symbol.hasSuffix("JPY") ? 2 : 4
         return VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 7) {
+            HStack(alignment: .top, spacing: 6) {
                 HStack(spacing: -4) {
                     CountryFlagView(currencyCode: String(symbol.prefix(3)), diameter: 20)
                     CountryFlagView(currencyCode: String(symbol.suffix(3)), diameter: 20)
@@ -82,28 +82,46 @@ struct MovementDetailView: View {
                     NotoText.text(FXPairSymbol.displayName(symbol), size: 11).foregroundStyle(.white)
                     NotoText.text(HomeCurrencyPairEditorViewModel.names(symbol), size: 7.5).foregroundStyle(SettingsCardStyle.subtitleColor)
                 }
-                Spacer()
+                Spacer(minLength: 4)
+                // HQ指示(2026-10-13、8回目)「参考画像をピクセル単位で再現して」:
+                // 「発表◯分後の価格」を小さな字幕ではなく、行右上のバッジ(棒グラフ
+                // アイコン+テキスト、角丸の縁取り)にした。
+                if let latest {
+                    priceBadge(timeframe: latest.timeframe)
+                }
             }
             // HQ指示(2026-10-09)「価格情報を整理する」: 比較時点の小さなラベル → 価格(最も目立たせる)と
             // 変動幅・変動率を同じ行 → 変動の基準価格、の順。
             if let latest, let price = latest.postReleasePrice {
                 VStack(alignment: .leading, spacing: 1) {
-                    NotoText.text("発表\(MovementAnalysisText.label(latest.timeframe))後の価格", size: 6.5)
-                        .foregroundStyle(SettingsCardStyle.subtitleColor)
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(ValueFormat.number(price, fractionDigits: digits))
-                            .font(.system(size: 18, weight: .semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(.white)
+                        HStack(alignment: .firstTextBaseline, spacing: 1) {
+                            Text(ValueFormat.number(price, fractionDigits: digits))
+                                .font(.system(size: 18, weight: .semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(.white)
+                            // HQ指示(2026-10-13、8回目): 参考画像どおり価格の右に単位「円」を
+                            // 添えた(JPYペアのみ。それ以外は省略表記が無いため付けない)。
+                            if symbol.hasSuffix("JPY") {
+                                NotoText.text("円", size: 10).foregroundStyle(.white)
+                            }
+                        }
                         if let pre = preReleasePrice {
                             let change = price - pre
                             let percent = pre == 0 ? 0 : change / pre * 100
-                            Text("\(ValueFormat.number(change, fractionDigits: digits, signed: true)) (\(ValueFormat.number(percent, fractionDigits: 2, signed: true))%)")
-                                .font(.system(size: 12, weight: .semibold))
-                                .monospacedDigit()
-                                .foregroundStyle(change >= 0 ? V5P.green : V5P.red)
-                                .lineLimit(1)
-                                .fixedSize()
+                            HStack(spacing: 2) {
+                                // HQ指示(2026-10-13、8回目): 参考画像どおり、変動幅の前に
+                                // 上昇/下落の三角マークを添えた。
+                                Image(systemName: change >= 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
+                                    .font(.system(size: 8))
+                                    .foregroundStyle(change >= 0 ? V5P.green : V5P.red)
+                                Text("\(ValueFormat.number(change, fractionDigits: digits, signed: true)) (\(ValueFormat.number(percent, fractionDigits: 2, signed: true))%)")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .monospacedDigit()
+                                    .foregroundStyle(change >= 0 ? V5P.green : V5P.red)
+                                    .lineLimit(1)
+                                    .fixedSize()
+                            }
                         }
                     }
                     if let pre = preReleasePrice {
@@ -119,6 +137,24 @@ struct MovementDetailView: View {
         .padding(8)
         .frame(width: 214, alignment: .leading)
         .background(AccountCardBackground())
+    }
+
+    /// HQ指示(2026-10-13、8回目)「参考画像をピクセル単位で再現して」: ヘッダー行右上の
+    /// 「発表◯分後の価格」バッジ(棒グラフアイコン+テキスト、角丸の縁取り)。
+    private func priceBadge(timeframe: String) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "chart.bar.fill")
+                .font(.system(size: 7, weight: .semibold))
+                .foregroundStyle(V5P.cyan)
+            NotoText.text("発表\(MovementAnalysisText.label(timeframe))後の価格", size: 6.5)
+                .foregroundStyle(V5P.cyan)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(Color.black.opacity(0.2)))
+        .overlay(Capsule().stroke(V5P.cyan.opacity(0.4), lineWidth: 0.6))
     }
 
     private var timeframeTabs: some View {
@@ -174,21 +210,43 @@ struct MovementDetailView: View {
             marketViewAbove: viewModel.indicator?.marketViewAbove, marketViewBelow: viewModel.indicator?.marketViewBelow
         ) {
             // HQ指示(2026-10-09)「要点を分けて表示」「値動きの事実と相場の解釈は分ける」。
+            // HQ指示(2026-10-13、8回目)「参考画像をピクセル単位で再現して」: 見出しに
+            // アイコンを追加、「発表結果」の値を角丸バッジに、「解説」の見出しに文言を
+            // 合わせ電球アイコンを追加。
             VStack(alignment: .leading, spacing: 5) {
-                NotoText.text("値動きの分析", size: 11).foregroundStyle(.white)
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(V5P.cyan)
+                    NotoText.text("値動きの分析", size: 11).foregroundStyle(.white)
+                }
                 VStack(spacing: 3) {
                     ForEach(summary.facts, id: \.label) { row in
                         HStack {
                             NotoText.text(row.label, size: 8).foregroundStyle(SettingsCardStyle.subtitleColor)
                             Spacer()
-                            NotoText.text(row.value, size: row.sign == nil ? 8.5 : 10)
-                                .foregroundStyle(row.sign.map { $0 >= 0 ? V5P.green : V5P.red } ?? .white)
+                            if row.sign == nil {
+                                NotoText.text(row.value, size: 8.5)
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(Capsule().fill(Color.black.opacity(0.2)))
+                                    .overlay(Capsule().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
+                            } else {
+                                NotoText.text(row.value, size: 10)
+                                    .foregroundStyle(row.sign! >= 0 ? V5P.green : V5P.red)
+                            }
                         }
                     }
                 }
                 if let interpretation = summary.interpretation {
                     VStack(alignment: .leading, spacing: 2) {
-                        NotoText.text("解釈（一般的な見方）", size: 7.5).foregroundStyle(V5P.cyan)
+                        HStack(spacing: 3) {
+                            Image(systemName: "lightbulb.fill")
+                                .font(.system(size: 8))
+                                .foregroundStyle(V5P.cyan)
+                            NotoText.text("解説（一般的な見方）", size: 7.5).foregroundStyle(V5P.cyan)
+                        }
                         NotoText.text(interpretation, size: 7.5)
                             .foregroundStyle(.white.opacity(0.85))
                             .fixedSize(horizontal: false, vertical: true)
@@ -287,12 +345,19 @@ private struct CandleChart: View {
                 .foregroundStyle(V5P.cyan.opacity(0.8))
                 .lineStyle(StrokeStyle(lineWidth: 0.8, dash: [3, 2]))
                 .annotation(position: .top, alignment: .center, spacing: 1) {
-                    Text("発表 \(AppPreferences.shared.timeString(chart.releaseDatetime))")
-                        .font(.system(size: 6, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 3)
-                        .padding(.vertical, 1)
-                        .background(V5P.cyan.opacity(0.35), in: Capsule())
+                    // HQ指示(2026-10-13、8回目)「参考画像をピクセル単位で再現して」:
+                    // 「発表」ラベルの前に上向き三角マークを添えた。
+                    HStack(spacing: 2) {
+                        Image(systemName: "arrowtriangle.up.fill")
+                            .font(.system(size: 5))
+                            .foregroundStyle(.white)
+                        Text("発表 \(AppPreferences.shared.timeString(chart.releaseDatetime))")
+                            .font(.system(size: 6, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.horizontal, 3)
+                    .padding(.vertical, 1)
+                    .background(V5P.cyan.opacity(0.35), in: Capsule())
                 }
             // HQ指示(2026-10-09)「発表時点からの変動幅(pips)を確認しやすく」: 発表直前の価格に基準線。
             if let pre = preReleasePrice {
