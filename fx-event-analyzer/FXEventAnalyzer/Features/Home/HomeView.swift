@@ -1308,7 +1308,10 @@ struct HomeView: View {
                 // 常に同じ上下位置になるようにした。＞も同様に明示的な
                 // `frame(height:alignment:)`で行の中央に固定し、左右の
                 // コンテンツ量に依存しないようにした。
-                Divider().overlay(Self.cardBorderColor).frame(maxHeight: .infinity).padding(.vertical, 2).padding(.leading, 11)
+                // HQ指示(2026-10-14)「USD/JPY・発言前・現在と縦線の間に余白を設けて。詰まって見える」:
+                // 縦線を3pt左へ寄せ(11→8)、その分だけ縦線と右側の間を広げた(2→5)。右側の幅は変えないので
+                // 文字の大きさは変わらない。
+                Divider().overlay(Self.cardBorderColor).frame(maxHeight: .infinity).padding(.vertical, 2).padding(.leading, 8)
 
                 if let symbol = speech.reactionFxSymbol {
                     VStack(alignment: .leading, spacing: 2) {
@@ -1342,7 +1345,7 @@ struct HomeView: View {
                         speechPriceRow(label: "現在", value: speech.reactionPriceAfter, symbol: symbol)
                     }
                     .lineLimit(1)
-                    .padding(.leading, 2)
+                    .padding(.leading, 5)
                 }
 
                 // chevron(＞)はHQ指示により調整対象外。pairRowと同じ
