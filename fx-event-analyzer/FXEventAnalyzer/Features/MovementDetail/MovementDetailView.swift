@@ -234,15 +234,16 @@ struct MovementDetailView: View {
             // おかしくない？」: 2列の下に全幅で置いていたため「主な要因」との対応が
             // 分かりにくかった。「解説」ボックスの一部だった元の構成どおり、「主な要因」
             // の枠の中(本文の下)に戻した。
-            // 「まだ上の部分に余白があるから文字サイズ大きくできない？」: カード間隔を
-            // 詰めてもまだ余白があったため、文字サイズをもう一段(0.5〜1pt)引き上げた。
+            // HQ指示(2026-10-14、5回目): 4回目で文字サイズを引き上げすぎて「今回の変動」
+            // の行がタブバーに隠れる回帰が起きたため、文字サイズは3回目の大きさまで
+            // 戻した(免責文を枠内に移したぶんの余白は残り、3回目より少し余裕がある)。
             VStack(alignment: .leading, spacing: 4) {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 4) {
                         Image(systemName: "chart.bar.fill")
-                            .font(.system(size: 9.5, weight: .bold))
+                            .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(V5P.cyan)
-                        NotoText.text("値動きの分析", size: 11).foregroundStyle(.white)
+                        NotoText.text("値動きの分析", size: 10.5).foregroundStyle(.white)
                     }
                     Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
                 }
@@ -251,17 +252,17 @@ struct MovementDetailView: View {
                         ForEach(summary.facts, id: \.label) { row in
                             if row.sign == nil {
                                 VStack(alignment: .leading, spacing: 1) {
-                                    NotoText.text(row.label, size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
-                                    NotoText.text(row.value, size: 7.5)
+                                    NotoText.text(row.label, size: 6).foregroundStyle(SettingsCardStyle.subtitleColor)
+                                    NotoText.text(row.value, size: 7)
                                         .foregroundStyle(.white)
                                         .lineLimit(1)
                                         .minimumScaleFactor(0.7)
                                 }
                             } else {
                                 HStack(spacing: 2) {
-                                    NotoText.text(row.label, size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                                    NotoText.text(row.label, size: 6).foregroundStyle(SettingsCardStyle.subtitleColor)
                                     Spacer(minLength: 2)
-                                    NotoText.text(row.value, size: 8)
+                                    NotoText.text(row.value, size: 7.5)
                                         .foregroundStyle(row.sign! >= 0 ? V5P.green : V5P.red)
                                         .lineLimit(1)
                                         .fixedSize()
@@ -269,16 +270,16 @@ struct MovementDetailView: View {
                             }
                         }
                     }
-                    .frame(width: 96, alignment: .leading)
+                    .frame(width: 94, alignment: .leading)
                     if let interpretation = summary.interpretation {
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 2) {
                                 Image(systemName: "person.fill")
-                                    .font(.system(size: 7))
+                                    .font(.system(size: 6.5))
                                     .foregroundStyle(V5P.cyan)
-                                NotoText.text("主な要因", size: 7).foregroundStyle(V5P.cyan)
+                                NotoText.text("主な要因", size: 6.5).foregroundStyle(V5P.cyan)
                             }
-                            NotoText.text(interpretation, size: 6.5)
+                            NotoText.text(interpretation, size: 6)
                                 .foregroundStyle(.white.opacity(0.85))
                                 .fixedSize(horizontal: false, vertical: true)
                             NotoText.text("※ 値動きの原因を断定するものではない。", size: 5.5)
@@ -306,14 +307,15 @@ struct MovementDetailView: View {
         if let average = viewModel.comparisonStats?.averagePips,
            let count = viewModel.comparisonAnalyzableEvents, count > 0,
            let current = reactions.first(where: { $0.timeframe == "15m" && $0.analysisStatus == .ready })?.pips {
-            // HQ指示(2026-10-14、4回目)「まだ上の部分に余白があるから文字サイズ大きく
-            // できない？」: この区画もさらに0.5pt前後引き上げた。
+            // HQ指示(2026-10-14、5回目): 4回目で文字サイズを引き上げすぎて「今回の変動」の
+            // 行がタブバーに隠れる回帰が起きたため、文字サイズは3回目の大きさまで戻した
+            // (免責文を枠内に移したぶんの余白は残り、3回目より少し余裕がある)。
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 3) {
                     Image(systemName: "lightbulb.fill")
-                        .font(.system(size: 8))
+                        .font(.system(size: 7.5))
                         .foregroundStyle(V5P.cyan)
-                    NotoText.text("過去の類似イベントとの比較", size: 7.5)
+                    NotoText.text("過去の類似イベントとの比較", size: 7)
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
@@ -325,9 +327,9 @@ struct MovementDetailView: View {
                         fxPairSymbol: viewModel.symbol
                     )) {
                         HStack(spacing: 1) {
-                            NotoText.text("過去イベントを見る", size: 6.5).foregroundStyle(V5P.cyan)
+                            NotoText.text("過去イベントを見る", size: 6).foregroundStyle(V5P.cyan)
                             Image(systemName: "chevron.right")
-                                .font(.system(size: 6, weight: .semibold))
+                                .font(.system(size: 5.5, weight: .semibold))
                                 .foregroundStyle(V5P.cyan)
                         }
                         .lineLimit(1)
@@ -336,25 +338,25 @@ struct MovementDetailView: View {
                 }
                 Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
                 HStack {
-                    NotoText.text("過去\(count)回の平均変動（15分後）", size: 7)
+                    NotoText.text("過去\(count)回の平均変動（15分後）", size: 6.5)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                     Spacer(minLength: 4)
-                    NotoText.text(Self.signedPipsText(average), size: 8)
+                    NotoText.text(Self.signedPipsText(average), size: 7.5)
                         .foregroundStyle(average >= 0 ? V5P.green : V5P.red)
                         .lineLimit(1)
                         .fixedSize()
                 }
                 HStack {
-                    NotoText.text("今回の変動", size: 7).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    NotoText.text("今回の変動", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
                     Spacer(minLength: 4)
-                    NotoText.text(Self.signedPipsText(current), size: 8)
+                    NotoText.text(Self.signedPipsText(current), size: 7.5)
                         .foregroundStyle(current >= 0 ? V5P.green : V5P.red)
                         .lineLimit(1)
                         .fixedSize()
                     if let magnitude = MovementAnalysisText.magnitudeLabel(current: current, average: average) {
-                        NotoText.text(magnitude, size: 6.5)
+                        NotoText.text(magnitude, size: 6)
                             .foregroundStyle(.white)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
