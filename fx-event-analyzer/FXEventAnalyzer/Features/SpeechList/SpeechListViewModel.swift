@@ -36,6 +36,9 @@ final class SpeechListViewModel: ObservableObject {
     @Published var importanceFilter: Importance?
     @Published var organizationFilter: String?
     @Published var statusFilter: StatusFilter?
+    /// HQ指示(2026-10-14)「重要度順をつけて」。重要度順でも「これから／発言済み」の見出しは分けたまま、
+    /// それぞれの中を重要度の高い順にする。
+    @Published var sortOrder: ListSortOrder = .date
 
     private let apiClient: APIClient
 
@@ -75,7 +78,8 @@ final class SpeechListViewModel: ObservableObject {
     /// 一覧の見出しごとの並び(「これからの発言」は近い順、「発言済み」は中止も含めて新しい順)。
     var sections: (upcoming: [SpeechDetailResponse], past: [SpeechDetailResponse]) {
         guard case .loaded(let speeches) = state else { return ([], []) }
-        return Self.split(speeches.filter { matches($0) })
+        let parts = Self.split(speeches.filter { matches($0) })
+        return (sortOrder.apply(parts.upcoming, importance: \.importance), sortOrder.apply(parts.past, importance: \.importance))
     }
 
     static func split(_ speeches: [SpeechDetailResponse]) -> (upcoming: [SpeechDetailResponse], past: [SpeechDetailResponse]) {

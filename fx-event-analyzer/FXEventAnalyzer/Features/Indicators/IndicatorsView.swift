@@ -40,6 +40,7 @@ struct IndicatorsView: View {
                 VStack(alignment: .leading, spacing: 7) {
                     HelpSearchField(text: $viewModel.searchText, placeholder: "指標名・国・通貨ペアで検索")
                     filterBar
+                    ListSortBar(countText: "\(viewModel.filtered.count)件", order: $viewModel.sortOrder)
                     list
                 }
                 .frame(width: 214)

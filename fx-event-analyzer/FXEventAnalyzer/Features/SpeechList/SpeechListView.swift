@@ -36,6 +36,7 @@ struct SpeechListView: View {
                 VStack(alignment: .leading, spacing: 7) {
                     HelpSearchField(text: $viewModel.searchText, placeholder: "要人名・機関・通貨で検索")
                     filterBar
+                    ListSortBar(countText: "\(viewModel.sections.upcoming.count + viewModel.sections.past.count)件", order: $viewModel.sortOrder)
                     list
                 }
                 .frame(width: 214)

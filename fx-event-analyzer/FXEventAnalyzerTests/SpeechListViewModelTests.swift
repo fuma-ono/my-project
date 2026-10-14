@@ -36,6 +36,17 @@ final class SpeechListViewModelTests: XCTestCase {
         XCTAssertEqual(split.past.map(\.speechId), ["cancel", "done"])
     }
 
+    func testImportanceOrderPutsHighFirstAndKeepsDateOrderWithinTheSameImportance() {
+        let byDate = [
+            speech("low", name: "A", org: "FRB", title: "t", minutes: 10, status: .scheduled, importance: .low),
+            speech("high-1", name: "B", org: "FRB", title: "t", minutes: 20, status: .scheduled, importance: .high),
+            speech("medium", name: "C", org: "ECB", title: "t", minutes: 30, status: .scheduled, importance: .medium),
+            speech("high-2", name: "D", org: "ECB", title: "t", minutes: 40, status: .scheduled, importance: .high),
+        ]
+        XCTAssertEqual(ListSortOrder.importance.apply(byDate, importance: \.importance).map(\.speechId), ["high-1", "high-2", "medium", "low"])
+        XCTAssertEqual(ListSortOrder.date.apply(byDate, importance: \.importance).map(\.speechId), ["low", "high-1", "medium", "high-2"])
+    }
+
     func testFamilyNameIsTheLastPartOfAKatakanaName() {
         XCTAssertEqual(SpeechListView.familyName("ジェローム・パウエル"), "パウエル")
         XCTAssertEqual(SpeechListView.familyName("クリスティーヌ・ラガルド"), "ラガルド")

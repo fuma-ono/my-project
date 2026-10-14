@@ -43,6 +43,8 @@ final class IndicatorsViewModel: ObservableObject {
     @Published var importanceFilter: Importance?
     @Published var countryFilter: String?
     @Published var timeBandFilter: TimeBand?
+    /// HQ指示(2026-10-14)「重要度順をつけて」。既定は日付順(次回発表の近い順)。
+    @Published var sortOrder: ListSortOrder = .date
 
     private let apiClient: APIClient
     private let calendar: Calendar
@@ -78,7 +80,7 @@ final class IndicatorsViewModel: ObservableObject {
     /// 検索と絞り込みを通した一覧。次回発表の近い順、次回が無いものは後ろに名前順。
     var filtered: [IndicatorSummary] {
         guard case .loaded(let indicators) = state else { return [] }
-        return indicators
+        let byDate = indicators
             .filter { matches($0) }
             .sorted { lhs, rhs in
                 switch (lhs.nextReleaseDatetime, rhs.nextReleaseDatetime) {
@@ -88,6 +90,7 @@ final class IndicatorsViewModel: ObservableObject {
                 case (.none, .none): return lhs.name < rhs.name
                 }
             }
+        return sortOrder.apply(byDate, importance: \.importance)
     }
 
     func matches(_ indicator: IndicatorSummary) -> Bool {
