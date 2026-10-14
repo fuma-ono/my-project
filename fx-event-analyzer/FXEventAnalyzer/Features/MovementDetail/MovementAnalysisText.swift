@@ -107,6 +107,21 @@ enum MovementAnalysisText {
         timeframe.hasSuffix("m") ? "\(timeframe.dropLast())分" : timeframe
     }
 
+    /// HQ指示(2026-10-14)「過去の類似イベントとの比較」: 今回のpipsが過去の平均pipsに
+    /// 対してどの程度かを、比率だけから決まった型で返す(AIは使わない)。平均が0なら
+    /// 比較できないのでnil。
+    static func magnitudeLabel(current: Double, average: Double) -> String? {
+        guard average != 0 else { return nil }
+        let ratio = abs(current) / abs(average)
+        switch ratio {
+        case ..<0.67: return "小さい"
+        case 0.67..<0.87: return "やや小さい"
+        case 0.87..<1.15: return "同程度"
+        case 1.15..<1.5: return "やや大きい"
+        default: return "大きい"
+        }
+    }
+
     private static func direction(_ value: Double) -> String {
         value > 0 ? "上昇" : value < 0 ? "下落" : "横ばい"
     }
