@@ -96,9 +96,27 @@ struct HistoricalComparisonView: View {
                 }
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
             }
-            Spacer(minLength: 0)
+            Spacer(minLength: 4)
+            // HQ指示(2026-10-14)「右上に通貨ペア名を出して」: 表のpipsがどのペアの値動きかを示す。
+            // 見た目はイベント詳細の値動き表のペア(重ねた国旗+USD/JPY)と同じ。
+            HStack(spacing: 3) {
+                OverlappingPairFlags(symbol: viewModel.fxPairSymbol, diameter: 9)
+                NotoText.text(Self.pairLabel(viewModel.fxPairSymbol), size: 7.5)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
+            .padding(.trailing, 2)
         }
+        .frame(height: 26)
         .padding(.leading, 4)
+    }
+
+    /// 「USDJPY」「USD/JPY」のどちらでも「USD/JPY」にする。
+    static func pairLabel(_ symbol: String) -> String {
+        let compact = symbol.replacingOccurrences(of: "/", with: "")
+        guard compact.count == 6 else { return symbol }
+        return "\(compact.prefix(3))/\(compact.suffix(3))"
     }
 
     // MARK: - 表
