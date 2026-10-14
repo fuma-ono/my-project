@@ -337,6 +337,11 @@ struct MovementDetailView: View {
                     }
                 }
                 Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
+                // HQ指示(2026-10-14、6回目)「+18.7pipsの位置が間違ってる。-41.3pipsと
+                // 同じ高さの位置に揃えて」: 「今回の変動」の行は値の後ろに「大きい」等の
+                // バッジが続くぶん、値の右端が「平均変動」の行より左に来ていた。両方の
+                // 行で値の右端が揃うよう、バッジが無い行にも同じ幅の透明プレースホルダーを
+                // 置いて右端の位置を合わせた。
                 HStack {
                     NotoText.text("過去\(count)回の平均変動（15分後）", size: 6.5)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
@@ -347,6 +352,7 @@ struct MovementDetailView: View {
                         .foregroundStyle(average >= 0 ? V5P.green : V5P.red)
                         .lineLimit(1)
                         .fixedSize()
+                    Color.clear.frame(width: Self.magnitudeBadgeWidth, height: 1)
                 }
                 HStack {
                     NotoText.text("今回の変動", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
@@ -358,8 +364,11 @@ struct MovementDetailView: View {
                     if let magnitude = MovementAnalysisText.magnitudeLabel(current: current, average: average) {
                         NotoText.text(magnitude, size: 6)
                             .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
+                            .frame(width: Self.magnitudeBadgeWidth)
                             .background(Capsule().fill(Color.black.opacity(0.2)))
                             .overlay(Capsule().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
                     }
@@ -371,6 +380,11 @@ struct MovementDetailView: View {
     private static func signedPipsText(_ value: Double) -> String {
         "\(ValueFormat.number(value, fractionDigits: 1, signed: true)) pips"
     }
+
+    /// 「今回の変動」の「大きい」等バッジの固定幅。最長の「やや大きい/やや小さい」
+    /// (5文字)でも収まる幅にし、バッジの無い「平均変動」の行にも同じ幅の透明
+    /// プレースホルダーを置いて、pips値の右端を2行で揃える。
+    private static let magnitudeBadgeWidth: CGFloat = 44
 
     @ViewBuilder private func loadingScaffold(@ViewBuilder content: @escaping () -> some View) -> some View {
         V5Viewport {
