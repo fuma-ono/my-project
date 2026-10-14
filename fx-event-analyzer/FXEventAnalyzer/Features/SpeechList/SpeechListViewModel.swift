@@ -68,9 +68,20 @@ final class SpeechListViewModel: ObservableObject {
     }
 
     static func order(_ speeches: [SpeechDetailResponse]) -> [SpeechDetailResponse] {
+        let split = split(speeches)
+        return split.upcoming + split.past
+    }
+
+    /// 一覧の見出しごとの並び(「これからの発言」は近い順、「発言済み」は中止も含めて新しい順)。
+    var sections: (upcoming: [SpeechDetailResponse], past: [SpeechDetailResponse]) {
+        guard case .loaded(let speeches) = state else { return ([], []) }
+        return Self.split(speeches.filter { matches($0) })
+    }
+
+    static func split(_ speeches: [SpeechDetailResponse]) -> (upcoming: [SpeechDetailResponse], past: [SpeechDetailResponse]) {
         let upcoming = speeches.filter { $0.status == .scheduled }.sorted { $0.statementDatetime < $1.statementDatetime }
         let past = speeches.filter { $0.status != .scheduled }.sorted { $0.statementDatetime > $1.statementDatetime }
-        return upcoming + past
+        return (upcoming, past)
     }
 
     func matches(_ speech: SpeechDetailResponse) -> Bool {

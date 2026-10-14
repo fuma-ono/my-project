@@ -113,29 +113,47 @@ struct SpeechListView: View {
     // MARK: - 一覧
 
     private var list: some View {
-        let speeches = viewModel.filtered
+        let sections = viewModel.sections
         return ScrollView(showsIndicators: false) {
-            VStack(spacing: 5) {
-                if speeches.isEmpty {
+            VStack(alignment: .leading, spacing: 5) {
+                if sections.upcoming.isEmpty && sections.past.isEmpty {
                     NotoText.text("条件に合う要人発言はありません。", size: 8)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .frame(maxWidth: .infinity, minHeight: 40)
                         .background(AccountCardBackground())
                 }
-                ForEach(speeches, id: \.speechId) { speech in
-                    NavigationLink(value: AppRoute.speechDetail(id: speech.speechId)) {
-                        row(speech)
-                            .background(rowCard(speech.importance))
-                    }
-                    .buttonStyle(SettingsRowPressStyle())
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("\(speech.speaker.name) \(speech.title)")
-                    .accessibilityAddTraits(.isButton)
+                // HQ指示(2026-10-14)「発言前と発言後を分けた方がいい」: 1つの一覧の中に見出しを入れて分ける。
+                // これからの発言は近い順、発言済み(と中止)は新しい順。
+                if !sections.upcoming.isEmpty {
+                    sectionTitle("これからの発言")
+                    ForEach(sections.upcoming, id: \.speechId) { speechLink($0) }
+                }
+                if !sections.past.isEmpty {
+                    sectionTitle("発言済み")
+                        .padding(.top, sections.upcoming.isEmpty ? 0 : 5)
+                    ForEach(sections.past, id: \.speechId) { speechLink($0) }
                 }
             }
             .frame(width: 214)
             .padding(.bottom, 6)
         }
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        NotoText.text(title, size: 8.5)
+            .foregroundStyle(SettingsListLayout.sectionTitleColor)
+            .padding(.leading, 2)
+    }
+
+    private func speechLink(_ speech: SpeechDetailResponse) -> some View {
+        NavigationLink(value: AppRoute.speechDetail(id: speech.speechId)) {
+            row(speech)
+                .background(rowCard(speech.importance))
+        }
+        .buttonStyle(SettingsRowPressStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(speech.speaker.name) \(speech.title)")
+        .accessibilityAddTraits(.isButton)
     }
 
     private func rowCard(_ importance: Importance) -> some View {

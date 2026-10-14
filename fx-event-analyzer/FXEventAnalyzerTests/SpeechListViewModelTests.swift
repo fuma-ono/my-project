@@ -25,6 +25,17 @@ final class SpeechListViewModelTests: XCTestCase {
         XCTAssertEqual(ordered.map(\.speechId), ["future-near", "future-far", "past-new", "past-old"])
     }
 
+    func testSplitSeparatesUpcomingFromDeliveredAndCancelled() {
+        let speeches = [
+            speech("done", name: "A", org: "FRB", title: "t", minutes: -60, status: .delivered),
+            speech("cancel", name: "B", org: "FRB", title: "t", minutes: -30, status: .cancelled),
+            speech("next", name: "C", org: "ECB", title: "t", minutes: 30, status: .scheduled),
+        ]
+        let split = SpeechListViewModel.split(speeches)
+        XCTAssertEqual(split.upcoming.map(\.speechId), ["next"])
+        XCTAssertEqual(split.past.map(\.speechId), ["cancel", "done"])
+    }
+
     func testFamilyNameIsTheLastPartOfAKatakanaName() {
         XCTAssertEqual(SpeechListView.familyName("ジェローム・パウエル"), "パウエル")
         XCTAssertEqual(SpeechListView.familyName("クリスティーヌ・ラガルド"), "ラガルド")
