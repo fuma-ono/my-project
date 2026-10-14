@@ -113,8 +113,9 @@ struct HistoricalComparisonView: View {
     private static let headerFill = Color(red: 0.06, green: 0.17, blue: 0.33)
     private static let tableFill = Color(red: 0.02, green: 0.09, blue: 0.20)
     private static let timeColor = Color(red: 0.36, green: 0.63, blue: 0.95)
-    private static let plusColor = Color(red: 0.13, green: 0.80, blue: 0.56)
-    private static let minusColor = Color(red: 1.0, green: 0.30, blue: 0.40)
+    // HQ指示(2026-10-14)「プラスが赤・マイナスが緑」: イベント詳細など他の画面と同じ色。
+    private static let plusColor = HomeView.changeUpColor
+    private static let minusColor = HomeView.changeDownColor
 
     private func table(_ response: ComparisonResponse) -> some View {
         let events = newestFirst
