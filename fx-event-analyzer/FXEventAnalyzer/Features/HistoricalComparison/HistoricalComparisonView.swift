@@ -84,14 +84,15 @@ struct HistoricalComparisonView: View {
         // 2026-10-14: 文字を大きくしたら指標名が通貨ペアに押されて「消費者物価指数（C…」と切れたので、
         // 通貨ペアは2行目(国｜通貨)の右端に置き、指標名は1行目を全部使う。
         return HStack(spacing: 8) {
-            CountryFlagView(countryCode: country, diameter: 30)
+            // 2026-10-14「指標名と国旗はイベント詳細と同じ大きさに」: 国旗34・名前11。
+            CountryFlagView(countryCode: country, diameter: 34)
             VStack(alignment: .leading, spacing: 3) {
-                NotoText.text(name, size: 12)
+                NotoText.text(name, size: 11)
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 HStack(spacing: 3) {
-                    CountryFlagView(countryCode: country, diameter: 9)
+                    // 「米国の横の小さい国旗は消して」(2026-10-14)。
                     NotoText.text(CountryFlag.japaneseName(forCountry: country), size: 8.5)
                     NotoText.text("｜", size: 8.5).opacity(0.6)
                     NotoText.text(indicator.currencyCode ?? "", size: 8.5)
@@ -106,7 +107,7 @@ struct HistoricalComparisonView: View {
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
             }
         }
-        .frame(height: 34)
+        .frame(height: 36)
         .padding(.horizontal, 2)
     }
 
