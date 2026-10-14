@@ -35,6 +35,12 @@ final class MovementDetailViewModel: ObservableObject {
     @Published private(set) var eventSnapshot: EventSnapshotDetail?
     /// 指標の一般的な見方(上振れ・下振れ)。取れなくても画面は出す。
     @Published private(set) var indicator: IndicatorSummary?
+    /// HQ指示(2026-10-14)「過去の類似イベントとの比較」: 過去イベント比較(SCR-009)と
+    /// 同じBackend集計(`/indicators/{id}/comparison`の`stats`、常にAIは使わない数値)
+    /// から、15分後の平均pipsを取る。Advanced Statisticsと違いプラン制限の対象外。
+    @Published private(set) var comparisonStats: ComparisonStats?
+    /// 平均の算出に使われた実際の件数(`analyzable_events`)。「過去◯回」の◯に使う。
+    @Published private(set) var comparisonAnalyzableEvents: Int?
 
     /// 発表直前の価格(チャートの基準線)。
     var preReleasePrice: Double? {
@@ -74,6 +80,7 @@ final class MovementDetailViewModel: ObservableObject {
             // 結果・予想は分析の文にだけ使う。チャートより先に取り終える(最後の通信がチャートになる)。
             await fetchEventSnapshot()
             await fetchIndicator()
+            await fetchComparisonStats()
             await fetchReactions()
             if case .loaded = state {
                 loadChart()
@@ -125,6 +132,22 @@ final class MovementDetailViewModel: ObservableObject {
     private func fetchIndicator() async {
         let response: IndicatorDetailResponse? = try? await apiClient.send(Endpoint(path: "indicators/\(indicatorId)"))
         indicator = response?.indicator
+    }
+
+    /// HQ指示(2026-10-14)「過去の類似イベントとの比較」。過去イベント比較(SCR-009)と
+    /// 同じ集計エンドポイントを15分後固定で呼び、取れなくても画面は出す(他のベスト
+    /// エフォートな取得と同様`try?`)。
+    private func fetchComparisonStats() async {
+        let endpoint = Endpoint(
+            path: "indicators/\(indicatorId)/comparison",
+            queryItems: [
+                URLQueryItem(name: "fx_pair_id", value: fxPairId),
+                URLQueryItem(name: "timeframe", value: "15m"),
+            ]
+        )
+        let response: ComparisonResponse? = try? await apiClient.send(endpoint)
+        comparisonStats = response?.stats
+        comparisonAnalyzableEvents = response?.analyzableEvents
     }
 
     private func loadChart() {

@@ -218,68 +218,121 @@ struct MovementDetailView: View {
             marketViewAbove: viewModel.indicator?.marketViewAbove, marketViewBelow: viewModel.indicator?.marketViewBelow
         ) {
             // HQ指示(2026-10-09)「要点を分けて表示」「値動きの事実と相場の解釈は分ける」。
-            // HQ指示(2026-10-13、8回目)「参考画像をピクセル単位で再現して」: 見出しに
-            // アイコンを追加、「発表結果」の値を角丸バッジに、「解説」の見出しに文言を
-            // 合わせ電球アイコンを追加。
-            VStack(alignment: .leading, spacing: 5) {
-                // HQ指示(2026-10-13、10回目)「先ほどまで1画面で収まってたから収めてください」:
-                // priceCardと同じく、見出しと区切り線を1つの入れ子VStackにまとめ、外側の
-                // 子要素数(spacingの数)を増やさないようにした。
+            // HQ指示(2026-10-14)「値動きの分析の構成を画像のようにして」: 事実(発表結果・
+            // 初動・15分後)と「主な要因」(旧「解説」)を2列に並べ、その下に「過去の
+            // 類似イベントとの比較」を追加。画像にあった「AI分析」バッジはこのアプリの
+            // 「AIは使わず数値から決まった型で作る」方針(要件定義書12章)と矛盾するため、
+            // HQ確認のうえ付けていない。枠の高さを変えないよう、文字サイズ・余白を
+            // 詰めている。
+            VStack(alignment: .leading, spacing: 4) {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 4) {
-                        Image(systemName: "arrow.up.right")
+                        Image(systemName: "chart.bar.fill")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(V5P.cyan)
                         NotoText.text("値動きの分析", size: 11).foregroundStyle(.white)
                     }
-                    // HQ指示(2026-10-13、9回目)「値動きの分析の下にも付けて」: 見出しと
-                    // 事実の行の間に区切り線を追加した。
                     Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
                 }
-                VStack(spacing: 3) {
-                    ForEach(summary.facts, id: \.label) { row in
-                        HStack {
-                            NotoText.text(row.label, size: 8).foregroundStyle(SettingsCardStyle.subtitleColor)
-                            Spacer()
-                            if row.sign == nil {
-                                // HQ指示(2026-10-13、10回目)「文字サイズを1小さくして。枠も
-                                // 小さくして」: 8→7、パディングも詰めた。
-                                NotoText.text(row.value, size: 7)
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 2)
-                                    .background(Capsule().fill(Color.black.opacity(0.2)))
-                                    .overlay(Capsule().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
-                            } else {
-                                NotoText.text(row.value, size: 10)
-                                    .foregroundStyle(row.sign! >= 0 ? V5P.green : V5P.red)
+                HStack(alignment: .top, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(summary.facts, id: \.label) { row in
+                            VStack(alignment: .leading, spacing: 1) {
+                                NotoText.text(row.label, size: 6).foregroundStyle(SettingsCardStyle.subtitleColor)
+                                NotoText.text(row.value, size: 7.5)
+                                    .foregroundStyle(row.sign.map { $0 >= 0 ? V5P.green : V5P.red } ?? .white)
                             }
                         }
                     }
-                }
-                if let interpretation = summary.interpretation {
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "lightbulb.fill")
-                                .font(.system(size: 8))
-                                .foregroundStyle(V5P.cyan)
-                            NotoText.text("解説（一般的な見方）", size: 7.5).foregroundStyle(V5P.cyan)
+                    .frame(width: 84, alignment: .leading)
+                    if let interpretation = summary.interpretation {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 2) {
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 6.5))
+                                    .foregroundStyle(V5P.cyan)
+                                NotoText.text("主な要因", size: 6.5).foregroundStyle(V5P.cyan)
+                            }
+                            NotoText.text(interpretation, size: 6)
+                                .foregroundStyle(.white.opacity(0.85))
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                        NotoText.text(interpretation, size: 7.5)
-                            .foregroundStyle(.white.opacity(0.85))
-                            .fixedSize(horizontal: false, vertical: true)
-                        NotoText.text("※ 値動きの原因を断定するものではない。", size: 6)
-                            .foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .padding(5)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 5).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
                     }
-                    .padding(6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 5).fill(V5P.cyan.opacity(0.08)))
                 }
+                NotoText.text("※ 値動きの原因を断定するものではない。", size: 5.5)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                comparisonSection(reactions: reactions)
             }
             .padding(8)
             .frame(width: 214, alignment: .leading)
             .background(AccountCardBackground())
         }
+    }
+
+    /// HQ指示(2026-10-14)「値動きの分析の構成を画像のようにして」「過去イベントを見るで
+    /// 過去イベント比較に動線を作成して」: 過去イベント比較(SCR-009)と同じBackend集計
+    /// (`comparisonStats`)から、今回の15分後pipsと過去の平均pipsを並べる。平均が
+    /// 取れていない(取得失敗・分析可能な過去イベントが無い)ときはこの区画ごと出さない。
+    @ViewBuilder
+    private func comparisonSection(reactions: [ReactionTimeframeEntry]) -> some View {
+        if let average = viewModel.comparisonStats?.averagePips,
+           let count = viewModel.comparisonAnalyzableEvents, count > 0,
+           let current = reactions.first(where: { $0.timeframe == "15m" && $0.analysisStatus == .ready })?.pips {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 4) {
+                    Image(systemName: "lightbulb.fill")
+                        .font(.system(size: 7.5))
+                        .foregroundStyle(V5P.cyan)
+                    NotoText.text("過去の類似イベントとの比較", size: 7).foregroundStyle(.white)
+                    Spacer(minLength: 4)
+                    NavigationLink(value: AppRoute.historicalComparison(
+                        indicatorId: viewModel.indicatorId,
+                        indicatorName: viewModel.indicatorName,
+                        fxPairId: viewModel.fxPairId,
+                        fxPairSymbol: viewModel.symbol
+                    )) {
+                        HStack(spacing: 1) {
+                            NotoText.text("過去イベントを見る", size: 6).foregroundStyle(V5P.cyan)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 5.5, weight: .semibold))
+                                .foregroundStyle(V5P.cyan)
+                        }
+                    }
+                }
+                Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
+                HStack {
+                    NotoText.text("過去\(count)回の平均変動（15分後）", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    Spacer(minLength: 4)
+                    NotoText.text(Self.signedPipsText(average), size: 7.5)
+                        .foregroundStyle(average >= 0 ? V5P.green : V5P.red)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+                HStack {
+                    NotoText.text("今回の変動", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    Spacer(minLength: 4)
+                    NotoText.text(Self.signedPipsText(current), size: 7.5)
+                        .foregroundStyle(current >= 0 ? V5P.green : V5P.red)
+                        .lineLimit(1)
+                        .fixedSize()
+                    if let magnitude = MovementAnalysisText.magnitudeLabel(current: current, average: average) {
+                        NotoText.text(magnitude, size: 6)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(Color.black.opacity(0.2)))
+                            .overlay(Capsule().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
+                    }
+                }
+            }
+        }
+    }
+
+    private static func signedPipsText(_ value: Double) -> String {
+        "\(ValueFormat.number(value, fractionDigits: 1, signed: true)) pips"
     }
 
     @ViewBuilder private func loadingScaffold(@ViewBuilder content: @escaping () -> some View) -> some View {
