@@ -118,6 +118,12 @@ final class ScreenshotTests: XCTestCase {
         capture("05-Indicators")
 
         // SCR-006 指標詳細
+        // 2026-10-14: 米国CPIは前回の発表が終わると次回が翌月になり、一覧の下のほうへ移る。
+        // スクロールした先の行は(拡大表示の都合で)押せる判定にならないことがあるので、
+        // 「国・地域」で米国に絞り、最初の画面に入れてから押す。
+        tap(containing: "国・地域")
+        let usMenuItem = app.buttons["米国"]
+        if usMenuItem.waitForExistence(timeout: 5) { usMenuItem.tap() }
         tap(containing: "米国CPI(消費者物価指数)")
         XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 15), "Indicator Detail did not load")
         capture("06-IndicatorDetail")
