@@ -233,7 +233,7 @@ struct HistoricalComparisonView: View {
                     .font(.system(size: 7, weight: .semibold))
                     .foregroundStyle(.white)
                 Text(Self.timeString(event.releaseDatetime))
-                    .font(.system(size: 6.5, weight: .medium))
+                    .font(.system(size: 5.5, weight: .medium))
                     .foregroundStyle(Self.timeColor)
             }
             .monospacedDigit()
