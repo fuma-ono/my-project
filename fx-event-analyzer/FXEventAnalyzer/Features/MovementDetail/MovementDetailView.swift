@@ -90,6 +90,9 @@ struct MovementDetailView: View {
                     priceBadge(timeframe: latest.timeframe)
                 }
             }
+            // HQ指示(2026-10-13、9回目)「国旗マークと154.71の間に線があるから付けて」:
+            // ヘッダー行(国旗・通貨ペア名)と価格の間に区切り線を追加した。
+            Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
             // HQ指示(2026-10-09)「価格情報を整理する」: 比較時点の小さなラベル → 価格(最も目立たせる)と
             // 変動幅・変動率を同じ行 → 変動の基準価格、の順。
             if let latest, let price = latest.postReleasePrice {
@@ -140,21 +143,19 @@ struct MovementDetailView: View {
     }
 
     /// HQ指示(2026-10-13、8回目)「参考画像をピクセル単位で再現して」: ヘッダー行右上の
-    /// 「発表◯分後の価格」バッジ(棒グラフアイコン+テキスト、角丸の縁取り)。
+    /// 「発表◯分後の価格」バッジ(角丸の縁取り)。
+    /// HQ指示(2026-10-13、9回目)「アイコンはいらないから消して」「文字と枠線の色を
+    /// 米ドルの色にして」: 棒グラフアイコンを削除し、色をV5P.cyanから米ドル(USD)を
+    /// 象徴するV5P.blue(米国旗の青、このチャートの選択中タブと同じ色)に変更。
     private func priceBadge(timeframe: String) -> some View {
-        HStack(spacing: 3) {
-            Image(systemName: "chart.bar.fill")
-                .font(.system(size: 7, weight: .semibold))
-                .foregroundStyle(V5P.cyan)
-            NotoText.text("発表\(MovementAnalysisText.label(timeframe))後の価格", size: 6.5)
-                .foregroundStyle(V5P.cyan)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 4)
-        .background(Capsule().fill(Color.black.opacity(0.2)))
-        .overlay(Capsule().stroke(V5P.cyan.opacity(0.4), lineWidth: 0.6))
+        NotoText.text("発表\(MovementAnalysisText.label(timeframe))後の価格", size: 6.5)
+            .foregroundStyle(V5P.blue)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(Color.black.opacity(0.2)))
+            .overlay(Capsule().stroke(V5P.blue.opacity(0.5), lineWidth: 0.6))
     }
 
     private var timeframeTabs: some View {
@@ -220,13 +221,18 @@ struct MovementDetailView: View {
                         .foregroundStyle(V5P.cyan)
                     NotoText.text("値動きの分析", size: 11).foregroundStyle(.white)
                 }
+                // HQ指示(2026-10-13、9回目)「値動きの分析の下にも付けて」: 見出しと
+                // 事実の行の間に区切り線を追加した。
+                Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
                 VStack(spacing: 3) {
                     ForEach(summary.facts, id: \.label) { row in
                         HStack {
                             NotoText.text(row.label, size: 8).foregroundStyle(SettingsCardStyle.subtitleColor)
                             Spacer()
                             if row.sign == nil {
-                                NotoText.text(row.value, size: 8.5)
+                                // HQ指示(2026-10-13、9回目)「予想を0.1ポイント下回るの文字
+                                // サイズを発表結果と同じにして」: 8.5→8(ラベルと同じ)。
+                                NotoText.text(row.value, size: 8)
                                     .foregroundStyle(.white)
                                     .padding(.horizontal, 7)
                                     .padding(.vertical, 3)
