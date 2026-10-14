@@ -183,12 +183,15 @@ struct IndicatorsView: View {
         let colors = HomeView.importanceBadgeColors(indicator.importance)
         return HStack(spacing: 5) {
             VStack(alignment: .leading, spacing: 0) {
+                // HQ指示(2026-10-14)「日時の前に『次回』と小さく付ける。次回の予定が無い指標は
+                // 『前回 10/01』のように前回の発表日を薄く出す」。
                 HStack(spacing: 6) {
                     if let date {
+                        NotoText.text(isNext ? "次回" : "前回", size: 6)
                         Text(Self.dateString(date))
-                        Text(Self.timeString(date))
+                        if isNext { Text(Self.timeString(date)) }
                     } else {
-                        Text("--")
+                        NotoText.text("予定なし", size: 6)
                     }
                 }
                 .font(.system(size: 7.5, weight: .semibold))
