@@ -96,8 +96,9 @@ struct EventDetailCards: View {
                     Spacer(minLength: 4)
                     // HQ指示(2026-10-12、6回目)「日時の文字サイズを0.5下げて」:
                     // 8.5→8。
+                    // HQ指示(2026-10-14)「日時の文字色を米国｜USDと同じ色に」(要人発言詳細と同じ)。
                     NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 8)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .lineLimit(1)
                 }
             }

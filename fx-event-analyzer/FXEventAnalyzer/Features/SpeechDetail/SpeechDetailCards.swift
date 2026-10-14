@@ -90,8 +90,9 @@ struct SpeechDetailCards: View {
                     Spacer(minLength: 4)
                     // HQ指示(2026-10-12、6回目)「日時の文字サイズを0.5下げて」:
                     // 8.5→8。
+                    // HQ指示(2026-10-14)「日時の文字色を米国｜FRBと同じ色に」。
                     NotoText.text("\(AppPreferences.shared.dateString(response.statementDatetime)) \(AppPreferences.shared.timeString(response.statementDatetime))", size: 8)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .lineLimit(1)
                 }
             }
@@ -116,15 +117,15 @@ struct SpeechDetailCards: View {
     @ViewBuilder private var statementCard: some View {
         VStack(alignment: .leading, spacing: 4) {
             if response.status == .scheduled {
-                NotoText.text("この発言はまだ行われていません。", size: 9).foregroundStyle(SettingsCardStyle.subtitleColor)
+                NotoText.text("この発言はまだ行われていません。", size: 10.5).foregroundStyle(SettingsCardStyle.subtitleColor)
             } else if response.status == .cancelled {
-                NotoText.text("この発言は中止されました。", size: 9).foregroundStyle(SettingsCardStyle.subtitleColor)
+                NotoText.text("この発言は中止されました。", size: 10.5).foregroundStyle(SettingsCardStyle.subtitleColor)
             } else if let summary = response.summary {
                 // HQ指示(2026-10-13、2回目)「発言の文字サイズは通貨ペアの
                 // 値動き表記(pipsText、10)より0.5大きくして」: 10→10.5。
                 NotoText.text("「\(summary)」", size: 10.5).foregroundStyle(.white)
             } else {
-                NotoText.text("要約はまだ用意されていません。", size: 9).foregroundStyle(SettingsCardStyle.subtitleColor)
+                NotoText.text("要約はまだ用意されていません。", size: 10.5).foregroundStyle(SettingsCardStyle.subtitleColor)
             }
         }
         // HQ指示(2026-10-12、7回目)「発言の枠をもう少し大きくして」:
@@ -143,7 +144,9 @@ struct SpeechDetailCards: View {
         // summaryCardMinHeight`と同じ最低高さを与えて揃えた。
         // `width:`(固定)と`minHeight:`(可変)は`frame`の別のオーバーロード
         // であり同じ呼び出しに混在できないため、`.frame`を2回に分けた。
-        .frame(minHeight: EventDetailCards.summaryCardMinHeight, alignment: .top)
+        // HQ指示(2026-10-14)「1行しかないときは上下の中心に、文字を大きくして余白を目立たせない」:
+        // 状態文を9→10.5(要約と同じ)にし、枠の中で上下の中心に置く。2行以上はそのまま枠いっぱいに並ぶ。
+        .frame(minHeight: EventDetailCards.summaryCardMinHeight, alignment: .leading)
         .frame(width: 214, alignment: .leading)
         .background(AccountCardBackground())
     }
