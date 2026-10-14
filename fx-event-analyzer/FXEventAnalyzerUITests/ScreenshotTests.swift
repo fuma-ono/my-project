@@ -260,6 +260,11 @@ final class ScreenshotTests: XCTestCase {
         // iPadはキーボードを出したままで押せていて、閉じると逆に押せなくなったのでiPhoneだけ。
         if UIDevice.current.userInterfaceIdiom == .phone {
             searchField.typeText("\n")
+        } else {
+            // 2026-10-14: iPadでも、大きいキーボードが結果の行に重なって押せないことがあった
+            // (毎回ではない)。キーボードの「キーボードを閉じる」ボタンで閉じてから押す。
+            let hideKeyboard = app.keyboards.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS %@", "keyboard", "キーボード")).firstMatch
+            if hideKeyboard.waitForExistence(timeout: 2) { hideKeyboard.tap() }
         }
 
         // 「最近の検索履歴」にデータが入った状態(HQ指示 2026-10-09、7回目
