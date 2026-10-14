@@ -443,84 +443,56 @@ final class ScreenshotTests: XCTestCase {
         add(attachment)
     }
 
+    /// `query`に合う要素のうち押せるものを押す。押せるものが無ければ、画面の横幅の中にある
+    /// (=今のタブの)要素に向かって1回だけゆっくりスクロールする。
+    ///
+    /// 2026-10-14: 以前は最初に見つかった要素だけを見て、押せなければ上へ素早くスワイプを
+    /// 繰り返していたため、(1)行を通り過ぎる、(2)別のタブに同じ名前の要素があるとそちらを
+    /// 追いかけ続ける、の2つでiPadのテストが時々止まっていた。合う要素を全部見て、押せる
+    /// ものを優先し、スクロールは向きを見て1回ずつにした。
+    private func tapFirstHittable(in queries: [XCUIElementQuery], timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        var swipes = 0
+        while Date() < deadline {
+            let candidates = queries.flatMap { $0.allElementsBoundByIndex }.filter { $0.exists }
+            if let hittable = candidates.first(where: { $0.isHittable }) {
+                hittable.tap()
+                return true
+            }
+            let screen = app.windows.firstMatch.frame
+            if let target = candidates.first(where: { !$0.frame.isEmpty && $0.frame.midX > screen.minX && $0.frame.midX < screen.maxX }),
+               swipes < 12 {
+                if target.frame.midY < screen.midY {
+                    app.swipeDown(velocity: .slow)
+                } else {
+                    app.swipeUp(velocity: .slow)
+                }
+                swipes += 1
+            }
+            Thread.sleep(forTimeInterval: 0.4)
+        }
+        return false
+    }
+
     /// SwiftUI exposes a `NavigationLink` row as different XCUITest element
     /// types depending on its container (`List` vs plain `VStack`/
     /// `ScrollView`) and OS version — this tries the common ones in order
     /// rather than assuming one.
-    /// 押せない要素に近づくようにスクロールする。画面内に見えているのに押せない判定の
-    /// ときは、その位置を直接押して true を返す。
-    private func scrollToward(_ element: XCUIElement, attempts: inout Int) -> Bool {
-        let screen = app.windows.firstMatch.frame
-        let frame = element.frame
-        if !frame.isEmpty, screen.insetBy(dx: 0, dy: screen.height * 0.12).contains(CGPoint(x: frame.midX, y: frame.midY)), attempts >= 2 {
-            element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-            return true
-        }
-        guard attempts < 10 else { return false }
-        if frame.midY < screen.midY {
-            app.swipeDown(velocity: .slow)
-        } else {
-            app.swipeUp(velocity: .slow)
-        }
-        attempts += 1
-        return false
-    }
-
     private func tap(containing text: String, timeout: TimeInterval = 10) {
         let predicate = NSPredicate(format: "label CONTAINS[c] %@", text)
-        let collections: [XCUIElementQuery] = [app.buttons, app.cells, app.otherElements, app.staticTexts]
-        let deadline = Date().addingTimeInterval(timeout)
-        var swipeAttempts = 0
-        while Date() < deadline {
-            for collection in collections {
-                let element = collection.matching(predicate).firstMatch
-                guard element.exists else { continue }
-                if element.isHittable {
-                    element.tap()
-                    return
-                }
-                // Found in the accessibility tree (e.g. a ScrollView row
-                // rendered off-screen) but not yet hittable — scroll and
-                // retry rather than waiting out the timeout. Real failure
-                // seen in CI on Historical Comparison's event list: 06-
-                // HistoricalEventDetail came out as a stale screenshot of
-                // Historical Comparison because this case wasn't handled.
-                // 2026-10-14: 上へだけ素早く8回スワイプしていたため、行を通り過ぎて
-                // 画面の上へ出てしまい、iPadで押せないまま終わることがあった。行が画面の
-                // 下にあれば上へ、上にあれば下へ、ゆっくり動かす。画面内に見えているのに
-                // isHittableにならない(拡大表示の都合)ときは、その位置を直接押す。
-                if scrollToward(element, attempts: &swipeAttempts) { return }
-            }
-            Thread.sleep(forTimeInterval: 0.3)
+        let queries = [app.buttons, app.cells, app.otherElements, app.staticTexts].map { $0.matching(predicate) }
+        if !tapFirstHittable(in: queries, timeout: timeout) {
+            XCTFail("Could not find a tappable element containing '\(text)' within \(timeout)s")
         }
-        XCTFail("Could not find a tappable element containing '\(text)' within \(timeout)s")
     }
 
-    /// Same scroll-and-retry approach as `tap(containing:)`, but matches by
-    /// `accessibilityIdentifier` instead of displayed text — for rows whose
-    /// text is variable mock data (dates, numbers) rather than a stable
-    /// literal.
+    /// `tap(containing:)`と同じ探し方を、表示文字ではなく`accessibilityIdentifier`で行う
+    /// (日付・数値など、文字が変わるモックデータの行用)。
     private func tapIdentifier(_ identifier: String, timeout: TimeInterval = 10) {
-        let collections: [XCUIElementQuery] = [app.buttons, app.cells, app.otherElements]
-        let deadline = Date().addingTimeInterval(timeout)
-        var swipeAttempts = 0
-        while Date() < deadline {
-            for collection in collections {
-                let element = collection.matching(identifier: identifier).firstMatch
-                guard element.exists else { continue }
-                if element.isHittable {
-                    element.tap()
-                    return
-                }
-                // 2026-10-14: 上へだけ素早く8回スワイプしていたため、行を通り過ぎて
-                // 画面の上へ出てしまい、iPadで押せないまま終わることがあった。行が画面の
-                // 下にあれば上へ、上にあれば下へ、ゆっくり動かす。画面内に見えているのに
-                // isHittableにならない(拡大表示の都合)ときは、その位置を直接押す。
-                if scrollToward(element, attempts: &swipeAttempts) { return }
-            }
-            Thread.sleep(forTimeInterval: 0.3)
+        let queries = [app.buttons, app.cells, app.otherElements].map { $0.matching(identifier: identifier) }
+        if !tapFirstHittable(in: queries, timeout: timeout) {
+            XCTFail("Could not find a tappable element with identifier '\(identifier)' within \(timeout)s")
         }
-        XCTFail("Could not find a tappable element with identifier '\(identifier)' within \(timeout)s")
     }
 
     private func waitForAnyElement(containing text: String, timeout: TimeInterval) -> Bool {
