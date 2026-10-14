@@ -81,6 +81,8 @@ struct HistoricalComparisonView: View {
         let indicator = response.indicator
         let country = indicator.countryCode ?? ""
         let name = CountryFlag.indicatorDisplayText(indicator.name, countryCode: country, displayName: indicator.displayName)
+        // 2026-10-14: 文字を大きくしたら指標名が通貨ペアに押されて「消費者物価指数（C…」と切れたので、
+        // 通貨ペアは2行目(国｜通貨)の右端に置き、指標名は1行目を全部使う。
         return HStack(spacing: 8) {
             CountryFlagView(countryCode: country, diameter: 30)
             VStack(alignment: .leading, spacing: 3) {
@@ -93,23 +95,19 @@ struct HistoricalComparisonView: View {
                     NotoText.text(CountryFlag.japaneseName(forCountry: country), size: 8.5)
                     NotoText.text("｜", size: 8.5).opacity(0.6)
                     NotoText.text(indicator.currencyCode ?? "", size: 8.5)
+                    Spacer(minLength: 4)
+                    // HQ指示(2026-10-14)「通貨ペア名を出して」: 表のpipsがどのペアの値動きかを示す。
+                    // 見た目はイベント詳細の値動き表のペア(重ねた国旗+USD/JPY)と同じ。
+                    OverlappingPairFlags(symbol: viewModel.fxPairSymbol, diameter: 10)
+                    NotoText.text(Self.pairLabel(viewModel.fxPairSymbol), size: 9)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
                 }
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
             }
-            Spacer(minLength: 4)
-            // HQ指示(2026-10-14)「右上に通貨ペア名を出して」: 表のpipsがどのペアの値動きかを示す。
-            // 見た目はイベント詳細の値動き表のペア(重ねた国旗+USD/JPY)と同じ。
-            HStack(spacing: 3) {
-                OverlappingPairFlags(symbol: viewModel.fxPairSymbol, diameter: 12)
-                NotoText.text(Self.pairLabel(viewModel.fxPairSymbol), size: 9)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-            }
-            .frame(maxHeight: .infinity, alignment: .top)
-            .padding(.trailing, 2)
         }
         .frame(height: 34)
-        .padding(.leading, 2)
+        .padding(.horizontal, 2)
     }
 
     /// 「USDJPY」「USD/JPY」のどちらでも「USD/JPY」にする。
@@ -122,10 +120,11 @@ struct HistoricalComparisonView: View {
     // MARK: - 表
 
     /// 列の幅(参考画像の比率: 日時110px・数値3列235px・pips3列199px → 43 / 30.7×3 / 26×3)。
+    /// 2026-10-14: 文字を8.5にしたらpips(「-24.5」)が詰まって見えたので、数値列を少し狭めてpips列を広げた。
     private enum Column {
-        static let date: CGFloat = 43
-        static let value: CGFloat = 30.7
-        static let pips: CGFloat = 26
+        static let date: CGFloat = 40
+        static let value: CGFloat = 28
+        static let pips: CGFloat = 30
     }
 
     private static let headerFill = Color(red: 0.06, green: 0.17, blue: 0.33)
