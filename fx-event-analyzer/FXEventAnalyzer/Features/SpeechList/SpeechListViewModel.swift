@@ -68,8 +68,8 @@ final class SpeechListViewModel: ObservableObject {
     }
 
     static func order(_ speeches: [SpeechDetailResponse]) -> [SpeechDetailResponse] {
-        let split = split(speeches)
-        return split.upcoming + split.past
+        let parts = Self.split(speeches)
+        return parts.upcoming + parts.past
     }
 
     /// 一覧の見出しごとの並び(「これからの発言」は近い順、「発言済み」は中止も含めて新しい順)。
