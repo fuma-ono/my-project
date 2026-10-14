@@ -346,7 +346,9 @@ private struct CandleChart: View {
                 .lineStyle(StrokeStyle(lineWidth: 0.8, dash: [3, 2]))
                 .annotation(position: .top, alignment: .center, spacing: 1) {
                     // HQ指示(2026-10-13、8回目)「参考画像をピクセル単位で再現して」:
-                    // 「発表」ラベルの前に上向き三角マークを添えた。
+                    // 「発表」ラベルの前に上向き三角マークを添えた。三角を足したことで
+                    // 註釈の幅がチャート領域からはみ出し「発表 11:...」と省略される
+                    // 回帰が起きたため、`.fixedSize()`で内容どおりの幅を強制した。
                     HStack(spacing: 2) {
                         Image(systemName: "arrowtriangle.up.fill")
                             .font(.system(size: 5))
@@ -354,10 +356,13 @@ private struct CandleChart: View {
                         Text("発表 \(AppPreferences.shared.timeString(chart.releaseDatetime))")
                             .font(.system(size: 6, weight: .semibold))
                             .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .fixedSize()
                     }
                     .padding(.horizontal, 3)
                     .padding(.vertical, 1)
                     .background(V5P.cyan.opacity(0.35), in: Capsule())
+                    .fixedSize()
                 }
             // HQ指示(2026-10-09)「発表時点からの変動幅(pips)を確認しやすく」: 発表直前の価格に基準線。
             if let pre = preReleasePrice {
