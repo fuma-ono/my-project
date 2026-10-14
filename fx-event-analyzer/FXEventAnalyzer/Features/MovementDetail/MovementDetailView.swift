@@ -230,16 +230,19 @@ struct MovementDetailView: View {
             // HQ指示(2026-10-14、2回目)「予想を...下回るは1行で収まるように」「きちんと
             // 参考画像をピクセル単位で見て」: 「発表結果」の値だけ下の行に値(1行)を置き、
             // 「初動」「15分後」はラベルと値を同じ行(ラベル左・値右)に並べる構成。
-            // HQ指示(2026-10-14、3回目)「少し上にあげることで余白が生まれるから...文字
-            // サイズを少し大きくできない？」: カード間の間隔を詰めて生まれた余白ぶん、
-            // この区画の文字サイズを全体的に0.5pt前後引き上げた。
+            // HQ指示(2026-10-14、4回目)「値動きの原因を断定するものではないの位置が
+            // おかしくない？」: 2列の下に全幅で置いていたため「主な要因」との対応が
+            // 分かりにくかった。「解説」ボックスの一部だった元の構成どおり、「主な要因」
+            // の枠の中(本文の下)に戻した。
+            // 「まだ上の部分に余白があるから文字サイズ大きくできない？」: カード間隔を
+            // 詰めてもまだ余白があったため、文字サイズをもう一段(0.5〜1pt)引き上げた。
             VStack(alignment: .leading, spacing: 4) {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 4) {
                         Image(systemName: "chart.bar.fill")
-                            .font(.system(size: 9, weight: .bold))
+                            .font(.system(size: 9.5, weight: .bold))
                             .foregroundStyle(V5P.cyan)
-                        NotoText.text("値動きの分析", size: 10.5).foregroundStyle(.white)
+                        NotoText.text("値動きの分析", size: 11).foregroundStyle(.white)
                     }
                     Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
                 }
@@ -248,17 +251,17 @@ struct MovementDetailView: View {
                         ForEach(summary.facts, id: \.label) { row in
                             if row.sign == nil {
                                 VStack(alignment: .leading, spacing: 1) {
-                                    NotoText.text(row.label, size: 6).foregroundStyle(SettingsCardStyle.subtitleColor)
-                                    NotoText.text(row.value, size: 7)
+                                    NotoText.text(row.label, size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                                    NotoText.text(row.value, size: 7.5)
                                         .foregroundStyle(.white)
                                         .lineLimit(1)
                                         .minimumScaleFactor(0.7)
                                 }
                             } else {
                                 HStack(spacing: 2) {
-                                    NotoText.text(row.label, size: 6).foregroundStyle(SettingsCardStyle.subtitleColor)
+                                    NotoText.text(row.label, size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
                                     Spacer(minLength: 2)
-                                    NotoText.text(row.value, size: 7.5)
+                                    NotoText.text(row.value, size: 8)
                                         .foregroundStyle(row.sign! >= 0 ? V5P.green : V5P.red)
                                         .lineLimit(1)
                                         .fixedSize()
@@ -266,26 +269,26 @@ struct MovementDetailView: View {
                             }
                         }
                     }
-                    .frame(width: 94, alignment: .leading)
+                    .frame(width: 96, alignment: .leading)
                     if let interpretation = summary.interpretation {
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 2) {
                                 Image(systemName: "person.fill")
-                                    .font(.system(size: 6.5))
+                                    .font(.system(size: 7))
                                     .foregroundStyle(V5P.cyan)
-                                NotoText.text("主な要因", size: 6.5).foregroundStyle(V5P.cyan)
+                                NotoText.text("主な要因", size: 7).foregroundStyle(V5P.cyan)
                             }
-                            NotoText.text(interpretation, size: 6)
+                            NotoText.text(interpretation, size: 6.5)
                                 .foregroundStyle(.white.opacity(0.85))
                                 .fixedSize(horizontal: false, vertical: true)
+                            NotoText.text("※ 値動きの原因を断定するものではない。", size: 5.5)
+                                .foregroundStyle(SettingsCardStyle.subtitleColor)
                         }
                         .padding(5)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(RoundedRectangle(cornerRadius: 5).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
                     }
                 }
-                NotoText.text("※ 値動きの原因を断定するものではない。", size: 5.5)
-                    .foregroundStyle(SettingsCardStyle.subtitleColor)
                 comparisonSection(reactions: reactions)
             }
             .padding(8)
@@ -303,14 +306,14 @@ struct MovementDetailView: View {
         if let average = viewModel.comparisonStats?.averagePips,
            let count = viewModel.comparisonAnalyzableEvents, count > 0,
            let current = reactions.first(where: { $0.timeframe == "15m" && $0.analysisStatus == .ready })?.pips {
-            // HQ指示(2026-10-14、3回目)「文字サイズを少し大きくできない？」: この区画も
-            // 合わせて0.5pt前後引き上げた。
+            // HQ指示(2026-10-14、4回目)「まだ上の部分に余白があるから文字サイズ大きく
+            // できない？」: この区画もさらに0.5pt前後引き上げた。
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 3) {
                     Image(systemName: "lightbulb.fill")
-                        .font(.system(size: 7.5))
+                        .font(.system(size: 8))
                         .foregroundStyle(V5P.cyan)
-                    NotoText.text("過去の類似イベントとの比較", size: 7)
+                    NotoText.text("過去の類似イベントとの比較", size: 7.5)
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
@@ -322,9 +325,9 @@ struct MovementDetailView: View {
                         fxPairSymbol: viewModel.symbol
                     )) {
                         HStack(spacing: 1) {
-                            NotoText.text("過去イベントを見る", size: 6).foregroundStyle(V5P.cyan)
+                            NotoText.text("過去イベントを見る", size: 6.5).foregroundStyle(V5P.cyan)
                             Image(systemName: "chevron.right")
-                                .font(.system(size: 5.5, weight: .semibold))
+                                .font(.system(size: 6, weight: .semibold))
                                 .foregroundStyle(V5P.cyan)
                         }
                         .lineLimit(1)
@@ -333,25 +336,25 @@ struct MovementDetailView: View {
                 }
                 Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
                 HStack {
-                    NotoText.text("過去\(count)回の平均変動（15分後）", size: 6.5)
+                    NotoText.text("過去\(count)回の平均変動（15分後）", size: 7)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                     Spacer(minLength: 4)
-                    NotoText.text(Self.signedPipsText(average), size: 7.5)
+                    NotoText.text(Self.signedPipsText(average), size: 8)
                         .foregroundStyle(average >= 0 ? V5P.green : V5P.red)
                         .lineLimit(1)
                         .fixedSize()
                 }
                 HStack {
-                    NotoText.text("今回の変動", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    NotoText.text("今回の変動", size: 7).foregroundStyle(SettingsCardStyle.subtitleColor)
                     Spacer(minLength: 4)
-                    NotoText.text(Self.signedPipsText(current), size: 7.5)
+                    NotoText.text(Self.signedPipsText(current), size: 8)
                         .foregroundStyle(current >= 0 ? V5P.green : V5P.red)
                         .lineLimit(1)
                         .fixedSize()
                     if let magnitude = MovementAnalysisText.magnitudeLabel(current: current, average: average) {
-                        NotoText.text(magnitude, size: 6)
+                        NotoText.text(magnitude, size: 6.5)
                             .foregroundStyle(.white)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
