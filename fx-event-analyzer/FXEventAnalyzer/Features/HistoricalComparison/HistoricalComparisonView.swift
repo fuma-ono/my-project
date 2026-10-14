@@ -177,16 +177,17 @@ struct HistoricalComparisonView: View {
 
     /// HQ指示(2026-10-14)「参考画像と比べて文字が小さすぎる。枠も小さい。見やすく」:
     /// 見出し20→26・行18→24、文字は表の見出し6.5→8.5・数字6.5→8.5・時刻5→6.5に上げた。
-    static let headerHeight: CGFloat = 26
-    static let rowHeight: CGFloat = 24
+    /// 2026-10-14(2回目)の指定: 見出し・日付・数値・pips 7、見出しの下の小さな字 5、見出しの帯24・行22。
+    static let headerHeight: CGFloat = 24
+    static let rowHeight: CGFloat = 22
 
     private var tableHeader: some View {
         HStack(spacing: 0) {
             Button { newestFirst.toggle() } label: {
                 HStack(spacing: 2) {
-                    Image(systemName: "calendar").font(.system(size: 8, weight: .semibold))
-                    NotoText.text("日時", size: 8.5)
-                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 6, weight: .bold))
+                    Image(systemName: "calendar").font(.system(size: 6.5, weight: .semibold))
+                    NotoText.text("日時", size: 7)
+                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 5, weight: .bold))
                 }
                 .foregroundStyle(.white)
                 .frame(width: Column.date, height: Self.headerHeight)
@@ -216,8 +217,8 @@ struct HistoricalComparisonView: View {
 
     private func headerCell(_ title: String, _ subtitle: String, width: CGFloat) -> some View {
         VStack(spacing: 0) {
-            NotoText.text(title, size: 8.5).foregroundStyle(.white)
-            NotoText.text(subtitle, size: 6)
+            NotoText.text(title, size: 7).foregroundStyle(.white)
+            NotoText.text(subtitle, size: 5)
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -229,7 +230,7 @@ struct HistoricalComparisonView: View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 Text(Self.dateString(event.releaseDatetime))
-                    .font(.system(size: 8.5, weight: .semibold))
+                    .font(.system(size: 7, weight: .semibold))
                     .foregroundStyle(.white)
                 Text(Self.timeString(event.releaseDatetime))
                     .font(.system(size: 6.5, weight: .medium))
@@ -251,7 +252,7 @@ struct HistoricalComparisonView: View {
 
     private func valueCell(_ value: Double?, unit: String?) -> some View {
         Text(Self.valueText(value, unit: unit))
-            .font(.system(size: 8.5, weight: .medium))
+            .font(.system(size: 7, weight: .medium))
             .monospacedDigit()
             .foregroundStyle(.white)
             .lineLimit(1)
@@ -261,7 +262,7 @@ struct HistoricalComparisonView: View {
 
     private func pipsCell(_ pips: Double?) -> some View {
         Text(Self.pipsText(pips))
-            .font(.system(size: 8.5, weight: .medium))
+            .font(.system(size: 7, weight: .medium))
             .monospacedDigit()
             .foregroundStyle(pips.map { $0 >= 0 ? Self.plusColor : Self.minusColor } ?? SettingsCardStyle.subtitleColor)
             .lineLimit(1)

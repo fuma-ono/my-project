@@ -169,7 +169,7 @@ final class IndicatorDisplayNameTests: XCTestCase {
         XCTAssertEqual(HistoricalComparisonView.pipsText(2.1), "+2.1")
         XCTAssertEqual(HistoricalComparisonView.pairLabel("USDJPY"), "USD/JPY")
         XCTAssertEqual(HistoricalComparisonView.pairLabel("EUR/USD"), "EUR/USD")
-        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false), 26 + 7 * 24.5)
+        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false), 24 + 7 * 22.5)
         // 表示名(DBのdisplay_name)があればそれを優先する。
         XCTAssertEqual(CountryFlag.indicatorDisplayText("米国雇用統計(非農業部門雇用者数)", countryCode: "US", displayName: "非農業部門雇用者数（NFP）"), "非農業部門雇用者数（NFP）")
         XCTAssertEqual(CountryFlag.indicatorDisplayName("x", countryCode: "US", displayName: "非農業部門雇用者数（NFP）").abbreviation, "NFP")
