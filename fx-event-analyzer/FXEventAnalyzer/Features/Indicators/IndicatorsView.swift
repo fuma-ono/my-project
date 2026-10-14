@@ -156,7 +156,8 @@ struct IndicatorsView: View {
             .overlay(shape.stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }
 
-    private static func accentColor(_ importance: Importance) -> Color {
+    /// 重要度の色の帯(要人発言一覧も同じ色を使う)。
+    static func accentColor(_ importance: Importance) -> Color {
         switch importance {
         case .high: return HomeView.changeUpColor
         case .medium: return HomeView.importanceBadgeColors(.medium).border

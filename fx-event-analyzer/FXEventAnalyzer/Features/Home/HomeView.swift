@@ -1182,6 +1182,8 @@ struct HomeView: View {
                 NavigationLink(value: AppRoute.speechList) {
                     headerLink("すべて見る")
                 }
+                // UIテストが他のカードの「すべて見る」と区別して押すための目印。
+                .accessibilityIdentifier("homeSpeechesSeeAll")
             }
             if speeches.isEmpty {
                 V5JPFont.text("現在表示できる要人発言はありません", size: 8)

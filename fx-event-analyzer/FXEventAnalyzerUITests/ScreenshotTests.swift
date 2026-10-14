@@ -194,6 +194,14 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(speechesHeader.isHittable, "Home did not scroll to reveal 直近の要人発言")
         capture("04b-Home-Speeches")
 
+        // SCR-012 要人発言一覧(HQ指示 2026-10-14)。「直近の要人発言」の「すべて見る」から開き、
+        // 撮ったらホームへ戻る。
+        tapIdentifier("homeSpeechesSeeAll")
+        XCTAssertTrue(waitForAnyElement(containing: "金融経済懇談会での講演", timeout: 15), "Speech list did not load")
+        capture("12-SpeechList")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "直近の要人発言", timeout: 10), "Did not return to Home from Speech list")
+
         // 通知一覧(HQ指示 2026-10-05「通知はホーム画面の通知マークを押したら
         // そこで確認できる仕様にして」)。ログイン時に`RootView`が
         // `GET /notifications/upcoming`を取り込み、モックの通知時刻を過ぎた
