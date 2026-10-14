@@ -168,11 +168,18 @@ struct SpeechListView: View {
                 HStack(spacing: 7) {
                     SpeakerAvatar(name: speaker.name, organization: speaker.organization, countryCode: speaker.countryCode, photoURL: speaker.photoURL, size: 17)
                     VStack(alignment: .leading, spacing: 1) {
-                        NotoText.text("\(speaker.name)　\(speaker.title)", size: 9.5)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                            .frame(height: 14, alignment: .leading)
-                            .foregroundStyle(.white)
+                        // HQ指示(2026-10-14)「入りきらない場合は名前を姓だけにする」: フルネーム+肩書きが
+                        // 1行に入ればそのまま、入らなければ姓+肩書き(それでも入らなければ少し縮める)。
+                        ViewThatFits(in: .horizontal) {
+                            NotoText.text("\(speaker.name)　\(speaker.title)", size: 9.5)
+                                .lineLimit(1)
+                                .fixedSize()
+                            NotoText.text("\(Self.familyName(speaker.name))　\(speaker.title)", size: 9.5)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                        .frame(height: 14, alignment: .leading)
+                        .foregroundStyle(.white)
                         NotoText.text(speech.title, size: 7)
                             .lineLimit(1)
                             .foregroundStyle(SettingsCardStyle.subtitleColor)
@@ -196,6 +203,11 @@ struct SpeechListView: View {
         .padding(.trailing, 7)
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+    }
+
+    /// 姓。「ジェローム・パウエル」→「パウエル」。「・」の無い名前(「植田和男」)はそのまま。
+    static func familyName(_ name: String) -> String {
+        name.split(separator: "・").last.map(String.init) ?? name
     }
 
     private static let dateFormatter: DateFormatter = {

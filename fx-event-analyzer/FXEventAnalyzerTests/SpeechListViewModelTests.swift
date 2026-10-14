@@ -25,6 +25,12 @@ final class SpeechListViewModelTests: XCTestCase {
         XCTAssertEqual(ordered.map(\.speechId), ["future-near", "future-far", "past-new", "past-old"])
     }
 
+    func testFamilyNameIsTheLastPartOfAKatakanaName() {
+        XCTAssertEqual(SpeechListView.familyName("ジェローム・パウエル"), "パウエル")
+        XCTAssertEqual(SpeechListView.familyName("クリスティーヌ・ラガルド"), "ラガルド")
+        XCTAssertEqual(SpeechListView.familyName("植田和男"), "植田和男")
+    }
+
     func testSearchMatchesNameOrganizationTitleAndCountry() {
         let item = speech("1", name: "植田和男", org: "日本銀行", title: "金融経済懇談会での講演", minutes: 0, status: .scheduled)
         XCTAssertTrue(SpeechListViewModel.matchesSearch(item, query: "植田"))
