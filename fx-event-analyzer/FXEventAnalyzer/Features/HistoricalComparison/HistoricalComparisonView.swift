@@ -82,17 +82,17 @@ struct HistoricalComparisonView: View {
         let country = indicator.countryCode ?? ""
         let name = CountryFlag.indicatorDisplayText(indicator.name, countryCode: country, displayName: indicator.displayName)
         return HStack(spacing: 8) {
-            CountryFlagView(countryCode: country, diameter: 23)
+            CountryFlagView(countryCode: country, diameter: 30)
             VStack(alignment: .leading, spacing: 3) {
-                NotoText.text(name, size: 10)
+                NotoText.text(name, size: 12)
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 HStack(spacing: 3) {
-                    CountryFlagView(countryCode: country, diameter: 7)
-                    NotoText.text(CountryFlag.japaneseName(forCountry: country), size: 6.5)
-                    NotoText.text("｜", size: 6.5).opacity(0.6)
-                    NotoText.text(indicator.currencyCode ?? "", size: 6.5)
+                    CountryFlagView(countryCode: country, diameter: 9)
+                    NotoText.text(CountryFlag.japaneseName(forCountry: country), size: 8.5)
+                    NotoText.text("｜", size: 8.5).opacity(0.6)
+                    NotoText.text(indicator.currencyCode ?? "", size: 8.5)
                 }
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
             }
@@ -100,16 +100,16 @@ struct HistoricalComparisonView: View {
             // HQ指示(2026-10-14)「右上に通貨ペア名を出して」: 表のpipsがどのペアの値動きかを示す。
             // 見た目はイベント詳細の値動き表のペア(重ねた国旗+USD/JPY)と同じ。
             HStack(spacing: 3) {
-                OverlappingPairFlags(symbol: viewModel.fxPairSymbol, diameter: 9)
-                NotoText.text(Self.pairLabel(viewModel.fxPairSymbol), size: 7.5)
+                OverlappingPairFlags(symbol: viewModel.fxPairSymbol, diameter: 12)
+                NotoText.text(Self.pairLabel(viewModel.fxPairSymbol), size: 9)
                     .foregroundStyle(.white)
                     .lineLimit(1)
             }
             .frame(maxHeight: .infinity, alignment: .top)
             .padding(.trailing, 2)
         }
-        .frame(height: 26)
-        .padding(.leading, 4)
+        .frame(height: 34)
+        .padding(.leading, 2)
     }
 
     /// 「USDJPY」「USD/JPY」のどちらでも「USD/JPY」にする。
@@ -171,20 +171,25 @@ struct HistoricalComparisonView: View {
 
     /// 表の高さ。行が少なければ行の分だけ、多ければ画面に入る高さで止めて中をスクロールする。
     static func tableHeight(rows: Int, limited: Bool) -> CGFloat {
-        let content = 20 + CGFloat(max(rows, 1)) * 18.5
-        return min(content, limited ? 318 : 340)
+        let content = headerHeight + CGFloat(max(rows, 1)) * (rowHeight + 0.5)
+        return min(content, limited ? 312 : 334)
     }
+
+    /// HQ指示(2026-10-14)「参考画像と比べて文字が小さすぎる。枠も小さい。見やすく」:
+    /// 見出し20→26・行18→24、文字は表の見出し6.5→8.5・数字6.5→8.5・時刻5→6.5に上げた。
+    static let headerHeight: CGFloat = 26
+    static let rowHeight: CGFloat = 24
 
     private var tableHeader: some View {
         HStack(spacing: 0) {
             Button { newestFirst.toggle() } label: {
                 HStack(spacing: 2) {
-                    Image(systemName: "calendar").font(.system(size: 6.5, weight: .semibold))
-                    NotoText.text("日時", size: 6.5)
-                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 4.5, weight: .bold))
+                    Image(systemName: "calendar").font(.system(size: 8, weight: .semibold))
+                    NotoText.text("日時", size: 8.5)
+                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 6, weight: .bold))
                 }
                 .foregroundStyle(.white)
-                .frame(width: Column.date, height: 20)
+                .frame(width: Column.date, height: Self.headerHeight)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -198,7 +203,7 @@ struct HistoricalComparisonView: View {
             headerCell("5分", "(pips)", width: Column.pips)
             headerCell("15分", "(pips)", width: Column.pips)
         }
-        .frame(height: 20)
+        .frame(height: Self.headerHeight)
         .background(Self.headerFill)
         .overlay(alignment: .bottom) {
             Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
@@ -206,28 +211,28 @@ struct HistoricalComparisonView: View {
     }
 
     private var divider: some View {
-        Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 0.5, height: 20)
+        Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 0.5, height: Self.headerHeight)
     }
 
     private func headerCell(_ title: String, _ subtitle: String, width: CGFloat) -> some View {
         VStack(spacing: 0) {
-            NotoText.text(title, size: 6.5).foregroundStyle(.white)
-            NotoText.text(subtitle, size: 4.5)
+            NotoText.text(title, size: 8.5).foregroundStyle(.white)
+            NotoText.text(subtitle, size: 6)
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
-        .frame(width: width, height: 20)
+        .frame(width: width, height: Self.headerHeight)
     }
 
     private func tableRow(_ event: ComparisonEventSummary, unit: String?) -> some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 Text(Self.dateString(event.releaseDatetime))
-                    .font(.system(size: 6.5, weight: .semibold))
+                    .font(.system(size: 8.5, weight: .semibold))
                     .foregroundStyle(.white)
                 Text(Self.timeString(event.releaseDatetime))
-                    .font(.system(size: 5, weight: .medium))
+                    .font(.system(size: 6.5, weight: .medium))
                     .foregroundStyle(Self.timeColor)
             }
             .monospacedDigit()
@@ -240,13 +245,13 @@ struct HistoricalComparisonView: View {
             pipsCell(event.pipsByTimeframe?["5m"] ?? nil)
             pipsCell(event.pipsByTimeframe?["15m"] ?? nil)
         }
-        .frame(height: 18)
+        .frame(height: Self.rowHeight)
         .contentShape(Rectangle())
     }
 
     private func valueCell(_ value: Double?, unit: String?) -> some View {
         Text(Self.valueText(value, unit: unit))
-            .font(.system(size: 6.5, weight: .medium))
+            .font(.system(size: 8.5, weight: .medium))
             .monospacedDigit()
             .foregroundStyle(.white)
             .lineLimit(1)
@@ -256,12 +261,12 @@ struct HistoricalComparisonView: View {
 
     private func pipsCell(_ pips: Double?) -> some View {
         Text(Self.pipsText(pips))
-            .font(.system(size: 6.5, weight: .medium))
+            .font(.system(size: 8.5, weight: .medium))
             .monospacedDigit()
             .foregroundStyle(pips.map { $0 >= 0 ? Self.plusColor : Self.minusColor } ?? SettingsCardStyle.subtitleColor)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
-            .padding(.trailing, 4)
+            .padding(.trailing, 2)
             .frame(width: Column.pips, alignment: .trailing)
     }
 
