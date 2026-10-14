@@ -160,6 +160,14 @@ final class IndicatorDisplayNameTests: XCTestCase {
         // 小さい表示(ホームの要人発言 16pt)では国旗の印を付けない。
         XCTAssertFalse(SpeakerAvatar.showsFlagBadge(size: 16))
         XCTAssertTrue(SpeakerAvatar.showsFlagBadge(size: 34))
+        // 過去イベント比較の表の書式(参考画像「3.1%」「-8.2」「+2.1」)。
+        XCTAssertEqual(HistoricalComparisonView.valueText(3.1, unit: "%"), "3.1%")
+        XCTAssertEqual(HistoricalComparisonView.valueText(3.25, unit: "%"), "3.25%")
+        XCTAssertEqual(HistoricalComparisonView.valueText(250, unit: "千人"), "250.0")
+        XCTAssertEqual(HistoricalComparisonView.valueText(nil, unit: "%"), "--")
+        XCTAssertEqual(HistoricalComparisonView.pipsText(-8.2), "-8.2")
+        XCTAssertEqual(HistoricalComparisonView.pipsText(2.1), "+2.1")
+        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false), 20 + 7 * 18.5)
         // 表示名(DBのdisplay_name)があればそれを優先する。
         XCTAssertEqual(CountryFlag.indicatorDisplayText("米国雇用統計(非農業部門雇用者数)", countryCode: "US", displayName: "非農業部門雇用者数（NFP）"), "非農業部門雇用者数（NFP）")
         XCTAssertEqual(CountryFlag.indicatorDisplayName("x", countryCode: "US", displayName: "非農業部門雇用者数（NFP）").abbreviation, "NFP")

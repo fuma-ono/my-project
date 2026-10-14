@@ -484,7 +484,16 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       });
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.indicator).toMatchObject({ code: 'US_CPI', display_name: '消費者物価指数（CPI）' });
+      expect(body.indicator).toMatchObject({
+        code: 'US_CPI',
+        display_name: '消費者物価指数（CPI）',
+        country_code: 'US',
+        currency_code: 'USD',
+      });
+      // 過去イベント比較の表(api-design v1.26): どの時間足を選んでも、各発表に1分・5分・15分のpipsが付く。
+      for (const event of body.events) {
+        expect(Object.keys(event.pips_by_timeframe).sort()).toEqual(['15m', '1m', '5m']);
+      }
     });
   });
 

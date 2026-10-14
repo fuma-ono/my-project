@@ -150,7 +150,8 @@ final class ScreenshotTests: XCTestCase {
         tapIdentifier("v5HeaderBack")
         XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 10), "Did not go back to Indicator Detail")
         tap(containing: "過去イベント比較")
-        XCTAssertTrue(waitForAnyElement(containing: "過去の発表一覧", timeout: 15), "Historical Comparison did not load")
+        // 2026-10-14: 参考画像どおりの表に作り直したので、表の見出し「前回値」で待つ。
+        XCTAssertTrue(waitForAnyElement(containing: "前回値", timeout: 15), "Historical Comparison did not load")
         capture("09-HistoricalComparison")
 
         // HQ指示(2026-10-03、画面構成全面更新)「旧『過去イベント詳細』の
@@ -446,6 +447,25 @@ final class ScreenshotTests: XCTestCase {
     /// types depending on its container (`List` vs plain `VStack`/
     /// `ScrollView`) and OS version — this tries the common ones in order
     /// rather than assuming one.
+    /// 押せない要素に近づくようにスクロールする。画面内に見えているのに押せない判定の
+    /// ときは、その位置を直接押して true を返す。
+    private func scrollToward(_ element: XCUIElement, attempts: inout Int) -> Bool {
+        let screen = app.windows.firstMatch.frame
+        let frame = element.frame
+        if !frame.isEmpty, screen.insetBy(dx: 0, dy: screen.height * 0.12).contains(CGPoint(x: frame.midX, y: frame.midY)), attempts >= 2 {
+            element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            return true
+        }
+        guard attempts < 10 else { return false }
+        if frame.midY < screen.midY {
+            app.swipeDown(velocity: .slow)
+        } else {
+            app.swipeUp(velocity: .slow)
+        }
+        attempts += 1
+        return false
+    }
+
     private func tap(containing text: String, timeout: TimeInterval = 10) {
         let predicate = NSPredicate(format: "label CONTAINS[c] %@", text)
         let collections: [XCUIElementQuery] = [app.buttons, app.cells, app.otherElements, app.staticTexts]
@@ -465,10 +485,11 @@ final class ScreenshotTests: XCTestCase {
                 // seen in CI on Historical Comparison's event list: 06-
                 // HistoricalEventDetail came out as a stale screenshot of
                 // Historical Comparison because this case wasn't handled.
-                if swipeAttempts < 8 {
-                    app.swipeUp()
-                    swipeAttempts += 1
-                }
+                // 2026-10-14: 上へだけ素早く8回スワイプしていたため、行を通り過ぎて
+                // 画面の上へ出てしまい、iPadで押せないまま終わることがあった。行が画面の
+                // 下にあれば上へ、上にあれば下へ、ゆっくり動かす。画面内に見えているのに
+                // isHittableにならない(拡大表示の都合)ときは、その位置を直接押す。
+                if scrollToward(element, attempts: &swipeAttempts) { return }
             }
             Thread.sleep(forTimeInterval: 0.3)
         }
@@ -491,10 +512,11 @@ final class ScreenshotTests: XCTestCase {
                     element.tap()
                     return
                 }
-                if swipeAttempts < 8 {
-                    app.swipeUp()
-                    swipeAttempts += 1
-                }
+                // 2026-10-14: 上へだけ素早く8回スワイプしていたため、行を通り過ぎて
+                // 画面の上へ出てしまい、iPadで押せないまま終わることがあった。行が画面の
+                // 下にあれば上へ、上にあれば下へ、ゆっくり動かす。画面内に見えているのに
+                // isHittableにならない(拡大表示の都合)ときは、その位置を直接押す。
+                if scrollToward(element, attempts: &swipeAttempts) { return }
             }
             Thread.sleep(forTimeInterval: 0.3)
         }

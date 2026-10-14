@@ -1344,6 +1344,23 @@ function eventHistoryHandler(eventId) {
   };
 }
 
+// 過去イベント比較の表(HQ指示 2026-10-14の参考画像の値)。[結果, 予想, 前回, 1分, 5分, 15分(pips)]。
+// 1行目は EVENT_ID(イベント詳細の USD/JPY と同じ値)。
+const COMPARISON_TABLE = [
+  [3.1, 3.2, 3.3, -8.2, -24.5, -41.3],
+  [3.4, 3.3, 3.5, 2.1, 11.8, 18.4],
+  [3.4, 3.3, 3.5, -4.6, -15.2, -22.7],
+  [3.2, 3.1, 3.3, 3.8, 12.6, 21.3],
+  [3.0, 3.1, 3.2, -6.4, -17.8, -28.9],
+  [3.1, 3.2, 3.4, 2.7, 10.4, 16.8],
+  [3.2, 3.3, 3.5, -3.9, -12.6, -19.8],
+];
+
+function comparisonPips(index) {
+  const row = COMPARISON_TABLE[index];
+  return row ? { '1m': row[3], '5m': row[4], '15m': row[5] } : { '1m': null, '5m': null, '15m': null };
+}
+
 function comparisonEventsList() {
   // ComparisonEventSummary.CodingKeys maps `id` to JSON key `event_id`
   // (HistoricalComparisonModels.swift) — matches historicalRepository.ts's
@@ -1358,17 +1375,21 @@ function comparisonEventsList() {
       previous: RELEASE_SNAPSHOT.previous,
       surprise: RELEASE_SNAPSHOT.surprise,
       surprise_direction: RELEASE_SNAPSHOT.surprise_direction,
+      pips_by_timeframe: comparisonPips(0),
     },
     ...HISTORICAL_EVENT_IDS.map((id, index) => {
-      const surprise = [0.2, -0.1, 0.0, 0.3, -0.2, 0.1][index % 6];
+      const row = COMPARISON_TABLE[index + 1];
+      const [actual, forecast, previous] = row ?? [3.0, 3.0, 3.0];
+      const surprise = Number((actual - forecast).toFixed(2));
       return {
         event_id: id,
         release_datetime: isoMinusDays(30 * (index + 1) + 3),
-        forecast: 3.0 + index * 0.05,
-        actual: 3.0 + index * 0.05 + surprise,
-        previous: 2.9 + index * 0.05,
+        forecast,
+        actual,
+        previous,
         surprise,
         surprise_direction: surprise > 0 ? 'POSITIVE' : surprise < 0 ? 'NEGATIVE' : 'NEUTRAL',
+        pips_by_timeframe: comparisonPips(index + 1),
       };
     }),
   ];
@@ -1402,7 +1423,15 @@ function comparisonHandler(indicatorId, timeframe) {
       advanced_statistics: { available: true, required_entitlement: null, data: advanced },
     }));
     return {
-      indicator: { id: indicator.id, code: indicator.code, name: indicator.name, display_name: indicator.display_name },
+      indicator: {
+        id: indicator.id,
+        code: indicator.code,
+        name: indicator.name,
+        display_name: indicator.display_name,
+        country_code: indicator.country_code,
+        currency_code: indicator.currency_code,
+        unit: indicator.unit,
+      },
       fx_pair_id: FX_PAIR_ID,
       total_events: events.length,
       analyzable_events: events.length,
@@ -1415,7 +1444,15 @@ function comparisonHandler(indicatorId, timeframe) {
 
   const base = TIMEFRAME_REACTIONS[timeframe] ?? TIMEFRAME_REACTIONS['5m'];
   return {
-    indicator: { id: indicator.id, code: indicator.code, name: indicator.name, display_name: indicator.display_name },
+    indicator: {
+      id: indicator.id,
+      code: indicator.code,
+      name: indicator.name,
+      display_name: indicator.display_name,
+      country_code: indicator.country_code,
+      currency_code: indicator.currency_code,
+      unit: indicator.unit,
+    },
     fx_pair_id: FX_PAIR_ID,
     timeframe,
     total_events: events.length,

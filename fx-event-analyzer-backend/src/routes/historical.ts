@@ -17,6 +17,23 @@ import { comparisonQuerySchema } from '../schemas/historical.js';
 import { buildMeta, parsePagination, rangeFor } from '../utils/pagination.js';
 
 const ALL_TIMEFRAMES = ['1m', '5m', '15m', '30m', '60m'] as const;
+/** 過去イベント比較の表の列(HQ指示 2026-10-14、api-design v1.26)。各発表の1分・5分・15分のpips。 */
+const TABLE_TIMEFRAMES = ['1m', '5m', '15m'] as const;
+
+/** 各発表に、表の列の時間足ごとのpips(無ければ null)を付ける。 */
+function withPipsByTimeframe<T extends { event_id: string }>(
+  events: T[],
+  reactionRows: { event_id: string; timeframe: string; pips: number | null }[],
+): (T & { pips_by_timeframe: Record<string, number | null> })[] {
+  return events.map((event) => {
+    const pips: Record<string, number | null> = {};
+    for (const timeframe of TABLE_TIMEFRAMES) {
+      const row = reactionRows.find((r) => r.event_id === event.event_id && r.timeframe === timeframe);
+      pips[timeframe] = row?.pips ?? null;
+    }
+    return { ...event, pips_by_timeframe: pips };
+  });
+}
 
 export function registerHistoricalRoutes(app: FastifyInstance): void {
   // GET /events/{event_id}/history — api-design.md §20.
@@ -103,13 +120,17 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
     const historyLimit = historyLimitFor(plan, allEventIds.length);
 
     const timeframes = query.timeframe === 'all' ? [...ALL_TIMEFRAMES] : [query.timeframe];
-    const reactionRows = await listAvailableReactionsForComparison(
+    // 統計は選んだ時間足だけ。表の1分・5分・15分のために、その3つも一緒に読む。
+    const fetchTimeframes = [...new Set<string>([...timeframes, ...TABLE_TIMEFRAMES])];
+    const fetchedRows = await listAvailableReactionsForComparison(
       app.supabase,
       allEventIds,
       query.fx_pair_id,
-      timeframes,
+      fetchTimeframes,
     );
+    const reactionRows = fetchedRows.filter((row) => (timeframes as string[]).includes(row.timeframe));
     const analyzableEventIds = new Set(reactionRows.map((row) => row.event_id));
+    const eventsWithPips = withPipsByTimeframe(events, fetchedRows);
 
     if (query.timeframe !== 'all') {
       const rowsForStats = reactionRows.map((row) => ({ movement: row.movement ?? 0, pips: row.pips ?? 0 }));
@@ -122,6 +143,9 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
           code: indicator.code,
           name: indicator.name,
           display_name: indicator.display_name,
+          country_code: indicator.country_code,
+          currency_code: indicator.currency_code,
+          unit: indicator.unit,
         },
         fx_pair_id: query.fx_pair_id,
         timeframe: query.timeframe,
@@ -137,7 +161,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
           no_change_count: 0,
         },
         advanced_statistics: gateAdvancedStatistics(hasAdvanced, advanced),
-        events,
+        events: eventsWithPips,
         meta: buildMeta(pagination.page, pagination.limit, total),
         history_limit: historyLimit,
       };
@@ -160,12 +184,15 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
         code: indicator.code,
         name: indicator.name,
         display_name: indicator.display_name,
+        country_code: indicator.country_code,
+        currency_code: indicator.currency_code,
+        unit: indicator.unit,
       },
       fx_pair_id: query.fx_pair_id,
       total_events: allEventIds.length,
       analyzable_events: analyzableEventIds.size,
       stats_by_timeframe: statsByTimeframe,
-      events,
+      events: eventsWithPips,
       meta: buildMeta(pagination.page, pagination.limit, total),
       history_limit: historyLimit,
     };

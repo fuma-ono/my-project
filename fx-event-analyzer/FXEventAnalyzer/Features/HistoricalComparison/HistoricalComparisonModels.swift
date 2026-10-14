@@ -50,10 +50,16 @@ struct ComparisonIndicatorSummary: Decodable, Equatable {
     let name: String
     /// 一覧表示名(api-design v1.22)。古いBackendではnil。
     var displayName: String? = nil
+    /// 国・通貨・単位(api-design v1.26、過去イベント比較の見出しと表に使う)。古いBackendではnil。
+    var countryCode: String? = nil
+    var currencyCode: String? = nil
+    var unit: String? = nil
 
     enum CodingKeys: String, CodingKey {
-        case id, code, name
+        case id, code, name, unit
         case displayName = "display_name"
+        case countryCode = "country_code"
+        case currencyCode = "currency_code"
     }
 }
 
@@ -113,8 +119,11 @@ struct ComparisonEventSummary: Decodable, Identifiable, Equatable {
     let previous: Double?
     let surprise: Double?
     let surpriseDirection: SurpriseDirection?
+    /// 1分・5分・15分のpips(api-design v1.26)。キーは"1m"/"5m"/"15m"、値が無ければnil。
+    var pipsByTimeframe: [String: Double?]? = nil
 
     enum CodingKeys: String, CodingKey {
+        case pipsByTimeframe = "pips_by_timeframe"
         case id = "event_id"
         case releaseDatetime = "release_datetime"
         case forecast
