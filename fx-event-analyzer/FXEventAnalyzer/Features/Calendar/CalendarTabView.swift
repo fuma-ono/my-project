@@ -138,7 +138,8 @@ private struct CalendarMonthCard: View {
         .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }
 
-    private static let cardGradient = LinearGradient(
+    /// カレンダーのカードの背景。下のイベントの枠(`CalendarDayList`)も同じものを使う。
+    static let cardGradient = LinearGradient(
         colors: [
             Color(red: 10.0 / 255, green: 70.0 / 255, blue: 145.0 / 255),
             Color(red: 2.0 / 255, green: 24.0 / 255, blue: 54.0 / 255),
@@ -357,7 +358,7 @@ private struct CalendarDayList: View {
         .frame(width: 214)
         // HQ指示(2026-10-15)「カレンダーのグラデーションの背景を下のイベントの枠も同じに」:
         // カレンダーのカードと同じ`cardGradient`と枠線にした。
-        .background(Self.cardGradient)
+        .background(CalendarMonthCard.cardGradient)
         .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
         .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
         .contentShape(Rectangle())
