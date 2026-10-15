@@ -166,3 +166,42 @@ export async function listSpeechesByIds(supabase: SupabaseClient, ids: readonly 
   if (error) throw error;
   return (data ?? []).map((row) => toSpeechSummary(row as SpeechDbRow));
 }
+
+/** A speaker by id (GET /speakers/{id}/comparison), or null. photo_url is the raw DB value. */
+export async function getSpeakerById(supabase: SupabaseClient, speakerId: string): Promise<SpeakerSummary | null> {
+  const { data, error } = await supabase
+    .from('speakers')
+    .select('id, name, title, organization, country_code, currency_code, photo_url')
+    .eq('id', speakerId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    speaker_id: data.id,
+    name: data.name,
+    title: data.title,
+    organization: data.organization,
+    country_code: data.country_code,
+    currency_code: data.currency_code,
+    photo_url: data.photo_url ?? null,
+  };
+}
+
+/** GET /speakers/{id}/comparison: the speaker's DELIVERED speeches, newest first, at most `limit`. */
+export async function listDeliveredSpeechesForSpeaker(
+  supabase: SupabaseClient,
+  speakerId: string,
+  limit: number,
+): Promise<SpeechSummary[]> {
+  if (limit <= 0) return [];
+  const { data, error } = await supabase
+    .from('speech_events')
+    .select(SPEECH_COLUMNS)
+    .eq('speaker_id', speakerId)
+    .eq('status', 'DELIVERED')
+    .order('statement_datetime', { ascending: false })
+    .order('id', { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []).map((row) => toSpeechSummary(row as SpeechDbRow));
+}

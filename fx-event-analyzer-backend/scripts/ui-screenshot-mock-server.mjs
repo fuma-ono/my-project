@@ -1237,10 +1237,18 @@ function seededRandom(seedText) {
   };
 }
 
-function oneMinuteCandles(fixture, fxPairId) {
+// releaseMs / pinAnchors は要人発言の値動き(speechCandles)用。既定値のときはイベントの
+// チャートと全く同じ足になる(乱数の使い方も変えていない)。pinAnchors = true のときは、
+// 発言直前の足の終値を発言前の価格ちょうどに、1・5・15・30・60分後の足の終値を各 pips
+// ちょうどにする(本番の要人発言の計算は、この終値から pips を求めるため)。
+function oneMinuteCandles(
+  fixture,
+  fxPairId,
+  releaseMs = new Date(EVENT_RELEASE_DATETIME).getTime(),
+  pinAnchors = false,
+) {
   const { preReleasePrice, pipSize, rows } = fixture;
   const random = seededRandom(String(fxPairId));
-  const releaseMs = new Date(EVENT_RELEASE_DATETIME).getTime();
   // 発表後の目標(分 → pips)。0分は発表直前の価格。
   const anchors = [
     [0, 0],
@@ -1266,7 +1274,9 @@ function oneMinuteCandles(fixture, fxPairId) {
     const noisePips = after ? 1.2 + 6 * Math.exp(-minute / 6) : 0.9;
     // 発表前はゆるやかに上下する(3時間前でも平らになりすぎないよう、ゆっくりした波を足す)。
     const base = after ? targetAt(minute + 1) : Math.sin(minute / 25) * 4 + (random() - 0.5) * 2.5;
-    const closePips = base + (random() - 0.5) * noisePips;
+    const noisyClosePips = base + (random() - 0.5) * noisePips;
+    const pinned = pinAnchors ? anchors.find(([m]) => m === minute + 1) : undefined;
+    const closePips = pinned ? pinned[1] : noisyClosePips;
     const close = preReleasePrice + closePips * pipSize;
     const open = previousClose;
     const wick = (0.3 + random() * (after ? noisePips * 0.6 : 0.8)) * pipSize;
@@ -1987,9 +1997,11 @@ function deleteRateAlert(id) {
 // 要人発言が時刻順で混ざって出るよう、撮影した月の約15日に
 // 1〜4件ずつ並べる。本日は参考画像と同じ4件(08:50 国内企業物価指数 /
 // 15:00 FOMCメンバー発言 / 20:35 ECB要人発言 / 21:30 雇用統計)にする。
-// 時刻はこのサーバーのタイムゾーン(CIはシミュレーターと同じUTC、手元は日本時間)
-// の時刻として書き、UTCに直して返す。日本時間で固定すると、UTCのシミュレーター
-// では時刻がずれて別の日に分かれてしまうため。発表済み・発言済みかは撮影時刻で決める。
+// 時刻は GET /calendar の `timezone`(アプリの表示設定のタイムゾーン。2026-10-15から
+// アプリはこのタイムゾーンで日を分ける)の時刻として書き、UTCに直して返す。`timezone`
+// が無ければ従来どおりこのサーバーのタイムゾーン(CIはUTC、手元は日本時間)。
+// どちらでも、アプリに見える壁時計の時刻(08:50 等)と本日の項目は変わらない。
+// 発表済み・発言済みかは撮影時刻で決める。
 // 既存のフィクスチャと同じ指標(米国CPI・NFP・FOMC・日本CPI)は同じevent_idを
 // 使い、タップ先の詳細画面が出るようにした。要人発言はGET /speeches/{id}が
 // このカレンダー用の発言も返す(handleApi参照)。
@@ -2125,12 +2137,19 @@ const CALENDAR_OTHER_DAYS = {
   ],
 };
 
-/** 撮影した月(このサーバーのタイムゾーン)の全項目。kind・idはGET /calendarと同じ形。
+/**
+ * カレンダーの時刻(HH:MM)を書くタイムゾーン。GET /calendar が `timezone` を付けて来たら
+ * それを覚える(アプリは表示設定のタイムゾーン = 'Asia/Tokyo' で日を分けて送る)。まだ
+ * 来ていなければ undefined = このサーバーのタイムゾーン。GET /speeches/{id}・GET /indicators
+ * の次回発表など、カレンダーから作る他の応答も同じタイムゾーンで作り、IDと日時を揃える。
+ */
+let mockCalendarTimeZone;
+
+/** 撮影した月(timeZone、既定は mockCalendarTimeZone)の全項目。kind・idはGET /calendarと同じ形。
  * monthOffset (前月 -1 / 翌月 +1) は GET /indicators の次回発表・前回発表の算出用:
  * 同じ日付パターンを前後の月にも置き、固定IDは使わず月ごとに別のIDを振る。 */
-function calendarFixture(monthOffset = 0) {
-  const offsetMs = -now().getTimezoneOffset() * 60_000;
-  const localNow = new Date(now().getTime() + offsetMs);
+function calendarFixture(monthOffset = 0, timeZone = mockCalendarTimeZone) {
+  const localNow = new Date(now().getTime() + mockOffsetMs(now().getTime(), timeZone));
   const year = localNow.getUTCFullYear();
   const month = localNow.getUTCMonth() + monthOffset;
   const today = localNow.getUTCDate();
@@ -2147,7 +2166,9 @@ function calendarFixture(monthOffset = 0) {
   for (const [day, specs] of days) {
     specs.forEach((spec, index) => {
       const [hours, minutes] = spec[1].split(':').map(Number);
-      const at = new Date(Date.UTC(year, month, day, hours, minutes) - offsetMs);
+      // timeZone の壁時計 HH:MM → UTC(mockLocalMidnight と同じ2段階の補正で夏時間にも合わせる)。
+      const wall = Date.UTC(year, month, day, hours, minutes);
+      const at = new Date(wall - mockOffsetMs(wall - mockOffsetMs(wall, timeZone), timeZone));
       const past = at.getTime() <= now().getTime();
       const serial = String(day * 10 + index).padStart(12, '0');
       if (spec[0] === 'I') {
@@ -2207,6 +2228,343 @@ function calendarSpeechSummary(speechId) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// 要人発言の値動き (HQ指示 2026-10-15、api-design.md §14.5/§14.8〜§14.10 v1.28)。
+// 本番 (src/domain/speechReactions.ts) と同じく、発言済み(DELIVERED)の発言だけ、1分足の
+// 終値から計算する: 発言前 = 発言時刻ちょうどに終わる足の終値、N分後 = 発言時刻 + N分に
+// 終わる足の終値、pips = 差 ÷ pip_size(円 0.01・それ以外 0.0001)。足は oneMinuteCandles
+// (pinAnchors) で作るので、チャート・反応・比較の数字はすべて同じ足から出る。
+// 値動きのフィクスチャがあるのは発言済みの3件(パウエル FOMC後の記者会見・植田 金融政策
+// 決定会合後の記者会見・ラガルド 欧州議会での証言)と、要人ごとの過去比較用の発言だけ。
+// カレンダーの発言(SCR-013 のウォラー等)・発言前の発言は reactions: [] のまま。
+
+const SPEECH_ID_LAGARDE_DELIVERED = '77777777-7777-7777-7777-777777777773';
+const SPEECH_ID_UEDA_DELIVERED = '77777777-7777-7777-7777-777777777774';
+const SPEECH_ID_POWELL_DELIVERED = '77777777-7777-7777-7777-777777777775';
+
+/** 本番の selectSpeechFxPairs と同じ順(主要ペアが先、最大4件)。 */
+const SPEECH_FX_PAIR_ORDER = [
+  'USDJPY',
+  'EURUSD',
+  'GBPUSD',
+  'AUDUSD',
+  'USDCHF',
+  'USDCAD',
+  'EURJPY',
+  'GBPJPY',
+  'AUDJPY',
+  'CADJPY',
+];
+
+function speechFxPairs(currencyCode) {
+  const rank = (symbol) => {
+    const index = SPEECH_FX_PAIR_ORDER.indexOf(symbol);
+    return index === -1 ? SPEECH_FX_PAIR_ORDER.length : index;
+  };
+  return FX_PAIRS.filter((pair) => pair.base_currency === currencyCode || pair.quote_currency === currencyCode)
+    .sort((a, b) => rank(a.symbol) - rank(b.symbol) || a.symbol.localeCompare(b.symbol))
+    .slice(0, 4);
+}
+
+const speechPipSize = (symbol) => (symbol.endsWith('JPY') ? 0.01 : 0.0001);
+
+/** 発言済みの3件: 通貨ペアごとの発言前の価格と、1・5・15・30・60分後の pips。 */
+const SPEECH_PRICE_FIXTURES = {
+  [SPEECH_ID_POWELL_DELIVERED]: {
+    USDJPY: { pre: 155.31, pips: { '1m': 9.8, '5m': 21.4, '15m': 34.6, '30m': 38.2, '60m': 31.5 } },
+    EURUSD: { pre: 1.0798, pips: { '1m': -6.2, '5m': -14.9, '15m': -24.1, '30m': -26.7, '60m': -22.0 } },
+    GBPUSD: { pre: 1.2735, pips: { '1m': -5.4, '5m': -12.8, '15m': -20.3, '30m': -22.6, '60m': -18.4 } },
+    AUDUSD: { pre: 0.6624, pips: { '1m': -4.1, '5m': -9.7, '15m': -15.8, '30m': -17.2, '60m': -14.1 } },
+  },
+  [SPEECH_ID_UEDA_DELIVERED]: {
+    USDJPY: { pre: 154.88, pips: { '1m': -12.4, '5m': -27.9, '15m': -41.2, '30m': -44.8, '60m': -37.6 } },
+    EURJPY: { pre: 167.95, pips: { '1m': -11.1, '5m': -25.3, '15m': -37.8, '30m': -40.2, '60m': -33.9 } },
+    GBPJPY: { pre: 196.42, pips: { '1m': -13.6, '5m': -30.1, '15m': -44.9, '30m': -48.3, '60m': -40.7 } },
+    AUDJPY: { pre: 102.63, pips: { '1m': -8.7, '5m': -19.4, '15m': -29.6, '30m': -31.8, '60m': -26.5 } },
+  },
+  [SPEECH_ID_LAGARDE_DELIVERED]: {
+    EURUSD: { pre: 1.0852, pips: { '1m': -4.3, '5m': -11.8, '15m': -18.6, '30m': -21.2, '60m': -16.9 } },
+    EURJPY: { pre: 168.42, pips: { '1m': -5.1, '5m': -14.7, '15m': -22.9, '30m': -25.4, '60m': -20.3 } },
+  },
+};
+
+// 過去比較 (GET /speakers/{id}/comparison) 用の、要人ごとの過去の発言(発言済み)。
+// GET /speeches の一覧には出さない(一覧の出力は変えない)が、GET /speeches/{id} では返す。
+// [id, 題名, 何日前, importance, 主要ペアの 1・5・15分後の pips]。他のペアは
+// SPEECH_PAIR_FACTORS 倍、30・60分後は 15分後の 1.1倍・0.9倍。
+const SPEECH_HISTORY = {
+  powell: [
+    ['77777777-7777-7777-7777-7777777777a1', '議会証言(半期金融政策報告)', 40, 'HIGH', [-6.1, -13.5, -19.8]],
+    ['77777777-7777-7777-7777-7777777777a2', 'ジャクソンホール会議での講演', 60, 'HIGH', [11.3, 24.7, 38.9]],
+    ['77777777-7777-7777-7777-7777777777a3', 'FOMC後の記者会見', 75, 'HIGH', [-8.4, -17.2, -26.5]],
+    ['77777777-7777-7777-7777-7777777777a4', '経済クラブでの講演', 100, 'MEDIUM', [4.2, 8.9, 12.1]],
+    ['77777777-7777-7777-7777-7777777777a5', 'FOMC後の記者会見', 120, 'HIGH', [7.6, 15.3, 22.8]],
+  ],
+  ueda: [
+    ['77777777-7777-7777-7777-7777777777b1', '国会答弁', 30, 'MEDIUM', [5.3, 9.8, 14.2]],
+    ['77777777-7777-7777-7777-7777777777b2', '金融政策決定会合後の記者会見', 50, 'HIGH', [-9.6, -21.7, -33.4]],
+  ],
+  lagarde: [
+    ['77777777-7777-7777-7777-7777777777c1', 'ECB理事会後の記者会見', 35, 'HIGH', [7.2, 16.4, 25.8]],
+    ['77777777-7777-7777-7777-7777777777c2', '欧州議会での証言', 70, 'MEDIUM', [-3.1, -7.9, -11.6]],
+  ],
+};
+
+/** 主要ペア(1件目)に対する各ペアの動きの倍率。 */
+const SPEECH_PAIR_FACTORS = {
+  USD: { USDJPY: 1, EURUSD: -0.62, GBPUSD: -0.56, AUDUSD: -0.43 },
+  JPY: { USDJPY: 1, EURJPY: 0.9, GBPJPY: 1.08, AUDJPY: 0.7 },
+  EUR: { EURUSD: 1, EURJPY: 1.2 },
+};
+
+/** 過去の発言の、発言前の価格(撮影時の価格の近く)。 */
+const SPEECH_HISTORY_PRE_PRICES = {
+  USDJPY: 153.86,
+  EURUSD: 1.0874,
+  GBPUSD: 1.2689,
+  AUDUSD: 0.6597,
+  EURJPY: 167.31,
+  GBPJPY: 195.24,
+  AUDJPY: 101.48,
+};
+
+/** daysAgo 日前(UTCの日付)の 14:30Z = 日本時間 23:30。分ちょうどの、毎回同じ時刻。 */
+function speechHistoryDatetime(daysAgo) {
+  const dayMs = 86_400_000;
+  const day = Math.floor((now().getTime() - daysAgo * dayMs) / dayMs) * dayMs;
+  return isoSeconds(new Date(day + 14.5 * 3_600_000));
+}
+
+function speechHistoryRows() {
+  const rows = [];
+  for (const [speakerKey, specs] of Object.entries(SPEECH_HISTORY)) {
+    const speaker = SPEAKERS[speakerKey];
+    for (const [id, title, daysAgo, importance, primaryPips] of specs) {
+      const pairs = {};
+      for (const [symbol, factor] of Object.entries(SPEECH_PAIR_FACTORS[speaker.currency_code])) {
+        const [p1, p5, p15] = primaryPips.map((pips) => Number((pips * factor).toFixed(1)));
+        pairs[symbol] = {
+          pre: SPEECH_HISTORY_PRE_PRICES[symbol],
+          pips: {
+            '1m': p1,
+            '5m': p5,
+            '15m': p15,
+            '30m': Number((p15 * 1.1).toFixed(1)),
+            '60m': Number((p15 * 0.9).toFixed(1)),
+          },
+        };
+      }
+      rows.push({
+        speech: {
+          speech_id: id,
+          speaker,
+          title,
+          summary: null,
+          statement_datetime: speechHistoryDatetime(daysAgo),
+          importance,
+          status: 'DELIVERED',
+        },
+        pairs,
+      });
+    }
+  }
+  return rows;
+}
+
+/** speech_id → { speech, pairs(値動きのフィクスチャ、無ければ null) }。無い発言は null。 */
+function findMockSpeech(speechId) {
+  const fixture = speechesFixture().find((row) => row.speech_id === speechId);
+  if (fixture) return { speech: fixture, pairs: SPEECH_PRICE_FIXTURES[speechId] ?? null };
+  const history = speechHistoryRows().find((row) => row.speech.speech_id === speechId);
+  if (history) return history;
+  const calendar = calendarSpeechSummary(speechId);
+  return calendar ? { speech: calendar, pairs: null } : null;
+}
+
+/** 発言の1分足(timestamp = 足の始まり)。値動きのフィクスチャが無いペアは []。 */
+function speechCandles(found, fxPairId) {
+  const symbol = FX_PAIRS.find((pair) => pair.fx_pair_id === fxPairId)?.symbol;
+  const pair = symbol && found.pairs ? found.pairs[symbol] : undefined;
+  if (!pair || found.speech.status !== 'DELIVERED') return { symbol, candles: [] };
+  const fixture = { preReleasePrice: pair.pre, pipSize: speechPipSize(symbol), rows: {} };
+  for (const [timeframe, pips] of Object.entries(pair.pips)) fixture.rows[timeframe] = { pips };
+  const statementMs = Date.parse(found.speech.statement_datetime);
+  return { symbol, candles: oneMinuteCandles(fixture, `${found.speech.speech_id}-${fxPairId}`, statementMs, true) };
+}
+
+const SPEECH_TIMEFRAME_MINUTES = { '1m': 1, '5m': 5, '15m': 15, '30m': 30, '60m': 60 };
+
+/** 本番の computeSpeechPairReaction と同じ計算(src/domain/speechReactions.ts)。 */
+function speechPairReaction(found, fxPairId, timeframes) {
+  const { symbol, candles } = speechCandles(found, fxPairId);
+  const { status } = found.speech;
+  const empty = (timeframe, analysisStatus) => ({
+    timeframe,
+    post_release_price: null,
+    movement: null,
+    pips: null,
+    change_percent: null,
+    max_upward: null,
+    max_downward: null,
+    max_upward_pips: null,
+    max_downward_pips: null,
+    analysis_status: analysisStatus,
+  });
+  if (status !== 'DELIVERED') {
+    const analysisStatus = status === 'CANCELLED' ? 'NOT_ANALYZABLE' : 'DATA_PENDING';
+    return { pre_release_price: null, reactions: timeframes.map((tf) => empty(tf, analysisStatus)) };
+  }
+  const statementMs = Date.parse(found.speech.statement_datetime);
+  const digits = symbol && symbol.endsWith('JPY') ? 3 : 5;
+  const roundPrice = (value) => Number(value.toFixed(digits));
+  const closeAt = (ms) => candles.find((c) => c.t + 60_000 === ms)?.close;
+  const preRaw = closeAt(statementMs);
+  const pre = preRaw === undefined ? null : roundPrice(preRaw);
+  const pipSize = symbol ? speechPipSize(symbol) : 0.0001;
+  const reactions = timeframes.map((timeframe) => {
+    const endMs = statementMs + SPEECH_TIMEFRAME_MINUTES[timeframe] * 60_000;
+    if (endMs > now().getTime()) return empty(timeframe, 'DATA_PENDING');
+    const postRaw = closeAt(endMs);
+    if (pre === null || postRaw === undefined) return empty(timeframe, 'DATA_UNAVAILABLE');
+    const post = roundPrice(postRaw);
+    const inWindow = candles.filter((c) => c.t >= statementMs && c.t + 60_000 <= endMs);
+    const highest = Math.max(...inWindow.map((c) => roundPrice(c.high)));
+    const lowest = Math.min(...inWindow.map((c) => roundPrice(c.low)));
+    const movement = post - pre;
+    return {
+      timeframe,
+      post_release_price: post,
+      movement: Number(movement.toFixed(6)),
+      pips: Number((movement / pipSize).toFixed(1)),
+      change_percent: Number(((movement / pre) * 100).toFixed(4)),
+      max_upward: Number((highest - pre).toFixed(6)),
+      max_downward: Number((lowest - pre).toFixed(6)),
+      max_upward_pips: Number(((highest - pre) / pipSize).toFixed(1)),
+      max_downward_pips: Number(((lowest - pre) / pipSize).toFixed(1)),
+      analysis_status: 'READY',
+    };
+  });
+  return { pre_release_price: pre, reactions };
+}
+
+const SPEECH_SUMMARY_TIMEFRAMES = ['1m', '5m', '15m'];
+const SPEECH_REACTION_TIMEFRAMES = ['1m', '5m', '15m', '30m', '60m'];
+
+function speechPipsByTimeframe(reaction) {
+  return Object.fromEntries(
+    SPEECH_SUMMARY_TIMEFRAMES.map((tf) => [tf, reaction.reactions.find((row) => row.timeframe === tf)?.pips ?? null]),
+  );
+}
+
+/** GET /speeches/{id}: SpeechSummary + reactions(発言済みで値動きのフィクスチャがある発言だけ)。 */
+function speechDetailHandler(found) {
+  const { speech } = found;
+  const reactions =
+    speech.status === 'DELIVERED' && found.pairs
+      ? speechFxPairs(speech.speaker.currency_code).map((pair) => {
+          const reaction = speechPairReaction(found, pair.fx_pair_id, SPEECH_SUMMARY_TIMEFRAMES);
+          return {
+            fx_pair_id: pair.fx_pair_id,
+            symbol: pair.symbol,
+            pre_statement_price: reaction.pre_release_price,
+            pips: speechPipsByTimeframe(reaction),
+          };
+        })
+      : [];
+  return { ...speech, reactions };
+}
+
+/** GET /speeches/{id}/reaction: GET /events/{id}/reaction と同じ形(event_id = speech_id)。 */
+function speechReactionHandler(found, fxPairId, timeframe) {
+  const speechId = found.speech.speech_id;
+  if (timeframe === 'all') {
+    const reaction = speechPairReaction(found, fxPairId, SPEECH_REACTION_TIMEFRAMES);
+    return { event_id: speechId, fx_pair_id: fxPairId, ...reaction };
+  }
+  const reaction = speechPairReaction(found, fxPairId, [timeframe]);
+  return {
+    event_id: speechId,
+    fx_pair_id: fxPairId,
+    pre_release_price: reaction.pre_release_price,
+    ...reaction.reactions[0],
+  };
+}
+
+/** GET /speeches/{id}/reaction/chart: GET /events/{id}/reaction/chart と同じ形・同じ表示範囲。 */
+function speechChartHandler(found, fxPairId, timeframe) {
+  const { symbol, candles } = speechCandles(found, fxPairId);
+  const digits = symbol && symbol.endsWith('JPY') ? 3 : 5;
+  const round = (value) => Number(value.toFixed(digits));
+  const stepMinutes = SPEECH_TIMEFRAME_MINUTES[timeframe] ?? 5;
+  const statementMs = Date.parse(found.speech.statement_datetime);
+  const windowMinutes = { '1m': [15, 15], '5m': [60, 60], '15m': [180, 180] }[timeframe] ?? [30, 60];
+  const fromMs = statementMs - windowMinutes[0] * 60_000;
+  const toMs = statementMs + windowMinutes[1] * 60_000;
+  const minutes = candles.filter((c) => c.t >= fromMs && c.t < toMs && c.t + 60_000 <= now().getTime());
+  const prices = [];
+  for (let i = 0; i < minutes.length; i += stepMinutes) {
+    const group = minutes.slice(i, i + stepMinutes);
+    prices.push({
+      timestamp: new Date(group[0].t).toISOString(),
+      open: round(group[0].open),
+      high: round(Math.max(...group.map((c) => c.high))),
+      low: round(Math.min(...group.map((c) => c.low))),
+      close: round(group[group.length - 1].close),
+      volume: null,
+    });
+  }
+  return {
+    event_id: found.speech.speech_id,
+    fx_pair_id: fxPairId,
+    timeframe,
+    release_datetime: found.speech.statement_datetime,
+    window_from: new Date(fromMs).toISOString(),
+    window_to: new Date(toMs).toISOString(),
+    prices,
+  };
+}
+
+/** GET /speakers/{id}/comparison: その要人の発言済みの発言(新しい順、プランの上限まで)。 */
+function speakerComparisonHandler(speakerId, fxPairIdParam) {
+  const speaker = Object.values(CALENDAR_SPEAKERS).find((row) => row.speaker_id === speakerId);
+  if (!speaker) return null;
+  const fxPairId = fxPairIdParam ?? speechFxPairs(speaker.currency_code)[0]?.fx_pair_id ?? FX_PAIR_ID;
+  const symbol = FX_PAIRS.find((pair) => pair.fx_pair_id === fxPairId)?.symbol ?? null;
+  const delivered = [
+    ...speechesFixture().map((speech) => ({ speech, pairs: SPEECH_PRICE_FIXTURES[speech.speech_id] ?? null })),
+    ...speechHistoryRows(),
+  ]
+    .filter((row) => row.speech.speaker.speaker_id === speakerId && row.speech.status === 'DELIVERED')
+    .sort((a, b) => b.speech.statement_datetime.localeCompare(a.speech.statement_datetime));
+  const maxForPlan = MOCK_PLAN_LIMITS[mockSubscriptionPlan].history_events_max;
+  const used = delivered.slice(0, maxForPlan);
+  return {
+    speaker: {
+      speaker_id: speaker.speaker_id,
+      name: speaker.name,
+      title: speaker.title,
+      organization: speaker.organization,
+      country_code: speaker.country_code,
+      currency_code: speaker.currency_code,
+      photo_url: speaker.photo_url,
+    },
+    fx_pair_id: fxPairId,
+    symbol,
+    events: used.map((found) => ({
+      speech_id: found.speech.speech_id,
+      title: found.speech.title,
+      statement_datetime: found.speech.statement_datetime,
+      importance: found.speech.importance,
+      pips_by_timeframe: speechPipsByTimeframe(speechPairReaction(found, fxPairId, SPEECH_SUMMARY_TIMEFRAMES)),
+    })),
+    history_limit: {
+      applied: used.length,
+      max_for_plan: maxForPlan,
+      pro_max: MOCK_PLAN_LIMITS.PRO.history_events_max,
+    },
+  };
+}
+
 /** GET /calendar: from(含む)〜to(含まない)、importance・currencyで絞り、
  * 日時 → INDICATORが先 → idの順。 */
 function calendarHandler(searchParams) {
@@ -2214,10 +2572,14 @@ function calendarHandler(searchParams) {
   const to = searchParams.get('to');
   const importance = searchParams.get('importance');
   const currency = searchParams.get('currency');
+  // calendarPlanError が不正なタイムゾーンを先に 422 にしている。付いていなければ従来どおり
+  // サーバーのタイムゾーン。最後に見せたカレンダーと同じタイムゾーンを他の応答でも使う。
+  const timeZone = searchParams.get('timezone') || undefined;
+  mockCalendarTimeZone = timeZone;
   const fromMs = from ? Date.parse(from) : -Infinity;
   const toMs = to ? Date.parse(to) : Infinity;
   const kindOrder = { INDICATOR: 0, SPEECH: 1 };
-  const items = calendarFixture()
+  const items = calendarFixture(0, timeZone)
     .filter((item) => {
       const at = Date.parse(item.datetime);
       if (at < fromMs || at >= toMs) return false;
@@ -2481,10 +2843,24 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
   }
   if (pathname === '/api/v1/fx-pairs') return json(res, 200, { data: FX_PAIRS });
   if (pathname === '/api/v1/speeches') return json(res, 200, speechesListHandler());
-  if (segments[0] === 'speeches' && segments.length === 2) {
-    const speech = speechesFixture().find((row) => row.speech_id === segments[1]) ?? calendarSpeechSummary(segments[1]);
-    if (!speech) return json(res, 404, { error: { code: 'SPEECH_NOT_FOUND', message: 'Speech not found.' } });
-    return json(res, 200, speech);
+  if (segments[0] === 'speeches' && segments.length >= 2) {
+    const found = findMockSpeech(segments[1]);
+    if (!found) return json(res, 404, { error: { code: 'SPEECH_NOT_FOUND', message: 'Speech not found.' } });
+    if (segments.length === 2) return json(res, 200, speechDetailHandler(found));
+    const fxPairId = searchParams.get('fx_pair_id') ?? speechFxPairs(found.speech.speaker.currency_code)[0]?.fx_pair_id;
+    if (segments[2] === 'reaction' && segments.length === 3) {
+      const timeframe = searchParams.get('timeframe') ?? 'all';
+      return json(res, 200, speechReactionHandler(found, fxPairId ?? FX_PAIR_ID, timeframe));
+    }
+    if (segments[2] === 'reaction' && segments[3] === 'chart') {
+      const timeframe = searchParams.get('timeframe') ?? '5m';
+      return json(res, 200, speechChartHandler(found, fxPairId ?? FX_PAIR_ID, timeframe));
+    }
+  }
+  if (segments[0] === 'speakers' && segments[2] === 'comparison' && segments.length === 3) {
+    const comparison = speakerComparisonHandler(segments[1], searchParams.get('fx_pair_id') ?? undefined);
+    if (!comparison) return json(res, 404, { error: { code: 'SPEAKER_NOT_FOUND', message: 'Speaker not found.' } });
+    return json(res, 200, comparison);
   }
   if (pathname === '/api/v1/notifications/upcoming') return json(res, 200, upcomingNotificationsHandler());
   // アプリ内の通知一覧 (api-design.md §24.9-§24.11).

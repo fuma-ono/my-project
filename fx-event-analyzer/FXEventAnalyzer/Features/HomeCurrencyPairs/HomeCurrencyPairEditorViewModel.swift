@@ -30,7 +30,8 @@ final class HomeCurrencyPairEditorViewModel: ObservableObject {
         loadState = .loading
         do {
             let settings = try await service.fetchSettings()
-            let symbols = (try? await catalog.availableSymbols()) ?? StaticFXPairCatalog.seededSymbols
+            // 基本通貨を含むペアを先に並べる(HQ指示 2026-10-15)。
+            let symbols = BaseCurrency.prioritize((try? await catalog.availableSymbols()) ?? StaticFXPairCatalog.seededSymbols)
             let current = settings.home.fxPairs ?? HomeSettings.defaultPairs.filter(symbols.contains)
             selected = Array(current.prefix(HomeSettings.maxPairs))
             saved = selected

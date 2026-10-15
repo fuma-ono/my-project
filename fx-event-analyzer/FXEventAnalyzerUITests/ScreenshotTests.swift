@@ -214,6 +214,21 @@ final class ScreenshotTests: XCTestCase {
         tapIdentifier("homeSpeechesSeeAll")
         XCTAssertTrue(waitForAnyElement(containing: "金融経済懇談会での講演", timeout: 15), "Speech list did not load")
         capture("12-SpeechList")
+        // 発言済みの要人発言(本番と同じ計算の値動き)と、同じ要人の過去イベント比較(HQ指示 2026-10-15)。
+        tap(containing: "欧州議会での証言")
+        if waitForAnyElement(containing: "相場反応詳細", timeout: 15) {
+            Thread.sleep(forTimeInterval: 1.0)
+            capture("13b-SpeechDetailDelivered")
+            tap(containing: "過去イベント比較")
+            if waitForAnyElement(containing: "発言", timeout: 15) {
+                Thread.sleep(forTimeInterval: 1.0)
+                capture("13c-SpeakerComparison")
+            }
+            tapIdentifier("v5HeaderBack")
+            _ = waitForAnyElement(containing: "通貨ペア別の値動き", timeout: 10)
+        }
+        tapIdentifier("v5HeaderBack")
+        _ = waitForAnyElement(containing: "これからの発言", timeout: 10)
         tapIdentifier("v5HeaderBack")
         XCTAssertTrue(waitForAnyElement(containing: "直近の要人発言", timeout: 10), "Did not return to Home from Speech list")
 

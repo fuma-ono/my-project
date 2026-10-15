@@ -14,7 +14,7 @@ struct MovementDetailView: View {
     /// チャートの足の種類(参考画像のタブ)。
     static let candleTimeframes = ["1m", "5m", "15m"]
 
-    init(apiClient: APIClient, eventId: String, indicatorId: String, fxPairId: String, symbol: String, indicatorName: String, releaseDatetime: Date, tabSelection: Binding<Int>) {
+    init(apiClient: APIClient, eventId: String, indicatorId: String, fxPairId: String, symbol: String, indicatorName: String, releaseDatetime: Date, isSpeech: Bool = false, tabSelection: Binding<Int>) {
         _viewModel = StateObject(wrappedValue: MovementDetailViewModel(
             apiClient: apiClient,
             eventId: eventId,
@@ -23,6 +23,7 @@ struct MovementDetailView: View {
             symbol: symbol,
             indicatorName: indicatorName,
             releaseDatetime: releaseDatetime,
+            isSpeech: isSpeech,
             initialTimeframe: "1m"
         ))
         _tabSelection = tabSelection

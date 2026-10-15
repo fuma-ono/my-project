@@ -18,6 +18,8 @@ enum APIErrorCode: String, Decodable, Equatable {
     case fxPairNotFound = "FX_PAIR_NOT_FOUND"
     /// api-design.md §14.5(v1.6) — `GET /speeches/{speech_id}`。
     case speechNotFound = "SPEECH_NOT_FOUND"
+    /// api-design v1.28 — `GET /speakers/{speaker_id}/comparison`。
+    case speakerNotFound = "SPEAKER_NOT_FOUND"
     case subscriptionRequired = "SUBSCRIPTION_REQUIRED"
     case featureNotEntitled = "FEATURE_NOT_ENTITLED"
 }

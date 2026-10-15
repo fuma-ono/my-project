@@ -45,6 +45,20 @@ struct AppRouteDestinationView: View {
             SupportHistoryView(apiClient: apiClient, tabSelection: $tabSelection)
         case .rateAlerts:
             RateAlertsView(apiClient: apiClient, tabSelection: $tabSelection)
+        case .speechMovementDetail(let speechId, let fxPairId, let symbol, let title, let statementDatetime):
+            MovementDetailView(
+                apiClient: apiClient,
+                eventId: speechId,
+                indicatorId: speechId,
+                fxPairId: fxPairId,
+                symbol: symbol,
+                indicatorName: title,
+                releaseDatetime: statementDatetime,
+                isSpeech: true,
+                tabSelection: $tabSelection
+            )
+        case .speakerComparison(let speakerId, let fxPairId, let symbol):
+            SpeakerComparisonView(apiClient: apiClient, speakerId: speakerId, fxPairId: fxPairId, symbol: symbol, tabSelection: $tabSelection)
         case .indicatorReleases(let id, let name):
             IndicatorReleasesView(apiClient: apiClient, indicatorId: id, indicatorName: name, tabSelection: $tabSelection)
 

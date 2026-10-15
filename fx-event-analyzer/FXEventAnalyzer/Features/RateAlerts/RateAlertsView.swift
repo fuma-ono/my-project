@@ -97,7 +97,9 @@ final class RateAlertsViewModel: ObservableObject {
             alerts = response.items
             limit = response.limit
             if pairs.isEmpty, let list: RateAlertPairList = try? await apiClient.send(Endpoint(path: "fx-pairs")) {
-                pairs = list.data
+                // 基本通貨を含むペアを先に並べる(HQ指示 2026-10-15)。
+                let order = BaseCurrency.prioritize(list.data.map(\.symbol))
+                pairs = list.data.sorted { (order.firstIndex(of: $0.symbol) ?? 0) < (order.firstIndex(of: $1.symbol) ?? 0) }
             }
             state = .loaded
         } catch {

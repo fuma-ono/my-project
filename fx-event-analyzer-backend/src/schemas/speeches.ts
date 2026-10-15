@@ -18,3 +18,24 @@ export const listSpeechesQuerySchema = z.object({
 export const speechParamsSchema = z.object({
   speech_id: z.guid(),
 });
+
+/** GET /speeches/{id}/reaction (api-design.md §14.8) — same query as GET /events/{id}/reaction. */
+export const speechReactionQuerySchema = z.object({
+  fx_pair_id: z.guid(),
+  timeframe: z.enum(['1m', '5m', '15m', '30m', '60m', 'all']).default('all'),
+});
+
+/** GET /speeches/{id}/reaction/chart (api-design.md §14.9) — same query as the event chart. */
+export const speechChartQuerySchema = z.object({
+  fx_pair_id: z.guid(),
+  timeframe: z.enum(['1m', '5m', '15m', '30m', '60m']),
+});
+
+export const speakerParamsSchema = z.object({
+  speaker_id: z.guid(),
+});
+
+/** GET /speakers/{id}/comparison (api-design.md §14.10). fx_pair_id omitted = the speaker's first pair. */
+export const speakerComparisonQuerySchema = z.object({
+  fx_pair_id: z.guid().optional(),
+});

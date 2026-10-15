@@ -62,9 +62,14 @@ final class MovementDetailViewModel: ObservableObject {
 
     private let apiClient: APIClient
     private let eventId: String
+    /// 要人発言の相場反応(HQ指示 2026-10-15)。`eventId`には発言のIDが入り、値動き・チャートは
+    /// `speeches/{id}/reaction`から取る。指標の結果・予想・過去比較は無いので読まない。
+    let isSpeech: Bool
+    private var basePath: String { isSpeech ? "speeches/\(eventId)" : "events/\(eventId)" }
 
-    init(apiClient: APIClient, eventId: String, indicatorId: String, fxPairId: String, symbol: String, indicatorName: String, releaseDatetime: Date, initialTimeframe: String = ReactionTimeframe.default) {
+    init(apiClient: APIClient, eventId: String, indicatorId: String, fxPairId: String, symbol: String, indicatorName: String, releaseDatetime: Date, isSpeech: Bool = false, initialTimeframe: String = ReactionTimeframe.default) {
         self.apiClient = apiClient
+        self.isSpeech = isSpeech
         _selectedTimeframe = Published(initialValue: initialTimeframe)
         self.eventId = eventId
         self.indicatorId = indicatorId
@@ -78,9 +83,11 @@ final class MovementDetailViewModel: ObservableObject {
         state = .loading
         Task {
             // 結果・予想は分析の文にだけ使う。チャートより先に取り終える(最後の通信がチャートになる)。
-            await fetchEventSnapshot()
-            await fetchIndicator()
-            await fetchComparisonStats()
+            if !isSpeech {
+                await fetchEventSnapshot()
+                await fetchIndicator()
+                await fetchComparisonStats()
+            }
             await fetchReactions()
             if case .loaded = state {
                 loadChart()
@@ -95,7 +102,7 @@ final class MovementDetailViewModel: ObservableObject {
 
     private func fetchReactions() async {
         let endpoint = Endpoint(
-            path: "events/\(eventId)/reaction",
+            path: "\(basePath)/reaction",
             queryItems: [
                 URLQueryItem(name: "fx_pair_id", value: fxPairId),
                 URLQueryItem(name: "timeframe", value: "all"),
@@ -109,7 +116,7 @@ final class MovementDetailViewModel: ObservableObject {
         } catch let error as APIError {
             if case .server(let code, _, _) = error {
                 switch code {
-                case .eventNotFound, .fxPairNotFound:
+                case .eventNotFound, .fxPairNotFound, .speechNotFound:
                     state = .notFound
                 case .featureNotEntitled, .subscriptionRequired:
                     state = .notEntitled
@@ -157,7 +164,7 @@ final class MovementDetailViewModel: ObservableObject {
 
     private func fetchChart() async {
         let endpoint = Endpoint(
-            path: "events/\(eventId)/reaction/chart",
+            path: "\(basePath)/reaction/chart",
             queryItems: [
                 URLQueryItem(name: "fx_pair_id", value: fxPairId),
                 URLQueryItem(name: "timeframe", value: selectedTimeframe),

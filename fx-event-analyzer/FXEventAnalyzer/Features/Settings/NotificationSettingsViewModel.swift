@@ -56,7 +56,7 @@ final class NotificationSettingsViewModel: ObservableObject {
                 return
             }
             if let symbols = try? await catalog.availableSymbols(), !symbols.isEmpty {
-                fxPairSymbols = symbols
+                fxPairSymbols = BaseCurrency.prioritize(symbols)
             }
             if settings.push {
                 authorizationDenied = await scheduler.isAuthorizationDenied()

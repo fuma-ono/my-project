@@ -155,23 +155,9 @@ struct SpeechDetailCards: View {
 
     /// 表示専用の仮データ(上部のドキュメントコメント参照)。4大通貨ペア×
     /// 1分/5分/15分。
-    private struct PlaceholderReaction: Identifiable {
-        let symbol: String
-        let oneMinute: Double
-        let fiveMinute: Double
-        let fifteenMinute: Double
-        var id: String { symbol }
-    }
+    /// HQ指示(2026-10-15)「本番データを使用して機能を作成」: 発言前後の実際の価格から計算した値動き。
+    private var reactions: [SpeechReaction] { response.reactions ?? [] }
 
-    private static let placeholderReactions: [PlaceholderReaction] = [
-        PlaceholderReaction(symbol: "USD/JPY", oneMinute: -5.2, fiveMinute: -18.4, fifteenMinute: -32.7),
-        PlaceholderReaction(symbol: "EUR/USD", oneMinute: 2.1, fiveMinute: 8.6, fifteenMinute: 14.2),
-        PlaceholderReaction(symbol: "GBP/USD", oneMinute: 1.4, fiveMinute: 6.2, fifteenMinute: 11.8),
-        PlaceholderReaction(symbol: "AUD/USD", oneMinute: 0.8, fiveMinute: 4.3, fifteenMinute: 7.6),
-    ]
-
-    /// `EventDetailCards.reactionTable`と同じ枠組み(見出し行・列ヘッダー・
-    /// 行の罫線)。
     private var reactionTable: some View {
         // HQ指示(2026-10-12、7回目)「文字部分に背景色がある/枠があるので
         // 消して」: 見出しを表の枠(角丸カード)の外に出し、下線も外した
@@ -200,12 +186,17 @@ struct SpeechDetailCards: View {
             // HQ指示(2026-10-12、2回目)「1分5分とかの見出しの色は戻して」:
             // 前回この見出し行の色を消したのは誤りだったため戻した。
             .background(Self.headerFill)
-            ForEach(Self.placeholderReactions) { reaction in
+            if reactions.isEmpty {
+                NotoText.text(response.status == .scheduled ? "発言後に値動きを表示します。" : "値動きのデータがありません。", size: 8.5)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .frame(maxWidth: .infinity, minHeight: Self.rowHeight)
+            }
+            ForEach(reactions) { reaction in
                 HStack(spacing: 0) {
                     cell(width: Self.pairColumnWidth, alignment: .leading) { pairLabel(reaction.symbol) }
-                    cell(width: Self.valueColumnWidth) { pipsText(reaction.oneMinute) }
-                    cell(width: Self.valueColumnWidth) { pipsText(reaction.fiveMinute) }
-                    cell(width: Self.valueColumnWidth) { pipsText(reaction.fifteenMinute) }
+                    cell(width: Self.valueColumnWidth) { pipsText(reaction.pips["1m"] ?? nil) }
+                    cell(width: Self.valueColumnWidth) { pipsText(reaction.pips["5m"] ?? nil) }
+                    cell(width: Self.valueColumnWidth) { pipsText(reaction.pips["15m"] ?? nil) }
                 }
                 .frame(height: Self.rowHeight)
             }
@@ -262,28 +253,31 @@ struct SpeechDetailCards: View {
         .contentShape(Rectangle())
     }
 
-    private var movementLink: some View {
-        let pair = Self.placeholderReactions[0]
-        return NavigationLink(value: AppRoute.movementDetail(
-            eventId: response.speechId,
-            indicatorId: response.speechId,
-            fxPairId: response.speechId,
-            symbol: pair.symbol,
-            indicatorName: response.title,
-            releaseDatetime: response.statementDatetime
-        )) {
-            linkCard(icon: "chart.bar.xaxis", title: "相場反応詳細")
+    /// 値動きの表の先頭の通貨ペア(発言者の通貨のペア)。まだ値動きが無いとき(発言前)はnil。
+    private var firstReaction: SpeechReaction? { reactions.first }
+
+    /// 相場反応詳細: 先頭の通貨ペアのチャートと値動き(本番データ)。発言前で値動きが無いときは出さない。
+    @ViewBuilder private var movementLink: some View {
+        if let pair = firstReaction {
+            NavigationLink(value: AppRoute.speechMovementDetail(
+                speechId: response.speechId,
+                fxPairId: pair.fxPairId,
+                symbol: pair.symbol,
+                title: "\(response.speaker.name) \(response.title)",
+                statementDatetime: response.statementDatetime
+            )) {
+                linkCard(icon: "chart.bar.xaxis", title: "相場反応詳細")
+            }
+            .buttonStyle(SettingsRowPressStyle())
         }
-        .buttonStyle(SettingsRowPressStyle())
     }
 
+    /// 過去イベント比較: 同じ要人の過去の発言と比べる(本番データ)。通貨ペアは表の先頭、無ければサーバーが決める。
     private var comparisonLink: some View {
-        let pair = Self.placeholderReactions[0]
-        return NavigationLink(value: AppRoute.historicalComparison(
-            indicatorId: response.speechId,
-            indicatorName: response.title,
-            fxPairId: response.speechId,
-            fxPairSymbol: pair.symbol
+        NavigationLink(value: AppRoute.speakerComparison(
+            speakerId: response.speaker.speakerId,
+            fxPairId: firstReaction?.fxPairId,
+            symbol: firstReaction?.symbol
         )) {
             linkCard(icon: "clock.arrow.circlepath", title: "過去イベント比較")
         }
@@ -305,13 +299,13 @@ struct SpeechDetailCards: View {
 
     /// `HomeView.speechRow`の`reactionPips`と同じ色分け(pips >= 0は
     /// `changeUpColor`、負は`changeDownColor`)に揃える。
-    private func pipsText(_ pips: Double) -> some View {
+    private func pipsText(_ pips: Double?) -> some View {
         // HQ指示(2026-10-13、2回目)「-5.2の文字間隔をもう少し詰めて」。
-        Text(ValueFormat.number(pips, fractionDigits: 1, signed: true))
+        Text(pips.map { ValueFormat.number($0, fractionDigits: 1, signed: true) } ?? "--")
             .font(.system(size: 10, weight: .semibold))
             .monospacedDigit()
             .tracking(-0.3)
-            .foregroundStyle(pips >= 0 ? HomeView.changeUpColor : HomeView.changeDownColor)
+            .foregroundStyle(pips.map { $0 >= 0 ? HomeView.changeUpColor : HomeView.changeDownColor } ?? SettingsCardStyle.subtitleColor)
     }
 
     /// 見出しの行: 本文と見分けがつく、少し明るい青(HQ指示 2026-10-09「もう少し明るく」)。

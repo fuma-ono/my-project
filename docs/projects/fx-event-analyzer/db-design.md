@@ -464,7 +464,7 @@ IDX(currency_code)
 
 ### 3.16 SpeechEvent(v4.4で追加、HQ指示 2026-10-05)
 
-要人発言1件。テーブル名は`speech_events`。`SpeechPriceReaction`は引き続き対象外。
+要人発言1件。テーブル名は`speech_events`。`SpeechPriceReaction`は引き続き対象外(テーブルは作らない)。要人発言の値動きは api-design.md v1.28(14.11節)で、`fx_prices`の1分足から API 応答時に計算する方針とした(保存しない)。
 
 | カラム | 型 | 制約 | 備考 |
 |---|---|---|---|

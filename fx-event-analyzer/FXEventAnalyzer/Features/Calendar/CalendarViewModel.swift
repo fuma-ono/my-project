@@ -95,7 +95,7 @@ final class CalendarViewModel: ObservableObject {
         }
         if itemsByDay.isEmpty { loadState = .loading }
         do {
-            let response = try await service.fetch(from: first, to: end)
+            let response = try await service.fetch(from: first, to: end, timeZone: calendar.timeZone)
             guard current == revision else { return }
             itemsByDay = Dictionary(grouping: response.items) { calendar.startOfDay(for: $0.datetime) }
             loadState = .loaded

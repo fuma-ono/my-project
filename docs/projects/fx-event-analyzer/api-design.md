@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.27
+# FX Event Analyzer: API詳細設計書 v1.28
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -70,6 +70,7 @@
 - **v1.25**(2026-10-13): 要人の写真を自前で配信。federalreserve.gov の利用条件(特に断りがなければパブリックドメインで許可なく複製・配布可、出典として FRB を示す。リンクは可だがフレーム内表示は不可)に従い、直リンクをやめて Backend が複製を配信する。`GET /api/v1/speaker-photos/{file}`(14.7節。**認証なし**、`Cache-Control: public, max-age=86400`)を追加。`speakers.photo_url`は`null` / 絶対URL / key`speaker-photos/<file>`のいずれかを持ち、APIは常に**絶対URL**(key は`${PUBLIC_BASE_URL}/api/v1/speaker-photos/<file>`。環境変数`PUBLIC_BASE_URL`が未設定ならリクエストの`protocol://host`)か`null`で返す(`GET /speeches`・`GET /speeches/{id}`の`speaker.photo_url`)。`GET /calendar`の各行に`speaker_photo_url`(SPEECHは発言者の写真、INDICATORと写真の無い要人は`null`)を追加。FRB理事会の現メンバーに合わせ、パウエル氏の役職を「FRB理事」に直し、ケビン・ウォーシュ(FRB議長)・フィリップ・ジェファーソン(FRB副議長)・ミシェル・ボウマン(FRB副議長（金融監督担当）)・マイケル・バー(FRB理事)・リサ・クック(FRB理事)を追加(Migration `20261013000004_frb_speakers_self_hosted_photos.sql`)。写真を入れるのは FRB の要人だけ(ほかの機関は利用条件が未確認のため`null`)。`GET /home`は要人発言を返さないため変更なし(UIスクリーンショット用モックの`speeches`の各行には`speaker_photo_url`を追加)。`GET /search`は要人を返さないため変更なし
 
 - **v1.27**(2026-10-15): ホームの要人発言と、レートアラート・カレンダー更新の通知(notification-inbox-spec.md 7章・8章)。`GET /home`に`speeches`(直近7日の発言済み(`DELIVERED`)の要人発言、新しい順・最大3件。UIスクリーンショット用モックと同じ形。値動きの`reaction_*`はデータが無いため`null`)を追加(12章)。`GET /rate-alerts`・`POST /rate-alerts`・`DELETE /rate-alerts/{id}`を追加(24.12〜24.14節。有効なアラートの上限 FREE 1件・PRO 10件、28.1節)。`GET /notifications`は、本人の有効なレートアラートを最新の価格で判定して`RATE_ALERT`の行を、直近7日の予定の変更(日時の変更・中止)から`CALENDAR_UPDATE`の行を記録する(24.9節)。テーブル`rate_alerts`・`event_schedule_changes`(DBトリガーで記録)と、全員分を判定するジョブ`npm run jobs:evaluate-rate-alerts`を追加
+- **v1.28**(2026-10-15): 要人発言の値動き(HQ指示 2026-10-15)。`GET /speeches/{id}`に`reactions`(発言者の通貨を含む主要ペア最大4件 × 発言前の価格と`1m`・`5m`・`15m`の`pips`。発言済み(`DELIVERED`)の発言だけ、それ以外は`[]`)を追加(14.5節)。`GET /speeches/{id}/reaction`(14.8節、`GET /events/{id}/reaction`と同じ形)・`GET /speeches/{id}/reaction/chart`(14.9節、`GET /events/{id}/reaction/chart`と同じ形・同じ表示範囲)・`GET /speakers/{speaker_id}/comparison`(14.10節、要人ごとの過去の発言の比較。上限は`history_events_max`)を追加。要人発言の値動きは保存せず、`fx_prices`の1分足から**API応答時に計算する**(14.11節。保存テーブル・ジョブは追加しない。18.1節の「pips系はDB保存値を返す」は経済指標イベントのみの方針)。価格が無い値は`null`(`DATA_UNAVAILABLE`)で、補った値は返さない。Error Code `SPEAKER_NOT_FOUND`(404)を追加
 
 ---
 
@@ -199,6 +200,7 @@ service_role credentialはClientへ絶対に公開しない。db-design.md 6章�
 - INDICATOR_NOT_FOUND
 - FX_PAIR_NOT_FOUND
 - SPEECH_NOT_FOUND(v1.6で追加)
+- SPEAKER_NOT_FOUND(v1.28で追加。404)
 - SUBSCRIPTION_REQUIRED
 - FEATURE_NOT_ENTITLED
 - PLAN_LIMIT_EXCEEDED(v1.15で追加。403)
@@ -708,6 +710,25 @@ Response：`{ "data": SpeechSummary[], "meta": { page, limit, total, has_next } 
 
 要人発言1件(SpeechSummary、14.4節と同じ形)。`speech_id`がUUID形式でなければ`422 VALIDATION_ERROR`、存在しなければ`404 SPEECH_NOT_FOUND`。必要なfeature_code：`VIEW_BASIC_EVENT`。
 
+**reactions(v1.28で追加、主要通貨ペアの値動き)**: SpeechSummaryに`reactions`を加えて返す。発言済み(`status = DELIVERED`)の発言だけ、発言者の`currency_code`を含む有効な通貨ペア最大4件(14.11節の順)。発言前(`SCHEDULED`)・中止(`CANCELLED`)は`[]`。
+
+```json
+{
+  "reactions": [
+    {
+      "fx_pair_id": "20000000-0000-0000-0000-000000000001",
+      "symbol": "USDJPY",
+      "pre_statement_price": 155.31,
+      "pips": { "1m": 9.8, "5m": 21.4, "15m": 34.6 }
+    }
+  ]
+}
+```
+
+- `pre_statement_price`：発言前の価格(14.11節)。価格が無ければ`null`
+- `pips`：各時間足の`pips`(14.11節)。価格が無い・まだその時刻になっていない時間足は`null`
+- 必要なfeature_codeは`GET /events/{id}`の`major_fx_reactions`と同じく`VIEW_BASIC_EVENT`のみ
+
 ## 14.6 GET /api/v1/calendar(v1.14で追加)
 
 SCR-010 経済カレンダー(画面番号はui-screens.md)。期間内の経済指標イベントと要人発言を1つの一覧で返す。iOSは月のマス目(日ごとに重要度の色の点)と、選んだ日の一覧(時刻順)の両方をこのResponseから作る。必要なfeature_code：`VIEW_BASIC_EVENT`。
@@ -781,6 +802,76 @@ Response：`{ "from": string, "to": string, "items": CalendarItem[] }`(`from` / 
 | 絶対URL(`https://…`) | そのまま |
 | `speaker-photos/<file>`(`<file>`は上の形式) | `${base}/api/v1/speaker-photos/<file>`。`base`は環境変数`PUBLIC_BASE_URL`(末尾の`/`は除く)、未設定ならリクエストの`protocol://host` |
 | それ以外 | `null`(壊れたリンクを返さない) |
+
+## 14.8 GET /api/v1/speeches/{speech_id}/reaction(v1.28で追加)
+
+要人発言の値動き。**`GET /events/{event_id}/reaction`(18章)と同じQuery・同じ形**(アプリは同じデコーダーを使う)。`event_id`には`speech_id`、`pre_release_price`には発言前の価格(14.11節)が入る。必要なfeature_code：`VIEW_MARKET_REACTION`。
+
+Query：`fx_pair_id`(必須、UUID) / `timeframe`(`1m` / `5m` / `15m` / `30m` / `60m` / `all`、省略時`all`)
+
+- `timeframe=all`(省略時)：`{ event_id, fx_pair_id, pre_release_price, reactions: [...] }`。`reactions`は`1m`・`5m`・`15m`・`30m`・`60m`の5件、各要素は`timeframe` / `post_release_price` / `movement` / `pips` / `change_percent` / `max_upward` / `max_downward` / `max_upward_pips` / `max_downward_pips` / `analysis_status`
+- 単一の`timeframe`：`{ event_id, fx_pair_id, timeframe, pre_release_price, post_release_price, movement, pips, change_percent, max_upward, max_downward, max_upward_pips, max_downward_pips, analysis_status }`
+- `analysis_status`：発言前(`SCHEDULED`) = `DATA_PENDING`、中止(`CANCELLED`) = `NOT_ANALYZABLE`(どちらも数値はすべて`null`)。発言済みは、発言時刻 + N分がまだ来ていなければ`DATA_PENDING`、発言前の価格かN分後の価格が無ければ`DATA_UNAVAILABLE`(数値は`null`)、そろっていれば`READY`。要人発言には時刻の精度(`release_datetime_precision`)が無いため、`EXACT`と同じ扱い
+- Error：`speech_id`・`fx_pair_id`がUUID形式でない・`timeframe`が不正 → `422 VALIDATION_ERROR`。発言が無い → `404 SPEECH_NOT_FOUND`。通貨ペアが無い → `404 FX_PAIR_NOT_FOUND`
+
+## 14.9 GET /api/v1/speeches/{speech_id}/reaction/chart(v1.28で追加)
+
+要人発言のチャート。**`GET /events/{event_id}/reaction/chart`(19章)と同じQuery・同じ形・同じ表示範囲**。`event_id`には`speech_id`、`release_datetime`には`statement_datetime`が入る。必要なfeature_code：`VIEW_MARKET_REACTION`。
+
+Query：`fx_pair_id`(必須、UUID) / `timeframe`(必須、`1m` / `5m` / `15m` / `30m` / `60m`)
+
+Response：`{ event_id, fx_pair_id, timeframe, release_datetime, window_from, window_to, prices: [{ timestamp, open, high, low, close, volume }] }`。表示範囲は発言時刻を基準に19章と同じ(`1m`前後15分・`5m`前後60分・`15m`前後3時間・それ以外は前30分〜後60分)。`prices`は`fx_prices`にある足だけ(補った足は返さない)。発言の状態に関係なく、範囲内にある実際の足を返す。
+
+## 14.10 GET /api/v1/speakers/{speaker_id}/comparison(v1.28で追加)
+
+要人ごとの過去の発言の比較(過去イベント比較(21章)の要人発言版)。その要人の**発言済み(`DELIVERED`)**の発言を`statement_datetime`の新しい順に、プランの`history_events_max`件(FREE 5件・PRO 20件、28.1節)まで。必要なfeature_code：`VIEW_HISTORICAL`(21章と同じ)。
+
+Query：`fx_pair_id`(UUID、省略時はその要人の通貨の1件目のペア(14.11節の順)。該当するペアが無ければ`fx_pair_id`・`symbol`は`null`、`pips_by_timeframe`はすべて`null`)
+
+```json
+{
+  "speaker": {
+    "speaker_id": "40000000-0000-0000-0000-000000000001",
+    "name": "ジェローム・パウエル",
+    "title": "FRB理事",
+    "organization": "FRB",
+    "country_code": "US",
+    "currency_code": "USD",
+    "photo_url": "https://api.example.com/api/v1/speaker-photos/powell.jpg"
+  },
+  "fx_pair_id": "20000000-0000-0000-0000-000000000001",
+  "symbol": "USDJPY",
+  "events": [
+    {
+      "speech_id": "50000000-0000-0000-0000-000000000001",
+      "title": "FOMC後の記者会見",
+      "statement_datetime": "2026-09-17T18:30:00+00:00",
+      "importance": "HIGH",
+      "pips_by_timeframe": { "1m": 9.8, "5m": 21.4, "15m": 34.6 }
+    }
+  ],
+  "history_limit": { "applied": 1, "max_for_plan": 20, "pro_max": 20 }
+}
+```
+
+- `speaker.photo_url`：14.4節と同じ(絶対URLか`null`)
+- `pips_by_timeframe`：14.11節の計算の`1m`・`5m`・`15m`の`pips`。価格が無ければ`null`
+- `history_limit`：21章と同じ意味(`applied` = 実際に使った発言の件数 = min(発言済みの件数, `max_for_plan`))
+- ページングは無い(最大でも`history_events_max`件)。統計は返さない
+- Error：`speaker_id`・`fx_pair_id`がUUID形式でない → `422 VALIDATION_ERROR`。要人が無い → `404 SPEAKER_NOT_FOUND`。指定した通貨ペアが無い → `404 FX_PAIR_NOT_FOUND`
+
+## 14.11 要人発言の値動きの計算(v1.28で追加)
+
+経済指標イベントの値動き(`event_price_reactions`、Ingestion Workerが書く)と違い、要人発言の値動きは**保存しない**。14.5節・14.8節・14.10節は、応答のたびに`fx_prices`の**1分足**(`timeframe = '1m'`)から計算する(`src/domain/speechReactions.ts`)。保存用のテーブル・ジョブは追加していない(発言は経済指標より少なく、1回の応答で読む足は通貨ペアあたり最大75本のため)。
+
+- 足の`timestamp`は足の始まり(db-design.md 3.11節)なので、1分足は`timestamp` + 1分に終わる。**「時刻Xの価格」= Xに終わる1分足(`timestamp` = X − 1分)の終値**(seedの経済指標イベントと同じ: 12:30の発表 → 発表前 = 12:29の足の終値、1m = 12:30の足の終値)
+- **発言前の価格**(`pre_statement_price` / `pre_release_price`)：`statement_datetime`以前に終わった最後の1分足の終値。発言の15分より前に終わった足は使わない(無ければ`null`)
+- **N分後の価格**(`post_release_price`)：`statement_datetime` + N分に終わる1分足の終値。その足が無ければ`null`(前後の足で補わない)
+- `movement` = N分後 − 発言前、`pips` = `movement` ÷ pip_size(**円が後ろの通貨ペア(…JPY)は0.01 = ×100、それ以外は0.0001 = ×10000**)、`change_percent` = `movement` ÷ 発言前 × 100(10章と同じ式)
+- `max_upward` / `max_downward`(と`_pips`)：発言時刻からN分後までに終わる1分足の高値・安値の、発言前の価格との差の最大・最小(10.4・10.5節と同じ定義)
+- 丸め：`pips`系は0.1(実際の気配の最小単位)、価格・`movement`系は小数6桁、`change_percent`は小数4桁
+- 発言済み(`DELIVERED`)の発言だけ数値を出す。`analysis_status`は14.8節
+- **通貨ペアの選び方**(14.5節・14.10節の省略時)：有効な(`is_active`)通貨ペアのうち、発言者の`currency_code`を含むもの。順番は`USDJPY`・`EURUSD`・`GBPUSD`・`AUDUSD`・`USDCHF`・`USDCAD`・`EURJPY`・`GBPJPY`・`AUDJPY`・`CADJPY`(14.1節の主要ペアの順)・`EURGBP`・`EURCHF`・`CHFJPY`・`NZDUSD`・`NZDJPY`・`EURAUD`、それ以外は通貨ペア名の順。最大4件。例：USD → USDJPY・EURUSD・GBPUSD・AUDUSD、JPY → USDJPY・EURJPY・GBPJPY・AUDJPY、EUR → EURUSD・EURJPY・EURGBP…
 
 ---
 
@@ -1763,6 +1854,8 @@ Backend側の各Endpointが要求するEntitlementを以下の通り確定する
 | Market Reaction | `GET /events/{id}/reaction`、`GET /events/{id}/reaction/chart` | `VIEW_MARKET_REACTION` |
 | Historical Event Detail | `GET /events/{id}/history` | `VIEW_HISTORICAL` |
 | 要人発言(v1.6で追加) | `GET /speeches`、`GET /speeches/{id}` | `VIEW_BASIC_EVENT` |
+| 要人発言の値動き(v1.28で追加) | `GET /speeches/{id}/reaction`、`GET /speeches/{id}/reaction/chart` | `VIEW_MARKET_REACTION` |
+| 要人ごとの過去比較(v1.28で追加) | `GET /speakers/{speaker_id}/comparison` | `VIEW_HISTORICAL`(件数はプランの`history_events_max`、28.1節) |
 | 経済カレンダー(v1.14で追加) | `GET /calendar` | `VIEW_BASIC_EVENT` |
 | 通知予約対象(v1.6で追加) | `GET /notifications/upcoming` | `VIEW_BASIC_EVENT` |
 | 通知一覧(v1.23で追加) | `GET /notifications` | `VIEW_BASIC_EVENT` |
@@ -1804,7 +1897,7 @@ PRO Entitlementの付与(v1.4): `POST /subscription/verify`の保存時に、FRE
 | お気に入りの件数(`favorites_max`) | 3件 | 上限なし(`null`) | なし(お気に入りは端末内に保存。Backendは上限の値を返すだけ) |
 | 通知の重要度(`notification_importances`) | `HIGH`のみ | `HIGH` / `MEDIUM` / `LOW` | `PATCH /settings`(24.5節)、`GET /notifications/upcoming`(24.6節) |
 | 通知の通貨ペア(`notification_fx_pairs_max`) | 1件(`null` = すべての通貨ペアは不可。保存済みの`null`は`USDJPY`として扱う) | 上限なし(`null`) | `PATCH /settings`(24.5節)、`GET /notifications/upcoming`(24.6節) |
-| 過去イベント比較の発表回(`history_events_max`) | 直近5回 | 直近20回 | `GET /indicators/{id}/comparison`(21章) |
+| 過去イベント比較の発表回(`history_events_max`) | 直近5回 | 直近20回 | `GET /indicators/{id}/comparison`(21章)、`GET /speakers/{speaker_id}/comparison`(14.10節、v1.28。要人の発言済みの発言の件数) |
 | 有効なレートアラート(`rate_alerts_max`、v1.27) | 1件 | 10件 | `POST /rate-alerts`(24.13節)、`GET /rate-alerts`の`limit`(24.12節)。`GET /entitlements`の`limits`には含めない |
 
 - カレンダーの日時は、Requestの`timezone`(既定`UTC`)の現地時刻で計算する(「先月」「今年」もそのタイムゾーンで決める)

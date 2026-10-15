@@ -382,7 +382,7 @@ struct SearchView: View {
 
     /// 「USDJPY」「usd/jpy」「ドル円」「米ドル」などで探す。
     private var matchedFxSymbols: [String] {
-        Self.matchFxSymbols(fxSymbols, query: trimmedQuery)
+        BaseCurrency.prioritize(Self.matchFxSymbols(fxSymbols, query: trimmedQuery))
     }
 
     static func matchFxSymbols(_ symbols: [String], query: String) -> [String] {

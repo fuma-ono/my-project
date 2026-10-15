@@ -50,13 +50,17 @@ struct DisplaySettingsView: View {
     ]
 
     /// ISO 3166-1 alpha-2
+    /// HQ指示(2026-10-15)「国・地域もある程度選べるように」: 主要な国・地域を増やした。
     static let regions = [
-        SettingsOption(value: "JP", label: "日本"),
-        SettingsOption(value: "US", label: "アメリカ"),
-        SettingsOption(value: "GB", label: "イギリス"),
-        SettingsOption(value: "AU", label: "オーストラリア"),
-        SettingsOption(value: "SG", label: "シンガポール"),
-    ]
+        ("JP", "日本"), ("US", "アメリカ"), ("CA", "カナダ"), ("MX", "メキシコ"), ("BR", "ブラジル"),
+        ("GB", "イギリス"), ("IE", "アイルランド"), ("DE", "ドイツ"), ("FR", "フランス"), ("IT", "イタリア"),
+        ("ES", "スペイン"), ("NL", "オランダ"), ("BE", "ベルギー"), ("CH", "スイス"), ("AT", "オーストリア"),
+        ("SE", "スウェーデン"), ("NO", "ノルウェー"), ("DK", "デンマーク"), ("FI", "フィンランド"), ("PL", "ポーランド"),
+        ("TR", "トルコ"), ("ZA", "南アフリカ"), ("AE", "アラブ首長国連邦"), ("IN", "インド"), ("CN", "中国"),
+        ("HK", "香港"), ("TW", "台湾"), ("KR", "韓国"), ("SG", "シンガポール"), ("TH", "タイ"),
+        ("MY", "マレーシア"), ("ID", "インドネシア"), ("PH", "フィリピン"), ("VN", "ベトナム"), ("AU", "オーストラリア"),
+        ("NZ", "ニュージーランド"),
+    ].map { SettingsOption(value: $0.0, label: $0.1) }
 
     /// IANA timezone名。表示は参考画像の「(UTC+9) 東京」。
     static let timezones = AppPreferences.timeZones.map { SettingsOption(value: $0.id, label: AppPreferences.timeZoneLabel($0.id)) }
@@ -93,8 +97,7 @@ struct DisplaySettingsView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 8) {
                         SettingsListSection(title: "アプリの表示設定") {
-                            row("テーマ", Self.themes, \.theme, .theme)
-                            SettingsListSeparator()
+                            // HQ指示(2026-10-15)「テーマは無くそう」: ダークのみ。
                             row("文字サイズ", Self.textSizes, \.textSize, .textSize)
                             SettingsListSeparator()
                             row("日付の表示形式", Self.dateFormats, \.dateFormat, .dateFormat)
@@ -108,7 +111,7 @@ struct DisplaySettingsView: View {
                             SettingsListSeparator()
                             row("タイムゾーン", Self.timezones, \.timezone, .timezone)
                             SettingsListSeparator()
-                            row("通貨", Self.currencies, \.currency, .currency)
+                            row("基本通貨", Self.currencies, \.currency, .currency)
                             SettingsListSeparator()
                             row("週の開始曜日", Self.weekStarts, \.weekStart, .weekStart)
                         }
@@ -127,13 +130,13 @@ struct DisplaySettingsView: View {
         .sheet(item: $picker) { picker in
             switch picker {
             case .theme: sheet("テーマ", Self.themes, \.theme)
-            case .textSize: sheet("文字サイズ", Self.textSizes, \.textSize, footer: "シートや確認画面など、iOS標準の部品の文字の大きさに反映されます。")
+            case .textSize: sheet("文字サイズ", Self.textSizes, \.textSize, footer: "全画面の文字の大きさが変わります。変えるとホーム画面に戻ります。")
             case .dateFormat: sheet("日付の表示形式", Self.dateFormats, \.dateFormat)
             case .timeFormat: sheet("時刻の表示形式", Self.timeFormats, \.timeFormat)
             case .language: sheet("言語", Self.languages, \.language)
             case .region: sheet("国・地域", Self.regions, \.region)
             case .timezone: sheet("タイムゾーン", Self.timezones, \.timezone, footer: "発表時刻などをこのタイムゾーンで表示します。")
-            case .currency: sheet("通貨", Self.currencies, \.currency)
+            case .currency: sheet("基本通貨", Self.currencies, \.currency, footer: "この通貨を含む通貨ペアを、通貨ペアの追加・通知の対象・レートアラート・検索で先に表示します。")
             case .weekStart: sheet("週の開始曜日", Self.weekStarts, \.weekStart)
             }
         }

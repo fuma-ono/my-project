@@ -12,8 +12,11 @@ struct SpeechDetailResponse: Decodable, Equatable {
     let statementDatetime: Date
     let importance: Importance
     let status: SpeechStatus
+    /// 発言前後の実際の価格から計算した値動き(api-design v1.28)。発言済みのときだけ入る。古いBackendではnil。
+    var reactions: [SpeechReaction]? = nil
 
     enum CodingKeys: String, CodingKey {
+        case reactions
         case speechId = "speech_id"
         case speaker
         case title
@@ -51,4 +54,21 @@ enum SpeechStatus: String, Decodable, Equatable {
     case scheduled = "SCHEDULED"
     case delivered = "DELIVERED"
     case cancelled = "CANCELLED"
+}
+
+/// `GET /speeches/{id}`の`reactions`の1件(api-design v1.28)。pipsのキーは"1m"/"5m"/"15m"、値が無ければnil。
+struct SpeechReaction: Decodable, Equatable, Identifiable {
+    let fxPairId: String
+    let symbol: String
+    let preStatementPrice: Double?
+    let pips: [String: Double?]
+
+    var id: String { fxPairId }
+
+    enum CodingKeys: String, CodingKey {
+        case fxPairId = "fx_pair_id"
+        case symbol
+        case preStatementPrice = "pre_statement_price"
+        case pips
+    }
 }

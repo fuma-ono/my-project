@@ -60,7 +60,7 @@ struct CalendarItem: Decodable, Equatable, Identifiable {
 struct CalendarService {
     let apiClient: APIClient
 
-    func fetch(from: Date, to: Date) async throws -> CalendarResponse {
+    func fetch(from: Date, to: Date, timeZone: TimeZone = .current) async throws -> CalendarResponse {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         return try await apiClient.send(Endpoint(
@@ -68,8 +68,8 @@ struct CalendarService {
             queryItems: [
                 URLQueryItem(name: "from", value: formatter.string(from: from)),
                 URLQueryItem(name: "to", value: formatter.string(from: to)),
-                // 範囲の上限(先月の1日など)をこの端末のタイムゾーンで判定してもらう(v1.15)。
-                URLQueryItem(name: "timezone", value: TimeZone.current.identifier),
+                // 範囲の上限(先月の1日など)を表示設定のタイムゾーンで判定してもらう(v1.15、2026-10-15から表示設定)。
+                URLQueryItem(name: "timezone", value: timeZone.identifier),
             ]
         ))
     }
