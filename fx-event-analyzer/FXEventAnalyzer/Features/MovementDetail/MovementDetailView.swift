@@ -169,25 +169,48 @@ struct MovementDetailView: View {
             .overlay(Capsule().stroke(SettingsCardStyle.subtitleColor.opacity(0.6), lineWidth: 0.6))
     }
 
+    /// HQ指示(2026-10-15)「枠内の背景と1分、5分、15分のボタンのデザインを参考画像と
+    /// 同じにして」: 参考画像をピクセル単位で実測(枠の塗り色≈#0E233F、縁の色は既存の
+    /// `SettingsCardStyle.cardFill`/`cardBorder`と同系統、選択中タブは左から右へ
+    /// 明→暗のブルーのグラデーション(左端≈#03AAFE、右端≈#276FFB)の全高ピル)。
+    /// 配置・サイズは変更していない(ボタン高さ20+余白2×2=合計24を維持、外側の
+    /// `padding(2)`を無くして選択タブが枠の端まで隙間なく届くようにした)。
     private var timeframeTabs: some View {
         HStack(spacing: 0) {
-            ForEach(Self.candleTimeframes, id: \.self) { timeframe in
+            ForEach(Array(Self.candleTimeframes.enumerated()), id: \.element) { index, timeframe in
                 let isSelected = viewModel.selectedTimeframe == timeframe
                 Button { viewModel.selectedTimeframe = timeframe } label: {
                     NotoText.text(MovementAnalysisText.label(timeframe), size: 8.5)
                         .foregroundStyle(isSelected ? .white : SettingsCardStyle.subtitleColor)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 20)
-                        .background(RoundedRectangle(cornerRadius: 5).fill(isSelected ? V5P.blue : .clear))
+                        .frame(height: 24)
+                        .background {
+                            if isSelected {
+                                Capsule().fill(Self.timeframeSelectedGradient)
+                            }
+                        }
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
+
+                if index < Self.candleTimeframes.count - 1 {
+                    let nextSelected = viewModel.selectedTimeframe == Self.candleTimeframes[index + 1]
+                    if !isSelected && !nextSelected {
+                        Rectangle().fill(Color.black.opacity(0.35)).frame(width: 0.6, height: 14)
+                    }
+                }
             }
         }
-        .padding(2)
-        .background(RoundedRectangle(cornerRadius: 7).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
+        .background(Capsule().fill(SettingsCardStyle.cardFill))
+        .overlay(Capsule().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }
+
+    private static let timeframeSelectedGradient = LinearGradient(
+        colors: [Color(red: 3 / 255, green: 170 / 255, blue: 254 / 255), Color(red: 39 / 255, green: 111 / 255, blue: 251 / 255)],
+        startPoint: .leading,
+        endPoint: .trailing
+    )
 
     @ViewBuilder
     private var chartSection: some View {
