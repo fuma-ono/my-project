@@ -29,6 +29,9 @@ struct MovementDetailView: View {
         _tabSelection = tabSelection
     }
 
+    /// HQ指示(2026-10-15)「要人発言では『発表』を『発言』に」。
+    private var noun: String { viewModel.isSpeech ? "発言" : "発表" }
+
     var body: some View {
         content
             .toolbar(.hidden, for: .navigationBar)
@@ -139,7 +142,7 @@ struct MovementDetailView: View {
                         }
                     }
                     if let pre = preReleasePrice {
-                        NotoText.text("発表直前 \(String(format: "%.\(digits)f", pre)) との比較", size: 6.5)
+                        NotoText.text("\(noun)直前 \(String(format: "%.\(digits)f", pre)) との比較", size: 6.5)
                             .foregroundStyle(SettingsCardStyle.subtitleColor)
                     }
                 }
@@ -160,7 +163,7 @@ struct MovementDetailView: View {
     /// 言った」: V5P.blueではなく、「米ドル/円」の字幕と同じSettingsCardStyle.subtitleColorに
     /// 修正。
     private func priceBadge(timeframe: String) -> some View {
-        NotoText.text("発表\(MovementAnalysisText.label(timeframe))後の価格", size: 6.5)
+        NotoText.text("\(noun)\(MovementAnalysisText.label(timeframe))後の価格", size: 6.5)
             .foregroundStyle(SettingsCardStyle.subtitleColor)
             .lineLimit(1)
             .minimumScaleFactor(0.7)
@@ -239,7 +242,8 @@ struct MovementDetailView: View {
                 digits: viewModel.symbol.hasSuffix("JPY") ? 2 : 4,
                 timeframe: viewModel.selectedTimeframe,
                 preReleasePrice: viewModel.preReleasePrice,
-                pipSize: viewModel.symbol.hasSuffix("JPY") ? 0.01 : 0.0001
+                pipSize: viewModel.symbol.hasSuffix("JPY") ? 0.01 : 0.0001,
+                noun: noun
             )
                 .padding(.top, 9)
         }
@@ -438,6 +442,8 @@ private struct CandleChart: View {
     /// 発表直前の価格。基準線を引き、最後の足に「発表時点からの変動幅(pips)」を出す。
     let preReleasePrice: Double?
     let pipSize: Double
+    /// 「発表」か「発言」(要人発言の相場反応詳細、HQ指示 2026-10-15)。
+    var noun: String = "発表"
 
     /// HQ指示(2026-10-09)の表示範囲: 発表時刻を基準に、1分足は前後15分(初動)、5分足は
     /// 前後60分(短期の流れ)、15分足は前後3時間(全体の流れ)。Backendの`window_from`/`window_to`
@@ -510,7 +516,7 @@ private struct CandleChart: View {
                         Image(systemName: "arrowtriangle.up.fill")
                             .font(.system(size: 5))
                             .foregroundStyle(.white)
-                        Text("発表 \(AppPreferences.shared.timeString(chart.releaseDatetime))")
+                        Text("\(noun) \(AppPreferences.shared.timeString(chart.releaseDatetime))")
                             .font(.system(size: 6, weight: .semibold))
                             .foregroundStyle(.white)
                             .lineLimit(1)

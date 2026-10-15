@@ -65,7 +65,8 @@ enum MovementAnalysisText {
         unit: String?,
         marketViewAbove: String? = nil,
         marketViewBelow: String? = nil,
-        subject: String? = nil
+        subject: String? = nil,
+        noun: String = "発表"
     ) -> String? {
         func ready(_ timeframe: String) -> ReactionTimeframeEntry? {
             reactions.first { $0.timeframe == timeframe && $0.analysisStatus == .ready && $0.pips != nil }
@@ -93,12 +94,12 @@ enum MovementAnalysisText {
         let lead = subject.map { "\($0)は" } ?? ""
         if let later = ready("15m"), later.timeframe != first.timeframe, let laterPips = later.pips {
             if laterPips != 0, (laterPips > 0) == (firstPips > 0) {
-                sentences.append("\(lead)発表後\(firstLabel)で\(pips(abs(firstPips)))、15分で\(pips(abs(laterPips)))\(direction(firstPips))した。")
+                sentences.append("\(lead)\(noun)後\(firstLabel)で\(pips(abs(firstPips)))、15分で\(pips(abs(laterPips)))\(direction(firstPips))した。")
             } else {
-                sentences.append("\(lead)発表後\(firstLabel)で\(pips(abs(firstPips)))\(direction(firstPips))したが、15分後には\(pips(abs(laterPips)))\(direction(laterPips))した。")
+                sentences.append("\(lead)\(noun)後\(firstLabel)で\(pips(abs(firstPips)))\(direction(firstPips))したが、15分後には\(pips(abs(laterPips)))\(direction(laterPips))した。")
             }
         } else {
-            sentences.append("\(lead)発表後\(firstLabel)で\(pips(abs(firstPips)))\(direction(firstPips))した。")
+            sentences.append("\(lead)\(noun)後\(firstLabel)で\(pips(abs(firstPips)))\(direction(firstPips))した。")
         }
         return sentences.joined()
     }
