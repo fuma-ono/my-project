@@ -92,8 +92,8 @@ enum V5JPFont {
             guard runStart < end else { return }
             let run = String(string[runStart..<end])
             let piece = (runIsJapanese == true)
-                ? Text(verbatim: run).font(.custom(postScriptName, size: size))
-                : Text(verbatim: run).font(.system(size: size, weight: weight))
+                ? Text(verbatim: run).font(.custom(postScriptName, size: size * NotoText.scale))
+                : Text(verbatim: run).font(.system(size: size * NotoText.scale, weight: weight))
             result = (result.map { $0 + piece }) ?? piece
         }
         for index in string.indices {

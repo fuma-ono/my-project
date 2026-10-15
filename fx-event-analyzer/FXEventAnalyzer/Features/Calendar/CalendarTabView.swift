@@ -13,6 +13,7 @@ struct CalendarTabView: View {
     @State private var path = NavigationPath()
     @StateObject private var viewModel: CalendarViewModel
     @ObservedObject private var plan = PlanStore.shared
+    @ObservedObject private var preferences = AppPreferences.shared
     @State private var planPrompt: String?
 
     init(apiClient: APIClient, tabSelection: Binding<Int>) {
@@ -30,7 +31,14 @@ struct CalendarTabView: View {
                 V5BottomBar(selected: $tabSelection)
             }
             .toolbar(.hidden, for: .navigationBar)
-            .task { await viewModel.load() }
+            .task {
+                await viewModel.applyPreferences(timeZone: preferences.timeZone, firstWeekday: preferences.calendar.firstWeekday)
+                await viewModel.load()
+            }
+            // 表示設定で週の開始曜日・タイムゾーンを変えたら作り直す(HQ指示 2026-10-15)。
+            .onChange(of: preferences.display) { _, _ in
+                Task { await viewModel.applyPreferences(timeZone: preferences.timeZone, firstWeekday: preferences.calendar.firstWeekday) }
+            }
             // 購入・解約でプランが変わったら、見られる範囲で取り直す。
             .onChange(of: plan.plan) { _, _ in Task { await viewModel.load() } }
             // ホームの日付リンクから来たら、その日を選んで一覧の先頭へ戻る(HQ指示 2026-10-15)。
@@ -114,7 +122,7 @@ private struct CalendarMonthCard: View {
                 HStack(spacing: 0) {
                     ForEach(Array(viewModel.weekdaySymbols.enumerated()), id: \.offset) { index, symbol in
                         NotoText.text(symbol, size: 8.5)
-                            .foregroundStyle(Self.weekdayColor(column: index))
+                            .foregroundStyle(Self.weekdayColor(weekday: (viewModel.calendar.firstWeekday - 1 + index) % 7 + 1))
                             .frame(maxWidth: .infinity)
                     }
                 }
@@ -229,7 +237,7 @@ private struct CalendarMonthCard: View {
                 Text("\(calendar.component(.day, from: day))")
                     .font(.system(size: 8.5, weight: .semibold))
                     .monospacedDigit()
-                    .foregroundStyle(isSelected ? .white : Self.weekdayColor(column: column))
+                    .foregroundStyle(isSelected ? .white : Self.weekdayColor(weekday: calendar.component(.weekday, from: day)))
                 HStack(spacing: 1.5) {
                     ForEach(Array(dots.enumerated()), id: \.offset) { _, importance in
                         // 選んだ日は水色の円と重なって見えにくいので、白くふちどる(HQ指示 2026-10-08)。
@@ -257,11 +265,11 @@ private struct CalendarMonthCard: View {
     /// マスの高さ。週の数が月によって4〜6週に変わるので、6週でも収まる高さにする。
     static let cellHeight: CGFloat = 25
 
-    /// 月曜始まりの列番号(0〜6)。土曜は青、日曜は赤。
-    static func weekdayColor(column: Int) -> Color {
-        switch column {
-        case 5: return Color(red: 120.0 / 255, green: 170.0 / 255, blue: 1.0)
-        case 6: return Color(red: 1.0, green: 110.0 / 255, blue: 130.0 / 255)
+    /// 曜日(1=日曜〜7=土曜)の色。土曜は青、日曜は赤。週の開始曜日が変わっても曜日で決める。
+    static func weekdayColor(weekday: Int) -> Color {
+        switch weekday {
+        case 7: return Color(red: 120.0 / 255, green: 170.0 / 255, blue: 1.0)
+        case 1: return Color(red: 1.0, green: 110.0 / 255, blue: 130.0 / 255)
         default: return .white
         }
     }
@@ -314,7 +322,7 @@ private struct CalendarDayList: View {
             // 名前と重要度の間の最小(2→0)・重要度の幅(32→30)を詰めて、名前の幅を約14pt広げた。
             HStack(spacing: 4) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(item.hasTime ? Self.timeFormatter.string(from: item.datetime) : "未定")
+                    Text(item.hasTime ? AppPreferences.shared.timeString(item.datetime) : "未定")
                         .font(.system(size: 9, weight: .bold))
                         .monospacedDigit()
                         .foregroundStyle(.white)

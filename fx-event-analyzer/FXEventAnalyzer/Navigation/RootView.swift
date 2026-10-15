@@ -47,6 +47,9 @@ struct RootView: View {
                     AppPreferences.shared.reset()
                     appState.handleSignOut()
                 }
+                // 文字サイズを変えたら全画面を作り直して新しい大きさで表示する(HQ指示 2026-10-15)。
+                // 作り直すのでホームのタブに戻る。
+                .id(preferences.display.textSize)
                 .task(id: scenePhase) {
                     // 起動時・フォアグラウンド復帰時にローカル通知を予約し直し、
                     // 表示中は通知時刻を過ぎた分をベルの赤バッジに反映する。

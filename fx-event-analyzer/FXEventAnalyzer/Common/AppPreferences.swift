@@ -17,12 +17,15 @@ final class AppPreferences: ObservableObject {
     @Published private(set) var chart: ChartSettings = .defaults
 
     func apply(_ settings: SettingsResponse) {
+        // 文字サイズの倍率(HQ指示 2026-10-15)。画面は RootView が作り直して反映する。
+        NotoText.scale = NotoText.scale(forTextSize: settings.display.textSize)
         display = settings.display
         chart = settings.chart
     }
 
     /// ログアウト・セッション切れで、前のユーザーの設定を残さない。
     func reset() {
+        NotoText.scale = 1
         display = .defaults
         chart = .defaults
     }
@@ -78,7 +81,8 @@ final class AppPreferences: ObservableObject {
 
     /// 「15:12」/「午後3:12」。
     func timeString(_ date: Date) -> String {
-        Self.format(date, pattern: display.timeFormat == "12H" ? "ah:mm" : "H:mm", timeZone: timeZone)
+        // 2026-10-15「日付・時刻の表示形式を全画面にそろえる」: 24時間は一覧と同じ2桁(06:30)。
+        Self.format(date, pattern: display.timeFormat == "12H" ? "ah:mm" : "HH:mm", timeZone: timeZone)
     }
 
     /// 「（日本時間）」「（ニューヨーク時間）」。

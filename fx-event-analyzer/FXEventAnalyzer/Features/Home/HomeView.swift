@@ -655,6 +655,12 @@ struct HomeView: View {
     /// 遷移)とは違い、このカードの右側は今日の日付+曜日を「10/5(月)」の
     /// ように表示する。カレンダーへの遷移導線自体は維持する(表示テキストの
     /// 差し替えのみ)。
+    /// 「10/15(木)」。日付は表示設定の形式(年なし)、曜日は表示設定のタイムゾーンで(HQ指示 2026-10-15)。
+    @MainActor static func todayLabel(_ date: Date) -> String {
+        let weekday = AppPreferences.format(date, pattern: "E", timeZone: AppPreferences.shared.timeZone)
+        return "\(AppPreferences.shared.shortDateString(date))(\(weekday))"
+    }
+
     private static let todayEventsDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ja_JP")
@@ -686,7 +692,7 @@ struct HomeView: View {
                     tabSelection = 2
                 } label: {
                     HStack(spacing: 2) {
-                        Text(Self.todayEventsDateFormatter.string(from: Date()))
+                        Text(Self.todayLabel(Date()))
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(Self.linkBlue)
                         Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
@@ -731,7 +737,7 @@ struct HomeView: View {
             // 30→26に縮め、後続の国旗+内容のグループ全体を左に寄せた
             // (内部の間隔(`HStack(spacing: 5)`や`VStack`内の間隔)は
             // 変えていない)。
-            Text(Self.timeFormatter.string(from: event.releaseDatetime))
+            Text(AppPreferences.shared.timeString(event.releaseDatetime))
                 .font(.system(size: 9, weight: .bold))
                 .tracking(-0.2)
                 .foregroundStyle(.white)
@@ -1121,7 +1127,7 @@ struct HomeView: View {
     @ViewBuilder private func dateRow(_ date: Date) -> some View {
         HStack(spacing: 3) {
             Image(systemName: "calendar").font(.system(size: 7)).foregroundStyle(Self.linkBlue)
-            Text(Self.favoriteDateFormatter.string(from: date)).font(.system(size: 7, weight: .medium)).tracking(-0.4).foregroundStyle(Self.linkBlue)
+            Text("\(AppPreferences.shared.shortDateString(date)) \(AppPreferences.shared.timeString(date))").font(.system(size: 7, weight: .medium)).tracking(-0.4).foregroundStyle(Self.linkBlue)
         }
     }
 
@@ -1406,7 +1412,7 @@ struct HomeView: View {
     /// `favoriteDateFormatter`("M/d HH:mm")が内部で使う半角スペース1個も
     /// 日付と時刻がほぼくっついて見えていたため、置換で2個に広げた。
     private static func speechDateOrgText(_ speech: HomeSpeechSummary) -> String {
-        let dateText = Self.favoriteDateFormatter.string(from: speech.statementDatetime)
+        let dateText = "\(AppPreferences.shared.shortDateString(speech.statementDatetime)) \(AppPreferences.shared.timeString(speech.statementDatetime))"
             .replacingOccurrences(of: " ", with: "  ")
         guard let organization = speech.organization else { return dateText }
         return "\(dateText)  |  \(organization)"

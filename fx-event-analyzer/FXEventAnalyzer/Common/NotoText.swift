@@ -7,9 +7,21 @@ import SwiftUI
 enum NotoText {
     private static let postScriptName = "NotoSansJP-SemiBold"
 
+    /// 表示設定の文字サイズ(小・標準・大)の倍率(HQ指示 2026-10-15「文字サイズの仕組みを作成」)。
+    /// `AppPreferences`が設定を受け取ったときに入れる。端末の文字サイズ設定には連動させない
+    /// (V5の画面は固定キャンバスで、端末側で大きくすると枠からはみ出すため)。
+    static var scale: CGFloat = 1
+
     static func text(_ string: String, size: CGFloat) -> Text {
-        // 端末・アプリの文字サイズ設定で大きくならないよう固定の大きさにする
-        // (V5の画面は固定キャンバスで、拡大すると枠からはみ出すため)。
-        Text(verbatim: string).font(.custom(postScriptName, fixedSize: size))
+        Text(verbatim: string).font(.custom(postScriptName, fixedSize: size * scale))
+    }
+
+    /// 表示設定の`text_size`(SMALL / STANDARD / LARGE)→ 倍率。
+    static func scale(forTextSize textSize: String) -> CGFloat {
+        switch textSize {
+        case "SMALL": return 0.92
+        case "LARGE": return 1.1
+        default: return 1
+        }
     }
 }

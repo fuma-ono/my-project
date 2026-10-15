@@ -325,12 +325,12 @@ struct HistoricalComparisonView: View {
     }()
 
     @MainActor private static func dateString(_ date: Date) -> String {
-        dateFormatter.timeZone = AppPreferences.shared.timeZone
-        return dateFormatter.string(from: date)
+        // 表示設定の日付の形式(年なし)とタイムゾーン(HQ指示 2026-10-15)。
+        AppPreferences.shared.shortDateString(date)
     }
 
     @MainActor private static func timeString(_ date: Date) -> String {
-        timeFormatter.timeZone = AppPreferences.shared.timeZone
-        return timeFormatter.string(from: date)
+        // 表示設定の時刻の形式(24時間/12時間)とタイムゾーン(HQ指示 2026-10-15)。
+        AppPreferences.shared.timeString(date)
     }
 }

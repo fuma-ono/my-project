@@ -20,7 +20,7 @@ final class CalendarViewModel: ObservableObject {
 
     private let service: CalendarService
     private let plan: PlanStore
-    let calendar: Calendar
+    private(set) var calendar: Calendar
     /// 前月・翌月への切り替えが重なったとき、古い結果で上書きしない。
     private var revision = 0
 
@@ -33,13 +33,23 @@ final class CalendarViewModel: ObservableObject {
         month = calendar.date(from: calendar.dateComponents([.year, .month], from: day)) ?? day
     }
 
-    /// 参考画像どおり月曜始まり。
-    nonisolated static func makeCalendar() -> Calendar {
+    /// 既定は月曜始まり(参考画像)。HQ指示(2026-10-15)「週の開始曜日をカレンダーに反映」で、
+    /// 表示設定の週の開始曜日(`firstWeekday`: 1=日曜, 2=月曜)とタイムゾーンを受け取れるようにした。
+    nonisolated static func makeCalendar(timeZone: TimeZone = .current, firstWeekday: Int = 2) -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = Locale(identifier: "ja_JP")
-        calendar.timeZone = .current
-        calendar.firstWeekday = 2
+        calendar.timeZone = timeZone
+        calendar.firstWeekday = firstWeekday
         return calendar
+    }
+
+    /// 表示設定(週の開始曜日・タイムゾーン)が変わったら、カレンダーを作り直して読み直す。
+    func applyPreferences(timeZone: TimeZone, firstWeekday: Int) async {
+        guard calendar.timeZone != timeZone || calendar.firstWeekday != firstWeekday else { return }
+        calendar = Self.makeCalendar(timeZone: timeZone, firstWeekday: firstWeekday)
+        selectedDate = calendar.startOfDay(for: selectedDate)
+        month = calendar.date(from: calendar.dateComponents([.year, .month], from: selectedDate)) ?? month
+        await load()
     }
 
     /// カレンダーに並べる日。先頭は月の1日を含む週の月曜で、月の最後の日を含む週まで
@@ -160,7 +170,7 @@ final class CalendarViewModel: ObservableObject {
         return "\(parts.month ?? 0)/\(parts.day ?? 0)(\(weekday))のイベント"
     }
 
-    /// 月曜始まりの曜日(月〜日)。
+    /// 週の開始曜日から並べた曜日(月曜始まりなら月〜日、日曜始まりなら日〜土)。
     var weekdaySymbols: [String] {
         let symbols = calendar.veryShortWeekdaySymbols
         return (0..<7).map { symbols[(calendar.firstWeekday - 1 + $0) % 7] }
