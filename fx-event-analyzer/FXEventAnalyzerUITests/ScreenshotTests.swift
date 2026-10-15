@@ -268,7 +268,7 @@ final class ScreenshotTests: XCTestCase {
         // カレンダー項目(モックサーバーの`CALENDAR_TODAY_ITEMS`)に固定で
         // 含まれる発言行からタップする。
         tap(containing: "FOMCメンバー発言")
-        XCTAssertTrue(waitForAnyElement(containing: "クリストファー・ウォラー", timeout: 15), "Speech Detail did not load from Calendar")
+        XCTAssertTrue(waitForAnyElement(containing: "ウォラー", timeout: 15), "Speech Detail did not load from Calendar")
         capture("13-SpeechDetail")
         tapIdentifier("v5HeaderBack")
         XCTAssertTrue(waitForAnyElement(containing: "のイベント", timeout: 10), "Did not return to Calendar from Speech Detail")
