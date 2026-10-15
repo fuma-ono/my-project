@@ -70,9 +70,17 @@ struct SpeechDetailCards: View {
                     // されないよう、1行に収まらなければ自然に2行へ折り返す。
                     // HQ指示(2026-10-13、2回目)「消費者物価指数の文字サイズは
                     // 11にして」(イベント詳細と同じサイズに揃える): 10.5→11。
-                    NotoText.text("\(speaker.name)　\(speaker.title)", size: 11)
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
+                    // HQ指示(2026-10-15)「入りきらないときは姓だけに」(要人発言一覧と同じ):
+                    // 名前の途中で2行に分かれないよう、フルネームが1行に入らなければ姓+肩書き。
+                    ViewThatFits(in: .horizontal) {
+                        NotoText.text("\(speaker.name)　\(speaker.title)", size: 11)
+                            .lineLimit(1)
+                            .fixedSize()
+                        NotoText.text("\(SpeechListView.familyName(speaker.name))　\(speaker.title)", size: 11)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .foregroundStyle(.white)
                     Spacer(minLength: 4)
                     let colors = HomeView.importanceBadgeColors(response.importance)
                     NotoText.text(response.importance.rawValue, size: 7)
