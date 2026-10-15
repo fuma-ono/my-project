@@ -494,15 +494,8 @@ private struct CandleChart: View {
         let pad = max((maxY - minY) * 0.08, 0.0001)
         let width = candleWidth
         Chart {
-            // HQ指示(2026-10-14、2回目)「発表前後の境界を明確にするのが重要」: 発表時点
-            // より後ろをうっすら塗り、発表前(通常のローソク足)/発表後(値動きが一目で
-            // 分かる)の境界を背景の濃淡だけで分かるようにした。最背面になるよう他の
-            // マークより先に置く。グリッド線・ローソク足自体の描き方は変えていない。
-            RectangleMark(
-                xStart: .value("発表後開始", chart.releaseDatetime),
-                xEnd: .value("終了", window.to)
-            )
-            .foregroundStyle(Color.white.opacity(0.05))
+            // HQ指示(2026-10-15)「点線で十分だから不要」: 発表後の背景をうっすら塗る
+            // 区切り(2026-10-14、2回目に追加)は、発表時点の縦の点線だけで十分として削除。
             // HQ指示(2026-10-09)「縦の点線を、発表や発表時刻と分かるように」。
             RuleMark(x: .value("発表", chart.releaseDatetime))
                 .foregroundStyle(V5P.cyan.opacity(0.8))
