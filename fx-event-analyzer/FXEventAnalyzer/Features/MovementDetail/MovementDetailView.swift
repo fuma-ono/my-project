@@ -173,6 +173,9 @@ struct MovementDetailView: View {
     /// 同じにして」: 参考画像をピクセル単位で実測(枠の塗り色≈#0E233F、縁の色は既存の
     /// `SettingsCardStyle.cardFill`/`cardBorder`と同系統、選択中タブは左から右へ
     /// 明→暗のブルーのグラデーション(左端≈#03AAFE、右端≈#276FFB)の全高ピル)。
+    /// HQ指示(2026-10-15、2回目)「枠内の背景が少しグラデーションっぽい」: 選択タブ
+    /// 以外の塗りも、複数行を平均した実測で左端≈RGB(15,36,67)→右端≈RGB(14,34,61)と
+    /// わずかに右へ暗くなっていたため、単色から薄いグラデーションに変更した。
     /// 配置・サイズは変更していない(ボタン高さ20+余白2×2=合計24を維持、外側の
     /// `padding(2)`を無くして選択タブが枠の端まで隙間なく届くようにした)。
     private var timeframeTabs: some View {
@@ -202,12 +205,18 @@ struct MovementDetailView: View {
                 }
             }
         }
-        .background(Capsule().fill(SettingsCardStyle.cardFill))
+        .background(Capsule().fill(Self.timeframeContainerGradient))
         .overlay(Capsule().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }
 
     private static let timeframeSelectedGradient = LinearGradient(
         colors: [Color(red: 3 / 255, green: 170 / 255, blue: 254 / 255), Color(red: 39 / 255, green: 111 / 255, blue: 251 / 255)],
+        startPoint: .leading,
+        endPoint: .trailing
+    )
+
+    private static let timeframeContainerGradient = LinearGradient(
+        colors: [Color(red: 15 / 255, green: 36 / 255, blue: 67 / 255), Color(red: 14 / 255, green: 34 / 255, blue: 61 / 255)],
         startPoint: .leading,
         endPoint: .trailing
     )
