@@ -16,7 +16,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "jobs:cleanup-notifications": "tsx src/jobs/cleanupNotifications.ts",
-    "jobs:evaluate-rate-alerts": "tsx src/jobs/evaluateRateAlerts.ts"
+    "jobs:evaluate-rate-alerts": "tsx src/jobs/evaluateRateAlerts.ts",
+    "jobs:ingest-fx-prices": "tsx src/jobs/ingestFxPrices.ts"
   },
   "keywords": [],
   "author": "",

@@ -31,6 +31,10 @@ const envSchema = z.object({
   // absolute URLs such as speaker photo URLs (api-design.md §14.7). Optional:
   // when unset, the request's own protocol://host is used.
   PUBLIC_BASE_URL: optionalString(z.string().url()),
+  // HQ指示(2026-10-15)「無料枠で内部確認用に繋ぐ」: src/jobs/ingestFxPrices.ts
+  // (社内の開発ビルド確認専用、本番配信では使わない)のTwelve Data無料プラン
+  // APIキー。未設定ならそのジョブは何もせず終了する。
+  TWELVE_DATA_API_KEY: optionalString(z.string().min(1)),
 });
 
 export type Env = z.infer<typeof envSchema>;
