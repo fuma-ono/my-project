@@ -124,6 +124,10 @@ export async function listChartPrices(
     .select('timestamp, open, high, low, close, volume')
     .eq('fx_pair_id', fxPairId)
     .eq('timeframe', timeframe)
+    // UNVERIFIED minutes (failed the ③ vs ⑤ cross-check, data-sources.md §6.4)
+    // are treated as missing: not charted, and a speech reaction that needs
+    // one becomes DATA_UNAVAILABLE. Nothing is interpolated.
+    .neq('verification_status', 'UNVERIFIED')
     .gte('timestamp', fromIso)
     .lte('timestamp', toIso)
     .order('timestamp', { ascending: true });

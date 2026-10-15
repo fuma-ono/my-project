@@ -149,6 +149,7 @@ export async function listMajorFx(
         .from('fx_prices')
         .select('close, timestamp')
         .eq('fx_pair_id', pair.id)
+        .neq('verification_status', 'UNVERIFIED')
         .order('timestamp', { ascending: false })
         .limit(2);
       if (priceError) throw priceError;

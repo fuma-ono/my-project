@@ -1,0 +1,6 @@
+{"economicCalendar":[
+  {"actual":3.7,"country":"US","estimate":3.6,"event":"CPI YoY","impact":"high","prev":3.4,"time":"2026-10-14 12:30:00","unit":"%"},
+  {"actual":29,"country":"US","estimate":50,"event":"Nonfarm Payrolls","impact":"high","prev":120,"time":"2026-10-02 12:30:00","unit":"K"},
+  {"actual":null,"country":"US","estimate":0.3,"event":"Retail Sales MoM","impact":"high","prev":0.5,"time":"2026-10-16 12:30:00","unit":"%"},
+  {"actual":2.1,"country":"JP","estimate":2.0,"event":"CPI YoY","impact":"medium","prev":2.0,"time":"2026-10-23 23:30:00","unit":"%"}
+]}

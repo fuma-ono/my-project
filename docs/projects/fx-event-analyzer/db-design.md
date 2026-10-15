@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.14
+# FX Event Analyzer: DB詳細設計 v4.15
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -40,6 +40,11 @@
 - **v4.13**(2026-10-13): 要人の公式写真(HQ指示 2026-10-13「FRBは公式写真で、そのほかは頭文字と機関の色で」)。`Speaker`に`photo_url`(nullable)を追加(3.15節。Migration `20261013000003_speakers_photo_url.sql`)。値は`null` / 絶対URL / Backendが配信するファイルのkey `speaker-photos/<file>`で、APIが絶対URLに直して返す(api-design.md v1.25、14.7節)。FRBのサイトの写真はパブリックドメインだがフレーム内表示は不可のため、直リンクせず複製を`assets/speaker-photos/`に置いて自前で配信する(出典「米国連邦準備制度理事会(FRB)」、出典・取得日は同じ場所の`SOURCES.md`)。Migration `20261013000004_frb_speakers_self_hosted_photos.sql`でFRB理事会の現メンバーに合わせ、パウエル氏の役職を「FRB理事」に直し、ケビン・ウォーシュ(FRB議長)・フィリップ・ジェファーソン(FRB副議長)・ミシェル・ボウマン(FRB副議長（金融監督担当）)・マイケル・バー・リサ・クック(FRB理事)を追加(同じ名前・機関の要人がいれば追加しない)し、FRBの要人の`photo_url`をkeyにした。ほかの機関の要人は`null`。開発用seedのパウエル氏も「FRB理事」・`speaker-photos/powell.jpg`にした(5人の追加はseedより先に流れるMigrationで行う)
 
 - **v4.14**(2026-10-15): レートアラートとカレンダー更新の通知(notification-inbox-spec.md 7章・8章、api-design.md v1.27)。`RateAlert`(`rate_alerts`、3.18節。Migration `20261015000001_rate_alerts.sql`)と`EventScheduleChange`(`event_schedule_changes`、3.19節。Migration `20261015000002_event_schedule_changes.sql`)を追加。`EventScheduleChange`は`economic_events` / `speech_events`のトリガーが書く。通知一覧のテーブル`notification_inbox`はapi-design.md 24.9節(v1.23)
+- **v4.15**(2026-10-15): データ取得(Ingestion Worker)の正確さの仕組み(data-sources.md)。Migration `20261015000003_ingestion_accuracy.sql`
+  - `EventSnapshot`に`verification_status`(`VERIFIED` / `SINGLE_SOURCE`、既存行は`VERIFIED`)・`verification_source`・`official_actual`を追加(3.6節)。既存のAPI応答は変わらない
+  - 検証待ち・要確認の値を置く`IngestionStagedValue`(`ingestion_staged_values`、3.20節)と、照合用の公式統計`OfficialObservation`(`official_observations`、3.21節)を追加。どちらもRead APIは読まない(RLSはポリシーなし)
+  - `FxPrice`に`verification_status`(`VERIFIED` / `SINGLE_SOURCE` / `UNVERIFIED`、既存行は`SINGLE_SOURCE`)・`cross_check_source`・`cross_check_close`・`cross_check_diff_pips`を追加(3.11節)。`UNVERIFIED`の足はRead APIが使わない
+  - `IngestionLog`に`job`・`skipped_count`・`review_count`・`details`(jsonb)を追加(3.13節)。`data_type`の値セットは変えない(公式統計・要人発言は`OTHER`、ジョブ名は`job`)
 
 ---
 
@@ -247,8 +252,14 @@ IDX(status)
 | surprise_direction | text | nullable, CHK: `surprise_direction IN ('POSITIVE','NEGATIVE','NEUTRAL')` | 5章の判定ロジック参照。surpriseがnullならnull、0なら`NEUTRAL` |
 | created_at | timestamptz | NN, DEF now() | |
 
+| verification_status | text | NN, DEF `VERIFIED`, CHK: `IN ('VERIFIED','SINGLE_SOURCE')` | v4.15。`VERIFIED` = 公式統計と丸めを合わせて一致した(または人が確認した。既存行・seed)。`SINGLE_SOURCE` = 照合できる公式統計がなく取得元1つの値(対応表で許可した指標だけ。いまは無し) |
+| verification_source | text | nullable | v4.15。照合に使った公式統計(例: `FRED:CPIAUCNS@2026-10-14`) |
+| official_actual | numeric(18,4) | nullable | v4.15。照合に使った公式統計から計算した値 |
+
 UQ(event_id, snapshot_type)
 IDX(event_id)
+
+**(v4.15)確かめる前の値は入れない**: 不変なので、Ingestion Workerは検証ルールと公式統計との照合を通った値だけをRELEASEとして作る。それ以外は3.20節の`IngestionStagedValue`に置く(data-sources.md 6章)。
 
 **不変性のDBレベル担保(HQ確定)**: `RELEASE`のSnapshotは、作成後のUPDATE/DELETEをDBレベルで防止する。実装方式の第一候補は、`BEFORE UPDATE OR DELETE`トリガーで`OLD.snapshot_type = 'RELEASE'`の場合に例外を発生させる方式(代案: アプリケーションroleへのUPDATE/DELETE権限を`REVOKE`し、訂正が必要な場合は`EventRevision`経由のみで表現する権限設計)。具体的なSQL(トリガー関数・権限設定)は実装フェーズで確定するが、**「DB側で不変性を担保する」ことは設計方針として確定**する。
 
@@ -334,6 +345,10 @@ IDX(fx_pair_id)
 | close | numeric(12,6) | NN | |
 | volume | numeric | nullable | 提供元により意味が異なるため必須にしない |
 | source | text | nullable | |
+| verification_status | text | NN, DEF `SINGLE_SOURCE`, CHK: `IN ('VERIFIED','SINGLE_SOURCE','UNVERIFIED')` | v4.15。2つ目の取得元との照合結果(data-sources.md 6.4節)。`UNVERIFIED`(差が閾値超え・不自然な値)の足はRead APIが使わない(欠けた足と同じ扱い。補わない) |
+| cross_check_source | text | nullable | v4.15。照合した2つ目の取得元 |
+| cross_check_close | numeric(12,6) | nullable | v4.15。2つ目の取得元の同じ分の終値 |
+| cross_check_diff_pips | numeric(10,2) | nullable | v4.15。終値の差(pips) |
 | created_at | timestamptz | NN, DEF now() | |
 
 UQ(fx_pair_id, timeframe, timestamp)
@@ -388,6 +403,10 @@ IDX(event_id, fx_pair_id, timeframe)
 | success_count | integer | nullable | |
 | error_count | integer | nullable | |
 | error_message | text | nullable | |
+| job | text | nullable | v4.15。例: `ingest:official`・`ingest:speeches` |
+| skipped_count | integer | nullable | v4.15。対応表に無い・DBに無い指標・不明な要人などでスキップした件数 |
+| review_count | integer | nullable | v4.15。保留(要確認・公式待ち)にした件数 |
+| details | jsonb | nullable | v4.15。スキップの理由別件数・保留にした値の一覧など。APIキーは入れない |
 | created_at | timestamptz | NN, DEF now() | |
 
 IDX(data_type, started_at DESC)
@@ -560,6 +579,57 @@ IDX(changed_at)、IDX(kind, target_id)。
 
 **RLS**: `EconomicEvent`と同じ共有データ(全認証ユーザーSELECT可)。書き込みはトリガーのみ(Backendは書かない)。
 
+### 3.20 IngestionStagedValue(v4.15で追加)
+
+検証待ち・要確認の経済指標の値。テーブル名は`ingestion_staged_values`。**Read APIは読まない**(ここにある値は利用者に見えず、イベントは`data_status = PENDING`のまま)。検証を通ったら`EventSnapshot`(RELEASE)または`EventRevision`に書き、この行は`VERIFIED`等にして残す(監査用)。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK | |
+| event_id | uuid | NN, FK→EconomicEvent.id ON DELETE RESTRICT | |
+| kind | text | NN, CHK: `IN ('RELEASE','REVISION')` | RELEASE = 発表値、REVISION = 発表後の改定の候補 |
+| revision_field | text | nullable, CHK: `IN ('ACTUAL','PREVIOUS')` | REVISIONのときだけ値あり(CHK) |
+| provider / provider_event_id | text | NN | 取得元とそのID |
+| indicator_code | text | NN | `EconomicIndicator.code` |
+| reference_period | text | nullable | 照合する期間(`YYYY-MM`) |
+| forecast / actual / previous | numeric(18,4) | nullable | RELEASEの値 |
+| old_value / new_value | numeric(18,4) | nullable | REVISIONの改定前・改定後 |
+| unit / source / source_url | text | nullable | |
+| release_status | text | NN, DEF `UNKNOWN`, CHK: `IN ('PRELIMINARY','REVISED','FINAL','UNKNOWN')` | |
+| fetched_at | timestamptz | NN | 取得時刻 |
+| official_actual | numeric(18,4) | nullable | 照合した公式値 |
+| official_source | text | nullable | 例: `BLS:CUUR0000SA0@2026-10-15` |
+| verification_status | text | NN, CHK: `IN ('AWAITING_OFFICIAL','PENDING_REVIEW','VERIFIED','SINGLE_SOURCE','REJECTED')` | `AWAITING_OFFICIAL` = 公式値待ち(`ingest:official`が照合し直す)、`PENDING_REVIEW` = 人の確認待ち |
+| reasons | text[] | NN, DEF `{}` | 検証で見つかった問題のコード(data-sources.md 6.2節) |
+| detail | jsonb | nullable | |
+| resolved_at / resolved_by | timestamptz / text | nullable | |
+| created_at / updated_at | timestamptz | NN, DEF now() | |
+
+UQ(event_id, kind, coalesce(revision_field, '')) WHERE verification_status IN ('AWAITING_OFFICIAL','PENDING_REVIEW') — 未解決は1行だけ(再実行しても増えない)
+IDX(verification_status, created_at)
+
+**RLS**: 運用データ。ポリシーなし(service_roleのみ)。
+
+### 3.21 OfficialObservation(v4.15で追加)
+
+照合に使う公式統計(FRED / BLS)の観測値。テーブル名は`official_observations`。`npm run ingest:official`が書く。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | bigint (IDENTITY) | PK | |
+| source | text | NN, CHK: `IN ('FRED','BLS')` | |
+| series_id | text | NN | 例: `CPIAUCNS`、`CUUR0000SA0` |
+| period_start | date | NN | 観測期間の初日(月次は1日) |
+| as_of_date | date | NN | いつ時点の値か(FREDはrealtimeの日付、BLSは取得日) |
+| value | numeric(20,6) | nullable | 公表されていない期間はnull(補わない) |
+| release_status | text | NN, DEF `UNKNOWN` | BLSの脚注P = `PRELIMINARY` |
+| fetched_at | timestamptz | NN | |
+| created_at | timestamptz | NN, DEF now() | |
+
+UQ(source, series_id, period_start, as_of_date)、IDX(source, series_id, period_start)
+
+**RLS**: 運用データ。ポリシーなし(service_roleのみ)。
+
 ---
 
 ## 4. Snapshot不変性・Revision管理(確定)
@@ -592,7 +662,7 @@ Supabase RLSを実装前提の設計条件として採用する。論理方針�
 | ユーザー固有 | `Profile` / `Subscription` / `Entitlement` / `UserSettings` / `RateAlert`(v4.14) | `auth.uid()`等を利用した本人のみSELECT可。INSERT/UPDATE/DELETEはservice_roleのみ |
 | ユーザー固有(Backend経由のみ、v4.8) | `SupportRequest`(v4.7) | クライアントからは読み書き不可(ポリシーなし、anon / authenticatedの権限なし)。内部情報の列(`classification` / `github_issue_*`)を含むため、参照もservice_role(Backend)経由のみ |
 | 共有データ | `EconomicIndicator` / `EconomicEvent` / `Speaker` / `SpeechEvent`(v4.4) / `EventScheduleChange`(v4.14、書き込みはトリガーのみ) / `EventSnapshot` / `EventRevision` / `EventExplanation` / `IndicatorFxPair` / `FxPair` / `FxPrice` / `EventPriceReaction` | ユーザー単位のRLSを前提とせず、原則として全認証ユーザーからSELECT可能。INSERT/UPDATE/DELETEはservice_role(Ingestion Worker・管理者機能)のみ |
-| 運用ログ | `IngestionLog` | 一般ユーザーからは非公開。管理者機能・service_roleのみアクセス可 |
+| 運用ログ | `IngestionLog` / `IngestionStagedValue`(v4.15) / `OfficialObservation`(v4.15) | 一般ユーザーからは非公開。管理者機能・service_roleのみアクセス可 |
 
 ## 7. Delete / Cascade方針(確定)
 

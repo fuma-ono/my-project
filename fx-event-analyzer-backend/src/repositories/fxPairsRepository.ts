@@ -76,6 +76,7 @@ export async function listLatestFxPrices(
         .from('fx_prices')
         .select('close')
         .eq('fx_pair_id', fxPairId)
+        .neq('verification_status', 'UNVERIFIED')
         .order('timestamp', { ascending: false })
         .limit(1);
       if (error) throw error;

@@ -57,6 +57,23 @@ integration, the Ingestion Worker, AI analysis, speech analysis,
 notifications, community features, StoreKit, Web client, and
 auto-trading/signal/prediction features.
 
+## Ingestion Worker (phase 1, 2026-10-15)
+
+`src/ingestion/` — provider adapters, the code-reviewed mapping tables
+(`src/ingestion/mappings/`), validation, cross-verification against
+official statistics, and idempotent writes with an `ingestion_logs` row per
+run. Values that fail validation or do not match the official statistics
+are held in `ingestion_staged_values` (never read by the Read API, so the
+event stays `DATA_PENDING`). Sources, terms of use, accuracy rules and
+the keys to obtain: [`data-sources.md`](../docs/projects/fx-event-analyzer/data-sources.md).
+
+- `npm run ingest:official` — FRED / BLS observations + re-verification of values waiting for an official number
+- `npm run ingest:speeches` — FRB calendar (and ECB RSS, logged only) → `speech_events`
+- `npm run eval:providers` — compares the paid candidates whose keys are set; writes `eval-reports/` (no DB writes; exits 0 without keys)
+
+Nothing is scheduled automatically (suggested intervals: data-sources.md §8).
+Behind a proxy: `NODE_USE_ENV_PROXY=1 HTTPS_PROXY=...`.
+
 ## Running locally
 
 ```sh

@@ -11,6 +11,7 @@
 - [features.md](./features.md) — 機能一覧 v1.7(FEAT-ID、優先度P0/P1/P2/OUT。HQにより正式な基準仕様として確定済み)
 - [db-design.md](./db-design.md) — DB詳細設計 v4.2(HQ確定・完成版。max_upward_pips/max_downward_pipsをDB保存に統一)
 - [api-design.md](./api-design.md) — API詳細設計書 v1.3(HQ作成のv1.0をベースに、全設計横断監査の確定事項まで反映)
+- [data-sources.md](./data-sources.md) — データ取得元(①有料カレンダー・②公式統計・③有料為替・④中央銀行・⑤照合用為替)、各取得元の利用条件、正確さの仕組み、取り込みジョブ v1.0
 - [mockups/](./mockups/) — UIモックアップ画像(画面一覧・App Icon参考・Splash参考)
 
 ## 開発体制(2026-09〜)

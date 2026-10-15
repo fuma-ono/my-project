@@ -1,4 +1,4 @@
-# FXイベント反応分析アプリ 概要設計書 v1.10
+# FXイベント反応分析アプリ 概要設計書 v1.11
 
 ## 変更履歴
 
@@ -57,6 +57,11 @@
   - Provider Adapter抽象化方針(Ingestion Worker → Provider Adapter → Normalized Domain Model)を追記(4.3節、新設)。Adapter実装は未着手
   - `provider`/`provider_event_id`によるProvider非依存の内部ID設計方針を追記(5.3節)
   - Provider契約・API Client実装・Ingestion Worker実装・migration・API・iOSは本バージョンでは変更しない(方針決定・設計書追記のみ)
+- **v1.11**(2026-10-15): データ取得元の構成(ユーザー承認)と、Ingestion Workerの第1段階の実装を反映。詳細は新設の`data-sources.md`
+  - 取得元を①有料の経済指標カレンダー(候補: Trading Economics / Finnhub / Financial Modeling Prep)、②結果を照合する無料の公式統計(FRED・BLS ほか)、③有料の為替1分足(候補: Twelve Data / Polygon)、④中央銀行の公式の要人発言予定、⑤③を照合する2つ目の為替(任意)に整理(6.2節・7.3節・14章)。Trading Economics を第一候補とする v1.10 の方針は変えない(契約前の比較ツールを用意)
+  - Provider Adapterを実装(4.3節): 共通のインターフェース(`EconomicCalendarProvider` / `OfficialStatsProvider` / `FxPriceProvider` / `SpeechScheduleProvider`)、FRED・BLS・FRBカレンダー・ECB RSSは実データ/記録データで確認、有料候補は公開ドキュメントどおりの下書き
+  - **確かめる前の値はRead APIが読むテーブルに入れない**(5.4節・8.5節): 検証ルール・公式統計との照合を通った値だけをRELEASEスナップショットにし、それ以外は保留(`ingestion_staged_values`)。保留中は `DATA_PENDING`
+  - 2つ目の取得元と合わない為替の分は `UNVERIFIED` とし、Read APIは使わない(7.2節・8.5節)
 
 ---
 
@@ -229,7 +234,9 @@ Normalized Domain Model(Provider非依存の共通形式)
 EconomicEvent / EventSnapshot / FxPrice(5章)
 ```
 
-将来的に`TradingEconomicsAdapter`・`TwelveDataAdapter`・その他Providerに対応するAdapterを追加できる構造を想定し、Provider変更・追加時にDomain層への影響を出さないことを目的とする。**本バージョンではAdapterの実装には着手しない(方針確定のみ)。**
+将来的に`TradingEconomicsAdapter`・`TwelveDataAdapter`・その他Providerに対応するAdapterを追加できる構造を想定し、Provider変更・追加時にDomain層への影響を出さないことを目的とする。
+
+**v1.11で実装(第1段階)**: `fx-event-analyzer-backend/src/ingestion/`。Adapter(`adapters/`) → 共通の形(`types.ts`、時刻はUTC・単位・値の種類・季節調整・速報/改定) → 検証(`validation/`・`verification/`) → DBへの書き込み(取得元のIDで重複しない) → `ingestion_logs`。指標・通貨ペア・要人と取得元の対応は、コードレビュー対象の設定ファイル(`mappings/`)に書き、載っているものだけを取り込む。取得元の一覧・利用条件・正確さの仕組みは `data-sources.md`。
 
 ---
 
@@ -297,6 +304,8 @@ Indicator ── IndicatorFxPair ── FxPair
 ### 5.4 EventSnapshot(改訂: EconomicEventから分離)
 
 **最重要エンティティ。発表時点でユーザーに提供されていた情報を、不変(immutable)に保存する。** 一度保存した`actual`・`previous`は、後日の改定があっても書き換えない。
+
+**(v1.11)不変なので、確かめる前の値は入れない。** Ingestion Workerは、検証ルールと公式統計との照合(`data-sources.md` 4章・6章)を通った値だけをRELEASEスナップショットにし、どう確かめたか(`verification_status`・照合元・公式値)も記録する。通らなかった値・公式値を待つ値は別テーブル(`ingestion_staged_values`、Read APIは読まない)に置き、その間のイベントは`data_status = PENDING`のまま。
 
 管理情報: snapshot_id / event_id / snapshot_type / forecast(nullを許容) / actual / previous / unit / source / source_url / captured_at / surprise(forecast・actualのいずれかがnullならnullも許容) / surprise_direction(favorable_directionに基づく方向性)
 
@@ -409,7 +418,7 @@ USD/JPY: Before 147.20 → +1m 147.48(+28pips) → +5m 147.76(+56pips) → +15m 
 
 ### 8.5 データ欠損・不確実性
 
-以下の場合はdata_statusで管理し、推測値は生成しない。
+以下の場合はdata_statusで管理し、推測値は生成しない。(v1.11)取得した値が検証・照合で保留になった場合も`PENDING`のまま(API: `DATA_PENDING`)。2つ目の取得元と合わなかった為替の分(`fx_prices.verification_status = UNVERIFIED`)は欠けた分として扱う。
 
 - 価格データ欠損 / イベント時刻不明・低精度 / API障害・取得遅延 / 時刻ずれの疑い / 市場休場 / データ取得遅延
 

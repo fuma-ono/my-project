@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.28
+# FX Event Analyzer: API詳細設計書 v1.29
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -71,6 +71,7 @@
 
 - **v1.27**(2026-10-15): ホームの要人発言と、レートアラート・カレンダー更新の通知(notification-inbox-spec.md 7章・8章)。`GET /home`に`speeches`(直近7日の発言済み(`DELIVERED`)の要人発言、新しい順・最大3件。UIスクリーンショット用モックと同じ形。値動きの`reaction_*`はデータが無いため`null`)を追加(12章)。`GET /rate-alerts`・`POST /rate-alerts`・`DELETE /rate-alerts/{id}`を追加(24.12〜24.14節。有効なアラートの上限 FREE 1件・PRO 10件、28.1節)。`GET /notifications`は、本人の有効なレートアラートを最新の価格で判定して`RATE_ALERT`の行を、直近7日の予定の変更(日時の変更・中止)から`CALENDAR_UPDATE`の行を記録する(24.9節)。テーブル`rate_alerts`・`event_schedule_changes`(DBトリガーで記録)と、全員分を判定するジョブ`npm run jobs:evaluate-rate-alerts`を追加
 - **v1.28**(2026-10-15): 要人発言の値動き(HQ指示 2026-10-15)。`GET /speeches/{id}`に`reactions`(発言者の通貨を含む主要ペア最大4件 × 発言前の価格と`1m`・`5m`・`15m`の`pips`。発言済み(`DELIVERED`)の発言だけ、それ以外は`[]`)を追加(14.5節)。`GET /speeches/{id}/reaction`(14.8節、`GET /events/{id}/reaction`と同じ形)・`GET /speeches/{id}/reaction/chart`(14.9節、`GET /events/{id}/reaction/chart`と同じ形・同じ表示範囲)・`GET /speakers/{speaker_id}/comparison`(14.10節、要人ごとの過去の発言の比較。上限は`history_events_max`)を追加。要人発言の値動きは保存せず、`fx_prices`の1分足から**API応答時に計算する**(14.11節。保存テーブル・ジョブは追加しない。18.1節の「pips系はDB保存値を返す」は経済指標イベントのみの方針)。価格が無い値は`null`(`DATA_UNAVAILABLE`)で、補った値は返さない。Error Code `SPEAKER_NOT_FOUND`(404)を追加
+- **v1.29**(2026-10-15): データ取得の正確さの仕組み(data-sources.md、db-design.md v4.15)。**Endpoint・Response の形は変えない。** (1) Ingestion Worker が検証・公式統計との照合で保留にした経済指標の値(`ingestion_staged_values`)はどのAPIも返さない。保留中のイベントは `data_status` = `DATA_PENDING`・`snapshot` = `null`(7.3節)。(2) 2つ目の取得元と合わなかった1分足(`fx_prices.verification_status = UNVERIFIED`)は、チャート(`/reaction/chart`)・最新価格(`GET /home` の major_fx、レートアラートの判定)・要人発言の値動き(14.11節)で使わない。欠けた足と同じ扱いで、補わない(必要な値は `null` / `DATA_UNAVAILABLE`)
 
 ---
 
@@ -319,6 +320,12 @@ forecast = 0  # NG
 ```
 
 DATA_PENDING / DATA_UNAVAILABLE / NOT_ANALYZABLEはいずれも**HTTP 200のResponse Body内のstatus fieldとして**表現し、HTTPエラーとしては返さない(4章・7章参照)。
+
+## 7.3 確かめる前の値は返さない(v1.29で追加)
+
+Read API が返す経済指標の値は、`event_snapshots`(RELEASE)と `event_revisions` にあるものだけ。Ingestion Worker は検証ルールと公式統計との照合(data-sources.md 4章・6章)を通った値だけをそこに書き、通らなかった値・公式値を待つ値は `ingestion_staged_values` に置く。Read API はこのテーブルを読まないので、その間のイベントは `data_status` = `DATA_PENDING`、`snapshot` = `null`、`analysis.surprise` = `null` になる(発表済みでも `status` は `RELEASED`)。
+
+1分足は `fx_prices.verification_status` が `UNVERIFIED`(2つ目の取得元と終値が閾値以上違う、または不自然な値)のものを使わない。チャートからは抜け、値動きの計算でその足が必要なら `DATA_UNAVAILABLE`。前後の足で補わない。
 
 ---
 
@@ -1994,6 +2001,8 @@ getUpcomingEvents() / getHistoricalEvents() / getEventSnapshot()
 getPrices() / getIntradayPrices()
 
 将来的にProvider変更・追加が可能な構造とする。Provider固有のResponse形式をiOSへ直接返さない。
+
+(v1.29)実装は `fx-event-analyzer-backend/src/ingestion/`。インターフェースは `EconomicCalendarProvider`(①)・`OfficialStatsProvider`(②、照合用)・`FxPriceProvider`(③⑤)・`SpeechScheduleProvider`(④)。取得元の一覧・利用条件は data-sources.md。
 
 ---
 

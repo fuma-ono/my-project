@@ -10,3 +10,6 @@ coverage/
 # Supabase CLI local state
 supabase/.branches/
 supabase/.temp/
+
+# npm run eval:providers output (may contain licensed provider data — never commit)
+eval-reports/
