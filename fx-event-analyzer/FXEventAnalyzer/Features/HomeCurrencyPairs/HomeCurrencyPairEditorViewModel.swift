@@ -15,10 +15,13 @@ final class HomeCurrencyPairEditorViewModel: ObservableObject {
 
     private let service: SettingsService
     private let catalog: FXPairCatalog
+    /// 表示設定の基本通貨を含むペアを候補の先に並べるか。候補の一覧を差し替えたとき(テスト)は並べ替えない。
+    private let prioritizesBaseCurrency: Bool
 
     init(apiClient: APIClient, catalog: FXPairCatalog? = nil) {
         service = SettingsService(apiClient: apiClient)
         self.catalog = catalog ?? RemoteFXPairCatalog(apiClient: apiClient)
+        prioritizesBaseCurrency = catalog == nil
     }
 
     var others: [String] { available.filter { !selected.contains($0) } }
@@ -31,7 +34,8 @@ final class HomeCurrencyPairEditorViewModel: ObservableObject {
         do {
             let settings = try await service.fetchSettings()
             // 基本通貨を含むペアを先に並べる(HQ指示 2026-10-15)。
-            let symbols = BaseCurrency.prioritize((try? await catalog.availableSymbols()) ?? StaticFXPairCatalog.seededSymbols)
+            let fetched = (try? await catalog.availableSymbols()) ?? StaticFXPairCatalog.seededSymbols
+            let symbols = prioritizesBaseCurrency ? BaseCurrency.prioritize(fetched) : fetched
             let current = settings.home.fxPairs ?? HomeSettings.defaultPairs.filter(symbols.contains)
             selected = Array(current.prefix(HomeSettings.maxPairs))
             saved = selected
