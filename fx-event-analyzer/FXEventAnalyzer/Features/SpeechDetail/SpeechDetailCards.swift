@@ -148,7 +148,7 @@ struct SpeechDetailCards: View {
         // 状態文を9→10.5(要約と同じ)にし、枠の中で上下の中心に置く。2行以上はそのまま枠いっぱいに並ぶ。
         .frame(minHeight: EventDetailCards.summaryCardMinHeight, alignment: .leading)
         .frame(width: 214, alignment: .leading)
-        .background(AccountCardBackground())
+        .background(GradientCardBackground())
     }
 
     // MARK: - 通貨ペア別の値動き(pips)
@@ -222,7 +222,7 @@ struct SpeechDetailCards: View {
         // (`bodyGradient`)であってこの中立な背景ではない)を敷いた上で
         // クリップし、角丸をきちんと見えるようにした
         // (`EventDetailCards.reactionTable`と同じ変更)。
-        .background(AccountCardBackground())
+        .background(GradientCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
     }
 
@@ -254,7 +254,7 @@ struct SpeechDetailCards: View {
         }
         .padding(.horizontal, 10)
         .frame(width: 214, height: 32)
-        .background(SettingsCardStyle.cardFill, in: RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
+        .background(V5CardGradient.fill, in: RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
                 .stroke(LinearGradient(colors: [V5P.cyan, V5P.blue.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.9)

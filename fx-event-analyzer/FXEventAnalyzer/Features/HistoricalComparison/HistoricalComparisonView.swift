@@ -164,7 +164,8 @@ struct HistoricalComparisonView: View {
             }
         }
         .frame(width: 214, height: Self.tableHeight(rows: events.count, limited: response.historyLimit?.isLimited == true), alignment: .top)
-        .background(Self.tableFill)
+        // HQ指示(2026-10-15): 表の外枠もグラデーションに(見出しの帯は今の色のまま)。
+        .background(V5CardGradient.fill)
         .clipShape(shape)
         .overlay(shape.stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }

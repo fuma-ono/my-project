@@ -147,7 +147,7 @@ struct EventDetailCards: View {
         // であり同じ呼び出しに混在できないため、`.frame`を2回に分けた。
         .frame(minHeight: Self.summaryCardMinHeight)
         .frame(width: 214)
-        .background(AccountCardBackground())
+        .background(GradientCardBackground())
     }
 
     /// `results`(イベント詳細)と`SpeechDetailCards.statementCard`(要人発言)
@@ -278,7 +278,7 @@ struct EventDetailCards: View {
         // (`AccountCardBackground`、以前消したのは特別な青いグラデーション
         // (`bodyGradient`)であってこの中立な背景ではない)を敷いた上で
         // クリップし、角丸をきちんと見えるようにした。
-        .background(AccountCardBackground())
+        .background(GradientCardBackground())
         .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
     }
 
@@ -318,7 +318,7 @@ struct EventDetailCards: View {
         }
         .padding(.horizontal, 10)
         .frame(width: 214, height: 32)
-        .background(SettingsCardStyle.cardFill, in: RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
+        .background(V5CardGradient.fill, in: RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
                 .stroke(LinearGradient(colors: [V5P.cyan, V5P.blue.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.9)
@@ -372,7 +372,7 @@ struct EventDetailCards: View {
             }
             .padding(.horizontal, 10)
             .frame(width: 214, height: 26)
-            .background(AccountCardBackground())
+            .background(GradientCardBackground())
         }
     }
 

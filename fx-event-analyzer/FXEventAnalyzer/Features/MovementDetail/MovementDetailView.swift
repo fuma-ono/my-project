@@ -149,7 +149,7 @@ struct MovementDetailView: View {
         }
         .padding(8)
         .frame(width: 214, alignment: .leading)
-        .background(AccountCardBackground())
+        .background(GradientCardBackground())
     }
 
     /// HQ指示(2026-10-13、8回目)「参考画像をピクセル単位で再現して」: ヘッダー行右上の
@@ -326,7 +326,7 @@ struct MovementDetailView: View {
             }
             .padding(8)
             .frame(width: 214, alignment: .leading)
-            .background(AccountCardBackground())
+            .background(GradientCardBackground())
         }
     }
 

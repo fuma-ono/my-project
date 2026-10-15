@@ -94,7 +94,7 @@ struct IndicatorDetailCard: View {
         .padding(.top, 10)
         .padding(.bottom, 4)
         .frame(width: 214)
-        .background(AccountCardBackground())
+        .background(GradientCardBackground())
         // HQ指示(2026-10-13、3回目)「消費者物価指数（CPI）は折り返さないで」
         // がまだ直っていない件: 星をヘッダーのHStackの兄弟(Spacer越しに
         // 右端へ寄せる形)に置いていたため、名前の横幅が星の分(24pt+spacing)
@@ -134,7 +134,7 @@ struct IndicatorDetailCard: View {
             content()
                 .padding(.horizontal, 10)
                 .frame(width: 214, height: 38, alignment: .leading)
-                .background(AccountCardBackground())
+                .background(GradientCardBackground())
         }
         .contentShape(Rectangle())
     }

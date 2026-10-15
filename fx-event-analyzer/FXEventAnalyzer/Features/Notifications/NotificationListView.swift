@@ -268,7 +268,7 @@ private struct NotificationRow: View {
         .padding(.horizontal, 9)
         .padding(.vertical, 4)
         .frame(width: 214, alignment: .leading)
-        .background(AccountCardBackground())
+        .background(GradientCardBackground())
         // 受信日時はカードの右上(シェブロンの上)に、字間を詰めて置く。
         .overlay(alignment: .topTrailing) {
             NotoText.text(receivedText, size: 7)

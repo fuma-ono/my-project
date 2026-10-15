@@ -159,7 +159,7 @@ struct SpeechListView: View {
 
     private func rowCard(_ importance: Importance) -> some View {
         let shape = RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
-        return shape.fill(SettingsCardStyle.cardFill)
+        return shape.fill(V5CardGradient.fill)
             .overlay(alignment: .leading) {
                 Rectangle().fill(IndicatorsView.accentColor(importance)).frame(width: 3)
             }

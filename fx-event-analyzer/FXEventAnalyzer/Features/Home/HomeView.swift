@@ -570,7 +570,8 @@ struct HomeView: View {
         }
         .padding(.horizontal, 8)
         .frame(width: Self.cardWidth, height: height, alignment: .top)
-        .background(RoundedRectangle(cornerRadius: Self.cardCornerRadius).fill(Self.cardFill))
+        // HQ指示(2026-10-15)「データを見せるカードはグラデーションに」(経済カレンダーと同じ)。
+        .background(RoundedRectangle(cornerRadius: Self.cardCornerRadius).fill(V5CardGradient.fill))
         .overlay(
             RoundedRectangle(cornerRadius: Self.cardCornerRadius)
                 .stroke(Self.cardBorderColor, lineWidth: 0.75)

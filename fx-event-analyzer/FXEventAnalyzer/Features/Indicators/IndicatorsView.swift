@@ -149,7 +149,7 @@ struct IndicatorsView: View {
     /// 1件分のカード。左端の帯は重要度の色(HIGHは赤、MEDIUMは黄、LOWは青)。
     private func rowCard(_ importance: Importance) -> some View {
         let shape = RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
-        return shape.fill(SettingsCardStyle.cardFill)
+        return shape.fill(V5CardGradient.fill)
             .overlay(alignment: .leading) {
                 Rectangle().fill(Self.accentColor(importance)).frame(width: 3)
             }

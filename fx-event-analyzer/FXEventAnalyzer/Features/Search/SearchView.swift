@@ -351,7 +351,7 @@ struct SearchView: View {
                 // HQ指示(2026-10-11、10回目)「検索結果の米国CPI等の枠の色も
                 // 同じにして」: `popularKeywordsPanel`と同じ`popularPanelFill`
                 // に揃えた(枠線の不透明度0.3は元々同じ)。
-                .background(Self.popularPanelFill, in: RoundedRectangle(cornerRadius: 10))
+                .background(V5CardGradient.fill, in: RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(V5P.line.opacity(0.3), lineWidth: 1))
             }
         }

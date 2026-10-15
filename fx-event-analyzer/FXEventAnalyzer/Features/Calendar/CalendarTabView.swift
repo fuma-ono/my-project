@@ -138,16 +138,8 @@ private struct CalendarMonthCard: View {
         .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }
 
-    /// カレンダーのカードの背景。下のイベントの枠(`CalendarDayList`)も同じものを使う。
-    static let cardGradient = LinearGradient(
-        colors: [
-            Color(red: 10.0 / 255, green: 70.0 / 255, blue: 145.0 / 255),
-            Color(red: 2.0 / 255, green: 24.0 / 255, blue: 54.0 / 255),
-            Color(red: 0, green: 8.0 / 255, blue: 22.0 / 255)
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
+    /// カレンダーのカードの背景。アプリ共通の`V5CardGradient`(データを見せるカードの背景)と同じ。
+    static let cardGradient = V5CardGradient.fill
 
     /// HQ指示(2026-10-13、2回目)「赤丸はHIGH　黄色はMEDIUM　青丸LOWの
     /// 表記にして」: カレンダーの点と同じ色(`HomeView.importanceBadgeColors`)
