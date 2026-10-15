@@ -187,12 +187,12 @@ struct IndicatorsView: View {
                 // 『前回 10/01』のように前回の発表日を薄く出す」。
                 HStack(spacing: 6) {
                     if let date {
-                        // 2026-10-14「次回の文字サイズは日時と揃えて」: 6→7.5。
-                        NotoText.text(isNext ? "次回" : "前回", size: 7.5)
+                        // 2026-10-14「次回の文字サイズは日時と揃えて」: 6→7.5、2回目「0.5小さく」で7。
+                        NotoText.text(isNext ? "次回" : "前回", size: 7)
                         Text(Self.dateString(date))
                         if isNext { Text(Self.timeString(date)) }
                     } else {
-                        NotoText.text("予定なし", size: 7.5)
+                        NotoText.text("予定なし", size: 7)
                     }
                 }
                 .font(.system(size: 7.5, weight: .semibold))
