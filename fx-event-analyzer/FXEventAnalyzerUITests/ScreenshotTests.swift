@@ -215,6 +215,7 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "金融経済懇談会での講演", timeout: 15), "Speech list did not load")
         capture("12-SpeechList")
         // 発言済みの要人発言(本番と同じ計算の値動き)と、同じ要人の過去イベント比較(HQ指示 2026-10-15)。
+        // (2026-10-15: CIのシミュレータがアプリを起動できず全画面が撮れなかった回があったため撮り直し。)
         tap(containing: "欧州議会での証言")
         if waitForAnyElement(containing: "相場反応詳細", timeout: 15) {
             Thread.sleep(forTimeInterval: 1.0)
