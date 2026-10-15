@@ -64,8 +64,6 @@ private struct RateAlertPairList: Decodable {
     let data: [RateAlertPair]
 }
 
-private struct EmptyResponse: Decodable {}
-
 @MainActor
 final class RateAlertsViewModel: ObservableObject {
     enum State: Equatable {
@@ -119,11 +117,10 @@ final class RateAlertsViewModel: ObservableObject {
     }
 
     func delete(_ alert: RateAlert) async {
-        do {
-            let _: EmptyResponse? = try? await apiClient.send(Endpoint(path: "rate-alerts/\(alert.id)", method: .delete))
-            alerts.removeAll { $0.id == alert.id }
-            await load()
-        }
+        // 204(本文なし)は APIClient が EmptyResponse として返す。
+        let _: EmptyResponse? = try? await apiClient.send(Endpoint(path: "rate-alerts/\(alert.id)", method: .delete))
+        alerts.removeAll { $0.id == alert.id }
+        await load()
     }
 
     static func pairLabel(_ symbol: String) -> String {
