@@ -184,6 +184,10 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
         case speech = "SPEECH"
         /// アプリ内の出来事(通知設定の更新など)。ローカル通知は出さない。
         case system = "SYSTEM"
+        /// レートアラート(指定した価格を上回った・下回った)。サーバーの通知一覧から来る(HQ指示 2026-10-15)。
+        case rateAlert = "RATE_ALERT"
+        /// カレンダー更新(発表日時の変更・中止)。サーバーの通知一覧から来る(HQ指示 2026-10-15)。
+        case calendarUpdate = "CALENDAR_UPDATE"
 
         init(_ kind: UpcomingNotification.Kind) {
             switch kind {
@@ -197,6 +201,8 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
             case .indicator: return "経済指標"
             case .speech: return "要人発言"
             case .system: return "システム"
+            case .rateAlert: return "レート"
+            case .calendarUpdate: return "カレンダー"
             }
         }
 
@@ -205,6 +211,7 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
         var retentionDays: Int {
             switch self {
             case .indicator, .speech, .system: return 30
+            case .rateAlert, .calendarUpdate: return 7
             }
         }
     }
@@ -295,6 +302,8 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
         case "INDICATOR": kind = .indicator
         case "SPEECH": kind = .speech
         case "SYSTEM": kind = .system
+        case "RATE_ALERT": kind = .rateAlert
+        case "CALENDAR_UPDATE": kind = .calendarUpdate
         default: return nil
         }
         let subject = kind == .indicator

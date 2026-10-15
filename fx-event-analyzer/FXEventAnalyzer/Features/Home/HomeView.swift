@@ -680,7 +680,11 @@ struct HomeView: View {
                 // 10に拡大したが、再指摘(2026-10-05)「10/5(月)文字サイズを0.5
                 // 下げて」で10→9.5に調整(「すべて見る」もこのサイズに統一、
                 // `headerLink`参照)。
-                NavigationLink(value: AppRoute.calendar) {
+                // HQ指示(2026-10-15): 仮画面ではなく、下のタブの「カレンダー」に切り替えて今日を選ぶ。
+                Button {
+                    CalendarJump.shared.requestedDate = Date()
+                    tabSelection = 2
+                } label: {
                     HStack(spacing: 2) {
                         Text(Self.todayEventsDateFormatter.string(from: Date()))
                             .font(.system(size: 9, weight: .semibold))
@@ -688,6 +692,8 @@ struct HomeView: View {
                         Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
                     }
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("homeTodayCalendarLink")
             }
             ForEach(Array(events.enumerated()), id: \.element.id) { idx, event in
                 if idx > 0 { Divider().overlay(Self.cardBorderColor) }
@@ -1044,6 +1050,8 @@ struct HomeView: View {
                 NavigationLink(value: AppRoute.favoritesList) {
                     headerLink("すべて見る")
                 }
+                // UIテストが他のカードの「すべて見る」と区別して押すための目印。
+                .accessibilityIdentifier("homeFavoritesSeeAll")
             }
             HStack(alignment: .top, spacing: Self.favoriteCardGap) {
                 ForEach(favorites) { item in

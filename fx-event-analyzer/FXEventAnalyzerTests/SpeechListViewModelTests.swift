@@ -47,6 +47,14 @@ final class SpeechListViewModelTests: XCTestCase {
         XCTAssertEqual(ListSortOrder.date.apply(byDate, importance: \.importance).map(\.speechId), ["low", "high-1", "medium", "high-2"])
     }
 
+    func testFxPairSearchMatchesSymbolAndJapaneseCurrencyNames() {
+        let symbols = ["USDJPY", "EURUSD", "EURJPY", "GBPUSD"]
+        XCTAssertEqual(SearchView.matchFxSymbols(symbols, query: "usd/jpy"), ["USDJPY"])
+        XCTAssertEqual(SearchView.matchFxSymbols(symbols, query: "EUR"), ["EURUSD", "EURJPY"])
+        XCTAssertEqual(SearchView.matchFxSymbols(symbols, query: "ポンド"), ["GBPUSD"])
+        XCTAssertEqual(SearchView.matchFxSymbols(symbols, query: ""), [])
+    }
+
     func testFamilyNameIsTheLastPartOfAKatakanaName() {
         XCTAssertEqual(SpeechListView.familyName("ジェローム・パウエル"), "パウエル")
         XCTAssertEqual(SpeechListView.familyName("クリスティーヌ・ラガルド"), "ラガルド")

@@ -75,4 +75,6 @@ enum AppRoute: Hashable {
     case supportHistory
     /// SCR-006 指標詳細の「過去の発表日」。その指標の発表済みの回の一覧(HQ指示 2026-10-09)。
     case indicatorReleases(id: String, name: String)
+    /// レートアラート(HQ指示 2026-10-15)。通知設定と、通知一覧のレートアラートから開く。
+    case rateAlerts
 }

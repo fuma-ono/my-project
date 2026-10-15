@@ -77,6 +77,10 @@ import SwiftUI
 /// 構成に変更。
 struct SearchView: View {
     @StateObject private var viewModel: IndicatorsViewModel
+    /// HQ指示(2026-10-15)「要人発言・通貨ペアも検索できるように」: 要人発言は要人発言一覧と同じく
+    /// 1回読み込んで端末の中で絞り込む。通貨ペアは`GET /fx-pairs`の一覧から探す。
+    @StateObject private var speechViewModel: SpeechListViewModel
+    @State private var fxSymbols: [String] = StaticFXPairCatalog.seededSymbols
     @State private var path = NavigationPath()
     @State private var selectedFilter: SearchFilter = .all
     @State private var recentSearches: [RecentSearchEntry] = RecentSearchStore.load()
@@ -88,6 +92,7 @@ struct SearchView: View {
     init(apiClient: APIClient, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
         _viewModel = StateObject(wrappedValue: IndicatorsViewModel(apiClient: apiClient))
+        _speechViewModel = StateObject(wrappedValue: SpeechListViewModel(apiClient: apiClient))
         _tabSelection = tabSelection
     }
 
@@ -116,7 +121,12 @@ struct SearchView: View {
         }
         // 2026-10-13: IndicatorsViewModelは一覧を1回読み込み、検索語では端末の中で絞り込む
         // 形になった(入力のたびの通信はしない)ので、最初に読み込む。
-        .task { viewModel.load() }
+        .task {
+            viewModel.load()
+            speechViewModel.load()
+            fxSymbols = (try? await RemoteFXPairCatalog(apiClient: apiClient).availableSymbols()) ?? StaticFXPairCatalog.seededSymbols
+        }
+        .onChange(of: viewModel.searchText) { _, text in speechViewModel.searchText = text }
     }
 
     // 検索バー上端53・高さ28(y=67中心)、フィルターpill(y=104・高さ約20)との
@@ -354,7 +364,154 @@ struct SearchView: View {
                 .background(V5CardGradient.fill, in: RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(V5P.line.opacity(0.3), lineWidth: 1))
             }
+            if selectedFilter == .all || selectedFilter == .speech {
+                speechResults
+            }
+            if selectedFilter == .all || selectedFilter == .fxPair {
+                fxPairResults
+            }
         }
+    }
+
+    // MARK: - 要人発言・通貨ペアの検索結果(HQ指示 2026-10-15)
+
+    private var matchedSpeeches: [SpeechDetailResponse] {
+        let sections = speechViewModel.sections
+        return sections.upcoming + sections.past
+    }
+
+    /// 「USDJPY」「usd/jpy」「ドル円」「米ドル」などで探す。
+    private var matchedFxSymbols: [String] {
+        Self.matchFxSymbols(fxSymbols, query: trimmedQuery)
+    }
+
+    static func matchFxSymbols(_ symbols: [String], query: String) -> [String] {
+        let keyword = query.trimmingCharacters(in: .whitespaces)
+        guard !keyword.isEmpty else { return [] }
+        let compact = keyword.uppercased().replacingOccurrences(of: "/", with: "").replacingOccurrences(of: " ", with: "")
+        return symbols.filter { symbol in
+            let plain = symbol.replacingOccurrences(of: "/", with: "").uppercased()
+            guard plain.count == 6 else { return false }
+            if plain.contains(compact) { return true }
+            let base = String(plain.prefix(3)), quote = String(plain.suffix(3))
+            let names = CountryFlag.japaneseName(forCurrency: base) + CountryFlag.japaneseName(forCurrency: quote)
+            return names.contains(keyword)
+        }
+    }
+
+    @ViewBuilder private var speechResults: some View {
+        let speeches = matchedSpeeches
+        if !speeches.isEmpty || selectedFilter == .speech {
+            sectionTitle("要人発言 \(speeches.count)件")
+            if speeches.isEmpty {
+                emptyResult("該当する要人発言はありません。")
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(speeches.enumerated()), id: \.element.speechId) { index, speech in
+                        NavigationLink(value: AppRoute.speechDetail(id: speech.speechId)) {
+                            speechRow(speech)
+                        }
+                        .buttonStyle(.plain)
+                        if index < speeches.count - 1 {
+                            Rectangle().fill(V5P.line.opacity(0.3)).frame(height: 1)
+                        }
+                    }
+                }
+                .background(V5CardGradient.fill, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(V5P.line.opacity(0.3), lineWidth: 1))
+            }
+        }
+    }
+
+    @ViewBuilder private var fxPairResults: some View {
+        let symbols = matchedFxSymbols
+        if !symbols.isEmpty || selectedFilter == .fxPair {
+            sectionTitle("通貨ペア \(symbols.count)件")
+            if symbols.isEmpty {
+                emptyResult("該当する通貨ペアはありません。")
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(symbols.enumerated()), id: \.element) { index, symbol in
+                        // 押すと、その通貨ペアに関係する指標(どちらかの通貨の指標)を「指標」の絞り込みで出す。
+                        Button {
+                            viewModel.searchText = symbol.replacingOccurrences(of: "/", with: "")
+                            selectedFilter = .indicator
+                        } label: {
+                            fxPairRow(symbol)
+                        }
+                        .buttonStyle(.plain)
+                        if index < symbols.count - 1 {
+                            Rectangle().fill(V5P.line.opacity(0.3)).frame(height: 1)
+                        }
+                    }
+                }
+                .background(V5CardGradient.fill, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(V5P.line.opacity(0.3), lineWidth: 1))
+            }
+        }
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        NotoText.text(title, size: 8)
+            .foregroundStyle(SettingsCardStyle.subtitleColor)
+            .padding(.horizontal, 2)
+            .padding(.bottom, -8)
+    }
+
+    private func emptyResult(_ message: String) -> some View {
+        NotoText.text(message, size: 8)
+            .foregroundStyle(SettingsCardStyle.subtitleColor)
+            .frame(maxWidth: .infinity, minHeight: 36)
+            .background(V5CardGradient.fill, in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func speechRow(_ speech: SpeechDetailResponse) -> some View {
+        let speaker = speech.speaker
+        return HStack(alignment: .center, spacing: 8) {
+            SpeakerAvatar(name: speaker.name, organization: speaker.organization, countryCode: speaker.countryCode, photoURL: speaker.photoURL, size: 20)
+            VStack(alignment: .leading, spacing: 1) {
+                NotoText.text("\(SpeechListView.familyName(speaker.name))　\(speaker.title)", size: 9)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                NotoText.text(speech.title, size: 8)
+                    .foregroundStyle(V5P.muted)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(V5P.muted)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
+        .frame(minHeight: 37, alignment: .center)
+        .contentShape(Rectangle())
+    }
+
+    private func fxPairRow(_ symbol: String) -> some View {
+        let plain = symbol.replacingOccurrences(of: "/", with: "")
+        let base = String(plain.prefix(3)), quote = String(plain.suffix(3))
+        return HStack(alignment: .center, spacing: 8) {
+            OverlappingPairFlags(symbol: plain, diameter: 13)
+            VStack(alignment: .leading, spacing: 1) {
+                NotoText.text("\(base)/\(quote)", size: 9)
+                    .foregroundStyle(.white)
+                NotoText.text("\(CountryFlag.japaneseName(forCurrency: base)) / \(CountryFlag.japaneseName(forCurrency: quote))", size: 8)
+                    .foregroundStyle(V5P.muted)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            NotoText.text("関連する指標", size: 7)
+                .foregroundStyle(V5P.cyan)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(V5P.muted)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
+        .frame(minHeight: 37, alignment: .center)
+        .contentShape(Rectangle())
     }
 
     /// HQ指示(2026-10-13)「参考画像のように検索結果何件と関連度順のようなものもあるといい」。

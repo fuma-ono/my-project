@@ -33,6 +33,13 @@ struct CalendarTabView: View {
             .task { await viewModel.load() }
             // 購入・解約でプランが変わったら、見られる範囲で取り直す。
             .onChange(of: plan.plan) { _, _ in Task { await viewModel.load() } }
+            // ホームの日付リンクから来たら、その日を選んで一覧の先頭へ戻る(HQ指示 2026-10-15)。
+            .onReceive(CalendarJump.shared.$requestedDate) { date in
+                guard let date else { return }
+                path = NavigationPath()
+                viewModel.select(date)
+                CalendarJump.shared.requestedDate = nil
+            }
             .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
             .navigationDestination(for: AppRoute.self) { route in
                 AppRouteDestinationView(route: route, apiClient: apiClient, tabSelection: $tabSelection)

@@ -43,6 +43,8 @@ struct AppRouteDestinationView: View {
             NotificationSettingsView(apiClient: apiClient, tabSelection: $tabSelection)
         case .supportHistory:
             SupportHistoryView(apiClient: apiClient, tabSelection: $tabSelection)
+        case .rateAlerts:
+            RateAlertsView(apiClient: apiClient, tabSelection: $tabSelection)
         case .indicatorReleases(let id, let name):
             IndicatorReleasesView(apiClient: apiClient, indicatorId: id, indicatorName: name, tabSelection: $tabSelection)
 
@@ -61,9 +63,8 @@ struct AppRouteDestinationView: View {
         case .homeCurrencyPairEditor:
             HomeCurrencyPairEditorView(apiClient: apiClient, tabSelection: $tabSelection)
         case .favoritesList:
-            PlaceholderScreenView(scrNumber: "未採番", screenName: "お気に入り一覧", detail: "指標・イベント・通貨ペアのお気に入りを横断する一覧です。")
-                .navigationTitle("お気に入り")
-                .navigationBarTitleDisplayMode(.inline)
+            // HQ指示(2026-10-15): 仮画面から、指標一覧と同じデザインのお気に入り一覧へ。
+            FavoritesListView(apiClient: apiClient, tabSelection: $tabSelection)
         case .signUp:
             PlaceholderScreenView(scrNumber: "SCR-002", screenName: "新規会員登録")
                 .navigationTitle("新規会員登録")

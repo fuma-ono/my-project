@@ -170,68 +170,8 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func loadFavorites(_ entries: [FavoritesStore.Entry]) async {
-        var items: [HomeFavoriteItem] = []
-        for entry in entries.prefix(3) {
-            switch entry.type {
-            case .event:
-                if let item = await fetchFavoriteEvent(id: entry.id) {
-                    items.append(item)
-                }
-            case .indicator:
-                if let item = await fetchFavoriteIndicator(id: entry.id) {
-                    items.append(item)
-                }
-            case .fxPair:
-                // `FavoritesStore.ItemType.fxPair`のドキュメントコメント参照
-                // — 単体取得APIも★も無いため、このtypeのエントリは実際には
-                // 存在しない。来たとしても黙ってスキップする(捏造しない)。
-                continue
-            }
-        }
-        favoriteItems = items
-    }
-
-    private func fetchFavoriteEvent(id: String) async -> HomeFavoriteItem? {
-        do {
-            let response: EventDetailResponse = try await apiClient.send(Endpoint(path: "events/\(id)"))
-            return .event(
-                id: response.event.id,
-                countryCode: response.event.countryCode,
-                currencyCode: response.event.currencyCode,
-                // 表示名は全画面統一(HQ指示 2026-10-13)。
-                name: CountryFlag.indicatorDisplayText(response.event.indicatorName, countryCode: response.event.countryCode, displayName: response.event.displayName),
-                importance: response.event.importance,
-                releaseDatetime: response.event.releaseDatetime
-            )
-        } catch {
-            return nil
-        }
-    }
-
-    private func fetchFavoriteIndicator(id: String) async -> HomeFavoriteItem? {
-        do {
-            async let detail: IndicatorDetailResponse = apiClient.send(Endpoint(path: "indicators/\(id)"))
-            async let scheduled: IndicatorEventsListResponse = apiClient.send(
-                Endpoint(
-                    path: "indicators/\(id)/events",
-                    queryItems: [
-                        URLQueryItem(name: "status", value: "SCHEDULED"),
-                        URLQueryItem(name: "limit", value: "1"),
-                    ]
-                )
-            )
-            let (response, scheduledResponse) = try await (detail, scheduled)
-            return .indicator(
-                id: response.indicator.id,
-                countryCode: response.indicator.countryCode,
-                currencyCode: response.indicator.currencyCode,
-                name: CountryFlag.indicatorDisplayText(response.indicator.name, countryCode: response.indicator.countryCode, displayName: response.indicator.displayName),
-                importance: response.indicator.importance,
-                nextReleaseDatetime: scheduledResponse.data.first?.releaseDatetime
-            )
-        } catch {
-            return nil
-        }
+        // ホームには先頭3件だけ。全件はお気に入り一覧(`FavoritesListView`)で出す。
+        favoriteItems = await FavoriteItemLoader(apiClient: apiClient).load(Array(entries.prefix(3)))
     }
 
     private static let isoDateFormatter: DateFormatter = {

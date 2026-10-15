@@ -178,6 +178,14 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "消費者物価指数（CPI）", timeout: 15), "Home did not show the newly-favorited indicator")
         capture("04-Home")
 
+        // お気に入り一覧(HQ指示 2026-10-15)。上でお気に入りにした米国CPIが並ぶ。
+        tapIdentifier("homeFavoritesSeeAll")
+        XCTAssertTrue(waitForAnyElement(containing: "消費者物価指数（CPI）", timeout: 15), "Favorites list did not load")
+        Thread.sleep(forTimeInterval: 1.0)
+        capture("04c-Favorites")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "通貨ペア", timeout: 10), "Did not return to Home from Favorites")
+
         // HQ指示(2026-10-06)「直近の要人発言が見えるようにして」: 本番の
         // 挙動は変えない(4枚目のカードが初期表示の折り返し線より下にあり、
         // スクロールして閲覧する設計は`contentAreaHeight`のドキュメント

@@ -9,6 +9,7 @@ struct NotificationSettingsView: View {
     @StateObject private var viewModel: NotificationSettingsViewModel
     @Binding var tabSelection: Int
     @State private var picker: OptionPicker?
+    @State private var showsRateAlerts = false
     @State private var planPrompt: String?
     private let apiClient: APIClient
     @Environment(\.dismiss) private var dismiss
@@ -59,6 +60,9 @@ struct NotificationSettingsView: View {
             if phase == .active { viewModel.recheckAuthorization() }
         }
         .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
+        .navigationDestination(isPresented: $showsRateAlerts) {
+            RateAlertsView(apiClient: apiClient, tabSelection: $tabSelection)
+        }
         .sheet(item: $picker) { picker in
             switch picker {
             case .fxPairs: fxPairSheet
@@ -89,6 +93,9 @@ struct NotificationSettingsView: View {
             SettingsListSeparator()
             SettingsListToggleRow(title: "要人発言の通知", isOn: viewModel.settings.speeches, onChange: { viewModel.setSpeeches($0) })
                 .dimmed(!viewModel.settings.push)
+            SettingsListSeparator()
+            // HQ指示(2026-10-15): レートアラート(指定した価格を上回った・下回ったら通知)。
+            SettingsListValueRow(title: "レートアラート", value: "") { showsRateAlerts = true }
         }
     }
 

@@ -45,12 +45,24 @@ struct NotificationListView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 4) {
                         ForEach(delivered) { entry in
-                            NavigationLink(value: Self.route(for: entry)) {
-                                NotificationRow(entry: entry, isUnread: store.isUnread(entry))
+                            if entry.kind == .calendarUpdate {
+                                // カレンダー更新は、カレンダーのタブを開いて新しい日を選ぶ(HQ指示 2026-10-15)。
+                                Button {
+                                    markRead(entry)
+                                    CalendarJump.shared.requestedDate = entry.scheduledAt
+                                    tabSelection = 2
+                                } label: {
+                                    NotificationRow(entry: entry, isUnread: store.isUnread(entry))
+                                }
+                                .buttonStyle(SettingsRowPressStyle())
+                            } else {
+                                NavigationLink(value: Self.route(for: entry)) {
+                                    NotificationRow(entry: entry, isUnread: store.isUnread(entry))
+                                }
+                                .buttonStyle(SettingsRowPressStyle())
+                                // 開いた通知だけ既読にする(HQ指示 2026-10-13)。
+                                .simultaneousGesture(TapGesture().onEnded { markRead(entry) })
                             }
-                            .buttonStyle(SettingsRowPressStyle())
-                            // 開いた通知だけ既読にする(HQ指示 2026-10-13)。
-                            .simultaneousGesture(TapGesture().onEnded { markRead(entry) })
                         }
                     }
                     .padding(.bottom, 4)
@@ -123,11 +135,14 @@ struct NotificationListView: View {
         .frame(width: 210, height: 14)
     }
 
+    /// 2026-10-15: レート・カレンダーの2種類が増えて6つになったので、横にスクロールできるようにした。
     private var filterBar: some View {
-        HStack(spacing: 4) {
-            filterChip(label: "すべて", kind: nil)
-            ForEach(NotificationEntry.Kind.allCases, id: \.self) { kind in
-                filterChip(label: kind.label, kind: kind)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                filterChip(label: "すべて", kind: nil)
+                ForEach(NotificationEntry.Kind.allCases, id: \.self) { kind in
+                    filterChip(label: kind.label, kind: kind)
+                }
             }
         }
         .frame(width: 214)
@@ -138,7 +153,8 @@ struct NotificationListView: View {
         return Button { filter = kind } label: {
             NotoText.text(label, size: 8)
                 .foregroundStyle(isSelected ? .white : SettingsCardStyle.subtitleColor)
-                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 10)
+                .frame(minWidth: 44)
                 .frame(height: 20)
                 .background(
                     Capsule().fill(isSelected ? V5P.blue : SettingsCardStyle.cardFill)
@@ -159,6 +175,11 @@ struct NotificationListView: View {
         case .system:
             // お問い合わせへの返信は履歴へ、それ以外(通知設定の更新)は通知設定へ。
             return entry.targetID.hasPrefix(SupportViewModel.notificationTargetPrefix) ? .supportHistory : .notificationSettings
+        case .rateAlert:
+            return .rateAlerts
+        case .calendarUpdate:
+            // 実際には行を押すとカレンダーのタブへ切り替える(`NotificationListView`の行)。
+            return .rateAlerts
         }
     }
 }
@@ -179,6 +200,8 @@ private struct NotificationRow: View {
         case .indicator: return "calendar"
         case .speech: return "person.fill"
         case .system: return "bell.fill"
+        case .rateAlert: return "chart.line.uptrend.xyaxis"
+        case .calendarUpdate: return "calendar.badge.clock"
         }
     }
 
@@ -187,6 +210,8 @@ private struct NotificationRow: View {
         case .indicator: return V5P.blue
         case .speech: return Color(red: 0.42, green: 0.30, blue: 0.92)
         case .system: return Color(red: 0.05, green: 0.58, blue: 0.42)
+        case .rateAlert: return Color(red: 0.85, green: 0.45, blue: 0.10)
+        case .calendarUpdate: return Color(red: 0.10, green: 0.55, blue: 0.75)
         }
     }
 
@@ -197,7 +222,7 @@ private struct NotificationRow: View {
             return entry.subject ?? entry.title
         case .speech:
             return entry.speakerName.map { "\($0) 発言" } ?? entry.title
-        case .system:
+        case .system, .rateAlert, .calendarUpdate:
             return entry.title
         }
     }
@@ -224,7 +249,7 @@ private struct NotificationRow: View {
             return ["発表時刻：\(time)", timing]
         case .speech:
             return ["「\(entry.subject ?? entry.title)」", "発言時刻：\(time)"]
-        case .system:
+        case .system, .rateAlert, .calendarUpdate:
             return [entry.body]
         }
     }
