@@ -355,8 +355,11 @@ private struct CalendarDayList: View {
             .padding(.vertical, 4)
         }
         .frame(width: 214)
-        .background(AccountCardBackground())
+        // HQ指示(2026-10-15)「カレンダーのグラデーションの背景を下のイベントの枠も同じに」:
+        // カレンダーのカードと同じ`cardGradient`と枠線にした。
+        .background(Self.cardGradient)
         .clipShape(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
+        .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
