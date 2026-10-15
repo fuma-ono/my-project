@@ -309,7 +309,10 @@ private struct CalendarDayList: View {
         // を、それぞれ横並びではなく縦に積む構成に作り直した。
         return HStack(spacing: 0) {
             Rectangle().fill(colors.border).frame(width: 3)
-            HStack(spacing: 6) {
+            // HQ指摘(2026-10-15)「非農業部門雇用者数（NFP）はなんでこんなに小さいの？もう少し大きくしても
+            // 1行に入る」: 名前に使える幅が約86ptしかなく0.75倍まで縮んでいた。部品の間(6→4)・
+            // 名前と重要度の間の最小(2→0)・重要度の幅(32→30)を詰めて、名前の幅を約14pt広げた。
+            HStack(spacing: 4) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.hasTime ? Self.timeFormatter.string(from: item.datetime) : "未定")
                         .font(.system(size: 9, weight: .bold))
@@ -335,11 +338,12 @@ private struct CalendarDayList: View {
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
-                Spacer(minLength: 2)
+                    .padding(.leading, 2)
+                Spacer(minLength: 0)
                 NotoText.text(item.importance.rawValue, size: 6.5)
                     .tracking(-0.4)
                     .foregroundStyle(.white)
-                    .frame(width: 32)
+                    .frame(width: 30)
                     .padding(.vertical, 2.5)
                     .background(colors.fill, in: Capsule())
                     .overlay(Capsule().stroke(colors.border, lineWidth: 0.6))
