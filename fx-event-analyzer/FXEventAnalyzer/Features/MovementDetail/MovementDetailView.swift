@@ -169,25 +169,48 @@ struct MovementDetailView: View {
             .overlay(Capsule().stroke(SettingsCardStyle.subtitleColor.opacity(0.6), lineWidth: 0.6))
     }
 
+    /// HQ指示(2026-10-15)「枠内の背景と1分、5分、15分のボタンのデザインを参考画像と
+    /// 同じにして」: 参考画像をピクセル単位で実測(枠の塗り色≈#0E233F、縁の色は既存の
+    /// `SettingsCardStyle.cardFill`/`cardBorder`と同系統、選択中タブは左から右へ
+    /// 明→暗のブルーのグラデーション(左端≈#03AAFE、右端≈#276FFB)の全高ピル)。
+    /// 配置・サイズは変更していない(ボタン高さ20+余白2×2=合計24を維持、外側の
+    /// `padding(2)`を無くして選択タブが枠の端まで隙間なく届くようにした)。
     private var timeframeTabs: some View {
         HStack(spacing: 0) {
-            ForEach(Self.candleTimeframes, id: \.self) { timeframe in
+            ForEach(Array(Self.candleTimeframes.enumerated()), id: \.element) { index, timeframe in
                 let isSelected = viewModel.selectedTimeframe == timeframe
                 Button { viewModel.selectedTimeframe = timeframe } label: {
                     NotoText.text(MovementAnalysisText.label(timeframe), size: 8.5)
                         .foregroundStyle(isSelected ? .white : SettingsCardStyle.subtitleColor)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 20)
-                        .background(RoundedRectangle(cornerRadius: 5).fill(isSelected ? V5P.blue : .clear))
+                        .frame(height: 24)
+                        .background {
+                            if isSelected {
+                                Capsule().fill(Self.timeframeSelectedGradient)
+                            }
+                        }
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
+
+                if index < Self.candleTimeframes.count - 1 {
+                    let nextSelected = viewModel.selectedTimeframe == Self.candleTimeframes[index + 1]
+                    if !isSelected && !nextSelected {
+                        Rectangle().fill(Color.black.opacity(0.35)).frame(width: 0.6, height: 14)
+                    }
+                }
             }
         }
-        .padding(2)
-        .background(RoundedRectangle(cornerRadius: 7).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
+        .background(Capsule().fill(SettingsCardStyle.cardFill))
+        .overlay(Capsule().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }
+
+    private static let timeframeSelectedGradient = LinearGradient(
+        colors: [Color(red: 3 / 255, green: 170 / 255, blue: 254 / 255), Color(red: 39 / 255, green: 111 / 255, blue: 251 / 255)],
+        startPoint: .leading,
+        endPoint: .trailing
+    )
 
     @ViewBuilder
     private var chartSection: some View {
@@ -234,8 +257,11 @@ struct MovementDetailView: View {
             // おかしくない？」: 2列の下に全幅で置いていたため「主な要因」との対応が
             // 分かりにくかった。「解説」ボックスの一部だった元の構成どおり、「主な要因」
             // の枠の中(本文の下)に戻した。
-            // 「まだ上の部分に余白があるから文字サイズ大きくできない？」: カード間隔を
-            // 詰めてもまだ余白があったため、文字サイズをもう一段(0.5〜1pt)引き上げた。
+            // HQ指示(2026-10-14、7回目)「値動きの原因を断定するものではないは無くしていい。
+            // その空いた分サイズをベストな調整して」: 免責文を削除して空いた「主な要因」
+            // 枠の高さぶん、文字サイズを引き上げた。「今回の変動」の行は5回目の
+            // オーバーフロー回帰の直接の原因だったため、comparisonSectionの数値2行
+            // (平均変動・今回の変動の値とバッジ)はサイズを据え置き、安全マージンを確保。
             VStack(alignment: .leading, spacing: 4) {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 4) {
@@ -281,8 +307,6 @@ struct MovementDetailView: View {
                             NotoText.text(interpretation, size: 6.5)
                                 .foregroundStyle(.white.opacity(0.85))
                                 .fixedSize(horizontal: false, vertical: true)
-                            NotoText.text("※ 値動きの原因を断定するものではない。", size: 5.5)
-                                .foregroundStyle(SettingsCardStyle.subtitleColor)
                         }
                         .padding(5)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -306,8 +330,9 @@ struct MovementDetailView: View {
         if let average = viewModel.comparisonStats?.averagePips,
            let count = viewModel.comparisonAnalyzableEvents, count > 0,
            let current = reactions.first(where: { $0.timeframe == "15m" && $0.analysisStatus == .ready })?.pips {
-            // HQ指示(2026-10-14、4回目)「まだ上の部分に余白があるから文字サイズ大きく
-            // できない？」: この区画もさらに0.5pt前後引き上げた。
+            // HQ指示(2026-10-14、7回目)「免責文を無くした空きぶん文字サイズをベストな
+            // 調整」: このセクションの見出し行は引き上げたが、5回目のオーバーフロー
+            // 回帰の直接の原因だった下の数値2行(平均変動・今回の変動)はサイズ据え置き。
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 3) {
                     Image(systemName: "lightbulb.fill")
@@ -335,29 +360,38 @@ struct MovementDetailView: View {
                     }
                 }
                 Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
+                // HQ指示(2026-10-14、6回目)「+18.7pipsの位置が間違ってる。-41.3pipsと
+                // 同じ高さの位置に揃えて」: 「今回の変動」の行は値の後ろに「大きい」等の
+                // バッジが続くぶん、値の右端が「平均変動」の行より左に来ていた。両方の
+                // 行で値の右端が揃うよう、バッジが無い行にも同じ幅の透明プレースホルダーを
+                // 置いて右端の位置を合わせた。
                 HStack {
-                    NotoText.text("過去\(count)回の平均変動（15分後）", size: 7)
+                    NotoText.text("過去\(count)回の平均変動（15分後）", size: 6.5)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                     Spacer(minLength: 4)
-                    NotoText.text(Self.signedPipsText(average), size: 8)
+                    NotoText.text(Self.signedPipsText(average), size: 7.5)
                         .foregroundStyle(average >= 0 ? V5P.green : V5P.red)
                         .lineLimit(1)
                         .fixedSize()
+                    Color.clear.frame(width: Self.magnitudeBadgeWidth, height: 1)
                 }
                 HStack {
-                    NotoText.text("今回の変動", size: 7).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    NotoText.text("今回の変動", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
                     Spacer(minLength: 4)
-                    NotoText.text(Self.signedPipsText(current), size: 8)
+                    NotoText.text(Self.signedPipsText(current), size: 7.5)
                         .foregroundStyle(current >= 0 ? V5P.green : V5P.red)
                         .lineLimit(1)
                         .fixedSize()
                     if let magnitude = MovementAnalysisText.magnitudeLabel(current: current, average: average) {
-                        NotoText.text(magnitude, size: 6.5)
+                        NotoText.text(magnitude, size: 6)
                             .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
+                            .frame(width: Self.magnitudeBadgeWidth)
                             .background(Capsule().fill(Color.black.opacity(0.2)))
                             .overlay(Capsule().stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
                     }
@@ -369,6 +403,11 @@ struct MovementDetailView: View {
     private static func signedPipsText(_ value: Double) -> String {
         "\(ValueFormat.number(value, fractionDigits: 1, signed: true)) pips"
     }
+
+    /// 「今回の変動」の「大きい」等バッジの固定幅。最長の「やや大きい/やや小さい」
+    /// (5文字)でも収まる幅にし、バッジの無い「平均変動」の行にも同じ幅の透明
+    /// プレースホルダーを置いて、pips値の右端を2行で揃える。
+    private static let magnitudeBadgeWidth: CGFloat = 44
 
     @ViewBuilder private func loadingScaffold(@ViewBuilder content: @escaping () -> some View) -> some View {
         V5Viewport {
