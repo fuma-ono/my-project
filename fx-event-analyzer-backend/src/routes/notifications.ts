@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireEntitlement, FEATURE_CODES } from '../authorization/entitlements.js';
 import { resolvePlan } from '../authorization/plan.js';
 import { ApiError } from '../errors/ApiError.js';
-import { applyNotificationPlanLimits } from '../domain/planLimits.js';
+import { applyNotificationPlanLimits, planLimitsFor, type Plan } from '../domain/planLimits.js';
 import { toSettingsResponse } from '../domain/userSettings.js';
 import {
   buildUpcomingNotifications,
@@ -12,7 +12,17 @@ import {
   type NotificationPreferences,
 } from '../domain/notifications.js';
 import { resolveInboxMaterializationWindow, selectInboxDeliveries, toInboxItem } from '../domain/notificationInbox.js';
-import { listNotificationCandidates } from '../repositories/notificationsRepository.js';
+import {
+  candidateKey,
+  resolveCalendarUpdateWindow,
+  selectCalendarUpdateDeliveries,
+} from '../domain/calendarUpdates.js';
+import {
+  listNotificationCandidates,
+  listNotificationCandidatesByIds,
+} from '../repositories/notificationsRepository.js';
+import { evaluateRateAlertsForUser } from '../repositories/rateAlertsRepository.js';
+import { listScheduleChanges } from '../repositories/scheduleChangesRepository.js';
 import {
   countUnreadInboxNotifications,
   deleteExpiredInboxNotificationsForUser,
@@ -38,16 +48,18 @@ import {
 async function loadNotificationPreferences(
   supabase: SupabaseClient,
   userId: string,
-): Promise<{ prefs: NotificationPreferences; settingsUpdatedAt: string }> {
+): Promise<{ prefs: NotificationPreferences; settingsUpdatedAt: string; plan: Plan | null }> {
   const row = await getOrCreateUserSettings(supabase, userId);
   const { notifications, display } = toSettingsResponse(row);
-  const limited = notifications.push
-    ? applyNotificationPlanLimits(await resolvePlan(supabase, userId), {
+  const plan = notifications.push ? await resolvePlan(supabase, userId) : null;
+  const limited = plan
+    ? applyNotificationPlanLimits(plan, {
         importances: notifications.importances,
         fxPairSymbols: notifications.fx_pairs,
       })
     : { importances: notifications.importances, fxPairSymbols: notifications.fx_pairs };
   return {
+    plan,
     prefs: {
       push: notifications.push,
       indicators: notifications.indicators,
@@ -67,6 +79,32 @@ async function loadNotificationPreferences(
 }
 
 /**
+ * CALENDAR_UPDATE (src/domain/calendarUpdates.ts): the last 7 days of
+ * event_schedule_changes (not before the settings were saved) whose event
+ * the caller would be notified about.
+ */
+async function materializeCalendarUpdates(
+  supabase: SupabaseClient,
+  userId: string,
+  prefs: NotificationPreferences,
+  settingsUpdatedAt: string,
+  now: Date,
+): Promise<void> {
+  const window = resolveCalendarUpdateWindow(now, new Date(settingsUpdatedAt));
+  const changes = await listScheduleChanges(supabase, window.from.toISOString(), window.to.toISOString(), {
+    indicators: prefs.indicators,
+    speeches: prefs.speeches,
+  });
+  if (changes.length === 0) return;
+  const candidates = await listNotificationCandidatesByIds(supabase, {
+    indicators: changes.filter((change) => change.kind === 'INDICATOR').map((change) => change.target_id),
+    speeches: changes.filter((change) => change.kind === 'SPEECH').map((change) => change.target_id),
+  });
+  const byKey = new Map(candidates.map((candidate) => [candidateKey(candidate.kind, candidate.id), candidate]));
+  await insertInboxNotifications(supabase, selectCalendarUpdateDeliveries(userId, prefs, changes, byKey, window, now));
+}
+
+/**
  * GET /notifications/upcoming (api-design.md §24.6, HQ指示 2026-10-05).
  * iOS schedules on-device local notifications from this list, filtered by
  * the caller's saved SCR-016 通知設定 — there is no server-side push.
@@ -77,7 +115,9 @@ async function loadNotificationPreferences(
  *
  * GET /notifications, POST /notifications/{id}/read, POST
  * /notifications/read-all (api-design.md §24.9-§24.11,
- * notification-inbox-spec.md §6): the in-app notification inbox.
+ * notification-inbox-spec.md §6): the in-app notification inbox. GET also
+ * fires the caller's crossed rate alerts (RATE_ALERT, §7) and records
+ * calendar changes (CALENDAR_UPDATE, §8).
  */
 export function registerNotificationRoutes(app: FastifyInstance): void {
   app.get('/notifications/upcoming', async (request) => {
@@ -110,7 +150,14 @@ export function registerNotificationRoutes(app: FastifyInstance): void {
 
     const now = new Date();
     const nowIso = now.toISOString();
-    const { prefs, settingsUpdatedAt } = await loadNotificationPreferences(app.supabase, userId);
+    const { prefs, settingsUpdatedAt, plan } = await loadNotificationPreferences(app.supabase, userId);
+
+    // push = false records nothing new — no INDICATOR / SPEECH /
+    // CALENDAR_UPDATE rows, and rate alerts are not evaluated (they stay
+    // active until push is turned back on).
+    if (prefs.push && plan) {
+      await evaluateRateAlertsForUser(app.supabase, userId, planLimitsFor(plan).rate_alerts_max, now);
+    }
 
     if (prefs.push && (prefs.indicators || prefs.speeches)) {
       const window = resolveInboxMaterializationWindow(now, prefs.leadMinutes, new Date(settingsUpdatedAt));
@@ -122,6 +169,7 @@ export function registerNotificationRoutes(app: FastifyInstance): void {
         { includePast: true },
       );
       await insertInboxNotifications(app.supabase, selectInboxDeliveries(userId, prefs, candidates, window, now));
+      await materializeCalendarUpdates(app.supabase, userId, prefs, settingsUpdatedAt, now);
     }
 
     await deleteExpiredInboxNotificationsForUser(app.supabase, userId, nowIso);

@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.13
+# FX Event Analyzer: DB詳細設計 v4.14
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -39,6 +39,8 @@
 - **v4.12**(2026-10-13): 指標の一覧画面の表示名(HQ指示 2026-10-13)。`EconomicIndicator`に`display_name`(一覧画面の表示名。HQの表示名ルール indicator-display-names.md に従う。40文字以内・空白だけは不可)を追加(3.4節)。NULL = 未登録。Migration `20261013000001_economic_indicators_display_name.sql`。開発用seedの5指標に入れた(`US_CPI` 消費者物価指数（CPI）・`US_NFP` 非農業部門雇用者数（NFP）・`US_FOMC` FOMC政策金利・`JP_CPI` 消費者物価指数（CPI）・`BOJ_RATE` 日銀政策金利)。API(api-design.md v1.21)ではNULLを`null`のまま返す
 - **v4.13**(2026-10-13): 要人の公式写真(HQ指示 2026-10-13「FRBは公式写真で、そのほかは頭文字と機関の色で」)。`Speaker`に`photo_url`(nullable)を追加(3.15節。Migration `20261013000003_speakers_photo_url.sql`)。値は`null` / 絶対URL / Backendが配信するファイルのkey `speaker-photos/<file>`で、APIが絶対URLに直して返す(api-design.md v1.25、14.7節)。FRBのサイトの写真はパブリックドメインだがフレーム内表示は不可のため、直リンクせず複製を`assets/speaker-photos/`に置いて自前で配信する(出典「米国連邦準備制度理事会(FRB)」、出典・取得日は同じ場所の`SOURCES.md`)。Migration `20261013000004_frb_speakers_self_hosted_photos.sql`でFRB理事会の現メンバーに合わせ、パウエル氏の役職を「FRB理事」に直し、ケビン・ウォーシュ(FRB議長)・フィリップ・ジェファーソン(FRB副議長)・ミシェル・ボウマン(FRB副議長（金融監督担当）)・マイケル・バー・リサ・クック(FRB理事)を追加(同じ名前・機関の要人がいれば追加しない)し、FRBの要人の`photo_url`をkeyにした。ほかの機関の要人は`null`。開発用seedのパウエル氏も「FRB理事」・`speaker-photos/powell.jpg`にした(5人の追加はseedより先に流れるMigrationで行う)
 
+- **v4.14**(2026-10-15): レートアラートとカレンダー更新の通知(notification-inbox-spec.md 7章・8章、api-design.md v1.27)。`RateAlert`(`rate_alerts`、3.18節。Migration `20261015000001_rate_alerts.sql`)と`EventScheduleChange`(`event_schedule_changes`、3.19節。Migration `20261015000002_event_schedule_changes.sql`)を追加。`EventScheduleChange`は`economic_events` / `speech_events`のトリガーが書く。通知一覧のテーブル`notification_inbox`はapi-design.md 24.9節(v1.23)
+
 ---
 
 ## 1. Entity一覧
@@ -62,8 +64,10 @@
 | `Speaker` | 要人(発言者)マスタ(v4.4で追加) |
 | `SpeechEvent` | 要人発言(v4.4で追加) |
 | `SupportRequest` | お問い合わせ・フィードバックと自動返信(v4.7で追加) |
+| `RateAlert` | ユーザーのレートアラート(通貨ペアの価格の上抜け・下抜け。v4.14で追加) |
+| `EventScheduleChange` | 予定の指標・要人発言の日時の変更・中止の記録(v4.14で追加) |
 
-将来拡張(P2、今回はテーブル設計対象外): `favorite_indicators` / `favorite_pairs` / `alert_settings` / `SpeechPriceReaction` / Community関連。(`Person` / `SpeechEvent`はHQ指示 2026-10-05により`Speaker` / `SpeechEvent`としてv4.4で追加)
+将来拡張(P2、今回はテーブル設計対象外): `favorite_indicators` / `favorite_pairs` / `alert_settings` / `SpeechPriceReaction` / Community関連。(`Person` / `SpeechEvent`はHQ指示 2026-10-05により`Speaker` / `SpeechEvent`としてv4.4で追加。`alert_settings`のうちレートアラートはv4.14で`RateAlert`として追加)
 
 ---
 
@@ -75,7 +79,8 @@ Profile
    ├── Subscription[]
    ├── Entitlement[]
    ├── UserSettings(0..1)
-   └── SupportRequest[](v4.7)
+   ├── SupportRequest[](v4.7)
+   └── RateAlert[](v4.14) ── FxPair
 
 EconomicIndicator
    │
@@ -91,6 +96,8 @@ EconomicIndicator
                  └── (参照)FxPair・FxPrice
 
 IngestionLog(他Entityへの直接参照なし。provider/data_typeで対象を記録)
+
+EventScheduleChange(v4.14。kind + target_idでEconomicEvent / SpeechEventを指す。FKなし)
 ```
 
 ---
@@ -508,6 +515,51 @@ CHK: `(status = 'IGNORED') = (reply_body IS NULL)`、`(reply_body IS NULL) = (re
 
 **RLS**: RLSは有効だがポリシーなし(v4.8)。anon / authenticatedの権限も取り消しており、クライアントからは読み書きできない。参照・書き込みはservice_role(Backendの`GET` / `POST /support/requests`)のみ。v4.7の「本人のみSELECT可」のポリシーでは`classification` / `github_issue_*`がクライアントから読めたため削除した。
 
+### 3.18 RateAlert(v4.14で追加)
+
+レートアラート(api-design.md §24.12〜§24.14、notification-inbox-spec.md 7章)。テーブル名は`rate_alerts`。Migration `20261015000001_rate_alerts.sql`。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK, DEF gen_random_uuid() | 通知一覧の`RATE_ALERT`の行の`target_id` |
+| user_id | uuid | NN, FK→Profile.id ON DELETE CASCADE | |
+| fx_pair_id | uuid | NN, FK→FxPair.id ON DELETE CASCADE | |
+| direction | text | NN, CHK: `IN ('ABOVE','BELOW')` | ABOVE: 価格 >= target_price で通知、BELOW: 価格 <= target_price で通知 |
+| target_price | numeric(12, 6) | NN, CHK: `> 0` | `FxPrice`と同じ精度 |
+| is_active | boolean | NN, DEF true | 通知すると false |
+| triggered_at | timestamptz | nullable | 通知した時刻 |
+| created_at / updated_at | timestamptz | NN, DEF now() | updated_atはトリガー`set_updated_at` |
+
+CHK: `triggered_at IS NULL OR NOT is_active`(通知済みは有効に戻らない)。IDX(user_id, created_at)、部分IDX(fx_pair_id) WHERE is_active(全員分を判定するジョブ用)。
+
+**有効なアラートの上限**: FREE 1件・PRO 10件。DBではなくBackend(`src/domain/planLimits.ts`の`rate_alerts_max`)で確認する。
+
+**判定**: 価格は`FxPrice`の最新の行(`timestamp`が最も新しい行)の`close`。Backendが`GET /notifications`(本人の分)と`npm run jobs:evaluate-rate-alerts`(全員分)で判定し、通知したら`notification_inbox`に行を入れて`is_active = false`・`triggered_at = now()`にする。
+
+**RLS**: `UserSettings`と同じ(本人のみSELECT可、書き込みはservice_roleのみ)。
+
+### 3.19 EventScheduleChange(v4.14で追加)
+
+予定(`status = SCHEDULED`)の経済指標イベント・要人発言の、日時の変更と中止の記録(notification-inbox-spec.md 8章)。テーブル名は`event_schedule_changes`。Migration `20261015000002_event_schedule_changes.sql`。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK, DEF gen_random_uuid() | 通知一覧の`CALENDAR_UPDATE`の行の`target_id` |
+| kind | text | NN, CHK: `IN ('INDICATOR','SPEECH')` | |
+| target_id | uuid | NN | INDICATORは`EconomicEvent.id`、SPEECHは`SpeechEvent.id`。2つの表を指すためFKなし(消えたイベントの行は使われない) |
+| change_type | text | NN, CHK: `IN ('RESCHEDULED','CANCELLED')` | |
+| old_datetime | timestamptz | NN | 変更前の日時 |
+| new_datetime | timestamptz | nullable | 変更後の日時。CHK: `(change_type = 'CANCELLED') = (new_datetime IS NULL)` |
+| changed_at | timestamptz | NN, DEF now() | |
+
+IDX(changed_at)、IDX(kind, target_id)。
+
+**記録するトリガー**: `economic_events`の`AFTER UPDATE OF release_datetime, status`(関数`record_economic_event_schedule_change()`)と、`speech_events`の`AFTER UPDATE OF statement_datetime, status`(関数`record_speech_event_schedule_change()`)。変更前が`SCHEDULED`の行だけ記録する。`status`が`CANCELLED`になったら`CANCELLED`、それ以外で日時が変わったら`RESCHEDULED`。発表済み・発言済みのイベントの時刻の訂正は記録しない。
+
+**保持**: 通知一覧の`CALENDAR_UPDATE`の保存期間(7日)を過ぎた行は日次ジョブ`npm run jobs:cleanup-notifications`が消す。
+
+**RLS**: `EconomicEvent`と同じ共有データ(全認証ユーザーSELECT可)。書き込みはトリガーのみ(Backendは書かない)。
+
 ---
 
 ## 4. Snapshot不変性・Revision管理(確定)
@@ -537,9 +589,9 @@ Supabase RLSを実装前提の設計条件として採用する。論理方針�
 
 | 区分 | 対象テーブル | 方針 |
 |---|---|---|
-| ユーザー固有 | `Profile` / `Subscription` / `Entitlement` / `UserSettings` | `auth.uid()`等を利用した本人のみSELECT可。INSERT/UPDATE/DELETEはservice_roleのみ |
+| ユーザー固有 | `Profile` / `Subscription` / `Entitlement` / `UserSettings` / `RateAlert`(v4.14) | `auth.uid()`等を利用した本人のみSELECT可。INSERT/UPDATE/DELETEはservice_roleのみ |
 | ユーザー固有(Backend経由のみ、v4.8) | `SupportRequest`(v4.7) | クライアントからは読み書き不可(ポリシーなし、anon / authenticatedの権限なし)。内部情報の列(`classification` / `github_issue_*`)を含むため、参照もservice_role(Backend)経由のみ |
-| 共有データ | `EconomicIndicator` / `EconomicEvent` / `Speaker` / `SpeechEvent`(v4.4) / `EventSnapshot` / `EventRevision` / `EventExplanation` / `IndicatorFxPair` / `FxPair` / `FxPrice` / `EventPriceReaction` | ユーザー単位のRLSを前提とせず、原則として全認証ユーザーからSELECT可能。INSERT/UPDATE/DELETEはservice_role(Ingestion Worker・管理者機能)のみ |
+| 共有データ | `EconomicIndicator` / `EconomicEvent` / `Speaker` / `SpeechEvent`(v4.4) / `EventScheduleChange`(v4.14、書き込みはトリガーのみ) / `EventSnapshot` / `EventRevision` / `EventExplanation` / `IndicatorFxPair` / `FxPair` / `FxPrice` / `EventPriceReaction` | ユーザー単位のRLSを前提とせず、原則として全認証ユーザーからSELECT可能。INSERT/UPDATE/DELETEはservice_role(Ingestion Worker・管理者機能)のみ |
 | 運用ログ | `IngestionLog` | 一般ユーザーからは非公開。管理者機能・service_roleのみアクセス可 |
 
 ## 7. Delete / Cascade方針(確定)

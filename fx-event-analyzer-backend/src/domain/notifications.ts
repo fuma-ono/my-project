@@ -71,6 +71,8 @@ export interface IndicatorNotificationCandidate extends CandidateBase {
 export interface SpeechNotificationCandidate extends CandidateBase {
   kind: 'SPEECH';
   speaker_name: string;
+  /** 役職(`speakers.title`、例: `FRB理事`)。カレンダー更新の見出しに使う。 */
+  speaker_title?: string | undefined;
 }
 
 export type NotificationCandidate = IndicatorNotificationCandidate | SpeechNotificationCandidate;
@@ -190,7 +192,13 @@ export interface BuildNotificationsOptions {
   limit?: number | null;
 }
 
-function isEligible(
+/**
+ * The per-candidate settings rules shared by GET /notifications/upcoming,
+ * the inbox and CALENDAR_UPDATE (src/domain/calendarUpdates.ts): status ∈
+ * `statuses`, per-kind switch, EXACT release time for indicators,
+ * importance, fx_pairs. Timing (lead, window, quiet hours) is not checked.
+ */
+export function isNotificationEligible(
   candidate: NotificationCandidate,
   prefs: NotificationPreferences,
   statuses: readonly string[],
@@ -238,7 +246,7 @@ export function buildUpcomingNotifications(
 
   const items: Array<{ notifyAtMs: number; scheduledAtMs: number; item: UpcomingNotificationItem }> = [];
   for (const candidate of candidates) {
-    if (!isEligible(candidate, prefs, statuses)) continue;
+    if (!isNotificationEligible(candidate, prefs, statuses)) continue;
 
     const scheduledAtMs = new Date(candidate.scheduled_at).getTime();
     if (Number.isNaN(scheduledAtMs)) continue;

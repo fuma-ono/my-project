@@ -13,7 +13,7 @@
 | システム通知 | 30日 | 保存期間内は残す |
 
 - 保存期間は初期案。期限を過ぎた通知は一覧から自動的に外す。
-- レートアラートとカレンダー更新の通知はまだ無い。足すときにこの保存期間で入れる。
+- レートアラートとカレンダー更新の通知は**実装済み(2026-10-15)**。この保存期間で入れる(7章・8章)。
 
 ## 2. 古い通知は自動で外す
 
@@ -75,3 +75,40 @@
   - `POST /notifications/read-all`: 未読をすべて既読にし、件数を返す。
 - **プッシュ通知との関係**: プッシュ通知の配信記録とは別のテーブル。プッシュを消しても `notification_inbox` は変わらない。
 - **RLS**: 本人は自分の行だけ読める。書き込みはBackend(service_role)だけ。
+- **種類ごとの `target_id` / `trigger`**(2026-10-15):
+
+  | kind | target_id | trigger |
+  |---|---|---|
+  | INDICATOR | `economic_events.id` | `LEAD_N` / `AT_RELEASE` |
+  | SPEECH | `speech_events.id` | `LEAD_N` / `AT_RELEASE` |
+  | RATE_ALERT | `rate_alerts.id` | `CROSSED` |
+  | CALENDAR_UPDATE | `event_schedule_changes.id` | `RESCHEDULED` / `CANCELLED` |
+
+## 7. レートアラート(実装済み 2026-10-15)
+
+通貨ペアの価格が決めた値を上回った・下回ったときに、通知一覧に入れる。API の詳細は api-design.md 24.12〜24.14節(v1.27)。
+
+- **テーブル `rate_alerts`**(`supabase/migrations/20261015000001_rate_alerts.sql`): `user_id`・`fx_pair_id`・`direction`(`ABOVE` 上回ったら / `BELOW` 下回ったら)・`target_price`・`is_active`・`triggered_at`。RLS は本人だけ読める・書き込みはBackendだけ。
+- **API**: `GET /rate-alerts`(一覧と上限)、`POST /rate-alerts`(作成)、`DELETE /rate-alerts/{id}`(削除)。
+- **プランの上限**: 有効な(まだ通知していない)アラートは FREE 1件・PRO 10件(`src/domain/planLimits.ts` の `rate_alerts_max`)。FREE で超えると `403 PLAN_LIMIT_EXCEEDED`(`required_plan: "PRO"`)、PRO で超えると `422 VALIDATION_ERROR`(ほかのプランの上限と同じ書き方)。
+- **価格**: `fx_prices` の最新の行(`timestamp` が最も新しい行、時間足は問わない)の `close`。ホームの `major_fx` の `price` と同じ値。価格の無い通貨ペアのアラートは通知しない。
+- **判定**: `ABOVE` は価格 >= `target_price`、`BELOW` は価格 <= `target_price`。
+- **判定するとき**: `GET /notifications` を呼ぶたび(呼んだ本人の分)と、ジョブ `npm run jobs:evaluate-rate-alerts`(全員分。価格の取り込みのたびに cron で動かす)。プランの上限より多く有効なアラートがある人(PRO から FREE に戻った人)は、古い順に上限の件数だけ判定する。
+- **通知したとき**: `RATE_ALERT` の行を入れ(`target_id` = アラートのID、`trigger` = `CROSSED`、見出し「USD/JPY が 155.00 を上回りました」/「…を下回りました」、本文「現在 155.42（アラート: 155.00 以上）」、重要度 `HIGH`、`notify_at` = 判定した時刻、`scheduled_at`・`country_code` は null、保存期間 7日)、アラートを `is_active = false`・`triggered_at` = 判定した時刻にする。アラートは1回だけ通知する。もう一度知りたいときは作り直す。
+  - 価格の小数は、円の通貨ペアは2桁、それ以外は4桁(目標の値の桁が多ければその桁まで)。
+- **重複防止**: 一意制約 `(user_id, kind, target_id, trigger)` で、同時に判定しても1件だけ。
+- **プッシュ通知がオフのとき**: 6章と同じく、通知一覧に新しい行を入れない。アラートも判定せず、有効なまま残す(オンに戻したあと、その時点の価格で判定する)。
+
+## 8. カレンダー更新(実装済み 2026-10-15)
+
+予定の経済指標・要人発言の日時が変わったとき・中止になったときに、通知一覧に入れる。
+
+- **テーブル `event_schedule_changes`**(`supabase/migrations/20261015000002_event_schedule_changes.sql`): `kind`(INDICATOR / SPEECH)・`target_id`(イベントのID)・`change_type`(`RESCHEDULED` 日時の変更 / `CANCELLED` 中止)・`old_datetime`・`new_datetime`(中止は null)・`changed_at`。
+- **記録**: DBのトリガーが書く(Backendは書かない)。`economic_events` の `release_datetime`、`speech_events` の `statement_datetime` が変わったとき、または `status` が `CANCELLED` になったとき。変更前に `SCHEDULED` だったイベントだけ(発表済み・発言済みの時刻の訂正は記録しない)。
+- **通知一覧に入れるとき**: `GET /notifications` を呼ぶたびに、直近7日の変更のうち、そのイベントが6章と同じ条件(通知設定の種類ごとのオンオフ・重要度・通貨ペア・プランの上限、指標は発表時刻が `EXACT` のものだけ)で通知の対象になるものを入れる。何分前か・通知しない時間帯は使わない(何分前の通知ではないため)。
+  - 通知設定を最後に保存した時刻(`user_settings.updated_at`)より前の変更は入れない(6章と同じ)。
+  - プッシュ通知がオフのときは入れない(6章と同じ)。
+- **行の中身**: `target_id` = 変更のID、`trigger` = `change_type`、`notify_at` = `changed_at`、`scheduled_at` = 変更後の日時(中止は変更前の日時)、重要度 = イベントの重要度、`display_name` / `speaker_name` / `country_code` は6章と同じ。
+  - 見出し: 指標は「日本の消費者物価指数（CPI）の発表日時が変更されました」/「…の発表が中止されました」(国名 + 表示名。表示名が無い指標は正式名)。発言は「パウエルFRB理事の発言日時が変更されました」/「…の発言が中止されました」(発言者の姓 + 役職、ホームの要人発言と同じ)。
+  - 本文: 「発表日時 10/16 8:30 → 10/17 8:30（重要度 高）」/ 中止は「10/16 8:30の発表は行われません（重要度 高）」(発言は「発言」)。時刻は表示設定のタイムゾーン。
+- **古い変更の削除**: 7日を過ぎた変更は日次ジョブ `npm run jobs:cleanup-notifications` で消す。

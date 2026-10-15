@@ -33,6 +33,8 @@ export interface PlanLimits {
   notification_fx_pairs_max: number | null;
   /** 過去イベント比較に使う過去の発表回の上限 (most recent first). */
   history_events_max: number;
+  /** 有効な(is_active)レートアラートの上限 (POST /rate-alerts, api-design.md §24.12). */
+  rate_alerts_max: number;
 }
 
 export const PLAN_LIMITS: Readonly<Record<Plan, PlanLimits>> = {
@@ -43,6 +45,7 @@ export const PLAN_LIMITS: Readonly<Record<Plan, PlanLimits>> = {
     notification_importances: ['HIGH'],
     notification_fx_pairs_max: 1,
     history_events_max: 5,
+    rate_alerts_max: 1,
   },
   PRO: {
     calendar_past: { unit: 'YEARS', count: 5 },
@@ -51,6 +54,7 @@ export const PLAN_LIMITS: Readonly<Record<Plan, PlanLimits>> = {
     notification_importances: IMPORTANCES_DESC,
     notification_fx_pairs_max: null,
     history_events_max: 20,
+    rate_alerts_max: 10,
   },
 };
 
@@ -208,6 +212,36 @@ export function historyLimitFor(plan: Plan, usedCount: number): HistoryLimit {
     max_for_plan: planLimitsFor(plan).history_events_max,
     pro_max: PLAN_LIMITS.PRO.history_events_max,
   };
+}
+
+/** GET /rate-alerts `limit` (api-design.md §24.12). */
+export interface RateAlertLimit {
+  max_for_plan: number;
+  pro_max: number;
+}
+
+export function rateAlertLimitFor(plan: Plan): RateAlertLimit {
+  return { max_for_plan: planLimitsFor(plan).rate_alerts_max, pro_max: PLAN_LIMITS.PRO.rate_alerts_max };
+}
+
+/**
+ * POST /rate-alerts: may one more active alert be created when the user
+ * already has `activeCount`? Same verdict shape as checkCalendarRange —
+ * PLAN_LIMIT_EXCEEDED (403, required_plan) when a higher plan would allow
+ * it, OUT_OF_RANGE (422) when no plan would.
+ */
+export type RateAlertCreateVerdict =
+  | { kind: 'OK' }
+  | { kind: 'PLAN_LIMIT_EXCEEDED'; max: number; requiredPlan: Plan }
+  | { kind: 'OUT_OF_RANGE'; max: number };
+
+export function checkRateAlertCreate(plan: Plan, activeCount: number): RateAlertCreateVerdict {
+  const max = planLimitsFor(plan).rate_alerts_max;
+  if (activeCount < max) return { kind: 'OK' };
+  const upgrade = PLANS.slice(PLANS.indexOf(plan) + 1).find(
+    (candidate) => activeCount < planLimitsFor(candidate).rate_alerts_max,
+  );
+  return upgrade ? { kind: 'PLAN_LIMIT_EXCEEDED', max, requiredPlan: upgrade } : { kind: 'OUT_OF_RANGE', max };
 }
 
 /**

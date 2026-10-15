@@ -9,11 +9,18 @@ import { getHomeFxPairSymbols } from '../repositories/userSettingsRepository.js'
 import { resolveDayRangeUtc } from '../domain/timezone.js';
 import { homeQuerySchema } from '../schemas/home.js';
 import { mapEventDataStatus, type EconomicEventDbStatus } from '../domain/dataQuality.js';
+import { HOME_SPEECHES_MAX, homeSpeechesRange, toHomeSpeechItem } from '../domain/homeSpeeches.js';
+import { resolvePublicBaseUrl } from '../domain/speakerPhotos.js';
+import { listRecentDeliveredSpeeches } from '../repositories/speechesRepository.js';
 
 /**
  * GET /home — api-design.md §12. "最近のイベント" is not a separate
  * field/endpoint (H-2, resolved) — the client splits this same day-scoped
  * `events` array by `status` (SCHEDULED vs RELEASED) itself.
+ *
+ * `speeches` (v1.27, 直近の要人発言): the latest DELIVERED speeches of the
+ * last 7 days (relative to now, not `date`), newest first, max 3 — see
+ * src/domain/homeSpeeches.ts.
  */
 export function registerHomeRoutes(app: FastifyInstance): void {
   app.get('/home', async (request) => {
@@ -34,6 +41,15 @@ export function registerHomeRoutes(app: FastifyInstance): void {
     // SCR-026: the user's home.fx_pairs (in that order), else the default 3.
     const homeFxPairSymbols = await getHomeFxPairSymbols(app.supabase, request.user!.id);
     const majorFx = await listMajorFx(app.supabase, homeFxPairSymbols);
+
+    const speechRange = homeSpeechesRange(new Date());
+    const recentSpeeches = await listRecentDeliveredSpeeches(
+      app.supabase,
+      speechRange.from.toISOString(),
+      speechRange.to.toISOString(),
+      HOME_SPEECHES_MAX,
+    );
+    const baseUrl = resolvePublicBaseUrl(app.env.PUBLIC_BASE_URL, request);
 
     return {
       date: query.date,
@@ -62,6 +78,7 @@ export function registerHomeRoutes(app: FastifyInstance): void {
         };
       }),
       major_fx: majorFx,
+      speeches: recentSpeeches.map((speech) => toHomeSpeechItem(speech, baseUrl)),
     };
   });
 }

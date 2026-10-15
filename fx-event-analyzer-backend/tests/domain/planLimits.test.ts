@@ -5,11 +5,13 @@ import {
   calendarLatestTo,
   capRowRange,
   checkCalendarRange,
+  checkRateAlertCreate,
   historyLimitFor,
   notificationPlanViolation,
   PLAN_LIMITS,
   planFromFeatures,
   planLimitsFor,
+  rateAlertLimitFor,
   toEntitlementLimits,
 } from '../../src/domain/planLimits.js';
 
@@ -24,6 +26,7 @@ describe('planLimitsFor', () => {
       notification_importances: ['HIGH'],
       notification_fx_pairs_max: 1,
       history_events_max: 5,
+      rate_alerts_max: 1,
     });
     expect(planLimitsFor('PRO')).toEqual({
       calendar_past: { unit: 'YEARS', count: 5 },
@@ -32,7 +35,23 @@ describe('planLimitsFor', () => {
       notification_importances: ['HIGH', 'MEDIUM', 'LOW'],
       notification_fx_pairs_max: null,
       history_events_max: 20,
+      rate_alerts_max: 10,
     });
+  });
+});
+
+describe('rate alert limits (POST /rate-alerts)', () => {
+  it('rateAlertLimitFor reports the plan max and the PRO max', () => {
+    expect(rateAlertLimitFor('FREE')).toEqual({ max_for_plan: 1, pro_max: 10 });
+    expect(rateAlertLimitFor('PRO')).toEqual({ max_for_plan: 10, pro_max: 10 });
+  });
+
+  it('checkRateAlertCreate: OK under the max, PLAN_LIMIT_EXCEEDED when PRO would allow it, else OUT_OF_RANGE', () => {
+    expect(checkRateAlertCreate('FREE', 0)).toEqual({ kind: 'OK' });
+    expect(checkRateAlertCreate('FREE', 1)).toEqual({ kind: 'PLAN_LIMIT_EXCEEDED', max: 1, requiredPlan: 'PRO' });
+    expect(checkRateAlertCreate('FREE', 10)).toEqual({ kind: 'OUT_OF_RANGE', max: 1 });
+    expect(checkRateAlertCreate('PRO', 9)).toEqual({ kind: 'OK' });
+    expect(checkRateAlertCreate('PRO', 10)).toEqual({ kind: 'OUT_OF_RANGE', max: 10 });
   });
 });
 

@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.26
+# FX Event Analyzer: API詳細設計書 v1.27
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -68,6 +68,8 @@
 - **v1.23**(2026-10-13): アプリ内の通知一覧(HQ指示 2026-10-13「おすすめの通知仕様」、notification-inbox-spec.md 6章)。`GET /notifications`(24.9節。`GET /notifications/upcoming`と同じ条件で選んだ通知のうち通知時刻を過ぎたものをサーバーに記録して返す。`order=desc|asc`・`kind`、`{ items, unread_count }`)、`POST /notifications/{id}/read`(24.10節、`{ id, read_at }`)、`POST /notifications/read-all`(24.11節、`{ updated }`)を追加。テーブル`notification_inbox`(一意制約`(user_id, kind, target_id, trigger)`、保存期間 INDICATOR/SPEECH/SYSTEM 30日・RATE_ALERT/CALENDAR_UPDATE 7日)と、期限切れを消す日次ジョブ`npm run jobs:cleanup-notifications`を追加。`GET /notifications/upcoming`は変えない
 - **v1.26**(2026-10-14): 過去イベント比較の表(HQ指示 2026-10-14の参考画像)。`GET /indicators/{indicator_id}/comparison`の`events[]`に`pips_by_timeframe`(`{"1m", "5m", "15m"}`、値は number|null。選んだ`timeframe`に関係なく常に付く)を、`indicator`に`country_code`・`currency_code`・`unit`を追加。統計(`stats`/`stats_by_timeframe`)は従来どおり選んだ時間足だけで計算する
 - **v1.25**(2026-10-13): 要人の写真を自前で配信。federalreserve.gov の利用条件(特に断りがなければパブリックドメインで許可なく複製・配布可、出典として FRB を示す。リンクは可だがフレーム内表示は不可)に従い、直リンクをやめて Backend が複製を配信する。`GET /api/v1/speaker-photos/{file}`(14.7節。**認証なし**、`Cache-Control: public, max-age=86400`)を追加。`speakers.photo_url`は`null` / 絶対URL / key`speaker-photos/<file>`のいずれかを持ち、APIは常に**絶対URL**(key は`${PUBLIC_BASE_URL}/api/v1/speaker-photos/<file>`。環境変数`PUBLIC_BASE_URL`が未設定ならリクエストの`protocol://host`)か`null`で返す(`GET /speeches`・`GET /speeches/{id}`の`speaker.photo_url`)。`GET /calendar`の各行に`speaker_photo_url`(SPEECHは発言者の写真、INDICATORと写真の無い要人は`null`)を追加。FRB理事会の現メンバーに合わせ、パウエル氏の役職を「FRB理事」に直し、ケビン・ウォーシュ(FRB議長)・フィリップ・ジェファーソン(FRB副議長)・ミシェル・ボウマン(FRB副議長（金融監督担当）)・マイケル・バー(FRB理事)・リサ・クック(FRB理事)を追加(Migration `20261013000004_frb_speakers_self_hosted_photos.sql`)。写真を入れるのは FRB の要人だけ(ほかの機関は利用条件が未確認のため`null`)。`GET /home`は要人発言を返さないため変更なし(UIスクリーンショット用モックの`speeches`の各行には`speaker_photo_url`を追加)。`GET /search`は要人を返さないため変更なし
+
+- **v1.27**(2026-10-15): ホームの要人発言と、レートアラート・カレンダー更新の通知(notification-inbox-spec.md 7章・8章)。`GET /home`に`speeches`(直近7日の発言済み(`DELIVERED`)の要人発言、新しい順・最大3件。UIスクリーンショット用モックと同じ形。値動きの`reaction_*`はデータが無いため`null`)を追加(12章)。`GET /rate-alerts`・`POST /rate-alerts`・`DELETE /rate-alerts/{id}`を追加(24.12〜24.14節。有効なアラートの上限 FREE 1件・PRO 10件、28.1節)。`GET /notifications`は、本人の有効なレートアラートを最新の価格で判定して`RATE_ALERT`の行を、直近7日の予定の変更(日時の変更・中止)から`CALENDAR_UPDATE`の行を記録する(24.9節)。テーブル`rate_alerts`・`event_schedule_changes`(DBトリガーで記録)と、全員分を判定するジョブ`npm run jobs:evaluate-rate-alerts`を追加
 
 ---
 
@@ -418,7 +420,8 @@ Response：
   "date": "2026-09-12",
   "timezone": "Asia/Tokyo",
   "events": [],
-  "major_fx": []
+  "major_fx": [],
+  "speeches": []
 }
 ```
 
@@ -451,6 +454,30 @@ major_fxにはHomeで表示する主要FX Pairの最新情報を含める。想�
 - 未設定(`null`、または設定の行がない)：既定の`USDJPY` → `EURUSD` → `EURJPY`。既定の通貨ペアが無効な場合は、残りの有効な通貨ペアを`symbol`順で足して3件まで
 - 各行の形(`fx_pair_id` / `symbol` / `price` / `change` / `change_percent` / `timestamp`)は従来と同じ。価格データのない通貨ペアは`price`等が`null`
 - 価格を取得するのは表示する通貨ペア(最大3件)だけ。v1.11までは有効な通貨ペアをすべて返していた
+
+**speeches(v1.27で追加、直近の要人発言)**: 現在時刻から7日前までに発言済み(`status = DELIVERED`)の要人発言を、`statement_datetime`の新しい順に最大3件。`date`・`timezone`には関係しない。無ければ`[]`。各行の形はUIスクリーンショット用モック(`scripts/ui-screenshot-mock-server.mjs`)と同じ：
+
+```json
+{
+  "speech_id": "50000000-0000-0000-0000-000000000001",
+  "country_code": "US",
+  "speaker_name": "パウエルFRB理事",
+  "statement_datetime": "2026-10-14T18:30:00Z",
+  "headline": "政策金利の据え置きを説明し、今後の判断はデータ次第との認識を示した。",
+  "organization": "FRB",
+  "speaker_photo_url": "https://api.example.com/api/v1/speaker-photos/powell.jpg",
+  "reaction_fx_symbol": null,
+  "reaction_price_before": null,
+  "reaction_price_after": null,
+  "reaction_pips": null
+}
+```
+
+- `speaker_name`：発言者の姓 + 役職。名前に「・」があれば最後の「・」より後(「ジェローム・パウエル」+「FRB理事」→「パウエルFRB理事」)、無ければ名前全体(「植田和男日本銀行総裁」)
+- `statement_datetime`：秒精度のUTC(`Z`)
+- `headline`：`summary`があればそれ、無ければ`title`
+- `speaker_photo_url`：14.4節の`speaker.photo_url`と同じく絶対URLか`null`(14.7節)
+- `reaction_fx_symbol` / `reaction_price_before` / `reaction_price_after` / `reaction_pips`：発言前後の値動き。要人発言の値動きのデータ(`SpeechPriceReaction`)は無いため、今は常に`null`(値を作らない)。アプリは`null`のとき値動きを出さない
 
 **「今日の注目イベント」と「最近のイベント」の扱い(v1.3で確定、H-2)**: `events`は`date`でスコープされた当日分の一覧であり、「最近のイベント」は**当日中に`status = RELEASED`になったイベント**を指す(複数日にまたがる履歴ではない)。専用APIや`recent_events`フィールドは追加せず、Clientが`events`配列を`status`(`SCHEDULED`/`RELEASED`/`CANCELLED`)で「今日の注目イベント」(主にSCHEDULED)と「最近のイベント」(RELEASED)に表示分けする。
 
@@ -1445,8 +1472,8 @@ Response：
 ```
 
 - `id`：通知一覧の行のID(24.10節で使う)。イベントのIDは`target_id`
-- `kind` / `target_id`：`INDICATOR`は`economic_events.id`、`SPEECH`は`speech_events.id`(24.6節の`id`)。`RATE_ALERT` / `CALENDAR_UPDATE` / `SYSTEM`はまだ作られない(将来用)
-- `trigger`：通知の種類。発表の何分前か(`lead_minutes`)が N のとき`LEAD_N`、0のとき`AT_RELEASE`
+- `kind` / `target_id`：`INDICATOR`は`economic_events.id`、`SPEECH`は`speech_events.id`(24.6節の`id`)、`RATE_ALERT`(v1.27)は`rate_alerts.id`(24.12節)、`CALENDAR_UPDATE`(v1.27)は`event_schedule_changes.id`。`SYSTEM`はまだ作られない(将来用)
+- `trigger`：通知の種類。発表の何分前か(`lead_minutes`)が N のとき`LEAD_N`、0のとき`AT_RELEASE`。`RATE_ALERT`は`CROSSED`、`CALENDAR_UPDATE`は`RESCHEDULED`(日時の変更)/ `CANCELLED`(中止)
 - `lead_minutes`：`trigger`から求めた何分前か(`AT_RELEASE` = 0)。それ以外の`trigger`(システム通知など)は`null`
 - `title`：24.6節の`title`(指標の正式名・発言のタイトル)。`display_name`・`speaker_name`も24.6節と同じ(INDICATORの`speaker_name`、SPEECHの`display_name`は`null`)
 - `body`：本文。アプリのローカル通知と同じ書き方で、時刻は`display.timezone`(解決できない場合は`Asia/Tokyo`)。「発表の5分前です（M/d H:mm発表・重要度 高）」、0分前は「まもなく発表です（…）」、SPEECHは「発表」が「発言」
@@ -1462,11 +1489,28 @@ Response：
    - 60件の上限なし
    - さかのぼるのは保存期間(30日)まで、かつ通知設定を最後に保存した時刻(`user_settings.updated_at`)まで。初めて使う人や`lead_minutes`を変えた人に、受け取る設定ではなかった過去の通知を並べないため
    - 同じ`(kind, target_id, trigger)`の行があれば何もしない(重複しない)。`LEAD_5`と`AT_RELEASE`は別の行
-   - `push = false`のときは記録しない(記録済みの行は返す)
+   - `push = false`のときは記録しない(記録済みの行は返す)。下の`RATE_ALERT`・`CALENDAR_UPDATE`も同じ
+   - **`RATE_ALERT`(v1.27)**：呼び出しユーザーの有効なレートアラート(プランの上限の件数まで、古い順)を最新の価格(24.12節)で判定し、`ABOVE`は価格 >= `target_price`、`BELOW`は価格 <= `target_price`なら行を入れて、アラートを`is_active = false`・`triggered_at` = 現在時刻にする。行は`target_id` = アラートのID、`trigger` = `CROSSED`、`title`「USD/JPY が 155.00 を上回りました」/「…を下回りました」、`body`「現在 155.42（アラート: 155.00 以上）」/「…以下）」、`importance` = `HIGH`、`notify_at` = 現在時刻、`scheduled_at`・`country_code`・`display_name`・`speaker_name` = `null`、`lead_minutes` = `null`
+   - **`CALENDAR_UPDATE`(v1.27)**：`changed_at`が直近7日(かつ`user_settings.updated_at`以降)の`event_schedule_changes`のうち、イベントが上の抽出ルールの通知設定(種類ごとのオンオフ・重要度・通貨ペア・プランの上限、指標は`EXACT`のみ)を満たすもの。`lead_minutes`・通知しない時間帯は使わない。行は`target_id` = 変更のID、`trigger` = `change_type`、`title`「日本の消費者物価指数（CPI）の発表日時が変更されました」/「…の発表が中止されました」(指標は国名 + `display_name`、未登録なら正式名。発言は12章の`speaker_name`と同じ「パウエルFRB理事」+「の発言日時が変更されました」/「の発言が中止されました」)、`body`「発表日時 10/16 8:30 → 10/17 8:30（重要度 高）」/ 中止は「10/16 8:30の発表は行われません（重要度 高）」(時刻は`display.timezone`)、`importance` = イベントの重要度、`scheduled_at` = 変更後の日時(中止は変更前)、`notify_at` = `changed_at`。`display_name` / `speaker_name` / `country_code`は`INDICATOR` / `SPEECH`と同じ
 2. **期限切れの削除**：呼び出しユーザーの`expires_at <= 現在時刻`の行を消す
 3. **返す**：`expires_at > 現在時刻`の行だけを返す
 
-設定を変えても記録済みの行は変わらない。発表時刻が変わったイベントは、記録済みの行の時刻のまま残る。
+設定を変えても記録済みの行は変わらない。発表時刻が変わったイベントは、記録済みの行の時刻のまま残り、変更は別の`CALENDAR_UPDATE`の行で知らせる(v1.27)。
+
+**テーブル`event_schedule_changes`**(v1.27、`supabase/migrations/20261015000002_event_schedule_changes.sql`)：予定の変更の記録。DBのトリガーが書く(`economic_events`の`release_datetime`・`speech_events`の`statement_datetime`が変わったとき、または`status`が`CANCELLED`になったとき。変更前が`SCHEDULED`のイベントだけ)。
+
+| 列 | 型 | 内容 |
+|---|---|---|
+| `id` | uuid | 主キー |
+| `kind` | text not null | `INDICATOR` / `SPEECH`(CHECK) |
+| `target_id` | uuid not null | `economic_events.id` / `speech_events.id`(FKなし。消えたイベントの変更は使わない) |
+| `change_type` | text not null | `RESCHEDULED` / `CANCELLED`(CHECK) |
+| `old_datetime` | timestamptz not null | 変更前の日時 |
+| `new_datetime` | timestamptz | 変更後の日時(`CANCELLED`は`null`) |
+| `changed_at` | timestamptz not null | 既定`now()` |
+
+- RLS：`economic_events`と同じ共有データ(認証済みならSELECT可、書き込みはトリガーのみ)
+- 7日を過ぎた行は日次ジョブ`npm run jobs:cleanup-notifications`が消す
 
 **テーブル`notification_inbox`**(`supabase/migrations/20261013000002_notification_inbox.sql`)：
 
@@ -1514,6 +1558,80 @@ Response：
 ```
 
 - `updated`：既読にした件数(未読が無ければ0)。他のユーザーの行は変えない
+
+## 24.12 GET /api/v1/rate-alerts(v1.27で追加)
+
+呼び出しユーザーのレートアラート(通貨ペアの価格が決めた値を上回った・下回ったら通知一覧に入れる。notification-inbox-spec.md 7章)。Authentication Required / Entitlementなし。
+
+Response：
+
+```json
+{
+  "items": [
+    {
+      "id": "abababab-abab-abab-abab-000000000001",
+      "fx_pair_id": "20000000-0000-0000-0000-000000000001",
+      "symbol": "USDJPY",
+      "direction": "ABOVE",
+      "target_price": 156,
+      "is_active": true,
+      "triggered_at": null,
+      "created_at": "2026-10-13T06:00:00Z"
+    }
+  ],
+  "limit": { "max_for_plan": 1, "pro_max": 10 }
+}
+```
+
+- `items`：通知済み(`is_active = false`)も含め、作った順(古い順)。Paginationなし
+- `symbol`：`fx_pairs.symbol`(`/fx-pairs`と同じ`USDJPY`形式)
+- `direction`：`ABOVE`(価格 >= `target_price`で通知) / `BELOW`(価格 <= `target_price`で通知)
+- `target_price`：number
+- `is_active`：まだ通知していない。通知すると`false`になり、`triggered_at`に通知した時刻が入る(1回だけ通知する)
+- `triggered_at` / `created_at`：秒精度のUTC(`Z`)
+- `limit.max_for_plan`：今のプランで持てる有効なアラートの数(FREE 1・PRO 10、28.1節)。`limit.pro_max`：PROの数
+
+**価格と判定**：価格は`fx_prices`の最新の行(`timestamp`が最も新しい行、時間足は問わない)の`close`で、`GET /home`の`major_fx`の`price`と同じ。価格の無い通貨ペアは通知しない。判定は`GET /notifications`(本人の分、24.9節)と、ジョブ`npm run jobs:evaluate-rate-alerts`(全員分。`src/jobs/evaluateRateAlerts.ts`、ビルド後は`node dist/jobs/evaluateRateAlerts.js`。価格の取り込みのたびにcronで動かす。成功で終了コード0、失敗で1)が行う。どちらも`push = false`のユーザーは判定しない(アラートは有効なまま)。有効なアラートがプランの上限より多いユーザー(PROからFREEに戻った人)は、古い順に上限の件数だけ判定する。
+
+**テーブル`rate_alerts`**(`supabase/migrations/20261015000001_rate_alerts.sql`)：
+
+| 列 | 型 | 内容 |
+|---|---|---|
+| `id` | uuid | 主キー |
+| `user_id` | uuid not null | `profiles(id)`、`on delete cascade` |
+| `fx_pair_id` | uuid not null | `fx_pairs(id)`、`on delete cascade` |
+| `direction` | text not null | `ABOVE` / `BELOW`(CHECK) |
+| `target_price` | numeric(12, 6) not null | 0より大きい(CHECK) |
+| `is_active` | boolean not null | 既定`true` |
+| `triggered_at` | timestamptz | 通知した時刻(未通知は`null`)。通知済みは`is_active = false`(CHECK) |
+| `created_at` / `updated_at` | timestamptz not null | 既定`now()` |
+
+- RLS：本人は自分の行だけSELECT可。書き込みはBackend(service_role)だけ(`user_settings`と同じ形)
+
+## 24.13 POST /api/v1/rate-alerts(v1.27で追加)
+
+レートアラートを作る。Authentication Required / Entitlementなし。
+
+Request：
+
+```json
+{ "fx_pair_id": "20000000-0000-0000-0000-000000000001", "direction": "ABOVE", "target_price": 156.0 }
+```
+
+Response：`201`で、作った1件(24.12節の`items`の1件と同じ形。`is_active: true`、`triggered_at: null`)
+
+- `fx_pair_id`がUUIDでない・有効な通貨ペアでない、`direction`が`ABOVE` / `BELOW`以外、`target_price`が0以下・1,000,000以上・数値でない：`422 VALIDATION_ERROR`
+- 有効なアラートがすでにプランの上限(FREE 1件・PRO 10件)ある：FREEは`403 PLAN_LIMIT_EXCEEDED`(`required_plan: "PRO"`)、PROは`422 VALIDATION_ERROR`(4章・28.1節)。通知済みのアラートは数えない
+- 判定はValidation(`422`)の後にプランの上限(`403`)
+
+## 24.14 DELETE /api/v1/rate-alerts/{id}(v1.27で追加)
+
+レートアラートを消す(通知済みも消せる)。Authentication Required / Entitlementなし。
+
+Response：`204`(Bodyなし)
+
+- 他のユーザーのアラート・存在しないアラートは`404 NOT_FOUND`。`id`がUUIDでなければ`422 VALIDATION_ERROR`
+- 記録済みの通知一覧の`RATE_ALERT`の行は消えない
 
 ---
 
@@ -1650,6 +1768,7 @@ Backend側の各Endpointが要求するEntitlementを以下の通り確定する
 | 通知一覧(v1.23で追加) | `GET /notifications` | `VIEW_BASIC_EVENT` |
 | 通知の既読(v1.23で追加) | `POST /notifications/{id}/read`、`POST /notifications/read-all` | **Authentication Required / Entitlementなし** |
 | 要人の写真(v1.25で追加) | `GET /speaker-photos/{file}` | **認証なし / Entitlementなし**(14.7節) |
+| レートアラート(v1.27で追加) | `GET /rate-alerts`、`POST /rate-alerts`、`DELETE /rate-alerts/{id}` | **Authentication Required / Entitlementなし**(件数はプランの上限、28.1節) |
 | お問い合わせ(v1.10で追加) | `POST /support/requests`、`GET /support/requests` | **Authentication Required / Entitlementなし** |
 
 Home / Indicators / Indicator Detail / FX Pairs(v1.6) / Search / Account / Settings / Subscription / Entitlement APIは、認証済みであれば全ユーザーがアクセス可能とし、特定feature_codeを要求しない。
@@ -1686,6 +1805,7 @@ PRO Entitlementの付与(v1.4): `POST /subscription/verify`の保存時に、FRE
 | 通知の重要度(`notification_importances`) | `HIGH`のみ | `HIGH` / `MEDIUM` / `LOW` | `PATCH /settings`(24.5節)、`GET /notifications/upcoming`(24.6節) |
 | 通知の通貨ペア(`notification_fx_pairs_max`) | 1件(`null` = すべての通貨ペアは不可。保存済みの`null`は`USDJPY`として扱う) | 上限なし(`null`) | `PATCH /settings`(24.5節)、`GET /notifications/upcoming`(24.6節) |
 | 過去イベント比較の発表回(`history_events_max`) | 直近5回 | 直近20回 | `GET /indicators/{id}/comparison`(21章) |
+| 有効なレートアラート(`rate_alerts_max`、v1.27) | 1件 | 10件 | `POST /rate-alerts`(24.13節)、`GET /rate-alerts`の`limit`(24.12節)。`GET /entitlements`の`limits`には含めない |
 
 - カレンダーの日時は、Requestの`timezone`(既定`UTC`)の現地時刻で計算する(「先月」「今年」もそのタイムゾーンで決める)
 - 上限の値はBackendの`src/domain/planLimits.ts`だけで定義する。iOSは`GET /entitlements`の`limits`で受け取り、端末に値を持たない

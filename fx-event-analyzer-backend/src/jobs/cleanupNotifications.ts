@@ -1,7 +1,9 @@
 import 'dotenv/config';
 import { loadEnv } from '../config/env.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
+import { NOTIFICATION_RETENTION_DAYS } from '../domain/notificationInbox.js';
 import { deleteAllExpiredInboxNotifications } from '../repositories/notificationInboxRepository.js';
+import { deleteScheduleChangesBefore } from '../repositories/scheduleChangesRepository.js';
 
 /**
  * Daily expiry job for the in-app notification inbox (notification-inbox-spec.md
@@ -15,11 +17,24 @@ import { deleteAllExpiredInboxNotifications } from '../repositories/notification
  * .env) like the server. Exit code 0 on success, 1 on failure — cron-friendly.
  * GET /notifications also deletes the caller's expired rows, so this only
  * keeps the table from growing for users who stop opening the app.
+ *
+ * Also drops event_schedule_changes older than the CALENDAR_UPDATE
+ * retention (7 days) — GET /notifications never looks further back.
  */
 async function main(): Promise<void> {
   const env = loadEnv();
-  const deleted = await deleteAllExpiredInboxNotifications(createSupabaseClient(env));
-  console.log(JSON.stringify({ job: 'cleanup-notifications', deleted, at: new Date().toISOString() }));
+  const supabase = createSupabaseClient(env);
+  const deleted = await deleteAllExpiredInboxNotifications(supabase);
+  const scheduleChangesBefore = new Date(Date.now() - NOTIFICATION_RETENTION_DAYS.CALENDAR_UPDATE * 86_400_000);
+  const scheduleChangesDeleted = await deleteScheduleChangesBefore(supabase, scheduleChangesBefore.toISOString());
+  console.log(
+    JSON.stringify({
+      job: 'cleanup-notifications',
+      deleted,
+      schedule_changes_deleted: scheduleChangesDeleted,
+      at: new Date().toISOString(),
+    }),
+  );
 }
 
 main().catch((error: unknown) => {

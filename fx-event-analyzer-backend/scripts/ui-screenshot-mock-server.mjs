@@ -15,15 +15,12 @@
 // FX pair flavor), but does not read seed.sql or touch any real Supabase
 // project.
 //
-// One documented exception: `/api/v1/home`'s `speeches` field (HQ
-// instruction 2026-10-06, "直近の要人発言に何か表示されるようにして").
-// `SpeechEvent` is explicitly P2/out of scope for the real Backend
-// (db-design.md, features.md), so `src/routes/home.ts` does not and will
-// not return this field — it exists only here, so HQ can review the
-// Home screen's 直近の要人発言 card layout via CI screenshots. The iOS
-// app's `HomeResponse.speeches` is optional for exactly this reason: a
-// real Backend response (this field absent) still decodes fine and the
-// card still renders its empty state, unchanged.
+// `/api/v1/home`'s `speeches` field (HQ instruction 2026-10-06,
+// "直近の要人発言に何か表示されるようにして") started here as a mock-only
+// field. Since api-design.md v1.27 the real `src/routes/home.ts` returns it
+// too, in the same item shape (src/domain/homeSpeeches.ts) — except that
+// the real reaction_* fields are null (no speech price-reaction data
+// exists), while these fixtures keep the reference image's numbers.
 //
 // Usage: node scripts/ui-screenshot-mock-server.mjs [port]
 // Serves BOTH:
@@ -863,9 +860,9 @@ function homeHandler() {
     ],
     major_fx: majorFxRows(),
     // HQ指示(2026-10-06)「直近の要人発言に何か表示されるようにして」の
-    // 参考画像内容を再現したUIスクリーンショット専用フィクスチャ — ファイル
-    // 冒頭コメントの「documented exception」参照。本番`/home`ルートは
-    // このフィールドを返さない。
+    // 参考画像内容を再現したUIスクリーンショット用フィクスチャ — ファイル
+    // 冒頭コメント参照。本番`/home`ルートもv1.27から同じ形で返す(ただし
+    // 本番のreaction_*は値動きのデータが無いためnull)。
     //
     // HQ再指摘(2026-10-06、2回目、参考画像をピクセル単位で再確認)
     // 「発言前と現在それぞれの数字を付けて」に伴い、organization/
@@ -1767,6 +1764,58 @@ function notificationBody(kind, scheduledAt, importance, leadMinutes) {
   return `${timing}（${when}${noun}・重要度 ${IMPORTANCE_LABELS[importance] ?? importance}）`;
 }
 
+/** "M/d H:mm" in Asia/Tokyo, like src/domain/notificationInbox.ts formatMonthDayTime. */
+function jstMonthDayTime(iso) {
+  const jst = new Date(Date.parse(iso) + 9 * 3_600_000);
+  return `${jst.getUTCMonth() + 1}/${jst.getUTCDate()} ${jst.getUTCHours()}:${String(jst.getUTCMinutes()).padStart(2, '0')}`;
+}
+
+/**
+ * api-design.md v1.27: one already-fired RATE_ALERT (USD/JPY 155.00 above,
+ * at the MOCK_FX_QUOTES price) and one CALENDAR_UPDATE (日本CPI moved by an
+ * hour), both unread. Their notify_at (now - 15 / - 30 min) is older than
+ * the two indicator/speech items (now - 10 / - 1 min), so those stay on top.
+ */
+function extraInboxRows() {
+  const rateAlertNotifyAt = isoSecondsPlusMinutes(-15);
+  const oldDatetime = isoSecondsPlusMinutes(24 * 60);
+  const newDatetime = isoSecondsPlusMinutes(25 * 60);
+  const calendarNotifyAt = isoSecondsPlusMinutes(-30);
+  const expires = (iso, kind) => isoSeconds(new Date(Date.parse(iso) + NOTIFICATION_RETENTION_DAYS[kind] * 86_400_000));
+  return [
+    {
+      kind: 'RATE_ALERT',
+      target_id: MOCK_FIRED_RATE_ALERT_ID,
+      trigger: 'CROSSED',
+      title: 'USD/JPY が 155.00 を上回りました',
+      body: `現在 ${MOCK_FX_QUOTES.USDJPY.price.toFixed(2)}（アラート: 155.00 以上）`,
+      display_name: null,
+      speaker_name: null,
+      country_code: null,
+      importance: 'HIGH',
+      scheduled_at: null,
+      notify_at: rateAlertNotifyAt,
+      read_at: null,
+      expires_at: expires(rateAlertNotifyAt, 'RATE_ALERT'),
+    },
+    {
+      kind: 'CALENDAR_UPDATE',
+      target_id: MOCK_SCHEDULE_CHANGE_ID,
+      trigger: 'RESCHEDULED',
+      title: '日本の消費者物価指数（CPI）の発表日時が変更されました',
+      body: `発表日時 ${jstMonthDayTime(oldDatetime)} → ${jstMonthDayTime(newDatetime)}（重要度 高）`,
+      display_name: '消費者物価指数（CPI）',
+      speaker_name: null,
+      country_code: 'JP',
+      importance: 'HIGH',
+      scheduled_at: newDatetime,
+      notify_at: calendarNotifyAt,
+      read_at: null,
+      expires_at: expires(calendarNotifyAt, 'CALENDAR_UPDATE'),
+    },
+  ];
+}
+
 function materializeNotificationInbox() {
   const { lead_minutes: lead, items } = upcomingNotificationsHandler();
   const trigger = notificationTrigger(lead);
@@ -1793,6 +1842,16 @@ function materializeNotificationInbox() {
       expires_at: isoSeconds(
         new Date(Date.parse(item.notify_at) + NOTIFICATION_RETENTION_DAYS[item.kind] * 86_400_000),
       ),
+    });
+  }
+  // Added after the two above so their ids (...0001 / ...0002) stay the same.
+  for (const row of extraInboxRows()) {
+    const key = `${row.kind}|${row.target_id}|${row.trigger}`;
+    if (notificationInbox.has(key)) continue;
+    notificationInboxSeq += 1;
+    notificationInbox.set(key, {
+      id: `88888888-8888-8888-8888-${String(notificationInboxSeq).padStart(12, '0')}`,
+      ...row,
     });
   }
   for (const [key, row] of notificationInbox) {
@@ -1840,6 +1899,86 @@ function markAllNotificationsRead() {
     }
   }
   return { updated };
+}
+
+// ---------------------------------------------------------------------------
+// レートアラート — GET/POST /rate-alerts, DELETE /rate-alerts/{id}
+// (api-design.md §24.12-§24.14, v1.27). In memory, starting with one active
+// alert (USD/JPY ABOVE 156.00 — above the MOCK_FX_QUOTES price, so it has
+// not fired). The limit follows the /__mock/subscription-plan switch with
+// the same numbers as src/domain/planLimits.ts rate_alerts_max.
+
+const MOCK_FIRED_RATE_ALERT_ID = 'abababab-abab-abab-abab-000000000000';
+const MOCK_SCHEDULE_CHANGE_ID = 'cdcdcdcd-cdcd-cdcd-cdcd-000000000001';
+const MOCK_RATE_ALERTS_MAX = { FREE: 1, PRO: 10 };
+const RATE_ALERT_DIRECTIONS = ['ABOVE', 'BELOW'];
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const rateAlerts = [
+  {
+    id: 'abababab-abab-abab-abab-000000000001',
+    fx_pair_id: FX_PAIR_ID,
+    symbol: 'USDJPY',
+    direction: 'ABOVE',
+    target_price: 156,
+    is_active: true,
+    triggered_at: null,
+    created_at: isoSeconds(new Date(now().getTime() - 2 * 86_400_000)),
+  },
+];
+let rateAlertSeq = 1;
+
+function rateAlertsListHandler() {
+  return {
+    items: [...rateAlerts],
+    limit: { max_for_plan: MOCK_RATE_ALERTS_MAX[mockSubscriptionPlan], pro_max: MOCK_RATE_ALERTS_MAX.PRO },
+  };
+}
+
+/** [status, body] like the real POST /rate-alerts: 422 -> 403 (plan) -> 201. */
+function createRateAlert(rawBody) {
+  let body;
+  try {
+    body = JSON.parse(rawBody || '{}');
+  } catch {
+    return [422, { error: { code: 'VALIDATION_ERROR', message: 'Invalid JSON body.' } }];
+  }
+  const pair = FX_PAIRS.find((row) => row.fx_pair_id === body?.fx_pair_id);
+  if (!pair) return [422, { error: { code: 'VALIDATION_ERROR', message: 'fx_pair_id: unknown FX pair.' } }];
+  if (!RATE_ALERT_DIRECTIONS.includes(body.direction)) {
+    return [422, { error: { code: 'VALIDATION_ERROR', message: 'direction: must be ABOVE or BELOW' } }];
+  }
+  if (typeof body.target_price !== 'number' || !(body.target_price > 0) || body.target_price >= 1_000_000) {
+    return [422, { error: { code: 'VALIDATION_ERROR', message: 'target_price: must be a positive number' } }];
+  }
+  const max = MOCK_RATE_ALERTS_MAX[mockSubscriptionPlan];
+  if (rateAlerts.filter((row) => row.is_active).length >= max) {
+    const message = `rate alerts: at most ${max} active alert(s) on the ${mockSubscriptionPlan} plan.`;
+    return mockSubscriptionPlan === 'FREE'
+      ? [403, { error: { code: 'PLAN_LIMIT_EXCEEDED', message, required_plan: 'PRO' } }]
+      : [422, { error: { code: 'VALIDATION_ERROR', message } }];
+  }
+  rateAlertSeq += 1;
+  const row = {
+    id: `abababab-abab-abab-abab-${String(rateAlertSeq).padStart(12, '0')}`,
+    fx_pair_id: pair.fx_pair_id,
+    symbol: pair.symbol,
+    direction: body.direction,
+    target_price: body.target_price,
+    is_active: true,
+    triggered_at: null,
+    created_at: isoSeconds(now()),
+  };
+  rateAlerts.push(row);
+  return [201, row];
+}
+
+/** true when deleted; false -> 404. */
+function deleteRateAlert(id) {
+  const index = rateAlerts.findIndex((row) => row.id === id);
+  if (index < 0) return false;
+  rateAlerts.splice(index, 1);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -2360,6 +2499,21 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
     if (!result) return json(res, 404, { error: { code: 'NOT_FOUND', message: 'Notification not found.' } });
     return json(res, 200, result);
   }
+  // レートアラート (api-design.md §24.12-§24.14).
+  if (pathname === '/api/v1/rate-alerts') {
+    if (req.method === 'POST') return json(res, ...createRateAlert(rawBody));
+    if (req.method === 'GET') return json(res, 200, rateAlertsListHandler());
+  }
+  if (segments[0] === 'rate-alerts' && segments.length === 2 && req.method === 'DELETE') {
+    if (!UUID_PATTERN.test(segments[1])) {
+      return json(res, 422, { error: { code: 'VALIDATION_ERROR', message: 'id: must be a UUID' } });
+    }
+    if (!deleteRateAlert(segments[1])) {
+      return json(res, 404, { error: { code: 'NOT_FOUND', message: 'Rate alert not found.' } });
+    }
+    res.writeHead(204);
+    return res.end();
+  }
   // SCR-010 経済カレンダー (api-design.md §14.6).
   if (pathname === '/api/v1/calendar') {
     const planError = calendarPlanError(searchParams);
@@ -2433,7 +2587,7 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://127.0.0.1');
-  const rawBody = await readBody(req); // only PATCH /settings and POST /support/requests read it
+  const rawBody = await readBody(req); // only PATCH /settings, POST /support/requests and POST /rate-alerts read it
   console.log(`[mock] ${req.method} ${url.pathname}${url.search}`);
   requestOrigin = `http://${req.headers.host ?? `127.0.0.1:${PORT}`}`;
 

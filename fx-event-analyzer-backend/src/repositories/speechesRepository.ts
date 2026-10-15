@@ -135,3 +135,34 @@ export async function listSpeechesInRange(
   if (error) throw error;
   return (data ?? []).map((row) => toSpeechSummary(row as SpeechDbRow));
 }
+
+/** GET /home `speeches`: DELIVERED speeches in [from, to], newest first, at most `limit`. */
+export async function listRecentDeliveredSpeeches(
+  supabase: SupabaseClient,
+  fromIso: string,
+  toIso: string,
+  limit: number,
+): Promise<SpeechSummary[]> {
+  const { data, error } = await supabase
+    .from('speech_events')
+    .select(SPEECH_COLUMNS)
+    .eq('status', 'DELIVERED')
+    .gte('statement_datetime', fromIso)
+    .lte('statement_datetime', toIso)
+    .order('statement_datetime', { ascending: false })
+    .order('id', { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []).map((row) => toSpeechSummary(row as SpeechDbRow));
+}
+
+/** Speeches by id regardless of status (CALENDAR_UPDATE candidates). */
+export async function listSpeechesByIds(supabase: SupabaseClient, ids: readonly string[]): Promise<SpeechSummary[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from('speech_events')
+    .select(SPEECH_COLUMNS)
+    .in('id', [...ids]);
+  if (error) throw error;
+  return (data ?? []).map((row) => toSpeechSummary(row as SpeechDbRow));
+}

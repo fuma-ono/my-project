@@ -93,14 +93,16 @@ export interface NotificationInboxInsert {
   body: string;
   display_name: string | null;
   speaker_name: string | null;
-  country_code: string;
+  /** null for RATE_ALERT (not tied to a country). */
+  country_code: string | null;
   importance: string;
-  scheduled_at: string;
+  /** null for RATE_ALERT (no event time). */
+  scheduled_at: string | null;
   notify_at: string;
   expires_at: string;
 }
 
-const IMPORTANCE_LABELS: Record<string, string> = { HIGH: '高', MEDIUM: '中', LOW: '低' };
+export const IMPORTANCE_LABELS: Readonly<Record<string, string>> = { HIGH: '高', MEDIUM: '中', LOW: '低' };
 
 const dateTimeFormatters = new Map<string, Intl.DateTimeFormat>();
 

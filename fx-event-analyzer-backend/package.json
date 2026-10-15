@@ -15,7 +15,8 @@
     "format:fix": "prettier --write src tests",
     "test": "vitest run",
     "test:watch": "vitest",
-    "jobs:cleanup-notifications": "tsx src/jobs/cleanupNotifications.ts"
+    "jobs:cleanup-notifications": "tsx src/jobs/cleanupNotifications.ts",
+    "jobs:evaluate-rate-alerts": "tsx src/jobs/evaluateRateAlerts.ts"
   },
   "keywords": [],
   "author": "",

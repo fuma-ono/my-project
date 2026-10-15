@@ -80,7 +80,22 @@ It reads `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` from the environment (or
 `.env`) like the server, prints one JSON line (`{"job":"cleanup-notifications","deleted":N,...}`)
 and exits non-zero on failure. `GET /notifications` already deletes the
 caller's own expired rows, so the job only matters for users who stop opening
-the app (api-design.md §24.9).
+the app (api-design.md §24.9). It also deletes `event_schedule_changes` older
+than 7 days (the CALENDAR_UPDATE retention).
+
+```sh
+npm run jobs:evaluate-rate-alerts    # tsx src/jobs/evaluateRateAlerts.ts
+node dist/jobs/evaluateRateAlerts.js # same, after `npm run build`
+```
+
+Checks every user's active `rate_alerts` against the latest stored price
+(`fx_prices`, the same price `GET /home` `major_fx` shows) and, for crossed
+ones, inserts the `RATE_ALERT` inbox row and deactivates the alert. Users with
+push off are skipped (like `GET /notifications`), and each user's alerts are
+cut to their plan's limit. Run it after each price ingestion, e.g. every 5
+minutes: `*/5 * * * * cd /path/to/fx-event-analyzer-backend && npm run jobs:evaluate-rate-alerts`.
+Prints `{"job":"evaluate-rate-alerts","users":N,"evaluated":N,"fired":N,...}`
+and exits non-zero on failure (api-design.md §24.12).
 
 ## Quality gates
 

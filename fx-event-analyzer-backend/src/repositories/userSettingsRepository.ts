@@ -134,3 +134,18 @@ export async function updateUserSettings(
   }
   return toUserSettingsRow(data);
 }
+
+/** Users among `userIds` whose saved notify_push is false (no row = the default, true). */
+export async function listPushDisabledUserIds(
+  supabase: SupabaseClient,
+  userIds: readonly string[],
+): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set();
+  const { data, error } = await supabase
+    .from('user_settings')
+    .select('user_id')
+    .in('user_id', [...userIds])
+    .eq('notify_push', false);
+  if (error) throw error;
+  return new Set((data ?? []).map((row: { user_id: string }) => row.user_id));
+}
