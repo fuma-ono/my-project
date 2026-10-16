@@ -5,7 +5,14 @@
  * order.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { IngestionLogSample, ReleaseInstant, FxRowSample, SnapshotSample, StagedSample } from './metrics.js';
+import type {
+  CreditUsageSample,
+  IngestionLogSample,
+  ReleaseInstant,
+  FxRowSample,
+  SnapshotSample,
+  StagedSample,
+} from './metrics.js';
 
 export const PAGE_SIZE = 1000;
 
@@ -34,6 +41,12 @@ export interface QualityPair {
 export interface QualityReader {
   listPairs(symbols: readonly string[] | null): Promise<QualityPair[]>;
   listFxRows(pairId: string, fromIso: string, toIso: string): Promise<FxRowSample[]>;
+  /** ISO open time of the earliest stored 1m candle of the pair (= ingestion start), null = none. */
+  firstCandleAt(pairId: string): Promise<string | null>;
+  /** economic_events rows (any status) with release_datetime in [from, to). */
+  countEconomicEvents(fromIso: string, toIso: string): Promise<number>;
+  /** api_credit_usage rows with usage_date in [fromDate, toDate] (UTC dates); null = table missing or unreadable. */
+  listCreditUsage(fromDate: string, toDate: string): Promise<CreditUsageSample[] | null>;
   listReleases(fromIso: string, toIso: string): Promise<ReleaseInstant[]>;
   listLogs(fromIso: string, toIso: string): Promise<IngestionLogSample[]>;
   listSnapshots(fromIso: string, toIso: string): Promise<SnapshotSample[]>;
@@ -66,6 +79,60 @@ export function createQualityReader(supabase: SupabaseClient): QualityReader {
           .range(from, to),
       );
       return rows.map((row) => ({ ...row, cross_check_diff_pips: nullableNumber(row.cross_check_diff_pips) }));
+    },
+
+    async firstCandleAt(pairId) {
+      const { data, error }: PageResult = await supabase
+        .from('fx_prices')
+        .select('timestamp')
+        .eq('fx_pair_id', pairId)
+        .eq('timeframe', '1m')
+        .order('timestamp', { ascending: true })
+        .limit(1);
+      if (error) throw error;
+      const first = (data ?? [])[0] as { timestamp: string } | undefined;
+      return first?.timestamp ?? null;
+    },
+
+    async countEconomicEvents(fromIso, toIso) {
+      const { count, error } = await supabase
+        .from('economic_events')
+        .select('id', { count: 'exact', head: true })
+        .gte('release_datetime', fromIso)
+        .lt('release_datetime', toIso);
+      if (error) throw error;
+      return count ?? 0;
+    },
+
+    async listCreditUsage(fromDate, toDate) {
+      try {
+        const rows = await fetchAllPages<{
+          provider: string;
+          usage_date: string;
+          job: string | null;
+          credits: number | string;
+          cap: number | string | null;
+        }>((from, to) =>
+          supabase
+            .from('api_credit_usage')
+            .select('id, provider, usage_date, job, credits, cap')
+            .gte('usage_date', fromDate)
+            .lte('usage_date', toDate)
+            .order('usage_date', { ascending: true })
+            .order('id', { ascending: true })
+            .range(from, to),
+        );
+        return rows.map((row) => ({
+          provider: row.provider,
+          usage_date: row.usage_date,
+          job: row.job,
+          credits: Number(row.credits),
+          cap: row.cap === null || row.cap === undefined ? null : Number(row.cap),
+        }));
+      } catch {
+        // The table is added by a later migration; before it exists the report shows 「—(クレジット記録なし)」.
+        return null;
+      }
     },
 
     async listReleases(fromIso, toIso) {

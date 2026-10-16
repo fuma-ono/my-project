@@ -2,15 +2,17 @@ import 'dotenv/config';
 import { appendFileSync } from 'node:fs';
 import { loadEnv } from '../config/env.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
-import { buildDataQualityReport, MINUTE_MS } from '../ingestion/quality/metrics.js';
+import { MINUTE_MS } from '../ingestion/marketHours.js';
+import { buildDataQualityReport } from '../ingestion/quality/metrics.js';
 import { createQualityReader } from '../ingestion/quality/reader.js';
 import { renderDataQualityMarkdown } from '../ingestion/quality/report.js';
 
 /**
  * データ品質レポート (HQ判断 2026-10-16、data-sources.md §12): 取得率・欠損率・
- * 照合一致率・時刻ずれ・ジョブの実行間隔・発表前後の足の揃い具合を、実データ
- * (fx_prices / ingestion_logs / event_snapshots / ingestion_staged_values /
- * economic_events / speech_events) から READ-ONLY で集計する。
+ * 照合一致率・時刻ずれ・ジョブの実行間隔・発表前後の足の揃い具合・API クレジットを、
+ * 実データ (fx_prices / ingestion_logs / event_snapshots / ingestion_staged_values /
+ * economic_events / speech_events / api_credit_usage) から READ-ONLY で集計する
+ * (select のみ。insert/update/upsert/delete/rpc は使わない。外部 API も呼ばない)。
  *
  *   npm run report:data-quality                          # 直近7日、有効な全通貨ペア
  *   npm run report:data-quality -- --days 14 --pairs USDJPY,EURUSD
@@ -54,7 +56,11 @@ async function main(): Promise<void> {
   const pairs = await reader.listPairs(symbols);
   const pairRows = [];
   for (const pair of pairs) {
-    pairRows.push({ symbol: pair.symbol, rows: await reader.listFxRows(pair.id, fromIso, nowIso) });
+    pairRows.push({
+      symbol: pair.symbol,
+      rows: await reader.listFxRows(pair.id, fromIso, nowIso),
+      firstCandleAt: await reader.firstCandleAt(pair.id),
+    });
   }
   const report = buildDataQualityReport({
     now,
@@ -65,6 +71,8 @@ async function main(): Promise<void> {
     logs: await reader.listLogs(fromIso, nowIso),
     snapshots: await reader.listSnapshots(fromIso, nowIso),
     staged: await reader.listStaged(fromIso, nowIso),
+    economicEventCount: await reader.countEconomicEvents(fromIso, toIso),
+    creditUsage: await reader.listCreditUsage(fromIso.slice(0, 10), nowIso.slice(0, 10)),
   });
   let markdown = renderDataQualityMarkdown(report);
   if (symbols && pairs.length < symbols.length) {

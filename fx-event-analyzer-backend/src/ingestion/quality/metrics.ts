@@ -7,67 +7,174 @@
  * Times are epoch milliseconds (UTC) internally; fx_prices.timestamp is
  * the candle OPEN time (db-design.md §3.11). Periods are half-open
  * [from, to) and minute-aligned.
+ *
+ * Market hours come from ../marketHours.ts (New York 17:00 Sun → 17:00 Fri,
+ * DST-aware, Dec 25 / Jan 1 closed) — the same definition the gap repair
+ * uses, so "missing" means the same thing in both.
+ *
+ * Zero denominators are returned as null (never as 0 %); the renderer
+ * shows them as 「—(理由)」. "No data" and "the check never ran" are
+ * reported as states, not as zero counts (HQ 2026-10-16 C-5/C-6).
  */
+import { floorMinute, isFxMarketOpen, marketMinutes, missingMarketIntervals, MINUTE_MS } from '../marketHours.js';
+import type { MinuteInterval } from '../marketHours.js';
 import type { FxPriceRow, IngestionLogRow, StagedVerificationStatus } from '../store.js';
-
-export const MINUTE_MS = 60_000;
-
-/**
- * Approximate FX market week used to count "expected" 1m candles:
- * open Sunday 21:00 UTC → close Friday 21:00 UTC (= 17:00 New York in US
- * daylight time). This is an APPROXIMATION:
- *   - DST shifts it by an hour: in US standard time (Nov–Mar) the real
- *     week is Sunday 22:00 → Friday 22:00 UTC, so Sunday 21:00–22:00 is
- *     counted as expected (and missing) although the market is closed,
- *     and Friday 21:00–22:00 is not counted at all.
- *   - Holidays (Dec 25, Jan 1, …) and thin minutes in which the provider
- *     has no trade are NOT excluded.
- * Expected minutes / missing rate are therefore UPPER BOUNDS — a missing
- * rate of a few percent may be entirely explained by the above.
- */
-export const FX_MARKET_WEEK_UTC = {
-  /** getUTCDay(): 0 = Sunday */
-  openDay: 0,
-  openHour: 21,
-  /** 5 = Friday */
-  closeDay: 5,
-  closeHour: 21,
-} as const;
 
 /** Minutes around a release that reactions need: open times [T − 5 min, T + 60 min). */
 export const RELEASE_WINDOW_MINUTES = { before: 5, after: 60 } as const;
 
-/** ingest:fx-prices fetches the last 120 minutes on every run (src/jobs/ingestFxPrices.ts). */
+/** ingest:fx-prices fetches (at least) the last 120 minutes on every run (src/jobs/ingestFxPrices.ts). */
 export const FX_INGEST_WINDOW_MINUTES = 120;
 
 export const FX_INGEST_JOB = 'ingest:fx-prices';
+/** ingest:official and ingest:official:reverify — the jobs that compare economic values with official statistics. */
+export const OFFICIAL_JOB_PREFIX = 'ingest:official';
+
+/** Twelve Data Basic (free) plan: 800 requests per UTC day. */
+export const API_DAILY_LIMIT = 800;
+/** Our own daily budget below the plan limit, used when the logs do not record budget.daily. */
+export const API_DAILY_BUDGET_DEFAULT = 700;
 
 export interface Period {
   from: number;
   to: number;
 }
 
-export function isFxMarketOpen(ms: number): boolean {
-  const date = new Date(ms);
-  const day = date.getUTCDay();
-  const hour = date.getUTCHours();
-  if (day === FX_MARKET_WEEK_UTC.openDay) return hour >= FX_MARKET_WEEK_UTC.openHour;
-  if (day === FX_MARKET_WEEK_UTC.closeDay) return hour < FX_MARKET_WEEK_UTC.closeHour;
-  return day !== 6;
-}
-
-const floorMinute = (ms: number): number => Math.floor(ms / MINUTE_MS) * MINUTE_MS;
-const ceilMinute = (ms: number): number => Math.ceil(ms / MINUTE_MS) * MINUTE_MS;
-
-/** Number of market-open minutes (by open time) in [from, to). */
-export function countMarketOpenMinutes(period: Period): number {
-  let count = 0;
-  for (let ms = ceilMinute(period.from); ms < period.to; ms += MINUTE_MS) if (isFxMarketOpen(ms)) count += 1;
-  return count;
-}
-
 const ratio = (numerator: number, denominator: number): number | null =>
   denominator === 0 ? null : numerator / denominator;
+
+// ---------------------------------------------------------------------------
+// ingestion_logs.details parsing (every key optional — older rows lack them)
+// ---------------------------------------------------------------------------
+
+/** The ingestion_logs columns the report reads (job is null in rows from before migration 20261015000003). */
+export interface IngestionLogSample {
+  job: string | null;
+  provider: string;
+  data_type: IngestionLogRow['data_type'];
+  started_at: string;
+  completed_at: string | null;
+  status: IngestionLogRow['status'];
+  details: Record<string, unknown> | null;
+}
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+
+const asNumber = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null;
+
+/** ISO string or epoch ms → ms; anything else → null. */
+function asTime(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value !== 'string') return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+interface SymbolInterval extends MinuteInterval {
+  symbol: string;
+  reason: string | null;
+}
+
+function parseInterval(entry: unknown, symbol: string | null): SymbolInterval | null {
+  const record = asRecord(entry);
+  if (!record) return null;
+  const sym = symbol ?? (typeof record.symbol === 'string' ? record.symbol : null);
+  const from = asTime(record.from);
+  const to = asTime(record.to);
+  if (sym === null || from === null || to === null || to <= from) return null;
+  return { symbol: sym, from, to, reason: typeof record.reason === 'string' ? record.reason : null };
+}
+
+/**
+ * Parses `[{symbol, from, to, reason?}]` or `{SYMBOL: [{from, to, …}]}` (the
+ * shape of details.no_data_unconfirmed); malformed entries are ignored.
+ * `to` is exclusive (the pipeline writes the end of the last minute).
+ */
+function symbolIntervals(value: unknown): SymbolInterval[] {
+  const parsed: (SymbolInterval | null)[] = [];
+  if (Array.isArray(value)) {
+    for (const entry of value) parsed.push(parseInterval(entry, null));
+  } else {
+    for (const [symbol, list] of Object.entries(asRecord(value) ?? {})) {
+      if (Array.isArray(list)) for (const entry of list) parsed.push(parseInterval(entry, symbol));
+    }
+  }
+  return parsed.filter((i): i is SymbolInterval => i !== null);
+}
+
+const byStartedAt = (a: IngestionLogSample, b: IngestionLogSample): number =>
+  Date.parse(a.started_at) - Date.parse(b.started_at);
+
+const fxLogs = (logs: readonly IngestionLogSample[]): IngestionLogSample[] =>
+  logs.filter((log) => log.job === FX_INGEST_JOB).sort(byStartedAt);
+
+/**
+ * Causes of missing 1m minutes as written by ingest:fx-prices
+ * (details.unrecovered[].reason / details.no_data_unconfirmed). UNKNOWN =
+ * no log evidence (未取得・原因未特定).
+ */
+export const MISSING_CAUSES = [
+  'NO_DATA_UNCONFIRMED',
+  'BEYOND_HORIZON',
+  'BUDGET',
+  'RATE_LIMITED',
+  'TIMEOUT',
+  'API_ERROR',
+  'UNKNOWN',
+] as const;
+export type MissingCause = (typeof MISSING_CAUSES)[number];
+
+const UNRECOVERED_REASONS: ReadonlySet<string> = new Set(MISSING_CAUSES.filter((c) => c !== 'UNKNOWN'));
+
+/** Known causes of missing 1m minutes for one pair, from the ingest:fx-prices logs. */
+export interface MissingCauses {
+  /**
+   * details.no_data_unconfirmed of every run (the older key provider_empty
+   * is read the same way) + unrecovered with reason NO_DATA_UNCONFIRMED of
+   * the latest run: the provider may have no candles (not confirmed).
+   */
+  noDataUnconfirmed: MinuteInterval[];
+  /** details.unrecovered of the latest run that recorded the key, by reason (except NO_DATA_UNCONFIRMED) */
+  unrecovered: { reason: Exclude<MissingCause, 'NO_DATA_UNCONFIRMED' | 'UNKNOWN'>; interval: MinuteInterval }[];
+}
+
+export function extractMissingCauses(logs: readonly IngestionLogSample[]): Map<string, MissingCauses> {
+  const result = new Map<string, MissingCauses>();
+  const of = (symbol: string): MissingCauses => {
+    const existing = result.get(symbol);
+    if (existing) return existing;
+    const created: MissingCauses = { noDataUnconfirmed: [], unrecovered: [] };
+    result.set(symbol, created);
+    return created;
+  };
+  const runs = fxLogs(logs);
+  for (const run of runs) {
+    for (const key of ['no_data_unconfirmed', 'provider_empty']) {
+      for (const i of symbolIntervals(run.details?.[key])) of(i.symbol).noDataUnconfirmed.push(i);
+    }
+  }
+  const latest = [...runs].reverse().find((run) => Array.isArray(run.details?.unrecovered));
+  for (const i of symbolIntervals(latest?.details?.unrecovered)) {
+    if (i.reason === 'NO_DATA_UNCONFIRMED') of(i.symbol).noDataUnconfirmed.push(i);
+    else if (i.reason !== null && UNRECOVERED_REASONS.has(i.reason)) {
+      of(i.symbol).unrecovered.push({
+        reason: i.reason as MissingCauses['unrecovered'][number]['reason'],
+        interval: { from: i.from, to: i.to },
+      });
+    }
+  }
+  return result;
+}
+
+const inInterval = (ms: number, i: MinuteInterval): boolean => ms >= i.from && ms < i.to;
+
+/** no_data_unconfirmed first, then the latest run's unrecovered reason, else UNKNOWN. */
+export function classifyMissingMinute(ms: number, causes: MissingCauses): MissingCause {
+  if (causes.noDataUnconfirmed.some((i) => inInterval(ms, i))) return 'NO_DATA_UNCONFIRMED';
+  return causes.unrecovered.find((u) => inInterval(ms, u.interval))?.reason ?? 'UNKNOWN';
+}
 
 // ---------------------------------------------------------------------------
 // FX completeness
@@ -89,28 +196,56 @@ export interface Gap {
 
 export interface AggregateCoverage {
   timeframe: Exclude<FxPriceRow['timeframe'], '1m'>;
-  /** Buckets fully inside the period whose 1m minutes are all present and none UNVERIFIED (what the pipeline needs). */
+  /** (a) Buckets whose 1m minutes are all present and none UNVERIFIED (= the pipeline could build them). */
   eligibleBuckets: number;
   /** Of those, buckets that have a row of this timeframe. */
   presentBuckets: number;
+  /** (a) 作成可能区間での成功率 = presentBuckets ÷ eligibleBuckets */
+  successRate: number | null;
+  /** (b) Buckets fully inside [max(period.from, ingestion start), period.to) whose minutes are all open-market. */
+  expectedBuckets: number;
+  /** Of those, buckets that have a row of this timeframe. */
+  presentExpectedBuckets: number;
+  /** (b) 評価期間全体に対するカバレッジ = presentExpectedBuckets ÷ expectedBuckets */
   coverageRate: number | null;
 }
 
+/**
+ * OK: ingestion started before period.to.
+ * NO_DATA: no 1m candle stored at all (取り込み未開始).
+ * STARTED_AFTER_PERIOD: the first candle is at or after period.to.
+ */
+export type FxDataState = 'OK' | 'NO_DATA' | 'STARTED_AFTER_PERIOD';
+
+/** Missing minutes per cause (see MISSING_CAUSES; UNKNOWN = 未取得・原因未特定). */
+export type MissingBreakdown = Record<MissingCause, number>;
+
+export const emptyBreakdown = (): MissingBreakdown =>
+  Object.fromEntries(MISSING_CAUSES.map((c) => [c, 0])) as MissingBreakdown;
+
 export interface FxCompleteness {
   symbol: string;
+  state: FxDataState;
+  /** ISO open time of the earliest stored 1m candle (null = none) */
+  ingestionStart: string | null;
+  /** open-market minutes in [period.from, ingestion start) — not judged (取り込み開始前・対象外) */
+  beforeStartMinutes: number;
+  /** open-market minutes in [max(period.from, ingestion start), period.to) */
   expectedMinutes: number;
   presentMinutes: number;
+  /** expected − present = real gaps */
   missingMinutes: number;
   missingRate: number | null;
+  missingBreakdown: MissingBreakdown;
   /** present minutes not UNVERIFIED (= usable for reactions) */
   usableMinutes: number;
-  /** 1m rows outside the approximate market week (not counted as present). */
+  /** 1m rows in the period but outside market hours (not counted as present). */
   outsideMarketRows: number;
   longestGaps: Gap[];
   status: Record<FxPriceRow['verification_status'], number>;
   /** 1m rows with a cross-check value (cross_check_diff_pips not null). */
   crossChecked: number;
-  /** VERIFIED / cross-checked rows (VERIFIED + UNVERIFIED that were compared). null = nothing compared. */
+  /** VERIFIED / cross-checked rows. null = nothing compared. */
   agreementRate: number | null;
   maxAbsDiffPips: number | null;
   aggregates: AggregateCoverage[];
@@ -127,36 +262,39 @@ const AGGREGATES = [
 
 export const TOP_GAPS = 5;
 
-/**
- * Gaps are runs of consecutive market-open minutes without a 1m row; a
- * closed-market minute ends a gap (a gap never spans the weekend).
- * Sorted by length desc, then start asc; at most `TOP_GAPS`.
- */
-export function findGaps(present: ReadonlySet<number>, period: Period, limit = TOP_GAPS): Gap[] {
-  const gaps: { start: number; minutes: number }[] = [];
-  let start: number | null = null;
-  let length = 0;
-  const close = (): void => {
-    if (start !== null) gaps.push({ start, minutes: length });
-    start = null;
-    length = 0;
-  };
-  for (let ms = ceilMinute(period.from); ms < period.to; ms += MINUTE_MS) {
-    if (!isFxMarketOpen(ms) || present.has(ms)) {
-      close();
-      continue;
-    }
-    if (start === null) start = ms;
-    length += 1;
-  }
-  close();
-  return gaps
+function topGaps(intervals: readonly MinuteInterval[], limit: number): Gap[] {
+  return intervals
+    .map((i) => ({ start: i.from, minutes: (i.to - i.from) / MINUTE_MS }))
     .sort((a, b) => b.minutes - a.minutes || a.start - b.start)
     .slice(0, limit)
     .map((gap) => ({ start: new Date(gap.start).toISOString(), minutes: gap.minutes }));
 }
 
-export function computeFxCompleteness(symbol: string, rows: readonly FxRowSample[], period: Period): FxCompleteness {
+/**
+ * Gaps are runs of consecutive open-market minutes without a 1m row; a
+ * closed-market minute ends a gap (a gap never spans the weekend).
+ * Sorted by length desc, then start asc; at most `limit`.
+ */
+export function findGaps(present: ReadonlySet<number>, period: Period, limit = TOP_GAPS): Gap[] {
+  return topGaps(missingMarketIntervals(period.from, period.to, present), limit);
+}
+
+export interface FxCompletenessOptions {
+  /**
+   * ISO open time of the earliest stored 1m candle of the pair (any time).
+   * undefined → the earliest 1m row in `rows`; null → none stored. The
+   * earlier of this and the earliest row in `rows` is used.
+   */
+  firstCandleAt?: string | null | undefined;
+  causes?: MissingCauses | undefined;
+}
+
+export function computeFxCompleteness(
+  symbol: string,
+  rows: readonly FxRowSample[],
+  period: Period,
+  options: FxCompletenessOptions = {},
+): FxCompleteness {
   const minuteStatus = new Map<number, FxPriceRow['verification_status']>();
   const aggregated = new Map<string, Set<number>>();
   const status: FxCompleteness['status'] = { VERIFIED: 0, SINGLE_SOURCE: 0, UNVERIFIED: 0 };
@@ -165,10 +303,14 @@ export function computeFxCompleteness(symbol: string, rows: readonly FxRowSample
   let verifiedChecked = 0;
   let maxAbsDiffPips: number | null = null;
   let latest: number | null = null;
+  let earliest: number | null = null;
 
   for (const row of rows) {
     const ms = Date.parse(row.timestamp);
-    if (row.timeframe === '1m' && (latest === null || ms > latest)) latest = ms;
+    if (row.timeframe === '1m') {
+      if (latest === null || ms > latest) latest = ms;
+      if (earliest === null || ms < earliest) earliest = ms;
+    }
     if (ms < period.from || ms >= period.to) continue;
     if (row.timeframe !== '1m') {
       const set = aggregated.get(row.timeframe) ?? new Set<number>();
@@ -190,40 +332,75 @@ export function computeFxCompleteness(symbol: string, rows: readonly FxRowSample
     }
   }
 
-  const expectedMinutes = countMarketOpenMinutes(period);
-  const presentMinutes = minuteStatus.size;
-  const missingMinutes = expectedMinutes - presentMinutes;
+  const given = options.firstCandleAt ? Date.parse(options.firstCandleAt) : null;
+  const start = given === null ? earliest : earliest === null ? given : Math.min(given, earliest);
+  const state: FxDataState = start === null ? 'NO_DATA' : start >= period.to ? 'STARTED_AFTER_PERIOD' : 'OK';
+  const judgedFrom = state === 'OK' ? Math.max(period.from, floorMinute(start!)) : period.to;
+
+  const beforeStartMinutes = marketMinutes(period.from, judgedFrom).length;
+  const expectedMinutes = marketMinutes(judgedFrom, period.to).length;
+  const presentSet = new Set(minuteStatus.keys());
+  const presentMinutes = presentSet.size;
+  const intervals = missingMarketIntervals(judgedFrom, period.to, presentSet);
+  const missingMinutes = intervals.reduce((sum, i) => sum + (i.to - i.from) / MINUTE_MS, 0);
+
+  const missingBreakdown = emptyBreakdown();
+  const causes = options.causes ?? { noDataUnconfirmed: [], unrecovered: [] };
+  for (const interval of intervals) {
+    for (let ms = interval.from; ms < interval.to; ms += MINUTE_MS) {
+      missingBreakdown[classifyMissingMinute(ms, causes)] += 1;
+    }
+  }
 
   const aggregates = AGGREGATES.map(({ timeframe, minutes }): AggregateCoverage => {
     const bucketMs = minutes * MINUTE_MS;
     const present = aggregated.get(timeframe) ?? new Set<number>();
     let eligibleBuckets = 0;
     let presentBuckets = 0;
-    for (let start = Math.ceil(period.from / bucketMs) * bucketMs; start + bucketMs <= period.to; start += bucketMs) {
+    let expectedBuckets = 0;
+    let presentExpectedBuckets = 0;
+    for (let b = Math.ceil(judgedFrom / bucketMs) * bucketMs; b + bucketMs <= period.to; b += bucketMs) {
+      let allOpen = true;
       let complete = true;
-      for (let ms = start; ms < start + bucketMs; ms += MINUTE_MS) {
-        const s = minuteStatus.get(ms);
-        if (s === undefined || s === 'UNVERIFIED') {
-          complete = false;
+      for (let ms = b; ms < b + bucketMs; ms += MINUTE_MS) {
+        if (!isFxMarketOpen(ms)) {
+          allOpen = false;
           break;
         }
+        const s = minuteStatus.get(ms);
+        if (s === undefined || s === 'UNVERIFIED') complete = false;
       }
+      if (!allOpen) continue;
+      expectedBuckets += 1;
+      if (present.has(b)) presentExpectedBuckets += 1;
       if (!complete) continue;
       eligibleBuckets += 1;
-      if (present.has(start)) presentBuckets += 1;
+      if (present.has(b)) presentBuckets += 1;
     }
-    return { timeframe, eligibleBuckets, presentBuckets, coverageRate: ratio(presentBuckets, eligibleBuckets) };
+    return {
+      timeframe,
+      eligibleBuckets,
+      presentBuckets,
+      successRate: ratio(presentBuckets, eligibleBuckets),
+      expectedBuckets,
+      presentExpectedBuckets,
+      coverageRate: ratio(presentExpectedBuckets, expectedBuckets),
+    };
   });
 
   return {
     symbol,
+    state,
+    ingestionStart: start === null ? null : new Date(start).toISOString(),
+    beforeStartMinutes,
     expectedMinutes,
     presentMinutes,
     missingMinutes,
     missingRate: ratio(missingMinutes, expectedMinutes),
+    missingBreakdown,
     usableMinutes: presentMinutes - status.UNVERIFIED,
     outsideMarketRows,
-    longestGaps: findGaps(new Set(minuteStatus.keys()), period),
+    longestGaps: topGaps(intervals, TOP_GAPS),
     status,
     crossChecked,
     agreementRate: ratio(verifiedChecked, crossChecked),
@@ -262,39 +439,54 @@ export interface ReleaseWindowIssue {
 }
 
 export interface ReleaseWindowCounts {
-  /** instant × pair windows that could be judged */
+  /** releases / speeches in the input (= in the period) */
+  instants: number;
+  /** of those, instants judged for at least one pair (件数) */
+  evaluatedInstants: number;
+  /** instant × pair windows that were judged (通貨ペア別の判定件数) */
   windows: number;
   complete: number;
   incomplete: number;
-  /** windows touching the (approximate) closed market — not judged */
+  /** instant × pair windows not judged: the window touches the closed market */
   outsideMarket: number;
-  /** windows not fully inside the period — not judged */
+  /** … the window is not fully inside the period */
   outsidePeriod: number;
+  /** … the window starts before the pair's first stored candle (or the pair has none) */
+  beforeIngestionStart: number;
 }
 
 export interface ReleaseWindowSummary {
+  /** number of pairs every instant is judged against */
+  pairs: number;
   byKind: Record<ReleaseInstant['kind'], ReleaseWindowCounts>;
   /** incomplete windows, most missing minutes first (at most 20) */
   issues: ReleaseWindowIssue[];
 }
 
 const emptyCounts = (): ReleaseWindowCounts => ({
+  instants: 0,
+  evaluatedInstants: 0,
   windows: 0,
   complete: 0,
   incomplete: 0,
   outsideMarket: 0,
   outsidePeriod: 0,
+  beforeIngestionStart: 0,
 });
 
 /**
  * For every instant × pair: does every 1m candle with open time in
  * [T − 5 min, T + 60 min) exist and is not UNVERIFIED? A non-minute-aligned
- * T is floored to the minute.
+ * T is floored to the minute. Not judged (counted separately): window not
+ * fully in the period, window touching the closed market, window starting
+ * before the pair's ingestion start (`startBySymbol`; null = no data; a
+ * pair missing from the map is not restricted).
  */
 export function checkReleaseWindows(
   instants: readonly ReleaseInstant[],
   usableBySymbol: ReadonlyMap<string, ReadonlySet<number>>,
   period: Period,
+  startBySymbol: ReadonlyMap<string, number | null> = new Map(),
 ): ReleaseWindowSummary {
   const byKind = { ECONOMIC: emptyCounts(), SPEECH: emptyCounts() };
   const issues: ReleaseWindowIssue[] = [];
@@ -303,6 +495,7 @@ export function checkReleaseWindows(
     const start = t - RELEASE_WINDOW_MINUTES.before * MINUTE_MS;
     const end = t + RELEASE_WINDOW_MINUTES.after * MINUTE_MS;
     const counts = byKind[instant.kind];
+    counts.instants += 1;
     let marketOpen = true;
     for (let ms = start; ms < end; ms += MINUTE_MS) {
       if (!isFxMarketOpen(ms)) {
@@ -310,6 +503,7 @@ export function checkReleaseWindows(
         break;
       }
     }
+    let judged = false;
     for (const [symbol, usable] of usableBySymbol) {
       if (start < period.from || end > period.to) {
         counts.outsidePeriod += 1;
@@ -319,6 +513,12 @@ export function checkReleaseWindows(
         counts.outsideMarket += 1;
         continue;
       }
+      const pairStart = startBySymbol.has(symbol) ? startBySymbol.get(symbol)! : -Infinity;
+      if (pairStart === null || start < pairStart) {
+        counts.beforeIngestionStart += 1;
+        continue;
+      }
+      judged = true;
       counts.windows += 1;
       let missing = 0;
       for (let ms = start; ms < end; ms += MINUTE_MS) if (!usable.has(ms)) missing += 1;
@@ -329,25 +529,15 @@ export function checkReleaseWindows(
         issues.push({ kind: instant.kind, at: instant.at, label: instant.label, symbol, missingMinutes: missing });
       }
     }
+    if (judged) counts.evaluatedInstants += 1;
   }
   issues.sort((a, b) => b.missingMinutes - a.missingMinutes || Date.parse(a.at) - Date.parse(b.at));
-  return { byKind, issues: issues.slice(0, 20) };
+  return { pairs: usableBySymbol.size, byKind, issues: issues.slice(0, 20) };
 }
 
 // ---------------------------------------------------------------------------
 // Ingestion runs
 // ---------------------------------------------------------------------------
-
-/** The ingestion_logs columns the report reads (job is null in rows from before migration 20261015000003). */
-export interface IngestionLogSample {
-  job: string | null;
-  provider: string;
-  data_type: IngestionLogRow['data_type'];
-  started_at: string;
-  completed_at: string | null;
-  status: IngestionLogRow['status'];
-  details: Record<string, unknown> | null;
-}
 
 export interface JobRunStats {
   job: string;
@@ -371,15 +561,18 @@ export function median(values: readonly number[]): number | null {
   return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
-function skipReasonsOf(log: IngestionLogSample): Record<string, number> {
-  const raw = log.details?.skip_reasons;
-  if (!raw || typeof raw !== 'object') return {};
+function numberRecord(raw: unknown): Record<string, number> {
+  const record = asRecord(raw);
+  if (!record) return {};
   const result: Record<string, number> = {};
-  for (const [reason, count] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof count === 'number' && Number.isFinite(count)) result[reason] = count;
+  for (const [key, value] of Object.entries(record)) {
+    const n = asNumber(value);
+    if (n !== null) result[key] = n;
   }
   return result;
 }
+
+const skipReasonsOf = (log: IngestionLogSample): Record<string, number> => numberRecord(log.details?.skip_reasons);
 
 export function summarizeRuns(logs: readonly IngestionLogSample[]): JobRunStats[] {
   const byJob = new Map<string, IngestionLogSample[]>();
@@ -456,7 +649,7 @@ export function analyzeFxSchedule(
         from: new Date(from).toISOString(),
         to: new Date(to).toISOString(),
         minutes: Math.round(minutes),
-        uncoveredMarketMinutes: countMarketOpenMinutes({ from, to: floorMinute(to) - windowMinutes * MINUTE_MS }),
+        uncoveredMarketMinutes: marketMinutes(from, floorMinute(to) - windowMinutes * MINUTE_MS).length,
       });
     }
   }
@@ -480,6 +673,244 @@ export function countSpeechTimeNotExact(logs: readonly IngestionLogSample[]): nu
 }
 
 // ---------------------------------------------------------------------------
+// API usage and reconciliation (ingest:fx-prices details)
+// ---------------------------------------------------------------------------
+
+export interface ApiUsageDay {
+  /** UTC date YYYY-MM-DD of started_at */
+  date: string;
+  requests: number;
+  /** runs that recorded api_requests */
+  runs: number;
+}
+
+export interface ReconciliationTotals {
+  /** runs whose details had a reconciliation object */
+  runs: number;
+  fetched: number;
+  accepted: number;
+  rejected: number;
+  rejectedByReason: Record<string, number>;
+  upserted1m: number;
+  upsertedAggregated: number;
+  corrected: number;
+  failedRequests: number;
+  /** runs where fetched ≠ accepted + Σrejected, or upserted_1m ≠ accepted (only fields that were recorded are checked) */
+  mismatchRuns: number;
+  /** the same checks on the sums over all runs */
+  sumMismatch: boolean;
+}
+
+export interface ApiUsageStats {
+  /** ingest:fx-prices runs in the logs */
+  fxRuns: number;
+  /** of those, runs that recorded details.api_requests (older rows don't) */
+  runsWithCount: number;
+  totalRequests: number;
+  maxPerRun: { requests: number; startedAt: string } | null;
+  perDay: ApiUsageDay[];
+  dailyLimit: number;
+  /** budget.daily of the latest run that recorded it, else API_DAILY_BUDGET_DEFAULT */
+  dailyBudget: number;
+  latestBudget: {
+    startedAt: string;
+    daily: number | null;
+    usedBeforeRun: number | null;
+    leftAfterRun: number | null;
+  } | null;
+  /** details.unrecovered of the latest run that recorded it: minutes per reason */
+  latestUnrecovered: { startedAt: string; total: number | null; minutesByReason: Record<string, number> } | null;
+  reconciliation: ReconciliationTotals | null;
+}
+
+export function summarizeApiUsage(logs: readonly IngestionLogSample[]): ApiUsageStats {
+  const runs = fxLogs(logs);
+  const perDay = new Map<string, ApiUsageDay>();
+  let totalRequests = 0;
+  let runsWithCount = 0;
+  let maxPerRun: ApiUsageStats['maxPerRun'] = null;
+  let latestBudget: ApiUsageStats['latestBudget'] = null;
+  let latestUnrecovered: ApiUsageStats['latestUnrecovered'] = null;
+  let rec: ReconciliationTotals | null = null;
+
+  for (const run of runs) {
+    const details = run.details ?? {};
+    const requests = asNumber(details.api_requests);
+    if (requests !== null) {
+      runsWithCount += 1;
+      totalRequests += requests;
+      const date = new Date(Date.parse(run.started_at)).toISOString().slice(0, 10);
+      const day = perDay.get(date) ?? { date, requests: 0, runs: 0 };
+      day.requests += requests;
+      day.runs += 1;
+      perDay.set(date, day);
+      if (!maxPerRun || requests > maxPerRun.requests) maxPerRun = { requests, startedAt: run.started_at };
+    }
+    const budget = asRecord(details.budget);
+    if (budget) {
+      latestBudget = {
+        startedAt: run.started_at,
+        daily: asNumber(budget.daily),
+        usedBeforeRun: asNumber(budget.used_before_run),
+        leftAfterRun: asNumber(budget.left_after_run),
+      };
+    }
+    if (Array.isArray(details.unrecovered)) {
+      const minutesByReason: Record<string, number> = {};
+      for (const i of symbolIntervals(details.unrecovered)) {
+        const reason = i.reason ?? '(理由なし)';
+        minutesByReason[reason] = (minutesByReason[reason] ?? 0) + Math.round((i.to - i.from) / MINUTE_MS);
+      }
+      latestUnrecovered = { startedAt: run.started_at, total: asNumber(details.unrecovered_total), minutesByReason };
+    }
+    const r = asRecord(details.reconciliation);
+    if (r) {
+      rec ??= {
+        runs: 0,
+        fetched: 0,
+        accepted: 0,
+        rejected: 0,
+        rejectedByReason: {},
+        upserted1m: 0,
+        upsertedAggregated: 0,
+        corrected: 0,
+        failedRequests: 0,
+        mismatchRuns: 0,
+        sumMismatch: false,
+      };
+      const fetched = asNumber(r.fetched);
+      const accepted = asNumber(r.accepted);
+      const upserted1m = asNumber(r.upserted_1m);
+      const rejectedByReason = numberRecord(r.rejected_by_reason);
+      const rejected = Object.values(rejectedByReason).reduce((sum, n) => sum + n, 0);
+      rec.runs += 1;
+      rec.fetched += fetched ?? 0;
+      rec.accepted += accepted ?? 0;
+      rec.rejected += rejected;
+      for (const [reason, n] of Object.entries(rejectedByReason)) {
+        rec.rejectedByReason[reason] = (rec.rejectedByReason[reason] ?? 0) + n;
+      }
+      rec.upserted1m += upserted1m ?? 0;
+      rec.upsertedAggregated += asNumber(r.upserted_aggregated) ?? 0;
+      rec.corrected += asNumber(r.corrected) ?? 0;
+      rec.failedRequests += asNumber(r.failed_requests) ?? 0;
+      const countMismatch = fetched !== null && accepted !== null && fetched !== accepted + rejected;
+      const upsertMismatch = upserted1m !== null && accepted !== null && upserted1m !== accepted;
+      if (countMismatch || upsertMismatch) rec.mismatchRuns += 1;
+    }
+  }
+  if (rec) rec.sumMismatch = rec.fetched !== rec.accepted + rec.rejected || rec.upserted1m !== rec.accepted;
+
+  return {
+    fxRuns: runs.length,
+    runsWithCount,
+    totalRequests,
+    maxPerRun,
+    perDay: [...perDay.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
+    dailyLimit: API_DAILY_LIMIT,
+    dailyBudget: latestBudget?.daily ?? API_DAILY_BUDGET_DEFAULT,
+    latestBudget,
+    latestUnrecovered,
+    reconciliation: rec,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// API credits (api_credit_usage, written by the ingest jobs before each attempt)
+// ---------------------------------------------------------------------------
+
+/** The api_credit_usage columns the report reads. */
+export interface CreditUsageSample {
+  provider: string;
+  /** UTC date YYYY-MM-DD */
+  usage_date: string;
+  job: string | null;
+  credits: number;
+  /** daily cap applied when the credit was reserved (700 scheduled / 800 manual); null = unknown */
+  cap?: number | null | undefined;
+}
+
+export type CreditJobKind = 'AUTO' | 'MANUAL' | 'EVAL';
+
+/**
+ * Daily caps (UTC day). PLAN assumes the Twelve Data Basic plan (800/day,
+ * contract not confirmed); AUTO is the budget of the scheduled ingest,
+ * MANUAL the most a manual run may use.
+ */
+export const CREDIT_CAPS = { AUTO: API_DAILY_BUDGET_DEFAULT, MANUAL: API_DAILY_LIMIT, PLAN: API_DAILY_LIMIT } as const;
+
+/**
+ * eval:providers → EVAL. ingest:fx-prices reserves with job 'ingest:fx-prices'
+ * in both modes, so its --manual runs are told apart by the cap they reserved
+ * under (> the automatic cap). Any other job → MANUAL.
+ */
+export function creditJobKind(job: string | null, cap: number | null = null): CreditJobKind {
+  if (job === 'eval:providers') return 'EVAL';
+  if (job === FX_INGEST_JOB) return cap !== null && cap > CREDIT_CAPS.AUTO ? 'MANUAL' : 'AUTO';
+  return 'MANUAL';
+}
+
+export interface CreditDay {
+  provider: string;
+  date: string;
+  auto: number;
+  manual: number;
+  eval: number;
+  total: number;
+  overAutoCap: boolean;
+  overManualCap: boolean;
+  overPlan: boolean;
+}
+
+export interface CreditUsageStats {
+  days: CreditDay[];
+  /** job names counted as MANUAL */
+  manualJobs: string[];
+}
+
+/** null rows (= table missing or unreadable) → null. */
+export function summarizeCreditUsage(rows: readonly CreditUsageSample[] | null): CreditUsageStats | null {
+  if (rows === null) return null;
+  const days = new Map<string, CreditDay>();
+  const manualJobs = new Set<string>();
+  for (const row of rows) {
+    const credits = Number(row.credits);
+    if (!Number.isFinite(credits)) continue;
+    const date = row.usage_date.slice(0, 10);
+    const key = `${date}|${row.provider}`;
+    const day = days.get(key) ?? {
+      provider: row.provider,
+      date,
+      auto: 0,
+      manual: 0,
+      eval: 0,
+      total: 0,
+      overAutoCap: false,
+      overManualCap: false,
+      overPlan: false,
+    };
+    const kind = creditJobKind(row.job, row.cap ?? null);
+    if (kind === 'AUTO') day.auto += credits;
+    else if (kind === 'EVAL') day.eval += credits;
+    else {
+      day.manual += credits;
+      manualJobs.add(row.job === FX_INGEST_JOB ? `${FX_INGEST_JOB} (--manual)` : (row.job ?? '(job未記録)'));
+    }
+    day.total += credits;
+    days.set(key, day);
+  }
+  const sorted = [...days.values()].sort((a, b) =>
+    a.date !== b.date ? (a.date < b.date ? -1 : 1) : a.provider < b.provider ? -1 : a.provider > b.provider ? 1 : 0,
+  );
+  for (const day of sorted) {
+    day.overAutoCap = day.auto > CREDIT_CAPS.AUTO;
+    day.overManualCap = day.manual > CREDIT_CAPS.MANUAL;
+    day.overPlan = day.total > CREDIT_CAPS.PLAN;
+  }
+  return { days: sorted, manualJobs: [...manualJobs].sort() };
+}
+
+// ---------------------------------------------------------------------------
 // Economic values
 // ---------------------------------------------------------------------------
 
@@ -492,7 +923,19 @@ export interface StagedSample {
   reasons: readonly string[];
 }
 
+/**
+ * NO_DATA: no economic_events and no event_snapshots rows in the period (未検証・経済指標データ未取得).
+ * NOT_RUN: data exists but no ingest:official* run in the period (未検証・照合処理未実行).
+ * MEASURED: counts and rates are meaningful.
+ */
+export type EconomicState = 'NO_DATA' | 'NOT_RUN' | 'MEASURED';
+
 export interface EconomicValueStats {
+  state: EconomicState;
+  /** economic_events rows in the period (any status); null = not counted */
+  economicEvents: number | null;
+  /** ingest:official / ingest:official:reverify runs in the period; null = not counted */
+  officialRuns: number | null;
   snapshots: Record<string, number>;
   staged: Record<string, number>;
   /** PENDING_REVIEW staged values whose reasons include OFFICIAL_MISMATCH */
@@ -506,6 +949,7 @@ export interface EconomicValueStats {
 export function summarizeEconomicValues(
   snapshots: readonly SnapshotSample[],
   staged: readonly StagedSample[],
+  context: { economicEvents: number; officialRuns: number } | null = null,
 ): EconomicValueStats {
   const count = (values: readonly string[]): Record<string, number> => {
     const result: Record<string, number> = {};
@@ -516,7 +960,15 @@ export function summarizeEconomicValues(
   const officialMismatches = pending.filter((s) => s.reasons.includes('OFFICIAL_MISMATCH')).length;
   const snapshotCounts = count(snapshots.map((s) => s.verification_status));
   const verified = snapshotCounts.VERIFIED ?? 0;
+  let state: EconomicState = 'MEASURED';
+  if (context) {
+    if (context.economicEvents === 0 && snapshots.length === 0) state = 'NO_DATA';
+    else if (context.officialRuns === 0) state = 'NOT_RUN';
+  }
   return {
+    state,
+    economicEvents: context?.economicEvents ?? null,
+    officialRuns: context?.officialRuns ?? null,
     snapshots: snapshotCounts,
     staged: count(staged.map((s) => s.verification_status)),
     officialMismatches,
@@ -529,17 +981,39 @@ export function summarizeEconomicValues(
 // Whole report
 // ---------------------------------------------------------------------------
 
+export interface FxPairInput {
+  symbol: string;
+  /** 1m and aggregated rows, at least for [period.from, now) */
+  rows: readonly FxRowSample[];
+  /** ISO open time of the earliest stored 1m candle (see FxCompletenessOptions.firstCandleAt) */
+  firstCandleAt?: string | null | undefined;
+}
+
 export interface DataQualityInput {
   now: Date;
   /** completeness period [from, to) — `to` is a bit before `now` (the latest minutes wait for the next run) */
   period: Period;
   days: number;
-  /** 1m and aggregated rows per pair, at least for [period.from, now) */
-  pairs: readonly { symbol: string; rows: readonly FxRowSample[] }[];
+  pairs: readonly FxPairInput[];
   releases: readonly ReleaseInstant[];
   logs: readonly IngestionLogSample[];
   snapshots: readonly SnapshotSample[];
   staged: readonly StagedSample[];
+  /** economic_events rows (any status) in the period; undefined → the ECONOMIC releases are counted */
+  economicEventCount?: number;
+  /** api_credit_usage rows for the UTC days of the period; null/undefined = table missing or unreadable */
+  creditUsage?: readonly CreditUsageSample[] | null;
+}
+
+export interface FxTotals {
+  beforeStartMinutes: number;
+  expectedMinutes: number;
+  presentMinutes: number;
+  missingMinutes: number;
+  missingRate: number | null;
+  missingBreakdown: MissingBreakdown;
+  /** pairs with no stored 1m candle at all */
+  pairsWithoutData: string[];
 }
 
 export interface DataQualityReport {
@@ -547,43 +1021,63 @@ export interface DataQualityReport {
   period: { from: string; to: string };
   days: number;
   fx: FxCompleteness[];
-  fxTotals: { expectedMinutes: number; presentMinutes: number; missingMinutes: number; missingRate: number | null };
+  fxTotals: FxTotals;
   /** now − close time of the newest 1m candle, per pair (null = no candle) */
   latestCandleAgeMinutes: Record<string, number | null>;
   releaseWindows: ReleaseWindowSummary;
   runs: JobRunStats[];
   fxSchedule: FxScheduleStats;
+  apiUsage: ApiUsageStats;
+  /** null = no credit records (table missing or unreadable) */
+  credits: CreditUsageStats | null;
   speechTimeNotExact: number;
   economic: EconomicValueStats;
 }
 
 export function buildDataQualityReport(input: DataQualityInput): DataQualityReport {
   const now = input.now.getTime();
-  const fx = input.pairs.map((pair) => computeFxCompleteness(pair.symbol, pair.rows, input.period));
-  const expectedMinutes = fx.reduce((sum, f) => sum + f.expectedMinutes, 0);
-  const presentMinutes = fx.reduce((sum, f) => sum + f.presentMinutes, 0);
+  const causes = extractMissingCauses(input.logs);
+  const fx = input.pairs.map((pair) =>
+    computeFxCompleteness(pair.symbol, pair.rows, input.period, {
+      firstCandleAt: pair.firstCandleAt,
+      causes: causes.get(pair.symbol),
+    }),
+  );
+  const sum = (pick: (f: FxCompleteness) => number): number => fx.reduce((total, f) => total + pick(f), 0);
+  const expectedMinutes = sum((f) => f.expectedMinutes);
+  const missingMinutes = sum((f) => f.missingMinutes);
   const latestCandleAgeMinutes: Record<string, number | null> = {};
   for (const f of fx) {
     latestCandleAgeMinutes[f.symbol] =
       f.latestCandleOpen === null ? null : Math.round((now - Date.parse(f.latestCandleOpen) - MINUTE_MS) / MINUTE_MS);
   }
   const usable = new Map(input.pairs.map((pair) => [pair.symbol, usableMinuteSet(pair.rows)]));
+  const starts = new Map(fx.map((f) => [f.symbol, f.ingestionStart === null ? null : Date.parse(f.ingestionStart)]));
+  const economicEvents = input.economicEventCount ?? input.releases.filter((r) => r.kind === 'ECONOMIC').length;
+  const officialRuns = input.logs.filter((log) => log.job?.startsWith(OFFICIAL_JOB_PREFIX)).length;
   return {
     generatedAt: input.now.toISOString(),
     period: { from: new Date(input.period.from).toISOString(), to: new Date(input.period.to).toISOString() },
     days: input.days,
     fx,
     fxTotals: {
+      beforeStartMinutes: sum((f) => f.beforeStartMinutes),
       expectedMinutes,
-      presentMinutes,
-      missingMinutes: expectedMinutes - presentMinutes,
-      missingRate: ratio(expectedMinutes - presentMinutes, expectedMinutes),
+      presentMinutes: sum((f) => f.presentMinutes),
+      missingMinutes,
+      missingRate: ratio(missingMinutes, expectedMinutes),
+      missingBreakdown: Object.fromEntries(
+        MISSING_CAUSES.map((c) => [c, sum((f) => f.missingBreakdown[c])]),
+      ) as MissingBreakdown,
+      pairsWithoutData: fx.filter((f) => f.state === 'NO_DATA').map((f) => f.symbol),
     },
     latestCandleAgeMinutes,
-    releaseWindows: checkReleaseWindows(input.releases, usable, input.period),
+    releaseWindows: checkReleaseWindows(input.releases, usable, input.period, starts),
     runs: summarizeRuns(input.logs),
     fxSchedule: analyzeFxSchedule(input.logs, now),
+    apiUsage: summarizeApiUsage(input.logs),
+    credits: summarizeCreditUsage(input.creditUsage ?? null),
     speechTimeNotExact: countSpeechTimeNotExact(input.logs),
-    economic: summarizeEconomicValues(input.snapshots, input.staged),
+    economic: summarizeEconomicValues(input.snapshots, input.staged, { economicEvents, officialRuns }),
   };
 }

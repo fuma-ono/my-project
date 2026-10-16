@@ -168,6 +168,21 @@ export interface IngestionLogRow {
   details: Record<string, unknown>;
 }
 
+/** ingestion_logs row of ingest:fx-prices, reduced to what the gap repair reads back. */
+export interface FxIngestionLogSample {
+  started_at: string;
+  details: { no_data_unconfirmed?: unknown };
+}
+
+export interface ApiCreditReservation {
+  provider: string;
+  job: string;
+  runId: string;
+  credits: number;
+  /** Provider-wide limit for today (UTC): the reservation succeeds only if today's total + credits ≤ cap. */
+  cap: number;
+}
+
 export interface IngestionStore {
   findIndicatorsByCode(codes: readonly string[]): Promise<Map<string, IndicatorRef>>;
   findEventByProviderId(provider: string, providerEventId: string): Promise<StoredEvent | null>;
@@ -194,5 +209,17 @@ export interface IngestionStore {
   listScheduledSpeechIds(provider: string, fromIso: string, toIso: string): Promise<string[]>;
   listFxPairs(): Promise<FxPairRef[]>;
   upsertFxPrices(rows: readonly FxPriceRow[]): Promise<number>;
+  /** 1m candle open times of the pair in [fromIso, toIso), ascending (ISO strings). */
+  listFxMinuteTimestamps(fxPairId: string, fromIso: string, toIso: string): Promise<string[]>;
+  /** Earliest stored 1m open time of the pair (= when ingestion started for it), or null. */
+  firstFxMinute(fxPairId: string): Promise<string | null>;
+  /** Full 1m rows of the pair in [fromIso, toIso), ascending. */
+  listFxMinuteRows(fxPairId: string, fromIso: string, toIso: string): Promise<FxPriceRow[]>;
+  /** ingest:fx-prices log rows started at or after sinceIso (no_data_unconfirmed history). */
+  listRecentFxIngestionLogs(sinceIso: string): Promise<FxIngestionLogSample[]>;
+  /** Atomic check-and-reserve in the API-credit ledger; false = cap reached, nothing reserved. */
+  reserveApiCredits(reservation: ApiCreditReservation): Promise<boolean>;
+  /** Credits reserved today (UTC) for the provider, all jobs. */
+  todayApiCredits(provider: string): Promise<number>;
   insertIngestionLog(row: IngestionLogRow): Promise<void>;
 }

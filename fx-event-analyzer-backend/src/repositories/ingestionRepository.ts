@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
+  ApiCreditReservation,
   EventPatch,
+  FxIngestionLogSample,
   FxPairRef,
   FxPriceRow,
   IndicatorRef,
@@ -64,6 +66,45 @@ function toStaged(row: Record<string, unknown>): StagedValue {
 }
 
 const UPSERT_CHUNK = 500;
+/** PostgREST returns at most 1000 rows per request — longer lists are paged with .range(). */
+const PAGE_SIZE = 1000;
+const FX_ROW_COLUMNS =
+  'fx_pair_id, timestamp, timeframe, open, high, low, close, volume, source, verification_status, cross_check_source, cross_check_close, cross_check_diff_pips';
+
+interface Page {
+  data: unknown[] | null;
+  error: unknown;
+}
+
+/** Calls `page(from, to)` (inclusive offsets, stable order) until a short page comes back. */
+async function allPages<T>(page: (from: number, to: number) => PromiseLike<Page>): Promise<T[]> {
+  const rows: T[] = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const { data, error } = await page(offset, offset + PAGE_SIZE - 1);
+    if (error) throw error instanceof Error ? error : new Error(JSON.stringify(error));
+    const chunk = (data ?? []) as T[];
+    rows.push(...chunk);
+    if (chunk.length < PAGE_SIZE) return rows;
+  }
+}
+
+function toFxRow(row: Record<string, unknown>): FxPriceRow {
+  return {
+    fx_pair_id: row.fx_pair_id as string,
+    timestamp: new Date(row.timestamp as string).toISOString(),
+    timeframe: row.timeframe as FxPriceRow['timeframe'],
+    open: Number(row.open),
+    high: Number(row.high),
+    low: Number(row.low),
+    close: Number(row.close),
+    volume: num(row.volume),
+    source: (row.source as string | null) ?? '',
+    verification_status: row.verification_status as FxPriceRow['verification_status'],
+    cross_check_source: (row.cross_check_source as string | null) ?? null,
+    cross_check_close: num(row.cross_check_close),
+    cross_check_diff_pips: num(row.cross_check_diff_pips),
+  };
+}
 
 export function createIngestionRepository(supabase: SupabaseClient): IngestionStore {
   return {
@@ -232,6 +273,86 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
         count += chunk.length;
       }
       return count;
+    },
+
+    async listFxMinuteTimestamps(fxPairId: string, fromIso: string, toIso: string): Promise<string[]> {
+      const rows = await allPages<{ timestamp: string }>((from, to) =>
+        supabase
+          .from('fx_prices')
+          .select('timestamp')
+          .eq('fx_pair_id', fxPairId)
+          .eq('timeframe', '1m')
+          .gte('timestamp', fromIso)
+          .lt('timestamp', toIso)
+          .order('timestamp', { ascending: true })
+          .range(from, to),
+      );
+      return rows.map((row) => new Date(row.timestamp).toISOString());
+    },
+
+    async firstFxMinute(fxPairId: string): Promise<string | null> {
+      const { data, error } = await supabase
+        .from('fx_prices')
+        .select('timestamp')
+        .eq('fx_pair_id', fxPairId)
+        .eq('timeframe', '1m')
+        .order('timestamp', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      const row: { timestamp: string } | null = data;
+      return row ? new Date(row.timestamp).toISOString() : null;
+    },
+
+    async listFxMinuteRows(fxPairId: string, fromIso: string, toIso: string): Promise<FxPriceRow[]> {
+      const rows = await allPages<Record<string, unknown>>((from, to) =>
+        supabase
+          .from('fx_prices')
+          .select(FX_ROW_COLUMNS)
+          .eq('fx_pair_id', fxPairId)
+          .eq('timeframe', '1m')
+          .gte('timestamp', fromIso)
+          .lt('timestamp', toIso)
+          .order('timestamp', { ascending: true })
+          .range(from, to),
+      );
+      return rows.map(toFxRow);
+    },
+
+    async listRecentFxIngestionLogs(sinceIso: string): Promise<FxIngestionLogSample[]> {
+      // Only the one details key the gap repair needs (not the whole details JSON).
+      const rows = await allPages<{ started_at: string; no_data_unconfirmed: unknown }>((from, to) =>
+        supabase
+          .from('ingestion_logs')
+          .select('id, started_at, no_data_unconfirmed:details->no_data_unconfirmed')
+          .eq('job', 'ingest:fx-prices')
+          .gte('started_at', sinceIso)
+          .order('started_at', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
+      return rows.map((row) => ({
+        started_at: new Date(row.started_at).toISOString(),
+        details: { no_data_unconfirmed: row.no_data_unconfirmed ?? undefined },
+      }));
+    },
+
+    async reserveApiCredits(reservation: ApiCreditReservation): Promise<boolean> {
+      const { data, error } = await supabase.rpc('reserve_api_credits', {
+        p_provider: reservation.provider,
+        p_job: reservation.job,
+        p_run_id: reservation.runId,
+        p_credits: reservation.credits,
+        p_cap: reservation.cap,
+      });
+      if (error) throw error;
+      return data === true;
+    },
+
+    async todayApiCredits(provider: string): Promise<number> {
+      const { data, error } = await supabase.rpc('api_credits_used_today', { p_provider: provider });
+      if (error) throw error;
+      return Number(data ?? 0);
     },
 
     async insertIngestionLog(row: IngestionLogRow): Promise<void> {

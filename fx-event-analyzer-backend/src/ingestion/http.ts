@@ -8,6 +8,11 @@
  * API keys travel in query strings for most providers, so every URL that
  * can end up in an error message or ingestion log goes through
  * redactUrl() first.
+ *
+ * Credits: `beforeAttempt` runs before EVERY attempt (retries included).
+ * When it returns false (or throws) the request is not sent and a
+ * CreditBudgetExceededError is thrown — that is how the API-credit ledger
+ * (CreditGate below) becomes a hard limit.
  */
 
 export interface ProviderHttpSettings {
@@ -25,17 +30,88 @@ export interface HttpClientDeps {
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
+  /** Called before every attempt (retries included). false → not sent, CreditBudgetExceededError. */
+  beforeAttempt?: () => Promise<boolean>;
+  /** Called for every attempt actually sent (retries included). */
+  onAttempt?: () => void;
 }
+
+export type HttpErrorKind = 'HTTP' | 'TIMEOUT' | 'NETWORK' | 'PARSE';
 
 export class HttpError extends Error {
   constructor(
     message: string,
     readonly status: number | null,
     readonly retryable: boolean,
+    readonly kind: HttpErrorKind = 'HTTP',
   ) {
     super(message);
     this.name = 'HttpError';
   }
+}
+
+/** The request was NOT sent: the credit cap is reached, or the ledger could not be asked. */
+export class CreditBudgetExceededError extends Error {
+  constructor(
+    message: string,
+    readonly reason: 'CAP_REACHED' | 'LEDGER_UNAVAILABLE',
+  ) {
+    super(message);
+    this.name = 'CreditBudgetExceededError';
+  }
+}
+
+/** The part of the ingestion store the credit gate needs (atomic in the DB: reserve_api_credits()). */
+export interface CreditLedger {
+  reserveApiCredits(reservation: {
+    provider: string;
+    job: string;
+    runId: string;
+    credits: number;
+    cap: number;
+  }): Promise<boolean>;
+}
+
+/**
+ * Reserves one credit in the ledger before every HTTP attempt. `dailyCap`
+ * is the provider-wide limit for today (UTC) across every job and run;
+ * `runCap` (optional) additionally limits the attempts of this run.
+ */
+export class CreditGate {
+  /** Credits reserved (= attempts allowed to be sent) by this run. */
+  reserved = 0;
+  refusal: 'RUN_CAP' | 'DAILY_CAP' | 'LEDGER_UNAVAILABLE' | null = null;
+
+  constructor(
+    private readonly ledger: CreditLedger,
+    readonly spec: { provider: string; job: string; runId: string; dailyCap: number; runCap?: number },
+  ) {}
+
+  readonly beforeAttempt = async (): Promise<boolean> => {
+    if (this.spec.runCap !== undefined && this.reserved >= this.spec.runCap) {
+      this.refusal = 'RUN_CAP';
+      return false;
+    }
+    let ok: boolean;
+    try {
+      ok = await this.ledger.reserveApiCredits({
+        provider: this.spec.provider,
+        job: this.spec.job,
+        runId: this.spec.runId,
+        credits: 1,
+        cap: this.spec.dailyCap,
+      });
+    } catch (error) {
+      this.refusal = 'LEDGER_UNAVAILABLE';
+      throw error;
+    }
+    if (!ok) {
+      this.refusal = 'DAILY_CAP';
+      return false;
+    }
+    this.reserved += 1;
+    return true;
+  };
 }
 
 const SECRET_QUERY_PARAMS = new Set(['api_key', 'apikey', 'apiKey', 'token', 'c', 'registrationkey', 'key']);
@@ -72,6 +148,8 @@ export class HttpClient {
   private readonly fetchImpl: typeof fetch;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly now: () => number;
+  private readonly beforeAttempt: (() => Promise<boolean>) | undefined;
+  private readonly onAttempt: (() => void) | undefined;
   private nextAllowedAt = 0;
   /** Serializes requests so the rate limit holds even with concurrent callers. */
   private queue: Promise<void> = Promise.resolve();
@@ -84,6 +162,8 @@ export class HttpClient {
     this.fetchImpl = deps.fetch ?? fetch;
     this.sleep = deps.sleep ?? defaultSleep;
     this.now = deps.now ?? Date.now;
+    this.beforeAttempt = deps.beforeAttempt;
+    this.onAttempt = deps.onAttempt;
   }
 
   async getText(url: string, init: RequestInit = {}): Promise<string> {
@@ -96,7 +176,7 @@ export class HttpClient {
     try {
       return JSON.parse(stripBom(text)) as unknown;
     } catch {
-      throw new HttpError(`${this.provider}: response is not JSON (${redactUrl(url)})`, null, false);
+      throw new HttpError(`${this.provider}: response is not JSON (${redactUrl(url)})`, null, false, 'PARSE');
     }
   }
 
@@ -111,11 +191,33 @@ export class HttpClient {
     release();
   }
 
+  private async reserveAttempt(safeUrl: string): Promise<void> {
+    if (!this.beforeAttempt) return;
+    let allowed: boolean;
+    try {
+      allowed = await this.beforeAttempt();
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new CreditBudgetExceededError(
+        `${this.provider}: credit ledger unavailable, request not sent (${safeUrl}): ${reason}`,
+        'LEDGER_UNAVAILABLE',
+      );
+    }
+    if (!allowed) {
+      throw new CreditBudgetExceededError(
+        `${this.provider}: API credit cap reached, request not sent (${safeUrl})`,
+        'CAP_REACHED',
+      );
+    }
+  }
+
   private async request(url: string, init: RequestInit): Promise<Response> {
     const safeUrl = redactUrl(url);
     let lastError: HttpError = new HttpError(`${this.provider}: request failed (${safeUrl})`, null, true);
     for (let attempt = 0; attempt <= this.settings.maxRetries; attempt += 1) {
       await this.waitForSlot();
+      await this.reserveAttempt(safeUrl);
+      this.onAttempt?.();
       let retryDelay = this.settings.backoffMs * 2 ** attempt;
       try {
         const response = await this.fetchImpl(url, { ...init, signal: AbortSignal.timeout(this.settings.timeoutMs) });
@@ -128,7 +230,8 @@ export class HttpClient {
         if (error instanceof HttpError && !error.retryable) throw error;
         if (!(error instanceof HttpError)) {
           const reason = error instanceof Error ? error.name : 'error';
-          lastError = new HttpError(`${this.provider}: ${reason} (${safeUrl})`, null, true);
+          const kind = reason === 'TimeoutError' || reason === 'AbortError' ? 'TIMEOUT' : 'NETWORK';
+          lastError = new HttpError(`${this.provider}: ${reason} (${safeUrl})`, null, true, kind);
         }
       }
       if (attempt < this.settings.maxRetries) await this.sleep(retryDelay);

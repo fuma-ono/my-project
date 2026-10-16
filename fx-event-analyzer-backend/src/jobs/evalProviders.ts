@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { BlsAdapter } from '../ingestion/adapters/bls.js';
@@ -7,8 +8,12 @@ import { FmpAdapter } from '../ingestion/adapters/fmp.js';
 import { FredAdapter } from '../ingestion/adapters/fred.js';
 import { PolygonAdapter } from '../ingestion/adapters/polygon.js';
 import { TradingEconomicsAdapter } from '../ingestion/adapters/tradingEconomics.js';
-import { TwelveDataAdapter } from '../ingestion/adapters/twelveData.js';
-import { INGESTION_SETTINGS, loadIngestionEnv } from '../ingestion/config.js';
+import { TWELVE_DATA_PROVIDER, TwelveDataAdapter } from '../ingestion/adapters/twelveData.js';
+import { loadEnv } from '../config/env.js';
+import { createSupabaseClient } from '../db/supabaseClient.js';
+import { API_CREDIT_CAPS, INGESTION_SETTINGS, loadIngestionEnv } from '../ingestion/config.js';
+import { CreditGate } from '../ingestion/http.js';
+import { createIngestionRepository } from '../repositories/ingestionRepository.js';
 import {
   checkAgainstFredReleaseDates,
   compareCalendarProvider,
@@ -26,7 +31,12 @@ import { checkCandles } from '../ingestion/validation/fxCandles.js';
 
 /**
  * Compares the paid candidates whose keys are set (data-sources.md §7).
- * Reads only; writes a JSON + Markdown report — never touches the DB.
+ * Reads only; writes a JSON + Markdown report. The only DB access: when
+ * TWELVE_DATA_API_KEY is set, every Twelve Data HTTP attempt first reserves
+ * a credit in the shared ledger (api_credit_usage, manual cap 800/day —
+ * data-sources.md §6.4), so this needs SUPABASE_URL /
+ * SUPABASE_SERVICE_ROLE_KEY too. Without them, or when the ledger cannot
+ * be reached, Twelve Data is NOT called (the other providers still are).
  *
  *   npm run eval:providers -- --from 2026-09-01 --to 2026-10-14 --fx-pairs USDJPY,EURUSD --fx-hours 6 --out eval-reports
  *
@@ -56,7 +66,16 @@ async function main(): Promise<void> {
     calendarProviders.push({ id: 'finnhub', adapter: new FinnhubAdapter(keys.FINNHUB_API_KEY) });
   if (keys.FMP_API_KEY) calendarProviders.push({ id: 'fmp', adapter: new FmpAdapter(keys.FMP_API_KEY) });
   const fxProviders: FxPriceProvider[] = [];
-  if (keys.TWELVE_DATA_API_KEY) fxProviders.push(new TwelveDataAdapter(keys.TWELVE_DATA_API_KEY));
+  const setupErrors: string[] = [];
+  if (keys.TWELVE_DATA_API_KEY) {
+    const gate = await twelveDataCreditGate();
+    if (gate instanceof CreditGate) {
+      fxProviders.push(new TwelveDataAdapter(keys.TWELVE_DATA_API_KEY, { beforeAttempt: gate.beforeAttempt }));
+    } else {
+      setupErrors.push(`twelvedata: not called — ${gate}`);
+      console.error(JSON.stringify({ job: 'eval:providers', twelvedata: `not called — ${gate}` }));
+    }
+  }
   if (keys.POLYGON_API_KEY) fxProviders.push(new PolygonAdapter(keys.POLYGON_API_KEY));
 
   if (calendarProviders.length === 0 && fxProviders.length === 0) {
@@ -76,7 +95,7 @@ async function main(): Promise<void> {
   const fxHours = Number(arg('fx-hours') ?? '6');
   const outDir = resolve(arg('out') ?? 'eval-reports');
 
-  const errors: string[] = [];
+  const errors: string[] = [...setupErrors];
   const officialProviders: OfficialProviders = { BLS: new BlsAdapter(keys.BLS_API_KEY) };
   const fred = keys.FRED_API_KEY ? new FredAdapter(keys.FRED_API_KEY) : null;
   if (fred) officialProviders.FRED = fred;
@@ -177,6 +196,27 @@ async function main(): Promise<void> {
   await writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
   await writeFile(mdPath, renderMarkdownReport(report), 'utf8');
   console.log(JSON.stringify({ job: 'eval:providers', json: jsonPath, markdown: mdPath, errors: errors.length }));
+}
+
+/** The credit gate for Twelve Data, or why Twelve Data must not be called (no Supabase env / ledger unreachable). */
+async function twelveDataCreditGate(): Promise<CreditGate | string> {
+  let store;
+  try {
+    store = createIngestionRepository(createSupabaseClient(loadEnv()));
+  } catch {
+    return 'SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are needed for the API-credit ledger';
+  }
+  try {
+    await store.todayApiCredits(TWELVE_DATA_PROVIDER);
+  } catch (error) {
+    return `API-credit ledger unreachable: ${error instanceof Error ? error.message : String(error)}`;
+  }
+  return new CreditGate(store, {
+    provider: TWELVE_DATA_PROVIDER,
+    job: 'eval:providers',
+    runId: `${process.env.GITHUB_RUN_ID ?? 'local'}:${randomUUID()}`,
+    dailyCap: API_CREDIT_CAPS.twelvedata.manual,
+  });
 }
 
 main().catch((error: unknown) => {

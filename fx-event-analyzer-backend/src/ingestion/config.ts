@@ -39,6 +39,47 @@ export const INGESTION_SETTINGS = {
   officialLookbackMonths: 15,
 } as const;
 
+/**
+ * Daily API-credit caps enforced by the atomic ledger (api_credit_usage +
+ * reserve_api_credits(), migration 20261016000003). One credit is reserved
+ * BEFORE every HTTP attempt, retries included — whether a failed / retried
+ * request costs a credit is not documented, so we assume it does.
+ *
+ * Twelve Data: /time_series costs 1 credit per symbol per request whatever
+ * the outputsize (https://twelvedata.com/docs time_series, checked
+ * 2026-10-16). ASSUMED plan: Basic (free) — 800 credits/day reset at 00:00
+ * UTC, 8/minute (https://support.twelvedata.com/en/articles/5615854-credits).
+ * The plan of our account is NOT verified yet (dashboard check: 大野さん).
+ */
+export const API_CREDIT_CAPS = {
+  twelvedata: {
+    /** Scheduled runs (forward fetch + gap repair together) stop here: 800 − 100 kept for manual work. */
+    automatic: 700,
+    /** --manual runs and eval:providers may use the last 100 (= the plan's 800/day). */
+    manual: 800,
+  },
+} as const;
+
+/** ingest:fx-prices fetch planning (pipelines/fxGapRepair.ts, data-sources.md §6.4). */
+export const FX_FETCH_SETTINGS = {
+  /** Planned requests per run: 9 pairs × 3. Also a hard cap on HTTP attempts per run (retries included). */
+  perRunRequestCap: 27,
+  /** One request covers at most this many minutes — below Twelve Data's outputsize 5000, so a response is never truncated. */
+  maxWindowMinutes: 4_800,
+  /** Missing minutes up to this many days old are re-fetched automatically; older ones are only reported (BEYOND_HORIZON). */
+  repairHorizonDays: 7,
+  /** BEYOND_HORIZON gaps are still reported for this many days after they leave the horizon (bounds the DB read). */
+  beyondHorizonReportDays: 1,
+  /** Minutes newer than now − this are never treated as missing (the provider may still be finishing them). */
+  finalityLagMinutes: 2,
+  /** The FORWARD window (newest data) of a normal run; also the whole first run of a pair. */
+  forwardMinutes: 120,
+  /** A NO_DATA_UNCONFIRMED interval is re-requested at most this many more times, each on a later UTC day. */
+  noDataRetryDays: 2,
+} as const;
+
+export type FxFetchSettings = { readonly [K in keyof typeof FX_FETCH_SETTINGS]: number };
+
 function optionalKey() {
   return z.preprocess((value) => (value === '' ? undefined : value), z.string().min(1).optional());
 }

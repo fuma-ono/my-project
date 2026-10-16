@@ -1,4 +1,6 @@
 import type {
+  ApiCreditReservation,
+  FxIngestionLogSample,
   FxPairRef,
   FxPriceRow,
   IndicatorRef,
@@ -32,7 +34,13 @@ export class MemoryIngestionStore implements IngestionStore {
   fxPairs: FxPairRef[] = [];
   fxPrices: FxPriceRow[] = [];
   logs: IngestionLogRow[] = [];
+  /** api_credit_usage rows (usage_date = UTC date of `clock()` at reservation time). */
+  creditUsage: (ApiCreditReservation & { usage_date: string })[] = [];
+  /** Clock of the credit ledger (the DB uses now()). */
+  clock: () => Date = () => new Date();
   private seq = 0;
+  private fxIndex = new Map<string, number>();
+  private fxIndexed: FxPriceRow[] | null = null;
 
   private nextId(prefix: string): string {
     this.seq += 1;
@@ -175,15 +183,90 @@ export class MemoryIngestionStore implements IngestionStore {
     return Promise.resolve(this.fxPairs);
   }
 
+  private fxKey(row: Pick<FxPriceRow, 'fx_pair_id' | 'timeframe' | 'timestamp'>): string {
+    return `${row.fx_pair_id}|${row.timeframe}|${Date.parse(row.timestamp)}`;
+  }
+
+  /** Index on the upsert key; rebuilt when a test replaced or pushed into fxPrices directly. */
+  private fxPriceIndex(): Map<string, number> {
+    if (this.fxIndexed !== this.fxPrices || this.fxIndex.size !== this.fxPrices.length) {
+      this.fxIndex = new Map(this.fxPrices.map((row, i) => [this.fxKey(row), i]));
+      this.fxIndexed = this.fxPrices;
+    }
+    return this.fxIndex;
+  }
+
   upsertFxPrices(rows: readonly FxPriceRow[]): Promise<number> {
+    const index = this.fxPriceIndex();
     for (const row of rows) {
-      const index = this.fxPrices.findIndex(
-        (p) => p.fx_pair_id === row.fx_pair_id && p.timeframe === row.timeframe && p.timestamp === row.timestamp,
-      );
-      if (index === -1) this.fxPrices.push(row);
-      else this.fxPrices[index] = row;
+      const key = this.fxKey(row);
+      const at = index.get(key);
+      if (at === undefined) {
+        index.set(key, this.fxPrices.length);
+        this.fxPrices.push(row);
+      } else {
+        this.fxPrices[at] = row;
+      }
     }
     return Promise.resolve(rows.length);
+  }
+
+  private minuteRows(fxPairId: string, fromIso: string, toIso: string): FxPriceRow[] {
+    const from = Date.parse(fromIso);
+    const to = Date.parse(toIso);
+    return this.fxPrices
+      .filter((p) => p.fx_pair_id === fxPairId && p.timeframe === '1m')
+      .filter((p) => Date.parse(p.timestamp) >= from && Date.parse(p.timestamp) < to)
+      .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+  }
+
+  listFxMinuteTimestamps(fxPairId: string, fromIso: string, toIso: string): Promise<string[]> {
+    return Promise.resolve(this.minuteRows(fxPairId, fromIso, toIso).map((p) => new Date(p.timestamp).toISOString()));
+  }
+
+  firstFxMinute(fxPairId: string): Promise<string | null> {
+    let first: number | null = null;
+    for (const p of this.fxPrices) {
+      if (p.fx_pair_id !== fxPairId || p.timeframe !== '1m') continue;
+      const ms = Date.parse(p.timestamp);
+      if (first === null || ms < first) first = ms;
+    }
+    return Promise.resolve(first === null ? null : new Date(first).toISOString());
+  }
+
+  listFxMinuteRows(fxPairId: string, fromIso: string, toIso: string): Promise<FxPriceRow[]> {
+    return Promise.resolve(this.minuteRows(fxPairId, fromIso, toIso).map((p) => ({ ...p })));
+  }
+
+  listRecentFxIngestionLogs(sinceIso: string): Promise<FxIngestionLogSample[]> {
+    const since = Date.parse(sinceIso);
+    return Promise.resolve(
+      this.logs
+        .filter((log) => log.job === 'ingest:fx-prices' && Date.parse(log.started_at) >= since)
+        .map((log) => ({
+          started_at: log.started_at,
+          details: { no_data_unconfirmed: log.details.no_data_unconfirmed },
+        })),
+    );
+  }
+
+  private creditsToday(provider: string): number {
+    const today = this.clock().toISOString().slice(0, 10);
+    return this.creditUsage
+      .filter((u) => u.provider === provider && u.usage_date === today)
+      .reduce((sum, u) => sum + u.credits, 0);
+  }
+
+  /** Same semantics as reserve_api_credits(): check + insert with no await in between (atomic in JS). */
+  reserveApiCredits(reservation: ApiCreditReservation): Promise<boolean> {
+    if (reservation.credits <= 0 || reservation.cap <= 0) return Promise.reject(new Error('invalid reservation'));
+    if (this.creditsToday(reservation.provider) + reservation.credits > reservation.cap) return Promise.resolve(false);
+    this.creditUsage.push({ ...reservation, usage_date: this.clock().toISOString().slice(0, 10) });
+    return Promise.resolve(true);
+  }
+
+  todayApiCredits(provider: string): Promise<number> {
+    return Promise.resolve(this.creditsToday(provider));
   }
 
   insertIngestionLog(row: IngestionLogRow): Promise<void> {
