@@ -1,0 +1,180 @@
+import Combine
+import Foundation
+
+enum MovementDetailState: Equatable {
+    case loading
+    case backendNotConfigured
+    case notEntitled
+    case notFound
+    case loaded(preReleasePrice: Double?, reactions: [ReactionTimeframeEntry])
+    case error(String)
+}
+
+enum MovementChartState: Equatable {
+    case loading
+    case loaded(ChartResponse)
+    /// A successful response with zero candles — distinct from `.error`
+    /// (api-design.md §19: chart data can legitimately not exist yet).
+    case empty
+    case error(String)
+}
+
+/// SCR-008 相場反応詳細 (HQ Phase 4 instruction) —
+/// "発表前後にFX相場が実際にどれくらい動いたのか確認する". Backend is the
+/// sole Source of Truth for pips/movement/max upward-downward
+/// (api-design.md §8); this view model never recomputes them. Fetches
+/// every timeframe's Reaction summary once (`timeframe=all`, §18.1) so
+/// switching the Segmented Control is instant, and only re-fetches the
+/// Chart (§19) per timeframe, since that's the one genuinely
+/// timeframe-scoped, heavier call.
+@MainActor
+final class MovementDetailViewModel: ObservableObject {
+    @Published private(set) var state: MovementDetailState = .loading
+    @Published private(set) var chartState: MovementChartState = .loading
+    /// 発表の結果・予想(「値動きの分析」の1文目)。取れなくても画面は出す。
+    @Published private(set) var eventSnapshot: EventSnapshotDetail?
+    /// 指標の一般的な見方(上振れ・下振れ)。取れなくても画面は出す。
+    @Published private(set) var indicator: IndicatorSummary?
+    /// HQ指示(2026-10-14)「過去の類似イベントとの比較」: 過去イベント比較(SCR-009)と
+    /// 同じBackend集計(`/indicators/{id}/comparison`の`stats`、常にAIは使わない数値)
+    /// から、15分後の平均pipsを取る。Advanced Statisticsと違いプラン制限の対象外。
+    @Published private(set) var comparisonStats: ComparisonStats?
+    /// 平均の算出に使われた実際の件数(`analyzable_events`)。「過去◯回」の◯に使う。
+    @Published private(set) var comparisonAnalyzableEvents: Int?
+
+    /// 発表直前の価格(チャートの基準線)。
+    var preReleasePrice: Double? {
+        if case .loaded(let price, _) = state { return price }
+        return nil
+    }
+    @Published var selectedTimeframe: String = ReactionTimeframe.default {
+        didSet {
+            guard oldValue != selectedTimeframe, case .loaded = state else { return }
+            loadChart()
+        }
+    }
+
+    let indicatorId: String
+    let fxPairId: String
+    let symbol: String
+    let indicatorName: String
+    let releaseDatetime: Date
+
+    private let apiClient: APIClient
+    private let eventId: String
+    /// 要人発言の相場反応(HQ指示 2026-10-15)。`eventId`には発言のIDが入り、値動き・チャートは
+    /// `speeches/{id}/reaction`から取る。指標の結果・予想・過去比較は無いので読まない。
+    let isSpeech: Bool
+    private var basePath: String { isSpeech ? "speeches/\(eventId)" : "events/\(eventId)" }
+
+    init(apiClient: APIClient, eventId: String, indicatorId: String, fxPairId: String, symbol: String, indicatorName: String, releaseDatetime: Date, isSpeech: Bool = false, initialTimeframe: String = ReactionTimeframe.default) {
+        self.apiClient = apiClient
+        self.isSpeech = isSpeech
+        _selectedTimeframe = Published(initialValue: initialTimeframe)
+        self.eventId = eventId
+        self.indicatorId = indicatorId
+        self.fxPairId = fxPairId
+        self.symbol = symbol
+        self.indicatorName = indicatorName
+        self.releaseDatetime = releaseDatetime
+    }
+
+    func load() {
+        state = .loading
+        Task {
+            // 結果・予想は分析の文にだけ使う。チャートより先に取り終える(最後の通信がチャートになる)。
+            if !isSpeech {
+                await fetchEventSnapshot()
+                await fetchIndicator()
+                await fetchComparisonStats()
+            }
+            await fetchReactions()
+            if case .loaded = state {
+                loadChart()
+            }
+        }
+    }
+
+    func retryChart() {
+        guard case .loaded = state else { return }
+        loadChart()
+    }
+
+    private func fetchReactions() async {
+        let endpoint = Endpoint(
+            path: "\(basePath)/reaction",
+            queryItems: [
+                URLQueryItem(name: "fx_pair_id", value: fxPairId),
+                URLQueryItem(name: "timeframe", value: "all"),
+            ]
+        )
+        do {
+            let response: ReactionAllTimeframesResponse = try await apiClient.send(endpoint)
+            state = .loaded(preReleasePrice: response.preReleasePrice, reactions: response.reactions)
+        } catch let error as APIError where error.isNotConfigured {
+            state = .backendNotConfigured
+        } catch let error as APIError {
+            if case .server(let code, _, _) = error {
+                switch code {
+                case .eventNotFound, .fxPairNotFound, .speechNotFound:
+                    state = .notFound
+                case .featureNotEntitled, .subscriptionRequired:
+                    state = .notEntitled
+                default:
+                    state = .error("値動き情報の取得に失敗しました。")
+                }
+            } else {
+                state = .error("値動き情報の取得に失敗しました。")
+            }
+        } catch {
+            state = .error("値動き情報の取得に失敗しました。")
+        }
+    }
+
+    private func fetchEventSnapshot() async {
+        let response: EventDetailResponse? = try? await apiClient.send(Endpoint(path: "events/\(eventId)"))
+        eventSnapshot = response?.snapshot
+    }
+
+    private func fetchIndicator() async {
+        let response: IndicatorDetailResponse? = try? await apiClient.send(Endpoint(path: "indicators/\(indicatorId)"))
+        indicator = response?.indicator
+    }
+
+    /// HQ指示(2026-10-14)「過去の類似イベントとの比較」。過去イベント比較(SCR-009)と
+    /// 同じ集計エンドポイントを15分後固定で呼び、取れなくても画面は出す(他のベスト
+    /// エフォートな取得と同様`try?`)。
+    private func fetchComparisonStats() async {
+        let endpoint = Endpoint(
+            path: "indicators/\(indicatorId)/comparison",
+            queryItems: [
+                URLQueryItem(name: "fx_pair_id", value: fxPairId),
+                URLQueryItem(name: "timeframe", value: "15m"),
+            ]
+        )
+        let response: ComparisonResponse? = try? await apiClient.send(endpoint)
+        comparisonStats = response?.stats
+        comparisonAnalyzableEvents = response?.analyzableEvents
+    }
+
+    private func loadChart() {
+        chartState = .loading
+        Task { await fetchChart() }
+    }
+
+    private func fetchChart() async {
+        let endpoint = Endpoint(
+            path: "\(basePath)/reaction/chart",
+            queryItems: [
+                URLQueryItem(name: "fx_pair_id", value: fxPairId),
+                URLQueryItem(name: "timeframe", value: selectedTimeframe),
+            ]
+        )
+        do {
+            let response: ChartResponse = try await apiClient.send(endpoint)
+            chartState = response.prices.isEmpty ? .empty : .loaded(response)
+        } catch {
+            chartState = .error("チャートの取得に失敗しました。")
+        }
+    }
+}
