@@ -264,3 +264,26 @@ from pg_roles r where r.rolname in ('anon', 'authenticated', 'service_role');
 期待: `twelvedata | 800 | 700` / どちらも `true` / `anon`・`authenticated` は `false`、`service_role` は `true`。
 
 適用するまでは、取り込みが台帳に予約できないため Twelve Data を呼ばずに止まる。
+
+### 8.1 確認SQLの実行状況(2026-10-16、HQ判断「直接実行は未完了として記録」)
+
+**この3本の確認SQLは、Claude(セッション)側からは未実行(直接実行は未完了)。** セッション側のサンドボックスには開発DBの認証情報が無く、SQL Editor にアクセスできる人(大野さん、または鍵を持つ担当者)が実行する必要がある。
+
+以下は、Claude が代わりに実施した**間接的な確認**(実際のジョブ実行のログから読み取れること)。直接SQLの結果とは区別して記録する。
+
+| # | 確認項目 | 期待値 | 直接SQLの結果 | 間接確認(ジョブ実行ログより) |
+|---|---|---|---|---|
+| 1 | `api_credit_limits` の上限値 | `twelvedata \| 800 \| 700` | **未実施** | 一致する動き: AUTOMATIC実行で `budget.daily=700`、MANUAL実行で `budget.daily=800` をそれぞれ観測(2026-10-16 run #38897668088・#38898413039) |
+| 2 | 両テーブルの RLS (`relrowsecurity`) | どちらも `true` | **未実施** | 直接は未確認。RLS が無効でも `revoke all` 済みなら `service_role` 以外は読めないはずだが、これは RLS とは別の確認軸であり代替にはならない |
+| 3 | `reserve_api_credits` の実行権限 | `anon=false`・`authenticated=false`・`service_role=true` | **未実施** | `service_role` からの呼び出しは2回とも成功(エラー無し)。`anon`/`authenticated` からの呼び出しは試していない(そもそも試す経路が無い) |
+
+**この表の「間接確認」列は、権限・上限が機能していることの状況証拠であり、SQLを直接実行して値を読んだことの代わりにはならない。** 項目2(RLS自体のフラグ)は間接確認の手段が無く、現時点で完全に未確認。
+
+**担当者向け手順**(上記3本のSQLを実行できる方へ):
+
+1. 本セクション冒頭の3本のSQLを、社内確認用DB(`fx-event-analyzer-dev`、`pbemckwnqmeaoveelihd`)の SQL Editor で実行する
+2. 結果を上の表の「直接SQLの結果」列に追記する(このファイルを編集してコミット、または報告コメントで値を伝える)
+3. 期待値と食い違う行があれば、特に以下を優先して Claude / HQ に伝える:
+   - 上限値が `800`・`700` のいずれかと違う → `api_credit_limits` への insert が重複挿入や誤った値で入っていないか確認
+   - RLS が `false` → `alter table ... enable row level security` が流れていない可能性。再実行して良い(べき等)
+   - `service_role` の `can_reserve` が `false` → `grant execute ... to service_role` が流れていない。再実行して良い(べき等)
