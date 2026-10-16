@@ -138,7 +138,8 @@ export interface FxPairRef {
 export interface FxPriceRow {
   fx_pair_id: string;
   timestamp: string;
-  timeframe: '1m';
+  /** 1m comes from the provider; 5m–60m are built from it (pipelines/fxPrices.ts). */
+  timeframe: '1m' | '5m' | '15m' | '30m' | '60m';
   open: number;
   high: number;
   low: number;

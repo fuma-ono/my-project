@@ -149,6 +149,7 @@ ECB の発言の正確な予定時刻は「Weekly schedule of public speaking en
 - 足の時刻は**足の始まり**(db-design.md 3.11節)。Twelve Data は `timezone=UTC` を付けないと取引所の時刻帯(UTC+11)で返すことを実データで確認したため、必ず付ける
 - **欠けた分は補わない**。まだ終わっていない足(取得時点で1分たっていない足)・分の区切りでない足・高値/安値が矛盾する足・同じ分に値の違う足が2本ある場合は取り込まない
 - 2つ目の取得元(⑤)があるときは同じ分の終値を比べ、差が 3 pips(`fxCrossCheckMaxDiffPips`)を超えた分は `fx_prices.verification_status = UNVERIFIED`(差も記録)。2つ目に同じ分が無いときは `SINGLE_SOURCE`、範囲内は `VERIFIED`。直前の分から 500 pips を超えて飛んだ分も `UNVERIFIED`
+- 5分・15分・30分・60分足は取得元から別に取らず、取り込んだ1分足から組み立てる(`aggregateMinuteRows`)。どの時間足も値動きの計算に使う1分足と食い違わず、取得回数も増えない。区切りの中の1分足が1本でも欠けている・`UNVERIFIED`・まだ終わっていない区切りは作らない(次の実行で揃えば作る)。全部 `VERIFIED` なら `VERIFIED`、それ以外は `SINGLE_SOURCE`
 - Read API は `UNVERIFIED` の足を使わない(チャートに出さず、最新価格にも使わない)。要人発言の値動きでその足が必要なら `DATA_UNAVAILABLE`。経済指標の値動き(`event_price_reactions`)を計算するジョブも同じ扱いにする(`usableForReactions`)
 
 ### 6.5 再実行しても重複しない
@@ -194,9 +195,10 @@ npm run eval:providers -- --from 2026-09-01 --to 2026-10-14 --fx-pairs USDJPY,EU
 |---|---|---|---|
 | `npm run ingest:official` | FRED/BLS の観測値を `official_observations` に保存し、公式待ちの値を照合し直す | Supabase、FRED_API_KEY(任意)、BLS_API_KEY(任意) | 米国の発表日は 12:30〜15:00 UTC(21:30〜24:00 JST、冬時間は1時間遅く)に15分ごと、それ以外は1日1回 |
 | `npm run ingest:speeches` | FRB のカレンダー・ECB の RSS → `speech_events` | Supabase | 1日2回(例 06:00・18:00 JST) |
+| `npm run ingest:fx-prices` | Twelve Data の1分足(+ POLYGON_API_KEY があれば照合)→ `fx_prices`、5分〜60分足も組み立てる。既定は直近120分・対応する全ペア(`--minutes`・`--pairs` で変更) | Supabase、TWELVE_DATA_API_KEY(無ければ何もしない)、POLYGON_API_KEY(任意) | 無料枠(1分8回・1日800回)・9ペアなら20分ごと(1日648回) |
 | `npm run eval:providers` | 有料候補の比較(7章) | 候補のキー | 手動 |
 
-① の取り込み(`ingestCalendarReleases`)と ③ の取り込み(`ingestFxCandles`)は実装・テスト済みだが、契約前のためコマンドは用意していない。社内プロキシの内側で動かすときは `NODE_USE_ENV_PROXY=1` と `HTTPS_PROXY` を設定する(Node 22.21 以降の標準 fetch がプロキシを使う)。
+① の取り込み(`ingestCalendarReleases`)は実装・テスト済みだが、契約前のためコマンドは用意していない。③ は HQ指示(2026-10-16)「今日はこちらで進める」により `ingest:fx-prices` を用意した。**Twelve Data の無料・個人向けキーで動かすのは社内の開発ビルド確認だけ**(個人向けプランは商用の表示・再配布不可、要件定義書 6.4節)。一般向けに公開する前に、表示が認められたプランに切り替える。別ブランチ `claude/fx-price-provider-adapter` の同じ役割のジョブ(`jobs:ingest-fx-prices`)はこれで置き換える(照合・ログ・`UNVERIFIED` の扱いが無いため取り込まない)。社内プロキシの内側で動かすときは `NODE_USE_ENV_PROXY=1` と `HTTPS_PROXY` を設定する(Node 22.21 以降の標準 fetch がプロキシを使う)。
 
 ---
 

@@ -19,6 +19,7 @@
     "jobs:evaluate-rate-alerts": "tsx src/jobs/evaluateRateAlerts.ts",
     "ingest:official": "tsx src/jobs/ingestOfficial.ts",
     "ingest:speeches": "tsx src/jobs/ingestSpeeches.ts",
+    "ingest:fx-prices": "tsx src/jobs/ingestFxPrices.ts",
     "eval:providers": "tsx src/jobs/evalProviders.ts"
   },
   "keywords": [],

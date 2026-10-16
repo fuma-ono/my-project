@@ -3,9 +3,10 @@ import { parseEcbPressRss } from '../../src/ingestion/adapters/ecbPress.js';
 import { parseFrbCalendar } from '../../src/ingestion/adapters/frbCalendar.js';
 import { parsePolygonAggregates } from '../../src/ingestion/adapters/polygon.js';
 import { parseTwelveDataSeries } from '../../src/ingestion/adapters/twelveData.js';
-import { ingestFxCandles } from '../../src/ingestion/pipelines/fxPrices.js';
+import { aggregateMinuteRows, ingestFxCandles } from '../../src/ingestion/pipelines/fxPrices.js';
 import { ingestSpeeches, speechTitle } from '../../src/ingestion/pipelines/speeches.js';
 import type { FxPriceProvider } from '../../src/ingestion/providers.js';
+import type { FxPriceRow } from '../../src/ingestion/store.js';
 import { JobCounters, resolveJobStatus, runIngestionJob } from '../../src/ingestion/runner.js';
 import type { NormalizedCandle } from '../../src/ingestion/types.js';
 import { checkCandles, usableForReactions } from '../../src/ingestion/validation/fxCandles.js';
@@ -227,6 +228,78 @@ describe('FX pipeline', () => {
 
     await ingestFxCandles(deps, ['USDJPY'], range, new JobCounters());
     expect(store.fxPrices).toHaveLength(3);
+  });
+});
+
+describe('FX aggregation (5m–60m from 1m)', () => {
+  const minute = (iso: string, close: number, status: FxPriceRow['verification_status'] = 'VERIFIED'): FxPriceRow => ({
+    fx_pair_id: 'pair-usdjpy',
+    timestamp: new Date(iso).toISOString(),
+    timeframe: '1m',
+    open: close - 0.01,
+    high: close + 0.02,
+    low: close - 0.03,
+    close,
+    volume: null,
+    source: 'twelvedata',
+    verification_status: status,
+    cross_check_source: null,
+    cross_check_close: null,
+    cross_check_diff_pips: null,
+  });
+  const fiveMinutes = (start: number, closes: number[]): FxPriceRow[] =>
+    closes.map((close, i) => minute(`2026-10-15T08:${String(start + i).padStart(2, '0')}:00Z`, close));
+  const now = new Date('2026-10-15T09:00:00Z');
+
+  it('builds open/high/low/close from complete, finished buckets only', () => {
+    const rows = fiveMinutes(30, [150.1, 150.3, 149.9, 150.0, 150.2]);
+    const [bar] = aggregateMinuteRows(rows, '5m', 5, now);
+    expect(bar).toMatchObject({
+      timeframe: '5m',
+      timestamp: '2026-10-15T08:30:00.000Z',
+      verification_status: 'VERIFIED',
+    });
+    expect(bar?.open).toBeCloseTo(150.09, 10);
+    expect(bar?.high).toBeCloseTo(150.32, 10);
+    expect(bar?.low).toBeCloseTo(149.87, 10);
+    expect(bar?.close).toBe(150.2);
+    // Not finished yet at 08:33.
+    expect(aggregateMinuteRows(rows, '5m', 5, new Date('2026-10-15T08:33:00Z'))).toEqual([]);
+  });
+
+  it('leaves out a bucket with a missing or UNVERIFIED minute, and marks SINGLE_SOURCE ones', () => {
+    const missing = fiveMinutes(30, [150.1, 150.3, 149.9, 150.0, 150.2]).filter((_, i) => i !== 2);
+    expect(aggregateMinuteRows(missing, '5m', 5, now)).toEqual([]);
+    const bad = fiveMinutes(30, [150.1, 150.3, 149.9, 150.0, 150.2]);
+    bad[1] = { ...bad[1]!, verification_status: 'UNVERIFIED' };
+    expect(aggregateMinuteRows(bad, '5m', 5, now)).toEqual([]);
+    const single = fiveMinutes(30, [150.1, 150.3, 149.9, 150.0, 150.2]);
+    single[4] = { ...single[4]!, verification_status: 'SINGLE_SOURCE' };
+    expect(aggregateMinuteRows(single, '5m', 5, now)[0]?.verification_status).toBe('SINGLE_SOURCE');
+  });
+
+  it('writes 1m and the aggregated timeframes through the pipeline', async () => {
+    const store = new MemoryIngestionStore();
+    store.fxPairs = [{ id: 'pair-usdjpy', symbol: 'USDJPY', pip_size: 0.01, price_precision: 3 }];
+    const candlesFrom = Array.from({ length: 15 }, (_, i) => ({
+      provider: 'twelvedata',
+      symbol: 'USDJPY',
+      openTime: `2026-10-15T08:${String(30 + i).padStart(2, '0')}:00Z`,
+      open: 150,
+      high: 150.2,
+      low: 149.95,
+      close: 150 + i / 100,
+      volume: null,
+    }));
+    const primary: FxPriceProvider = { name: 'twelvedata', fetchOneMinuteCandles: () => Promise.resolve(candlesFrom) };
+    const range = { from: '2026-10-15T08:30:00Z', to: '2026-10-15T08:45:00Z' };
+    await ingestFxCandles({ store, primary, now: () => now }, ['USDJPY'], range, new JobCounters());
+    const count = (tf: string) => store.fxPrices.filter((p) => p.timeframe === tf).length;
+    expect([count('1m'), count('5m'), count('15m'), count('30m'), count('60m')]).toEqual([15, 3, 1, 0, 0]);
+    expect(store.fxPrices.find((p) => p.timeframe === '15m')).toMatchObject({
+      close: 150.14,
+      verification_status: 'SINGLE_SOURCE',
+    });
   });
 });
 
