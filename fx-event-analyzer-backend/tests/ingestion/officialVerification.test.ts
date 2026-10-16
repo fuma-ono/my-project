@@ -65,7 +65,12 @@ describe('official resolver', () => {
       },
       (ref) => errors.push(ref.seriesId),
     );
-    const resolved = await resolver.resolve(cpi, '2026-09', '2026-10-14');
+    // 本番の対応表は BLS だけ(FRED は外した)。フォールバックの仕組みは2つの照合元を並べて確かめる。
+    const twoSources = {
+      ...cpi,
+      official: [{ source: 'FRED' as const, seriesId: 'CPIAUCNS', transform: 'YOY_PCT' as const }, ...cpi.official],
+    };
+    const resolved = await resolver.resolve(twoSources, '2026-09', '2026-10-14');
     expect(resolved?.sourceRef).toBe('BLS:CUUR0000SA0@2026-10-15');
     expect(resolved?.value).toBeCloseTo(3.7377, 4);
     expect(errors).toEqual(['CPIAUCNS']);

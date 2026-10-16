@@ -23,7 +23,8 @@ describe('indicator mapping table', () => {
       expect(m.expectedRange.min, m.code).toBeLessThan(m.expectedRange.max);
       expect(m.maxAbsChangeFromPrevious, m.code).toBeGreaterThan(0);
       expect(m.decimals, m.code).toBeGreaterThanOrEqual(0);
-      expect(m.official.length, m.code).toBeGreaterThan(0);
+      // US_RETAIL_SALES: FRED を外したため照合元が無い(公開されない)。data-sources.md 13章。
+      if (m.code !== 'US_RETAIL_SALES') expect(m.official.length, m.code).toBeGreaterThan(0);
       expect(FRED_RELEASE_IDS[m.code], m.code).toBeTypeOf('number');
       // Kind ↔ unit: percent changes are in %, CHANGE of payrolls in thousands.
       if (m.valueKind === 'YOY_PCT' || m.valueKind === 'MOM_PCT') expect(m.unit, m.code).toBe('PERCENT');
@@ -40,10 +41,10 @@ describe('indicator mapping table', () => {
   it('documents the seasonal-adjustment choice that matches the published headline', () => {
     const cpi = INDICATOR_MAPPINGS.find((m) => m.code === 'US_CPI')!;
     expect(cpi.seasonalAdjustment).toBe('NSA');
-    expect(cpi.official.map((r) => r.seriesId)).toEqual(['CPIAUCNS', 'CUUR0000SA0']);
+    expect(cpi.official.map((r) => r.seriesId)).toEqual(['CUUR0000SA0']);
     const nfp = INDICATOR_MAPPINGS.find((m) => m.code === 'US_NFP')!;
     expect(nfp.seasonalAdjustment).toBe('SA');
-    expect(nfp.official.map((r) => r.seriesId)).toEqual(['PAYEMS', 'CES0000000001']);
+    expect(nfp.official.map((r) => r.seriesId)).toEqual(['CES0000000001']);
   });
 
   it('matches provider keys case-insensitively', () => {

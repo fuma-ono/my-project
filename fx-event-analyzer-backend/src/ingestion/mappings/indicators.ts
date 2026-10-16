@@ -11,7 +11,9 @@
  *   from public docs and MUST be re-checked against real responses after
  *   signing (`npm run eval:providers` reports unmapped rows) — 要確認.
  * - Official series ids / transforms were checked against FRED/BLS
- *   (data-sources.md §4 lists the evidence).
+ *   (data-sources.md §4 lists the evidence). FRED is NOT used as an official
+ *   source: its API terms forbid storing FRED content (HQ判断 2026-10-16,
+ *   data-sources.md §11, §13). Official values come from BLS only.
  */
 import type { MappedUnit, SeasonalAdjustment, ValueKind } from '../types.js';
 
@@ -93,10 +95,7 @@ export const INDICATOR_MAPPINGS: readonly IndicatorMapping[] = [
       finnhub: { country: 'US', event: 'CPI YoY' },
       fmp: { country: 'US', event: 'CPI YoY' },
     },
-    official: [
-      { source: 'FRED', seriesId: 'CPIAUCNS', transform: 'YOY_PCT' },
-      { source: 'BLS', seriesId: 'CUUR0000SA0', transform: 'YOY_PCT' },
-    ],
+    official: [{ source: 'BLS', seriesId: 'CUUR0000SA0', transform: 'YOY_PCT' }],
     officialTolerance: 0,
     requireOfficialMatch: true,
     allowMissingUnit: false,
@@ -120,10 +119,7 @@ export const INDICATOR_MAPPINGS: readonly IndicatorMapping[] = [
       finnhub: { country: 'US', event: 'Core CPI YoY' },
       fmp: { country: 'US', event: 'Core CPI YoY' },
     },
-    official: [
-      { source: 'FRED', seriesId: 'CPILFENS', transform: 'YOY_PCT' },
-      { source: 'BLS', seriesId: 'CUUR0000SA0L1E', transform: 'YOY_PCT' },
-    ],
+    official: [{ source: 'BLS', seriesId: 'CUUR0000SA0L1E', transform: 'YOY_PCT' }],
     officialTolerance: 0,
     requireOfficialMatch: true,
     allowMissingUnit: false,
@@ -149,10 +145,7 @@ export const INDICATOR_MAPPINGS: readonly IndicatorMapping[] = [
       finnhub: { country: 'US', event: 'Nonfarm Payrolls' },
       fmp: { country: 'US', event: 'Nonfarm Payrolls' },
     },
-    official: [
-      { source: 'FRED', seriesId: 'PAYEMS', transform: 'DIFF' },
-      { source: 'BLS', seriesId: 'CES0000000001', transform: 'DIFF' },
-    ],
+    official: [{ source: 'BLS', seriesId: 'CES0000000001', transform: 'DIFF' }],
     officialTolerance: 0,
     requireOfficialMatch: true,
     allowMissingUnit: false,
@@ -175,10 +168,7 @@ export const INDICATOR_MAPPINGS: readonly IndicatorMapping[] = [
       finnhub: { country: 'US', event: 'Unemployment Rate' },
       fmp: { country: 'US', event: 'Unemployment Rate' },
     },
-    official: [
-      { source: 'FRED', seriesId: 'UNRATE', transform: 'LEVEL' },
-      { source: 'BLS', seriesId: 'LNS14000000', transform: 'LEVEL' },
-    ],
+    official: [{ source: 'BLS', seriesId: 'LNS14000000', transform: 'LEVEL' }],
     officialTolerance: 0,
     requireOfficialMatch: true,
     allowMissingUnit: false,
@@ -204,7 +194,10 @@ export const INDICATOR_MAPPINGS: readonly IndicatorMapping[] = [
       finnhub: { country: 'US', event: 'Retail Sales MoM' },
       fmp: { country: 'US', event: 'Retail Sales MoM' },
     },
-    official: [{ source: 'FRED', seriesId: 'RSAFS', transform: 'MOM_PCT' }],
+    // 公式値は Census(米国勢調査局)が出す。FRED(RSAFS)は保存が規約で認められないため外した
+    // (HQ判断 2026-10-16、data-sources.md 13章)。Census の API の利用条件を確認して足すまで照合元が無いので、
+    // requireOfficialMatch: true のこの指標は公開されない(公式待ちのまま)。
+    official: [],
     officialTolerance: 0,
     requireOfficialMatch: true,
     allowMissingUnit: false,

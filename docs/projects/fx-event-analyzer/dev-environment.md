@@ -122,3 +122,118 @@ xcodebuild ... SUPABASE_URL="https://<project>.supabase.co" SUPABASE_ANON_KEY="<
 
 - ログインは Supabase Auth。実機で新しくアカウントを作れば、無料プランの機能(基本3つ)が使える(`default_entitlements`、db-design.md)
 - 2026-10-16 に確認用のアカウント `dev-check@fx-event-analyzer.invalid` を作った(パスワードは控えていない。不要なら Supabase の Authentication から消す)
+
+## 6. 変更案: データ品質レポートを毎日動かす(2026-10-16、HQ判断を受けて。**main に入れる前に確認する**)
+
+HQ判断「実装前に、main に追加する変更内容と実行スケジュール等を確認する」に沿い、入れる前にこの案を確認してもらう。確認が取れたら、3章のファイルをこの内容に置き換えて main に入れる。
+
+### 6.1 変える点
+
+| 項目 | いま | 変更後 |
+|---|---|---|
+| 実行するもの | 為替(20分ごと)・要人発言(1日2回) | ＋ **データ品質レポート(毎日 09:00 JST、直近1日分)** |
+| 接続先の確認 | Secrets が無ければ何もしない | ＋ **接続先が社内確認用のDB(`pbemckwnqmeaoveelihd`)でなければ、何も書かずに失敗で止まる**(本番DBに書き込まないため) |
+| 手動実行 | fx-prices / speeches / both | ＋ report(レポートだけ。DBは読むだけ) |
+
+### 6.2 HQ の確認項目への答え
+
+| 確認項目 | 答え |
+|---|---|
+| main に追加する内容とスケジュール | 6.3 のファイル1つ(`.github/workflows/fx-event-analyzer-ingestion.yml` の置き換え)。為替: 毎時7分・27分・47分、要人発言: 06:15・18:15 JST、レポート: 09:00 JST |
+| 社内確認用と本番の区別 | Secrets の名前を `FX_DEV_*` にし、さらに接続先の URL が社内確認用のプロジェクトと一致するかをジョブの最初に確かめる。本番用の環境はまだ無い。作るときは別の Secrets・別のワークフローにし、このワークフローからは書き込めないようにする |
+| 取得件数・欠損・重複・照合不一致・失敗理由の記録 | 取得件数・飛ばした理由・照合で「未確認」になった件数・エラーの文面は、実行のたびに `ingestion_logs` に残る。欠損・照合一致率・実行の抜けはレポート(data-sources.md 12章)で毎日まとめる。重複は DB の一意制約(通貨ペア・時間足・時刻、発言のID)で入らない仕組みで、同じデータを取り直すと上書きになる |
+| 秘密情報がログに出ないこと | キーは Secrets から渡し、GitHub が伏せ字にする。取り込み側も URL に含まれるキーを伏せる(`redactUrl`)。レポートに出るのは件数・割合・時刻だけ(テストで URL・キーが含まれないことを確認) |
+| 失敗時の通知と再実行 | 取り込みが失敗するとジョブが失敗になり、GitHub がワークフローを最後に変更した人(大野さんのアカウント)にメールで知らせる。再実行は Actions の画面の「Re-run jobs」か「Run workflow」。取り込みは直近120分を毎回取り直すので、再実行で同じデータが二重に入ることはない |
+| 不要な API 利用料・実行時間 | 公開リポジトリなので GitHub Actions の実行時間は無料。Twelve Data は無料枠の範囲(1日648回 / 800回)で、有料の API は使わない。レポートは DB を読むだけで、外部の API を呼ばない。1回の実行は1〜2分 |
+
+### 6.3 変更後のファイル
+
+```yaml
+name: FX Event Analyzer - Data ingestion (dev)
+
+# 社内確認用DB へ本番データを取り込み、品質レポートを作る(docs/projects/fx-event-analyzer/dev-environment.md)。
+#   - 為替: 20分ごと。Twelve Data の1分足 → fx_prices(5分〜60分足も組み立て)
+#   - 要人発言: 1日2回(06:15 / 18:15 JST)。FRB カレンダー・ECB RSS → speech_events
+#   - 品質レポート: 毎日 09:00 JST、直近1日分。DB を読むだけ。結果は実行の Summary に出る
+# 接続先が社内確認用のDBでなければ止まる(本番DBに書き込まない)。
+# Twelve Data の無料キーは社内確認専用(要件定義書6.4)。
+on:
+  schedule:
+    - cron: '7,27,47 * * * *'
+    - cron: '15 21,9 * * *'
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'fx-prices / speeches / both / report'
+        default: both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fx-ingestion
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: fx-event-analyzer-backend
+    env:
+      DEV_PROJECT_URL: https://pbemckwnqmeaoveelihd.supabase.co
+      SUPABASE_URL: ${{ secrets.FX_DEV_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.FX_DEV_SUPABASE_SERVICE_ROLE_KEY }}
+      TWELVE_DATA_API_KEY: ${{ secrets.FX_TWELVE_DATA_API_KEY }}
+    steps:
+      - name: Check secrets and target
+        id: check
+        working-directory: .
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "Secrets が未登録のため何もしません"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${SUPABASE_URL%/}" != "$DEV_PROJECT_URL" ]; then
+            echo "接続先が社内確認用のDBではありません。書き込まずに止めます"
+            exit 1
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          ref: claude/fx-settings-screens
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: fx-event-analyzer-backend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        if: steps.check.outputs.ready == 'true'
+      - name: FX prices
+        if: steps.check.outputs.ready == 'true' && (github.event.schedule == '7,27,47 * * * *' || (github.event_name == 'workflow_dispatch' && (inputs.target == 'fx-prices' || inputs.target == 'both')))
+        run: npm run -s ingest:fx-prices
+      - name: Speeches
+        if: steps.check.outputs.ready == 'true' && (github.event.schedule == '15 21,9 * * *' || (github.event_name == 'workflow_dispatch' && (inputs.target == 'speeches' || inputs.target == 'both')))
+        run: npm run -s ingest:speeches
+      - name: Data quality report
+        if: steps.check.outputs.ready == 'true' && (github.event.schedule == '0 0 * * *' || (github.event_name == 'workflow_dispatch' && inputs.target == 'report'))
+        run: npm run -s report:data-quality -- --days 1
+```
+
+## 7. 手動実行(「Run workflow」)の前の確認(HQ判断 2026-10-16)
+
+社内確認用のDBを対象に実行する。実行前に次を確かめる。
+
+| 確認すること | いまの状態 |
+|---|---|
+| 対象ブランチ | ワークフローは main のファイルで動き、コードは `claude/fx-settings-screens` を取り出す(画面の「Use workflow from」は main のままでよい) |
+| 接続先のDB | Secrets `FX_DEV_SUPABASE_URL` = 社内確認用のプロジェクト。6章の変更後は、違う接続先なら止まる |
+| 取得対象 | target で選ぶ。fx-prices = 9ペアの直近120分、speeches = FRB・ECB の直近14日、report = 読むだけ |
+| 重複登録の防止 | DB の一意制約で同じデータは上書きになる。何回実行しても件数は増えない |
+| 費用 | GitHub Actions は無料(公開リポジトリ)。Twelve Data は無料枠を1回あたり9回使う(1日800回まで)。有料の API は使わない |
+| 本番への書き込み | 本番環境はまだ無い。本番に書き込む可能性があるときは、実行前に HQ へ報告する |
