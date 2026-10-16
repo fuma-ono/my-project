@@ -140,7 +140,7 @@ HQ判断「実装前に、main に追加する変更内容と実行スケジュ�
 | 確認項目 | 答え |
 |---|---|
 | main に追加する内容とスケジュール | 6.3 のファイル1つ(`.github/workflows/fx-event-analyzer-ingestion.yml` の置き換え)。為替: 毎時7分・27分・47分、要人発言: 06:15・18:15 JST、レポート: 09:00 JST |
-| 社内確認用と本番の区別 | Secrets の名前を `FX_DEV_*` にし、さらに接続先の URL が社内確認用のプロジェクトと一致するかをジョブの最初に確かめる。本番用の環境はまだ無い。作るときは別の Secrets・別のワークフローにし、このワークフローからは書き込めないようにする |
+| 社内確認用と本番の区別 | Secrets の名前を `FX_DEV_*` にし、さらにジョブの最初に、接続先の URL と service_role の鍵(JWT)に書かれたプロジェクト番号の両方が社内確認用のプロジェクトと一致するかを確かめる。違えば何も書かずに失敗で止まる。本番用の環境はまだ無い。作るときは別の Secrets・別のワークフローにし、このワークフローからは書き込めないようにする |
 | 取得件数・欠損・重複・照合不一致・失敗理由の記録 | 取得件数・飛ばした理由・照合で「未確認」になった件数・エラーの文面は、実行のたびに `ingestion_logs` に残る。欠損・照合一致率・実行の抜けはレポート(data-sources.md 12章)で毎日まとめる。重複は DB の一意制約(通貨ペア・時間足・時刻、発言のID)で入らない仕組みで、同じデータを取り直すと上書きになる |
 | 秘密情報がログに出ないこと | キーは Secrets から渡し、GitHub が伏せ字にする。取り込み側も URL に含まれるキーを伏せる(`redactUrl`)。レポートに出るのは件数・割合・時刻だけ(テストで URL・キーが含まれないことを確認) |
 | 失敗時の通知と再実行 | 取り込みが失敗するとジョブが失敗になり、GitHub がワークフローを最後に変更した人(大野さんのアカウント)にメールで知らせる。再実行は Actions の画面の「Re-run jobs」か「Run workflow」。取り込みは直近120分を毎回取り直すので、再実行で同じデータが二重に入ることはない |
@@ -183,6 +183,7 @@ jobs:
       run:
         working-directory: fx-event-analyzer-backend
     env:
+      DEV_PROJECT_REF: pbemckwnqmeaoveelihd
       DEV_PROJECT_URL: https://pbemckwnqmeaoveelihd.supabase.co
       SUPABASE_URL: ${{ secrets.FX_DEV_SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.FX_DEV_SUPABASE_SERVICE_ROLE_KEY }}
@@ -199,6 +200,12 @@ jobs:
           fi
           if [ "${SUPABASE_URL%/}" != "$DEV_PROJECT_URL" ]; then
             echo "接続先が社内確認用のDBではありません。書き込まずに止めます"
+            exit 1
+          fi
+          # 鍵の中身(JWT)に書かれたプロジェクトも社内確認用か確かめる。鍵そのものは出力しない。
+          KEY_REF=$(python3 -c 'import os,base64,json; p=os.environ["SUPABASE_SERVICE_ROLE_KEY"].split("."); print(json.loads(base64.urlsafe_b64decode(p[1]+"="*(-len(p[1])%4))).get("ref","") if len(p)==3 else "")' 2>/dev/null || true)
+          if [ "$KEY_REF" != "$DEV_PROJECT_REF" ]; then
+            echo "鍵が社内確認用のプロジェクトのものではありません(または形式が違います)。書き込まずに止めます"
             exit 1
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
