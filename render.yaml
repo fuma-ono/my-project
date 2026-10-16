@@ -1,0 +1,32 @@
+# FX Event Analyzer Backend — 社内確認用(実機テスト用)の API サーバー(HQ指示 2026-10-16)。
+# Render の Blueprint(New → Blueprint → このリポジトリ)で作る。手順は
+# docs/projects/fx-event-analyzer/dev-environment.md。
+# キー(sync: false の項目)は Render の画面で入れる。このファイルとGitには書かない。
+services:
+  - type: web
+    name: fx-event-analyzer-api-dev
+    runtime: node
+    plan: free # 15分アクセスが無いと眠り、次のアクセスで起きる(最初の1回は30〜60秒かかる)
+    region: singapore
+    branch: claude/fx-settings-screens
+    rootDir: fx-event-analyzer-backend
+    # tsc は devDependencies にあるので --include=dev を付ける。
+    buildCommand: npm ci --include=dev --no-audit --no-fund && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: '22'
+      - key: HOST
+        value: 0.0.0.0
+      - key: LOG_LEVEL
+        value: info
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # 要人の写真URLを https で返すため(Render の内側は http で届く)。作成後に表示される
+      # https://<名前>.onrender.com を入れる。
+      - key: PUBLIC_BASE_URL
+        sync: false
