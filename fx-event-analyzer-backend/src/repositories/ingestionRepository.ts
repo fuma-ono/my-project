@@ -343,7 +343,7 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
         p_job: reservation.job,
         p_run_id: reservation.runId,
         p_credits: reservation.credits,
-        p_cap: reservation.cap,
+        p_mode: reservation.mode,
       });
       if (error) throw error;
       return data === true;

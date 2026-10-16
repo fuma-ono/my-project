@@ -382,6 +382,7 @@ function prefillLedger(store: MemoryIngestionStore, credits: number, at: number)
     provider: 'twelvedata',
     job: 'other',
     runId: 'other-run',
+    mode: 'MANUAL',
     credits,
     cap: 800,
     usage_date: iso(at).slice(0, 10),
@@ -432,6 +433,7 @@ async function run(
     provider: 'twelvedata',
     job: 'ingest:fx-prices',
     runId: `test-${runSeq}`,
+    mode,
     dailyCap: mode === 'MANUAL' ? 800 : 700,
     runCap: settings.perRunRequestCap,
   });

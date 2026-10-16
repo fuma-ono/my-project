@@ -71,6 +71,7 @@ async function main(): Promise<void> {
     provider: TWELVE_DATA_PROVIDER,
     job: 'ingest:fx-prices',
     runId,
+    mode,
     dailyCap: manual ? API_CREDIT_CAPS.twelvedata.manual : API_CREDIT_CAPS.twelvedata.automatic,
     runCap: FX_FETCH_SETTINGS.perRunRequestCap,
   });

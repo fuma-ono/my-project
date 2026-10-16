@@ -828,6 +828,8 @@ export interface CreditUsageSample {
   credits: number;
   /** daily cap applied when the credit was reserved (700 scheduled / 800 manual); null = unknown */
   cap?: number | null | undefined;
+  /** api_credit_usage.mode (AUTOMATIC / MANUAL); null = unknown */
+  mode?: string | null | undefined;
 }
 
 export type CreditJobKind = 'AUTO' | 'MANUAL' | 'EVAL';
@@ -840,12 +842,18 @@ export type CreditJobKind = 'AUTO' | 'MANUAL' | 'EVAL';
 export const CREDIT_CAPS = { AUTO: API_DAILY_BUDGET_DEFAULT, MANUAL: API_DAILY_LIMIT, PLAN: API_DAILY_LIMIT } as const;
 
 /**
- * eval:providers → EVAL. ingest:fx-prices reserves with job 'ingest:fx-prices'
- * in both modes, so its --manual runs are told apart by the cap they reserved
- * under (> the automatic cap). Any other job → MANUAL.
+ * eval:providers → EVAL. Otherwise the ledger's `mode` column decides
+ * (AUTOMATIC → AUTO, MANUAL → MANUAL). Rows without a mode (none expected)
+ * fall back to the cap they reserved under (> the automatic cap = manual).
  */
-export function creditJobKind(job: string | null, cap: number | null = null): CreditJobKind {
+export function creditJobKind(
+  job: string | null,
+  cap: number | null = null,
+  mode: string | null = null,
+): CreditJobKind {
   if (job === 'eval:providers') return 'EVAL';
+  if (mode === 'AUTOMATIC') return 'AUTO';
+  if (mode === 'MANUAL') return 'MANUAL';
   if (job === FX_INGEST_JOB) return cap !== null && cap > CREDIT_CAPS.AUTO ? 'MANUAL' : 'AUTO';
   return 'MANUAL';
 }
@@ -889,7 +897,7 @@ export function summarizeCreditUsage(rows: readonly CreditUsageSample[] | null):
       overManualCap: false,
       overPlan: false,
     };
-    const kind = creditJobKind(row.job, row.cap ?? null);
+    const kind = creditJobKind(row.job, row.cap ?? null, row.mode ?? null);
     if (kind === 'AUTO') day.auto += credits;
     else if (kind === 'EVAL') day.eval += credits;
     else {

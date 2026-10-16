@@ -112,10 +112,11 @@ export function createQualityReader(supabase: SupabaseClient): QualityReader {
           job: string | null;
           credits: number | string;
           cap: number | string | null;
+          mode: string | null;
         }>((from, to) =>
           supabase
             .from('api_credit_usage')
-            .select('id, provider, usage_date, job, credits, cap')
+            .select('id, provider, usage_date, job, mode, credits, cap')
             .gte('usage_date', fromDate)
             .lte('usage_date', toDate)
             .order('usage_date', { ascending: true })
@@ -128,6 +129,7 @@ export function createQualityReader(supabase: SupabaseClient): QualityReader {
           job: row.job,
           credits: Number(row.credits),
           cap: row.cap === null || row.cap === undefined ? null : Number(row.cap),
+          mode: row.mode ?? null,
         }));
       } catch {
         // The table is added by a later migration; before it exists the report shows 「—(クレジット記録なし)」.

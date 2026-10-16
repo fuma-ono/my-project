@@ -179,9 +179,15 @@ export interface ApiCreditReservation {
   job: string;
   runId: string;
   credits: number;
-  /** Provider-wide limit for today (UTC): the reservation succeeds only if today's total + credits ≤ cap. */
-  cap: number;
+  /**
+   * AUTOMATIC (scheduled) or MANUAL (--manual, eval:providers). The limits live in the DB
+   * (api_credit_limits, migration 20261016000003), not in the caller: AUTOMATIC succeeds only if
+   * today's total of ALL reservations + credits ≤ automatic_cap (700), MANUAL only if ≤ daily_total_cap (800).
+   */
+  mode: CreditMode;
 }
+
+export type CreditMode = 'AUTOMATIC' | 'MANUAL';
 
 export interface IngestionStore {
   findIndicatorsByCode(codes: readonly string[]): Promise<Map<string, IndicatorRef>>;

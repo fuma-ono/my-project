@@ -51,6 +51,11 @@ export const INGESTION_SETTINGS = {
  * UTC, 8/minute (https://support.twelvedata.com/en/articles/5615854-credits).
  * The plan of our account is NOT verified yet (dashboard check: 大野さん).
  */
+/**
+ * Mirror of api_credit_limits (migration 20261016000003) used to PLAN how many requests to schedule.
+ * The DB row is authoritative: reserve_api_credits() applies its own values, so a wrong number here
+ * can only make a run schedule fewer/more requests, never exceed the DB limit.
+ */
 export const API_CREDIT_CAPS = {
   twelvedata: {
     /** Scheduled runs (forward fetch + gap repair together) stop here: 800 − 100 kept for manual work. */

@@ -35,7 +35,11 @@ export class MemoryIngestionStore implements IngestionStore {
   fxPrices: FxPriceRow[] = [];
   logs: IngestionLogRow[] = [];
   /** api_credit_usage rows (usage_date = UTC date of `clock()` at reservation time). */
-  creditUsage: (ApiCreditReservation & { usage_date: string })[] = [];
+  creditUsage: (ApiCreditReservation & { usage_date: string; cap: number })[] = [];
+  /** api_credit_limits rows (same defaults as migration 20261016000003). */
+  creditLimits: Record<string, { daily_total_cap: number; automatic_cap: number }> = {
+    twelvedata: { daily_total_cap: 800, automatic_cap: 700 },
+  };
   /** Clock of the credit ledger (the DB uses now()). */
   clock: () => Date = () => new Date();
   private seq = 0;
@@ -257,11 +261,20 @@ export class MemoryIngestionStore implements IngestionStore {
       .reduce((sum, u) => sum + u.credits, 0);
   }
 
-  /** Same semantics as reserve_api_credits(): check + insert with no await in between (atomic in JS). */
+  /** Same semantics as reserve_api_credits(): limits from creditLimits, total of ALL modes, check + insert with no await in between (atomic in JS). */
   reserveApiCredits(reservation: ApiCreditReservation): Promise<boolean> {
-    if (reservation.credits <= 0 || reservation.cap <= 0) return Promise.reject(new Error('invalid reservation'));
-    if (this.creditsToday(reservation.provider) + reservation.credits > reservation.cap) return Promise.resolve(false);
-    this.creditUsage.push({ ...reservation, usage_date: this.clock().toISOString().slice(0, 10) });
+    if (reservation.credits <= 0) return Promise.reject(new Error('p_credits must be positive'));
+    if (reservation.mode !== 'AUTOMATIC' && reservation.mode !== 'MANUAL') {
+      return Promise.reject(new Error('p_mode must be AUTOMATIC or MANUAL'));
+    }
+    const limits = this.creditLimits[reservation.provider];
+    if (!limits) return Promise.reject(new Error(`no credit limit configured for provider ${reservation.provider}`));
+    const cap =
+      reservation.mode === 'AUTOMATIC'
+        ? Math.min(limits.automatic_cap, limits.daily_total_cap)
+        : limits.daily_total_cap;
+    if (this.creditsToday(reservation.provider) + reservation.credits > cap) return Promise.resolve(false);
+    this.creditUsage.push({ ...reservation, cap, usage_date: this.clock().toISOString().slice(0, 10) });
     return Promise.resolve(true);
   }
 

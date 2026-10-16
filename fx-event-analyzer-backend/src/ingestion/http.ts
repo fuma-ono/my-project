@@ -68,7 +68,7 @@ export interface CreditLedger {
     job: string;
     runId: string;
     credits: number;
-    cap: number;
+    mode: 'AUTOMATIC' | 'MANUAL';
   }): Promise<boolean>;
 }
 
@@ -84,7 +84,15 @@ export class CreditGate {
 
   constructor(
     private readonly ledger: CreditLedger,
-    readonly spec: { provider: string; job: string; runId: string; dailyCap: number; runCap?: number },
+    readonly spec: {
+      provider: string;
+      job: string;
+      runId: string;
+      mode: 'AUTOMATIC' | 'MANUAL';
+      /** For PLANNING only (how many requests to schedule). The DB enforces the real limit from api_credit_limits. */
+      dailyCap: number;
+      runCap?: number;
+    },
   ) {}
 
   readonly beforeAttempt = async (): Promise<boolean> => {
@@ -99,7 +107,7 @@ export class CreditGate {
         job: this.spec.job,
         runId: this.spec.runId,
         credits: 1,
-        cap: this.spec.dailyCap,
+        mode: this.spec.mode,
       });
     } catch (error) {
       this.refusal = 'LEDGER_UNAVAILABLE';

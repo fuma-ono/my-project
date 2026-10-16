@@ -215,6 +215,7 @@ async function twelveDataCreditGate(): Promise<CreditGate | string> {
     provider: TWELVE_DATA_PROVIDER,
     job: 'eval:providers',
     runId: `${process.env.GITHUB_RUN_ID ?? 'local'}:${randomUUID()}`,
+    mode: 'MANUAL',
     dailyCap: API_CREDIT_CAPS.twelvedata.manual,
   });
 }

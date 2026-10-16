@@ -151,9 +151,30 @@ describe('HttpClient credit hooks', () => {
 });
 
 describe('CreditGate + ledger', () => {
-  it('reserves one credit per attempt and stops at the daily cap and the run cap', async () => {
+  const gate = (
+    store: MemoryIngestionStore,
+    mode: 'AUTOMATIC' | 'MANUAL',
+    runId: string,
+    extra: { provider?: string; dailyCap?: number; runCap?: number } = {},
+  ) =>
+    new CreditGate(store, {
+      provider: extra.provider ?? 'twelvedata',
+      job: 'j',
+      runId,
+      mode,
+      dailyCap: extra.dailyCap ?? 800,
+      ...(extra.runCap !== undefined ? { runCap: extra.runCap } : {}),
+    });
+  const reserveN = async (g: CreditGate, n: number) => {
+    let ok = 0;
+    for (let i = 0; i < n; i += 1) if (await g.beforeAttempt()) ok += 1;
+    return ok;
+  };
+
+  it('reserves one credit per attempt and stops at the DB limit and the run cap', async () => {
     const store = new MemoryIngestionStore();
-    const daily = new CreditGate(store, { provider: 'twelvedata', job: 'j', runId: 'r1', dailyCap: 2 });
+    store.creditLimits.twelvedata = { daily_total_cap: 2, automatic_cap: 2 };
+    const daily = gate(store, 'MANUAL', 'r1');
     expect([await daily.beforeAttempt(), await daily.beforeAttempt(), await daily.beforeAttempt()]).toEqual([
       true,
       true,
@@ -162,28 +183,71 @@ describe('CreditGate + ledger', () => {
     expect(daily.refusal).toBe('DAILY_CAP');
     expect(await store.todayApiCredits('twelvedata')).toBe(2);
 
-    const run = new CreditGate(store, { provider: 'other', job: 'j', runId: 'r2', dailyCap: 10, runCap: 1 });
+    store.creditLimits.other = { daily_total_cap: 10, automatic_cap: 10 };
+    const run = gate(store, 'MANUAL', 'r2', { provider: 'other', runCap: 1 });
     expect([await run.beforeAttempt(), await run.beforeAttempt()]).toEqual([true, false]);
     expect(run.refusal).toBe('RUN_CAP');
   });
 
-  it('cannot be overrun by concurrent reservations', async () => {
+  it('the caller cannot raise the limit: the DB row (800 / 700) wins over dailyCap', async () => {
     const store = new MemoryIngestionStore();
-    const gates = [1, 2, 3].map(
-      (i) => new CreditGate(store, { provider: 'twelvedata', job: 'j', runId: `r${i}`, dailyCap: 10 }),
-    );
-    const results = await Promise.all(Array.from({ length: 30 }, (_, i) => gates[i % 3]!.beforeAttempt()));
-    expect(results.filter(Boolean)).toHaveLength(10);
-    expect(await store.todayApiCredits('twelvedata')).toBe(10);
+    expect(await reserveN(gate(store, 'MANUAL', 'm', { dailyCap: 5000 }), 900)).toBe(800);
+    const store2 = new MemoryIngestionStore();
+    expect(await reserveN(gate(store2, 'AUTOMATIC', 'a', { dailyCap: 5000 }), 900)).toBe(700);
+  });
+
+  it('total of every mode ≤ 800, automatic ≤ 700, never 700 + 800', async () => {
+    // Automatic first: 700, then manual gets only the remaining 100.
+    const s1 = new MemoryIngestionStore();
+    expect(await reserveN(gate(s1, 'AUTOMATIC', 'a'), 1000)).toBe(700);
+    expect(await reserveN(gate(s1, 'MANUAL', 'm'), 1000)).toBe(100);
+    expect(await reserveN(gate(s1, 'AUTOMATIC', 'a2'), 10)).toBe(0);
+    expect(await s1.todayApiCredits('twelvedata')).toBe(800);
+
+    // Manual first (300): automatic may only reach a TOTAL of 700 (400 more), manual keeps the last 100.
+    const s2 = new MemoryIngestionStore();
+    expect(await reserveN(gate(s2, 'MANUAL', 'm'), 300)).toBe(300);
+    expect(await reserveN(gate(s2, 'AUTOMATIC', 'a'), 1000)).toBe(400);
+    expect(await reserveN(gate(s2, 'MANUAL', 'm2'), 1000)).toBe(100);
+    expect(await s2.todayApiCredits('twelvedata')).toBe(800);
+    const autoUsed = s2.creditUsage.filter((u) => u.mode === 'AUTOMATIC').reduce((n, u) => n + u.credits, 0);
+    expect(autoUsed).toBe(400);
+  });
+
+  it('cannot be overrun by concurrent automatic and manual reservations', async () => {
+    const store = new MemoryIngestionStore();
+    const gates = [
+      gate(store, 'AUTOMATIC', 'a1'),
+      gate(store, 'AUTOMATIC', 'a2'),
+      gate(store, 'MANUAL', 'm1'),
+      gate(store, 'MANUAL', 'm2'),
+    ];
+    const results = await Promise.all(Array.from({ length: 2000 }, (_, i) => gates[i % 4]!.beforeAttempt()));
+    expect(results.filter(Boolean)).toHaveLength(800);
+    expect(await store.todayApiCredits('twelvedata')).toBe(800);
+    // Every automatic reservation was made while the total was below 700.
+    let total = 0;
+    for (const u of store.creditUsage) {
+      if (u.mode === 'AUTOMATIC') expect(total + u.credits).toBeLessThanOrEqual(700);
+      total += u.credits;
+    }
+  });
+
+  it('refuses a provider without a configured limit (no request is sent)', async () => {
+    const store = new MemoryIngestionStore();
+    const g = gate(store, 'MANUAL', 'r', { provider: 'unknown-provider' });
+    await expect(g.beforeAttempt()).rejects.toThrow('no credit limit configured');
+    expect(g.refusal).toBe('LEDGER_UNAVAILABLE');
   });
 
   it('counts per UTC day', async () => {
     const store = new MemoryIngestionStore();
+    store.creditLimits.twelvedata = { daily_total_cap: 1, automatic_cap: 1 };
     store.clock = () => new Date('2026-10-16T23:59:00Z');
-    const gate = new CreditGate(store, { provider: 'twelvedata', job: 'j', runId: 'r', dailyCap: 1 });
-    expect(await gate.beforeAttempt()).toBe(true);
-    expect(await gate.beforeAttempt()).toBe(false);
+    const g = gate(store, 'AUTOMATIC', 'r');
+    expect(await g.beforeAttempt()).toBe(true);
+    expect(await g.beforeAttempt()).toBe(false);
     store.clock = () => new Date('2026-10-17T00:00:00Z');
-    expect(await gate.beforeAttempt()).toBe(true);
+    expect(await g.beforeAttempt()).toBe(true);
   });
 });
