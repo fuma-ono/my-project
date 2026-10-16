@@ -116,7 +116,12 @@ describe.skipIf(!integration)('Plan limits (FREE / PRO)', () => {
       const { headers } = await newUser('FREE');
       const { status, body } = await request('GET', '/entitlements?timezone=Asia/Tokyo', headers);
       expect(status).toBe(200);
-      expect(body.features).toEqual([FEATURE_CODES.VIEW_BASIC_EVENT]);
+      // VIEW_BASIC_EVENT is an explicit row; the other two come from default_entitlements.
+      expect([...body.features].sort()).toEqual([
+        FEATURE_CODES.VIEW_BASIC_EVENT,
+        FEATURE_CODES.VIEW_HISTORICAL,
+        FEATURE_CODES.VIEW_MARKET_REACTION,
+      ]);
       expect(body.plan).toBe('FREE');
       expect(body.limits).toMatchObject({
         favorites_max: 3,
@@ -151,6 +156,23 @@ describe.skipIf(!integration)('Plan limits (FREE / PRO)', () => {
       const { body } = await request('GET', '/entitlements', headers);
       expect(body.plan).toBe('FREE');
       expect(body.features).not.toContain(FEATURE_CODES.VIEW_ADVANCED_STATS);
+    });
+
+    it('a brand-new user with no entitlement rows gets the default features (FREE) — HQ 2026-10-16', async () => {
+      const { user, headers } = await newUser('FREE', []);
+      const { data: rows } = await ctx.serviceClient.from('entitlements').select('id').eq('user_id', user.id);
+      expect(rows).toEqual([]);
+
+      const entitlements = await request('GET', '/entitlements', headers);
+      expect(entitlements.status).toBe(200);
+      expect(entitlements.body.features).toEqual([
+        FEATURE_CODES.VIEW_BASIC_EVENT,
+        FEATURE_CODES.VIEW_HISTORICAL,
+        FEATURE_CODES.VIEW_MARKET_REACTION,
+      ]);
+      expect(entitlements.body.plan).toBe('FREE');
+
+      expect((await request('GET', '/speeches', headers)).status).toBe(200);
     });
 
     it('422s an unknown timezone', async () => {

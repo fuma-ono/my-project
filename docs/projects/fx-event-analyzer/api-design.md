@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.29
+# FX Event Analyzer: API詳細設計書 v1.30
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -72,6 +72,7 @@
 - **v1.27**(2026-10-15): ホームの要人発言と、レートアラート・カレンダー更新の通知(notification-inbox-spec.md 7章・8章)。`GET /home`に`speeches`(直近7日の発言済み(`DELIVERED`)の要人発言、新しい順・最大3件。UIスクリーンショット用モックと同じ形。値動きの`reaction_*`はデータが無いため`null`)を追加(12章)。`GET /rate-alerts`・`POST /rate-alerts`・`DELETE /rate-alerts/{id}`を追加(24.12〜24.14節。有効なアラートの上限 FREE 1件・PRO 10件、28.1節)。`GET /notifications`は、本人の有効なレートアラートを最新の価格で判定して`RATE_ALERT`の行を、直近7日の予定の変更(日時の変更・中止)から`CALENDAR_UPDATE`の行を記録する(24.9節)。テーブル`rate_alerts`・`event_schedule_changes`(DBトリガーで記録)と、全員分を判定するジョブ`npm run jobs:evaluate-rate-alerts`を追加
 - **v1.28**(2026-10-15): 要人発言の値動き(HQ指示 2026-10-15)。`GET /speeches/{id}`に`reactions`(発言者の通貨を含む主要ペア最大4件 × 発言前の価格と`1m`・`5m`・`15m`の`pips`。発言済み(`DELIVERED`)の発言だけ、それ以外は`[]`)を追加(14.5節)。`GET /speeches/{id}/reaction`(14.8節、`GET /events/{id}/reaction`と同じ形)・`GET /speeches/{id}/reaction/chart`(14.9節、`GET /events/{id}/reaction/chart`と同じ形・同じ表示範囲)・`GET /speakers/{speaker_id}/comparison`(14.10節、要人ごとの過去の発言の比較。上限は`history_events_max`)を追加。要人発言の値動きは保存せず、`fx_prices`の1分足から**API応答時に計算する**(14.11節。保存テーブル・ジョブは追加しない。18.1節の「pips系はDB保存値を返す」は経済指標イベントのみの方針)。価格が無い値は`null`(`DATA_UNAVAILABLE`)で、補った値は返さない。Error Code `SPEAKER_NOT_FOUND`(404)を追加
 - **v1.29**(2026-10-15): データ取得の正確さの仕組み(data-sources.md、db-design.md v4.15)。**Endpoint・Response の形は変えない。** (1) Ingestion Worker が検証・公式統計との照合で保留にした経済指標の値(`ingestion_staged_values`)はどのAPIも返さない。保留中のイベントは `data_status` = `DATA_PENDING`・`snapshot` = `null`(7.3節)。(2) 2つ目の取得元と合わなかった1分足(`fx_prices.verification_status = UNVERIFIED`)は、チャート(`/reaction/chart`)・最新価格(`GET /home` の major_fx、レートアラートの判定)・要人発言の値動き(14.11節)で使わない。欠けた足と同じ扱いで、補わない(必要な値は `null` / `DATA_UNAVAILABLE`)
+- **v1.30**(2026-10-16): FREEの機能の付与(HQ指示 2026-10-16)。**Endpoint・Response の形は変えない。** これまでFREEの機能(`VIEW_BASIC_EVENT` / `VIEW_HISTORICAL` / `VIEW_MARKET_REACTION`)は`entitlements`の行が無いと使えず、その行を入れる処理がどこにも無かったため、登録したばかりのユーザーが`GET /speeches`・`GET /calendar`・`GET /events/{id}`などで`403 FEATURE_NOT_ENTITLED`になっていた。全ユーザーが持つ機能を`default_entitlements`(db-design.md v4.16 3.3.1節)に置き、ユーザーの有効な機能 = 有効な`entitlements`の行 + そのユーザーの行が無い`default_entitlements`の機能、とした。同じfeature_codeの`entitlements`の行があれば、有効・無効・期限切れのどれでもそちらが優先する(27章・28章)。`GET /entitlements`の`features`は既定の機能も含み、アルファベット順
 
 ---
 
@@ -1836,7 +1837,7 @@ Response(v1.15で`plan`・`limits`を追加。`features`は変更なし)：
 
 (例は`timezone=Asia/Tokyo`、2026-10-08に呼んだ場合)
 
-- `features`：有効な(`enabled = true`かつ期限内の)feature_codeのみ
+- `features`：ユーザーが使えるfeature_code(28章「Entitlementの決め方」)。アルファベット順(v1.30)
 - `plan`：`FREE` / `PRO`。判定は28.1節
 - `limits`：28.1節の表の値。`calendar_earliest_from` / `calendar_latest_to`はUTCの秒精度(`Z`、小数秒なし)で、`GET /calendar`(14.6節)の`from`の下限(含む)と`to`の上限
 - `favorites_max` / `notification_fx_pairs_max`：`null` = 上限なし
@@ -1847,6 +1848,8 @@ MVP：VIEW_BASIC_EVENT / VIEW_HISTORICAL / VIEW_MARKET_REACTION / VIEW_ADVANCED_
 将来：AI_ANALYSIS / SPEECH_ANALYSIS / ALERT
 
 EntitlementはPlan名ではなくFeature単位で管理する。
+
+`GET /entitlements`の`features`・27.1節の判定・28.1節のプランの判定は、すべて28章「Entitlementの決め方」(v1.30)の同じ機能の集合を使う。
 
 ## 27.1 Endpoint × feature_code対応表(v1.2で確定、B-1・A-1)
 
@@ -1887,6 +1890,13 @@ FREE：VIEW_BASIC_EVENT / VIEW_HISTORICAL / VIEW_MARKET_REACTION
 
 PRO：VIEW_BASIC_EVENT / VIEW_HISTORICAL / VIEW_MARKET_REACTION / VIEW_ADVANCED_STATS
 
+**Entitlementの決め方(v1.30、HQ指示 2026-10-16)**: FREEの機能はユーザーごとの行を作らず、全ユーザーが持つ機能の表`default_entitlements`(db-design.md 3.3.1節。値は`VIEW_BASIC_EVENT` / `VIEW_HISTORICAL` / `VIEW_MARKET_REACTION`)で与える。ユーザーが使える機能は次の2つを合わせたもの。
+
+1. そのユーザーの`entitlements`の行のうち、有効な(`enabled = true`かつ期限内の)もの
+2. `default_entitlements`の機能のうち、そのユーザーの`entitlements`に同じfeature_codeの行が**無い**もの
+
+同じfeature_codeの`entitlements`の行があれば、有効・無効(`enabled = false`)・期限切れのどれでも、その行が既定より優先する。運用でユーザーごとに既定の機能を止めるときは、`enabled = false`の行を入れる。コードにはFREE/PROの名前も既定の機能の一覧も持たない(どの機能を既定にするかは`default_entitlements`のデータで決める)。登録したばかりのユーザー(`entitlements`の行が無い)はFREEの機能をすべて使え、プランは`FREE`。
+
 ~~ただし価格・正式な課金条件はBeta前に最終決定する。実際のStoreKit購入・更新・キャンセル・Receipt検証はBeta時期に実装する。~~ (v1.4で確定: 価格・商品は25.2節、購入検証は25.1節)
 
 PRO Entitlementの付与(v1.4): `POST /subscription/verify`の保存時に、FREEとの差分である`VIEW_ADVANCED_STATS`の`entitlements`行を、購読が有効(ACTIVE / TRIAL / 期限内CANCELED)なら`enabled = true`・`expires_at = 購読のexpires_at`、EXPIREDなら`enabled = false`で更新する。
@@ -1895,7 +1905,7 @@ PRO Entitlementの付与(v1.4): `POST /subscription/verify`の保存時に、FRE
 
 ## 28.1 プラン別の利用上限(v1.15で追加、HQ決定 2026-10-08)
 
-プランの判定：有効な(`enabled = true`かつ期限内の)`VIEW_ADVANCED_STATS`を持つユーザーが`PRO`、それ以外の認証済みユーザーが`FREE`。`VIEW_ADVANCED_STATS`は`POST /subscription/verify`が購読の状態に合わせて付け外しする(上記)。プラン名をDBに保存する列は追加しない。
+プランの判定：有効な(`enabled = true`かつ期限内の)`VIEW_ADVANCED_STATS`を持つユーザー(28章「Entitlementの決め方」の機能の集合に含まれるユーザー)が`PRO`、それ以外の認証済みユーザーが`FREE`。`VIEW_ADVANCED_STATS`は`POST /subscription/verify`が購読の状態に合わせて付け外しする(上記)。プラン名をDBに保存する列は追加しない。
 
 | 上限 | FREE | PRO | 使うAPI |
 |---|---|---|---|

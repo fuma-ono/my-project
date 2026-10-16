@@ -129,3 +129,74 @@ describe('listActiveFeatureCodes / resolvePlan', () => {
     await expect(resolvePlan(supabase, USER)).resolves.toBe('FREE');
   });
 });
+
+describe('default_entitlements (HQ instruction 2026-10-16)', () => {
+  const DEFAULTS = [
+    { feature_code: 'VIEW_BASIC_EVENT' },
+    { feature_code: 'VIEW_HISTORICAL' },
+    { feature_code: 'VIEW_MARKET_REACTION' },
+  ];
+
+  it('grants a default feature to a user with no entitlement row', async () => {
+    const supabase = fakeSupabaseClient({ entitlements: [], default_entitlements: DEFAULTS });
+    await expect(hasEntitlement(supabase, USER, FEATURE_CODES.VIEW_BASIC_EVENT)).resolves.toBe(true);
+    await expect(requireEntitlement(supabase, USER, FEATURE_CODES.VIEW_MARKET_REACTION)).resolves.toBeUndefined();
+    await expect(listActiveFeatureCodes(supabase, USER)).resolves.toEqual([
+      'VIEW_BASIC_EVENT',
+      'VIEW_HISTORICAL',
+      'VIEW_MARKET_REACTION',
+    ]);
+  });
+
+  it('an explicit disabled row overrides the default', async () => {
+    const supabase = fakeSupabaseClient({
+      entitlements: [{ user_id: USER, feature_code: 'VIEW_HISTORICAL', enabled: false, expires_at: null }],
+      default_entitlements: DEFAULTS,
+    });
+    await expect(hasEntitlement(supabase, USER, FEATURE_CODES.VIEW_HISTORICAL)).resolves.toBe(false);
+    await expect(requireEntitlement(supabase, USER, FEATURE_CODES.VIEW_HISTORICAL)).rejects.toMatchObject({
+      code: 'FEATURE_NOT_ENTITLED',
+      statusCode: 403,
+    });
+    await expect(listActiveFeatureCodes(supabase, USER)).resolves.toEqual(['VIEW_BASIC_EVENT', 'VIEW_MARKET_REACTION']);
+  });
+
+  it('an explicit expired row overrides the default', async () => {
+    const supabase = fakeSupabaseClient({
+      entitlements: [
+        { user_id: USER, feature_code: 'VIEW_MARKET_REACTION', enabled: true, expires_at: '2020-01-01T00:00:00Z' },
+      ],
+      default_entitlements: DEFAULTS,
+    });
+    await expect(hasEntitlement(supabase, USER, FEATURE_CODES.VIEW_MARKET_REACTION)).resolves.toBe(false);
+  });
+
+  it('another user’s disabled row does not revoke this user’s default', async () => {
+    const supabase = fakeSupabaseClient({
+      entitlements: [{ user_id: OTHER_USER, feature_code: 'VIEW_HISTORICAL', enabled: false, expires_at: null }],
+      default_entitlements: DEFAULTS,
+    });
+    await expect(hasEntitlement(supabase, USER, FEATURE_CODES.VIEW_HISTORICAL)).resolves.toBe(true);
+  });
+
+  it('a non-default feature (VIEW_ADVANCED_STATS) still needs an active row', async () => {
+    const without = fakeSupabaseClient({ entitlements: [], default_entitlements: DEFAULTS });
+    await expect(hasEntitlement(without, USER, FEATURE_CODES.VIEW_ADVANCED_STATS)).resolves.toBe(false);
+    const withRow = fakeSupabaseClient({
+      entitlements: [{ user_id: USER, feature_code: 'VIEW_ADVANCED_STATS', enabled: true, expires_at: null }],
+      default_entitlements: DEFAULTS,
+    });
+    await expect(hasEntitlement(withRow, USER, FEATURE_CODES.VIEW_ADVANCED_STATS)).resolves.toBe(true);
+    await expect(listActiveFeatureCodes(withRow, USER)).resolves.toEqual([
+      'VIEW_ADVANCED_STATS',
+      'VIEW_BASIC_EVENT',
+      'VIEW_HISTORICAL',
+      'VIEW_MARKET_REACTION',
+    ]);
+  });
+
+  it('a user with only the defaults is FREE', async () => {
+    const supabase = fakeSupabaseClient({ entitlements: [], default_entitlements: DEFAULTS });
+    await expect(resolvePlan(supabase, USER)).resolves.toBe('FREE');
+  });
+});

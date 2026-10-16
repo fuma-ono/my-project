@@ -51,7 +51,9 @@ describe.skipIf(!integration)('GET /calendar', () => {
   async function newUser(entitled = true, plan: 'FREE' | 'PRO' = 'PRO'): Promise<{ authorization: string }> {
     const user = await createTestUser(ctx);
     users.push(user);
-    if (entitled) await grantEntitlement(ctx, user.id, FEATURE_CODES.VIEW_BASIC_EVENT);
+    // VIEW_BASIC_EVENT is a default feature (default_entitlements, HQ 2026-10-16):
+    // "not entitled" needs an explicit disabled row, not just no row.
+    await grantEntitlement(ctx, user.id, FEATURE_CODES.VIEW_BASIC_EVENT, { enabled: entitled });
     if (plan === 'PRO') await grantEntitlement(ctx, user.id, FEATURE_CODES.VIEW_ADVANCED_STATS);
     return { authorization: `Bearer ${user.accessToken}` };
   }

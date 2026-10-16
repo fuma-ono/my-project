@@ -43,10 +43,13 @@ describe.skipIf(!integration)('Speech reactions / speaker comparison', () => {
   let ctx: IntegrationContext;
   const users: TestUser[] = [];
 
-  async function newUser(features: string[]): Promise<{ authorization: string }> {
+  /** `revoked`: explicit disabled rows — the FREE features are defaults
+   * (default_entitlements, HQ 2026-10-16), so a missing row means granted. */
+  async function newUser(features: string[], revoked: string[] = []): Promise<{ authorization: string }> {
     const user = await createTestUser(ctx);
     users.push(user);
     for (const feature of features) await grantEntitlement(ctx, user.id, feature);
+    for (const feature of revoked) await grantEntitlement(ctx, user.id, feature, { enabled: false });
     return { authorization: `Bearer ${user.accessToken}` };
   }
   const ALL = [
@@ -218,7 +221,7 @@ describe.skipIf(!integration)('Speech reactions / speaker comparison', () => {
       );
       expect((await get(`/speeches/${DELIVERED_ID}/reaction`, headers)).status).toBe(422);
 
-      const noReaction = await newUser([FEATURE_CODES.VIEW_BASIC_EVENT]);
+      const noReaction = await newUser([FEATURE_CODES.VIEW_BASIC_EVENT], [FEATURE_CODES.VIEW_MARKET_REACTION]);
       const forbidden = await get(`/speeches/${DELIVERED_ID}/reaction?fx_pair_id=${USDJPY}`, noReaction);
       expect(forbidden.status).toBe(403);
       expect(forbidden.body.error.code).toBe('FEATURE_NOT_ENTITLED');
@@ -247,7 +250,7 @@ describe.skipIf(!integration)('Speech reactions / speaker comparison', () => {
     it('403 without VIEW_MARKET_REACTION, 422 without a valid timeframe', async () => {
       const forbidden = await get(
         `/speeches/${DELIVERED_ID}/reaction/chart?fx_pair_id=${USDJPY}&timeframe=1m`,
-        await newUser([FEATURE_CODES.VIEW_BASIC_EVENT]),
+        await newUser([FEATURE_CODES.VIEW_BASIC_EVENT], [FEATURE_CODES.VIEW_MARKET_REACTION]),
       );
       expect(forbidden.status).toBe(403);
       const invalid = await get(
@@ -287,7 +290,7 @@ describe.skipIf(!integration)('Speech reactions / speaker comparison', () => {
     it('403 without VIEW_HISTORICAL, 404 SPEAKER_NOT_FOUND / FX_PAIR_NOT_FOUND', async () => {
       const forbidden = await get(
         `/speakers/${SPEAKER_ID}/comparison`,
-        await newUser([FEATURE_CODES.VIEW_BASIC_EVENT]),
+        await newUser([FEATURE_CODES.VIEW_BASIC_EVENT], [FEATURE_CODES.VIEW_HISTORICAL]),
       );
       expect(forbidden.status).toBe(403);
       const headers = await newUser(ALL);

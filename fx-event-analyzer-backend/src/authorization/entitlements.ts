@@ -1,11 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ApiError } from '../errors/ApiError.js';
-import { listEntitlements } from '../repositories/entitlementsRepository.js';
+import { listDefaultFeatureCodes, listEntitlements } from '../repositories/entitlementsRepository.js';
 
 /**
  * MVP feature_code set (db-design.md §3.3 / Phase 2 instruction §8). Never
  * embeds FREE/PRO in the code itself — plan-to-feature mapping lives in
- * data (the entitlements table), not in this constant list.
+ * data (the entitlements / default_entitlements tables), not in this
+ * constant list.
  */
 export const FEATURE_CODES = {
   VIEW_BASIC_EVENT: 'VIEW_BASIC_EVENT',
@@ -22,10 +23,20 @@ export function isActive(row: { enabled: boolean; expires_at: string | null }): 
   return true;
 }
 
-/** The user's currently active feature_codes (enabled, not expired). */
+/**
+ * The user's effective feature_codes (api-design.md §28, HQ instruction
+ * 2026-10-16): active explicit `entitlements` rows (enabled, not expired)
+ * plus every `default_entitlements` feature the user has *no* explicit row
+ * for. An explicit row always wins over the default — a disabled or expired
+ * row revokes a default feature for that user. Two queries, run in parallel;
+ * sorted so GET /entitlements `features` is stable.
+ */
 export async function listActiveFeatureCodes(supabase: SupabaseClient, userId: string): Promise<string[]> {
-  const rows = await listEntitlements(supabase, userId);
-  return rows.filter(isActive).map((row) => row.feature_code);
+  const [rows, defaults] = await Promise.all([listEntitlements(supabase, userId), listDefaultFeatureCodes(supabase)]);
+  const explicit = new Set(rows.map((row) => row.feature_code));
+  const active = rows.filter(isActive).map((row) => row.feature_code);
+  const inherited = defaults.filter((code) => !explicit.has(code));
+  return [...new Set([...active, ...inherited])].sort();
 }
 
 export async function hasEntitlement(
@@ -33,8 +44,8 @@ export async function hasEntitlement(
   userId: string,
   featureCode: FeatureCode,
 ): Promise<boolean> {
-  const rows = await listEntitlements(supabase, userId);
-  return rows.some((row) => row.feature_code === featureCode && isActive(row));
+  const features = await listActiveFeatureCodes(supabase, userId);
+  return features.includes(featureCode);
 }
 
 /** Throws 403 FEATURE_NOT_ENTITLED. Used for endpoints that gate the

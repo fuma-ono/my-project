@@ -5,7 +5,8 @@ import { entitlementsQuerySchema } from '../schemas/entitlements.js';
 
 /** GET /entitlements — api-design.md §27: "現在ユーザーが利用可能な
  * Featureを取得する". Returns the user's currently-active feature_codes
- * only (expired/disabled rows are filtered out here, not left for the
+ * only — active explicit rows plus default_entitlements without an explicit
+ * row (expired/disabled rows are filtered out here, not left for the
  * client to interpret), plus the plan derived from them and that plan's
  * usage limits (§28.1). Date limits are computed in `timezone` (default UTC). */
 export function registerEntitlementsRoutes(app: FastifyInstance): void {

@@ -13,6 +13,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * Also supports `.in` / `.gte` / `.order` / `.range` (and treats `.or` as a
  * no-op) for the indicator list's release-summary queries (§13.1, v1.20).
  * `count` is the filtered row count before `.range`.
+ *
+ * A table missing from `tableData` reads as empty — e.g. `default_entitlements`
+ * in tests that only set up `entitlements` (no default features).
  */
 export function fakeSupabaseClient(tableData: Record<string, unknown[]>): SupabaseClient {
   const builder = (table: string) => {

@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.15
+# FX Event Analyzer: DB詳細設計 v4.16
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -45,6 +45,7 @@
   - 検証待ち・要確認の値を置く`IngestionStagedValue`(`ingestion_staged_values`、3.20節)と、照合用の公式統計`OfficialObservation`(`official_observations`、3.21節)を追加。どちらもRead APIは読まない(RLSはポリシーなし)
   - `FxPrice`に`verification_status`(`VERIFIED` / `SINGLE_SOURCE` / `UNVERIFIED`、既存行は`SINGLE_SOURCE`)・`cross_check_source`・`cross_check_close`・`cross_check_diff_pips`を追加(3.11節)。`UNVERIFIED`の足はRead APIが使わない
   - `IngestionLog`に`job`・`skipped_count`・`review_count`・`details`(jsonb)を追加(3.13節)。`data_type`の値セットは変えない(公式統計・要人発言は`OTHER`、ジョブ名は`job`)
+- **v4.16**(2026-10-16): FREEの機能の付与(HQ指示 2026-10-16)。全ユーザーが持つ機能の表`DefaultEntitlement`(`default_entitlements`、3.3.1節)を追加し、`VIEW_BASIC_EVENT` / `VIEW_HISTORICAL` / `VIEW_MARKET_REACTION`を入れた。Migration `20261016000002_default_entitlements.sql`。これまで新しいユーザーに`Entitlement`の行を入れる処理が無く、登録したばかりのユーザーがFREEの機能も使えなかった。ユーザーの`Entitlement`に同じfeature_codeの行があれば、有効・無効・期限切れのどれでもそちらが優先する(api-design.md v1.30 28章)。RLSはポリシーなし(service_roleのみ)
 
 ---
 
@@ -55,6 +56,7 @@
 | `Profile` | アプリ固有のユーザー情報(認証情報自体は認証基盤=Supabase Authが保持) |
 | `Subscription` | ユーザーのプラン契約状態 |
 | `Entitlement` | 機能単位のアクセス権フラグ |
+| `DefaultEntitlement` | 全ユーザーが持つ機能(v4.16で追加) |
 | `EconomicIndicator` | 経済指標マスタ |
 | `EconomicEvent` | 特定日時に発表される1回のイベント(メタデータ) |
 | `EventSnapshot` | 発表時点でユーザーに提供されていた値。immutable(DBレベルで担保) |
@@ -185,6 +187,21 @@ IDX(user_id)
 実際のFree/Proへの機能割り当ては`Subscription`/`Entitlement`の運用ロジック側で管理し、`feature_code`自体にFREE/PROという名称は含めない(HQ確定)。CHECK制約は付けず、値の追加を将来のMigrationのみで行えるようにする。
 
 **RLS**: `user_id = auth.uid()`の本人のみSELECT可。書き込みはservice_roleのみ。
+
+### 3.3.1 DefaultEntitlement(v4.16で追加、HQ指示 2026-10-16)
+
+認証済みの全ユーザーが最初から持つ機能。テーブル名は`default_entitlements`。FREEの機能をユーザーごとの`Entitlement`の行ではなく、この表のデータで与える(新しいユーザーに行を入れる処理は持たない)。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| feature_code | text | PK | 3.3節の値セット。FREE/PRO名称は埋め込まない |
+| created_at | timestamptz | NN, DEF now() | |
+
+**初期値**(Migration `20261016000002_default_entitlements.sql`): `VIEW_BASIC_EVENT` / `VIEW_HISTORICAL` / `VIEW_MARKET_REACTION`
+
+**有効な機能の決め方**: ユーザーの有効な機能 = 有効な(`enabled = true`かつ期限内の)`Entitlement`の行 + そのユーザーの`Entitlement`に同じfeature_codeの行が**無い**`DefaultEntitlement`の機能。`Entitlement`の行があれば、有効・無効・期限切れのどれでもそちらが優先する(運用でユーザーごとに既定の機能を止めるときは`enabled = false`の行を入れる)。プラン(FREE/PRO)の判定もこの集合で行う(api-design.md 28章・28.1節)。
+
+**RLS**: ポリシーなし(service_roleのみ)。Backendがservice_roleで読む。
 
 ### 3.4 EconomicIndicator(確定: importance値セット)
 
@@ -663,6 +680,7 @@ Supabase RLSを実装前提の設計条件として採用する。論理方針�
 | ユーザー固有(Backend経由のみ、v4.8) | `SupportRequest`(v4.7) | クライアントからは読み書き不可(ポリシーなし、anon / authenticatedの権限なし)。内部情報の列(`classification` / `github_issue_*`)を含むため、参照もservice_role(Backend)経由のみ |
 | 共有データ | `EconomicIndicator` / `EconomicEvent` / `Speaker` / `SpeechEvent`(v4.4) / `EventScheduleChange`(v4.14、書き込みはトリガーのみ) / `EventSnapshot` / `EventRevision` / `EventExplanation` / `IndicatorFxPair` / `FxPair` / `FxPrice` / `EventPriceReaction` | ユーザー単位のRLSを前提とせず、原則として全認証ユーザーからSELECT可能。INSERT/UPDATE/DELETEはservice_role(Ingestion Worker・管理者機能)のみ |
 | 運用ログ | `IngestionLog` / `IngestionStagedValue`(v4.15) / `OfficialObservation`(v4.15) | 一般ユーザーからは非公開。管理者機能・service_roleのみアクセス可 |
+| 設定データ(v4.16) | `DefaultEntitlement`(v4.16) | クライアントからは読み書き不可(ポリシーなし)。Backend(service_role)だけが読む |
 
 ## 7. Delete / Cascade方針(確定)
 

@@ -4,7 +4,9 @@ import { listActiveFeatureCodes } from './entitlements.js';
 
 /** FREE / PRO for usage limits (api-design.md §28.1): PRO = an active
  * VIEW_ADVANCED_STATS entitlement (synced by POST /subscription/verify),
- * FREE = every other authenticated user. */
+ * FREE = every other authenticated user. Uses the effective feature set
+ * (explicit rows + default_entitlements), so a user with only the defaults
+ * is FREE. */
 export async function resolvePlan(supabase: SupabaseClient, userId: string): Promise<Plan> {
   return planFromFeatures(await listActiveFeatureCodes(supabase, userId));
 }

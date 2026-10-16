@@ -498,14 +498,25 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
   });
 
   describe('Entitlement gating — VIEW_MARKET_REACTION (api-design.md §27.1)', () => {
-    it('403s the reaction endpoint for a user without the entitlement', async () => {
-      const response = await ctx.app.inject({
-        method: 'GET',
-        url: `/api/v1/events/${US_CPI_EVENT_ID}/reaction?fx_pair_id=${USDJPY_FX_PAIR_ID}`,
-        headers: authHeader,
-      });
-      expect(response.statusCode).toBe(403);
-      expect(JSON.parse(response.body).error.code).toBe('FEATURE_NOT_ENTITLED');
+    it('403s the reaction endpoint for a user whose VIEW_MARKET_REACTION is explicitly disabled', async () => {
+      // VIEW_MARKET_REACTION is a default feature (default_entitlements,
+      // HQ instruction 2026-10-16), so "no row" now means granted. Revoking
+      // it takes an explicit disabled row — on its own user, since rows are
+      // unique per (user_id, feature_code) and the shared user is granted
+      // the feature in the next test.
+      const revoked = await createTestUser(ctx);
+      try {
+        await grantEntitlement(ctx, revoked.id, FEATURE_CODES.VIEW_MARKET_REACTION, { enabled: false });
+        const response = await ctx.app.inject({
+          method: 'GET',
+          url: `/api/v1/events/${US_CPI_EVENT_ID}/reaction?fx_pair_id=${USDJPY_FX_PAIR_ID}`,
+          headers: { authorization: `Bearer ${revoked.accessToken}` },
+        });
+        expect(response.statusCode).toBe(403);
+        expect(JSON.parse(response.body).error.code).toBe('FEATURE_NOT_ENTITLED');
+      } finally {
+        await deleteTestUser(ctx, revoked.id);
+      }
     });
 
     it('200s once the user is granted VIEW_MARKET_REACTION, returning real reaction data for all timeframes', async () => {
