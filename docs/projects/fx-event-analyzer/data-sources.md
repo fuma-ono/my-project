@@ -1,7 +1,8 @@
-# FX Event Analyzer: データ取得元と正確さの仕組み v1.0
+# FX Event Analyzer: データ取得元と正確さの仕組み v1.1
 
 ## 変更履歴
 
+- **v1.1**(2026-10-16): HQ判断(方針は承認、契約・公開には前提条件)を受けて、利用条件を再確認(11章)、品質の測り方(12章)、為替の取り込みジョブ `ingest:fx-prices` を追加。**FRED は API 規約が「保存・DBへの取り込み」を禁じていると分かったため、`ingest:official` で使うのをやめた**(公式値は BLS のみ。FRED を使うには書面の許可が必要)。アプリ情報に「データの出典」を追加
 - **v1.0**(2026-10-15): 初版。取得元の構成(①〜⑤、ユーザー承認済み)、各取得元の利用条件の確認結果、正確さの仕組み、取り込みジョブ、有料候補の比較ツールをまとめた。実装は `fx-event-analyzer-backend/src/ingestion/`。DB変更は db-design.md v4.15、設計方針は design.md v1.11、API は api-design.md v1.29
 
 ---
@@ -231,3 +232,182 @@ npm run eval:providers -- --from 2026-09-01 --to 2026-10-14 --fx-pairs USDJPY,EU
 - **管理機能**: `ingestion_staged_values` の要確認の値を人が承認・却下する画面/API(design.md 13章。いまは DB を直接確認する)
 - **値動きの計算ジョブ**: `event_price_reactions` を `fx_prices` から計算するジョブ(`UNVERIFIED` の足を使わない)
 - 発表前の予想(forecast)の変化は、RELEASE スナップショットができるまで保存していない(発表前のスナップショットの種類を足すかは HQ 判断)
+
+---
+
+## 11. 利用条件の再確認(2026-10-16、HQ判断を受けて)
+
+HQ指示(2026-10-16)「契約・本番利用の前に、取得元ごとの利用条件を確認し直す」による再確認。2026-10-16 に各サイトの利用条件・料金のページをプロキシ経由で読んだ(curl。BLS は curl が 403 のため WebFetch で読んだ)。引用は英語の原文のまま。**ページに書かれていないことは「要確認」**とし、推測で埋めていない。料金は税抜・米ドル、公開ページの表示どおり(見積・契約条件ではない)。
+
+表の記号: ◯=ページに許可の記載あり、△=条件付き、×=ページに禁止の記載あり、要確認=ページに記載なし・読めなかった。各セルの [番号] は表の下の根拠(URL と原文)。
+
+### 11.1 公式統計(②)
+
+| 取得元 | 商用アプリでの利用 | DBへの保存 | 内部照合 | 利用者への表示/再配布 | 派生値 | 出典表示 | 料金(公開価格) | 未解決(機関に確認すること) |
+|---|---|---|---|---|---|---|---|---|
+| FRED API | △ 商用は銀行の書面の同意が原則 [F3]。ただし「Public Domain: Citation requested」の系列は社内の商用利用・顧客向けレポートでの表示は可 [F4]。有料アプリでの表示はこの例に**書かれておらず要確認** | **× API の追加規約で保存・キャッシュ・DB への組み込みを禁止** [F5]。終了時は全コピーの破棄 [F6] | △ 社内の商用利用は上記の系列なら可 [F4]。**ただし保存せずに照合する場合に限る**(保存は [F5] で禁止) | 要確認(有料アプリでの表示は [F4] の例に無い)。第三者の系列の商用再配布は持ち主の書面の許可が必要 [F7] | 要確認(派生値の規定なし) | **必須** "This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis." [F8]。アプリ利用者に FRED API 利用規約へのリンクを示し、アプリの規約で利用者もそれに従うと明記 [F8]。系列の出典(例 "Source: BLS via FRED")[F4] | 無料。**120回/分**まで(超えると 429・一時遮断)[F9] | 有料アプリでの表示と、照合用の値の DB 保存(期間)を書面で認めてもらえるか(stlsFRED@stls.frb.org [F10]) |
+| BLS Public Data API | ◯ 規約に商用の禁止なし。"Data accessed through BLS.gov do not, and should not, include controls over its end use." [B1]。BLS の公表物は原則パブリックドメイン [B3] | ◯ 規約に保存の制限の記載なし [B1](期間の定めもなし) | ◯(同上) | ◯ パブリックドメイン [B3]。ただし内容を改変・偽って示したまま BLS を出典にしない [B2] | △ 可。ただし派生値については下の免責文を示す [B2] | **必須** 取得日の記載と "BLS.gov cannot vouch for the data or analyses derived from these data after the data have been retrieved from BLS.gov." [B2]。出典として BLS を示す(依頼)[B3]。BLS のロゴは使えない [B2] | 無料。v2(登録)500回/日・1回50系列・20年、v1 25回/日・25系列・10年、どちらも 50回/10秒 [B4] | なし(念のため、規約ページを社外の回線のブラウザで原文確認。プロキシからは 403) |
+| e-Stat API(日本) | ◯「商用利用も可能です。」[E2] | ◯ 複製・公衆送信・翻案を自由に利用できる [E2](期間の定めなし) | ◯ [E2] | ◯ [E2]。第三者が権利を持つ部分は利用者が確認 [E2] | △ 可。加工したことを出典とは別に書く(例「○○調査結果(A省)を加工して作成」)。国が作ったように見せない [E2] | **必須** API のクレジット「このサービスは、政府統計総合窓口(e-Stat)のAPI機能を使用していますが、サービスの内容は国によって保証されたものではありません。」[E3] + 出典「出典:政府統計の総合窓口(e-Stat)(https://www.e-stat.go.jp/)」等 [E2] | 無料(アプリケーションID 要)。回数の上限の数値は記載なし。「短時間における大量のアクセス」は禁止、負荷に応じて制限あり [E1] | 回数の目安(数値) |
+
+根拠(2026-10-16 確認):
+
+- [F1] https://fred.stlouisfed.org/docs/api/terms_of_use.html — FRED API 利用規約(下の [F5]〜[F8] と同じ内容は https://fred.stlouisfed.org/legal/ の "Additional Terms of Use for the FRED® API" にもある)
+- [F2] https://fred.stlouisfed.org/legal/ "FRED provides data and data services to the public for non-commercial, educational, and personal uses subject to a few prohibitions. Furthermore, other uses (e.g., commercial) are subject to additional restrictions."
+- [F3] 同 FRED® Services Terms of Use: "(j) Except as expressly authorized in the FRED® Terms of Service, use the FRED® Services for any commercial use without the prior written consent of the Bank."
+- [F4] 同 "IV. Commercial Use: Series with the following copyright labels—Public Domain: Citation requested and Copyrighted: Citation required—may be used for internal commercial uses and may be displayed in textbooks, newsletters, or reports to clients provided that appropriate attribution is given to FRED as well as the original source of the data." / "Public Domain: Citation requested … When using, please cite the data source and acknowledge that you obtained the data from FRED (example, "Source: BLS via FRED") when displaying or publishing it."
+- [F5] 同 "Prohibitions for FRED® API … (l) Use the FRED® API in connection with storing, caching, or archiving any portion of the FRED® Services or FRED® Content; providing any stored, cached, or archived portion of the FRED® Services or FRED® Content to any third party; or incorporating any FRED® Content in any database, compilation, archive, cache, or other medium."
+- [F6] 同 "Upon termination of the licenses, you shall cease all use of the FRED® Services, and destroy all copies, full or partial, of the FRED® Content."
+- [F7] 同 "Redistribute any third party's proprietary content, including any graphs, maps, images, logos, data, or datasets, for commercial use without first obtaining express written permission from the data provider."
+- [F8] [F1] "Requirements … Place the following notice prominently on your application: …" / "If you develop a FRED® API application for use by other users, display to the users of your application the link to these Terms of Use, and explicitly state in your application's terms of use that, by using your application, your users are agreeing to be bound by the FRED® API Terms of Use"
+- [F9] https://fred.stlouisfed.org/docs/api/fred/errors.html "429 Too Many Requests (Up to 120 requests per minute are allowed before being served a 429 error code. Not complying with the throttling can result in a temporary block.)"
+- [F10] https://fred.stlouisfed.org/legal/ "For comments or questions about the data in the FRED® database, we prefer you send an email to stlsFRED@stls.frb.org." / "If you are unsure if a data series is under copyright, please contact us."
+- [F11] 系列の著作権の表示(各系列のページのタグ): https://fred.stlouisfed.org/series/CPIAUCNS ・ /CPILFENS ・ /PAYEMS ・ /UNRATE はいずれも出典 "U.S. Bureau of Labor Statistics"、/RSAFS は出典 "U.S. Census Bureau"。**5系列とも "Public Domain: Citation Requested"**(第三者の著作権の系列 "Copyrighted: Pre-approval required" ではない)。ページ内の "Data in this graph are copyrighted." は非表示(`hide`)の定型文で、これらの系列には当たらない
+- [B1] https://www.bls.gov/developers/termsOfService.htm(Last Modified: August 30, 2023。WebFetch で取得)"Data accessed through BLS.gov do not, and should not, include controls over its end use."
+- [B2] 同 "cite the date that data were accessed or retrieved using the API" / "BLS.gov cannot vouch for the data or analyses derived from these data after the data have been retrieved from BLS.gov." / "may not modify or falsely represent content accessed through BLS.gov and still cite the source as BLS.gov" / "The BLS.gov logo may not be used by persons who are not BLS employees or on products (including web pages) that are not BLS-sponsored."
+- [B3] https://www.bls.gov/opub/copyright-information.htm(WebFetch)"everything that we publish, both in hard copy and electronically, is in the public domain, except for previously copyrighted photographs and illustrations." / "You are free to use our public domain material without specific permission, although we do ask that you cite the Bureau of Labor Statistics as the source."
+- [B4] https://www.bls.gov/developers/api_faqs.htm(WebFetch)v2: Daily query limit 500、Series per query 50、Years per query 20、50 requests per 10 seconds / v1: 25・25・10・50 requests per 10 seconds。"Users must renew registration with the BLS Public Data API at least once a year."
+- [E1] https://www.e-stat.go.jp/api/terms-of-use 第6条「コンテンツ…の利用条件等は、『政府統計の総合窓口(e-Stat)利用規約』に準じる」、第7条「本機能を利用したサービスを提供する場合には、別途定める方法により、本機能を利用している出所等を明示する」、第8条「短時間における大量のアクセスその他本機能の運用に支障を与える行為」の禁止、第5条3「負荷状況に応じてアクセス制限をかけることがあります」
+- [E2] https://www.e-stat.go.jp/terms-of-use「どなたでも以下の1)〜6)に従って、複製、公衆送信、翻訳・変形等の翻案等、自由に利用できます。商用利用も可能です。」「コンテンツを編集・加工等して利用する場合は、上記出典とは別に、編集・加工等を行ったことを記載してください。」「政府標準利用規約(第2.0版)に準拠」「CC BY と互換性」
+- [E3] https://www.e-stat.go.jp/api/api-info/credit(上記の文言)「利用される方が参照できる場所であれば、表示場所の指定はございません。」
+
+**FRED についての結論**: いまの実装(`ingest:official` が FRED の観測値を `official_observations` に保存し、照合した公式値を `event_snapshots` に記録。4章・8章)は、FRED API の追加規約 [F5] の「保存・キャッシュ・DB への組み込み」の禁止に当たる。2章の「確認済み」はこの条項を見落としていた。照合に使う5系列はどれも元は BLS・Census(米政府)の数値で、FRED 上もパブリックドメイン扱い [F11]・[B3]。**保存・表示する公式値は BLS(と Census)から直接取り、FRED は「保存しない一時的な照合」だけに使うか、使わない**のが規約上安全。FRED の発表日時点の値(ALFRED)を使った照合(4章 2.)を続けるなら、セントルイス連銀の書面の許可が要る。米国の小売売上高(RSAFS、Census)を直接取る場合の Census API の利用条件は今回確認していない(**要確認**)。
+
+### 11.2 要人発言(④)
+
+| 取得元 | 商用アプリでの利用 | DBへの保存 | 内部照合 | 利用者への表示/再配布 | 派生値 | 出典表示 | 料金(公開価格) | 未解決(機関に確認すること) |
+|---|---|---|---|---|---|---|---|---|
+| FRB(federalreserve.gov、`/json/calendar.json`) | ◯ 特に断りがなければパブリックドメイン [R1] | ◯(パブリックドメイン。制限の記載なし)[R1] | ◯ [R1] | ◯ 許可なく複製・配布できる [R1]。フレーム内表示は不可 [R2] | 要確認(規定なし。パブリックドメインのため制限は書かれていない) | 出典として FRB(the Board)を示す [R1]。FRB の印章・ロゴは使えない [R3] | 無料 | **calendar.json の `time` に時刻帯が無い**(例 `"time": "11:30 p.m."`。ほかの項目は `month`・`days`・`title`・`type`・`location`・`description`・`link`・`live` だけ)。カレンダーのページにも時刻帯・「開始時刻か」の説明は無い [R4]。米東部時間であること・開始予定時刻であることを FRB に確認(5章では速報RSSとの照合で東部時間と判断している) |
+| ECB(サイト・RSS・週間予定・Data Portal) | △ 自由に使える。ただし**有料の商品に組み込む場合は、購入前と利用のたびに「ECB のサイトで無料で入手できる」と知らせる** [C1] | 要確認(保存の規定なし) | ◯ 自由に使える [C1] | △ 正確に再現し ECB を出典とする [C1]。著者名のある文書(Working Paper 等)の再掲は事前の書面許可が必要 [C1] | △ 加工した場合(季節調整・伸び率の計算等)はその旨を明記 [C1] | 出典「ECB」+ 有料プランで見せる場合は上記の無料入手の案内 [C1] | 無料 | 週間予定の時刻帯(下記)。Data Portal 独自の利用条件のページ(https://data.ecb.europa.eu/help/terms-use)は 404。Data Portal のページの法的情報は同じ ECB の disclaimer にリンク [C3] |
+| 日本銀行 | **要相談**。商用目的の転載・複製は予め情報サービス局に相談 [J1] | 要確認(商用は相談が前提)[J1] | 要確認(同上) | 要相談 [J1]。無断改変は不可 [J1] | 要確認(無断改変の禁止 [J1] との関係) | 出所を明記 [J1] | 無料(相談) | **窓口**: 著作権・商用利用は 情報サービス局 post.prd8@boj.or.jp。サイトの利用に関するその他の相談は prd.hp-mds@boj.or.jp(メール)[J1] |
+| イングランド銀行(BOE) | × サイトの内容は個人利用・組織内の**非商用**利用のみ [K1]。それ以外は許可が必要。許可は通常、非商用(学術・教育)に出すと書かれている [K1] | 要確認(許可次第) | △ 組織内の非商用利用は可 [K1]。商用の社内照合は要確認 | × 許可が必要 [K1] | 要確認 | 要確認(許可の条件次第) | 無料(許可制) | **窓口**: enquiries@bankofengland.co.uk、電話 +44 (0)20 3461 4878 [K1]。統計 Database は UK Open Government Licence(ただし一部の為替レートの系列は対象外)[K2] |
+
+ECB の週間予定の時刻帯(https://www.ecb.europa.eu/press/calendars/weekly/html/index.en.html、2026-10-16 時点で 10月9日〜18日分): 時刻は「Time: 10:00 CET」のように **10月(夏時間の期間)でも "CET"** と書かれ、ページに時刻帯の説明は無い。現地時刻が併記された予定では "Time: 20:30 CET / 19:30 local time"(ダブリン、10月13日)、"Time: 04:10 CET / 09:10 local time"(バンコク、10月14日)、"Time: 10:15 CET / 15:15 local time"(バンコク)とあり、いずれも **"CET" が UTC+2(=フランクフルトの夏時間 CEST)** のとき計算が合う。つまり "CET" は「フランクフルトの現地時刻」の意味で使われていると読める(**推測。ECB への確認が必要**)。統計の公表など一部は "Time: 10:00" と時刻帯が無い。「Last modified: 14 October 2026, 15:30 CET」も同じ書き方。
+
+根拠(2026-10-16 確認):
+
+- [R1] https://www.federalreserve.gov/disclaimer.htm "Unless otherwise indicated, information on Board's website is in the public domain and may be copied and distributed without permission. Please cite to the Board as the source of the information."
+- [R2] 同 "This permission extends only to a hyperlink, however, and does not include authority to engage in any other activities such as the "framing" of the Board's website on another website"
+- [R3] 同 "The use of the Board seals, logos and other official insignia is protected by federal law and may not be used or reproduced without the Board's written permission."
+- [R4] https://www.federalreserve.gov/json/calendar.json(2,602件。最新の例 `{"title": "Discussion - Chairman Kevin Warsh", "time": "11:30 p.m.", "month": "2026-10", "days": "15", "type": "Speeches", "location": "… Bangkok, Thailand"}`)、https://www.federalreserve.gov/newsevents/calendar.htm(時刻帯の記載なし)
+- [C1] https://www.ecb.europa.eu/services/disclaimer/html/index.en.html "users of this website may make free use of the information obtained directly from it subject to the following conditions: When such information is distributed or reproduced, it must appear accurately and the ECB must be cited as the source. Where the information is incorporated in documents that are sold (regardless of the medium), the natural or legal person publishing the information must inform buyers, both before they pay any subscription or fee and each time they access the information taken from this website, that the information may be obtained free of charge through this website. If the information is modified by the user (e.g. by seasonal adjustment of statistical data or calculation of growth rates) this must be stated explicitly." / 著者名のある文書は "permitted only with the explicit prior written authorisation of the ECB or the authors."
+- [C3] https://data.ecb.europa.eu/help/terms-use は 404。Data Portal のページの法的情報のリンク先は [C1]
+- [J1] https://www.boj.or.jp/about/copyright.htm「当サイトの内容については、以下の場合を除き、転載・複製を行うことが出来ます。転載・複製を行う場合は、出所を明記してください。 i.商用目的で転載・複製を行う場合 …上記i.〜iii.の場合には、予め情報サービス局(post.prd8@boj.or.jp)までご相談ください」「当サイトの内容については、日本銀行に無断で改変を行うことはできません。」「当サイトの利用に関するその他のご相談は、情報サービス局(prd.hp-mds@boj.or.jp)までメールにてお願いします。」
+- [K1] https://www.bankofengland.co.uk/legal "You may … download, display or print the Resources for personal use or internal use within an individual organisation for non-commercial purposes." / "You can email enquiries@bankofengland.co.uk and can also phone on +44 (0)20 3461 4878." / "The Bank typically grants permission for non-commercial re-use of the Resources, particularly in an academic or education context."
+- [K2] 同 "Reproduction of data in the Database is subject to the terms of the UK Open Government Licence" / "selected exchange rate data and series are excluded from this licence as they are reproduced by the Bank under licence from third parties."
+
+### 11.3 経済カレンダー候補(①)
+
+| 取得元 | 商用アプリでの利用 | DBへの保存 | 内部照合 | 利用者への表示/再配布 | 派生値 | 出典表示 | 料金(公開価格) | 未解決(業者に確認すること) |
+|---|---|---|---|---|---|---|---|---|
+| Trading Economics | △ **経済カレンダーの API は Enterprise プランだけ**(Standard・Professional は "Economic Calendar" が含まれない)[T1] | 要確認(利用規約のページが見つからない)[T2] | 要確認 [T2] | △ Enterprise に "White Label"・"Data Distribution … Redistribute data to your clients and partners under enterprise licensing." [T1]。条件は要確認 | 要確認 [T2] | 要確認 [T2] | Basic $29.99/月(API なし)、Standard $199/月(API 500回/月、カレンダーなし)、Professional $399/月(5,000回/月、カレンダーなし)、**Enterprise は非公開("Customized and priced to your needs. Billed quarterly or yearly"、最大 100万回/月)**。四半期15%・年25%引き。試用は1週間(Standard $49・Professional $99、返金なし)、試用は 100,000 データ点・100 リクエストまで [T1]。→ **10か国のカレンダーは Enterprise の見積が必要(公開価格なし)** | Enterprise の見積(10か国・カレンダー+Live Streaming)、アプリでの表示・DB 保存・保存期間・派生値・出典表示・解約後の扱い、利用規約の原文。Enterprise に試用があるか |
+| Finnhub | × 公開プランはすべて個人用。"All plan listed on Finnhub website is strictly for personal use unless explicitly stated otherwise. Personal plan can't be used by any business even internally without a written approval." [N1] | △ 購読が終わったら全データを削除 [N1]。購読中の保存期間は要確認 | × 個人プランは企業の内部利用も書面の承認なしでは不可 [N1] | × 書面の承認なしにデータ・派生結果の再配布・共有は不可 [N1]。Enterprise は "Commercial use. Redistribution right." [N2] | × 派生結果も再配布不可 [N1](Enterprise は要確認) | 要確認 | Economic-1 **$50/月(四半期ごと $150 の請求)**、"License: Personal Use"、150回/分、経済カレンダー10年分 [N2]。全プランに上乗せで 30回/秒 [N1]。**商用(Enterprise)は "Flexible"・要問合せ(support@finnhub.io)**[N2] | Enterprise の見積(カレンダーのみ・10か国)、表示・保存・派生値の範囲、出典表示 |
+| Financial Modeling Prep | × 個人プランは個人の非商用のみ。会社のための利用・第三者が使うアプリへの組み込みは不可 [M2] | △ 保存場所のセキュリティ管理と、保存場所の IP・ドメインの FMP への通知が必要 [M3]。終了時はキャッシュを含め全削除・削除の合意書に署名 [M4] | △ 商用プランの "Grow" は "for internal usage"・"Internal Commercial Use" [M1]。個人プランは不可 [M2] | × **"Displaying or redistributing data sourced from FMP requires a specific Data Display and Licensing Agreement with FMP."** [M1]。表示・再配布は Enterprise ("Perfect if you're looking for data display and redistribution")[M1] | × 書面の承認なしに派生物の作成不可 [M2] | 要確認 | 個人: Basic $0(250回/日)、Starter $29/月(年払い $19/月)、Premium $69/月($49)、Ultimate $139/月($99)[M1]。**商用(Build・Grow・Enterprise)の価格は公開ページから読めず要確認**。どのプランで経済指標カレンダー("Economic Data Releases Calendar")が使えるかも表から読み取れず要確認 [M1] | Enterprise(表示・再配布)の見積、Data Display and Licensing Agreement の内容、カレンダーの国の範囲、対象期間(reference period)を返すか |
+
+根拠(2026-10-16 確認):
+
+- [T1] https://tradingeconomics.com/api/pricing.aspx(価格表はページが読み込むデータ https://d3e5kp2e91w0k0.cloudfront.net/pricing/pricing-data.js?v=20260316 にある): Standard・Professional とも "Economic Calendar … included: false"、Enterprise "Economic Calendar … included: true"・"Live Streaming … included: true"、"White Label: Display real-time and historical market or economic data directly on your website, fully branded to match your branding."、"Data Distribution: Power your own applications using your branding but with our data and API. Redistribute data to your clients and partners under enterprise licensing." / ページ本文 "The trial fee is not refundable …" "To prevent abuse, trial users are limited to 100000 data points and 100 requests for data."
+- [T2] https://tradingeconomics.com/terms-of-use.aspx ・ /terms-of-service.aspx ・ /terms は 404(見つからない)。サイトのフッターにも利用規約のリンクが無い(privacy-policy のみ)
+- [N1] https://finnhub.io/terms-of-service "All data must be deleted should your subscription to that data ends." / "You hereby agree to not redistribute or share access to data or derived results from the data obtained from Finnhub with anyone or any 3rd party without written approval from Finnhub. All plan listed on Finnhub website is strictly for personal use unless explicitly stated otherwise. Personal plan can't be used by any business even internally without a written approval." / "There is a 30 API calls/second limit on top of all plan's limit"
+- [N2] https://finnhub.io/pricing(価格はページのデータ `"economic-1":50` とページのスクリプトの表): "Economic-1 … $50/month … Billing Frequency: Quarterly … License: Personal Use. Terms apply … Limit: 150 API calls/minute … Global Economic Calendar: 10 years of data" / Enterprise "Pricing: Flexible … Contact Sales (support@finnhub.io) … License: Commercial use. Redistribution right. … Limit: Unlimited API calls"
+- [M1] https://site.financialmodelingprep.com/developer/docs/pricing 上記の価格と "Displaying or redistributing data sourced from FMP requires a specific Data Display and Licensing Agreement with FMP." / 商用プランの説明 "Build: Begin building with instant access to financial market data that powers startups and enterprises." "Grow: A full set of financial data to cover all cases for internal usage" "Enterprise: Perfect if you're looking for data display and redistribution, unlimited volume, and priority support"
+- [M2] https://site.financialmodelingprep.com/terms-of-service(Last updated: August 1, 2023)"2.2.1 Personal Use: This license may only be used by a Customer who is an individual, and strictly for their own personal, non-business and non-commercial purposes. … integrate the Data or Services into any tools or applications accessible by any third parties …" / "without the prior written approval of FMP, the Customer may not distribute, publicly perform or display, … create derivative works from …" / "2.2.2 Data Display: Without a specific agreement with FMP, customers are prohibited from showcasing FMP Services or Data on platforms including … software products, or applications designed for utilization by multiple individuals, irrespective of whether such usage is complimentary or paid"
+- [M3] 同 "2.8 Customer Security. … Customer will notify FMP of the IP and domain aliases of any location where data is stored or processed."
+- [M4] 同 "6.3 Data Deletion. Upon termination of this Agreement, Customer must delete all Data it has received from FMP …, including data cached, and sign the Data Deletion Agreement in Exhibit A."
+
+### 11.4 為替候補(③・⑤)
+
+| 取得元 | 商用アプリでの利用 | DBへの保存 | 内部照合 | 利用者への表示/再配布 | 派生値 | 出典表示 | 料金(公開価格) | 未解決(業者に確認すること) |
+|---|---|---|---|---|---|---|---|---|
+| Twelve Data | △ **Business プランが必須**(会社の利用は表示しなくても Business)[W1]。個人プランは個人・非商用のみ [W1] | △ 内部利用のための保存は可 [W2]。ただし「ドキュメントの定める期間を超えて保存・キャッシュしない」[W2](期間の数値は要確認)。終了後30日以内に全削除 [W3] | ◯ Business の内部利用 [W2] | △ 外部表示は Business の **Venture 以上("External display data access")**、外部配布は **Enterprise("External distribution market data")**[W1]。規約では外部表示・再配布は「Redistribution Rights Add-On または別の書面契約で明示的に認められた場合のみ」[W2] | ◯ 元データを復元できない派生データは可・権利は顧客 [W2]。再配布目的の派生物は不可 [W3] | 要確認(外部表示の帰属表示の要件は「追加の条件」による [W2]) | Business: Venture **$149/月**(610クレジット/分)・$299(1,597)・$499(2,584。年払い $414/月相当・$4,990/年)、Enterprise **$1,099/月**(10,946。年払い $916/月相当)、Enterprise+ 要見積。年払い17%引き [W1]。→ **9ペアの1分足(1回1クレジット×9)は Venture $149/月の枠で足りる**。外部「配布」扱いなら Enterprise $1,099/月。リアルタイムの為替は Basic から含まれ、Venture は "Everything from Basic" [W1]。遅延表示の別料金の記載なし | iOS アプリでの1分足・値動き(pips)の表示は Venture の "external display" で足りるか、Redistribution Rights Add-On が要るか。保存期間の上限。帰属表示の文言。**価格の定義(bid・ask・mid のどれか)は記載なし**("Currency data is sourced from well established commercial providers and large banks" [W4]) |
+| Massive(旧 Polygon.io) | △ 個人プランは個人・非商用のみ [P2]。商用は "Currencies Business"(license_type: commercial)[P1] | ◯ 購入した範囲で保存可 "access, receive, process, transmit, store, and use" [P3]。終了時は全削除(自社で作った派生物は保持可)[P4] | ◯ 社内の業務目的 [P3] | △ 自社のアプリ内で利用者(Edge Users)に**表示**は可 [P3]。データフィード・ファイル等の機械可読な形での提供、表示に必要な範囲を超えて端末に送ることは不可 [P5]。第三者提供元が求める帰属表示・遅延表示が必要 [P5] | ◯ 派生物(計算・分析等)は、元データを含まなければ自由に利用・表示・配布可 [P3](元データを復元できるものは元データ扱い [P6]) | 要確認(第三者提供元が求める場合に表示 [P5]) | 個人: Currencies Basic $0(5回/分・日足)、Currencies Starter **$49/月**(リアルタイム・分足・無制限。個人のみ)[P1]。**Business: Currencies Business $999/月(年払い $9,588/年 = $799/月相当)、リアルタイム・無制限・分足・商用**[P1]。遅延の安いプランの記載なし | 9ペアの1分足を iOS で表示する用途が Currencies Business の範囲か。チャート用に1分足の配列を端末に送ることが「表示に必要な範囲」に入るか [P5]。帰属表示の要否。スタートアップ割引(初年度25%以上、sales@massive.com)の対象か |
+
+価格の定義: Massive の為替の足は "these aggregates are generated from quoted bid/ask prices rather than executed trades."、足の時刻は "The Unix millisecond timestamp for the start of the aggregate window."、気配の更新が無い分は足が作られない(https://massive.com/docs/rest/forex/aggregates/custom-bars、WebFetch)。bid・ask のどちらか・仲値かは書かれておらず**要確認**。取得元は "Forex quotes come from institutional bank feeds"(https://massive.com/currencies)。Twelve Data は [W4] のみで価格の定義の記載なし(**要確認**)。
+
+根拠(2026-10-16 確認):
+
+- [W1] https://twelvedata.com/pricing.md(と https://twelvedata.com/pricing ・ https://twelvedata.com/pricing-business)"Business plans are required for any company, team, fund, or organization using Twelve Data — even if the data is only used internally and never displayed externally. Business plans also unlock external display rights and, on Enterprise tiers, external distribution." / Individual: "For individuals only — personal, internal, and non-commercial use." / Venture "ideal for companies showcasing data on client-facing apps or websites"、"External display data access" / Enterprise "External distribution market data"
+- [W2] https://twelvedata.com/terms(Last updated: January 1, 2026)"(a) Access, receive, process, and store Data solely for Internal Use (or as otherwise permitted by your Subscription Tier or add-ons)" / "(c) Create Derived Data that cannot be reverse-engineered to recreate the original Data" / "(e) Redistribute or provide external display of Data only if and as expressly authorized by a Redistribution Rights Add-On or separate written agreement with Twelve Data (including compliance with attribution requirements)" / 禁止事項 "(g) Store or cache Data beyond permitted timeframes specified in the Documentation" / "2.4 Redistribution and External Display: Certain Subscription Tiers or Data Add-ons may permit limited redistribution or external display of Data, subject to additional terms, attribution requirements, exchange rules, and separate agreements. Contact sales@twelvedata.com" / "Customer retains rights to Derived Data created in compliance with this Agreement."
+- [W3] 同 "16.2 Data Deletion: Upon termination or expiration: (a) All Data must be deleted within 30 days" / "17.1 … (g) Create derivative works for redistribution"
+- [W4] https://twelvedata.com/forex "Currency data is sourced from well established commercial providers and large banks, that correspond to the institutional grade performance standards." "Prices get updated at least once per minute depending on the currency pair."
+- [P1] https://massive.com/pricing?product=currencies ・ https://massive.com/business(価格はページのデータ): Currencies Starter `monthly_price 4900`(個人)、Currencies Business `monthly_price 99900`・`annual_price 958800`・`"license_type":"commercial"`・"Real-time Data"・"Unlimited API Calls"・"10+ Years Historical Data"・"Minute Aggregates" / "Qualifying startups can get 25% or more off their first year … Email sales@massive.com"
+- [P2] https://massive.com/legal/individuals-terms-of-service "solely for your own personal, non-commercial, and non-business purposes."
+- [P3] https://massive.com/legal/businesses-terms-of-service(Last Updated: October 6, 2026)"to access, receive, process, transmit, store, and use the Information available via the Services solely (a) for Customer's internal business purposes; (b) to display it to Authorized Users or Edge Users within products, services, applications, and websites owned or licensed by Customer; and (c) to create derivative works, analyses, calculations, models, and other data or works from the Information, and to use, display, and distribute those outputs for any lawful business purpose, provided that they do not contain Information." / "Edge Users" means natural persons who use Customer's products or services.
+- [P4] 同 "11.3 … Customer must delete all related Information in its possession or control, including downloaded files, and certify the deletion on request … Customer may retain the data and works it created under Section 2.2(c)"
+- [P5] 同 "(d) … make it available to Edge Users other than by display under Section 2.2(b), transmit it to an Edge User's device beyond what that display requires, or provide any display that gives anyone access to the Information as a data feed, file, or other systematic or machine-readable delivery …" / "(g) … fail to display with any Information the attribution, delay label, or other notice that the applicable Third-Party Provider requires"
+- [P6] 同 ""Information" means Third-Party Data, Massive Data, and any data derived from either, in whole or in part, that can be used to identify, recalculate, reverse engineer, or decompile either, or that is or can be used to create a substitute for either"
+
+### 11.5 本番利用の可否(現時点)
+
+- **FRED**: **条件付き(いまの使い方は不可)** — DB への保存は API 規約で禁止 [F5]。保存しない一時的な照合なら社内の商用利用として可 [F4]。保存・有料アプリでの表示には書面の許可が要る
+- **BLS**: **可** — 取得日と免責文の表示 [B2] が条件
+- **e-Stat**: **可** — API のクレジット表示 [E3] と出典・加工の記載 [E2] が条件
+- **FRB**: **可**(出典表示)。ただし calendar.json の時刻の定義は**要確認**
+- **ECB**: **条件付き** — 出典表示、有料プランで見せるなら「ECB のサイトで無料で入手できる」の案内(購入前と利用のたび)、加工したらその旨。週間予定の時刻帯は**要確認**
+- **日本銀行**: **要確認**(商用は事前相談。相談が済むまで使わない)
+- **BOE**: **不可**(許可が出るまで)
+- **Trading Economics**: **要確認** — カレンダーは Enterprise のみで、価格・規約が非公開
+- **Finnhub**: **不可**(公開プラン)/ Enterprise は**要確認**
+- **Financial Modeling Prep**: **不可**(個人プラン)/ Enterprise・Data Display and Licensing Agreement は**要確認**
+- **Twelve Data**: **条件付き** — Business の Venture 以上が必須。iOS での表示に Redistribution Rights Add-On が要るかは**要確認**。いまの個人・無料キーは社内の開発確認だけ(8章)
+- **Massive**: **条件付き** — Currencies Business($999/月)なら利用者への表示は規約上可 [P3]。端末に送る1分足の範囲 [P5] は**要確認**
+
+### 11.6 送る質問(業者・機関ごと)
+
+- **セントルイス連銀(FRED、stlsFRED@stls.frb.org)**: ① 有料 iOS アプリで、FRED API から取った公共の系列(CPIAUCNS・CPILFENS・PAYEMS・UNRATE・RSAFS)を発表値の照合に使い、照合結果と公式値を自社 DB(Supabase)に保存してよいか。保存期間の上限は。② 利用者に「公式値(出典: BLS via FRED)」として表示してよいか。③ ALFRED の時点指定の値も同じ扱いか
+- **BLS**: (原則不要)規約ページの原文を社外回線で確認するのみ
+- **FRB(Board)**: calendar.json の `time` は米東部時間か、発言の開始予定時刻か。calendar.json をアプリのデータ源として定期取得してよいか(頻度の目安)
+- **ECB**: ① 週間予定の "CET" は、夏時間の期間も中央ヨーロッパ夏時間(UTC+2)の現地時刻の意味か。② "Time: 10:00" のように時刻帯が無いものの扱い。③ 有料アプリで「無料で入手できる」案内をアプリ内のどこに・どの頻度で出せば条件を満たすか
+- **日本銀行(post.prd8@boj.or.jp)**: 有料アプリで講演・挨拶の予定(日時・題・登壇者)を掲載し、リンクを張る使い方の可否と条件(出所の書き方、題の翻訳は改変に当たるか)
+- **BOE(enquiries@bankofengland.co.uk)**: 有料アプリでスピーチの予定(日時・題・登壇者)を掲載する商用利用の許可の可否・条件・費用
+- **Trading Economics**: Enterprise の見積(経済カレンダー約10か国、予想・結果・改定、Live Streaming の要否)。アプリでの表示・DB 保存と期間・派生値(前年比など)・出典表示・解約後の扱い。利用規約の原文。試用の可否
+- **Finnhub(support@finnhub.io)**: 経済カレンダーだけの Enterprise(商用・表示)の見積。保存と派生値の範囲、出典表示。対象期間(reference period)を返すか
+- **Financial Modeling Prep**: Build・Grow・Enterprise の価格、経済カレンダーが含まれるプラン、Data Display and Licensing Agreement の内容と費用、保存場所の通知の手続き
+- **Twelve Data(sales@twelvedata.com)**: iOS アプリで9ペアの1分足チャート・値動き(pips)を見せるのに Venture で足りるか、Redistribution Rights Add-On が要るか(費用)。保存・キャッシュの許容期間。帰属表示の文言。為替の価格の定義(bid・ask・mid)と取得元
+- **Massive(sales@massive.com)**: Currencies Business で9ペアの1分足を iOS アプリに表示する用途が §2.2(b) の範囲か(端末に送る足の本数の上限)。帰属表示の要否。価格の定義(bid か mid か)。スタートアップ割引の対象か
+
+---
+
+## 12. 品質の測り方(2026-10-16、HQ判断を受けて)
+
+HQ判断: 取得率・欠損率・照合一致率・時刻ずれを**実データで**測る。数日〜数週間の連続稼働で確認し、経済指標の発表前後は重点的に見る。そのためのレポートを `npm run report:data-quality` として用意した(READ-ONLY。DB には何も書かない)。
+
+### 12.1 実行方法
+
+```
+cd fx-event-analyzer-backend
+npm run report:data-quality -- --days 7                    # 直近7日(既定)、有効な全通貨ペア
+npm run report:data-quality -- --days 14 --pairs USDJPY,EURUSD
+```
+
+- `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` が必要(他のジョブと同じ)。`--days` は 1〜31
+- Markdown を標準出力に出す。環境変数 `GITHUB_STEP_SUMMARY` があれば同じ内容をそのファイルにも追記する(GitHub Actions の実行画面の Summary に出る)
+- 品質が悪くても exit 0(レポートなので)。exit 1 は処理が落ちたときだけ。キーや URL は出さない
+- GitHub Actions では **1日1回** の実行を想定。ただし main のスケジュール済みワークフローへの追加は別の手順で、HQ・大野さんの承認後に行う(このブランチでは追加していない)
+- 期間の終端は「いま − 30分」。`ingest:fx-prices` は20分ごとなので、直近の分はまだ取得されていないだけの可能性があるため判定しない
+- コード: 計算は `src/ingestion/quality/metrics.ts`(I/O なしの関数、`tests/ingestion/dataQuality.test.ts`)、表示は `quality/report.ts`、読み取りは `quality/reader.ts`(PostgREST は1回1000行までなので `.range()` で全件読む)
+
+### 12.2 指標と計算式
+
+| 指標 | 計算式 | 見るもの |
+|---|---|---|
+| 想定分数 | 期間内の市場時間(下記)の分数 | 通貨ペアごと |
+| 取得率 / 欠損率 | 取得 = 市場時間内にある `fx_prices` 1分足の数。欠損 = 想定 − 取得。欠損率 = 欠損 ÷ 想定(取得率 = 1 − 欠損率) | UNVERIFIED の足も「取得」に数える。反応計算に使える分(UNVERIFIED を除く)は別の列 |
+| 長い欠損 | 市場時間内で連続して足が無い分の並び。長い順に上位5件(開始時刻・長さ) | 市場が閉じる時間で区切る(週末をまたいで1つにしない) |
+| 照合一致率(為替) | VERIFIED ÷ 照合した足(`cross_check_diff_pips` が入っている = VERIFIED + 照合して差が閾値を超えた UNVERIFIED) | 照合元(Polygon)が未設定なら「—」。最大差 = max \|cross_check_diff_pips\| |
+| 集約足の作成率 | 作成済み ÷ 作れるはずの区間。作れるはずの区間 = 期間内に収まる 5/15/30/60分の区間で、1分足が全部あり UNVERIFIED を含まないもの(§6 の集約の条件と同じ) | 区間ごとの作成漏れ |
+| 発表・発言前後の揃い具合 | 発表時刻 T(`economic_events` の RELEASED、`speech_events` の DELIVERED)× 通貨ペアごとに、開始時刻 T−5分〜T+59分(= T+60分の価格まで)の1分足が全部あるか(UNVERIFIED は欠損扱い)。完全率 = 完全 ÷ 判定した件数 | 時間帯が市場時間外にかかるもの、期間の端にかかるものは判定しない(件数は別に出す) |
+| ジョブの実行状況 | `ingestion_logs` のジョブごとの実行回数・SUCCESS/PARTIAL/FAILURE の数・所要時間(completed_at − started_at)の中央値・スキップ理由の合計 | |
+| 実行間隔(`ingest:fx-prices`) | SUCCESS の実行どうしの started_at の間隔の最長値。間隔が120分(1回の取得範囲)を超えたものは一覧にし、「どの実行も取得しなかった市場時間」= 前回の実行 〜 次の実行 − 120分 のうち市場時間の分数 を出す | PARTIAL は成功に数えない(一部の通貨ペアが失敗しているため)。最後の成功からの経過分も出す |
+| 時刻ずれ(為替) | レポート作成時点での最新1分足の経過時間(いま − 足の終了時刻) | 実行ごとの「足の時刻と取得時刻の差」は、`ingestion_logs` に取得範囲や最新足の時刻を記録していないため**算出できない(未計測)**とレポートに明記している |
+| 時刻ずれ(要人発言) | `ingest:speeches` のスキップ理由 TIME_NOT_EXACT の合計 | 発言時刻そのもののずれは自動では測れない(公式発表と手作業で照合) |
+| 経済指標の値の一致率 | `event_snapshots`(RELEASE)の VERIFIED ÷ (VERIFIED + `ingestion_staged_values` の PENDING_REVIEW のうち理由に OFFICIAL_MISMATCH を含むもの) | 公開済みの値の内訳(VERIFIED / SINGLE_SOURCE)、検証待ち・要確認の内訳(AWAITING_OFFICIAL / PENDING_REVIEW / …)、要確認の理由の内訳も出す |
+
+期間の絞り込み: 為替は足の時刻、発表は発表時刻、ログは started_at、スナップショットは captured_at、`ingestion_staged_values` は fetched_at。
+
+### 12.3 わかっている限界
+
+- **市場時間は近似**: 日曜 21:00 UTC 〜 金曜 21:00 UTC を開いているとみなす(定数 `FX_MARKET_WEEK_UTC`)。米国の夏時間でないとき(11月〜3月)の実際は 22:00〜22:00 UTC なので、日曜 21:00〜22:00 が「欠損」に数えられ、金曜 21:00〜22:00 は数えない。祝日(12/25・1/1 など)も除いていない。取引の無い分に取得元が足を出さないこともある。**欠損率は上限値**として読む(数%は上記だけで説明できることがある)
+- **Twelve Data の無料プラン**: 8リクエスト/分・800/日のため、9通貨ペアで20分ごと・1回120分の取得にしている(§8)。実行が遅れたり抜けたりすると取りこぼしが出る(GitHub Actions の schedule は混雑時に遅れ・抜けがある)。レポートの「取得範囲を超えた間隔」で見る。また無料・個人プランのデータは内部確認用で、一般の利用者には見せられない(要件定義書 6.4)
+- **照合元が無いとき**: Polygon のキーが無いと全部 SINGLE_SOURCE になり、照合一致率は「—」
+- **時刻ずれの計測**: 為替の「取得までの遅れ」を実行ごとに測るには、`ingest:fx-prices` のログ(details)に取得範囲と最新足の時刻を記録する変更が要る(未実施。必要なら HQ 判断)
+- 経済指標の一致率は、公式統計で照合できる指標(§4)だけが分母に入る

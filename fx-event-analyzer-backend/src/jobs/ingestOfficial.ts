@@ -2,7 +2,6 @@ import 'dotenv/config';
 import { loadEnv } from '../config/env.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
 import { BlsAdapter } from '../ingestion/adapters/bls.js';
-import { FredAdapter } from '../ingestion/adapters/fred.js';
 import { loadIngestionEnv } from '../ingestion/config.js';
 import { reverifyAwaitingOfficial } from '../ingestion/pipelines/economicCalendar.js';
 import {
@@ -15,7 +14,7 @@ import { createIngestionRepository } from '../repositories/ingestionRepository.j
 
 /**
  * ② Official statistics (data-sources.md §4, §8):
- *   1. stores recent observations of every mapped FRED / BLS series in
+ *   1. stores recent observations of every mapped BLS series in
  *      official_observations;
  *   2. re-verifies calendar values waiting for an official number
  *      (ingestion_staged_values AWAITING_OFFICIAL): match → published as the
@@ -23,9 +22,14 @@ import { createIngestionRepository } from '../repositories/ingestionRepository.j
  *
  *   npm run ingest:official
  *
- * Needs SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY; FRED_API_KEY (FRED is
- * skipped without it) and optionally BLS_API_KEY (BLS v1 without it,
- * 25 queries/day). One ingestion_logs row per step. Exit 0 / 1 — cron-friendly.
+ * FRED is NOT used here (HQ判断 2026-10-16 / data-sources.md §11): the FRED
+ * API terms forbid storing FRED content or incorporating it in a database,
+ * and this job writes official values to official_observations /
+ * event_snapshots. Until written permission is obtained, official values come
+ * from BLS (public domain) only. FRED_API_KEY is ignored by this job.
+ *
+ * Needs SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY and optionally BLS_API_KEY
+ * (BLS v1 without it, 25 queries/day). One ingestion_logs row per step. Exit 0 / 1 — cron-friendly.
  * Not scheduled automatically (suggested schedule: data-sources.md §8).
  */
 async function main(): Promise<void> {
@@ -33,8 +37,11 @@ async function main(): Promise<void> {
   const keys = loadIngestionEnv();
   const store = createIngestionRepository(createSupabaseClient(env));
   const providers: OfficialProviders = { BLS: new BlsAdapter(keys.BLS_API_KEY) };
-  if (keys.FRED_API_KEY) providers.FRED = new FredAdapter(keys.FRED_API_KEY);
-  else console.log(JSON.stringify({ job: 'ingest:official', note: 'FRED_API_KEY is not set — FRED skipped' }));
+  if (keys.FRED_API_KEY) {
+    console.log(
+      JSON.stringify({ job: 'ingest:official', note: 'FRED is not used (storage not permitted by FRED terms)' }),
+    );
+  }
 
   const observations = await runIngestionJob(
     store,

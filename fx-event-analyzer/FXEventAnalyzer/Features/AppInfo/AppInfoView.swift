@@ -153,7 +153,8 @@ enum AppInfo {
     )
 
     /// データの出典と、各取得元の利用条件で求められている表示(HQ判断 2026-10-16「出典表示と利用条件を実際の画面に反映」)。
-    /// 文言の根拠は docs/projects/fx-event-analyzer/data-sources.md 2章・11章。FRED の一文は規約の指定どおり英語のまま載せる。
+    /// 文言の根拠は docs/projects/fx-event-analyzer/data-sources.md 2章・11章。BLS の一文は利用条件の指定どおり英語のまま載せる。
+    /// FRED は保存が規約で認められないため使っていない(11章)。使う許可を得たら FRED の指定の一文を足す。
     /// 取得元を契約・変更したら(経済カレンダー・為替)ここも直す。
     static let dataSourcesDocument = LegalDocument(
         id: "data-sources",
@@ -165,8 +166,8 @@ enum AppInfo {
                 "出典：欧州中央銀行（ECB）。ECB の情報は ECB のウェブサイトで無料で入手できます。",
             ]),
             .init(heading: "経済指標の結果の照合", items: [
-                "出典：米国労働統計局（BLS）",
-                "This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.",
+                "出典：米国労働統計局（BLS）。各指標の発表日に取得しています。",
+                "BLS.gov cannot vouch for the data or analyses derived from these data after the data have been retrieved from BLS.gov.",
             ]),
             .init(heading: "値動き・pipsについて", items: [
                 "値動き（pips・変化率）は、取得した為替レートをもとに本アプリが計算したものです。取得元が提供した値ではありません。",
