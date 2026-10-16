@@ -161,7 +161,8 @@ insert into economic_events (id, indicator_id, provider, provider_event_id, rele
 insert into speakers (id, name, title, organization, country_code, currency_code, photo_url) values
   ('40000000-0000-0000-0000-000000000001', 'ジェローム・パウエル', 'FRB理事', 'FRB', 'US', 'USD', 'speaker-photos/powell.jpg'),
   ('40000000-0000-0000-0000-000000000002', '植田和男', '日本銀行総裁', '日本銀行', 'JP', 'JPY', null),
-  ('40000000-0000-0000-0000-000000000003', 'クリスティーヌ・ラガルド', 'ECB総裁', 'ECB', 'EU', 'EUR', null);
+  ('40000000-0000-0000-0000-000000000003', 'クリスティーヌ・ラガルド', 'ECB総裁', 'ECB', 'EU', 'EUR', null)
+on conflict (id) do nothing; -- migration 20261016000001 が先に入れている
 
 insert into speech_events (id, speaker_id, provider, provider_event_id, title, summary, statement_datetime, importance, status) values
   ('50000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', 'seed', 'seed-powell-2026-09-17', 'FOMC後の記者会見', '政策金利の据え置きを説明し、今後の判断はデータ次第との認識を示した。', '2026-09-17T18:30:00Z', 'HIGH', 'DELIVERED'),
