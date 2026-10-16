@@ -20,7 +20,8 @@
     "ingest:official": "tsx src/jobs/ingestOfficial.ts",
     "ingest:speeches": "tsx src/jobs/ingestSpeeches.ts",
     "ingest:fx-prices": "tsx src/jobs/ingestFxPrices.ts",
-    "eval:providers": "tsx src/jobs/evalProviders.ts"
+    "eval:providers": "tsx src/jobs/evalProviders.ts",
+    "report:data-quality": "tsx src/jobs/reportDataQuality.ts"
   },
   "keywords": [],
   "author": "",

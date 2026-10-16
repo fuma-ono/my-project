@@ -58,13 +58,15 @@ async function main(): Promise<void> {
   const result = await runIngestionJob(
     store,
     { provider: primary.name, dataType: 'FX_PRICE', job: 'ingest:fx-prices' },
-    (counters) =>
-      ingestFxCandles(
+    (counters) => {
+      counters.note('range', range);
+      return ingestFxCandles(
         { store, primary, ...(secondary ? { secondary } : {}), now: () => now },
         symbols,
         range,
         counters,
-      ),
+      );
+    },
   );
   console.log(
     JSON.stringify({

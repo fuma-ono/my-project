@@ -93,6 +93,8 @@ export async function ingestFxCandles(
         aggregateMinuteRows(minuteRows, timeframe, minutes, now),
       );
       counters.note('aggregated_candles', { symbol, count: aggregated.length });
+      // 時刻ずれの計測用(data-sources.md 12章): この実行で取れた最新の1分足の始まりの時刻。
+      counters.note('latest_candle', { symbol, open_time: minuteRows[minuteRows.length - 1]?.timestamp ?? null });
       counters.success += await deps.store.upsertFxPrices([...minuteRows, ...aggregated]);
     } catch (error) {
       counters.error(`${symbol}: ${error instanceof Error ? error.message : String(error)}`);
