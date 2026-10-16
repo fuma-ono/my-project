@@ -1,0 +1,63 @@
+name: FX Event Analyzer - Data ingestion (dev)
+
+# 社内確認用DB へ本番データを取り込む(docs/projects/fx-event-analyzer/dev-environment.md)。
+#   - 為替: 20分ごと。Twelve Data の1分足 → fx_prices(5分〜60分足も組み立て)
+#   - 要人発言: 1日2回(06:15 / 18:15 JST)。FRB カレンダー・ECB RSS → speech_events
+# Twelve Data の無料キーは社内確認専用(要件定義書6.4)。
+on:
+  schedule:
+    - cron: '7,27,47 * * * *'
+    - cron: '15 21,9 * * *'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'fx-prices / speeches / both'
+        default: both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fx-ingestion
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: fx-event-analyzer-backend
+    env:
+      SUPABASE_URL: ${{ secrets.FX_DEV_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.FX_DEV_SUPABASE_SERVICE_ROLE_KEY }}
+      TWELVE_DATA_API_KEY: ${{ secrets.FX_TWELVE_DATA_API_KEY }}
+    steps:
+      - name: Check secrets
+        id: check
+        working-directory: .
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "Secrets が未登録のため何もしません"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          ref: claude/fx-settings-screens
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: fx-event-analyzer-backend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        if: steps.check.outputs.ready == 'true'
+      - name: FX prices
+        if: steps.check.outputs.ready == 'true' && (github.event.schedule == '7,27,47 * * * *' || (github.event_name == 'workflow_dispatch' && inputs.target != 'speeches'))
+        run: npm run -s ingest:fx-prices
+      - name: Speeches
+        if: steps.check.outputs.ready == 'true' && (github.event.schedule == '15 21,9 * * *' || (github.event_name == 'workflow_dispatch' && inputs.target != 'fx-prices'))
+        run: npm run -s ingest:speeches
