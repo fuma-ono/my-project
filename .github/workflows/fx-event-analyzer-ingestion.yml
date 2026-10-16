@@ -72,7 +72,7 @@ jobs:
         if: steps.check.outputs.ready == 'true'
       - name: FX prices
         if: steps.check.outputs.ready == 'true' && (github.event.schedule == '7,27,47 * * * *' || (github.event_name == 'workflow_dispatch' && (inputs.target == 'fx-prices' || inputs.target == 'both')))
-        run: npm run -s ingest:fx-prices ${{ github.event_name == 'workflow_dispatch' && '--manual' || '' }}
+        run: npm run -s ingest:fx-prices -- ${{ github.event_name == 'workflow_dispatch' && '--manual' || '' }}
       - name: Speeches
         if: steps.check.outputs.ready == 'true' && (github.event.schedule == '15 21,9 * * *' || (github.event_name == 'workflow_dispatch' && (inputs.target == 'speeches' || inputs.target == 'both')))
         run: npm run -s ingest:speeches
