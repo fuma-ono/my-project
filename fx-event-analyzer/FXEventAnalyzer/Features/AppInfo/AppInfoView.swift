@@ -17,7 +17,7 @@ struct AppInfoView: View {
     private static let rowHeight: CGFloat = 33
 
     enum Page: String, Identifiable, Hashable {
-        case license, openSource, libraries
+        case license, openSource, libraries, dataSources
         var id: String { rawValue }
     }
 
@@ -47,6 +47,8 @@ struct AppInfoView: View {
                     SettingsListValueRow(title: "オープンソースライセンス", value: "", height: Self.rowHeight) { page = .openSource }
                     SettingsListSeparator()
                     SettingsListValueRow(title: "利用しているライブラリ", value: "", height: Self.rowHeight) { page = .libraries }
+                    SettingsListSeparator()
+                    SettingsListValueRow(title: "データの出典", value: "", height: Self.rowHeight) { page = .dataSources }
                 }
                 .frame(width: 214)
                 .background(AccountCardBackground())
@@ -80,6 +82,7 @@ struct AppInfoView: View {
             case .license: LegalDocumentView(document: AppInfo.licenseDocument, tabSelection: $tabSelection)
             case .openSource: OpenSourceLicensesView(tabSelection: $tabSelection)
             case .libraries: LegalDocumentView(document: AppInfo.librariesDocument, tabSelection: $tabSelection)
+            case .dataSources: LegalDocumentView(document: AppInfo.dataSourcesDocument, tabSelection: $tabSelection)
             }
         }
     }
@@ -146,6 +149,30 @@ enum AppInfo {
         sections: libraries.map { library in
             .init(heading: library.name, items: ["用途：\(library.purpose)\nライセンス：\(library.license)"])
         },
+        footer: []
+    )
+
+    /// データの出典と、各取得元の利用条件で求められている表示(HQ判断 2026-10-16「出典表示と利用条件を実際の画面に反映」)。
+    /// 文言の根拠は docs/projects/fx-event-analyzer/data-sources.md 2章・11章。FRED の一文は規約の指定どおり英語のまま載せる。
+    /// 取得元を契約・変更したら(経済カレンダー・為替)ここも直す。
+    static let dataSourcesDocument = LegalDocument(
+        id: "data-sources",
+        screenTitle: "データの出典",
+        title: "データの出典",
+        sections: [
+            .init(heading: "要人発言の予定・要人の写真", items: [
+                "出典：米国連邦準備制度理事会（FRB）",
+                "出典：欧州中央銀行（ECB）。ECB の情報は ECB のウェブサイトで無料で入手できます。",
+            ]),
+            .init(heading: "経済指標の結果の照合", items: [
+                "出典：米国労働統計局（BLS）",
+                "This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.",
+            ]),
+            .init(heading: "値動き・pipsについて", items: [
+                "値動き（pips・変化率）は、取得した為替レートをもとに本アプリが計算したものです。取得元が提供した値ではありません。",
+                "確認できないデータは表示せず、推測で補うこともしません。",
+            ]),
+        ],
         footer: []
     )
 
