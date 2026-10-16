@@ -244,3 +244,23 @@ jobs:
 | 重複登録の防止 | DB の一意制約で同じデータは上書きになる。何回実行しても件数は増えない |
 | 費用 | GitHub Actions は無料(公開リポジトリ)。Twelve Data は無料枠を1回あたり9回使う(1日800回まで)。有料の API は使わない |
 | 本番への書き込み | 本番環境はまだ無い。本番に書き込む可能性があるときは、実行前に HQ へ報告する |
+
+## 8. クレジット台帳の適用(2026-10-16、HQ判断「開発DBへの適用前に確認」)
+
+`supabase/migrations/20261016000003_api_credit_ledger.sql` を社内確認用DBに適用する。新しい表2つと関数2つを足すだけで、既存の表は変えない。2回実行しても何も変わらない書き方。**本番DBには適用しない。**
+
+1. Supabase の画面の左上が `fx-event-analyzer-dev`、URL に `pbemckwnqmeaoveelihd` が含まれることを確かめる
+2. SQL Editor の新しいタブにファイルの中身を貼って実行する
+3. 新しいタブで次を実行して確かめる(読むだけ)
+
+```sql
+select provider, daily_total_cap, automatic_cap from api_credit_limits;
+select relname, relrowsecurity from pg_class where relname in ('api_credit_limits', 'api_credit_usage');
+select r.rolname,
+       has_function_privilege(r.rolname, 'reserve_api_credits(text,text,text,integer,text)', 'execute') as can_reserve
+from pg_roles r where r.rolname in ('anon', 'authenticated', 'service_role');
+```
+
+期待: `twelvedata | 800 | 700` / どちらも `true` / `anon`・`authenticated` は `false`、`service_role` は `true`。
+
+適用するまでは、取り込みが台帳に予約できないため Twelve Data を呼ばずに止まる。
