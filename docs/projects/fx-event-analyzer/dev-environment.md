@@ -277,6 +277,15 @@ from pg_roles r where r.rolname in ('anon', 'authenticated', 'service_role');
 | 2 | 両テーブルの RLS (`relrowsecurity`) | どちらも `true` | **未実施** | 直接は未確認。RLS が無効でも `revoke all` 済みなら `service_role` 以外は読めないはずだが、これは RLS とは別の確認軸であり代替にはならない |
 | 3 | `reserve_api_credits` の実行権限 | `anon=false`・`authenticated=false`・`service_role=true` | **未実施** | `service_role` からの呼び出しは2回とも成功(エラー無し)。`anon`/`authenticated` からの呼び出しは試していない(そもそも試す経路が無い) |
 
+## 9. 実機で確認できる品質レポート(2026-10-17、HQ判断「実機テスト配布の必須条件」)
+
+`npm run report:data-quality` と同じ READ-ONLY の集計を、スマホのブラウザから見られるようにした(`GET /api/v1/quality-report`、`src/routes/qualityReport.ts`)。既存のiOSアプリの画面・仕様は変えていない(別のURLを直接開くだけ)。追加のインフラ・費用は無し(既存のRenderサービス上の1エンドポイント)。
+
+- 既定では無効(`INTERNAL_REPORT_TOKEN` が未設定なら常に404)。Renderの環境変数に `INTERNAL_REPORT_TOKEN` を設定すると有効になる(値は会社のPC・チャットには置かない。他の秘密情報と同じ扱い)
+- 開き方: `https://<名前>.onrender.com/api/v1/quality-report?token=<設定した値>`(`&days=14` で期間変更、`&pairs=USDJPY,EURUSD` で通貨ペア指定。既定は直近7日・全ペア)
+- 内容は`npm run report:data-quality`のMarkdownと同じ(§2に「個別の異常値・差異の一覧」を追加済み: 通貨ペア・対象日時・差(pips)・参照元・理由を表で確認できる)
+- 実機テストに参加する知り合いに見せるためのものではない。大野さん・HQがテスト期間中に品質を確認するためのもの
+
 **この表の「間接確認」列は、権限・上限が機能していることの状況証拠であり、SQLを直接実行して値を読んだことの代わりにはならない。** 項目2(RLS自体のフラグ)は間接確認の手段が無く、現時点で完全に未確認。
 
 **担当者向け手順**(上記3本のSQLを実行できる方へ):

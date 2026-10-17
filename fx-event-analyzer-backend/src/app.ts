@@ -2,8 +2,10 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Env } from './config/env.js';
 import { createGitHubBugIssueCreator, type BugIssueCreator } from './integrations/githubIssues.js';
+import { createQualityReader, type QualityReader } from './ingestion/quality/reader.js';
 import { registerErrorHandler } from './plugins/errorHandler.js';
 import { registerApiRoutes } from './routes/api.js';
+import { registerQualityReportRoutes } from './routes/qualityReport.js';
 import { registerSpeakerPhotoRoutes } from './routes/speakerPhotos.js';
 import { APPLE_ROOT_CA_G3_PEM } from './storekit/appleRootCertificates.js';
 import { createSignedDataVerifier, type SignedDataVerifier } from './storekit/signedDataVerifier.js';
@@ -19,6 +21,9 @@ export interface BuildAppOptions {
   /** fetch used for GitHub Issue creation (SCR-020 bug reports). Defaults
    * to the global fetch; tests pass a fake so nothing reaches GitHub. */
   githubFetch?: typeof fetch;
+  /** GET /api/v1/quality-report (HQ判断 2026-10-17). Defaults to a real
+   * QualityReader over `supabase`; tests pass a fake so no DB is needed. */
+  qualityReader?: QualityReader;
 }
 
 export function buildApp(options: BuildAppOptions): FastifyInstance {
@@ -47,6 +52,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.register(
     (photos, _options, done) => {
       registerSpeakerPhotoRoutes(photos);
+      registerQualityReportRoutes(photos, {
+        reader: options.qualityReader ?? createQualityReader(options.supabase),
+      });
       done();
     },
     { prefix: '/api/v1' },

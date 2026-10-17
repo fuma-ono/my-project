@@ -2,6 +2,7 @@
 
 作成: 2026-10-16(HQ判断「6件の問い合わせを進め、結果を記録する」)
 更新: 2026-10-17(HQ決定「データ提供元の契約判断と次フェーズ」。Massiveの問い合わせ項目を6項目に拡充、FMPを追加)
+更新: 2026-10-17(HQ決定「データ品質検証を実機テストの必須条件にする」。Twelve Dataへの問い合わせに、知り合いへの小規模なベータ配布が無料・個人向けプランの範囲内かを追加。規約の文言上は「Internal Use」限定・再配布は別途ライセンスが必要と読め、現状では知り合いへの配布も規約上グレーであることが判明したため)
 
 送るのは大野さん。会社名・担当者名・メールアドレスを確認してから送る(HQ判断)。返事が来たら、下の表と「結果」の欄を更新する。**書面回答を得る前にAPIキーを取得・設定したり、有料契約を開始したりしない(HQ決定2026-10-17)。** 利用条件の確認結果は data-sources.md 11章、代替候補の比較は調査レポート(外為データ提供元比較調査・経済指標データ提供元調査、2026-10-16)参照。
 
@@ -86,16 +87,20 @@ Best regards,
 
 ### 3.2 Twelve Data
 ```
-Subject: Plan question – 1-minute FX bars displayed in a paid iOS app
+Subject: Plan question – 1-minute FX bars, including a small ad-hoc beta test
 
 Hello,
 
 We plan to show 1-minute FX charts and price moves (pips) for 9 currency pairs (USD/JPY, EUR/USD, EUR/JPY, GBP/USD, GBP/JPY, AUD/USD, AUD/JPY, USD/CHF, CAD/JPY) to the users of our paid iOS app.
 
-1. Is the Venture plan enough for this, or do we also need the Redistribution Rights Add-On? What would it cost?
-2. How long may we store or cache the bars in our own database?
-3. What attribution text is required?
-4. How are FX prices defined (bid, ask or mid), and where do they come from?
+Before that, we would like to run a small, informal beta test (TestFlight/ad-hoc, a handful of friends and acquaintances, not the general public) using live FX data from our current free/personal API key.
+
+1. Does our free/personal plan's "Internal Use" license cover installing the app on a few testers' own devices for this kind of informal beta, or does any distribution beyond our own use already require a paid plan / the Redistribution Rights Add-On?
+2. If a paid plan is required even for this small-scale beta, which is the minimum one, and what would it cost?
+3. For the eventual public release: is the Venture plan enough, or do we also need the Redistribution Rights Add-On? What would it cost?
+4. How long may we store or cache the bars in our own database?
+5. What attribution text is required?
+6. How are FX prices defined (bid, ask or mid), and where do they come from?
 
 Best regards,
 [Name] / [Company] / [Email]

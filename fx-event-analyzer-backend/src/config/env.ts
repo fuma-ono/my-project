@@ -31,6 +31,10 @@ const envSchema = z.object({
   // absolute URLs such as speaker photo URLs (api-design.md §14.7). Optional:
   // when unset, the request's own protocol://host is used.
   PUBLIC_BASE_URL: optionalString(z.string().url()),
+  // GET /api/v1/quality-report (HQ判断 2026-10-17: 実機テスト中に品質レポートを
+  // 見られるようにする)。未設定ならルートは404(既定で無効)。設定したら
+  // ?token=<この値> を付けてスマホのブラウザで開く。社内限定・READ-ONLY。
+  INTERNAL_REPORT_TOKEN: optionalString(z.string().min(1)),
 });
 
 export type Env = z.infer<typeof envSchema>;
