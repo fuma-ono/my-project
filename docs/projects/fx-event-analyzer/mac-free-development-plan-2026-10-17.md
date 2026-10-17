@@ -39,7 +39,23 @@ Appleは、実機にアプリを入れる署名処理をmacOS(Xcodeまたは同�
 
 「実際にCIで未署名の実機用ビルドが作れるか」を確認するため、既存のワークフローとは別の、調査専用・手動起動のみのワークフロー(`.github/workflows/fx-event-analyzer-ios-unsigned-ipa.yml`)を追加し、`claude/fx-settings-screens`ブランチ上で実行した(既存の`fx-event-analyzer-ios-build.yml`等は変更していない)。
 
-**実行結果: [CI実行中、本レポートの更新版で結果を追記する]**
+**実行結果: 成功(2026-10-17、確認済み)**
+
+GitHub Actions run #39034362431(`unsigned-device-build`ジョブ、macos-15 runner)が成功。
+`CODE_SIGNING_ALLOWED=NO` / `CODE_SIGNING_REQUIRED=NO` での実機(iphoneos SDK)向けビルドが
+通り、生成された`.app`を`Payload/`に入れてzip化した未署名`.ipa`(約13.2MB)がCIアーティファクト
+として実際に作成された(`FXEventAnalyzer-unsigned-ipa`、3日間保存)。証明書・プロビジョニング
+プロファイル・Apple IDは一切使っていない。
+
+**これにより確認できたこと**: 「Mac購入・レンタル・Apple Developer Program登録のいずれも
+行わずに、実機(iphoneos)向けの.appを作る」こと自体は**技術的に可能**であることを実機構成の
+ビルドとして確認した。
+
+**これでまだ確認できていないこと**(§2.4参照): この未署名.ipaを実際にWindows PC+Sideloadly等で
+署名し、実際のiPhoneにインストールできるかどうかは、Mac/Windows/iPhoneのいずれも無い本
+セッションの実行環境では確認できない。**そのため「知り合いの実機にアプリを配布できる」とは、
+まだ報告しない。** 次の段階(Windows PCとiPhoneを使った実際の署名・インストール)は、本人また
+担当者が行う必要がある。
 
 ### 2.4 まだ確認できていないこと(①が成功したとしても残る課題)
 
@@ -52,6 +68,24 @@ Appleは、実機にアプリを入れる署名処理をmacOS(Xcodeまたは同�
 - [AltStore — How to Install (Windows)](https://faq.altstore.io/altstore-classic/how-to-install-altstore-windows)
 - [Sideloadly公式サイト](https://sideloadly.io/)
 - [GitHub Actions usage limits, billing, and administration](https://docs.github.com/en/actions/administering-github-actions/usage-limits-billing-and-administration)
+- 実行結果: https://github.com/fuma-ono/my-project/actions/runs/39034362431(run #39034362431、成功)
+
+## 6. 次に本人が行う操作(Windows PC + iPhoneがあれば、追加費用0円で進められる)
+
+1. 上記run #39034362431のページを開き、「Artifacts」から`FXEventAnalyzer-unsigned-ipa`
+   をダウンロードする(**2026-10-20まで保存。期限切れ後は、同じワークフローを手動実行
+   (workflow_dispatch)するか、もう一度このファイルに変更を加えてpushすれば再生成できる**。
+   ただしworkflow_dispatchでの手動実行は、このワークフローファイルがmainブランチにある
+   ことが必要 — 現時点では`claude/fx-settings-screens`ブランチのみにあるため、mainへの
+   取り込みが要る。取り込みの判断はHQが行う)。
+2. Windows PCにSideloadlyをインストールする(`sideloadly.io`、無料)。Microsoft Store版ではない
+   iTunes/iCloudをApple公式サイトから入れておく(Sideloadly公式サイトの案内どおり)。
+3. iPhoneをUSBで接続し、iOS 16以降なら「設定→プライバシーとセキュリティ→デベロッパモード」を
+   有効化する。
+4. Sideloadlyに①の`.ipa`をドラッグし、無料のApple IDでサインインして「Start」する。
+5. 7日ごとに自動再署名されるかどうか(Sideloadlyの自動更新デーモン)を確認し、結果をHQへ報告する。
+
+この手順はWindows PC・iPhoneが必要で、このセッションでは実行できない(環境制約として明記)。
 
 ## 3. Twelve Data問い合わせ
 

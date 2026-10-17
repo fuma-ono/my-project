@@ -23,15 +23,14 @@ name: FX Event Analyzer - Unsigned device IPA (feasibility check, no signing)
 # このワークフローは既存の fx-event-analyzer-ios-build.yml /
 # fx-event-analyzer-ui-screenshots.yml を一切変更・トリガーしない
 # (別ファイル、手動実行のみ)。既存のUI・データ取得処理にも触れない。
+#
+# 2026-10-17 結果: run #39034362431 で実際に成功を確認済み(macos-15 runner、
+# 未署名の.ipa、約13.2MB、アーティファクトとして生成)。CODE_SIGNING_ALLOWED=NO/
+# CODE_SIGNING_REQUIRED=NOのビルドが実機(iphoneos SDK)向けに通ることを確認した
+# ため、動作確認用の一時pushトリガーは外し、workflow_dispatch(手動実行)のみに戻す。
 
 on:
   workflow_dispatch: {}
-  # workflow_dispatch経由の手動実行はAPIがdefaultブランチ(main)上の登録を要求するため、
-  # mainにpushせずにこのブランチで動作確認するための一時的なpushトリガー(このファイル
-  # 自身のパスにのみ反応し、既存のfx-event-analyzer/**を対象にしたワークフローとは無関係)。
-  push:
-    paths:
-      - ".github/workflows/fx-event-analyzer-ios-unsigned-ipa.yml"
 
 jobs:
   unsigned-device-build:
