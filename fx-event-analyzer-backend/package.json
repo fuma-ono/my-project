@@ -18,6 +18,7 @@
     "jobs:cleanup-notifications": "tsx src/jobs/cleanupNotifications.ts",
     "jobs:evaluate-rate-alerts": "tsx src/jobs/evaluateRateAlerts.ts",
     "ingest:official": "tsx src/jobs/ingestOfficial.ts",
+    "ingest:official:bls-calendar": "tsx src/jobs/ingestBlsCalendar.ts",
     "ingest:speeches": "tsx src/jobs/ingestSpeeches.ts",
     "ingest:fx-prices": "tsx src/jobs/ingestFxPrices.ts",
     "eval:providers": "tsx src/jobs/evalProviders.ts",

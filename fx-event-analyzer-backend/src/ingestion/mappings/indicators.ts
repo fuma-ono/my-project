@@ -48,6 +48,12 @@ export interface IndicatorMapping {
     tradingeconomics?: { country: string; event: string };
     finnhub?: { country: string; event: string };
     fmp?: { country: string; event: string };
+    /**
+     * HQ判断(2026-10-17): 有料カレンダーに依存しない独立経路。BLSの公式発表
+     * スケジュール(mappings/blsSchedule.ts、無料・登録不要)から直接
+     * economic_events を作る指標だけが持つ(いまは US_CPI・US_NFP のみ)。
+     */
+    bls_schedule?: { country: string; event: string };
   };
   /** Official series used to verify the actual, in priority order (first available wins). */
   official: readonly OfficialSeriesRef[];
@@ -94,6 +100,7 @@ export const INDICATOR_MAPPINGS: readonly IndicatorMapping[] = [
       tradingeconomics: { country: 'United States', event: 'Inflation Rate YoY' },
       finnhub: { country: 'US', event: 'CPI YoY' },
       fmp: { country: 'US', event: 'CPI YoY' },
+      bls_schedule: { country: 'US', event: 'US_CPI' },
     },
     official: [{ source: 'BLS', seriesId: 'CUUR0000SA0', transform: 'YOY_PCT' }],
     officialTolerance: 0,
@@ -144,6 +151,7 @@ export const INDICATOR_MAPPINGS: readonly IndicatorMapping[] = [
       tradingeconomics: { country: 'United States', event: 'Non Farm Payrolls' },
       finnhub: { country: 'US', event: 'Nonfarm Payrolls' },
       fmp: { country: 'US', event: 'Nonfarm Payrolls' },
+      bls_schedule: { country: 'US', event: 'US_NFP' },
     },
     official: [{ source: 'BLS', seriesId: 'CES0000000001', transform: 'DIFF' }],
     officialTolerance: 0,

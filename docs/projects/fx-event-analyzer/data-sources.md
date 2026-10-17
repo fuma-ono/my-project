@@ -531,3 +531,31 @@ FRED は公式統計の取り込みから外した(`ingest:official` は FRED �
 3. e-Stat の取り込み(`JP_CPI`)
 4. FOMC の声明から政策金利を取る仕組み
 5. 13.2 の各統計局の利用条件の確認
+
+---
+
+## 14. 有料カレンダーに依存しない独立経路(2026-10-17、HQ判断「BLS公式統計データを使った照合基盤の先行整備を承認」)
+
+有料の経済カレンダー(①、未契約)を待たずに、BLSの公式発表スケジュールとBLS自身の実績値だけで`economic_events`・`event_snapshots`を作る経路を追加した(`npm run ingest:official:bls-calendar`)。契約・APIキーの追加費用は無し(BLS APIはキー無しでも動く、v1・25クエリ/日)。
+
+### 14.1 対象・取得範囲
+
+- **対象指標**: `US_CPI`・`US_NFP` の2つだけ(`economic_indicators`に行があり、BLSの公式系列で確認できる指標。13.1節の「DBに行あり」の指標からさらに絞っている)
+- **取得範囲**: 参照期間 2025-12 〜 2027-11(`src/ingestion/mappings/blsSchedule.ts`に書いた表の範囲)。これより前・後の月は扱わない
+- **取得できない項目**: 予想値(forecast)は常に`null`(BLSは予想値を出さないため、提供元も取得時刻も無い値として扱う。「予想値は提供元と取得時刻を記録する」というHQ方針どおり、存在しない値を作らない)。米国以外の指標、`US_CORE_CPI`・`US_UNEMPLOYMENT_RATE`・`US_RETAIL_SALES`(DBに行が無い)は対象外
+
+### 14.2 仕組み
+
+- `mappings/blsSchedule.ts`: BLSの公式スケジュールページ(bls.gov/schedule/…、2026-10-17取得、ログイン・キー不要)を人が書き写した表(`mappings/indicators.ts`と同じ、コードレビュー対象の設定ファイル。将来の月は自動で増えないので、表の末尾に達したらHQ/人が追記する)
+- `pipelines/blsCalendar.ts`: 表の各行について、BLSが実際にその月の値を発表済みなら(発表予定日を過ぎていて、BLSの値が取れる)`NormalizedCalendarRelease`を作る。既存の①向けパイプライン(`ingestCalendarReleases`、economicCalendar.ts)はまったく変更していない — 新しい"取得元"(`bls_schedule`)として同じ関数にそのまま渡すだけ
+- 発表予定時刻と実際の発表時刻: BLSは2つを区別して公表していない(米国統計機関は公表時刻を厳格に守るため)。そのため両方に同じ値(表の日付 + 08:30 America/New_York、`zonedWallTimeToUtc`で夏時間を考慮してUTCに変換)を使う。精度は`EXACT`
+- 実績値の出典・取得日時・単位・改定: 既存の`event_snapshots.source`/`source_url`(BLSの公式URL)/`captured_at`にそのまま載る。前回値は毎回の実行でBLSの最新値を取り直すため、初回発表時の値(`event_snapshots.previous`、不変)と、後から変わった値(`event_revisions`、改定ごとに記録)が区別される
+- 「一致・差異あり・未照合」: このルートは実績値そのものをBLSから作るため、通常は検証も自分自身との比較になり`VERIFIED`になる(2つの独立した取得元による裏付けではない点は限界として明記する)。発表予定日を過ぎてもBLSの値がまだ無い月は「未照合」としてスキップする(作らない。guessしない)。`validateRelease`の妥当性チェック(範囲外・前回からの変化が大きすぎる等)に引っかかった場合は既存の仕組みのまま`PENDING_REVIEW`になる
+
+### 14.3 BLSの利用条件
+
+bls.gov/opub/copyright-information.htm 等で確認(2026-10-17): BLSのデータ・資料はパブリックドメイン。API経由のデータに利用制限は無く、取得日を明記すること・「BLSは取得後の分析の正しさを保証しない」旨を示すこと・改変したデータをBLS発のものとして示さないことが求められる。この経路はBLSの値をそのまま(改変せず)使い、出典・取得日時を記録しているため、確認できた条件の範囲内。
+
+### 14.4 既存処理への影響
+
+`economicCalendar.ts`・`officialStats.ts`・`ingestOfficial.ts`(既存の①②ジョブ)は1行も変更していない。`mappings/indicators.ts`は、US_CPI・US_NFPの`providers`に`bls_schedule`キーを追加しただけ(既存の`tradingeconomics`/`finnhub`/`fmp`キーは変更なし)。既存のテスト(`economicCalendarPipeline.test.ts`・`officialVerification.test.ts`等)は変更せずに実行し、全て通過を確認した。
