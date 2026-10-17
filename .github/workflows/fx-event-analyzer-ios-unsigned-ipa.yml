@@ -26,6 +26,12 @@ name: FX Event Analyzer - Unsigned device IPA (feasibility check, no signing)
 
 on:
   workflow_dispatch: {}
+  # workflow_dispatch経由の手動実行はAPIがdefaultブランチ(main)上の登録を要求するため、
+  # mainにpushせずにこのブランチで動作確認するための一時的なpushトリガー(このファイル
+  # 自身のパスにのみ反応し、既存のfx-event-analyzer/**を対象にしたワークフローとは無関係)。
+  push:
+    paths:
+      - ".github/workflows/fx-event-analyzer-ios-unsigned-ipa.yml"
 
 jobs:
   unsigned-device-build:
