@@ -3,6 +3,7 @@
 作成: 2026-10-16(HQ判断「6件の問い合わせを進め、結果を記録する」)
 更新: 2026-10-17(HQ決定「データ提供元の契約判断と次フェーズ」。Massiveの問い合わせ項目を6項目に拡充、FMPを追加)
 更新: 2026-10-17(HQ決定「データ品質検証を実機テストの必須条件にする」。Twelve Dataへの問い合わせに、知り合いへの小規模なベータ配布が無料・個人向けプランの範囲内かを追加。規約の文言上は「Internal Use」限定・再配布は別途ライセンスが必要と読め、現状では知り合いへの配布も規約上グレーであることが判明したため)
+更新: 2026-10-17(HQ判断「Apple Developer Programの年間99ドルは保留」の付随指示。Twelve Data向け文面を再確認し、集計データ(5/15/30/60分足)の表示許諾を問う項目が無かったため追加。また公式サイトを確認したところ `sales@twelvedata.com` という宛先は掲載されておらず、営業問い合わせは Web フォーム(`https://twelvedata.com/contact/sales`)のみであることが判明したため、送り先を修正。詳細は §1・§4 参照)
 
 送るのは大野さん。会社名・担当者名・メールアドレスを確認してから送る(HQ判断)。返事が来たら、下の表と「結果」の欄を更新する。**書面回答を得る前にAPIキーを取得・設定したり、有料契約を開始したりしない(HQ決定2026-10-17)。** 利用条件の確認結果は data-sources.md 11章、代替候補の比較は調査レポート(外為データ提供元比較調査・経済指標データ提供元調査、2026-10-16)参照。
 
@@ -11,7 +12,7 @@
 | # | 送り先 | 窓口 | 目的 | 送った日 | 返事 | 状態 |
 |---|---|---|---|---|---|---|
 | 1 | Trading Economics | ウェブサイトの Contact / Sales フォーム | 経済カレンダーの商用利用・再配布ライセンスの見積もり・お試し | — | — | 未送信 |
-| 2 | Twelve Data | sales@twelvedata.com | 必要なプラン・追加料金 | — | — | 未送信 |
+| 2 | Twelve Data | ウェブサイトの Contact Sales フォーム(`https://twelvedata.com/contact/sales`)。`sales@twelvedata.com` という宛先は公式サイトに記載が無く、2026-10-17 の確認で誤りと判明(§4参照) | 必要なプラン・追加料金 | — | — | 未送信 |
 | 3 | Massive(旧 Polygon) | sales@massive.com | 6項目の明示的な書面回答(下記3.3) | — | — | 未送信 |
 | 4 | Financial Modeling Prep (FMP) | ウェブサイトの Contact / Sales フォーム | 経済カレンダーの商用利用・再配布ライセンスの見積もり | — | — | 未送信 |
 | 5 | 日本銀行 情報サービス局 | post.prd8@boj.or.jp | 商用利用の相談 | — | — | 未送信 |
@@ -99,8 +100,9 @@ Before that, we would like to run a small, informal beta test (TestFlight/ad-hoc
 2. If a paid plan is required even for this small-scale beta, which is the minimum one, and what would it cost?
 3. For the eventual public release: is the Venture plan enough, or do we also need the Redistribution Rights Add-On? What would it cost?
 4. How long may we store or cache the bars in our own database?
-5. What attribution text is required?
-6. How are FX prices defined (bid, ask or mid), and where do they come from?
+5. We also build our own 5/15/30/60-minute bars by aggregating the 1-minute bars we store, and show these aggregated bars to our end users (not fetched separately from your API). Does our license permit showing such derived/aggregated bars, or does this require separate permission?
+6. What attribution text is required?
+7. How are FX prices defined (bid, ask or mid), and where do they come from?
 
 Best regards,
 [Name] / [Company] / [Email]
@@ -195,3 +197,18 @@ Hello,
 Best regards,
 [Name] / [Company] / [Email]
 ```
+
+## 4. Twelve Data向け文面の網羅性レビュー(HQ指示2026-10-17「送信内容がTwelve Data向けの質問を網羅しているか報告する」への回答)
+
+§3.2の文面(本レビューを反映した版)が、求められた4点を網羅しているか確認した。
+
+| 確認項目 | 文面での対応箇所 | 判定 |
+|---|---|---|
+| 第三者表示(知り合い・一般利用者への表示) | 項目1(非公開ベータでの他人の端末へのインストールが許諾範囲内か)・項目3(一般公開時にVentureプラン/Redistribution Rights Add-Onが必要か) | 網羅 |
+| テスト配布(知り合いへの小規模ベータ) | 項目1・2(ベータでも有料プランが要るか、要るなら最低プランと費用) | 網羅 |
+| 保存(自社DBへの保存・キャッシュ期間) | 項目4 | 網羅 |
+| 集計データの扱い(1分足から組み立てる5/15/30/60分足の表示) | **本レビューで追加した項目5**。追加前の文面には無く、抜けていた | **追加により網羅**(追加前は未網羅) |
+
+**送信先の確認結果**: `sales@twelvedata.com` という宛先は、公式サイト(`twelvedata.com/contact`・`twelvedata.com/contact/sales`、2026-10-17 WebFetchで確認)に記載が無かった。営業問い合わせは Web フォーム(`https://twelvedata.com/contact/sales`)のみで、一般問い合わせ用のメールアドレスは `info@twelvedata.com`。**メールでの送信を前提にした現在の文面は、宛先をWebフォームに合わせて作り直す必要がある**(本レビューでは文面の内容確認のみ行い、フォーム用への再構成はHQの送信承認と合わせて次回行う)。
+
+**送信権限の確認状況**: `vendor-inquiries.md` 冒頭に記載の通り「送るのは大野さん」がHQ判断で決まっている。今回は会社名・担当者名・連絡用メールアドレス([Name] / [Company] / [Email]の各欄)がまだ未確定(プレースホルダのまま)であり、これらを埋める作業も送信前に必要。**本レビューの時点では送信していない。HQが送信を承認するまで送信しない。**
