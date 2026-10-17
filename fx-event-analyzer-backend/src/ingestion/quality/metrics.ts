@@ -981,11 +981,71 @@ export function summarizeCreditUsage(rows: readonly CreditUsageSample[] | null):
 
 export interface SnapshotSample {
   verification_status: string;
+  /**
+   * economic_events.provider that supplied the actual value (e.g.
+   * 'tradingeconomics', 'bls_schedule'). Optional: samples from before this
+   * field existed are treated as independently sourced, matching the
+   * behavior before this distinction existed (HQ判断 2026-10-17).
+   */
+  provider?: string;
+  /** event_snapshots.verification_source (e.g. "BLS:CUUR0000SA0@2026-10-14"); null = no official corroboration (SINGLE_SOURCE). */
+  verification_source?: string | null;
 }
 
 export interface StagedSample {
   verification_status: StagedVerificationStatus;
   reasons: readonly string[];
+  indicator_code?: string;
+  reference_period?: string | null;
+  provider?: string;
+  actual?: number | null;
+  new_value?: number | null;
+  official_actual?: number | null;
+}
+
+/**
+ * Providers that ARE the official agency itself, not a third-party
+ * calendar — HQ判断(2026-10-17): a VERIFIED snapshot from one of these,
+ * matched against THE SAME agency's own official series, is a self-match
+ * (data-sources.md §14.5): actual and official come from the identical
+ * fetch, so the agreement is tautological, not independent corroboration.
+ * This is an explicit, reviewed map — never inferred from the provider
+ * string alone (a provider could coincidentally be named after an agency
+ * without actually being it) and never from matching text alone (a
+ * genuinely independent provider's value could coincidentally equal the
+ * official one without being the same fetch).
+ */
+export const SELF_SOURCING_PROVIDER_AGENCY: Readonly<Record<string, string>> = {
+  bls_schedule: 'BLS',
+};
+
+/** "BLS:CUUR0000SA0@2026-10-14" → "BLS". */
+function officialAgencyOf(verificationSource: string | null | undefined): string | null {
+  if (!verificationSource) return null;
+  const colon = verificationSource.indexOf(':');
+  return colon === -1 ? verificationSource : verificationSource.slice(0, colon);
+}
+
+export type SnapshotMatchKind = 'INDEPENDENT' | 'SELF_MATCH' | 'SINGLE_SOURCE';
+
+/** null for a status this function doesn't classify (anything but VERIFIED/SINGLE_SOURCE). */
+export function classifySnapshotMatch(sample: SnapshotSample): SnapshotMatchKind | null {
+  if (sample.verification_status === 'SINGLE_SOURCE') return 'SINGLE_SOURCE';
+  if (sample.verification_status !== 'VERIFIED') return null;
+  const selfAgency = sample.provider ? SELF_SOURCING_PROVIDER_AGENCY[sample.provider] : undefined;
+  return selfAgency !== undefined && officialAgencyOf(sample.verification_source) === selfAgency
+    ? 'SELF_MATCH'
+    : 'INDEPENDENT';
+}
+
+export const MAX_MISMATCH_DETAILS = 20;
+
+export interface MismatchDetail {
+  indicatorCode: string;
+  referencePeriod: string | null;
+  provider: string;
+  actual: number | null;
+  officialActual: number | null;
 }
 
 /**
@@ -1005,10 +1065,28 @@ export interface EconomicValueStats {
   staged: Record<string, number>;
   /** PENDING_REVIEW staged values whose reasons include OFFICIAL_MISMATCH */
   officialMismatches: number;
-  /** snapshots VERIFIED / (VERIFIED + officialMismatches). null = nothing compared. */
+  /**
+   * snapshots VERIFIED / (VERIFIED + officialMismatches). null = nothing
+   * compared. Kept for compatibility — INCLUDES self-matched snapshots
+   * (SELF_SOURCING_PROVIDER_AGENCY) in both counts, so it does NOT answer
+   * "what fraction was independently verified" (independentAgreementRate
+   * does). HQ判断(2026-10-17): 自己一致は独立照合に加算しない。
+   */
   agreementRate: number | null;
   /** reasons of PENDING_REVIEW staged values (count per code) */
   pendingReviewReasons: Record<string, number>;
+  /** VERIFIED snapshots classified INDEPENDENT (classifySnapshotMatch) — a genuinely different source corroborated the value. */
+  independentlyVerified: number;
+  /** VERIFIED snapshots classified SELF_MATCH — same fetch compared with itself; never counted toward independentlyVerified. */
+  selfMatched: number;
+  /** = snapshots.SINGLE_SOURCE (no official ever available/required). Exposed separately for the new breakdown. */
+  singleSource: number;
+  /** ingestion_staged_values still AWAITING_OFFICIAL (actual received, official corroboration not yet available) — 未発表・確認待ち. */
+  awaitingOfficial: number;
+  /** independentlyVerified / (independentlyVerified + officialMismatches), excluding self-matches from both sides. null = nothing to compare. */
+  independentAgreementRate: number | null;
+  /** Up to MAX_MISMATCH_DETAILS of the PENDING_REVIEW/OFFICIAL_MISMATCH rows, for 差異あり detail (指標・対象期間・取得元・値). */
+  mismatches: MismatchDetail[];
 }
 
 export function summarizeEconomicValues(
@@ -1022,7 +1100,8 @@ export function summarizeEconomicValues(
     return result;
   };
   const pending = staged.filter((s) => s.verification_status === 'PENDING_REVIEW');
-  const officialMismatches = pending.filter((s) => s.reasons.includes('OFFICIAL_MISMATCH')).length;
+  const mismatched = pending.filter((s) => s.reasons.includes('OFFICIAL_MISMATCH'));
+  const officialMismatches = mismatched.length;
   const snapshotCounts = count(snapshots.map((s) => s.verification_status));
   const verified = snapshotCounts.VERIFIED ?? 0;
   let state: EconomicState = 'MEASURED';
@@ -1030,6 +1109,25 @@ export function summarizeEconomicValues(
     if (context.economicEvents === 0 && snapshots.length === 0) state = 'NO_DATA';
     else if (context.officialRuns === 0) state = 'NOT_RUN';
   }
+
+  let independentlyVerified = 0;
+  let selfMatched = 0;
+  let singleSource = 0;
+  for (const snapshot of snapshots) {
+    const kind = classifySnapshotMatch(snapshot);
+    if (kind === 'INDEPENDENT') independentlyVerified += 1;
+    else if (kind === 'SELF_MATCH') selfMatched += 1;
+    else if (kind === 'SINGLE_SOURCE') singleSource += 1;
+  }
+  const awaitingOfficial = staged.filter((s) => s.verification_status === 'AWAITING_OFFICIAL').length;
+  const mismatches: MismatchDetail[] = mismatched.slice(0, MAX_MISMATCH_DETAILS).map((s) => ({
+    indicatorCode: s.indicator_code ?? '(指標不明)',
+    referencePeriod: s.reference_period ?? null,
+    provider: s.provider ?? '(取得元不明)',
+    actual: s.actual ?? s.new_value ?? null,
+    officialActual: s.official_actual ?? null,
+  }));
+
   return {
     state,
     economicEvents: context?.economicEvents ?? null,
@@ -1039,6 +1137,12 @@ export function summarizeEconomicValues(
     officialMismatches,
     agreementRate: ratio(verified, verified + officialMismatches),
     pendingReviewReasons: count(pending.flatMap((s) => [...s.reasons])),
+    independentlyVerified,
+    selfMatched,
+    singleSource,
+    awaitingOfficial,
+    independentAgreementRate: ratio(independentlyVerified, independentlyVerified + officialMismatches),
+    mismatches,
   };
 }
 

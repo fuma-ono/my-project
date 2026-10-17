@@ -9,6 +9,7 @@
 import {
   CREDIT_CAPS,
   FX_INGEST_WINDOW_MINUTES,
+  MAX_MISMATCH_DETAILS,
   MISSING_CAUSES,
   RELEASE_WINDOW_MINUTES,
   type AggregateCoverage,
@@ -541,6 +542,48 @@ export function renderDataQualityMarkdown(report: DataQualityReport): string {
       lines.push(
         `- 公式統計との一致率: ${rate(e.agreementRate, '公式値と照合できた値なし')}(VERIFIED ${e.snapshots.VERIFIED ?? 0} ÷ (VERIFIED + 公式値と不一致 ${e.officialMismatches}))`,
       );
+      lines.push('');
+      lines.push('### 検証の内訳(自己一致は独立照合に数えない、HQ判断 2026-10-17)');
+      lines.push('');
+      lines.push(
+        ...table(
+          ['分類', '件数', '説明'],
+          [
+            ['独立照合済み', String(e.independentlyVerified), '取得元と照合元が別(本当の裏付け)'],
+            ['自己一致', String(e.selfMatched), '取得元と照合元が同じ出所(例: BLSスケジュール経由。独立検証ではない)'],
+            ['単一ソース・未照合', String(e.singleSource), '照合先が無い、または不要な指標'],
+            ['差異あり', String(e.officialMismatches), '公式値と不一致(要確認のまま、公開していない)'],
+            [
+              '未発表・確認待ち',
+              String(e.awaitingOfficial),
+              '実績値はあるが公式統計での確認がまだ(ingest:official待ち)',
+            ],
+          ],
+        ),
+      );
+      lines.push('');
+      lines.push(
+        `独立照合の一致率(自己一致を除く): ${rate(e.independentAgreementRate, '独立照合できた値なし')}(独立照合済み ${e.independentlyVerified} ÷ (独立照合済み + 差異あり ${e.officialMismatches}))`,
+      );
+      lines.push('');
+      lines.push(`### 差異あり の一覧(最大${MAX_MISMATCH_DETAILS}件)`);
+      lines.push('');
+      if (e.mismatches.length === 0) {
+        lines.push('—(差異ありの指標なし)');
+      } else {
+        lines.push(
+          ...table(
+            ['指標', '対象期間', '取得元', '値', '公式値'],
+            e.mismatches.map((m) => [
+              m.indicatorCode,
+              m.referencePeriod ?? '—',
+              m.provider,
+              m.actual === null ? '—' : String(m.actual),
+              m.officialActual === null ? '—' : String(m.officialActual),
+            ]),
+          ),
+        );
+      }
     }
   }
   lines.push('');

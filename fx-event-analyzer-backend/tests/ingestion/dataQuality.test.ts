@@ -3,6 +3,7 @@ import {
   analyzeFxSchedule,
   buildDataQualityReport,
   checkReleaseWindows,
+  classifySnapshotMatch,
   computeFxCompleteness,
   classifyMissingMinute,
   countSpeechTimeNotExact,
@@ -452,6 +453,120 @@ describe('economic values', () => {
     expect(stats.agreementRate).toBeCloseTo(0.75);
     expect(stats.pendingReviewReasons).toEqual({ OFFICIAL_MISMATCH: 1, REFERENCE_PERIOD_INFERRED: 1 });
     expect(summarizeEconomicValues([], []).agreementRate).toBeNull();
+  });
+
+  // HQ判断(2026-10-17): 自己一致(同じ取得元・同じデータでの一致)は独立照合に
+  // 数えない。classifySnapshotMatch / summarizeEconomicValues の分類をテストする。
+
+  it('classifies a BLS-schedule snapshot (same fetch compared with itself) as a self-match, not independent', () => {
+    const sample: Parameters<typeof classifySnapshotMatch>[0] = {
+      verification_status: 'VERIFIED',
+      provider: 'bls_schedule',
+      verification_source: 'BLS:CUUR0000SA0@2026-10-14',
+    };
+    expect(classifySnapshotMatch(sample)).toBe('SELF_MATCH');
+
+    const stats = summarizeEconomicValues([sample], []);
+    expect(stats.selfMatched).toBe(1);
+    expect(stats.independentlyVerified).toBe(0);
+    // The self-match must not inflate the independent rate: nothing to compare independently.
+    expect(stats.independentAgreementRate).toBeNull();
+    // ...but it still counts toward the (compat) blended rate, same as before this change.
+    expect(stats.agreementRate).toBe(1);
+  });
+
+  it('classifies a paid-calendar snapshot matched against BLS as independently verified', () => {
+    const sample: Parameters<typeof classifySnapshotMatch>[0] = {
+      verification_status: 'VERIFIED',
+      provider: 'tradingeconomics',
+      verification_source: 'BLS:CUUR0000SA0@2026-10-14',
+    };
+    expect(classifySnapshotMatch(sample)).toBe('INDEPENDENT');
+
+    const stats = summarizeEconomicValues([sample], []);
+    expect(stats.independentlyVerified).toBe(1);
+    expect(stats.selfMatched).toBe(0);
+    expect(stats.independentAgreementRate).toBe(1);
+  });
+
+  it('counts a genuine independent mismatch, with indicator/period/provider/value detail', () => {
+    const stats = summarizeEconomicValues(
+      [
+        {
+          verification_status: 'VERIFIED',
+          provider: 'tradingeconomics',
+          verification_source: 'BLS:CUUR0000SA0@2026-10-14',
+        },
+      ],
+      [
+        {
+          verification_status: 'PENDING_REVIEW',
+          reasons: ['OFFICIAL_MISMATCH'],
+          indicator_code: 'US_CPI',
+          reference_period: '2026-09',
+          provider: 'tradingeconomics',
+          actual: 3.9,
+          official_actual: 3.8,
+        },
+      ],
+    );
+    expect(stats.officialMismatches).toBe(1);
+    // 1 independent match, 1 independent mismatch → 50%, excluding the mismatch from neither side.
+    expect(stats.independentAgreementRate).toBeCloseTo(0.5);
+    expect(stats.mismatches).toEqual([
+      {
+        indicatorCode: 'US_CPI',
+        referencePeriod: '2026-09',
+        provider: 'tradingeconomics',
+        actual: 3.9,
+        officialActual: 3.8,
+      },
+    ]);
+  });
+
+  it('classifies SINGLE_SOURCE (no official source available/required) as its own bucket, not a match', () => {
+    const sample: Parameters<typeof classifySnapshotMatch>[0] = {
+      verification_status: 'SINGLE_SOURCE',
+      provider: 'tradingeconomics',
+      verification_source: null,
+    };
+    expect(classifySnapshotMatch(sample)).toBe('SINGLE_SOURCE');
+
+    const stats = summarizeEconomicValues([sample], []);
+    expect(stats.singleSource).toBe(1);
+    expect(stats.independentlyVerified).toBe(0);
+    expect(stats.selfMatched).toBe(0);
+  });
+
+  it('counts AWAITING_OFFICIAL staged values as 未発表・確認待ち, separate from a true mismatch', () => {
+    const stats = summarizeEconomicValues(
+      [],
+      [
+        { verification_status: 'AWAITING_OFFICIAL', reasons: [] },
+        { verification_status: 'AWAITING_OFFICIAL', reasons: [] },
+        { verification_status: 'PENDING_REVIEW', reasons: ['OFFICIAL_MISMATCH'] },
+      ],
+    );
+    expect(stats.awaitingOfficial).toBe(2);
+    expect(stats.officialMismatches).toBe(1);
+  });
+
+  it('treats pre-existing snapshots with no provider/verification_source as independent (report compatibility)', () => {
+    // Exactly the shape used before this field existed — must classify the same
+    // way it was always counted (nothing was self-sourced before bls_schedule).
+    const stats = summarizeEconomicValues(
+      [
+        { verification_status: 'VERIFIED' },
+        { verification_status: 'VERIFIED' },
+        { verification_status: 'SINGLE_SOURCE' },
+      ],
+      [{ verification_status: 'PENDING_REVIEW', reasons: ['OFFICIAL_MISMATCH'] }],
+    );
+    expect(stats.independentlyVerified).toBe(2);
+    expect(stats.selfMatched).toBe(0);
+    expect(stats.singleSource).toBe(1);
+    // Old and new rates agree exactly when nothing is self-sourced.
+    expect(stats.independentAgreementRate).toBe(stats.agreementRate);
   });
 });
 
@@ -1074,5 +1189,54 @@ describe('zero-denominator labels', () => {
     );
     expect(measured).toContain('状態: 照合済み');
     expect(measured).toContain('公式統計との一致率: 50.00%');
+  });
+
+  it('renders 自己一致・独立照合・差異あり as distinct rows, and shows mismatch detail (HQ判断 2026-10-17)', () => {
+    const officialRun = log('ingest:official', '2026-10-12T13:00:00Z', 'SUCCESS', {
+      provider: 'official',
+      data_type: 'OTHER',
+    });
+    const markdown = renderDataQualityMarkdown(
+      buildDataQualityReport({
+        ...emptyInput(),
+        economicEventCount: 3,
+        logs: [officialRun],
+        snapshots: [
+          {
+            verification_status: 'VERIFIED',
+            provider: 'bls_schedule',
+            verification_source: 'BLS:CES0000000001@2026-10-02',
+          },
+          {
+            verification_status: 'VERIFIED',
+            provider: 'tradingeconomics',
+            verification_source: 'BLS:CUUR0000SA0@2026-10-14',
+          },
+          { verification_status: 'SINGLE_SOURCE', provider: 'fmp', verification_source: null },
+        ],
+        staged: [
+          { verification_status: 'AWAITING_OFFICIAL', reasons: [] },
+          {
+            verification_status: 'PENDING_REVIEW',
+            reasons: ['OFFICIAL_MISMATCH'],
+            indicator_code: 'US_NFP',
+            reference_period: '2026-09',
+            provider: 'finnhub',
+            actual: 35,
+            official_actual: 29,
+          },
+        ],
+      }),
+    );
+    expect(markdown).toContain('### 検証の内訳(自己一致は独立照合に数えない、HQ判断 2026-10-17)');
+    expect(markdown).toContain('| 独立照合済み | 1 |');
+    expect(markdown).toContain('| 自己一致 | 1 |');
+    expect(markdown).toContain('| 単一ソース・未照合 | 1 |');
+    expect(markdown).toContain('| 差異あり | 1 |');
+    expect(markdown).toContain('| 未発表・確認待ち | 1 |');
+    expect(markdown).toContain('独立照合の一致率(自己一致を除く): 50.00%');
+    expect(markdown).toContain('### 差異あり の一覧(最大20件)');
+    expect(markdown).toContain('| US_NFP | 2026-09 | finnhub | 35 | 29 |');
+    expect(markdown).not.toMatch(SECRET);
   });
 });

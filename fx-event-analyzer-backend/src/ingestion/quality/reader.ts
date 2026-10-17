@@ -185,32 +185,61 @@ export function createQualityReader(supabase: SupabaseClient): QualityReader {
     },
 
     async listSnapshots(fromIso, toIso) {
-      return fetchAllPages<SnapshotSample>((from, to) =>
+      const rows = await fetchAllPages<{
+        verification_status: string;
+        verification_source: string | null;
+        economic_events: { provider: string } | null;
+      }>((from, to) =>
         supabase
           .from('event_snapshots')
-          .select('id, verification_status')
+          .select('id, verification_status, verification_source, economic_events(provider)')
           .eq('snapshot_type', 'RELEASE')
           .gte('captured_at', fromIso)
           .lt('captured_at', toIso)
           .order('id', { ascending: true })
           .range(from, to),
       );
+      return rows.map((row) => {
+        const provider = row.economic_events?.provider;
+        return {
+          verification_status: row.verification_status,
+          verification_source: row.verification_source,
+          ...(provider !== undefined ? { provider } : {}),
+        };
+      });
     },
 
     async listStaged(fromIso, toIso) {
       const rows = await fetchAllPages<{
         verification_status: StagedSample['verification_status'];
         reasons: string[] | null;
+        indicator_code: string;
+        reference_period: string | null;
+        provider: string;
+        actual: number | string | null;
+        new_value: number | string | null;
+        official_actual: number | string | null;
       }>((from, to) =>
         supabase
           .from('ingestion_staged_values')
-          .select('id, verification_status, reasons')
+          .select(
+            'id, verification_status, reasons, indicator_code, reference_period, provider, actual, new_value, official_actual',
+          )
           .gte('fetched_at', fromIso)
           .lt('fetched_at', toIso)
           .order('id', { ascending: true })
           .range(from, to),
       );
-      return rows.map((row) => ({ verification_status: row.verification_status, reasons: row.reasons ?? [] }));
+      return rows.map((row) => ({
+        verification_status: row.verification_status,
+        reasons: row.reasons ?? [],
+        indicator_code: row.indicator_code,
+        reference_period: row.reference_period,
+        provider: row.provider,
+        actual: nullableNumber(row.actual),
+        new_value: nullableNumber(row.new_value),
+        official_actual: nullableNumber(row.official_actual),
+      }));
     },
   };
 }
