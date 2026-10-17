@@ -1,0 +1,107 @@
+name: FX Event Analyzer - Unsigned device IPA (feasibility check, no signing)
+
+# HQ指示(2026-10-17「Macなし・追加費用0円で開発を進める」)に対応した調査専用の
+# ワークフロー。目的はただ1つ: 「Macを持たずに、Apple Developer Program($99/年、
+# 保留中)にも登録せずに、実機(実際のiPhone)にアプリを入れる手段があるか」の
+# 技術的な可否を確認すること。
+#
+# 仕組み: 既存の fx-event-analyzer-ios-build.yml と同じ GitHub Actions の
+# macOS runner(このリポジトリはpublicなので macOS runner も追加費用0円 —
+# https://docs.github.com/en/actions/reference/usage-limits-billing-and-administration
+# 参照、2026-10-17確認)を使い、実機(iphoneos SDK)向けに
+# CODE_SIGNING_ALLOWED=NO・CODE_SIGNING_REQUIRED=NO でビルドする。これは
+# Appleの署名を一切行わない「未署名」の.appを作るだけで、証明書・秘密鍵・
+# Apple Developer Programのアカウントは一切使わない(存在しないので使えない)。
+#
+# 未署名の.appを Payload/ ディレクトリに入れてzipしたものが「未署名.ipa」。
+# これ自体は実機にインストールできない(Appleの署名が無いため)。実機へ
+# 入れるには、この.ipaを AltStore/AltServer・Sideloadly・iLoader 等の
+# 無料ツール(Windows対応、開発者本人のApple IDで再署名する)で改めて
+# 署名する必要がある。その手順はこのワークフローの範囲外(HQ報告の別紙に
+# まとめる)。
+#
+# このワークフローは既存の fx-event-analyzer-ios-build.yml /
+# fx-event-analyzer-ui-screenshots.yml を一切変更・トリガーしない
+# (別ファイル、手動実行のみ)。既存のUI・データ取得処理にも触れない。
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  unsigned-device-build:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: fx-event-analyzer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project from project.yml
+        run: xcodegen generate
+
+      - name: Cache Swift Package Manager artifacts
+        uses: actions/cache@v4
+        with:
+          path: fx-event-analyzer/DerivedData/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('fx-event-analyzer/project.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Resolve Swift Package dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project FXEventAnalyzer.xcodeproj \
+            -scheme FXEventAnalyzer \
+            -derivedDataPath DerivedData
+
+      # 実機(iphoneos SDK)向け・署名なしビルド。証明書・プロビジョニング
+      # プロファイル・Apple Developerアカウントは使わない(存在しないため)。
+      - name: Build for a real device, unsigned (feasibility check)
+        env:
+          SUPABASE_URL: ${{ secrets.FX_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.FX_SUPABASE_ANON_KEY }}
+          API_BASE_URL: ${{ secrets.FX_API_BASE_URL }}
+        run: |
+          xcodebuild build \
+            -project FXEventAnalyzer.xcodeproj \
+            -scheme FXEventAnalyzer \
+            -sdk iphoneos \
+            -configuration Release \
+            -derivedDataPath DerivedData \
+            -destination "generic/platform=iOS" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            SUPABASE_URL="$SUPABASE_URL" \
+            SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            API_BASE_URL="$API_BASE_URL"
+
+      - name: Package the unsigned .app as an .ipa (zip only, no signing)
+        run: |
+          set -eu
+          APP_PATH="DerivedData/Build/Products/Release-iphoneos/FXEventAnalyzer.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "::error::Expected app bundle not found at $APP_PATH" >&2
+            find DerivedData/Build/Products -maxdepth 3 >&2 || true
+            exit 1
+          fi
+          mkdir -p ipa-root/Payload
+          cp -R "$APP_PATH" ipa-root/Payload/
+          (cd ipa-root && zip -r -y ../FXEventAnalyzer-unsigned.ipa Payload)
+          ls -la FXEventAnalyzer-unsigned.ipa
+
+      - name: Upload unsigned .ipa as a CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FXEventAnalyzer-unsigned-ipa
+          path: fx-event-analyzer/FXEventAnalyzer-unsigned.ipa
+          retention-days: 3
