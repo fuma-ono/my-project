@@ -212,3 +212,52 @@ Best regards,
 **送信先の確認結果**: `sales@twelvedata.com` という宛先は、公式サイト(`twelvedata.com/contact`・`twelvedata.com/contact/sales`、2026-10-17 WebFetchで確認)に記載が無かった。営業問い合わせは Web フォーム(`https://twelvedata.com/contact/sales`)のみで、一般問い合わせ用のメールアドレスは `info@twelvedata.com`。**メールでの送信を前提にした現在の文面は、宛先をWebフォームに合わせて作り直す必要がある**(本レビューでは文面の内容確認のみ行い、フォーム用への再構成はHQの送信承認と合わせて次回行う)。
 
 **送信権限の確認状況**: `vendor-inquiries.md` 冒頭に記載の通り「送るのは大野さん」がHQ判断で決まっている。今回は会社名・担当者名・連絡用メールアドレス([Name] / [Company] / [Email]の各欄)がまだ未確定(プレースホルダのまま)であり、これらを埋める作業も送信前に必要。**本レビューの時点では送信していない。HQが送信を承認するまで送信しない。**
+
+## 5. Twelve Data: フォーム提出用 最終文面(HQ指示2026-10-17「フォームへ貼り付け可能な最終文面を提示する」への回答)
+
+### 5.1 フォームの構成(2026-10-17 WebFetchで確認)
+
+`https://twelvedata.com/contact/sales` は以下の入力項目を持つ(メール送信ではなくこのフォームのみが窓口)。
+
+| 項目 | 必須 | 内容 |
+|---|---|---|
+| Request from | 必須 | 「Individual」「Company」の選択式 |
+| Surname | 必須 | 自由入力 |
+| Name | 必須 | 自由入力 |
+| Email | 必須 | 自由入力 |
+| Company Name | 必須 | 自由入力 |
+| Message | 必須 | 自由入力(文字数制限の表示は確認できなかった。2026-10-17 WebFetchで取得したページ本文に上限の記載が無い) |
+| (ラベル無しの2つ目の選択式) | 不明 | 選択肢の内容がWebFetchでは取得できなかった。**送信前に実際のフォーム画面で選択肢を確認する必要がある(要確認のまま)** |
+
+**文字数制限は「記載が確認できなかった」のであって「無いと確認できた」わけではない**。実際にフォームへ貼り付ける際、エラーが出ないか確認すること。
+
+### 5.2 Message欄に貼り付ける最終文面
+
+下記はそのまま貼り付け可能(§3.2の内容と同一、Subject行はフォームに項目が無いため除いた)。
+
+```
+We plan to show 1-minute FX charts and price moves (pips) for 9 currency pairs (USD/JPY, EUR/USD, EUR/JPY, GBP/USD, GBP/JPY, AUD/USD, AUD/JPY, USD/CHF, CAD/JPY) to the users of our paid iOS app.
+
+Before that, we would like to run a small, informal beta test (TestFlight/ad-hoc, a handful of friends and acquaintances, not the general public) using live FX data from our current free/personal API key.
+
+1. Does our free/personal plan's "Internal Use" license cover installing the app on a few testers' own devices for this kind of informal beta, or does any distribution beyond our own use already require a paid plan / the Redistribution Rights Add-On?
+2. If a paid plan is required even for this small-scale beta, which is the minimum one, and what would it cost?
+3. For the eventual public release: is the Venture plan enough, or do we also need the Redistribution Rights Add-On? What would it cost?
+4. How long may we store or cache the bars in our own database?
+5. We also build our own 5/15/30/60-minute bars by aggregating the 1-minute bars we store, and show these aggregated bars to our end users (not fetched separately from your API). Does our license permit showing such derived/aggregated bars, or does this require separate permission?
+6. What attribution text is required?
+7. How are FX prices defined (bid, ask or mid), and where do they come from?
+```
+
+### 5.3 残っているプレースホルダ(HQが未提供の情報。推測・捏造していない)
+
+| フォーム項目 | 現在の状態 |
+|---|---|
+| Request from | **[要選択]** Individual / Company のどちらにするかはHQ/大野さんの判断(本調査では決めていない) |
+| Surname | **[要記入]** |
+| Name | **[要記入]** |
+| Email | **[要記入]** (連絡が取れる実在のメールアドレスが必要) |
+| Company Name | **[要記入]** |
+| ラベル無しの2つ目の選択式 | **[要確認]** フォーム画面で実際の選択肢を見てから選ぶ必要がある |
+
+**本文面はHQの最終確認・送信承認が出るまで送信しない。**
