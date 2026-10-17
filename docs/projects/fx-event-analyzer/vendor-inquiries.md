@@ -1,33 +1,39 @@
 # 取得元への問い合わせの記録
 
 作成: 2026-10-16(HQ判断「6件の問い合わせを進め、結果を記録する」)
+更新: 2026-10-17(HQ決定「データ提供元の契約判断と次フェーズ」。Massiveの問い合わせ項目を6項目に拡充、FMPを追加)
 
-送るのは大野さん。会社名・担当者名・メールアドレスを確認してから送る(HQ判断)。返事が来たら、下の表と「結果」の欄を更新する。利用条件の確認結果は data-sources.md 11章。
+送るのは大野さん。会社名・担当者名・メールアドレスを確認してから送る(HQ判断)。返事が来たら、下の表と「結果」の欄を更新する。**書面回答を得る前にAPIキーを取得・設定したり、有料契約を開始したりしない(HQ決定2026-10-17)。** 利用条件の確認結果は data-sources.md 11章、代替候補の比較は調査レポート(外為データ提供元比較調査・経済指標データ提供元調査、2026-10-16)参照。
 
 ## 1. 状況
 
 | # | 送り先 | 窓口 | 目的 | 送った日 | 返事 | 状態 |
 |---|---|---|---|---|---|---|
-| 1 | Trading Economics | ウェブサイトの Contact / Sales フォーム | 経済カレンダーの見積もり・お試し | — | — | 未送信 |
+| 1 | Trading Economics | ウェブサイトの Contact / Sales フォーム | 経済カレンダーの商用利用・再配布ライセンスの見積もり・お試し | — | — | 未送信 |
 | 2 | Twelve Data | sales@twelvedata.com | 必要なプラン・追加料金 | — | — | 未送信 |
-| 3 | Massive(旧 Polygon) | sales@massive.com | 用途がプランの範囲か | — | — | 未送信 |
-| 4 | 日本銀行 情報サービス局 | post.prd8@boj.or.jp | 商用利用の相談 | — | — | 未送信 |
-| 5 | イングランド銀行(BOE) | enquiries@bankofengland.co.uk | 商用利用の許可の申請 | — | — | 未送信 |
-| 6 | 欧州中央銀行(ECB) | ウェブサイトの問い合わせフォーム | 時刻の決まり・無料入手の案内の出し方 | — | — | 未送信 |
+| 3 | Massive(旧 Polygon) | sales@massive.com | 6項目の明示的な書面回答(下記3.3) | — | — | 未送信 |
+| 4 | Financial Modeling Prep (FMP) | ウェブサイトの Contact / Sales フォーム | 経済カレンダーの商用利用・再配布ライセンスの見積もり | — | — | 未送信 |
+| 5 | 日本銀行 情報サービス局 | post.prd8@boj.or.jp | 商用利用の相談 | — | — | 未送信 |
+| 6 | イングランド銀行(BOE) | enquiries@bankofengland.co.uk | 商用利用の許可の申請 | — | — | 未送信 |
+| 7 | 欧州中央銀行(ECB) | ウェブサイトの問い合わせフォーム | 時刻の決まり・無料入手の案内の出し方 | — | — | 未送信 |
 
 ## 2. 結果の記録(返事が来たら埋める)
 
-各社・各機関について、次の項目を記録する(HQ判断)。返事に書かれていないものは「未回答」と書き、推測で埋めない。
+各社・各機関について、次の項目を記録する(HQ判断)。**返事の原文・受信日を必ず残し、確認項目ごとに分けて記録する(HQ決定2026-10-17)。** 返事に書かれていないものは「未回答」と書き、推測で埋めない。
 
 | 項目 | 内容 |
 |---|---|
+| 受信日 | 返事を受け取った日付 |
 | 費用 | 月額・年額、最低契約期間、従量課金の有無 |
 | 商用表示権 | 有料アプリの利用者に見せてよいか、条件 |
 | 保存期間 | 自社DBに保存してよい期間、解約後の扱い |
 | 再配布権 | 端末への送り方の制限、追加料金の要否 |
+| クロスチェック権 | 他取得元との内部比較に使ってよいか(Massiveのみ、規約に明文が無いため個別確認) |
 | 派生値 | pips・前年比などを計算して見せてよいか |
+| 過去データ利用 | 遡って取得・保存してよい範囲(経済指標candidates向け) |
 | 出典表示 | 必要な文言と表示場所 |
-| その他 | お試しの可否、時刻・価格の定義など |
+| 原文 | 返事メールの原文(全文または該当部分の引用) |
+| その他 | お試しの可否、時刻・価格の定義、契約期間・解約条件、API移行条件など |
 
 ### 2.1 Trading Economics
 (未回答)
@@ -38,13 +44,16 @@
 ### 2.3 Massive
 (未回答)
 
-### 2.4 日本銀行
+### 2.4 Financial Modeling Prep (FMP)
 (未回答)
 
-### 2.5 BOE
+### 2.5 日本銀行
 (未回答)
 
-### 2.6 ECB
+### 2.6 BOE
+(未回答)
+
+### 2.7 ECB
 (未回答)
 
 ## 3. 送る文面
@@ -53,22 +62,23 @@
 
 ### 3.1 Trading Economics
 ```
-Subject: Enterprise quote and trial – Economic Calendar API for a paid iOS app
+Subject: Enterprise quote and trial – Economic Calendar API, redistribution license for a paid iOS app
 
 Hello,
 
-We are developing a paid iOS app (Japan) that shows economic calendar events and the FX market reaction around each release. We would like a quote and, if possible, a trial for the Economic Calendar API.
+We are developing a paid iOS app (Japan) that shows economic calendar events and the FX market reaction around each release. We would like a quote and, if possible, a trial for the Economic Calendar API, and specifically a redistribution license that covers displaying the data to the paying end users of a publicly released commercial app (not just internal/personal use).
 
 Scope: about 10 countries (US, Japan, Euro area, UK, Australia, Canada, Switzerland, China, New Zealand, Germany); forecast, actual, previous and revised values; release times; history of about 5 years.
 
 Could you please let us know:
-1. Which plan includes the calendar for this use, and its price (do we need live streaming?)
+1. Which plan includes the calendar for this use and the redistribution/display license, and its price (do we need live streaming?)
 2. Whether we may display the values to our app users and store them in our own database, and for how long
 3. Whether derived values (e.g. our own percentage calculations) are allowed
-4. The required attribution text
-5. What happens to stored data after cancellation
-6. The full API terms of use
-7. Whether a trial key is available
+4. How far back historical data may be fetched and retained under this plan
+5. The required attribution text
+6. What happens to stored data after cancellation (must it be deleted, and by when?)
+7. The full API terms of use
+8. Whether a trial key is available
 
 Best regards,
 [Name] / [Company] / [Email]
@@ -93,22 +103,45 @@ Best regards,
 
 ### 3.3 Massive
 ```
-Subject: Currencies Business – use case check for a paid iOS app
+Subject: Currencies Business – written confirmation needed on 6 points before we subscribe
 
 Hello,
 
-We are considering Currencies Business to show 1-minute bars for 9 FX pairs in our paid iOS app (charts and price moves around economic releases).
+We are evaluating the Currencies Business plan ($999/mo listed) for a paid iOS app that will show 1-minute FX bars for 9 currency pairs (AUDJPY, AUDUSD, CADJPY, EURJPY, EURUSD, GBPJPY, GBPUSD, USDCHF, USDJPY), aggregated into 5/15/30/60-minute bars, with charts and price moves displayed around economic-indicator releases. Before we subscribe, we need written confirmation on the following 6 points (we will not purchase API access or start a paid contract until we have your written answers):
 
-1. Is this use covered by section 2.2(b) of your terms? Is there a limit on how many bars we may send to a device?
-2. Is attribution required?
-3. Are bars built from bid or mid prices?
-4. Do you offer startup discounts?
+1. Internal cross-check use: we plan to compare your 1-minute bars against a second, independent data source purely for internal data-quality checking (not shown to end users). Your Businesses Terms of Service do not explicitly mention this use — is it permitted under section 2.2, or does it require separate approval?
+2. Persistent storage: we store 1-minute bars in our own database indefinitely (not just cached) so we can serve historical charts to our users. Does this conflict with section 6.1(d)'s prohibition on "operating as a data feed" / systematic redistribution, or is storage for our own app's historical charts covered by section 2.2(a)?
+3. Aggregation to higher timeframes: we build 5/15/30/60-minute bars from the 1-minute bars we store, and show these aggregated bars to our end users. Please confirm this falls under the "derivative works" permission in section 2.2(c) and the end-user display permission in section 2.2(b).
+4. Contract terms: minimum contract length, cancellation terms/notice period, and any early-termination fees for the Business plan (month-to-month vs. annual).
+5. Additional fees: under what conditions would we be charged beyond the listed $999/month (e.g. per-ticker fees, bandwidth/call-volume overages, WebSocket connection add-ons)?
+6. Coverage and endpoint details: please confirm all 9 pairs listed above are individually available tickers under Currencies Business, which timeframes are officially supported via the timespan/multiplier parameters (1/5/15/30/60-minute), and what the migration plan/timeline is from api.polygon.io to api.massive.com (will old integrations break, and by when must we migrate?).
 
 Best regards,
 [Name] / [Company] / [Email]
 ```
 
-### 3.4 日本銀行
+### 3.4 Financial Modeling Prep (FMP)
+```
+Subject: Commercial redistribution license – Economic Calendar in a publicly released iOS app
+
+Hello,
+
+We are developing a paid iOS app (Japan) that shows economic calendar events (forecast, actual, previous values, release times) and the FX market reaction around each release. Your published FAQ notes that a Data Display and Licensing Agreement is needed to show FMP data in a public app/website/client dashboard, so we are writing to request a quote for that license, specifically for economic calendar data (not equities).
+
+Could you please let us know:
+1. Which plan(s) include a commercial redistribution/display license for economic calendar data in a publicly released app, and the price
+2. Whether we may store the values in our own database, and for how long
+3. Whether we may compute and display derived values (e.g. combining calendar data with our own FX price data)
+4. How far back historical calendar data may be fetched and retained under this license
+5. What happens to stored data after cancellation (must it be deleted, and by when?)
+6. The required attribution text and placement
+7. Whether a trial key is available
+
+Best regards,
+[Name] / [Company] / [Email]
+```
+
+### 3.5 日本銀行
 ```
 件名：講演・挨拶の予定情報の商用アプリでの利用についてのご相談
 
@@ -130,7 +163,7 @@ Best regards,
 [メールアドレス] [電話番号]
 ```
 
-### 3.5 BOE
+### 3.6 BOE
 ```
 Subject: Permission request – speech schedule in a paid mobile app
 
@@ -144,7 +177,7 @@ Best regards,
 [Name] / [Company] / [Email]
 ```
 
-### 3.6 ECB
+### 3.7 ECB
 ```
 Subject: Time zone of the weekly speaking schedule, and the free-availability notice
 
