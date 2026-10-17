@@ -27,40 +27,62 @@ import type { OfficialStatsProvider } from '../providers.js';
 import { findMappingByCode, type IndicatorMapping } from '../mappings/indicators.js';
 import { BLS_SCHEDULE, type BlsScheduleEntry } from '../mappings/blsSchedule.js';
 import { providerIndicatorKey } from '../mappings/indicators.js';
-import { localDate, shiftMonth, zonedWallTimeToUtc } from '../time.js';
-import type { NormalizedCalendarRelease } from '../types.js';
-import { computeOfficialValue, observationWindow, type OfficialValueResolver } from '../verification/official.js';
+import { localDate, monthStart, shiftMonth, zonedWallTimeToUtc } from '../time.js';
+import type { NormalizedCalendarRelease, OfficialObservation } from '../types.js';
+import { computeOfficialValue, type OfficialValueResolver } from '../verification/official.js';
 import { displayUnit } from '../values.js';
 
 export const BLS_SCHEDULE_PROVIDER = 'bls_schedule';
 
 /**
+ * [start, end] ('YYYY-MM-DD') covering every period buildBlsScheduleReleases
+ * will ever ask about for `entries` — 12 months before the earliest
+ * referencePeriod (the farthest YOY_PCT needs to look back) through the
+ * latest one. Used to fetch each BLS series ONCE (see createBlsNativeResolver)
+ * instead of once per period: BLS's unauthenticated v1 API allows only 25
+ * requests/day, and this schedule alone has dozens of periods.
+ */
+export function scheduleObservationRange(entries: readonly BlsScheduleEntry[]): { start: string; end: string } {
+  const periods = entries.map((e) => e.referencePeriod);
+  const min = periods.reduce((a, b) => (a < b ? a : b));
+  const max = periods.reduce((a, b) => (a > b ? a : b));
+  return { start: monthStart(shiftMonth(min, -12)), end: monthStart(max) };
+}
+
+/**
  * Resolves a mapping's BLS official series directly, at any age — see the
  * file header for why this must not share officialStats.ts's staleness
- * guard. onError reports (never throws) a fetch failure for one period so
- * the rest of the schedule still gets processed.
+ * guard. Fetches each series ONCE for the whole `range` and serves every
+ * period/asOfDate from that cached set (never once per period — see
+ * scheduleObservationRange). onError reports (never throws) a fetch
+ * failure for one series so the rest of the schedule still gets processed.
  */
 export function createBlsNativeResolver(
   bls: OfficialStatsProvider,
+  range: { start: string; end: string },
   onError: (error: unknown) => void = () => undefined,
 ): OfficialValueResolver {
+  const cache = new Map<string, Promise<OfficialObservation[]>>();
   return {
     async resolve(mapping, period, asOfDate) {
       const ref = mapping.official.find((r) => r.source === 'BLS');
       if (!ref) return null;
-      const window = observationWindow(period, ref.transform);
-      let observations;
-      try {
-        observations = await bls.fetchObservations({
-          seriesId: ref.seriesId,
-          observationStart: window.start,
-          observationEnd: window.end,
-          asOfDate,
-        });
-      } catch (error) {
-        onError(error);
-        return null;
+      let pending = cache.get(ref.seriesId);
+      if (!pending) {
+        pending = bls
+          .fetchObservations({
+            seriesId: ref.seriesId,
+            observationStart: range.start,
+            observationEnd: range.end,
+            asOfDate,
+          })
+          .catch((error: unknown) => {
+            onError(error);
+            return [];
+          });
+        cache.set(ref.seriesId, pending);
       }
+      const observations = await pending;
       const value = computeOfficialValue(observations, period, ref.transform);
       if (value === null) return null;
       const asOf = observations.find((o) => o.periodStart === `${period}-01`)?.asOfDate ?? asOfDate;

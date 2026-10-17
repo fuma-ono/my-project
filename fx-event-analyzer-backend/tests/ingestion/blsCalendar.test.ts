@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { BlsScheduleEntry } from '../../src/ingestion/mappings/blsSchedule.js';
 import { findMappingByCode, type IndicatorMapping } from '../../src/ingestion/mappings/indicators.js';
-import { buildBlsScheduleReleases, createBlsNativeResolver } from '../../src/ingestion/pipelines/blsCalendar.js';
+import {
+  buildBlsScheduleReleases,
+  createBlsNativeResolver,
+  scheduleObservationRange,
+} from '../../src/ingestion/pipelines/blsCalendar.js';
 import { ingestCalendarReleases } from '../../src/ingestion/pipelines/economicCalendar.js';
 import type { OfficialStatsProvider } from '../../src/ingestion/providers.js';
 import { JobCounters } from '../../src/ingestion/runner.js';
@@ -47,13 +51,16 @@ function fakeBlsWith(cpi: Record<string, number>, nfp: Record<string, number>): 
   );
 }
 
+/** Wide enough for every fixture period below (never the real schedule's exact range). */
+const WIDE_RANGE = { start: '2024-01-01', end: '2027-12-31' };
+
 describe('createBlsNativeResolver', () => {
   const cpiMapping = findMappingByCode('US_CPI')!;
   const nfpMapping = findMappingByCode('US_NFP')!;
 
   it('computes YOY_PCT for CPI from 12 months back, at any asOfDate age', async () => {
     const bls = fakeBlsWith({ '2025-09': 320.0, '2026-09': 332.16 }, {});
-    const resolver = createBlsNativeResolver(bls);
+    const resolver = createBlsNativeResolver(bls, WIDE_RANGE);
     // 2026-09 YoY, asked as-of an old date far in the past: must still resolve (no 20-day staleness gate).
     const result = await resolver.resolve(cpiMapping, '2026-09', '2026-10-14');
     expect(result?.sourceRef).toBe(`BLS:${CPI_SERIES}@2026-10-17`);
@@ -62,14 +69,14 @@ describe('createBlsNativeResolver', () => {
 
   it('computes DIFF for NFP from the prior month', async () => {
     const bls = fakeBlsWith({}, { '2026-08': 159_015, '2026-09': 159_044 });
-    const resolver = createBlsNativeResolver(bls);
+    const resolver = createBlsNativeResolver(bls, WIDE_RANGE);
     const result = await resolver.resolve(nfpMapping, '2026-09', '2026-10-02');
     expect(result).toEqual({ value: 29, sourceRef: `BLS:${NFP_SERIES}@2026-10-17` });
   });
 
   it('returns null (never a guess) when BLS has not published the period yet', async () => {
     const bls = fakeBlsWith({ '2025-10': 320 }, {});
-    const resolver = createBlsNativeResolver(cpiMapping ? bls : bls);
+    const resolver = createBlsNativeResolver(bls, WIDE_RANGE);
     const result = await resolver.resolve(cpiMapping, '2026-10', '2026-11-10');
     expect(result).toBeNull();
   });
@@ -81,7 +88,7 @@ describe('createBlsNativeResolver', () => {
       fetchObservations: () => Promise.reject(new Error('network down')),
     };
     const errors: unknown[] = [];
-    const resolver = createBlsNativeResolver(failing, (e) => errors.push(e));
+    const resolver = createBlsNativeResolver(failing, WIDE_RANGE, (e) => errors.push(e));
     const result = await resolver.resolve(cpiMapping, '2026-09', '2026-10-14');
     expect(result).toBeNull();
     expect(errors).toHaveLength(1);
@@ -92,8 +99,33 @@ describe('createBlsNativeResolver', () => {
       ...cpiMapping,
       official: [{ source: 'FRED', seriesId: 'X', transform: 'LEVEL' }],
     };
-    const resolver = createBlsNativeResolver(fakeBlsWith({}, {}));
+    const resolver = createBlsNativeResolver(fakeBlsWith({}, {}), WIDE_RANGE);
     expect(await resolver.resolve(noBls, '2026-09', '2026-10-14')).toBeNull();
+  });
+
+  it('fetches a series only once no matter how many different periods are resolved (BLS v1: 25 requests/day)', async () => {
+    const bls = fakeBlsWith(
+      { '2025-01': 300, '2025-09': 320, '2026-09': 332.16, '2025-08': 318, '2026-08': 328 },
+      { '2026-08': 159_015, '2026-09': 159_044 },
+    );
+    const resolver = createBlsNativeResolver(bls, WIDE_RANGE);
+    await resolver.resolve(cpiMapping, '2026-09', '2026-10-14');
+    await resolver.resolve(cpiMapping, '2026-08', '2026-10-14'); // same series, different period
+    await resolver.resolve(cpiMapping, '2025-09', '2026-10-14'); // same series again
+    await resolver.resolve(nfpMapping, '2026-09', '2026-10-02'); // a different series
+    expect(bls.calls).toHaveLength(2); // one per series (CUUR0000SA0, CES0000000001), not per period
+    expect(bls.calls.map((c) => c.seriesId).sort()).toEqual([NFP_SERIES, CPI_SERIES].sort());
+  });
+});
+
+describe('scheduleObservationRange', () => {
+  it('spans 12 months before the earliest reference period through the latest one', () => {
+    const entries: BlsScheduleEntry[] = [
+      { indicatorCode: 'US_CPI', referencePeriod: '2026-03', releaseDate: '2026-04-10' },
+      { indicatorCode: 'US_NFP', referencePeriod: '2026-09', releaseDate: '2026-10-02' },
+      { indicatorCode: 'US_CPI', referencePeriod: '2026-01', releaseDate: '2026-02-13' },
+    ];
+    expect(scheduleObservationRange(entries)).toEqual({ start: '2025-01-01', end: '2026-09-01' });
   });
 });
 
@@ -102,7 +134,7 @@ describe('buildBlsScheduleReleases', () => {
 
   it('builds a release for a past, published period with actual/previous/revisedPrevious set', async () => {
     const bls = fakeBlsWith({ '2025-09': 320.0, '2026-09': 332.16, '2025-08': 318.0, '2026-08': 328.0 }, {});
-    const resolver = createBlsNativeResolver(bls);
+    const resolver = createBlsNativeResolver(bls, WIDE_RANGE);
     const entries: BlsScheduleEntry[] = [
       { indicatorCode: 'US_CPI', referencePeriod: '2026-09', releaseDate: '2026-10-14' },
     ];
@@ -128,7 +160,7 @@ describe('buildBlsScheduleReleases', () => {
 
   it('converts an EST-month release date correctly (winter, UTC−5)', async () => {
     const bls = fakeBlsWith({ '2025-01': 300, '2026-01': 310, '2025-12': 298, '2025-02': 1 /* unused */ }, {});
-    const resolver = createBlsNativeResolver(bls);
+    const resolver = createBlsNativeResolver(bls, WIDE_RANGE);
     const entries: BlsScheduleEntry[] = [
       { indicatorCode: 'US_CPI', referencePeriod: '2026-01', releaseDate: '2026-02-13' },
     ];
@@ -139,7 +171,7 @@ describe('buildBlsScheduleReleases', () => {
   });
 
   it('does not build a release for a future-dated entry', async () => {
-    const resolver = createBlsNativeResolver(fakeBlsWith({ '2026-10': 999 }, {}));
+    const resolver = createBlsNativeResolver(fakeBlsWith({ '2026-10': 999 }, {}), WIDE_RANGE);
     const entries: BlsScheduleEntry[] = [
       { indicatorCode: 'US_CPI', referencePeriod: '2026-10', releaseDate: '2026-11-10' },
     ];
@@ -149,7 +181,7 @@ describe('buildBlsScheduleReleases', () => {
   });
 
   it('does not build a release when the scheduled date has passed but BLS has not published the value', async () => {
-    const resolver = createBlsNativeResolver(fakeBlsWith({}, {})); // nothing published
+    const resolver = createBlsNativeResolver(fakeBlsWith({}, {}), WIDE_RANGE); // nothing published
     const entries: BlsScheduleEntry[] = [
       { indicatorCode: 'US_CPI', referencePeriod: '2026-09', releaseDate: '2026-10-14' },
     ];
@@ -159,7 +191,7 @@ describe('buildBlsScheduleReleases', () => {
   });
 
   it('reports an entry with no mapping as unmapped instead of throwing', async () => {
-    const resolver = createBlsNativeResolver(fakeBlsWith({}, {}));
+    const resolver = createBlsNativeResolver(fakeBlsWith({}, {}), WIDE_RANGE);
     const entries = [
       { indicatorCode: 'US_CORE_CPI', referencePeriod: '2026-09', releaseDate: '2026-10-14' },
     ] as unknown as BlsScheduleEntry[]; // US_CORE_CPI has no bls_schedule provider key
@@ -181,7 +213,7 @@ describe('BLS schedule → ingestCalendarReleases (no paid calendar involved)', 
 
   it('publishes a VERIFIED snapshot (actual and the cross-check share the same BLS resolver)', async () => {
     const bls = fakeBlsWith({ '2025-09': 320.0, '2026-09': 332.16 }, {});
-    const official = createBlsNativeResolver(bls);
+    const official = createBlsNativeResolver(bls, WIDE_RANGE);
     const entries: BlsScheduleEntry[] = [
       { indicatorCode: 'US_CPI', referencePeriod: '2026-09', releaseDate: '2026-10-14' },
     ];
@@ -207,6 +239,7 @@ describe('BLS schedule → ingestCalendarReleases (no paid calendar involved)', 
   it('records a revision when a later run sees BLS has revised the previous month', async () => {
     const official1 = createBlsNativeResolver(
       fakeBlsWith({ '2025-09': 320.0, '2026-09': 332.16, '2025-08': 318.0, '2026-08': 328.0 }, {}),
+      WIDE_RANGE,
     );
     const entries: BlsScheduleEntry[] = [
       { indicatorCode: 'US_CPI', referencePeriod: '2026-09', releaseDate: '2026-10-14' },
@@ -222,6 +255,7 @@ describe('BLS schedule → ingestCalendarReleases (no paid calendar involved)', 
     // A later run: August's YoY CPI has been revised from 3.14% to 3.20%.
     const official2 = createBlsNativeResolver(
       fakeBlsWith({ '2025-09': 320.0, '2026-09': 332.16, '2025-08': 318.0, '2026-08': 328.2 }, {}),
+      WIDE_RANGE,
     );
     const second = await buildBlsScheduleReleases({ official: official2, entries, now: () => new Date('2026-11-01Z') });
     const counters = new JobCounters();

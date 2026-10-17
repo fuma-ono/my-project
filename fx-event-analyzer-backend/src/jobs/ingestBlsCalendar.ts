@@ -8,7 +8,9 @@ import {
   buildBlsScheduleReleases,
   BLS_SCHEDULE_PROVIDER,
   createBlsNativeResolver,
+  scheduleObservationRange,
 } from '../ingestion/pipelines/blsCalendar.js';
+import { BLS_SCHEDULE } from '../ingestion/mappings/blsSchedule.js';
 import { runIngestionJob } from '../ingestion/runner.js';
 import { createIngestionRepository } from '../repositories/ingestionRepository.js';
 
@@ -31,7 +33,7 @@ async function main(): Promise<void> {
   const store = createIngestionRepository(createSupabaseClient(env));
   const bls = new BlsAdapter(keys.BLS_API_KEY);
   const resolverErrors: string[] = [];
-  const official = createBlsNativeResolver(bls, (error) =>
+  const official = createBlsNativeResolver(bls, scheduleObservationRange(BLS_SCHEDULE), (error) =>
     resolverErrors.push(error instanceof Error ? error.message : String(error)),
   );
 
