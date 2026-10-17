@@ -4,6 +4,9 @@ name: FX Event Analyzer - Data ingestion (dev)
 #   - 為替: 20分ごと。Twelve Data の1分足 → fx_prices(5分〜60分足も組み立て)
 #   - 要人発言: 1日2回(06:15 / 18:15 JST)。FRB カレンダー・ECB RSS → speech_events
 #   - 品質レポート: 毎日 09:00 JST、直近1日分。DB を読むだけ。結果は実行の Summary に出る
+#   - BLS公式統計の経済カレンダー(手動実行のみ、target=official-bls): 有料カレンダーに
+#     依存しない独立経路(HQ判断2026-10-17)。BLSの公式スケジュール(無料・キー不要)
+#     からUS_CPI・US_NFPのeconomic_eventsを作る。定期実行には入れていない
 # 接続先が社内確認用のDBでなければ止まる(本番DBに書き込まない)。
 # Twelve Data の無料キーは社内確認専用(要件定義書6.4)。
 on:
@@ -14,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'fx-prices / speeches / both / report'
+        description: 'fx-prices / speeches / both / report / official-bls'
         default: both
 
 permissions:
@@ -79,3 +82,6 @@ jobs:
       - name: Data quality report
         if: steps.check.outputs.ready == 'true' && (github.event.schedule == '0 0 * * *' || (github.event_name == 'workflow_dispatch' && inputs.target == 'report'))
         run: npm run -s report:data-quality -- --days 1
+      - name: Official stats (BLS calendar, manual only)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'official-bls'
+        run: npm run -s ingest:official:bls-calendar
