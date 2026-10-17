@@ -217,6 +217,31 @@ export function renderDataQualityMarkdown(report: DataQualityReport): string {
   lines.push('');
   lines.push('照合一致率 = VERIFIED ÷ 2つ目の取得元と照合できた足。');
   lines.push('');
+  lines.push('### 個別の異常値・差異の一覧(最大20件、新しい順)');
+  lines.push('');
+  if (report.anomalies.length === 0) {
+    lines.push('—(この期間にUNVERIFIEDの足なし)');
+  } else {
+    lines.push(
+      ...table(
+        ['通貨ペア', '対象日時(足の開始)', '差(pips)', '参照元', '理由', 'ログの実行'],
+        report.anomalies.map((a) => [
+          a.symbol,
+          time(a.minute),
+          a.diffPips === null ? '—' : a.diffPips.toFixed(2),
+          a.referenceSource ?? '—(照合元未設定)',
+          a.notes.length === 0 ? '—' : a.notes.join(', '),
+          time(a.loggedAt),
+        ]),
+      ),
+    );
+    lines.push('');
+    lines.push(
+      '理由: CROSS_CHECK_DIFF = 2つ目の取得元との差が許容を超えた。PRICE_JUMP = 直前の分からの変化が大きすぎた(両方つくこともある)。' +
+        'これらの足は反応計算(値動きの算出)には使われない。',
+    );
+  }
+  lines.push('');
 
   // 3 -----------------------------------------------------------------------
   lines.push('## 3. 集約足(5分〜60分)');

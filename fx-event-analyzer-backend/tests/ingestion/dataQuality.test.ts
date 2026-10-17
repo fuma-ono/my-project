@@ -6,6 +6,7 @@ import {
   computeFxCompleteness,
   classifyMissingMinute,
   countSpeechTimeNotExact,
+  extractAnomalyDetails,
   extractMissingCauses,
   findGaps,
   median,
@@ -308,6 +309,125 @@ describe('ingestion runs', () => {
     expect(countSpeechTimeNotExact(runs)).toBe(6);
     expect(median([3, 1, 2, 10])).toBe(2.5);
     expect(median([])).toBeNull();
+  });
+});
+
+describe('anomaly details (UNVERIFIED minutes from the logs)', () => {
+  const period = { from: ms('2026-10-12T12:00:00Z'), to: ms('2026-10-12T14:00:00Z') };
+
+  it('reads symbol, minute, diff, reference source and notes from unverified_minutes', () => {
+    const logs = [
+      log('ingest:fx-prices', '2026-10-12T12:40:00Z', 'SUCCESS', {
+        details: {
+          skip_reasons: {},
+          unverified_minutes: [
+            {
+              symbol: 'USDJPY',
+              minute: '2026-10-12T12:31:00Z',
+              diff_pips: 6.2,
+              cross_check_source: 'polygon',
+              notes: ['CROSS_CHECK_DIFF'],
+            },
+            {
+              symbol: 'EURUSD',
+              minute: '2026-10-12T12:35:00Z',
+              diff_pips: null,
+              cross_check_source: null,
+              notes: ['PRICE_JUMP'],
+            },
+          ],
+        },
+      }),
+    ];
+    const details = extractAnomalyDetails(logs, period);
+    expect(details).toHaveLength(2);
+    expect(details[0]).toEqual({
+      symbol: 'EURUSD',
+      minute: '2026-10-12T12:35:00Z',
+      diffPips: null,
+      referenceSource: null,
+      notes: ['PRICE_JUMP'],
+      loggedAt: '2026-10-12T12:40:00Z',
+    });
+    expect(details[1]).toEqual({
+      symbol: 'USDJPY',
+      minute: '2026-10-12T12:31:00Z',
+      diffPips: 6.2,
+      referenceSource: 'polygon',
+      notes: ['CROSS_CHECK_DIFF'],
+      loggedAt: '2026-10-12T12:40:00Z',
+    });
+  });
+
+  it('drops entries outside the period, keeps the latest run for a repeated minute, and ignores malformed entries', () => {
+    const logs = [
+      log('ingest:fx-prices', '2026-10-12T12:20:00Z', 'SUCCESS', {
+        details: {
+          skip_reasons: {},
+          unverified_minutes: [
+            { symbol: 'USDJPY', minute: '2026-10-12T12:10:00Z', diff_pips: 5, notes: ['CROSS_CHECK_DIFF'] },
+            { symbol: 'USDJPY', minute: '2026-10-12T11:00:00Z', diff_pips: 9, notes: ['PRICE_JUMP'] }, // before period
+            { symbol: 'USDJPY' }, // no minute
+          ],
+        },
+      }),
+      log('ingest:fx-prices', '2026-10-12T12:40:00Z', 'SUCCESS', {
+        details: {
+          skip_reasons: {},
+          // the same minute, re-logged by a later run with a different note: the later run wins
+          unverified_minutes: [{ symbol: 'USDJPY', minute: '2026-10-12T12:10:00Z', diff_pips: 1, notes: [] }],
+        },
+      }),
+      log('ingest:speeches', '2026-10-12T12:30:00Z', 'SUCCESS', {
+        provider: 'ecb_press',
+        data_type: 'OTHER',
+        details: { skip_reasons: {}, unverified_minutes: [{ symbol: 'USDJPY', minute: '2026-10-12T12:11:00Z' }] },
+      }),
+    ];
+    const details = extractAnomalyDetails(logs, period);
+    expect(details).toEqual([
+      {
+        symbol: 'USDJPY',
+        minute: '2026-10-12T12:10:00Z',
+        diffPips: 1,
+        referenceSource: null,
+        notes: [],
+        loggedAt: '2026-10-12T12:40:00Z',
+      },
+    ]);
+  });
+
+  it('renders the list in the Markdown report, newest first, and shows the empty state otherwise', () => {
+    const input = sampleReportInput();
+    const withDetail = renderDataQualityMarkdown(
+      buildDataQualityReport({
+        ...input,
+        logs: [
+          ...input.logs,
+          log('ingest:fx-prices', '2026-10-12T12:35:00Z', 'SUCCESS', {
+            details: {
+              skip_reasons: {},
+              unverified_minutes: [
+                {
+                  symbol: 'USDJPY',
+                  minute: '2026-10-12T12:31:00Z',
+                  diff_pips: 6.2,
+                  cross_check_source: 'polygon',
+                  notes: ['CROSS_CHECK_DIFF'],
+                },
+              ],
+            },
+          }),
+        ],
+      }),
+    );
+    expect(withDetail).toContain('### 個別の異常値・差異の一覧(最大20件、新しい順)');
+    expect(withDetail).toContain(
+      '| USDJPY | 2026-10-12 12:31Z | 6.20 | polygon | CROSS_CHECK_DIFF | 2026-10-12 12:35Z |',
+    );
+
+    const withoutDetail = renderDataQualityMarkdown(buildDataQualityReport(input));
+    expect(withoutDetail).toContain('—(この期間にUNVERIFIEDの足なし)');
   });
 });
 

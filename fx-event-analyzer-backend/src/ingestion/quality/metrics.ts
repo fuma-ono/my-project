@@ -673,6 +673,63 @@ export function countSpeechTimeNotExact(logs: readonly IngestionLogSample[]): nu
 }
 
 // ---------------------------------------------------------------------------
+// Individual anomalies (HQ判断 2026-10-17: 差異の内容・対象日時・通貨ペア・
+// 参照元を確認できるようにする)
+// ---------------------------------------------------------------------------
+
+/** One minute that ingest:fx-prices marked UNVERIFIED (details.unverified_minutes), as logged at the time. */
+export interface AnomalyDetail {
+  symbol: string;
+  /** ISO open time of the candle. */
+  minute: string;
+  /** null = no cross-check was run for this minute (the only other way to become UNVERIFIED is a price jump). */
+  diffPips: number | null;
+  /** The取得元 compared against, when diffPips is not null; null otherwise. */
+  referenceSource: string | null;
+  /** checkCandles' notes: 'CROSS_CHECK_DIFF' and/or 'PRICE_JUMP' (a jump can override an in-range cross-check). */
+  notes: readonly string[];
+  /** started_at of the run that recorded this entry (the most recent one, if seen more than once). */
+  loggedAt: string;
+}
+
+export const MAX_ANOMALY_DETAILS = 20;
+
+/**
+ * One entry per (symbol, minute) in the period, from the latest run that
+ * recorded it (details.unverified_minutes is capped at 50 per run, newest
+ * runs first, so a minute later re-verified by gap repair and no longer
+ * UNVERIFIED may still appear here from an older run — this lists what was
+ * logged, not today's live status; §2's counts are the live status).
+ */
+export function extractAnomalyDetails(logs: readonly IngestionLogSample[], period: Period): AnomalyDetail[] {
+  const runs = fxLogs(logs);
+  const byKey = new Map<string, AnomalyDetail>();
+  for (const run of runs) {
+    const list = run.details?.unverified_minutes;
+    if (!Array.isArray(list)) continue;
+    for (const entry of list) {
+      const record = asRecord(entry);
+      if (!record) continue;
+      const symbol = typeof record.symbol === 'string' ? record.symbol : null;
+      const minute = typeof record.minute === 'string' ? record.minute : null;
+      if (symbol === null || minute === null) continue;
+      const ms = Date.parse(minute);
+      if (!Number.isFinite(ms) || ms < period.from || ms >= period.to) continue;
+      const notes = Array.isArray(record.notes) ? record.notes.filter((n): n is string => typeof n === 'string') : [];
+      byKey.set(`${symbol}|${minute}`, {
+        symbol,
+        minute,
+        diffPips: asNumber(record.diff_pips),
+        referenceSource: typeof record.cross_check_source === 'string' ? record.cross_check_source : null,
+        notes,
+        loggedAt: run.started_at,
+      });
+    }
+  }
+  return [...byKey.values()].sort((a, b) => Date.parse(b.minute) - Date.parse(a.minute));
+}
+
+// ---------------------------------------------------------------------------
 // API usage and reconciliation (ingest:fx-prices details)
 // ---------------------------------------------------------------------------
 
@@ -1040,6 +1097,8 @@ export interface DataQualityReport {
   credits: CreditUsageStats | null;
   speechTimeNotExact: number;
   economic: EconomicValueStats;
+  /** Individual UNVERIFIED minutes in the period (most recent first, at most MAX_ANOMALY_DETAILS). */
+  anomalies: AnomalyDetail[];
 }
 
 export function buildDataQualityReport(input: DataQualityInput): DataQualityReport {
@@ -1087,5 +1146,6 @@ export function buildDataQualityReport(input: DataQualityInput): DataQualityRepo
     credits: summarizeCreditUsage(input.creditUsage ?? null),
     speechTimeNotExact: countSpeechTimeNotExact(input.logs),
     economic: summarizeEconomicValues(input.snapshots, input.staged, { economicEvents, officialRuns }),
+    anomalies: extractAnomalyDetails(input.logs, input.period).slice(0, MAX_ANOMALY_DETAILS),
   };
 }

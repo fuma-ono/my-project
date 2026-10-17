@@ -228,6 +228,7 @@ async function ingestWindow(
         symbol,
         minute: c.candle.openTime,
         diff_pips: c.crossCheckDiffPips,
+        cross_check_source: c.crossCheckClose === null ? null : (deps.secondary?.name ?? null),
         notes: c.notes,
       });
     }
