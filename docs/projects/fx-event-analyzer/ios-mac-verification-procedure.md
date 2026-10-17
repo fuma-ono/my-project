@@ -62,7 +62,26 @@ xcodebuild test-without-building \
 open DerivedData/iPhone.xcresult
 ```
 
-**これはモックデータでの確認であり、実データの正確性は確認できない**(表3.0.5にも記載済みの既知の限界)。
+**これはモックデータでの確認であり、実データの正確性は確認できない**(表1の既知の限界)。
+
+### 3.1 ViewModelの単体テスト(`FXEventAnalyzerTests`、モック・Xcode必須)
+
+`project.yml`で確認した実際のスキーム構成どおり、`FXEventAnalyzer`スキームの Test Action が
+`FXEventAnalyzerTests`ターゲットを対象にしている(`FXEventAnalyzerUITests`とは別ターゲット)。
+
+```sh
+xcodebuild test \
+  -project FXEventAnalyzer.xcodeproj \
+  -scheme FXEventAnalyzer \
+  -destination "platform=iOS Simulator,name=<iPhoneシミュレータ名>" \
+  -only-testing:FXEventAnalyzerTests \
+  CODE_SIGNING_ALLOWED=NO
+```
+
+通信失敗・データなしの扱いを確認する既存テスト(ソースコード上で確認済み。コマンドは未実行):
+`HomeViewModelTests.testLoadOtherFailureShowsGenericError`、
+`Phase3ViewModelTests.testLoadGenericErrorShowsErrorState`、
+`Phase3ViewModelTests.testLoadNotFoundIndicatorShowsError`。
 
 ## 4. 実データでの1分/5分/15分足の確認(dev環境、追加費用0円 — 既存のRender無料プラン+既存の開発Supabaseを使うだけ)
 
@@ -111,7 +130,39 @@ DB側のRLS(他ユーザーの行を直接読めないこと)はBackendの統合
 3. ホーム通貨ペア編集(SCR-026)・お気に入り・アラート設定など、端末ローカルではなくAPI経由で
    保存される項目を一方の端末で変更し、もう一方の端末に反映されないことを確認する。
 
-## 7. 未検証のまま残る項目(2026-10-17時点)
+## 7. 1分・5分・15分の価格反応: どの層まで検証できたか(HQ指示2026-10-17「記録する」への回答)
+
+「価格反応の検証」は実際には3つの異なる層であり、層ごとに検証状況が異なる。混同しない。
+
+| 層 | 内容 | 検証状況 |
+|---|---|---|
+| ① APIレスポンス(Backendが返すJSON) | `GET /events/{id}`等が返す`pips`・`movement`・各時間足の値 | **未検証**。開発DBの認証情報がこのセッションに無く、実際のAPIレスポンスを取得できていない |
+| ② 集計結果(1分足→5分/15分足のロジック) | `aggregateMinuteRows`が正しく集計するか | **検証済み**(前回報告、`npm test`、`tests/ingestion/fxGapRepair.test.ts`等、697件中含む全件成功)。ただしこれは**ロジックの正しさ**の検証であり、実際のdev DBに入っている実データそのものを対象にしたものではない |
+| ③ 画面表示(iOSアプリが実際に表示する値) | SCR-008相場反応詳細に表示される値・時刻 | **未検証**(Xcode必須、このセッションでは実行不可) |
+
+**結論**: ②(集計ロジックの正しさ)は検証済み。①(実データでのAPIレスポンス)・③(画面表示)は
+このセッションでは未検証のまま。①③を確認するには、§4の手順でMac上でビルド・実行し、
+実際に画面を開いて値を目視するか、`curl`等でBackendのAPIレスポンスを直接取得する必要がある
+(Macが無くてもAPIレスポンスの取得自体は可能 — ただし開発DBの認証情報を持つ人が、
+`https://<既存のRenderサービス名>.onrender.com/api/v1/events/{id}`等を直接叩けば、
+Xcode無しでも①は確認できる。これは次に人が行える作業として記録する)。
+
+## 8. 結果記入欄(Macを使う担当者が実行後に記入する。このセッションでは空欄のまま)
+
+| # | 確認対象 | 実行日 | 実行者 | 結果(成功/失敗/問題点) | メモ・スクリーンショット保管先 |
+|---|---|---|---|---|---|
+| 7 | 画面遷移・レイアウト(§3) | | | | |
+| 8 | ViewModel単体テスト(§3.1) | | | | |
+| 9-① | 実データAPIレスポンス(§7) | | | | |
+| 9-③ | 実データ画面表示(§4) | | | | |
+| 10 | 通信失敗の表示(§5) | | | | |
+| 10 | データなしの表示(§5) | | | | |
+| 10 | 更新遅延の表示(§5) | | | | |
+| 11 | 複数端末・複数ユーザー(§6) | | | | |
+
+記入後、このファイルを更新してHQへ報告する(新しいファイルを作らず、この表を埋める)。
+
+## 9. 未検証のまま残る項目(2026-10-17時点)
 
 上記1節の表の通り、Xcode/Macが必要な項目(7〜11)はこのセッションでは**実行できない**
 (Swift/Xcodeツールチェインが無い環境のため)。これらは実際にMacを使える人(大野さん等)が
