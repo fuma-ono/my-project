@@ -22,7 +22,29 @@
  * past. That concern does not apply to a release BLS's own schedule says
  * is BLS's own number, at any age — backfilling older months must not be
  * silently limited to the last 20 days.
+ *
+ * HQ確認(2026-10-17)への回答:
+ * - 「一致」は独立検証ではない: actual と official (event_snapshots.verification_status
+ *   を決める側) は同じ createBlsNativeResolver インスタンス・同じBLS系列から来るため、
+ *   数学的に同じ値になる(トートロジー)。VERIFIED は「BLS自身の値と自己一致した」
+ *   ことだけを意味し、2つ目の独立した取得元による裏付けではない。既存の
+ *   economicCalendar.ts は provider(有料カレンダー)×BLS(公式)という2者の一致を
+ *   VERIFIED としているため、同じ値がこの経路にも付くのは紛らわしい — 区別する
+ *   新しいステータスを足すにはスキーマ変更が要るため、ここでは実装せず報告する
+ *   (data-sources.md §14 参照)。
+ * - releaseAtPrecision: 'EXACT' は「公開時刻が実際に確認された」ことではなく、
+ *   既存のTradingEconomicsアダプタ等と同じ意味(発表時刻が具体的に分かっている
+ *   = 予定時刻が分かっている)で使っている。BLSの発表時刻を独立した手段で
+ *   事後確認する仕組みは無い(米国統計機関が時刻を厳格に守ってきた実績に基づく
+ *   前提)。blsSchedule.ts の日付は BLS が予定を変更(例: 2025年10月の政府閉鎖)
+ *   した場合に追随する仕組みが無い静的な表なので、スケジュールされた日付を
+ *   過去に残したまま値が長期間発表されないエントリは `overdue` として分けて
+ *   報告する(下記 BlsScheduleReleaseResult.overdue)。見つかったら人が
+ *   blsSchedule.ts の日付を確認・修正する。
  */
+
+/** `notYetAvailable` entries whose scheduled date is this many days or more in the past with still no BLS value — probably means BLS rescheduled and the static table is stale, not a normal wait. */
+export const OVERDUE_AFTER_DAYS = 45;
 import type { OfficialStatsProvider } from '../providers.js';
 import { findMappingByCode, type IndicatorMapping } from '../mappings/indicators.js';
 import { BLS_SCHEDULE, type BlsScheduleEntry } from '../mappings/blsSchedule.js';
@@ -95,6 +117,15 @@ export interface BlsScheduleReleaseResult {
   releases: NormalizedCalendarRelease[];
   /** Schedule entries in the future, or whose BLS value is not published yet (never guessed). */
   notYetAvailable: BlsScheduleEntry[];
+  /**
+   * Subset of notYetAvailable whose scheduled date is OVERDUE_AFTER_DAYS or
+   * more in the past with still no BLS value — a normal wait looks like
+   * this too in the days right after the scheduled date, but this long
+   * past it, it more likely means BLS rescheduled and blsSchedule.ts's
+   * static date for this entry is stale (see file header). Needs a human
+   * to check BLS's current schedule and correct the table if so.
+   */
+  overdue: BlsScheduleEntry[];
   /** Schedule entries for an indicator with no economic_indicators row / no bls_schedule mapping key. */
   unmapped: BlsScheduleEntry[];
 }
@@ -117,6 +148,7 @@ export async function buildBlsScheduleReleases(deps: {
   const now = deps.now?.() ?? new Date();
   const releases: NormalizedCalendarRelease[] = [];
   const notYetAvailable: BlsScheduleEntry[] = [];
+  const overdue: BlsScheduleEntry[] = [];
   const unmapped: BlsScheduleEntry[] = [];
 
   for (const entry of entries) {
@@ -137,6 +169,8 @@ export async function buildBlsScheduleReleases(deps: {
     const actual = await deps.official.resolve(mapping, entry.referencePeriod, asOfDate);
     if (!actual) {
       notYetAvailable.push(entry);
+      const daysPast = (now.getTime() - releaseAt.getTime()) / 86_400_000;
+      if (daysPast >= OVERDUE_AFTER_DAYS) overdue.push(entry);
       continue;
     }
     const previousPeriod = shiftMonth(entry.referencePeriod, -1);
@@ -162,5 +196,5 @@ export async function buildBlsScheduleReleases(deps: {
       fetchedAt: now.toISOString(),
     });
   }
-  return { releases, notYetAvailable, unmapped };
+  return { releases, notYetAvailable, overdue, unmapped };
 }

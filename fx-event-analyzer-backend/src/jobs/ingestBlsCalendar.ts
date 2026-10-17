@@ -43,6 +43,7 @@ async function main(): Promise<void> {
     async (counters) => {
       const built = await buildBlsScheduleReleases({ official });
       counters.details.not_yet_available = built.notYetAvailable.length;
+      counters.details.overdue = built.overdue.map((e) => `${e.indicatorCode}:${e.referencePeriod}`);
       counters.details.unmapped = built.unmapped.length;
       await ingestCalendarReleases(BLS_SCHEDULE_PROVIDER, built.releases, { store, official }, counters);
     },
@@ -56,6 +57,7 @@ async function main(): Promise<void> {
       review: result.counters.review,
       skipped: result.counters.skipReasons,
       not_yet_available: result.counters.details.not_yet_available,
+      overdue: result.counters.details.overdue,
       unmapped: result.counters.details.unmapped,
       errors: result.counters.errorMessages,
       resolver_errors: resolverErrors.slice(0, 10),

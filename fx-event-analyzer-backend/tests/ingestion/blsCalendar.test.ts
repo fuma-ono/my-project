@@ -185,9 +185,27 @@ describe('buildBlsScheduleReleases', () => {
     const entries: BlsScheduleEntry[] = [
       { indicatorCode: 'US_CPI', referencePeriod: '2026-09', releaseDate: '2026-10-14' },
     ];
+    // NOW is only 3 days after the scheduled date — a normal wait, not overdue.
     const result = await buildBlsScheduleReleases({ official: resolver, entries, now: NOW });
     expect(result.releases).toEqual([]);
     expect(result.notYetAvailable).toEqual(entries);
+    expect(result.overdue).toEqual([]);
+  });
+
+  it('flags an entry as overdue once OVERDUE_AFTER_DAYS have passed with still no BLS value (likely a BLS reschedule, not a normal wait)', async () => {
+    const resolver = createBlsNativeResolver(fakeBlsWith({}, {}), WIDE_RANGE); // nothing published, ever
+    const entries: BlsScheduleEntry[] = [
+      { indicatorCode: 'US_CPI', referencePeriod: '2026-09', releaseDate: '2026-10-14' },
+    ];
+    // 60 days after the scheduled date (> OVERDUE_AFTER_DAYS = 45): still nothing from BLS.
+    const result = await buildBlsScheduleReleases({
+      official: resolver,
+      entries,
+      now: () => new Date('2026-12-13T12:00:00Z'),
+    });
+    expect(result.releases).toEqual([]);
+    expect(result.notYetAvailable).toEqual(entries); // overdue is a subset of notYetAvailable, not a separate bucket
+    expect(result.overdue).toEqual(entries);
   });
 
   it('reports an entry with no mapping as unmapped instead of throwing', async () => {

@@ -559,3 +559,22 @@ bls.gov/opub/copyright-information.htm 等で確認(2026-10-17): BLSのデータ
 ### 14.4 既存処理への影響
 
 `economicCalendar.ts`・`officialStats.ts`・`ingestOfficial.ts`(既存の①②ジョブ)は1行も変更していない。`mappings/indicators.ts`は、US_CPI・US_NFPの`providers`に`bls_schedule`キーを追加しただけ(既存の`tradingeconomics`/`finnhub`/`fmp`キーは変更なし)。既存のテスト(`economicCalendarPipeline.test.ts`・`officialVerification.test.ts`等)は変更せずに実行し、全て通過を確認した。
+
+### 14.5 照合の独立性(2026-10-17、HQ確認指示への回答)
+
+**この経路の「VERIFIED」は独立検証ではない。** `actual`(載せる値)と`official`(照合先)は同じ`createBlsNativeResolver`インスタンス・同じBLS系列(例: `US_CPI`→`CUUR0000SA0`)から来るため、数学的に同じ値になる(自己一致・トートロジー)。コードで確認: `jobs/ingestBlsCalendar.ts`が1つの`official`を作り、`buildBlsScheduleReleases`(`actual`を決める)と`ingestCalendarReleases`→`processActual`(`official`との一致を判定する)の両方に同じインスタンスを渡している(`pipelines/blsCalendar.ts`)。
+
+- 既存の①(有料カレンダー)× BLS の照合は、provider(例: Trading Economics)という**別の**取得元の値とBLSを比べるため、本当の独立照合。この経路はBLSが唯一の取得元で、provider=BLS・照合元=BLSなので同じ意味の「VERIFIED」ではない
+- `event_snapshots.verification_status`は既存のenum(`VERIFIED`/`SINGLE_SOURCE`)のどちらかしか選べず、「唯一の公式機関の値そのもの(裏付け不要)」を表す3つ目の状態が無い。`requireOfficialMatch: true`(US_CPI/US_NFPは有料カレンダー側と共有)の都合上、`official`をnullにすると発行されず`AWAITING_OFFICIAL`のまま止まってしまうため、ステータス自体を変える修正はスキーマ・既存コード双方への影響範囲の確認が先に必要(未実施)
+- **区別する手段(表示のみ、スキーマ変更なしで可能という提案、未実装)**: `event_snapshots.source`(採用した値の出典)と`verification_status`を決めた`verification_source`の取得元が同じ(ともにBLS)なら自己一致、違う取得元(例: provider=Trading Economics、verification_source=BLS)なら独立照合、とレポート側で区別して表示できる。実施するにはquality reportの経済指標セクション(`reader.ts`のSELECT列拡張・`metrics.ts`・`report.ts`)に変更が要るため、この回では実装せず提案のみとする
+- CPI・NFPの対応(系列・単位・季節調整・対象月)を再確認: `US_CPI`→`CUUR0000SA0`(CPI-U全品目・季節調整なし=NSA、`mapping.seasonalAdjustment`と一致)・YOY_PCT・PERCENT。`US_NFP`→`CES0000000001`(非農業部門雇用者数・季節調整あり=SA、一致)・DIFF(前月差)・THOUSANDS。いずれもmappings/indicators.tsの既存定義(3.1節)と一致しており、この経路で変更していない
+
+### 14.6 発表時刻の精度
+
+`releaseAtPrecision: 'EXACT'`は「発表が実際にこの時刻に行われたことを確認した」という意味ではない。既存のTradingEconomicsアダプタ(`adapters/tradingEconomics.ts`)の`EXACT`も、提供元が具体的な時刻を示しているかどうかだけで判定しており(`DateSpan`フィールド)、実際の公開を独立した手段で確認しているわけではない。この経路の`EXACT`もBLSが公表している予定時刻(`blsSchedule.ts`)を使っているという点で、既存の意味と同じ水準。BLSが長年厳格に時刻を守ってきた実績に基づく前提であり、個々の発表ごとに「本当にその時刻だったか」を確認する独立した手段は無い。
+
+**予定変更への対応(今回の確認で見つけた課題)**: `blsSchedule.ts`は静的な表で、BLSが発表を延期・変更した場合に自動で追随しない(2025年10月の政府閉鎖で実際に発表が遅れた前例がある、13章)。延期が起きると、表の日付のまま値を待ち続け、後から値が出たときに古い(実際とは違う)予定日時を`EXACT`として記録してしまう恐れがある。対策として`overdue`(45日以上経過しても値が無いエントリ)を分けて報告するようにした(`BlsScheduleReleaseResult.overdue`)。これは完全な解決ではなく、「おかしいので人が確認すべき」という合図を出すだけ — 見つかったら`blsSchedule.ts`の該当日付をBLSの最新スケジュールで確認・修正する運用とする。スキーマ変更は行っていない。
+
+### 14.7 未発表データの扱い(確認結果)
+
+将来分・未発表分は推測で補完していない(`buildBlsScheduleReleases`は`official.resolve()`がnullを返す限り`notYetAvailable`に入れるだけで、値を作らない)。「予定」(`notYetAvailable`、まだ発表予定日が来ていない)・「発表済みで実績照合済み」(`releases`、BLSの値で発行)・「発表予定日を過ぎても未発表(要確認)」(`overdue`)の3つを区別して報告する。
