@@ -632,6 +632,58 @@ function sampleReportInput(): DataQualityInput {
   };
 }
 
+describe('latestCandleAgeMinutes (更新遅延の検出。2026-10-18、HQ指示「専用テストを追加する」)', () => {
+  // HQ指示は「正常・警告・異常の判定境界を確認し」と求めているが、コードを確認した結果、
+  // 現状このコードベースのどこにも正常/警告/異常を区別する閾値は存在しない
+  // (report.ts §7は「○○分」という生の数値を表示するだけ)。新しい閾値を導入すること自体は
+  // 「閾値を変更する場合は理由と影響範囲を先に報告する」というHQ指示の対象であり、
+  // このラウンドでは未承認のため実装していない。ここでは既存の計算ロジック(生の経過時間)
+  // そのものの正確さだけをテストする。
+
+  it('= 今 − 最新1分足の終了時刻(足の開始時刻ではない)、分単位', () => {
+    const input = sampleReportInput();
+    const report = buildDataQualityReport(input);
+    // sampleReportInput: USDJPY/EURUSDの最後の1分足は13:59開始(=14:00終了)、now=14:30
+    expect(report.latestCandleAgeMinutes.USDJPY).toBe(30);
+    expect(report.latestCandleAgeMinutes.EURUSD).toBe(30);
+  });
+
+  it('候補データが1件も無いペアはnull(0分ではない — 「データが無い」と「最新データが古い」を混同しない)', () => {
+    const input = sampleReportInput();
+    const report = buildDataQualityReport({ ...input, pairs: [...input.pairs, { symbol: 'GBPUSD', rows: [] }] });
+    expect(report.latestCandleAgeMinutes.GBPUSD).toBeNull();
+  });
+
+  it('経過時間がレポート期間の外(未来側)の1分足も見る — 直近の実データの新鮮さを知るのが目的のため', () => {
+    const input = sampleReportInput();
+    // USDJPYにレポート期間(〜14:00)より新しい1分足(14:05開始)を1本だけ追加する。
+    const usdjpyWithNewerCandle = {
+      ...input.pairs[0]!,
+      rows: [
+        ...input.pairs[0]!.rows,
+        {
+          timestamp: '2026-10-12T14:05:00.000Z',
+          timeframe: '1m',
+          verification_status: 'VERIFIED',
+          cross_check_diff_pips: 0.1,
+        } satisfies FxRowSample,
+      ],
+    };
+    const report = buildDataQualityReport({ ...input, pairs: [usdjpyWithNewerCandle, ...input.pairs.slice(1)] });
+    // 14:05開始→14:06終了、now=14:30 → 24分(期間外の新しい足を正しく最新として拾う)
+    expect(report.latestCandleAgeMinutes.USDJPY).toBe(24);
+  });
+
+  it('経過時間が非常に大きい場合も、値をそのまま返す(上限・警告ラベルは付けない — 現状の仕様どおり)', () => {
+    const input = sampleReportInput();
+    input.pairs[0]!.rows = input.pairs[0]!.rows.filter((row) => row.timestamp < '2026-10-12T12:10:00.000Z');
+    const report = buildDataQualityReport(input);
+    // 最後の足は12:09開始→12:10終了、now=14:30 → 140分。これが「警告」か「異常」かの判定は
+    // 現状のコードには存在しない(本テストは生の計算結果のみを確認する)。
+    expect(report.latestCandleAgeMinutes.USDJPY).toBe(140);
+  });
+});
+
 const SECRET = /https?:\/\/|http|apikey|api_key|service_role/i;
 
 describe('Markdown report', () => {

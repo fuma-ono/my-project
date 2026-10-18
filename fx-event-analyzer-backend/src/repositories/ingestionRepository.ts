@@ -1,7 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   ApiCreditReservation,
+  EventForReactionRef,
   EventPatch,
+  EventPriceReactionRow,
   FxIngestionLogSample,
   FxPairRef,
   FxPriceRow,
@@ -253,7 +255,9 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
     },
 
     async listFxPairs(): Promise<FxPairRef[]> {
-      const { data, error } = await supabase.from('fx_pairs').select('id, symbol, pip_size, price_precision');
+      const { data, error } = await supabase
+        .from('fx_pairs')
+        .select('id, symbol, pip_size, price_precision, base_currency, quote_currency');
       if (error) throw error;
       return ((data ?? []) as FxPairRef[]).map((row) => ({
         ...row,
@@ -358,6 +362,43 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
     async insertIngestionLog(row: IngestionLogRow): Promise<void> {
       const { error } = await supabase.from('ingestion_logs').insert(row);
       if (error) throw error;
+    },
+
+    async listReleasedEventsForReactions(sinceIso: string): Promise<EventForReactionRef[]> {
+      const rows = await allPages<{
+        id: string;
+        release_datetime: string;
+        release_datetime_precision: string;
+        economic_indicators: { currency_code: string } | null;
+      }>((from, to) =>
+        supabase
+          .from('economic_events')
+          .select('id, release_datetime, release_datetime_precision, economic_indicators!inner(currency_code)')
+          .eq('status', 'RELEASED')
+          .gte('release_datetime', sinceIso)
+          .order('release_datetime', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
+      return rows.map((row) => ({
+        id: row.id,
+        release_datetime: row.release_datetime,
+        release_datetime_precision: row.release_datetime_precision as EventForReactionRef['release_datetime_precision'],
+        currency_code: row.economic_indicators?.currency_code ?? '',
+      }));
+    },
+
+    async upsertEventPriceReactions(rows: readonly EventPriceReactionRow[]): Promise<number> {
+      let count = 0;
+      for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
+        const chunk = rows.slice(i, i + UPSERT_CHUNK);
+        const { error } = await supabase
+          .from('event_price_reactions')
+          .upsert(chunk, { onConflict: 'event_id,fx_pair_id,timeframe' });
+        if (error) throw error;
+        count += chunk.length;
+      }
+      return count;
     },
   };
 }

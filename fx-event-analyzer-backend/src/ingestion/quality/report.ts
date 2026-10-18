@@ -521,6 +521,12 @@ export function renderDataQualityMarkdown(report: DataQualityReport): string {
   // 8 -----------------------------------------------------------------------
   lines.push('## 8. 経済指標の値');
   lines.push('');
+  lines.push(
+    '- 相場反応の計算状況(HQ指示2026-10-18「未実装・実装済み未検証・テスト済みを区別する」): ' +
+      '要人発言の値動きは従来から実装・テスト済み(API応答時にその場で計算、speechReactions.ts)。' +
+      '経済指標の値動き(event_price_reactions)は2026-10-18に実装(ingest:event-reactions、' +
+      '自動テストのみ・実データでの検証はまだ行っていない)。実機での表示確認はいずれも未実施。',
+  );
   const e = report.economic;
   if (e.state === 'NO_DATA') {
     lines.push('- 状態: 未検証(経済指標データ未取得)');

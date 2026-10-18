@@ -133,6 +133,10 @@ export interface FxPairRef {
   symbol: string;
   pip_size: number;
   price_precision: number;
+  /** For currency-relevant pair filtering (event_price_reactions writer). Optional: existing
+   * callers/fixtures that don't need it are unaffected. */
+  base_currency?: string;
+  quote_currency?: string;
 }
 
 export interface FxPriceRow {
@@ -172,6 +176,38 @@ export interface IngestionLogRow {
 export interface FxIngestionLogSample {
   started_at: string;
   details: { no_data_unconfirmed?: unknown };
+}
+
+/**
+ * A RELEASED economic event, as needed to compute event_price_reactions
+ * (HQ決定 2026-10-18「経済指標の価格反応計算」). currency_code comes from
+ * the event's indicator (economic_indicators.currency_code), joined —
+ * economic_events itself has no currency column.
+ */
+export interface EventForReactionRef {
+  id: string;
+  release_datetime: string;
+  release_datetime_precision: ReleaseDatetimePrecision;
+  currency_code: string;
+}
+
+export interface EventPriceReactionRow {
+  event_id: string;
+  fx_pair_id: string;
+  timeframe: '1m' | '5m' | '15m' | '30m' | '60m';
+  pre_release_price: number | null;
+  post_release_price: number | null;
+  movement: number | null;
+  pips: number | null;
+  change_percent: number | null;
+  max_upward: number | null;
+  max_downward: number | null;
+  max_upward_pips: number | null;
+  max_downward_pips: number | null;
+  /** 'PENDING' is never written (db-design.md §3.12) — a timeframe not ready yet is simply
+   * not written, and the API already defaults a missing row to DATA_PENDING. */
+  data_status: 'AVAILABLE' | 'UNAVAILABLE';
+  calculated_at: string;
 }
 
 export interface ApiCreditReservation {
@@ -228,4 +264,8 @@ export interface IngestionStore {
   /** Credits reserved today (UTC) for the provider, all jobs. */
   todayApiCredits(provider: string): Promise<number>;
   insertIngestionLog(row: IngestionLogRow): Promise<void>;
+  /** RELEASED events with release_datetime >= sinceIso (bounds the scan to the repair horizon). */
+  listReleasedEventsForReactions(sinceIso: string): Promise<EventForReactionRef[]>;
+  /** Upsert by (event_id, fx_pair_id, timeframe) — re-running never duplicates a row. */
+  upsertEventPriceReactions(rows: readonly EventPriceReactionRow[]): Promise<number>;
 }

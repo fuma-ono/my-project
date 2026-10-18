@@ -21,6 +21,7 @@
     "ingest:official:bls-calendar": "tsx src/jobs/ingestBlsCalendar.ts",
     "ingest:speeches": "tsx src/jobs/ingestSpeeches.ts",
     "ingest:fx-prices": "tsx src/jobs/ingestFxPrices.ts",
+    "ingest:event-reactions": "tsx src/jobs/ingestEventReactions.ts",
     "eval:providers": "tsx src/jobs/evalProviders.ts",
     "report:data-quality": "tsx src/jobs/reportDataQuality.ts"
   },

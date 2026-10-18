@@ -84,7 +84,8 @@ export interface PriceCandle {
   close: number;
 }
 
-function closeTimeMs(candle: PriceCandle): number {
+/** Exported for reuse by economicEventReactions.ts (same open→close conversion, same rule). */
+export function closeTimeMs(candle: PriceCandle): number {
   return Date.parse(candle.timestamp) + MINUTE_MS;
 }
 
@@ -119,7 +120,8 @@ export function selectPriceAt(candles: readonly PriceCandle[], atMs: number): nu
   return candle ? Number(candle.close) : null;
 }
 
-function round(value: number | null, digits: number): number | null {
+/** Exported for reuse by economicEventReactions.ts (identical rounding rule). */
+export function round(value: number | null, digits: number): number | null {
   if (value === null) return null;
   const factor = 10 ** digits;
   return Math.round(value * factor) / factor;

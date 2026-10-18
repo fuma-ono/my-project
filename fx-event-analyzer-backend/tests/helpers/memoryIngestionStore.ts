@@ -1,5 +1,7 @@
 import type {
   ApiCreditReservation,
+  EventForReactionRef,
+  EventPriceReactionRow,
   FxIngestionLogSample,
   FxPairRef,
   FxPriceRow,
@@ -24,7 +26,15 @@ import type {
  */
 export class MemoryIngestionStore implements IngestionStore {
   indicators: IndicatorRef[] = [];
-  events: (StoredEvent & { provider: string; provider_event_id: string; importance: string })[] = [];
+  /** currency_code is optional: only tests exercising event_price_reactions need to set it
+   * (it mirrors economic_indicators.currency_code, joined in the real Supabase query). */
+  events: (StoredEvent & {
+    provider: string;
+    provider_event_id: string;
+    importance: string;
+    currency_code?: string;
+  })[] = [];
+  eventPriceReactions: EventPriceReactionRow[] = [];
   snapshots: NewReleaseSnapshot[] = [];
   revisions: (NewRevision & { created_at: string })[] = [];
   staged: (NewStagedValue & { id: string; resolved_at?: string | null })[] = [];
@@ -285,6 +295,35 @@ export class MemoryIngestionStore implements IngestionStore {
   insertIngestionLog(row: IngestionLogRow): Promise<void> {
     this.logs.push(row);
     return Promise.resolve();
+  }
+
+  listReleasedEventsForReactions(sinceIso: string): Promise<EventForReactionRef[]> {
+    const since = Date.parse(sinceIso);
+    return Promise.resolve(
+      this.events
+        .filter((e) => e.status === 'RELEASED' && Date.parse(e.release_datetime) >= since)
+        .sort((a, b) => Date.parse(a.release_datetime) - Date.parse(b.release_datetime))
+        .map((e) => ({
+          id: e.id,
+          release_datetime: e.release_datetime,
+          release_datetime_precision: e.release_datetime_precision,
+          currency_code: e.currency_code ?? '',
+        })),
+    );
+  }
+
+  private eventReactionKey(row: Pick<EventPriceReactionRow, 'event_id' | 'fx_pair_id' | 'timeframe'>): string {
+    return `${row.event_id}|${row.fx_pair_id}|${row.timeframe}`;
+  }
+
+  upsertEventPriceReactions(rows: readonly EventPriceReactionRow[]): Promise<number> {
+    for (const row of rows) {
+      const key = this.eventReactionKey(row);
+      const index = this.eventPriceReactions.findIndex((r) => this.eventReactionKey(r) === key);
+      if (index === -1) this.eventPriceReactions.push(row);
+      else this.eventPriceReactions[index] = row;
+    }
+    return Promise.resolve(rows.length);
   }
 }
 
