@@ -7,6 +7,10 @@ name: FX Event Analyzer - Data ingestion (dev)
 #   - BLS公式統計の経済カレンダー(手動実行のみ、target=official-bls): 有料カレンダーに
 #     依存しない独立経路(HQ判断2026-10-17)。BLSの公式スケジュール(無料・キー不要)
 #     からUS_CPI・US_NFPのeconomic_eventsを作る。定期実行には入れていない
+#   - 経済指標の価格反応(手動実行のみ、target=event-reactions): HQ決定2026-10-18
+#     「経済指標の価格反応実装と異常系テストを進める」。既存のfx_prices/economic_events
+#     を読むだけで、外部APIは呼ばない(追加費用0円)。手動実行とDEVデータ検証が
+#     成功するまで定期実行には入れない(HQ決定2026-10-18「定期実行への移行条件」)。
 # 接続先が社内確認用のDBでなければ止まる(本番DBに書き込まない)。
 # Twelve Data の無料キーは社内確認専用(要件定義書6.4)。
 on:
@@ -17,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'fx-prices / speeches / both / report / official-bls'
+        description: 'fx-prices / speeches / both / report / official-bls / event-reactions'
         default: both
 
 permissions:
@@ -76,6 +80,9 @@ jobs:
       - name: FX prices
         if: steps.check.outputs.ready == 'true' && (github.event.schedule == '7,27,47 * * * *' || (github.event_name == 'workflow_dispatch' && (inputs.target == 'fx-prices' || inputs.target == 'both')))
         run: npm run -s ingest:fx-prices -- ${{ github.event_name == 'workflow_dispatch' && '--manual' || '' }}
+      - name: Event reactions (経済指標の価格反応、手動実行のみ・HQ承認待ちで定期実行には入れない)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'event-reactions'
+        run: npm run -s ingest:event-reactions
       - name: Speeches
         if: steps.check.outputs.ready == 'true' && (github.event.schedule == '15 21,9 * * *' || (github.event_name == 'workflow_dispatch' && (inputs.target == 'speeches' || inputs.target == 'both')))
         run: npm run -s ingest:speeches
