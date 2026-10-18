@@ -1185,6 +1185,45 @@ export interface FxTotals {
   pairsWithoutData: string[];
 }
 
+/**
+ * latestCandleAgeMinutesの正常/警告/異常の判定(HQ決定2026-10-18「価格データ品質の閾値」)。
+ *
+ * 為替の取り込みは20分ごと(cron '7,27,47 * * * *'、FX_FETCH_SETTINGS.forwardMinutesとは
+ * 別の、実際のGitHub Actionsスケジュール)+ finality lag 2分のため、**健全な状態でも**
+ * 次の実行の直前には最大で20+2=22分前後になる。これは正常な運用サイクルであり異常では
+ * ない。HQ暫定案(3分以内=正常、10分超=異常)のままでは、1サイクルの後半(約10〜22分、
+ * サイクルのおよそ半分)で毎回「異常」と誤判定するため、そのままでは実装しなかった
+ * (HQ指示「休場中に誤警告が出る設計であれば、そのまま実装せず、適切な判定方法を
+ * 提案すること」への対応。実際には休場中だけでなく、健全な通常運用中にも誤警告が出る
+ * 設計だったため、取り込みサイクルに合わせた閾値へ変更して提案する)。
+ *
+ * 市場休場中(週末・祝日。isFxMarketOpen参照)は、新しい足自体が来ないため評価しない
+ * (MARKET_CLOSED。警告・異常にはしない — これがHQ指示が想定していた誤警告の防止)。
+ *
+ * 新しい閾値(1サイクル=20分+finality lag 2分を基準):
+ * - 正常: 25分以内(1サイクル分の遅れまで)
+ * - 警告: 25分超〜45分以内(2サイクル以内の遅れ — 1回の取り込み失敗・リトライ相当)
+ * - 異常: 45分超(2サイクル以上、連続して取得できていない — Twelve Data側の配信停止・
+ *   大幅な遅延等を検出する本来の目的に対応)
+ *
+ * 画面(iOSアプリ)には一切表示されない(品質レポートのみ、report.ts §7)。閾値の変更は
+ * この判定ロジックのみに影響し、既存のUI・データ取得処理・API利用上限には影響しない。
+ */
+export const CANDLE_FRESHNESS_THRESHOLDS = {
+  normalMaxMinutes: 25,
+  warningMaxMinutes: 45,
+} as const;
+
+export type CandleFreshnessStatus = 'NORMAL' | 'WARNING' | 'CRITICAL' | 'MARKET_CLOSED' | 'NO_DATA';
+
+export function classifyCandleFreshness(ageMinutes: number | null, now: Date): CandleFreshnessStatus {
+  if (!isFxMarketOpen(now.getTime())) return 'MARKET_CLOSED';
+  if (ageMinutes === null) return 'NO_DATA';
+  if (ageMinutes <= CANDLE_FRESHNESS_THRESHOLDS.normalMaxMinutes) return 'NORMAL';
+  if (ageMinutes <= CANDLE_FRESHNESS_THRESHOLDS.warningMaxMinutes) return 'WARNING';
+  return 'CRITICAL';
+}
+
 export interface DataQualityReport {
   generatedAt: string;
   period: { from: string; to: string };
@@ -1193,6 +1232,8 @@ export interface DataQualityReport {
   fxTotals: FxTotals;
   /** now − close time of the newest 1m candle, per pair (null = no candle) */
   latestCandleAgeMinutes: Record<string, number | null>;
+  /** classifyCandleFreshness() result per pair, using the SAME `now` as latestCandleAgeMinutes. */
+  candleFreshness: Record<string, CandleFreshnessStatus>;
   releaseWindows: ReleaseWindowSummary;
   runs: JobRunStats[];
   fxSchedule: FxScheduleStats;
@@ -1218,9 +1259,12 @@ export function buildDataQualityReport(input: DataQualityInput): DataQualityRepo
   const expectedMinutes = sum((f) => f.expectedMinutes);
   const missingMinutes = sum((f) => f.missingMinutes);
   const latestCandleAgeMinutes: Record<string, number | null> = {};
+  const candleFreshness: Record<string, CandleFreshnessStatus> = {};
   for (const f of fx) {
-    latestCandleAgeMinutes[f.symbol] =
+    const age =
       f.latestCandleOpen === null ? null : Math.round((now - Date.parse(f.latestCandleOpen) - MINUTE_MS) / MINUTE_MS);
+    latestCandleAgeMinutes[f.symbol] = age;
+    candleFreshness[f.symbol] = classifyCandleFreshness(age, input.now);
   }
   const usable = new Map(input.pairs.map((pair) => [pair.symbol, usableMinuteSet(pair.rows)]));
   const starts = new Map(fx.map((f) => [f.symbol, f.ingestionStart === null ? null : Date.parse(f.ingestionStart)]));
@@ -1243,6 +1287,7 @@ export function buildDataQualityReport(input: DataQualityInput): DataQualityRepo
       pairsWithoutData: fx.filter((f) => f.state === 'NO_DATA').map((f) => f.symbol),
     },
     latestCandleAgeMinutes,
+    candleFreshness,
     releaseWindows: checkReleaseWindows(input.releases, usable, input.period, starts),
     runs: summarizeRuns(input.logs),
     fxSchedule: analyzeFxSchedule(input.logs, now),

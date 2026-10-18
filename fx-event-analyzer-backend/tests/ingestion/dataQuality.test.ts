@@ -3,6 +3,7 @@ import {
   analyzeFxSchedule,
   buildDataQualityReport,
   checkReleaseWindows,
+  classifyCandleFreshness,
   classifySnapshotMatch,
   computeFxCompleteness,
   classifyMissingMinute,
@@ -633,12 +634,11 @@ function sampleReportInput(): DataQualityInput {
 }
 
 describe('latestCandleAgeMinutes (更新遅延の検出。2026-10-18、HQ指示「専用テストを追加する」)', () => {
-  // HQ指示は「正常・警告・異常の判定境界を確認し」と求めているが、コードを確認した結果、
-  // 現状このコードベースのどこにも正常/警告/異常を区別する閾値は存在しない
-  // (report.ts §7は「○○分」という生の数値を表示するだけ)。新しい閾値を導入すること自体は
-  // 「閾値を変更する場合は理由と影響範囲を先に報告する」というHQ指示の対象であり、
-  // このラウンドでは未承認のため実装していない。ここでは既存の計算ロジック(生の経過時間)
-  // そのものの正確さだけをテストする。
+  // 前回ラウンドの調査: 正常/警告/異常の閾値はコードのどこにも存在しなかった
+  // (「既存を確認」ではなく新規導入が必要と判明)。今回のHQ決定で、取り込みサイクル
+  // (20分ごと+finality lag 2分)に合わせた25分/45分の閾値と、市場休場中は評価しない
+  // MARKET_CLOSED状態を実装した(classifyCandleFreshness、下のdescribeブロック)。
+  // ここでは生の経過時間の計算そのものの正確さを確認する(分類ロジックは別のdescribe)。
 
   it('= 今 − 最新1分足の終了時刻(足の開始時刻ではない)、分単位', () => {
     const input = sampleReportInput();
@@ -674,13 +674,60 @@ describe('latestCandleAgeMinutes (更新遅延の検出。2026-10-18、HQ指示�
     expect(report.latestCandleAgeMinutes.USDJPY).toBe(24);
   });
 
-  it('経過時間が非常に大きい場合も、値をそのまま返す(上限・警告ラベルは付けない — 現状の仕様どおり)', () => {
+  it('経過時間が非常に大きい場合も、値をそのまま返す(上限は無い。分類はclassifyCandleFreshnessが別途行う)', () => {
     const input = sampleReportInput();
     input.pairs[0]!.rows = input.pairs[0]!.rows.filter((row) => row.timestamp < '2026-10-12T12:10:00.000Z');
     const report = buildDataQualityReport(input);
-    // 最後の足は12:09開始→12:10終了、now=14:30 → 140分。これが「警告」か「異常」かの判定は
-    // 現状のコードには存在しない(本テストは生の計算結果のみを確認する)。
+    // 最後の足は12:09開始→12:10終了、now=14:30 → 140分。
     expect(report.latestCandleAgeMinutes.USDJPY).toBe(140);
+  });
+});
+
+describe('classifyCandleFreshness (正常・警告・異常の判定境界。HQ決定2026-10-18)', () => {
+  // sampleReportInputのnow(2026-10-12T14:30:00Z)は月曜 → 市場は開いている。
+  const OPEN_NOW = new Date('2026-10-12T14:30:00Z');
+  // 2026-10-17は土曜 → 市場は閉じている(isFxMarketOpenの既存ロジックで確認済み)。
+  const CLOSED_NOW = new Date('2026-10-17T12:00:00Z');
+
+  it('25分以内は正常(1サイクル(20分)+finality lag(2分)までの遅れ)', () => {
+    expect(classifyCandleFreshness(0, OPEN_NOW)).toBe('NORMAL');
+    expect(classifyCandleFreshness(25, OPEN_NOW)).toBe('NORMAL');
+  });
+
+  it('25分超〜45分以内は警告(2サイクル以内の遅れ)', () => {
+    expect(classifyCandleFreshness(26, OPEN_NOW)).toBe('WARNING');
+    expect(classifyCandleFreshness(45, OPEN_NOW)).toBe('WARNING');
+  });
+
+  it('45分超は異常(2サイクルを超えて取得できていない)', () => {
+    expect(classifyCandleFreshness(46, OPEN_NOW)).toBe('CRITICAL');
+    expect(classifyCandleFreshness(10_000, OPEN_NOW)).toBe('CRITICAL');
+  });
+
+  it('市場休場中(週末)は経過時間に関わらずMARKET_CLOSED — 誤警告を出さない(HQ指示への対応)', () => {
+    // 休場中なので、健全な運用でも経過時間は数十時間になる(直前の金曜17:00NY以降、
+    // 新しい足が来ないため)。これを異常として報告しないことが本テストの目的。
+    expect(classifyCandleFreshness(3000, CLOSED_NOW)).toBe('MARKET_CLOSED');
+    expect(classifyCandleFreshness(0, CLOSED_NOW)).toBe('MARKET_CLOSED');
+    expect(classifyCandleFreshness(null, CLOSED_NOW)).toBe('MARKET_CLOSED');
+  });
+
+  it('市場が開いているのに候補データが無ければNO_DATA(MARKET_CLOSEDとは区別する)', () => {
+    expect(classifyCandleFreshness(null, OPEN_NOW)).toBe('NO_DATA');
+  });
+
+  it('buildDataQualityReportのcandleFreshnessは、latestCandleAgeMinutesと同じnowで判定する', () => {
+    const report = buildDataQualityReport(sampleReportInput());
+    // USDJPY/EURUSDの経過時間は30分(前述のテストで確認済み)→ 25分超45分以内 = 警告
+    expect(report.candleFreshness.USDJPY).toBe('WARNING');
+    expect(report.candleFreshness.EURUSD).toBe('WARNING');
+  });
+
+  it('Markdown出力は分類ラベルを日本語で表示し、閾値の根拠も記載する', () => {
+    const markdown = renderDataQualityMarkdown(buildDataQualityReport(sampleReportInput()));
+    expect(markdown).toContain('警告');
+    expect(markdown).toContain('25分以内');
+    expect(markdown).toContain('休場中');
   });
 });
 

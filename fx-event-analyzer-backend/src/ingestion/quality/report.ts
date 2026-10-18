@@ -501,15 +501,29 @@ export function renderDataQualityMarkdown(report: DataQualityReport): string {
   // 7 -----------------------------------------------------------------------
   lines.push('## 7. 時刻ずれ');
   lines.push('');
+  const FRESHNESS_LABEL: Record<string, string> = {
+    NORMAL: '正常',
+    WARNING: '警告',
+    CRITICAL: '異常',
+    MARKET_CLOSED: '休場中(判定対象外)',
+    NO_DATA: 'データなし',
+  };
   lines.push(
     `- 為替: 最新1分足の経過時間(レポート作成時点、足の終了時刻から): ${
       report.fx
         .map((f) => {
           const age = report.latestCandleAgeMinutes[f.symbol] ?? null;
-          return `${f.symbol} ${age === null ? 'データなし' : `${age}分`}`;
+          const status = report.candleFreshness[f.symbol] ?? 'NO_DATA';
+          const ageText = age === null ? 'データなし' : `${age}分`;
+          return `${f.symbol} ${ageText}(${FRESHNESS_LABEL[status] ?? status})`;
         })
         .join(', ') || '—(通貨ペアなし)'
     }`,
+  );
+  lines.push(
+    '- 判定基準(HQ決定2026-10-18): 正常=25分以内、警告=25分超〜45分以内、異常=45分超' +
+      '(取り込みは20分ごと+finality lag 2分のため、1サイクル分の遅れは正常、2サイクル以内は警告とする)。' +
+      '市場休場中(週末・祝日)は新しい足自体が来ないため「休場中」として判定しない(誤警告の防止)。',
   );
   lines.push('- 為替: 実行ごとの「足の時刻と取得時刻の差」は未集計(このレポートでは計測していない)。');
   const speechRuns = report.runs.find((r) => r.job === 'ingest:speeches')?.runs ?? 0;

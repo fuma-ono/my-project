@@ -308,3 +308,34 @@ from pg_roles r where r.rolname in ('anon', 'authenticated', 'service_role');
    - 上限値が `800`・`700` のいずれかと違う → `api_credit_limits` への insert が重複挿入や誤った値で入っていないか確認
    - RLS が `false` → `alter table ... enable row level security` が流れていない可能性。再実行して良い(べき等)
    - `service_role` の `can_reserve` が `false` → `grant execute ... to service_role` が流れていない。再実行して良い(べき等)
+
+## 10. 経済指標の価格反応(event_price_reactions)のDEV検証手順(2026-10-18、HQ決定「開発DBでの実データ検証」)
+
+**この節の作業は権限者(大野さん、または開発用Supabaseの鍵・GitHub Actions手動実行権限を
+持つ担当者)が行う。このセッションには開発DBの認証情報が無く、Claude自身は実行できない。**
+ジョブが成功しただけで正確性を保証しない(HQ指示)ため、各項目で手計算・独立した検算との
+比較を行うこと。
+
+### 10.1 実行手順
+
+1. GitHub の Actions タブで `FX Event Analyzer - Data ingestion (dev)` を開く
+2. 「Run workflow」→ ブランチ `claude/fx-settings-screens` → `target: event-reactions` を選び実行する
+   (`main`のワークフロー定義自体は`commit df15527d`で追加済みだが、**実行自体はまだ
+   行っていない** — まだ「実行済み」とは報告しない)
+3. 実行ログ(JSON1行)の `fetched`・`success`・`skipped` を確認する。`errors` が空であることを確認する
+
+### 10.2 検証項目(手計算・独立した検算と比較すること)
+
+| # | 確認項目 | 確認方法 |
+|---|---|---|
+| 1 | イベントと価格足の対応 | `select id, release_datetime, release_datetime_precision, status from economic_events where status='RELEASED' order by release_datetime desc limit 5;` で直近のRELEASEDイベントを1件選び、その`release_datetime`の前後のfx_prices(1分足、対象ペア)を`select timestamp, close from fx_prices where fx_pair_id='<対象ペアのid>' and timeframe='1m' and timestamp between '<release_datetime - 15分>' and '<release_datetime + 61分>' order by timestamp;`で取得し、目で見て「発表直前の足」「各時間枠の終了時刻の足」が正しく対応しているか確認する |
+| 2 | 1分・5分・15分のpips計算 | `select timeframe, pre_release_price, post_release_price, movement, pips from event_price_reactions where event_id='<上記のevent_id>' order by timeframe;` の値を、項目1で取得したfx_pricesのclose値から**自分で** `(post_release_price - pre_release_price) / pip_size`(USDJPY等JPY絡みは0.01、それ以外は0.0001)を計算し、保存されているpips(小数点2桁)と一致するか確認する |
+| 3 | 欠損・未到着データの扱い | `select * from event_price_reactions where event_id='<対象>' and data_status='UNAVAILABLE';` が有れば、対応する時間枠の締切(release_datetime + 時間枠の分)が既に過去であること、かつ対応する1分足がfx_pricesに実際に無い(欠けている)ことを確認する。締切がまだ来ていない時間枠の行が**存在しないこと**(PENDING行を明示的に書かない設計のため)も確認する |
+| 4 | 後続実行による再計算 | 項目3でUNAVAILABLEだった時間枠について、欠けていた1分足が`ingest:fx-prices`の後続実行で補填された後に`ingest:event-reactions`を再実行し、同じ行が`AVAILABLE`に更新される(行が増えない)ことを確認する |
+| 5 | upsertによる重複防止 | `select event_id, fx_pair_id, timeframe, count(*) from event_price_reactions group by 1,2,3 having count(*) > 1;` が**0件**であることを確認する(`ingest:event-reactions`を複数回実行した後に確認するとより確実) |
+| 6 | 要人発言側の既存機能への影響 | `GET /speeches/{id}`(既存のAPI)が、このジョブの実行前後で同じ結果を返すことを確認する(このジョブはevent_price_reactionsのみに書き込み、speech_eventsやその場計算ロジックには触れていないため、変化しないはずである) |
+
+### 10.3 まだ確認できていないこと
+
+- 1分足そのもの(Twelve Data由来)の正確性は、本検証の対象外(別途、外部の独立照合が未実装のまま。既報)。本検証は「正しい1分足が入っていれば、正しい時間反応に変換されるか」のみを確認する。
+- 実機(iOS)での画面表示は本検証の対象外(§9のブラウザ版品質レポートか、直接SQLでの確認に限る)。
