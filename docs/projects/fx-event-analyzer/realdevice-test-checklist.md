@@ -122,3 +122,28 @@
 5. 期待した動作と、実際に起きた動作の違い
 
 この記録はテスターへの配布時に案内文として同封する(配布方法確定後、別途作成)。
+
+## 8. 異常系テストの現状(2026-10-18追記、HQ指示「実機テスト保留中の検証を進める」優先順位2への回答)
+
+HQが列挙した6ケースについて、Backend(既存テスト、再実行して確認)・iOS(ソースコード上の
+既存テスト、**Xcode無しのためこのセッションでは実行不可、存在確認のみ**)それぞれの現状を
+整理する。「確認済み」はコードレベルの話であり、実機・Simulatorでの目視確認ではない。
+
+| # | ケース | Backend(再実行して確認) | iOS(ソースコード上の存在確認。未実行) |
+|---|---|---|---|
+| 1 | API通信失敗 | 確認済み: `fxGapRepair.test.ts`「429 that survives the retries」「a timeout or API error for one pair does not stop the others → PARTIAL」 | 存在確認: ほぼ全ViewModelに`*FailureShowsError`系のテストがある(例: `HomeViewModelTests.testLoadOtherFailureShowsGenericError`、`SplashViewModelTests.testSessionCheckFailureShowsInitializationError`) |
+| 2 | データ欠損・取得遅延 | 確認済み: 同ファイル「NO_DATA_UNCONFIRMED: not re-requested the same day, at most 2 more times on later days」等 | **専用テストは見当たらない**(「欠損」に特化したものは無く、空データ系のテストで部分的に重なるのみ) |
+| 3 | API利用上限到達 | 確認済み: 同ファイル「credit ledger」グループ(800/700上限) | **別物に注意**: `SupportTests.testRateLimitShowsAFriendlyMessage`は存在するが、これは問い合わせ(SCR-020)送信の429であり、**Twelve Dataの利用上限とは無関係**。価格データ側の利用上限到達に対応するiOS側テストは見当たらない |
+| 4 | 空データ | 確認済み: `dataQuality.test.ts`「pairs without data > reports データなし(取り込み未開始)」 | 存在確認: `Phase4ModelsDecodingTests.testChartResponseDecodesAnEmptyPricesArray`、`testComparisonResponseDecodesEmptyEventsAsAGenuineNoHistoryState`、`Phase4ViewModelTests.testLoadSuccessShowsEmptyHistory` |
+| 5 | 古い価格データ(更新遅延の表示) | **穴を発見**: `latestCandleAgeMinutes`(品質レポートの経過時間計算)に専用テストが無い(`data-quality-verification-2026-10-17.md`§9.3) | **専用テストは見当たらない** |
+| 6 | Supabase認証失敗・RLSアクセス拒否 | 確認済み(認証失敗側、Docker不要): `tests/auth/jwt.test.ts`(missing/invalid/expired/tampered token、4種とも区別してテスト済み)。確認済み(RLS側、Docker必須・前回CIで183件成功、再実行せず): `tests/integration/auth.test.ts`等 | 存在確認: `SplashViewModelTests`がアプリ起動時の未認証・セッション確認失敗を扱う。RLS拒否時のレスポンス(403/404相当)に特化したテストは見当たらず、汎用の`*FailureShowsError`系で吸収される想定 |
+
+### 8.1 まとめ
+
+* ①③④⑥はBackend側でテスト済み(再実行して696→696passedを再確認、変化なし)。
+* **②⑤はBackend側に穴がある**(⑤は今回のコード調査で新たに発見)。
+* iOS側は、いずれのケースも**ソースコード上にテストが存在することの確認のみ**(Xcode無しの
+  ため実行はしていない)。③は「別の種類の429テストと混同しないこと」に注意。②⑤はiOS側にも
+  専用テストが見当たらない。
+* 画面にどう表示されるべきかの**実際の目視確認**(Simulator/実機)は、いずれのケースも
+  未実施のまま(`ios-mac-verification-procedure.md`§5参照)。
