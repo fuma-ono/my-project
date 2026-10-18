@@ -689,18 +689,20 @@ describe('classifyCandleFreshness (正常・警告・異常の判定境界。HQ�
   // 2026-10-17は土曜 → 市場は閉じている(isFxMarketOpenの既存ロジックで確認済み)。
   const CLOSED_NOW = new Date('2026-10-17T12:00:00Z');
 
-  it('25分以内は正常(1サイクル(20分)+finality lag(2分)までの遅れ)', () => {
-    expect(classifyCandleFreshness(0, OPEN_NOW)).toBe('NORMAL');
+  it('24分・25分は正常、26分は警告(正常/警告の境界。HQ指示2026-10-18「24・25・26分」)', () => {
+    expect(classifyCandleFreshness(24, OPEN_NOW)).toBe('NORMAL');
     expect(classifyCandleFreshness(25, OPEN_NOW)).toBe('NORMAL');
-  });
-
-  it('25分超〜45分以内は警告(2サイクル以内の遅れ)', () => {
     expect(classifyCandleFreshness(26, OPEN_NOW)).toBe('WARNING');
-    expect(classifyCandleFreshness(45, OPEN_NOW)).toBe('WARNING');
   });
 
-  it('45分超は異常(2サイクルを超えて取得できていない)', () => {
+  it('44分・45分は警告、46分は異常(警告/異常の境界。HQ指示2026-10-18「44・45・46分」)', () => {
+    expect(classifyCandleFreshness(44, OPEN_NOW)).toBe('WARNING');
+    expect(classifyCandleFreshness(45, OPEN_NOW)).toBe('WARNING');
     expect(classifyCandleFreshness(46, OPEN_NOW)).toBe('CRITICAL');
+  });
+
+  it('0分は正常、非常に大きい値も異常のまま(上限は無い)', () => {
+    expect(classifyCandleFreshness(0, OPEN_NOW)).toBe('NORMAL');
     expect(classifyCandleFreshness(10_000, OPEN_NOW)).toBe('CRITICAL');
   });
 
@@ -714,6 +716,25 @@ describe('classifyCandleFreshness (正常・警告・異常の判定境界。HQ�
 
   it('市場が開いているのに候補データが無ければNO_DATA(MARKET_CLOSEDとは区別する)', () => {
     expect(classifyCandleFreshness(null, OPEN_NOW)).toBe('NO_DATA');
+  });
+
+  // HQ指示2026-10-18「時刻不明・不正値などの異常入力」の確認結果。
+  // classifyCandleFreshness自体は防御していないコードだが、呼び出し元を全てコードで確認した
+  // 結果(routes/qualityReport.ts・jobs/reportDataQuality.ts、いずれも `now: new Date()`
+  // のみを渡す)、`now`が無効な値になる経路・`ageMinutes`がNaNになる経路は現状存在しない
+  // (`ageMinutes`はlatestCandleOpenがnullか、DBの実在するISO文字列をDate.parseした結果の
+  // どちらかのみ)。したがって本番コードへの防御コードの追加はせず(内部の前提が常に成り立つ
+  // ため、境界でのみ検証する既存方針どおり)、現状の挙動をテストで固定しておく。
+  it('不正な`now`(Invalid Date)は例外を投げる — 確認した2箇所の呼び出し元(qualityReport.ts・reportDataQuality.ts)はいずれもnew Date()のみを渡すため、現状到達しない経路', () => {
+    expect(() => classifyCandleFreshness(10, new Date(NaN))).toThrow('Invalid time value');
+  });
+
+  it('`ageMinutes`がNaN(現状のコードでは発生し得ない)の場合、CRITICALとして扱われる(しきい値の比較がすべてfalseになるため)', () => {
+    expect(classifyCandleFreshness(Number.NaN, OPEN_NOW)).toBe('CRITICAL');
+  });
+
+  it('負のageMinutes(クロックスキュー等で未来時刻の足になった場合)はNORMALとして扱われる(上限と同様、下限の特別扱いも無い)', () => {
+    expect(classifyCandleFreshness(-5, OPEN_NOW)).toBe('NORMAL');
   });
 
   it('buildDataQualityReportのcandleFreshnessは、latestCandleAgeMinutesと同じnowで判定する', () => {

@@ -316,12 +316,34 @@ from pg_roles r where r.rolname in ('anon', 'authenticated', 'service_role');
 ジョブが成功しただけで正確性を保証しない(HQ指示)ため、各項目で手計算・独立した検算との
 比較を行うこと。
 
+### 10.0 手動実行前の確認(2026-10-18、HQ指示「手動実行前の確認」への回答)
+
+* `main`の現在のHEADは`commit df15527d`(2026-10-18確認)。これが本節の前提。
+* `target`は**ドロップダウンの選択式ではなく自由入力欄**(`workflow_dispatch.inputs.target`に
+  `type: choice`を指定していない、既存の`fx-prices`/`speeches`/`both`/`report`/`official-bls`と
+  同じ形式)。「選択できる」は正確には「入力欄に`event-reactions`と入力できる」という意味
+  (2026-10-18、`main`のYAMLを直接確認)。
+* 実行順序: `main`のワークフロー内で「FX prices」ステップの直後に「Event reactions」ステップを
+  配置した(価格データ取得後に実行される順序。いずれも`target`の値で排他的に実行される
+  ため、1回の手動実行では両方同時には走らない。価格データが既に存在する状態で
+  `event-reactions`を単独実行することを想定している — 為替の定期取り込みは20分ごとに
+  別途動いているため、手動実行時点で通常は既にfx_pricesにデータがある)。
+* APIクレジット消費: **0**(このジョブは外部APIを一切呼ばない。Twelve Data/BLS等への
+  問い合わせは無い)。
+* DB書き込みの範囲: **`event_price_reactions`テーブルへのupsertのみ**(+実行記録として
+  既存の`ingestion_logs`への1行追加、他のジョブと同じ仕組み)。読み取りは`economic_events`・
+  `fx_pairs`・`fx_prices`(いずれも既存テーブル、読み取りのみ)。他のテーブル(`event_snapshots`、
+  `speech_events`、`api_credit_usage`等)への書き込みは無い。
+* 既存のRLS・認証・利用上限設定への変更: **無し**。このジョブはservice_role(既存の
+  `SUPABASE_SERVICE_ROLE_KEY`、新しいsecretは追加していない)で動き、RLSポリシー・
+  `api_credit_limits`・認証ロジックのいずれも変更していない(マイグレーション追加も無し)。
+
 ### 10.1 実行手順
 
 1. GitHub の Actions タブで `FX Event Analyzer - Data ingestion (dev)` を開く
-2. 「Run workflow」→ ブランチ `claude/fx-settings-screens` → `target: event-reactions` を選び実行する
-   (`main`のワークフロー定義自体は`commit df15527d`で追加済みだが、**実行自体はまだ
-   行っていない** — まだ「実行済み」とは報告しない)
+2. 「Run workflow」→ ブランチ `claude/fx-settings-screens` → `target`欄に`event-reactions`と
+   入力して実行する(`main`のワークフロー定義自体は`commit df15527d`で追加済みだが、
+   **実行自体はまだ行っていない** — まだ「実行済み」とは報告しない)
 3. 実行ログ(JSON1行)の `fetched`・`success`・`skipped` を確認する。`errors` が空であることを確認する
 
 ### 10.2 検証項目(手計算・独立した検算と比較すること)
