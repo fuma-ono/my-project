@@ -35,10 +35,23 @@ final class SplashViewModel: ObservableObject {
 
     private let authService: AuthServicing
     private let onFinished: (SplashOutcome) -> Void
+    private let minimumDisplayDuration: Duration
     private var hasStarted = false
 
-    init(authService: AuthServicing, onFinished: @escaping (SplashOutcome) -> Void) {
+    /// `minimumDisplayDuration` keeps Splash on screen at least this long
+    /// before routing away on success, so `SplashLoadingBar`'s one-shot
+    /// fill animation (1.6s, see that file) actually gets to play instead
+    /// of being swapped out mid-animation when the init sequence finishes
+    /// near-instantly — user feedback: "一瞬でサインイン画面に行く".
+    /// Only the success path waits; `.initializationError` still shows as
+    /// soon as it's known. Tests pass `.zero` to stay fast.
+    init(
+        authService: AuthServicing,
+        minimumDisplayDuration: Duration = .seconds(1.6),
+        onFinished: @escaping (SplashOutcome) -> Void
+    ) {
         self.authService = authService
+        self.minimumDisplayDuration = minimumDisplayDuration
         self.onFinished = onFinished
     }
 
@@ -58,6 +71,8 @@ final class SplashViewModel: ObservableObject {
     }
 
     private func runInitSequence() async {
+        let startedAt = ContinuousClock.now
+
         // Step 1: app initial-state check. Nothing beyond process launch to
         // verify in Phase 1.
 
@@ -84,19 +99,25 @@ final class SplashViewModel: ObservableObject {
             return
         }
 
+        let outcome: SplashOutcome
         if let session {
-            if session.isExpired {
-                onFinished(.sessionExpired)
-            } else {
-                onFinished(.authenticated(session))
-            }
-            return
+            outcome = session.isExpired ? .sessionExpired : .authenticated(session)
+        } else {
+            // Step 3 + 4: required initial settings / Backend API
+            // connectivity — intentionally a no-op in Phase 1; see
+            // file-level doc comment.
+            outcome = .unauthenticated
         }
 
-        // Step 3 + 4: required initial settings / Backend API connectivity
-        // — intentionally a no-op in Phase 1; see file-level doc comment.
+        // Step 6: route — but not before minimumDisplayDuration has
+        // elapsed, so the loading bar isn't cut off mid-animation.
+        await waitForMinimumDisplayDuration(since: startedAt)
+        onFinished(outcome)
+    }
 
-        // Step 6: route.
-        onFinished(.unauthenticated)
+    private func waitForMinimumDisplayDuration(since startedAt: ContinuousClock.Instant) async {
+        let elapsed = ContinuousClock.now - startedAt
+        guard elapsed < minimumDisplayDuration else { return }
+        try? await Task.sleep(for: minimumDisplayDuration - elapsed)
     }
 }

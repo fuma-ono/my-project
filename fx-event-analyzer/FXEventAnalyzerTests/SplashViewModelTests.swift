@@ -36,7 +36,7 @@ final class SplashViewModelTests: XCTestCase {
         let auth = MockAuthService()
         auth.sessionResult = .failure(AuthServiceError.network("offline"))
 
-        let viewModel = SplashViewModel(authService: auth) { _ in
+        let viewModel = SplashViewModel(authService: auth, minimumDisplayDuration: .zero) { _ in
             XCTFail("onFinished should not be called when the init sequence fails")
         }
         viewModel.start()
@@ -53,7 +53,7 @@ final class SplashViewModelTests: XCTestCase {
         auth.sessionResult = .failure(AuthServiceError.network("offline"))
 
         var finishedOutcome: SplashOutcome?
-        let viewModel = SplashViewModel(authService: auth) { outcome in
+        let viewModel = SplashViewModel(authService: auth, minimumDisplayDuration: .zero) { outcome in
             finishedOutcome = outcome
         }
         viewModel.start()
@@ -72,7 +72,7 @@ final class SplashViewModelTests: XCTestCase {
 
     private func outcome(for auth: MockAuthService) async -> SplashOutcome {
         await withCheckedContinuation { continuation in
-            let viewModel = SplashViewModel(authService: auth) { outcome in
+            let viewModel = SplashViewModel(authService: auth, minimumDisplayDuration: .zero) { outcome in
                 continuation.resume(returning: outcome)
             }
             viewModel.start()
