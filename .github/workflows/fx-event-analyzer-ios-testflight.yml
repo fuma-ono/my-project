@@ -147,6 +147,12 @@ jobs:
           echo "FX_PROVISIONING_PROFILE_UUID=$UUID" >> "$GITHUB_ENV"
 
       - name: Generate ExportOptions.plist
+        # methodは"app-store"を使う(HQ承認、2026-10-19)。xcodebuild自体は
+        # "app-store-connect"を現行の正式名として認識するが、fastlane(gym)は
+        # export_optionsに渡したplist内の"method"値も自前の許可リストで検証し、
+        # そこに"app-store-connect"が含まれていないため実行時エラーになった
+        # (実際のログで確認済み)。"app-store"は非推奨の別名だが、xcodebuild・
+        # fastlaneの両方で動作する。
         env:
           FX_APPLE_TEAM_ID: ${{ secrets.FX_APPLE_TEAM_ID }}
           FX_IOS_PROVISIONING_PROFILE_NAME: ${{ secrets.FX_IOS_PROVISIONING_PROFILE_NAME }}
@@ -158,7 +164,7 @@ jobs:
           <plist version="1.0">
           <dict>
               <key>method</key>
-              <string>app-store-connect</string>
+              <string>app-store</string>
               <key>teamID</key>
               <string>${FX_APPLE_TEAM_ID}</string>
               <key>signingStyle</key>
