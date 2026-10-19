@@ -489,3 +489,198 @@ CIでの既存テスト(`tests/integration/speech-reactions.test.ts`含む全726
 いずれも今回は実施せず、HQの判断を待つ。**
 
 コード変更・ワークフロー再実行は行っていない。
+
+### 10.5 次回の経済指標イベントでのDEV実データ検証準備(HQ指示 2026-10-19)
+
+この節は調査と検証計画のみ。本番コードの変更・DEV/PROD DBへの接続・外部APIの呼び出しは
+行っていない(検証日時の候補もコード内に既に取り込まれている静的なBLS公式スケジュール表
+`src/ingestion/mappings/blsSchedule.ts`から確認したのみで、新たな外部への問い合わせはしていない)。
+
+#### 10.5.1 現在の実装の整理(§必須作業1)
+
+**取得対象イベント**(`src/ingestion/pipelines/eventReactions.ts`・`src/repositories/ingestionRepository.ts`):
+
+* `economic_events.status = 'RELEASED'` のイベントのみ(`listReleasedEventsForReactions`)。
+* `release_datetime >= now - repairHorizonDays日`(`FX_FETCH_SETTINGS.repairHorizonDays = 7`、
+  `src/ingestion/config.ts`)。**7日より古いRELEASEDイベントは対象外**
+  (FX価格のgap repairと同じ horizon)。
+* 必ず`economic_indicators`と内部結合(`!inner`)するため、対応する`economic_indicators`行が
+  無いイベントはそもそも取得されない。
+
+**対象通貨ペア**(`listFxPairs()` + `candidatePairs`フィルタ):
+
+* `listFxPairs()`は`fx_pairs`の全行を無条件に返す(`is_active`での絞り込みは**行っていない** —
+  コード中のコメント「アクティブな為替ペア全て」とは裏腹に、実装は`is_active`列を一切見ていない。
+  現在のDEV seed(`supabase/seed.sql`)は9ペア全てが列既定値`is_active = true`のため、
+  **今回は実害は無い**が、将来どのペアかが`is_active = false`にされた場合、そのペアも
+  候補として扱われてしまう実装上のギャップとして記録する(未確認事項とリスクに記載)。
+* 候補ペア = イベントの指標の`currency_code`(`economic_indicators.currency_code`、
+  `economic_events`自体には通貨列が無い)が`base_currency`または`quote_currency`と一致する
+  ペア全て。US_NFP・US_CPIは米国指標のため`currency_code = 'USD'`と推定するが、
+  **実際のDEV DB上の値は未確認**(§10.5.4のSQLで確認する)。
+* DEV seedの9ペア(`USDJPY, EURUSD, EURJPY, GBPJPY, AUDUSD, GBPUSD, USDCHF, AUDJPY, CADJPY`)
+  のうちUSDを含むのは**USDJPY・EURUSD・GBPUSD・AUDUSD・USDCHFの5ペア**
+  (§10.4.2で確認済みの5ペアと一致)。
+
+**必要な1分足の範囲**(`ingestEventPriceReactions`内、`fromIso`/`toIso`):
+
+* `fromIso = release_datetime - 15分`(`PRE_STATEMENT_LOOKBACK_MINUTES`、要人発言側と共通)
+* `toIso = release_datetime + 60分`(`MAX_TIMEFRAME_MINUTES`、半開区間 `[fromIso, toIso)`)
+* つまり発表時刻の15分前から60分後までの、合計75分間の1分足(`timeframe = '1m'`)が
+  対象ペアごとに必要。欠けている分だけ、その分を含む時間枠がUNAVAILABLEになる。
+
+**UNAVAILABLEの判定条件**(`src/domain/economicEventReactions.ts`):
+
+1. 時間枠の締切(`release_datetime + 時間枠`)が未来(`now`より後)の場合 → **行を一切書かない**
+   (UNAVAILABLEではなく、行が無いためAPI側はDATA_PENDINGとして返す)。
+2. 締切が過去で、発表直前価格(`pre_release_price`)または発表後価格(`post_release_price`)の
+   いずれかに対応する1分足が無い場合 → **UNAVAILABLE**(movement/pips/change_percent/
+   max_upward/max_downward/max_upward_pips/max_downward_pipsは全てnull)。
+3. 両方の価格が揃っている場合のみ → **AVAILABLE**(実数値を計算)。
+4. `release_datetime_precision`がEXACTでない場合、精度上分析できない時間枠(例: APPROXIMATEは
+   1mを除外)はそもそも計算対象に入らない(`availableTimeframes`、`dataQuality.ts`)。
+
+#### 10.5.2 通常のデータ取得処理だけで次回の検証データが揃うか(§必須作業2)
+
+**結論: 1分足は通常のデータ取得処理だけで揃う見込みが高いが、`economic_events`行自体は
+自動では作られない。** 定期実行(スケジュール)に入っているのは為替1分足取得
+(`ingest:fx-prices`、20分おき、`.github/workflows/fx-event-analyzer-ingestion.yml`の
+`cron: '7,27,47 * * * *'`)のみで、BLSカレンダー取り込み(`target=official-bls`)と
+経済指標の価格反応計算(`target=event-reactions`)はいずれも**手動実行のみ**
+(`workflow_dispatch`)。
+
+* **1分足(fx_prices)**: `ingest:fx-prices`の既定実行対象は`FX_PAIR_MAPPINGS`
+  (`src/ingestion/mappings/fxPairs.ts`)の9ペア全てで、対象5ペア(USDJPY等)を含む。
+  市場が開いていれば(2026-11-06は金曜・祝日判定対象日`12-25`/`01-01`には該当しない
+  通常営業日)20分おきに自動で取り込まれる見込み。§10.4.2で確認済みの通り
+  2026-10-16以降は継続的に収集されているはずだが、**今回のセッションでは現時点の
+  継続状況そのものは未確認**(§10.5.4 Query 3で確認可能)。
+* **economic_events行(RELEASED)**: `src/ingestion/pipelines/blsCalendar.ts`の
+  `buildBlsScheduleReleases`は、**BLSが実際にその期間の値を公表した後でなければ
+  release(＝economic_eventsの行)を一切生成しない**(`official.resolve(...)`がnullなら
+  `notYetAvailable`に積むだけで、行は作られない)。つまり:
+  1. 2026-11-06 08:30 America/New_York(BLSの予定通りなら)にNFPが実際に発表される。
+  2. その**後**に、権限者が手動で`target=official-bls`を実行しないと、
+     `economic_events`に行ができない(定期実行には入っていないため、放置しても
+     自動では作られない)。
+  3. 行ができて初めて(かつ7日以内に)、権限者が`target=event-reactions`を手動実行する
+     ことで`event_price_reactions`が書き込まれる。
+* したがって、**「次回の経済指標で検証できる状態」にするには、1分足の自動収集に加えて、
+  発表後に権限者が`official-bls`→`event-reactions`の順で2回、手動実行する必要がある**。
+  これは実装上の仕様であり、今回のセッションでは変更していない(変更するには別途HQ判断が必要)。
+
+#### 10.5.3 検証手順(文書化のみ、実施はしていない)
+
+| 手順 | 実施者 | 内容 | 備考 |
+|---|---|---|---|
+| ① 発表前の健全性確認 | 権限者(いつでも可) | §10.5.4 Query 2・3で、対象5ペアの`is_active`と直近の1分足取り込み状況を確認する | 問題があれば`ingest:fx-prices`側の調査が先に必要 |
+| ② BLS発表を待つ | — | 2026-11-06 08:30 America/New_York(=13:30 UTC、夏時間終了後のためEST)にNFPが発表される想定 | BLSが延期・変更する可能性は常にある(blsSchedule.tsのコメント参照) |
+| ③ 経済指標イベントの取り込み | 権限者 | GitHub Actionsで`target=official-bls`を手動実行する(①と同じワークフロー) | BLSの無料・無認証APIを呼ぶ(既存のHQ承認済み経路、2026-10-17)。追加費用は発生しない |
+| ④ イベント行の確認 | 権限者 | §10.5.4 Query 1で`economic_events`にUS_NFP(対象期間2026-10)のRELEASED行ができたこと、`release_datetime`が`2026-11-06T13:30:00Z`であること、`release_datetime_precision`がEXACTであることを確認する | タイムゾーン換算の確認はここで行う |
+| ⑤ 発表前後の1分足の確認 | 権限者 | §10.5.4 Query 4で、対象5ペアそれぞれに`2026-11-06T13:15:00Z`〜`14:30:00Z`(発表15分前〜60分後、半開区間)の1分足が欠けなく(75本)存在するか確認する | 欠けていれば、その時間枠はUNAVAILABLEになる見込みと事前に判断できる |
+| ⑥ 価格反応の計算・書き込み | 権限者 | GitHub Actionsで`target=event-reactions`を手動実行する(④の行ができてから7日以内 = 2026-11-13まで) | 外部API呼び出しなし・追加費用0円 |
+| ⑦ 書き込み結果の検証 | 権限者 | §10.5.4 Query 5で`event_price_reactions`の各時間枠の値を取得し、Query 4で得た生の1分足データから1m・5m・15mのpipsを手計算し、一致することを独立に確認する | §10節の6項目の検証表と同じ要領。今回は実データでAVAILABLE行が期待される |
+
+#### 10.5.4 読み取り専用SQL(提示のみ。実行はユーザー/権限者の判断を待つ)
+
+いずれも**SELECT文のみ**(INSERT/UPDATE/DELETEなし)。**DEV環境専用**
+(`fx-event-analyzer-dev`、ref `pbemckwnqmeaoveelihd`)。外部API呼び出し・追加費用は発生しない。
+
+```sql
+-- Query 1(③の後、④で実行): US_NFP/US_CPIのeconomic_events行の有無・内容・currency_codeを確認
+select e.id, e.release_datetime, e.release_datetime_precision, e.status,
+       i.code, i.currency_code
+from economic_events e
+join economic_indicators i on i.id = e.indicator_id
+where i.code in ('US_NFP', 'US_CPI')
+  and e.release_datetime >= '2026-10-20T00:00:00Z'
+order by e.release_datetime;
+```
+
+```sql
+-- Query 2(①で実行): fx_pairsのis_activeの実際の値を確認(§10.5.1のギャップの実害有無)
+select symbol, base_currency, quote_currency, is_active
+from fx_pairs
+order by symbol;
+```
+
+```sql
+-- Query 3(①で実行): 対象5ペアの直近の1分足取り込み状況(定期実行が健全に継続しているか)
+select fp.symbol,
+       max(p.timestamp) as latest_candle,
+       count(*) filter (where p.timestamp >= now() - interval '2 hours') as candles_last_2h
+from fx_pairs fp
+left join fx_prices p on p.fx_pair_id = fp.id and p.timeframe = '1m'
+where fp.symbol in ('USDJPY', 'EURUSD', 'GBPUSD', 'AUDUSD', 'USDCHF')
+group by fp.symbol
+order by fp.symbol;
+```
+
+```sql
+-- Query 4(⑤で実行): 発表15分前〜60分後の1分足が対象5ペースすべてで欠けていないか
+-- (release_datetimeが実際の値と異なる場合はQuery 1の結果に合わせて置き換える)
+select fp.symbol, count(*) as candle_count, min(p.timestamp) as first_ts, max(p.timestamp) as last_ts
+from fx_pairs fp
+join fx_prices p on p.fx_pair_id = fp.id and p.timeframe = '1m'
+where fp.symbol in ('USDJPY', 'EURUSD', 'GBPUSD', 'AUDUSD', 'USDCHF')
+  and p.timestamp >= '2026-11-06T13:15:00Z'
+  and p.timestamp <  '2026-11-06T14:30:00Z'
+group by fp.symbol
+order by fp.symbol;
+-- 期待結果: candle_count = 75 (欠けなし)。75未満のペアは、欠けた分を含む時間枠がUNAVAILABLEになる。
+```
+
+```sql
+-- Query 5(⑦で実行): event_price_reactionsの書き込み結果を取得(手計算との照合用)
+select fp.symbol, r.timeframe, r.pre_release_price, r.post_release_price,
+       r.movement, r.pips, r.max_upward, r.max_downward,
+       r.max_upward_pips, r.max_downward_pips, r.data_status
+from event_price_reactions r
+join fx_pairs fp on fp.id = r.fx_pair_id
+join economic_events e on e.id = r.event_id
+join economic_indicators i on i.id = e.indicator_id
+where i.code = 'US_NFP' and e.release_datetime = '2026-11-06T13:30:00Z'
+order by fp.symbol, r.timeframe;
+```
+
+#### 10.5.5 検証日時の候補(§必須作業5、外部への問い合わせなし)
+
+既にコードに取り込まれている静的なBLS公式スケジュール表(`src/ingestion/mappings/blsSchedule.ts`、
+2026-10-17にBLS公式ページから人手で取り込んだもの。今回新たな外部アクセスはしていない)から
+確認:
+
+| 指標 | 対象期間 | 発表日(America/New_York 08:30) | UTC換算 | 本日(2026-10-19)からの日数 |
+|---|---|---|---|---|
+| **US_NFP**(推奨・最速) | 2026-10 | 2026-11-06 | **2026-11-06T13:30:00Z**(夏時間終了後のEST、UTC-5) | 約18日後 |
+| US_CPI | 2026-10 | 2026-11-10 | 2026-11-10T13:30:00Z(EST) | 約22日後 |
+
+* 2026-11-01(日)に米国の夏時間が終了するため、2026-11-06・2026-11-10はいずれも
+  EST(UTC-5)。2026-10-14のCPI(EDT・UTC-4)とはUTCオフセットが異なる点に注意。
+* 2026-11-06は金曜日で、`FX_MARKET_CLOSED_DAYS`(`12-25`・`01-01`)に該当しない通常営業日
+  (`src/ingestion/marketHours.ts`)。市場はNY時間17:00まで開いているため、発表(08:30)から
+  60分枠(09:30)まで市場休場の影響は無い見込み。
+* US_NFPの方がUS_CPIより早く発表されるため、**次回の検証対象としてはUS_NFP
+  (2026-11-06)を推奨する**。
+
+#### 10.5.6 未確認事項とリスク
+
+* **`economic_indicators.currency_code`が実際に`'USD'`であることは未確認**(Query 1で確認可能。
+  推定の根拠は両指標が米国指標であることのみ)。
+* **`listFxPairs()`が`is_active`を見ていない実装上のギャップ**(§10.5.1)。現在のDEV seedでは
+  実害が無いと推定されるが、Query 2で裏付けていない。これを修正するかはHQ判断が必要
+  (本指示では本番コード変更が禁止されているため、今回は実装していない)。
+* **BLSが予定日に発表するとは限らない**(過去に政府機関閉鎖等で延期された例がある、
+  `blsSchedule.ts`のコメント参照)。延期された場合、§10.5.5の候補日時はずれる。
+* **`official-bls`の手動実行自体がBLSの無料API(外部API)を呼ぶ**(2026-10-17にHQ承認済みの
+  既存経路)。本指示の「外部API呼び出し禁止」は本セッション(調査・計画作成)に適用されるもので
+  あり、将来権限者が実施する①〜⑦の手順そのものを禁止するものではないと解釈している。
+  この解釈に相違があればHQの確認を求める。
+* **`ingest:fx-prices`が2026-10-19時点で実際に継続稼働しているかは本セッションでは未確認**
+  (DB接続権限が無いため。Query 3で確認可能)。市場休場・障害等で止まっていれば、
+  11月6日までに復旧していることが前提になる。
+* **repairHorizonDaysの7日制約**: `official-bls`実行(④)から7日以内(2026-11-13まで)に
+  `event-reactions`を実行(⑥)しないと、そのイベントはhorizon外になり対象外になる
+  (再実行しても結果は変わらない設計、§10.4.7と同じ理由)。
+
+コード変更・DB接続・外部API呼び出し・ワークフロー実行は、この節の調査・計画作成では
+行っていない。
