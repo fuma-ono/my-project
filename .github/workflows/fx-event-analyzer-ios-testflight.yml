@@ -6,13 +6,15 @@ name: FX Event Analyzer iOS TestFlight (manual, signed)
 #
 # workflow_dispatchのみで起動する。pushやPRでは動かない。既存の
 # fx-event-analyzer-ios-build.yml(Simulatorビルド+テスト、署名なし)には
-# 一切手を加えていない。両者は完全に独立したワークフローで、Secretsも
-# 共有しない。
+# 一切手を加えていない。署名関連のSecrets(FX_IOS_*・FX_ASC_*・
+# FX_APPLE_TEAM_ID)はkashikari用とは独立した別名で新設したが、
+# FX_SUPABASE_URL/FX_SUPABASE_ANON_KEY/FX_API_BASE_URLは
+# fx-event-analyzer-ios-build.ymlと同じ既存Secretsをそのまま共有する
+# (アプリが参照するSupabaseプロジェクトは1つのため)。
 #
 # 認証はApp Store Connect APIキー(.p8)のみ。Apple ID/パスワードは使わない。
 #
-# 必須のRepository secrets(すべてFX_接頭辞。既存のkashikari用
-# (ASC_KEY_ID等)・Supabase用(FX_SUPABASE_URL等)Secretsとは独立した別名):
+# 必須のRepository secrets:
 #   FX_IOS_DIST_CERT_P12_BASE64         配布証明書+秘密鍵(.p12、base64)
 #   FX_IOS_DIST_CERT_PASSWORD           上記.p12のパスフレーズ
 #   FX_IOS_PROVISIONING_PROFILE_BASE64  App Store用プロビジョニングプロファイル(base64)
@@ -23,6 +25,9 @@ name: FX Event Analyzer iOS TestFlight (manual, signed)
 #   FX_ASC_ISSUER_ID                    同Issuer ID
 #   FX_ASC_KEY_P8_BASE64                 同APIキーの.p8内容(base64化。以前はPEM形式そのまま
 #                                        渡していたが"invalid curve name"エラーが続いたため変更)
+#   FX_SUPABASE_URL / FX_SUPABASE_ANON_KEY  アプリが使うSupabaseプロジェクト
+#                                        (fx-event-analyzer-ios-build.ymlと共有、必須)
+#   FX_API_BASE_URL                      バックエンドAPIのベースURL(未デプロイ時は空でも可)
 #
 # ビルド番号はCURRENT_PROJECT_VERSIONをgithub.run_numberで上書きする
 # (project.yml自体は変更しない。既存のSimulatorビルドに影響なし)。
@@ -92,9 +97,16 @@ jobs:
           FX_ASC_KEY_ID: ${{ secrets.FX_ASC_KEY_ID }}
           FX_ASC_ISSUER_ID: ${{ secrets.FX_ASC_ISSUER_ID }}
           FX_ASC_KEY_P8_BASE64: ${{ secrets.FX_ASC_KEY_P8_BASE64 }}
+          # FX_SUPABASE_URL/FX_SUPABASE_ANON_KEYが空だとアプリが起動直後に
+          # 「アプリの初期化に失敗しました」で止まる(SupabaseAuthService側で
+          # AuthServiceError.notConfiguredが必ず発生するため)。既存の
+          # fx-event-analyzer-ios-build.ymlと同じSecrets。ここも必須に加える
+          # (実機確認で発覚、2026-10-19)。
+          FX_SUPABASE_URL: ${{ secrets.FX_SUPABASE_URL }}
+          FX_SUPABASE_ANON_KEY: ${{ secrets.FX_SUPABASE_ANON_KEY }}
         run: |
           set -uo pipefail
-          REQUIRED_SECRETS="FX_IOS_DIST_CERT_P12_BASE64 FX_IOS_DIST_CERT_PASSWORD FX_IOS_PROVISIONING_PROFILE_BASE64 FX_IOS_PROVISIONING_PROFILE_NAME FX_IOS_BUILD_KEYCHAIN_PASSWORD FX_APPLE_TEAM_ID FX_ASC_KEY_ID FX_ASC_ISSUER_ID FX_ASC_KEY_P8_BASE64"
+          REQUIRED_SECRETS="FX_IOS_DIST_CERT_P12_BASE64 FX_IOS_DIST_CERT_PASSWORD FX_IOS_PROVISIONING_PROFILE_BASE64 FX_IOS_PROVISIONING_PROFILE_NAME FX_IOS_BUILD_KEYCHAIN_PASSWORD FX_APPLE_TEAM_ID FX_ASC_KEY_ID FX_ASC_ISSUER_ID FX_ASC_KEY_P8_BASE64 FX_SUPABASE_URL FX_SUPABASE_ANON_KEY"
           MISSING=""
           for name in $REQUIRED_SECRETS; do
             value="${!name:-}"
@@ -187,6 +199,9 @@ jobs:
           FX_IOS_PROVISIONING_PROFILE_NAME: ${{ secrets.FX_IOS_PROVISIONING_PROFILE_NAME }}
           FX_EXPORT_OPTIONS_PLIST_PATH: ${{ runner.temp }}/FXExportOptions.plist
           FX_BUILD_NUMBER: ${{ github.run_number }}
+          FX_SUPABASE_URL: ${{ secrets.FX_SUPABASE_URL }}
+          FX_SUPABASE_ANON_KEY: ${{ secrets.FX_SUPABASE_ANON_KEY }}
+          FX_API_BASE_URL: ${{ secrets.FX_API_BASE_URL }}
         run: fastlane ios testflight
 
       - name: Clean up temporary keychain and generated files
