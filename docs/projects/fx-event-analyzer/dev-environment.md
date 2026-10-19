@@ -684,3 +684,153 @@ order by fp.symbol, r.timeframe;
 
 コード変更・DB接続・外部API呼び出し・ワークフロー実行は、この節の調査・計画作成では
 行っていない。
+
+### 10.6 DEV環境の健全性確認(HQ指示 2026-10-19「調査と読み取り専用SQLの準備・レビューに限定」)
+
+この節もコードレベルの調査のみ。DB接続・SQL実行・ワークフロー実行・外部API呼び出し・
+`src/`配下の変更は一切行っていない。
+
+#### 10.6.1 §10.5.4 SQL 5件のレビュー結果
+
+実際のMigration DDL(`supabase/migrations/20260917000003_economic_indicators_and_fx_pairs.sql`・
+`20260917000004_economic_events.sql`・`20260917000007_fx_prices_and_event_price_reactions.sql`)と
+照合した。**5件とも、テーブル名・カラム名・JOIN条件に不一致なし。**
+
+| Query | 対象テーブル・カラム | 照合結果 |
+|---|---|---|
+| 1 | `economic_events(id, release_datetime, release_datetime_precision, status, indicator_id)` / `economic_indicators(id, code, currency_code)` | 一致。`economic_events.indicator_id → economic_indicators.id`のJOINも定義通り |
+| 2 | `fx_pairs(symbol, base_currency, quote_currency, is_active)` | 一致 |
+| 3 | `fx_pairs` LEFT JOIN `fx_prices(fx_pair_id, timestamp, timeframe)` | 一致。`fx_prices."timestamp"`はDDL上は予約語回避のため引用符付きで定義されているが、`p.timestamp`という非引用の列参照は通常のPostgreSQL構文として有効(型名としての予約語制限であり、識別子としての使用は問題ない) |
+| 4 | 同上(JOIN使用) | 一致 |
+| 5 | `event_price_reactions(event_id, fx_pair_id, timeframe, pre_release_price, post_release_price, movement, pips, change_percent, max_upward, max_downward, max_upward_pips, max_downward_pips, data_status)` | 一致。全カラム名・型がDDLと同一 |
+
+全てSELECT文のみでINSERT/UPDATE/DELETEは含まれない。全てDEV環境(`fx-event-analyzer-dev`)のみを
+対象とし、接続先を切り替える記述は無い。**今回も実行はしていない(レビューのみ)。**
+
+#### 10.6.2 `ingest:fx-prices`の起動方法・実行履歴・継続稼働の確認方法(ワークフローは実行していない)
+
+**起動方法**(`src/jobs/ingestFxPrices.ts`):
+
+* 定期実行: GitHub Actions `cron: '7,27,47 * * * *'`(20分おき)で自動実行(`--manual`なし、
+  対象ペアは`FX_PAIR_MAPPINGS`の9ペア全て)。
+* 手動実行: `workflow_dispatch`で`target: fx-prices`または`both`を指定(`--manual`付き、
+  クレジット上限が700/日→800/日になる)。
+* ローカルCLI: `npm run ingest:fx-prices`(スケジュール相当)、または
+  `npm run ingest:fx-prices -- --manual --pairs USDJPY,EURUSD`(対象ペア指定)。
+
+**実行履歴の確認方法**(いずれも未実施。方法の整理のみ):
+
+1. **GitHub Actionsの実行履歴**: リポジトリの Actions タブ →
+   ワークフロー「FX Event Analyzer - Data ingestion (dev)」→ 各runの「FX prices」ステップの
+   ログ(JSON形式のサマリ: `job/status/api_requests/budget/fetched/upserted/unverified/skipped/errors`)
+   を見る。20分おきに走っているはずなので、runの間隔が空いていないかも確認できる。
+2. **`ingestion_logs`テーブル**(DB、未実行・読み取り専用で確認可能):
+   `data_type = 'FX_PRICE'`で`started_at desc`に並べると、各回の`status`・`fetched_count`・
+   `success_count`・`error_count`が時系列で見える(`20261015000003_ingestion_accuracy.sql`で
+   `job`・`details`列も追加済み)。
+3. **既存の品質レポート機能**(`npm run report:data-quality`、定期実行は`cron: '0 0 * * *'`、
+   毎日のGitHub Actions Summaryに出力): `latestCandleAgeMinutes`・`candleFreshness`
+   (NORMAL/WARNING/CRITICAL、§9.2で確定した25/45分の閾値)が対象ペアごとに既に出力される
+   設計になっている。**これが最も直接的な「継続稼働」の確認手段**であり、新たなSQLを書かずに
+   既存の仕組みで確認できる。
+4. **§10.5.4 Query 3**(`fx_prices`から直接`latest_candle`/`candles_last_2h`を読む)も同じ目的で
+   使える(③より直接的だが、品質レポートの閾値判定ロジックは経由しない生データ)。
+
+いずれも今回は実行していない(確認方法の整理のみ)。
+
+#### 10.6.3 `listFxPairs()`が`is_active`を参照しない件の調査(§必須作業3、修正はしない)
+
+**呼び出し元は2つのみ**(`grep`で確認、`src/`配下全体):
+
+* `src/ingestion/pipelines/fxPrices.ts`(`resolvePairs`、56行目付近) — 為替1分足の取得対象ペア解決。
+* `src/ingestion/pipelines/eventReactions.ts`(43行目) — 経済指標の価格反応の対象ペア解決。
+
+**いずれも`is_active`を一切見ていない。** これは今回の`eventReactions.ts`実装で新たに生じた
+ギャップではなく、**Ingestion Worker側(書き込み側)の既存の設計**(`fxPrices.ts`も同様)。
+一方、**読み取り側(API)はほぼ全箇所で`is_active = true`を明示的に絞り込んでいる**
+(`src/repositories/fxPairsRepository.ts`・`homeRepository.ts`・`rateAlertsRepository.ts`・
+データ品質レポートの`src/ingestion/quality/reader.ts`も`is_active = true`で絞り込み済み)。
+つまり**「書き込み側(Ingestion Worker)は`is_active`を見ない、読み取り側(API・品質レポート)は
+見る」という非対称な設計が、`fx_pairs`を扱うコード全体に既に存在する**。今回のeventReactions.ts
+固有の不具合ではない。
+
+**実際にどの通貨ペアが対象になるか**: `supabase/seed.sql`(67-79行目)のINSERT文は`is_active`列を
+一切指定していないため、DEV seedの9ペア全てが列既定値`is_active = true`で入る
+(マイグレーション`20260917000003_economic_indicators_and_fx_pairs.sql`で`default true`)。
+したがって**現在のDEV DBでは`is_active`列の値による実際の絞り込み差異は発生しない**
+(全9ペアが事実上「アクティブ」)。US_NFP/US_CPI(`currency_code = 'USD'`)の場合、
+`base_currency`または`quote_currency`が`USD`のペアは9ペア中
+**USDJPY・EURUSD・GBPUSD・AUDUSD・USDCHFの5ペア**(seed.sqlの定義から確認、§10.4.2で実データでも
+確認済み)。EURJPY・GBPJPY・AUDJPY・CADJPYはUSDを含まないため対象外。
+
+**修正は行っていない**(本指示で禁止されているため)。将来誰かが`fx_pairs.is_active`を
+`false`に変更した場合、読み取り側・品質レポートはそのペアを除外するが、Ingestion Worker
+(`fxPrices.ts`・`eventReactions.ts`)は除外しないという非対称が実害を持つようになる。
+修正するかどうかはHQ判断が必要(影響範囲は`listFxPairs()`呼び出し元の2ファイルのみ)。
+
+#### 10.6.4 `currency_code='USD'`と NFPイベント登録方法の根拠(§必須作業4、DB接続なし)
+
+**`currency_code`の根拠**(DB接続せず、コード/seedから確認):
+
+`supabase/seed.sql` 19-26行目:
+```sql
+insert into economic_indicators (id, code, name, name_en, country_code, currency_code, importance, ...) values
+  ('10000000-...0001', 'US_CPI', '米国CPI(消費者物価指数)', 'Consumer Price Index', 'US', 'USD', 'HIGH', ...),
+  ('10000000-...0002', 'US_NFP', '米国雇用統計(非農業部門雇用者数)', 'Nonfarm Payrolls', 'US', 'USD', 'HIGH', ...),
+```
+US_CPI・US_NFPともに`country_code = 'US'`・`currency_code = 'USD'`が**seedファイルに直接記載**
+されている。DEV DBがこのseedから作られたままであれば(途中でUPDATEされていなければ)、
+DB上の実際の値も`'USD'`である可能性が高いが、**DB上の実値そのものは今回も未確認**
+(§10.5.4 Query 1で確認できる)。
+
+**NFPイベントの登録方法**(`src/ingestion/pipelines/blsCalendar.ts`・`economicCalendar.ts`):
+
+1. `buildBlsScheduleReleases`が`blsSchedule.ts`の各エントリについて、BLSの公式系列から
+   実際の値(`actual`)が取得できるかを確認する。**`actual`が無い(まだ発表されていない)間は
+   release自体を生成しない**(`notYetAvailable`に積むのみ)。
+2. `actual`が取得できた回だけ、`NormalizedCalendarRelease`(`provider: 'bls_schedule'`、
+   `providerEventId: 'bls_schedule:US_NFP:2026-10'`等)を生成する。
+3. `economicCalendar.ts`の`upsertSchedule`が`provider_event_id`で既存イベントを検索し、
+   無ければ`store.insertEvent({..., status: release.actual !== null ? 'RELEASED' : 'SCHEDULED', ...})`
+   で新規作成する。`buildBlsScheduleReleases`は`actual !== null`の場合しかreleaseを作らないため、
+   **BLSパス経由のイベントは常に初回からRELEASEDとして作成される(SCHEDULEDを経由しない)**。
+4. `release_datetime_precision`は、スケジュール上の問題(`scheduleIssues`)が無ければ`'EXACT'`になる。
+
+**テストによる裏付け**(`tests/ingestion/blsCalendar.test.ts`、DB接続なしのユニットテスト):
+
+* `does not build a release for a future-dated entry` / `does not build a release when the
+  scheduled date has passed but BLS has not published the value` — 上記1を確認済み。
+* `publishes a VERIFIED snapshot (actual and the cross-check share the same BLS resolver)` —
+  `expect(event?.status).toBe('RELEASED')`で上記3を確認済み。
+* `converts an EST-month release date correctly (winter, UTC−5)` — 2026-02-13 08:30
+  America/New_York → `13:30:00.000Z`への変換を確認済み。**2026-11-06(NFP)も同じくEST
+  (夏時間終了後)のため、同じ変換ロジックが適用される**(このテスト自体は2026-02-13の例だが、
+  直後の別テストでは`US_CPI`・`releaseDate: '2026-11-10'`という**今回のCPI候補と全く同じ日付**を
+  入力に使っている)。
+* 本セッションでは`npx vitest run tests/ingestion/blsCalendar.test.ts`等のテスト実行はしていない
+  (読んで確認したのみ。実行禁止ではないが、今回は必須作業に含まれないため実施せず)。
+
+**このDEV環境でBLS経路以外の取り込みが動いていないことの根拠**: `.github/workflows/
+fx-event-analyzer-ingestion.yml`の`workflow_dispatch.inputs.target`は
+`fx-prices / speeches / both / report / official-bls / event-reactions`のみで、有料カレンダー
+(`economicCalendar.ts`経由、Finnhub/FMP等)を呼ぶターゲットはワークフローに存在しない。
+したがって**この環境ではUS_NFP/US_CPIの`economic_events`行はBLS経路(`official-bls`)でしか
+作られない**(2026-10-17のHQ判断の通り)。
+
+#### 10.6.5 11月6日のNFP検証に必要な手動操作と実行可能期間(§必須作業5)
+
+| 操作 | 実施可能な時期 | 備考 |
+|---|---|---|
+| ① `target=official-bls`を手動実行 | BLSが実際にNFP(2026-10期間分)を公表した**後**(予定: 2026-11-06 08:30 America/New_York = 13:30 UTC。発表後、BLSの系列に反映されてから) | これより前に実行しても`notYetAvailable`に入るだけで`economic_events`行は作られない(§10.6.4) |
+| ② `target=event-reactions`を手動実行 | ①で`economic_events`行(RELEASED)ができた後、かつ**`release_datetime`(2026-11-06T13:30:00Z)から7日以内 = 2026-11-13T13:30:00Z まで** | 実行対象は`release_datetime >= now - repairHorizonDays(7日)`で判定するため、①を実行した日時ではなく**release_datetime基準**で7日間(§10.5.6の記述を訂正: 「④の実行から7日以内」ではなく「release_datetime から7日以内」が正確) |
+
+* **60分枠まで確実にAVAILABLEを得たい場合**、②は2026-11-06T14:30:00Z(発表60分後)以降に
+  実行するのが望ましい(それより前だと60分枠はまだ締切未到達でNOTHING_READY_YET扱いになる
+  可能性がある。1分・5分・15分枠はそれぞれの締切後なら先に揃う)。
+* ①→②の順序は必須(②は①で作られたRELEASED行が無ければ何もしない、§10.5.2参照)。
+* ①・②とも、2026-11-13T13:30:00Zを過ぎると、そのイベントはhorizon外になり②を実行しても
+  対象外(`counters.fetched`が0のまま)になる見込み。
+* いずれも今回は実行していない(手順の整理のみ)。
+
+コード変更・DB接続・SQL実行・外部API呼び出し・ワークフロー実行は、この節の調査でも
+行っていない。
