@@ -834,3 +834,127 @@ fx-event-analyzer-ingestion.yml`の`workflow_dispatch.inputs.target`は
 
 コード変更・DB接続・SQL実行・外部API呼び出し・ワークフロー実行は、この節の調査でも
 行っていない。
+
+### 10.7 価格データの継続取得状況の確認準備(HQ指示 2026-10-19、DB接続・実行はまだ許可されていない)
+
+この節もコードレベルの調査のみ。DB接続・SQL実行・GitHub Actions実行・外部API呼び出し・
+`src/`配下の変更は一切行っていない。
+
+#### 10.7.1 既存のdata-quality reportの実行コマンド・出力・対象期間・鮮度判定基準
+
+**実行コマンド**(`src/jobs/reportDataQuality.ts`):
+
+```
+npm run report:data-quality                          # 直近7日(既定)、is_active=trueの全ペア
+npm run report:data-quality -- --days 14 --pairs USDJPY,EURUSD   # 日数・対象ペアを指定(1〜31日)
+```
+
+GitHub Actions上では`cron: '0 0 * * *'`(毎日)で`--days 1`で定期実行されるほか、
+`workflow_dispatch`で`target=report`を指定しても手動実行できる(いずれも今回は実行していない)。
+出力はMarkdownで標準出力、GitHub Actionsでは`GITHUB_STEP_SUMMARY`にも追記される(実行結果の
+画面で読める)。READ-ONLY(SELECTのみ、外部API呼び出しなし)。
+
+**出力項目**(`src/ingestion/quality/report.ts`、章構成):
+
+| 章 | 内容 |
+|---|---|
+| 1 | 為替1分足の取得率・欠損率(欠損の内訳・長い欠損TOP5) |
+| 2 | 照合一致率(1分足、2つ目の取得元との比較) |
+| 3 | 集約足(5分〜60分)の作成可能区間での成功率・評価期間全体のカバレッジ |
+| 4 | 発表・発言前後の1分足が揃っているか(経済指標・要人発言それぞれ) |
+| 5 | 取得ジョブの実行状況(ジョブ別の実行回数・成功/部分/失敗・所要時間・`ingest:fx-prices`の実行間隔) |
+| 6 | API利用量とクレジット消費・取り込み件数の照合 |
+| 7 | 時刻ずれ(**`latestCandleAgeMinutes`/`candleFreshness`はここ**) |
+| 8 | 経済指標の値の検証状況(VERIFIED/SINGLE_SOURCE等) |
+
+**対象期間**(`src/ingestion/quality/run.ts`):`period.from = floor(now) − days日`、
+`period.to = floor(now) − 30分`(`REPORT_END_LAG_MINUTES`。直近30分は「まだ取得待ちかもしれない」
+ため判定対象から除外)。ただし`latestCandleAgeMinutes`/`candleFreshness`は`period.to`では
+なく`now`そのものを基準に計算される(鮮度は「今」を知りたいため、取得待ちの除外を
+経由しない)。
+
+**対象ペア**: `reader.listPairs()`が`fx_pairs`を`is_active = true`で絞り込んで取得する
+(§10.6.3で確認した通り、DEV seedは9ペア全てが`is_active=true`既定のため、現在は**9ペア全て**が
+対象になる。HQの「9通貨ペア」という理解と一致する)。
+
+#### 10.7.2 `candleFreshness`の判定基準(既存実装の再掲、変更なし)
+
+`src/ingestion/quality/metrics.ts`の`classifyCandleFreshness`(HQ決定2026-10-18「価格データ品質の
+閾値」で既に実装済み。今回は変更していない):
+
+1. その時点(`now`)で市場が休場中(`isFxMarketOpen`、週末・12/25・1/1) → **`MARKET_CLOSED`**
+   (正常/警告/異常の判定対象外。新しい足自体が来ないため)。
+2. 市場が開いていて、1分足が1件も無い → **`NO_DATA`**。
+3. 市場が開いていて、最新1分足の経過時間(足の終了時刻からの分数)が:
+   * **25分以内 → `NORMAL`**(取り込みは20分おき+finality lag 2分のため、1サイクル分の遅れまで)
+   * **25分超〜45分以内 → `WARNING`**(2サイクル以内。1回分の取得失敗・リトライに相当)
+   * **45分超 → `CRITICAL`**(2サイクル以上連続して取得できていない。配信停止・大幅遅延を検出)
+
+画面(iOSアプリ)には一切表示されない。品質レポート§7にのみ出力される
+(`FRESHNESS_LABEL`: NORMAL=正常、WARNING=警告、CRITICAL=異常、MARKET_CLOSED=休場中(判定対象外)、
+NO_DATA=データなし)。
+
+#### 10.7.3 GitHub Actions実行履歴で分かることとDB接続でしか分からないこと
+
+| 確認したい情報 | GitHub Actions実行履歴(Actionsタブ)だけで分かるか | DB接続(`ingestion_logs`等)が必要か |
+|---|---|---|
+| 各runが起動した日時・成功/失敗(workflow全体) | **分かる**(runの一覧・ステータス) | 不要 |
+| 「FX prices」ステップのログ出力(JSON、`api_requests`/`fetched`/`upserted`/`skipped`/`errors`) | **分かる**(各stepのログを展開すれば読める。runごとに1件) | 不要。ただし過去runのログはGitHubの保持期間(既定90日)を過ぎると消える |
+| 複数runをまとめた傾向(例: 直近7日の成功率、実行間隔の最長、欠損の累積) | **分からない**(1run=1ログの単発情報のみ。横断集計はできない) | **必要**(`ingestion_logs`を集計する`report:data-quality`、またはSQLでの直接集計) |
+| 対象ペアごとの1分足の実際の充足状況(欠損区間・原因別の内訳) | **分からない**(ステップのログには出るが、`fx_prices`の実データとの対応確認はできない) | **必要**(`fx_prices`テーブルを直接読む必要がある) |
+| `latestCandleAgeMinutes`/`candleFreshness`(現在の鮮度) | **分からない**(「今」の鮮度はレポート実行時点の値であり、過去のrunログには出ない) | **必要**(`report:data-quality`の実行、または§10.5.4 Query 3) |
+| APIクレジットの消費状況(`api_credit_usage`) | ステップのログに`budget`は出るが、他ジョブ・他日との合算は**分からない** | 横断的な確認には**必要** |
+
+**まとめ**: 個々のrunが「動いたか」はActions履歴だけで確認できるが、**「継続的に健全に動いているか」
+(傾向・現在の鮮度・累積欠損)を確認するにはDB接続が必要**。§10.5.4 Query 3、または
+`report:data-quality`の実行(どちらも未実施)がその手段になる。
+
+#### 10.7.4 NFP検証前チェックリスト(§必須作業4)
+
+§10.5.3の7ステップのうち、①(発表前の健全性確認)を具体化したもの。全て未実施(DB接続・
+実行の許可を待つ)。
+
+| # | 確認項目 | 確認方法 | 現状 |
+|---|---|---|---|
+| 1 | 対象5ペア(USDJPY/EURUSD/GBPUSD/AUDUSD/USDCHF)が`is_active=true`か | §10.5.4 Query 2、または品質レポートの対象ペアに含まれているか | 未確認(seed.sql上は既定値true) |
+| 2 | 対象5ペアの`candleFreshness`がNORMAL(または市場休場中でMARKET_CLOSED)か | `report:data-quality`の実行、または§10.5.4 Query 3 | 未確認 |
+| 3 | `ingest:fx-prices`の直近7日の成功率・実行間隔に異常(長い欠損)が無いか | `report:data-quality`§5「ingest:fx-pricesの実行間隔」 | 未確認 |
+| 4 | 対象5ペアの直近の欠損率・長い欠損TOP5に懸念が無いか | `report:data-quality`§1 | 未確認 |
+| 5 | `economic_events`にUS_NFP(対象期間2026-10)の行がまだ存在しないこと(事前の状態確認) | §10.5.4 Query 1 | 未確認 |
+| 6 | 2026-11-06当日まで`ingest:fx-prices`の定期実行が継続していること(当日に再確認) | 同上①〜④を発表直前に再実行 | 発表直前に再確認が必要 |
+| 7 | BLSが予定通り発表したこと(BLS公式ページ、または`official-bls`実行後のログ) | 実行後のログ・§10.5.4 Query 1 | 発表後に確認 |
+
+#### 10.7.5 `is_active`非対称性の修正案と影響範囲(§必須作業5、未実装)
+
+§10.6.3で確認した事実を踏まえ、修正案のみ提示する(実装していない)。
+
+**修正案**: `src/repositories/ingestionRepository.ts`の`listFxPairs()`のSupabaseクエリに
+`.eq('is_active', true)`を追加する(`src/ingestion/quality/reader.ts`の`listPairs()`や
+各種読み取り側リポジトリと同じ絞り込みを書き込み側にも揃える)。
+
+**影響範囲**:
+
+* 呼び出し元は2箇所のみ: `src/ingestion/pipelines/fxPrices.ts`(為替1分足の取得対象ペア解決)、
+  `src/ingestion/pipelines/eventReactions.ts`(経済指標の価格反応の対象ペア解決)。
+* **現在のDEV DBでの挙動変化はゼロと推定**(9ペア全てが`is_active=true`既定のため)。
+* 将来誰かが`fx_pairs.is_active`を`false`にした場合:
+  * 修正後は、そのペアは`ingest:fx-prices`で1分足が取得されなくなり、`event-reactions`でも
+    候補ペアから除外される(読み取り側・品質レポートと一致する動きになる)。
+  * 修正前(現状)のままだと、非活性化したペアも取得・計算対象に残り続ける(読み取り側は
+    表示しないのに、裏では取得・計算だけ継続する無駄が生じる)。
+* **テストへの影響**: 現在のユニットテスト(`tests/ingestion/eventReactions.test.ts`・
+  `tests/helpers/memoryIngestionStore.ts`)は`is_active`列自体をモデル化していないため、
+  修正する場合は`FxPairRef`に`is_active`を追加し、`MemoryIngestionStore`でも絞り込みを
+  再現した上で、「非活性ペアは候補から除外される」ことを確認する新規テストが必要になる。
+  既存テストへの挙動変化は無い(既存テストは全ペア`is_active`未設定 = 実質true相当のため)。
+* **リスク**: 本番/DEVで実際に`is_active=false`のペアが存在する場合、その状態を正としてよいか
+  (将来再度活性化する想定か、恒久的に除外する想定か)は確認が必要。現在は該当ペアが無いため
+  リスクは理論上のもの。
+* マイグレーション・スキーマ変更は不要(列は既に存在)。コード変更は`ingestionRepository.ts`の
+  1行(クエリへの`.eq`追加)とテスト追加のみで、他の設計・既存の認証・RLS・API利用上限には
+  影響しない。
+
+**実装は行っていない**(本指示で禁止されているため)。実装するかどうかはHQ判断を待つ。
+
+コード変更・DB接続・SQL実行・GitHub Actions実行・外部API呼び出しは、この節の調査でも
+行っていない。
