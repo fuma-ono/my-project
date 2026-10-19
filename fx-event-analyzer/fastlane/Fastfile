@@ -18,8 +18,11 @@ platform :ios do
     app_store_connect_api_key(
       key_id: ENV.fetch("FX_ASC_KEY_ID"),
       issuer_id: ENV.fetch("FX_ASC_ISSUER_ID"),
-      key_content: ENV.fetch("FX_ASC_KEY_P8_PEM"),
-      is_key_content_base64: false,
+      # 以前はPEM形式のまま(is_key_content_base64: false)渡していたが、
+      # 複数回の実行で"invalid curve name"エラーが続いたため、改行の
+      # 保持がより確実なBase64方式に変更した(HQ承認、2026-10-19)。
+      key_content: ENV.fetch("FX_ASC_KEY_P8_BASE64"),
+      is_key_content_base64: true,
       in_house: false
     )
 
