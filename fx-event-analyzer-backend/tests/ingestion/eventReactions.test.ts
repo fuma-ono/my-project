@@ -187,6 +187,48 @@ describe('ingestEventPriceReactions', () => {
     expect(store.eventPriceReactions.every((r) => r.event_id === 'event-1')).toBe(true);
   });
 
+  it('stores the calculated pips/movement/max-excursion values correctly in store.eventPriceReactions (DB-write wiring check)', async () => {
+    // 手計算（pre = T-1m candle close = 150.000, pip_size 0.01 for USDJPY）:
+    //   1m: post = 150.100 (T+1m) → movement = 0.100 → pips = 0.100 / 0.01 = 10
+    //   5m: post = 150.400 (T+5m) → movement = 0.400 → pips = 0.400 / 0.01 = 40
+    //   5m window (T, T+5m] の各candleの値(高値=安値=終値のみ): 150.100, 150.250, 149.900, 150.050, 150.400
+    //     最大上昇 = 150.400 - 150.000 = 0.400 → 40pips / 最大下降 = 149.900 - 150.000 = -0.100 → -10pips
+    store.fxPrices = [
+      fxCandle('pair-usdjpy', -1, 150.0),
+      fxCandle('pair-usdjpy', 0, 150.1),
+      fxCandle('pair-usdjpy', 1, 150.25),
+      fxCandle('pair-usdjpy', 2, 149.9),
+      fxCandle('pair-usdjpy', 3, 150.05),
+      fxCandle('pair-usdjpy', 4, 150.4),
+    ];
+    const counters = new JobCounters();
+
+    await ingestEventPriceReactions(store, { horizonDays: 7 }, NOW, counters);
+
+    const row = (timeframe: string) =>
+      store.eventPriceReactions.find((r) => r.fx_pair_id === 'pair-usdjpy' && r.timeframe === timeframe);
+
+    expect(row('1m')).toMatchObject({
+      data_status: 'AVAILABLE',
+      pre_release_price: 150.0,
+      post_release_price: 150.1,
+      movement: 0.1,
+      pips: 10,
+    });
+
+    expect(row('5m')).toMatchObject({
+      data_status: 'AVAILABLE',
+      pre_release_price: 150.0,
+      post_release_price: 150.4,
+      movement: 0.4,
+      pips: 40,
+      max_upward: 0.4,
+      max_downward: -0.1,
+      max_upward_pips: 40,
+      max_downward_pips: -10,
+    });
+  });
+
   it('logs the run via the shared JobCounters (data_type EVENT_REACTION) without crashing on an empty DB', async () => {
     store.events = [];
     const counters = new JobCounters();

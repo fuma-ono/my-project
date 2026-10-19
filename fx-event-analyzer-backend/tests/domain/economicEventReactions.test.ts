@@ -47,16 +47,38 @@ describe('computeEventPairReactionRows', () => {
     expect(oneMinute.movement).toBe(0.2);
     expect(oneMinute.pips).toBeCloseTo(20, 6); // 0.2 / 0.01 (JPY pip size) = 20 pips
     expect(oneMinute.change_percent).toBeCloseTo((0.2 / 150.0) * 100, 4);
+    // 1m window = only the T+1m candle (high 150.3 / low 149.95): deltas from pre 150.0 are 0.3 / -0.05.
+    expect(oneMinute.max_upward_pips).toBeCloseTo(30, 6);
+    expect(oneMinute.max_downward_pips).toBeCloseTo(-5, 6);
+
+    const fiveMinute = rows[1]!;
+    expect(fiveMinute.post_release_price).toBe(150.4);
+    expect(fiveMinute.pips).toBeCloseTo(40, 6); // (150.4 - 150.0) / 0.01 = 40 pips
+    // 5m window adds the T+2m/+3m/+4m/+5m candles: highest high is 150.6 (T+3m) → +0.6 → 60 pips,
+    // lowest low stays 149.95 (T+1m) → -0.05 → -5 pips.
+    expect(fiveMinute.max_upward_pips).toBeCloseTo(60, 6);
+    expect(fiveMinute.max_downward_pips).toBeCloseTo(-5, 6);
+
+    const fifteenMinute = rows[2]!;
+    expect(fifteenMinute.post_release_price).toBe(150.6);
+    expect(fifteenMinute.pips).toBeCloseTo(60, 6); // (150.6 - 150.0) / 0.01 = 60 pips
+    // 15m window adds the T+14m/+15m candles: highest high becomes 150.65 (T+15m) → +0.65 → 65 pips,
+    // lowest low still 149.95 (T+1m) → -0.05 → -5 pips.
+    expect(fifteenMinute.max_upward_pips).toBeCloseTo(65, 6);
+    expect(fifteenMinute.max_downward_pips).toBeCloseTo(-5, 6);
 
     const sixtyMinute = rows[4]!;
     expect(sixtyMinute.post_release_price).toBe(150.8);
+    expect(sixtyMinute.pips).toBeCloseTo(80, 6); // (150.8 - 150.0) / 0.01 = 80 pips
     // pre_release_price (150.0) basis, not cumulative between candles (db-design.md §3.12)
     expect(sixtyMinute.max_upward).toBeCloseTo(150.85 - 150.0, 6);
     expect(sixtyMinute.max_downward).toBeCloseTo(149.85 - 150.0, 6);
+    expect(sixtyMinute.max_upward_pips).toBeCloseTo(85, 6);
+    expect(sixtyMinute.max_downward_pips).toBeCloseTo(-15, 6);
   });
 
   it("rounds pips/max_upward_pips/max_downward_pips to 2 decimals (event_price_reactions is numeric(10,2) — not speeches' 1-decimal API convention)", () => {
-    const candles = [candle(-1, 1.1, 1.1, 1.1), candle(0, 1.10005, 1.1001, 1.0999)];
+    const candles = [candle(-1, 1.1, 1.1, 1.1), candle(0, 1.10005, 1.100127, 1.099873)];
     const rows = computeEventPairReactionRows({
       releaseDatetime: RELEASE,
       precision: 'EXACT',
@@ -67,6 +89,10 @@ describe('computeEventPairReactionRows', () => {
     const oneMinute = rows.find((r) => r.timeframe === '1m')!;
     // movement = 0.00005 / 0.0001 pip size = 0.5 pips exactly representable at 2dp
     expect(oneMinute.pips).toBe(0.5);
+    // max_upward = 1.100127 - 1.1 = 0.000127 / 0.0001 pip size = 1.27 pips (needs 2dp, not 1dp)
+    expect(oneMinute.max_upward_pips).toBeCloseTo(1.27, 6);
+    // max_downward = 1.099873 - 1.1 = -0.000127 / 0.0001 pip size = -1.27 pips
+    expect(oneMinute.max_downward_pips).toBeCloseTo(-1.27, 6);
   });
 
   it('a timeframe whose window has not closed yet is omitted entirely (never a guessed/placeholder row)', () => {
@@ -93,6 +119,12 @@ describe('computeEventPairReactionRows', () => {
       expect(row.post_release_price).toBeNull();
       expect(row.pips).toBeNull();
       expect(row.pre_release_price).toBe(150.0); // shared across every timeframe row
+      expect(row.movement).toBeNull();
+      expect(row.change_percent).toBeNull();
+      expect(row.max_upward).toBeNull();
+      expect(row.max_downward).toBeNull();
+      expect(row.max_upward_pips).toBeNull();
+      expect(row.max_downward_pips).toBeNull();
     }
   });
 

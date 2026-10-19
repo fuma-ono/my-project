@@ -65,4 +65,16 @@ describe('calculateMaxExcursion', () => {
     expect(result.maxUpwardPips).toBeCloseTo(90.0);
     expect(result.maxDownwardPips).toBeCloseTo(-20.0);
   });
+
+  it('computes maxUpwardPips/maxDownwardPips for EURUSD (pip_size 0.0001)', () => {
+    const result = calculateMaxExcursion({
+      preReleasePrice: 1.085,
+      pricesInWindow: [1.087, 1.082, 1.086, 1.084],
+      pipSize: 0.0001,
+    });
+    expect(result.maxUpward).toBeCloseTo(0.002); // 1.087 - 1.085
+    expect(result.maxDownward).toBeCloseTo(-0.003); // 1.082 - 1.085
+    expect(result.maxUpwardPips).toBeCloseTo(20.0); // 0.002 / 0.0001
+    expect(result.maxDownwardPips).toBeCloseTo(-30.0); // -0.003 / 0.0001
+  });
 });
