@@ -361,3 +361,131 @@ from pg_roles r where r.rolname in ('anon', 'authenticated', 'service_role');
 
 - 1分足そのもの(Twelve Data由来)の正確性は、本検証の対象外(別途、外部の独立照合が未実装のまま。既報)。本検証は「正しい1分足が入っていれば、正しい時間反応に変換されるか」のみを確認する。
 - 実機(iOS)での画面表示は本検証の対象外(§9のブラウザ版品質レポートか、直接SQLでの確認に限る)。
+
+### 10.4 初回DEV実行結果の調査(2026-10-19、HQ指示「event-reactions初回DEV実行結果の調査」)
+
+権限者による初回手動実行(2026-10-19T01:05:52Z)の結果: `fetched:1, success:1`、1イベント×5ペア×5時間枠=25件、**全件UNAVAILABLE(available:0)**。
+
+**このセッションには開発DBの認証情報が無く、DBへの接続・確認は行っていない。** 以下は
+コード・既存の設定ファイル(`blsSchedule.ts`、ワークフローの作成日時)からの推定であり、
+DB上の実際の値による確認はまだ取れていない(§10.4.3のクエリで権限者に確認を依頼する)。
+
+#### 10.4.1 対象イベントの推定(§調査指示1)
+
+`pairs: 5`は、アクティブな9通貨ペアのうちUSDを含む5ペア(USDJPY・EURUSD・GBPUSD・AUDUSD・USDCHF)
+と一致する数であり、対象イベントの`currency_code`は**USD**と推定される。現状USDの
+`economic_events`を作れる経路はBLS独立経路(`ingest:official:bls-calendar`、US_CPI・US_NFPのみ、
+有料カレンダーは未契約)のみのため、対象はこのいずれかと推定される。
+
+`mappings/blsSchedule.ts`の表と実行時刻(2026-10-19、7日horizon→2026-10-12以降が対象)を
+照合すると:
+- US_CPI(対象期間2026-09)の発表日は**2026-10-14**(horizon内)
+- US_NFP(対象期間2026-09)の発表日は2026-10-02(horizon外、7日より前)
+- 次のUS_NFP(2026-10対象)は2026-11-06(未来、まだRELEASEDにならない)
+
+これらから、対象イベントは**US_CPI(対象期間2026-09、発表日2026-10-14、08:30
+America/New_York = 12:30 UTC、EDT期間のため)である可能性が高い**と推定する。
+
+`25件`(5ペア×5時間枠、除外された時間枠が無い)という件数は、`release_datetime_precision`が
+**EXACT**であることとも整合する(APPROXIMATEなら1m除外で20件、DATE_ONLY/UNKNOWNなら
+1m・5m除外で15件になるはず)。
+
+**確認用クエリ**(権限者向け、読み取りのみ):
+```sql
+select e.id, e.release_datetime, e.release_datetime_precision, e.status, i.code
+from economic_events e
+join economic_indicators i on i.id = e.indicator_id
+where e.id = 'b7a6a88f-131c-4005-9a9a-255a2f223e04';
+```
+
+#### 10.4.2 5通貨ペアの1分足データの有無(§調査指示2)
+
+**推定(DB未確認)**: 存在しない可能性が高い。根拠は、為替1分足の定期取り込み
+(`ingest:fx-prices`、20分ごと)を実行するGitHub Actionsワークフロー
+(`fx-event-analyzer-ingestion.yml`)が**作成されたのは2026-10-16**であり、推定される
+発表日時(2026-10-14 12:30 UTC)はそれより**2日前**である。db-design.md
+の方針(「イベント周辺の時間窓を中心に保持する」、過去への遡及的バックフィルは
+行わない)から、ワークフロー開始前の時刻の1分足は最初から存在しないはずである。
+
+**確認用クエリ**(権限者向け、読み取りのみ):
+```sql
+select fp.symbol,
+       (select min(timestamp) from fx_prices p where p.fx_pair_id = fp.id and p.timeframe = '1m') as first_candle,
+       (select count(*) from fx_prices p where p.fx_pair_id = fp.id and p.timeframe = '1m'
+          and p.timestamp between '2026-10-14T12:15:00Z' and '2026-10-14T13:31:00Z') as candles_near_release
+from fx_pairs fp
+where fp.symbol in ('USDJPY','EURUSD','GBPUSD','AUDUSD','USDCHF');
+```
+期待(推定どおりなら): `first_candle`が2026-10-16以降、`candles_near_release`が0。
+
+#### 10.4.3 25件すべてがUNAVAILABLEになった理由(§調査指示3・4)
+
+`src/domain/economicEventReactions.ts`の`computeEventPairReactionRows`を確認した結果:
+`pre_release_price`は(event, pair)ごとに1回だけ計算され、全ての時間枠の行で共有される
+(db-design.md §3.12「全timeframe行で共通値」どおりの実装)。**この`pre_release_price`が
+null(発表直前の1分足が1本も無い)の場合、その(event, pair)の5時間枠すべてが
+UNAVAILABLEになる**(`tests/domain/economicEventReactions.test.ts`「no pre-release
+candle at all → every timeframe UNAVAILABLE with pre_release_price null too」で既にこの
+挙動を確認済み)。
+
+したがって、**コード側の挙動は仕様どおりであり、バグではない**。25件全てがUNAVAILABLEに
+なった根本原因は、**5ペア全てについて発表前後の1分足データがDB上に存在しなかったこと**
+(§10.4.2の推定どおりであれば、価格データの取得元(Twelve Data)がまだこの日時のデータを
+持っていなかったため)と考えられる。
+
+#### 10.4.4 時間枠ごとの分類(§調査指示4)
+
+| 分類 | 該当件数 | 判定根拠 |
+|---|---|---|
+| 価格不足(必要な1分足がfx_pricesに無い) | **25件(該当)** | 全件がUNAVAILABLE。締切(release_datetime+各時間枠)はいずれも5日以上前で既に過去のため「対象時間未到達」ではない |
+| 対象時間未到達(締切がまだ来ていない) | 0件(該当なし) | 実行時点(2026-10-19)は発表(2026-10-14)から5日後。60分枠まで含め全ての締切が過去 |
+| 時刻精度不足(release_datetime_precisionによる除外) | 0件(該当なし) | 25件(5ペア×5時間枠)全てが書き込まれており、除外された時間枠が無い(EXACTと推定) |
+| 通貨ペア不一致 | 0件(該当なし) | 5ペアはUSD関連の正しい候補集合と一致(推定どおり選定ロジックは正しく機能) |
+
+#### 10.4.5 SUCCESSの意味(§調査指示5)
+
+**`status: "SUCCESS"`は「ジョブがエラー無く完了した」ことのみを意味し、「データの正確性が
+検証済み」であることは意味しない。** `runIngestionJob`の`resolveJobStatus`は
+`counters.errors === 0`のときSUCCESSを返す実装で、UNAVAILABLE行の書き込みはエラーとして
+数えていない(「データが無いことを正直に記録できた」という意味で、意図的に成功として
+扱う設計)。今回のケースでは、**ジョブは「価格データが無いので計算できない」という
+正しい結論を正しく記録できた、という意味でのSUCCESS**であり、経済指標の価格反応の
+計算結果(pips等)が実際に正しいかどうかは、AVAILABLE行が1件も無いため**今回は検証できていない**。
+
+#### 10.4.6 要人発言側への影響(§調査指示6)
+
+`src/domain/speechReactions.ts`への変更は、既存の非公開関数2つ(`closeTimeMs`・`round`)に
+`export`を付けただけで、処理内容・呼び出し元は変更していない(2026-10-18のコミットで確認済み)。
+CIでの既存テスト(`tests/integration/speech-reactions.test.ts`含む全726件)が今回のラウンドまで
+通過し続けていることをコードレベルで確認済み。本ジョブは`event_price_reactions`テーブルのみに
+書き込み、`speech_events`・要人発言のその場計算ロジックには一切触れないため、**影響は無いと
+判断する**(コード上の保証。DEV DB上での`GET /speeches/{id}`の前後比較は未実施)。
+
+#### 10.4.7 データ取得を待てば解決するか、コード修正が必要か
+
+**コード修正は不要と判断する(未実施、HQ承認前提)。** 今回UNAVAILABLEになったのは、
+たまたま最初に見つかったイベント(推定: 2026-10-14発表のCPI)が、為替1分足の定期取り込みが
+始まる(2026-10-16)**より前**に発表されたためで、パイプライン自体の不具合ではないと判断する。
+
+* **このイベント(2026-10-14 CPI)自体は、待っても解決しない**: 1分足の遡及的な
+  バックフィルは行わない設計のため、今後`ingest:event-reactions`を何度再実行しても
+  UNAVAILABLEのままになる見込み。
+* **今後発表される新しいイベント(2026-10-16以降に取り込みが始まった後に発表されるもの)
+  であれば、1分足が既に継続的に収集されているため、AVAILABLEになる見込みが高い。**
+  次の対象(BLSスケジュールのみ): US_NFP(対象期間2026-10、発表日2026-11-06)、
+  US_CPI(対象期間2026-10、発表日2026-11-10)。いずれも約3〜4週間後。
+
+#### 10.4.8 修正案と費用・APIクレジットへの影響
+
+今回判明した制約を踏まえた選択肢を提示する(いずれも実行していない。HQ判断を待つ):
+
+| 選択肢 | 内容 | 費用・APIクレジット |
+|---|---|---|
+| A. 何もしない(推奨) | 次の自然なBLS発表(3〜4週間後)を待って再実行する | **0円・0クレジット**。ただし検証に数週間かかる |
+| B. DEV限定のテスト用イベントを人が手で1件作る | 権限者が、直近(例: 実行日の1〜2時間前)の仮のeconomic_events行を1件INSERTし、その時間帯には既に1分足が存在するため、AVAILABLE行が書かれることを早期に確認できる | **0円・0クレジット**(外部APIは呼ばない)。ただし「DBデータの手動書き換え」に近い操作のため、本指示の禁止事項との整合を先にHQに確認する必要がある。既存データの削除・書き換えではなく新規行の追加のみ |
+| C. 過去の1分足を遡及的に取得する | Twelve Dataの履歴APIで2026-10-14前後の1分足を取得し直す | **要確認・おそらく有料**(無料プランでの遡及取得可否は未確認)。今回は提案のみで実施していない |
+
+**Claudeの推奨はAだが、早期に正常系(AVAILABLE)を確認したい場合はBが最もコストが低い。
+いずれも今回は実施せず、HQの判断を待つ。**
+
+コード変更・ワークフロー再実行は行っていない。
