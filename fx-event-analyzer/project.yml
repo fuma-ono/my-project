@@ -49,6 +49,22 @@ targets:
         # Required for `@testable import FXEventAnalyzer` in FXEventAnalyzerTests.
         Debug:
           SWIFT_ENABLE_TESTABILITY: YES
+        # TestFlight配布用の手動署名設定(HQ承認、2026-10-19)。このターゲット
+        # だけに適用されるよう、ここ(プロジェクト設定)に書く。以前は
+        # xcodebuildのコマンドライン上書き(xcargs)で渡していたが、その方式
+        # だとSwift Packageの疑似ターゲット(swift-crypto_Crypto等)にも
+        # プロビジョニングプロファイルの指定が一律で及んでしまい、
+        # 「does not support provisioning profiles」でアーカイブが失敗した。
+        # ここでターゲット単位に閉じることで、パッケージ側には影響しない。
+        # DEVELOPMENT_TEAM・PROVISIONING_PROFILE_SPECIFIERの実値は
+        # project.ymlに書かず、CI側がxcodebuildのコマンドラインから
+        # $(FX_SIGNING_TEAM_ID)・$(FX_SIGNING_PROFILE_NAME)という別名の
+        # 変数経由で渡す(Secrets管理の方針を維持)。
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "Apple Distribution"
+          DEVELOPMENT_TEAM: "$(FX_SIGNING_TEAM_ID)"
+          PROVISIONING_PROFILE_SPECIFIER: "$(FX_SIGNING_PROFILE_NAME)"
     info:
       path: FXEventAnalyzer/Resources/Info.plist
       properties:

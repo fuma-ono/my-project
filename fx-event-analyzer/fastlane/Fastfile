@@ -37,11 +37,16 @@ platform :ios do
       export_options: ENV.fetch("FX_EXPORT_OPTIONS_PLIST_PATH"),
       output_directory: ENV.fetch("FX_IPA_OUTPUT_DIR", "build"),
       output_name: "FXEventAnalyzer.ipa",
+      # CODE_SIGN_STYLE/PROVISIONING_PROFILE_SPECIFIER等を直接ここで
+      # 上書きしない(HQ承認、2026-10-19)。xcodebuildのコマンドライン上書きは
+      # 全ターゲット(Swift Packageの疑似ターゲット含む)に一律適用され、
+      # swift-crypto_Crypto等が「プロビジョニングプロファイルに対応しない」
+      # エラーでアーカイブ失敗する原因になっていた。署名設定自体は
+      # project.ymlのFXEventAnalyzerターゲット(Releaseのみ)に移し、
+      # ここでは別名の変数として値を渡すだけにする。
       xcargs: [
-        "CODE_SIGN_STYLE=Manual",
-        "DEVELOPMENT_TEAM=#{ENV.fetch('FX_APPLE_TEAM_ID')}",
-        "PROVISIONING_PROFILE_SPECIFIER=\"#{ENV.fetch('FX_IOS_PROVISIONING_PROFILE_NAME')}\"",
-        "CODE_SIGN_IDENTITY=\"Apple Distribution\"",
+        "FX_SIGNING_TEAM_ID=#{ENV.fetch('FX_APPLE_TEAM_ID')}",
+        "FX_SIGNING_PROFILE_NAME=\"#{ENV.fetch('FX_IOS_PROVISIONING_PROFILE_NAME')}\"",
         "CURRENT_PROJECT_VERSION=#{ENV.fetch('FX_BUILD_NUMBER')}"
       ].join(" ")
     )
