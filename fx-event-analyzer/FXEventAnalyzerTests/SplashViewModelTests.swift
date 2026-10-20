@@ -1,6 +1,20 @@
 import XCTest
 @testable import FXEventAnalyzer
 
+/// HQ指示(2026-10-20)「既存テストの待機方法を修正」: 固定50msのsleepは
+/// `runInitSequence()`の実行時間がその枠を超えた瞬間に(ログ出力の追加等、
+/// 本来の意図と無関係な理由でも)失敗する不安定なテストだった。
+/// `SettingsViewModelTests.swift`と同じ、状態が変わるまで短い間隔で
+/// ポーリングする方式に統一する(最大1秒、10ms間隔)。タイムアウトしても
+/// ループはただ抜けるだけで、後続の`XCTAssertEqual`等が実際の値で
+/// 失敗する — 失敗を成功扱いにはしない。
+private func waitUntil(_ condition: @escaping () -> Bool) async {
+    for _ in 0..<100 {
+        if condition() { return }
+        try? await Task.sleep(nanoseconds: 10_000_000)
+    }
+}
+
 @MainActor
 final class SplashViewModelTests: XCTestCase {
     func testNoSessionRoutesToUnauthenticated() async {
@@ -57,13 +71,13 @@ final class SplashViewModelTests: XCTestCase {
             finishedOutcome = outcome
         }
         viewModel.start()
-        try? await Task.sleep(nanoseconds: 50_000_000)
+        await waitUntil { viewModel.state == .initializationError }
         XCTAssertEqual(viewModel.state, .initializationError)
         XCTAssertNil(finishedOutcome, "onFinished must not fire when the init sequence fails")
 
         auth.sessionResult = .success(nil)
         viewModel.retry()
-        try? await Task.sleep(nanoseconds: 50_000_000)
+        await waitUntil { finishedOutcome != nil }
 
         XCTAssertEqual(finishedOutcome, .unauthenticated)
     }
