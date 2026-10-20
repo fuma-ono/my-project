@@ -143,22 +143,31 @@ struct HistoricalComparisonView: View {
         let shape = RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
         return VStack(spacing: 0) {
             tableHeader
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 0) {
-                    ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
-                        if index > 0 {
-                            Rectangle().fill(SettingsCardStyle.cardBorder.opacity(0.6)).frame(height: 0.5)
+            if events.isEmpty {
+                // ユーザー指摘(2026-10-20)「過去の発表はまだありませんの文字の
+                // 位置がおかしい、下すぎる」: 以前はScrollViewの中に
+                // `minHeight: 36`で置いていたため、表の実際の高さ(0件時は
+                // ヘッダーを除くと約22.5pt)より中身の希望高さの方が大きく、
+                // ScrollViewの中でコンテンツが窮屈にはみ出し、文字が本来の
+                // 表示領域からズレて見えていた。ScrollViewの外に出し、
+                // 残りの領域いっぱいに`.center`で配置することで、表の
+                // 実際の高さに関わらず常に中央に来るようにした。
+                NotoText.text("過去の発表はまだありません。", size: 7)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            } else {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
+                            if index > 0 {
+                                Rectangle().fill(SettingsCardStyle.cardBorder.opacity(0.6)).frame(height: 0.5)
+                            }
+                            NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
+                                tableRow(event, unit: unit)
+                            }
+                            .buttonStyle(SettingsRowPressStyle())
+                            .accessibilityIdentifier("historyEventRow")
                         }
-                        NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
-                            tableRow(event, unit: unit)
-                        }
-                        .buttonStyle(SettingsRowPressStyle())
-                        .accessibilityIdentifier("historyEventRow")
-                    }
-                    if events.isEmpty {
-                        NotoText.text("過去の発表はまだありません。", size: 7)
-                            .foregroundStyle(SettingsCardStyle.subtitleColor)
-                            .frame(maxWidth: .infinity, minHeight: 36)
                     }
                 }
             }
