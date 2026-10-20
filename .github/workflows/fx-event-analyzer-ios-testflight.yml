@@ -29,6 +29,17 @@ name: FX Event Analyzer iOS TestFlight (manual, signed)
 #                                        (fx-event-analyzer-ios-build.ymlと共有、必須)
 #   FX_API_BASE_URL                      バックエンドAPIのベースURL(未デプロイ時は空でも可)
 #
+# HQ指示(2026-10-20)「サインインは両方実装しよう」で追加。任意
+# (未設定でもビルド自体は成功し、Googleサインインボタンだけが「準備中」
+# 相当のエラーを返す — fx-event-analyzer-ios-build.ymlと同じ方針):
+#   FX_GOOGLE_SIGNIN_CLIENT_ID            Google Cloud ConsoleのOAuth Client ID(iOS)
+#   FX_GOOGLE_SIGNIN_REVERSED_CLIENT_ID   同Client IDの「逆順」形式(URL Scheme用)
+#
+# Sign In with Apple側はこのワークフローのSecretsに追加は不要だが、Apple
+# Developer Portal側でApp IDの"Sign In with Apple" Capabilityを有効化し、
+# FX_IOS_PROVISIONING_PROFILE_BASE64/NAMEをそれを含む内容で再生成・再登録
+# する必要がある(別途対応、このワークフロー自体は変更不要)。
+#
 # ビルド番号はCURRENT_PROJECT_VERSIONをgithub.run_numberで上書きする
 # (project.yml自体は変更しない。既存のSimulatorビルドに影響なし)。
 #
@@ -202,6 +213,8 @@ jobs:
           FX_SUPABASE_URL: ${{ secrets.FX_SUPABASE_URL }}
           FX_SUPABASE_ANON_KEY: ${{ secrets.FX_SUPABASE_ANON_KEY }}
           FX_API_BASE_URL: ${{ secrets.FX_API_BASE_URL }}
+          FX_GOOGLE_SIGNIN_CLIENT_ID: ${{ secrets.FX_GOOGLE_SIGNIN_CLIENT_ID }}
+          FX_GOOGLE_SIGNIN_REVERSED_CLIENT_ID: ${{ secrets.FX_GOOGLE_SIGNIN_REVERSED_CLIENT_ID }}
         run: fastlane ios testflight
 
       - name: Clean up temporary keychain and generated files
