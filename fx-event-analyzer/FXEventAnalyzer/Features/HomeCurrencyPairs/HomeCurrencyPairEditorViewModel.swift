@@ -12,6 +12,12 @@ final class HomeCurrencyPairEditorViewModel: ObservableObject {
     /// 選べる通貨ペアすべて。
     @Published private(set) var available: [String] = []
     private var saved: [String] = []
+    /// HQ指示(2026-10-20)「選択中の状態と保存済みの状態を適切に分離する」:
+    /// `load()`が再度呼ばれても(例えば`.task`の再実行や画面の再構築)、
+    /// 選択中の未保存の`selected`をサーバー側の値で上書きしないための
+    /// 一度きりフラグ。この画面はSave前提の単一編集セッションであり、
+    /// 読み込み後にサーバー側の値を再適用する必要はない。
+    private var hasLoadedOnce = false
 
     private let service: SettingsService
     private let catalog: FXPairCatalog
@@ -30,6 +36,9 @@ final class HomeCurrencyPairEditorViewModel: ObservableObject {
     var canSave: Bool { loadState == .loaded && hasChanges && !selected.isEmpty && saveState != .saving }
 
     func load() async {
+        // `.task`の再実行等で`load()`が2度目以降呼ばれても、選択中の
+        // 未保存の変更をサーバー側の値で上書きしない(初回のみ初期化する)。
+        guard !hasLoadedOnce else { return }
         loadState = .loading
         do {
             let settings = try await service.fetchSettings()
@@ -42,6 +51,7 @@ final class HomeCurrencyPairEditorViewModel: ObservableObject {
             // 保存済みだが候補に無い記号も消さずに残す。
             available = symbols + selected.filter { !symbols.contains($0) }
             loadState = .loaded
+            hasLoadedOnce = true
         } catch let error as APIError where error.isNotConfigured {
             loadState = .backendNotConfigured
         } catch {

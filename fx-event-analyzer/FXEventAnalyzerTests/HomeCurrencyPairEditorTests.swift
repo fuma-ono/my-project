@@ -51,6 +51,23 @@ final class HomeCurrencyPairEditorTests: XCTestCase {
         XCTAssertEqual(viewModel.selected, ["EURUSD", "GBPJPY"])
     }
 
+    /// HQ指示(2026-10-20)「通貨ペア選択状態の消失を修正」: 追加画面から
+    /// 戻った際などに`.task`経由で`load()`が再度呼ばれても、選択中の
+    /// 未保存の変更がサーバー側の値で上書きされないことを確認する。
+    func testReloadingAfterLoadDoesNotDiscardUnsavedSelection() async {
+        let apiClient = MockAPIClient()
+        let viewModel = await loaded(apiClient, home: ["USDJPY"])
+        viewModel.toggle("GBPJPY") // 追加画面での選択を模する(未保存)
+        XCTAssertEqual(viewModel.selected, ["USDJPY", "GBPJPY"])
+
+        // 画面の再構築等で`load()`が再度呼ばれるケースを模す。
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.selected, ["USDJPY", "GBPJPY"])
+        XCTAssertTrue(viewModel.hasChanges)
+        XCTAssertTrue(viewModel.canSave)
+    }
+
     func testPickerCategoriesAndSearch() async {
         let viewModel = await loaded(MockAPIClient(), home: ["GBPJPY", "USDJPY"])
         // 選択中を選んだ順で上に、残りはその下に。
