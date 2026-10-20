@@ -81,4 +81,10 @@ enum AppRoute: Hashable {
     case speechMovementDetail(speechId: String, fxPairId: String, symbol: String, title: String, statementDatetime: Date)
     /// 要人発言の過去イベント比較: 同じ要人の過去の発言(api-design v1.28)。
     case speakerComparison(speakerId: String, fxPairId: String?, symbol: String?)
+    /// HQ指示(2026-10-20)「起動診断画面」。Mac/Console.app無しでiPhone
+    /// だけで起動シーケンスの計測値を確認できる、設定画面からの遷移先
+    /// (`DiagnosticsStore`が保持する値の表示専用)。ui-screens.mdのSCR
+    /// 番号を持つ製品画面ではなくエンジニアリング用の診断画面のため、
+    /// 固定SCR番号を持つ`SettingsSubRoute`ではなくこちらに置いている。
+    case launchDiagnostics
 }

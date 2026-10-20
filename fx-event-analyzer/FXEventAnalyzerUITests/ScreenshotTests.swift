@@ -357,11 +357,15 @@ final class ScreenshotTests: XCTestCase {
             _ = setMockSubscriptionPlan("PRO")
         }
         captureSettingsSubScreen(row: "表示・地域設定", rowIndex: 3, waitFor: "タイムゾーン", name: "18-DisplaySettings")
+        // HQ指示(2026-10-20)「起動診断画面を追加」でグループ1が5行→6行に
+        // なったため、グループ2(2つ目のまとまり)の各行のrowIndexを+1した
+        // (1つ目6行+間隔8)。
+        captureSettingsSubScreen(row: "起動診断", rowIndex: 5, waitFor: "起動シーケンス全体の時間", name: "19-LaunchDiagnostics")
         // SCR-020 ヘルプ・お問い合わせは2つ目のまとまりの先頭(1つ目6行+間隔8)。
-        captureSettingsSubScreen(row: "ヘルプ・お問い合わせ", rowIndex: 5, extraOffset: 8, waitFor: "よくある質問", name: "20-Help")
-        captureSettingsSubScreen(row: "利用規約", rowIndex: 6, extraOffset: 8, waitFor: "第1条", name: "21-Terms")
-        captureSettingsSubScreen(row: "プライバシーポリシー", rowIndex: 7, extraOffset: 8, waitFor: "第1条", name: "22-PrivacyPolicy")
-        captureSettingsSubScreen(row: "アプリ情報", rowIndex: 8, extraOffset: 8, waitFor: "利用しているライブラリ", name: "23-AppInfo")
+        captureSettingsSubScreen(row: "ヘルプ・お問い合わせ", rowIndex: 6, extraOffset: 8, waitFor: "よくある質問", name: "20-Help")
+        captureSettingsSubScreen(row: "利用規約", rowIndex: 7, extraOffset: 8, waitFor: "第1条", name: "21-Terms")
+        captureSettingsSubScreen(row: "プライバシーポリシー", rowIndex: 8, extraOffset: 8, waitFor: "第1条", name: "22-PrivacyPolicy")
+        captureSettingsSubScreen(row: "アプリ情報", rowIndex: 9, extraOffset: 8, waitFor: "利用しているライブラリ", name: "23-AppInfo")
         // SCR-015 アカウント情報 (added 2026-10-05 with the reference-image
         // rebuild) and SCR-024 アカウント削除, opened from SCR-015's
         // bottom row (V5 card top 342.9, height 33.9). The deletion screen

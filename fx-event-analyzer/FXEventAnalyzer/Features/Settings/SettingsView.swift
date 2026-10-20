@@ -127,7 +127,8 @@ struct SettingsView: View {
     private static let groupGap: CGFloat = 8
     /// グループ2(ヘルプ・お問い合わせ〜アプリ情報)のカード上端y。
     // HQ指示(2026-10-09)「チャート分析画面がなくなったので、チャート設定はなくして」で1グループ目は5行。
-    private static let group2Top: CGFloat = group1Top + 5 * rowHeight + groupGap
+    // HQ指示(2026-10-20)「起動診断画面を追加」で「起動診断」を6行目に追加、6行に変更。
+    private static let group2Top: CGFloat = group1Top + 6 * rowHeight + groupGap
     /// ログアウトカードの上端y。
     private static let logoutTop: CGFloat = group2Top + 4 * rowHeight + groupGap
 
@@ -137,7 +138,7 @@ struct SettingsView: View {
                 V5Header(title: "設定", back: false)
 
                 let g1 = Self.group1Top
-                groupBackground(topY: g1, rowCount: 5)
+                groupBackground(topY: g1, rowCount: 6)
                 NavigationLink(value: AppRoute.account) {
                     rowLabel("person.fill", "アカウント情報", nudge: CGSize(width: 0, height: -0.75))
                 }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 0))
@@ -153,6 +154,13 @@ struct SettingsView: View {
                 NavigationLink(value: AppRoute.homeCurrencyPairEditor) {
                     rowLabel("arrow.left.arrow.right", "ホーム通貨ペア編集")
                 }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 4))
+                // HQ指示(2026-10-20)「起動診断画面」。ui-screens.mdの参考画像
+                // には無い行だが、HQから直接「設定画面に『起動診断』という
+                // 項目を追加する」と明示指示されたため追加。既存のデザイン
+                // (カード・行の見た目)はそのまま踏襲する。
+                NavigationLink(value: AppRoute.launchDiagnostics) {
+                    rowLabel("stethoscope", "起動診断")
+                }.buttonStyle(SettingsRowPressStyle()).position(x: 117, y: rowY(topY: g1, index: 5))
 
                 let g2 = Self.group2Top
                 groupBackground(topY: g2, rowCount: 4)

@@ -76,6 +76,8 @@ struct AppRouteDestinationView: View {
             SpeechDetailView(apiClient: apiClient, speechId: id, tabSelection: $tabSelection)
         case .homeCurrencyPairEditor:
             HomeCurrencyPairEditorView(apiClient: apiClient, tabSelection: $tabSelection)
+        case .launchDiagnostics:
+            LaunchDiagnosticsView(tabSelection: $tabSelection)
         case .favoritesList:
             // HQ指示(2026-10-15): 仮画面から、指標一覧と同じデザインのお気に入り一覧へ。
             FavoritesListView(apiClient: apiClient, tabSelection: $tabSelection)

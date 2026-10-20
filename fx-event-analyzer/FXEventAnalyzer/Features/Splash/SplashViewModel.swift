@@ -73,6 +73,9 @@ final class SplashViewModel: ObservableObject {
     private func runInitSequence() async {
         let startedAt = ContinuousClock.now
         ClientTiming.log("label=runInitSequence.start process_uptime_s=\(ProcessInfo.processInfo.systemUptime)")
+        // HQ指示(2026-10-20)「起動診断画面」: os.Loggerへのログ出力(上の行)
+        // に加え、同じ計測イベントの場で構造化データとしても保持する。
+        DiagnosticsStore.shared.recordRunInitSequenceStart()
 
         // Step 1: app initial-state check. Nothing beyond process launch to
         // verify in Phase 1.
@@ -96,14 +99,18 @@ final class SplashViewModel: ObservableObject {
         // 取得(トークンの検証・必要なら更新で、Supabaseへの通信が発生し
         // うる)にかかる時間を計測する。
         let session: UserSession?
+        DiagnosticsStore.shared.recordSessionCheckStart()
         do {
             session = try await ClientTiming.measure("authService.currentSession") {
                 try await authService.currentSession()
             }
         } catch {
+            DiagnosticsStore.shared.recordSessionCheckEnd(succeeded: false)
+            DiagnosticsStore.shared.recordRunInitSequenceFinished(succeeded: false)
             state = .initializationError
             return
         }
+        DiagnosticsStore.shared.recordSessionCheckEnd(succeeded: true)
 
         let outcome: SplashOutcome
         if let session {
@@ -119,6 +126,7 @@ final class SplashViewModel: ObservableObject {
         // elapsed, so the loading bar isn't cut off mid-animation.
         await waitForMinimumDisplayDuration(since: startedAt)
         ClientTiming.log("label=runInitSequence.total duration_ms=\((ContinuousClock.now - startedAt).milliseconds)")
+        DiagnosticsStore.shared.recordRunInitSequenceFinished(succeeded: true)
         onFinished(outcome)
     }
 

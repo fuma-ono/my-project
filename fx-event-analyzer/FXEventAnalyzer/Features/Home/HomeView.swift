@@ -567,6 +567,11 @@ struct HomeView: View {
 
             V5BottomBar(selected: $tabSelection)
         }
+        // HQ指示(2026-10-20)「起動診断画面」: ホームの読み込み済みコンテンツ
+        // が画面上に現れた「表示イベント」。`.onAppear`は描画完了の保証では
+        // ない(診断画面側の説明文でも明記する)。初回だけ記録する(内部で
+        // ガード済み、再読み込みのたびには上書きしない)。
+        .onAppear { DiagnosticsStore.shared.recordHomeReadyToDisplay() }
     }
 
     /// カードの外枠(塗り・枠線・角丸)。高さは呼び出し側が明示的に固定値で

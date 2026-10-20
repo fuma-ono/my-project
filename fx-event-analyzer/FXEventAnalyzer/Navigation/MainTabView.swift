@@ -29,7 +29,13 @@ struct MainTabView: View {
             Group {
                 if landscape { landscapeLayout } else { portraitLayout }
             }
-        }.preferredColorScheme(.dark)
+        }
+        .preferredColorScheme(.dark)
+        // HQ指示(2026-10-20)「起動診断画面」: Splash完了後にメイン画面が
+        // 画面上に現れた「表示イベント」の時刻。`.onAppear`は描画が完全に
+        // 終わったことの保証ではなく、あくまでイベント発生の記録(診断
+        // 画面側の説明文でも明記する)。初回だけ記録する(内部でガード済み)。
+        .onAppear { DiagnosticsStore.shared.recordMainScreenAppeared() }
     }
 
     @ViewBuilder

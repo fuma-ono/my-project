@@ -8,6 +8,11 @@ struct FXEventAnalyzerApp: App {
     private let apiClient: APIClient
 
     init() {
+        // HQ指示(2026-10-20)「起動診断画面」: `DiagnosticsStore`の基準点
+        // (経過msの起点)を、アプリ内コードが動き始める最も早い地点で
+        // 確定させる(ここより前のプロセス起動・Swiftランタイム初期化等の
+        // 時間は、アプリ内計測だけでは直接測れない — 診断画面側で注記する)。
+        _ = DiagnosticsStore.shared
         let config = SupabaseConfig.loadFromInfoPlist()
         let authService = SupabaseAuthService(config: config)
         self.authService = authService
