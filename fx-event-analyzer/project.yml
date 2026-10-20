@@ -102,15 +102,19 @@ targets:
         # read the build settings so SCR-023 アプリ情報 shows the real version.
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # HQ指示(2026-10-20)「アプリ全体を縦画面固定にする」: 横画面にすると
+        # レイアウトが崩れるため、iPhone・iPad(TARGETED_DEVICE_FAMILY
+        # "1,2"で両方サポート対象)とも横画面を禁止する。AppDelegateは
+        # 存在しない(SwiftUIの`App`プロトコルのみ)ため、UIKitはこの
+        # Info.plistキーだけを見て回転を制御する — 画面ごとの個別制御
+        # (`.supportedInterfaceOrientations`等)は追加していない。
+        # iPadは従来、縦横画面に加え上下反転のPortraitUpsideDownも許可して
+        # いたが、既存のダークUIは1方向の縦画面専用レイアウトのため、
+        # iPhoneと同じくPortraitのみに統一した。
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
         UISupportedInterfaceOrientations~ipad:
           - UIInterfaceOrientationPortrait
-          - UIInterfaceOrientationPortraitUpsideDown
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
         # Read at runtime via SupabaseConfig. Values come from the SUPABASE_URL /
         # SUPABASE_ANON_KEY build settings (see settings.base above), which CI
         # populates from GitHub Actions secrets and which are blank by default.

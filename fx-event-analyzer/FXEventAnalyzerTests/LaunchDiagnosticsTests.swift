@@ -138,6 +138,45 @@ final class LaunchDiagnosticsTests: XCTestCase {
         XCTAssertFalse(text.contains(": 0ms"))
     }
 
+    // MARK: - 前回の起動との間隔(HQ指示 2026-10-20「起動遅延の再調査」)
+
+    func testIntervalSincePreviousDescriptionWhenThereIsNoPreviousLaunch() {
+        let diagnostics = makeDiagnostics()
+        XCTAssertEqual(diagnostics.intervalSincePreviousDescription(previous: nil), "前回の起動データがないため算出できません")
+    }
+
+    func testIntervalSincePreviousDescriptionUnderOneMinute() {
+        let previous = LaunchDiagnostics(launchID: UUID(), startedAt: Date(timeIntervalSince1970: 1_000))
+        let current = LaunchDiagnostics(launchID: UUID(), startedAt: Date(timeIntervalSince1970: 1_045))
+        XCTAssertEqual(current.intervalSincePreviousDescription(previous: previous), "45秒")
+    }
+
+    func testIntervalSincePreviousDescriptionInMinutesAndSeconds() {
+        let previous = LaunchDiagnostics(launchID: UUID(), startedAt: Date(timeIntervalSince1970: 0))
+        // 20分ちょうど — Renderの無料プランのスリープ基準(15分)を超えた間隔。
+        let current = LaunchDiagnostics(launchID: UUID(), startedAt: Date(timeIntervalSince1970: 1_200))
+        XCTAssertEqual(current.intervalSincePreviousDescription(previous: previous), "20分0秒")
+    }
+
+    func testIntervalSincePreviousDescriptionInHoursAndMinutes() {
+        let previous = LaunchDiagnostics(launchID: UUID(), startedAt: Date(timeIntervalSince1970: 0))
+        let current = LaunchDiagnostics(launchID: UUID(), startedAt: Date(timeIntervalSince1970: 3_700)) // 1時間1分40秒
+        XCTAssertEqual(current.intervalSincePreviousDescription(previous: previous), "1時間1分")
+    }
+
+    func testReportTextIncludesPreviousLaunchComparisonWhenAvailable() {
+        let previous = LaunchDiagnostics(launchID: UUID(), startedAt: Date(timeIntervalSince1970: 0))
+        let current = LaunchDiagnostics(launchID: UUID(), startedAt: Date(timeIntervalSince1970: 1_200))
+        let text = current.reportText(appVersion: "1.0", buildNumber: "1", previous: previous)
+        XCTAssertTrue(text.contains("前回の起動との間隔: 20分0秒"))
+    }
+
+    func testReportTextShowsNoPreviousLaunchWhenNoneIsPassed() {
+        let diagnostics = makeDiagnostics()
+        let text = diagnostics.reportText(appVersion: "1.0", buildNumber: "1")
+        XCTAssertTrue(text.contains("前回の起動データ: なし"))
+    }
+
     func testCodableRoundTrip() throws {
         var diagnostics = makeDiagnostics()
         diagnostics.sessionCheckStartMs = 12

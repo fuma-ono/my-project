@@ -187,6 +187,34 @@ extension LaunchDiagnostics {
         return end - start
     }
 
+    /// HQ指示(2026-10-20、2回目「起動遅延の再調査」): 「アプリをすぐ
+    /// 再起動した場合」と「しばらく時間を空けた場合」を、既存の起動診断
+    /// 画面(今回/前回の表示)だけで比較できるようにするための表示専用の
+    /// 値。新しい計測(アプリ内コードの計測フック)は追加せず、既に保持
+    /// している両方の起動の`startedAt`から計算するだけ — Renderの無料
+    /// プランが15分アクセスが無いと眠る(次のアクセスで起きるまで30〜60秒)
+    /// 仕様と突き合わせる際の目安になる。
+    func intervalSincePreviousDescription(previous: LaunchDiagnostics?) -> String {
+        guard let previous else { return "前回の起動データがないため算出できません" }
+        let seconds = startedAt.timeIntervalSince(previous.startedAt)
+        guard seconds >= 0 else { return "算出不可" }
+        return Self.describeInterval(seconds)
+    }
+
+    /// 秒単位の間隔を「X分Y秒」等で表示する(起動区間の`describe(_:)`は
+    /// ミリ秒〜数十秒向けのため、分・時間単位になりうるこの値には別の
+    /// 書式を使う)。
+    private static func describeInterval(_ seconds: TimeInterval) -> String {
+        let totalSeconds = Int(seconds)
+        if totalSeconds < 60 { return "\(totalSeconds)秒" }
+        let minutes = totalSeconds / 60
+        let remainingSeconds = totalSeconds % 60
+        if minutes < 60 { return "\(minutes)分\(remainingSeconds)秒" }
+        let hours = minutes / 60
+        let remainingMinutes = minutes % 60
+        return "\(hours)時間\(remainingMinutes)分"
+    }
+
     /// 項目11「計測成功・失敗・未計測の状態」の要約。
     var overallStatusDescription: String {
         let outcomes = [sessionCheckOutcome, runInitSequenceOutcome, homeRequestOutcome]
@@ -213,15 +241,27 @@ extension LaunchDiagnostics {
     }()
 
     /// コピー・書き出しの両方が使う、診断結果のプレーンテキスト表現。
-    /// このメソッドが参照するのはこの構造体の値だけで、トークン・
-    /// ユーザーID・認証ヘッダー・本文等はそもそも保持していないため
-    /// 混入しない。
-    func reportText(appVersion: String, buildNumber: String, generatedAt: Date = Date()) -> String {
+    /// このメソッドが参照するのはこの構造体の値(と、引数で渡された前回の
+    /// 起動の値)だけで、トークン・ユーザーID・認証ヘッダー・本文等は
+    /// そもそも保持していないため混入しない。
+    ///
+    /// `previous`はHQ指示(2026-10-20、2回目「起動遅延の再調査」)対応:
+    /// 「すぐ再起動した場合」と「しばらく時間を空けた場合」をコピー・
+    /// 書き出し結果だけでも比較できるよう、前回の起動日時との間隔を含める
+    /// (省略時は従来通り今回の起動の値のみ、既存の呼び出し元・テストに
+    /// 影響しない)。
+    func reportText(appVersion: String, buildNumber: String, generatedAt: Date = Date(), previous: LaunchDiagnostics? = nil) -> String {
         var lines: [String] = []
         lines.append("FX Event Analyzer 起動診断結果")
         lines.append("バージョン: \(appVersion) (\(buildNumber))")
         lines.append("診断日時: \(Self.reportDateFormatter.string(from: generatedAt))")
         lines.append("対象の起動の記録開始日時: \(Self.reportDateFormatter.string(from: startedAt))")
+        if let previous {
+            lines.append("前回の起動の記録開始日時: \(Self.reportDateFormatter.string(from: previous.startedAt))")
+            lines.append("前回の起動との間隔: \(intervalSincePreviousDescription(previous: previous))")
+        } else {
+            lines.append("前回の起動データ: なし")
+        }
         lines.append("")
         lines.append("[起動シーケンス全体]")
         lines.append("合計時間(起動基準点〜ホーム表示イベント): \(Self.describe(totalUntilHomeReadyMs))")

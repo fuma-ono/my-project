@@ -38,6 +38,7 @@ struct LaunchDiagnosticsView: View {
                     if let previous = store.previous {
                         sectionTitle("前回の起動")
                         summaryCard(previous)
+                        intervalCard(previous: previous)
                     } else {
                         sectionTitle("前回の起動")
                         NotoText.text("前回の起動データはまだありません。", size: 7.5)
@@ -124,6 +125,21 @@ struct LaunchDiagnosticsView: View {
         .background(AccountCardBackground())
     }
 
+    /// HQ指示(2026-10-20、2回目「起動遅延の再調査」):「アプリをすぐ
+    /// 再起動した場合」と「しばらく時間を空けた場合」を、追加の計測なしで
+    /// 比較できるようにする。前回・今回それぞれの`startedAt`から計算する
+    /// だけの表示専用カード。
+    private func intervalCard(previous: LaunchDiagnostics) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            row("今回の起動との間隔", store.current.intervalSincePreviousDescription(previous: previous))
+            NotoText.text("Renderの無料プランは15分アクセスが無いと休止し、次のアクセスで起きるまで最初の1回は30〜60秒かかります。間隔が短い起動と長い起動で「/home HTTP通信往復」の値を見比べる目安にしてください。", size: 6.3)
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+        }
+        .padding(10)
+        .frame(width: 214, alignment: .leading)
+        .background(AccountCardBackground())
+    }
+
     private var noteCard: some View {
         VStack(alignment: .leading, spacing: 4) {
             NotoText.text("注記", size: 8).foregroundStyle(.white)
@@ -199,7 +215,7 @@ struct LaunchDiagnosticsView: View {
     }
 
     private var reportText: String {
-        store.current.reportText(appVersion: AppInfo.version, buildNumber: Self.buildNumber)
+        store.current.reportText(appVersion: AppInfo.version, buildNumber: Self.buildNumber, previous: store.previous)
     }
 
     private static var buildNumber: String {
