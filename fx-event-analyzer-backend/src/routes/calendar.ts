@@ -9,6 +9,7 @@ import { buildCalendarItems } from '../domain/calendar.js';
 import { formatIsoSeconds } from '../domain/notifications.js';
 import { checkCalendarRange } from '../domain/planLimits.js';
 import { resolvePublicBaseUrl, withResolvedSpeakerPhoto } from '../domain/speakerPhotos.js';
+import { withTiming } from '../utils/requestTiming.js';
 
 /** SCR-010 経済指標カレンダー — GET /calendar (api-design.md §14.6).
  * Same Entitlement as GET /speeches. The range is capped at 62 days, so
@@ -17,7 +18,7 @@ import { resolvePublicBaseUrl, withResolvedSpeakerPhoto } from '../domain/speake
  * may go depends on the plan (§28.1): past what PRO allows → 403
  * PLAN_LIMIT_EXCEEDED, past what any plan allows → 422. */
 export function registerCalendarRoutes(app: FastifyInstance): void {
-  app.get('/calendar', async (request) => {
+  app.get('/calendar', async (request) => withTiming('GET /calendar', async () => {
     const userId = request.user!.id;
     await requireEntitlement(app.supabase, userId, FEATURE_CODES.VIEW_BASIC_EVENT);
 
@@ -53,5 +54,5 @@ export function registerCalendarRoutes(app: FastifyInstance): void {
         { importance: query.importance, currency: query.currency },
       ),
     };
-  });
+  }));
 }

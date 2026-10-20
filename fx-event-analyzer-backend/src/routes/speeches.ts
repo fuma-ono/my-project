@@ -21,6 +21,7 @@ import {
 } from '../schemas/speeches.js';
 import { buildMeta, parsePagination } from '../utils/pagination.js';
 import { resolvePublicBaseUrl, resolveSpeakerPhotoUrl, withResolvedSpeakerPhoto } from '../domain/speakerPhotos.js';
+import { withTiming } from '../utils/requestTiming.js';
 import { chartWindow } from '../domain/chartWindow.js';
 import { historyLimitFor, planFromFeatures, planLimitsFor } from '../domain/planLimits.js';
 import {
@@ -79,7 +80,7 @@ async function requireSpeech(supabase: SupabaseClient, rawParams: unknown): Prom
  * (v1.28, §14.8〜§14.10) is computed on the fly from fx_prices
  * (src/domain/speechReactions.ts) — there is no speech reaction table. */
 export function registerSpeechRoutes(app: FastifyInstance): void {
-  app.get('/speeches', async (request) => {
+  app.get('/speeches', async (request) => withTiming('GET /speeches', async () => {
     await requireEntitlement(app.supabase, request.user!.id, FEATURE_CODES.VIEW_BASIC_EVENT);
 
     const query = listSpeechesQuerySchema.parse(request.query);
@@ -95,7 +96,7 @@ export function registerSpeechRoutes(app: FastifyInstance): void {
       data: rows.map((row) => withResolvedSpeakerPhoto(row, baseUrl)),
       meta: buildMeta(pagination.page, pagination.limit, total),
     };
-  });
+  }));
 
   app.get('/speeches/:speech_id', async (request) => {
     await requireEntitlement(app.supabase, request.user!.id, FEATURE_CODES.VIEW_BASIC_EVENT);

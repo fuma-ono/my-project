@@ -12,6 +12,7 @@ import { mapEventDataStatus, type EconomicEventDbStatus } from '../domain/dataQu
 import { HOME_SPEECHES_MAX, homeSpeechesRange, toHomeSpeechItem } from '../domain/homeSpeeches.js';
 import { resolvePublicBaseUrl } from '../domain/speakerPhotos.js';
 import { listRecentDeliveredSpeeches } from '../repositories/speechesRepository.js';
+import { withTiming } from '../utils/requestTiming.js';
 
 /**
  * GET /home — api-design.md §12. "最近のイベント" is not a separate
@@ -23,32 +24,42 @@ import { listRecentDeliveredSpeeches } from '../repositories/speechesRepository.
  * src/domain/homeSpeeches.ts.
  */
 export function registerHomeRoutes(app: FastifyInstance): void {
-  app.get('/home', async (request) => {
+  app.get('/home', async (request) => withTiming('GET /home', async () => {
     const query = homeQuerySchema.parse(request.query);
     const { startUtc, endUtc } = resolveDayRangeUtc(query.date, query.timezone);
 
     const events = await listEventsInRange(app.supabase, startUtc, endUtc);
-    const snapshots = await listSnapshotsForEvents(
-      app.supabase,
-      events.map((event) => event.id),
-    );
-    const snapshotByEventId = new Map(snapshots.map((snapshot) => [snapshot.event_id, snapshot]));
-    const relatedFxPairsByIndicator = await listRelatedFxPairsForIndicators(
-      app.supabase,
-      events.map((event) => event.indicator_id),
-    );
 
-    // SCR-026: the user's home.fx_pairs (in that order), else the default 3.
-    const homeFxPairSymbols = await getHomeFxPairSymbols(app.supabase, request.user!.id);
-    const majorFx = await listMajorFx(app.supabase, homeFxPairSymbols);
-
+    // HQ指示(2026-10-20)「`/home`の独立したDB取得処理を安全に並列化する」:
+    // 以下4つはいずれも`events`(とその上の`request.user!.id`/現在時刻)
+    // だけに依存し、互いには依存しない(snapshotsとrelatedFxPairsは両方
+    // `events`から作る配列を使うだけで、片方の結果を使って片方を呼んで
+    // いるわけではない)。直列6回のawaitを、依存関係のある部分だけ順に
+    // 待つ形に変えた — 取得対象・フィルタ条件・返却データは一切変えて
+    // いない(各関数自体は無変更)。
     const speechRange = homeSpeechesRange(new Date());
-    const recentSpeeches = await listRecentDeliveredSpeeches(
-      app.supabase,
-      speechRange.from.toISOString(),
-      speechRange.to.toISOString(),
-      HOME_SPEECHES_MAX,
-    );
+    const [snapshots, relatedFxPairsByIndicator, homeFxPairSymbols, recentSpeeches] = await Promise.all([
+      listSnapshotsForEvents(
+        app.supabase,
+        events.map((event) => event.id),
+      ),
+      listRelatedFxPairsForIndicators(
+        app.supabase,
+        events.map((event) => event.indicator_id),
+      ),
+      // SCR-026: the user's home.fx_pairs (in that order), else the default 3.
+      getHomeFxPairSymbols(app.supabase, request.user!.id),
+      listRecentDeliveredSpeeches(
+        app.supabase,
+        speechRange.from.toISOString(),
+        speechRange.to.toISOString(),
+        HOME_SPEECHES_MAX,
+      ),
+    ]);
+    const snapshotByEventId = new Map(snapshots.map((snapshot) => [snapshot.event_id, snapshot]));
+    // majorFxはhomeFxPairSymbolsの結果が無いと呼べないため、これだけは
+    // 上の並列処理の後に残す(依存関係があるため直列のまま)。
+    const majorFx = await listMajorFx(app.supabase, homeFxPairSymbols);
     const baseUrl = resolvePublicBaseUrl(app.env.PUBLIC_BASE_URL, request);
 
     return {
@@ -80,5 +91,5 @@ export function registerHomeRoutes(app: FastifyInstance): void {
       major_fx: majorFx,
       speeches: recentSpeeches.map((speech) => toHomeSpeechItem(speech, baseUrl)),
     };
-  });
+  }));
 }
