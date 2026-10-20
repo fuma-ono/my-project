@@ -56,7 +56,11 @@ platform :ios do
         "CURRENT_PROJECT_VERSION=#{ENV.fetch('FX_BUILD_NUMBER')}",
         "SUPABASE_URL=#{ENV.fetch('FX_SUPABASE_URL', '')}",
         "SUPABASE_ANON_KEY=#{ENV.fetch('FX_SUPABASE_ANON_KEY', '')}",
-        "API_BASE_URL=#{ENV.fetch('FX_API_BASE_URL', '')}"
+        "API_BASE_URL=#{ENV.fetch('FX_API_BASE_URL', '')}",
+        # HQ指示(2026-10-20)「サインインは両方実装しよう」。SUPABASE_URL等と
+        # 同じく空文字デフォルト(未設定でもビルド自体は成功する)。
+        "GOOGLE_SIGNIN_CLIENT_ID=#{ENV.fetch('FX_GOOGLE_SIGNIN_CLIENT_ID', '')}",
+        "GOOGLE_SIGNIN_REVERSED_CLIENT_ID=#{ENV.fetch('FX_GOOGLE_SIGNIN_REVERSED_CLIENT_ID', '')}"
       ].join(" ")
     )
 

@@ -5,6 +5,9 @@
 # Info.plist content is fully specified by project.yml's `info:` block;
 # XcodeGen writes the actual file to this path on every `generate`.
 FXEventAnalyzer/Resources/Info.plist
+# Same for the entitlements file — project.yml's `targets.FXEventAnalyzer.
+# entitlements.properties` block fully specifies it.
+FXEventAnalyzer/Resources/FXEventAnalyzer.entitlements
 
 # Xcode
 xcuserdata/

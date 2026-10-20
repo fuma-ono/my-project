@@ -95,4 +95,19 @@ protocol AuthServicing {
     /// while the app is already past Splash (ui-screens.md SCR-000
     /// "Session Expired" flow applies at any point, not only at launch).
     func authStateChanges() -> AsyncStream<AuthEvent>
+
+    /// Native "Sign In with Apple". `idToken` is
+    /// `ASAuthorizationAppleIDCredential.identityToken` decoded as UTF-8
+    /// (see `AppleSignInCoordinator`); `nonce` is the same raw, unhashed
+    /// value whose SHA256 digest was set as the
+    /// `ASAuthorizationAppleIDRequest`'s `nonce` — Supabase verifies the ID
+    /// token's own `nonce` claim against it, Apple's documented
+    /// replay-protection pattern for native Sign In with Apple.
+    @discardableResult
+    func signInWithApple(idToken: String, nonce: String) async throws -> UserSession
+
+    /// Native Google Sign-In. `idToken` is `GIDGoogleUser.idToken.tokenString`
+    /// from the GoogleSignIn-iOS SDK (see `GoogleSignInCoordinator`).
+    @discardableResult
+    func signInWithGoogle(idToken: String) async throws -> UserSession
 }

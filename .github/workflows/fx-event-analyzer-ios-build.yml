@@ -19,6 +19,12 @@ name: FX Event Analyzer iOS Build & Test
 # Networking/APIClient.swift's defaultBaseURLProvider), so an unconfigured
 # build is expected to succeed, not fail.
 #
+# GOOGLE_SIGNIN_CLIENT_ID / GOOGLE_SIGNIN_REVERSED_CLIENT_ID (secrets
+# FX_GOOGLE_SIGNIN_CLIENT_ID / FX_GOOGLE_SIGNIN_REVERSED_CLIENT_ID) are the
+# same kind of blank-by-default value, for native Google Sign-In
+# (GoogleSignInCoordinator checks for an empty Client ID itself before
+# calling the SDK, same policy as Supabase above).
+#
 # This project is entirely independent of personal-side-projects/kashikari/
 # (separate Bundle ID, separate Supabase project, no shared secrets) — see
 # fx-event-analyzer/README.md "What this is not".
@@ -87,6 +93,8 @@ jobs:
           SUPABASE_URL: ${{ secrets.FX_SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.FX_SUPABASE_ANON_KEY }}
           API_BASE_URL: ${{ secrets.FX_API_BASE_URL }}
+          GOOGLE_SIGNIN_CLIENT_ID: ${{ secrets.FX_GOOGLE_SIGNIN_CLIENT_ID }}
+          GOOGLE_SIGNIN_REVERSED_CLIENT_ID: ${{ secrets.FX_GOOGLE_SIGNIN_REVERSED_CLIENT_ID }}
         run: |
           xcodebuild build \
             -project FXEventAnalyzer.xcodeproj \
@@ -96,13 +104,17 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             SUPABASE_URL="$SUPABASE_URL" \
             SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
-            API_BASE_URL="$API_BASE_URL"
+            API_BASE_URL="$API_BASE_URL" \
+            GOOGLE_SIGNIN_CLIENT_ID="$GOOGLE_SIGNIN_CLIENT_ID" \
+            GOOGLE_SIGNIN_REVERSED_CLIENT_ID="$GOOGLE_SIGNIN_REVERSED_CLIENT_ID"
 
       - name: Test
         env:
           SUPABASE_URL: ${{ secrets.FX_SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.FX_SUPABASE_ANON_KEY }}
           API_BASE_URL: ${{ secrets.FX_API_BASE_URL }}
+          GOOGLE_SIGNIN_CLIENT_ID: ${{ secrets.FX_GOOGLE_SIGNIN_CLIENT_ID }}
+          GOOGLE_SIGNIN_REVERSED_CLIENT_ID: ${{ secrets.FX_GOOGLE_SIGNIN_REVERSED_CLIENT_ID }}
         run: |
           xcodebuild test \
             -project FXEventAnalyzer.xcodeproj \
@@ -112,4 +124,6 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             SUPABASE_URL="$SUPABASE_URL" \
             SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
-            API_BASE_URL="$API_BASE_URL"
+            API_BASE_URL="$API_BASE_URL" \
+            GOOGLE_SIGNIN_CLIENT_ID="$GOOGLE_SIGNIN_CLIENT_ID" \
+            GOOGLE_SIGNIN_REVERSED_CLIENT_ID="$GOOGLE_SIGNIN_REVERSED_CLIENT_ID"

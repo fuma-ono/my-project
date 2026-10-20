@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import GoogleSignIn
 
 enum SignUpState: Equatable {
     case idle
@@ -65,6 +66,58 @@ final class SignUpViewModel: ObservableObject {
                 state = .error(Self.message(for: error))
             } catch {
                 state = .error("登録に失敗しました。もう一度お試しください。")
+            }
+        }
+    }
+
+    /// Social sign-in has no separate "sign up" step — Supabase creates
+    /// the account automatically on a first-time ID token exchange — so
+    /// this does the exact same thing `LoginViewModel.signInWithApple`
+    /// does, just reached from this screen's Apple button instead.
+    func signInWithApple() {
+        guard state != .submitting else { return }
+        guard authService.isConfigured else {
+            state = .error("認証機能は現在準備中です(Supabaseプロジェクト未接続)。")
+            return
+        }
+        state = .submitting
+        Task {
+            do {
+                let (idToken, nonce) = try await AppleSignInCoordinator().signIn()
+                let session = try await authService.signInWithApple(idToken: idToken, nonce: nonce)
+                state = .idle
+                onSuccess(session)
+            } catch AppleSignInCoordinator.SignInError.cancelled {
+                state = .idle
+            } catch let error as AuthServiceError {
+                state = .error(Self.message(for: error))
+            } catch {
+                state = .error("Appleでの登録に失敗しました。")
+            }
+        }
+    }
+
+    func signInWithGoogle() {
+        guard state != .submitting else { return }
+        guard authService.isConfigured else {
+            state = .error("認証機能は現在準備中です(Supabaseプロジェクト未接続)。")
+            return
+        }
+        state = .submitting
+        Task {
+            do {
+                let idToken = try await GoogleSignInCoordinator().signIn()
+                let session = try await authService.signInWithGoogle(idToken: idToken)
+                state = .idle
+                onSuccess(session)
+            } catch GoogleSignInCoordinator.SignInError.notConfigured {
+                state = .error("Googleサインインは現在準備中です。")
+            } catch GIDSignInError.canceled {
+                state = .idle
+            } catch let error as AuthServiceError {
+                state = .error(Self.message(for: error))
+            } catch {
+                state = .error("Googleでの登録に失敗しました。")
             }
         }
     }

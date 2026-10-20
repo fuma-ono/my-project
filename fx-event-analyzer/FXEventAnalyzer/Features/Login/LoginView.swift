@@ -44,12 +44,13 @@ import SwiftUI
 /// to the Reference's fairly uniform blue (measured (63,142,245)→
 /// (52,120,244), no real cyan pull) — switched to a flat `accentPrimary`
 /// fill. (3) Apple/Google sign-in, which the Reference doesn't show at
-/// all — added, wired to the same "準備中" alert as every other
-/// not-yet-implemented action here, since `AuthServicing` has no
-/// social-auth method yet either (ui-screens.md: "認証方式は別途詳細設計で
-/// 確定する"). First placed below the email/password form; follow-up
+/// all — added. First placed below the email/password form; follow-up
 /// feedback moved it above instead — social sign-in first, an "または"
-/// divider, then the traditional email/password form below it.
+/// divider, then the traditional email/password form below it. Originally
+/// wired to a "準備中" placeholder alert (`AuthServicing` had no
+/// social-auth method yet); HQ指示(2026-10-20)「サインインは両方実装
+/// しよう」— now calls `LoginViewModel.signInWithApple`/`signInWithGoogle`
+/// for real (`socialSignInSection` below).
 struct LoginView: View {
     @StateObject private var viewModel: LoginViewModel
     let sessionExpired: Bool
@@ -380,14 +381,17 @@ struct LoginView: View {
     }
 
     /// Not in the Reference at all — added per explicit user request.
-    /// `AuthServicing` has no social-auth method yet (ui-screens.md: "認証
-    /// 方式は別途詳細設計で確定する"), so both buttons are wired to the
-    /// same "準備中" alert every other not-yet-implemented action on this
-    /// screen already uses, rather than silently doing nothing.
+    /// Originally wired to the same "準備中" alert every other
+    /// not-yet-implemented action on this screen used, since
+    /// `AuthServicing` had no social-auth method yet. HQ指示(2026-10-20)
+    /// 「サインインは両方実装しよう」— now call
+    /// `LoginViewModel.signInWithApple`/`signInWithGoogle`, which share the
+    /// email/password form's own `state`/error-overlay (below) rather than
+    /// a separate alert.
     private func socialSignInSection(controlHeight: CGFloat) -> some View {
         VStack(spacing: 12) {
             Button {
-                pendingFeatureMessage = "Appleでサインインは準備中です。もうしばらくお待ちください。"
+                viewModel.signInWithApple()
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "apple.logo")
@@ -400,9 +404,10 @@ struct LoginView: View {
                 .background(Color.white, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
             }
             .buttonStyle(.plain)
+            .disabled(viewModel.state == .submitting)
 
             Button {
-                pendingFeatureMessage = "Googleでサインインは準備中です。もうしばらくお待ちください。"
+                viewModel.signInWithGoogle()
             } label: {
                 HStack(spacing: 8) {
                     // User-supplied reference (2026-09-28): the flat,
@@ -426,6 +431,7 @@ struct LoginView: View {
                 .overlay(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero).stroke(DesignTokens.Colors.borderSubtle, lineWidth: 1))
             }
             .buttonStyle(.plain)
+            .disabled(viewModel.state == .submitting)
         }
     }
 

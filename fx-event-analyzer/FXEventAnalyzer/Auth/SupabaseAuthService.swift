@@ -116,6 +116,32 @@ final class SupabaseAuthService: AuthServicing {
         }
     }
 
+    @discardableResult
+    func signInWithApple(idToken: String, nonce: String) async throws -> UserSession {
+        guard let client else { throw AuthServiceError.notConfigured }
+        do {
+            let session = try await client.signInWithIdToken(
+                credentials: OpenIDConnectCredentials(provider: .apple, idToken: idToken, nonce: nonce)
+            )
+            return Self.mapSession(session)
+        } catch {
+            throw AuthServiceError.network(error.localizedDescription)
+        }
+    }
+
+    @discardableResult
+    func signInWithGoogle(idToken: String) async throws -> UserSession {
+        guard let client else { throw AuthServiceError.notConfigured }
+        do {
+            let session = try await client.signInWithIdToken(
+                credentials: OpenIDConnectCredentials(provider: .google, idToken: idToken)
+            )
+            return Self.mapSession(session)
+        } catch {
+            throw AuthServiceError.network(error.localizedDescription)
+        }
+    }
+
     func signOut() async throws {
         guard let client else { throw AuthServiceError.notConfigured }
         do {

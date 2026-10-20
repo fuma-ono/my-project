@@ -5,6 +5,8 @@ final class MockAuthService: AuthServicing {
     var sessionResult: Result<UserSession?, Error> = .success(nil)
     var signInResult: Result<UserSession, Error>?
     var signUpResult: Result<SignUpResult, Error>?
+    var signInWithAppleResult: Result<UserSession, Error>?
+    var signInWithGoogleResult: Result<UserSession, Error>?
     var resetPasswordError: Error?
     var signOutError: Error?
     var updateEmailError: Error?
@@ -50,6 +52,30 @@ final class MockAuthService: AuthServicing {
         switch signUpResult {
         case .success(let result):
             return result
+        case .failure(let error):
+            throw error
+        }
+    }
+
+    func signInWithApple(idToken: String, nonce: String) async throws -> UserSession {
+        guard let signInWithAppleResult else {
+            throw AuthServiceError.unknown("MockAuthService.signInWithAppleResult not configured")
+        }
+        switch signInWithAppleResult {
+        case .success(let session):
+            return session
+        case .failure(let error):
+            throw error
+        }
+    }
+
+    func signInWithGoogle(idToken: String) async throws -> UserSession {
+        guard let signInWithGoogleResult else {
+            throw AuthServiceError.unknown("MockAuthService.signInWithGoogleResult not configured")
+        }
+        switch signInWithGoogleResult {
+        case .success(let session):
+            return session
         case .failure(let error):
             throw error
         }

@@ -1,3 +1,4 @@
+import GoogleSignIn
 import SwiftUI
 import UserNotifications
 
@@ -29,6 +30,14 @@ struct FXEventAnalyzerApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(authService: authService, apiClient: apiClient)
+                // GoogleSignInCoordinator's sign-in sheet hands control
+                // back to the app via the GOOGLE_SIGNIN_REVERSED_CLIENT_ID
+                // URL scheme (project.yml) once the user finishes Google's
+                // consent screen; GIDSignIn needs this call to resume and
+                // complete that flow's continuation.
+                .onOpenURL { url in
+                    GIDSignIn.sharedInstance.handle(url)
+                }
         }
     }
 }

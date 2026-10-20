@@ -288,13 +288,13 @@ struct SignUpView: View {
     /// ログイン画面と揃えてほしい」— 参考画像の枠線のみのスタイルから、
     /// `LoginView.socialSignInSection`と全く同じ塗り(Apple=白塗りつぶし+
     /// 黒文字、Google=`backgroundElevated`塗りつぶし+`borderSubtle`枠線)に
-    /// 揃えた。`AuthServicing`に社会的ログインのAPIはまだ無いため
-    /// (ui-screens.md: "認証方式は別途詳細設計で確定する")、Loginと同じ
-    /// "準備中"アラートに繋いでいる。
+    /// 揃えた。HQ指示(2026-10-20)「サインインは両方実装しよう」— 元は
+    /// "準備中"アラートに繋いでいたが、`SignUpViewModel.signInWithApple`/
+    /// `signInWithGoogle`(`LoginViewModel`側と同じ実装)を呼ぶように変更。
     private var socialSignUpSection: some View {
         VStack(spacing: 12) {
             Button {
-                pendingFeatureMessage = "Appleで登録は準備中です。もうしばらくお待ちください。"
+                viewModel.signInWithApple()
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "apple.logo")
@@ -308,9 +308,10 @@ struct SignUpView: View {
                 .background(Color.white, in: RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero))
             }
             .buttonStyle(.plain)
+            .disabled(viewModel.state == .submitting)
 
             Button {
-                pendingFeatureMessage = "Googleで登録は準備中です。もうしばらくお待ちください。"
+                viewModel.signInWithGoogle()
             } label: {
                 HStack(spacing: 8) {
                     Image("GoogleLogo")
@@ -327,6 +328,7 @@ struct SignUpView: View {
                 .overlay(RoundedRectangle(cornerRadius: DesignTokens.CornerRadius.hero).stroke(DesignTokens.Colors.borderSubtle, lineWidth: 1))
             }
             .buttonStyle(.plain)
+            .disabled(viewModel.state == .submitting)
         }
     }
 
