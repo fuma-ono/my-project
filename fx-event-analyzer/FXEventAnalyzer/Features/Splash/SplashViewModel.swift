@@ -72,7 +72,7 @@ final class SplashViewModel: ObservableObject {
 
     private func runInitSequence() async {
         let startedAt = ContinuousClock.now
-        print("[timing-ios] label=runInitSequence.start process_uptime_s=\(ProcessInfo.processInfo.systemUptime)")
+        ClientTiming.log("label=runInitSequence.start process_uptime_s=\(ProcessInfo.processInfo.systemUptime)")
 
         // Step 1: app initial-state check. Nothing beyond process launch to
         // verify in Phase 1.
@@ -118,7 +118,7 @@ final class SplashViewModel: ObservableObject {
         // Step 6: route — but not before minimumDisplayDuration has
         // elapsed, so the loading bar isn't cut off mid-animation.
         await waitForMinimumDisplayDuration(since: startedAt)
-        print("[timing-ios] label=runInitSequence.total duration_ms=\((ContinuousClock.now - startedAt).milliseconds)")
+        ClientTiming.log("label=runInitSequence.total duration_ms=\((ContinuousClock.now - startedAt).milliseconds)")
         onFinished(outcome)
     }
 
