@@ -130,11 +130,11 @@ final class SupabaseAuthService: AuthServicing {
     }
 
     @discardableResult
-    func signInWithGoogle(idToken: String) async throws -> UserSession {
+    func signInWithGoogle(idToken: String, accessToken: String) async throws -> UserSession {
         guard let client else { throw AuthServiceError.notConfigured }
         do {
             let session = try await client.signInWithIdToken(
-                credentials: OpenIDConnectCredentials(provider: .google, idToken: idToken)
+                credentials: OpenIDConnectCredentials(provider: .google, idToken: idToken, accessToken: accessToken)
             )
             return Self.mapSession(session)
         } catch {

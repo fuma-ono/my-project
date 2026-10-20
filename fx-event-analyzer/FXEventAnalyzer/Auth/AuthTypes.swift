@@ -106,8 +106,12 @@ protocol AuthServicing {
     @discardableResult
     func signInWithApple(idToken: String, nonce: String) async throws -> UserSession
 
-    /// Native Google Sign-In. `idToken` is `GIDGoogleUser.idToken.tokenString`
-    /// from the GoogleSignIn-iOS SDK (see `GoogleSignInCoordinator`).
+    /// Native Google Sign-In. `idToken`/`accessToken` are
+    /// `GIDGoogleUser.idToken`/`.accessToken` (`.tokenString`) from the
+    /// GoogleSignIn-iOS SDK (see `GoogleSignInCoordinator`). Both are
+    /// required — Supabase's own native-iOS sample passes both, since
+    /// Google's ID token carries an `at_hash` claim the server verifies
+    /// against the access token.
     @discardableResult
-    func signInWithGoogle(idToken: String) async throws -> UserSession
+    func signInWithGoogle(idToken: String, accessToken: String) async throws -> UserSession
 }

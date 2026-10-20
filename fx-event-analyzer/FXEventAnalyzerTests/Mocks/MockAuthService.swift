@@ -69,7 +69,7 @@ final class MockAuthService: AuthServicing {
         }
     }
 
-    func signInWithGoogle(idToken: String) async throws -> UserSession {
+    func signInWithGoogle(idToken: String, accessToken: String) async throws -> UserSession {
         guard let signInWithGoogleResult else {
             throw AuthServiceError.unknown("MockAuthService.signInWithGoogleResult not configured")
         }

@@ -16,7 +16,13 @@ struct GoogleSignInCoordinator {
         case missingIdentityToken
     }
 
-    func signIn() async throws -> String {
+    /// Returns both the ID token and the access token — Supabase's own
+    /// native-iOS sample (supabase.com/docs/guides/auth/social-login/
+    /// auth-google, Swift section, verified live 2026-10-20) passes both
+    /// to `signInWithIdToken`, since Google's ID token carries an
+    /// `at_hash` claim that `OpenIDConnectCredentials.accessToken` exists
+    /// specifically to let the server verify.
+    func signIn() async throws -> (idToken: String, accessToken: String) {
         guard let clientID = Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String,
               !clientID.isEmpty else {
             throw SignInError.notConfigured
@@ -31,6 +37,6 @@ struct GoogleSignInCoordinator {
         guard let idToken = result.user.idToken?.tokenString else {
             throw SignInError.missingIdentityToken
         }
-        return idToken
+        return (idToken: idToken, accessToken: result.user.accessToken.tokenString)
     }
 }

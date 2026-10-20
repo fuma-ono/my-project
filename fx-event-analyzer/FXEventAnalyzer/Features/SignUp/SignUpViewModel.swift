@@ -106,8 +106,8 @@ final class SignUpViewModel: ObservableObject {
         state = .submitting
         Task {
             do {
-                let idToken = try await GoogleSignInCoordinator().signIn()
-                let session = try await authService.signInWithGoogle(idToken: idToken)
+                let (idToken, accessToken) = try await GoogleSignInCoordinator().signIn()
+                let session = try await authService.signInWithGoogle(idToken: idToken, accessToken: accessToken)
                 state = .idle
                 onSuccess(session)
             } catch GoogleSignInCoordinator.SignInError.notConfigured {
