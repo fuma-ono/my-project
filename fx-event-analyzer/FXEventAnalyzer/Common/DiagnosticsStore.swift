@@ -103,25 +103,34 @@ final class DiagnosticsStore: ObservableObject {
 
     // MARK: - B・C・D. /home の認証・通信・デコード
 
-    /// 新しい`/home`取得が始まったことを記録し、以降のB/C/Dの値をこの
-    /// リクエストに紐づけるためのID(診断セッション内だけのランダム値、
-    /// ユーザーID等とは無関係)を払い出す。
+    /// 新しい`/home`取得が始まったことを記録する。
+    ///
+    /// 診断の目的は「起動シーケンス」の内訳であり、起動後にタブの
+    /// 出入り等で`/home`が再度走っても、その値で起動時の値を上書きして
+    /// はいけない — 実機確認(UI自動テストのスクリーンショットで実際に
+    /// 検出): 複数画面を回った後に設定画面を開くと「メイン画面表示→
+    /// /home認証開始」が100秒を超え、区間外の時間が負になる不具合が
+    /// あった。原因は、画面を行き来するたびにホームタブが再生成され
+    /// `/home`が再取得される(`MainTabView`の`switch tabSelection`は
+    /// タブ切り替えで各タブのViewを作り直す)ため、`homeRequestID`と
+    /// その詳細値が最新の(=起動とは無関係な)取得で上書きされていたため。
+    ///
+    /// 対応: 1回目の`/home`取得だけに本物のIDを払い出し、以降の呼び出し
+    /// (`homeRequestCount`はそのたびに増やす)には`current.homeRequestID`
+    /// と一致しない使い捨てのIDを返す — `APIClient.send()`側の
+    /// `requestID == current.homeRequestID`判定により、2回目以降の詳細値
+    /// (認証・通信・デコードの時刻)は記録されず、1回目(起動時)の値が
+    /// 固定されたまま残る。回数自体(`homeRequestCount`)は正しく増える
+    /// ため、複数回走ったこと自体は画面側で分かる。
     @discardableResult
     func beginHomeRequest() -> UUID {
+        current.homeRequestCount += 1
+        guard current.homeRequestCount == 1 else {
+            persist()
+            return UUID()
+        }
         let id = UUID()
         current.homeRequestID = id
-        current.homeRequestCount += 1
-        // 新しいリクエストを始める時点で、前回ぶんの詳細値をクリアする
-        // (古いリクエストの値が新しいリクエストの値と混ざらないように)。
-        current.homeAuthTokenStartMs = nil
-        current.homeAuthTokenEndMs = nil
-        current.homeHTTPStartMs = nil
-        current.homeHTTPEndMs = nil
-        current.homeHTTPStatusCode = nil
-        current.homeDecodeStartMs = nil
-        current.homeDecodeEndMs = nil
-        current.homeRequestOutcome = .notMeasured
-        current.homeStateAppliedMs = nil
         persist()
         return id
     }

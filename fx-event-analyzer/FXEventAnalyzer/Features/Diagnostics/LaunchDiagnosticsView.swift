@@ -113,7 +113,7 @@ struct LaunchDiagnosticsView: View {
         VStack(alignment: .leading, spacing: 6) {
             row("/home取得回数(今回の起動内)", diagnostics.homeRequestCount == 0 ? "未実行" : "\(diagnostics.homeRequestCount)回")
             if diagnostics.homeRequestCount > 1 {
-                NotoText.text("表示中の詳細は直近1回ぶんの値です。", size: 6)
+                NotoText.text("下の詳細は起動時(1回目)の値です。タブの出入り等での再取得で上書きしません。", size: 6)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
             }
             row("/homeリクエストの状態", diagnostics.homeRequestOutcome.rawValue)

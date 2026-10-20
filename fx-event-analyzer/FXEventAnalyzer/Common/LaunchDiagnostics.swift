@@ -43,12 +43,14 @@ struct LaunchDiagnostics: Codable, Equatable {
     /// 前提で説明する。
     var mainScreenAppearedMs: Int64?
 
-    // MARK: - B・C・D. /home の認証・通信・デコード(最新リクエストぶん)
+    // MARK: - B・C・D. /home の認証・通信・デコード(起動時=1回目のリクエストぶん)
 
-    /// このプロセス内で`/home`取得が何回走ったか。複数回走った場合、
-    /// 以下の詳細値は最新(直近)の1回ぶん。
+    /// このプロセス内で`/home`取得が何回走ったか。起動シーケンスの診断が
+    /// 目的のため、以下の詳細値は常に1回目(起動時)のものに固定され、
+    /// 2回目以降(タブの出入り等での再取得)では上書きされない —
+    /// `DiagnosticsStore.beginHomeRequest()`のドキュメントコメント参照。
     var homeRequestCount: Int = 0
-    /// 直近の`/home`取得1回だけに紐づく、診断セッション内限定のID
+    /// 1回目(起動時)の`/home`取得だけに紐づく、診断セッション内限定のID
     /// (ユーザーIDやセッションIDとは無関係なランダム値)。
     var homeRequestID: UUID?
     var homeAuthTokenStartMs: Int64?

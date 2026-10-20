@@ -70,7 +70,11 @@ final class DiagnosticsStoreTests: XCTestCase {
         XCTAssertEqual(store.current.homeReadyToDisplayMs, first)
     }
 
-    func testBeginHomeRequestIssuesAFreshIDAndIncrementsCount() {
+    /// 1回目だけが`current.homeRequestID`に反映される。2回目以降は回数
+    /// (`homeRequestCount`)だけ増え、`current.homeRequestID`は1回目の
+    /// ままで動かない(起動時の値を後の再取得で上書きしないため — 下記
+    /// `testFirstHomeRequestsDetailSurvivesASecondRequestStarting`参照)。
+    func testOnlyTheFirstHomeRequestBecomesCurrent() {
         let store = makeStore()
         let first = store.beginHomeRequest()
         XCTAssertEqual(store.current.homeRequestID, first)
@@ -78,13 +82,14 @@ final class DiagnosticsStoreTests: XCTestCase {
 
         let second = store.beginHomeRequest()
         XCTAssertNotEqual(first, second)
-        XCTAssertEqual(store.current.homeRequestID, second)
+        XCTAssertEqual(store.current.homeRequestID, first)
         XCTAssertEqual(store.current.homeRequestCount, 2)
     }
 
-    /// 2回目の/home取得を始めたら、1回目の詳細値(認証・通信・デコード)は
-    /// クリアされる — 古いリクエストの値が新しいリクエストの値と混ざらない。
-    func testBeginHomeRequestClearsThePreviousRequestsDetail() {
+    /// HQ指示(2026-10-20、実機で検出): タブの出入り等で`/home`が2回目
+    /// 以降走っても、起動シーケンス診断の対象である1回目の詳細値
+    /// (認証・通信時刻)を上書きしてはいけない。
+    func testFirstHomeRequestsDetailSurvivesASecondRequestStarting() {
         let store = makeStore()
         let first = store.beginHomeRequest()
         store.recordHomeAuthTokenStart(requestID: first)
@@ -95,28 +100,45 @@ final class DiagnosticsStoreTests: XCTestCase {
         XCTAssertEqual(store.current.homeHTTPStatusCode, 200)
 
         _ = store.beginHomeRequest()
-        XCTAssertNil(store.current.homeAuthTokenStartMs)
-        XCTAssertNil(store.current.homeAuthTokenEndMs)
-        XCTAssertNil(store.current.homeHTTPStatusCode)
+
+        XCTAssertNotNil(store.current.homeAuthTokenStartMs)
+        XCTAssertEqual(store.current.homeHTTPStatusCode, 200)
     }
 
-    /// 古い(現在の`homeRequestID`と一致しない)IDでの記録は無視される。
-    func testStaleHomeRequestIDIsIgnored() {
+    /// 2回目以降の`beginHomeRequest()`が返すIDは`current.homeRequestID`と
+    /// 一致しないダミーのため、それで記録しようとしても無視される。
+    func testSecondHomeRequestsRecordsAreIgnored() {
         let store = makeStore()
-        let stale = store.beginHomeRequest()
-        _ = store.beginHomeRequest() // 新しいリクエストを開始、staleはもう最新ではない
+        _ = store.beginHomeRequest()
+        let second = store.beginHomeRequest()
 
-        store.recordHomeAuthTokenStart(requestID: stale)
-        store.recordHomeAuthTokenEnd(requestID: stale)
-        store.recordHomeHTTPStart(requestID: stale)
-        store.recordHomeHTTPEnd(requestID: stale, statusCode: 500)
-        store.recordHomeDecodeStart(requestID: stale)
-        store.recordHomeDecodeEnd(requestID: stale, succeeded: true)
-        store.recordHomeStateApplied(requestID: stale)
+        store.recordHomeAuthTokenStart(requestID: second)
+        store.recordHomeAuthTokenEnd(requestID: second)
+        store.recordHomeHTTPStart(requestID: second)
+        store.recordHomeHTTPEnd(requestID: second, statusCode: 500)
+        store.recordHomeDecodeStart(requestID: second)
+        store.recordHomeDecodeEnd(requestID: second, succeeded: true)
+        store.recordHomeStateApplied(requestID: second)
 
         XCTAssertNil(store.current.homeAuthTokenStartMs)
         XCTAssertNil(store.current.homeHTTPStatusCode)
         XCTAssertEqual(store.current.homeRequestOutcome, .notMeasured)
+        XCTAssertNil(store.current.homeStateAppliedMs)
+    }
+
+    /// 今の`current.homeRequestID`と一致しない、本当に無関係なIDでの記録も
+    /// 無視される(例: 別の診断セッションの値が紛れ込まない)。
+    func testUnrelatedRequestIDIsIgnored() {
+        let store = makeStore()
+        _ = store.beginHomeRequest()
+        let unrelated = UUID()
+
+        store.recordHomeAuthTokenStart(requestID: unrelated)
+        store.recordHomeHTTPEnd(requestID: unrelated, statusCode: 500)
+        store.recordHomeStateApplied(requestID: unrelated)
+
+        XCTAssertNil(store.current.homeAuthTokenStartMs)
+        XCTAssertNil(store.current.homeHTTPStatusCode)
         XCTAssertNil(store.current.homeStateAppliedMs)
     }
 
