@@ -64,7 +64,7 @@ final class URLSessionAPIClient: APIClient {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
-        if let token = await authTokenProvider() {
+        if let token = await ClientTiming.measure("authTokenProvider \(endpoint.path)", { await authTokenProvider() }) {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         if let body = endpoint.body {
@@ -75,7 +75,13 @@ final class URLSessionAPIClient: APIClient {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            // HQ指示(2026-10-20)「初回起動が約30秒かかる原因調査」: Renderの
+            // `[timing]`(ハンドラ内のみ、1〜2秒)と、このクライアント視点の
+            // 時間(認証+ネットワーク+Renderのコールドスタート待ちを含む)を
+            // 比較できるようにする。
+            (data, response) = try await ClientTiming.measure("request \(endpoint.method.rawValue) \(endpoint.path)") {
+                try await session.data(for: request)
+            }
         } catch {
             throw APIError.transport(error.localizedDescription)
         }

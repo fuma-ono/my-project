@@ -72,6 +72,7 @@ final class SplashViewModel: ObservableObject {
 
     private func runInitSequence() async {
         let startedAt = ContinuousClock.now
+        print("[timing-ios] label=runInitSequence.start process_uptime_s=\(ProcessInfo.processInfo.systemUptime)")
 
         // Step 1: app initial-state check. Nothing beyond process launch to
         // verify in Phase 1.
@@ -91,9 +92,14 @@ final class SplashViewModel: ObservableObject {
         }
 
         // Step 2 + 5: Supabase Auth session check / logged-in determination.
+        // HQ指示(2026-10-20)「初回起動が約30秒かかる原因調査」: セッション
+        // 取得(トークンの検証・必要なら更新で、Supabaseへの通信が発生し
+        // うる)にかかる時間を計測する。
         let session: UserSession?
         do {
-            session = try await authService.currentSession()
+            session = try await ClientTiming.measure("authService.currentSession") {
+                try await authService.currentSession()
+            }
         } catch {
             state = .initializationError
             return
@@ -112,6 +118,7 @@ final class SplashViewModel: ObservableObject {
         // Step 6: route — but not before minimumDisplayDuration has
         // elapsed, so the loading bar isn't cut off mid-animation.
         await waitForMinimumDisplayDuration(since: startedAt)
+        print("[timing-ios] label=runInitSequence.total duration_ms=\((ContinuousClock.now - startedAt).milliseconds)")
         onFinished(outcome)
     }
 
