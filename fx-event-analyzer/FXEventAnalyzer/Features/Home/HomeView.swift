@@ -68,6 +68,19 @@ struct HomeView: View {
                 }
         }
         .task { viewModel.load() }
+        // HQ指示(2026-10-20)「通貨ペア変更が反映されない不具合」: `.task`は
+        // `NavigationStack`自身の識別子が生きている間1度しか走らない
+        // ため、同じスタックに積んだSCR-026(通貨ペア編集画面)から戻って
+        // きても再実行されず、`majorFx`が保存前の値のまま表示され続けて
+        // いた。戻り先のスタック段数(0=Home自身に戻った)を監視して
+        // 再取得する — 他画面には影響しない(`path`はHome自身の
+        // `NavigationStack`専用のバインディングで、タブ切り替えでは
+        // 変化しない)。
+        .onChange(of: path.count) { _, newCount in
+            if newCount == 0 {
+                viewModel.load()
+            }
+        }
     }
 
     @ViewBuilder
@@ -535,15 +548,15 @@ struct HomeView: View {
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: Self.sectionGap) {
-                    if !topEvents.isEmpty {
-                        todayEventsCard(topEvents)
-                    }
+                    // HQ指示(2026-10-20)「今日の重要イベント」「お気に入り」は
+                    // 0件でもセクション自体を隠さず空状態を案内する
+                    // (`speechesCard`が元から常時表示+空状態表示だったのに
+                    // 合わせた)。
+                    todayEventsCard(topEvents)
                     if !pairs.isEmpty {
                         pairsCard(pairs)
                     }
-                    if !favorites.isEmpty {
-                        favoritesCard(favorites)
-                    }
+                    favoritesCard(favorites)
                     speechesCard(speeches)
                 }
                 .padding(.bottom, 16)
@@ -701,11 +714,20 @@ struct HomeView: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("homeTodayCalendarLink")
             }
-            ForEach(Array(events.enumerated()), id: \.element.id) { idx, event in
-                if idx > 0 { Divider().overlay(Self.cardBorderColor) }
-                NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
-                    eventRow(event)
-                }.buttonStyle(.plain)
+            if events.isEmpty {
+                // HQ指示(2026-10-20)「今日の重要イベントは0件でもセクションを
+                // 表示し、空状態を案内する」: `speechesCard`の空状態表示と
+                // 同じ考え方(固定高さの枠内に案内文言1行)。
+                V5JPFont.text("今日の重要イベントはありません", size: 8)
+                    .foregroundStyle(V5P.muted)
+                    .frame(maxWidth: .infinity, minHeight: Self.todayEventsCardHeight - Self.todayEventsHeaderHeight, alignment: .center)
+            } else {
+                ForEach(Array(events.enumerated()), id: \.element.id) { idx, event in
+                    if idx > 0 { Divider().overlay(Self.cardBorderColor) }
+                    NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
+                        eventRow(event)
+                    }.buttonStyle(.plain)
+                }
             }
         }
     }
@@ -1059,9 +1081,17 @@ struct HomeView: View {
                 // UIテストが他のカードの「すべて見る」と区別して押すための目印。
                 .accessibilityIdentifier("homeFavoritesSeeAll")
             }
-            HStack(alignment: .top, spacing: Self.favoriteCardGap) {
-                ForEach(favorites) { item in
-                    favoriteGridCard(item)
+            if favorites.isEmpty {
+                // HQ指示(2026-10-20)「お気に入りは0件でもセクションを表示し、
+                // 指標詳細の☆から追加できることを案内する」。
+                V5JPFont.text("指標詳細の☆から追加できます", size: 8)
+                    .foregroundStyle(V5P.muted)
+                    .frame(maxWidth: .infinity, minHeight: Self.favoritesCardHeight - Self.favoritesHeaderHeight, alignment: .center)
+            } else {
+                HStack(alignment: .top, spacing: Self.favoriteCardGap) {
+                    ForEach(favorites) { item in
+                        favoriteGridCard(item)
+                    }
                 }
             }
         }
