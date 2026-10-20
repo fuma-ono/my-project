@@ -158,14 +158,16 @@ final class HomeViewModel: ObservableObject {
                 URLQueryItem(name: "timezone", value: timezone),
             ]
         )
-        // HQ指示(2026-10-20)「起動診断画面」: この/home取得1回ぶんのID(診断
-        // セッション内だけのランダム値)を発行し、APIClient.send()内の
-        // 認証・通信・デコードの計測をこのIDに紐づける。
-        let diagnosticsRequestID = DiagnosticsStore.shared.beginHomeRequest()
+        // HQ指示(2026-10-20)「起動診断画面」: この/home取得が何回目かを
+        // `DiagnosticsStore`に伝える。APIClient.send()内の認証・通信・
+        // デコードの計測は、1回目の取得中かどうかを`DiagnosticsStore`自身が
+        // 判定して記録を受け付ける(2回目の修正、`DiagnosticsStore.swift`
+        // 冒頭のコメント参照)。
+        DiagnosticsStore.shared.beginHomeRequest()
         do {
             let response: HomeResponse = try await apiClient.send(endpoint)
             state = .loaded(events: response.events, majorFx: response.majorFx)
-            DiagnosticsStore.shared.recordHomeStateApplied(requestID: diagnosticsRequestID)
+            DiagnosticsStore.shared.recordHomeStateApplied()
             recentSpeeches = response.speeches ?? []
         } catch let error as APIError where error.isNotConfigured {
             state = .backendNotConfigured

@@ -107,68 +107,71 @@ final class DiagnosticsStore: ObservableObject {
     ///
     /// 診断の目的は「起動シーケンス」の内訳であり、起動後にタブの
     /// 出入り等で`/home`が再度走っても、その値で起動時の値を上書きして
-    /// はいけない — 実機確認(UI自動テストのスクリーンショットで実際に
-    /// 検出): 複数画面を回った後に設定画面を開くと「メイン画面表示→
-    /// /home認証開始」が100秒を超え、区間外の時間が負になる不具合が
-    /// あった。原因は、画面を行き来するたびにホームタブが再生成され
-    /// `/home`が再取得される(`MainTabView`の`switch tabSelection`は
-    /// タブ切り替えで各タブのViewを作り直す)ため、`homeRequestID`と
-    /// その詳細値が最新の(=起動とは無関係な)取得で上書きされていたため。
+    /// はいけない — 実機確認(UI自動テストのスクリーンショットで2回
+    /// 実際に検出): 複数画面を回った後に設定画面を開くと「メイン画面
+    /// 表示→/home認証開始」が100秒を超え、区間外の時間が負になる不具合が
+    /// あった。
     ///
-    /// 対応: 1回目の`/home`取得だけに本物のIDを払い出し、以降の呼び出し
-    /// (`homeRequestCount`はそのたびに増やす)には`current.homeRequestID`
-    /// と一致しない使い捨てのIDを返す — `APIClient.send()`側の
-    /// `requestID == current.homeRequestID`判定により、2回目以降の詳細値
-    /// (認証・通信・デコードの時刻)は記録されず、1回目(起動時)の値が
-    /// 固定されたまま残る。回数自体(`homeRequestCount`)は正しく増える
-    /// ため、複数回走ったこと自体は画面側で分かる。
+    /// 1回目の修正(IDが一致するかで判定)は不十分だった: `APIClient.
+    /// send()`は`beginHomeRequest()`の戻り値を受け取らず、呼ばれるたびに
+    /// `DiagnosticsStore.shared.current.homeRequestID`を読み直していた
+    /// ため、2回目以降の取得でもそのつど「現在のID」を読んで一致判定に
+    /// 通ってしまい、結局毎回上書きされていた。
+    ///
+    /// 対応: IDの一致ではなく、`homeRequestCount`が1(=まだ1回目の取得中)
+    /// のときだけ記録を受け付けるようにした。`beginHomeRequest()`は
+    /// `HomeViewModel.fetch()`から`apiClient.send()`より必ず先に呼ばれる
+    /// ため、2回目の取得が始まった時点で`homeRequestCount`は既に2になって
+    /// おり、以降の`recordHomeXxx`呼び出しは自動的に無視される。
+    /// `homeRequestID`自体は診断画面に出す識別用の値として引き続き
+    /// 1回目の取得時にだけ発行する。
     @discardableResult
     func beginHomeRequest() -> UUID {
         current.homeRequestCount += 1
-        guard current.homeRequestCount == 1 else {
-            persist()
-            return UUID()
+        if current.homeRequestCount == 1 {
+            current.homeRequestID = UUID()
         }
-        let id = UUID()
-        current.homeRequestID = id
         persist()
-        return id
+        return current.homeRequestID ?? UUID()
     }
 
-    func recordHomeAuthTokenStart(requestID: UUID) {
-        guard requestID == current.homeRequestID else { return }
+    /// 1回目の`/home`取得が進行中の間だけ記録を受け付ける。
+    private var isRecordingFirstHomeRequest: Bool { current.homeRequestCount == 1 }
+
+    func recordHomeAuthTokenStart() {
+        guard isRecordingFirstHomeRequest else { return }
         current.homeAuthTokenStartMs = elapsedMs()
         persist()
     }
 
-    func recordHomeAuthTokenEnd(requestID: UUID) {
-        guard requestID == current.homeRequestID else { return }
+    func recordHomeAuthTokenEnd() {
+        guard isRecordingFirstHomeRequest else { return }
         current.homeAuthTokenEndMs = elapsedMs()
         persist()
     }
 
-    func recordHomeHTTPStart(requestID: UUID) {
-        guard requestID == current.homeRequestID else { return }
+    func recordHomeHTTPStart() {
+        guard isRecordingFirstHomeRequest else { return }
         current.homeHTTPStartMs = elapsedMs()
         persist()
     }
 
     /// `statusCode`はHTTPステータスのみ(本文・ヘッダーは渡さないこと)。
-    func recordHomeHTTPEnd(requestID: UUID, statusCode: Int?) {
-        guard requestID == current.homeRequestID else { return }
+    func recordHomeHTTPEnd(statusCode: Int?) {
+        guard isRecordingFirstHomeRequest else { return }
         current.homeHTTPEndMs = elapsedMs()
         current.homeHTTPStatusCode = statusCode
         persist()
     }
 
-    func recordHomeDecodeStart(requestID: UUID) {
-        guard requestID == current.homeRequestID else { return }
+    func recordHomeDecodeStart() {
+        guard isRecordingFirstHomeRequest else { return }
         current.homeDecodeStartMs = elapsedMs()
         persist()
     }
 
-    func recordHomeDecodeEnd(requestID: UUID, succeeded: Bool) {
-        guard requestID == current.homeRequestID else { return }
+    func recordHomeDecodeEnd(succeeded: Bool) {
+        guard isRecordingFirstHomeRequest else { return }
         current.homeDecodeEndMs = elapsedMs()
         current.homeRequestOutcome = succeeded ? .success : .failure
         persist()
@@ -176,8 +179,8 @@ final class DiagnosticsStore: ObservableObject {
 
     // MARK: - E. ホームデータの反映・表示
 
-    func recordHomeStateApplied(requestID: UUID) {
-        guard requestID == current.homeRequestID else { return }
+    func recordHomeStateApplied() {
+        guard isRecordingFirstHomeRequest else { return }
         current.homeStateAppliedMs = elapsedMs()
         persist()
     }

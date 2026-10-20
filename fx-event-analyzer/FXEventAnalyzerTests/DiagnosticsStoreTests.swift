@@ -71,8 +71,9 @@ final class DiagnosticsStoreTests: XCTestCase {
     }
 
     /// 1回目だけが`current.homeRequestID`に反映される。2回目以降は回数
-    /// (`homeRequestCount`)だけ増え、`current.homeRequestID`は1回目の
-    /// ままで動かない(起動時の値を後の再取得で上書きしないため — 下記
+    /// (`homeRequestCount`)だけ増えるが、`beginHomeRequest()`の戻り値・
+    /// `current.homeRequestID`は1回目のIDのままで動かない(起動時の値を
+    /// 後の再取得で上書きしないため — 下記
     /// `testFirstHomeRequestsDetailSurvivesASecondRequestStarting`参照)。
     func testOnlyTheFirstHomeRequestBecomesCurrent() {
         let store = makeStore()
@@ -81,7 +82,7 @@ final class DiagnosticsStoreTests: XCTestCase {
         XCTAssertEqual(store.current.homeRequestCount, 1)
 
         let second = store.beginHomeRequest()
-        XCTAssertNotEqual(first, second)
+        XCTAssertEqual(second, first)
         XCTAssertEqual(store.current.homeRequestID, first)
         XCTAssertEqual(store.current.homeRequestCount, 2)
     }
@@ -91,11 +92,11 @@ final class DiagnosticsStoreTests: XCTestCase {
     /// (認証・通信時刻)を上書きしてはいけない。
     func testFirstHomeRequestsDetailSurvivesASecondRequestStarting() {
         let store = makeStore()
-        let first = store.beginHomeRequest()
-        store.recordHomeAuthTokenStart(requestID: first)
-        store.recordHomeAuthTokenEnd(requestID: first)
-        store.recordHomeHTTPStart(requestID: first)
-        store.recordHomeHTTPEnd(requestID: first, statusCode: 200)
+        _ = store.beginHomeRequest()
+        store.recordHomeAuthTokenStart()
+        store.recordHomeAuthTokenEnd()
+        store.recordHomeHTTPStart()
+        store.recordHomeHTTPEnd(statusCode: 200)
         XCTAssertNotNil(store.current.homeAuthTokenStartMs)
         XCTAssertEqual(store.current.homeHTTPStatusCode, 200)
 
@@ -105,20 +106,21 @@ final class DiagnosticsStoreTests: XCTestCase {
         XCTAssertEqual(store.current.homeHTTPStatusCode, 200)
     }
 
-    /// 2回目以降の`beginHomeRequest()`が返すIDは`current.homeRequestID`と
-    /// 一致しないダミーのため、それで記録しようとしても無視される。
+    /// 2回目以降の`/home`取得中(`homeRequestCount != 1`)は、どの記録呼び出しも
+    /// 無視される(IDの一致ではなく回数で判定 — `DiagnosticsStore.swift`
+    /// 冒頭のコメント参照)。
     func testSecondHomeRequestsRecordsAreIgnored() {
         let store = makeStore()
         _ = store.beginHomeRequest()
-        let second = store.beginHomeRequest()
+        _ = store.beginHomeRequest()
 
-        store.recordHomeAuthTokenStart(requestID: second)
-        store.recordHomeAuthTokenEnd(requestID: second)
-        store.recordHomeHTTPStart(requestID: second)
-        store.recordHomeHTTPEnd(requestID: second, statusCode: 500)
-        store.recordHomeDecodeStart(requestID: second)
-        store.recordHomeDecodeEnd(requestID: second, succeeded: true)
-        store.recordHomeStateApplied(requestID: second)
+        store.recordHomeAuthTokenStart()
+        store.recordHomeAuthTokenEnd()
+        store.recordHomeHTTPStart()
+        store.recordHomeHTTPEnd(statusCode: 500)
+        store.recordHomeDecodeStart()
+        store.recordHomeDecodeEnd(succeeded: true)
+        store.recordHomeStateApplied()
 
         XCTAssertNil(store.current.homeAuthTokenStartMs)
         XCTAssertNil(store.current.homeHTTPStatusCode)
@@ -126,32 +128,16 @@ final class DiagnosticsStoreTests: XCTestCase {
         XCTAssertNil(store.current.homeStateAppliedMs)
     }
 
-    /// 今の`current.homeRequestID`と一致しない、本当に無関係なIDでの記録も
-    /// 無視される(例: 別の診断セッションの値が紛れ込まない)。
-    func testUnrelatedRequestIDIsIgnored() {
+    func testFirstHomeRequestRecordsAreApplied() {
         let store = makeStore()
         _ = store.beginHomeRequest()
-        let unrelated = UUID()
-
-        store.recordHomeAuthTokenStart(requestID: unrelated)
-        store.recordHomeHTTPEnd(requestID: unrelated, statusCode: 500)
-        store.recordHomeStateApplied(requestID: unrelated)
-
-        XCTAssertNil(store.current.homeAuthTokenStartMs)
-        XCTAssertNil(store.current.homeHTTPStatusCode)
-        XCTAssertNil(store.current.homeStateAppliedMs)
-    }
-
-    func testCurrentHomeRequestIDRecordsAreApplied() {
-        let store = makeStore()
-        let id = store.beginHomeRequest()
-        store.recordHomeAuthTokenStart(requestID: id)
-        store.recordHomeAuthTokenEnd(requestID: id)
-        store.recordHomeHTTPStart(requestID: id)
-        store.recordHomeHTTPEnd(requestID: id, statusCode: 200)
-        store.recordHomeDecodeStart(requestID: id)
-        store.recordHomeDecodeEnd(requestID: id, succeeded: true)
-        store.recordHomeStateApplied(requestID: id)
+        store.recordHomeAuthTokenStart()
+        store.recordHomeAuthTokenEnd()
+        store.recordHomeHTTPStart()
+        store.recordHomeHTTPEnd(statusCode: 200)
+        store.recordHomeDecodeStart()
+        store.recordHomeDecodeEnd(succeeded: true)
+        store.recordHomeStateApplied()
 
         XCTAssertNotNil(store.current.homeAuthTokenStartMs)
         XCTAssertNotNil(store.current.homeAuthTokenEndMs)

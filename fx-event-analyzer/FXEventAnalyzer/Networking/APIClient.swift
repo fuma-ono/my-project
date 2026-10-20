@@ -65,23 +65,22 @@ final class URLSessionAPIClient: APIClient {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
         // HQ指示(2026-10-20)「起動診断画面」: /homeの認証・通信・デコードを
-        // `DiagnosticsStore`にも記録する(`HomeViewModel.fetch()`が
-        // `beginHomeRequest()`で発行したIDに紐づける)。他エンドポイント
-        // (settings/plan等)はこれまで通りos.Loggerへの`ClientTiming`出力
-        // のみで、構造化保持の対象を増やさない(過剰な計測を避ける)。
+        // `DiagnosticsStore`にも記録する。他エンドポイント(settings/plan等)
+        // はこれまで通りos.Loggerへの`ClientTiming`出力のみで、構造化保持
+        // の対象を増やさない(過剰な計測を避ける)。`DiagnosticsStore`側が
+        // 「1回目の/home取得中かどうか」を自分で判定して記録を受け付ける
+        // かどうかを決めるため、ここではIDを扱わない(2026-10-20、2回目の
+        // 修正: IDをこちらで読み直す方式は、2回目以降の取得でも常に
+        // 「現在のID」が一致してしまい上書きを防げていなかった)。
         let isHomeRequest = endpoint.path == "home"
-        var homeRequestID: UUID?
         if isHomeRequest {
-            homeRequestID = await DiagnosticsStore.shared.current.homeRequestID
-        }
-        if isHomeRequest, let homeRequestID {
-            await DiagnosticsStore.shared.recordHomeAuthTokenStart(requestID: homeRequestID)
+            await DiagnosticsStore.shared.recordHomeAuthTokenStart()
         }
         if let token = await ClientTiming.measure("authTokenProvider \(endpoint.path)", { await authTokenProvider() }) {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        if isHomeRequest, let homeRequestID {
-            await DiagnosticsStore.shared.recordHomeAuthTokenEnd(requestID: homeRequestID)
+        if isHomeRequest {
+            await DiagnosticsStore.shared.recordHomeAuthTokenEnd()
         }
         if let body = endpoint.body {
             request.httpBody = body
@@ -90,8 +89,8 @@ final class URLSessionAPIClient: APIClient {
 
         let data: Data
         let response: URLResponse
-        if isHomeRequest, let homeRequestID {
-            await DiagnosticsStore.shared.recordHomeHTTPStart(requestID: homeRequestID)
+        if isHomeRequest {
+            await DiagnosticsStore.shared.recordHomeHTTPStart()
         }
         do {
             // HQ指示(2026-10-20)「初回起動が約30秒かかる原因調査」: Renderの
@@ -102,53 +101,53 @@ final class URLSessionAPIClient: APIClient {
                 try await session.data(for: request)
             }
         } catch {
-            if isHomeRequest, let homeRequestID {
-                await DiagnosticsStore.shared.recordHomeHTTPEnd(requestID: homeRequestID, statusCode: nil)
-                await DiagnosticsStore.shared.recordHomeDecodeEnd(requestID: homeRequestID, succeeded: false)
+            if isHomeRequest {
+                await DiagnosticsStore.shared.recordHomeHTTPEnd(statusCode: nil)
+                await DiagnosticsStore.shared.recordHomeDecodeEnd(succeeded: false)
             }
             throw APIError.transport(error.localizedDescription)
         }
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            if isHomeRequest, let homeRequestID {
-                await DiagnosticsStore.shared.recordHomeHTTPEnd(requestID: homeRequestID, statusCode: nil)
-                await DiagnosticsStore.shared.recordHomeDecodeEnd(requestID: homeRequestID, succeeded: false)
+            if isHomeRequest {
+                await DiagnosticsStore.shared.recordHomeHTTPEnd(statusCode: nil)
+                await DiagnosticsStore.shared.recordHomeDecodeEnd(succeeded: false)
             }
             throw APIError.transport("No HTTP response")
         }
-        if isHomeRequest, let homeRequestID {
-            await DiagnosticsStore.shared.recordHomeHTTPEnd(requestID: homeRequestID, statusCode: httpResponse.statusCode)
+        if isHomeRequest {
+            await DiagnosticsStore.shared.recordHomeHTTPEnd(statusCode: httpResponse.statusCode)
         }
 
         switch httpResponse.statusCode {
         case 200...299:
             if data.isEmpty, let empty = EmptyResponse() as? T {
-                if isHomeRequest, let homeRequestID {
-                    await DiagnosticsStore.shared.recordHomeDecodeStart(requestID: homeRequestID)
-                    await DiagnosticsStore.shared.recordHomeDecodeEnd(requestID: homeRequestID, succeeded: true)
+                if isHomeRequest {
+                    await DiagnosticsStore.shared.recordHomeDecodeStart()
+                    await DiagnosticsStore.shared.recordHomeDecodeEnd(succeeded: true)
                 }
                 return empty
             }
-            if isHomeRequest, let homeRequestID {
-                await DiagnosticsStore.shared.recordHomeDecodeStart(requestID: homeRequestID)
+            if isHomeRequest {
+                await DiagnosticsStore.shared.recordHomeDecodeStart()
             }
             do {
                 let decoded = try await ClientTiming.measure("decode \(endpoint.method.rawValue) \(endpoint.path)") {
                     try decoder.decode(T.self, from: data)
                 }
-                if isHomeRequest, let homeRequestID {
-                    await DiagnosticsStore.shared.recordHomeDecodeEnd(requestID: homeRequestID, succeeded: true)
+                if isHomeRequest {
+                    await DiagnosticsStore.shared.recordHomeDecodeEnd(succeeded: true)
                 }
                 return decoded
             } catch {
-                if isHomeRequest, let homeRequestID {
-                    await DiagnosticsStore.shared.recordHomeDecodeEnd(requestID: homeRequestID, succeeded: false)
+                if isHomeRequest {
+                    await DiagnosticsStore.shared.recordHomeDecodeEnd(succeeded: false)
                 }
                 throw APIError.decoding(error.localizedDescription)
             }
         default:
-            if isHomeRequest, let homeRequestID {
-                await DiagnosticsStore.shared.recordHomeDecodeEnd(requestID: homeRequestID, succeeded: false)
+            if isHomeRequest {
+                await DiagnosticsStore.shared.recordHomeDecodeEnd(succeeded: false)
             }
             if let body = try? decoder.decode(APIErrorBody.self, from: data),
                let code = APIErrorCode(rawValue: body.error.code) {
