@@ -1,0 +1,113 @@
+name: FX Event Analyzer - Measurement Fastfile check (no signing, no upload)
+
+# HQ承認(2026-10-21)「計測用 Fastfile をアップロードせずに検証する」。
+# 通信計測の実機検証用ブランチ(claude/fx-ios-network-metrics)の Fastfile と
+# fastlane/measurement_guard.rb を、署名もアップロードもせずに確かめる:
+#   1. Ruby の構文(ruby -c)と、fastlane が Fastfile を読み込めるか(fastlane lanes。レーンは実行しない)
+#   2. measurement_guard のテスト(鍵の判定はテスト用の JWT だけ。Fastfile の並びの静的な確認も含む)
+#   3. 本物のプロジェクトをシミュレーター向けに署名なしでビルドし、MeasurementGuard の固定値を
+#      xcodebuild に渡したときに Info.plist が DEV の URL になるか、その .app から作った ipa の代わりで
+#      verify_ipa! が通る/書き換えた ipa で止まるか
+#
+# Secrets・署名証明書・プロビジョニングプロファイルは一切参照しない。upload_to_testflight も
+# App Store Connect への接続もしない。Render・Supabase にも接続しない(ビルドした .app は起動しない)。
+# 外部への通信は GitHub(checkout・actions)と RubyGems / Homebrew / Swift Package の取得だけ。
+#
+# このファイルは claude/fx-ios-network-metrics にだけ置く。push の対象ブランチを限定し、
+# ジョブでもブランチを確かめる(ほかのブランチに置かれても動かない)。
+on:
+  push:
+    branches:
+      - claude/fx-ios-network-metrics
+    paths:
+      - "fx-event-analyzer/fastlane/**"
+      - ".github/workflows/fx-event-analyzer-measurement-fastfile-check.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fx-measurement-fastfile-check
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: github.ref == 'refs/heads/claude/fx-ios-network-metrics'
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: fx-event-analyzer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Ruby syntax check
+        run: |
+          ruby -c fastlane/Fastfile
+          ruby -c fastlane/measurement_guard.rb
+          ruby -c fastlane/test/measurement_guard_test.rb
+
+      - name: Guard unit tests (test JWTs only; ipa tests are skipped until the app is built)
+        run: ruby fastlane/test/measurement_guard_test.rb
+
+      - name: Install Fastlane
+        run: gem install fastlane -N
+
+      - name: Fastlane can load the Fastfile (lanes are listed, not run)
+        run: fastlane lanes
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project from project.yml
+        run: xcodegen generate
+
+      - name: Cache Swift Package Manager artifacts
+        uses: actions/cache@v4
+        with:
+          path: fx-event-analyzer/DerivedData/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('fx-event-analyzer/project.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Build for Simulator (no signing) with the guard's fixed connection settings
+        run: |
+          set -euo pipefail
+          # MeasurementGuard の固定値を、Fastfile と同じ形(KEY=VALUE)で xcodebuild に渡す。
+          SETTINGS=$(ruby -r ./fastlane/measurement_guard -e 'puts MeasurementGuard.connection_build_settings.join(" ")')
+          echo "connection settings: $SETTINGS"
+          # shellcheck disable=SC2086
+          xcodebuild build \
+            -project FXEventAnalyzer.xcodeproj \
+            -scheme FXEventAnalyzer \
+            -configuration Release \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            $SETTINGS
+
+      - name: Info.plist of the built app has the DEV URLs (xcargs take precedence over project.yml)
+        id: app
+        run: |
+          set -euo pipefail
+          APP=$(find DerivedData/Build/Products/Release-iphonesimulator -maxdepth 1 -name "FXEventAnalyzer.app" -type d | head -n1)
+          if [ -z "$APP" ]; then echo "::error::built app not found" >&2; exit 1; fi
+          for KEY in API_BASE_URL SUPABASE_URL; do
+            echo "$KEY = $(/usr/libexec/PlistBuddy -c "Print :$KEY" "$APP/Info.plist")"
+          done
+          echo "app_path=$PWD/$APP" >> "$GITHUB_OUTPUT"
+
+      - name: Guard tests including the ipa checks against the real built app
+        env:
+          MEASUREMENT_APP_PATH: ${{ steps.app.outputs.app_path }}
+        run: ruby fastlane/test/measurement_guard_test.rb --verbose

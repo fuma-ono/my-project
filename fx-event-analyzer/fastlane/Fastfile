@@ -10,31 +10,13 @@
 # 値はすべて環境変数(呼び出し元のワークフローがGitHub Secretsから渡す)
 # 経由で読み込む。この行に実値を書かない。
 
-require "base64"
-require "json"
-require "tmpdir"
-
 # HQ指示(2026-10-21)「計測用ビルドの接続先を DEV に固定」: このブランチ
-# (claude/fx-ios-network-metrics)は通信計測の実機検証用。FX_API_BASE_URL が
-# 更新されていて値を確かめられないため、Secrets の値に頼らず、接続先を社内確認用(DEV)
-# に固定する。xcodebuild のコマンドラインの build setting は project.yml の値より
-# 優先されるので、ここで渡した値がそのまま Info.plist に入る(下で ipa を読み直して確かめる)。
+# (claude/fx-ios-network-metrics)は通信計測の実機検証用。接続先の固定と確認は
+# measurement_guard.rb にまとめ(確かめ専用のワークフローのテストからも同じコードを呼ぶ)、
+# ここではそれを呼ぶだけにする。xcodebuild のコマンドラインの build setting は
+# project.yml の値より優先され、最後に ipa の Info.plist を読み直して確かめる。
 # この変更はこのブランチの Fastfile だけにあり、通常版(claude/fx-settings-screens)には影響しない。
-MEASUREMENT_DEV_API_BASE_URL = "https://fx-event-analyzer-api-dev.onrender.com/api/v1"
-MEASUREMENT_DEV_SUPABASE_URL = "https://pbemckwnqmeaoveelihd.supabase.co"
-MEASUREMENT_DEV_SUPABASE_REF = "pbemckwnqmeaoveelihd"
-
-# Supabase の鍵(JWT)のペイロードの "ref"(プロジェクト番号)。JWT でなければ nil。
-# 鍵の値そのものはどこにも出さない。
-def supabase_key_ref(key)
-  parts = key.to_s.split(".")
-  return nil unless parts.length == 3
-  payload = parts[1].tr("-_", "+/")
-  payload += "=" * ((4 - payload.length % 4) % 4)
-  JSON.parse(Base64.decode64(payload))["ref"]
-rescue StandardError
-  nil
-end
+require_relative "measurement_guard"
 
 default_platform(:ios)
 
@@ -42,8 +24,10 @@ platform :ios do
   desc "Archive FXEventAnalyzer and upload the build to TestFlight"
   lane :testflight do
     # 1. Supabase の鍵が DEV のプロジェクトのものか(違う・確かめられないならビルドしない)。
-    unless supabase_key_ref(ENV.fetch("FX_SUPABASE_ANON_KEY", "")) == MEASUREMENT_DEV_SUPABASE_REF
-      UI.user_error!("計測用ビルド: FX_SUPABASE_ANON_KEY が DEV の Supabase プロジェクトの鍵だと確認できないため中止します(鍵の値は表示しません)")
+    begin
+      MeasurementGuard.ensure_dev_supabase_key!(ENV.fetch("FX_SUPABASE_ANON_KEY", ""))
+    rescue MeasurementGuard::Error => e
+      UI.user_error!(e.message)
     end
 
     app_store_connect_api_key(
@@ -85,10 +69,9 @@ platform :ios do
         "FX_SIGNING_TEAM_ID=#{ENV.fetch('FX_APPLE_TEAM_ID')}",
         "FX_SIGNING_PROFILE_NAME=\"#{ENV.fetch('FX_IOS_PROVISIONING_PROFILE_NAME')}\"",
         "CURRENT_PROJECT_VERSION=#{ENV.fetch('FX_BUILD_NUMBER')}",
-        # 2. 接続先は Secrets ではなく DEV の固定値(上の MEASUREMENT_DEV_*)。
-        "SUPABASE_URL=#{MEASUREMENT_DEV_SUPABASE_URL}",
+        # 2. 接続先は Secrets ではなく DEV の固定値(MeasurementGuard.connection_build_settings)。
+        *MeasurementGuard.connection_build_settings,
         "SUPABASE_ANON_KEY=#{ENV.fetch('FX_SUPABASE_ANON_KEY', '')}",
-        "API_BASE_URL=#{MEASUREMENT_DEV_API_BASE_URL}",
         # HQ指示(2026-10-20)「サインインは両方実装しよう」。SUPABASE_URL等と
         # 同じく空文字デフォルト(未設定でもビルド自体は成功する)。
         "GOOGLE_SIGNIN_CLIENT_ID=#{ENV.fetch('FX_GOOGLE_SIGNIN_CLIENT_ID', '')}",
@@ -97,19 +80,12 @@ platform :ios do
     )
 
     # 3. できあがった ipa の Info.plist を読み直し、接続先が DEV でなければアップロードしない。
-    ipa_path = lane_context[SharedValues::IPA_OUTPUT_PATH]
-    Dir.mktmpdir do |dir|
-      sh("unzip", "-q", "-o", ipa_path, "Payload/*.app/Info.plist", "-d", dir, log: false)
-      plist = Dir.glob(File.join(dir, "Payload", "*.app", "Info.plist")).first
-      UI.user_error!("計測用ビルド: ipa の Info.plist が見つからないため中止します") if plist.nil?
-      {
-        "API_BASE_URL" => MEASUREMENT_DEV_API_BASE_URL,
-        "SUPABASE_URL" => MEASUREMENT_DEV_SUPABASE_URL
-      }.each do |key, expected|
-        actual = sh("/usr/libexec/PlistBuddy", "-c", "Print :#{key}", plist, log: false).strip
-        UI.user_error!("計測用ビルド: Info.plist の #{key} が DEV ではないため中止します") unless actual == expected
-        UI.message("計測用ビルド: #{key} = #{actual}(DEV)")
+    begin
+      MeasurementGuard.verify_ipa!(lane_context[SharedValues::IPA_OUTPUT_PATH]).each do |key, value|
+        UI.message("計測用ビルド: #{key} = #{value}(DEV)")
       end
+    rescue MeasurementGuard::Error => e
+      UI.user_error!(e.message)
     end
 
     upload_to_testflight(
