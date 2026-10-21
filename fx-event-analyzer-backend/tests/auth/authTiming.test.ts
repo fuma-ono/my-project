@@ -93,4 +93,22 @@ describe('auth timing log', () => {
     ]);
     expect(lines.join('\n')).not.toContain('nope');
   });
+
+  it('marks exactly one request as first_in_process when several arrive at once, each with its own reqId', async () => {
+    const responses = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        app.inject({ method: 'GET', url: '/me', headers: { authorization: `Bearer ${TOKEN}` } }),
+      ),
+    );
+    expect(responses.every((r) => r.statusCode === 200)).toBe(true);
+    const timing = authLines(lines);
+    expect(timing).toHaveLength(5);
+    expect(timing.filter((l) => l.first_in_process === true)).toHaveLength(1);
+    expect(new Set(timing.map((l) => l.reqId)).size).toBe(5);
+    // Each auth_timing line shares its reqId with that request's own Fastify lines.
+    const completed = lines
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .filter((l) => l.msg === 'request completed');
+    expect(new Set(completed.map((l) => l.reqId))).toEqual(new Set(timing.map((l) => l.reqId)));
+  });
 });
