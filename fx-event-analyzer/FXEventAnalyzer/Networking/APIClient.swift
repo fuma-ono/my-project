@@ -18,16 +18,20 @@ final class URLSessionAPIClient: APIClient {
     private let session: URLSession
     private let baseURLProvider: () -> URL?
     private let authTokenProvider: () async -> String?
+    /// 通信の内訳(HQ指示 2026-10-21)を記録する先。テストだけ別のインスタンスを渡す。
+    private let diagnosticsStore: @MainActor () -> DiagnosticsStore
     private let decoder: JSONDecoder
 
     init(
         session: URLSession = .shared,
         baseURLProvider: @escaping () -> URL? = URLSessionAPIClient.defaultBaseURLProvider,
-        authTokenProvider: @escaping () async -> String? = { nil }
+        authTokenProvider: @escaping () async -> String? = { nil },
+        diagnosticsStore: @escaping @MainActor () -> DiagnosticsStore = { DiagnosticsStore.shared }
     ) {
         self.session = session
         self.baseURLProvider = baseURLProvider
         self.authTokenProvider = authTokenProvider
+        self.diagnosticsStore = diagnosticsStore
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom(BackendDate.decode)
         self.decoder = decoder
@@ -73,11 +77,28 @@ final class URLSessionAPIClient: APIClient {
         // 修正: IDをこちらで読み直す方式は、2回目以降の取得でも常に
         // 「現在のID」が一致してしまい上書きを防げていなかった)。
         let isHomeRequest = endpoint.path == "home"
+        // HQ指示(2026-10-21)「通信遅延の詳細計測」: 起動後1回目の home・calendar・
+        // speeches だけ、通信の内訳(URLSessionTaskMetrics)を記録する。記録するか
+        // どうかはDiagnosticsStoreが決める(`home`は上の既存の判定と同じ1回目だけ)。
+        // 記録しない要求は、下の`session.data(for:)`も含めて今までとまったく同じ経路。
+        // 記録に使うのはパス(`endpoint.path`、クエリなし)と時間・ステータスだけ。
+        let diagnosticsPath = endpoint.path
+        var diagnostics: DiagnosticsStore?
+        var tracksNetwork = false
+        if LaunchDiagnostics.trackedAPIPaths.contains(diagnosticsPath) {
+            let store = await diagnosticsStore()
+            diagnostics = store
+            tracksNetwork = await store.beginAPIRequestDiagnostics(path: diagnosticsPath)
+        }
         if isHomeRequest {
             await DiagnosticsStore.shared.recordHomeAuthTokenStart()
         }
+        let authTokenStartedAt = ContinuousClock.now
         if let token = await ClientTiming.measure("authTokenProvider \(endpoint.path)", { await authTokenProvider() }) {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        if tracksNetwork {
+            await diagnostics?.recordAPIRequestAuthToken(path: diagnosticsPath, ms: (ContinuousClock.now - authTokenStartedAt).milliseconds)
         }
         if isHomeRequest {
             await DiagnosticsStore.shared.recordHomeAuthTokenEnd()
@@ -92,15 +113,31 @@ final class URLSessionAPIClient: APIClient {
         if isHomeRequest {
             await DiagnosticsStore.shared.recordHomeHTTPStart()
         }
+        let requestStartedAt = ContinuousClock.now
         do {
             // HQ指示(2026-10-20)「初回起動が約30秒かかる原因調査」: Renderの
             // `[timing]`(ハンドラ内のみ、1〜2秒)と、このクライアント視点の
             // 時間(認証+ネットワーク+Renderのコールドスタート待ちを含む)を
             // 比較できるようにする。
-            (data, response) = try await ClientTiming.measure("request \(endpoint.method.rawValue) \(endpoint.path)") {
-                try await session.data(for: request)
+            (data, response) = try await ClientTiming.measure("request \(endpoint.method.rawValue) \(endpoint.path)") { () async throws -> (Data, URLResponse) in
+                guard tracksNetwork else { return try await session.data(for: request) }
+                // メトリクスを受け取るだけのタスク用の受け取り役(他の処理は既定のまま)。
+                // メトリクスは通信の完了の前後どちらで届いてもよい(届いた時点で記録する)。
+                let metricsStore = diagnostics
+                let collector = NetworkMetricsCollector { breakdown in
+                    Task { @MainActor in metricsStore?.recordAPIRequestNetwork(path: diagnosticsPath, breakdown) }
+                }
+                return try await session.data(for: request, delegate: collector)
             }
         } catch {
+            if tracksNetwork {
+                await diagnostics?.recordAPIRequestFinished(
+                    path: diagnosticsPath,
+                    clientTotalMs: (ContinuousClock.now - requestStartedAt).milliseconds,
+                    statusCode: nil,
+                    succeeded: false
+                )
+            }
             if isHomeRequest {
                 await DiagnosticsStore.shared.recordHomeHTTPEnd(statusCode: nil)
                 await DiagnosticsStore.shared.recordHomeDecodeEnd(succeeded: false)
@@ -108,12 +145,24 @@ final class URLSessionAPIClient: APIClient {
             throw APIError.transport(error.localizedDescription)
         }
 
+        let clientTotalMs = (ContinuousClock.now - requestStartedAt).milliseconds
         guard let httpResponse = response as? HTTPURLResponse else {
+            if tracksNetwork {
+                await diagnostics?.recordAPIRequestFinished(path: diagnosticsPath, clientTotalMs: clientTotalMs, statusCode: nil, succeeded: false)
+            }
             if isHomeRequest {
                 await DiagnosticsStore.shared.recordHomeHTTPEnd(statusCode: nil)
                 await DiagnosticsStore.shared.recordHomeDecodeEnd(succeeded: false)
             }
             throw APIError.transport("No HTTP response")
+        }
+        if tracksNetwork {
+            await diagnostics?.recordAPIRequestFinished(
+                path: diagnosticsPath,
+                clientTotalMs: clientTotalMs,
+                statusCode: httpResponse.statusCode,
+                succeeded: (200...299).contains(httpResponse.statusCode)
+            )
         }
         if isHomeRequest {
             await DiagnosticsStore.shared.recordHomeHTTPEnd(statusCode: httpResponse.statusCode)

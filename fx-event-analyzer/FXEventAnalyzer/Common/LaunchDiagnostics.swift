@@ -71,6 +71,13 @@ struct LaunchDiagnostics: Codable, Equatable {
     /// (`.onAppear`、完全な描画完了の保証ではない)。
     var homeReadyToDisplayMs: Int64?
 
+    // MARK: - G. 通信の内訳(HQ指示 2026-10-21「通信遅延の詳細計測」)
+
+    /// 起動後1回目の`home`・`calendar`・`speeches`の通信の内訳(キーは
+    /// `Endpoint.path`)。古い保存データには無いため`Optional`(読めなくなら
+    /// ないように)。`nil`・キーなし = その要求はまだ走っていない。
+    var apiRequests: [String: APIRequestDiagnostics]?
+
     init(launchID: UUID, startedAt: Date) {
         self.launchID = launchID
         self.startedAt = startedAt
@@ -282,6 +289,12 @@ extension LaunchDiagnostics {
         lines.append("/homeリクエスト全体の状態: \(homeRequestOutcome.rawValue)")
         lines.append("/home HTTPステータスコード: \(homeHTTPStatusCode.map(String.init) ?? "未計測")")
         lines.append("")
+        lines.append("[通信の内訳(起動後1回目の要求)]")
+        for path in Self.trackedAPIPaths {
+            lines.append(contentsOf: Self.networkReportLines(path: path, request: apiRequests?[path]))
+        }
+        lines.append("応答待ち(送信完了→応答開始)には、サーバーの処理時間と途中の中継(Renderの入り口など)での待ちの両方が入り、この計測だけでは区別できません。")
+        lines.append("")
         lines.append("[参考・注記]")
         if let uptime = systemUptimeAtLaunchSeconds {
             lines.append("OS起動(端末の最後の再起動)からの経過秒数(起動時点): \(String(format: "%.1f", uptime))秒 — アプリの起動時間とは別物")
@@ -291,3 +304,46 @@ extension LaunchDiagnostics {
         return lines.joined(separator: "\n")
     }
 }
+
+// MARK: - 通信の内訳の表示(画面・コピーで共通)
+
+extension LaunchDiagnostics {
+    /// 通信の内訳を記録するAPI(`Endpoint.path`)。表示もこの順。
+    static let trackedAPIPaths = ["home", "calendar", "speeches"]
+
+    /// 1つの区間の表示名と値(「N/A(理由)」を含む)。
+    static func networkRows(_ request: APIRequestDiagnostics) -> [(String, String)] {
+        var rows: [(String, String)] = [
+            ("認証トークン取得", describe(request.authTokenMs)),
+            ("通信全体(アプリから見た待ち時間)", describe(request.clientTotalMs)),
+            ("HTTPステータス", request.statusCode.map(String.init) ?? "未計測"),
+            ("状態", request.outcome.rawValue),
+        ]
+        guard let network = request.network else {
+            rows.append(("通信の内訳", "未取得(URLSessionのメトリクスが届いていない)"))
+            return rows
+        }
+        rows.append(contentsOf: [
+            ("URLSession全体(taskInterval)", describe(network.taskTotalMs)),
+            ("接続待ち(開始→最初の通信)", network.describe(.queue)),
+            ("DNS", network.describe(.dns)),
+            ("TCP(TLSを除く)", network.describe(.tcp)),
+            ("TLS", network.describe(.tls)),
+            ("送信", network.describe(.requestSend)),
+            ("応答待ち(送信完了→応答開始)", network.describe(.wait)),
+            ("受信", network.describe(.responseReceive)),
+            ("内訳外(全体−上の区間)", network.unattributedMs.map { describe($0) } ?? "算出不可"),
+            ("接続", network.connectionDescription),
+            ("プロトコル", network.networkProtocol ?? "不明"),
+            ("取得の種類", network.fetchType),
+            ("リダイレクト", network.redirectCount == 0 ? "なし" : "\(network.redirectCount)回"),
+        ])
+        return rows
+    }
+
+    static func networkReportLines(path: String, request: APIRequestDiagnostics?) -> [String] {
+        guard let request else { return ["/\(path): 未実行(この起動ではまだ要求していない)"] }
+        return ["/\(path):"] + networkRows(request).map { "  - \($0.0): \($0.1)" }
+    }
+}
+
