@@ -12,7 +12,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  *
  * Also supports `.in` / `.gte` / `.order` / `.range` (and treats `.or` as a
  * no-op) for the indicator list's release-summary queries (§13.1, v1.20).
- * `count` is the filtered row count before `.range`.
+ * `count` is the filtered row count before `.range` / `.limit`.
+ * `.neq` / `.limit` are for the latest-price queries (homeRepository /
+ * fxPairsRepository). `.order` is a stable sort, so rows with the same value
+ * keep their insertion order — tests use that to put a tie first.
  *
  * A table missing from `tableData` reads as empty — e.g. `default_entitlements`
  * in tests that only set up `entitlements` (no default features).
@@ -48,6 +51,14 @@ export function fakeSupabaseClient(tableData: Record<string, unknown[]>): Supaba
       },
       gte: (column: string, value: string) => {
         rows = rows.filter((row) => Date.parse(String(field(row, column))) >= Date.parse(value));
+        return chain;
+      },
+      neq: (column: string, value: unknown) => {
+        rows = rows.filter((row) => field(row, column) !== value);
+        return chain;
+      },
+      limit: (count: number) => {
+        rangeBounds = { from: 0, to: count - 1 };
         return chain;
       },
       or: () => chain,

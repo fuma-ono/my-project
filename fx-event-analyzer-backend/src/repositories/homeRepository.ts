@@ -125,10 +125,15 @@ export interface MajorFxRow {
 }
 
 /**
- * No continuous live price feed exists yet (Ingestion Worker is Phase 6) —
- * this reports the most recent stored candle per pair and, when a prior
- * one exists, the change against it. A pair with no price data at all
- * returns nulls rather than a fabricated value.
+ * Reports the most recent stored 1-minute candle per pair and, when a prior
+ * 1-minute candle exists, the change against it. A pair with no 1-minute
+ * price data at all returns nulls rather than a fabricated value.
+ *
+ * Only `timeframe = '1m'` is read (HQ承認 2026-10-21): fx_prices also holds
+ * 5m–60m candles built from the 1m ones (data-sources.md §6.4.1), whose
+ * open times can equal a 1m candle's, so without the filter the latest /
+ * previous rows could come from different timeframes. The index
+ * (fx_pair_id, timeframe, timestamp) serves this query.
  *
  * SCR-026: which pairs (and in which order) is decided by
  * selectHomeFxPairs from the user's home.fx_pairs (null = default), so at
@@ -149,6 +154,7 @@ export async function listMajorFx(
         .from('fx_prices')
         .select('close, timestamp')
         .eq('fx_pair_id', pair.id)
+        .eq('timeframe', '1m')
         .neq('verification_status', 'UNVERIFIED')
         .order('timestamp', { ascending: false })
         .limit(2);

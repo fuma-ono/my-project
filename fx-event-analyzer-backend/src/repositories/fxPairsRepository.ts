@@ -60,10 +60,12 @@ export async function getActiveFxPairById(supabase: SupabaseClient, fxPairId: st
 }
 
 /**
- * The latest price per pair — the `close` of the most recent fx_prices row
- * (any timeframe), exactly what GET /home major_fx shows as `price`
- * (homeRepository listMajorFx). Pairs without any price are absent from
- * the map. One query per pair, like listMajorFx (index (fx_pair_id, timestamp)).
+ * The latest price per pair — the `close` of the most recent 1-minute
+ * fx_prices row (`timeframe = '1m'`, HQ承認 2026-10-21; 5m–60m candles are
+ * not read), exactly what GET /home major_fx shows as `price`
+ * (homeRepository listMajorFx). Pairs without any 1-minute price are absent
+ * from the map. One query per pair, like listMajorFx
+ * (index (fx_pair_id, timeframe, timestamp)).
  */
 export async function listLatestFxPrices(
   supabase: SupabaseClient,
@@ -76,6 +78,7 @@ export async function listLatestFxPrices(
         .from('fx_prices')
         .select('close')
         .eq('fx_pair_id', fxPairId)
+        .eq('timeframe', '1m')
         .neq('verification_status', 'UNVERIFIED')
         .order('timestamp', { ascending: false })
         .limit(1);
