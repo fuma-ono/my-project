@@ -55,9 +55,14 @@ final class SplashViewModelTests: XCTestCase {
         }
         viewModel.start()
 
-        // Allow the detached Task inside start() to run.
-        await Task.yield()
-        try? await Task.sleep(nanoseconds: 50_000_000)
+        // HQ指示(2026-10-21「次回ビルドに向けたiOS改善」CI確認時)対応:
+        // このテストだけファイル冒頭のコメントが指摘する固定50msの待機の
+        // ままになっており、テスト件数の増加でCI実行がわずかに重くなった
+        // ことで実際にタイムアウトし、CIが不安定になった(`state`がまだ
+        // `.initializing`のまま検証してしまっていた)。同じファイル内の
+        // `testRetryReRunsInitSequenceOnTheSameInstance`と同じ`waitUntil`
+        // ポーリングに統一する(実装側の挙動は変えていない)。
+        await waitUntil { viewModel.state == .initializationError }
 
         XCTAssertEqual(viewModel.state, .initializationError)
     }
