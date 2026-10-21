@@ -67,7 +67,10 @@ enum HomeFavoriteItem: Identifiable, Equatable {
 /// 等)と同じ考え方の`reactionPips`に置き換えた — pipsをクライアント側で
 /// 価格差から再計算しない(`Formatting.swift`冒頭コメント「iOS側でこれらを
 /// 再計算して表示することを前提としない」に合わせた)。
-struct HomeSpeechSummary: Decodable, Identifiable, Equatable {
+// HQ指示(2026-10-21)「要人発言一覧の初回表示改善」: `AppRoute.speechList`が
+// このプレビュー配列を関連値として持つため(`Navigation/AppRoute.swift`
+// 参照)、`AppRoute: Hashable`の自動合成に必要な分だけ`Hashable`を追加した。
+struct HomeSpeechSummary: Decodable, Identifiable, Equatable, Hashable {
     let id: String
     let countryCode: String
     let speakerName: String

@@ -8,6 +8,13 @@ struct SpeechListResponse: Decodable, Equatable {
 
 enum SpeechListState: Equatable {
     case loading
+    /// HQ指示(2026-10-21)「要人発言一覧の初回表示改善」: ホームが既に
+    /// 取得済みの直近の要人発言(`HomeViewModel.recentSpeeches`、最大3件)を
+    /// 使って、`/speeches`の全件取得が終わるまでの間、空のスピナーではなく
+    /// この一覧を先に表示する。`SpeechListView`側はこの状態の間、検索・
+    /// 絞り込み・並べ替えのUIを出さない(`HomeSpeechSummary`には重要度・
+    /// 状態・機関等、絞り込みに必要な項目が揃っていないため)。
+    case loadingWithPreview([HomeSpeechSummary])
     case backendNotConfigured
     case loaded([SpeechDetailResponse])
     case error(String)
@@ -31,7 +38,7 @@ final class SpeechListViewModel: ObservableObject {
         }
     }
 
-    @Published private(set) var state: SpeechListState = .loading
+    @Published private(set) var state: SpeechListState
     @Published var searchText: String = ""
     @Published var importanceFilter: Importance?
     @Published var organizationFilter: String?
@@ -42,12 +49,28 @@ final class SpeechListViewModel: ObservableObject {
 
     private let apiClient: APIClient
 
-    init(apiClient: APIClient) {
+    /// `preview`はHQ指示(2026-10-21)「要人発言一覧の初回表示改善」対応。
+    /// 非空ならホームの直近の要人発言を初期表示に使う(`AppRoute.speechList`
+    /// のドキュメントコメント参照)。空(既定値、Home経由以外からの遷移等)
+    /// なら従来通り`.loading`から始まる。
+    init(apiClient: APIClient, preview: [HomeSpeechSummary] = []) {
         self.apiClient = apiClient
+        self.state = preview.isEmpty ? .loading : .loadingWithPreview(preview)
     }
 
     func load() {
-        state = .loading
+        // プレビュー表示中・取得済みの間は、取得中もその表示を維持する
+        // (`CalendarViewModel.load()`の`itemsByDay.isEmpty`ガードと同じ
+        // 考え方)。`.task`からの初回呼び出しで`.loadingWithPreview`を
+        // 即座に`.loading`へ上書きしてしまうと、プレビューが一瞬も表示
+        // されないため。リトライ(`.error`からの再試行)等、それ以外の
+        // 状態からの呼び出しは従来通り`.loading`にする。
+        switch state {
+        case .loadingWithPreview, .loaded:
+            break
+        case .loading, .backendNotConfigured, .error:
+            state = .loading
+        }
         Task { await fetch() }
     }
 

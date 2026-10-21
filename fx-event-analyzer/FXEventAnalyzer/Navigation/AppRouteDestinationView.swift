@@ -69,9 +69,9 @@ struct AppRouteDestinationView: View {
             PlaceholderScreenView(scrNumber: "SCR-010", screenName: "経済カレンダー")
                 .navigationTitle("経済カレンダー")
                 .navigationBarTitleDisplayMode(.inline)
-        case .speechList:
+        case .speechList(let preview):
             // SCR-012 要人発言一覧(HQ指示 2026-10-14「指標一覧と同じデザインで」)。
-            SpeechListView(apiClient: apiClient, tabSelection: $tabSelection)
+            SpeechListView(apiClient: apiClient, preview: preview, tabSelection: $tabSelection)
         case .speechDetail(let id):
             SpeechDetailView(apiClient: apiClient, speechId: id, tabSelection: $tabSelection)
         case .homeCurrencyPairEditor:

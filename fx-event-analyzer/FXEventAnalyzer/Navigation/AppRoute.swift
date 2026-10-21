@@ -46,8 +46,13 @@ enum AppRoute: Hashable {
     /// プッシュ遷移)から到達する場合のために残しているが、現時点では
     /// 呼び出し元がない。
     case calendar
-    /// SCR-012 要人発言一覧(バックエンドAPI未実装、仮画面のみ)。
-    case speechList
+    /// SCR-012 要人発言一覧。`preview`はHQ指示(2026-10-21)「要人発言一覧の
+    /// 初回表示改善」対応: ホームが既に取得済みの直近の要人発言
+    /// (`HomeViewModel.recentSpeeches`、最大3件)を渡し、`/speeches`の
+    /// 全件取得が終わるまでの間、一覧画面の初期表示に使う
+    /// (`SpeechListViewModel`のドキュメントコメント参照)。ホーム以外から
+    /// 遷移する場合は空配列を渡す(その場合は従来通りの空スピナー表示)。
+    case speechList(preview: [HomeSpeechSummary])
     /// SCR-013 要人発言詳細。`GET /speeches/{id}`(api-design.md §14.5)で
     /// 実装済み(`SpeechDetailView`)。
     case speechDetail(id: String)

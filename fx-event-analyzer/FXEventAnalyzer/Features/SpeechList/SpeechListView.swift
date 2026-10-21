@@ -12,8 +12,10 @@ struct SpeechListView: View {
     @Binding var tabSelection: Int
     @Environment(\.dismiss) private var dismiss
 
-    init(apiClient: APIClient, tabSelection: Binding<Int>) {
-        _viewModel = StateObject(wrappedValue: SpeechListViewModel(apiClient: apiClient))
+    /// `preview`はHQ指示(2026-10-21)「要人発言一覧の初回表示改善」対応。
+    /// `AppRoute.speechList(preview:)`のドキュメントコメント参照。
+    init(apiClient: APIClient, preview: [HomeSpeechSummary] = [], tabSelection: Binding<Int>) {
+        _viewModel = StateObject(wrappedValue: SpeechListViewModel(apiClient: apiClient, preview: preview))
         _tabSelection = tabSelection
     }
 
@@ -28,6 +30,8 @@ struct SpeechListView: View {
         switch viewModel.state {
         case .loading:
             loadingScaffold { LoadingView(caption: "読み込み中...") }
+        case .loadingWithPreview(let preview):
+            previewScreen(preview)
         case .backendNotConfigured:
             loadingScaffold { FXEmptyState(icon: "server.rack", title: "Backendは準備中です", message: "要人発言データはまだ利用できません。") }
         case .loaded:
@@ -58,6 +62,83 @@ struct SpeechListView: View {
                 .padding(.top, 53)
             V5BottomBar(selected: $tabSelection)
         }
+    }
+
+    // MARK: - プレビュー表示(HQ指示 2026-10-21「要人発言一覧の初回表示改善」)
+
+    /// `/speeches`の全件取得が終わるまでの間、ホームが既に取得済みの直近の
+    /// 要人発言(最大3件)を先に表示する。検索欄・絞り込み・並べ替えのUIは
+    /// 出さない(`HomeSpeechSummary`には重要度・状態・機関等、絞り込みに
+    /// 必要な項目が揃っていないため)。プレビュー中であることが分かるよう、
+    /// 読み込み中インジケーターと案内文を常に添える。
+    @ViewBuilder private func previewScreen(_ preview: [HomeSpeechSummary]) -> some View {
+        V5Viewport {
+            V5Header(title: "要人発言一覧", back: true, onBack: { dismiss() })
+            VStack(alignment: .leading, spacing: 7) {
+                previewBanner
+                if preview.isEmpty {
+                    // ホーム側が0件(空状態)だった場合もプレビュー表示自体は
+                    // 維持し、案内文だけで全件取得を待つ(空のスピナーより
+                    // 「読み込み中」である旨が伝わる)。
+                    NotoText.text("最新の一覧を読み込んでいます。", size: 8)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .frame(maxWidth: .infinity, minHeight: 40)
+                        .background(AccountCardBackground())
+                } else {
+                    ScrollView(showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            ForEach(preview) { previewRow($0) }
+                        }
+                        .frame(width: 214)
+                        .padding(.bottom, 6)
+                    }
+                }
+            }
+            .frame(width: 214)
+            .padding(.top, 6)
+            .frame(width: V5P.W, height: 398, alignment: .top)
+            .position(x: V5P.W / 2, y: 54 + 398 / 2)
+            V5BottomBar(selected: $tabSelection)
+        }
+    }
+
+    private var previewBanner: some View {
+        HStack(spacing: 6) {
+            ProgressView()
+                .tint(V5P.cyan)
+                .scaleEffect(0.7)
+            NotoText.text("最新の一覧を読み込み中です。下はホームの直近の要人発言です。", size: 7)
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// プレビュー専用の簡易行。`HomeSpeechSummary`には重要度・状態が無い
+    /// ため、`row(_:SpeechDetailResponse)`の重要度バッジ・左端の色帯は
+    /// 出さない(実際には無い情報を出さないため)。タップ遷移先
+    /// (`AppRoute.speechDetail`)は`HomeView.speechRow`と同じ。
+    private func previewRow(_ speech: HomeSpeechSummary) -> some View {
+        NavigationLink(value: AppRoute.speechDetail(id: speech.id)) {
+            HStack(spacing: 7) {
+                SpeakerAvatar(name: speech.speakerName, organization: speech.organization ?? "", countryCode: speech.countryCode, photoURL: speech.speakerPhotoURL, size: 17)
+                VStack(alignment: .leading, spacing: 1) {
+                    NotoText.text(speech.speakerName, size: 9.5).foregroundStyle(.white).lineLimit(1)
+                    NotoText.text(speech.headline, size: 7).foregroundStyle(SettingsCardStyle.subtitleColor).lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(V5P.muted)
+            }
+            .padding(.leading, 9)
+            .padding(.trailing, 7)
+            .padding(.vertical, 6)
+            .background(AccountCardBackground())
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SettingsRowPressStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(speech.speakerName) \(speech.headline)")
+        .accessibilityAddTraits(.isButton)
     }
 
     // MARK: - 絞り込み(指標一覧と同じカプセル)

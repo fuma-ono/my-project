@@ -1229,7 +1229,10 @@ struct HomeView: View {
                 Image(systemName: "speaker.wave.2.fill").font(.system(size: 14, weight: .semibold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
                     .frame(width: 16, alignment: .center)
             } trailing: {
-                NavigationLink(value: AppRoute.speechList) {
+                // HQ指示(2026-10-21)「要人発言一覧の初回表示改善」: ホームが
+                // 既に取得済みのこの`speeches`(最大3件)を一覧画面へ渡し、
+                // 一覧側の全件取得が終わるまでの初期表示に使う。
+                NavigationLink(value: AppRoute.speechList(preview: speeches)) {
                     headerLink("すべて見る")
                 }
                 // UIテストが他のカードの「すべて見る」と区別して押すための目印。
