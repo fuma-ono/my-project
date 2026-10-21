@@ -37,6 +37,11 @@ struct RootView: View {
                     LocalNotificationScheduler(apiClient: apiClient).reset()
                     AppPreferences.shared.reset()
                     if sessionExpired { FavoritesStore.shared.removeAll() }
+                    // HQ決定(2026-10-21「起動の遅れの改善A1」): ログイン画面が
+                    // 出たときは(セッション期限切れ・通常のログアウトを問わず)
+                    // 前回のホームデータの保存も必ず消す — 次に別の利用者が
+                    // ログインしたとき、前の利用者のデータが一瞬でも見えないようにする。
+                    HomeSnapshotStore.shared.clear()
                 }
             case .loggedIn:
                 MainTabView(apiClient: apiClient, authService: authService) {
@@ -45,6 +50,9 @@ struct RootView: View {
                     LocalNotificationScheduler(apiClient: apiClient).reset()
                     FavoritesStore.shared.removeAll()
                     AppPreferences.shared.reset()
+                    // HQ決定(2026-10-21「起動の遅れの改善A1」): ログアウト・
+                    // アカウント削除でも前回のホームデータの保存を消す。
+                    HomeSnapshotStore.shared.clear()
                     appState.handleSignOut()
                 }
                 // 文字サイズを変えたら全画面を作り直して新しい大きさで表示する(HQ指示 2026-10-15)。

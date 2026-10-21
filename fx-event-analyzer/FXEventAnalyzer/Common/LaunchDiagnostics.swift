@@ -78,6 +78,23 @@ struct LaunchDiagnostics: Codable, Equatable {
     /// ないように)。`nil`・キーなし = その要求はまだ走っていない。
     var apiRequests: [String: APIRequestDiagnostics]?
 
+    // MARK: - H. 前回のホームデータの先行表示(HQ決定 2026-10-21「起動の遅れの改善A1」)
+
+    /// 前回保存したホームの内容を先に表示した時点(基準点からの経過ms)。
+    /// 使わなかった場合は`nil`のまま。最新のデータ(`.loaded`)が画面に
+    /// 表示された時点は、従来通り`homeReadyToDisplayMs`が担う(意味は
+    /// 変えていない — 前回の内容を表示しても`homeReadyToDisplayMs`は
+    /// 更新しない)。古い保存データ(この項目が無いもの)も読めるよう
+    /// `Optional`にしている。
+    var homeSnapshotShownMs: Int64?
+    /// 前回データが使えた/使えなかった理由(`HomeSnapshotLoadResult`の
+    /// `rawValue`)。`nil` = この起動では判定自体が走っていない(利用者
+    /// IDが未解決など)。
+    var homeSnapshotOutcome: String?
+    /// 表示した(または使えなかった)前回データの、取得からの古さ(秒)。
+    /// 保存データが無い場合は`nil`。
+    var homeSnapshotAgeSeconds: Double?
+
     init(launchID: UUID, startedAt: Date) {
         self.launchID = launchID
         self.startedAt = startedAt
@@ -294,6 +311,11 @@ extension LaunchDiagnostics {
             lines.append(contentsOf: Self.networkReportLines(path: path, request: apiRequests?[path]))
         }
         lines.append("応答待ち(送信完了→応答開始)には、サーバーの処理時間と途中の中継(Renderの入り口など)での待ちの両方が入り、この計測だけでは区別できません。")
+        lines.append("")
+        lines.append("[前回のホームデータの先行表示(A1)]")
+        lines.append("前回データを表示した時点: \(Self.describe(homeSnapshotShownMs))")
+        lines.append("判定結果: \(homeSnapshotOutcome ?? "未判定")")
+        lines.append("表示(または判定)した前回データの古さ: \(homeSnapshotAgeSeconds.map { String(format: "%.0f秒", $0) } ?? "該当データなし")")
         lines.append("")
         lines.append("[参考・注記]")
         if let uptime = systemUptimeAtLaunchSeconds {

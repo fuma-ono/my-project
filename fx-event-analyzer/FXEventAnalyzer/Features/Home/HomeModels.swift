@@ -5,7 +5,11 @@ import Foundation
 /// (ui-screens.md §5 SCR-004) reference: Forecast/Actual/Previous/Surprise,
 /// country/currency/importance for the card header, and related_fx_pairs
 /// for the "関連通貨ペア" row.
-struct HomeEventSummary: Decodable, Identifiable, Equatable {
+// HQ決定(2026-10-21「起動の遅れの改善A1」): `HomeSnapshotStore`が`/home`の
+// 応答を端末に保存するため、`HomeEventSummary`/`MajorFxSummary`に
+// `Encodable`を追加した(`Decodable`→`Codable`)。保存はこのストアだけが
+// 行い、Backendとの通信の形は変えていない。
+struct HomeEventSummary: Codable, Identifiable, Equatable {
     let id: String
     let indicatorId: String
     let indicatorName: String
@@ -53,7 +57,7 @@ struct HomeEventSummary: Decodable, Identifiable, Equatable {
 /// feed exists yet (Ingestion Worker is a later phase), so `price`/`change`
 /// can legitimately be null for a pair with no stored candle; the UI must
 /// not fabricate a value for that case.
-struct MajorFxSummary: Decodable, Identifiable, Equatable {
+struct MajorFxSummary: Codable, Identifiable, Equatable {
     let fxPairId: String
     let symbol: String
     let price: Double?

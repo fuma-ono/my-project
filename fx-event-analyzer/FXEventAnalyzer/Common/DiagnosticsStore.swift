@@ -262,4 +262,24 @@ final class DiagnosticsStore: ObservableObject {
     }
 
     private static func logValue(_ ms: Int64?) -> String { ms.map(String.init) ?? "NA" }
+
+    // MARK: - H. 前回のホームデータの先行表示(HQ決定 2026-10-21「起動の遅れの改善A1」)
+
+    /// 前回データを画面に表示した時点。最初の1回だけ記録する
+    /// (`recordHomeReadyToDisplay()`と同じ考え方)。
+    func recordHomeSnapshotShown() {
+        guard current.homeSnapshotShownMs == nil else { return }
+        current.homeSnapshotShownMs = elapsedMs()
+        persist()
+        logger.log("[diagnostics] home snapshot shown")
+    }
+
+    /// 前回データが使えた/使えなかった理由と、その古さ(秒)を記録する。
+    /// `ageSeconds`はトークン・ユーザーID等を含まない、単なる経過秒数。
+    func recordHomeSnapshotOutcome(_ outcome: String, ageSeconds: Double?) {
+        current.homeSnapshotOutcome = outcome
+        current.homeSnapshotAgeSeconds = ageSeconds
+        persist()
+        logger.log("[diagnostics] home snapshot outcome=\(outcome, privacy: .public)")
+    }
 }

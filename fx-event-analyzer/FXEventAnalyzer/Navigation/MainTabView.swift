@@ -66,7 +66,10 @@ struct MainTabView: View {
     @ViewBuilder
     private var portraitLayout: some View {
         ZStack {
-            HomeView(apiClient: apiClient, path: $homePath, tabSelection: $tabSelection)
+            // `authService`はHQ決定(2026-10-21「起動の遅れの改善A1」)対応:
+            // ログイン中の利用者IDを`HomeViewModel`が解決するために渡す
+            // (`HomeView.init`のドキュメントコメント参照)。
+            HomeView(apiClient: apiClient, path: $homePath, tabSelection: $tabSelection, authService: authService)
                 .opacity(tabSelection == 0 ? 1 : 0)
                 .allowsHitTesting(tabSelection == 0)
                 .accessibilityHidden(tabSelection != 0)

@@ -7,6 +7,12 @@ enum HomeState: Equatable {
     case backendNotConfigured
     case loaded(events: [HomeEventSummary], majorFx: [MajorFxSummary])
     case error(String)
+    /// HQ決定(2026-10-21「起動の遅れの改善A1」): 前回保存したホームの内容を、
+    /// `/home`の取得が終わるまでの間だけ鮮度表示付きで先に出す状態。
+    /// `refreshFailed`は`/home`の取得が失敗した(かつ前回の内容を表示中の)
+    /// ことを示す — その場合も前回の内容は消さず、帯の文言と再試行導線だけ
+    /// 切り替える(`HomeSnapshotStore`のドキュメントコメント参照)。
+    case showingSnapshot(HomeSnapshot, refreshFailed: Bool)
 }
 
 /// HQ指示(2026-10-02)「お気に入り」セクション用の軽量表示モデル。指標と
@@ -70,7 +76,9 @@ enum HomeFavoriteItem: Identifiable, Equatable {
 // HQ指示(2026-10-21)「要人発言一覧の初回表示改善」: `AppRoute.speechList`が
 // このプレビュー配列を関連値として持つため(`Navigation/AppRoute.swift`
 // 参照)、`AppRoute: Hashable`の自動合成に必要な分だけ`Hashable`を追加した。
-struct HomeSpeechSummary: Decodable, Identifiable, Equatable, Hashable {
+// HQ決定(2026-10-21「起動の遅れの改善A1」): `HomeSnapshotStore`での保存に
+// `Encodable`が必要なため追加(`Decodable`→`Codable`)。
+struct HomeSpeechSummary: Codable, Identifiable, Equatable, Hashable {
     let id: String
     let countryCode: String
     let speakerName: String
@@ -124,11 +132,22 @@ final class HomeViewModel: ObservableObject {
 
     private let apiClient: APIClient
     private let favoritesStore: FavoritesStore
+    private let snapshotStore: HomeSnapshotStore
+    /// セッションからログイン中の利用者IDを取るためだけに使う(認証状態の
+    /// 管理・取得自体はこれまで通り`AuthServicing`実装側が行う)。`nil`なら
+    /// 前回データの先行表示は行わない(利用者を特定できないため)。
+    private let authService: AuthServicing?
     private var cancellables = Set<AnyCancellable>()
+    /// 起動後、前回データの先行表示を試みたか(1回の起動につき1回だけ)。
+    /// タブ復帰等での再度の`load()`呼び出しでは、前回データへは戻さない
+    /// (`load()`のドキュメントコメント参照)。
+    private var hasAttemptedSnapshot = false
 
-    init(apiClient: APIClient, favoritesStore: FavoritesStore = .shared) {
+    init(apiClient: APIClient, favoritesStore: FavoritesStore = .shared, snapshotStore: HomeSnapshotStore = .shared, authService: AuthServicing? = nil) {
         self.apiClient = apiClient
         self.favoritesStore = favoritesStore
+        self.snapshotStore = snapshotStore
+        self.authService = authService
         favoritesStore.$entries
             .sink { [weak self] entries in
                 Task { await self?.loadFavorites(entries) }
@@ -137,18 +156,80 @@ final class HomeViewModel: ObservableObject {
     }
 
     var upcomingEvents: [HomeEventSummary] {
-        guard case .loaded(let events, _) = state else { return [] }
-        return events.filter { $0.status == .scheduled }
+        events(scheduledOnly: true)
     }
 
     var recentEvents: [HomeEventSummary] {
-        guard case .loaded(let events, _) = state else { return [] }
-        return events.filter { $0.status == .released }
+        events(scheduledOnly: false)
     }
 
+    private func events(scheduledOnly: Bool) -> [HomeEventSummary] {
+        let all: [HomeEventSummary]
+        switch state {
+        case .loaded(let events, _): all = events
+        case .showingSnapshot(let snapshot, _): all = snapshot.events
+        default: return []
+        }
+        return all.filter { scheduledOnly ? $0.status == .scheduled : $0.status == .released }
+    }
+
+    /// 前回データを表示中なら、その取得時刻(鮮度帯の表示に使う)。
+    var snapshotFetchedAt: Date? {
+        guard case .showingSnapshot(let snapshot, _) = state else { return nil }
+        return snapshot.fetchedAt
+    }
+
+    /// 前回データを表示中かどうかと、取得の再試行が失敗したかどうか。
+    var snapshotRefreshFailed: Bool {
+        guard case .showingSnapshot(_, let refreshFailed) = state else { return false }
+        return refreshFailed
+    }
+
+    /// `.task`からの初回呼び出しと、ホーム自身の`NavigationStack`へ戻った
+    /// 際の再呼び出し(`HomeView`の`.onChange(of: path.count)`)の両方で
+    /// 使われる。前回データの先行表示は**起動後最初の1回だけ**試みる —
+    /// 2回目以降(詳細画面からの復帰等)でまで前回データに戻すと、既に
+    /// 表示していた最新のデータを一時的に古いデータへ後退させてしまう
+    /// ため(A1の対象はあくまで「起動直後」)。
     func load() {
-        state = .loading
-        Task { await fetch() }
+        Task { await performLoad() }
+    }
+
+    private func performLoad() async {
+        if !hasAttemptedSnapshot {
+            hasAttemptedSnapshot = true
+            await showSnapshotIfUsable()
+        }
+        // 前回データを表示中の間だけ、取得中もその表示を維持する
+        // (`SpeechListViewModel.load()`の`.loadingWithPreview`と同じ考え方、
+        // 再試行フラグだけ下ろす)。それ以外(`.loaded`を含む)は従来通り
+        // 無条件に`.loading`へ戻す — `load()`は詳細画面からの復帰時にも
+        // 呼ばれるため、この部分の挙動は変えていない。
+        switch state {
+        case .showingSnapshot(let snapshot, _):
+            state = .showingSnapshot(snapshot, refreshFailed: false)
+        default:
+            state = .loading
+        }
+        await fetch()
+    }
+
+    /// 前回データが使える条件を満たせば`state`に反映する。使えない場合は
+    /// 何もしない(通常の`.loading`のまま)。判定結果は起動診断にも記録する
+    /// (「使った」理由も含め、HQ指示により失敗があっても断定せず記録のみ)。
+    private func showSnapshotIfUsable() async {
+        guard let authService, let userID = try? await authService.currentSession()?.userID.uuidString else {
+            DiagnosticsStore.shared.recordHomeSnapshotOutcome(HomeSnapshotLoadResult.Outcome.userIDUnavailable.rawValue, ageSeconds: nil)
+            return
+        }
+        let today = Self.isoDateFormatter.string(from: Date())
+        let timezone = TimeZone.current.identifier
+        let result = snapshotStore.load(userID: userID, requestedDate: today, requestedTimezone: timezone)
+        DiagnosticsStore.shared.recordHomeSnapshotOutcome(result.outcome.rawValue, ageSeconds: result.ageSeconds)
+        guard case .usable(let snapshot) = result else { return }
+        state = .showingSnapshot(snapshot, refreshFailed: false)
+        recentSpeeches = snapshot.speeches
+        DiagnosticsStore.shared.recordHomeSnapshotShown()
     }
 
     private func fetch() async {
@@ -172,10 +253,28 @@ final class HomeViewModel: ObservableObject {
             state = .loaded(events: response.events, majorFx: response.majorFx)
             DiagnosticsStore.shared.recordHomeStateApplied()
             recentSpeeches = response.speeches ?? []
+            // HQ決定(2026-10-21「起動の遅れの改善A1」): 取得に成功したときだけ保存する。
+            if let authService, let userID = try? await authService.currentSession()?.userID.uuidString {
+                snapshotStore.save(HomeSnapshot(
+                    events: response.events,
+                    majorFx: response.majorFx,
+                    speeches: response.speeches ?? [],
+                    fetchedAt: Date(),
+                    requestedDate: today,
+                    requestedTimezone: timezone,
+                    userID: userID
+                ))
+            }
         } catch let error as APIError where error.isNotConfigured {
             state = .backendNotConfigured
         } catch {
-            state = .error("イベント情報の取得に失敗しました。")
+            // 前回データを表示中の取得失敗は、既存のエラー画面ではなく
+            // 「取得できなかった」帯+再試行に切り替える(前回データは消さない)。
+            if case .showingSnapshot(let snapshot, _) = state {
+                state = .showingSnapshot(snapshot, refreshFailed: true)
+            } else {
+                state = .error("イベント情報の取得に失敗しました。")
+            }
         }
     }
 

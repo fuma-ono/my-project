@@ -233,6 +233,14 @@ final class ScreenshotTests: XCTestCase {
         tapIdentifier("v5HeaderBack")
         XCTAssertTrue(waitForAnyElement(containing: "直近の要人発言", timeout: 10), "Did not return to Home from Speech list")
 
+        // ホーム画面ヘッダーの人物アイコン(HQ指示 2026-10-21「ホーム画面の人物アイコン」)。
+        // タップしても遷移しなかった不具合の修正確認 — SCR-015アカウント情報
+        // (SettingsからのAppRoute.accountと同じ画面)へ遷移し、ホームへ戻れることを確認する。
+        tapIdentifier("homeAccountIcon")
+        XCTAssertTrue(waitForAnyElement(containing: "プロフィール編集", timeout: 15), "Home account icon did not open Account screen")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "直近の要人発言", timeout: 10), "Did not return to Home from Account screen")
+
         // 通知一覧(HQ指示 2026-10-05「通知はホーム画面の通知マークを押したら
         // そこで確認できる仕様にして」)。ログイン時に`RootView`が
         // `GET /notifications/upcoming`を取り込み、モックの通知時刻を過ぎた

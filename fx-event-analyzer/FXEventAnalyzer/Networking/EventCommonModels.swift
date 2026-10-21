@@ -12,7 +12,13 @@ enum ReactionTimeframe {
     static let `default` = "5m"
 }
 
-enum Importance: String, Decodable, Equatable {
+// HQ決定(2026-10-21「起動の遅れの改善A1」)対応で`Decodable`から`Codable`へ
+// 変更した5つのenumは、`/home`の応答を端末に保存する`HomeSnapshotStore`が
+// 保存のために`Encodable`を必要とするため。rawValueのString enumのため
+// `Encodable`追加はいずれも既存の挙動に影響しない(読み込み側のAPI応答の
+// 解釈は変えていない)。
+
+enum Importance: String, Codable, Equatable {
     case low = "LOW"
     case medium = "MEDIUM"
     case high = "HIGH"
@@ -21,7 +27,7 @@ enum Importance: String, Decodable, Equatable {
 /// api-design.md §12: Home's `events` is day-scoped; the client splits it
 /// by `status` into "今日の注目イベント" (SCHEDULED) and "最近のイベント"
 /// (RELEASED) itself — there is no separate Backend field for this.
-enum EventStatus: String, Decodable, Equatable {
+enum EventStatus: String, Codable, Equatable {
     case scheduled = "SCHEDULED"
     case released = "RELEASED"
     case cancelled = "CANCELLED"
@@ -29,7 +35,7 @@ enum EventStatus: String, Decodable, Equatable {
 
 /// api-design.md §7: the API-level Data Quality state — always HTTP 200 +
 /// this field, never an HTTP error.
-enum DataQualityStatus: String, Decodable, Equatable {
+enum DataQualityStatus: String, Codable, Equatable {
     case ready = "READY"
     case dataPending = "DATA_PENDING"
     case dataUnavailable = "DATA_UNAVAILABLE"
@@ -38,7 +44,7 @@ enum DataQualityStatus: String, Decodable, Equatable {
 
 /// api-design.md §9: null (never 0) when Forecast or Actual is missing;
 /// NEUTRAL when surprise == 0.
-enum SurpriseDirection: String, Decodable, Equatable {
+enum SurpriseDirection: String, Codable, Equatable {
     case positive = "POSITIVE"
     case negative = "NEGATIVE"
     case neutral = "NEUTRAL"
@@ -46,7 +52,7 @@ enum SurpriseDirection: String, Decodable, Equatable {
 
 /// api-design.md §11.1: drives which timeframes are analyzable for an
 /// event, independent of stored reaction data_status.
-enum ReleaseDatetimePrecision: String, Decodable, Equatable {
+enum ReleaseDatetimePrecision: String, Codable, Equatable {
     case exact = "EXACT"
     case approximate = "APPROXIMATE"
     case dateOnly = "DATE_ONLY"
@@ -72,7 +78,7 @@ enum FavorableDirection: String, Decodable, Equatable {
 /// an Indicator or Event, with priority determining display order (lower
 /// first) — the same shape appears on Home events, Event Detail, and
 /// Indicator Detail.
-struct RelatedFxPairSummary: Decodable, Identifiable, Equatable {
+struct RelatedFxPairSummary: Codable, Identifiable, Equatable {
     let fxPairId: String
     let symbol: String
     let priority: Int

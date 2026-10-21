@@ -35,6 +35,7 @@ struct LaunchDiagnosticsView: View {
                     spansCard(store.current)
                     homeRequestCard(store.current)
                     networkCard(store.current)
+                    homeSnapshotCard(store.current)
 
                     if let previous = store.previous {
                         sectionTitle("前回の起動")
@@ -146,6 +147,21 @@ struct LaunchDiagnosticsView: View {
             NotoText.text("「応答待ち」には、サーバーの処理時間と、途中の中継(Renderの入り口など)での待ちの両方が入ります。この計測だけでは区別できません。", size: 6.3)
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .frame(width: 214, alignment: .leading)
+        .background(AccountCardBackground())
+    }
+
+    /// HQ決定(2026-10-21「起動の遅れの改善A1」): 前回保存したホームの
+    /// 内容を先に表示した場合の判定結果・古さ・表示時点。
+    private func homeSnapshotCard(_ diagnostics: LaunchDiagnostics) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            NotoText.text("前回のホームデータの先行表示", size: 8).foregroundStyle(.white)
+            row("判定結果", diagnostics.homeSnapshotOutcome ?? "未判定")
+            row("表示した前回データの古さ", diagnostics.homeSnapshotAgeSeconds.map { String(format: "%.0f秒", $0) } ?? "該当データなし")
+            row("前回データを表示した時点", LaunchDiagnostics.describe(diagnostics.homeSnapshotShownMs))
+            row("最新データを表示した時点", LaunchDiagnostics.describe(diagnostics.homeReadyToDisplayMs))
         }
         .padding(10)
         .frame(width: 214, alignment: .leading)

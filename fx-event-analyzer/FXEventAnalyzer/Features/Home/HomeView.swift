@@ -52,9 +52,14 @@ struct HomeView: View {
     @ObservedObject private var notifications = NotificationsStore.shared
     private let apiClient: APIClient
 
-    init(apiClient: APIClient, path: Binding<NavigationPath>, tabSelection: Binding<Int>) {
+    /// `authService`はHQ決定(2026-10-21「起動の遅れの改善A1」)対応:
+    /// 前回データの先行表示を利用者単位で区別するため、ログイン中の
+    /// `UserSession.userID`を`HomeViewModel`が解決するのに使う。省略時
+    /// (既定`nil`)は先行表示自体を行わず、従来通り`.loading`から始まる
+    /// (テスト等、認証を伴わない構築との互換性のため既定値を付けている)。
+    init(apiClient: APIClient, path: Binding<NavigationPath>, tabSelection: Binding<Int>, authService: AuthServicing? = nil) {
         self.apiClient = apiClient
-        _viewModel = StateObject(wrappedValue: HomeViewModel(apiClient: apiClient))
+        _viewModel = StateObject(wrappedValue: HomeViewModel(apiClient: apiClient, authService: authService))
         _path = path
         _tabSelection = tabSelection
     }
@@ -93,6 +98,17 @@ struct HomeView: View {
         case .loaded(_, let majorFx) where majorFx.isEmpty:
             loadingScaffold { FXEmptyState(icon: "chart.bar", title: "表示できる通貨ペアがありません", message: "しばらくしてから再度お試しください。") }
         case .loaded:
+            // HQ指示(2026-10-20)「起動診断画面」: 最新データが画面に表示
+            // された「表示イベント」。前回データの先行表示(`.showingSnapshot`、
+            // 下のcase参照)はこの時点を更新しない — 意味は変えていない。
+            loadedScreen
+                .onAppear { DiagnosticsStore.shared.recordHomeReadyToDisplay() }
+        case .showingSnapshot:
+            // HQ決定(2026-10-21「起動の遅れの改善A1」): 前回保存したホームの
+            // 内容を、`/home`の取得が終わるまでの間だけ鮮度表示付きで出す。
+            // レイアウトは`.loaded`と同じ`loadedScreen`をそのまま再利用し
+            // (既存カードの構成・座標は一切変えない)、`loadedScreen`内部で
+            // 帯の表示・薄い表示・価格の時刻表示への切り替えだけを行う。
             loadedScreen
         case .error(let message):
             loadingScaffold { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() }) }
@@ -310,10 +326,19 @@ struct HomeView: View {
                 .accessibilityLabel("通知")
                 .accessibilityValue(notifications.hasUnread ? "未読あり" : "")
                 .padding(.trailing, bellTrailingMargin)
-                Image(systemName: "person")
-                    .font(.system(size: accountIconSize, weight: .semibold))
-                    .foregroundStyle(Self.accountIconColor)
-                    .padding(.trailing, accountTrailingMargin)
+                // HQ指示(2026-10-21)「ホーム画面の人物アイコン」: タップしても
+                // 遷移しなかった不具合の修正。既存のSCR-015(アカウント情報、
+                // `SettingsView`の「アカウント情報」行と同じ`AppRoute.account`)
+                // をそのまま再利用する。新規画面は作っていない。
+                NavigationLink(value: AppRoute.account) {
+                    Image(systemName: "person")
+                        .font(.system(size: accountIconSize, weight: .semibold))
+                        .foregroundStyle(Self.accountIconColor)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("アカウント")
+                .accessibilityIdentifier("homeAccountIcon")
+                .padding(.trailing, accountTrailingMargin)
             }
         }
         .position(x: V5P.W / 2, y: 34.9)
@@ -542,12 +567,18 @@ struct HomeView: View {
         let pairs = Array(mappedPairs.prefix(3))
         let favorites = Array(viewModel.favoriteItems.prefix(3))
         let speeches = Array(viewModel.recentSpeeches.prefix(3))
+        // HQ決定(2026-10-21「起動の遅れの改善A1」): 前回データを表示中の
+        // ときだけ非nil。`.loaded`(最新データ)のときは常にnil。
+        let snapshotFetchedAt = viewModel.snapshotFetchedAt
 
         return V5Viewport {
             homeHeader
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: Self.sectionGap) {
+                    if let snapshotFetchedAt {
+                        homeSnapshotBanner(fetchedAt: snapshotFetchedAt, refreshFailed: viewModel.snapshotRefreshFailed)
+                    }
                     // HQ指示(2026-10-20)「今日の重要イベント」「お気に入り」は
                     // 0件でもセクション自体を隠さず空状態を案内する
                     // (`speechesCard`が元から常時表示+空状態表示だったのに
@@ -560,6 +591,11 @@ struct HomeView: View {
                     speechesCard(speeches)
                 }
                 .padding(.bottom, 16)
+                // HQ決定(2026-10-21「起動の遅れの改善A1」)「前回の内容のカード
+                // 全体を文字を少し薄く表示する」: レイアウト(高さ・位置)には
+                // 影響しない`.opacity`のみを使い、最新データに置き換わったら
+                // 元の色に戻る。
+                .opacity(snapshotFetchedAt == nil ? 1 : 0.88)
             }
             .frame(width: V5P.W, height: Self.contentAreaHeight, alignment: .top)
             .padding(.top, 53)
@@ -567,11 +603,42 @@ struct HomeView: View {
 
             V5BottomBar(selected: $tabSelection)
         }
-        // HQ指示(2026-10-20)「起動診断画面」: ホームの読み込み済みコンテンツ
-        // が画面上に現れた「表示イベント」。`.onAppear`は描画完了の保証では
-        // ない(診断画面側の説明文でも明記する)。初回だけ記録する(内部で
-        // ガード済み、再読み込みのたびには上書きしない)。
-        .onAppear { DiagnosticsStore.shared.recordHomeReadyToDisplay() }
+    }
+
+    /// HQ決定(2026-10-21「起動の遅れの改善A1」): 要人発言一覧プレビュー
+    /// (`SpeechListView.previewBanner`)と同じ視覚言語(アイコン+1行説明)の帯。
+    /// 取得中はスピナー、取得失敗時は注意アイコン+再試行ボタンに切り替える。
+    @ViewBuilder private func homeSnapshotBanner(fetchedAt: Date, refreshFailed: Bool) -> some View {
+        let timeText = AppPreferences.shared.timeString(fetchedAt)
+        HStack(alignment: .top, spacing: 6) {
+            if refreshFailed {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(V5P.red)
+            } else {
+                ProgressView().tint(V5P.cyan).scaleEffect(0.7)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                if refreshFailed {
+                    V5JPFont.text("最新の情報を取得できませんでした。前回の取得(\(timeText))の内容です。", size: 7.5)
+                        .foregroundStyle(V5P.red)
+                    Button("再試行") { viewModel.load() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 7.5, weight: .semibold))
+                        .foregroundStyle(V5P.cyan)
+                        .accessibilityIdentifier("homeSnapshotRetry")
+                } else {
+                    V5JPFont.text("前回の取得(\(timeText))の内容です。最新の情報を取得中…", size: 7.5)
+                        .foregroundStyle(V5P.muted)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(8)
+        .frame(width: Self.cardWidth, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Self.cardCornerRadius).fill(V5CardGradient.fill))
+        .overlay(RoundedRectangle(cornerRadius: Self.cardCornerRadius).stroke(Self.cardBorderColor, lineWidth: 0.75))
+        .accessibilityIdentifier("homeSnapshotBanner")
     }
 
     /// カードの外枠(塗り・枠線・角丸)。高さは呼び出し側が明示的に固定値で
@@ -899,7 +966,7 @@ struct HomeView: View {
 
     // MARK: - 通貨ペアカード
 
-    @ViewBuilder private func pairsCard(_ pairs: [FXPairUI]) -> some View {
+    @ViewBuilder private func pairsCard(_ pairs: [HomeFXPairRow]) -> some View {
         cardShell(height: Self.pairsCardHeight) {
             cardHeaderRow(title: "通貨ペア", height: Self.pairsHeaderHeight) {
                 // HQ再指摘(2026-10-05、6回目)「通貨ペアのアイコンをもう少し
@@ -950,7 +1017,8 @@ struct HomeView: View {
     ///    価格を中央揃え・変化率を右(chevron側)揃えにすることで、行ごとの
     ///    文字幅に関係なく価格が常にシンボルと変化率の中間に来て、かつ
     ///    3行とも同じx位置に揃うようにした。
-    @ViewBuilder private func pairRow(_ pair: FXPairUI) -> some View {
+    @ViewBuilder private func pairRow(_ row: HomeFXPairRow) -> some View {
+        let pair = row.pair
         HStack(spacing: 4) {
             // 国旗の間隔(2)と通貨ペア名までの間隔(4+5=9)も編集画面と同じ。
             HStack(spacing: 2) {
@@ -1056,13 +1124,27 @@ struct HomeView: View {
             // `.tracking`だけの問題なら幅だけ変わるはずだが、高さも同程度
             // 拡大していたため、文字サイズそのものが大きすぎたと判断)。
             // 9.5×(36.4/42.5)≒8.14と9.5×(6.4/7.4)≒8.21の平均から8.2に縮小。
-            HStack(spacing: 1) {
-                Text(pair.change).font(.system(size: 8.2, weight: .semibold)).tracking(-0.6).lineLimit(1)
-                Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 8.2))
+            //
+            // HQ決定(2026-10-21「起動の遅れの改善A1」)「古い価格は時刻を
+            // 表示し、変化・変化率は『—』にする」: 前回データ表示中
+            // (`row.staleTimestamp`が非nil)は、今の値動きと誤解されやすい
+            // 変化率+矢印を出さず、取得時刻だけを表示する。
+            if let staleTimestamp = row.staleTimestamp {
+                Text("\(staleTimestamp)時点")
+                    .font(.system(size: 8.2, weight: .semibold))
+                    .tracking(-0.3)
+                    .foregroundStyle(V5P.muted)
+                    .frame(height: Self.flagDiameter, alignment: .center)
+                    .fixedSize()
+            } else {
+                HStack(spacing: 1) {
+                    Text(pair.change).font(.system(size: 8.2, weight: .semibold)).tracking(-0.6).lineLimit(1)
+                    Image(systemName: pair.isUp ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill").font(.system(size: 8.2))
+                }
+                .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
+                .frame(height: Self.flagDiameter, alignment: .center)
+                .fixedSize()
             }
-            .foregroundStyle(pair.isUp ? Self.changeUpColor : Self.changeDownColor)
-            .frame(height: Self.flagDiameter, alignment: .center)
-            .fixedSize()
             // HQ指示(2026-10-08)「>はいらない、消して」: 行は遷移しないので
             // chevronを削除。行の中身がカードの内側幅(215-左右8)より約10pt
             // 広く、はみ出した分だけカード全体の左右の余白が他のカードより
@@ -1473,9 +1555,24 @@ struct HomeView: View {
         viewModel.upcomingEvents.sorted { $0.releaseDatetime < $1.releaseDatetime }
     }
 
-    private var mappedPairs: [FXPairUI] {
-        viewModel.majorFxList.map(FXPairUI.init(major:))
+    private var mappedPairs: [HomeFXPairRow] {
+        // HQ決定(2026-10-21「起動の遅れの改善A1」)「古い価格は時刻を表示し、
+        // 変化・変化率は『—』にする」: 前回データ表示中は取得時刻の文字列を
+        // 全行共通で持たせ、`pairRow`側で変化率の代わりに表示する。
+        let staleTimestamp = viewModel.snapshotFetchedAt.map { AppPreferences.shared.timeString($0) }
+        return viewModel.majorFxList.map { HomeFXPairRow(pair: FXPairUI(major: $0), staleTimestamp: staleTimestamp) }
     }
+}
+
+/// `pairRow`専用のラッパー(HQ決定 2026-10-21「起動の遅れの改善A1」)。共有の
+/// `FXPairUI`(他画面でも使う、`HQFrontend/FrontendModels.swift`)自体は
+/// 変更せず、Home固有の「前回データ表示中は時刻を出す」情報だけをここで
+/// 追加で持たせる。
+private struct HomeFXPairRow: Identifiable {
+    let pair: FXPairUI
+    /// 非nilのときだけ`pairRow`が変化率の代わりにこの時刻文字列(「17:30」等)を表示する。
+    let staleTimestamp: String?
+    var id: String { pair.id }
 }
 
 /// HQ指摘(2026-10-02、3回目)「通貨ペアや今日の重要イベントのアイコンが
@@ -1535,8 +1632,11 @@ private struct HomeChartIcon: View {
 
 private extension HomeViewModel {
     var majorFxList: [MajorFxSummary] {
-        guard case .loaded(_, let majorFx) = state else { return [] }
-        return majorFx
+        switch state {
+        case .loaded(_, let majorFx): return majorFx
+        case .showingSnapshot(let snapshot, _): return snapshot.majorFx
+        default: return []
+        }
     }
 }
 
