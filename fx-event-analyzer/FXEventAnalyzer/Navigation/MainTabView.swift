@@ -22,6 +22,12 @@ struct MainTabView: View {
     @State private var collapsed = false
     @State private var homePath = NavigationPath()
     @State private var indicatorsPath = NavigationPath()
+    /// カレンダータブを常駐化する(`portraitLayout`参照)にあたり、起動直後
+    /// (ホームタブが初期選択)からカレンダーも即座に生成して`/calendar`を
+    /// 先読みしてしまうと、使われるとは限らない通信を毎回の起動に追加する
+    /// ことになる。初めてカレンダータブが選ばれた時点で初めて生成し、以後は
+    /// 常駐させる(2回目以降の切り替えで再生成・再取得しない)。
+    @State private var hasVisitedCalendarTab = false
 
     var body: some View {
         GeometryReader { geo in
@@ -36,16 +42,47 @@ struct MainTabView: View {
         // 終わったことの保証ではなく、あくまでイベント発生の記録(診断
         // 画面側の説明文でも明記する)。初回だけ記録する(内部でガード済み)。
         .onAppear { DiagnosticsStore.shared.recordMainScreenAppeared() }
+        .onChange(of: tabSelection) { _, newValue in
+            if newValue == 2 { hasVisitedCalendarTab = true }
+        }
     }
 
+    /// HQ緊急指示(2026-10-21)「起動・画面表示の高速化」: 以前は`switch`で
+    /// タブごとにViewを都度生成しており、タブを離れて戻るたびに`HomeView`/
+    /// `CalendarTabView`(と中の`@StateObject`)が作り直され、`.task`が
+    /// 再実行されて`/home`・`/calendar`を毎回フルに再取得していた
+    /// (起動診断の`homeRequestCount`が複数回に増えていた既知の挙動の
+    /// 発生源そのもの)。`CalendarViewModel.load()`は元々
+    /// `itemsByDay.isEmpty`のときだけ`.loading`にする作り(stale-while-
+    /// revalidate相当)だったが、Viewごと破棄されるため活きていなかった。
+    ///
+    /// ホーム・カレンダーの2タブだけ、`ZStack`+`opacity`で常駐させる形に
+    /// 変更し、タブ復帰時に再生成・再取得が起きないようにした
+    /// (`.task`はViewが最初に生成された1回だけ走る)。指標・検索・設定の
+    /// 3タブは、この問題が報告されていないため、従来通り`switch`での
+    /// 都度生成のまま変更していない(影響範囲を最小限にするため)。
+    /// `HomeView`/`CalendarTabView`のどちらにも`.onDisappear`に依存する
+    /// 処理が無いことを確認済み(常駐化しても副作用が無い)。
     @ViewBuilder
     private var portraitLayout: some View {
-        switch tabSelection {
-        case 0: HomeView(apiClient: apiClient, path: $homePath, tabSelection: $tabSelection)
-        case 1: IndicatorsView(apiClient: apiClient, path: $indicatorsPath, tabSelection: $tabSelection)
-        case 2: CalendarTabView(apiClient: apiClient, tabSelection: $tabSelection)
-        case 3: SearchView(apiClient: apiClient, tabSelection: $tabSelection)
-        default: SettingsView(apiClient: apiClient, authService: authService, onSignOut: onSignOut, tabSelection: $tabSelection)
+        ZStack {
+            HomeView(apiClient: apiClient, path: $homePath, tabSelection: $tabSelection)
+                .opacity(tabSelection == 0 ? 1 : 0)
+                .allowsHitTesting(tabSelection == 0)
+                .accessibilityHidden(tabSelection != 0)
+            if hasVisitedCalendarTab || tabSelection == 2 {
+                CalendarTabView(apiClient: apiClient, tabSelection: $tabSelection)
+                    .opacity(tabSelection == 2 ? 1 : 0)
+                    .allowsHitTesting(tabSelection == 2)
+                    .accessibilityHidden(tabSelection != 2)
+            }
+            if tabSelection != 0 && tabSelection != 2 {
+                switch tabSelection {
+                case 1: IndicatorsView(apiClient: apiClient, path: $indicatorsPath, tabSelection: $tabSelection)
+                case 3: SearchView(apiClient: apiClient, tabSelection: $tabSelection)
+                default: SettingsView(apiClient: apiClient, authService: authService, onSignOut: onSignOut, tabSelection: $tabSelection)
+                }
+            }
         }
     }
 
