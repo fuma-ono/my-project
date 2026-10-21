@@ -34,6 +34,7 @@ struct LaunchDiagnosticsView: View {
                     summaryCard(store.current)
                     spansCard(store.current)
                     homeRequestCard(store.current)
+                    networkCard(store.current)
 
                     if let previous = store.previous {
                         sectionTitle("前回の起動")
@@ -123,6 +124,32 @@ struct LaunchDiagnosticsView: View {
             }
             row("/homeリクエストの状態", diagnostics.homeRequestOutcome.rawValue)
             row("/home HTTPステータスコード", diagnostics.homeHTTPStatusCode.map(String.init) ?? "未計測")
+        }
+        .padding(10)
+        .frame(width: 214, alignment: .leading)
+        .background(AccountCardBackground())
+    }
+
+    /// HQ指示(2026-10-21)「通信遅延の詳細計測」: 起動後1回目の/home・/calendar・
+    /// /speechesの通信の内訳(URLSessionTaskMetrics)。取れない値は「N/A(理由)」。
+    private func networkCard(_ diagnostics: LaunchDiagnostics) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            NotoText.text("通信の内訳(起動後1回目の要求)", size: 8).foregroundStyle(.white)
+            ForEach(LaunchDiagnostics.trackedAPIPaths, id: \.self) { path in
+                SettingsListSeparator()
+                NotoText.text("/\(path)", size: 7.5).foregroundStyle(V5P.cyan)
+                if let request = diagnostics.apiRequests?[path] {
+                    ForEach(Array(LaunchDiagnostics.networkRows(request).enumerated()), id: \.offset) { _, row in
+                        self.row(row.0, row.1)
+                    }
+                } else {
+                    NotoText.text("未実行(この起動ではまだ要求していない)", size: 6.5)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                }
+            }
+            NotoText.text("「応答待ち」には、サーバーの処理時間と、途中の中継(Renderの入り口など)での待ちの両方が入ります。この計測だけでは区別できません。", size: 6.3)
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(10)
         .frame(width: 214, alignment: .leading)
