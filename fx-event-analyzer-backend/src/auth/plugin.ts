@@ -12,10 +12,21 @@ import './types.js';
  */
 /**
  * Whether this process has already verified a token (HQ承認 2026-10-21
- * 「認証処理の所要時間と、そのプロセス内での初回かどうか」). The first
- * verification after a (cold) start is the one that also fetches the JWKS
- * (`getSupabaseJwks`, cached afterwards); the flag only labels the timing
- * line — verification itself is unchanged.
+ * 「認証処理の所要時間と、そのプロセス内での初回かどうか」). The flag only
+ * labels the timing line — verification itself is unchanged.
+ *
+ * `first_in_process: true` = the first request IN THIS PROCESS that carried a
+ * Bearer token (set synchronously before the await, so exactly one request
+ * gets it even when several arrive at once). It usually is the request that
+ * triggers the JWKS fetch (`getSupabaseJwks`, jose `createRemoteJWKSet`), but not
+ * always: requests arriving while that fetch is in flight wait for the same
+ * fetch and are labelled false; a malformed token fails before any key fetch;
+ * and jose fetches the JWKS again when its cache is older than 10 minutes
+ * (jose's default `cacheMaxAge`) — that later fetch is also labelled false.
+ *
+ * `auth_ms` = from just before `verifySupabaseJwt()` to its result (token
+ * signature/expiry check, plus any JWKS fetch it waits for). It does not
+ * include Fastify's routing, other hooks, the route handler or sending.
  */
 let authVerifiedInProcess = false;
 
