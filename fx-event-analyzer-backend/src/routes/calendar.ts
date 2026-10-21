@@ -18,41 +18,43 @@ import { withTiming } from '../utils/requestTiming.js';
  * may go depends on the plan (§28.1): past what PRO allows → 403
  * PLAN_LIMIT_EXCEEDED, past what any plan allows → 422. */
 export function registerCalendarRoutes(app: FastifyInstance): void {
-  app.get('/calendar', async (request) => withTiming('GET /calendar', async () => {
-    const userId = request.user!.id;
-    await requireEntitlement(app.supabase, userId, FEATURE_CODES.VIEW_BASIC_EVENT);
+  app.get('/calendar', async (request) =>
+    withTiming('GET /calendar', async () => {
+      const userId = request.user!.id;
+      await requireEntitlement(app.supabase, userId, FEATURE_CODES.VIEW_BASIC_EVENT);
 
-    const query = calendarQuerySchema.parse(request.query);
-    const plan = await resolvePlan(app.supabase, userId);
-    const verdict = checkCalendarRange(plan, new Date(query.from), new Date(query.to), new Date(), query.timezone);
-    if (verdict.kind === 'PLAN_LIMIT_EXCEEDED') {
-      throw ApiError.planLimitExceeded(
-        `from: the ${plan} plan can go back to ${formatIsoSeconds(verdict.bound)} (${query.timezone}).`,
-        verdict.requiredPlan,
-      );
-    }
-    if (verdict.kind === 'OUT_OF_RANGE') {
-      throw ApiError.validation(
-        verdict.field === 'from'
-          ? `from: must be ${formatIsoSeconds(verdict.bound)} or later.`
-          : `to: must be ${formatIsoSeconds(verdict.bound)} or earlier.`,
-      );
-    }
+      const query = calendarQuerySchema.parse(request.query);
+      const plan = await resolvePlan(app.supabase, userId);
+      const verdict = checkCalendarRange(plan, new Date(query.from), new Date(query.to), new Date(), query.timezone);
+      if (verdict.kind === 'PLAN_LIMIT_EXCEEDED') {
+        throw ApiError.planLimitExceeded(
+          `from: the ${plan} plan can go back to ${formatIsoSeconds(verdict.bound)} (${query.timezone}).`,
+          verdict.requiredPlan,
+        );
+      }
+      if (verdict.kind === 'OUT_OF_RANGE') {
+        throw ApiError.validation(
+          verdict.field === 'from'
+            ? `from: must be ${formatIsoSeconds(verdict.bound)} or later.`
+            : `to: must be ${formatIsoSeconds(verdict.bound)} or earlier.`,
+        );
+      }
 
-    const [events, speeches] = await Promise.all([
-      listEventsInRange(app.supabase, query.from, query.to),
-      listSpeechesInRange(app.supabase, query.from, query.to),
-    ]);
+      const [events, speeches] = await Promise.all([
+        listEventsInRange(app.supabase, query.from, query.to),
+        listSpeechesInRange(app.supabase, query.from, query.to),
+      ]);
 
-    const baseUrl = resolvePublicBaseUrl(app.env.PUBLIC_BASE_URL, request);
-    return {
-      from: query.from,
-      to: query.to,
-      items: buildCalendarItems(
-        events,
-        speeches.map((speech) => withResolvedSpeakerPhoto(speech, baseUrl)),
-        { importance: query.importance, currency: query.currency },
-      ),
-    };
-  }));
+      const baseUrl = resolvePublicBaseUrl(app.env.PUBLIC_BASE_URL, request);
+      return {
+        from: query.from,
+        to: query.to,
+        items: buildCalendarItems(
+          events,
+          speeches.map((speech) => withResolvedSpeakerPhoto(speech, baseUrl)),
+          { importance: query.importance, currency: query.currency },
+        ),
+      };
+    }),
+  );
 }
