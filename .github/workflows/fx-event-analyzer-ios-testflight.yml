@@ -45,9 +45,24 @@ name: FX Event Analyzer iOS TestFlight (manual, signed)
 #
 # ExportOptions.plistはコミットせず、このワークフロー内でSecretsの値から
 # 都度生成する(Team ID・プロファイル名をリポジトリに平置きしない)。
+#
+# HQ判断(2026-10-21、T2-3「検証ブランチ指定機能」): 実機検証のため、ビルドする
+# ブランチを手動実行の画面で選べるようにした。既定は従来どおり
+# claude/fx-settings-screens。選べるのは下の options の2つだけ(GitHub が選択肢以外を
+# 受け付けないうえ、最初のステップでも同じ許可リストで確かめ、違えば何もせず止まる)。
+# 署名・Secrets・接続先(FX_API_BASE_URL など)・ビルド番号の仕組みは変えていない。
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      source_branch:
+        description: 'ビルドするブランチ(既定: claude/fx-settings-screens。claude/fx-ios-network-metrics は通信計測の実機検証用)'
+        required: true
+        type: choice
+        default: claude/fx-settings-screens
+        options:
+          - claude/fx-settings-screens
+          - claude/fx-ios-network-metrics
 
 jobs:
   testflight:
@@ -56,12 +71,30 @@ jobs:
       run:
         working-directory: fx-event-analyzer
     steps:
+      # 入力のブランチ名を許可リストで確かめる(checkout より前。違えば失敗で止まり、
+      # 署名・ビルド・アップロードは一切行わない)。値は env で渡し、シェルに直接埋め込まない。
+      - name: Validate source branch
+        working-directory: ${{ github.workspace }}
+        env:
+          SOURCE_BRANCH: ${{ inputs.source_branch }}
+        run: |
+          set -euo pipefail
+          case "$SOURCE_BRANCH" in
+            claude/fx-settings-screens|claude/fx-ios-network-metrics)
+              echo "Building from: $SOURCE_BRANCH"
+              ;;
+            *)
+              echo "::error::source_branch is not allowed: $SOURCE_BRANCH" >&2
+              exit 1
+              ;;
+          esac
+
       - uses: actions/checkout@v4
         with:
           # ワークフロー定義自体はworkflow_dispatchの登録要件のためmainに置くが、
-          # 実際のiOSアプリ本体・fastlane/Fastfileはclaude/fx-settings-screens
-          # にあるため、そちらを明示的にcheckoutする。
-          ref: claude/fx-settings-screens
+          # 実際のiOSアプリ本体・fastlane/Fastfileは開発ブランチにあるため、
+          # 上で確かめた source_branch(既定 claude/fx-settings-screens)を明示的にcheckoutする。
+          ref: ${{ inputs.source_branch }}
 
       - name: Select latest stable Xcode
         uses: maxim-lobanov/setup-xcode@v1
