@@ -21,6 +21,7 @@ import type {
   StagedVerificationStatus,
   StoredEvent,
   StoredSnapshot,
+  UnreleasedEventRef,
 } from '../ingestion/store.js';
 
 /**
@@ -142,6 +143,18 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
     async updateEvent(eventId: string, patch: EventPatch): Promise<void> {
       const { error } = await supabase.from('economic_events').update(patch).eq('id', eventId);
       if (error) throw error;
+    },
+
+    async listUnreleasedEventsByProvider(provider: string): Promise<UnreleasedEventRef[]> {
+      const { data, error } = await supabase
+        .from('economic_events')
+        .select('provider_event_id, status, release_datetime')
+        .eq('provider', provider)
+        .neq('status', 'RELEASED')
+        .not('provider_event_id', 'is', null)
+        .order('release_datetime', { ascending: true });
+      if (error) throw error;
+      return data ?? [];
     },
 
     async getReleaseSnapshot(eventId: string): Promise<StoredSnapshot | null> {

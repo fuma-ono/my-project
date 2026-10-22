@@ -31,8 +31,17 @@ export interface NewEvent {
   release_datetime: string;
   release_datetime_precision: ReleaseDatetimePrecision;
   importance: 'LOW' | 'MEDIUM' | 'HIGH';
-  status: 'SCHEDULED' | 'RELEASED';
-  data_status: 'PENDING';
+  /** CANCELLED is only inserted by the BLS schedule path (blsCalendar.ts) for a release the agency cancelled. */
+  status: 'SCHEDULED' | 'RELEASED' | 'CANCELLED';
+  /** UNAVAILABLE only together with status CANCELLED (no value will ever come). */
+  data_status: 'PENDING' | 'UNAVAILABLE';
+}
+
+/** An un-released economic_events row of one provider (for spotting rows its schedule table no longer lists). */
+export interface UnreleasedEventRef {
+  provider_event_id: string;
+  status: 'SCHEDULED' | 'CANCELLED';
+  release_datetime: string;
 }
 
 export type EventPatch = Partial<
@@ -230,6 +239,8 @@ export interface IngestionStore {
   findEventByProviderId(provider: string, providerEventId: string): Promise<StoredEvent | null>;
   insertEvent(event: NewEvent): Promise<StoredEvent>;
   updateEvent(eventId: string, patch: EventPatch): Promise<void>;
+  /** economic_events rows of `provider` whose status is not RELEASED (SCHEDULED / CANCELLED). */
+  listUnreleasedEventsByProvider(provider: string): Promise<UnreleasedEventRef[]>;
   getReleaseSnapshot(eventId: string): Promise<StoredSnapshot | null>;
   insertReleaseSnapshot(snapshot: NewReleaseSnapshot): Promise<void>;
   /** Latest revision value per field for the event (to skip re-recording the same revision). */

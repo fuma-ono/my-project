@@ -22,14 +22,37 @@
  * BLS以外が出す指標はこの経路では一切扱わない。
  */
 
-export interface BlsScheduleEntry {
+interface BlsScheduleEntryBase {
   /** economic_indicators.code — only 'US_CPI' and 'US_NFP' exist here. */
   indicatorCode: 'US_CPI' | 'US_NFP';
   /** 'YYYY-MM' the release reports on. */
   referencePeriod: string;
-  /** 'YYYY-MM-DD', America/New_York wall-clock date of the 08:30 release. */
+  /**
+   * 'YYYY-MM-DD', America/New_York wall-clock date of the 08:30 release.
+   * BLSが日付を変更したら、人が公式ページを読んでここを書き換える
+   * (ingest:official:bls-calendar が同じ economic_events 行の release_datetime を
+   * 更新し、DBトリガーが RESCHEDULED を記録する — data-sources.md §14)。
+   */
   releaseDate: string;
 }
+
+/**
+ * One row of the schedule. A release BLS has officially CANCELLED (not
+ * merely moved — e.g. a period never published because of a government
+ * shutdown) is kept in the table with `cancelled: true` and a
+ * `cancelledNote` naming the official BLS page/notice that says so; the
+ * job then marks its economic_events row CANCELLED. Never mark an entry
+ * cancelled on a guess — a moved date is a releaseDate change instead.
+ */
+export type BlsScheduleEntry = BlsScheduleEntryBase &
+  (
+    | { cancelled?: undefined; cancelledNote?: undefined }
+    | {
+        cancelled: true;
+        /** Required: which official BLS source (URL + date read) says the release is cancelled. */
+        cancelledNote: string;
+      }
+  );
 
 const cpi: readonly [string, string][] = [
   ['2025-12', '2026-01-13'],
@@ -85,7 +108,22 @@ const nfp: readonly [string, string][] = [
   ['2027-11', '2027-12-03'],
 ];
 
+/**
+ * Officially cancelled releases, keyed `${indicatorCode}:${referencePeriod}`
+ * → cancelledNote (see BlsScheduleEntry). Empty: as of 2026-10-17 no
+ * release in the periods above is cancelled. Example of a valid entry:
+ *   'US_CPI:2026-12': 'https://www.bls.gov/... (read YYYY-MM-DD): <BLSの告知の要旨>',
+ */
+const cancelled: Readonly<Record<string, string>> = {};
+
+function entry(indicatorCode: 'US_CPI' | 'US_NFP', [referencePeriod, releaseDate]: [string, string]): BlsScheduleEntry {
+  const cancelledNote = cancelled[`${indicatorCode}:${referencePeriod}`];
+  return cancelledNote === undefined
+    ? { indicatorCode, referencePeriod, releaseDate }
+    : { indicatorCode, referencePeriod, releaseDate, cancelled: true, cancelledNote };
+}
+
 export const BLS_SCHEDULE: readonly BlsScheduleEntry[] = [
-  ...cpi.map(([referencePeriod, releaseDate]) => ({ indicatorCode: 'US_CPI' as const, referencePeriod, releaseDate })),
-  ...nfp.map(([referencePeriod, releaseDate]) => ({ indicatorCode: 'US_NFP' as const, referencePeriod, releaseDate })),
+  ...cpi.map((row) => entry('US_CPI', row)),
+  ...nfp.map((row) => entry('US_NFP', row)),
 ];

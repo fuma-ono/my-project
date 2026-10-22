@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { BlsScheduleEntry } from '../../src/ingestion/mappings/blsSchedule.js';
+import { BLS_SCHEDULE, type BlsScheduleEntry } from '../../src/ingestion/mappings/blsSchedule.js';
 import { findMappingByCode, type IndicatorMapping } from '../../src/ingestion/mappings/indicators.js';
 import {
   buildBlsScheduleReleases,
   createBlsNativeResolver,
   scheduleObservationRange,
+  syncBlsScheduledEvents,
 } from '../../src/ingestion/pipelines/blsCalendar.js';
 import { ingestCalendarReleases } from '../../src/ingestion/pipelines/economicCalendar.js';
 import type { OfficialStatsProvider } from '../../src/ingestion/providers.js';
@@ -290,5 +291,269 @@ describe('BLS schedule → ingestCalendarReleases (no paid calendar involved)', 
     expect(revisions[0]?.field_name).toBe('PREVIOUS');
     expect(revisions[0]?.old_value).toBeCloseTo(3.1447, 4);
     expect(revisions[0]?.new_value).toBeCloseTo(3.2075, 4);
+  });
+});
+
+describe('syncBlsScheduledEvents (future releases → SCHEDULED rows, from the table alone)', () => {
+  let store: MemoryIngestionStore;
+  const NOW = () => new Date('2026-10-22T00:00:00Z');
+  const nfpNov: BlsScheduleEntry = { indicatorCode: 'US_NFP', referencePeriod: '2026-10', releaseDate: '2026-11-06' };
+  const cpiSummer: BlsScheduleEntry = {
+    indicatorCode: 'US_CPI',
+    referencePeriod: '2027-06',
+    releaseDate: '2027-07-14',
+  };
+
+  beforeEach(() => {
+    store = new MemoryIngestionStore();
+    store.indicators = [
+      { id: 'ind-cpi', code: 'US_CPI', importance: 'HIGH', favorable_direction: 'HIGHER_IS_POSITIVE' },
+      { id: 'ind-nfp', code: 'US_NFP', importance: 'HIGH', favorable_direction: 'HIGHER_IS_POSITIVE' },
+    ];
+  });
+
+  async function sync(entries: readonly BlsScheduleEntry[], now: () => Date = NOW) {
+    const counters = new JobCounters();
+    const counts = await syncBlsScheduledEvents({ store, entries, now }, counters);
+    return { counts, counters };
+  }
+
+  it('inserts one SCHEDULED row per future entry with the DST-correct UTC instant and no values', async () => {
+    const { counts, counters } = await sync([nfpNov, cpiSummer]);
+    expect(counters.errorMessages).toEqual([]);
+    expect(counts).toEqual({
+      scheduled_inserted: 2,
+      scheduled_updated: 0,
+      scheduled_unchanged: 0,
+      cancelled: 0,
+      cancelled_unchanged: 0,
+    });
+    expect(counters.details.scheduled_inserted).toBe(2);
+    expect(store.events).toHaveLength(2);
+    // 2026-11-06 is after US DST ended (2026-11-01): 08:30 EST (UTC-5) is 13:30Z.
+    expect(store.events.find((e) => e.provider_event_id === 'bls_schedule:US_NFP:2026-10')).toMatchObject({
+      provider: 'bls_schedule',
+      indicator_id: 'ind-nfp',
+      release_datetime: '2026-11-06T13:30:00.000Z',
+      release_datetime_precision: 'EXACT',
+      status: 'SCHEDULED',
+      data_status: 'PENDING',
+      importance: 'HIGH',
+    });
+    // 2027-07-14 is in EDT (UTC-4): 12:30Z.
+    expect(store.events.find((e) => e.provider_event_id === 'bls_schedule:US_CPI:2027-06')?.release_datetime).toBe(
+      '2027-07-14T12:30:00.000Z',
+    );
+    expect(store.snapshots).toEqual([]);
+    expect(store.staged).toEqual([]);
+    expect(store.scheduleChanges).toEqual([]);
+    // Existing counters keep their meaning: the schedule part is not a fetch / success.
+    expect([counters.fetched, counters.success, counters.skipped, counters.review]).toEqual([0, 0, 0, 0]);
+  });
+
+  it('is idempotent: a re-run writes nothing and counts the rows as unchanged', async () => {
+    await sync([nfpNov, cpiSummer]);
+    const { counts } = await sync([nfpNov, cpiSummer]);
+    expect(store.events).toHaveLength(2);
+    expect(counts).toMatchObject({ scheduled_inserted: 0, scheduled_updated: 0, scheduled_unchanged: 2 });
+    expect(store.scheduleChanges).toEqual([]);
+  });
+
+  it('a date changed in the table updates the SAME row (trigger records RESCHEDULED)', async () => {
+    await sync([nfpNov]);
+    const id = store.events[0]!.id;
+    const { counts, counters } = await sync([{ ...nfpNov, releaseDate: '2026-11-13' }]);
+    expect(counts).toMatchObject({ scheduled_inserted: 0, scheduled_updated: 1, scheduled_unchanged: 0 });
+    expect(store.events).toHaveLength(1);
+    expect(store.events[0]).toMatchObject({ id, release_datetime: '2026-11-13T13:30:00.000Z', status: 'SCHEDULED' });
+    expect(counters.details.schedule_rescheduled).toEqual([
+      {
+        provider_event_id: 'bls_schedule:US_NFP:2026-10',
+        from: '2026-11-06T13:30:00.000Z',
+        to: '2026-11-13T13:30:00.000Z',
+      },
+    ]);
+    expect(store.scheduleChanges).toEqual([
+      {
+        target_id: id,
+        change_type: 'RESCHEDULED',
+        old_datetime: '2026-11-06T13:30:00.000Z',
+        new_datetime: '2026-11-13T13:30:00.000Z',
+      },
+    ]);
+  });
+
+  it('after the release, the RELEASED path turns the same SCHEDULED row into RELEASED with values (no second row)', async () => {
+    const entry: BlsScheduleEntry = { indicatorCode: 'US_CPI', referencePeriod: '2026-10', releaseDate: '2026-11-10' };
+    await sync([entry]);
+    expect(store.events).toHaveLength(1);
+    const id = store.events[0]!.id;
+
+    // A later run, after 2026-11-10 08:30 ET, when BLS has published October.
+    const later = () => new Date('2026-11-12T00:00:00Z');
+    const counters = new JobCounters();
+    const counts = await syncBlsScheduledEvents({ store, entries: [entry], now: later }, counters);
+    expect(counts).toMatchObject({ scheduled_inserted: 0, scheduled_updated: 0, scheduled_unchanged: 0 });
+    const official = createBlsNativeResolver(fakeBlsWith({ '2025-10': 320.0, '2026-10': 332.8 }, {}), WIDE_RANGE);
+    const built = await buildBlsScheduleReleases({ official, entries: [entry], now: later });
+    expect(built.releases).toHaveLength(1);
+    await ingestCalendarReleases('bls_schedule', built.releases, { store, official, now: later }, counters);
+
+    expect(counters.errorMessages).toEqual([]);
+    expect(store.events).toHaveLength(1);
+    expect(store.events[0]).toMatchObject({
+      id,
+      status: 'RELEASED',
+      data_status: 'AVAILABLE',
+      release_datetime: '2026-11-10T13:30:00.000Z',
+    });
+    const snapshot = store.snapshots.find((s) => s.event_id === id);
+    expect(snapshot?.verification_status).toBe('VERIFIED');
+    expect(snapshot?.actual).toBeCloseTo(4.0, 6);
+    expect(store.scheduleChanges).toEqual([]); // released, not rescheduled
+  });
+
+  it('a cancelled entry turns an existing SCHEDULED row CANCELLED (trigger records CANCELLED) and is never built into a release', async () => {
+    await sync([nfpNov]);
+    const id = store.events[0]!.id;
+    const cancelledEntry: BlsScheduleEntry = {
+      ...nfpNov,
+      cancelled: true,
+      cancelledNote: 'https://www.bls.gov/schedule/news_release/empsit.htm (test fixture)',
+    };
+    const { counts } = await sync([cancelledEntry]);
+    expect(counts).toMatchObject({ cancelled: 1, scheduled_unchanged: 0 });
+    expect(store.events).toHaveLength(1);
+    expect(store.events[0]).toMatchObject({ id, status: 'CANCELLED', data_status: 'UNAVAILABLE' });
+    expect(store.scheduleChanges).toEqual([
+      { target_id: id, change_type: 'CANCELLED', old_datetime: '2026-11-06T13:30:00.000Z', new_datetime: null },
+    ]);
+
+    const again = await sync([cancelledEntry]);
+    expect(again.counts).toMatchObject({ cancelled: 0, cancelled_unchanged: 1 });
+    expect(store.scheduleChanges).toHaveLength(1);
+
+    // Even long after its date, a cancelled entry is neither a release nor overdue.
+    const official = createBlsNativeResolver(fakeBlsWith({}, { '2026-09': 1, '2026-10': 2 }), WIDE_RANGE);
+    const built = await buildBlsScheduleReleases({
+      official,
+      entries: [cancelledEntry],
+      now: () => new Date('2027-01-31T00:00:00Z'),
+    });
+    expect(built.releases).toEqual([]);
+    expect(built.overdue).toEqual([]);
+    expect(built.cancelled).toEqual([cancelledEntry]);
+  });
+
+  it('a cancelled entry with no row is inserted as CANCELLED (shown in the calendar; no trigger fires on insert)', async () => {
+    const { counts } = await sync([{ ...cpiSummer, cancelled: true, cancelledNote: 'test fixture' }]);
+    expect(counts).toMatchObject({ cancelled: 1, scheduled_inserted: 0 });
+    expect(store.events).toHaveLength(1);
+    expect(store.events[0]).toMatchObject({
+      provider_event_id: 'bls_schedule:US_CPI:2027-06',
+      status: 'CANCELLED',
+      data_status: 'UNAVAILABLE',
+      release_datetime: '2027-07-14T12:30:00.000Z',
+    });
+    expect(store.scheduleChanges).toEqual([]);
+  });
+
+  it('never cancels, reschedules or reinstates a RELEASED / CANCELLED row (noted for a human instead)', async () => {
+    store.events.push({
+      id: 'event-released',
+      indicator_id: 'ind-nfp',
+      provider: 'bls_schedule',
+      provider_event_id: 'bls_schedule:US_NFP:2026-10',
+      release_datetime: '2026-11-06T13:30:00.000Z',
+      release_datetime_precision: 'EXACT',
+      importance: 'HIGH',
+      status: 'RELEASED',
+      data_status: 'AVAILABLE',
+    });
+    store.events.push({
+      id: 'event-cancelled',
+      indicator_id: 'ind-cpi',
+      provider: 'bls_schedule',
+      provider_event_id: 'bls_schedule:US_CPI:2027-06',
+      release_datetime: '2027-07-14T12:30:00.000Z',
+      release_datetime_precision: 'EXACT',
+      importance: 'HIGH',
+      status: 'CANCELLED',
+      data_status: 'UNAVAILABLE',
+    });
+    const { counters } = await sync([
+      { ...nfpNov, releaseDate: '2026-11-20' },
+      { ...nfpNov, cancelled: true, cancelledNote: 'test fixture' },
+      cpiSummer,
+    ]);
+    expect(store.events[0]).toMatchObject({ status: 'RELEASED', release_datetime: '2026-11-06T13:30:00.000Z' });
+    expect(store.events[1]).toMatchObject({ status: 'CANCELLED' });
+    expect(counters.details.schedule_entry_conflict).toEqual([
+      { provider_event_id: 'bls_schedule:US_NFP:2026-10', entry: 'SCHEDULED', row: 'RELEASED' },
+      { provider_event_id: 'bls_schedule:US_NFP:2026-10', entry: 'CANCELLED', row: 'RELEASED' },
+      { provider_event_id: 'bls_schedule:US_CPI:2027-06', entry: 'SCHEDULED', row: 'CANCELLED' },
+    ]);
+    expect(store.scheduleChanges).toEqual([]);
+  });
+
+  it('a row whose entry was removed from the table is noted and left untouched (never auto-cancelled)', async () => {
+    await sync([nfpNov, cpiSummer]);
+    const { counters } = await sync([cpiSummer]);
+    const removed = store.events.find((e) => e.provider_event_id === 'bls_schedule:US_NFP:2026-10');
+    expect(removed).toMatchObject({ status: 'SCHEDULED', release_datetime: '2026-11-06T13:30:00.000Z' });
+    expect(counters.details.schedule_rows_not_in_table).toEqual([
+      {
+        provider_event_id: 'bls_schedule:US_NFP:2026-10',
+        status: 'SCHEDULED',
+        release_datetime: '2026-11-06T13:30:00.000Z',
+      },
+    ]);
+    expect(store.scheduleChanges).toEqual([]);
+  });
+
+  it('leaves past entries to the existing RELEASED path (no row created for them here)', async () => {
+    const past: BlsScheduleEntry = { indicatorCode: 'US_CPI', referencePeriod: '2026-09', releaseDate: '2026-10-14' };
+    const { counts } = await sync([past]);
+    expect(counts.scheduled_inserted).toBe(0);
+    expect(store.events).toEqual([]);
+  });
+
+  it('keeps overdue detection working for a SCHEDULED row whose date passed long ago with no BLS value', async () => {
+    const entry: BlsScheduleEntry = { indicatorCode: 'US_CPI', referencePeriod: '2026-10', releaseDate: '2026-11-10' };
+    await sync([entry]); // registered while still in the future
+    const muchLater = () => new Date('2027-01-15T00:00:00Z'); // > OVERDUE_AFTER_DAYS after 2026-11-10
+    await sync([entry], muchLater);
+    const built = await buildBlsScheduleReleases({
+      official: createBlsNativeResolver(fakeBlsWith({}, {}), WIDE_RANGE),
+      entries: [entry],
+      now: muchLater,
+    });
+    expect(built.overdue).toEqual([entry]);
+    expect(store.events).toHaveLength(1);
+    expect(store.events[0]).toMatchObject({ status: 'SCHEDULED', release_datetime: '2026-11-10T13:30:00.000Z' });
+  });
+
+  it('skips an indicator without an economic_indicators row (noted) without failing the others', async () => {
+    store.indicators = store.indicators.filter((i) => i.code !== 'US_NFP');
+    const { counts, counters } = await sync([nfpNov, cpiSummer]);
+    expect(counts.scheduled_inserted).toBe(1);
+    expect(counters.details.indicator_not_in_db).toEqual(['US_NFP']);
+  });
+
+  it('the real BLS_SCHEDULE table: every future entry gets one SCHEDULED row at 08:30 New York time', async () => {
+    const counters = new JobCounters();
+    const counts = await syncBlsScheduledEvents({ store, now: NOW }, counters);
+    expect(counters.errorMessages).toEqual([]);
+    const future = BLS_SCHEDULE.filter((e) => e.releaseDate > '2026-10-22');
+    expect(future.length).toBeGreaterThan(0);
+    expect(counts.scheduled_inserted).toBe(future.length);
+    expect(new Set(store.events.map((e) => e.provider_event_id)).size).toBe(future.length);
+    const newYork = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'America/New_York',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    });
+    for (const event of store.events) expect(newYork.format(new Date(event.release_datetime))).toBe('08:30');
   });
 });

@@ -958,3 +958,80 @@ NO_DATA=データなし)。
 
 コード変更・DB接続・SQL実行・GitHub Actions実行・外部API呼び出しは、この節の調査でも
 行っていない。
+
+## 11. BLSの発表前予定行(SCHEDULED)のDEV確認手順(2026-10-22、HQ承認 Task 2)
+
+`npm run ingest:official:bls-calendar` が、`blsSchedule.ts`の未来のエントリを`SCHEDULED`行として登録するようになった(仕組みは data-sources.md §14.8)。このジョブは**手動実行のみ**で、定期実行への組み込み(main 側のスケジュール変更)は**承認されていない**。ワークフローは変更していない。実行するかどうか・いつ実行するかは権限者の判断による。
+
+### 11.1 実行前・実行後に見る読み取り専用SQL
+
+どれも SELECT のみ(書き込みなし)。実行前に1回、実行後に1回流して比べる。
+
+```sql
+-- (1) bls_schedule の行を状態・日時順に一覧(release_datetime は UTC。ニューヨーク時刻も併記)
+select e.provider_event_id,
+       i.code as indicator,
+       e.status,
+       e.data_status,
+       e.release_datetime,
+       e.release_datetime at time zone 'America/New_York' as release_ny,
+       e.release_datetime_precision,
+       e.updated_at
+from economic_events e
+join economic_indicators i on i.id = e.indicator_id
+where e.provider = 'bls_schedule'
+order by e.release_datetime;
+
+-- (2) 状態ごとの件数
+select status, data_status, count(*)
+from economic_events
+where provider = 'bls_schedule'
+group by status, data_status
+order by status, data_status;
+
+-- (3) 同じIDの重複が無いこと(0行が正しい)
+select provider_event_id, count(*)
+from economic_events
+where provider = 'bls_schedule'
+group by provider_event_id
+having count(*) > 1;
+
+-- (4) 予定行の発表時刻がニューヨーク時間 08:30 であること(0行が正しい)
+select provider_event_id, release_datetime
+from economic_events
+where provider = 'bls_schedule'
+  and to_char(release_datetime at time zone 'America/New_York', 'HH24:MI') <> '08:30';
+
+-- (5) トリガーが記録した予定変更・中止(bls_schedule の行だけ)
+select c.change_type, e.provider_event_id, c.old_datetime, c.new_datetime, c.changed_at
+from event_schedule_changes c
+join economic_events e on e.id = c.target_id
+where c.kind = 'INDICATOR' and e.provider = 'bls_schedule'
+order by c.changed_at desc;
+
+-- (6) 直近のジョブログの予定行の件数・要確認項目
+select started_at, status,
+       details->'scheduled_inserted' as scheduled_inserted,
+       details->'scheduled_updated' as scheduled_updated,
+       details->'scheduled_unchanged' as scheduled_unchanged,
+       details->'cancelled' as cancelled,
+       details->'schedule_rows_not_in_table' as not_in_table,
+       details->'schedule_entry_conflict' as conflict,
+       details->'overdue' as overdue
+from ingestion_logs
+where job = 'ingest:official:bls-calendar'
+order by started_at desc
+limit 5;
+```
+
+### 11.2 期待する結果
+
+- **初回実行後**: (1) に、実行時点より後の発表日のエントリ(表の参照期間 2027-11 まで)が`SCHEDULED`・`PENDING`・`EXACT`で並ぶ。過去の月は従来どおり`RELEASED`(値が取れたもののみ)。(3)(4) は0行。(6) の`scheduled_inserted`が新しく作られた件数
+- **2回目以降(表を変えずに実行)**: (1)(2) は変わらない。(6) は`scheduled_inserted = 0`、`scheduled_unchanged`が予定行の件数
+- **表の日付を直した後**: 該当行の`release_datetime`だけが変わり(IDは同じ)、(5) に`RESCHEDULED`が1行増える。(6) の`scheduled_updated`が1
+- **発表後の実行**: 該当行が同じIDのまま`RELEASED`・`AVAILABLE`になる(行は増えない)。(5) には何も増えない
+- (6) の`schedule_rows_not_in_table`・`schedule_entry_conflict`・`overdue`が空でなければ、data-sources.md §14.8 の手順で公式ページと照合する
+
+### 11.3 まだ確認できていないこと
+
+- 実DBのトリガー(`RESCHEDULED`・`CANCELLED`の記録)は結合テスト`tests/integration/bls-schedule-future.test.ts`で確認するが、これはCI(ローカルSupabase)でのみ動く。DEV DBでのジョブ実行はまだ行っていない

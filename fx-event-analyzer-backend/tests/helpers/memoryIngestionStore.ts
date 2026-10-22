@@ -16,6 +16,7 @@ import type {
   SpeechEventRow,
   StagedValue,
   StoredEvent,
+  UnreleasedEventRef,
 } from '../../src/ingestion/store.js';
 
 /**
@@ -34,6 +35,13 @@ export class MemoryIngestionStore implements IngestionStore {
     importance: string;
     currency_code?: string;
   })[] = [];
+  /** event_schedule_changes rows (kind INDICATOR) as the DB trigger would write them on updateEvent. */
+  scheduleChanges: {
+    target_id: string;
+    change_type: 'RESCHEDULED' | 'CANCELLED';
+    old_datetime: string;
+    new_datetime: string | null;
+  }[] = [];
   eventPriceReactions: EventPriceReactionRow[] = [];
   snapshots: NewReleaseSnapshot[] = [];
   revisions: (NewRevision & { created_at: string })[] = [];
@@ -83,8 +91,41 @@ export class MemoryIngestionStore implements IngestionStore {
   updateEvent(eventId: string, patch: Parameters<IngestionStore['updateEvent']>[1]): Promise<void> {
     const event = this.events.find((e) => e.id === eventId);
     if (!event) return Promise.reject(new Error(`no event ${eventId}`));
+    const before = { status: event.status, release_datetime: event.release_datetime };
     Object.assign(event, patch);
+    // Mirrors trg_economic_events_schedule_change (migration 20261015000002): only a row that
+    // was SCHEDULED before the update is logged; CANCELLED wins over a datetime change.
+    if (before.status === 'SCHEDULED') {
+      if (event.status === 'CANCELLED') {
+        this.scheduleChanges.push({
+          target_id: event.id,
+          change_type: 'CANCELLED',
+          old_datetime: before.release_datetime,
+          new_datetime: null,
+        });
+      } else if (Date.parse(event.release_datetime) !== Date.parse(before.release_datetime)) {
+        this.scheduleChanges.push({
+          target_id: event.id,
+          change_type: 'RESCHEDULED',
+          old_datetime: before.release_datetime,
+          new_datetime: event.release_datetime,
+        });
+      }
+    }
     return Promise.resolve();
+  }
+
+  listUnreleasedEventsByProvider(provider: string): Promise<UnreleasedEventRef[]> {
+    return Promise.resolve(
+      this.events
+        .filter((e) => e.provider === provider && e.status !== 'RELEASED')
+        .sort((a, b) => Date.parse(a.release_datetime) - Date.parse(b.release_datetime))
+        .map((e) => ({
+          provider_event_id: e.provider_event_id,
+          status: e.status as UnreleasedEventRef['status'],
+          release_datetime: e.release_datetime,
+        })),
+    );
   }
 
   getReleaseSnapshot(eventId: string) {

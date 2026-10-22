@@ -1,7 +1,8 @@
-# FX Event Analyzer: データ取得元と正確さの仕組み v1.1
+# FX Event Analyzer: データ取得元と正確さの仕組み v1.2
 
 ## 変更履歴
 
+- **v1.2**(2026-10-22): HQ承認 Task 2。BLS独立経路(14章)が、発表前の CPI・NFP も `SCHEDULED` 行として登録するようにした(14.8節)。予定変更・中止・表から消えた行・期限超過の扱いと、月1回の公式ページとの照合手順を追加
 - **v1.1**(2026-10-16): HQ判断(方針は承認、契約・公開には前提条件)を受けて、利用条件を再確認(11章)、品質の測り方(12章)、為替の取り込みジョブ `ingest:fx-prices` を追加。**FRED は API 規約が「保存・DBへの取り込み」を禁じていると分かったため、`ingest:official` で使うのをやめた**(公式値は BLS のみ。FRED を使うには書面の許可が必要)。アプリ情報に「データの出典」を追加
 - **v1.0**(2026-10-15): 初版。取得元の構成(①〜⑤、ユーザー承認済み)、各取得元の利用条件の確認結果、正確さの仕組み、取り込みジョブ、有料候補の比較ツールをまとめた。実装は `fx-event-analyzer-backend/src/ingestion/`。DB変更は db-design.md v4.15、設計方針は design.md v1.11、API は api-design.md v1.29
 
@@ -578,3 +579,48 @@ bls.gov/opub/copyright-information.htm 等で確認(2026-10-17): BLSのデータ
 ### 14.7 未発表データの扱い(確認結果)
 
 将来分・未発表分は推測で補完していない(`buildBlsScheduleReleases`は`official.resolve()`がnullを返す限り`notYetAvailable`に入れるだけで、値を作らない)。「予定」(`notYetAvailable`、まだ発表予定日が来ていない)・「発表済みで実績照合済み」(`releases`、BLSの値で発行)・「発表予定日を過ぎても未発表(要確認)」(`overdue`)の3つを区別して報告する。
+
+### 14.8 発表前の予定行(SCHEDULED)の登録(2026-10-22、HQ承認 Task 2)
+
+これまでこの経路は、BLSが値を発表した**後**にだけ`economic_events`の行を作っていた(未来の月は`notYetAvailable`として何もしなかった)。カレンダーに次回のCPI・NFPを発表前から出せるよう、同じジョブ(`npm run ingest:official:bls-calendar`)が`blsSchedule.ts`の未来のエントリを`SCHEDULED`行として登録するようにした(`syncBlsScheduledEvents`、`pipelines/blsCalendar.ts`)。
+
+- **BLS APIは呼ばない**: 予定行は表だけから作る。必要なのはSupabaseの接続情報だけ(実績値の取得は従来どおり別処理)
+- **登録する内容**: `provider = 'bls_schedule'`、`provider_event_id = 'bls_schedule:<指標コード>:<参照期間>'`(発表後に使う既存のIDと同じ形式)、`release_datetime` = 表の日付の 08:30 America/New_York をUTCに変換(夏時間を考慮。例: 2026-11-06 は夏時間終了後なので 13:30Z、2027-07-14 は 12:30Z)、精度`EXACT`、`status = 'SCHEDULED'`、`data_status = 'PENDING'`(API上は`DATA_PENDING` =「まだ発表されていない」)。値・`event_snapshots`は作らない
+- **再実行しても重複しない**: 同じIDの行があれば作らない。日時も同じなら何も書かない(`scheduled_unchanged`)
+- **発表後は同じ行を更新する**: 発表後の実行では既存の経路(`buildBlsScheduleReleases`→`ingestCalendarReleases`)が同じIDの行を見つけて`SCHEDULED`→`RELEASED`に更新し、値を入れる。2つ目の行は作らない。照合・検証の規則は変更していない
+- **ログ**: `ingestion_logs.details`に`scheduled_inserted`(新規)・`scheduled_updated`(日付変更)・`scheduled_unchanged`・`cancelled`・`cancelled_unchanged`の件数を記録する。既存の`fetched`・`success`等の意味は変えていない(予定行の登録はこれらに数えない)
+- 過去のエントリ(発表時刻を過ぎたもの)はこの処理では触らない。従来どおり発表後の経路と`overdue`判定に任せる
+
+#### 14.8.1 予定変更の管理(人が表を直す)
+
+BLSが発表日を変更しても、システムが自動で追随することは無い。**人がBLSの公式ページを読んで`src/ingestion/mappings/blsSchedule.ts`の日付を書き換え、コードレビューを経て反映する**。次の実行で同じ行の`release_datetime`が更新され(`scheduled_updated`、details の`schedule_rescheduled`に変更前後を記録)、DBのトリガー(`trg_economic_events_schedule_change`、migration 20261015000002)が`event_schedule_changes`に`RESCHEDULED`を記録する。トリガーが記録するのは更新前の行が`SCHEDULED`のときだけなので、発表済み(`RELEASED`)の行の日時はこの処理では変えない(表と食い違えば details の`schedule_entry_conflict`に記録して人が確認する)。バックエンドが`event_schedule_changes`へ直接書くことはない。
+
+**月1回の照合手順**(毎月初め、または前月の発表後):
+
+1. 公式ページを開く(ログイン・キー不要)
+   - CPI: https://www.bls.gov/schedule/news_release/cpi.htm
+   - 雇用統計(NFP): https://www.bls.gov/schedule/news_release/empsit.htm
+2. 表の参照期間ごとに、`blsSchedule.ts`の`cpi`・`nfp`の日付と公式ページの日付を照合する
+3. 違いがあれば`blsSchedule.ts`を修正する(ファイル冒頭の取得日も更新する)。表の末尾(現在は参照期間 2027-11)に近づいたら、公式ページに載った次の月を追記する
+4. 修正をレビュー・取り込んだ後にジョブを手動実行し、ログの`scheduled_updated`・`schedule_rescheduled`で反映を確認する(確認SQLは dev-environment.md §11)
+
+#### 14.8.2 中止(CANCELLED)
+
+BLSが公式に発表を**中止**した場合(日付の移動ではなく、その月の発表が行われないと公表された場合)は、`blsSchedule.ts`の`cancelled`表に`'<指標コード>:<参照期間>'`と、根拠(公式ページのURL・読んだ日・告知の要旨)を書く(`cancelledNote`は必須)。推測で中止扱いにしてはいけない — 日付が動いただけなら日付を直す。
+
+- 予定行(`SCHEDULED`)がある → `status = 'CANCELLED'`、`data_status = 'UNAVAILABLE'`(値は今後も来ないため)に更新する。トリガーが`CANCELLED`を記録する
+- 行がまだ無い → `CANCELLED`の行を新しく作る(カレンダーは中止された指標も状態付きで表示するため)。INSERTではトリガーが動かないので`event_schedule_changes`には記録されない — DBに予定が載ったことが無く、誰にも知らせていないので、変更の通知も不要という判断
+- すでに`RELEASED`の行 → 変更しない(BLSが結局発表した = 表が誤り)。details の`schedule_entry_conflict`に記録する
+- 中止のエントリは、日付が過ぎても値を探さず、`overdue`にも入れない。中止を取り消す(行を`SCHEDULED`に戻す)処理は自動では行わない(`schedule_entry_conflict`に記録され、人が判断する)
+
+#### 14.8.3 表から消えたエントリ
+
+`bls_schedule`の未発表行(`SCHEDULED`・`CANCELLED`)のうち、IDが表に無くなったものは**自動で中止にしない**。details の`schedule_rows_not_in_table`にID・状態・日時を記録するだけなので、人が公式ページと照合し、必要なら表に戻すか`cancelled`に登録する。
+
+#### 14.8.4 期限超過(overdue)
+
+既存の`overdue`判定(発表予定日から`OVERDUE_AFTER_DAYS` = 45日以上経ってもBLSの値が無い)は変更していない。予定行が登録済みでも同じく判定され、details の`overdue`と、ジョブのコンソール出力(`overdue`・`overdue_after_days`)に出る。見つかったら14.8.1の手順で公式ページを確認する。
+
+#### 14.8.5 実行について
+
+このジョブは**手動実行のみ**。定期実行(GitHub Actions の schedule)への組み込みは承認されていないので、ワークフローは変更していない。
