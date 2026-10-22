@@ -60,6 +60,7 @@ const EVENT_ID_UPCOMING = '44444444-4444-4444-4444-444444444444'; // 本日発�
 // 参考画像(3件表示)と同じ件数をCIキャプチャで確認できるようにした。
 const EVENT_ID_UPCOMING_FOMC = '44444444-4444-4444-4444-444444444445'; // 本日発表前(FOMC)
 const EVENT_ID_UPCOMING_JP_CPI = '44444444-4444-4444-4444-444444444446'; // 本日発表前(日本CPI)
+const EVENT_ID_NEXT_SCHEDULED = '44444444-4444-4444-4444-444444444447'; // 米国CPIの次の予定(指標の詳細の「次回発表予定」)
 const TEST_USER_ID = '99999999-9999-9999-9999-999999999999';
 const TEST_USER_EMAIL = 'ui-screenshot@example.com';
 
@@ -1023,9 +1024,41 @@ function indicatorDetailHandler(indicatorId) {
   };
 }
 
-function indicatorEventsHandler(indicatorId) {
+/** 米国CPIの次の予定(本番の §13.3 と同じく、`status=SCHEDULED` のときだけ返す)。
+ * UI テストはここ(指標の詳細の「次回発表予定」)からイベントの詳細へ進んで撮影を続ける。
+ * `eventDetailHandler` は知らない ID に発表済みの米国CPIの内容を返すので、撮影される画面は以前と同じ。 */
+function nextIndicatorScheduledRow() {
+  return {
+    event_id: EVENT_ID_NEXT_SCHEDULED,
+    indicator_id: INDICATOR_ID,
+    release_datetime: isoPlusHours(24 * 21),
+    release_datetime_precision: 'EXACT',
+    importance: 'HIGH',
+    status: 'SCHEDULED',
+    data_status: 'DATA_PENDING',
+    forecast: 3.1,
+    actual: null,
+    previous: RELEASE_SNAPSHOT.actual,
+    surprise: null,
+    surprise_direction: null,
+  };
+}
+
+function indicatorEventsHandler(indicatorId, searchParams) {
   if (indicatorId !== INDICATOR_ID) {
     return { data: [], meta: { page: 1, limit: 10, total: 0, has_next: false } };
+  }
+  // v1.31: 「次の発表」は status=SCHEDULED&from=現在&order=asc で求める。本番と同じく status・from・
+  // order・limit に従う(以前は status を見ずに発表済みの行を返し、それが次回発表予定に出ていた)。
+  if (searchParams.get('status') === 'SCHEDULED') {
+    const from = searchParams.get('from');
+    const limit = Number(searchParams.get('limit') ?? 10);
+    let scheduled = [nextIndicatorScheduledRow()].filter(
+      (row) => !from || Date.parse(row.release_datetime) >= Date.parse(from),
+    );
+    if (searchParams.get('order') === 'desc') scheduled = scheduled.reverse();
+    const page = scheduled.slice(0, limit);
+    return { data: page, meta: { page: 1, limit, total: scheduled.length, has_next: scheduled.length > limit } };
   }
   const rows = [
     {
@@ -2934,7 +2967,7 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
     return json(res, 200, detail);
   }
   if (segments[0] === 'indicators' && segments[2] === 'events') {
-    return json(res, 200, indicatorEventsHandler(segments[1]));
+    return json(res, 200, indicatorEventsHandler(segments[1], searchParams));
   }
   if (segments[0] === 'indicators' && segments[2] === 'comparison') {
     const timeframe = searchParams.get('timeframe') ?? '5m';
