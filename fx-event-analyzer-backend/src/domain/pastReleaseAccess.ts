@@ -27,6 +27,17 @@ export interface PastReleaseAccessFields {
 export const UNLOCKED: Readonly<PastReleaseAccessFields> = { locked: false, required_plan: null };
 export const LOCKED: Readonly<PastReleaseAccessFields> = { locked: true, required_plan: PAST_RELEASE_REQUIRED_PLAN };
 
+/**
+ * GET /events/{id} でロックした発表の `event.revision_status` と各 reaction の
+ * `analysis_status` に入れる固定値(HQ指示 2026-10-22、api-design.md v1.33 §14.1)。
+ * 古いアプリ(ビルド17/18)はこの2つを null にできない型で読むため、null だと
+ * 詳細画面全体が読み込みエラーになる。どちらも古いアプリの enum にある値で、
+ * 実際の改定の有無・データの状態に関係なく常に同じ値なので、隠した値は漏れない。
+ * 新しいアプリは `locked` を先に見て、この2つを表示に使わない。
+ */
+export const LOCKED_REVISION_STATUS = 'NONE' as const;
+export const LOCKED_ANALYSIS_STATUS = 'NOT_ANALYZABLE' as const;
+
 /** The plan's cap on visible past releases per indicator; null = no cap. */
 export function pastReleasesMaxFor(plan: Plan): number | null {
   return planLimitsFor(plan).past_releases_max;

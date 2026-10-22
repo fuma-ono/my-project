@@ -7,8 +7,8 @@
 --
 -- この制限をアプリ利用者が Supabase に直接つないで回避できないよう、
 -- 市場の「値」を持つ次の5テーブルは、anon / authenticated から直接
--- SELECT できなくする(これまでの「全認証ユーザーが SELECT 可」の
--- policy を削除し、SELECT 権限も取り消す。RLS は有効のまま)。
+-- 読み書きできなくする(これまでの「全認証ユーザーが SELECT 可」の
+-- policy を削除し、テーブルの権限もすべて取り消す。RLS は有効のまま)。
 --   economic_events, event_snapshots, event_revisions,
 --   event_explanations, event_price_reactions
 --
@@ -18,17 +18,29 @@
 -- 変えないもの: economic_indicators, fx_pairs, fx_prices, speakers,
 -- speech_events, event_schedule_changes, indicator_fx_pairs の policy。
 --
--- トリガー/関数の確認: これらのテーブルを読むトリガー関数は
--- record_economic_event_schedule_change (economic_events の UPDATE 時、
--- OLD/NEW だけを使い event_schedule_changes に INSERT) と
--- prevent_release_snapshot_mutation (event_snapshots の UPDATE/DELETE 時、
--- OLD/NEW だけを使う) で、どちらもテーブルを SELECT しない。書き込みは
--- service_role だけが行うので、authenticated の SELECT 権限は不要。
+-- 取り消す権限: SELECT だけでなく INSERT / UPDATE / DELETE / TRUNCATE /
+-- REFERENCES / TRIGGER も(revoke all)。Supabase は public スキーマの表に
+-- 既定で anon / authenticated / service_role へ ALL を与える(default
+-- privileges)。INSERT / UPDATE / DELETE はこれまでも policy が無く RLS で
+-- 拒否されていたが、TRUNCATE は RLS の対象外なので権限ごと外す。
+-- 戻す手順(rollback)は dev-environment.md §13。
+--
+-- これらの権限に頼るものが無いことの確認:
+--   - トリガー関数 record_economic_event_schedule_change (economic_events の
+--     UPDATE 時、OLD/NEW だけを使い event_schedule_changes に INSERT) と
+--     prevent_release_snapshot_mutation (event_snapshots の UPDATE/DELETE
+--     時、OLD/NEW だけを使う) はどちらもこの5テーブルを SELECT しない。
+--     トリガーは更新した役割(service_role)の権限で動く。
+--   - set_updated_at() は NEW を書き換えるだけ。
+--   - この5テーブルを読む view・SECURITY INVOKER の関数は無い(SECURITY
+--     DEFINER の関数は下の visible_released_event_ids だけ)。
+--   - 外部キーの確認は表の所有者の権限で行われるので REFERENCES は不要。
+--   - iOS は Supabase を認証にしか使わない(テーブルを直接読まない)。
 --
 -- 何度流しても同じ結果になる(if exists / create or replace / revoke・grant)。
 
 -- ---------------------------------------------------------------------
--- 1) 直接 SELECT の禁止
+-- 1) 直接の読み書きの禁止
 -- ---------------------------------------------------------------------
 
 alter table economic_events enable row level security;
@@ -43,11 +55,11 @@ drop policy if exists event_revisions_select_authenticated on event_revisions;
 drop policy if exists event_explanations_select_authenticated on event_explanations;
 drop policy if exists event_price_reactions_select_authenticated on event_price_reactions;
 
-revoke select on economic_events from anon, authenticated;
-revoke select on event_snapshots from anon, authenticated;
-revoke select on event_revisions from anon, authenticated;
-revoke select on event_explanations from anon, authenticated;
-revoke select on event_price_reactions from anon, authenticated;
+revoke all on economic_events from anon, authenticated;
+revoke all on event_snapshots from anon, authenticated;
+revoke all on event_revisions from anon, authenticated;
+revoke all on event_explanations from anon, authenticated;
+revoke all on event_price_reactions from anon, authenticated;
 
 -- ---------------------------------------------------------------------
 -- 2) 値を見られる発表の計算

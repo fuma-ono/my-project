@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { ApiError } from '../errors/ApiError.js';
 import { FEATURE_CODES, listActiveFeatureCodes, requireEntitlement } from '../authorization/entitlements.js';
-import { requireUnlockedEvent } from '../authorization/pastReleaseAccess.js';
+import { requireUnlockedEventForPlan } from '../authorization/pastReleaseAccess.js';
+import { requireEntitlementAndResolvePlan } from '../authorization/plan.js';
 import { getEventById, getLatestExplanation, getReleaseSnapshot } from '../repositories/eventsRepository.js';
 import { getIndicatorById, listRelatedFxPairs } from '../repositories/indicatorsRepository.js';
 import {
@@ -40,7 +41,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
   // GET /events/{event_id}/history — api-design.md §20.
   app.get<{ Params: { event_id: string } }>('/events/:event_id/history', async (request) => {
     const userId = request.user!.id;
-    await requireEntitlement(app.supabase, userId, FEATURE_CODES.VIEW_HISTORICAL);
+    const plan = await requireEntitlementAndResolvePlan(app.supabase, userId, FEATURE_CODES.VIEW_HISTORICAL);
 
     const { event_id: eventId } = request.params;
     const event = await getEventById(app.supabase, eventId);
@@ -48,7 +49,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
       throw new ApiError('EVENT_NOT_FOUND', 'Event not found.');
     }
     // HQ判断 2026-10-22: 親の発表がロックされていれば 403 PLAN_LIMIT_EXCEEDED。
-    await requireUnlockedEvent(app.supabase, userId, event);
+    await requireUnlockedEventForPlan(app.supabase, plan, event);
 
     const [snapshot, explanation, relatedFxPairs] = await Promise.all([
       getReleaseSnapshot(app.supabase, eventId),

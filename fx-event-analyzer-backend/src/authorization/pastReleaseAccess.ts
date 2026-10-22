@@ -56,7 +56,17 @@ export async function requireUnlockedEvent(
   userId: string,
   event: { id: string; indicator_id: string; status: string },
 ): Promise<void> {
-  const { plan, lockedIds } = await resolvePastReleaseAccess(supabase, userId, [event]);
+  await requireUnlockedEventForPlan(supabase, await resolvePlan(supabase, userId), event);
+}
+
+/** requireUnlockedEvent with the plan already resolved for this request
+ * (requireEntitlementAndResolvePlan), so the plan is read only once. */
+export async function requireUnlockedEventForPlan(
+  supabase: SupabaseClient,
+  plan: Plan,
+  event: { id: string; indicator_id: string; status: string },
+): Promise<void> {
+  const lockedIds = await resolvePastReleaseAccessForPlan(supabase, plan, [event]);
   if (lockedIds.has(event.id)) {
     throw ApiError.planLimitExceeded(lockedReleaseMessage(plan), PAST_RELEASE_REQUIRED_PLAN);
   }

@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { chartWindow } from '../domain/chartWindow.js';
 import { ApiError } from '../errors/ApiError.js';
-import { requireEntitlement, FEATURE_CODES } from '../authorization/entitlements.js';
+import { FEATURE_CODES } from '../authorization/entitlements.js';
+import { requireEntitlementAndResolvePlan } from '../authorization/plan.js';
 import {
   countRevisions,
   getEventById,
@@ -10,8 +11,19 @@ import {
   listRevisions,
   type EventRow,
 } from '../repositories/eventsRepository.js';
-import { requireUnlockedEvent, resolvePastReleaseAccess } from '../authorization/pastReleaseAccess.js';
-import { LOCKED, nullFields, RELEASE_VALUE_FIELDS, UNLOCKED } from '../domain/pastReleaseAccess.js';
+import {
+  requireUnlockedEvent,
+  requireUnlockedEventForPlan,
+  resolvePastReleaseAccessForPlan,
+} from '../authorization/pastReleaseAccess.js';
+import {
+  LOCKED,
+  LOCKED_ANALYSIS_STATUS,
+  LOCKED_REVISION_STATUS,
+  nullFields,
+  RELEASE_VALUE_FIELDS,
+  UNLOCKED,
+} from '../domain/pastReleaseAccess.js';
 import { listRelatedFxPairs } from '../repositories/indicatorsRepository.js';
 import { listActiveFxPairs } from '../repositories/fxPairsRepository.js';
 import {
@@ -46,10 +58,13 @@ function isValidTimeframe(value: unknown): value is ValidTimeframe {
  * 2026-10-22): same shape as the unlocked response, but every field that
  * carries released values or their analysis is null — snapshot
  * forecast/actual/previous/surprise/surprise_direction, `analysis`,
- * `explanation`, `event.revision_status`, and the pips / change_percent /
- * analysis_status of every reaction. Dates, status, data_status, indicator
- * info, the snapshot's unit/source/captured_at and the pair lists stay.
- * Explanations, revisions and reactions are not even read.
+ * `explanation`, and the pips / change_percent of every reaction.
+ * `event.revision_status` and each reaction's `analysis_status` get fixed
+ * placeholders (LOCKED_REVISION_STATUS / LOCKED_ANALYSIS_STATUS) instead of
+ * null, so older app builds that decode them as non-optional still open the
+ * screen; they never depend on the hidden data. Dates, status, data_status,
+ * indicator info, the snapshot's unit/source/captured_at and the pair lists
+ * stay. Explanations, revisions and reactions are not even read.
  */
 async function lockedEventDetail(app: FastifyInstance, event: EventRow, precision: ReleaseDatetimePrecision) {
   const [snapshot, relatedFxPairs, activeFxPairs] = await Promise.all([
@@ -72,7 +87,7 @@ async function lockedEventDetail(app: FastifyInstance, event: EventRow, precisio
       importance: event.importance,
       status: event.status,
       data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
-      revision_status: null,
+      revision_status: LOCKED_REVISION_STATUS,
       ...LOCKED,
     },
     snapshot: snapshot ? nullFields(snapshot, RELEASE_VALUE_FIELDS) : null,
@@ -86,7 +101,7 @@ async function lockedEventDetail(app: FastifyInstance, event: EventRow, precisio
         timeframe: RELATED_FX_PAIR_SUMMARY_TIMEFRAME,
         pips: null,
         change_percent: null,
-        analysis_status: null,
+        analysis_status: LOCKED_ANALYSIS_STATUS,
       },
     })),
     major_fx_reactions: majorFxPairs.map((pair) => ({
@@ -96,7 +111,7 @@ async function lockedEventDetail(app: FastifyInstance, event: EventRow, precisio
         timeframe,
         pips: null,
         change_percent: null,
-        analysis_status: null,
+        analysis_status: LOCKED_ANALYSIS_STATUS,
       })),
     })),
     available_timeframes: availableTimeframes(precision),
@@ -106,7 +121,8 @@ async function lockedEventDetail(app: FastifyInstance, event: EventRow, precisio
 export function registerEventRoutes(app: FastifyInstance): void {
   app.get<{ Params: { event_id: string } }>('/events/:event_id', async (request) => {
     const userId = request.user!.id;
-    await requireEntitlement(app.supabase, userId, FEATURE_CODES.VIEW_BASIC_EVENT);
+    // 機能の確認とプランを1回の読み込みで(このリクエストではもう読まない)。
+    const plan = await requireEntitlementAndResolvePlan(app.supabase, userId, FEATURE_CODES.VIEW_BASIC_EVENT);
 
     const { event_id: eventId } = request.params;
     const event = await getEventById(app.supabase, eventId);
@@ -118,7 +134,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
 
     // HQ判断 2026-10-22: FREE は指標ごとに直近3回の発表だけ値を見られる。
     // ロックされた発表も 403 にはせず、値を隠して locked: true で返す。
-    const { lockedIds } = await resolvePastReleaseAccess(app.supabase, userId, [event]);
+    const lockedIds = await resolvePastReleaseAccessForPlan(app.supabase, plan, [event]);
     if (lockedIds.has(event.id)) {
       return lockedEventDetail(app, event, precision);
     }
@@ -219,7 +235,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
     '/events/:event_id/reaction',
     async (request) => {
       const userId = request.user!.id;
-      await requireEntitlement(app.supabase, userId, FEATURE_CODES.VIEW_MARKET_REACTION);
+      const plan = await requireEntitlementAndResolvePlan(app.supabase, userId, FEATURE_CODES.VIEW_MARKET_REACTION);
 
       const { event_id: eventId } = request.params;
       const { fx_pair_id: fxPairId, timeframe } = request.query;
@@ -231,7 +247,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       if (!event) {
         throw new ApiError('EVENT_NOT_FOUND', 'Event not found.');
       }
-      await requireUnlockedEvent(app.supabase, userId, event);
+      await requireUnlockedEventForPlan(app.supabase, plan, event);
       const fxPair = await getFxPairById(app.supabase, fxPairId);
       if (!fxPair) {
         throw new ApiError('FX_PAIR_NOT_FOUND', 'FX pair not found.');
@@ -301,7 +317,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
     '/events/:event_id/reaction/chart',
     async (request) => {
       const userId = request.user!.id;
-      await requireEntitlement(app.supabase, userId, FEATURE_CODES.VIEW_MARKET_REACTION);
+      const plan = await requireEntitlementAndResolvePlan(app.supabase, userId, FEATURE_CODES.VIEW_MARKET_REACTION);
 
       const { event_id: eventId } = request.params;
       const { fx_pair_id: fxPairId, timeframe } = request.query;
@@ -313,7 +329,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       if (!event) {
         throw new ApiError('EVENT_NOT_FOUND', 'Event not found.');
       }
-      await requireUnlockedEvent(app.supabase, userId, event);
+      await requireUnlockedEventForPlan(app.supabase, plan, event);
 
       // MVP Chart Window: release -30min to +60min (api-design.md §19).
       // 時間足ごとに、発表時刻を基準にした表示範囲(domain/chartWindow.ts)。

@@ -293,7 +293,8 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
         status: 'RELEASED',
         data_status: 'READY',
         release_datetime_precision: 'EXACT',
-        revision_status: null,
+        // 古いアプリ(非 optional の enum)が読める固定値。A4 には改定があるが REVISED にはしない。
+        revision_status: 'NONE',
         locked: true,
         required_plan: 'PRO',
       });
@@ -310,11 +311,16 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
       expect(body.analysis).toEqual({ surprise: null, surprise_direction: null });
       expect(body.explanation).toBeNull();
       for (const pair of body.related_fx_pairs) {
-        expect(pair.reaction).toMatchObject({ pips: null, change_percent: null, analysis_status: null });
+        expect(pair.reaction).toEqual({
+          timeframe: '5m',
+          pips: null,
+          change_percent: null,
+          analysis_status: 'NOT_ANALYZABLE',
+        });
       }
       for (const pair of body.major_fx_reactions) {
         for (const reaction of pair.reactions) {
-          expect(reaction).toMatchObject({ pips: null, change_percent: null, analysis_status: null });
+          expect(reaction).toMatchObject({ pips: null, change_percent: null, analysis_status: 'NOT_ANALYZABLE' });
         }
       }
       const text = JSON.stringify(body);
@@ -429,6 +435,21 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
       expect(body.history_limit).toEqual({ applied: 5, max_for_plan: 5, pro_max: 20 });
       // The embedded RELEASE snapshot values come through.
       expect(Number(body.events[0].actual)).toBeCloseTo(206);
+      // Each row carries only what the comparison table needs: no explanation,
+      // revision or full reaction of the release (api-design.md §21).
+      for (const event of body.events) {
+        expect(Object.keys(event).sort()).toEqual([
+          'actual',
+          'event_id',
+          'forecast',
+          'pips_by_timeframe',
+          'previous',
+          'release_datetime',
+          'surprise',
+          'surprise_direction',
+        ]);
+        expect(Object.keys(event.pips_by_timeframe).sort()).toEqual(['15m', '1m', '5m']);
+      }
     });
 
     it('PRO: every release with a snapshot (7), max 20', async () => {
@@ -440,13 +461,14 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
     });
   });
 
-  describe('Direct Supabase access (RLS / GRANT, migration 20261022000001)', () => {
+  describe('Direct Supabase access (GRANT, migration 20261022000001)', () => {
+    /** Each locked table with one real column, for the write attempts below. */
     const MARKET_VALUE_TABLES = [
-      'economic_events',
-      'event_snapshots',
-      'event_revisions',
-      'event_explanations',
-      'event_price_reactions',
+      { table: 'economic_events', column: 'provider' },
+      { table: 'event_snapshots', column: 'source' },
+      { table: 'event_revisions', column: 'source' },
+      { table: 'event_explanations', column: 'source' },
+      { table: 'event_price_reactions', column: 'data_status' },
     ] as const;
 
     function asUser(user: TestUser): SupabaseClient {
@@ -460,29 +482,112 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
       return createClient(ctx.supabaseUrl, ctx.anonKey, { auth: { autoRefreshToken: false, persistSession: false } });
     }
 
-    it('an authenticated app user (FREE or PRO) reads no rows from the 5 market-value tables', async () => {
-      for (const plan of ['FREE', 'PRO'] as const) {
-        const { user } = await newUser(plan);
-        const client = asUser(user);
-        for (const table of MARKET_VALUE_TABLES) {
-          const { data, error } = await client.from(table).select('*').limit(5);
-          // A permission error (SELECT revoked) or zero rows — never rows.
-          expect(error !== null || (data ?? []).length === 0, `${plan} ${table}`).toBe(true);
-          expect(data ?? [], `${plan} ${table}`).toEqual([]);
+    type Result = {
+      data: unknown;
+      error: { code?: string; message: string } | null;
+      status: number;
+    };
+
+    /** Both roles an app user can reach PostgREST with. PostgREST answers a
+     * privilege error (42501) with 401 for the anon role and 403 otherwise. */
+    async function roles(): Promise<{ label: string; client: SupabaseClient; deniedStatus: number }[]> {
+      const { user } = await newUser('FREE');
+      return [
+        { label: 'anon', client: anon(), deniedStatus: 401 },
+        { label: 'authenticated', client: asUser(user), deniedStatus: 403 },
+      ];
+    }
+
+    /**
+     * A privilege error, not "0 rows" (RLS alone would answer an empty 200):
+     * Postgres 42501 "permission denied for table <table>" — and not the RLS
+     * error ("new row violates row-level security policy …").
+     */
+    function expectTableDenied(result: Result, table: string, deniedStatus: number, label: string): void {
+      const detail = `${label}: ${JSON.stringify({ status: result.status, error: result.error, data: result.data })}`;
+      expect(result.status, detail).toBe(deniedStatus);
+      expect(result.error?.code, detail).toBe('42501');
+      expect(result.error?.message, detail).toBe(`permission denied for table ${table}`);
+      expect(result.data, detail).toBeNull();
+    }
+
+    it('SELECT on each of the 5 tables fails with a privilege error (anon and authenticated)', async () => {
+      for (const { label, client, deniedStatus } of await roles()) {
+        for (const { table } of MARKET_VALUE_TABLES) {
+          const result = await client.from(table).select('*').limit(5);
+          expectTableDenied(result, table, deniedStatus, `${label} select ${table}`);
         }
       }
     });
 
-    it('the anon key without a user reads no rows either', async () => {
-      const client = anon();
-      for (const table of MARKET_VALUE_TABLES) {
-        const { data, error } = await client.from(table).select('*').limit(5);
-        expect(error !== null || (data ?? []).length === 0, table).toBe(true);
-        expect(data ?? [], table).toEqual([]);
+    it('a PRO user is denied the same way (the plan does not matter for direct access)', async () => {
+      const { user } = await newUser('PRO');
+      const client = asUser(user);
+      for (const { table } of MARKET_VALUE_TABLES) {
+        expectTableDenied(await client.from(table).select('*').limit(1), table, 403, `PRO select ${table}`);
       }
     });
 
-    it('service_role (the Backend) still reads them', async () => {
+    it('count-only requests (HEAD, count=exact) fail too — no row count leaks', async () => {
+      for (const { label, client, deniedStatus } of await roles()) {
+        for (const { table } of MARKET_VALUE_TABLES) {
+          const result = await client.from(table).select('*', { count: 'exact', head: true });
+          const detail = `${label} count ${table}: ${JSON.stringify(result)}`;
+          // A HEAD response has no body, so the status is what tells the error apart.
+          expect(result.status, detail).toBe(deniedStatus);
+          expect(result.error, detail).not.toBeNull();
+          expect(result.count, detail).toBeNull();
+        }
+      }
+    });
+
+    it('embedding a locked table from a still-readable table fails the whole request', async () => {
+      const embeds = [
+        // economic_indicators → economic_events (FK economic_events.indicator_id)
+        { from: 'economic_indicators', select: 'id,economic_events(id)', locked: 'economic_events' },
+        { from: 'economic_indicators', select: 'id,economic_events!inner(id)', locked: 'economic_events' },
+        // fx_pairs → event_price_reactions (FK event_price_reactions.fx_pair_id)
+        { from: 'fx_pairs', select: 'id,event_price_reactions(pips)', locked: 'event_price_reactions' },
+      ];
+      for (const { label, client, deniedStatus } of await roles()) {
+        for (const embed of embeds) {
+          const result = await client.from(embed.from).select(embed.select).limit(5);
+          expectTableDenied(result, embed.locked, deniedStatus, `${label} ${embed.from}?select=${embed.select}`);
+        }
+      }
+    });
+
+    it('INSERT / UPDATE / DELETE are rejected by privilege, not only by RLS', async () => {
+      for (const { label, client, deniedStatus } of await roles()) {
+        for (const { table, column } of MARKET_VALUE_TABLES) {
+          // The client has no generated DB types, so the row's type is not checked here.
+          const row = { [column]: 'direct-write' } as never;
+          const insert = await client.from(table).insert(row);
+          expectTableDenied(insert, table, deniedStatus, `${label} insert ${table}`);
+          const update = await client.from(table).update(row).eq(column, 'integration-test');
+          expectTableDenied(update, table, deniedStatus, `${label} update ${table}`);
+          const remove = await client.from(table).delete().eq(column, 'integration-test');
+          expectTableDenied(remove, table, deniedStatus, `${label} delete ${table}`);
+        }
+      }
+      // Nothing was written or removed.
+      const explanation = await ctx.serviceClient.from('event_explanations').select('summary').eq('event_id', A.fourth);
+      expect(explanation.data).toEqual([{ summary: 'locked-explanation-text' }]);
+    });
+
+    it('visible_released_event_ids: anon and authenticated cannot execute it', async () => {
+      const args = { p_indicator_ids: [indicatorA], p_limit: 3 };
+      for (const { label, client, deniedStatus } of await roles()) {
+        const result = await client.rpc('visible_released_event_ids', args);
+        const detail = `${label} rpc: ${JSON.stringify(result)}`;
+        expect(result.status, detail).toBe(deniedStatus);
+        expect(result.error?.code, detail).toBe('42501');
+        expect(result.error?.message, detail).toBe('permission denied for function visible_released_event_ids');
+        expect(result.data, detail).toBeNull();
+      }
+    });
+
+    it('service_role (the Backend) still reads them, embeds them and runs the function', async () => {
       const events = await ctx.serviceClient.from('economic_events').select('id').in('id', A_ALL_IDS);
       expect(events.error).toBeNull();
       expect(events.data).toHaveLength(7);
@@ -494,29 +599,32 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
       expect(explanations.data).toHaveLength(1);
       const reactions = await ctx.serviceClient.from('event_price_reactions').select('id').eq('event_id', A.fourth);
       expect(reactions.data).toHaveLength(1);
-    });
+      const embedded = await ctx.serviceClient
+        .from('economic_indicators')
+        .select('id,economic_events(id)')
+        .eq('id', indicatorA);
+      expect(embedded.error).toBeNull();
+      expect((embedded.data?.[0] as { economic_events: unknown[] }).economic_events).toHaveLength(7);
 
-    it('economic_indicators stays readable by an authenticated user', async () => {
-      const { user } = await newUser('FREE');
-      const { data, error } = await asUser(user).from('economic_indicators').select('id').eq('id', indicatorA);
-      expect(error).toBeNull();
-      expect(data).toEqual([{ id: indicatorA }]);
-    });
-
-    it('visible_released_event_ids: app users cannot call it, service_role can', async () => {
-      const { user } = await newUser('FREE');
-      const args = { p_indicator_ids: [indicatorA], p_limit: 3 };
-      const asApp = await asUser(user).rpc('visible_released_event_ids', args);
-      expect(asApp.error).not.toBeNull();
-      expect(asApp.data ?? []).toEqual([]);
-      const asAnon = await anon().rpc('visible_released_event_ids', args);
-      expect(asAnon.error).not.toBeNull();
-
-      const asService = await ctx.serviceClient.rpc('visible_released_event_ids', args);
-      expect(asService.error).toBeNull();
-      expect(((asService.data ?? []) as { event_id: string }[]).map((row) => row.event_id).sort()).toEqual(
+      const rpc = await ctx.serviceClient.rpc('visible_released_event_ids', {
+        p_indicator_ids: [indicatorA],
+        p_limit: 3,
+      });
+      expect(rpc.error).toBeNull();
+      expect(((rpc.data ?? []) as { event_id: string }[]).map((row) => row.event_id).sort()).toEqual(
         [A.first, A.second, A.third].sort(),
       );
+    });
+
+    it('economic_indicators and fx_pairs stay readable by an authenticated user', async () => {
+      const { user } = await newUser('FREE');
+      const client = asUser(user);
+      const indicators = await client.from('economic_indicators').select('id').eq('id', indicatorA);
+      expect(indicators.error).toBeNull();
+      expect(indicators.data).toEqual([{ id: indicatorA }]);
+      const pairs = await client.from('fx_pairs').select('id').eq('id', USDJPY_FX_PAIR_ID);
+      expect(pairs.error).toBeNull();
+      expect(pairs.data).toEqual([{ id: USDJPY_FX_PAIR_ID }]);
     });
   });
 });

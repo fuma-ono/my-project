@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   FEATURE_CODES,
   hasEntitlement,
   listActiveFeatureCodes,
   requireEntitlement,
 } from '../../src/authorization/entitlements.js';
-import { resolvePlan } from '../../src/authorization/plan.js';
+import { requireEntitlementAndResolvePlan, resolvePlan } from '../../src/authorization/plan.js';
 import { ApiError } from '../../src/errors/ApiError.js';
 import { fakeSupabaseClient } from '../helpers/fakeSupabaseClient.js';
 
@@ -198,5 +199,57 @@ describe('default_entitlements (HQ instruction 2026-10-16)', () => {
   it('a user with only the defaults is FREE', async () => {
     const supabase = fakeSupabaseClient({ entitlements: [], default_entitlements: DEFAULTS });
     await expect(resolvePlan(supabase, USER)).resolves.toBe('FREE');
+  });
+});
+
+/** Counts `.from(table)` calls (= PostgREST round trips) on top of the fake. */
+function countingClient(tableData: Record<string, unknown[]>) {
+  const inner = fakeSupabaseClient(tableData);
+  const tables: string[] = [];
+  const client = {
+    from: (table: string) => {
+      tables.push(table);
+      return inner.from(table);
+    },
+  } as unknown as SupabaseClient;
+  return { client, tables };
+}
+
+describe('requireEntitlementAndResolvePlan (one read per request, HQ指示 2026-10-22)', () => {
+  const DEFAULT_ROWS = [
+    { feature_code: 'VIEW_BASIC_EVENT' },
+    { feature_code: 'VIEW_HISTORICAL' },
+    { feature_code: 'VIEW_MARKET_REACTION' },
+  ];
+  const proRow = { user_id: USER, feature_code: 'VIEW_ADVANCED_STATS', enabled: true, expires_at: null };
+
+  it('reads entitlements and default_entitlements once each (requireEntitlement + resolvePlan read them twice)', async () => {
+    const separate = countingClient({ entitlements: [], default_entitlements: DEFAULT_ROWS });
+    await requireEntitlement(separate.client, USER, FEATURE_CODES.VIEW_BASIC_EVENT);
+    await resolvePlan(separate.client, USER);
+    expect(separate.tables).toHaveLength(4);
+
+    const combined = countingClient({ entitlements: [], default_entitlements: DEFAULT_ROWS });
+    await expect(requireEntitlementAndResolvePlan(combined.client, USER, FEATURE_CODES.VIEW_BASIC_EVENT)).resolves.toBe(
+      'FREE',
+    );
+    expect(combined.tables.sort()).toEqual(['default_entitlements', 'entitlements']);
+  });
+
+  it('gives the same plan as resolvePlan (PRO = active VIEW_ADVANCED_STATS)', async () => {
+    const data = { entitlements: [proRow], default_entitlements: DEFAULT_ROWS };
+    await expect(
+      requireEntitlementAndResolvePlan(fakeSupabaseClient(data), USER, FEATURE_CODES.VIEW_MARKET_REACTION),
+    ).resolves.toBe('PRO');
+    await expect(resolvePlan(fakeSupabaseClient(data), USER)).resolves.toBe('PRO');
+  });
+
+  it('throws the same 403 FEATURE_NOT_ENTITLED as requireEntitlement when the feature is missing', async () => {
+    const supabase = fakeSupabaseClient({ entitlements: [], default_entitlements: [] });
+    const error = await requireEntitlementAndResolvePlan(supabase, USER, FEATURE_CODES.VIEW_HISTORICAL).catch(
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).code).toBe('FEATURE_NOT_ENTITLED');
   });
 });
