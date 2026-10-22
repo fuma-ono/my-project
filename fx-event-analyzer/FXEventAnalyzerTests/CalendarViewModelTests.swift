@@ -112,7 +112,7 @@ final class CalendarViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.monthTitle, "2025年10月")
     }
 
-    /// `is_provisional`(api-design v1.31、HQ承認 2026-10-22 Task 3)。返さない古いBackendでも読める(暫定ではない扱い)。
+    /// `is_provisional`(api-design v1.32、HQ承認 2026-10-22 Task 3)。返さない古いBackendでも読める(暫定ではない扱い)。
     func testDecodesIsProvisionalWithAndWithoutTheField() throws {
         let json = """
         {

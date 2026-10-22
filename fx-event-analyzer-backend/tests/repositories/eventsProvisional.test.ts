@@ -42,12 +42,15 @@ describe('is_provisional in the Read API', () => {
   it('GET /calendar: listEventsInRange → buildCalendarItems exposes is_provisional per INDICATOR item', async () => {
     const supabase = fakeSupabaseClient({ economic_events: EVENTS });
     const events = await listEventsInRange(supabase, '2026-10-01T00:00:00Z', '2026-12-31T00:00:00Z');
-    const items = buildCalendarItems(events, []);
+    const items = buildCalendarItems(events, [], {}, new Date('2026-10-22T00:00:00Z'));
     expect(items.map((item) => [item.id, item.kind, item.is_provisional])).toEqual([
       ['oct', 'INDICATOR', false],
       ['legacy', 'INDICATOR', false],
       ['dec', 'INDICATOR', true],
     ]);
+    // 12/9 の会合が過ぎた後は、DB が true のままでも暫定と出さない。
+    const later = buildCalendarItems(events, [], {}, new Date('2026-12-09T19:00:00Z'));
+    expect(later.find((item) => item.id === 'dec')?.is_provisional).toBe(false);
   });
 
   it('GET /calendar: the range is [from, to)', async () => {

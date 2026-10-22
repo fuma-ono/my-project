@@ -1,5 +1,5 @@
 -- 暫定の予定(HQ承認 2026-10-22 Task 3「FOMCの公式日程」、db-design.md v4.17 §3.5、
--- api-design.md v1.31 §14.6)。
+-- api-design.md v1.32 §14.6)。
 --
 -- is_provisional = true は「予定の日時がまだ公式に確定していない」ことを表す。
 -- FOMCの日程表(src/ingestion/mappings/fomcSchedule.ts)では、FRBの

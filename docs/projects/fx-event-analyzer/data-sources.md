@@ -1,8 +1,8 @@
-# FX Event Analyzer: データ取得元と正確さの仕組み v1.2
+# FX Event Analyzer: データ取得元と正確さの仕組み v1.3
 
 ## 変更履歴
 
-- **v1.2**(2026-10-22): FOMCの会合日程(HQ承認 2026-10-22 Task 3)。FRBの公式ページを人が書き写した表から、指標`US_FOMC`の政策発表の予定を`economic_events`に入れるジョブ`npm run ingest:fomc-schedule`を追加(15章)。暫定の会合は`economic_events.is_provisional`(db-design.md v4.17)で区別する。定期実行には登録していない
+- **v1.3**(2026-10-22): FOMCの会合日程(HQ承認 2026-10-22 Task 3)。FRBの公式ページを人が書き写した表から、指標`US_FOMC`の政策発表の予定を`economic_events`に入れるジョブ`npm run ingest:fomc-schedule`を追加(15章)。暫定の会合は`economic_events.is_provisional`(db-design.md v4.17)で区別する。定期実行には登録していない
 - **v1.1**(2026-10-16): HQ判断(方針は承認、契約・公開には前提条件)を受けて、利用条件を再確認(11章)、品質の測り方(12章)、為替の取り込みジョブ `ingest:fx-prices` を追加。**FRED は API 規約が「保存・DBへの取り込み」を禁じていると分かったため、`ingest:official` で使うのをやめた**(公式値は BLS のみ。FRED を使うには書面の許可が必要)。アプリ情報に「データの出典」を追加
 - **v1.0**(2026-10-15): 初版。取得元の構成(①〜⑤、ユーザー承認済み)、各取得元の利用条件の確認結果、正確さの仕組み、取り込みジョブ、有料候補の比較ツールをまとめた。実装は `fx-event-analyzer-backend/src/ingestion/`。DB変更は db-design.md v4.15、設計方針は design.md v1.11、API は api-design.md v1.29
 
@@ -617,25 +617,35 @@ bls.gov/opub/copyright-information.htm 等で確認(2026-10-17): BLSのデータ
 
 ### 15.4 時刻の変換
 
-`announcement`(America/New_York の壁時計)を`src/ingestion/time.ts`の`zonedWallTimeToUtc`で UTC に直して`release_datetime`に入れる(夏時間を考慮。固定の時差は使わない)。例: 2026-10-28 14:00 EDT → `2026-10-28T18:00:00Z`、2026-12-09 14:00 EST → `2026-12-09T19:00:00Z`、2027-01-27 → 19:00Z、2027-06-09 → 18:00Z。`release_datetime_precision`は`EXACT`(BLSの経路と同じ意味。予定の時刻が分かっている、14.6節)。
+`announcement`(America/New_York の壁時計)を`src/ingestion/time.ts`の`zonedWallTimeToUtc`で UTC に直して`release_datetime`に入れる(夏時間を考慮。固定の時差は使わない)。例: 2026-10-28 14:00 EDT → `2026-10-28T18:00:00Z`、2026-12-09 14:00 EST → `2026-12-09T19:00:00Z`、2027-01-27 → 19:00Z、2027-03-17 → 18:00Z(2027年の夏時間は 3/14 開始)、2027-06-09 → 18:00Z、2027-10-27 → 18:00Z(夏時間の終わりは 11/7)、2027-12-08 → 19:00Z。表の10回はすべて 18:00Z か 19:00Z になる(テストで確認)。`release_datetime_precision`は`EXACT`(BLSの経路と同じ意味。予定の時刻が分かっている、14.6節)。
 
 ### 15.5 取り込み(`npm run ingest:fomc-schedule`、`src/jobs/ingestFomcSchedule.ts` → `src/ingestion/pipelines/fomcSchedule.ts`)
 
 - 1会合につき1行: 指標`US_FOMC`、provider `fomc_schedule`、provider_event_id `fomc_schedule:<meetingEnd>`(`eventKey`があればそれ)、`status = SCHEDULED`、`data_status = PENDING`、重要度は指標の値、`is_provisional`は表の`provisional`。`RELEASED`の行・値(event_snapshots)は作らない
 - 何度動かしても同じ(同じ表なら何も変わらない)
 - 表の日時が変わったら同じ行の`release_datetime`を更新する → DBのトリガーが`event_schedule_changes`に`RESCHEDULED`を記録する(通知一覧のカレンダー更新)
-- 暫定→確定は`is_provisional`だけを更新する(トリガーの対象の列ではないので、日時の変更としては記録されない)
+- 暫定→確定は`is_provisional`だけを更新する(トリガーは`AFTER UPDATE OF release_datetime, status`なので起動せず、`event_schedule_changes`に行は増えない。単体テストと結合テスト`tests/integration/fomc-schedule.test.ts`で確認)。**暫定→確定はジョブが自動で判断しない**: 表の`provisional`を人が直して、ジョブを動かしたときだけ変わる(15.6節)
+- 表示: APIは`is_provisional`を「DBの値が`true`かつ発表日時が今より先」のときだけ`true`で返す(api-design.md v1.32 14.6節)。そのため会合が過ぎた後は、表とDBを直す前でも「予定（暫定）」は出ない
 - `cancelled`が付いた会合は`status = CANCELLED`にする(トリガーが`CANCELLED`を記録)。まだ行が無ければ作らない
 - 発表時刻を過ぎた会合は作らない。既にある過去の行は変えない。`RELEASED`の行も変えない
 - 表から消えた会合(DBにあり、未来・`SCHEDULED`)は**ログに出すだけ**で、消さない・中止にしない
 - `ingestion_logs`(provider `fomc_schedule`、job `ingest:fomc-schedule`、data_type `ECONOMIC_EVENT`)の`details`に`inserted`・`updated`・`unchanged`・`cancelled`・`provisional`・`past`・`removed`を残す
-- 外部へのアクセスは無い(表を読むだけ)。**定期実行には登録していない**(GitHub Actions のワークフローも変えていない)。表を直したときに手動で動かす。前提: Migration `20261022000002`(dev-environment.md 11章)
+- 外部へのアクセスは無い(表を読むだけ)。**定期実行には登録していない**(GitHub Actions のワークフローも変えていない)。表を直したときに手動で動かす。前提: Migration `20261022000002`(dev-environment.md 12章)
 
 ### 15.6 表の更新手順(人が行う)
 
 1. 15.1節の2つのページを開き、会合日程ページの日付・* と calendar.json の`FOMC Meeting`の日付・時刻を見比べる
 2. 日付が変わった会合は`meetingStart` / `meetingEnd`を直し、`eventKey`に元の`meetingEnd`を入れる(同じ行が更新され、`RESCHEDULED`が記録される)
-3. 直前の会合が終わり、calendar.json に 14:00 が載った会合は`provisional`を`false`にする(例: 2026-10-28 の会合の後に 12/8-9)
+3. 直前の会合が終わり、calendar.json に 14:00 が載った会合は`provisional`を`false`にする(例: 2026-10-28 の会合の後に 12/8-9。詳しい手順は dev-environment.md 12.7節)
 4. 中止になった会合は行を消さずに`cancelled: { note }`を足す
 5. `checkedAt`を確認した日に直し、`npm test`(表の整合性のテスト: `meetingEnd` = 発表日、`meetingStart` < `meetingEnd`、SEPの印)を通してからレビューに出す
-6. マージ後に`npm run ingest:fomc-schedule`を動かす(DEVで動かす前は dev-environment.md 11章の確認SQLで前後を比べる)
+6. マージ後に`npm run ingest:fomc-schedule`を動かす(DEVで動かす前は dev-environment.md 12章の確認SQLで前後を比べる)
+
+### 15.7 既知の制約(2026-10-22)
+
+- **発表後も予定のまま**: FOMCの行は発表時刻を過ぎても`status = SCHEDULED`・`data_status = PENDING`のまま変わらない。このジョブは値を入れず、他のジョブもFOMCの結果(政策金利)を取りに行かない
+- **値動き・過去の結果は自動では入らない**: 値動きの取り込み(`npm run ingest:event-reactions`)は`status = RELEASED`の行だけを対象にする(`src/repositories/ingestionRepository.ts`の`listReleasedEventsForReactions`)。FOMCの行は`RELEASED`にならないので、相場反応・`/events/{id}/history`の過去の結果は作られない
+- **ホームでは当日中「これから」の側**: iOSのホームは`status = SCHEDULED`の行を「これからの予定」に分ける(`HomeViewModel.swift`の`upcomingEvents`)。発表後もその日のうちは「これから」の側に出続ける(日付が変われば出なくなる)
+- **暫定の表示**: 過ぎた会合は API が`is_provisional = false`で返すので「予定（暫定）」は出ない(15.5節)。DBの値は人が表を直してジョブを動かすまで`true`のまま
+- **通知**: 指標`US_FOMC`は重要度`HIGH`なので、暫定の会合も含め、通常の指標と同じく発表の数分前(既定5分前)の通知・通知一覧の対象になる。DEVでの注意は dev-environment.md 12.5節
+- 結果の取り込みや「発表済み」への切り替えは、この Task の範囲外(HQの判断を待つ)

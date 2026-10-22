@@ -25,7 +25,8 @@ export function registerCalendarRoutes(app: FastifyInstance): void {
 
       const query = calendarQuerySchema.parse(request.query);
       const plan = await resolvePlan(app.supabase, userId);
-      const verdict = checkCalendarRange(plan, new Date(query.from), new Date(query.to), new Date(), query.timezone);
+      const now = new Date();
+      const verdict = checkCalendarRange(plan, new Date(query.from), new Date(query.to), now, query.timezone);
       if (verdict.kind === 'PLAN_LIMIT_EXCEEDED') {
         throw ApiError.planLimitExceeded(
           `from: the ${plan} plan can go back to ${formatIsoSeconds(verdict.bound)} (${query.timezone}).`,
@@ -53,6 +54,7 @@ export function registerCalendarRoutes(app: FastifyInstance): void {
           events,
           speeches.map((speech) => withResolvedSpeakerPhoto(speech, baseUrl)),
           { importance: query.importance, currency: query.currency },
+          now,
         ),
       };
     }),

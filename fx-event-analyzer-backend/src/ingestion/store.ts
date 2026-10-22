@@ -25,6 +25,8 @@ export interface StoredEvent {
 }
 
 export interface NewEvent {
+  /** economic_events.is_provisional (migration 20261022000002, DB default false). Only the FOMC schedule sets it. */
+  is_provisional?: boolean;
   indicator_id: string;
   provider: string;
   provider_event_id: string;
@@ -33,8 +35,6 @@ export interface NewEvent {
   importance: 'LOW' | 'MEDIUM' | 'HIGH';
   status: 'SCHEDULED' | 'RELEASED';
   data_status: 'PENDING';
-  /** economic_events.is_provisional (migration 20261022000002, DB default false). Only the FOMC schedule sets it. */
-  is_provisional?: boolean;
 }
 
 export type EventPatch = Partial<
@@ -237,10 +237,10 @@ export type CreditMode = 'AUTOMATIC' | 'MANUAL';
 
 export interface IngestionStore {
   findIndicatorsByCode(codes: readonly string[]): Promise<Map<string, IndicatorRef>>;
-  findEventByProviderId(provider: string, providerEventId: string): Promise<StoredEvent | null>;
-  insertEvent(event: NewEvent): Promise<StoredEvent>;
   /** Every economic_events row of `provider` that has a provider_event_id (with is_provisional). */
   listEventsByProvider(provider: string): Promise<ProviderEventRow[]>;
+  findEventByProviderId(provider: string, providerEventId: string): Promise<StoredEvent | null>;
+  insertEvent(event: NewEvent): Promise<StoredEvent>;
   updateEvent(eventId: string, patch: EventPatch): Promise<void>;
   getReleaseSnapshot(eventId: string): Promise<StoredSnapshot | null>;
   insertReleaseSnapshot(snapshot: NewReleaseSnapshot): Promise<void>;

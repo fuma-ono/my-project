@@ -41,10 +41,48 @@ const OCT = entry('2026-10-27', '2026-10-28');
 const DEC = entry('2026-12-08', '2026-12-09', { sep: true, provisional: true });
 const JAN = entry('2027-01-26', '2027-01-27', { provisional: true });
 
-let store: MemoryIngestionStore;
+/**
+ * trg_economic_events_schedule_change (migration 20261015000002) を真似る store。
+ * トリガーは `update of release_datetime, status` のときだけ動き、更新前に
+ * SCHEDULED だった行だけを記録する(is_provisional だけの更新では動かない)。
+ * 共通の MemoryIngestionStore には足さず、このテストの中だけに置く
+ * (Task 2 のブランチが同じ helper に別の記録を足すため、衝突を避ける)。
+ */
+class TriggerMirroringStore extends MemoryIngestionStore {
+  triggerChanges: {
+    target_id: string;
+    change_type: 'RESCHEDULED' | 'CANCELLED';
+    old_datetime: string;
+    new_datetime: string | null;
+  }[] = [];
+
+  override updateEvent(eventId: string, patch: Parameters<MemoryIngestionStore['updateEvent']>[1]): Promise<void> {
+    const event = this.events.find((e) => e.id === eventId);
+    if (event && event.status === 'SCHEDULED' && ('release_datetime' in patch || 'status' in patch)) {
+      if (patch.status === 'CANCELLED') {
+        this.triggerChanges.push({
+          target_id: eventId,
+          change_type: 'CANCELLED',
+          old_datetime: event.release_datetime,
+          new_datetime: null,
+        });
+      } else if (patch.release_datetime !== undefined && patch.release_datetime !== event.release_datetime) {
+        this.triggerChanges.push({
+          target_id: eventId,
+          change_type: 'RESCHEDULED',
+          old_datetime: event.release_datetime,
+          new_datetime: patch.release_datetime,
+        });
+      }
+    }
+    return super.updateEvent(eventId, patch);
+  }
+}
+
+let store: TriggerMirroringStore;
 
 beforeEach(() => {
-  store = new MemoryIngestionStore();
+  store = new TriggerMirroringStore();
   store.indicators = [
     { id: 'ind-fomc', code: 'US_FOMC', importance: 'HIGH', favorable_direction: 'HIGHER_IS_POSITIVE' },
   ];
@@ -108,6 +146,28 @@ describe('fomcAnnouncementUtc (America/New_York → UTC, DST-correct)', () => {
     expect(fomcAnnouncementUtc(entry('2027-06-08', '2027-06-09'))?.toISOString()).toBe('2027-06-09T18:00:00.000Z');
   });
 
+  // 2027年の米国の夏時間は 3/14 開始・11/7 終了。境目に近い会合で固定の時差を使っていないことを確かめる。
+  it('2027 near the DST switches: 03-17 → 18:00Z (EDT), 10-27 → 18:00Z (EDT), 12-08 → 19:00Z (EST)', () => {
+    expect(fomcAnnouncementUtc(entry('2027-03-16', '2027-03-17'))?.toISOString()).toBe('2027-03-17T18:00:00.000Z');
+    expect(fomcAnnouncementUtc(entry('2027-10-26', '2027-10-27'))?.toISOString()).toBe('2027-10-27T18:00:00.000Z');
+    expect(fomcAnnouncementUtc(entry('2027-12-07', '2027-12-08'))?.toISOString()).toBe('2027-12-08T19:00:00.000Z');
+  });
+
+  it('every FOMC_SCHEDULE entry converts to 18:00Z or 19:00Z (the real table)', () => {
+    expect(FOMC_SCHEDULE.map((e) => fomcAnnouncementUtc(e)?.toISOString())).toEqual([
+      '2026-10-28T18:00:00.000Z',
+      '2026-12-09T19:00:00.000Z',
+      '2027-01-27T19:00:00.000Z',
+      '2027-03-17T18:00:00.000Z',
+      '2027-04-28T18:00:00.000Z',
+      '2027-06-09T18:00:00.000Z',
+      '2027-07-28T18:00:00.000Z',
+      '2027-09-15T18:00:00.000Z',
+      '2027-10-27T18:00:00.000Z',
+      '2027-12-08T19:00:00.000Z',
+    ]);
+  });
+
   it('rejects a malformed date or time', () => {
     expect(fomcAnnouncementUtc(entry('2027-02-29', '2027-02-30'))).toBeNull();
     expect(fomcAnnouncementUtc({ ...OCT, announcement: { ...OCT.announcement, time: '2pm' } })).toBeNull();
@@ -145,7 +205,7 @@ describe('ingestFomcSchedule', () => {
     const { result } = await run([OCT, DEC, JAN]);
     expect(result).toMatchObject({ inserted: 0, updated: 0, unchanged: 3, provisional: 2 });
     expect(JSON.stringify(store.events)).toBe(before);
-    expect(store.scheduleChanges).toEqual([]);
+    expect(store.triggerChanges).toEqual([]);
   });
 
   it('a changed announcement time updates the same row (RESCHEDULED by the DB trigger)', async () => {
@@ -156,7 +216,7 @@ describe('ingestFomcSchedule', () => {
     expect(result).toMatchObject({ inserted: 0, updated: 1 });
     expect(store.events).toHaveLength(1);
     expect(store.events[0]).toMatchObject({ id, release_datetime: '2026-10-28T18:30:00.000Z' });
-    expect(store.scheduleChanges).toEqual([
+    expect(store.triggerChanges).toEqual([
       {
         target_id: id,
         change_type: 'RESCHEDULED',
@@ -174,7 +234,7 @@ describe('ingestFomcSchedule', () => {
     const { result } = await run([moved]);
     expect(result).toMatchObject({ inserted: 0, updated: 1, removed: [] });
     expect(store.events).toEqual([expect.objectContaining({ id, release_datetime: '2027-02-03T19:00:00.000Z' })]);
-    expect(store.scheduleChanges.map((c) => c.change_type)).toEqual(['RESCHEDULED']);
+    expect(store.triggerChanges.map((c) => c.change_type)).toEqual(['RESCHEDULED']);
   });
 
   it('provisional → confirmed flips is_provisional only (no schedule change)', async () => {
@@ -193,7 +253,7 @@ describe('ingestFomcSchedule', () => {
       is_provisional: false,
       status: 'SCHEDULED',
     });
-    expect(store.scheduleChanges).toEqual([]);
+    expect(store.triggerChanges).toEqual([]);
   });
 
   it('cancelled → status CANCELLED once (with the note in the log); a cancelled meeting is never created', async () => {
@@ -207,11 +267,11 @@ describe('ingestFomcSchedule', () => {
     expect(first.counters.details.cancelled_notes).toEqual([
       { provider_event_id: 'fomc_schedule:2026-12-09', note: 'FRB announcement 2026-11-30' },
     ]);
-    expect(store.scheduleChanges.map((c) => c.change_type)).toEqual(['CANCELLED']);
+    expect(store.triggerChanges.map((c) => c.change_type)).toEqual(['CANCELLED']);
 
     const second = await run([cancelledDec]);
     expect(second.result).toMatchObject({ cancelled: 0, unchanged: 1 });
-    expect(store.scheduleChanges).toHaveLength(1);
+    expect(store.triggerChanges).toHaveLength(1);
   });
 
   it('an entry removed from the table is only logged, never deleted or cancelled', async () => {

@@ -46,7 +46,7 @@
   - `FxPrice`に`verification_status`(`VERIFIED` / `SINGLE_SOURCE` / `UNVERIFIED`、既存行は`SINGLE_SOURCE`)・`cross_check_source`・`cross_check_close`・`cross_check_diff_pips`を追加(3.11節)。`UNVERIFIED`の足はRead APIが使わない
   - `IngestionLog`に`job`・`skipped_count`・`review_count`・`details`(jsonb)を追加(3.13節)。`data_type`の値セットは変えない(公式統計・要人発言は`OTHER`、ジョブ名は`job`)
 - **v4.16**(2026-10-16): FREEの機能の付与(HQ指示 2026-10-16)。全ユーザーが持つ機能の表`DefaultEntitlement`(`default_entitlements`、3.3.1節)を追加し、`VIEW_BASIC_EVENT` / `VIEW_HISTORICAL` / `VIEW_MARKET_REACTION`を入れた。Migration `20261016000002_default_entitlements.sql`。これまで新しいユーザーに`Entitlement`の行を入れる処理が無く、登録したばかりのユーザーがFREEの機能も使えなかった。ユーザーの`Entitlement`に同じfeature_codeの行があれば、有効・無効・期限切れのどれでもそちらが優先する(api-design.md v1.30 28章)。RLSはポリシーなし(service_roleのみ)
-- **v4.17**(2026-10-22): 暫定の予定(HQ承認 2026-10-22 Task 3「FOMCの公式日程」、api-design.md v1.31)。`EconomicEvent`に`is_provisional`(boolean, NN, DEF `false`)を追加(3.5節)。Migration `20261022000002_economic_events_provisional.sql`(`add column if not exists`、既存の行はすべて`false`)。設定するのはFOMCの日程表のジョブ(`npm run ingest:fomc-schedule`、data-sources.md 15章)だけ。`EventScheduleChange`のトリガー(3.19節)は`AFTER UPDATE OF release_datetime, status`のままで、`is_provisional`だけを変える更新では起動しない(暫定→確定は日時の変更として記録しない)。RLSは変わらない
+- **v4.17**(2026-10-22): 暫定の予定(HQ承認 2026-10-22 Task 3「FOMCの公式日程」、api-design.md v1.32)。`EconomicEvent`に`is_provisional`(boolean, NN, DEF `false`)を追加(3.5節)。Migration `20261022000002_economic_events_provisional.sql`(`add column if not exists`、既存の行はすべて`false`)。設定するのはFOMCの日程表のジョブ(`npm run ingest:fomc-schedule`、data-sources.md 15章)だけ。`EventScheduleChange`のトリガー(3.19節)は`AFTER UPDATE OF release_datetime, status`のままで、`is_provisional`だけを変える更新では起動しない(暫定→確定は日時の変更として記録しない)。RLSは変わらない
 
 ---
 
