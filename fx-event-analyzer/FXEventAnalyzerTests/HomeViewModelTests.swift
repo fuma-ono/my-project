@@ -201,7 +201,9 @@ final class HomeViewModelTests: XCTestCase {
 
         let mockClient = MockAPIClient()
         mockClient.results["entitlements"] = .success(EntitlementsResponse(features: [], plan: .free, limits: nil))
-        mockClient.results["home"] = .success(HomeResponse(date: today, timezone: timezone, events: [], majorFx: []))
+        // `/home`取得はあえて失敗させ、確定後にスナップショットが実際に
+        // 使われたことを(`.loaded`に即置き換わってしまわずに)確認できるようにする。
+        mockClient.results["home"] = .failure(APIError.transport("connection reset"))
         // entitlementsの応答だけ意図的に遅らせ、「未確定の間」を作り出す。
         let apiClient = DelayedEntitlementsAPIClient(wrapped: mockClient, delayNanoseconds: 300_000_000)
         let authService = MockAuthService()
@@ -217,7 +219,8 @@ final class HomeViewModelTests: XCTestCase {
             XCTFail("プラン未確定の間にスナップショットを表示してはならない")
         }
 
-        // 確定後は使える条件を満たすため、最終的には表示される。
+        // 確定後は使える条件を満たすため、最終的には表示される
+        // (`/home`取得は失敗させているため`.loaded`へは置き換わらない)。
         let state = await settledState(of: viewModel)
         guard case .showingSnapshot = state else {
             return XCTFail("プラン確定後は前回データが表示されるはず、got \(state)")
