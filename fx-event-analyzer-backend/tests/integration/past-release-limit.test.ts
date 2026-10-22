@@ -69,6 +69,8 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
   }));
   const B_NO_SNAPSHOT = { id: randomUUID(), at: '2011-08-12T12:30:00Z' };
   const B_MOST_RECENT_FIRST = [...B_RELEASED].reverse().map((event) => event.id);
+  /** pips of B_RELEASED[index] (every timeframe): 10.37, 20.37, … 70.37. */
+  const B_PIPS = (index: number) => (index + 1) * 10 + 0.37;
 
   async function newUser(plan: 'FREE' | 'PRO'): Promise<{ user: TestUser; headers: { authorization: string } }> {
     const user = await createTestUser(ctx);
@@ -207,6 +209,25 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
       await ctx.serviceClient
         .from('event_snapshots')
         .insert(B_RELEASED.map((e, index) => snapshotRow(e.id, e.at, 200 + index))),
+    );
+    check(
+      'reactions B',
+      await ctx.serviceClient.from('event_price_reactions').insert(
+        B_RELEASED.flatMap((e, index) =>
+          ['1m', '5m', '15m'].map((timeframe) => ({
+            event_id: e.id,
+            fx_pair_id: USDJPY_FX_PAIR_ID,
+            timeframe,
+            pre_release_price: 80,
+            post_release_price: 80 + B_PIPS(index) / 100,
+            movement: B_PIPS(index) / 100,
+            pips: B_PIPS(index),
+            change_percent: 0.1,
+            data_status: 'AVAILABLE',
+            calculated_at: e.at,
+          })),
+        ),
+      ),
     );
   });
 
@@ -419,49 +440,132 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
     });
   });
 
-  describe('Historical comparison keeps FREE 5 / PRO 20 (only releases with a RELEASE snapshot)', () => {
+  describe('Historical comparison: FREE 5 / PRO 20 rows, FREE values and stats only from unlocked rows', () => {
     const url = (query = '') =>
       `/indicators/${indicatorB}/comparison?fx_pair_id=${USDJPY_FX_PAIR_ID}&timeframe=5m${query}`;
     const ids = (events: { event_id: string }[]) => events.map((event) => event.event_id);
+    // FREE lock for indicator B: the 3 newest RELEASED are B_NO_SNAPSHOT (no
+    // snapshot, so not a comparison row), B7 and B6. Comparison rows B7…B3:
+    // B7 / B6 unlocked, B5 / B4 / B3 locked.
+    const [B7, B6, B5, B4, B3] = B_MOST_RECENT_FIRST;
+    const ROW_KEYS = [
+      'actual',
+      'event_id',
+      'forecast',
+      'locked',
+      'pips_by_timeframe',
+      'previous',
+      'release_datetime',
+      'required_plan',
+      'surprise',
+      'surprise_direction',
+    ];
+    // Values only the locked rows B5 / B4 / B3 have (actual / forecast and pips).
+    // B5's actual (204) is not listed: it is also B6's published `previous`
+    // (the known residual, api-design.md 21章).
+    const LOCKED_ONLY_VALUES = ['203.5', '202.5', '201.5', '50.37', '40.37', '30.37'];
 
-    it('FREE: the 5 most recent releases with a snapshot, ids and page agree', async () => {
+    type ComparisonRow = {
+      event_id: string;
+      actual: number | string | null;
+      locked: boolean;
+      required_plan: string | null;
+      pips_by_timeframe: Record<string, number | string | null>;
+    };
+
+    it('FREE: 5 rows (the setting), the 3 locked ones without values, stats from the 2 unlocked ones', async () => {
       const { headers } = await newUser('FREE');
       const { status, body } = await get(url(), headers);
       expect(status).toBe(200);
-      expect(body.total_events).toBe(5);
-      expect(ids(body.events)).toEqual(B_MOST_RECENT_FIRST.slice(0, 5));
-      expect(ids(body.events)).not.toContain(B_NO_SNAPSHOT.id);
+      const rows: ComparisonRow[] = body.events;
+      expect(ids(rows)).toEqual([B7, B6, B5, B4, B3]);
+      expect(ids(rows)).not.toContain(B_NO_SNAPSHOT.id);
       expect(body.meta).toEqual({ page: 1, limit: 20, total: 5, has_next: false });
       expect(body.history_limit).toEqual({ applied: 5, max_for_plan: 5, pro_max: 20 });
-      // The embedded RELEASE snapshot values come through.
-      expect(Number(body.events[0].actual)).toBeCloseTo(206);
+      expect(body.past_release_limit).toEqual({ applied: true, max_for_plan: 3, pro_max: null });
+
       // Each row carries only what the comparison table needs: no explanation,
       // revision or full reaction of the release (api-design.md §21).
-      for (const event of body.events) {
-        expect(Object.keys(event).sort()).toEqual([
-          'actual',
-          'event_id',
-          'forecast',
-          'pips_by_timeframe',
-          'previous',
-          'release_datetime',
-          'surprise',
-          'surprise_direction',
-        ]);
-        expect(Object.keys(event.pips_by_timeframe).sort()).toEqual(['15m', '1m', '5m']);
+      for (const row of rows) {
+        expect(Object.keys(row).sort()).toEqual(ROW_KEYS);
+        expect(Object.keys(row.pips_by_timeframe).sort()).toEqual(['15m', '1m', '5m']);
       }
+      expect(rows[0]).toMatchObject({ locked: false, required_plan: null });
+      expect(Number(rows[0]!.actual)).toBeCloseTo(206);
+      expect(Number(rows[0]!.pips_by_timeframe['5m'])).toBeCloseTo(70.37);
+      expect(rows[1]).toMatchObject({ locked: false, required_plan: null });
+      for (const row of rows.slice(2)) {
+        expect(row).toMatchObject({
+          locked: true,
+          required_plan: 'PRO',
+          forecast: null,
+          actual: null,
+          previous: null,
+          surprise: null,
+          surprise_direction: null,
+          pips_by_timeframe: { '1m': null, '5m': null, '15m': null },
+        });
+      }
+
+      // Every statistic comes from B7 / B6 only (pips 70.37 / 60.37).
+      expect(body.total_events).toBe(2);
+      expect(body.analyzable_events).toBe(2);
+      expect(Number(body.stats.average_pips)).toBeCloseTo(65.37);
+      expect(Number(body.stats.average_movement)).toBeCloseTo(0.6537);
+      expect(Number(body.stats.max_movement)).toBeCloseTo(0.7037);
+      expect(Number(body.stats.min_movement)).toBeCloseTo(0.6037);
+      expect(body.stats).toMatchObject({ upward_count: 2, downward_count: 0, no_change_count: 0 });
+      expect(body.advanced_statistics).toMatchObject({ available: false, data: null });
+
+      const text = JSON.stringify(body);
+      for (const value of LOCKED_ONLY_VALUES) expect(text, value).not.toContain(value);
     });
 
-    it('PRO: every release with a snapshot (7), max 20', async () => {
+    it('FREE timeframe=all: stats_by_timeframe also from the unlocked rows only', async () => {
+      const { headers } = await newUser('FREE');
+      const { status, body } = await get(
+        `/indicators/${indicatorB}/comparison?fx_pair_id=${USDJPY_FX_PAIR_ID}&timeframe=all`,
+        headers,
+      );
+      expect(status).toBe(200);
+      expect(body.total_events).toBe(2);
+      expect(body.analyzable_events).toBe(2);
+      expect(body.past_release_limit).toEqual({ applied: true, max_for_plan: 3, pro_max: null });
+      for (const timeframe of ['1m', '5m', '15m']) {
+        const entry = body.stats_by_timeframe.find((item: { timeframe: string }) => item.timeframe === timeframe);
+        expect(Number(entry.stats.average_pips), timeframe).toBeCloseTo(65.37);
+        expect(entry.stats.upward_count, timeframe).toBe(2);
+      }
+      expect((body.events as ComparisonRow[]).map((row) => row.locked)).toEqual([false, false, true, true, true]);
+      const text = JSON.stringify(body);
+      for (const value of LOCKED_ONLY_VALUES) expect(text, value).not.toContain(value);
+    });
+
+    it('FREE page 2: only locked rows, still no values', async () => {
+      const { headers } = await newUser('FREE');
+      const { body } = await get(url('&page=2&limit=3'), headers);
+      expect(ids(body.events)).toEqual([B4, B3]);
+      expect((body.events as ComparisonRow[]).every((row) => row.locked && row.actual === null)).toBe(true);
+      expect(body.meta).toEqual({ page: 2, limit: 3, total: 5, has_next: false });
+      expect(body.total_events).toBe(2);
+    });
+
+    it('PRO: every release with a snapshot (7), max 20, nothing locked, stats from all 7', async () => {
       const { headers } = await newUser('PRO');
       const { body } = await get(url(), headers);
       expect(body.total_events).toBe(7);
+      expect(body.analyzable_events).toBe(7);
       expect(ids(body.events)).toEqual(B_MOST_RECENT_FIRST);
+      expect((body.events as ComparisonRow[]).every((row) => !row.locked && row.required_plan === null)).toBe(true);
+      expect(Number((body.events as ComparisonRow[])[2]!.pips_by_timeframe['5m'])).toBeCloseTo(50.37);
+      expect(Number(body.stats.average_pips)).toBeCloseTo(40.37);
+      expect(body.advanced_statistics.available).toBe(true);
       expect(body.history_limit).toEqual({ applied: 7, max_for_plan: 20, pro_max: 20 });
+      expect(body.past_release_limit).toEqual({ applied: false, max_for_plan: null, pro_max: null });
     });
   });
 
-  describe('Direct Supabase access (GRANT, migration 20261022000001)', () => {
+  describe('Direct Supabase access (GRANT, migrations 20261022000001 / 20261022000003)', () => {
     /** Each locked table with one real column, for the write attempts below. */
     const MARKET_VALUE_TABLES = [
       { table: 'economic_events', column: 'provider' },
@@ -585,6 +689,71 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
         expect(result.error?.message, detail).toBe('permission denied for function visible_released_event_ids');
         expect(result.data, detail).toBeNull();
       }
+    });
+
+    describe('fx_prices (migration 20261022000003)', () => {
+      it('SELECT, count-only, embedding from fx_pairs and INSERT / UPDATE / DELETE all fail with 42501', async () => {
+        for (const { label, client, deniedStatus } of await roles()) {
+          expectTableDenied(
+            await client.from('fx_prices').select('*').limit(5),
+            'fx_prices',
+            deniedStatus,
+            `${label} select fx_prices`,
+          );
+
+          const count = await client.from('fx_prices').select('*', { count: 'exact', head: true });
+          expect(count.status, `${label} count fx_prices`).toBe(deniedStatus);
+          expect(count.error, `${label} count fx_prices`).not.toBeNull();
+          expect(count.count, `${label} count fx_prices`).toBeNull();
+
+          // fx_pairs stays readable, but embedding its prices fails the whole request.
+          for (const select of ['id,fx_prices(close)', 'id,fx_prices!inner(timestamp,close)']) {
+            expectTableDenied(
+              await client.from('fx_pairs').select(select).limit(5),
+              'fx_prices',
+              deniedStatus,
+              `${label} fx_pairs?select=${select}`,
+            );
+          }
+
+          const row = { source: 'direct-write' } as never;
+          expectTableDenied(
+            await client.from('fx_prices').insert(row),
+            'fx_prices',
+            deniedStatus,
+            `${label} insert fx_prices`,
+          );
+          expectTableDenied(
+            await client.from('fx_prices').update(row).eq('fx_pair_id', USDJPY_FX_PAIR_ID),
+            'fx_prices',
+            deniedStatus,
+            `${label} update fx_prices`,
+          );
+          expectTableDenied(
+            await client.from('fx_prices').delete().eq('fx_pair_id', USDJPY_FX_PAIR_ID),
+            'fx_prices',
+            deniedStatus,
+            `${label} delete fx_prices`,
+          );
+        }
+      });
+
+      it('service_role (the Backend and the ingestion jobs) still reads and embeds fx_prices', async () => {
+        const prices = await ctx.serviceClient
+          .from('fx_prices')
+          .select('timestamp, close', { count: 'exact' })
+          .eq('fx_pair_id', USDJPY_FX_PAIR_ID)
+          .limit(1);
+        expect(prices.error).toBeNull();
+        expect(prices.status).toBe(200);
+        const embedded = await ctx.serviceClient
+          .from('fx_pairs')
+          .select('id,fx_prices(close)')
+          .eq('id', USDJPY_FX_PAIR_ID)
+          .limit(1, { foreignTable: 'fx_prices' });
+        expect(embedded.error).toBeNull();
+        expect(embedded.data).toHaveLength(1);
+      });
     });
 
     it('service_role (the Backend) still reads them, embeds them and runs the function', async () => {

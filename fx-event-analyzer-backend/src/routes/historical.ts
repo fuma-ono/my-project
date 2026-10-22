@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { ApiError } from '../errors/ApiError.js';
-import { FEATURE_CODES, listActiveFeatureCodes, requireEntitlement } from '../authorization/entitlements.js';
-import { requireUnlockedEventForPlan } from '../authorization/pastReleaseAccess.js';
+import { assertEntitlement, FEATURE_CODES, listActiveFeatureCodes } from '../authorization/entitlements.js';
+import { requireUnlockedEventForPlan, resolvePastReleaseAccessForPlan } from '../authorization/pastReleaseAccess.js';
+import { pastReleaseLimitFor, pastReleasesMaxFor, redactRelease } from '../domain/pastReleaseAccess.js';
 import { requireEntitlementAndResolvePlan } from '../authorization/plan.js';
 import { getEventById, getLatestExplanation, getReleaseSnapshot } from '../repositories/eventsRepository.js';
 import { getIndicatorById, listRelatedFxPairs } from '../repositories/indicatorsRepository.js';
@@ -22,18 +23,27 @@ const ALL_TIMEFRAMES = ['1m', '5m', '15m', '30m', '60m'] as const;
 /** 過去イベント比較の表の列(HQ指示 2026-10-14、api-design v1.26)。各発表の1分・5分・15分のpips。 */
 const TABLE_TIMEFRAMES = ['1m', '5m', '15m'] as const;
 
-/** 各発表に、表の列の時間足ごとのpips(無ければ null)を付ける。 */
-function withPipsByTimeframe<T extends { event_id: string }>(
+/**
+ * 各発表に、表の列の時間足ごとのpips(無ければ null)を付ける。無料プランで
+ * ロックされた発表(HQ指示 2026-10-22、api-design.md 21章)は、一覧(13.3節)と
+ * 同じく forecast/actual/previous/surprise/surprise_direction を null にし、
+ * pips もすべて null(キーは残す)にして `locked: true`・`required_plan: "PRO"` を付ける。
+ */
+function toComparisonRows<T extends { event_id: string }>(
   events: T[],
   reactionRows: { event_id: string; timeframe: string; pips: number | null }[],
-): (T & { pips_by_timeframe: Record<string, number | null> })[] {
+  lockedIds: ReadonlySet<string>,
+) {
   return events.map((event) => {
+    const locked = lockedIds.has(event.event_id);
     const pips: Record<string, number | null> = {};
     for (const timeframe of TABLE_TIMEFRAMES) {
-      const row = reactionRows.find((r) => r.event_id === event.event_id && r.timeframe === timeframe);
+      const row = locked
+        ? undefined
+        : reactionRows.find((r) => r.event_id === event.event_id && r.timeframe === timeframe);
       pips[timeframe] = row?.pips ?? null;
     }
-    return { ...event, pips_by_timeframe: pips };
+    return { ...redactRelease(event, locked), pips_by_timeframe: pips };
   });
 }
 
@@ -96,11 +106,17 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
   });
 
   // GET /indicators/{indicator_id}/comparison — api-design.md §21. Only the
-  // plan's history_events_max most recent releases are used — for stats and
+  // plan's history_events_max most recent releases are listed — for stats and
   // for the paginated `events` alike (§28.1); `history_limit` reports the cap.
+  // FREE (HQ指示 2026-10-22): rows locked by the past-release limit (§28.2,
+  // same visible_released_event_ids rule as the list/detail) are listed with
+  // their values hidden, and every statistic / count is computed from the
+  // unlocked rows only, so locked values cannot be derived from aggregates.
   app.get<{ Params: { indicator_id: string } }>('/indicators/:indicator_id/comparison', async (request) => {
     const userId = request.user!.id;
-    await requireEntitlement(app.supabase, userId, FEATURE_CODES.VIEW_HISTORICAL);
+    // 機能の確認・高度な統計・プランを1回の読み込みで(このリクエストではもう読まない)。
+    const features = await listActiveFeatureCodes(app.supabase, userId);
+    assertEntitlement(features, FEATURE_CODES.VIEW_HISTORICAL);
 
     const { indicator_id: indicatorId } = request.params;
     const indicator = await getIndicatorById(app.supabase, indicatorId);
@@ -110,7 +126,6 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
 
     const query = comparisonQuerySchema.parse(request.query);
     const pagination = parsePagination(query);
-    const features = await listActiveFeatureCodes(app.supabase, userId);
     const hasAdvanced = features.includes(FEATURE_CODES.VIEW_ADVANCED_STATS);
     const plan = planFromFeatures(features);
     const historyMax = planLimitsFor(plan).history_events_max;
@@ -122,19 +137,33 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
       : { rows: [], total: allEventIds.length };
     const total = Math.min(releasedTotal, historyMax);
     const historyLimit = historyLimitFor(plan, allEventIds.length);
+    const lockedIds = await resolvePastReleaseAccessForPlan(
+      app.supabase,
+      plan,
+      allEventIds.map((id) => ({ id, indicator_id: indicatorId, status: 'RELEASED' })),
+    );
+    // 統計・件数に使う発表(ロックされた発表の値は読まない)。
+    const statsEventIds = allEventIds.filter((id) => !lockedIds.has(id));
+    // FREE: 統計に使う発表以外はすべてロック(2つの読み込みの間に新しい発表が
+    // 入って一覧の行がずれても、値を見せる行は statsEventIds の中だけ)。
+    const unlockedIds = new Set(statsEventIds);
+    const rowLockedIds =
+      pastReleasesMaxFor(plan) === null
+        ? new Set<string>()
+        : new Set(events.map((event) => event.event_id).filter((id) => !unlockedIds.has(id)));
 
     const timeframes = query.timeframe === 'all' ? [...ALL_TIMEFRAMES] : [query.timeframe];
     // 統計は選んだ時間足だけ。表の1分・5分・15分のために、その3つも一緒に読む。
     const fetchTimeframes = [...new Set<string>([...timeframes, ...TABLE_TIMEFRAMES])];
     const fetchedRows = await listAvailableReactionsForComparison(
       app.supabase,
-      allEventIds,
+      statsEventIds,
       query.fx_pair_id,
       fetchTimeframes,
     );
     const reactionRows = fetchedRows.filter((row) => (timeframes as string[]).includes(row.timeframe));
     const analyzableEventIds = new Set(reactionRows.map((row) => row.event_id));
-    const eventsWithPips = withPipsByTimeframe(events, fetchedRows);
+    const eventsWithPips = toComparisonRows(events, fetchedRows, rowLockedIds);
 
     if (query.timeframe !== 'all') {
       const rowsForStats = reactionRows.map((row) => ({ movement: row.movement ?? 0, pips: row.pips ?? 0 }));
@@ -153,7 +182,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
         },
         fx_pair_id: query.fx_pair_id,
         timeframe: query.timeframe,
-        total_events: allEventIds.length,
+        total_events: statsEventIds.length,
         analyzable_events: analyzableEventIds.size,
         stats: stats ?? {
           average_movement: null,
@@ -168,6 +197,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
         events: eventsWithPips,
         meta: buildMeta(pagination.page, pagination.limit, total),
         history_limit: historyLimit,
+        past_release_limit: pastReleaseLimitFor(plan),
       };
     }
 
@@ -193,12 +223,13 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
         unit: indicator.unit,
       },
       fx_pair_id: query.fx_pair_id,
-      total_events: allEventIds.length,
+      total_events: statsEventIds.length,
       analyzable_events: analyzableEventIds.size,
       stats_by_timeframe: statsByTimeframe,
       events: eventsWithPips,
       meta: buildMeta(pagination.page, pagination.limit, total),
       history_limit: historyLimit,
+      past_release_limit: pastReleaseLimitFor(plan),
     };
   });
 }

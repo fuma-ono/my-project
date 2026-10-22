@@ -969,6 +969,8 @@ NO_DATA=データなし)。
 - 同じ5表の `anon`・`authenticated` の権限をすべて取り消す(`revoke all`。SELECT・INSERT・UPDATE・DELETE・TRUNCATE・REFERENCES・TRIGGER)。RLS は有効のまま
 - 関数 `visible_released_event_ids(uuid[], int)`(SECURITY DEFINER、実行は `service_role` だけ)を足す
 
+`fx_prices` の直接参照の禁止(`20261022000003_fx_prices_access.sql`)は別のマイグレーションで、手順は 13.7(これとは独立に適用・取り消しできる)。
+
 **順番を必ず守る: マイグレーション → `notify pgrst` → Backend のデプロイ。** 先に Backend を入れると、FREE のユーザーで `GET /home`・`GET /indicators/{id}/events`・`GET /events/{id}` と子の `/revisions`・`/history`・`/reaction`・`/reaction/chart` が関数が無いため 500 になる(PRO は関数を呼ばないので影響なし)。逆にマイグレーションだけ先に入れても、今の Backend は service_role で読むので影響しない。iOS は同時に出す必要はない(古いアプリ ビルド17/18 も読める形で返す。api-design.md 14.1節「古いアプリとの互換」)。
 
 ### 13.1 適用前の確認(読むだけ)
@@ -1111,7 +1113,7 @@ rollback;
    - `GET /indicators/{id}/events`(指標詳細の過去の発表): 新しい3回は値あり、4回目より古いものは鍵の印。未発表の行は今までどおり
    - `GET /events/{id}`: 4回目より古い発表を開くと 200 で鍵の印(エラー画面にならない)。値動きの表も鍵の印で、相場反応詳細へは進まない
 4. **PRO のアカウント**で同じ画面を開き、すべての発表に値が出て鍵の印が無いことを確かめる
-5. 過去イベント比較は FREE 5回・PRO 20回のまま(変えていない)
+5. 過去イベント比較(`GET /indicators/{id}/comparison`)は FREE 5行・PRO 20行のまま。FREE では直近3回より古い行が鍵の印で値・pips が出ず、平均などの統計はロックされていない行だけから出ること。PRO はすべての行に値が出ること
 
 ### 13.5 中止する条件(どれかが起きたら止めて HQ に報告する)
 
@@ -1154,3 +1156,96 @@ notify pgrst, 'reload schema';
 ```
 
 4. 13.1 (1)〜(3) をもう一度実行し、適用前に記録した結果と同じになったことを確かめる
+
+### 13.7 fx_prices の直接参照の禁止(2026-10-22、HQ指示。`20261022000003_fx_prices_access.sql`)
+
+`fx_prices` の「全認証ユーザー SELECT 可」の policy(`fx_prices_select_authenticated`)を消し、`anon`・`authenticated` の権限をすべて取り消す(RLS は有効のまま)。これまでは、アプリの anon key でログインした利用者が `fx_prices` を直接読み、ロックされた発表の前後の足から値動きを計算し直せた。
+
+- **13.1〜13.6 とは別に、単独で適用・取り消しできる。** Backend・取り込みジョブ・レートアラートの判定は service_role で読むので、Backend のデプロイの前でも後でもよい(順番の決まりは無い)。iOS は `fx_prices` を直接読まない
+- 13.1 の1と同じく、プロジェクトが `fx-event-analyzer-dev` であることを先に確かめる
+
+適用前の確認(読むだけ。結果を記録しておく):
+
+```sql
+-- (1) policy。期待: fx_prices_select_authenticated の1行(cmd = SELECT)だけ
+select policyname, cmd, roles, qual from pg_policies
+where schemaname = 'public' and tablename = 'fx_prices';
+
+-- (2) 権限(戻すときの基準)。期待: anon / authenticated / service_role がすべて
+--     DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE
+select grantee, string_agg(privilege_type, ',' order by privilege_type) as privileges
+from information_schema.role_table_grants
+where table_schema = 'public' and table_name = 'fx_prices'
+  and grantee in ('anon', 'authenticated', 'service_role')
+group by grantee order by grantee;
+
+-- (3) RLS。期待: relrowsecurity = true
+select relname, relrowsecurity from pg_class
+where relnamespace = 'public'::regnamespace and relname = 'fx_prices';
+
+-- (4) fx_prices を読む view・関数・Realtime。期待: すべて0行
+select distinct v.relname as view_name
+from pg_depend d
+join pg_rewrite r on r.oid = d.objid
+join pg_class v on v.oid = r.ev_class
+where d.classid = 'pg_rewrite'::regclass and d.refobjid = 'public.fx_prices'::regclass and v.oid <> d.refobjid;
+select p.oid::regprocedure from pg_proc p
+where p.pronamespace = 'public'::regnamespace and p.prosrc ~ 'fx_prices';
+select pubname from pg_publication_tables where schemaname = 'public' and tablename = 'fx_prices';
+```
+
+適用: SQL Editor にファイルの中身を貼って実行し、続けて `notify pgrst, 'reload schema';`。
+
+適用後の確認:
+
+```sql
+-- (1) policy。期待: 0行(13.7 の適用前 (1) と同じ SQL)
+
+-- (2) 権限。期待: anon / authenticated は7列すべて false、service_role はすべて true
+select r.rolname,
+       has_table_privilege(r.rolname, 'fx_prices', 'select') as sel,
+       has_table_privilege(r.rolname, 'fx_prices', 'insert') as ins,
+       has_table_privilege(r.rolname, 'fx_prices', 'update') as upd,
+       has_table_privilege(r.rolname, 'fx_prices', 'delete') as del,
+       has_table_privilege(r.rolname, 'fx_prices', 'truncate') as trn,
+       has_table_privilege(r.rolname, 'fx_prices', 'references') as ref,
+       has_table_privilege(r.rolname, 'fx_prices', 'trigger') as trg
+from pg_roles r where r.rolname in ('anon', 'authenticated', 'service_role')
+order by r.rolname;
+```
+
+```sql
+-- (3) 期待: ERROR 42501 permission denied for table fx_prices(authenticated を anon に替えてもう1回)
+begin;
+set local role authenticated;
+select count(*) from fx_prices;
+rollback;
+```
+
+```sql
+-- (4) 期待: エラーなく件数が返る
+begin;
+set local role service_role;
+select count(*) from fx_prices;
+rollback;
+```
+
+適用後、次の20分ごとの為替の取り込み(GitHub Actions、§3)が今までどおり成功し、アプリのホームの主要通貨のレートと相場反応詳細のチャートが出ることを確かめる(どちらも Backend 経由なので変わらないはず)。
+
+中止する条件:
+
+- (3) で行や件数が返った、または (2) の anon / authenticated に true がある
+- (4) がエラーになった、または為替の取り込み・ホームのレート・チャートが失敗するようになった(すぐ下の手順で戻す)
+
+戻す手順(権限は適用前 (2) の記録と同じに戻す。Supabase の既定どおりなら `grant all` でよい。policy は `20260917000009_rls.sql` と同じ定義):
+
+```sql
+grant all on fx_prices to anon, authenticated;
+
+create policy fx_prices_select_authenticated on fx_prices
+  for select using (auth.role() = 'authenticated');
+
+notify pgrst, 'reload schema';
+```
+
+戻したあと、適用前の (1)〜(3) をもう一度実行し、記録と同じになったことを確かめる。

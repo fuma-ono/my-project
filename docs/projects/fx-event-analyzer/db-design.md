@@ -46,7 +46,7 @@
   - `FxPrice`に`verification_status`(`VERIFIED` / `SINGLE_SOURCE` / `UNVERIFIED`、既存行は`SINGLE_SOURCE`)・`cross_check_source`・`cross_check_close`・`cross_check_diff_pips`を追加(3.11節)。`UNVERIFIED`の足はRead APIが使わない
   - `IngestionLog`に`job`・`skipped_count`・`review_count`・`details`(jsonb)を追加(3.13節)。`data_type`の値セットは変えない(公式統計・要人発言は`OTHER`、ジョブ名は`job`)
 - **v4.16**(2026-10-16): FREEの機能の付与(HQ指示 2026-10-16)。全ユーザーが持つ機能の表`DefaultEntitlement`(`default_entitlements`、3.3.1節)を追加し、`VIEW_BASIC_EVENT` / `VIEW_HISTORICAL` / `VIEW_MARKET_REACTION`を入れた。Migration `20261016000002_default_entitlements.sql`。これまで新しいユーザーに`Entitlement`の行を入れる処理が無く、登録したばかりのユーザーがFREEの機能も使えなかった。ユーザーの`Entitlement`に同じfeature_codeの行があれば、有効・無効・期限切れのどれでもそちらが優先する(api-design.md v1.30 28章)。RLSはポリシーなし(service_roleのみ)
-- **v4.18**(2026-10-22): 無料プランの「過去の発表」制限(HQ判断 2026-10-21/22、api-design.md v1.33 28.2節)。Migration `20261022000001_past_release_access.sql`。市場の値を持つ`EconomicEvent` / `EventSnapshot` / `EventRevision` / `EventExplanation` / `EventPriceReaction`の「全認証ユーザーSELECT可」のポリシーを削除し、`anon` / `authenticated`のテーブルの権限もすべて取り消した(`revoke all`。RLSは有効のまま。6章)。値を見られる発表を計算する関数`visible_released_event_ids`(service_role専用)を追加(6.1節)。テーブル・列は変えない
+- **v4.18**(2026-10-22): 無料プランの「過去の発表」制限(HQ判断 2026-10-21/22、api-design.md v1.33 28.2節)。Migration `20261022000001_past_release_access.sql`。市場の値を持つ`EconomicEvent` / `EventSnapshot` / `EventRevision` / `EventExplanation` / `EventPriceReaction`の「全認証ユーザーSELECT可」のポリシーを削除し、`anon` / `authenticated`のテーブルの権限もすべて取り消した(`revoke all`。RLSは有効のまま。6章)。値を見られる発表を計算する関数`visible_released_event_ids`(service_role専用)を追加(6.1節)。Migration `20261022000003_fx_prices_access.sql`(HQ指示 2026-10-22、単独で適用・取り消しできる別ファイル)で、`FxPrice`の「全認証ユーザーSELECT可」のポリシーも削除し、`anon` / `authenticated`の権限をすべて取り消した(ロックされた発表の前後の足から値動きを計算し直せないため。6章)。テーブル・列は変えない
 
 ---
 
@@ -679,8 +679,8 @@ Supabase RLSを実装前提の設計条件として採用する。論理方針�
 |---|---|---|
 | ユーザー固有 | `Profile` / `Subscription` / `Entitlement` / `UserSettings` / `RateAlert`(v4.14) | `auth.uid()`等を利用した本人のみSELECT可。INSERT/UPDATE/DELETEはservice_roleのみ |
 | ユーザー固有(Backend経由のみ、v4.8) | `SupportRequest`(v4.7) | クライアントからは読み書き不可(ポリシーなし、anon / authenticatedの権限なし)。内部情報の列(`classification` / `github_issue_*`)を含むため、参照もservice_role(Backend)経由のみ |
-| 共有データ | `EconomicIndicator` / `Speaker` / `SpeechEvent`(v4.4) / `EventScheduleChange`(v4.14、書き込みはトリガーのみ) / `IndicatorFxPair` / `FxPair` / `FxPrice` | ユーザー単位のRLSを前提とせず、原則として全認証ユーザーからSELECT可能。INSERT/UPDATE/DELETEはservice_role(Ingestion Worker・管理者機能)のみ |
-| 市場の値(Backend経由のみ、v4.18) | `EconomicEvent` / `EventSnapshot` / `EventRevision` / `EventExplanation` / `EventPriceReaction` | クライアントからは直接読み書きできない(ポリシーなし、`anon` / `authenticated`の権限なし(SELECT・INSERT・UPDATE・DELETE・TRUNCATE・REFERENCES・TRIGGERをすべて取り消し)。RLSは有効)。無料プランの「過去の発表」制限(api-design.md 28.2節)をBackendが判定するため、値はBackend(service_role)経由でだけ返す。INSERT/UPDATE/DELETEは従来どおりservice_roleのみ |
+| 共有データ | `EconomicIndicator` / `Speaker` / `SpeechEvent`(v4.4) / `EventScheduleChange`(v4.14、書き込みはトリガーのみ) / `IndicatorFxPair` / `FxPair` | ユーザー単位のRLSを前提とせず、原則として全認証ユーザーからSELECT可能。INSERT/UPDATE/DELETEはservice_role(Ingestion Worker・管理者機能)のみ |
+| 市場の値(Backend経由のみ、v4.18) | `EconomicEvent` / `EventSnapshot` / `EventRevision` / `EventExplanation` / `EventPriceReaction` / `FxPrice`(v4.18、Migration `20261022000003`) | クライアントからは直接読み書きできない(ポリシーなし、`anon` / `authenticated`の権限なし(SELECT・INSERT・UPDATE・DELETE・TRUNCATE・REFERENCES・TRIGGERをすべて取り消し)。RLSは有効)。無料プランの「過去の発表」制限(api-design.md 28.2節)をBackendが判定するため、値はBackend(service_role)経由でだけ返す。INSERT/UPDATE/DELETEは従来どおりservice_roleのみ |
 | 運用ログ | `IngestionLog` / `IngestionStagedValue`(v4.15) / `OfficialObservation`(v4.15) | 一般ユーザーからは非公開。管理者機能・service_roleのみアクセス可 |
 | 設定データ(v4.16) | `DefaultEntitlement`(v4.16) | クライアントからは読み書き不可(ポリシーなし)。Backend(service_role)だけが読む |
 

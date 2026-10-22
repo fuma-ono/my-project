@@ -16,7 +16,8 @@
 -- 書き込みも従来どおり service_role だけ。
 --
 -- 変えないもの: economic_indicators, fx_pairs, fx_prices, speakers,
--- speech_events, event_schedule_changes, indicator_fx_pairs の policy。
+-- speech_events, event_schedule_changes, indicator_fx_pairs の policy
+-- (fx_prices は別ファイル 20261022000003_fx_prices_access.sql で同じ対策をする)。
 --
 -- 取り消す権限: SELECT だけでなく INSERT / UPDATE / DELETE / TRUNCATE /
 -- REFERENCES / TRIGGER も(revoke all)。Supabase は public スキーマの表に
