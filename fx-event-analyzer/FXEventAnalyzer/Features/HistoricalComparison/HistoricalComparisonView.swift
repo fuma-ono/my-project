@@ -258,7 +258,16 @@ struct HistoricalComparisonView: View {
             } else {
                 valueCell(event.actual, unit: unit)
                 valueCell(event.forecast, unit: unit)
-                valueCell(event.previous, unit: unit)
+                if event.isPreviousLocked {
+                    // ひとつ前の発表がロックされているため前回は隠されている(HQ指示 2026-10-22)。
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 6, weight: .semibold))
+                        .foregroundStyle(V5P.cyan)
+                        .frame(width: Column.value)
+                        .accessibilityLabel(PastReleaseLock.label)
+                } else {
+                    valueCell(event.previous, unit: unit)
+                }
                 pipsCell(event.pipsByTimeframe?["1m"] ?? nil)
                 pipsCell(event.pipsByTimeframe?["5m"] ?? nil)
                 pipsCell(event.pipsByTimeframe?["15m"] ?? nil)

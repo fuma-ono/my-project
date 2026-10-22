@@ -452,6 +452,146 @@ final class PastReleaseLimitTests: XCTestCase {
         XCTAssertEqual(response.events[0].actual, 3.2)
     }
 
+    // MARK: - 「前回」だけを隠した発表(previous_locked、api-design v1.33 §28.2)
+
+    func testIndicatorEventsDecodePreviousLockedRow() throws {
+        let json = """
+        {
+          "data": [
+            {
+              "event_id": "evt_3rd",
+              "release_datetime": "2026-07-10T12:30:00Z",
+              "status": "RELEASED",
+              "data_status": "READY",
+              "forecast": 3.1,
+              "actual": 3.3,
+              "previous": null,
+              "surprise": 0.2,
+              "surprise_direction": "POSITIVE",
+              "locked": false,
+              "required_plan": null,
+              "previous_locked": true
+            },
+            {
+              "event_id": "evt_2nd",
+              "release_datetime": "2026-08-10T12:30:00Z",
+              "status": "RELEASED",
+              "data_status": "READY",
+              "forecast": 3.2,
+              "actual": 3.4,
+              "previous": 3.3,
+              "surprise": 0.2,
+              "surprise_direction": "POSITIVE",
+              "locked": false,
+              "required_plan": null,
+              "previous_locked": false
+            }
+          ],
+          "meta": { "page": 1, "limit": 20, "total": 2, "has_next": false }
+        }
+        """.data(using: .utf8)!
+
+        let response = try makeDecoder().decode(IndicatorEventsListResponse.self, from: json)
+
+        XCTAssertEqual(response.data.map(\.isPreviousLocked), [true, false])
+        XCTAssertEqual(response.data.map(\.isLocked), [false, false])
+        XCTAssertNil(response.data[0].previous)
+        XCTAssertEqual(response.data[0].actual, 3.3)
+        // 行そのものは隠さない(結果・予想は出す)。前回の列だけ鍵の印。
+        XCTAssertEqual(IndicatorReleasesView.releaseValues(response.data[0])?.actual, ValueFormat.number(3.3))
+        XCTAssertEqual(IndicatorReleasesView.releaseValues(response.data[1])?.previous, ValueFormat.number(3.3))
+    }
+
+    func testOlderBackendRowsAreNotPreviousLocked() throws {
+        let json = """
+        {
+          "data": [
+            {
+              "event_id": "evt_1",
+              "release_datetime": "2026-09-10T12:30:00Z",
+              "status": "RELEASED",
+              "data_status": "READY",
+              "forecast": 3.1,
+              "actual": 3.3,
+              "previous": 3.0,
+              "surprise": 0.2,
+              "surprise_direction": "POSITIVE"
+            }
+          ],
+          "meta": { "page": 1, "limit": 10, "total": 1, "has_next": false }
+        }
+        """.data(using: .utf8)!
+
+        let response = try makeDecoder().decode(IndicatorEventsListResponse.self, from: json)
+
+        XCTAssertEqual(response.data.first?.isPreviousLocked, false)
+        XCTAssertEqual(response.data.first?.previous, 3.0)
+    }
+
+    func testHomeSubtitleShowsPreviousAsPlanOnlyWhenPreviousLocked() {
+        let previousLocked = HomeEventSummary(
+            id: "evt_3rd", indicatorId: "ind_1", indicatorName: "US CPI", countryCode: "US", currencyCode: "USD",
+            importance: .high, releaseDatetime: Date(), releaseDatetimePrecision: .exact, status: .released,
+            dataStatus: .ready, forecast: 3.1, actual: 3.3, previous: nil, surprise: 0.2, surpriseDirection: .positive,
+            relatedFxPairs: [], locked: false, requiredPlan: nil, previousLocked: true
+        )
+        let subtitle = HomeView.eventSubtitle(previousLocked)
+        XCTAssertEqual(subtitle, "予想 \(ValueFormat.withUnit(3.1, unit: nil)) | 前回 \(PastReleaseLock.previousShortLabel)")
+    }
+
+    func testEventDetailDecodesPreviousLocked() throws {
+        let json = """
+        {
+          "event": {
+            "id": "evt_3rd",
+            "indicator_id": "ind_1",
+            "indicator_name": "US CPI",
+            "country_code": "US",
+            "currency_code": "USD",
+            "release_datetime": "2026-07-10T12:30:00Z",
+            "release_datetime_precision": "EXACT",
+            "importance": "HIGH",
+            "status": "RELEASED",
+            "data_status": "READY",
+            "revision_status": "REVISED",
+            "locked": false,
+            "required_plan": null,
+            "previous_locked": true
+          },
+          "snapshot": { "forecast": 3.1, "actual": 3.3, "previous": null, "unit": "%", "source": "BLS", "source_url": null },
+          "analysis": { "surprise": 0.2, "surprise_direction": "POSITIVE" },
+          "explanation": null,
+          "related_fx_pairs": [],
+          "available_timeframes": ["1m", "5m"]
+        }
+        """.data(using: .utf8)!
+
+        let response = try makeDecoder().decode(EventDetailResponse.self, from: json)
+
+        XCTAssertTrue(response.event.isPreviousLocked)
+        XCTAssertFalse(response.event.isLocked)
+        XCTAssertEqual(response.snapshot?.actual, 3.3)
+        XCTAssertNil(response.snapshot?.previous)
+        // 行そのものはロックしないので、相場反応詳細へは進める。
+        XCTAssertTrue(EventDetailCards(response: response).canOpenReactions)
+    }
+
+    func testComparisonDecodesPreviousLockedRow() throws {
+        let json = Self.comparisonJSON(events: """
+            { "event_id": "evt_3rd", "release_datetime": "2026-07-10T12:30:00Z",
+              "forecast": 3.0, "actual": 3.2, "previous": null, "surprise": 0.2, "surprise_direction": "POSITIVE",
+              "locked": false, "required_plan": null, "previous_locked": true,
+              "pips_by_timeframe": { "1m": 7.7, "5m": 20.0, "15m": null } }
+            """)
+
+        let response = try makeDecoder().decode(ComparisonResponse.self, from: json)
+
+        XCTAssertTrue(response.events[0].isPreviousLocked)
+        XCTAssertFalse(response.events[0].isLocked)
+        XCTAssertEqual(response.events[0].actual, 3.2)
+        XCTAssertNil(response.events[0].previous)
+    }
+
     // MARK: - GET /entitlements・PlanStore
 
     func testPlanLimitsDefaults() {

@@ -876,7 +876,12 @@ struct HomeView: View {
         var parts: [String] = []
         // HQ指示(2026-10-08)「予想・前回に単位を付けて」: APIの`unit`で表示する。
         if let forecast = event.forecast { parts.append("予想 \(ValueFormat.withUnit(forecast, unit: event.unit))") }
-        if let previous = event.previous { parts.append("前回 \(ValueFormat.withUnit(previous, unit: event.unit))") }
+        if event.isPreviousLocked {
+            // ひとつ前の発表が無料プランでロックされているため、前回は隠されている(HQ指示 2026-10-22)。
+            parts.append("前回 \(PastReleaseLock.previousShortLabel)")
+        } else if let previous = event.previous {
+            parts.append("前回 \(ValueFormat.withUnit(previous, unit: event.unit))")
+        }
         // 単位が付いて長くなった分、区切りの全角スペースを半角にした。
         return parts.isEmpty ? nil : parts.joined(separator: " | ")
     }

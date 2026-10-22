@@ -51,6 +51,8 @@ struct ProBadge: View {
 /// 値の代わりに「有料プランで見られます」を出す(「--」だとデータが無いように見えるため使わない)。
 enum PastReleaseLock {
     static let label = "有料プランで見られます"
+    /// 「前回」だけを隠したとき(ひとつ前の発表がロックされている)の短い表記。
+    static let previousShortLabel = "有料プラン"
 
     /// 印を押したときの案内(`planLimitPrompt`の本文)。`maxForPlan`は`PlanLimits.pastReleasesMax`
     /// (古いBackendでnilのときは無料プランの3回)。

@@ -131,9 +131,16 @@ struct ComparisonEventSummary: Decodable, Identifiable, Equatable {
 
     /// ロックされた発表か。`true`のとき表は値の代わりに鍵の印を出す。
     var isLocked: Bool { locked ?? false }
+    /// 「前回」だけを隠した発表(api-design v1.33 §28.2): ひとつ前の発表が無料プランでロック
+    /// されているため、その結果にあたる`previous`をBackendが`null`で返す。古いBackendではnil。
+    var previousLocked: Bool? = nil
+
+    /// 「前回」を隠した発表か。`true`のとき前回は「--」ではなく鍵の印で出す。
+    var isPreviousLocked: Bool { previousLocked ?? false }
 
     enum CodingKeys: String, CodingKey {
         case locked
+        case previousLocked = "previous_locked"
         case requiredPlan = "required_plan"
         case pipsByTimeframe = "pips_by_timeframe"
         case id = "event_id"

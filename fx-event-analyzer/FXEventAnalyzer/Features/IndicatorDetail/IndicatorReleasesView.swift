@@ -78,7 +78,12 @@ struct IndicatorReleasesView: View {
                             dateText(event)
                             number(values.actual).frame(width: 34, alignment: .trailing)
                             number(values.forecast).frame(width: 34, alignment: .trailing)
-                            number(values.previous).frame(width: 34, alignment: .trailing)
+                            if event.isPreviousLocked {
+                                // ひとつ前の発表がロックされているため前回は隠されている(HQ指示 2026-10-22)。
+                                previousLockIcon.frame(width: 34, alignment: .trailing)
+                            } else {
+                                number(values.previous).frame(width: 34, alignment: .trailing)
+                            }
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 7, weight: .semibold))
                                 .foregroundStyle(SettingsCardStyle.chevronColor)
@@ -122,6 +127,13 @@ struct IndicatorReleasesView: View {
         NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 7.5)
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var previousLockIcon: some View {
+        Image(systemName: "lock.fill")
+            .font(.system(size: 7, weight: .semibold))
+            .foregroundStyle(V5P.cyan)
+            .accessibilityLabel(PastReleaseLock.label)
     }
 
     private func number(_ text: String) -> some View {

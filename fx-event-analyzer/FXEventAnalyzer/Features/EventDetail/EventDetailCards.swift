@@ -161,7 +161,12 @@ struct EventDetailCards: View {
             divider
             resultColumn("予想", value: snapshot?.forecast, unit: unit, note: nil)
             divider
-            resultColumn("前回", value: snapshot?.previous, unit: unit, note: Self.changeFromPrevious(actual: actual, previous: snapshot?.previous, unit: unit))
+            if response.event.isPreviousLocked {
+                // ひとつ前の発表が無料プランでロックされているため、前回(とその前回比)は隠されている。
+                lockedPreviousColumn
+            } else {
+                resultColumn("前回", value: snapshot?.previous, unit: unit, note: Self.changeFromPrevious(actual: actual, previous: snapshot?.previous, unit: unit))
+            }
         }
         // HQ指示(2026-10-12、4回目、参考画像)「結果予想の縦幅の違い」:
         // 8→6に詰めてカードの高さを参考画像に合わせた。
@@ -193,6 +198,21 @@ struct EventDetailCards: View {
 
     private var divider: some View {
         Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 0.5, height: 50)
+    }
+
+    /// 「前回」を隠した発表の前回の列(HQ指示 2026-10-22)。押すとプランの案内。
+    private var lockedPreviousColumn: some View {
+        Button(action: onLockedTap) {
+            VStack(alignment: .center, spacing: 3) {
+                NotoText.text("前回", size: 9.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                PastReleaseLockBadge(size: 8)
+            }
+            .padding(.horizontal, 4)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("eventDetailLockedPrevious")
     }
 
     private func resultColumn(_ title: String, value: Double?, unit: String?, note: String?, placeholder: String = "--") -> some View {

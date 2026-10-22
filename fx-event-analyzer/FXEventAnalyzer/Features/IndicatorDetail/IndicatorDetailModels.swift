@@ -32,9 +32,16 @@ struct IndicatorEventSummary: Decodable, Identifiable, Equatable {
 
     /// ロックされた発表か。`true`のとき予想・結果・前回・サプライズはBackendが`null`で返す。
     var isLocked: Bool { locked ?? false }
+    /// 「前回」だけを隠した発表(api-design v1.33 §28.2): ひとつ前の発表が無料プランでロック
+    /// されているため、その結果にあたる`previous`をBackendが`null`で返す。古いBackendではnil。
+    var previousLocked: Bool? = nil
+
+    /// 「前回」を隠した発表か。`true`のとき前回は「--」ではなく鍵の印で出す。
+    var isPreviousLocked: Bool { previousLocked ?? false }
 
     enum CodingKeys: String, CodingKey {
         case locked
+        case previousLocked = "previous_locked"
         case requiredPlan = "required_plan"
         case id = "event_id"
         case releaseDatetime = "release_datetime"
