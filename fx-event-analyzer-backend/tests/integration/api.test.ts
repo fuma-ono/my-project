@@ -304,7 +304,7 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
         expect(JSON.parse(desc.body).data[0].event_id).toBe(BOJ_LATER_EVENT_ID);
 
         const bad = await ctx.app.inject({ method: 'GET', url: `${url}&order=up`, headers: authHeader });
-        expect(bad.statusCode).toBe(400);
+        expect(bad.statusCode).toBe(422);
       });
 
       it('keeps the release history newest first (status=RELEASED, v1.31)', async () => {

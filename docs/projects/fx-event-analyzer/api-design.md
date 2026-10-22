@@ -566,7 +566,7 @@ Query：from / to / status / page / limit / sort / order(v1.31)
 
 fromはinclusive。toはexclusive。
 
-`order`(v1.31)：`release_datetime`の並び順。`asc` / `desc`。省略時は`status=SCHEDULED`なら`asc`(近い予定が先)、それ以外は`desc`(新しい発表が先)。それ以外の値は400。
+`order`(v1.31)：`release_datetime`の並び順。`asc` / `desc`。省略時は`status=SCHEDULED`なら`asc`(近い予定が先)、それ以外は`desc`(新しい発表が先)。それ以外の値は422(VALIDATION_ERROR)。
 
 **「次の発表」の求め方(v1.31)**：指標の詳細(SCR-006)・お気に入り・イベントの詳細の「次の発表」は`status=SCHEDULED&from=<現在のUTC>&order=asc&limit=1`の先頭(イベントの詳細は`limit=2`で、表示中のイベントを除いた先頭)。`from`を付けるのは、発表時刻を過ぎてもまだ`SCHEDULED`の行(取り込み待ち。BLS は発表後にジョブを動かすまで、FOMC は発表後もそのまま)を「次の発表」にしないため。該当が無ければ「次の発表」は出さない(過去の発表を代わりに出さない)。13.1 の`next_release_datetime`と同じ条件。
 
