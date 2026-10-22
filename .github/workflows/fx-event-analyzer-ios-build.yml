@@ -108,6 +108,56 @@ jobs:
             GOOGLE_SIGNIN_CLIENT_ID="$GOOGLE_SIGNIN_CLIENT_ID" \
             GOOGLE_SIGNIN_REVERSED_CLIENT_ID="$GOOGLE_SIGNIN_REVERSED_CLIENT_ID"
 
+      # HQ指示(2026-10-22「A1差分レビュー・iPad向き設定修正・次回ビルド準備」):
+      # TestFlight実行#16(run 39438349394)がApp Store Connectのアップロード時
+      # バリデーションで409エラーになった原因(iPadのマルチタスク対応には
+      # UISupportedInterfaceOrientationsに4方向すべてが必要)の再発防止。
+      # project.ymlの設定値だけでなく、実際にXcodeGen+xcodebuildが生成した
+      # .appバンドルのInfo.plistそのものを検証する(project.ymlのキー名の
+      # 誤り・XcodeGenの反映漏れ等も検出できるようにするため)。
+      - name: Verify generated Info.plist orientations (iPhone portrait-only, iPad all 4)
+        run: |
+          APP_PATH="DerivedData/Build/Products/Debug-iphonesimulator/FXEventAnalyzer.app"
+          PLIST="$APP_PATH/Info.plist"
+          if [ ! -f "$PLIST" ]; then
+            echo "::error::Info.plist not found at $PLIST (build output layout may have changed)"
+            exit 1
+          fi
+
+          IPHONE=$(/usr/libexec/PlistBuddy -c "Print :UISupportedInterfaceOrientations" "$PLIST" 2>&1) || {
+            echo "::error::UISupportedInterfaceOrientations key is missing from the generated Info.plist"
+            exit 1
+          }
+          IPAD=$(/usr/libexec/PlistBuddy -c "Print :UISupportedInterfaceOrientations~ipad" "$PLIST" 2>&1) || {
+            echo "::error::UISupportedInterfaceOrientations~ipad key is missing from the generated Info.plist"
+            exit 1
+          }
+
+          echo "iPhone (UISupportedInterfaceOrientations):"
+          echo "$IPHONE"
+          echo "iPad (UISupportedInterfaceOrientations~ipad):"
+          echo "$IPAD"
+
+          # iPhone: Portraitのみ(横画面禁止を維持)。
+          if ! echo "$IPHONE" | grep -q "UIInterfaceOrientationPortrait"; then
+            echo "::error::iPhone's UISupportedInterfaceOrientations must include UIInterfaceOrientationPortrait"
+            exit 1
+          fi
+          if echo "$IPHONE" | grep -qE "LandscapeLeft|LandscapeRight|PortraitUpsideDown"; then
+            echo "::error::iPhone's UISupportedInterfaceOrientations must be Portrait-only (横画面禁止の方針に反する値が含まれています)"
+            exit 1
+          fi
+
+          # iPad: 縦・横の4方向すべて(Appleのアップロード時バリデーション要件、409エラーの再発防止)。
+          for dir in UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight; do
+            if ! echo "$IPAD" | grep -q "$dir"; then
+              echo "::error::iPad's UISupportedInterfaceOrientations~ipad is missing $dir — Appleのアップロード時バリデーションがiPadのマルチタスク対応のため4方向すべてを要求する(TestFlight run #16の409エラーの再発防止)"
+              exit 1
+            fi
+          done
+
+          echo "Orientation check passed: iPhone=Portrait-only, iPad=all 4 directions"
+
       - name: Test
         env:
           SUPABASE_URL: ${{ secrets.FX_SUPABASE_URL }}
