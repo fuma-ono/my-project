@@ -741,7 +741,7 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
       it('service_role (the Backend and the ingestion jobs) still reads and embeds fx_prices', async () => {
         const prices = await ctx.serviceClient
           .from('fx_prices')
-          .select('timestamp, close', { count: 'exact' })
+          .select('timestamp, close')
           .eq('fx_pair_id', USDJPY_FX_PAIR_ID)
           .limit(1);
         expect(prices.error).toBeNull();
