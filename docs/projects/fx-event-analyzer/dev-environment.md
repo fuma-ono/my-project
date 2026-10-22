@@ -959,13 +959,108 @@ NO_DATA=データなし)。
 コード変更・DB接続・SQL実行・GitHub Actions実行・外部API呼び出しは、この節の調査でも
 行っていない。
 
-## 11. BLSの発表前予定行(SCHEDULED)のDEV確認手順(2026-10-22、HQ承認 Task 2)
+## 11. BLSの発表前予定行(SCHEDULED)のDEV確認手順(2026-10-22、HQ承認 Task 2。同日HQレビュー指摘を反映)
 
 `npm run ingest:official:bls-calendar` が、`blsSchedule.ts`の未来のエントリを`SCHEDULED`行として登録するようになった(仕組みは data-sources.md §14.8)。このジョブは**手動実行のみ**で、定期実行への組み込み(main 側のスケジュール変更)は**承認されていない**。ワークフローは変更していない。実行するかどうか・いつ実行するかは権限者の判断による。
 
-### 11.1 実行前・実行後に見る読み取り専用SQL
+DEVでの手順は「11.1 実行前の確認(P1〜P5、すべて読み取り専用) → 11.2 書き込みなしの事前実行(`--dry-run`) → 11.3 本実行 → 11.4 実行後の確認と期待結果」の順。どこかで11.5の中止条件に当たったら、そこで止めて報告する(DBの行を手で直したり消したりしない)。通知への影響は11.7を先に読むこと。
 
-どれも SELECT のみ(書き込みなし)。実行前に1回、実行後に1回流して比べる。
+### 11.1 実行前の確認(読み取り専用SQL P1〜P5)
+
+どれも SELECT のみ(書き込みなし)。結果は実行後との比較に使うので保存しておく。
+
+```sql
+-- P1: 既存の bls_schedule の行を保存する(実行後に「発表済みの行が変わっていない」ことを比べるため)
+select e.id, e.provider_event_id, i.code as indicator, e.status, e.data_status,
+       e.release_datetime, e.release_datetime_precision, e.importance,
+       e.created_at, e.updated_at,
+       s.actual, s.previous, s.verification_status, s.captured_at
+from economic_events e
+join economic_indicators i on i.id = e.indicator_id
+left join event_snapshots s on s.event_id = e.id and s.snapshot_type = 'RELEASE'
+where e.provider = 'bls_schedule'
+order by e.release_datetime;
+
+-- P1b: 同じ行の指紋(件数とハッシュ)。実行後に P1c と比べる
+select now() as checked_at,
+       count(*) as rows,
+       md5(string_agg(concat_ws('|', e.id, e.provider_event_id, e.status, e.data_status,
+                                e.release_datetime, e.release_datetime_precision, e.updated_at),
+                      ',' order by e.id)) as fingerprint
+from economic_events e
+where e.provider = 'bls_schedule';
+
+-- P2: 他の取得元(provider <> 'bls_schedule')の US_CPI・US_NFP の行が、
+--     過去60日〜表の末尾(2027-12)の範囲に無いこと(0行が正しい)。
+--     supabase/seed.sql の95行目以降(テスト用の架空イベント。例: 102行目 seed-us-cpi-2026-09、
+--     147行目 seed-us-nfp-2026-10)を DEV に流していると、ここに provider = 'seed' の行が出る。
+--     有料カレンダー(①)の行も同じ発表の2つ目の行になり、カレンダー・通知に二重に出る
+select e.provider, e.provider_event_id, i.code as indicator, e.status, e.release_datetime
+from economic_events e
+join economic_indicators i on i.id = e.indicator_id
+where i.code in ('US_CPI', 'US_NFP')
+  and e.provider <> 'bls_schedule'
+  and e.release_datetime >= now() - interval '60 days'
+  and e.release_datetime < timestamptz '2028-01-01'
+order by e.release_datetime;
+
+-- P2b: 参考(期間を問わない)。US_CPI・US_NFP の行が取得元ごとに何件あるか。'seed' があれば報告する
+select e.provider, i.code as indicator, count(*), min(e.release_datetime), max(e.release_datetime)
+from economic_events e
+join economic_indicators i on i.id = e.indicator_id
+where i.code in ('US_CPI', 'US_NFP')
+group by e.provider, i.code
+order by e.provider, i.code;
+
+-- P3: 2指標とも重要度 HIGH であること(2行・どちらも HIGH が正しい。予定行の importance はこの値を写す)
+select code, importance, country_code, currency_code
+from economic_indicators
+where code in ('US_CPI', 'US_NFP')
+order by code;
+
+-- P4: bls_schedule の未来の行・未発表の行が無いこと(どちらも 0 が正しい = 初回実行の前提)
+select count(*) filter (where release_datetime > now()) as future_rows,
+       count(*) filter (where status <> 'RELEASED') as unreleased_rows
+from economic_events
+where provider = 'bls_schedule';
+
+-- P5: 通知の対象になりうるアカウントの数(集計のみ。個人を特定する列は出さない。11.7 参照)
+--     user_settings が無いアカウントは、アプリが最初に設定を読んだ時点で既定値(通知オン)で作られる
+select (select count(*) from profiles) as profiles,
+       count(*) as user_settings_rows,
+       count(*) filter (where notify_push) as push_on,
+       count(*) filter (where notify_push and notify_indicators and 'HIGH' = any(notify_importances))
+         as would_notify_cpi_nfp
+from user_settings;
+```
+
+### 11.2 書き込みなしの事前実行(`--dry-run`)
+
+本実行と同じ環境変数(DEVの Supabase 接続情報)で、次を実行する。
+
+```bash
+cd fx-event-analyzer-backend
+npm run ingest:official:bls-calendar -- --dry-run
+```
+
+- 予定行の処理(`syncBlsScheduledEvents`)だけを、**書き込み系のメソッドを呼んだ時点で拒否するストア**(`readOnlyIngestionStore`)越しに、書き込みを省く`dryRun`で実行する(二重の安全策。単体テストで「何も書かれない」「書き込みメソッドは全部拒否される」ことを確認済み)
+- BLS API・発表後の経路・`ingestion_logs`への記録は**行わない**。DBへの書き込みは0件(読むのは`economic_indicators`と`bls_schedule`の行だけ)
+- 出力(1行のJSON)の期待値(2026-11-06 13:30Z より前に実行した場合): `would_insert_scheduled = 28`、`dry_run_writes` が28件で全部`action = 'insert'`・`status = 'SCHEDULED'`、`would_update_scheduled = 0`、`scheduled_unchanged = 0`、`would_cancel = 0`、`schedule_entry_conflict`・`schedule_rows_not_in_table`・`indicator_not_in_db`・`errors` が空、終了コード0
+- `dry_run_writes` の28件の`release_datetime`が、下の11.4の表と一致すること
+
+### 11.3 本実行
+
+11.1・11.2 で中止条件(11.5)に当たらず、11.7 の通知対策を済ませてから実行する。
+
+```bash
+cd fx-event-analyzer-backend
+npm run ingest:official:bls-calendar
+```
+
+- 予定行の処理が失敗しても(DBエラー等)、既存の発表後の経路(過去の月の`RELEASED`化)は**止めずに最後まで実行する**。失敗は出力の`errors`(`scheduled_sync:` で始まる)・`scheduled_sync_errors`(件数)と`ingestion_logs.error_message`・`details.scheduled_sync_errors`に残り、**終了コードは1**になる(`ingestion_logs.status`は従来の規則どおり、成功が1件でもあれば`PARTIAL`、無ければ`FAILURE`)
+- 発表後の経路は従来どおり BLS API を呼ぶ(キーなしの v1 で系列ごとに1回、計2回)
+
+### 11.4 実行後の確認(読み取り専用SQL)と期待結果
 
 ```sql
 -- (1) bls_schedule の行を状態・日時順に一覧(release_datetime は UTC。ニューヨーク時刻も併記)
@@ -973,9 +1068,11 @@ select e.provider_event_id,
        i.code as indicator,
        e.status,
        e.data_status,
+       e.importance,
        e.release_datetime,
        e.release_datetime at time zone 'America/New_York' as release_ny,
        e.release_datetime_precision,
+       e.created_at,
        e.updated_at
 from economic_events e
 join economic_indicators i on i.id = e.indicator_id
@@ -983,10 +1080,10 @@ where e.provider = 'bls_schedule'
 order by e.release_datetime;
 
 -- (2) 状態ごとの件数
-select status, data_status, count(*)
+select status, data_status, release_datetime_precision, count(*)
 from economic_events
 where provider = 'bls_schedule'
-group by status, data_status
+group by status, data_status, release_datetime_precision
 order by status, data_status;
 
 -- (3) 同じIDの重複が無いこと(0行が正しい)
@@ -996,11 +1093,18 @@ where provider = 'bls_schedule'
 group by provider_event_id
 having count(*) > 1;
 
--- (4) 予定行の発表時刻がニューヨーク時間 08:30 であること(0行が正しい)
+-- (4) 発表時刻がニューヨーク時間 08:30 であること(0行が正しい)
 select provider_event_id, release_datetime
 from economic_events
 where provider = 'bls_schedule'
   and to_char(release_datetime at time zone 'America/New_York', 'HH24:MI') <> '08:30';
+
+-- (4b) 予定行の UTC 時刻の内訳(13:30 が13件・12:30 が15件が正しい。夏時間 2027-03-14〜11-07 は 12:30Z)
+select to_char(release_datetime at time zone 'UTC', 'HH24:MI') as utc_time, count(*)
+from economic_events
+where provider = 'bls_schedule' and status = 'SCHEDULED'
+group by 1
+order by 1;
 
 -- (5) トリガーが記録した予定変更・中止(bls_schedule の行だけ)
 select c.change_type, e.provider_event_id, c.old_datetime, c.new_datetime, c.changed_at
@@ -1010,7 +1114,8 @@ where c.kind = 'INDICATOR' and e.provider = 'bls_schedule'
 order by c.changed_at desc;
 
 -- (6) 直近のジョブログの予定行の件数・要確認項目
-select started_at, status,
+select started_at, status, error_message,
+       details->'scheduled_sync_errors' as scheduled_sync_errors,
        details->'scheduled_inserted' as scheduled_inserted,
        details->'scheduled_updated' as scheduled_updated,
        details->'scheduled_unchanged' as scheduled_unchanged,
@@ -1022,16 +1127,94 @@ from ingestion_logs
 where job = 'ingest:official:bls-calendar'
 order by started_at desc
 limit 5;
+
+-- P1c: 実行前からあった行が変わっていないこと。P1b の checked_at を入れて流し、P1b と rows・fingerprint が同じなら正しい
+select count(*) as rows,
+       md5(string_agg(concat_ws('|', e.id, e.provider_event_id, e.status, e.data_status,
+                                e.release_datetime, e.release_datetime_precision, e.updated_at),
+                      ',' order by e.id)) as fingerprint
+from economic_events e
+where e.provider = 'bls_schedule'
+  and e.created_at < timestamptz '<P1b の checked_at>';
 ```
 
-### 11.2 期待する結果
+**初回実行後の期待結果**(2026-11-06 13:30Z より前に実行した場合):
 
-- **初回実行後**: (1) に、実行時点より後の発表日のエントリ(表の参照期間 2027-11 まで)が`SCHEDULED`・`PENDING`・`EXACT`で並ぶ。過去の月は従来どおり`RELEASED`(値が取れたもののみ)。(3)(4) は0行。(6) の`scheduled_inserted`が新しく作られた件数
-- **2回目以降(表を変えずに実行)**: (1)(2) は変わらない。(6) は`scheduled_inserted = 0`、`scheduled_unchanged`が予定行の件数
-- **表の日付を直した後**: 該当行の`release_datetime`だけが変わり(IDは同じ)、(5) に`RESCHEDULED`が1行増える。(6) の`scheduled_updated`が1
-- **発表後の実行**: 該当行が同じIDのまま`RELEASED`・`AVAILABLE`になる(行は増えない)。(5) には何も増えない
+- 予定行がちょうど**28行**増える。すべて`SCHEDULED`・`PENDING`・`EXACT`・`importance = HIGH`
+  - US_CPI 14行: 参照期間 2026-10〜2027-11、発表日 2026-11-10 … 2027-12-10
+  - US_NFP 14行: 参照期間 2026-10〜2027-11、発表日 2026-11-06 … 2027-12-03
+  - (4) は0行(すべてニューヨーク時間 08:30)。UTC は冬時間 13:30Z(2026-11-06〜2027-03-10 と 2027-11-10・12-03・12-10、計13行)、夏時間 12:30Z(2027-04-02〜2027-11-05、計15行)。例: 2026-11-06 は 13:30Z、2027-07-14 は 12:30Z
+- 実行前からあった行(発表済みの行)は変わらない: P1c が P1b と同じ件数・同じ指紋。過去の月で新しく`RELEASED`行が増えた場合は、それが前回の実行以降に BLS が発表した月だけであること(従来の経路の動作)
+- (3) は0行。P2 をもう一度流して0行のまま(他の取得元との重複なし)
+- (5) は**増えない**(INSERT ではトリガーは動かない)
+- (6)・ジョブ出力: `scheduled_inserted = 28`、`scheduled_updated = 0`、`scheduled_unchanged = 0`、`cancelled = 0`、`scheduled_sync_errors = 0`、`errors` が空、`schedule_entry_conflict`・`schedule_rows_not_in_table` が空、終了コード0
+
+**2回目の実行(表を変えずに、同じ日に)**: 予定行は1行も増えない。`scheduled_inserted = 0`、`scheduled_unchanged = 28`(日をおいて実行した場合は、その間に発表時刻を過ぎた分だけ減る)。(1)(2)(3)(5) は変わらない。`--dry-run` も`would_insert_scheduled = 0`・`dry_run_writes` が空になる。
+
+**その後の運用で起きること**:
+
+- **表の日付を直した後(行がまだ`SCHEDULED`のうちに)**: 該当行の`release_datetime`だけが変わり(IDは同じ)、(5) に`RESCHEDULED`が1行増える。(6) の`scheduled_updated`が1
+- **発表後の実行**: 該当行が同じIDのまま`RELEASED`・`AVAILABLE`になる(行は増えない)。表の日付と実際の発表日が同じなら (5) は増えない。**同じでない場合は11.6のとおり、発表後の実行で`RESCHEDULED`が記録されることがある**
 - (6) の`schedule_rows_not_in_table`・`schedule_entry_conflict`・`overdue`が空でなければ、data-sources.md §14.8 の手順で公式ページと照合する
 
-### 11.3 まだ確認できていないこと
+### 11.5 中止条件
 
-- 実DBのトリガー(`RESCHEDULED`・`CANCELLED`の記録)は結合テスト`tests/integration/bls-schedule-future.test.ts`で確認するが、これはCI(ローカルSupabase)でのみ動く。DEV DBでのジョブ実行はまだ行っていない
+次のどれかに当たったら、その段階で止めて報告する(DBの行を手で更新・削除しない。戻し方は別途判断を仰ぐ)。
+
+- **実行前**: P2 が1行以上(他の取得元・seed の CPI/NFP が期間内にある)/P3 が2行でない・HIGH でない/P4 のどちらかが0でない/P5 で通知の対象になるアカウントがあり、11.7 の対策をまだしていない
+- **dry-run**: 終了コード1、`errors`が空でない、`would_insert_scheduled`が28でない(2026-11-06 13:30Z 以降の実行なら、その時点で未来の件数)、`would_update_scheduled`・`would_cancel`が0でない、`schedule_entry_conflict`・`schedule_rows_not_in_table`・`indicator_not_in_db`が空でない、日時が11.4の表と違う
+- **本実行後**: 終了コード1・`scheduled_sync_errors`が0でない・`errors`が空でない/増えた予定行が28行でない/(3)(4) が0行でない、(4b) が13件・15件でない/(5) が増えた/P1c が P1b と違う/P2 が0行でなくなった。**2回目の実行はしない**
+- 2回目の実行で`scheduled_inserted`が0でない、または行が増えた
+
+### 11.6 予定変更が記録される場合・されない場合(HQ指摘 2026-10-22 で訂正)
+
+以前の版で「発表後の実行では (5) は増えない」「発表後は予定変更が記録されない」と読める書き方をしていたが、正確ではなかった。DBのトリガー(`trg_economic_events_schedule_change`、migration 20261015000002)は、**更新前の行が`SCHEDULED`で、`release_datetime`が変わった(または`CANCELLED`になった)UPDATE**をすべて記録する。そして既存の発表後の経路(`economicCalendar.ts`の`upsertSchedule`、100〜113行目)は、行がまだ`SCHEDULED`のうちに発表を取り込むとき、**表の日時が行の日時と違えば`release_datetime`の変更と`RELEASED`化を1回のUPDATEで行う**。このため、次のとおりになる(単体テスト「when a schedule change is / is not recorded」で確認)。
+
+**記録される(`event_schedule_changes`に`RESCHEDULED`、通知一覧に「カレンダー更新」が出うる)**:
+
+1. 行が`SCHEDULED`のうちに表の日付を直し、新しい日付がまだ未来のとき → 予定行の処理が日時を更新する(通常のケース)
+2. BLSが日付を**後ろへ**ずらし、表を直さないまま元の日付が過ぎ(BLSの値がまだ無いので行は`SCHEDULED`のまま)、**元の日付と新しい日付の両方を過ぎてから**表を直したとき → 次の実行で、発表後の経路が`release_datetime`を新しい日付に変えると同時に`RELEASED`にする。更新前は`SCHEDULED`なので`RESCHEDULED`が記録される(`changed_at`は発表より後)
+3. BLSが日付を**前へ**ずらし、新しい日付は過ぎたが表の古い日付がまだ未来のうちに表を直したとき → 2. と同じく、発表後の経路の1回のUPDATEで記録される
+
+**記録されない**:
+
+- 行が既に`RELEASED`になった後に表の日付を直したとき → 発表後の経路は`RELEASED`の行の日時を変えない(`upsertSchedule`は`SCHEDULED`のときだけ日時を更新する)。予定行の処理も過去のエントリには触らず、未来のエントリなら`schedule_entry_conflict`に記録するだけ。行の日時は古いまま残る
+- 表を直さないまま、BLSが**後ろへ**ずらした日に発表したとき → 表の古い日付は過ぎているので、発表後の実行で値が取れると、行は表の(古い)日時のまま`RELEASED`になる。日時が変わらないので記録されず、行の時刻も実際の発表時刻と違ったまま残る(価格反応の計算もこの時刻を基準にする)
+- 表を直さないまま、BLSが**前へ**ずらしたとき → 表の古い日付が来るまで行は`SCHEDULED`のまま(その間、古い日付で通知の予定に載る)。古い日付を過ぎた最初の実行で、古い日時のまま`RELEASED`になり、記録されない
+- 予定行を新しく作るとき・中止の行を新しく作るとき(INSERT)
+- 新しい日時がその指標の通常の発表時刻(08:30 ニューヨーク)でないとき → 発表後の経路は日時の変更を採用せず`schedule_change_ignored`に記録する(表の日付は時刻を持たないので、この経路では通常起きない)
+
+つまり、**表の修正が発表に間に合わないと、「発表後にカレンダー更新が届く」か「行の時刻が誤ったまま残る」かのどちらかになる**。これを避けるため、data-sources.md §14.8.1 の月1回の照合を守り、BLSの変更告知を見たら発表日より前に表を直す。
+
+### 11.7 通知への影響と、DEV確認中に意図しない通知を出さない方法
+
+**通知の仕組み(コードで確認した事実)**:
+
+- **サーバーからのプッシュ(APNs)は存在しない**。Backend に APNs の送信処理・鍵・デバイストークンは無く(migration 20261005000002 の冒頭「Backend側の送信基盤・デバイストークンは引き続き不要」)、`render.yaml`の環境変数も`SUPABASE_URL`・`SUPABASE_SERVICE_ROLE_KEY`・`PUBLIC_BASE_URL`等だけ。DEV に APNs の設定は無い
+- 端末に出る通知は、**iOSアプリが自分で予約するローカル通知**だけ(`LocalNotificationScheduler.swift`)。アプリは`GET /notifications/upcoming`(既定で「今から7日先まで」)の結果で、発表の N 分前(既定5分前)のローカル通知を予約し直す。予約し直すのは、アプリの起動時・フォアグラウンドに戻ったとき・通知一覧を開いたとき・通知設定を保存したとき・iOSのバックグラウンド更新(最短3時間おき、時刻はiOSが決める)。予約された通知は、アプリを閉じていても時刻に出る
+- `GET /notifications/upcoming`に載る条件(`buildUpcomingNotifications`・`isNotificationEligible`): そのアカウントの「プッシュ通知」がオン、「経済指標」がオン、行が`SCHEDULED`、精度`EXACT`、重要度が設定の`notify_importances`に入っている(既定`{HIGH,MEDIUM}`。無料プランは HIGH のみ・通貨ペア1つに制限)、通貨ペアの絞り込みがあればその指標の関連ペア(US_CPI・US_NFP は USDJPY・EURUSD)と重なる、通知時刻がおやすみ時間外(既定はオフ)。**今回の予定行(HIGH・EXACT・SCHEDULED)は既定の設定ならすべて対象になる**
+- アプリ内の通知一覧(`notification_inbox`)の行は、**アプリが`GET /notifications`を呼んだとき**に、通知時刻を過ぎたもの(かつ`user_settings.updated_at`以降のもの)だけが書かれる。ジョブやタイマーが書くことは無い(`jobs:cleanup-notifications`は期限切れを消すだけ)
+- 「カレンダー更新」(予定変更・中止)は、トリガーが書いた`event_schedule_changes`のうち直近7日分を、同じく`GET /notifications`のときに通知一覧へ入れる。**ローカル通知にはならない**(一覧に出るだけ)
+- **定期的に動くものは無い**: `render.yaml`は Web サービスだけ(cron なし)、FX 関連のワークフローに`schedule:`は無い(backend-ci は lint・テストのみ)、migration に pg_cron は無く、Backend のコードにも`setInterval`等のタイマーは無い。サーバー側が自分から通知を「送る」ことは無い
+- 対象アカウント: DEV のアカウントは大野さんのテスト用アカウントだけのはず(DBに接続していないので未確認。P5 で件数だけ確かめる)
+
+**今回の実行で起きること**:
+
+- 初回実行は INSERT だけなので、トリガーは動かず「カレンダー更新」は出ない
+- いちばん近い予定は NFP 2026-11-06 13:30Z(日本時間 22:30)、通知は既定で 22:25。これが`GET /notifications/upcoming`の7日間に入るのは **2026-10-30 22:30(日本時間)以降**。次は CPI 2026-11-10 13:30Z(11-03 22:30 以降に予約対象)
+- したがって、**2026-10-30 22:30(日本時間)より前に実行すれば、実行直後に予約される通知は無い**。ただしそのまま何もしなければ、10-30 以降にアプリを開いた(またはバックグラウンド更新が走った)テスト端末は、11-06 22:25 に雇用統計の「発表5分前」のローカル通知を出す。発表時刻を過ぎてから通知一覧を開くと、その通知が一覧にも入る
+- 予定行の日時は本物の BLS の予定なので、通知そのものは誤りではない。DEV確認の間に**通知を出したくない場合**は、次のどれかを行う
+
+**意図しない通知を防ぐ方法(おすすめ順)**:
+
+1. **実行前に、テスト用アカウントそれぞれのアプリで「設定 → 通知」(SCR-016)の「プッシュ通知」をオフにして保存する**。アプリは予約済みのローカル通知を消し(`removeUpcoming`)、Backend は`notify_push = false`の間`GET /notifications/upcoming`に何も返さず、通知一覧にも新しい行を書かない。DB を直接触らずに済む。確認したい場合は P5 の`push_on`(または`would_notify_cpi_nfp`)が0になっていること。あとで戻すときに設定を保存すると`user_settings.updated_at`が新しくなり、それ以前の分が通知一覧にまとめて入ることも無い
+2. 指標の通知だけ止めたいなら、同じ画面で「経済指標」をオフにするか、重要度から「高」を外す(P5 の`would_notify_cpi_nfp`が0)
+3. 端末の iOS 設定でこのアプリの通知を許可しない(端末に出なくなるだけで、アプリを開けば通知一覧には入る)
+4. 時期で避ける: 2026-10-30 22:30(日本時間)より前に実行・確認を終え、問題があればその前に報告して判断を仰ぐ(予定行は消さない)。ただし行を残す限り、10-30 以降は 1.〜3. のどれかをしないと通知は出る
+
+- 予定行の時刻が誤っていた場合に誤った時刻の通知が出る危険は、11.2(dry-run の日時確認)と 11.4 の (4)(4b) で事前・直後に確認する
+
+### 11.8 まだ確認できていないこと
+
+- 実DBのトリガー(`RESCHEDULED`・`CANCELLED`の記録)は結合テスト`tests/integration/bls-schedule-future.test.ts`で確認するが、これはCI(ローカルSupabase)でのみ動く。DEV DBでのジョブ実行(`--dry-run`を含む)はまだ行っていない
+- DEV のアカウント数・通知設定は未確認(P5 で確認する)

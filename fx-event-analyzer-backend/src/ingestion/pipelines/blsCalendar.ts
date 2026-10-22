@@ -53,13 +53,14 @@
 /** `notYetAvailable` entries whose scheduled date is this many days or more in the past with still no BLS value — probably means BLS rescheduled and the static table is stale, not a normal wait. */
 export const OVERDUE_AFTER_DAYS = 45;
 import type { OfficialStatsProvider } from '../providers.js';
-import type { JobCounters } from '../runner.js';
+import { JobCounters } from '../runner.js';
 import type { IngestionStore } from '../store.js';
 import { findMappingByCode, type IndicatorMapping } from '../mappings/indicators.js';
 import { BLS_SCHEDULE, type BlsScheduleEntry } from '../mappings/blsSchedule.js';
 import { providerIndicatorKey } from '../mappings/indicators.js';
 import { localDate, monthStart, shiftMonth, zonedWallTimeToUtc } from '../time.js';
 import type { NormalizedCalendarRelease, OfficialObservation } from '../types.js';
+import { ingestCalendarReleases } from './economicCalendar.js';
 import { computeOfficialValue, type OfficialValueResolver } from '../verification/official.js';
 import { displayUnit } from '../values.js';
 
@@ -271,7 +272,15 @@ export interface BlsScheduleSyncCounts {
  *   human to compare with BLS's official page.
  *
  * Existing counters (fetched / success / skipped / review) are NOT
- * touched; a per-entry failure goes to counters.error.
+ * touched; a per-entry failure goes to counters.error. The indicator
+ * lookup may still throw (nothing can be registered without it) — the job
+ * calls this through runBlsCalendarIngestion, which records that and still
+ * runs the RELEASED path. The counts so far reach counters.details even
+ * then (try/finally).
+ *
+ * dryRun: insertEvent / updateEvent を一切呼ばず、書き込むはずだった件数を同じ
+ * キーで数え、内容を details の `dry_run_writes` に残す(DEV実行前の「何が
+ * 入るか」の確認用。dev-environment.md §11)。
  */
 export async function syncBlsScheduledEvents(
   deps: {
@@ -279,6 +288,7 @@ export async function syncBlsScheduledEvents(
     entries?: readonly BlsScheduleEntry[];
     mappings?: readonly IndicatorMapping[];
     now?: () => Date;
+    dryRun?: boolean;
   },
   counters: JobCounters,
 ): Promise<BlsScheduleSyncCounts> {
@@ -292,75 +302,173 @@ export async function syncBlsScheduledEvents(
     cancelled: 0,
     cancelled_unchanged: 0,
   };
-  const indicators = await store.findIndicatorsByCode([...new Set(entries.map((e) => e.indicatorCode))]);
+  const dryRun = deps.dryRun ?? false;
+  /** dryRun なら書き込まず、内容だけ details.dry_run_writes に残す。 */
+  const write = async (
+    action: 'insert' | 'update',
+    target: { provider_event_id: string; status: string; release_datetime: string },
+    run: () => Promise<unknown>,
+  ): Promise<void> => {
+    if (dryRun) counters.note('dry_run_writes', { action, ...target });
+    else await run();
+  };
 
-  for (const entry of entries) {
-    const id = blsScheduleEventId(entry);
-    const mapping = findMappingByCode(entry.indicatorCode, deps.mappings);
-    // Unmapped entries are already reported by buildBlsScheduleReleases (`unmapped`).
-    if (!mapping?.providers.bls_schedule) continue;
-    const releaseAt = entryReleaseAt(entry, mapping);
-    if (!releaseAt) {
-      counters.error(`${id}: release time does not exist in ${mapping.release.timeZone}`);
-      continue;
-    }
-    if (!entry.cancelled && releaseAt.getTime() <= now.getTime()) continue;
-    const indicator = indicators.get(entry.indicatorCode);
-    if (!indicator) {
-      counters.note('indicator_not_in_db', entry.indicatorCode);
-      continue;
-    }
-    const releaseIso = releaseAt.toISOString();
-    const newRow = {
-      indicator_id: indicator.id,
-      provider: BLS_SCHEDULE_PROVIDER,
-      provider_event_id: id,
-      release_datetime: releaseIso,
-      release_datetime_precision: 'EXACT' as const,
-      importance: indicator.importance,
-    };
-    try {
-      const existing = await store.findEventByProviderId(BLS_SCHEDULE_PROVIDER, id);
-      if (entry.cancelled) {
-        if (!existing) {
-          await store.insertEvent({ ...newRow, status: 'CANCELLED', data_status: 'UNAVAILABLE' });
-          counts.cancelled += 1;
-        } else if (existing.status === 'SCHEDULED') {
-          await store.updateEvent(existing.id, { status: 'CANCELLED', data_status: 'UNAVAILABLE' });
-          counts.cancelled += 1;
-        } else if (existing.status === 'CANCELLED') {
-          counts.cancelled_unchanged += 1;
-        } else {
-          counters.note('schedule_entry_conflict', { provider_event_id: id, entry: 'CANCELLED', row: existing.status });
-        }
-      } else if (!existing) {
-        await store.insertEvent({ ...newRow, status: 'SCHEDULED', data_status: 'PENDING' });
-        counts.scheduled_inserted += 1;
-      } else if (existing.status !== 'SCHEDULED') {
-        counters.note('schedule_entry_conflict', { provider_event_id: id, entry: 'SCHEDULED', row: existing.status });
-      } else if (Date.parse(existing.release_datetime) === releaseAt.getTime()) {
-        counts.scheduled_unchanged += 1;
-      } else {
-        const from = existing.release_datetime;
-        await store.updateEvent(existing.id, { release_datetime: releaseIso, release_datetime_precision: 'EXACT' });
-        counts.scheduled_updated += 1;
-        counters.note('schedule_rescheduled', { provider_event_id: id, from, to: releaseIso });
+  try {
+    const indicators = await store.findIndicatorsByCode([...new Set(entries.map((e) => e.indicatorCode))]);
+
+    for (const entry of entries) {
+      const id = blsScheduleEventId(entry);
+      const mapping = findMappingByCode(entry.indicatorCode, deps.mappings);
+      // Unmapped entries are already reported by buildBlsScheduleReleases (`unmapped`).
+      if (!mapping?.providers.bls_schedule) continue;
+      const releaseAt = entryReleaseAt(entry, mapping);
+      if (!releaseAt) {
+        counters.error(`${id}: release time does not exist in ${mapping.release.timeZone}`);
+        continue;
       }
-    } catch (error) {
-      counters.error(`${id}: ${error instanceof Error ? error.message : String(error)}`);
+      if (!entry.cancelled && releaseAt.getTime() <= now.getTime()) continue;
+      const indicator = indicators.get(entry.indicatorCode);
+      if (!indicator) {
+        counters.note('indicator_not_in_db', entry.indicatorCode);
+        continue;
+      }
+      const releaseIso = releaseAt.toISOString();
+      const newRow = {
+        indicator_id: indicator.id,
+        provider: BLS_SCHEDULE_PROVIDER,
+        provider_event_id: id,
+        release_datetime: releaseIso,
+        release_datetime_precision: 'EXACT' as const,
+        importance: indicator.importance,
+      };
+      try {
+        const existing = await store.findEventByProviderId(BLS_SCHEDULE_PROVIDER, id);
+        if (entry.cancelled) {
+          if (!existing) {
+            const row = { ...newRow, status: 'CANCELLED', data_status: 'UNAVAILABLE' } as const;
+            await write('insert', row, () => store.insertEvent(row));
+            counts.cancelled += 1;
+          } else if (existing.status === 'SCHEDULED') {
+            const target = { provider_event_id: id, status: 'CANCELLED', release_datetime: existing.release_datetime };
+            await write('update', target, () =>
+              store.updateEvent(existing.id, { status: 'CANCELLED', data_status: 'UNAVAILABLE' }),
+            );
+            counts.cancelled += 1;
+          } else if (existing.status === 'CANCELLED') {
+            counts.cancelled_unchanged += 1;
+          } else {
+            counters.note('schedule_entry_conflict', {
+              provider_event_id: id,
+              entry: 'CANCELLED',
+              row: existing.status,
+            });
+          }
+        } else if (!existing) {
+          const row = { ...newRow, status: 'SCHEDULED', data_status: 'PENDING' } as const;
+          await write('insert', row, () => store.insertEvent(row));
+          counts.scheduled_inserted += 1;
+        } else if (existing.status !== 'SCHEDULED') {
+          counters.note('schedule_entry_conflict', { provider_event_id: id, entry: 'SCHEDULED', row: existing.status });
+        } else if (Date.parse(existing.release_datetime) === releaseAt.getTime()) {
+          counts.scheduled_unchanged += 1;
+        } else {
+          const from = existing.release_datetime;
+          await write('update', { provider_event_id: id, status: 'SCHEDULED', release_datetime: releaseIso }, () =>
+            store.updateEvent(existing.id, { release_datetime: releaseIso, release_datetime_precision: 'EXACT' }),
+          );
+          counts.scheduled_updated += 1;
+          counters.note('schedule_rescheduled', { provider_event_id: id, from, to: releaseIso });
+        }
+      } catch (error) {
+        counters.error(`${id}: ${errorText(error)}`);
+      }
     }
-  }
 
-  const tableIds = new Set(entries.map(blsScheduleEventId));
-  for (const row of await store.listUnreleasedEventsByProvider(BLS_SCHEDULE_PROVIDER)) {
-    if (tableIds.has(row.provider_event_id)) continue;
-    counters.note('schedule_rows_not_in_table', {
-      provider_event_id: row.provider_event_id,
-      status: row.status,
-      release_datetime: row.release_datetime,
-    });
+    const tableIds = new Set(entries.map(blsScheduleEventId));
+    let unreleased: Awaited<ReturnType<IngestionStore['listUnreleasedEventsByProvider']>>;
+    try {
+      unreleased = await store.listUnreleasedEventsByProvider(BLS_SCHEDULE_PROVIDER);
+    } catch (error) {
+      // 登録・更新の件数は失わない(finally)。表から消えた行の点検だけができなかったと記録する。
+      counters.error(`schedule_rows_not_in_table check failed: ${errorText(error)}`);
+      return counts;
+    }
+    for (const row of unreleased) {
+      if (tableIds.has(row.provider_event_id)) continue;
+      counters.note('schedule_rows_not_in_table', {
+        provider_event_id: row.provider_event_id,
+        status: row.status,
+        release_datetime: row.release_datetime,
+      });
+    }
+    return counts;
+  } finally {
+    Object.assign(counters.details, counts);
   }
+}
 
-  Object.assign(counters.details, counts);
-  return counts;
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * ジョブ本体(ingest:official:bls-calendar)。HQ指摘(2026-10-22): 予定行の処理
+ * (syncBlsScheduledEvents)が DB エラーで例外を投げても、既存の発表後の経路
+ * (buildBlsScheduleReleases → ingestCalendarReleases)は必ず実行する。予定行の
+ * 処理で出たエラーは `scheduled_sync: ` を付けて counters.error に入れ
+ * (ingestion_logs.error_message・ジョブ出力の errors)、件数を details の
+ * `scheduled_sync_errors` に入れる。ジョブはこれが1以上なら終了コード1にする
+ * (ingestion_logs.status は従来の規則どおり PARTIAL / FAILURE)。
+ */
+export async function runBlsCalendarIngestion(
+  deps: {
+    store: IngestionStore;
+    official: OfficialValueResolver;
+    entries?: readonly BlsScheduleEntry[];
+    mappings?: readonly IndicatorMapping[];
+    now?: () => Date;
+  },
+  counters: JobCounters,
+): Promise<{ scheduledSyncErrors: number }> {
+  // 予定行の処理のエラーだけを別に集めてから、prefix を付けて本体へ移す。
+  const sync = new JobCounters();
+  try {
+    await syncBlsScheduledEvents(deps, sync);
+  } catch (error) {
+    sync.error(`aborted: ${errorText(error)}`);
+  }
+  Object.assign(counters.details, sync.details);
+  for (const message of sync.errorMessages) counters.error(`scheduled_sync: ${message}`);
+  // errorMessages は20件までしか残らないので、残りは件数だけ足す。
+  counters.errors += sync.errors - sync.errorMessages.length;
+  counters.details.scheduled_sync_errors = sync.errors;
+
+  const built = await buildBlsScheduleReleases(deps);
+  counters.details.not_yet_available = built.notYetAvailable.length;
+  counters.details.overdue = built.overdue.map((e) => `${e.indicatorCode}:${e.referencePeriod}`);
+  counters.details.unmapped = built.unmapped.length;
+  counters.details.cancelled_entries = built.cancelled.length;
+  await ingestCalendarReleases(BLS_SCHEDULE_PROVIDER, built.releases, deps, counters);
+  return { scheduledSyncErrors: sync.errors };
+}
+
+/** 読み取り専用として通す IngestionStore のメソッド名(find* / get* / list* …)。 */
+const READ_ONLY_METHOD = /^(find|get|list|latest|today|first)/;
+
+/**
+ * dry-run 用: 読み取り系のメソッドだけを通し、それ以外(insert* / update* /
+ * upsert* / reserve* …)は呼ばれた時点で reject する。syncBlsScheduledEvents の
+ * dryRun が書き込みを呼ばないことへの二重の安全策。
+ */
+export function readOnlyIngestionStore(store: IngestionStore): IngestionStore {
+  return new Proxy(store, {
+    get(target, prop, receiver) {
+      const value: unknown = Reflect.get(target, prop, receiver);
+      if (typeof value !== 'function' || typeof prop !== 'string') return value;
+      if (!READ_ONLY_METHOD.test(prop)) {
+        return () => Promise.reject(new Error(`read-only store: ${prop} is not allowed in a dry run`));
+      }
+      return (value as (...args: unknown[]) => unknown).bind(target);
+    },
+  });
 }

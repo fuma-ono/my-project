@@ -2,7 +2,7 @@
 
 ## 変更履歴
 
-- **v1.2**(2026-10-22): HQ承認 Task 2。BLS独立経路(14章)が、発表前の CPI・NFP も `SCHEDULED` 行として登録するようにした(14.8節)。予定変更・中止・表から消えた行・期限超過の扱いと、月1回の公式ページとの照合手順を追加
+- **v1.2**(2026-10-22): HQ承認 Task 2。BLS独立経路(14章)が、発表前の CPI・NFP も `SCHEDULED` 行として登録するようにした(14.8節)。予定変更・中止・表から消えた行・期限超過の扱いと、月1回の公式ページとの照合手順を追加。同日のHQレビューを受けて、予定行の処理の失敗が発表後の経路を止めないようにし、`--dry-run`を追加、発表後に予定変更が記録される場合の説明を訂正(14.8.1)
 - **v1.1**(2026-10-16): HQ判断(方針は承認、契約・公開には前提条件)を受けて、利用条件を再確認(11章)、品質の測り方(12章)、為替の取り込みジョブ `ingest:fx-prices` を追加。**FRED は API 規約が「保存・DBへの取り込み」を禁じていると分かったため、`ingest:official` で使うのをやめた**(公式値は BLS のみ。FRED を使うには書面の許可が必要)。アプリ情報に「データの出典」を追加
 - **v1.0**(2026-10-15): 初版。取得元の構成(①〜⑤、ユーザー承認済み)、各取得元の利用条件の確認結果、正確さの仕組み、取り込みジョブ、有料候補の比較ツールをまとめた。実装は `fx-event-analyzer-backend/src/ingestion/`。DB変更は db-design.md v4.15、設計方針は design.md v1.11、API は api-design.md v1.29
 
@@ -590,10 +590,14 @@ bls.gov/opub/copyright-information.htm 等で確認(2026-10-17): BLSのデータ
 - **発表後は同じ行を更新する**: 発表後の実行では既存の経路(`buildBlsScheduleReleases`→`ingestCalendarReleases`)が同じIDの行を見つけて`SCHEDULED`→`RELEASED`に更新し、値を入れる。2つ目の行は作らない。照合・検証の規則は変更していない
 - **ログ**: `ingestion_logs.details`に`scheduled_inserted`(新規)・`scheduled_updated`(日付変更)・`scheduled_unchanged`・`cancelled`・`cancelled_unchanged`の件数を記録する。既存の`fetched`・`success`等の意味は変えていない(予定行の登録はこれらに数えない)
 - 過去のエントリ(発表時刻を過ぎたもの)はこの処理では触らない。従来どおり発表後の経路と`overdue`判定に任せる
+- **失敗しても発表後の経路は止めない**(2026-10-22 HQ指摘): 予定行の処理がDBエラー等で失敗しても、発表後の経路は最後まで実行する。失敗は`scheduled_sync:`付きのエラー(`ingestion_logs.error_message`・ジョブ出力の`errors`)と`details.scheduled_sync_errors`(件数)に残し、ジョブの終了コードを1にする(`runBlsCalendarIngestion`)
+- **書き込みなしの事前確認**: `npm run ingest:official:bls-calendar -- --dry-run` は予定行の処理だけを、書き込みを拒否するストア越しに実行して「何が書き込まれるか」を出力する。BLS API・発表後の経路・`ingestion_logs`は使わない(dev-environment.md §11.2)
 
 #### 14.8.1 予定変更の管理(人が表を直す)
 
-BLSが発表日を変更しても、システムが自動で追随することは無い。**人がBLSの公式ページを読んで`src/ingestion/mappings/blsSchedule.ts`の日付を書き換え、コードレビューを経て反映する**。次の実行で同じ行の`release_datetime`が更新され(`scheduled_updated`、details の`schedule_rescheduled`に変更前後を記録)、DBのトリガー(`trg_economic_events_schedule_change`、migration 20261015000002)が`event_schedule_changes`に`RESCHEDULED`を記録する。トリガーが記録するのは更新前の行が`SCHEDULED`のときだけなので、発表済み(`RELEASED`)の行の日時はこの処理では変えない(表と食い違えば details の`schedule_entry_conflict`に記録して人が確認する)。バックエンドが`event_schedule_changes`へ直接書くことはない。
+BLSが発表日を変更しても、システムが自動で追随することは無い。**人がBLSの公式ページを読んで`src/ingestion/mappings/blsSchedule.ts`の日付を書き換え、コードレビューを経て反映する**。次の実行で同じ行の`release_datetime`が更新され(`scheduled_updated`、details の`schedule_rescheduled`に変更前後を記録)、DBのトリガー(`trg_economic_events_schedule_change`、migration 20261015000002)が`event_schedule_changes`に`RESCHEDULED`を記録する。発表済み(`RELEASED`)の行の日時は、予定行の処理でも発表後の経路でも変えない(未来のエントリと食い違えば details の`schedule_entry_conflict`に記録して人が確認する)。バックエンドが`event_schedule_changes`へ直接書くことはない。
+
+**発表後に記録されることもある**(2026-10-22 HQ指摘で訂正): トリガーは「更新前の行が`SCHEDULED`で日時が変わったUPDATE」をすべて記録する。表の修正が発表に間に合わず、行が`SCHEDULED`のまま元の日付と新しい日付の両方を過ぎてから表を直すと、次の実行で発表後の経路(`economicCalendar.ts`の`upsertSchedule`)が日時の変更と`RELEASED`化を1回のUPDATEで行うので、そのとき`RESCHEDULED`が記録され、通知一覧の「カレンダー更新」にも出うる。逆に、行が`RELEASED`になった後に表を直しても何も記録されず、行の日時も古いまま残る。場合分けの全体は dev-environment.md §11.6。
 
 **月1回の照合手順**(毎月初め、または前月の発表後):
 

@@ -4,6 +4,8 @@ import { findMappingByCode, type IndicatorMapping } from '../../src/ingestion/ma
 import {
   buildBlsScheduleReleases,
   createBlsNativeResolver,
+  readOnlyIngestionStore,
+  runBlsCalendarIngestion,
   scheduleObservationRange,
   syncBlsScheduledEvents,
 } from '../../src/ingestion/pipelines/blsCalendar.js';
@@ -555,5 +557,216 @@ describe('syncBlsScheduledEvents (future releases → SCHEDULED rows, from the t
       hourCycle: 'h23',
     });
     for (const event of store.events) expect(newYork.format(new Date(event.release_datetime))).toBe('08:30');
+  });
+});
+
+describe('runBlsCalendarIngestion (the job body): a failing scheduled sync never stops the RELEASED path', () => {
+  const NOW = () => new Date('2026-10-22T00:00:00Z');
+  const cpiSep: BlsScheduleEntry = { indicatorCode: 'US_CPI', referencePeriod: '2026-09', releaseDate: '2026-10-14' };
+  const nfpNov: BlsScheduleEntry = { indicatorCode: 'US_NFP', referencePeriod: '2026-10', releaseDate: '2026-11-06' };
+  const official = () => createBlsNativeResolver(fakeBlsWith({ '2025-09': 320.0, '2026-09': 332.16 }, {}), WIDE_RANGE);
+
+  function withIndicators<T extends MemoryIngestionStore>(store: T): T {
+    store.indicators = [
+      { id: 'ind-cpi', code: 'US_CPI', importance: 'HIGH', favorable_direction: 'HIGHER_IS_POSITIVE' as const },
+      { id: 'ind-nfp', code: 'US_NFP', importance: 'HIGH', favorable_direction: 'HIGHER_IS_POSITIVE' as const },
+    ];
+    return store;
+  }
+
+  function eventOf(store: MemoryIngestionStore, providerEventId: string) {
+    return store.events.find((e) => e.provider_event_id === providerEventId);
+  }
+
+  it('the indicator lookup throws (once) → the past release is still ingested and the sync error is recorded', async () => {
+    class LookupFailsOnce extends MemoryIngestionStore {
+      failed = false;
+      override findIndicatorsByCode(codes: readonly string[]) {
+        if (!this.failed) {
+          this.failed = true;
+          return Promise.reject(new Error('connection reset'));
+        }
+        return super.findIndicatorsByCode(codes);
+      }
+    }
+    const store = withIndicators(new LookupFailsOnce());
+    const counters = new JobCounters();
+    const { scheduledSyncErrors } = await runBlsCalendarIngestion(
+      { store, official: official(), entries: [cpiSep, nfpNov], now: NOW },
+      counters,
+    );
+
+    expect(scheduledSyncErrors).toBe(1);
+    expect(counters.details.scheduled_sync_errors).toBe(1);
+    expect(counters.errorMessages).toEqual(['scheduled_sync: aborted: connection reset']);
+    // The counts still reach details (all 0: nothing was registered).
+    expect(counters.details).toMatchObject({ scheduled_inserted: 0, scheduled_updated: 0, scheduled_unchanged: 0 });
+    // The RELEASED path ran: CPI September is RELEASED; no future row was made.
+    expect(eventOf(store, 'bls_schedule:US_CPI:2026-09')?.status).toBe('RELEASED');
+    expect(counters.success).toBe(1);
+    expect(eventOf(store, 'bls_schedule:US_NFP:2026-10')).toBeUndefined();
+  });
+
+  it('listing un-released rows throws → rows already inserted are counted, the error recorded, the past path still runs', async () => {
+    class ListFails extends MemoryIngestionStore {
+      override listUnreleasedEventsByProvider(): never {
+        throw new Error('statement timeout');
+      }
+    }
+    const store = withIndicators(new ListFails());
+    const counters = new JobCounters();
+    const { scheduledSyncErrors } = await runBlsCalendarIngestion(
+      { store, official: official(), entries: [cpiSep, nfpNov], now: NOW },
+      counters,
+    );
+
+    expect(scheduledSyncErrors).toBe(1);
+    expect(counters.errorMessages).toEqual([
+      'scheduled_sync: schedule_rows_not_in_table check failed: statement timeout',
+    ]);
+    expect(counters.details.scheduled_inserted).toBe(1);
+    expect(eventOf(store, 'bls_schedule:US_NFP:2026-10')?.status).toBe('SCHEDULED');
+    expect(eventOf(store, 'bls_schedule:US_CPI:2026-09')?.status).toBe('RELEASED');
+  });
+
+  it('a per-entry insert failure is recorded with the prefix and the past path continues', async () => {
+    class InsertNfpFails extends MemoryIngestionStore {
+      override insertEvent(event: Parameters<MemoryIngestionStore['insertEvent']>[0]) {
+        if (event.provider_event_id === 'bls_schedule:US_NFP:2026-10')
+          return Promise.reject(new Error('duplicate key'));
+        return super.insertEvent(event);
+      }
+    }
+    const store = withIndicators(new InsertNfpFails());
+    const counters = new JobCounters();
+    const { scheduledSyncErrors } = await runBlsCalendarIngestion(
+      { store, official: official(), entries: [cpiSep, nfpNov], now: NOW },
+      counters,
+    );
+    expect(scheduledSyncErrors).toBe(1);
+    expect(counters.errorMessages).toEqual(['scheduled_sync: bls_schedule:US_NFP:2026-10: duplicate key']);
+    expect(eventOf(store, 'bls_schedule:US_CPI:2026-09')?.status).toBe('RELEASED');
+  });
+
+  it('no failure → scheduled_sync_errors 0, a SCHEDULED future row and the RELEASED past row', async () => {
+    const store = withIndicators(new MemoryIngestionStore());
+    const counters = new JobCounters();
+    const { scheduledSyncErrors } = await runBlsCalendarIngestion(
+      { store, official: official(), entries: [cpiSep, nfpNov], now: NOW },
+      counters,
+    );
+    expect(scheduledSyncErrors).toBe(0);
+    expect(counters.errorMessages).toEqual([]);
+    expect(counters.details).toMatchObject({ scheduled_sync_errors: 0, scheduled_inserted: 1, not_yet_available: 1 });
+    expect(store.events.map((e) => [e.provider_event_id, e.status]).sort()).toEqual([
+      ['bls_schedule:US_CPI:2026-09', 'RELEASED'],
+      ['bls_schedule:US_NFP:2026-10', 'SCHEDULED'],
+    ]);
+  });
+});
+
+describe('when a schedule change is / is not recorded (event_schedule_changes, dev-environment.md §11)', () => {
+  let store: MemoryIngestionStore;
+  const entry: BlsScheduleEntry = { indicatorCode: 'US_CPI', referencePeriod: '2026-10', releaseDate: '2026-11-10' };
+  const moved: BlsScheduleEntry = { ...entry, releaseDate: '2026-11-17' };
+
+  beforeEach(() => {
+    store = new MemoryIngestionStore();
+    store.indicators = [
+      { id: 'ind-cpi', code: 'US_CPI', importance: 'HIGH', favorable_direction: 'HIGHER_IS_POSITIVE' as const },
+    ];
+  });
+
+  /** One job run at `at`; `published` = whether BLS has published October by then. */
+  async function run(entries: readonly BlsScheduleEntry[], at: string, published: boolean) {
+    const values: Record<string, number> = published ? { '2025-10': 320.0, '2026-10': 332.8 } : { '2025-10': 320.0 };
+    const official = createBlsNativeResolver(fakeBlsWith(values, {}), WIDE_RANGE);
+    const counters = new JobCounters();
+    await runBlsCalendarIngestion({ store, official, entries, now: () => new Date(at) }, counters);
+    expect(counters.errorMessages).toEqual([]);
+  }
+
+  it('table fixed only after BOTH dates passed: the release update itself records RESCHEDULED (row was still SCHEDULED)', async () => {
+    await run([entry], '2026-10-22T00:00:00Z', false); // SCHEDULED at 11-10
+    // BLS moved it to 11-17 and nobody fixed the table. On 11-12 the table date has passed but BLS has
+    // not published → the row stays SCHEDULED at the old instant.
+    await run([entry], '2026-11-12T00:00:00Z', false);
+    expect(store.events[0]).toMatchObject({ status: 'SCHEDULED', release_datetime: '2026-11-10T13:30:00.000Z' });
+    // Table fixed on 11-20 (after 11-17, BLS has published): the sync skips the past entry; the RELEASED
+    // path changes release_datetime and status in ONE update → the trigger sees OLD.status = SCHEDULED.
+    await run([moved], '2026-11-20T00:00:00Z', true);
+    expect(store.events[0]).toMatchObject({ status: 'RELEASED', release_datetime: '2026-11-17T13:30:00.000Z' });
+    expect(store.scheduleChanges).toEqual([
+      {
+        target_id: store.events[0]!.id,
+        change_type: 'RESCHEDULED',
+        old_datetime: '2026-11-10T13:30:00.000Z',
+        new_datetime: '2026-11-17T13:30:00.000Z',
+      },
+    ]);
+  });
+
+  it('table fixed after the row became RELEASED: the stored time is kept and nothing is recorded', async () => {
+    await run([entry], '2026-10-22T00:00:00Z', false);
+    await run([entry], '2026-11-12T00:00:00Z', true); // published → RELEASED at the table's 11-10
+    expect(store.events[0]?.status).toBe('RELEASED');
+    await run([moved], '2026-11-20T00:00:00Z', true);
+    expect(store.events[0]).toMatchObject({ status: 'RELEASED', release_datetime: '2026-11-10T13:30:00.000Z' });
+    expect(store.scheduleChanges).toEqual([]);
+  });
+});
+
+describe('dry run (syncBlsScheduledEvents dryRun + readOnlyIngestionStore): writes nothing', () => {
+  const NOW = () => new Date('2026-10-22T00:00:00Z');
+  const indicators = [
+    { id: 'ind-cpi', code: 'US_CPI', importance: 'HIGH' as const, favorable_direction: 'HIGHER_IS_POSITIVE' as const },
+    { id: 'ind-nfp', code: 'US_NFP', importance: 'HIGH' as const, favorable_direction: 'HIGHER_IS_POSITIVE' as const },
+  ];
+
+  it('the real table on 2026-10-22: reports the same 28 inserts a real run makes, without writing', async () => {
+    const store = new MemoryIngestionStore();
+    store.indicators = [...indicators];
+    const counters = new JobCounters();
+    const counts = await syncBlsScheduledEvents(
+      { store: readOnlyIngestionStore(store), now: NOW, dryRun: true },
+      counters,
+    );
+    expect(counters.errorMessages).toEqual([]);
+    expect(store.events).toEqual([]);
+    expect(store.scheduleChanges).toEqual([]);
+
+    const realCounts = await syncBlsScheduledEvents({ store, now: NOW }, new JobCounters());
+    expect(counts).toEqual(realCounts);
+    expect(counts.scheduled_inserted).toBe(28);
+    const writes = counters.details.dry_run_writes as { action: string; provider_event_id: string }[];
+    expect(writes).toHaveLength(28);
+    expect(writes.every((w) => w.action === 'insert')).toBe(true);
+    expect(writes.map((w) => w.provider_event_id).sort()).toEqual(store.events.map((e) => e.provider_event_id).sort());
+  });
+
+  it('the read-only store rejects every write method and passes reads through', async () => {
+    const readOnly = readOnlyIngestionStore(new MemoryIngestionStore());
+    await expect(readOnly.findEventByProviderId('bls_schedule', 'x')).resolves.toBeNull();
+    await expect(readOnly.listUnreleasedEventsByProvider('bls_schedule')).resolves.toEqual([]);
+    await expect(readOnly.insertEvent({} as never)).rejects.toThrow(/read-only store: insertEvent/);
+    await expect(readOnly.updateEvent('id', {})).rejects.toThrow(/read-only store: updateEvent/);
+    await expect(readOnly.insertIngestionLog({} as never)).rejects.toThrow(/read-only store/);
+    await expect(readOnly.reserveApiCredits({} as never)).rejects.toThrow(/read-only store/);
+  });
+
+  it('even if dryRun were forgotten, the read-only store turns each write into a recorded error (no row)', async () => {
+    const store = new MemoryIngestionStore();
+    store.indicators = [...indicators];
+    const counters = new JobCounters();
+    await syncBlsScheduledEvents(
+      {
+        store: readOnlyIngestionStore(store),
+        entries: [{ indicatorCode: 'US_NFP', referencePeriod: '2026-10', releaseDate: '2026-11-06' }],
+        now: NOW,
+      },
+      counters,
+    );
+    expect(store.events).toEqual([]);
+    expect(counters.errorMessages[0]).toMatch(/read-only store: insertEvent/);
   });
 });
