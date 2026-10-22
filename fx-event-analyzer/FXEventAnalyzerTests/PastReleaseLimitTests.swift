@@ -386,6 +386,72 @@ final class PastReleaseLimitTests: XCTestCase {
         XCTAssertEqual(response.event.revisionStatus, RevisionStatus.none)
     }
 
+    // MARK: - GET /indicators/{id}/comparison(api-design v1.33 §21)
+
+    private static func comparisonJSON(events: String, extra: String = "") -> Data {
+        """
+        {
+          "indicator": { "id": "ind_1", "code": "US_CPI", "name": "US CPI", "display_name": null,
+                         "country_code": "US", "currency_code": "USD", "unit": "%" },
+          "fx_pair_id": "fx_1",
+          "timeframe": "5m",
+          "total_events": 1,
+          "analyzable_events": 1,
+          "stats": { "average_movement": 0.2, "average_pips": 20.0, "max_movement": 0.2, "min_movement": 0.2,
+                     "upward_count": 1, "downward_count": 0, "no_change_count": 0 },
+          "advanced_statistics": { "available": false, "required_entitlement": "VIEW_ADVANCED_STATS", "data": null },
+          "events": [\(events)],
+          "meta": { "page": 1, "limit": 20, "total": 3, "has_next": false },
+          "history_limit": { "applied": 3, "max_for_plan": 5, "pro_max": 20 }\(extra)
+        }
+        """.data(using: .utf8)!
+    }
+
+    func testComparisonDecodesLockedRowsWithNullValues() throws {
+        let json = Self.comparisonJSON(events: """
+            { "event_id": "evt_new", "release_datetime": "2026-09-10T12:30:00Z",
+              "forecast": 3.0, "actual": 3.2, "previous": 3.1, "surprise": 0.2, "surprise_direction": "POSITIVE",
+              "locked": false, "required_plan": null,
+              "pips_by_timeframe": { "1m": 7.7, "5m": 20.0, "15m": null } },
+            { "event_id": "evt_old", "release_datetime": "2026-05-10T12:30:00Z",
+              "forecast": null, "actual": null, "previous": null, "surprise": null, "surprise_direction": null,
+              "locked": true, "required_plan": "PRO",
+              "pips_by_timeframe": { "1m": null, "5m": null, "15m": null } },
+            { "event_id": "evt_older", "release_datetime": "2026-04-10T12:30:00Z",
+              "forecast": null, "actual": null, "previous": null, "surprise": null, "surprise_direction": null,
+              "locked": true, "required_plan": "PRO", "pips_by_timeframe": null }
+            """, extra: """
+            ,
+              "past_release_limit": { "applied": true, "max_for_plan": 3, "pro_max": null }
+            """)
+
+        let response = try makeDecoder().decode(ComparisonResponse.self, from: json)
+
+        XCTAssertEqual(response.events.map(\.isLocked), [false, true, true])
+        XCTAssertEqual(response.events[0].pipsByTimeframe?["5m"] ?? nil, 20.0)
+        XCTAssertNil(response.events[0].requiredPlan)
+        XCTAssertEqual(response.events[1].requiredPlan, "PRO")
+        XCTAssertNil(response.events[1].actual)
+        XCTAssertNil(response.events[1].pipsByTimeframe?["5m"] ?? nil)
+        XCTAssertNil(response.events[2].pipsByTimeframe)
+        XCTAssertEqual(response.pastReleaseLimit, PastReleaseLimit(applied: true, maxForPlan: 3, proMax: nil))
+    }
+
+    func testComparisonFromOlderBackendDecodesAsUnlocked() throws {
+        let json = Self.comparisonJSON(events: """
+            { "event_id": "evt_1", "release_datetime": "2026-09-10T12:30:00Z",
+              "forecast": 3.0, "actual": 3.2, "previous": 3.1, "surprise": 0.2, "surprise_direction": "POSITIVE",
+              "pips_by_timeframe": { "1m": 7.7, "5m": 20.0, "15m": -3.0 } }
+            """)
+
+        let response = try makeDecoder().decode(ComparisonResponse.self, from: json)
+
+        XCTAssertFalse(response.events[0].isLocked)
+        XCTAssertNil(response.events[0].requiredPlan)
+        XCTAssertNil(response.pastReleaseLimit)
+        XCTAssertEqual(response.events[0].actual, 3.2)
+    }
+
     // MARK: - GET /entitlements・PlanStore
 
     func testPlanLimitsDefaults() {

@@ -249,12 +249,20 @@ struct HistoricalComparisonView: View {
             .monospacedDigit()
             .padding(.leading, 5)
             .frame(width: Column.date, alignment: .leading)
-            valueCell(event.actual, unit: unit)
-            valueCell(event.forecast, unit: unit)
-            valueCell(event.previous, unit: unit)
-            pipsCell(event.pipsByTimeframe?["1m"] ?? nil)
-            pipsCell(event.pipsByTimeframe?["5m"] ?? nil)
-            pipsCell(event.pipsByTimeframe?["15m"] ?? nil)
+            if event.isLocked {
+                // 無料プランで隠された過去の発表(HQ指示 2026-10-22): 値・pipsの代わりに鍵の印。
+                // 行を押すと従来どおりイベント詳細へ進み、そこで鍵の印とプランの案内が出る。
+                PastReleaseLockBadge(size: 7)
+                    .frame(width: Column.value * 3 + Column.pips * 3)
+                    .accessibilityIdentifier("historyLockedRow")
+            } else {
+                valueCell(event.actual, unit: unit)
+                valueCell(event.forecast, unit: unit)
+                valueCell(event.previous, unit: unit)
+                pipsCell(event.pipsByTimeframe?["1m"] ?? nil)
+                pipsCell(event.pipsByTimeframe?["5m"] ?? nil)
+                pipsCell(event.pipsByTimeframe?["15m"] ?? nil)
+            }
         }
         .frame(height: Self.rowHeight)
         .contentShape(Rectangle())
