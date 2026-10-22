@@ -49,14 +49,12 @@ final class IndicatorDetailViewModel: ObservableObject {
             // scheduled release (date/forecast) — the same
             // `/indicators/{id}/events` endpoint the RELEASED fetch above
             // already uses, just with its existing `status` parameter set
-            // to SCHEDULED instead.
+            // to SCHEDULED instead. v1.31: 現在以降の近い順(`NextReleaseQuery`)。
+            let now = Date()
             async let scheduled: IndicatorEventsListResponse = apiClient.send(
                 Endpoint(
                     path: "indicators/\(indicatorId)/events",
-                    queryItems: [
-                        URLQueryItem(name: "status", value: "SCHEDULED"),
-                        URLQueryItem(name: "limit", value: "1"),
-                    ]
+                    queryItems: NextReleaseQuery.queryItems(limit: 1, now: now)
                 )
             )
             let (detailResponse, eventsResponse, scheduledResponse) = try await (detail, events, scheduled)
@@ -64,7 +62,7 @@ final class IndicatorDetailViewModel: ObservableObject {
                 indicator: detailResponse.indicator,
                 relatedFxPairs: detailResponse.relatedFxPairs,
                 recentEvents: eventsResponse.data,
-                nextScheduledEvent: scheduledResponse.data.first
+                nextScheduledEvent: NextReleaseQuery.next(in: scheduledResponse.data, after: now)
             )
         } catch let error as APIError where error.isNotConfigured {
             state = .backendNotConfigured

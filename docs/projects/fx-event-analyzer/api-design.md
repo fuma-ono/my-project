@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.30
+# FX Event Analyzer: API詳細設計書 v1.31
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -73,6 +73,11 @@
 - **v1.28**(2026-10-15): 要人発言の値動き(HQ指示 2026-10-15)。`GET /speeches/{id}`に`reactions`(発言者の通貨を含む主要ペア最大4件 × 発言前の価格と`1m`・`5m`・`15m`の`pips`。発言済み(`DELIVERED`)の発言だけ、それ以外は`[]`)を追加(14.5節)。`GET /speeches/{id}/reaction`(14.8節、`GET /events/{id}/reaction`と同じ形)・`GET /speeches/{id}/reaction/chart`(14.9節、`GET /events/{id}/reaction/chart`と同じ形・同じ表示範囲)・`GET /speakers/{speaker_id}/comparison`(14.10節、要人ごとの過去の発言の比較。上限は`history_events_max`)を追加。要人発言の値動きは保存せず、`fx_prices`の1分足から**API応答時に計算する**(14.11節。保存テーブル・ジョブは追加しない。18.1節の「pips系はDB保存値を返す」は経済指標イベントのみの方針)。価格が無い値は`null`(`DATA_UNAVAILABLE`)で、補った値は返さない。Error Code `SPEAKER_NOT_FOUND`(404)を追加
 - **v1.29**(2026-10-15): データ取得の正確さの仕組み(data-sources.md、db-design.md v4.15)。**Endpoint・Response の形は変えない。** (1) Ingestion Worker が検証・公式統計との照合で保留にした経済指標の値(`ingestion_staged_values`)はどのAPIも返さない。保留中のイベントは `data_status` = `DATA_PENDING`・`snapshot` = `null`(7.3節)。(2) 2つ目の取得元と合わなかった1分足(`fx_prices.verification_status = UNVERIFIED`)は、チャート(`/reaction/chart`)・最新価格(`GET /home` の major_fx、レートアラートの判定)・要人発言の値動き(14.11節)で使わない。欠けた足と同じ扱いで、補わない(必要な値は `null` / `DATA_UNAVAILABLE`)
 - **v1.30**(2026-10-16): FREEの機能の付与(HQ指示 2026-10-16)。**Endpoint・Response の形は変えない。** これまでFREEの機能(`VIEW_BASIC_EVENT` / `VIEW_HISTORICAL` / `VIEW_MARKET_REACTION`)は`entitlements`の行が無いと使えず、その行を入れる処理がどこにも無かったため、登録したばかりのユーザーが`GET /speeches`・`GET /calendar`・`GET /events/{id}`などで`403 FEATURE_NOT_ENTITLED`になっていた。全ユーザーが持つ機能を`default_entitlements`(db-design.md v4.16 3.3.1節)に置き、ユーザーの有効な機能 = 有効な`entitlements`の行 + そのユーザーの行が無い`default_entitlements`の機能、とした。同じfeature_codeの`entitlements`の行があれば、有効・無効・期限切れのどれでもそちらが優先する(27章・28章)。`GET /entitlements`の`features`は既定の機能も含み、アルファベット順
+- **v1.31**(2026-10-22): 「次の発表」の表示の修正(HQ指示 2026-10-22。BLS・FOMC の未来の予定を登録する前に必要)。未来の予定が何件も入ると、新しい順の先頭がいちばん先の予定(翌年の12月など)になり、指標の詳細・お気に入り・イベントの詳細の「次の発表」や、`latest_event`・イベントの検索の先頭に出ていたため。
+  - 13.3: Query に`order`(`asc` / `desc`)を追加。省略時は`status=SCHEDULED`なら`asc`(近い予定が先)、それ以外は`desc`(新しい発表が先、これまでどおり)。アプリは「次の発表」を`status=SCHEDULED&from=<現在>&order=asc&limit=1`(イベントの詳細は`limit=2`で、表示中のイベントを除く)で求め、受け取った行も端末側で現在以降に絞る(予定が無いときに、過去の発表や取り込み待ちの行を「次の発表」にしない)
+  - 13.2: `latest_event`は`release_datetime`が現在以前で最も新しいEvent(状態は問わない)。未来の予定は含めない
+  - 23: Event 検索の並びを、各指標の次の予定(1指標1件、近い順)→ 現在より前の Event(新しい順)に変更。2件目以降の未来の予定は返さない
+  - 発表の履歴(`status=RELEASED`など)の並び順、13.1 の`next_release_datetime`(もともと現在以降の最も早い予定)は変えない
 
 ---
 
@@ -513,6 +518,8 @@ sort：`name`(既定)/ `importance` / `created_at` / `next_release`(v1.20)。`ne
 
 Responseには以下を含む：indicator / favorable_direction / related_fx_pairs / latest_event
 
+`latest_event`(v1.31で明確化)：`release_datetime`が現在以前で最も新しいEvent(`id` / `release_datetime` / `status`、状態は問わない)。未来の予定は含めない。該当が無ければ`null`。
+
 Indicator Detailでは、name / code / country / currency / importance / description / frequency / unit / source / source_url / favorable_direction などを取得可能とする。
 
 **indicatorオブジェクトの項目(v1.16で`name_en`・`key_points`、v1.18で`market_view_above`・`market_view_below`、v1.20で`next_release_datetime`・`next_event_id`・`latest_release_datetime`、v1.21で`display_name`を追加)**: 13.1の一覧の各行と13.2の`indicator`は同じ形：
@@ -548,16 +555,20 @@ Indicator Detailでは、name / code / country / currency / importance / descrip
 - `key_points`(v1.16)：SCR-006の「注目される理由」。日本語の短文の配列(2〜4件程度、DB上の上限6件)、配列順 = 表示順。**未登録(DBの`NULL`)は`[]`で返し、`null`にはしない**
 - `market_view_above` / `market_view_below`(v1.18)：一般的な見方。SCR-008で結果と予想の差に応じて表示(結果が予想を上回ったら`market_view_above`、下回ったら`market_view_below`)。実際の値動きの原因と断定する表示はしない。人が書いた日本語1文(200文字以内、AI生成ではない)。未登録は`null`(画面側で項目を出さない)
 - `next_release_datetime` / `next_event_id`(v1.20)：SCR-005の次回発表。その指標の`economic_events`のうち`status = SCHEDULED`かつ`release_datetime`が現在以降で最も早いEvent(同時刻はEvent IDの小さい方)の`release_datetime`とID。該当が無ければ両方`null`。発表時刻を過ぎてもまだ`SCHEDULED`のEvent(取り込み待ち)と`CANCELLED`は次回発表にしない
-- `latest_release_datetime`(v1.20)：最新の`status = RELEASED`のEventの`release_datetime`。無ければ`null`。次回発表が無い指標で「前回発表」として表示する。13.2の`latest_event`(状態を問わず最新のEvent)とは別の項目
+- `latest_release_datetime`(v1.20)：最新の`status = RELEASED`のEventの`release_datetime`。無ければ`null`。次回発表が無い指標で「前回発表」として表示する。13.2の`latest_event`(状態を問わず、現在以前で最新のEvent。v1.31)とは別の項目
 - 3項目は一覧の1ページ分をまとめて求める(指標ごとに問い合わせない)
 
 ## 13.3 GET /api/v1/indicators/{indicator_id}/events
 
 指定Indicatorの過去・未来Event一覧を取得する。
 
-Query：from / to / status / page / limit / sort
+Query：from / to / status / page / limit / sort / order(v1.31)
 
 fromはinclusive。toはexclusive。
+
+`order`(v1.31)：`release_datetime`の並び順。`asc` / `desc`。省略時は`status=SCHEDULED`なら`asc`(近い予定が先)、それ以外は`desc`(新しい発表が先)。それ以外の値は400。
+
+**「次の発表」の求め方(v1.31)**：指標の詳細(SCR-006)・お気に入り・イベントの詳細の「次の発表」は`status=SCHEDULED&from=<現在のUTC>&order=asc&limit=1`の先頭(イベントの詳細は`limit=2`で、表示中のイベントを除いた先頭)。`from`を付けるのは、発表時刻を過ぎてもまだ`SCHEDULED`の行(取り込み待ち。BLS は発表後にジョブを動かすまで、FOMC は発表後もそのまま)を「次の発表」にしないため。該当が無ければ「次の発表」は出さない(過去の発表を代わりに出さない)。13.1 の`next_release_datetime`と同じ条件。
 
 ## 13.4 GET /api/v1/indicators/{indicator_id}/fx-pairs
 
@@ -1215,6 +1226,8 @@ type：all / indicator / event / fx_pair / currency
 **Currency**(v1.1で修正、A-5): `currency_code`(DB上のSource of Truth)に加え、**アプリケーション側の静的なCode→Nameマッピング**(例: `USD → US Dollar`、`JPY → Japanese Yen`、`EUR → Euro`)を用いてcurrency nameでも検索可能にする。DBに`currencies`マスタテーブルは追加しない。将来Currency情報が大幅に増える場合のみマスタテーブル化を再検討する。
 
 MVPでは部分一致検索。Full Text SearchはMVP対象外。
+
+**Eventの並び(v1.31)**：① 該当した各指標の次の予定(`status = SCHEDULED`かつ`release_datetime`が現在以降で最も早いもの、1指標1件)を近い順、② `release_datetime`が現在より前のEvent(状態は問わない)を新しい順、の順に`limit`件まで返す。2件目以降の未来の予定と、未来の`CANCELLED`は返さない(未来の予定が先頭を埋めないため)。
 
 **表示名(v1.22で追加)**: `indicators`の各行(`id`・`code`・`name`・`display_name`・`country_code`・`currency_code`)と`events`の各行(`id`・`indicator_id`・`indicator_name`・`display_name`・`release_datetime`・`status`)に`display_name`(13.2節、未登録は`null`)を返す。検索対象は変えない(`display_name`では検索しない)。
 

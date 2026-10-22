@@ -13,6 +13,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * Also supports `.in` / `.gte` / `.order` / `.range` (and treats `.or` as a
  * no-op) for the indicator list's release-summary queries (§13.1, v1.20).
  * `count` is the filtered row count before `.range` / `.limit`.
+ * `.lt` / `.lte` are for the "before now" filters of §13.2 `latest_event` and
+ * the event search (v1.31).
  * `.neq` / `.limit` are for the latest-price queries (homeRepository /
  * fxPairsRepository). `.order` is a stable sort, so rows with the same value
  * keep their insertion order — tests use that to put a tie first.
@@ -51,6 +53,14 @@ export function fakeSupabaseClient(tableData: Record<string, unknown[]>): Supaba
       },
       gte: (column: string, value: string) => {
         rows = rows.filter((row) => Date.parse(String(field(row, column))) >= Date.parse(value));
+        return chain;
+      },
+      lt: (column: string, value: string) => {
+        rows = rows.filter((row) => Date.parse(String(field(row, column))) < Date.parse(value));
+        return chain;
+      },
+      lte: (column: string, value: string) => {
+        rows = rows.filter((row) => Date.parse(String(field(row, column))) <= Date.parse(value));
         return chain;
       },
       neq: (column: string, value: unknown) => {

@@ -31,18 +31,14 @@ final class EventDetailViewModel: ObservableObject {
 
     /// 画面側がイベントを読み込んだ後に呼ぶ(`load`の通信の順番は変えない)。
     func loadIndicator(id: String) async {
+        // v1.31: 現在以降の近い順(`NextReleaseQuery`)。このイベント自体が発表前なら
+        // 先頭がこのイベントになるため2件受け取り、それより後の回を次回とする。
+        let now = Date()
         let response: IndicatorEventsListResponse? = try? await apiClient.send(Endpoint(
             path: "indicators/\(id)/events",
-            queryItems: [
-                URLQueryItem(name: "status", value: "SCHEDULED"),
-                URLQueryItem(name: "limit", value: "2"),
-            ]
+            queryItems: NextReleaseQuery.queryItems(limit: 2, now: now)
         ))
-        // このイベント自体が発表前なら、それより後の回を次回とする。
-        nextRelease = response?.data
-            .filter { $0.id != eventId && $0.releaseDatetime > Date() }
-            .map(\.releaseDatetime)
-            .min()
+        nextRelease = NextReleaseQuery.next(in: response?.data ?? [], after: now, excluding: eventId)?.releaseDatetime
     }
 
     func load() {

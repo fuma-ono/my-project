@@ -209,6 +209,15 @@ export interface ListIndicatorEventsFilters {
   from?: string | undefined;
   to?: string | undefined;
   status?: string | undefined;
+  order?: 'asc' | 'desc' | undefined;
+}
+
+/** v1.31: `order` 省略時の並び順。予定(SCHEDULED)は近い順、それ以外(発表の履歴など)は新しい順。 */
+export function resolveIndicatorEventsOrder(
+  filters: Pick<ListIndicatorEventsFilters, 'status' | 'order'>,
+): 'asc' | 'desc' {
+  if (filters.order) return filters.order;
+  return filters.status === 'SCHEDULED' ? 'asc' : 'desc';
 }
 
 /** api-design.md §13.3 — past/future Event list for one Indicator.
@@ -232,7 +241,8 @@ export async function listEventsForIndicator(
   if (filters.status) query = query.eq('status', filters.status);
 
   const { from, to } = rangeFor(pagination.page, pagination.limit);
-  const { data, error, count } = await query.order('release_datetime', { ascending: false }).range(from, to);
+  const ascending = resolveIndicatorEventsOrder(filters) === 'asc';
+  const { data, error, count } = await query.order('release_datetime', { ascending }).range(from, to);
   if (error) throw error;
 
   const rows: IndicatorEventRow[] = (data ?? []).map((row) => {
@@ -269,11 +279,18 @@ export interface LatestEventRow {
   status: string;
 }
 
-export async function getLatestEvent(supabase: SupabaseClient, indicatorId: string): Promise<LatestEventRow | null> {
+/** §13.2 `latest_event`: `release_datetime` が `now` 以前で最も新しい Event(状態は問わない)。
+ * v1.31 で未来の予定を除いた(未来の予定が入ると、いちばん先の予定が「最新」になっていたため)。 */
+export async function getLatestEvent(
+  supabase: SupabaseClient,
+  indicatorId: string,
+  now: Date = new Date(),
+): Promise<LatestEventRow | null> {
   const { data, error } = await supabase
     .from('economic_events')
     .select('id, release_datetime, status')
     .eq('indicator_id', indicatorId)
+    .lte('release_datetime', now.toISOString())
     .order('release_datetime', { ascending: false })
     .limit(1)
     .maybeSingle();

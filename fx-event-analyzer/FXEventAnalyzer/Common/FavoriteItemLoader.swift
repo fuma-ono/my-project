@@ -41,13 +41,12 @@ struct FavoriteItemLoader {
     func fetchFavoriteIndicator(id: String) async -> HomeFavoriteItem? {
         do {
             async let detail: IndicatorDetailResponse = apiClient.send(Endpoint(path: "indicators/\(id)"))
+            // v1.31: 次の発表は現在以降の近い順(`NextReleaseQuery`)。
+            let now = Date()
             async let scheduled: IndicatorEventsListResponse = apiClient.send(
                 Endpoint(
                     path: "indicators/\(id)/events",
-                    queryItems: [
-                        URLQueryItem(name: "status", value: "SCHEDULED"),
-                        URLQueryItem(name: "limit", value: "1"),
-                    ]
+                    queryItems: NextReleaseQuery.queryItems(limit: 1, now: now)
                 )
             )
             let (response, scheduledResponse) = try await (detail, scheduled)
@@ -57,7 +56,7 @@ struct FavoriteItemLoader {
                 currencyCode: response.indicator.currencyCode,
                 name: CountryFlag.indicatorDisplayText(response.indicator.name, countryCode: response.indicator.countryCode, displayName: response.indicator.displayName),
                 importance: response.indicator.importance,
-                nextReleaseDatetime: scheduledResponse.data.first?.releaseDatetime
+                nextReleaseDatetime: NextReleaseQuery.next(in: scheduledResponse.data, after: now)?.releaseDatetime
             )
         } catch {
             return nil

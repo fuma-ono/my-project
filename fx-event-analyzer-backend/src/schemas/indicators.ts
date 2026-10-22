@@ -17,4 +17,6 @@ export const listIndicatorEventsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
   sort: z.enum(['release_datetime']).optional(),
+  // v1.31: 並び順。省略時は status=SCHEDULED なら asc(近い予定が先)、それ以外は desc(新しい発表が先)。
+  order: z.enum(['asc', 'desc']).optional(),
 });

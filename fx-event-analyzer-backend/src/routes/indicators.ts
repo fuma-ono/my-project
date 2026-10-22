@@ -77,7 +77,7 @@ export function registerIndicatorRoutes(app: FastifyInstance): void {
       const { rows, total } = await listEventsForIndicator(
         app.supabase,
         indicatorId,
-        { from: query.from, to: query.to, status: query.status },
+        { from: query.from, to: query.to, status: query.status, order: query.order },
         pagination,
       );
 

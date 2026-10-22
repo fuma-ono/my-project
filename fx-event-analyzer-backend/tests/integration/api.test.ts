@@ -287,6 +287,78 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
         expect(time(indicator.latest_release_datetime)).toBe(Date.parse('2026-09-12T03:00:00Z'));
       });
 
+      // v1.31「次の発表」: 予定(SCHEDULED)は近い順が既定。アプリは from=現在 を付けて先頭の1件を次の発表にする。
+      it('status=SCHEDULED lists the nearest future release first (v1.31), and order=desc keeps the old order', async () => {
+        const url = `/api/v1/indicators/${BOJ_INDICATOR_ID}/events?status=SCHEDULED&limit=1`;
+        const nearest = await ctx.app.inject({ method: 'GET', url, headers: authHeader });
+        expect(nearest.statusCode).toBe(200);
+        expect(JSON.parse(nearest.body).data.map((row: { event_id: string }) => row.event_id)).toEqual([
+          BOJ_NEXT_EVENT_ID,
+        ]);
+
+        const from = encodeURIComponent(new Date().toISOString());
+        const withFrom = await ctx.app.inject({ method: 'GET', url: `${url}&from=${from}`, headers: authHeader });
+        expect(JSON.parse(withFrom.body).data[0].event_id).toBe(BOJ_NEXT_EVENT_ID);
+
+        const desc = await ctx.app.inject({ method: 'GET', url: `${url}&order=desc`, headers: authHeader });
+        expect(JSON.parse(desc.body).data[0].event_id).toBe(BOJ_LATER_EVENT_ID);
+
+        const bad = await ctx.app.inject({ method: 'GET', url: `${url}&order=up`, headers: authHeader });
+        expect(bad.statusCode).toBe(400);
+      });
+
+      it('keeps the release history newest first (status=RELEASED, v1.31)', async () => {
+        const response = await ctx.app.inject({
+          method: 'GET',
+          url: `/api/v1/indicators/${BOJ_INDICATOR_ID}/events?status=RELEASED`,
+          headers: authHeader,
+        });
+        const times: number[] = JSON.parse(response.body).data.map((row: { release_datetime: string }) =>
+          Date.parse(row.release_datetime),
+        );
+        expect(times.length).toBeGreaterThan(0);
+        expect([...times].sort((a, b) => b - a)).toEqual(times);
+      });
+
+      it('never shows a past-due SCHEDULED release as the next one when from=now is sent (v1.31)', async () => {
+        // NFP の seed の行は SCHEDULED のまま発表時刻(2026-10-03)を過ぎている。
+        const from = encodeURIComponent(new Date().toISOString());
+        const response = await ctx.app.inject({
+          method: 'GET',
+          url: `/api/v1/indicators/${NFP_INDICATOR_ID}/events?status=SCHEDULED&from=${from}&limit=1`,
+          headers: authHeader,
+        });
+        expect(response.statusCode).toBe(200);
+        expect(JSON.parse(response.body).data).toEqual([]);
+      });
+
+      it('latest_event is the newest event up to now, not the farthest future schedule (v1.31)', async () => {
+        const response = await ctx.app.inject({
+          method: 'GET',
+          url: `/api/v1/indicators/${BOJ_INDICATOR_ID}`,
+          headers: authHeader,
+        });
+        const { latest_event: latestEvent } = JSON.parse(response.body) as {
+          latest_event: { id: string; release_datetime: string } | null;
+        };
+        expect(latestEvent).not.toBeNull();
+        expect(insertedIds).not.toContain(latestEvent!.id);
+        expect(Date.parse(latestEvent!.release_datetime)).toBeLessThanOrEqual(Date.now());
+      });
+
+      it('event search lists the next schedule (one per indicator) before past events (v1.31)', async () => {
+        const response = await ctx.app.inject({
+          method: 'GET',
+          url: '/api/v1/search?q=BOJ_RATE&type=event',
+          headers: authHeader,
+        });
+        expect(response.statusCode).toBe(200);
+        const events: Array<{ id: string }> = JSON.parse(response.body).events;
+        expect(events[0]!.id).toBe(BOJ_NEXT_EVENT_ID);
+        expect(events.map((row) => row.id)).not.toContain(BOJ_LATER_EVENT_ID);
+        expect(events.map((row) => row.id)).toContain(BOJ_EVENT_ID);
+      });
+
       it('sort=next_release puts indicators with a next release first, ascending, then the rest', async () => {
         const response = await ctx.app.inject({
           method: 'GET',

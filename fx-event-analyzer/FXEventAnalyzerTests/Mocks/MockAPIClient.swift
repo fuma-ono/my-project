@@ -17,6 +17,9 @@ final class MockAPIClient: APIClient {
     var results: [String: MockResult] = [:]
     private(set) var lastEndpoint: Endpoint?
     private(set) var requestedPaths: [String] = []
+    /// Every endpoint sent, in order — for asserting query items (e.g. the
+    /// "次の発表" query, v1.31).
+    private(set) var requestedEndpoints: [Endpoint] = []
     /// View models like `IndicatorDetailViewModel` fire two `send` calls
     /// concurrently via `async let`; without this, concurrent mutation of
     /// `requestedPaths`/`lastEndpoint` from those overlapping calls is a
@@ -27,6 +30,7 @@ final class MockAPIClient: APIClient {
         stateLock.lock()
         lastEndpoint = endpoint
         requestedPaths.append(endpoint.path)
+        requestedEndpoints.append(endpoint)
         let outcome = results[endpoint.path] ?? result
         stateLock.unlock()
         switch outcome {
