@@ -25,7 +25,7 @@ struct IndicatorEventSummary: Decodable, Identifiable, Equatable {
     let previous: Double?
     let surprise: Double?
     let surpriseDirection: SurpriseDirection?
-    /// 無料プランで隠された過去の発表(api-design v1.31 §13.3)。古いBackendではnil(=隠していない)。
+    /// 無料プランで隠された過去の発表(api-design v1.33 §13.3)。古いBackendではnil(=隠していない)。
     var locked: Bool? = nil
     /// ロックを外すのに必要なプラン(`"PRO"`)。ロックしていなければnil。
     var requiredPlan: String? = nil
@@ -51,7 +51,7 @@ struct IndicatorEventSummary: Decodable, Identifiable, Equatable {
 struct IndicatorEventsListResponse: Decodable {
     let data: [IndicatorEventSummary]
     let meta: PaginationMeta
-    /// 無料プランの過去の発表の上限(api-design v1.31 §13.3)。古いBackendではnil。
+    /// 無料プランの過去の発表の上限(api-design v1.33 §13.3)。古いBackendではnil。
     var pastReleaseLimit: PastReleaseLimit? = nil
 
     enum CodingKeys: String, CodingKey {
@@ -61,7 +61,7 @@ struct IndicatorEventsListResponse: Decodable {
     }
 }
 
-/// `GET /indicators/{id}/events`・`GET /home`の`past_release_limit`(api-design v1.31 §13.3)。
+/// `GET /indicators/{id}/events`・`GET /home`の`past_release_limit`(api-design v1.33 §13.3)。
 struct PastReleaseLimit: Decodable, Equatable {
     /// このプランで古い発表を隠しているとき`true`(FREE)。
     let applied: Bool

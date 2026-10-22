@@ -35,11 +35,12 @@ struct EventDetailEvent: Decodable, Equatable {
     let importance: Importance
     let status: EventStatus
     let dataStatus: DataQualityStatus
-    /// 無料プランで隠された発表(api-design v1.31)では`null`。
+    /// 無料プランで隠された発表(api-design v1.33 §14.1)では、古いアプリが読めるよう固定値`NONE`
+    /// (以前は`null`)。実際の改定の有無ではないので、`isLocked`のときは使わない。
     let revisionStatus: RevisionStatus?
     /// 指標の一覧表示名(api-design v1.22)。古いBackendではnil。
     var displayName: String? = nil
-    /// 無料プランで隠された過去の発表(api-design v1.31 §14.1)。古いBackendではnil(=隠していない)。
+    /// 無料プランで隠された過去の発表(api-design v1.33 §14.1)。古いBackendではnil(=隠していない)。
     var locked: Bool? = nil
     /// ロックを外すのに必要なプラン(`"PRO"`)。ロックしていなければnil。
     var requiredPlan: String? = nil
@@ -117,7 +118,8 @@ struct EventReactionSummary: Decodable, Equatable {
     let timeframe: String
     let pips: Double?
     let changePercent: Double?
-    /// 無料プランで隠された発表(api-design v1.31)では`null`。
+    /// 無料プランで隠された発表(api-design v1.33 §14.1)では固定値`NOT_ANALYZABLE`(以前は`null`)。
+    /// 画面は`EventDetailEvent.isLocked`を先に見て、隠された発表ではこの値を表示に使わない。
     let analysisStatus: DataQualityStatus?
 
     enum CodingKeys: String, CodingKey {

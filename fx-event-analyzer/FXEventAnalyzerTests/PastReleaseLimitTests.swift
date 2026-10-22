@@ -8,7 +8,7 @@ private func waitUntil(_ condition: @escaping () -> Bool) async {
     }
 }
 
-/// 無料プランの「過去の発表」制限(api-design v1.31 §12・§13.3・§14.1・§27・§28.2、
+/// 無料プランの「過去の発表」制限(api-design v1.33 §12・§13.3・§14.1・§27・§28.2、
 /// HQ判断 2026-10-22)。新しい項目(`locked`・`required_plan`・`past_release_limit`・
 /// `past_releases_max`)が無い古いBackendの応答もそのまま読めることを確かめる。
 @MainActor
@@ -239,6 +239,120 @@ final class PastReleaseLimitTests: XCTestCase {
         XCTAssertNil(response.explanation)
         XCTAssertNil(response.relatedFxPairs.first?.reaction.analysisStatus)
         XCTAssertEqual(response.majorFxReactions?.first?.reactions.count, 3)
+    }
+
+    /// api-design v1.33: ロックされた発表の`revision_status`・`analysis_status`は`null`ではなく固定値。
+    /// 古いアプリ(ビルド17/18)の型(どちらも非optional)でも読め、新しいアプリは`locked`を先に見る。
+    private static let lockedDetailWithPlaceholdersJSON = """
+    {
+      "event": {
+        "id": "evt_old",
+        "indicator_id": "ind_1",
+        "indicator_name": "US Consumer Price Index (YoY)",
+        "display_name": null,
+        "country_code": "US",
+        "currency_code": "USD",
+        "release_datetime": "2026-05-10T12:30:00Z",
+        "release_datetime_precision": "EXACT",
+        "importance": "HIGH",
+        "status": "RELEASED",
+        "data_status": "READY",
+        "revision_status": "NONE",
+        "locked": true,
+        "required_plan": "PRO"
+      },
+      "snapshot": {
+        "forecast": null, "actual": null, "previous": null,
+        "surprise": null, "surprise_direction": null,
+        "unit": "%", "source": "U.S. Bureau of Labor Statistics", "source_url": null,
+        "captured_at": "2026-05-10T12:30:05Z"
+      },
+      "analysis": { "surprise": null, "surprise_direction": null },
+      "explanation": null,
+      "related_fx_pairs": [
+        {
+          "fx_pair_id": "fx_1",
+          "symbol": "USDJPY",
+          "priority": 1,
+          "reaction": { "timeframe": "5m", "pips": null, "change_percent": null, "analysis_status": "NOT_ANALYZABLE" }
+        }
+      ],
+      "major_fx_reactions": [
+        {
+          "fx_pair_id": "fx_1",
+          "symbol": "USDJPY",
+          "reactions": [
+            { "timeframe": "1m", "pips": null, "change_percent": null, "analysis_status": "NOT_ANALYZABLE" },
+            { "timeframe": "5m", "pips": null, "change_percent": null, "analysis_status": "NOT_ANALYZABLE" },
+            { "timeframe": "15m", "pips": null, "change_percent": null, "analysis_status": "NOT_ANALYZABLE" }
+          ]
+        }
+      ],
+      "available_timeframes": ["1m", "5m", "15m", "30m", "60m"]
+    }
+    """
+
+    func testEventDetailDecodesLockedResponseWithPlaceholderStatuses() throws {
+        let json = Self.lockedDetailWithPlaceholdersJSON.data(using: .utf8)!
+
+        let response = try makeDecoder().decode(EventDetailResponse.self, from: json)
+
+        // 新しいアプリ: locked を先に見る。値は無く、相場反応詳細へは進まない。
+        XCTAssertTrue(response.event.isLocked)
+        XCTAssertEqual(response.event.requiredPlan, "PRO")
+        XCTAssertNil(response.snapshot?.actual)
+        XCTAssertNil(response.relatedFxPairs.first?.reaction.pips)
+        let cards = EventDetailCards(response: response)
+        XCTAssertTrue(cards.isLocked)
+        XCTAssertFalse(cards.canOpenReactions)
+    }
+
+    /// 古いアプリ(ビルド17/18、489da7c7)の`EventDetailEvent.revisionStatus`・
+    /// `EventReactionSummary.analysisStatus`は非optional。同じ形で読めることを確かめる。
+    private struct LegacyEventDetail: Decodable {
+        struct Event: Decodable {
+            let status: EventStatus
+            let dataStatus: DataQualityStatus
+            let revisionStatus: RevisionStatus
+
+            enum CodingKeys: String, CodingKey {
+                case status
+                case dataStatus = "data_status"
+                case revisionStatus = "revision_status"
+            }
+        }
+        struct Reaction: Decodable {
+            let analysisStatus: DataQualityStatus
+
+            enum CodingKeys: String, CodingKey {
+                case analysisStatus = "analysis_status"
+            }
+        }
+        struct Pair: Decodable {
+            let reaction: Reaction
+        }
+        struct MajorPair: Decodable {
+            let reactions: [Reaction]
+        }
+        let event: Event
+        let relatedFxPairs: [Pair]
+        let majorFxReactions: [MajorPair]
+
+        enum CodingKeys: String, CodingKey {
+            case event
+            case relatedFxPairs = "related_fx_pairs"
+            case majorFxReactions = "major_fx_reactions"
+        }
+    }
+
+    func testLockedEventDetailDecodesWithLegacyNonOptionalStatuses() throws {
+        let json = Self.lockedDetailWithPlaceholdersJSON.data(using: .utf8)!
+
+        let legacy = try makeDecoder().decode(LegacyEventDetail.self, from: json)
+
+        XCTAssertEqual(legacy.event.revisionStatus, RevisionStatus.none)
+        XCTAssertEqual(legacy.relatedFxPairs.first?.reaction.analysisStatus, .notAnalyzable)
+        XCTAssertEqual(legacy.majorFxReactions.first?.reactions.map(\.analysisStatus), [.notAnalyzable, .notAnalyzable, .notAnalyzable])
     }
 
     func testEventDetailFromOlderBackendDecodesAsUnlocked() throws {

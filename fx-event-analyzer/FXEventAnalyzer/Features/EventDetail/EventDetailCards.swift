@@ -9,7 +9,7 @@ struct EventDetailCards: View {
     let response: EventDetailResponse
     /// この指標の次回発表予定(呼び出し側で読む)。無ければ表示しない。
     var nextRelease: Date? = nil
-    /// 無料プランで隠された発表(api-design v1.31)の鍵の印を押したとき(プランの案内を出す)。
+    /// 無料プランで隠された発表(api-design v1.33)の鍵の印を押したとき(プランの案内を出す)。
     var onLockedTap: () -> Void = {}
 
     /// HQ指示(2026-10-09)の表: 発表前は結果「未発表」、値動き「発表後に表示」、分析「発表後に分析」。

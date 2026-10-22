@@ -26,7 +26,7 @@ struct HomeEventSummary: Decodable, Identifiable, Equatable {
     var displayName: String? = nil
     /// 指標の単位(API v1.13、例: `%`・`千人`)。返さない古いBackendではnil。
     var unit: String? = nil
-    /// 無料プランで隠された過去の発表(api-design v1.31 §28.2)。古いBackendではnil(=隠していない)。
+    /// 無料プランで隠された過去の発表(api-design v1.33 §28.2)。古いBackendではnil(=隠していない)。
     var locked: Bool? = nil
     /// ロックを外すのに必要なプラン(`"PRO"`)。ロックしていなければnil。
     var requiredPlan: String? = nil
@@ -96,7 +96,7 @@ struct HomeResponse: Decodable {
     /// だけがこのフィールドを含む応答を返し、本番のバックエンドの挙動は
     /// 変えていない。
     let speeches: [HomeSpeechSummary]?
-    /// 無料プランの過去の発表の上限(api-design v1.31 §12)。古いBackendではnil。
+    /// 無料プランの過去の発表の上限(api-design v1.33 §12)。古いBackendではnil。
     let pastReleaseLimit: PastReleaseLimit?
 
     init(date: String, timezone: String, events: [HomeEventSummary], majorFx: [MajorFxSummary], speeches: [HomeSpeechSummary]? = nil, pastReleaseLimit: PastReleaseLimit? = nil) {

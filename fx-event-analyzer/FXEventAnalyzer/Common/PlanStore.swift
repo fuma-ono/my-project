@@ -50,7 +50,7 @@ struct PlanLimits: Decodable, Equatable {
     let notificationFxPairsMax: Int?
     /// 過去イベント比較に使う回数。
     let historyEventsMax: Int
-    /// 指標ごとに値を見られる過去の発表の回数(api-design v1.31 §28.2)。nilは上限なし。
+    /// 指標ごとに値を見られる過去の発表の回数(api-design v1.33 §28.2)。nilは上限なし。
     /// 古いBackend(項目なし)ではnil。どの発表を隠すかは各Responseの`locked`で判断する。
     var pastReleasesMax: Int? = nil
 

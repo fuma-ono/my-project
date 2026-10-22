@@ -5,7 +5,7 @@ enum MovementDetailState: Equatable {
     case loading
     case backendNotConfigured
     case notEntitled
-    /// 無料プランで隠された過去の発表(api-design v1.31 §28.2): `/reaction`が
+    /// 無料プランで隠された過去の発表(api-design v1.33 §28.2): `/reaction`が
     /// `403 PLAN_LIMIT_EXCEEDED`。エラー画面ではなくプランの案内を出す。
     case pastReleaseLocked
     case notFound
