@@ -12,6 +12,7 @@ import type {
   NewRevision,
   NewStagedValue,
   OfficialObservationRow,
+  ProviderEventRow,
   SpeakerRef,
   SpeechEventRow,
   StagedValue,
@@ -33,7 +34,16 @@ export class MemoryIngestionStore implements IngestionStore {
     provider_event_id: string;
     importance: string;
     currency_code?: string;
+    /** economic_events.is_provisional — absent = the DB default (false). */
+    is_provisional?: boolean;
   })[] = [];
+  /** event_schedule_changes rows the DB trigger would write for INDICATOR events (see updateEvent). */
+  scheduleChanges: {
+    target_id: string;
+    change_type: 'RESCHEDULED' | 'CANCELLED';
+    old_datetime: string;
+    new_datetime: string | null;
+  }[] = [];
   eventPriceReactions: EventPriceReactionRow[] = [];
   snapshots: NewReleaseSnapshot[] = [];
   revisions: (NewRevision & { created_at: string })[] = [];
@@ -80,9 +90,36 @@ export class MemoryIngestionStore implements IngestionStore {
     return Promise.resolve(row);
   }
 
+  listEventsByProvider(provider: string): Promise<ProviderEventRow[]> {
+    return Promise.resolve(
+      this.events
+        .filter((e) => e.provider === provider && e.provider_event_id)
+        .map((e) => ({ ...e, is_provisional: e.is_provisional ?? false })),
+    );
+  }
+
   updateEvent(eventId: string, patch: Parameters<IngestionStore['updateEvent']>[1]): Promise<void> {
     const event = this.events.find((e) => e.id === eventId);
     if (!event) return Promise.reject(new Error(`no event ${eventId}`));
+    // Mirrors trg_economic_events_schedule_change (migration 20261015000002): it fires only
+    // when release_datetime or status is in the UPDATE, and logs only rows that were SCHEDULED.
+    if (event.status === 'SCHEDULED' && ('release_datetime' in patch || 'status' in patch)) {
+      if (patch.status === 'CANCELLED') {
+        this.scheduleChanges.push({
+          target_id: eventId,
+          change_type: 'CANCELLED',
+          old_datetime: event.release_datetime,
+          new_datetime: null,
+        });
+      } else if (patch.release_datetime !== undefined && patch.release_datetime !== event.release_datetime) {
+        this.scheduleChanges.push({
+          target_id: eventId,
+          change_type: 'RESCHEDULED',
+          old_datetime: event.release_datetime,
+          new_datetime: patch.release_datetime,
+        });
+      }
+    }
     Object.assign(event, patch);
     return Promise.resolve();
   }

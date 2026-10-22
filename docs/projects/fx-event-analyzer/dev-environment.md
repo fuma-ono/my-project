@@ -958,3 +958,72 @@ NO_DATA=データなし)。
 
 コード変更・DB接続・SQL実行・GitHub Actions実行・外部API呼び出しは、この節の調査でも
 行っていない。
+
+## 11. FOMCの会合日程と`is_provisional`の適用手順(2026-10-22、HQ承認 Task 3。**実行はまだ。承認を得てから行う**)
+
+`supabase/migrations/20261022000002_economic_events_provisional.sql`(`economic_events`に`is_provisional boolean not null default false`を足すだけ。`add column if not exists`なので2回実行しても同じ)と、`npm run ingest:fomc-schedule`(data-sources.md 15章)を社内確認用DBで使うための手順。Claude(セッション)はDBに接続しておらず、どれも未実行。
+
+**順番が大事**: API サーバー(Render)とジョブは`is_provisional`を読む・書くため、**このブランチのコードを動かす前に必ず Migration を適用する**(先にコードが動くと`GET /calendar`・`GET /home`・`GET /events/{id}`が「列が無い」エラーになる)。
+
+### 11.1 適用前の確認(読むだけ)
+
+1. Supabase の画面の左上が `fx-event-analyzer-dev`、URL に `pbemckwnqmeaoveelihd` が含まれることを確かめる(本番のプロジェクトでないこと)
+2. SQL Editor の新しいタブで次を実行し、結果を記録する
+
+```sql
+-- (a) 列がまだ無いこと(0行)
+select column_name from information_schema.columns
+where table_name = 'economic_events' and column_name = 'is_provisional';
+-- (b) US_FOMC の行とイベント数(期待: is_active = true、件数 0)
+select i.code, i.is_active, count(e.id) as events
+from economic_indicators i left join economic_events e on e.indicator_id = i.id
+where i.code = 'US_FOMC' group by i.code, i.is_active;
+-- (c) fomc_schedule の行がまだ無いこと(期待: 0)
+select count(*) from economic_events where provider = 'fomc_schedule';
+-- (d) 比較用: 予定の変更の記録の件数
+select count(*) from event_schedule_changes;
+```
+
+### 11.2 Migration の適用
+
+3. SQL Editor の新しいタブに`20261022000002_economic_events_provisional.sql`の中身をそのまま貼って実行する
+4. 次で確かめる(読むだけ)
+
+```sql
+-- 期待: is_provisional | boolean | NO | false
+select column_name, data_type, is_nullable, column_default from information_schema.columns
+where table_name = 'economic_events' and column_name = 'is_provisional';
+-- 期待: 既存の行はすべて false(true の件数 0)
+select is_provisional, count(*) from economic_events group by is_provisional;
+-- 期待: トリガーの定義が「UPDATE OF release_datetime, status」のまま
+select pg_get_triggerdef(oid) from pg_trigger where tgname = 'trg_economic_events_schedule_change';
+```
+
+### 11.3 ジョブの実行(手動。定期実行には登録していない)
+
+5. このブランチのコードで、社内確認用DBの`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`を(会社のPCに残さない方法で)渡して`npm run ingest:fomc-schedule`を1回動かす。外部へのアクセスは無い。出力の1行JSONを記録する(2026-10-22 から 10/28 18:00Z までに動かした場合の期待: `inserted: 10`・`provisional: 9`・`past: 0`・`removed: []`。それより後なら10月の会合は過去なので`inserted: 9`・`past: 1`)
+6. 次で確かめる(読むだけ)
+
+```sql
+-- 期待: 10行(10/28 18:00Z より後に動かしたなら9行)。10/28 は 18:00Z・false、12/09 は 19:00Z・true、2027年はすべて true
+select e.provider_event_id, e.release_datetime, e.release_datetime_precision, e.status, e.data_status,
+       e.is_provisional, e.importance
+from economic_events e join economic_indicators i on i.id = e.indicator_id
+where i.code = 'US_FOMC' and e.provider = 'fomc_schedule'
+order by e.release_datetime;
+-- 期待: 値は入っていない(0)
+select count(*) from event_snapshots s join economic_events e on e.id = s.event_id
+where e.provider = 'fomc_schedule';
+-- 期待: 11.1 (d) と同じ件数(新しい行を入れただけでは記録されない)
+select count(*) from event_schedule_changes;
+-- 期待: 最新の1行が SUCCESS、details に inserted / updated / unchanged / cancelled / provisional / past / removed
+select status, fetched_count, success_count, error_count, details, started_at
+from ingestion_logs where job = 'ingest:fomc-schedule' order by started_at desc limit 1;
+```
+
+7. もう一度動かし、`inserted: 0`・`updated: 0`・`unchanged`が前回の`inserted`と同じであること(何度動かしても同じ)を確かめる
+
+### 11.4 戻し方(必要なとき)
+
+ジョブで入れた行は`delete from economic_events where provider = 'fomc_schedule';`で消せる(値・反応の行は作らないので、外部キーで止まらない。`event_schedule_changes`に記録が残った場合は`target_id`で消す)。列を消す場合は`alter table economic_events drop column if exists is_provisional;`。ただし列を消すと、このブランチのコードは動かなくなる。
+

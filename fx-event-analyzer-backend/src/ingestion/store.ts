@@ -33,11 +33,21 @@ export interface NewEvent {
   importance: 'LOW' | 'MEDIUM' | 'HIGH';
   status: 'SCHEDULED' | 'RELEASED';
   data_status: 'PENDING';
+  /** economic_events.is_provisional (migration 20261022000002, DB default false). Only the FOMC schedule sets it. */
+  is_provisional?: boolean;
 }
 
 export type EventPatch = Partial<
-  Pick<StoredEvent, 'release_datetime' | 'release_datetime_precision' | 'status' | 'data_status'>
+  Pick<StoredEvent, 'release_datetime' | 'release_datetime_precision' | 'status' | 'data_status'> & {
+    is_provisional: boolean;
+  }
 >;
+
+/** An economic_events row of one provider, as the FOMC schedule job compares it with its table. */
+export interface ProviderEventRow extends StoredEvent {
+  provider_event_id: string;
+  is_provisional: boolean;
+}
 
 export interface StoredSnapshot {
   forecast: number | null;
@@ -229,6 +239,8 @@ export interface IngestionStore {
   findIndicatorsByCode(codes: readonly string[]): Promise<Map<string, IndicatorRef>>;
   findEventByProviderId(provider: string, providerEventId: string): Promise<StoredEvent | null>;
   insertEvent(event: NewEvent): Promise<StoredEvent>;
+  /** Every economic_events row of `provider` that has a provider_event_id (with is_provisional). */
+  listEventsByProvider(provider: string): Promise<ProviderEventRow[]>;
   updateEvent(eventId: string, patch: EventPatch): Promise<void>;
   getReleaseSnapshot(eventId: string): Promise<StoredSnapshot | null>;
   insertReleaseSnapshot(snapshot: NewReleaseSnapshot): Promise<void>;

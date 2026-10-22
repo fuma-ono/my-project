@@ -111,4 +111,42 @@ final class CalendarViewModelTests: XCTestCase {
         await viewModel.moveMonth(by: -12)
         XCTAssertEqual(viewModel.monthTitle, "2025年10月")
     }
+
+    /// `is_provisional`(api-design v1.31、HQ承認 2026-10-22 Task 3)。返さない古いBackendでも読める(暫定ではない扱い)。
+    func testDecodesIsProvisionalWithAndWithoutTheField() throws {
+        let json = """
+        {
+          "from": "2026-12-01T00:00:00Z",
+          "to": "2027-01-01T00:00:00Z",
+          "items": [
+            {
+              "kind": "INDICATOR", "id": "fomc-dec", "indicator_id": "ind-fomc", "title": "FOMC政策金利",
+              "display_name": "FOMC政策金利", "speaker_name": null, "speaker_photo_url": null,
+              "country_code": "US", "currency_code": "USD", "importance": "HIGH",
+              "datetime": "2026-12-09T19:00:00+00:00", "datetime_precision": "EXACT", "status": "SCHEDULED",
+              "is_provisional": true
+            },
+            {
+              "kind": "INDICATOR", "id": "cpi", "indicator_id": "ind-cpi", "title": "米国CPI",
+              "display_name": null, "speaker_name": null, "speaker_photo_url": null,
+              "country_code": "US", "currency_code": "USD", "importance": "HIGH",
+              "datetime": "2026-12-10T13:30:00+00:00", "datetime_precision": "EXACT", "status": "SCHEDULED",
+              "is_provisional": false
+            },
+            {
+              "kind": "SPEECH", "id": "old-backend", "title": "講演",
+              "speaker_name": "ジェローム・パウエル",
+              "country_code": "US", "currency_code": "USD", "importance": "MEDIUM",
+              "datetime": "2026-12-11T15:00:00.123456+00:00", "datetime_precision": "EXACT", "status": "SCHEDULED"
+            }
+          ]
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom(BackendDate.decode)
+        let response = try decoder.decode(CalendarResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(response.items.map(\.isProvisional), [true, false, false])
+        XCTAssertNil(response.items[2].provisionalFlag)
+        XCTAssertFalse(item("x", .indicator, .high, at: date(2026, 12, 9)).isProvisional)
+    }
 }

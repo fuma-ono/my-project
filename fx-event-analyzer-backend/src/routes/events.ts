@@ -88,6 +88,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
         release_datetime_precision: event.release_datetime_precision,
         importance: event.importance,
         status: event.status,
+        is_provisional: event.is_provisional,
         data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
         revision_status: resolveRevisionStatus(revisionCount),
       },

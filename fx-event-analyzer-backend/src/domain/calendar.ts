@@ -31,6 +31,11 @@ export interface CalendarItem {
   /** INDICATOR: release_datetime_precision. SPEECH: always EXACT. */
   datetime_precision: string;
   status: string;
+  /**
+   * INDICATOR: economic_events.is_provisional — the scheduled datetime is not yet
+   * officially confirmed (the app shows 「予定（暫定）」). SPEECH: always false.
+   */
+  is_provisional: boolean;
 }
 
 export interface CalendarIndicatorEvent {
@@ -44,6 +49,8 @@ export interface CalendarIndicatorEvent {
   release_datetime: string;
   release_datetime_precision: string;
   status: string;
+  /** Absent = false (rows read before migration 20261022000002 / test fixtures). */
+  is_provisional?: boolean | undefined;
 }
 
 export interface CalendarSpeech {
@@ -99,6 +106,7 @@ export function buildCalendarItems(
     datetime: event.release_datetime,
     datetime_precision: event.release_datetime_precision,
     status: event.status,
+    is_provisional: event.is_provisional === true,
   }));
   const speechItems = speeches
     .filter((speech) => speech.status !== 'CANCELLED')
@@ -116,6 +124,7 @@ export function buildCalendarItems(
       datetime: speech.statement_datetime,
       datetime_precision: 'EXACT',
       status: speech.status,
+      is_provisional: false,
     }));
   return [...indicatorItems, ...speechItems].filter((item) => matches(item, filters)).sort(compareCalendarItems);
 }

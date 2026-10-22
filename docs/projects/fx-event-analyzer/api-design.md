@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.30
+# FX Event Analyzer: API詳細設計書 v1.31
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -73,6 +73,7 @@
 - **v1.28**(2026-10-15): 要人発言の値動き(HQ指示 2026-10-15)。`GET /speeches/{id}`に`reactions`(発言者の通貨を含む主要ペア最大4件 × 発言前の価格と`1m`・`5m`・`15m`の`pips`。発言済み(`DELIVERED`)の発言だけ、それ以外は`[]`)を追加(14.5節)。`GET /speeches/{id}/reaction`(14.8節、`GET /events/{id}/reaction`と同じ形)・`GET /speeches/{id}/reaction/chart`(14.9節、`GET /events/{id}/reaction/chart`と同じ形・同じ表示範囲)・`GET /speakers/{speaker_id}/comparison`(14.10節、要人ごとの過去の発言の比較。上限は`history_events_max`)を追加。要人発言の値動きは保存せず、`fx_prices`の1分足から**API応答時に計算する**(14.11節。保存テーブル・ジョブは追加しない。18.1節の「pips系はDB保存値を返す」は経済指標イベントのみの方針)。価格が無い値は`null`(`DATA_UNAVAILABLE`)で、補った値は返さない。Error Code `SPEAKER_NOT_FOUND`(404)を追加
 - **v1.29**(2026-10-15): データ取得の正確さの仕組み(data-sources.md、db-design.md v4.15)。**Endpoint・Response の形は変えない。** (1) Ingestion Worker が検証・公式統計との照合で保留にした経済指標の値(`ingestion_staged_values`)はどのAPIも返さない。保留中のイベントは `data_status` = `DATA_PENDING`・`snapshot` = `null`(7.3節)。(2) 2つ目の取得元と合わなかった1分足(`fx_prices.verification_status = UNVERIFIED`)は、チャート(`/reaction/chart`)・最新価格(`GET /home` の major_fx、レートアラートの判定)・要人発言の値動き(14.11節)で使わない。欠けた足と同じ扱いで、補わない(必要な値は `null` / `DATA_UNAVAILABLE`)
 - **v1.30**(2026-10-16): FREEの機能の付与(HQ指示 2026-10-16)。**Endpoint・Response の形は変えない。** これまでFREEの機能(`VIEW_BASIC_EVENT` / `VIEW_HISTORICAL` / `VIEW_MARKET_REACTION`)は`entitlements`の行が無いと使えず、その行を入れる処理がどこにも無かったため、登録したばかりのユーザーが`GET /speeches`・`GET /calendar`・`GET /events/{id}`などで`403 FEATURE_NOT_ENTITLED`になっていた。全ユーザーが持つ機能を`default_entitlements`(db-design.md v4.16 3.3.1節)に置き、ユーザーの有効な機能 = 有効な`entitlements`の行 + そのユーザーの行が無い`default_entitlements`の機能、とした。同じfeature_codeの`entitlements`の行があれば、有効・無効・期限切れのどれでもそちらが優先する(27章・28章)。`GET /entitlements`の`features`は既定の機能も含み、アルファベット順
+- **v1.31**(2026-10-22): 暫定の予定(HQ承認 2026-10-22 Task 3「FOMCの公式日程」)。`GET /calendar`の各行(14.6節)と`GET /events/{event_id}`の`event`(14.1節)に`is_provisional`(boolean)を追加。`economic_events.is_provisional`(db-design.md v4.17 3.5節、Migration `20261022000002_economic_events_provisional.sql`)の値で、予定の日時がまだ公式に確定していない(暫定)なら`true`。`SPEECH`の行は常に`false`。今のところ`true`になるのはFOMCの日程表(data-sources.md 15章)の暫定の会合だけ。iOSは`true`の行に「予定（暫定）」と表示し、項目が無い古いBackendでは`false`として扱う。項目の追加だけで、既存の項目・並び順・絞り込みは変えない
 
 ---
 
@@ -650,6 +651,8 @@ Event Detailでは以下を1回のAPIで取得可能とする。
 
 Movement Chart等の比較的重いデータ、および特定timeframe・特定ペアの詳細Reaction、全revision履歴は別APIで取得する。
 
+**`event.is_provisional`(v1.31で追加)**: 予定の日時がまだ公式に確定していない(暫定)なら`true`、それ以外は`false`(`economic_events.is_provisional`。14.6節と同じ値)。
+
 **`event.display_name`(v1.22で追加)**: 指標の一覧画面の表示名(13.2節の`display_name`、未登録は`null`)。画面は`display_name`を指標名として表示し、`null`なら`indicator_name`(正式名)を表示する。`indicator_name`は変えない。
 
 **`major_fx_reactions`(v1.17で追加)**: SCR-007「主要通貨ペアの値動き(pips)」の表。行 = 通貨ペア、列 = `1m`・`5m`・`15m`。「通貨ペアを選択して詳細を見る」で選んだ行の`fx_pair_id`・`symbol`でSCR-008 相場反応詳細(18章)を開く。
@@ -771,7 +774,8 @@ Response：`{ "from": string, "to": string, "items": CalendarItem[] }`(`from` / 
   "importance": "HIGH",
   "datetime": "2026-10-08T12:30:00+00:00",
   "datetime_precision": "EXACT",
-  "status": "SCHEDULED"
+  "status": "SCHEDULED",
+  "is_provisional": false
 }
 ```
 
@@ -786,6 +790,7 @@ Response：`{ "from": string, "to": string, "items": CalendarItem[] }`(`from` / 
 - `datetime`：`INDICATOR`は`release_datetime`、`SPEECH`は`statement_datetime`
 - `datetime_precision`：`INDICATOR`は`release_datetime_precision`(6章)、`SPEECH`は常に`EXACT`
 - `status`：`INDICATOR`はイベントの`status`(`SCHEDULED` / `RELEASED` / `CANCELLED`)、`SPEECH`は発言の`status`(`SCHEDULED` / `DELIVERED`)。**`CANCELLED`の要人発言は返さない**
+- `is_provisional`(v1.31)：`INDICATOR`は`economic_events.is_provisional`(予定の日時がまだ公式に確定していない = 暫定なら`true`)。`SPEECH`は常に`false`。いまのところ`true`になるのはFOMCの日程表の暫定の会合だけ(data-sources.md 15章。FRBの「各会合の日程は直前の会合で確認されるまで暫定」というルールと、FRBのカレンダーにまだ発表時刻が載っていない会合)。iOSは`true`の行に「予定（暫定）」と表示する。`datetime`・`status`の意味は変えない(暫定でも`status`は`SCHEDULED`)
 - 並び順：`datetime`昇順 → 同時刻は`INDICATOR`が先 → `id`昇順
 
 ## 14.7 GET /api/v1/speaker-photos/{file}(v1.25で追加)
