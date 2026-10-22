@@ -970,6 +970,7 @@ NO_DATA=データなし)。
 - 関数 `visible_released_event_ids(uuid[], int)`(SECURITY DEFINER、実行は `service_role` だけ)を足す
 
 `fx_prices` の直接参照の禁止(`20261022000003_fx_prices_access.sql`)は別のマイグレーションで、手順は 13.7(これとは独立に適用・取り消しできる)。
+取り込みの運用データの表の権限(`20261022000004_ingestion_tables_access.sql`)も別のマイグレーションで、手順は 13.8(同じく独立)。
 
 **順番を必ず守る: マイグレーション → `notify pgrst` → Backend のデプロイ。** 先に Backend を入れると、FREE のユーザーで `GET /home`・`GET /indicators/{id}/events`・`GET /events/{id}` と子の `/revisions`・`/history`・`/reaction`・`/reaction/chart` が関数が無いため 500 になる(PRO は関数を呼ばないので影響なし)。逆にマイグレーションだけ先に入れても、今の Backend は service_role で読むので影響しない。iOS は同時に出す必要はない(古いアプリ ビルド17/18 も読める形で返す。api-design.md 14.1節「古いアプリとの互換」)。
 
@@ -1263,15 +1264,107 @@ notify pgrst, 'reload schema';
 
 戻したあと、適用前の (1)〜(3) をもう一度実行し、記録と同じになったことを確かめる。
 
-### 13.8 取り込みの運用データの表(権限は変えない。2026-10-22 HQ指示「記録のみ」)
+### 13.8 取り込みの運用データの表の権限(2026-10-22、HQ判断。`20261022000004_ingestion_tables_access.sql`)
 
-`ingestion_logs`・`ingestion_staged_values`・`official_observations`(公式の結果の値を含む)は、このブランチでも権限を変えない。今の状態(マイグレーションから):
+`ingestion_logs`・`ingestion_staged_values`・`official_observations`(公式の結果の値を含む)の `anon`・`authenticated` の権限をすべて取り消す。RLS は有効のまま、ポリシーは変えない(もともと無い)。13.1〜13.7 とは別に、単独で適用・取り消しできる。順番の決まりは無い。
 
-| 表 | RLS | ポリシー | anon / authenticated の権限 | 読み書きするもの(どれも service_role) |
+今の状態と使っているもの(マイグレーションとコードから):
+
+| 表 | RLS | ポリシー | 適用前の anon / authenticated の権限 | 読み書きするもの(どれも service_role) |
 |---|---|---|---|---|
-| `ingestion_logs` | 有効(`20260917000009_rls.sql`) | なし | Supabase の既定(ALL)のまま。ポリシーが無いので RLS で0件・書き込み不可 | 取り込みジョブ(`ingestionRepository.ts`、書き込み・読み込み)、品質レポート(`quality/reader.ts`、読むだけ) |
+| `ingestion_logs` | 有効(`20260917000009_rls.sql`) | なし | Supabase の既定(ALL)。ポリシーが無いので RLS で0件・書き込み不可 | 取り込みジョブ(`ingestionRepository.ts`、書き込み・読み込み)、品質レポート(`quality/reader.ts`、読むだけ) |
 | `ingestion_staged_values` | 有効(`20261015000003_ingestion_accuracy.sql`) | なし | 同上 | 取り込みジョブ(読み書き)、品質レポート(読むだけ) |
 | `official_observations` | 有効(同上) | なし | 同上 | 取り込みジョブ(`upsertOfficialObservations`) |
 
 - 品質レポートは `npm run report:data-quality`(GitHub Actions)と `GET /quality-report`(`INTERNAL_REPORT_TOKEN` が無いと404。社内向けで、アプリからは使わない)
-- 確かめる SQL(読むだけ): `select relname, relrowsecurity from pg_class where relname in ('ingestion_logs', 'ingestion_staged_values', 'official_observations');`(期待: すべて true)と `select tablename, policyname from pg_policies where tablename in ('ingestion_logs', 'ingestion_staged_values', 'official_observations');`(期待: 0行)
+- 3表を読む view・関数は無い。トリガーは `ingestion_staged_values` の `set_updated_at` だけ
+
+適用前の確認(読むだけ。結果を記録しておく):
+
+```sql
+-- (1) RLS。期待: 3行すべて relrowsecurity = true
+select relname, relrowsecurity from pg_class
+where relnamespace = 'public'::regnamespace
+  and relname in ('ingestion_logs', 'ingestion_staged_values', 'official_observations');
+
+-- (2) ポリシー。期待: 0行
+select tablename, policyname from pg_policies
+where schemaname = 'public' and tablename in ('ingestion_logs', 'ingestion_staged_values', 'official_observations');
+
+-- (3) 権限(戻すときの基準)。期待: 3表 × anon / authenticated / service_role がすべて
+--     DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE
+select table_name, grantee, string_agg(privilege_type, ',' order by privilege_type) as privileges
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and table_name in ('ingestion_logs', 'ingestion_staged_values', 'official_observations')
+  and grantee in ('anon', 'authenticated', 'service_role')
+group by table_name, grantee order by table_name, grantee;
+
+-- (4) 3表を読む view。期待: 0行
+select distinct v.relname as view_name, t.relname as table_name
+from pg_depend d
+join pg_rewrite r on r.oid = d.objid
+join pg_class v on v.oid = r.ev_class
+join pg_class t on t.oid = d.refobjid
+where d.classid = 'pg_rewrite'::regclass and v.oid <> t.oid
+  and t.relname in ('ingestion_logs', 'ingestion_staged_values', 'official_observations');
+```
+
+適用: SQL Editor にファイルの中身を貼って実行し、続けて `notify pgrst, 'reload schema';`。
+
+適用後の確認:
+
+```sql
+-- (1)(2) は適用前と同じ結果であること
+
+-- (3) 権限。期待: anon / authenticated は7列すべて false、service_role はすべて true(計9行)
+select r.rolname, t.tbl,
+       has_table_privilege(r.rolname, t.tbl, 'select') as sel,
+       has_table_privilege(r.rolname, t.tbl, 'insert') as ins,
+       has_table_privilege(r.rolname, t.tbl, 'update') as upd,
+       has_table_privilege(r.rolname, t.tbl, 'delete') as del,
+       has_table_privilege(r.rolname, t.tbl, 'truncate') as trn,
+       has_table_privilege(r.rolname, t.tbl, 'references') as ref,
+       has_table_privilege(r.rolname, t.tbl, 'trigger') as trg
+from pg_roles r
+cross join unnest(array['ingestion_logs', 'ingestion_staged_values', 'official_observations']) as t(tbl)
+where r.rolname in ('anon', 'authenticated', 'service_role')
+order by t.tbl, r.rolname;
+```
+
+```sql
+-- (4) 期待: ERROR 42501 permission denied for table ingestion_logs
+--     (表を ingestion_staged_values・official_observations に、authenticated を anon に替えて計6回)
+begin;
+set local role authenticated;
+select count(*) from ingestion_logs;
+rollback;
+```
+
+```sql
+-- (5) 期待: エラーなく件数が返る
+begin;
+set local role service_role;
+select count(*) from ingestion_logs;
+select count(*) from ingestion_staged_values;
+select count(*) from official_observations;
+rollback;
+```
+
+適用後、次の取り込み(GitHub Actions の為替・要人発言、§3)と毎日の品質レポートが今までどおり成功することを確かめる(どちらも service_role)。
+
+中止する条件:
+
+- (3) の anon / authenticated に true がある、または (4) で件数が返った
+- (5) がエラーになった、または取り込み・品質レポートが失敗するようになった(すぐ下の手順で戻す)
+
+戻す手順(権限は適用前 (3) の記録と同じに戻す。Supabase の既定どおりなら `grant all` でよい。ポリシー・RLS は変えていないので戻すものは無い):
+
+```sql
+grant all on ingestion_logs to anon, authenticated;
+grant all on ingestion_staged_values to anon, authenticated;
+grant all on official_observations to anon, authenticated;
+notify pgrst, 'reload schema';
+```
+
+戻したあと、適用前の (1)〜(3) をもう一度実行し、記録と同じになったことを確かめる。

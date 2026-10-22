@@ -73,7 +73,7 @@
 - **v1.28**(2026-10-15): 要人発言の値動き(HQ指示 2026-10-15)。`GET /speeches/{id}`に`reactions`(発言者の通貨を含む主要ペア最大4件 × 発言前の価格と`1m`・`5m`・`15m`の`pips`。発言済み(`DELIVERED`)の発言だけ、それ以外は`[]`)を追加(14.5節)。`GET /speeches/{id}/reaction`(14.8節、`GET /events/{id}/reaction`と同じ形)・`GET /speeches/{id}/reaction/chart`(14.9節、`GET /events/{id}/reaction/chart`と同じ形・同じ表示範囲)・`GET /speakers/{speaker_id}/comparison`(14.10節、要人ごとの過去の発言の比較。上限は`history_events_max`)を追加。要人発言の値動きは保存せず、`fx_prices`の1分足から**API応答時に計算する**(14.11節。保存テーブル・ジョブは追加しない。18.1節の「pips系はDB保存値を返す」は経済指標イベントのみの方針)。価格が無い値は`null`(`DATA_UNAVAILABLE`)で、補った値は返さない。Error Code `SPEAKER_NOT_FOUND`(404)を追加
 - **v1.29**(2026-10-15): データ取得の正確さの仕組み(data-sources.md、db-design.md v4.15)。**Endpoint・Response の形は変えない。** (1) Ingestion Worker が検証・公式統計との照合で保留にした経済指標の値(`ingestion_staged_values`)はどのAPIも返さない。保留中のイベントは `data_status` = `DATA_PENDING`・`snapshot` = `null`(7.3節)。(2) 2つ目の取得元と合わなかった1分足(`fx_prices.verification_status = UNVERIFIED`)は、チャート(`/reaction/chart`)・最新価格(`GET /home` の major_fx、レートアラートの判定)・要人発言の値動き(14.11節)で使わない。欠けた足と同じ扱いで、補わない(必要な値は `null` / `DATA_UNAVAILABLE`)
 - **v1.30**(2026-10-16): FREEの機能の付与(HQ指示 2026-10-16)。**Endpoint・Response の形は変えない。** これまでFREEの機能(`VIEW_BASIC_EVENT` / `VIEW_HISTORICAL` / `VIEW_MARKET_REACTION`)は`entitlements`の行が無いと使えず、その行を入れる処理がどこにも無かったため、登録したばかりのユーザーが`GET /speeches`・`GET /calendar`・`GET /events/{id}`などで`403 FEATURE_NOT_ENTITLED`になっていた。全ユーザーが持つ機能を`default_entitlements`(db-design.md v4.16 3.3.1節)に置き、ユーザーの有効な機能 = 有効な`entitlements`の行 + そのユーザーの行が無い`default_entitlements`の機能、とした。同じfeature_codeの`entitlements`の行があれば、有効・無効・期限切れのどれでもそちらが優先する(27章・28章)。`GET /entitlements`の`features`は既定の機能も含み、アルファベット順
-- **v1.33**(2026-10-22): 無料プランの「過去の発表」制限(HQ判断 2026-10-21/22、28.2節)。FREEは指標ごとに発表済み(`RELEASED`)の直近3回(`release_datetime`の新しい順、同時刻は`id`の昇順)だけ値を見られ、それより古い発表は「ロック」(値を`null`にして`locked: true`・`required_plan: "PRO"`)。PROは変更なし。`GET /indicators/{id}/events`(13.3節)・`GET /home`(12章)の各イベントと`GET /events/{id}`(14.1節)の`event`に`locked`・`required_plan`を追加し、一覧には`past_release_limit`を追加。ロックされた発表の`GET /events/{id}/revisions`・`/history`・`/reaction`・`/reaction/chart`は`403 PLAN_LIMIT_EXCEEDED`(`required_plan: "PRO"`)。`GET /entitlements`の`limits`に`past_releases_max`を追加(27章・28.1節)。過去イベント比較(21章)の件数(FREE 5・PRO 20)は変えず、使う発表の数え方を「RELEASE snapshotのある`RELEASED`、`release_datetime`の新しい順・同時刻は`id`の昇順」に揃えた。アプリ利用者がSupabaseに直接つないで値を読めないよう、市場の値を持つ5テーブルの`anon`・`authenticated`の権限をすべて取り消した(db-design.md v4.18 6章)。古いアプリ(ビルド17/18)が詳細画面を開けるよう、ロックされた発表の`event.revision_status`は固定値`NONE`、各reactionの`analysis_status`は固定値`NOT_ANALYZABLE`で返す(`null`にしない、14.1節)。過去イベント比較(21章)は件数(FREE 5・PRO 20)を変えず、FREEでロックされる発表の行は値・pipsを`null`にして`locked: true`で返し、統計・件数はロックされていない発表だけで計算する(`past_release_limit`を追加)。`fx_prices`も`anon`・`authenticated`から直接読めないようにした(db-design.md v4.18 6章)。FREEで見られる一番古い発表(ひとつ前の発表がロックされているもの)は、その結果にあたる`previous`と、前回の改定・解説も隠し、`previous_locked: true`を付ける(28.2節。一覧・ホーム・詳細・履歴・改定・比較)
+- **v1.33**(2026-10-22): 無料プランの「過去の発表」制限(HQ判断 2026-10-21/22、28.2節)。FREEは指標ごとに発表済み(`RELEASED`)の直近3回(`release_datetime`の新しい順、同時刻は`id`の昇順)だけ値を見られ、それより古い発表は「ロック」(値を`null`にして`locked: true`・`required_plan: "PRO"`)。PROは変更なし。`GET /indicators/{id}/events`(13.3節)・`GET /home`(12章)の各イベントと`GET /events/{id}`(14.1節)の`event`に`locked`・`required_plan`を追加し、一覧には`past_release_limit`を追加。ロックされた発表の`GET /events/{id}/revisions`・`/history`・`/reaction`・`/reaction/chart`は`403 PLAN_LIMIT_EXCEEDED`(`required_plan: "PRO"`)。`GET /entitlements`の`limits`に`past_releases_max`を追加(27章・28.1節)。過去イベント比較(21章)の件数(FREE 5・PRO 20)は変えず、使う発表の数え方を「RELEASE snapshotのある`RELEASED`、`release_datetime`の新しい順・同時刻は`id`の昇順」に揃えた。アプリ利用者がSupabaseに直接つないで値を読めないよう、市場の値を持つ5テーブルの`anon`・`authenticated`の権限をすべて取り消した(db-design.md v4.18 6章)。古いアプリ(ビルド17/18)が詳細画面を開けるよう、ロックされた発表の`event.revision_status`は固定値`NONE`、各reactionの`analysis_status`は固定値`NOT_ANALYZABLE`で返す(`null`にしない、14.1節)。過去イベント比較(21章)は件数(FREE 5・PRO 20)を変えず、FREEでロックされる発表の行は値・pipsを`null`にして`locked: true`で返し、統計・件数はロックされていない発表だけで計算する(`past_release_limit`を追加)。`fx_prices`と取り込みの運用データの表(`ingestion_logs`・`ingestion_staged_values`・`official_observations`)も`anon`・`authenticated`から直接読めないようにした(db-design.md v4.18 6章)。要人発言は対象外のままで、近くの発表の影響を値動きから推測できる可能性があることを既知の制約とした(14.9節の後・21章・28.2節)。FREEで見られる一番古い発表(ひとつ前の発表がロックされているもの)は、その結果にあたる`previous`と、前回の改定・解説も隠し、`previous_locked: true`を付ける(28.2節。一覧・ホーム・詳細・履歴・改定・比較)
 
 ---
 
@@ -860,7 +860,7 @@ Response：`{ "from": string, "to": string, "items": CalendarItem[] }`(`from` / 
 
 ## 14.8 GET /api/v1/speeches/{speech_id}/reaction(v1.28で追加)
 
-要人発言の値動き。**`GET /events/{event_id}/reaction`(18章)と同じQuery・同じ形**(アプリは同じデコーダーを使う)。`event_id`には`speech_id`、`pre_release_price`には発言前の価格(14.11節)が入る。必要なfeature_code：`VIEW_MARKET_REACTION`。
+要人発言の値動き(既知の制約は14.9節の後)。**`GET /events/{event_id}/reaction`(18章)と同じQuery・同じ形**(アプリは同じデコーダーを使う)。`event_id`には`speech_id`、`pre_release_price`には発言前の価格(14.11節)が入る。必要なfeature_code：`VIEW_MARKET_REACTION`。
 
 Query：`fx_pair_id`(必須、UUID) / `timeframe`(`1m` / `5m` / `15m` / `30m` / `60m` / `all`、省略時`all`)
 
@@ -876,6 +876,8 @@ Query：`fx_pair_id`(必須、UUID) / `timeframe`(`1m` / `5m` / `15m` / `30m` / 
 Query：`fx_pair_id`(必須、UUID) / `timeframe`(必須、`1m` / `5m` / `15m` / `30m` / `60m`)
 
 Response：`{ event_id, fx_pair_id, timeframe, release_datetime, window_from, window_to, prices: [{ timestamp, open, high, low, close, volume }] }`。表示範囲は発言時刻を基準に19章と同じ(`1m`前後15分・`5m`前後60分・`15m`前後3時間・それ以外は前30分〜後60分)。`prices`は`fx_prices`にある足だけ(補った足は返さない)。発言の状態に関係なく、範囲内にある実際の足を返す。
+
+**既知の制約(v1.33、HQ判断 2026-10-22)**: 要人発言は無料プランの「過去の発表」制限(28.2節)の対象外。発言の時刻がロックされた経済指標の発表の近くにあると、14.8節の値動き・14.9節のチャート・この比較のpipsに、その発表の前後の動きが含まれるため、**市場の値動きから発表の影響を推測できる可能性がある**。発表の値(結果・予想・前回)はここからは分からない(21章の残課題)。
 
 ## 14.10 GET /api/v1/speakers/{speaker_id}/comparison(v1.28で追加)
 
@@ -1126,7 +1128,7 @@ Query：
 
 **前回値(v1.33、HQ指示 2026-10-22)**: 3回目の`previous`は4回目の`actual`(またはその改定値)なので、FREEでは28.2節「前回を隠す発表」のとおり`null`・`previous_locked: true`にする(比較の行も同じ)。統計は`previous`を使わない。
 
-**残課題(v1.33)**: 要人発言は28.2節の制限の対象外(要人発言の一覧・詳細・値動き・チャート・話者の比較は従来どおり)。要人発言のチャート(14.9節。1分足は発言の前後15分、5分足は前後60分、15分足は前後3時間)と値動き(14.8節。発言から1〜60分後)は為替の足を返すため、発言がロックされた発表の近くにあると、その発表の前後の値動きが見える(例: FOMCの声明の30分後の議長会見、日銀の決定の後の総裁会見、米国の8:30 ETの指標と同じ日の午前の講演)。発表の値(結果・予想・前回)は要人発言からは分からない。
+**残課題・既知の制約(v1.33、HQ判断 2026-10-22「要人発言の仕様は変えない」)**: 要人発言は28.2節の制限の対象外(要人発言の一覧・詳細・値動き・チャート・話者の比較は従来どおり)。**市場の値動きから発表の影響を推測できる可能性がある**。要人発言のチャート(14.9節。1分足は発言の前後15分、5分足は前後60分、15分足は前後3時間)と値動き(14.8節。発言から1〜60分後)は為替の足を返すため、発言がロックされた発表の近くにあると、その発表の前後の値動きが見える(例: FOMCの声明の30分後の議長会見、日銀の決定の後の総裁会見、米国の8:30 ETの指標と同じ日の午前の講演)。発表の値(結果・予想・前回)は要人発言からは分からない。
 
 `indicator`は`id`・`code`・`name`・`display_name`(v1.22で追加。13.2節の`display_name`、未登録は`null`)。timeframe単一指定・`all`の両方で同じ形。
 
@@ -2000,6 +2002,7 @@ PRO Entitlementの付与(v1.4): `POST /subscription/verify`の保存時に、FRE
 - **前回を隠す発表(v1.33、HQ指示 2026-10-22)**：発表の`previous`は、ひとつ前の発表の結果(またはその改定値)。そこで、見られる発表のうち、ひとつ前の`RELEASED`の発表がロックされているもの(= 指標ごとに直近`past_releases_max`回目で、それより古い`RELEASED`があるもの)は、`previous`を`null`にし、`previous_locked: true`を付ける。あわせて、その発表の解説(`explanation`。前回値を書いていることがある)を`null`にし、改定(`GET /events/{id}/revisions`・`revision_status`)から`PREVIOUS`の改定を除く(`ACTUAL`の改定は返す)。`actual`・`forecast`・`surprise`・`surprise_direction`・値動きはそのまま(`surprise`は予想と結果から計算し、前回は使わない)。行そのものはロックしない(`locked: false`・`required_plan: null`)。対象は一覧(13.3節)・ホーム(12章)・詳細(14.1節の`event`)・`GET /events/{id}/history`(20章の`event`)・改定(16.1節)・過去イベント比較の行(21章)。それ以外の行・PROはすべて`previous_locked: false`。発表が`past_releases_max`回以下しか無い指標では隠さない(前回値にあたる発表がDBに無いため)
 - 対象：`GET /indicators/{id}/events`(13.3節)・`GET /home`(12章。過去の日付で表示される`RELEASED`のイベント)・`GET /events/{id}`(14.1節。403にはしない)・`GET /indicators/{id}/comparison`(21章。行は件数の設定どおり返し、ロックされた行の値を隠し、統計はロックされていない行だけで計算する。v1.33)
 - 子のAPI：`GET /events/{id}/revisions`・`/history`・`/reaction`・`/reaction/chart`は、親の発表がロックされていれば`403 PLAN_LIMIT_EXCEEDED`(`required_plan: "PRO"`)
+- 既知の制約(v1.33)：要人発言は対象外のため、ロックされた発表の近くの要人発言の値動き・チャート(14.8〜14.10節)から、**市場の値動きから発表の影響を推測できる可能性がある**(発表の値は分からない。21章の残課題)
 - 対象外(変更なし)：要人発言、`GET /calendar`、`GET /search`、`GET /indicators`・`GET /indicators/{id}`、未発表のイベント、過去イベント比較の件数(21章、FREE 5・PRO 20)
 - 上限の値は`src/domain/planLimits.ts`の`past_releases_max`だけで定義し、iOSは`GET /entitlements`の`limits.past_releases_max`と各Responseの`locked`で判断する。どの発表を見られるか・どの発表の前回を隠すかはDB関数`visible_released_event_ids`(db-design.md 6.1節、service_role専用)で計算し、PROのときは呼ばない。すべての経路が`src/authorization/pastReleaseAccess.ts`の同じ判定を使う
 - アプリ利用者がSupabaseに直接つないでも値を読めないよう、`economic_events`・`event_snapshots`・`event_revisions`・`event_explanations`・`event_price_reactions`は`anon`・`authenticated`から直接読み書きできない(SELECT・INSERT・UPDATE・DELETE・TRUNCATE・REFERENCES・TRIGGERの権限を取り消し。db-design.md v4.18 6章)。ロックされた発表の前後の足から値動きを計算し直せないよう、`fx_prices`も同じく直接読み書きできない(別のMigration)。Backendはservice_roleで接続するため影響しない
