@@ -10,23 +10,61 @@ final class PlanStore: ObservableObject {
 
     @Published private(set) var plan: EntitlementsResponse.Plan = .free
     @Published private(set) var limits: PlanLimits = .free()
+    /// HQ指示(2026-10-22「A1ホームスナップショットのプラン失効対策」):
+    /// `plan`がBackendで実際に確認済みかどうか。起動直後・`load()`が一度も
+    /// 成功していない間は`.notLoaded`、直前の取得が失敗していれば`.failed`
+    /// (このとき`plan`自体は従来通り直前の値のまま変えない)。`load()`が
+    /// 成功した場合だけ`.confirmed`になる。前回データ(`HomeSnapshotStore`)の
+    /// 利用可否など、「今のプランが確実に分かっているときだけ」判断したい
+    /// 側はこれを見る — プラン判定そのものをここ以外で重複実装しない。
+    @Published private(set) var confirmationState: ConfirmationState = .notLoaded
+
+    enum ConfirmationState: Equatable {
+        case notLoaded
+        case confirmed
+        case failed
+    }
 
     var isPro: Bool { plan == .pro }
 
-    func load(apiClient: APIClient) async {
-        do {
-            let response = try await EntitlementsService(apiClient: apiClient).fetchEntitlements(timezone: TimeZone.current.identifier)
-            plan = response.plan ?? .free
-            limits = response.limits ?? (plan == .pro ? .pro() : .free())
-        } catch {
-            // 取れないときは前回の値のまま(起動直後は無料プランの範囲)。
+    /// 同時に複数箇所(`RootView`のフォアグラウンド復帰処理、`HomeViewModel`の
+    /// 前回データ判定など)から呼ばれても、entitlementsの取得は1回にまとめる
+    /// — HQ指示「フォアグラウンド復帰時のプラン再取得とスナップショットの
+    /// 利用判定が競合しないようにする」「独自のプラン判定を重複実装しない」
+    /// への対応。後から呼んだ側は、新たに取得し直すのではなく進行中の結果を
+    /// 待つだけになる。
+    private var inFlightLoad: Task<ConfirmationState, Never>?
+
+    @discardableResult
+    func load(apiClient: APIClient) async -> ConfirmationState {
+        if let inFlightLoad {
+            return await inFlightLoad.value
         }
+        let task = Task { () -> ConfirmationState in
+            do {
+                let response = try await EntitlementsService(apiClient: apiClient).fetchEntitlements(timezone: TimeZone.current.identifier)
+                plan = response.plan ?? .free
+                limits = response.limits ?? (plan == .pro ? .pro() : .free())
+                confirmationState = .confirmed
+            } catch {
+                // 取れないときは前回の値のまま(起動直後は無料プランの範囲) —
+                // ただし「確認済みか」は.failedにし、古いプランの値を確認済み
+                // 扱いで使わせない(前回データ表示の可否判断等に影響)。
+                confirmationState = .failed
+            }
+            return confirmationState
+        }
+        inFlightLoad = task
+        let result = await task.value
+        inFlightLoad = nil
+        return result
     }
 
-    /// テスト用。
+    /// テスト用。確認済みのプランとして扱う。
     func set(plan: EntitlementsResponse.Plan, limits: PlanLimits) {
         self.plan = plan
         self.limits = limits
+        self.confirmationState = .confirmed
     }
 }
 

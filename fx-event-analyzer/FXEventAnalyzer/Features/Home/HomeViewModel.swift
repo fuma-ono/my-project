@@ -137,17 +137,23 @@ final class HomeViewModel: ObservableObject {
     /// 管理・取得自体はこれまで通り`AuthServicing`実装側が行う)。`nil`なら
     /// 前回データの先行表示は行わない(利用者を特定できないため)。
     private let authService: AuthServicing?
+    /// HQ指示(2026-10-22「A1ホームスナップショットのプラン失効対策」):
+    /// 前回データが保存時と同じプランのときだけ表示してよいかの判定に使う。
+    /// プラン状態の管理自体はこのクラスで重複実装せず、既存の`PlanStore`を
+    /// そのまま読む(`CalendarViewModel`等と同じ`plan ?? .shared`の注入パターン)。
+    private let planStore: PlanStore
     private var cancellables = Set<AnyCancellable>()
     /// 起動後、前回データの先行表示を試みたか(1回の起動につき1回だけ)。
     /// タブ復帰等での再度の`load()`呼び出しでは、前回データへは戻さない
     /// (`load()`のドキュメントコメント参照)。
     private var hasAttemptedSnapshot = false
 
-    init(apiClient: APIClient, favoritesStore: FavoritesStore = .shared, snapshotStore: HomeSnapshotStore = .shared, authService: AuthServicing? = nil) {
+    init(apiClient: APIClient, favoritesStore: FavoritesStore = .shared, snapshotStore: HomeSnapshotStore = .shared, authService: AuthServicing? = nil, planStore: PlanStore? = nil) {
         self.apiClient = apiClient
         self.favoritesStore = favoritesStore
         self.snapshotStore = snapshotStore
         self.authService = authService
+        self.planStore = planStore ?? .shared
         favoritesStore.$entries
             .sink { [weak self] entries in
                 Task { await self?.loadFavorites(entries) }
@@ -217,14 +223,28 @@ final class HomeViewModel: ObservableObject {
     /// 前回データが使える条件を満たせば`state`に反映する。使えない場合は
     /// 何もしない(通常の`.loading`のまま)。判定結果は起動診断にも記録する
     /// (「使った」理由も含め、HQ指示により失敗があっても断定せず記録のみ)。
+    ///
+    /// HQ指示(2026-10-22「A1ホームスナップショットのプラン失効対策」):
+    /// 現在のプランが確認できるまでは前回データを出さない(フェイルクローズ)。
+    /// `PlanStore.load(apiClient:)`は同時呼び出しを1回にまとめるため、
+    /// `RootView`のフォアグラウンド復帰処理(`.task(id: scenePhase)`)が
+    /// 同時にentitlementsを取りに行っても、ここからの呼び出しは新たに
+    /// 取得し直すのではなくその結果を待つだけになる(競合しない)。
     private func showSnapshotIfUsable() async {
         guard let authService, let userID = try? await authService.currentSession()?.userID.uuidString else {
             DiagnosticsStore.shared.recordHomeSnapshotOutcome(HomeSnapshotLoadResult.Outcome.userIDUnavailable.rawValue, ageSeconds: nil)
             return
         }
+        let confirmation = await planStore.load(apiClient: apiClient)
+        guard confirmation == .confirmed else {
+            // 未確認(未取得・取得失敗)の間は、以前のプランで取得した
+            // データをそれと知らずに表示しないよう、判定自体を行わない。
+            DiagnosticsStore.shared.recordHomeSnapshotOutcome(HomeSnapshotLoadResult.Outcome.planUnconfirmed.rawValue, ageSeconds: nil)
+            return
+        }
         let today = Self.isoDateFormatter.string(from: Date())
         let timezone = TimeZone.current.identifier
-        let result = snapshotStore.load(userID: userID, requestedDate: today, requestedTimezone: timezone)
+        let result = snapshotStore.load(userID: userID, requestedDate: today, requestedTimezone: timezone, plan: planStore.plan.rawValue)
         DiagnosticsStore.shared.recordHomeSnapshotOutcome(result.outcome.rawValue, ageSeconds: result.ageSeconds)
         guard case .usable(let snapshot) = result else { return }
         state = .showingSnapshot(snapshot, refreshFailed: false)
@@ -262,7 +282,15 @@ final class HomeViewModel: ObservableObject {
                     fetchedAt: Date(),
                     requestedDate: today,
                     requestedTimezone: timezone,
-                    userID: userID
+                    userID: userID,
+                    // HQ指示(2026-10-22「A1ホームスナップショットのプラン失効対策」):
+                    // この時点の`planStore.plan`を記録する。`/home`自体はBackend側で
+                    // 常にその場の実際のプランに基づいてロック済みの値を返すため、
+                    // ここで仮に古いプラン値のまま記録してしまっても、保存される
+                    // データ自体が安全でなくなることはない — 次回読み込み時に
+                    // 「保存時のプラン=現在確認済みのプラン」を要求する判定
+                    // (`HomeSnapshotStore.load`)が、不一致なら使わせないことで守る。
+                    plan: planStore.plan.rawValue
                 ))
             }
         } catch let error as APIError where error.isNotConfigured {

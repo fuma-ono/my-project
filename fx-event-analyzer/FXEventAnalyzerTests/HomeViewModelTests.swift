@@ -67,14 +67,15 @@ final class HomeViewModelTests: XCTestCase {
         let session = makeSession()
         let today = Self.isoDateFormatter.string(from: Date())
         let timezone = TimeZone.current.identifier
-        snapshotStore.save(HomeSnapshot(events: [], majorFx: [], speeches: [], fetchedAt: Date(), requestedDate: today, requestedTimezone: timezone, userID: session.userID.uuidString))
+        snapshotStore.save(HomeSnapshot(events: [], majorFx: [], speeches: [], fetchedAt: Date(), requestedDate: today, requestedTimezone: timezone, userID: session.userID.uuidString, plan: "FREE"))
 
         let apiClient = MockAPIClient()
+        apiClient.results["entitlements"] = .success(EntitlementsResponse(features: [], plan: .free, limits: nil))
         let freshEvent = Self.makeEvent(id: "evt_fresh", status: .scheduled)
-        apiClient.result = .success(HomeResponse(date: today, timezone: timezone, events: [freshEvent], majorFx: []))
+        apiClient.results["home"] = .success(HomeResponse(date: today, timezone: timezone, events: [freshEvent], majorFx: []))
         let authService = MockAuthService()
         authService.sessionResult = .success(session)
-        let viewModel = HomeViewModel(apiClient: apiClient, snapshotStore: snapshotStore, authService: authService)
+        let viewModel = HomeViewModel(apiClient: apiClient, snapshotStore: snapshotStore, authService: authService, planStore: PlanStore())
 
         viewModel.load()
         let state = await settledState(of: viewModel)
@@ -88,14 +89,15 @@ final class HomeViewModelTests: XCTestCase {
         let session = makeSession()
         let today = Self.isoDateFormatter.string(from: Date())
         let timezone = TimeZone.current.identifier
-        let snapshot = HomeSnapshot(events: [], majorFx: [], speeches: [], fetchedAt: Date(), requestedDate: today, requestedTimezone: timezone, userID: session.userID.uuidString)
+        let snapshot = HomeSnapshot(events: [], majorFx: [], speeches: [], fetchedAt: Date(), requestedDate: today, requestedTimezone: timezone, userID: session.userID.uuidString, plan: "FREE")
         snapshotStore.save(snapshot)
 
         let apiClient = MockAPIClient()
-        apiClient.result = .failure(APIError.transport("connection reset"))
+        apiClient.results["entitlements"] = .success(EntitlementsResponse(features: [], plan: .free, limits: nil))
+        apiClient.results["home"] = .failure(APIError.transport("connection reset"))
         let authService = MockAuthService()
         authService.sessionResult = .success(session)
-        let viewModel = HomeViewModel(apiClient: apiClient, snapshotStore: snapshotStore, authService: authService)
+        let viewModel = HomeViewModel(apiClient: apiClient, snapshotStore: snapshotStore, authService: authService, planStore: PlanStore())
 
         viewModel.load()
         let state = await settledState(of: viewModel)
@@ -113,13 +115,14 @@ final class HomeViewModelTests: XCTestCase {
         let today = Self.isoDateFormatter.string(from: Date())
         let timezone = TimeZone.current.identifier
         // 別の利用者IDで保存された前回データ。
-        snapshotStore.save(HomeSnapshot(events: [], majorFx: [], speeches: [], fetchedAt: Date(), requestedDate: today, requestedTimezone: timezone, userID: "someone-else"))
+        snapshotStore.save(HomeSnapshot(events: [], majorFx: [], speeches: [], fetchedAt: Date(), requestedDate: today, requestedTimezone: timezone, userID: "someone-else", plan: "FREE"))
 
         let apiClient = MockAPIClient()
-        apiClient.result = .success(HomeResponse(date: today, timezone: timezone, events: [], majorFx: []))
+        apiClient.results["entitlements"] = .success(EntitlementsResponse(features: [], plan: .free, limits: nil))
+        apiClient.results["home"] = .success(HomeResponse(date: today, timezone: timezone, events: [], majorFx: []))
         let authService = MockAuthService()
         authService.sessionResult = .success(makeSession())
-        let viewModel = HomeViewModel(apiClient: apiClient, snapshotStore: snapshotStore, authService: authService)
+        let viewModel = HomeViewModel(apiClient: apiClient, snapshotStore: snapshotStore, authService: authService, planStore: PlanStore())
 
         viewModel.load()
         let state = await settledState(of: viewModel)
@@ -134,22 +137,131 @@ final class HomeViewModelTests: XCTestCase {
         let today = Self.isoDateFormatter.string(from: Date())
         let timezone = TimeZone.current.identifier
         let speech = Self.makeSpeech(id: "sp1")
-        snapshotStore.save(HomeSnapshot(events: [], majorFx: [], speeches: [speech], fetchedAt: Date(), requestedDate: today, requestedTimezone: timezone, userID: session.userID.uuidString))
+        snapshotStore.save(HomeSnapshot(events: [], majorFx: [], speeches: [speech], fetchedAt: Date(), requestedDate: today, requestedTimezone: timezone, userID: session.userID.uuidString, plan: "FREE"))
 
         let apiClient = MockAPIClient()
+        apiClient.results["entitlements"] = .success(EntitlementsResponse(features: [], plan: .free, limits: nil))
         // `fetch()`が成功で終わるまで待つと`recentSpeeches`が最新のもの
         // (ここでは空)に置き換わってしまうため、意図的に通信エラーにして
         // `.showingSnapshot(_, refreshFailed: true)`で止める
         // (`.notConfigured`は`.backendNotConfigured`へ遷移してしまうため使えない)。
-        apiClient.result = .failure(APIError.transport("connection reset"))
+        apiClient.results["home"] = .failure(APIError.transport("connection reset"))
         let authService = MockAuthService()
         authService.sessionResult = .success(session)
-        let viewModel = HomeViewModel(apiClient: apiClient, snapshotStore: snapshotStore, authService: authService)
+        let viewModel = HomeViewModel(apiClient: apiClient, snapshotStore: snapshotStore, authService: authService, planStore: PlanStore())
 
         viewModel.load()
         _ = await settledState(of: viewModel)
 
         XCTAssertEqual(viewModel.recentSpeeches, [speech])
+    }
+
+    // MARK: - HQ指示(2026-10-22「A1ホームスナップショットのプラン失効対策」)
+
+    /// 受け入れ条件1: PROで保存したスナップショットをFREE確定後に利用できない。
+    func testLoadWithSnapshotSavedUnderDifferentPlanDoesNotShowIt() async {
+        let (snapshotStore, cleanup) = makeSnapshotStore()
+        defer { cleanup() }
+        let session = makeSession()
+        let today = Self.isoDateFormatter.string(from: Date())
+        let timezone = TimeZone.current.identifier
+        // PRO時点で保存された前回データ(ロックされていない実数値を含む想定)。
+        let proSnapshot = HomeSnapshot(events: [], majorFx: [], speeches: [], fetchedAt: Date(), requestedDate: today, requestedTimezone: timezone, userID: session.userID.uuidString, plan: "PRO")
+        snapshotStore.save(proSnapshot)
+
+        let apiClient = MockAPIClient()
+        // 現在はFREEであることが確認できる。
+        apiClient.results["entitlements"] = .success(EntitlementsResponse(features: [], plan: .free, limits: nil))
+        apiClient.results["home"] = .success(HomeResponse(date: today, timezone: timezone, events: [], majorFx: []))
+        let authService = MockAuthService()
+        authService.sessionResult = .success(session)
+        let planStore = PlanStore()
+        let viewModel = HomeViewModel(apiClient: apiClient, snapshotStore: snapshotStore, authService: authService, planStore: planStore)
+
+        viewModel.load()
+        let state = await settledState(of: viewModel)
+
+        if case .showingSnapshot(let shown, _) = state, shown == proSnapshot {
+            XCTFail("PROプラン時点のスナップショットが、FREE確定後にそのまま表示されてはならない")
+        }
+        XCTAssertEqual(planStore.plan, .free)
+        XCTAssertEqual(planStore.confirmationState, .confirmed)
+    }
+
+    /// 受け入れ条件2: プラン未確定中はスナップショットを表示しない
+    /// (`PlanStore.load()`がまだ完了していない間、途中で`.showingSnapshot`に
+    /// ならないこと)。
+    func testLoadWhilePlanUnconfirmedDoesNotShowSnapshot() async {
+        let (snapshotStore, cleanup) = makeSnapshotStore()
+        defer { cleanup() }
+        let session = makeSession()
+        let today = Self.isoDateFormatter.string(from: Date())
+        let timezone = TimeZone.current.identifier
+        snapshotStore.save(HomeSnapshot(events: [], majorFx: [], speeches: [], fetchedAt: Date(), requestedDate: today, requestedTimezone: timezone, userID: session.userID.uuidString, plan: "FREE"))
+
+        let mockClient = MockAPIClient()
+        mockClient.results["entitlements"] = .success(EntitlementsResponse(features: [], plan: .free, limits: nil))
+        mockClient.results["home"] = .success(HomeResponse(date: today, timezone: timezone, events: [], majorFx: []))
+        // entitlementsの応答だけ意図的に遅らせ、「未確定の間」を作り出す。
+        let apiClient = DelayedEntitlementsAPIClient(wrapped: mockClient, delayNanoseconds: 300_000_000)
+        let authService = MockAuthService()
+        authService.sessionResult = .success(session)
+        let planStore = PlanStore()
+        let viewModel = HomeViewModel(apiClient: apiClient, snapshotStore: snapshotStore, authService: authService, planStore: planStore)
+
+        viewModel.load()
+        try? await Task.sleep(nanoseconds: 100_000_000) // entitlementsの遅延(300ms)より短い時点で確認
+
+        XCTAssertEqual(planStore.confirmationState, .notLoaded, "この時点ではまだプラン確認が終わっていないはず")
+        if case .showingSnapshot = viewModel.state {
+            XCTFail("プラン未確定の間にスナップショットを表示してはならない")
+        }
+
+        // 確定後は使える条件を満たすため、最終的には表示される。
+        let state = await settledState(of: viewModel)
+        guard case .showingSnapshot = state else {
+            return XCTFail("プラン確定後は前回データが表示されるはず、got \(state)")
+        }
+    }
+
+    /// 受け入れ条件3: プラン取得失敗時に古いPROデータを表示しない。
+    func testLoadWithPlanFetchFailureDoesNotShowStaleSnapshot() async {
+        let (snapshotStore, cleanup) = makeSnapshotStore()
+        defer { cleanup() }
+        let session = makeSession()
+        let today = Self.isoDateFormatter.string(from: Date())
+        let timezone = TimeZone.current.identifier
+        let staleSnapshot = HomeSnapshot(events: [], majorFx: [], speeches: [], fetchedAt: Date(), requestedDate: today, requestedTimezone: timezone, userID: session.userID.uuidString, plan: "PRO")
+        snapshotStore.save(staleSnapshot)
+
+        let apiClient = MockAPIClient()
+        apiClient.results["entitlements"] = .failure(APIError.transport("connection reset"))
+        apiClient.results["home"] = .success(HomeResponse(date: today, timezone: timezone, events: [], majorFx: []))
+        let authService = MockAuthService()
+        authService.sessionResult = .success(session)
+        let planStore = PlanStore()
+        let viewModel = HomeViewModel(apiClient: apiClient, snapshotStore: snapshotStore, authService: authService, planStore: planStore)
+
+        viewModel.load()
+        let state = await settledState(of: viewModel)
+
+        if case .showingSnapshot = state {
+            XCTFail("プラン取得に失敗した場合、古いPROデータのスナップショットを表示してはならない, got \(state)")
+        }
+        XCTAssertEqual(planStore.confirmationState, .failed)
+    }
+
+    /// プラン確認付きの`APIClient`ラッパー(`entitlements`だけ応答を遅らせる)。
+    private struct DelayedEntitlementsAPIClient: APIClient {
+        let wrapped: APIClient
+        let delayNanoseconds: UInt64
+
+        func send<T: Decodable>(_ endpoint: Endpoint) async throws -> T {
+            if endpoint.path == "entitlements" {
+                try? await Task.sleep(nanoseconds: delayNanoseconds)
+            }
+            return try await wrapped.send(endpoint)
+        }
     }
 
     /// `load()`はdispatchが非同期(利用者ID解決のため)のため、短くポーリングする。

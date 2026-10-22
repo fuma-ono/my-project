@@ -15,6 +15,11 @@ struct HomeSnapshot: Codable, Equatable {
     let requestedTimezone: String
     /// 取得した利用者の`UserSession.userID`(文字列化したUUID)。
     let userID: String
+    /// HQ指示(2026-10-22「A1ホームスナップショットのプラン失効対策」): 取得時点で
+    /// 確認済みだったプラン(`EntitlementsResponse.Plan.rawValue`、"FREE"/"PRO")。
+    /// この対策より前に保存された古いデータにはこのキーが無いため`nil`になり、
+    /// プランが分からない以上は必ず使えない扱いにする(`load(...)`参照)。
+    var plan: String? = nil
 }
 
 /// `HomeSnapshotStore.load(...)`の結果。「使える」場合だけ`HomeSnapshot`を
@@ -35,6 +40,14 @@ enum HomeSnapshotLoadResult: Equatable {
         case expired = "期限切れ"
         /// ログイン中の利用者IDが(まだ)取れなかった — 前回データは使わない。
         case userIDUnavailable = "利用者ID未解決"
+        /// HQ指示(2026-10-22「A1ホームスナップショットのプラン失効対策」):
+        /// 現在のプランが確認できていない(未取得・取得失敗)。古いプランで
+        /// 取得したデータをそれと知らず表示しないよう、前回データは使わない。
+        case planUnconfirmed = "プラン未確認"
+        /// 保存時のプランと現在のプランが違う(古い保存データにプランの記録が
+        /// 無い場合も含む)。ロックされているはずの過去の発表の値を、プラン
+        /// 変更前の古いデータのまま表示しないための判定。
+        case planMismatch = "プランが違う"
     }
 
     var outcome: Outcome {
@@ -89,9 +102,16 @@ final class HomeSnapshotStore {
     }
 
     /// 使える条件(すべて満たしたときだけ`.usable`): ①利用者IDが一致
-    /// ②要求した`date`・`timezone`が今日・今の時間帯と一致(日付が変わったら
-    /// 使わない) ③取得後12時間以内 ④保存の形式の版が一致 ⑤読み込み成功。
-    func load(userID: String, requestedDate: String, requestedTimezone: String, now: Date = Date()) -> HomeSnapshotLoadResult {
+    /// ②保存時のプランと現在のプランが一致 ③要求した`date`・`timezone`が
+    /// 今日・今の時間帯と一致(日付が変わったら使わない) ④取得後12時間以内
+    /// ⑤保存の形式の版が一致 ⑥読み込み成功。
+    ///
+    /// `plan`は呼び出し側(`HomeViewModel`)が`PlanStore`で確認済みの現在の
+    /// プラン(`EntitlementsResponse.Plan.rawValue`)を渡す — プランが未確認
+    /// (未取得・取得失敗)の場合は、このメソッドを呼ぶ前に呼び出し側が
+    /// `.planUnconfirmed`として扱う(`HomeViewModel.showSnapshotIfUsable()`
+    /// 参照、プラン判定そのものをここで重複実装しない)。
+    func load(userID: String, requestedDate: String, requestedTimezone: String, plan: String, now: Date = Date()) -> HomeSnapshotLoadResult {
         guard let data = try? Data(contentsOf: fileURL) else { return .unusable(.notFound, ageSeconds: nil) }
         guard let stored = try? JSONDecoder().decode(StoredSnapshot.self, from: data) else {
             return .unusable(.decodeFailed, ageSeconds: nil)
@@ -102,6 +122,9 @@ final class HomeSnapshotStore {
             return .unusable(.formatVersionMismatch, ageSeconds: ageSeconds)
         }
         guard snapshot.userID == userID else { return .unusable(.userMismatch, ageSeconds: ageSeconds) }
+        guard let savedPlan = snapshot.plan, savedPlan == plan else {
+            return .unusable(.planMismatch, ageSeconds: ageSeconds)
+        }
         guard snapshot.requestedDate == requestedDate else { return .unusable(.dateMismatch, ageSeconds: ageSeconds) }
         guard snapshot.requestedTimezone == requestedTimezone else { return .unusable(.timezoneMismatch, ageSeconds: ageSeconds) }
         // 未来方向(端末時計が巻き戻った等)も不自然なため、0以上12時間以内のみ使える。
