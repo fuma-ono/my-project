@@ -46,3 +46,34 @@ struct ProBadge: View {
             .accessibilityLabel("プレミアムプラン")
     }
 }
+
+/// 無料プランで隠された過去の発表(api-design v1.31 §28.2、HQ判断 2026-10-22)。
+/// 値の代わりに「有料プランで見られます」を出す(「--」だとデータが無いように見えるため使わない)。
+enum PastReleaseLock {
+    static let label = "有料プランで見られます"
+
+    /// 印を押したときの案内(`planLimitPrompt`の本文)。`maxForPlan`は`PlanLimits.pastReleasesMax`
+    /// (古いBackendでnilのときは無料プランの3回)。
+    static func promptMessage(maxForPlan: Int?) -> String {
+        let count = maxForPlan ?? 3
+        return "無料プランで結果・予想・前回を見られるのは、指標ごとに直近\(count)回の発表です。プレミアムプランならすべての発表を見られます。"
+    }
+}
+
+/// 隠された値の代わりに出す小さな鍵の印と「有料プランで見られます」。
+struct PastReleaseLockBadge: View {
+    var size: CGFloat = 8
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: size * 0.8, weight: .semibold))
+            NotoText.text(PastReleaseLock.label, size: size)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .foregroundStyle(V5P.cyan)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(PastReleaseLock.label)
+    }
+}

@@ -843,7 +843,11 @@ struct HomeView: View {
                         }
                     }
                 }
-                if let subtitle {
+                if event.isLocked {
+                    // 無料プランで隠された過去の発表(HQ判断 2026-10-22): 予想・前回の代わりに
+                    // 鍵の印。行はこれまでどおりイベント詳細へ進み、そこで印を押すとプランの案内。
+                    PastReleaseLockBadge(size: 6.3)
+                } else if let subtitle {
                     V5JPFont.text(subtitle, size: 6.3, weight: .regular)
                         .foregroundStyle(Self.linkBlue)
                         .lineLimit(1)
@@ -866,7 +870,9 @@ struct HomeView: View {
     }
 
     /// 予想・前回のみ(`HomeEventSummary`に単位情報が無いため数値のみ)。
-    private static func eventSubtitle(_ event: HomeEventSummary) -> String? {
+    /// 無料プランで隠された発表(`isLocked`)では値を出さない(nil)。
+    static func eventSubtitle(_ event: HomeEventSummary) -> String? {
+        guard !event.isLocked else { return nil }
         var parts: [String] = []
         // HQ指示(2026-10-08)「予想・前回に単位を付けて」: APIの`unit`で表示する。
         if let forecast = event.forecast { parts.append("予想 \(ValueFormat.withUnit(forecast, unit: event.unit))") }

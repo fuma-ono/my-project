@@ -63,7 +63,9 @@ struct EventDetailView: View {
 
                 // HQ指示(2026-10-09)の参考画像で作り直した本体(EventDetailCards)。
                 ScrollView(showsIndicators: false) {
-                    EventDetailCards(response: response, nextRelease: viewModel.nextRelease)
+                    EventDetailCards(response: response, nextRelease: viewModel.nextRelease, onLockedTap: {
+                        planPrompt = PastReleaseLock.promptMessage(maxForPlan: plan.limits.pastReleasesMax)
+                    })
                         .padding(.vertical, 6)
                         .frame(width: V5P.W)
                 }

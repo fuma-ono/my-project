@@ -6,8 +6,12 @@ struct IndicatorReleasesView: View {
     @StateObject private var viewModel: IndicatorReleasesViewModel
     @Binding var tabSelection: Int
     @Environment(\.dismiss) private var dismiss
+    private let apiClient: APIClient
+    @ObservedObject private var plan = PlanStore.shared
+    @State private var planPrompt: String?
 
     init(apiClient: APIClient, indicatorId: String, indicatorName: String, tabSelection: Binding<Int>) {
+        self.apiClient = apiClient
         _viewModel = StateObject(wrappedValue: IndicatorReleasesViewModel(apiClient: apiClient, indicatorId: indicatorId, indicatorName: indicatorName))
         _tabSelection = tabSelection
     }
@@ -40,6 +44,7 @@ struct IndicatorReleasesView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.load() }
+        .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
     }
 
     private func centered(@ViewBuilder _ content: () -> some View) -> some View {
@@ -67,24 +72,42 @@ struct IndicatorReleasesView: View {
             }
             ForEach(events) { event in
                 SettingsListSeparator()
-                NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
-                    HStack(spacing: 0) {
-                        NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 7.5)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        number(event.actual).frame(width: 34, alignment: .trailing)
-                        number(event.forecast).frame(width: 34, alignment: .trailing)
-                        number(event.previous).frame(width: 34, alignment: .trailing)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 7, weight: .semibold))
-                            .foregroundStyle(SettingsCardStyle.chevronColor)
-                            .frame(width: 12, alignment: .trailing)
+                if let values = Self.releaseValues(event) {
+                    NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
+                        HStack(spacing: 0) {
+                            dateText(event)
+                            number(values.actual).frame(width: 34, alignment: .trailing)
+                            number(values.forecast).frame(width: 34, alignment: .trailing)
+                            number(values.previous).frame(width: 34, alignment: .trailing)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 7, weight: .semibold))
+                                .foregroundStyle(SettingsCardStyle.chevronColor)
+                                .frame(width: 12, alignment: .trailing)
+                        }
+                        .padding(.horizontal, 9)
+                        .frame(height: 28)
+                        .contentShape(Rectangle())
                     }
-                    .padding(.horizontal, 9)
-                    .frame(height: 28)
-                    .contentShape(Rectangle())
+                    .buttonStyle(SettingsRowPressStyle())
+                } else {
+                    // 無料プランで隠された過去の発表(HQ判断 2026-10-22): 値の3列の代わりに鍵の印。
+                    // 押すとプランの案内(イベント詳細も値は隠されているため進まない)。
+                    Button {
+                        planPrompt = PastReleaseLock.promptMessage(maxForPlan: plan.limits.pastReleasesMax)
+                    } label: {
+                        HStack(spacing: 0) {
+                            dateText(event)
+                            PastReleaseLockBadge(size: 7)
+                                .frame(width: 102, alignment: .trailing)
+                            Color.clear.frame(width: 12)
+                        }
+                        .padding(.horizontal, 9)
+                        .frame(height: 28)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(SettingsRowPressStyle())
+                    .accessibilityIdentifier("indicatorReleaseLockedRow")
                 }
-                .buttonStyle(SettingsRowPressStyle())
             }
         }
         .frame(width: 214)
@@ -95,11 +118,25 @@ struct IndicatorReleasesView: View {
         NotoText.text(text, size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
     }
 
-    private func number(_ value: Double?) -> some View {
-        Text(value.map { ValueFormat.number($0) } ?? "-")
+    private func dateText(_ event: IndicatorEventSummary) -> some View {
+        NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 7.5)
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func number(_ text: String) -> some View {
+        Text(text)
             .font(.system(size: 8, weight: .semibold))
             .monospacedDigit()
             .foregroundStyle(.white)
+    }
+
+    /// 行に出す結果・予想・前回の文字。無料プランで隠された発表(`isLocked`)ではnil
+    /// (値を「-」で出すとデータが無いように見えるため、行ごと鍵の印に替える)。
+    static func releaseValues(_ event: IndicatorEventSummary) -> (actual: String, forecast: String, previous: String)? {
+        guard !event.isLocked else { return nil }
+        func text(_ value: Double?) -> String { value.map { ValueFormat.number($0) } ?? "-" }
+        return (text(event.actual), text(event.forecast), text(event.previous))
     }
 }
 

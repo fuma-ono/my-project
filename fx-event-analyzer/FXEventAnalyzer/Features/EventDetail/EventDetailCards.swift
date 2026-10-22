@@ -9,9 +9,18 @@ struct EventDetailCards: View {
     let response: EventDetailResponse
     /// この指標の次回発表予定(呼び出し側で読む)。無ければ表示しない。
     var nextRelease: Date? = nil
+    /// 無料プランで隠された発表(api-design v1.31)の鍵の印を押したとき(プランの案内を出す)。
+    var onLockedTap: () -> Void = {}
 
     /// HQ指示(2026-10-09)の表: 発表前は結果「未発表」、値動き「発表後に表示」、分析「発表後に分析」。
     var isReleased: Bool { response.event.status == .released }
+
+    /// 無料プランで隠された過去の発表(HQ判断 2026-10-22)。値の代わりに鍵の印を出し、
+    /// 403になる相場反応詳細(`/reaction`)へは進まない。
+    var isLocked: Bool { response.event.isLocked }
+
+    /// 相場反応詳細へ進めるか(発表後で、隠されていない発表だけ)。
+    var canOpenReactions: Bool { isReleased && !isLocked }
 
     static let timeframes = ["1m", "5m", "15m"]
 
@@ -116,7 +125,33 @@ struct EventDetailCards: View {
 
     // MARK: - 結果・予想・前回
 
-    private var results: some View {
+    @ViewBuilder private var results: some View {
+        if isLocked {
+            lockedResults
+        } else {
+            unlockedResults
+        }
+    }
+
+    /// 隠された発表: 結果・予想・前回の代わりに鍵の印(押すとプランの案内)。カードの大きさは同じ。
+    private var lockedResults: some View {
+        Button(action: onLockedTap) {
+            VStack(spacing: 3) {
+                NotoText.text("結果・予想・前回", size: 9.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                PastReleaseLockBadge(size: 10)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 2)
+            .frame(minHeight: Self.summaryCardMinHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .frame(width: 214)
+        .background(GradientCardBackground())
+        .accessibilityIdentifier("eventDetailLockedValues")
+    }
+
+    private var unlockedResults: some View {
         let snapshot = response.snapshot
         let unit = snapshot?.unit
         let released = response.event.status == .released
@@ -228,7 +263,17 @@ struct EventDetailCards: View {
             // 前回この見出し行の色を消したのは誤りだったため戻した。
             .background(Self.headerFill)
             ForEach(pairs) { pair in
-                if isReleased {
+                if isLocked {
+                    Button(action: onLockedTap) {
+                        HStack(spacing: 0) {
+                            cell(width: Self.pairColumnWidth, alignment: .leading) { pairLabel(pair) }
+                            cell(width: Self.valueColumnWidth * 3) { PastReleaseLockBadge(size: 8) }
+                        }
+                        .frame(height: Self.rowHeight)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                } else if isReleased {
                 NavigationLink(value: AppRoute.movementDetail(
                     eventId: response.event.id,
                     indicatorId: response.event.indicatorId,
@@ -328,7 +373,7 @@ struct EventDetailCards: View {
 
     /// 先頭の通貨ペアのSCR-008 相場反応詳細へ(発表後だけ)。
     @ViewBuilder private var movementLink: some View {
-        if isReleased, let pair = pairs.first {
+        if canOpenReactions, let pair = pairs.first {
             NavigationLink(value: AppRoute.movementDetail(
                 eventId: response.event.id,
                 indicatorId: response.event.indicatorId,

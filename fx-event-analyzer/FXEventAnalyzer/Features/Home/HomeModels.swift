@@ -26,9 +26,18 @@ struct HomeEventSummary: Decodable, Identifiable, Equatable {
     var displayName: String? = nil
     /// 指標の単位(API v1.13、例: `%`・`千人`)。返さない古いBackendではnil。
     var unit: String? = nil
+    /// 無料プランで隠された過去の発表(api-design v1.31 §28.2)。古いBackendではnil(=隠していない)。
+    var locked: Bool? = nil
+    /// ロックを外すのに必要なプラン(`"PRO"`)。ロックしていなければnil。
+    var requiredPlan: String? = nil
+
+    /// ロックされた発表か。`true`のとき予想・結果・前回・サプライズはBackendが`null`で返す。
+    var isLocked: Bool { locked ?? false }
 
     enum CodingKeys: String, CodingKey {
         case unit
+        case locked
+        case requiredPlan = "required_plan"
         case displayName = "display_name"
         case id = "event_id"
         case indicatorId = "indicator_id"
@@ -87,16 +96,20 @@ struct HomeResponse: Decodable {
     /// だけがこのフィールドを含む応答を返し、本番のバックエンドの挙動は
     /// 変えていない。
     let speeches: [HomeSpeechSummary]?
+    /// 無料プランの過去の発表の上限(api-design v1.31 §12)。古いBackendではnil。
+    let pastReleaseLimit: PastReleaseLimit?
 
-    init(date: String, timezone: String, events: [HomeEventSummary], majorFx: [MajorFxSummary], speeches: [HomeSpeechSummary]? = nil) {
+    init(date: String, timezone: String, events: [HomeEventSummary], majorFx: [MajorFxSummary], speeches: [HomeSpeechSummary]? = nil, pastReleaseLimit: PastReleaseLimit? = nil) {
         self.date = date
         self.timezone = timezone
         self.events = events
         self.majorFx = majorFx
         self.speeches = speeches
+        self.pastReleaseLimit = pastReleaseLimit
     }
 
     enum CodingKeys: String, CodingKey {
+        case pastReleaseLimit = "past_release_limit"
         case date
         case timezone
         case events
