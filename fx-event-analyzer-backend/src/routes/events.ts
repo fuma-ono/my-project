@@ -8,7 +8,10 @@ import {
   getLatestExplanation,
   getReleaseSnapshot,
   listRevisions,
+  type EventRow,
 } from '../repositories/eventsRepository.js';
+import { requireUnlockedEvent, resolvePastReleaseAccess } from '../authorization/pastReleaseAccess.js';
+import { LOCKED, nullFields, RELEASE_VALUE_FIELDS, UNLOCKED } from '../domain/pastReleaseAccess.js';
 import { listRelatedFxPairs } from '../repositories/indicatorsRepository.js';
 import { listActiveFxPairs } from '../repositories/fxPairsRepository.js';
 import {
@@ -38,6 +41,68 @@ function isValidTimeframe(value: unknown): value is ValidTimeframe {
   return typeof value === 'string' && (VALID_TIMEFRAMES as readonly string[]).includes(value);
 }
 
+/**
+ * GET /events/{id} for an event locked by the past-release limit (HQ判断
+ * 2026-10-22): same shape as the unlocked response, but every field that
+ * carries released values or their analysis is null — snapshot
+ * forecast/actual/previous/surprise/surprise_direction, `analysis`,
+ * `explanation`, `event.revision_status`, and the pips / change_percent /
+ * analysis_status of every reaction. Dates, status, data_status, indicator
+ * info, the snapshot's unit/source/captured_at and the pair lists stay.
+ * Explanations, revisions and reactions are not even read.
+ */
+async function lockedEventDetail(app: FastifyInstance, event: EventRow, precision: ReleaseDatetimePrecision) {
+  const [snapshot, relatedFxPairs, activeFxPairs] = await Promise.all([
+    getReleaseSnapshot(app.supabase, event.id),
+    listRelatedFxPairs(app.supabase, event.indicator_id),
+    listActiveFxPairs(app.supabase),
+  ]);
+  const majorFxPairs = selectMajorFxPairs(activeFxPairs, relatedFxPairs, event.currency_code);
+
+  return {
+    event: {
+      id: event.id,
+      indicator_id: event.indicator_id,
+      indicator_name: event.indicator_name,
+      display_name: event.indicator_display_name,
+      country_code: event.country_code,
+      currency_code: event.currency_code,
+      release_datetime: event.release_datetime,
+      release_datetime_precision: event.release_datetime_precision,
+      importance: event.importance,
+      status: event.status,
+      data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
+      revision_status: null,
+      ...LOCKED,
+    },
+    snapshot: snapshot ? nullFields(snapshot, RELEASE_VALUE_FIELDS) : null,
+    analysis: { surprise: null, surprise_direction: null },
+    explanation: null,
+    related_fx_pairs: relatedFxPairs.map((pair) => ({
+      fx_pair_id: pair.fx_pair_id,
+      symbol: pair.symbol,
+      priority: pair.priority,
+      reaction: {
+        timeframe: RELATED_FX_PAIR_SUMMARY_TIMEFRAME,
+        pips: null,
+        change_percent: null,
+        analysis_status: null,
+      },
+    })),
+    major_fx_reactions: majorFxPairs.map((pair) => ({
+      fx_pair_id: pair.fx_pair_id,
+      symbol: pair.symbol,
+      reactions: MAJOR_FX_REACTION_TIMEFRAMES.map((timeframe) => ({
+        timeframe,
+        pips: null,
+        change_percent: null,
+        analysis_status: null,
+      })),
+    })),
+    available_timeframes: availableTimeframes(precision),
+  };
+}
+
 export function registerEventRoutes(app: FastifyInstance): void {
   app.get<{ Params: { event_id: string } }>('/events/:event_id', async (request) => {
     const userId = request.user!.id;
@@ -50,6 +115,13 @@ export function registerEventRoutes(app: FastifyInstance): void {
     }
 
     const precision = event.release_datetime_precision as ReleaseDatetimePrecision;
+
+    // HQ判断 2026-10-22: FREE は指標ごとに直近3回の発表だけ値を見られる。
+    // ロックされた発表も 403 にはせず、値を隠して locked: true で返す。
+    const { lockedIds } = await resolvePastReleaseAccess(app.supabase, userId, [event]);
+    if (lockedIds.has(event.id)) {
+      return lockedEventDetail(app, event, precision);
+    }
 
     const [snapshot, explanation, revisionCount, relatedFxPairs, activeFxPairs] = await Promise.all([
       getReleaseSnapshot(app.supabase, eventId),
@@ -90,6 +162,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
         status: event.status,
         data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
         revision_status: resolveRevisionStatus(revisionCount),
+        ...UNLOCKED,
       },
       snapshot: snapshot ?? null,
       analysis: {
@@ -129,6 +202,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
       if (!event) {
         throw new ApiError('EVENT_NOT_FOUND', 'Event not found.');
       }
+      // HQ判断 2026-10-22: 親の発表がロックされていれば 403 PLAN_LIMIT_EXCEEDED。
+      await requireUnlockedEvent(app.supabase, request.user!.id, event);
 
       const pagination = parsePagination(request.query);
       const { rows, total } = await listRevisions(app.supabase, eventId, rangeFor(pagination.page, pagination.limit));
@@ -156,6 +231,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       if (!event) {
         throw new ApiError('EVENT_NOT_FOUND', 'Event not found.');
       }
+      await requireUnlockedEvent(app.supabase, userId, event);
       const fxPair = await getFxPairById(app.supabase, fxPairId);
       if (!fxPair) {
         throw new ApiError('FX_PAIR_NOT_FOUND', 'FX pair not found.');
@@ -237,6 +313,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       if (!event) {
         throw new ApiError('EVENT_NOT_FOUND', 'Event not found.');
       }
+      await requireUnlockedEvent(app.supabase, userId, event);
 
       // MVP Chart Window: release -30min to +60min (api-design.md §19).
       // 時間足ごとに、発表時刻を基準にした表示範囲(domain/chartWindow.ts)。

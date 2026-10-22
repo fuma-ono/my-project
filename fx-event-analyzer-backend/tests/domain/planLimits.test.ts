@@ -27,6 +27,7 @@ describe('planLimitsFor', () => {
       notification_fx_pairs_max: 1,
       history_events_max: 5,
       rate_alerts_max: 1,
+      past_releases_max: 3,
     });
     expect(planLimitsFor('PRO')).toEqual({
       calendar_past: { unit: 'YEARS', count: 5 },
@@ -36,6 +37,7 @@ describe('planLimitsFor', () => {
       notification_fx_pairs_max: null,
       history_events_max: 20,
       rate_alerts_max: 10,
+      past_releases_max: null,
     });
   });
 });
@@ -167,6 +169,7 @@ describe('toEntitlementLimits', () => {
       notification_importances: ['HIGH'],
       notification_fx_pairs_max: 1,
       history_events_max: 5,
+      past_releases_max: 3,
     });
     expect(toEntitlementLimits('PRO', NOW, 'UTC')).toEqual({
       calendar_earliest_from: '2021-01-01T00:00:00Z',
@@ -175,6 +178,7 @@ describe('toEntitlementLimits', () => {
       notification_importances: ['HIGH', 'MEDIUM', 'LOW'],
       notification_fx_pairs_max: null,
       history_events_max: 20,
+      past_releases_max: null,
     });
   });
 

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { ApiError } from '../errors/ApiError.js';
 import { FEATURE_CODES, listActiveFeatureCodes, requireEntitlement } from '../authorization/entitlements.js';
+import { requireUnlockedEvent } from '../authorization/pastReleaseAccess.js';
 import { getEventById, getLatestExplanation, getReleaseSnapshot } from '../repositories/eventsRepository.js';
 import { getIndicatorById, listRelatedFxPairs } from '../repositories/indicatorsRepository.js';
 import {
@@ -46,6 +47,8 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
     if (!event) {
       throw new ApiError('EVENT_NOT_FOUND', 'Event not found.');
     }
+    // HQ判断 2026-10-22: 親の発表がロックされていれば 403 PLAN_LIMIT_EXCEEDED。
+    await requireUnlockedEvent(app.supabase, userId, event);
 
     const [snapshot, explanation, relatedFxPairs] = await Promise.all([
       getReleaseSnapshot(app.supabase, eventId),

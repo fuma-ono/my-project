@@ -128,6 +128,7 @@ describe.skipIf(!integration)('Plan limits (FREE / PRO)', () => {
         notification_importances: ['HIGH'],
         notification_fx_pairs_max: 1,
         history_events_max: 5,
+        past_releases_max: 3,
       });
       // 00:00 JST on the 1st of last month = 15:00 UTC on the day before.
       expect(body.limits.calendar_earliest_from).toMatch(/^\d{4}-\d{2}-\d{2}T15:00:00Z$/);
@@ -147,6 +148,7 @@ describe.skipIf(!integration)('Plan limits (FREE / PRO)', () => {
         notification_importances: ['HIGH', 'MEDIUM', 'LOW'],
         notification_fx_pairs_max: null,
         history_events_max: 20,
+        past_releases_max: null,
       });
     });
 
