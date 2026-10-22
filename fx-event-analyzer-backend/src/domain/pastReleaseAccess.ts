@@ -19,13 +19,40 @@ export const PAST_RELEASE_REQUIRED_PLAN = 'PRO' as const;
 /** ロックした発表で null にする値の項目(一覧・ホーム・詳細の snapshot)。 */
 export const RELEASE_VALUE_FIELDS = ['forecast', 'actual', 'previous', 'surprise', 'surprise_direction'] as const;
 
+/**
+ * 「前回」を隠す発表で null にする項目(HQ指示 2026-10-22)。発表の「前回」は、
+ * ひとつ前の発表の結果(またはその改定値)なので、ひとつ前の発表がロックされて
+ * いれば(= FREE で見られる発表のうち一番古いもの)隠す。surprise は予想と結果
+ * から計算する値で、前回は使わない。
+ */
+export const PREVIOUS_VALUE_FIELDS = ['previous'] as const;
+
+/** `event_revisions.field_name` of a revised `previous` (= the preceding release's actual). */
+export const PREVIOUS_REVISION_FIELD = 'PREVIOUS' as const;
+
 export interface PastReleaseAccessFields {
   locked: boolean;
   required_plan: typeof PAST_RELEASE_REQUIRED_PLAN | null;
+  /** 「前回」だけを隠した(ひとつ前の発表がロックされている)とき true。`locked` の行では false。 */
+  previous_locked: boolean;
 }
 
-export const UNLOCKED: Readonly<PastReleaseAccessFields> = { locked: false, required_plan: null };
-export const LOCKED: Readonly<PastReleaseAccessFields> = { locked: true, required_plan: PAST_RELEASE_REQUIRED_PLAN };
+export const UNLOCKED: Readonly<PastReleaseAccessFields> = {
+  locked: false,
+  required_plan: null,
+  previous_locked: false,
+};
+export const LOCKED: Readonly<PastReleaseAccessFields> = {
+  locked: true,
+  required_plan: PAST_RELEASE_REQUIRED_PLAN,
+  previous_locked: false,
+};
+/** 行そのものはロックしない(`required_plan` は従来どおり null)。前回を見るのに必要なプランは PRO。 */
+export const PREVIOUS_LOCKED: Readonly<PastReleaseAccessFields> = {
+  locked: false,
+  required_plan: null,
+  previous_locked: true,
+};
 
 /**
  * GET /events/{id} でロックした発表の `event.revision_status` と各 reaction の
@@ -70,8 +97,13 @@ function compareNewestFirst(a: ReleaseCandidate, b: ReleaseCandidate): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
-/** Pure equivalent of the SQL function: per indicator, the `limit` newest RELEASED ids. */
-export function selectVisibleReleasedIds(events: readonly ReleaseCandidate[], limit: number): Set<string> {
+/**
+ * Pure equivalent of the SQL function: per indicator, the `limit` newest
+ * RELEASED ids, each mapped to `previous_locked` — true for the `limit`-th
+ * newest when an older RELEASED release exists (its `previous` is that
+ * locked release's actual).
+ */
+export function selectVisibleReleasedIds(events: readonly ReleaseCandidate[], limit: number): Map<string, boolean> {
   const byIndicator = new Map<string, ReleaseCandidate[]>();
   for (const event of events) {
     if (event.status !== 'RELEASED') continue;
@@ -79,11 +111,12 @@ export function selectVisibleReleasedIds(events: readonly ReleaseCandidate[], li
     list.push(event);
     byIndicator.set(event.indicator_id, list);
   }
-  const visible = new Set<string>();
+  const visible = new Map<string, boolean>();
   for (const list of byIndicator.values()) {
-    for (const event of [...list].sort(compareNewestFirst).slice(0, Math.max(limit, 0))) {
-      visible.add(event.id);
-    }
+    const sorted = [...list].sort(compareNewestFirst);
+    sorted.slice(0, Math.max(limit, 0)).forEach((event, index) => {
+      visible.set(event.id, index === limit - 1 && sorted.length > limit);
+    });
   }
   return visible;
 }
@@ -105,22 +138,25 @@ export function lockedEventIds(
   return locked;
 }
 
-export function accessFields(locked: boolean): PastReleaseAccessFields {
-  return locked ? { ...LOCKED } : { ...UNLOCKED };
+export function accessFields(locked: boolean, previousLocked = false): PastReleaseAccessFields {
+  if (locked) return { ...LOCKED };
+  return previousLocked ? { ...PREVIOUS_LOCKED } : { ...UNLOCKED };
 }
 
 /**
- * Adds `locked` / `required_plan` to `item`; when locked, every field in
- * `valueFields` that is present on `item` is set to null. Everything else
- * (dates, status, data_status, indicator info, source …) is kept.
+ * Adds `locked` / `required_plan` / `previous_locked` to `item`. Locked: every
+ * value field (RELEASE_VALUE_FIELDS) present on `item` is set to null.
+ * Previous-locked (and not locked): only `previous` is set to null. Everything
+ * else (dates, status, data_status, indicator info, source …) is kept.
  */
 export function redactRelease<T extends object>(
   item: T,
   locked: boolean,
-  valueFields: readonly string[] = RELEASE_VALUE_FIELDS,
+  previousLocked = false,
 ): T & PastReleaseAccessFields {
-  if (!locked) return { ...item, ...UNLOCKED };
-  return { ...nullFields(item, valueFields), ...LOCKED };
+  if (locked) return { ...nullFields(item, RELEASE_VALUE_FIELDS), ...LOCKED };
+  if (previousLocked) return { ...nullFields(item, PREVIOUS_VALUE_FIELDS), ...PREVIOUS_LOCKED };
+  return { ...item, ...UNLOCKED };
 }
 
 /** A copy of `item` with each of `fields` that is present set to null. */

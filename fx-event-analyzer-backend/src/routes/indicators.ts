@@ -84,7 +84,7 @@ export function registerIndicatorRoutes(app: FastifyInstance): void {
       );
 
       // HQ判断 2026-10-22: FREE は直近3回より古い RELEASED の値を隠す(locked)。
-      const { plan, lockedIds } = await resolvePastReleaseAccess(
+      const { plan, lockedIds, previousLockedIds } = await resolvePastReleaseAccess(
         app.supabase,
         request.user!.id,
         rows.map((row) => ({ id: row.id, indicator_id: indicatorId, status: row.status })),
@@ -100,6 +100,7 @@ export function registerIndicatorRoutes(app: FastifyInstance): void {
               data_status: mapEventDataStatus(dataStatus as EconomicEventDbStatus),
             },
             lockedIds.has(id),
+            previousLockedIds.has(id),
           ),
         ),
         meta: buildMeta(pagination.page, pagination.limit, total),

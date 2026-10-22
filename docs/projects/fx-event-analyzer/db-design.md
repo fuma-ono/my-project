@@ -46,7 +46,7 @@
   - `FxPrice`に`verification_status`(`VERIFIED` / `SINGLE_SOURCE` / `UNVERIFIED`、既存行は`SINGLE_SOURCE`)・`cross_check_source`・`cross_check_close`・`cross_check_diff_pips`を追加(3.11節)。`UNVERIFIED`の足はRead APIが使わない
   - `IngestionLog`に`job`・`skipped_count`・`review_count`・`details`(jsonb)を追加(3.13節)。`data_type`の値セットは変えない(公式統計・要人発言は`OTHER`、ジョブ名は`job`)
 - **v4.16**(2026-10-16): FREEの機能の付与(HQ指示 2026-10-16)。全ユーザーが持つ機能の表`DefaultEntitlement`(`default_entitlements`、3.3.1節)を追加し、`VIEW_BASIC_EVENT` / `VIEW_HISTORICAL` / `VIEW_MARKET_REACTION`を入れた。Migration `20261016000002_default_entitlements.sql`。これまで新しいユーザーに`Entitlement`の行を入れる処理が無く、登録したばかりのユーザーがFREEの機能も使えなかった。ユーザーの`Entitlement`に同じfeature_codeの行があれば、有効・無効・期限切れのどれでもそちらが優先する(api-design.md v1.30 28章)。RLSはポリシーなし(service_roleのみ)
-- **v4.18**(2026-10-22): 無料プランの「過去の発表」制限(HQ判断 2026-10-21/22、api-design.md v1.33 28.2節)。Migration `20261022000001_past_release_access.sql`。市場の値を持つ`EconomicEvent` / `EventSnapshot` / `EventRevision` / `EventExplanation` / `EventPriceReaction`の「全認証ユーザーSELECT可」のポリシーを削除し、`anon` / `authenticated`のテーブルの権限もすべて取り消した(`revoke all`。RLSは有効のまま。6章)。値を見られる発表を計算する関数`visible_released_event_ids`(service_role専用)を追加(6.1節)。Migration `20261022000003_fx_prices_access.sql`(HQ指示 2026-10-22、単独で適用・取り消しできる別ファイル)で、`FxPrice`の「全認証ユーザーSELECT可」のポリシーも削除し、`anon` / `authenticated`の権限をすべて取り消した(ロックされた発表の前後の足から値動きを計算し直せないため。6章)。テーブル・列は変えない
+- **v4.18**(2026-10-22): 無料プランの「過去の発表」制限(HQ判断 2026-10-21/22、api-design.md v1.33 28.2節)。Migration `20261022000001_past_release_access.sql`。市場の値を持つ`EconomicEvent` / `EventSnapshot` / `EventRevision` / `EventExplanation` / `EventPriceReaction`の「全認証ユーザーSELECT可」のポリシーを削除し、`anon` / `authenticated`のテーブルの権限もすべて取り消した(`revoke all`。RLSは有効のまま。6章)。値を見られる発表と、前回を隠す発表を計算する関数`visible_released_event_ids`(service_role専用)を追加(6.1節)。Migration `20261022000003_fx_prices_access.sql`(HQ指示 2026-10-22、単独で適用・取り消しできる別ファイル)で、`FxPrice`の「全認証ユーザーSELECT可」のポリシーも削除し、`anon` / `authenticated`の権限をすべて取り消した(ロックされた発表の前後の足から値動きを計算し直せないため。6章)。テーブル・列は変えない
 
 ---
 
@@ -686,10 +686,11 @@ Supabase RLSを実装前提の設計条件として採用する。論理方針�
 
 ### 6.1 visible_released_event_ids(v4.18で追加、HQ判断 2026-10-22)
 
-`visible_released_event_ids(p_indicator_ids uuid[], p_limit int) returns table(event_id uuid)`: 指定した指標ごとに、`status = 'RELEASED'`の`EconomicEvent`を`release_datetime`の新しい順・同時刻は`id`の昇順に並べ(`row_number() over (partition by indicator_id ...)`)、先頭`p_limit`件のidを返す。Backendが無料プランの「過去の発表」制限(api-design.md 28.2節、FREEは`p_limit = 3`)で、値を見せてよい発表を決めるのに使う。PROのときは呼ばない。
+`visible_released_event_ids(p_indicator_ids uuid[], p_limit int) returns table(event_id uuid, previous_locked boolean)`: 指定した指標ごとに、`status = 'RELEASED'`の`EconomicEvent`を`release_datetime`の新しい順・同時刻は`id`の昇順に並べ(`row_number() over (partition by indicator_id ...)`)、先頭`p_limit`件のidを返す。`previous_locked`は、`p_limit`番目で、それより古い`RELEASED`がある発表だけ`true`(その発表の`previous`は、ロックされたひとつ前の発表の結果にあたるため、Backendが隠す。api-design.md 28.2節)。Backendが無料プランの「過去の発表」制限(api-design.md 28.2節、FREEは`p_limit = 3`)で、値を見せてよい発表を決めるのに使う。PROのときは呼ばない。
 
 - `security definer`・`set search_path = public`。実行権限は`service_role`だけ(`public` / `anon` / `authenticated`からは取り消し)
 - 上の5テーブルの権限を外しても、既存のトリガー関数(`record_economic_event_schedule_change`・`prevent_release_snapshot_mutation`・`set_updated_at`)は`OLD` / `NEW`だけを使いテーブルをSELECTしない。トリガーは更新した役割(service_role)の権限で動き、外部キーの確認は表の所有者の権限で行われる。この5テーブルを読むviewやSECURITY INVOKERの関数は無い。書き込みはservice_roleだけが行うため影響しない
+- 取り込みの運用データ(`IngestionLog`・`IngestionStagedValue`・`OfficialObservation`。公式の結果の値を含む)は、v4.18でも権限を変えない。現状: RLSは有効、ポリシーなし(`20260917000009_rls.sql`・`20261015000003_ingestion_accuracy.sql`)、`anon` / `authenticated`の権限はSupabaseの既定のまま(ALL。ポリシーが無いのでRLSで0件・書き込み不可)。読み書きするのは取り込みジョブ(`npm run ingest:*`、`src/repositories/ingestionRepository.ts`)と品質レポート(`npm run report:data-quality`、`GET /quality-report`。`src/ingestion/quality/reader.ts`、読むだけ)で、どれもservice_role(`src/db/supabaseClient.ts`)。`GET /quality-report`は`INTERNAL_REPORT_TOKEN`が無いと404の社内向けで、アプリからは使わない
 - 取り消す前の権限: Supabaseは`public`スキーマの表に既定で`anon` / `authenticated` / `service_role`へALL(SELECT・INSERT・UPDATE・DELETE・TRUNCATE・REFERENCES・TRIGGER)を与える。戻す手順はdev-environment.md §13.6(`grant all`とポリシー5件の作り直し)
 
 ## 7. Delete / Cascade方針(確定)

@@ -17,12 +17,14 @@ import {
   resolvePastReleaseAccessForPlan,
 } from '../authorization/pastReleaseAccess.js';
 import {
+  accessFields,
   LOCKED,
   LOCKED_ANALYSIS_STATUS,
   LOCKED_REVISION_STATUS,
   nullFields,
+  PREVIOUS_REVISION_FIELD,
+  PREVIOUS_VALUE_FIELDS,
   RELEASE_VALUE_FIELDS,
-  UNLOCKED,
 } from '../domain/pastReleaseAccess.js';
 import { listRelatedFxPairs } from '../repositories/indicatorsRepository.js';
 import { listActiveFxPairs } from '../repositories/fxPairsRepository.js';
@@ -134,19 +136,23 @@ export function registerEventRoutes(app: FastifyInstance): void {
 
     // HQ判断 2026-10-22: FREE は指標ごとに直近3回の発表だけ値を見られる。
     // ロックされた発表も 403 にはせず、値を隠して locked: true で返す。
-    const lockedIds = await resolvePastReleaseAccessForPlan(app.supabase, plan, [event]);
+    const { lockedIds, previousLockedIds } = await resolvePastReleaseAccessForPlan(app.supabase, plan, [event]);
     if (lockedIds.has(event.id)) {
       return lockedEventDetail(app, event, precision);
     }
+    // HQ指示 2026-10-22: ひとつ前の発表がロックされていれば(FREE で見られる一番古い
+    // 発表)、その結果にあたる「前回」と、前回の改定・解説(前回を書いていることがある)を隠す。
+    const previousLocked = previousLockedIds.has(event.id);
 
-    const [snapshot, explanation, revisionCount, relatedFxPairs, activeFxPairs] = await Promise.all([
+    const [rawSnapshot, explanation, revisionCount, relatedFxPairs, activeFxPairs] = await Promise.all([
       getReleaseSnapshot(app.supabase, eventId),
-      getLatestExplanation(app.supabase, eventId),
-      countRevisions(app.supabase, eventId),
+      previousLocked ? Promise.resolve(null) : getLatestExplanation(app.supabase, eventId),
+      countRevisions(app.supabase, eventId, previousLocked ? { excludeField: PREVIOUS_REVISION_FIELD } : {}),
       listRelatedFxPairs(app.supabase, event.indicator_id),
       listActiveFxPairs(app.supabase),
     ]);
 
+    const snapshot = rawSnapshot && previousLocked ? nullFields(rawSnapshot, PREVIOUS_VALUE_FIELDS) : rawSnapshot;
     const majorFxPairs = selectMajorFxPairs(activeFxPairs, relatedFxPairs, event.currency_code);
     const [reactions, majorReactionRows] = await Promise.all([
       listReactionsForTimeframe(
@@ -178,7 +184,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
         status: event.status,
         data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
         revision_status: resolveRevisionStatus(revisionCount),
-        ...UNLOCKED,
+        ...accessFields(false, previousLocked),
       },
       snapshot: snapshot ?? null,
       analysis: {
@@ -219,10 +225,16 @@ export function registerEventRoutes(app: FastifyInstance): void {
         throw new ApiError('EVENT_NOT_FOUND', 'Event not found.');
       }
       // HQ判断 2026-10-22: 親の発表がロックされていれば 403 PLAN_LIMIT_EXCEEDED。
-      await requireUnlockedEvent(app.supabase, request.user!.id, event);
+      // 「前回」を隠す発表では、前回の改定(= ひとつ前の発表の結果の改定)も返さない。
+      const { previousLocked } = await requireUnlockedEvent(app.supabase, request.user!.id, event);
 
       const pagination = parsePagination(request.query);
-      const { rows, total } = await listRevisions(app.supabase, eventId, rangeFor(pagination.page, pagination.limit));
+      const { rows, total } = await listRevisions(
+        app.supabase,
+        eventId,
+        rangeFor(pagination.page, pagination.limit),
+        previousLocked ? { excludeField: PREVIOUS_REVISION_FIELD } : {},
+      );
 
       return {
         data: rows.map((row) => ({ event_id: eventId, ...row })),

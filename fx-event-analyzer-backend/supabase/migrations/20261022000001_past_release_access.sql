@@ -38,7 +38,7 @@
 --   - 外部キーの確認は表の所有者の権限で行われるので REFERENCES は不要。
 --   - iOS は Supabase を認証にしか使わない(テーブルを直接読まない)。
 --
--- 何度流しても同じ結果になる(if exists / create or replace / revoke・grant)。
+-- 何度流しても同じ結果になる(if exists / drop・create / revoke・grant)。
 
 -- ---------------------------------------------------------------------
 -- 1) 直接の読み書きの禁止
@@ -68,22 +68,33 @@ revoke all on event_price_reactions from anon, authenticated;
 -- 指標ごとに、RELEASED の直近 p_limit 回の event id を返す
 -- (release_datetime desc, id asc)。Backend が FREE のときだけ呼ぶ
 -- (PRO は呼ばない)。service_role 専用。
+--
+-- previous_locked (HQ指示 2026-10-22「3件目の前回から4件目の結果が漏れる」):
+-- 発表の「前回」(event_snapshots.previous)は、ひとつ前の発表の結果(または
+-- その改定値)。見られる発表のうち、ひとつ前の RELEASED の発表がロックされて
+-- いるもの = 直近 p_limit 回目で、それより古い RELEASED がある発表は true。
+-- Backend はこの発表の「前回」と、それに由来するもの(前回の改定・解説)を隠す。
 
-create or replace function visible_released_event_ids(p_indicator_ids uuid[], p_limit int)
-returns table (event_id uuid)
+-- 返す列を変えたので、作り直す(create or replace では列を変えられない)。
+drop function if exists visible_released_event_ids(uuid[], int);
+
+create function visible_released_event_ids(p_indicator_ids uuid[], p_limit int)
+returns table (event_id uuid, previous_locked boolean)
 language sql
 stable
 security definer
 set search_path = public
 as $$
-  select ranked.id
+  select ranked.id, (ranked.rn = p_limit and ranked.has_older) as previous_locked
   from (
     select
       e.id,
-      row_number() over (partition by e.indicator_id order by e.release_datetime desc, e.id asc) as rn
+      row_number() over w as rn,
+      lead(e.id) over w is not null as has_older
     from economic_events e
     where e.indicator_id = any (p_indicator_ids)
       and e.status = 'RELEASED'
+    window w as (partition by e.indicator_id order by e.release_datetime desc, e.id asc)
   ) ranked
   where ranked.rn <= p_limit;
 $$;

@@ -1075,6 +1075,17 @@ order by t.tbl, r.rolname;
 
 -- (3) RLS。期待: 5行すべて relrowsecurity = true(13.1 (3) と同じ SQL)
 
+-- (3b) 前回を隠す発表の判定(読むだけ)。期待: 指標ごとに rn = 3 の行だけ previous_locked = true
+--      (その指標に RELEASED が4回以上あるとき)。1・2回目は false
+begin;
+set local role service_role;
+select e.indicator_id, e.release_datetime, v.previous_locked
+from visible_released_event_ids(array(select id from economic_indicators where is_active), 3) v
+join economic_events e on e.id = v.event_id
+order by e.indicator_id, e.release_datetime desc
+limit 30;
+rollback;
+
 -- (4) 関数の実行権限。期待: anon = false、authenticated = false、service_role = true
 select r.rolname,
        has_function_privilege(r.rolname, 'visible_released_event_ids(uuid[],integer)', 'execute') as can_execute
@@ -1112,6 +1123,7 @@ rollback;
    - `GET /home`: 過去の日付で、その指標の直近3回より古い発表は値が出ず鍵の印、直近3回は値が出る
    - `GET /indicators/{id}/events`(指標詳細の過去の発表): 新しい3回は値あり、4回目より古いものは鍵の印。未発表の行は今までどおり
    - `GET /events/{id}`: 4回目より古い発表を開くと 200 で鍵の印(エラー画面にならない)。値動きの表も鍵の印で、相場反応詳細へは進まない
+   - 直近3回目の発表(4回目より古い発表がある指標): 結果・予想は出て、**前回だけ鍵の印**(前回比も出ない)。解説は出ない。改定履歴に「前回」の改定が出ない。1回目・2回目の前回は今までどおり出る(一覧・ホーム・詳細・比較の表で同じ)
 4. **PRO のアカウント**で同じ画面を開き、すべての発表に値が出て鍵の印が無いことを確かめる
 5. 過去イベント比較(`GET /indicators/{id}/comparison`)は FREE 5行・PRO 20行のまま。FREE では直近3回より古い行が鍵の印で値・pips が出ず、平均などの統計はロックされていない行だけから出ること。PRO はすべての行に値が出ること
 
@@ -1121,6 +1133,7 @@ rollback;
 - service_role で `visible_released_event_ids` がエラーになった、または関数が見つからない
 - デプロイ後、FREE のアカウントで `/home`・`/indicators/{id}/events`・`/events/{id}` のどれかが 500 になった(すぐ 13.6 の順で戻すか、Backend だけ前の版に戻す)
 - PRO のアカウントで鍵の印が出た
+- FREE で直近3回目の発表の前回が数字で出た、または1回目・2回目の前回が鍵の印になった
 
 ### 13.6 戻す手順
 
@@ -1249,3 +1262,16 @@ notify pgrst, 'reload schema';
 ```
 
 戻したあと、適用前の (1)〜(3) をもう一度実行し、記録と同じになったことを確かめる。
+
+### 13.8 取り込みの運用データの表(権限は変えない。2026-10-22 HQ指示「記録のみ」)
+
+`ingestion_logs`・`ingestion_staged_values`・`official_observations`(公式の結果の値を含む)は、このブランチでも権限を変えない。今の状態(マイグレーションから):
+
+| 表 | RLS | ポリシー | anon / authenticated の権限 | 読み書きするもの(どれも service_role) |
+|---|---|---|---|---|
+| `ingestion_logs` | 有効(`20260917000009_rls.sql`) | なし | Supabase の既定(ALL)のまま。ポリシーが無いので RLS で0件・書き込み不可 | 取り込みジョブ(`ingestionRepository.ts`、書き込み・読み込み)、品質レポート(`quality/reader.ts`、読むだけ) |
+| `ingestion_staged_values` | 有効(`20261015000003_ingestion_accuracy.sql`) | なし | 同上 | 取り込みジョブ(読み書き)、品質レポート(読むだけ) |
+| `official_observations` | 有効(同上) | なし | 同上 | 取り込みジョブ(`upsertOfficialObservations`) |
+
+- 品質レポートは `npm run report:data-quality`(GitHub Actions)と `GET /quality-report`(`INTERNAL_REPORT_TOKEN` が無いと404。社内向けで、アプリからは使わない)
+- 確かめる SQL(読むだけ): `select relname, relrowsecurity from pg_class where relname in ('ingestion_logs', 'ingestion_staged_values', 'official_observations');`(期待: すべて true)と `select tablename, policyname from pg_policies where tablename in ('ingestion_logs', 'ingestion_staged_values', 'official_observations');`(期待: 0行)

@@ -38,7 +38,7 @@ describe('selectVisibleReleasedIds', () => {
       released('e4', '2026-04-10T13:30:00Z'),
       released('e5', '2026-05-10T13:30:00Z'),
     ];
-    expect([...selectVisibleReleasedIds(events, 3)].sort()).toEqual(['e3', 'e4', 'e5']);
+    expect([...selectVisibleReleasedIds(events, 3).keys()].sort()).toEqual(['e3', 'e4', 'e5']);
   });
 
   it('breaks ties on release_datetime by id ascending', () => {
@@ -48,7 +48,7 @@ describe('selectVisibleReleasedIds', () => {
       released('e-d', '2026-05-10T13:30:00Z'),
       released('e-b', '2026-05-10T13:30:00Z'),
     ];
-    expect([...selectVisibleReleasedIds(events, 3)].sort()).toEqual(['e-a', 'e-b', 'e-c']);
+    expect([...selectVisibleReleasedIds(events, 3).keys()].sort()).toEqual(['e-a', 'e-b', 'e-c']);
   });
 
   it('compares instants, not strings (offsets)', () => {
@@ -56,12 +56,12 @@ describe('selectVisibleReleasedIds', () => {
       released('late', '2026-05-10T09:00:00+09:00'), // 00:00Z
       released('early', '2026-05-09T23:00:00Z'),
     ];
-    expect([...selectVisibleReleasedIds(events, 1)]).toEqual(['late']);
+    expect([...selectVisibleReleasedIds(events, 1).keys()]).toEqual(['late']);
   });
 
   it('shows every release when there are fewer than 3', () => {
     const events = [released('e1', '2026-01-10T13:30:00Z'), released('e2', '2026-02-10T13:30:00Z')];
-    expect([...selectVisibleReleasedIds(events, 3)].sort()).toEqual(['e1', 'e2']);
+    expect([...selectVisibleReleasedIds(events, 3).keys()].sort()).toEqual(['e1', 'e2']);
   });
 
   it('never counts SCHEDULED (or CANCELLED) events', () => {
@@ -72,7 +72,7 @@ describe('selectVisibleReleasedIds', () => {
       { id: 's1', indicator_id: IND_A, status: 'SCHEDULED', release_datetime: '2026-06-10T13:30:00Z' },
       { id: 'c1', indicator_id: IND_A, status: 'CANCELLED', release_datetime: '2026-05-10T13:30:00Z' },
     ];
-    expect([...selectVisibleReleasedIds(events, 3)].sort()).toEqual(['e1', 'e2', 'e3']);
+    expect([...selectVisibleReleasedIds(events, 3).keys()].sort()).toEqual(['e1', 'e2', 'e3']);
   });
 
   it('counts each indicator separately', () => {
@@ -82,7 +82,23 @@ describe('selectVisibleReleasedIds', () => {
       released('b1', '2025-01-10T13:30:00Z', IND_B),
       released('b2', '2025-02-10T13:30:00Z', IND_B),
     ];
-    expect([...selectVisibleReleasedIds(events, 1)].sort()).toEqual(['a2', 'b2']);
+    expect([...selectVisibleReleasedIds(events, 1).keys()].sort()).toEqual(['a2', 'b2']);
+  });
+
+  it('previous_locked: only the oldest visible release, and only when an older RELEASED exists', () => {
+    const five = [
+      released('e1', '2026-01-10T13:30:00Z'),
+      released('e2', '2026-02-10T13:30:00Z'),
+      released('e3', '2026-03-10T13:30:00Z'),
+      released('e4', '2026-04-10T13:30:00Z'),
+      released('e5', '2026-05-10T13:30:00Z'),
+    ];
+    expect(Object.fromEntries(selectVisibleReleasedIds(five, 3))).toEqual({ e5: false, e4: false, e3: true });
+    // Exactly 3 releases: the 3rd's previous is not a stored (locked) release.
+    expect(Object.fromEntries(selectVisibleReleasedIds(five.slice(2), 3))).toEqual({ e5: false, e4: false, e3: false });
+    // Tie on the 3rd / 4th: the lower id is visible and previous-locked.
+    const tie = [...five.slice(2), released('e3b', '2026-03-10T13:30:00Z')];
+    expect(Object.fromEntries(selectVisibleReleasedIds(tie, 3))).toEqual({ e5: false, e4: false, e3: true });
   });
 });
 
@@ -133,13 +149,26 @@ describe('redactRelease', () => {
       surprise_direction: null,
       locked: true,
       required_plan: 'PRO',
+      previous_locked: false,
     });
     // The input is not mutated.
     expect(item.actual).toBe(1.3);
   });
 
   it('keeps everything and marks unlocked items', () => {
-    expect(redactRelease(item, false)).toEqual({ ...item, locked: false, required_plan: null });
+    expect(redactRelease(item, false)).toEqual({ ...item, locked: false, required_plan: null, previous_locked: false });
+  });
+
+  it('previous-locked: only previous is nulled, everything else (actual, surprise …) stays', () => {
+    expect(redactRelease(item, false, true)).toEqual({
+      ...item,
+      previous: null,
+      locked: false,
+      required_plan: null,
+      previous_locked: true,
+    });
+    // A locked row wins over previous-locked.
+    expect(redactRelease(item, true, true)).toMatchObject({ actual: null, locked: true, previous_locked: false });
   });
 
   it('does not add value fields that the item does not have', () => {
@@ -148,6 +177,7 @@ describe('redactRelease', () => {
       actual: null,
       locked: true,
       required_plan: 'PRO',
+      previous_locked: false,
     });
   });
 
@@ -160,8 +190,9 @@ describe('redactRelease', () => {
   });
 
   it('accessFields', () => {
-    expect(accessFields(true)).toEqual({ locked: true, required_plan: 'PRO' });
-    expect(accessFields(false)).toEqual({ locked: false, required_plan: null });
+    expect(accessFields(true)).toEqual({ locked: true, required_plan: 'PRO', previous_locked: false });
+    expect(accessFields(false)).toEqual({ locked: false, required_plan: null, previous_locked: false });
+    expect(accessFields(false, true)).toEqual({ locked: false, required_plan: null, previous_locked: true });
   });
 
   it('the 403 message mentions the cap and PRO', () => {
@@ -171,8 +202,13 @@ describe('redactRelease', () => {
 });
 
 describe('resolvePastReleaseAccessForPlan', () => {
-  function fakeRpc(visible: string[]) {
-    const rpc = vi.fn(() => Promise.resolve({ data: visible.map((id) => ({ event_id: id })), error: null }));
+  function fakeRpc(visible: string[], previousLocked: string[] = []) {
+    const rpc = vi.fn(() =>
+      Promise.resolve({
+        data: visible.map((id) => ({ event_id: id, previous_locked: previousLocked.includes(id) })),
+        error: null,
+      }),
+    );
     return { client: { rpc } as unknown as SupabaseClient, rpc };
   }
 
@@ -184,22 +220,24 @@ describe('resolvePastReleaseAccessForPlan', () => {
   ];
 
   it('FREE: asks the DB function for the visible ids (unique indicators, limit 3)', async () => {
-    const { client, rpc } = fakeRpc(['e4', 'b1']);
-    const locked = await resolvePastReleaseAccessForPlan(client, 'FREE', events);
-    expect([...locked]).toEqual(['e1']);
+    const { client, rpc } = fakeRpc(['e4', 'b1'], ['e4']);
+    const { lockedIds, previousLockedIds } = await resolvePastReleaseAccessForPlan(client, 'FREE', events);
+    expect([...lockedIds]).toEqual(['e1']);
+    expect([...previousLockedIds]).toEqual(['e4']);
     expect(rpc).toHaveBeenCalledTimes(1);
     expect(rpc).toHaveBeenCalledWith('visible_released_event_ids', { p_indicator_ids: [IND_A, IND_B], p_limit: 3 });
   });
 
   it('PRO: never calls the DB function and locks nothing', async () => {
     const { client, rpc } = fakeRpc([]);
-    expect((await resolvePastReleaseAccessForPlan(client, 'PRO', events)).size).toBe(0);
+    const pro = await resolvePastReleaseAccessForPlan(client, 'PRO', events);
+    expect(pro.lockedIds.size + pro.previousLockedIds.size).toBe(0);
     expect(rpc).not.toHaveBeenCalled();
   });
 
   it('FREE with no RELEASED event on the page: no DB call', async () => {
     const { client, rpc } = fakeRpc([]);
-    expect((await resolvePastReleaseAccessForPlan(client, 'FREE', [events[0]!])).size).toBe(0);
+    expect((await resolvePastReleaseAccessForPlan(client, 'FREE', [events[0]!])).lockedIds.size).toBe(0);
     expect(rpc).not.toHaveBeenCalled();
   });
 

@@ -102,6 +102,7 @@ export function registerHomeRoutes(app: FastifyInstance): void {
                 related_fx_pairs: relatedFxPairsByIndicator.get(event.indicator_id) ?? [],
               },
               pastReleaseAccess.lockedIds.has(event.id),
+              pastReleaseAccess.previousLockedIds.has(event.id),
             );
           }),
           past_release_limit: pastReleaseLimitFor(pastReleaseAccess.plan),

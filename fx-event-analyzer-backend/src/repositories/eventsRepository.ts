@@ -96,11 +96,20 @@ export async function getLatestExplanation(supabase: SupabaseClient, eventId: st
   return data;
 }
 
-export async function countRevisions(supabase: SupabaseClient, eventId: string): Promise<number> {
-  const { count, error } = await supabase
-    .from('event_revisions')
-    .select('id', { count: 'exact', head: true })
-    .eq('event_id', eventId);
+/** `excludeField`: leave out revisions of that field (e.g. PREVIOUS when the
+ * event's `previous` is hidden by the past-release limit). */
+export interface RevisionFilter {
+  excludeField?: string;
+}
+
+export async function countRevisions(
+  supabase: SupabaseClient,
+  eventId: string,
+  filter: RevisionFilter = {},
+): Promise<number> {
+  let query = supabase.from('event_revisions').select('id', { count: 'exact', head: true }).eq('event_id', eventId);
+  if (filter.excludeField) query = query.neq('field_name', filter.excludeField);
+  const { count, error } = await query;
   if (error) throw error;
   return count ?? 0;
 }
@@ -118,13 +127,14 @@ export async function listRevisions(
   supabase: SupabaseClient,
   eventId: string,
   range: { from: number; to: number },
+  filter: RevisionFilter = {},
 ): Promise<{ rows: RevisionRow[]; total: number }> {
-  const { data, error, count } = await supabase
+  let query = supabase
     .from('event_revisions')
     .select('field_name, old_value, new_value, effective_at, source, created_at', { count: 'exact' })
-    .eq('event_id', eventId)
-    .order('effective_at', { ascending: false })
-    .range(range.from, range.to);
+    .eq('event_id', eventId);
+  if (filter.excludeField) query = query.neq('field_name', filter.excludeField);
+  const { data, error, count } = await query.order('effective_at', { ascending: false }).range(range.from, range.to);
   if (error) throw error;
   return { rows: data ?? [], total: count ?? 0 };
 }

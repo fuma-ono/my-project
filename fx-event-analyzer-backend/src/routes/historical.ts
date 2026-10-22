@@ -2,7 +2,14 @@ import type { FastifyInstance } from 'fastify';
 import { ApiError } from '../errors/ApiError.js';
 import { assertEntitlement, FEATURE_CODES, listActiveFeatureCodes } from '../authorization/entitlements.js';
 import { requireUnlockedEventForPlan, resolvePastReleaseAccessForPlan } from '../authorization/pastReleaseAccess.js';
-import { pastReleaseLimitFor, pastReleasesMaxFor, redactRelease } from '../domain/pastReleaseAccess.js';
+import {
+  accessFields,
+  nullFields,
+  pastReleaseLimitFor,
+  pastReleasesMaxFor,
+  PREVIOUS_VALUE_FIELDS,
+  redactRelease,
+} from '../domain/pastReleaseAccess.js';
 import { requireEntitlementAndResolvePlan } from '../authorization/plan.js';
 import { getEventById, getLatestExplanation, getReleaseSnapshot } from '../repositories/eventsRepository.js';
 import { getIndicatorById, listRelatedFxPairs } from '../repositories/indicatorsRepository.js';
@@ -33,6 +40,7 @@ function toComparisonRows<T extends { event_id: string }>(
   events: T[],
   reactionRows: { event_id: string; timeframe: string; pips: number | null }[],
   lockedIds: ReadonlySet<string>,
+  previousLockedIds: ReadonlySet<string>,
 ) {
   return events.map((event) => {
     const locked = lockedIds.has(event.event_id);
@@ -43,7 +51,7 @@ function toComparisonRows<T extends { event_id: string }>(
         : reactionRows.find((r) => r.event_id === event.event_id && r.timeframe === timeframe);
       pips[timeframe] = row?.pips ?? null;
     }
-    return { ...redactRelease(event, locked), pips_by_timeframe: pips };
+    return { ...redactRelease(event, locked, previousLockedIds.has(event.event_id)), pips_by_timeframe: pips };
   });
 }
 
@@ -59,14 +67,16 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
       throw new ApiError('EVENT_NOT_FOUND', 'Event not found.');
     }
     // HQ判断 2026-10-22: 親の発表がロックされていれば 403 PLAN_LIMIT_EXCEEDED。
-    await requireUnlockedEventForPlan(app.supabase, plan, event);
+    // ひとつ前の発表がロックされていれば、「前回」と解説を隠す(GET /events/{id} と同じ)。
+    const { previousLocked } = await requireUnlockedEventForPlan(app.supabase, plan, event);
 
-    const [snapshot, explanation, relatedFxPairs] = await Promise.all([
+    const [rawSnapshot, explanation, relatedFxPairs] = await Promise.all([
       getReleaseSnapshot(app.supabase, eventId),
-      getLatestExplanation(app.supabase, eventId),
+      previousLocked ? Promise.resolve(null) : getLatestExplanation(app.supabase, eventId),
       listRelatedFxPairs(app.supabase, event.indicator_id),
     ]);
 
+    const snapshot = rawSnapshot && previousLocked ? nullFields(rawSnapshot, PREVIOUS_VALUE_FIELDS) : rawSnapshot;
     const precision = event.release_datetime_precision as ReleaseDatetimePrecision;
 
     const reactionsByPair = await Promise.all(
@@ -98,6 +108,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
         display_name: event.indicator_display_name,
         release_datetime: event.release_datetime,
         importance: event.importance,
+        ...accessFields(false, previousLocked),
       },
       snapshot: snapshot ?? null,
       explanation: explanation ?? null,
@@ -137,7 +148,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
       : { rows: [], total: allEventIds.length };
     const total = Math.min(releasedTotal, historyMax);
     const historyLimit = historyLimitFor(plan, allEventIds.length);
-    const lockedIds = await resolvePastReleaseAccessForPlan(
+    const { lockedIds, previousLockedIds } = await resolvePastReleaseAccessForPlan(
       app.supabase,
       plan,
       allEventIds.map((id) => ({ id, indicator_id: indicatorId, status: 'RELEASED' })),
@@ -163,7 +174,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
     );
     const reactionRows = fetchedRows.filter((row) => (timeframes as string[]).includes(row.timeframe));
     const analyzableEventIds = new Set(reactionRows.map((row) => row.event_id));
-    const eventsWithPips = toComparisonRows(events, fetchedRows, rowLockedIds);
+    const eventsWithPips = toComparisonRows(events, fetchedRows, rowLockedIds, previousLockedIds);
 
     if (query.timeframe !== 'all') {
       const rowsForStats = reactionRows.map((row) => ({ movement: row.movement ?? 0, pips: row.pips ?? 0 }));

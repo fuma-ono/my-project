@@ -153,7 +153,48 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
     );
     check(
       'snapshots A',
-      await ctx.serviceClient.from('event_snapshots').insert(A_RELEASED.map((e) => snapshotRow(e.id, e.at, e.actual))),
+      await ctx.serviceClient.from('event_snapshots').insert(
+        A_RELEASED.map((e) =>
+          // The 3rd's published `previous` is the (locked) 4th's actual, as in real data.
+          e.id === A.third
+            ? { ...snapshotRow(e.id, e.at, e.actual), previous: 901.2345 }
+            : snapshotRow(e.id, e.at, e.actual),
+        ),
+      ),
+    );
+    check(
+      'revisions A3',
+      await ctx.serviceClient.from('event_revisions').insert([
+        // A revised `previous` of the 3rd = the revised actual of the locked 4th.
+        {
+          event_id: A.third,
+          field_name: 'PREVIOUS',
+          old_value: 901.2345,
+          new_value: 904.5678,
+          effective_at: '2012-03-09T12:30:00Z',
+          source: 'integration-test',
+        },
+        // The 3rd's own actual revision stays visible.
+        {
+          event_id: A.third,
+          field_name: 'ACTUAL',
+          old_value: 103.5,
+          new_value: 103.75,
+          effective_at: '2012-04-10T12:30:00Z',
+          source: 'integration-test',
+        },
+      ]),
+    );
+    check(
+      'explanation A3',
+      await ctx.serviceClient.from('event_explanations').insert({
+        event_id: A.third,
+        version: 1,
+        explanation_type: 'FACT_SUMMARY',
+        summary: 'third-explanation-quotes-previous 901.2345',
+        source: 'integration-test',
+        published_at: '2012-03-09T12:30:00Z',
+      }),
     );
     check(
       'revision A4',
@@ -280,6 +321,20 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
         expect(item.surprise_direction).toBe('POSITIVE');
       }
       expect(Number(byId.get(A.third)!.actual)).toBeCloseTo(103.5);
+      // The 3rd's previous is the locked 4th's actual: hidden, marked previous_locked.
+      expect(byId.get(A.third)).toMatchObject({
+        previous: null,
+        previous_locked: true,
+        locked: false,
+        required_plan: null,
+      });
+      for (const id of [A.first, A.second]) {
+        expect(byId.get(id)).toMatchObject({ previous_locked: false });
+        expect(byId.get(id)!.previous).not.toBeNull();
+      }
+      for (const id of [A.fourth, A.fifth, A.scheduled1, A.scheduled2]) {
+        expect(byId.get(id)).toMatchObject({ previous_locked: false });
+      }
 
       for (const id of [A.fourth, A.fifth]) {
         expect(byId.get(id)).toMatchObject({
@@ -351,13 +406,61 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
       expect(text).not.toContain('locked-explanation-text');
     });
 
-    it('GET /events/{3rd} (tie, lower id) is unlocked', async () => {
+    it('GET /events/{3rd} (tie, lower id) is unlocked, but its previous (= the locked 4th actual) is hidden', async () => {
       const { headers } = await newUser('FREE');
       const { status, body } = await get(`/events/${A.third}`, headers);
       expect(status).toBe(200);
-      expect(body.event).toMatchObject({ locked: false, required_plan: null, revision_status: 'NONE' });
+      // REVISED from its own ACTUAL revision; the PREVIOUS revision is not counted.
+      expect(body.event).toMatchObject({
+        locked: false,
+        required_plan: null,
+        previous_locked: true,
+        revision_status: 'REVISED',
+      });
       expect(Number(body.snapshot.actual)).toBeCloseTo(103.5);
-      expect((await get(`/events/${A.third}/revisions`, headers)).status).toBe(200);
+      expect(Number(body.snapshot.forecast)).toBeCloseTo(103);
+      expect(body.snapshot.previous).toBeNull();
+      expect(body.analysis.surprise_direction).toBe('POSITIVE');
+      // The explanation may quote the previous figure, so it is hidden too.
+      expect(body.explanation).toBeNull();
+      const text = JSON.stringify(body);
+      expect(text).not.toContain('901.2345');
+      expect(text).not.toContain('904.5678');
+      expect(text).not.toContain('third-explanation-quotes-previous');
+    });
+
+    it('GET /events/{3rd}/revisions: the PREVIOUS revision is left out, the ACTUAL one stays', async () => {
+      const { headers } = await newUser('FREE');
+      const { status, body } = await get(`/events/${A.third}/revisions`, headers);
+      expect(status).toBe(200);
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0]).toMatchObject({ field_name: 'ACTUAL' });
+      expect(Number(body.data[0].new_value)).toBeCloseTo(103.75);
+      expect(body.meta).toMatchObject({ total: 1 });
+      expect(JSON.stringify(body)).not.toContain('904.5678');
+    });
+
+    it('GET /events/{3rd}/history: previous and explanation hidden, previous_locked true', async () => {
+      const { headers } = await newUser('FREE');
+      const { status, body } = await get(`/events/${A.third}/history`, headers);
+      expect(status).toBe(200);
+      expect(body.event).toMatchObject({ locked: false, previous_locked: true });
+      expect(Number(body.snapshot.actual)).toBeCloseTo(103.5);
+      expect(body.snapshot.previous).toBeNull();
+      expect(body.explanation).toBeNull();
+      expect(JSON.stringify(body)).not.toContain('901.2345');
+    });
+
+    it('the 1st / 2nd releases keep their previous (their preceding release is visible)', async () => {
+      const { headers } = await newUser('FREE');
+      for (const [id, previous] of [
+        [A.first, 100.5],
+        [A.second, 101.5],
+      ] as const) {
+        const { body } = await get(`/events/${id}`, headers);
+        expect(body.event).toMatchObject({ locked: false, previous_locked: false });
+        expect(Number(body.snapshot.previous)).toBeCloseTo(previous);
+      }
     });
 
     it('child endpoints of a locked event: 403 PLAN_LIMIT_EXCEEDED required_plan PRO', async () => {
@@ -383,7 +486,7 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
       const items: ListItem[] = body.events;
       const third = items.find((item) => item.event_id === A.third)!;
       const fourth = items.find((item) => item.event_id === A.fourth)!;
-      expect(third).toMatchObject({ locked: false, required_plan: null });
+      expect(third).toMatchObject({ locked: false, required_plan: null, previous: null, previous_locked: true });
       expect(Number(third.actual)).toBeCloseTo(103.5);
       expect(fourth).toMatchObject({
         status: 'RELEASED',
@@ -420,6 +523,16 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
       expect(Number(detail.body.snapshot.actual)).toBeCloseTo(901.2345);
       expect(detail.body.explanation.summary).toBe('locked-explanation-text');
 
+      const third = await get(`/events/${A.third}`, headers);
+      expect(third.body.event).toMatchObject({ locked: false, previous_locked: false });
+      expect(Number(third.body.snapshot.previous)).toBeCloseTo(901.2345);
+      expect(third.body.explanation.summary).toContain('third-explanation-quotes-previous');
+      const thirdRevisions = await get(`/events/${A.third}/revisions`, headers);
+      expect(thirdRevisions.body.data).toHaveLength(2);
+      expect(list.body.data.find((item: ListItem) => item.event_id === A.third)).toMatchObject({
+        previous_locked: false,
+      });
+
       expect((await get(`/events/${A.fourth}/revisions`, headers)).status).toBe(200);
       expect((await get(`/events/${A.fourth}/history`, headers)).status).toBe(200);
       expect((await get(`/events/${A.fourth}/reaction?fx_pair_id=${USDJPY_FX_PAIR_ID}`, headers)).status).toBe(200);
@@ -455,14 +568,15 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
       'locked',
       'pips_by_timeframe',
       'previous',
+      'previous_locked',
       'release_datetime',
       'required_plan',
       'surprise',
       'surprise_direction',
     ];
     // Values only the locked rows B5 / B4 / B3 have (actual / forecast and pips).
-    // B5's actual (204) is not listed: it is also B6's published `previous`
-    // (the known residual, api-design.md 21章).
+    // B5's actual (204) is also B6's published `previous`: B6 is previous-locked
+    // (checked on the field; a bare "204" could appear inside an id).
     const LOCKED_ONLY_VALUES = ['203.5', '202.5', '201.5', '50.37', '40.37', '30.37'];
 
     type ComparisonRow = {
@@ -493,7 +607,10 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
       expect(rows[0]).toMatchObject({ locked: false, required_plan: null });
       expect(Number(rows[0]!.actual)).toBeCloseTo(206);
       expect(Number(rows[0]!.pips_by_timeframe['5m'])).toBeCloseTo(70.37);
-      expect(rows[1]).toMatchObject({ locked: false, required_plan: null });
+      expect(rows[0]).toMatchObject({ previous_locked: false });
+      expect(Number((rows[0] as unknown as { previous: number }).previous)).toBeCloseTo(205);
+      expect(rows[1]).toMatchObject({ locked: false, required_plan: null, previous: null, previous_locked: true });
+      expect(Number(rows[1]!.actual)).toBeCloseTo(205);
       for (const row of rows.slice(2)) {
         expect(row).toMatchObject({
           locked: true,
