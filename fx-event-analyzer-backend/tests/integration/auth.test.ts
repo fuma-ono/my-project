@@ -129,13 +129,14 @@ describe.skipIf(!integration)('RLS — user isolation (db-design.md §6, defense
     expect(data?.length).toBeGreaterThan(0);
   });
 
-  it('ingestion_logs has no SELECT policy at all — even an authenticated user gets zero rows', async () => {
+  it('ingestion_logs: no policy and no privilege — an authenticated user gets a permission error, never rows', async () => {
+    // migration 20261022000004 (HQ判断 2026-10-22) revoked every privilege on top of RLS without policies.
     const asUserA = createClient(ctx.supabaseUrl, ctx.anonKey, {
       global: { headers: { Authorization: `Bearer ${userA.accessToken}` } },
     });
     const { data, error } = await asUserA.from('ingestion_logs').select('id');
-    expect(error).toBeNull();
-    expect(data).toEqual([]);
+    expect(error?.code).toBe('42501');
+    expect(data).toBeNull();
   });
 
   it('an anonymous (unauthenticated) request cannot read anyone’s profile', async () => {
