@@ -112,7 +112,11 @@ struct LaunchDiagnosticsView: View {
     /// 項目12にあたる、/homeリクエスト固有の詳細(複数回走った場合の識別含む)。
     private func homeRequestCard(_ diagnostics: LaunchDiagnostics) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            row("/home取得回数(今回の起動内)", diagnostics.homeRequestCount == 0 ? "未実行" : "\(diagnostics.homeRequestCount)回")
+            row(
+                "/home取得回数(今回の起動内)",
+                diagnostics.homeRequestCount == 0 ? "未実行" : "\(diagnostics.homeRequestCount)回",
+                identifier: "homeRequestCountValue"
+            )
             if diagnostics.homeRequestCount > 1 {
                 NotoText.text("下の詳細は起動時(1回目)の値です。タブの出入り等での再取得で上書きしません。", size: 6)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
@@ -155,11 +159,22 @@ struct LaunchDiagnosticsView: View {
         .background(AccountCardBackground())
     }
 
-    private func row(_ label: String, _ value: String) -> some View {
+    /// `identifier`はUIテストが値を読み取るためのもの(HQ指示2026-10-23
+    /// 「起動遅延とホーム画面の人物アイコン不具合の調査」、/home重複取得の
+    /// 回帰確認用)。既存の呼び出しはすべて省略しており、見た目・挙動は
+    /// 変わらない。
+    private func row(_ label: String, _ value: String, identifier: String? = nil) -> some View {
         HStack(alignment: .top) {
             NotoText.text(label, size: 7.5).foregroundStyle(SettingsCardStyle.subtitleColor)
             Spacer(minLength: 8)
-            NotoText.text(value, size: 7.5).foregroundStyle(.white).multilineTextAlignment(.trailing)
+            Group {
+                if let identifier {
+                    NotoText.text(value, size: 7.5).foregroundStyle(.white).multilineTextAlignment(.trailing)
+                        .accessibilityIdentifier(identifier)
+                } else {
+                    NotoText.text(value, size: 7.5).foregroundStyle(.white).multilineTextAlignment(.trailing)
+                }
+            }
         }
     }
 
