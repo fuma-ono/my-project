@@ -12,6 +12,7 @@ import { mapEventDataStatus, type EconomicEventDbStatus } from '../domain/dataQu
 import {
   HOME_SPEECHES_MAX,
   homeSpeechesRange,
+  readHomeSpeechRunsSafely,
   toHomeSpeechesStatus,
   toHomeSpeechItem,
 } from '../domain/homeSpeeches.js';
@@ -72,7 +73,8 @@ export function registerHomeRoutes(app: FastifyInstance): void {
               HOME_SPEECHES_MAX,
             ),
             // v1.34 speeches_status(HQ承認 2026-10-23): 他の取得とは独立(ingestion_logs を読むだけ)。
-            listSpeechIngestionRuns(app.supabase, SPEECH_HOME_PROVIDER),
+            // 読めなくても /home は 200 のまま(null → stale。readHomeSpeechRunsSafely)。
+            readHomeSpeechRunsSafely(() => listSpeechIngestionRuns(app.supabase, SPEECH_HOME_PROVIDER), request.log),
           ],
         );
         mark('parallel');

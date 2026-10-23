@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   HOME_SPEECHES_MAX,
   homeSpeechesRange,
+  readHomeSpeechRunsSafely,
   speakerDisplayName,
   toHomeSpeechesStatus,
+  UNAVAILABLE_HOME_SPEECHES_STATUS,
   toHomeSpeechItem,
   type HomeSpeechSource,
 } from '../../src/domain/homeSpeeches.js';
@@ -131,5 +133,51 @@ describe('toHomeSpeechesStatus (GET /home speeches_status, v1.34)', () => {
 
   it('is stale with last_success_at null when there are no logs at all', () => {
     expect(toHomeSpeechesStatus([], now)).toEqual({ window_days: 7, last_success_at: null, stale: true });
+  });
+});
+
+// HQ承認(2026-10-23)「/home の鮮度情報の読み取り失敗」: 失敗しても throw せず stale を返す。
+describe('readHomeSpeechRunsSafely / UNAVAILABLE_HOME_SPEECHES_STATUS', () => {
+  const capture = () => {
+    const calls: Array<{ details: unknown; message: string }> = [];
+    return { calls, log: { warn: (details: unknown, message: string) => calls.push({ details, message }) } };
+  };
+
+  it('returns the rows and logs nothing when the read succeeds', async () => {
+    const { calls, log } = capture();
+    await expect(readHomeSpeechRunsSafely(() => Promise.resolve(['row']), log)).resolves.toEqual(['row']);
+    expect(calls).toEqual([]);
+  });
+
+  it('returns null and logs only the error name and code (no message, URL or key) when the read fails', async () => {
+    const { calls, log } = capture();
+    const error = Object.assign(new Error('connect to https://secret.example.supabase.co with key sb_secret_xxx'), {
+      code: 'PGRST301',
+    });
+    await expect(readHomeSpeechRunsSafely(() => Promise.reject(error), log)).resolves.toBeNull();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.details).toEqual({ error_name: 'Error', error_code: 'PGRST301' });
+    expect(JSON.stringify(calls)).not.toContain('secret');
+    expect(JSON.stringify(calls)).not.toContain('sb_secret');
+  });
+
+  it('handles a non-Error rejection', async () => {
+    const { calls, log } = capture();
+    await expect(
+      readHomeSpeechRunsSafely(() => {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- Error 以外で失敗する場合を確かめる
+        return Promise.reject('boom');
+      }, log),
+    ).resolves.toBeNull();
+    expect(calls[0]!.details).toEqual({ error_name: null, error_code: null });
+  });
+
+  it('maps null runs to { window_days: 7, last_success_at: null, stale: true }', () => {
+    expect(toHomeSpeechesStatus(null, new Date('2026-10-23T00:00:00Z'))).toEqual({
+      window_days: 7,
+      last_success_at: null,
+      stale: true,
+    });
+    expect(UNAVAILABLE_HOME_SPEECHES_STATUS).toEqual({ window_days: 7, last_success_at: null, stale: true });
   });
 });

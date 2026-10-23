@@ -100,11 +100,51 @@ export interface HomeSpeechesStatus {
   stale: boolean;
 }
 
-export function toHomeSpeechesStatus(runs: readonly SpeechRunSample[], now: Date): HomeSpeechesStatus {
+/**
+ * 実行記録(ingestion_logs)を読めなかったとき(HQ承認 2026-10-23「/home の鮮度情報の読み取り失敗」)。
+ * 取得できているか確かめられないので stale とし、「発言なし」と取り違えさせない。
+ */
+export const UNAVAILABLE_HOME_SPEECHES_STATUS: HomeSpeechesStatus = Object.freeze({
+  window_days: HOME_SPEECHES_WINDOW_DAYS,
+  last_success_at: null,
+  stale: true,
+});
+
+/** `runs` が null = 実行記録を読めなかった(UNAVAILABLE_HOME_SPEECHES_STATUS)。 */
+export function toHomeSpeechesStatus(runs: readonly SpeechRunSample[] | null, now: Date): HomeSpeechesStatus {
+  if (runs === null) return { ...UNAVAILABLE_HOME_SPEECHES_STATUS };
   const health = judgeSpeechFetch(runs, now);
   return {
     window_days: HOME_SPEECHES_WINDOW_DAYS,
     last_success_at: health.lastSuccessAt === null ? null : formatIsoSeconds(new Date(health.lastSuccessAt)),
     stale: health.failed,
   };
+}
+
+/** ログに出すのは失敗の種類(エラーの名前とコード)だけ。メッセージ・接続先・鍵は出さない。 */
+export interface SpeechRunsReadLogger {
+  warn(details: { error_name: string | null; error_code: string | null }, message: string): void;
+}
+
+/**
+ * `/home` の speeches_status 用に実行記録を読む。失敗しても throw せず null を返し、警告を1行残す
+ * (HQ承認 2026-10-23: この読み取りの失敗で /home 全体を 500 にしない。events・major_fx・speeches は変えない)。
+ */
+export async function readHomeSpeechRunsSafely<T>(
+  read: () => Promise<T>,
+  log: SpeechRunsReadLogger,
+): Promise<T | null> {
+  try {
+    return await read();
+  } catch (error: unknown) {
+    const record = (typeof error === 'object' && error !== null ? error : {}) as { name?: unknown; code?: unknown };
+    log.warn(
+      {
+        error_name: typeof record.name === 'string' ? record.name : null,
+        error_code: typeof record.code === 'string' ? record.code : null,
+      },
+      'home speeches_status: ingestion_logs を読めなかったため stale として返す',
+    );
+    return null;
+  }
 }

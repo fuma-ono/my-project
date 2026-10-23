@@ -503,6 +503,7 @@ major_fxにはHomeで表示する主要FX Pairの最新情報を含める。想�
 - `stale`：`frb_calendar`の取得ができていなければ`true`。最新の実行(`started_at`が最大)が`SUCCESS`以外・エラーあり・取得件数0のとき、または最後の`SUCCESS`から18時間以上経っているとき(`SUCCESS`が一度も無い・実行記録が無いときも`true`)。品質レポート第9章の「取得の失敗」と同じ判定(`judgeSpeechFetch`)
 - ECB(`ecb_press_rss`)は判定に入れない。ECB の RSS は公開時刻しか無く、仕様上`speech_events`に1件も書かない(`TIME_NOT_EXACT`)ため、ホームの要人発言の有無に関係しない。FRB と ECB を混ぜて判定しない
 - `ingestion_logs`は service_role でだけ読む(RLS)。アプリには上の3項目だけを返す
+- 実行記録(`ingestion_logs`)を読めなかったとき(HQ承認 2026-10-23)：`/home`は500にせず200のまま、`speeches_status`を`{ "window_days": 7, "last_success_at": null, "stale": true }`で返す(取得できているか確かめられないため、「発言なし」と取り違えさせない)。`events`・`major_fx`・`speeches`は変えない。サーバーのログには失敗の種類(エラーの名前とコード)だけを警告として残し、メッセージ・接続先・鍵は出さない
 
 アプリ(SCR-004)の「直近の要人発言」が0件のときの表示：`stale = false` →「直近7日間の要人発言はありません」と小さく「最終更新 M/d HH:mm」(`last_success_at`があるときだけ)、`stale = true` →「要人発言の情報を更新できていません（最終更新 M/d HH:mm）」(`last_success_at`が`null`なら括弧なし)、`speeches_status`が無い →「直近7日間の要人発言はありません」のみ。日時はホームの他の日時と同じ表示設定(タイムゾーン・形式)。1件以上あるときの表示は変えない。
 
