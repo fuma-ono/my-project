@@ -16,6 +16,8 @@ const EMPTY_READER: QualityReader = {
   listLogs: () => Promise.resolve([]),
   listSnapshots: () => Promise.resolve([]),
   listStaged: () => Promise.resolve([]),
+  listSpeechRuns: () => Promise.resolve([]),
+  speechDbStatus: () => Promise.resolve({ latestAt: null, futureScheduled: 0 }),
 };
 
 function buildTestApp(envOverrides: Record<string, string> = {}): FastifyInstance {
@@ -63,6 +65,7 @@ describe('GET /api/v1/quality-report', () => {
     expect(response.body).toContain('<meta name="viewport"');
     expect(response.body).toContain('# データ品質レポート(直近7日)');
     expect(response.body).toContain('## 1. 為替1分足の取得率・欠損率');
+    expect(response.body).toContain('## 9. 要人発言の鮮度');
   });
 
   it('rejects an out-of-range days parameter', async () => {

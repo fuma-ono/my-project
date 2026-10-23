@@ -914,6 +914,13 @@ function homeHandler() {
         reaction_pips: -22,
       },
     ],
+    // v1.34(HQ承認 2026-10-23)speeches_status: 本物と同じ形。speeches は空でないので
+    // アプリの表示(=スクリーンショット)は変わらない(空のときの文言にだけ使う)。
+    speeches_status: {
+      window_days: 7,
+      last_success_at: isoMinusHours(2).replace(/\.\d{3}Z$/, 'Z'),
+      stale: false,
+    },
   };
 }
 

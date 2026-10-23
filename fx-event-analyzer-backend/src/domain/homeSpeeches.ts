@@ -1,3 +1,4 @@
+import { judgeSpeechFetch, type SpeechRunSample } from '../ingestion/quality/metrics.js';
 import { formatIsoSeconds } from './notifications.js';
 import { resolveSpeakerPhotoUrl } from './speakerPhotos.js';
 
@@ -77,5 +78,33 @@ export function toHomeSpeechItem(speech: HomeSpeechSource, baseUrl: string): Hom
     reaction_price_before: null,
     reaction_price_after: null,
     reaction_pips: null,
+  };
+}
+
+/**
+ * GET /home `speeches_status`(api-design.md §12 v1.34、HQ承認 2026-10-23): `speeches` が空のとき、
+ * 「直近7日間に発言が無い」のか「取得できていない」のかをアプリが言い分けるための情報。
+ * `speeches` 自体には一切影響しない。
+ *
+ * - last_success_at: frb_calendar の最後の SUCCESS の完了時刻。記録が無ければ null
+ * - stale: frb_calendar の取得の失敗(quality/metrics.ts judgeSpeechFetch。品質レポート第9章と
+ *   同じ判定 — 最新の実行が SUCCESS 以外・エラーあり・取得0件、または18時間以内の SUCCESS なし)。
+ *   実行記録が1件も無ければ true
+ *
+ * ECB(ecb_press_rss)は判定に入れない: 公開時刻しか無いため仕様上 speech_events へ1件も
+ * 書かず(TIME_NOT_EXACT)、ホームの要人発言の有無に関係しない。FRB と ECB を混ぜて判定しない。
+ */
+export interface HomeSpeechesStatus {
+  window_days: number;
+  last_success_at: string | null;
+  stale: boolean;
+}
+
+export function toHomeSpeechesStatus(runs: readonly SpeechRunSample[], now: Date): HomeSpeechesStatus {
+  const health = judgeSpeechFetch(runs, now);
+  return {
+    window_days: HOME_SPEECHES_WINDOW_DAYS,
+    last_success_at: health.lastSuccessAt === null ? null : formatIsoSeconds(new Date(health.lastSuccessAt)),
+    stale: health.failed,
   };
 }

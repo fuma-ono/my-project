@@ -3,9 +3,11 @@ import {
   HOME_SPEECHES_MAX,
   homeSpeechesRange,
   speakerDisplayName,
+  toHomeSpeechesStatus,
   toHomeSpeechItem,
   type HomeSpeechSource,
 } from '../../src/domain/homeSpeeches.js';
+import type { SpeechRunSample } from '../../src/ingestion/quality/metrics.js';
 
 const BASE_URL = 'https://api.example.com';
 
@@ -79,5 +81,55 @@ describe('toHomeSpeechItem', () => {
       speaker_photo_url: null,
     });
     expect(toHomeSpeechItem(speech({ summary: '  ' }), BASE_URL).headline).toBe('FOMC後の記者会見');
+  });
+});
+
+describe('toHomeSpeechesStatus (GET /home speeches_status, v1.34)', () => {
+  const now = new Date('2026-10-23T06:00:00Z');
+  const run = (overrides: Partial<SpeechRunSample> = {}): SpeechRunSample => ({
+    job: 'ingest:speeches',
+    provider: 'frb_calendar',
+    data_type: 'OTHER',
+    started_at: '2026-10-23T03:00:00.000Z',
+    completed_at: '2026-10-23T03:00:04.512Z',
+    status: 'SUCCESS',
+    fetched_count: 40,
+    success_count: 6,
+    error_count: 0,
+    details: { skip_reasons: {} },
+    ...overrides,
+  });
+
+  it('is not stale after a recent SUCCESS, with the completion time in ISO seconds', () => {
+    expect(toHomeSpeechesStatus([run()], now)).toEqual({
+      window_days: 7,
+      last_success_at: '2026-10-23T03:00:04Z',
+      stale: false,
+    });
+  });
+
+  it('is stale when the latest run failed after a SUCCESS (keeps that SUCCESS time)', () => {
+    const failure = run({
+      started_at: '2026-10-23T05:00:00.000Z',
+      completed_at: '2026-10-23T05:00:01.000Z',
+      status: 'FAILURE',
+      fetched_count: 0,
+      success_count: 0,
+      error_count: 1,
+    });
+    expect(toHomeSpeechesStatus([run(), failure], now)).toEqual({
+      window_days: 7,
+      last_success_at: '2026-10-23T03:00:04Z',
+      stale: true,
+    });
+  });
+
+  it('is stale when the last SUCCESS is 18 hours old or more', () => {
+    const old = run({ started_at: '2026-10-22T11:59:00.000Z', completed_at: '2026-10-22T12:00:00.000Z' });
+    expect(toHomeSpeechesStatus([old], now).stale).toBe(true);
+  });
+
+  it('is stale with last_success_at null when there are no logs at all', () => {
+    expect(toHomeSpeechesStatus([], now)).toEqual({ window_days: 7, last_success_at: null, stale: true });
   });
 });

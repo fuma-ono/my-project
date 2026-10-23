@@ -11,8 +11,11 @@ import type {
   ReleaseInstant,
   FxRowSample,
   SnapshotSample,
+  SpeechDbStatus,
+  SpeechRunSample,
   StagedSample,
 } from './metrics.js';
+import { getSpeechProviderDbStatus, listSpeechIngestionRuns } from '../../repositories/speechesRepository.js';
 
 export const PAGE_SIZE = 1000;
 
@@ -51,6 +54,13 @@ export interface QualityReader {
   listLogs(fromIso: string, toIso: string): Promise<IngestionLogSample[]>;
   listSnapshots(fromIso: string, toIso: string): Promise<SnapshotSample[]>;
   listStaged(fromIso: string, toIso: string): Promise<StagedSample[]>;
+  /**
+   * 第9章(要人発言の鮮度): その取得元の ingest:speeches の最新2件と最後の SUCCESS。
+   * 対象期間(days)に関係なく読む(18時間ルールは期間より前の SUCCESS も見るため)。
+   */
+  listSpeechRuns(provider: string): Promise<SpeechRunSample[]>;
+  /** 第9章: その取得元の speech_events の最新 statement_datetime(状態問わず)と未来の SCHEDULED 件数。 */
+  speechDbStatus(provider: string, nowIso: string): Promise<SpeechDbStatus>;
 }
 
 const nullableNumber = (value: unknown): number | null =>
@@ -240,6 +250,14 @@ export function createQualityReader(supabase: SupabaseClient): QualityReader {
         new_value: nullableNumber(row.new_value),
         official_actual: nullableNumber(row.official_actual),
       }));
+    },
+
+    async listSpeechRuns(provider) {
+      return listSpeechIngestionRuns(supabase, provider);
+    },
+
+    async speechDbStatus(provider, nowIso) {
+      return getSpeechProviderDbStatus(supabase, provider, nowIso);
     },
   };
 }

@@ -673,6 +673,203 @@ export function countSpeechTimeNotExact(logs: readonly IngestionLogSample[]): nu
 }
 
 // ---------------------------------------------------------------------------
+// 要人発言の鮮度(HQ承認 2026-10-23「要人発言の鮮度監視」、レポート第9章と
+// GET /home speeches_status の共通判定。FRB と ECB は混ぜずに provider ごとに判定する)
+// ---------------------------------------------------------------------------
+
+export const SPEECH_JOB = 'ingest:speeches';
+/** ingest:speeches の取得元(src/jobs/ingestSpeeches.ts の adapter name)。レポートは記録が無くても両方を表示する。 */
+export const SPEECH_PROVIDERS = ['frb_calendar', 'ecb_press_rss'] as const;
+/** 要人発言を実際に speech_events へ書く唯一の取得元(ECB RSS は公開時刻のみで、仕様上すべて TIME_NOT_EXACT)。 */
+export const SPEECH_HOME_PROVIDER = 'frb_calendar';
+/** 最後の SUCCESS からこの時間以上経っていたら「取得の失敗」。 */
+export const SPEECH_SUCCESS_MAX_AGE_HOURS = 18;
+/** 取得元の最新の予定がこの日数以上前で、未来の予定も無ければ「取得元の更新なし」。 */
+export const SPEECH_SOURCE_STALE_DAYS = 10;
+/** pipelines/speeches.ts の pastDays の既定値(これより古い項目は OUTSIDE_WINDOW で取り込まない)。 */
+export const SPEECH_INGEST_PAST_DAYS = 14;
+
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+/** ingest:speeches の1回の実行(ingestion_logs の1行)。件数の列は古い行・異常終了で null のことがある。 */
+export interface SpeechRunSample extends IngestionLogSample {
+  fetched_count: number | null;
+  success_count: number | null;
+  error_count: number | null;
+}
+
+/** speech_events のうち、その provider の行の状態(状態は問わない)。 */
+export interface SpeechDbStatus {
+  /** statement_datetime の最大値(SCHEDULED/DELIVERED を問わない)。行が無ければ null */
+  latestAt: string | null;
+  /** statement_datetime が now より後の SCHEDULED の件数 */
+  futureScheduled: number;
+}
+
+const runTime = (run: SpeechRunSample): number => Date.parse(run.completed_at ?? run.started_at);
+
+/** started_at の新しい順(同時刻は completed_at の新しい順)。 */
+export function sortSpeechRunsNewestFirst(runs: readonly SpeechRunSample[]): SpeechRunSample[] {
+  return [...runs].sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at) || runTime(b) - runTime(a));
+}
+
+export interface SpeechFetchHealth {
+  /** started_at が最新の実行。記録が無ければ null */
+  latest: SpeechRunSample | null;
+  /** latest の1つ前の実行(取得件数の前回比用) */
+  previous: SpeechRunSample | null;
+  /** 最後の SUCCESS の完了時刻(completed_at、無ければ started_at)。無ければ null */
+  lastSuccessAt: string | null;
+  /** 「取得の失敗」に当たるか */
+  failed: boolean;
+  /** failed の理由(表示用、日本語) */
+  reasons: string[];
+}
+
+/**
+ * 「取得の失敗」の判定(レポート第9章と /home speeches_status.stale の共通部分)。
+ * `runs` は1つの provider の実行だけを渡す(FRB と ECB を混ぜない)。並び順は問わない。
+ *
+ * 失敗とするのは次のいずれか:
+ * - 最新の実行(started_at が最大)が FAILURE / PARTIAL、error_count > 0、または取得件数 0
+ *   (過去に SUCCESS があっても、その後の実行が失敗していれば失敗。最新の実行で見る)
+ * - 18時間以内に SUCCESS が無い(now − 最後の SUCCESS の完了時刻 ≥ 18時間、または SUCCESS が一度も無い)
+ */
+export function judgeSpeechFetch(runs: readonly SpeechRunSample[], now: Date): SpeechFetchHealth {
+  const sorted = sortSpeechRunsNewestFirst(runs);
+  const latest = sorted[0] ?? null;
+  const lastSuccess = sorted.find((run) => run.status === 'SUCCESS') ?? null;
+  const lastSuccessMs = lastSuccess ? runTime(lastSuccess) : null;
+  const reasons: string[] = [];
+  if (!latest) {
+    reasons.push('実行記録なし');
+  } else {
+    if (latest.status !== 'SUCCESS') reasons.push(`最新の実行が ${latest.status}`);
+    if ((latest.error_count ?? 0) > 0) reasons.push(`最新の実行でエラー ${latest.error_count} 件`);
+    if ((latest.fetched_count ?? 0) === 0) reasons.push('最新の実行の取得件数が 0');
+  }
+  if (lastSuccessMs === null) {
+    if (latest) reasons.push('SUCCESS の実行記録なし');
+  } else if (now.getTime() - lastSuccessMs >= SPEECH_SUCCESS_MAX_AGE_HOURS * HOUR_MS) {
+    reasons.push(`最後の SUCCESS から ${SPEECH_SUCCESS_MAX_AGE_HOURS} 時間以上経過`);
+  }
+  return {
+    latest,
+    previous: sorted[1] ?? null,
+    lastSuccessAt: lastSuccessMs === null ? null : new Date(lastSuccessMs).toISOString(),
+    failed: reasons.length > 0,
+    reasons,
+  };
+}
+
+export type SpeechFreshnessJudgement =
+  'FETCH_FAILED' | 'INGEST_GAP' | 'SOURCE_NOT_UPDATED' | 'TIME_NOT_EXACT_ONLY' | 'NORMAL';
+
+export interface SpeechFreshness extends SpeechFetchHealth {
+  provider: string;
+  judgement: SpeechFreshnessJudgement;
+  /** 判定の理由(表示用、日本語)。NORMAL は空 */
+  judgementReasons: string[];
+  /** 最新の実行の details.source_latest_at。null = 記録なし(この記録より前の行)または0件 */
+  sourceLatestAt: string | null;
+  /** 最新の実行に source_latest_at のキーがあるか(false = 記録なし。漏れ・更新なしは判定しない) */
+  sourceRecorded: boolean;
+  /** 最新の実行の details.source_future_count。null = 記録なし */
+  sourceFutureCount: number | null;
+  /** 最新の実行の details.skip_reasons */
+  skipReasons: Record<string, number>;
+  db: SpeechDbStatus;
+}
+
+/**
+ * 最新の実行で、取り込み期間内(OUTSIDE_WINDOW 以外)の項目が1件以上あり、それが
+ * すべて TIME_NOT_EXACT で、取り込み件数が 0 か(ECB RSS の通常の状態)。
+ */
+function isTimeNotExactOnly(run: SpeechRunSample): boolean {
+  const reasons = skipReasonsOf(run);
+  const inWindow = (run.fetched_count ?? 0) - (reasons.OUTSIDE_WINDOW ?? 0);
+  return inWindow > 0 && (reasons.TIME_NOT_EXACT ?? 0) === inWindow && (run.success_count ?? 0) === 0;
+}
+
+/**
+ * レポート第9章の provider ごとの判定。優先順位(上ほど優先、1つだけ返す):
+ *
+ * 1. FETCH_FAILED 取得の失敗(異常) — judgeSpeechFetch。取得できていなければ他の判定は意味を持たない
+ * 2. INGEST_GAP 取り込みの漏れ(異常) — 取得元の最新(source_latest_at)が取り込み期間内
+ *    (now − 14日 以降。未来も含む)で、DB のその provider の最新 statement_datetime
+ *    (状態は問わない。未来の予定は SCHEDULED で保存されるため)より新しい、または DB に行が無い。
+ *    source_latest_at はスキップされた項目も含むため、最新の項目が話者未登録(SPEAKER_UNKNOWN 等)で
+ *    スキップされた場合もここに当たる(スキップ理由の行で確認する)。
+ *    ただし最新の実行が「時刻なしのみ」(4.)のときは判定しない — 期間内の項目がすべて
+ *    TIME_NOT_EXACT なら、DB に無いのは仕様どおりで漏れではない
+ * 3. SOURCE_NOT_UPDATED 取得元の更新なし(注意) — 取得は成功しているが、source_latest_at が
+ *    now − 10日 以前で、source_future_count が 0
+ * 4. TIME_NOT_EXACT_ONLY 時刻なしで未取り込み(情報) — isTimeNotExactOnly(ECB の通常の状態)
+ * 5. NORMAL 正常
+ *
+ * 2.〜3. は source_latest_at を使うため、最新の実行にその記録が無い(この記録の追加前の行)
+ * ときは判定しない(「—(記録なし)」と表示)。1. と 4. は記録が無くても判定する。
+ * 異常 > 注意 > 情報 の順にしたのは、ECB の時刻なし(情報)が更新停止(注意)を隠さないようにするため
+ * (時刻なしで未取り込みの実行でも、取得元が10日以上更新されていなければ「更新なし」と出す)。
+ */
+export function judgeSpeechFreshness(
+  provider: string,
+  runs: readonly SpeechRunSample[],
+  db: SpeechDbStatus,
+  now: Date,
+): SpeechFreshness {
+  const health = judgeSpeechFetch(runs, now);
+  const details = health.latest?.details ?? null;
+  const sourceRecorded = details !== null && Object.prototype.hasOwnProperty.call(details, 'source_latest_at');
+  const sourceLatestMs = sourceRecorded ? asTime(details.source_latest_at) : null;
+  const base = {
+    ...health,
+    provider,
+    sourceLatestAt: sourceLatestMs === null ? null : new Date(sourceLatestMs).toISOString(),
+    sourceRecorded,
+    sourceFutureCount: details ? asNumber(details.source_future_count) : null,
+    skipReasons: health.latest ? skipReasonsOf(health.latest) : {},
+    db,
+  };
+  const result = (judgement: SpeechFreshnessJudgement, judgementReasons: string[]): SpeechFreshness => ({
+    ...base,
+    judgement,
+    judgementReasons,
+  });
+
+  if (health.failed) return result('FETCH_FAILED', health.reasons);
+  const latest = health.latest!;
+  const timeNotExactOnly = isTimeNotExactOnly(latest);
+  const nowMs = now.getTime();
+  if (sourceLatestMs !== null && !timeNotExactOnly && sourceLatestMs >= nowMs - SPEECH_INGEST_PAST_DAYS * DAY_MS) {
+    const dbLatestMs = db.latestAt === null ? null : Date.parse(db.latestAt);
+    if (dbLatestMs === null || sourceLatestMs > dbLatestMs) {
+      return result('INGEST_GAP', [
+        dbLatestMs === null
+          ? '取得元に取り込み期間内の予定があるが、DB にこの取得元の行が無い'
+          : '取得元の最新の予定が DB の最新より新しい',
+      ]);
+    }
+  }
+  if (
+    sourceLatestMs !== null &&
+    sourceLatestMs <= nowMs - SPEECH_SOURCE_STALE_DAYS * DAY_MS &&
+    base.sourceFutureCount === 0
+  ) {
+    return result('SOURCE_NOT_UPDATED', [
+      `取得元の最新の予定が ${SPEECH_SOURCE_STALE_DAYS} 日以上前で、未来の予定が 0 件`,
+    ]);
+  }
+  if (timeNotExactOnly) {
+    return result('TIME_NOT_EXACT_ONLY', [
+      '取り込み期間内の項目がすべて時刻なし(公開時刻のみ)のため、仕様どおり取り込んでいない',
+    ]);
+  }
+  return result('NORMAL', []);
+}
+
+// ---------------------------------------------------------------------------
 // Individual anomalies (HQ判断 2026-10-17: 差異の内容・対象日時・通貨ペア・
 // 参照元を確認できるようにする)
 // ---------------------------------------------------------------------------

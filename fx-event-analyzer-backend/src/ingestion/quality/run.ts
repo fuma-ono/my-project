@@ -5,9 +5,9 @@
  * so both read the same data the same way. READ-ONLY, no external API calls.
  */
 import { MINUTE_MS } from '../marketHours.js';
-import { buildDataQualityReport } from './metrics.js';
+import { buildDataQualityReport, judgeSpeechFreshness, SPEECH_PROVIDERS, type SpeechFreshness } from './metrics.js';
 import type { QualityReader } from './reader.js';
-import { renderDataQualityMarkdown } from './report.js';
+import { renderDataQualityMarkdown, renderSpeechFreshnessMarkdown } from './report.js';
 
 /** The newest minutes are not judged: ingest:fx-prices runs every 20 min, so they may simply not be fetched yet. */
 export const REPORT_END_LAG_MINUTES = 30;
@@ -24,6 +24,21 @@ export function validateReportDays(days: number): void {
   if (!Number.isInteger(days) || days < 1 || days > MAX_REPORT_DAYS) {
     throw new Error(`days must be an integer between 1 and ${MAX_REPORT_DAYS} (got ${days})`);
   }
+}
+
+/**
+ * 第9章(要人発言の鮮度)の材料を取得元ごとに読み、判定する。対象期間(days)とは
+ * 無関係に、各取得元の最新の実行と最後の SUCCESS を読む(reader.listSpeechRuns)。
+ */
+export async function buildSpeechFreshness(reader: QualityReader, now: Date): Promise<SpeechFreshness[]> {
+  const nowIso = now.toISOString();
+  const result: SpeechFreshness[] = [];
+  for (const provider of SPEECH_PROVIDERS) {
+    const runs = await reader.listSpeechRuns(provider);
+    const db = await reader.speechDbStatus(provider, nowIso);
+    result.push(judgeSpeechFreshness(provider, runs, db, now));
+  }
+  return result;
 }
 
 export async function buildQualityReportMarkdown(
@@ -67,5 +82,7 @@ export async function buildQualityReportMarkdown(
     const found = new Set(pairs.map((p) => p.symbol));
     markdown += `\n> fx_pairs に無い(または無効な)通貨ペア: ${symbols.filter((s) => !found.has(s)).join(', ')}\n`;
   }
+  // 第9章は既存の出力(第1〜8章と上の注記)の後ろに足すだけ。既存部分は1文字も変えない。
+  markdown += `\n${renderSpeechFreshnessMarkdown(await buildSpeechFreshness(reader, now))}`;
   return markdown;
 }

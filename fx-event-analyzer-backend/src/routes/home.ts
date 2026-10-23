@@ -9,9 +9,15 @@ import { getHomeFxPairSymbols } from '../repositories/userSettingsRepository.js'
 import { resolveDayRangeUtc } from '../domain/timezone.js';
 import { homeQuerySchema } from '../schemas/home.js';
 import { mapEventDataStatus, type EconomicEventDbStatus } from '../domain/dataQuality.js';
-import { HOME_SPEECHES_MAX, homeSpeechesRange, toHomeSpeechItem } from '../domain/homeSpeeches.js';
+import {
+  HOME_SPEECHES_MAX,
+  homeSpeechesRange,
+  toHomeSpeechesStatus,
+  toHomeSpeechItem,
+} from '../domain/homeSpeeches.js';
 import { resolvePublicBaseUrl } from '../domain/speakerPhotos.js';
-import { listRecentDeliveredSpeeches } from '../repositories/speechesRepository.js';
+import { SPEECH_HOME_PROVIDER } from '../ingestion/quality/metrics.js';
+import { listRecentDeliveredSpeeches, listSpeechIngestionRuns } from '../repositories/speechesRepository.js';
 import { withTiming } from '../utils/requestTiming.js';
 
 /**
@@ -22,6 +28,9 @@ import { withTiming } from '../utils/requestTiming.js';
  * `speeches` (v1.27, 直近の要人発言): the latest DELIVERED speeches of the
  * last 7 days (relative to now, not `date`), newest first, max 3 — see
  * src/domain/homeSpeeches.ts.
+ *
+ * `speeches_status` (v1.34, 任意項目): 要人発言の取得状況(frb_calendar の
+ * ingest:speeches の実行記録から。toHomeSpeechesStatus)。`speeches` は変えない。
  */
 export function registerHomeRoutes(app: FastifyInstance): void {
   app.get('/home', async (request) =>
@@ -36,31 +45,36 @@ export function registerHomeRoutes(app: FastifyInstance): void {
         mark('events');
 
         // HQ指示(2026-10-20)「`/home`の独立したDB取得処理を安全に並列化する」:
-        // 以下4つはいずれも`events`(とその上の`request.user!.id`/現在時刻)
+        // 以下4つ(v1.34 で speechRuns を追加して5つ)はいずれも`events`(とその上の`request.user!.id`/現在時刻)
         // だけに依存し、互いには依存しない(snapshotsとrelatedFxPairsは両方
         // `events`から作る配列を使うだけで、片方の結果を使って片方を呼んで
         // いるわけではない)。直列6回のawaitを、依存関係のある部分だけ順に
         // 待つ形に変えた — 取得対象・フィルタ条件・返却データは一切変えて
         // いない(各関数自体は無変更)。
-        const speechRange = homeSpeechesRange(new Date());
-        const [snapshots, relatedFxPairsByIndicator, homeFxPairSymbols, recentSpeeches] = await Promise.all([
-          listSnapshotsForEvents(
-            app.supabase,
-            events.map((event) => event.id),
-          ),
-          listRelatedFxPairsForIndicators(
-            app.supabase,
-            events.map((event) => event.indicator_id),
-          ),
-          // SCR-026: the user's home.fx_pairs (in that order), else the default 3.
-          getHomeFxPairSymbols(app.supabase, request.user!.id),
-          listRecentDeliveredSpeeches(
-            app.supabase,
-            speechRange.from.toISOString(),
-            speechRange.to.toISOString(),
-            HOME_SPEECHES_MAX,
-          ),
-        ]);
+        const now = new Date();
+        const speechRange = homeSpeechesRange(now);
+        const [snapshots, relatedFxPairsByIndicator, homeFxPairSymbols, recentSpeeches, speechRuns] = await Promise.all(
+          [
+            listSnapshotsForEvents(
+              app.supabase,
+              events.map((event) => event.id),
+            ),
+            listRelatedFxPairsForIndicators(
+              app.supabase,
+              events.map((event) => event.indicator_id),
+            ),
+            // SCR-026: the user's home.fx_pairs (in that order), else the default 3.
+            getHomeFxPairSymbols(app.supabase, request.user!.id),
+            listRecentDeliveredSpeeches(
+              app.supabase,
+              speechRange.from.toISOString(),
+              speechRange.to.toISOString(),
+              HOME_SPEECHES_MAX,
+            ),
+            // v1.34 speeches_status(HQ承認 2026-10-23): 他の取得とは独立(ingestion_logs を読むだけ)。
+            listSpeechIngestionRuns(app.supabase, SPEECH_HOME_PROVIDER),
+          ],
+        );
         mark('parallel');
         const snapshotByEventId = new Map(snapshots.map((snapshot) => [snapshot.event_id, snapshot]));
         // majorFxはhomeFxPairSymbolsの結果が無いと呼べないため、これだけは
@@ -97,6 +111,7 @@ export function registerHomeRoutes(app: FastifyInstance): void {
           }),
           major_fx: majorFx,
           speeches: recentSpeeches.map((speech) => toHomeSpeechItem(speech, baseUrl)),
+          speeches_status: toHomeSpeechesStatus(speechRuns, now),
         };
       },
       request.log,

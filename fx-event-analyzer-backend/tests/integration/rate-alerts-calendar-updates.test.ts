@@ -205,6 +205,98 @@ describe.skipIf(!integration)('Rate alerts / calendar updates / Home speeches', 
     });
   });
 
+  // v1.34(HQ承認 2026-10-23): speeches_status。ingest:speeches の実行記録を書く結合テストは
+  // ほかに無いので、このファイルで入れた行だけで判定が決まる(入れた行は最後に消す)。
+  describe('GET /home speeches_status', () => {
+    const SUCCESS_LOG_ID = '3c000000-0000-0000-0000-0000000000a1';
+    const FAILURE_LOG_ID = '3c000000-0000-0000-0000-0000000000a2';
+    const ECB_LOG_ID = '3c000000-0000-0000-0000-0000000000a3';
+
+    const logRow = (id: string, provider: string, startedMinutes: number, failed: boolean) => ({
+      id,
+      job: 'ingest:speeches',
+      provider,
+      data_type: 'OTHER',
+      started_at: at(startedMinutes),
+      completed_at: at(startedMinutes + 1),
+      status: failed ? 'FAILURE' : 'SUCCESS',
+      fetched_count: failed ? 0 : 40,
+      success_count: failed ? 0 : 6,
+      error_count: failed ? 1 : 0,
+      skipped_count: 0,
+      review_count: 0,
+      details: { skip_reasons: {}, source_latest_at: at(60 * 24), source_future_count: 2 },
+    });
+
+    async function insertLog(row: ReturnType<typeof logRow>) {
+      const { error } = await ctx.serviceClient.from('ingestion_logs').insert(row);
+      if (error) throw new Error(`Failed to insert ingestion log: ${error.message}`);
+    }
+
+    /** このファイルが入れた要人発言だけ(他のファイルが並行して入れる発言に左右されない比較用)。 */
+    const ownSpeeches = (body: { speeches: Array<{ speech_id: string }> }) =>
+      body.speeches.filter((item) => SPEECH_IDS.includes(item.speech_id));
+
+    afterAll(async () => {
+      await ctx.serviceClient.from('ingestion_logs').delete().in('id', [SUCCESS_LOG_ID, FAILURE_LOG_ID, ECB_LOG_ID]);
+    });
+
+    it('reports stale with last_success_at null when there are no ingest:speeches logs, and FRB-only judgement', async () => {
+      const { count, error } = await ctx.serviceClient
+        .from('ingestion_logs')
+        .select('id', { count: 'exact', head: true })
+        .eq('job', 'ingest:speeches');
+      if (error) throw error;
+      expect(count).toBe(0);
+
+      const { headers } = await newUser();
+      const before = await call('GET', '/home?date=2026-09-10&timezone=UTC', headers);
+      expect(before.status).toBe(200);
+      expect(before.body.speeches_status).toEqual({ window_days: 7, last_success_at: null, stale: true });
+
+      // ECB の成功は /home の判定に入れない(ECB は仕様上 speech_events を書かない)
+      await insertLog(logRow(ECB_LOG_ID, 'ecb_press_rss', -10, false));
+      const ecbOnly = await call('GET', '/home?date=2026-09-10&timezone=UTC', headers);
+      expect(ecbOnly.body.speeches_status).toEqual({ window_days: 7, last_success_at: null, stale: true });
+      expect(ownSpeeches(ecbOnly.body)).toEqual(ownSpeeches(before.body));
+    });
+
+    it('is not stale after a recent FRB SUCCESS, and stale again when a later run failed', async () => {
+      const { headers } = await newUser();
+      const noLogs = await call('GET', '/home?date=2026-09-10&timezone=UTC', headers);
+
+      await insertLog(logRow(SUCCESS_LOG_ID, 'frb_calendar', -60, false));
+      const fresh = await call('GET', '/home?date=2026-09-10&timezone=UTC', headers);
+      expect(fresh.status).toBe(200);
+      expect(fresh.body.speeches_status).toEqual({
+        window_days: 7,
+        last_success_at: isoSeconds(at(-59)),
+        stale: false,
+      });
+
+      await insertLog(logRow(FAILURE_LOG_ID, 'frb_calendar', -30, true));
+      const failed = await call('GET', '/home?date=2026-09-10&timezone=UTC', headers);
+      expect(failed.body.speeches_status).toEqual({
+        window_days: 7,
+        last_success_at: isoSeconds(at(-59)),
+        stale: true,
+      });
+
+      // speeches は記録の有無で変わらない(従来どおりの形・中身)
+      expect(ownSpeeches(fresh.body)).toEqual(ownSpeeches(noLogs.body));
+      expect(ownSpeeches(failed.body)).toEqual(ownSpeeches(noLogs.body));
+      expect(ownSpeeches(failed.body).map((item) => item.speech_id)).toEqual([HOME_RECENT_SPEECH_ID]);
+      expect(Object.keys(failed.body)).toEqual([
+        'date',
+        'timezone',
+        'events',
+        'major_fx',
+        'speeches',
+        'speeches_status',
+      ]);
+    });
+  });
+
   describe('/rate-alerts', () => {
     it('401s without a token', async () => {
       expect((await call('GET', '/rate-alerts')).status).toBe(401);

@@ -12,11 +12,16 @@ import {
   MAX_MISMATCH_DETAILS,
   MISSING_CAUSES,
   RELEASE_WINDOW_MINUTES,
+  SPEECH_INGEST_PAST_DAYS,
+  SPEECH_SOURCE_STALE_DAYS,
+  SPEECH_SUCCESS_MAX_AGE_HOURS,
   type AggregateCoverage,
   type DataQualityReport,
   type FxCompleteness,
   type MissingCause,
   type ReleaseWindowCounts,
+  type SpeechFreshness,
+  type SpeechFreshnessJudgement,
 } from './metrics.js';
 
 const percent = (value: number): string => `${(value * 100).toFixed(2)}%`;
@@ -606,6 +611,104 @@ export function renderDataQualityMarkdown(report: DataQualityReport): string {
       }
     }
   }
+  lines.push('');
+  return `${lines.join('\n')}\n`;
+}
+
+// ---------------------------------------------------------------------------
+// 9. 要人発言の鮮度(HQ承認 2026-10-23)。第1〜8章とは別に描画し、run.ts が末尾に足す
+// (第1〜8章の出力は変えない)
+// ---------------------------------------------------------------------------
+
+export const SPEECH_FRESHNESS_LABELS: Record<SpeechFreshnessJudgement, string> = {
+  FETCH_FAILED: '取得の失敗(異常)',
+  INGEST_GAP: '取り込みの漏れ(異常)',
+  SOURCE_NOT_UPDATED: '取得元の更新なし(注意)',
+  TIME_NOT_EXACT_ONLY: '時刻なしで未取り込み(情報)',
+  NORMAL: '正常',
+};
+
+const NOT_RECORDED = '—(記録なし)';
+
+function fetchedWithDiff(f: SpeechFreshness): string {
+  const latest = f.latest?.fetched_count ?? null;
+  if (latest === null) return NOT_RECORDED;
+  const previous = f.previous?.fetched_count ?? null;
+  if (!f.previous) return `${latest}(前回の実行なし)`;
+  if (previous === null) return `${latest}(前回は記録なし)`;
+  const diff = latest - previous;
+  return `${latest}(前回比 ${diff > 0 ? '+' : diff < 0 ? '−' : '±'}${Math.abs(diff)})`;
+}
+
+function speechFreshnessRows(f: SpeechFreshness): string[] {
+  const run = f.latest;
+  const noRun = '—(実行記録なし)';
+  return [
+    SPEECH_FRESHNESS_LABELS[f.judgement],
+    f.judgementReasons.length === 0 ? '—' : f.judgementReasons.join('、'),
+    run ? time(run.started_at) : noRun,
+    run ? (run.completed_at ? time(run.completed_at) : NOT_RECORDED) : noRun,
+    run ? `${run.status}(エラー ${run.error_count ?? 0} 件)` : noRun,
+    run ? fetchedWithDiff(f) : noRun,
+    run ? num(run.success_count) : noRun,
+    run ? counts(f.skipReasons) : noRun,
+    !run || !f.sourceRecorded ? NOT_RECORDED : f.sourceLatestAt ? time(f.sourceLatestAt) : '—(取得0件)',
+    !run || f.sourceFutureCount === null ? NOT_RECORDED : String(f.sourceFutureCount),
+    f.db.latestAt ? time(f.db.latestAt) : '—(行なし)',
+    String(f.db.futureScheduled),
+    f.lastSuccessAt ? time(f.lastSuccessAt) : '—(SUCCESSなし)',
+  ];
+}
+
+export function renderSpeechFreshnessMarkdown(freshness: readonly SpeechFreshness[]): string {
+  const lines: string[] = [];
+  lines.push('## 9. 要人発言の鮮度');
+  lines.push('');
+  lines.push(
+    `取得元(provider)ごとに、ingest:speeches の最新の実行と speech_events を比べる。FRB と ECB は混ぜずに別々に判定する。対象期間(直近の日数)に関係なく、各取得元の最新の実行と最後の SUCCESS を読む。`,
+  );
+  lines.push('');
+  const columns = freshness.map(speechFreshnessRows);
+  const labels = [
+    '判定',
+    '判定の理由',
+    '最新の実行(開始)',
+    '最新の実行(完了)',
+    '最新の実行の状態',
+    '取得件数',
+    '取り込み件数',
+    'スキップ理由(最新の実行)',
+    '取得元の最新の予定(source_latest_at)',
+    '取得元の未来の予定(source_future_count)',
+    'DB の最新(statement_datetime、状態問わず)',
+    'DB の未来の SCHEDULED',
+    '最後の SUCCESS',
+  ];
+  lines.push(
+    ...table(
+      ['項目', ...freshness.map((f) => f.provider)],
+      labels.map((label, index) => [label, ...columns.map((column) => column[index]!)]),
+    ),
+  );
+  lines.push('');
+  lines.push('判定(上ほど優先。1つだけ表示):');
+  lines.push(
+    `1. 取得の失敗(異常): 最新の実行が FAILURE/PARTIAL・エラーあり・取得件数 0、または最後の SUCCESS から ${SPEECH_SUCCESS_MAX_AGE_HOURS} 時間以上経過(SUCCESS なしを含む)`,
+  );
+  lines.push(
+    `2. 取り込みの漏れ(異常): 取得元の最新の予定が取り込み期間内(直近 ${SPEECH_INGEST_PAST_DAYS} 日以降。未来を含む)で、DB の最新より新しい(DB に行が無い場合を含む)。取得元の最新はスキップされた項目も含むため、話者未登録(SPEAKER_UNKNOWN 等)でもここに当たる。期間内の項目がすべて時刻なしの実行では判定しない`,
+  );
+  lines.push(
+    `3. 取得元の更新なし(注意): 取得元の最新の予定が ${SPEECH_SOURCE_STALE_DAYS} 日以上前で、未来の予定が 0 件`,
+  );
+  lines.push(
+    '4. 時刻なしで未取り込み(情報): 取り込み期間内の項目がすべて TIME_NOT_EXACT(公開時刻のみ)で取り込み 0 件。ECB RSS の通常の状態',
+  );
+  lines.push('5. 正常: 上のいずれにも当たらない');
+  lines.push('');
+  lines.push(
+    `「${NOT_RECORDED}」の取得元の最新の予定は、この記録を追加する前の実行。2.・3. は判定せず、1.・4. だけで判定する。`,
+  );
   lines.push('');
   return `${lines.join('\n')}\n`;
 }

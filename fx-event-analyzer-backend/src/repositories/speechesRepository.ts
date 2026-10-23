@@ -205,3 +205,73 @@ export async function listDeliveredSpeechesForSpeaker(
   if (error) throw error;
   return (data ?? []).map((row) => toSpeechSummary(row as SpeechDbRow));
 }
+
+/** ingest:speeches の実行記録(ingestion_logs)の列。鮮度の判定(quality/metrics.ts judgeSpeechFetch)に使う。 */
+export interface SpeechIngestionRunRow {
+  id: string;
+  job: string | null;
+  provider: string;
+  data_type: 'ECONOMIC_EVENT' | 'FX_PRICE' | 'EVENT_REACTION' | 'OTHER';
+  started_at: string;
+  completed_at: string | null;
+  status: 'SUCCESS' | 'FAILURE' | 'PARTIAL';
+  fetched_count: number | null;
+  success_count: number | null;
+  error_count: number | null;
+  details: Record<string, unknown> | null;
+}
+
+const SPEECH_RUN_COLUMNS =
+  'id, job, provider, data_type, started_at, completed_at, status, fetched_count, success_count, error_count, details';
+
+/**
+ * 要人発言の鮮度(HQ承認 2026-10-23): 1つの取得元(provider)の ingest:speeches の
+ * 実行記録のうち、新しい順の2件(最新と前回)と、最後の SUCCESS 1件(重複は除く)。
+ * 期間で絞らないので、品質レポートの対象期間より前の SUCCESS も見つかる。
+ * READ-ONLY。ingestion_logs は service_role だけが読める(RLS)。
+ */
+export async function listSpeechIngestionRuns(
+  supabase: SupabaseClient,
+  provider: string,
+): Promise<SpeechIngestionRunRow[]> {
+  const base = () =>
+    supabase.from('ingestion_logs').select(SPEECH_RUN_COLUMNS).eq('job', 'ingest:speeches').eq('provider', provider);
+  const [recent, success] = await Promise.all([
+    base().order('started_at', { ascending: false }).order('id', { ascending: true }).limit(2),
+    base().eq('status', 'SUCCESS').order('started_at', { ascending: false }).order('id', { ascending: true }).limit(1),
+  ]);
+  if (recent.error) throw recent.error;
+  if (success.error) throw success.error;
+  const rows = new Map<string, SpeechIngestionRunRow>();
+  for (const row of [...(recent.data ?? []), ...(success.data ?? [])] as SpeechIngestionRunRow[]) rows.set(row.id, row);
+  return [...rows.values()];
+}
+
+/**
+ * 1つの取得元の speech_events の状態(品質レポート第9章): statement_datetime の最大値
+ * (状態は問わない)と、now より後の SCHEDULED の件数。READ-ONLY。
+ */
+export async function getSpeechProviderDbStatus(
+  supabase: SupabaseClient,
+  provider: string,
+  nowIso: string,
+): Promise<{ latestAt: string | null; futureScheduled: number }> {
+  const [latest, future] = await Promise.all([
+    supabase
+      .from('speech_events')
+      .select('statement_datetime')
+      .eq('provider', provider)
+      .order('statement_datetime', { ascending: false })
+      .limit(1),
+    supabase
+      .from('speech_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('provider', provider)
+      .eq('status', 'SCHEDULED')
+      .gt('statement_datetime', nowIso),
+  ]);
+  if (latest.error) throw latest.error;
+  if (future.error) throw future.error;
+  const first = (latest.data ?? [])[0] as { statement_datetime: string } | undefined;
+  return { latestAt: first?.statement_datetime ?? null, futureScheduled: future.count ?? 0 };
+}
