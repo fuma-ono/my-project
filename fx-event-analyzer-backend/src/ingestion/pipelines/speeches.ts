@@ -38,6 +38,20 @@ export function speechTitle(speech: NormalizedSpeech): string {
   return topic ? `${label}: ${topic}` : label;
 }
 
+/**
+ * 鮮度監視用の記録(HQ承認 2026-10-23「要人発言の鮮度監視」)。取り込み対象・
+ * スキップ・状態は一切変えず、ingestion_logs.details に次の2つを書くだけ:
+ * - source_latest_at: 取得した全件(後でスキップされたものも含む)の startsAt の最大値(ISO)。0件なら null
+ * - source_future_count: 取得した全件のうち startsAt が now より後の件数。0件なら 0
+ * 品質レポート第9章(quality/metrics.ts judgeSpeechFreshness)が、取得元の更新停止・
+ * 取り込みの漏れの判定に使う。
+ */
+function recordSourceFreshness(speeches: readonly NormalizedSpeech[], now: Date, counters: JobCounters): void {
+  const times = speeches.map((speech) => Date.parse(speech.startsAt)).filter(Number.isFinite);
+  counters.details.source_latest_at = times.length > 0 ? new Date(Math.max(...times)).toISOString() : null;
+  counters.details.source_future_count = times.filter((time) => time > now.getTime()).length;
+}
+
 export async function ingestSpeeches(
   provider: string,
   speeches: readonly NormalizedSpeech[],
@@ -48,6 +62,7 @@ export async function ingestSpeeches(
   const aliases = options.aliases ?? SPEAKER_ALIASES;
   const now = (options.now ?? (() => new Date()))();
   counters.fetched += speeches.length;
+  recordSourceFreshness(speeches, now, counters);
 
   const speakers = await store.listSpeakers();
   const speakerIdByKey = new Map(speakers.map((speaker) => [`${speaker.organization}|${speaker.name}`, speaker.id]));

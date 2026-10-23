@@ -8,7 +8,7 @@ import { ingestSpeeches, speechTitle } from '../../src/ingestion/pipelines/speec
 import type { FxPriceProvider } from '../../src/ingestion/providers.js';
 import type { FxPriceRow } from '../../src/ingestion/store.js';
 import { JobCounters, resolveJobStatus, runIngestionJob } from '../../src/ingestion/runner.js';
-import type { NormalizedCandle } from '../../src/ingestion/types.js';
+import type { NormalizedCandle, NormalizedSpeech } from '../../src/ingestion/types.js';
 import { checkCandles, usableForReactions } from '../../src/ingestion/validation/fxCandles.js';
 import { fixture, jsonFixture, MemoryIngestionStore } from '../helpers/memoryIngestionStore.js';
 
@@ -105,6 +105,96 @@ describe('speech pipeline (recorded FRB calendar / ECB RSS)', () => {
     );
     expect(store.speeches).toHaveLength(0);
     expect(counters.skipReasons.TIME_NOT_EXACT).toBe(speeches.length);
+  });
+
+  describe('鮮度の記録 source_latest_at / source_future_count (HQ承認 2026-10-23)', () => {
+    const NOW = new Date('2026-10-20T12:00:00Z');
+    const item = (
+      id: string,
+      speakerName: string,
+      startsAt: string,
+      overrides: Partial<NormalizedSpeech> = {},
+    ): NormalizedSpeech => ({
+      provider: 'frb_calendar',
+      providerEventId: id,
+      speakerName,
+      organization: 'FRB',
+      kind: 'SPEECH',
+      topic: 'Economic Outlook',
+      startsAt,
+      timePrecision: 'EXACT',
+      url: null,
+      ...overrides,
+    });
+    const items: NormalizedSpeech[] = [
+      item('old', 'Lisa D. Cook', '2026-09-01T15:00:00Z'), // OUTSIDE_WINDOW
+      item('past', 'Lisa D. Cook', '2026-10-19T15:00:00Z'), // DELIVERED
+      item('future', 'Philip N. Jefferson', '2026-10-22T15:00:00Z'), // SCHEDULED
+      item('latest-unknown', 'Stephen I. Miran', '2026-10-28T15:00:00Z'), // SPEAKER_UNKNOWN (最新)
+      item('no-time', 'Lisa D. Cook', '2026-10-25T00:00:00Z', { timePrecision: 'PUBLICATION_TIME' }),
+    ];
+
+    it('computes them from ALL fetched items, including skipped ones', async () => {
+      const counters = new JobCounters();
+      await ingestSpeeches('frb_calendar', items, { store, now: () => NOW }, counters);
+      // 最新はスキップされた話者未登録の項目、未来の予定はスキップ分も含めて3件
+      expect(counters.details.source_latest_at).toBe('2026-10-28T15:00:00.000Z');
+      expect(counters.details.source_future_count).toBe(3);
+    });
+
+    it('records null / 0 when nothing was fetched', async () => {
+      const counters = new JobCounters();
+      await ingestSpeeches('frb_calendar', [], { store, now: () => NOW }, counters);
+      expect(counters.details).toEqual({ source_latest_at: null, source_future_count: 0 });
+      expect(counters.fetched).toBe(0);
+      expect(store.speeches).toEqual([]);
+    });
+
+    it('leaves the upserted rows and the counters exactly as before', async () => {
+      const counters = new JobCounters();
+      await ingestSpeeches('frb_calendar', items, { store, now: () => NOW }, counters);
+      expect(
+        store.speeches.map(({ provider_event_id, speaker_id, status, statement_datetime }) => ({
+          provider_event_id,
+          speaker_id,
+          status,
+          statement_datetime,
+        })),
+      ).toEqual([
+        {
+          provider_event_id: 'past',
+          speaker_id: 'sp-cook',
+          status: 'DELIVERED',
+          statement_datetime: '2026-10-19T15:00:00Z',
+        },
+        {
+          provider_event_id: 'future',
+          speaker_id: 'sp-jefferson',
+          status: 'SCHEDULED',
+          statement_datetime: '2026-10-22T15:00:00Z',
+        },
+      ]);
+      expect({
+        fetched: counters.fetched,
+        success: counters.success,
+        skipped: counters.skipped,
+        errors: counters.errors,
+        skipReasons: counters.skipReasons,
+      }).toEqual({
+        fetched: 5,
+        success: 2,
+        skipped: 3,
+        errors: 0,
+        skipReasons: { OUTSIDE_WINDOW: 1, SPEAKER_UNKNOWN: 1, TIME_NOT_EXACT: 1 },
+      });
+      // 追加したのは2つのキーだけ(既存の details はそのまま)
+      expect(Object.keys(counters.details).sort()).toEqual([
+        'source_future_count',
+        'source_latest_at',
+        'unknown_speakers',
+      ]);
+      expect(counters.details.unknown_speakers).toEqual(['FRB: Stephen I. Miran']);
+    });
   });
 
   it('builds a Japanese kind label + the source topic (no translation)', () => {
