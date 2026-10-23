@@ -1239,9 +1239,22 @@ struct HomeView: View {
                 .accessibilityIdentifier("homeSpeechesSeeAll")
             }
             if speeches.isEmpty {
-                V5JPFont.text("現在表示できる要人発言はありません", size: 8)
-                    .foregroundStyle(V5P.muted)
-                    .frame(maxWidth: .infinity, minHeight: Self.speechesCardHeight - Self.speechesHeaderHeight, alignment: .center)
+                // HQ承認(2026-10-23)「要人発言の鮮度監視」: 「直近7日間に発言が無い」のか
+                // 「取得できていない」のかを speeches_status(v1.34)で言い分ける。
+                // 日時はホームの他の日時と同じく表示設定のタイムゾーン・形式で出す。
+                let empty = HomeSpeechesEmptyText.make(status: viewModel.speechesStatus) { date in
+                    "\(AppPreferences.shared.shortDateString(date)) \(AppPreferences.shared.timeString(date))"
+                }
+                VStack(spacing: 3) {
+                    V5JPFont.text(empty.message, size: 8)
+                        .foregroundStyle(V5P.muted)
+                        .multilineTextAlignment(.center)
+                    if let detail = empty.detail {
+                        V5JPFont.text(detail, size: 7)
+                            .foregroundStyle(V5P.muted)
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: Self.speechesCardHeight - Self.speechesHeaderHeight, alignment: .center)
             } else {
                 ForEach(Array(speeches.enumerated()), id: \.element.id) { idx, speech in
                     if idx > 0 { Divider().overlay(Self.cardBorderColor) }

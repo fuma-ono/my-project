@@ -121,6 +121,8 @@ final class HomeViewModel: ObservableObject {
     /// (空状態表示)。CIのUIスクリーンショット用モックサーバーの応答にだけ
     /// 値が入っている。
     @Published private(set) var recentSpeeches: [HomeSpeechSummary] = []
+    /// GET /home `speeches_status`(v1.34)。古いサーバーでは nil。`recentSpeeches` が空のときの文言にだけ使う。
+    @Published private(set) var speechesStatus: HomeSpeechesStatus?
 
     private let apiClient: APIClient
     private let favoritesStore: FavoritesStore
@@ -172,6 +174,7 @@ final class HomeViewModel: ObservableObject {
             state = .loaded(events: response.events, majorFx: response.majorFx)
             DiagnosticsStore.shared.recordHomeStateApplied()
             recentSpeeches = response.speeches ?? []
+            speechesStatus = response.speechesStatus
         } catch let error as APIError where error.isNotConfigured {
             state = .backendNotConfigured
         } catch {

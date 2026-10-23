@@ -87,13 +87,24 @@ struct HomeResponse: Decodable {
     /// だけがこのフィールドを含む応答を返し、本番のバックエンドの挙動は
     /// 変えていない。
     let speeches: [HomeSpeechSummary]?
+    /// api-design.md §12 v1.34(HQ承認 2026-10-23)。古いサーバーは返さないので optional。
+    /// `speeches` が空のときの文言にだけ使う(`HomeSpeechesEmptyText`)。
+    let speechesStatus: HomeSpeechesStatus?
 
-    init(date: String, timezone: String, events: [HomeEventSummary], majorFx: [MajorFxSummary], speeches: [HomeSpeechSummary]? = nil) {
+    init(
+        date: String,
+        timezone: String,
+        events: [HomeEventSummary],
+        majorFx: [MajorFxSummary],
+        speeches: [HomeSpeechSummary]? = nil,
+        speechesStatus: HomeSpeechesStatus? = nil
+    ) {
         self.date = date
         self.timezone = timezone
         self.events = events
         self.majorFx = majorFx
         self.speeches = speeches
+        self.speechesStatus = speechesStatus
     }
 
     enum CodingKeys: String, CodingKey {
@@ -102,5 +113,48 @@ struct HomeResponse: Decodable {
         case events
         case majorFx = "major_fx"
         case speeches
+        case speechesStatus = "speeches_status"
+    }
+}
+
+/// GET /home `speeches_status`(api-design.md §12 v1.34): 要人発言の取得状況。
+/// - `lastSuccessAt`: 最後に取得に成功した時刻(無ければ nil)
+/// - `stale`: 取得できていない(最新の取得が失敗、または18時間以上成功していない)
+struct HomeSpeechesStatus: Decodable, Equatable {
+    let windowDays: Int
+    let lastSuccessAt: Date?
+    let stale: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case windowDays = "window_days"
+        case lastSuccessAt = "last_success_at"
+        case stale
+    }
+}
+
+/// 「直近の要人発言」カードの空状態の文言(`speeches` が0件のときだけ使う。1件以上なら表示は従来どおり)。
+/// 日時の書式は呼び出し側から渡す(ホームでは表示設定のタイムゾーン・形式、`AppPreferences`)ので、
+/// 文言の選び方だけを単体テストできる。
+struct HomeSpeechesEmptyText: Equatable {
+    let message: String
+    /// 小さく出す「最終更新 …」の行。無ければ nil
+    let detail: String?
+
+    /// - status あり・stale == false → 「直近7日間の要人発言はありません」+「最終更新 …」(時刻があるときだけ)
+    /// - status あり・stale == true → 「要人発言の情報を更新できていません（最終更新 …）」(時刻が無ければ括弧なし)
+    /// - status なし(古いサーバー) → 「直近7日間の要人発言はありません」のみ
+    static func make(status: HomeSpeechesStatus?, formatDate: (Date) -> String) -> HomeSpeechesEmptyText {
+        guard let status else {
+            return HomeSpeechesEmptyText(message: "直近7日間の要人発言はありません", detail: nil)
+        }
+        let lastSuccess = status.lastSuccessAt.map(formatDate)
+        if status.stale {
+            let message = lastSuccess.map { "要人発言の情報を更新できていません（最終更新 \($0)）" } ?? "要人発言の情報を更新できていません"
+            return HomeSpeechesEmptyText(message: message, detail: nil)
+        }
+        return HomeSpeechesEmptyText(
+            message: "直近\(status.windowDays)日間の要人発言はありません",
+            detail: lastSuccess.map { "最終更新 \($0)" }
+        )
     }
 }
