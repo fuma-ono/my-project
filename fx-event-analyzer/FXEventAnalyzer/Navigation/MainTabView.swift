@@ -22,7 +22,7 @@ struct MainTabView: View {
     @State private var collapsed = false
     @State private var homePath = NavigationPath()
     @State private var indicatorsPath = NavigationPath()
-    /// カレンダータブを常駐化する(`portraitLayout`参照)にあたり、起動直後
+    /// カレンダータブを常駐化する(`tabContent`参照)にあたり、起動直後
     /// (ホームタブが初期選択)からカレンダーも即座に生成して`/calendar`を
     /// 先読みしてしまうと、使われるとは限らない通信を毎回の起動に追加する
     /// ことになる。初めてカレンダータブが選ばれた時点で初めて生成し、以後は
@@ -32,8 +32,25 @@ struct MainTabView: View {
     var body: some View {
         GeometryReader { geo in
             let landscape = geo.size.width > geo.size.height && geo.size.width >= 900
-            Group {
-                if landscape { landscapeLayout } else { portraitLayout }
+            // HQ指示(2026-10-23)「起動遅延とホーム画面の人物アイコン不具合の
+            // 調査」: 以前はここで`if landscape { landscapeLayout } else {
+            // portraitLayout }`とし、`landscapeLayout`の内部でもう一度
+            // `portraitLayout`(`HomeView`/`CalendarTabView`等を含む`ZStack`)を
+            // 生成していた。SwiftUIの`if/else`は分岐が切り替わると前の分岐の
+            // ビュー階層を丸ごと破棄して作り直すため、端末の向きが変わって
+            // `landscape`の値が変わるたびに`HomeView`(と中の`@StateObject
+            // HomeViewModel`)が再生成され、`.task { viewModel.load() }`が
+            // 再実行されて`/home`が余分に呼ばれていた(実機診断の
+            // `homeRequestCount`が2回に増えていた不具合の原因)。
+            //
+            // 対応: タブの内容(`tabContent`)を`landscape`の分岐の外側で
+            // 1回だけ構築し、分岐は「サイドバーを表示するかどうか」だけを
+            // 決めるようにした。`tabContent`はどちらの向きでも同じ木構造上の
+            // 位置に置かれるため、向きが変わっても`HomeView`等は再生成されない。
+            HStack(spacing: 0) {
+                if landscape { sidebar }
+                tabContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .preferredColorScheme(.dark)
@@ -63,8 +80,13 @@ struct MainTabView: View {
     /// 都度生成のまま変更していない(影響範囲を最小限にするため)。
     /// `HomeView`/`CalendarTabView`のどちらにも`.onDisappear`に依存する
     /// 処理が無いことを確認済み(常駐化しても副作用が無い)。
+    ///
+    /// HQ指示(2026-10-23)により、`body`の`landscape`/`portrait`の分岐の
+    /// 外側に移動した(旧`portraitLayout`)。`landscape`が変わってもこの
+    /// プロパティ自体の呼び出し位置(`body`内、`tabContent`という1箇所)は
+    /// 変わらないため、中の`HomeView`等は再生成されない。
     @ViewBuilder
-    private var portraitLayout: some View {
+    private var tabContent: some View {
         ZStack {
             HomeView(apiClient: apiClient, path: $homePath, tabSelection: $tabSelection)
                 .opacity(tabSelection == 0 ? 1 : 0)
@@ -86,39 +108,38 @@ struct MainTabView: View {
         }
     }
 
-    private var landscapeLayout: some View {
-        HStack(spacing: 0) {
-            VStack(spacing: 18) {
-                HStack {
-                    if !collapsed { FXBrandMark(compact: true) }
-                    Spacer()
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) { collapsed.toggle() }
-                    } label: {
-                        Image(systemName: "sidebar.left").foregroundStyle(FXColor.secondaryText)
-                    }
-                }.padding(.horizontal, 14).padding(.top, 12)
-                ForEach(FXTab.allCases) { tab in
-                    Button { tabSelection = tab.index } label: {
-                        HStack {
-                            Image(systemName: tab.icon).frame(width: 22)
-                            if !collapsed { Text(tab.title) }
-                            Spacer()
-                        }
-                        .padding(.horizontal, 14).frame(height: 48)
-                        .foregroundStyle(tabSelection == tab.index ? FXColor.cyan : FXColor.secondaryText)
-                        .background(tabSelection == tab.index ? FXColor.cyan.opacity(0.10) : .clear)
-                        .clipShape(RoundedRectangle(cornerRadius: 13))
-                    }.buttonStyle(.plain)
-                }
+    /// iPad横画面の折りたたみ可能な左サイドバー(v5 UIパッケージ以前から存在)。
+    /// HQ指示(2026-10-23)により`landscapeLayout`から切り出した。内容・見た目は
+    /// 変更していない — `tabContent`を分岐の外に出すための構造変更のみ。
+    private var sidebar: some View {
+        VStack(spacing: 18) {
+            HStack {
+                if !collapsed { FXBrandMark(compact: true) }
                 Spacer()
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { collapsed.toggle() }
+                } label: {
+                    Image(systemName: "sidebar.left").foregroundStyle(FXColor.secondaryText)
+                }
+            }.padding(.horizontal, 14).padding(.top, 12)
+            ForEach(FXTab.allCases) { tab in
+                Button { tabSelection = tab.index } label: {
+                    HStack {
+                        Image(systemName: tab.icon).frame(width: 22)
+                        if !collapsed { Text(tab.title) }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 14).frame(height: 48)
+                    .foregroundStyle(tabSelection == tab.index ? FXColor.cyan : FXColor.secondaryText)
+                    .background(tabSelection == tab.index ? FXColor.cyan.opacity(0.10) : .clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 13))
+                }.buttonStyle(.plain)
             }
-            .frame(width: collapsed ? 78 : 230)
-            .background(FXColor.backgroundElevated.opacity(0.86))
-            .overlay(alignment: .trailing) { Rectangle().fill(FXColor.border).frame(width: 1) }
-
-            portraitLayout.frame(maxWidth: .infinity, maxHeight: .infinity)
+            Spacer()
         }
+        .frame(width: collapsed ? 78 : 230)
+        .background(FXColor.backgroundElevated.opacity(0.86))
+        .overlay(alignment: .trailing) { Rectangle().fill(FXColor.border).frame(width: 1) }
     }
 }
 

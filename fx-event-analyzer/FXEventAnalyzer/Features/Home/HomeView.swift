@@ -310,10 +310,19 @@ struct HomeView: View {
                 .accessibilityLabel("通知")
                 .accessibilityValue(notifications.hasUnread ? "未読あり" : "")
                 .padding(.trailing, bellTrailingMargin)
-                Image(systemName: "person")
-                    .font(.system(size: accountIconSize, weight: .semibold))
-                    .foregroundStyle(Self.accountIconColor)
-                    .padding(.trailing, accountTrailingMargin)
+                // HQ指示(2026-10-23)「ホーム画面の人物アイコン」: タップしても
+                // 遷移しなかった不具合の修正。既存のSCR-015(アカウント情報、
+                // `SettingsView`の「アカウント情報」行と同じ`AppRoute.account`)
+                // をそのまま再利用する。新規画面は作っていない。
+                NavigationLink(value: AppRoute.account) {
+                    Image(systemName: "person")
+                        .font(.system(size: accountIconSize, weight: .semibold))
+                        .foregroundStyle(Self.accountIconColor)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("アカウント")
+                .accessibilityIdentifier("homeAccountIcon")
+                .padding(.trailing, accountTrailingMargin)
             }
         }
         .position(x: V5P.W / 2, y: 34.9)

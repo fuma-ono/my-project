@@ -233,6 +233,14 @@ final class ScreenshotTests: XCTestCase {
         tapIdentifier("v5HeaderBack")
         XCTAssertTrue(waitForAnyElement(containing: "直近の要人発言", timeout: 10), "Did not return to Home from Speech list")
 
+        // ホーム画面ヘッダーの人物アイコン(HQ指示 2026-10-23「ホーム画面の人物アイコン」)。
+        // タップしても遷移しなかった不具合の修正確認 — SCR-015アカウント情報
+        // (SettingsからのAppRoute.accountと同じ画面)へ遷移し、ホームへ戻れることを確認する。
+        tapIdentifier("homeAccountIcon")
+        XCTAssertTrue(waitForAnyElement(containing: "プロフィール編集", timeout: 15), "Home account icon did not open Account screen")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "直近の要人発言", timeout: 10), "Did not return to Home from Account screen")
+
         // 通知一覧(HQ指示 2026-10-05「通知はホーム画面の通知マークを押したら
         // そこで確認できる仕様にして」)。ログイン時に`RootView`が
         // `GET /notifications/upcoming`を取り込み、モックの通知時刻を過ぎた
@@ -387,6 +395,50 @@ final class ScreenshotTests: XCTestCase {
         tap(containing: "通貨ペアを追加する")
         XCTAssertTrue(waitForAnyElement(containing: "クロス円", timeout: 15), "26a-HomeCurrencyPairPicker did not load")
         capture("26a-HomeCurrencyPairPicker")
+    }
+
+    /// HQ指示(2026-10-23「起動遅延とホーム画面の人物アイコン不具合の調査」)で
+    /// `MainTabView.swift`の縦横分岐を再構成した(`HomeView`等を`landscape`の
+    /// if/elseの外側に移動)ことの回帰確認。端末を横向きにしても`HomeView`の
+    /// `HomeViewModel`が再生成されず、`/home`が2回取得されないことを、起動
+    /// 診断画面の「/home取得回数」が「1回」のままであることで確認する。
+    ///
+    /// 注記(未検証事項): このテストを現時点で実行するCIパスは存在しない。
+    /// `fx-event-analyzer-ui-screenshots.yml`のiPadシミュレータ実行は
+    /// 2026-10-06のHQ判断で一時停止中(iPhoneのみ)で、`fx-event-analyzer-
+    /// ios-build.yml`もiPhoneシミュレータのみを使用する。横画面(landscape)は
+    /// iPadでのみ許可されており(`project.yml`の`UISupportedInterfaceOrientations
+    /// ~ipad`、iPhoneはPortrait固定)、iPhone実行ではこの回転は何も起こさない。
+    /// そのため、このテスト自体は今回のラウンドでCI実行・成功確認できていない
+    /// (iPad実機・iPadシミュレータでの確認が別途必要)。修正の正しさはコード
+    /// レビュー(`HomeView`が`landscape`の分岐の外、`body`内の1箇所だけに
+    /// 置かれ続けること)で裏付けている。
+    func testOrientationChangeDoesNotDuplicateHomeFetch() throws {
+        let emailField = app.textFields["メールアドレス"]
+        XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
+        type("ui-screenshot@example.com", into: emailField)
+        type("ui-screenshot-password", into: app.secureTextFields["パスワード"])
+        app.buttons["ログイン"].tap()
+        XCTAssertTrue(waitForAnyElement(containing: "直近の要人発言", timeout: 20), "Home did not load")
+
+        // iPadでのみ向き変更が意味を持つ(iPhoneはPortrait固定)。landscapeへの
+        // 回転が`MainTabView`の`landscape`を切り替え、修正前は`HomeView`
+        // (`HomeViewModel`)が再生成されて`/home`を2回目取得していた。
+        XCUIDevice.shared.orientation = .landscapeLeft
+        Thread.sleep(forTimeInterval: 2.0)
+        // 以降のタップは既存ヘルパー(`tapV5`等)がPortrait基準のため、
+        // 向きを戻してから起動診断画面を開く。
+        XCUIDevice.shared.orientation = .portrait
+        Thread.sleep(forTimeInterval: 1.0)
+
+        captureSettingsSubScreen(row: "起動診断", rowIndex: 5, waitFor: "起動シーケンス全体の時間", name: "19b-LaunchDiagnostics-AfterRotation")
+
+        let homeRequestCountValue = app.staticTexts["homeRequestCountValue"]
+        XCTAssertTrue(homeRequestCountValue.waitForExistence(timeout: 10), "homeRequestCountValue row not found")
+        XCTAssertEqual(
+            homeRequestCountValue.label, "1回",
+            "/homeが複数回取得されている(MainTabViewのlandscape/portrait分岐でHomeViewが再生成された可能性)"
+        )
     }
 
     /// Taps the row's center through SettingsView's fixed V5 layout (group 1
