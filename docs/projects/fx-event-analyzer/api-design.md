@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.31
+# FX Event Analyzer: API詳細設計書 v1.34
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -78,6 +78,7 @@
   - 13.2: `latest_event`は`release_datetime`が現在以前で最も新しいEvent(状態は問わない)。未来の予定は含めない
   - 23: Event 検索の並びを、各指標の次の予定(1指標1件、近い順)→ 現在より前の Event(新しい順)に変更。2件目以降の未来の予定は返さない
   - 発表の履歴(`status=RELEASED`など)の並び順、13.1 の`next_release_datetime`(もともと現在以降の最も早い予定)は変えない
+- **v1.34**(2026-10-23): 要人発言の鮮度(HQ承認 2026-10-23)。`GET /home`に任意の`speeches_status`(`window_days` / `last_success_at` / `stale`)を追加(12章)。ホームの「直近の要人発言」が0件のとき、「直近7日間に発言が無い」のか「取得できていない」のかをアプリが言い分けるため。**`speeches`の中身・形は変えない。** 判定は品質レポート第9章(dev-environment.md 14章)の「取得の失敗」と同じ関数を使う
 
 ---
 
@@ -436,7 +437,8 @@ Response：
   "timezone": "Asia/Tokyo",
   "events": [],
   "major_fx": [],
-  "speeches": []
+  "speeches": [],
+  "speeches_status": { "window_days": 7, "last_success_at": "2026-10-23T03:00:04Z", "stale": false }
 }
 ```
 
@@ -493,6 +495,16 @@ major_fxにはHomeで表示する主要FX Pairの最新情報を含める。想�
 - `headline`：`summary`があればそれ、無ければ`title`
 - `speaker_photo_url`：14.4節の`speaker.photo_url`と同じく絶対URLか`null`(14.7節)
 - `reaction_fx_symbol` / `reaction_price_before` / `reaction_price_after` / `reaction_pips`：発言前後の値動き。要人発言の値動きのデータ(`SpeechPriceReaction`)は無いため、今は常に`null`(値を作らない)。アプリは`null`のとき値動きを出さない
+
+**speeches_status(v1.34で追加、任意項目)**: 要人発言の取得状況。`speeches`には影響しない(0件のときの文言にだけ使う)。古いサーバーは返さないため、アプリは無くても動く。
+
+- `window_days`：`speeches`の対象期間の日数。`7`
+- `last_success_at`：取得元`frb_calendar`(FRBのカレンダー)の`ingest:speeches`の最後の`SUCCESS`の完了時刻(秒精度のUTC)。実行記録が無ければ`null`
+- `stale`：`frb_calendar`の取得ができていなければ`true`。最新の実行(`started_at`が最大)が`SUCCESS`以外・エラーあり・取得件数0のとき、または最後の`SUCCESS`から18時間以上経っているとき(`SUCCESS`が一度も無い・実行記録が無いときも`true`)。品質レポート第9章の「取得の失敗」と同じ判定(`judgeSpeechFetch`)
+- ECB(`ecb_press_rss`)は判定に入れない。ECB の RSS は公開時刻しか無く、仕様上`speech_events`に1件も書かない(`TIME_NOT_EXACT`)ため、ホームの要人発言の有無に関係しない。FRB と ECB を混ぜて判定しない
+- `ingestion_logs`は service_role でだけ読む(RLS)。アプリには上の3項目だけを返す
+
+アプリ(SCR-004)の「直近の要人発言」が0件のときの表示：`stale = false` →「直近7日間の要人発言はありません」と小さく「最終更新 M/d HH:mm」(`last_success_at`があるときだけ)、`stale = true` →「要人発言の情報を更新できていません（最終更新 M/d HH:mm）」(`last_success_at`が`null`なら括弧なし)、`speeches_status`が無い →「直近7日間の要人発言はありません」のみ。日時はホームの他の日時と同じ表示設定(タイムゾーン・形式)。1件以上あるときの表示は変えない。
 
 **「今日の注目イベント」と「最近のイベント」の扱い(v1.3で確定、H-2)**: `events`は`date`でスコープされた当日分の一覧であり、「最近のイベント」は**当日中に`status = RELEASED`になったイベント**を指す(複数日にまたがる履歴ではない)。専用APIや`recent_events`フィールドは追加せず、Clientが`events`配列を`status`(`SCHEDULED`/`RELEASED`/`CANCELLED`)で「今日の注目イベント」(主にSCHEDULED)と「最近のイベント」(RELEASED)に表示分けする。
 

@@ -1,7 +1,8 @@
-# FX Event Analyzer: データ取得元と正確さの仕組み v1.1
+# FX Event Analyzer: データ取得元と正確さの仕組み v1.4
 
 ## 変更履歴
 
+- **v1.4**(2026-10-23): 要人発言の鮮度の監視(HQ承認 2026-10-23)。`ingest:speeches` が `ingestion_logs.details` に `source_latest_at`・`source_future_count` を記録し、品質レポート第9章で取得元ごとに判定する(5章)。取り込む行・スキップ・状態は変えない。`GET /home` に `speeches_status`(api-design.md v1.34)
 - **v1.1**(2026-10-16): HQ判断(方針は承認、契約・公開には前提条件)を受けて、利用条件を再確認(11章)、品質の測り方(12章)、為替の取り込みジョブ `ingest:fx-prices` を追加。**FRED は API 規約が「保存・DBへの取り込み」を禁じていると分かったため、`ingest:official` で使うのをやめた**(公式値は BLS のみ。FRED を使うには書面の許可が必要)。アプリ情報に「データの出典」を追加
 - **v1.0**(2026-10-15): 初版。取得元の構成(①〜⑤、ユーザー承認済み)、各取得元の利用条件の確認結果、正確さの仕組み、取り込みジョブ、有料候補の比較ツールをまとめた。実装は `fx-event-analyzer-backend/src/ingestion/`。DB変更は db-design.md v4.15、設計方針は design.md v1.11、API は api-design.md v1.29
 
@@ -96,6 +97,7 @@
 - **期間**: カレンダーには数年分の履歴があるため、既定では14日より前の発言は取り込まない
 - **タイトル**: 「講演: 〈取得元の題〉」のように種類だけ日本語にし、題は訳さない(機械翻訳で意味を変えないため)
 - **状態**: 開始時刻を過ぎたら `DELIVERED`、それまでは `SCHEDULED`
+- **鮮度の監視(v1.4)**: 取り込みのたびに `ingestion_logs.details` へ、取得した全件(スキップした項目も含む)の開始時刻の最大値 `source_latest_at`(0件なら `null`)と、未来の件数 `source_future_count` を記録する(記録するだけで、取り込む行は変えない)。品質レポート第9章「要人発言の鮮度」が FRB・ECB を別々に、取得の失敗(最新の実行の失敗・18時間以上 SUCCESS なし)/取り込みの漏れ/取得元の更新なし(10日以上)/時刻なしで未取り込み(ECB の通常の状態)を判定する。読み方は dev-environment.md 14章。ホームの `speeches_status.stale` は FRB だけの「取得の失敗」(ECB は仕様上 `speech_events` を書かないため入れない)
 
 ECB の発言の正確な予定時刻は「Weekly schedule of public speaking engagements」(https://www.ecb.europa.eu/press/calendars/weekly/html/index.en.html、HTML)にある。ただし夏時間の期間でも「CET」と書かれている例があり、時刻帯の扱いを確かめてから実装する(10章)。
 
