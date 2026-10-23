@@ -57,10 +57,20 @@ struct RootView: View {
                         NotificationBackgroundRefresh.schedule()
                     }
                     guard scenePhase == .active else { return }
+                    // HQ指示(2026-10-23「iOS画面表示速度の改善」): 以前はこの2つを
+                    // 直列(`await`→`await`)で取得しており、互いに依存しないにも
+                    // かかわらず2回ぶんの通信時間を合計していた。`LocalNotification
+                    // Scheduler.refresh()`(この後)はAppPreferences.sharedの
+                    // timeZoneを読むため、AppPreferences.load()の完了は引き続き
+                    // refresh()より前に保証する必要がある(そのため両方の完了を
+                    // 待ってから次へ進む) — PlanStore.load()はAppPreferences/
+                    // LocalNotificationSchedulerのどちらにも依存しない独立した
+                    // 取得(`PlanStore.swift`参照)なので、ここだけ並行化できる。
                     // SCR-018 / SCR-019の設定(表示形式など)を読み込む。
-                    await AppPreferences.shared.load(apiClient: apiClient)
+                    async let preferencesLoad: Void = AppPreferences.shared.load(apiClient: apiClient)
                     // 無料プラン・プレミアムプランの使える範囲(カレンダー・お気に入りなど)。
-                    await PlanStore.shared.load(apiClient: apiClient)
+                    async let planLoad: Void = PlanStore.shared.load(apiClient: apiClient)
+                    _ = await (preferencesLoad, planLoad)
                     // SCR-017: 自動更新・解約などの購読の変化をBackendへ送る。
                     // UIスクリーンショットCIではApp Store Connectのサンドボックス
                     // アカウントが無く、StoreKitの`Product.products(for:)`/
