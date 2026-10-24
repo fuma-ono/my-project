@@ -137,4 +137,77 @@ final class CalendarViewModelTests: XCTestCase {
         // 通信は発生しない。
         XCTAssertEqual(apiClient.requestedEndpoints.count, requestsAfterPrefetch)
     }
+
+    /// 月を連続して送り、さらに前の月へ戻ってきても、既に先読み・取得済みの
+    /// 月は通信し直さないことを確認する(HQ指示 2026-10-24「月を連続して送る
+    /// 操作、前後の月へ戻る操作」)。
+    func testConsecutiveMovesUsePrefetchedCacheBothForwardAndBack() async throws {
+        let apiClient = MockAPIClient()
+        apiClient.result = .success(CalendarResponse(items: [
+            item("nov-high", .indicator, .high, at: date(2026, 11, 10, 8, 30)),
+        ]))
+        let viewModel = CalendarViewModel(apiClient: apiClient, today: date(2026, 10, 8), calendar: calendar, plan: proPlan)
+        await viewModel.load()
+        try await Task.sleep(nanoseconds: 100_000_000) // 9月・11月の先読みを待つ
+
+        await viewModel.moveMonth(by: 1) // 10月→11月(先読み済み、通信なし)
+        XCTAssertEqual(viewModel.monthTitle, "2026年11月")
+        try await Task.sleep(nanoseconds: 100_000_000) // 12月の先読みを待つ
+
+        await viewModel.moveMonth(by: 1) // 11月→12月(先読み済み、通信なし)
+        XCTAssertEqual(viewModel.monthTitle, "2026年12月")
+        try await Task.sleep(nanoseconds: 100_000_000) // 1月の先読みを待つ
+        let requestsBeforeGoingBack = apiClient.requestedEndpoints.count
+
+        await viewModel.moveMonth(by: -1) // 12月→11月(戻る。先読み済みのはず)
+        XCTAssertEqual(viewModel.monthTitle, "2026年11月")
+        XCTAssertEqual(viewModel.dots(on: date(2026, 11, 10)), [.high])
+        await viewModel.moveMonth(by: -1) // 11月→10月(戻る。最初に読み込んだ月)
+        XCTAssertEqual(viewModel.monthTitle, "2026年10月")
+        // 既に先読み・取得済みの月を行き来するだけなら、新たな通信は発生しない。
+        XCTAssertEqual(apiClient.requestedEndpoints.count, requestsBeforeGoingBack)
+    }
+
+    /// 呼び出された順にレスポンス/エラーを返す簡易スタブ。既存の`MockAPIClient`は
+    /// パス単位(どの呼び出しも同じ"calendar"パス)でしか結果を分けられないため、
+    /// 「先読みだけ失敗する」状況を再現するのに使う(このテスト専用のローカル
+    /// 実装 — `MockAPIClient`自体は変更していない)。
+    private final class SequencedAPIClient: APIClient {
+        private let results: [MockAPIClient.MockResult]
+        private(set) var callCount = 0
+        init(_ results: [MockAPIClient.MockResult]) { self.results = results }
+        func send<T: Decodable>(_ endpoint: Endpoint) async throws -> T {
+            let outcome = results[min(callCount, results.count - 1)]
+            callCount += 1
+            switch outcome {
+            case .success(let value):
+                guard let typed = value as? T else {
+                    throw APIError.decoding("SequencedAPIClient: configured result does not match requested type \(T.self)")
+                }
+                return typed
+            case .failure(let error):
+                throw error
+            }
+        }
+    }
+
+    /// 前後の月の先読みが失敗しても、表示中の月の表示状態には影響せず、
+    /// 実際にその月へ移動したときは取り直して正しく表示できることを確認する
+    /// (HQ指示 2026-10-24「取得失敗時の挙動」)。
+    func testFailedPrefetchIsRetriedWhenTheUserActuallyNavigatesThere() async throws {
+        let apiClient = SequencedAPIClient([
+            .success(CalendarResponse(items: [])), // 10月(表示中の月): 成功
+            .failure(APIError.transport("network error")), // 9月の先読み: 失敗
+            .failure(APIError.transport("network error")), // 11月の先読み: 失敗
+            .success(CalendarResponse(items: [item("nov-high", .indicator, .high, at: date(2026, 11, 10, 8, 30))])),
+        ])
+        let viewModel = CalendarViewModel(apiClient: apiClient, today: date(2026, 10, 8), calendar: calendar, plan: proPlan)
+        await viewModel.load()
+        try await Task.sleep(nanoseconds: 100_000_000) // 失敗する先読みが終わるまで待つ
+        XCTAssertEqual(viewModel.loadState, .loaded, "先読みの失敗は表示中の月の状態に影響しない")
+
+        await viewModel.moveMonth(by: 1) // 11月へ(先読みは失敗していたので取り直すはず)
+        XCTAssertEqual(viewModel.loadState, .loaded)
+        XCTAssertEqual(viewModel.dots(on: date(2026, 11, 10)), [.high], "先読みが失敗していても、実際に移動すれば取り直して表示できる")
+    }
 }
