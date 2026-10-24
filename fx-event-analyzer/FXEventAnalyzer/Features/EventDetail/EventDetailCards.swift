@@ -30,7 +30,6 @@ struct EventDetailCards: View {
             // HQ指示(2026-10-09)の2枚目の参考画像: 見出しは表のカードの中、その下に
             // 「相場反応詳細」「過去イベント比較」のボタンと次回発表予定。分析の欄はなくした。
             reactionTable
-            movementLink
             comparisonLink
             nextReleaseFooter
         }
@@ -298,11 +297,14 @@ struct EventDetailCards: View {
         .padding(.leading, 7)
     }
 
-    // MARK: - 相場反応詳細・過去イベント比較・次回発表予定
+    // MARK: - 過去イベント比較・次回発表予定
 
     /// HQ指示(2026-10-12、4回目、参考画像)「相場反応詳細の外枠のグラデー
     /// ション」: 他カードと同じ単色の枠線(`AccountCardBackground`)ではなく、
-    /// `V5Button`と同じ青→シアンのグラデーションを枠線に使う。
+    /// `V5Button`と同じ青→シアンのグラデーションを枠線に使う。`comparisonLink`
+    /// (過去イベント比較)が使う。相場反応詳細自体へのリンクは、HQ指示
+    /// (2026-10-24)「相場反応枠はいらない。行タップで済む」により、値動き表の
+    /// 各行のNavigationLinkのみに一本化した(別枠のボタンは削除)。
     private func linkCard(icon: String, title: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
@@ -324,23 +326,6 @@ struct EventDetailCards: View {
                 .stroke(LinearGradient(colors: [V5P.cyan, V5P.blue.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.9)
         )
         .contentShape(Rectangle())
-    }
-
-    /// 先頭の通貨ペアのSCR-008 相場反応詳細へ(発表後だけ)。
-    @ViewBuilder private var movementLink: some View {
-        if isReleased, let pair = pairs.first {
-            NavigationLink(value: AppRoute.movementDetail(
-                eventId: response.event.id,
-                indicatorId: response.event.indicatorId,
-                fxPairId: pair.fxPairId,
-                symbol: pair.symbol,
-                indicatorName: response.event.indicatorName,
-                releaseDatetime: response.event.releaseDatetime
-            )) {
-                linkCard(icon: "chart.bar.xaxis", title: "相場反応詳細")
-            }
-            .buttonStyle(SettingsRowPressStyle())
-        }
     }
 
     /// HQ指示(2026-10-09)「イベント詳細には過去イベント比較ボタンを」。
