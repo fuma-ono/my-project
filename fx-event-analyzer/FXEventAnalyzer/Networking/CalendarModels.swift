@@ -41,9 +41,12 @@ struct CalendarItem: Decodable, Equatable, Identifiable {
 
     var route: AppRoute {
         switch kind {
-        // HQ指示(2026-10-09)「指標詳細へは経済カレンダーからも」: 指標の行は指標詳細へ。
-        // 指標IDを返さない古いBackendでは、今までどおりイベント詳細へ。
-        case .indicator: return indicatorId.map { .indicatorDetail(id: $0) } ?? .eventDetail(id: id)
+        // HQ指示(2026-10-24)「カレンダーからはイベント詳細に遷移してほしい」:
+        // 2026-10-09に指標詳細へ変更したが、具体的な発表(イベントID・日付)の
+        // 情報が失われ、タップした日の相場反応詳細(SCR-008)へ進めなくなって
+        // いたため戻す。指標の行はイベント詳細へ(RELEASED済みならそこから
+        // 「相場反応詳細」へ進める)。
+        case .indicator: return .eventDetail(id: id)
         case .speech: return .speechDetail(id: id)
         }
     }
