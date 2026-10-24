@@ -111,4 +111,30 @@ final class CalendarViewModelTests: XCTestCase {
         await viewModel.moveMonth(by: -12)
         XCTAssertEqual(viewModel.monthTitle, "2025年10月")
     }
+
+    /// HQ指示(2026-10-24)「開いた瞬間は日付だけ出て、点だけ遅れて浮いてくる」対策:
+    /// 表示中の月を読み込んだ後、前後1か月を裏で先読みしておき、実際にその月へ
+    /// 移動したときは通信せずそのまま(=点も一緒に)表示できることを確認する。
+    func testPrefetchesAdjacentMonthsSoMovingThereDoesNotRefetch() async throws {
+        let apiClient = MockAPIClient()
+        apiClient.result = .success(CalendarResponse(items: [
+            item("nov-high", .indicator, .high, at: date(2026, 11, 10, 8, 30)),
+        ]))
+        let viewModel = CalendarViewModel(apiClient: apiClient, today: date(2026, 10, 8), calendar: calendar, plan: proPlan)
+        await viewModel.load()
+        // 先読みは裏のTaskなので、走り終わるまで少し待つ(MainActorは今の
+        // 続き — ここまでの同期処理 — を終えてから先読みのTaskを実行する)。
+        try await Task.sleep(nanoseconds: 100_000_000)
+        let requestsAfterPrefetch = apiClient.requestedEndpoints.count
+        XCTAssertGreaterThan(requestsAfterPrefetch, 1, "表示中の月の前後1か月を先読みしているはず")
+
+        await viewModel.moveMonth(by: 1) // 11月へ移動(先読み済みのはず)
+        XCTAssertEqual(viewModel.monthTitle, "2026年11月")
+        // 先読みのレスポンスで点(dots)も既に入っている — 日付だけ先に出て
+        // 点が遅れる、ということがない。
+        XCTAssertEqual(viewModel.dots(on: date(2026, 11, 10)), [.high])
+        // 先読み済みのキャッシュをそのまま使うので、11月への移動では新たな
+        // 通信は発生しない。
+        XCTAssertEqual(apiClient.requestedEndpoints.count, requestsAfterPrefetch)
+    }
 }

@@ -23,6 +23,15 @@ final class CalendarViewModel: ObservableObject {
     private(set) var calendar: Calendar
     /// 前月・翌月への切り替えが重なったとき、古い結果で上書きしない。
     private var revision = 0
+    /// 先読み済み・取得済みの月(1日0時に正規化)。含まれていれば`load()`は
+    /// 通信せずそのまま表示する(HQ指示 2026-10-24「月を開いた瞬間に日付だけ
+    /// 出て、重要度の点が遅れて浮いてくる」対策: 表示中の月の前後1か月を
+    /// 裏で先読みしておく)。
+    private var loadedMonths: Set<Date> = []
+    /// `applyPreferences`でカレンダー(タイムゾーン・週の開始曜日)を作り直す
+    /// たびに増やす。先読みのTaskが完了した時点でこれが変わっていれば、
+    /// 古いカレンダーで計算した結果を後から書き込まない。
+    private var calendarEpoch = 0
 
     init(apiClient: APIClient, today: Date = Date(), calendar: Calendar = CalendarViewModel.makeCalendar(), plan: PlanStore? = nil) {
         service = CalendarService(apiClient: apiClient)
@@ -47,6 +56,11 @@ final class CalendarViewModel: ObservableObject {
     func applyPreferences(timeZone: TimeZone, firstWeekday: Int) async {
         guard calendar.timeZone != timeZone || calendar.firstWeekday != firstWeekday else { return }
         calendar = Self.makeCalendar(timeZone: timeZone, firstWeekday: firstWeekday)
+        calendarEpoch += 1
+        // 古いカレンダー(タイムゾーン・週の開始曜日)で計算した日付キーは
+        // 新しいカレンダーの下では無効なので、先読みキャッシュも作り直す。
+        itemsByDay = [:]
+        loadedMonths = []
         selectedDate = calendar.startOfDay(for: selectedDate)
         month = calendar.date(from: calendar.dateComponents([.year, .month], from: selectedDate)) ?? month
         await load()
@@ -90,15 +104,25 @@ final class CalendarViewModel: ObservableObject {
         let end = min(gridEnd, plan.limits.calendarLatestTo)
         guard first < end else {
             itemsByDay = [:]
+            loadedMonths = []
             loadState = .loaded
+            return
+        }
+        // 前後の月への移動で既に先読み済みなら、通信せずそのまま表示する
+        // (HQ指示 2026-10-24: 日付だけ先に出て点が遅れて浮いてくるのを防ぐ)。
+        if loadedMonths.contains(month) {
+            loadState = .loaded
+            prefetchAdjacentMonths()
             return
         }
         if itemsByDay.isEmpty { loadState = .loading }
         do {
             let response = try await service.fetch(from: first, to: end, timeZone: calendar.timeZone)
             guard current == revision else { return }
-            itemsByDay = Dictionary(grouping: response.items) { calendar.startOfDay(for: $0.datetime) }
+            mergeItems(response.items)
+            loadedMonths.insert(month)
             loadState = .loaded
+            prefetchAdjacentMonths()
         } catch let error as APIError where error.isNotConfigured {
             guard current == revision else { return }
             loadState = .backendNotConfigured
@@ -106,6 +130,52 @@ final class CalendarViewModel: ObservableObject {
             guard current == revision else { return }
             loadState = .error("カレンダーの取得に失敗しました。")
         }
+    }
+
+    /// 表示中の月の前後1か月を裏で取得し、`itemsByDay`に加えておく(ベスト
+    /// エフォート: 失敗しても画面の表示状態は変えず、次に`load()`されたときに
+    /// 取り直せるよう`loadedMonths`から外すだけ)。実際にその月へ移動した
+    /// ときは`load()`が`loadedMonths`を見て通信せずそのまま表示する。
+    private func prefetchAdjacentMonths() {
+        let epoch = calendarEpoch
+        for offset in [-1, 1] {
+            guard let targetMonth = calendar.date(byAdding: .month, value: offset, to: month),
+                  !loadedMonths.contains(targetMonth),
+                  let range = gridRange(forMonth: targetMonth) else { continue }
+            let first = max(range.first, plan.limits.calendarEarliestFrom)
+            let end = min(range.end, plan.limits.calendarLatestTo)
+            guard first < end else { continue }
+            loadedMonths.insert(targetMonth)
+            Task {
+                do {
+                    let response = try await service.fetch(from: first, to: end, timeZone: calendar.timeZone)
+                    guard epoch == calendarEpoch else { return }
+                    mergeItems(response.items)
+                } catch {
+                    guard epoch == calendarEpoch else { return }
+                    loadedMonths.remove(targetMonth)
+                }
+            }
+        }
+    }
+
+    /// 取得した項目を日付ごとに`itemsByDay`へ書き加える(他の月の既存分は消さない)。
+    private func mergeItems(_ items: [CalendarItem]) {
+        for (day, dayItems) in Dictionary(grouping: items, by: { calendar.startOfDay(for: $0.datetime) }) {
+            itemsByDay[day] = dayItems
+        }
+    }
+
+    /// `targetMonth`のグリッド(前後の月の日を含む6週分)の範囲 [開始, 終了)。
+    /// `gridDays`と同じ計算だが、表示中でない月にも使える(先読み用)。
+    private func gridRange(forMonth targetMonth: Date) -> (first: Date, end: Date)? {
+        let weekday = calendar.component(.weekday, from: targetMonth)
+        let offset = (weekday - calendar.firstWeekday + 7) % 7
+        let daysInMonth = calendar.range(of: .day, in: .month, for: targetMonth)?.count ?? 30
+        let weeks = (offset + daysInMonth + 6) / 7
+        guard let start = calendar.date(byAdding: .day, value: -offset, to: targetMonth),
+              let end = calendar.date(byAdding: .day, value: weeks * 7, to: start) else { return nil }
+        return (start, end)
     }
 
     func select(_ day: Date) {
