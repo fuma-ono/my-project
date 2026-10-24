@@ -115,7 +115,12 @@ export function createBlsNativeResolver(
 
 export interface BlsScheduleReleaseResult {
   releases: NormalizedCalendarRelease[];
-  /** Schedule entries in the future, or whose BLS value is not published yet (never guessed). */
+  /**
+   * Schedule entries in the future, or whose BLS value is not published yet
+   * (never guessed). A future entry here also gets a SCHEDULED row in
+   * `releases` (actual/forecast null) — this list is for the
+   * overdue/unmapped bookkeeping below, not "nothing was written".
+   */
   notYetAvailable: BlsScheduleEntry[];
   /**
    * Subset of notYetAvailable whose scheduled date is OVERDUE_AFTER_DAYS or
@@ -132,11 +137,16 @@ export interface BlsScheduleReleaseResult {
 
 /**
  * Turns BLS_SCHEDULE into NormalizedCalendarRelease rows ready for
- * ingestCalendarReleases('bls_schedule', …). A release is only produced
- * once BLS has actually published that period's value (never fabricated
- * from the schedule alone) — `official` is used for BOTH `actual` and the
- * resolver the caller passes to ingestCalendarReleases, so they always
- * agree (see file header).
+ * ingestCalendarReleases('bls_schedule', …). Two kinds of rows:
+ * - Already published (releaseAt is in the past and BLS has the value):
+ *   `actual` is the real published number — never fabricated. `official`
+ *   is used for BOTH `actual` and the resolver the caller passes to
+ *   ingestCalendarReleases, so they always agree (see file header).
+ * - Not yet published (releaseAt is in the future, or BLS hasn't posted
+ *   the value yet): `actual`/`forecast` are always null (HQ指示
+ *   2026-10-24「無料の公式カレンダー経路」— BLSの公開スケジュール自体は
+ *   事前に分かっている事実なので、SCHEDULEDの行だけ先に作る。予想値は
+ *   作らない)。`previous`は直前期間の既に発表済みの実績値。
  */
 export async function buildBlsScheduleReleases(deps: {
   official: OfficialValueResolver;
@@ -163,6 +173,35 @@ export async function buildBlsScheduleReleases(deps: {
     const releaseAt = zonedWallTimeToUtc(year, month, day, hour, minute, mapping.release.timeZone);
     if (!releaseAt || releaseAt.getTime() > now.getTime()) {
       notYetAvailable.push(entry);
+      // HQ指示(2026-10-24「無料の公式カレンダー経路を調査・実装する」):
+      // BLSは自分の発表スケジュールを事前に公開している(blsSchedule.ts
+      // 冒頭のコメント参照、2026-10-17取得・利用条件確認済み・無料・キー
+      // 不要)。未来の分も、日付だけはすでに分かっている事実であり、予想
+      // 値を作るわけではない(actual/forecastは常にnull。previousは
+      // 直前の期間の既に発表済みの実績値で、こちらも推測ではない)。
+      // ingestCalendarReleases()はactual===nullの行をSCHEDULEDとして
+      // そのまま書き込む設計(economicCalendar.ts upsertSchedule)なので、
+      // 既存の仕組みを変えずにそのまま使う。
+      if (releaseAt) {
+        const scheduledAsOf = localDate(now, mapping.release.timeZone);
+        const previousPeriod = shiftMonth(entry.referencePeriod, -1);
+        const previous = await deps.official.resolve(mapping, previousPeriod, scheduledAsOf);
+        const unit = displayUnit(mapping.unit);
+        releases.push({
+          provider: BLS_SCHEDULE_PROVIDER,
+          providerEventId: `${BLS_SCHEDULE_PROVIDER}:${entry.indicatorCode}:${entry.referencePeriod}`,
+          providerIndicatorKey: providerIndicatorKey(ref.country, ref.event),
+          eventName: mapping.description,
+          releaseAt: releaseAt.toISOString(),
+          releaseAtPrecision: 'EXACT',
+          referencePeriod: entry.referencePeriod,
+          actual: null,
+          forecast: null,
+          previous: previous ? { value: previous.value, unit } : null,
+          revisedPrevious: previous ? { value: previous.value, unit } : null,
+          fetchedAt: now.toISOString(),
+        });
+      }
       continue;
     }
     const asOfDate = localDate(releaseAt, mapping.release.timeZone);

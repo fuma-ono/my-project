@@ -170,14 +170,42 @@ describe('buildBlsScheduleReleases', () => {
     expect(result.releases[0]!.releaseAt).toBe('2026-02-13T13:30:00.000Z');
   });
 
-  it('does not build a release for a future-dated entry', async () => {
-    const resolver = createBlsNativeResolver(fakeBlsWith({ '2026-10': 999 }, {}), WIDE_RANGE);
+  it('builds a SCHEDULED release (actual/forecast null) for a future-dated entry, using only the known release date', async () => {
+    // 2026-10 is not published yet (per fakeBlsWith); 2025-09/2026-09 are
+    // the previous period's own already-published value, which IS safe to
+    // show on a SCHEDULED card (not a forecast, not a guess).
+    const bls = fakeBlsWith({ '2025-09': 320.0, '2026-09': 332.16 }, {});
+    const resolver = createBlsNativeResolver(bls, WIDE_RANGE);
     const entries: BlsScheduleEntry[] = [
       { indicatorCode: 'US_CPI', referencePeriod: '2026-10', releaseDate: '2026-11-10' },
     ];
     const result = await buildBlsScheduleReleases({ official: resolver, entries, now: NOW });
-    expect(result.releases).toEqual([]);
     expect(result.notYetAvailable).toEqual(entries);
+    expect(result.releases).toHaveLength(1);
+    const release = result.releases[0]!;
+    expect(release.provider).toBe('bls_schedule');
+    expect(release.providerEventId).toBe('bls_schedule:US_CPI:2026-10');
+    expect(release.releaseAtPrecision).toBe('EXACT');
+    expect(release.referencePeriod).toBe('2026-10');
+    expect(release.actual).toBeNull();
+    expect(release.forecast).toBeNull();
+    // previous = 2026-09's YoY (332.16/320 − 1 = 3.8%), already published — not fabricated.
+    expect(release.previous?.value).toBeCloseTo(3.8, 6);
+    expect(release.revisedPrevious).toEqual(release.previous);
+    // 2026-11-10 08:30 America/New_York is EST (UTC−5) → 13:30Z.
+    expect(release.releaseAt).toBe('2026-11-10T13:30:00.000Z');
+  });
+
+  it('builds a SCHEDULED release with previous=null when even the prior period is unresolvable', async () => {
+    const resolver = createBlsNativeResolver(fakeBlsWith({}, {}), WIDE_RANGE); // nothing published at all
+    const entries: BlsScheduleEntry[] = [
+      { indicatorCode: 'US_CPI', referencePeriod: '2026-10', releaseDate: '2026-11-10' },
+    ];
+    const result = await buildBlsScheduleReleases({ official: resolver, entries, now: NOW });
+    expect(result.releases).toHaveLength(1);
+    expect(result.releases[0]!.actual).toBeNull();
+    expect(result.releases[0]!.forecast).toBeNull();
+    expect(result.releases[0]!.previous).toBeNull();
   });
 
   it('does not build a release when the scheduled date has passed but BLS has not published the value', async () => {
@@ -290,5 +318,49 @@ describe('BLS schedule → ingestCalendarReleases (no paid calendar involved)', 
     expect(revisions[0]?.field_name).toBe('PREVIOUS');
     expect(revisions[0]?.old_value).toBeCloseTo(3.1447, 4);
     expect(revisions[0]?.new_value).toBeCloseTo(3.2075, 4);
+  });
+
+  it('writes a SCHEDULED row for a future entry, then transitions it to RELEASED once BLS publishes', async () => {
+    const official1 = createBlsNativeResolver(fakeBlsWith({ '2025-09': 320.0, '2026-09': 325.0 }, {}), WIDE_RANGE);
+    const entries: BlsScheduleEntry[] = [
+      { indicatorCode: 'US_CPI', referencePeriod: '2026-10', releaseDate: '2026-11-10' },
+    ];
+
+    // First run: well before the 2026-11-10 release date. BLS has no 2026-10 value yet.
+    const first = await buildBlsScheduleReleases({ official: official1, entries, now: () => new Date('2026-10-17Z') });
+    await ingestCalendarReleases(
+      'bls_schedule',
+      first.releases,
+      { store, official: official1, now: () => new Date('2026-10-17Z') },
+      new JobCounters(),
+    );
+
+    const scheduledEvent = store.events.find((e) => e.provider_event_id === 'bls_schedule:US_CPI:2026-10');
+    expect(scheduledEvent?.status).toBe('SCHEDULED');
+
+    // Second run: after the release date/time, BLS now has the 2026-10 value published.
+    const official2 = createBlsNativeResolver(
+      fakeBlsWith({ '2025-09': 320.0, '2026-09': 325.0, '2025-10': 322.0, '2026-10': 330.0 }, {}),
+      WIDE_RANGE,
+    );
+    const second = await buildBlsScheduleReleases({
+      official: official2,
+      entries,
+      now: () => new Date('2026-11-10T14:00:00Z'),
+    });
+    const counters = new JobCounters();
+    await ingestCalendarReleases(
+      'bls_schedule',
+      second.releases,
+      { store, official: official2, now: () => new Date('2026-11-10T14:00:00Z') },
+      counters,
+    );
+
+    expect(counters.errorMessages).toEqual([]);
+    const releasedEvent = store.events.find((e) => e.provider_event_id === 'bls_schedule:US_CPI:2026-10');
+    expect(releasedEvent?.id).toBe(scheduledEvent?.id); // same row, updated in place — not a duplicate
+    expect(releasedEvent?.status).toBe('RELEASED');
+    const snapshot = store.snapshots.find((s) => s.event_id === releasedEvent!.id);
+    expect(snapshot?.verification_status).toBe('VERIFIED');
   });
 });

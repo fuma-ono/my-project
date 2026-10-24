@@ -21,35 +21,46 @@ import type { OfficialObservation, ReleaseStatus } from '../types.js';
 const V1_URL = 'https://api.bls.gov/publicAPI/v1/timeseries/data/';
 const V2_URL = 'https://api.bls.gov/publicAPI/v2/timeseries/data/';
 
-const blsSchema = z.object({
+// Checked first, before anything about `Results` is assumed: BLS reports its
+// own failures (rate limit, bad series ID, etc.) inside a 200 OK body via
+// `status`/`message`, often with `Results` present but empty rather than
+// omitted (e.g. `{"status":"REQUEST_NOT_SUCCEEDED","Results":{}}`). A single
+// schema that required `Results.series` whenever `Results` is present would
+// throw an opaque Zod error on that shape before `status` is ever read —
+// this is exactly what happened on 2026-10-17 (first run failed with a raw
+// "expected array, received undefined" on Results.series; a second run 10
+// minutes later succeeded — almost certainly the v1 unauthenticated API's
+// 25-queries/day limit, not a malformed response).
+const blsEnvelopeSchema = z.object({
   status: z.string(),
   message: z.array(z.string()).optional(),
-  Results: z
-    .object({
-      series: z.array(
+  Results: z.unknown().optional(),
+});
+
+const blsResultsSchema = z.object({
+  series: z.array(
+    z.object({
+      seriesID: z.string(),
+      data: z.array(
         z.object({
-          seriesID: z.string(),
-          data: z.array(
-            z.object({
-              year: z.string().regex(/^\d{4}$/),
-              period: z.string(),
-              value: z.string(),
-              footnotes: z.array(z.object({ code: z.string().optional(), text: z.string().optional() })).optional(),
-            }),
-          ),
+          year: z.string().regex(/^\d{4}$/),
+          period: z.string(),
+          value: z.string(),
+          footnotes: z.array(z.object({ code: z.string().optional(), text: z.string().optional() })).optional(),
         }),
       ),
-    })
-    .optional(),
+    }),
+  ),
 });
 
 export function parseBlsResponse(body: unknown, asOfDate: string): OfficialObservation[] {
-  const parsed = blsSchema.parse(body);
-  if (parsed.status !== 'REQUEST_SUCCEEDED' || !parsed.Results) {
-    throw new Error(`BLS: ${parsed.status} ${(parsed.message ?? []).join(' ')}`.trim());
+  const envelope = blsEnvelopeSchema.parse(body);
+  if (envelope.status !== 'REQUEST_SUCCEEDED') {
+    throw new Error(`BLS: ${envelope.status} ${(envelope.message ?? []).join(' ')}`.trim());
   }
+  const results = blsResultsSchema.parse(envelope.Results);
   const observations: OfficialObservation[] = [];
-  for (const series of parsed.Results.series) {
+  for (const series of results.series) {
     for (const point of series.data) {
       const month = /^M(0[1-9]|1[0-2])$/.exec(point.period);
       if (!month) continue;

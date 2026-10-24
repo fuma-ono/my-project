@@ -74,6 +74,21 @@ describe('BLS adapter (recorded v1 response, 2026-10-15)', () => {
       bls.fetchObservations({ seriesId: 'CUUR0000SA0', observationStart: '2026-01-01', observationEnd: '2026-09-01' }),
     ).rejects.toThrow('REQUEST_NOT_PROCESSED daily threshold');
   });
+
+  it("throws BLS's own status/message, not a raw schema error, when Results is present but empty (2026-10-17 failure shape)", async () => {
+    // Observed on 2026-10-17 (first ingest:official:bls-calendar run, job
+    // 117273067187): BLS returned Results as an object without `series`
+    // rather than omitting it. Before the fix this raised a bare Zod
+    // "expected: array, received: undefined" at path Results.series,
+    // instead of surfacing BLS's own explanation.
+    const stub = stubFetch(() => ({
+      body: JSON.stringify({ status: 'REQUEST_NOT_SUCCEEDED', message: ['Daily threshold exceeded'], Results: {} }),
+    }));
+    const bls = new BlsAdapter(undefined, { fetch: stub.fetch, sleep: noSleep });
+    await expect(
+      bls.fetchObservations({ seriesId: 'CUUR0000SA0', observationStart: '2026-01-01', observationEnd: '2026-09-01' }),
+    ).rejects.toThrow('REQUEST_NOT_SUCCEEDED Daily threshold exceeded');
+  });
 });
 
 describe('FRB calendar adapter (recorded calendar.json, 2026-10-15)', () => {
