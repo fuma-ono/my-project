@@ -62,6 +62,20 @@ struct MainTabView: View {
         .onChange(of: tabSelection) { _, newValue in
             if newValue == 2 { hasVisitedCalendarTab = true }
         }
+        // HQ指示(2026-10-24)「タブを押しても元に戻らない」: ホーム(0)・
+        // 指標(1)のpathはここ(MainTabView)が@Stateとして持っているため、
+        // 再タップされたのがどちらかであればここで直接空に戻す。
+        // カレンダー・検索・設定は各自のpathを自分で持つため、それぞれの
+        // 画面側で同じ`TabBarReselection`を見て戻す。
+        .onReceive(TabBarReselection.shared.$tappedTab) { tapped in
+            guard let tapped else { return }
+            switch tapped {
+            case 0: homePath = NavigationPath()
+            case 1: indicatorsPath = NavigationPath()
+            default: break
+            }
+            TabBarReselection.shared.tappedTab = nil
+        }
     }
 
     /// HQ緊急指示(2026-10-21)「起動・画面表示の高速化」: 以前は`switch`で
@@ -123,7 +137,14 @@ struct MainTabView: View {
                 }
             }.padding(.horizontal, 14).padding(.top, 12)
             ForEach(FXTab.allCases) { tab in
-                Button { tabSelection = tab.index } label: {
+                Button {
+                    // HQ指示(2026-10-24)「タブを押しても元に戻らない」:
+                    // iPad横画面のサイドバーも`V5BottomBar`と同じ再タップ検知。
+                    if tabSelection == tab.index {
+                        TabBarReselection.shared.tappedTab = tab.index
+                    }
+                    tabSelection = tab.index
+                } label: {
                     HStack {
                         Image(systemName: tab.icon).frame(width: 22)
                         if !collapsed { Text(tab.title) }

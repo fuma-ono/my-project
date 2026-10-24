@@ -127,6 +127,13 @@ struct SearchView: View {
             fxSymbols = (try? await RemoteFXPairCatalog(apiClient: apiClient).availableSymbols()) ?? StaticFXPairCatalog.seededSymbols
         }
         .onChange(of: viewModel.searchText) { _, text in speechViewModel.searchText = text }
+        // HQ指示(2026-10-24)「タブを押しても元に戻らない」: 検索タブ
+        // (index 3)を再タップしたらpathを戻す。
+        .onReceive(TabBarReselection.shared.$tappedTab) { tapped in
+            guard tapped == 3 else { return }
+            path = NavigationPath()
+            TabBarReselection.shared.tappedTab = nil
+        }
     }
 
     // 検索バー上端53・高さ28(y=67中心)、フィルターpill(y=104・高さ約20)との

@@ -441,6 +441,30 @@ final class ScreenshotTests: XCTestCase {
         )
     }
 
+    /// HQ指示(2026-10-24)「全画面共通でタブ画面から他画面に遷移した場合に
+    /// タブを押しても元に戻らない」: 設定タブから「アカウント情報」(SCR-015)
+    /// へ進んだ状態で設定タブを再タップすると、`TabBarReselection`経由で
+    /// pathがルートまで戻ることを確認する(`V5BottomBar.tab`の`selected`は
+    /// 再タップでは値が変わらないため、素朴な`onChange`では検知できない点が
+    /// 修正前の原因)。
+    func testReselectingTabPopsToRoot() throws {
+        let emailField = app.textFields["メールアドレス"]
+        XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
+        type("ui-screenshot@example.com", into: emailField)
+        type("ui-screenshot-password", into: app.secureTextFields["パスワード"])
+        app.buttons["ログイン"].tap()
+        XCTAssertTrue(waitForAnyElement(containing: "直近の要人発言", timeout: 20), "Home did not load")
+
+        tap(containing: "設定")
+        XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load")
+        tap(containing: "アカウント情報")
+        XCTAssertTrue(waitForAnyElement(containing: "プロフィール編集", timeout: 15), "Account did not load")
+
+        // 設定タブを再タップ(既に設定タブを選択中のまま)。
+        tapIdentifier("v5Tab4")
+        XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Re-tapping the Settings tab did not pop back to the Settings root")
+    }
+
     /// Taps the row's center through SettingsView's fixed V5 layout (group 1
     /// top y=54.5, 31pt rows — SettingsView.rowHeight) mapped through V5Viewport's scale-to-fit.
     /// Center taps used to land in the row's Spacer gap, which had no

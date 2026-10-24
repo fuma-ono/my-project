@@ -48,6 +48,13 @@ struct CalendarTabView: View {
                 viewModel.select(date)
                 CalendarJump.shared.requestedDate = nil
             }
+            // HQ指示(2026-10-24)「タブを押しても元に戻らない」: カレンダー
+            // タブ(index 2)を再タップしたらpathを戻す。
+            .onReceive(TabBarReselection.shared.$tappedTab) { tapped in
+                guard tapped == 2 else { return }
+                path = NavigationPath()
+                TabBarReselection.shared.tappedTab = nil
+            }
             .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
             .navigationDestination(for: AppRoute.self) { route in
                 AppRouteDestinationView(route: route, apiClient: apiClient, tabSelection: $tabSelection)
