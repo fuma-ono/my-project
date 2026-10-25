@@ -20,10 +20,24 @@ import UIKit
 /// スクリーンショットでは依然として文字が横倒しに写った
 /// (ユーザーが実機を物理的に横に持てば中身は正立して見える発想だったが、
 /// CIのスクリーンショット検証という目的に対しては成立しなかった)。
-/// 3回目(今回): `setAllowed(_:)`で許可する向きの集合を切り替えるのと同時に
+/// 3回目: `setAllowed(_:)`で許可する向きの集合を切り替えるのと同時に
 /// `setNeedsUpdateOfSupportedInterfaceOrientations()`を呼び、UIKitに実際の
-/// インターフェース回転を行わせる。ウィンドウの実寸自体が横長になるため、
-/// スクリーンショットも正しく横長で撮れる。
+/// インターフェース回転を行わせる方式に戻した。CI実機キャプチャでは
+/// ウィンドウの実寸(画像サイズ)自体は正しく横長になったが、中身が
+/// Portrait時のレイアウトのまま90°回転しただけの状態でスクリーンショットに
+/// 写り、新しく広がった分が黒いまま(1回目と酷似した壊れ方)だった —
+/// `setNeedsUpdateOfSupportedInterfaceOrientations()`は「許可する向きの
+/// 再判定」を要求するだけで、実際のシーンのジオメトリ(ウィンドウの
+/// bounds)遷移そのものは保証しない、という複数の報告(Apple Developer
+/// Forums)と一致する。
+///
+/// 4回目(今回): iOS16+の`UIWindowScene.requestGeometryUpdate(_:)`を追加で
+/// 呼び、シーンのジオメトリ遷移そのものを能動的に要求する
+/// (`setNeedsUpdateOfSupportedInterfaceOrientations()`は向きの許可集合が
+/// 変わったことの通知、`requestGeometryUpdate`は実際の遷移の要求、という
+/// 役割分担)。`interfaceOrientations`には許可する向きの集合を渡すだけで、
+/// 特定の向きを強制はしない(実機の向きに追従させたいだけで、
+/// この画面に来た瞬間に強制回転させたいわけではないため)。
 @MainActor
 final class HistoricalComparisonOrientation {
     static let shared = HistoricalComparisonOrientation()
@@ -41,6 +55,11 @@ final class HistoricalComparisonOrientation {
             let rootViewController = windowScene.windows.first(where: \.isKeyWindow)?.rootViewController
         else { return }
         rootViewController.setNeedsUpdateOfSupportedInterfaceOrientations()
+        let mask: UIInterfaceOrientationMask = allowed ? [.portrait, .landscapeLeft, .landscapeRight] : .portrait
+        windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { _ in
+            // ベストエフォート: ここで失敗しても`supportedInterfaceOrientationsFor:`
+            // ベースの通常の回転判定は引き続き効く。
+        }
     }
 }
 

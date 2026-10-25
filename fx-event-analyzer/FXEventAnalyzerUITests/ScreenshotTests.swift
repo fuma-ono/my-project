@@ -516,7 +516,15 @@ final class ScreenshotTests: XCTestCase {
         )
         XCTAssertFalse(app.buttons["v5HeaderBack"].exists, "Portrait-only back button should not exist in landscape")
         XCTAssertFalse(app.buttons["v5Tab1"].exists, "Bottom tab bar should not exist in landscape")
-        capture("09b-HistoricalComparison-Landscape")
+        // 4回目の修正(`OrientationLock.swift`参照): `requestGeometryUpdate`で
+        // シーンのジオメトリ遷移を能動的に要求するようにしたが、要素の存在
+        // 判定(アクセシビリティツリー、最終的な論理レイアウトを反映)と
+        // 実際に合成されるピクセル(UIKitの回転トランジションアニメーション)
+        // はタイミングが別物のため、通常の`settle`(既定0.6秒)では
+        // アニメーションの完了前にスクリーンショットを撮ってしまい、
+        // 回転アニメーションの途中状態(中身が回転しかけ・新しく広がった分が
+        // 黒いまま)が写るおそれがある。この画面だけ長めに待つ。
+        capture("09b-HistoricalComparison-Landscape", settle: 2.5)
 
         // 戻る: Portraitに戻すと、横画面専用の要素が消えて縦画面の見た目に戻る。
         XCUIDevice.shared.orientation = .portrait
