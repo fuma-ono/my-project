@@ -354,7 +354,8 @@ struct HistoricalComparisonView: View {
                 // 実際の高さに関わらず常に中央に来るようにした。
                 NotoText.text("過去の発表はまだありません。", size: 7)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
-                    .frame(width: Self.tableContentWidth, maxHeight: .infinity, alignment: .center)
+                    .frame(maxHeight: .infinity, alignment: .center)
+                    .frame(width: Self.tableContentWidth)
             } else {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
