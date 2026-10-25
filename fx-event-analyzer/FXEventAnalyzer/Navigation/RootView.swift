@@ -5,7 +5,9 @@ import SwiftUI
 struct RootView: View {
     @StateObject private var appState: AppState
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
     @ObservedObject private var preferences = AppPreferences.shared
+    @ObservedObject private var updateStore = AppUpdateStore.shared
     private let authService: AuthServicing
     private let apiClient: APIClient
 
@@ -82,6 +84,11 @@ struct RootView: View {
                         SubscriptionSync.shared.start(apiClient: apiClient)
                     }
                     await LocalNotificationScheduler(apiClient: apiClient).refresh()
+                    // HQ指示(2026-10-25)「アップデートしてくださいのポップを出して
+                    // App Storeで更新させるようにしたい」: 他の起動時読み込みを
+                    // 待たせたくないので、結果を待たずに独立して走らせる
+                    // (`AppUpdateStore.swift`参照)。
+                    Task { await AppUpdateStore.shared.checkForUpdate() }
                     while !Task.isCancelled {
                         try? await Task.sleep(for: .seconds(30))
                         NotificationsStore.shared.refreshUnread()
@@ -92,5 +99,21 @@ struct RootView: View {
         // SCR-018の文字サイズ(iOS標準の部品に効く)。
         .dynamicTypeSize(preferences.dynamicTypeSize)
         .preferredColorScheme(.dark) // MVP baseline theme (ui-screens.md 5.0節); see DesignTokens.swift
+        // HQ指示(2026-10-25)「アップデートしてくださいのポップを出して
+        // App Storeで更新させるようにしたい」。閉じられる案内(強制アップデート
+        // ではない、HQ確認済み2026-10-25) — 「後で」でも「アップデート」でも
+        // 同じバージョンでは次回以降案内しない(`AppUpdateStore.dismiss()`)。
+        .alert(
+            "新しいバージョンがあります",
+            isPresented: Binding(get: { updateStore.availableUpdate != nil }, set: { if !$0 { updateStore.dismiss() } })
+        ) {
+            Button("後で", role: .cancel) { updateStore.dismiss() }
+            Button("アップデート") {
+                if let url = updateStore.availableUpdate?.storeURL { openURL(url) }
+                updateStore.dismiss()
+            }
+        } message: {
+            Text("最新の機能や修正を利用するには、App Storeでアップデートしてください。")
+        }
     }
 }
