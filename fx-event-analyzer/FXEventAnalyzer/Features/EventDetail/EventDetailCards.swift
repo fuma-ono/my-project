@@ -26,7 +26,6 @@ struct EventDetailCards: View {
             VStack(alignment: .leading, spacing: 4) {
                 header
                 results
-                secondaryResults
             }
             // HQ指示(2026-10-09)の2枚目の参考画像: 見出しは表のカードの中、その下に
             // 「相場反応詳細」「過去イベント比較」のボタンと次回発表予定。分析の欄はなくした。
@@ -116,17 +115,45 @@ struct EventDetailCards: View {
 
     // MARK: - 結果・予想・前回
 
+    /// HQ指示(2026-10-25)「前年比を記載してください。また前月比の枠の大きさは
+    /// 前年比と同じ大きさにしてください。1画面で収まるようにしてください」:
+    /// 当初は結果/予想/前回のカードと前月比のカードを別々の2枚で出していたが、
+    /// (1) 前年比側に見出しが無く2枚の見た目が揃わない、(2) カード2枚分の
+    /// 背景・余白が重なって縦に伸び、1画面に収まらなくなる、という指摘を
+    /// 受けた。1枚のカードの中に「前年比」「前月比」の2段(同じ3列構成)を
+    /// 持たせる形にまとめ、見た目を揃えつつ余白を抑えた。副指標(前月比)が
+    /// 無い指標(米国CPI以外、2026-10-25時点で全て)は1段のみ、見出しも出さない
+    /// (従来1指標しか値が無い画面で「前年比」とだけ表示すると、YoY%が本来の
+    /// 値ではない指標(NFP等)では誤った説明になるため)。
     private var results: some View {
         let snapshot = response.snapshot
         let unit = snapshot?.unit
         let released = response.event.status == .released
         let actual = released ? snapshot?.actual : nil
-        return HStack(spacing: 0) {
-            resultColumn("結果", value: actual, unit: unit, note: nil, placeholder: released ? "--" : "未発表")
-            divider
-            resultColumn("予想", value: snapshot?.forecast, unit: unit, note: nil)
-            divider
-            resultColumn("前回", value: snapshot?.previous, unit: unit, note: Self.changeFromPrevious(actual: actual, previous: snapshot?.previous, unit: unit))
+        let secondaryActual = released ? snapshot?.secondaryActual : nil
+        let secondaryLabel = Self.secondaryLabel(snapshot?.secondaryValueKind)
+        let primaryLabel = Self.primaryLabel(forSecondary: snapshot?.secondaryValueKind)
+
+        return VStack(alignment: .leading, spacing: 3) {
+            resultsRow(
+                label: primaryLabel,
+                actual: actual,
+                forecast: snapshot?.forecast,
+                previous: snapshot?.previous,
+                unit: unit,
+                released: released
+            )
+            if let secondaryLabel {
+                Rectangle().fill(SettingsCardStyle.cardBorder.opacity(0.5)).frame(height: 0.5)
+                resultsRow(
+                    label: secondaryLabel,
+                    actual: secondaryActual,
+                    forecast: snapshot?.secondaryForecast,
+                    previous: snapshot?.secondaryPrevious,
+                    unit: unit,
+                    released: released
+                )
+            }
         }
         // HQ指示(2026-10-12、4回目、参考画像)「結果予想の縦幅の違い」:
         // 8→6に詰めてカードの高さを参考画像に合わせた。
@@ -150,46 +177,41 @@ struct EventDetailCards: View {
         .background(GradientCardBackground())
     }
 
-    /// HQ指示(2026-10-25)「結果予想前回も前年と前月が必要」: この指標の本来の
-    /// 値(`results`、米国CPIはYoY%=前年比)に加えて、副指標(api-design v1.35、
-    /// 米国CPIはMoM%=前月比)がある指標だけ、同じ3列の構成でもう1枚表示する。
-    /// 副指標が設定されていない指標(米国CPI以外、2026-10-25時点で全て)・
-    /// 古いBackendでは何も表示しない。
-    @ViewBuilder
-    private var secondaryResults: some View {
-        let snapshot = response.snapshot
-        if let label = Self.secondaryLabel(snapshot?.secondaryValueKind) {
-            let unit = snapshot?.unit
-            let released = response.event.status == .released
-            let secondaryActual = released ? snapshot?.secondaryActual : nil
-            VStack(alignment: .leading, spacing: 2) {
-                NotoText.text(label, size: 8.5)
+    private func resultsRow(label: String?, actual: Double?, forecast: Double?, previous: Double?, unit: String?, released: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let label {
+                NotoText.text(label, size: 8)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                     .padding(.leading, 6)
-                HStack(spacing: 0) {
-                    resultColumn("結果", value: secondaryActual, unit: unit, note: nil, placeholder: released ? "--" : "未発表")
-                    divider
-                    resultColumn("予想", value: snapshot?.secondaryForecast, unit: unit, note: nil)
-                    divider
-                    resultColumn(
-                        "前回",
-                        value: snapshot?.secondaryPrevious,
-                        unit: unit,
-                        note: Self.changeFromPrevious(actual: secondaryActual, previous: snapshot?.secondaryPrevious, unit: unit)
-                    )
-                }
-                .padding(.vertical, 2)
             }
-            .frame(width: 214)
-            .background(GradientCardBackground())
+            HStack(spacing: 0) {
+                resultColumn("結果", value: actual, unit: unit, note: nil, placeholder: released ? "--" : "未発表")
+                divider
+                resultColumn("予想", value: forecast, unit: unit, note: nil)
+                divider
+                resultColumn("前回", value: previous, unit: unit, note: Self.changeFromPrevious(actual: actual, previous: previous, unit: unit))
+            }
         }
     }
 
-    /// 副指標の種類(`ingestion/types.ts`の`ValueKind`と同じ値)に対応する見出し。
+    /// 副指標(前月比・前年比等)の見出し。`ingestion/types.ts`の`ValueKind`と同じ値。
     static func secondaryLabel(_ valueKind: String?) -> String? {
         switch valueKind {
         case "MOM_PCT": return "前月比"
         case "YOY_PCT": return "前年比"
+        default: return nil
+        }
+    }
+
+    /// 副指標があるときだけ、本来の値(`結果/予想/前回`)の見出しを出す。
+    /// 現状の組み合わせは米国CPI(本来の値がYoY%、副指標がMoM%)のみだが、
+    /// 逆の組み合わせ(本来の値がMoM%、副指標がYoY%)にも対応できるよう
+    /// `secondaryLabel`と対になる組み合わせで判定する(api-design v1.35には
+    /// 本来の値の種類を示すフィールドが無いため)。
+    static func primaryLabel(forSecondary valueKind: String?) -> String? {
+        switch valueKind {
+        case "MOM_PCT": return "前年比"
+        case "YOY_PCT": return "前月比"
         default: return nil
         }
     }
@@ -200,8 +222,11 @@ struct EventDetailCards: View {
     /// `SpeechDetailCards`から参照するため`private`にしない。
     static let summaryCardMinHeight: CGFloat = 50
 
+    /// HQ指示(2026-10-25)で1枚のカードに前年比/前月比の2段を持たせるように
+    /// なったため、固定の高さ(50)ではなく`maxHeight: .infinity`で行の実際の
+    /// 高さに自動で合わせる(`resultsRow`のHStack内で使われる)。
     private var divider: some View {
-        Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 0.5, height: 50)
+        Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 0.5).frame(maxHeight: .infinity)
     }
 
     private func resultColumn(_ title: String, value: Double?, unit: String?, note: String?, placeholder: String = "--") -> some View {

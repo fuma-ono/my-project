@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// SCR-009 過去イベント比較。HQ指示(2026-10-14)「ピクセル単位で参考画像を完全再現して」:
 /// 上に国旗・指標名・「国旗 国 ｜ 通貨」、その下に過去の発表の表
@@ -13,6 +14,30 @@ struct HistoricalComparisonView: View {
     /// 日時の並び(参考画像の「日時 ⇕」)。既定は新しい順。
     @State private var newestFirst = true
     @Environment(\.dismiss) private var dismiss
+    /// HQ指示(2026-10-25)「この画面だけ横画面できるようにしたい」の修正版。
+    /// 最初の実装(AppDelegateでUIKitに実際にインターフェースを回転させる
+    /// 方式)はCI実機キャプチャで実際には回転せず(文字が横倒しのまま)、
+    /// HQから「横画面は特に酷い」と指摘を受けて撤回した。インターフェース
+    /// の回転そのものには頼らず、`UIDevice.current.orientation`(実機の
+    /// 向き)を直接見て、この画面の中身だけ`.rotationEffect`で回転させる
+    /// (project.yml・アプリ全体の向き設定はPortrait固定のまま変えない)。
+    @State private var deviceOrientation: UIDeviceOrientation = .portrait
+
+    private var isLandscape: Bool { deviceOrientation.isLandscape }
+
+    /// `UIDeviceOrientation.landscapeLeft`(端末の上辺が左を向く)は中身を
+    /// 時計回りに90°回すと正立する。`.landscapeRight`はその逆。
+    private var landscapeRotation: Angle {
+        deviceOrientation == .landscapeRight ? .degrees(-90) : .degrees(90)
+    }
+
+    private func updateDeviceOrientation() {
+        let orientation = UIDevice.current.orientation
+        // .faceUp/.faceDown/.unknownは机に置いた等で向きの意味を持たないため無視し、
+        // 直前の縦/横の状態を保つ(valid以外で表示が切り替わってしまうのを防ぐ)。
+        guard orientation.isValidInterfaceOrientation else { return }
+        deviceOrientation = orientation
+    }
 
     init(apiClient: APIClient, indicatorId: String, indicatorName: String, fxPairId: String, fxPairSymbol: String, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
@@ -31,11 +56,16 @@ struct HistoricalComparisonView: View {
             .toolbar(.hidden, for: .navigationBar)
             .task { viewModel.load() }
             .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
-            // HQ指示(2026-10-25)「この画面だけ横画面できるようにしたい」:
-            // この画面が表示されている間だけ回転を許可し、離れたら既定の
-            // Portrait専用に戻す(`OrientationLock.swift`参照)。
-            .onAppear { OrientationLock.unlockLandscape() }
-            .onDisappear { OrientationLock.lockToPortrait() }
+            .onAppear {
+                UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+                updateDeviceOrientation()
+            }
+            .onDisappear {
+                UIDevice.current.endGeneratingDeviceOrientationNotifications()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+                updateDeviceOrientation()
+            }
     }
 
     @ViewBuilder
@@ -53,10 +83,17 @@ struct HistoricalComparisonView: View {
             // HQ指示(2026-10-25): 横画面では表が縦画面用のV5キャンバス
             // (234×491、`V5Viewport`参照)に収まらないため、横画面の時は
             // `V5Viewport`のレターボックス表示をやめ、実寸ポイントの専用
-            // レイアウト(`landscapeLayout`)に切り替える。
+            // レイアウト(`landscapeLayout`)に切り替える。アプリ自体は
+            // Portrait固定のままなので、ウィンドウの実寸は常に縦長
+            // (`geo.size`)のまま変わらない — 横長の中身を`geo.size.height
+            // × geo.size.width`のキャンバスで組んでから`.rotationEffect`で
+            // 回転させ、縦長のウィンドウの中央に収める。
             GeometryReader { geo in
-                if geo.size.width > geo.size.height {
+                if isLandscape {
                     landscapeLayout(response)
+                        .frame(width: geo.size.height, height: geo.size.width)
+                        .rotationEffect(landscapeRotation)
+                        .position(x: geo.size.width / 2, y: geo.size.height / 2)
                 } else {
                     V5Viewport {
                         V5Header(title: "過去イベント比較", back: true, onBack: { dismiss() })
@@ -75,6 +112,7 @@ struct HistoricalComparisonView: View {
                     }
                 }
             }
+            .ignoresSafeArea(isLandscape ? SafeAreaRegions.all : [])
         case .error(let message):
             loadingScaffold { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() }) }
         }
@@ -119,9 +157,17 @@ struct HistoricalComparisonView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("戻る")
+            .accessibilityIdentifier("historyLandscapeBack")
             NotoText.text("過去イベント比較", size: 15).foregroundStyle(.white)
             Spacer()
         }
+        // `.accessibilityElement(children: .contain)`: 中の戻るボタンを個別に
+        // タップ可能なまま保ちつつ、このHStack自体もXCUITestから識別子で
+        // 問い合わせられる要素にする(`.contain`を付けないと、単体の
+        // `.accessibilityIdentifier`だけではコンテナがアクセシビリティ要素に
+        // ならず、UIテストが見つけられないことがある)。
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("historyLandscapeTopBar")
     }
 
     private enum LandscapeColumn {
@@ -130,18 +176,12 @@ struct HistoricalComparisonView: View {
         static let pips: CGFloat = 70
     }
 
-    /// 副指標(api-design v1.35、HQ指示2026-10-25「前月と前年必要」)の列が
-    /// 無い指標(米国CPI以外)では非表示にする — `secondaryActual`・
-    /// `secondaryPrevious`のどちらかがある行が1件もない場合は列ごと隠す。
+    /// 副指標(api-design v1.35、HQ指示2026-10-25「前年の結果予想前回、前月の
+    /// 結果予想前回が必要」)の列が無い指標(米国CPI以外)では非表示にする —
+    /// `secondaryActual`・`secondaryForecast`・`secondaryPrevious`のいずれかが
+    /// ある行が1件もない場合は列ごと隠す。
     private static func hasSecondaryColumn(_ events: [ComparisonEventSummary]) -> Bool {
-        events.contains { $0.secondaryActual != nil || $0.secondaryPrevious != nil }
-    }
-
-    /// 「+0.2%」「-0.1%」(符号付き、小数1桁、%は指標の単位がパーセントの時だけ)。
-    static func secondaryText(_ value: Double?, unit: String?) -> String {
-        guard let value else { return "--" }
-        let suffix = unit == "%" ? "%" : ""
-        return String(format: "%+.1f", value) + suffix
+        events.contains { $0.secondaryActual != nil || $0.secondaryForecast != nil || $0.secondaryPrevious != nil }
     }
 
     private func landscapeTable(_ events: [ComparisonEventSummary], unit: String?) -> some View {
@@ -176,33 +216,61 @@ struct HistoricalComparisonView: View {
         .overlay(shape.stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }
 
-    private func landscapeTableHeader(showSecondary: Bool) -> some View {
+    /// HQ指示(2026-10-25)「過去イベント比較は前年の結果予想前回、前月の
+    /// 結果予想前回が必要」: 列見出しの上にもう1段、グループ見出し
+    /// (「前年」「前月」)を出して2つの結果/予想/前回を区別する。
+    private func landscapeGroupHeaderRow(showSecondary: Bool) -> some View {
         HStack(spacing: 0) {
-            Button { newestFirst.toggle() } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "calendar").font(.system(size: 12, weight: .semibold))
-                    NotoText.text("日時", size: 13)
-                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .bold))
-                }
-                .foregroundStyle(.white)
-                .frame(width: LandscapeColumn.date, height: 40)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(newestFirst ? "日時 新しい順" : "日時 古い順")
-            landscapeDivider
-            landscapeHeaderCell("結果", "(実績)", width: LandscapeColumn.value)
-            landscapeHeaderCell("予想", "(市場予想)", width: LandscapeColumn.value)
-            landscapeHeaderCell("前回", "(前回値)", width: LandscapeColumn.value)
+            Color.clear.frame(width: LandscapeColumn.date + 1)
+            landscapeGroupLabel("前年", width: LandscapeColumn.value * 3)
             if showSecondary {
-                landscapeHeaderCell("前月", "(前月比)", width: LandscapeColumn.value)
+                Color.clear.frame(width: 1)
+                landscapeGroupLabel("前月", width: LandscapeColumn.value * 3)
             }
-            landscapeDivider
-            landscapeHeaderCell("1分", "(pips)", width: LandscapeColumn.pips)
-            landscapeHeaderCell("5分", "(pips)", width: LandscapeColumn.pips)
-            landscapeHeaderCell("15分", "(pips)", width: LandscapeColumn.pips)
+            Color.clear.frame(width: 1 + LandscapeColumn.pips * 3)
         }
-        .frame(height: 40)
+        .frame(height: 20)
+    }
+
+    private func landscapeGroupLabel(_ title: String, width: CGFloat) -> some View {
+        NotoText.text(title, size: 11)
+            .foregroundStyle(SettingsCardStyle.subtitleColor)
+            .frame(width: width, alignment: .center)
+    }
+
+    private func landscapeTableHeader(showSecondary: Bool) -> some View {
+        VStack(spacing: 0) {
+            landscapeGroupHeaderRow(showSecondary: showSecondary)
+            HStack(spacing: 0) {
+                Button { newestFirst.toggle() } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar").font(.system(size: 12, weight: .semibold))
+                        NotoText.text("日時", size: 13)
+                        Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .bold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: LandscapeColumn.date, height: 40)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(newestFirst ? "日時 新しい順" : "日時 古い順")
+                landscapeDivider
+                landscapeHeaderCell("結果", "(実績)", width: LandscapeColumn.value)
+                landscapeHeaderCell("予想", "(市場予想)", width: LandscapeColumn.value)
+                landscapeHeaderCell("前回", "(前回値)", width: LandscapeColumn.value)
+                if showSecondary {
+                    landscapeDivider
+                    landscapeHeaderCell("結果", "(実績)", width: LandscapeColumn.value)
+                    landscapeHeaderCell("予想", "(市場予想)", width: LandscapeColumn.value)
+                    landscapeHeaderCell("前回", "(前回値)", width: LandscapeColumn.value)
+                }
+                landscapeDivider
+                landscapeHeaderCell("1分", "(pips)", width: LandscapeColumn.pips)
+                landscapeHeaderCell("5分", "(pips)", width: LandscapeColumn.pips)
+                landscapeHeaderCell("15分", "(pips)", width: LandscapeColumn.pips)
+            }
+            .frame(height: 40)
+        }
         .background(Self.headerFill)
         .overlay(alignment: .bottom) {
             Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
@@ -241,7 +309,9 @@ struct HistoricalComparisonView: View {
             landscapeValueCell(event.forecast, unit: unit)
             landscapeValueCell(event.previous, unit: unit)
             if showSecondary {
-                landscapeSecondaryValueCell(event.secondaryActual, unit: unit)
+                landscapeValueCell(event.secondaryActual, unit: unit)
+                landscapeValueCell(event.secondaryForecast, unit: unit)
+                landscapeValueCell(event.secondaryPrevious, unit: unit)
             }
             landscapePipsCell(event.pipsByTimeframe?["1m"] ?? nil)
             landscapePipsCell(event.pipsByTimeframe?["5m"] ?? nil)
@@ -253,16 +323,6 @@ struct HistoricalComparisonView: View {
 
     private func landscapeValueCell(_ value: Double?, unit: String?) -> some View {
         Text(Self.valueText(value, unit: unit))
-            .font(.system(size: 13, weight: .medium))
-            .monospacedDigit()
-            .foregroundStyle(.white)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .frame(width: LandscapeColumn.value)
-    }
-
-    private func landscapeSecondaryValueCell(_ value: Double?, unit: String?) -> some View {
-        Text(Self.secondaryText(value, unit: unit))
             .font(.system(size: 13, weight: .medium))
             .monospacedDigit()
             .foregroundStyle(.white)
@@ -357,9 +417,12 @@ struct HistoricalComparisonView: View {
     /// ほぼ一致するが、この先列が増えれば(例: 前月・前年の追加)この値も
     /// 自動的に大きくなる — 下の`table(_:)`はこの値を表の実寸として使い、
     /// 表示幅(214)に収まらない分は横スクロールで見せる。
-    /// `includeSecondary`: 副指標(前月比)の列を含めるか(HQ指示2026-10-25)。
+    /// `includeSecondary`: 前年(結果/予想/前回)に加え、前月(結果/予想/前回)
+    /// の3列も含めるか(HQ指示2026-10-25「前年の結果予想前回、前月の結果
+    /// 予想前回が必要」) — 含める場合、区切り線がもう1本増える。
     private static func tableContentWidth(includeSecondary: Bool) -> CGFloat {
-        Column.date + 0.5 + Column.value * (includeSecondary ? 4 : 3) + 0.5 + Column.pips * 3
+        let dividers: CGFloat = includeSecondary ? 1.5 : 1.0
+        return Column.date + dividers + Column.value * (includeSecondary ? 6 : 3) + Column.pips * 3
     }
 
     /// HQ指示(2026-10-25)「縦画面に入らないから縦画面の場合は横スクロールで
@@ -373,10 +436,15 @@ struct HistoricalComparisonView: View {
             : response.events.sorted { $0.releaseDatetime < $1.releaseDatetime }
         let unit = response.indicator.unit
         let shape = RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
-        let height = Self.tableHeight(rows: events.count, limited: response.historyLimit?.isLimited == true)
-        // HQ指示(2026-10-25)「過去イベント比較の表も前月と前年必要」:
-        // 副指標(米国CPIのMoM%)がある指標だけ「前月」列を出す(api-design v1.35)。
+        // HQ指示(2026-10-25)「過去イベント比較は前年の結果予想前回、前月の
+        // 結果予想前回が必要」: 副指標(米国CPIのMoM%)がある指標だけ「前月」の
+        // 結果/予想/前回の3列を出す(api-design v1.35)。
         let showSecondary = Self.hasSecondaryColumn(events)
+        let height = Self.tableHeight(
+            rows: events.count,
+            limited: response.historyLimit?.isLimited == true,
+            showSecondary: showSecondary
+        )
         let tableBody = VStack(spacing: 0) {
             tableHeader(showSecondary: showSecondary)
             if events.isEmpty {
@@ -422,8 +490,11 @@ struct HistoricalComparisonView: View {
     }
 
     /// 表の高さ。行が少なければ行の分だけ、多ければ画面に入る高さで止めて中をスクロールする。
-    static func tableHeight(rows: Int, limited: Bool) -> CGFloat {
-        let content = headerHeight + CGFloat(max(rows, 1)) * (rowHeight + 0.5)
+    /// `showSecondary`: 前年/前月のグループ見出し行(`groupHeaderHeight`)が
+    /// 付く分、表全体の高さも増える(HQ指示2026-10-25)。
+    static func tableHeight(rows: Int, limited: Bool, showSecondary: Bool) -> CGFloat {
+        let header = headerHeight + (showSecondary ? groupHeaderHeight : 0)
+        let content = header + CGFloat(max(rows, 1)) * (rowHeight + 0.5)
         return min(content, limited ? 312 : 334)
     }
 
@@ -432,37 +503,67 @@ struct HistoricalComparisonView: View {
     /// 2026-10-14(2回目)の指定: 見出し・日付・数値・pips 7、見出しの下の小さな字 5、見出しの帯24・行22。
     static let headerHeight: CGFloat = 24
     static let rowHeight: CGFloat = 22
+    /// HQ指示(2026-10-25)「前年の結果予想前回、前月の結果予想前回が必要」:
+    /// 2つの結果/予想/前回を区別するグループ見出し行(「前年」「前月」)の高さ。
+    static let groupHeaderHeight: CGFloat = 11
+
+    /// HQ指示(2026-10-25): 列見出しの上にグループ見出し行を出して、
+    /// 前年の結果/予想/前回と前月の結果/予想/前回を区別する。
+    private func groupHeaderRow(showSecondary: Bool) -> some View {
+        HStack(spacing: 0) {
+            Color.clear.frame(width: Column.date + 0.5)
+            groupLabel("前年", width: Column.value * 3)
+            if showSecondary {
+                Color.clear.frame(width: 0.5)
+                groupLabel("前月", width: Column.value * 3)
+            }
+            Color.clear.frame(width: 0.5 + Column.pips * 3)
+        }
+        .frame(height: Self.groupHeaderHeight)
+    }
+
+    private func groupLabel(_ title: String, width: CGFloat) -> some View {
+        NotoText.text(title, size: 6)
+            .foregroundStyle(SettingsCardStyle.subtitleColor)
+            .frame(width: width, alignment: .center)
+    }
 
     private func tableHeader(showSecondary: Bool) -> some View {
-        HStack(spacing: 0) {
-            Button { newestFirst.toggle() } label: {
-                HStack(spacing: 2) {
-                    Image(systemName: "calendar").font(.system(size: 6.5, weight: .semibold))
-                    NotoText.text("日時", size: 7)
-                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 5, weight: .bold))
+        VStack(spacing: 0) {
+            groupHeaderRow(showSecondary: showSecondary)
+            HStack(spacing: 0) {
+                Button { newestFirst.toggle() } label: {
+                    HStack(spacing: 2) {
+                        Image(systemName: "calendar").font(.system(size: 6.5, weight: .semibold))
+                        NotoText.text("日時", size: 7)
+                        Image(systemName: "chevron.up.chevron.down").font(.system(size: 5, weight: .bold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: Column.date, height: Self.headerHeight)
+                    .contentShape(Rectangle())
                 }
-                .foregroundStyle(.white)
-                .frame(width: Column.date, height: Self.headerHeight)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .accessibilityLabel(newestFirst ? "日時 新しい順" : "日時 古い順")
+                divider
+                headerCell("結果", "(実績)", width: Column.value)
+                headerCell("予想", "(市場予想)", width: Column.value)
+                headerCell("前回", "(前回値)", width: Column.value)
+                // HQ指示(2026-10-25)「前年の結果予想前回、前月の結果予想前回が
+                // 必要」: 副指標(米国CPIのMoM%)がある指標だけ、同じ3列構成を
+                // もう1組出す(`groupHeaderRow`の「前月」label と対になる)。
+                if showSecondary {
+                    divider
+                    headerCell("結果", "(実績)", width: Column.value)
+                    headerCell("予想", "(市場予想)", width: Column.value)
+                    headerCell("前回", "(前回値)", width: Column.value)
+                }
+                divider
+                headerCell("1分", "(pips)", width: Column.pips)
+                headerCell("5分", "(pips)", width: Column.pips)
+                headerCell("15分", "(pips)", width: Column.pips)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(newestFirst ? "日時 新しい順" : "日時 古い順")
-            divider
-            headerCell("結果", "(実績)", width: Column.value)
-            headerCell("予想", "(市場予想)", width: Column.value)
-            headerCell("前回", "(前回値)", width: Column.value)
-            // HQ指示(2026-10-25)「前月と前年必要」: 結果(=この指標の本来の値、
-            // 米国CPIはYoY%=前年比)に加えて、副指標(MoM%=前月比)がある指標
-            // だけ列を追加する。
-            if showSecondary {
-                headerCell("前月", "(前月比)", width: Column.value)
-            }
-            divider
-            headerCell("1分", "(pips)", width: Column.pips)
-            headerCell("5分", "(pips)", width: Column.pips)
-            headerCell("15分", "(pips)", width: Column.pips)
+            .frame(height: Self.headerHeight)
         }
-        .frame(height: Self.headerHeight)
         .background(Self.headerFill)
         .overlay(alignment: .bottom) {
             Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
@@ -501,7 +602,9 @@ struct HistoricalComparisonView: View {
             valueCell(event.forecast, unit: unit)
             valueCell(event.previous, unit: unit)
             if showSecondary {
-                secondaryValueCell(event.secondaryActual, unit: unit)
+                valueCell(event.secondaryActual, unit: unit)
+                valueCell(event.secondaryForecast, unit: unit)
+                valueCell(event.secondaryPrevious, unit: unit)
             }
             pipsCell(event.pipsByTimeframe?["1m"] ?? nil)
             pipsCell(event.pipsByTimeframe?["5m"] ?? nil)
@@ -513,18 +616,6 @@ struct HistoricalComparisonView: View {
 
     private func valueCell(_ value: Double?, unit: String?) -> some View {
         Text(Self.valueText(value, unit: unit))
-            .font(.system(size: 7, weight: .medium))
-            .monospacedDigit()
-            .foregroundStyle(.white)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .frame(width: Column.value)
-    }
-
-    /// 副指標(前月比)の列。「+0.2%」のように符号付きで見せる(他の数値列と
-    /// 違い、前月からの変化そのものが値のため)。
-    private func secondaryValueCell(_ value: Double?, unit: String?) -> some View {
-        Text(Self.secondaryText(value, unit: unit))
             .font(.system(size: 7, weight: .medium))
             .monospacedDigit()
             .foregroundStyle(.white)
