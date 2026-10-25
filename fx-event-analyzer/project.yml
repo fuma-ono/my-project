@@ -110,14 +110,22 @@ targets:
         # UISupportedInterfaceOrientationsに含める必要がある」、実際に
         # TestFlightワークフローのupload_to_testflightステップで409
         # エラーとして確認済み、2026-10-20)。そのため:
-        #   - iPhone: Portraitのみ(横画面禁止を維持)。
         #   - iPad: Portrait・PortraitUpsideDown・LandscapeLeft・
         #     LandscapeRightの4方向を許可(変更前の設定に戻す)。
-        # AppDelegateは存在しない(SwiftUIの`App`プロトコルのみ)ため、
-        # UIKitはこのInfo.plistキーだけを見て回転を制御する — 画面ごとの
-        # 個別制御(`.supportedInterfaceOrientations`等)は追加していない。
+        #
+        # HQ指示(2026-10-25)「過去イベント比較の表が縦画面に入らないので、
+        # この画面だけ横画面できるようにしたい」でiPhoneもLandscapeLeft/
+        # Rightを追加した。このキーは「アプリとして使ってよい向きの上限」
+        # であり、実際にどの画面で横画面を許すかは`OrientationAppDelegate`/
+        # `OrientationLock`(`FXEventAnalyzer/App/OrientationLock.swift`)が
+        # 画面単位で動的に絞り込む — このキーとアプリ側のmaskの掛け算(AND)
+        # で最終的な許可範囲が決まるため、両方の変更が必要だった。既定では
+        # `OrientationLock.mask`はPortraitのみなので、このキーを広げても
+        # 過去イベント比較画面以外は従来通りPortrait固定のまま回転しない。
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UISupportedInterfaceOrientations~ipad:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown

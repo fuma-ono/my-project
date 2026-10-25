@@ -465,6 +465,47 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Re-tapping the Settings tab did not pop back to the Settings root")
     }
 
+    /// HQ指示(2026-10-25)「過去イベント比較の表が縦画面に入らないから、この
+    /// 画面だけ横画面できるようにしたい」: project.ymlのiPhone向き設定に
+    /// LandscapeLeft/Rightを追加し、`OrientationLock`で過去イベント比較
+    /// 画面(`HistoricalComparisonView`)の表示中だけ動的に許可している。
+    /// `testOrientationChangeDoesNotDuplicateHomeFetch`の注記時点(iPhoneは
+    /// Portrait固定のみ)とは異なり、この画面に限ってはiPhoneシミュレータ上
+    /// でも`XCUIDevice.shared.orientation`の変更が実際に回転として反映される
+    /// ため、CIのiPhone実行だけで検証できる。
+    func testHistoricalComparisonAllowsLandscape() throws {
+        let emailField = app.textFields["メールアドレス"]
+        XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
+        type("ui-screenshot@example.com", into: emailField)
+        type("ui-screenshot-password", into: app.secureTextFields["パスワード"])
+        app.buttons["ログイン"].tap()
+        XCTAssertTrue(waitForAnyElement(containing: "通貨ペア", timeout: 25), "Home did not load")
+
+        tapIdentifier("v5Tab1")
+        XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicators list did not load")
+        tap(containing: "国・地域")
+        let usMenuItem = app.buttons["米国"]
+        if usMenuItem.waitForExistence(timeout: 5) { usMenuItem.tap() }
+        tap(containing: "米国CPI(消費者物価指数)")
+        XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 15), "Indicator Detail did not load")
+        tap(containing: "過去イベント比較")
+        XCTAssertTrue(waitForAnyElement(containing: "前回値", timeout: 15), "Historical Comparison did not load")
+
+        XCUIDevice.shared.orientation = .landscapeLeft
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertTrue(waitForAnyElement(containing: "前回値", timeout: 10), "Historical Comparison did not keep rendering its table after rotating to landscape")
+        capture("09b-HistoricalComparison-Landscape")
+
+        // 戻る: Portraitに戻した上で、この画面を抜けたら通常のPortrait専用
+        // (`OrientationLock.lockToPortrait()`)に戻っていることを、他タブへの
+        // 遷移が通常通り動くことで確認する。
+        XCUIDevice.shared.orientation = .portrait
+        Thread.sleep(forTimeInterval: 1.0)
+        XCTAssertTrue(waitForAnyElement(containing: "前回値", timeout: 10), "Historical Comparison did not resume its portrait layout")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 10), "Did not return to Indicator Detail after leaving Historical Comparison")
+    }
+
     /// Taps the row's center through SettingsView's fixed V5 layout (group 1
     /// top y=54.5, 31pt rows — SettingsView.rowHeight) mapped through V5Viewport's scale-to-fit.
     /// Center taps used to land in the row's Spacer gap, which had no
