@@ -115,17 +115,23 @@ targets:
         #   - iPhone: Portraitのみ(横画面禁止を維持)。
         #
         # HQ指示(2026-10-25)「過去イベント比較の表が縦画面に入らないので、
-        # この画面だけ横画面できるようにしたい」への最初の実装(AppDelegate
-        # の`supportedInterfaceOrientationsFor:`+このキーへのLandscape追加で
-        # 画面単位にUIKitへ実際にインターフェースを回転させる方式)は、CI実機
-        # キャプチャで実際には回転しておらず(文字が横倒しのまま・画面半分が
-        # 黒)、HQから「横画面は特に酷い」と指摘を受けて撤回した(2026-10-25)。
-        # 原因の特定ができなかったため、インターフェースの回転そのものには
-        # 頼らず、`HistoricalComparisonView`側で`UIDevice.current.orientation`
-        # を見てコンテンツ自体を`.rotationEffect`で回転させる方式に変更
-        # (アプリの向きの設定はPortrait固定のまま変えない)。
+        # この画面だけ横画面できるようにしたい」の3回目の実装(経緯は
+        # `FXEventAnalyzer/App/OrientationLock.swift`のコメント参照)。
+        # 1回目(AppDelegateの`supportedInterfaceOrientationsFor:`+この
+        # キーへのLandscape追加)はUIKitへ再判定を要求する呼び出し
+        # (`setNeedsUpdateOfSupportedInterfaceOrientations()`)が無く、CI実機
+        # キャプチャで実際には回転していなかった(文字が横倒しのまま・画面
+        # 半分が黒)。2回目はインターフェースの回転そのものを諦め
+        # `UIDevice.current.orientation`でコンテンツ自体を`.rotationEffect`
+        # で回転させたが、ウィンドウの実寸(≒スクリーンショットの対象)が
+        # Portraitのまま変わらないため、スクリーンショットでは依然として
+        # 文字が横倒しに写った。3回目は`setNeedsUpdateOfSupportedInterfaceOrientations()`
+        # を加えてUIKitに実際にインターフェースを回転させる(このキーへの
+        # Landscape追加を再度行う)。
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UISupportedInterfaceOrientations~ipad:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown

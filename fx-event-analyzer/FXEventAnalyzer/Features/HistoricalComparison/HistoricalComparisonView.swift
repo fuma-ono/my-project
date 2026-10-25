@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// SCR-009 過去イベント比較。HQ指示(2026-10-14)「ピクセル単位で参考画像を完全再現して」:
 /// 上に国旗・指標名・「国旗 国 ｜ 通貨」、その下に過去の発表の表
@@ -14,30 +13,6 @@ struct HistoricalComparisonView: View {
     /// 日時の並び(参考画像の「日時 ⇕」)。既定は新しい順。
     @State private var newestFirst = true
     @Environment(\.dismiss) private var dismiss
-    /// HQ指示(2026-10-25)「この画面だけ横画面できるようにしたい」の修正版。
-    /// 最初の実装(AppDelegateでUIKitに実際にインターフェースを回転させる
-    /// 方式)はCI実機キャプチャで実際には回転せず(文字が横倒しのまま)、
-    /// HQから「横画面は特に酷い」と指摘を受けて撤回した。インターフェース
-    /// の回転そのものには頼らず、`UIDevice.current.orientation`(実機の
-    /// 向き)を直接見て、この画面の中身だけ`.rotationEffect`で回転させる
-    /// (project.yml・アプリ全体の向き設定はPortrait固定のまま変えない)。
-    @State private var deviceOrientation: UIDeviceOrientation = .portrait
-
-    private var isLandscape: Bool { deviceOrientation.isLandscape }
-
-    /// `UIDeviceOrientation.landscapeLeft`(端末の上辺が左を向く)は中身を
-    /// 時計回りに90°回すと正立する。`.landscapeRight`はその逆。
-    private var landscapeRotation: Angle {
-        deviceOrientation == .landscapeRight ? .degrees(-90) : .degrees(90)
-    }
-
-    private func updateDeviceOrientation() {
-        let orientation = UIDevice.current.orientation
-        // .faceUp/.faceDown/.unknownは机に置いた等で向きの意味を持たないため無視し、
-        // 直前の縦/横の状態を保つ(valid以外で表示が切り替わってしまうのを防ぐ)。
-        guard orientation.isValidInterfaceOrientation else { return }
-        deviceOrientation = orientation
-    }
 
     init(apiClient: APIClient, indicatorId: String, indicatorName: String, fxPairId: String, fxPairSymbol: String, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
@@ -56,16 +31,11 @@ struct HistoricalComparisonView: View {
             .toolbar(.hidden, for: .navigationBar)
             .task { viewModel.load() }
             .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
-            .onAppear {
-                UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-                updateDeviceOrientation()
-            }
-            .onDisappear {
-                UIDevice.current.endGeneratingDeviceOrientationNotifications()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
-                updateDeviceOrientation()
-            }
+            // HQ指示(2026-10-25)「この画面だけ横画面できるようにしたい」:
+            // この画面がオンスクリーンの間だけ横画面を許可する
+            // (`OrientationLock.swift`参照 — 過去2回の失敗の経緯も含む)。
+            .onAppear { HistoricalComparisonOrientation.shared.setAllowed(true) }
+            .onDisappear { HistoricalComparisonOrientation.shared.setAllowed(false) }
     }
 
     @ViewBuilder
@@ -83,17 +53,13 @@ struct HistoricalComparisonView: View {
             // HQ指示(2026-10-25): 横画面では表が縦画面用のV5キャンバス
             // (234×491、`V5Viewport`参照)に収まらないため、横画面の時は
             // `V5Viewport`のレターボックス表示をやめ、実寸ポイントの専用
-            // レイアウト(`landscapeLayout`)に切り替える。アプリ自体は
-            // Portrait固定のままなので、ウィンドウの実寸は常に縦長
-            // (`geo.size`)のまま変わらない — 横長の中身を`geo.size.height
-            // × geo.size.width`のキャンバスで組んでから`.rotationEffect`で
-            // 回転させ、縦長のウィンドウの中央に収める。
+            // レイアウト(`landscapeLayout`)に切り替える。今回(3回目の実装、
+            // `OrientationLock.swift`参照)はUIKitのインターフェースが実際に
+            // 回転するため、`geo.size`自体が横長になる — 以前の版のような
+            // `.rotationEffect`での見た目だけの回転は不要。
             GeometryReader { geo in
-                if isLandscape {
+                if geo.size.width > geo.size.height {
                     landscapeLayout(response)
-                        .frame(width: geo.size.height, height: geo.size.width)
-                        .rotationEffect(landscapeRotation)
-                        .position(x: geo.size.width / 2, y: geo.size.height / 2)
                 } else {
                     V5Viewport {
                         V5Header(title: "過去イベント比較", back: true, onBack: { dismiss() })
@@ -112,7 +78,6 @@ struct HistoricalComparisonView: View {
                     }
                 }
             }
-            .ignoresSafeArea(isLandscape ? SafeAreaRegions.all : [])
         case .error(let message):
             loadingScaffold { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() }) }
         }

@@ -4,6 +4,10 @@ import UserNotifications
 
 @main
 struct FXEventAnalyzerApp: App {
+    // HQ指示(2026-10-25)「過去イベント比較の表が縦画面に入らないので、この
+    // 画面だけ横画面できるようにしたい」: 画面ごとの向き制御
+    // (`OrientationLock.swift`参照)に必要。
+    @UIApplicationDelegateAdaptor(OrientationAppDelegate.self) private var orientationAppDelegate
     private let authService: AuthServicing
     private let apiClient: APIClient
 
