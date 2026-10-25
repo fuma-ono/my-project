@@ -203,7 +203,16 @@ struct SpeakerComparisonView: View {
                 }
             }
         }
-        .frame(width: 212, height: HistoricalComparisonView.tableHeight(rows: events.count, limited: response.historyLimit?.isLimited == true), alignment: .top)
+        .frame(
+            width: 212,
+            height: HistoricalComparisonView.tableHeight(
+                rows: events.count,
+                limited: response.historyLimit?.isLimited == true,
+                // 要人発言の比較には前年/前月の副指標(HQ指示2026-10-25)が無いため常にfalse。
+                showSecondary: false
+            ),
+            alignment: .top
+        )
         .background(V5CardGradient.fill)
         .clipShape(shape)
         .overlay(shape.stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
