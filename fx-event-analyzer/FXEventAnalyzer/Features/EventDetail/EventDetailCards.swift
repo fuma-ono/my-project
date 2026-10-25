@@ -26,6 +26,7 @@ struct EventDetailCards: View {
             VStack(alignment: .leading, spacing: 4) {
                 header
                 results
+                secondaryResults
             }
             // HQ指示(2026-10-09)の2枚目の参考画像: 見出しは表のカードの中、その下に
             // 「相場反応詳細」「過去イベント比較」のボタンと次回発表予定。分析の欄はなくした。
@@ -147,6 +148,50 @@ struct EventDetailCards: View {
         .frame(minHeight: Self.summaryCardMinHeight)
         .frame(width: 214)
         .background(GradientCardBackground())
+    }
+
+    /// HQ指示(2026-10-25)「結果予想前回も前年と前月が必要」: この指標の本来の
+    /// 値(`results`、米国CPIはYoY%=前年比)に加えて、副指標(api-design v1.35、
+    /// 米国CPIはMoM%=前月比)がある指標だけ、同じ3列の構成でもう1枚表示する。
+    /// 副指標が設定されていない指標(米国CPI以外、2026-10-25時点で全て)・
+    /// 古いBackendでは何も表示しない。
+    @ViewBuilder
+    private var secondaryResults: some View {
+        let snapshot = response.snapshot
+        if let label = Self.secondaryLabel(snapshot?.secondaryValueKind) {
+            let unit = snapshot?.unit
+            let released = response.event.status == .released
+            let secondaryActual = released ? snapshot?.secondaryActual : nil
+            VStack(alignment: .leading, spacing: 2) {
+                NotoText.text(label, size: 8.5)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .padding(.leading, 6)
+                HStack(spacing: 0) {
+                    resultColumn("結果", value: secondaryActual, unit: unit, note: nil, placeholder: released ? "--" : "未発表")
+                    divider
+                    resultColumn("予想", value: snapshot?.secondaryForecast, unit: unit, note: nil)
+                    divider
+                    resultColumn(
+                        "前回",
+                        value: snapshot?.secondaryPrevious,
+                        unit: unit,
+                        note: Self.changeFromPrevious(actual: secondaryActual, previous: snapshot?.secondaryPrevious, unit: unit)
+                    )
+                }
+                .padding(.vertical, 2)
+            }
+            .frame(width: 214)
+            .background(GradientCardBackground())
+        }
+    }
+
+    /// 副指標の種類(`ingestion/types.ts`の`ValueKind`と同じ値)に対応する見出し。
+    static func secondaryLabel(_ valueKind: String?) -> String? {
+        switch valueKind {
+        case "MOM_PCT": return "前月比"
+        case "YOY_PCT": return "前年比"
+        default: return nil
+        }
     }
 
     /// `results`(イベント詳細)と`SpeechDetailCards.statementCard`(要人発言)

@@ -121,6 +121,13 @@ struct ComparisonEventSummary: Decodable, Identifiable, Equatable {
     let surpriseDirection: SurpriseDirection?
     /// 1分・5分・15分のpips(api-design v1.26)。キーは"1m"/"5m"/"15m"、値が無ければnil。
     var pipsByTimeframe: [String: Double?]? = nil
+    /// 副指標(api-design v1.35、HQ指示2026-10-25「前月と前年必要」)。この指標の
+    /// 本来の値(例: 米国CPIはYoY%)に加えて見せる別の変換(例: MoM%)。
+    /// 副指標が設定されていない指標(米国CPI以外)・古いBackendではnil。
+    var secondaryValueKind: String? = nil
+    var secondaryForecast: Double? = nil
+    var secondaryActual: Double? = nil
+    var secondaryPrevious: Double? = nil
 
     enum CodingKeys: String, CodingKey {
         case pipsByTimeframe = "pips_by_timeframe"
@@ -131,5 +138,9 @@ struct ComparisonEventSummary: Decodable, Identifiable, Equatable {
         case previous
         case surprise
         case surpriseDirection = "surprise_direction"
+        case secondaryValueKind = "secondary_value_kind"
+        case secondaryForecast = "secondary_forecast"
+        case secondaryActual = "secondary_actual"
+        case secondaryPrevious = "secondary_previous"
     }
 }

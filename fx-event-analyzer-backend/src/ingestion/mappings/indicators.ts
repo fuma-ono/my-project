@@ -75,6 +75,18 @@ export interface IndicatorMapping {
    * series for that period (a wrong guess shows up as OFFICIAL_MISMATCH).
    */
   referencePeriodLagMonths: number;
+  /**
+   * HQ指示(2026-10-25)「過去イベント比較の表も前月と前年必要だと思う」:
+   * この指標の本来の値(valueKind、例: 米国CPIはYOY_PCT)に加えて、同じ
+   * 公式系列を別の変換で見せたい場合だけ設定する(米国CPIはMOM_PCTを追加
+   * = 前月比)。新しい外部データ源は増やさず、既にingestion/verification
+   * で取得しているBLS系列を別の変換で計算するだけ。
+   * 現時点ではbls_schedule経路(blsCalendar.ts)だけが対応しており、
+   * 有料カレンダー経路(economicCalendar.ts)はこのフィールドを読まない
+   * (プロバイダがMoM%を別イベントとして報告することが多く、そちらは
+   * 別指標として追加する方が自然なため — data-sources.md参照)。
+   */
+  secondary?: { valueKind: ValueKind; official: OfficialSeriesRef };
 }
 
 const BLS = { name: 'U.S. Bureau of Labor Statistics', url: 'https://www.bls.gov/' };
@@ -107,6 +119,10 @@ export const INDICATOR_MAPPINGS: readonly IndicatorMapping[] = [
     requireOfficialMatch: true,
     allowMissingUnit: false,
     referencePeriodLagMonths: 1,
+    // HQ指示(2026-10-25): 過去イベント比較・イベント詳細に前月比(MoM%)も
+    // 併記する。同じ系列(CUUR0000SA0)をMOM_PCTで計算するだけで、新しい
+    // 外部データ源は不要。
+    secondary: { valueKind: 'MOM_PCT', official: { source: 'BLS', seriesId: 'CUUR0000SA0', transform: 'MOM_PCT' } },
   },
   {
     // Core CPI (all items less food and energy) YoY, NSA. economic_indicators

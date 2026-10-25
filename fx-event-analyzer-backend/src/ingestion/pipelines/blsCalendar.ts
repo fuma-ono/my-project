@@ -113,6 +113,50 @@ export function createBlsNativeResolver(
   };
 }
 
+/**
+ * Resolves a mapping's `secondary` official series (HQ指示 2026-10-25) the
+ * same way createBlsNativeResolver() resolves the primary one — fetched
+ * ONCE per series and cached across periods. A separate resolver instance
+ * (rather than extending createBlsNativeResolver/OfficialValueResolver) to
+ * avoid touching the shared resolver interface other pipelines/tests
+ * depend on; the extra fetch this causes is at most one per distinct
+ * secondary series per run (CUUR0000SA0 for US_CPI today), well under the
+ * BLS v1 API's unauthenticated 25 requests/day limit.
+ */
+export function createBlsSecondaryResolver(
+  bls: OfficialStatsProvider,
+  range: { start: string; end: string },
+  onError: (error: unknown) => void = () => undefined,
+): OfficialValueResolver {
+  const cache = new Map<string, Promise<OfficialObservation[]>>();
+  return {
+    async resolve(mapping, period, asOfDate) {
+      const ref = mapping.secondary?.official;
+      if (!ref || ref.source !== 'BLS') return null;
+      let pending = cache.get(ref.seriesId);
+      if (!pending) {
+        pending = bls
+          .fetchObservations({
+            seriesId: ref.seriesId,
+            observationStart: range.start,
+            observationEnd: range.end,
+            asOfDate,
+          })
+          .catch((error: unknown) => {
+            onError(error);
+            return [];
+          });
+        cache.set(ref.seriesId, pending);
+      }
+      const observations = await pending;
+      const value = computeOfficialValue(observations, period, ref.transform);
+      if (value === null) return null;
+      const asOf = observations.find((o) => o.periodStart === `${period}-01`)?.asOfDate ?? asOfDate;
+      return { value, sourceRef: `${ref.source}:${ref.seriesId}@${asOf}` };
+    },
+  };
+}
+
 export interface BlsScheduleReleaseResult {
   releases: NormalizedCalendarRelease[];
   /**
@@ -150,6 +194,8 @@ export interface BlsScheduleReleaseResult {
  */
 export async function buildBlsScheduleReleases(deps: {
   official: OfficialValueResolver;
+  /** HQ指示(2026-10-25)。createBlsSecondaryResolver() の実装を渡す。省略時は副指標を一切計算しない(既存の挙動のまま)。 */
+  officialSecondary?: OfficialValueResolver;
   entries?: readonly BlsScheduleEntry[];
   mappings?: readonly IndicatorMapping[];
   now?: () => Date;
@@ -187,6 +233,9 @@ export async function buildBlsScheduleReleases(deps: {
         const previousPeriod = shiftMonth(entry.referencePeriod, -1);
         const previous = await deps.official.resolve(mapping, previousPeriod, scheduledAsOf);
         const unit = displayUnit(mapping.unit);
+        const secondaryPrevious = mapping.secondary
+          ? await deps.officialSecondary?.resolve(mapping, previousPeriod, scheduledAsOf)
+          : null;
         releases.push({
           provider: BLS_SCHEDULE_PROVIDER,
           providerEventId: `${BLS_SCHEDULE_PROVIDER}:${entry.indicatorCode}:${entry.referencePeriod}`,
@@ -200,6 +249,8 @@ export async function buildBlsScheduleReleases(deps: {
           previous: previous ? { value: previous.value, unit } : null,
           revisedPrevious: previous ? { value: previous.value, unit } : null,
           fetchedAt: now.toISOString(),
+          secondaryActual: null,
+          secondaryPrevious: secondaryPrevious ? secondaryPrevious.value : null,
         });
       }
       continue;
@@ -219,6 +270,15 @@ export async function buildBlsScheduleReleases(deps: {
     // unit must say so explicitly — allowMissingUnit is false for these
     // indicators (shared with the paid-calendar path, not changed here).
     const unit = displayUnit(mapping.unit);
+    // HQ指示(2026-10-25)。副指標(例: 米国CPIのMoM%)はmapping.secondaryが
+    // 設定された指標だけ、同じ公式系列を別の変換(createBlsSecondaryResolver)
+    // で解決する — 新しい外部データ源は増やさない。
+    const secondaryActual = mapping.secondary
+      ? await deps.officialSecondary?.resolve(mapping, entry.referencePeriod, asOfDate)
+      : null;
+    const secondaryPrevious = mapping.secondary
+      ? await deps.officialSecondary?.resolve(mapping, previousPeriod, asOfDate)
+      : null;
 
     releases.push({
       provider: BLS_SCHEDULE_PROVIDER,
@@ -233,6 +293,8 @@ export async function buildBlsScheduleReleases(deps: {
       previous: previous ? { value: previous.value, unit } : null,
       revisedPrevious: previous ? { value: previous.value, unit } : null,
       fetchedAt: now.toISOString(),
+      secondaryActual: secondaryActual ? secondaryActual.value : null,
+      secondaryPrevious: secondaryPrevious ? secondaryPrevious.value : null,
     });
   }
   return { releases, notYetAvailable, overdue, unmapped };

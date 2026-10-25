@@ -51,6 +51,16 @@ export interface NormalizedCalendarRelease {
   /** The provider's revised figure for `previous`, when it reports one. */
   revisedPrevious: ProviderValue | null;
   fetchedAt: string;
+  /**
+   * HQ指示(2026-10-25)「過去イベント比較の表も前月と前年必要」: この指標の
+   * 本来の値(valueKind)とは別の変換(mappings/indicators.tsのsecondary、
+   * 例: 米国CPIのMoM%)で見た値。既にmapping.unitの単位に変換済みの数値
+   * そのもの(ProviderValueでラップしない) — BLSの公式系列から自前で計算
+   * した値であり、providerが報告した値ではないため。この経路
+   * (blsCalendar.ts)だけが設定し、他の経路(paid calendar)はundefined。
+   */
+  secondaryActual?: number | null;
+  secondaryPrevious?: number | null;
 }
 
 /** One observation of an official statistics series (②). */

@@ -167,6 +167,11 @@ final class IndicatorDisplayNameTests: XCTestCase {
         XCTAssertEqual(HistoricalComparisonView.valueText(nil, unit: "%"), "--")
         XCTAssertEqual(HistoricalComparisonView.pipsText(-8.2), "-8.2")
         XCTAssertEqual(HistoricalComparisonView.pipsText(2.1), "+2.1")
+        // 副指標(前月比、api-design v1.35、HQ指示2026-10-25)の書式(「+0.2%」「-0.1%」)。
+        XCTAssertEqual(HistoricalComparisonView.secondaryText(0.2, unit: "%"), "+0.2%")
+        XCTAssertEqual(HistoricalComparisonView.secondaryText(-0.1, unit: "%"), "-0.1%")
+        XCTAssertEqual(HistoricalComparisonView.secondaryText(250, unit: "千人"), "+250.0")
+        XCTAssertEqual(HistoricalComparisonView.secondaryText(nil, unit: "%"), "--")
         XCTAssertEqual(HistoricalComparisonView.pairLabel("USDJPY"), "USD/JPY")
         XCTAssertEqual(HistoricalComparisonView.pairLabel("EUR/USD"), "EUR/USD")
         XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false), 24 + 7 * 22.5)

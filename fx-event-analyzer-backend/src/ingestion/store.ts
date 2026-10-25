@@ -59,6 +59,11 @@ export interface NewReleaseSnapshot {
   verification_status: 'VERIFIED' | 'SINGLE_SOURCE';
   verification_source: string | null;
   official_actual: number | null;
+  /** HQ指示(2026-10-25)「過去イベント比較の表も前月と前年必要」: mapping.secondaryが設定された指標だけ埋まる(今は米国CPIのMOM_PCT)。 */
+  secondary_value_kind: 'LEVEL' | 'YOY_PCT' | 'MOM_PCT' | 'CHANGE' | null;
+  secondary_actual: number | null;
+  secondary_forecast: number | null;
+  secondary_previous: number | null;
 }
 
 export interface NewRevision {

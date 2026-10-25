@@ -200,6 +200,13 @@ export interface PublishReleaseInput {
   values: Pick<NormalizedValues, 'forecast' | 'previous'> & { actual: number };
   capturedAt: string;
   official: ResolvedOfficialValue | null;
+  /**
+   * HQ指示(2026-10-25)「過去イベント比較の表も前月と前年必要」:
+   * mapping.secondaryが設定された指標(今は米国CPIのMoM%)のみ渡される。
+   * 省略時(reverifyAwaitingOfficial経由など)は副指標なしで書き込む —
+   * RELEASEスナップショットは不変なので、後から追加することはできない。
+   */
+  secondary?: { actual: number | null; previous: number | null } | undefined;
 }
 
 /** Writes the immutable RELEASE snapshot and marks the event AVAILABLE. */
@@ -219,6 +226,10 @@ export async function publishRelease(store: IngestionStore, input: PublishReleas
     verification_status: input.official ? 'VERIFIED' : 'SINGLE_SOURCE',
     verification_source: input.official?.sourceRef ?? null,
     official_actual: input.official ? roundTo(input.official.value, 4) : null,
+    secondary_value_kind: input.mapping.secondary ? input.mapping.secondary.valueKind : null,
+    secondary_actual: input.secondary?.actual ?? null,
+    secondary_forecast: null,
+    secondary_previous: input.secondary?.previous ?? null,
   });
   await store.updateEvent(input.eventId, { status: 'RELEASED', data_status: 'AVAILABLE' });
 }
@@ -303,6 +314,9 @@ async function processActual(
     values: { ...values, actual: values.actual },
     capturedAt: release.fetchedAt,
     official,
+    secondary: mapping.secondary
+      ? { actual: release.secondaryActual ?? null, previous: release.secondaryPrevious ?? null }
+      : undefined,
   });
   await resolveOpenStaged(
     store,
