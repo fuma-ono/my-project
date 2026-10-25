@@ -31,6 +31,11 @@ struct HistoricalComparisonView: View {
             .toolbar(.hidden, for: .navigationBar)
             .task { viewModel.load() }
             .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
+            // HQ指示(2026-10-25)「この画面だけ横画面できるようにしたい」:
+            // この画面が表示されている間だけ回転を許可し、離れたら既定の
+            // Portrait専用に戻す(`OrientationLock.swift`参照)。
+            .onAppear { OrientationLock.unlockLandscape() }
+            .onDisappear { OrientationLock.lockToPortrait() }
     }
 
     @ViewBuilder
@@ -45,24 +50,205 @@ struct HistoricalComparisonView: View {
         case .notEntitled:
             loadingScaffold { FXEmptyState(icon: "lock.fill", title: "この情報はご利用いただけません", message: "現在のプランでは過去の比較データを閲覧できません。") }
         case .loaded(let response):
-            V5Viewport {
-                V5Header(title: "過去イベント比較", back: true, onBack: { dismiss() })
-                VStack(alignment: .leading, spacing: 8) {
-                    header(response)
-                    table(response)
-                    if let limit = response.historyLimit, limit.isLimited {
-                        planLimitRow(limit)
+            // HQ指示(2026-10-25): 横画面では表が縦画面用のV5キャンバス
+            // (234×491、`V5Viewport`参照)に収まらないため、横画面の時は
+            // `V5Viewport`のレターボックス表示をやめ、実寸ポイントの専用
+            // レイアウト(`landscapeLayout`)に切り替える。
+            GeometryReader { geo in
+                if geo.size.width > geo.size.height {
+                    landscapeLayout(response)
+                } else {
+                    V5Viewport {
+                        V5Header(title: "過去イベント比較", back: true, onBack: { dismiss() })
+                        VStack(alignment: .leading, spacing: 8) {
+                            header(response)
+                            table(response)
+                            if let limit = response.historyLimit, limit.isLimited {
+                                planLimitRow(limit)
+                            }
+                        }
+                        .frame(width: 214)
+                        .padding(.top, 8)
+                        .frame(width: V5P.W, height: 398, alignment: .top)
+                        .position(x: V5P.W / 2, y: 54 + 398 / 2)
+                        V5BottomBar(selected: $tabSelection)
                     }
                 }
-                .frame(width: 214)
-                .padding(.top, 8)
-                .frame(width: V5P.W, height: 398, alignment: .top)
-                .position(x: V5P.W / 2, y: 54 + 398 / 2)
-                V5BottomBar(selected: $tabSelection)
             }
         case .error(let message):
             loadingScaffold { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() }) }
         }
+    }
+
+    // MARK: - 横画面レイアウト
+
+    /// HQ指示(2026-10-25)「縦画面に入らないから...この画面だけ横画面できる
+    /// ようにしたい。そうしたら入るようにして」: 縦画面用の表(`table(_:)`、
+    /// V5キャンバス単位の小さいフォント・列幅)を使い回さず、実寸ポイントの
+    /// 大きめの列幅・フォントで組んだ専用の表(`landscapeTable`)を使う。
+    /// 横画面はiPhoneの横幅(例: iPhone 16 Proで約874pt)を活かせるため、
+    /// 列を増やしても(前月・前年の追加分を含め)基本的に横スクロール無しで
+    /// 収まる想定。タブバーは表示しない(横画面はこの表を見るための一時的な
+    /// 向きという想定 — 他タブへはいったん縦に戻ってから移動する)。
+    private func landscapeLayout(_ response: ComparisonResponse) -> some View {
+        let events = newestFirst
+            ? response.events.sorted { $0.releaseDatetime > $1.releaseDatetime }
+            : response.events.sorted { $0.releaseDatetime < $1.releaseDatetime }
+        return ZStack {
+            V5GlowBackground()
+            VStack(alignment: .leading, spacing: 12) {
+                landscapeTopBar
+                header(response)
+                landscapeTable(events, unit: response.indicator.unit)
+                if let limit = response.historyLimit, limit.isLimited {
+                    planLimitRow(limit)
+                }
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 14)
+        }
+        .ignoresSafeArea()
+    }
+
+    private var landscapeTopBar: some View {
+        HStack(spacing: 8) {
+            Button(action: { dismiss() }) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("戻る")
+            NotoText.text("過去イベント比較", size: 15).foregroundStyle(.white)
+            Spacer()
+        }
+    }
+
+    private enum LandscapeColumn {
+        static let date: CGFloat = 92
+        static let value: CGFloat = 70
+        static let pips: CGFloat = 70
+    }
+
+    private func landscapeTable(_ events: [ComparisonEventSummary], unit: String?) -> some View {
+        let shape = RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
+        return VStack(spacing: 0) {
+            landscapeTableHeader
+            if events.isEmpty {
+                NotoText.text("過去の発表はまだありません。", size: 13)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
+            } else {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
+                            if index > 0 {
+                                Rectangle().fill(SettingsCardStyle.cardBorder.opacity(0.6)).frame(height: 0.5)
+                            }
+                            NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
+                                landscapeTableRow(event, unit: unit)
+                            }
+                            .buttonStyle(SettingsRowPressStyle())
+                            .accessibilityIdentifier("historyEventRow")
+                        }
+                    }
+                }
+                .frame(maxHeight: 250)
+            }
+        }
+        .background(V5CardGradient.fill)
+        .clipShape(shape)
+        .overlay(shape.stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
+    }
+
+    private var landscapeTableHeader: some View {
+        HStack(spacing: 0) {
+            Button { newestFirst.toggle() } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "calendar").font(.system(size: 12, weight: .semibold))
+                    NotoText.text("日時", size: 13)
+                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .frame(width: LandscapeColumn.date, height: 40)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(newestFirst ? "日時 新しい順" : "日時 古い順")
+            landscapeDivider
+            landscapeHeaderCell("結果", "(実績)", width: LandscapeColumn.value)
+            landscapeHeaderCell("予想", "(市場予想)", width: LandscapeColumn.value)
+            landscapeHeaderCell("前回", "(前回値)", width: LandscapeColumn.value)
+            landscapeDivider
+            landscapeHeaderCell("1分", "(pips)", width: LandscapeColumn.pips)
+            landscapeHeaderCell("5分", "(pips)", width: LandscapeColumn.pips)
+            landscapeHeaderCell("15分", "(pips)", width: LandscapeColumn.pips)
+        }
+        .frame(height: 40)
+        .background(Self.headerFill)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
+        }
+    }
+
+    private var landscapeDivider: some View {
+        Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 1, height: 40)
+    }
+
+    private func landscapeHeaderCell(_ title: String, _ subtitle: String, width: CGFloat) -> some View {
+        VStack(spacing: 2) {
+            NotoText.text(title, size: 13).foregroundStyle(.white)
+            NotoText.text(subtitle, size: 9)
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(width: width, height: 40)
+    }
+
+    private func landscapeTableRow(_ event: ComparisonEventSummary, unit: String?) -> some View {
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(Self.dateString(event.releaseDatetime))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                Text(Self.timeString(event.releaseDatetime))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Self.timeColor)
+            }
+            .monospacedDigit()
+            .padding(.leading, 10)
+            .frame(width: LandscapeColumn.date, alignment: .leading)
+            landscapeValueCell(event.actual, unit: unit)
+            landscapeValueCell(event.forecast, unit: unit)
+            landscapeValueCell(event.previous, unit: unit)
+            landscapePipsCell(event.pipsByTimeframe?["1m"] ?? nil)
+            landscapePipsCell(event.pipsByTimeframe?["5m"] ?? nil)
+            landscapePipsCell(event.pipsByTimeframe?["15m"] ?? nil)
+        }
+        .frame(height: 44)
+        .contentShape(Rectangle())
+    }
+
+    private func landscapeValueCell(_ value: Double?, unit: String?) -> some View {
+        Text(Self.valueText(value, unit: unit))
+            .font(.system(size: 13, weight: .medium))
+            .monospacedDigit()
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .frame(width: LandscapeColumn.value)
+    }
+
+    private func landscapePipsCell(_ pips: Double?) -> some View {
+        Text(Self.pipsText(pips))
+            .font(.system(size: 13, weight: .medium))
+            .monospacedDigit()
+            .foregroundStyle(pips.map { $0 >= 0 ? Self.plusColor : Self.minusColor } ?? SettingsCardStyle.subtitleColor)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .padding(.trailing, 4)
+            .frame(width: LandscapeColumn.pips, alignment: .trailing)
     }
 
     @ViewBuilder private func loadingScaffold(@ViewBuilder content: @escaping () -> some View) -> some View {
@@ -135,13 +321,27 @@ struct HistoricalComparisonView: View {
     private static let plusColor = HomeView.changeUpColor
     private static let minusColor = HomeView.changeDownColor
 
+    /// 表の列を全部並べた時の本来の幅。現在は214相当(日時40+区切り0.5+
+    /// 数値3列84+区切り0.5+pips3列90)で、過去イベント比較の表示幅(214)と
+    /// ほぼ一致するが、この先列が増えれば(例: 前月・前年の追加)この値も
+    /// 自動的に大きくなる — 下の`table(_:)`はこの値を表の実寸として使い、
+    /// 表示幅(214)に収まらない分は横スクロールで見せる。
+    private static let tableContentWidth: CGFloat =
+        Column.date + 0.5 + Column.value * 3 + 0.5 + Column.pips * 3
+
+    /// HQ指示(2026-10-25)「縦画面に入らないから縦画面の場合は横スクロールで
+    /// pipsが見えるようにして」: 表の本来の幅(`tableContentWidth`)が表示幅
+    /// (214)を超えても列を切り詰めず、`ScrollView(.horizontal)`で表全体を
+    /// 横にスクロールできるようにした(以前は`.frame(width: 214)`で強制的に
+    /// 切り詰めていたため、列を増やすと右側のpipsが見えなくなっていた)。
     private func table(_ response: ComparisonResponse) -> some View {
         let events = newestFirst
             ? response.events.sorted { $0.releaseDatetime > $1.releaseDatetime }
             : response.events.sorted { $0.releaseDatetime < $1.releaseDatetime }
         let unit = response.indicator.unit
         let shape = RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
-        return VStack(spacing: 0) {
+        let height = Self.tableHeight(rows: events.count, limited: response.historyLimit?.isLimited == true)
+        let tableBody = VStack(spacing: 0) {
             tableHeader
             if events.isEmpty {
                 // ユーザー指摘(2026-10-20)「過去の発表はまだありませんの文字の
@@ -154,7 +354,8 @@ struct HistoricalComparisonView: View {
                 // 実際の高さに関わらず常に中央に来るようにした。
                 NotoText.text("過去の発表はまだありません。", size: 7)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .frame(maxHeight: .infinity, alignment: .center)
+                    .frame(width: Self.tableContentWidth)
             } else {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
@@ -172,11 +373,16 @@ struct HistoricalComparisonView: View {
                 }
             }
         }
-        .frame(width: 214, height: Self.tableHeight(rows: events.count, limited: response.historyLimit?.isLimited == true), alignment: .top)
+        .frame(height: height, alignment: .top)
         // HQ指示(2026-10-15): 表の外枠もグラデーションに(見出しの帯は今の色のまま)。
         .background(V5CardGradient.fill)
         .clipShape(shape)
         .overlay(shape.stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
+
+        return ScrollView(.horizontal, showsIndicators: false) {
+            tableBody
+        }
+        .frame(width: 214, height: height, alignment: .topLeading)
     }
 
     /// 表の高さ。行が少なければ行の分だけ、多ければ画面に入る高さで止めて中をスクロールする。
