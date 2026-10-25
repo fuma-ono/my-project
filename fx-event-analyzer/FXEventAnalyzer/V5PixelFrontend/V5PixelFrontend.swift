@@ -620,6 +620,13 @@ struct V5BottomBar: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .contentShape(Rectangle())
         .onTapGesture {
+            // HQ指示(2026-10-24)「タブを押しても元に戻らない」: 既に選択中の
+            // タブを再タップしたとき(`selected`の値は変わらないため
+            // `onChange(of: tabSelection)`等では検知できない)、
+            // `TabBarReselection`で各タブのルート画面へ伝え、pathを戻す。
+            if isSelected {
+                TabBarReselection.shared.tappedTab = index
+            }
             selected = index
         }
         // UIテストが画面内の同じ文字(ホームの「経済指標」など)と取り違えないよう、

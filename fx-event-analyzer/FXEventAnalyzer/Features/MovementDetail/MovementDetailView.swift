@@ -332,7 +332,47 @@ struct MovementDetailView: View {
             .padding(8)
             .frame(width: 214, alignment: .leading)
             .background(GradientCardBackground())
+        } else {
+            // HQ指示(2026-10-24)「相場反応詳細で分析の解説が表示されていない」:
+            // 以前はsummaryがnilのとき(1分・5分いずれもanalysisStatus==.ready
+            // の値動きが無い)、@ViewBuilderが暗黙にEmptyViewを返すため、
+            // 「値動きの分析」の枠自体が消えていた。データが無い状態と取得
+            // 失敗を分けて表示し、枠自体は常に出す。
+            analysisUnavailableCard(reactions: reactions)
         }
+    }
+
+    /// `analysisCard`がsummaryを作れないときの代わりの表示。1分→5分の順で
+    /// 見つかった`analysisStatus`から理由を出し分ける(`MovementAnalysisText.
+    /// summary`の`ready(_:)`と同じ優先順位)。どちらも無ければ「取得中」扱い。
+    private func analysisUnavailableCard(reactions: [ReactionTimeframeEntry]) -> some View {
+        let status = reactions.first(where: { $0.timeframe == "1m" })?.analysisStatus
+            ?? reactions.first(where: { $0.timeframe == "5m" })?.analysisStatus
+        let message: String
+        switch status {
+        case .dataUnavailable:
+            message = "値動きのデータが取得できなかったため、分析を表示できません。"
+        case .notAnalyzable:
+            message = "この発表は値動きの分析の対象外です。"
+        case .ready, .dataPending, nil:
+            message = "値動きのデータを取得中です。しばらくしてから確認してください。"
+        }
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 4) {
+                Image(systemName: "chart.bar.fill")
+                    .font(.system(size: 9.5, weight: .bold))
+                    .foregroundStyle(V5P.cyan)
+                NotoText.text("値動きの分析", size: 11).foregroundStyle(.white)
+            }
+            Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
+            NotoText.text(message, size: 7.5)
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 2)
+        }
+        .padding(8)
+        .frame(width: 214, alignment: .leading)
+        .background(GradientCardBackground())
     }
 
     /// HQ指示(2026-10-14)「値動きの分析の構成を画像のようにして」「過去イベントを見るで

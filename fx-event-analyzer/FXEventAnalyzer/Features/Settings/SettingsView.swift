@@ -98,6 +98,11 @@ struct SettingsView: View {
     private let apiClient: APIClient
     private let authService: AuthServicing
     private let onSignOut: () -> Void
+    /// HQ指示(2026-10-24)「タブを押しても元に戻らない」対応のため、他の
+    /// タブルート画面(Home/Indicators/Calendar/Search)と同じく自前の
+    /// pathを持つようにした(以前は`NavigationStack {}`のみで、外から
+    /// ルートへ戻す手段が無かった)。
+    @State private var path = NavigationPath()
     /// SCR-025 ログアウト確認ダイアログ(2026-09-29 HQ承認、2-b)。
     @State private var showLogoutConfirmation = false
     @Binding var tabSelection: Int
@@ -133,7 +138,7 @@ struct SettingsView: View {
     private static let logoutTop: CGFloat = group2Top + 4 * rowHeight + groupGap
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             V5Viewport {
                 V5Header(title: "設定", back: false)
 
@@ -207,6 +212,13 @@ struct SettingsView: View {
         }
         // 2026-09-29 HQ承認(2-b): SCR-025 ログアウト確認ダイアログ。独立した
         // フルスクリーン画面ではなくダイアログとする(ui-screens.md v2.0 §4.2)。
+        // HQ指示(2026-10-24)「タブを押しても元に戻らない」: 設定タブ
+        // (index 4)を再タップしたらpathを戻す。
+        .onReceive(TabBarReselection.shared.$tappedTab) { tapped in
+            guard tapped == 4 else { return }
+            path = NavigationPath()
+            TabBarReselection.shared.tappedTab = nil
+        }
     }
 
     /// 参考画像v2から実測したカード・行の見た目(V5座標系)。横方向の位置は
