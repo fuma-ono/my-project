@@ -22,7 +22,10 @@ struct EventDetailCards: View {
         // HQ再指摘(2026-10-12、2回目)「まだ上に上げて」でさらに0まで詰めた。
         // HQ再指摘(2026-10-12、6回目)「結果、予想、前回の枠を少し下げて」:
         // 詰めすぎていたため0→4に戻した。
-        VStack(alignment: .leading, spacing: 8) {
+        // HQ指示(2026-10-26)「次回発表予定が1画面に収まっていない」:
+        // 前年比/前月比の2段構成でカード自体が伸びた分、ここのセクション間隔も
+        // 詰めて最後の次回発表予定まで1画面に収まるようにした(8→5)。
+        VStack(alignment: .leading, spacing: 5) {
             VStack(alignment: .leading, spacing: 4) {
                 header
                 results
@@ -52,7 +55,6 @@ struct EventDetailCards: View {
         // 残したまま括弧で割るだけ)を使っていたため「米国CPI」が消えて
         // いなかった。Home/検索と同じ`CountryFlag.indicatorDisplayName`
         // (国名接頭辞を取り除く)に揃えた。
-        let display = CountryFlag.indicatorDisplayName(event.indicatorName, countryCode: event.countryCode, displayName: event.displayName)
         let combinedName = CountryFlag.indicatorDisplayText(event.indicatorName, countryCode: event.countryCode, displayName: event.displayName)
         // HQ指示(2026-10-13、2回目)「米国|USDの位置が指標名の下になるように」:
         // 国旗(34pt)と同じHStackの兄弟として2行目を置くと、国旗の高さ分
@@ -68,16 +70,16 @@ struct EventDetailCards: View {
                     // 名前本体と(略称)を2行に分ける。
                     // HQ指示(2026-10-13、2回目)「消費者物価指数の文字サイズは
                     // 11にして」: 10.5→11。
-                    ViewThatFits(in: .horizontal) {
-                        NotoText.text(combinedName, size: 11).lineLimit(1)
-                        VStack(alignment: .leading, spacing: 1) {
-                            NotoText.text(display.main, size: 11).lineLimit(1).minimumScaleFactor(0.8)
-                            if let abbreviation = display.abbreviation {
-                                NotoText.text("（\(abbreviation)）", size: 11).lineLimit(1).minimumScaleFactor(0.8)
-                            }
-                        }
-                    }
-                    .foregroundStyle(.white)
+                    // HQ指示(2026-10-26)「（CPI）を2行目にしないで1行に収めて」:
+                    // `ViewThatFits`は1行版に`minimumScaleFactor`が無いと、
+                    // そのままの文字サイズで収まるかどうかでしか判定せず、
+                    // わずかにはみ出ただけでも2行版にフォールバックしていた。
+                    // 1行版が縮小して収まれるようにし、2行への分割よりそちらを
+                    // 優先させた。
+                    NotoText.text(combinedName, size: 11)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .foregroundStyle(.white)
                     Spacer(minLength: 4)
                     let colors = HomeView.importanceBadgeColors(event.importance)
                     NotoText.text(event.importance.rawValue, size: 7)
@@ -440,8 +442,10 @@ struct EventDetailCards: View {
 
     private static let pairColumnWidth: CGFloat = 80
     private static let valueColumnWidth: CGFloat = (214 - 80) / 3
-    private static let headerHeight: CGFloat = 22
-    private static let rowHeight: CGFloat = 28
+    // HQ指示(2026-10-26)「次回発表予定が1画面に収まっていない」に合わせて
+    // 22/28→20/26に詰めた(4行分で8pt節約)。
+    private static let headerHeight: CGFloat = 20
+    private static let rowHeight: CGFloat = 26
 
     private func cell(width: CGFloat, alignment: Alignment = .center, @ViewBuilder _ content: () -> some View) -> some View {
         content()

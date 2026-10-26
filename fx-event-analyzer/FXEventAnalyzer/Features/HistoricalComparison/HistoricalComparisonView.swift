@@ -31,11 +31,6 @@ struct HistoricalComparisonView: View {
             .toolbar(.hidden, for: .navigationBar)
             .task { viewModel.load() }
             .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
-            // HQ指示(2026-10-25)「この画面だけ横画面できるようにしたい」:
-            // この画面がオンスクリーンの間だけ横画面を許可する
-            // (`OrientationLock.swift`参照 — 過去2回の失敗の経緯も含む)。
-            .onAppear { HistoricalComparisonOrientation.shared.setAllowed(true) }
-            .onDisappear { HistoricalComparisonOrientation.shared.setAllowed(false) }
     }
 
     @ViewBuilder
@@ -50,125 +45,24 @@ struct HistoricalComparisonView: View {
         case .notEntitled:
             loadingScaffold { FXEmptyState(icon: "lock.fill", title: "この情報はご利用いただけません", message: "現在のプランでは過去の比較データを閲覧できません。") }
         case .loaded(let response):
-            // HQ指示(2026-10-25): 横画面では表が縦画面用のV5キャンバス
-            // (234×491、`V5Viewport`参照)に収まらないため、横画面の時は
-            // `V5Viewport`のレターボックス表示をやめ、実寸ポイントの専用
-            // レイアウト(`landscapeLayout`)に切り替える。今回(3回目の実装、
-            // `OrientationLock.swift`参照)はUIKitのインターフェースが実際に
-            // 回転するため、`geo.size`自体が横長になる — 以前の版のような
-            // `.rotationEffect`での見た目だけの回転は不要。
-            GeometryReader { geo in
-                if geo.size.width > geo.size.height {
-                    landscapeLayout(response)
-                } else {
-                    V5Viewport {
-                        V5Header(title: "過去イベント比較", back: true, onBack: { dismiss() })
-                        VStack(alignment: .leading, spacing: 8) {
-                            header(response)
-                            table(response)
-                            if let limit = response.historyLimit, limit.isLimited {
-                                planLimitRow(limit)
-                            }
-                        }
-                        .frame(width: 214)
-                        .padding(.top, 8)
-                        .frame(width: V5P.W, height: 398, alignment: .top)
-                        .position(x: V5P.W / 2, y: 54 + 398 / 2)
-                        V5BottomBar(selected: $tabSelection)
+            V5Viewport {
+                V5Header(title: "過去イベント比較", back: true, onBack: { dismiss() })
+                VStack(alignment: .leading, spacing: 8) {
+                    header(response)
+                    table(response)
+                    if let limit = response.historyLimit, limit.isLimited {
+                        planLimitRow(limit)
                     }
                 }
+                .frame(width: 214)
+                .padding(.top, 8)
+                .frame(width: V5P.W, height: 398, alignment: .top)
+                .position(x: V5P.W / 2, y: 54 + 398 / 2)
+                V5BottomBar(selected: $tabSelection)
             }
         case .error(let message):
             loadingScaffold { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() }) }
         }
-    }
-
-    // MARK: - 横画面レイアウト
-
-    /// HQ指示(2026-10-25)「縦画面に入らないから...この画面だけ横画面できる
-    /// ようにしたい。そうしたら入るようにして」: 縦画面用の表(`table(_:)`、
-    /// V5キャンバス単位の小さいフォント・列幅)を使い回さず、実寸ポイントの
-    /// 大きめの列幅・フォントで組んだ専用の表(`landscapeTable`)を使う。
-    /// 横画面はiPhoneの横幅(例: iPhone 16 Proで約874pt)を活かせるため、
-    /// 列を増やしても(前月・前年の追加分を含め)基本的に横スクロール無しで
-    /// 収まる想定。タブバーは表示しない(横画面はこの表を見るための一時的な
-    /// 向きという想定 — 他タブへはいったん縦に戻ってから移動する)。
-    private func landscapeLayout(_ response: ComparisonResponse) -> some View {
-        let events = newestFirst
-            ? response.events.sorted { $0.releaseDatetime > $1.releaseDatetime }
-            : response.events.sorted { $0.releaseDatetime < $1.releaseDatetime }
-        return ZStack(alignment: .topLeading) {
-            V5GlowBackground()
-            VStack(alignment: .leading, spacing: 10) {
-                landscapeHeaderBar(response)
-                // HQ指示(2026-10-26)「日時～15分横の余白が目立つのでなくして」:
-                // 表自体の幅(`tableContentWidth`相当)は列の合計で決まり画面幅
-                // より狭いことがあるため、カードの背景・枠線を画面の残り幅まで
-                // 広げて、未装飾の余白として目立たないようにする。
-                landscapeTable(events, unit: response.indicator.unit)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if let limit = response.historyLimit, limit.isLimited {
-                    planLimitRow(limit)
-                }
-            }
-            .padding(.horizontal, 28)
-            .padding(.top, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .ignoresSafeArea()
-    }
-
-    /// HQ指示(2026-10-26)「過去イベント比較や国旗マーク、指標名が端に
-    /// 寄りすぎているので日時の上あたりにして」: 以前は戻るボタン+タイトルの
-    /// 行(`landscapeTopBar`)と国旗+指標名の行(`header(_:)`)を別々に縦積み
-    /// していたが、横画面は横幅に余裕があるため1行にまとめ、表(日時列が
-    /// 左端)のすぐ上・同じ左端に揃えて置く。
-    private func landscapeHeaderBar(_ response: ComparisonResponse) -> some View {
-        let indicator = response.indicator
-        let country = indicator.countryCode ?? ""
-        let name = CountryFlag.indicatorDisplayText(indicator.name, countryCode: country, displayName: indicator.displayName)
-        return HStack(spacing: 10) {
-            Button(action: { dismiss() }) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("戻る")
-            .accessibilityIdentifier("historyLandscapeBack")
-            NotoText.text("過去イベント比較", size: 15).foregroundStyle(.white)
-            Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 1, height: 22)
-            CountryFlagView(countryCode: country, diameter: 24)
-            VStack(alignment: .leading, spacing: 1) {
-                NotoText.text(name, size: 12)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                HStack(spacing: 3) {
-                    NotoText.text(CountryFlag.japaneseName(forCountry: country), size: 8.5)
-                    NotoText.text("｜", size: 8.5).opacity(0.6)
-                    NotoText.text(indicator.currencyCode ?? "", size: 8.5)
-                }
-                .foregroundStyle(SettingsCardStyle.subtitleColor)
-            }
-            Spacer(minLength: 8)
-            OverlappingPairFlags(symbol: viewModel.fxPairSymbol, diameter: 10)
-            NotoText.text(Self.pairLabel(viewModel.fxPairSymbol), size: 9)
-                .foregroundStyle(.white)
-        }
-        // `.accessibilityElement(children: .contain)`: 中の戻るボタンを個別に
-        // タップ可能なまま保ちつつ、このHStack自体もXCUITestから識別子で
-        // 問い合わせられる要素にする(`.contain`を付けないと、単体の
-        // `.accessibilityIdentifier`だけではコンテナがアクセシビリティ要素に
-        // ならず、UIテストが見つけられないことがある)。
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("historyLandscapeTopBar")
-    }
-
-    private enum LandscapeColumn {
-        static let date: CGFloat = 92
-        static let value: CGFloat = 70
-        static let pips: CGFloat = 70
     }
 
     /// 副指標(api-design v1.35、HQ指示2026-10-25「前年の結果予想前回、前月の
@@ -177,164 +71,6 @@ struct HistoricalComparisonView: View {
     /// ある行が1件もない場合は列ごと隠す。
     private static func hasSecondaryColumn(_ events: [ComparisonEventSummary]) -> Bool {
         events.contains { $0.secondaryActual != nil || $0.secondaryForecast != nil || $0.secondaryPrevious != nil }
-    }
-
-    private func landscapeTable(_ events: [ComparisonEventSummary], unit: String?) -> some View {
-        let shape = RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
-        let showSecondary = Self.hasSecondaryColumn(events)
-        return VStack(spacing: 0) {
-            landscapeTableHeader(showSecondary: showSecondary)
-            if events.isEmpty {
-                NotoText.text("過去の発表はまだありません。", size: 13)
-                    .foregroundStyle(SettingsCardStyle.subtitleColor)
-                    .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
-            } else {
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 0) {
-                        ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
-                            if index > 0 {
-                                Rectangle().fill(SettingsCardStyle.cardBorder.opacity(0.6)).frame(height: 0.5)
-                            }
-                            NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
-                                landscapeTableRow(event, unit: unit, showSecondary: showSecondary)
-                            }
-                            .buttonStyle(SettingsRowPressStyle())
-                            .accessibilityIdentifier("historyEventRow")
-                        }
-                    }
-                }
-                .frame(maxHeight: 250)
-            }
-        }
-        .background(V5CardGradient.fill)
-        .clipShape(shape)
-        .overlay(shape.stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
-    }
-
-    /// HQ指示(2026-10-25)「過去イベント比較は前年の結果予想前回、前月の
-    /// 結果予想前回が必要」: 列見出しの上にもう1段、グループ見出し
-    /// (「前年」「前月」)を出して2つの結果/予想/前回を区別する。
-    private func landscapeGroupHeaderRow(showSecondary: Bool) -> some View {
-        HStack(spacing: 0) {
-            Color.clear.frame(width: LandscapeColumn.date + 1)
-            landscapeGroupLabel("前年", width: LandscapeColumn.value * 3)
-            if showSecondary {
-                Color.clear.frame(width: 1)
-                landscapeGroupLabel("前月", width: LandscapeColumn.value * 3)
-            }
-            Color.clear.frame(width: 1 + LandscapeColumn.pips * 3)
-        }
-        .frame(height: 20)
-    }
-
-    private func landscapeGroupLabel(_ title: String, width: CGFloat) -> some View {
-        NotoText.text(title, size: 11)
-            .foregroundStyle(SettingsCardStyle.subtitleColor)
-            .frame(width: width, alignment: .center)
-    }
-
-    private func landscapeTableHeader(showSecondary: Bool) -> some View {
-        VStack(spacing: 0) {
-            landscapeGroupHeaderRow(showSecondary: showSecondary)
-            HStack(spacing: 0) {
-                Button { newestFirst.toggle() } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "calendar").font(.system(size: 12, weight: .semibold))
-                        NotoText.text("日時", size: 13)
-                        Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .bold))
-                    }
-                    .foregroundStyle(.white)
-                    .frame(width: LandscapeColumn.date, height: 40)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(newestFirst ? "日時 新しい順" : "日時 古い順")
-                landscapeDivider
-                landscapeHeaderCell("結果", "(実績)", width: LandscapeColumn.value)
-                landscapeHeaderCell("予想", "(市場予想)", width: LandscapeColumn.value)
-                landscapeHeaderCell("前回", "(前回値)", width: LandscapeColumn.value)
-                if showSecondary {
-                    landscapeDivider
-                    landscapeHeaderCell("結果", "(実績)", width: LandscapeColumn.value)
-                    landscapeHeaderCell("予想", "(市場予想)", width: LandscapeColumn.value)
-                    landscapeHeaderCell("前回", "(前回値)", width: LandscapeColumn.value)
-                }
-                landscapeDivider
-                landscapeHeaderCell("1分", "(pips)", width: LandscapeColumn.pips)
-                landscapeHeaderCell("5分", "(pips)", width: LandscapeColumn.pips)
-                landscapeHeaderCell("15分", "(pips)", width: LandscapeColumn.pips)
-            }
-            .frame(height: 40)
-        }
-        .background(Self.headerFill)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
-        }
-    }
-
-    private var landscapeDivider: some View {
-        Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 1, height: 40)
-    }
-
-    private func landscapeHeaderCell(_ title: String, _ subtitle: String, width: CGFloat) -> some View {
-        VStack(spacing: 2) {
-            NotoText.text(title, size: 13).foregroundStyle(.white)
-            NotoText.text(subtitle, size: 9)
-                .foregroundStyle(SettingsCardStyle.subtitleColor)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(width: width, height: 40)
-    }
-
-    private func landscapeTableRow(_ event: ComparisonEventSummary, unit: String?, showSecondary: Bool) -> some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(Self.dateString(event.releaseDatetime))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                Text(Self.timeString(event.releaseDatetime))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Self.timeColor)
-            }
-            .monospacedDigit()
-            .padding(.leading, 10)
-            .frame(width: LandscapeColumn.date, alignment: .leading)
-            landscapeValueCell(event.actual, unit: unit)
-            landscapeValueCell(event.forecast, unit: unit)
-            landscapeValueCell(event.previous, unit: unit)
-            if showSecondary {
-                landscapeValueCell(event.secondaryActual, unit: unit)
-                landscapeValueCell(event.secondaryForecast, unit: unit)
-                landscapeValueCell(event.secondaryPrevious, unit: unit)
-            }
-            landscapePipsCell(event.pipsByTimeframe?["1m"] ?? nil)
-            landscapePipsCell(event.pipsByTimeframe?["5m"] ?? nil)
-            landscapePipsCell(event.pipsByTimeframe?["15m"] ?? nil)
-        }
-        .frame(height: 44)
-        .contentShape(Rectangle())
-    }
-
-    private func landscapeValueCell(_ value: Double?, unit: String?) -> some View {
-        Text(Self.valueText(value, unit: unit))
-            .font(.system(size: 13, weight: .medium))
-            .monospacedDigit()
-            .foregroundStyle(.white)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .frame(width: LandscapeColumn.value)
-    }
-
-    private func landscapePipsCell(_ pips: Double?) -> some View {
-        Text(Self.pipsText(pips))
-            .font(.system(size: 13, weight: .medium))
-            .monospacedDigit()
-            .foregroundStyle(pips.map { $0 >= 0 ? Self.plusColor : Self.minusColor } ?? SettingsCardStyle.subtitleColor)
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .padding(.trailing, 4)
-            .frame(width: LandscapeColumn.pips, alignment: .trailing)
     }
 
     @ViewBuilder private func loadingScaffold(@ViewBuilder content: @escaping () -> some View) -> some View {
