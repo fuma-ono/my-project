@@ -7,6 +7,7 @@
  * the indicator name, a speech row's title is the speech's own title with
  * the speaker's display name alongside in `speaker_name`.
  */
+import { effectiveIsProvisional } from './provisional.js';
 
 export type CalendarItemKind = 'INDICATOR' | 'SPEECH';
 
@@ -31,6 +32,12 @@ export interface CalendarItem {
   /** INDICATOR: release_datetime_precision. SPEECH: always EXACT. */
   datetime_precision: string;
   status: string;
+  /**
+   * INDICATOR: economic_events.is_provisional — the scheduled datetime is not yet
+   * officially confirmed (the app shows 「予定（暫定）」). true only while the
+   * datetime is still in the future (domain/provisional.ts). SPEECH: always false.
+   */
+  is_provisional: boolean;
 }
 
 export interface CalendarIndicatorEvent {
@@ -44,6 +51,8 @@ export interface CalendarIndicatorEvent {
   release_datetime: string;
   release_datetime_precision: string;
   status: string;
+  /** Absent = false (rows read before migration 20261022000002 / test fixtures). */
+  is_provisional?: boolean | undefined;
 }
 
 export interface CalendarSpeech {
@@ -79,11 +88,13 @@ function matches(item: CalendarItem, filters: CalendarFilters): boolean {
 }
 
 /** CANCELLED speeches are dropped; indicator events keep their status
- * (a CANCELLED release is still shown, labelled by status). */
+ * (a CANCELLED release is still shown, labelled by status). `now` decides
+ * is_provisional (a past provisional row is returned as false). */
 export function buildCalendarItems(
   events: readonly CalendarIndicatorEvent[],
   speeches: readonly CalendarSpeech[],
   filters: CalendarFilters = {},
+  now: Date = new Date(),
 ): CalendarItem[] {
   const indicatorItems = events.map((event): CalendarItem => ({
     kind: 'INDICATOR',
@@ -99,6 +110,7 @@ export function buildCalendarItems(
     datetime: event.release_datetime,
     datetime_precision: event.release_datetime_precision,
     status: event.status,
+    is_provisional: effectiveIsProvisional(event.is_provisional, event.release_datetime, now),
   }));
   const speechItems = speeches
     .filter((speech) => speech.status !== 'CANCELLED')
@@ -116,6 +128,7 @@ export function buildCalendarItems(
       datetime: speech.statement_datetime,
       datetime_precision: 'EXACT',
       status: speech.status,
+      is_provisional: false,
     }));
   return [...indicatorItems, ...speechItems].filter((item) => matches(item, filters)).sort(compareCalendarItems);
 }

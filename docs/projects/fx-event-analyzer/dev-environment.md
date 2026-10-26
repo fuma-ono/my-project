@@ -959,6 +959,164 @@ NO_DATA=データなし)。
 コード変更・DB接続・SQL実行・GitHub Actions実行・外部API呼び出しは、この節の調査でも
 行っていない。
 
+## 12. FOMCの会合日程と`is_provisional`の適用手順(2026-10-22、HQ承認 Task 3。**実行はまだ。承認を得てから行う**)
+
+`supabase/migrations/20261022000002_economic_events_provisional.sql`(`economic_events`に`is_provisional boolean not null default false`を足すだけ。`add column if not exists`なので2回実行しても同じ)と、`npm run ingest:fomc-schedule`(data-sources.md 15章)を社内確認用DBで使うための手順。Claude(セッション)はDBに接続しておらず、どれも未実行。Migration の適用・デプロイ・ジョブの実行は、それぞれ別に承認を得てから行う。
+
+### 12.1 順番(必ずこの順)と、順番を間違えたときに止まるもの
+
+1. **Migration の適用**(12.3節)
+2. **`notify pgrst, 'reload schema';`**(PostgREST に新しい列を読み直させる。これをしないと、列があっても API から見えず同じエラーになる)
+3. **このブランチのコードのデプロイ**(Render。12.4節)
+4. **ジョブの実行**(手動、`npm run ingest:fomc-schedule`。12.6節)
+
+コードが Migration より先に動くと、`is_provisional`を select する次の処理が「列が無い」エラー(PostgREST のエラー → API は 500)になる。`grep -rn "is_provisional" src/repositories` で select している箇所を確認した結果(2026-10-22):
+
+| 止まるもの | 原因の select |
+|---|---|
+| `GET /home`(**応答全体**。最初に読む経済指標の取得が失敗するため) | `homeRepository.ts`の`listEventsInRange` |
+| `GET /calendar` | 同上 |
+| `GET /events/{event_id}` | `eventsRepository.ts`の`getEventById` |
+| `GET /events/{event_id}/revisions` | 同上(イベントの存在確認) |
+| `GET /events/{event_id}/reaction` | 同上 |
+| `GET /events/{event_id}/reaction/chart` | 同上 |
+| `GET /events/{event_id}/history` | 同上(`routes/historical.ts`) |
+| ジョブ `npm run ingest:fomc-schedule` | `ingestionRepository.ts`の`listEventsByProvider` |
+
+通知(`GET /notifications/upcoming`・`GET /notifications`)・他の取り込みジョブは`is_provisional`を読まないので影響しない(他のジョブの insert は列を指定しないので、Migration 後は既定の`false`が入る)。
+
+### 12.2 適用前の確認(読むだけ)
+
+1. Supabase の画面の左上が `fx-event-analyzer-dev`、URL に `pbemckwnqmeaoveelihd` が含まれることを確かめる(本番のプロジェクトでないこと)
+2. SQL Editor の新しいタブで次を実行し、結果を記録する
+
+```sql
+-- (a) 列がまだ無いこと(期待: 0行)
+select column_name from information_schema.columns
+where table_schema = 'public' and table_name = 'economic_events' and column_name = 'is_provisional';
+-- (b) US_FOMC の行とイベント数(期待: is_active = true、events = 0)
+select i.code, i.is_active, count(e.id) as events
+from economic_indicators i left join economic_events e on e.indicator_id = i.id
+where i.code = 'US_FOMC' group by i.code, i.is_active;
+-- (c) fomc_schedule の行がまだ無いこと(期待: 0)
+select count(*) from economic_events where provider = 'fomc_schedule';
+-- (d) 比較用: economic_events の全件数
+select count(*) as total_events from economic_events;
+-- (e) 比較用: 予定の変更の記録の件数
+select count(*) as schedule_changes from event_schedule_changes;
+-- (f) 比較用: 予定の変更を記録するトリガーの定義(Migration の後に同じ文字列か比べる)
+select tgname, pg_get_triggerdef(oid) from pg_trigger
+where tgname in ('trg_economic_events_schedule_change', 'trg_speech_events_schedule_change') order by tgname;
+```
+
+### 12.3 Migration の適用とスキーマの再読み込み
+
+3. SQL Editor の新しいタブに`20261022000002_economic_events_provisional.sql`の中身をそのまま貼って実行する
+4. 続けて`notify pgrst, 'reload schema';`を実行する
+5. 次で確かめる(読むだけ)
+
+```sql
+-- 期待: is_provisional | boolean | NO | false
+select column_name, data_type, is_nullable, column_default from information_schema.columns
+where table_schema = 'public' and table_name = 'economic_events' and column_name = 'is_provisional';
+-- 期待: true の行は 0(既存の行はすべて false)
+select count(*) as provisional_rows from economic_events where is_provisional;
+-- 期待: 12.2 (d) と同じ件数
+select count(*) as total_events from economic_events;
+-- 期待: 12.2 (f) と同じ文字列(economic_events は「AFTER UPDATE OF release_datetime, status」のまま)
+select tgname, pg_get_triggerdef(oid) from pg_trigger
+where tgname in ('trg_economic_events_schedule_change', 'trg_speech_events_schedule_change') order by tgname;
+```
+
+### 12.4 コードのデプロイ
+
+6. 12.3節の確認がすべて期待どおりのときだけ、このブランチのコードを社内確認用の API(Render)にデプロイする(別の承認)
+7. アプリ(または curl)で`GET /home`・`GET /calendar`・`GET /events/{id}`(既存のイベント)が 200 を返すことを確かめる。この時点では FOMC の行が無いので、画面の見た目は変わらない(全行`is_provisional = false`)
+
+### 12.5 通知(FOMC固有の注意)
+
+通知の仕組み(サーバーからのプッシュは無く、iOSが`GET /notifications/upcoming`の結果で端末のローカル通知を予約する。通知一覧は`GET /notifications`のときに書かれる)と、DEV確認中に意図しない通知を出さない一般的な方法は **dev-environment.md 11.7節(Task 2、別ブランチ)** にある。ここでは FOMC に固有のことだけを書く。通知のコードは変えていない。
+
+- 指標`US_FOMC`は重要度`HIGH`(`supabase/seed.sql`)・精度`EXACT`・`SCHEDULED`なので、**暫定の会合も含めて**既定の設定(「プッシュ通知」「経済指標」オン、重要度`{HIGH,MEDIUM}`、5分前)なら通知の対象になる。暫定かどうかは通知の条件に入っていない
+- **2026-10-28 18:00Z(日本時間 10/29 03:00、通知は既定で 02:55)は、既に`GET /notifications/upcoming`の7日間に入っている**。10/28 より前にジョブを動かすと、その後アプリを開いた(またはバックグラウンド更新が走った)テスト端末は、すぐに深夜 02:55 の「FOMC政策金利の5分前」のローカル通知を予約する。発表時刻の後に通知一覧を開けば一覧にも入る
+- 次の 2026-12-09 19:00Z(暫定、日本時間 12/10 04:00、通知は 03:55)が7日間に入るのは 2026-12-02 19:00Z 以降。2027年分は 2027-01-20 以降まで入らない
+- 防ぎ方: **ジョブを動かす前に**、11.7節の方法1(テスト用アカウントのアプリで「設定 → 通知」の「プッシュ通知」をオフにして保存)か方法2(「経済指標」をオフ、または重要度から「高」を外す)を行う。どちらもしないなら、2026-10-28 18:00Z を過ぎてから動かす(10/28 の行は作られず、12.6節の期待値は9行・確定0・暫定9になる。ただし12/02 以降は同じ対応が要る)
+- 日時を後から直すと`event_schedule_changes`に`RESCHEDULED`が入り、通知一覧の「カレンダー更新」に出る(ローカル通知にはならない)。暫定→確定(12.7節)では何も出ない
+
+### 12.6 ジョブの実行(手動。定期実行には登録していない)と期待値
+
+8. このブランチのコードで、社内確認用DBの`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`を(会社のPCに残さない方法で)渡して`npm run ingest:fomc-schedule`を1回動かす。外部へのアクセスは無い。出力の1行JSONを記録する
+   - 2026-10-28 18:00Z より前に動かした場合の期待: `inserted: 10`・`updated: 0`・`unchanged: 0`・`provisional: 9`・`past: 0`・`removed: []`・`errors: []`
+   - それより後なら10月の会合は過去なので`inserted: 9`・`provisional: 9`・`past: 1`
+9. 次で確かめる(読むだけ)
+
+```sql
+-- (1) 期待: 10行(確定 1 = 2026-10-28 18:00Z・false、暫定 9 = 2026-12-09 19:00Z と 2027年の8回・true)。
+--     すべて EXACT・SCHEDULED・PENDING・HIGH
+select e.provider_event_id, e.release_datetime, e.release_datetime_precision, e.status, e.data_status,
+       e.is_provisional, e.importance
+from economic_events e join economic_indicators i on i.id = e.indicator_id
+where i.code = 'US_FOMC' and e.provider = 'fomc_schedule'
+order by e.release_datetime;
+-- (2) 期待: 時刻は 18:00Z か 19:00Z だけ(0行)
+select provider_event_id, release_datetime from economic_events
+where provider = 'fomc_schedule'
+  and to_char(release_datetime at time zone 'UTC', 'HH24:MI') not in ('18:00', '19:00');
+-- (3) 期待: 確定 1・暫定 9
+select is_provisional, count(*) from economic_events where provider = 'fomc_schedule' group by is_provisional;
+-- (4) 期待: 他の provider の行に暫定は無い(0)
+select count(*) from economic_events where provider <> 'fomc_schedule' and is_provisional;
+-- (5) 期待: 12.2 (d) + 10
+select count(*) as total_events from economic_events;
+-- (6) 期待: 値は入っていない(0)
+select count(*) from event_snapshots s join economic_events e on e.id = s.event_id
+where e.provider = 'fomc_schedule';
+-- (7) 期待: 12.2 (e) と同じ件数(+0。新しい行を入れただけでは記録されない)
+select count(*) as schedule_changes from event_schedule_changes;
+-- (8) 期待: 最新の1行が SUCCESS、details に inserted / updated / unchanged / cancelled / provisional / past / removed
+select status, fetched_count, success_count, error_count, details, started_at
+from ingestion_logs where job = 'ingest:fomc-schedule' order by started_at desc limit 1;
+```
+
+10. もう一度動かし、`inserted: 0`・`updated: 0`・`unchanged: 10`(10/28 18:00Z より後なら`unchanged: 9`・`past: 1`)であること、(5)(7) が変わらないことを確かめる(何度動かしても同じ)
+11. アプリのカレンダーで、2026-12-09 の FOMC の行に「予定（暫定）」が出て、2026-10-28 の行には出ないことを確かめる
+
+### 12.7 暫定→確定の手順(会合ごとに人が行う。ジョブは自動で判断しない)
+
+暫定→確定はコードの表(`src/ingestion/mappings/fomcSchedule.ts`)を直してジョブを動かしたときだけ変わる。ただし API は**発表日時を過ぎた行を`is_provisional = false`で返す**(`src/domain/provisional.ts`、api-design.md v1.32 14.6節)ので、表を直すのが遅れても、過ぎた会合に「予定（暫定）」が残ることはない。表を直すのは「次の会合」を確定と出すため。
+
+例: 2026-10-27〜28 の会合の後
+
+1. 会合日程のページ(https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm)と calendar.json(https://www.federalreserve.gov/json/calendar.json)で、2026-12-09 の 14:00(`FOMC Meeting`)が載っていて日付が変わっていないことを確かめる
+2. `mappings/fomcSchedule.ts` の`meeting('2026-12-08', '2026-12-09', true, true)`を`meeting('2026-12-08', '2026-12-09', true, false)`に直し、`CHECKED_AT`を確認した日にする。テスト`tests/ingestion/fomcSchedule.test.ts`の表の期待値(と`checkedAt`)も同じく直し、`npm test`を通す
+3. コミットしてレビュー・マージ(通常のコードの変更と同じ)
+4. **別の承認を得てから** `npm run ingest:fomc-schedule` を動かす。期待: `updated: 1`(12/09 の行の`is_provisional`が`false`になる)・残りは`unchanged`・10/28 は`past`
+5. 次で確かめる: 12/09 の行が`is_provisional = false`、`release_datetime`は変わらない(19:00Z)、`event_schedule_changes`の件数は変わらない(トリガーは`AFTER UPDATE OF release_datetime, status`だけで、`is_provisional`だけの更新では起動しない。結合テスト`tests/integration/fomc-schedule.test.ts`で確認済み)
+
+```sql
+select provider_event_id, release_datetime, is_provisional, updated_at
+from economic_events where provider = 'fomc_schedule' order by release_datetime;
+select count(*) as schedule_changes from event_schedule_changes;
+```
+
+日付そのものが変わった場合は data-sources.md 15.6節の手順(`eventKey`)で直す。こちらは`RESCHEDULED`が1行記録され、カレンダー更新の通知が出る。
+
+### 12.8 止める条件(どれか1つでも当てはまったら、先へ進まずに報告する)
+
+- 12.2 で、プロジェクトが`fx-event-analyzer-dev`でない、(a) が1行以上、(b) が`is_active = false`または`events`が0でない、(c) が0でない
+- 12.3 で、列の型・NOT NULL・既定値が期待と違う、`true`の行がある、全件数が変わった、トリガーの定義が 12.2 (f) と違う
+- 12.4 で、デプロイ後に 12.1節の表のどれかが 500 を返す
+- 12.6 で、ジョブが`FAILURE`、`errors`が空でない、件数・時刻・暫定の数が期待と違う、他の provider に暫定の行がある、`event_schedule_changes`が増えた、2回目で`inserted`か`updated`が0でない
+
+### 12.9 戻し方(必要なとき。この順番で行う)
+
+1. FOMCの行についた予定の変更の記録を消す: `delete from event_schedule_changes where kind = 'INDICATOR' and target_id in (select id from economic_events where provider = 'fomc_schedule');`(通知一覧に入った分も消すなら`delete from notification_inbox where kind = 'INDICATOR' and target_id in (select id::text from economic_events where provider = 'fomc_schedule');`)
+2. FOMCの行を消す: `delete from economic_events where provider = 'fomc_schedule';`(値・反応の行は作らないので、外部キーで止まらない)
+3. コードを前の版に戻して再デプロイする
+4. **最後に**列を消す: `alter table economic_events drop column if exists is_provisional;` → `notify pgrst, 'reload schema';`
+
+**コードを戻す前に列を消すと、12.1節の表の API(`GET /home`全体・`GET /calendar`・`GET /events/{id}`ほか)とジョブがすべて 500 になる。** 列を残したままでも前の版のコードは問題なく動く(読まないだけ)ので、迷ったら列は消さずに残す。
+
 ## 14. 品質レポート第9章「要人発言の鮮度」の読み方(2026-10-23、HQ承認「要人発言の鮮度監視」)
 
 `npm run report:data-quality`・`GET /api/v1/quality-report` の最後に「## 9. 要人発言の鮮度」が付く(第1〜8章は変えていない)。READ-ONLY。対象期間(`days`)に関係なく、取得元ごとに `ingest:speeches` の最新の実行と最後の SUCCESS を読む。異常があってもレポートのジョブは失敗にしない(終了コード0のまま)。

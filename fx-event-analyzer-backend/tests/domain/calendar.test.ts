@@ -65,6 +65,7 @@ describe('buildCalendarItems', () => {
         datetime: '2026-10-08T06:00:00+00:00',
         datetime_precision: 'EXACT',
         status: 'SCHEDULED',
+        is_provisional: false,
       },
       {
         kind: 'INDICATOR',
@@ -80,8 +81,32 @@ describe('buildCalendarItems', () => {
         datetime: '2026-10-08T12:30:00+00:00',
         datetime_precision: 'DATE_ONLY',
         status: 'SCHEDULED',
+        is_provisional: false,
       },
     ]);
+  });
+
+  it('carries is_provisional on indicator rows (absent = false); speeches are always false', () => {
+    const items = buildCalendarItems(
+      [event({ id: 'fomc', is_provisional: true }), event({ id: 'cpi', is_provisional: false }), event({ id: 'old' })],
+      [speech()],
+      {},
+      new Date('2026-10-01T00:00:00Z'),
+    );
+    expect(Object.fromEntries(items.map((item) => [item.id, item.is_provisional]))).toEqual({
+      fomc: true,
+      cpi: false,
+      old: false,
+      s1: false,
+    });
+  });
+
+  it('is_provisional is false once the datetime has passed (the DB flag stays true)', () => {
+    const fomc = event({ id: 'fomc', release_datetime: '2026-10-08T12:30:00+00:00', is_provisional: true });
+    const at = (now: string) => buildCalendarItems([fomc], [], {}, new Date(now))[0]?.is_provisional;
+    expect(at('2026-10-08T12:29:59Z')).toBe(true);
+    expect(at('2026-10-08T12:30:00Z')).toBe(false);
+    expect(at('2026-10-09T00:00:00Z')).toBe(false);
   });
 
   it('sorts by instant (not string), then INDICATOR before SPEECH, then id', () => {

@@ -15,6 +15,7 @@ import type {
   NewRevision,
   NewStagedValue,
   OfficialObservationRow,
+  ProviderEventRow,
   SpeakerRef,
   SpeechEventRow,
   StagedValue,
@@ -120,6 +121,18 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
       if (error) throw error;
       for (const row of (data ?? []) as IndicatorRef[]) map.set(row.code, row);
       return map;
+    },
+
+    async listEventsByProvider(provider: string): Promise<ProviderEventRow[]> {
+      return allPages<ProviderEventRow>((from, to) =>
+        supabase
+          .from('economic_events')
+          .select(`${EVENT_COLUMNS}, provider_event_id, is_provisional`)
+          .eq('provider', provider)
+          .not('provider_event_id', 'is', null)
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
     },
 
     async findEventByProviderId(provider: string, providerEventId: string): Promise<StoredEvent | null> {

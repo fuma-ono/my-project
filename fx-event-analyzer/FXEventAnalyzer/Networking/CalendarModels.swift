@@ -28,6 +28,9 @@ struct CalendarItem: Decodable, Equatable, Identifiable {
     let datetimePrecision: ReleaseDatetimePrecision?
     /// 指標と発言で値の種類が違う(`RELEASED`/`DELIVERED`など)ので文字列のまま持つ。
     let status: String
+    /// `is_provisional`(api-design v1.32): 予定の日時がまだ公式に確定していない(暫定)。
+    /// 古いBackendは返さないのでnil(= 暫定ではない)。画面は`isProvisional`を使う。
+    var provisionalFlag: Bool? = nil
 
     enum CodingKeys: String, CodingKey {
         case kind, id, title, importance, datetime, status
@@ -37,7 +40,11 @@ struct CalendarItem: Decodable, Equatable, Identifiable {
         case countryCode = "country_code"
         case currencyCode = "currency_code"
         case datetimePrecision = "datetime_precision"
+        case provisionalFlag = "is_provisional"
     }
+
+    /// 一覧の行に「予定（暫定）」を出すかどうか。
+    var isProvisional: Bool { provisionalFlag ?? false }
 
     var route: AppRoute {
         switch kind {

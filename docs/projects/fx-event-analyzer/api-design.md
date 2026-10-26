@@ -78,6 +78,7 @@
   - 13.2: `latest_event`は`release_datetime`が現在以前で最も新しいEvent(状態は問わない)。未来の予定は含めない
   - 23: Event 検索の並びを、各指標の次の予定(1指標1件、近い順)→ 現在より前の Event(新しい順)に変更。2件目以降の未来の予定は返さない
   - 発表の履歴(`status=RELEASED`など)の並び順、13.1 の`next_release_datetime`(もともと現在以降の最も早い予定)は変えない
+- **v1.32**(2026-10-22): 暫定の予定(HQ承認 2026-10-22 Task 3「FOMCの公式日程」)。`GET /calendar`の各行(14.6節)と`GET /events/{event_id}`の`event`(14.1節)に`is_provisional`(boolean)を追加。`economic_events.is_provisional`(db-design.md v4.17 3.5節、Migration `20261022000002_economic_events_provisional.sql`)の値で、予定の日時がまだ公式に確定していない(暫定)なら`true`。`SPEECH`の行は常に`false`。今のところ`true`になるのはFOMCの日程表(data-sources.md 15章)の暫定の会合だけ。APIは応答を作る時点で「DBの値が`true`**かつ**日時が今より先」のときだけ`true`を返す(過ぎた会合は、DBの値を直す前でも`false`。`src/domain/provisional.ts`の`effectiveIsProvisional`を`GET /calendar`・`GET /events/{id}`の両方で使う。`GET /home`は`is_provisional`を返さない)。iOSは`true`の行に「予定（暫定）」と表示し、項目が無い古いBackendでは`false`として扱う。項目の追加だけで、既存の項目・並び順・絞り込みは変えない。**既知の制約**(14.6節): FOMCの行は発表後も`SCHEDULED`・`DATA_PENDING`のままで、値・値動き・過去の結果は自動では入らない。**この項目を読むコードを、Migration より先にデプロイしてはいけない**(dev-environment.md 12章)
 - **v1.34**(2026-10-23): 要人発言の鮮度(HQ承認 2026-10-23)。`GET /home`に任意の`speeches_status`(`window_days` / `last_success_at` / `stale`)を追加(12章)。ホームの「直近の要人発言」が0件のとき、「直近7日間に発言が無い」のか「取得できていない」のかをアプリが言い分けるため。**`speeches`の中身・形は変えない。** 判定は品質レポート第9章(dev-environment.md 14章)の「取得の失敗」と同じ関数を使う
 - **v1.35**(2026-10-25): 過去イベント比較・イベント詳細に前月比・前年比を併記(HQ指示 2026-10-25「過去イベント比較の表も前月と前年必要だと思う」)。`GET /indicators/{indicator_id}/comparison`の`events[]`、`GET /events/{event_id}`・`GET /events/{event_id}/history`の`snapshot`に`secondary_value_kind`(`"MOM_PCT"`等、副指標が無い指標は`null`)・`secondary_forecast`・`secondary_actual`・`secondary_previous`を追加(21章・14章・20章)。米国CPIは本来の値(`actual`等)がYoY%(前年比)なので、これに加えてMoM%(前月比)を`secondary_*`として追加した — 新しい外部データ源は増やさず、既に取得しているBLS公式系列(CUUR0000SA0)を別の変換で計算しただけ(data-sources.md参照)。副指標が設定されていない指標(米国CPI以外、2026-10-25時点で全て)は常に`null`
 
@@ -675,6 +676,8 @@ Event Detailでは以下を1回のAPIで取得可能とする。
 
 Movement Chart等の比較的重いデータ、および特定timeframe・特定ペアの詳細Reaction、全revision履歴は別APIで取得する。
 
+**`event.is_provisional`(v1.32で追加)**: 予定の日時がまだ公式に確定していない(暫定)なら`true`、それ以外は`false`(`economic_events.is_provisional`が`true`で、かつ`release_datetime`が今より先のときだけ`true`。14.6節と同じ判定)。
+
 **`event.display_name`(v1.22で追加)**: 指標の一覧画面の表示名(13.2節の`display_name`、未登録は`null`)。画面は`display_name`を指標名として表示し、`null`なら`indicator_name`(正式名)を表示する。`indicator_name`は変えない。
 
 **`major_fx_reactions`(v1.17で追加)**: SCR-007「主要通貨ペアの値動き(pips)」の表。行 = 通貨ペア、列 = `1m`・`5m`・`15m`。「通貨ペアを選択して詳細を見る」で選んだ行の`fx_pair_id`・`symbol`でSCR-008 相場反応詳細(18章)を開く。
@@ -798,7 +801,8 @@ Response：`{ "from": string, "to": string, "items": CalendarItem[] }`(`from` / 
   "importance": "HIGH",
   "datetime": "2026-10-08T12:30:00+00:00",
   "datetime_precision": "EXACT",
-  "status": "SCHEDULED"
+  "status": "SCHEDULED",
+  "is_provisional": false
 }
 ```
 
@@ -813,6 +817,8 @@ Response：`{ "from": string, "to": string, "items": CalendarItem[] }`(`from` / 
 - `datetime`：`INDICATOR`は`release_datetime`、`SPEECH`は`statement_datetime`
 - `datetime_precision`：`INDICATOR`は`release_datetime_precision`(6章)、`SPEECH`は常に`EXACT`
 - `status`：`INDICATOR`はイベントの`status`(`SCHEDULED` / `RELEASED` / `CANCELLED`)、`SPEECH`は発言の`status`(`SCHEDULED` / `DELIVERED`)。**`CANCELLED`の要人発言は返さない**
+- `is_provisional`(v1.32)：`INDICATOR`は`economic_events.is_provisional`(予定の日時がまだ公式に確定していない = 暫定なら`true`)。`SPEECH`は常に`false`。いまのところ`true`になるのはFOMCの日程表の暫定の会合だけ(data-sources.md 15章。FRBの「各会合の日程は直前の会合で確認されるまで暫定」というルールと、FRBのカレンダーにまだ発表時刻が載っていない会合)。iOSは`true`の行に「予定（暫定）」と表示する。`datetime`・`status`の意味は変えない(暫定でも`status`は`SCHEDULED`)。**`datetime`を過ぎた行は常に`false`**(DBの`is_provisional`が`true`のままでも。会合が過ぎた後に「予定（暫定）」が残らないよう、応答を作る時点で判定する。`GET /events/{id}`も同じ)
+- **既知の制約(FOMCの行、v1.32)**: FOMCの日程表の行(provider `fomc_schedule`)は予定だけで、**発表後も`status = SCHEDULED`・`data_status = PENDING`(`DATA_PENDING`)のまま**変わらない。政策金利の結果(実績値)・相場反応(値動きの取り込みジョブは`RELEASED`の行だけを対象にする)・過去の結果(`/history`)は**自動では入らない**。`GET /home`では発表の当日中も「これからの予定」の側に出る(iOSは`status = SCHEDULED`の行を「これから」に分けるため)。`GET /events/{id}`の`snapshot`は`null`、値動きは`DATA_PENDING`のまま
 - 並び順：`datetime`昇順 → 同時刻は`INDICATOR`が先 → `id`昇順
 
 ## 14.7 GET /api/v1/speaker-photos/{file}(v1.25で追加)

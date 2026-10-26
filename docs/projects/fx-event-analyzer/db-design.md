@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.16
+# FX Event Analyzer: DB詳細設計 v4.17
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -46,6 +46,7 @@
   - `FxPrice`に`verification_status`(`VERIFIED` / `SINGLE_SOURCE` / `UNVERIFIED`、既存行は`SINGLE_SOURCE`)・`cross_check_source`・`cross_check_close`・`cross_check_diff_pips`を追加(3.11節)。`UNVERIFIED`の足はRead APIが使わない
   - `IngestionLog`に`job`・`skipped_count`・`review_count`・`details`(jsonb)を追加(3.13節)。`data_type`の値セットは変えない(公式統計・要人発言は`OTHER`、ジョブ名は`job`)
 - **v4.16**(2026-10-16): FREEの機能の付与(HQ指示 2026-10-16)。全ユーザーが持つ機能の表`DefaultEntitlement`(`default_entitlements`、3.3.1節)を追加し、`VIEW_BASIC_EVENT` / `VIEW_HISTORICAL` / `VIEW_MARKET_REACTION`を入れた。Migration `20261016000002_default_entitlements.sql`。これまで新しいユーザーに`Entitlement`の行を入れる処理が無く、登録したばかりのユーザーがFREEの機能も使えなかった。ユーザーの`Entitlement`に同じfeature_codeの行があれば、有効・無効・期限切れのどれでもそちらが優先する(api-design.md v1.30 28章)。RLSはポリシーなし(service_roleのみ)
+- **v4.17**(2026-10-22): 暫定の予定(HQ承認 2026-10-22 Task 3「FOMCの公式日程」、api-design.md v1.32)。`EconomicEvent`に`is_provisional`(boolean, NN, DEF `false`)を追加(3.5節)。Migration `20261022000002_economic_events_provisional.sql`(`add column if not exists`、既存の行はすべて`false`)。設定するのはFOMCの日程表のジョブ(`npm run ingest:fomc-schedule`、data-sources.md 15章)だけ。`EventScheduleChange`のトリガー(3.19節)は`AFTER UPDATE OF release_datetime, status`のままで、`is_provisional`だけを変える更新では起動しない(暫定→確定は日時の変更として記録しない)。RLSは変わらない
 
 ---
 
@@ -241,6 +242,7 @@ IDX(user_id)
 | importance | text | NN, CHK: `importance IN ('LOW','MEDIUM','HIGH')` | イベント単位でも保持(既存設計踏襲) |
 | status | text | NN, DEF `SCHEDULED`, CHK: `status IN ('SCHEDULED','RELEASED','CANCELLED')` | |
 | data_status | text | NN, DEF `PENDING`, CHK: `data_status IN ('PENDING','AVAILABLE','PARTIAL','UNAVAILABLE')` | |
+| is_provisional | boolean | NN, DEF `false` | v4.17。予定の日時がまだ公式に確定していない(暫定)なら`true`。FOMCの日程表(provider `fomc_schedule`)だけが設定する。APIは`GET /calendar`・`GET /events/{id}`の`is_provisional`で返す |
 | created_at | timestamptz | NN, DEF now() | |
 | updated_at | timestamptz | NN, DEF now() | |
 
@@ -590,7 +592,7 @@ CHK: `triggered_at IS NULL OR NOT is_active`(通知済みは有効に戻らな�
 
 IDX(changed_at)、IDX(kind, target_id)。
 
-**記録するトリガー**: `economic_events`の`AFTER UPDATE OF release_datetime, status`(関数`record_economic_event_schedule_change()`)と、`speech_events`の`AFTER UPDATE OF statement_datetime, status`(関数`record_speech_event_schedule_change()`)。変更前が`SCHEDULED`の行だけ記録する。`status`が`CANCELLED`になったら`CANCELLED`、それ以外で日時が変わったら`RESCHEDULED`。発表済み・発言済みのイベントの時刻の訂正は記録しない。
+**記録するトリガー**: `economic_events`の`AFTER UPDATE OF release_datetime, status`(関数`record_economic_event_schedule_change()`)と、`speech_events`の`AFTER UPDATE OF statement_datetime, status`(関数`record_speech_event_schedule_change()`)。変更前が`SCHEDULED`の行だけ記録する。`status`が`CANCELLED`になったら`CANCELLED`、それ以外で日時が変わったら`RESCHEDULED`。発表済み・発言済みのイベントの時刻の訂正は記録しない。`EconomicEvent.is_provisional`(v4.17)だけを変える更新はトリガーの列に含まれないため起動せず、何も記録しない。
 
 **保持**: 通知一覧の`CALENDAR_UPDATE`の保存期間(7日)を過ぎた行は日次ジョブ`npm run jobs:cleanup-notifications`が消す。
 

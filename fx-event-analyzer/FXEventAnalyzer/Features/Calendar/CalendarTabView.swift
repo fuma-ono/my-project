@@ -349,11 +349,20 @@ private struct CalendarDayList: View {
                 // 省略(…)ではなく縮小で対応するようminimumScaleFactorを
                 // 0.5まで広げた。
                 // 表示名は全画面統一(HQ指示 2026-10-13)。
-                NotoText.text(item.kind == .indicator ? CountryFlag.indicatorDisplayText(item.title, countryCode: item.countryCode, displayName: item.displayName) : item.title, size: 9)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                    .padding(.leading, 2)
+                // HQ承認(2026-10-22 Task 3): 日時がまだ公式に確定していない予定(FOMCの
+                // 先の会合など、`is_provisional`)は、名前の下に小さく「予定（暫定）」と出す。
+                VStack(alignment: .leading, spacing: 1) {
+                    NotoText.text(item.kind == .indicator ? CountryFlag.indicatorDisplayText(item.title, countryCode: item.countryCode, displayName: item.displayName) : item.title, size: 9)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                    if item.isProvisional {
+                        NotoText.text("予定（暫定）", size: 6)
+                            .foregroundStyle(SettingsCardStyle.subtitleColor)
+                            .lineLimit(1)
+                    }
+                }
+                .padding(.leading, 2)
                 Spacer(minLength: 0)
                 NotoText.text(item.importance.rawValue, size: 6.5)
                     .tracking(-0.4)

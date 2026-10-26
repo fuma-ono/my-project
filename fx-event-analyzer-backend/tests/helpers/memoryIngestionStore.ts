@@ -12,6 +12,7 @@ import type {
   NewRevision,
   NewStagedValue,
   OfficialObservationRow,
+  ProviderEventRow,
   SpeakerRef,
   SpeechEventRow,
   StagedValue,
@@ -33,6 +34,8 @@ export class MemoryIngestionStore implements IngestionStore {
     provider_event_id: string;
     importance: string;
     currency_code?: string;
+    /** economic_events.is_provisional — absent = the DB default (false). */
+    is_provisional?: boolean;
   })[] = [];
   eventPriceReactions: EventPriceReactionRow[] = [];
   snapshots: NewReleaseSnapshot[] = [];
@@ -63,6 +66,14 @@ export class MemoryIngestionStore implements IngestionStore {
 
   findIndicatorsByCode(codes: readonly string[]): Promise<Map<string, IndicatorRef>> {
     return Promise.resolve(new Map(this.indicators.filter((i) => codes.includes(i.code)).map((i) => [i.code, i])));
+  }
+
+  listEventsByProvider(provider: string): Promise<ProviderEventRow[]> {
+    return Promise.resolve(
+      this.events
+        .filter((e) => e.provider === provider && e.provider_event_id)
+        .map((e) => ({ ...e, is_provisional: e.is_provisional ?? false })),
+    );
   }
 
   findEventByProviderId(provider: string, providerEventId: string): Promise<StoredEvent | null> {

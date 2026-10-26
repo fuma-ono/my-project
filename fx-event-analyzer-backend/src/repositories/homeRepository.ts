@@ -9,6 +9,8 @@ export interface HomeEventRow {
   importance: string;
   status: string;
   data_status: string;
+  /** economic_events.is_provisional — 予定の日時がまだ公式に確定していない(暫定)。 */
+  is_provisional: boolean;
   indicator_name: string;
   /** 一覧画面の表示名(`economic_indicators.display_name`)。未登録はnull。 */
   indicator_display_name: string | null;
@@ -26,7 +28,7 @@ export async function listEventsInRange(
   const { data, error } = await supabase
     .from('economic_events')
     .select(
-      'id, indicator_id, release_datetime, release_datetime_precision, importance, status, data_status, economic_indicators!inner(name, display_name, country_code, currency_code, unit)',
+      'id, indicator_id, release_datetime, release_datetime_precision, importance, status, data_status, is_provisional, economic_indicators!inner(name, display_name, country_code, currency_code, unit)',
     )
     .gte('release_datetime', startUtc)
     .lt('release_datetime', endUtc)
@@ -49,6 +51,7 @@ export async function listEventsInRange(
       importance: row.importance,
       status: row.status,
       data_status: row.data_status,
+      is_provisional: row.is_provisional === true,
       indicator_name: indicator.name,
       indicator_display_name: indicator.display_name ?? null,
       country_code: indicator.country_code,

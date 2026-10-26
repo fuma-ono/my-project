@@ -27,6 +27,7 @@ import {
   type EconomicEventDbStatus,
   type ReleaseDatetimePrecision,
 } from '../domain/dataQuality.js';
+import { effectiveIsProvisional } from '../domain/provisional.js';
 import { resolveRevisionStatus } from '../domain/revisionStatus.js';
 import { buildMeta, parsePagination, rangeFor } from '../utils/pagination.js';
 
@@ -88,6 +89,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
         release_datetime_precision: event.release_datetime_precision,
         importance: event.importance,
         status: event.status,
+        // 過ぎた予定は暫定と出さない(domain/provisional.ts、GET /calendar と同じ)。
+        is_provisional: effectiveIsProvisional(event.is_provisional, event.release_datetime, new Date()),
         data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
         revision_status: resolveRevisionStatus(revisionCount),
       },
