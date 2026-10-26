@@ -97,24 +97,37 @@ struct HistoricalComparisonView: View {
         let events = newestFirst
             ? response.events.sorted { $0.releaseDatetime > $1.releaseDatetime }
             : response.events.sorted { $0.releaseDatetime < $1.releaseDatetime }
-        return ZStack {
+        return ZStack(alignment: .topLeading) {
             V5GlowBackground()
-            VStack(alignment: .leading, spacing: 12) {
-                landscapeTopBar
-                header(response)
+            VStack(alignment: .leading, spacing: 10) {
+                landscapeHeaderBar(response)
+                // HQ指示(2026-10-26)「日時～15分横の余白が目立つのでなくして」:
+                // 表自体の幅(`tableContentWidth`相当)は列の合計で決まり画面幅
+                // より狭いことがあるため、カードの背景・枠線を画面の残り幅まで
+                // 広げて、未装飾の余白として目立たないようにする。
                 landscapeTable(events, unit: response.indicator.unit)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 if let limit = response.historyLimit, limit.isLimited {
                     planLimitRow(limit)
                 }
             }
             .padding(.horizontal, 28)
             .padding(.top, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .ignoresSafeArea()
     }
 
-    private var landscapeTopBar: some View {
-        HStack(spacing: 8) {
+    /// HQ指示(2026-10-26)「過去イベント比較や国旗マーク、指標名が端に
+    /// 寄りすぎているので日時の上あたりにして」: 以前は戻るボタン+タイトルの
+    /// 行(`landscapeTopBar`)と国旗+指標名の行(`header(_:)`)を別々に縦積み
+    /// していたが、横画面は横幅に余裕があるため1行にまとめ、表(日時列が
+    /// 左端)のすぐ上・同じ左端に揃えて置く。
+    private func landscapeHeaderBar(_ response: ComparisonResponse) -> some View {
+        let indicator = response.indicator
+        let country = indicator.countryCode ?? ""
+        let name = CountryFlag.indicatorDisplayText(indicator.name, countryCode: country, displayName: indicator.displayName)
+        return HStack(spacing: 10) {
             Button(action: { dismiss() }) {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 16, weight: .semibold))
@@ -124,7 +137,24 @@ struct HistoricalComparisonView: View {
             .accessibilityLabel("戻る")
             .accessibilityIdentifier("historyLandscapeBack")
             NotoText.text("過去イベント比較", size: 15).foregroundStyle(.white)
-            Spacer()
+            Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 1, height: 22)
+            CountryFlagView(countryCode: country, diameter: 24)
+            VStack(alignment: .leading, spacing: 1) {
+                NotoText.text(name, size: 12)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                HStack(spacing: 3) {
+                    NotoText.text(CountryFlag.japaneseName(forCountry: country), size: 8.5)
+                    NotoText.text("｜", size: 8.5).opacity(0.6)
+                    NotoText.text(indicator.currencyCode ?? "", size: 8.5)
+                }
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+            }
+            Spacer(minLength: 8)
+            OverlappingPairFlags(symbol: viewModel.fxPairSymbol, diameter: 10)
+            NotoText.text(Self.pairLabel(viewModel.fxPairSymbol), size: 9)
+                .foregroundStyle(.white)
         }
         // `.accessibilityElement(children: .contain)`: 中の戻るボタンを個別に
         // タップ可能なまま保ちつつ、このHStack自体もXCUITestから識別子で

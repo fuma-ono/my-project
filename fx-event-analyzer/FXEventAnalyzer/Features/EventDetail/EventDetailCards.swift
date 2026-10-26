@@ -134,7 +134,7 @@ struct EventDetailCards: View {
         let secondaryLabel = Self.secondaryLabel(snapshot?.secondaryValueKind)
         let primaryLabel = Self.primaryLabel(forSecondary: snapshot?.secondaryValueKind)
 
-        return VStack(alignment: .leading, spacing: 3) {
+        return VStack(alignment: .leading, spacing: 2) {
             resultsRow(
                 label: primaryLabel,
                 actual: actual,
@@ -163,7 +163,12 @@ struct EventDetailCards: View {
         // わずかに低いだけなので、この縮小をしないと従来どおり
         // `results`側だけ元の高さのまま残り、`statementCard`との位置が
         // また揃わなくなる)。
-        .padding(.vertical, 2)
+        // HQ指示(2026-10-26)「前年比と前月比の枠をもう少し小さくして、
+        // それに合わせて中の文字サイズも小さく。下が見切れている」:
+        // 前年比/前月比の2段構成になって以来カードが縦に伸び、画面下部
+        // (値動き表・次回発表予定)が1画面に収まらなくなっていた。行間・
+        // 文字サイズ(`resultsRow`・`resultColumn`)を全体的に少し詰めた。
+        .padding(.vertical, 1)
         // HQ指示(2026-10-12、8回目)「要人発言の通貨ペアはイベント詳細と
         // 同じ位置にして」: 要人発言側の`statementCard`(発言内容)はこの
         // `results`より内容が短く縦幅が小さいため、値動き表の開始位置が
@@ -178,9 +183,9 @@ struct EventDetailCards: View {
     }
 
     private func resultsRow(label: String?, actual: Double?, forecast: Double?, previous: Double?, unit: String?, released: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 1) {
             if let label {
-                NotoText.text(label, size: 8)
+                NotoText.text(label, size: 7)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                     .padding(.leading, 6)
             }
@@ -231,15 +236,17 @@ struct EventDetailCards: View {
 
     private func resultColumn(_ title: String, value: Double?, unit: String?, note: String?, placeholder: String = "--") -> some View {
         // HQ指示(2026-10-09)「結果、予想、前回と数字、前回比を大きく中央に」。
-        VStack(alignment: .center, spacing: 3) {
-            NotoText.text(title, size: 9.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+        // HQ指示(2026-10-26)「枠をもう少し小さくして、文字サイズも小さく」:
+        // 前年比/前月比の2段構成でカードが縦に伸びたため、9.5/17/8→8.5/15/7に詰めた。
+        VStack(alignment: .center, spacing: 2) {
+            NotoText.text(title, size: 8.5).foregroundStyle(SettingsCardStyle.subtitleColor)
             Text(value.map { ValueFormat.withUnit($0, unit: unit) } ?? placeholder)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-            NotoText.text(note ?? " ", size: 8)
+            NotoText.text(note ?? " ", size: 7)
                 .foregroundStyle(SettingsListLayout.sectionTitleColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
