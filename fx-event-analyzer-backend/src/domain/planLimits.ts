@@ -47,7 +47,9 @@ export const PLAN_LIMITS: Readonly<Record<Plan, PlanLimits>> = {
     favorites_max: 3,
     notification_importances: ['HIGH'],
     notification_fx_pairs_max: 1,
-    history_events_max: 5,
+    // v1.37(大野さん決定 2026-10-26): 過去イベント比較・要人発言の比較の FREE の件数を 5 → 3
+    // (過去の発表の制限「直近3回」と揃える)。PRO は 20 のまま。
+    history_events_max: 3,
     rate_alerts_max: 1,
     past_releases_max: 3,
   },

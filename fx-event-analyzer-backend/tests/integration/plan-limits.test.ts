@@ -127,7 +127,7 @@ describe.skipIf(!integration)('Plan limits (FREE / PRO)', () => {
         favorites_max: 3,
         notification_importances: ['HIGH'],
         notification_fx_pairs_max: 1,
-        history_events_max: 5,
+        history_events_max: 3,
         past_releases_max: 3,
       });
       // 00:00 JST on the 1st of last month = 15:00 UTC on the day before.
@@ -276,31 +276,37 @@ describe.skipIf(!integration)('Plan limits (FREE / PRO)', () => {
       `/indicators/${US_NFP_INDICATOR_ID}/comparison?fx_pair_id=${USDJPY_FX_PAIR_ID}&${query}`;
     const historyFeatures = [FEATURE_CODES.VIEW_HISTORICAL];
 
-    it('FREE lists the 5 most recent releases; stats use the 3 not locked by the past-release limit', async () => {
+    it('FREE lists the 3 most recent releases (v1.37: 5 → 3), none locked, all in the stats', async () => {
       const { headers } = await newUser('FREE', historyFeatures);
       const { status, body } = await request('GET', url('timeframe=5m'), headers);
       expect(status).toBe(200);
-      // HQ指示 2026-10-22: 4・5回目は過去の発表の制限(直近3回)でロックされ、統計に入らない。
+      // 件数(3)と過去の発表の制限(直近3回)が同じになったので、比較の行はロックされない。
       expect(body.total_events).toBe(3);
       expect(body.analyzable_events).toBe(3);
       expect(body.stats.upward_count).toBe(3);
-      expect(body.events.map((event: { event_id: string }) => event.event_id)).toEqual(MOST_RECENT_FIRST.slice(0, 5));
-      expect(body.events.map((event: { locked: boolean }) => event.locked)).toEqual([false, false, false, true, true]);
-      expect(body.meta).toEqual({ page: 1, limit: 20, total: 5, has_next: false });
-      expect(body.history_limit).toEqual({ applied: 5, max_for_plan: 5, pro_max: 20 });
+      expect(body.events.map((event: { event_id: string }) => event.event_id)).toEqual(MOST_RECENT_FIRST.slice(0, 3));
+      expect(body.events.map((event: { locked: boolean }) => event.locked)).toEqual([false, false, false]);
+      expect(body.meta).toEqual({ page: 1, limit: 20, total: 3, has_next: false });
+      expect(body.history_limit).toEqual({ applied: 3, max_for_plan: 3, pro_max: 20 });
     });
 
     it('FREE pagination stops at the cap', async () => {
       const { headers } = await newUser('FREE', historyFeatures);
-      const second = await request('GET', url('timeframe=5m&page=2&limit=3'), headers);
-      expect(second.body.events.map((event: { event_id: string }) => event.event_id)).toEqual(
-        MOST_RECENT_FIRST.slice(3, 5),
+      const first = await request('GET', url('timeframe=5m&page=1&limit=2'), headers);
+      expect(first.body.events.map((event: { event_id: string }) => event.event_id)).toEqual(
+        MOST_RECENT_FIRST.slice(0, 2),
       );
-      expect(second.body.meta).toEqual({ page: 2, limit: 3, total: 5, has_next: false });
+      expect(first.body.meta).toEqual({ page: 1, limit: 2, total: 3, has_next: true });
 
-      const third = await request('GET', url('timeframe=5m&page=3&limit=3'), headers);
+      const second = await request('GET', url('timeframe=5m&page=2&limit=2'), headers);
+      expect(second.body.events.map((event: { event_id: string }) => event.event_id)).toEqual(
+        MOST_RECENT_FIRST.slice(2, 3),
+      );
+      expect(second.body.meta).toEqual({ page: 2, limit: 2, total: 3, has_next: false });
+
+      const third = await request('GET', url('timeframe=5m&page=3&limit=2'), headers);
       expect(third.body.events).toEqual([]);
-      expect(third.body.meta.total).toBe(5);
+      expect(third.body.meta.total).toBe(3);
     });
 
     it('PRO uses every release up to 20 (timeframe=all too)', async () => {

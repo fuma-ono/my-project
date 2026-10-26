@@ -280,11 +280,11 @@ describe.skipIf(!integration)('Speech reactions / speaker comparison', () => {
       expect(body.history_limit).toEqual({ applied: 6, max_for_plan: 20, pro_max: 20 });
     });
 
-    it('FREE: capped at history_events_max (5); fx_pair_id omitted = USDJPY', async () => {
+    it('FREE: capped at history_events_max (3, v1.37); fx_pair_id omitted = USDJPY', async () => {
       const { body } = await get(`/speakers/${SPEAKER_ID}/comparison`, await newUser(FREE));
       expect(body.fx_pair_id).toBe(USDJPY);
-      expect(body.events).toHaveLength(5);
-      expect(body.history_limit).toEqual({ applied: 5, max_for_plan: 5, pro_max: 20 });
+      expect(body.events).toHaveLength(3);
+      expect(body.history_limit).toEqual({ applied: 3, max_for_plan: 3, pro_max: 20 });
     });
 
     it('403 without VIEW_HISTORICAL, 404 SPEAKER_NOT_FOUND / FX_PAIR_NOT_FOUND', async () => {

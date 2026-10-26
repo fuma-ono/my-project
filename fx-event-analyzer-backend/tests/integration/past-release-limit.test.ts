@@ -608,15 +608,18 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
       pips_by_timeframe: Record<string, number | string | null>;
     };
 
-    it('FREE: 5 rows (the setting), the 3 locked ones without values, stats from the 2 unlocked ones', async () => {
+    // v1.37: FREE の比較は 3 行(B7・B6・B5)。B5 は過去の発表の制限でロックされる(ロックは B_NO_SNAPSHOT も数える)。
+    it('FREE: 3 rows (the setting), the locked one (B5) without values, stats from the 2 unlocked ones', async () => {
       const { headers } = await newUser('FREE');
       const { status, body } = await get(url(), headers);
       expect(status).toBe(200);
       const rows: ComparisonRow[] = body.events;
-      expect(ids(rows)).toEqual([B7, B6, B5, B4, B3]);
+      expect(ids(rows)).toEqual([B7, B6, B5]);
       expect(ids(rows)).not.toContain(B_NO_SNAPSHOT.id);
-      expect(body.meta).toEqual({ page: 1, limit: 20, total: 5, has_next: false });
-      expect(body.history_limit).toEqual({ applied: 5, max_for_plan: 5, pro_max: 20 });
+      expect(ids(rows)).not.toContain(B4);
+      expect(ids(rows)).not.toContain(B3);
+      expect(body.meta).toEqual({ page: 1, limit: 20, total: 3, has_next: false });
+      expect(body.history_limit).toEqual({ applied: 3, max_for_plan: 3, pro_max: 20 });
       expect(body.past_release_limit).toEqual({ applied: true, max_for_plan: 3, pro_max: null });
 
       // Each row carries only what the comparison table needs: no explanation,

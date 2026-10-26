@@ -650,7 +650,7 @@ final class PastReleaseLimitTests: XCTestCase {
             "favorites_max": 3,
             "notification_importances": ["HIGH"],
             "notification_fx_pairs_max": 1,
-            "history_events_max": 5,
+            "history_events_max": 3,
             "past_releases_max": 3
           }
         }
