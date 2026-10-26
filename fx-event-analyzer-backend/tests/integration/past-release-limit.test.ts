@@ -570,13 +570,13 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
     });
   });
 
-  describe('Historical comparison: FREE 5 / PRO 20 rows, FREE values and stats only from unlocked rows', () => {
+  describe('Historical comparison: FREE 3 (v1.37) / PRO 20 rows, FREE values and stats only from unlocked rows', () => {
     const url = (query = '') =>
       `/indicators/${indicatorB}/comparison?fx_pair_id=${USDJPY_FX_PAIR_ID}&timeframe=5m${query}`;
     const ids = (events: { event_id: string }[]) => events.map((event) => event.event_id);
     // FREE lock for indicator B: the 3 newest RELEASED are B_NO_SNAPSHOT (no
-    // snapshot, so not a comparison row), B7 and B6. Comparison rows B7…B3:
-    // B7 / B6 unlocked, B5 / B4 / B3 locked.
+    // snapshot, so not a comparison row), B7 and B6. FREE comparison rows (v1.37: 3) B7…B5:
+    // B7 / B6 unlocked, B5 locked (B4 / B3 are beyond the 3 rows).
     const [B7, B6, B5, B4, B3] = B_MOST_RECENT_FIRST;
     const ROW_KEYS = [
       'actual',
@@ -677,17 +677,18 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
         expect(Number(entry.stats.average_pips), timeframe).toBeCloseTo(65.37);
         expect(entry.stats.upward_count, timeframe).toBe(2);
       }
-      expect((body.events as ComparisonRow[]).map((row) => row.locked)).toEqual([false, false, true, true, true]);
+      expect((body.events as ComparisonRow[]).map((row) => row.locked)).toEqual([false, false, true]);
       const text = JSON.stringify(body);
       for (const value of LOCKED_ONLY_VALUES) expect(text, value).not.toContain(value);
     });
 
     it('FREE page 2: only locked rows, still no values', async () => {
       const { headers } = await newUser('FREE');
-      const { body } = await get(url('&page=2&limit=3'), headers);
-      expect(ids(body.events)).toEqual([B4, B3]);
+      // v1.37: FREE は 3 行(B7・B6・B5)。2件ずつなら 2ページ目は B5(ロック)だけ。
+      const { body } = await get(url('&page=2&limit=2'), headers);
+      expect(ids(body.events)).toEqual([B5]);
       expect((body.events as ComparisonRow[]).every((row) => row.locked && row.actual === null)).toBe(true);
-      expect(body.meta).toEqual({ page: 2, limit: 3, total: 5, has_next: false });
+      expect(body.meta).toEqual({ page: 2, limit: 2, total: 3, has_next: false });
       expect(body.total_events).toBe(2);
     });
 
