@@ -20,6 +20,8 @@ import { resolvePublicBaseUrl } from '../domain/speakerPhotos.js';
 import { SPEECH_HOME_PROVIDER } from '../ingestion/quality/metrics.js';
 import { listRecentDeliveredSpeeches, listSpeechIngestionRuns } from '../repositories/speechesRepository.js';
 import { withTiming } from '../utils/requestTiming.js';
+import { resolvePastReleaseAccess } from '../authorization/pastReleaseAccess.js';
+import { pastReleaseLimitFor, redactRelease } from '../domain/pastReleaseAccess.js';
 
 /**
  * GET /home — api-design.md §12. "最近のイベント" is not a separate
@@ -54,8 +56,8 @@ export function registerHomeRoutes(app: FastifyInstance): void {
         // いない(各関数自体は無変更)。
         const now = new Date();
         const speechRange = homeSpeechesRange(now);
-        const [snapshots, relatedFxPairsByIndicator, homeFxPairSymbols, recentSpeeches, speechRuns] = await Promise.all(
-          [
+        const [snapshots, relatedFxPairsByIndicator, homeFxPairSymbols, recentSpeeches, speechRuns, pastReleaseAccess] =
+          await Promise.all([
             listSnapshotsForEvents(
               app.supabase,
               events.map((event) => event.id),
@@ -75,8 +77,10 @@ export function registerHomeRoutes(app: FastifyInstance): void {
             // v1.34 speeches_status(HQ承認 2026-10-23): 他の取得とは独立(ingestion_logs を読むだけ)。
             // 読めなくても /home は 200 のまま(null → stale。readHomeSpeechRunsSafely)。
             readHomeSpeechRunsSafely(() => listSpeechIngestionRuns(app.supabase, SPEECH_HOME_PROVIDER), request.log),
-          ],
-        );
+            // HQ判断 2026-10-22: FREE は指標ごとに直近3回より古い RELEASED の値を隠す。
+            // これも`events`だけに依存する。
+            resolvePastReleaseAccess(app.supabase, request.user!.id, events),
+          ]);
         mark('parallel');
         const snapshotByEventId = new Map(snapshots.map((snapshot) => [snapshot.event_id, snapshot]));
         // majorFxはhomeFxPairSymbolsの結果が無いと呼べないため、これだけは
@@ -90,27 +94,32 @@ export function registerHomeRoutes(app: FastifyInstance): void {
           timezone: query.timezone,
           events: events.map((event) => {
             const snapshot = snapshotByEventId.get(event.id);
-            return {
-              event_id: event.id,
-              indicator_id: event.indicator_id,
-              indicator_name: event.indicator_name,
-              display_name: event.indicator_display_name,
-              country_code: event.country_code,
-              currency_code: event.currency_code,
-              unit: event.unit,
-              importance: event.importance,
-              release_datetime: event.release_datetime,
-              release_datetime_precision: event.release_datetime_precision,
-              status: event.status,
-              data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
-              forecast: snapshot?.forecast ?? null,
-              actual: snapshot?.actual ?? null,
-              previous: snapshot?.previous ?? null,
-              surprise: snapshot?.surprise ?? null,
-              surprise_direction: snapshot?.surprise_direction ?? null,
-              related_fx_pairs: relatedFxPairsByIndicator.get(event.indicator_id) ?? [],
-            };
+            return redactRelease(
+              {
+                event_id: event.id,
+                indicator_id: event.indicator_id,
+                indicator_name: event.indicator_name,
+                display_name: event.indicator_display_name,
+                country_code: event.country_code,
+                currency_code: event.currency_code,
+                unit: event.unit,
+                importance: event.importance,
+                release_datetime: event.release_datetime,
+                release_datetime_precision: event.release_datetime_precision,
+                status: event.status,
+                data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
+                forecast: snapshot?.forecast ?? null,
+                actual: snapshot?.actual ?? null,
+                previous: snapshot?.previous ?? null,
+                surprise: snapshot?.surprise ?? null,
+                surprise_direction: snapshot?.surprise_direction ?? null,
+                related_fx_pairs: relatedFxPairsByIndicator.get(event.indicator_id) ?? [],
+              },
+              pastReleaseAccess.lockedIds.has(event.id),
+              pastReleaseAccess.previousLockedIds.has(event.id),
+            );
           }),
+          past_release_limit: pastReleaseLimitFor(pastReleaseAccess.plan),
           major_fx: majorFx,
           speeches: recentSpeeches.map((speech) => toHomeSpeechItem(speech, baseUrl)),
           speeches_status: toHomeSpeechesStatus(speechRuns, now),

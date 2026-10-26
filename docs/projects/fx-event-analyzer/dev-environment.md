@@ -1117,6 +1117,416 @@ select count(*) as schedule_changes from event_schedule_changes;
 
 **コードを戻す前に列を消すと、12.1節の表の API(`GET /home`全体・`GET /calendar`・`GET /events/{id}`ほか)とジョブがすべて 500 になる。** 列を残したままでも前の版のコードは問題なく動く(読まないだけ)ので、迷ったら列は消さずに残す。
 
+## 13. 無料プランの「過去の発表」制限の適用(2026-10-22、HQ判断「直近3回」・api-design.md v1.33 28.2節)
+
+`supabase/migrations/20261022000001_past_release_access.sql` を社内確認用DBに適用し、Backend をデプロイする手順。**本番DBには適用しない。** この節の SQL は Claude(セッション)側からは実行していない(鍵が無い。§8.1 と同じ扱い)。実行するのは SQL Editor にアクセスできる人(大野さん、または鍵を持つ担当者)。
+
+このマイグレーションがすること:
+
+- `economic_events`・`event_snapshots`・`event_revisions`・`event_explanations`・`event_price_reactions` の「全認証ユーザー SELECT 可」の policy(`<表>_select_authenticated`)5件を消す
+- 同じ5表の `anon`・`authenticated` の権限をすべて取り消す(`revoke all`。SELECT・INSERT・UPDATE・DELETE・TRUNCATE・REFERENCES・TRIGGER)。RLS は有効のまま
+- 関数 `visible_released_event_ids(uuid[], int)`(SECURITY DEFINER、実行は `service_role` だけ)を足す
+
+`fx_prices` の直接参照の禁止(`20261022000003_fx_prices_access.sql`)は別のマイグレーションで、手順は 13.7(これとは独立に適用・取り消しできる)。
+取り込みの運用データの表の権限(`20261022000004_ingestion_tables_access.sql`)も別のマイグレーションで、手順は 13.8(同じく独立)。
+
+**順番を必ず守る: マイグレーション → `notify pgrst` → Backend のデプロイ。** 先に Backend を入れると、FREE のユーザーで `GET /home`・`GET /indicators/{id}/events`・`GET /events/{id}` と子の `/revisions`・`/history`・`/reaction`・`/reaction/chart` が関数が無いため 500 になる(PRO は関数を呼ばないので影響なし)。逆にマイグレーションだけ先に入れても、今の Backend は service_role で読むので影響しない。iOS は同時に出す必要はない(古いアプリ ビルド17/18 も読める形で返す。api-design.md 14.1節「古いアプリとの互換」)。
+
+### 13.1 適用前の確認(読むだけ)
+
+1. Supabase の画面の左上が `fx-event-analyzer-dev`、URL に `pbemckwnqmeaoveelihd` が含まれることを確かめる(別のプロジェクトを開いていないこと)
+2. SQL Editor の新しいタブで次を1つずつ実行し、結果をそのまま記録する(戻すときの基準になる)
+
+```sql
+-- (1) 5表の policy。期待: 各表に <表>_select_authenticated が1件ずつ、計5行(cmd = SELECT)
+select tablename, policyname, cmd, roles, qual
+from pg_policies
+where schemaname = 'public'
+  and tablename in ('economic_events', 'event_snapshots', 'event_revisions', 'event_explanations', 'event_price_reactions')
+order by tablename, policyname;
+
+-- (2) 5表の権限(戻すときの基準。結果を必ず保存する)
+--     期待(Supabase の既定): anon / authenticated / service_role の3役割すべてが
+--     DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE
+select table_name, grantee, string_agg(privilege_type, ',' order by privilege_type) as privileges
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and table_name in ('economic_events', 'event_snapshots', 'event_revisions', 'event_explanations', 'event_price_reactions')
+  and grantee in ('anon', 'authenticated', 'service_role')
+group by table_name, grantee
+order by table_name, grantee;
+
+-- (3) RLS が有効か。期待: 5行すべて relrowsecurity = true
+select relname, relrowsecurity, relforcerowsecurity
+from pg_class
+where relnamespace = 'public'::regnamespace
+  and relname in ('economic_events', 'event_snapshots', 'event_revisions', 'event_explanations', 'event_price_reactions');
+
+-- (4) 5表を読む view。期待: 0行
+select distinct v.relname as view_name, t.relname as table_name
+from pg_depend d
+join pg_rewrite r on r.oid = d.objid
+join pg_class v on v.oid = r.ev_class
+join pg_class t on t.oid = d.refobjid
+where d.classid = 'pg_rewrite'::regclass
+  and v.oid <> t.oid
+  and t.relname in ('economic_events', 'event_snapshots', 'event_revisions', 'event_explanations', 'event_price_reactions');
+
+-- (5) 5表の名前を本文に含む関数。期待: prevent_release_snapshot_mutation() の1行だけ(エラー文に
+--     'event_snapshots:' と書いてあるだけで表は読まない)。適用後は visible_released_event_ids も加わる
+select p.oid::regprocedure as function, p.prosecdef as security_definer
+from pg_proc p
+where p.pronamespace = 'public'::regnamespace
+  and p.prosrc ~ '(economic_events|event_snapshots|event_revisions|event_explanations|event_price_reactions)';
+
+-- (6) 5表のトリガー。期待: set_updated_at 系・trg_economic_events_schedule_change・
+--     trg_prevent_release_snapshot_mutation だけ(どれも OLD/NEW しか使わない)
+select tgrelid::regclass as table_name, tgname, tgfoid::regprocedure as function
+from pg_trigger
+where not tgisinternal
+  and tgrelid::regclass::text in ('economic_events', 'event_snapshots', 'event_revisions', 'event_explanations', 'event_price_reactions')
+order by 1, 2;
+
+-- (7) Realtime の publication に入っていないか。期待: 0行
+select pubname, tablename from pg_publication_tables
+where schemaname = 'public'
+  and tablename in ('economic_events', 'event_snapshots', 'event_revisions', 'event_explanations', 'event_price_reactions');
+
+-- (8) GraphQL(pg_graphql)の有無。入っていても権限に従うので、適用後は anon / authenticated から5表が見えなくなるだけ
+select extname, extversion from pg_extension where extname = 'pg_graphql';
+
+-- (9) 関数名がぶつからないか。期待: 0行
+select p.oid::regprocedure from pg_proc p where p.proname = 'visible_released_event_ids';
+```
+
+(1)〜(9) のどれかが期待と違えば適用しないで、結果を HQ に報告する。
+
+### 13.2 適用
+
+1. SQL Editor の新しいタブに `supabase/migrations/20261022000001_past_release_access.sql` の中身をそのまま貼って実行する(2回実行しても同じ結果になる書き方)
+2. 続けて次を実行する(PostgREST にスキーマを読み直させる)
+
+```sql
+notify pgrst, 'reload schema';
+```
+
+### 13.3 適用後の確認(読むだけ。`begin`〜`rollback` の中でだけ役割を変える)
+
+```sql
+-- (1) 5表の policy。期待: 0行
+select tablename, policyname from pg_policies
+where schemaname = 'public'
+  and tablename in ('economic_events', 'event_snapshots', 'event_revisions', 'event_explanations', 'event_price_reactions');
+
+-- (2) 権限。期待: anon / authenticated は7列すべて false、service_role はすべて true(計15行)
+select r.rolname, t.tbl,
+       has_table_privilege(r.rolname, t.tbl, 'select') as sel,
+       has_table_privilege(r.rolname, t.tbl, 'insert') as ins,
+       has_table_privilege(r.rolname, t.tbl, 'update') as upd,
+       has_table_privilege(r.rolname, t.tbl, 'delete') as del,
+       has_table_privilege(r.rolname, t.tbl, 'truncate') as trn,
+       has_table_privilege(r.rolname, t.tbl, 'references') as ref,
+       has_table_privilege(r.rolname, t.tbl, 'trigger') as trg
+from pg_roles r
+cross join unnest(array['economic_events', 'event_snapshots', 'event_revisions', 'event_explanations', 'event_price_reactions']) as t(tbl)
+where r.rolname in ('anon', 'authenticated', 'service_role')
+order by t.tbl, r.rolname;
+
+-- (3) RLS。期待: 5行すべて relrowsecurity = true(13.1 (3) と同じ SQL)
+
+-- (3b) 前回を隠す発表の判定(読むだけ)。期待: 指標ごとに rn = 3 の行だけ previous_locked = true
+--      (その指標に RELEASED が4回以上あるとき)。1・2回目は false
+begin;
+set local role service_role;
+select e.indicator_id, e.release_datetime, v.previous_locked
+from visible_released_event_ids(array(select id from economic_indicators where is_active), 3) v
+join economic_events e on e.id = v.event_id
+order by e.indicator_id, e.release_datetime desc
+limit 30;
+rollback;
+
+-- (4) 関数の実行権限。期待: anon = false、authenticated = false、service_role = true
+select r.rolname,
+       has_function_privilege(r.rolname, 'visible_released_event_ids(uuid[],integer)', 'execute') as can_execute
+from pg_roles r where r.rolname in ('anon', 'authenticated', 'service_role')
+order by r.rolname;
+```
+
+アプリの利用者の役割で読めないこと(1ブロックずつ実行する。エラーになるのが正しい):
+
+```sql
+-- 期待: ERROR 42501 permission denied for table economic_events
+begin;
+set local role authenticated;
+select count(*) from economic_events;
+rollback;
+```
+
+`economic_events` を `event_snapshots`・`event_revisions`・`event_explanations`・`event_price_reactions` に替えて同じく4回、`authenticated` を `anon` に替えて5回。どれも 42501 になること(0 件が返るのは誤り)。
+
+service_role では動くこと(期待: エラーなく件数が返る):
+
+```sql
+begin;
+set local role service_role;
+select count(*) from economic_events;
+select count(*) from visible_released_event_ids(array(select id from economic_indicators where is_active), 3);
+rollback;
+```
+
+### 13.4 Backend のデプロイと画面の確認
+
+1. 13.3 がすべて期待どおりなら、Backend をデプロイする(このブランチを `claude/fx-settings-screens` に取り込んで push すると Render が入れ替える。§4)
+2. `https://<名前>.onrender.com/health` が `{"status":"ok"}` を返すことを確かめる
+3. **FREE のアカウント**(`VIEW_ADVANCED_STATS` が無い)でアプリを開き、次を確かめる
+   - `GET /home`: 過去の日付で、その指標の直近3回より古い発表は値が出ず鍵の印、直近3回は値が出る
+   - `GET /indicators/{id}/events`(指標詳細の過去の発表): 新しい3回は値あり、4回目より古いものは鍵の印。未発表の行は今までどおり
+   - `GET /events/{id}`: 4回目より古い発表を開くと 200 で鍵の印(エラー画面にならない)。値動きの表も鍵の印で、相場反応詳細へは進まない
+   - 直近3回目の発表(4回目より古い発表がある指標): 結果・予想は出て、**前回だけ鍵の印**(前回比も出ない)。解説は出ない。改定履歴に「前回」の改定が出ない。1回目・2回目の前回は今までどおり出る(一覧・ホーム・詳細・比較の表で同じ)
+4. **PRO のアカウント**で同じ画面を開き、すべての発表に値が出て鍵の印が無いことを確かめる
+5. 過去イベント比較(`GET /indicators/{id}/comparison`)は FREE 5行・PRO 20行のまま。FREE では直近3回より古い行が鍵の印で値・pips が出ず、平均などの統計はロックされていない行だけから出ること。PRO はすべての行に値が出ること
+
+### 13.5 中止する条件(どれかが起きたら止めて HQ に報告する)
+
+- 13.3 で `anon`・`authenticated` の役割のまま5表から行や件数が返った(42501 にならない)、または `has_table_privilege` に true がある
+- service_role で `visible_released_event_ids` がエラーになった、または関数が見つからない
+- デプロイ後、FREE のアカウントで `/home`・`/indicators/{id}/events`・`/events/{id}` のどれかが 500 になった(すぐ 13.6 の順で戻すか、Backend だけ前の版に戻す)
+- PRO のアカウントで鍵の印が出た
+- FREE で直近3回目の発表の前回が数字で出た、または1回目・2回目の前回が鍵の印になった
+
+### 13.6 戻す手順
+
+1. 先に Backend を前の版に戻す(FREE でも関数を呼ばなくなる)。関数を消すのは必ずこの後
+2. 権限と policy を戻す。権限は 13.1 (2) で記録した内容と同じに戻す(Supabase の既定どおりなら下の `grant all` でよい)。policy は `20260917000009_rls.sql` と同じ定義
+
+```sql
+grant all on economic_events to anon, authenticated;
+grant all on event_snapshots to anon, authenticated;
+grant all on event_revisions to anon, authenticated;
+grant all on event_explanations to anon, authenticated;
+grant all on event_price_reactions to anon, authenticated;
+
+create policy economic_events_select_authenticated on economic_events
+  for select using (auth.role() = 'authenticated');
+create policy event_snapshots_select_authenticated on event_snapshots
+  for select using (auth.role() = 'authenticated');
+create policy event_revisions_select_authenticated on event_revisions
+  for select using (auth.role() = 'authenticated');
+create policy event_explanations_select_authenticated on event_explanations
+  for select using (auth.role() = 'authenticated');
+create policy event_price_reactions_select_authenticated on event_price_reactions
+  for select using (auth.role() = 'authenticated');
+
+notify pgrst, 'reload schema';
+```
+
+3. Backend を戻したあとでだけ、関数を消す
+
+```sql
+drop function if exists visible_released_event_ids(uuid[], int);
+notify pgrst, 'reload schema';
+```
+
+4. 13.1 (1)〜(3) をもう一度実行し、適用前に記録した結果と同じになったことを確かめる
+
+### 13.7 fx_prices の直接参照の禁止(2026-10-22、HQ指示。`20261022000003_fx_prices_access.sql`)
+
+`fx_prices` の「全認証ユーザー SELECT 可」の policy(`fx_prices_select_authenticated`)を消し、`anon`・`authenticated` の権限をすべて取り消す(RLS は有効のまま)。これまでは、アプリの anon key でログインした利用者が `fx_prices` を直接読み、ロックされた発表の前後の足から値動きを計算し直せた。
+
+- **13.1〜13.6 とは別に、単独で適用・取り消しできる。** Backend・取り込みジョブ・レートアラートの判定は service_role で読むので、Backend のデプロイの前でも後でもよい(順番の決まりは無い)。iOS は `fx_prices` を直接読まない
+- 13.1 の1と同じく、プロジェクトが `fx-event-analyzer-dev` であることを先に確かめる
+
+適用前の確認(読むだけ。結果を記録しておく):
+
+```sql
+-- (1) policy。期待: fx_prices_select_authenticated の1行(cmd = SELECT)だけ
+select policyname, cmd, roles, qual from pg_policies
+where schemaname = 'public' and tablename = 'fx_prices';
+
+-- (2) 権限(戻すときの基準)。期待: anon / authenticated / service_role がすべて
+--     DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE
+select grantee, string_agg(privilege_type, ',' order by privilege_type) as privileges
+from information_schema.role_table_grants
+where table_schema = 'public' and table_name = 'fx_prices'
+  and grantee in ('anon', 'authenticated', 'service_role')
+group by grantee order by grantee;
+
+-- (3) RLS。期待: relrowsecurity = true
+select relname, relrowsecurity from pg_class
+where relnamespace = 'public'::regnamespace and relname = 'fx_prices';
+
+-- (4) fx_prices を読む view・関数・Realtime。期待: すべて0行
+select distinct v.relname as view_name
+from pg_depend d
+join pg_rewrite r on r.oid = d.objid
+join pg_class v on v.oid = r.ev_class
+where d.classid = 'pg_rewrite'::regclass and d.refobjid = 'public.fx_prices'::regclass and v.oid <> d.refobjid;
+select p.oid::regprocedure from pg_proc p
+where p.pronamespace = 'public'::regnamespace and p.prosrc ~ 'fx_prices';
+select pubname from pg_publication_tables where schemaname = 'public' and tablename = 'fx_prices';
+```
+
+適用: SQL Editor にファイルの中身を貼って実行し、続けて `notify pgrst, 'reload schema';`。
+
+適用後の確認:
+
+```sql
+-- (1) policy。期待: 0行(13.7 の適用前 (1) と同じ SQL)
+
+-- (2) 権限。期待: anon / authenticated は7列すべて false、service_role はすべて true
+select r.rolname,
+       has_table_privilege(r.rolname, 'fx_prices', 'select') as sel,
+       has_table_privilege(r.rolname, 'fx_prices', 'insert') as ins,
+       has_table_privilege(r.rolname, 'fx_prices', 'update') as upd,
+       has_table_privilege(r.rolname, 'fx_prices', 'delete') as del,
+       has_table_privilege(r.rolname, 'fx_prices', 'truncate') as trn,
+       has_table_privilege(r.rolname, 'fx_prices', 'references') as ref,
+       has_table_privilege(r.rolname, 'fx_prices', 'trigger') as trg
+from pg_roles r where r.rolname in ('anon', 'authenticated', 'service_role')
+order by r.rolname;
+```
+
+```sql
+-- (3) 期待: ERROR 42501 permission denied for table fx_prices(authenticated を anon に替えてもう1回)
+begin;
+set local role authenticated;
+select count(*) from fx_prices;
+rollback;
+```
+
+```sql
+-- (4) 期待: エラーなく件数が返る
+begin;
+set local role service_role;
+select count(*) from fx_prices;
+rollback;
+```
+
+適用後、次の20分ごとの為替の取り込み(GitHub Actions、§3)が今までどおり成功し、アプリのホームの主要通貨のレートと相場反応詳細のチャートが出ることを確かめる(どちらも Backend 経由なので変わらないはず)。
+
+中止する条件:
+
+- (3) で行や件数が返った、または (2) の anon / authenticated に true がある
+- (4) がエラーになった、または為替の取り込み・ホームのレート・チャートが失敗するようになった(すぐ下の手順で戻す)
+
+戻す手順(権限は適用前 (2) の記録と同じに戻す。Supabase の既定どおりなら `grant all` でよい。policy は `20260917000009_rls.sql` と同じ定義):
+
+```sql
+grant all on fx_prices to anon, authenticated;
+
+create policy fx_prices_select_authenticated on fx_prices
+  for select using (auth.role() = 'authenticated');
+
+notify pgrst, 'reload schema';
+```
+
+戻したあと、適用前の (1)〜(3) をもう一度実行し、記録と同じになったことを確かめる。
+
+### 13.8 取り込みの運用データの表の権限(2026-10-22、HQ判断。`20261022000004_ingestion_tables_access.sql`)
+
+`ingestion_logs`・`ingestion_staged_values`・`official_observations`(公式の結果の値を含む)の `anon`・`authenticated` の権限をすべて取り消す。RLS は有効のまま、ポリシーは変えない(もともと無い)。13.1〜13.7 とは別に、単独で適用・取り消しできる。順番の決まりは無い。
+
+今の状態と使っているもの(マイグレーションとコードから):
+
+| 表 | RLS | ポリシー | 適用前の anon / authenticated の権限 | 読み書きするもの(どれも service_role) |
+|---|---|---|---|---|
+| `ingestion_logs` | 有効(`20260917000009_rls.sql`) | なし | Supabase の既定(ALL)。ポリシーが無いので RLS で0件・書き込み不可 | 取り込みジョブ(`ingestionRepository.ts`、書き込み・読み込み)、品質レポート(`quality/reader.ts`、読むだけ) |
+| `ingestion_staged_values` | 有効(`20261015000003_ingestion_accuracy.sql`) | なし | 同上 | 取り込みジョブ(読み書き)、品質レポート(読むだけ) |
+| `official_observations` | 有効(同上) | なし | 同上 | 取り込みジョブ(`upsertOfficialObservations`) |
+
+- 品質レポートは `npm run report:data-quality`(GitHub Actions)と `GET /quality-report`(`INTERNAL_REPORT_TOKEN` が無いと404。社内向けで、アプリからは使わない)
+- 3表を読む view・関数は無い。トリガーは `ingestion_staged_values` の `set_updated_at` だけ
+
+適用前の確認(読むだけ。結果を記録しておく):
+
+```sql
+-- (1) RLS。期待: 3行すべて relrowsecurity = true
+select relname, relrowsecurity from pg_class
+where relnamespace = 'public'::regnamespace
+  and relname in ('ingestion_logs', 'ingestion_staged_values', 'official_observations');
+
+-- (2) ポリシー。期待: 0行
+select tablename, policyname from pg_policies
+where schemaname = 'public' and tablename in ('ingestion_logs', 'ingestion_staged_values', 'official_observations');
+
+-- (3) 権限(戻すときの基準)。期待: 3表 × anon / authenticated / service_role がすべて
+--     DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE
+select table_name, grantee, string_agg(privilege_type, ',' order by privilege_type) as privileges
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and table_name in ('ingestion_logs', 'ingestion_staged_values', 'official_observations')
+  and grantee in ('anon', 'authenticated', 'service_role')
+group by table_name, grantee order by table_name, grantee;
+
+-- (4) 3表を読む view。期待: 0行
+select distinct v.relname as view_name, t.relname as table_name
+from pg_depend d
+join pg_rewrite r on r.oid = d.objid
+join pg_class v on v.oid = r.ev_class
+join pg_class t on t.oid = d.refobjid
+where d.classid = 'pg_rewrite'::regclass and v.oid <> t.oid
+  and t.relname in ('ingestion_logs', 'ingestion_staged_values', 'official_observations');
+```
+
+適用: SQL Editor にファイルの中身を貼って実行し、続けて `notify pgrst, 'reload schema';`。
+
+適用後の確認:
+
+```sql
+-- (1)(2) は適用前と同じ結果であること
+
+-- (3) 権限。期待: anon / authenticated は7列すべて false、service_role はすべて true(計9行)
+select r.rolname, t.tbl,
+       has_table_privilege(r.rolname, t.tbl, 'select') as sel,
+       has_table_privilege(r.rolname, t.tbl, 'insert') as ins,
+       has_table_privilege(r.rolname, t.tbl, 'update') as upd,
+       has_table_privilege(r.rolname, t.tbl, 'delete') as del,
+       has_table_privilege(r.rolname, t.tbl, 'truncate') as trn,
+       has_table_privilege(r.rolname, t.tbl, 'references') as ref,
+       has_table_privilege(r.rolname, t.tbl, 'trigger') as trg
+from pg_roles r
+cross join unnest(array['ingestion_logs', 'ingestion_staged_values', 'official_observations']) as t(tbl)
+where r.rolname in ('anon', 'authenticated', 'service_role')
+order by t.tbl, r.rolname;
+```
+
+```sql
+-- (4) 期待: ERROR 42501 permission denied for table ingestion_logs
+--     (表を ingestion_staged_values・official_observations に、authenticated を anon に替えて計6回)
+begin;
+set local role authenticated;
+select count(*) from ingestion_logs;
+rollback;
+```
+
+```sql
+-- (5) 期待: エラーなく件数が返る
+begin;
+set local role service_role;
+select count(*) from ingestion_logs;
+select count(*) from ingestion_staged_values;
+select count(*) from official_observations;
+rollback;
+```
+
+適用後、次の取り込み(GitHub Actions の為替・要人発言、§3)と毎日の品質レポートが今までどおり成功することを確かめる(どちらも service_role)。
+
+中止する条件:
+
+- (3) の anon / authenticated に true がある、または (4) で件数が返った
+- (5) がエラーになった、または取り込み・品質レポートが失敗するようになった(すぐ下の手順で戻す)
+
+戻す手順(権限は適用前 (3) の記録と同じに戻す。Supabase の既定どおりなら `grant all` でよい。ポリシー・RLS は変えていないので戻すものは無い):
+
+```sql
+grant all on ingestion_logs to anon, authenticated;
+grant all on ingestion_staged_values to anon, authenticated;
+grant all on official_observations to anon, authenticated;
+notify pgrst, 'reload schema';
+```
+
+戻したあと、適用前の (1)〜(3) をもう一度実行し、記録と同じになったことを確かめる。
+
 ## 14. 品質レポート第9章「要人発言の鮮度」の読み方(2026-10-23、HQ承認「要人発言の鮮度監視」)
 
 `npm run report:data-quality`・`GET /api/v1/quality-report` の最後に「## 9. 要人発言の鮮度」が付く(第1〜8章は変えていない)。READ-ONLY。対象期間(`days`)に関係なく、取得元ごとに `ingest:speeches` の最新の実行と最後の SUCCESS を読む。異常があってもレポートのジョブは失敗にしない(終了コード0のまま)。

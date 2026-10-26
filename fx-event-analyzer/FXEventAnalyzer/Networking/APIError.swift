@@ -22,6 +22,9 @@ enum APIErrorCode: String, Decodable, Equatable {
     case speakerNotFound = "SPEAKER_NOT_FOUND"
     case subscriptionRequired = "SUBSCRIPTION_REQUIRED"
     case featureNotEntitled = "FEATURE_NOT_ENTITLED"
+    /// 無料プランの上限(api-design v1.15 §28)。v1.33からは、無料プランで隠された
+    /// 過去の発表の`/revisions`・`/history`・`/reaction`・`/reaction/chart`もこれ。
+    case planLimitExceeded = "PLAN_LIMIT_EXCEEDED"
 }
 
 /// Decodes `docs/projects/fx-event-analyzer/api-design.md` §4's Error

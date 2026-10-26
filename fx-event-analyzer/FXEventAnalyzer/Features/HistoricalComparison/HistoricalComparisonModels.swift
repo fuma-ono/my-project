@@ -14,6 +14,8 @@ struct ComparisonResponse: Decodable, Equatable {
     let meta: PaginationMeta
     /// 比べた回数の上限(api-design v1.15、無料5回・プレミアム20回)。古いBackendではnil。
     var historyLimit: HistoryLimit? = nil
+    /// 過去の発表の制限(api-design v1.33 §21・§28.2、無料プランは直近3回)。古いBackendではnil。
+    var pastReleaseLimit: PastReleaseLimit? = nil
 
     struct HistoryLimit: Decodable, Equatable {
         let applied: Int
@@ -32,6 +34,7 @@ struct ComparisonResponse: Decodable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case historyLimit = "history_limit"
+        case pastReleaseLimit = "past_release_limit"
         case indicator
         case fxPairId = "fx_pair_id"
         case timeframe
@@ -129,7 +132,24 @@ struct ComparisonEventSummary: Decodable, Identifiable, Equatable {
     var secondaryActual: Double? = nil
     var secondaryPrevious: Double? = nil
 
+    /// 無料プランで隠された過去の発表(api-design v1.33 §21)。値とpipsは`null`。古いBackendではnil(=隠していない)。
+    var locked: Bool? = nil
+    /// ロックを外すのに必要なプラン(`"PRO"`)。ロックしていなければnil。
+    var requiredPlan: String? = nil
+
+    /// ロックされた発表か。`true`のとき表は値の代わりに鍵の印を出す。
+    var isLocked: Bool { locked ?? false }
+    /// 「前回」だけを隠した発表(api-design v1.33 §28.2): ひとつ前の発表が無料プランでロック
+    /// されているため、その結果にあたる`previous`をBackendが`null`で返す。古いBackendではnil。
+    var previousLocked: Bool? = nil
+
+    /// 「前回」を隠した発表か。`true`のとき前回は「--」ではなく鍵の印で出す。
+    var isPreviousLocked: Bool { previousLocked ?? false }
+
     enum CodingKeys: String, CodingKey {
+        case locked
+        case previousLocked = "previous_locked"
+        case requiredPlan = "required_plan"
         case pipsByTimeframe = "pips_by_timeframe"
         case id = "event_id"
         case releaseDatetime = "release_datetime"

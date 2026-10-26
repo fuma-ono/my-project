@@ -56,8 +56,14 @@ export async function requireEntitlement(
   userId: string,
   featureCode: FeatureCode,
 ): Promise<void> {
-  const has = await hasEntitlement(supabase, userId, featureCode);
-  if (!has) {
+  assertEntitlement(await listActiveFeatureCodes(supabase, userId), featureCode);
+}
+
+/** requireEntitlement の判定だけ(読み込み済みの機能の集合に対して)。同じ
+ * リクエストでプランも使うとき、機能の集合を2回読まないため
+ * (src/authorization/plan.ts の requireEntitlementAndResolvePlan)。 */
+export function assertEntitlement(features: readonly string[], featureCode: FeatureCode): void {
+  if (!features.includes(featureCode)) {
     throw ApiError.featureNotEntitled(`This endpoint requires the ${featureCode} entitlement.`);
   }
 }

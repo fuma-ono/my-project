@@ -128,6 +128,7 @@ describe.skipIf(!integration)('Plan limits (FREE / PRO)', () => {
         notification_importances: ['HIGH'],
         notification_fx_pairs_max: 1,
         history_events_max: 5,
+        past_releases_max: 3,
       });
       // 00:00 JST on the 1st of last month = 15:00 UTC on the day before.
       expect(body.limits.calendar_earliest_from).toMatch(/^\d{4}-\d{2}-\d{2}T15:00:00Z$/);
@@ -147,6 +148,7 @@ describe.skipIf(!integration)('Plan limits (FREE / PRO)', () => {
         notification_importances: ['HIGH', 'MEDIUM', 'LOW'],
         notification_fx_pairs_max: null,
         history_events_max: 20,
+        past_releases_max: null,
       });
     });
 
@@ -274,14 +276,16 @@ describe.skipIf(!integration)('Plan limits (FREE / PRO)', () => {
       `/indicators/${US_NFP_INDICATOR_ID}/comparison?fx_pair_id=${USDJPY_FX_PAIR_ID}&${query}`;
     const historyFeatures = [FEATURE_CODES.VIEW_HISTORICAL];
 
-    it('FREE uses only the 5 most recent releases, for stats and events alike', async () => {
+    it('FREE lists the 5 most recent releases; stats use the 3 not locked by the past-release limit', async () => {
       const { headers } = await newUser('FREE', historyFeatures);
       const { status, body } = await request('GET', url('timeframe=5m'), headers);
       expect(status).toBe(200);
-      expect(body.total_events).toBe(5);
-      expect(body.analyzable_events).toBe(5);
-      expect(body.stats.upward_count).toBe(5);
+      // HQ指示 2026-10-22: 4・5回目は過去の発表の制限(直近3回)でロックされ、統計に入らない。
+      expect(body.total_events).toBe(3);
+      expect(body.analyzable_events).toBe(3);
+      expect(body.stats.upward_count).toBe(3);
       expect(body.events.map((event: { event_id: string }) => event.event_id)).toEqual(MOST_RECENT_FIRST.slice(0, 5));
+      expect(body.events.map((event: { locked: boolean }) => event.locked)).toEqual([false, false, false, true, true]);
       expect(body.meta).toEqual({ page: 1, limit: 20, total: 5, has_next: false });
       expect(body.history_limit).toEqual({ applied: 5, max_for_plan: 5, pro_max: 20 });
     });

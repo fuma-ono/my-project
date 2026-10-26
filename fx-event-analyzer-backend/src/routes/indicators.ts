@@ -12,6 +12,8 @@ import { listIndicatorEventsQuerySchema, listIndicatorsQuerySchema } from '../sc
 import { buildMeta, parsePagination, resolveSort } from '../utils/pagination.js';
 import { EMPTY_RELEASE_SUMMARY } from '../domain/indicators.js';
 import { mapEventDataStatus, type EconomicEventDbStatus } from '../domain/dataQuality.js';
+import { resolvePastReleaseAccess } from '../authorization/pastReleaseAccess.js';
+import { pastReleaseLimitFor, redactRelease } from '../domain/pastReleaseAccess.js';
 
 // `next_release` (v1.20, SCR-005): next SCHEDULED release ascending, none last, then name.
 const SORT_ALLOWLIST = ['name', 'importance', 'created_at', 'next_release'] as const;
@@ -81,14 +83,28 @@ export function registerIndicatorRoutes(app: FastifyInstance): void {
         pagination,
       );
 
+      // HQ判断 2026-10-22: FREE は直近3回より古い RELEASED の値を隠す(locked)。
+      const { plan, lockedIds, previousLockedIds } = await resolvePastReleaseAccess(
+        app.supabase,
+        request.user!.id,
+        rows.map((row) => ({ id: row.id, indicator_id: indicatorId, status: row.status })),
+      );
+
       return {
-        data: rows.map(({ id, data_status: dataStatus, ...rest }) => ({
-          event_id: id,
-          indicator_id: indicatorId,
-          ...rest,
-          data_status: mapEventDataStatus(dataStatus as EconomicEventDbStatus),
-        })),
+        data: rows.map(({ id, data_status: dataStatus, ...rest }) =>
+          redactRelease(
+            {
+              event_id: id,
+              indicator_id: indicatorId,
+              ...rest,
+              data_status: mapEventDataStatus(dataStatus as EconomicEventDbStatus),
+            },
+            lockedIds.has(id),
+            previousLockedIds.has(id),
+          ),
+        ),
         meta: buildMeta(pagination.page, pagination.limit, total),
+        past_release_limit: pastReleaseLimitFor(plan),
       };
     },
   );

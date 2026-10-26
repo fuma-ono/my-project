@@ -348,19 +348,29 @@ struct HistoricalComparisonView: View {
             // 列見出し(`tableHeader`)と同じ位置に縦線を入れ、グループ見出し行
             // 〜列見出し行〜各データ行まで縦線がつながって見えるようにした。
             rowDivider
-            valueCell(event.actual, unit: unit)
-            valueCell(event.forecast, unit: unit)
-            valueCell(event.previous, unit: unit)
-            if showSecondary {
+            if event.isLocked {
+                // 無料プランで隠された過去の発表(HQ指示 2026-10-22): 値・前月比・pipsの代わりに鍵の印。
+                // 行を押すと従来どおりイベント詳細へ進み、そこで鍵の印とプランの案内が出る。
+                // 幅は、隠した列(値3列・前月比3列・pips3列)と、その間の縦線を合わせたもの。
+                PastReleaseLockBadge(size: 7)
+                    .frame(width: Column.value * (showSecondary ? 6 : 3) + Column.pips * 3 + (showSecondary ? 1.0 : 0.5))
+                    .accessibilityIdentifier("historyLockedRow")
+            } else {
+                valueCell(event.actual, unit: unit)
+                valueCell(event.forecast, unit: unit)
+                previousCell(event.previous, unit: unit, locked: event.isPreviousLocked)
+                if showSecondary {
+                    rowDivider
+                    valueCell(event.secondaryActual, unit: unit)
+                    valueCell(event.secondaryForecast, unit: unit)
+                    // 副指標の前回(secondary_previous)も、ひとつ前のロックされた発表の値なので同じく隠す(v1.36)。
+                    previousCell(event.secondaryPrevious, unit: unit, locked: event.isPreviousLocked)
+                }
                 rowDivider
-                valueCell(event.secondaryActual, unit: unit)
-                valueCell(event.secondaryForecast, unit: unit)
-                valueCell(event.secondaryPrevious, unit: unit)
+                pipsCell(event.pipsByTimeframe?["1m"] ?? nil)
+                pipsCell(event.pipsByTimeframe?["5m"] ?? nil)
+                pipsCell(event.pipsByTimeframe?["15m"] ?? nil)
             }
-            rowDivider
-            pipsCell(event.pipsByTimeframe?["1m"] ?? nil)
-            pipsCell(event.pipsByTimeframe?["5m"] ?? nil)
-            pipsCell(event.pipsByTimeframe?["15m"] ?? nil)
         }
         .frame(height: Self.rowHeight)
         .contentShape(Rectangle())
@@ -368,6 +378,19 @@ struct HistoricalComparisonView: View {
 
     private var rowDivider: some View {
         Rectangle().fill(SettingsCardStyle.cardBorder.opacity(0.5)).frame(width: 0.5, height: Self.rowHeight)
+    }
+
+    /// 前回の列。ひとつ前の発表が無料プランでロックされているとき(`previous_locked`)は鍵の印(HQ指示 2026-10-22)。
+    @ViewBuilder private func previousCell(_ value: Double?, unit: String?, locked: Bool) -> some View {
+        if locked {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 6, weight: .semibold))
+                .foregroundStyle(V5P.cyan)
+                .frame(width: Column.value)
+                .accessibilityLabel(PastReleaseLock.label)
+        } else {
+            valueCell(value, unit: unit)
+        }
     }
 
     private func valueCell(_ value: Double?, unit: String?) -> some View {

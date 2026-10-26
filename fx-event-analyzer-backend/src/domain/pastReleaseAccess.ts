@@ -1,0 +1,175 @@
+import { PLAN_LIMITS, planLimitsFor, type Plan } from './planLimits.js';
+
+/**
+ * 無料プランの「過去の発表」制限 (HQ判断 2026-10-22, api-design.md §28.1).
+ *
+ * FREE: 指標ごとに、発表済み(status = 'RELEASED')の直近
+ * `past_releases_max` 回(release_datetime の新しい順、同時刻は id の昇順)
+ * だけ値を見られる。それより古い発表は「ロック」— 値を隠し、
+ * `locked: true, required_plan: "PRO"` を付けて返す。
+ * PRO: ロックしない。SCHEDULED などの未発表イベントはどのプランでもロックしない。
+ *
+ * どの発表が見られるかの本番の計算は DB 関数 `visible_released_event_ids`
+ * (migration 20261022000001) が行う。`selectVisibleReleasedIds` は同じ規則の
+ * 純粋関数版(単体テスト・説明用)。
+ */
+
+export const PAST_RELEASE_REQUIRED_PLAN = 'PRO' as const;
+
+/** ロックした発表で null にする値の項目(一覧・ホーム・詳細の snapshot)。 */
+export const RELEASE_VALUE_FIELDS = ['forecast', 'actual', 'previous', 'surprise', 'surprise_direction'] as const;
+
+/**
+ * 「前回」を隠す発表で null にする項目(HQ指示 2026-10-22)。発表の「前回」は、
+ * ひとつ前の発表の結果(またはその改定値)なので、ひとつ前の発表がロックされて
+ * いれば(= FREE で見られる発表のうち一番古いもの)隠す。surprise は予想と結果
+ * から計算する値で、前回は使わない。
+ */
+export const PREVIOUS_VALUE_FIELDS = ['previous'] as const;
+
+/** `event_revisions.field_name` of a revised `previous` (= the preceding release's actual). */
+export const PREVIOUS_REVISION_FIELD = 'PREVIOUS' as const;
+
+export interface PastReleaseAccessFields {
+  locked: boolean;
+  required_plan: typeof PAST_RELEASE_REQUIRED_PLAN | null;
+  /** 「前回」だけを隠した(ひとつ前の発表がロックされている)とき true。`locked` の行では false。 */
+  previous_locked: boolean;
+}
+
+export const UNLOCKED: Readonly<PastReleaseAccessFields> = {
+  locked: false,
+  required_plan: null,
+  previous_locked: false,
+};
+export const LOCKED: Readonly<PastReleaseAccessFields> = {
+  locked: true,
+  required_plan: PAST_RELEASE_REQUIRED_PLAN,
+  previous_locked: false,
+};
+/** 行そのものはロックしない(`required_plan` は従来どおり null)。前回を見るのに必要なプランは PRO。 */
+export const PREVIOUS_LOCKED: Readonly<PastReleaseAccessFields> = {
+  locked: false,
+  required_plan: null,
+  previous_locked: true,
+};
+
+/**
+ * GET /events/{id} でロックした発表の `event.revision_status` と各 reaction の
+ * `analysis_status` に入れる固定値(HQ指示 2026-10-22、api-design.md v1.33 §14.1)。
+ * 古いアプリ(ビルド17/18)はこの2つを null にできない型で読むため、null だと
+ * 詳細画面全体が読み込みエラーになる。どちらも古いアプリの enum にある値で、
+ * 実際の改定の有無・データの状態に関係なく常に同じ値なので、隠した値は漏れない。
+ * 新しいアプリは `locked` を先に見て、この2つを表示に使わない。
+ */
+export const LOCKED_REVISION_STATUS = 'NONE' as const;
+export const LOCKED_ANALYSIS_STATUS = 'NOT_ANALYZABLE' as const;
+
+/** The plan's cap on visible past releases per indicator; null = no cap. */
+export function pastReleasesMaxFor(plan: Plan): number | null {
+  return planLimitsFor(plan).past_releases_max;
+}
+
+/** Top-level `past_release_limit` of GET /indicators/{id}/events and GET /home. */
+export interface PastReleaseLimit {
+  /** true when this plan hides older releases. */
+  applied: boolean;
+  max_for_plan: number | null;
+  pro_max: number | null;
+}
+
+export function pastReleaseLimitFor(plan: Plan): PastReleaseLimit {
+  const max = pastReleasesMaxFor(plan);
+  return { applied: max !== null, max_for_plan: max, pro_max: PLAN_LIMITS.PRO.past_releases_max };
+}
+
+export interface ReleaseCandidate {
+  id: string;
+  indicator_id: string;
+  status: string;
+  release_datetime: string;
+}
+
+/** Ordering of `visible_released_event_ids`: release_datetime desc, then id asc. */
+function compareNewestFirst(a: ReleaseCandidate, b: ReleaseCandidate): number {
+  const byTime = Date.parse(b.release_datetime) - Date.parse(a.release_datetime);
+  if (byTime !== 0) return byTime;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/**
+ * Pure equivalent of the SQL function: per indicator, the `limit` newest
+ * RELEASED ids, each mapped to `previous_locked` — true for the `limit`-th
+ * newest when an older RELEASED release exists (its `previous` is that
+ * locked release's actual).
+ */
+export function selectVisibleReleasedIds(events: readonly ReleaseCandidate[], limit: number): Map<string, boolean> {
+  const byIndicator = new Map<string, ReleaseCandidate[]>();
+  for (const event of events) {
+    if (event.status !== 'RELEASED') continue;
+    const list = byIndicator.get(event.indicator_id) ?? [];
+    list.push(event);
+    byIndicator.set(event.indicator_id, list);
+  }
+  const visible = new Map<string, boolean>();
+  for (const list of byIndicator.values()) {
+    const sorted = [...list].sort(compareNewestFirst);
+    sorted.slice(0, Math.max(limit, 0)).forEach((event, index) => {
+      visible.set(event.id, index === limit - 1 && sorted.length > limit);
+    });
+  }
+  return visible;
+}
+
+/**
+ * Locked ids among `events`, given the visible RELEASED ids.
+ * `visibleIds = null` means the plan has no cap (PRO) → nothing is locked.
+ * Only RELEASED events can be locked.
+ */
+export function lockedEventIds(
+  events: readonly { id: string; status: string }[],
+  visibleIds: ReadonlySet<string> | null,
+): Set<string> {
+  const locked = new Set<string>();
+  if (visibleIds === null) return locked;
+  for (const event of events) {
+    if (event.status === 'RELEASED' && !visibleIds.has(event.id)) locked.add(event.id);
+  }
+  return locked;
+}
+
+export function accessFields(locked: boolean, previousLocked = false): PastReleaseAccessFields {
+  if (locked) return { ...LOCKED };
+  return previousLocked ? { ...PREVIOUS_LOCKED } : { ...UNLOCKED };
+}
+
+/**
+ * Adds `locked` / `required_plan` / `previous_locked` to `item`. Locked: every
+ * value field (RELEASE_VALUE_FIELDS) present on `item` is set to null.
+ * Previous-locked (and not locked): only `previous` is set to null. Everything
+ * else (dates, status, data_status, indicator info, source …) is kept.
+ */
+export function redactRelease<T extends object>(
+  item: T,
+  locked: boolean,
+  previousLocked = false,
+): T & PastReleaseAccessFields {
+  if (locked) return { ...nullFields(item, RELEASE_VALUE_FIELDS), ...LOCKED };
+  if (previousLocked) return { ...nullFields(item, PREVIOUS_VALUE_FIELDS), ...PREVIOUS_LOCKED };
+  return { ...item, ...UNLOCKED };
+}
+
+/** A copy of `item` with each of `fields` that is present set to null. */
+export function nullFields<T extends object>(item: T, fields: readonly string[]): T {
+  const copy = { ...item } as Record<string, unknown>;
+  for (const field of fields) {
+    if (field in copy) copy[field] = null;
+  }
+  return copy as T;
+}
+
+/** Message of the 403 PLAN_LIMIT_EXCEEDED for a locked event's child resources. */
+export function lockedReleaseMessage(plan: Plan): string {
+  const max = pastReleasesMaxFor(plan);
+  return `This past release is not available on the ${plan} plan (only the ${max ?? 'all'} most recent releases per indicator). Upgrade to ${PAST_RELEASE_REQUIRED_PLAN} to unlock it.`;
+}

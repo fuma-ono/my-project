@@ -35,11 +35,30 @@ struct EventDetailEvent: Decodable, Equatable {
     let importance: Importance
     let status: EventStatus
     let dataStatus: DataQualityStatus
-    let revisionStatus: RevisionStatus
+    /// 無料プランで隠された発表(api-design v1.33 §14.1)では、古いアプリが読めるよう固定値`NONE`
+    /// (以前は`null`)。実際の改定の有無ではないので、`isLocked`のときは使わない。
+    let revisionStatus: RevisionStatus?
     /// 指標の一覧表示名(api-design v1.22)。古いBackendではnil。
     var displayName: String? = nil
+    /// 無料プランで隠された過去の発表(api-design v1.33 §14.1)。古いBackendではnil(=隠していない)。
+    var locked: Bool? = nil
+    /// ロックを外すのに必要なプラン(`"PRO"`)。ロックしていなければnil。
+    var requiredPlan: String? = nil
+
+    /// ロックされた発表か。`true`のとき値・解説・値動きはBackendが`null`で返し、
+    /// 子のAPI(`/revisions`・`/history`・`/reaction`・`/reaction/chart`)は403になる。
+    var isLocked: Bool { locked ?? false }
+    /// 「前回」だけを隠した発表(api-design v1.33 §28.2): ひとつ前の発表が無料プランでロック
+    /// されているため、その結果にあたる`previous`をBackendが`null`で返す。古いBackendではnil。
+    var previousLocked: Bool? = nil
+
+    /// 「前回」を隠した発表か。`true`のとき前回は「--」ではなく鍵の印で出す。
+    var isPreviousLocked: Bool { previousLocked ?? false }
 
     enum CodingKeys: String, CodingKey {
+        case locked
+        case previousLocked = "previous_locked"
+        case requiredPlan = "required_plan"
         case displayName = "display_name"
         case id
         case indicatorId = "indicator_id"
@@ -117,7 +136,9 @@ struct EventReactionSummary: Decodable, Equatable {
     let timeframe: String
     let pips: Double?
     let changePercent: Double?
-    let analysisStatus: DataQualityStatus
+    /// 無料プランで隠された発表(api-design v1.33 §14.1)では固定値`NOT_ANALYZABLE`(以前は`null`)。
+    /// 画面は`EventDetailEvent.isLocked`を先に見て、隠された発表ではこの値を表示に使わない。
+    let analysisStatus: DataQualityStatus?
 
     enum CodingKeys: String, CodingKey {
         case timeframe

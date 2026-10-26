@@ -38,6 +38,7 @@ struct RootView: View {
                     // 通知の予約・一覧と表示設定を残さない。
                     LocalNotificationScheduler(apiClient: apiClient).reset()
                     AppPreferences.shared.reset()
+                    PlanStore.shared.reset()
                     if sessionExpired { FavoritesStore.shared.removeAll() }
                 }
             case .loggedIn:
@@ -47,6 +48,7 @@ struct RootView: View {
                     LocalNotificationScheduler(apiClient: apiClient).reset()
                     FavoritesStore.shared.removeAll()
                     AppPreferences.shared.reset()
+                    PlanStore.shared.reset()
                     appState.handleSignOut()
                 }
                 // 文字サイズを変えたら全画面を作り直して新しい大きさで表示する(HQ指示 2026-10-15)。

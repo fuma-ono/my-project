@@ -9,9 +9,18 @@ struct EventDetailCards: View {
     let response: EventDetailResponse
     /// この指標の次回発表予定(呼び出し側で読む)。無ければ表示しない。
     var nextRelease: Date? = nil
+    /// 無料プランで隠された発表(api-design v1.33)の鍵の印を押したとき(プランの案内を出す)。
+    var onLockedTap: () -> Void = {}
 
     /// HQ指示(2026-10-09)の表: 発表前は結果「未発表」、値動き「発表後に表示」、分析「発表後に分析」。
     var isReleased: Bool { response.event.status == .released }
+
+    /// 無料プランで隠された過去の発表(HQ判断 2026-10-22)。値の代わりに鍵の印を出し、
+    /// 403になる相場反応詳細(`/reaction`)へは進まない。
+    var isLocked: Bool { response.event.isLocked }
+
+    /// 相場反応詳細へ進めるか(発表後で、隠されていない発表だけ)。
+    var canOpenReactions: Bool { isReleased && !isLocked }
 
     static let timeframes = ["1m", "5m", "15m"]
 
@@ -127,7 +136,33 @@ struct EventDetailCards: View {
     /// 無い指標(米国CPI以外、2026-10-25時点で全て)は1段のみ、見出しも出さない
     /// (従来1指標しか値が無い画面で「前年比」とだけ表示すると、YoY%が本来の
     /// 値ではない指標(NFP等)では誤った説明になるため)。
-    private var results: some View {
+    @ViewBuilder private var results: some View {
+        if isLocked {
+            lockedResults
+        } else {
+            unlockedResults
+        }
+    }
+
+    /// 隠された発表: 結果・予想・前回の代わりに鍵の印(押すとプランの案内)。カードの大きさは同じ。
+    private var lockedResults: some View {
+        Button(action: onLockedTap) {
+            VStack(spacing: 3) {
+                NotoText.text("結果・予想・前回", size: 9.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                PastReleaseLockBadge(size: 10)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 2)
+            .frame(minHeight: Self.summaryCardMinHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .frame(width: 214)
+        .background(GradientCardBackground())
+        .accessibilityIdentifier("eventDetailLockedValues")
+    }
+
+    private var unlockedResults: some View {
         let snapshot = response.snapshot
         let unit = snapshot?.unit
         let released = response.event.status == .released
@@ -143,7 +178,9 @@ struct EventDetailCards: View {
                 forecast: snapshot?.forecast,
                 previous: snapshot?.previous,
                 unit: unit,
-                released: released
+                released: released,
+                // ひとつ前の発表が無料プランでロックされているため、前回(とその前回比)は隠されている(v1.33)。
+                previousLocked: response.event.isPreviousLocked
             )
             if let secondaryLabel {
                 Rectangle().fill(SettingsCardStyle.cardBorder.opacity(0.5)).frame(height: 0.5)
@@ -153,7 +190,9 @@ struct EventDetailCards: View {
                     forecast: snapshot?.secondaryForecast,
                     previous: snapshot?.secondaryPrevious,
                     unit: unit,
-                    released: released
+                    released: released,
+                    // 副指標の前回(secondary_previous)も、ひとつ前のロックされた発表の値なので同じく隠す(v1.36)。
+                    previousLocked: response.event.isPreviousLocked
                 )
             }
         }
@@ -184,7 +223,15 @@ struct EventDetailCards: View {
         .background(GradientCardBackground())
     }
 
-    private func resultsRow(label: String?, actual: Double?, forecast: Double?, previous: Double?, unit: String?, released: Bool) -> some View {
+    private func resultsRow(
+        label: String?,
+        actual: Double?,
+        forecast: Double?,
+        previous: Double?,
+        unit: String?,
+        released: Bool,
+        previousLocked: Bool = false
+    ) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             if let label {
                 NotoText.text(label, size: 7)
@@ -196,7 +243,11 @@ struct EventDetailCards: View {
                 divider
                 resultColumn("予想", value: forecast, unit: unit, note: nil)
                 divider
-                resultColumn("前回", value: previous, unit: unit, note: Self.changeFromPrevious(actual: actual, previous: previous, unit: unit))
+                if previousLocked {
+                    lockedPreviousColumn
+                } else {
+                    resultColumn("前回", value: previous, unit: unit, note: Self.changeFromPrevious(actual: actual, previous: previous, unit: unit))
+                }
             }
         }
     }
@@ -234,6 +285,21 @@ struct EventDetailCards: View {
     /// 高さに自動で合わせる(`resultsRow`のHStack内で使われる)。
     private var divider: some View {
         Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 0.5).frame(maxHeight: .infinity)
+    }
+
+    /// 「前回」を隠した発表の前回の列(HQ指示 2026-10-22)。押すとプランの案内。
+    private var lockedPreviousColumn: some View {
+        Button(action: onLockedTap) {
+            VStack(alignment: .center, spacing: 3) {
+                NotoText.text("前回", size: 8.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                PastReleaseLockBadge(size: 8)
+            }
+            .padding(.horizontal, 4)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("eventDetailLockedPrevious")
     }
 
     private func resultColumn(_ title: String, value: Double?, unit: String?, note: String?, placeholder: String = "--") -> some View {
@@ -306,7 +372,17 @@ struct EventDetailCards: View {
             // 前回この見出し行の色を消したのは誤りだったため戻した。
             .background(Self.headerFill)
             ForEach(pairs) { pair in
-                if isReleased {
+                if isLocked {
+                    Button(action: onLockedTap) {
+                        HStack(spacing: 0) {
+                            cell(width: Self.pairColumnWidth, alignment: .leading) { pairLabel(pair) }
+                            cell(width: Self.valueColumnWidth * 3) { PastReleaseLockBadge(size: 8) }
+                        }
+                        .frame(height: Self.rowHeight)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                } else if isReleased {
                 NavigationLink(value: AppRoute.movementDetail(
                     eventId: response.event.id,
                     indicatorId: response.event.indicatorId,

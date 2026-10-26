@@ -10,6 +10,9 @@ struct MovementDetailView: View {
     @StateObject private var viewModel: MovementDetailViewModel
     @Binding var tabSelection: Int
     @Environment(\.dismiss) private var dismiss
+    private let apiClient: APIClient
+    @ObservedObject private var plan = PlanStore.shared
+    @State private var planPrompt: String?
 
     /// チャートの足の種類(参考画像のタブ)。
     static let candleTimeframes = ["1m", "5m", "15m"]
@@ -27,6 +30,7 @@ struct MovementDetailView: View {
             initialTimeframe: "1m"
         ))
         _tabSelection = tabSelection
+        self.apiClient = apiClient
     }
 
     /// HQ指示(2026-10-15)「要人発言では『発表』を『発言』に」。
@@ -36,6 +40,7 @@ struct MovementDetailView: View {
         content
             .toolbar(.hidden, for: .navigationBar)
             .task { viewModel.load() }
+            .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
     }
 
     @ViewBuilder
@@ -49,6 +54,17 @@ struct MovementDetailView: View {
             loadingScaffold { FXEmptyState(icon: "questionmark.circle", title: "データが見つかりません", message: "指定されたイベント・通貨ペアの組み合わせが存在しません。") }
         case .notEntitled:
             loadingScaffold { FXEmptyState(icon: "lock.fill", title: "この情報はご利用いただけません", message: "現在のプランでは値動き情報を閲覧できません。") }
+        case .pastReleaseLocked:
+            // 無料プランで隠された過去の発表(HQ判断 2026-10-22)。押すとプランの案内。
+            loadingScaffold {
+                Button {
+                    planPrompt = PastReleaseLock.promptMessage(maxForPlan: plan.limits.pastReleasesMax)
+                } label: {
+                    FXEmptyState(icon: "lock.fill", title: PastReleaseLock.label, message: "この発表の値動きはプレミアムプランで見られます。")
+                }
+                .buttonStyle(.plain)
+                .onAppear { planPrompt = PastReleaseLock.promptMessage(maxForPlan: plan.limits.pastReleasesMax) }
+            }
         case .loaded(let preReleasePrice, let reactions):
             V5Viewport {
                 V5Header(title: "相場反応詳細", back: true, onBack: { dismiss() })

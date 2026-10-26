@@ -15,11 +15,50 @@ export interface HistoricalEventRow {
   secondary_previous: number | null;
 }
 
-const SNAPSHOT_COLUMNS =
+/** RELEASE スナップショットの値。secondary_* は前月比など(v1.35。副指標が無い指標は null)。 */
+const SNAPSHOT_VALUE_COLUMNS =
   'forecast, actual, previous, surprise, surprise_direction, secondary_value_kind, secondary_forecast, secondary_actual, secondary_previous';
 
+interface SnapshotValues {
+  forecast: number | null;
+  actual: number | null;
+  previous: number | null;
+  surprise: number | null;
+  surprise_direction: string | null;
+  secondary_value_kind: string | null;
+  secondary_forecast: number | null;
+  secondary_actual: number | null;
+  secondary_previous: number | null;
+}
+
+/** The embedded RELEASE snapshot — PostgREST returns the one-to-many
+ * `event_snapshots` embed as an array (unique is (event_id, snapshot_type),
+ * not event_id alone), so accept both shapes. */
+function releaseSnapshotOf(embedded: unknown): SnapshotValues {
+  const snapshot = (Array.isArray(embedded) ? embedded[0] : embedded) as Partial<SnapshotValues> | undefined;
+  return {
+    forecast: snapshot?.forecast ?? null,
+    actual: snapshot?.actual ?? null,
+    previous: snapshot?.previous ?? null,
+    surprise: snapshot?.surprise ?? null,
+    surprise_direction: snapshot?.surprise_direction ?? null,
+    secondary_value_kind: snapshot?.secondary_value_kind ?? null,
+    secondary_forecast: snapshot?.secondary_forecast ?? null,
+    secondary_actual: snapshot?.secondary_actual ?? null,
+    secondary_previous: snapshot?.secondary_previous ?? null,
+  };
+}
+
+/**
+ * Both comparison queries below select the same rows in the same order
+ * (HQ判断 2026-10-22): RELEASED events of the indicator that have a RELEASE
+ * snapshot (inner join), release_datetime desc then id asc. So the id set the
+ * stats use and the paginated `events` never disagree, and FREE never sees
+ * more than history_events_max.
+ */
+
 /** RELEASED events for an indicator, most recent first, each paired with
- * its RELEASE snapshot (MVP only ever writes that one snapshot_type). */
+ * its RELEASE snapshot. */
 export async function listReleasedEventsForIndicator(
   supabase: SupabaseClient,
   indicatorId: string,
@@ -27,27 +66,22 @@ export async function listReleasedEventsForIndicator(
 ): Promise<{ rows: HistoricalEventRow[]; total: number }> {
   const { data, error, count } = await supabase
     .from('economic_events')
-    .select(`id, release_datetime, event_snapshots!inner(${SNAPSHOT_COLUMNS})`, { count: 'exact' })
+    .select(`id, release_datetime, event_snapshots!inner(${SNAPSHOT_VALUE_COLUMNS}, snapshot_type)`, {
+      count: 'exact',
+    })
     .eq('indicator_id', indicatorId)
     .eq('status', 'RELEASED')
+    .eq('event_snapshots.snapshot_type', 'RELEASE')
     .order('release_datetime', { ascending: false })
+    .order('id', { ascending: true })
     .range(range.from, range.to);
   if (error) throw error;
 
-  const rows: HistoricalEventRow[] = (data ?? []).map((row) => {
-    const snapshot = row.event_snapshots as unknown as {
-      forecast: number | null;
-      actual: number | null;
-      previous: number | null;
-      surprise: number | null;
-      surprise_direction: string | null;
-      secondary_value_kind: string | null;
-      secondary_forecast: number | null;
-      secondary_actual: number | null;
-      secondary_previous: number | null;
-    };
-    return { event_id: row.id, release_datetime: row.release_datetime, ...snapshot };
-  });
+  const rows: HistoricalEventRow[] = (data ?? []).map((row) => ({
+    event_id: row.id,
+    release_datetime: row.release_datetime,
+    ...releaseSnapshotOf(row.event_snapshots),
+  }));
 
   return { rows, total: count ?? 0 };
 }
@@ -56,7 +90,8 @@ export interface ReleasedEventIdRow {
   id: string;
 }
 
-/** The `limit` most recent RELEASED event ids for an indicator — the set
+/** The `limit` most recent RELEASED event ids (with a RELEASE snapshot,
+ * same eligibility and order as listReleasedEventsForIndicator) — the set
  * Historical Comparison stats are computed over (capped per plan,
  * api-design.md §21 / §28.1). */
 export async function listRecentReleasedEventIds(
@@ -66,10 +101,12 @@ export async function listRecentReleasedEventIds(
 ): Promise<string[]> {
   const { data, error } = await supabase
     .from('economic_events')
-    .select('id')
+    .select('id, event_snapshots!inner(snapshot_type)')
     .eq('indicator_id', indicatorId)
     .eq('status', 'RELEASED')
+    .eq('event_snapshots.snapshot_type', 'RELEASE')
     .order('release_datetime', { ascending: false })
+    .order('id', { ascending: true })
     .limit(limit);
   if (error) throw error;
   return (data ?? []).map((row: ReleasedEventIdRow) => row.id);

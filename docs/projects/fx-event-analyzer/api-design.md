@@ -79,6 +79,7 @@
   - 23: Event 検索の並びを、各指標の次の予定(1指標1件、近い順)→ 現在より前の Event(新しい順)に変更。2件目以降の未来の予定は返さない
   - 発表の履歴(`status=RELEASED`など)の並び順、13.1 の`next_release_datetime`(もともと現在以降の最も早い予定)は変えない
 - **v1.32**(2026-10-22): 暫定の予定(HQ承認 2026-10-22 Task 3「FOMCの公式日程」)。`GET /calendar`の各行(14.6節)と`GET /events/{event_id}`の`event`(14.1節)に`is_provisional`(boolean)を追加。`economic_events.is_provisional`(db-design.md v4.17 3.5節、Migration `20261022000002_economic_events_provisional.sql`)の値で、予定の日時がまだ公式に確定していない(暫定)なら`true`。`SPEECH`の行は常に`false`。今のところ`true`になるのはFOMCの日程表(data-sources.md 15章)の暫定の会合だけ。APIは応答を作る時点で「DBの値が`true`**かつ**日時が今より先」のときだけ`true`を返す(過ぎた会合は、DBの値を直す前でも`false`。`src/domain/provisional.ts`の`effectiveIsProvisional`を`GET /calendar`・`GET /events/{id}`の両方で使う。`GET /home`は`is_provisional`を返さない)。iOSは`true`の行に「予定（暫定）」と表示し、項目が無い古いBackendでは`false`として扱う。項目の追加だけで、既存の項目・並び順・絞り込みは変えない。**既知の制約**(14.6節): FOMCの行は発表後も`SCHEDULED`・`DATA_PENDING`のままで、値・値動き・過去の結果は自動では入らない。**この項目を読むコードを、Migration より先にデプロイしてはいけない**(dev-environment.md 12章)
+- **v1.33**(2026-10-22): 無料プランの「過去の発表」制限(HQ判断 2026-10-21/22、28.2節)。FREEは指標ごとに発表済み(`RELEASED`)の直近3回(`release_datetime`の新しい順、同時刻は`id`の昇順)だけ値を見られ、それより古い発表は「ロック」(値を`null`にして`locked: true`・`required_plan: "PRO"`)。PROは変更なし。`GET /indicators/{id}/events`(13.3節)・`GET /home`(12章)の各イベントと`GET /events/{id}`(14.1節)の`event`に`locked`・`required_plan`を追加し、一覧には`past_release_limit`を追加。ロックされた発表の`GET /events/{id}/revisions`・`/history`・`/reaction`・`/reaction/chart`は`403 PLAN_LIMIT_EXCEEDED`(`required_plan: "PRO"`)。`GET /entitlements`の`limits`に`past_releases_max`を追加(27章・28.1節)。過去イベント比較(21章)の件数(FREE 5・PRO 20)は変えず、使う発表の数え方を「RELEASE snapshotのある`RELEASED`、`release_datetime`の新しい順・同時刻は`id`の昇順」に揃えた。アプリ利用者がSupabaseに直接つないで値を読めないよう、市場の値を持つ5テーブルの`anon`・`authenticated`の権限をすべて取り消した(db-design.md v4.18 6章)。古いアプリ(ビルド17/18)が詳細画面を開けるよう、ロックされた発表の`event.revision_status`は固定値`NONE`、各reactionの`analysis_status`は固定値`NOT_ANALYZABLE`で返す(`null`にしない、14.1節)。過去イベント比較(21章)は件数(FREE 5・PRO 20)を変えず、FREEでロックされる発表の行は値・pipsを`null`にして`locked: true`で返し、統計・件数はロックされていない発表だけで計算する(`past_release_limit`を追加)。`fx_prices`と取り込みの運用データの表(`ingestion_logs`・`ingestion_staged_values`・`official_observations`)も`anon`・`authenticated`から直接読めないようにした(db-design.md v4.18 6章)。要人発言は対象外のままで、近くの発表の影響を値動きから推測できる可能性があることを既知の制約とした(14.9節の後・21章・28.2節)。FREEで見られる一番古い発表(ひとつ前の発表がロックされているもの)は、その結果にあたる`previous`と、前回の改定・解説も隠し、`previous_locked: true`を付ける(28.2節。一覧・ホーム・詳細・履歴・改定・比較)
 - **v1.34**(2026-10-23): 要人発言の鮮度(HQ承認 2026-10-23)。`GET /home`に任意の`speeches_status`(`window_days` / `last_success_at` / `stale`)を追加(12章)。ホームの「直近の要人発言」が0件のとき、「直近7日間に発言が無い」のか「取得できていない」のかをアプリが言い分けるため。**`speeches`の中身・形は変えない。** 判定は品質レポート第9章(dev-environment.md 14章)の「取得の失敗」と同じ関数を使う
 - **v1.35**(2026-10-25): 過去イベント比較・イベント詳細に前月比・前年比を併記(HQ指示 2026-10-25「過去イベント比較の表も前月と前年必要だと思う」)。`GET /indicators/{indicator_id}/comparison`の`events[]`、`GET /events/{event_id}`・`GET /events/{event_id}/history`の`snapshot`に`secondary_value_kind`(`"MOM_PCT"`等、副指標が無い指標は`null`)・`secondary_forecast`・`secondary_actual`・`secondary_previous`を追加(21章・14章・20章)。米国CPIは本来の値(`actual`等)がYoY%(前年比)なので、これに加えてMoM%(前月比)を`secondary_*`として追加した — 新しい外部データ源は増やさず、既に取得しているBLS公式系列(CUUR0000SA0)を別の変換で計算しただけ(data-sources.md参照)。副指標が設定されていない指標(米国CPI以外、2026-10-25時点で全て)は常に`null`
 
@@ -464,6 +465,9 @@ Eventには以下を含む。
 - surprise
 - surprise_direction
 - related_fx_pairs
+- locked / required_plan(v1.33で追加、28.2節)
+
+**過去の発表の制限(v1.33、28.2節)**: FREEでは、ロックされた`RELEASED`のイベントの`forecast`・`actual`・`previous`・`surprise`・`surprise_direction`が`null`になり、`locked: true`・`required_plan: "PRO"`が付く(日時・`status`・`data_status`・指標の情報・`related_fx_pairs`はそのまま)。それ以外のイベント(PROのすべて、SCHEDULEDなど)は`locked: false`・`required_plan: null`。Responseの一番上に`past_release_limit`(13.3節と同じ形)を追加する。
 
 major_fxにはHomeで表示する主要FX Pairの最新情報を含める。想定項目：fx_pair_id / symbol / price / change / change_percent / timestamp。実際の価格データProviderには依存しない。
 
@@ -585,6 +589,37 @@ fromはinclusive。toはexclusive。
 
 **「次の発表」の求め方(v1.31)**：指標の詳細(SCR-006)・お気に入り・イベントの詳細の「次の発表」は`status=SCHEDULED&from=<現在のUTC>&order=asc&limit=1`の先頭(イベントの詳細は`limit=2`で、表示中のイベントを除いた先頭)。`from`を付けるのは、発表時刻を過ぎてもまだ`SCHEDULED`の行(取り込み待ち。BLS は発表後にジョブを動かすまで、FOMC は発表後もそのまま)を「次の発表」にしないため。該当が無ければ「次の発表」は出さない(過去の発表を代わりに出さない)。13.1 の`next_release_datetime`と同じ条件。
 
+**過去の発表の制限(v1.33、28.2節)**: 各行に`locked`・`required_plan`を追加する。FREEでロックされた`RELEASED`の行は`forecast`・`actual`・`previous`・`surprise`・`surprise_direction`が`null`(日時・`status`・`data_status`はそのまま)。`SCHEDULED`などの未発表の行はロックしない。`meta`・Paginationは変えない(ロックされた行も一覧に出て、件数に含む)。
+
+```json
+{
+  "data": [
+    {
+      "event_id": "xxx",
+      "indicator_id": "xxx",
+      "release_datetime": "2026-06-10T12:30:00Z",
+      "release_datetime_precision": "EXACT",
+      "importance": "HIGH",
+      "status": "RELEASED",
+      "data_status": "READY",
+      "forecast": null,
+      "actual": null,
+      "previous": null,
+      "surprise": null,
+      "surprise_direction": null,
+      "locked": true,
+      "required_plan": "PRO"
+    }
+  ],
+  "meta": { "page": 1, "limit": 20, "total": 7, "has_next": false },
+  "past_release_limit": { "applied": true, "max_for_plan": 3, "pro_max": null }
+}
+```
+
+- `past_release_limit.applied`：呼び出しユーザーのプランに上限があるとき`true`(FREE)
+- `past_release_limit.max_for_plan`：そのプランの`past_releases_max`(FREE `3`、PRO `null` = 上限なし)
+- `past_release_limit.pro_max`：PROの値(`null` = 上限なし。「PROならすべての発表を見られる」の表示用)
+
 ## 13.4 GET /api/v1/indicators/{indicator_id}/fx-pairs
 
 指定Indicatorに関連するFX Pair一覧を取得する。IndicatorとFX Pairは、IndicatorFxPairによるMany-to-Many関係とする。
@@ -677,6 +712,18 @@ Event Detailでは以下を1回のAPIで取得可能とする。
 Movement Chart等の比較的重いデータ、および特定timeframe・特定ペアの詳細Reaction、全revision履歴は別APIで取得する。
 
 **`event.is_provisional`(v1.32で追加)**: 予定の日時がまだ公式に確定していない(暫定)なら`true`、それ以外は`false`(`economic_events.is_provisional`が`true`で、かつ`release_datetime`が今より先のときだけ`true`。14.6節と同じ判定)。
+
+**過去の発表の制限(v1.33、28.2節)**: `event`に`locked`・`required_plan`を追加する。ロックされた発表でも`403`にはせず、同じ形で値だけを隠して返す。
+
+- `event.locked: true`・`event.required_plan: "PRO"`。`event.revision_status`は固定値`"NONE"`(実際の改定の有無に関係なく常に同じ値。下記「古いアプリとの互換」)
+- `snapshot`：`forecast`・`actual`・`previous`・`surprise`・`surprise_direction`が`null`(`unit`・`source`・`source_url`・`captured_at`はそのまま。snapshotが無ければ従来どおり`null`)
+- `analysis`：`surprise`・`surprise_direction`が`null`
+- `explanation`：`null`
+- `related_fx_pairs[].reaction`・`major_fx_reactions[].reactions[]`：`pips`・`change_percent`が`null`、`analysis_status`は固定値`"NOT_ANALYZABLE"`(通貨ペアの一覧と`timeframe`はそのまま)
+- `available_timeframes`・日時・`status`・`data_status`・指標の情報はそのまま
+- ロックされていなければ`event.locked: false`・`event.required_plan: null`で、従来と同じ
+
+**古いアプリとの互換(v1.33、HQ指示 2026-10-22)**: ビルド17/18のアプリは`event.revision_status`(`NONE` / `REVISED`)と`analysis_status`(`READY` / `DATA_PENDING` / `DATA_UNAVAILABLE` / `NOT_ANALYZABLE`)を`null`にできない型で読むため、`null`を返すと詳細画面全体が読み込みエラーになり、お気に入りに入れたロックされた発表も一覧から消える。そこでロックされた発表ではこの2つを古いアプリの値の中の固定値(`NONE`・`NOT_ANALYZABLE`)で返す。常に同じ値なので、隠した改定の有無・データの状態は分からない。**クライアントは`locked`を先に見て、`locked: true`のときはこの2つを表示や判断に使わない。** 古いアプリでは、値が「--」で表示され(鍵の印は出ない)、相場反応詳細などの子のAPIは`403 PLAN_LIMIT_EXCEEDED`を知らないため一般的なエラー表示になる
 
 **`event.display_name`(v1.22で追加)**: 指標の一覧画面の表示名(13.2節の`display_name`、未登録は`null`)。画面は`display_name`を指標名として表示し、`null`なら`indicator_name`(正式名)を表示する。`indicator_name`は変えない。
 
@@ -846,7 +893,7 @@ Response：`{ "from": string, "to": string, "items": CalendarItem[] }`(`from` / 
 
 ## 14.8 GET /api/v1/speeches/{speech_id}/reaction(v1.28で追加)
 
-要人発言の値動き。**`GET /events/{event_id}/reaction`(18章)と同じQuery・同じ形**(アプリは同じデコーダーを使う)。`event_id`には`speech_id`、`pre_release_price`には発言前の価格(14.11節)が入る。必要なfeature_code：`VIEW_MARKET_REACTION`。
+要人発言の値動き(既知の制約は14.9節の後)。**`GET /events/{event_id}/reaction`(18章)と同じQuery・同じ形**(アプリは同じデコーダーを使う)。`event_id`には`speech_id`、`pre_release_price`には発言前の価格(14.11節)が入る。必要なfeature_code：`VIEW_MARKET_REACTION`。
 
 Query：`fx_pair_id`(必須、UUID) / `timeframe`(`1m` / `5m` / `15m` / `30m` / `60m` / `all`、省略時`all`)
 
@@ -862,6 +909,8 @@ Query：`fx_pair_id`(必須、UUID) / `timeframe`(`1m` / `5m` / `15m` / `30m` / 
 Query：`fx_pair_id`(必須、UUID) / `timeframe`(必須、`1m` / `5m` / `15m` / `30m` / `60m`)
 
 Response：`{ event_id, fx_pair_id, timeframe, release_datetime, window_from, window_to, prices: [{ timestamp, open, high, low, close, volume }] }`。表示範囲は発言時刻を基準に19章と同じ(`1m`前後15分・`5m`前後60分・`15m`前後3時間・それ以外は前30分〜後60分)。`prices`は`fx_prices`にある足だけ(補った足は返さない)。発言の状態に関係なく、範囲内にある実際の足を返す。
+
+**既知の制約(v1.33、HQ判断 2026-10-22)**: 要人発言は無料プランの「過去の発表」制限(28.2節)の対象外。発言の時刻がロックされた経済指標の発表の近くにあると、14.8節の値動き・14.9節のチャート・この比較のpipsに、その発表の前後の動きが含まれるため、**市場の値動きから発表の影響を推測できる可能性がある**。発表の値(結果・予想・前回)はここからは分からない(21章の残課題)。
 
 ## 14.10 GET /api/v1/speakers/{speaker_id}/comparison(v1.28で追加)
 
@@ -1094,7 +1143,25 @@ Query：
 - `max_for_plan`：呼び出しユーザーのプランの上限
 - `pro_max`：PROの上限(「PROなら20回分」の表示用)
 
-`GET /events/{event_id}/history`(20章)は1回分の発表を返すAPIで、過去の発表回の一覧を使わないため、上限の対象外(変更なし)。
+`GET /events/{event_id}/history`(20章)は1回分の発表を返すAPIで、過去の発表回の一覧を使わないため、上限の対象外(変更なし)。ただしv1.33から、その発表が28.2節でロックされていれば`403 PLAN_LIMIT_EXCEEDED`。
+
+**v1.33(HQ判断 2026-10-22)**: 件数(FREE 5回・PRO 20回)は変えない(28.2節の「直近3回」とは別の上限)。使う発表は「RELEASE snapshotのある`RELEASED`の発表」で、並びは`release_datetime`の新しい順・同時刻は`id`の昇順。統計に使う発表と`events`の一覧は必ず同じ条件・同じ順で数える(以前はsnapshotの無い発表を片方だけが数え得た)。`GET /speakers/{speaker_id}/comparison`(14.10節)も件数は変えない。
+
+**返す項目(v1.33)**: `events`の各行は`event_id`・`release_datetime`・`forecast`・`actual`・`previous`・`surprise`・`surprise_direction`・`pips_by_timeframe`(`1m`・`5m`・`15m`のpips)・`locked`・`required_plan`だけ。解説・改定・`change_percent`・最大上昇/下落などの値動きの詳細は返さない。
+
+**過去の発表の制限(v1.33、HQ指示 2026-10-22「比較機能からFREE制限を迂回できないこと」)**: 件数(FREE 5・PRO 20)は行数の設定としてそのまま。FREEでは、28.2節と同じ規則(DB関数`visible_released_event_ids`、指標ごとに`RELEASED`の直近3回)でロックされる発表の行を、一覧(13.3節)と同じ形で返す。
+
+- ロックされた行：`forecast`・`actual`・`previous`・`surprise`・`surprise_direction`が`null`、`pips_by_timeframe`は3つのキーを残して値がすべて`null`、`locked: true`・`required_plan: "PRO"`。`event_id`・`release_datetime`はそのまま(一覧と同じく日時は隠さない)。ロックされていない行は`locked: false`・`required_plan: null`
+- 行は除かずに返す：行数の設定(5回)と一覧(13.3節)の見え方を揃え、隠した行があることを画面で示せるようにするため。日時は一覧でも見えるので、行を残しても新しく分かることはない
+- `stats` / `stats_by_timeframe`・`advanced_statistics`・`total_events`・`analyzable_events`は、ロックされていない行だけで計算する(ロックされた発表の値動きはDBから読まない)。平均・最大・最小・件数から隠した値を逆算できない
+- `meta`(Pagination)と`history_limit`は行数(ロックされた行を含む)で数える。どちらも値を含まない
+- Responseの一番上に`past_release_limit`(13.3節と同じ形)を追加する
+- PROは変更なし(ロックしない)
+- 直近にRELEASE snapshotの無い`RELEASED`の発表があると、ロックはそれも数えるため、比較の5行のうちロックされていない行が3行より少なくなることがある(値が見えすぎることは無い)
+
+**前回値(v1.33、HQ指示 2026-10-22)**: 3回目の`previous`は4回目の`actual`(またはその改定値)なので、FREEでは28.2節「前回を隠す発表」のとおり`null`・`previous_locked: true`にする(比較の行も同じ)。統計は`previous`を使わない。
+
+**残課題・既知の制約(v1.33、HQ判断 2026-10-22「要人発言の仕様は変えない」)**: 要人発言は28.2節の制限の対象外(要人発言の一覧・詳細・値動き・チャート・話者の比較は従来どおり)。**市場の値動きから発表の影響を推測できる可能性がある**。要人発言のチャート(14.9節。1分足は発言の前後15分、5分足は前後60分、15分足は前後3時間)と値動き(14.8節。発言から1〜60分後)は為替の足を返すため、発言がロックされた発表の近くにあると、その発表の前後の値動きが見える(例: FOMCの声明の30分後の議長会見、日銀の決定の後の総裁会見、米国の8:30 ETの指標と同じ日の午前の講演)。発表の値(結果・予想・前回)は要人発言からは分からない。
 
 `indicator`は`id`・`code`・`name`・`display_name`(v1.22で追加。13.2節の`display_name`、未登録は`null`)。timeframe単一指定・`all`の両方で同じ形。
 
@@ -1869,7 +1936,8 @@ Response(v1.15で`plan`・`limits`を追加。`features`は変更なし)：
     "favorites_max": 3,
     "notification_importances": ["HIGH"],
     "notification_fx_pairs_max": 1,
-    "history_events_max": 5
+    "history_events_max": 5,
+    "past_releases_max": 3
   }
 }
 ```
@@ -1880,6 +1948,7 @@ Response(v1.15で`plan`・`limits`を追加。`features`は変更なし)：
 - `plan`：`FREE` / `PRO`。判定は28.1節
 - `limits`：28.1節の表の値。`calendar_earliest_from` / `calendar_latest_to`はUTCの秒精度(`Z`、小数秒なし)で、`GET /calendar`(14.6節)の`from`の下限(含む)と`to`の上限
 - `favorites_max` / `notification_fx_pairs_max`：`null` = 上限なし
+- `past_releases_max`(v1.33)：指標ごとに値を見られる過去の発表の回数(28.2節)。FREE `3`、PRO `null` = 上限なし
 - `notification_importances`：通知に使える重要度(`HIGH`, `MEDIUM`, `LOW`の順)
 
 MVP：VIEW_BASIC_EVENT / VIEW_HISTORICAL / VIEW_MARKET_REACTION / VIEW_ADVANCED_STATS
@@ -1914,6 +1983,8 @@ Backend側の各Endpointが要求するEntitlementを以下の通り確定する
 | お問い合わせ(v1.10で追加) | `POST /support/requests`、`GET /support/requests` | **Authentication Required / Entitlementなし** |
 
 Home / Indicators / Indicator Detail / FX Pairs(v1.6) / Search / Account / Settings / Subscription / Entitlement APIは、認証済みであれば全ユーザーがアクセス可能とし、特定feature_codeを要求しない。
+
+**過去の発表の制限(v1.33、28.2節)**: `GET /events/{id}/revisions`・`GET /events/{id}/history`・`GET /events/{id}/reaction`・`GET /events/{id}/reaction/chart`は、上の表のfeature_codeの確認に加えて、親の発表がロックされていれば`403 PLAN_LIMIT_EXCEEDED`(`required_plan: "PRO"`)を返す。
 
 **Event Revision APIについて(HQ確定、v1.2)**: `GET /events/{id}/revisions`はMVPではEntitlement制限を設けない。認証済みユーザーであれば取得可能とする。理由: Revisionは課金対象となる高度分析そのものではなく、イベントデータの履歴・事実情報であるため。
 
@@ -1954,11 +2025,26 @@ PRO Entitlementの付与(v1.4): `POST /subscription/verify`の保存時に、FRE
 | 通知の重要度(`notification_importances`) | `HIGH`のみ | `HIGH` / `MEDIUM` / `LOW` | `PATCH /settings`(24.5節)、`GET /notifications/upcoming`(24.6節) |
 | 通知の通貨ペア(`notification_fx_pairs_max`) | 1件(`null` = すべての通貨ペアは不可。保存済みの`null`は`USDJPY`として扱う) | 上限なし(`null`) | `PATCH /settings`(24.5節)、`GET /notifications/upcoming`(24.6節) |
 | 過去イベント比較の発表回(`history_events_max`) | 直近5回 | 直近20回 | `GET /indicators/{id}/comparison`(21章)、`GET /speakers/{speaker_id}/comparison`(14.10節、v1.28。要人の発言済みの発言の件数) |
+| 値を見られる過去の発表(`past_releases_max`、v1.33) | 指標ごとに直近3回 | 上限なし(`null`) | `GET /indicators/{id}/events`(13.3節)、`GET /home`(12章)、`GET /events/{id}`(14.1節)と、その子の`/revisions`・`/history`・`/reaction`・`/reaction/chart`(28.2節) |
 | 有効なレートアラート(`rate_alerts_max`、v1.27) | 1件 | 10件 | `POST /rate-alerts`(24.13節)、`GET /rate-alerts`の`limit`(24.12節)。`GET /entitlements`の`limits`には含めない |
 
 - カレンダーの日時は、Requestの`timezone`(既定`UTC`)の現地時刻で計算する(「先月」「今年」もそのタイムゾーンで決める)
 - 上限の値はBackendの`src/domain/planLimits.ts`だけで定義する。iOSは`GET /entitlements`の`limits`で受け取り、端末に値を持たない
 - 上限を超える操作は`403 PLAN_LIMIT_EXCEEDED`(`required_plan`付き、4章)。どのプランでも許されない値は`422 VALIDATION_ERROR`
+
+## 28.2 過去の発表の制限(v1.33で追加、HQ判断 2026-10-21/22)
+
+- **FREE**：指標ごとに、発表済み(`status = RELEASED`)のイベントを`release_datetime`の新しい順(同時刻は`id`の昇順)に並べ、先頭の`past_releases_max`回(3回)だけ値を見られる。それより古い`RELEASED`の発表は「ロック」
+- **PRO**：ロックしない(Paginationなどの上限も従来どおり)
+- `SCHEDULED`・`CANCELLED`のイベントは数えず、ロックもしない
+- ロックされた発表：値(`forecast`・`actual`・`previous`・`surprise`・`surprise_direction`)と、その分析(解説・改定の有無・値動き)を`null`にし、`locked: true`・`required_plan: "PRO"`を付ける。日時・`status`・`data_status`・指標の情報・`source`はそのまま。ロックされていない行は`locked: false`・`required_plan: null`
+- **前回を隠す発表(v1.33、HQ指示 2026-10-22)**：発表の`previous`は、ひとつ前の発表の結果(またはその改定値)。そこで、見られる発表のうち、ひとつ前の`RELEASED`の発表がロックされているもの(= 指標ごとに直近`past_releases_max`回目で、それより古い`RELEASED`があるもの)は、`previous`を`null`にし、`previous_locked: true`を付ける。あわせて、その発表の解説(`explanation`。前回値を書いていることがある)を`null`にし、改定(`GET /events/{id}/revisions`・`revision_status`)から`PREVIOUS`の改定を除く(`ACTUAL`の改定は返す)。`actual`・`forecast`・`surprise`・`surprise_direction`・値動きはそのまま(`surprise`は予想と結果から計算し、前回は使わない)。行そのものはロックしない(`locked: false`・`required_plan: null`)。対象は一覧(13.3節)・ホーム(12章)・詳細(14.1節の`event`)・`GET /events/{id}/history`(20章の`event`)・改定(16.1節)・過去イベント比較の行(21章)。それ以外の行・PROはすべて`previous_locked: false`。発表が`past_releases_max`回以下しか無い指標では隠さない(前回値にあたる発表がDBに無いため)
+- 対象：`GET /indicators/{id}/events`(13.3節)・`GET /home`(12章。過去の日付で表示される`RELEASED`のイベント)・`GET /events/{id}`(14.1節。403にはしない)・`GET /indicators/{id}/comparison`(21章。行は件数の設定どおり返し、ロックされた行の値を隠し、統計はロックされていない行だけで計算する。v1.33)
+- 子のAPI：`GET /events/{id}/revisions`・`/history`・`/reaction`・`/reaction/chart`は、親の発表がロックされていれば`403 PLAN_LIMIT_EXCEEDED`(`required_plan: "PRO"`)
+- 既知の制約(v1.33)：要人発言は対象外のため、ロックされた発表の近くの要人発言の値動き・チャート(14.8〜14.10節)から、**市場の値動きから発表の影響を推測できる可能性がある**(発表の値は分からない。21章の残課題)
+- 対象外(変更なし)：要人発言、`GET /calendar`、`GET /search`、`GET /indicators`・`GET /indicators/{id}`、未発表のイベント、過去イベント比較の件数(21章、FREE 5・PRO 20)
+- 上限の値は`src/domain/planLimits.ts`の`past_releases_max`だけで定義し、iOSは`GET /entitlements`の`limits.past_releases_max`と各Responseの`locked`で判断する。どの発表を見られるか・どの発表の前回を隠すかはDB関数`visible_released_event_ids`(db-design.md 6.1節、service_role専用)で計算し、PROのときは呼ばない。すべての経路が`src/authorization/pastReleaseAccess.ts`の同じ判定を使う
+- アプリ利用者がSupabaseに直接つないでも値を読めないよう、`economic_events`・`event_snapshots`・`event_revisions`・`event_explanations`・`event_price_reactions`は`anon`・`authenticated`から直接読み書きできない(SELECT・INSERT・UPDATE・DELETE・TRUNCATE・REFERENCES・TRIGGERの権限を取り消し。db-design.md v4.18 6章)。ロックされた発表の前後の足から値動きを計算し直せないよう、`fx_prices`も同じく直接読み書きできない(別のMigration)。Backendはservice_roleで接続するため影響しない
 
 ---
 

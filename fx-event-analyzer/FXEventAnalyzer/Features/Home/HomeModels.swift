@@ -26,9 +26,25 @@ struct HomeEventSummary: Decodable, Identifiable, Equatable {
     var displayName: String? = nil
     /// 指標の単位(API v1.13、例: `%`・`千人`)。返さない古いBackendではnil。
     var unit: String? = nil
+    /// 無料プランで隠された過去の発表(api-design v1.33 §28.2)。古いBackendではnil(=隠していない)。
+    var locked: Bool? = nil
+    /// ロックを外すのに必要なプラン(`"PRO"`)。ロックしていなければnil。
+    var requiredPlan: String? = nil
+
+    /// ロックされた発表か。`true`のとき予想・結果・前回・サプライズはBackendが`null`で返す。
+    var isLocked: Bool { locked ?? false }
+    /// 「前回」だけを隠した発表(api-design v1.33 §28.2): ひとつ前の発表が無料プランでロック
+    /// されているため、その結果にあたる`previous`をBackendが`null`で返す。古いBackendではnil。
+    var previousLocked: Bool? = nil
+
+    /// 「前回」を隠した発表か。`true`のとき前回は「--」ではなく鍵の印で出す。
+    var isPreviousLocked: Bool { previousLocked ?? false }
 
     enum CodingKeys: String, CodingKey {
         case unit
+        case locked
+        case previousLocked = "previous_locked"
+        case requiredPlan = "required_plan"
         case displayName = "display_name"
         case id = "event_id"
         case indicatorId = "indicator_id"
@@ -90,6 +106,8 @@ struct HomeResponse: Decodable {
     /// api-design.md §12 v1.34(HQ承認 2026-10-23)。古いサーバーは返さないので optional。
     /// `speeches` が空のときの文言にだけ使う(`HomeSpeechesEmptyText`)。
     let speechesStatus: HomeSpeechesStatus?
+    /// 無料プランの過去の発表の上限(api-design v1.33 §12)。古いBackendではnil。
+    let pastReleaseLimit: PastReleaseLimit?
 
     init(
         date: String,
@@ -97,7 +115,8 @@ struct HomeResponse: Decodable {
         events: [HomeEventSummary],
         majorFx: [MajorFxSummary],
         speeches: [HomeSpeechSummary]? = nil,
-        speechesStatus: HomeSpeechesStatus? = nil
+        speechesStatus: HomeSpeechesStatus? = nil,
+        pastReleaseLimit: PastReleaseLimit? = nil
     ) {
         self.date = date
         self.timezone = timezone
@@ -105,9 +124,11 @@ struct HomeResponse: Decodable {
         self.majorFx = majorFx
         self.speeches = speeches
         self.speechesStatus = speechesStatus
+        self.pastReleaseLimit = pastReleaseLimit
     }
 
     enum CodingKeys: String, CodingKey {
+        case pastReleaseLimit = "past_release_limit"
         case date
         case timezone
         case events

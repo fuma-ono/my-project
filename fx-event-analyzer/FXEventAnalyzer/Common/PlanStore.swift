@@ -23,6 +23,12 @@ final class PlanStore: ObservableObject {
         }
     }
 
+    /// ログアウト・セッション切れ: 前のユーザーのプランを残さず、無料プランの範囲に戻す。
+    func reset() {
+        plan = .free
+        limits = .free()
+    }
+
     /// テスト用。
     func set(plan: EntitlementsResponse.Plan, limits: PlanLimits) {
         self.plan = plan
@@ -44,6 +50,9 @@ struct PlanLimits: Decodable, Equatable {
     let notificationFxPairsMax: Int?
     /// 過去イベント比較に使う回数。
     let historyEventsMax: Int
+    /// 指標ごとに値を見られる過去の発表の回数(api-design v1.33 §28.2)。nilは上限なし。
+    /// 古いBackend(項目なし)ではnil。どの発表を隠すかは各Responseの`locked`で判断する。
+    var pastReleasesMax: Int? = nil
 
     enum CodingKeys: String, CodingKey {
         case calendarEarliestFrom = "calendar_earliest_from"
@@ -52,9 +61,11 @@ struct PlanLimits: Decodable, Equatable {
         case notificationImportances = "notification_importances"
         case notificationFxPairsMax = "notification_fx_pairs_max"
         case historyEventsMax = "history_events_max"
+        case pastReleasesMax = "past_releases_max"
     }
 
-    /// 無料プラン: カレンダーは先月の1日から、お気に入り3件、通知はHIGHと通貨ペア1つ、比較は5回。
+    /// 無料プラン: カレンダーは先月の1日から、お気に入り3件、通知はHIGHと通貨ペア1つ、比較は5回、
+    /// 過去の発表は指標ごとに直近3回。
     static func free(now: Date = Date(), calendar: Calendar = .current) -> PlanLimits {
         PlanLimits(
             calendarEarliestFrom: monthStart(offset: -1, from: now, calendar: calendar),
@@ -62,11 +73,12 @@ struct PlanLimits: Decodable, Equatable {
             favoritesMax: 3,
             notificationImportances: ["HIGH"],
             notificationFxPairsMax: 1,
-            historyEventsMax: 5
+            historyEventsMax: 5,
+            pastReleasesMax: 3
         )
     }
 
-    /// プレミアムプラン: カレンダーは5年前の1月から、ほかは無制限、比較は20回。
+    /// プレミアムプラン: カレンダーは5年前の1月から、ほかは無制限(過去の発表も)、比較は20回。
     static func pro(now: Date = Date(), calendar: Calendar = .current) -> PlanLimits {
         PlanLimits(
             calendarEarliestFrom: yearStart(offset: -5, from: now, calendar: calendar),
@@ -74,7 +86,8 @@ struct PlanLimits: Decodable, Equatable {
             favoritesMax: nil,
             notificationImportances: ["HIGH", "MEDIUM", "LOW"],
             notificationFxPairsMax: nil,
-            historyEventsMax: 20
+            historyEventsMax: 20,
+            pastReleasesMax: nil
         )
     }
 

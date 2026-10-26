@@ -35,6 +35,9 @@ export interface PlanLimits {
   history_events_max: number;
   /** 有効な(is_active)レートアラートの上限 (POST /rate-alerts, api-design.md §24.12). */
   rate_alerts_max: number;
+  /** 指標ごとに値を見られる過去の発表(RELEASED)の回数。古い発表はロック
+   * (HQ判断 2026-10-22, src/domain/pastReleaseAccess.ts)。null = 制限なし。 */
+  past_releases_max: number | null;
 }
 
 export const PLAN_LIMITS: Readonly<Record<Plan, PlanLimits>> = {
@@ -46,6 +49,7 @@ export const PLAN_LIMITS: Readonly<Record<Plan, PlanLimits>> = {
     notification_fx_pairs_max: 1,
     history_events_max: 5,
     rate_alerts_max: 1,
+    past_releases_max: 3,
   },
   PRO: {
     calendar_past: { unit: 'YEARS', count: 5 },
@@ -55,6 +59,7 @@ export const PLAN_LIMITS: Readonly<Record<Plan, PlanLimits>> = {
     notification_fx_pairs_max: null,
     history_events_max: 20,
     rate_alerts_max: 10,
+    past_releases_max: null,
   },
 };
 
@@ -95,6 +100,8 @@ export interface EntitlementLimits {
   notification_importances: Importance[];
   notification_fx_pairs_max: number | null;
   history_events_max: number;
+  /** null = no cap (PRO). */
+  past_releases_max: number | null;
 }
 
 export function toEntitlementLimits(plan: Plan, now: Date, timeZone: string): EntitlementLimits {
@@ -106,6 +113,7 @@ export function toEntitlementLimits(plan: Plan, now: Date, timeZone: string): En
     notification_importances: [...limits.notification_importances],
     notification_fx_pairs_max: limits.notification_fx_pairs_max,
     history_events_max: limits.history_events_max,
+    past_releases_max: limits.past_releases_max,
   };
 }
 
