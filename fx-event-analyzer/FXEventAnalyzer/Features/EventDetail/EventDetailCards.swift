@@ -22,7 +22,10 @@ struct EventDetailCards: View {
         // HQ再指摘(2026-10-12、2回目)「まだ上に上げて」でさらに0まで詰めた。
         // HQ再指摘(2026-10-12、6回目)「結果、予想、前回の枠を少し下げて」:
         // 詰めすぎていたため0→4に戻した。
-        VStack(alignment: .leading, spacing: 8) {
+        // HQ指示(2026-10-26)「次回発表予定が1画面に収まっていない」:
+        // 前年比/前月比の2段構成でカード自体が伸びた分、ここのセクション間隔も
+        // 詰めて最後の次回発表予定まで1画面に収まるようにした(8→5)。
+        VStack(alignment: .leading, spacing: 5) {
             VStack(alignment: .leading, spacing: 4) {
                 header
                 results
@@ -52,7 +55,6 @@ struct EventDetailCards: View {
         // 残したまま括弧で割るだけ)を使っていたため「米国CPI」が消えて
         // いなかった。Home/検索と同じ`CountryFlag.indicatorDisplayName`
         // (国名接頭辞を取り除く)に揃えた。
-        let display = CountryFlag.indicatorDisplayName(event.indicatorName, countryCode: event.countryCode, displayName: event.displayName)
         let combinedName = CountryFlag.indicatorDisplayText(event.indicatorName, countryCode: event.countryCode, displayName: event.displayName)
         // HQ指示(2026-10-13、2回目)「米国|USDの位置が指標名の下になるように」:
         // 国旗(34pt)と同じHStackの兄弟として2行目を置くと、国旗の高さ分
@@ -68,16 +70,16 @@ struct EventDetailCards: View {
                     // 名前本体と(略称)を2行に分ける。
                     // HQ指示(2026-10-13、2回目)「消費者物価指数の文字サイズは
                     // 11にして」: 10.5→11。
-                    ViewThatFits(in: .horizontal) {
-                        NotoText.text(combinedName, size: 11).lineLimit(1)
-                        VStack(alignment: .leading, spacing: 1) {
-                            NotoText.text(display.main, size: 11).lineLimit(1).minimumScaleFactor(0.8)
-                            if let abbreviation = display.abbreviation {
-                                NotoText.text("（\(abbreviation)）", size: 11).lineLimit(1).minimumScaleFactor(0.8)
-                            }
-                        }
-                    }
-                    .foregroundStyle(.white)
+                    // HQ指示(2026-10-26)「（CPI）を2行目にしないで1行に収めて」:
+                    // `ViewThatFits`は1行版に`minimumScaleFactor`が無いと、
+                    // そのままの文字サイズで収まるかどうかでしか判定せず、
+                    // わずかにはみ出ただけでも2行版にフォールバックしていた。
+                    // 1行版が縮小して収まれるようにし、2行への分割よりそちらを
+                    // 優先させた。
+                    NotoText.text(combinedName, size: 11)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .foregroundStyle(.white)
                     Spacer(minLength: 4)
                     let colors = HomeView.importanceBadgeColors(event.importance)
                     NotoText.text(event.importance.rawValue, size: 7)
@@ -115,17 +117,45 @@ struct EventDetailCards: View {
 
     // MARK: - 結果・予想・前回
 
+    /// HQ指示(2026-10-25)「前年比を記載してください。また前月比の枠の大きさは
+    /// 前年比と同じ大きさにしてください。1画面で収まるようにしてください」:
+    /// 当初は結果/予想/前回のカードと前月比のカードを別々の2枚で出していたが、
+    /// (1) 前年比側に見出しが無く2枚の見た目が揃わない、(2) カード2枚分の
+    /// 背景・余白が重なって縦に伸び、1画面に収まらなくなる、という指摘を
+    /// 受けた。1枚のカードの中に「前年比」「前月比」の2段(同じ3列構成)を
+    /// 持たせる形にまとめ、見た目を揃えつつ余白を抑えた。副指標(前月比)が
+    /// 無い指標(米国CPI以外、2026-10-25時点で全て)は1段のみ、見出しも出さない
+    /// (従来1指標しか値が無い画面で「前年比」とだけ表示すると、YoY%が本来の
+    /// 値ではない指標(NFP等)では誤った説明になるため)。
     private var results: some View {
         let snapshot = response.snapshot
         let unit = snapshot?.unit
         let released = response.event.status == .released
         let actual = released ? snapshot?.actual : nil
-        return HStack(spacing: 0) {
-            resultColumn("結果", value: actual, unit: unit, note: nil, placeholder: released ? "--" : "未発表")
-            divider
-            resultColumn("予想", value: snapshot?.forecast, unit: unit, note: nil)
-            divider
-            resultColumn("前回", value: snapshot?.previous, unit: unit, note: Self.changeFromPrevious(actual: actual, previous: snapshot?.previous, unit: unit))
+        let secondaryActual = released ? snapshot?.secondaryActual : nil
+        let secondaryLabel = Self.secondaryLabel(snapshot?.secondaryValueKind)
+        let primaryLabel = Self.primaryLabel(forSecondary: snapshot?.secondaryValueKind)
+
+        return VStack(alignment: .leading, spacing: 2) {
+            resultsRow(
+                label: primaryLabel,
+                actual: actual,
+                forecast: snapshot?.forecast,
+                previous: snapshot?.previous,
+                unit: unit,
+                released: released
+            )
+            if let secondaryLabel {
+                Rectangle().fill(SettingsCardStyle.cardBorder.opacity(0.5)).frame(height: 0.5)
+                resultsRow(
+                    label: secondaryLabel,
+                    actual: secondaryActual,
+                    forecast: snapshot?.secondaryForecast,
+                    previous: snapshot?.secondaryPrevious,
+                    unit: unit,
+                    released: released
+                )
+            }
         }
         // HQ指示(2026-10-12、4回目、参考画像)「結果予想の縦幅の違い」:
         // 8→6に詰めてカードの高さを参考画像に合わせた。
@@ -135,7 +165,12 @@ struct EventDetailCards: View {
         // わずかに低いだけなので、この縮小をしないと従来どおり
         // `results`側だけ元の高さのまま残り、`statementCard`との位置が
         // また揃わなくなる)。
-        .padding(.vertical, 2)
+        // HQ指示(2026-10-26)「前年比と前月比の枠をもう少し小さくして、
+        // それに合わせて中の文字サイズも小さく。下が見切れている」:
+        // 前年比/前月比の2段構成になって以来カードが縦に伸び、画面下部
+        // (値動き表・次回発表予定)が1画面に収まらなくなっていた。行間・
+        // 文字サイズ(`resultsRow`・`resultColumn`)を全体的に少し詰めた。
+        .padding(.vertical, 1)
         // HQ指示(2026-10-12、8回目)「要人発言の通貨ペアはイベント詳細と
         // 同じ位置にして」: 要人発言側の`statementCard`(発言内容)はこの
         // `results`より内容が短く縦幅が小さいため、値動き表の開始位置が
@@ -149,27 +184,71 @@ struct EventDetailCards: View {
         .background(GradientCardBackground())
     }
 
+    private func resultsRow(label: String?, actual: Double?, forecast: Double?, previous: Double?, unit: String?, released: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            if let label {
+                NotoText.text(label, size: 7)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .padding(.leading, 6)
+            }
+            HStack(spacing: 0) {
+                resultColumn("結果", value: actual, unit: unit, note: nil, placeholder: released ? "--" : "未発表")
+                divider
+                resultColumn("予想", value: forecast, unit: unit, note: nil)
+                divider
+                resultColumn("前回", value: previous, unit: unit, note: Self.changeFromPrevious(actual: actual, previous: previous, unit: unit))
+            }
+        }
+    }
+
+    /// 副指標(前月比・前年比等)の見出し。`ingestion/types.ts`の`ValueKind`と同じ値。
+    static func secondaryLabel(_ valueKind: String?) -> String? {
+        switch valueKind {
+        case "MOM_PCT": return "前月比"
+        case "YOY_PCT": return "前年比"
+        default: return nil
+        }
+    }
+
+    /// 副指標があるときだけ、本来の値(`結果/予想/前回`)の見出しを出す。
+    /// 現状の組み合わせは米国CPI(本来の値がYoY%、副指標がMoM%)のみだが、
+    /// 逆の組み合わせ(本来の値がMoM%、副指標がYoY%)にも対応できるよう
+    /// `secondaryLabel`と対になる組み合わせで判定する(api-design v1.35には
+    /// 本来の値の種類を示すフィールドが無いため)。
+    static func primaryLabel(forSecondary valueKind: String?) -> String? {
+        switch valueKind {
+        case "MOM_PCT": return "前年比"
+        case "YOY_PCT": return "前月比"
+        default: return nil
+        }
+    }
+
     /// `results`(イベント詳細)と`SpeechDetailCards.statementCard`(要人発言)
     /// の両方に使う共通の最低高さ。内容の短い方(通常は`statementCard`)を
     /// 底上げし、後に続く値動き表の開始位置を画面間で揃える。別ファイルの
     /// `SpeechDetailCards`から参照するため`private`にしない。
     static let summaryCardMinHeight: CGFloat = 50
 
+    /// HQ指示(2026-10-25)で1枚のカードに前年比/前月比の2段を持たせるように
+    /// なったため、固定の高さ(50)ではなく`maxHeight: .infinity`で行の実際の
+    /// 高さに自動で合わせる(`resultsRow`のHStack内で使われる)。
     private var divider: some View {
-        Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 0.5, height: 50)
+        Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 0.5).frame(maxHeight: .infinity)
     }
 
     private func resultColumn(_ title: String, value: Double?, unit: String?, note: String?, placeholder: String = "--") -> some View {
         // HQ指示(2026-10-09)「結果、予想、前回と数字、前回比を大きく中央に」。
-        VStack(alignment: .center, spacing: 3) {
-            NotoText.text(title, size: 9.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+        // HQ指示(2026-10-26)「枠をもう少し小さくして、文字サイズも小さく」:
+        // 前年比/前月比の2段構成でカードが縦に伸びたため、9.5/17/8→8.5/15/7に詰めた。
+        VStack(alignment: .center, spacing: 2) {
+            NotoText.text(title, size: 8.5).foregroundStyle(SettingsCardStyle.subtitleColor)
             Text(value.map { ValueFormat.withUnit($0, unit: unit) } ?? placeholder)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-            NotoText.text(note ?? " ", size: 8)
+            NotoText.text(note ?? " ", size: 7)
                 .foregroundStyle(SettingsListLayout.sectionTitleColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -363,8 +442,10 @@ struct EventDetailCards: View {
 
     private static let pairColumnWidth: CGFloat = 80
     private static let valueColumnWidth: CGFloat = (214 - 80) / 3
-    private static let headerHeight: CGFloat = 22
-    private static let rowHeight: CGFloat = 28
+    // HQ指示(2026-10-26)「次回発表予定が1画面に収まっていない」に合わせて
+    // 22/28→20/26に詰めた(4行分で8pt節約)。
+    private static let headerHeight: CGFloat = 20
+    private static let rowHeight: CGFloat = 26
 
     private func cell(width: CGFloat, alignment: Alignment = .center, @ViewBuilder _ content: () -> some View) -> some View {
         content()

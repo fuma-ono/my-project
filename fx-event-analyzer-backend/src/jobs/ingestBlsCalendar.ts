@@ -8,6 +8,7 @@ import {
   buildBlsScheduleReleases,
   BLS_SCHEDULE_PROVIDER,
   createBlsNativeResolver,
+  createBlsSecondaryResolver,
   scheduleObservationRange,
 } from '../ingestion/pipelines/blsCalendar.js';
 import { BLS_SCHEDULE } from '../ingestion/mappings/blsSchedule.js';
@@ -36,12 +37,17 @@ async function main(): Promise<void> {
   const official = createBlsNativeResolver(bls, scheduleObservationRange(BLS_SCHEDULE), (error) =>
     resolverErrors.push(error instanceof Error ? error.message : String(error)),
   );
+  // HQ指示(2026-10-25)「過去イベント比較の表も前月と前年必要」: 米国CPIの
+  // 前月比(MoM%)を、同じBLS系列(CUUR0000SA0)の別変換として計算する。
+  const officialSecondary = createBlsSecondaryResolver(bls, scheduleObservationRange(BLS_SCHEDULE), (error) =>
+    resolverErrors.push(error instanceof Error ? error.message : String(error)),
+  );
 
   const result = await runIngestionJob(
     store,
     { provider: BLS_SCHEDULE_PROVIDER, dataType: 'ECONOMIC_EVENT', job: 'ingest:official:bls-calendar' },
     async (counters) => {
-      const built = await buildBlsScheduleReleases({ official });
+      const built = await buildBlsScheduleReleases({ official, officialSecondary });
       counters.details.not_yet_available = built.notYetAvailable.length;
       counters.details.overdue = built.overdue.map((e) => `${e.indicatorCode}:${e.referencePeriod}`);
       counters.details.unmapped = built.unmapped.length;

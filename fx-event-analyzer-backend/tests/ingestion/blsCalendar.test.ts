@@ -4,6 +4,7 @@ import { findMappingByCode, type IndicatorMapping } from '../../src/ingestion/ma
 import {
   buildBlsScheduleReleases,
   createBlsNativeResolver,
+  createBlsSecondaryResolver,
   scheduleObservationRange,
 } from '../../src/ingestion/pipelines/blsCalendar.js';
 import { ingestCalendarReleases } from '../../src/ingestion/pipelines/economicCalendar.js';
@@ -118,6 +119,34 @@ describe('createBlsNativeResolver', () => {
   });
 });
 
+describe('createBlsSecondaryResolver', () => {
+  // HQ指示(2026-10-25)「過去イベント比較の表も前月と前年必要」: 米国CPIの
+  // mapping.secondaryはMOM_PCT(同じCUUR0000SA0系列の前月比)。
+  const cpiMapping = findMappingByCode('US_CPI')!;
+
+  it('computes MOM_PCT for the secondary series from the prior month', async () => {
+    const bls = fakeBlsWith({ '2026-08': 328.0, '2026-09': 332.16 }, {});
+    const resolver = createBlsSecondaryResolver(bls, WIDE_RANGE);
+    const result = await resolver.resolve(cpiMapping, '2026-09', '2026-10-14');
+    expect(result?.sourceRef).toBe(`BLS:${CPI_SERIES}@2026-10-17`);
+    expect(result?.value).toBeCloseTo((332.16 / 328.0 - 1) * 100, 6);
+  });
+
+  it('returns null for a mapping with no secondary configured', async () => {
+    const nfpMapping = findMappingByCode('US_NFP')!;
+    const resolver = createBlsSecondaryResolver(fakeBlsWith({}, {}), WIDE_RANGE);
+    expect(await resolver.resolve(nfpMapping, '2026-09', '2026-10-02')).toBeNull();
+  });
+
+  it('fetches the secondary series only once no matter how many periods are resolved', async () => {
+    const bls = fakeBlsWith({ '2026-07': 325.0, '2026-08': 328.0, '2026-09': 332.16 }, {});
+    const resolver = createBlsSecondaryResolver(bls, WIDE_RANGE);
+    await resolver.resolve(cpiMapping, '2026-09', '2026-10-14');
+    await resolver.resolve(cpiMapping, '2026-08', '2026-10-14');
+    expect(bls.calls).toHaveLength(1);
+  });
+});
+
 describe('scheduleObservationRange', () => {
   it('spans 12 months before the earliest reference period through the latest one', () => {
     const entries: BlsScheduleEntry[] = [
@@ -156,6 +185,34 @@ describe('buildBlsScheduleReleases', () => {
     expect(release.revisedPrevious).toEqual(release.previous);
     // 2026-10-14 08:30 America/New_York is EDT (UTC−4) → 12:30Z.
     expect(release.releaseAt).toBe('2026-10-14T12:30:00.000Z');
+  });
+
+  it('includes secondaryActual/secondaryPrevious (MoM%) when officialSecondary is given (HQ指示 2026-10-25)', async () => {
+    const bls = fakeBlsWith(
+      { '2025-09': 320.0, '2026-09': 332.16, '2025-08': 318.0, '2026-08': 328.0, '2026-07': 325.0 },
+      {},
+    );
+    const official = createBlsNativeResolver(bls, WIDE_RANGE);
+    const officialSecondary = createBlsSecondaryResolver(bls, WIDE_RANGE);
+    const entries: BlsScheduleEntry[] = [
+      { indicatorCode: 'US_CPI', referencePeriod: '2026-09', releaseDate: '2026-10-14' },
+    ];
+    const result = await buildBlsScheduleReleases({ official, officialSecondary, entries, now: NOW });
+    const release = result.releases[0]!;
+    expect(release.secondaryActual).toBeCloseTo((332.16 / 328.0 - 1) * 100, 6);
+    expect(release.secondaryPrevious).toBeCloseTo((328.0 / 325.0 - 1) * 100, 6);
+  });
+
+  it('leaves secondaryActual/secondaryPrevious null when officialSecondary is not given', async () => {
+    const bls = fakeBlsWith({ '2025-09': 320.0, '2026-09': 332.16, '2025-08': 318.0, '2026-08': 328.0 }, {});
+    const official = createBlsNativeResolver(bls, WIDE_RANGE);
+    const entries: BlsScheduleEntry[] = [
+      { indicatorCode: 'US_CPI', referencePeriod: '2026-09', releaseDate: '2026-10-14' },
+    ];
+    const result = await buildBlsScheduleReleases({ official, entries, now: NOW });
+    const release = result.releases[0]!;
+    expect(release.secondaryActual).toBeNull();
+    expect(release.secondaryPrevious).toBeNull();
   });
 
   it('converts an EST-month release date correctly (winter, UTC−5)', async () => {
@@ -280,6 +337,37 @@ describe('BLS schedule → ingestCalendarReleases (no paid calendar involved)', 
     const snapshot = store.snapshots.find((s) => s.event_id === event!.id);
     expect(snapshot).toMatchObject({ verification_status: 'VERIFIED', source: 'U.S. Bureau of Labor Statistics' });
     expect(snapshot?.actual).toBeCloseTo(3.8, 6);
+  });
+
+  it('persists secondary_actual/secondary_value_kind on the RELEASE snapshot (HQ指示 2026-10-25「前月と前年必要」)', async () => {
+    const bls = fakeBlsWith(
+      { '2025-09': 320.0, '2026-09': 332.16, '2025-08': 318.0, '2026-08': 328.0, '2026-07': 325.0 },
+      {},
+    );
+    const official = createBlsNativeResolver(bls, WIDE_RANGE);
+    const officialSecondary = createBlsSecondaryResolver(bls, WIDE_RANGE);
+    const entries: BlsScheduleEntry[] = [
+      { indicatorCode: 'US_CPI', referencePeriod: '2026-09', releaseDate: '2026-10-14' },
+    ];
+    const { releases } = await buildBlsScheduleReleases({
+      official,
+      officialSecondary,
+      entries,
+      now: () => new Date('2026-10-17Z'),
+    });
+
+    await ingestCalendarReleases(
+      'bls_schedule',
+      releases,
+      { store, official, now: () => new Date('2026-10-17Z') },
+      new JobCounters(),
+    );
+
+    const event = store.events.find((e) => e.provider_event_id === 'bls_schedule:US_CPI:2026-09');
+    const snapshot = store.snapshots.find((s) => s.event_id === event!.id);
+    expect(snapshot?.secondary_value_kind).toBe('MOM_PCT');
+    expect(snapshot?.secondary_actual).toBeCloseTo((332.16 / 328.0 - 1) * 100, 6);
+    expect(snapshot?.secondary_previous).toBeCloseTo((328.0 / 325.0 - 1) * 100, 6);
   });
 
   it('records a revision when a later run sees BLS has revised the previous month', async () => {

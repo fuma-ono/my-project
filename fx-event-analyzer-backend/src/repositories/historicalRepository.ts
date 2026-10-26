@@ -8,7 +8,15 @@ export interface HistoricalEventRow {
   previous: number | null;
   surprise: number | null;
   surprise_direction: string | null;
+  /** HQ指示(2026-10-25)「過去イベント比較の表も前月と前年必要」: mapping.secondaryが設定された指標だけ埋まる(今は米国CPIのMOM_PCT)。 */
+  secondary_value_kind: string | null;
+  secondary_forecast: number | null;
+  secondary_actual: number | null;
+  secondary_previous: number | null;
 }
+
+const SNAPSHOT_COLUMNS =
+  'forecast, actual, previous, surprise, surprise_direction, secondary_value_kind, secondary_forecast, secondary_actual, secondary_previous';
 
 /** RELEASED events for an indicator, most recent first, each paired with
  * its RELEASE snapshot (MVP only ever writes that one snapshot_type). */
@@ -19,9 +27,7 @@ export async function listReleasedEventsForIndicator(
 ): Promise<{ rows: HistoricalEventRow[]; total: number }> {
   const { data, error, count } = await supabase
     .from('economic_events')
-    .select('id, release_datetime, event_snapshots!inner(forecast, actual, previous, surprise, surprise_direction)', {
-      count: 'exact',
-    })
+    .select(`id, release_datetime, event_snapshots!inner(${SNAPSHOT_COLUMNS})`, { count: 'exact' })
     .eq('indicator_id', indicatorId)
     .eq('status', 'RELEASED')
     .order('release_datetime', { ascending: false })
@@ -35,6 +41,10 @@ export async function listReleasedEventsForIndicator(
       previous: number | null;
       surprise: number | null;
       surprise_direction: string | null;
+      secondary_value_kind: string | null;
+      secondary_forecast: number | null;
+      secondary_actual: number | null;
+      secondary_previous: number | null;
     };
     return { event_id: row.id, release_datetime: row.release_datetime, ...snapshot };
   });

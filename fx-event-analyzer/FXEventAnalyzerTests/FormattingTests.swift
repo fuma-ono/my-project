@@ -169,7 +169,16 @@ final class IndicatorDisplayNameTests: XCTestCase {
         XCTAssertEqual(HistoricalComparisonView.pipsText(2.1), "+2.1")
         XCTAssertEqual(HistoricalComparisonView.pairLabel("USDJPY"), "USD/JPY")
         XCTAssertEqual(HistoricalComparisonView.pairLabel("EUR/USD"), "EUR/USD")
-        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false), 24 + 7 * 22.5)
+        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: false), 24 + 7 * 22.5)
+        // 前年/前月のグループ見出し行(api-design v1.35、HQ指示2026-10-25)がある分、表の高さも増える。
+        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: true), 24 + 11 + 7 * 22.5)
+        // イベント詳細の結果/予想/前回カード(api-design v1.35、HQ指示2026-10-25「前年比を記載」)。
+        XCTAssertEqual(EventDetailCards.secondaryLabel("MOM_PCT"), "前月比")
+        XCTAssertEqual(EventDetailCards.secondaryLabel("YOY_PCT"), "前年比")
+        XCTAssertNil(EventDetailCards.secondaryLabel(nil))
+        XCTAssertEqual(EventDetailCards.primaryLabel(forSecondary: "MOM_PCT"), "前年比")
+        XCTAssertEqual(EventDetailCards.primaryLabel(forSecondary: "YOY_PCT"), "前月比")
+        XCTAssertNil(EventDetailCards.primaryLabel(forSecondary: nil))
         // 表示名(DBのdisplay_name)があればそれを優先する。
         XCTAssertEqual(CountryFlag.indicatorDisplayText("米国雇用統計(非農業部門雇用者数)", countryCode: "US", displayName: "非農業部門雇用者数（NFP）"), "非農業部門雇用者数（NFP）")
         XCTAssertEqual(CountryFlag.indicatorDisplayName("x", countryCode: "US", displayName: "非農業部門雇用者数（NFP）").abbreviation, "NFP")

@@ -4,9 +4,6 @@ import UserNotifications
 
 @main
 struct FXEventAnalyzerApp: App {
-    // 過去イベント比較画面だけ横画面を許可するための`OrientationLock`連携
-    // (詳細は`OrientationAppDelegate`/`OrientationLock.swift`を参照)。
-    @UIApplicationDelegateAdaptor(OrientationAppDelegate.self) private var orientationAppDelegate
     private let authService: AuthServicing
     private let apiClient: APIClient
 

@@ -64,6 +64,13 @@ struct EventSnapshotDetail: Decodable, Equatable {
     let unit: String?
     let source: String?
     let sourceUrl: String?
+    /// 副指標(api-design v1.35、HQ指示2026-10-25「結果/予想/前回も前年と前月が
+    /// 必要」)。この指標の本来の値(例: 米国CPIはYoY%)に加えて見せる別の変換
+    /// (例: MoM%)。副指標が設定されていない指標・古いBackendではnil。
+    var secondaryValueKind: String? = nil
+    var secondaryForecast: Double? = nil
+    var secondaryActual: Double? = nil
+    var secondaryPrevious: Double? = nil
 
     enum CodingKeys: String, CodingKey {
         case forecast
@@ -72,6 +79,10 @@ struct EventSnapshotDetail: Decodable, Equatable {
         case unit
         case source
         case sourceUrl = "source_url"
+        case secondaryValueKind = "secondary_value_kind"
+        case secondaryForecast = "secondary_forecast"
+        case secondaryActual = "secondary_actual"
+        case secondaryPrevious = "secondary_previous"
     }
 }
 

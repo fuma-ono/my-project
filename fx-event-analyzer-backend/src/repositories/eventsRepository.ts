@@ -61,12 +61,19 @@ export interface SnapshotRow {
   captured_at: string;
   surprise: number | null;
   surprise_direction: string | null;
+  /** HQ指示(2026-10-25)「結果/予想/前回も前年と前月が必要」: mapping.secondaryが設定された指標だけ埋まる(今は米国CPIのMOM_PCT)。 */
+  secondary_value_kind: string | null;
+  secondary_forecast: number | null;
+  secondary_actual: number | null;
+  secondary_previous: number | null;
 }
 
 export async function getReleaseSnapshot(supabase: SupabaseClient, eventId: string): Promise<SnapshotRow | null> {
   const { data, error } = await supabase
     .from('event_snapshots')
-    .select('forecast, actual, previous, unit, source, source_url, captured_at, surprise, surprise_direction')
+    .select(
+      'forecast, actual, previous, unit, source, source_url, captured_at, surprise, surprise_direction, secondary_value_kind, secondary_forecast, secondary_actual, secondary_previous',
+    )
     .eq('event_id', eventId)
     .eq('snapshot_type', 'RELEASE')
     .maybeSingle();

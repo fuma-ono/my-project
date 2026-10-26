@@ -112,20 +112,26 @@ targets:
         # エラーとして確認済み、2026-10-20)。そのため:
         #   - iPad: Portrait・PortraitUpsideDown・LandscapeLeft・
         #     LandscapeRightの4方向を許可(変更前の設定に戻す)。
+        #   - iPhone: Portraitのみ(横画面禁止を維持)。
         #
         # HQ指示(2026-10-25)「過去イベント比較の表が縦画面に入らないので、
-        # この画面だけ横画面できるようにしたい」でiPhoneもLandscapeLeft/
-        # Rightを追加した。このキーは「アプリとして使ってよい向きの上限」
-        # であり、実際にどの画面で横画面を許すかは`OrientationAppDelegate`/
-        # `OrientationLock`(`FXEventAnalyzer/App/OrientationLock.swift`)が
-        # 画面単位で動的に絞り込む — このキーとアプリ側のmaskの掛け算(AND)
-        # で最終的な許可範囲が決まるため、両方の変更が必要だった。既定では
-        # `OrientationLock.mask`はPortraitのみなので、このキーを広げても
-        # 過去イベント比較画面以外は従来通りPortrait固定のまま回転しない。
+        # この画面だけ横画面できるようにしたい」: 画面単位でUIKitの
+        # インターフェースを実際に回転させる方式を4回試みた
+        # (AppDelegateの`supportedInterfaceOrientationsFor:`方式、
+        # `UIDevice.current.orientation`でコンテンツ自体を`.rotationEffect`
+        # で回す方式、`setNeedsUpdateOfSupportedInterfaceOrientations()`を
+        # 足す方式、`UIWindowScene.requestGeometryUpdate(_:)`を足す方式)
+        # が、いずれもCI実機キャプチャで「ウィンドウの実寸(画像サイズ)は
+        # 横長になるが、中身がPortrait時のレイアウトのまま90°回転しただけで
+        # 新しく広がった分が黒いまま」という同じ壊れ方をし、原因を特定
+        # できなかった(2026-10-25〜26)。このアプリのSwiftUI(App/Scene
+        # ライフサイクル)構成とUIKitの画面単位の向き制御の組み合わせに
+        # 根本的な相性問題があると判断し、横画面そのものを撤回。表の幅
+        # (`HistoricalComparisonView.table(_:)`)は元々`ScrollView(.horizontal)`
+        # で全列を横スクロールして見られるようになっており、この方式に
+        # 一本化した(iPhoneはPortraitのみに戻す)。
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
         UISupportedInterfaceOrientations~ipad:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown

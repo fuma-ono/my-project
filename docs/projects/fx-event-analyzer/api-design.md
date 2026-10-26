@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.34
+# FX Event Analyzer: API詳細設計書 v1.35
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -79,6 +79,7 @@
   - 23: Event 検索の並びを、各指標の次の予定(1指標1件、近い順)→ 現在より前の Event(新しい順)に変更。2件目以降の未来の予定は返さない
   - 発表の履歴(`status=RELEASED`など)の並び順、13.1 の`next_release_datetime`(もともと現在以降の最も早い予定)は変えない
 - **v1.34**(2026-10-23): 要人発言の鮮度(HQ承認 2026-10-23)。`GET /home`に任意の`speeches_status`(`window_days` / `last_success_at` / `stale`)を追加(12章)。ホームの「直近の要人発言」が0件のとき、「直近7日間に発言が無い」のか「取得できていない」のかをアプリが言い分けるため。**`speeches`の中身・形は変えない。** 判定は品質レポート第9章(dev-environment.md 14章)の「取得の失敗」と同じ関数を使う
+- **v1.35**(2026-10-25): 過去イベント比較・イベント詳細に前月比・前年比を併記(HQ指示 2026-10-25「過去イベント比較の表も前月と前年必要だと思う」)。`GET /indicators/{indicator_id}/comparison`の`events[]`、`GET /events/{event_id}`・`GET /events/{event_id}/history`の`snapshot`に`secondary_value_kind`(`"MOM_PCT"`等、副指標が無い指標は`null`)・`secondary_forecast`・`secondary_actual`・`secondary_previous`を追加(21章・14章・20章)。米国CPIは本来の値(`actual`等)がYoY%(前年比)なので、これに加えてMoM%(前月比)を`secondary_*`として追加した — 新しい外部データ源は増やさず、既に取得しているBLS公式系列(CUUR0000SA0)を別の変換で計算しただけ(data-sources.md参照)。副指標が設定されていない指標(米国CPI以外、2026-10-25時点で全て)は常に`null`
 
 ---
 
@@ -678,6 +679,8 @@ Movement Chart等の比較的重いデータ、および特定timeframe・特定
 
 **`major_fx_reactions`(v1.17で追加)**: SCR-007「主要通貨ペアの値動き(pips)」の表。行 = 通貨ペア、列 = `1m`・`5m`・`15m`。「通貨ペアを選択して詳細を見る」で選んだ行の`fx_pair_id`・`symbol`でSCR-008 相場反応詳細(18章)を開く。
 
+**`snapshot.secondary_value_kind`/`secondary_forecast`/`secondary_actual`/`secondary_previous`(v1.35で追加)**: 21章参照。副指標が設定されていない指標(米国CPI以外)は常に`null`。
+
 - 対象の通貨ペア：有効な(`is_active`)通貨ペアのうち、基軸通貨または決済通貨がイベントの通貨(`currency_code`)と同じもの。最大4件
 - 並び順：指標の`related_fx_pairs`に含まれるペアを`priority`順で先に、残りは固定の主要順(`USDJPY`・`EURUSD`・`GBPUSD`・`AUDUSD`・`USDCHF`・`USDCAD`・`EURJPY`・`GBPJPY`・`AUDJPY`・`CADJPY`)、それ以外は`symbol`順
 - イベントの通貨を含む通貨ペアが1件もない場合は、`related_fx_pairs`の通貨ペア(`priority`順、最大4件)を返す。どちらもなければ`[]`
@@ -1148,6 +1151,10 @@ Query：
       "previous": 3.1,
       "surprise": 0.2,
       "surprise_direction": "POSITIVE",
+      "secondary_value_kind": "MOM_PCT",
+      "secondary_forecast": null,
+      "secondary_actual": 0.1,
+      "secondary_previous": 0.2,
       "reactions": [
         { "timeframe": "1m", "pips": 7.7, "change_percent": 0.049, "analysis_status": "READY" }
       ]

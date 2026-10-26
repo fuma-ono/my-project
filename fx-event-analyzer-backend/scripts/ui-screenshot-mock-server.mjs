@@ -751,6 +751,9 @@ const ALL_MOCK_INDICATORS = [...INDICATORS_LIST, ...Object.values(CALENDAR_INDIC
 
 // SCR-007 イベント詳細の参考画像 (HQ指示 2026-10-09): 結果 3.1 / 予想 3.2 / 前回 3.3。
 // ホーム・指標詳細・過去比較・過去イベント詳細もこの値を参照する。
+// secondary_* (HQ指示 2026-10-25「前月と前年必要」): 米国CPIの本来の値
+// (forecast/actual/previous)はYoY%(前年比)なので、MoM%(前月比)を副指標
+// として追加した(api-design.md v1.35)。
 const RELEASE_SNAPSHOT = {
   forecast: 3.2,
   actual: 3.1,
@@ -761,6 +764,10 @@ const RELEASE_SNAPSHOT = {
   captured_at: EVENT_RELEASE_DATETIME,
   surprise: -0.1,
   surprise_direction: 'NEGATIVE',
+  secondary_value_kind: 'MOM_PCT',
+  secondary_forecast: null,
+  secondary_actual: 0.2,
+  secondary_previous: 0.3,
 };
 
 const EXPLANATION = {
@@ -1403,6 +1410,11 @@ const COMPARISON_TABLE = [
   [3.2, 3.3, 3.5, -3.9, -12.6, -19.8],
 ];
 
+// 副指標(MoM%、前月比) — HQ指示(2026-10-25)「前月と前年必要」。各行の
+// COMPARISON_TABLEと同じ順(新しい順)。末尾は「前回」としてもう1件先の
+// 行まで使うため、本体より1件多い。
+const COMPARISON_TABLE_MOM = [0.2, 0.3, -0.1, 0.4, -0.2, 0.3, -0.1, 0.2];
+
 function comparisonPips(index) {
   const row = COMPARISON_TABLE[index];
   return row ? { '1m': row[3], '5m': row[4], '15m': row[5] } : { '1m': null, '5m': null, '15m': null };
@@ -1422,6 +1434,10 @@ function comparisonEventsList() {
       previous: RELEASE_SNAPSHOT.previous,
       surprise: RELEASE_SNAPSHOT.surprise,
       surprise_direction: RELEASE_SNAPSHOT.surprise_direction,
+      secondary_value_kind: RELEASE_SNAPSHOT.secondary_value_kind,
+      secondary_forecast: RELEASE_SNAPSHOT.secondary_forecast,
+      secondary_actual: RELEASE_SNAPSHOT.secondary_actual,
+      secondary_previous: RELEASE_SNAPSHOT.secondary_previous,
       pips_by_timeframe: comparisonPips(0),
     },
     ...HISTORICAL_EVENT_IDS.map((id, index) => {
@@ -1436,6 +1452,10 @@ function comparisonEventsList() {
         previous,
         surprise,
         surprise_direction: surprise > 0 ? 'POSITIVE' : surprise < 0 ? 'NEGATIVE' : 'NEUTRAL',
+        secondary_value_kind: 'MOM_PCT',
+        secondary_forecast: null,
+        secondary_actual: COMPARISON_TABLE_MOM[index + 1] ?? null,
+        secondary_previous: COMPARISON_TABLE_MOM[index + 2] ?? null,
         pips_by_timeframe: comparisonPips(index + 1),
       };
     }),
