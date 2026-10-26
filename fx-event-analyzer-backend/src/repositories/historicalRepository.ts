@@ -16,7 +16,7 @@ export interface HistoricalEventRow {
 }
 
 /** RELEASE スナップショットの値。secondary_* は前月比など(v1.35。副指標が無い指標は null)。 */
-const SNAPSHOT_VALUE_COLUMNS =
+export const SNAPSHOT_VALUE_COLUMNS =
   'forecast, actual, previous, surprise, surprise_direction, secondary_value_kind, secondary_forecast, secondary_actual, secondary_previous';
 
 interface SnapshotValues {

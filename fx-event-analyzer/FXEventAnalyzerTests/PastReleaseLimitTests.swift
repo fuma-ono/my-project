@@ -592,6 +592,46 @@ final class PastReleaseLimitTests: XCTestCase {
         XCTAssertNil(response.events[0].previous)
     }
 
+    // MARK: - 前月比(secondary_*, v1.35)と無料プランの制限(v1.36)
+
+    /// ロックされた行は前月比も null で届き、鍵の印の行として読める。前月比の種類(value kind)は残る。
+    func testComparisonDecodesLockedRowWithNullSecondaryValues() throws {
+        let json = Self.comparisonJSON(events: """
+            { "event_id": "evt_4th", "release_datetime": "2026-06-10T12:30:00Z",
+              "forecast": null, "actual": null, "previous": null, "surprise": null, "surprise_direction": null,
+              "secondary_value_kind": "MOM_PCT", "secondary_forecast": null, "secondary_actual": null, "secondary_previous": null,
+              "locked": true, "required_plan": "PRO", "previous_locked": false,
+              "pips_by_timeframe": { "1m": null, "5m": null, "15m": null } }
+            """)
+
+        let event = try makeDecoder().decode(ComparisonResponse.self, from: json).events[0]
+
+        XCTAssertTrue(event.isLocked)
+        XCTAssertEqual(event.secondaryValueKind, "MOM_PCT")
+        XCTAssertNil(event.secondaryActual)
+        XCTAssertNil(event.secondaryForecast)
+        XCTAssertNil(event.secondaryPrevious)
+    }
+
+    /// 「前回」を隠した行は、前月比の前回(secondary_previous)も null。前月比の結果・予想は届く。
+    func testComparisonDecodesPreviousLockedRowWithSecondaryPreviousHidden() throws {
+        let json = Self.comparisonJSON(events: """
+            { "event_id": "evt_3rd", "release_datetime": "2026-07-10T12:30:00Z",
+              "forecast": 3.0, "actual": 3.2, "previous": null, "surprise": 0.2, "surprise_direction": "POSITIVE",
+              "secondary_value_kind": "MOM_PCT", "secondary_forecast": 0.2, "secondary_actual": 0.3, "secondary_previous": null,
+              "locked": false, "required_plan": null, "previous_locked": true,
+              "pips_by_timeframe": { "1m": 7.7, "5m": 20.0, "15m": null } }
+            """)
+
+        let event = try makeDecoder().decode(ComparisonResponse.self, from: json).events[0]
+
+        XCTAssertTrue(event.isPreviousLocked)
+        XCTAssertFalse(event.isLocked)
+        XCTAssertEqual(event.secondaryActual, 0.3)
+        XCTAssertEqual(event.secondaryForecast, 0.2)
+        XCTAssertNil(event.secondaryPrevious)
+    }
+
     // MARK: - GET /entitlements・PlanStore
 
     func testPlanLimitsDefaults() {

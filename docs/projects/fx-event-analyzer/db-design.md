@@ -1,4 +1,4 @@
-# FX Event Analyzer: DB詳細設計 v4.18
+# FX Event Analyzer: DB詳細設計 v4.19
 
 **出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
 
@@ -48,6 +48,7 @@
 - **v4.16**(2026-10-16): FREEの機能の付与(HQ指示 2026-10-16)。全ユーザーが持つ機能の表`DefaultEntitlement`(`default_entitlements`、3.3.1節)を追加し、`VIEW_BASIC_EVENT` / `VIEW_HISTORICAL` / `VIEW_MARKET_REACTION`を入れた。Migration `20261016000002_default_entitlements.sql`。これまで新しいユーザーに`Entitlement`の行を入れる処理が無く、登録したばかりのユーザーがFREEの機能も使えなかった。ユーザーの`Entitlement`に同じfeature_codeの行があれば、有効・無効・期限切れのどれでもそちらが優先する(api-design.md v1.30 28章)。RLSはポリシーなし(service_roleのみ)
 - **v4.17**(2026-10-22): 暫定の予定(HQ承認 2026-10-22 Task 3「FOMCの公式日程」、api-design.md v1.32)。`EconomicEvent`に`is_provisional`(boolean, NN, DEF `false`)を追加(3.5節)。Migration `20261022000002_economic_events_provisional.sql`(`add column if not exists`、既存の行はすべて`false`)。設定するのはFOMCの日程表のジョブ(`npm run ingest:fomc-schedule`、data-sources.md 15章)だけ。`EventScheduleChange`のトリガー(3.19節)は`AFTER UPDATE OF release_datetime, status`のままで、`is_provisional`だけを変える更新では起動しない(暫定→確定は日時の変更として記録しない)。RLSは変わらない
 - **v4.18**(2026-10-22): 無料プランの「過去の発表」制限(HQ判断 2026-10-21/22、api-design.md v1.33 28.2節)。Migration `20261022000001_past_release_access.sql`。市場の値を持つ`EconomicEvent` / `EventSnapshot` / `EventRevision` / `EventExplanation` / `EventPriceReaction`の「全認証ユーザーSELECT可」のポリシーを削除し、`anon` / `authenticated`のテーブルの権限もすべて取り消した(`revoke all`。RLSは有効のまま。6章)。値を見られる発表と、前回を隠す発表を計算する関数`visible_released_event_ids`(service_role専用)を追加(6.1節)。Migration `20261022000004_ingestion_tables_access.sql`で`IngestionLog` / `IngestionStagedValue` / `OfficialObservation`の`anon` / `authenticated`の権限もすべて取り消した(RLS・ポリシーは変えない。6.1節)。Migration `20261022000003_fx_prices_access.sql`(HQ指示 2026-10-22、単独で適用・取り消しできる別ファイル)で、`FxPrice`の「全認証ユーザーSELECT可」のポリシーも削除し、`anon` / `authenticated`の権限をすべて取り消した(ロックされた発表の前後の足から値動きを計算し直せないため。6章)。テーブル・列は変えない
+- **v4.19**(2026-10-26): `EventSnapshot`の副指標(前月比など)の4列を追記(Migration `20261025000001_event_snapshot_secondary_metric.sql`、api-design.md v1.35。HQ指示 2026-10-25。この Migration の追加時に本書を更新していなかったため、HQ指示 2026-10-26 の統合で反映した)。`secondary_value_kind`・`secondary_forecast`・`secondary_actual`・`secondary_previous`(3.6節)。どれも nullable で、副指標が無い指標(現在は米国CPI以外すべて)は null。RELEASE スナップショットは不変なので、発表時の INSERT で一緒に書く。無料プランの「過去の発表」制限では、ロックした発表の`secondary_forecast`・`secondary_actual`・`secondary_previous`を、前回を隠す発表の`secondary_previous`を、API で null にする(api-design.md v1.36)。権限は v4.18 のとおり(`anon` / `authenticated` は`event_snapshots`の権限なし)で、列の追加による変更はない
 
 ---
 
@@ -275,6 +276,10 @@ IDX(status)
 | verification_status | text | NN, DEF `VERIFIED`, CHK: `IN ('VERIFIED','SINGLE_SOURCE')` | v4.15。`VERIFIED` = 公式統計と丸めを合わせて一致した(または人が確認した。既存行・seed)。`SINGLE_SOURCE` = 照合できる公式統計がなく取得元1つの値(対応表で許可した指標だけ。いまは無し) |
 | verification_source | text | nullable | v4.15。照合に使った公式統計(例: `FRED:CPIAUCNS@2026-10-14`) |
 | official_actual | numeric(18,4) | nullable | v4.15。照合に使った公式統計から計算した値 |
+| secondary_value_kind | text | nullable, CHK: `IN ('LEVEL','YOY_PCT','MOM_PCT','CHANGE')` | v4.19(Migration 20261025000001)。副指標の値の種類(例: 米国CPIは`MOM_PCT` = 前月比)。null = この指標には副指標が無い |
+| secondary_forecast | numeric(18,4) | nullable | v4.19。副指標の市場予想値。BLS の経路(`bls_schedule`)は予想を作らないため常に null |
+| secondary_actual | numeric(18,4) | nullable | v4.19。副指標の実績値(米国CPIなら前月比%) |
+| secondary_previous | numeric(18,4) | nullable | v4.19。副指標の前回値(ひとつ前の発表の副指標の実績) |
 
 UQ(event_id, snapshot_type)
 IDX(event_id)

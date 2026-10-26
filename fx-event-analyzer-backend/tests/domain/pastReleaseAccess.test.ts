@@ -6,11 +6,15 @@ import {
   lockedReleaseMessage,
   nullFields,
   pastReleaseLimitFor,
+  PREVIOUS_VALUE_FIELDS,
+  RELEASE_VALUE_FIELDS,
   pastReleasesMaxFor,
   redactRelease,
   selectVisibleReleasedIds,
   type ReleaseCandidate,
 } from '../../src/domain/pastReleaseAccess.js';
+import { RELEASE_SNAPSHOT_COLUMNS } from '../../src/repositories/eventsRepository.js';
+import { SNAPSHOT_VALUE_COLUMNS } from '../../src/repositories/historicalRepository.js';
 import { resolvePastReleaseAccessForPlan } from '../../src/authorization/pastReleaseAccess.js';
 
 const IND_A = 'a0000000-0000-0000-0000-000000000000';
@@ -246,5 +250,60 @@ describe('resolvePastReleaseAccessForPlan', () => {
       rpc: () => Promise.resolve({ data: null, error: new Error('boom') }),
     } as unknown as SupabaseClient;
     await expect(resolvePastReleaseAccessForPlan(client, 'FREE', events)).rejects.toThrow('boom');
+  });
+});
+
+// v1.36(HQ指示 2026-10-26): 前月比などの副指標(secondary_*, v1.35)も FREE の制限で隠す。
+describe('secondary_* (前月比など) の制限 (v1.36)', () => {
+  /** スナップショットから取る列のうち、値ではない列(残してよいもの)。 */
+  const NOT_VALUES = new Set(['unit', 'source', 'source_url', 'captured_at', 'secondary_value_kind', 'snapshot_type']);
+  const columns = (list: string) => list.split(',').map((c) => c.trim());
+
+  it('every value column the repositories read is in RELEASE_VALUE_FIELDS (a new column cannot leak by omission)', () => {
+    for (const column of [...columns(RELEASE_SNAPSHOT_COLUMNS), ...columns(SNAPSHOT_VALUE_COLUMNS)]) {
+      if (NOT_VALUES.has(column)) continue;
+      expect(RELEASE_VALUE_FIELDS as readonly string[], column).toContain(column);
+    }
+  });
+
+  const row = {
+    event_id: 'e',
+    release_datetime: '2026-10-14T12:30:00Z',
+    forecast: 3.6,
+    actual: 3.7,
+    previous: 3.4,
+    surprise: 0.1,
+    surprise_direction: 'POSITIVE',
+    secondary_value_kind: 'MOM_PCT',
+    secondary_forecast: 0.3,
+    secondary_actual: 0.4,
+    secondary_previous: 0.2,
+  };
+
+  it('a locked release hides every secondary value but keeps the value kind', () => {
+    expect(redactRelease(row, true)).toMatchObject({
+      secondary_value_kind: 'MOM_PCT',
+      secondary_forecast: null,
+      secondary_actual: null,
+      secondary_previous: null,
+      locked: true,
+    });
+  });
+
+  it('previous_locked hides secondary_previous too, and keeps the release own secondary values', () => {
+    expect(redactRelease(row, false, true)).toMatchObject({
+      previous: null,
+      secondary_previous: null,
+      secondary_actual: 0.4,
+      secondary_forecast: 0.3,
+      previous_locked: true,
+    });
+    expect(PREVIOUS_VALUE_FIELDS).toEqual(['previous', 'secondary_previous']);
+  });
+
+  it('an unlocked release keeps everything, and rows without secondary_* get no new keys', () => {
+    expect(redactRelease(row, false)).toMatchObject({ secondary_actual: 0.4, secondary_previous: 0.2 });
+    const listRow = { event_id: 'e', actual: 1, previous: 2 };
+    expect(Object.keys(nullFields(listRow, RELEASE_VALUE_FIELDS)).sort()).toEqual(['actual', 'event_id', 'previous']);
   });
 });

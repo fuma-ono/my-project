@@ -91,6 +91,8 @@ async function lockedEventDetail(app: FastifyInstance, event: EventRow, precisio
       status: event.status,
       data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
       revision_status: LOCKED_REVISION_STATUS,
+      // v1.32 is_provisional: ロックされるのは過去の RELEASED だけなので常に false(応答の形を揃える)。
+      is_provisional: false,
       ...LOCKED,
     },
     snapshot: snapshot ? nullFields(snapshot, RELEASE_VALUE_FIELDS) : null,

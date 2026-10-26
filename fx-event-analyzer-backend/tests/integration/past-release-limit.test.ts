@@ -130,6 +130,19 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
       captured_at: at,
       surprise: 0.5,
       surprise_direction: 'POSITIVE',
+      // v1.35 前月比(副指標)。値は actual から作る目印(例: 901.2345 → 9.0103 / 9.0102 / 9.0101)で、
+      // ロックした発表の目印が応答のどこにも出ないことを確かめる(v1.36)。
+      ...secondaryOf(actual),
+    };
+  }
+
+  function secondaryOf(actual: number) {
+    const base = Math.round(actual) / 100;
+    return {
+      secondary_value_kind: 'MOM_PCT',
+      secondary_actual: Number((base + 0.0003).toFixed(4)),
+      secondary_forecast: Number((base + 0.0002).toFixed(4)),
+      secondary_previous: Number((base + 0.0001).toFixed(4)),
     };
   }
 
@@ -157,7 +170,11 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
         A_RELEASED.map((e) =>
           // The 3rd's published `previous` is the (locked) 4th's actual, as in real data.
           e.id === A.third
-            ? { ...snapshotRow(e.id, e.at, e.actual), previous: 901.2345 }
+            ? {
+                ...snapshotRow(e.id, e.at, e.actual),
+                previous: 901.2345,
+                secondary_previous: secondaryOf(901.2345).secondary_actual,
+              }
             : snapshotRow(e.id, e.at, e.actual),
         ),
       ),
@@ -571,6 +588,10 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
       'previous_locked',
       'release_datetime',
       'required_plan',
+      'secondary_actual',
+      'secondary_forecast',
+      'secondary_previous',
+      'secondary_value_kind',
       'surprise',
       'surprise_direction',
     ];
@@ -679,6 +700,101 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
       expect(body.advanced_statistics.available).toBe(true);
       expect(body.history_limit).toEqual({ applied: 7, max_for_plan: 20, pro_max: 20 });
       expect(body.past_release_limit).toEqual({ applied: false, max_for_plan: null, pro_max: null });
+    });
+  });
+
+  // v1.36(HQ指示 2026-10-26): 前月比などの副指標 secondary_*(v1.35)も、ロックした発表では隠し、
+  // 「前回」を隠す発表(previous_locked)では secondary_previous も隠す。PRO はすべて見える。
+  describe('secondary_* (前月比) と FREE の制限 (v1.36)', () => {
+    // A: 4th(901.2345)・5th(902.3456)がロック、3rd が previous_locked(3rd の secondary_previous = 4th の 9.0103)。
+    const A_LOCKED_SECONDARY = ['9.0103', '9.0102', '9.0101', '9.0203', '9.0202', '9.0201'];
+    // B(比較): B5 / B4 / B3(actual 204 / 203 / 202)がロック。B6 は previous_locked。
+    const B_LOCKED_SECONDARY = [
+      '2.0403',
+      '2.0402',
+      '2.0401',
+      '2.0303',
+      '2.0302',
+      '2.0301',
+      '2.0203',
+      '2.0202',
+      '2.0201',
+    ];
+    const comparisonUrl = `/indicators/${indicatorB}/comparison?fx_pair_id=${USDJPY_FX_PAIR_ID}&timeframe=5m`;
+
+    it('FREE GET /events/{locked}: every secondary value is null, the kind stays, no locked marker anywhere', async () => {
+      const { headers } = await newUser('FREE');
+      for (const id of [A.fourth, A.fifth]) {
+        const { status, body } = await get(`/events/${id}`, headers);
+        expect(status).toBe(200);
+        expect(body.snapshot).toMatchObject({
+          secondary_value_kind: 'MOM_PCT',
+          secondary_forecast: null,
+          secondary_actual: null,
+          secondary_previous: null,
+        });
+        const text = JSON.stringify(body);
+        for (const value of A_LOCKED_SECONDARY) expect(text, value).not.toContain(value);
+      }
+    });
+
+    it('FREE GET /events/{3rd} and /history: secondary_previous hidden (previous_locked), own secondary values shown', async () => {
+      const { headers } = await newUser('FREE');
+      for (const path of [`/events/${A.third}`, `/events/${A.third}/history`]) {
+        const { status, body } = await get(path, headers);
+        expect(status, path).toBe(200);
+        expect(body.snapshot.secondary_previous, path).toBeNull();
+        expect(Number(body.snapshot.secondary_actual), path).toBeCloseTo(1.0403);
+        expect(Number(body.snapshot.secondary_forecast), path).toBeCloseTo(1.0402);
+        const text = JSON.stringify(body);
+        for (const value of A_LOCKED_SECONDARY) expect(text, `${path} ${value}`).not.toContain(value);
+      }
+    });
+
+    it('FREE GET /events/{1st}: the newest release keeps all its secondary values', async () => {
+      const { headers } = await newUser('FREE');
+      const { body } = await get(`/events/${A.first}`, headers);
+      expect(body.snapshot).toMatchObject({ secondary_value_kind: 'MOM_PCT' });
+      expect(Number(body.snapshot.secondary_previous)).toBeCloseTo(1.0201);
+    });
+
+    it('FREE comparison: locked rows have no secondary values, B6 (previous_locked) has no secondary_previous', async () => {
+      const { headers } = await newUser('FREE');
+      const { status, body } = await get(comparisonUrl, headers);
+      expect(status).toBe(200);
+      const rows: Array<Record<string, unknown>> = body.events;
+      expect(Number(rows[0]!.secondary_actual)).toBeCloseTo(2.0603);
+      expect(rows[1]).toMatchObject({ previous_locked: true, secondary_previous: null });
+      expect(Number(rows[1]!.secondary_actual)).toBeCloseTo(2.0503);
+      for (const row of rows.slice(2)) {
+        expect(row).toMatchObject({
+          locked: true,
+          secondary_forecast: null,
+          secondary_actual: null,
+          secondary_previous: null,
+        });
+      }
+      const text = JSON.stringify(body);
+      for (const value of B_LOCKED_SECONDARY) expect(text, value).not.toContain(value);
+    });
+
+    it('FREE lists and home do not carry secondary_* at all (unchanged shape)', async () => {
+      const { headers } = await newUser('FREE');
+      const { body } = await get(`/indicators/${indicatorA}/events`, headers);
+      for (const item of body.data as Array<Record<string, unknown>>) {
+        expect(Object.keys(item).some((key) => key.startsWith('secondary_'))).toBe(false);
+      }
+    });
+
+    it('PRO sees every secondary value (locked-for-FREE releases, the 3rd secondary_previous, comparison rows)', async () => {
+      const { headers } = await newUser('PRO');
+      const fourth = await get(`/events/${A.fourth}`, headers);
+      expect(Number(fourth.body.snapshot.secondary_actual)).toBeCloseTo(9.0103);
+      const third = await get(`/events/${A.third}`, headers);
+      expect(Number(third.body.snapshot.secondary_previous)).toBeCloseTo(9.0103);
+      const comparison = await get(comparisonUrl, headers);
+      const text = JSON.stringify(comparison.body);
+      for (const value of ['2.0403', '2.0303', '2.0203', '2.0501']) expect(text, value).toContain(value);
     });
   });
 

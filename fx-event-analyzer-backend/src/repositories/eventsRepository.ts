@@ -71,12 +71,14 @@ export interface SnapshotRow {
   secondary_previous: number | null;
 }
 
+/** GET /events/{id}・履歴の RELEASE スナップショットの列。値の列は FREE で隠す一覧(RELEASE_VALUE_FIELDS)と突き合わせる。 */
+export const RELEASE_SNAPSHOT_COLUMNS =
+  'forecast, actual, previous, unit, source, source_url, captured_at, surprise, surprise_direction, secondary_value_kind, secondary_forecast, secondary_actual, secondary_previous';
+
 export async function getReleaseSnapshot(supabase: SupabaseClient, eventId: string): Promise<SnapshotRow | null> {
   const { data, error } = await supabase
     .from('event_snapshots')
-    .select(
-      'forecast, actual, previous, unit, source, source_url, captured_at, surprise, surprise_direction, secondary_value_kind, secondary_forecast, secondary_actual, secondary_previous',
-    )
+    .select(RELEASE_SNAPSHOT_COLUMNS)
     .eq('event_id', eventId)
     .eq('snapshot_type', 'RELEASE')
     .maybeSingle();

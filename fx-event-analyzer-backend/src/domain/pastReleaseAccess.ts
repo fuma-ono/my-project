@@ -16,16 +16,32 @@ import { PLAN_LIMITS, planLimitsFor, type Plan } from './planLimits.js';
 
 export const PAST_RELEASE_REQUIRED_PLAN = 'PRO' as const;
 
-/** ロックした発表で null にする値の項目(一覧・ホーム・詳細の snapshot)。 */
-export const RELEASE_VALUE_FIELDS = ['forecast', 'actual', 'previous', 'surprise', 'surprise_direction'] as const;
+/**
+ * ロックした発表で null にする値の項目(一覧・ホーム・詳細の snapshot・履歴・比較の行)。
+ * v1.36(HQ指示 2026-10-26): 前月比などの副指標(`secondary_forecast` / `secondary_actual` /
+ * `secondary_previous`、v1.35)も同じく隠す。`secondary_value_kind` は値の種類(例: MOM_PCT)
+ * だけなので残す。スナップショットの値の列を足したら、ここにも足すこと
+ * (tests/domain/pastReleaseAccess.test.ts が repository の列の一覧と突き合わせる)。
+ */
+export const RELEASE_VALUE_FIELDS = [
+  'forecast',
+  'actual',
+  'previous',
+  'surprise',
+  'surprise_direction',
+  'secondary_forecast',
+  'secondary_actual',
+  'secondary_previous',
+] as const;
 
 /**
  * 「前回」を隠す発表で null にする項目(HQ指示 2026-10-22)。発表の「前回」は、
  * ひとつ前の発表の結果(またはその改定値)なので、ひとつ前の発表がロックされて
  * いれば(= FREE で見られる発表のうち一番古いもの)隠す。surprise は予想と結果
- * から計算する値で、前回は使わない。
+ * から計算する値で、前回は使わない。副指標の前回(`secondary_previous`、例: 前月比の前回)も、
+ * ひとつ前の発表の副指標の結果なので同じく隠す(v1.36)。
  */
-export const PREVIOUS_VALUE_FIELDS = ['previous'] as const;
+export const PREVIOUS_VALUE_FIELDS = ['previous', 'secondary_previous'] as const;
 
 /** `event_revisions.field_name` of a revised `previous` (= the preceding release's actual). */
 export const PREVIOUS_REVISION_FIELD = 'PREVIOUS' as const;
