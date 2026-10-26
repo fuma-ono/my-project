@@ -214,7 +214,10 @@ struct HistoricalComparisonView: View {
         .clipShape(shape)
         .overlay(shape.stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
 
-        return ScrollView(.horizontal, showsIndicators: false) {
+        // HQ指示(2026-10-26)「横スクロールバーを下に表示させてください」:
+        // 列が多く(前年/前月+pips)横に隠れていることに気づきにくいため、
+        // スクロールバーを常に表示するようにした。
+        return ScrollView(.horizontal, showsIndicators: true) {
             tableBody
         }
         .frame(width: 214, height: height, alignment: .topLeading)
@@ -240,17 +243,29 @@ struct HistoricalComparisonView: View {
 
     /// HQ指示(2026-10-25): 列見出しの上にグループ見出し行を出して、
     /// 前年の結果/予想/前回と前月の結果/予想/前回を区別する。
+    /// HQ指示(2026-10-26)「前年前月の線がないので結果、前回の縦線を伸ばして
+    /// ください」: 以前はこの行に実際の区切り線が無く(`Color.clear`の余白
+    /// だけ)、下の`tableHeader`側の区切り線ともつながっていなかったため、
+    /// 「前年」「前月」の境目が分かりにくかった。`tableHeader`・`tableRow`と
+    /// 同じ位置に実際の縦線(`groupDivider`)を置き、グループ見出し行〜列見出し
+    /// 行〜各データ行まで縦線が一直線につながるようにした。
     private func groupHeaderRow(showSecondary: Bool) -> some View {
         HStack(spacing: 0) {
-            Color.clear.frame(width: Column.date + 0.5)
+            Color.clear.frame(width: Column.date)
+            groupDivider
             groupLabel("前年", width: Column.value * 3)
             if showSecondary {
-                Color.clear.frame(width: 0.5)
+                groupDivider
                 groupLabel("前月", width: Column.value * 3)
             }
-            Color.clear.frame(width: 0.5 + Column.pips * 3)
+            groupDivider
+            Color.clear.frame(width: Column.pips * 3)
         }
         .frame(height: Self.groupHeaderHeight)
+    }
+
+    private var groupDivider: some View {
+        Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 0.5, height: Self.groupHeaderHeight)
     }
 
     private func groupLabel(_ title: String, width: CGFloat) -> some View {
@@ -329,20 +344,30 @@ struct HistoricalComparisonView: View {
             .monospacedDigit()
             .padding(.leading, 5)
             .frame(width: Column.date, alignment: .leading)
+            // HQ指示(2026-10-26)「結果、前回の縦線を伸ばしてください」:
+            // 列見出し(`tableHeader`)と同じ位置に縦線を入れ、グループ見出し行
+            // 〜列見出し行〜各データ行まで縦線がつながって見えるようにした。
+            rowDivider
             valueCell(event.actual, unit: unit)
             valueCell(event.forecast, unit: unit)
             valueCell(event.previous, unit: unit)
             if showSecondary {
+                rowDivider
                 valueCell(event.secondaryActual, unit: unit)
                 valueCell(event.secondaryForecast, unit: unit)
                 valueCell(event.secondaryPrevious, unit: unit)
             }
+            rowDivider
             pipsCell(event.pipsByTimeframe?["1m"] ?? nil)
             pipsCell(event.pipsByTimeframe?["5m"] ?? nil)
             pipsCell(event.pipsByTimeframe?["15m"] ?? nil)
         }
         .frame(height: Self.rowHeight)
         .contentShape(Rectangle())
+    }
+
+    private var rowDivider: some View {
+        Rectangle().fill(SettingsCardStyle.cardBorder.opacity(0.5)).frame(width: 0.5, height: Self.rowHeight)
     }
 
     private func valueCell(_ value: Double?, unit: String?) -> some View {
