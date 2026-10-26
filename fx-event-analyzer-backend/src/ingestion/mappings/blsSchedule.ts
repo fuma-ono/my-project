@@ -22,14 +22,39 @@
  * BLS以外が出す指標はこの経路では一切扱わない。
  */
 
-export interface BlsScheduleEntry {
+export interface BlsScheduleEntryBase {
   /** economic_indicators.code — only 'US_CPI' and 'US_NFP' exist here. */
   indicatorCode: 'US_CPI' | 'US_NFP';
   /** 'YYYY-MM' the release reports on. */
   referencePeriod: string;
-  /** 'YYYY-MM-DD', America/New_York wall-clock date of the 08:30 release. */
+  /**
+   * 'YYYY-MM-DD', America/New_York wall-clock date of the 08:30 release.
+   * BLSが日付を変更したら、人が公式ページを読んでここを書き換える
+   * (ingest:official:bls-calendar が同じ economic_events 行の release_datetime を
+   * 更新し、DBトリガーが RESCHEDULED を記録する — dev-environment.md §11)。
+   */
   releaseDate: string;
 }
+
+/**
+ * One row of the schedule. A release BLS has officially CANCELLED (not
+ * merely moved — e.g. a period never published because of a government
+ * shutdown) is kept in the table with `cancelled: true` and a
+ * `cancelledNote` naming the official BLS page/notice that says so; the
+ * job then marks its un-released economic_events row CANCELLED
+ * (reconcileBlsScheduleRows). Never mark an entry cancelled on a guess —
+ * a moved date is a releaseDate change instead. A RELEASED row is never
+ * changed by a cancelled entry (HQ指示 2026-10-26).
+ */
+export type BlsScheduleEntry = BlsScheduleEntryBase &
+  (
+    | { cancelled?: undefined; cancelledNote?: undefined }
+    | {
+        cancelled: true;
+        /** Required: which official BLS source (URL + date read) says the release is cancelled. */
+        cancelledNote: string;
+      }
+  );
 
 const cpi: readonly [string, string][] = [
   ['2025-12', '2026-01-13'],

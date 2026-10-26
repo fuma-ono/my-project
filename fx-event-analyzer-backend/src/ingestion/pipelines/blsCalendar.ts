@@ -51,6 +51,8 @@ import { BLS_SCHEDULE, type BlsScheduleEntry } from '../mappings/blsSchedule.js'
 import { providerIndicatorKey } from '../mappings/indicators.js';
 import { localDate, monthStart, shiftMonth, zonedWallTimeToUtc } from '../time.js';
 import type { NormalizedCalendarRelease, OfficialObservation } from '../types.js';
+import type { JobCounters } from '../runner.js';
+import type { IngestionStore } from '../store.js';
 import { computeOfficialValue, type OfficialValueResolver } from '../verification/official.js';
 import { displayUnit } from '../values.js';
 
@@ -177,6 +179,12 @@ export interface BlsScheduleReleaseResult {
   overdue: BlsScheduleEntry[];
   /** Schedule entries for an indicator with no economic_indicators row / no bls_schedule mapping key. */
   unmapped: BlsScheduleEntry[];
+  /**
+   * Entries marked `cancelled` (BLS officially cancelled the release). Never built into a
+   * release here — otherwise ingestCalendarReleases would write the row back to SCHEDULED.
+   * reconcileBlsScheduleRows marks their un-released rows CANCELLED (HQ指示 2026-10-26).
+   */
+  cancelled: BlsScheduleEntry[];
 }
 
 /**
@@ -206,8 +214,13 @@ export async function buildBlsScheduleReleases(deps: {
   const notYetAvailable: BlsScheduleEntry[] = [];
   const overdue: BlsScheduleEntry[] = [];
   const unmapped: BlsScheduleEntry[] = [];
+  const cancelled: BlsScheduleEntry[] = [];
 
   for (const entry of entries) {
+    if (entry.cancelled) {
+      cancelled.push(entry);
+      continue;
+    }
     const mapping = findMappingByCode(entry.indicatorCode, deps.mappings);
     const ref = mapping?.providers.bls_schedule;
     if (!mapping || !ref) {
@@ -297,5 +310,230 @@ export async function buildBlsScheduleReleases(deps: {
       secondaryPrevious: secondaryPrevious ? secondaryPrevious.value : null,
     });
   }
-  return { releases, notYetAvailable, overdue, unmapped };
+  return { releases, notYetAvailable, overdue, unmapped, cancelled };
+}
+
+/** The economic_events id of a schedule entry — the same one buildBlsScheduleReleases uses. */
+export function blsScheduleEventId(entry: Pick<BlsScheduleEntry, 'indicatorCode' | 'referencePeriod'>): string {
+  return `${BLS_SCHEDULE_PROVIDER}:${entry.indicatorCode}:${entry.referencePeriod}`;
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * What ingestCalendarReleases is about to do with each built release (HQ指示 2026-10-26
+ * 「取り込み結果の内訳をログに記録する」「--dry-run」). Reads only (findEventByProviderId).
+ * - scheduled_insert: future entry, no row yet → a new SCHEDULED row
+ * - scheduled_reschedule: future entry whose SCHEDULED row has another release time
+ *   (the DB trigger records RESCHEDULED)
+ * - scheduled_unchanged: future entry already matching its SCHEDULED row
+ * - released_insert / released_update: published value for a missing / SCHEDULED row
+ * - released_unchanged: the row is already RELEASED (this job never re-writes it)
+ * - row_cancelled: the row is CANCELLED but the entry is not (a human must check; noted)
+ */
+export interface BlsSchedulePlan {
+  scheduled_insert: number;
+  scheduled_reschedule: number;
+  scheduled_unchanged: number;
+  released_insert: number;
+  released_update: number;
+  released_unchanged: number;
+  row_cancelled: number;
+}
+
+export async function planBlsScheduleWrites(
+  store: Pick<IngestionStore, 'findEventByProviderId'>,
+  releases: readonly NormalizedCalendarRelease[],
+  counters: JobCounters,
+): Promise<BlsSchedulePlan> {
+  const plan: BlsSchedulePlan = {
+    scheduled_insert: 0,
+    scheduled_reschedule: 0,
+    scheduled_unchanged: 0,
+    released_insert: 0,
+    released_update: 0,
+    released_unchanged: 0,
+    row_cancelled: 0,
+  };
+  for (const release of releases) {
+    try {
+      const existing = await store.findEventByProviderId(BLS_SCHEDULE_PROVIDER, release.providerEventId);
+      const published = release.actual !== null;
+      if (existing?.status === 'CANCELLED') {
+        plan.row_cancelled += 1;
+        counters.note('schedule_entry_conflict', {
+          provider_event_id: release.providerEventId,
+          entry: published ? 'RELEASED' : 'SCHEDULED',
+          row: 'CANCELLED',
+        });
+      } else if (existing?.status === 'RELEASED') {
+        plan.released_unchanged += 1;
+      } else if (published) {
+        plan[existing ? 'released_update' : 'released_insert'] += 1;
+      } else if (!existing) {
+        plan.scheduled_insert += 1;
+      } else if (Date.parse(existing.release_datetime) === Date.parse(release.releaseAt)) {
+        plan.scheduled_unchanged += 1;
+      } else {
+        plan.scheduled_reschedule += 1;
+        counters.note('schedule_rescheduled', {
+          provider_event_id: release.providerEventId,
+          from: existing.release_datetime,
+          to: release.releaseAt,
+        });
+      }
+    } catch (error) {
+      counters.error(`plan ${release.providerEventId}: ${errorText(error)}`);
+    }
+  }
+  return plan;
+}
+
+/** counters.details keys written by reconcileBlsScheduleRows (ingestion_logs.details). */
+export interface BlsScheduleReconcileCounts {
+  /** SCHEDULED rows set CANCELLED (or CANCELLED rows inserted) because the entry is `cancelled`. */
+  cancelled_applied: number;
+  /** `cancelled` entries whose row was already CANCELLED. */
+  cancelled_unchanged: number;
+  /** `cancelled` entries whose row is RELEASED — never changed, noted as schedule_entry_conflict. */
+  cancelled_conflicts: number;
+  /** Un-released bls_schedule rows whose id is no longer in the table (noted, never changed). */
+  rows_not_in_table: number;
+}
+
+/**
+ * Applies the parts of the schedule table that ingestCalendarReleases cannot (HQ指示 2026-10-26
+ * 「発表予定の取りやめ」「予定表から消えた未発表イベント」), after it has run:
+ * - `cancelled` entry: SCHEDULED row → CANCELLED + data_status UNAVAILABLE (the DB trigger records
+ *   CANCELLED); no row → inserted CANCELLED so the calendar still shows it (an INSERT fires no
+ *   trigger); CANCELLED row → nothing; **RELEASED row → never changed**, noted
+ *   (`schedule_entry_conflict`: BLS published it after all — the table is wrong).
+ * - An un-released (SCHEDULED / CANCELLED) bls_schedule row whose id is not in the table is noted
+ *   (`schedule_rows_not_in_table`) for a human to compare with BLS's page — never auto-cancelled
+ *   (a removed line may be a typo fix).
+ * Each entry has its own try/catch (counters.error); the caller runs this AFTER the
+ * published-value path, in its own try/catch, so a failure here never stops past releases.
+ * dryRun: no insertEvent / updateEvent; the writes it would do go to details.dry_run_writes.
+ */
+export async function reconcileBlsScheduleRows(
+  deps: {
+    store: IngestionStore;
+    entries?: readonly BlsScheduleEntry[];
+    mappings?: readonly IndicatorMapping[];
+    dryRun?: boolean;
+  },
+  counters: JobCounters,
+): Promise<BlsScheduleReconcileCounts> {
+  const entries = deps.entries ?? BLS_SCHEDULE;
+  const { store } = deps;
+  const dryRun = deps.dryRun ?? false;
+  const counts: BlsScheduleReconcileCounts = {
+    cancelled_applied: 0,
+    cancelled_unchanged: 0,
+    cancelled_conflicts: 0,
+    rows_not_in_table: 0,
+  };
+  const write = async (action: string, target: Record<string, string>, run: () => Promise<unknown>) => {
+    if (dryRun) counters.note('dry_run_writes', { action, ...target });
+    else await run();
+  };
+
+  try {
+    const cancelledEntries = entries.filter((entry) => entry.cancelled);
+    const indicators =
+      cancelledEntries.length > 0
+        ? await store.findIndicatorsByCode([...new Set(cancelledEntries.map((e) => e.indicatorCode))])
+        : new Map<string, never>();
+    for (const entry of cancelledEntries) {
+      const id = blsScheduleEventId(entry);
+      try {
+        const existing = await store.findEventByProviderId(BLS_SCHEDULE_PROVIDER, id);
+        if (existing?.status === 'RELEASED') {
+          counts.cancelled_conflicts += 1;
+          counters.note('schedule_entry_conflict', { provider_event_id: id, entry: 'CANCELLED', row: 'RELEASED' });
+        } else if (existing?.status === 'CANCELLED') {
+          counts.cancelled_unchanged += 1;
+        } else if (existing) {
+          await write('cancel', { provider_event_id: id, release_datetime: existing.release_datetime }, () =>
+            store.updateEvent(existing.id, { status: 'CANCELLED', data_status: 'UNAVAILABLE' }),
+          );
+          counts.cancelled_applied += 1;
+        } else {
+          const mapping = findMappingByCode(entry.indicatorCode, deps.mappings);
+          const indicator = indicators.get(entry.indicatorCode);
+          const releaseAt = mapping ? entryReleaseAt(entry, mapping) : null;
+          if (!mapping || !indicator || !releaseAt) {
+            counters.note('indicator_not_in_db', entry.indicatorCode);
+            continue;
+          }
+          const row = {
+            indicator_id: indicator.id,
+            provider: BLS_SCHEDULE_PROVIDER,
+            provider_event_id: id,
+            release_datetime: releaseAt.toISOString(),
+            release_datetime_precision: 'EXACT' as const,
+            importance: indicator.importance,
+            status: 'CANCELLED' as const,
+            data_status: 'UNAVAILABLE' as const,
+          };
+          await write('insert_cancelled', { provider_event_id: id, release_datetime: row.release_datetime }, () =>
+            store.insertEvent(row),
+          );
+          counts.cancelled_applied += 1;
+        }
+      } catch (error) {
+        counters.error(`cancel ${id}: ${errorText(error)}`);
+      }
+    }
+
+    const tableIds = new Set(entries.map(blsScheduleEventId));
+    let unreleased: Awaited<ReturnType<IngestionStore['listUnreleasedEventsByProvider']>>;
+    try {
+      unreleased = await store.listUnreleasedEventsByProvider(BLS_SCHEDULE_PROVIDER);
+    } catch (error) {
+      counters.error(`schedule_rows_not_in_table check failed: ${errorText(error)}`);
+      return counts;
+    }
+    for (const row of unreleased) {
+      if (tableIds.has(row.provider_event_id)) continue;
+      counts.rows_not_in_table += 1;
+      counters.note('schedule_rows_not_in_table', {
+        provider_event_id: row.provider_event_id,
+        status: row.status,
+        release_datetime: row.release_datetime,
+      });
+    }
+    return counts;
+  } finally {
+    Object.assign(counters.details, counts);
+  }
+}
+
+/** UTC instant of an entry's release (the mapping's local release time, DST-correct). */
+function entryReleaseAt(entry: BlsScheduleEntry, mapping: IndicatorMapping): Date | null {
+  const [year, month, day] = entry.releaseDate.split('-').map(Number) as [number, number, number];
+  const [hour, minute] = mapping.release.localTimes[0]!.split(':').map(Number) as [number, number];
+  return zonedWallTimeToUtc(year, month, day, hour, minute, mapping.release.timeZone);
+}
+
+/** Store methods a --dry-run may call (reads). Everything else (insert/update/upsert/reserve…) is refused. */
+const READ_ONLY_METHOD = /^(find|get|list|latest|today|first)/;
+
+/**
+ * --dry-run 用(HQ指示 2026-10-26): 読む関数だけを通し、書き込む関数は呼ばれた時点で例外にする。
+ * dryRun フラグの付け忘れがあっても DB に書かない二重の守り。
+ */
+export function readOnlyIngestionStore(store: IngestionStore): IngestionStore {
+  return new Proxy(store, {
+    get(target, prop, receiver) {
+      const value: unknown = Reflect.get(target, prop, receiver);
+      if (typeof value !== 'function' || typeof prop !== 'string') return value;
+      if (!READ_ONLY_METHOD.test(prop)) {
+        return () => Promise.reject(new Error(`read-only store: ${prop} is not allowed in a dry run`));
+      }
+      return (value as (...args: unknown[]) => unknown).bind(target);
+    },
+  });
 }

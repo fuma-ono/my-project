@@ -16,6 +16,7 @@ import type {
   NewStagedValue,
   OfficialObservationRow,
   ProviderEventRow,
+  UnreleasedEventRef,
   SpeakerRef,
   SpeechEventRow,
   StagedValue,
@@ -129,6 +130,19 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
           .from('economic_events')
           .select(`${EVENT_COLUMNS}, provider_event_id, is_provisional`)
           .eq('provider', provider)
+          .not('provider_event_id', 'is', null)
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
+    },
+
+    async listUnreleasedEventsByProvider(provider: string): Promise<UnreleasedEventRef[]> {
+      return allPages<UnreleasedEventRef>((from, to) =>
+        supabase
+          .from('economic_events')
+          .select('id, provider_event_id, status, release_datetime')
+          .eq('provider', provider)
+          .neq('status', 'RELEASED')
           .not('provider_event_id', 'is', null)
           .order('id', { ascending: true })
           .range(from, to),

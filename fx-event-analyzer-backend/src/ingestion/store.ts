@@ -33,8 +33,9 @@ export interface NewEvent {
   release_datetime: string;
   release_datetime_precision: ReleaseDatetimePrecision;
   importance: 'LOW' | 'MEDIUM' | 'HIGH';
-  status: 'SCHEDULED' | 'RELEASED';
-  data_status: 'PENDING';
+  status: 'SCHEDULED' | 'RELEASED' | 'CANCELLED';
+  /** UNAVAILABLE only together with status CANCELLED (no value will ever come; BLS予定の取りやめ、v1.36). */
+  data_status: 'PENDING' | 'UNAVAILABLE';
 }
 
 export type EventPatch = Partial<
@@ -240,8 +241,21 @@ export interface ApiCreditReservation {
 
 export type CreditMode = 'AUTOMATIC' | 'MANUAL';
 
+/** An un-released (SCHEDULED / CANCELLED) economic_events row of one provider (BLS予定の点検用、v1.36)。 */
+export interface UnreleasedEventRef {
+  id: string;
+  provider_event_id: string;
+  status: 'SCHEDULED' | 'CANCELLED';
+  release_datetime: string;
+}
+
 export interface IngestionStore {
   findIndicatorsByCode(codes: readonly string[]): Promise<Map<string, IndicatorRef>>;
+  /**
+   * economic_events rows of `provider` whose status is not RELEASED (SCHEDULED / CANCELLED).
+   * is_provisional を読まないので、FOMC の列(migration 20261022000002)が無い DB でも動く。
+   */
+  listUnreleasedEventsByProvider(provider: string): Promise<UnreleasedEventRef[]>;
   /** Every economic_events row of `provider` that has a provider_event_id (with is_provisional). */
   listEventsByProvider(provider: string): Promise<ProviderEventRow[]>;
   findEventByProviderId(provider: string, providerEventId: string): Promise<StoredEvent | null>;

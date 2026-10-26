@@ -13,6 +13,7 @@ import type {
   NewStagedValue,
   OfficialObservationRow,
   ProviderEventRow,
+  UnreleasedEventRef,
   SpeakerRef,
   SpeechEventRow,
   StagedValue,
@@ -73,6 +74,19 @@ export class MemoryIngestionStore implements IngestionStore {
       this.events
         .filter((e) => e.provider === provider && e.provider_event_id)
         .map((e) => ({ ...e, is_provisional: e.is_provisional ?? false })),
+    );
+  }
+
+  listUnreleasedEventsByProvider(provider: string): Promise<UnreleasedEventRef[]> {
+    return Promise.resolve(
+      this.events
+        .filter((e) => e.provider === provider && e.provider_event_id && e.status !== 'RELEASED')
+        .map((e) => ({
+          id: e.id,
+          provider_event_id: e.provider_event_id,
+          status: e.status as UnreleasedEventRef['status'],
+          release_datetime: e.release_datetime,
+        })),
     );
   }
 
