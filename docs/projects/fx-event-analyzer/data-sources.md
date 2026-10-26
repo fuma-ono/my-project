@@ -1,7 +1,8 @@
-# FX Event Analyzer: データ取得元と正確さの仕組み v1.4
+# FX Event Analyzer: データ取得元と正確さの仕組み v1.5
 
 ## 変更履歴
 
+- **v1.5**(2026-10-26): BLS の独立経路(14章)の安全対策(HQ指示 2026-10-26「BLSの安全対策」)。2026-10-24 に統合された未来の予定行の作成をベースに、表のエントリの取りやめ(`cancelled`・`cancelledNote`。未発表の行を`CANCELLED`にし、`RELEASED`の行は変えない)、予定表から消えた未発表の行の記録、書き込む前の内訳(`details.plan`)、`--dry-run`を追加した。取りやめ・消えた行の点検は発表済みの値の取り込みの後に別の try/catch で行い、失敗しても過去の発表の取り込みは止まらない。DEV の手順は dev-environment.md 11章
 - **v1.4**(2026-10-23): 要人発言の鮮度の監視(HQ承認 2026-10-23)。`ingest:speeches` が `ingestion_logs.details` に `source_latest_at`・`source_future_count` を記録し、品質レポート第9章で取得元ごとに判定する(5章)。取り込む行・スキップ・状態は変えない。`GET /home` に `speeches_status`(api-design.md v1.34)
 - **v1.3**(2026-10-22): FOMCの会合日程(HQ承認 2026-10-22 Task 3)。FRBの公式ページを人が書き写した表から、指標`US_FOMC`の政策発表の予定を`economic_events`に入れるジョブ`npm run ingest:fomc-schedule`を追加(15章)。暫定の会合は`economic_events.is_provisional`(db-design.md v4.17)で区別する。定期実行には登録していない
 - **v1.1**(2026-10-16): HQ判断(方針は承認、契約・公開には前提条件)を受けて、利用条件を再確認(11章)、品質の測り方(12章)、為替の取り込みジョブ `ingest:fx-prices` を追加。**FRED は API 規約が「保存・DBへの取り込み」を禁じていると分かったため、`ingest:official` で使うのをやめた**(公式値は BLS のみ。FRED を使うには書面の許可が必要)。アプリ情報に「データの出典」を追加

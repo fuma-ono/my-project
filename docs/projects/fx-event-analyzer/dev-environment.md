@@ -959,6 +959,167 @@ NO_DATA=データなし)。
 コード変更・DB接続・SQL実行・GitHub Actions実行・外部API呼び出しは、この節の調査でも
 行っていない。
 
+## 11. BLSの発表前予定行(SCHEDULED)・取りやめのDEV確認手順(2026-10-26、HQ指示「BLSの安全対策」。統合済みの実装に合わせて書き直し)
+
+`npm run ingest:official:bls-calendar` は、`mappings/blsSchedule.ts`の表から、発表済みの月は`RELEASED`、未来の月は`SCHEDULED`の行を作る(`buildBlsScheduleReleases` → `ingestCalendarReleases`。2026-10-24 統合、`0b198205`)。2026-10-26 の統合で、次の安全対策を足した(`claude/fx-bls-future-schedule`の処理は重複して取り込まず、不足分だけを移した)。
+
+- **取りやめ**: BLS が公式に発表を取りやめた月は、表のエントリに`cancelled: true`と`cancelledNote`(公式の告知のURLと読んだ日)を書く。ジョブはその月の release を作らず(`SCHEDULED`に書き戻さない)、未発表の行を`CANCELLED`・`UNAVAILABLE`にする(行が無ければ`CANCELLED`で作る)。**`RELEASED`の行は変えず**、`schedule_entry_conflict`に記録する(`reconcileBlsScheduleRows`)
+- **予定表から消えた行**: 未発表(`SCHEDULED`・`CANCELLED`)の`bls_schedule`の行で、表に無いIDのものは`schedule_rows_not_in_table`に記録するだけ(自動では取りやめにしない)
+- **取り込みの内訳**: 書く前に読むだけで数え、`ingestion_logs.details.plan`に残す(`planBlsScheduleWrites`。`scheduled_insert`・`scheduled_reschedule`・`scheduled_unchanged`・`released_insert`・`released_update`・`released_unchanged`・`row_cancelled`)
+- **失敗の切り分け**: 取りやめ・消えた行の点検は、発表済みの値の取り込みの**後に別の try/catch で**行う。ここで失敗しても過去の発表の取り込みは済んでいる。失敗は`schedule_reconcile:`付きで`errors`に入り、`details.reconcile_errors`に件数が入り、**終了コードは1**。発表済みの値の取り込みも、1件ごとに try/catch(`ingestCalendarReleases`)
+- **`--dry-run`**: 書き込む関数をすべて断るストア(`readOnlyIngestionStore`)で同じ処理を読むだけ行い、内訳と書くはずだった内容を出す。`ingestion_logs`にも書かない。**BLS の API は読む**(キーなしの v1 は25クエリ/日。1回の実行で系列ごとに1回)
+- この経路は`is_provisional`(FOMC のマイグレーション 20261022000002)を読まない。前月比(`secondary_*`、マイグレーション 20261025000001)は**書く**ので、**DEV にそのマイグレーションを適用する前にこのジョブを本実行すると、新しい発表の RELEASE スナップショットの INSERT が失敗する**(過去の月の`RELEASED`化がその月だけ止まる。予定行の作成・取りやめには影響しない)。`--dry-run`は書かないので影響しない
+
+このジョブは**手動実行のみ**(定期実行には入っていない。ワークフローは変更していない)。**DEV では 2026-10-24 07:09 UTC に一度実行されている**(GitHub Actions の実行 40073041318、統合前のコード)。実行するかどうか・いつ実行するかは権限者の判断による。
+
+手順は「11.1 実行前の確認(P1〜P5、読み取り専用) → 11.2 `--dry-run` → 11.3 本実行 → 11.4 実行後の確認」。どこかで11.5の中止条件に当たったら、そこで止めて報告する(DBの行を手で直したり消したりしない)。通知への影響は11.7を先に読むこと。
+
+### 11.1 実行前の確認(読み取り専用SQL P1〜P5)
+
+どれも SELECT のみ。結果は実行後との比較に使うので保存しておく。
+
+```sql
+-- P1: 既存の bls_schedule の行(実行後に「発表済みの行が変わっていない」ことを比べるため)
+select e.id, e.provider_event_id, i.code as indicator, e.status, e.data_status,
+       e.release_datetime, e.release_datetime_precision, e.importance, e.created_at, e.updated_at,
+       s.actual, s.previous, s.verification_status, s.captured_at
+from economic_events e
+join economic_indicators i on i.id = e.indicator_id
+left join event_snapshots s on s.event_id = e.id and s.snapshot_type = 'RELEASE'
+where e.provider = 'bls_schedule'
+order by e.release_datetime;
+
+-- P1b: 同じ行の指紋(件数とハッシュ)。実行後に P1c と比べる
+select now() as checked_at, count(*) as rows,
+       md5(string_agg(concat_ws('|', e.id, e.provider_event_id, e.status, e.data_status,
+                                e.release_datetime, e.release_datetime_precision, e.updated_at),
+                      ',' order by e.id)) as fingerprint
+from economic_events e
+where e.provider = 'bls_schedule';
+
+-- P2: 他の取得元(provider <> 'bls_schedule')の US_CPI・US_NFP の行が、過去60日〜表の末尾(2027-12)に無いこと(0行が正しい)。
+--     supabase/seed.sql のテスト用の行(provider = 'seed')や有料カレンダーの行があると、同じ発表が2行になり、カレンダー・通知に二重に出る
+select e.provider, e.provider_event_id, i.code as indicator, e.status, e.release_datetime
+from economic_events e
+join economic_indicators i on i.id = e.indicator_id
+where i.code in ('US_CPI', 'US_NFP') and e.provider <> 'bls_schedule'
+  and e.release_datetime >= now() - interval '60 days' and e.release_datetime < timestamptz '2028-01-01'
+order by e.release_datetime;
+
+-- P3: 2指標とも重要度 HIGH であること(2行・どちらも HIGH が正しい)
+select code, importance, country_code, currency_code from economic_indicators
+where code in ('US_CPI', 'US_NFP') order by code;
+
+-- P4: bls_schedule の行の状態ごとの件数(2026-10-24 の実行で未来の SCHEDULED が入っているはず。件数を記録する)
+select status, data_status, count(*) filter (where release_datetime > now()) as future,
+       count(*) filter (where release_datetime <= now()) as past
+from economic_events where provider = 'bls_schedule'
+group by status, data_status order by status;
+
+-- P5: 通知の対象になりうるアカウントの数(集計のみ。11.7)
+select (select count(*) from profiles) as profiles, count(*) as user_settings_rows,
+       count(*) filter (where notify_push) as push_on,
+       count(*) filter (where notify_push and notify_indicators and 'HIGH' = any(notify_importances)) as would_notify_cpi_nfp
+from user_settings;
+
+-- P6: 前月比のマイグレーション(20261025000001)が DEV に入っているか(4 なら入っている。0 なら本実行の前に、この章の冒頭の注意を読む)
+select count(*) from information_schema.columns
+where table_schema = 'public' and table_name = 'event_snapshots' and column_name like 'secondary%';
+```
+
+### 11.2 書き込みなしの事前実行(`--dry-run`)
+
+```bash
+cd fx-event-analyzer-backend
+npm run ingest:official:bls-calendar -- --dry-run
+```
+
+- 出力(1行のJSON)の`plan`・`reconcile`・`dry_run_writes`・`notes`・`errors`を保存する
+- 期待値(2026-10-24 の実行で28行が入っており、表を変えていない場合): `plan.scheduled_insert = 0`、`plan.scheduled_unchanged`が「今より後の表のエントリの数」(10/26 時点で28)、`plan.scheduled_reschedule = 0`、`plan.row_cancelled = 0`、`reconcile`がすべて0、`dry_run_writes`が空、`errors`が空、終了コード0
+- 2026-10-24 の実行がされていなかった DB なら`plan.scheduled_insert`が未来のエントリの数になる
+- 発表済みの月の`plan.released_*`は、`released_unchanged`(すでに`RELEASED`)が正しい。`released_insert`・`released_update`は、前回の実行より後に BLS が発表した月だけ
+
+### 11.3 本実行
+
+11.1・11.2 で中止条件に当たらず、11.7 の通知対策と11.1のP6の確認を済ませてから実行する。
+
+```bash
+cd fx-event-analyzer-backend
+npm run ingest:official:bls-calendar
+```
+
+### 11.4 実行後の確認(読み取り専用SQL)と期待結果
+
+```sql
+-- (1) 状態ごとの件数
+select status, data_status, release_datetime_precision, count(*) from economic_events
+where provider = 'bls_schedule' group by 1, 2, 3 order by 1, 2;
+
+-- (2) 同じIDの重複が無いこと(0行が正しい)
+select provider_event_id, count(*) from economic_events
+where provider = 'bls_schedule' group by provider_event_id having count(*) > 1;
+
+-- (3) 発表時刻がニューヨーク時間 08:30 であること(0行が正しい)
+select provider_event_id, release_datetime from economic_events
+where provider = 'bls_schedule'
+  and to_char(release_datetime at time zone 'America/New_York', 'HH24:MI') <> '08:30';
+
+-- (4) トリガーが記録した予定変更・中止(bls_schedule の行だけ)
+select c.change_type, e.provider_event_id, c.old_datetime, c.new_datetime, c.changed_at
+from event_schedule_changes c join economic_events e on e.id = c.target_id
+where c.kind = 'INDICATOR' and e.provider = 'bls_schedule' order by c.changed_at desc;
+
+-- (5) 直近のジョブログ(内訳と要確認の項目)
+select started_at, status, error_message,
+       details->'plan' as plan, details->'reconcile_errors' as reconcile_errors,
+       details->'cancelled_applied' as cancelled_applied, details->'cancelled_conflicts' as cancelled_conflicts,
+       details->'rows_not_in_table' as rows_not_in_table,
+       details->'schedule_entry_conflict' as conflict, details->'schedule_rows_not_in_table' as not_in_table,
+       details->'overdue' as overdue
+from ingestion_logs where job = 'ingest:official:bls-calendar' order by started_at desc limit 5;
+
+-- P1c: 実行前からあった行が変わっていないこと(P1b の checked_at を入れて流す。P1b と同じなら正しい)
+select count(*) as rows,
+       md5(string_agg(concat_ws('|', e.id, e.provider_event_id, e.status, e.data_status,
+                                e.release_datetime, e.release_datetime_precision, e.updated_at),
+                      ',' order by e.id)) as fingerprint
+from economic_events e
+where e.provider = 'bls_schedule' and e.created_at < timestamptz '<P1b の checked_at>';
+```
+
+**期待結果**(表を変えていない場合): (5)の`plan`が11.2の dry-run と同じ、`reconcile_errors = 0`、`cancelled_applied = 0`、`rows_not_in_table = 0`、`conflict`・`not_in_table`が空。(2)(3)は0行。(4)は増えない。P1c は、前回の実行より後に BLS が発表した月の行(`SCHEDULED` → `RELEASED`)だけが違う。
+
+**取りやめを入れたとき**: 該当月の行が`CANCELLED`・`UNAVAILABLE`になり、(4)に`CANCELLED`が1行増える(行がまだ`SCHEDULED`だった場合。新しく作った場合は INSERT なので増えない)。(5)の`cancelled_applied = 1`。
+
+### 11.5 中止条件
+
+次のどれかに当たったら、その段階で止めて報告する(DBの行を手で更新・削除しない)。
+
+- **実行前**: P2 が1行以上/P3 が2行でない・HIGH でない/P5 で通知の対象のアカウントがあり、11.7 の対策をまだしていない/P6 が0なのに本実行しようとしている
+- **dry-run**: 終了コード1、`errors`が空でない、`plan.scheduled_reschedule`・`plan.row_cancelled`・`reconcile`の件数が想定と違う(表を変えていないのに0でない)、`schedule_entry_conflict`・`schedule_rows_not_in_table`・`indicator_not_in_db`が空でない
+- **本実行後**: 終了コード1・`reconcile_errors`が0でない・`errors`が空でない/(2)(3)が0行でない/(4)が想定外に増えた/P1c が想定外に違う/P2 が0行でなくなった
+
+### 11.6 予定変更が記録される場合・されない場合
+
+DBのトリガー(`trg_economic_events_schedule_change`、migration 20261015000002)は、**更新前の行が`SCHEDULED`で、`release_datetime`が変わった(または`CANCELLED`になった)UPDATE**をすべて記録する。発表済みの値の取り込み(`economicCalendar.ts`の`upsertSchedule`)は、行がまだ`SCHEDULED`のうちに発表を取り込むとき、表の日時が行の日時と違えば日時の変更と`RELEASED`化を1回のUPDATEで行う。このため:
+
+- **記録される**: 行が`SCHEDULED`のうちに表の日付を直したとき(通常)/BLSが日付をずらし、表を直したのが元の日付・新しい日付を過ぎた後でも、行がまだ`SCHEDULED`だったとき(発表後の実行の1回のUPDATEで記録される)/取りやめで`SCHEDULED`の行を`CANCELLED`にしたとき
+- **記録されない**: 行が`RELEASED`になった後に表を直したとき(この経路は`RELEASED`の行の日時を変えない)/表を直さないまま発表されたとき(古い日時のまま`RELEASED`になる)/新しく行を作るとき(INSERT)
+
+表の修正が発表に間に合わないと、「発表後にカレンダー更新が届く」か「行の時刻が誤ったまま残る」かのどちらかになる。BLS の変更告知を見たら、発表日より前に表を直す(data-sources.md §14)。
+
+### 11.7 通知への影響と、DEV確認中に意図しない通知を出さない方法
+
+- **サーバーからのプッシュ(APNs)は無い**。端末に出る通知は、iOS アプリが`GET /notifications/upcoming`(今から7日先まで)の結果で予約するローカル通知だけ。条件は、プッシュ通知オン・経済指標オン・行が`SCHEDULED`・精度`EXACT`・重要度が設定に含まれる(既定 HIGH と MEDIUM)。**CPI・雇用統計の予定行は既定の設定ならすべて対象**
+- 通知一覧(`notification_inbox`)は、アプリが`GET /notifications`を呼んだときに書かれる。予定変更・取りやめ(`event_schedule_changes`の直近7日)は一覧に出るだけで、ローカル通知にはならない。定期的に動くもの(cron・タイマー)は無い
+- **今の DEV**: 2026-10-24 の実行で予定行が入っていれば、いちばん近い NFP 2026-11-06 13:30Z(日本時間 22:30)が7日の範囲に入るのは **2026-10-30 22:30(日本時間)以降**。そのあとアプリを開いたテスト端末は、11-06 22:25 に「発表5分前」の通知を出す
+- **防ぎ方(おすすめ順)**: ① テスト用アカウントのアプリで「設定 → 通知」の「プッシュ通知」をオフにして保存する(P5 の`push_on`が0) ② 「経済指標」をオフ、または重要度から「高」を外す ③ 端末の iOS 設定で通知を許可しない ④ 時期で避ける(10-30 22:30 より前に確認を終える。行を残す限り、その後は①〜③が必要)
+
+### 11.8 まだ確認できていないこと
+
+- DEV の実データ(2026-10-24 の実行で入った行の件数・重複・`ingestion_logs`)は、読み取り専用SQLで確認が必要(11.1)
+- 取りやめ・消えた行の処理は単体テスト(`tests/ingestion/blsScheduleSafety.test.ts`)で確認した。DEV DB でのジョブ実行(`--dry-run`を含む)は、承認後に行う
+
 ## 12. FOMCの会合日程と`is_provisional`の適用手順(2026-10-22、HQ承認 Task 3。**実行はまだ。承認を得てから行う**)
 
 `supabase/migrations/20261022000002_economic_events_provisional.sql`(`economic_events`に`is_provisional boolean not null default false`を足すだけ。`add column if not exists`なので2回実行しても同じ)と、`npm run ingest:fomc-schedule`(data-sources.md 15章)を社内確認用DBで使うための手順。Claude(セッション)はDBに接続しておらず、どれも未実行。Migration の適用・デプロイ・ジョブの実行は、それぞれ別に承認を得てから行う。
