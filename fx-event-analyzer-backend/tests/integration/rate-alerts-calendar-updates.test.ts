@@ -290,6 +290,8 @@ describe.skipIf(!integration)('Rate alerts / calendar updates / Home speeches', 
         'date',
         'timezone',
         'events',
+        // v1.33 無料プランの過去の発表の上限(T1)。統合(2026-10-26)で /home に両方の項目が並ぶ。
+        'past_release_limit',
         'major_fx',
         'speeches',
         'speeches_status',

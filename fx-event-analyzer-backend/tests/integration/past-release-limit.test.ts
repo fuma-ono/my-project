@@ -720,7 +720,8 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
       '2.0202',
       '2.0201',
     ];
-    const comparisonUrl = `/indicators/${indicatorB}/comparison?fx_pair_id=${USDJPY_FX_PAIR_ID}&timeframe=5m`;
+    // indicatorB は beforeAll で決まるので、呼ぶときに URL を作る。
+    const comparisonUrl = () => `/indicators/${indicatorB}/comparison?fx_pair_id=${USDJPY_FX_PAIR_ID}&timeframe=5m`;
 
     it('FREE GET /events/{locked}: every secondary value is null, the kind stays, no locked marker anywhere', async () => {
       const { headers } = await newUser('FREE');
@@ -760,7 +761,7 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
 
     it('FREE comparison: locked rows have no secondary values, B6 (previous_locked) has no secondary_previous', async () => {
       const { headers } = await newUser('FREE');
-      const { status, body } = await get(comparisonUrl, headers);
+      const { status, body } = await get(comparisonUrl(), headers);
       expect(status).toBe(200);
       const rows: Array<Record<string, unknown>> = body.events;
       expect(Number(rows[0]!.secondary_actual)).toBeCloseTo(2.0603);
@@ -792,7 +793,7 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
       expect(Number(fourth.body.snapshot.secondary_actual)).toBeCloseTo(9.0103);
       const third = await get(`/events/${A.third}`, headers);
       expect(Number(third.body.snapshot.secondary_previous)).toBeCloseTo(9.0103);
-      const comparison = await get(comparisonUrl, headers);
+      const comparison = await get(comparisonUrl(), headers);
       const text = JSON.stringify(comparison.body);
       for (const value of ['2.0403', '2.0303', '2.0203', '2.0501']) expect(text, value).toContain(value);
     });
