@@ -11,6 +11,9 @@ name: FX Event Analyzer - Data ingestion (dev)
 #     「経済指標の価格反応実装と異常系テストを進める」。既存のfx_prices/economic_events
 #     を読むだけで、外部APIは呼ばない(追加費用0円)。手動実行とDEVデータ検証が
 #     成功するまで定期実行には入れない(HQ決定2026-10-18「定期実行への移行条件」)。
+#   - FOMCの会合日程(手動実行のみ、target=fomc-schedule): HQ承認2026-10-26。コードレビュー済みの
+#     表(ingestion/mappings/fomcSchedule.ts)から US_FOMC の発表予定を economic_events に入れる。
+#     外部APIは呼ばない。migration 20261022000002(is_provisional)が前提。定期実行には入れない
 # 接続先が社内確認用のDBでなければ止まる(本番DBに書き込まない)。
 # Twelve Data の無料キーは社内確認専用(要件定義書6.4)。
 on:
@@ -21,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'fx-prices / speeches / both / report / official-bls / event-reactions'
+        description: 'fx-prices / speeches / both / report / official-bls / event-reactions / fomc-schedule'
         default: both
 
 permissions:
@@ -92,3 +95,6 @@ jobs:
       - name: Official stats (BLS calendar, manual only)
         if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'official-bls'
         run: npm run -s ingest:official:bls-calendar
+      - name: FOMC schedule (manual only)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'fomc-schedule'
+        run: npm run -s ingest:fomc-schedule
