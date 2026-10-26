@@ -25,7 +25,7 @@ describe('planLimitsFor', () => {
       favorites_max: 3,
       notification_importances: ['HIGH'],
       notification_fx_pairs_max: 1,
-      history_events_max: 5,
+      history_events_max: 3,
       rate_alerts_max: 1,
       past_releases_max: 3,
     });
@@ -168,7 +168,7 @@ describe('toEntitlementLimits', () => {
       favorites_max: 3,
       notification_importances: ['HIGH'],
       notification_fx_pairs_max: 1,
-      history_events_max: 5,
+      history_events_max: 3,
       past_releases_max: 3,
     });
     expect(toEntitlementLimits('PRO', NOW, 'UTC')).toEqual({
@@ -249,8 +249,8 @@ describe('applyNotificationPlanLimits', () => {
 
 describe('historyLimitFor', () => {
   it('reports the applied count with the plan and PRO maxima', () => {
-    expect(historyLimitFor('FREE', 5)).toEqual({ applied: 5, max_for_plan: 5, pro_max: 20 });
-    expect(historyLimitFor('FREE', 2)).toEqual({ applied: 2, max_for_plan: 5, pro_max: 20 });
+    expect(historyLimitFor('FREE', 3)).toEqual({ applied: 3, max_for_plan: 3, pro_max: 20 });
+    expect(historyLimitFor('FREE', 2)).toEqual({ applied: 2, max_for_plan: 3, pro_max: 20 });
     expect(historyLimitFor('PRO', 20)).toEqual({ applied: 20, max_for_plan: 20, pro_max: 20 });
   });
 });

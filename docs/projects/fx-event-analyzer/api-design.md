@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.36
+# FX Event Analyzer: API詳細設計書 v1.37
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -83,6 +83,7 @@
 - **v1.34**(2026-10-23): 要人発言の鮮度(HQ承認 2026-10-23)。`GET /home`に任意の`speeches_status`(`window_days` / `last_success_at` / `stale`)を追加(12章)。ホームの「直近の要人発言」が0件のとき、「直近7日間に発言が無い」のか「取得できていない」のかをアプリが言い分けるため。**`speeches`の中身・形は変えない。** 判定は品質レポート第9章(dev-environment.md 14章)の「取得の失敗」と同じ関数を使う
 - **v1.35**(2026-10-25): 過去イベント比較・イベント詳細に前月比・前年比を併記(HQ指示 2026-10-25「過去イベント比較の表も前月と前年必要だと思う」)。`GET /indicators/{indicator_id}/comparison`の`events[]`、`GET /events/{event_id}`・`GET /events/{event_id}/history`の`snapshot`に`secondary_value_kind`(`"MOM_PCT"`等、副指標が無い指標は`null`)・`secondary_forecast`・`secondary_actual`・`secondary_previous`を追加(21章・14章・20章)。米国CPIは本来の値(`actual`等)がYoY%(前年比)なので、これに加えてMoM%(前月比)を`secondary_*`として追加した — 新しい外部データ源は増やさず、既に取得しているBLS公式系列(CUUR0000SA0)を別の変換で計算しただけ(data-sources.md参照)。副指標が設定されていない指標(米国CPI以外、2026-10-25時点で全て)は常に`null`
 - **v1.36**(2026-10-26): 前月比などの副指標(v1.35、`secondary_*`)にも、無料プランの「過去の発表」制限(v1.33、28.2節)をかける(HQ指示 2026-10-26「前月比機能とFREE制限をセットで統合する」)。ロックした発表では`secondary_forecast`・`secondary_actual`・`secondary_previous`を`null`にし、前回を隠す発表(`previous_locked: true`)では`secondary_previous`も`null`にする(ひとつ前の、ロックされた発表の副指標の実績にあたるため)。`secondary_value_kind`(値の種類)は残す。対象は`GET /events/{event_id}`の`snapshot`・`GET /events/{event_id}/history`の`snapshot`・`GET /indicators/{indicator_id}/comparison`の`events[]`の3か所(一覧`/indicators/{id}/events`とホームは`secondary_*`を返さないので変わらない)。比較の統計は前から pips だけを使うので変わらない。PRO は変わらない。あわせて、ロックした発表の`GET /events/{id}`の`event`にも`is_provisional: false`(v1.32)を入れ、ロックしていない発表と応答の形を揃えた
+- **v1.37**(2026-10-26): 過去イベント比較・要人ごとの過去比較の FREE の件数(`history_events_max`)を 5 → **3** にした(大野さん決定 2026-10-26。過去の発表の制限「直近3回」(28.2節)と揃える)。PRO は 20 のまま。**Endpoint・Response の形は変えない**。`GET /entitlements`の`limits.history_events_max`も FREE は 3 を返す。FREE の比較の行は直近3回だけになるので、ロックされた行は原則出なくなる(値の無い RELEASED の発表がある指標では、ロックの数え方の違いで1行出ることがある。28.2節)
 
 ---
 
@@ -1132,7 +1133,7 @@ Query：
 - from / to
 - page / limit(**v1.1で追加、B-4**。default = 20、max = 100。Statisticsはページング対象外)
 
-**過去の発表回の上限(v1.15、28.1節)**: 使う過去の発表回(`RELEASED`)は、直近から`history_events_max`件(FREE 5件・PRO 20件)だけ。`stats` / `stats_by_timeframe`・`total_events`・`analyzable_events`・`events`・`meta.total`はすべてこの件数の中で数える(上限より後のページは`events: []`)。Responseに`history_limit`を追加する(timeframe単一指定・`all`の両方)：
+**過去の発表回の上限(v1.15、28.1節)**: 使う過去の発表回(`RELEASED`)は、直近から`history_events_max`件(FREE 3件(v1.37。それまでは5件)・PRO 20件)だけ。`stats` / `stats_by_timeframe`・`total_events`・`analyzable_events`・`events`・`meta.total`はすべてこの件数の中で数える(上限より後のページは`events: []`)。Responseに`history_limit`を追加する(timeframe単一指定・`all`の両方)：
 
 ```json
 {
@@ -1146,7 +1147,7 @@ Query：
 
 `GET /events/{event_id}/history`(20章)は1回分の発表を返すAPIで、過去の発表回の一覧を使わないため、上限の対象外(変更なし)。ただしv1.33から、その発表が28.2節でロックされていれば`403 PLAN_LIMIT_EXCEEDED`。
 
-**v1.33(HQ判断 2026-10-22)**: 件数(FREE 5回・PRO 20回)は変えない(28.2節の「直近3回」とは別の上限)。使う発表は「RELEASE snapshotのある`RELEASED`の発表」で、並びは`release_datetime`の新しい順・同時刻は`id`の昇順。統計に使う発表と`events`の一覧は必ず同じ条件・同じ順で数える(以前はsnapshotの無い発表を片方だけが数え得た)。`GET /speakers/{speaker_id}/comparison`(14.10節)も件数は変えない。
+**v1.33(HQ判断 2026-10-22)**: 件数(当時は FREE 5回・PRO 20回。v1.37 で FREE は3回)は変えない(28.2節の「直近3回」とは別の上限)。使う発表は「RELEASE snapshotのある`RELEASED`の発表」で、並びは`release_datetime`の新しい順・同時刻は`id`の昇順。統計に使う発表と`events`の一覧は必ず同じ条件・同じ順で数える(以前はsnapshotの無い発表を片方だけが数え得た)。`GET /speakers/{speaker_id}/comparison`(14.10節)も件数は変えない。
 
 **返す項目(v1.33)**: `events`の各行は`event_id`・`release_datetime`・`forecast`・`actual`・`previous`・`surprise`・`surprise_direction`・`pips_by_timeframe`(`1m`・`5m`・`15m`のpips)・`locked`・`required_plan`だけ。解説・改定・`change_percent`・最大上昇/下落などの値動きの詳細は返さない。
 
@@ -1937,7 +1938,7 @@ Response(v1.15で`plan`・`limits`を追加。`features`は変更なし)：
     "favorites_max": 3,
     "notification_importances": ["HIGH"],
     "notification_fx_pairs_max": 1,
-    "history_events_max": 5,
+    "history_events_max": 3,
     "past_releases_max": 3
   }
 }
@@ -2025,7 +2026,7 @@ PRO Entitlementの付与(v1.4): `POST /subscription/verify`の保存時に、FRE
 | お気に入りの件数(`favorites_max`) | 3件 | 上限なし(`null`) | なし(お気に入りは端末内に保存。Backendは上限の値を返すだけ) |
 | 通知の重要度(`notification_importances`) | `HIGH`のみ | `HIGH` / `MEDIUM` / `LOW` | `PATCH /settings`(24.5節)、`GET /notifications/upcoming`(24.6節) |
 | 通知の通貨ペア(`notification_fx_pairs_max`) | 1件(`null` = すべての通貨ペアは不可。保存済みの`null`は`USDJPY`として扱う) | 上限なし(`null`) | `PATCH /settings`(24.5節)、`GET /notifications/upcoming`(24.6節) |
-| 過去イベント比較の発表回(`history_events_max`) | 直近5回 | 直近20回 | `GET /indicators/{id}/comparison`(21章)、`GET /speakers/{speaker_id}/comparison`(14.10節、v1.28。要人の発言済みの発言の件数) |
+| 過去イベント比較の発表回(`history_events_max`) | 直近3回(v1.37。それまでは5回) | 直近20回 | `GET /indicators/{id}/comparison`(21章)、`GET /speakers/{speaker_id}/comparison`(14.10節、v1.28。要人の発言済みの発言の件数) |
 | 値を見られる過去の発表(`past_releases_max`、v1.33) | 指標ごとに直近3回 | 上限なし(`null`) | `GET /indicators/{id}/events`(13.3節)、`GET /home`(12章)、`GET /events/{id}`(14.1節)と、その子の`/revisions`・`/history`・`/reaction`・`/reaction/chart`(28.2節) |
 | 有効なレートアラート(`rate_alerts_max`、v1.27) | 1件 | 10件 | `POST /rate-alerts`(24.13節)、`GET /rate-alerts`の`limit`(24.12節)。`GET /entitlements`の`limits`には含めない |
 

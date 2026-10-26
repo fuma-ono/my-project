@@ -2770,7 +2770,7 @@ const MOCK_PLAN_LIMITS = {
     favorites_max: 3,
     notification_importances: ['HIGH'],
     notification_fx_pairs_max: 1,
-    history_events_max: 5,
+    history_events_max: 3, // v1.37: FREE 5 → 3
   },
   PRO: {
     calendar_past: { unit: 'YEARS', count: 5 },

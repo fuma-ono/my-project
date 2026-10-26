@@ -73,7 +73,7 @@ struct PlanLimits: Decodable, Equatable {
             favoritesMax: 3,
             notificationImportances: ["HIGH"],
             notificationFxPairsMax: 1,
-            historyEventsMax: 5,
+            historyEventsMax: 3, // v1.37: FREE 5 → 3(Backend の planLimits.ts と同じ)
             pastReleasesMax: 3
         )
     }
