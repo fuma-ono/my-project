@@ -514,7 +514,19 @@ final class ScreenshotTests: XCTestCase {
             "Landscape-only top bar did not appear after rotating to landscape — the screen likely did not actually switch to the landscape layout"
         )
         XCTAssertFalse(app.buttons["v5HeaderBack"].exists, "Portrait-only back button should not exist in landscape")
-        XCTAssertFalse(app.buttons["v5Tab1"].exists, "Bottom tab bar should not exist in landscape")
+        // 6回目の修正: `v5Tab1`だけ`.exists`で2回連続して失敗した
+        // (「Bottom tab bar should not exist in landscape」)。`NavigationStack`
+        // はこの画面を押す前の画面(指標詳細)を画面裏に保持し続けており、
+        // その画面にも同じ`v5Tab1`識別子のタブバーが存在する — `app.buttons[id]`
+        // は画面の前面・裏面を問わずアプリ全体のアクセシビリティツリーから
+        // 一致する要素を探すため、このHistoricalComparisonView自身の
+        // タブバーが消えていても、裏の指標詳細の方が引っかかって`exists`が
+        // `true`のままになっていたと見られる(`v5HeaderBack`は指標詳細側には
+        // 無い識別子のため、この影響を受けずに正しく`false`になっていた)。
+        // 「画面として見えている(ヒットテスト可能)かどうか」を見る
+        // `isHittable`に変えることで、裏に隠れているだけの要素を誤って
+        // 拾わないようにした。
+        XCTAssertFalse(app.buttons["v5Tab1"].isHittable, "Bottom tab bar should not be visible in landscape")
         // 5回目の修正(`OrientationLock.swift`参照): 要素の存在判定
         // (アクセシビリティツリー、最終的な論理レイアウトを反映)と実際に
         // 合成されるピクセル(UIKitの回転トランジションアニメーション)は
