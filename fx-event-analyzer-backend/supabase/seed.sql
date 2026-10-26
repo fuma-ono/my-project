@@ -92,6 +92,20 @@ insert into indicator_fx_pairs (indicator_id, fx_pair_id, priority) values
   ('10000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-000000000003', 2), -- Japan CPI x EURJPY
   ('10000000-0000-0000-0000-000000000005', '20000000-0000-0000-0000-000000000001', 1); -- BOJ x USDJPY
 
+-- 米国コアCPI・失業率・平均時給 (migration 20261026000001 が指標の行を入れる)。migration は seed の
+-- 前に流れ、その時点では fx_pairs が空で関連の通貨ペアを入れられないため、ローカルではここで入れる
+-- (DEV では fx_pairs が既にあり、migration が入れる。どちらも何度流しても同じ)。
+insert into indicator_fx_pairs (indicator_id, fx_pair_id, priority)
+select i.id, p.id, v.priority
+from (values
+  ('US_CORE_CPI', 'USDJPY', 1), ('US_CORE_CPI', 'EURUSD', 2),
+  ('US_UNEMPLOYMENT_RATE', 'USDJPY', 1), ('US_UNEMPLOYMENT_RATE', 'EURUSD', 2),
+  ('US_AVG_HOURLY_EARNINGS', 'USDJPY', 1), ('US_AVG_HOURLY_EARNINGS', 'EURUSD', 2)
+) as v(code, symbol, priority)
+join economic_indicators i on i.code = v.code
+join fx_pairs p on p.symbol = v.symbol
+on conflict (indicator_id, fx_pair_id) do nothing;
+
 -- ---------------------------------------------------------------------
 -- Event 1: US CPI, already released, forecast present, has a revision and
 -- a fact-based explanation, and reaction data for USDJPY across all

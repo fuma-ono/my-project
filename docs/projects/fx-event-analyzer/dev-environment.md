@@ -24,7 +24,7 @@
 
 ## 2. データベース(Supabase)
 
-- 新しく作るときは、`fx-event-analyzer-backend/supabase/migrations/` を名前順にすべて流し、`supabase/seed.sql` は **1〜94行目(指標・通貨ペア・指標×通貨ペア)だけ**流す。95行目以降はテスト用の架空のイベント・値動きなので、本物のデータと混ぜない
+- 新しく作るときは、`fx-event-analyzer-backend/supabase/migrations/` を名前順にすべて流し、`supabase/seed.sql` は **1〜107行目(指標・通貨ペア・指標×通貨ペア)だけ**流す。108行目以降はテスト用の架空のイベント・値動きなので、本物のデータと混ぜない
 - 要人のマスタは migration `20261016000001_master_speakers.sql` が入れる
 - 作成時の設定: Data API あり、Automatically expose new tables あり(マイグレーションが前提にしている)、automatic RLS あり
 
@@ -997,18 +997,19 @@ select now() as checked_at, count(*) as rows,
 from economic_events e
 where e.provider = 'bls_schedule';
 
--- P2: 他の取得元(provider <> 'bls_schedule')の US_CPI・US_NFP の行が、過去60日〜表の末尾(2027-12)に無いこと(0行が正しい)。
+-- P2: 他の取得元(provider <> 'bls_schedule')の5指標の行が、過去60日〜表の末尾(2027-12)に無いこと(0行が正しい)。
 --     supabase/seed.sql のテスト用の行(provider = 'seed')や有料カレンダーの行があると、同じ発表が2行になり、カレンダー・通知に二重に出る
 select e.provider, e.provider_event_id, i.code as indicator, e.status, e.release_datetime
 from economic_events e
 join economic_indicators i on i.id = e.indicator_id
-where i.code in ('US_CPI', 'US_NFP') and e.provider <> 'bls_schedule'
+where i.code in ('US_CPI', 'US_NFP', 'US_CORE_CPI', 'US_UNEMPLOYMENT_RATE', 'US_AVG_HOURLY_EARNINGS') and e.provider <> 'bls_schedule'
   and e.release_datetime >= now() - interval '60 days' and e.release_datetime < timestamptz '2028-01-01'
 order by e.release_datetime;
 
--- P3: 2指標とも重要度 HIGH であること(2行・どちらも HIGH が正しい)
-select code, importance, country_code, currency_code from economic_indicators
-where code in ('US_CPI', 'US_NFP') order by code;
+-- P3: 指標の行があること(11.9 の migration の後は5行。US_AVG_HOURLY_EARNINGS だけ MEDIUM、他は HIGH が正しい。
+--     適用前は US_CPI・US_NFP の2行で、3指標は indicator_not_in_db として飛ばされる)
+select code, importance, country_code, currency_code, display_name from economic_indicators
+where code in ('US_CPI', 'US_NFP', 'US_CORE_CPI', 'US_UNEMPLOYMENT_RATE', 'US_AVG_HOURLY_EARNINGS') order by code;
 
 -- P4: bls_schedule の行の状態ごとの件数(2026-10-24 の実行で未来の SCHEDULED が入っているはず。件数を記録する)
 select status, data_status, count(*) filter (where release_datetime > now()) as future,
@@ -1119,6 +1120,26 @@ DBのトリガー(`trg_economic_events_schedule_change`、migration 202610150000
 
 - DEV の実データ(2026-10-24 の実行で入った行の件数・重複・`ingestion_logs`)は、読み取り専用SQLで確認が必要(11.1)
 - 取りやめ・消えた行の処理は単体テスト(`tests/ingestion/blsScheduleSafety.test.ts`)で確認した。DEV DB でのジョブ実行(`--dry-run`を含む)は、承認後に行う
+
+### 11.9 米国コアCPI・失業率・平均時給の追加(2026-10-26、HQ指示。**DEV への適用・実行はまだ。承認を得てから行う**)
+
+仕様は data-sources.md 16章。DEV でやることは「migration の適用 → 11.1〜11.4 の手順でジョブ」の順。
+
+1. **migration `20261026000001_us_bls_indicators.sql` を DEV に適用する**(3指標の`economic_indicators`の行と、USDJPY・EURUSD との`indicator_fx_pairs`の6行。`on conflict do nothing`なので2回流しても同じ)。確認:
+   ```sql
+   select i.code, i.display_name, i.importance, count(p.*) as fx_pairs
+   from economic_indicators i left join indicator_fx_pairs p on p.indicator_id = i.id
+   where i.code in ('US_CORE_CPI', 'US_UNEMPLOYMENT_RATE', 'US_AVG_HOURLY_EARNINGS')
+   group by 1, 2, 3 order by 1;
+   -- 3行・fx_pairs がどれも 2 が正しい
+   ```
+2. 11.1(P3 が5行)→ 11.2 の`--dry-run`。期待値は、11.2 の US_CPI・US_NFP の分に、3指標の分が足される: 2026-11-06 13:30Z より前の実行なら`plan.scheduled_insert`が **+42**(14か月 × 3)、`plan.released_insert`が **+30**(参照月 2025-12〜2026-09 の10か月 × 3。BLS が値を出していない月はその分減り、`not_yet_available`に入る)。`unmapped`は0、`indicator_not_in_db`は空
+3. 11.3 の本実行・11.4 の確認。(2)(3) の SQL はそのまま使える(3指標の行も 08:30 ニューヨーク時間)
+4. 画面: 指標一覧に「コアCPI」「失業率」「平均時給」が出る、イベント詳細・過去比較の値と前月比/前年比(`secondary_value_kind`がコアCPIは`MOM_PCT`、平均時給は`YOY_PCT`、失業率は null)
+
+- **BLS API の回数が 3回 → 8回/実行**になる(data-sources.md 16.2)。dry-run と本実行を同じ日に続けて行っても16回で、v1 の25回/日に収まる
+- **通知**: 11.7 と同じ。CPI の日は2件、雇用統計の日は3件が同じ時刻に予約される(平均時給は MEDIUM なので、重要度を HIGH だけにした設定では出ない)
+- 戻し方: 3指標の`bls_schedule`の行が作られる前なら、`indicator_fx_pairs` → `economic_indicators` の順にこの3つの code の行を消す。作られた後は、行を消さずに報告して判断を仰ぐ
 
 ## 12. FOMCの会合日程と`is_provisional`の適用手順(2026-10-22、HQ承認 Task 3。**実行はまだ。承認を得てから行う**)
 

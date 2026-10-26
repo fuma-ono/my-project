@@ -1,7 +1,8 @@
-# FX Event Analyzer: データ取得元と正確さの仕組み v1.5
+# FX Event Analyzer: データ取得元と正確さの仕組み v1.6
 
 ## 変更履歴
 
+- **v1.6**(2026-10-26): 米国コアCPI・失業率・平均時給を BLS の独立経路(14章)に追加(HQ指示 2026-10-26)。指標ごとの系列・季節調整・単位・前月比/前年比の計算・発表日は16章。指標マスタは migration `20261026000001_us_bls_indicators.sql`。US_CPI・US_NFP の系列・予定・値は変えていない
 - **v1.5**(2026-10-26): BLS の独立経路(14章)の安全対策(HQ指示 2026-10-26「BLSの安全対策」)。2026-10-24 に統合された未来の予定行の作成をベースに、表のエントリの取りやめ(`cancelled`・`cancelledNote`。未発表の行を`CANCELLED`にし、`RELEASED`の行は変えない)、予定表から消えた未発表の行の記録、書き込む前の内訳(`details.plan`)、`--dry-run`を追加した。取りやめ・消えた行の点検は発表済みの値の取り込みの後に別の try/catch で行い、失敗しても過去の発表の取り込みは止まらない。DEV の手順は dev-environment.md 11章
 - **v1.4**(2026-10-23): 要人発言の鮮度の監視(HQ承認 2026-10-23)。`ingest:speeches` が `ingestion_logs.details` に `source_latest_at`・`source_future_count` を記録し、品質レポート第9章で取得元ごとに判定する(5章)。取り込む行・スキップ・状態は変えない。`GET /home` に `speeches_status`(api-design.md v1.34)
 - **v1.3**(2026-10-22): FOMCの会合日程(HQ承認 2026-10-22 Task 3)。FRBの公式ページを人が書き写した表から、指標`US_FOMC`の政策発表の予定を`economic_events`に入れるジョブ`npm run ingest:fomc-schedule`を追加(15章)。暫定の会合は`economic_events.is_provisional`(db-design.md v4.17)で区別する。定期実行には登録していない
@@ -544,9 +545,9 @@ FRED は公式統計の取り込みから外した(`ingest:official` は FRED �
 
 ### 14.1 対象・取得範囲
 
-- **対象指標**: `US_CPI`・`US_NFP` の2つだけ(`economic_indicators`に行があり、BLSの公式系列で確認できる指標。13.1節の「DBに行あり」の指標からさらに絞っている)
+- **対象指標**: `US_CPI`・`US_NFP`。v1.6(2026-10-26)から`US_CORE_CPI`・`US_UNEMPLOYMENT_RATE`・`US_AVG_HOURLY_EARNINGS`も(16章)
 - **取得範囲**: 参照期間 2025-12 〜 2027-11(`src/ingestion/mappings/blsSchedule.ts`に書いた表の範囲)。これより前・後の月は扱わない
-- **取得できない項目**: 予想値(forecast)は常に`null`(BLSは予想値を出さないため、提供元も取得時刻も無い値として扱う。「予想値は提供元と取得時刻を記録する」というHQ方針どおり、存在しない値を作らない)。米国以外の指標、`US_CORE_CPI`・`US_UNEMPLOYMENT_RATE`・`US_RETAIL_SALES`(DBに行が無い)は対象外
+- **取得できない項目**: 予想値(forecast)は常に`null`(BLSは予想値を出さないため、提供元も取得時刻も無い値として扱う。「予想値は提供元と取得時刻を記録する」というHQ方針どおり、存在しない値を作らない)。米国以外の指標、`US_RETAIL_SALES`(Census の指標で BLS の系列が無い)は対象外
 
 ### 14.2 仕組み
 
@@ -652,3 +653,47 @@ bls.gov/opub/copyright-information.htm 等で確認(2026-10-17): BLSのデータ
 - **暫定の表示**: 過ぎた会合は API が`is_provisional = false`で返すので「予定（暫定）」は出ない(15.5節)。DBの値は人が表を直してジョブを動かすまで`true`のまま
 - **通知**: 指標`US_FOMC`は重要度`HIGH`なので、暫定の会合も含め、通常の指標と同じく発表の数分前(既定5分前)の通知・通知一覧の対象になる。DEVでの注意は dev-environment.md 12.5節
 - 結果の取り込みや「発表済み」への切り替えは、この Task の範囲外(HQの判断を待つ)
+
+## 16. 米国コアCPI・失業率・平均時給(2026-10-26、HQ指示「米国コアCPI・失業率・平均時給の追加」)
+
+3指標とも、US_CPI・US_NFP と同じ BLS の独立経路(14章、`npm run ingest:official:bls-calendar`)で取り込む。新しい取得元・契約・キーは無い。既存の処理(`buildBlsScheduleReleases` → `ingestCalendarReleases`、予定行・取りやめ・内訳・`--dry-run`)をそのまま使い、足したのは設定(`mappings/indicators.ts`・`mappings/blsSchedule.ts`)と指標マスタ(migration `20261026000001_us_bls_indicators.sql`)だけ。
+
+### 16.1 指標ごとの仕様
+
+| | コアCPI | 失業率 | 平均時給 |
+|---|---|---|---|
+| code | `US_CORE_CPI` | `US_UNEMPLOYMENT_RATE` | `US_AVG_HOURLY_EARNINGS` |
+| 表示名(indicator-display-names.md) | コアCPI | 失業率 | 平均時給 |
+| BLS 系列(本体) | `CUUR0000SA0L1E`(食品・エネルギーを除く、都市平均、季節調整なし) | `LNS14000000`(U-3、16歳以上、季節調整済み) | `CES0500000003`(民間・全従業員の平均時給、季節調整済み、ドル) |
+| 値(actual・previous) | 前年比 %(`YOY_PCT`)。BLS の発表の前年比は季節調整なしの指数で計算する(US_CPI と同じ) | 水準 %(`LEVEL`。変換なし) | 前月比 %(`MOM_PCT`) |
+| 副指標(`secondary_*`) | 前月比 %(`MOM_PCT`)。BLS の発表どおり**季節調整済みの`CUSR0000SA0L1E`**で計算する | なし | 前年比 %(`YOY_PCT`)。本体と同じ`CES0500000003` |
+| 小数 | 1桁 | 1桁 | 1桁 |
+| 発表日 | CPI の発表と同じ日(`blsSchedule.ts`の`cpi`の表) | 雇用統計と同じ日(`nfp`の表) | 雇用統計と同じ日(`nfp`の表) |
+| 発表時刻 | 08:30 America/New_York | 同 | 同 |
+| 重要度 | HIGH | HIGH | MEDIUM |
+| 関連の通貨ペア | USDJPY(1)・EURUSD(2)。US_CPI・US_NFP と同じ | 同 | 同 |
+| 妥当性の範囲・前回からの変化の上限 | −3〜12%・1.0 | 2〜20%・1.0 | −3〜5%・2.0 |
+
+- 前年比・前月比は`computeOfficialValue`(`verification/official.ts`)で、BLS の公表値(指数・水準)から計算する: 前年比 = 当月 ÷ 12か月前 − 1、前月比 = 当月 ÷ 前月 − 1(×100)
+- 同じ発表の指標は同じ日付を使う。`blsSchedule.ts`の`cpi`・`nfp`の表は1つのまま(`CPI_RELEASE_INDICATORS`・`EMPSIT_RELEASE_INDICATORS`)で、BLS が日付を変えたら1か所直せば全部に効く。取りやめ(`cancelled`)は指標ごとのエントリに付けるので、同じ発表の指標それぞれに付ける
+- 有料カレンダーの経路(①、未契約)は、コアCPI・失業率は従来どおりキーを持つ。平均時給は持たない(契約後に実際の応答で確かめて足す)
+
+### 16.2 取り込みの流れ・冪等性・欠損・改定
+
+- 行のID(`provider_event_id`)は`bls_schedule:<code>:<参照月>`。同じIDの行は1つだけで、何度実行しても行は増えない(既存の`findEventByProviderId`による更新。`RELEASED`の行は書き換えない)。単体テスト`tests/ingestion/blsUsIndicators.test.ts`で、2回目の実行の内訳が`released_unchanged`だけになり、行・スナップショット・改定が増えないことを確認した
+- **欠損**: BLS がその月の値をまだ出していない(または出さなかった)指標は、その指標だけ作らない(推測しない)。同じ日の他の指標(例: NFP)は影響を受けない。発表日を45日過ぎても値が無ければ`overdue`に出る(14章)
+- **改定**: 前回値は毎回 BLS の最新値を取り直し、変わっていれば`event_revisions`に記録する(既存の仕組みのまま。失業率の前月の改定をテストで確認)。失業率は年1回(1月の発表)季節調整を見直し過去5年分が変わる。平均時給・NFP は毎月、前2か月分が改定される
+- **指標の行が DB に無い場合**(migration を適用する前): その指標は`indicator_not_in_db`として飛ばすだけで、US_CPI・US_NFP の取り込みは止まらない
+- **BLS API の回数**: 1回の実行で系列ごとに1回。US_CPI・US_NFP だけのときの3回(CPI 本体・CPI 前月比・NFP)が **8回**になる(+コアCPI 2系列・失業率・平均時給 2回)。キーなしの v1 は25クエリ/日なので、1日3回までなら足りる(`--dry-run`も同じ回数を使う)
+
+### 16.3 既存の CPI・NFP への影響
+
+- US_CPI・US_NFP の系列・変換・予定(日付・件数・並び)・`provider_event_id`は変えていない(テストで確認)
+- 同じ時刻に発表が増える: CPI の日は2件、雇用統計の日は3件が同じ 08:30 に並ぶ。**通知も同じ時刻に複数出る**(既定の設定では重要度 HIGH・MEDIUM が対象。無料プランは HIGH のみなので平均時給は出ない)。まとめるかどうかは未決定(HQ判断)
+
+### 16.4 商用利用・未確認のこと
+
+- BLS のデータはパブリックドメイン(14.3節。bls.gov/opub/copyright-information.htm)。3指標とも追加の契約・許可は不要。出典の表示は既存の`event_snapshots.source`(U.S. Bureau of Labor Statistics)・`source_url`
+- **要確認**: 平均時給の前月比・前年比は、BLS が公表する**セント単位に丸めた水準**から計算する。BLS の発表文の%が丸める前の値から計算されている場合、月によって 0.1 違う可能性がある。実データで過去の発表文と比べて確かめる(DEV の取り込み後)
+- **要確認**: 予想値(forecast)は無い(BLS は予想を出さない)。サプライズ・「予想を上回ると」の表示は、予想値の取得元が決まるまで出ない(US_CPI・US_NFP と同じ)
+- **参考(既存の指摘)**: US_CPI の前月比(副指標)は季節調整なしの`CUUR0000SA0`で計算しているが、BLS の発表の前月比は季節調整済み(`CUSR0000SA0`)。コアCPIでは季節調整済みを使った。US_CPI を直すかは別途判断(既存の値が変わるため、この変更には入れていない)

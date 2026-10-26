@@ -16,15 +16,23 @@
  * - https://www.bls.gov/schedule/news_release/empsit.htm (Employment Situation, 2026-11 through 2027-11)
  *
  * BLS content is public domain (no end-use controls; bls.gov/opub/copyright-information.htm) —
- * reusing this published schedule needs no permission. 対象はこの2指標のみ
- * (経済指標・単位ともDBにrowがあるのはUS_CPI・US_NFPだけ — data-sources.md §3.1)。
+ * reusing this published schedule needs no permission. 対象は CPI の発表(US_CPI・
+ * US_CORE_CPI)と雇用統計の発表(US_NFP・US_UNEMPLOYMENT_RATE・US_AVG_HOURLY_EARNINGS)。
+ * 同じ発表の指標は同じ日付を使う(下の cpi / nfp の表を共有する。HQ指示 2026-10-26)。
  * 取得範囲は下表の参照期間(2025-12〜2027-11)に限られる。日本・欧州・英国など
  * BLS以外が出す指標はこの経路では一切扱わない。
  */
 
+/** Indicators released in the CPI news release — they share the `cpi` dates below. */
+export const CPI_RELEASE_INDICATORS = ['US_CPI', 'US_CORE_CPI'] as const;
+/** Indicators released in the Employment Situation — they share the `nfp` dates below. */
+export const EMPSIT_RELEASE_INDICATORS = ['US_NFP', 'US_UNEMPLOYMENT_RATE', 'US_AVG_HOURLY_EARNINGS'] as const;
+export type BlsScheduleIndicatorCode =
+  (typeof CPI_RELEASE_INDICATORS)[number] | (typeof EMPSIT_RELEASE_INDICATORS)[number];
+
 export interface BlsScheduleEntryBase {
-  /** economic_indicators.code — only 'US_CPI' and 'US_NFP' exist here. */
-  indicatorCode: 'US_CPI' | 'US_NFP';
+  /** economic_indicators.code */
+  indicatorCode: BlsScheduleIndicatorCode;
   /** 'YYYY-MM' the release reports on. */
   referencePeriod: string;
   /**
@@ -110,7 +118,12 @@ const nfp: readonly [string, string][] = [
   ['2027-11', '2027-12-03'],
 ];
 
+// 指標の順(US_CPI → US_CORE_CPI、US_NFP → …)に並べる。US_CPI・US_NFP の分は従来と同じ並び・同じ内容。
 export const BLS_SCHEDULE: readonly BlsScheduleEntry[] = [
-  ...cpi.map(([referencePeriod, releaseDate]) => ({ indicatorCode: 'US_CPI' as const, referencePeriod, releaseDate })),
-  ...nfp.map(([referencePeriod, releaseDate]) => ({ indicatorCode: 'US_NFP' as const, referencePeriod, releaseDate })),
+  ...CPI_RELEASE_INDICATORS.flatMap((indicatorCode) =>
+    cpi.map(([referencePeriod, releaseDate]) => ({ indicatorCode, referencePeriod, releaseDate })),
+  ),
+  ...EMPSIT_RELEASE_INDICATORS.flatMap((indicatorCode) =>
+    nfp.map(([referencePeriod, releaseDate]) => ({ indicatorCode, referencePeriod, releaseDate })),
+  ),
 ];
