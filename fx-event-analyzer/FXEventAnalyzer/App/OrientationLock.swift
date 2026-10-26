@@ -41,14 +41,18 @@ import UIKit
 /// (アクセシビリティツリー)と実際に合成されるピクセル(UIKitの回転
 /// トランジションアニメーション)のタイミングが別物であることに起因する
 /// CI実機キャプチャ側の取得タイミングの問題である可能性が高いと判断した。
-/// 今回追加したのは2点:
-/// (a) `requestGeometryUpdate`実行後、ウィンドウに対して明示的に
-///     `setNeedsLayout()` + `layoutIfNeeded()`を呼び、システムの自動
-///     レイアウトパスを待たずに即座に新しいbounds基準で再レイアウトを
-///     強制する(論理レイアウトの反映を早める側の対策)。
-/// (b) スクリーンショット側(`ScreenshotTests.swift`)の待ち時間を
-///     2.5秒→4.0秒にさらに伸ばす(ピクセル合成がまだ追いついて
-///     いない場合の対策)。
+///
+/// 最初、ここに`requestGeometryUpdate`実行後の`DispatchQueue.main.async`で
+/// ウィンドウへ`setNeedsLayout()`+`layoutIfNeeded()`を明示的に呼ぶ対策を
+/// 追加したが、これを入れたCI実機キャプチャでは逆に新しい壊れ方
+/// (`v5Tab1`= 縦画面専用のタブバーが横画面でも存在判定上消えない)が
+/// 出た。回転直後に同期的な`layoutIfNeeded()`を強制すると、SwiftUIの
+/// `NavigationStack`が裏で保持している直前の画面(指標詳細)の再描画が
+/// 意図せず誘発され、そちらのタブバーの要素がアクセシビリティツリー上に
+/// 残ってしまったと見られる。この対策は取り下げ、4回目の実装
+/// (`requestGeometryUpdate`まで、`layoutIfNeeded()`は呼ばない)に戻した。
+/// スクリーンショット側(`ScreenshotTests.swift`)の待ち時間だけ2.5秒→
+/// 4.0秒に伸ばし、ピクセル合成のタイミング差だけを個別に確認する。
 /// これでも同じ壊れ方が再現する場合、原因はこのアプリのコードではなく
 /// CIのシミュレーター環境でのXCUITest駆動の回転(`XCUIDevice.shared.orientation`)
 /// 自体がこのアプリのような画面単位の動的向き制御と組み合わさったときに
@@ -75,18 +79,6 @@ final class HistoricalComparisonOrientation {
         windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { _ in
             // ベストエフォート: ここで失敗しても`supportedInterfaceOrientationsFor:`
             // ベースの通常の回転判定は引き続き効く。
-        }
-        // 5回目の追加対策: システムの自動レイアウトパスを待たず、
-        // ウィンドウの現在のboundsに基づく再レイアウトを即座に強制する。
-        // `requestGeometryUpdate`のcompletionは実際のジオメトリ遷移の
-        // 完了を待たないため、ここでは遷移後に改めて呼ぶ必要がある —
-        // `DispatchQueue.main.async`で次のランループに回し、システム側の
-        // ジオメトリ適用が先に済むようにする。
-        DispatchQueue.main.async {
-            for window in windowScene.windows {
-                window.setNeedsLayout()
-                window.layoutIfNeeded()
-            }
         }
     }
 }
