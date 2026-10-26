@@ -296,8 +296,8 @@ describe('buildBlsScheduleReleases', () => {
   it('reports an entry with no mapping as unmapped instead of throwing', async () => {
     const resolver = createBlsNativeResolver(fakeBlsWith({}, {}), WIDE_RANGE);
     const entries = [
-      { indicatorCode: 'US_CORE_CPI', referencePeriod: '2026-09', releaseDate: '2026-10-14' },
-    ] as unknown as BlsScheduleEntry[]; // US_CORE_CPI has no bls_schedule provider key
+      { indicatorCode: 'US_RETAIL_SALES', referencePeriod: '2026-09', releaseDate: '2026-10-14' },
+    ] as unknown as BlsScheduleEntry[]; // US_RETAIL_SALES has no bls_schedule provider key (Census, not BLS)
     const result = await buildBlsScheduleReleases({ official: resolver, entries, now: NOW });
     expect(result.releases).toEqual([]);
     expect(result.unmapped).toEqual(entries);

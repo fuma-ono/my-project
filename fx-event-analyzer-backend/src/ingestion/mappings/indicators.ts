@@ -51,7 +51,8 @@ export interface IndicatorMapping {
     /**
      * HQ判断(2026-10-17): 有料カレンダーに依存しない独立経路。BLSの公式発表
      * スケジュール(mappings/blsSchedule.ts、無料・登録不要)から直接
-     * economic_events を作る指標だけが持つ(いまは US_CPI・US_NFP のみ)。
+     * economic_events を作る指標だけが持つ(US_CPI・US_NFP。2026-10-26 から
+     * US_CORE_CPI・US_UNEMPLOYMENT_RATE・US_AVG_HOURLY_EARNINGS も)。
      */
     bls_schedule?: { country: string; event: string };
   };
@@ -125,8 +126,10 @@ export const INDICATOR_MAPPINGS: readonly IndicatorMapping[] = [
     secondary: { valueKind: 'MOM_PCT', official: { source: 'BLS', seriesId: 'CUUR0000SA0', transform: 'MOM_PCT' } },
   },
   {
-    // Core CPI (all items less food and energy) YoY, NSA. economic_indicators
-    // has no US_CORE_CPI row yet — skipped (and logged) until HQ adds one.
+    // Core CPI (all items less food and energy) YoY, NSA — like US_CPI, the
+    // headline YoY is on the NOT seasonally adjusted index. Same release
+    // (CPI news release) as US_CPI. economic_indicators row: migration
+    // 20261026000001 (HQ指示 2026-10-26「米国コアCPI・失業率・平均時給の追加」).
     code: 'US_CORE_CPI',
     description: 'US Core CPI (less food and energy) YoY, NSA',
     valueKind: 'YOY_PCT',
@@ -141,12 +144,16 @@ export const INDICATOR_MAPPINGS: readonly IndicatorMapping[] = [
       tradingeconomics: { country: 'United States', event: 'Core Inflation Rate YoY' },
       finnhub: { country: 'US', event: 'Core CPI YoY' },
       fmp: { country: 'US', event: 'Core CPI YoY' },
+      bls_schedule: { country: 'US', event: 'US_CORE_CPI' },
     },
     official: [{ source: 'BLS', seriesId: 'CUUR0000SA0L1E', transform: 'YOY_PCT' }],
     officialTolerance: 0,
     requireOfficialMatch: true,
     allowMissingUnit: false,
     referencePeriodLagMonths: 1,
+    // 前月比は BLS の発表どおり季節調整済みの系列(CUSR0000SA0L1E)で計算する。
+    // 前年比(季節調整なし CUUR0000SA0L1E)とは別の系列なので、BLS の取得が1系列増える。
+    secondary: { valueKind: 'MOM_PCT', official: { source: 'BLS', seriesId: 'CUSR0000SA0L1E', transform: 'MOM_PCT' } },
   },
   {
     // Nonfarm payrolls: monthly CHANGE of the seasonally adjusted level
@@ -176,7 +183,9 @@ export const INDICATOR_MAPPINGS: readonly IndicatorMapping[] = [
     referencePeriodLagMonths: 1,
   },
   {
-    // Unemployment rate (U-3), SA. No US_UNEMPLOYMENT_RATE row yet — skipped until added.
+    // Unemployment rate (U-3), SA, the level itself (no MoM/YoY transform).
+    // Same release (Employment Situation) as US_NFP. economic_indicators
+    // row: migration 20261026000001.
     code: 'US_UNEMPLOYMENT_RATE',
     description: 'US Unemployment Rate (U-3), SA',
     valueKind: 'LEVEL',
@@ -191,12 +200,43 @@ export const INDICATOR_MAPPINGS: readonly IndicatorMapping[] = [
       tradingeconomics: { country: 'United States', event: 'Unemployment Rate' },
       finnhub: { country: 'US', event: 'Unemployment Rate' },
       fmp: { country: 'US', event: 'Unemployment Rate' },
+      bls_schedule: { country: 'US', event: 'US_UNEMPLOYMENT_RATE' },
     },
     official: [{ source: 'BLS', seriesId: 'LNS14000000', transform: 'LEVEL' }],
     officialTolerance: 0,
     requireOfficialMatch: true,
     allowMissingUnit: false,
     referencePeriodLagMonths: 1,
+  },
+  {
+    // Average hourly earnings of all employees, total private (CES, SA, dollars).
+    // The headline is the MoM % change of the SA level; BLS also states the
+    // YoY % change of the same SA series (secondary). Same release
+    // (Employment Situation) as US_NFP. Only the bls_schedule path —
+    // the paid-calendar keys are not mapped (要確認 after signing, like the others).
+    // BLS publishes the level rounded to cents and the % is recomputed here
+    // from those published levels. Whether BLS's own headline % uses the
+    // rounded or unrounded level is not confirmed (要確認, data-sources.md §16):
+    // if unrounded, a month can differ from the news release by 0.1.
+    code: 'US_AVG_HOURLY_EARNINGS',
+    description: 'US Average Hourly Earnings (all employees, total private) MoM, SA',
+    valueKind: 'MOM_PCT',
+    seasonalAdjustment: 'SA',
+    unit: 'PERCENT',
+    decimals: 1,
+    expectedRange: { min: -3, max: 5 },
+    maxAbsChangeFromPrevious: 2,
+    release: US_RELEASE_0830,
+    agency: { ...BLS, url: 'https://www.bls.gov/ces/' },
+    providers: {
+      bls_schedule: { country: 'US', event: 'US_AVG_HOURLY_EARNINGS' },
+    },
+    official: [{ source: 'BLS', seriesId: 'CES0500000003', transform: 'MOM_PCT' }],
+    officialTolerance: 0,
+    requireOfficialMatch: true,
+    allowMissingUnit: false,
+    referencePeriodLagMonths: 1,
+    secondary: { valueKind: 'YOY_PCT', official: { source: 'BLS', seriesId: 'CES0500000003', transform: 'YOY_PCT' } },
   },
   {
     // Advance retail and food services sales MoM, SA (Census, not BLS —
@@ -235,6 +275,7 @@ export const FRED_RELEASE_IDS: Readonly<Record<string, number>> = {
   US_CORE_CPI: 10,
   US_NFP: 50,
   US_UNEMPLOYMENT_RATE: 50,
+  US_AVG_HOURLY_EARNINGS: 50,
   US_RETAIL_SALES: 9,
 };
 
