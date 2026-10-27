@@ -103,4 +103,29 @@ export class TwelveDataAdapter implements FxPriceProvider {
     const to = Date.parse(range.to);
     return candles.filter((c) => Date.parse(c.openTime) >= from && Date.parse(c.openTime) < to);
   }
+
+  /**
+   * GET /earliest_timestamp?symbol&interval=1min&timezone=UTC — the oldest 1-minute candle Twelve Data has
+   * for the symbol (docs: "Use the /earliest_timestamp endpoint … to determine the earliest available date").
+   * HQ判断 2026-10-27(バックフィルの取得可能性の確認)。1 credit。
+   */
+  async fetchEarliestTimestamp(symbol: string): Promise<{ datetime: string | null; unix_time: number | null }> {
+    const providerSymbol = findFxPairMapping(symbol)?.providers.twelvedata;
+    if (!providerSymbol) throw new Error(`twelvedata: no symbol mapping for ${symbol}`);
+    const url = new URL('https://api.twelvedata.com/earliest_timestamp');
+    url.searchParams.set('symbol', providerSymbol);
+    url.searchParams.set('interval', '1min');
+    url.searchParams.set('timezone', 'UTC');
+    url.searchParams.set('apikey', this.apiKey);
+    const body = (await this.http.getJson(url.toString())) as Record<string, unknown>;
+    if (body.status === 'error') {
+      const code = typeof body.code === 'number' ? String(body.code) : '';
+      const message = typeof body.message === 'string' ? body.message : '';
+      throw new Error(`twelvedata ${symbol}: ${code} ${message}`.trim());
+    }
+    return {
+      datetime: typeof body.datetime === 'string' ? body.datetime : null,
+      unix_time: typeof body.unix_time === 'number' ? body.unix_time : null,
+    };
+  }
 }

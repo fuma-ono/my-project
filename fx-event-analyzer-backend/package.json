@@ -23,6 +23,7 @@
     "ingest:speeches": "tsx src/jobs/ingestSpeeches.ts",
     "ingest:fx-prices": "tsx src/jobs/ingestFxPrices.ts",
     "ingest:event-reactions": "tsx src/jobs/ingestEventReactions.ts",
+    "probe:fx-history": "tsx src/jobs/probeFxHistory.ts",
     "eval:providers": "tsx src/jobs/evalProviders.ts",
     "report:data-quality": "tsx src/jobs/reportDataQuality.ts"
   },

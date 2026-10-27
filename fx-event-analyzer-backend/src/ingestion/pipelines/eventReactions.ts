@@ -16,6 +16,9 @@
  *   何も書かない。欠損が確認された時間枠はUNAVAILABLEとして書き、
  *   後で1分足が補填されれば次回の実行でAVAILABLEへ再計算・上書きする
  *   (upsertのため同一イベント・ペア・時間枠の行が重複することはない)。
+ * - HQ指示(2026-10-27): 書く前に保存済みの行と比べ、値も状態も同じ行は書かない(calculated_at だけを
+ *   書き換えない)。値のある行(AVAILABLE)を値の無い行(UNAVAILABLE)で上書きしない(1分足が後から
+ *   欠けても値を失わない)。settings.range を渡すと、直近の代わりにその期間の発表を計算し直す。
  */
 import { availableTimeframes } from '../../domain/dataQuality.js';
 import { computeEventPairReactionRows, EVENT_REACTION_TIMEFRAMES } from '../../domain/economicEventReactions.js';
@@ -29,6 +32,32 @@ const MAX_TIMEFRAME_MINUTES = Math.max(...EVENT_REACTION_TIMEFRAMES.map((tf) => 
 export interface EventReactionSettings {
   /** How far back (days) a RELEASED event is still worth attempting (mirrors FX_FETCH_SETTINGS.repairHorizonDays). */
   horizonDays: number;
+  /**
+   * HQ指示(2026-10-27「反応計算の期間指定」): 指定すると horizonDays の代わりに、release_datetime が
+   * [from, to) の RELEASED の発表を計算し直す(過去の発表のバックフィル。為替の1分足が無ければ UNAVAILABLE のまま)。
+   */
+  range?: { fromIso: string; toIso: string };
+}
+
+/** Same numbers and status → nothing to write (calculated_at alone does not count). */
+function sameReaction(a: EventPriceReactionRow, b: EventPriceReactionRow): boolean {
+  const num = (v: number | string | null) => (v === null ? null : Number(v));
+  return (
+    a.data_status === b.data_status &&
+    (
+      [
+        'pre_release_price',
+        'post_release_price',
+        'movement',
+        'pips',
+        'change_percent',
+        'max_upward',
+        'max_downward',
+        'max_upward_pips',
+        'max_downward_pips',
+      ] as const
+    ).every((key) => num(a[key]) === num(b[key]))
+  );
 }
 
 export async function ingestEventPriceReactions(
@@ -37,11 +66,21 @@ export async function ingestEventPriceReactions(
   now: Date,
   counters: JobCounters,
 ): Promise<void> {
-  const sinceIso = new Date(now.getTime() - settings.horizonDays * 24 * 60 * MINUTE_MS).toISOString();
-  const [events, activePairs] = await Promise.all([
+  const sinceIso =
+    settings.range?.fromIso ?? new Date(now.getTime() - settings.horizonDays * 24 * 60 * MINUTE_MS).toISOString();
+  const untilMs = settings.range ? Date.parse(settings.range.toIso) : Number.POSITIVE_INFINITY;
+  const [listed, activePairs] = await Promise.all([
     store.listReleasedEventsForReactions(sinceIso),
     store.listFxPairs(),
   ]);
+  const events = listed.filter((event) => Date.parse(event.release_datetime) < untilMs);
+  // 書く前に、保存済みの行と比べる(HQ指示 2026-10-27):
+  // - 値も状態も同じ行は書かない(calculated_at だけを書き換えない)
+  // - 値のある行(AVAILABLE)を、値の無い行(UNAVAILABLE)で上書きしない(為替の1分足が後から欠けても値を失わない)
+  const stored = new Map<string, EventPriceReactionRow>();
+  for (const row of await store.listEventPriceReactions(events.map((event) => event.id))) {
+    stored.set(`${row.event_id}|${row.fx_pair_id}|${row.timeframe}`, row);
+  }
 
   for (const event of events) {
     counters.fetched += 1;
@@ -69,6 +108,7 @@ export async function ingestEventPriceReactions(
     const toIso = new Date(release + MAX_TIMEFRAME_MINUTES * MINUTE_MS).toISOString();
 
     const rowsToWrite: EventPriceReactionRow[] = [];
+    let computedAny = false;
     let available = 0;
     let unavailable = 0;
     for (const pair of candidatePairs) {
@@ -86,10 +126,11 @@ export async function ingestEventPriceReactions(
         candles,
         now,
       });
+      if (computed.length > 0) computedAny = true;
       for (const row of computed) {
         if (row.data_status === 'AVAILABLE') available += 1;
         else unavailable += 1;
-        rowsToWrite.push({
+        const candidate: EventPriceReactionRow = {
           event_id: event.id,
           fx_pair_id: pair.id,
           timeframe: row.timeframe,
@@ -104,12 +145,22 @@ export async function ingestEventPriceReactions(
           max_downward_pips: row.max_downward_pips,
           data_status: row.data_status,
           calculated_at: now.toISOString(),
-        });
+        };
+        const existing = stored.get(`${event.id}|${pair.id}|${row.timeframe}`);
+        if (existing && existing.data_status === 'AVAILABLE' && candidate.data_status === 'UNAVAILABLE') {
+          counters.skip('KEEP_AVAILABLE');
+          continue;
+        }
+        if (existing && sameReaction(existing, candidate)) {
+          counters.skip('UNCHANGED');
+          continue;
+        }
+        rowsToWrite.push(candidate);
       }
     }
 
     if (rowsToWrite.length === 0) {
-      counters.skip('NOTHING_READY_YET');
+      counters.skip(computedAny ? 'NOTHING_CHANGED' : 'NOTHING_READY_YET');
       continue;
     }
     await store.upsertEventPriceReactions(rowsToWrite);

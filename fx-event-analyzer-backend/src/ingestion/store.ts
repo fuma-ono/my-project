@@ -299,4 +299,6 @@ export interface IngestionStore {
   listReleasedEventsForReactions(sinceIso: string): Promise<EventForReactionRef[]>;
   /** Upsert by (event_id, fx_pair_id, timeframe) — re-running never duplicates a row. */
   upsertEventPriceReactions(rows: readonly EventPriceReactionRow[]): Promise<number>;
+  /** Stored reaction rows of these events (read only; compared before writing — HQ指示 2026-10-27). */
+  listEventPriceReactions(eventIds: readonly string[]): Promise<EventPriceReactionRow[]>;
 }
