@@ -527,6 +527,24 @@ final class ScreenshotTests: XCTestCase {
         // `isHittable`に変えることで、裏に隠れているだけの要素を誤って
         // 拾わないようにした。
         XCTAssertFalse(app.buttons["v5Tab1"].isHittable, "Bottom tab bar should not be visible in landscape")
+        // HQ指摘(2026-10-26、2027-10-27)「スクリーンショットの特定の領域が
+        // 空白に見える、なぜ直らないのか」: スクリーンショットのピクセルは
+        // 回転トランジションの影響で信頼できない(過去複数回の壊れ方と同じ)。
+        // アクセシビリティツリーは論理レイアウトをそのまま反映し、回転の
+        // ピクセル合成バグの影響を受けないため、ここで実際の要素の有無・
+        // 座標・サイズをCIログへ出力し、ピクセルを目視するのではなく
+        // ログから直接レイアウトを確認できるようにする。
+        print("=== [landscape debug] full accessibility tree ===")
+        print(app.debugDescription)
+        print("=== [landscape debug] 前年/前月/日時 staticTexts ===")
+        for text in app.staticTexts.allElementsBoundByIndex {
+            if ["前年", "前月", "日時"].contains(text.label) {
+                print("[landscape debug] label=\(text.label) frame=\(text.frame) exists=\(text.exists)")
+            }
+        }
+        print("=== [landscape debug] historyLandscapeTopBar / table frames ===")
+        print("[landscape debug] historyLandscapeTopBar frame=\(app.otherElements["historyLandscapeTopBar"].frame)")
+        print("[landscape debug] window frame=\(app.windows.firstMatch.frame)")
         // 5回目の修正(`OrientationLock.swift`参照): 要素の存在判定
         // (アクセシビリティツリー、最終的な論理レイアウトを反映)と実際に
         // 合成されるピクセル(UIKitの回転トランジションアニメーション)は
