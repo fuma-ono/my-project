@@ -111,4 +111,15 @@ describe.skipIf(!integration)('API credit ledger (reserve_api_credits)', () => {
     if (error) throw error;
     expect(data).toEqual({ daily_total_cap: 800, automatic_cap: 700 });
   });
+
+  // HQ指示 2026-10-27「BLS定時実行」(migration 20261027000002): BLS v1 の 25/日に1残す。定期は1日2回(8×2)まで。
+  it('ships the BLS limits 24 / 16', async () => {
+    const { data, error } = await ctx.serviceClient
+      .from('api_credit_limits')
+      .select('daily_total_cap, automatic_cap')
+      .eq('provider', 'bls')
+      .single();
+    if (error) throw error;
+    expect(data).toEqual({ daily_total_cap: 24, automatic_cap: 16 });
+  });
 });

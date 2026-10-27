@@ -1,14 +1,17 @@
 import 'dotenv/config';
+import { randomUUID } from 'node:crypto';
 import { loadEnv } from '../config/env.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
 import { BlsAdapter } from '../ingestion/adapters/bls.js';
-import { loadIngestionEnv } from '../ingestion/config.js';
+import { API_CREDIT_CAPS, loadIngestionEnv } from '../ingestion/config.js';
+import { CreditGate } from '../ingestion/http.js';
 import { ingestCalendarReleases } from '../ingestion/pipelines/economicCalendar.js';
 import {
   buildBlsScheduleReleases,
   BLS_SCHEDULE_PROVIDER,
   createBlsNativeResolver,
   createBlsSecondaryResolver,
+  findDueBlsEntries,
   planBlsScheduleWrites,
   readOnlyIngestionStore,
   reconcileBlsScheduleRows,
@@ -40,6 +43,15 @@ import type { OfficialValueResolver } from '../ingestion/verification/official.j
  * - --dry-run: 書き込む関数をすべて断るストア(readOnlyIngestionStore)で同じ処理を読むだけ行い、
  *   内訳と書くはずだった内容を出す。ingestion_logs にも書かない。BLS の API は読む(v1 は25クエリ/日)。
  *
+ * HQ指示(2026-10-27「BLS定時実行」):
+ * - --if-due: 発表時刻を過ぎたのにまだ RELEASED でないエントリ(findDueBlsEntries)が無ければ、BLS を
+ *   1回も呼ばずに終わる(ingestion_logs にも書かない)。定期実行はこれを付ける
+ * - --scheduled: クレジット台帳(api_credit_ledger)に AUTOMATIC として予約する(付けなければ MANUAL)
+ * - BLS への HTTP は1回ごと(再試行を含む)に台帳で予約してから送る(CreditGate、provider 'bls')。
+ *   上限は DB の api_credit_limits('bls': 合計24・自動16/日、UTC の日付)と、1回の実行の runCap(10)。
+ *   予約できなければ送らず、その系列の値は入らない(行は SCHEDULED のまま、次の実行で取り直す)。終了コード1
+ *   台帳の行が無い DB(migration 20261027000002 の前)では BLS を呼べない
+ *
  * BLS_API_KEY は不要(無ければ v1、25クエリ/日)。キー・契約なしで動く。
  * 既存の①(有料カレンダー、economicCalendar.ts)・②(ingest:official)は
  * 一切変更していない。Exit 0 / 1。
@@ -48,7 +60,37 @@ async function main(): Promise<void> {
   const env = loadEnv();
   const keys = loadIngestionEnv();
   const store = createIngestionRepository(createSupabaseClient(env));
-  const bls = new BlsAdapter(keys.BLS_API_KEY);
+  const scheduled = process.argv.includes('--scheduled');
+  const mode = scheduled ? 'AUTOMATIC' : 'MANUAL';
+  if (process.argv.includes('--if-due')) {
+    const due = await findDueBlsEntries(store, new Date());
+    if (due.length === 0) {
+      console.log(
+        JSON.stringify({
+          job: 'ingest:official:bls-calendar',
+          skipped: 'nothing_due',
+          mode,
+          at: new Date().toISOString(),
+        }),
+      );
+      return;
+    }
+    console.log(
+      JSON.stringify({
+        job: 'ingest:official:bls-calendar',
+        due: due.map((e) => `${e.indicatorCode}:${e.referencePeriod}`),
+      }),
+    );
+  }
+  const gate = new CreditGate(store, {
+    provider: 'bls',
+    job: 'ingest:official:bls-calendar',
+    runId: `${process.env.GITHUB_RUN_ID ?? 'local'}:${randomUUID()}`,
+    mode,
+    dailyCap: scheduled ? API_CREDIT_CAPS.bls.automatic : API_CREDIT_CAPS.bls.manual,
+    runCap: API_CREDIT_CAPS.bls.runCap,
+  });
+  const bls = new BlsAdapter(keys.BLS_API_KEY, { beforeAttempt: gate.beforeAttempt });
   const resolverErrors: string[] = [];
   const official = createBlsNativeResolver(bls, scheduleObservationRange(BLS_SCHEDULE), (error) =>
     resolverErrors.push(error instanceof Error ? error.message : String(error)),
@@ -60,7 +102,7 @@ async function main(): Promise<void> {
   );
 
   if (process.argv.includes('--dry-run')) {
-    await dryRun(store, official, officialSecondary, resolverErrors);
+    await dryRun(store, official, officialSecondary, resolverErrors, gate);
     return;
   }
 
@@ -85,6 +127,9 @@ async function main(): Promise<void> {
       }
       reconcileErrors = counters.errors - errorsBefore;
       counters.details.reconcile_errors = reconcileErrors;
+      counters.details.bls_requests = gate.reserved;
+      counters.details.credit_mode = mode;
+      if (gate.refusal) counters.details.credit_refusal = gate.refusal;
     },
   );
   console.log(
@@ -106,10 +151,13 @@ async function main(): Promise<void> {
       reconcile_errors: reconcileErrors,
       errors: result.counters.errorMessages,
       resolver_errors: resolverErrors.slice(0, 10),
+      bls_requests: gate.reserved,
+      credit_mode: mode,
+      credit_refusal: gate.refusal,
       at: new Date().toISOString(),
     }),
   );
-  if (result.status === 'FAILURE' || reconcileErrors > 0) process.exitCode = 1;
+  if (result.status === 'FAILURE' || reconcileErrors > 0 || gate.refusal) process.exitCode = 1;
 }
 
 /**
@@ -121,6 +169,7 @@ async function dryRun(
   official: OfficialValueResolver,
   officialSecondary: OfficialValueResolver,
   resolverErrors: string[],
+  gate: CreditGate,
 ): Promise<void> {
   const readOnly = readOnlyIngestionStore(store);
   const counters = new JobCounters();
@@ -142,10 +191,12 @@ async function dryRun(
       notes: Object.fromEntries(Object.entries(counters.details).filter(([key]) => key !== 'dry_run_writes')),
       errors: counters.errorMessages,
       resolver_errors: resolverErrors.slice(0, 10),
+      bls_requests: gate.reserved,
+      credit_refusal: gate.refusal,
       at: new Date().toISOString(),
     }),
   );
-  if (counters.errors > 0) process.exitCode = 1;
+  if (counters.errors > 0 || gate.refusal) process.exitCode = 1;
 }
 
 main().catch((error: unknown) => {

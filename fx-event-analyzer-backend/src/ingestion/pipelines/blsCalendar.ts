@@ -537,3 +537,44 @@ export function readOnlyIngestionStore(store: IngestionStore): IngestionStore {
     },
   });
 }
+
+/**
+ * The 08:30 New York release instant of a schedule entry (null: no mapping / no bls_schedule key /
+ * the wall time does not exist). Same computation as buildBlsScheduleReleases.
+ */
+export function blsScheduleReleaseAt(entry: BlsScheduleEntry, mappings?: readonly IndicatorMapping[]): Date | null {
+  const mapping = findMappingByCode(entry.indicatorCode, mappings);
+  if (!mapping?.providers.bls_schedule) return null;
+  const [year, month, day] = entry.releaseDate.split('-').map(Number) as [number, number, number];
+  const [hour, minute] = mapping.release.localTimes[0]!.split(':').map(Number) as [number, number];
+  return zonedWallTimeToUtc(year, month, day, hour, minute, mapping.release.timeZone);
+}
+
+/**
+ * HQ指示(2026-10-27「BLS定時実行」): 定期実行(`--if-due`)は、発表時刻を過ぎたのにまだ RELEASED に
+ * なっていない(行が無い・SCHEDULED のまま)エントリがあるときだけ BLS を呼ぶ。発表の無い日は BLS を
+ * 1回も呼ばない。失敗して値が入らなかったエントリは SCHEDULED のまま残るので、次の実行(定期・手動)で
+ * もう一度対象になる。発表から `windowDays`(既定 OVERDUE_AFTER_DAYS = 45日)を過ぎたものは対象にしない
+ * (BLS が予定を変えた可能性が高く、人が表を確かめる。手動の実行の overdue に出る)。
+ * 取りやめ(cancelled)・CANCELLED の行は対象にしない。読むだけ(findEventByProviderId)。
+ */
+export async function findDueBlsEntries(
+  store: Pick<IngestionStore, 'findEventByProviderId'>,
+  now: Date,
+  options: { entries?: readonly BlsScheduleEntry[]; mappings?: readonly IndicatorMapping[]; windowDays?: number } = {},
+): Promise<BlsScheduleEntry[]> {
+  const entries = options.entries ?? BLS_SCHEDULE;
+  const windowMs = (options.windowDays ?? OVERDUE_AFTER_DAYS) * 86_400_000;
+  const due: BlsScheduleEntry[] = [];
+  for (const entry of entries) {
+    if (entry.cancelled) continue;
+    const releaseAt = blsScheduleReleaseAt(entry, options.mappings);
+    if (!releaseAt) continue;
+    const age = now.getTime() - releaseAt.getTime();
+    if (age < 0 || age > windowMs) continue;
+    const row = await store.findEventByProviderId(BLS_SCHEDULE_PROVIDER, blsScheduleEventId(entry));
+    if (row && (row.status === 'RELEASED' || row.status === 'CANCELLED')) continue;
+    due.push(entry);
+  }
+  return due;
+}

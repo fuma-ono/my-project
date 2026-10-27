@@ -63,6 +63,17 @@ export const API_CREDIT_CAPS = {
     /** --manual runs and eval:providers may use the last 100 (= the plan's 800/day). */
     manual: 800,
   },
+  /**
+   * BLS API v1(キーなし): 25 クエリ/日(HQ指示 2026-10-27「BLS定時実行」)。上限の本体は DB の
+   * api_credit_limits('bls', 24, 16)(migration 20261027000002)。1回の実行は系列ごとに1回の8回
+   * (再試行を含めて runCap まで)。定期は1日2回まで(16)、手動は残り(合計24。BLS の 25 に1残す)。
+   */
+  bls: {
+    automatic: 16,
+    manual: 24,
+    /** 1回の実行の HTTP の上限(再試行を含む)。8系列 + 再試行2回分。 */
+    runCap: 10,
+  },
 } as const;
 
 /** ingest:fx-prices fetch planning (pipelines/fxGapRepair.ts, data-sources.md §6.4). */
