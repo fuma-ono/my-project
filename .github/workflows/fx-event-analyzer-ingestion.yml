@@ -4,9 +4,13 @@ name: FX Event Analyzer - Data ingestion (dev)
 #   - 為替: 20分ごと。Twelve Data の1分足 → fx_prices(5分〜60分足も組み立て)
 #   - 要人発言: 1日2回(06:15 / 18:15 JST)。FRB カレンダー・ECB RSS → speech_events
 #   - 品質レポート: 毎日 09:00 JST、直近1日分。DB を読むだけ。結果は実行の Summary に出る
-#   - BLS公式統計の経済カレンダー(手動実行のみ、target=official-bls): 有料カレンダーに
+#   - BLS公式統計の経済カレンダー(手動実行は target=official-bls): 有料カレンダーに
 #     依存しない独立経路(HQ判断2026-10-17)。BLSの公式スケジュール(無料・キー不要)
-#     からUS_CPI・US_NFPのeconomic_eventsを作る。定期実行には入れていない
+#     から米国5指標のeconomic_eventsを作る
+#   - BLSの定時実行(HQ指示2026-10-27): 平日 13:37 / 17:37 UTC。発表(NY 08:30 = 夏時間 12:30Z /
+#     冬時間 13:30Z)の後に `--scheduled --if-due` で動く。発表時刻を過ぎたのにまだ値の入っていない
+#     発表があるときだけ BLS を呼ぶ(無い日は BLS を1回も呼ばない)。17:37 は 13:37 の失敗・遅延の取り直し。
+#     BLS への HTTP は1回ごとに api_credit_ledger で予約する(定期は1日16回まで、合計24回まで)
 #   - 経済指標の価格反応(手動実行のみ、target=event-reactions): HQ決定2026-10-18
 #     「経済指標の価格反応実装と異常系テストを進める」。既存のfx_prices/economic_events
 #     を読むだけで、外部APIは呼ばない(追加費用0円)。手動実行とDEVデータ検証が
@@ -25,6 +29,7 @@ on:
     - cron: '7,27,47 * * * *'
     - cron: '15 21,9 * * *'
     - cron: '0 0 * * *'
+    - cron: '37 13,17 * * 1-5'
   workflow_dispatch:
     inputs:
       target:
@@ -99,6 +104,9 @@ jobs:
       - name: Official stats (BLS calendar, manual only)
         if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'official-bls'
         run: npm run -s ingest:official:bls-calendar
+      - name: Official stats (BLS calendar, scheduled, only when a release is due)
+        if: steps.check.outputs.ready == 'true' && github.event.schedule == '37 13,17 * * 1-5'
+        run: npm run -s ingest:official:bls-calendar -- --scheduled --if-due
       - name: Official stats (BLS calendar) dry run, no DB writes (manual only)
         if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'official-bls-dry-run'
         run: npm run -s ingest:official:bls-calendar -- --dry-run
