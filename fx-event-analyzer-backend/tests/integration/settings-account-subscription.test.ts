@@ -620,6 +620,61 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
       expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: true });
     });
 
+    it('grants PRO again for a legitimate re-purchase after a refund (new transaction, newer signedDate)', async () => {
+      const { user, headers } = await newUser();
+      const id = originalTransactionId();
+      const before = Date.now() - 60_000;
+      await verify(headers, transactionPayload(user.id, { originalTransactionId: id }, before), null);
+      await verify(
+        headers,
+        transactionPayload(
+          user.id,
+          { originalTransactionId: id, revocationDate: Date.now() - 30_000 },
+          Date.now() - 30_000,
+        ),
+        null,
+      );
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: false });
+
+      const repurchased = await verify(
+        headers,
+        transactionPayload(user.id, { originalTransactionId: id, transactionId: '2000000000000077' }),
+        renewalInfoPayload({ originalTransactionId: id }),
+      );
+      expect(JSON.parse(repurchased.body).status).toBe('ACTIVE');
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: true });
+      const { data } = await ctx.serviceClient
+        .from('subscriptions')
+        .select('revoked_at, last_transaction_id')
+        .eq('provider_subscription_id', id)
+        .single();
+      expect(data).toEqual({ revoked_at: null, last_transaction_id: '2000000000000077' });
+    });
+
+    it('applies the newest state when JWS arrive out of order, and a duplicate resend changes nothing', async () => {
+      const { user, headers } = await newUser();
+      const id = originalTransactionId();
+      const older = Date.now() - 60_000;
+      const canceled = renewalInfoPayload({ originalTransactionId: id, autoRenewStatus: 0 });
+      const tx = transactionPayload(user.id, { originalTransactionId: id });
+      expect(JSON.parse((await verify(headers, tx, canceled)).body).status).toBe('CANCELED');
+      // 自動更新オンのときの古い JWS が後から届いても、CANCELED のまま
+      const stale = await verify(
+        headers,
+        transactionPayload(user.id, { originalTransactionId: id }, older),
+        renewalInfoPayload({ originalTransactionId: id }, older),
+      );
+      expect(JSON.parse(stale.body).status).toBe('CANCELED');
+      // 同じ JWS の再送は冪等
+      expect(JSON.parse((await verify(headers, tx, canceled)).body).status).toBe('CANCELED');
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: true });
+      const { count } = await ctx.serviceClient
+        .from('subscriptions')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+      expect(count).toBe(1);
+    });
+
     it('rejects a transaction bought by another account with 403', async () => {
       const { headers } = await newUser();
       const { user: other } = await newUser();
