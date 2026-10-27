@@ -102,3 +102,39 @@ export const FOMC_SCHEDULE: readonly FomcScheduleEntry[] = [
   meeting('2027-10-26', '2027-10-27', false, true),
   meeting('2027-12-07', '2027-12-08', true, true),
 ];
+
+/**
+ * FOMC 議事要旨(minutes)の公表予定(HQ指示 2026-10-27「FOMC議事要旨は会合日とは別イベント」)。
+ * 会合の日・政策発表の日時とは別の行(指標 US_FOMC_MINUTES、provider 'fomc_minutes_schedule')。
+ * `meetingStart` / `meetingEnd` はどの会合の議事要旨か、`announcement` は議事要旨の公表日時。
+ *
+ * 公式の出典(2026-10-27 取得): FRB のカレンダー calendar.json の type "FOMC"・title "FOMC Minutes"
+ * (2026-11-18 2:00 p.m.・2026-12-30 2:00 p.m.)。会合日程のページの「minutes … are released three
+ * weeks after the date of the policy decision」。**calendar.json に載った日だけを入れる**(2027年の
+ * 議事要旨は calendar.json に無いので、規則から日付を作らない。載ったら足す)。
+ * provisional は、その会合の日程が暫定なら true(12/9 の会合は10月の会合で確認されるまで暫定)。
+ * 値は無い(議事要旨は文書)。予定の行だけを作る。
+ */
+const MINUTES_SOURCES = [FRB_CALENDAR_JSON_URL, FOMC_MEETINGS_PAGE_URL] as const;
+
+function minutes(
+  meetingStart: string,
+  meetingEnd: string,
+  releaseDate: string,
+  provisional: boolean,
+): FomcScheduleEntry {
+  return {
+    meetingStart,
+    meetingEnd,
+    announcement: { date: releaseDate, time: FOMC_ANNOUNCEMENT_TIME, timeZone: FOMC_TIME_ZONE },
+    sep: false,
+    provisional,
+    sources: MINUTES_SOURCES,
+    checkedAt: '2026-10-27',
+  };
+}
+
+export const FOMC_MINUTES_SCHEDULE: readonly FomcScheduleEntry[] = [
+  minutes('2026-10-27', '2026-10-28', '2026-11-18', false),
+  minutes('2026-12-08', '2026-12-09', '2026-12-30', true),
+];

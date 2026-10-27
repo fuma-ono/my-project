@@ -104,7 +104,9 @@ from (values
   -- 米国 PPI・コアPPI・JOLTS(migration 20261027000003)
   ('US_PPI', 'USDJPY', 1), ('US_PPI', 'EURUSD', 2),
   ('US_CORE_PPI', 'USDJPY', 1), ('US_CORE_PPI', 'EURUSD', 2),
-  ('US_JOLTS', 'USDJPY', 1), ('US_JOLTS', 'EURUSD', 2)
+  ('US_JOLTS', 'USDJPY', 1), ('US_JOLTS', 'EURUSD', 2),
+  -- FOMC議事要旨(migration 20261027000004)
+  ('US_FOMC_MINUTES', 'USDJPY', 1), ('US_FOMC_MINUTES', 'EURUSD', 2)
 ) as v(code, symbol, priority)
 join economic_indicators i on i.code = v.code
 join fx_pairs p on p.symbol = v.symbol
