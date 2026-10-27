@@ -61,6 +61,7 @@ export async function applyAppStoreSubscription(
       p_auto_renew: state.autoRenew,
       p_revoked_at: state.revokedAt,
       p_pro_feature_codes: proFeatureCodes,
+      p_signed_at: state.signedAt,
     })
     .single<SubscriptionRow>();
   if (error) {

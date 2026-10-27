@@ -557,6 +557,121 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
       expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: false });
     });
 
+    // HQ指示 2026-10-27(G4): 返金の前に保存しておいた JWS を送り直しても PRO に戻らない(migration 20261027000001)。
+    it('ignores an older JWS replayed after a refund (stays EXPIRED / FREE)', async () => {
+      const { user, headers } = await newUser();
+      const id = originalTransactionId();
+      // 署名日時は前に進めるだけにする(テストの証明書はテストの開始時に作られ、それより前の署名日時は 422)
+      const before = Date.now();
+      const active = transactionPayload(user.id, { originalTransactionId: id }, before);
+      expect(
+        (await verify(headers, active, renewalInfoPayload({ originalTransactionId: id }, before))).statusCode,
+      ).toBe(200);
+
+      const refunded = await verify(
+        headers,
+        transactionPayload(user.id, { originalTransactionId: id, revocationDate: before + 1000 }, before + 2000),
+        null,
+      );
+      expect(JSON.parse(refunded.body).status).toBe('EXPIRED');
+
+      const replay = await verify(headers, active, renewalInfoPayload({ originalTransactionId: id }, before));
+      expect(replay.statusCode).toBe(200);
+      expect(JSON.parse(replay.body).status).toBe('EXPIRED');
+      const current = JSON.parse((await ctx.app.inject({ method: 'GET', url: '/api/v1/subscription', headers })).body);
+      expect(current.plan).toBe('FREE');
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: false });
+      const { data } = await ctx.serviceClient
+        .from('subscriptions')
+        .select('revoked_at, last_signed_at')
+        .eq('provider_subscription_id', id)
+        .single();
+      expect(data?.revoked_at).not.toBeNull();
+      expect(data?.last_signed_at).not.toBeNull();
+    });
+
+    it('keeps a stored refund even when the same transaction is sent again without revocationDate (rows from before last_signed_at)', async () => {
+      const { user, headers } = await newUser();
+      const id = originalTransactionId();
+      const tx = transactionPayload(user.id, { originalTransactionId: id, revocationDate: Date.now() - 1000 });
+      await verify(headers, tx, null);
+      // この migration より前に保存された行と同じ状態にする(署名日時が無い)
+      await ctx.serviceClient.from('subscriptions').update({ last_signed_at: null }).eq('provider_subscription_id', id);
+
+      const replay = await verify(headers, transactionPayload(user.id, { originalTransactionId: id }), null);
+      expect(JSON.parse(replay.body).status).toBe('EXPIRED');
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: false });
+    });
+
+    it('still accepts a newer JWS (renewal / re-purchase after expiry)', async () => {
+      const { user, headers } = await newUser();
+      const id = originalTransactionId();
+      const old = Date.now();
+      await verify(
+        headers,
+        transactionPayload(user.id, { originalTransactionId: id, expiresDate: old - 1000 }, old),
+        null,
+      );
+      const renewed = await verify(
+        headers,
+        transactionPayload(user.id, { originalTransactionId: id, transactionId: '2000000000000099' }, old + 2000),
+        null,
+      );
+      expect(JSON.parse(renewed.body).status).toBe('ACTIVE');
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: true });
+    });
+
+    it('grants PRO again for a legitimate re-purchase after a refund (new transaction, newer signedDate)', async () => {
+      const { user, headers } = await newUser();
+      const id = originalTransactionId();
+      const before = Date.now();
+      await verify(headers, transactionPayload(user.id, { originalTransactionId: id }, before), null);
+      await verify(
+        headers,
+        transactionPayload(user.id, { originalTransactionId: id, revocationDate: before + 500 }, before + 1000),
+        null,
+      );
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: false });
+
+      const repurchased = await verify(
+        headers,
+        transactionPayload(user.id, { originalTransactionId: id, transactionId: '2000000000000077' }, before + 2000),
+        renewalInfoPayload({ originalTransactionId: id }, before + 2000),
+      );
+      expect(JSON.parse(repurchased.body).status).toBe('ACTIVE');
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: true });
+      const { data } = await ctx.serviceClient
+        .from('subscriptions')
+        .select('revoked_at, last_transaction_id')
+        .eq('provider_subscription_id', id)
+        .single();
+      expect(data).toEqual({ revoked_at: null, last_transaction_id: '2000000000000077' });
+    });
+
+    it('applies the newest state when JWS arrive out of order, and a duplicate resend changes nothing', async () => {
+      const { user, headers } = await newUser();
+      const id = originalTransactionId();
+      const older = Date.now();
+      const canceled = renewalInfoPayload({ originalTransactionId: id, autoRenewStatus: 0 }, older + 2000);
+      const tx = transactionPayload(user.id, { originalTransactionId: id }, older + 2000);
+      expect(JSON.parse((await verify(headers, tx, canceled)).body).status).toBe('CANCELED');
+      // 自動更新オンのときの古い JWS が後から届いても、CANCELED のまま
+      const stale = await verify(
+        headers,
+        transactionPayload(user.id, { originalTransactionId: id }, older),
+        renewalInfoPayload({ originalTransactionId: id }, older),
+      );
+      expect(JSON.parse(stale.body).status).toBe('CANCELED');
+      // 同じ JWS の再送は冪等
+      expect(JSON.parse((await verify(headers, tx, canceled)).body).status).toBe('CANCELED');
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: true });
+      const { count } = await ctx.serviceClient
+        .from('subscriptions')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+      expect(count).toBe(1);
+    });
+
     it('rejects a transaction bought by another account with 403', async () => {
       const { headers } = await newUser();
       const { user: other } = await newUser();

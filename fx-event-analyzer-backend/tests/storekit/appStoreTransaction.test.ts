@@ -39,7 +39,21 @@ describe('resolveSubscriptionState', () => {
       expiresAt: new Date(NOW + 29 * DAY_MS).toISOString(),
       autoRenew: true,
       revokedAt: null,
+      signedAt: new Date(NOW).toISOString(),
     });
+  });
+
+  it('takes the newer signedDate of the transaction and the renewal info as signedAt (replay guard)', () => {
+    const state = resolveSubscriptionState(
+      tx({ signedDate: NOW - 1000 }),
+      renewal({ signedDate: NOW + 5000 }),
+      options,
+    );
+    expect(state.signedAt).toBe(new Date(NOW + 5000).toISOString());
+    expect(resolveSubscriptionState(tx({ signedDate: NOW - 1000 }), null, options).signedAt).toBe(
+      new Date(NOW - 1000).toISOString(),
+    );
+    expect(resolveSubscriptionState(tx({ signedDate: undefined }), null, options).signedAt).toBeNull();
   });
 
   it('accepts the yearly product', () => {

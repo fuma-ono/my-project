@@ -19,6 +19,7 @@ const transactionPayloadSchema = z
     appAccountToken: z.string().optional(),
     offerType: z.number().optional(),
     offerDiscountType: z.string().optional(),
+    signedDate: z.number().optional(),
   })
   .passthrough();
 
@@ -28,6 +29,7 @@ const renewalInfoPayloadSchema = z
     originalTransactionId: z.string().min(1),
     environment: z.string(),
     autoRenewStatus: z.number(),
+    signedDate: z.number().optional(),
   })
   .passthrough();
 
@@ -47,6 +49,13 @@ export interface AppStoreSubscriptionState {
   expiresAt: string;
   autoRenew: boolean | null;
   revokedAt: string | null;
+  /**
+   * The newer signedDate of the two JWS (Apple's signing time — the client
+   * cannot change it). The DB ignores a state signed before the one it last
+   * stored, so an old JWS saved before a refund cannot restore PRO
+   * (migration 20261027000001). null when neither payload has signedDate.
+   */
+  signedAt: string | null;
 }
 
 const AUTO_RENEWABLE_SUBSCRIPTION = 'Auto-Renewable Subscription';
@@ -143,5 +152,11 @@ export function resolveSubscriptionState(
     expiresAt: new Date(transaction.expiresDate).toISOString(),
     autoRenew,
     revokedAt: transaction.revocationDate !== undefined ? new Date(transaction.revocationDate).toISOString() : null,
+    signedAt: latestSignedAt(transaction.signedDate, renewalInfo?.signedDate),
   };
+}
+
+function latestSignedAt(...dates: (number | undefined)[]): string | null {
+  const known = dates.filter((date): date is number => date !== undefined);
+  return known.length > 0 ? new Date(Math.max(...known)).toISOString() : null;
 }
