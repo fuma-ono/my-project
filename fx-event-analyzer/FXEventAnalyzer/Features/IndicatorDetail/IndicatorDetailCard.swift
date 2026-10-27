@@ -19,52 +19,46 @@ struct IndicatorDetailCard: View {
             // HQ指示(2026-10-09)の1枚目の参考画像: カードの下に「次回発表予定 ›」と
             // 「過去イベント比較 ›」の見出しと、それぞれの小さなカード。
             if let next = nextScheduledEvent {
-                NavigationLink(value: AppRoute.eventDetail(id: next.id)) {
-                    linkSection(title: "次回発表予定") {
-                        HStack(spacing: 8) {
-                            Image(systemName: "calendar")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(V5P.cyan)
-                            VStack(alignment: .leading, spacing: 2) {
-                                NotoText.text(Self.releaseLabel(next.releaseDatetime), size: 9.5).foregroundStyle(.white)
-                                NotoText.text("\(CountryFlag.indicatorDisplayText(indicator.name, countryCode: indicator.countryCode, displayName: indicator.displayName))　|　\(CountryFlag.japaneseName(forCountry: indicator.countryCode))", size: 7)
-                                    .foregroundStyle(SettingsCardStyle.subtitleColor)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
-                            }
-                            Spacer(minLength: 4)
-                            importanceBadge(width: 32)
-                            linkChevron
+                linkSection(title: "次回発表予定", route: .eventDetail(id: next.id)) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(V5P.cyan)
+                        VStack(alignment: .leading, spacing: 2) {
+                            NotoText.text(Self.releaseLabel(next.releaseDatetime), size: 9.5).foregroundStyle(.white)
+                            NotoText.text("\(CountryFlag.indicatorDisplayText(indicator.name, countryCode: indicator.countryCode, displayName: indicator.displayName))　|　\(CountryFlag.japaneseName(forCountry: indicator.countryCode))", size: 7)
+                                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                         }
+                        Spacer(minLength: 4)
+                        importanceBadge(width: 32)
+                        linkChevron
                     }
                 }
-                .buttonStyle(SettingsRowPressStyle())
             }
             if let pair = comparisonPair {
-                NavigationLink(value: AppRoute.historicalComparison(
+                linkSection(title: "過去イベント比較", route: .historicalComparison(
                     indicatorId: indicator.id,
                     indicatorName: indicator.name,
                     fxPairId: pair.fxPairId,
                     fxPairSymbol: pair.symbol
                 )) {
-                    linkSection(title: "過去イベント比較") {
-                        HStack(spacing: 8) {
-                            Image(systemName: "clock")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(V5P.cyan)
-                            VStack(alignment: .leading, spacing: 2) {
-                                NotoText.text("過去\(PlanStore.shared.limits.historyEventsMax)回のデータを表示", size: 9.5).foregroundStyle(.white)
-                                NotoText.text("過去の結果・予想・前回と為替の動きを比較できます", size: 7)
-                                    .foregroundStyle(SettingsCardStyle.subtitleColor)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
-                            }
-                            Spacer(minLength: 4)
-                            linkChevron
+                    HStack(spacing: 8) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(V5P.cyan)
+                        VStack(alignment: .leading, spacing: 2) {
+                            NotoText.text("過去\(PlanStore.shared.limits.historyEventsMax)回のデータを表示", size: 9.5).foregroundStyle(.white)
+                            NotoText.text("過去の結果・予想・前回と為替の動きを比較できます", size: 7)
+                                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                         }
+                        Spacer(minLength: 4)
+                        linkChevron
                     }
                 }
-                .buttonStyle(SettingsRowPressStyle())
             }
         }
         .frame(width: 214)
@@ -122,21 +116,31 @@ struct IndicatorDetailCard: View {
         .accessibilityIdentifier("indicatorFavoriteStar")
     }
 
-    /// 見出し(「次回発表予定」)とその下の小さなカード。全体で1つのボタン。
+    /// 見出し(「次回発表予定」)とその下の小さなカード。カードだけがボタン
+    /// (`NavigationLink`)。
     /// HQ指示(2026-10-13、4回目)「次回発表予定と過去イベント比較の＞は
     /// 枠内の右側にして」: 見出し行(枠の外)にあった「＞」を外し、枠(カード)
     /// の中、右端に移した(`linkChevron`、各カードのHStackの末尾)。
-    private func linkSection(title: String, @ViewBuilder content: () -> some View) -> some View {
+    /// HQ指摘(2026-10-27)「選択して光る枠がはみ出ている」: 以前は見出しの
+    /// 文字を含むVStack全体をNavigationLinkのlabelにしていたため、
+    /// `SettingsRowPressStyle`が押下中に敷く光る枠(`configuration.label`と
+    /// 同じ大きさ)が、実際に見えているカード(`content()`だけ)より見出しの
+    /// 文字の高さ分だけ大きくなり、カードの角丸からはみ出して見えていた。
+    /// ボタンのlabelをカード本体(`content()`)だけにし、見出しの文字は
+    /// ボタンの外(兄弟要素)に出すことで、光る枠とカードの外形を一致させた。
+    private func linkSection(title: String, route: AppRoute, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             // HQ指示(2026-10-13、5回目)「見出しの文字サイズは10にして」: 10.5→10。
             NotoText.text(title, size: 10).foregroundStyle(.white)
                 .padding(.horizontal, 4)
-            content()
-                .padding(.horizontal, 10)
-                .frame(width: 214, height: 38, alignment: .leading)
-                .background(GradientCardBackground())
+            NavigationLink(value: route) {
+                content()
+                    .padding(.horizontal, 10)
+                    .frame(width: 214, height: 38, alignment: .leading)
+                    .background(GradientCardBackground())
+            }
+            .buttonStyle(SettingsRowPressStyle())
         }
-        .contentShape(Rectangle())
     }
 
     private var linkChevron: some View {
