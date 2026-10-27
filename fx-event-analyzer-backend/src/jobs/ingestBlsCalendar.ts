@@ -10,6 +10,8 @@ import {
   buildBlsScheduleReleases,
   BLS_SCHEDULE_PROVIDER,
   createBlsNativeResolver,
+  blsScheduleSeriesIds,
+  createBlsBatchProvider,
   createBlsSecondaryResolver,
   findDueBlsEntries,
   planBlsScheduleWrites,
@@ -90,7 +92,9 @@ async function main(): Promise<void> {
     dailyCap: scheduled ? API_CREDIT_CAPS.bls.automatic : API_CREDIT_CAPS.bls.manual,
     runCap: API_CREDIT_CAPS.bls.runCap,
   });
-  const bls = new BlsAdapter(keys.BLS_API_KEY, { beforeAttempt: gate.beforeAttempt });
+  const adapter = new BlsAdapter(keys.BLS_API_KEY, { beforeAttempt: gate.beforeAttempt });
+  // 全系列を1回の HTTP でまとめて取る(createBlsBatchProvider)。両方の resolver で同じ1回を使う。
+  const bls = createBlsBatchProvider(adapter, blsScheduleSeriesIds(), scheduleObservationRange(BLS_SCHEDULE));
   const resolverErrors: string[] = [];
   const official = createBlsNativeResolver(bls, scheduleObservationRange(BLS_SCHEDULE), (error) =>
     resolverErrors.push(error instanceof Error ? error.message : String(error)),

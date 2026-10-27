@@ -46,7 +46,7 @@
 /** `notYetAvailable` entries whose scheduled date is this many days or more in the past with still no BLS value — probably means BLS rescheduled and the static table is stale, not a normal wait. */
 export const OVERDUE_AFTER_DAYS = 45;
 import type { OfficialStatsProvider } from '../providers.js';
-import { findMappingByCode, type IndicatorMapping } from '../mappings/indicators.js';
+import { findMappingByCode, INDICATOR_MAPPINGS, type IndicatorMapping } from '../mappings/indicators.js';
 import { BLS_SCHEDULE, type BlsScheduleEntry } from '../mappings/blsSchedule.js';
 import { providerIndicatorKey } from '../mappings/indicators.js';
 import { localDate, monthStart, shiftMonth, zonedWallTimeToUtc } from '../time.js';
@@ -577,4 +577,56 @@ export async function findDueBlsEntries(
     due.push(entry);
   }
   return due;
+}
+
+/** Every BLS series the bls_schedule path reads (official + secondary of mappings with a bls_schedule key). */
+export function blsScheduleSeriesIds(mappings: readonly IndicatorMapping[] = INDICATOR_MAPPINGS): string[] {
+  const ids = new Set<string>();
+  for (const mapping of mappings) {
+    if (!mapping.providers.bls_schedule) continue;
+    for (const ref of mapping.official) if (ref.source === 'BLS') ids.add(ref.seriesId);
+    if (mapping.secondary?.official.source === 'BLS') ids.add(mapping.secondary.official.seriesId);
+  }
+  return [...ids].sort();
+}
+
+/** The part of BlsAdapter the batch provider needs (tests pass a fake). */
+export interface BlsBatchSource {
+  fetchManyObservations(query: {
+    seriesIds: readonly string[];
+    observationStart: string;
+    observationEnd: string;
+  }): Promise<OfficialObservation[]>;
+}
+
+/**
+ * HQ指示(2026-10-27): 1回の実行で BLS に送る HTTP を1回(系列が25を超えれば分割)にする。
+ * `seriesIds` を `range` でまとめて1回だけ取り、以降の fetchObservations はその結果から返す。
+ * createBlsNativeResolver / createBlsSecondaryResolver にこれを渡すと、両方で同じ1回を共有する。
+ * 取得に失敗したら、すべての系列の fetchObservations が同じエラーで失敗する(resolver の onError に入り、
+ * その実行では値が入らない — 行は SCHEDULED のまま、次の実行で取り直す)。
+ */
+export function createBlsBatchProvider(
+  source: BlsBatchSource,
+  seriesIds: readonly string[],
+  range: { start: string; end: string },
+): OfficialStatsProvider {
+  let pending: Promise<OfficialObservation[]> | null = null;
+  return {
+    name: 'BLS',
+    supportsPointInTime: false,
+    async fetchObservations(query) {
+      if (!seriesIds.includes(query.seriesId)) {
+        throw new Error(`BLS batch: series ${query.seriesId} is not in the batch`);
+      }
+      pending ??= source.fetchManyObservations({ seriesIds, observationStart: range.start, observationEnd: range.end });
+      const observations = await pending;
+      return observations.filter(
+        (o) =>
+          o.seriesId === query.seriesId &&
+          o.periodStart >= query.observationStart &&
+          o.periodStart <= query.observationEnd,
+      );
+    },
+  };
 }

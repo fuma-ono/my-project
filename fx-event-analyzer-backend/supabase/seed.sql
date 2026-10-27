@@ -100,7 +100,11 @@ select i.id, p.id, v.priority
 from (values
   ('US_CORE_CPI', 'USDJPY', 1), ('US_CORE_CPI', 'EURUSD', 2),
   ('US_UNEMPLOYMENT_RATE', 'USDJPY', 1), ('US_UNEMPLOYMENT_RATE', 'EURUSD', 2),
-  ('US_AVG_HOURLY_EARNINGS', 'USDJPY', 1), ('US_AVG_HOURLY_EARNINGS', 'EURUSD', 2)
+  ('US_AVG_HOURLY_EARNINGS', 'USDJPY', 1), ('US_AVG_HOURLY_EARNINGS', 'EURUSD', 2),
+  -- 米国 PPI・コアPPI・JOLTS(migration 20261027000003)
+  ('US_PPI', 'USDJPY', 1), ('US_PPI', 'EURUSD', 2),
+  ('US_CORE_PPI', 'USDJPY', 1), ('US_CORE_PPI', 'EURUSD', 2),
+  ('US_JOLTS', 'USDJPY', 1), ('US_JOLTS', 'EURUSD', 2)
 ) as v(code, symbol, priority)
 join economic_indicators i on i.code = v.code
 join fx_pairs p on p.symbol = v.symbol

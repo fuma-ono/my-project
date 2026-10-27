@@ -65,13 +65,14 @@ export const API_CREDIT_CAPS = {
   },
   /**
    * BLS API v1(キーなし): 25 クエリ/日(HQ指示 2026-10-27「BLS定時実行」)。上限の本体は DB の
-   * api_credit_limits('bls', 24, 16)(migration 20261027000002)。1回の実行は系列ごとに1回の8回
-   * (再試行を含めて runCap まで)。定期は1日2回まで(16)、手動は残り(合計24。BLS の 25 に1残す)。
+   * api_credit_limits('bls', 24, 16)(migration 20261027000002)。1回の実行は、全系列をまとめた
+   * 1回の HTTP(createBlsBatchProvider。v1 は1クエリ25系列まで)、再試行を含めて最大3回。
+   * 定期(1日2回)は最大6回、手動の dry-run・本実行を足しても 24 に収まる。
    */
   bls: {
     automatic: 16,
     manual: 24,
-    /** 1回の実行の HTTP の上限(再試行を含む)。8系列 + 再試行2回分。 */
+    /** 1回の実行の HTTP の上限(再試行を含む)。まとめた1回 + 再試行2回(25系列を超えて分割したときも収まる余裕を持つ)。 */
     runCap: 10,
   },
 } as const;

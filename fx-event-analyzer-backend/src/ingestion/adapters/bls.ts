@@ -117,4 +117,41 @@ export class BlsAdapter implements OfficialStatsProvider {
         o.periodStart <= query.observationEnd,
     );
   }
+
+  /**
+   * HQ指示(2026-10-27「BLS定時実行」「API上限」): 複数の系列を1回の HTTP でまとめて取る
+   * (v1 は1クエリ25系列まで、v2 は50系列まで — 超える分は分けて送る)。1日25クエリの v1 でも、
+   * 指標を足すたびに1回の実行の HTTP の数が増えないようにする。
+   */
+  async fetchManyObservations(query: {
+    seriesIds: readonly string[];
+    observationStart: string;
+    observationEnd: string;
+  }): Promise<OfficialObservation[]> {
+    const perRequest = this.apiKey ? 50 : 25;
+    const observations: OfficialObservation[] = [];
+    for (let i = 0; i < query.seriesIds.length; i += perRequest) {
+      const seriesIds = query.seriesIds.slice(i, i + perRequest);
+      const payload: Record<string, unknown> = {
+        seriesid: seriesIds,
+        startyear: query.observationStart.slice(0, 4),
+        endyear: query.observationEnd.slice(0, 4),
+      };
+      if (this.apiKey) payload.registrationkey = this.apiKey;
+      const body = await this.http.getJson(this.apiKey ? V2_URL : V1_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      observations.push(
+        ...parseBlsResponse(body, this.today()).filter(
+          (o) =>
+            seriesIds.includes(o.seriesId) &&
+            o.periodStart >= query.observationStart &&
+            o.periodStart <= query.observationEnd,
+        ),
+      );
+    }
+    return observations;
+  }
 }

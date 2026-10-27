@@ -129,7 +129,8 @@ describe('BLS_SCHEDULE for the added indicators', () => {
   it('gives each indicator the dates of its own release (CPI / Employment Situation)', () => {
     for (const code of CPI_RELEASE_INDICATORS) expect(datesOf(code)).toEqual(datesOf('US_CPI'));
     for (const code of EMPSIT_RELEASE_INDICATORS) expect(datesOf(code)).toEqual(datesOf('US_NFP'));
-    expect(BLS_SCHEDULE).toHaveLength(24 * 5);
+    // 24か月 × 5指標(CPI 系・雇用統計系) + PPI 24か月 × 2 + JOLTS 11か月(2027年は BLS がまだ出していない)
+    expect(BLS_SCHEDULE).toHaveLength(24 * 5 + 24 * 2 + 11);
   });
 
   it('has one unique event id per indicator and period', () => {
@@ -138,7 +139,7 @@ describe('BLS_SCHEDULE for the added indicators', () => {
     expect(ids).toContain('bls_schedule:US_AVG_HOURLY_EARNINGS:2026-09');
   });
 
-  it('fetches each BLS series once for the whole schedule (v1: 25 requests/day) — 8 requests', async () => {
+  it('fetches each BLS series once per resolver for the whole schedule (the job batches them into one HTTP request)', async () => {
     const bls = new FakeBls({});
     const range = scheduleObservationRange(BLS_SCHEDULE);
     await buildBlsScheduleReleases({
@@ -146,7 +147,8 @@ describe('BLS_SCHEDULE for the added indicators', () => {
       officialSecondary: createBlsSecondaryResolver(bls, range),
       now: NOW,
     });
-    // 一次: CPI・コアCPI(季節調整なし)・NFP・失業率・平均時給。副: CPI・コアCPI(季節調整済み)・平均時給。
+    // 一次: CPI・コアCPI(季節調整なし)・NFP・失業率・平均時給・PPI・コアPPI・JOLTS。
+    // 副: CPI・コアCPI(季節調整済み)・平均時給・PPI・コアPPI(季節調整なし)。
     expect([...bls.calls].sort()).toEqual(
       [
         'CES0000000001',
@@ -156,7 +158,12 @@ describe('BLS_SCHEDULE for the added indicators', () => {
         'CUUR0000SA0',
         'CUUR0000SA0',
         'CUUR0000SA0L1E',
+        'JTS000000000000000JOL',
         'LNS14000000',
+        'WPSFD4',
+        'WPSFD49104',
+        'WPUFD4',
+        'WPUFD49104',
       ].sort(),
     );
   });

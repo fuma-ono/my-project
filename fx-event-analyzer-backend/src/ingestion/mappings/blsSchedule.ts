@@ -27,8 +27,15 @@
 export const CPI_RELEASE_INDICATORS = ['US_CPI', 'US_CORE_CPI'] as const;
 /** Indicators released in the Employment Situation — they share the `nfp` dates below. */
 export const EMPSIT_RELEASE_INDICATORS = ['US_NFP', 'US_UNEMPLOYMENT_RATE', 'US_AVG_HOURLY_EARNINGS'] as const;
+/** Indicators released in the PPI news release — they share the `ppi` dates below. */
+export const PPI_RELEASE_INDICATORS = ['US_PPI', 'US_CORE_PPI'] as const;
+/** Indicators released in the JOLTS news release (10:00 New York) — the `jolts` dates below. */
+export const JOLTS_RELEASE_INDICATORS = ['US_JOLTS'] as const;
 export type BlsScheduleIndicatorCode =
-  (typeof CPI_RELEASE_INDICATORS)[number] | (typeof EMPSIT_RELEASE_INDICATORS)[number];
+  | (typeof CPI_RELEASE_INDICATORS)[number]
+  | (typeof EMPSIT_RELEASE_INDICATORS)[number]
+  | (typeof PPI_RELEASE_INDICATORS)[number]
+  | (typeof JOLTS_RELEASE_INDICATORS)[number];
 
 export interface BlsScheduleEntryBase {
   /** economic_indicators.code */
@@ -118,6 +125,53 @@ const nfp: readonly [string, string][] = [
   ['2027-11', '2027-12-03'],
 ];
 
+// PPI(HQ指示 2026-10-27)。出典: https://www.bls.gov/schedule/2026/home.htm ・
+// https://www.bls.gov/schedule/2027/home.htm ・ https://www.bls.gov/schedule/news_release/ppi.htm
+// (2026-10-27 取得。すべて 08:30)。2025年11月分(2026-01-14)は表の範囲(2025-12〜)の外なので入れない。
+const ppi: readonly [string, string][] = [
+  ['2025-12', '2026-01-30'],
+  ['2026-01', '2026-02-27'],
+  ['2026-02', '2026-03-18'],
+  ['2026-03', '2026-04-14'],
+  ['2026-04', '2026-05-13'],
+  ['2026-05', '2026-06-11'],
+  ['2026-06', '2026-07-15'],
+  ['2026-07', '2026-08-13'],
+  ['2026-08', '2026-09-10'],
+  ['2026-09', '2026-10-15'],
+  ['2026-10', '2026-11-13'],
+  ['2026-11', '2026-12-15'],
+  ['2026-12', '2027-01-14'],
+  ['2027-01', '2027-02-12'],
+  ['2027-02', '2027-03-12'],
+  ['2027-03', '2027-04-14'],
+  ['2027-04', '2027-05-13'],
+  ['2027-05', '2027-06-11'],
+  ['2027-06', '2027-07-15'],
+  ['2027-07', '2027-08-10'],
+  ['2027-08', '2027-09-10'],
+  ['2027-09', '2027-10-15'],
+  ['2027-10', '2027-11-12'],
+  ['2027-11', '2027-12-15'],
+];
+
+// JOLTS(HQ指示 2026-10-27)。出典: https://www.bls.gov/schedule/2026/home.htm ・
+// https://www.bls.gov/schedule/news_release/jolts.htm(2026-10-27 取得。すべて 10:00)。
+// 2027年の日程は BLS がまだ出していない(2027 の年間予定に JOLTS が無い)ので、公式に出たら足す。
+const jolts: readonly [string, string][] = [
+  ['2025-12', '2026-02-05'],
+  ['2026-01', '2026-03-13'],
+  ['2026-02', '2026-03-31'],
+  ['2026-03', '2026-05-05'],
+  ['2026-04', '2026-06-02'],
+  ['2026-05', '2026-06-30'],
+  ['2026-06', '2026-08-04'],
+  ['2026-07', '2026-09-01'],
+  ['2026-08', '2026-09-29'],
+  ['2026-09', '2026-11-03'],
+  ['2026-10', '2026-12-01'],
+];
+
 // 指標の順(US_CPI → US_CORE_CPI、US_NFP → …)に並べる。US_CPI・US_NFP の分は従来と同じ並び・同じ内容。
 export const BLS_SCHEDULE: readonly BlsScheduleEntry[] = [
   ...CPI_RELEASE_INDICATORS.flatMap((indicatorCode) =>
@@ -125,5 +179,11 @@ export const BLS_SCHEDULE: readonly BlsScheduleEntry[] = [
   ),
   ...EMPSIT_RELEASE_INDICATORS.flatMap((indicatorCode) =>
     nfp.map(([referencePeriod, releaseDate]) => ({ indicatorCode, referencePeriod, releaseDate })),
+  ),
+  ...PPI_RELEASE_INDICATORS.flatMap((indicatorCode) =>
+    ppi.map(([referencePeriod, releaseDate]) => ({ indicatorCode, referencePeriod, releaseDate })),
+  ),
+  ...JOLTS_RELEASE_INDICATORS.flatMap((indicatorCode) =>
+    jolts.map(([referencePeriod, releaseDate]) => ({ indicatorCode, referencePeriod, releaseDate })),
   ),
 ];

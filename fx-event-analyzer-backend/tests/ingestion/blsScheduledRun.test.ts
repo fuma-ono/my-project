@@ -93,10 +93,10 @@ describe('findDueBlsEntries (--if-due)', () => {
 
 describe('BLS credit planning (API_CREDIT_CAPS.bls)', () => {
   it('keeps two scheduled runs + one manual run within BLS v1 (25/day)', () => {
-    const perRun = 8; // series per run (blsUsIndicators.test.ts)
-    expect(API_CREDIT_CAPS.bls.automatic).toBe(2 * perRun);
+    // 1回の実行は全系列をまとめた1回の HTTP(createBlsBatchProvider)。再試行を含めても runCap まで。
+    const perRun = API_CREDIT_CAPS.bls.runCap;
+    expect(API_CREDIT_CAPS.bls.automatic).toBeLessThanOrEqual(2 * perRun);
     expect(API_CREDIT_CAPS.bls.manual).toBeLessThan(25);
-    expect(API_CREDIT_CAPS.bls.manual - API_CREDIT_CAPS.bls.automatic).toBeGreaterThanOrEqual(perRun);
-    expect(API_CREDIT_CAPS.bls.runCap).toBeGreaterThanOrEqual(perRun);
+    expect(API_CREDIT_CAPS.bls.manual - API_CREDIT_CAPS.bls.automatic).toBeGreaterThanOrEqual(3);
   });
 });
