@@ -11,6 +11,7 @@ name: FX Event Analyzer - Data ingestion (dev)
 #     冬時間 13:30Z)の後に `--scheduled --if-due` で動く。発表時刻を過ぎたのにまだ値の入っていない
 #     発表があるときだけ BLS を呼ぶ(無い日は BLS を1回も呼ばない)。17:37 は 13:37 の失敗・遅延の取り直し。
 #     BLS への HTTP は1回ごとに api_credit_ledger で予約する(定期は1日16回まで、合計24回まで)
+#     手動で同じ判定を試すときは target=official-bls-if-due(台帳には MANUAL として数える)
 #   - 経済指標の価格反応(手動実行のみ、target=event-reactions): HQ決定2026-10-18
 #     「経済指標の価格反応実装と異常系テストを進める」。既存のfx_prices/economic_events
 #     を読むだけで、外部APIは呼ばない(追加費用0円)。手動実行とDEVデータ検証が
@@ -33,7 +34,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'fx-prices / speeches / both / report / official-bls / official-bls-dry-run / event-reactions / fomc-schedule'
+        description: 'fx-prices / speeches / both / report / official-bls / official-bls-dry-run / official-bls-if-due / event-reactions / fomc-schedule'
         default: both
 
 permissions:
@@ -107,6 +108,9 @@ jobs:
       - name: Official stats (BLS calendar, scheduled, only when a release is due)
         if: steps.check.outputs.ready == 'true' && github.event.schedule == '37 13,17 * * 1-5'
         run: npm run -s ingest:official:bls-calendar -- --scheduled --if-due
+      - name: Official stats (BLS calendar, manual, only when a release is due)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'official-bls-if-due'
+        run: npm run -s ingest:official:bls-calendar -- --if-due
       - name: Official stats (BLS calendar) dry run, no DB writes (manual only)
         if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'official-bls-dry-run'
         run: npm run -s ingest:official:bls-calendar -- --dry-run
