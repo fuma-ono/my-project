@@ -23,11 +23,16 @@ enum ValueFormat {
         }
     }
 
-    static func number(_ value: Double?, fractionDigits: Int = 2, signed: Bool = false) -> String {
+    /// `minimumFractionDigits`は既定で0(末尾の0は省く、「3.2」「18」等
+    /// 多くの画面の表示に合わせる)。桁数を揃えて縦に並べたい表示(ホームの
+    /// 通貨ペアの価格など、HQ指摘2026-10-27「数字が縦に揃ってない」)では
+    /// `fractionDigits`と同じ値を渡し、末尾の0を省かず常に同じ桁数で
+    /// 表示する。
+    static func number(_ value: Double?, fractionDigits: Int = 2, minimumFractionDigits: Int = 0, signed: Bool = false) -> String {
         guard let value else { return "--" }
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = 0
+        formatter.minimumFractionDigits = minimumFractionDigits
         formatter.maximumFractionDigits = fractionDigits
         if signed {
             formatter.positivePrefix = "+"
