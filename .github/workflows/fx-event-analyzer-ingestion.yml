@@ -12,10 +12,12 @@ name: FX Event Analyzer - Data ingestion (dev)
 #     発表があるときだけ BLS を呼ぶ(無い日は BLS を1回も呼ばない)。17:37 は 13:37 の失敗・遅延の取り直し。
 #     BLS への HTTP は1回ごとに api_credit_ledger で予約する(定期は1日16回まで、合計24回まで)
 #     手動で同じ判定を試すときは target=official-bls-if-due(台帳には MANUAL として数える)
-#   - 経済指標の価格反応(手動実行のみ、target=event-reactions): HQ決定2026-10-18
-#     「経済指標の価格反応実装と異常系テストを進める」。既存のfx_prices/economic_events
-#     を読むだけで、外部APIは呼ばない(追加費用0円)。手動実行とDEVデータ検証が
-#     成功するまで定期実行には入れない(HQ決定2026-10-18「定期実行への移行条件」)。
+#   - 経済指標の価格反応(target=event-reactions): HQ決定2026-10-18。既存のfx_prices/economic_events
+#     を読むだけで、外部APIは呼ばない(追加費用0円)。HQ判断2026-10-27「反応ジョブの定時実行」で、
+#     毎時 57 分(為替の 7・27・47 分、BLS の 37 分と重ならない)に直近7日の発表を計算する。
+#     同じ値の行は書かず、値のある行を値の無い行で上書きしない。失敗しても次の時間に取り直す
+#   - 期間を指定した反応の計算し直し(手動実行のみ、target=event-reactions-range、入力 from・to): 過去の発表のバックフィル
+#   - 過去の為替1分足の取得の試し(手動実行のみ、target=fx-history-probe): Twelve Data に最大5回。DB には書かない
 #   - FOMCの会合日程(手動実行のみ、target=fomc-schedule): HQ承認2026-10-26。コードレビュー済みの
 #     表(ingestion/mappings/fomcSchedule.ts)から US_FOMC の発表予定を economic_events に入れる。
 #     外部APIは呼ばない。migration 20261022000002(is_provisional)が前提。定期実行には入れない
@@ -31,11 +33,20 @@ on:
     - cron: '15 21,9 * * *'
     - cron: '0 0 * * *'
     - cron: '37 13,17 * * 1-5'
+    - cron: '57 * * * *'
   workflow_dispatch:
     inputs:
       target:
-        description: 'fx-prices / speeches / both / report / official-bls / official-bls-dry-run / official-bls-if-due / event-reactions / fomc-schedule'
+        description: 'fx-prices / speeches / both / report / official-bls / official-bls-dry-run / official-bls-if-due / event-reactions / event-reactions-range / fx-history-probe / fomc-schedule'
         default: both
+      from:
+        description: 'event-reactions-range だけ: 開始(ISO 8601、例 2026-01-01T00:00:00Z)'
+        required: false
+        default: ''
+      to:
+        description: 'event-reactions-range だけ: 終了(含まない。ISO 8601)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -93,9 +104,18 @@ jobs:
       - name: FX prices
         if: steps.check.outputs.ready == 'true' && (github.event.schedule == '7,27,47 * * * *' || (github.event_name == 'workflow_dispatch' && (inputs.target == 'fx-prices' || inputs.target == 'both')))
         run: npm run -s ingest:fx-prices -- ${{ github.event_name == 'workflow_dispatch' && '--manual' || '' }}
-      - name: Event reactions (経済指標の価格反応、手動実行のみ・HQ承認待ちで定期実行には入れない)
-        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'event-reactions'
+      - name: Event reactions (経済指標の価格反応、毎時57分・手動)
+        if: steps.check.outputs.ready == 'true' && (github.event.schedule == '57 * * * *' || (github.event_name == 'workflow_dispatch' && inputs.target == 'event-reactions'))
         run: npm run -s ingest:event-reactions
+      - name: Event reactions for a range (manual only)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'event-reactions-range'
+        env:
+          RANGE_FROM: ${{ inputs.from }}
+          RANGE_TO: ${{ inputs.to }}
+        run: npm run -s ingest:event-reactions -- --from "$RANGE_FROM" --to "$RANGE_TO"
+      - name: FX history probe (Twelve Data, at most 5 requests, no DB writes, manual only)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'fx-history-probe'
+        run: npm run -s probe:fx-history
       - name: Speeches
         if: steps.check.outputs.ready == 'true' && (github.event.schedule == '15 21,9 * * *' || (github.event_name == 'workflow_dispatch' && (inputs.target == 'speeches' || inputs.target == 'both')))
         run: npm run -s ingest:speeches
