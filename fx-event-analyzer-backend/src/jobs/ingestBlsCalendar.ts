@@ -29,8 +29,9 @@ import type { OfficialValueResolver } from '../ingestion/verification/official.j
  * 有料カレンダーに依存しない独立経路(HQ判断 2026-10-17): BLSの公式発表
  * スケジュール(mappings/blsSchedule.ts)と、BLS自身の実績値だけで
  * economic_events / event_snapshots を作る。対象は US_CPI・US_NFP と、2026-10-26 に足した
- * US_CORE_CPI・US_UNEMPLOYMENT_RATE・US_AVG_HOURLY_EARNINGS(data-sources.md 16章。BLS への
- * 問い合わせは1回の実行で8回)。詳しい設計は ingestion/pipelines/blsCalendar.ts を参照。
+ * US_CORE_CPI・US_UNEMPLOYMENT_RATE・US_AVG_HOURLY_EARNINGS(data-sources.md 16章)、2026-10-27 に足した
+ * US_PPI・US_CORE_PPI・US_JOLTS。BLS への問い合わせは、全11系列をまとめた1回の HTTP
+ * (createBlsBatchProvider。再試行を含めて最大3回)。詳しい設計は ingestion/pipelines/blsCalendar.ts を参照。
  *
  *   npm run ingest:official:bls-calendar
  *   npm run ingest:official:bls-calendar -- --dry-run   # 書き込まずに、何をするはずかだけ出す
