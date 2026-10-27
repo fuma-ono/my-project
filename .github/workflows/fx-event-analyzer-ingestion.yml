@@ -14,6 +14,10 @@ name: FX Event Analyzer - Data ingestion (dev)
 #   - FOMCの会合日程(手動実行のみ、target=fomc-schedule): HQ承認2026-10-26。コードレビュー済みの
 #     表(ingestion/mappings/fomcSchedule.ts)から US_FOMC の発表予定を economic_events に入れる。
 #     外部APIは呼ばない。migration 20261022000002(is_provisional)が前提。定期実行には入れない
+#   - BLS公式統計の経済カレンダーの書き込みなしの事前実行(手動実行のみ、target=official-bls-dry-run):
+#     HQ承認2026-10-27(D-1)。`--dry-run` で DB には何も書かない(ingestion_logs にも書かない)。
+#     書き込む関数をすべて断るストアで、内訳(plan)と書くはずだった内容をログに出すだけ。
+#     DB は読む。BLS の API は読む(キーなしの v1 は25回/日。1回の実行で系列ごとに1回)
 # 接続先が社内確認用のDBでなければ止まる(本番DBに書き込まない)。
 # Twelve Data の無料キーは社内確認専用(要件定義書6.4)。
 on:
@@ -24,7 +28,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'fx-prices / speeches / both / report / official-bls / event-reactions / fomc-schedule'
+        description: 'fx-prices / speeches / both / report / official-bls / official-bls-dry-run / event-reactions / fomc-schedule'
         default: both
 
 permissions:
@@ -95,6 +99,9 @@ jobs:
       - name: Official stats (BLS calendar, manual only)
         if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'official-bls'
         run: npm run -s ingest:official:bls-calendar
+      - name: Official stats (BLS calendar) dry run, no DB writes (manual only)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'official-bls-dry-run'
+        run: npm run -s ingest:official:bls-calendar -- --dry-run
       - name: FOMC schedule (manual only)
         if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'fomc-schedule'
         run: npm run -s ingest:fomc-schedule
