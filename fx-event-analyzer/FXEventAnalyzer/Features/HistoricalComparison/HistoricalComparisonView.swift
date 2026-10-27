@@ -96,9 +96,18 @@ struct HistoricalComparisonView: View {
         let events = newestFirst
             ? response.events.sorted { $0.releaseDatetime > $1.releaseDatetime }
             : response.events.sorted { $0.releaseDatetime < $1.releaseDatetime }
+        // HQ指摘(2026-10-26、CIスクリーンショットでの目視確認時)「ヘッダーの
+        // 位置、国旗マーク、指標名などが左端すぎる」: `landscapeTopBar`は
+        // 末尾の`Spacer()`で横幅いっぱいに広がる(ナビゲーションバーとして
+        // 戻るボタン・タイトルが左端にあるのは意図通り)が、`header(response)`
+        // と`landscapeTable`はどちらも内容の実寸に応じた幅しか持たないため、
+        // 親の`VStack(alignment: .leading)`では画面の余った右側を無視して
+        // 左端に詰めて並んでいた。`alignment: .center`に変えることで、
+        // 横幅いっぱいに広がる`landscapeTopBar`の見た目(左端固定)は変えずに、
+        // `header`・`landscapeTable`の2つだけが横画面の中央に来るようにした。
         return ZStack {
             V5GlowBackground()
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .center, spacing: 12) {
                 landscapeTopBar
                 header(response)
                 landscapeTable(events, unit: response.indicator.unit)
@@ -106,7 +115,10 @@ struct HistoricalComparisonView: View {
                     planLimitRow(limit)
                 }
             }
-            .padding(.horizontal, 28)
+            // HQ指摘(同上)「日時の左部分の余白が広いから狭めて」: 画面端からの
+            // 余白を28→18に詰めた(`LandscapeColumn.date`・行の左パディングも
+            // 合わせて詰めている、`landscapeTableRow`参照)。
+            .padding(.horizontal, 18)
             .padding(.top, 14)
         }
         .ignoresSafeArea()
@@ -133,7 +145,11 @@ struct HistoricalComparisonView: View {
     }
 
     private enum LandscapeColumn {
-        static let date: CGFloat = 92
+        // HQ指摘(2026-10-26)「日時の左部分の余白が広いから狭めて」:
+        // 日時列は「MM/dd」+「HH:mm」の2行が収まる幅があれば十分で、
+        // 92ptは広すぎた。76に詰めた(`landscapeTableRow`の左パディングも
+        // 10→6に詰め、見出しの「日時」ラベルとの余白差も縮めている)。
+        static let date: CGFloat = 76
         static let value: CGFloat = 70
         static let pips: CGFloat = 70
     }
@@ -276,7 +292,7 @@ struct HistoricalComparisonView: View {
                     .foregroundStyle(Self.timeColor)
             }
             .monospacedDigit()
-            .padding(.leading, 10)
+            .padding(.leading, 6)
             .frame(width: LandscapeColumn.date, alignment: .leading)
             landscapeRowDivider
             landscapeValueCell(event.actual, unit: unit)
