@@ -427,5 +427,26 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
       }
       return count;
     },
+
+    async listEventPriceReactions(eventIds: readonly string[]): Promise<EventPriceReactionRow[]> {
+      const rows: EventPriceReactionRow[] = [];
+      for (let i = 0; i < eventIds.length; i += UPSERT_CHUNK) {
+        const ids = eventIds.slice(i, i + UPSERT_CHUNK);
+        const chunk = await allPages<EventPriceReactionRow>((from, to) =>
+          supabase
+            .from('event_price_reactions')
+            .select(
+              'event_id, fx_pair_id, timeframe, pre_release_price, post_release_price, movement, pips, change_percent, max_upward, max_downward, max_upward_pips, max_downward_pips, data_status, calculated_at',
+            )
+            .in('event_id', ids)
+            .order('event_id', { ascending: true })
+            .order('fx_pair_id', { ascending: true })
+            .order('timeframe', { ascending: true })
+            .range(from, to),
+        );
+        rows.push(...chunk);
+      }
+      return rows;
+    },
   };
 }

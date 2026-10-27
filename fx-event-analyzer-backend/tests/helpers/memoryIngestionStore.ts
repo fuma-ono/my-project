@@ -350,6 +350,10 @@ export class MemoryIngestionStore implements IngestionStore {
     }
     return Promise.resolve(rows.length);
   }
+
+  listEventPriceReactions(eventIds: readonly string[]): Promise<EventPriceReactionRow[]> {
+    return Promise.resolve(this.eventPriceReactions.filter((r) => eventIds.includes(r.event_id)));
+  }
 }
 
 /** Reads a JSON / text fixture from tests/fixtures/ingestion. */
