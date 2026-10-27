@@ -1,3 +1,4 @@
+import { attributionForOrganization, type Attribution } from '../domain/attribution.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { rangeFor, type PaginationParams } from '../utils/pagination.js';
 
@@ -21,6 +22,8 @@ export interface SpeechSummary {
   statement_datetime: string;
   importance: string;
   status: string;
+  /** 出典と告知(api-design v1.38、domain/attribution.ts)。ECB・FRB の要人の発言だけ。 */
+  attribution: Attribution | null;
 }
 
 const SPEECH_COLUMNS =
@@ -62,6 +65,7 @@ function toSpeechSummary(row: SpeechDbRow): SpeechSummary {
     statement_datetime: row.statement_datetime,
     importance: row.importance,
     status: row.status,
+    attribution: attributionForOrganization(speaker.organization),
   };
 }
 

@@ -1,3 +1,4 @@
+import { attributionForOrganization, type Attribution } from './attribution.js';
 import { judgeSpeechFetch, type SpeechRunSample } from '../ingestion/quality/metrics.js';
 import { formatIsoSeconds } from './notifications.js';
 import { resolveSpeakerPhotoUrl } from './speakerPhotos.js';
@@ -61,6 +62,8 @@ export interface HomeSpeechItem {
   reaction_price_before: number | null;
   reaction_price_after: number | null;
   reaction_pips: number | null;
+  /** 出典と告知(api-design v1.38)。 */
+  attribution: Attribution | null;
 }
 
 /** headline = summary when present (non-blank), else title. */
@@ -78,6 +81,7 @@ export function toHomeSpeechItem(speech: HomeSpeechSource, baseUrl: string): Hom
     reaction_price_before: null,
     reaction_price_after: null,
     reaction_pips: null,
+    attribution: attributionForOrganization(speech.speaker.organization),
   };
 }
 
