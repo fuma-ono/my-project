@@ -16,6 +16,9 @@
  *   何も書かない。欠損が確認された時間枠はUNAVAILABLEとして書き、
  *   後で1分足が補填されれば次回の実行でAVAILABLEへ再計算・上書きする
  *   (upsertのため同一イベント・ペア・時間枠の行が重複することはない)。
+ * - HQ指示(2026-10-27): 書く前に保存済みの行と比べ、値も状態も同じ行は書かない(calculated_at だけを
+ *   書き換えない)。値のある行(AVAILABLE)を値の無い行(UNAVAILABLE)で上書きしない(1分足が後から
+ *   欠けても値を失わない)。settings.range を渡すと、直近の代わりにその期間の発表を計算し直す。
  */
 import { availableTimeframes } from '../../domain/dataQuality.js';
 import { computeEventPairReactionRows, EVENT_REACTION_TIMEFRAMES } from '../../domain/economicEventReactions.js';
