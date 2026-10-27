@@ -201,6 +201,12 @@ describe.skipIf(!integration)('Rate alerts / calendar updates / Home speeches', 
         reaction_price_before: null,
         reaction_price_after: null,
         reaction_pips: null,
+        // api-design v1.38: FRB の要人は出典だけ(告知なし)
+        attribution: {
+          source: '米国連邦準備制度理事会（FRB）',
+          source_url: 'https://www.federalreserve.gov',
+          notice: null,
+        },
       });
     });
   });
