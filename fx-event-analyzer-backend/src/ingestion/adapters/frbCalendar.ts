@@ -44,6 +44,17 @@ const calendarSchema = z.object({
 
 const SPEECH_TYPES = new Set(['Speeches', 'Testimony']);
 
+/**
+ * FOMC の記者会見(HQ判断 2026-10-27「FOMC記者会見の取り込み」)。calendar.json では type "FOMC"・
+ * title "FOMC Press Conference"(会合の2日目 2:30 p.m.)で載る。題名に話者の名前が無いので、会見をする
+ * FRB 議長をこの設定で決める(**議長が替わったら直す**。2026-10-27 時点: ケビン・ウォーシュ —
+ * calendar.json の 10/15 の "Discussion - Chairman Kevin Warsh")。type "FOMC" の他の項目
+ * ("FOMC Meeting" = 政策の発表、"FOMC Minutes" = 議事要旨)は、経済指標の側(fomcSchedule.ts、
+ * US_FOMC・US_FOMC_MINUTES)で扱うので、ここでは今までどおり取り込まない。
+ */
+export const FOMC_PRESS_CONFERENCE_SPEAKER = 'Kevin Warsh';
+const FOMC_PRESS_CONFERENCE_TITLE = /^FOMC Press Conference$/i;
+
 function decodeEntities(text: string): string {
   return text
     .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
@@ -89,15 +100,16 @@ export function parseFrbCalendar(body: unknown): FrbParseResult {
   const speeches: NormalizedSpeech[] = [];
   const skipped: FrbParseResult['skipped'] = [];
   for (const event of parsed.events) {
-    if (!event.type || !SPEECH_TYPES.has(event.type)) continue;
     const title = decodeEntities(event.title ?? '').trim();
-    const split = /^(.*?)\s*[-–—]{1,2}\s*(.+)$/.exec(title);
-    if (!split) {
+    const pressConference = event.type === 'FOMC' && FOMC_PRESS_CONFERENCE_TITLE.test(title);
+    if (!pressConference && (!event.type || !SPEECH_TYPES.has(event.type))) continue;
+    const split = pressConference ? null : /^(.*?)\s*[-–—]{1,2}\s*(.+)$/.exec(title);
+    if (!pressConference && !split) {
       skipped.push({ title, reason: 'TITLE_UNPARSEABLE' });
       continue;
     }
-    const kindLabel = split[1]!.trim();
-    const speakerName = stripRole(split[2]!);
+    const kindLabel = pressConference ? 'press conference' : split![1]!.trim();
+    const speakerName = pressConference ? FOMC_PRESS_CONFERENCE_SPEAKER : stripRole(split![2]!);
     const month = /^(\d{4})-(\d{2})$/.exec(event.month ?? '');
     const day = /^\d{1,2}$/.test((event.days ?? '').trim()) ? Number(event.days) : null;
     const time = parseFrbTime(event.time ?? '');
@@ -114,11 +126,11 @@ export function parseFrbCalendar(body: unknown): FrbParseResult {
       skipped.push({ title, reason: 'TIME_NONEXISTENT' });
       continue;
     }
-    const kind = kindOf(kindLabel);
+    const kind: SpeechKind = pressConference ? 'PRESS_CONFERENCE' : kindOf(kindLabel);
     const date = `${month[1]}-${month[2]}-${String(day).padStart(2, '0')}`;
     const hhmm = `${String(time.hour).padStart(2, '0')}${String(time.minute).padStart(2, '0')}`;
     const slug = normalizeSpeakerName(speakerName).replace(/ /g, '-');
-    const topic = decodeEntities(event.description ?? '').trim();
+    const topic = pressConference ? 'FOMC' : decodeEntities(event.description ?? '').trim();
     speeches.push({
       provider: FRB_PROVIDER,
       providerEventId: `${date}_${hhmm}_${slug}_${kind.toLowerCase()}`,

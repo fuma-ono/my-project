@@ -50,8 +50,34 @@ export const SPEAKER_ALIASES: readonly SpeakerAlias[] = [
     aliases: ['Christopher J. Waller', 'Christopher Waller'],
     importance: 'MEDIUM',
   },
-  // ECB
+  // ECB。役員会(Executive Board)の他の役員は HQ判断 2026-10-27(監査で ECB の RSS に出た名前と、
+  // シュナーベル)。speakers の行は migration 20261027000005。ECB の発言は、時刻の正確な取得元(週間予定、
+  // 設計中)ができるまでは TIME_NOT_EXACT で取り込まれない(この表に足すだけでは件数は増えない)。
   { organization: 'ECB', nameJa: 'クリスティーヌ・ラガルド', aliases: ['Christine Lagarde'], importance: 'HIGH' },
+  {
+    organization: 'ECB',
+    nameJa: 'フィリップ・レーン',
+    aliases: ['Philip R. Lane', 'Philip Lane'],
+    importance: 'MEDIUM',
+  },
+  {
+    organization: 'ECB',
+    nameJa: 'イザベル・シュナーベル',
+    aliases: ['Isabel Schnabel'],
+    importance: 'MEDIUM',
+  },
+  {
+    organization: 'ECB',
+    nameJa: 'ピエロ・チポローネ',
+    aliases: ['Piero Cipollone'],
+    importance: 'MEDIUM',
+  },
+  {
+    organization: 'ECB',
+    nameJa: 'フランク・エルダーソン',
+    aliases: ['Frank Elderson'],
+    importance: 'MEDIUM',
+  },
 ];
 
 /** Lower-case, accents removed, punctuation/whitespace collapsed. */
@@ -104,5 +130,6 @@ export const SPEECH_KIND_LABEL_JA: Record<SpeechKind, string> = {
   DISCUSSION: '討論',
   TESTIMONY: '議会証言',
   INTERVIEW: 'インタビュー',
+  PRESS_CONFERENCE: '記者会見',
   OTHER: '発言',
 };

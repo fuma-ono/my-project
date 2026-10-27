@@ -89,7 +89,7 @@ export interface NormalizedCandle {
   volume: number | null;
 }
 
-export type SpeechKind = 'SPEECH' | 'DISCUSSION' | 'TESTIMONY' | 'INTERVIEW' | 'OTHER';
+export type SpeechKind = 'SPEECH' | 'DISCUSSION' | 'TESTIMONY' | 'INTERVIEW' | 'PRESS_CONFERENCE' | 'OTHER';
 
 /** One central-bank speech / appearance (④). */
 export interface NormalizedSpeech {

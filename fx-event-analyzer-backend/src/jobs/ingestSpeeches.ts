@@ -18,7 +18,8 @@ import { createIngestionRepository } from '../repositories/ingestionRepository.j
  *   npm run ingest:speeches
  *
  * Needs SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY only (no API keys).
- * Exit 0 / 1. Not scheduled automatically.
+ * FRB: FOMC の記者会見(type "FOMC" の "FOMC Press Conference")も、議長の発言として取り込む(HQ判断 2026-10-27)。
+ * Exit 0 / 1. 定時実行: 1日2回(fx-event-analyzer-ingestion.yml の cron 15 21,9 * * *)。
  */
 async function main(): Promise<void> {
   const env = loadEnv();
