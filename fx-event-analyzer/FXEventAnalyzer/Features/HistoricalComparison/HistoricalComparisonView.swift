@@ -109,7 +109,7 @@ struct HistoricalComparisonView: View {
             V5GlowBackground()
             VStack(alignment: .center, spacing: 12) {
                 landscapeTopBar
-                header(response)
+                landscapeHeader(response)
                 landscapeTable(events, unit: response.indicator.unit)
                 if let limit = response.historyLimit, limit.isLimited {
                     planLimitRow(limit)
@@ -144,12 +144,51 @@ struct HistoricalComparisonView: View {
         .accessibilityIdentifier("historyLandscapeTopBar")
     }
 
+    /// HQ指摘(2026-10-26)「ヘッダーや指標名や国旗マークとかの大きさが
+    /// 縦画面と違います。揃えてください」: 縦画面の`header(_:)`はV5キャンバス
+    /// 単位(国旗34・名前11等)で書かれており、`V5Viewport`の
+    /// `scaleEffect(scale)`(実機ではおよそ1.72倍、`V5P.headerRefScale`参照)
+    /// を経て初めて実寸になる。横画面(`landscapeLayout`)は`V5Viewport`を
+    /// 経由せず実寸ポイントでそのまま描画するため、`header(_:)`を直接
+    /// 呼ぶと見た目が縦画面よりひとまわり小さくなっていた。`header(_:)`と
+    /// 同じ構成を`V5P.headerRefScale`倍した専用版を使い、見た目の大きさを
+    /// 縦画面と揃えた。
+    private func landscapeHeader(_ response: ComparisonResponse) -> some View {
+        let scale = V5P.headerRefScale
+        let indicator = response.indicator
+        let country = indicator.countryCode ?? ""
+        let name = CountryFlag.indicatorDisplayText(indicator.name, countryCode: country, displayName: indicator.displayName)
+        return HStack(spacing: 8 * scale) {
+            CountryFlagView(countryCode: country, diameter: 34 * scale)
+            VStack(alignment: .leading, spacing: 3 * scale) {
+                NotoText.text(name, size: 11 * scale)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                HStack(spacing: 3 * scale) {
+                    NotoText.text(CountryFlag.japaneseName(forCountry: country), size: 8.5 * scale)
+                    NotoText.text("｜", size: 8.5 * scale).opacity(0.6)
+                    NotoText.text(indicator.currencyCode ?? "", size: 8.5 * scale)
+                    Spacer(minLength: 4 * scale)
+                    OverlappingPairFlags(symbol: viewModel.fxPairSymbol, diameter: 10 * scale)
+                    NotoText.text(Self.pairLabel(viewModel.fxPairSymbol), size: 9 * scale)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                }
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+            }
+        }
+        .frame(height: 36 * scale)
+        .padding(.horizontal, 2 * scale)
+    }
+
     private enum LandscapeColumn {
-        // HQ指摘(2026-10-26)「日時の左部分の余白が広いから狭めて」:
-        // 日時列は「MM/dd」+「HH:mm」の2行が収まる幅があれば十分で、
-        // 92ptは広すぎた。76に詰めた(`landscapeTableRow`の左パディングも
-        // 10→6に詰め、見出しの「日時」ラベルとの余白差も縮めている)。
-        static let date: CGFloat = 76
+        // HQ指摘(2026-10-26)「日時の横の余白枠いらないから消して」:
+        // 76ptでもまだ「MM/dd」+「HH:mm」の文字そのものより広く、左右に
+        // 余白が残っていた。62に詰めた(`landscapeTableRow`の左パディングも
+        // 6→4に詰め、見出しの「日時」ラベルも中央揃えから左揃えに変えて
+        // 行のデータと同じ位置に揃えている)。
+        static let date: CGFloat = 62
         static let value: CGFloat = 70
         static let pips: CGFloat = 70
     }
@@ -238,7 +277,13 @@ struct HistoricalComparisonView: View {
                         Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .bold))
                     }
                     .foregroundStyle(.white)
-                    .frame(width: LandscapeColumn.date, height: 40)
+                    // HQ指摘(2026-10-26)「日時の横の余白枠いらない」:
+                    // 既定(中央揃え)のままだと、下の各行の日時(左揃え、
+                    // `landscapeTableRow`参照)とずれて、見出しの左右に
+                    // 余白の箱があるように見えていた。行と同じ左揃え+
+                    // 同じ左パディングに揃えた。
+                    .padding(.leading, 4)
+                    .frame(width: LandscapeColumn.date, height: 40, alignment: .leading)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -292,7 +337,7 @@ struct HistoricalComparisonView: View {
                     .foregroundStyle(Self.timeColor)
             }
             .monospacedDigit()
-            .padding(.leading, 6)
+            .padding(.leading, 4)
             .frame(width: LandscapeColumn.date, alignment: .leading)
             landscapeRowDivider
             landscapeValueCell(event.actual, unit: unit)
