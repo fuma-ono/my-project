@@ -557,6 +557,69 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
       expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: false });
     });
 
+    // HQ指示 2026-10-27(G4): 返金の前に保存しておいた JWS を送り直しても PRO に戻らない(migration 20261027000001)。
+    it('ignores an older JWS replayed after a refund (stays EXPIRED / FREE)', async () => {
+      const { user, headers } = await newUser();
+      const id = originalTransactionId();
+      const before = Date.now() - 60_000;
+      const active = transactionPayload(user.id, { originalTransactionId: id }, before);
+      expect(
+        (await verify(headers, active, renewalInfoPayload({ originalTransactionId: id }, before))).statusCode,
+      ).toBe(200);
+
+      const refunded = await verify(
+        headers,
+        transactionPayload(user.id, { originalTransactionId: id, revocationDate: Date.now() - 1000 }),
+        null,
+      );
+      expect(JSON.parse(refunded.body).status).toBe('EXPIRED');
+
+      const replay = await verify(headers, active, renewalInfoPayload({ originalTransactionId: id }, before));
+      expect(replay.statusCode).toBe(200);
+      expect(JSON.parse(replay.body).status).toBe('EXPIRED');
+      const current = JSON.parse((await ctx.app.inject({ method: 'GET', url: '/api/v1/subscription', headers })).body);
+      expect(current.plan).toBe('FREE');
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: false });
+      const { data } = await ctx.serviceClient
+        .from('subscriptions')
+        .select('revoked_at, last_signed_at')
+        .eq('provider_subscription_id', id)
+        .single();
+      expect(data?.revoked_at).not.toBeNull();
+      expect(data?.last_signed_at).not.toBeNull();
+    });
+
+    it('keeps a stored refund even when the same transaction is sent again without revocationDate (rows from before last_signed_at)', async () => {
+      const { user, headers } = await newUser();
+      const id = originalTransactionId();
+      const tx = transactionPayload(user.id, { originalTransactionId: id, revocationDate: Date.now() - 1000 });
+      await verify(headers, tx, null);
+      // この migration より前に保存された行と同じ状態にする(署名日時が無い)
+      await ctx.serviceClient.from('subscriptions').update({ last_signed_at: null }).eq('provider_subscription_id', id);
+
+      const replay = await verify(headers, transactionPayload(user.id, { originalTransactionId: id }), null);
+      expect(JSON.parse(replay.body).status).toBe('EXPIRED');
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: false });
+    });
+
+    it('still accepts a newer JWS (renewal / re-purchase after expiry)', async () => {
+      const { user, headers } = await newUser();
+      const id = originalTransactionId();
+      const old = Date.now() - 60_000;
+      await verify(
+        headers,
+        transactionPayload(user.id, { originalTransactionId: id, expiresDate: old - 1000 }, old),
+        null,
+      );
+      const renewed = await verify(
+        headers,
+        transactionPayload(user.id, { originalTransactionId: id, transactionId: '2000000000000099' }),
+        null,
+      );
+      expect(JSON.parse(renewed.body).status).toBe('ACTIVE');
+      expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: true });
+    });
+
     it('rejects a transaction bought by another account with 403', async () => {
       const { headers } = await newUser();
       const { user: other } = await newUser();
