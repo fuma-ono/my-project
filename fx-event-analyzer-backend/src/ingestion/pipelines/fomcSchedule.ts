@@ -26,16 +26,38 @@
  * or cancelled — a removal is far more likely an editing mistake than a
  * cancellation, which has its own explicit field).
  */
-import { FOMC_SCHEDULE, type FomcScheduleEntry } from '../mappings/fomcSchedule.js';
+import { FOMC_MINUTES_SCHEDULE, FOMC_SCHEDULE, type FomcScheduleEntry } from '../mappings/fomcSchedule.js';
 import type { JobCounters } from '../runner.js';
 import type { EventPatch, IngestionStore, ProviderEventRow } from '../store.js';
 import { zonedWallTimeToUtc } from '../time.js';
 
 export const FOMC_SCHEDULE_PROVIDER = 'fomc_schedule';
 export const FOMC_INDICATOR_CODE = 'US_FOMC';
+/** FOMC 議事要旨(HQ指示 2026-10-27): 会合とは別の指標・別の provider。 */
+export const FOMC_MINUTES_PROVIDER = 'fomc_minutes_schedule';
+export const FOMC_MINUTES_INDICATOR_CODE = 'US_FOMC_MINUTES';
+
+/** Which indicator / provider a table is applied to. Default: the policy announcements. */
+export interface FomcScheduleTarget {
+  provider: string;
+  indicatorCode: string;
+}
+export const FOMC_ANNOUNCEMENT_TARGET: FomcScheduleTarget = {
+  provider: FOMC_SCHEDULE_PROVIDER,
+  indicatorCode: FOMC_INDICATOR_CODE,
+};
+export const FOMC_MINUTES_TARGET: FomcScheduleTarget = {
+  provider: FOMC_MINUTES_PROVIDER,
+  indicatorCode: FOMC_MINUTES_INDICATOR_CODE,
+};
 
 export function fomcProviderEventId(entry: FomcScheduleEntry): string {
   return `${FOMC_SCHEDULE_PROVIDER}:${entry.eventKey ?? entry.meetingEnd}`;
+}
+
+/** `fomc_minutes_schedule:<meetingEnd>` — keyed by the meeting, so a moved release date updates the same row. */
+export function fomcMinutesProviderEventId(entry: FomcScheduleEntry): string {
+  return `${FOMC_MINUTES_PROVIDER}:${entry.eventKey ?? entry.meetingEnd}`;
 }
 
 /** The announcement instant (UTC), or null when the wall time is malformed / does not exist. */
@@ -68,10 +90,18 @@ export interface FomcScheduleResult {
  * unchanged/cancelled, details = the FomcScheduleResult numbers).
  */
 export async function ingestFomcSchedule(
-  deps: { store: IngestionStore; entries?: readonly FomcScheduleEntry[]; now?: () => Date },
+  deps: {
+    store: IngestionStore;
+    entries?: readonly FomcScheduleEntry[];
+    now?: () => Date;
+    /** Default FOMC_ANNOUNCEMENT_TARGET (US_FOMC). FOMC_MINUTES_TARGET for the minutes table. */
+    target?: FomcScheduleTarget;
+  },
   counters: JobCounters,
 ): Promise<FomcScheduleResult> {
-  const entries = deps.entries ?? FOMC_SCHEDULE;
+  const target = deps.target ?? FOMC_ANNOUNCEMENT_TARGET;
+  const entries = deps.entries ?? (target === FOMC_MINUTES_TARGET ? FOMC_MINUTES_SCHEDULE : FOMC_SCHEDULE);
+  const providerEventIdOf = (entry: FomcScheduleEntry) => `${target.provider}:${entry.eventKey ?? entry.meetingEnd}`;
   const now = (deps.now?.() ?? new Date()).getTime();
   const result: FomcScheduleResult = {
     inserted: 0,
@@ -93,21 +123,21 @@ export async function ingestFomcSchedule(
   };
   counters.fetched += entries.length;
 
-  const indicator = (await deps.store.findIndicatorsByCode([FOMC_INDICATOR_CODE])).get(FOMC_INDICATOR_CODE);
+  const indicator = (await deps.store.findIndicatorsByCode([target.indicatorCode])).get(target.indicatorCode);
   if (!indicator) {
-    counters.error(`economic_indicators has no ${FOMC_INDICATOR_CODE} row`);
+    counters.error(`economic_indicators has no ${target.indicatorCode} row`);
     writeDetails();
     return result;
   }
 
   const existing = new Map<string, ProviderEventRow>();
-  for (const row of await deps.store.listEventsByProvider(FOMC_SCHEDULE_PROVIDER)) {
+  for (const row of await deps.store.listEventsByProvider(target.provider)) {
     existing.set(row.provider_event_id, row);
   }
 
   const seen = new Set<string>();
   for (const entry of entries) {
-    const providerEventId = fomcProviderEventId(entry);
+    const providerEventId = providerEventIdOf(entry);
     if (seen.has(providerEventId)) {
       counters.error(`duplicate FOMC entry ${providerEventId}`);
       continue;
@@ -151,7 +181,7 @@ export async function ingestFomcSchedule(
       if (!row) {
         await deps.store.insertEvent({
           indicator_id: indicator.id,
-          provider: FOMC_SCHEDULE_PROVIDER,
+          provider: target.provider,
           provider_event_id: providerEventId,
           release_datetime: releaseAt.toISOString(),
           release_datetime_precision: 'EXACT',
