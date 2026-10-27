@@ -66,6 +66,12 @@ export interface IndicatorNotificationCandidate extends CandidateBase {
   release_datetime_precision: string;
   /** 一覧表示名(`economic_indicators.display_name`)。未登録はnull。 */
   display_name?: string | null | undefined;
+  /**
+   * economic_events.is_provisional(DB の値。日時がまだ公式に確定していない)。HQ判断 2026-10-27(案B):
+   * 暫定の予定は発表前の通知(GET /notifications/upcoming と通知一覧)に出さない。確定したら出す。
+   * カレンダー更新(日時の変更・取りやめ)は isNotificationEligible で判定し、これは見ない。
+   */
+  is_provisional?: boolean | undefined;
 }
 
 export interface SpeechNotificationCandidate extends CandidateBase {
@@ -222,7 +228,7 @@ export function isNotificationEligible(
 /**
  * Applies the user's notification settings to candidate events/speeches:
  * push off → nothing; per-kind switches; SCHEDULED only; indicators need
- * an EXACT release time; importance ∈ importances; fx_pairs (when set)
+ * an EXACT release time and a confirmed (not provisional) date; importance ∈ importances; fx_pairs (when set)
  * must intersect related_fx_pairs; notify_at >= from and scheduled_at <=
  * to; notify_at outside the quiet hours (when enabled, in prefs.timeZone).
  * Sorted by notify_at ascending and capped at 60 (after filtering).
@@ -247,6 +253,9 @@ export function buildUpcomingNotifications(
   const items: Array<{ notifyAtMs: number; scheduledAtMs: number; item: UpcomingNotificationItem }> = [];
   for (const candidate of candidates) {
     if (!isNotificationEligible(candidate, prefs, statuses)) continue;
+    // HQ判断 2026-10-27(案B): 暫定の予定は通知しない。人が公式の情報で表を直し、is_provisional が
+    // false になったら、次に iOS が予約し直すときから通知に入る。
+    if (candidate.kind === 'INDICATOR' && candidate.is_provisional === true) continue;
 
     const scheduledAtMs = new Date(candidate.scheduled_at).getTime();
     if (Number.isNaN(scheduledAtMs)) continue;

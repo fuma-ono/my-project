@@ -37,7 +37,7 @@ export async function listNotificationCandidates(
 }
 
 const INDICATOR_CANDIDATE_COLUMNS =
-  'id, indicator_id, release_datetime, release_datetime_precision, importance, status, economic_indicators!inner(name, display_name, country_code, currency_code)';
+  'id, indicator_id, release_datetime, release_datetime_precision, importance, status, is_provisional, economic_indicators!inner(name, display_name, country_code, currency_code)';
 
 async function listIndicatorCandidates(
   supabase: SupabaseClient,
@@ -62,6 +62,7 @@ interface IndicatorCandidateDbRow {
   release_datetime_precision: string;
   importance: string;
   status: string;
+  is_provisional?: boolean | null;
   economic_indicators: unknown;
 }
 
@@ -90,6 +91,7 @@ async function toIndicatorCandidates(
       status: row.status,
       scheduled_at: row.release_datetime,
       release_datetime_precision: row.release_datetime_precision,
+      is_provisional: row.is_provisional === true,
       country_code: indicator.country_code,
       currency_code: indicator.currency_code,
       related_fx_pairs: (relatedByIndicator.get(row.indicator_id) ?? []).map((pair) => pair.symbol),

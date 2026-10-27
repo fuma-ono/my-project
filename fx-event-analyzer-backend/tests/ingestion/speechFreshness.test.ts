@@ -9,7 +9,11 @@ import {
   type SpeechRunSample,
 } from '../../src/ingestion/quality/metrics.js';
 import type { QualityReader } from '../../src/ingestion/quality/reader.js';
-import { renderDataQualityMarkdown, renderSpeechFreshnessMarkdown } from '../../src/ingestion/quality/report.js';
+import {
+  renderDataQualityMarkdown,
+  renderProvisionalEventsMarkdown,
+  renderSpeechFreshnessMarkdown,
+} from '../../src/ingestion/quality/report.js';
 import { buildQualityReportMarkdown, REPORT_END_LAG_MINUTES } from '../../src/ingestion/quality/run.js';
 
 /** 要人発言の鮮度(HQ承認 2026-10-23、品質レポート第9章・/home speeches_status の共通判定) */
@@ -257,6 +261,7 @@ describe('buildQualityReportMarkdown + 第9章', () => {
       return Promise.resolve(provider === 'frb_calendar' ? [run()] : []);
     },
     speechDbStatus: (provider) => Promise.resolve(provider === 'frb_calendar' ? DB_UP_TO_DATE : DB_EMPTY),
+    listProvisionalEvents: () => Promise.resolve([]),
   };
 
   it('appends chapter 9 after the unchanged chapters 1–8, reading each provider separately', async () => {
@@ -281,7 +286,8 @@ describe('buildQualityReportMarkdown + 第9章', () => {
       `\n${renderSpeechFreshnessMarkdown([
         judgeSpeechFreshness('frb_calendar', [run()], DB_UP_TO_DATE, NOW),
         judgeSpeechFreshness('ecb_press_rss', [], DB_EMPTY, NOW),
-      ])}`,
+      ])}
+${renderProvisionalEventsMarkdown([], NOW)}`, // 第10章(HQ判断 2026-10-27)も末尾に足すだけ
     );
     expect(calls).toEqual(['frb_calendar', 'ecb_press_rss']);
   });

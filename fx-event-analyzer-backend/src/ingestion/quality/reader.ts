@@ -61,6 +61,15 @@ export interface QualityReader {
   listSpeechRuns(provider: string): Promise<SpeechRunSample[]>;
   /** 第9章: その取得元の speech_events の最新 statement_datetime(状態問わず)と未来の SCHEDULED 件数。 */
   speechDbStatus(provider: string, nowIso: string): Promise<SpeechDbStatus>;
+  /** 第10章: 暫定(is_provisional)のまま SCHEDULED の economic_events で、release_datetime が [from, to) のもの。 */
+  listProvisionalEvents(fromIso: string, toIso: string): Promise<ProvisionalEventSample[]>;
+}
+
+/** 第10章(HQ判断 2026-10-27 案B): 暫定の予定は通知しないため、確定の作業の漏れを見つける。 */
+export interface ProvisionalEventSample {
+  provider_event_id: string | null;
+  indicator_code: string;
+  release_datetime: string;
 }
 
 const nullableNumber = (value: unknown): number | null =>
@@ -258,6 +267,30 @@ export function createQualityReader(supabase: SupabaseClient): QualityReader {
 
     async speechDbStatus(provider, nowIso) {
       return getSpeechProviderDbStatus(supabase, provider, nowIso);
+    },
+
+    async listProvisionalEvents(fromIso, toIso) {
+      const rows = await fetchAllPages<{
+        provider_event_id: string | null;
+        release_datetime: string;
+        economic_indicators: { code: string } | null;
+      }>((from, to) =>
+        supabase
+          .from('economic_events')
+          .select('id, provider_event_id, release_datetime, economic_indicators(code)')
+          .eq('is_provisional', true)
+          .eq('status', 'SCHEDULED')
+          .gte('release_datetime', fromIso)
+          .lt('release_datetime', toIso)
+          .order('release_datetime', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
+      return rows.map((row) => ({
+        provider_event_id: row.provider_event_id,
+        indicator_code: row.economic_indicators?.code ?? '(指標不明)',
+        release_datetime: row.release_datetime,
+      }));
     },
   };
 }

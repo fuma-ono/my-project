@@ -7,7 +7,12 @@
 import { MINUTE_MS } from '../marketHours.js';
 import { buildDataQualityReport, judgeSpeechFreshness, SPEECH_PROVIDERS, type SpeechFreshness } from './metrics.js';
 import type { QualityReader } from './reader.js';
-import { renderDataQualityMarkdown, renderSpeechFreshnessMarkdown } from './report.js';
+import {
+  PROVISIONAL_LIST_DAYS,
+  renderDataQualityMarkdown,
+  renderProvisionalEventsMarkdown,
+  renderSpeechFreshnessMarkdown,
+} from './report.js';
 
 /** The newest minutes are not judged: ingest:fx-prices runs every 20 min, so they may simply not be fetched yet. */
 export const REPORT_END_LAG_MINUTES = 30;
@@ -84,5 +89,8 @@ export async function buildQualityReportMarkdown(
   }
   // 第9章は既存の出力(第1〜8章と上の注記)の後ろに足すだけ。既存部分は1文字も変えない。
   markdown += `\n${renderSpeechFreshnessMarkdown(await buildSpeechFreshness(reader, now))}`;
+  // 第10章(HQ判断 2026-10-27 案B): 暫定のまま発表が近い予定。これも末尾に足すだけ。
+  const provisionalUntil = new Date(now.getTime() + PROVISIONAL_LIST_DAYS * 86_400_000).toISOString();
+  markdown += `\n${renderProvisionalEventsMarkdown(await reader.listProvisionalEvents(nowIso, provisionalUntil), now)}`;
   return markdown;
 }

@@ -712,3 +712,48 @@ export function renderSpeechFreshnessMarkdown(freshness: readonly SpeechFreshnes
   lines.push('');
   return `${lines.join('\n')}\n`;
 }
+
+// ---------------------------------------------------------------------------
+// 10. 暫定の予定(HQ判断 2026-10-27 案B)。暫定の予定は通知しないので、発表が近いのに暫定のままの予定
+// (= 人が公式の情報を確かめて表を直す作業の漏れ)を出す。第1〜9章とは別に描画し、run.ts が末尾に足す。
+// ---------------------------------------------------------------------------
+
+/** これより先の暫定は「注意」ではなく「情報」(通知の候補の範囲 = 7日)。 */
+export const PROVISIONAL_WARN_DAYS = 7;
+/** 一覧に出す範囲。 */
+export const PROVISIONAL_LIST_DAYS = 30;
+
+export function renderProvisionalEventsMarkdown(
+  events: readonly { provider_event_id: string | null; indicator_code: string; release_datetime: string }[],
+  now: Date,
+): string {
+  const warnUntil = now.getTime() + PROVISIONAL_WARN_DAYS * 86_400_000;
+  const warn = events.filter((e) => Date.parse(e.release_datetime) < warnUntil);
+  const lines: string[] = [];
+  lines.push('## 10. 暫定の予定(確定の作業の漏れ)');
+  lines.push('');
+  lines.push(
+    `暫定(is_provisional)の予定は通知しない(HQ判断 2026-10-27)。今から ${PROVISIONAL_LIST_DAYS} 日以内に発表があるのに暫定のままの予定を出す。` +
+      `${PROVISIONAL_WARN_DAYS} 日以内のものは、確定しないと**通知が出ない**(注意)。公式の情報を確かめ、コードの表を直してジョブを動かす(dev-environment.md 12.7)。`,
+  );
+  lines.push('');
+  lines.push(
+    `判定: ${warn.length > 0 ? `注意(${PROVISIONAL_WARN_DAYS}日以内に暫定 ${warn.length} 件)` : events.length > 0 ? '情報(7日より先の暫定のみ)' : '正常(暫定の予定なし)'}`,
+  );
+  lines.push('');
+  if (events.length > 0) {
+    lines.push(
+      ...table(
+        ['発表(UTC)', '指標', 'provider_event_id', '区分'],
+        events.map((e) => [
+          time(e.release_datetime),
+          e.indicator_code,
+          e.provider_event_id ?? '—',
+          Date.parse(e.release_datetime) < warnUntil ? '注意(通知が出ない)' : '情報',
+        ]),
+      ),
+    );
+    lines.push('');
+  }
+  return `${lines.join('\n')}\n`;
+}
