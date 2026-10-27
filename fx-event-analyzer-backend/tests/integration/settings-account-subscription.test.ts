@@ -561,7 +561,8 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
     it('ignores an older JWS replayed after a refund (stays EXPIRED / FREE)', async () => {
       const { user, headers } = await newUser();
       const id = originalTransactionId();
-      const before = Date.now() - 60_000;
+      // 署名日時は前に進めるだけにする(テストの証明書はテストの開始時に作られ、それより前の署名日時は 422)
+      const before = Date.now();
       const active = transactionPayload(user.id, { originalTransactionId: id }, before);
       expect(
         (await verify(headers, active, renewalInfoPayload({ originalTransactionId: id }, before))).statusCode,
@@ -569,7 +570,7 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
 
       const refunded = await verify(
         headers,
-        transactionPayload(user.id, { originalTransactionId: id, revocationDate: Date.now() - 1000 }),
+        transactionPayload(user.id, { originalTransactionId: id, revocationDate: before + 1000 }, before + 2000),
         null,
       );
       expect(JSON.parse(refunded.body).status).toBe('EXPIRED');
@@ -605,7 +606,7 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
     it('still accepts a newer JWS (renewal / re-purchase after expiry)', async () => {
       const { user, headers } = await newUser();
       const id = originalTransactionId();
-      const old = Date.now() - 60_000;
+      const old = Date.now();
       await verify(
         headers,
         transactionPayload(user.id, { originalTransactionId: id, expiresDate: old - 1000 }, old),
@@ -613,7 +614,7 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
       );
       const renewed = await verify(
         headers,
-        transactionPayload(user.id, { originalTransactionId: id, transactionId: '2000000000000099' }),
+        transactionPayload(user.id, { originalTransactionId: id, transactionId: '2000000000000099' }, old + 2000),
         null,
       );
       expect(JSON.parse(renewed.body).status).toBe('ACTIVE');
@@ -623,23 +624,19 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
     it('grants PRO again for a legitimate re-purchase after a refund (new transaction, newer signedDate)', async () => {
       const { user, headers } = await newUser();
       const id = originalTransactionId();
-      const before = Date.now() - 60_000;
+      const before = Date.now();
       await verify(headers, transactionPayload(user.id, { originalTransactionId: id }, before), null);
       await verify(
         headers,
-        transactionPayload(
-          user.id,
-          { originalTransactionId: id, revocationDate: Date.now() - 30_000 },
-          Date.now() - 30_000,
-        ),
+        transactionPayload(user.id, { originalTransactionId: id, revocationDate: before + 500 }, before + 1000),
         null,
       );
       expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: false });
 
       const repurchased = await verify(
         headers,
-        transactionPayload(user.id, { originalTransactionId: id, transactionId: '2000000000000077' }),
-        renewalInfoPayload({ originalTransactionId: id }),
+        transactionPayload(user.id, { originalTransactionId: id, transactionId: '2000000000000077' }, before + 2000),
+        renewalInfoPayload({ originalTransactionId: id }, before + 2000),
       );
       expect(JSON.parse(repurchased.body).status).toBe('ACTIVE');
       expect(await advancedStatsEntitlement(user.id)).toEqual({ enabled: true });
@@ -654,9 +651,9 @@ describe.skipIf(!integration)('Settings / account deletion / App Store subscript
     it('applies the newest state when JWS arrive out of order, and a duplicate resend changes nothing', async () => {
       const { user, headers } = await newUser();
       const id = originalTransactionId();
-      const older = Date.now() - 60_000;
-      const canceled = renewalInfoPayload({ originalTransactionId: id, autoRenewStatus: 0 });
-      const tx = transactionPayload(user.id, { originalTransactionId: id });
+      const older = Date.now();
+      const canceled = renewalInfoPayload({ originalTransactionId: id, autoRenewStatus: 0 }, older + 2000);
+      const tx = transactionPayload(user.id, { originalTransactionId: id }, older + 2000);
       expect(JSON.parse((await verify(headers, tx, canceled)).body).status).toBe('CANCELED');
       // 自動更新オンのときの古い JWS が後から届いても、CANCELED のまま
       const stale = await verify(
