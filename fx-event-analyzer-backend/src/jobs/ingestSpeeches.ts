@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { loadEnv } from '../config/env.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
 import { EcbPressAdapter } from '../ingestion/adapters/ecbPress.js';
-import { ECB_TIME_ZONE, EcbWeeklyScheduleAdapter } from '../ingestion/adapters/ecbWeeklySchedule.js';
+import { EcbWeeklyScheduleAdapter } from '../ingestion/adapters/ecbWeeklySchedule.js';
 import { FrbCalendarAdapter } from '../ingestion/adapters/frbCalendar.js';
 import { ingestSpeeches } from '../ingestion/pipelines/speeches.js';
 import type { SpeechScheduleProvider } from '../ingestion/providers.js';
@@ -47,8 +47,7 @@ async function main(): Promise<void> {
           }
         }
         // ECB の週間予定だけ、消えた予定を中止・時刻の変更として扱う(HQ判断 2026-10-28 R1〜R3)。FRB・ECB RSS は今までどおり記録だけ。
-        const reconcile =
-          ecbWeekly && source === ecbWeekly ? { coverage: ecbWeekly.lastCoverage, timeZone: ECB_TIME_ZONE } : undefined;
+        const reconcile = ecbWeekly && source === ecbWeekly ? ecbWeekly.lastReconcile : null;
         await ingestSpeeches(source.name, speeches, { store, ...(reconcile ? { reconcile } : {}) }, counters);
       },
     );

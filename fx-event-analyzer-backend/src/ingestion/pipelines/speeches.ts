@@ -38,7 +38,18 @@ export interface SpeechPipelineOptions {
    * in the source's time zone); null = unknown → nothing is changed. Only for a source that lists
    * every item of the period it covers (the ECB weekly schedule).
    */
-  reconcile?: { coverage: { fromIso: string; toIso: string } | null; timeZone: string };
+  reconcile?: {
+    coverage: { fromIso: string; toIso: string } | null;
+    timeZone: string;
+    /**
+     * Days (YYYY-MM-DD in `timeZone`) where the source had an item it could not read (A1): a speech that
+     * disappeared on such a day may only be unread, so it is held (warned) instead of cancelled.
+     * Days of items this pipeline skips for an unknown speaker are added here.
+     */
+    uncertainDays?: readonly string[];
+    /** The whole page cannot tell deleted from unread → nothing is changed (held, warned). */
+    pageAnomaly?: string | null;
+  };
 }
 
 /** Up to this many disappeared speeches are always reconciled; more only if at most half of the scheduled ones. */
@@ -81,6 +92,11 @@ export async function ingestSpeeches(
   const speakerIdByKey = new Map(speakers.map((speaker) => [`${speaker.organization}|${speaker.name}`, speaker.id]));
 
   const rows = new Map<string, SpeechEventRow>();
+  /** Days of items skipped below for the speaker (A1: an unknown spelling must not cancel that speaker's row). */
+  const unreadDays = new Set<string>();
+  const unread = (speech: NormalizedSpeech) => {
+    if (options.reconcile) unreadDays.add(localDay(speech.startsAt, options.reconcile.timeZone));
+  };
   const oldest = now.getTime() - (options.pastDays ?? 14) * 86_400_000;
   for (const speech of speeches) {
     if (Date.parse(speech.startsAt) < oldest) {
@@ -94,12 +110,14 @@ export async function ingestSpeeches(
     const alias = findSpeakerAlias(speech.organization, speech.speakerName, aliases);
     if (!alias) {
       counters.skip('SPEAKER_UNKNOWN');
+      unread(speech);
       counters.note('unknown_speakers', `${speech.organization}: ${speech.speakerName}`);
       continue;
     }
     const speakerId = speakerIdByKey.get(`${alias.organization}|${alias.nameJa}`);
     if (!speakerId) {
       counters.skip('SPEAKER_NOT_IN_DB');
+      unread(speech);
       counters.note('speakers_not_in_db', `${alias.organization}: ${alias.nameJa}`);
       continue;
     }
@@ -115,7 +133,15 @@ export async function ingestSpeeches(
   }
 
   if (options.reconcile) {
-    await reconcileDisappeared(provider, speeches, rows, options.reconcile, now, store, counters);
+    await reconcileDisappeared(
+      provider,
+      speeches,
+      rows,
+      { ...options.reconcile, uncertainDays: [...(options.reconcile.uncertainDays ?? []), ...unreadDays] },
+      now,
+      store,
+      counters,
+    );
   }
 
   if (rows.size > 0) {
@@ -141,10 +167,12 @@ export async function ingestSpeeches(
 /**
  * HQ判断 2026-10-28(R1〜R3)。取得したページが範囲(coverage)の項目をすべて載せている取得元のための処理。
  * 範囲の中で、今より後の SCHEDULED の行のうち、今回のページに無いもの(消えた予定)を:
+ * - 区別できない日(uncertainDays)・ページ全体が区別できない(pageAnomaly)→ 変えない。held_disappearances に残す
+ *   (品質レポート第9章が「消えた予定の保留(注意)」と出す。HQ判断 2026-10-28「統合前レビュー」A1・A2)
  * - R2 同じ話者・同じ日(取得元の時間帯の日付)に、DB にまだ無い新しい行がちょうど1つあり、その日の消えた予定も
- *   1つだけ → 時刻の変更とみなし、旧行の provider_event_id・時刻・題名・重要度を新しい値にする(新しい行は作らない。
+ *   1つだけで、**題名が同じ**(A3: 時刻だけが変わった。題名も変わったら別の予定として扱う)→ 時刻の変更とみなし、旧行の provider_event_id・時刻・題名・重要度を新しい値にする(新しい行は作らない。
  *   この後の upsert は同じ行を更新するだけ)。DB トリガーが RESCHEDULED を記録する
- * - R1 それ以外(話者の変更・候補が0件か2件以上) → CANCELLED。DB トリガーが CANCELLED を記録する
+ * - R1 それ以外(話者の変更・題名の変更・候補が0件か2件以上) → CANCELLED。DB トリガーが CANCELLED を記録する
  * 安全弁(どれかに当たれば何も変えず、cancel_suppressed に理由を残す):
  * - 範囲が分からない(coverage が null)
  * - 今回の取得で項目が0件(ページの形が変わり何も読めない可能性。形が全く違うときは adapter がエラーにする)
@@ -175,6 +203,12 @@ async function reconcileDisappeared(
   if (disappeared.length === 0) return;
   for (const row of disappeared) counters.note('disappeared_scheduled_speeches', row.provider_event_id);
 
+  if (reconcile.pageAnomaly) {
+    counters.note('cancel_suppressed', { reason: 'PAGE_ANOMALY', detail: reconcile.pageAnomaly });
+    for (const row of disappeared) counters.note('held_disappearances', row.provider_event_id);
+    return;
+  }
+
   if (speeches.length === 0) {
     counters.note('cancel_suppressed', { reason: 'NO_ITEMS', disappeared: disappeared.length });
     return;
@@ -188,10 +222,8 @@ async function reconcileDisappeared(
     return;
   }
 
-  const dayKey = (speakerId: string, iso: string): string => {
-    const wall = wallClockParts(new Date(iso), timeZone);
-    return `${speakerId}|${wall.year}-${wall.month}-${wall.day}`;
-  };
+  const dayKey = (speakerId: string, iso: string): string => `${speakerId}|${localDay(iso, timeZone)}`;
+  const uncertain = new Set(reconcile.uncertainDays ?? []);
   const storedIds = new Set(stored.map((row) => row.provider_event_id));
   const freshByDay = groupBy(
     [...rows.values()].filter((row) => !storedIds.has(row.provider_event_id)),
@@ -202,9 +234,13 @@ async function reconcileDisappeared(
   );
 
   for (const row of disappeared) {
+    if (uncertain.has(localDay(row.statement_datetime, timeZone))) {
+      counters.note('held_disappearances', row.provider_event_id);
+      continue;
+    }
     const key = dayKey(row.speaker_id, row.statement_datetime);
     const fresh = freshByDay.get(key) ?? [];
-    if (fresh.length === 1 && disappearedByDay.get(key)!.length === 1) {
+    if (fresh.length === 1 && disappearedByDay.get(key)!.length === 1 && fresh[0]!.title === row.title) {
       const moved = fresh[0]!;
       await store.updateSpeechEvent(provider, row.provider_event_id, {
         provider_event_id: moved.provider_event_id,
@@ -218,6 +254,12 @@ async function reconcileDisappeared(
       counters.note('cancelled_speeches', row.provider_event_id);
     }
   }
+}
+
+/** YYYY-MM-DD of `iso` in `timeZone`. */
+function localDay(iso: string, timeZone: string): string {
+  const wall = wallClockParts(new Date(iso), timeZone);
+  return `${wall.year}-${String(wall.month).padStart(2, '0')}-${String(wall.day).padStart(2, '0')}`;
 }
 
 function groupBy<T>(items: readonly T[], key: (item: T) => string): Map<string, T[]> {

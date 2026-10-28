@@ -625,6 +625,7 @@ export const SPEECH_FRESHNESS_LABELS: Record<SpeechFreshnessJudgement, string> =
   FETCH_FAILED: '取得の失敗(異常)',
   INGEST_GAP: '取り込みの漏れ(異常)',
   SOURCE_NOT_UPDATED: '取得元の更新なし(注意)',
+  RECONCILE_HELD: '消えた予定の保留(注意)',
   OVERDUE_SCHEDULED: '終わった予定が SCHEDULED のまま(注意)',
   TIME_NOT_EXACT_ONLY: '時刻なしで未取り込み(情報)',
   NORMAL: '正常',
@@ -706,15 +707,18 @@ export function renderSpeechFreshnessMarkdown(freshness: readonly SpeechFreshnes
     `3. 取得元の更新なし(注意): 取得元の最新の予定が ${SPEECH_SOURCE_STALE_DAYS} 日以上前で、未来の予定が 0 件`,
   );
   lines.push(
-    `4. 終わった予定が SCHEDULED のまま(注意): 開始から ${SPEECH_OVERDUE_HOURS} 時間を過ぎても SCHEDULED の行がある(ECB の週間予定だけで判定。ほかの取得元は件数の表示だけ)`,
+    '4. 消えた予定の保留(注意): 最新の実行で、取得元から消えた予定を読み漏れと区別できず中止にしなかった、または安全弁(0件・大量の消失・ページの異常)で何も変えなかった。取得元で、予定が本当に消えたのかを確かめる(ECB の週間予定だけ)',
   );
   lines.push(
-    '5. 時刻なしで未取り込み(情報): 取り込み期間内の項目がすべて TIME_NOT_EXACT(公開時刻のみ)で取り込み 0 件。ECB RSS の通常の状態',
+    `5. 終わった予定が SCHEDULED のまま(注意): 開始から ${SPEECH_OVERDUE_HOURS} 時間を過ぎても SCHEDULED の行がある(ECB の週間予定だけで判定。ほかの取得元は件数の表示だけ)`,
   );
-  lines.push('6. 正常: 上のいずれにも当たらない');
+  lines.push(
+    '6. 時刻なしで未取り込み(情報): 取り込み期間内の項目がすべて TIME_NOT_EXACT(公開時刻のみ)で取り込み 0 件。ECB RSS の通常の状態',
+  );
+  lines.push('7. 正常: 上のいずれにも当たらない');
   lines.push('');
   lines.push(
-    `「${NOT_RECORDED}」の取得元の最新の予定は、この記録を追加する前の実行。2.・3. は判定せず、1.・4.・5. だけで判定する。ECB の週間予定(ecb_weekly_schedule)は、実行記録が無ければ(INGEST_ECB_WEEKLY が未設定)表示しない。`,
+    `「${NOT_RECORDED}」の取得元の最新の予定は、この記録を追加する前の実行。2.・3. は判定せず、1.・4.〜6. だけで判定する。ECB の週間予定(ecb_weekly_schedule)は、実行記録が無ければ(INGEST_ECB_WEEKLY が未設定)表示しない。`,
   );
   lines.push('');
   return `${lines.join('\n')}\n`;

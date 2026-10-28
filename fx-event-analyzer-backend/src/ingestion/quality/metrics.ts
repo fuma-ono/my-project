@@ -778,7 +778,13 @@ export function judgeSpeechFetch(runs: readonly SpeechRunSample[], now: Date): S
 }
 
 export type SpeechFreshnessJudgement =
-  'FETCH_FAILED' | 'INGEST_GAP' | 'SOURCE_NOT_UPDATED' | 'OVERDUE_SCHEDULED' | 'TIME_NOT_EXACT_ONLY' | 'NORMAL';
+  | 'FETCH_FAILED'
+  | 'INGEST_GAP'
+  | 'SOURCE_NOT_UPDATED'
+  | 'RECONCILE_HELD'
+  | 'OVERDUE_SCHEDULED'
+  | 'TIME_NOT_EXACT_ONLY'
+  | 'NORMAL';
 
 export interface SpeechFreshness extends SpeechFetchHealth {
   provider: string;
@@ -819,16 +825,24 @@ function isTimeNotExactOnly(run: SpeechRunSample): boolean {
  *    TIME_NOT_EXACT なら、DB に無いのは仕様どおりで漏れではない
  * 3. SOURCE_NOT_UPDATED 取得元の更新なし(注意) — 取得は成功しているが、source_latest_at が
  *    now − 10日 以前で、source_future_count が 0
- * 4. OVERDUE_SCHEDULED 終わった予定が SCHEDULED のまま(注意) — SPEECH_OVERDUE_JUDGED_PROVIDERS の取得元で、
+ * 4. RECONCILE_HELD 消えた予定の保留(注意) — 最新の実行の details に held_disappearances(読み漏れと区別できず
+ *    中止にしなかった予定)か cancel_suppressed(安全弁で何も変えなかった)がある(ECB の週間予定。HQ判断 2026-10-28
+ *    「統合前レビュー」A2)。取得元で、予定が本当に消えたのかを人が確かめる
+ * 5. OVERDUE_SCHEDULED 終わった予定が SCHEDULED のまま(注意) — SPEECH_OVERDUE_JUDGED_PROVIDERS の取得元で、
  *    db.overdueScheduled > 0(HQ判断 2026-10-28 R4)
- * 5. TIME_NOT_EXACT_ONLY 時刻なしで未取り込み(情報) — isTimeNotExactOnly(ECB の通常の状態)
- * 6. NORMAL 正常
+ * 6. TIME_NOT_EXACT_ONLY 時刻なしで未取り込み(情報) — isTimeNotExactOnly(ECB の通常の状態)
+ * 7. NORMAL 正常
  *
  * 2.〜3. は source_latest_at を使うため、最新の実行にその記録が無い(この記録の追加前の行)
  * ときは判定しない(「—(記録なし)」と表示)。1. と 4. は記録が無くても判定する。
  * 異常 > 注意 > 情報 の順にしたのは、ECB の時刻なし(情報)が更新停止(注意)を隠さないようにするため
  * (時刻なしで未取り込みの実行でも、取得元が10日以上更新されていなければ「更新なし」と出す)。
  */
+/** details の配列の件数(配列でなければ 0)。 */
+function asArrayLength(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
+}
+
 export function judgeSpeechFreshness(
   provider: string,
   runs: readonly SpeechRunSample[],
@@ -875,6 +889,13 @@ export function judgeSpeechFreshness(
   ) {
     return result('SOURCE_NOT_UPDATED', [
       `取得元の最新の予定が ${SPEECH_SOURCE_STALE_DAYS} 日以上前で、未来の予定が 0 件`,
+    ]);
+  }
+  const held = asArrayLength(details?.held_disappearances);
+  const suppressed = asArrayLength(details?.cancel_suppressed);
+  if (held > 0 || suppressed > 0) {
+    return result('RECONCILE_HELD', [
+      `最新の実行で、消えた予定 ${held} 件を中止にせず保留した(読み漏れと区別できない・安全弁 ${suppressed} 件)。取得元で確かめる`,
     ]);
   }
   if (SPEECH_OVERDUE_JUDGED_PROVIDERS.includes(provider) && db.overdueScheduled > 0) {

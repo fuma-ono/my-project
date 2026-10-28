@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FEATURE_CODES } from '../../src/authorization/entitlements.js';
 import {
-  ECB_TIME_ZONE,
   ECB_WEEKLY_PROVIDER,
+  ecbReconcileOptions,
   parseEcbWeeklySchedule,
 } from '../../src/ingestion/adapters/ecbWeeklySchedule.js';
 import { ingestSpeeches } from '../../src/ingestion/pipelines/speeches.js';
@@ -39,15 +39,15 @@ describe.skipIf(!integration)('ECB weekly schedule: reconcile against the real D
     `<dl>${day('Monday, 6 December 2027', stats)}${days.join('')}${day('Friday, 10 December 2027', stats)}</dl>`;
 
   async function ingest(html: string): Promise<JobCounters> {
-    const { speeches, coverage } = parseEcbWeeklySchedule(html);
+    const result = parseEcbWeeklySchedule(html);
     const counters = new JobCounters();
     await ingestSpeeches(
       ECB_WEEKLY_PROVIDER,
-      speeches,
+      result.speeches,
       {
         store: createIngestionRepository(ctx.serviceClient),
         now: () => now,
-        reconcile: { coverage, timeZone: ECB_TIME_ZONE },
+        reconcile: ecbReconcileOptions(result),
       },
       counters,
     );

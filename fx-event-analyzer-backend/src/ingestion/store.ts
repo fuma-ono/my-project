@@ -150,6 +150,7 @@ export type SpeechStatus = 'SCHEDULED' | 'DELIVERED' | 'CANCELLED';
 export interface StoredSpeechRef {
   provider_event_id: string;
   speaker_id: string;
+  title: string;
   statement_datetime: string;
   status: SpeechStatus;
 }

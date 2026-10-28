@@ -217,9 +217,10 @@ export class MemoryIngestionStore implements IngestionStore {
             Date.parse(s.statement_datetime) >= Date.parse(fromIso) &&
             Date.parse(s.statement_datetime) < Date.parse(toIso),
         )
-        .map(({ provider_event_id, speaker_id, statement_datetime, status }) => ({
+        .map(({ provider_event_id, speaker_id, title, statement_datetime, status }) => ({
           provider_event_id,
           speaker_id,
+          title,
           statement_datetime,
           status,
         })),

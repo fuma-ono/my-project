@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ECB_TIME_ZONE,
   ECB_WEEKLY_PROVIDER,
+  ecbReconcileOptions,
   parseEcbDate,
   parseEcbTime,
   parseEcbWeeklySchedule,
@@ -159,12 +160,12 @@ describe('ECB weekly schedule → speech_events: reconcile disappeared speeches'
     return store;
   }
   async function ingest(store: MemoryIngestionStore, html: string, now = NOW): Promise<JobCounters> {
-    const { speeches, coverage } = parseEcbWeeklySchedule(html);
+    const result = parseEcbWeeklySchedule(html);
     const counters = new JobCounters();
     await ingestSpeeches(
       ECB_WEEKLY_PROVIDER,
-      speeches,
-      { store, now: () => now, reconcile: { coverage, timeZone: ECB_TIME_ZONE } },
+      result.speeches,
+      { store, now: () => now, reconcile: ecbReconcileOptions(result) },
       counters,
     );
     return counters;
@@ -285,17 +286,124 @@ describe('ECB weekly schedule → speech_events: reconcile disappeared speeches'
     ]);
   });
 
-  it('a time that became "to be confirmed" counts as disappeared → CANCELLED (no exact time, not shown)', async () => {
+  // HQ判断 2026-10-28「統合前レビュー」A1・A2: 読み切れなかった項目がある日は、削除と読み漏れを区別できない → 中止にせず警告
+  describe('partial parse: deleted or unread cannot be told apart → held (warned), never CANCELLED', () => {
+    async function expectHeld(changed: string, heldId: string, reason?: string) {
+      const store = newStore();
+      await ingest(store, WEEK);
+      const counters = await ingest(store, changed);
+      expect(store.speeches.find((row) => row.provider_event_id === heldId)?.status).toBe('SCHEDULED');
+      expect(counters.details.held_disappearances).toEqual([heldId]);
+      expect(counters.details.cancelled_speeches).toBeUndefined();
+      if (reason) expect(counters.details.cancel_suppressed).toEqual([expect.objectContaining({ reason })]);
+      return { store, counters };
+    }
+    const CIP = '2026-11-05_1200_piero-cipollone';
+
+    it('the time became "to be confirmed" (TIME_MISSING): the old time stays, warned', async () => {
+      await expectHeld(
+        weekPage(
+          day('Tuesday, 3 November 2026', lane('10:00 CET')),
+          day('Thursday, 5 November 2026', cip('to be confirmed')),
+        ),
+        CIP,
+      );
+    });
+
+    it("one item's Time label is unreadable while the others parse", async () => {
+      const broken = cip('12:00 CET').replace('<strong>Time:</strong>', '<strong>Hour:</strong>');
+      const { store } = await expectHeld(
+        weekPage(day('Tuesday, 3 November 2026', lane('10:00 CET')), day('Thursday, 5 November 2026', broken)),
+        CIP,
+      );
+      expect(store.speeches.find((row) => row.speaker_id === 'sp-lane')?.status).toBe('SCHEDULED');
+    });
+
+    it('the "Board member" label is there but the name cannot be read', async () => {
+      const broken = cip('12:00 CET').replace('<strong>Board member:</strong>', '<b>Board member:</b>');
+      await expectHeld(
+        weekPage(day('Tuesday, 3 November 2026', lane('10:00 CET')), day('Thursday, 5 November 2026', broken)),
+        CIP,
+      );
+    });
+
+    it('a new spelling of the name (SPEAKER_UNKNOWN in the pipeline)', async () => {
+      const respelled = cip('12:00 CET').replace('Piero Cipollone', 'Piero Cipolone');
+      await expectHeld(
+        weekPage(day('Tuesday, 3 November 2026', lane('10:00 CET')), day('Thursday, 5 November 2026', respelled)),
+        CIP,
+      );
+    });
+
+    it('the event text now matches a non-public word ("private sector" — maybe a false match)', async () => {
+      const privateSector = board('Piero Cipollone', '12:00 CET', 'Speech on private sector investment');
+      await expectHeld(
+        weekPage(day('Tuesday, 3 November 2026', lane('10:00 CET')), day('Thursday, 5 November 2026', privateSector)),
+        CIP,
+      );
+    });
+
+    it('a Board member item with an unreadable date: the whole page is held (PAGE_ANOMALY)', async () => {
+      const store = newStore();
+      await ingest(store, WEEK);
+      const counters = await ingest(
+        store,
+        weekPage(day('Tuesday, 3 November 2026', lane('10:00 CET')), day('Jeudi 5 novembre', cip('12:00 CET'))),
+      );
+      expect(rows(store).map(([, , status]) => status)).toEqual(['SCHEDULED', 'SCHEDULED']);
+      expect(counters.details.cancel_suppressed).toEqual([{ reason: 'PAGE_ANOMALY', detail: 'DATE_UNPARSEABLE' }]);
+      expect(counters.details.held_disappearances).toEqual([CIP]);
+    });
+
+    it('the hold is per day: a speech deleted on a fully-read day is still CANCELLED', async () => {
+      const store = newStore();
+      await ingest(
+        store,
+        weekPage(
+          day('Tuesday, 3 November 2026', lane('10:00 CET')),
+          day('Wednesday, 4 November 2026', schnabel('10:00 CET')),
+          day('Thursday, 5 November 2026', cip('12:00 CET')),
+        ),
+      );
+      // 11/3 のレーンは削除(その日は全部読めた)。11/5 はチポローネが時刻なしで読み切れない → 保留
+      const counters = await ingest(
+        store,
+        weekPage(
+          day('Wednesday, 4 November 2026', schnabel('10:00 CET')),
+          day('Thursday, 5 November 2026', cip('to be confirmed')),
+        ),
+      );
+      expect(counters.details.cancelled_speeches).toEqual(['2026-11-03_1000_philip-r-lane']);
+      expect(counters.details.held_disappearances).toEqual([CIP]);
+    });
+
+    it("reports the uncertain days from the parser (recorded page: 10/23 summer time, Lagarde's dinner day)", async () => {
+      const result = parseEcbWeeklySchedule(await fixture('ecb-weekly-schedule.html'));
+      expect(result.pageAnomaly).toBeNull();
+      expect(result.uncertainDays).toEqual(
+        [...new Set(result.skipped.filter((s) => s.reason !== 'DUPLICATE_ON_PAGE').map((s) => s.day!))].sort(),
+      );
+      expect(result.uncertainDays).toContain('2026-10-23');
+    });
+  });
+
+  // A3: 同じ日・同じ話者の別の予定を、日時の変更と取り違えない
+  it('A3: same speaker, same day, but another event (title differs) → CANCELLED + new, not a time change', async () => {
     const store = newStore();
     await ingest(store, WEEK);
-    await ingest(
+    const counters = await ingest(
       store,
-      page(
-        day('Tuesday, 3 November 2026', lane('to be confirmed')),
+      weekPage(
+        day('Tuesday, 3 November 2026', lane('15:00 CET', 'Panel discussion on payments')),
         day('Thursday, 5 November 2026', cip('12:00 CET')),
       ),
     );
-    expect(store.speeches.find((row) => row.speaker_id === 'sp-lane')?.status).toBe('CANCELLED');
+    expect(counters.details.rescheduled_speeches).toBeUndefined();
+    expect(rows(store)).toEqual([
+      ['2026-11-03_1000_philip-r-lane', '2026-11-03T09:00:00.000Z', 'CANCELLED'],
+      ['2026-11-05_1200_piero-cipollone', '2026-11-05T11:00:00.000Z', 'SCHEDULED'],
+      ['2026-11-03_1500_philip-r-lane', '2026-11-03T14:00:00.000Z', 'SCHEDULED'],
+    ]);
   });
 
   it('item 3: rows outside the page (past, later weeks) and past rows on the page are never changed', async () => {

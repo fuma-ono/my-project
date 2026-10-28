@@ -286,7 +286,7 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
     async listSpeechRefs(provider: string, fromIso: string, toIso: string): Promise<StoredSpeechRef[]> {
       const { data, error } = await supabase
         .from('speech_events')
-        .select('provider_event_id, speaker_id, statement_datetime, status')
+        .select('provider_event_id, speaker_id, title, statement_datetime, status')
         .eq('provider', provider)
         .gte('statement_datetime', fromIso)
         .lt('statement_datetime', toIso);

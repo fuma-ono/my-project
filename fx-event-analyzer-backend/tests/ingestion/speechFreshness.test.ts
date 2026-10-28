@@ -335,3 +335,20 @@ describe('終わった予定が SCHEDULED のまま (HQ判断 2026-10-28 R4)', (
     expect(judgeSpeechFreshness('ecb_weekly_schedule', [], overdue, NOW).judgement).toBe('FETCH_FAILED');
   });
 });
+
+describe('消えた予定の保留 (HQ判断 2026-10-28「統合前レビュー」A2)', () => {
+  it('warns when the latest run held disappeared speeches or a safety valve stopped the reconciliation', () => {
+    const held = run({ details: { source_latest_at: null, held_disappearances: ['2026-11-05_1200_piero-cipollone'] } });
+    const result = judgeSpeechFreshness('ecb_weekly_schedule', [held], DB_UP_TO_DATE, NOW);
+    expect(result.judgement).toBe('RECONCILE_HELD');
+    expect(result.judgementReasons[0]).toMatch(/消えた予定 1 件を中止にせず保留/);
+    const suppressed = run({ details: { source_latest_at: null, cancel_suppressed: [{ reason: 'NO_ITEMS' }] } });
+    expect(judgeSpeechFreshness('ecb_weekly_schedule', [suppressed], DB_UP_TO_DATE, NOW).judgement).toBe(
+      'RECONCILE_HELD',
+    );
+  });
+
+  it('is not raised without those records (FRB never writes them)', () => {
+    expect(judgeSpeechFreshness('frb_calendar', [run()], DB_UP_TO_DATE, NOW).judgement).not.toBe('RECONCILE_HELD');
+  });
+});

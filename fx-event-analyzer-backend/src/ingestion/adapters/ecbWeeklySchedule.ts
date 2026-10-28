@@ -22,12 +22,18 @@
  * 項目の日付も含める。ジョブはこの範囲で、消えた予定を中止・時刻の変更として扱う(pipelines/speeches.ts の reconcile。
  * HQ判断 2026-10-28 R1〜R3)。範囲の外の行は変えない。
  *
+ * 区別できない日(uncertainDays、HQ判断 2026-10-28「統合前レビュー」A1・A2): 役員の項目を読み切れなかった日
+ * (時刻・時刻帯が読めない、夏時間、非公開の語に当たった、「Board member」の語はあるのに名前が読めない)は、
+ * 予定が本当に消えたのか、読み漏れなのかを区別できない。その日に消えた予定は、ジョブが中止にせず警告だけにする。
+ * 日付が読めない役員の項目があるときは、どの日か分からないので pageAnomaly としてページ全体を区別できない扱いにする。
+ *
  * 利用条件: ECB のサイトの情報(data-sources.md §2)。出典の表示と、有料サービスでの告知が必要。告知の方針が
  * 決まるまで公開に使わない(ジョブでは環境変数 INGEST_ECB_WEEKLY=1 のときだけ動く)。
  */
 import { PROVIDER_HTTP_SETTINGS } from '../config.js';
 import { HttpClient, type HttpClientDeps } from '../http.js';
 import { normalizeSpeakerName } from '../mappings/speakers.js';
+import type { SpeechPipelineOptions } from '../pipelines/speeches.js';
 import type { SpeechScheduleProvider } from '../providers.js';
 import { zonedWallTimeToUtc } from '../time.js';
 import type { NormalizedSpeech, SpeechKind } from '../types.js';
@@ -117,9 +123,23 @@ function berlinOffsetMinutes(
   return Math.round((Date.UTC(wall.y, wall.m - 1, wall.d, wall.hour, wall.minute) - utc.getTime()) / 60_000);
 }
 
+/** Skip reasons that leave a Board member item on the page unread (A1): its day cannot tell deleted from unread. */
+const UNCERTAIN_REASONS = new Set([
+  'NOT_PUBLIC',
+  'TIME_MISSING',
+  'TIME_NONEXISTENT',
+  'SUMMER_TIME_UNVERIFIED',
+  'BOARD_MEMBER_UNREADABLE',
+]);
+
 export interface EcbWeeklyParseResult {
   speeches: NormalizedSpeech[];
-  skipped: { title: string; reason: string }[];
+  /** `day` = the item's date (YYYY-MM-DD, Frankfurt) when readable. */
+  skipped: { title: string; reason: string; day?: string }[];
+  /** Days with a Board member item that was not read (A1). Disappeared speeches on these days are not cancelled. */
+  uncertainDays: string[];
+  /** Set when the whole page cannot tell deleted from unread (a Board member item with an unreadable date). */
+  pageAnomaly: string | null;
   /** All dt/dd entries on the page (with or without a Board member). 0 = the structure is not what we know. */
   entries: number;
   /** The days the page covers (see the header). null = no readable date on the page. */
@@ -152,44 +172,49 @@ export function parseEcbWeeklySchedule(
   const seen = new Set<string>();
   const days: [number, number, number][] = [];
   for (const [, dt, dd] of pairs) {
-    const day = parseEcbDate(dt!);
-    if (day) days.push(day);
+    const date = parseEcbDate(dt!);
+    if (date) days.push(date);
+    const ymd = date ? `${date[0]}-${String(date[1]).padStart(2, '0')}-${String(date[2]).padStart(2, '0')}` : null;
+    const skip = (title: string, reason: string) =>
+      skipped.push(ymd === null ? { title, reason } : { title, reason, day: ymd });
     const speaker = field(dd!, 'Board member');
-    if (!speaker) continue; // 統計の公表・理事会など(役員の発言ではない)
+    if (!speaker) {
+      // 統計の公表・理事会など(役員の発言ではない)。ただし「Board member」の語があるのに名前が読めないのは読み漏れ
+      if (/Board\s*member/i.test(decode(dd!))) skip('(Board member unreadable)', 'BOARD_MEMBER_UNREADABLE');
+      continue;
+    }
     const event = field(dd!, 'Event') ?? '';
     const title = `${speaker}: ${event}`.slice(0, 200);
     if (NOT_PUBLIC.test(event)) {
-      skipped.push({ title, reason: 'NOT_PUBLIC' });
+      skip(title, 'NOT_PUBLIC');
       continue;
     }
-    const date = parseEcbDate(dt!);
-    if (!date) {
-      skipped.push({ title, reason: 'DATE_UNPARSEABLE' });
+    if (!date || ymd === null) {
+      skip(title, 'DATE_UNPARSEABLE');
       continue;
     }
     const time = parseEcbTime(field(dd!, 'Time') ?? '');
     if (!time) {
-      skipped.push({ title, reason: 'TIME_MISSING' });
+      skip(title, 'TIME_MISSING');
       continue;
     }
     const [y, m, d] = date;
     const startsAt = zonedWallTimeToUtc(y, m, d, time.hour, time.minute, ECB_TIME_ZONE);
     if (!startsAt) {
-      skipped.push({ title, reason: 'TIME_NONEXISTENT' });
+      skip(title, 'TIME_NONEXISTENT');
       continue;
     }
     if (
       berlinOffsetMinutes(startsAt, { y, m, d, hour: time.hour, minute: time.minute }) !== 60 &&
       !summerTimeVerified
     ) {
-      skipped.push({ title, reason: 'SUMMER_TIME_UNVERIFIED' });
+      skip(title, 'SUMMER_TIME_UNVERIFIED');
       continue;
     }
-    const ymd = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     const hhmm = `${String(time.hour).padStart(2, '0')}${String(time.minute).padStart(2, '0')}`;
     const id = `${ymd}_${hhmm}_${normalizeSpeakerName(speaker).replace(/ /g, '-')}`;
     if (seen.has(id)) {
-      skipped.push({ title, reason: 'DUPLICATE_ON_PAGE' });
+      skip(title, 'DUPLICATE_ON_PAGE');
       continue;
     }
     seen.add(id);
@@ -205,14 +230,31 @@ export function parseEcbWeeklySchedule(
       url: ECB_WEEKLY_URL,
     });
   }
-  return { speeches, skipped, entries: pairs.length, coverage: pageCoverage(days) };
+  const uncertainDays = [
+    ...new Set(skipped.filter((s) => UNCERTAIN_REASONS.has(s.reason) && s.day).map((s) => s.day!)),
+  ].sort();
+  const pageAnomaly = skipped.some((s) => !s.day) ? 'DATE_UNPARSEABLE' : null;
+  return { speeches, skipped, uncertainDays, pageAnomaly, entries: pairs.length, coverage: pageCoverage(days) };
+}
+
+/** The pipeline's `reconcile` option from a parse result (the job and the tests use the same mapping). */
+export function ecbReconcileOptions(
+  result: Pick<EcbWeeklyParseResult, 'coverage' | 'uncertainDays' | 'pageAnomaly'>,
+): NonNullable<SpeechPipelineOptions['reconcile']> {
+  return {
+    coverage: result.coverage,
+    timeZone: ECB_TIME_ZONE,
+    uncertainDays: result.uncertainDays,
+    pageAnomaly: result.pageAnomaly,
+  };
 }
 
 export class EcbWeeklyScheduleAdapter implements SpeechScheduleProvider {
   readonly name = ECB_WEEKLY_PROVIDER;
   private readonly http: HttpClient;
   lastSkipped: EcbWeeklyParseResult['skipped'] = [];
-  lastCoverage: EcbWeeklyParseResult['coverage'] = null;
+  /** For the pipeline (ecbReconcileOptions). null = not fetched yet → the job passes nothing. */
+  lastReconcile: NonNullable<SpeechPipelineOptions['reconcile']> | null = null;
 
   constructor(deps: HttpClientDeps = {}) {
     this.http = new HttpClient('ecb', PROVIDER_HTTP_SETTINGS.ecb, deps);
@@ -221,7 +263,7 @@ export class EcbWeeklyScheduleAdapter implements SpeechScheduleProvider {
   async fetchSpeeches(): Promise<NormalizedSpeech[]> {
     const result = parseEcbWeeklySchedule(await this.http.getText(ECB_WEEKLY_URL));
     this.lastSkipped = result.skipped;
-    this.lastCoverage = result.coverage;
+    this.lastReconcile = ecbReconcileOptions(result);
     return result.speeches;
   }
 }
