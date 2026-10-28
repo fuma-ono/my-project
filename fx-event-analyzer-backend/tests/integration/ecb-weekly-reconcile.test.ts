@@ -225,7 +225,7 @@ describe.skipIf(!integration)('ECB weekly schedule: reconcile against the real D
       expect(response.statusCode).toBe(200);
       return JSON.parse(response.body);
     };
-    const WEEK2 = 'from=2027-12-13T00:00:00Z&to=2027-12-18T00:00:00Z';
+    const WEEK2 = 'from=2027-12-12T00:00:00Z&to=2027-12-18T00:00:00Z'; // 12/13 00:30 CET = 12/12 23:30Z
 
     // 一覧・詳細・カレンダー: 出る(種別のラベルと statement_time_precision で区別)
     const list = await get(`/speeches?${WEEK2}`);
