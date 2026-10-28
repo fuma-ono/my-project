@@ -58,7 +58,7 @@ struct HistoricalComparisonView: View {
             // `geo.size`自体が横長になる。
             GeometryReader { geo in
                 if geo.size.width > geo.size.height {
-                    landscapeLayout(response)
+                    landscapeLayout(response, availableWidth: geo.size.width)
                 } else {
                     V5Viewport {
                         V5Header(title: "過去イベント比較", back: true, onBack: { dismiss() })
@@ -92,31 +92,49 @@ struct HistoricalComparisonView: View {
     /// スクロール無しで収まる想定。タブバーは表示しない(横画面はこの表を
     /// 見るための一時的な向きという想定 — 他タブへはいったん縦に戻ってから
     /// 移動する)。
-    private func landscapeLayout(_ response: ComparisonResponse) -> some View {
+    private func landscapeLayout(_ response: ComparisonResponse, availableWidth: CGFloat) -> some View {
         let events = newestFirst
             ? response.events.sorted { $0.releaseDatetime > $1.releaseDatetime }
             : response.events.sorted { $0.releaseDatetime < $1.releaseDatetime }
-        // HQ指摘(2026-10-26、CIスクリーンショットでの目視確認時)「ヘッダーの
-        // 位置、国旗マーク、指標名などが左端すぎる」: `landscapeTopBar`は
-        // 末尾の`Spacer()`で横幅いっぱいに広がる(ナビゲーションバーとして
-        // 戻るボタン・タイトルが左端にあるのは意図通り)が、`header(response)`
-        // と`landscapeTable`はどちらも内容の実寸に応じた幅しか持たないため、
-        // 親の`VStack(alignment: .leading)`では画面の余った右側を無視して
-        // 左端に詰めて並んでいた。`alignment: .center`に変えることで、
-        // 横幅いっぱいに広がる`landscapeTopBar`の見た目(左端固定)は変えずに、
-        // `header`・`landscapeTable`の2つだけが横画面の中央に来るようにした。
+        let showSecondary = Self.hasSecondaryColumn(events)
+        // HQ指摘(2026-10-28、実機確認)「表の両サイドおかしすぎる」: 表の列幅
+        // (`LandscapeColumn`)は固定のpt値で組んでいたため、横画面の実際の
+        // 横幅(端末やモデルによって異なる、iPhone SEで約660pt〜Proサイズで
+        // 約930pt)よりずっと狭い固定幅(前年/前月の有無で484pt/695pt)にしか
+        // ならず、`alignment: .center`で中央寄せしても表の両脇に大きな空白が
+        // 残っていた。表の内容の自然な幅(`Self.landscapeTableNaturalWidth`)
+        // と実際に使える横幅(ここでの`availableWidth`、左右の余白18×2を
+        // 引いた値)の比率を列幅の倍率(`columns`)にし、空白が残らないよう
+        // 列を実際の横幅いっぱいまで広げる(ただし文字が間延びしすぎない
+        // よう最大1.4倍、縮小はしない(最小1.0倍)よう制限する)。
+        let naturalWidth = Self.landscapeTableNaturalWidth(showSecondary: showSecondary)
+        let targetWidth = availableWidth - 36
+        let scale = min(max(targetWidth / naturalWidth, 1.0), 1.4)
+        let columns = LandscapeColumns(scale: scale)
         return ZStack {
             V5GlowBackground()
             VStack(alignment: .center, spacing: 12) {
                 landscapeTopBar
+                // HQ指摘(2026-10-28、実機確認)「ヘッダーが縦画面と異なる」:
+                // `landscapeHeader`内の`Spacer(minLength:)`は、親から提案
+                // された幅をそのまま引き継ぐ性質があり、ここの親
+                // (`alignment: .center`のVStack)は`landscapeTopBar`の末尾の
+                // `Spacer()`によって画面幅いっぱいに広がっていたため、
+                // `landscapeHeader`自体も画面幅いっぱいまで伸び、指標名(左)と
+                // 通貨ペア(右)が画面の両端に離れて見えていた(縦画面では
+                // `header(_:)`が表と同じ固定幅のコンテナの中にあるため、
+                // ここまで離れない)。表と同じ幅(`columns.totalWidth`)に
+                // 明示的に収めることで、縦画面と同じく「表と同じ幅のまとまり」
+                // として中央に来るようにした。
                 landscapeHeader(response)
-                landscapeTable(events, unit: response.indicator.unit)
+                    .frame(width: columns.totalWidth(showSecondary: showSecondary), alignment: .leading)
+                landscapeTable(events, unit: response.indicator.unit, showSecondary: showSecondary, columns: columns)
                 if let limit = response.historyLimit, limit.isLimited {
                     planLimitRow(limit)
                 }
             }
             // HQ指摘(同上)「日時の左部分の余白が広いから狭めて」: 画面端からの
-            // 余白を28→18に詰めた(`LandscapeColumn.date`・行の左パディングも
+            // 余白を28→18に詰めた(`LandscapeColumns.date`・行の左パディングも
             // 合わせて詰めている、`landscapeTableRow`参照)。
             .padding(.horizontal, 18)
             .padding(.top, 14)
@@ -182,22 +200,41 @@ struct HistoricalComparisonView: View {
         .padding(.horizontal, 2 * scale)
     }
 
-    private enum LandscapeColumn {
+    /// 横画面の表の列幅。HQ指摘(2026-10-28、実機確認)「表の両サイドが
+    /// おかしい」: 固定pt値のままだと実際の横幅よりずっと狭くなるため、
+    /// 基準値(`scale`1.0時の値、以前の固定値と同じ)を`landscapeLayout`で
+    /// 計算した倍率でまとめて拡大できるようにした。
+    private struct LandscapeColumns {
+        let scale: CGFloat
         // HQ指摘(2026-10-26)「日時の横の余白枠いらないから消して」:
         // 76ptでもまだ「MM/dd」+「HH:mm」の文字そのものより広く、左右に
         // 余白が残っていた。62に詰めた(`landscapeTableRow`の左パディングも
         // 6→4に詰め、見出しの「日時」ラベルも中央揃えから左揃えに変えて
         // 行のデータと同じ位置に揃えている)。
-        static let date: CGFloat = 62
-        static let value: CGFloat = 70
-        static let pips: CGFloat = 70
+        var date: CGFloat { 62 * scale }
+        var value: CGFloat { 70 * scale }
+        var pips: CGFloat { 70 * scale }
+
+        /// 表全体の幅(縦線の分も含む)。`landscapeHeader`を表と同じ幅に
+        /// 揃えるため(`landscapeLayout`参照)に使う。
+        func totalWidth(showSecondary: Bool) -> CGFloat {
+            var width = date + 1 + value * 3 + 1 + pips * 3
+            if showSecondary { width += value * 3 + 1 }
+            return width
+        }
     }
 
-    private func landscapeTable(_ events: [ComparisonEventSummary], unit: String?) -> some View {
+    /// `LandscapeColumns(scale: 1.0)`(以前の固定値)での表全体の幅。
+    /// `landscapeLayout`で実際の横幅との比率から`scale`を逆算するための
+    /// 基準値として使う。
+    private static func landscapeTableNaturalWidth(showSecondary: Bool) -> CGFloat {
+        LandscapeColumns(scale: 1.0).totalWidth(showSecondary: showSecondary)
+    }
+
+    private func landscapeTable(_ events: [ComparisonEventSummary], unit: String?, showSecondary: Bool, columns: LandscapeColumns) -> some View {
         let shape = RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
-        let showSecondary = Self.hasSecondaryColumn(events)
         return VStack(spacing: 0) {
-            landscapeTableHeader(showSecondary: showSecondary)
+            landscapeTableHeader(showSecondary: showSecondary, columns: columns)
             if events.isEmpty {
                 NotoText.text("過去の発表はまだありません。", size: 13)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
@@ -210,7 +247,7 @@ struct HistoricalComparisonView: View {
                                 Rectangle().fill(SettingsCardStyle.cardBorder.opacity(0.6)).frame(height: 0.5)
                             }
                             NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
-                                landscapeTableRow(event, unit: unit, showSecondary: showSecondary)
+                                landscapeTableRow(event, unit: unit, showSecondary: showSecondary, columns: columns)
                             }
                             .buttonStyle(SettingsRowPressStyle())
                             .accessibilityIdentifier("historyEventRow")
@@ -232,17 +269,17 @@ struct HistoricalComparisonView: View {
     /// ください」(縦画面向けの対応を横画面にも同様に適用): グループ見出し
     /// 行〜列見出し行〜各データ行まで実際の縦線(`landscapeGroupDivider`)が
     /// つながるようにした。
-    private func landscapeGroupHeaderRow(showSecondary: Bool) -> some View {
+    private func landscapeGroupHeaderRow(showSecondary: Bool, columns: LandscapeColumns) -> some View {
         HStack(spacing: 0) {
-            Color.clear.frame(width: LandscapeColumn.date)
+            Color.clear.frame(width: columns.date)
             landscapeGroupDivider
-            landscapeGroupLabel("前年", width: LandscapeColumn.value * 3)
+            landscapeGroupLabel("前年", width: columns.value * 3)
             if showSecondary {
                 landscapeGroupDivider
-                landscapeGroupLabel("前月", width: LandscapeColumn.value * 3)
+                landscapeGroupLabel("前月", width: columns.value * 3)
             }
             landscapeGroupDivider
-            Color.clear.frame(width: LandscapeColumn.pips * 3)
+            Color.clear.frame(width: columns.pips * 3)
         }
         .frame(height: 20)
     }
@@ -266,9 +303,9 @@ struct HistoricalComparisonView: View {
             .frame(width: width, alignment: .center)
     }
 
-    private func landscapeTableHeader(showSecondary: Bool) -> some View {
+    private func landscapeTableHeader(showSecondary: Bool, columns: LandscapeColumns) -> some View {
         VStack(spacing: 0) {
-            landscapeGroupHeaderRow(showSecondary: showSecondary)
+            landscapeGroupHeaderRow(showSecondary: showSecondary, columns: columns)
             HStack(spacing: 0) {
                 Button { newestFirst.toggle() } label: {
                     HStack(spacing: 4) {
@@ -283,25 +320,25 @@ struct HistoricalComparisonView: View {
                     // 余白の箱があるように見えていた。行と同じ左揃え+
                     // 同じ左パディングに揃えた。
                     .padding(.leading, 4)
-                    .frame(width: LandscapeColumn.date, height: 40, alignment: .leading)
+                    .frame(width: columns.date, height: 40, alignment: .leading)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(newestFirst ? "日時 新しい順" : "日時 古い順")
                 landscapeDivider
-                landscapeHeaderCell("結果", "(実績)", width: LandscapeColumn.value)
-                landscapeHeaderCell("予想", "(市場予想)", width: LandscapeColumn.value)
-                landscapeHeaderCell("前回", "(前回値)", width: LandscapeColumn.value)
+                landscapeHeaderCell("結果", "(実績)", width: columns.value)
+                landscapeHeaderCell("予想", "(市場予想)", width: columns.value)
+                landscapeHeaderCell("前回", "(前回値)", width: columns.value)
                 if showSecondary {
                     landscapeDivider
-                    landscapeHeaderCell("結果", "(実績)", width: LandscapeColumn.value)
-                    landscapeHeaderCell("予想", "(市場予想)", width: LandscapeColumn.value)
-                    landscapeHeaderCell("前回", "(前回値)", width: LandscapeColumn.value)
+                    landscapeHeaderCell("結果", "(実績)", width: columns.value)
+                    landscapeHeaderCell("予想", "(市場予想)", width: columns.value)
+                    landscapeHeaderCell("前回", "(前回値)", width: columns.value)
                 }
                 landscapeDivider
-                landscapeHeaderCell("1分", "(pips)", width: LandscapeColumn.pips)
-                landscapeHeaderCell("5分", "(pips)", width: LandscapeColumn.pips)
-                landscapeHeaderCell("15分", "(pips)", width: LandscapeColumn.pips)
+                landscapeHeaderCell("1分", "(pips)", width: columns.pips)
+                landscapeHeaderCell("5分", "(pips)", width: columns.pips)
+                landscapeHeaderCell("15分", "(pips)", width: columns.pips)
             }
             .frame(height: 40)
         }
@@ -326,7 +363,7 @@ struct HistoricalComparisonView: View {
         .frame(width: width, height: 40)
     }
 
-    private func landscapeTableRow(_ event: ComparisonEventSummary, unit: String?, showSecondary: Bool) -> some View {
+    private func landscapeTableRow(_ event: ComparisonEventSummary, unit: String?, showSecondary: Bool, columns: LandscapeColumns) -> some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(Self.dateString(event.releaseDatetime))
@@ -338,37 +375,37 @@ struct HistoricalComparisonView: View {
             }
             .monospacedDigit()
             .padding(.leading, 4)
-            .frame(width: LandscapeColumn.date, alignment: .leading)
+            .frame(width: columns.date, alignment: .leading)
             landscapeRowDivider
-            landscapeValueCell(event.actual, unit: unit)
-            landscapeValueCell(event.forecast, unit: unit)
-            landscapeValueCell(event.previous, unit: unit)
+            landscapeValueCell(event.actual, unit: unit, width: columns.value)
+            landscapeValueCell(event.forecast, unit: unit, width: columns.value)
+            landscapeValueCell(event.previous, unit: unit, width: columns.value)
             if showSecondary {
                 landscapeRowDivider
-                landscapeValueCell(event.secondaryActual, unit: unit)
-                landscapeValueCell(event.secondaryForecast, unit: unit)
-                landscapeValueCell(event.secondaryPrevious, unit: unit)
+                landscapeValueCell(event.secondaryActual, unit: unit, width: columns.value)
+                landscapeValueCell(event.secondaryForecast, unit: unit, width: columns.value)
+                landscapeValueCell(event.secondaryPrevious, unit: unit, width: columns.value)
             }
             landscapeRowDivider
-            landscapePipsCell(event.pipsByTimeframe?["1m"] ?? nil)
-            landscapePipsCell(event.pipsByTimeframe?["5m"] ?? nil)
-            landscapePipsCell(event.pipsByTimeframe?["15m"] ?? nil)
+            landscapePipsCell(event.pipsByTimeframe?["1m"] ?? nil, width: columns.pips)
+            landscapePipsCell(event.pipsByTimeframe?["5m"] ?? nil, width: columns.pips)
+            landscapePipsCell(event.pipsByTimeframe?["15m"] ?? nil, width: columns.pips)
         }
         .frame(height: 44)
         .contentShape(Rectangle())
     }
 
-    private func landscapeValueCell(_ value: Double?, unit: String?) -> some View {
+    private func landscapeValueCell(_ value: Double?, unit: String?, width: CGFloat) -> some View {
         Text(Self.valueText(value, unit: unit))
             .font(.system(size: 13, weight: .medium))
             .monospacedDigit()
             .foregroundStyle(.white)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
-            .frame(width: LandscapeColumn.value)
+            .frame(width: width)
     }
 
-    private func landscapePipsCell(_ pips: Double?) -> some View {
+    private func landscapePipsCell(_ pips: Double?, width: CGFloat) -> some View {
         Text(Self.pipsText(pips))
             .font(.system(size: 13, weight: .medium))
             .monospacedDigit()
@@ -376,7 +413,7 @@ struct HistoricalComparisonView: View {
             .lineLimit(1)
             .minimumScaleFactor(0.8)
             .padding(.trailing, 4)
-            .frame(width: LandscapeColumn.pips, alignment: .trailing)
+            .frame(width: width, alignment: .trailing)
     }
 
     /// 副指標(api-design v1.35、HQ指示2026-10-25「前年の結果予想前回、前月の
