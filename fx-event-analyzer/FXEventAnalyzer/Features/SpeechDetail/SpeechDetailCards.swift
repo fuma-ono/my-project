@@ -33,7 +33,6 @@ struct SpeechDetailCards: View {
                 statementCard
             }
             reactionTable
-            movementLink
             comparisonLink
         }
         .frame(width: 214)
@@ -199,14 +198,33 @@ struct SpeechDetailCards: View {
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                     .frame(maxWidth: .infinity, minHeight: Self.rowHeight)
             }
+            // HQ指示(2026-10-28)「要人発言詳細も相場反応詳細ボタンを消して。
+            // 通貨を押したらその通貨の相場反応詳細に行くようにして」:
+            // 別枠の「相場反応詳細」ボタン(常に先頭の通貨ペアだけに固定)を
+            // 削除し、`EventDetailCards.grid`と同じく各行自体を
+            // `NavigationLink`にして、押した通貨ペアの相場反応詳細に進む
+            // ようにした。
             ForEach(reactions) { reaction in
-                HStack(spacing: 0) {
-                    cell(width: Self.pairColumnWidth, alignment: .leading) { pairLabel(reaction.symbol) }
-                    cell(width: Self.valueColumnWidth) { pipsText(reaction.pips["1m"] ?? nil) }
-                    cell(width: Self.valueColumnWidth) { pipsText(reaction.pips["5m"] ?? nil) }
-                    cell(width: Self.valueColumnWidth) { pipsText(reaction.pips["15m"] ?? nil) }
+                NavigationLink(value: AppRoute.speechMovementDetail(
+                    speechId: response.speechId,
+                    fxPairId: reaction.fxPairId,
+                    symbol: reaction.symbol,
+                    title: "\(response.speaker.name) \(response.title)",
+                    statementDatetime: response.statementDatetime
+                )) {
+                    HStack(spacing: 0) {
+                        cell(width: Self.pairColumnWidth, alignment: .leading) { pairLabel(reaction.symbol) }
+                        cell(width: Self.valueColumnWidth) { pipsText(reaction.pips["1m"] ?? nil) }
+                        cell(width: Self.valueColumnWidth) { pipsText(reaction.pips["5m"] ?? nil) }
+                        cell(width: Self.valueColumnWidth) { pipsText(reaction.pips["15m"] ?? nil) }
+                    }
+                    .frame(height: Self.rowHeight)
+                    .contentShape(Rectangle())
                 }
-                .frame(height: Self.rowHeight)
+                .buttonStyle(SettingsRowPressStyle())
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(FXPairSymbol.displayName(reaction.symbol))の相場反応を見る")
+                .accessibilityAddTraits(.isButton)
             }
         }
         .frame(width: 214)
@@ -262,23 +280,12 @@ struct SpeechDetailCards: View {
     }
 
     /// 値動きの表の先頭の通貨ペア(発言者の通貨のペア)。まだ値動きが無いとき(発言前)はnil。
+    /// HQ指示(2026-10-28)で「相場反応詳細」の個別ボタン(`movementLink`、
+    /// 常に先頭の通貨ペア固定)は削除し、表の各行から押した通貨ペアの
+    /// 相場反応詳細に進むようにした(`grid`参照)。このプロパティ自体は
+    /// `comparisonLink`の既定の通貨ペア(表の先頭、無ければサーバーが決める)
+    /// として引き続き使う。
     private var firstReaction: SpeechReaction? { reactions.first }
-
-    /// 相場反応詳細: 先頭の通貨ペアのチャートと値動き(本番データ)。発言前で値動きが無いときは出さない。
-    @ViewBuilder private var movementLink: some View {
-        if let pair = firstReaction {
-            NavigationLink(value: AppRoute.speechMovementDetail(
-                speechId: response.speechId,
-                fxPairId: pair.fxPairId,
-                symbol: pair.symbol,
-                title: "\(response.speaker.name) \(response.title)",
-                statementDatetime: response.statementDatetime
-            )) {
-                linkCard(icon: "chart.bar.xaxis", title: "相場反応詳細")
-            }
-            .buttonStyle(SettingsRowPressStyle())
-        }
-    }
 
     /// 過去イベント比較: 同じ要人の過去の発言と比べる(本番データ)。通貨ペアは表の先頭、無ければサーバーが決める。
     private var comparisonLink: some View {
