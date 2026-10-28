@@ -176,6 +176,23 @@ describe('inboxBody', () => {
     ).toBe('発表の5分前です（10/13 20:30発表・重要度 高）');
   });
 
+  it('a no-result event (FOMC議事要旨, result_type NONE) says 公表, not 発表 (N7)', () => {
+    expect(
+      inboxBody(
+        { kind: 'INDICATOR', scheduled_at: '2026-11-18T19:00:00Z', importance: 'MEDIUM', result_type: 'NONE' },
+        5,
+        'Asia/Tokyo',
+      ),
+    ).toBe('公表の5分前です（11/19 4:00公表・重要度 中）');
+    expect(
+      inboxBody(
+        { kind: 'INDICATOR', scheduled_at: '2026-11-18T19:00:00Z', importance: 'HIGH', result_type: 'VALUE' },
+        0,
+        'Asia/Tokyo',
+      ),
+    ).toBe('まもなく発表です（11/19 4:00発表・重要度 高）');
+  });
+
   it('falls back to Asia/Tokyo for an unknown zone', () => {
     expect(formatMonthDayTime(new Date('2026-10-13T15:00:00Z'), 'Not/AZone')).toBe('10/14 0:00');
     expect(formatMonthDayTime(new Date('2026-10-13T15:00:00Z'), 'UTC')).toBe('10/13 15:00');
