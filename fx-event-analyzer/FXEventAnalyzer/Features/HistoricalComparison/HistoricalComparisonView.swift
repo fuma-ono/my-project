@@ -31,6 +31,11 @@ struct HistoricalComparisonView: View {
             .toolbar(.hidden, for: .navigationBar)
             .task { viewModel.load() }
             .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
+            // HQ指示(2026-10-25、再指示2026-10-26)「この画面だけ横画面できる
+            // ようにしたい」: この画面がオンスクリーンの間だけ横画面を許可する
+            // (`OrientationLock.swift`参照 — 過去4回の失敗の経緯も含む)。
+            .onAppear { HistoricalComparisonOrientation.shared.setAllowed(true) }
+            .onDisappear { HistoricalComparisonOrientation.shared.setAllowed(false) }
     }
 
     @ViewBuilder
@@ -45,24 +50,333 @@ struct HistoricalComparisonView: View {
         case .notEntitled:
             loadingScaffold { FXEmptyState(icon: "lock.fill", title: "この情報はご利用いただけません", message: "現在のプランでは過去の比較データを閲覧できません。") }
         case .loaded(let response):
-            V5Viewport {
-                V5Header(title: "過去イベント比較", back: true, onBack: { dismiss() })
-                VStack(alignment: .leading, spacing: 8) {
-                    header(response)
-                    table(response)
-                    if let limit = response.historyLimit, limit.isLimited {
-                        planLimitRow(limit)
+            // HQ指示(2026-10-25、再指示2026-10-26): 横画面では表が縦画面用の
+            // V5キャンバス(234×491、`V5Viewport`参照)に収まらないため、
+            // 横画面の時は`V5Viewport`のレターボックス表示をやめ、実寸
+            // ポイントの専用レイアウト(`landscapeLayout`)に切り替える。
+            // UIKitのインターフェースが実際に回転する方式のため、
+            // `geo.size`自体が横長になる。
+            GeometryReader { geo in
+                if geo.size.width > geo.size.height {
+                    landscapeLayout(response)
+                } else {
+                    V5Viewport {
+                        V5Header(title: "過去イベント比較", back: true, onBack: { dismiss() })
+                        VStack(alignment: .leading, spacing: 8) {
+                            header(response)
+                            table(response)
+                            if let limit = response.historyLimit, limit.isLimited {
+                                planLimitRow(limit)
+                            }
+                        }
+                        .frame(width: 214)
+                        .padding(.top, 8)
+                        .frame(width: V5P.W, height: 398, alignment: .top)
+                        .position(x: V5P.W / 2, y: 54 + 398 / 2)
+                        V5BottomBar(selected: $tabSelection)
                     }
                 }
-                .frame(width: 214)
-                .padding(.top, 8)
-                .frame(width: V5P.W, height: 398, alignment: .top)
-                .position(x: V5P.W / 2, y: 54 + 398 / 2)
-                V5BottomBar(selected: $tabSelection)
             }
         case .error(let message):
             loadingScaffold { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() }) }
         }
+    }
+
+    // MARK: - 横画面レイアウト
+
+    /// HQ指示(2026-10-25、再指示2026-10-26)「縦画面に入らないから...この
+    /// 画面だけ横画面できるようにしたい」: 縦画面用の表(`table(_:)`、V5
+    /// キャンバス単位の小さいフォント・列幅)を使い回さず、実寸ポイントの
+    /// 大きめの列幅・フォントで組んだ専用の表(`landscapeTable`)を使う。
+    /// 横画面はiPhoneの横幅を活かせるため、列を増やしても基本的に横
+    /// スクロール無しで収まる想定。タブバーは表示しない(横画面はこの表を
+    /// 見るための一時的な向きという想定 — 他タブへはいったん縦に戻ってから
+    /// 移動する)。
+    private func landscapeLayout(_ response: ComparisonResponse) -> some View {
+        let events = newestFirst
+            ? response.events.sorted { $0.releaseDatetime > $1.releaseDatetime }
+            : response.events.sorted { $0.releaseDatetime < $1.releaseDatetime }
+        // HQ指摘(2026-10-26、CIスクリーンショットでの目視確認時)「ヘッダーの
+        // 位置、国旗マーク、指標名などが左端すぎる」: `landscapeTopBar`は
+        // 末尾の`Spacer()`で横幅いっぱいに広がる(ナビゲーションバーとして
+        // 戻るボタン・タイトルが左端にあるのは意図通り)が、`header(response)`
+        // と`landscapeTable`はどちらも内容の実寸に応じた幅しか持たないため、
+        // 親の`VStack(alignment: .leading)`では画面の余った右側を無視して
+        // 左端に詰めて並んでいた。`alignment: .center`に変えることで、
+        // 横幅いっぱいに広がる`landscapeTopBar`の見た目(左端固定)は変えずに、
+        // `header`・`landscapeTable`の2つだけが横画面の中央に来るようにした。
+        return ZStack {
+            V5GlowBackground()
+            VStack(alignment: .center, spacing: 12) {
+                landscapeTopBar
+                landscapeHeader(response)
+                landscapeTable(events, unit: response.indicator.unit)
+                if let limit = response.historyLimit, limit.isLimited {
+                    planLimitRow(limit)
+                }
+            }
+            // HQ指摘(同上)「日時の左部分の余白が広いから狭めて」: 画面端からの
+            // 余白を28→18に詰めた(`LandscapeColumn.date`・行の左パディングも
+            // 合わせて詰めている、`landscapeTableRow`参照)。
+            .padding(.horizontal, 18)
+            .padding(.top, 14)
+        }
+        .ignoresSafeArea()
+    }
+
+    private var landscapeTopBar: some View {
+        HStack(spacing: 8) {
+            Button(action: { dismiss() }) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("戻る")
+            .accessibilityIdentifier("historyLandscapeBack")
+            NotoText.text("過去イベント比較", size: 15).foregroundStyle(.white)
+            Spacer()
+        }
+        // `.accessibilityElement(children: .contain)`: 中の戻るボタンを個別に
+        // タップ可能なまま保ちつつ、このHStack自体もXCUITestから識別子で
+        // 問い合わせられる要素にする。
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("historyLandscapeTopBar")
+    }
+
+    /// HQ指摘(2026-10-26)「ヘッダーや指標名や国旗マークとかの大きさが
+    /// 縦画面と違います。揃えてください」: 縦画面の`header(_:)`はV5キャンバス
+    /// 単位(国旗34・名前11等)で書かれており、`V5Viewport`の
+    /// `scaleEffect(scale)`(実機ではおよそ1.72倍、`V5P.headerRefScale`参照)
+    /// を経て初めて実寸になる。横画面(`landscapeLayout`)は`V5Viewport`を
+    /// 経由せず実寸ポイントでそのまま描画するため、`header(_:)`を直接
+    /// 呼ぶと見た目が縦画面よりひとまわり小さくなっていた。`header(_:)`と
+    /// 同じ構成を`V5P.headerRefScale`倍した専用版を使い、見た目の大きさを
+    /// 縦画面と揃えた。
+    private func landscapeHeader(_ response: ComparisonResponse) -> some View {
+        let scale = V5P.headerRefScale
+        let indicator = response.indicator
+        let country = indicator.countryCode ?? ""
+        let name = CountryFlag.indicatorDisplayText(indicator.name, countryCode: country, displayName: indicator.displayName)
+        return HStack(spacing: 8 * scale) {
+            CountryFlagView(countryCode: country, diameter: 34 * scale)
+            VStack(alignment: .leading, spacing: 3 * scale) {
+                NotoText.text(name, size: 11 * scale)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                HStack(spacing: 3 * scale) {
+                    NotoText.text(CountryFlag.japaneseName(forCountry: country), size: 8.5 * scale)
+                    NotoText.text("｜", size: 8.5 * scale).opacity(0.6)
+                    NotoText.text(indicator.currencyCode ?? "", size: 8.5 * scale)
+                    Spacer(minLength: 4 * scale)
+                    OverlappingPairFlags(symbol: viewModel.fxPairSymbol, diameter: 10 * scale)
+                    NotoText.text(Self.pairLabel(viewModel.fxPairSymbol), size: 9 * scale)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                }
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+            }
+        }
+        .frame(height: 36 * scale)
+        .padding(.horizontal, 2 * scale)
+    }
+
+    private enum LandscapeColumn {
+        // HQ指摘(2026-10-26)「日時の横の余白枠いらないから消して」:
+        // 76ptでもまだ「MM/dd」+「HH:mm」の文字そのものより広く、左右に
+        // 余白が残っていた。62に詰めた(`landscapeTableRow`の左パディングも
+        // 6→4に詰め、見出しの「日時」ラベルも中央揃えから左揃えに変えて
+        // 行のデータと同じ位置に揃えている)。
+        static let date: CGFloat = 62
+        static let value: CGFloat = 70
+        static let pips: CGFloat = 70
+    }
+
+    private func landscapeTable(_ events: [ComparisonEventSummary], unit: String?) -> some View {
+        let shape = RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
+        let showSecondary = Self.hasSecondaryColumn(events)
+        return VStack(spacing: 0) {
+            landscapeTableHeader(showSecondary: showSecondary)
+            if events.isEmpty {
+                NotoText.text("過去の発表はまだありません。", size: 13)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
+            } else {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
+                            if index > 0 {
+                                Rectangle().fill(SettingsCardStyle.cardBorder.opacity(0.6)).frame(height: 0.5)
+                            }
+                            NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
+                                landscapeTableRow(event, unit: unit, showSecondary: showSecondary)
+                            }
+                            .buttonStyle(SettingsRowPressStyle())
+                            .accessibilityIdentifier("historyEventRow")
+                        }
+                    }
+                }
+                .frame(maxHeight: 250)
+            }
+        }
+        .background(V5CardGradient.fill)
+        .clipShape(shape)
+        .overlay(shape.stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
+    }
+
+    /// HQ指示(2026-10-25)「過去イベント比較は前年の結果予想前回、前月の
+    /// 結果予想前回が必要」: 列見出しの上にもう1段、グループ見出し
+    /// (「前年」「前月」)を出して2つの結果/予想/前回を区別する。
+    /// HQ指示(2026-10-26)「前年前月の線がないので結果、前回の縦線を伸ばして
+    /// ください」(縦画面向けの対応を横画面にも同様に適用): グループ見出し
+    /// 行〜列見出し行〜各データ行まで実際の縦線(`landscapeGroupDivider`)が
+    /// つながるようにした。
+    private func landscapeGroupHeaderRow(showSecondary: Bool) -> some View {
+        HStack(spacing: 0) {
+            Color.clear.frame(width: LandscapeColumn.date)
+            landscapeGroupDivider
+            landscapeGroupLabel("前年", width: LandscapeColumn.value * 3)
+            if showSecondary {
+                landscapeGroupDivider
+                landscapeGroupLabel("前月", width: LandscapeColumn.value * 3)
+            }
+            landscapeGroupDivider
+            Color.clear.frame(width: LandscapeColumn.pips * 3)
+        }
+        .frame(height: 20)
+    }
+
+    private var landscapeGroupDivider: some View {
+        Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 1, height: 20)
+    }
+
+    /// `landscapeTableRow`(行の高さ44)用の縦線。`landscapeGroupDivider`
+    /// (グループ見出し行の高さ20専用)とは高さが異なるため別に用意し、
+    /// グループ見出し行〜列見出し行〜各データ行まで同じ横位置で縦線が
+    /// 一直線につながるようにした(HQ指示 2026-10-26「結果、前回の縦線を
+    /// 伸ばしてください」、縦画面向けの対応を横画面にも適用)。
+    private var landscapeRowDivider: some View {
+        Rectangle().fill(SettingsCardStyle.cardBorder.opacity(0.5)).frame(width: 1, height: 44)
+    }
+
+    private func landscapeGroupLabel(_ title: String, width: CGFloat) -> some View {
+        NotoText.text(title, size: 11)
+            .foregroundStyle(SettingsCardStyle.subtitleColor)
+            .frame(width: width, alignment: .center)
+    }
+
+    private func landscapeTableHeader(showSecondary: Bool) -> some View {
+        VStack(spacing: 0) {
+            landscapeGroupHeaderRow(showSecondary: showSecondary)
+            HStack(spacing: 0) {
+                Button { newestFirst.toggle() } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar").font(.system(size: 12, weight: .semibold))
+                        NotoText.text("日時", size: 13)
+                        Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .bold))
+                    }
+                    .foregroundStyle(.white)
+                    // HQ指摘(2026-10-26)「日時の横の余白枠いらない」:
+                    // 既定(中央揃え)のままだと、下の各行の日時(左揃え、
+                    // `landscapeTableRow`参照)とずれて、見出しの左右に
+                    // 余白の箱があるように見えていた。行と同じ左揃え+
+                    // 同じ左パディングに揃えた。
+                    .padding(.leading, 4)
+                    .frame(width: LandscapeColumn.date, height: 40, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(newestFirst ? "日時 新しい順" : "日時 古い順")
+                landscapeDivider
+                landscapeHeaderCell("結果", "(実績)", width: LandscapeColumn.value)
+                landscapeHeaderCell("予想", "(市場予想)", width: LandscapeColumn.value)
+                landscapeHeaderCell("前回", "(前回値)", width: LandscapeColumn.value)
+                if showSecondary {
+                    landscapeDivider
+                    landscapeHeaderCell("結果", "(実績)", width: LandscapeColumn.value)
+                    landscapeHeaderCell("予想", "(市場予想)", width: LandscapeColumn.value)
+                    landscapeHeaderCell("前回", "(前回値)", width: LandscapeColumn.value)
+                }
+                landscapeDivider
+                landscapeHeaderCell("1分", "(pips)", width: LandscapeColumn.pips)
+                landscapeHeaderCell("5分", "(pips)", width: LandscapeColumn.pips)
+                landscapeHeaderCell("15分", "(pips)", width: LandscapeColumn.pips)
+            }
+            .frame(height: 40)
+        }
+        .background(Self.headerFill)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
+        }
+    }
+
+    private var landscapeDivider: some View {
+        Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 1, height: 40)
+    }
+
+    private func landscapeHeaderCell(_ title: String, _ subtitle: String, width: CGFloat) -> some View {
+        VStack(spacing: 2) {
+            NotoText.text(title, size: 13).foregroundStyle(.white)
+            NotoText.text(subtitle, size: 9)
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(width: width, height: 40)
+    }
+
+    private func landscapeTableRow(_ event: ComparisonEventSummary, unit: String?, showSecondary: Bool) -> some View {
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(Self.dateString(event.releaseDatetime))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                Text(Self.timeString(event.releaseDatetime))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Self.timeColor)
+            }
+            .monospacedDigit()
+            .padding(.leading, 4)
+            .frame(width: LandscapeColumn.date, alignment: .leading)
+            landscapeRowDivider
+            landscapeValueCell(event.actual, unit: unit)
+            landscapeValueCell(event.forecast, unit: unit)
+            landscapeValueCell(event.previous, unit: unit)
+            if showSecondary {
+                landscapeRowDivider
+                landscapeValueCell(event.secondaryActual, unit: unit)
+                landscapeValueCell(event.secondaryForecast, unit: unit)
+                landscapeValueCell(event.secondaryPrevious, unit: unit)
+            }
+            landscapeRowDivider
+            landscapePipsCell(event.pipsByTimeframe?["1m"] ?? nil)
+            landscapePipsCell(event.pipsByTimeframe?["5m"] ?? nil)
+            landscapePipsCell(event.pipsByTimeframe?["15m"] ?? nil)
+        }
+        .frame(height: 44)
+        .contentShape(Rectangle())
+    }
+
+    private func landscapeValueCell(_ value: Double?, unit: String?) -> some View {
+        Text(Self.valueText(value, unit: unit))
+            .font(.system(size: 13, weight: .medium))
+            .monospacedDigit()
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .frame(width: LandscapeColumn.value)
+    }
+
+    private func landscapePipsCell(_ pips: Double?) -> some View {
+        Text(Self.pipsText(pips))
+            .font(.system(size: 13, weight: .medium))
+            .monospacedDigit()
+            .foregroundStyle(pips.map { $0 >= 0 ? Self.plusColor : Self.minusColor } ?? SettingsCardStyle.subtitleColor)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .padding(.trailing, 4)
+            .frame(width: LandscapeColumn.pips, alignment: .trailing)
     }
 
     /// 副指標(api-design v1.35、HQ指示2026-10-25「前年の結果予想前回、前月の

@@ -465,6 +465,104 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Re-tapping the Settings tab did not pop back to the Settings root")
     }
 
+    /// HQ指示(2026-10-25、再指示2026-10-26)「過去イベント比較の表が縦画面に
+    /// 入らないから、この画面だけ横画面できるようにしたい」。過去4回の
+    /// 実装試行の経緯は`HistoricalComparisonView.onAppear`・
+    /// `OrientationLock.swift`のコメント参照。文字列の存在だけでなく
+    /// 「横画面専用の要素(`historyLandscapeTopBar`)が出て、縦画面専用の
+    /// 要素(`v5HeaderBack`・タブバー)が消える」という構造の変化を確認する
+    /// — 回転が実際に効いていなければ、`historyLandscapeTopBar`は現れず
+    /// `v5HeaderBack`が残り続けるため、この種の「見た目は壊れているのに
+    /// テストは通る」を防げる。過去4回ともこの構造面アサーションは
+    /// パスしており(SwiftUIの論理レイアウトは正しく切り替わっていた)、
+    /// 壊れて見えたのは保存されたスクリーンショットのピクセル側だけ
+    /// だった。5回目(今回)は`OrientationLock.swift`側に明示的な
+    /// `layoutIfNeeded()`強制を追加し、ここでは回転アニメーションの完了を
+    /// さらに待つ余地を持たせるため待ち時間を2.5秒→4.0秒に伸ばした。
+    func testHistoricalComparisonAllowsLandscape() throws {
+        let emailField = app.textFields["メールアドレス"]
+        XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
+        type("ui-screenshot@example.com", into: emailField)
+        type("ui-screenshot-password", into: app.secureTextFields["パスワード"])
+        app.buttons["ログイン"].tap()
+        XCTAssertTrue(waitForAnyElement(containing: "通貨ペア", timeout: 25), "Home did not load")
+
+        tapIdentifier("v5Tab1")
+        XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicators list did not load")
+        tap(containing: "国・地域")
+        let usMenuItem = app.buttons["米国"]
+        if usMenuItem.waitForExistence(timeout: 5) { usMenuItem.tap() }
+        tap(containing: "米国CPI(消費者物価指数)")
+        XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 15), "Indicator Detail did not load")
+        tap(containing: "過去イベント比較")
+        XCTAssertTrue(waitForAnyElement(containing: "前回値", timeout: 15), "Historical Comparison did not load")
+        // 縦画面では横画面専用の要素が無く、縦画面専用の戻るボタンがある。
+        XCTAssertFalse(app.otherElements["historyLandscapeTopBar"].exists, "Landscape-only top bar should not exist in portrait")
+        XCTAssertTrue(app.buttons["v5HeaderBack"].exists, "Portrait-only back button should exist in portrait")
+
+        XCUIDevice.shared.orientation = .landscapeLeft
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertTrue(
+            waitForAnyElement(containing: "前回値", timeout: 10),
+            "Historical Comparison did not keep rendering its table after rotating to landscape"
+        )
+        // 横画面専用の要素が実際に現れ、縦画面専用の戻るボタン・タブバーが
+        // 消えていることを確認する(文字列の存在だけでは回転の成否を
+        // 検知できなかった反省を踏まえた、構造面のアサーション)。
+        XCTAssertTrue(
+            app.otherElements["historyLandscapeTopBar"].waitForExistence(timeout: 5),
+            "Landscape-only top bar did not appear after rotating to landscape — the screen likely did not actually switch to the landscape layout"
+        )
+        XCTAssertFalse(app.buttons["v5HeaderBack"].exists, "Portrait-only back button should not exist in landscape")
+        // 6回目の修正: `v5Tab1`だけ`.exists`で2回連続して失敗した
+        // (「Bottom tab bar should not exist in landscape」)。`NavigationStack`
+        // はこの画面を押す前の画面(指標詳細)を画面裏に保持し続けており、
+        // その画面にも同じ`v5Tab1`識別子のタブバーが存在する — `app.buttons[id]`
+        // は画面の前面・裏面を問わずアプリ全体のアクセシビリティツリーから
+        // 一致する要素を探すため、このHistoricalComparisonView自身の
+        // タブバーが消えていても、裏の指標詳細の方が引っかかって`exists`が
+        // `true`のままになっていたと見られる(`v5HeaderBack`は指標詳細側には
+        // 無い識別子のため、この影響を受けずに正しく`false`になっていた)。
+        // 「画面として見えている(ヒットテスト可能)かどうか」を見る
+        // `isHittable`に変えることで、裏に隠れているだけの要素を誤って
+        // 拾わないようにした。
+        XCTAssertFalse(app.buttons["v5Tab1"].isHittable, "Bottom tab bar should not be visible in landscape")
+        // HQ指摘(2026-10-26、2027-10-27)「スクリーンショットの特定の領域が
+        // 空白に見える、なぜ直らないのか」: スクリーンショットのピクセルは
+        // 回転トランジションの影響で信頼できない(過去複数回の壊れ方と同じ)。
+        // アクセシビリティツリーは論理レイアウトをそのまま反映し、回転の
+        // ピクセル合成バグの影響を受けないため、ここで実際の要素の有無・
+        // 座標・サイズをCIログへ出力し、ピクセルを目視するのではなく
+        // ログから直接レイアウトを確認できるようにする。
+        print("=== [landscape debug] full accessibility tree ===")
+        print(app.debugDescription)
+        print("=== [landscape debug] 前年/前月/日時 staticTexts ===")
+        for text in app.staticTexts.allElementsBoundByIndex {
+            if ["前年", "前月", "日時"].contains(text.label) {
+                print("[landscape debug] label=\(text.label) frame=\(text.frame) exists=\(text.exists)")
+            }
+        }
+        print("=== [landscape debug] historyLandscapeTopBar / table frames ===")
+        print("[landscape debug] historyLandscapeTopBar frame=\(app.otherElements["historyLandscapeTopBar"].frame)")
+        print("[landscape debug] window frame=\(app.windows.firstMatch.frame)")
+        // 5回目の修正(`OrientationLock.swift`参照): 要素の存在判定
+        // (アクセシビリティツリー、最終的な論理レイアウトを反映)と実際に
+        // 合成されるピクセル(UIKitの回転トランジションアニメーション)は
+        // タイミングが別物のため、通常の`settle`(既定0.6秒)ではアニメー
+        // ションの完了前にスクリーンショットを撮ってしまい、回転アニメー
+        // ションの途中状態(中身が回転しかけ・新しく広がった分が黒いまま)
+        // が写るおそれがある。この画面だけさらに長めに待つ。
+        capture("09b-HistoricalComparison-Landscape", settle: 4.0)
+
+        // 戻る: Portraitに戻すと、横画面専用の要素が消えて縦画面の見た目に戻る。
+        XCUIDevice.shared.orientation = .portrait
+        Thread.sleep(forTimeInterval: 1.0)
+        XCTAssertTrue(waitForAnyElement(containing: "前回値", timeout: 10), "Historical Comparison did not resume its portrait layout")
+        XCTAssertFalse(app.otherElements["historyLandscapeTopBar"].exists, "Landscape-only top bar should disappear after rotating back to portrait")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 10), "Did not return to Indicator Detail after leaving Historical Comparison")
+    }
+
     /// Taps the row's center through SettingsView's fixed V5 layout (group 1
     /// top y=54.5, 31pt rows — SettingsView.rowHeight) mapped through V5Viewport's scale-to-fit.
     /// Center taps used to land in the row's Spacer gap, which had no
