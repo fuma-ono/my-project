@@ -217,7 +217,12 @@ final class ScreenshotTests: XCTestCase {
         // 発言済みの要人発言(本番と同じ計算の値動き)と、同じ要人の過去イベント比較(HQ指示 2026-10-15)。
         // (2026-10-15: CIのシミュレータがアプリを起動できず全画面が撮れなかった回があったため撮り直し。)
         tap(containing: "欧州議会での証言")
-        if waitForAnyElement(containing: "相場反応詳細", timeout: 15) {
+        // HQ指示(2026-10-28)「要人発言詳細も相場反応詳細ボタンを消して。
+        // 通貨を押したらその通貨の相場反応詳細に行くようにして」により、
+        // 別枠の「相場反応詳細」ボタン自体を削除したため、代わりに値動きの
+        // 表の行(先頭はEUR/USD、`speechFxPairs`の並び順)のaccessibility
+        // labelで「値動きのデータが読み込まれ発言済みである」ことを確かめる。
+        if waitForAnyElement(containing: "EUR/USDの相場反応を見る", timeout: 15) {
             Thread.sleep(forTimeInterval: 1.0)
             capture("13b-SpeechDetailDelivered")
             tap(containing: "過去イベント比較")
