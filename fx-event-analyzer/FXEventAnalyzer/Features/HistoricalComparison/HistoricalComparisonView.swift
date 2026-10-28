@@ -540,11 +540,22 @@ struct HistoricalComparisonView: View {
     /// 表の高さ。行が少なければ行の分だけ、多ければ画面に入る高さで止めて中をスクロールする。
     /// `showSecondary`: 前年/前月のグループ見出し行(`groupHeaderHeight`)が
     /// 付く分、表全体の高さも増える(HQ指示2026-10-25)。
+    ///
+    /// HQ指摘(2026-10-28、実機確認)「8/7の行が常時見切れている」: 行の積算
+    /// (`rowHeight + 0.5`)だけでちょうどの高さを計算し、`.frame(height:)`+
+    /// `.clipShape`で表の外枠を切り詰めていたため、最終行(特にロック印の
+    /// アイコンなど)が外枠ぴったりの境界に接しており、実機のレンダリングで
+    /// わずかにはみ出た分がそのまま切り取られていた(シミュレータのスクリー
+    /// ンショットでは出ない、この画面特有の実機差異)。行数に関わらず一定の
+    /// 余白(`bottomSafetyMargin`)を高さに足し、最終行と外枠の間に常に隙間が
+    /// 残るようにした。
     static func tableHeight(rows: Int, limited: Bool, showSecondary: Bool) -> CGFloat {
         let header = headerHeight + (showSecondary ? groupHeaderHeight : 0)
-        let content = header + CGFloat(max(rows, 1)) * (rowHeight + 0.5)
+        let content = header + CGFloat(max(rows, 1)) * (rowHeight + 0.5) + bottomSafetyMargin
         return min(content, limited ? 312 : 334)
     }
+
+    private static let bottomSafetyMargin: CGFloat = 4
 
     /// HQ指示(2026-10-14)「参考画像と比べて文字が小さすぎる。枠も小さい。見やすく」:
     /// 見出し20→26・行18→24、文字は表の見出し6.5→8.5・数字6.5→8.5・時刻5→6.5に上げた。
