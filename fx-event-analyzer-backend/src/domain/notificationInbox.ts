@@ -1,3 +1,4 @@
+import { attributionForOrganization, inboxSourceNote, type Attribution } from './attribution.js';
 import {
   buildUpcomingNotifications,
   formatIsoSeconds,
@@ -139,7 +140,8 @@ export function formatMonthDayTime(instant: Date, timeZone: string): string {
  * 「まもなく発言です（…発言・重要度 中）」.
  */
 export function inboxBody(
-  item: Pick<UpcomingNotificationItem, 'kind' | 'scheduled_at' | 'importance'>,
+  item: Pick<UpcomingNotificationItem, 'kind' | 'scheduled_at' | 'importance'> &
+    Partial<Pick<UpcomingNotificationItem, 'attribution'>>,
   leadMinutes: number,
   timeZone: string,
 ): string {
@@ -147,7 +149,7 @@ export function inboxBody(
   const timing = leadMinutes === 0 ? `まもなく${noun}です` : `${noun}の${leadMinutes}分前です`;
   const level = IMPORTANCE_LABELS[item.importance] ?? item.importance;
   const when = formatMonthDayTime(new Date(item.scheduled_at), timeZone);
-  return `${timing}（${when}${noun}・重要度 ${level}）`;
+  return `${timing}（${when}${noun}・重要度 ${level}）${inboxSourceNote(item.attribution) ?? ''}`;
 }
 
 /**
@@ -208,14 +210,72 @@ export interface NotificationInboxRow {
 
 export interface NotificationInboxItem extends NotificationInboxRow {
   lead_minutes: number | null;
+  /**
+   * 出典と告知(api-design v1.39)。SPEECH と、要人発言の CALENDAR_UPDATE: 要人の機関(ECB・FRB)から。
+   * それ以外(INDICATOR・RATE_ALERT・SYSTEM 等)・発言が見つからない(変更の記録が保存期間を過ぎて消えた等): null。
+   */
+  attribution: Attribution | null;
+  /**
+   * 開く要人発言の id(api-design v1.40、HQ判断 2026-10-28「告知API」)。SPEECH: target_id と同じ。要人発言の
+   * CALENDAR_UPDATE(日時の変更・中止): 変更の記録から引いた発言の id(中止の発言はカレンダーから消えるので、
+   * 中止の通知から詳細 GET /speeches/{id} を開くため)。それ以外・見つからない: null。
+   */
+  speech_id: string | null;
+}
+
+/**
+ * 通知一覧の行の、出典を決める要人発言の id(api-design v1.39)。SPEECH は target_id がその発言。
+ * CALENDAR_UPDATE は target_id が event_schedule_changes の id なので、`speechIdOfChange` で発言に引く
+ * (speaker_name が null の行は経済指標の変更なので対象外)。それ以外は null。
+ */
+export function inboxAttributionSpeechId(
+  row: Pick<NotificationInboxRow, 'kind' | 'target_id' | 'speaker_name'>,
+  speechIdOfChange: ReadonlyMap<string, string>,
+): string | null {
+  if (row.kind === 'SPEECH') return row.target_id;
+  if (row.kind === 'CALENDAR_UPDATE' && row.speaker_name !== null) return speechIdOfChange.get(row.target_id) ?? null;
+  return null;
 }
 
 function isoOrNull(value: string | null): string | null {
   return value === null ? null : formatIsoSeconds(new Date(value));
 }
 
+/** How resolveInboxAttributions reads the DB (each one query per 100 ids — repositories). */
+export interface InboxAttributionLookups {
+  /** event_schedule_changes.id (SPEECH) → speech id. */
+  speechIdsOfChanges(changeIds: readonly string[]): Promise<ReadonlyMap<string, string>>;
+  /** speech id → speakers.organization. */
+  organizationsOfSpeeches(speechIds: readonly string[]): Promise<ReadonlyMap<string, string>>;
+}
+
+/**
+ * 通知一覧の行ごとの要人発言の id と出典(api-design v1.39・v1.40)。行の数によらず、各 lookup を最大1回だけ呼ぶ
+ * (N+1 にしない)。対象の行が無ければ DB を読まない。
+ */
+export async function resolveInboxAttributions(
+  rows: readonly NotificationInboxRow[],
+  lookups: InboxAttributionLookups,
+): Promise<{ speech_id: string | null; attribution: Attribution | null }[]> {
+  const changeIds = rows
+    .filter((row) => row.kind === 'CALENDAR_UPDATE' && row.speaker_name !== null)
+    .map((row) => row.target_id);
+  const speechIdOfChange =
+    changeIds.length > 0 ? await lookups.speechIdsOfChanges(changeIds) : new Map<string, string>();
+  const speechIds = rows.map((row) => inboxAttributionSpeechId(row, speechIdOfChange));
+  const wanted = [...new Set(speechIds.filter((id): id is string => id !== null))];
+  const organizations = wanted.length > 0 ? await lookups.organizationsOfSpeeches(wanted) : new Map<string, string>();
+  return speechIds.map((id) => ({
+    speech_id: id,
+    attribution: id === null ? null : attributionForOrganization(organizations.get(id)),
+  }));
+}
+
 /** API shape (api-design.md §24.9): timestamps as second-precision UTC. */
-export function toInboxItem(row: NotificationInboxRow): NotificationInboxItem {
+export function toInboxItem(
+  row: NotificationInboxRow,
+  link: { speech_id: string | null; attribution: Attribution | null } = { speech_id: null, attribution: null },
+): NotificationInboxItem {
   return {
     id: row.id,
     kind: row.kind,
@@ -232,5 +292,7 @@ export function toInboxItem(row: NotificationInboxRow): NotificationInboxItem {
     notify_at: formatIsoSeconds(new Date(row.notify_at)),
     read_at: isoOrNull(row.read_at),
     expires_at: formatIsoSeconds(new Date(row.expires_at)),
+    attribution: link.attribution,
+    speech_id: link.speech_id,
   };
 }

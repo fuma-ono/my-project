@@ -1,3 +1,4 @@
+import { FRB_ATTRIBUTION } from '../../src/domain/attribution.js';
 import { describe, expect, it } from 'vitest';
 import {
   HOME_SPEECHES_MAX,
@@ -63,6 +64,7 @@ describe('toHomeSpeechItem', () => {
       reaction_price_before: null,
       reaction_price_after: null,
       reaction_pips: null,
+      attribution: FRB_ATTRIBUTION, // api-design v1.38
     });
   });
 

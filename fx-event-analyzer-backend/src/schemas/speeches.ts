@@ -11,6 +11,11 @@ export const listSpeechesQuerySchema = z.object({
     .optional(),
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
+  /** api-design v1.40: true = 中止(CANCELLED)の行も返す(中止の履歴)。既定 false = SCHEDULED・DELIVERED だけ。 */
+  include_cancelled: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => value === 'true'),
 });
 
 /** z.guid() rather than z.uuid(): any 8-4-4-4-12 hex id, as Postgres accepts

@@ -1,4 +1,6 @@
+import { attributionForOrganization, type Attribution } from '../domain/attribution.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { chunk } from '../utils/chunks.js';
 import { rangeFor, type PaginationParams } from '../utils/pagination.js';
 
 export interface SpeakerSummary {
@@ -21,6 +23,8 @@ export interface SpeechSummary {
   statement_datetime: string;
   importance: string;
   status: string;
+  /** 出典と告知(api-design v1.38、domain/attribution.ts)。ECB・FRB の要人の発言だけ。 */
+  attribution: Attribution | null;
 }
 
 const SPEECH_COLUMNS =
@@ -62,6 +66,7 @@ function toSpeechSummary(row: SpeechDbRow): SpeechSummary {
     statement_datetime: row.statement_datetime,
     importance: row.importance,
     status: row.status,
+    attribution: attributionForOrganization(speaker.organization),
   };
 }
 
@@ -70,6 +75,8 @@ export interface ListSpeechesFilters {
   to?: string | undefined;
   importance?: string | undefined;
   currency?: string | undefined;
+  /** api-design v1.40: false(既定)= CANCELLED を返さない。true = 中止の履歴も返す。行は消さない。 */
+  includeCancelled?: boolean | undefined;
 }
 
 /** `from` is inclusive, `to` is exclusive (api-design.md §6). Newest first. */
@@ -84,6 +91,7 @@ export async function listSpeeches(
   if (filters.to) query = query.lt('statement_datetime', filters.to);
   if (filters.importance) query = query.eq('importance', filters.importance);
   if (filters.currency) query = query.eq('speakers.currency_code', filters.currency);
+  if (!filters.includeCancelled) query = query.in('status', ['SCHEDULED', 'DELIVERED']);
 
   const { from, to } = rangeFor(pagination.page, pagination.limit);
   const { data, error, count } = await query
@@ -154,6 +162,28 @@ export async function listRecentDeliveredSpeeches(
     .limit(limit);
   if (error) throw error;
   return (data ?? []).map((row) => toSpeechSummary(row as SpeechDbRow));
+}
+
+/**
+ * 要人発言の id → 要人の機関(通知一覧の出典、api-design v1.39)。状態は問わない。READ-ONLY。主キーで引き、
+ * 列は機関だけ。id は 100 件ごとに分けて読む(utils/chunks.ts)。
+ */
+export async function mapSpeechOrganizations(
+  supabase: SupabaseClient,
+  speechIds: readonly string[],
+): Promise<Map<string, string>> {
+  const organizations = new Map<string, string>();
+  for (const ids of chunk([...new Set(speechIds)])) {
+    const { data, error } = await supabase
+      .from('speech_events')
+      .select('id, speakers!inner(organization)')
+      .in('id', ids);
+    if (error) throw error;
+    for (const row of (data ?? []) as unknown as { id: string; speakers: { organization: string } }[]) {
+      organizations.set(row.id, row.speakers.organization);
+    }
+  }
+  return organizations;
 }
 
 /** Speeches by id regardless of status (CALENDAR_UPDATE candidates). */

@@ -66,6 +66,7 @@ describe('buildCalendarItems', () => {
         datetime_precision: 'EXACT',
         status: 'SCHEDULED',
         is_provisional: false,
+        attribution: null, // 機関の無い要人(テストのデータ)は出典なし。ECB・FRB は attribution.test.ts
       },
       {
         kind: 'INDICATOR',
@@ -82,6 +83,7 @@ describe('buildCalendarItems', () => {
         datetime_precision: 'DATE_ONLY',
         status: 'SCHEDULED',
         is_provisional: false,
+        attribution: null,
       },
     ]);
   });
