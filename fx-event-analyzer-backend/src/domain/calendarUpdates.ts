@@ -1,3 +1,4 @@
+import { inboxSourceNote, type Attribution } from './attribution.js';
 import { speakerDisplayName } from './homeSpeeches.js';
 import {
   expiresAtFor,
@@ -96,6 +97,16 @@ export function calendarUpdateBody(
   change: Pick<ScheduleChangeRow, 'kind' | 'change_type' | 'old_datetime' | 'new_datetime'>,
   importance: string,
   timeZone: string,
+  /** 要人発言の出典(ECB のときだけ本文の末尾に「（出典：ECB）」。domain/attribution.ts inboxSourceNote)。 */
+  attribution: Attribution | null = null,
+): string {
+  return calendarUpdateText(change, importance, timeZone) + (inboxSourceNote(attribution) ?? '');
+}
+
+function calendarUpdateText(
+  change: Pick<ScheduleChangeRow, 'kind' | 'change_type' | 'old_datetime' | 'new_datetime'>,
+  importance: string,
+  timeZone: string,
 ): string {
   const what = noun(change.kind);
   const level = IMPORTANCE_LABELS[importance] ?? importance;
@@ -162,7 +173,12 @@ export function selectCalendarUpdateDeliveries(
       target_id: change.id,
       trigger: change.change_type,
       title: calendarUpdateTitle(candidate, change.change_type),
-      body: calendarUpdateBody(change, candidate.importance, prefs.timeZone),
+      body: calendarUpdateBody(
+        change,
+        candidate.importance,
+        prefs.timeZone,
+        candidate.kind === 'SPEECH' ? (candidate.attribution ?? null) : null,
+      ),
       display_name: candidate.kind === 'INDICATOR' ? (candidate.display_name ?? null) : null,
       speaker_name: candidate.kind === 'SPEECH' ? candidate.speaker_name : null,
       country_code: candidate.country_code,

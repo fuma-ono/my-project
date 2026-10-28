@@ -29,6 +29,14 @@ export const FRB_ATTRIBUTION: Attribution = {
   notice: null,
 };
 
+/**
+ * 受信箱の本文の末尾に付ける短い出典(HQ判断 2026-10-28「告知API」4)。告知の義務がある取得元(今は ECB だけ)のときだけ
+ * 「（出典：ECB）」を返す。告知の全文は通知先の詳細の画面で出す(本文に全文が必要かは未確認)。FRB・経済指標は null(本文を変えない)。
+ */
+export function inboxSourceNote(attribution: Attribution | null | undefined): string | null {
+  return attribution?.source === ECB_ATTRIBUTION.source ? '（出典：ECB）' : null;
+}
+
 /** speakers.organization(要人発言)から。 */
 export function attributionForOrganization(organization: string | null | undefined): Attribution | null {
   if (organization === 'ECB') return ECB_ATTRIBUTION;

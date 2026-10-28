@@ -190,7 +190,7 @@ export function registerNotificationRoutes(app: FastifyInstance): void {
       organizationsOfSpeeches: (ids) => mapSpeechOrganizations(app.supabase, ids),
     });
     return {
-      items: rows.map((row, index) => toInboxItem(row, attributions[index] ?? null)),
+      items: rows.map((row, index) => toInboxItem(row, attributions[index])),
       unread_count: unreadCount,
     };
   });

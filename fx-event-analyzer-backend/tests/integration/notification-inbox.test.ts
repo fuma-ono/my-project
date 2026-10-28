@@ -213,10 +213,13 @@ describe.skipIf(!integration)('Notification inbox', () => {
         read_at: null,
         expires_at: isoSeconds(at(-1 + 30 * 24 * 60)),
         attribution: null,
+        speech_id: null,
       });
       expect(items.find((item) => item.target_id === DELIVERED_SPEECH_ID)).toMatchObject({
         kind: 'SPEECH',
         attribution: FRB_ATTRIBUTION, // api-design v1.39
+        speech_id: DELIVERED_SPEECH_ID, // api-design v1.40
+        body: expect.not.stringContaining('出典'), // FRB の本文は変えない
         trigger: 'LEAD_5',
         title: '受信箱テスト講演',
         display_name: null,

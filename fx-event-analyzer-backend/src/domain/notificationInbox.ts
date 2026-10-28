@@ -1,4 +1,4 @@
-import { attributionForOrganization, type Attribution } from './attribution.js';
+import { attributionForOrganization, inboxSourceNote, type Attribution } from './attribution.js';
 import {
   buildUpcomingNotifications,
   formatIsoSeconds,
@@ -140,7 +140,8 @@ export function formatMonthDayTime(instant: Date, timeZone: string): string {
  * 「まもなく発言です（…発言・重要度 中）」.
  */
 export function inboxBody(
-  item: Pick<UpcomingNotificationItem, 'kind' | 'scheduled_at' | 'importance'>,
+  item: Pick<UpcomingNotificationItem, 'kind' | 'scheduled_at' | 'importance'> &
+    Partial<Pick<UpcomingNotificationItem, 'attribution'>>,
   leadMinutes: number,
   timeZone: string,
 ): string {
@@ -148,7 +149,7 @@ export function inboxBody(
   const timing = leadMinutes === 0 ? `まもなく${noun}です` : `${noun}の${leadMinutes}分前です`;
   const level = IMPORTANCE_LABELS[item.importance] ?? item.importance;
   const when = formatMonthDayTime(new Date(item.scheduled_at), timeZone);
-  return `${timing}（${when}${noun}・重要度 ${level}）`;
+  return `${timing}（${when}${noun}・重要度 ${level}）${inboxSourceNote(item.attribution) ?? ''}`;
 }
 
 /**
@@ -214,6 +215,12 @@ export interface NotificationInboxItem extends NotificationInboxRow {
    * それ以外(INDICATOR・RATE_ALERT・SYSTEM 等)・発言が見つからない(変更の記録が保存期間を過ぎて消えた等): null。
    */
   attribution: Attribution | null;
+  /**
+   * 開く要人発言の id(api-design v1.40、HQ判断 2026-10-28「告知API」)。SPEECH: target_id と同じ。要人発言の
+   * CALENDAR_UPDATE(日時の変更・中止): 変更の記録から引いた発言の id(中止の発言はカレンダーから消えるので、
+   * 中止の通知から詳細 GET /speeches/{id} を開くため)。それ以外・見つからない: null。
+   */
+  speech_id: string | null;
 }
 
 /**
@@ -243,13 +250,13 @@ export interface InboxAttributionLookups {
 }
 
 /**
- * 通知一覧の行ごとの出典(api-design v1.39)。行の数によらず、各 lookup を最大1回だけ呼ぶ(N+1 にしない)。
- * 対象の行が無ければ DB を読まない。
+ * 通知一覧の行ごとの要人発言の id と出典(api-design v1.39・v1.40)。行の数によらず、各 lookup を最大1回だけ呼ぶ
+ * (N+1 にしない)。対象の行が無ければ DB を読まない。
  */
 export async function resolveInboxAttributions(
   rows: readonly NotificationInboxRow[],
   lookups: InboxAttributionLookups,
-): Promise<(Attribution | null)[]> {
+): Promise<{ speech_id: string | null; attribution: Attribution | null }[]> {
   const changeIds = rows
     .filter((row) => row.kind === 'CALENDAR_UPDATE' && row.speaker_name !== null)
     .map((row) => row.target_id);
@@ -258,11 +265,17 @@ export async function resolveInboxAttributions(
   const speechIds = rows.map((row) => inboxAttributionSpeechId(row, speechIdOfChange));
   const wanted = [...new Set(speechIds.filter((id): id is string => id !== null))];
   const organizations = wanted.length > 0 ? await lookups.organizationsOfSpeeches(wanted) : new Map<string, string>();
-  return speechIds.map((id) => (id === null ? null : attributionForOrganization(organizations.get(id))));
+  return speechIds.map((id) => ({
+    speech_id: id,
+    attribution: id === null ? null : attributionForOrganization(organizations.get(id)),
+  }));
 }
 
 /** API shape (api-design.md §24.9): timestamps as second-precision UTC. */
-export function toInboxItem(row: NotificationInboxRow, attribution: Attribution | null = null): NotificationInboxItem {
+export function toInboxItem(
+  row: NotificationInboxRow,
+  link: { speech_id: string | null; attribution: Attribution | null } = { speech_id: null, attribution: null },
+): NotificationInboxItem {
   return {
     id: row.id,
     kind: row.kind,
@@ -279,6 +292,7 @@ export function toInboxItem(row: NotificationInboxRow, attribution: Attribution 
     notify_at: formatIsoSeconds(new Date(row.notify_at)),
     read_at: isoOrNull(row.read_at),
     expires_at: formatIsoSeconds(new Date(row.expires_at)),
-    attribution,
+    attribution: link.attribution,
+    speech_id: link.speech_id,
   };
 }

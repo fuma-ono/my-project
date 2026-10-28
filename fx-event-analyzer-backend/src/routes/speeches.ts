@@ -89,7 +89,13 @@ export function registerSpeechRoutes(app: FastifyInstance): void {
       const pagination = parsePagination(query);
       const { rows, total } = await listSpeeches(
         app.supabase,
-        { from: query.from, to: query.to, importance: query.importance, currency: query.currency },
+        {
+          from: query.from,
+          to: query.to,
+          importance: query.importance,
+          currency: query.currency,
+          includeCancelled: query.include_cancelled,
+        },
         pagination,
       );
 

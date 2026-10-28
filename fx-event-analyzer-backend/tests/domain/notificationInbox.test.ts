@@ -159,6 +159,23 @@ describe('inboxBody', () => {
     ).toBe('まもなく発言です（10/16 8:05発言・重要度 中）');
   });
 
+  it('adds （出典：ECB） only for ECB speeches (HQ判断 2026-10-28); FRB and indicators are unchanged', () => {
+    const speech = { kind: 'SPEECH' as const, scheduled_at: '2026-10-15T23:05:00Z', importance: 'MEDIUM' };
+    expect(inboxBody({ ...speech, attribution: ECB_ATTRIBUTION }, 5, 'Asia/Tokyo')).toBe(
+      '発言の5分前です（10/16 8:05発言・重要度 中）（出典：ECB）',
+    );
+    expect(inboxBody({ ...speech, attribution: FRB_ATTRIBUTION }, 5, 'Asia/Tokyo')).toBe(
+      '発言の5分前です（10/16 8:05発言・重要度 中）',
+    );
+    expect(
+      inboxBody(
+        { kind: 'INDICATOR', scheduled_at: '2026-10-13T11:30:00Z', importance: 'HIGH', attribution: null },
+        5,
+        'Asia/Tokyo',
+      ),
+    ).toBe('発表の5分前です（10/13 20:30発表・重要度 高）');
+  });
+
   it('falls back to Asia/Tokyo for an unknown zone', () => {
     expect(formatMonthDayTime(new Date('2026-10-13T15:00:00Z'), 'Not/AZone')).toBe('10/14 0:00');
     expect(formatMonthDayTime(new Date('2026-10-13T15:00:00Z'), 'UTC')).toBe('10/13 15:00');
@@ -318,8 +335,12 @@ describe('toInboxItem', () => {
       read_at: '2026-10-13T11:40:12Z',
       expires_at: '2026-11-12T11:25:00Z',
       attribution: null,
+      speech_id: null,
     });
-    expect(toInboxItem(row, ECB_ATTRIBUTION).attribution).toEqual(ECB_ATTRIBUTION);
+    expect(toInboxItem(row, { speech_id: 'speech-1', attribution: ECB_ATTRIBUTION })).toMatchObject({
+      speech_id: 'speech-1',
+      attribution: ECB_ATTRIBUTION,
+    });
   });
 
   it('keeps nulls (unread, no schedule, no lead)', () => {
@@ -399,15 +420,16 @@ describe('resolveInboxAttributions (api-design v1.39, HQ判断 2026-10-28「統�
     const { calls, lookups } = counting(changes, organizations);
     const result = await resolveInboxAttributions(rows, lookups);
     expect(calls).toEqual({ changes: [100], speeches: [8] });
-    expect(result[0]).toEqual(ECB_ATTRIBUTION);
-    expect(result[1]).toEqual(FRB_ATTRIBUTION);
-    expect(result[2]).toBeNull();
+    // 要人発言の変更 → 変更の記録から引いた発言の id(中止の通知から詳細を開くため、api-design v1.40)
+    expect(result[0]).toEqual({ speech_id: 'speech-ecb', attribution: ECB_ATTRIBUTION });
+    expect(result[1]).toEqual({ speech_id: 'speech-1', attribution: FRB_ATTRIBUTION });
+    expect(result[2]).toEqual({ speech_id: null, attribution: null });
   });
 
   it('reads nothing when no row needs an attribution', async () => {
     const { calls, lookups } = counting(new Map(), new Map());
     const rows = [{ ...base, id: 'a', kind: 'RATE_ALERT' as const, target_id: 'alert', speaker_name: null }];
-    expect(await resolveInboxAttributions(rows, lookups)).toEqual([null]);
+    expect(await resolveInboxAttributions(rows, lookups)).toEqual([{ speech_id: null, attribution: null }]);
     expect(calls).toEqual({ changes: [], speeches: [] });
   });
 });

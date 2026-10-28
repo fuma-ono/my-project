@@ -75,6 +75,8 @@ export interface ListSpeechesFilters {
   to?: string | undefined;
   importance?: string | undefined;
   currency?: string | undefined;
+  /** api-design v1.40: false(既定)= CANCELLED を返さない。true = 中止の履歴も返す。行は消さない。 */
+  includeCancelled?: boolean | undefined;
 }
 
 /** `from` is inclusive, `to` is exclusive (api-design.md §6). Newest first. */
@@ -89,6 +91,7 @@ export async function listSpeeches(
   if (filters.to) query = query.lt('statement_datetime', filters.to);
   if (filters.importance) query = query.eq('importance', filters.importance);
   if (filters.currency) query = query.eq('speakers.currency_code', filters.currency);
+  if (!filters.includeCancelled) query = query.in('status', ['SCHEDULED', 'DELIVERED']);
 
   const { from, to } = rangeFor(pagination.page, pagination.limit);
   const { data, error, count } = await query
