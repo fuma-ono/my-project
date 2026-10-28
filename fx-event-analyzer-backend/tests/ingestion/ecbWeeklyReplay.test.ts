@@ -11,6 +11,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  ECB_PUBLICATION_TIME_KINDS,
   ECB_WEEKLY_PROVIDER,
   ecbReconcileOptions,
   parseEcbWeeklySchedule,
@@ -42,7 +43,13 @@ describe.skipIf(!dir)('ECB weekly schedule: replay saved pages (real data, no DB
       await ingestSpeeches(
         ECB_WEEKLY_PROVIDER,
         result.speeches,
-        { store, now: () => now, reconcile: ecbReconcileOptions(result) },
+        // ジョブ(src/jobs/ingestSpeeches.ts)と同じ設定: 消えた予定の扱いと、ポッドキャスト(公開の時刻)の保存
+        {
+          store,
+          now: () => now,
+          reconcile: ecbReconcileOptions(result),
+          publicationTimeKinds: ECB_PUBLICATION_TIME_KINDS,
+        },
         counters,
       );
       const pick = (key: string) => counters.details[key] ?? [];

@@ -1728,3 +1728,17 @@ notify pgrst, 'reload schema';
 - しきい値は `src/ingestion/quality/metrics.ts` の `SPEECH_SUCCESS_MAX_AGE_HOURS`(18)・`SPEECH_SOURCE_STALE_DAYS`(10)。1回でも失敗すると、次の実行が成功するまで「取得の失敗」になる。18時間は、取り込みの間隔(1日2回、06:15 / 18:15 JST = 12時間)に余裕を持たせた値で、実行そのものが止まったことを検出するためのもの
 - ホームの `speeches_status.stale`(api-design.md v1.34)は、FRB の「取得の失敗」と同じ判定
 - ECB の週間予定の消えた予定(HQ判断 2026-10-28 R1〜R3): ページの範囲(最初の日の 00:00〜最後の日の翌日 00:00、フランクフルト時間)の中で、今より後の SCHEDULED の行がページから消えたら、同じ話者・同じ日に新しい予定がちょうど1つあれば時刻の変更(`rescheduled_speeches`、DB トリガーが RESCHEDULED を記録)、それ以外は中止(`cancelled_speeches`、CANCELLED)にする。時刻の変更とみなすのは題名も同じときだけ(題名が変わったら別の予定として中止+追加)。役員の項目を読み切れなかった日(時刻・時刻帯が読めない、夏時間、非公開の語、名前が読めない、話者名の綴りが未登録)に消えた予定は、削除と読み漏れを区別できないので変えず、`held_disappearances` に残す(第9章の「消えた予定の保留」)。日付が読めない役員の項目があるときはページ全体を保留する(`PAGE_ANOMALY`)。今回の取得が0件、または消えた件数が2件より多くて範囲の SCHEDULED の半分を超えるときは何も変えず、`cancel_suppressed` に理由(`NO_ITEMS` / `MASS_DISAPPEARANCE` / `NO_COVERAGE`)を残す。FRB・ECB RSS は今までどおり `disappeared_scheduled_speeches` に記録するだけ
+
+## ECB 週間予定の2週間観測の確認(2026-10-28、HQ指示「ECB週間予定・観測確認スクリプト」)
+
+観測は GitHub Actions の `.github/workflows/fx-ecb-weekly-snapshot.yml`(main。09:30 / 17:30 JST、最初の実行から14日で自分を無効にする)。記録はブランチ `ecb-weekly-snapshots`(公開。予定の部分だけ、連絡先は削除)。確認は読むだけのスクリプトで行う。
+
+```
+NODE_USE_ENV_PROXY=1 HTTPS_PROXY=<社内のプロキシ> NODE_OPTIONS=--use-system-ca npm run check:ecb-observation
+```
+
+- 予定の時刻ごとに、Actions の実行(予定・開始・終了・結果)と `log.jsonl` を突き合わせ、成功・取得の失敗(実行は成功)・ワークフローの失敗(取得・解析/保存/その他の段階)・記録なし・欠落・遅延(GitHub 側、30分超)を数える。まだ予定の時刻に達していない回と、予定から2時間以内の回は欠落にしない
+- GitHub API(キーなし。1時間あたりの回数に上限があり、社内のプロキシでは当たりやすい)が読めないときは「集計不能」と出す(欠落0件とは数えない)。記録だけから推定した内容は「推定」に分ける
+- `log.jsonl` の形式不正・重複・順序の乱れ・未来の時刻、どの実行にも対応しない記録を出す。1つの記録は1つの実行にだけ対応させる
+- 保存ページを一時フォルダに取り出し、`tests/ingestion/ecbWeeklyReplay.test.ts`(ジョブと同じ設定)に古い順に流す。ページごとに発言・スキップ(理由)・解析エラー・範囲・区別できない日・中止/時刻の変更/保留/安全弁を出す。一時フォルダは最後に消す
+- レポートは標準出力だけ(ファイルに残さない)。ページの本文(題名・名前)・連絡先は写さない。書き込みは一切しない(ブランチ・ログ・ワークフローの有効/無効を変えない)。DB・API(DEV・本番)にはつながない
