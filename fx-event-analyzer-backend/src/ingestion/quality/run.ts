@@ -5,7 +5,13 @@
  * so both read the same data the same way. READ-ONLY, no external API calls.
  */
 import { MINUTE_MS } from '../marketHours.js';
-import { buildDataQualityReport, judgeSpeechFreshness, SPEECH_PROVIDERS, type SpeechFreshness } from './metrics.js';
+import {
+  buildDataQualityReport,
+  judgeSpeechFreshness,
+  SPEECH_OPTIONAL_PROVIDERS,
+  SPEECH_PROVIDERS,
+  type SpeechFreshness,
+} from './metrics.js';
 import type { QualityReader } from './reader.js';
 import {
   PROVISIONAL_LIST_DAYS,
@@ -40,6 +46,7 @@ export async function buildSpeechFreshness(reader: QualityReader, now: Date): Pr
   const result: SpeechFreshness[] = [];
   for (const provider of SPEECH_PROVIDERS) {
     const runs = await reader.listSpeechRuns(provider);
+    if (runs.length === 0 && SPEECH_OPTIONAL_PROVIDERS.includes(provider)) continue;
     const db = await reader.speechDbStatus(provider, nowIso);
     result.push(judgeSpeechFreshness(provider, runs, db, now));
   }

@@ -131,5 +131,6 @@ export const SPEECH_KIND_LABEL_JA: Record<SpeechKind, string> = {
   TESTIMONY: '議会証言',
   INTERVIEW: 'インタビュー',
   PRESS_CONFERENCE: '記者会見',
+  PODCAST: 'ポッドキャスト',
   OTHER: '発言',
 };

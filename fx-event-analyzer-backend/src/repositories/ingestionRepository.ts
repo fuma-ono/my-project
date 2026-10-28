@@ -18,11 +18,13 @@ import type {
   ProviderEventRow,
   UnreleasedEventRef,
   SpeakerRef,
+  SpeechEventPatch,
   SpeechEventRow,
   StagedValue,
   StagedVerificationStatus,
   StoredEvent,
   StoredSnapshot,
+  StoredSpeechRef,
 } from '../ingestion/store.js';
 
 /**
@@ -279,6 +281,26 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
         .lt('statement_datetime', toIso);
       if (error) throw error;
       return ((data ?? []) as { provider_event_id: string }[]).map((row) => row.provider_event_id);
+    },
+
+    async listSpeechRefs(provider: string, fromIso: string, toIso: string): Promise<StoredSpeechRef[]> {
+      const { data, error } = await supabase
+        .from('speech_events')
+        .select('provider_event_id, speaker_id, title, statement_datetime, status')
+        .eq('provider', provider)
+        .gte('statement_datetime', fromIso)
+        .lt('statement_datetime', toIso);
+      if (error) throw error;
+      return data ?? [];
+    },
+
+    async updateSpeechEvent(provider: string, providerEventId: string, patch: SpeechEventPatch): Promise<void> {
+      const { error } = await supabase
+        .from('speech_events')
+        .update(patch)
+        .eq('provider', provider)
+        .eq('provider_event_id', providerEventId);
+      if (error) throw error;
     },
 
     async listFxPairs(): Promise<FxPairRef[]> {

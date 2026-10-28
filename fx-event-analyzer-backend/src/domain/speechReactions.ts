@@ -166,6 +166,7 @@ function emptyReaction(timeframe: SpeechReactionTimeframe, status: ApiDataStatus
 
 /**
  * The reaction of one pair to one speech, per timeframe:
+ * - time_precision not EXACT (publication time only, e.g. a podcast) → all null, NOT_ANALYZABLE;
  * - not DELIVERED → all null; SCHEDULED = DATA_PENDING, CANCELLED = NOT_ANALYZABLE;
  * - DELIVERED, T + N still in the future → DATA_PENDING (null);
  * - DELIVERED, the pre-statement or the T + N candle missing → DATA_UNAVAILABLE (null);
@@ -176,6 +177,8 @@ function emptyReaction(timeframe: SpeechReactionTimeframe, status: ApiDataStatus
  */
 export function computeSpeechPairReaction(input: {
   status: SpeechStatus;
+  /** speech_events.time_precision. Not EXACT (only the publication time is known) → NOT_ANALYZABLE. Omitted = EXACT. */
+  timePrecision?: string | undefined;
   statementDatetime: string;
   symbol: string;
   candles: readonly PriceCandle[];
@@ -183,6 +186,10 @@ export function computeSpeechPairReaction(input: {
   now: Date;
 }): SpeechPairReaction {
   const { status, statementDatetime, symbol, candles, timeframes, now } = input;
+  if ((input.timePrecision ?? 'EXACT') !== 'EXACT') {
+    // 発言の時刻が確かめられない(公開の時刻だけ)。HQ判断 2026-10-28: 相場反応の計算の対象外
+    return { pre_release_price: null, reactions: timeframes.map((tf) => emptyReaction(tf, 'NOT_ANALYZABLE')) };
+  }
   if (status !== 'DELIVERED') {
     const notDelivered: ApiDataStatus = status === 'CANCELLED' ? 'NOT_ANALYZABLE' : 'DATA_PENDING';
     return { pre_release_price: null, reactions: timeframes.map((tf) => emptyReaction(tf, notDelivered)) };

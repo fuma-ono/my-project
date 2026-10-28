@@ -17,7 +17,7 @@ const EMPTY_READER: QualityReader = {
   listSnapshots: () => Promise.resolve([]),
   listStaged: () => Promise.resolve([]),
   listSpeechRuns: () => Promise.resolve([]),
-  speechDbStatus: () => Promise.resolve({ latestAt: null, futureScheduled: 0 }),
+  speechDbStatus: () => Promise.resolve({ latestAt: null, futureScheduled: 0, overdueScheduled: 0 }),
   listProvisionalEvents: () => Promise.resolve([]),
 };
 

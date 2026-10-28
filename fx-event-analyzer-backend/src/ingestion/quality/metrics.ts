@@ -678,8 +678,20 @@ export function countSpeechTimeNotExact(logs: readonly IngestionLogSample[]): nu
 // ---------------------------------------------------------------------------
 
 export const SPEECH_JOB = 'ingest:speeches';
-/** ingest:speeches の取得元(src/jobs/ingestSpeeches.ts の adapter name)。レポートは記録が無くても両方を表示する。 */
-export const SPEECH_PROVIDERS = ['frb_calendar', 'ecb_press_rss'] as const;
+/** ingest:speeches の取得元(src/jobs/ingestSpeeches.ts の adapter name)。レポートは記録が無くても表示する(下の任意の取得元を除く)。 */
+export const SPEECH_PROVIDERS = ['frb_calendar', 'ecb_press_rss', 'ecb_weekly_schedule'] as const;
+/**
+ * 環境変数で有効にしたときだけ動く取得元(ECB の週間予定は INGEST_ECB_WEEKLY=1 のときだけ)。実行記録が1件も無ければ
+ * レポートに出さない(動かしていないのを「取得の失敗」と出さないため。HQ判断 2026-10-28 R5)。
+ */
+export const SPEECH_OPTIONAL_PROVIDERS: readonly string[] = ['ecb_weekly_schedule'];
+/**
+ * 開始から SPEECH_OVERDUE_HOURS 時間を過ぎても SCHEDULED の行を「終わった予定が SCHEDULED のまま(注意)」と判定する取得元
+ * (HQ判断 2026-10-28 R4)。ECB の週間予定は約1週間分しか載らないので、開始の後に取り直す前にページから外れると
+ * SCHEDULED のまま残り得る(自動では DELIVERED にしない)。FRB は件数を表示するだけで判定には使わない。
+ */
+export const SPEECH_OVERDUE_JUDGED_PROVIDERS: readonly string[] = ['ecb_weekly_schedule'];
+export const SPEECH_OVERDUE_HOURS = 24;
 /** 要人発言を実際に speech_events へ書く唯一の取得元(ECB RSS は公開時刻のみで、仕様上すべて TIME_NOT_EXACT)。 */
 export const SPEECH_HOME_PROVIDER = 'frb_calendar';
 /** 最後の SUCCESS からこの時間以上経っていたら「取得の失敗」。 */
@@ -705,6 +717,8 @@ export interface SpeechDbStatus {
   latestAt: string | null;
   /** statement_datetime が now より後の SCHEDULED の件数 */
   futureScheduled: number;
+  /** statement_datetime が now − SPEECH_OVERDUE_HOURS より前で、SCHEDULED のままの件数 */
+  overdueScheduled: number;
 }
 
 const runTime = (run: SpeechRunSample): number => Date.parse(run.completed_at ?? run.started_at);
@@ -764,7 +778,13 @@ export function judgeSpeechFetch(runs: readonly SpeechRunSample[], now: Date): S
 }
 
 export type SpeechFreshnessJudgement =
-  'FETCH_FAILED' | 'INGEST_GAP' | 'SOURCE_NOT_UPDATED' | 'TIME_NOT_EXACT_ONLY' | 'NORMAL';
+  | 'FETCH_FAILED'
+  | 'INGEST_GAP'
+  | 'SOURCE_NOT_UPDATED'
+  | 'RECONCILE_HELD'
+  | 'OVERDUE_SCHEDULED'
+  | 'TIME_NOT_EXACT_ONLY'
+  | 'NORMAL';
 
 export interface SpeechFreshness extends SpeechFetchHealth {
   provider: string;
@@ -805,14 +825,24 @@ function isTimeNotExactOnly(run: SpeechRunSample): boolean {
  *    TIME_NOT_EXACT なら、DB に無いのは仕様どおりで漏れではない
  * 3. SOURCE_NOT_UPDATED 取得元の更新なし(注意) — 取得は成功しているが、source_latest_at が
  *    now − 10日 以前で、source_future_count が 0
- * 4. TIME_NOT_EXACT_ONLY 時刻なしで未取り込み(情報) — isTimeNotExactOnly(ECB の通常の状態)
- * 5. NORMAL 正常
+ * 4. RECONCILE_HELD 消えた予定の保留(注意) — 最新の実行の details に held_disappearances(読み漏れと区別できず
+ *    中止にしなかった予定)か cancel_suppressed(安全弁で何も変えなかった)がある(ECB の週間予定。HQ判断 2026-10-28
+ *    「統合前レビュー」A2)。取得元で、予定が本当に消えたのかを人が確かめる
+ * 5. OVERDUE_SCHEDULED 終わった予定が SCHEDULED のまま(注意) — SPEECH_OVERDUE_JUDGED_PROVIDERS の取得元で、
+ *    db.overdueScheduled > 0(HQ判断 2026-10-28 R4)
+ * 6. TIME_NOT_EXACT_ONLY 時刻なしで未取り込み(情報) — isTimeNotExactOnly(ECB の通常の状態)
+ * 7. NORMAL 正常
  *
  * 2.〜3. は source_latest_at を使うため、最新の実行にその記録が無い(この記録の追加前の行)
  * ときは判定しない(「—(記録なし)」と表示)。1. と 4. は記録が無くても判定する。
  * 異常 > 注意 > 情報 の順にしたのは、ECB の時刻なし(情報)が更新停止(注意)を隠さないようにするため
  * (時刻なしで未取り込みの実行でも、取得元が10日以上更新されていなければ「更新なし」と出す)。
  */
+/** details の配列の件数(配列でなければ 0)。 */
+function asArrayLength(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
+}
+
 export function judgeSpeechFreshness(
   provider: string,
   runs: readonly SpeechRunSample[],
@@ -859,6 +889,18 @@ export function judgeSpeechFreshness(
   ) {
     return result('SOURCE_NOT_UPDATED', [
       `取得元の最新の予定が ${SPEECH_SOURCE_STALE_DAYS} 日以上前で、未来の予定が 0 件`,
+    ]);
+  }
+  const held = asArrayLength(details?.held_disappearances);
+  const suppressed = asArrayLength(details?.cancel_suppressed);
+  if (held > 0 || suppressed > 0) {
+    return result('RECONCILE_HELD', [
+      `最新の実行で、消えた予定 ${held} 件を中止にせず保留した(読み漏れと区別できない・安全弁 ${suppressed} 件)。取得元で確かめる`,
+    ]);
+  }
+  if (SPEECH_OVERDUE_JUDGED_PROVIDERS.includes(provider) && db.overdueScheduled > 0) {
+    return result('OVERDUE_SCHEDULED', [
+      `開始から ${SPEECH_OVERDUE_HOURS} 時間を過ぎても SCHEDULED のままの予定が ${db.overdueScheduled} 件(実施されたか取得元で確かめる)`,
     ]);
   }
   if (timeNotExactOnly) {

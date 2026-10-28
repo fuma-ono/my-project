@@ -45,8 +45,8 @@ function run(overrides: Partial<SpeechRunSample> & { at?: string } = {}): Speech
   };
 }
 
-const DB_UP_TO_DATE: SpeechDbStatus = { latestAt: '2026-10-28T15:00:00Z', futureScheduled: 3 };
-const DB_EMPTY: SpeechDbStatus = { latestAt: null, futureScheduled: 0 };
+const DB_UP_TO_DATE: SpeechDbStatus = { latestAt: '2026-10-28T15:00:00Z', futureScheduled: 3, overdueScheduled: 0 };
+const DB_EMPTY: SpeechDbStatus = { latestAt: null, futureScheduled: 0, overdueScheduled: 0 };
 
 describe('judgeSpeechFetch (取得の失敗。/home と第9章の共通部分)', () => {
   it('is failed with no runs at all', () => {
@@ -118,7 +118,7 @@ describe('judgeSpeechFreshness (第9章の判定と優先順位)', () => {
   });
 
   it('INGEST_GAP: the source latest (in the window) is newer than the DB latest, or the DB has none', () => {
-    const behind = { latestAt: '2026-10-22T15:00:00Z', futureScheduled: 1 };
+    const behind = { latestAt: '2026-10-22T15:00:00Z', futureScheduled: 1, overdueScheduled: 0 };
     expect(judgeSpeechFreshness('frb_calendar', [run()], behind, NOW).judgement).toBe('INGEST_GAP');
     expect(judgeSpeechFreshness('frb_calendar', [run()], DB_EMPTY, NOW).judgementReasons).toEqual([
       '取得元に取り込み期間内の予定があるが、DB にこの取得元の行が無い',
@@ -126,7 +126,12 @@ describe('judgeSpeechFreshness (第9章の判定と優先順位)', () => {
     // 過去(期間内)の予定でも同じ
     const past = run({ details: { skip_reasons: {}, source_latest_at: ago(2 * DAY), source_future_count: 0 } });
     expect(
-      judgeSpeechFreshness('frb_calendar', [past], { latestAt: ago(3 * DAY), futureScheduled: 0 }, NOW).judgement,
+      judgeSpeechFreshness(
+        'frb_calendar',
+        [past],
+        { latestAt: ago(3 * DAY), futureScheduled: 0, overdueScheduled: 0 },
+        NOW,
+      ).judgement,
     ).toBe('INGEST_GAP');
   });
 
@@ -141,7 +146,11 @@ describe('judgeSpeechFreshness (第9章の判定と優先順位)', () => {
   it(`SOURCE_NOT_UPDATED: the source latest is ${SPEECH_SOURCE_STALE_DAYS}+ days old and there is no future item`, () => {
     const withLatest = (latestMs: number, future: number) =>
       run({ details: { skip_reasons: {}, source_latest_at: ago(latestMs), source_future_count: future } });
-    const db = (latestMs: number): SpeechDbStatus => ({ latestAt: ago(latestMs), futureScheduled: 0 });
+    const db = (latestMs: number): SpeechDbStatus => ({
+      latestAt: ago(latestMs),
+      futureScheduled: 0,
+      overdueScheduled: 0,
+    });
     expect(judgeSpeechFreshness('frb_calendar', [withLatest(10 * DAY, 0)], db(10 * DAY), NOW).judgement).toBe(
       'SOURCE_NOT_UPDATED',
     );
@@ -289,6 +298,57 @@ describe('buildQualityReportMarkdown + 第9章', () => {
       ])}
 ${renderProvisionalEventsMarkdown([], NOW)}`, // 第10章(HQ判断 2026-10-27)も末尾に足すだけ
     );
-    expect(calls).toEqual(['frb_calendar', 'ecb_press_rss']);
+    // ECB の週間予定は INGEST_ECB_WEEKLY=1 のときだけ動く。実行記録が無ければ表に出さない(HQ判断 2026-10-28 R5)
+    expect(calls).toEqual(['frb_calendar', 'ecb_press_rss', 'ecb_weekly_schedule']);
+  });
+
+  it('shows the ECB weekly schedule once it has run (R5)', async () => {
+    const withWeekly: QualityReader = {
+      ...reader,
+      listSpeechRuns: (provider) =>
+        Promise.resolve(provider === 'frb_calendar' || provider === 'ecb_weekly_schedule' ? [run()] : []),
+    };
+    const markdown = await buildQualityReportMarkdown(withWeekly, { days: 1, now: NOW });
+    expect(markdown).toContain('| 項目 | frb_calendar | ecb_press_rss | ecb_weekly_schedule |');
+  });
+});
+
+describe('終わった予定が SCHEDULED のまま (HQ判断 2026-10-28 R4)', () => {
+  const overdue: SpeechDbStatus = { ...DB_UP_TO_DATE, overdueScheduled: 2 };
+
+  it('warns for the ECB weekly schedule', () => {
+    const result = judgeSpeechFreshness('ecb_weekly_schedule', [run()], overdue, NOW);
+    expect(result.judgement).toBe('OVERDUE_SCHEDULED');
+    expect(result.judgementReasons[0]).toMatch(/24 時間を過ぎても SCHEDULED のままの予定が 2 件/);
+  });
+
+  it('does not change the FRB judgement (the count is only shown)', () => {
+    expect(judgeSpeechFreshness('frb_calendar', [run()], overdue, NOW).judgement).toBe(
+      judgeSpeechFreshness('frb_calendar', [run()], DB_UP_TO_DATE, NOW).judgement,
+    );
+    expect(renderSpeechFreshnessMarkdown([judgeSpeechFreshness('frb_calendar', [run()], overdue, NOW)])).toContain(
+      '| DB の開始から 24 時間を過ぎた SCHEDULED | 2 |',
+    );
+  });
+
+  it('a fetch failure still wins', () => {
+    expect(judgeSpeechFreshness('ecb_weekly_schedule', [], overdue, NOW).judgement).toBe('FETCH_FAILED');
+  });
+});
+
+describe('消えた予定の保留 (HQ判断 2026-10-28「統合前レビュー」A2)', () => {
+  it('warns when the latest run held disappeared speeches or a safety valve stopped the reconciliation', () => {
+    const held = run({ details: { source_latest_at: null, held_disappearances: ['2026-11-05_1200_piero-cipollone'] } });
+    const result = judgeSpeechFreshness('ecb_weekly_schedule', [held], DB_UP_TO_DATE, NOW);
+    expect(result.judgement).toBe('RECONCILE_HELD');
+    expect(result.judgementReasons[0]).toMatch(/消えた予定 1 件を中止にせず保留/);
+    const suppressed = run({ details: { source_latest_at: null, cancel_suppressed: [{ reason: 'NO_ITEMS' }] } });
+    expect(judgeSpeechFreshness('ecb_weekly_schedule', [suppressed], DB_UP_TO_DATE, NOW).judgement).toBe(
+      'RECONCILE_HELD',
+    );
+  });
+
+  it('is not raised without those records (FRB never writes them)', () => {
+    expect(judgeSpeechFreshness('frb_calendar', [run()], DB_UP_TO_DATE, NOW).judgement).not.toBe('RECONCILE_HELD');
   });
 });
