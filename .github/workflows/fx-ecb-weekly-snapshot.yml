@@ -1,16 +1,24 @@
-# ECB の週間予定のページを1日2回保存する(HQ判断 2026-10-28「公開ページの保存を1日2回、2週間」)。
-# 社内PCには置かない(大野さん指示 2026-10-28)。記録はブランチ ecb-weekly-snapshots に残す(このワークフローだけが書く)。
-# 公開のページを読むだけ(キー・Secrets 不要)。予定の部分だけを保存し、連絡先は消す(.github/scripts/fx_ecb_weekly_snapshot.py)。
-# 2026-11-11 24:00 JST を過ぎたら、スクリプトは何もしない(その後このファイルを消す)。
+# ECB の週間予定の2週間観測(HQ指示 2026-10-28「ECB週間予定の2週間観測を GitHub Actions へ移行」)。
+# 社内PCには置かない。公開のページを読むだけ(DB・API・Secrets は使わない)。予定の部分だけを保存し、連絡先は消す。
+# 記録はブランチ ecb-weekly-snapshots(このワークフローだけが書く。リポジトリは公開なので誰でも読める)。
+# 停止: 最初の実行から14日を過ぎると、スクリプトは何も取得せず expired=true を返し、このワークフローを自分で無効にする
+#       (gh workflow disable)。14日を過ぎて自動で続けることはない。消すときはこのファイルとスクリプトを main から消す。
 name: FX ECB weekly snapshot
 
 on:
   schedule:
-    - cron: '30 0,8 * * *' # 09:30 / 17:30 JST
+    - cron: '30 0,8 * * *' # 09:30 / 17:30 JST(GitHub の混雑で遅れることがある)
   workflow_dispatch:
+  push:
+    # main に入れたとき(このファイルかスクリプトが変わったとき)に1回動かす(初回の実行)
+    branches: [main]
+    paths:
+      - .github/workflows/fx-ecb-weekly-snapshot.yml
+      - .github/scripts/fx_ecb_weekly_snapshot.py
 
 permissions:
-  contents: write
+  contents: write # 記録のブランチへの書き込み
+  actions: write # 14日後に自分を無効にする
 
 concurrency:
   group: fx-ecb-weekly-snapshot
@@ -18,6 +26,7 @@ concurrency:
 
 jobs:
   snapshot:
+    if: github.repository == 'fuma-ono/my-project'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -35,6 +44,7 @@ jobs:
           fi
 
       - name: Fetch and record
+        id: snapshot
         run: python3 code/.github/scripts/fx_ecb_weekly_snapshot.py data
 
       - name: Commit the record
@@ -49,3 +59,9 @@ jobs:
           fi
           git commit -q -m "ECB weekly snapshot $(date -u +%Y-%m-%dT%H:%MZ)"
           git push origin ecb-weekly-snapshots
+
+      - name: Stop after the 14 days (disable this workflow)
+        if: steps.snapshot.outputs.expired == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow disable "${{ github.workflow }}" --repo "${{ github.repository }}"
