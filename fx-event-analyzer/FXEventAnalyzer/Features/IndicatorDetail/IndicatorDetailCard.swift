@@ -19,52 +19,46 @@ struct IndicatorDetailCard: View {
             // HQ指示(2026-10-09)の1枚目の参考画像: カードの下に「次回発表予定 ›」と
             // 「過去イベント比較 ›」の見出しと、それぞれの小さなカード。
             if let next = nextScheduledEvent {
-                NavigationLink(value: AppRoute.eventDetail(id: next.id)) {
-                    linkSection(title: "次回発表予定") {
-                        HStack(spacing: 8) {
-                            Image(systemName: "calendar")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(V5P.cyan)
-                            VStack(alignment: .leading, spacing: 2) {
-                                NotoText.text(Self.releaseLabel(next.releaseDatetime), size: 9.5).foregroundStyle(.white)
-                                NotoText.text("\(CountryFlag.indicatorDisplayText(indicator.name, countryCode: indicator.countryCode, displayName: indicator.displayName))　|　\(CountryFlag.japaneseName(forCountry: indicator.countryCode))", size: 7)
-                                    .foregroundStyle(SettingsCardStyle.subtitleColor)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
-                            }
-                            Spacer(minLength: 4)
-                            importanceBadge(width: 32)
-                            linkChevron
+                linkSection(title: "次回発表予定", route: .eventDetail(id: next.id)) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(V5P.cyan)
+                        VStack(alignment: .leading, spacing: 2) {
+                            NotoText.text(Self.releaseLabel(next.releaseDatetime), size: 9.5).foregroundStyle(.white)
+                            NotoText.text("\(CountryFlag.indicatorDisplayText(indicator.name, countryCode: indicator.countryCode, displayName: indicator.displayName))　|　\(CountryFlag.japaneseName(forCountry: indicator.countryCode))", size: 7)
+                                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                         }
+                        Spacer(minLength: 4)
+                        importanceBadge(width: 32)
+                        linkChevron
                     }
                 }
-                .buttonStyle(SettingsRowPressStyle())
             }
             if let pair = comparisonPair {
-                NavigationLink(value: AppRoute.historicalComparison(
+                linkSection(title: "過去イベント比較", route: .historicalComparison(
                     indicatorId: indicator.id,
                     indicatorName: indicator.name,
                     fxPairId: pair.fxPairId,
                     fxPairSymbol: pair.symbol
                 )) {
-                    linkSection(title: "過去イベント比較") {
-                        HStack(spacing: 8) {
-                            Image(systemName: "clock")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(V5P.cyan)
-                            VStack(alignment: .leading, spacing: 2) {
-                                NotoText.text("過去\(PlanStore.shared.limits.historyEventsMax)回のデータを表示", size: 9.5).foregroundStyle(.white)
-                                NotoText.text("過去の結果・予想・前回と為替の動きを比較できます", size: 7)
-                                    .foregroundStyle(SettingsCardStyle.subtitleColor)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
-                            }
-                            Spacer(minLength: 4)
-                            linkChevron
+                    HStack(spacing: 8) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(V5P.cyan)
+                        VStack(alignment: .leading, spacing: 2) {
+                            NotoText.text("過去\(PlanStore.shared.limits.historyEventsMax)回のデータを表示", size: 9.5).foregroundStyle(.white)
+                            NotoText.text("過去の結果・予想・前回と為替の動きを比較できます", size: 7)
+                                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                         }
+                        Spacer(minLength: 4)
+                        linkChevron
                     }
                 }
-                .buttonStyle(SettingsRowPressStyle())
             }
         }
         .frame(width: 214)
@@ -122,21 +116,37 @@ struct IndicatorDetailCard: View {
         .accessibilityIdentifier("indicatorFavoriteStar")
     }
 
-    /// 見出し(「次回発表予定」)とその下の小さなカード。全体で1つのボタン。
+    /// 見出し(「次回発表予定」)とその下の小さなカード。見出し+カード全体が
+    /// ボタン(`NavigationLink`)。
     /// HQ指示(2026-10-13、4回目)「次回発表予定と過去イベント比較の＞は
     /// 枠内の右側にして」: 見出し行(枠の外)にあった「＞」を外し、枠(カード)
     /// の中、右端に移した(`linkChevron`、各カードのHStackの末尾)。
-    private func linkSection(title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // HQ指示(2026-10-13、5回目)「見出しの文字サイズは10にして」: 10.5→10。
-            NotoText.text(title, size: 10).foregroundStyle(.white)
-                .padding(.horizontal, 4)
-            content()
-                .padding(.horizontal, 10)
-                .frame(width: 214, height: 38, alignment: .leading)
-                .background(GradientCardBackground())
+    /// HQ指摘(2026-10-27)「選択して光る枠がはみ出ている」: 見出しの文字を
+    /// 含むVStack全体をNavigationLinkのlabelにすると、`SettingsRowPressStyle`
+    /// が押下中に敷く光る枠(`configuration.label`と同じ大きさ)が、実際に
+    /// 見えているカード(`content()`だけ)より見出しの文字の高さ分だけ大きく
+    /// なり、カードの角丸からはみ出して見えていた。
+    /// 一度は見出しをボタンの外(兄弟要素)に出して直したが、そのせいで
+    /// `testCaptureAllScreens`の`tap(containing: "次回発表予定")`
+    /// (見出し文字を含む領域をタップする)が遷移しなくなる回帰が起きた
+    /// (実際のユーザーが見出し文字をタップしても遷移しなくなる不具合でもある)。
+    /// 見出し+カードの`VStack`全体を再びNavigationLinkのlabelに戻し、代わりに
+    /// 光る枠の大きさをカード(214×38)だけに固定して下端に揃える専用の
+    /// `IndicatorDetailLinkPressStyle`を使うことで、タップ範囲は元に戻しつつ
+    /// 光る枠だけカードの外形に一致させた。
+    private func linkSection(title: String, route: AppRoute, @ViewBuilder content: () -> some View) -> some View {
+        NavigationLink(value: route) {
+            VStack(alignment: .leading, spacing: 4) {
+                // HQ指示(2026-10-13、5回目)「見出しの文字サイズは10にして」: 10.5→10。
+                NotoText.text(title, size: 10).foregroundStyle(.white)
+                    .padding(.horizontal, 4)
+                content()
+                    .padding(.horizontal, 10)
+                    .frame(width: 214, height: 38, alignment: .leading)
+                    .background(GradientCardBackground())
+            }
         }
-        .contentShape(Rectangle())
+        .buttonStyle(IndicatorDetailLinkPressStyle())
     }
 
     private var linkChevron: some View {
@@ -306,5 +316,32 @@ struct IndicatorDetailCard: View {
         case "IRREGULAR": return "不定期"
         default: return frequency
         }
+    }
+}
+
+/// `linkSection`専用の押下スタイル。`SettingsRowPressStyle`と見た目(色・線・
+/// 光)は同じだが、光る枠を`configuration.label`全体(見出し+カード)ではなく
+/// カード本体と同じ大きさ(214×38)に固定し、下端に揃えて敷く。
+/// HQ指摘(2026-10-27)で見つかった、見出し+カード全体をラベルにすると
+/// 光る枠が見出しの高さ分はみ出す不具合と、それを避けて見出しをボタンの外に
+/// 出すとタップ範囲が見出し文字を除外してしまう回帰、その両方を避けるため。
+private struct IndicatorDetailLinkPressStyle: ButtonStyle {
+    private static let border = Color(red: 0 / 255, green: 201 / 255, blue: 234 / 255) // #00C9EA
+    private static let fill = Color(red: 0 / 255, green: 48 / 255, blue: 90 / 255) // #00305A
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(alignment: .bottom) {
+                if configuration.isPressed {
+                    RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
+                        .fill(Self.fill)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
+                                .stroke(Self.border, lineWidth: 0.9)
+                                .shadow(color: Self.border.opacity(0.8), radius: 2.5)
+                        )
+                        .frame(width: 214, height: 38)
+                }
+            }
     }
 }
