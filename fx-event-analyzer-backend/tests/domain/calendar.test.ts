@@ -67,6 +67,8 @@ describe('buildCalendarItems', () => {
         status: 'SCHEDULED',
         is_provisional: false,
         attribution: null, // 機関の無い要人(テストのデータ)は出典なし。ECB・FRB は attribution.test.ts
+        result_type: null,
+        data_status: null,
       },
       {
         kind: 'INDICATOR',
@@ -84,6 +86,8 @@ describe('buildCalendarItems', () => {
         status: 'SCHEDULED',
         is_provisional: false,
         attribution: null,
+        result_type: 'VALUE',
+        data_status: null,
       },
     ]);
   });
@@ -166,5 +170,25 @@ describe('buildCalendarItems', () => {
 
   it('returns an empty list for an empty range', () => {
     expect(buildCalendarItems([], [])).toEqual([]);
+  });
+});
+
+describe('result_type / data_status (schedule-only design 2章、HQ指示 2026-10-27)', () => {
+  it('FOMC議事要旨 is NONE (no result value), other indicators VALUE; data_status uses the detail API vocabulary', () => {
+    const items = buildCalendarItems(
+      [
+        event({ id: 'minutes', indicator_code: 'US_FOMC_MINUTES', data_status: 'PENDING' }),
+        event({ id: 'cpi', indicator_code: 'US_CPI', data_status: 'AVAILABLE' }),
+        event({ id: 'fomc', indicator_code: 'US_FOMC', data_status: 'PENDING' }),
+      ],
+      [],
+      {},
+      new Date('2026-10-01T00:00:00Z'),
+    );
+    expect(Object.fromEntries(items.map((item) => [item.id, [item.result_type, item.data_status]]))).toEqual({
+      minutes: ['NONE', 'DATA_PENDING'],
+      cpi: ['VALUE', 'READY'],
+      fomc: ['VALUE', 'DATA_PENDING'], // 金利の値の取り込みができるまでは、発表後も「結果待ち」
+    });
   });
 });
