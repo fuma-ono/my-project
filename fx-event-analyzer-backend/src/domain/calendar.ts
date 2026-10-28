@@ -7,6 +7,8 @@
  * the indicator name, a speech row's title is the speech's own title with
  * the speaker's display name alongside in `speaker_name`.
  */
+import { mapEventDataStatus, type EconomicEventDbStatus } from './dataQuality.js';
+import { resultTypeForIndicator, type ResultType } from './resultType.js';
 import { effectiveIsProvisional } from './provisional.js';
 
 export type CalendarItemKind = 'INDICATOR' | 'SPEECH';
@@ -38,6 +40,14 @@ export interface CalendarItem {
    * datetime is still in the future (domain/provisional.ts). SPEECH: always false.
    */
   is_provisional: boolean;
+  /**
+   * INDICATOR: 結果の値が出るか(VALUE / NONE、domain/resultType.ts。api-design v1.38 の次、HQ指示 2026-10-27)。
+   * NONE(FOMC議事要旨)は発表時刻の後「公表済み」、VALUE で発表時刻の後に data_status が PENDING なら「結果待ち」。
+   * SPEECH: null。
+   */
+  result_type: ResultType | null;
+  /** INDICATOR: 値の取り込みの状態(詳細の API と同じ言葉: READY / DATA_PENDING / DATA_UNAVAILABLE)。SPEECH: null。 */
+  data_status: string | null;
 }
 
 export interface CalendarIndicatorEvent {
@@ -53,6 +63,10 @@ export interface CalendarIndicatorEvent {
   status: string;
   /** Absent = false (rows read before migration 20261022000002 / test fixtures). */
   is_provisional?: boolean | undefined;
+  /** economic_indicators.code. Absent = VALUE (test fixtures). */
+  indicator_code?: string | undefined;
+  /** economic_events.data_status (DB value). Absent = null (test fixtures). */
+  data_status?: string | undefined;
 }
 
 export interface CalendarSpeech {
@@ -111,6 +125,8 @@ export function buildCalendarItems(
     datetime_precision: event.release_datetime_precision,
     status: event.status,
     is_provisional: effectiveIsProvisional(event.is_provisional, event.release_datetime, now),
+    result_type: resultTypeForIndicator(event.indicator_code),
+    data_status: event.data_status ? mapEventDataStatus(event.data_status as EconomicEventDbStatus) : null,
   }));
   const speechItems = speeches
     .filter((speech) => speech.status !== 'CANCELLED')
@@ -129,6 +145,8 @@ export function buildCalendarItems(
       datetime_precision: 'EXACT',
       status: speech.status,
       is_provisional: false,
+      result_type: null,
+      data_status: null,
     }));
   return [...indicatorItems, ...speechItems].filter((item) => matches(item, filters)).sort(compareCalendarItems);
 }

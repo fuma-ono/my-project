@@ -139,11 +139,13 @@ export function formatMonthDayTime(instant: Date, timeZone: string): string {
  * 「まもなく発言です（…発言・重要度 中）」.
  */
 export function inboxBody(
-  item: Pick<UpcomingNotificationItem, 'kind' | 'scheduled_at' | 'importance'>,
+  item: Pick<UpcomingNotificationItem, 'kind' | 'scheduled_at' | 'importance'> &
+    Partial<Pick<UpcomingNotificationItem, 'result_type'>>,
   leadMinutes: number,
   timeZone: string,
 ): string {
-  const noun = item.kind === 'SPEECH' ? '発言' : '発表';
+  // 結果の値が出ない予定(FOMC議事要旨、result_type = NONE)は「公表」(「発表」と書かない。結果が出ると誤解させない)
+  const noun = item.kind === 'SPEECH' ? '発言' : item.result_type === 'NONE' ? '公表' : '発表';
   const timing = leadMinutes === 0 ? `まもなく${noun}です` : `${noun}の${leadMinutes}分前です`;
   const level = IMPORTANCE_LABELS[item.importance] ?? item.importance;
   const when = formatMonthDayTime(new Date(item.scheduled_at), timeZone);

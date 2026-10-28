@@ -1,3 +1,4 @@
+import type { ResultType } from './resultType.js';
 import { ApiError } from '../errors/ApiError.js';
 import type { Importance } from './importance.js';
 
@@ -72,6 +73,8 @@ export interface IndicatorNotificationCandidate extends CandidateBase {
    * カレンダー更新(日時の変更・取りやめ)は isNotificationEligible で判定し、これは見ない。
    */
   is_provisional?: boolean | undefined;
+  /** 結果の値が出るか(domain/resultType.ts)。省略 = VALUE。 */
+  result_type?: ResultType | undefined;
 }
 
 export interface SpeechNotificationCandidate extends CandidateBase {
@@ -96,6 +99,11 @@ export interface UpcomingNotificationItem {
   country_code: string;
   currency_code: string;
   related_fx_pairs: string[];
+  /**
+   * INDICATOR: 結果の値が出るか(VALUE / NONE)。NONE(FOMC議事要旨)の通知の文面は「公表の N 分前」にする。
+   * SPEECH: null。
+   */
+  result_type: ResultType | null;
 }
 
 export interface NotificationWindow {
@@ -278,6 +286,7 @@ export function buildUpcomingNotifications(
         country_code: candidate.country_code,
         currency_code: candidate.currency_code,
         related_fx_pairs: candidate.related_fx_pairs,
+        result_type: candidate.kind === 'INDICATOR' ? (candidate.result_type ?? 'VALUE') : null,
       },
     });
   }

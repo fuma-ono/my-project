@@ -1,3 +1,4 @@
+import { resultTypeForIndicator } from '../domain/resultType.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fxPairsForCurrency, type NotificationCandidate } from '../domain/notifications.js';
 import { listActiveFxPairs, type FxPairRow } from './fxPairsRepository.js';
@@ -37,7 +38,7 @@ export async function listNotificationCandidates(
 }
 
 const INDICATOR_CANDIDATE_COLUMNS =
-  'id, indicator_id, release_datetime, release_datetime_precision, importance, status, is_provisional, economic_indicators!inner(name, display_name, country_code, currency_code)';
+  'id, indicator_id, release_datetime, release_datetime_precision, importance, status, is_provisional, economic_indicators!inner(code, name, display_name, country_code, currency_code)';
 
 async function listIndicatorCandidates(
   supabase: SupabaseClient,
@@ -77,6 +78,7 @@ async function toIndicatorCandidates(
 
   return rows.map((row) => {
     const indicator = row.economic_indicators as {
+      code?: string;
       name: string;
       display_name?: string | null;
       country_code: string;
@@ -92,6 +94,7 @@ async function toIndicatorCandidates(
       scheduled_at: row.release_datetime,
       release_datetime_precision: row.release_datetime_precision,
       is_provisional: row.is_provisional === true,
+      result_type: resultTypeForIndicator(indicator.code),
       country_code: indicator.country_code,
       currency_code: indicator.currency_code,
       related_fx_pairs: (relatedByIndicator.get(row.indicator_id) ?? []).map((pair) => pair.symbol),

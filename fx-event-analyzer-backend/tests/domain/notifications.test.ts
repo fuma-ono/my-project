@@ -79,6 +79,7 @@ describe('buildUpcomingNotifications', () => {
         country_code: 'US',
         currency_code: 'USD',
         related_fx_pairs: ['USDJPY', 'EURUSD'],
+        result_type: 'VALUE',
       },
       {
         kind: 'SPEECH',
@@ -92,6 +93,7 @@ describe('buildUpcomingNotifications', () => {
         country_code: 'US',
         currency_code: 'USD',
         related_fx_pairs: ['EURUSD', 'USDJPY'],
+        result_type: null,
       },
     ]);
   });
@@ -382,5 +384,19 @@ describe('isInQuietHours', () => {
     const instant = at('2026-10-06T14:00:00Z'); // 23:00 JST, 14:00 UTC
     expect(isInQuietHours(instant, overnight, 'Mars/Olympus')).toBe(true);
     expect(isInQuietHours(instant, overnight, '')).toBe(true);
+  });
+});
+
+describe('result_type on upcoming items (HQ指示 2026-10-27)', () => {
+  it('passes NONE through for a no-result event (FOMC議事要旨); speeches are null', () => {
+    const items = buildUpcomingNotifications(
+      prefs,
+      [indicator({ id: 'minutes', result_type: 'NONE' }), speech()],
+      window,
+    );
+    expect(Object.fromEntries(items.map((item) => [item.id, item.result_type]))).toEqual({
+      minutes: 'NONE',
+      'speech-1': null,
+    });
   });
 });

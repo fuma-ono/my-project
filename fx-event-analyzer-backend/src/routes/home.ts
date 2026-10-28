@@ -1,3 +1,4 @@
+import { resultTypeForIndicator } from '../domain/resultType.js';
 import type { FastifyInstance } from 'fastify';
 import {
   listEventsInRange,
@@ -108,6 +109,8 @@ export function registerHomeRoutes(app: FastifyInstance): void {
                 release_datetime_precision: event.release_datetime_precision,
                 status: event.status,
                 data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
+                // 結果の値が出るか(VALUE / NONE、domain/resultType.ts)。NONE = FOMC議事要旨(発表後「公表済み」)
+                result_type: resultTypeForIndicator(event.indicator_code),
                 forecast: snapshot?.forecast ?? null,
                 actual: snapshot?.actual ?? null,
                 previous: snapshot?.previous ?? null,

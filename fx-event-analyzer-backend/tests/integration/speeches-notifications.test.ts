@@ -257,6 +257,7 @@ describe.skipIf(!integration)('Speeches / FX pairs / upcoming notifications', ()
         currency_code: 'USD',
         // Every active USD pair by symbol (seed.sql has 9 pairs since SCR-026).
         related_fx_pairs: ['AUDUSD', 'EURUSD', 'GBPUSD', 'USDCHF', 'USDJPY'],
+        result_type: null, // 要人発言は null(結果の値の区別は指標だけ)
       });
       expect(body.items.find((item: { id: string }) => item.id === EXACT_EVENT_ID)).toMatchObject({
         kind: 'INDICATOR',
