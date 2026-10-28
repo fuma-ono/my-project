@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ECB_ATTRIBUTION, FRB_ATTRIBUTION } from '../../src/domain/attribution.js';
 import { FEATURE_CODES } from '../../src/authorization/entitlements.js';
 import {
   buildIntegrationContext,
@@ -268,6 +269,7 @@ describe.skipIf(!integration)('Speech reactions / speaker comparison', () => {
       expect(body.speaker).toMatchObject({ speaker_id: SPEAKER_ID, currency_code: 'USD', photo_url: null });
       expect(body.fx_pair_id).toBe(USDJPY);
       expect(body.symbol).toBe('USDJPY');
+      expect(body.attribution).toEqual(FRB_ATTRIBUTION); // api-design v1.39: 要人の機関(FRB)から
       expect(body.events.map((row: { speech_id: string }) => row.speech_id)).toEqual([
         DELIVERED_ID,
         ...[...OLDER_DELIVERED_IDS].reverse(),
@@ -278,6 +280,14 @@ describe.skipIf(!integration)('Speech reactions / speaker comparison', () => {
       });
       expect(body.events[1].pips_by_timeframe).toEqual({ '1m': null, '5m': null, '15m': null });
       expect(body.history_limit).toEqual({ applied: 6, max_for_plan: 20, pro_max: 20 });
+    });
+
+    it('an ECB speaker: attribution with the ECB notice (api-design v1.39)', async () => {
+      const LAGARDE_SPEAKER_ID = '40000000-0000-0000-0000-000000000003'; // seed.sql: ECB総裁
+      const { status, body } = await get(`/speakers/${LAGARDE_SPEAKER_ID}/comparison`, await newUser(ALL));
+      expect(status).toBe(200);
+      expect(body.attribution).toEqual(ECB_ATTRIBUTION);
+      expect(body.attribution.notice).toBe('この情報は ECB のウェブサイト（www.ecb.europa.eu）で無料で入手できます。');
     });
 
     it('FREE: capped at history_events_max (3, v1.37); fx_pair_id omitted = USDJPY', async () => {

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { FRB_ATTRIBUTION } from '../../src/domain/attribution.js';
 import { FEATURE_CODES } from '../../src/authorization/entitlements.js';
 import { deleteAllExpiredInboxNotifications } from '../../src/repositories/notificationInboxRepository.js';
 import {
@@ -211,9 +212,11 @@ describe.skipIf(!integration)('Notification inbox', () => {
         notify_at: isoSeconds(at(-1)),
         read_at: null,
         expires_at: isoSeconds(at(-1 + 30 * 24 * 60)),
+        attribution: null,
       });
       expect(items.find((item) => item.target_id === DELIVERED_SPEECH_ID)).toMatchObject({
         kind: 'SPEECH',
+        attribution: FRB_ATTRIBUTION, // api-design v1.39
         trigger: 'LEAD_5',
         title: '受信箱テスト講演',
         display_name: null,

@@ -1,3 +1,4 @@
+import { ECB_ATTRIBUTION, FRB_ATTRIBUTION } from '../../src/domain/attribution.js';
 import { describe, expect, it } from 'vitest';
 import {
   buildUpcomingNotifications,
@@ -79,6 +80,7 @@ describe('buildUpcomingNotifications', () => {
         country_code: 'US',
         currency_code: 'USD',
         related_fx_pairs: ['USDJPY', 'EURUSD'],
+        attribution: null,
       },
       {
         kind: 'SPEECH',
@@ -92,6 +94,7 @@ describe('buildUpcomingNotifications', () => {
         country_code: 'US',
         currency_code: 'USD',
         related_fx_pairs: ['EURUSD', 'USDJPY'],
+        attribution: null, // 候補に attribution が無い = null
       },
     ]);
   });
@@ -104,6 +107,23 @@ describe('buildUpcomingNotifications', () => {
 
   it('returns nothing when push is off', () => {
     expect(buildUpcomingNotifications({ ...prefs, push: false }, [indicator(), speech()], window)).toEqual([]);
+  });
+
+  it('passes the speech attribution through (api-design v1.39); indicators stay null', () => {
+    const items = buildUpcomingNotifications(
+      prefs,
+      [
+        indicator(),
+        speech({ id: 'ecb-1', attribution: ECB_ATTRIBUTION }),
+        speech({ id: 'frb-1', attribution: FRB_ATTRIBUTION }),
+      ],
+      window,
+    );
+    expect(Object.fromEntries(items.map((item) => [item.id, item.attribution]))).toEqual({
+      [indicator().id]: null,
+      'ecb-1': ECB_ATTRIBUTION,
+      'frb-1': FRB_ATTRIBUTION,
+    });
   });
 
   it('respects the per-kind switches', () => {

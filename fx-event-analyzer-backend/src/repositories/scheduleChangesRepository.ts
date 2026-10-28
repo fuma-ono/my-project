@@ -29,6 +29,21 @@ export async function listScheduleChanges(
 }
 
 /** The cleanup job: drops changes older than `beforeIso` (past the CALENDAR_UPDATE retention). */
+/** SPEECH の変更の id → 要人発言の id(通知一覧の CALENDAR_UPDATE の出典、api-design v1.39)。READ-ONLY。 */
+export async function mapSpeechChangeTargets(
+  supabase: SupabaseClient,
+  changeIds: readonly string[],
+): Promise<Map<string, string>> {
+  if (changeIds.length === 0) return new Map();
+  const { data, error } = await supabase
+    .from('event_schedule_changes')
+    .select('id, target_id')
+    .eq('kind', 'SPEECH')
+    .in('id', [...changeIds]);
+  if (error) throw error;
+  return new Map(((data ?? []) as { id: string; target_id: string }[]).map((row) => [row.id, row.target_id]));
+}
+
 export async function deleteScheduleChangesBefore(supabase: SupabaseClient, beforeIso: string): Promise<number> {
   const { data, error } = await supabase
     .from('event_schedule_changes')

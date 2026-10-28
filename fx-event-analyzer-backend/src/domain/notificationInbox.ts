@@ -1,3 +1,4 @@
+import type { Attribution } from './attribution.js';
 import {
   buildUpcomingNotifications,
   formatIsoSeconds,
@@ -208,6 +209,25 @@ export interface NotificationInboxRow {
 
 export interface NotificationInboxItem extends NotificationInboxRow {
   lead_minutes: number | null;
+  /**
+   * 出典と告知(api-design v1.39)。SPEECH と、要人発言の CALENDAR_UPDATE: 要人の機関(ECB・FRB)から。
+   * それ以外(INDICATOR・RATE_ALERT・SYSTEM 等)・発言が見つからない(変更の記録が保存期間を過ぎて消えた等): null。
+   */
+  attribution: Attribution | null;
+}
+
+/**
+ * 通知一覧の行の、出典を決める要人発言の id(api-design v1.39)。SPEECH は target_id がその発言。
+ * CALENDAR_UPDATE は target_id が event_schedule_changes の id なので、`speechIdOfChange` で発言に引く
+ * (speaker_name が null の行は経済指標の変更なので対象外)。それ以外は null。
+ */
+export function inboxAttributionSpeechId(
+  row: Pick<NotificationInboxRow, 'kind' | 'target_id' | 'speaker_name'>,
+  speechIdOfChange: ReadonlyMap<string, string>,
+): string | null {
+  if (row.kind === 'SPEECH') return row.target_id;
+  if (row.kind === 'CALENDAR_UPDATE' && row.speaker_name !== null) return speechIdOfChange.get(row.target_id) ?? null;
+  return null;
 }
 
 function isoOrNull(value: string | null): string | null {
@@ -215,7 +235,7 @@ function isoOrNull(value: string | null): string | null {
 }
 
 /** API shape (api-design.md §24.9): timestamps as second-precision UTC. */
-export function toInboxItem(row: NotificationInboxRow): NotificationInboxItem {
+export function toInboxItem(row: NotificationInboxRow, attribution: Attribution | null = null): NotificationInboxItem {
   return {
     id: row.id,
     kind: row.kind,
@@ -232,5 +252,6 @@ export function toInboxItem(row: NotificationInboxRow): NotificationInboxItem {
     notify_at: formatIsoSeconds(new Date(row.notify_at)),
     read_at: isoOrNull(row.read_at),
     expires_at: formatIsoSeconds(new Date(row.expires_at)),
+    attribution,
   };
 }

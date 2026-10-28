@@ -1,3 +1,4 @@
+import { ECB_ATTRIBUTION } from '../../src/domain/attribution.js';
 import { describe, expect, it } from 'vitest';
 import {
   AT_RELEASE_TRIGGER,
@@ -10,6 +11,7 @@ import {
   NOTIFICATION_RETENTION_DAYS,
   resolveInboxMaterializationWindow,
   selectInboxDeliveries,
+  inboxAttributionSpeechId,
   toInboxItem,
   triggerForLeadMinutes,
   type NotificationInboxRow,
@@ -314,11 +316,38 @@ describe('toInboxItem', () => {
       notify_at: '2026-10-13T11:25:00Z',
       read_at: '2026-10-13T11:40:12Z',
       expires_at: '2026-11-12T11:25:00Z',
+      attribution: null,
     });
+    expect(toInboxItem(row, ECB_ATTRIBUTION).attribution).toEqual(ECB_ATTRIBUTION);
   });
 
   it('keeps nulls (unread, no schedule, no lead)', () => {
     const item = toInboxItem({ ...row, kind: 'SYSTEM', trigger: 'WELCOME', scheduled_at: null, read_at: null });
     expect(item).toMatchObject({ lead_minutes: null, scheduled_at: null, read_at: null });
+  });
+});
+
+describe('inboxAttributionSpeechId (api-design v1.39)', () => {
+  const changes = new Map([['change-1', 'speech-9']]);
+  it('SPEECH → its target; a speech CALENDAR_UPDATE → the changed speech; anything else → null', () => {
+    expect(inboxAttributionSpeechId({ kind: 'SPEECH', target_id: 'speech-1', speaker_name: 'x' }, changes)).toBe(
+      'speech-1',
+    );
+    expect(
+      inboxAttributionSpeechId({ kind: 'CALENDAR_UPDATE', target_id: 'change-1', speaker_name: 'x' }, changes),
+    ).toBe('speech-9');
+    // 経済指標の変更(speaker_name が null)・変更の記録が見つからない・その他の種類
+    expect(
+      inboxAttributionSpeechId({ kind: 'CALENDAR_UPDATE', target_id: 'change-1', speaker_name: null }, changes),
+    ).toBe(null);
+    expect(inboxAttributionSpeechId({ kind: 'CALENDAR_UPDATE', target_id: 'gone', speaker_name: 'x' }, changes)).toBe(
+      null,
+    );
+    expect(inboxAttributionSpeechId({ kind: 'INDICATOR', target_id: 'event-1', speaker_name: null }, changes)).toBe(
+      null,
+    );
+    expect(inboxAttributionSpeechId({ kind: 'RATE_ALERT', target_id: 'alert-1', speaker_name: null }, changes)).toBe(
+      null,
+    );
   });
 });

@@ -1,3 +1,4 @@
+import type { Attribution } from './attribution.js';
 import { ApiError } from '../errors/ApiError.js';
 import type { Importance } from './importance.js';
 
@@ -77,6 +78,8 @@ export interface IndicatorNotificationCandidate extends CandidateBase {
 export interface SpeechNotificationCandidate extends CandidateBase {
   kind: 'SPEECH';
   speaker_name: string;
+  /** 出典と告知(api-design v1.39、domain/attribution.ts)。要人の機関から。省略 = null。 */
+  attribution?: Attribution | null | undefined;
   /** 役職(`speakers.title`、例: `FRB理事`)。カレンダー更新の見出しに使う。 */
   speaker_title?: string | undefined;
 }
@@ -96,6 +99,8 @@ export interface UpcomingNotificationItem {
   country_code: string;
   currency_code: string;
   related_fx_pairs: string[];
+  /** 出典と告知(api-design v1.39)。SPEECH: 要人の機関(ECB・FRB)から。INDICATOR: 今は常に null。 */
+  attribution: Attribution | null;
 }
 
 export interface NotificationWindow {
@@ -278,6 +283,7 @@ export function buildUpcomingNotifications(
         country_code: candidate.country_code,
         currency_code: candidate.currency_code,
         related_fx_pairs: candidate.related_fx_pairs,
+        attribution: candidate.kind === 'SPEECH' ? (candidate.attribution ?? null) : null,
       },
     });
   }

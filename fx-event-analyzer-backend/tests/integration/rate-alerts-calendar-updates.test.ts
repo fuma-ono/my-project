@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { FRB_ATTRIBUTION } from '../../src/domain/attribution.js';
 import { FEATURE_CODES } from '../../src/authorization/entitlements.js';
 import { evaluateAllRateAlerts } from '../../src/repositories/rateAlertsRepository.js';
 import {
@@ -442,6 +443,7 @@ describe.skipIf(!integration)('Rate alerts / calendar updates / Home speeches', 
         notify_at: expect.stringMatching(/Z$/),
         read_at: null,
         expires_at: expect.stringMatching(/Z$/),
+        attribution: null,
       });
       expect(Date.parse(first[0]!.expires_at) - Date.parse(first[0]!.notify_at)).toBe(7 * 24 * 60 * MINUTE_MS);
 
@@ -557,6 +559,7 @@ describe.skipIf(!integration)('Rate alerts / calendar updates / Home speeches', 
         notify_at: isoSeconds(changes[0].changed_at),
         read_at: null,
         expires_at: expect.stringMatching(/Z$/),
+        attribution: null, // 経済指標の変更
       });
 
       // Calling again never duplicates it.
@@ -587,6 +590,8 @@ describe.skipIf(!integration)('Rate alerts / calendar updates / Home speeches', 
         country_code: 'US',
         importance: 'LOW',
         scheduled_at: isoSeconds(at(2 * 24 * 60)),
+        // api-design v1.39: 要人発言の変更は、変更の記録 → 発言 → 要人の機関(FRB)から
+        attribution: FRB_ATTRIBUTION,
       });
 
       expect(await inbox(pushOff, 'CALENDAR_UPDATE')).toEqual([]);

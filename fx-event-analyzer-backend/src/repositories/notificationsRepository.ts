@@ -130,6 +130,7 @@ function toSpeechCandidates(
     country_code: speech.speaker.country_code,
     currency_code: speech.speaker.currency_code,
     related_fx_pairs: fxPairsForCurrency(speech.speaker.currency_code, fxPairs),
+    attribution: speech.attribution,
   }));
 }
 
