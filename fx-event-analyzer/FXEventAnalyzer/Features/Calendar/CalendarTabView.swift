@@ -138,6 +138,22 @@ private struct CalendarMonthCard: View {
                         dayCell(day)
                     }
                 }
+                // HQ指示(2026-10-27)「カレンダー部分を横スワイプで次の月に
+                // 移動することはできる?」→追加。`‹ ›`ボタンと同じ
+                // `moveAvailability`判定(プラン範囲外ならプランの案内)を
+                // 使い、グリッド全体への横ドラッグで前後の月に移る。
+                // `minimumDistance`を24ptにして、日付セルの`Button`タップ
+                // (`onTapGesture`相当)と誤反応しないようにしている。縦方向の
+                // 移動(スクロールしようとした等)の方が大きい場合は無視する。
+                .gesture(
+                    DragGesture(minimumDistance: 24)
+                        .onEnded { drag in
+                            let horizontal = drag.translation.width
+                            let vertical = drag.translation.height
+                            guard abs(horizontal) > abs(vertical) else { return }
+                            requestMoveMonth(by: horizontal < 0 ? 1 : -1)
+                        }
+                )
             }
             .padding(.horizontal, 4)
             .padding(.vertical, 5)
@@ -181,16 +197,23 @@ private struct CalendarMonthCard: View {
         }
     }
 
+    /// `‹ ›`(±1)・`« »`(±12)ボタンと横スワイプ(±1)が共通して使う、プラン
+    /// 範囲を考慮した月移動。範囲外(プレミアムなら見られる)は案内を出し、
+    /// 完全に範囲外なら何もしない。
+    private func requestMoveMonth(by value: Int) {
+        switch viewModel.moveAvailability(by: value) {
+        case .allowed: Task { await viewModel.moveMonth(by: value) }
+        case .needsPro: onNeedsPro()
+        case .unavailable: break
+        }
+    }
+
     /// 範囲の端では薄くして押せなくする。無料プランの範囲の外(プレミアムなら
     /// 見られる)は押せるままにして、押したらプランの案内を出す。
     private func monthButton(systemName: String, label: String, value: Int) -> some View {
         let availability = viewModel.moveAvailability(by: value)
         return Button {
-            switch availability {
-            case .allowed: Task { await viewModel.moveMonth(by: value) }
-            case .needsPro: onNeedsPro()
-            case .unavailable: break
-            }
+            requestMoveMonth(by: value)
         } label: {
             Image(systemName: systemName)
                 .font(.system(size: 9, weight: .semibold))
