@@ -13,9 +13,9 @@ import {
 const integration = loadIntegrationEnv();
 
 // テスト用の行(afterAll で消す)。実際の時計から3日後。議事要旨(migration 20261027000004 の指標)と、比べるための CPI
-const MINUTES_EVENT_ID = '3d000000-0000-0000-0000-000000000001';
+const MINUTES_EVENT_ID = '3e000000-0000-0000-0000-000000000001';
 const US_CPI_INDICATOR_ID = '10000000-0000-0000-0000-000000000001';
-const CPI_EVENT_ID = '3d000000-0000-0000-0000-000000000002';
+const CPI_EVENT_ID = '3e000000-0000-0000-0000-000000000002';
 const MINUTE_MS = 60_000;
 const base = Math.floor(Date.now() / MINUTE_MS) * MINUTE_MS;
 const at = (minutes: number) => new Date(base + minutes * MINUTE_MS).toISOString();
@@ -40,7 +40,7 @@ describe.skipIf(!integration)('result_type: schedule-only events (FOMC minutes) 
     const { error } = await ctx.serviceClient.from('economic_events').insert([
       {
         id: MINUTES_EVENT_ID,
-        indicator_id: (minutes).id,
+        indicator_id: minutes.id,
         provider: 'integration-test',
         provider_event_id: 'result-type-minutes',
         release_datetime: at(3 * 24 * 60),
