@@ -1,4 +1,4 @@
-import { ECB_ATTRIBUTION } from '../../src/domain/attribution.js';
+import { ECB_ATTRIBUTION, FRB_ATTRIBUTION } from '../../src/domain/attribution.js';
 import { describe, expect, it } from 'vitest';
 import {
   AT_RELEASE_TRIGGER,
@@ -12,6 +12,7 @@ import {
   resolveInboxMaterializationWindow,
   selectInboxDeliveries,
   inboxAttributionSpeechId,
+  resolveInboxAttributions,
   toInboxItem,
   triggerForLeadMinutes,
   type NotificationInboxRow,
@@ -349,5 +350,64 @@ describe('inboxAttributionSpeechId (api-design v1.39)', () => {
     expect(inboxAttributionSpeechId({ kind: 'RATE_ALERT', target_id: 'alert-1', speaker_name: null }, changes)).toBe(
       null,
     );
+  });
+});
+
+describe('resolveInboxAttributions (api-design v1.39, HQ判断 2026-10-28「統合前レビュー」B3)', () => {
+  const base = {
+    trigger: 'LEAD_5',
+    title: 't',
+    body: null,
+    display_name: null,
+    country_code: null,
+    importance: null,
+    scheduled_at: null,
+    notify_at: '2026-10-13T11:25:00Z',
+    read_at: null,
+    expires_at: '2026-11-12T11:25:00Z',
+  };
+  function counting(changes: Map<string, string>, organizations: Map<string, string>) {
+    const calls = { changes: [] as number[], speeches: [] as number[] };
+    return {
+      calls,
+      lookups: {
+        speechIdsOfChanges: (ids: readonly string[]) => {
+          calls.changes.push(ids.length);
+          return Promise.resolve(changes);
+        },
+        organizationsOfSpeeches: (ids: readonly string[]) => {
+          calls.speeches.push(ids.length);
+          return Promise.resolve(organizations);
+        },
+      },
+    };
+  }
+
+  it('no N+1: 300 rows → each lookup called once, with the distinct ids', async () => {
+    const rows: NotificationInboxRow[] = Array.from({ length: 300 }, (_, i) => ({
+      ...base,
+      id: `row-${i}`,
+      kind: i % 3 === 0 ? 'CALENDAR_UPDATE' : i % 3 === 1 ? 'SPEECH' : 'INDICATOR',
+      target_id: i % 3 === 0 ? `change-${i}` : i % 3 === 1 ? `speech-${i % 7}` : `event-${i}`,
+      speaker_name: i % 3 === 2 ? null : 'x',
+    }));
+    const changes = new Map(rows.filter((r) => r.kind === 'CALENDAR_UPDATE').map((r) => [r.target_id, 'speech-ecb']));
+    const organizations = new Map([
+      ['speech-ecb', 'ECB'],
+      ...Array.from({ length: 7 }, (_, k) => [`speech-${k}`, 'FRB'] as [string, string]),
+    ]);
+    const { calls, lookups } = counting(changes, organizations);
+    const result = await resolveInboxAttributions(rows, lookups);
+    expect(calls).toEqual({ changes: [100], speeches: [8] });
+    expect(result[0]).toEqual(ECB_ATTRIBUTION);
+    expect(result[1]).toEqual(FRB_ATTRIBUTION);
+    expect(result[2]).toBeNull();
+  });
+
+  it('reads nothing when no row needs an attribution', async () => {
+    const { calls, lookups } = counting(new Map(), new Map());
+    const rows = [{ ...base, id: 'a', kind: 'RATE_ALERT' as const, target_id: 'alert', speaker_name: null }];
+    expect(await resolveInboxAttributions(rows, lookups)).toEqual([null]);
+    expect(calls).toEqual({ changes: [], speeches: [] });
   });
 });

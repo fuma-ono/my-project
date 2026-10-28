@@ -1,4 +1,4 @@
-import type { Attribution } from './attribution.js';
+import { attributionForOrganization, type Attribution } from './attribution.js';
 import {
   buildUpcomingNotifications,
   formatIsoSeconds,
@@ -232,6 +232,33 @@ export function inboxAttributionSpeechId(
 
 function isoOrNull(value: string | null): string | null {
   return value === null ? null : formatIsoSeconds(new Date(value));
+}
+
+/** How resolveInboxAttributions reads the DB (each one query per 100 ids — repositories). */
+export interface InboxAttributionLookups {
+  /** event_schedule_changes.id (SPEECH) → speech id. */
+  speechIdsOfChanges(changeIds: readonly string[]): Promise<ReadonlyMap<string, string>>;
+  /** speech id → speakers.organization. */
+  organizationsOfSpeeches(speechIds: readonly string[]): Promise<ReadonlyMap<string, string>>;
+}
+
+/**
+ * 通知一覧の行ごとの出典(api-design v1.39)。行の数によらず、各 lookup を最大1回だけ呼ぶ(N+1 にしない)。
+ * 対象の行が無ければ DB を読まない。
+ */
+export async function resolveInboxAttributions(
+  rows: readonly NotificationInboxRow[],
+  lookups: InboxAttributionLookups,
+): Promise<(Attribution | null)[]> {
+  const changeIds = rows
+    .filter((row) => row.kind === 'CALENDAR_UPDATE' && row.speaker_name !== null)
+    .map((row) => row.target_id);
+  const speechIdOfChange =
+    changeIds.length > 0 ? await lookups.speechIdsOfChanges(changeIds) : new Map<string, string>();
+  const speechIds = rows.map((row) => inboxAttributionSpeechId(row, speechIdOfChange));
+  const wanted = [...new Set(speechIds.filter((id): id is string => id !== null))];
+  const organizations = wanted.length > 0 ? await lookups.organizationsOfSpeeches(wanted) : new Map<string, string>();
+  return speechIds.map((id) => (id === null ? null : attributionForOrganization(organizations.get(id))));
 }
 
 /** API shape (api-design.md §24.9): timestamps as second-precision UTC. */

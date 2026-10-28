@@ -12,7 +12,7 @@ import {
   type NotificationPreferences,
 } from '../domain/notifications.js';
 import {
-  inboxAttributionSpeechId,
+  resolveInboxAttributions,
   resolveInboxMaterializationWindow,
   selectInboxDeliveries,
   toInboxItem,
@@ -28,7 +28,7 @@ import {
 } from '../repositories/notificationsRepository.js';
 import { evaluateRateAlertsForUser } from '../repositories/rateAlertsRepository.js';
 import { listScheduleChanges, mapSpeechChangeTargets } from '../repositories/scheduleChangesRepository.js';
-import { listSpeechesByIds } from '../repositories/speechesRepository.js';
+import { mapSpeechOrganizations } from '../repositories/speechesRepository.js';
 import {
   countUnreadInboxNotifications,
   deleteExpiredInboxNotificationsForUser,
@@ -184,21 +184,13 @@ export function registerNotificationRoutes(app: FastifyInstance): void {
       listInboxNotifications(app.supabase, userId, nowIso, { order: query.order, kind: query.kind }),
       countUnreadInboxNotifications(app.supabase, userId, nowIso),
     ]);
-    // 出典と告知(api-design v1.39): 要人発言の行だけ、発言の要人の機関から付ける
-    const changeIds = rows
-      .filter((row) => row.kind === 'CALENDAR_UPDATE' && row.speaker_name !== null)
-      .map((row) => row.target_id);
-    const speechIdOfChange = await mapSpeechChangeTargets(app.supabase, changeIds);
-    const speechIdOfRow = new Map(rows.map((row) => [row.id, inboxAttributionSpeechId(row, speechIdOfChange)]));
-    const speechIds = [...new Set([...speechIdOfRow.values()].filter((id): id is string => id !== null))];
-    const attributionBySpeech = new Map(
-      (await listSpeechesByIds(app.supabase, speechIds)).map((speech) => [speech.speech_id, speech.attribution]),
-    );
+    // 出典と告知(api-design v1.39): 要人発言の行だけ、発言の要人の機関から付ける(問い合わせは最大2種類、N+1 なし)
+    const attributions = await resolveInboxAttributions(rows, {
+      speechIdsOfChanges: (ids) => mapSpeechChangeTargets(app.supabase, ids),
+      organizationsOfSpeeches: (ids) => mapSpeechOrganizations(app.supabase, ids),
+    });
     return {
-      items: rows.map((row) => {
-        const speechId = speechIdOfRow.get(row.id) ?? null;
-        return toInboxItem(row, speechId === null ? null : (attributionBySpeech.get(speechId) ?? null));
-      }),
+      items: rows.map((row, index) => toInboxItem(row, attributions[index] ?? null)),
       unread_count: unreadCount,
     };
   });
