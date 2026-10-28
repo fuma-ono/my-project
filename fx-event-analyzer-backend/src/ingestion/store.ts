@@ -142,6 +142,8 @@ export interface SpeechEventRow {
   statement_datetime: string;
   importance: 'LOW' | 'MEDIUM' | 'HIGH';
   status: 'SCHEDULED' | 'DELIVERED';
+  /** speech_events.time_precision (migration 20261028000001). */
+  time_precision: 'EXACT' | 'PUBLICATION_TIME';
 }
 
 export type SpeechStatus = 'SCHEDULED' | 'DELIVERED' | 'CANCELLED';

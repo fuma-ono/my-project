@@ -18,7 +18,7 @@ import { findSpeakerAlias, SPEAKER_ALIASES, SPEECH_KIND_LABEL_JA, type SpeakerAl
 import type { JobCounters } from '../runner.js';
 import type { IngestionStore, SpeechEventRow, StoredSpeechRef } from '../store.js';
 import { wallClockParts } from '../time.js';
-import type { NormalizedSpeech } from '../types.js';
+import type { NormalizedSpeech, SpeechKind } from '../types.js';
 
 export interface SpeechPipelineOptions {
   store: IngestionStore;
@@ -26,6 +26,11 @@ export interface SpeechPipelineOptions {
   now?: () => Date;
   /** Accept PUBLICATION_TIME items as statement times (default false — see header). */
   allowPublicationTime?: boolean;
+  /**
+   * Store PUBLICATION_TIME items of these kinds (HQ判断 2026-10-28: ECB のポッドキャスト). They are written with
+   * time_precision = PUBLICATION_TIME: shown in the list / detail, but no reactions, comparison or notifications.
+   */
+  publicationTimeKinds?: readonly SpeechKind[];
   /**
    * Ignore speeches that started more than this many days ago (the FRB
    * calendar JSON carries years of history; backfilling it is a separate,
@@ -103,7 +108,11 @@ export async function ingestSpeeches(
       counters.skip('OUTSIDE_WINDOW');
       continue;
     }
-    if (speech.timePrecision !== 'EXACT' && !options.allowPublicationTime) {
+    if (
+      speech.timePrecision !== 'EXACT' &&
+      !options.allowPublicationTime &&
+      !(options.publicationTimeKinds ?? []).includes(speech.kind)
+    ) {
       counters.skip('TIME_NOT_EXACT');
       continue;
     }
@@ -129,6 +138,7 @@ export async function ingestSpeeches(
       statement_datetime: speech.startsAt,
       importance: alias.importance,
       status: Date.parse(speech.startsAt) <= now.getTime() ? 'DELIVERED' : 'SCHEDULED',
+      time_precision: speech.timePrecision,
     });
   }
 

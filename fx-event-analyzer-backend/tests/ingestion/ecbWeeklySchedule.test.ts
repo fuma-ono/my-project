@@ -3,6 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  ECB_PUBLICATION_TIME_KINDS,
   ECB_TIME_ZONE,
   ECB_WEEKLY_PROVIDER,
   ecbReconcileOptions,
@@ -527,6 +528,7 @@ describe('ECB weekly schedule → speech_events: reconcile disappeared speeches'
       statement_datetime: '2026-11-03T09:00:00.000Z',
       importance: 'HIGH',
       status: 'SCHEDULED',
+      time_precision: 'EXACT',
     });
     await ingest(store, WEEK);
     const counters = await ingest(store, weekPage(day('Thursday, 5 November 2026', cip('12:00 CET'))));
@@ -535,5 +537,54 @@ describe('ECB weekly schedule → speech_events: reconcile disappeared speeches'
       provider_event_id: '2026-11-03_1000_x_speech',
       status: 'SCHEDULED',
     });
+  });
+});
+
+// HQ判断 2026-10-28: ポッドキャストは要人発言として扱う(一覧・詳細に出す)が、時刻は公開の時刻 → 相場反応・通知の対象外
+describe('ECB weekly schedule: podcasts (publication time only)', () => {
+  // 10/28 に保存した実ページの項目(連絡先は除いた)
+  const html =
+    '<dl><dt>Thursday, 29 October 2026</dt><dd><strong>Board member:</strong> Christine Lagarde<br>' +
+    '<strong>Event:</strong> Euro Matters podcast: President Lagarde presents the latest monetary policy decisions<br>' +
+    '<strong>Time:</strong> 16:15 CET<br></dd>' +
+    '<dt>Thursday, 29 October 2026</dt><dd><strong>Board member:</strong> Piero Cipollone<br>' +
+    "<strong>Event:</strong> Remarks by Mr Cipollone at event titled 'One year to T+1'<br>" +
+    '<strong>Time:</strong> 16:50 CET<br></dd></dl>';
+
+  it('parses a podcast as PODCAST with a publication time (not as a speech)', () => {
+    const { speeches } = parseEcbWeeklySchedule(html);
+    expect(speeches.map((s) => [s.speakerName, s.kind, s.timePrecision, s.startsAt])).toEqual([
+      ['Christine Lagarde', 'PODCAST', 'PUBLICATION_TIME', '2026-10-29T15:15:00.000Z'],
+      ['Piero Cipollone', 'SPEECH', 'EXACT', '2026-10-29T15:50:00.000Z'],
+    ]);
+    expect(ECB_PUBLICATION_TIME_KINDS).toEqual(['PODCAST']);
+  });
+
+  it('the job stores it with time_precision PUBLICATION_TIME and the label ポッドキャスト; without the option it is skipped', async () => {
+    const store = new MemoryIngestionStore();
+    store.speakers = [
+      { id: 'sp-lagarde', name: 'クリスティーヌ・ラガルド', organization: 'ECB' },
+      { id: 'sp-cip', name: 'ピエロ・チポローネ', organization: 'ECB' },
+    ];
+    const result = parseEcbWeeklySchedule(html);
+    const now = () => new Date('2026-10-28T03:00:00Z');
+    await ingestSpeeches(
+      ECB_WEEKLY_PROVIDER,
+      result.speeches,
+      { store, now, reconcile: ecbReconcileOptions(result), publicationTimeKinds: ECB_PUBLICATION_TIME_KINDS },
+      new JobCounters(),
+    );
+    expect(store.speeches.map((row) => [row.speaker_id, row.time_precision, row.title.split(':')[0]])).toEqual([
+      ['sp-lagarde', 'PUBLICATION_TIME', 'ポッドキャスト'],
+      ['sp-cip', 'EXACT', '講演'],
+    ]);
+
+    // 既定(FRB・ECB RSS と同じ): 公開の時刻だけの項目は保存しない
+    const plain = new MemoryIngestionStore();
+    plain.speakers = store.speakers;
+    const counters = new JobCounters();
+    await ingestSpeeches(ECB_WEEKLY_PROVIDER, result.speeches, { store: plain, now }, counters);
+    expect(plain.speeches.map((row) => row.speaker_id)).toEqual(['sp-cip']);
+    expect(counters.skipReasons).toEqual({ TIME_NOT_EXACT: 1 });
   });
 });

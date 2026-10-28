@@ -22,10 +22,15 @@ export interface SpeechSummary {
   statement_datetime: string;
   importance: string;
   status: string;
+  /**
+   * EXACT = 発言の予定の時刻。PUBLICATION_TIME = 公開の時刻しか分からない(ポッドキャスト等)。PUBLICATION_TIME は
+   * 相場反応・過去比較・発言前の通知の対象外(api-design v1.41、HQ判断 2026-10-28)。
+   */
+  statement_time_precision: string;
 }
 
 const SPEECH_COLUMNS =
-  'id, title, summary, statement_datetime, importance, status, speakers!inner(id, name, title, organization, country_code, currency_code, photo_url)';
+  'id, title, summary, statement_datetime, importance, status, time_precision, speakers!inner(id, name, title, organization, country_code, currency_code, photo_url)';
 
 interface SpeechDbRow {
   id: string;
@@ -34,6 +39,7 @@ interface SpeechDbRow {
   statement_datetime: string;
   importance: string;
   status: string;
+  time_precision: string;
   speakers: unknown;
 }
 
@@ -63,6 +69,7 @@ function toSpeechSummary(row: SpeechDbRow): SpeechSummary {
     statement_datetime: row.statement_datetime,
     importance: row.importance,
     status: row.status,
+    statement_time_precision: row.time_precision,
   };
 }
 
@@ -200,6 +207,7 @@ export async function listDeliveredSpeechesForSpeaker(
     .select(SPEECH_COLUMNS)
     .eq('speaker_id', speakerId)
     .eq('status', 'DELIVERED')
+    .eq('time_precision', 'EXACT') // 公開の時刻しか無い発言(ポッドキャスト等)は相場反応を比べない
     .order('statement_datetime', { ascending: false })
     .order('id', { ascending: true })
     .limit(limit);

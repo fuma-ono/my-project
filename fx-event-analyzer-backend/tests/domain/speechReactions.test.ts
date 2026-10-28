@@ -193,6 +193,31 @@ describe('computeSpeechPairReaction', () => {
     expect(result.reactions.map((row) => row.analysis_status)).toEqual(['READY', 'DATA_PENDING', 'DATA_PENDING']);
   });
 
+  it('a publication-time-only speech (podcast, HQ判断 2026-10-28) → NOT_ANALYZABLE even when DELIVERED with candles', () => {
+    const podcast = computeSpeechPairReaction({
+      status: 'DELIVERED',
+      timePrecision: 'PUBLICATION_TIME',
+      statementDatetime: STATEMENT,
+      symbol: 'USDJPY',
+      candles,
+      timeframes: SPEECH_REACTION_TIMEFRAMES,
+      now: NOW,
+    });
+    expect(podcast.pre_release_price).toBeNull();
+    expect(podcast.reactions.every((row) => row.pips === null && row.analysis_status === 'NOT_ANALYZABLE')).toBe(true);
+    // EXACT(既定)は今までどおり計算する
+    const exact = computeSpeechPairReaction({
+      status: 'DELIVERED',
+      timePrecision: 'EXACT',
+      statementDatetime: STATEMENT,
+      symbol: 'USDJPY',
+      candles,
+      timeframes: ['1m'],
+      now: NOW,
+    });
+    expect(exact.reactions[0]!.analysis_status).not.toBe('NOT_ANALYZABLE');
+  });
+
   it('SCHEDULED → all null / DATA_PENDING, CANCELLED → NOT_ANALYZABLE, even with candles', () => {
     const scheduled = computeSpeechPairReaction({
       status: 'SCHEDULED',

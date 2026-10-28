@@ -45,7 +45,7 @@ async function speechPairReaction(
   timeframes: readonly SpeechReactionTimeframe[],
 ): Promise<SpeechPairReaction> {
   let candles: PriceCandle[] = [];
-  if (speech.status === 'DELIVERED') {
+  if (speech.status === 'DELIVERED' && speech.statement_time_precision === 'EXACT') {
     const maxMinutes = Math.max(...timeframes.map((timeframe) => TIMEFRAME_MINUTES[timeframe]));
     const { from, to } = speechCandleRange(speech.statement_datetime, maxMinutes);
     const rows = await listChartPrices(supabase, fxPair.fx_pair_id, '1m', from, to);
@@ -58,6 +58,7 @@ async function speechPairReaction(
   }
   return computeSpeechPairReaction({
     status: speech.status,
+    timePrecision: speech.statement_time_precision,
     statementDatetime: speech.statement_datetime,
     symbol: fxPair.symbol,
     candles,
@@ -112,7 +113,8 @@ export function registerSpeechRoutes(app: FastifyInstance): void {
       pre_statement_price: number | null;
       pips: Record<string, number | null>;
     }[] = [];
-    if (speech.status === 'DELIVERED') {
+    // 公開の時刻しか無い発言(ポッドキャスト等)は相場反応を出さない(HQ判断 2026-10-28)
+    if (speech.status === 'DELIVERED' && speech.statement_time_precision === 'EXACT') {
       const pairs = selectSpeechFxPairs(await listActiveFxPairs(app.supabase), speech.speaker.currency_code);
       reactions = await Promise.all(
         pairs.map(async (pair) => {

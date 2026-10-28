@@ -118,19 +118,23 @@ function toSpeechCandidates(
   speeches: readonly SpeechSummary[],
   fxPairs: readonly FxPairRow[],
 ): NotificationCandidate[] {
-  return speeches.map((speech) => ({
-    kind: 'SPEECH' as const,
-    id: speech.speech_id,
-    title: speech.title,
-    speaker_name: speech.speaker.name,
-    speaker_title: speech.speaker.title,
-    importance: speech.importance,
-    status: speech.status,
-    scheduled_at: speech.statement_datetime,
-    country_code: speech.speaker.country_code,
-    currency_code: speech.speaker.currency_code,
-    related_fx_pairs: fxPairsForCurrency(speech.speaker.currency_code, fxPairs),
-  }));
+  // 公開の時刻しか無い発言(ポッドキャスト等)は「発言の N 分前」の通知にしない(経済指標の DATE_ONLY と同じ考え方。
+  // HQ判断 2026-10-28)。カレンダー更新(中止・日時の変更)は別の候補で、ここでは扱わない
+  return speeches
+    .filter((speech) => speech.statement_time_precision === 'EXACT')
+    .map((speech) => ({
+      kind: 'SPEECH' as const,
+      id: speech.speech_id,
+      title: speech.title,
+      speaker_name: speech.speaker.name,
+      speaker_title: speech.speaker.title,
+      importance: speech.importance,
+      status: speech.status,
+      scheduled_at: speech.statement_datetime,
+      country_code: speech.speaker.country_code,
+      currency_code: speech.speaker.currency_code,
+      related_fx_pairs: fxPairsForCurrency(speech.speaker.currency_code, fxPairs),
+    }));
 }
 
 /**

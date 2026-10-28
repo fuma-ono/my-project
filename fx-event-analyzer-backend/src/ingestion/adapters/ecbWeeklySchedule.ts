@@ -41,6 +41,11 @@ import type { NormalizedSpeech, SpeechKind } from '../types.js';
 export const ECB_WEEKLY_URL = 'https://www.ecb.europa.eu/press/calendars/weekly/html/index.en.html';
 export const ECB_WEEKLY_PROVIDER = 'ecb_weekly_schedule';
 export const ECB_TIME_ZONE = 'Europe/Berlin';
+/**
+ * 時刻が公開の時刻でしかない種別(HQ判断 2026-10-28)。一覧・詳細には出す(ジョブは pipelines/speeches.ts の
+ * publicationTimeKinds で保存を許す)が、time_precision = PUBLICATION_TIME として、相場反応・過去比較・通知には使わない。
+ */
+export const ECB_PUBLICATION_TIME_KINDS: readonly SpeechKind[] = ['PODCAST'];
 /** 夏時間の期間の「CET」の意味を公式の情報で確かめたら true にする(上の説明)。 */
 export const ECB_SUMMER_TIME_VERIFIED = false;
 
@@ -107,6 +112,8 @@ export function parseEcbTime(text: string): { hour: number; minute: number } | n
 
 function kindOf(event: string): SpeechKind {
   const lower = event.toLowerCase();
+  // ポッドキャストは先に見る(「presents the latest monetary policy decisions」等の語で講演にしない)
+  if (lower.includes('podcast')) return 'PODCAST';
   if (lower.includes('press conference')) return 'PRESS_CONFERENCE';
   if (lower.includes('hearing') || lower.includes('testimony')) return 'TESTIMONY';
   if (lower.includes('interview')) return 'INTERVIEW';
@@ -218,15 +225,17 @@ export function parseEcbWeeklySchedule(
       continue;
     }
     seen.add(id);
+    const kind = kindOf(event);
     speeches.push({
       provider: ECB_WEEKLY_PROVIDER,
       providerEventId: id,
       speakerName: speaker,
       organization: 'ECB',
-      kind: kindOf(event),
+      kind,
       topic: event === '' ? null : event.slice(0, 300),
       startsAt: startsAt.toISOString(),
-      timePrecision: 'EXACT',
+      // ポッドキャストの時刻は公開の時刻(発言そのものの時刻は分からない)。ECB_PUBLICATION_TIME_KINDS
+      timePrecision: ECB_PUBLICATION_TIME_KINDS.includes(kind) ? 'PUBLICATION_TIME' : 'EXACT',
       url: ECB_WEEKLY_URL,
     });
   }
