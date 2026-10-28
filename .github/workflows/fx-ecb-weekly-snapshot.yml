@@ -1,0 +1,51 @@
+# ECB の週間予定のページを1日2回保存する(HQ判断 2026-10-28「公開ページの保存を1日2回、2週間」)。
+# 社内PCには置かない(大野さん指示 2026-10-28)。記録はブランチ ecb-weekly-snapshots に残す(このワークフローだけが書く)。
+# 公開のページを読むだけ(キー・Secrets 不要)。予定の部分だけを保存し、連絡先は消す(.github/scripts/fx_ecb_weekly_snapshot.py)。
+# 2026-11-11 24:00 JST を過ぎたら、スクリプトは何もしない(その後このファイルを消す)。
+name: FX ECB weekly snapshot
+
+on:
+  schedule:
+    - cron: '30 0,8 * * *' # 09:30 / 17:30 JST
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fx-ecb-weekly-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: code
+
+      - name: Check out the record branch (created empty on the first run)
+        working-directory: code
+        run: |
+          if git fetch --depth 1 origin ecb-weekly-snapshots; then
+            git worktree add -B ecb-weekly-snapshots ../data FETCH_HEAD
+          else
+            git worktree add --orphan -b ecb-weekly-snapshots ../data
+          fi
+
+      - name: Fetch and record
+        run: python3 code/.github/scripts/fx_ecb_weekly_snapshot.py data
+
+      - name: Commit the record
+        working-directory: data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "nothing to record"
+            exit 0
+          fi
+          git commit -q -m "ECB weekly snapshot $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push origin ecb-weekly-snapshots
