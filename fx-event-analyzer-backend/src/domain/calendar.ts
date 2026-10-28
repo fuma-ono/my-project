@@ -7,6 +7,7 @@
  * the indicator name, a speech row's title is the speech's own title with
  * the speaker's display name alongside in `speaker_name`.
  */
+import { attributionForOrganization, type Attribution } from './attribution.js';
 import { effectiveIsProvisional } from './provisional.js';
 
 export type CalendarItemKind = 'INDICATOR' | 'SPEECH';
@@ -38,6 +39,8 @@ export interface CalendarItem {
    * datetime is still in the future (domain/provisional.ts). SPEECH: always false.
    */
   is_provisional: boolean;
+  /** 出典と告知(api-design v1.38)。SPEECH: 要人の機関(ECB・FRB)から。INDICATOR: 今は常に null。 */
+  attribution: Attribution | null;
 }
 
 export interface CalendarIndicatorEvent {
@@ -59,7 +62,13 @@ export interface CalendarSpeech {
   speech_id: string;
   title: string;
   /** photo_url: already resolved to an absolute URL (domain/speakerPhotos.ts) or null. */
-  speaker: { name: string; country_code: string; currency_code: string; photo_url?: string | null | undefined };
+  speaker: {
+    name: string;
+    country_code: string;
+    currency_code: string;
+    photo_url?: string | null | undefined;
+    organization?: string | undefined;
+  };
   importance: string;
   statement_datetime: string;
   status: string;
@@ -111,6 +120,7 @@ export function buildCalendarItems(
     datetime_precision: event.release_datetime_precision,
     status: event.status,
     is_provisional: effectiveIsProvisional(event.is_provisional, event.release_datetime, now),
+    attribution: null,
   }));
   const speechItems = speeches
     .filter((speech) => speech.status !== 'CANCELLED')
@@ -129,6 +139,7 @@ export function buildCalendarItems(
       datetime_precision: 'EXACT',
       status: speech.status,
       is_provisional: false,
+      attribution: attributionForOrganization(speech.speaker.organization),
     }));
   return [...indicatorItems, ...speechItems].filter((item) => matches(item, filters)).sort(compareCalendarItems);
 }

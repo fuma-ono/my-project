@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ECB_ATTRIBUTION, FRB_ATTRIBUTION } from '../../src/domain/attribution.js';
 import { FEATURE_CODES } from '../../src/authorization/entitlements.js';
 import { evaluateAllRateAlerts } from '../../src/repositories/rateAlertsRepository.js';
 import {
@@ -29,8 +30,16 @@ const CANCELLED_SPEECH_ID = '3c000000-0000-0000-0000-000000000003';
 const HOME_RECENT_SPEECH_ID = '3c000000-0000-0000-0000-000000000004'; // DELIVERED 1 min ago
 const HOME_OLD_SPEECH_ID = '3c000000-0000-0000-0000-000000000005'; // DELIVERED 8 days ago
 const HOME_SCHEDULED_SPEECH_ID = '3c000000-0000-0000-0000-000000000006'; // SCHEDULED 2 min ago (not yet marked delivered)
+const ECB_CANCELLED_SPEECH_ID = '3c000000-0000-0000-0000-000000000007'; // ラガルド(ECB)、2日後、後で中止
+const LAGARDE_SPEAKER_ID = '40000000-0000-0000-0000-000000000003'; // seed.sql: クリスティーヌ・ラガルド / ECB総裁
 const EVENT_IDS = [RESCHEDULED_EVENT_ID, RELEASED_EVENT_ID];
-const SPEECH_IDS = [CANCELLED_SPEECH_ID, HOME_RECENT_SPEECH_ID, HOME_OLD_SPEECH_ID, HOME_SCHEDULED_SPEECH_ID];
+const SPEECH_IDS = [
+  CANCELLED_SPEECH_ID,
+  HOME_RECENT_SPEECH_ID,
+  HOME_OLD_SPEECH_ID,
+  HOME_SCHEDULED_SPEECH_ID,
+  ECB_CANCELLED_SPEECH_ID,
+];
 
 const MINUTE_MS = 60_000;
 const base = Math.floor(Date.now() / MINUTE_MS) * MINUTE_MS;
@@ -158,6 +167,7 @@ describe.skipIf(!integration)('Rate alerts / calendar updates / Home speeches', 
         speech(HOME_RECENT_SPEECH_ID, -1, 'DELIVERED', '物価の動向について説明した。'),
         speech(HOME_OLD_SPEECH_ID, -8 * 24 * 60, 'DELIVERED'),
         speech(HOME_SCHEDULED_SPEECH_ID, -2, 'SCHEDULED'),
+        { ...speech(ECB_CANCELLED_SPEECH_ID, 2 * 24 * 60 + 30, 'SCHEDULED'), speaker_id: LAGARDE_SPEAKER_ID },
       ]);
     if (speeches.error) throw new Error(`Failed to insert test speeches: ${speeches.error.message}`);
   });
@@ -201,6 +211,12 @@ describe.skipIf(!integration)('Rate alerts / calendar updates / Home speeches', 
         reaction_price_before: null,
         reaction_price_after: null,
         reaction_pips: null,
+        // api-design v1.38: FRB の要人は出典だけ(告知なし)
+        attribution: {
+          source: '米国連邦準備制度理事会（FRB）',
+          source_url: 'https://www.federalreserve.gov',
+          notice: null,
+        },
       });
     });
   });
@@ -436,6 +452,8 @@ describe.skipIf(!integration)('Rate alerts / calendar updates / Home speeches', 
         notify_at: expect.stringMatching(/Z$/),
         read_at: null,
         expires_at: expect.stringMatching(/Z$/),
+        attribution: null,
+        speech_id: null,
       });
       expect(Date.parse(first[0]!.expires_at) - Date.parse(first[0]!.notify_at)).toBe(7 * 24 * 60 * MINUTE_MS);
 
@@ -551,6 +569,8 @@ describe.skipIf(!integration)('Rate alerts / calendar updates / Home speeches', 
         notify_at: isoSeconds(changes[0].changed_at),
         read_at: null,
         expires_at: expect.stringMatching(/Z$/),
+        attribution: null, // 経済指標の変更
+        speech_id: null,
       });
 
       // Calling again never duplicates it.
@@ -559,6 +579,40 @@ describe.skipIf(!integration)('Rate alerts / calendar updates / Home speeches', 
 
       // Not notified about LOW events → no calendar update either.
       expect((await inbox(highOnly, 'CALENDAR_UPDATE')).some((item) => item.target_id === changes[0].id)).toBe(false);
+    });
+
+    it('an ECB speech cancelled: the body ends with （出典：ECB）, speech_id opens the detail; /speeches hides it unless include_cancelled', async () => {
+      const { headers } = await newUser({ plan: 'PRO', settings: LOW_SETTINGS });
+      await ctx.serviceClient.from('speech_events').update({ status: 'CANCELLED' }).eq('id', ECB_CANCELLED_SPEECH_ID);
+      const changes = await changesFor(ECB_CANCELLED_SPEECH_ID);
+      expect(changes).toHaveLength(1);
+
+      const items = (await inbox(headers, 'CALENDAR_UPDATE')).filter((item) => item.target_id === changes[0].id);
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({
+        trigger: 'CANCELLED',
+        speaker_name: 'クリスティーヌ・ラガルド',
+        body: expect.stringMatching(/^\d+\/\d+ \d+:\d{2}の発言は行われません（重要度 低）（出典：ECB）$/),
+        attribution: ECB_ATTRIBUTION,
+        speech_id: ECB_CANCELLED_SPEECH_ID,
+      });
+
+      // 中止の通知から詳細を開ける(中止の行も返す)。告知の全文は詳細の attribution.notice
+      const detail = await call('GET', `/speeches/${ECB_CANCELLED_SPEECH_ID}`, headers);
+      expect(detail.status).toBe(200);
+      expect(detail.body).toMatchObject({ status: 'CANCELLED', attribution: ECB_ATTRIBUTION });
+
+      // 一覧: 既定では出さない、include_cancelled=true で出す(行は消さない)
+      const range = `from=${encodeURIComponent(at(2 * 24 * 60))}&to=${encodeURIComponent(at(2 * 24 * 60 + 60))}`;
+      const listed = async (query: string) =>
+        ((await call('GET', `/speeches?${range}${query}`, headers)).body.data as { speech_id: string }[]).map(
+          (row) => row.speech_id,
+        );
+      expect(await listed('')).not.toContain(ECB_CANCELLED_SPEECH_ID);
+      expect(await listed('&include_cancelled=false')).not.toContain(ECB_CANCELLED_SPEECH_ID);
+      expect(await listed('&include_cancelled=true')).toContain(ECB_CANCELLED_SPEECH_ID);
+      const invalid = await call('GET', `/speeches?include_cancelled=yes`, headers);
+      expect(invalid.status).toBe(422);
     });
 
     it('a cancelled speech produces a CANCELLED item; not for push off or changes before the settings were saved', async () => {
@@ -581,7 +635,16 @@ describe.skipIf(!integration)('Rate alerts / calendar updates / Home speeches', 
         country_code: 'US',
         importance: 'LOW',
         scheduled_at: isoSeconds(at(2 * 24 * 60)),
+        // api-design v1.39: 要人発言の変更は、変更の記録 → 発言 → 要人の機関(FRB)から
+        attribution: FRB_ATTRIBUTION,
+        // api-design v1.40: 中止の通知から詳細を開くための発言の id
+        speech_id: CANCELLED_SPEECH_ID,
       });
+      // FRB の本文は変えない(出典を足さない。上の body の正規表現は末尾まで一致)
+      expect(items[0]!.body).not.toContain('出典');
+      const detail = await call('GET', `/speeches/${CANCELLED_SPEECH_ID}`, headers);
+      expect(detail.status).toBe(200);
+      expect(detail.body).toMatchObject({ speech_id: CANCELLED_SPEECH_ID, status: 'CANCELLED' });
 
       expect(await inbox(pushOff, 'CALENDAR_UPDATE')).toEqual([]);
 

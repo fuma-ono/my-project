@@ -1,3 +1,4 @@
+import { ECB_ATTRIBUTION, FRB_ATTRIBUTION } from '../../src/domain/attribution.js';
 import { describe, expect, it } from 'vitest';
 import {
   calendarUpdateBody,
@@ -116,6 +117,24 @@ describe('subject / title / body', () => {
         'Asia/Tokyo',
       ),
     ).toBe('10/17 1:00の発言は行われません（重要度 中）');
+  });
+
+  it('bodies: （出典：ECB） only for an ECB speech (HQ判断 2026-10-28); FRB and indicators unchanged', () => {
+    const cancelled = change({
+      kind: 'SPEECH',
+      change_type: 'CANCELLED',
+      old_datetime: '2026-10-16T16:00:00Z',
+      new_datetime: null,
+    });
+    expect(calendarUpdateBody(cancelled, 'MEDIUM', 'Asia/Tokyo', ECB_ATTRIBUTION)).toBe(
+      '10/17 1:00の発言は行われません（重要度 中）（出典：ECB）',
+    );
+    expect(calendarUpdateBody(cancelled, 'MEDIUM', 'Asia/Tokyo', FRB_ATTRIBUTION)).toBe(
+      '10/17 1:00の発言は行われません（重要度 中）',
+    );
+    expect(calendarUpdateBody(change(), 'HIGH', 'Asia/Tokyo', null)).toBe(
+      '発表日時 10/16 8:30 → 10/17 8:30（重要度 高）',
+    );
   });
 });
 

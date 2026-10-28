@@ -1,3 +1,4 @@
+import { attributionForOrganization } from '../domain/attribution.js';
 import type { FastifyInstance } from 'fastify';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ApiError } from '../errors/ApiError.js';
@@ -88,7 +89,13 @@ export function registerSpeechRoutes(app: FastifyInstance): void {
       const pagination = parsePagination(query);
       const { rows, total } = await listSpeeches(
         app.supabase,
-        { from: query.from, to: query.to, importance: query.importance, currency: query.currency },
+        {
+          from: query.from,
+          to: query.to,
+          importance: query.importance,
+          currency: query.currency,
+          includeCancelled: query.include_cancelled,
+        },
         pagination,
       );
 
@@ -236,6 +243,8 @@ export function registerSpeechRoutes(app: FastifyInstance): void {
       },
       fx_pair_id: pair?.fx_pair_id ?? null,
       symbol: pair?.symbol ?? null,
+      /** 出典と告知(api-design v1.39)。要人の機関から(ECB: 告知つき、FRB: 出典だけ、他: null)。 */
+      attribution: attributionForOrganization(speaker.organization),
       events,
       history_limit: historyLimitFor(plan, speeches.length),
     };

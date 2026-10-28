@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { chunk } from '../utils/chunks.js';
 import type { ScheduleChangeRow } from '../domain/calendarUpdates.js';
 
 /**
@@ -29,6 +30,27 @@ export async function listScheduleChanges(
 }
 
 /** The cleanup job: drops changes older than `beforeIso` (past the CALENDAR_UPDATE retention). */
+/**
+ * SPEECH の変更の id → 要人発言の id(通知一覧の CALENDAR_UPDATE の出典、api-design v1.39)。READ-ONLY。
+ * 主キーで引く。id は 100 件ごとに分けて読む(utils/chunks.ts。行ごとの問い合わせにはしない)。
+ */
+export async function mapSpeechChangeTargets(
+  supabase: SupabaseClient,
+  changeIds: readonly string[],
+): Promise<Map<string, string>> {
+  const targets = new Map<string, string>();
+  for (const ids of chunk([...new Set(changeIds)])) {
+    const { data, error } = await supabase
+      .from('event_schedule_changes')
+      .select('id, target_id')
+      .eq('kind', 'SPEECH')
+      .in('id', ids);
+    if (error) throw error;
+    for (const row of (data ?? []) as { id: string; target_id: string }[]) targets.set(row.id, row.target_id);
+  }
+  return targets;
+}
+
 export async function deleteScheduleChangesBefore(supabase: SupabaseClient, beforeIso: string): Promise<number> {
   const { data, error } = await supabase
     .from('event_schedule_changes')

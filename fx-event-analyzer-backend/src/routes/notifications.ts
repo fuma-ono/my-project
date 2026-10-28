@@ -11,7 +11,12 @@ import {
   resolveUpcomingWindow,
   type NotificationPreferences,
 } from '../domain/notifications.js';
-import { resolveInboxMaterializationWindow, selectInboxDeliveries, toInboxItem } from '../domain/notificationInbox.js';
+import {
+  resolveInboxAttributions,
+  resolveInboxMaterializationWindow,
+  selectInboxDeliveries,
+  toInboxItem,
+} from '../domain/notificationInbox.js';
 import {
   candidateKey,
   resolveCalendarUpdateWindow,
@@ -22,7 +27,8 @@ import {
   listNotificationCandidatesByIds,
 } from '../repositories/notificationsRepository.js';
 import { evaluateRateAlertsForUser } from '../repositories/rateAlertsRepository.js';
-import { listScheduleChanges } from '../repositories/scheduleChangesRepository.js';
+import { listScheduleChanges, mapSpeechChangeTargets } from '../repositories/scheduleChangesRepository.js';
+import { mapSpeechOrganizations } from '../repositories/speechesRepository.js';
 import {
   countUnreadInboxNotifications,
   deleteExpiredInboxNotificationsForUser,
@@ -178,7 +184,15 @@ export function registerNotificationRoutes(app: FastifyInstance): void {
       listInboxNotifications(app.supabase, userId, nowIso, { order: query.order, kind: query.kind }),
       countUnreadInboxNotifications(app.supabase, userId, nowIso),
     ]);
-    return { items: rows.map(toInboxItem), unread_count: unreadCount };
+    // 出典と告知(api-design v1.39): 要人発言の行だけ、発言の要人の機関から付ける(問い合わせは最大2種類、N+1 なし)
+    const attributions = await resolveInboxAttributions(rows, {
+      speechIdsOfChanges: (ids) => mapSpeechChangeTargets(app.supabase, ids),
+      organizationsOfSpeeches: (ids) => mapSpeechOrganizations(app.supabase, ids),
+    });
+    return {
+      items: rows.map((row, index) => toInboxItem(row, attributions[index])),
+      unread_count: unreadCount,
+    };
   });
 
   // Registered before /:id/read for readability; the paths never overlap.

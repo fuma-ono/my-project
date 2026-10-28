@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { FRB_ATTRIBUTION } from '../../src/domain/attribution.js';
 import { FEATURE_CODES } from '../../src/authorization/entitlements.js';
 import {
   buildIntegrationContext,
@@ -257,10 +258,12 @@ describe.skipIf(!integration)('Speeches / FX pairs / upcoming notifications', ()
         currency_code: 'USD',
         // Every active USD pair by symbol (seed.sql has 9 pairs since SCR-026).
         related_fx_pairs: ['AUDUSD', 'EURUSD', 'GBPUSD', 'USDCHF', 'USDJPY'],
+        attribution: FRB_ATTRIBUTION, // api-design v1.39: 要人の機関(FRB)から。出典だけ(告知なし)
       });
       expect(body.items.find((item: { id: string }) => item.id === EXACT_EVENT_ID)).toMatchObject({
         kind: 'INDICATOR',
         speaker_name: null,
+        attribution: null,
         related_fx_pairs: ['USDJPY', 'EURJPY'],
       });
 

@@ -1,3 +1,4 @@
+import { ECB_ATTRIBUTION, FRB_ATTRIBUTION } from '../../src/domain/attribution.js';
 import { describe, expect, it } from 'vitest';
 import {
   AT_RELEASE_TRIGGER,
@@ -10,6 +11,8 @@ import {
   NOTIFICATION_RETENTION_DAYS,
   resolveInboxMaterializationWindow,
   selectInboxDeliveries,
+  inboxAttributionSpeechId,
+  resolveInboxAttributions,
   toInboxItem,
   triggerForLeadMinutes,
   type NotificationInboxRow,
@@ -154,6 +157,23 @@ describe('inboxBody', () => {
     expect(
       inboxBody({ kind: 'SPEECH', scheduled_at: '2026-10-15T23:05:00Z', importance: 'MEDIUM' }, 0, 'Asia/Tokyo'),
     ).toBe('まもなく発言です（10/16 8:05発言・重要度 中）');
+  });
+
+  it('adds （出典：ECB） only for ECB speeches (HQ判断 2026-10-28); FRB and indicators are unchanged', () => {
+    const speech = { kind: 'SPEECH' as const, scheduled_at: '2026-10-15T23:05:00Z', importance: 'MEDIUM' };
+    expect(inboxBody({ ...speech, attribution: ECB_ATTRIBUTION }, 5, 'Asia/Tokyo')).toBe(
+      '発言の5分前です（10/16 8:05発言・重要度 中）（出典：ECB）',
+    );
+    expect(inboxBody({ ...speech, attribution: FRB_ATTRIBUTION }, 5, 'Asia/Tokyo')).toBe(
+      '発言の5分前です（10/16 8:05発言・重要度 中）',
+    );
+    expect(
+      inboxBody(
+        { kind: 'INDICATOR', scheduled_at: '2026-10-13T11:30:00Z', importance: 'HIGH', attribution: null },
+        5,
+        'Asia/Tokyo',
+      ),
+    ).toBe('発表の5分前です（10/13 20:30発表・重要度 高）');
   });
 
   it('falls back to Asia/Tokyo for an unknown zone', () => {
@@ -314,11 +334,102 @@ describe('toInboxItem', () => {
       notify_at: '2026-10-13T11:25:00Z',
       read_at: '2026-10-13T11:40:12Z',
       expires_at: '2026-11-12T11:25:00Z',
+      attribution: null,
+      speech_id: null,
+    });
+    expect(toInboxItem(row, { speech_id: 'speech-1', attribution: ECB_ATTRIBUTION })).toMatchObject({
+      speech_id: 'speech-1',
+      attribution: ECB_ATTRIBUTION,
     });
   });
 
   it('keeps nulls (unread, no schedule, no lead)', () => {
     const item = toInboxItem({ ...row, kind: 'SYSTEM', trigger: 'WELCOME', scheduled_at: null, read_at: null });
     expect(item).toMatchObject({ lead_minutes: null, scheduled_at: null, read_at: null });
+  });
+});
+
+describe('inboxAttributionSpeechId (api-design v1.39)', () => {
+  const changes = new Map([['change-1', 'speech-9']]);
+  it('SPEECH → its target; a speech CALENDAR_UPDATE → the changed speech; anything else → null', () => {
+    expect(inboxAttributionSpeechId({ kind: 'SPEECH', target_id: 'speech-1', speaker_name: 'x' }, changes)).toBe(
+      'speech-1',
+    );
+    expect(
+      inboxAttributionSpeechId({ kind: 'CALENDAR_UPDATE', target_id: 'change-1', speaker_name: 'x' }, changes),
+    ).toBe('speech-9');
+    // 経済指標の変更(speaker_name が null)・変更の記録が見つからない・その他の種類
+    expect(
+      inboxAttributionSpeechId({ kind: 'CALENDAR_UPDATE', target_id: 'change-1', speaker_name: null }, changes),
+    ).toBe(null);
+    expect(inboxAttributionSpeechId({ kind: 'CALENDAR_UPDATE', target_id: 'gone', speaker_name: 'x' }, changes)).toBe(
+      null,
+    );
+    expect(inboxAttributionSpeechId({ kind: 'INDICATOR', target_id: 'event-1', speaker_name: null }, changes)).toBe(
+      null,
+    );
+    expect(inboxAttributionSpeechId({ kind: 'RATE_ALERT', target_id: 'alert-1', speaker_name: null }, changes)).toBe(
+      null,
+    );
+  });
+});
+
+describe('resolveInboxAttributions (api-design v1.39, HQ判断 2026-10-28「統合前レビュー」B3)', () => {
+  const base = {
+    trigger: 'LEAD_5',
+    title: 't',
+    body: null,
+    display_name: null,
+    country_code: null,
+    importance: null,
+    scheduled_at: null,
+    notify_at: '2026-10-13T11:25:00Z',
+    read_at: null,
+    expires_at: '2026-11-12T11:25:00Z',
+  };
+  function counting(changes: Map<string, string>, organizations: Map<string, string>) {
+    const calls = { changes: [] as number[], speeches: [] as number[] };
+    return {
+      calls,
+      lookups: {
+        speechIdsOfChanges: (ids: readonly string[]) => {
+          calls.changes.push(ids.length);
+          return Promise.resolve(changes);
+        },
+        organizationsOfSpeeches: (ids: readonly string[]) => {
+          calls.speeches.push(ids.length);
+          return Promise.resolve(organizations);
+        },
+      },
+    };
+  }
+
+  it('no N+1: 300 rows → each lookup called once, with the distinct ids', async () => {
+    const rows: NotificationInboxRow[] = Array.from({ length: 300 }, (_, i) => ({
+      ...base,
+      id: `row-${i}`,
+      kind: i % 3 === 0 ? 'CALENDAR_UPDATE' : i % 3 === 1 ? 'SPEECH' : 'INDICATOR',
+      target_id: i % 3 === 0 ? `change-${i}` : i % 3 === 1 ? `speech-${i % 7}` : `event-${i}`,
+      speaker_name: i % 3 === 2 ? null : 'x',
+    }));
+    const changes = new Map(rows.filter((r) => r.kind === 'CALENDAR_UPDATE').map((r) => [r.target_id, 'speech-ecb']));
+    const organizations = new Map([
+      ['speech-ecb', 'ECB'],
+      ...Array.from({ length: 7 }, (_, k) => [`speech-${k}`, 'FRB'] as [string, string]),
+    ]);
+    const { calls, lookups } = counting(changes, organizations);
+    const result = await resolveInboxAttributions(rows, lookups);
+    expect(calls).toEqual({ changes: [100], speeches: [8] });
+    // 要人発言の変更 → 変更の記録から引いた発言の id(中止の通知から詳細を開くため、api-design v1.40)
+    expect(result[0]).toEqual({ speech_id: 'speech-ecb', attribution: ECB_ATTRIBUTION });
+    expect(result[1]).toEqual({ speech_id: 'speech-1', attribution: FRB_ATTRIBUTION });
+    expect(result[2]).toEqual({ speech_id: null, attribution: null });
+  });
+
+  it('reads nothing when no row needs an attribution', async () => {
+    const { calls, lookups } = counting(new Map(), new Map());
+    const rows = [{ ...base, id: 'a', kind: 'RATE_ALERT' as const, target_id: 'alert', speaker_name: null }];
+    expect(await resolveInboxAttributions(rows, lookups)).toEqual([{ speech_id: null, attribution: null }]);
+    expect(calls).toEqual({ changes: [], speeches: [] });
   });
 });
