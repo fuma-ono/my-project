@@ -18,6 +18,10 @@
  * (dinner・lunch・meeting with・bilateral 等)、時刻の無い項目、読めない日付。
  * ページの形が変わって項目が1つも読めないときは、0件として静かに終わらず、エラーにする(ジョブの記録で分かる)。
  *
+ * 範囲(coverage): ページの `<dt>` の最初の日の 00:00 から、最後の日の翌日 00:00(Europe/Berlin)まで。役員以外の
+ * 項目の日付も含める。ジョブはこの範囲で、消えた予定を中止・時刻の変更として扱う(pipelines/speeches.ts の reconcile。
+ * HQ判断 2026-10-28 R1〜R3)。範囲の外の行は変えない。
+ *
  * 利用条件: ECB のサイトの情報(data-sources.md §2)。出典の表示と、有料サービスでの告知が必要。告知の方針が
  * 決まるまで公開に使わない(ジョブでは環境変数 INGEST_ECB_WEEKLY=1 のときだけ動く)。
  */
@@ -30,7 +34,7 @@ import type { NormalizedSpeech, SpeechKind } from '../types.js';
 
 export const ECB_WEEKLY_URL = 'https://www.ecb.europa.eu/press/calendars/weekly/html/index.en.html';
 export const ECB_WEEKLY_PROVIDER = 'ecb_weekly_schedule';
-const ECB_TIME_ZONE = 'Europe/Berlin';
+export const ECB_TIME_ZONE = 'Europe/Berlin';
 /** 夏時間の期間の「CET」の意味を公式の情報で確かめたら true にする(上の説明)。 */
 export const ECB_SUMMER_TIME_VERIFIED = false;
 
@@ -118,6 +122,20 @@ export interface EcbWeeklyParseResult {
   skipped: { title: string; reason: string }[];
   /** All dt/dd entries on the page (with or without a Board member). 0 = the structure is not what we know. */
   entries: number;
+  /** The days the page covers (see the header). null = no readable date on the page. */
+  coverage: { fromIso: string; toIso: string } | null;
+}
+
+function pageCoverage(days: readonly [number, number, number][]): EcbWeeklyParseResult['coverage'] {
+  if (days.length === 0) return null;
+  const ms = days.map(([y, m, d]) => Date.UTC(y, m - 1, d));
+  const first = new Date(Math.min(...ms));
+  const afterLast = new Date(Math.max(...ms) + 86_400_000);
+  const midnight = (day: Date) =>
+    zonedWallTimeToUtc(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), 0, 0, ECB_TIME_ZONE);
+  const from = midnight(first);
+  const to = midnight(afterLast);
+  return from && to ? { fromIso: from.toISOString(), toIso: to.toISOString() } : null;
 }
 
 export function parseEcbWeeklySchedule(
@@ -132,7 +150,10 @@ export function parseEcbWeeklySchedule(
     throw new Error('ECB weekly schedule: no <dt>/<dd> entries found — the page structure may have changed');
   }
   const seen = new Set<string>();
+  const days: [number, number, number][] = [];
   for (const [, dt, dd] of pairs) {
+    const day = parseEcbDate(dt!);
+    if (day) days.push(day);
     const speaker = field(dd!, 'Board member');
     if (!speaker) continue; // 統計の公表・理事会など(役員の発言ではない)
     const event = field(dd!, 'Event') ?? '';
@@ -184,13 +205,14 @@ export function parseEcbWeeklySchedule(
       url: ECB_WEEKLY_URL,
     });
   }
-  return { speeches, skipped, entries: pairs.length };
+  return { speeches, skipped, entries: pairs.length, coverage: pageCoverage(days) };
 }
 
 export class EcbWeeklyScheduleAdapter implements SpeechScheduleProvider {
   readonly name = ECB_WEEKLY_PROVIDER;
   private readonly http: HttpClient;
   lastSkipped: EcbWeeklyParseResult['skipped'] = [];
+  lastCoverage: EcbWeeklyParseResult['coverage'] = null;
 
   constructor(deps: HttpClientDeps = {}) {
     this.http = new HttpClient('ecb', PROVIDER_HTTP_SETTINGS.ecb, deps);
@@ -199,6 +221,7 @@ export class EcbWeeklyScheduleAdapter implements SpeechScheduleProvider {
   async fetchSpeeches(): Promise<NormalizedSpeech[]> {
     const result = parseEcbWeeklySchedule(await this.http.getText(ECB_WEEKLY_URL));
     this.lastSkipped = result.skipped;
+    this.lastCoverage = result.coverage;
     return result.speeches;
   }
 }

@@ -15,9 +15,12 @@ import type {
   ProviderEventRow,
   UnreleasedEventRef,
   SpeakerRef,
+  SpeechEventPatch,
   SpeechEventRow,
+  SpeechStatus,
   StagedValue,
   StoredEvent,
+  StoredSpeechRef,
 } from '../../src/ingestion/store.js';
 
 /**
@@ -44,7 +47,8 @@ export class MemoryIngestionStore implements IngestionStore {
   staged: (NewStagedValue & { id: string; resolved_at?: string | null })[] = [];
   observations: OfficialObservationRow[] = [];
   speakers: SpeakerRef[] = [];
-  speeches: SpeechEventRow[] = [];
+  /** status may become CANCELLED through updateSpeechEvent (the reconciliation). */
+  speeches: (Omit<SpeechEventRow, 'status'> & { status: SpeechStatus })[] = [];
   fxPairs: FxPairRef[] = [];
   fxPrices: FxPriceRow[] = [];
   logs: IngestionLogRow[] = [];
@@ -202,6 +206,39 @@ export class MemoryIngestionStore implements IngestionStore {
       else this.speeches[index] = row;
     }
     return Promise.resolve(rows.length);
+  }
+
+  listSpeechRefs(provider: string, fromIso: string, toIso: string): Promise<StoredSpeechRef[]> {
+    return Promise.resolve(
+      this.speeches
+        .filter(
+          (s) =>
+            s.provider === provider &&
+            Date.parse(s.statement_datetime) >= Date.parse(fromIso) &&
+            Date.parse(s.statement_datetime) < Date.parse(toIso),
+        )
+        .map(({ provider_event_id, speaker_id, statement_datetime, status }) => ({
+          provider_event_id,
+          speaker_id,
+          statement_datetime,
+          status,
+        })),
+    );
+  }
+
+  /** Mirrors unique (provider, provider_event_id): changing the id onto an existing row throws. */
+  updateSpeechEvent(provider: string, providerEventId: string, patch: SpeechEventPatch): Promise<void> {
+    const row = this.speeches.find((s) => s.provider === provider && s.provider_event_id === providerEventId);
+    if (!row) return Promise.resolve();
+    if (
+      patch.provider_event_id !== undefined &&
+      patch.provider_event_id !== providerEventId &&
+      this.speeches.some((s) => s.provider === provider && s.provider_event_id === patch.provider_event_id)
+    ) {
+      return Promise.reject(new Error('duplicate key value violates unique constraint (provider, provider_event_id)'));
+    }
+    Object.assign(row, patch);
+    return Promise.resolve();
   }
 
   listScheduledSpeechIds(provider: string, fromIso: string, toIso: string): Promise<string[]> {

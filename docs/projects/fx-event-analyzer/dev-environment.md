@@ -1713,15 +1713,17 @@ notify pgrst, 'reload schema';
 
 `npm run report:data-quality`・`GET /api/v1/quality-report` の最後に「## 9. 要人発言の鮮度」が付く(第1〜8章は変えていない)。READ-ONLY。対象期間(`days`)に関係なく、取得元ごとに `ingest:speeches` の最新の実行と最後の SUCCESS を読む。異常があってもレポートのジョブは失敗にしない(終了コード0のまま)。
 
-- 列は `frb_calendar`(FRB のカレンダー)と `ecb_press_rss`(ECB の RSS)。**FRB と ECB は混ぜずに別々に判定する**。実行記録が無い取得元も列は出る(「—(実行記録なし)」)
-- 行: 判定・判定の理由・最新の実行(開始/完了/状態とエラー件数)・取得件数(前回の実行との差)・取り込み件数・スキップ理由・取得元の最新の予定(`source_latest_at`)・取得元の未来の予定(`source_future_count`)・DB の最新(`speech_events.statement_datetime`、状態問わず)・DB の未来の SCHEDULED 件数・最後の SUCCESS
+- 列は `frb_calendar`(FRB のカレンダー)と `ecb_press_rss`(ECB の RSS)と `ecb_weekly_schedule`(ECB の週間予定)。**FRB と ECB は混ぜずに別々に判定する**。実行記録が無い取得元も列は出る(「—(実行記録なし)」)。ただし `ecb_weekly_schedule` は `INGEST_ECB_WEEKLY=1` のときだけ動くので、実行記録が1件も無ければ列を出さない(HQ判断 2026-10-28 R5)
+- 行: 判定・判定の理由・最新の実行(開始/完了/状態とエラー件数)・取得件数(前回の実行との差)・取り込み件数・スキップ理由・取得元の最新の予定(`source_latest_at`)・取得元の未来の予定(`source_future_count`)・DB の最新(`speech_events.statement_datetime`、状態問わず)・DB の未来の SCHEDULED 件数・DB の開始から24時間を過ぎた SCHEDULED の件数・最後の SUCCESS
 - 判定(上ほど優先。1つだけ出る):
   1. **取得の失敗(異常)**: 最新の実行(`started_at` が最大)が FAILURE / PARTIAL・エラーあり・取得件数0、または最後の SUCCESS から18時間以上(SUCCESS なしを含む)。前に SUCCESS があっても、その後の実行が失敗していればこれになる。→ Actions の実行ログ・`error_message` を見る(取得元の障害・形式変更など)
   2. **取り込みの漏れ(異常)**: 取得元の最新の予定が直近14日以降(未来を含む)で、DB の最新より新しい(DB に行が無い場合を含む)。取得元の最新はスキップした項目も含むので、最新の予定が**話者未登録(SPEAKER_UNKNOWN / SPEAKER_NOT_IN_DB)**でスキップされたときもこれになる。→ スキップ理由の行を見て、話者の追加(migration + `speakers.ts` の別名)が必要か判断する。期間内の項目がすべて時刻なしの実行(4.)では判定しない
   3. **取得元の更新なし(注意)**: 取得元の最新の予定が10日以上前で、未来の予定が0件。→ 取得元の URL・形式が変わっていないか確認する
-  4. **時刻なしで未取り込み(情報)**: 期間内の項目がすべて TIME_NOT_EXACT(公開時刻のみ)で取り込み0件。**ECB の通常の状態**で、対応は不要
-  5. **正常**
-- 「—(記録なし)」: `source_latest_at` を記録する前のコードで動いた実行。2.・3. は判定せず、1.・4. だけで判定する。次の `ingest:speeches` の実行から記録される
+  4. **終わった予定が SCHEDULED のまま(注意)**(`ecb_weekly_schedule` だけ。HQ判断 2026-10-28 R4): 開始から24時間を過ぎても SCHEDULED の行がある。週間予定は約1週間分しか載らないので、開始の後に取り直す前にページから外れると残り得る(自動では DELIVERED にしない)。→ ECB のサイトで実施されたか確かめる。ほかの取得元は件数を表示するだけで、判定は変えない
+  5. **時刻なしで未取り込み(情報)**: 期間内の項目がすべて TIME_NOT_EXACT(公開時刻のみ)で取り込み0件。**ECB の通常の状態**で、対応は不要
+  6. **正常**
+- 「—(記録なし)」: `source_latest_at` を記録する前のコードで動いた実行。2.・3. は判定せず、1.・4.・5. だけで判定する。次の `ingest:speeches` の実行から記録される
 - 優先順位を 異常 > 注意 > 情報 にしたのは、ECB の「時刻なし」(情報)が「更新なし」(注意)を隠さないようにするため
 - しきい値は `src/ingestion/quality/metrics.ts` の `SPEECH_SUCCESS_MAX_AGE_HOURS`(18)・`SPEECH_SOURCE_STALE_DAYS`(10)。1回でも失敗すると、次の実行が成功するまで「取得の失敗」になる。18時間は、取り込みの間隔(1日2回、06:15 / 18:15 JST = 12時間)に余裕を持たせた値で、実行そのものが止まったことを検出するためのもの
 - ホームの `speeches_status.stale`(api-design.md v1.34)は、FRB の「取得の失敗」と同じ判定
+- ECB の週間予定の消えた予定(HQ判断 2026-10-28 R1〜R3): ページの範囲(最初の日の 00:00〜最後の日の翌日 00:00、フランクフルト時間)の中で、今より後の SCHEDULED の行がページから消えたら、同じ話者・同じ日に新しい予定がちょうど1つあれば時刻の変更(`rescheduled_speeches`、DB トリガーが RESCHEDULED を記録)、それ以外は中止(`cancelled_speeches`、CANCELLED)にする。今回の取得が0件、または消えた件数が2件より多くて範囲の SCHEDULED の半分を超えるときは何も変えず、`cancel_suppressed` に理由(`NO_ITEMS` / `MASS_DISAPPEARANCE` / `NO_COVERAGE`)を残す。FRB・ECB RSS は今までどおり `disappeared_scheduled_speeches` に記録するだけ

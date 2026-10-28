@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { SPEECH_OVERDUE_HOURS } from '../ingestion/quality/metrics.js';
 import { rangeFor, type PaginationParams } from '../utils/pagination.js';
 
 export interface SpeakerSummary {
@@ -249,14 +250,15 @@ export async function listSpeechIngestionRuns(
 
 /**
  * 1つの取得元の speech_events の状態(品質レポート第9章): statement_datetime の最大値
- * (状態は問わない)と、now より後の SCHEDULED の件数。READ-ONLY。
+ * (状態は問わない)と、now より後の SCHEDULED の件数と、開始から24時間を過ぎた SCHEDULED の件数(HQ判断 2026-10-28 R4)。READ-ONLY。
  */
 export async function getSpeechProviderDbStatus(
   supabase: SupabaseClient,
   provider: string,
   nowIso: string,
-): Promise<{ latestAt: string | null; futureScheduled: number }> {
-  const [latest, future] = await Promise.all([
+): Promise<{ latestAt: string | null; futureScheduled: number; overdueScheduled: number }> {
+  const overdueBefore = new Date(Date.parse(nowIso) - SPEECH_OVERDUE_HOURS * 3_600_000).toISOString();
+  const [latest, future, overdue] = await Promise.all([
     supabase
       .from('speech_events')
       .select('statement_datetime')
@@ -269,9 +271,20 @@ export async function getSpeechProviderDbStatus(
       .eq('provider', provider)
       .eq('status', 'SCHEDULED')
       .gt('statement_datetime', nowIso),
+    supabase
+      .from('speech_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('provider', provider)
+      .eq('status', 'SCHEDULED')
+      .lt('statement_datetime', overdueBefore),
   ]);
   if (latest.error) throw latest.error;
   if (future.error) throw future.error;
+  if (overdue.error) throw overdue.error;
   const first = (latest.data ?? [])[0] as { statement_datetime: string } | undefined;
-  return { latestAt: first?.statement_datetime ?? null, futureScheduled: future.count ?? 0 };
+  return {
+    latestAt: first?.statement_datetime ?? null,
+    futureScheduled: future.count ?? 0,
+    overdueScheduled: overdue.count ?? 0,
+  };
 }

@@ -10,11 +10,14 @@
  *   statement_datetime (api-design.md §14.8〜§14.10).
  * - Status: SCHEDULED until the start time has passed, then DELIVERED.
  * - A SCHEDULED speech that disappears from the source is only logged
- *   (the source does not say whether it was cancelled or moved).
+ *   (the source does not say whether it was cancelled or moved) — unless the
+ *   caller passes `reconcile` (ECB weekly schedule only, HQ判断 2026-10-28 R1〜R3):
+ *   see reconcileDisappeared below.
  */
 import { findSpeakerAlias, SPEAKER_ALIASES, SPEECH_KIND_LABEL_JA, type SpeakerAlias } from '../mappings/speakers.js';
 import type { JobCounters } from '../runner.js';
-import type { IngestionStore, SpeechEventRow } from '../store.js';
+import type { IngestionStore, SpeechEventRow, StoredSpeechRef } from '../store.js';
+import { wallClockParts } from '../time.js';
 import type { NormalizedSpeech } from '../types.js';
 
 export interface SpeechPipelineOptions {
@@ -29,7 +32,17 @@ export interface SpeechPipelineOptions {
    * deliberate decision). Default 14.
    */
   pastDays?: number;
+  /**
+   * Reconcile disappeared SCHEDULED speeches instead of only logging them (HQ判断 2026-10-28 R1〜R3).
+   * `coverage` = the dates the fetched page covers ([first day 00:00, day after the last day 00:00)
+   * in the source's time zone); null = unknown → nothing is changed. Only for a source that lists
+   * every item of the period it covers (the ECB weekly schedule).
+   */
+  reconcile?: { coverage: { fromIso: string; toIso: string } | null; timeZone: string };
 }
+
+/** Up to this many disappeared speeches are always reconciled; more only if at most half of the scheduled ones. */
+export const RECONCILE_ALWAYS_ALLOWED = 2;
 
 /** speech_events.title: Japanese kind label + the source's topic (not translated). */
 export function speechTitle(speech: NormalizedSpeech): string {
@@ -101,9 +114,14 @@ export async function ingestSpeeches(
     });
   }
 
+  if (options.reconcile) {
+    await reconcileDisappeared(provider, speeches, rows, options.reconcile, now, store, counters);
+  }
+
   if (rows.size > 0) {
     counters.success += await store.upsertSpeechEvents([...rows.values()]);
   }
+  if (options.reconcile) return;
 
   // Disappeared SCHEDULED speeches: future ones up to the latest time this fetch covers.
   const fetchedTimes = speeches.map((speech) => Date.parse(speech.startsAt)).filter(Number.isFinite);
@@ -118,4 +136,95 @@ export async function ingestSpeeches(
       }
     }
   }
+}
+
+/**
+ * HQ判断 2026-10-28(R1〜R3)。取得したページが範囲(coverage)の項目をすべて載せている取得元のための処理。
+ * 範囲の中で、今より後の SCHEDULED の行のうち、今回のページに無いもの(消えた予定)を:
+ * - R2 同じ話者・同じ日(取得元の時間帯の日付)に、DB にまだ無い新しい行がちょうど1つあり、その日の消えた予定も
+ *   1つだけ → 時刻の変更とみなし、旧行の provider_event_id・時刻・題名・重要度を新しい値にする(新しい行は作らない。
+ *   この後の upsert は同じ行を更新するだけ)。DB トリガーが RESCHEDULED を記録する
+ * - R1 それ以外(話者の変更・候補が0件か2件以上) → CANCELLED。DB トリガーが CANCELLED を記録する
+ * 安全弁(どれかに当たれば何も変えず、cancel_suppressed に理由を残す):
+ * - 範囲が分からない(coverage が null)
+ * - 今回の取得で項目が0件(ページの形が変わり何も読めない可能性。形が全く違うときは adapter がエラーにする)
+ * - 消えた予定が RECONCILE_ALWAYS_ALLOWED 件より多く、かつ範囲の SCHEDULED の半分を超える
+ * 範囲の外(過去・ページより先)の行と、SCHEDULED 以外の行は変えない。CANCELLED の行がページに戻ったら、
+ * この後の upsert で SCHEDULED / DELIVERED に戻る(再掲載)。
+ */
+async function reconcileDisappeared(
+  provider: string,
+  speeches: readonly NormalizedSpeech[],
+  rows: ReadonlyMap<string, SpeechEventRow>,
+  reconcile: NonNullable<SpeechPipelineOptions['reconcile']>,
+  now: Date,
+  store: IngestionStore,
+  counters: JobCounters,
+): Promise<void> {
+  const { coverage, timeZone } = reconcile;
+  if (!coverage) {
+    counters.note('cancel_suppressed', { reason: 'NO_COVERAGE' });
+    return;
+  }
+  const stored = await store.listSpeechRefs(provider, coverage.fromIso, coverage.toIso);
+  const fetchedIds = new Set(speeches.map((speech) => speech.providerEventId));
+  const scheduled = stored.filter(
+    (row) => row.status === 'SCHEDULED' && Date.parse(row.statement_datetime) >= now.getTime(),
+  );
+  const disappeared = scheduled.filter((row) => !fetchedIds.has(row.provider_event_id));
+  if (disappeared.length === 0) return;
+  for (const row of disappeared) counters.note('disappeared_scheduled_speeches', row.provider_event_id);
+
+  if (speeches.length === 0) {
+    counters.note('cancel_suppressed', { reason: 'NO_ITEMS', disappeared: disappeared.length });
+    return;
+  }
+  if (disappeared.length > RECONCILE_ALWAYS_ALLOWED && disappeared.length * 2 > scheduled.length) {
+    counters.note('cancel_suppressed', {
+      reason: 'MASS_DISAPPEARANCE',
+      disappeared: disappeared.length,
+      scheduled: scheduled.length,
+    });
+    return;
+  }
+
+  const dayKey = (speakerId: string, iso: string): string => {
+    const wall = wallClockParts(new Date(iso), timeZone);
+    return `${speakerId}|${wall.year}-${wall.month}-${wall.day}`;
+  };
+  const storedIds = new Set(stored.map((row) => row.provider_event_id));
+  const freshByDay = groupBy(
+    [...rows.values()].filter((row) => !storedIds.has(row.provider_event_id)),
+    (row) => dayKey(row.speaker_id, row.statement_datetime),
+  );
+  const disappearedByDay = groupBy(disappeared, (row: StoredSpeechRef) =>
+    dayKey(row.speaker_id, row.statement_datetime),
+  );
+
+  for (const row of disappeared) {
+    const key = dayKey(row.speaker_id, row.statement_datetime);
+    const fresh = freshByDay.get(key) ?? [];
+    if (fresh.length === 1 && disappearedByDay.get(key)!.length === 1) {
+      const moved = fresh[0]!;
+      await store.updateSpeechEvent(provider, row.provider_event_id, {
+        provider_event_id: moved.provider_event_id,
+        statement_datetime: moved.statement_datetime,
+        title: moved.title,
+        importance: moved.importance,
+      });
+      counters.note('rescheduled_speeches', { from: row.provider_event_id, to: moved.provider_event_id });
+    } else {
+      await store.updateSpeechEvent(provider, row.provider_event_id, { status: 'CANCELLED' });
+      counters.note('cancelled_speeches', row.provider_event_id);
+    }
+  }
+}
+
+function groupBy<T>(items: readonly T[], key: (item: T) => string): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const k = key(item);
+    groups.set(k, [...(groups.get(k) ?? []), item]);
+  }
+  return groups;
 }
