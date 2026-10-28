@@ -155,14 +155,17 @@ describe.skipIf(!integration)('ECB weekly schedule: reconcile against the real D
       [before[0]!.id, Date.parse('2027-12-07T10:30:00Z')],
     ]);
 
-    // 一覧(GET /speeches)は状態で絞らない(api-design §14.4・既存の設計)。中止の行は status: CANCELLED で返り、
-    // iOS は「中止」のラベルを付けて過去の側に並べる(予定の側には出ない)
-    const list = await ctx.app.inject({ method: 'GET', url: `/api/v1/speeches?${RANGE}`, headers });
-    expect(list.statusCode).toBe(200);
-    const listed = (JSON.parse(list.body).data as { speech_id: string; status: string }[]).filter((row) =>
-      [before[0]!.id, before[1]!.id].includes(row.speech_id),
-    );
-    expect(Object.fromEntries(listed.map((row) => [row.speech_id, row.status]))).toEqual({
+    // 一覧(GET /speeches、api-design v1.40): 既定では中止の行を出さない。include_cancelled=true で中止の履歴も返す
+    const listed = async (query: string) => {
+      const list = await ctx.app.inject({ method: 'GET', url: `/api/v1/speeches?${RANGE}${query}`, headers });
+      expect(list.statusCode).toBe(200);
+      const rows = (JSON.parse(list.body).data as { speech_id: string; status: string }[]).filter((row) =>
+        [before[0]!.id, before[1]!.id].includes(row.speech_id),
+      );
+      return Object.fromEntries(rows.map((row) => [row.speech_id, row.status]));
+    };
+    expect(await listed('')).toEqual({ [before[0]!.id]: 'SCHEDULED' });
+    expect(await listed('&include_cancelled=true')).toEqual({
       [before[0]!.id]: 'SCHEDULED',
       [before[1]!.id]: 'CANCELLED',
     });
