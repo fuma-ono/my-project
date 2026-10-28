@@ -25,7 +25,8 @@
     "ingest:event-reactions": "tsx src/jobs/ingestEventReactions.ts",
     "probe:fx-history": "tsx src/jobs/probeFxHistory.ts",
     "eval:providers": "tsx src/jobs/evalProviders.ts",
-    "report:data-quality": "tsx src/jobs/reportDataQuality.ts"
+    "report:data-quality": "tsx src/jobs/reportDataQuality.ts",
+    "check:ecb-observation": "tsx src/jobs/checkEcbObservation.ts"
   },
   "keywords": [],
   "author": "",

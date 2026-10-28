@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { loadEnv } from '../config/env.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
 import { EcbPressAdapter } from '../ingestion/adapters/ecbPress.js';
+import { ECB_PUBLICATION_TIME_KINDS, EcbWeeklyScheduleAdapter } from '../ingestion/adapters/ecbWeeklySchedule.js';
 import { FrbCalendarAdapter } from '../ingestion/adapters/frbCalendar.js';
 import { ingestSpeeches } from '../ingestion/pipelines/speeches.js';
 import type { SpeechScheduleProvider } from '../ingestion/providers.js';
@@ -25,7 +26,10 @@ async function main(): Promise<void> {
   const env = loadEnv();
   const store = createIngestionRepository(createSupabaseClient(env));
   const frb = new FrbCalendarAdapter();
-  const sources: SpeechScheduleProvider[] = [frb, new EcbPressAdapter()];
+  // HQ判断 2026-10-27(案A): ECB の週間予定は、告知の方針が決まるまで公開に使わないため、
+  // 環境変数 INGEST_ECB_WEEKLY=1 のときだけ取得する(既定では取得しない)。
+  const ecbWeekly = process.env.INGEST_ECB_WEEKLY === '1' ? new EcbWeeklyScheduleAdapter() : null;
+  const sources: SpeechScheduleProvider[] = [frb, new EcbPressAdapter(), ...(ecbWeekly ? [ecbWeekly] : [])];
   let failed = false;
   for (const source of sources) {
     const result = await runIngestionJob(
@@ -36,7 +40,23 @@ async function main(): Promise<void> {
         if (source === frb && frb.lastSkipped.length > 0) {
           for (const skipped of frb.lastSkipped) counters.skip(`FEED_${skipped.reason}`);
         }
-        await ingestSpeeches(source.name, speeches, { store }, counters);
+        if (ecbWeekly && source === ecbWeekly) {
+          for (const skipped of ecbWeekly.lastSkipped) {
+            counters.skip(`FEED_${skipped.reason}`);
+            counters.note('feed_skipped', skipped);
+          }
+        }
+        // ECB の週間予定だけ、消えた予定を中止・時刻の変更として扱う(HQ判断 2026-10-28 R1〜R3)。FRB・ECB RSS は今までどおり記録だけ。
+        const reconcile = ecbWeekly && source === ecbWeekly ? ecbWeekly.lastReconcile : null;
+        await ingestSpeeches(
+          source.name,
+          speeches,
+          {
+            store,
+            ...(reconcile ? { reconcile, publicationTimeKinds: ECB_PUBLICATION_TIME_KINDS } : {}),
+          },
+          counters,
+        );
       },
     );
     console.log(

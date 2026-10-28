@@ -89,7 +89,15 @@ export interface NormalizedCandle {
   volume: number | null;
 }
 
-export type SpeechKind = 'SPEECH' | 'DISCUSSION' | 'TESTIMONY' | 'INTERVIEW' | 'PRESS_CONFERENCE' | 'OTHER';
+export type SpeechKind =
+  | 'SPEECH'
+  | 'DISCUSSION'
+  | 'TESTIMONY'
+  | 'INTERVIEW'
+  | 'PRESS_CONFERENCE'
+  /** 収録して公開される音声(ECB の「Euro Matters podcast」等)。時刻は公開の時刻(HQ判断 2026-10-28)。 */
+  | 'PODCAST'
+  | 'OTHER';
 
 /** One central-bank speech / appearance (④). */
 export interface NormalizedSpeech {

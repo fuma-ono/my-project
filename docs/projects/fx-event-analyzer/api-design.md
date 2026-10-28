@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.40
+# FX Event Analyzer: API詳細設計書 v1.41
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -87,6 +87,7 @@
 - **v1.38**(2026-10-27、HQ判断「ECBの告知」): 要人発言の項目(`GET /speeches`・`GET /speeches/{id}`・`GET /home` の `speeches`・`GET /calendar` の SPEECH)に **`attribution`** を追加(項目の追加だけ。既存の項目は変えない)。形は `{ source, source_url, notice }` または `null`。ECB の要人は `notice` に ECB の規約が求める「ECB のウェブサイトで無料で入手できます」の文、FRB の要人は出典だけ(`notice: null`)、それ以外は `null`。経済指標の項目(カレンダーの INDICATOR)は今は常に `null`。iOS の表示は未実装(A の担当)。domain/attribution.ts
 - **v1.39**(2026-10-28、HQ判断「ECB告知API」): **`attribution`** を、要人ごとの過去比較と通知の API にも追加(項目の追加だけ。既存の項目は変えない。形は v1.38 と同じ `{ source, source_url, notice }` または `null`)。`GET /speakers/{id}/comparison` は応答の最上位に1つ(要人の機関から)。`GET /notifications/upcoming` の各項目: SPEECH は要人の機関から、INDICATOR は `null`。`GET /notifications`(通知一覧)の各項目: SPEECH は発言の要人の機関から、要人発言の CALENDAR_UPDATE は変更の記録(`event_schedule_changes`)から発言を引いてその要人の機関から、それ以外(INDICATOR・経済指標の変更・RATE_ALERT・SYSTEM)と、発言・変更の記録が見つからない行は `null`。通知一覧の行には機関を保存していないので、読むたびに引く(migration なし)。引くのは主キーでの2種類の問い合わせ(変更の記録・発言の機関)だけで、行ごとには引かない(N+1 なし)。id は100件ごとに分けて読む。iOS の表示は未実装(A の担当)。
 - **v1.40**(2026-10-28、HQ判断「ECB週間予定・告知APIの追加対応」B): ① `GET /speeches` の既定の一覧は **SCHEDULED・DELIVERED だけ**を返す(`meta.total` も同じ条件)。`include_cancelled=true` で中止(CANCELLED)の行も返す(中止の履歴)。`true`/`false` 以外は 422。DB の行は消さない。② `GET /speeches/{id}` は変えない(中止の行も返す)。③ 通知一覧(`GET /notifications`)の各項目に **`speech_id`** を追加: SPEECH は target_id と同じ、要人発言の CALENDAR_UPDATE(日時の変更・中止)は変更の記録から引いた発言の id、それ以外は `null`(中止の発言はカレンダーから消えるため、中止の通知から詳細を開くのに使う。iOS は未対応)。④ 受信箱の本文: **ECB の要人発言**(発言前の通知・日時の変更・中止)だけ、末尾に「（出典：ECB）」を付ける。FRB・経済指標の本文は変えない。告知の全文は通知先の詳細(`attribution.notice`)で出す(本文に全文が必要かは未確認)。この変更の前に作られた受信箱の行の本文は変えない
+- **v1.41**(2026-10-28、HQ判断「ECB週間予定・告知APIの追加対応」。`claude/fx-ecb-weekly` で追加。settings への統合のときは `claude/fx-ecb-attribution-apis` の v1.38〜v1.40 の後に並べる): 要人発言の項目(`GET /speeches`・`GET /speeches/{id}`)に **`statement_time_precision`**(`EXACT` / `PUBLICATION_TIME`)を追加(項目の追加だけ)。`EXACT` = 発言の予定の時刻(今までの行はすべて)、`PUBLICATION_TIME` = 公開の時刻しか分からない(ECB の週間予定のポッドキャスト。題名の種別のラベルは「ポッドキャスト」)。`PUBLICATION_TIME` の発言は、一覧・詳細・カレンダーには出すが、相場反応は計算しない(`reactions` は空、`/reaction` は `NOT_ANALYZABLE`)、要人ごとの過去比較に入れない、発言前の通知(`/notifications/upcoming`・通知一覧の発言の通知)にしない。DB は `speech_events.time_precision`(migration 20261028000001、既定 `EXACT`)
 
 ---
 

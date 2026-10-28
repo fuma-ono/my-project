@@ -142,7 +142,27 @@ export interface SpeechEventRow {
   statement_datetime: string;
   importance: 'LOW' | 'MEDIUM' | 'HIGH';
   status: 'SCHEDULED' | 'DELIVERED';
+  /** speech_events.time_precision (migration 20261028000001). */
+  time_precision: 'EXACT' | 'PUBLICATION_TIME';
 }
+
+export type SpeechStatus = 'SCHEDULED' | 'DELIVERED' | 'CANCELLED';
+
+/** A stored speech_events row of one provider, as the reconciliation reads it (pipelines/speeches.ts). */
+export interface StoredSpeechRef {
+  provider_event_id: string;
+  speaker_id: string;
+  title: string;
+  statement_datetime: string;
+  status: SpeechStatus;
+}
+
+/** Columns the reconciliation changes on an existing speech_events row. */
+export type SpeechEventPatch = Partial<
+  Pick<SpeechEventRow, 'provider_event_id' | 'title' | 'statement_datetime' | 'importance'> & {
+    status: SpeechStatus;
+  }
+>;
 
 export interface FxPairRef {
   id: string;
@@ -280,6 +300,10 @@ export interface IngestionStore {
   upsertSpeechEvents(rows: readonly SpeechEventRow[]): Promise<number>;
   /** provider_event_ids of SCHEDULED speeches of `provider` with statement_datetime in [fromIso, toIso). */
   listScheduledSpeechIds(provider: string, fromIso: string, toIso: string): Promise<string[]>;
+  /** speech_events of `provider` (any status) with statement_datetime in [fromIso, toIso). */
+  listSpeechRefs(provider: string, fromIso: string, toIso: string): Promise<StoredSpeechRef[]>;
+  /** Updates one row found by (provider, provider_event_id). The DB trigger records CANCELLED / RESCHEDULED. */
+  updateSpeechEvent(provider: string, providerEventId: string, patch: SpeechEventPatch): Promise<void>;
   listFxPairs(): Promise<FxPairRef[]>;
   upsertFxPrices(rows: readonly FxPriceRow[]): Promise<number>;
   /** 1m candle open times of the pair in [fromIso, toIso), ascending (ISO strings). */

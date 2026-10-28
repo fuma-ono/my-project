@@ -1,6 +1,7 @@
 import { attributionForOrganization, type Attribution } from '../domain/attribution.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { chunk } from '../utils/chunks.js';
+import { SPEECH_OVERDUE_HOURS } from '../ingestion/quality/metrics.js';
 import { rangeFor, type PaginationParams } from '../utils/pagination.js';
 
 export interface SpeakerSummary {
@@ -25,10 +26,15 @@ export interface SpeechSummary {
   status: string;
   /** 出典と告知(api-design v1.38、domain/attribution.ts)。ECB・FRB の要人の発言だけ。 */
   attribution: Attribution | null;
+  /**
+   * EXACT = 発言の予定の時刻。PUBLICATION_TIME = 公開の時刻しか分からない(ポッドキャスト等)。PUBLICATION_TIME は
+   * 相場反応・過去比較・発言前の通知の対象外(api-design v1.41、HQ判断 2026-10-28)。
+   */
+  statement_time_precision: string;
 }
 
 const SPEECH_COLUMNS =
-  'id, title, summary, statement_datetime, importance, status, speakers!inner(id, name, title, organization, country_code, currency_code, photo_url)';
+  'id, title, summary, statement_datetime, importance, status, time_precision, speakers!inner(id, name, title, organization, country_code, currency_code, photo_url)';
 
 interface SpeechDbRow {
   id: string;
@@ -37,6 +43,7 @@ interface SpeechDbRow {
   statement_datetime: string;
   importance: string;
   status: string;
+  time_precision: string;
   speakers: unknown;
 }
 
@@ -67,6 +74,7 @@ function toSpeechSummary(row: SpeechDbRow): SpeechSummary {
     importance: row.importance,
     status: row.status,
     attribution: attributionForOrganization(speaker.organization),
+    statement_time_precision: row.time_precision,
   };
 }
 
@@ -229,6 +237,7 @@ export async function listDeliveredSpeechesForSpeaker(
     .select(SPEECH_COLUMNS)
     .eq('speaker_id', speakerId)
     .eq('status', 'DELIVERED')
+    .eq('time_precision', 'EXACT') // 公開の時刻しか無い発言(ポッドキャスト等)は相場反応を比べない
     .order('statement_datetime', { ascending: false })
     .order('id', { ascending: true })
     .limit(limit);
@@ -279,14 +288,15 @@ export async function listSpeechIngestionRuns(
 
 /**
  * 1つの取得元の speech_events の状態(品質レポート第9章): statement_datetime の最大値
- * (状態は問わない)と、now より後の SCHEDULED の件数。READ-ONLY。
+ * (状態は問わない)と、now より後の SCHEDULED の件数と、開始から24時間を過ぎた SCHEDULED の件数(HQ判断 2026-10-28 R4)。READ-ONLY。
  */
 export async function getSpeechProviderDbStatus(
   supabase: SupabaseClient,
   provider: string,
   nowIso: string,
-): Promise<{ latestAt: string | null; futureScheduled: number }> {
-  const [latest, future] = await Promise.all([
+): Promise<{ latestAt: string | null; futureScheduled: number; overdueScheduled: number }> {
+  const overdueBefore = new Date(Date.parse(nowIso) - SPEECH_OVERDUE_HOURS * 3_600_000).toISOString();
+  const [latest, future, overdue] = await Promise.all([
     supabase
       .from('speech_events')
       .select('statement_datetime')
@@ -299,9 +309,20 @@ export async function getSpeechProviderDbStatus(
       .eq('provider', provider)
       .eq('status', 'SCHEDULED')
       .gt('statement_datetime', nowIso),
+    supabase
+      .from('speech_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('provider', provider)
+      .eq('status', 'SCHEDULED')
+      .lt('statement_datetime', overdueBefore),
   ]);
   if (latest.error) throw latest.error;
   if (future.error) throw future.error;
+  if (overdue.error) throw overdue.error;
   const first = (latest.data ?? [])[0] as { statement_datetime: string } | undefined;
-  return { latestAt: first?.statement_datetime ?? null, futureScheduled: future.count ?? 0 };
+  return {
+    latestAt: first?.statement_datetime ?? null,
+    futureScheduled: future.count ?? 0,
+    overdueScheduled: overdue.count ?? 0,
+  };
 }
