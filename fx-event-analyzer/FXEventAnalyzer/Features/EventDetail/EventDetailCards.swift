@@ -7,8 +7,10 @@ import SwiftUI
 /// (`NavigationLink(value:)`)から直接進む形にした。
 struct EventDetailCards: View {
     let response: EventDetailResponse
-    /// この指標の次回発表予定(呼び出し側で読む)。無ければ表示しない。
-    var nextRelease: Date? = nil
+    /// この指標の次回発表予定(呼び出し側で読む)。読み込み中は確定前の
+    /// プレースホルダーを表示し、無いと分かれば表示しない(経緯は
+    /// `NextReleaseState`参照)。
+    var nextReleaseState: NextReleaseState = .none
     /// 無料プランで隠された発表(api-design v1.33)の鍵の印を押したとき(プランの案内を出す)。
     var onLockedTap: () -> Void = {}
 
@@ -501,19 +503,35 @@ struct EventDetailCards: View {
     }
 
     @ViewBuilder private var nextReleaseFooter: some View {
-        if let nextRelease {
-            HStack(spacing: 6) {
-                Image(systemName: "calendar")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(V5P.cyan)
-                NotoText.text("次回発表予定", size: 8).foregroundStyle(SettingsCardStyle.subtitleColor)
+        switch nextReleaseState {
+        case .available(let nextRelease):
+            nextReleaseFooterCard {
                 NotoText.text(IndicatorDetailCard.releaseLabel(nextRelease), size: 8.5).foregroundStyle(.white)
-                Spacer()
             }
-            .padding(.horizontal, 10)
-            .frame(width: 214, height: 26)
-            .background(GradientCardBackground())
+        case .loading:
+            // HQ指摘(2026-10-28)「次回発表の表示にラグがある」対応: 日時が
+            // 確定するまでの間も同じ高さのプレースホルダーを出し、取得完了時に
+            // カードが高さ0から突然現れてレイアウトがガタつくのを防ぐ。
+            nextReleaseFooterCard {
+                NotoText.text("確認中…", size: 8.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+            }
+        case .none:
+            EmptyView()
         }
+    }
+
+    @ViewBuilder private func nextReleaseFooterCard(@ViewBuilder trailing: () -> some View) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "calendar")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(V5P.cyan)
+            NotoText.text("次回発表予定", size: 8).foregroundStyle(SettingsCardStyle.subtitleColor)
+            trailing()
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .frame(width: 214, height: 26)
+        .background(GradientCardBackground())
     }
 
     private static let pairColumnWidth: CGFloat = 80
