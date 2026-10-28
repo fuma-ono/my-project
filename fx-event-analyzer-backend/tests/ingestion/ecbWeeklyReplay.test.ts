@@ -60,7 +60,8 @@ describe.skipIf(!dir)('ECB weekly schedule: replay saved pages (real data, no DB
           held: pick('held_disappearances'),
           cancel_suppressed: pick('cancel_suppressed'),
           rows: store.speeches.map(
-            (row) => `${row.statement_datetime} ${row.status} ${speakerName.get(row.speaker_id)} ${row.provider_event_id}`,
+            (row) =>
+              `${row.statement_datetime} ${row.status} ${speakerName.get(row.speaker_id)} ${row.provider_event_id}`,
           ),
         }),
       );
