@@ -1042,7 +1042,18 @@ struct HomeView: View {
             // 広げ、右端をさらに右へ。
             // HQ指示(2026-10-08)「155.42ももう少し大きくして」: 10→11に拡大し、
             // 列幅も40→44に広げた(国旗の縮小とchevronの削除で横幅に余裕がある)。
-            Text(pair.price).font(.system(size: 11, weight: .semibold)).tracking(-0.4).monospacedDigit().frame(width: 44, alignment: .trailing)
+            // HQ再指摘(2026-10-28)「まだ157.91と0.8309の縦位置がそろってない」:
+            // 前回の修正(`FXPairUI.init(major:)`の`minimumFractionDigits`)は
+            // 同じペア同士(例: JPYペア同士)の間で末尾の0が消えて短くなる
+            // 問題だけを直したが、JPYペア(小数2桁)とそれ以外(小数4桁)は
+            // そもそも小数点以下の桁数自体が異なるため、文字列全体を
+            // この固定幅枠の中で右揃えにしても、整数部の桁数(JPYペアは
+            // 3桁、それ以外は1桁)が違えば小数点の位置は行ごとにズレたままだった
+            // (右揃えは文字列の末尾を揃えるだけで、小数点の位置は揃わない)。
+            // 価格を小数点で整数部(「.」含む)と小数部に分け、整数部側は
+            // 右揃え・小数部側は左揃えの別々の固定幅枠に収めることで、
+            // 整数部の桁数に関わらず小数点の位置そのものを行ごとに揃えた。
+            priceText(pair.price)
             // HQ再指摘(2026-10-05、5回目)「+0.25%▲>は右に寄せて」:
             // 固定幅の列を並べただけだと行の合計幅がカード幅より短くなり、
             // 左詰め(`cardShell`のVStackが`alignment: .leading`)のため
@@ -1090,6 +1101,25 @@ struct HomeView: View {
         }
         .foregroundStyle(.white)
         .frame(height: Self.pairRowHeight)
+    }
+
+    /// `pairRow`の価格表示。小数点を境に整数部(「.」含む)・小数部に分けて
+    /// 別々の固定幅枠(整数部は右揃え、小数部は左揃え)に収めることで、
+    /// JPYペア(小数2桁、整数部3桁)とそれ以外(小数4桁、整数部1桁)が
+    /// 混在しても小数点の位置が行ごとに揃う(詳しい経緯は呼び出し元の
+    /// コメント参照)。2枠の幅の合計(20+24=44)は変更前の単一枠の幅44と
+    /// 揃え、行全体の横幅は変えていない。
+    private func priceText(_ price: String) -> some View {
+        let components = price.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)
+        let integerPart = components.isEmpty ? price : "\(components[0])."
+        let fractionPart = components.count > 1 ? String(components[1]) : ""
+        return HStack(spacing: 0) {
+            Text(integerPart).frame(width: 20, alignment: .trailing)
+            Text(fractionPart).frame(width: 24, alignment: .leading)
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .tracking(-0.4)
+        .monospacedDigit()
     }
 
     // MARK: - お気に入りカード
