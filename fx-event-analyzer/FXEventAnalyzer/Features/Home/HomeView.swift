@@ -1585,10 +1585,19 @@ extension Importance {
 
 private extension FXPairUI {
     init(major fx: MajorFxSummary) {
+        // HQ指摘(2026-10-27)「通貨ペアの157.75とか0.8281とかの数字が縦に
+        // 揃ってない」: `pairRow`側は価格を固定幅(44)・右揃えで並べて
+        // いたが、`ValueFormat.number`が既定で末尾の0を省くため、桁数が
+        // 少ない値(112.50→112.5)だけ短くなり、小数点の位置が行ごとに
+        // ズレて見えていた。この価格表示だけ`minimumFractionDigits`を
+        // `fractionDigits`と同じ値にし、末尾の0を省かず常に同じ桁数
+        // (JPYペアなら小数2桁、それ以外は4桁)で表示することで、右揃えの
+        // 列の中で小数点の位置も揃うようにした。
+        let priceFractionDigits = fx.symbol.contains("JPY") ? 2 : 4
         self.init(
             id: fx.fxPairId,
             symbol: fx.symbol,
-            price: ValueFormat.number(fx.price, fractionDigits: fx.symbol.contains("JPY") ? 2 : 4),
+            price: ValueFormat.number(fx.price, fractionDigits: priceFractionDigits, minimumFractionDigits: priceFractionDigits),
             change: ValueFormat.percent(fx.changePercent, signed: true),
             isUp: (fx.changePercent ?? 0) >= 0
         )
