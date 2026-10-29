@@ -31,6 +31,7 @@ struct SpeechDetailCards: View {
             VStack(alignment: .leading, spacing: 0) {
                 header
                 statementCard
+                attributionNotice
             }
             reactionTable
             comparisonLink
@@ -156,6 +157,23 @@ struct SpeechDetailCards: View {
         .frame(minHeight: EventDetailCards.summaryCardMinHeight, alignment: .leading)
         .frame(width: 214, alignment: .leading)
         .background(GradientCardBackground())
+    }
+
+    /// HQ指示(2026-10-29)「出典・告知の表示」: APIのattributionを利用して
+    /// 出典を表示する。告知文(`notice`)が存在する場合のみ適切な場所に表示
+    /// する。ECBは取得元の規約で「利用のたびに」告知が必要(domain/
+    /// attribution.ts)なため、要約の直下に小さく添える。FRB(`notice`が
+    /// nil)や出典情報自体が無い要人は何も表示せず、既存の表示を変えない。
+    @ViewBuilder private var attributionNotice: some View {
+        if let notice = response.attribution?.notice {
+            NotoText.text(notice, size: 6.5)
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                .lineSpacing(1)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 10)
+                .padding(.top, 4)
+                .frame(width: 214, alignment: .leading)
+        }
     }
 
     // MARK: - 通貨ペア別の値動き(pips)

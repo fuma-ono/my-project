@@ -14,6 +14,9 @@ struct SpeechDetailResponse: Decodable, Equatable {
     let status: SpeechStatus
     /// 発言前後の実際の価格から計算した値動き(api-design v1.28)。発言済みのときだけ入る。古いBackendではnil。
     var reactions: [SpeechReaction]? = nil
+    /// 出典と告知(api-design v1.38)。取得元の規約が出典の表示・告知を求める要人(ECB・FRB)だけ付く。
+    /// ECBは`notice`に規約が求める告知文、FRBは出典のみ(`notice`はnil)、それ以外・古いBackendはnil。
+    var attribution: SpeechAttribution? = nil
 
     enum CodingKeys: String, CodingKey {
         case reactions
@@ -24,6 +27,21 @@ struct SpeechDetailResponse: Decodable, Equatable {
         case statementDatetime = "statement_datetime"
         case importance
         case status
+        case attribution
+    }
+}
+
+/// api-design v1.38(`domain/attribution.ts`のAttribution)。
+struct SpeechAttribution: Decodable, Equatable {
+    let source: String
+    let sourceUrl: String
+    /// 取得元の規約が求める告知文。nil = 告知の義務なし(出典の表示だけ)。
+    let notice: String?
+
+    enum CodingKeys: String, CodingKey {
+        case source
+        case sourceUrl = "source_url"
+        case notice
     }
 }
 
