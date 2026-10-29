@@ -100,6 +100,22 @@ struct HistoricalComparisonView: View {
             // (回転後に横幅として使える寸法)で組み、`.rotationEffect`で
             // 見かけ上回転させてから、外側をPortraitの`geo.size`に収め直す
             // (SwiftUIで「向き固定のまま中身だけ回して見せる」定番の構成)。
+            //
+            // HQ指摘(2026-10-29)「横画面にした際の黒い画面の部分(右と左)は
+            // 実機ではどうなる？」: この`GeometryReader`自体には
+            // `.ignoresSafeArea()`を付けていなかったため、`geo.size`は
+            // セーフエリア(ステータスバー/ノッチ分)を除いた高さしか
+            // 返さず、回転後の見かけ上の横画面では、そのステータスバー分の
+            // 帯が画面の片側(回転方向により左右どちらか)に黒い帯として
+            // 残っていた(実機スクリーンショットの上部に黒帯が写っていたのは
+            // シミュレーターのキャプチャ特有の見え方ではなく、この帯その
+            // もの — 実機でも同じく黒帯が出る)。`V5Viewport`自身も同じ
+            // 構成(`GeometryReader` + `.ignoresSafeArea()`)で画面全体の
+            // 実寸を取っているのに倣い、この`GeometryReader`にも
+            // `.ignoresSafeArea()`を付けてセーフエリアを除外しない実寸を
+            // 取るようにした(縦画面側は`V5Viewport`が内部で独自に
+            // `GeometryReader`を持ち、この外側の`geo`を参照していないため、
+            // 影響しない)。
             GeometryReader { geo in
                 if isLandscape {
                     landscapeLayout(response, availableWidth: geo.size.height)
@@ -125,6 +141,7 @@ struct HistoricalComparisonView: View {
                     }
                 }
             }
+            .ignoresSafeArea()
         case .error(let message):
             loadingScaffold { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() }) }
         }
