@@ -116,26 +116,23 @@ targets:
         #
         # HQ指示(2026-10-25、再指示2026-10-26)「過去イベント比較の表が
         # 縦画面に入らないので、この画面だけ横画面できるようにしたい」:
-        # 画面単位でUIKitのインターフェースを実際に回転させる方式を4回
-        # 試みたが(経緯は`FXEventAnalyzer/App/OrientationLock.swift`の
-        # コメント参照)、いずれもCI実機キャプチャで「ウィンドウの実寸
-        # (画像サイズ)は横長になるが、中身がPortrait時のレイアウトのまま
-        # 90°回転しただけで新しく広がった分が黒いまま」という同じ壊れ方に
-        # 見えた。ただしそのテスト自体のアクセシビリティツリーに基づく
-        # 構造面アサーション(横画面専用の要素が実際に出現し、縦画面専用の
-        # 要素が消えること)は毎回パスしており、SwiftUIの論理レイアウトは
-        # 正しく横画面に切り替わっていた — 壊れて見えたのはスクリーン
-        # ショットのピクセル取得タイミングの問題だった可能性が高いと判断し
-        # (`OrientationLock.swift`参照)、5回目として再度有効化した。
-        # iPhoneもiPadと同じくPortrait・LandscapeLeft・LandscapeRightを許可
-        # (PortraitUpsideDownはiPhoneでは対象外のまま)。実際にこの3方向を
-        # 使うのは`HistoricalComparisonView`のみで、他の画面は
-        # `HistoricalComparisonOrientation.shared`が`false`のままの限り
-        # Portraitから動かない。
+        # 画面単位でUIKitのインターフェースを実際に回転させる方式
+        # (`UISupportedInterfaceOrientations`にLandscapeを加え、
+        # `UIWindowScene.requestGeometryUpdate`で動的に切り替える、旧
+        # `FXEventAnalyzer/App/OrientationLock.swift`)を6回試みたが、実機
+        # 確認のたびに「ウィンドウの実寸(画像サイズ)は横長になるが、中身が
+        # Portrait時のレイアウトのまま小さく収まり、新しく広がった分が
+        # 黒いまま」という同じ壊れ方を繰り返した。アクセシビリティツリーの
+        # 構造面アサーションは毎回パスしていたため「CIのスクリーンショット
+        # 取得タイミングの問題だろう」と判断し5回目を有効化していたが、
+        # 実機でのHQ確認でも同じ壊れ方が再現し、その判断自体が誤りだったと
+        # 判明した(2026-10-29)。HQ指示によりこの方式自体を撤回し、
+        # iPhoneはPortrait固定に戻した。`HistoricalComparisonView`は
+        # OSのインターフェース回転に頼らず、画面の中身だけを
+        # `UIDevice.orientation`を見て`.rotationEffect`で見かけ上回転させる
+        # 方式に変更した(詳細は同Viewのコメント参照)。
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
         UISupportedInterfaceOrientations~ipad:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown

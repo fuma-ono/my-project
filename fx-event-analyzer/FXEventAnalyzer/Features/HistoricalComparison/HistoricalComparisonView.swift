@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// SCR-009 過去イベント比較。HQ指示(2026-10-14)「ピクセル単位で参考画像を完全再現して」:
 /// 上に国旗・指標名・「国旗 国 ｜ 通貨」、その下に過去の発表の表
@@ -13,6 +14,37 @@ struct HistoricalComparisonView: View {
     /// 日時の並び(参考画像の「日時 ⇕」)。既定は新しい順。
     @State private var newestFirst = true
     @Environment(\.dismiss) private var dismiss
+    /// HQ指示(2026-10-29、7回目)「横画面にしたけど直ってない(表の両サイド・
+    /// 日時の余白)」: OSのインターフェース自体を回転させる方式
+    /// (`UIWindowScene.requestGeometryUpdate`、旧`OrientationLock.swift`)を
+    /// 6回試みたが、実機確認のたびに「ウィンドウの実寸(画像サイズ)は横長に
+    /// なるが、中身がPortrait時のレイアウトのまま小さく収まり、新しく
+    /// 広がった分が黒いまま」という同じ壊れ方を繰り返した。アクセシビリ
+    /// ティツリーの構造面アサーションは毎回パスしていたため「CIのスクリーン
+    /// ショット取得タイミングの問題だろう」と判断していたが、実機での
+    /// ユーザー確認でも同じ壊れ方が再現したため、その判断自体が誤りだった。
+    /// 方針変更: アプリ全体をPortrait固定に戻し(project.yml)、OSの
+    /// インターフェース回転には一切頼らない。この画面は端末の物理的な
+    /// 向き(`UIDevice.orientation`)だけを見て、中身を`.rotationEffect`で
+    /// 見かけ上回転させる(ウィンドウの実寸は常にPortraitのまま変わらない
+    /// ため、ジオメトリ更新のタイミング起因の不具合が原理的に起こらない)。
+    @State private var deviceOrientation: UIDeviceOrientation = UIDevice.current.orientation
+
+    private var isLandscape: Bool {
+        deviceOrientation == .landscapeLeft || deviceOrientation == .landscapeRight
+    }
+
+    /// `.landscapeLeft`(Appleの定義: ホームボタン/下端が右に来る向き = 端末を
+    /// 反時計回りに90°回した状態)は、中身を時計回り(+90°)に回転させれば
+    /// 正立する。`.landscapeRight`はその逆(-90°)。`UIDeviceOrientation`は
+    /// 純粋な値なので、回転方向の正しさをレンダリングなしで単体テストできる。
+    static func rotationAngle(for orientation: UIDeviceOrientation) -> Angle {
+        switch orientation {
+        case .landscapeLeft: return .degrees(90)
+        case .landscapeRight: return .degrees(-90)
+        default: return .degrees(0)
+        }
+    }
 
     init(apiClient: APIClient, indicatorId: String, indicatorName: String, fxPairId: String, fxPairSymbol: String, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
@@ -31,11 +63,20 @@ struct HistoricalComparisonView: View {
             .toolbar(.hidden, for: .navigationBar)
             .task { viewModel.load() }
             .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
-            // HQ指示(2026-10-25、再指示2026-10-26)「この画面だけ横画面できる
-            // ようにしたい」: この画面がオンスクリーンの間だけ横画面を許可する
-            // (`OrientationLock.swift`参照 — 過去4回の失敗の経緯も含む)。
-            .onAppear { HistoricalComparisonOrientation.shared.setAllowed(true) }
-            .onDisappear { HistoricalComparisonOrientation.shared.setAllowed(false) }
+            .onAppear {
+                UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+                deviceOrientation = UIDevice.current.orientation
+            }
+            .onDisappear {
+                UIDevice.current.endGeneratingDeviceOrientationNotifications()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+                let newOrientation = UIDevice.current.orientation
+                // faceUp/faceDown/unknown(テーブルに置いた時など)は向きの
+                // 情報として使えないため無視し、直前の状態を維持する。
+                guard newOrientation.isValidInterfaceOrientation else { return }
+                deviceOrientation = newOrientation
+            }
     }
 
     @ViewBuilder
@@ -54,11 +95,18 @@ struct HistoricalComparisonView: View {
             // V5キャンバス(234×491、`V5Viewport`参照)に収まらないため、
             // 横画面の時は`V5Viewport`のレターボックス表示をやめ、実寸
             // ポイントの専用レイアウト(`landscapeLayout`)に切り替える。
-            // UIKitのインターフェースが実際に回転する方式のため、
-            // `geo.size`自体が横長になる。
+            // アプリ全体はPortrait固定のままなので、`geo.size`は常に縦長
+            // (幅<高さ)。横長に組んだ`landscapeLayout`を`geo.size.height`
+            // (回転後に横幅として使える寸法)で組み、`.rotationEffect`で
+            // 見かけ上回転させてから、外側をPortraitの`geo.size`に収め直す
+            // (SwiftUIで「向き固定のまま中身だけ回して見せる」定番の構成)。
             GeometryReader { geo in
-                if geo.size.width > geo.size.height {
-                    landscapeLayout(response, availableWidth: geo.size.width)
+                if isLandscape {
+                    landscapeLayout(response, availableWidth: geo.size.height)
+                        .frame(width: geo.size.height, height: geo.size.width)
+                        .rotationEffect(Self.rotationAngle(for: deviceOrientation))
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .animation(nil, value: deviceOrientation)
                 } else {
                     V5Viewport {
                         V5Header(title: "過去イベント比較", back: true, onBack: { dismiss() })
