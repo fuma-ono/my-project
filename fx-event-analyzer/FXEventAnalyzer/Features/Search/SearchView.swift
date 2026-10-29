@@ -401,9 +401,29 @@ struct SearchView: View {
             guard plain.count == 6 else { return false }
             if plain.contains(compact) { return true }
             let base = String(plain.prefix(3)), quote = String(plain.suffix(3))
-            let names = CountryFlag.japaneseName(forCurrency: base) + CountryFlag.japaneseName(forCurrency: quote)
-            return names.contains(keyword)
+            return currencyNameCombinations(base: base, quote: quote).contains { $0.contains(keyword) }
         }
+    }
+
+    /// HQ指示(2026-10-29)「検索問題で他にも文字列だけで判定はないか」:
+    /// `CountryFlag.japaneseName(forCurrency:)`は表示用に、同じ「ドル」でも
+    /// 米ドル・加ドル・豪ドル・NZドルのように国名の接頭辞で区別している。
+    /// 従来はこの表示名をそのまま2通貨分連結して一致を見ていたため、
+    /// 「ドル円」(USD/JPY、円に接頭辞が無いため元々問題なかった)は検索
+    /// できても、「ユーロドル」(EUR/USD)・「ポンドドル」(GBP/USD)のような
+    /// 一般的な略称は、USD側の表示名が「米ドル」で「米」が間に挟まるため
+    /// 一致しなかった。接頭辞を外した「ドル」単体も候補に加える。
+    private static func currencyNameCombinations(base: String, quote: String) -> [String] {
+        let baseNames = Set([CountryFlag.japaneseName(forCurrency: base), bareDollarName(base)])
+        let quoteNames = Set([CountryFlag.japaneseName(forCurrency: quote), bareDollarName(quote)])
+        return baseNames.flatMap { b in quoteNames.map { q in b + q } }
+    }
+
+    /// 「米ドル」「加ドル」「豪ドル」「NZドル」→「ドル」。接頭辞の無い名前(ユーロ・
+    /// ポンド・円・人民元・スイスフラン)はそのまま返す。
+    private static func bareDollarName(_ currencyCode: String) -> String {
+        let name = CountryFlag.japaneseName(forCurrency: currencyCode)
+        return name.hasSuffix("ドル") && name != "ドル" ? "ドル" : name
     }
 
     @ViewBuilder private var speechResults: some View {

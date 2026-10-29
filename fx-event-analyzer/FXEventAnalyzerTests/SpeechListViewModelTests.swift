@@ -55,6 +55,17 @@ final class SpeechListViewModelTests: XCTestCase {
         XCTAssertEqual(SearchView.matchFxSymbols(symbols, query: ""), [])
     }
 
+    /// HQ指示(2026-10-29)「検索問題で他にも文字列だけで判定はないか」:
+    /// 米ドル/加ドル/豪ドル/NZドルのように表示名に国名の接頭辞がある通貨は、
+    /// その接頭辞を外した「ドル」単体の略称(「ユーロドル」「ポンドドル」)でも
+    /// 検索できる必要がある(「ドル円」は円に接頭辞が無いため従来から動いていた)。
+    func testFxPairSearchMatchesSlangNamesWithDollarPrefixStripped() {
+        let symbols = ["USDJPY", "EURUSD", "GBPUSD"]
+        XCTAssertEqual(SearchView.matchFxSymbols(symbols, query: "ドル円"), ["USDJPY"])
+        XCTAssertEqual(SearchView.matchFxSymbols(symbols, query: "ユーロドル"), ["EURUSD"])
+        XCTAssertEqual(SearchView.matchFxSymbols(symbols, query: "ポンドドル"), ["GBPUSD"])
+    }
+
     func testFamilyNameIsTheLastPartOfAKatakanaName() {
         XCTAssertEqual(SpeechListView.familyName("ジェローム・パウエル"), "パウエル")
         XCTAssertEqual(SpeechListView.familyName("クリスティーヌ・ラガルド"), "ラガルド")
