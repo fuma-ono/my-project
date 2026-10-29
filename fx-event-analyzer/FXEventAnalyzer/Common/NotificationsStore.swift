@@ -235,6 +235,12 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
     var leadMinutes: Int?
     /// サーバーの通知一覧から来たものはそのID(既読をサーバーへ送るのに使う)。端末だけの記録はnil。
     var serverID: String?
+    /// サーバーの`trigger`(api-design v1.40)。要人発言のカレンダー更新(`kind == .calendarUpdate`)は
+    /// 変更の種類そのもの("RESCHEDULED"/"CANCELLED")。それ以外は発表何分前か("LEAD_5"等)で使わない。
+    var trigger: String?
+    /// 開く要人発言のid(api-design v1.40)。中止された要人発言のカレンダー更新を、カレンダーではなく
+    /// 要人発言詳細へ遷移させるのに使う(中止の発言はカレンダーから消えるため)。
+    var speechId: String?
 
     var id: String { "\(kind.rawValue).\(targetID).\(Int(notifyAt.timeIntervalSince1970))" }
     /// 重複を防ぐ単位(同じイベント・同じ通知の種類で1件)。
@@ -246,9 +252,18 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
         now.timeIntervalSince(notifyAt) > Double(kind.retentionDays) * 24 * 60 * 60
     }
 
+    /// 中止された要人発言のカレンダー更新通知か(HQ指示 2026-10-29「中止された要人発言の通知」)。
+    /// `speakerName`が付くカレンダー更新は要人発言のもの(経済指標の変更では付かない、
+    /// バックエンドの`inboxAttributionSpeechId`と同じ判定)。中止の発言はカレンダーから消えるため、
+    /// 通常のカレンダー更新(日時変更)とは別に、要人発言詳細へ直接遷移させる。
+    var isCancelledSpeechUpdate: Bool {
+        kind == .calendarUpdate && trigger == "CANCELLED" && speakerName != nil
+    }
+
     init(
         kind: Kind, targetID: String, title: String, body: String, notifyAt: Date, scheduledAt: Date, importance: String,
-        speakerName: String? = nil, subject: String? = nil, countryCode: String? = nil, leadMinutes: Int? = nil
+        speakerName: String? = nil, subject: String? = nil, countryCode: String? = nil, leadMinutes: Int? = nil,
+        trigger: String? = nil, speechId: String? = nil
     ) {
         self.kind = kind
         self.leadMinutes = leadMinutes
@@ -261,6 +276,8 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
         self.notifyAt = notifyAt
         self.scheduledAt = scheduledAt
         self.importance = importance
+        self.trigger = trigger
+        self.speechId = speechId
     }
 
     /// 「発表の5分前です（21:30発表・重要度 高）」。要人発言は「発言」。
@@ -320,7 +337,9 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
             speakerName: item.speakerName,
             subject: subject,
             countryCode: item.countryCode,
-            leadMinutes: item.leadMinutes
+            leadMinutes: item.leadMinutes,
+            trigger: item.trigger,
+            speechId: item.speechId
         )
         serverID = item.id
     }

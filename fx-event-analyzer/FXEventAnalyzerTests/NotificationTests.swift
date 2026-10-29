@@ -243,6 +243,39 @@ final class NotificationsStoreTests: XCTestCase {
         XCTAssertEqual(store.entries.filter { $0.notifyAt > base }.map(\.targetID), ["later"], "upcoming entries stay")
     }
 
+    /// HQ指示(2026-10-29)「中止された要人発言の通知」: speech_id・trigger(change_type)を
+    /// 取り込み、要人発言の中止のカレンダー更新だけを区別できることを確認する。
+    func testCancelledSpeechCalendarUpdateIsDistinguishedFromOtherCalendarUpdates() throws {
+        let json = Data(#"""
+        {"unread_count":0,"items":[
+          {"id":"n1","kind":"CALENDAR_UPDATE","target_id":"chg1","trigger":"CANCELLED","lead_minutes":null,"title":"パウエル議長の発言が中止されました","body":"10/16 8:30の発言は行われません（重要度 高）","display_name":null,"speaker_name":"パウエル議長","country_code":"US","importance":"HIGH","scheduled_at":"2026-10-16T08:30:00Z","notify_at":"2026-10-16T08:00:00Z","read_at":null,"expires_at":"2026-10-23T08:00:00Z","speech_id":"s1"},
+          {"id":"n2","kind":"CALENDAR_UPDATE","target_id":"chg2","trigger":"RESCHEDULED","lead_minutes":null,"title":"米国CPIの発表日時が変更されました","body":"発表日時 10/16 8:30 → 10/17 21:30（重要度 高）","display_name":"消費者物価指数（CPI）","speaker_name":null,"country_code":"US","importance":"HIGH","scheduled_at":"2026-10-17T21:30:00Z","notify_at":"2026-10-16T08:00:00Z","read_at":null,"expires_at":"2026-10-23T08:00:00Z"},
+          {"id":"n3","kind":"CALENDAR_UPDATE","target_id":"chg3","trigger":"CANCELLED","lead_minutes":null,"title":"ラガルド総裁の発言が中止されました","body":"10/16 9:00の発言は行われません（重要度 高）（出典：ECB）","display_name":null,"speaker_name":"ラガルド総裁","country_code":"EU","importance":"HIGH","scheduled_at":"2026-10-16T09:00:00Z","notify_at":"2026-10-16T08:30:00Z","read_at":null,"expires_at":"2026-10-23T08:30:00Z","speech_id":null}
+        ]}
+        """#.utf8)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(InboxNotificationsResponse.self, from: json)
+
+        let store = makeStore()
+        store.applyInbox(response.items, now: base)
+        let byServerID = Dictionary(uniqueKeysWithValues: store.entries.map { ($0.serverID, $0) })
+
+        // speech_idが引けた中止 → 中止の要人発言として区別し、要人発言詳細へ遷移できる。
+        let cancelled = try XCTUnwrap(byServerID["n1"])
+        XCTAssertTrue(cancelled.isCancelledSpeechUpdate)
+        XCTAssertEqual(cancelled.speechId, "s1")
+
+        // 日時変更(中止ではない)は区別しない。
+        let rescheduled = try XCTUnwrap(byServerID["n2"])
+        XCTAssertFalse(rescheduled.isCancelledSpeechUpdate)
+
+        // 中止だがspeech_idが引けない(遷移先が無い) → 区別はするが、遷移に使うIDが無い。
+        let unresolvedCancelled = try XCTUnwrap(byServerID["n3"])
+        XCTAssertTrue(unresolvedCancelled.isCancelledSpeechUpdate)
+        XCTAssertNil(unresolvedCancelled.speechId)
+    }
+
     func testRemoveAllForgetsEverything() {
         let store = makeStore()
         store.record([entry("a", minutesFromBase: -1)], now: base)

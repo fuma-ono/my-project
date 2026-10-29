@@ -45,8 +45,20 @@ struct NotificationListView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 4) {
                         ForEach(delivered) { entry in
-                            if entry.kind == .calendarUpdate {
-                                // カレンダー更新は、カレンダーのタブを開いて新しい日を選ぶ(HQ指示 2026-10-15)。
+                            if entry.isCancelledSpeechUpdate, let speechId = entry.speechId {
+                                // HQ指示(2026-10-29)「中止された要人発言の通知」: 中止の発言は
+                                // カレンダーから消えるため、カレンダーへ遷移しても何も無い。
+                                // speech_idがあれば要人発言詳細(中止の行も返す、GET /speeches/{id})へ。
+                                NavigationLink(value: AppRoute.speechDetail(id: speechId)) {
+                                    NotificationRow(entry: entry, isUnread: store.isUnread(entry))
+                                }
+                                .buttonStyle(SettingsRowPressStyle())
+                                .simultaneousGesture(TapGesture().onEnded { markRead(entry) })
+                            } else if entry.kind == .calendarUpdate {
+                                // カレンダー更新(日時変更、またはspeech_idが無い中止)は、カレンダーの
+                                // タブを開いて新しい日を選ぶ(HQ指示 2026-10-15)。speech_idが引けない
+                                // 中止通知(変更の記録が保存期間を過ぎた等)は遷移先が無いため、従来どおり
+                                // カレンダーへのフォールバックのままにする。
                                 Button {
                                     markRead(entry)
                                     CalendarJump.shared.requestedDate = entry.scheduledAt

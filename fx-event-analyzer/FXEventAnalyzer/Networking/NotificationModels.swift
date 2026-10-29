@@ -67,7 +67,8 @@ struct InboxNotification: Decodable, Equatable {
     /// INDICATOR / SPEECH / RATE_ALERT / CALENDAR_UPDATE / SYSTEM
     let kind: String
     let targetId: String
-    /// 例: LEAD_5(発表5分前)、AT_RELEASE(発表時)
+    /// 例: LEAD_5(発表5分前)、AT_RELEASE(発表時)。要人発言のCALENDAR_UPDATE(日時変更・中止)は
+    /// change_typeそのもの(api-design v1.40): "RESCHEDULED" / "CANCELLED"。
     let trigger: String
     let leadMinutes: Int?
     let title: String
@@ -80,6 +81,10 @@ struct InboxNotification: Decodable, Equatable {
     let notifyAt: Date
     let readAt: Date?
     let expiresAt: Date
+    /// 開く要人発言のid(api-design v1.40)。SPEECHはtarget_idと同じ。要人発言のCALENDAR_UPDATE
+    /// (日時変更・中止)は変更の記録から引いた発言のid(中止の発言はカレンダーから消えるため、
+    /// 中止の通知から詳細を開くのに使う)。それ以外・見つからなければnil。古いBackendでもnil。
+    var speechId: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, kind, trigger, title, body, importance
@@ -92,6 +97,7 @@ struct InboxNotification: Decodable, Equatable {
         case notifyAt = "notify_at"
         case readAt = "read_at"
         case expiresAt = "expires_at"
+        case speechId = "speech_id"
     }
 }
 
