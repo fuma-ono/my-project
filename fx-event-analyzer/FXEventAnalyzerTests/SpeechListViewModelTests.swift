@@ -7,7 +7,7 @@ final class SpeechListViewModelTests: XCTestCase {
         _ id: String, name: String, org: String, title: String, minutes: Double, status: SpeechStatus,
         importance: Importance = .high, timePrecision: StatementTimePrecision? = nil
     ) -> SpeechDetailResponse {
-        let precisionField = timePrecision.map { #","statement_time_precision":"\($0.rawValue)""# } ?? ""
+        let precisionField = timePrecision.map { #","statement_time_precision":"\#($0.rawValue)""# } ?? ""
         let json = """
         {"speech_id":"\(id)","speaker":{"speaker_id":"sp-\(id)","name":"\(name)","title":"理事","organization":"\(org)","country_code":"US","currency_code":"USD","photo_url":null},
          "title":"\(title)","summary":null,"statement_datetime":"\(ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: 1_790_000_000 + minutes * 60)))",
