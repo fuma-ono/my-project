@@ -269,7 +269,10 @@ struct NotificationEntry: Codable, Equatable, Identifiable {
         formatter.locale = Locale(identifier: "ja_JP")
         formatter.timeZone = timeZone
         formatter.dateFormat = "M/d H:mm"
-        let noun = item.kind == .speech ? "発言" : "発表"
+        // HQ指示(2026-10-29)「指標の状態表示」: 結果の値が出ない予定(FOMC議事要旨、
+        // result_type = NONE)は「公表」(「発表」と書かない。結果が出ると誤解させない)。
+        // バックエンドのinboxBody(domain/notificationInbox.ts)と同じ判定。
+        let noun = item.kind == .speech ? "発言" : (item.resultType == .noValue ? "公表" : "発表")
         let timing = leadMinutes == 0 ? "まもなく\(noun)です" : "\(noun)の\(leadMinutes)分前です"
         let level = NotificationImportance.label(item.importance)
         // HQ指示(2026-10-13)「通知の名前も消費者物価指数（CPI）にそろえて」: 指標は全画面共通の表示名にする。

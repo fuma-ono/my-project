@@ -96,6 +96,20 @@ final class NotificationModelsTests: XCTestCase {
         XCTAssertEqual(entry.speakerName, "パウエル理事")
         XCTAssertTrue(entry.body.hasPrefix("まもなく発言です"))
     }
+
+    /// HQ指示(2026-10-29)「指標の状態表示」: 結果の値が出ない予定(result_type =
+    /// NONE、今はFOMC議事要旨だけ)は「発表」ではなく「公表」(バックエンドの
+    /// inboxBodyと同じ判定、結果が出ると誤解させない)。
+    func testNoValueResultTypeUsesPublicationWordingInsteadOfAnnouncement() {
+        let scheduled = ISO8601DateFormatter().date(from: "2026-10-06T12:30:00Z")!
+        let item = UpcomingNotification(
+            kind: .indicator, id: "e2", title: "FOMC議事要旨", speakerName: nil, importance: "MEDIUM",
+            scheduledAt: scheduled, notifyAt: scheduled.addingTimeInterval(-300),
+            countryCode: "US", currencyCode: "USD", relatedFxPairs: [], resultType: .noValue
+        )
+        let entry = NotificationEntry(item, leadMinutes: 5, timeZone: TimeZone(identifier: "Asia/Tokyo")!)
+        XCTAssertEqual(entry.body, "公表の5分前です（10/6 21:30公表・重要度 中）")
+    }
 }
 
 // MARK: - 通知の記録・未読
