@@ -190,21 +190,33 @@ struct HistoricalComparisonView: View {
         .ignoresSafeArea()
     }
 
+    /// HQ指摘(2026-10-29)「ヘッダーを＜戻る　過去イベント比較にして(縦画面と
+    /// 揃えるように)」: 従来はシェブロンのみ(「戻る」の文字が無い)・
+    /// タイトルが左寄せで、縦画面の`V5Header`(＜ 戻る、水色文字＋タイトルは
+    /// 全幅中央揃え)と構成が異なっていた。`V5Header`と同じ構成
+    /// (戻るボタンとタイトルを別レイヤーのZStackにして、タイトルは
+    /// 戻るボタンの有無に関係なく常に中央)に揃えた。
     private var landscapeTopBar: some View {
-        HStack(spacing: 8) {
-            Button(action: { dismiss() }) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
+        ZStack {
+            NotoText.text("過去イベント比較", size: 15)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .center)
+            HStack(spacing: 0) {
+                Button(action: { dismiss() }) {
+                    HStack(spacing: 2) {
+                        Image(systemName: "chevron.left").font(.system(size: 16, weight: .semibold))
+                        NotoText.text("戻る", size: 13)
+                    }
+                    .foregroundStyle(V5P.cyan)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("戻る")
+                .accessibilityIdentifier("historyLandscapeBack")
+                Spacer()
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("戻る")
-            .accessibilityIdentifier("historyLandscapeBack")
-            NotoText.text("過去イベント比較", size: 15).foregroundStyle(.white)
-            Spacer()
         }
         // `.accessibilityElement(children: .contain)`: 中の戻るボタンを個別に
-        // タップ可能なまま保ちつつ、このHStack自体もXCUITestから識別子で
+        // タップ可能なまま保ちつつ、このZStack自体もXCUITestから識別子で
         // 問い合わせられる要素にする。
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("historyLandscapeTopBar")
@@ -384,9 +396,9 @@ struct HistoricalComparisonView: View {
                     landscapeHeaderCell("前回", "(前回値)", width: columns.value)
                 }
                 landscapeDivider
-                landscapeHeaderCell("1分", "(pips)", width: columns.pips)
-                landscapeHeaderCell("5分", "(pips)", width: columns.pips)
-                landscapeHeaderCell("15分", "(pips)", width: columns.pips)
+                landscapeHeaderCell("1分", "(pips)", width: columns.pips, trailing: true)
+                landscapeHeaderCell("5分", "(pips)", width: columns.pips, trailing: true)
+                landscapeHeaderCell("15分", "(pips)", width: columns.pips, trailing: true)
             }
             .frame(height: 40)
         }
@@ -400,15 +412,22 @@ struct HistoricalComparisonView: View {
         Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 1, height: 40)
     }
 
-    private func landscapeHeaderCell(_ title: String, _ subtitle: String, width: CGFloat) -> some View {
-        VStack(spacing: 2) {
+    /// HQ指摘(2026-10-29)「表の中の位置がバラバラ」: pipsの見出し(「1分」等)は
+    /// 中央揃えのままだったが、対応するデータ(`landscapePipsCell`)は符号を
+    /// 右端で揃えるため右揃え+右パディング4になっており、見出しとデータの
+    /// 横位置がずれていた。`trailing`で同じ右揃え+右パディングに切り替え
+    /// られるようにし、pipsの見出しに適用した(結果/予想/前回は従来どおり
+    /// 中央揃えのまま、`landscapeValueCell`と揃っている)。
+    private func landscapeHeaderCell(_ title: String, _ subtitle: String, width: CGFloat, trailing: Bool = false) -> some View {
+        VStack(alignment: trailing ? .trailing : .center, spacing: 2) {
             NotoText.text(title, size: 13).foregroundStyle(.white)
             NotoText.text(subtitle, size: 9)
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
-        .frame(width: width, height: 40)
+        .frame(width: width, height: 40, alignment: trailing ? .trailing : .center)
+        .padding(.trailing, trailing ? 4 : 0)
     }
 
     private func landscapeTableRow(_ event: ComparisonEventSummary, unit: String?, showSecondary: Bool, columns: LandscapeColumns) -> some View {
