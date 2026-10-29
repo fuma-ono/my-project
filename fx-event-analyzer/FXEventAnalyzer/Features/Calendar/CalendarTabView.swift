@@ -384,6 +384,14 @@ private struct CalendarDayList: View {
                             .foregroundStyle(SettingsCardStyle.subtitleColor)
                             .lineLimit(1)
                     }
+                    // HQ指示(2026-10-29)「指標の状態表示」: result_type/data_status
+                    // から「結果待ち」「公表済み」を出す(NONEの指標に実際には無い
+                    // 数値を表示しないため、値そのものはここでは出さない)。
+                    if let statusLabel = item.resultStatusLabel() {
+                        NotoText.text(statusLabel, size: 6)
+                            .foregroundStyle(SettingsCardStyle.subtitleColor)
+                            .lineLimit(1)
+                    }
                 }
                 .padding(.leading, 2)
                 Spacer(minLength: 0)

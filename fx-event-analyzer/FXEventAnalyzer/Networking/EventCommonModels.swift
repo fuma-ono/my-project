@@ -44,6 +44,34 @@ enum SurpriseDirection: String, Decodable, Equatable {
     case neutral = "NEUTRAL"
 }
 
+/// api-design v1.42(HQ指示2026-10-27「経済指標・要人発言の表示不足を解消する」)。
+/// `GET /calendar`(INDICATOR行)・`GET /home`の`events`・`GET /notifications/upcoming`
+/// に付く。SPEECHの行・古いBackendでは項目自体が無い(nil)。
+/// ケース名はSwiftの`Optional<ResultType>.none`との混同を避けるため`noValue`にした
+/// (バックエンドのJSON値はそのまま`"NONE"`)。
+enum ResultType: String, Decodable, Equatable {
+    /// 結果の値が出る指標(CPI・雇用統計など、FOMCの会合も含む)。
+    case value = "VALUE"
+    /// 結果の値が出ない予定(今はFOMC議事要旨だけ、`domain/resultType.ts`)。
+    case noValue = "NONE"
+}
+
+/// `ResultType`・`DataQualityStatus`から、指標の状態表示の文言を決める
+/// (api-design v1.42の「表示の目安」どおり)。
+enum ResultStatusDisplay {
+    /// VALUEで発表時刻を過ぎてDATA_PENDINGなら「結果待ち」(値を推測で埋めない)。
+    /// NONEで発表時刻を過ぎたら「公表済み」(結果の欄は出さない)。それ以外
+    /// (発表前・READY・古いBackendでresult_typeが無い等)は何も表示しない。
+    static func label(resultType: ResultType?, dataStatus: DataQualityStatus?, releaseDatetime: Date, now: Date = Date()) -> String? {
+        guard releaseDatetime <= now else { return nil }
+        switch resultType {
+        case .noValue: return "公表済み"
+        case .value: return dataStatus == .dataPending ? "結果待ち" : nil
+        case nil: return nil
+        }
+    }
+}
+
 /// api-design.md §11.1: drives which timeframes are analyzable for an
 /// event, independent of stored reaction data_status.
 enum ReleaseDatetimePrecision: String, Decodable, Equatable {

@@ -31,6 +31,10 @@ struct CalendarItem: Decodable, Equatable, Identifiable {
     /// `is_provisional`(api-design v1.32): 予定の日時がまだ公式に確定していない(暫定)。
     /// 古いBackendは返さないのでnil(= 暫定ではない)。画面は`isProvisional`を使う。
     var provisionalFlag: Bool? = nil
+    /// `result_type`(api-design v1.42)。指標(INDICATOR)の行だけ入る(SPEECHはnil)。
+    var resultType: ResultType? = nil
+    /// `data_status`(api-design v1.42)。指標(INDICATOR)の行だけ入る(SPEECHはnil)。
+    var dataStatus: DataQualityStatus? = nil
 
     enum CodingKeys: String, CodingKey {
         case kind, id, title, importance, datetime, status
@@ -41,10 +45,18 @@ struct CalendarItem: Decodable, Equatable, Identifiable {
         case currencyCode = "currency_code"
         case datetimePrecision = "datetime_precision"
         case provisionalFlag = "is_provisional"
+        case resultType = "result_type"
+        case dataStatus = "data_status"
     }
 
     /// 一覧の行に「予定（暫定）」を出すかどうか。
     var isProvisional: Bool { provisionalFlag ?? false }
+
+    /// 「結果待ち」「公表済み」(api-design v1.42「表示の目安」、HQ指示2026-10-29
+    /// 「指標の状態表示」)。SPEECHの行はresultTypeが常にnilなのでnilのまま。
+    func resultStatusLabel(now: Date = Date()) -> String? {
+        ResultStatusDisplay.label(resultType: resultType, dataStatus: dataStatus, releaseDatetime: datetime, now: now)
+    }
 
     var route: AppRoute {
         switch kind {

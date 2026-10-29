@@ -34,6 +34,8 @@ struct UpcomingNotification: Decodable, Equatable {
     let relatedFxPairs: [String]
     /// 指標の一覧表示名(api-design v1.22)。発言と古いBackendではnil。
     var displayName: String? = nil
+    /// `result_type`(api-design v1.42)。指標だけ入る(発言は常にnil)。古いBackendでもnil。
+    var resultType: ResultType? = nil
 
     enum CodingKeys: String, CodingKey {
         case kind
@@ -47,6 +49,7 @@ struct UpcomingNotification: Decodable, Equatable {
         case countryCode = "country_code"
         case currencyCode = "currency_code"
         case relatedFxPairs = "related_fx_pairs"
+        case resultType = "result_type"
     }
 }
 
