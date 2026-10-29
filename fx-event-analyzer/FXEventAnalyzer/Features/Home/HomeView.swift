@@ -808,7 +808,6 @@ struct HomeView: View {
             // 名前の長さで文字サイズを変える分岐はなくした。
             VStack(alignment: .leading, spacing: 1) {
                 let subtitle = Self.eventSubtitle(event)
-                let display = CountryFlag.indicatorDisplayName(event.indicatorName, countryCode: event.countryCode, displayName: event.displayName)
                 let combinedName = CountryFlag.indicatorDisplayText(event.indicatorName, countryCode: event.countryCode, displayName: event.displayName)
                 // HQ指示(2026-10-11、16回目)「非農業部門雇用者数の経済指標
                 // マークをもう少し下げて」: バッジだけ少し下にずらす。
@@ -833,25 +832,23 @@ struct HomeView: View {
                 // 「消費者物価指数(CPI)」のように1行に収まる名前はそのまま
                 // 1行で表示し、「非農業部門雇用者数(雇用統計)」のように収まら
                 // ない名前だけ、名前本体+小さいフォントの(略称)という2行に
-                // 分ける(`eventRowHeight`/`todayEventsCardHeight`自体は
-                // 変えない) — 検索結果の行(`ViewThatFits`)と同じ考え方。
-                ViewThatFits(in: .horizontal) {
-                    NotoText.text(combinedName, size: 9.0)
-                        .tracking(-0.3)
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    VStack(alignment: .leading, spacing: 0) {
-                        NotoText.text(display.main, size: 9.0)
-                            .tracking(-0.3)
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                        if let abbreviation = display.abbreviation {
-                            NotoText.text("（\(abbreviation)）", size: 6.0)
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                        }
-                    }
-                }
+                // 分けていた(`ViewThatFits`、検索結果の行と同じ考え方)。
+                // HQ指摘(2026-10-29)「予想と結果が下に見切れてる。指標名は
+                // 1行に収まるよう自動でサイズ調整して。ただ極端に小さくしない
+                // こと」: 名前が2行になる行は、バッジ+2行の名前+予想/前回で
+                // 縦に必要な高さが`eventRowHeight`(44、`VStack`の`minHeight:
+                // 38`も)を超え、固定高さの行の下端で予想/前回が見切れていた。
+                // 2行への分割をやめ、常に1行で`.lineLimit(1)` +
+                // `.minimumScaleFactor`で自動縮小する方式に変更した(行の
+                // 高さが指標名の長さに左右されなくなり、見切れも解消する)。
+                // 下限は、この行の予想/前回(`subtitle`)で既に使っている
+                // 最小許容値`minimumScaleFactor(0.7)`に揃え、極端に小さく
+                // なりすぎないようにした。
+                NotoText.text(combinedName, size: 9.0)
+                    .tracking(-0.3)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                 if event.isLocked {
                     // 無料プランで隠された過去の発表(HQ判断 2026-10-22): 予想・前回の代わりに
                     // 鍵の印。行はこれまでどおりイベント詳細へ進み、そこで印を押すとプランの案内。
