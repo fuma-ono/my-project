@@ -2,7 +2,8 @@ name: FX Event Analyzer - Data ingestion (dev)
 
 # 社内確認用DB へ本番データを取り込み、品質レポートを作る(docs/projects/fx-event-analyzer/dev-environment.md)。
 #   - 為替: 20分ごと。Twelve Data の1分足 → fx_prices(5分〜60分足も組み立て)
-#   - 要人発言: 1日2回(06:15 / 18:15 JST)。FRB カレンダー・ECB RSS → speech_events
+#   - 要人発言: 3時間ごと(毎時 41 分、UTC 0・3・6・…・21 時)。FRB カレンダー・ECB RSS → speech_events
+#     (HQ判断 2026-10-29 C: GitHub の定時の遅れ・間引きがあっても反映を早める。毎正時と為替の :07/:27/:47 を外す)
 #   - 品質レポート: 毎日 09:00 JST、直近1日分。DB を読むだけ。結果は実行の Summary に出る
 #   - BLS公式統計の経済カレンダー(手動実行のみ、target=official-bls): 有料カレンダーに
 #     依存しない独立経路(HQ判断2026-10-17)。BLSの公式スケジュール(無料・キー不要)
@@ -23,7 +24,7 @@ name: FX Event Analyzer - Data ingestion (dev)
 on:
   schedule:
     - cron: '7,27,47 * * * *'
-    - cron: '15 21,9 * * *'
+    - cron: '41 */3 * * *'
     - cron: '0 0 * * *'
   workflow_dispatch:
     inputs:
@@ -34,8 +35,11 @@ on:
 permissions:
   contents: read
 
+# HQ判断 2026-10-29 B: 要人発言だけの実行(定時と、手動の target=speeches)は別のグループにして、為替などの待ちに
+# 押し出されないようにする。それ以外(為替・品質レポート・BLS・反応・FOMC・手動の both など)は今までどおり fx-ingestion。
+# 書く表が別(speech_events と fx_prices 等。ingestion_logs は行を足すだけ)なので、同時に動いても衝突しない。
 concurrency:
-  group: fx-ingestion
+  group: ${{ (github.event.schedule == '41 */3 * * *' || (github.event_name == 'workflow_dispatch' && inputs.target == 'speeches')) && 'fx-ingestion-speeches' || 'fx-ingestion' }}
   cancel-in-progress: false
 
 jobs:
@@ -91,7 +95,7 @@ jobs:
         if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'event-reactions'
         run: npm run -s ingest:event-reactions
       - name: Speeches
-        if: steps.check.outputs.ready == 'true' && (github.event.schedule == '15 21,9 * * *' || (github.event_name == 'workflow_dispatch' && (inputs.target == 'speeches' || inputs.target == 'both')))
+        if: steps.check.outputs.ready == 'true' && (github.event.schedule == '41 */3 * * *' || (github.event_name == 'workflow_dispatch' && (inputs.target == 'speeches' || inputs.target == 'both')))
         run: npm run -s ingest:speeches
       - name: Data quality report
         if: steps.check.outputs.ready == 'true' && (github.event.schedule == '0 0 * * *' || (github.event_name == 'workflow_dispatch' && inputs.target == 'report'))
