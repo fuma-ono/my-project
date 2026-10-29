@@ -17,6 +17,12 @@ struct SpeechDetailResponse: Decodable, Equatable {
     /// 出典と告知(api-design v1.38)。取得元の規約が出典の表示・告知を求める要人(ECB・FRB)だけ付く。
     /// ECBは`notice`に規約が求める告知文、FRBは出典のみ(`notice`はnil)、それ以外・古いBackendはnil。
     var attribution: SpeechAttribution? = nil
+    /// 発言時刻の精度(api-design v1.41)。`.exact`(発言の予定の時刻、従来の全件)か
+    /// `.publicationTime`(ECB週間予定のポッドキャスト等、公開の時刻しか分からない)。
+    /// `statementDatetime`はいずれの場合も入るが、`.publicationTime`のときは公開時刻であり、
+    /// 実際の発言時刻そのものではないため、画面はそれを発言時刻として断定表示しない。
+    /// 古いBackendでは項目自体が無いので`.exact`として扱う。
+    var statementTimePrecision: StatementTimePrecision = .exact
 
     enum CodingKeys: String, CodingKey {
         case reactions
@@ -28,6 +34,24 @@ struct SpeechDetailResponse: Decodable, Equatable {
         case importance
         case status
         case attribution
+        case statementTimePrecision = "statement_time_precision"
+    }
+
+    // 合成される`init(from:)`は非Optionalの`statementTimePrecision`について、デフォルト値
+    // ではなく`decode`(必須)を使ってしまい、項目自体が無い古いBackendの応答で
+    // keyNotFoundになる。デフォルト値を実際に使うため手動で実装する。
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        speechId = try container.decode(String.self, forKey: .speechId)
+        speaker = try container.decode(SpeechSpeaker.self, forKey: .speaker)
+        title = try container.decode(String.self, forKey: .title)
+        summary = try container.decodeIfPresent(String.self, forKey: .summary)
+        statementDatetime = try container.decode(Date.self, forKey: .statementDatetime)
+        importance = try container.decode(Importance.self, forKey: .importance)
+        status = try container.decode(SpeechStatus.self, forKey: .status)
+        reactions = try container.decodeIfPresent([SpeechReaction].self, forKey: .reactions)
+        attribution = try container.decodeIfPresent(SpeechAttribution.self, forKey: .attribution)
+        statementTimePrecision = try container.decodeIfPresent(StatementTimePrecision.self, forKey: .statementTimePrecision) ?? .exact
     }
 }
 
@@ -43,6 +67,14 @@ struct SpeechAttribution: Decodable, Equatable {
         case sourceUrl = "source_url"
         case notice
     }
+}
+
+/// api-design v1.41。
+enum StatementTimePrecision: String, Decodable, Equatable {
+    case exact = "EXACT"
+    /// 公開の時刻しか分からない(ECB週間予定のポッドキャスト等)。相場反応は計算されず
+    /// (`reactions`は空)、要人ごとの過去比較・発言前の通知の対象にもならない(バックエンド側)。
+    case publicationTime = "PUBLICATION_TIME"
 }
 
 struct SpeechSpeaker: Decodable, Equatable {

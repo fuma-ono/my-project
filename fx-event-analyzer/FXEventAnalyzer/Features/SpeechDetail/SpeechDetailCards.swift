@@ -96,6 +96,13 @@ struct SpeechDetailCards: View {
                     NotoText.text("\(CountryFlag.japaneseName(forCountry: speaker.countryCode))　|　\(speaker.organization)", size: 8.5)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                     Spacer(minLength: 4)
+                    // HQ指示(2026-10-29)「ポッドキャストの区別」: 公開の時刻しか
+                    // 分からない発言は、下の日時が実際の発言時刻ではないことが
+                    // 伝わるようラベルを添える(statementDatetime自体は公開時刻が
+                    // そのまま入っているので、値は変えずラベルだけ足す)。
+                    if response.statementTimePrecision == .publicationTime {
+                        NotoText.text("ポッドキャスト", size: 7).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    }
                     // HQ指示(2026-10-12、6回目)「日時の文字サイズを0.5下げて」:
                     // 8.5→8。
                     // HQ指示(2026-10-14)「日時の文字色を米国｜FRBと同じ色に」。
@@ -197,6 +204,16 @@ struct SpeechDetailCards: View {
         .frame(width: 214, alignment: .leading)
     }
 
+    /// HQ指示(2026-10-29)「ポッドキャストの区別」: 公開の時刻しか分からない
+    /// 発言(`.publicationTime`)は相場反応を計算しない仕様(バックエンド)なので、
+    /// 発言済みでも値動きが空のままになる。「データがありません」(不具合に
+    /// 見える)ではなく、理由が伝わる文言にする。
+    static func reactionEmptyMessage(_ response: SpeechDetailResponse) -> String {
+        if response.status == .scheduled { return "発言後に値動きを表示します。" }
+        if response.statementTimePrecision == .publicationTime { return "ポッドキャストのため値動きの分析はありません。" }
+        return "値動きのデータがありません。"
+    }
+
     private var grid: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
@@ -212,7 +229,7 @@ struct SpeechDetailCards: View {
             // 前回この見出し行の色を消したのは誤りだったため戻した。
             .background(Self.headerFill)
             if reactions.isEmpty {
-                NotoText.text(response.status == .scheduled ? "発言後に値動きを表示します。" : "値動きのデータがありません。", size: 8.5)
+                NotoText.text(Self.reactionEmptyMessage(response), size: 8.5)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
                     .frame(maxWidth: .infinity, minHeight: Self.rowHeight)
             }
