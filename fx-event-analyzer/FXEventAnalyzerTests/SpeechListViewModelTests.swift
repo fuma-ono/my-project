@@ -167,3 +167,47 @@ final class SpeechListViewModelTests: XCTestCase {
         return viewModel.state
     }
 }
+
+// MARK: - 出典・告知(attribution、api-design v1.38)
+
+final class SpeechAttributionTests: XCTestCase {
+    /// HQ指示(2026-10-29)「出典・告知の表示」: ECBはnoticeが付く(告知が必要)。
+    func testDecodesAttributionWithNotice() throws {
+        let json = Data("""
+        {"speech_id":"s1","speaker":{"speaker_id":"sp1","name":"ラガルド総裁","title":"総裁","organization":"ECB","country_code":"EU","currency_code":"EUR"},
+         "title":"講演","summary":"物価安定を重視する姿勢を強調した。","statement_datetime":"2026-10-16T09:00:00Z","importance":"HIGH","status":"DELIVERED",
+         "attribution":{"source":"欧州中央銀行（ECB）","source_url":"https://www.ecb.europa.eu","notice":"この情報は ECB のウェブサイト（www.ecb.europa.eu）で無料で入手できます。"}}
+        """.utf8)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(SpeechDetailResponse.self, from: json)
+        XCTAssertEqual(response.attribution?.source, "欧州中央銀行（ECB）")
+        XCTAssertEqual(response.attribution?.notice, "この情報は ECB のウェブサイト（www.ecb.europa.eu）で無料で入手できます。")
+    }
+
+    /// FRBは出典のみでnoticeはnil(告知の義務なし)。
+    func testDecodesAttributionWithoutNotice() throws {
+        let json = Data("""
+        {"speech_id":"s2","speaker":{"speaker_id":"sp2","name":"パウエル議長","title":"議長","organization":"FRB","country_code":"US","currency_code":"USD"},
+         "title":"講演","summary":null,"statement_datetime":"2026-10-16T14:00:00Z","importance":"HIGH","status":"SCHEDULED",
+         "attribution":{"source":"米国連邦準備制度理事会（FRB）","source_url":"https://www.federalreserve.gov","notice":null}}
+        """.utf8)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(SpeechDetailResponse.self, from: json)
+        XCTAssertEqual(response.attribution?.source, "米国連邦準備制度理事会（FRB）")
+        XCTAssertNil(response.attribution?.notice)
+    }
+
+    /// attributionが無い(古いBackend・出典情報の無い要人)応答もそのままデコードできる。
+    func testMissingAttributionDecodesToNil() throws {
+        let json = Data("""
+        {"speech_id":"s3","speaker":{"speaker_id":"sp3","name":"植田和男","title":"総裁","organization":"日本銀行","country_code":"JP","currency_code":"JPY"},
+         "title":"講演","summary":null,"statement_datetime":"2026-10-16T05:00:00Z","importance":"HIGH","status":"SCHEDULED"}
+        """.utf8)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(SpeechDetailResponse.self, from: json)
+        XCTAssertNil(response.attribution)
+    }
+}
