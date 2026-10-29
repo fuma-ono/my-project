@@ -32,6 +32,22 @@ struct SpeechDetailResponse: Decodable, Equatable {
         case status
         case statementTimePrecision = "statement_time_precision"
     }
+
+    // 合成される`init(from:)`は非Optionalの`statementTimePrecision`について、デフォルト値
+    // ではなく`decode`(必須)を使ってしまい、項目自体が無い古いBackendの応答で
+    // keyNotFoundになる。デフォルト値を実際に使うため手動で実装する。
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        speechId = try container.decode(String.self, forKey: .speechId)
+        speaker = try container.decode(SpeechSpeaker.self, forKey: .speaker)
+        title = try container.decode(String.self, forKey: .title)
+        summary = try container.decodeIfPresent(String.self, forKey: .summary)
+        statementDatetime = try container.decode(Date.self, forKey: .statementDatetime)
+        importance = try container.decode(Importance.self, forKey: .importance)
+        status = try container.decode(SpeechStatus.self, forKey: .status)
+        reactions = try container.decodeIfPresent([SpeechReaction].self, forKey: .reactions)
+        statementTimePrecision = try container.decodeIfPresent(StatementTimePrecision.self, forKey: .statementTimePrecision) ?? .exact
+    }
 }
 
 /// api-design v1.41。
