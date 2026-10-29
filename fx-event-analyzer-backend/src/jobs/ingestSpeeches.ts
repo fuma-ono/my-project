@@ -3,7 +3,7 @@ import { loadEnv } from '../config/env.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
 import { EcbPressAdapter } from '../ingestion/adapters/ecbPress.js';
 import { ECB_PUBLICATION_TIME_KINDS, EcbWeeklyScheduleAdapter } from '../ingestion/adapters/ecbWeeklySchedule.js';
-import { FrbCalendarAdapter } from '../ingestion/adapters/frbCalendar.js';
+import { FrbCalendarAdapter, frbSkipLogEntries } from '../ingestion/adapters/frbCalendar.js';
 import { ingestSpeeches } from '../ingestion/pipelines/speeches.js';
 import type { SpeechScheduleProvider } from '../ingestion/providers.js';
 import { runIngestionJob } from '../ingestion/runner.js';
@@ -39,6 +39,8 @@ async function main(): Promise<void> {
         const speeches = await source.fetchSpeeches();
         if (source === frb && frb.lastSkipped.length > 0) {
           for (const skipped of frb.lastSkipped) counters.skip(`FEED_${skipped.reason}`);
+          // R-1(HQ判断 2026-10-29): 読めない項目の題名・理由・日付を最大20件(期間の外は残さない)
+          for (const skipped of frbSkipLogEntries(frb.lastSkipped)) counters.note('feed_skipped', skipped);
         }
         if (ecbWeekly && source === ecbWeekly) {
           for (const skipped of ecbWeekly.lastSkipped) {
