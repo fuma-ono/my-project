@@ -1107,15 +1107,33 @@ struct HomeView: View {
     /// 別々の固定幅枠(整数部は右揃え、小数部は左揃え)に収めることで、
     /// JPYペア(小数2桁、整数部3桁)とそれ以外(小数4桁、整数部1桁)が
     /// 混在しても小数点の位置が行ごとに揃う(詳しい経緯は呼び出し元の
-    /// コメント参照)。2枠の幅の合計(20+24=44)は変更前の単一枠の幅44と
-    /// 揃え、行全体の横幅は変えていない。
+    /// コメント参照)。HQ指摘(2026-10-29、実機確認)「数字が変な位置で
+    /// 折り返される」を受け、2枠の幅を20/24(合計44)から26/28(合計54)へ
+    /// 広げた(詳細は`priceText`内のコメント参照)。
     private func priceText(_ price: String) -> some View {
         let components = price.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)
         let integerPart = components.isEmpty ? price : "\(components[0])."
         let fractionPart = components.count > 1 ? String(components[1]) : ""
         return HStack(spacing: 0) {
-            Text(integerPart).frame(width: 20, alignment: .trailing)
-            Text(fractionPart).frame(width: 24, alignment: .leading)
+            // HQ指摘(2026-10-29、実機確認)「通貨ペアの価格が変な位置で
+            // 折り返されている(155/42/5.のように3行に割れる)」: この2枠の
+            // 幅(20/24)は、変更前の単一枠44からの単純な按分で、
+            // JPYペアの整数部「155.」(4文字)や非JPYペアの小数部「0821」
+            // (4文字)がどちらも実際には収まらず、`.lineLimit(1)`も
+            // 無かったため`Text`が複数行に折り返されて数字が分断されて
+            // 見えていた。幅をそれぞれの最大桁数(整数部「999.」相当・
+            // 小数部4桁)に収まる26/28へ広げ(合計54、元の44+10 — チェブロン
+            // 削除で生まれた余白分、呼び出し元のコメント参照)、
+            // `.lineLimit(1)`を明示し、万一幅が足りない場合でも折り返さず
+            // 縮小表示されるよう`.minimumScaleFactor`を保険として付けた。
+            Text(integerPart)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(width: 26, alignment: .trailing)
+            Text(fractionPart)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(width: 28, alignment: .leading)
         }
         .font(.system(size: 11, weight: .semibold))
         .tracking(-0.4)
