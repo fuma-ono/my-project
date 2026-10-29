@@ -102,46 +102,54 @@ struct HistoricalComparisonView: View {
             // (SwiftUIで「向き固定のまま中身だけ回して見せる」定番の構成)。
             //
             // HQ指摘(2026-10-29)「横画面にした際の黒い画面の部分(右と左)は
-            // 実機ではどうなる？」: この`GeometryReader`自体には
-            // `.ignoresSafeArea()`を付けていなかったため、`geo.size`は
-            // セーフエリア(ステータスバー/ノッチ分)を除いた高さしか
-            // 返さず、回転後の見かけ上の横画面では、そのステータスバー分の
-            // 帯が画面の片側(回転方向により左右どちらか)に黒い帯として
-            // 残っていた(実機スクリーンショットの上部に黒帯が写っていたのは
-            // シミュレーターのキャプチャ特有の見え方ではなく、この帯その
-            // もの — 実機でも同じく黒帯が出る)。`V5Viewport`自身も同じ
-            // 構成(`GeometryReader` + `.ignoresSafeArea()`)で画面全体の
-            // 実寸を取っているのに倣い、この`GeometryReader`にも
-            // `.ignoresSafeArea()`を付けてセーフエリアを除外しない実寸を
-            // 取るようにした(縦画面側は`V5Viewport`が内部で独自に
-            // `GeometryReader`を持ち、この外側の`geo`を参照していないため、
-            // 影響しない)。
-            GeometryReader { geo in
-                if isLandscape {
-                    landscapeLayout(response, availableWidth: geo.size.height)
-                        .frame(width: geo.size.height, height: geo.size.width)
-                        .rotationEffect(Self.rotationAngle(for: deviceOrientation))
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .animation(nil, value: deviceOrientation)
-                } else {
-                    V5Viewport {
-                        V5Header(title: "過去イベント比較", back: true, onBack: { dismiss() })
-                        VStack(alignment: .leading, spacing: 8) {
-                            header(response)
-                            table(response)
-                            if let limit = response.historyLimit, limit.isLimited {
-                                planLimitRow(limit)
+            // 実機ではどうなる？黒くなるなら修正して、背景と同じ色で」への
+            // 対応で、一度この`GeometryReader`自体に`.ignoresSafeArea()`を
+            // 付け、`geo.size`をセーフエリアを除外しない実寸にする変更を
+            // 試みたが、HQ再指摘(同日)「Wi-Fiや時間の部分がかぶさってる」の
+            // 通り裏目に出た: この画面は物理的にはPortraitのまま
+            // (`.rotationEffect`で見かけ上回転させているだけ、ウィンドウ自体は
+            // 回転しない)ため、OSが描くステータスバー(時刻・Wi-Fi・バッテリー)は
+            // 常にPortrait基準の実位置に居座ったまま。`geo.size`を実寸いっぱいに
+            // 広げると、回転後の中身もその実寸いっぱいまで伸びてしまい、
+            // ステータスバーの実位置に中身が重なって見えてしまっていた。
+            // `.ignoresSafeArea()`は撤回し、`geo.size`は元通りセーフエリアを
+            // 除いた寸法に戻した(＝中身の位置・大きさは最初の実装のまま)。
+            //
+            // 黒帯自体(セーフエリア分、中身が届かない領域)は中身の位置を
+            // 変えずに済む方法で解消する: この`GeometryReader`と同じ階層に、
+            // 画面全体(セーフエリアを含む実寸いっぱい)を覆う背景色の層を
+            // 下敷きとして敷く。`V5Viewport`の背景(`DesignTokens.Colors.
+            // backgroundPrimary`、縦画面の既定背景)と同じ色を使うことで、
+            // 中身が届かない帯もただの黒ではなく背景色で埋まる。
+            ZStack {
+                DesignTokens.Colors.backgroundPrimary
+                    .ignoresSafeArea()
+                GeometryReader { geo in
+                    if isLandscape {
+                        landscapeLayout(response, availableWidth: geo.size.height)
+                            .frame(width: geo.size.height, height: geo.size.width)
+                            .rotationEffect(Self.rotationAngle(for: deviceOrientation))
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .animation(nil, value: deviceOrientation)
+                    } else {
+                        V5Viewport {
+                            V5Header(title: "過去イベント比較", back: true, onBack: { dismiss() })
+                            VStack(alignment: .leading, spacing: 8) {
+                                header(response)
+                                table(response)
+                                if let limit = response.historyLimit, limit.isLimited {
+                                    planLimitRow(limit)
+                                }
                             }
+                            .frame(width: 214)
+                            .padding(.top, 8)
+                            .frame(width: V5P.W, height: 398, alignment: .top)
+                            .position(x: V5P.W / 2, y: 54 + 398 / 2)
+                            V5BottomBar(selected: $tabSelection)
                         }
-                        .frame(width: 214)
-                        .padding(.top, 8)
-                        .frame(width: V5P.W, height: 398, alignment: .top)
-                        .position(x: V5P.W / 2, y: 54 + 398 / 2)
-                        V5BottomBar(selected: $tabSelection)
                     }
                 }
             }
-            .ignoresSafeArea()
         case .error(let message):
             loadingScaffold { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() }) }
         }
