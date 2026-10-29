@@ -261,6 +261,12 @@ struct SpeechListView: View {
                     if speech.status == .cancelled {
                         NotoText.text("中止", size: 6.5)
                     }
+                    // HQ指示(2026-10-29)「ポッドキャストの区別」: 公開の時刻しか
+                    // 分からない発言(ECB週間予定のポッドキャスト等)は、この
+                    // 日時が実際の発言時刻ではないことが伝わるようラベルを添える。
+                    if speech.statementTimePrecision == .publicationTime {
+                        NotoText.text("ポッドキャスト", size: 6.5)
+                    }
                 }
                 .font(.system(size: 7.5, weight: .semibold))
                 .monospacedDigit()

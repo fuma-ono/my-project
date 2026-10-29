@@ -3,11 +3,15 @@ import XCTest
 
 @MainActor
 final class SpeechListViewModelTests: XCTestCase {
-    private func speech(_ id: String, name: String, org: String, title: String, minutes: Double, status: SpeechStatus, importance: Importance = .high) -> SpeechDetailResponse {
+    private func speech(
+        _ id: String, name: String, org: String, title: String, minutes: Double, status: SpeechStatus,
+        importance: Importance = .high, timePrecision: StatementTimePrecision? = nil
+    ) -> SpeechDetailResponse {
+        let precisionField = timePrecision.map { #","statement_time_precision":"\($0.rawValue)""# } ?? ""
         let json = """
         {"speech_id":"\(id)","speaker":{"speaker_id":"sp-\(id)","name":"\(name)","title":"理事","organization":"\(org)","country_code":"US","currency_code":"USD","photo_url":null},
          "title":"\(title)","summary":null,"statement_datetime":"\(ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: 1_790_000_000 + minutes * 60)))",
-         "importance":"\(importance.rawValue)","status":"\(status.rawValue)"}
+         "importance":"\(importance.rawValue)","status":"\(status.rawValue)"\(precisionField)}
         """
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -165,5 +169,52 @@ final class SpeechListViewModelTests: XCTestCase {
             }
         }
         return viewModel.state
+    }
+}
+
+// MARK: - ポッドキャスト(statement_time_precision、api-design v1.41)
+
+final class SpeechDetailPrecisionTests: XCTestCase {
+    /// HQ指示(2026-10-29)「ポッドキャストの区別」: `statement_time_precision`が
+    /// 無い応答(古いBackend)は`.exact`として扱う。
+    func testMissingTimePrecisionDefaultsToExact() throws {
+        let json = Data("""
+        {"speech_id":"s1","speaker":{"speaker_id":"sp1","name":"パウエル議長","title":"議長","organization":"FRB","country_code":"US","currency_code":"USD"},
+         "title":"講演","summary":null,"statement_datetime":"2026-10-16T14:00:00Z","importance":"HIGH","status":"SCHEDULED"}
+        """.utf8)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(SpeechDetailResponse.self, from: json)
+        XCTAssertEqual(response.statementTimePrecision, .exact)
+    }
+
+    func testDecodesPublicationTimePrecision() throws {
+        let json = Data("""
+        {"speech_id":"s2","speaker":{"speaker_id":"sp2","name":"ラガルド総裁","title":"総裁","organization":"ECB","country_code":"EU","currency_code":"EUR"},
+         "title":"ポッドキャスト","summary":null,"statement_datetime":"2026-10-16T09:00:00Z","importance":"HIGH","status":"DELIVERED","statement_time_precision":"PUBLICATION_TIME"}
+        """.utf8)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let response = try decoder.decode(SpeechDetailResponse.self, from: json)
+        XCTAssertEqual(response.statementTimePrecision, .publicationTime)
+    }
+
+    /// 公開の時刻しか分からない発言は相場反応を計算しない(バックエンド仕様)ため、
+    /// 発言済みでも値動きが常に空になる。「データがありません」(不具合に見える)ではなく、
+    /// 理由が伝わる文言になることを確認する。
+    func testReactionEmptyMessageDistinguishesScheduledPodcastAndOrdinaryEmpty() {
+        func response(status: SpeechStatus, precision: StatementTimePrecision) -> SpeechDetailResponse {
+            let json = Data("""
+            {"speech_id":"s","speaker":{"speaker_id":"sp","name":"要人","title":"肩書き","organization":"FRB","country_code":"US","currency_code":"USD"},
+             "title":"t","summary":null,"statement_datetime":"2026-10-16T14:00:00Z","importance":"HIGH","status":"\(status.rawValue)","statement_time_precision":"\(precision.rawValue)"}
+            """.utf8)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return try! decoder.decode(SpeechDetailResponse.self, from: json)
+        }
+
+        XCTAssertEqual(SpeechDetailCards.reactionEmptyMessage(response(status: .scheduled, precision: .exact)), "発言後に値動きを表示します。")
+        XCTAssertEqual(SpeechDetailCards.reactionEmptyMessage(response(status: .delivered, precision: .publicationTime)), "ポッドキャストのため値動きの分析はありません。")
+        XCTAssertEqual(SpeechDetailCards.reactionEmptyMessage(response(status: .delivered, precision: .exact)), "値動きのデータがありません。")
     }
 }

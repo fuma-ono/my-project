@@ -14,6 +14,12 @@ struct SpeechDetailResponse: Decodable, Equatable {
     let status: SpeechStatus
     /// 発言前後の実際の価格から計算した値動き(api-design v1.28)。発言済みのときだけ入る。古いBackendではnil。
     var reactions: [SpeechReaction]? = nil
+    /// 発言時刻の精度(api-design v1.41)。`.exact`(発言の予定の時刻、従来の全件)か
+    /// `.publicationTime`(ECB週間予定のポッドキャスト等、公開の時刻しか分からない)。
+    /// `statementDatetime`はいずれの場合も入るが、`.publicationTime`のときは公開時刻であり、
+    /// 実際の発言時刻そのものではないため、画面はそれを発言時刻として断定表示しない。
+    /// 古いBackendでは項目自体が無いので`.exact`として扱う。
+    var statementTimePrecision: StatementTimePrecision = .exact
 
     enum CodingKeys: String, CodingKey {
         case reactions
@@ -24,7 +30,16 @@ struct SpeechDetailResponse: Decodable, Equatable {
         case statementDatetime = "statement_datetime"
         case importance
         case status
+        case statementTimePrecision = "statement_time_precision"
     }
+}
+
+/// api-design v1.41。
+enum StatementTimePrecision: String, Decodable, Equatable {
+    case exact = "EXACT"
+    /// 公開の時刻しか分からない(ECB週間予定のポッドキャスト等)。相場反応は計算されず
+    /// (`reactions`は空)、要人ごとの過去比較・発言前の通知の対象にもならない(バックエンド側)。
+    case publicationTime = "PUBLICATION_TIME"
 }
 
 struct SpeechSpeaker: Decodable, Equatable {
