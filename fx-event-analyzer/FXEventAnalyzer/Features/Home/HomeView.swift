@@ -1099,20 +1099,16 @@ struct HomeView: View {
             // 広げ、右端をさらに右へ。
             // HQ指示(2026-10-08)「155.42ももう少し大きくして」: 10→11に拡大し、
             // 列幅も40→44に広げた(国旗の縮小とchevronの削除で横幅に余裕がある)。
-            // HQ再指摘(2026-10-28)「まだ157.91と0.8309の縦位置がそろってない」:
-            // 前回の修正(`FXPairUI.init(major:)`の`minimumFractionDigits`)は
-            // 同じペア同士(例: JPYペア同士)の間で末尾の0が消えて短くなる
-            // 問題だけを直したが、JPYペア(小数2桁)とそれ以外(小数4桁)は
-            // そもそも小数点以下の桁数自体が異なるため、文字列全体を
-            // この固定幅枠の中で右揃えにしても、整数部の桁数(JPYペアは
-            // 3桁、それ以外は1桁)が違えば小数点の位置は行ごとにズレたままだった
-            // (右揃えは文字列の末尾を揃えるだけで、小数点の位置は揃わない)。
-            // 価格を小数点で整数部(「.」含む)と小数部に分け、整数部側は
-            // 右揃え・小数部側は左揃えの別々の固定幅枠に収めることで、
-            // 整数部の桁数に関わらず小数点の位置そのものを行ごとに揃えた
-            // (行内での相対位置の話。行をまたいだ揃え方は直前のコメント
-            // 参照 — この`priceText`の開始位置自体を`alignmentGuide`で
-            // `pairsCard`の`VStack(alignment: .priceColumnStart)`に揃える)。
+            // HQ再指摘(2026-10-28、2026-10-29)「157.91と0.8309の縦位置が
+            // そろってない」「小数点の位置を揃えるのではなくて5文字表示
+            // だから揃えてと言っている」: 当初は小数点の位置で揃えようと
+            // 整数部/小数部を分ける構成を試みたが、HQの意図は「小数点と
+            // いう特定の位置」ではなく「どの通貨ペアも同じ文字数(5桁+
+            // 小数点)の値だから、単純に揃うはず」という点にあった。
+            // `priceText`側を単一`Text`+`.monospacedDigit()`+固定幅枠に
+            // 戻し、行をまたいだ揃え方(通貨ペア名の列の幅が行ごとに違う
+            // 問題への対応)は直前のコメントの通り`alignmentGuide`で
+            // `pairsCard`の`VStack(alignment: .priceColumnStart)`に揃える。
             priceText(pair.price)
                 .alignmentGuide(.priceColumnStart) { d in d[.leading] }
             // HQ再指摘(2026-10-05、5回目)「+0.25%▲>は右に寄せて」:
@@ -1164,41 +1160,29 @@ struct HomeView: View {
         .frame(height: Self.pairRowHeight)
     }
 
-    /// `pairRow`の価格表示。小数点を境に整数部(「.」含む)・小数部に分けて
-    /// 別々の固定幅枠(整数部は右揃え、小数部は左揃え)に収めることで、
-    /// JPYペア(小数2桁、整数部3桁)とそれ以外(小数4桁、整数部1桁)が
-    /// 混在しても小数点の位置が行ごとに揃う(詳しい経緯は呼び出し元の
-    /// コメント参照)。HQ指摘(2026-10-29、実機確認)「数字が変な位置で
-    /// 折り返される」を受け、2枠の幅を20/24(合計44)から26/28(合計54)へ
-    /// 広げた(詳細は`priceText`内のコメント参照)。
+    /// `pairRow`の価格表示。
+    ///
+    /// HQ再指摘(2026-10-29、3回目)「小数点の位置を揃えるのではなくて
+    /// 5文字表示だから揃えてと言っている」: 整数部/小数部を分けて小数点の
+    /// 位置で揃える方式(直前の実装、経緯は版管理履歴参照)は、HQの意図を
+    /// 読み違えていた。JPYペア(「155.42」)も非JPYペア(「1.0821」)も、
+    /// 小数点を含めて常に同じ6文字(整数部桁数+小数点+小数部桁数の合計が
+    /// 常に5桁)で表示される値であり、HQが求めていたのは「小数点という
+    /// 特定の位置で揃える」ことではなく、「同じ文字数の値として単純に
+    /// 揃える」ことだった。整数部/小数部を分ける複雑な構成をやめ、1つの
+    /// `Text`に戻した。`.monospacedDigit()`で全桁が同じ幅になるため、
+    /// 固定幅枠(54pt、呼び出し元の`pairRow`参照)の中で揃えれば、文字数が
+    /// 揃っているすべての行で見た目も揃う。行をまたいだ揃え(通貨ペア名の
+    /// 列の幅が行ごとに違う問題への対応)は`pairRow`側の`.alignmentGuide
+    /// (.priceColumnStart)`が引き続き担う。
     private func priceText(_ price: String) -> some View {
-        let components = price.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)
-        let integerPart = components.isEmpty ? price : "\(components[0])."
-        let fractionPart = components.count > 1 ? String(components[1]) : ""
-        return HStack(spacing: 0) {
-            // HQ指摘(2026-10-29、実機確認)「通貨ペアの価格が変な位置で
-            // 折り返されている(155/42/5.のように3行に割れる)」: この2枠の
-            // 幅(20/24)は、変更前の単一枠44からの単純な按分で、
-            // JPYペアの整数部「155.」(4文字)や非JPYペアの小数部「0821」
-            // (4文字)がどちらも実際には収まらず、`.lineLimit(1)`も
-            // 無かったため`Text`が複数行に折り返されて数字が分断されて
-            // 見えていた。幅をそれぞれの最大桁数(整数部「999.」相当・
-            // 小数部4桁)に収まる26/28へ広げ(合計54、元の44+10 — チェブロン
-            // 削除で生まれた余白分、呼び出し元のコメント参照)、
-            // `.lineLimit(1)`を明示し、万一幅が足りない場合でも折り返さず
-            // 縮小表示されるよう`.minimumScaleFactor`を保険として付けた。
-            Text(integerPart)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .frame(width: 26, alignment: .trailing)
-            Text(fractionPart)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .frame(width: 28, alignment: .leading)
-        }
-        .font(.system(size: 11, weight: .semibold))
-        .tracking(-0.4)
-        .monospacedDigit()
+        Text(price)
+            .font(.system(size: 11, weight: .semibold))
+            .tracking(-0.4)
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .frame(width: 54, alignment: .trailing)
     }
 
     // MARK: - お気に入りカード
