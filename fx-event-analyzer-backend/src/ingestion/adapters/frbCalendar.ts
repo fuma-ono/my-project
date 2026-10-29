@@ -14,6 +14,12 @@
  *
  * Terms: federalreserve.gov content is public domain unless marked;
  * cite the Board as the source; framing not allowed (data-sources.md §2).
+ *
+ * 読めない項目(HQ判断 2026-10-29 R-1・R-2): `skipped` には題名(200文字まで)・理由・現地の日付(YYYY-MM-DD)
+ * だけを入れる(本文・会場・連絡先は入れない)。取り込みの期間(既定は直近14日、pipelines/speeches.ts の pastDays と同じ)
+ * より古い項目で題名が読めないものは、題名の解析の前に期間の外(OUTSIDE_WINDOW)として数える
+ * (例: 2018-10-18 の "Vice Chairman Randal K. Quarles" — 種別の区切りの無い題名。今の取りこぼしではない)。
+ * 古くても題名が読める項目は今までどおり返し、パイプラインが期間の外として数える(取得件数・鮮度の判定は変えない)。
  */
 import { z } from 'zod';
 import { PROVIDER_HTTP_SETTINGS } from '../config.js';
@@ -26,6 +32,10 @@ import type { NormalizedSpeech, SpeechKind } from '../types.js';
 export const FRB_CALENDAR_URL = 'https://www.federalreserve.gov/json/calendar.json';
 const FRB_TIME_ZONE = 'America/New_York';
 export const FRB_PROVIDER = 'frb_calendar';
+/** 記録に残す題名の長さの上限(R-1)。 */
+export const FRB_SKIP_TITLE_MAX = 200;
+/** 取り込みの期間(日)。pipelines/speeches.ts の pastDays の既定値と同じ。 */
+const FRB_INGEST_PAST_DAYS = 14;
 
 const calendarSchema = z.object({
   events: z.array(
@@ -91,11 +101,31 @@ export function parseFrbTime(value: string): { hour: number; minute: number } | 
 
 export interface FrbParseResult {
   speeches: NormalizedSpeech[];
-  /** Speech-type entries that could not be used (no exact time, multi-day, unparseable title). */
-  skipped: { title: string; reason: string }[];
+  /**
+   * Speech-type entries that could not be used (no exact time, multi-day, unparseable title).
+   * title は200文字まで。date = 現地(ニューヨーク)の日付 YYYY-MM-DD(読めたときだけ)。
+   */
+  skipped: { title: string; reason: string; date?: string }[];
 }
 
-export function parseFrbCalendar(body: unknown): FrbParseResult {
+/** "2026-10", "18" → "2026-10-18"(読めなければ null)。 */
+function localDate(month: string | undefined, days: string | undefined): string | null {
+  const m = /^(\d{4})-(\d{2})$/.exec(month ?? '');
+  const d = (days ?? '').trim();
+  if (!m || !/^\d{1,2}$/.test(d)) return null;
+  return `${m[1]}-${m[2]}-${d.padStart(2, '0')}`;
+}
+
+/** その現地の日付が、取り込みの期間(now − pastDays)より確実に前に終わっているか(ニューヨークの時差の分の余裕を見る)。 */
+function endsBeforeWindow(date: string, now: Date, pastDays: number): boolean {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  const endOfLocalDayUtc = Date.UTC(y, m - 1, d + 1) + 5 * 3_600_000; // EST(UTC−5)の 24:00 = 翌日 05:00Z
+  return endOfLocalDayUtc <= now.getTime() - pastDays * 86_400_000;
+}
+
+export function parseFrbCalendar(body: unknown, options: { now?: Date; pastDays?: number } = {}): FrbParseResult {
+  const now = options.now ?? new Date();
+  const pastDays = options.pastDays ?? FRB_INGEST_PAST_DAYS;
   const parsed = calendarSchema.parse(body);
   const speeches: NormalizedSpeech[] = [];
   const skipped: FrbParseResult['skipped'] = [];
@@ -103,9 +133,13 @@ export function parseFrbCalendar(body: unknown): FrbParseResult {
     const title = decodeEntities(event.title ?? '').trim();
     const pressConference = event.type === 'FOMC' && FOMC_PRESS_CONFERENCE_TITLE.test(title);
     if (!pressConference && (!event.type || !SPEECH_TYPES.has(event.type))) continue;
+    const date = localDate(event.month, event.days);
+    const skip = (reason: string) =>
+      skipped.push({ title: title.slice(0, FRB_SKIP_TITLE_MAX), reason, ...(date ? { date } : {}) });
     const split = pressConference ? null : /^(.*?)\s*[-–—]{1,2}\s*(.+)$/.exec(title);
     if (!pressConference && !split) {
-      skipped.push({ title, reason: 'TITLE_UNPARSEABLE' });
+      // R-2: 取り込みの期間より古い項目は、題名が読めなくても「期間の外」(取りこぼしではない)
+      skip(date && endsBeforeWindow(date, now, pastDays) ? 'OUTSIDE_WINDOW' : 'TITLE_UNPARSEABLE');
       continue;
     }
     const kindLabel = pressConference ? 'press conference' : split![1]!.trim();
@@ -114,26 +148,26 @@ export function parseFrbCalendar(body: unknown): FrbParseResult {
     const day = /^\d{1,2}$/.test((event.days ?? '').trim()) ? Number(event.days) : null;
     const time = parseFrbTime(event.time ?? '');
     if (!month || day === null) {
-      skipped.push({ title, reason: 'DATE_NOT_SINGLE_DAY' });
+      skip('DATE_NOT_SINGLE_DAY');
       continue;
     }
     if (!time) {
-      skipped.push({ title, reason: 'TIME_MISSING' });
+      skip('TIME_MISSING');
       continue;
     }
     const startsAt = zonedWallTimeToUtc(Number(month[1]), Number(month[2]), day, time.hour, time.minute, FRB_TIME_ZONE);
     if (!startsAt) {
-      skipped.push({ title, reason: 'TIME_NONEXISTENT' });
+      skip('TIME_NONEXISTENT');
       continue;
     }
     const kind: SpeechKind = pressConference ? 'PRESS_CONFERENCE' : kindOf(kindLabel);
-    const date = `${month[1]}-${month[2]}-${String(day).padStart(2, '0')}`;
+    const ymd = `${month[1]}-${month[2]}-${String(day).padStart(2, '0')}`;
     const hhmm = `${String(time.hour).padStart(2, '0')}${String(time.minute).padStart(2, '0')}`;
     const slug = normalizeSpeakerName(speakerName).replace(/ /g, '-');
     const topic = pressConference ? 'FOMC' : decodeEntities(event.description ?? '').trim();
     speeches.push({
       provider: FRB_PROVIDER,
-      providerEventId: `${date}_${hhmm}_${slug}_${kind.toLowerCase()}`,
+      providerEventId: `${ymd}_${hhmm}_${slug}_${kind.toLowerCase()}`,
       speakerName,
       organization: 'FRB',
       kind,
@@ -144,6 +178,17 @@ export function parseFrbCalendar(body: unknown): FrbParseResult {
     });
   }
   return { speeches, skipped };
+}
+
+/** 記録に残す件数の上限(R-1)。 */
+export const FRB_SKIP_LOG_LIMIT = 20;
+
+/**
+ * ingestion_logs.details.feed_skipped に残す FRB の読めない項目(R-1)。期間の外(OUTSIDE_WINDOW)は残さない
+ * (取りこぼしではないため)。最大 FRB_SKIP_LOG_LIMIT 件。中身は題名(200文字まで)・理由・日付だけ。
+ */
+export function frbSkipLogEntries(skipped: FrbParseResult['skipped']): FrbParseResult['skipped'] {
+  return skipped.filter((item) => item.reason !== 'OUTSIDE_WINDOW').slice(0, FRB_SKIP_LOG_LIMIT);
 }
 
 export class FrbCalendarAdapter implements SpeechScheduleProvider {
