@@ -1,5 +1,12 @@
 import SwiftUI
 
+/// `HomeView.pairsCard`の通貨ペア行で、通貨ペア名の長さに関わらず価格
+/// ブロックの開始位置を行をまたいで揃えるためのカスタム水平アラインメント
+/// (詳細は`HomeView.PriceColumnAlignment`のコメント参照)。
+extension HorizontalAlignment {
+    fileprivate static let priceColumnStart = HorizontalAlignment(HomeView.PriceColumnAlignment.self)
+}
+
 /// SCR-004 ホーム画面。Real `GET /home` data.
 ///
 /// HQ "V5 Pixel Frontend" integration (2026-09-24): visual content is HQ's
@@ -919,6 +926,24 @@ struct HomeView: View {
 
     // MARK: - 通貨ペアカード
 
+    /// HQ再指摘(2026-10-29、2回目)「1.0821と155.42がそろってない」の根本
+    /// 修正用。シンボル/通貨ペア名の列を`.frame(width: 54)`で固定幅に
+    /// しても、`NotoText.text`(`Font.custom(_, fixedSize:)`)がその幅制約
+    /// (`.minimumScaleFactor`含む)を無視して自然な文字列幅のまま描画して
+    /// しまう(実機キャプチャをpx単位で比較し、`width`修正の前後で該当
+    /// 領域が1pxも変化していないことを確認済み)ため、通貨ペア名が長い行
+    /// (「ユーロ/米ドル」)ほど実際の描画幅が広がり、その分だけ直後の価格
+    /// ブロックが右にずれていた。幅を制約する方式では直らないため、代わりに
+    /// SwiftUI標準の`alignmentGuide`で「価格ブロックの開始位置」を行を
+    /// またいで直接揃える(Appleの定番「列を揃える」パターン)。各行の
+    /// `leading`の実際の幅に関わらず、`priceColumnStart`を指定した位置が
+    /// 全行で同じx座標になるようSwiftUIが行ごとに水平オフセットを調整する。
+    fileprivate struct PriceColumnAlignment: AlignmentID {
+        static func defaultValue(in context: ViewDimensions) -> CGFloat {
+            context[.leading]
+        }
+    }
+
     @ViewBuilder private func pairsCard(_ pairs: [FXPairUI]) -> some View {
         cardShell(height: Self.pairsCardHeight) {
             cardHeaderRow(title: "通貨ペア", height: Self.pairsHeaderHeight) {
@@ -933,14 +958,22 @@ struct HomeView: View {
                     headerLink("すべて見る")
                 }
             }
-            ForEach(Array(pairs.enumerated()), id: \.element.id) { idx, pair in
-                if idx > 0 { Divider().overlay(Self.cardBorderColor) }
-                // HQ指示(2026-10-03、画面構成全面更新)「Homeの通貨ペアカード
-                // → 現時点では遷移なし」: 旧`.chartAnalysis`(削除済み)への
-                // 遷移を外し、表示のみの行にした。通貨ペアそのものの詳細画面は
-                // 今回追加しない方針(SCR-026ホーム通貨ペア編集は表示する通貨
-                // ペアを選ぶ設定画面であり、通貨ペア詳細画面ではない)。
-                pairRow(pair)
+            // ヘッダー行(上)は通常どおり`cardShell`の`.leading`基準のまま
+            // 据え置きたいので、価格列を揃えるための`HorizontalAlignment
+            // .priceColumnStart`はこの内側の`VStack`だけに適用する(外側の
+            // `cardShell`のVStackにまで適用すると、ヘッダーもこの揃え位置に
+            // 引っ張られてズレてしまう)。
+            VStack(alignment: .priceColumnStart, spacing: 0) {
+                ForEach(Array(pairs.enumerated()), id: \.element.id) { idx, pair in
+                    if idx > 0 { Divider().overlay(Self.cardBorderColor) }
+                    // HQ指示(2026-10-03、画面構成全面更新)「Homeの通貨ペア
+                    // カード → 現時点では遷移なし」: 旧`.chartAnalysis`
+                    // (削除済み)への遷移を外し、表示のみの行にした。通貨
+                    // ペアそのものの詳細画面は今回追加しない方針(SCR-026
+                    // ホーム通貨ペア編集は表示する通貨ペアを選ぶ設定画面で
+                    // あり、通貨ペア詳細画面ではない)。
+                    pairRow(pair)
+                }
             }
         }
     }
@@ -1035,21 +1068,29 @@ struct HomeView: View {
                     .frame(height: 10, alignment: .leading)
             }
             // HQ再指摘(2026-10-29)「1.0821と155.42がそろってない」: この
-            // VStackは`minWidth: 54`(下限のみ)になっていたため、通貨ペア名
+            // VStackが`minWidth: 54`(下限のみ)だったため、通貨ペア名
             // (`displayName`)が長い行(「ユーロ/米ドル」7文字)は54ptに
             // 収まらず自然な幅まで広がり、その分だけ直後の`priceText`全体が
-            // 右にずれていた(短い行「米ドル/円」5文字は54ptのまま)。
-            // `priceText`自体の整数部/小数部に分けた右揃え/左揃えのロジックは
-            // 正しいが、その手前の列の開始位置(x座標)が行ごとに違っていては
-            // 小数点が揃うはずがなかった。`minWidth`ではなく`width`(厳密な
-            // 固定値)に戻し、この列の開始位置を全行で揃えた。2026-10-06に
-            // `width`→`minWidth`へ変更した際の「米ドル/円が表示されない」
-            // 不具合は、実際には縦方向(各`Text`の行送り圧迫)が原因で、
-            // 直後に追加した`.frame(height:)`(1行目14・2行目10、上記)で
-            // 解決済み — `minWidth`への変更自体は不要だったと判明したため、
-            // 安全に`width`へ戻せる(`.lineLimit(1)` + `.minimumScaleFactor(0.8)`
-            // が既に横方向の安全弁として入っており、54ptに収まらない場合は
-            // 消えずに縮小表示される)。
+            // 右にずれる、という仮説で`minWidth`を`width`(厳密な固定値)に
+            // 戻したが、実機キャプチャで検証したところ全く効果が無かった
+            // (修正前後で価格部分のピクセルが1pxも変化しなかった)。
+            //
+            // 真因: `NotoText.text`は`Font.custom(_, fixedSize:)`
+            // (Dynamic Type非対応の固定サイズフォント)を使っており、この
+            // フォントを使う`Text`は`.frame(width:)`による幅の制約自体を
+            // (`minWidth`でも`width`でも)無視し、`.minimumScaleFactor`も
+            // 効かないまま常に文字列の自然な幅で描画されることが実機
+            // キャプチャの比較で判明した。つまりこの列は`width`指定の
+            // 値に関わらずそもそも行ごとに幅が違っていた。
+            //
+            // 対応: 幅を揃えようとするのをやめ、代わりにSwiftUI標準の
+            // `alignmentGuide`で`priceText`の開始位置そのものを行をまたいで
+            // 直接揃える(`HomeView.PriceColumnAlignment`参照)。この列の
+            // 実際の幅が行ごとに違っていても影響を受けない。`.frame(width:
+            // 54, alignment: .leading)`自体は実質ノーオペだが、意図を示す
+            // ドキュメントとして残す(`.lineLimit(1)` + `.minimumScaleFactor
+            // (0.8)`も、たとえ今は効いていなくても将来`NotoText`側の制限が
+            // 解消された時の安全弁として残す)。
             .frame(width: 54, alignment: .leading)
             // HQ再指摘(2026-10-05、6回目)「155.42のサイズを0.5だけ大きく
             // して、もう少し右に寄せて」: 9.5→10に拡大し、列内の配置を
@@ -1068,8 +1109,12 @@ struct HomeView: View {
             // (右揃えは文字列の末尾を揃えるだけで、小数点の位置は揃わない)。
             // 価格を小数点で整数部(「.」含む)と小数部に分け、整数部側は
             // 右揃え・小数部側は左揃えの別々の固定幅枠に収めることで、
-            // 整数部の桁数に関わらず小数点の位置そのものを行ごとに揃えた。
+            // 整数部の桁数に関わらず小数点の位置そのものを行ごとに揃えた
+            // (行内での相対位置の話。行をまたいだ揃え方は直前のコメント
+            // 参照 — この`priceText`の開始位置自体を`alignmentGuide`で
+            // `pairsCard`の`VStack(alignment: .priceColumnStart)`に揃える)。
             priceText(pair.price)
+                .alignmentGuide(.priceColumnStart) { d in d[.leading] }
             // HQ再指摘(2026-10-05、5回目)「+0.25%▲>は右に寄せて」:
             // 固定幅の列を並べただけだと行の合計幅がカード幅より短くなり、
             // 左詰め(`cardShell`のVStackが`alignment: .leading`)のため
