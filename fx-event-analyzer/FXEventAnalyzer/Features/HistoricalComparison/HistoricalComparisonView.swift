@@ -380,10 +380,21 @@ struct HistoricalComparisonView: View {
                     // 余白の箱があるように見えていた。行と同じ左揃え+
                     // 同じ左パディングに揃えた。
                     .padding(.leading, 4)
-                    .frame(width: columns.date, height: 40, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                // HQ指摘(2026-10-29)「タブ部分の縦線がバラバラ」: 固定幅の
+                // `.frame(width:)`をボタンのラベル(内側)に付けていたため、
+                // `Button`自体の実際のレイアウト上の幅がラベルの意図した
+                // 幅と微妙にずれ(ボタンのタップ領域確保などの影響)、直後の
+                // `landscapeDivider`の位置が`landscapeGroupHeaderRow`側の
+                // 縦線(`Color.clear.frame(width: columns.date)`基準)と
+                // 1px未満だけずれて二重線に見えていた。固定幅はラベルでは
+                // なくボタン自体(外側)に付け、ラベル側は`maxWidth: .infinity`
+                // で内側を埋めるだけにすることで、他の行の`columns.date`幅の
+                // 要素と全く同じ幅計算になるようにした。
+                .frame(width: columns.date, height: 40)
                 .accessibilityLabel(newestFirst ? "日時 新しい順" : "日時 古い順")
                 landscapeDivider
                 landscapeHeaderCell("結果", "(実績)", width: columns.value)
@@ -396,9 +407,9 @@ struct HistoricalComparisonView: View {
                     landscapeHeaderCell("前回", "(前回値)", width: columns.value)
                 }
                 landscapeDivider
-                landscapeHeaderCell("1分", "(pips)", width: columns.pips, trailing: true)
-                landscapeHeaderCell("5分", "(pips)", width: columns.pips, trailing: true)
-                landscapeHeaderCell("15分", "(pips)", width: columns.pips, trailing: true)
+                landscapeHeaderCell("1分", "(pips)", width: columns.pips)
+                landscapeHeaderCell("5分", "(pips)", width: columns.pips)
+                landscapeHeaderCell("15分", "(pips)", width: columns.pips)
             }
             .frame(height: 40)
         }
@@ -415,19 +426,22 @@ struct HistoricalComparisonView: View {
     /// HQ指摘(2026-10-29)「表の中の位置がバラバラ」: pipsの見出し(「1分」等)は
     /// 中央揃えのままだったが、対応するデータ(`landscapePipsCell`)は符号を
     /// 右端で揃えるため右揃え+右パディング4になっており、見出しとデータの
-    /// 横位置がずれていた。`trailing`で同じ右揃え+右パディングに切り替え
-    /// られるようにし、pipsの見出しに適用した(結果/予想/前回は従来どおり
-    /// 中央揃えのまま、`landscapeValueCell`と揃っている)。
-    private func landscapeHeaderCell(_ title: String, _ subtitle: String, width: CGFloat, trailing: Bool = false) -> some View {
-        VStack(alignment: trailing ? .trailing : .center, spacing: 2) {
+    /// 横位置がずれていた。一度は見出し側を右揃えに合わせたが、HQ指摘
+    /// (2026-10-29、再指摘)「1分5分15分の部分が数字ともに右に寄りすぎて
+    /// いておかしい」: pips列は幅に対して数字自体が短いため、右揃えだと
+    /// 見出し・データとも列の右端に寄りすぎて列内の左側に不自然な余白が
+    /// 残る見た目になっていた。右揃えではなく、結果/予想/前回と同じ中央
+    /// 揃えに統一する方向で解決した(`landscapePipsCell`側も中央揃えに
+    /// 変更、右パディングを撤廃)。
+    private func landscapeHeaderCell(_ title: String, _ subtitle: String, width: CGFloat) -> some View {
+        VStack(spacing: 2) {
             NotoText.text(title, size: 13).foregroundStyle(.white)
             NotoText.text(subtitle, size: 9)
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
-        .frame(width: width, height: 40, alignment: trailing ? .trailing : .center)
-        .padding(.trailing, trailing ? 4 : 0)
+        .frame(width: width, height: 40)
     }
 
     private func landscapeTableRow(_ event: ComparisonEventSummary, unit: String?, showSecondary: Bool, columns: LandscapeColumns) -> some View {
@@ -472,6 +486,11 @@ struct HistoricalComparisonView: View {
             .frame(width: width)
     }
 
+    /// HQ指摘(2026-10-29)「1分5分15分の部分が数字ともに右に寄りすぎて
+    /// いておかしい」: 右揃え+右パディング4だったため、見出し
+    /// (`landscapeHeaderCell`)も右揃えに合わせた直後に、列の右端へ寄り
+    /// すぎて不自然という指摘を受けた。結果/予想/前回(`landscapeValueCell`)
+    /// と同じ中央揃えに変更した。
     private func landscapePipsCell(_ pips: Double?, width: CGFloat) -> some View {
         Text(Self.pipsText(pips))
             .font(.system(size: 13, weight: .medium))
@@ -479,8 +498,7 @@ struct HistoricalComparisonView: View {
             .foregroundStyle(pips.map { $0 >= 0 ? Self.plusColor : Self.minusColor } ?? SettingsCardStyle.subtitleColor)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
-            .padding(.trailing, 4)
-            .frame(width: width, alignment: .trailing)
+            .frame(width: width)
     }
 
     /// 副指標(api-design v1.35、HQ指示2026-10-25「前年の結果予想前回、前月の
