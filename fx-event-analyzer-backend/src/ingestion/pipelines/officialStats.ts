@@ -10,12 +10,21 @@ import type { OfficialStatsProvider } from '../providers.js';
 import type { JobCounters } from '../runner.js';
 import type { IngestionStore } from '../store.js';
 import { monthStart, shiftMonth } from '../time.js';
-import type { OfficialObservation } from '../types.js';
+import type { OfficialObservation, OfficialSource } from '../types.js';
 import { createOfficialResolver, observationWindow, type OfficialValueResolver } from '../verification/official.js';
 
 export interface OfficialProviders {
   FRED?: OfficialStatsProvider;
   BLS?: OfficialStatsProvider;
+}
+
+/**
+ * The provider for a mapping's official source. Only FRED / BLS — the sources official_observations
+ * stores (its check constraint). EUROSTAT is read live by its own schedule path only
+ * (pipelines/eurostatCalendar.ts) and never goes through ingest:official.
+ */
+function providerFor(providers: OfficialProviders, source: OfficialSource): OfficialStatsProvider | undefined {
+  return source === 'FRED' || source === 'BLS' ? providers[source] : undefined;
 }
 
 /** Unique official series referenced by the mappings, limited to providers that are configured. */
@@ -26,7 +35,7 @@ export function officialSeriesToFetch(
   const seen = new Map<string, OfficialSeriesRef>();
   for (const mapping of mappings) {
     for (const ref of mapping.official) {
-      if (providers[ref.source]) seen.set(`${ref.source}:${ref.seriesId}`, ref);
+      if (providerFor(providers, ref.source)) seen.set(`${ref.source}:${ref.seriesId}`, ref);
     }
   }
   return [...seen.values()];
@@ -46,7 +55,7 @@ export async function ingestOfficialObservations(
   const currentMonth = today.slice(0, 7);
   const start = monthStart(shiftMonth(currentMonth, -INGESTION_SETTINGS.officialLookbackMonths));
   for (const ref of officialSeriesToFetch(deps.providers, deps.mappings)) {
-    const provider = deps.providers[ref.source];
+    const provider = providerFor(deps.providers, ref.source);
     if (!provider) continue;
     try {
       const observations = await provider.fetchObservations({
@@ -57,15 +66,21 @@ export async function ingestOfficialObservations(
       });
       counters.fetched += observations.length;
       const stored = await deps.store.upsertOfficialObservations(
-        observations.map((observation) => ({
-          source: observation.source,
-          series_id: observation.seriesId,
-          period_start: observation.periodStart,
-          as_of_date: observation.asOfDate,
-          value: observation.value,
-          release_status: observation.releaseStatus,
-          fetched_at: now.toISOString(),
-        })),
+        observations.flatMap((observation) =>
+          observation.source === 'EUROSTAT'
+            ? []
+            : [
+                {
+                  source: observation.source,
+                  series_id: observation.seriesId,
+                  period_start: observation.periodStart,
+                  as_of_date: observation.asOfDate,
+                  value: observation.value,
+                  release_status: observation.releaseStatus,
+                  fetched_at: now.toISOString(),
+                },
+              ],
+        ),
       );
       counters.success += stored;
     } catch (error) {
@@ -93,7 +108,7 @@ export function createLiveOfficialResolver(
 ): OfficialValueResolver {
   const cache = new Map<string, Promise<OfficialObservation[]>>();
   return createOfficialResolver((ref, period, asOfDate) => {
-    const provider = providers[ref.source];
+    const provider = providerFor(providers, ref.source);
     if (!provider) return Promise.resolve([]);
     const ageDays = (now().getTime() - Date.parse(`${asOfDate}T00:00:00Z`)) / 86_400_000;
     if (!provider.supportsPointInTime && ageDays > CURRENT_VINTAGE_MAX_AGE_DAYS) return Promise.resolve([]);

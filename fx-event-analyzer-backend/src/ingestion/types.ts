@@ -63,9 +63,12 @@ export interface NormalizedCalendarRelease {
   secondaryPrevious?: number | null;
 }
 
+/** 公式統計の取得元。EUROSTAT はユーロ圏の指標の取得元(HQ承認 2026-10-30「ユーロ圏経済指標 第1弾」)。 */
+export type OfficialSource = 'FRED' | 'BLS' | 'EUROSTAT';
+
 /** One observation of an official statistics series (②). */
 export interface OfficialObservation {
-  source: 'FRED' | 'BLS';
+  source: OfficialSource;
   seriesId: string;
   /** First day of the period, 'YYYY-MM-DD' (monthly: 'YYYY-MM-01'). */
   periodStart: string;

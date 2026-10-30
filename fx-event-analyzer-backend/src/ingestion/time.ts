@@ -71,6 +71,20 @@ export function shiftMonth(period: string, months: number): string {
   return `${year}-${String(month).padStart(2, '0')}`;
 }
 
+/**
+ * The period just before `period`, decided by the period's own form (HQ承認 2026-10-30「前回値は指標の
+ * 対象期間に基づいて取得する」): monthly 'YYYY-MM' → the month before, quarterly 'YYYY-Qn' → the quarter
+ * before. Anything else throws — a period the pipelines cannot read must never get a guessed "previous".
+ */
+export function previousReferencePeriod(period: string): string {
+  if (/^\d{4}-\d{2}$/.test(period)) return shiftMonth(period, -1);
+  const quarter = /^(\d{4})-Q([1-4])$/.exec(period);
+  if (!quarter) throw new Error(`Invalid reference period: ${period}`);
+  const year = Number(quarter[1]);
+  const q = Number(quarter[2]);
+  return q === 1 ? `${year - 1}-Q4` : `${year}-Q${q - 1}`;
+}
+
 /** 'YYYY-MM' → 'YYYY-MM-01'. */
 export function monthStart(period: string): string {
   return `${period}-01`;

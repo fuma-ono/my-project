@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { attributionForIndicator } from '../domain/attribution.js';
 import { chartWindow } from '../domain/chartWindow.js';
 import { ApiError } from '../errors/ApiError.js';
 import { FEATURE_CODES } from '../authorization/entitlements.js';
@@ -93,6 +94,8 @@ async function lockedEventDetail(app: FastifyInstance, event: EventRow, precisio
       revision_status: LOCKED_REVISION_STATUS,
       // v1.32 is_provisional: ロックされるのは過去の RELEASED だけなので常に false(応答の形を揃える)。
       is_provisional: false,
+      // v1.43: 出典と告知(Eurostat の指標だけ。domain/attribution.ts)。ロックしても出典は隠さない。
+      attribution: attributionForIndicator(event.indicator_code),
       ...LOCKED,
     },
     snapshot: snapshot ? nullFields(snapshot, RELEASE_VALUE_FIELDS) : null,
@@ -189,6 +192,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
         is_provisional: effectiveIsProvisional(event.is_provisional, event.release_datetime, new Date()),
         data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
         revision_status: resolveRevisionStatus(revisionCount),
+        // v1.43: 出典と告知(Eurostat の指標だけ。domain/attribution.ts)。
+        attribution: attributionForIndicator(event.indicator_code),
         ...accessFields(false, previousLocked),
       },
       snapshot: snapshot ?? null,

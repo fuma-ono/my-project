@@ -11,6 +11,8 @@ export interface EventRow {
   /** economic_events.is_provisional — 予定の日時がまだ公式に確定していない(暫定)。 */
   is_provisional: boolean;
   indicator_name: string;
+  /** economic_indicators.code(出典の判定、domain/attribution.ts attributionForIndicator)。 */
+  indicator_code: string;
   /** 一覧表示名(`economic_indicators.display_name`)。未登録はnull。 */
   indicator_display_name: string | null;
   country_code: string;
@@ -22,7 +24,7 @@ export async function getEventById(supabase: SupabaseClient, eventId: string): P
   const { data, error } = await supabase
     .from('economic_events')
     .select(
-      'id, indicator_id, release_datetime, release_datetime_precision, importance, status, data_status, is_provisional, economic_indicators!inner(name, display_name, country_code, currency_code, favorable_direction)',
+      'id, indicator_id, release_datetime, release_datetime_precision, importance, status, data_status, is_provisional, economic_indicators!inner(code, name, display_name, country_code, currency_code, favorable_direction)',
     )
     .eq('id', eventId)
     .maybeSingle();
@@ -30,6 +32,7 @@ export async function getEventById(supabase: SupabaseClient, eventId: string): P
   if (!data) return null;
 
   const indicator = data.economic_indicators as unknown as {
+    code: string;
     name: string;
     display_name?: string | null;
     country_code: string;
@@ -47,6 +50,7 @@ export async function getEventById(supabase: SupabaseClient, eventId: string): P
     data_status: data.data_status,
     is_provisional: data.is_provisional === true,
     indicator_name: indicator.name,
+    indicator_code: indicator.code,
     indicator_display_name: indicator.display_name ?? null,
     country_code: indicator.country_code,
     currency_code: indicator.currency_code,

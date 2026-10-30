@@ -74,7 +74,11 @@ export function validateRelease(
   };
 
   if (release.releaseAtPrecision !== 'EXACT') {
-    issues.add('MISSING_EXACT_TIME');
+    // HQ判断(2026-10-30): an indicator whose agency time is approximate by design
+    // (mapping.release.precision) is not held for it — it is stored as APPROXIMATE.
+    const expectedApproximate =
+      mapping.release.precision === 'APPROXIMATE' && release.releaseAtPrecision === 'APPROXIMATE';
+    if (!expectedApproximate) issues.add('MISSING_EXACT_TIME');
   } else if (!mapping.release.localTimes.includes(localReleaseTime(release.releaseAt, mapping.release.timeZone))) {
     issues.add('RELEASE_TIME_UNEXPECTED');
   }

@@ -25,7 +25,7 @@ import {
 } from '../mappings/indicators.js';
 import type { JobCounters } from '../runner.js';
 import type { IndicatorRef, IngestionStore, StagedValue, StoredEvent, StoredSnapshot } from '../store.js';
-import { localDate, shiftMonth } from '../time.js';
+import { localDate, previousReferencePeriod } from '../time.js';
 import type { NormalizedCalendarRelease, ReleaseDatetimePrecision } from '../types.js';
 import {
   findDuplicateReleases,
@@ -74,10 +74,12 @@ async function upsertSchedule(
   const existing = await store.findEventByProviderId(release.provider, release.providerEventId);
   if (!existing) {
     // A time we cannot confirm is never stored as EXACT: 1-minute reactions
-    // are excluded for APPROXIMATE (dataQuality.availableTimeframes).
+    // are excluded for APPROXIMATE (dataQuality.availableTimeframes). With no
+    // schedule issue the release's own precision is kept: EXACT, or APPROXIMATE
+    // for an indicator whose mapping says its time is approximate (validateRelease).
     const precision: ReleaseDatetimePrecision =
       scheduleIssues.length === 0
-        ? 'EXACT'
+        ? release.releaseAtPrecision
         : release.releaseAtPrecision === 'EXACT'
           ? 'APPROXIMATE'
           : release.releaseAtPrecision;
@@ -100,7 +102,7 @@ async function upsertSchedule(
   if (existing.status === 'SCHEDULED' && !sameInstant(existing.release_datetime, release.releaseAt)) {
     if (scheduleIssues.length === 0) {
       patch.release_datetime = release.releaseAt;
-      patch.release_datetime_precision = 'EXACT';
+      patch.release_datetime_precision = release.releaseAtPrecision;
     } else {
       counters.note('schedule_change_ignored', {
         provider_event_id: release.providerEventId,
@@ -370,7 +372,7 @@ async function processRevisions(
       field: 'PREVIOUS',
       oldValue: snapshot.previous,
       newValue: values.revisedPrevious,
-      period: release.referencePeriod === null ? null : shiftMonth(release.referencePeriod, -1),
+      period: release.referencePeriod === null ? null : previousReferencePeriod(release.referencePeriod),
     });
   }
   if (candidates.length === 0) return;

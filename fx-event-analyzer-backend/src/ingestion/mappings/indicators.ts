@@ -13,14 +13,15 @@
  * - Official series ids / transforms were checked against FRED/BLS
  *   (data-sources.md §4 lists the evidence). FRED is NOT used as an official
  *   source: its API terms forbid storing FRED content (HQ判断 2026-10-16,
- *   data-sources.md §11, §13). Official values come from BLS only.
+ *   data-sources.md §11, §13). Official values come from BLS only — and,
+ *   for the euro-area indicators, from Eurostat (HQ承認 2026-10-30).
  */
-import type { MappedUnit, SeasonalAdjustment, ValueKind } from '../types.js';
+import type { MappedUnit, OfficialSource, SeasonalAdjustment, ValueKind } from '../types.js';
 
 export type OfficialTransform = 'LEVEL' | 'YOY_PCT' | 'MOM_PCT' | 'DIFF';
 
 export interface OfficialSeriesRef {
-  source: 'FRED' | 'BLS';
+  source: OfficialSource;
   seriesId: string;
   /** How to turn the series' observations into the comparable value. */
   transform: OfficialTransform;
@@ -39,8 +40,14 @@ export interface IndicatorMapping {
   expectedRange: { min: number; max: number };
   /** |actual − previous| above this → OUTLIER_VS_PREVIOUS (PENDING_REVIEW). Same unit as the value. */
   maxAbsChangeFromPrevious: number;
-  /** Scheduled local release time; a provider time that differs → RELEASE_TIME_UNEXPECTED. */
-  release: { timeZone: string; localTimes: readonly string[] };
+  /**
+   * Scheduled local release time; a provider time that differs → RELEASE_TIME_UNEXPECTED.
+   * `precision: 'APPROXIMATE'`: the agency's time of day is not confirmed from an official
+   * statement (HQ判断 2026-10-30「Eurostat経済指標 第1弾」2: Eurostat の 11:00). Releases of
+   * this indicator are then stored as APPROXIMATE (1-minute reactions excluded) and an
+   * APPROXIMATE release is not held as MISSING_EXACT_TIME. Omitted = the time is exact.
+   */
+  release: { timeZone: string; localTimes: readonly string[]; precision?: 'APPROXIMATE' };
   /** Official agency shown as event_snapshots.source / source_url. */
   agency: { name: string; url: string };
   /** Keys per paid calendar provider. */
@@ -55,6 +62,11 @@ export interface IndicatorMapping {
      * US_CORE_CPI・US_UNEMPLOYMENT_RATE・US_AVG_HOURLY_EARNINGS も)。
      */
     bls_schedule?: { country: string; event: string };
+    /**
+     * HQ承認(2026-10-30「ユーロ圏経済指標 第1弾」): Eurostat の公表日程(mappings/eurostatSchedule.ts)
+     * と Eurostat 自身の値から economic_events を作る指標だけが持つ(EU_HICP・EU_UNEMPLOYMENT_RATE)。
+     */
+    eurostat_schedule?: { country: string; event: string };
   };
   /** Official series used to verify the actual, in priority order (first available wins). */
   official: readonly OfficialSeriesRef[];
@@ -93,6 +105,23 @@ export interface IndicatorMapping {
 const BLS = { name: 'U.S. Bureau of Labor Statistics', url: 'https://www.bls.gov/' };
 const CENSUS = { name: 'U.S. Census Bureau', url: 'https://www.census.gov/retail/' };
 const US_RELEASE_0830 = { timeZone: 'America/New_York', localTimes: ['08:30'] } as const;
+const EUROSTAT = { name: 'Eurostat', url: 'https://ec.europa.eu/eurostat' };
+/**
+ * Eurostat の公表日程はルクセンブルク時間(release calendar: "This calendar uses Europe/Luxembourg
+ * time zone (CET/CEST)")。11:00 は FAQ の "Data ... are updated twice a day at 11:00 and 23:00" から
+ * で、ユーロ指標の公表時刻を明記した公式の文は見つかっていない(2026-10-30) → APPROXIMATE(HQ判断)。
+ */
+const EUROSTAT_RELEASE_1100 = {
+  timeZone: 'Europe/Luxembourg',
+  localTimes: ['11:00'],
+  precision: 'APPROXIMATE',
+} as const;
+/** Eurostat の系列 = データセットと次元の値(adapters/eurostat.ts の seriesId の形)。地域は EA21(2026年から)。 */
+export const EUROSTAT_SERIES = {
+  HICP_FLASH_YOY: 'prc_hicp_fpd?coicop18=TOTAL&geo=EA21&release=FLS&unit=RCH_A',
+  HICP_FINAL_YOY: 'prc_hicp_fpd?coicop18=TOTAL&geo=EA21&release=FIN&unit=RCH_A',
+  UNEMPLOYMENT_RATE: 'une_rt_m?age=TOTAL&geo=EA21&s_adj=SA&sex=T&unit=PC_ACT',
+} as const;
 
 export const INDICATOR_MAPPINGS: readonly IndicatorMapping[] = [
   {
@@ -327,6 +356,49 @@ export const INDICATOR_MAPPINGS: readonly IndicatorMapping[] = [
     // (HQ判断 2026-10-16、data-sources.md 13章)。Census の API の利用条件を確認して足すまで照合元が無いので、
     // requireOfficialMatch: true のこの指標は公開されない(公式待ちのまま)。
     official: [],
+    officialTolerance: 0,
+    requireOfficialMatch: true,
+    allowMissingUnit: false,
+    referencePeriodLagMonths: 1,
+  },
+  {
+    // ユーロ圏 HICP(総合)の前年比、速報値(flash estimate)。Eurostat prc_hicp_fpd の release=FLS は
+    // 速報として公表した値のまま残る(確報 FIN とは別。例: 2026-07 は FLS 2.9・FIN 3.0)ので、過去の月も
+    // 当時の値で取り込める。前回値は前月の確報(FIN)— 速報の前に公表済み(eurostatSchedule.ts)。
+    // economic_indicators の行: migration 20261030000001。HQ承認 2026-10-30「ユーロ圏経済指標 第1弾」。
+    code: 'EU_HICP',
+    description: 'Euro area HICP (all items) YoY, flash estimate',
+    valueKind: 'YOY_PCT',
+    seasonalAdjustment: 'NSA',
+    unit: 'PERCENT',
+    decimals: 1,
+    expectedRange: { min: -5, max: 15 },
+    maxAbsChangeFromPrevious: 1.5,
+    release: EUROSTAT_RELEASE_1100,
+    agency: EUROSTAT,
+    providers: { eurostat_schedule: { country: 'EU', event: 'EU_HICP' } },
+    official: [{ source: 'EUROSTAT', seriesId: EUROSTAT_SERIES.HICP_FLASH_YOY, transform: 'LEVEL' }],
+    officialTolerance: 0,
+    requireOfficialMatch: true,
+    allowMissingUnit: false,
+    // 速報は対象月の月末〜翌月初(0〜1か月)。この経路は日程表に対象期間があるので使わない(有料カレンダー用)。
+    referencePeriodLagMonths: 1,
+  },
+  {
+    // ユーロ圏の失業率(季節調整済み、%)。une_rt_m は最新の値だけ(過去の版を残さない)ので、発表の直後に
+    // 取れた値だけを当時の値として扱う(eurostatSchedule.ts の LATEST_ONLY、HQ判断 2026-10-30 1)。
+    code: 'EU_UNEMPLOYMENT_RATE',
+    description: 'Euro area unemployment rate, SA',
+    valueKind: 'LEVEL',
+    seasonalAdjustment: 'SA',
+    unit: 'PERCENT',
+    decimals: 1,
+    expectedRange: { min: 2, max: 20 },
+    maxAbsChangeFromPrevious: 1.0,
+    release: EUROSTAT_RELEASE_1100,
+    agency: EUROSTAT,
+    providers: { eurostat_schedule: { country: 'EU', event: 'EU_UNEMPLOYMENT_RATE' } },
+    official: [{ source: 'EUROSTAT', seriesId: EUROSTAT_SERIES.UNEMPLOYMENT_RATE, transform: 'LEVEL' }],
     officialTolerance: 0,
     requireOfficialMatch: true,
     allowMissingUnit: false,

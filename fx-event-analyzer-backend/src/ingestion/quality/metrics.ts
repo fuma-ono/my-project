@@ -1256,6 +1256,7 @@ export interface StagedSample {
  */
 export const SELF_SOURCING_PROVIDER_AGENCY: Readonly<Record<string, string>> = {
   bls_schedule: 'BLS',
+  eurostat_schedule: 'EUROSTAT',
 };
 
 /** "BLS:CUUR0000SA0@2026-10-14" → "BLS". */

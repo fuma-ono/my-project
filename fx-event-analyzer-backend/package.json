@@ -19,6 +19,7 @@
     "jobs:evaluate-rate-alerts": "tsx src/jobs/evaluateRateAlerts.ts",
     "ingest:official": "tsx src/jobs/ingestOfficial.ts",
     "ingest:official:bls-calendar": "tsx src/jobs/ingestBlsCalendar.ts",
+    "ingest:official:eurostat-calendar": "tsx src/jobs/ingestEurostatCalendar.ts",
     "ingest:fomc-schedule": "tsx src/jobs/ingestFomcSchedule.ts",
     "ingest:speeches": "tsx src/jobs/ingestSpeeches.ts",
     "ingest:fx-prices": "tsx src/jobs/ingestFxPrices.ts",
