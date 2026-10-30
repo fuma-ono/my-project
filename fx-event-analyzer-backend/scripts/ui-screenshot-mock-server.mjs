@@ -943,7 +943,7 @@ const MOCK_FX_QUOTES = {
   AUDJPY: { price: 103.11, change: 0.27, change_percent: 0.26 },
   CADJPY: { price: 113.58, change: -0.09, change_percent: -0.08 },
 };
-const DEFAULT_HOME_FX_PAIR_SYMBOLS = ['USDJPY', 'EURUSD', 'USDCHF'];
+const DEFAULT_HOME_FX_PAIR_SYMBOLS = ['USDJPY', 'EURUSD', 'EURJPY'];
 
 /** GET /home major_fx: the saved settings.home.fx_pairs in that order, else
  * the default 3 (src/domain/homeFxPairs.ts). Unknown symbols are skipped. */
