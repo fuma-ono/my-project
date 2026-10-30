@@ -193,4 +193,73 @@ final class DiagnosticsStore: ObservableObject {
         persist()
         logger.log("[diagnostics] home ready to display")
     }
+
+    // MARK: - G. 通信の内訳(HQ指示 2026-10-21「通信遅延の詳細計測」)
+
+    /// この要求の通信の内訳を記録するかどうかを決め、記録する場合は枠を作る。
+    /// 記録するのは`LaunchDiagnostics.trackedAPIPaths`の、起動後1回目の要求だけ:
+    /// - `home`: 既存の判定と同じ(1回目の`/home`取得中 = `homeRequestCount == 1`)
+    /// - `calendar`・`speeches`: この起動でまだ記録していないとき
+    /// `false`を返した要求は、APIClientが今までと同じ経路で送る(計測しない)。
+    func beginAPIRequestDiagnostics(path: String) -> Bool {
+        guard LaunchDiagnostics.trackedAPIPaths.contains(path) else { return false }
+        if path == "home", !isRecordingFirstHomeRequest { return false }
+        var requests = current.apiRequests ?? [:]
+        guard requests[path] == nil else { return false }
+        requests[path] = APIRequestDiagnostics(path: path)
+        current.apiRequests = requests
+        persist()
+        return true
+    }
+
+    func recordAPIRequestAuthToken(path: String, ms: Int64) {
+        updateAPIRequest(path) { $0.authTokenMs = ms }
+    }
+
+    /// `statusCode`はHTTPステータスのみ(本文・ヘッダーは渡さないこと)。
+    func recordAPIRequestFinished(path: String, clientTotalMs: Int64, statusCode: Int?, succeeded: Bool) {
+        updateAPIRequest(path) {
+            $0.clientTotalMs = clientTotalMs
+            $0.statusCode = statusCode
+            $0.outcome = succeeded ? .success : .failure
+        }
+    }
+
+    /// URLSessionのメトリクスが届いたとき(通信の完了の前後どちらでもよい)。
+    func recordAPIRequestNetwork(path: String, _ network: NetworkTimingBreakdown) {
+        updateAPIRequest(path) { $0.network = network }
+        let reused: String
+        switch network.reusedConnection {
+        case .some(true): reused = "true"
+        case .some(false): reused = "false"
+        case .none: reused = "NA"
+        }
+        let fields: [String] = [
+            "path=" + path,
+            "total_ms=" + Self.logValue(network.taskTotalMs),
+            "queue_ms=" + Self.logValue(network.queueMs),
+            "dns_ms=" + Self.logValue(network.dnsMs),
+            "tcp_ms=" + Self.logValue(network.tcpMs),
+            "tls_ms=" + Self.logValue(network.tlsMs),
+            "send_ms=" + Self.logValue(network.requestSendMs),
+            "wait_ms=" + Self.logValue(network.waitMs),
+            "receive_ms=" + Self.logValue(network.responseReceiveMs),
+            "status=" + (network.statusCode.map(String.init) ?? "NA"),
+            "reused=" + reused,
+            "protocol=" + (network.networkProtocol ?? "NA"),
+            "redirects=" + String(network.redirectCount),
+        ]
+        // 値はパス・ミリ秒・ステータス・接続の種類だけ(秘匿情報を含まない)ので .public で出す。
+        let summary = fields.joined(separator: " ")
+        logger.log("[diagnostics] network \(summary, privacy: .public)")
+    }
+
+    private func updateAPIRequest(_ path: String, _ change: (inout APIRequestDiagnostics) -> Void) {
+        guard var request = current.apiRequests?[path] else { return }
+        change(&request)
+        current.apiRequests?[path] = request
+        persist()
+    }
+
+    private static func logValue(_ ms: Int64?) -> String { ms.map(String.init) ?? "NA" }
 }
