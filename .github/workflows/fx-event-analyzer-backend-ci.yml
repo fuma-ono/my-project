@@ -1,0 +1,141 @@
+name: FX Event Analyzer Backend — CI
+
+# Phase 2 instruction §17 CI requirement: install / lint / typecheck / unit
+# test / integration test / Supabase migration validation, reproducing the
+# full Supabase CLI -> local stack -> db reset -> migration -> seed ->
+# integration test path where possible. This replaces the earlier
+# migration-validation-only workflow now that a Backend framework (Node.js
+# + TypeScript + Fastify) has been decided and Steps 1-12 are implemented.
+#
+# Two jobs:
+#  - lint-typecheck-unit: no Docker needed, runs on every push/PR touching
+#    the Backend. Covers install/lint/typecheck/unit tests (pure logic +
+#    fake-boundary tests — see tests/README-equivalent comments in
+#    tests/helpers/fakeSupabaseClient.ts and eslint.config.js).
+#  - db-and-integration: starts the real local Supabase stack via the
+#    Supabase CLI (Postgres + GoTrue + PostgREST), validates every
+#    migration + seed.sql applies cleanly via `supabase db reset`, then
+#    runs tests/integration/**, which exercise the real Fastify app against
+#    that real stack (real JWTs via Supabase Auth sign-in, real RLS, real
+#    DB triggers) — see tests/integration/setup.ts for why.
+#
+# This does not touch fx-event-analyzer/ (iOS) and cannot break its CI
+# workflow (fx-event-analyzer-ios-build.yml).
+
+on:
+  push:
+    paths:
+      - "fx-event-analyzer-backend/**"
+      - ".github/workflows/fx-event-analyzer-backend-ci.yml"
+  pull_request:
+    paths:
+      - "fx-event-analyzer-backend/**"
+  workflow_dispatch: {}
+
+jobs:
+  lint-typecheck-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: fx-event-analyzer-backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: fx-event-analyzer-backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format
+
+      - name: Typecheck (src + tests)
+        run: npm run typecheck
+
+      - name: Unit tests (pure logic + fake-boundary tests only — no live Supabase stack required)
+        run: npx vitest run tests --exclude "tests/integration/**"
+
+  db-and-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: fx-event-analyzer-backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: fx-event-analyzer-backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v3
+        with:
+          version: latest
+
+      - name: Start local Supabase stack
+        # `supabase start` pulls ~10 container images the first time; give
+        # it real headroom, but fail loudly (with logs we can read, unlike
+        # a job that silently runs for hours) rather than hanging forever.
+        timeout-minutes: 12
+        run: supabase start
+
+      - name: Reset DB (re-applies every migration + seed.sql from scratch)
+        timeout-minutes: 5
+        run: supabase db reset
+
+      - name: Export local Supabase connection details for integration tests
+        # No JWT secret needed — src/auth/jwt.ts verifies against the
+        # project's own JWKS (SUPABASE_URL alone is enough).
+        run: |
+          eval "$(supabase status -o env)"
+          {
+            echo "SUPABASE_URL=http://127.0.0.1:54321"
+            echo "SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify the exported env vars are non-empty
+        # A silently-empty var here would make tests/integration/setup.ts's
+        # loadIntegrationEnv() return null and every integration test would
+        # SKIP rather than run — a false green. Fail loudly instead.
+        run: |
+          for name in SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is empty — 'supabase status -o env' output shape may have changed."
+              exit 1
+            fi
+          done
+
+      - name: Wait for GoTrue (Auth) to accept requests
+        # `supabase db reset` restarts containers as its last step; the very
+        # first tests/integration/setup.ts createTestUser() call landed
+        # while GoTrue was still coming back up on the first real CI run
+        # ("Database error creating new user"). Poll its health endpoint
+        # rather than trust a fixed sleep.
+        timeout-minutes: 2
+        run: |
+          until curl -sf "${SUPABASE_URL}/auth/v1/health" > /dev/null; do
+            echo "Waiting for GoTrue..."
+            sleep 1
+          done
+
+      - name: Integration tests (real Fastify app + real local Supabase stack)
+        run: npx vitest run tests/integration
+
+      - name: Stop Supabase stack
+        if: always()
+        run: supabase stop
