@@ -85,6 +85,18 @@ final class AppPreferences: ObservableObject {
         Self.format(date, pattern: display.timeFormat == "12H" ? "ah:mm" : "HH:mm", timeZone: timeZone)
     }
 
+    /// `timeString(_:)`と同じだが、`precision`が`.approximate`(Eurostat等、
+    /// HQ指示 2026-10-30「APPROXIMATEの時刻が正確な時刻と誤認されない表示」)
+    /// のときだけ「約」を前に付ける。`.exact`は`timeString(_:)`と完全に同じ
+    /// (接頭辞なし)。`.dateOnly`・`.unknown`・nilも既存どおり接頭辞なし(この
+    /// 2つは呼び出し側で時刻自体を出さない判断をしている場合が多く、ここでは
+    /// 挙動を変えない)。カレンダー・ホーム・イベント詳細で同じイベントの
+    /// 時刻表記が食い違わないよう、この1箇所だけに「約」を付ける判断を集約する。
+    func timeString(_ date: Date, precision: ReleaseDatetimePrecision?) -> String {
+        let base = timeString(date)
+        return precision == .approximate ? "約\(base)" : base
+    }
+
     /// 「（日本時間）」「（ニューヨーク時間）」。
     var timeZoneNote: String { "（\(Self.cityName(display.timezone))時間）" }
 

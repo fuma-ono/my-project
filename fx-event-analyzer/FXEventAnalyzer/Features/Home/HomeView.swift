@@ -773,7 +773,9 @@ struct HomeView: View {
             // 30→26に縮め、後続の国旗+内容のグループ全体を左に寄せた
             // (内部の間隔(`HStack(spacing: 5)`や`VStack`内の間隔)は
             // 変えていない)。
-            Text(AppPreferences.shared.timeString(event.releaseDatetime))
+            // HQ指示(2026-10-30)「APPROXIMATEの時刻が正確な時刻と誤認されない
+            // 表示」: Eurostat等、発表の正確な時刻が不明な指標は「約」を前置。
+            Text(AppPreferences.shared.timeString(event.releaseDatetime, precision: event.releaseDatetimePrecision))
                 .font(.system(size: 9, weight: .bold))
                 .tracking(-0.2)
                 .foregroundStyle(.white)

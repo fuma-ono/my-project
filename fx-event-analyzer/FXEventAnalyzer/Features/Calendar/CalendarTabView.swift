@@ -352,7 +352,11 @@ private struct CalendarDayList: View {
             // 名前と重要度の間の最小(2→0)・重要度の幅(32→30)を詰めて、名前の幅を約14pt広げた。
             HStack(spacing: 4) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(item.hasTime ? AppPreferences.shared.timeString(item.datetime) : "未定")
+                    // HQ指示(2026-10-30)「APPROXIMATEの時刻が正確な時刻と誤認
+                    // されない表示」: Eurostat等、発表の正確な時刻が不明な指標
+                    // (`datetimePrecision == .approximate`)は「約15:00」のように
+                    // 前置詞を付ける。既存のEXACT/日付のみ/不明の表示は変えない。
+                    Text(item.hasTime ? AppPreferences.shared.timeString(item.datetime, precision: item.datetimePrecision) : "未定")
                         .font(.system(size: 9, weight: .bold))
                         .monospacedDigit()
                         .foregroundStyle(.white)

@@ -309,6 +309,39 @@ final class DisplayChartSettingsV2Tests: XCTestCase {
     }
 }
 
+// MARK: - APPROXIMATEの時刻表示(HQ指示 2026-10-30「APPROXIMATEの時刻が
+// 正確な時刻と誤認されない表示」)
+
+@MainActor
+final class ApproximateTimeStringTests: XCTestCase {
+    private let date = Date(timeIntervalSince1970: 1_711_983_600) // 2024-04-02 00:00 JST
+
+    func testExactMatchesPlainTimeString() {
+        let preferences = AppPreferences.shared
+        XCTAssertEqual(
+            preferences.timeString(date, precision: .exact),
+            preferences.timeString(date),
+            "EXACTは接頭辞なしの既存表示と完全に同じでなければならない"
+        )
+    }
+
+    func testApproximatePrefixesWithJapaneseMark() {
+        let preferences = AppPreferences.shared
+        XCTAssertEqual(
+            preferences.timeString(date, precision: .approximate),
+            "約" + preferences.timeString(date)
+        )
+    }
+
+    func testDateOnlyAndUnknownAndNilDoNotAddAPrefix() {
+        let preferences = AppPreferences.shared
+        let plain = preferences.timeString(date)
+        XCTAssertEqual(preferences.timeString(date, precision: .dateOnly), plain)
+        XCTAssertEqual(preferences.timeString(date, precision: .unknown), plain)
+        XCTAssertEqual(preferences.timeString(date, precision: nil), plain)
+    }
+}
+
 @MainActor
 final class SettingsAutoSaveTests: XCTestCase {
     func testUpdateSavesAutomaticallyAndUpdatesPreferences() async throws {
