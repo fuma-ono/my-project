@@ -103,6 +103,24 @@ final class IndicatorsViewModel: ObservableObject {
         return Self.matchesSearch(indicator, query: searchText)
     }
 
+    /// HQ指示(2026-10-29)「雇用統計と検索したらNFPしか出ていないけど失業率
+    /// なども出すようにして」: 同じ発表(雇用統計=Employment Situation)で
+    /// まとめて公表される指標でも、指標名(`indicator.name`)自体にその発表名を
+    /// 含まない指標(米国失業率・米国平均時給、どちらも名前は「米国失業率」
+    /// 「米国平均時給」で「雇用統計」を含まない)は、検索語が発表名と一致しても
+    /// 従来マッチしなかった(米国雇用統計(非農業部門雇用者数)=NFPだけは名前に
+    /// 「雇用統計」を含むため、偶然マッチしていた)。`indicator.code`をキーに、
+    /// 同じ発表でまとめて出したい追加の検索語をここで補う。グループ分けは
+    /// バックエンドの`src/ingestion/mappings/indicators.ts`のコメント
+    /// (「Same release (Employment Situation) as US_NFP」等)に基づく実際の
+    /// 組み合わせ。CPI/コアCPI・PPI/コアPPIは指標名自体に「CPI」「PPI」を
+    /// 含み既に一緒に出るため、ここに追加する必要はない。
+    static let releaseGroupKeywords: [String: [String]] = [
+        "US_NFP": ["雇用統計"],
+        "US_UNEMPLOYMENT_RATE": ["雇用統計"],
+        "US_AVG_HOURLY_EARNINGS": ["雇用統計"],
+    ]
+
     /// 指標名・英語名・コード・国名・通貨で探す。「USD/JPY」「usdjpy」のような通貨ペアなら、
     /// そのどちらかの通貨の指標を出す。
     static func matchesSearch(_ indicator: IndicatorSummary, query: String) -> Bool {
@@ -113,10 +131,10 @@ final class IndicatorsViewModel: ObservableObject {
             let base = String(compact.prefix(3)), quote = String(compact.suffix(3))
             if indicator.currencyCode == base || indicator.currencyCode == quote { return true }
         }
-        let haystack = [
+        let haystack = ([
             indicator.name, indicator.nameEn ?? "", indicator.code, indicator.currencyCode,
             CountryFlag.japaneseName(forCountry: indicator.countryCode), indicator.countryCode,
-        ].joined(separator: " ").lowercased()
+        ] + (releaseGroupKeywords[indicator.code] ?? [])).joined(separator: " ").lowercased()
         return haystack.contains(keyword.lowercased())
     }
 

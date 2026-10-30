@@ -44,6 +44,29 @@ final class IndicatorsViewModelTests: XCTestCase {
         XCTAssertFalse(IndicatorsViewModel.matchesSearch(cpi, query: "日本"))
     }
 
+    /// HQ指示(2026-10-29)「雇用統計と検索したらNFPしか出ていないけど失業率
+    /// なども出すようにして」: 米国失業率・米国平均時給は指標名自体に
+    /// 「雇用統計」を含まないため、`releaseGroupKeywords`で補っていなければ
+    /// 一致しない。
+    func testSearchMatchesSameReleaseGroupSynonyms() {
+        func indicator(code: String, name: String) -> IndicatorSummary {
+            IndicatorSummary(
+                id: code, code: code, name: name, countryCode: "US", currencyCode: "USD",
+                importance: .high, description: nil, frequency: "MONTHLY", unit: "%", source: nil,
+                sourceUrl: nil, favorableDirection: .higherIsPositive
+            )
+        }
+        let nfp = indicator(code: "US_NFP", name: "米国雇用統計(非農業部門雇用者数)")
+        let unemploymentRate = indicator(code: "US_UNEMPLOYMENT_RATE", name: "米国失業率")
+        let avgHourlyEarnings = indicator(code: "US_AVG_HOURLY_EARNINGS", name: "米国平均時給")
+        for indicator in [nfp, unemploymentRate, avgHourlyEarnings] {
+            XCTAssertTrue(IndicatorsViewModel.matchesSearch(indicator, query: "雇用統計"))
+        }
+        // 無関係な指標はこのグループに含めない。
+        let coreCpi = indicator(code: "US_CORE_CPI", name: "米国コアCPI(食品・エネルギーを除く消費者物価指数)")
+        XCTAssertFalse(IndicatorsViewModel.matchesSearch(coreCpi, query: "雇用統計"))
+    }
+
     func testListNames() {
         XCTAssertEqual(IndicatorsView.listName("米国CPI(消費者物価指数)", countryCode: "US"), "消費者物価指数（CPI）")
         XCTAssertEqual(IndicatorsView.listName("米国雇用統計(非農業部門雇用者数)", countryCode: "US"), "非農業部門雇用者数（雇用統計）")
