@@ -362,15 +362,20 @@ struct MovementDetailView: View {
     /// 見つかった`analysisStatus`から理由を出し分ける(`MovementAnalysisText.
     /// summary`の`ready(_:)`と同じ優先順位)。どちらも無ければ「取得中」扱い。
     private func analysisUnavailableCard(reactions: [ReactionTimeframeEntry]) -> some View {
-        let status = reactions.first(where: { $0.timeframe == "1m" })?.analysisStatus
-            ?? reactions.first(where: { $0.timeframe == "5m" })?.analysisStatus
+        let entry = reactions.first(where: { $0.timeframe == "1m" }) ?? reactions.first(where: { $0.timeframe == "5m" })
+        let status = entry?.analysisStatus
         let message: String
-        switch status {
-        case .dataUnavailable:
+        switch (status, entry?.reactionState) {
+        case (.dataUnavailable, _):
             message = "値動きのデータが取得できなかったため、分析を表示できません。"
-        case .notAnalyzable:
+        case (.notAnalyzable, _):
             message = "この発表は値動きの分析の対象外です。"
-        case .ready, .dataPending, nil:
+        // api-design v1.44(HQ判断 2026-10-30): 行が無い理由が分かるときは「取得中」と出さない。
+        case (.dataPending, .notDue):
+            message = "値動きは発表後に表示します。"
+        case (.dataPending, .notCalculated):
+            message = "この発表の値動きは未計算です。"
+        case (.ready, _), (.dataPending, _), (nil, _):
             message = "値動きのデータを取得中です。しばらくしてから確認してください。"
         }
         return VStack(alignment: .leading, spacing: 3) {

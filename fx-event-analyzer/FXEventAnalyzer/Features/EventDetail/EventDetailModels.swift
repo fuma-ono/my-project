@@ -139,12 +139,26 @@ struct EventReactionSummary: Decodable, Equatable {
     /// 無料プランで隠された発表(api-design v1.33 §14.1)では固定値`NOT_ANALYZABLE`(以前は`null`)。
     /// 画面は`EventDetailEvent.isLocked`を先に見て、隠された発表ではこの値を表示に使わない。
     let analysisStatus: DataQualityStatus?
+    /// api-design v1.44。古いBackend・知らない値ではnil。
+    var reactionState: ReactionState? = nil
 
     enum CodingKeys: String, CodingKey {
         case timeframe
         case pips
         case changePercent = "change_percent"
         case analysisStatus = "analysis_status"
+        case reactionState = "reaction_state"
+    }
+}
+
+extension EventReactionSummary {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        timeframe = try container.decode(String.self, forKey: .timeframe)
+        pips = try container.decodeIfPresent(Double.self, forKey: .pips)
+        changePercent = try container.decodeIfPresent(Double.self, forKey: .changePercent)
+        analysisStatus = try container.decodeIfPresent(DataQualityStatus.self, forKey: .analysisStatus)
+        reactionState = ReactionState.decode(from: container, forKey: .reactionState)
     }
 }
 

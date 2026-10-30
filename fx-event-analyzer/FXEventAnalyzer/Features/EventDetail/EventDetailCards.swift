@@ -570,6 +570,13 @@ struct EventDetailCards: View {
                 .monospacedDigit()
                 .tracking(-0.3)
                 .foregroundStyle(pips >= 0 ? HomeView.changeUpColor : HomeView.changeDownColor)
+        } else if let label = reaction?.reactionState?.shortLabel, reaction?.analysisStatus == .dataPending {
+            // api-design v1.44(HQ判断 2026-10-30): 行が無い理由。「取得中」とは出さない。
+            Text(label)
+                .font(.system(size: 7, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
         } else {
             Text("--")
                 .font(.system(size: 10, weight: .semibold))

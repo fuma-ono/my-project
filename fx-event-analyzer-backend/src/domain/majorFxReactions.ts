@@ -5,6 +5,7 @@ import {
   type ReleaseDatetimePrecision,
   type Timeframe,
 } from './dataQuality.js';
+import { resolveReactionState, type ReactionState } from './reactionState.js';
 
 /**
  * SCR-007 イベント詳細「主要通貨ペアの値動き(pips)」— GET /events/{id}
@@ -103,6 +104,9 @@ export interface MajorFxReaction {
     pips: number | null;
     change_percent: number | null;
     analysis_status: ApiDataStatus;
+    /** v1.44(domain/reactionState.ts)。context を渡したときだけ付く。 */
+    reaction_state?: ReactionState | null;
+    retry_scheduled?: boolean | null;
   }[];
 }
 
@@ -116,6 +120,8 @@ export function buildMajorFxReactions(
   pairs: readonly SelectedMajorFxPair[],
   rows: readonly MajorFxReactionRow[],
   precision: ReleaseDatetimePrecision,
+  /** v1.44: 渡すと各時間枠に reaction_state / retry_scheduled を付ける(行が無い理由。analysis_status は変えない)。 */
+  reactionStateContext?: { eventStatus: string; releaseDatetime: string; now: Date },
 ): MajorFxReaction[] {
   const rowByKey = new Map(rows.map((row) => [`${row.fx_pair_id}|${row.timeframe}`, row]));
   return pairs.map((pair) => ({
@@ -132,6 +138,9 @@ export function buildMajorFxReactions(
           precision,
           (row?.data_status as ReactionDbStatus | undefined) ?? 'PENDING',
         ),
+        ...(reactionStateContext
+          ? resolveReactionState({ ...reactionStateContext, precision, timeframe, hasRow: row !== undefined })
+          : {}),
       };
     }),
   }));

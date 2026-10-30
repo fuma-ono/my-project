@@ -28,6 +28,8 @@ struct ReactionTimeframeEntry: Decodable, Equatable, Identifiable {
     let maxUpwardPips: Double?
     let maxDownwardPips: Double?
     let analysisStatus: DataQualityStatus
+    /// api-design v1.44。古いBackend・知らない値ではnil。
+    var reactionState: ReactionState? = nil
 
     var id: String { timeframe }
 
@@ -42,6 +44,24 @@ struct ReactionTimeframeEntry: Decodable, Equatable, Identifiable {
         case maxUpwardPips = "max_upward_pips"
         case maxDownwardPips = "max_downward_pips"
         case analysisStatus = "analysis_status"
+        case reactionState = "reaction_state"
+    }
+}
+
+extension ReactionTimeframeEntry {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        timeframe = try container.decode(String.self, forKey: .timeframe)
+        postReleasePrice = try container.decodeIfPresent(Double.self, forKey: .postReleasePrice)
+        movement = try container.decodeIfPresent(Double.self, forKey: .movement)
+        pips = try container.decodeIfPresent(Double.self, forKey: .pips)
+        changePercent = try container.decodeIfPresent(Double.self, forKey: .changePercent)
+        maxUpward = try container.decodeIfPresent(Double.self, forKey: .maxUpward)
+        maxDownward = try container.decodeIfPresent(Double.self, forKey: .maxDownward)
+        maxUpwardPips = try container.decodeIfPresent(Double.self, forKey: .maxUpwardPips)
+        maxDownwardPips = try container.decodeIfPresent(Double.self, forKey: .maxDownwardPips)
+        analysisStatus = try container.decode(DataQualityStatus.self, forKey: .analysisStatus)
+        reactionState = ReactionState.decode(from: container, forKey: .reactionState)
     }
 }
 

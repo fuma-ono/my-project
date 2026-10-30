@@ -36,6 +36,31 @@ enum DataQualityStatus: String, Decodable, Equatable {
     case notAnalyzable = "NOT_ANALYZABLE"
 }
 
+/// api-design v1.44(HQ判断 2026-10-30 P1-1 段階1): 相場反応の行が計算されたか。`analysis_status`とは別の任意項目で、
+/// 古いBackendでは無い(nil)。知らない値もnil(画面は今までどおり)にし、応答の読み込みを失敗させない。
+/// 表示: `notDue`「発表後に表示」、`notCalculated`「未計算」、`calculated`は`analysis_status`のとおり。
+/// `retry_scheduled`は「取得中」の根拠に使わない(HQ判断)ので、端末では読まない。
+enum ReactionState: String, Equatable {
+    case calculated = "CALCULATED"
+    case notDue = "NOT_DUE"
+    case notCalculated = "NOT_CALCULATED"
+
+    /// `reaction_state`を読む。無い・null・知らない値はnil。
+    static func decode<K: CodingKey>(from container: KeyedDecodingContainer<K>, forKey key: K) -> ReactionState? {
+        guard let raw = try? container.decodeIfPresent(String.self, forKey: key) else { return nil }
+        return ReactionState(rawValue: raw)
+    }
+
+    /// 表の小さな欄に出す短い文言(値が無いとき)。nil = 今までどおり「--」。
+    var shortLabel: String? {
+        switch self {
+        case .notDue: return "発表後に表示"
+        case .notCalculated: return "未計算"
+        case .calculated: return nil
+        }
+    }
+}
+
 /// api-design.md §9: null (never 0) when Forecast or Actual is missing;
 /// NEUTRAL when surprise == 0.
 enum SurpriseDirection: String, Decodable, Equatable {
