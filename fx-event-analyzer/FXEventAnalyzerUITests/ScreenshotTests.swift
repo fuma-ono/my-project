@@ -374,6 +374,12 @@ final class ScreenshotTests: XCTestCase {
         // なったため、グループ2(2つ目のまとまり)の各行のrowIndexを+1した
         // (1つ目6行+間隔8)。
         captureSettingsSubScreen(row: "起動診断", rowIndex: 5, waitFor: "起動シーケンス全体の時間", name: "19-LaunchDiagnostics")
+        // HQ指示(2026-10-30)「通信内訳カードの表示検証」: 同じ画面を下へスクロールして、
+        // 「通信の内訳」のカードの見出しと、カードの最後の注記(応答待ちの説明)を撮る。撮るだけで、画面・計測は変えない。
+        XCTAssertTrue(scrollUntilHittable(containing: "通信の内訳(起動後1回目の要求)"), "LaunchDiagnostics did not scroll to the network card")
+        capture("19c-LaunchDiagnostics-Network")
+        XCTAssertTrue(scrollUntilHittable(containing: "途中の中継(Renderの入り口など)での待ちの両方が入ります"), "LaunchDiagnostics did not scroll to the network note")
+        capture("19d-LaunchDiagnostics-NetworkNote")
         // SCR-020 ヘルプ・お問い合わせは2つ目のまとまりの先頭(1つ目6行+間隔8)。
         captureSettingsSubScreen(row: "ヘルプ・お問い合わせ", rowIndex: 6, extraOffset: 8, waitFor: "よくある質問", name: "20-Help")
         captureSettingsSubScreen(row: "利用規約", rowIndex: 7, extraOffset: 8, waitFor: "第1条", name: "21-Terms")
@@ -646,6 +652,18 @@ final class ScreenshotTests: XCTestCase {
             if app.keyboards.firstMatch.waitForExistence(timeout: 5) { break }
         }
         field.typeText(text)
+    }
+
+    /// `text`を含む文字が画面内に入る(isHittable)まで、上へゆっくりスワイプする(最大10回)。
+    /// ScrollView の中身は画面外でも`.exists`が true になるため、`isHittable`で判定する(04b と同じ)。
+    private func scrollUntilHittable(containing text: String, maxSwipes: Int = 10) -> Bool {
+        let element = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", text)).firstMatch
+        var swipes = 0
+        while !(element.exists && element.isHittable) && swipes < maxSwipes {
+            app.swipeUp(velocity: .slow)
+            swipes += 1
+        }
+        return element.exists && element.isHittable
     }
 
     private func capture(_ name: String, settle: TimeInterval = 0.6) {
