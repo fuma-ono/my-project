@@ -87,10 +87,18 @@ struct EventDetailCards: View {
                     // わずかにはみ出ただけでも2行版にフォールバックしていた。
                     // 1行版が縮小して収まれるようにし、2行への分割よりそちらを
                     // 優先させた。
-                    NotoText.text(combinedName, size: 11)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                        .foregroundStyle(.white)
+                    // HQ指示(2026-10-29)「指標名を押したら指標詳細画面に遷移
+                    // するようにして」: この画面(SCR-007)はイベント(1回の
+                    // 発表)の詳細で、指標そのものの説明・次回発表・過去比較は
+                    // SCR-006(指標詳細)にしかないため、名前をタップして
+                    // そちらへ進めるようにした。
+                    NavigationLink(value: AppRoute.indicatorDetail(id: event.indicatorId)) {
+                        NotoText.text(combinedName, size: 11)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
                     Spacer(minLength: 4)
                     let colors = HomeView.importanceBadgeColors(event.importance)
                     NotoText.text(event.importance.rawValue, size: 7)
