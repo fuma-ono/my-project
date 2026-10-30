@@ -16,6 +16,20 @@ enum NotoText {
         Text(verbatim: string).font(.custom(postScriptName, fixedSize: size * scale))
     }
 
+    /// `text(_:size:)`と同じNotoSansJP-SemiBoldだが、`fixedSize:`(Dynamic
+    /// Type非対応の固定サイズ)ではなく通常のスケーラブルな`size:`で
+    /// `Font.custom`を作る。HQ指摘(2026-10-29)「通貨ペアが全体的に左側に
+    /// 行ってて見切れてる」の根本原因調査で判明した制限への対応: `fixedSize:`
+    /// を使う`Text`は`.frame(width:)`による幅の制約自体を無視し、
+    /// `.minimumScaleFactor`も効かないまま常に文字列の自然な幅で描画されて
+    /// しまう(`HomeView.pairRow`の通貨ペア名で実機キャプチャのpx比較により
+    /// 確認済み — 幅指定を`minWidth`→`width`に変えても1pxも変化しなかった)。
+    /// `.frame(width:)` + `.minimumScaleFactor`で幅を制約する必要がある
+    /// 箇所ではこちらを使う。
+    static func scalableText(_ string: String, size: CGFloat) -> Text {
+        Text(verbatim: string).font(.custom(postScriptName, size: size * scale))
+    }
+
     /// 表示設定の`text_size`(SMALL / STANDARD / LARGE)→ 倍率。
     static func scale(forTextSize textSize: String) -> CGFloat {
         switch textSize {

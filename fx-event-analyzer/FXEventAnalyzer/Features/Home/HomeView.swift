@@ -935,11 +935,12 @@ struct HomeView: View {
             }
             ForEach(Array(pairs.enumerated()), id: \.element.id) { idx, pair in
                 if idx > 0 { Divider().overlay(Self.cardBorderColor) }
-                // HQ指示(2026-10-03、画面構成全面更新)「Homeの通貨ペアカード
-                // → 現時点では遷移なし」: 旧`.chartAnalysis`(削除済み)への
-                // 遷移を外し、表示のみの行にした。通貨ペアそのものの詳細画面は
-                // 今回追加しない方針(SCR-026ホーム通貨ペア編集は表示する通貨
-                // ペアを選ぶ設定画面であり、通貨ペア詳細画面ではない)。
+                // HQ指示(2026-10-03、画面構成全面更新)「Homeの通貨ペア
+                // カード → 現時点では遷移なし」: 旧`.chartAnalysis`
+                // (削除済み)への遷移を外し、表示のみの行にした。通貨
+                // ペアそのものの詳細画面は今回追加しない方針(SCR-026
+                // ホーム通貨ペア編集は表示する通貨ペアを選ぶ設定画面で
+                // あり、通貨ペア詳細画面ではない)。
                 pairRow(pair)
             }
         }
@@ -1024,17 +1025,43 @@ struct HomeView: View {
             // 行送りが収まる14/10に広げた(合計25で行の高さ33に収まる)。
             VStack(alignment: .leading, spacing: 1) {
                 // HQ指示(2026-10-06)「英字を含む文字もNotoTextで表示して」
-                NotoText.text(pair.displaySymbol, size: 9.5)
+                //
+                // HQ再指摘(2026-10-29、2回目/3回目)「1.0821と155.42が
+                // そろってない」「通貨ペアが全体的に左側に行ってて見切れてる」:
+                // この列を`.frame(width: 54)`で固定幅にしても、通貨ペア名
+                // (`displayName`)が長い行(「ユーロ/米ドル」)は幅に収まらず
+                // 自然な文字列幅のまま描画されていた。真因は`NotoText.text`
+                // が`Font.custom(_, fixedSize:)`(Dynamic Type非対応の固定
+                // サイズフォント)を使っており、このフォントの`Text`は
+                // `.frame(width:)`による幅の制約自体を無視し、
+                // `.minimumScaleFactor`も効かないまま常に文字列の自然な幅で
+                // 描画されてしまうことだった(実機キャプチャのpx比較で、
+                // `minWidth`→`width`に変えても1px も変化しないことまで
+                // 確認済み)。応急処置として`alignmentGuide`で価格ブロックの
+                // 開始位置だけを行をまたいで揃える方式を試みたが、この列の
+                // 実際の描画幅(揃っていない)自体は変わらないため、通貨ペア名が
+                // 長い行に引きずられてカード全体の必要幅が`cardWidth`を
+                // 超え、`cardShell`の`.frame(width: cardWidth, alignment:
+                // .top)`(水平方向は中央揃え)によりカード全体が左右にはみ出し、
+                // 左側が見切れる新たな不具合を生んでいた。
+                //
+                // 根本修正: `NotoText.text`(`fixedSize:`)の代わりに新設の
+                // `NotoText.scalableText`(通常のスケーラブルな`size:`、
+                // `NotoText.swift`参照)を使う。これなら`.frame(width:)`と
+                // `.minimumScaleFactor`が他の通常のテキストと同様に機能し、
+                // この列が実際に54ptへ収まるようになるため、
+                // `alignmentGuide`のような回避策も不要になった。
+                NotoText.scalableText(pair.displaySymbol, size: 9.5)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                     .frame(height: 14, alignment: .leading)
-                NotoText.text(pair.displayName, size: 7)
+                NotoText.scalableText(pair.displayName, size: 7)
                     .foregroundStyle(Self.linkBlue)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                     .frame(height: 10, alignment: .leading)
             }
-            .frame(minWidth: 54, alignment: .leading)
+            .frame(width: 54, alignment: .leading)
             // HQ再指摘(2026-10-05、6回目)「155.42のサイズを0.5だけ大きく
             // して、もう少し右に寄せて」: 9.5→10に拡大し、列内の配置を
             // 中央揃えから右(変化率側)揃えに変更。HQ再指摘(2026-10-06)
@@ -1042,17 +1069,18 @@ struct HomeView: View {
             // 広げ、右端をさらに右へ。
             // HQ指示(2026-10-08)「155.42ももう少し大きくして」: 10→11に拡大し、
             // 列幅も40→44に広げた(国旗の縮小とchevronの削除で横幅に余裕がある)。
-            // HQ再指摘(2026-10-28)「まだ157.91と0.8309の縦位置がそろってない」:
-            // 前回の修正(`FXPairUI.init(major:)`の`minimumFractionDigits`)は
-            // 同じペア同士(例: JPYペア同士)の間で末尾の0が消えて短くなる
-            // 問題だけを直したが、JPYペア(小数2桁)とそれ以外(小数4桁)は
-            // そもそも小数点以下の桁数自体が異なるため、文字列全体を
-            // この固定幅枠の中で右揃えにしても、整数部の桁数(JPYペアは
-            // 3桁、それ以外は1桁)が違えば小数点の位置は行ごとにズレたままだった
-            // (右揃えは文字列の末尾を揃えるだけで、小数点の位置は揃わない)。
-            // 価格を小数点で整数部(「.」含む)と小数部に分け、整数部側は
-            // 右揃え・小数部側は左揃えの別々の固定幅枠に収めることで、
-            // 整数部の桁数に関わらず小数点の位置そのものを行ごとに揃えた。
+            // HQ再指摘(2026-10-28、2026-10-29)「157.91と0.8309の縦位置が
+            // そろってない」「小数点の位置を揃えるのではなくて5文字表示
+            // だから揃えてと言っている」: 当初は小数点の位置で揃えようと
+            // 整数部/小数部を分ける構成を試みたが、HQの意図は「小数点と
+            // いう特定の位置」ではなく「どの通貨ペアも同じ文字数(5桁+
+            // 小数点)の値だから、単純に揃うはず」という点にあった。
+            // `priceText`側を単一`Text`+`.monospacedDigit()`+固定幅枠に
+            // 戻した。行をまたいだ揃え方は、手前の通貨ペア名の列
+            // (`NotoText.scalableText`、直前のコメント参照)が実際に54ptへ
+            // 収まるようになったことで、両列とも単純な固定幅`.frame(width:)`
+            // だけで全行そろうようになった(`alignmentGuide`のような特別な
+            // 仕掛けは不要)。
             priceText(pair.price)
             // HQ再指摘(2026-10-05、5回目)「+0.25%▲>は右に寄せて」:
             // 固定幅の列を並べただけだと行の合計幅がカード幅より短くなり、
@@ -1103,23 +1131,29 @@ struct HomeView: View {
         .frame(height: Self.pairRowHeight)
     }
 
-    /// `pairRow`の価格表示。小数点を境に整数部(「.」含む)・小数部に分けて
-    /// 別々の固定幅枠(整数部は右揃え、小数部は左揃え)に収めることで、
-    /// JPYペア(小数2桁、整数部3桁)とそれ以外(小数4桁、整数部1桁)が
-    /// 混在しても小数点の位置が行ごとに揃う(詳しい経緯は呼び出し元の
-    /// コメント参照)。2枠の幅の合計(20+24=44)は変更前の単一枠の幅44と
-    /// 揃え、行全体の横幅は変えていない。
+    /// `pairRow`の価格表示。
+    ///
+    /// HQ再指摘(2026-10-29、3回目)「小数点の位置を揃えるのではなくて
+    /// 5文字表示だから揃えてと言っている」: 整数部/小数部を分けて小数点の
+    /// 位置で揃える方式(直前の実装、経緯は版管理履歴参照)は、HQの意図を
+    /// 読み違えていた。JPYペア(「155.42」)も非JPYペア(「1.0821」)も、
+    /// 小数点を含めて常に同じ6文字(整数部桁数+小数点+小数部桁数の合計が
+    /// 常に5桁)で表示される値であり、HQが求めていたのは「小数点という
+    /// 特定の位置で揃える」ことではなく、「同じ文字数の値として単純に
+    /// 揃える」ことだった。整数部/小数部を分ける複雑な構成をやめ、1つの
+    /// `Text`に戻した。`.monospacedDigit()`で全桁が同じ幅になるため、
+    /// 固定幅枠(54pt、呼び出し元の`pairRow`参照)の中で揃えれば、文字数が
+    /// 揃っているすべての行で見た目も揃う。手前の通貨ペア名の列
+    /// (`NotoText.scalableText`、`pairRow`参照)も実際に固定幅へ収まる
+    /// ようになったため、特別な揃え処理なしに全行そろう。
     private func priceText(_ price: String) -> some View {
-        let components = price.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)
-        let integerPart = components.isEmpty ? price : "\(components[0])."
-        let fractionPart = components.count > 1 ? String(components[1]) : ""
-        return HStack(spacing: 0) {
-            Text(integerPart).frame(width: 20, alignment: .trailing)
-            Text(fractionPart).frame(width: 24, alignment: .leading)
-        }
-        .font(.system(size: 11, weight: .semibold))
-        .tracking(-0.4)
-        .monospacedDigit()
+        Text(price)
+            .font(.system(size: 11, weight: .semibold))
+            .tracking(-0.4)
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .frame(width: 54, alignment: .trailing)
     }
 
     // MARK: - お気に入りカード
