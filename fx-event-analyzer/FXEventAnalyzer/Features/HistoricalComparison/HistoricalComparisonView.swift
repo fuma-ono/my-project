@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// SCR-009 過去イベント比較。HQ指示(2026-10-14)「ピクセル単位で参考画像を完全再現して」:
 /// 上に国旗・指標名・「国旗 国 ｜ 通貨」、その下に過去の発表の表
@@ -13,6 +14,37 @@ struct HistoricalComparisonView: View {
     /// 日時の並び(参考画像の「日時 ⇕」)。既定は新しい順。
     @State private var newestFirst = true
     @Environment(\.dismiss) private var dismiss
+    /// HQ指示(2026-10-29、7回目)「横画面にしたけど直ってない(表の両サイド・
+    /// 日時の余白)」: OSのインターフェース自体を回転させる方式
+    /// (`UIWindowScene.requestGeometryUpdate`、旧`OrientationLock.swift`)を
+    /// 6回試みたが、実機確認のたびに「ウィンドウの実寸(画像サイズ)は横長に
+    /// なるが、中身がPortrait時のレイアウトのまま小さく収まり、新しく
+    /// 広がった分が黒いまま」という同じ壊れ方を繰り返した。アクセシビリ
+    /// ティツリーの構造面アサーションは毎回パスしていたため「CIのスクリーン
+    /// ショット取得タイミングの問題だろう」と判断していたが、実機での
+    /// ユーザー確認でも同じ壊れ方が再現したため、その判断自体が誤りだった。
+    /// 方針変更: アプリ全体をPortrait固定に戻し(project.yml)、OSの
+    /// インターフェース回転には一切頼らない。この画面は端末の物理的な
+    /// 向き(`UIDevice.orientation`)だけを見て、中身を`.rotationEffect`で
+    /// 見かけ上回転させる(ウィンドウの実寸は常にPortraitのまま変わらない
+    /// ため、ジオメトリ更新のタイミング起因の不具合が原理的に起こらない)。
+    @State private var deviceOrientation: UIDeviceOrientation = UIDevice.current.orientation
+
+    private var isLandscape: Bool {
+        deviceOrientation == .landscapeLeft || deviceOrientation == .landscapeRight
+    }
+
+    /// `.landscapeLeft`(Appleの定義: ホームボタン/下端が右に来る向き = 端末を
+    /// 反時計回りに90°回した状態)は、中身を時計回り(+90°)に回転させれば
+    /// 正立する。`.landscapeRight`はその逆(-90°)。`UIDeviceOrientation`は
+    /// 純粋な値なので、回転方向の正しさをレンダリングなしで単体テストできる。
+    static func rotationAngle(for orientation: UIDeviceOrientation) -> Angle {
+        switch orientation {
+        case .landscapeLeft: return .degrees(90)
+        case .landscapeRight: return .degrees(-90)
+        default: return .degrees(0)
+        }
+    }
 
     init(apiClient: APIClient, indicatorId: String, indicatorName: String, fxPairId: String, fxPairSymbol: String, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
@@ -31,11 +63,20 @@ struct HistoricalComparisonView: View {
             .toolbar(.hidden, for: .navigationBar)
             .task { viewModel.load() }
             .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
-            // HQ指示(2026-10-25、再指示2026-10-26)「この画面だけ横画面できる
-            // ようにしたい」: この画面がオンスクリーンの間だけ横画面を許可する
-            // (`OrientationLock.swift`参照 — 過去4回の失敗の経緯も含む)。
-            .onAppear { HistoricalComparisonOrientation.shared.setAllowed(true) }
-            .onDisappear { HistoricalComparisonOrientation.shared.setAllowed(false) }
+            .onAppear {
+                UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+                deviceOrientation = UIDevice.current.orientation
+            }
+            .onDisappear {
+                UIDevice.current.endGeneratingDeviceOrientationNotifications()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+                let newOrientation = UIDevice.current.orientation
+                // faceUp/faceDown/unknown(テーブルに置いた時など)は向きの
+                // 情報として使えないため無視し、直前の状態を維持する。
+                guard newOrientation.isValidInterfaceOrientation else { return }
+                deviceOrientation = newOrientation
+            }
     }
 
     @ViewBuilder
@@ -54,26 +95,58 @@ struct HistoricalComparisonView: View {
             // V5キャンバス(234×491、`V5Viewport`参照)に収まらないため、
             // 横画面の時は`V5Viewport`のレターボックス表示をやめ、実寸
             // ポイントの専用レイアウト(`landscapeLayout`)に切り替える。
-            // UIKitのインターフェースが実際に回転する方式のため、
-            // `geo.size`自体が横長になる。
-            GeometryReader { geo in
-                if geo.size.width > geo.size.height {
-                    landscapeLayout(response, availableWidth: geo.size.width)
-                } else {
-                    V5Viewport {
-                        V5Header(title: "過去イベント比較", back: true, onBack: { dismiss() })
-                        VStack(alignment: .leading, spacing: 8) {
-                            header(response)
-                            table(response)
-                            if let limit = response.historyLimit, limit.isLimited {
-                                planLimitRow(limit)
+            // アプリ全体はPortrait固定のままなので、`geo.size`は常に縦長
+            // (幅<高さ)。横長に組んだ`landscapeLayout`を`geo.size.height`
+            // (回転後に横幅として使える寸法)で組み、`.rotationEffect`で
+            // 見かけ上回転させてから、外側をPortraitの`geo.size`に収め直す
+            // (SwiftUIで「向き固定のまま中身だけ回して見せる」定番の構成)。
+            //
+            // HQ指摘(2026-10-29)「横画面にした際の黒い画面の部分(右と左)は
+            // 実機ではどうなる？黒くなるなら修正して、背景と同じ色で」への
+            // 対応で、一度この`GeometryReader`自体に`.ignoresSafeArea()`を
+            // 付け、`geo.size`をセーフエリアを除外しない実寸にする変更を
+            // 試みたが、HQ再指摘(同日)「Wi-Fiや時間の部分がかぶさってる」の
+            // 通り裏目に出た: この画面は物理的にはPortraitのまま
+            // (`.rotationEffect`で見かけ上回転させているだけ、ウィンドウ自体は
+            // 回転しない)ため、OSが描くステータスバー(時刻・Wi-Fi・バッテリー)は
+            // 常にPortrait基準の実位置に居座ったまま。`geo.size`を実寸いっぱいに
+            // 広げると、回転後の中身もその実寸いっぱいまで伸びてしまい、
+            // ステータスバーの実位置に中身が重なって見えてしまっていた。
+            // `.ignoresSafeArea()`は撤回し、`geo.size`は元通りセーフエリアを
+            // 除いた寸法に戻した(＝中身の位置・大きさは最初の実装のまま)。
+            //
+            // 黒帯自体(セーフエリア分、中身が届かない領域)は中身の位置を
+            // 変えずに済む方法で解消する: この`GeometryReader`と同じ階層に、
+            // 画面全体(セーフエリアを含む実寸いっぱい)を覆う背景色の層を
+            // 下敷きとして敷く。`V5Viewport`の背景(`DesignTokens.Colors.
+            // backgroundPrimary`、縦画面の既定背景)と同じ色を使うことで、
+            // 中身が届かない帯もただの黒ではなく背景色で埋まる。
+            ZStack {
+                DesignTokens.Colors.backgroundPrimary
+                    .ignoresSafeArea()
+                GeometryReader { geo in
+                    if isLandscape {
+                        landscapeLayout(response, availableWidth: geo.size.height)
+                            .frame(width: geo.size.height, height: geo.size.width)
+                            .rotationEffect(Self.rotationAngle(for: deviceOrientation))
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .animation(nil, value: deviceOrientation)
+                    } else {
+                        V5Viewport {
+                            V5Header(title: "過去イベント比較", back: true, onBack: { dismiss() })
+                            VStack(alignment: .leading, spacing: 8) {
+                                header(response)
+                                table(response)
+                                if let limit = response.historyLimit, limit.isLimited {
+                                    planLimitRow(limit)
+                                }
                             }
+                            .frame(width: 214)
+                            .padding(.top, 8)
+                            .frame(width: V5P.W, height: 398, alignment: .top)
+                            .position(x: V5P.W / 2, y: 54 + 398 / 2)
+                            V5BottomBar(selected: $tabSelection)
                         }
-                        .frame(width: 214)
-                        .padding(.top, 8)
-                        .frame(width: V5P.W, height: 398, alignment: .top)
-                        .position(x: V5P.W / 2, y: 54 + 398 / 2)
-                        V5BottomBar(selected: $tabSelection)
                     }
                 }
             }
@@ -142,21 +215,33 @@ struct HistoricalComparisonView: View {
         .ignoresSafeArea()
     }
 
+    /// HQ指摘(2026-10-29)「ヘッダーを＜戻る　過去イベント比較にして(縦画面と
+    /// 揃えるように)」: 従来はシェブロンのみ(「戻る」の文字が無い)・
+    /// タイトルが左寄せで、縦画面の`V5Header`(＜ 戻る、水色文字＋タイトルは
+    /// 全幅中央揃え)と構成が異なっていた。`V5Header`と同じ構成
+    /// (戻るボタンとタイトルを別レイヤーのZStackにして、タイトルは
+    /// 戻るボタンの有無に関係なく常に中央)に揃えた。
     private var landscapeTopBar: some View {
-        HStack(spacing: 8) {
-            Button(action: { dismiss() }) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
+        ZStack {
+            NotoText.text("過去イベント比較", size: 15)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .center)
+            HStack(spacing: 0) {
+                Button(action: { dismiss() }) {
+                    HStack(spacing: 2) {
+                        Image(systemName: "chevron.left").font(.system(size: 16, weight: .semibold))
+                        NotoText.text("戻る", size: 13)
+                    }
+                    .foregroundStyle(V5P.cyan)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("戻る")
+                .accessibilityIdentifier("historyLandscapeBack")
+                Spacer()
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("戻る")
-            .accessibilityIdentifier("historyLandscapeBack")
-            NotoText.text("過去イベント比較", size: 15).foregroundStyle(.white)
-            Spacer()
         }
         // `.accessibilityElement(children: .contain)`: 中の戻るボタンを個別に
-        // タップ可能なまま保ちつつ、このHStack自体もXCUITestから識別子で
+        // タップ可能なまま保ちつつ、このZStack自体もXCUITestから識別子で
         // 問い合わせられる要素にする。
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("historyLandscapeTopBar")
@@ -320,10 +405,21 @@ struct HistoricalComparisonView: View {
                     // 余白の箱があるように見えていた。行と同じ左揃え+
                     // 同じ左パディングに揃えた。
                     .padding(.leading, 4)
-                    .frame(width: columns.date, height: 40, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                // HQ指摘(2026-10-29)「タブ部分の縦線がバラバラ」: 固定幅の
+                // `.frame(width:)`をボタンのラベル(内側)に付けていたため、
+                // `Button`自体の実際のレイアウト上の幅がラベルの意図した
+                // 幅と微妙にずれ(ボタンのタップ領域確保などの影響)、直後の
+                // `landscapeDivider`の位置が`landscapeGroupHeaderRow`側の
+                // 縦線(`Color.clear.frame(width: columns.date)`基準)と
+                // 1px未満だけずれて二重線に見えていた。固定幅はラベルでは
+                // なくボタン自体(外側)に付け、ラベル側は`maxWidth: .infinity`
+                // で内側を埋めるだけにすることで、他の行の`columns.date`幅の
+                // 要素と全く同じ幅計算になるようにした。
+                .frame(width: columns.date, height: 40)
                 .accessibilityLabel(newestFirst ? "日時 新しい順" : "日時 古い順")
                 landscapeDivider
                 landscapeHeaderCell("結果", "(実績)", width: columns.value)
@@ -352,6 +448,16 @@ struct HistoricalComparisonView: View {
         Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 1, height: 40)
     }
 
+    /// HQ指摘(2026-10-29)「表の中の位置がバラバラ」: pipsの見出し(「1分」等)は
+    /// 中央揃えのままだったが、対応するデータ(`landscapePipsCell`)は符号を
+    /// 右端で揃えるため右揃え+右パディング4になっており、見出しとデータの
+    /// 横位置がずれていた。一度は見出し側を右揃えに合わせたが、HQ指摘
+    /// (2026-10-29、再指摘)「1分5分15分の部分が数字ともに右に寄りすぎて
+    /// いておかしい」: pips列は幅に対して数字自体が短いため、右揃えだと
+    /// 見出し・データとも列の右端に寄りすぎて列内の左側に不自然な余白が
+    /// 残る見た目になっていた。右揃えではなく、結果/予想/前回と同じ中央
+    /// 揃えに統一する方向で解決した(`landscapePipsCell`側も中央揃えに
+    /// 変更、右パディングを撤廃)。
     private func landscapeHeaderCell(_ title: String, _ subtitle: String, width: CGFloat) -> some View {
         VStack(spacing: 2) {
             NotoText.text(title, size: 13).foregroundStyle(.white)
@@ -405,6 +511,11 @@ struct HistoricalComparisonView: View {
             .frame(width: width)
     }
 
+    /// HQ指摘(2026-10-29)「1分5分15分の部分が数字ともに右に寄りすぎて
+    /// いておかしい」: 右揃え+右パディング4だったため、見出し
+    /// (`landscapeHeaderCell`)も右揃えに合わせた直後に、列の右端へ寄り
+    /// すぎて不自然という指摘を受けた。結果/予想/前回(`landscapeValueCell`)
+    /// と同じ中央揃えに変更した。
     private func landscapePipsCell(_ pips: Double?, width: CGFloat) -> some View {
         Text(Self.pipsText(pips))
             .font(.system(size: 13, weight: .medium))
@@ -412,8 +523,7 @@ struct HistoricalComparisonView: View {
             .foregroundStyle(pips.map { $0 >= 0 ? Self.plusColor : Self.minusColor } ?? SettingsCardStyle.subtitleColor)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
-            .padding(.trailing, 4)
-            .frame(width: width, alignment: .trailing)
+            .frame(width: width)
     }
 
     /// 副指標(api-design v1.35、HQ指示2026-10-25「前年の結果予想前回、前月の

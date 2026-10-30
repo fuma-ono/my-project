@@ -175,6 +175,15 @@ final class IndicatorDisplayNameTests: XCTestCase {
         // HQ指摘(2026-10-28)「8/7の行が常時見切れている」: 最終行の実機はみ出しを
         // 防ぐ固定の余白(bottomSafetyMargin=4)が、行数・前年/前月の有無に
         // 関わらず常に足されている。
+        // HQ指摘(2026-10-29、7回目)「横画面が直っていない」: OSのインター
+        // フェース回転をやめ、`UIDevice.orientation`を見た見かけ上の
+        // `.rotationEffect`に切り替えた。回転方向(Appleの定義: landscapeLeft
+        // =ホームボタンが右に来る向き=端末を反時計回りに回した状態なので、
+        // 中身は時計回りに+90°で正立)を単体テストで固定する。
+        XCTAssertEqual(HistoricalComparisonView.rotationAngle(for: .landscapeLeft), .degrees(90))
+        XCTAssertEqual(HistoricalComparisonView.rotationAngle(for: .landscapeRight), .degrees(-90))
+        XCTAssertEqual(HistoricalComparisonView.rotationAngle(for: .portrait), .degrees(0))
+        XCTAssertEqual(HistoricalComparisonView.rotationAngle(for: .faceUp), .degrees(0))
         // イベント詳細の結果/予想/前回カード(api-design v1.35、HQ指示2026-10-25「前年比を記載」)。
         XCTAssertEqual(EventDetailCards.secondaryLabel("MOM_PCT"), "前月比")
         XCTAssertEqual(EventDetailCards.secondaryLabel("YOY_PCT"), "前年比")

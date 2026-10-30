@@ -471,19 +471,39 @@ final class ScreenshotTests: XCTestCase {
     }
 
     /// HQ指示(2026-10-25、再指示2026-10-26)「過去イベント比較の表が縦画面に
-    /// 入らないから、この画面だけ横画面できるようにしたい」。過去4回の
-    /// 実装試行の経緯は`HistoricalComparisonView.onAppear`・
-    /// `OrientationLock.swift`のコメント参照。文字列の存在だけでなく
-    /// 「横画面専用の要素(`historyLandscapeTopBar`)が出て、縦画面専用の
-    /// 要素(`v5HeaderBack`・タブバー)が消える」という構造の変化を確認する
-    /// — 回転が実際に効いていなければ、`historyLandscapeTopBar`は現れず
-    /// `v5HeaderBack`が残り続けるため、この種の「見た目は壊れているのに
-    /// テストは通る」を防げる。過去4回ともこの構造面アサーションは
-    /// パスしており(SwiftUIの論理レイアウトは正しく切り替わっていた)、
-    /// 壊れて見えたのは保存されたスクリーンショットのピクセル側だけ
-    /// だった。5回目(今回)は`OrientationLock.swift`側に明示的な
-    /// `layoutIfNeeded()`強制を追加し、ここでは回転アニメーションの完了を
-    /// さらに待つ余地を持たせるため待ち時間を2.5秒→4.0秒に伸ばした。
+    /// 入らないから、この画面だけ横画面できるようにしたい」。文字列の存在
+    /// だけでなく「横画面専用の要素(`historyLandscapeTopBar`)が出て、
+    /// 縦画面専用の要素(`v5HeaderBack`・タブバー)が消える」という構造の
+    /// 変化を確認する。
+    ///
+    /// HQ指示(2026-10-29、7回目)「横画面が直っていない(実機確認)」:
+    /// OSのインターフェース自体を回転させる方式(`UIWindowScene.
+    /// requestGeometryUpdate`、旧`OrientationLock.swift`)を6回試みたが、
+    /// 実機確認のたびに同じ壊れ方(ウィンドウの実寸は横長になるが中身が
+    /// Portrait時のレイアウトのまま小さく収まり、広がった分が黒いまま)を
+    /// 繰り返した。アクセシビリティツリーの構造面アサーションは毎回パス
+    /// していたため、5回目は「CIのスクリーンショット取得タイミングの
+    /// 問題だろう」と判断していたが、実機でのHQ確認でも同じ壊れ方が
+    /// 再現し、この判断自体が誤りだったと判明した。
+    ///
+    /// 方針変更: アプリ全体をPortrait固定に戻し(project.yml)、OSの
+    /// インターフェース回転には一切頼らない。`HistoricalComparisonView`は
+    /// 端末の物理的な向き(`UIDevice.orientation`)だけを見て、中身を
+    /// `.rotationEffect`で見かけ上回転させる(詳細は同Viewのコメント参照)。
+    /// `XCUIDevice.shared.orientation`はシミュレーターのセンサー値
+    /// (`UIDevice.orientation`)を変えるため、アプリがPortrait固定のままでも
+    /// この画面の回転ロジックは引き続き動く。
+    ///
+    /// 重要: ウィンドウの実寸(`app.windows.firstMatch.frame`)は、この方式
+    /// では横画面中も常にPortraitのまま変わらない。そのためこの後の
+    /// スクリーンショット(`09b-HistoricalComparison-Landscape`)は、実機で
+    /// 物理的に端末を横向きに持ったときの見た目(文字が正立して見える)を
+    /// そのまま撮れているわけではなく、Portrait寸法の画像の中に回転後の
+    /// 中身が収まった状態で保存される(平らな画面・この画像だけを見ると
+    /// 文字が横倒しに見えるが、実機で端末を横に傾けて見れば正立する —
+    /// これは不具合ではなく、OS回転に頼らない本方式の既知の見え方)。
+    /// 本当に実機で正立して見えるかどうかは、このCIスクリーンショットでは
+    /// 検証できないため、実機での目視確認が別途必要。
     func testHistoricalComparisonAllowsLandscape() throws {
         let emailField = app.textFields["メールアドレス"]
         XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
@@ -519,28 +539,13 @@ final class ScreenshotTests: XCTestCase {
             "Landscape-only top bar did not appear after rotating to landscape — the screen likely did not actually switch to the landscape layout"
         )
         XCTAssertFalse(app.buttons["v5HeaderBack"].exists, "Portrait-only back button should not exist in landscape")
-        // 6回目の修正: `v5Tab1`だけ`.exists`で2回連続して失敗した
-        // (「Bottom tab bar should not exist in landscape」)。`NavigationStack`
-        // はこの画面を押す前の画面(指標詳細)を画面裏に保持し続けており、
-        // その画面にも同じ`v5Tab1`識別子のタブバーが存在する — `app.buttons[id]`
-        // は画面の前面・裏面を問わずアプリ全体のアクセシビリティツリーから
-        // 一致する要素を探すため、このHistoricalComparisonView自身の
-        // タブバーが消えていても、裏の指標詳細の方が引っかかって`exists`が
-        // `true`のままになっていたと見られる(`v5HeaderBack`は指標詳細側には
-        // 無い識別子のため、この影響を受けずに正しく`false`になっていた)。
-        // 「画面として見えている(ヒットテスト可能)かどうか」を見る
-        // `isHittable`に変えることで、裏に隠れているだけの要素を誤って
-        // 拾わないようにした。
+        // `NavigationStack`はこの画面を押す前の画面(指標詳細)を画面裏に
+        // 保持し続けており、その画面にも同じ`v5Tab1`識別子のタブバーが
+        // 存在する — `app.buttons[id]`は画面の前面・裏面を問わずアプリ全体の
+        // アクセシビリティツリーから一致する要素を探すため、
+        // `.exists`だと裏の指標詳細の方が引っかかる。「画面として見えている
+        // (ヒットテスト可能)かどうか」を見る`isHittable`を使う。
         XCTAssertFalse(app.buttons["v5Tab1"].isHittable, "Bottom tab bar should not be visible in landscape")
-        // HQ指摘(2026-10-26、2027-10-27)「スクリーンショットの特定の領域が
-        // 空白に見える、なぜ直らないのか」: スクリーンショットのピクセルは
-        // 回転トランジションの影響で信頼できない(過去複数回の壊れ方と同じ)。
-        // アクセシビリティツリーは論理レイアウトをそのまま反映し、回転の
-        // ピクセル合成バグの影響を受けないため、ここで実際の要素の有無・
-        // 座標・サイズをCIログへ出力し、ピクセルを目視するのではなく
-        // ログから直接レイアウトを確認できるようにする。
-        print("=== [landscape debug] full accessibility tree ===")
-        print(app.debugDescription)
         print("=== [landscape debug] 前年/前月/日時 staticTexts ===")
         for text in app.staticTexts.allElementsBoundByIndex {
             if ["前年", "前月", "日時"].contains(text.label) {
@@ -550,14 +555,11 @@ final class ScreenshotTests: XCTestCase {
         print("=== [landscape debug] historyLandscapeTopBar / table frames ===")
         print("[landscape debug] historyLandscapeTopBar frame=\(app.otherElements["historyLandscapeTopBar"].frame)")
         print("[landscape debug] window frame=\(app.windows.firstMatch.frame)")
-        // 5回目の修正(`OrientationLock.swift`参照): 要素の存在判定
-        // (アクセシビリティツリー、最終的な論理レイアウトを反映)と実際に
-        // 合成されるピクセル(UIKitの回転トランジションアニメーション)は
-        // タイミングが別物のため、通常の`settle`(既定0.6秒)ではアニメー
-        // ションの完了前にスクリーンショットを撮ってしまい、回転アニメー
-        // ションの途中状態(中身が回転しかけ・新しく広がった分が黒いまま)
-        // が写るおそれがある。この画面だけさらに長めに待つ。
-        capture("09b-HistoricalComparison-Landscape", settle: 4.0)
+        // OSのインターフェース回転に頼らない(`.rotationEffect`で見かけ上
+        // 回転させるだけの)方式のため、UIKitの回転トランジションアニメー
+        // ションは発生しない。このスクリーンショットの見え方自体について
+        // は、このファイル冒頭の本テストのコメントを参照。
+        capture("09b-HistoricalComparison-Landscape", settle: 1.5)
 
         // 戻る: Portraitに戻すと、横画面専用の要素が消えて縦画面の見た目に戻る。
         XCUIDevice.shared.orientation = .portrait
