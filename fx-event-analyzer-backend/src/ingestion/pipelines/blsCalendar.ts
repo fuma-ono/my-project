@@ -347,6 +347,8 @@ export async function planBlsScheduleWrites(
   store: Pick<IngestionStore, 'findEventByProviderId'>,
   releases: readonly NormalizedCalendarRelease[],
   counters: JobCounters,
+  /** HQ承認 2026-10-30: the Eurostat schedule path (eurostat_schedule) counts its writes the same way. */
+  provider: string = BLS_SCHEDULE_PROVIDER,
 ): Promise<BlsSchedulePlan> {
   const plan: BlsSchedulePlan = {
     scheduled_insert: 0,
@@ -359,7 +361,7 @@ export async function planBlsScheduleWrites(
   };
   for (const release of releases) {
     try {
-      const existing = await store.findEventByProviderId(BLS_SCHEDULE_PROVIDER, release.providerEventId);
+      const existing = await store.findEventByProviderId(provider, release.providerEventId);
       const published = release.actual !== null;
       if (existing?.status === 'CANCELLED') {
         plan.row_cancelled += 1;

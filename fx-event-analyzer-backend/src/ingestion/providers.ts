@@ -11,6 +11,7 @@ import type {
   NormalizedCandle,
   NormalizedSpeech,
   OfficialObservation,
+  OfficialSource,
 } from './types.js';
 
 /** ① Paid economic calendar: schedule, forecast, actual, revisions. */
@@ -35,7 +36,7 @@ export interface ObservationQuery {
 
 /** ② Free official statistics used to VERIFY actual values. */
 export interface OfficialStatsProvider {
-  readonly name: 'FRED' | 'BLS';
+  readonly name: OfficialSource;
   /** true when asOfDate is honoured (FRED/ALFRED vintages). */
   readonly supportsPointInTime: boolean;
   fetchObservations(query: ObservationQuery): Promise<OfficialObservation[]>;

@@ -7,7 +7,7 @@
  * the indicator name, a speech row's title is the speech's own title with
  * the speaker's display name alongside in `speaker_name`.
  */
-import { attributionForOrganization, type Attribution } from './attribution.js';
+import { attributionForIndicator, attributionForOrganization, type Attribution } from './attribution.js';
 import { mapEventDataStatus, type EconomicEventDbStatus } from './dataQuality.js';
 import { resultTypeForIndicator, type ResultType } from './resultType.js';
 import { effectiveIsProvisional } from './provisional.js';
@@ -134,7 +134,7 @@ export function buildCalendarItems(
     datetime_precision: event.release_datetime_precision,
     status: event.status,
     is_provisional: effectiveIsProvisional(event.is_provisional, event.release_datetime, now),
-    attribution: null,
+    attribution: attributionForIndicator(event.indicator_code),
     result_type: resultTypeForIndicator(event.indicator_code),
     data_status: event.data_status ? mapEventDataStatus(event.data_status as EconomicEventDbStatus) : null,
   }));

@@ -15,6 +15,8 @@ export const PROVIDER_HTTP_SETTINGS = {
   // federalreserve.gov / ecb.europa.eu: public websites — be polite.
   frb: { minIntervalMs: 2_000, timeoutMs: 20_000, maxRetries: 2, backoffMs: 2_000 },
   ecb: { minIntervalMs: 2_000, timeoutMs: 20_000, maxRetries: 2, backoffMs: 2_000 },
+  // Eurostat dissemination API: no key, no published rate limit — be polite (1 run = 3 requests).
+  eurostat: { minIntervalMs: 2_000, timeoutMs: 30_000, maxRetries: 2, backoffMs: 2_000 },
   // Paid candidates (limits depend on plan — 要確認).
   tradingeconomics: { minIntervalMs: 1_000, timeoutMs: 20_000, maxRetries: 3, backoffMs: 1_000 },
   finnhub: { minIntervalMs: 1_100, timeoutMs: 15_000, maxRetries: 3, backoffMs: 1_000 },

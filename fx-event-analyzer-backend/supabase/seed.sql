@@ -106,7 +106,10 @@ from (values
   ('US_CORE_PPI', 'USDJPY', 1), ('US_CORE_PPI', 'EURUSD', 2),
   ('US_JOLTS', 'USDJPY', 1), ('US_JOLTS', 'EURUSD', 2),
   -- FOMC議事要旨(migration 20261027000004)
-  ('US_FOMC_MINUTES', 'USDJPY', 1), ('US_FOMC_MINUTES', 'EURUSD', 2)
+  ('US_FOMC_MINUTES', 'USDJPY', 1), ('US_FOMC_MINUTES', 'EURUSD', 2),
+  -- ユーロ圏 HICP速報値・失業率(migration 20261030000001)
+  ('EU_HICP', 'EURUSD', 1), ('EU_HICP', 'EURJPY', 2),
+  ('EU_UNEMPLOYMENT_RATE', 'EURUSD', 1), ('EU_UNEMPLOYMENT_RATE', 'EURJPY', 2)
 ) as v(code, symbol, priority)
 join economic_indicators i on i.code = v.code
 join fx_pairs p on p.symbol = v.symbol

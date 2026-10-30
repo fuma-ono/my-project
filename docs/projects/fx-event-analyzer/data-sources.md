@@ -521,7 +521,7 @@ FRED は公式統計の取り込みから外した(`ingest:official` は FRED �
 
 | 地域 | 候補 | 確認すること |
 |---|---|---|
-| ユーロ圏 | Eurostat(HICP・失業率・GDP)、ECB Data Portal | 商用アプリでの再利用・保存・出典の書き方 |
+| ユーロ圏 | Eurostat(HICP・失業率・GDP)、ECB Data Portal | **Eurostat は確認済み(2026-10-30)**: https://ec.europa.eu/eurostat/web/main/help/copyright-notice「Reuse ... for commercial or non-commercial purposes is authorised provided the source is acknowledged」、加工の明示と Eurostat が責任を負わない旨の免責文が必要。EU・EFTA・加盟候補国以外の国のデータは例外。HICP 速報値・失業率を実装(HQ承認 2026-10-30、`npm run ingest:official:eurostat-calendar`、api-design v1.43)。出典の定型の文言は無い(文言は実装候補)。ECB Data Portal は未実装 |
 | 英国 | ONS(Office for National Statistics) | Open Government Licence の範囲(BOE のサイトとは別) |
 | オーストラリア | ABS(Australian Bureau of Statistics) | ライセンス(CC BY の範囲)・API の条件 |
 | カナダ | Statistics Canada | Open Licence の範囲 |

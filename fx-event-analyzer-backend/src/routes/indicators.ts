@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { attributionForIndicator } from '../domain/attribution.js';
 import { ApiError } from '../errors/ApiError.js';
 import {
   getIndicatorById,
@@ -54,6 +55,8 @@ export function registerIndicatorRoutes(app: FastifyInstance): void {
 
     return {
       indicator: { ...indicator, ...(releaseSummaries.get(indicatorId) ?? EMPTY_RELEASE_SUMMARY) },
+      // v1.43: 出典と告知(Eurostat の指標だけ。domain/attribution.ts)。
+      attribution: attributionForIndicator(indicator.code),
       favorable_direction: indicator.favorable_direction,
       related_fx_pairs: relatedFxPairs,
       latest_event: latestEvent,
