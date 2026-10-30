@@ -24,6 +24,7 @@ import { availableTimeframes } from '../../domain/dataQuality.js';
 import { computeEventPairReactionRows, EVENT_REACTION_TIMEFRAMES } from '../../domain/economicEventReactions.js';
 import { PRE_STATEMENT_LOOKBACK_MINUTES, TIMEFRAME_MINUTES, type PriceCandle } from '../../domain/speechReactions.js';
 import type { JobCounters } from '../runner.js';
+import { usableForReactions } from '../validation/fxCandles.js';
 import type { EventPriceReactionRow, IngestionStore } from '../store.js';
 
 const MINUTE_MS = 60_000;
@@ -112,7 +113,9 @@ export async function ingestEventPriceReactions(
     let available = 0;
     let unavailable = 0;
     for (const pair of candidatePairs) {
-      const rows = await store.listFxMinuteRows(pair.id, fromIso, toIso);
+      // HQ指示(2026-10-30 P0-1): 照合で食い違った足(UNVERIFIED)は「足が無い」として扱う(data-sources.md §6.4、
+      // Read API の値動き・チャートと同じ)。SINGLE_SOURCE・VERIFIED はそのまま使う。補間はしない。
+      const rows = usableForReactions(await store.listFxMinuteRows(pair.id, fromIso, toIso));
       const candles: PriceCandle[] = rows.map((row) => ({
         timestamp: row.timestamp,
         high: Number(row.high),
