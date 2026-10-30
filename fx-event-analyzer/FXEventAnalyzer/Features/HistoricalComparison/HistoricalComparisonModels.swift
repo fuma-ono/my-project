@@ -12,7 +12,7 @@ struct ComparisonResponse: Decodable, Equatable {
     let advancedStatistics: AdvancedStatistics
     let events: [ComparisonEventSummary]
     let meta: PaginationMeta
-    /// 比べた回数の上限(api-design v1.15、無料5回・プレミアム20回)。古いBackendではnil。
+    /// 比べた回数の上限(api-design v1.37、無料3回・プレミアム20回)。古いBackendではnil。
     var historyLimit: HistoryLimit? = nil
     /// 過去の発表の制限(api-design v1.33 §21・§28.2、無料プランは直近3回)。古いBackendではnil。
     var pastReleaseLimit: PastReleaseLimit? = nil
