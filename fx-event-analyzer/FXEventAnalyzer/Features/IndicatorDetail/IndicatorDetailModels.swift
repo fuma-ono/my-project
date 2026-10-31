@@ -4,10 +4,15 @@ import Foundation
 struct IndicatorDetailResponse: Decodable {
     let indicator: IndicatorSummary
     let relatedFxPairs: [RelatedFxPairSummary]
+    /// 出典と告知(api-design v1.43)。`indicator`の項目ではなく応答の直下
+    /// (`EventDetailEvent.attribution`と違い、イベントではなく指標そのものの
+    /// 出典のため)。Eurostatの指標だけ付く。古いBackendではnil。
+    var attribution: Attribution? = nil
 
     enum CodingKeys: String, CodingKey {
         case indicator
         case relatedFxPairs = "related_fx_pairs"
+        case attribution
     }
 }
 

@@ -96,6 +96,25 @@ enum FavorableDirection: String, Decodable, Equatable {
     case neutral = "NEUTRAL"
 }
 
+/// api-design v1.43(`domain/attribution.ts`のAttribution)。要人発言の
+/// `SpeechAttribution`(`SpeechDetailModels.swift`)と同じ形だが、イベント
+/// 詳細・指標詳細はどちらも要人発言ほど出典の手がかりが画面内に無いため、
+/// `notice`だけでなく`source`・`sourceUrl`も表示する(HQ指示 2026-10-31
+/// 「出典表示」)。Eurostatの指標(EU_HICP・EU_UNEMPLOYMENT_RATE)だけ付き、
+/// それ以外・古いBackendはnil。
+struct Attribution: Decodable, Equatable {
+    let source: String
+    let sourceUrl: String
+    /// 取得元の規約が求める告知文。nil = 告知の義務なし(出典の表示だけ)。
+    let notice: String?
+
+    enum CodingKeys: String, CodingKey {
+        case source
+        case sourceUrl = "source_url"
+        case notice
+    }
+}
+
 /// api-design.md §14.2 / §12: a lightweight FX pair reference attached to
 /// an Indicator or Event, with priority determining display order (lower
 /// first) — the same shape appears on Home events, Event Detail, and

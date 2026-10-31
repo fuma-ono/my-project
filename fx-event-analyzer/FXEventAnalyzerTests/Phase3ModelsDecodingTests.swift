@@ -165,6 +165,46 @@ final class Phase3ModelsDecodingTests: XCTestCase {
 
         XCTAssertEqual(response.indicator.code, "US_CPI")
         XCTAssertEqual(response.relatedFxPairs.map(\.symbol), ["USDJPY"])
+        // 古いBackend・Eurostat以外の指標には`attribution`自体が無い(api-design v1.43)。
+        XCTAssertNil(response.attribution)
+    }
+
+    /// HQ指示(2026-10-31)「出典表示」: Eurostatの指標(EU_HICP・
+    /// EU_UNEMPLOYMENT_RATE)は`indicator`とは別の階層(応答の直下)に
+    /// `attribution`が付く(src/routes/indicators.ts)。
+    func testIndicatorDetailResponseDecodesEurostatAttribution() throws {
+        let json = """
+        {
+          "indicator": {
+            "id": "10000000-0000-0000-0000-000000000009",
+            "code": "EU_HICP",
+            "name": "Eurozone HICP (YoY)",
+            "country_code": "EU",
+            "currency_code": "EUR",
+            "importance": "HIGH",
+            "description": null,
+            "frequency": "MONTHLY",
+            "unit": "%",
+            "source": null,
+            "source_url": null,
+            "favorable_direction": "NEUTRAL"
+          },
+          "attribution": {
+            "source": "Eurostat（欧州連合統計局）",
+            "source_url": "https://ec.europa.eu/eurostat",
+            "notice": "Eurostat の公表データをもとに作成しています。Eurostat は本アプリでの利用について責任を負いません。"
+          },
+          "favorable_direction": "NEUTRAL",
+          "related_fx_pairs": [],
+          "latest_event": null
+        }
+        """.data(using: .utf8)!
+
+        let response = try makeDecoder().decode(IndicatorDetailResponse.self, from: json)
+
+        XCTAssertEqual(response.attribution?.source, "Eurostat（欧州連合統計局）")
+        XCTAssertEqual(response.attribution?.sourceUrl, "https://ec.europa.eu/eurostat")
+        XCTAssertEqual(response.attribution?.notice, "Eurostat の公表データをもとに作成しています。Eurostat は本アプリでの利用について責任を負いません。")
     }
 
     func testIndicatorEventsListResponseDecodesRealBackendShape() throws {
@@ -275,6 +315,47 @@ final class Phase3ModelsDecodingTests: XCTestCase {
         XCTAssertNil(response.explanation)
         XCTAssertNil(response.analysis.surprise)
         XCTAssertTrue(response.relatedFxPairs.isEmpty)
+        // 古いBackend・Eurostat以外の指標の発表には`event.attribution`自体が無い(api-design v1.43)。
+        XCTAssertNil(response.event.attribution)
+    }
+
+    /// HQ指示(2026-10-31)「出典表示」: Eurostatの指標(EU_HICP・
+    /// EU_UNEMPLOYMENT_RATE)の発表は`event`の中に`attribution`が付く
+    /// (src/routes/events.ts、ロックされていても隠さない)。
+    func testEventDetailResponseDecodesEurostatAttribution() throws {
+        let json = """
+        {
+          "event": {
+            "id": "30000000-0000-0000-0000-000000000009",
+            "indicator_id": "10000000-0000-0000-0000-000000000009",
+            "indicator_name": "Eurozone HICP (YoY)",
+            "country_code": "EU",
+            "currency_code": "EUR",
+            "release_datetime": "2026-11-05T10:00:00.000Z",
+            "release_datetime_precision": "APPROXIMATE",
+            "importance": "HIGH",
+            "status": "SCHEDULED",
+            "data_status": "DATA_PENDING",
+            "revision_status": "NONE",
+            "attribution": {
+              "source": "Eurostat（欧州連合統計局）",
+              "source_url": "https://ec.europa.eu/eurostat",
+              "notice": "Eurostat の公表データをもとに作成しています。Eurostat は本アプリでの利用について責任を負いません。"
+            }
+          },
+          "snapshot": null,
+          "analysis": { "surprise": null, "surprise_direction": null },
+          "explanation": null,
+          "related_fx_pairs": [],
+          "available_timeframes": ["1m", "5m", "15m", "30m", "60m"]
+        }
+        """.data(using: .utf8)!
+
+        let response = try makeDecoder().decode(EventDetailResponse.self, from: json)
+
+        XCTAssertEqual(response.event.attribution?.source, "Eurostat（欧州連合統計局）")
+        XCTAssertEqual(response.event.attribution?.sourceUrl, "https://ec.europa.eu/eurostat")
+        XCTAssertEqual(response.event.attribution?.notice, "Eurostat の公表データをもとに作成しています。Eurostat は本アプリでの利用について責任を負いません。")
     }
 
     // Historical Event Detail (`HistoricalEventDetailResponse`等)のデコードテストは、

@@ -4,7 +4,7 @@ import Foundation
 enum IndicatorDetailState: Equatable {
     case loading
     case backendNotConfigured
-    case loaded(indicator: IndicatorSummary, relatedFxPairs: [RelatedFxPairSummary], recentEvents: [IndicatorEventSummary], nextScheduledEvent: IndicatorEventSummary?)
+    case loaded(indicator: IndicatorSummary, relatedFxPairs: [RelatedFxPairSummary], recentEvents: [IndicatorEventSummary], nextScheduledEvent: IndicatorEventSummary?, attribution: Attribution?)
     case error(String)
 }
 
@@ -62,7 +62,8 @@ final class IndicatorDetailViewModel: ObservableObject {
                 indicator: detailResponse.indicator,
                 relatedFxPairs: detailResponse.relatedFxPairs,
                 recentEvents: eventsResponse.data,
-                nextScheduledEvent: NextReleaseQuery.next(in: scheduledResponse.data, after: now)
+                nextScheduledEvent: NextReleaseQuery.next(in: scheduledResponse.data, after: now),
+                attribution: detailResponse.attribution
             )
         } catch let error as APIError where error.isNotConfigured {
             state = .backendNotConfigured

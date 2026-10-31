@@ -40,6 +40,7 @@ struct EventDetailCards: View {
             VStack(alignment: .leading, spacing: 4) {
                 header
                 results
+                attributionNotice
             }
             // HQ指示(2026-10-09)の2枚目の参考画像: 見出しは表のカードの中、その下に
             // 「相場反応詳細」「過去イベント比較」のボタンと次回発表予定。分析の欄はなくした。
@@ -135,6 +136,36 @@ struct EventDetailCards: View {
         // パディングを縮め、カード右端に寄せた。
         .padding(.trailing, 4)
         .frame(width: 214, alignment: .leading)
+    }
+
+    /// HQ指示(2026-10-31)「出典表示」: APIのattributionを使って出典を表示
+    /// する。要人発言(`SpeechDetailCards.attributionNotice`)と違い、この
+    /// 画面には他に出典の手がかりが無いため、告知文(`notice`)だけでなく
+    /// 出典名(`source`)・出典元のURL(`sourceUrl`、タップで開く)も示す。
+    /// Eurostatの指標だけ付き、それ以外・古いBackendはnil(何も表示しない)。
+    @ViewBuilder private var attributionNotice: some View {
+        if let attribution = response.event.attribution {
+            VStack(alignment: .leading, spacing: 2) {
+                if let url = URL(string: attribution.sourceUrl) {
+                    Link(destination: url) {
+                        NotoText.text("出典：\(attribution.source)", size: 6.5)
+                            .foregroundStyle(V5P.cyan)
+                    }
+                } else {
+                    NotoText.text("出典：\(attribution.source)", size: 6.5)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                }
+                if let notice = attribution.notice {
+                    NotoText.text(notice, size: 6.5)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .lineSpacing(1)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 4)
+            .frame(width: 214, alignment: .leading)
+        }
     }
 
     // MARK: - 結果・予想・前回

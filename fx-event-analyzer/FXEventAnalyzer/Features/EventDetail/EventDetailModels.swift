@@ -40,6 +40,8 @@ struct EventDetailEvent: Decodable, Equatable {
     let revisionStatus: RevisionStatus?
     /// 指標の一覧表示名(api-design v1.22)。古いBackendではnil。
     var displayName: String? = nil
+    /// 出典と告知(api-design v1.43)。Eurostatの指標だけ付く。古いBackendではnil。
+    var attribution: Attribution? = nil
     /// 無料プランで隠された過去の発表(api-design v1.33 §14.1)。古いBackendではnil(=隠していない)。
     var locked: Bool? = nil
     /// ロックを外すのに必要なプラン(`"PRO"`)。ロックしていなければnil。
@@ -60,6 +62,7 @@ struct EventDetailEvent: Decodable, Equatable {
         case previousLocked = "previous_locked"
         case requiredPlan = "required_plan"
         case displayName = "display_name"
+        case attribution
         case id
         case indicatorId = "indicator_id"
         case indicatorName = "indicator_name"

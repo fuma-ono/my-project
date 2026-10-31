@@ -10,12 +10,15 @@ struct IndicatorDetailCard: View {
     let nextScheduledEvent: IndicatorEventSummary?
     /// 過去イベント比較(SCR-009)に使う通貨ペア(関連通貨ペアの先頭)。無ければ行を出さない。
     let comparisonPair: RelatedFxPairSummary?
+    /// 出典と告知(api-design v1.43)。Eurostatの指標だけ付く。古いBackendではnil。
+    var attribution: Attribution? = nil
     let isFavorite: Bool
     let onToggleFavorite: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             mainCard
+            attributionNotice
             // HQ指示(2026-10-09)の1枚目の参考画像: カードの下に「次回発表予定 ›」と
             // 「過去イベント比較 ›」の見出しと、それぞれの小さなカード。
             if let next = nextScheduledEvent {
@@ -100,6 +103,34 @@ struct IndicatorDetailCard: View {
             favoriteStar
                 .padding(.top, 10)
                 .padding(.trailing, 10)
+        }
+    }
+
+    /// HQ指示(2026-10-31)「出典表示」: APIのattributionを使って出典を表示
+    /// する。要人発言(`SpeechDetailCards.attributionNotice`)と違い、この
+    /// 画面には他に出典の手がかりが無いため、告知文(`notice`)だけでなく
+    /// 出典名(`source`)・出典元のURL(`sourceUrl`、タップで開く)も示す。
+    /// Eurostatの指標だけ付き、それ以外・古いBackendはnil(何も表示しない)。
+    @ViewBuilder private var attributionNotice: some View {
+        if let attribution {
+            VStack(alignment: .leading, spacing: 2) {
+                if let url = URL(string: attribution.sourceUrl) {
+                    Link(destination: url) {
+                        NotoText.text("出典：\(attribution.source)", size: 6.5)
+                            .foregroundStyle(V5P.cyan)
+                    }
+                } else {
+                    NotoText.text("出典：\(attribution.source)", size: 6.5)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                }
+                if let notice = attribution.notice {
+                    NotoText.text(notice, size: 6.5)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .lineSpacing(1)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.horizontal, 4)
         }
     }
 

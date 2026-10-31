@@ -168,6 +168,11 @@ enum AppInfo {
             .init(heading: "経済指標の結果の照合", items: [
                 "出典：米国労働統計局（BLS）。各指標の発表日に取得しています。",
                 "BLS.gov cannot vouch for the data or analyses derived from these data after the data have been retrieved from BLS.gov.",
+                // HQ指示(2026-10-31)「出典表示」: ユーロ圏の経済指標(消費者物価指数・失業率)は
+                // Eurostatの公表データを使用。文言はdomain/attribution.tsのEUROSTAT_ATTRIBUTIONと
+                // 同じ(iOS側で独自の文言を作らない)。
+                "出典：Eurostat（欧州連合統計局）。ユーロ圏の消費者物価指数・失業率に使用しています。",
+                "Eurostat の公表データをもとに作成しています。Eurostat は本アプリでの利用について責任を負いません。",
             ]),
             .init(heading: "値動き・pipsについて", items: [
                 "値動き（pips・変化率）は、取得した為替レートをもとに本アプリが計算したものです。取得元が提供した値ではありません。",
