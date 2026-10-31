@@ -178,11 +178,21 @@ struct HistoricalComparisonView: View {
         // 残っていた。表の内容の自然な幅(`Self.landscapeTableNaturalWidth`)
         // と実際に使える横幅(ここでの`availableWidth`、左右の余白18×2を
         // 引いた値)の比率を列幅の倍率(`columns`)にし、空白が残らないよう
-        // 列を実際の横幅いっぱいまで広げる(ただし文字が間延びしすぎない
-        // よう最大1.4倍、縮小はしない(最小1.0倍)よう制限する)。
+        // 列を実際の横幅いっぱいまで広げる(縮小はしない、最小1.0倍)。
+        //
+        // HQ再指摘(2026-10-30、実機確認)「表の両サイドの余白部分が直ってない」:
+        // 前回は「文字が間延びしすぎないよう」上限を1.4倍に制限していたが、
+        // この`scale`は列の幅(`LandscapeColumns`の各プロパティ)にのみ使われ、
+        // 文字サイズ(各セルの`.font(.system(size:))`)は固定値で`scale`の
+        // 影響を受けていない。そのため上限1.4倍は文字の間延び防止には
+        // 効いておらず、前年/前月列が無い指標(自然な幅484pt、大多数の指標)
+        // では必要な倍率(実機で約1.5〜1.7倍)に届かず頭打ちになり、両サイドに
+        // 空白が残っていた(前年/前月列がある米国CPI等は自然な幅695ptのため
+        // 必要倍率が1.4倍未満で収まり、この上限には引っかからなかった)。
+        // 文字サイズが伸びない以上、上限を設ける理由がないため撤廃した。
         let naturalWidth = Self.landscapeTableNaturalWidth(showSecondary: showSecondary)
         let targetWidth = availableWidth - 36
-        let scale = min(max(targetWidth / naturalWidth, 1.0), 1.4)
+        let scale = max(targetWidth / naturalWidth, 1.0)
         let columns = LandscapeColumns(scale: scale)
         return ZStack {
             V5GlowBackground()
