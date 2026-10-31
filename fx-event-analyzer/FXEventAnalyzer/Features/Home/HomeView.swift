@@ -774,30 +774,22 @@ struct HomeView: View {
             // (内部の間隔(`HStack(spacing: 5)`や`VStack`内の間隔)は
             // 変えていない)。
             // HQ指示(2026-10-30)「APPROXIMATEの時刻が正確な時刻と誤認されない
-            // 表示」: Eurostat等、発表の正確な時刻が不明な指標は「約」を前置。
-            // HQ再指摘(2026-10-30、実機確認)「約00:23が国旗アイコンと重なって
-            // 見切れる」、HQ再指摘(2026-10-31)「まだ重なっている」「国旗と
-            // 時刻の間に少し余白がないとダメ」を経て、一度は
-            // `.minimumScaleFactor`で「約」+時刻を列幅に収まるまで丸ごと
-            // 縮小する方式にしたが、HQ再指摘(2026-10-31、2回目)「時刻の
-            // 文字小さすぎ、他とバランス考えろ」: この方式だと時刻の桁
-            // (本来9pt)まで一緒に縮み、EXACTの行(縮小なし)と数字の大きさが
-            // 揃わなくなっていた。文字サイズを一切縮めない方針に戻した。
-            // HQ再指摘(2026-10-31、3回目、実機確認)「まだ重なっている」:
-            // `.padding(.trailing:)`をTextに付ける案を試したが、直後の
-            // `.frame(width: 26)`がこのTextの報告サイズを常に26に固定する
-            // ため、paddingを足してもその報告サイズ(=親のHStackが国旗の
-            // 位置を決めるのに使う値)は変わらず、国旗の位置は一切動いて
-            // いなかった(leading揃えのTextなので、paddingは描画位置にも
-            // 影響しない)。効果があるのはこの`.frame(width:)`自体を広げる
-            // ことだけだと分かったため、APPROXIMATEのときだけ26→34に広げた。
-            // EXACT・日付のみ・不明は26のまま変えていない。
-            AppPreferences.shared.timeText(event.releaseDatetime, precision: event.releaseDatetimePrecision, timeFontSize: 9, approximatePrefixSize: 6)
+            // 表示」で「約」を前置する対応を試みたが、この列はもともと国旗
+            // アイコンのすぐ左という詰まった幅(26pt)しかなく、「約」の分だけ
+            // 列を広げると(HQ再指摘2026-10-31、4回目)「国旗マークや指標の
+            // 位置が他と揃っていない」という新たな問題を生んでしまい、列幅を
+            // 変えない限り重なりも解消できない、という堂々巡りだった。
+            // HQ判断(2026-10-31)「難しいなら約は外して」: この列では
+            // APPROXIMATEでも前置詞を付けず、EXACTと同じ表示にする(列幅・
+            // 国旗の位置は常に一定のまま)。イベント詳細(EventDetailCards.swift)
+            // は列の余裕があるため「約」の表示を維持している。
+            Text(AppPreferences.shared.timeString(event.releaseDatetime))
+                .font(.system(size: 9, weight: .bold))
                 .tracking(-0.2)
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-                .frame(width: event.releaseDatetimePrecision == .approximate ? 34 : 26, alignment: .leading)
+                .frame(width: 26, alignment: .leading)
                 .frame(height: Self.eventRowHeight, alignment: .center)
 
             // HQ指示(2026-10-05、23回目)「今日の重要指標の国旗の下にUSDや

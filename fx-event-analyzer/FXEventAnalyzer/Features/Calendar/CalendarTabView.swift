@@ -353,38 +353,28 @@ private struct CalendarDayList: View {
             HStack(spacing: 4) {
                 VStack(alignment: .leading, spacing: 2) {
                     // HQ指示(2026-10-30)「APPROXIMATEの時刻が正確な時刻と誤認
-                    // されない表示」: Eurostat等、発表の正確な時刻が不明な指標
-                    // (`datetimePrecision == .approximate`)は「約15:00」のように
-                    // 前置詞を付ける。既存のEXACT/日付のみ/不明の表示は変えない。
-                    // HQ再指摘(2026-10-30、実機確認)「約08:50が国旗アイコンと
-                    // 重なって見切れる」、HQ再指摘(2026-10-31)「まだ重なって
-                    // いる」「国旗と時刻の間に少し余白がないとダメ」を経て、
-                    // 一度は`.minimumScaleFactor`で「約」+時刻を列幅に収まる
-                    // まで丸ごと縮小する方式にしたが、HQ再指摘(2026-10-31、
-                    // 2回目)「時刻の文字小さすぎ、他とバランス考えろ」:
-                    // この方式だと時刻の桁(本来9pt)まで一緒に縮み、EXACTの
-                    // 行(縮小なし)と数字の大きさが揃わなくなっていた。
-                    // 文字サイズを一切縮めない方針に戻した。
-                    // HQ再指摘(2026-10-31、3回目、実機確認)「まだ重なっている」:
-                    // `.padding(.trailing:)`をTextに付ける案を試したが、直後の
-                    // `.frame(width: 28)`がこのVStackの報告サイズを常に28に
-                    // 固定するため、Textにpaddingを足してもその報告サイズ
-                    // (=親のHStackが国旗の位置を決めるのに使う値)は変わらず、
-                    // 国旗の位置は一切動いていなかった(paddingは見た目の
-                    // 描画位置にも影響しない、leading揃えのTextなので)。
-                    // 効果があるのはこのVStack自体の`.frame(width:)`を広げる
-                    // ことだけだと分かったため、APPROXIMATEのときだけ28→36に
-                    // 広げた。EXACT・日付のみ・不明は28のまま変えていない。
+                    // されない表示」で「約15:00」のように前置詞を付ける対応を
+                    // 試みたが、この列はもともと国旗アイコンのすぐ左という
+                    // 詰まった幅(28pt)しかなく、「約」の分だけ列を広げると
+                    // (HQ再指摘2026-10-31、4回目)「国旗マークや指標の位置が
+                    // 他と揃っていない」という新たな問題を生んでしまい、
+                    // 列幅を変えない限り重なりも解消できない、という堂々巡り
+                    // だった。HQ判断(2026-10-31)「難しいなら約は外して」:
+                    // この列ではAPPROXIMATEでも前置詞を付けず、EXACTと同じ
+                    // 表示にする(列幅・国旗の位置は常に一定のまま)。
+                    // イベント詳細(EventDetailCards.swift)は列の余裕がある
+                    // ため「約」の表示を維持している。
                     (item.hasTime
-                        ? AppPreferences.shared.timeText(item.datetime, precision: item.datetimePrecision, timeFontSize: 9, approximatePrefixSize: 6)
-                        : Text("未定").font(.system(size: 9, weight: .bold)))
+                        ? Text(AppPreferences.shared.timeString(item.datetime))
+                        : Text("未定"))
+                        .font(.system(size: 9, weight: .bold))
                         .monospacedDigit()
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .fixedSize()
                     Circle().fill(colors.border).frame(width: 5, height: 5)
                 }
-                .frame(width: item.datetimePrecision == .approximate ? 36 : 28, alignment: .leading)
+                .frame(width: 28, alignment: .leading)
                 // HQ指示(2026-10-13、3回目)「枠をもう少し短くして」: 国旗を
                 // 16→14に縮め、カード全体の高さを決めている縦積み部分を詰めた。
                 VStack(spacing: 1) {
