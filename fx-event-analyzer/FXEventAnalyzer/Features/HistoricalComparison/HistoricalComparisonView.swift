@@ -706,13 +706,23 @@ struct HistoricalComparisonView: View {
     /// ンショットでは出ない、この画面特有の実機差異)。行数に関わらず一定の
     /// 余白(`bottomSafetyMargin`)を高さに足し、最終行と外枠の間に常に隙間が
     /// 残るようにした。
+    ///
+    /// HQ再指摘(2026-10-30、実機確認)「縦画面は3つ目が見切れてる」: 無料
+    /// プランはこの画面の比較件数自体が3件までしか返らない
+    /// (`history_events_max`)ため、3件のとき最終行(3件目)が見切れていた
+    /// ことになるが、3件なら表の高さは312/334の上限には達しておらず(頭打ち
+    /// による見切れではない)、`cc3e7b75`で見つかった「最終行が実機のレンダ
+    /// リングで外枠ぴったりの境界からわずかにはみ出て切り取られる」現象と
+    /// 同種と判断した。その時の余白4ptでは今回のケースで足りなかったため、
+    /// 余白を10ptに広げた(行数に関わらず最終行の下に常にこの隙間を確保する
+    /// ため、表示上の見た目への影響はごくわずか)。
     static func tableHeight(rows: Int, limited: Bool, showSecondary: Bool) -> CGFloat {
         let header = headerHeight + (showSecondary ? groupHeaderHeight : 0)
         let content = header + CGFloat(max(rows, 1)) * (rowHeight + 0.5) + bottomSafetyMargin
         return min(content, limited ? 312 : 334)
     }
 
-    private static let bottomSafetyMargin: CGFloat = 4
+    private static let bottomSafetyMargin: CGFloat = 10
 
     /// HQ指示(2026-10-14)「参考画像と比べて文字が小さすぎる。枠も小さい。見やすく」:
     /// 見出し20→26・行18→24、文字は表の見出し6.5→8.5・数字6.5→8.5・時刻5→6.5に上げた。
