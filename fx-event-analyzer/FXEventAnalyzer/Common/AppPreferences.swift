@@ -97,6 +97,20 @@ final class AppPreferences: ObservableObject {
         return precision == .approximate ? "約\(base)" : base
     }
 
+    /// カレンダー・ホームの時刻列(28pt/26ptの固定幅で、すぐ右に国旗アイコンが
+    /// 続く詰まった列)専用。`timeString(_:precision:)`と同じ文言だが、
+    /// 「約」をそのまま時刻と同じ大きさで前置すると、実機確認(2026-10-30)で
+    /// 「約08:50」が国旗アイコンと重なって見切れることが判明した。「約」
+    /// だけ`approximatePrefixSize`で縮小し、時刻の桁(`timeFontSize`)自体は
+    /// 変えない(EXACTの見た目・サイズは一切変わらない)。EventDetailは
+    /// この列より余裕があり重ならないため、引き続き`timeString(_:precision:)`
+    /// の文字列をそのまま使う(ここは使わない)。
+    func timeText(_ date: Date, precision: ReleaseDatetimePrecision?, timeFontSize: CGFloat, approximatePrefixSize: CGFloat) -> Text {
+        let time = Text(timeString(date)).font(.system(size: timeFontSize, weight: .bold))
+        guard precision == .approximate else { return time }
+        return Text("約").font(.system(size: approximatePrefixSize, weight: .bold)) + time
+    }
+
     /// 「（日本時間）」「（ニューヨーク時間）」。
     var timeZoneNote: String { "（\(Self.cityName(display.timezone))時間）" }
 

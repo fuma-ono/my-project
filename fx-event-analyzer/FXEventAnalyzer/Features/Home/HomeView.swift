@@ -775,8 +775,12 @@ struct HomeView: View {
             // 変えていない)。
             // HQ指示(2026-10-30)「APPROXIMATEの時刻が正確な時刻と誤認されない
             // 表示」: Eurostat等、発表の正確な時刻が不明な指標は「約」を前置。
-            Text(AppPreferences.shared.timeString(event.releaseDatetime, precision: event.releaseDatetimePrecision))
-                .font(.system(size: 9, weight: .bold))
+            // HQ再指摘(2026-10-30、実機確認)「約00:23が国旗アイコンと重なって
+            // 見切れる」: 「約」を時刻と同じ9ptでそのまま前置すると、この列の
+            // すぐ右の国旗アイコンに重なっていた。「約」だけ縮小する
+            // `timeText(_:precision:...)`に差し替えた(時刻の桁の大きさ・
+            // EXACTの見た目は変えていない)。
+            AppPreferences.shared.timeText(event.releaseDatetime, precision: event.releaseDatetimePrecision, timeFontSize: 9, approximatePrefixSize: 6)
                 .tracking(-0.2)
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: true, vertical: false)

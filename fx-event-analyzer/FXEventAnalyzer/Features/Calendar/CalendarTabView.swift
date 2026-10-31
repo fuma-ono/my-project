@@ -356,8 +356,14 @@ private struct CalendarDayList: View {
                     // されない表示」: Eurostat等、発表の正確な時刻が不明な指標
                     // (`datetimePrecision == .approximate`)は「約15:00」のように
                     // 前置詞を付ける。既存のEXACT/日付のみ/不明の表示は変えない。
-                    Text(item.hasTime ? AppPreferences.shared.timeString(item.datetime, precision: item.datetimePrecision) : "未定")
-                        .font(.system(size: 9, weight: .bold))
+                    // HQ再指摘(2026-10-30、実機確認)「約08:50が国旗アイコンと
+                    // 重なって見切れる」: 「約」を時刻と同じ9ptでそのまま前置
+                    // すると、この列のすぐ右の国旗アイコンに重なっていた。
+                    // 「約」だけ縮小する`timeText(_:precision:...)`に差し替えた
+                    // (時刻の桁の大きさ・EXACTの見た目は変えていない)。
+                    (item.hasTime
+                        ? AppPreferences.shared.timeText(item.datetime, precision: item.datetimePrecision, timeFontSize: 9, approximatePrefixSize: 6)
+                        : Text("未定").font(.system(size: 9, weight: .bold)))
                         .monospacedDigit()
                         .foregroundStyle(.white)
                         .lineLimit(1)
