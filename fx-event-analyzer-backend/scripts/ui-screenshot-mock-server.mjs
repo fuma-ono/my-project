@@ -1420,6 +1420,12 @@ function comparisonPips(index) {
   return row ? { '1m': row[3], '5m': row[4], '15m': row[5] } : { '1m': null, '5m': null, '15m': null };
 }
 
+// 検証用(HQ指示2026-10-31「前月がない指標の過去イベント比較の縦横画面を
+// 見せて」、撮影後にfalseへ戻す): このモックの過去イベント比較は常に
+// 米国CPI相当(前年/前月の副指標あり)のデータを返すため、副指標が無い
+// 大多数の指標の見た目を一時的にここで再現する。
+const VERIFY_NO_SECONDARY_COLUMN = true;
+
 function comparisonEventsList() {
   // ComparisonEventSummary.CodingKeys maps `id` to JSON key `event_id`
   // (HistoricalComparisonModels.swift) — matches historicalRepository.ts's
@@ -1434,10 +1440,10 @@ function comparisonEventsList() {
       previous: RELEASE_SNAPSHOT.previous,
       surprise: RELEASE_SNAPSHOT.surprise,
       surprise_direction: RELEASE_SNAPSHOT.surprise_direction,
-      secondary_value_kind: RELEASE_SNAPSHOT.secondary_value_kind,
-      secondary_forecast: RELEASE_SNAPSHOT.secondary_forecast,
-      secondary_actual: RELEASE_SNAPSHOT.secondary_actual,
-      secondary_previous: RELEASE_SNAPSHOT.secondary_previous,
+      secondary_value_kind: VERIFY_NO_SECONDARY_COLUMN ? null : RELEASE_SNAPSHOT.secondary_value_kind,
+      secondary_forecast: VERIFY_NO_SECONDARY_COLUMN ? null : RELEASE_SNAPSHOT.secondary_forecast,
+      secondary_actual: VERIFY_NO_SECONDARY_COLUMN ? null : RELEASE_SNAPSHOT.secondary_actual,
+      secondary_previous: VERIFY_NO_SECONDARY_COLUMN ? null : RELEASE_SNAPSHOT.secondary_previous,
       pips_by_timeframe: comparisonPips(0),
     },
     ...HISTORICAL_EVENT_IDS.map((id, index) => {
@@ -1452,10 +1458,10 @@ function comparisonEventsList() {
         previous,
         surprise,
         surprise_direction: surprise > 0 ? 'POSITIVE' : surprise < 0 ? 'NEGATIVE' : 'NEUTRAL',
-        secondary_value_kind: 'MOM_PCT',
+        secondary_value_kind: VERIFY_NO_SECONDARY_COLUMN ? null : 'MOM_PCT',
         secondary_forecast: null,
-        secondary_actual: COMPARISON_TABLE_MOM[index + 1] ?? null,
-        secondary_previous: COMPARISON_TABLE_MOM[index + 2] ?? null,
+        secondary_actual: VERIFY_NO_SECONDARY_COLUMN ? null : (COMPARISON_TABLE_MOM[index + 1] ?? null),
+        secondary_previous: VERIFY_NO_SECONDARY_COLUMN ? null : (COMPARISON_TABLE_MOM[index + 2] ?? null),
         pips_by_timeframe: comparisonPips(index + 1),
       };
     }),
