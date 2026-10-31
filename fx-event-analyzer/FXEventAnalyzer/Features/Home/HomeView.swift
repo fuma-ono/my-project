@@ -776,31 +776,22 @@ struct HomeView: View {
             // HQ指示(2026-10-30)「APPROXIMATEの時刻が正確な時刻と誤認されない
             // 表示」: Eurostat等、発表の正確な時刻が不明な指標は「約」を前置。
             // HQ再指摘(2026-10-30、実機確認)「約00:23が国旗アイコンと重なって
-            // 見切れる」: 「約」を時刻と同じ9ptでそのまま前置すると、この列の
-            // すぐ右の国旗アイコンに重なっていた。「約」だけ縮小する
-            // `timeText(_:precision:...)`に差し替えた(時刻の桁の大きさ・
-            // EXACTの見た目は変えていない)が、HQ再指摘(2026-10-31、実機確認)
-            // 「まだ重なっている」: 6ptへの固定縮小だけでは、端末によって
-            // 「約」+時刻の自然な幅が依然としてこの列の幅(26pt)を超え、
-            // `.fixedSize(horizontal: true, ...)`(この列の`.frame(width: 26)`を
-            // 無視して自然な幅で描画する)の効果でその分だけ右の国旗にはみ
-            // 出していた。APPROXIMATEのときだけ`.fixedSize()`の横方向を外し、
-            // 代わりに`.minimumScaleFactor`でこの列の幅(26pt)に収まるまで
-            // 全体を縮小する(文字サイズを固定値で狙い撃ちするのではなく、
-            // 実際に収まる保証がある縮小にした)。
-            // HQ指摘(2026-10-31)「国旗と時刻の間に少し余白がないとダメ」:
-            // 列幅いっぱい(26pt)まで縮小を許すと国旗との間が隙間ゼロに
-            // なりかねないため、APPROXIMATEは縮小の目標幅を22ptに狭め、
-            // この列の右端(26pt)との間に常に4pt分の余白を残す。EXACT・
-            // 日付のみ・不明は`.fixedSize(horizontal: true, ...)`の挙動
-            // そのまま(幅22ptの制約も適用しない)で見た目を一切変えていない。
+            // 見切れる」、HQ再指摘(2026-10-31)「まだ重なっている」「国旗と
+            // 時刻の間に少し余白がないとダメ」を経て、一度は
+            // `.minimumScaleFactor`で「約」+時刻を列幅に収まるまで丸ごと
+            // 縮小する方式にしたが、HQ再指摘(2026-10-31、2回目)「時刻の
+            // 文字小さすぎ、他とバランス考えろ」: この方式だと時刻の桁
+            // (本来9pt)まで一緒に縮み、EXACTの行(縮小なし)と数字の大きさが
+            // 揃わなくなっていた。文字サイズを一切縮めない方針に戻し、
+            // 代わりにAPPROXIMATEのときだけこの時刻テキスト自身に右側の
+            // 余白を追加する(EXACTの行は`.padding`が付かず、国旗の位置も
+            // 一切変わらない)。
             AppPreferences.shared.timeText(event.releaseDatetime, precision: event.releaseDatetimePrecision, timeFontSize: 9, approximatePrefixSize: 6)
                 .tracking(-0.2)
                 .foregroundStyle(.white)
                 .lineLimit(1)
-                .minimumScaleFactor(event.releaseDatetimePrecision == .approximate ? 0.55 : 1)
-                .frame(width: event.releaseDatetimePrecision == .approximate ? 22 : nil, alignment: .leading)
-                .fixedSize(horizontal: event.releaseDatetimePrecision != .approximate, vertical: false)
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.trailing, event.releaseDatetimePrecision == .approximate ? 6 : 0)
                 .frame(width: 26, alignment: .leading)
                 .frame(height: Self.eventRowHeight, alignment: .center)
 

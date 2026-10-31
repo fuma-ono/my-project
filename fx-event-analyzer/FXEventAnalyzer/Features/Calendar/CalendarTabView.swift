@@ -357,36 +357,28 @@ private struct CalendarDayList: View {
                     // (`datetimePrecision == .approximate`)は「約15:00」のように
                     // 前置詞を付ける。既存のEXACT/日付のみ/不明の表示は変えない。
                     // HQ再指摘(2026-10-30、実機確認)「約08:50が国旗アイコンと
-                    // 重なって見切れる」: 「約」を時刻と同じ9ptでそのまま前置
-                    // すると、この列のすぐ右の国旗アイコンに重なっていた。
-                    // 「約」だけ縮小する`timeText(_:precision:...)`に差し替えた
-                    // (時刻の桁の大きさ・EXACTの見た目は変えていない)が、
-                    // HQ再指摘(2026-10-31、実機確認)「まだ重なっている」:
-                    // 6ptへの固定縮小だけでは、端末によって「約」+時刻の
-                    // 自然な幅が依然としてこの列の幅(28pt)を超え、`.fixedSize()`
-                    // (この列の`.frame(width: 28)`を無視して自然な幅で描画する)
-                    // の効果でその分だけ右の国旗にはみ出していた。APPROXIMATEの
-                    // ときだけ`.fixedSize()`の横方向を外し、代わりに
-                    // `.minimumScaleFactor`でこの列の幅に収まるまで全体を
-                    // 縮小する(文字サイズを固定値で狙い撃ちするのではなく、
-                    // 実際に収まる保証がある縮小にした)。
-                    // HQ指摘(2026-10-31)「国旗と時刻の間に少し余白がないと
-                    // ダメ」: 列幅いっぱい(28pt)まで縮小を許すと、国旗との間が
-                    // 隙間ゼロ(ちょうど接する)になりかねないため、APPROXIMATEは
-                    // 縮小の目標幅を24ptに狭め、この列の右端(28pt)との間に
-                    // 常に4pt分の余白を残す(HStack側の`spacing: 4`と合わせて
-                    // 国旗との間は実質8pt相当の余白になる)。EXACT・日付のみ・
-                    // 不明・「未定」は`.fixedSize()`の挙動そのまま(horizontal:
-                    // true、幅24ptの制約も適用しない)で見た目を一切変えていない。
+                    // 重なって見切れる」、HQ再指摘(2026-10-31)「まだ重なって
+                    // いる」「国旗と時刻の間に少し余白がないとダメ」を経て、
+                    // 一度は`.minimumScaleFactor`で「約」+時刻を列幅に収まる
+                    // まで丸ごと縮小する方式にしたが、HQ再指摘(2026-10-31、
+                    // 2回目)「時刻の文字小さすぎ、他とバランス考えろ」:
+                    // この方式だと時刻の桁(本来9pt)まで一緒に縮み、EXACTの
+                    // 行(縮小なし)と数字の大きさが揃わなくなっていた。
+                    // 文字サイズを一切縮めない方針に戻した。間隔を広げる対象を
+                    // この列全体のHStack(spacing:)にすると、国旗の次の指標名
+                    // 列の幅まで一緒に削ってしまう(過去にNFP等の名前が
+                    // 縮みすぎた経緯があるため避けたい)ため、この時刻
+                    // テキスト自身にAPPROXIMATEのときだけ右側の余白を追加する
+                    // (EXACTの行は`.padding`が付かず、国旗の位置・指標名の
+                    // 幅とも一切変わらない)。
                     (item.hasTime
                         ? AppPreferences.shared.timeText(item.datetime, precision: item.datetimePrecision, timeFontSize: 9, approximatePrefixSize: 6)
                         : Text("未定").font(.system(size: 9, weight: .bold)))
                         .monospacedDigit()
                         .foregroundStyle(.white)
                         .lineLimit(1)
-                        .minimumScaleFactor(item.datetimePrecision == .approximate ? 0.55 : 1)
-                        .frame(width: item.datetimePrecision == .approximate ? 24 : nil, alignment: .leading)
-                        .fixedSize(horizontal: item.datetimePrecision != .approximate, vertical: true)
+                        .fixedSize()
+                        .padding(.trailing, item.datetimePrecision == .approximate ? 6 : 0)
                     Circle().fill(colors.border).frame(width: 5, height: 5)
                 }
                 .frame(width: 28, alignment: .leading)
