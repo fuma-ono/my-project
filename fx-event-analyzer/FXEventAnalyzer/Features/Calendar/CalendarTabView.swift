@@ -360,14 +360,26 @@ private struct CalendarDayList: View {
                     // 重なって見切れる」: 「約」を時刻と同じ9ptでそのまま前置
                     // すると、この列のすぐ右の国旗アイコンに重なっていた。
                     // 「約」だけ縮小する`timeText(_:precision:...)`に差し替えた
-                    // (時刻の桁の大きさ・EXACTの見た目は変えていない)。
+                    // (時刻の桁の大きさ・EXACTの見た目は変えていない)が、
+                    // HQ再指摘(2026-10-31、実機確認)「まだ重なっている」:
+                    // 6ptへの固定縮小だけでは、端末によって「約」+時刻の
+                    // 自然な幅が依然としてこの列の幅(28pt)を超え、`.fixedSize()`
+                    // (この列の`.frame(width: 28)`を無視して自然な幅で描画する)
+                    // の効果でその分だけ右の国旗にはみ出していた。APPROXIMATEの
+                    // ときだけ`.fixedSize()`の横方向を外し、代わりに
+                    // `.minimumScaleFactor`でこの列の幅(28pt)に収まるまで
+                    // 全体を縮小する(文字サイズを固定値で狙い撃ちするのではなく、
+                    // 実際に収まる保証がある縮小にした)。EXACT・日付のみ・不明・
+                    // 「未定」は`.fixedSize()`の挙動そのまま(horizontal: true)で
+                    // 見た目を一切変えていない。
                     (item.hasTime
                         ? AppPreferences.shared.timeText(item.datetime, precision: item.datetimePrecision, timeFontSize: 9, approximatePrefixSize: 6)
                         : Text("未定").font(.system(size: 9, weight: .bold)))
                         .monospacedDigit()
                         .foregroundStyle(.white)
                         .lineLimit(1)
-                        .fixedSize()
+                        .minimumScaleFactor(item.datetimePrecision == .approximate ? 0.55 : 1)
+                        .fixedSize(horizontal: item.datetimePrecision != .approximate, vertical: true)
                     Circle().fill(colors.border).frame(width: 5, height: 5)
                 }
                 .frame(width: 28, alignment: .leading)

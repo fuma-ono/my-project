@@ -779,11 +779,23 @@ struct HomeView: View {
             // 見切れる」: 「約」を時刻と同じ9ptでそのまま前置すると、この列の
             // すぐ右の国旗アイコンに重なっていた。「約」だけ縮小する
             // `timeText(_:precision:...)`に差し替えた(時刻の桁の大きさ・
-            // EXACTの見た目は変えていない)。
+            // EXACTの見た目は変えていない)が、HQ再指摘(2026-10-31、実機確認)
+            // 「まだ重なっている」: 6ptへの固定縮小だけでは、端末によって
+            // 「約」+時刻の自然な幅が依然としてこの列の幅(26pt)を超え、
+            // `.fixedSize(horizontal: true, ...)`(この列の`.frame(width: 26)`を
+            // 無視して自然な幅で描画する)の効果でその分だけ右の国旗にはみ
+            // 出していた。APPROXIMATEのときだけ`.fixedSize()`の横方向を外し、
+            // 代わりに`.minimumScaleFactor`でこの列の幅(26pt)に収まるまで
+            // 全体を縮小する(文字サイズを固定値で狙い撃ちするのではなく、
+            // 実際に収まる保証がある縮小にした)。EXACT・日付のみ・不明は
+            // `.fixedSize(horizontal: true, ...)`の挙動そのままで見た目を
+            // 一切変えていない。
             AppPreferences.shared.timeText(event.releaseDatetime, precision: event.releaseDatetimePrecision, timeFontSize: 9, approximatePrefixSize: 6)
                 .tracking(-0.2)
                 .foregroundStyle(.white)
-                .fixedSize(horizontal: true, vertical: false)
+                .lineLimit(1)
+                .minimumScaleFactor(event.releaseDatetimePrecision == .approximate ? 0.55 : 1)
+                .fixedSize(horizontal: event.releaseDatetimePrecision != .approximate, vertical: false)
                 .frame(width: 26, alignment: .leading)
                 .frame(height: Self.eventRowHeight, alignment: .center)
 

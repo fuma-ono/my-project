@@ -713,16 +713,19 @@ struct HistoricalComparisonView: View {
     /// ことになるが、3件なら表の高さは312/334の上限には達しておらず(頭打ち
     /// による見切れではない)、`cc3e7b75`で見つかった「最終行が実機のレンダ
     /// リングで外枠ぴったりの境界からわずかにはみ出て切り取られる」現象と
-    /// 同種と判断した。その時の余白4ptでは今回のケースで足りなかったため、
-    /// 余白を10ptに広げた(行数に関わらず最終行の下に常にこの隙間を確保する
-    /// ため、表示上の見た目への影響はごくわずか)。
+    /// 同種と判断し、余白を4→10ptに広げた。
+    ///
+    /// HQ再指摘(2026-10-31)「縦画面の表の下部分の余白が大きいからなくして」:
+    /// 10ptはCIスクリーンショットで見ると目立つ余白になっていた(実機の
+    /// わずかなはみ出しを吸収するための保険にしては大きすぎた)。6ptに
+    /// 下げ、安全マージンは残しつつ見た目の余白を抑えた。
     static func tableHeight(rows: Int, limited: Bool, showSecondary: Bool) -> CGFloat {
         let header = headerHeight + (showSecondary ? groupHeaderHeight : 0)
         let content = header + CGFloat(max(rows, 1)) * (rowHeight + 0.5) + bottomSafetyMargin
         return min(content, limited ? 312 : 334)
     }
 
-    private static let bottomSafetyMargin: CGFloat = 10
+    private static let bottomSafetyMargin: CGFloat = 6
 
     /// HQ指示(2026-10-14)「参考画像と比べて文字が小さすぎる。枠も小さい。見やすく」:
     /// 見出し20→26・行18→24、文字は表の見出し6.5→8.5・数字6.5→8.5・時刻5→6.5に上げた。
