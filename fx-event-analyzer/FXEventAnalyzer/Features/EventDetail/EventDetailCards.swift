@@ -36,7 +36,12 @@ struct EventDetailCards: View {
         // HQ指示(2026-10-26)「次回発表予定が1画面に収まっていない」:
         // 前年比/前月比の2段構成でカード自体が伸びた分、ここのセクション間隔も
         // 詰めて最後の次回発表予定まで1画面に収まるようにした(8→5)。
-        VStack(alignment: .leading, spacing: 5) {
+        // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」
+        // 「下が見切れています」: 出典(attributionNotice)の分だけ縦に伸び、
+        // 次回発表予定がこのScrollView(398pt固定)の外に出てしまっていた。
+        // 出典の有無に関わらず一律で5→3にさらに詰め、出典が無い既存の
+        // 表示は(わずかに詰まる程度で)崩さないようにした。
+        VStack(alignment: .leading, spacing: 3) {
             VStack(alignment: .leading, spacing: 4) {
                 header
                 results
@@ -144,26 +149,32 @@ struct EventDetailCards: View {
     /// 出典名(`source`)・出典元のURL(`sourceUrl`、タップで開く)も示す。
     /// Eurostatの指標だけ付き、それ以外・古いBackendはnil(何も表示しない)。
     @ViewBuilder private var attributionNotice: some View {
+        // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」
+        // 「下が見切れています」: このScrollViewは398ptに固定されており、
+        // 次回発表予定まで収まるよう各セクションの間隔が既にぎりぎりまで
+        // 詰められている(上のコメント参照)。出典の分を追加で食わせると
+        // 必ずどこかが見切れるため、親(spacing:4)に重ねて余白を足さない
+        // (padding.topを付けない)・内側の行間を1に詰める・文字サイズを
+        // 6に下げる、の3点で追加分を最小限にした。
         if let attribution = response.event.attribution {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 if let url = URL(string: attribution.sourceUrl) {
                     Link(destination: url) {
-                        NotoText.text("出典：\(attribution.source)", size: 6.5)
+                        NotoText.text("出典：\(attribution.source)", size: 6)
                             .foregroundStyle(V5P.cyan)
                     }
                 } else {
-                    NotoText.text("出典：\(attribution.source)", size: 6.5)
+                    NotoText.text("出典：\(attribution.source)", size: 6)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                 }
                 if let notice = attribution.notice {
-                    NotoText.text(notice, size: 6.5)
+                    NotoText.text(notice, size: 6)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
-                        .lineSpacing(1)
+                        .lineSpacing(0)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(.horizontal, 10)
-            .padding(.top, 4)
             .frame(width: 214, alignment: .leading)
         }
     }
@@ -393,7 +404,9 @@ struct EventDetailCards: View {
         // プレーンな見出しテキストに戻した。表(見出し行〜各通貨ペアの行)
         // 側のクリップ用背景(`AccountCardBackground`)は見出しの外に
         // あるため、見出し自体には色も枠も付かない。
-        VStack(alignment: .leading, spacing: 6) {
+        // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」対応
+        // (詳細はbodyのコメント参照): 見出しと表の間隔も6→4に詰めた。
+        VStack(alignment: .leading, spacing: 4) {
             V5JPFont.text("主要通貨ペアの値動き（pips）", size: 10, weight: .semibold)
                 .foregroundStyle(.white)
             grid

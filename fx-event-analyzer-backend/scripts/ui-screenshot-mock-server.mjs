@@ -1035,6 +1035,10 @@ function indicatorDetailHandler(indicatorId) {
       indicatorId === INDICATOR_ID
         ? { id: EVENT_ID, release_datetime: EVENT_RELEASE_DATETIME, status: 'RELEASED' }
         : null,
+    // 検証用(出典表示が1画面に収まるか再確認、撮影後に戻す):
+    attribution: indicatorId === INDICATOR_ID
+      ? { source: 'Eurostat（欧州連合統計局）', source_url: 'https://ec.europa.eu/eurostat', notice: 'Eurostat の公表データをもとに作成しています。Eurostat は本アプリでの利用について責任を負いません。' }
+      : null,
   };
 }
 
@@ -1128,6 +1132,8 @@ function eventDetailHandler(eventId) {
       status: isUpcoming ? 'SCHEDULED' : 'RELEASED',
       data_status: isUpcoming ? 'DATA_PENDING' : 'READY',
       revision_status: 'NONE',
+      // 検証用(出典表示が1画面に収まるか再確認、撮影後に戻す):
+      attribution: { source: 'Eurostat（欧州連合統計局）', source_url: 'https://ec.europa.eu/eurostat', notice: 'Eurostat の公表データをもとに作成しています。Eurostat は本アプリでの利用について責任を負いません。' },
     },
     snapshot: isUpcoming ? null : RELEASE_SNAPSHOT,
     analysis: {

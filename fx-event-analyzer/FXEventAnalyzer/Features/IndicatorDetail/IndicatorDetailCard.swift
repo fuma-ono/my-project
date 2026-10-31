@@ -16,9 +16,16 @@ struct IndicatorDetailCard: View {
     let onToggleFavorite: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            mainCard
-            attributionNotice
+        // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」
+        // 「下が見切れています」: このScrollViewも398pt固定で、出典の分だけ
+        // 伸びると過去イベント比較が外に出てしまう。mainCardと出典だけ
+        // 近い間隔(4)でまとめ、それ以外のセクション間隔も8→6に詰めた
+        // (出典の有無に関わらず一律。無いときはわずかに詰まるだけ)。
+        VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
+                mainCard
+                attributionNotice
+            }
             // HQ指示(2026-10-09)の1枚目の参考画像: カードの下に「次回発表予定 ›」と
             // 「過去イベント比較 ›」の見出しと、それぞれの小さなカード。
             if let next = nextScheduledEvent {
@@ -112,21 +119,23 @@ struct IndicatorDetailCard: View {
     /// 出典名(`source`)・出典元のURL(`sourceUrl`、タップで開く)も示す。
     /// Eurostatの指標だけ付き、それ以外・古いBackendはnil(何も表示しない)。
     @ViewBuilder private var attributionNotice: some View {
+        // HQ指摘(2026-10-31)「1画面に収まるように」: EventDetailCardsと
+        // 同じく、行間を詰め・文字サイズを6に下げて追加分を最小限にした。
         if let attribution {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 if let url = URL(string: attribution.sourceUrl) {
                     Link(destination: url) {
-                        NotoText.text("出典：\(attribution.source)", size: 6.5)
+                        NotoText.text("出典：\(attribution.source)", size: 6)
                             .foregroundStyle(V5P.cyan)
                     }
                 } else {
-                    NotoText.text("出典：\(attribution.source)", size: 6.5)
+                    NotoText.text("出典：\(attribution.source)", size: 6)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                 }
                 if let notice = attribution.notice {
-                    NotoText.text(notice, size: 6.5)
+                    NotoText.text(notice, size: 6)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
-                        .lineSpacing(1)
+                        .lineSpacing(0)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
