@@ -782,17 +782,22 @@ struct HomeView: View {
             // 縮小する方式にしたが、HQ再指摘(2026-10-31、2回目)「時刻の
             // 文字小さすぎ、他とバランス考えろ」: この方式だと時刻の桁
             // (本来9pt)まで一緒に縮み、EXACTの行(縮小なし)と数字の大きさが
-            // 揃わなくなっていた。文字サイズを一切縮めない方針に戻し、
-            // 代わりにAPPROXIMATEのときだけこの時刻テキスト自身に右側の
-            // 余白を追加する(EXACTの行は`.padding`が付かず、国旗の位置も
-            // 一切変わらない)。
+            // 揃わなくなっていた。文字サイズを一切縮めない方針に戻した。
+            // HQ再指摘(2026-10-31、3回目、実機確認)「まだ重なっている」:
+            // `.padding(.trailing:)`をTextに付ける案を試したが、直後の
+            // `.frame(width: 26)`がこのTextの報告サイズを常に26に固定する
+            // ため、paddingを足してもその報告サイズ(=親のHStackが国旗の
+            // 位置を決めるのに使う値)は変わらず、国旗の位置は一切動いて
+            // いなかった(leading揃えのTextなので、paddingは描画位置にも
+            // 影響しない)。効果があるのはこの`.frame(width:)`自体を広げる
+            // ことだけだと分かったため、APPROXIMATEのときだけ26→34に広げた。
+            // EXACT・日付のみ・不明は26のまま変えていない。
             AppPreferences.shared.timeText(event.releaseDatetime, precision: event.releaseDatetimePrecision, timeFontSize: 9, approximatePrefixSize: 6)
                 .tracking(-0.2)
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-                .padding(.trailing, event.releaseDatetimePrecision == .approximate ? 6 : 0)
-                .frame(width: 26, alignment: .leading)
+                .frame(width: event.releaseDatetimePrecision == .approximate ? 34 : 26, alignment: .leading)
                 .frame(height: Self.eventRowHeight, alignment: .center)
 
             // HQ指示(2026-10-05、23回目)「今日の重要指標の国旗の下にUSDや

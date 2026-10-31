@@ -364,13 +364,17 @@ private struct CalendarDayList: View {
                     // 2回目)「時刻の文字小さすぎ、他とバランス考えろ」:
                     // この方式だと時刻の桁(本来9pt)まで一緒に縮み、EXACTの
                     // 行(縮小なし)と数字の大きさが揃わなくなっていた。
-                    // 文字サイズを一切縮めない方針に戻した。間隔を広げる対象を
-                    // この列全体のHStack(spacing:)にすると、国旗の次の指標名
-                    // 列の幅まで一緒に削ってしまう(過去にNFP等の名前が
-                    // 縮みすぎた経緯があるため避けたい)ため、この時刻
-                    // テキスト自身にAPPROXIMATEのときだけ右側の余白を追加する
-                    // (EXACTの行は`.padding`が付かず、国旗の位置・指標名の
-                    // 幅とも一切変わらない)。
+                    // 文字サイズを一切縮めない方針に戻した。
+                    // HQ再指摘(2026-10-31、3回目、実機確認)「まだ重なっている」:
+                    // `.padding(.trailing:)`をTextに付ける案を試したが、直後の
+                    // `.frame(width: 28)`がこのVStackの報告サイズを常に28に
+                    // 固定するため、Textにpaddingを足してもその報告サイズ
+                    // (=親のHStackが国旗の位置を決めるのに使う値)は変わらず、
+                    // 国旗の位置は一切動いていなかった(paddingは見た目の
+                    // 描画位置にも影響しない、leading揃えのTextなので)。
+                    // 効果があるのはこのVStack自体の`.frame(width:)`を広げる
+                    // ことだけだと分かったため、APPROXIMATEのときだけ28→36に
+                    // 広げた。EXACT・日付のみ・不明は28のまま変えていない。
                     (item.hasTime
                         ? AppPreferences.shared.timeText(item.datetime, precision: item.datetimePrecision, timeFontSize: 9, approximatePrefixSize: 6)
                         : Text("未定").font(.system(size: 9, weight: .bold)))
@@ -378,10 +382,9 @@ private struct CalendarDayList: View {
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .fixedSize()
-                        .padding(.trailing, item.datetimePrecision == .approximate ? 6 : 0)
                     Circle().fill(colors.border).frame(width: 5, height: 5)
                 }
-                .frame(width: 28, alignment: .leading)
+                .frame(width: item.datetimePrecision == .approximate ? 36 : 28, alignment: .leading)
                 // HQ指示(2026-10-13、3回目)「枠をもう少し短くして」: 国旗を
                 // 16→14に縮め、カード全体の高さを決めている縦積み部分を詰めた。
                 VStack(spacing: 1) {
