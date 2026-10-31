@@ -787,14 +787,19 @@ struct HomeView: View {
             // 出していた。APPROXIMATEのときだけ`.fixedSize()`の横方向を外し、
             // 代わりに`.minimumScaleFactor`でこの列の幅(26pt)に収まるまで
             // 全体を縮小する(文字サイズを固定値で狙い撃ちするのではなく、
-            // 実際に収まる保証がある縮小にした)。EXACT・日付のみ・不明は
-            // `.fixedSize(horizontal: true, ...)`の挙動そのままで見た目を
-            // 一切変えていない。
+            // 実際に収まる保証がある縮小にした)。
+            // HQ指摘(2026-10-31)「国旗と時刻の間に少し余白がないとダメ」:
+            // 列幅いっぱい(26pt)まで縮小を許すと国旗との間が隙間ゼロに
+            // なりかねないため、APPROXIMATEは縮小の目標幅を22ptに狭め、
+            // この列の右端(26pt)との間に常に4pt分の余白を残す。EXACT・
+            // 日付のみ・不明は`.fixedSize(horizontal: true, ...)`の挙動
+            // そのまま(幅22ptの制約も適用しない)で見た目を一切変えていない。
             AppPreferences.shared.timeText(event.releaseDatetime, precision: event.releaseDatetimePrecision, timeFontSize: 9, approximatePrefixSize: 6)
                 .tracking(-0.2)
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(event.releaseDatetimePrecision == .approximate ? 0.55 : 1)
+                .frame(width: event.releaseDatetimePrecision == .approximate ? 22 : nil, alignment: .leading)
                 .fixedSize(horizontal: event.releaseDatetimePrecision != .approximate, vertical: false)
                 .frame(width: 26, alignment: .leading)
                 .frame(height: Self.eventRowHeight, alignment: .center)

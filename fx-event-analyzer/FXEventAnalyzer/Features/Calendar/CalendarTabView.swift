@@ -367,11 +367,17 @@ private struct CalendarDayList: View {
                     // (この列の`.frame(width: 28)`を無視して自然な幅で描画する)
                     // の効果でその分だけ右の国旗にはみ出していた。APPROXIMATEの
                     // ときだけ`.fixedSize()`の横方向を外し、代わりに
-                    // `.minimumScaleFactor`でこの列の幅(28pt)に収まるまで
-                    // 全体を縮小する(文字サイズを固定値で狙い撃ちするのではなく、
-                    // 実際に収まる保証がある縮小にした)。EXACT・日付のみ・不明・
-                    // 「未定」は`.fixedSize()`の挙動そのまま(horizontal: true)で
-                    // 見た目を一切変えていない。
+                    // `.minimumScaleFactor`でこの列の幅に収まるまで全体を
+                    // 縮小する(文字サイズを固定値で狙い撃ちするのではなく、
+                    // 実際に収まる保証がある縮小にした)。
+                    // HQ指摘(2026-10-31)「国旗と時刻の間に少し余白がないと
+                    // ダメ」: 列幅いっぱい(28pt)まで縮小を許すと、国旗との間が
+                    // 隙間ゼロ(ちょうど接する)になりかねないため、APPROXIMATEは
+                    // 縮小の目標幅を24ptに狭め、この列の右端(28pt)との間に
+                    // 常に4pt分の余白を残す(HStack側の`spacing: 4`と合わせて
+                    // 国旗との間は実質8pt相当の余白になる)。EXACT・日付のみ・
+                    // 不明・「未定」は`.fixedSize()`の挙動そのまま(horizontal:
+                    // true、幅24ptの制約も適用しない)で見た目を一切変えていない。
                     (item.hasTime
                         ? AppPreferences.shared.timeText(item.datetime, precision: item.datetimePrecision, timeFontSize: 9, approximatePrefixSize: 6)
                         : Text("未定").font(.system(size: 9, weight: .bold)))
@@ -379,6 +385,7 @@ private struct CalendarDayList: View {
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .minimumScaleFactor(item.datetimePrecision == .approximate ? 0.55 : 1)
+                        .frame(width: item.datetimePrecision == .approximate ? 24 : nil, alignment: .leading)
                         .fixedSize(horizontal: item.datetimePrecision != .approximate, vertical: true)
                     Circle().fill(colors.border).frame(width: 5, height: 5)
                 }
