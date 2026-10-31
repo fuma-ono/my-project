@@ -169,12 +169,12 @@ final class IndicatorDisplayNameTests: XCTestCase {
         XCTAssertEqual(HistoricalComparisonView.pipsText(2.1), "+2.1")
         XCTAssertEqual(HistoricalComparisonView.pairLabel("USDJPY"), "USD/JPY")
         XCTAssertEqual(HistoricalComparisonView.pairLabel("EUR/USD"), "EUR/USD")
-        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: false), 24 + 7 * 22.5 + 4)
+        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: false), 24 + 7 * 22.5 + 10)
         // 前年/前月のグループ見出し行(api-design v1.35、HQ指示2026-10-25)がある分、表の高さも増える。
-        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: true), 24 + 11 + 7 * 22.5 + 4)
+        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: true), 24 + 11 + 7 * 22.5 + 10)
         // HQ指摘(2026-10-28)「8/7の行が常時見切れている」: 最終行の実機はみ出しを
-        // 防ぐ固定の余白(bottomSafetyMargin=4)が、行数・前年/前月の有無に
-        // 関わらず常に足されている。
+        // 防ぐ固定の余白(bottomSafetyMargin、2026-10-30再指摘「3つ目が見切れる」
+        // を受けて4→10に拡大)が、行数・前年/前月の有無に関わらず常に足されている。
         // HQ指摘(2026-10-29、7回目)「横画面が直っていない」: OSのインター
         // フェース回転をやめ、`UIDevice.orientation`を見た見かけ上の
         // `.rotationEffect`に切り替えた。回転方向(Appleの定義: landscapeLeft
