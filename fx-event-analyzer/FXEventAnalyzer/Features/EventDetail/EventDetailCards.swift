@@ -39,9 +39,11 @@ struct EventDetailCards: View {
         // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」
         // 「下が見切れています」: 出典(attributionNotice)の分だけ縦に伸び、
         // 次回発表予定がこのScrollView(398pt固定)の外に出てしまっていた。
-        // 出典の有無に関わらず一律で5→3にさらに詰め、出典が無い既存の
-        // 表示は(わずかに詰まる程度で)崩さないようにした。
-        VStack(alignment: .leading, spacing: 3) {
+        // 出典の有無に関わらず一律で5→2にさらに詰め、出典が無い既存の
+        // 表示は(わずかに詰まる程度で)崩さないようにした。1回目の調整
+        // (5→3)だけではまだ足りず、値動き表の行の高さ(headerHeight・
+        // rowHeight)や次回発表予定カードの高さも合わせて詰めている。
+        VStack(alignment: .leading, spacing: 2) {
             VStack(alignment: .leading, spacing: 4) {
                 header
                 results
@@ -405,8 +407,8 @@ struct EventDetailCards: View {
         // 側のクリップ用背景(`AccountCardBackground`)は見出しの外に
         // あるため、見出し自体には色も枠も付かない。
         // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」対応
-        // (詳細はbodyのコメント参照): 見出しと表の間隔も6→4に詰めた。
-        VStack(alignment: .leading, spacing: 4) {
+        // (詳細はbodyのコメント参照): 見出しと表の間隔も6→3に詰めた。
+        VStack(alignment: .leading, spacing: 3) {
             V5JPFont.text("主要通貨ペアの値動き（pips）", size: 10, weight: .semibold)
                 .foregroundStyle(.white)
             grid
@@ -585,7 +587,9 @@ struct EventDetailCards: View {
             Spacer()
         }
         .padding(.horizontal, 10)
-        .frame(width: 214, height: 26)
+        // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」対応
+        // (bodyのコメント参照): 26→24にわずかに詰めた。
+        .frame(width: 214, height: 24)
         .background(GradientCardBackground())
     }
 
@@ -593,8 +597,11 @@ struct EventDetailCards: View {
     private static let valueColumnWidth: CGFloat = (214 - 80) / 3
     // HQ指示(2026-10-26)「次回発表予定が1画面に収まっていない」に合わせて
     // 22/28→20/26に詰めた(4行分で8pt節約)。
-    private static let headerHeight: CGFloat = 20
-    private static let rowHeight: CGFloat = 26
+    // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」で
+    // 出典の分の余地を作るため、同じ考え方でさらに20/26→18/23に詰めた
+    // (4行分で追加9pt節約)。
+    private static let headerHeight: CGFloat = 18
+    private static let rowHeight: CGFloat = 23
 
     private func cell(width: CGFloat, alignment: Alignment = .center, @ViewBuilder _ content: () -> some View) -> some View {
         content()
