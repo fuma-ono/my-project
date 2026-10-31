@@ -82,9 +82,7 @@ struct IndicatorDetailView: View {
                             favorites.toggle(.indicator, id: indicatorId)
                         }
                     )
-                    // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」
-                    // 対応(IndicatorDetailCard.body参照): 上下の余白も6→3に詰めた。
-                    .padding(.vertical, 3)
+                    .padding(.vertical, 6)
                     .frame(width: V5P.W)
                 }
                 .frame(width: V5P.W, height: 398)

@@ -37,23 +37,27 @@ struct EventDetailCards: View {
         // 前年比/前月比の2段構成でカード自体が伸びた分、ここのセクション間隔も
         // 詰めて最後の次回発表予定まで1画面に収まるようにした(8→5)。
         // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」
-        // 「下が見切れています」: 出典(attributionNotice)の分だけ縦に伸び、
-        // 次回発表予定がこのScrollView(398pt固定)の外に出てしまっていた。
-        // 出典の有無に関わらず一律で5→2にさらに詰め、出典が無い既存の
-        // 表示は(わずかに詰まる程度で)崩さないようにした。1回目の調整
-        // (5→3)だけではまだ足りず、値動き表の行の高さ(headerHeight・
-        // rowHeight)や次回発表予定カードの高さも合わせて詰めている。
-        VStack(alignment: .leading, spacing: 2) {
+        // 「下が見切れています」→「出典を1番下にするのはダメなの？」:
+        // 出典をresultsの直後(中段)に挟むと、次回発表予定・過去イベント
+        // 比較という既存の主要機能がこのScrollView(398pt固定、他の
+        // セクション間隔は上のコメントの経緯で既にぎりぎりまで詰められて
+        // いる)の外に押し出されてしまっていた。既存の主要機能を犠牲に
+        // するよりは、出典(補足情報)を一番下に置き、既存のセクション間隔・
+        // 行の高さは一切変えないことにした。これで出典が無いイベントの
+        // 表示は完全に元のまま、Eurostatの出典だけが一番下に追加される形
+        // になる(出典自体がこの枠の外に出た場合も、既存の主要機能より
+        // 優先度の低い補足情報なので許容する)。
+        VStack(alignment: .leading, spacing: 5) {
             VStack(alignment: .leading, spacing: 4) {
                 header
                 results
-                attributionNotice
             }
             // HQ指示(2026-10-09)の2枚目の参考画像: 見出しは表のカードの中、その下に
             // 「相場反応詳細」「過去イベント比較」のボタンと次回発表予定。分析の欄はなくした。
             reactionTable
             comparisonLink
             nextReleaseFooter
+            attributionNotice
         }
         .frame(width: 214)
     }
@@ -152,27 +156,24 @@ struct EventDetailCards: View {
     /// Eurostatの指標だけ付き、それ以外・古いBackendはnil(何も表示しない)。
     @ViewBuilder private var attributionNotice: some View {
         // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」
-        // 「下が見切れています」: このScrollViewは398ptに固定されており、
-        // 次回発表予定まで収まるよう各セクションの間隔が既にぎりぎりまで
-        // 詰められている(上のコメント参照)。出典の分を追加で食わせると
-        // 必ずどこかが見切れるため、親(spacing:4)に重ねて余白を足さない
-        // (padding.topを付けない)・内側の行間を1に詰める・文字サイズを
-        // 6に下げる、の3点で追加分を最小限にした。
+        // 「下が見切れています」→「出典を1番下にするのはダメなの？」対応:
+        // bodyの一番下(次回発表予定の後)に置くことにしたため、既存の
+        // 主要機能(次回発表予定・過去イベント比較)の表示を圧迫しない。
         if let attribution = response.event.attribution {
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
                 if let url = URL(string: attribution.sourceUrl) {
                     Link(destination: url) {
-                        NotoText.text("出典：\(attribution.source)", size: 6)
+                        NotoText.text("出典：\(attribution.source)", size: 6.5)
                             .foregroundStyle(V5P.cyan)
                     }
                 } else {
-                    NotoText.text("出典：\(attribution.source)", size: 6)
+                    NotoText.text("出典：\(attribution.source)", size: 6.5)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                 }
                 if let notice = attribution.notice {
-                    NotoText.text(notice, size: 6)
+                    NotoText.text(notice, size: 6.5)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
-                        .lineSpacing(0)
+                        .lineSpacing(1)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -406,9 +407,7 @@ struct EventDetailCards: View {
         // プレーンな見出しテキストに戻した。表(見出し行〜各通貨ペアの行)
         // 側のクリップ用背景(`AccountCardBackground`)は見出しの外に
         // あるため、見出し自体には色も枠も付かない。
-        // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」対応
-        // (詳細はbodyのコメント参照): 見出しと表の間隔も6→3に詰めた。
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 6) {
             V5JPFont.text("主要通貨ペアの値動き（pips）", size: 10, weight: .semibold)
                 .foregroundStyle(.white)
             grid
@@ -587,9 +586,7 @@ struct EventDetailCards: View {
             Spacer()
         }
         .padding(.horizontal, 10)
-        // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」対応
-        // (bodyのコメント参照): 26→24にわずかに詰めた。
-        .frame(width: 214, height: 24)
+        .frame(width: 214, height: 26)
         .background(GradientCardBackground())
     }
 
@@ -597,11 +594,8 @@ struct EventDetailCards: View {
     private static let valueColumnWidth: CGFloat = (214 - 80) / 3
     // HQ指示(2026-10-26)「次回発表予定が1画面に収まっていない」に合わせて
     // 22/28→20/26に詰めた(4行分で8pt節約)。
-    // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」で
-    // 出典の分の余地を作るため、同じ考え方でさらに20/26→18/23に詰めた
-    // (4行分で追加9pt節約)。
-    private static let headerHeight: CGFloat = 18
-    private static let rowHeight: CGFloat = 23
+    private static let headerHeight: CGFloat = 20
+    private static let rowHeight: CGFloat = 26
 
     private func cell(width: CGFloat, alignment: Alignment = .center, @ViewBuilder _ content: () -> some View) -> some View {
         content()
