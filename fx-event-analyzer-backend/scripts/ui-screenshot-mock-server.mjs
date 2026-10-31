@@ -834,7 +834,8 @@ function homeHandler() {
         currency_code: 'USD',
         importance: 'HIGH',
         release_datetime: isoPlusHours(2),
-        release_datetime_precision: 'EXACT',
+        // 検証用(HQ指示2026-10-31「約」文字サイズ修正の再確認、撮影後に戻す): APPROXIMATE
+        release_datetime_precision: 'APPROXIMATE',
         status: 'SCHEDULED',
         data_status: 'DATA_PENDING',
         // HQ指示(2026-10-08): FOMCだけ予想・前回が無く行の配置がそろわないため値を入れる。
@@ -2245,7 +2246,9 @@ function calendarFixture(monthOffset = 0, timeZone = mockCalendarTimeZone) {
           currency_code: currency,
           importance,
           datetime: isoSeconds(at),
-          datetime_precision: 'EXACT',
+          // 検証用(HQ指示2026-10-31「約」文字サイズ修正の再確認、撮影後に戻す):
+          // 今日の最初の指標行だけAPPROXIMATEにする。
+          datetime_precision: monthOffset === 0 && day === today && index === 0 ? 'APPROXIMATE' : 'EXACT',
           status: past ? 'RELEASED' : 'SCHEDULED',
         });
       } else {
