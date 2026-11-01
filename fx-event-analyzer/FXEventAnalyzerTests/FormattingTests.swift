@@ -192,6 +192,20 @@ final class IndicatorDisplayNameTests: XCTestCase {
         XCTAssertEqual(EventDetailCards.primaryLabel(forSecondary: "MOM_PCT"), "前年比")
         XCTAssertEqual(EventDetailCards.primaryLabel(forSecondary: "YOY_PCT"), "前月比")
         XCTAssertNil(EventDetailCards.primaryLabel(forSecondary: nil))
+        // 前回比の単位(HQ指示2026-11-01): 値そのもの(%)とは別に、率の差分は「ポイント」。
+        // 対象8指標(CPI・Core CPI・PPI・Core PPI・平均時給・失業率・EU HICP・EU失業率)はunitが
+        // すべて"%"で共通のため、unit文字列だけで判定できる。
+        XCTAssertEqual(EventDetailCards.changeFromPrevious(actual: 3.1, previous: 3.3, unit: "%"), "(前回比 -0.2ポイント)")
+        XCTAssertEqual(EventDetailCards.changeFromPrevious(actual: 3.3, previous: 3.1, unit: "%"), "(前回比 +0.2ポイント)")
+        XCTAssertEqual(EventDetailCards.changeFromPrevious(actual: 3.1, previous: 3.1, unit: "%"), "(前回比 ±0ポイント)")
+        // NFP(unit: "千人"/"K")は既存の万人変換のまま、ポイント表記にはしない。
+        XCTAssertEqual(EventDetailCards.changeFromPrevious(actual: 254, previous: 200, unit: "千人"), "(前回比 +5.4万人)")
+        XCTAssertEqual(EventDetailCards.changeFromPrevious(actual: 254, previous: 200, unit: "K"), "(前回比 +5.4万人)")
+        // 単位が無い指標は従来どおり(変更なし)。
+        XCTAssertEqual(EventDetailCards.changeFromPrevious(actual: 5, previous: 3, unit: nil), "(前回比 +2)")
+        // 欠損値はnil(ロック表示・欠損表示に影響しない)。
+        XCTAssertNil(EventDetailCards.changeFromPrevious(actual: nil, previous: 3, unit: "%"))
+        XCTAssertNil(EventDetailCards.changeFromPrevious(actual: 5, previous: nil, unit: "%"))
         // 表示名(DBのdisplay_name)があればそれを優先する。
         XCTAssertEqual(CountryFlag.indicatorDisplayText("米国雇用統計(非農業部門雇用者数)", countryCode: "US", displayName: "非農業部門雇用者数（NFP）"), "非農業部門雇用者数（NFP）")
         XCTAssertEqual(CountryFlag.indicatorDisplayName("x", countryCode: "US", displayName: "非農業部門雇用者数（NFP）").abbreviation, "NFP")

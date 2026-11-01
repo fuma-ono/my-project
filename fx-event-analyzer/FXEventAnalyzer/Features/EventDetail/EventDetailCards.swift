@@ -381,11 +381,21 @@ struct EventDetailCards: View {
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    /// 「(前回比 -0.2%)」。結果と前回がそろっているときだけ。
+    /// 差分(前回比)専用の単位。値そのもの(結果/予想/前回、`resultColumn`)の単位は
+    /// そのまま(`%`)表示するが、HQ指示(2026-11-01)で率の差分は「ポイント」と表示する
+    /// (対象: US_CPI・US_CORE_CPI・US_PPI・US_CORE_PPI・US_AVG_HOURLY_EARNINGS・
+    /// US_UNEMPLOYMENT_RATE・EU_HICP・EU_UNEMPLOYMENT_RATE。いずれもAPIの`unit`は`%`で
+    /// 共通のため、指標コードではなく`unit`文字列だけで判別できる)。NFP(`unit`は`千人`/`K`)は
+    /// `ValueFormat.withUnit`の既存の万人変換がそのまま使えるため対象外。
+    private static func diffUnit(for unit: String?) -> String? {
+        unit == "%" ? "ポイント" : unit
+    }
+
+    /// 「(前回比 -0.2ポイント)」。結果と前回がそろっているときだけ。
     static func changeFromPrevious(actual: Double?, previous: Double?, unit: String?) -> String? {
         guard let actual, let previous else { return nil }
         let diff = actual - previous
-        let text = ValueFormat.withUnit(abs(diff), unit: unit)
+        let text = ValueFormat.withUnit(abs(diff), unit: diffUnit(for: unit))
         let sign = diff > 0 ? "+" : diff < 0 ? "-" : "±"
         return "(前回比 \(sign)\(text))"
     }
