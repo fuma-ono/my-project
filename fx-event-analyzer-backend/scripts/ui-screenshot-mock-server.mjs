@@ -1128,6 +1128,11 @@ function eventDetailHandler(eventId) {
       status: isUpcoming ? 'SCHEDULED' : 'RELEASED',
       data_status: isUpcoming ? 'DATA_PENDING' : 'READY',
       revision_status: 'NONE',
+      // 検証用(HQ指示「Task 3・4：UI回帰確認」2026-11-01、一時的): previous_locked
+      // は既存CIスイートのどの画面にも出ず未検証だったため、差分単位変更が
+      // ロック表示に影響しないことを撮影確認するため一時的にtrueを注入する。
+      // 確認後、元に戻す(revert予定)。
+      previous_locked: true,
     },
     snapshot: isUpcoming ? null : RELEASE_SNAPSHOT,
     analysis: {
