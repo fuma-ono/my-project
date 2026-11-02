@@ -505,12 +505,15 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(usdjpy.reactions.map((r: { pips: number }) => Number(r.pips))).toEqual([28, 56, 85]);
       expect(Number(usdjpy.reactions[0].change_percent)).toBeCloseTo(0.1902);
       expect(usdjpy.reactions.every((r: { analysis_status: string }) => r.analysis_status === 'READY')).toBe(true);
-      // No price data for EURUSD in the seed.
+      // No price data for EURUSD in the seed. v1.44: analysis_status is unchanged (DATA_PENDING); reaction_state says
+      // the row was never calculated (the seed release 2026-09-10 is outside the job's 7-day horizon).
       expect(body.major_fx_reactions[1].reactions[0]).toEqual({
         timeframe: '1m',
         pips: null,
         change_percent: null,
         analysis_status: 'DATA_PENDING',
+        reaction_state: 'NOT_CALCULATED',
+        retry_scheduled: false,
       });
       // related_fx_pairs is unchanged (5m summary).
       expect(body.related_fx_pairs[0].reaction.timeframe).toBe('5m');
