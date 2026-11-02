@@ -303,9 +303,9 @@ struct HistoricalComparisonView: View {
         let scale: CGFloat
         // HQ指摘(2026-10-26)「日時の横の余白枠いらないから消して」:
         // 76ptでもまだ「MM/dd」+「HH:mm」の文字そのものより広く、左右に
-        // 余白が残っていた。62に詰めた(`landscapeTableRow`の左パディングも
-        // 6→4に詰め、見出しの「日時」ラベルも中央揃えから左揃えに変えて
-        // 行のデータと同じ位置に揃えている)。
+        // 余白が残っていた。62に詰めた(列幅自体はそのまま。列内の
+        // 日時の揃え方は`landscapeTableRow`/`landscapeTableHeader`参照、
+        // HQ再指摘2026-11-02で左揃え→中央揃えに戻している)。
         var date: CGFloat { 62 * scale }
         var value: CGFloat { 70 * scale }
         var pips: CGFloat { 70 * scale }
@@ -409,13 +409,13 @@ struct HistoricalComparisonView: View {
                         Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .bold))
                     }
                     .foregroundStyle(.white)
-                    // HQ指摘(2026-10-26)「日時の横の余白枠いらない」:
-                    // 既定(中央揃え)のままだと、下の各行の日時(左揃え、
-                    // `landscapeTableRow`参照)とずれて、見出しの左右に
-                    // 余白の箱があるように見えていた。行と同じ左揃え+
-                    // 同じ左パディングに揃えた。
-                    .padding(.leading, 4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    // HQ指摘(2026-10-26)「日時の横の余白枠いらない」で左揃えに
+                    // したが、横画面は列幅が端末サイズに応じて`scale`倍まで
+                    // 広がるため、固定4ptの左パディングのままでは左端に
+                    // 貼り付いて見えてしまっていた。HQ再指摘(2026-11-02)
+                    // 「横画面の日時をもう少し中央に寄せて」で中央揃えに戻した
+                    // (行側`landscapeTableRow`も同じく中央揃えに揃えている)。
+                    .frame(maxWidth: .infinity, alignment: .center)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -481,7 +481,7 @@ struct HistoricalComparisonView: View {
 
     private func landscapeTableRow(_ event: ComparisonEventSummary, unit: String?, showSecondary: Bool, columns: LandscapeColumns) -> some View {
         HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .center, spacing: 2) {
                 Text(Self.dateString(event.releaseDatetime))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
@@ -490,8 +490,7 @@ struct HistoricalComparisonView: View {
                     .foregroundStyle(Self.timeColor)
             }
             .monospacedDigit()
-            .padding(.leading, 4)
-            .frame(width: columns.date, alignment: .leading)
+            .frame(width: columns.date, alignment: .center)
             landscapeRowDivider
             landscapeValueCell(event.actual, unit: unit, width: columns.value)
             landscapeValueCell(event.forecast, unit: unit, width: columns.value)
