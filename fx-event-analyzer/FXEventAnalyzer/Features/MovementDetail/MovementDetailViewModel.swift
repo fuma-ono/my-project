@@ -34,6 +34,8 @@ enum MovementChartState: Equatable {
 final class MovementDetailViewModel: ObservableObject {
     @Published private(set) var state: MovementDetailState = .loading
     @Published private(set) var chartState: MovementChartState = .loading
+    /// api-design v1.45: 反応の応答の`release_datetime_precision`(古いBackendではnil)。APPROXIMATEなら概算の注記を出す。
+    @Published private(set) var releaseDatetimePrecision: ReleaseDatetimePrecision?
     /// 発表の結果・予想(「値動きの分析」の1文目)。取れなくても画面は出す。
     @Published private(set) var eventSnapshot: EventSnapshotDetail?
     /// 指標の一般的な見方(上振れ・下振れ)。取れなくても画面は出す。
@@ -113,6 +115,7 @@ final class MovementDetailViewModel: ObservableObject {
         )
         do {
             let response: ReactionAllTimeframesResponse = try await apiClient.send(endpoint)
+            releaseDatetimePrecision = response.releaseDatetimePrecision
             state = .loaded(preReleasePrice: response.preReleasePrice, reactions: response.reactions)
         } catch let error as APIError where error.isNotConfigured {
             state = .backendNotConfigured

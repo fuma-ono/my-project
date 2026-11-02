@@ -149,6 +149,17 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "値動きの分析", timeout: 15), "Movement Detail did not load")
         capture("08-MovementDetail")
 
+        // api-design v1.45(HQ指示 2026-11-02): 発表の時刻が概算(APPROXIMATE)のときの相場反応詳細。モックの応答にだけ
+        // 精度を付けて同じ画面を開き直し、注記とチャートの「約」を撮る。撮ったら元に戻す(後の撮影は今までどおり)。
+        if setMockReactionPrecision("APPROXIMATE") {
+            tapIdentifier("v5HeaderBack")
+            XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 10), "Did not go back to Event Detail")
+            tap(containing: "USD/JPYの相場反応を見る")
+            XCTAssertTrue(waitForAnyElement(containing: "値動きは概算の時刻を起点に計算しています", timeout: 15), "Approximate notice did not appear")
+            capture("08b-MovementDetail-Approximate")
+            _ = setMockReactionPrecision(nil)
+        }
+
         // SCR-009 過去イベント比較。2026-10-09から遷移元は指標詳細なので、
         // 相場反応詳細 → イベント詳細 → 指標詳細 と戻ってから進む。
         tapIdentifier("v5HeaderBack")
@@ -618,6 +629,22 @@ final class ScreenshotTests: XCTestCase {
     /// area, so it fills the whole app frame).
     /// スクショ用モックサーバー(CIでは127.0.0.1:8090、シミュレーターから届く)の
     /// 購読プランを切り替える。届かなければfalse(その撮影だけ飛ばす)。
+    /// モックの相場反応・チャートの応答に release_datetime_precision を付ける(nil = 付けない、今までの応答)。
+    /// 届かなければfalse(その撮影だけ飛ばす)。
+    private func setMockReactionPrecision(_ value: String?) -> Bool {
+        guard let url = URL(string: "http://127.0.0.1:8090/__mock/reaction-precision?value=\(value ?? "")") else { return false }
+        var request = URLRequest(url: url, timeoutInterval: 5)
+        request.httpMethod = "POST"
+        let done = DispatchSemaphore(value: 0)
+        var succeeded = false
+        URLSession.shared.dataTask(with: request) { _, response, _ in
+            succeeded = (response as? HTTPURLResponse)?.statusCode == 200
+            done.signal()
+        }.resume()
+        _ = done.wait(timeout: .now() + 6)
+        return succeeded
+    }
+
     private func setMockSubscriptionPlan(_ plan: String) -> Bool {
         guard let url = URL(string: "http://127.0.0.1:8090/__mock/subscription-plan?plan=\(plan)") else { return false }
         var request = URLRequest(url: url, timeoutInterval: 5)

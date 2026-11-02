@@ -75,6 +75,7 @@ struct MovementDetailView: View {
                     // 使った。
                     VStack(alignment: .leading, spacing: 3) {
                         priceCard(preReleasePrice: preReleasePrice, reactions: reactions)
+                        approximateTimingNotice
                         analysisCard(reactions: reactions)
                     }
                     .frame(width: 214)
@@ -87,6 +88,26 @@ struct MovementDetailView: View {
             }
         case .error(let message):
             loadingScaffold { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { viewModel.load() }) }
+        }
+    }
+
+    /// api-design v1.45(HQ指示 2026-11-02): 発表の時刻が概算(APPROXIMATE、Eurostat等)のときだけ、
+    /// 値動きが概算の時刻から計算されていることを出す。EXACT・nil・知らない値では何も出さない(画面は今までどおり)。
+    @ViewBuilder private var approximateTimingNotice: some View {
+        let label = AppPreferences.shared.timeString(viewModel.releaseDatetime, precision: viewModel.releaseDatetimePrecision)
+        if let notice = ReactionTimingNotice.text(precision: viewModel.releaseDatetimePrecision, releaseTimeLabel: label) {
+            HStack(alignment: .top, spacing: 4) {
+                Image(systemName: "clock.badge.questionmark")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(V5P.cyan)
+                NotoText.text(notice, size: 6.5)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .frame(width: 214, alignment: .leading)
+            .background(GradientCardBackground())
         }
     }
 
@@ -577,7 +598,8 @@ private struct CandleChart: View {
                         Image(systemName: "arrowtriangle.up.fill")
                             .font(.system(size: 5))
                             .foregroundStyle(.white)
-                        Text("\(noun) \(AppPreferences.shared.timeString(chart.releaseDatetime))")
+                        // v1.45: 発表の時刻が概算なら「約」を付ける(AppPreferences の判断をそのまま使う)。
+                        Text("\(noun) \(AppPreferences.shared.timeString(chart.releaseDatetime, precision: chart.releaseDatetimePrecision))")
                             .font(.system(size: 6, weight: .semibold))
                             .foregroundStyle(.white)
                             .lineLimit(1)
