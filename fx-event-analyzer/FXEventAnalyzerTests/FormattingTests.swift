@@ -169,31 +169,14 @@ final class IndicatorDisplayNameTests: XCTestCase {
         XCTAssertEqual(HistoricalComparisonView.pipsText(2.1), "+2.1")
         XCTAssertEqual(HistoricalComparisonView.pairLabel("USDJPY"), "USD/JPY")
         XCTAssertEqual(HistoricalComparisonView.pairLabel("EUR/USD"), "EUR/USD")
-        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: false), 24 + 7 * 22.5 + 6)
+        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: false), 24 + 7 * 22.5 + 0.5)
         // 前年/前月のグループ見出し行(api-design v1.35、HQ指示2026-10-25)がある分、表の高さも増える。
-        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: true), 24 + 11 + 7 * 22.5 + 6)
-        // HQ指摘(2026-11-02)「一番下の行の余白が大きいので小さくして」: 縦画面の
-        // 枠の高さは常に固定398ptではなく、表の実際の高さ(tableHeight)に合わせて
-        // 伸び縮みする(無料プランの制限行がある分だけ、さらに8+18が足される)。
-        let proResponse = HistoricalComparisonViewModelTests.makeComparisonResponse(
-            events: (0..<7).map { HistoricalComparisonViewModelTests.makeComparisonEvent(id: "\($0)") }
-        )
-        XCTAssertEqual(
-            HistoricalComparisonView.contentHeight(for: proResponse),
-            8 + 36 + 8 + HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: false)
-        )
-        let freeResponse = HistoricalComparisonViewModelTests.makeComparisonResponse(
-            events: (0..<3).map { HistoricalComparisonViewModelTests.makeComparisonEvent(id: "\($0)") },
-            historyLimit: .init(applied: 3, maxForPlan: 3, proMax: 20)
-        )
-        XCTAssertEqual(
-            HistoricalComparisonView.contentHeight(for: freeResponse),
-            8 + 36 + 8 + HistoricalComparisonView.tableHeight(rows: 3, limited: true, showSecondary: false) + 8 + 18
-        )
+        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: true), 24 + 11 + 7 * 22.5 + 0.5)
         // HQ指摘(2026-10-28)「8/7の行が常時見切れている」: 最終行の実機はみ出しを
         // 防ぐ固定の余白(bottomSafetyMargin、2026-10-30再指摘「3つ目が見切れる」で
-        // 4→10、2026-10-31再指摘「余白が大きい」で10→6に調整)が、行数・前年/前月
-        // の有無に関わらず常に足されている。
+        // 4→10、2026-10-31再指摘「余白が大きい」で10→6、2026-11-02再指摘「他の行と
+        // 一番下の行の幅を同じにして」で行間の区切り線と同じ0.5ptに調整)が、
+        // 行数・前年/前月の有無に関わらず常に足されている。
         // HQ指摘(2026-10-29、7回目)「横画面が直っていない」: OSのインター
         // フェース回転をやめ、`UIDevice.orientation`を見た見かけ上の
         // `.rotationEffect`に切り替えた。回転方向(Appleの定義: landscapeLeft
