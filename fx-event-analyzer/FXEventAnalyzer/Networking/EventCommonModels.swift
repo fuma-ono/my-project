@@ -79,6 +79,12 @@ enum ReleaseDatetimePrecision: String, Decodable, Equatable {
     case approximate = "APPROXIMATE"
     case dateOnly = "DATE_ONLY"
     case unknown = "UNKNOWN"
+
+    /// 任意の項目として読む(api-design v1.45 の反応・チャートの応答)。無い・null・知らない値はnilにし、応答の読み込みを失敗させない。
+    static func lenient<K: CodingKey>(from container: KeyedDecodingContainer<K>, forKey key: K) -> ReleaseDatetimePrecision? {
+        guard let raw = try? container.decodeIfPresent(String.self, forKey: key) else { return nil }
+        return ReleaseDatetimePrecision(rawValue: raw)
+    }
 }
 
 /// api-design.md §14.3: Backend-computed (not a stored column) — NONE vs
