@@ -423,6 +423,56 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(body.snapshot).toBeNull();
     });
 
+    // v1.44 reaction_state(HQ判断 2026-10-30 P1-1 段階1): 行が無い理由を足すだけで、analysis_status は変えない。
+    it('reaction_state: a stored row is CALCULATED; an old release with no row is NOT_CALCULATED (still DATA_PENDING, never DATA_UNAVAILABLE)', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/v1/events/${US_CPI_EVENT_ID}`,
+        headers: authHeader,
+      });
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      const bySymbol = new Map(
+        body.related_fx_pairs.map((pair: { symbol: string; reaction: Record<string, unknown> }) => [
+          pair.symbol,
+          pair.reaction,
+        ]),
+      );
+      // seed: US CPI (2026-09-10) has USDJPY rows (AVAILABLE) and no EURUSD rows
+      expect(bySymbol.get('USDJPY')).toMatchObject({
+        analysis_status: 'READY',
+        reaction_state: 'CALCULATED',
+        retry_scheduled: null,
+      });
+      expect(bySymbol.get('EURUSD')).toMatchObject({
+        analysis_status: 'DATA_PENDING',
+        reaction_state: 'NOT_CALCULATED',
+        retry_scheduled: false,
+      });
+      for (const major of body.major_fx_reactions as { reactions: Record<string, unknown>[] }[]) {
+        for (const reaction of major.reactions) {
+          expect(['CALCULATED', 'NOT_DUE', 'NOT_CALCULATED', null]).toContain(reaction.reaction_state);
+          if (reaction.reaction_state === null) expect(reaction.analysis_status).toBe('NOT_ANALYZABLE');
+        }
+      }
+    });
+
+    it('reaction_state: a scheduled (not yet released) event is NOT_DUE', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/v1/events/${NFP_EVENT_ID}`,
+        headers: authHeader,
+      });
+      const body = JSON.parse(response.body);
+      for (const pair of body.related_fx_pairs as { reaction: Record<string, unknown> }[]) {
+        expect(pair.reaction).toMatchObject({
+          analysis_status: 'DATA_PENDING',
+          reaction_state: 'NOT_DUE',
+          retry_scheduled: null,
+        });
+      }
+    });
+
     it('returns 404 EVENT_NOT_FOUND for an unknown id', async () => {
       const response = await ctx.app.inject({
         method: 'GET',
@@ -455,12 +505,15 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(usdjpy.reactions.map((r: { pips: number }) => Number(r.pips))).toEqual([28, 56, 85]);
       expect(Number(usdjpy.reactions[0].change_percent)).toBeCloseTo(0.1902);
       expect(usdjpy.reactions.every((r: { analysis_status: string }) => r.analysis_status === 'READY')).toBe(true);
-      // No price data for EURUSD in the seed.
+      // No price data for EURUSD in the seed. v1.44: analysis_status is unchanged (DATA_PENDING); reaction_state says
+      // the row was never calculated (the seed release 2026-09-10 is outside the job's 7-day horizon).
       expect(body.major_fx_reactions[1].reactions[0]).toEqual({
         timeframe: '1m',
         pips: null,
         change_percent: null,
         analysis_status: 'DATA_PENDING',
+        reaction_state: 'NOT_CALCULATED',
+        retry_scheduled: false,
       });
       // related_fx_pairs is unchanged (5m summary).
       expect(body.related_fx_pairs[0].reaction.timeframe).toBe('5m');

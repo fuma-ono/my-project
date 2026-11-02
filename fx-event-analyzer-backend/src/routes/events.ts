@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { attributionForIndicator } from '../domain/attribution.js';
+import { resolveReactionState } from '../domain/reactionState.js';
 import { chartWindow } from '../domain/chartWindow.js';
 import { ApiError } from '../errors/ApiError.js';
 import { FEATURE_CODES } from '../authorization/entitlements.js';
@@ -175,6 +176,13 @@ export function registerEventRoutes(app: FastifyInstance): void {
       ),
     ]);
     const reactionByFxPairId = new Map(reactions.map((reaction) => [reaction.fx_pair_id, reaction]));
+    // v1.44 reaction_state: 行が無い理由を事実で言える範囲だけ(domain/reactionState.ts)。analysis_status は変えない。
+    const reactionStateContext = {
+      precision,
+      eventStatus: event.status,
+      releaseDatetime: event.release_datetime,
+      now: new Date(),
+    };
 
     return {
       event: {
@@ -217,10 +225,15 @@ export function registerEventRoutes(app: FastifyInstance): void {
               precision,
               (reaction?.data_status as 'PENDING' | 'AVAILABLE' | 'UNAVAILABLE') ?? 'PENDING',
             ),
+            ...resolveReactionState({
+              ...reactionStateContext,
+              timeframe: RELATED_FX_PAIR_SUMMARY_TIMEFRAME,
+              hasRow: reaction !== undefined,
+            }),
           },
         };
       }),
-      major_fx_reactions: buildMajorFxReactions(majorFxPairs, majorReactionRows, precision),
+      major_fx_reactions: buildMajorFxReactions(majorFxPairs, majorReactionRows, precision, reactionStateContext),
       available_timeframes: availableTimeframes(precision),
     };
   });
@@ -276,6 +289,13 @@ export function registerEventRoutes(app: FastifyInstance): void {
       }
 
       const precision = event.release_datetime_precision as ReleaseDatetimePrecision;
+      // v1.44 reaction_state(domain/reactionState.ts)。analysis_status は変えない。
+      const reactionStateContext = {
+        precision,
+        eventStatus: event.status,
+        releaseDatetime: event.release_datetime,
+        now: new Date(),
+      };
 
       if (timeframe === 'all' || !timeframe) {
         const reactions = await listReactionsForPair(app.supabase, eventId, fxPairId);
@@ -303,6 +323,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
                 precision,
                 (reaction?.data_status as 'PENDING' | 'AVAILABLE' | 'UNAVAILABLE') ?? 'PENDING',
               ),
+              ...resolveReactionState({ ...reactionStateContext, timeframe: tf, hasRow: reaction !== undefined }),
             };
           }),
         };
@@ -331,6 +352,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
           precision,
           (reaction?.data_status as 'PENDING' | 'AVAILABLE' | 'UNAVAILABLE') ?? 'PENDING',
         ),
+        ...resolveReactionState({ ...reactionStateContext, timeframe, hasRow: reaction !== null }),
       };
     },
   );
