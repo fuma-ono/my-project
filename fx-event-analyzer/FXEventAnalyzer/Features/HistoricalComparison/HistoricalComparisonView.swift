@@ -694,8 +694,6 @@ struct HistoricalComparisonView: View {
     }
 
     /// 表の高さ。行が少なければ行の分だけ、多ければ画面に入る高さで止めて中をスクロールする。
-    /// `showSecondary`: 前年/前月のグループ見出し行(`groupHeaderHeight`)が
-    /// 付く分、表全体の高さも増える(HQ指示2026-10-25)。
     ///
     /// HQ指摘(2026-10-28、実機確認)「8/7の行が常時見切れている」: 行の積算
     /// (`rowHeight + 0.5`)だけでちょうどの高さを計算し、`.frame(height:)`+
@@ -719,25 +717,26 @@ struct HistoricalComparisonView: View {
     /// わずかなはみ出しを吸収するための保険にしては大きすぎた)。6ptに
     /// 下げ、安全マージンは残しつつ見た目の余白を抑えた。
     ///
-    /// HQ再指摘(2026-11-02、3回目)「まだ見切れています。そもそもなぜ
-    /// 前年前月がある指標と前年しかない指標で同じ表のサイズを使用して
-    /// いるのか、分けてください」: `bottomSafetyMargin`を showSecondary
-    /// の有無で共有の1つの定数にしていたため、6ptでも一方(showSecondary:
-    /// false、前年のみ)でまだ見切れが残っていた。showSecondaryの有無で
-    /// ヘッダー・各行の実際のレンダリング高さの端数が異なり、同じ余白では
-    /// 両方を同時に安全にできない — `bottomSafetyMargin(showSecondary:)`
-    /// として分離し、それぞれ独立に調整できるようにした。最初の安全確認
-    /// (2026-10-28)で両方とも見切れないと確認済みの10ptを両方の初期値に
-    /// 戻し、そこから個別に詰められるようにする。
+    /// HQ再指摘(2026-11-02)「前年前月ありの方が余白が広く見える。前年のみの
+    /// 幅に合わせて」で見つかった根本原因: `groupHeaderRow(showSecondary:)`
+    /// (「前年」ラベルの行)は`showSecondary`の値に関わらず常に描画される
+    /// (前年のみの指標でも「前年」ラベル自体は出すため)。ところがこの高さ
+    /// 計算式は`groupHeaderHeight`を`showSecondary == true`のときしか
+    /// 計上していなかった。前年のみの表は実際には`headerHeight +
+    /// groupHeaderHeight`の高さがあるのに、式は`headerHeight`分しか見込んで
+    /// おらず、その差(11pt)だけ下の余白が実質的に目減りしていた(これが
+    /// 「前年のみだけ見切れやすい」「前年前月ありより余白が狭く見える」の
+    /// 正体。`bottomSafetyMargin`をshowSecondaryで分けても解決しなかった
+    /// のは当然で、ズレの原因はheader側にあった)。`groupHeaderHeight`を
+    /// 常に計上するよう修正し、`bottomSafetyMargin`も両者で共有の1つの
+    /// 値に戻した(根本原因を直したことで、分ける理由自体が無くなった)。
     static func tableHeight(rows: Int, limited: Bool, showSecondary: Bool) -> CGFloat {
-        let header = headerHeight + (showSecondary ? groupHeaderHeight : 0)
-        let content = header + CGFloat(max(rows, 1)) * (rowHeight + 0.5) + bottomSafetyMargin(showSecondary: showSecondary)
+        let header = headerHeight + groupHeaderHeight
+        let content = header + CGFloat(max(rows, 1)) * (rowHeight + 0.5) + bottomSafetyMargin
         return min(content, limited ? 312 : 334)
     }
 
-    private static func bottomSafetyMargin(showSecondary: Bool) -> CGFloat {
-        showSecondary ? 10 : 10
-    }
+    private static let bottomSafetyMargin: CGFloat = 10
 
     /// HQ指示(2026-10-14)「参考画像と比べて文字が小さすぎる。枠も小さい。見やすく」:
     /// 見出し20→26・行18→24、文字は表の見出し6.5→8.5・数字6.5→8.5・時刻5→6.5に上げた。
