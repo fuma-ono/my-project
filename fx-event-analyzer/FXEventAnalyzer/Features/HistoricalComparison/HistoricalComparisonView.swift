@@ -718,29 +718,26 @@ struct HistoricalComparisonView: View {
     /// 10ptはCIスクリーンショットで見ると目立つ余白になっていた(実機の
     /// わずかなはみ出しを吸収するための保険にしては大きすぎた)。6ptに
     /// 下げ、安全マージンは残しつつ見た目の余白を抑えた。
+    ///
+    /// HQ再指摘(2026-11-02、3回目)「まだ見切れています。そもそもなぜ
+    /// 前年前月がある指標と前年しかない指標で同じ表のサイズを使用して
+    /// いるのか、分けてください」: `bottomSafetyMargin`を showSecondary
+    /// の有無で共有の1つの定数にしていたため、6ptでも一方(showSecondary:
+    /// false、前年のみ)でまだ見切れが残っていた。showSecondaryの有無で
+    /// ヘッダー・各行の実際のレンダリング高さの端数が異なり、同じ余白では
+    /// 両方を同時に安全にできない — `bottomSafetyMargin(showSecondary:)`
+    /// として分離し、それぞれ独立に調整できるようにした。最初の安全確認
+    /// (2026-10-28)で両方とも見切れないと確認済みの10ptを両方の初期値に
+    /// 戻し、そこから個別に詰められるようにする。
     static func tableHeight(rows: Int, limited: Bool, showSecondary: Bool) -> CGFloat {
         let header = headerHeight + (showSecondary ? groupHeaderHeight : 0)
-        let content = header + CGFloat(max(rows, 1)) * (rowHeight + 0.5) + bottomSafetyMargin
+        let content = header + CGFloat(max(rows, 1)) * (rowHeight + 0.5) + bottomSafetyMargin(showSecondary: showSecondary)
         return min(content, limited ? 312 : 334)
     }
 
-    /// HQ再指摘(2026-11-02)「他の行と一番下の行の幅を同じにして」: 行と行の
-    /// 間(`index > 0`のときだけ挟む0.5ptの区切り線)はぴったり詰まっている
-    /// のに対し、最終行だけ`bottomSafetyMargin`(これまで6pt)の分、外枠との
-    /// 間に明らかに広い余白ができていた。
-    ///
-    /// まず区切り線と同じ0.5ptまで詰めてCIスクリーンショットで確認したところ、
-    /// 最終行がカードの外枠で実際に見切れた — HQ指摘(2026-10-28、実機確認)
-    /// 「8/7の行が常時見切れている」で判明した現象(4→10→6ptと調整)は実機
-    /// 固有ではなく、CIのシミュレータでも0.5ptでは再現することが今回わかった。
-    /// 3ptまで戻して前年/前月ありの表(showSecondary: true)では見切れが
-    /// 無いことを確認したが、HQ再指摘(2026-11-02、2回目)で前年のみの表
-    /// (showSecondary: false)では3ptでも最終行の時刻が見切れることが判明
-    /// した(ヘッダーの高さがshowSecondaryの有無で変わり、表全体の高さの
-    /// 端数によって見切れの出方が変わる、文字の実際のレンダリング高さが
-    /// 22ptの見込みよりわずかに大きいことに起因する端数のずれと考えられる)。
-    /// showSecondaryの有無どちらでも見切れないことが確認済みの6ptに戻した。
-    private static let bottomSafetyMargin: CGFloat = 6
+    private static func bottomSafetyMargin(showSecondary: Bool) -> CGFloat {
+        showSecondary ? 10 : 10
+    }
 
     /// HQ指示(2026-10-14)「参考画像と比べて文字が小さすぎる。枠も小さい。見やすく」:
     /// 見出し20→26・行18→24、文字は表の見出し6.5→8.5・数字6.5→8.5・時刻5→6.5に上げた。
