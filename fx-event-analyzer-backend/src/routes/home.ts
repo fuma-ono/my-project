@@ -1,4 +1,5 @@
 import { resultTypeForIndicator } from '../domain/resultType.js';
+import { valueDecimalsForIndicator } from '../domain/valueDecimals.js';
 import type { FastifyInstance } from 'fastify';
 import {
   listEventsInRange,
@@ -111,6 +112,8 @@ export function registerHomeRoutes(app: FastifyInstance): void {
                 data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
                 // 結果の値が出るか(VALUE / NONE、domain/resultType.ts)。NONE = FOMC議事要旨(発表後「公表済み」)
                 result_type: resultTypeForIndicator(event.indicator_code),
+                // v1.46: 値を表示する小数の桁数(BLS の%の指標は 1、それ以外は null。domain/valueDecimals.ts)
+                value_decimals: valueDecimalsForIndicator(event.indicator_code),
                 forecast: snapshot?.forecast ?? null,
                 actual: snapshot?.actual ?? null,
                 previous: snapshot?.previous ?? null,

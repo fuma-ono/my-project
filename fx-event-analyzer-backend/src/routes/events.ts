@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { attributionForIndicator } from '../domain/attribution.js';
+import { valueDecimalsForIndicator } from '../domain/valueDecimals.js';
 import { resolveReactionState } from '../domain/reactionState.js';
 import { chartWindow } from '../domain/chartWindow.js';
 import { ApiError } from '../errors/ApiError.js';
@@ -97,6 +98,8 @@ async function lockedEventDetail(app: FastifyInstance, event: EventRow, precisio
       is_provisional: false,
       // v1.43: 出典と告知(Eurostat の指標だけ。domain/attribution.ts)。ロックしても出典は隠さない。
       attribution: attributionForIndicator(event.indicator_code),
+      // v1.46: 値を表示する小数の桁数(domain/valueDecimals.ts)。値ではないのでロックしても隠さない。
+      value_decimals: valueDecimalsForIndicator(event.indicator_code),
       ...LOCKED,
     },
     snapshot: snapshot ? nullFields(snapshot, RELEASE_VALUE_FIELDS) : null,
@@ -202,6 +205,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
         revision_status: resolveRevisionStatus(revisionCount),
         // v1.43: 出典と告知(Eurostat の指標だけ。domain/attribution.ts)。
         attribution: attributionForIndicator(event.indicator_code),
+        // v1.46: 値を表示する小数の桁数(BLS の%の指標は 1、それ以外は null。domain/valueDecimals.ts)
+        value_decimals: valueDecimalsForIndicator(event.indicator_code),
         ...accessFields(false, previousLocked),
       },
       snapshot: snapshot ?? null,
@@ -260,7 +265,12 @@ export function registerEventRoutes(app: FastifyInstance): void {
       );
 
       return {
-        data: rows.map((row) => ({ event_id: eventId, ...row })),
+        // v1.46: old_value / new_value を表示する小数の桁数(domain/valueDecimals.ts)
+        data: rows.map((row) => ({
+          event_id: eventId,
+          ...row,
+          value_decimals: valueDecimalsForIndicator(event.indicator_code),
+        })),
         meta: buildMeta(pagination.page, pagination.limit, total),
       };
     },

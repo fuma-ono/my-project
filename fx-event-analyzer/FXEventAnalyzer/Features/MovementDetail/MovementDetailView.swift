@@ -293,6 +293,7 @@ struct MovementDetailView: View {
         let result = viewModel.eventSnapshot
         if let summary = MovementAnalysisText.summary(
             reactions: reactions, actual: result?.actual, forecast: result?.forecast, unit: result?.unit,
+            valueDecimals: viewModel.valueDecimals,
             marketViewAbove: viewModel.indicator?.marketViewAbove, marketViewBelow: viewModel.indicator?.marketViewBelow
         ) {
             // HQ指示(2026-10-09)「要点を分けて表示」「値動きの事実と相場の解釈は分ける」。

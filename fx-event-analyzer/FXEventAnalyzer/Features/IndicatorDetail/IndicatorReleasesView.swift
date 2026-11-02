@@ -147,7 +147,8 @@ struct IndicatorReleasesView: View {
     /// (値を「-」で出すとデータが無いように見えるため、行ごと鍵の印に替える)。
     static func releaseValues(_ event: IndicatorEventSummary) -> (actual: String, forecast: String, previous: String)? {
         guard !event.isLocked else { return nil }
-        func text(_ value: Double?) -> String { value.map { ValueFormat.number($0) } ?? "-" }
+        // 桁はapi-design v1.46の`value_decimals`(BLSの%の指標は1、ほかはnilで今までどおり)。
+        func text(_ value: Double?) -> String { value.map { ValueFormat.indicatorNumber($0, decimals: event.valueDecimals) } ?? "-" }
         return (text(event.actual), text(event.forecast), text(event.previous))
     }
 }

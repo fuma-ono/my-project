@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { attributionForIndicator } from '../domain/attribution.js';
+import { valueDecimalsForIndicator } from '../domain/valueDecimals.js';
 import { ApiError } from '../errors/ApiError.js';
 import {
   getIndicatorById,
@@ -101,6 +102,8 @@ export function registerIndicatorRoutes(app: FastifyInstance): void {
               indicator_id: indicatorId,
               ...rest,
               data_status: mapEventDataStatus(dataStatus as EconomicEventDbStatus),
+              // v1.46: 値を表示する小数の桁数(domain/valueDecimals.ts)
+              value_decimals: valueDecimalsForIndicator(indicator.code),
             },
             lockedIds.has(id),
             previousLockedIds.has(id),
