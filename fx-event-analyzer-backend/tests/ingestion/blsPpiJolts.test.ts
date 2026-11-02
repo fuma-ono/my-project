@@ -102,7 +102,8 @@ describe('createBlsBatchProvider', () => {
     });
     expect(source.requests).toHaveLength(1);
     expect(source.requests[0]).toEqual(blsScheduleSeriesIds());
-    expect(blsScheduleSeriesIds()).toHaveLength(11); // 重なりを除いて11系列。v1 の1クエリ25系列に収まる
+    // 重なりを除いて12系列(2026-11-02 に US_CPI の前月比の CUSR0000SA0 が増えた)。v1 の1クエリ25系列に収まる
+    expect(blsScheduleSeriesIds()).toHaveLength(12);
   });
 
   it('computes PPI MoM (SA) / YoY (NSA) and the JOLTS level from the batch', async () => {

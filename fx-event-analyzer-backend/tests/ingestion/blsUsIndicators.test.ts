@@ -98,12 +98,13 @@ describe('mappings for the 3 added BLS indicators', () => {
     expect(mapping.secondary?.official.seriesId).toBe(secondarySeries);
   });
 
-  it('leaves US_CPI and US_NFP as they were', () => {
+  it('keeps US_CPI YoY on the NSA series, takes its MoM from the SA series, and leaves US_NFP as it was', () => {
     const cpi = findMappingByCode('US_CPI')!;
     expect(cpi.official).toEqual([{ source: 'BLS', seriesId: 'CUUR0000SA0', transform: 'YOY_PCT' }]);
+    // HQ指示(2026-11-02): BLS の発表の前月比は季節調整済み(CUSR0000SA0)。
     expect(cpi.secondary).toEqual({
       valueKind: 'MOM_PCT',
-      official: { source: 'BLS', seriesId: 'CUUR0000SA0', transform: 'MOM_PCT' },
+      official: { source: 'BLS', seriesId: 'CUSR0000SA0', transform: 'MOM_PCT' },
     });
     const nfp = findMappingByCode('US_NFP')!;
     expect(nfp.official).toEqual([{ source: 'BLS', seriesId: 'CES0000000001', transform: 'DIFF' }]);
@@ -154,8 +155,8 @@ describe('BLS_SCHEDULE for the added indicators', () => {
         'CES0000000001',
         'CES0500000003',
         'CES0500000003',
+        'CUSR0000SA0',
         'CUSR0000SA0L1E',
-        'CUUR0000SA0',
         'CUUR0000SA0',
         'CUUR0000SA0L1E',
         'JTS000000000000000JOL',
