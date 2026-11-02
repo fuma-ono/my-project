@@ -2748,6 +2748,14 @@ function createSupportRequest(rawBody) {
 /** SCR-017の撮影用。`/__mock/subscription-plan`で切り替える(PRO / FREE)。 */
 let mockSubscriptionPlan = 'PRO';
 
+/**
+ * api-design v1.45 の撮影用(HQ指示 2026-11-02)。`/__mock/reaction-precision?value=APPROXIMATE` で、相場反応・チャートの
+ * 応答に release_datetime_precision を付ける。既定(null)は項目を付けない(今までの応答と同じ)。
+ */
+let mockReactionPrecision = null;
+const withReactionPrecision = (body) =>
+  mockReactionPrecision ? { ...body, release_datetime_precision: mockReactionPrecision } : body;
+
 /** GET /subscription and POST /subscription/verify (api-design.md §25/§25.1). */
 function subscriptionFixture() {
   if (mockSubscriptionPlan === 'FREE') {
@@ -3009,13 +3017,13 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
   if (segments[0] === 'events' && segments[2] === 'reaction' && segments.length === 3) {
     const timeframe = searchParams.get('timeframe') ?? 'all';
     const fxPairId = searchParams.get('fx_pair_id') ?? FX_PAIR_ID;
-    if (timeframe === 'all') return json(res, 200, reactionAllHandler(segments[1], fxPairId));
-    return json(res, 200, reactionSingleHandler(segments[1], timeframe, fxPairId));
+    if (timeframe === 'all') return json(res, 200, withReactionPrecision(reactionAllHandler(segments[1], fxPairId)));
+    return json(res, 200, withReactionPrecision(reactionSingleHandler(segments[1], timeframe, fxPairId)));
   }
   if (segments[0] === 'events' && segments[2] === 'reaction' && segments[3] === 'chart') {
     const timeframe = searchParams.get('timeframe') ?? '5m';
     const fxPairId = searchParams.get('fx_pair_id') ?? FX_PAIR_ID;
-    return json(res, 200, reactionChartHandler(segments[1], timeframe, fxPairId));
+    return json(res, 200, withReactionPrecision(reactionChartHandler(segments[1], timeframe, fxPairId)));
   }
 
   json(res, 404, { error: { code: 'NOT_FOUND', message: `No UI-screenshot fixture for ${pathname}` } });
@@ -3043,6 +3051,11 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/__mock/subscription-plan' && req.method === 'POST') {
     mockSubscriptionPlan = url.searchParams.get('plan') === 'FREE' ? 'FREE' : 'PRO';
     return json(res, 200, { plan: mockSubscriptionPlan });
+  }
+  if (url.pathname === '/__mock/reaction-precision' && req.method === 'POST') {
+    const value = url.searchParams.get('value');
+    mockReactionPrecision = ['EXACT', 'APPROXIMATE', 'DATE_ONLY', 'UNKNOWN'].includes(value) ? value : null;
+    return json(res, 200, { value: mockReactionPrecision });
   }
   json(res, 404, { error: { code: 'NOT_FOUND', message: 'No fixture route.' } });
 });

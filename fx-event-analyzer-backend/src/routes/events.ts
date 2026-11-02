@@ -305,6 +305,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
         return {
           event_id: eventId,
           fx_pair_id: fxPairId,
+          // v1.45: 反応の起点(発表の時刻)の精度。APPROXIMATE なら概算の時刻から計算した値(端末が注記を出す)。
+          release_datetime_precision: event.release_datetime_precision,
           pre_release_price: preReleasePrice,
           reactions: VALID_TIMEFRAMES.map((tf) => {
             const reaction = byTimeframe.get(tf);
@@ -338,6 +340,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
         event_id: eventId,
         fx_pair_id: fxPairId,
         timeframe,
+        // v1.45: 反応の起点(発表の時刻)の精度(全時間枠の応答と同じ)。
+        release_datetime_precision: event.release_datetime_precision,
         pre_release_price: reaction?.pre_release_price ?? null,
         post_release_price: reaction?.post_release_price ?? null,
         movement: reaction?.movement ?? null,
@@ -386,6 +390,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
         fx_pair_id: fxPairId,
         timeframe,
         release_datetime: event.release_datetime,
+        // v1.45: release_datetime の精度。APPROXIMATE なら発表の印は概算の時刻(端末は「約」を付ける)。
+        release_datetime_precision: event.release_datetime_precision,
         window_from: from,
         window_to: to,
         prices,
