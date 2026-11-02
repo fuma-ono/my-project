@@ -236,6 +236,7 @@ struct EventDetailCards: View {
                 forecast: snapshot?.forecast,
                 previous: snapshot?.previous,
                 unit: unit,
+                decimals: response.event.valueDecimals,
                 released: released,
                 // ひとつ前の発表が無料プランでロックされているため、前回(とその前回比)は隠されている(v1.33)。
                 previousLocked: response.event.isPreviousLocked
@@ -248,6 +249,7 @@ struct EventDetailCards: View {
                     forecast: snapshot?.secondaryForecast,
                     previous: snapshot?.secondaryPrevious,
                     unit: unit,
+                    decimals: response.event.valueDecimals,
                     released: released,
                     // 副指標の前回(secondary_previous)も、ひとつ前のロックされた発表の値なので同じく隠す(v1.36)。
                     previousLocked: response.event.isPreviousLocked
@@ -287,6 +289,7 @@ struct EventDetailCards: View {
         forecast: Double?,
         previous: Double?,
         unit: String?,
+        decimals: Int?,
         released: Bool,
         previousLocked: Bool = false
     ) -> some View {
@@ -297,14 +300,17 @@ struct EventDetailCards: View {
                     .padding(.leading, 6)
             }
             HStack(spacing: 0) {
-                resultColumn("結果", value: actual, unit: unit, note: nil, placeholder: released ? "--" : "未発表")
+                resultColumn("結果", value: actual, unit: unit, decimals: decimals, note: nil, placeholder: released ? "--" : "未発表")
                 divider
-                resultColumn("予想", value: forecast, unit: unit, note: nil)
+                resultColumn("予想", value: forecast, unit: unit, decimals: decimals, note: nil)
                 divider
                 if previousLocked {
                     lockedPreviousColumn
                 } else {
-                    resultColumn("前回", value: previous, unit: unit, note: Self.changeFromPrevious(actual: actual, previous: previous, unit: unit))
+                    resultColumn(
+                        "前回", value: previous, unit: unit, decimals: decimals,
+                        note: Self.changeFromPrevious(actual: actual, previous: previous, unit: unit, decimals: decimals)
+                    )
                 }
             }
         }
@@ -360,13 +366,13 @@ struct EventDetailCards: View {
         .accessibilityIdentifier("eventDetailLockedPrevious")
     }
 
-    private func resultColumn(_ title: String, value: Double?, unit: String?, note: String?, placeholder: String = "--") -> some View {
+    private func resultColumn(_ title: String, value: Double?, unit: String?, decimals: Int?, note: String?, placeholder: String = "--") -> some View {
         // HQ指示(2026-10-09)「結果、予想、前回と数字、前回比を大きく中央に」。
         // HQ指示(2026-10-26)「枠をもう少し小さくして、文字サイズも小さく」:
         // 前年比/前月比の2段構成でカードが縦に伸びたため、9.5/17/8→8.5/15/7に詰めた。
         VStack(alignment: .center, spacing: 2) {
             NotoText.text(title, size: 8.5).foregroundStyle(SettingsCardStyle.subtitleColor)
-            Text(value.map { ValueFormat.withUnit($0, unit: unit) } ?? placeholder)
+            Text(value.map { ValueFormat.withUnit($0, unit: unit, decimals: decimals) } ?? placeholder)
                 .font(.system(size: 15, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(.white)
@@ -392,10 +398,12 @@ struct EventDetailCards: View {
     }
 
     /// 「(前回比 -0.2ポイント)」。結果と前回がそろっているときだけ。
-    static func changeFromPrevious(actual: Double?, previous: Double?, unit: String?) -> String? {
+    /// `decimals`(api-design v1.46)があれば、表示の桁に丸めた結果と前回どうしの差にする
+    /// (結果3.74・前回3.36は、表示の3.7と3.4に合わせて「+0.3」。丸める前の差0.38から「+0.4」とはしない)。
+    static func changeFromPrevious(actual: Double?, previous: Double?, unit: String?, decimals: Int? = nil) -> String? {
         guard let actual, let previous else { return nil }
-        let diff = actual - previous
-        let text = ValueFormat.withUnit(abs(diff), unit: diffUnit(for: unit))
+        let diff = ValueFormat.displayDifference(actual, previous, decimals: decimals)
+        let text = ValueFormat.withUnit(abs(diff), unit: diffUnit(for: unit), decimals: decimals)
         let sign = diff > 0 ? "+" : diff < 0 ? "-" : "±"
         return "(前回比 \(sign)\(text))"
     }

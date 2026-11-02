@@ -22,6 +22,7 @@ import { listReactionsForPair } from '../repositories/reactionsRepository.js';
 import { computeAdvancedHistoricalStats, computeHistoricalStats } from '../domain/historicalStatistics.js';
 import { gateAdvancedStatistics } from '../domain/advancedStatistics.js';
 import { resolveTimeframeAnalysisStatus, type ReleaseDatetimePrecision } from '../domain/dataQuality.js';
+import { valueDecimalsForIndicator } from '../domain/valueDecimals.js';
 import { capRowRange, historyLimitFor, planFromFeatures, planLimitsFor } from '../domain/planLimits.js';
 import { comparisonQuerySchema } from '../schemas/historical.js';
 import { buildMeta, parsePagination, rangeFor } from '../utils/pagination.js';
@@ -108,6 +109,8 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
         display_name: event.indicator_display_name,
         release_datetime: event.release_datetime,
         importance: event.importance,
+        // v1.46: 値を表示する小数の桁数(domain/valueDecimals.ts)
+        value_decimals: valueDecimalsForIndicator(event.indicator_code),
         ...accessFields(false, previousLocked),
       },
       snapshot: snapshot ?? null,
@@ -190,6 +193,8 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
           country_code: indicator.country_code,
           currency_code: indicator.currency_code,
           unit: indicator.unit,
+          // v1.46: events の値を表示する小数の桁数(domain/valueDecimals.ts)
+          value_decimals: valueDecimalsForIndicator(indicator.code),
         },
         fx_pair_id: query.fx_pair_id,
         timeframe: query.timeframe,
@@ -232,6 +237,8 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
         country_code: indicator.country_code,
         currency_code: indicator.currency_code,
         unit: indicator.unit,
+        // v1.46: events の値を表示する小数の桁数(domain/valueDecimals.ts)
+        value_decimals: valueDecimalsForIndicator(indicator.code),
       },
       fx_pair_id: query.fx_pair_id,
       total_events: statsEventIds.length,

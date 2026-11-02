@@ -40,6 +40,8 @@ struct IndicatorEventSummary: Decodable, Identifiable, Equatable {
     /// 「前回」だけを隠した発表(api-design v1.33 §28.2): ひとつ前の発表が無料プランでロック
     /// されているため、その結果にあたる`previous`をBackendが`null`で返す。古いBackendではnil。
     var previousLocked: Bool? = nil
+    /// 値を表示する小数の桁数(api-design v1.46、BLSの%の指標は1)。BLS以外の指標・古いBackendではnil(今までの表示)。
+    var valueDecimals: Int? = nil
 
     /// 「前回」を隠した発表か。`true`のとき前回は「--」ではなく鍵の印で出す。
     var isPreviousLocked: Bool { previousLocked ?? false }
@@ -48,6 +50,7 @@ struct IndicatorEventSummary: Decodable, Identifiable, Equatable {
         case locked
         case previousLocked = "previous_locked"
         case requiredPlan = "required_plan"
+        case valueDecimals = "value_decimals"
         case id = "event_id"
         case releaseDatetime = "release_datetime"
         case status
