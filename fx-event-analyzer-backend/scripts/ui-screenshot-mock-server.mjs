@@ -1434,12 +1434,10 @@ function comparisonEventsList() {
       previous: RELEASE_SNAPSHOT.previous,
       surprise: RELEASE_SNAPSHOT.surprise,
       surprise_direction: RELEASE_SNAPSHOT.surprise_direction,
-      // 検証用(HQ指示「bottomSafetyMargin再調整の確認」2026-11-02、一時的):
-      // showSecondary:falseの縦画面で最終行が見切れないことを撮影確認する。
-      secondary_value_kind: null,
-      secondary_forecast: null,
-      secondary_actual: null,
-      secondary_previous: null,
+      secondary_value_kind: RELEASE_SNAPSHOT.secondary_value_kind,
+      secondary_forecast: RELEASE_SNAPSHOT.secondary_forecast,
+      secondary_actual: RELEASE_SNAPSHOT.secondary_actual,
+      secondary_previous: RELEASE_SNAPSHOT.secondary_previous,
       pips_by_timeframe: comparisonPips(0),
     },
     ...HISTORICAL_EVENT_IDS.map((id, index) => {
@@ -1454,10 +1452,10 @@ function comparisonEventsList() {
         previous,
         surprise,
         surprise_direction: surprise > 0 ? 'POSITIVE' : surprise < 0 ? 'NEGATIVE' : 'NEUTRAL',
-        secondary_value_kind: null,
+        secondary_value_kind: 'MOM_PCT',
         secondary_forecast: null,
-        secondary_actual: null,
-        secondary_previous: null,
+        secondary_actual: COMPARISON_TABLE_MOM[index + 1] ?? null,
+        secondary_previous: COMPARISON_TABLE_MOM[index + 2] ?? null,
         pips_by_timeframe: comparisonPips(index + 1),
       };
     }),
