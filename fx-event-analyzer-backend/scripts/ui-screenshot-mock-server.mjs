@@ -1434,10 +1434,13 @@ function comparisonEventsList() {
       previous: RELEASE_SNAPSHOT.previous,
       surprise: RELEASE_SNAPSHOT.surprise,
       surprise_direction: RELEASE_SNAPSHOT.surprise_direction,
-      secondary_value_kind: RELEASE_SNAPSHOT.secondary_value_kind,
-      secondary_forecast: RELEASE_SNAPSHOT.secondary_forecast,
-      secondary_actual: RELEASE_SNAPSHOT.secondary_actual,
-      secondary_previous: RELEASE_SNAPSHOT.secondary_previous,
+      // 検証用(HQ指示「過去イベント比較: 非前年前月の横画面確認」2026-11-02、
+      // 一時的): 前年/前月列が無い指標(米国CPI以外の大多数)の見た目を
+      // 撮影確認するため、secondary_*を一時的にnullにする。確認後、元に戻す。
+      secondary_value_kind: null,
+      secondary_forecast: null,
+      secondary_actual: null,
+      secondary_previous: null,
       pips_by_timeframe: comparisonPips(0),
     },
     ...HISTORICAL_EVENT_IDS.map((id, index) => {
@@ -1452,10 +1455,10 @@ function comparisonEventsList() {
         previous,
         surprise,
         surprise_direction: surprise > 0 ? 'POSITIVE' : surprise < 0 ? 'NEGATIVE' : 'NEUTRAL',
-        secondary_value_kind: 'MOM_PCT',
+        secondary_value_kind: null,
         secondary_forecast: null,
-        secondary_actual: COMPARISON_TABLE_MOM[index + 1] ?? null,
-        secondary_previous: COMPARISON_TABLE_MOM[index + 2] ?? null,
+        secondary_actual: null,
+        secondary_previous: null,
         pips_by_timeframe: comparisonPips(index + 1),
       };
     }),
