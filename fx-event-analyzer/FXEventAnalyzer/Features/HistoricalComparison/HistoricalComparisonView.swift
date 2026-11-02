@@ -91,6 +91,13 @@ struct HistoricalComparisonView: View {
         case .notEntitled:
             loadingScaffold { FXEmptyState(icon: "lock.fill", title: "この情報はご利用いただけません", message: "現在のプランでは過去の比較データを閲覧できません。") }
         case .loaded(let response):
+            // HQ指摘(2026-11-02)「一番下の行の余白が大きいので小さくして」:
+            // 下の縦画面レイアウトは以前、行数や前月列の有無に関わらず常に
+            // 固定398ptの枠に収めていたため、表が短い(行数が少ない・前月列が
+            // 無い)指標では表の下に大きな空白が残っていた。`contentHeight(for:)`
+            // で表の実際の高さ(`tableHeight`と同じ式)から枠の高さを都度
+            // 計算し直す。
+            let boxHeight = Self.contentHeight(for: response)
             // HQ指示(2026-10-25、再指示2026-10-26): 横画面では表が縦画面用の
             // V5キャンバス(234×491、`V5Viewport`参照)に収まらないため、
             // 横画面の時は`V5Viewport`のレターボックス表示をやめ、実寸
@@ -143,8 +150,8 @@ struct HistoricalComparisonView: View {
                             }
                             .frame(width: 214)
                             .padding(.top, 8)
-                            .frame(width: V5P.W, height: 398, alignment: .top)
-                            .position(x: V5P.W / 2, y: 54 + 398 / 2)
+                            .frame(width: V5P.W, height: boxHeight, alignment: .top)
+                            .position(x: V5P.W / 2, y: 54 + boxHeight / 2)
                             V5BottomBar(selected: $tabSelection)
                         }
                     }
@@ -726,6 +733,36 @@ struct HistoricalComparisonView: View {
     }
 
     private static let bottomSafetyMargin: CGFloat = 6
+
+    /// 縦画面レイアウトの枠全体の高さ(`content`の`.frame(height:)`/`.position(y:)`
+    /// が使う)。HQ指摘(2026-11-02)「一番下の行の余白が大きいので小さくして」:
+    /// 以前は行数や前月列の有無に関わらず常に固定398ptに収めていたため、
+    /// 表が短いとき大きな空白が残っていた。上の余白(8)・見出し(`header(_:)`の
+    /// 固定高さ36)・VStackの行間(8)・表の高さ(`tableHeight`、行数等で可変)・
+    /// (無料プランの制限行があれば、その行間8+`planLimitRowHeight`)を
+    /// 積み上げて、内容に合わせて伸び縮みする高さにする。
+    static func contentHeight(for response: ComparisonResponse) -> CGFloat {
+        let limited = response.historyLimit?.isLimited == true
+        let tableH = tableHeight(
+            rows: response.events.count,
+            limited: limited,
+            showSecondary: hasSecondaryColumn(response.events)
+        )
+        let spacing: CGFloat = 8
+        var height = topPadding + headerRowHeight + spacing + tableH
+        if limited {
+            height += spacing + planLimitRowHeight
+        }
+        return height
+    }
+
+    private static let topPadding: CGFloat = 8
+    /// `header(_:)`の`.frame(height: 36)`と同じ値。
+    private static let headerRowHeight: CGFloat = 36
+    /// `planLimitRow(_:)`は文字サイズ6.5の1行(自然高さ約13pt)。実機での
+    /// わずかなはみ出しを吸収する余裕を持たせ、`bottomSafetyMargin`と同じ
+    /// 考え方で少し大きめの18ptを確保する。
+    private static let planLimitRowHeight: CGFloat = 18
 
     /// HQ指示(2026-10-14)「参考画像と比べて文字が小さすぎる。枠も小さい。見やすく」:
     /// 見出し20→26・行18→24、文字は表の見出し6.5→8.5・数字6.5→8.5・時刻5→6.5に上げた。

@@ -204,6 +204,42 @@ final class HistoricalComparisonViewModelTests: XCTestCase {
         )
     }
 
+    /// `HistoricalComparisonView.contentHeight(for:)`のテスト(FormattingTests.swift)用。
+    /// 上の`makeResponse`はこのクラス内の`private`インスタンスメソッドで他ファイルから
+    /// 呼べないため、`historyLimit`を指定できる版を`nonisolated static`で用意する
+    /// (`HistoricalComparisonViewModelTests`自体は`@MainActor`だが、呼び出し側の
+    /// テストはMainActor外のため`nonisolated`にする)。
+    nonisolated static func makeComparisonEvent(id: String) -> ComparisonEventSummary {
+        ComparisonEventSummary(
+            id: id, releaseDatetime: Date(), forecast: 3.0, actual: 3.1, previous: 2.9,
+            surprise: 0.1, surpriseDirection: .positive
+        )
+    }
+
+    nonisolated static func makeComparisonResponse(
+        events: [ComparisonEventSummary],
+        historyLimit: ComparisonResponse.HistoryLimit? = nil
+    ) -> ComparisonResponse {
+        ComparisonResponse(
+            indicator: ComparisonIndicatorSummary(id: "ind_1", code: "US_CPI", name: "US CPI"),
+            fxPairId: "fx_1",
+            timeframe: "5m",
+            totalEvents: events.count,
+            analyzableEvents: events.count,
+            stats: ComparisonStats(
+                averageMovement: 0.21, averagePips: 21.0, maxMovement: 0.55, minMovement: -0.30,
+                upwardCount: 12, downwardCount: 6, noChangeCount: 0
+            ),
+            advancedStatistics: AdvancedStatistics(
+                available: true, requiredEntitlement: nil,
+                data: AdvancedStatisticsData(averageAbsoluteMovement: 0.28, averageAbsolutePips: 28.0)
+            ),
+            events: events,
+            meta: PaginationMeta(page: 1, limit: 20, total: events.count, hasNext: false),
+            historyLimit: historyLimit
+        )
+    }
+
     func testLoadSuccessShowsNormalStats() async {
         let apiClient = MockAPIClient()
         let response = makeResponse()
