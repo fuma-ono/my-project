@@ -40,9 +40,12 @@ struct RootView: View {
                     AppPreferences.shared.reset()
                     PlanStore.shared.reset()
                     if sessionExpired { FavoritesStore.shared.removeAll() }
+                    // ホームのキャッシュも残さない(HQ承認 2026-11-02。AppStateでも消しているが、ログイン画面に
+                    // 出たときは経路によらず消す)。
+                    HomeCacheStore.shared.clear()
                 }
             case .loggedIn:
-                MainTabView(apiClient: apiClient, authService: authService) {
+                MainTabView(apiClient: apiClient, authService: authService, userID: appState.currentUserID) {
                     // ログアウト・アカウント削除: 前のユーザーの通知・お気に入り・
                     // 表示設定を残さない。
                     LocalNotificationScheduler(apiClient: apiClient).reset()

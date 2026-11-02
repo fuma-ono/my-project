@@ -185,6 +185,14 @@ final class DiagnosticsStore: ObservableObject {
         persist()
     }
 
+    /// 前回の情報(端末のキャッシュ)を先に出した時点。最初の1回だけ。`/home`の反映・ホームの表示の
+    /// 記録(`recordHomeStateApplied`・`recordHomeReadyToDisplay`)とは別の項目で、それらを上書きしない。
+    func recordHomeCacheShown() {
+        guard current.homeCacheShownMs == nil else { return }
+        current.homeCacheShownMs = elapsedMs()
+        persist()
+    }
+
     /// 最初の1回だけ記録する(再読み込みのたびには更新しない — あくまで
     /// 「起動シーケンス中に初めてホームが表示可能になった時刻」)。
     func recordHomeReadyToDisplay() {

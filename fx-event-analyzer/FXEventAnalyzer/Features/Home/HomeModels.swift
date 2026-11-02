@@ -5,7 +5,7 @@ import Foundation
 /// (ui-screens.md §5 SCR-004) reference: Forecast/Actual/Previous/Surprise,
 /// country/currency/importance for the card header, and related_fx_pairs
 /// for the "関連通貨ペア" row.
-struct HomeEventSummary: Decodable, Identifiable, Equatable {
+struct HomeEventSummary: Codable, Identifiable, Equatable {
     let id: String
     let indicatorId: String
     let indicatorName: String
@@ -75,7 +75,7 @@ struct HomeEventSummary: Decodable, Identifiable, Equatable {
 /// feed exists yet (Ingestion Worker is a later phase), so `price`/`change`
 /// can legitimately be null for a pair with no stored candle; the UI must
 /// not fabricate a value for that case.
-struct MajorFxSummary: Decodable, Identifiable, Equatable {
+struct MajorFxSummary: Codable, Identifiable, Equatable {
     let fxPairId: String
     let symbol: String
     let price: Double?
@@ -147,7 +147,7 @@ struct HomeResponse: Decodable {
 /// GET /home `speeches_status`(api-design.md §12 v1.34): 要人発言の取得状況。
 /// - `lastSuccessAt`: 最後に取得に成功した時刻(無ければ nil)
 /// - `stale`: 取得できていない(最新の取得が失敗、または18時間以上成功していない)
-struct HomeSpeechesStatus: Decodable, Equatable {
+struct HomeSpeechesStatus: Codable, Equatable {
     let windowDays: Int
     let lastSuccessAt: Date?
     let stale: Bool
@@ -183,5 +183,18 @@ struct HomeSpeechesEmptyText: Equatable {
             message: "直近\(status.windowDays)日間の要人発言はありません",
             detail: lastSuccess.map { "最終更新 \($0)" }
         )
+    }
+}
+
+/// ホームの「前回の情報を表示中」「更新できませんでした」の1行の文言(HQ承認 2026-11-02「ホーム画面のキャッシュ表示改善」)。
+/// 日時の書式は呼び出し側から渡す(ホームの他の日時と同じく表示設定のタイムゾーン・形式)。
+enum HomeRefreshNoticeText {
+    static func make(_ notice: HomeRefreshNotice, formatDate: (Date) -> String) -> String {
+        switch notice {
+        case .showingCache(let savedAt):
+            return "前回の情報（\(formatDate(savedAt))時点）を表示しています・更新中…"
+        case .refreshFailed(let savedAt):
+            return savedAt.map { "更新できませんでした（\(formatDate($0))時点の情報を表示中）" } ?? "更新できませんでした"
+        }
     }
 }

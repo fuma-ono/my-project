@@ -70,6 +70,10 @@ struct LaunchDiagnostics: Codable, Equatable {
     /// `HomeView`の読み込み済みコンテンツが最初に画面に現れた時点
     /// (`.onAppear`、完全な描画完了の保証ではない)。
     var homeReadyToDisplayMs: Int64?
+    /// 前回の情報(端末のキャッシュ)を先に出した時点(HQ承認 2026-11-02「ホーム画面のキャッシュ表示改善」)。
+    /// 上の`homeStateAppliedMs`・`homeReadyToDisplayMs`は、今までどおり`/home`の最新のデータで記録する
+    /// (キャッシュの表示では上書きしない)。キャッシュを出さなかった起動・古い保存データではnil。
+    var homeCacheShownMs: Int64?
 
     // MARK: - G. 通信の内訳(HQ指示 2026-10-21「通信遅延の詳細計測」)
 
@@ -287,6 +291,7 @@ extension LaunchDiagnostics {
         lines.append("今回の起動内での/home取得回数: \(homeRequestCount == 0 ? "未実行" : "\(homeRequestCount)回")")
         lines.append("Supabaseセッション取得: \(Self.describe(diff(sessionCheckStartMs, sessionCheckEndMs))) [状態: \(sessionCheckOutcome.rawValue)]")
         lines.append("/homeリクエスト全体の状態: \(homeRequestOutcome.rawValue)")
+        lines.append("前回の情報(キャッシュ)の表示: \(homeCacheShownMs.map { "起動から\(Self.describe($0))" } ?? "なし")(ホーム表示の合計時間には含めない)")
         lines.append("/home HTTPステータスコード: \(homeHTTPStatusCode.map(String.init) ?? "未計測")")
         lines.append("")
         lines.append("[通信の内訳(起動後1回目の要求)]")

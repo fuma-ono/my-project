@@ -194,8 +194,25 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "消費者物価指数（CPI）", timeout: 15), "Favorites list did not load")
         Thread.sleep(forTimeInterval: 1.0)
         capture("04c-Favorites")
+        // HQ承認(2026-11-02)「ホーム画面のキャッシュ表示改善」: ホームに戻ると取り直す。その間だけモックの
+        // /home を失敗させ、前回のデータを出したまま「更新できませんでした」が出る状態を撮る。撮ったら
+        // モックを戻して「再試行」し、1行が消えてから先へ進む(後の撮影は今までと同じ画面のまま)。
+        let homeFailSet = setMockHomeFail(true)
         tapIdentifier("v5HeaderBack")
         XCTAssertTrue(waitForAnyElement(containing: "通貨ペア", timeout: 10), "Did not return to Home from Favorites")
+        if homeFailSet {
+            XCTAssertTrue(waitForAnyElement(containing: "更新できませんでした", timeout: 15), "Home did not show the refresh-failed notice")
+            capture("04d-Home-Cached")
+            XCTAssertTrue(setMockHomeFail(false), "Could not restore the mock /home")
+            tapIdentifier("homeRefreshRetry", timeout: 10)
+            let notice = app.descendants(matching: .any)["homeRefreshNotice"]
+            var waited = 0.0
+            while notice.exists && waited < 15 {
+                Thread.sleep(forTimeInterval: 0.5)
+                waited += 0.5
+            }
+            XCTAssertFalse(notice.exists, "Home refresh notice did not go away after retry")
+        }
 
         // HQ指示(2026-10-06)「直近の要人発言が見えるようにして」: 本番の
         // 挙動は変えない(4枚目のカードが初期表示の折り返し線より下にあり、
@@ -633,6 +650,21 @@ final class ScreenshotTests: XCTestCase {
     /// 届かなければfalse(その撮影だけ飛ばす)。
     private func setMockReactionPrecision(_ value: String?) -> Bool {
         guard let url = URL(string: "http://127.0.0.1:8090/__mock/reaction-precision?value=\(value ?? "")") else { return false }
+        var request = URLRequest(url: url, timeoutInterval: 5)
+        request.httpMethod = "POST"
+        let done = DispatchSemaphore(value: 0)
+        var succeeded = false
+        URLSession.shared.dataTask(with: request) { _, response, _ in
+            succeeded = (response as? HTTPURLResponse)?.statusCode == 200
+            done.signal()
+        }.resume()
+        _ = done.wait(timeout: .now() + 6)
+        return succeeded
+    }
+
+    /// モックの GET /home を失敗させる(true)・戻す(false)。届かなければfalse(その撮影だけ飛ばす)。
+    private func setMockHomeFail(_ fail: Bool) -> Bool {
+        guard let url = URL(string: "http://127.0.0.1:8090/__mock/home-fail?value=\(fail ? "1" : "0")") else { return false }
         var request = URLRequest(url: url, timeoutInterval: 5)
         request.httpMethod = "POST"
         let done = DispatchSemaphore(value: 0)

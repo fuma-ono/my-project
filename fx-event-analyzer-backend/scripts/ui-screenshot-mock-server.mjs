@@ -2753,6 +2753,11 @@ let mockSubscriptionPlan = 'PRO';
  * 応答に release_datetime_precision を付ける。既定(null)は項目を付けない(今までの応答と同じ)。
  */
 let mockReactionPrecision = null;
+/**
+ * ホームのキャッシュ表示の撮影用(HQ承認 2026-11-02)。`/__mock/home-fail?value=1` の間だけ GET /home を 503 にする
+ * (前回のデータを出したまま「更新できませんでした」が出る状態)。既定(false)は今までどおり。
+ */
+let mockHomeFail = false;
 const withReactionPrecision = (body) =>
   mockReactionPrecision ? { ...body, release_datetime_precision: mockReactionPrecision } : body;
 
@@ -2897,7 +2902,10 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
     .split('/')
     .filter(Boolean);
 
-  if (pathname === '/api/v1/home') return json(res, 200, homeHandler());
+  if (pathname === '/api/v1/home') {
+    if (mockHomeFail) return json(res, 503, { error: { code: 'SERVICE_UNAVAILABLE', message: 'Mock: home unavailable.' } });
+    return json(res, 200, homeHandler());
+  }
   if (pathname === '/api/v1/indicators') return json(res, 200, indicatorsListHandler(searchParams));
   // SCR-016/018/020/021 (api-design.md §24.4/§24.5). PATCH merges the body
   // into the fixture and answers with the result.
@@ -3051,6 +3059,10 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/__mock/subscription-plan' && req.method === 'POST') {
     mockSubscriptionPlan = url.searchParams.get('plan') === 'FREE' ? 'FREE' : 'PRO';
     return json(res, 200, { plan: mockSubscriptionPlan });
+  }
+  if (url.pathname === '/__mock/home-fail' && req.method === 'POST') {
+    mockHomeFail = url.searchParams.get('value') === '1';
+    return json(res, 200, { value: mockHomeFail });
   }
   if (url.pathname === '/__mock/reaction-precision' && req.method === 'POST') {
     const value = url.searchParams.get('value');

@@ -13,30 +13,45 @@ final class AppState: ObservableObject {
     }
 
     @Published private(set) var phase: Phase = .launching
+    /// 認証済みの今のユーザー(HQ承認 2026-11-02「ホーム画面のキャッシュ表示改善」)。ホームのキャッシュは
+    /// このユーザーのものだけを出す。ログインしていない・分からないときはnil(キャッシュを出さない)。
+    @Published private(set) var currentUserID: UUID?
 
     private let authService: AuthServicing
+    private let homeCache: HomeCacheStore
     private var observationTask: Task<Void, Never>?
 
-    init(authService: AuthServicing) {
+    init(authService: AuthServicing, homeCache: HomeCacheStore = .shared) {
         self.authService = authService
+        self.homeCache = homeCache
+    }
+
+    /// ログインしていない状態へ移るとき(ログアウト・アカウント削除・セッション切れ・ログイン画面)。
+    /// 前のユーザーのホームのキャッシュを残さない。
+    private func leaveLoggedIn(sessionExpired: Bool) {
+        currentUserID = nil
+        homeCache.clear()
+        phase = .loggedOut(sessionExpired: sessionExpired)
     }
 
     /// Called once by `SplashViewModel` when its init sequence (auth
     /// session check, per ui-screens.md SCR-000) has resolved.
     func splashFinished(outcome: SplashOutcome) {
         switch outcome {
-        case .authenticated:
+        case .authenticated(let session):
+            currentUserID = session.userID
             phase = .loggedIn
         case .unauthenticated:
-            phase = .loggedOut(sessionExpired: false)
+            leaveLoggedIn(sessionExpired: false)
         case .sessionExpired:
-            phase = .loggedOut(sessionExpired: true)
+            leaveLoggedIn(sessionExpired: true)
         }
         startObservingAuthStateIfNeeded()
     }
 
     /// Called by `LoginViewModel` after a successful sign-in.
     func handleSuccessfulLogin(_ session: UserSession) {
+        currentUserID = session.userID
         phase = .loggedIn
     }
 
@@ -49,7 +64,7 @@ final class AppState: ObservableObject {
     /// runs; by then `phase` is no longer `.loggedIn`, so that handler's
     /// guard makes it a no-op.
     func handleSignOut() {
-        phase = .loggedOut(sessionExpired: false)
+        leaveLoggedIn(sessionExpired: false)
     }
 
     /// Starts listening for auth state changes that happen *after* launch —
@@ -62,13 +77,14 @@ final class AppState: ObservableObject {
         observationTask = Task { [authService] in
             for await event in authService.authStateChanges() {
                 switch event {
-                case .signedIn:
+                case .signedIn(let session):
                     if self.phase != .loggedIn {
+                        self.currentUserID = session.userID
                         self.phase = .loggedIn
                     }
                 case .signedOut:
                     if case .loggedIn = self.phase {
-                        self.phase = .loggedOut(sessionExpired: true)
+                        self.leaveLoggedIn(sessionExpired: true)
                     }
                 }
             }
