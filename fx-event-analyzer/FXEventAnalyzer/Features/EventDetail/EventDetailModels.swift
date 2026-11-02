@@ -42,6 +42,8 @@ struct EventDetailEvent: Decodable, Equatable {
     var displayName: String? = nil
     /// 出典と告知(api-design v1.43)。Eurostatの指標だけ付く。古いBackendではnil。
     var attribution: Attribution? = nil
+    /// 値を表示する小数の桁数(api-design v1.46、BLSの%の指標は1)。BLS以外の指標・古いBackendではnil(今までの表示)。
+    var valueDecimals: Int? = nil
     /// 無料プランで隠された過去の発表(api-design v1.33 §14.1)。古いBackendではnil(=隠していない)。
     var locked: Bool? = nil
     /// ロックを外すのに必要なプラン(`"PRO"`)。ロックしていなければnil。
@@ -63,6 +65,7 @@ struct EventDetailEvent: Decodable, Equatable {
         case requiredPlan = "required_plan"
         case displayName = "display_name"
         case attribution
+        case valueDecimals = "value_decimals"
         case id
         case indicatorId = "indicator_id"
         case indicatorName = "indicator_name"

@@ -657,6 +657,40 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(Number(oneMin.pips)).toBeCloseTo(28.0);
       expect(oneMin.analysis_status).toBe('READY');
     });
+
+    // v1.45: 反応の起点(発表の時刻)の精度を、反応・チャートの応答にも返す(イベントの保存済みの値のまま)。
+    // The previous test in this block already granted VIEW_MARKET_REACTION to the shared user (granting twice is a duplicate).
+    it('returns release_datetime_precision on /reaction (all and one timeframe) and /reaction/chart — EXACT and APPROXIMATE', async () => {
+      const get = async (path: string) => {
+        const response = await ctx.app.inject({ method: 'GET', url: `/api/v1${path}`, headers: authHeader });
+        expect(response.statusCode, path).toBe(200);
+        return JSON.parse(response.body);
+      };
+      const pair = `fx_pair_id=${USDJPY_FX_PAIR_ID}`;
+
+      const cpiAll = await get(`/events/${US_CPI_EVENT_ID}/reaction?${pair}`);
+      expect(cpiAll.release_datetime_precision).toBe('EXACT');
+      expect(cpiAll.reactions).toHaveLength(5); // the existing shape is unchanged
+      expect((await get(`/events/${US_CPI_EVENT_ID}/reaction?${pair}&timeframe=5m`)).release_datetime_precision).toBe(
+        'EXACT',
+      );
+      const cpiChart = await get(`/events/${US_CPI_EVENT_ID}/reaction/chart?${pair}&timeframe=1m`);
+      expect(cpiChart.release_datetime_precision).toBe('EXACT');
+      expect(cpiChart.release_datetime).toBeDefined();
+
+      // seed: the BOJ event is APPROXIMATE (1m is not analyzed — unchanged)
+      const bojAll = await get(`/events/${BOJ_EVENT_ID}/reaction?${pair}`);
+      expect(bojAll.release_datetime_precision).toBe('APPROXIMATE');
+      expect(bojAll.reactions.find((r: { timeframe: string }) => r.timeframe === '1m').analysis_status).toBe(
+        'NOT_ANALYZABLE',
+      );
+      expect((await get(`/events/${BOJ_EVENT_ID}/reaction?${pair}&timeframe=15m`)).release_datetime_precision).toBe(
+        'APPROXIMATE',
+      );
+      expect(
+        (await get(`/events/${BOJ_EVENT_ID}/reaction/chart?${pair}&timeframe=5m`)).release_datetime_precision,
+      ).toBe('APPROXIMATE');
+    });
   });
 
   describe('Search (api-design.md §23, partial match)', () => {

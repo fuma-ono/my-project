@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { attributionForIndicator } from '../domain/attribution.js';
+import { valueDecimalsForIndicator } from '../domain/valueDecimals.js';
 import { resolveReactionState } from '../domain/reactionState.js';
 import { chartWindow } from '../domain/chartWindow.js';
 import { ApiError } from '../errors/ApiError.js';
@@ -97,6 +98,8 @@ async function lockedEventDetail(app: FastifyInstance, event: EventRow, precisio
       is_provisional: false,
       // v1.43: 出典と告知(Eurostat の指標だけ。domain/attribution.ts)。ロックしても出典は隠さない。
       attribution: attributionForIndicator(event.indicator_code),
+      // v1.46: 値を表示する小数の桁数(domain/valueDecimals.ts)。値ではないのでロックしても隠さない。
+      value_decimals: valueDecimalsForIndicator(event.indicator_code),
       ...LOCKED,
     },
     snapshot: snapshot ? nullFields(snapshot, RELEASE_VALUE_FIELDS) : null,
@@ -202,6 +205,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
         revision_status: resolveRevisionStatus(revisionCount),
         // v1.43: 出典と告知(Eurostat の指標だけ。domain/attribution.ts)。
         attribution: attributionForIndicator(event.indicator_code),
+        // v1.46: 値を表示する小数の桁数(BLS の%の指標は 1、それ以外は null。domain/valueDecimals.ts)
+        value_decimals: valueDecimalsForIndicator(event.indicator_code),
         ...accessFields(false, previousLocked),
       },
       snapshot: snapshot ?? null,
@@ -260,7 +265,12 @@ export function registerEventRoutes(app: FastifyInstance): void {
       );
 
       return {
-        data: rows.map((row) => ({ event_id: eventId, ...row })),
+        // v1.46: old_value / new_value を表示する小数の桁数(domain/valueDecimals.ts)
+        data: rows.map((row) => ({
+          event_id: eventId,
+          ...row,
+          value_decimals: valueDecimalsForIndicator(event.indicator_code),
+        })),
         meta: buildMeta(pagination.page, pagination.limit, total),
       };
     },
@@ -305,6 +315,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
         return {
           event_id: eventId,
           fx_pair_id: fxPairId,
+          // v1.45: 反応の起点(発表の時刻)の精度。APPROXIMATE なら概算の時刻から計算した値(端末が注記を出す)。
+          release_datetime_precision: event.release_datetime_precision,
           pre_release_price: preReleasePrice,
           reactions: VALID_TIMEFRAMES.map((tf) => {
             const reaction = byTimeframe.get(tf);
@@ -338,6 +350,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
         event_id: eventId,
         fx_pair_id: fxPairId,
         timeframe,
+        // v1.45: 反応の起点(発表の時刻)の精度(全時間枠の応答と同じ)。
+        release_datetime_precision: event.release_datetime_precision,
         pre_release_price: reaction?.pre_release_price ?? null,
         post_release_price: reaction?.post_release_price ?? null,
         movement: reaction?.movement ?? null,
@@ -386,6 +400,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
         fx_pair_id: fxPairId,
         timeframe,
         release_datetime: event.release_datetime,
+        // v1.45: release_datetime の精度。APPROXIMATE なら発表の印は概算の時刻(端末は「約」を付ける)。
+        release_datetime_precision: event.release_datetime_precision,
         window_from: from,
         window_to: to,
         prices,

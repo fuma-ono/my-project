@@ -32,6 +32,8 @@ struct HomeEventSummary: Decodable, Identifiable, Equatable {
     var requiredPlan: String? = nil
     /// `result_type`(api-design v1.42)。古いBackendではnil。
     var resultType: ResultType? = nil
+    /// 値を表示する小数の桁数(api-design v1.46、BLSの%の指標は1)。BLS以外の指標・古いBackendではnil(今までの表示)。
+    var valueDecimals: Int? = nil
 
     /// ロックされた発表か。`true`のとき予想・結果・前回・サプライズはBackendが`null`で返す。
     var isLocked: Bool { locked ?? false }
@@ -48,6 +50,7 @@ struct HomeEventSummary: Decodable, Identifiable, Equatable {
         case previousLocked = "previous_locked"
         case requiredPlan = "required_plan"
         case resultType = "result_type"
+        case valueDecimals = "value_decimals"
         case displayName = "display_name"
         case id = "event_id"
         case indicatorId = "indicator_id"

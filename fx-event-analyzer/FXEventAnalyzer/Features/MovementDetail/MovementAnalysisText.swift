@@ -25,6 +25,7 @@ enum MovementAnalysisText {
         actual: Double?,
         forecast: Double?,
         unit: String?,
+        valueDecimals: Int? = nil,
         marketViewAbove: String? = nil,
         marketViewBelow: String? = nil
     ) -> Summary? {
@@ -35,12 +36,15 @@ enum MovementAnalysisText {
         var facts: [Summary.Row] = []
         var interpretation: String?
         if let actual, let forecast {
-            let diff = actual - forecast
+            // api-design v1.46: `valueDecimals`があれば、表示の桁に丸めた結果と予想どうしの差(イベント詳細の前回比と同じ)。
+            let diff = ValueFormat.displayDifference(actual, forecast, decimals: valueDecimals)
             if diff == 0 {
                 facts.append(.init(label: "発表結果", value: "予想どおり", sign: nil))
             } else {
                 // 「%」の指標の差はポイントで書く(3.1%と3.2%の差は0.1ポイント)。
-                let amount = unit == "%" ? "\(ValueFormat.number(abs(diff)))ポイント" : ValueFormat.withUnit(abs(diff), unit: unit)
+                let amount = unit == "%"
+                    ? "\(ValueFormat.indicatorNumber(abs(diff), decimals: valueDecimals))ポイント"
+                    : ValueFormat.withUnit(abs(diff), unit: unit, decimals: valueDecimals)
                 facts.append(.init(label: "発表結果", value: "予想を\(amount)\(diff > 0 ? "上回る" : "下回る")", sign: nil))
                 interpretation = diff > 0 ? marketViewAbove : marketViewBelow
             }
@@ -63,6 +67,7 @@ enum MovementAnalysisText {
         actual: Double?,
         forecast: Double?,
         unit: String?,
+        valueDecimals: Int? = nil,
         marketViewAbove: String? = nil,
         marketViewBelow: String? = nil,
         subject: String? = nil,
@@ -75,11 +80,11 @@ enum MovementAnalysisText {
 
         var sentences: [String] = []
         if let actual, let forecast {
-            let diff = actual - forecast
+            let diff = ValueFormat.displayDifference(actual, forecast, decimals: valueDecimals)
             if diff == 0 {
                 sentences.append("結果は予想どおりだった。")
             } else {
-                let amount = ValueFormat.withUnit(abs(diff), unit: unit)
+                let amount = ValueFormat.withUnit(abs(diff), unit: unit, decimals: valueDecimals)
                 sentences.append("結果は予想を\(amount)\(diff > 0 ? "上回った" : "下回った")。")
                 // HQ指示(2026-10-09)「なぜ下落したのかを表示したい」: 指標ごとに人が書いた
                 // 「一般的な見方」を、上振れ・下振れに合わせて添える。

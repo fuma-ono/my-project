@@ -101,7 +101,7 @@ async function main(): Promise<void> {
     resolverErrors.push(error instanceof Error ? error.message : String(error)),
   );
   // HQ指示(2026-10-25)「過去イベント比較の表も前月と前年必要」: 米国CPIの
-  // 前月比(MoM%)を、同じBLS系列(CUUR0000SA0)の別変換として計算する。
+  // 前月比(MoM%)を、季節調整済みの系列(CUSR0000SA0)から計算する(HQ指示 2026-11-02)。
   const officialSecondary = createBlsSecondaryResolver(bls, scheduleObservationRange(BLS_SCHEDULE), (error) =>
     resolverErrors.push(error instanceof Error ? error.message : String(error)),
   );

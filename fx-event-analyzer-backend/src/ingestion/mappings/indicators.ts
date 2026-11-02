@@ -150,9 +150,11 @@ export const INDICATOR_MAPPINGS: readonly IndicatorMapping[] = [
     allowMissingUnit: false,
     referencePeriodLagMonths: 1,
     // HQ指示(2026-10-25): 過去イベント比較・イベント詳細に前月比(MoM%)も
-    // 併記する。同じ系列(CUUR0000SA0)をMOM_PCTで計算するだけで、新しい
-    // 外部データ源は不要。
-    secondary: { valueKind: 'MOM_PCT', official: { source: 'BLS', seriesId: 'CUUR0000SA0', transform: 'MOM_PCT' } },
+    // 併記する。前月比は BLS の発表どおり季節調整済みの系列(CUSR0000SA0、
+    // CPI-U 全品目・米国都市平均・季節調整済み)で計算する(HQ指示 2026-11-02。
+    // 以前は前年比と同じ季節調整なしの CUUR0000SA0 で、発表の前月比と違っていた)。
+    // コアCPI と同じく BLS の取得が1系列増えるだけで、新しい外部データ源は不要。
+    secondary: { valueKind: 'MOM_PCT', official: { source: 'BLS', seriesId: 'CUSR0000SA0', transform: 'MOM_PCT' } },
   },
   {
     // Core CPI (all items less food and energy) YoY, NSA — like US_CPI, the

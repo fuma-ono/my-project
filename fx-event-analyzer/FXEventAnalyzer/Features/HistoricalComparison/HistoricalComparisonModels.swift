@@ -57,9 +57,12 @@ struct ComparisonIndicatorSummary: Decodable, Equatable {
     var countryCode: String? = nil
     var currencyCode: String? = nil
     var unit: String? = nil
+    /// 値を表示する小数の桁数(api-design v1.46、BLSの%の指標は1)。BLS以外の指標・古いBackendではnil(今までの表示)。
+    var valueDecimals: Int? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, code, name, unit
+        case valueDecimals = "value_decimals"
         case displayName = "display_name"
         case countryCode = "country_code"
         case currencyCode = "currency_code"

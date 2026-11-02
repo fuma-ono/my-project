@@ -55,11 +55,33 @@ final class SplashViewModelTests: XCTestCase {
         }
         viewModel.start()
 
-        // Allow the detached Task inside start() to run.
-        await Task.yield()
-        try? await Task.sleep(nanoseconds: 50_000_000)
+        // HQ指示(2026-11-02「iOS CI失敗の原因調査」): ここだけ固定50msのsleepが残っており、
+        // CI(efb85f29、iOS Build & Test #1070 Attempt #2)で状態が変わる前に判定して落ちた
+        // (期待 initializationError・実際 initializing)。状態が変わる前に起動診断の記録
+        // (DiagnosticsStore、JSONの変換とUserDefaultsへの保存を4回)が入るため、混んだ
+        // runnerでは50msを超えうる。ファイル冒頭の方針どおり、状態が変わるまで待つ形にする。
+        await waitUntil { viewModel.state == .initializationError }
 
         XCTAssertEqual(viewModel.state, .initializationError)
+    }
+
+    /// セッション取得の失敗は、成功時の最低表示時間(`minimumDisplayDuration`)を待たずに
+    /// すぐエラーを出す(SplashViewModelのinitの説明どおり)。待機を状態の変化の待ちに
+    /// したことで、この仕様が弱まっていないことを確かめる: 最低表示時間を5秒にしても、
+    /// 1秒以内(waitUntilの上限)にエラーになり、起動診断にも失敗として残る。
+    func testSessionCheckFailureDoesNotWaitForMinimumDisplayDuration() async {
+        let auth = MockAuthService()
+        auth.sessionResult = .failure(AuthServiceError.network("offline"))
+
+        let viewModel = SplashViewModel(authService: auth, minimumDisplayDuration: .seconds(5)) { _ in
+            XCTFail("onFinished should not be called when the init sequence fails")
+        }
+        viewModel.start()
+        await waitUntil { viewModel.state == .initializationError }
+
+        XCTAssertEqual(viewModel.state, .initializationError)
+        XCTAssertEqual(DiagnosticsStore.shared.current.sessionCheckOutcome, .failure)
+        XCTAssertEqual(DiagnosticsStore.shared.current.runInitSequenceOutcome, .failure)
     }
 
     func testRetryReRunsInitSequenceOnTheSameInstance() async {

@@ -34,8 +34,12 @@ enum MovementChartState: Equatable {
 final class MovementDetailViewModel: ObservableObject {
     @Published private(set) var state: MovementDetailState = .loading
     @Published private(set) var chartState: MovementChartState = .loading
+    /// api-design v1.45: 反応の応答の`release_datetime_precision`(古いBackendではnil)。APPROXIMATEなら概算の注記を出す。
+    @Published private(set) var releaseDatetimePrecision: ReleaseDatetimePrecision?
     /// 発表の結果・予想(「値動きの分析」の1文目)。取れなくても画面は出す。
     @Published private(set) var eventSnapshot: EventSnapshotDetail?
+    /// 結果・予想を表示する小数の桁数(api-design v1.46の`event.value_decimals`)。BLS以外の指標・古いBackendではnil。
+    @Published private(set) var valueDecimals: Int?
     /// 指標の一般的な見方(上振れ・下振れ)。取れなくても画面は出す。
     @Published private(set) var indicator: IndicatorSummary?
     /// HQ指示(2026-10-14)「過去の類似イベントとの比較」: 過去イベント比較(SCR-009)と
@@ -113,6 +117,7 @@ final class MovementDetailViewModel: ObservableObject {
         )
         do {
             let response: ReactionAllTimeframesResponse = try await apiClient.send(endpoint)
+            releaseDatetimePrecision = response.releaseDatetimePrecision
             state = .loaded(preReleasePrice: response.preReleasePrice, reactions: response.reactions)
         } catch let error as APIError where error.isNotConfigured {
             state = .backendNotConfigured
@@ -139,6 +144,7 @@ final class MovementDetailViewModel: ObservableObject {
     private func fetchEventSnapshot() async {
         let response: EventDetailResponse? = try? await apiClient.send(Endpoint(path: "events/\(eventId)"))
         eventSnapshot = response?.snapshot
+        valueDecimals = response?.event.valueDecimals
     }
 
     private func fetchIndicator() async {

@@ -10,17 +10,45 @@ enum ValueFormat {
     /// 単位が無ければ数値だけ。`claude/fx-settings-screens`のHome画面(HQ指示
     /// 2026-10-08「ホーム画面は別アカで作った方を採用して」で採用)が参照する
     /// (api-design.md v1.13の`unit`フィールド対応)。
-    static func withUnit(_ value: Double, unit: String?) -> String {
+    ///
+    /// `decimals`(api-design v1.46の`value_decimals`): 指定があれば、その桁に丸めて(0から遠い側へ)
+    /// 末尾の0も出す(3.0245 →「3.0%」、-0.0167 →「0.0%」)。nil(BLS以外の指標・古いBackend)なら
+    /// 今までどおり。千人・Kの万人の表示は、すでに公表の桁(千人の整数)なので`decimals`を使わない。
+    static func withUnit(_ value: Double, unit: String?, decimals: Int? = nil) -> String {
         switch unit?.trimmingCharacters(in: .whitespaces) {
-        case nil, "": return number(value)
+        case nil, "": return indicatorNumber(value, decimals: decimals)
         case "千人", "K":
             let formatter = NumberFormatter()
             formatter.numberStyle = .decimal
             formatter.minimumFractionDigits = 1
             formatter.maximumFractionDigits = 1
             return (formatter.string(from: NSNumber(value: value / 10)) ?? number(value / 10)) + "万人"
-        case let unit?: return number(value) + unit
+        case let unit?: return indicatorNumber(value, decimals: decimals) + unit
         }
+    }
+
+    /// 指標の値の数字の部分。`decimals`がnilなら`number(_:)`(今までの表示)。
+    static func indicatorNumber(_ value: Double, decimals: Int?) -> String {
+        guard let decimals else { return number(value) }
+        return number(displayRounded(value, decimals: decimals), fractionDigits: decimals, minimumFractionDigits: decimals)
+    }
+
+    /// 表示の桁に丸めた値(api-design v1.46、HQ指示 2026-11-02「表示桁数」)。0から遠い側へ丸め
+    /// (0.25 → 0.3、-0.25 → -0.3)、丸めて0になれば符号を取る(-0.0 → 0.0)。保存値は丸めず、
+    /// 表示と、表示した値どうしの差(前回比・予想との差)にだけ使う。2進数の誤差で0.15が
+    /// 0.1499…にならないよう、Backendの`roundTo`と同じく10進の文字列から丸める。
+    static func displayRounded(_ value: Double, decimals: Int) -> Double {
+        guard value.isFinite, var decimal = Decimal(string: "\(value)", locale: Locale(identifier: "en_US_POSIX")) else { return value }
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &decimal, decimals, .plain)
+        let result = NSDecimalNumber(decimal: rounded).doubleValue
+        return result == 0 ? 0 : result
+    }
+
+    /// 表示の桁に丸めた値どうしの差(前回比・予想との差)。`decimals`がnilなら丸めずに差を取る(今までどおり)。
+    static func displayDifference(_ a: Double, _ b: Double, decimals: Int?) -> Double {
+        guard let decimals else { return a - b }
+        return displayRounded(displayRounded(a, decimals: decimals) - displayRounded(b, decimals: decimals), decimals: decimals)
     }
 
     /// `minimumFractionDigits`は既定で0(末尾の0は省く、「3.2」「18」等

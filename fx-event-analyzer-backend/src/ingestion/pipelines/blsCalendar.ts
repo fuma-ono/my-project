@@ -122,7 +122,7 @@ export function createBlsNativeResolver(
  * (rather than extending createBlsNativeResolver/OfficialValueResolver) to
  * avoid touching the shared resolver interface other pipelines/tests
  * depend on; the extra fetch this causes is at most one per distinct
- * secondary series per run (CUUR0000SA0 for US_CPI today), well under the
+ * secondary series per run (e.g. CUSR0000SA0 for US_CPI), well under the
  * BLS v1 API's unauthenticated 25 requests/day limit.
  */
 export function createBlsSecondaryResolver(

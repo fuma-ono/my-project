@@ -511,7 +511,7 @@ struct HistoricalComparisonView: View {
     }
 
     private func landscapeValueCell(_ value: Double?, unit: String?, width: CGFloat) -> some View {
-        Text(Self.valueText(value, unit: unit))
+        Text(Self.valueText(value, unit: unit, decimals: valueDecimals))
             .font(.system(size: 13, weight: .medium))
             .monospacedDigit()
             .foregroundStyle(.white)
@@ -900,7 +900,7 @@ struct HistoricalComparisonView: View {
     }
 
     private func valueCell(_ value: Double?, unit: String?) -> some View {
-        Text(Self.valueText(value, unit: unit))
+        Text(Self.valueText(value, unit: unit, decimals: valueDecimals))
             .font(.system(size: 7, weight: .medium))
             .monospacedDigit()
             .foregroundStyle(.white)
@@ -938,11 +938,19 @@ struct HistoricalComparisonView: View {
     // MARK: - 書式
 
     /// 「3.1%」のように、小数は最大2桁で末尾の0を省く。単位(%)はそのまま後ろに付ける。
-    static func valueText(_ value: Double?, unit: String?) -> String {
+    /// `decimals`(api-design v1.46の`value_decimals`)があれば、その桁に丸めて末尾の0も出す(「3.0%」)。
+    static func valueText(_ value: Double?, unit: String?, decimals: Int? = nil) -> String {
         guard let value else { return "--" }
-        let number = Self.numberFormatter.string(from: NSNumber(value: value)) ?? "\(value)"
+        let number = decimals.map { ValueFormat.indicatorNumber(value, decimals: $0) }
+            ?? Self.numberFormatter.string(from: NSNumber(value: value)) ?? "\(value)"
         guard let unit, unit == "%" else { return number }
         return number + unit
+    }
+
+    /// 表示中の指標の`indicator.value_decimals`(api-design v1.46)。BLS以外の指標・古いBackendではnil。
+    private var valueDecimals: Int? {
+        if case .loaded(let response) = viewModel.state { return response.indicator.valueDecimals }
+        return nil
     }
 
     /// 「+2.1」「-8.2」(小数1桁、符号付き)。

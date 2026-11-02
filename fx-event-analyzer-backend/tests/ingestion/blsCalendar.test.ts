@@ -41,12 +41,18 @@ class FakeBls implements OfficialStatsProvider {
 }
 
 const CPI_SERIES = 'CUUR0000SA0'; // US_CPI, YOY_PCT
+const CPI_SA_SERIES = 'CUSR0000SA0'; // US_CPI の副指標(前月比)、季節調整済み(HQ指示 2026-11-02)
 const NFP_SERIES = 'CES0000000001'; // US_NFP, DIFF
 
-function fakeBlsWith(cpi: Record<string, number>, nfp: Record<string, number>): FakeBls {
+function fakeBlsWith(
+  cpi: Record<string, number>,
+  nfp: Record<string, number>,
+  cpiSa: Record<string, number> = {},
+): FakeBls {
   return new FakeBls(
     new Map([
       [CPI_SERIES, new Map(Object.entries(cpi))],
+      [CPI_SA_SERIES, new Map(Object.entries(cpiSa))],
       [NFP_SERIES, new Map(Object.entries(nfp))],
     ]),
   );
@@ -121,15 +127,26 @@ describe('createBlsNativeResolver', () => {
 
 describe('createBlsSecondaryResolver', () => {
   // HQ指示(2026-10-25)「過去イベント比較の表も前月と前年必要」: 米国CPIの
-  // mapping.secondaryはMOM_PCT(同じCUUR0000SA0系列の前月比)。
+  // mapping.secondaryはMOM_PCT。BLS の発表の前月比は季節調整済みなので CUSR0000SA0 で計算する
+  // (HQ指示 2026-11-02)。季節調整なし(CUUR0000SA0、前年比の系列)には別の値を入れ、取り違えたら落ちるようにする。
   const cpiMapping = findMappingByCode('US_CPI')!;
 
-  it('computes MOM_PCT for the secondary series from the prior month', async () => {
-    const bls = fakeBlsWith({ '2026-08': 328.0, '2026-09': 332.16 }, {});
+  it('computes MOM_PCT from the seasonally adjusted series (CUSR0000SA0), not the NSA YoY series', async () => {
+    const bls = fakeBlsWith({ '2026-08': 300.0, '2026-09': 310.0 }, {}, { '2026-08': 328.0, '2026-09': 332.16 });
     const resolver = createBlsSecondaryResolver(bls, WIDE_RANGE);
     const result = await resolver.resolve(cpiMapping, '2026-09', '2026-10-14');
-    expect(result?.sourceRef).toBe(`BLS:${CPI_SERIES}@2026-10-17`);
+    expect(result?.sourceRef).toBe(`BLS:${CPI_SA_SERIES}@2026-10-17`);
     expect(result?.value).toBeCloseTo((332.16 / 328.0 - 1) * 100, 6);
+    expect(bls.calls.map((c) => c.seriesId)).toEqual([CPI_SA_SERIES]);
+  });
+
+  it('matches the published MoM with the real BLS index values (2026-01: SA 0.2%, NSA would give 0.4%)', async () => {
+    // BLS v1 の今の値(2026-11-02 に読むだけで確認)。CPI の発表(2026-02-13)の前月比は 0.2%。
+    const bls = fakeBlsWith({ '2025-12': 324.054, '2026-01': 325.252 }, {}, { '2025-12': 326.031, '2026-01': 326.588 });
+    const result = await createBlsSecondaryResolver(bls, WIDE_RANGE).resolve(cpiMapping, '2026-01', '2026-02-13');
+    expect(result?.value).toBeCloseTo((326.588 / 326.031 - 1) * 100, 6);
+    expect(Math.round(result!.value * 10) / 10).toBe(0.2);
+    expect(Math.round((325.252 / 324.054 - 1) * 1000) / 10).toBe(0.4); // 季節調整なしなら発表と違う
   });
 
   it('returns null for a mapping with no secondary configured', async () => {
@@ -139,7 +156,7 @@ describe('createBlsSecondaryResolver', () => {
   });
 
   it('fetches the secondary series only once no matter how many periods are resolved', async () => {
-    const bls = fakeBlsWith({ '2026-07': 325.0, '2026-08': 328.0, '2026-09': 332.16 }, {});
+    const bls = fakeBlsWith({}, {}, { '2026-07': 325.0, '2026-08': 328.0, '2026-09': 332.16 });
     const resolver = createBlsSecondaryResolver(bls, WIDE_RANGE);
     await resolver.resolve(cpiMapping, '2026-09', '2026-10-14');
     await resolver.resolve(cpiMapping, '2026-08', '2026-10-14');
@@ -191,6 +208,7 @@ describe('buildBlsScheduleReleases', () => {
     const bls = fakeBlsWith(
       { '2025-09': 320.0, '2026-09': 332.16, '2025-08': 318.0, '2026-08': 328.0, '2026-07': 325.0 },
       {},
+      { '2026-09': 332.16, '2026-08': 328.0, '2026-07': 325.0 },
     );
     const official = createBlsNativeResolver(bls, WIDE_RANGE);
     const officialSecondary = createBlsSecondaryResolver(bls, WIDE_RANGE);
@@ -343,6 +361,7 @@ describe('BLS schedule → ingestCalendarReleases (no paid calendar involved)', 
     const bls = fakeBlsWith(
       { '2025-09': 320.0, '2026-09': 332.16, '2025-08': 318.0, '2026-08': 328.0, '2026-07': 325.0 },
       {},
+      { '2026-09': 332.16, '2026-08': 328.0, '2026-07': 325.0 },
     );
     const official = createBlsNativeResolver(bls, WIDE_RANGE);
     const officialSecondary = createBlsSecondaryResolver(bls, WIDE_RANGE);
