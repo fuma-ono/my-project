@@ -4,6 +4,7 @@ import XCTest
 /// api-design v1.45(HQ指示 2026-11-02「APPROXIMATE時刻の相場反応表示対応」): 反応・チャートの応答の
 /// `release_datetime_precision`は任意の項目。無い・null・知らない値でも読めること、APPROXIMATEのときだけ
 /// 注記と「約」を出すことを確かめる。
+@MainActor
 final class ReactionPrecisionTests: XCTestCase {
     private func decoder() -> JSONDecoder {
         let decoder = JSONDecoder()

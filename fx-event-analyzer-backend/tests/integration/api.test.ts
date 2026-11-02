@@ -606,8 +606,8 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
     });
 
     // v1.45: 反応の起点(発表の時刻)の精度を、反応・チャートの応答にも返す(イベントの保存済みの値のまま)。
+    // The previous test in this block already granted VIEW_MARKET_REACTION to the shared user (granting twice is a duplicate).
     it('returns release_datetime_precision on /reaction (all and one timeframe) and /reaction/chart — EXACT and APPROXIMATE', async () => {
-      await grantEntitlement(ctx, user.id, FEATURE_CODES.VIEW_MARKET_REACTION);
       const get = async (path: string) => {
         const response = await ctx.app.inject({ method: 'GET', url: `/api/v1${path}`, headers: authHeader });
         expect(response.statusCode, path).toBe(200);
