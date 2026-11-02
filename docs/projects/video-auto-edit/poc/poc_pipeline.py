@@ -1,7 +1,7 @@
 """使い捨て技術検証スクリプト(リポジトリ外)。
 入力動画 -> 文字起こし -> 無音/言い淀み検出 -> カット -> テロップ(ASS) -> BGM(ダッキング) -> 書き出し
 """
-import json, math, os, re, subprocess, sys, time
+import json, math, os, re, resource, subprocess, sys, time
 
 from faster_whisper import WhisperModel
 import budoux
@@ -60,6 +60,20 @@ r = subprocess.run(["ffmpeg", "-i", f"{W}/a16k.wav", "-af", f"silencedetect=nois
 ss = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", r.stderr)]
 se = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", r.stderr)]
 silences = list(zip(ss, se + [src_dur] * (len(ss) - len(se))))
+CUT_MODE = os.environ.get("VEDIT_CUT_MODE", "volume")  # volume(既定・従来どおり) / vad(実験: 背景音のある素材向け)
+if CUT_MODE == "vad":
+    # Silero VAD(faster-whisper 同梱、無料・ローカル)で「声がない区間」を無音として扱う
+    from faster_whisper.vad import get_speech_timestamps, VadOptions
+    VAD_THR = float(os.environ.get("VEDIT_VAD_THRESHOLD", "0.5"))
+    sp = [(x["start"] / 16000, x["end"] / 16000) for x in get_speech_timestamps(
+        audio16k, VadOptions(threshold=VAD_THR, min_silence_duration_ms=int(MIN_SIL * 1000), speech_pad_ms=0))]
+    silences, cur = [], 0.0
+    for a, b in sp:
+        if a - cur >= MIN_SIL:
+            silences.append((cur, a))
+        cur = b
+    if src_dur - cur >= MIN_SIL:
+        silences.append((cur, src_dur))
 T["silencedetect"] = time.time() - t
 
 # 3. 残す区間 = 無音以外 から 言い淀み語を除外。前後に少し余白を付ける
@@ -182,8 +196,10 @@ run(["ffmpeg", "-y", "-i", IN, "-i", f"{W}/bgm.wav", "-filter_complex", ";".join
      "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", OUT])
 T["render"] = time.time() - t
 
-report = dict(model=MODEL, video_size=[VW, VH], max_chars_per_line=MAXC, src_duration=round(src_dur, 2), out_duration=round(dur(OUT), 2), planned_out=round(out_dur, 2),
-              silences=[(round(a, 2), round(b, 2)) for a, b in silences], keep=[(round(a, 3), round(b, 3)) for a, b in keep], silence_threshold_db=NOISE_DB, silence_min_sec=MIN_SIL, pad_sec=PAD,
+peak_mb = dict(python_whisper=round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024),
+               largest_child_ffmpeg=round(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1024))
+report = dict(model=MODEL, peak_memory_mb=peak_mb, video_size=[VW, VH], max_chars_per_line=MAXC, src_duration=round(src_dur, 2), out_duration=round(dur(OUT), 2), planned_out=round(out_dur, 2),
+              silences=[(round(a, 2), round(b, 2)) for a, b in silences], keep=[(round(a, 3), round(b, 3)) for a, b in keep], cut_mode=CUT_MODE, silence_threshold_db=NOISE_DB, silence_min_sec=MIN_SIL, pad_sec=PAD,
               subtitle_lines=sub_count, transcript=[s.text for s in segs],
               words_detected=[w["w"] for w in words], timings_sec={k: round(v, 2) for k, v in T.items()})
 json.dump(report, open(f"{W}/report_{MODEL}.json", "w"), ensure_ascii=False, indent=1)

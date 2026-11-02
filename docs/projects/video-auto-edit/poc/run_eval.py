@@ -71,6 +71,18 @@ def parse_ass(path):
     return ev
 
 
+def out_time(x, keep):
+    """元動画の時刻 -> 出力動画の時刻(削除区間内なら直後の残存区間の先頭)"""
+    off = 0.0
+    for a, b in keep:
+        if x < a:
+            return off
+        if x <= b:
+            return off + x - a
+        off += b - a
+    return off
+
+
 def checks(work, report):
     words = json.load(open(f"{work}/words.json", encoding="utf-8"))
     keep = report["keep"]
@@ -134,10 +146,10 @@ def main():
         sys.exit(f"動画がありません: {src_dir}")
     os.makedirs(out_dir, exist_ok=True)
     summary = ["# 評価サマリー(自動集計)", "", f"- 実行日時: {time.strftime('%Y-%m-%d %H:%M:%S')}",
-               f"- 設定: 無音しきい値 {os.environ.get('VEDIT_NOISE_DB', '-35')}dB / 最短無音 {os.environ.get('VEDIT_MIN_SIL', '0.5')}秒 / 余白 {os.environ.get('VEDIT_PAD', '0.12')}秒",
+               f"- 設定: カット方式 {os.environ.get('VEDIT_CUT_MODE', 'volume')} / 無音しきい値 {os.environ.get('VEDIT_NOISE_DB', '-35')}dB / 最短無音 {os.environ.get('VEDIT_MIN_SIL', '0.5')}秒 / 余白 {os.environ.get('VEDIT_PAD', '0.12')}秒",
                "- 外部API・有料サービスの呼び出し: なし(すべてローカル処理)", "",
-               "| 動画 | 元の長さ | モデル | 出力の長さ | 全体の処理時間 | 文字起こし時間 | 文字誤り率 | 誤カット候補(高/低) | 語頭/語尾切れ候補 | 言い淀み(認識/除去) | テロップ要確認 | ラウドネス |",
-               "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+               "| 動画 | 元の長さ | モデル | 出力の長さ | 全体の処理時間 | 文字起こし時間 | 文字誤り率 | 誤カット候補(高/低) | 語頭/語尾切れ候補 | 言い淀み(認識/除去) | テロップ要確認 | ラウドネス | 最大メモリ |",
+               "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for v in videos:
         stem = os.path.splitext(v)[0]
         vdir = os.path.join(out_dir, stem)
@@ -154,7 +166,7 @@ def main():
             wall = time.time() - t
             if r.returncode != 0:
                 md += [f"## モデル {m}: 失敗", "", "```", r.stderr[-3000:], "```", ""]
-                summary.append(f"| {v} | {info['duration']} | {m} | 失敗 | {wall:.1f}秒 | - | - | - | - | - | - | - |")
+                summary.append(f"| {v} | {info['duration']} | {m} | 失敗 | {wall:.1f}秒 | - | - | - | - | - | - | - | - |")
                 continue
             rep = json.load(open(f"{work}/report_{m}.json", encoding="utf-8"))
             c = checks(work, rep)
@@ -164,22 +176,23 @@ def main():
             cer_v = round(cer(open(ref_path, encoding="utf-8").read(), "".join(rep["transcript"])) * 100, 1) if os.path.exists(ref_path) else None
             f_rec = len(c["fillers"]); f_rm = sum(f["removed"] for f in c["fillers"])
             summary.append(f"| {v} | {info['duration']}秒 | {m} | {rep['out_duration']}秒 | {wall:.1f}秒 | {rep['timings_sec']['transcribe']}秒 | {'-' if cer_v is None else f'{cer_v}%'} | "
-                           f"{len(c['miscut'])}/{len(c['quiet'])} | {len(c['edge'])} | {f_rec}/{f_rm} | {len(c['sub_issues'])} | {lufs} LUFS |")
+                           f"{len(c['miscut'])}/{len(c['quiet'])} | {len(c['edge'])} | {f_rec}/{f_rm} | {len(c['sub_issues'])} | {lufs} LUFS | {rep.get('peak_memory_mb', {}).get('python_whisper', '-')}MB |")
             md += [f"## モデル {m}", "",
                    f"- 出力: `out_{m}.mp4`({rep['out_duration']}秒、元の {rep['out_duration'] / info['duration'] * 100:.0f}%)",
                    f"- 処理時間: 全体 {wall:.1f}秒(うち 文字起こし {rep['timings_sec']['transcribe']}秒 / モデル読込 {rep['timings_sec']['model_load']}秒 / BGM生成 {rep['timings_sec']['bgm_generate']}秒 / 書き出し {rep['timings_sec']['render']}秒)",
                    f"- ラウドネス: {lufs} LUFS(目標 -14)/ ピーク {peak} dBFS",
+                   f"- 最大メモリ: Python(Whisper含む) {rep.get('peak_memory_mb', {}).get('python_whisper')}MB / 最大の子プロセス(ffmpeg等) {rep.get('peak_memory_mb', {}).get('largest_child_ffmpeg')}MB",
                    f"- 文字誤り率: {'台本なしのため未計算' if cer_v is None else f'{cer_v}%(台本 {stem}.txt と比較。台本に書かれていない言い淀みを Whisper が文字にした場合も誤りとして数えられる)'}", "",
                    "### 文字起こし(モデル出力そのまま)", ""] + [f"> {t}" for t in rep["transcript"]] + ["",
                    "### 削除した区間", "", "| 元動画の区間 | 長さ |", "|---|---|"] + \
                   [f"| {ts(a)}〜{ts(b)} | {b - a:.2f}秒 |" for a, b in c["removed"]] + ["",
                    f"### 誤カット候補・高(言い淀み除去や短区間の破棄に巻き込まれた単語): {len(c['miscut'])}件", ""] + \
-                  [f"- {ts(w['s'])} 「{w['w']}」 削除率{w['ratio']:.0%}" for w in c["miscut"]] + ["",
+                  [f"- 元 {ts(w['s'])} / 出力 {ts(out_time(w['s'], rep['keep']))} 「{w['w']}」 削除率{w['ratio']:.0%}" for w in c["miscut"]] + ["",
                    f"### 誤カット候補・低(無音判定の区間に3割以上かかった単語): {len(c['quiet'])}件", "",
                    "無音判定は音量で行うので、ここは多くが Whisper の単語時刻のずれ(実際は無音)。ただし小さい声の語尾が削られている場合があるので、該当箇所を聞いて確認する。", ""] + \
-                  [f"- {ts(w['s'])} 「{w['w']}」 削除率{w['ratio']:.0%}" for w in c["quiet"]] + ["",
+                  [f"- 元 {ts(w['s'])} / 出力 {ts(out_time(w['s'], rep['keep']))} 「{w['w']}」 削除率{w['ratio']:.0%}" for w in c["quiet"]] + ["",
                    f"### 語頭・語尾切れ候補(残す区間の境界が単語の途中にあるもの): {len(c['edge'])}件", ""] + \
-                  [f"- {ts(w['s'])}〜{ts(w['e'])} 「{w['w']}」" for w in c["edge"]] + ["",
+                  [f"- 元 {ts(w['s'])}〜{ts(w['e'])} / 出力 {ts(out_time(w['s'], rep['keep']))} 「{w['w']}」" for w in c["edge"]] + ["",
                    f"### 認識された言い淀み: {len(c['fillers'])}件", "",
                    "注意: Whisper は言い淀みを文字にしないことが多い。ここに出ない言い淀みは「検出漏れ」の可能性があるので、動画を聞いて確認する。", ""] + \
                   [f"- {ts(f['s'])} 「{f['w']}」 → {'言い淀みとして除去' if f['removed'] else '**残した**(文中の語と判定。言い淀みなら検出漏れ)'}" for f in c["fillers"]] + ["",
