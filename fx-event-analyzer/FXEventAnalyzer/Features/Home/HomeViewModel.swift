@@ -154,6 +154,8 @@ final class HomeViewModel: ObservableObject {
     private var hasFreshFavorites = false
     /// `GET /home`の取得中か(キャッシュを取り下げたとき、取得が終わっていれば取り直すため)。
     private var isFetching = false
+    /// 最後の`GET /home`が失敗したか(プランを確かめた後にキャッシュを出すとき、案内を「更新できませんでした」にする)。
+    private var lastFetchFailed = false
 
     /// 表示中のデータが端末のキャッシュか。
     var isShowingCache: Bool { displayedCacheSavedAt != nil }
@@ -177,11 +179,11 @@ final class HomeViewModel: ObservableObject {
                 Task { await self?.loadFavorites(entries) }
             }
             .store(in: &cancellables)
-        // プランが確かめられたら、キャッシュのプランと比べる。違えば、表示中のキャッシュも取り下げる。
-        // (`@Published`は値が変わる前に流れるので、確かめた後の`plan`はTaskの中で読む。)
-        planStore.$isConfirmed
-            .sink { [weak self] confirmed in
-                guard confirmed else { return }
+        // プランが確かめられた・変わったら、キャッシュのプランと比べる(HQ指示 2026-11-02「プラン安全性修正」)。
+        // 一致すれば、まだ最新のデータが無いときにキャッシュを出す。違えば捨て、表示中なら取り下げる。
+        // (`@Published`は値が変わる前に流れるので、今の値はTaskの中で読む。)
+        planStore.$isConfirmed.combineLatest(planStore.$plan)
+            .sink { [weak self] _ in
                 Task { @MainActor in self?.planConfirmed() }
             }
             .store(in: &cancellables)
@@ -198,7 +200,8 @@ final class HomeViewModel: ObservableObject {
     }
 
     /// 表示中のデータがあれば消さずに更新する(通貨ペア編集から戻ったときなど)。無ければ、条件に合う
-    /// キャッシュを先に出し、それも無ければ読み込み中にする。
+    /// キャッシュを先に出し、それも無ければ読み込み中にする。プランをまだ確かめていなければキャッシュは
+    /// 出さず、確かめた時点(`planConfirmed`)で改めて出すかを決める。
     func load() {
         if case .loaded = state {
             // 表示を残したまま更新する。
@@ -210,7 +213,7 @@ final class HomeViewModel: ObservableObject {
         Task { await fetch() }
     }
 
-    private func applyCache(_ snapshot: HomeCacheSnapshot) {
+    private func applyCache(_ snapshot: HomeCacheSnapshot, refreshFailed: Bool = false) {
         let current = now()
         state = .loaded(events: snapshot.displayEvents(now: current), majorFx: snapshot.displayMajorFx(now: current))
         recentSpeeches = snapshot.speeches
@@ -219,7 +222,7 @@ final class HomeViewModel: ObservableObject {
             favoriteItems = snapshot.displayFavorites(entries: favoritesStore.entries)
         }
         displayedCacheSavedAt = snapshot.savedAt
-        refreshNotice = .showingCache(savedAt: snapshot.savedAt)
+        refreshNotice = refreshFailed ? .refreshFailed(savedAt: snapshot.savedAt) : .showingCache(savedAt: snapshot.savedAt)
         // 起動診断: キャッシュの表示は、/homeの反映・ホームの表示の記録とは別に残す(既存の計測の意味を変えない)。
         DiagnosticsStore.shared.recordHomeCacheShown()
     }
@@ -227,14 +230,26 @@ final class HomeViewModel: ObservableObject {
     private func planConfirmed() {
         guard let userID, let plan = planStore.confirmedPlan else { return }
         let discarded = cacheStore.discardIfPlanDiffers(confirmedPlan: plan, userID: userID)
-        guard discarded, isShowingCache else { return }
-        // 前のプランのときの内容は出さない。最新のデータが届くまで読み込み中にする
-        // (取得がもう終わっていれば、取り直す)。
-        displayedCacheSavedAt = nil
-        refreshNotice = nil
-        state = .loading
-        if !hasFreshFavorites { favoriteItems = [] }
-        if !isFetching { Task { await fetch() } }
+        if discarded {
+            guard isShowingCache else { return }
+            // 前のプランのときの内容は出さない。最新のデータが届くまで読み込み中にする
+            // (取得がもう終わっていれば、取り直す)。
+            displayedCacheSavedAt = nil
+            refreshNotice = nil
+            state = .loading
+            if !hasFreshFavorites { favoriteItems = [] }
+            if !isFetching { Task { await fetch() } }
+            return
+        }
+        // プランが一致した: まだ何も出せていない(読み込み中・取得の失敗)ときだけ、キャッシュを出す。
+        switch state {
+        case .loading, .error:
+            if let snapshot = cacheStore.load(for: cacheContext()) {
+                applyCache(snapshot, refreshFailed: lastFetchFailed && !isFetching)
+            }
+        case .loaded, .backendNotConfigured:
+            break
+        }
     }
 
     private func cacheContext() -> HomeCacheContext {
@@ -271,6 +286,7 @@ final class HomeViewModel: ObservableObject {
             recentSpeeches = response.speeches ?? []
             speechesStatus = response.speechesStatus
             let fetchedAt = now()
+            lastFetchFailed = false
             displayedCacheSavedAt = nil
             lastFreshAt = fetchedAt
             refreshNotice = nil
@@ -286,6 +302,7 @@ final class HomeViewModel: ObservableObject {
             displayedCacheSavedAt = nil
             refreshNotice = nil
         } catch {
+            lastFetchFailed = true
             if case .loaded = state {
                 // キャッシュ・前回のデータを出したまま、更新できなかったことだけ知らせる。
                 refreshNotice = .refreshFailed(savedAt: displayedCacheSavedAt ?? lastFreshAt)

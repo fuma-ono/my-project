@@ -33,7 +33,7 @@ struct HomeCacheContext: Equatable {
     var userID: UUID?
     var date: String
     var timezone: String
-    /// 今のプラン。`PlanStore`がこの起動でまだ確かめていなければnil(未確定)。
+    /// 今のプラン。`PlanStore`がこの起動でまだ確かめていなければnil(未確定 → キャッシュを出さない)。
     var confirmedPlan: String?
 }
 
@@ -52,19 +52,25 @@ final class HomeCacheStore {
     }
 
     /// 条件に合うキャッシュだけを返す。合わないもの(ユーザー不明・不一致、日付・タイムゾーン・
-    /// 形式の版・プランの不一致、読めない)は捨てる。プランは、今のプランが未確定(`confirmedPlan`
-    /// がnil)なら保存時のプランが分かっていることだけを条件にし、確定した時点で
-    /// `discardIfPlanDiffers`で確かめ直す(起動直後は`/entitlements`も休止からの復帰を待つため)。
+    /// 形式の版の不一致、読めない)は捨てる。
+    ///
+    /// プラン(HQ指示 2026-11-02「ホームキャッシュのプラン安全性修正」): ホームのイベントの値・ロックは
+    /// プランで変わるため、`/entitlements`で今のプランを確かめるまでは出さない(未確認ならnilを返すが、
+    /// 確認を待つので捨てない)。確かめたプランが保存時のプランと違う・保存時のプランが分からない
+    /// ときは捨てる。確認に失敗したまま(`confirmedPlan`がnilのまま)なら、出さないまま。
     func load(for context: HomeCacheContext) -> HomeCacheSnapshot? {
         guard let snapshot = stored() else { return nil }
         guard let userID = context.userID,
               snapshot.userID == userID,
               snapshot.formatVersion == HomeCacheSnapshot.currentFormatVersion,
               snapshot.date == context.date,
-              snapshot.timezone == context.timezone,
-              let savedPlan = snapshot.plan,
-              context.confirmedPlan == nil || context.confirmedPlan == savedPlan
+              snapshot.timezone == context.timezone
         else {
+            clear()
+            return nil
+        }
+        guard let confirmedPlan = context.confirmedPlan else { return nil }
+        guard let savedPlan = snapshot.plan, savedPlan == confirmedPlan else {
             clear()
             return nil
         }
