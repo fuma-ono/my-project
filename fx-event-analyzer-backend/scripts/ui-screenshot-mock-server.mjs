@@ -61,6 +61,11 @@ const EVENT_ID_UPCOMING = '44444444-4444-4444-4444-444444444444'; // 本日発�
 const EVENT_ID_UPCOMING_FOMC = '44444444-4444-4444-4444-444444444445'; // 本日発表前(FOMC)
 const EVENT_ID_UPCOMING_JP_CPI = '44444444-4444-4444-4444-444444444446'; // 本日発表前(日本CPI)
 const EVENT_ID_NEXT_SCHEDULED = '44444444-4444-4444-4444-444444444447'; // 米国CPIの次の予定(指標の詳細の「次回発表予定」)
+// HQ指示(2026-11-04)「US_FOMC_MINUTESのiOS表示確認」: 数値を持たないイベント型
+// (domain/resultType.tsのRESULT_TYPE_NONE_INDICATORS)が指標詳細→次回発表予定→
+// イベント詳細で正常に表示できるかを、実データではなくこのテスト用fixtureで確認する。
+const INDICATOR_ID_FOMC_MINUTES = '11111111-1111-1111-1111-111111111221'; // FOMC議事要旨
+const EVENT_ID_FOMC_MINUTES_NEXT = '44444444-4444-4444-4444-444444444448'; // FOMC議事要旨の次の予定
 const TEST_USER_ID = '99999999-9999-9999-9999-999999999999';
 const TEST_USER_EMAIL = 'ui-screenshot@example.com';
 
@@ -744,6 +749,31 @@ const CALENDAR_INDICATORS = {
     market_view_below:
       '豪州小売売上高が予想を下回ると、個人消費の弱さからRBAの利下げが意識され、豪ドルが売られやすいとされる。',
   },
+  // HQ指示(2026-11-04)「US_FOMC_MINUTESのiOS表示確認」: 本番のeconomic_indicators
+  // にはmigration `20261027000004_us_fomc_minutes_indicator.sql`で登録済みだが、
+  // 数値を持たないイベント型(議事要旨は文書。domain/resultType.tsのRESULT_TYPE_NONE)
+  // であり、既存のfixtureには一件も無かった。指標詳細→次回発表予定→イベント詳細の
+  // 表示経路を確認するためのテスト用fixture(実データではない)。
+  US_FOMC_MINUTES: {
+    id: INDICATOR_ID_FOMC_MINUTES,
+    code: 'US_FOMC_MINUTES',
+    name: 'FOMC議事要旨',
+    display_name: 'FOMC議事要旨',
+    name_en: 'FOMC Minutes',
+    country_code: 'US',
+    currency_code: 'USD',
+    importance: 'MEDIUM',
+    description:
+      'FOMC議事要旨は、FOMC（連邦公開市場委員会）の会合での議論の内容をまとめた文書です。政策決定の約3週間後に公表され、今後の金融政策の方向性を読み取る材料として注目されます。',
+    key_points: ['会合での議論の内容がわかる', '今後の金融政策の手がかりになる', '政策決定の約3週間後に公表される'],
+    frequency: 'IRREGULAR',
+    unit: null,
+    source: 'Federal Reserve',
+    source_url: 'https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm',
+    favorable_direction: 'NEUTRAL',
+    market_view_above: null,
+    market_view_below: null,
+  },
 };
 
 /** GET /indicators/{id} が返せる全指標 (一覧の4指標 + カレンダー用)。 */
@@ -1059,6 +1089,28 @@ function nextIndicatorScheduledRow() {
 }
 
 function indicatorEventsHandler(indicatorId, searchParams) {
+  // HQ指示(2026-11-04)「US_FOMC_MINUTESのiOS表示確認」: 米国CPI用の分岐には
+  // 触れず、指標詳細→次回発表予定だけ別に用意する(値を持たない予定イベント)。
+  if (indicatorId === INDICATOR_ID_FOMC_MINUTES) {
+    if (searchParams.get('status') !== 'SCHEDULED') {
+      return { data: [], meta: { page: 1, limit: 10, total: 0, has_next: false } };
+    }
+    const row = {
+      event_id: EVENT_ID_FOMC_MINUTES_NEXT,
+      indicator_id: INDICATOR_ID_FOMC_MINUTES,
+      release_datetime: isoPlusHours(24 * 10),
+      release_datetime_precision: 'EXACT',
+      importance: 'MEDIUM',
+      status: 'SCHEDULED',
+      data_status: 'DATA_PENDING',
+      forecast: null,
+      actual: null,
+      previous: null,
+      surprise: null,
+      surprise_direction: null,
+    };
+    return { data: [row], meta: { page: 1, limit: 10, total: 1, has_next: false } };
+  }
   if (indicatorId !== INDICATOR_ID) {
     return { data: [], meta: { page: 1, limit: 10, total: 0, has_next: false } };
   }
@@ -1113,6 +1165,34 @@ function historicalIndicatorEventRow(id, index) {
 }
 
 function eventDetailHandler(eventId) {
+  // HQ指示(2026-11-04)「US_FOMC_MINUTESのiOS表示確認」: 米国CPI用の分岐には
+  // 触れず、値を持たないイベント型(result_type: NONE相当、ただし実際の
+  // events.tsはresult_typeを返さない — home.ts/calendar.tsのみ、今回の
+  // 調査で判明した表示項目の空白)の表示経路だけを別に確認する。
+  if (eventId === EVENT_ID_FOMC_MINUTES_NEXT) {
+    return {
+      event: {
+        id: eventId,
+        indicator_id: INDICATOR_ID_FOMC_MINUTES,
+        indicator_name: CALENDAR_INDICATORS.US_FOMC_MINUTES.name,
+        display_name: CALENDAR_INDICATORS.US_FOMC_MINUTES.display_name,
+        country_code: 'US',
+        currency_code: 'USD',
+        release_datetime: isoPlusHours(24 * 10),
+        release_datetime_precision: 'EXACT',
+        importance: 'MEDIUM',
+        status: 'SCHEDULED',
+        data_status: 'DATA_PENDING',
+        revision_status: 'NONE',
+      },
+      snapshot: null,
+      analysis: { surprise: null, surprise_direction: null },
+      explanation: null,
+      related_fx_pairs: [],
+      major_fx_reactions: [],
+      available_timeframes: ['1m', '5m', '15m', '30m', '60m'],
+    };
+  }
   const isUpcoming = eventId === EVENT_ID_UPCOMING;
   return {
     event: {

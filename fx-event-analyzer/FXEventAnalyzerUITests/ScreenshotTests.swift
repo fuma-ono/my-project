@@ -604,6 +604,50 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 10), "Did not return to Indicator Detail after leaving Historical Comparison")
     }
 
+    /// HQ指示(2026-11-04)「US_FOMC_MINUTESのiOS表示確認」: FOMC議事要旨は
+    /// backend側でindicator master(migration `20261027000004`)・予定イベント
+    /// 取り込み(fomcSchedule.ts)まで実装済みだが、値を持たないイベント型
+    /// (domain/resultType.tsのRESULT_TYPE_NONE)で、既存のUIスクリーンショット
+    /// fixtureには一件も無かった(調査で判明)。実データが無いため、CPI向けの
+    /// 既存分岐には触れずテスト専用fixture(mock-server側に追加)で指標詳細→
+    /// 次回発表予定→イベント詳細の表示経路だけを確認する。
+    ///
+    /// 調査で判明した表示項目の空白: `result_type`(値が出ない予定かどうか)は
+    /// 実際のbackendでは`GET /home`・`GET /calendar`にしか付かず(`GET
+    /// /events/{id}`には無い)、この経路では使われない。そのためイベント
+    /// 詳細画面は「snapshotがnullのSCHEDULEDイベント」という既存の一般的な
+    /// 状態として描画される(発表待ちの指標と区別がつかない表示になる)。
+    /// これは本テストでは仕様上の既知の制約として扱い、崩れたり落ちたり
+    /// しないことだけを確認する(表示文言の改善は別途HQ判断が必要)。
+    func testFomcMinutesEventDetailRendersAsAValuelessScheduledEvent() throws {
+        let emailField = app.textFields["メールアドレス"]
+        XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
+        type("ui-screenshot@example.com", into: emailField)
+        type("ui-screenshot-password", into: app.secureTextFields["パスワード"])
+        app.buttons["ログイン"].tap()
+        XCTAssertTrue(waitForAnyElement(containing: "通貨ペア", timeout: 25), "Home did not load")
+
+        tapIdentifier("v5Tab1")
+        XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicators list did not load")
+
+        let searchField = app.textFields["指標名・国・通貨ペアで検索"]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 10), "Indicators search field not found")
+        type("FOMC議事要旨", into: searchField)
+        XCTAssertTrue(waitForAnyElement(containing: "FOMC議事要旨", timeout: 10), "Search did not surface US_FOMC_MINUTES")
+        tap(containing: "FOMC議事要旨")
+        XCTAssertTrue(waitForAnyElement(containing: "次回発表予定", timeout: 15), "FOMC Minutes Indicator Detail did not load")
+        capture("30-IndicatorDetail-FomcMinutes")
+
+        tap(containing: "次回発表予定")
+        // 値が出ない予定のため「結果/予想/前回」カードは無く、画面自体が崩れず
+        // 主要通貨ペアの値動き欄(全指標共通のセクション見出し)まで描画される
+        // ことを確認する。既存の07-EventDetail(米国CPI)と同じ見出しを使うのは、
+        // この見出しが指標非依存の共通UIだから(EventDetailCards.swift参照)。
+        XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 15), "FOMC Minutes Event Detail did not load")
+        XCTAssertTrue(waitForAnyElement(containing: "FOMC議事要旨", timeout: 5), "Event Detail did not show the FOMC Minutes indicator name")
+        capture("31-EventDetail-FomcMinutes")
+    }
+
     /// Taps the row's center through SettingsView's fixed V5 layout (group 1
     /// top y=54.5, 31pt rows — SettingsView.rowHeight) mapped through V5Viewport's scale-to-fit.
     /// Center taps used to land in the row's Spacer gap, which had no
