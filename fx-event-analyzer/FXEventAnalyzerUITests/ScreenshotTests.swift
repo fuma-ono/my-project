@@ -436,6 +436,56 @@ final class ScreenshotTests: XCTestCase {
         capture("26a-HomeCurrencyPairPicker")
     }
 
+    /// HQ承認(2026-11-04「Home Cache更新中表示のUIテスト追加」、案A): ログインしたまま設定で文字サイズを変えると
+    /// RootView の `.id(textSize)` で全画面が作り直され、新しい HomeViewModel ができる。その間だけモックの /home を
+    /// 遅らせ、前回のデータ(キャッシュ)を出したまま「前回の情報を表示しています・更新中…」が出ること、応答の後に
+    /// 1行が消えて最新のデータに切り替わることを確かめる。
+    ///
+    /// 「前回の情報を表示しています」は HomeViewModel.applyCache だけが出す。applyCache は state がまだ .loaded で
+    /// ない(= 作られたばかりの)HomeViewModel でしか呼ばれない(表示中の HomeViewModel は、取り直しても1行を出さない —
+    /// HomeCacheTests.testReloadKeepsTheDisplayedDataWhileRefreshing)。この1行が出たこと自体が、作り直しの証拠になる。
+    ///
+    /// このテストでは確かめられないこと: アプリを終了して起動し直したときのキャッシュの表示(UI テストではログインが
+    /// 残らず、ログイン画面でキャッシュを消すため)、プランを確かめる前の非表示(ユニットテストで確認済み)。
+    func testHomeShowsCacheWhileRefreshing() throws {
+        // 失敗・タイムアウトでも、後のテストに遅延と文字サイズ(「大」)を残さない。文字サイズは画面の操作ではなく
+        // モックの設定に直接「標準」を書く(失敗した時点の画面に左右されない。次のテストは起動し直してモックから読む)。
+        addTeardownBlock { [weak self] in
+            guard let self else { return }
+            XCTAssertTrue(self.setMockHomeDelay(0), "Teardown could not restore the mock /home delay")
+            XCTAssertTrue(self.setMockTextSizeStandard(), "Teardown could not restore the text size to STANDARD")
+        }
+        XCTAssertTrue(setMockHomeDelay(0), "Could not reach the mock server")
+
+        let emailField = app.textFields["メールアドレス"]
+        XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
+        type("ui-screenshot@example.com", into: emailField)
+        type("ui-screenshot-password", into: app.secureTextFields["パスワード"])
+        app.buttons["ログイン"].tap()
+        XCTAssertTrue(waitForAnyElement(containing: "FOMC政策金利", timeout: 25), "Home did not load")
+        let notice = app.descendants(matching: .any)["homeRefreshNotice"]
+        XCTAssertTrue(waitUntilGone(notice, timeout: 10), "Home showed a notice right after login (there should be no cache)")
+        // 1回目: 「大」へ(遅延なし)。作り直したホームが最新のデータになり、キャッシュがこのユーザー・プランで保存される。
+        changeTextSize(to: "大")
+        XCTAssertTrue(waitForAnyElement(containing: "FOMC政策金利", timeout: 20), "Home did not come back after the text size change")
+        XCTAssertTrue(waitUntilGone(notice, timeout: 15), "Home refresh notice did not go away without a delay")
+
+        // 2回目: 「標準」へ戻す(今までの表示の大きさで撮る)。この間だけ /home を20秒遅らせる。
+        XCTAssertTrue(setMockHomeDelay(20_000), "Could not delay the mock /home")
+        changeTextSize(to: "標準")
+        XCTAssertTrue(waitForAnyElement(containing: "前回の情報", timeout: 15), "Home did not show the cached data with the refreshing notice")
+        XCTAssertTrue(waitForAnyElement(containing: "更新中", timeout: 2), "The notice does not say it is refreshing")
+        XCTAssertTrue(waitForAnyElement(containing: "FOMC政策金利", timeout: 2), "Cached events are not shown while refreshing")
+        XCTAssertTrue(waitForAnyElement(containing: "USD/JPY", timeout: 2), "Cached currency pairs are not shown while refreshing")
+        capture("04e-Home-CacheRefreshing")
+
+        // 応答の後: 1行が消え、最新のデータのまま(読み込み中にもエラーにもならない)。
+        XCTAssertTrue(waitUntilGone(notice, timeout: 40), "Home refresh notice did not go away after /home answered")
+        XCTAssertTrue(waitForAnyElement(containing: "FOMC政策金利", timeout: 5), "Home did not show the fresh data")
+        XCTAssertFalse(waitForAnyElement(containing: "更新できませんでした", timeout: 1), "Home showed the refresh-failed notice")
+        XCTAssertTrue(setMockHomeDelay(0), "Could not restore the mock /home")
+    }
+
     /// HQ指示(2026-10-23「起動遅延とホーム画面の人物アイコン不具合の調査」)で
     /// `MainTabView.swift`の縦横分岐を再構成した(`HomeView`等を`landscape`の
     /// if/elseの外側に移動)ことの回帰確認。端末を横向きにしても`HomeView`の
@@ -660,6 +710,66 @@ final class ScreenshotTests: XCTestCase {
         }.resume()
         _ = done.wait(timeout: .now() + 6)
         return succeeded
+    }
+
+    /// モックの GET /home をこの時間(ミリ秒)だけ遅らせる。0で戻す。届かなければfalse。
+    private func setMockHomeDelay(_ milliseconds: Int) -> Bool {
+        guard let url = URL(string: "http://127.0.0.1:8090/__mock/home-delay?ms=\(milliseconds)") else { return false }
+        var request = URLRequest(url: url, timeoutInterval: 5)
+        request.httpMethod = "POST"
+        let done = DispatchSemaphore(value: 0)
+        var succeeded = false
+        URLSession.shared.dataTask(with: request) { _, response, _ in
+            succeeded = (response as? HTTPURLResponse)?.statusCode == 200
+            done.signal()
+        }.resume()
+        _ = done.wait(timeout: .now() + 6)
+        return succeeded
+    }
+
+    /// モックの設定の文字サイズを「標準」にする(teardown 用)。モックが「標準」を返したらtrue。
+    private func setMockTextSizeStandard() -> Bool {
+        guard let url = URL(string: "http://127.0.0.1:8090/api/v1/settings") else { return false }
+        var request = URLRequest(url: url, timeoutInterval: 5)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data(#"{"display":{"text_size":"STANDARD"}}"#.utf8)
+        let done = DispatchSemaphore(value: 0)
+        var succeeded = false
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            if (response as? HTTPURLResponse)?.statusCode == 200,
+               let data,
+               let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let display = body["display"] as? [String: Any] {
+                succeeded = display["text_size"] as? String == "STANDARD"
+            }
+            done.signal()
+        }.resume()
+        _ = done.wait(timeout: .now() + 6)
+        return succeeded
+    }
+
+    /// 設定 → 表示・地域設定 → 文字サイズで `label`(小・標準・大)を選ぶ。保存されると全画面が作り直されて
+    /// ホームのタブに戻る(RootView の `.id(textSize)`)。
+    private func changeTextSize(to label: String) {
+        tap(containing: "設定")
+        XCTAssertTrue(waitForAnyElement(containing: "アカウント情報", timeout: 15), "Settings did not load")
+        tapV5(x: 117, y: 54.5 + 3.5 * 31)
+        XCTAssertTrue(waitForAnyElement(containing: "タイムゾーン", timeout: 15), "Display settings did not load")
+        tap(containing: "文字サイズ")
+        // 行のボタンのラベルは「大」か、チェックの画像の分が付いた「大, …」。
+        let option = app.buttons.matching(NSPredicate(format: "label == %@ OR label BEGINSWITH %@", label, label + ",")).firstMatch
+        XCTAssertTrue(option.waitForExistence(timeout: 10), "Text size option \(label) not found")
+        option.tap()
+    }
+
+    /// `element`が消えるまで待つ(最大`timeout`秒)。消えたらtrue。
+    private func waitUntilGone(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while element.exists && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        return !element.exists
     }
 
     /// モックの GET /home を失敗させる(true)・戻す(false)。届かなければfalse(その撮影だけ飛ばす)。

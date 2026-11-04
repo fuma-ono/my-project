@@ -2758,6 +2758,11 @@ let mockReactionPrecision = null;
  * (前回のデータを出したまま「更新できませんでした」が出る状態)。既定(false)は今までどおり。
  */
 let mockHomeFail = false;
+/**
+ * ホームのキャッシュの「更新中」の撮影用(HQ承認 2026-11-04「Home Cache更新中表示のUIテスト追加」)。
+ * `/__mock/home-delay?ms=20000` の間だけ GET /home の応答をその時間だけ遅らせる。既定は0(遅らせない、今までと同じ)。
+ */
+let mockHomeDelayMs = 0;
 const withReactionPrecision = (body) =>
   mockReactionPrecision ? { ...body, release_datetime_precision: mockReactionPrecision } : body;
 
@@ -2903,6 +2908,7 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
     .filter(Boolean);
 
   if (pathname === '/api/v1/home') {
+    if (mockHomeDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, mockHomeDelayMs));
     if (mockHomeFail) return json(res, 503, { error: { code: 'SERVICE_UNAVAILABLE', message: 'Mock: home unavailable.' } });
     return json(res, 200, homeHandler());
   }
@@ -3059,6 +3065,11 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/__mock/subscription-plan' && req.method === 'POST') {
     mockSubscriptionPlan = url.searchParams.get('plan') === 'FREE' ? 'FREE' : 'PRO';
     return json(res, 200, { plan: mockSubscriptionPlan });
+  }
+  if (url.pathname === '/__mock/home-delay' && req.method === 'POST') {
+    const ms = Number(url.searchParams.get('ms'));
+    mockHomeDelayMs = Number.isFinite(ms) && ms > 0 ? Math.min(ms, 60000) : 0;
+    return json(res, 200, { ms: mockHomeDelayMs });
   }
   if (url.pathname === '/__mock/home-fail' && req.method === 'POST') {
     mockHomeFail = url.searchParams.get('value') === '1';
