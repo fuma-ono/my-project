@@ -730,13 +730,20 @@ struct HistoricalComparisonView: View {
     /// のは当然で、ズレの原因はheader側にあった)。`groupHeaderHeight`を
     /// 常に計上するよう修正し、`bottomSafetyMargin`も両者で共有の1つの
     /// 値に戻した(根本原因を直したことで、分ける理由自体が無くなった)。
+    /// HQ再指摘(2026-11-04)「もう少し21:28から表の下の外枠までの余白を
+    /// 小さくして」: 根本原因(groupHeaderHeightの計上漏れ)を直した今は
+    /// showSecondaryの有無で表の高さが正しく揃っているため、以前
+    /// 「6ptでは前年のみが見切れた」のは式のズレが原因であり、6pt自体が
+    /// 不足していたわけではなかった。6ptは2026-10-31〜2026-11-02まで
+    /// 実機・CIとも問題の報告なく使われていた値のため、10ptから6ptに
+    /// 戻す。
     static func tableHeight(rows: Int, limited: Bool, showSecondary: Bool) -> CGFloat {
         let header = headerHeight + groupHeaderHeight
         let content = header + CGFloat(max(rows, 1)) * (rowHeight + 0.5) + bottomSafetyMargin
         return min(content, limited ? 312 : 334)
     }
 
-    private static let bottomSafetyMargin: CGFloat = 10
+    private static let bottomSafetyMargin: CGFloat = 6
 
     /// HQ指示(2026-10-14)「参考画像と比べて文字が小さすぎる。枠も小さい。見やすく」:
     /// 見出し20→26・行18→24、文字は表の見出し6.5→8.5・数字6.5→8.5・時刻5→6.5に上げた。

@@ -175,13 +175,13 @@ final class IndicatorDisplayNameTests: XCTestCase {
         // showSecondary: falseのときだけこの11ptを計上し忘れており、実際の
         // 描画より式の見積もりが11pt小さく、その分だけ下の余白が目減りして
         // 最終行が見切れていた)。
-        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: false), 24 + 11 + 7 * 22.5 + 10)
-        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: true), 24 + 11 + 7 * 22.5 + 10)
+        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: false), 24 + 11 + 7 * 22.5 + 6)
+        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: true), 24 + 11 + 7 * 22.5 + 6)
         // HQ指摘(2026-10-28)「8/7の行が常時見切れている」: 最終行の実機はみ出しを
         // 防ぐ固定の余白(2026-10-30再指摘「3つ目が見切れる」で4→10、2026-10-31
-        // 再指摘「余白が大きい」で10→6と調整してきたが、上記の根本原因修正後は
-        // 両方とも最初に安全と確認済みの10ptで統一)が、行数・前年/前月の
-        // 有無に関わらず常に足されている。
+        // 再指摘「余白が大きい」で10→6と調整し、根本原因修正後は両方とも
+        // 安全確認済みの10ptで統一、HQ再指摘(2026-11-04)でさらに10→6に
+        // 戻した)が、行数・前年/前月の有無に関わらず常に足されている。
         // HQ指摘(2026-10-29、7回目)「横画面が直っていない」: OSのインター
         // フェース回転をやめ、`UIDevice.orientation`を見た見かけ上の
         // `.rotationEffect`に切り替えた。回転方向(Appleの定義: landscapeLeft
