@@ -22,8 +22,16 @@ function offsetMinutesAt(instant: Date, timeZone: string): number {
 /**
  * `date` is a `YYYY-MM-DD` string. Returns `[startUtc, endUtc)` — from
  * inclusive, to exclusive, matching api-design.md §6's range convention.
+ *
+ * `days`(api-design.md v1.47、HQ指示「ホームの『今日の重要イベント』→
+ * 『今週の重要イベント』」): `date`から数えて何日分を範囲に含めるか(既定
+ * 1 = 従来どおり1日分)。`date`当日の分のUTC offsetをそのまま使って
+ * `days`日分を足すだけで、2日目以降の個別のDST境界は見ない(Home向けの
+ * 用途では直近1週間の表示用の範囲であり、厳密な複数日分のoffset再計算は
+ * 必要ない — 既存の`offsetMinutesAt`も1日分の代表値として正午を使う設計
+ * のため、同じ考え方を踏襲した)。
  */
-export function resolveDayRangeUtc(date: string, timeZone: string): UtcDayRange {
+export function resolveDayRangeUtc(date: string, timeZone: string, days = 1): UtcDayRange {
   // Use local noon as the representative instant for computing the day's
   // UTC offset — well clear of any DST transition that might fall near
   // midnight, and still the correct offset for this calendar date.
@@ -31,7 +39,7 @@ export function resolveDayRangeUtc(date: string, timeZone: string): UtcDayRange 
   const offsetMinutes = offsetMinutesAt(noonUtcGuess, timeZone);
 
   const startUtc = new Date(new Date(`${date}T00:00:00.000Z`).getTime() - offsetMinutes * 60_000);
-  const endUtc = new Date(startUtc.getTime() + 24 * 60 * 60_000);
+  const endUtc = new Date(startUtc.getTime() + days * 24 * 60 * 60_000);
 
   return { startUtc: startUtc.toISOString(), endUtc: endUtc.toISOString() };
 }

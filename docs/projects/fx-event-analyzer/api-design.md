@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.46
+# FX Event Analyzer: API詳細設計書 v1.47
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -93,6 +93,7 @@
 - **v1.44**(2026-10-30、HQ判断「P1-1 段階1」。`claude/fx-reaction-state` で追加): 相場反応の各時間枠に、任意の項目 **`reaction_state`**(`CALCULATED` / `NOT_DUE` / `NOT_CALCULATED` / `null`)と **`retry_scheduled`**(boolean または `null`)を追加(項目の追加だけ。**`analysis_status` の値と意味は変えない** — 行が無ければ今までどおり `DATA_PENDING`)。対象: `GET /events/{id}` の `related_fx_pairs[].reaction`・`major_fx_reactions[].reactions[]`、`GET /events/{id}/reaction` の各時間枠(`timeframe=all`)と1つの時間枠。`CALCULATED` = `event_price_reactions` に行がある(結果は `analysis_status`)、`NOT_DUE` = まだ計算できない(発表前、`SCHEDULED`、または発表から N 分が経っていない)、`NOT_CALCULATED` = 計算できる時刻を過ぎたが行が無い(ジョブがまだ計算していない。**行が無いことだけで「取得できない」とはしない**)、`null` = 対象外(精度で分析しない時間枠 = `NOT_ANALYZABLE`、または中止の発表)。`retry_scheduled` は `NOT_CALCULATED` のときだけ true / false で、相場反応のジョブが自動で見る範囲(発表から `repairHorizonDays` = 7日、ジョブと同じ `release_datetime >= now − 7日`)の中か。ジョブが実際に動く予定は意味しない(「取得中」の根拠にしない)。ロックされた発表(過去の発表の制限)の応答には付けない。過去比較(`/historical`)は保存済みの行だけを返すので付けない。domain/reactionState.ts。iOS の表示: `NOT_DUE`「発表後に表示」、`NOT_CALCULATED`「未計算」、`CALCULATED` は今までの状態の表示
 - **v1.45**(2026-11-02、HQ指示「APPROXIMATE時刻の相場反応表示対応」。`claude/fx-reaction-precision` で追加。v1.44(P1-1 の `reaction_state`)の後に settings へ統合した): `GET /events/{id}/reaction`(`timeframe=all` の最上位と、1つの時間枠の応答)と `GET /events/{id}/reaction/chart` に **`release_datetime_precision`**(`EXACT` / `APPROXIMATE` / `DATE_ONLY` / `UNKNOWN`)を追加(項目の追加だけ。値はイベントの保存済みの精度そのまま。計算・保存・`analysis_status` は変えない)。`APPROXIMATE` のとき、反応は概算の発表時刻を起点に計算した値で、チャートの `release_datetime` も概算(iOS は値動きの詳細に注記「発表の時刻は概算(約HH:mm)です。値動きは概算の時刻を起点に計算しています。」を出し、チャートの発表の印に「約」を付ける)。`GET /events/{id}` は以前から `release_datetime_precision` を返すので変えない
 - **v1.46**(2026-11-02、HQ指示「統合と表示桁数の実装」。`claude/fx-value-decimals` で追加): 経済指標の値を返す応答に、任意の項目 **`value_decimals`**(整数または `null`)を追加(項目の追加だけ。値は変えない — **保存値・応答の `actual`・`forecast`・`previous`・`secondary_*`・`old_value`・`new_value` は丸めない**)。BLS から取る%の指標(US_CPI・US_CORE_CPI・US_UNEMPLOYMENT_RATE・US_AVG_HOURLY_EARNINGS・US_PPI・US_CORE_PPI)は **1**(BLS の公表の桁)。それ以外は `null`(Eurostat などほかの取得元には当てはめない。NFP・JOLTS(千人)も `null` — iOS の「18.0万人」の表示が公表の桁と同じ)。決め方は `domain/valueDecimals.ts`。付ける場所: `GET /home` の `events[]`、`GET /events/{id}` の `event`(ロックした発表でも出す。値ではない)、`GET /events/{id}/history` の `event`、`GET /events/{id}/revisions` の `data[]`、`GET /indicators/{id}/events` の `data[]`、`GET /indicators/{id}/comparison` の `indicator`(`timeframe=all` も)。iOS は `value_decimals` があれば、その桁に**0から遠い側へ**丸めて末尾の0も出す(3.0245 →「3.0%」)。丸めて0なら符号を付けない(-0.0 →「0.0」)。前回比・予想との差は、表示の桁に丸めた値どうしで計算する(結果3.74・前回3.36 →「+0.3」)。項目が無い・`null` なら今までの表示のまま(古いBackendでも読める)
+- **v1.47**(2026-11-04、HQ判断「ホームの『今日の重要イベント』→『今週の重要イベント』」): `GET /home`に任意のQuery **`days`**(整数1〜7、既定1=従来どおり1日分)を追加(12章)。`date`から数えて`days`日分(ローリング、カレンダー上の週ではない)の`events`を返す(`days`省略時の挙動は変えない。`major_fx`・`speeches`・`speeches_status`は従来どおり`date`に関係しない)。Responseの最上位に`days`(リクエストの値、省略時は`1`)を追加(項目の追加だけ)。H-2(v1.3)の「`events`は`date`でスコープされた当日分の一覧」という前提は、`days`が1より大きいとき「`date`から`days`日分の一覧」に拡張される(「最近のイベント」の定義=当日中に`RELEASED`になったイベント、は変えない。未来の日の行はほぼ`SCHEDULED`のままのため実質的な影響はない)。目的: 月1回ペースの指標が中心のため「今日」だけだと空欄になりがちだった問題の解消(iOS「今週の重要イベント」カード、日付が近い順に最大3件)。iOSの表示側実装は`claude/fx-home-weekly-events`で追加
 
 ---
 
@@ -442,6 +443,7 @@ Query：
 
 - `date`(必須)
 - `timezone`(必須。v1.1で必須化、A-4。IANA timezone名、例: `Asia/Tokyo`)
+- `days`(任意、整数1〜7、既定1。v1.47で追加): `date`から数えてローリングで何日分の`events`を返すか。省略時は従来どおり1日分
 
 Response：
 
@@ -449,6 +451,7 @@ Response：
 {
   "date": "2026-09-12",
   "timezone": "Asia/Tokyo",
+  "days": 1,
   "events": [],
   "major_fx": [],
   "speeches": [],
@@ -524,7 +527,7 @@ major_fxにはHomeで表示する主要FX Pairの最新情報を含める。想�
 
 アプリ(SCR-004)の「直近の要人発言」が0件のときの表示：`stale = false` →「直近7日間の要人発言はありません」と小さく「最終更新 M/d HH:mm」(`last_success_at`があるときだけ)、`stale = true` →「要人発言の情報を更新できていません（最終更新 M/d HH:mm）」(`last_success_at`が`null`なら括弧なし)、`speeches_status`が無い →「直近7日間の要人発言はありません」のみ。日時はホームの他の日時と同じ表示設定(タイムゾーン・形式)。1件以上あるときの表示は変えない。
 
-**「今日の注目イベント」と「最近のイベント」の扱い(v1.3で確定、H-2)**: `events`は`date`でスコープされた当日分の一覧であり、「最近のイベント」は**当日中に`status = RELEASED`になったイベント**を指す(複数日にまたがる履歴ではない)。専用APIや`recent_events`フィールドは追加せず、Clientが`events`配列を`status`(`SCHEDULED`/`RELEASED`/`CANCELLED`)で「今日の注目イベント」(主にSCHEDULED)と「最近のイベント」(RELEASED)に表示分けする。
+**「今日の注目イベント」と「最近のイベント」の扱い(v1.3で確定、H-2。v1.47で`days`を反映)**: `events`は`date`から`days`日分(既定1=従来どおり当日分のみ)でスコープされた一覧であり、「最近のイベント」は**この範囲内で`status = RELEASED`になったイベント**を指す(`days`が1より大きくても、未来の日の行はほぼ`SCHEDULED`のままのため実質的には従来どおり「当日中にRELEASEDになったイベント」を指す)。専用APIや`recent_events`フィールドは追加せず、Clientが`events`配列を`status`(`SCHEDULED`/`RELEASED`/`CANCELLED`)で「今週の注目イベント」(主にSCHEDULED、iOSは日付が近い順に最大3件)と「最近のイベント」(RELEASED)に表示分けする。
 
 ---
 

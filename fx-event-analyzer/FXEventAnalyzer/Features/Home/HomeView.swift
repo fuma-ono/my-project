@@ -16,7 +16,13 @@ import SwiftUI
 /// イベントと通貨ペアとお気に入り、直近の要人発言が来るようにして
 /// ください」: 「今日の重要イベント」セクションを復元し、4セクション構成
 /// に戻した。
-/// 1. 今日の重要イベント — これから発生する重要イベント(`HomeViewModel.
+///
+/// HQ判断(2026-11-04)「今日の重要イベント」→「今週の重要イベント」:
+/// 月1回ペースの指標が中心のため「今日」だと空欄になりがちだった問題を
+/// 解消するため、表示範囲を今日からローリング7日間に広げた(`/home`の
+/// `days`パラメータ、api-design.md v1.47)。セクションの並び順・件数の
+/// 考え方(日付が近い順に最大3件)は変えていない。
+/// 1. 今週の重要イベント — これから発生する重要イベント(`HomeViewModel.
 ///    upcomingEvents`、SCHEDULEDのみ)。
 /// 2. 通貨ペア
 /// 3. お気に入り
@@ -710,31 +716,16 @@ struct HomeView: View {
     /// して復元した)。色は削除前の実測値(RGB(0,118,234))をそのまま流用。
     private static let economicIndicatorBadgeColor = Color(red: 0.0 / 255, green: 118.0 / 255, blue: 234.0 / 255)
 
-    /// HQ指示(2026-10-05、23回目)「今日の重要イベントの右側はすべて見る
-    /// ではなく日付（曜日）です」(当初「ミル」と記載されていたが、続く
-    /// 「すべて見るのこと」+`AskUserQuestion`での確認で「今日の重要イベント
-    /// カードの右側がすべて見る＞になっているから10/5(月)＞みたいにして」と
-    /// 確定): 他3カードの「すべて見る」リンク(`headerLink`、一覧画面への
-    /// 遷移)とは違い、このカードの右側は今日の日付+曜日を「10/5(月)」の
-    /// ように表示する。カレンダーへの遷移導線自体は維持する(表示テキストの
-    /// 差し替えのみ)。
-    /// 「10/15(木)」。日付は表示設定の形式(年なし)、曜日は表示設定のタイムゾーンで(HQ指示 2026-10-15)。
-    @MainActor static func todayLabel(_ date: Date) -> String {
-        let weekday = AppPreferences.format(date, pattern: "E", timeZone: AppPreferences.shared.timeZone)
-        return "\(AppPreferences.shared.shortDateString(date))(\(weekday))"
-    }
-
-    private static let todayEventsDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "M/d(E)"
-        formatter.timeZone = .current
-        return formatter
-    }()
-
+    /// HQ判断(2026-11-04)「今日の重要イベント」→「今週の重要イベント」:
+    /// 月1回ペースの指標が中心のため「今日」だと空欄になりがちだった問題を
+    /// 解消する目的で、表示範囲をローリング7日間に広げた(`HomeViewModel.
+    /// weeklyEventsWindowDays`)。これに伴い、右側は「今日の日付+曜日」
+    /// (`todayLabel`、2026-10-05時点の指定)の意味が無くなったため、他3
+    /// カードと同じ「すべて見る」リンク(`headerLink`)に戻した。カレンダー
+    /// への遷移導線自体は維持する(今日を選んだ状態で開く)。
     @ViewBuilder private func todayEventsCard(_ events: [HomeEventSummary]) -> some View {
         cardShell(height: Self.todayEventsCardHeight) {
-            cardHeaderRow(title: "今日の重要イベント", height: Self.todayEventsHeaderHeight) {
+            cardHeaderRow(title: "今週の重要イベント", height: Self.todayEventsHeaderHeight) {
                 // HQ再指摘(2026-10-05、6回目)「通貨ペアのタイトルの開始を
                 // 他と縦を合わせて」: 各カードのアイコン自体の幅(SF Symbolの
                 // calendar/star/quote.bubbleと自前描画のHomeChartIconとで
@@ -745,30 +736,22 @@ struct HomeView: View {
                 Image(systemName: "calendar").font(.system(size: 14, weight: .bold)).foregroundStyle(V5P.cyan).shadow(color: Self.iconGlowShadow.color, radius: Self.iconGlowShadow.radius)
                     .frame(width: 16, alignment: .center)
             } trailing: {
-                // HQ指示(2026-10-05)「日付10/5(月)の文字を大きくして」でいったん
-                // 10に拡大したが、再指摘(2026-10-05)「10/5(月)文字サイズを0.5
-                // 下げて」で10→9.5に調整(「すべて見る」もこのサイズに統一、
-                // `headerLink`参照)。
                 // HQ指示(2026-10-15): 仮画面ではなく、下のタブの「カレンダー」に切り替えて今日を選ぶ。
                 Button {
                     CalendarJump.shared.requestedDate = Date()
                     tabSelection = 2
                 } label: {
-                    HStack(spacing: 2) {
-                        Text(Self.todayLabel(Date()))
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(Self.linkBlue)
-                        Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(Self.linkBlue)
-                    }
+                    headerLink("すべて見る")
                 }
                 .buttonStyle(.plain)
-                .accessibilityIdentifier("homeTodayCalendarLink")
+                .accessibilityIdentifier("homeWeeklyEventsCalendarLink")
             }
             if events.isEmpty {
                 // HQ指示(2026-10-20)「今日の重要イベントは0件でもセクションを
                 // 表示し、空状態を案内する」: `speechesCard`の空状態表示と
-                // 同じ考え方(固定高さの枠内に案内文言1行)。
-                V5JPFont.text("今日の重要イベントはありません", size: 8)
+                // 同じ考え方(固定高さの枠内に案内文言1行)。「今週」化後も
+                // 同じ方針を維持。
+                V5JPFont.text("今週の重要イベントはありません", size: 8)
                     .foregroundStyle(V5P.muted)
                     .frame(maxWidth: .infinity, minHeight: Self.todayEventsCardHeight - Self.todayEventsHeaderHeight, alignment: .center)
             } else {
@@ -819,14 +802,28 @@ struct HomeView: View {
             // APPROXIMATEでも前置詞を付けず、EXACTと同じ表示にする(列幅・
             // 国旗の位置は常に一定のまま)。イベント詳細(EventDetailCards.swift)
             // は列の余裕があるため「約」の表示を維持している。
-            Text(AppPreferences.shared.timeString(event.releaseDatetime))
-                .font(.system(size: 9, weight: .bold))
-                .tracking(-0.2)
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-                .frame(width: 26, alignment: .leading)
-                .frame(height: Self.eventRowHeight, alignment: .center)
+            //
+            // HQ判断(2026-11-04)「今週の重要イベント」化に伴い、時刻だけ
+            // だと行ごとに日付が違うのに区別がつかないため、日付を追加した
+            // (過去イベント比較の表と同じ「日付(上)/時刻(下)」の縦積み、
+            // `HistoricalComparisonView.tableRow`参照)。列幅は日付
+            // (「11/4」程度)が収まるよう26→30に広げた(後続の国旗+内容の
+            // グループが4pt右にずれるのみで、内部の間隔は変えていない)。
+            VStack(spacing: 0) {
+                Text(AppPreferences.shared.shortDateString(event.releaseDatetime))
+                    .font(.system(size: 7, weight: .semibold))
+                    .tracking(-0.2)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(AppPreferences.shared.timeString(event.releaseDatetime))
+                    .font(.system(size: 7.5, weight: .bold))
+                    .tracking(-0.2)
+                    .foregroundStyle(Self.linkBlue)
+                    .lineLimit(1)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(width: 30, alignment: .leading)
+            .frame(height: Self.eventRowHeight, alignment: .center)
 
             // HQ指示(2026-10-05、23回目)「今日の重要指標の国旗の下にUSDや
             // JPYなどを記載して」。HQ再指摘(2026-10-05)「USDやJPYの文字が
@@ -1607,10 +1604,12 @@ struct HomeView: View {
         return String(format: "%.\(digits)f", value)
     }
 
-    /// 「今日の重要イベント」: これから発生する重要イベント — 既発表
-    /// (RELEASED)は含めず、`upcomingEvents`(SCHEDULED)のみを時刻順に
-    /// 並べる(9回目の削除時点から`HomeViewModel.upcomingEvents`自体は
-    /// 存在し続けている)。
+    /// 「今週の重要イベント」(HQ判断2026-11-04、旧「今日の重要イベント」):
+    /// これから発生する重要イベント — 既発表(RELEASED)は含めず、
+    /// `upcomingEvents`(SCHEDULED)のみを時刻順に並べる(9回目の削除時点
+    /// から`HomeViewModel.upcomingEvents`自体は存在し続けている)。対象
+    /// 期間自体は`/home`への`days`パラメータ(`weeklyEventsWindowDays`、
+    /// 今日からローリング7日間)で絞っているため、ここでは並べ替えのみ。
     private var mappedTodayEvents: [HomeEventSummary] {
         viewModel.upcomingEvents.sorted { $0.releaseDatetime < $1.releaseDatetime }
     }

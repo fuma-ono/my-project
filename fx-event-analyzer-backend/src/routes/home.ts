@@ -43,7 +43,9 @@ export function registerHomeRoutes(app: FastifyInstance): void {
       'GET /home',
       async (mark) => {
         const query = homeQuerySchema.parse(request.query);
-        const { startUtc, endUtc } = resolveDayRangeUtc(query.date, query.timezone);
+        // api-design.md v1.47: `days`(既定1)で`date`から数えた日数分の
+        // 範囲を返す(「今週の重要イベント」向け)。
+        const { startUtc, endUtc } = resolveDayRangeUtc(query.date, query.timezone, query.days ?? 1);
 
         const events = await listEventsInRange(app.supabase, startUtc, endUtc);
         // HQ承認(2026-10-21)「/homeの各段階の所要時間」: 3段階それぞれの終わりに印を付ける(処理の順番は変えない)。
@@ -94,6 +96,8 @@ export function registerHomeRoutes(app: FastifyInstance): void {
         return {
           date: query.date,
           timezone: query.timezone,
+          // api-design.md v1.47: リクエストの`days`をそのまま返す(未指定は1)。
+          days: query.days ?? 1,
           events: events.map((event) => {
             const snapshot = snapshotByEventId.get(event.id);
             return redactRelease(
