@@ -810,8 +810,10 @@ struct HomeView: View {
             // (「11/4」程度)が収まるよう26→30に広げた(後続の国旗+内容の
             // グループが4pt右にずれるのみで、内部の間隔は変えていない)。
             VStack(spacing: 0) {
+                // HQ指摘(2026-11-04)「日付の部分を大きくして、時刻と同じ
+                // サイズで」: 7→7.5(時刻と同じサイズ)に拡大。
                 Text(AppPreferences.shared.shortDateString(event.releaseDatetime))
-                    .font(.system(size: 7, weight: .semibold))
+                    .font(.system(size: 7.5, weight: .semibold))
                     .tracking(-0.2)
                     .foregroundStyle(.white)
                     .lineLimit(1)
