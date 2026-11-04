@@ -142,6 +142,12 @@ final class ScreenshotTests: XCTestCase {
         // から遷移する。
         tap(containing: "次回発表予定")
         XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 15), "Event Detail did not load")
+        // HQ指示(2026-11-04)「GET /events/{id}にresult_typeを追加」の回帰確認:
+        // 値が出る指標(米国CPI、result_type: VALUE)は従来どおり「結果/予想/
+        // 前回」の3列カードのままで、noValueResults(「数値結果なし」)には
+        // ならないことを確認する。
+        XCTAssertTrue(waitForAnyElement(containing: "結果", timeout: 5), "US_CPI Event Detail lost its 結果/予想/前回 card after adding result_type")
+        XCTAssertFalse(app.otherElements["eventDetailNoValueResults"].exists, "US_CPI (result_type: VALUE) should not render the no-value-result view")
         capture("07-EventDetail")
 
         // SCR-008 相場反応詳細。2026-10-09から、値動きの表のUSD/JPYの行から直接進む。
@@ -604,21 +610,20 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 10), "Did not return to Indicator Detail after leaving Historical Comparison")
     }
 
-    /// HQ指示(2026-11-04)「US_FOMC_MINUTESのiOS表示確認」: FOMC議事要旨は
-    /// backend側でindicator master(migration `20261027000004`)・予定イベント
-    /// 取り込み(fomcSchedule.ts)まで実装済みだが、値を持たないイベント型
-    /// (domain/resultType.tsのRESULT_TYPE_NONE)で、既存のUIスクリーンショット
-    /// fixtureには一件も無かった(調査で判明)。実データが無いため、CPI向けの
-    /// 既存分岐には触れずテスト専用fixture(mock-server側に追加)で指標詳細→
-    /// 次回発表予定→イベント詳細の表示経路だけを確認する。
+    /// HQ指示(2026-11-04)「US_FOMC_MINUTESのiOS表示確認」→「GET /events/{id}に
+    /// result_typeを追加」: FOMC議事要旨はbackend側でindicator master
+    /// (migration `20261027000004`)・予定イベント取り込み(fomcSchedule.ts)
+    /// まで実装済みだが、値を持たないイベント型(domain/resultType.tsの
+    /// RESULT_TYPE_NONE)で、既存のUIスクリーンショットfixtureには一件も
+    /// 無かった(調査で判明)。実データが無いため、CPI向けの既存分岐には
+    /// 触れずテスト専用fixture(mock-server側に追加)で指標詳細→次回発表
+    /// 予定→イベント詳細の表示経路を確認する。
     ///
-    /// 調査で判明した表示項目の空白: `result_type`(値が出ない予定かどうか)は
-    /// 実際のbackendでは`GET /home`・`GET /calendar`にしか付かず(`GET
-    /// /events/{id}`には無い)、この経路では使われない。そのためイベント
-    /// 詳細画面は「snapshotがnullのSCHEDULEDイベント」という既存の一般的な
-    /// 状態として描画される(発表待ちの指標と区別がつかない表示になる)。
-    /// これは本テストでは仕様上の既知の制約として扱い、崩れたり落ちたり
-    /// しないことだけを確認する(表示文言の改善は別途HQ判断が必要)。
+    /// 当初の調査で判明した表示項目の空白(`result_type`が`GET
+    /// /events/{id}`に無く、値が出る指標の未発表状態と見分けがつかない
+    /// 表示になっていた)はsrc/routes/events.tsに追加して解消した
+    /// (EventDetailCards.swiftに`noValueResults`を新設、`unlockedResults`
+    /// =値が出る指標の既存表示は変更していない)。
     func testFomcMinutesEventDetailRendersAsAValuelessScheduledEvent() throws {
         let emailField = app.textFields["メールアドレス"]
         XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
@@ -639,12 +644,14 @@ final class ScreenshotTests: XCTestCase {
         capture("30-IndicatorDetail-FomcMinutes")
 
         tap(containing: "次回発表予定")
-        // 値が出ない予定のため「結果/予想/前回」カードは無く、画面自体が崩れず
-        // 主要通貨ペアの値動き欄(全指標共通のセクション見出し)まで描画される
-        // ことを確認する。既存の07-EventDetail(米国CPI)と同じ見出しを使うのは、
-        // この見出しが指標非依存の共通UIだから(EventDetailCards.swift参照)。
         XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 15), "FOMC Minutes Event Detail did not load")
         XCTAssertTrue(waitForAnyElement(containing: "FOMC議事要旨", timeout: 5), "Event Detail did not show the FOMC Minutes indicator name")
+        // result_type: NONEのため「結果/予想/前回」の3列カードではなく、
+        // 専用の「数値結果なし」表示になることを確認する(EventDetailCards.swift
+        // の`noValueResults`、accessibilityIdentifier "eventDetailNoValueResults")。
+        XCTAssertTrue(waitForAnyElement(containing: "数値結果なし", timeout: 5), "FOMC Minutes Event Detail did not show the dedicated no-value-result message")
+        XCTAssertTrue(app.otherElements["eventDetailNoValueResults"].exists, "noValueResults view not found by accessibility identifier")
+        XCTAssertFalse(app.staticTexts["未発表"].exists, "FOMC Minutes should not show the VALUE-indicator 未発表 placeholder")
         capture("31-EventDetail-FomcMinutes")
     }
 

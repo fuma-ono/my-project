@@ -94,4 +94,16 @@ describe.skipIf(!integration)('result_type: schedule-only events (FOMC minutes) 
     expect(byId.get(MINUTES_EVENT_ID)?.result_type).toBe('NONE');
     expect(byId.get(CPI_EVENT_ID)?.result_type).toBe('VALUE');
   });
+
+  // HQ指示(2026-11-04)「GET /events/{id}にresult_typeを追加」: 調査で判明した
+  // 空白(/calendar・/notifications/upcomingにしか無く、イベント詳細には無い)
+  // を埋めた。ここは「値が出ない予定イベントが、値の出る指標の未発表状態と
+  // 区別できないまま表示される」実害があったため、GET /events/{id}でも
+  // result_typeが正しく返ることを確認する。
+  it('/events/{id}: the minutes event carries result_type NONE, CPI carries VALUE', async () => {
+    const minutes = await get(`/events/${MINUTES_EVENT_ID}`);
+    expect(minutes.event.result_type).toBe('NONE');
+    const cpi = await get(`/events/${CPI_EVENT_ID}`);
+    expect(cpi.event.result_type).toBe('VALUE');
+  });
 });

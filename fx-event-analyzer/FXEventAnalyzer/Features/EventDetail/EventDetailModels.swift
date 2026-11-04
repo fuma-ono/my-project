@@ -44,6 +44,11 @@ struct EventDetailEvent: Decodable, Equatable {
     var attribution: Attribution? = nil
     /// 値を表示する小数の桁数(api-design v1.46、BLSの%の指標は1)。BLS以外の指標・古いBackendではnil(今までの表示)。
     var valueDecimals: Int? = nil
+    /// 結果の値が出る指標かどうか(`ResultType`、api-design v1.42)。今までGET /home・
+    /// GET /calendarにしか付いていなかったが、HQ指示(2026-11-04)でGET /events/{id}にも
+    /// 追加した(値が出ない予定=FOMC議事要旨が、値が出る指標の未発表状態と見分けが
+    /// つかなかったため)。古いBackendではnil。
+    var resultType: ResultType? = nil
     /// 無料プランで隠された過去の発表(api-design v1.33 §14.1)。古いBackendではnil(=隠していない)。
     var locked: Bool? = nil
     /// ロックを外すのに必要なプラン(`"PRO"`)。ロックしていなければnil。
@@ -66,6 +71,7 @@ struct EventDetailEvent: Decodable, Equatable {
         case displayName = "display_name"
         case attribution
         case valueDecimals = "value_decimals"
+        case resultType = "result_type"
         case id
         case indicatorId = "indicator_id"
         case indicatorName = "indicator_name"

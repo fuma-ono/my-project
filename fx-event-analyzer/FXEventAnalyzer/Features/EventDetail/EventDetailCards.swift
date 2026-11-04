@@ -197,9 +197,35 @@ struct EventDetailCards: View {
     @ViewBuilder private var results: some View {
         if isLocked {
             lockedResults
+        } else if response.event.resultType == .noValue {
+            // HQ指示(2026-11-04)「GET /events/{id}にresult_typeを追加」: 結果の
+            // 値が出ない指標(今はFOMC議事要旨のみ)は、値が出る指標の未発表
+            // 状態(「結果 未発表」)と見分けがつかない表示になっていた
+            // (調査で判明)。発表予定・公表済みという状態の話とは別に、
+            // 「この指標にはそもそも数値の結果欄が無い」ことを明示する。
+            // 値が出る指標(VALUEまたはresultTypeが無い古いBackend)の表示は
+            // 変えない — `unlockedResults`に手を加えていない。
+            noValueResults
         } else {
             unlockedResults
         }
+    }
+
+    /// 結果の値が出ない指標(`ResultType.noValue`)専用の表示。カードの
+    /// 大きさ(`summaryCardMinHeight`・幅214)は`lockedResults`・
+    /// `unlockedResults`と揃え、値動き表・次回発表予定の開始位置がずれないようにする。
+    private var noValueResults: some View {
+        VStack(spacing: 3) {
+            NotoText.text("結果・予想・前回", size: 9.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+            NotoText.text("数値結果なし", size: 10).foregroundStyle(.white)
+            NotoText.text("この指標は数値の結果を伴いません", size: 7).foregroundStyle(SettingsCardStyle.subtitleColor)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 2)
+        .frame(minHeight: Self.summaryCardMinHeight)
+        .frame(width: 214)
+        .background(GradientCardBackground())
+        .accessibilityIdentifier("eventDetailNoValueResults")
     }
 
     /// 隠された発表: 結果・予想・前回の代わりに鍵の印(押すとプランの案内)。カードの大きさは同じ。

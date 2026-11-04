@@ -252,7 +252,8 @@ final class Phase3ModelsDecodingTests: XCTestCase {
             "importance": "HIGH",
             "status": "RELEASED",
             "data_status": "READY",
-            "revision_status": "REVISED"
+            "revision_status": "REVISED",
+            "result_type": "VALUE"
           },
           "snapshot": {
             "forecast": 3.1, "actual": 3.3, "previous": 3.0,
@@ -279,6 +280,7 @@ final class Phase3ModelsDecodingTests: XCTestCase {
         let response = try makeDecoder().decode(EventDetailResponse.self, from: json)
 
         XCTAssertEqual(response.event.revisionStatus, .revised)
+        XCTAssertEqual(response.event.resultType, .value)
         XCTAssertEqual(response.analysis.surprise, 0.2)
         XCTAssertEqual(response.explanation?.source, "U.S. Bureau of Labor Statistics")
         XCTAssertEqual(response.relatedFxPairs.first?.reaction.analysisStatus, .ready)
@@ -356,6 +358,71 @@ final class Phase3ModelsDecodingTests: XCTestCase {
         XCTAssertEqual(response.event.attribution?.source, "Eurostat（欧州連合統計局）")
         XCTAssertEqual(response.event.attribution?.sourceUrl, "https://ec.europa.eu/eurostat")
         XCTAssertEqual(response.event.attribution?.notice, "Eurostat の公表データをもとに作成しています。Eurostat は本アプリでの利用について責任を負いません。")
+    }
+
+    /// HQ指示(2026-11-04)「GET /events/{id}にresult_typeを追加」: 値が出ない
+    /// 予定(今はFOMC議事要旨のみ、domain/resultType.ts)は`result_type: "NONE"`
+    /// で返る(以前はGET /home・GET /calendarにしか無く、イベント詳細では
+    /// 値が出る指標の未発表状態と見分けがつかなかった — 調査で判明)。
+    func testEventDetailResponseDecodesNoValueResultType() throws {
+        let json = """
+        {
+          "event": {
+            "id": "30000000-0000-0000-0000-000000000013",
+            "indicator_id": "10000000-0000-0000-0000-000000000013",
+            "indicator_name": "FOMC Minutes",
+            "country_code": "US",
+            "currency_code": "USD",
+            "release_datetime": "2026-11-18T19:00:00.000Z",
+            "release_datetime_precision": "EXACT",
+            "importance": "MEDIUM",
+            "status": "SCHEDULED",
+            "data_status": "DATA_PENDING",
+            "revision_status": "NONE",
+            "result_type": "NONE"
+          },
+          "snapshot": null,
+          "analysis": { "surprise": null, "surprise_direction": null },
+          "explanation": null,
+          "related_fx_pairs": [],
+          "available_timeframes": ["1m", "5m", "15m", "30m", "60m"]
+        }
+        """.data(using: .utf8)!
+
+        let response = try makeDecoder().decode(EventDetailResponse.self, from: json)
+
+        XCTAssertEqual(response.event.resultType, .noValue)
+    }
+
+    /// 古いBackend(result_typeキー自体が無い)でも落ちず、nilへデコードされる
+    /// ことを確認する(`var resultType: ResultType? = nil`のデフォルト値経路)。
+    func testEventDetailResponseDecodesWithoutResultTypeOnOldBackend() throws {
+        let json = """
+        {
+          "event": {
+            "id": "30000000-0000-0000-0000-000000000014",
+            "indicator_id": "10000000-0000-0000-0000-000000000001",
+            "indicator_name": "US Consumer Price Index (YoY)",
+            "country_code": "US",
+            "currency_code": "USD",
+            "release_datetime": "2026-09-10T12:30:00.000Z",
+            "release_datetime_precision": "EXACT",
+            "importance": "HIGH",
+            "status": "RELEASED",
+            "data_status": "READY",
+            "revision_status": "NONE"
+          },
+          "snapshot": null,
+          "analysis": { "surprise": null, "surprise_direction": null },
+          "explanation": null,
+          "related_fx_pairs": [],
+          "available_timeframes": ["1m", "5m", "15m", "30m", "60m"]
+        }
+        """.data(using: .utf8)!
+
+        let response = try makeDecoder().decode(EventDetailResponse.self, from: json)
+
+        XCTAssertNil(response.event.resultType)
     }
 
     // Historical Event Detail (`HistoricalEventDetailResponse`等)のデコードテストは、

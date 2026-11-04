@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { attributionForIndicator } from '../domain/attribution.js';
 import { valueDecimalsForIndicator } from '../domain/valueDecimals.js';
+import { resultTypeForIndicator } from '../domain/resultType.js';
 import { resolveReactionState } from '../domain/reactionState.js';
 import { chartWindow } from '../domain/chartWindow.js';
 import { ApiError } from '../errors/ApiError.js';
@@ -100,6 +101,10 @@ async function lockedEventDetail(app: FastifyInstance, event: EventRow, precisio
       attribution: attributionForIndicator(event.indicator_code),
       // v1.46: 値を表示する小数の桁数(domain/valueDecimals.ts)。値ではないのでロックしても隠さない。
       value_decimals: valueDecimalsForIndicator(event.indicator_code),
+      // HQ指示(2026-11-04)「GET /events/{id}にresult_typeを追加」: 結果の値が
+      // 出る指標かどうか(domain/resultType.ts、GET /home・GET /calendarと同じ
+      // 仕組み)。値ではなく指標の性質なので、ロックしても隠さない。
+      result_type: resultTypeForIndicator(event.indicator_code),
       ...LOCKED,
     },
     snapshot: snapshot ? nullFields(snapshot, RELEASE_VALUE_FIELDS) : null,
@@ -207,6 +212,12 @@ export function registerEventRoutes(app: FastifyInstance): void {
         attribution: attributionForIndicator(event.indicator_code),
         // v1.46: 値を表示する小数の桁数(BLS の%の指標は 1、それ以外は null。domain/valueDecimals.ts)
         value_decimals: valueDecimalsForIndicator(event.indicator_code),
+        // HQ指示(2026-11-04)「GET /events/{id}にresult_typeを追加」: 結果の値が
+        // 出る指標かどうか(domain/resultType.ts)。今まではGET /home・GET
+        // /calendarにしか付いておらず、イベント詳細では値が出ない予定
+        // (今はFOMC議事要旨のみ)が、値が出る他の指標の未発表状態と見分けが
+        // つかなかった(調査2026-11-04で判明)。
+        result_type: resultTypeForIndicator(event.indicator_code),
         ...accessFields(false, previousLocked),
       },
       snapshot: snapshot ?? null,

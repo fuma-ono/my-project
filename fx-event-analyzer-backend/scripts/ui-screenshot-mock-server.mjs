@@ -1165,10 +1165,10 @@ function historicalIndicatorEventRow(id, index) {
 }
 
 function eventDetailHandler(eventId) {
-  // HQ指示(2026-11-04)「US_FOMC_MINUTESのiOS表示確認」: 米国CPI用の分岐には
-  // 触れず、値を持たないイベント型(result_type: NONE相当、ただし実際の
-  // events.tsはresult_typeを返さない — home.ts/calendar.tsのみ、今回の
-  // 調査で判明した表示項目の空白)の表示経路だけを別に確認する。
+  // HQ指示(2026-11-04)「US_FOMC_MINUTESのiOS表示確認」→「GET /events/{id}に
+  // result_typeを追加」: 米国CPI用の分岐には触れず、値を持たないイベント型
+  // (result_type: NONE)の表示経路だけを別に確認する。result_typeは
+  // src/routes/events.tsに追加済み(以前はhome.ts/calendar.tsのみだった)。
   if (eventId === EVENT_ID_FOMC_MINUTES_NEXT) {
     return {
       event: {
@@ -1184,6 +1184,7 @@ function eventDetailHandler(eventId) {
         status: 'SCHEDULED',
         data_status: 'DATA_PENDING',
         revision_status: 'NONE',
+        result_type: 'NONE',
       },
       snapshot: null,
       analysis: { surprise: null, surprise_direction: null },
@@ -1208,6 +1209,7 @@ function eventDetailHandler(eventId) {
       status: isUpcoming ? 'SCHEDULED' : 'RELEASED',
       data_status: isUpcoming ? 'DATA_PENDING' : 'READY',
       revision_status: 'NONE',
+      result_type: 'VALUE',
     },
     snapshot: isUpcoming ? null : RELEASE_SNAPSHOT,
     analysis: {
