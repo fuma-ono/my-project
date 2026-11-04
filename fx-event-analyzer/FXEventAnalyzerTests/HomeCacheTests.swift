@@ -484,8 +484,11 @@ final class HomeCacheTests: XCTestCase {
         UserSession(userID: user, accessToken: "token", expiresAt: Date().addingTimeInterval(3600))
     }
 
+    /// 状態が変わるまで待つ(実時間で最大10秒、条件が満たされればすぐ返る)。混んだCIのrunnerでも
+    /// 落ちないよう、回数ではなく時刻で上限を決める(SplashViewModelTestsと同じ、HQ指示 2026-11-04)。
     private func waitUntil(_ condition: @escaping () -> Bool) async {
-        for _ in 0..<100 {
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
             if condition() { return }
             try? await Task.sleep(nanoseconds: 10_000_000)
         }
