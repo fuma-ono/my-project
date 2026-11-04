@@ -31,11 +31,13 @@ on:
       - "fx-event-analyzer/**"
       - "fx-event-analyzer-backend/scripts/ui-screenshot-mock-server.mjs"
       - ".github/workflows/fx-event-analyzer-ui-screenshots.yml"
+      - ".github/scripts/update-ci-screenshots.sh"
   pull_request:
     paths:
       - "fx-event-analyzer/**"
       - "fx-event-analyzer-backend/scripts/ui-screenshot-mock-server.mjs"
       - ".github/workflows/fx-event-analyzer-ui-screenshots.yml"
+      - ".github/scripts/update-ci-screenshots.sh"
   workflow_dispatch: {}
 
 permissions:
@@ -141,6 +143,7 @@ jobs:
             API_BASE_URL="$API_BASE_URL"
 
       - name: Run UI tests + capture screenshots (iPhone)
+        id: ui_iphone
         run: |
           xcodebuild test-without-building \
             -project FXEventAnalyzer.xcodeproj \
@@ -151,6 +154,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
 
       - name: Run UI tests + capture screenshots (iPad)
+        id: ui_ipad
         if: steps.ipad.outputs.device_name != ''
         run: |
           xcodebuild test-without-building \
@@ -257,13 +261,25 @@ jobs:
       # workflow; [skip ci] as a second guard) makes them reachable via the
       # ordinary Git Contents API instead, which is not blocked — no human
       # download/upload round-trip needed to review a screen.
+      #
+      # HQ指示(2026-11-04「UI Screenshots workflow の安全対策」): UIテストが取り消された run(30分の上限)で
+      # この処理だけが always() で走り、撮影結果が空のまま反映先を全部消して45枚を削除する commit(c7c0074c)が
+      # できた。commit するのは、ジョブがここまで成功していて(success() — 失敗・取り消し・タイムアウトでは偽)、
+      # iPhone の UI テストが成功し、iPad は飛ばしたか成功したときだけ。反映は
+      # .github/scripts/update-ci-screenshots.sh(撮影結果が空なら何もしない・一括削除しない・画面ごとに置き換える・
+      # 枚数が減ったら失敗)。
       - name: Commit iPhone screenshots into the repo for direct review
-        if: always() && github.event_name == 'push'
+        if: >-
+          success() && github.event_name == 'push'
+          && steps.ui_iphone.outcome == 'success'
+          && (steps.ui_ipad.outcome == 'success' || steps.ui_ipad.outcome == 'skipped')
         run: |
-          mkdir -p ../ci-screenshots/iPhone
-          rm -f ../ci-screenshots/iPhone/*.png
-          if [ -d "Screenshots/iPhone" ]; then
-            cp Screenshots/iPhone/*.png ../ci-screenshots/iPhone/ 2>/dev/null || true
+          shots="$PWD/Screenshots/iPhone"
+          shopt -s nullglob
+          exported=("$shots"/*.png)
+          if [ "${#exported[@]}" -eq 0 ]; then
+            echo "No exported screenshots; nothing to commit."
+            exit 0
           fi
           cd ..
           git config user.name "github-actions[bot]"
@@ -282,6 +298,10 @@ jobs:
           for attempt in 1 2 3; do
             git fetch origin "${GITHUB_REF_NAME}"
             git reset --mixed "origin/${GITHUB_REF_NAME}"
+            # 反映は最新の先頭の ci-screenshots を土台にする(checkout した commit の分ではなく)。
+            rm -rf ci-screenshots/iPhone
+            git checkout "origin/${GITHUB_REF_NAME}" -- ci-screenshots 2>/dev/null || mkdir -p ci-screenshots/iPhone
+            bash .github/scripts/update-ci-screenshots.sh "$shots" ci-screenshots/iPhone
             git add ci-screenshots/iPhone
             if git diff --cached --quiet; then
               echo "No screenshot changes to commit."
