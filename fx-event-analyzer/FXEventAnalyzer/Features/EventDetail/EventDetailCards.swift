@@ -225,6 +225,12 @@ struct EventDetailCards: View {
         .frame(minHeight: Self.summaryCardMinHeight)
         .frame(width: 214)
         .background(GradientCardBackground())
+        // HQ指示(2026-11-04)の実装後、実CIで判明: プレーンなVStack+複数の
+        // Textの組み合わせは`.accessibilityIdentifier`だけでは単一要素として
+        // マッチせず(`app.otherElements[identifier]`が見つからなかった)、
+        // `.accessibilityElement(children: .combine)`で明示的に1つの要素に
+        // まとめる必要があった。`lockedResults`(Button、元々単一要素)との違い。
+        .accessibilityElement(children: .combine)
         .accessibilityIdentifier("eventDetailNoValueResults")
     }
 
