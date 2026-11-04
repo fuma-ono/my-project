@@ -464,11 +464,17 @@ final class ScreenshotTests: XCTestCase {
         app.buttons["ログイン"].tap()
         XCTAssertTrue(waitForAnyElement(containing: "FOMC政策金利", timeout: 25), "Home did not load")
         let notice = app.descendants(matching: .any)["homeRefreshNotice"]
-        XCTAssertTrue(waitUntilGone(notice, timeout: 10), "Home showed a notice right after login (there should be no cache)")
-        // 1回目: 「大」へ(遅延なし)。作り直したホームが最新のデータになり、キャッシュがこのユーザー・プランで保存される。
+        // ログインの直後はキャッシュが無い: 1行が「出てこない」ことを確かめる(消えるのを待つのではない)。
+        XCTAssertFalse(notice.waitForExistence(timeout: 3), "Home showed a notice right after login (there should be no cache)")
+        // 1回目: 「大」へ。作り直したホームが最新のデータになり、キャッシュがこのユーザー・プランで保存される。
+        // 「大」を押しても、設定の保存の後で作り直されるので、すぐには作り直さない(タブの裏に作り直す前のホームが残る)。
+        // /home を3秒遅らせて、作り直したホームが1行を出すのを確かめてから、消えるのを待つ(HQ指示 2026-11-04、
+        // f78508b5 の UI Screenshots で、作り直す前のホームを見て0.3秒で判定して落ちたため)。
+        XCTAssertTrue(setMockHomeDelay(3_000), "Could not delay the mock /home")
         changeTextSize(to: "大")
-        XCTAssertTrue(waitForAnyElement(containing: "FOMC政策金利", timeout: 20), "Home did not come back after the text size change")
-        XCTAssertTrue(waitUntilGone(notice, timeout: 15), "Home refresh notice did not go away without a delay")
+        XCTAssertTrue(notice.waitForExistence(timeout: 20), "Home was not rebuilt with the cached data after the text size change")
+        XCTAssertTrue(waitUntilGone(notice, timeout: 20), "Home refresh notice did not go away after /home answered")
+        XCTAssertTrue(waitForAnyElement(containing: "FOMC政策金利", timeout: 5), "Home did not show the fresh data")
 
         // 2回目: 「標準」へ戻す(今までの表示の大きさで撮る)。この間だけ /home を20秒遅らせる。
         XCTAssertTrue(setMockHomeDelay(20_000), "Could not delay the mock /home")
@@ -763,13 +769,15 @@ final class ScreenshotTests: XCTestCase {
         option.tap()
     }
 
-    /// `element`が消えるまで待つ(最大`timeout`秒)。消えたらtrue。
+    /// `element`が消えるまで待つ(最大`timeout`秒)。期限内に1回でも無いことを確かめたらtrue。
+    /// 呼ぶのは、要素が出たことを確かめた後だけ(初めから無いことを「消えた」と取り違えないため)。
     private func waitUntilGone(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
-        while element.exists && Date() < deadline {
+        while Date() < deadline {
+            if !element.exists { return true }
             Thread.sleep(forTimeInterval: 0.5)
         }
-        return !element.exists
+        return false
     }
 
     /// モックの GET /home を失敗させる(true)・戻す(false)。届かなければfalse(その撮影だけ飛ばす)。
