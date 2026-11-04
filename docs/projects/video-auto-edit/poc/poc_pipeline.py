@@ -8,7 +8,7 @@
   VEDIT_VAD_THRESHOLD=0.5  VEDIT_MIN_SIL=0.5  VEDIT_PAD=0.12  VEDIT_NOISE_DB=-35
   VEDIT_RENDER=select                 select(P12改善) / segments / legacy(第1〜3回の方式)
   VEDIT_MIX=duck_vad                  duck_vad(P11改善) / duck_sc / legacy(第1〜3回の方式)
-  VEDIT_VOICE_LUFS=-16  VEDIT_BGM_OFFSET=14  VEDIT_DUCK_DB=-10
+  VEDIT_VOICE_LUFS=-16  VEDIT_BGM_OFFSET=12  VEDIT_DUCK_DB=-6
 テロップ(P8〜P10)と言い淀み(P13)は v2 のみ。第1〜3回の結果は git の履歴と保存済みの出力で比較する。
 """
 import json, math, os, re, resource, subprocess, sys, time
@@ -26,6 +26,11 @@ CUT_MODE, RENDER, MIX = E("VEDIT_CUT_MODE", "volume"), E("VEDIT_RENDER", "select
 NOISE_DB, MIN_SIL, PAD = float(E("VEDIT_NOISE_DB", "-35")), float(E("VEDIT_MIN_SIL", "0.5")), float(E("VEDIT_PAD", "0.12"))
 VAD_THR = float(E("VEDIT_VAD_THRESHOLD", "0.5"))
 T = {}
+
+
+def _jd(o):
+    """numpy の値を JSON に書けるようにする"""
+    return o.item() if hasattr(o, "item") else str(o)
 
 
 def run(cmd):
@@ -67,13 +72,16 @@ segs, info = model.transcribe(audio16k, language="ja", word_timestamps=True, bea
 segs = list(segs)
 T["transcribe"] = time.time() - t
 words = [dict(s=w.start, e=w.end, w=w.word) for s in segs for w in s.words]
-json.dump([dict(s=s.start, e=s.end, text=s.text) for s in segs], open(f"{W}/segments.json", "w"), ensure_ascii=False, indent=1)
+json.dump([dict(s=s.start, e=s.end, text=s.text) for s in segs], open(f"{W}/segments.json", "w"), ensure_ascii=False, indent=1, default=_jd)
 
 # 2. 発話区間(VAD)は常に求める(カット方式が vad のときのカットと、BGM の下げ区間に使う)
 t = time.time()
 from faster_whisper.vad import get_speech_timestamps, VadOptions  # noqa: E402
 vad_speech = [(x["start"] / 16000, x["end"] / 16000) for x in get_speech_timestamps(
     audio16k, VadOptions(threshold=VAD_THR, min_silence_duration_ms=int(MIN_SIL * 1000), speech_pad_ms=0))]
+# BGM を下げる区間用の発話検出は、カットの設定(最短無音)と切り離して 0.3秒の間で区切る
+duck_speech = [(x["start"] / 16000, x["end"] / 16000) for x in get_speech_timestamps(
+    audio16k, VadOptions(threshold=VAD_THR, min_silence_duration_ms=300, speech_pad_ms=0))]
 if CUT_MODE == "vad":
     silences, cur = [], 0.0
     for a, b in vad_speech:
@@ -109,8 +117,8 @@ keep = [(a, b) for a, b in keep if b - a > MIN_GAP]
 frames = render.snap_keep(keep, FPS)
 keep = render.frames_to_sec(frames, FPS)
 json.dump(dict(silence=silence_cuts, filler=filler_cuts, dropped_short=dropped_short),
-          open(f"{W}/cuts.json", "w"), indent=1)
-json.dump([dict(w, filler=i in filler_drop) for i, w in enumerate(words)], open(f"{W}/words.json", "w"), ensure_ascii=False, indent=1)
+          open(f"{W}/cuts.json", "w"), indent=1, default=_jd)
+json.dump([dict(w, filler=i in filler_drop) for i, w in enumerate(words)], open(f"{W}/words.json", "w"), ensure_ascii=False, indent=1, default=_jd)
 
 
 def remap_snap(x):
@@ -128,7 +136,7 @@ def remap_snap(x):
 events = subtitles.build_events([dict(w, drop=i in filler_drop) for i, w in enumerate(words)], remap_snap,
                                 VW, FS, OUTLINE, MARGIN_LR)
 open(f"{W}/subs.ass", "w").write(subtitles.to_ass(events, VW, VH, FS, OUTLINE, MARGIN_LR, round(VH * 0.07)))
-json.dump([dict(e, lines=e["lines"]) for e in events], open(f"{W}/subs.json", "w"), ensure_ascii=False, indent=1)
+json.dump([dict(e, lines=e["lines"]) for e in events], open(f"{W}/subs.json", "w"), ensure_ascii=False, indent=1, default=_jd)
 out_dur = sum(b - a for a, b in keep)
 
 # 5. BGM: 既存 bgm-pipeline を読み取り専用で呼ぶ(自前生成 = ライセンス問題なし。長さによる既知の不具合は30秒単位で回避)
@@ -145,7 +153,7 @@ t = time.time()
 voice = render.cut_audio(render.read_audio(IN), 48000, frames, FPS)
 render.write_wav(f"{W}/voice_cut.wav", voice, 48000)
 speech_out = []                                      # 出力の時刻での発話区間(VAD)。0.4秒未満の切れ目はつなぐ
-for a, b in vad_speech:
+for a, b in duck_speech:
     for ka, kb in keep:
         s, e = max(a, ka), min(b, kb)
         if e > s:
@@ -155,8 +163,8 @@ for a, b in vad_speech:
             else:
                 speech_out.append((s2, e2))
 mix_info = render.mix_audio(f"{W}/voice_cut.wav", f"{W}/bgm.wav", W, MIX, speech_out,
-                            voice_target=float(E("VEDIT_VOICE_LUFS", "-16")), bgm_offset=float(E("VEDIT_BGM_OFFSET", "14")),
-                            duck_db=float(E("VEDIT_DUCK_DB", "-10")))
+                            voice_target=float(E("VEDIT_VOICE_LUFS", "-16")), bgm_offset=float(E("VEDIT_BGM_OFFSET", "12")),
+                            duck_db=float(E("VEDIT_DUCK_DB", "-6")))
 T["audio_mix"] = time.time() - t
 mix_m = render.mix_metrics(W, speech_out)
 
@@ -176,5 +184,5 @@ report = dict(model=MODEL, peak_memory_mb=peak_mb, video_size=[VW, VH], src_fps=
               pad_sec=PAD, vad_threshold=VAD_THR, mix=mix_info, mix_metrics=mix_m, speech_out=speech_out,
               filler_candidates=filler_cands, subtitle_lines=len(events), transcript=[s.text for s in segs],
               timings_sec={k: round(v, 2) for k, v in T.items()})
-json.dump(report, open(f"{W}/report_{MODEL}.json", "w"), ensure_ascii=False, indent=1)
+json.dump(report, open(f"{W}/report_{MODEL}.json", "w"), ensure_ascii=False, indent=1, default=_jd)
 print(json.dumps({k: report[k] for k in ("model", "out_duration", "peak_memory_mb", "mix_metrics", "timings_sec")}, ensure_ascii=False, indent=1))

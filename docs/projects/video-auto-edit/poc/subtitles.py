@@ -66,7 +66,8 @@ def split_lines(text, fits):
     for p, comma in allowed_breaks(text):
         a, b = text[:p], text[p:]
         if fits(a) and fits(b):
-            score = (0 if comma else 1, abs(len(a) - len(b)))
+            # 読点の直後は4文字分の優遇。それ以上偏るなら均等な位置を選ぶ
+            score = (abs(len(a) - len(b)) - (4 if comma else 0),)
             if best is None or score < best[0]:
                 best = (score, [a, b])
     return best[1] if best else None
@@ -165,7 +166,27 @@ def build_events(words, remap_snap, vw, font_size, outline, margin_lr, min_dur=0
             if ev["e"] - ev["s"] < min_dur:
                 ev["s"] = max(prv + gap, ev["e"] - min_dur)
         ev["short"] = ev["e"] - ev["s"] < min_dur - 1e-6
-    return merged
+    # 4) それでも短い表示は、隣の文と同じ表示に2行で並べる(各行が1行に収まり、合計2行以内のとき)
+    out = []
+    k = 0
+    while k < len(merged):
+        ev = merged[k]
+        if ev["short"]:
+            nxt = merged[k + 1] if k + 1 < len(merged) else None
+            if nxt and len(ev["lines"]) + len(nxt["lines"]) <= 2:
+                nxt = dict(nxt, s=ev["s"], lines=ev["lines"] + nxt["lines"], src_s=ev["src_s"])
+                nxt["short"] = nxt["e"] - nxt["s"] < min_dur - 1e-6
+                merged[k + 1] = nxt
+                k += 1
+                continue
+            if out and len(out[-1]["lines"]) + len(ev["lines"]) <= 2:
+                out[-1] = dict(out[-1], e=ev["e"], lines=out[-1]["lines"] + ev["lines"], src_e=ev["src_e"])
+                out[-1]["short"] = out[-1]["e"] - out[-1]["s"] < min_dur - 1e-6
+                k += 1
+                continue
+        out.append(ev)
+        k += 1
+    return out
 
 
 def to_ass(events, vw, vh, font_size, outline, margin_lr, margin_v):

@@ -93,7 +93,9 @@ def verify(out, frames, fps):
             continue
         # ビープ(50ms)が区間内に収まっているものだけ使う
         seg = next(((k0, k1) for k0, k1 in frames if k0 <= got[i] < k1), None)
-        if not seg or (seg[1] - got[i]) / float(fps) < 0.1:
+        # 区間の終わり際(ビープが切れる)と、区間の先頭3フレーム以内(直前の区間の末尾に切れたビープが
+        # 残っていると、出力上で2つのビープが隣り合い区別できない)は除外する
+        if not seg or (seg[1] - got[i]) / float(fps) < 0.1 or got[i] - seg[0] < 3:
             continue
         t_v = i / float(fps)
         if len(beeps):

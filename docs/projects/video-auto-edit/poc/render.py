@@ -121,7 +121,7 @@ def speech_gain_curve(n, sr, speech, depth_db, down=0.25, up=0.6):
     return (10 ** (depth_db * g / 20)).astype(np.float32)
 
 
-def mix_audio(voice_path, bgm_path, work, mode, speech, sr=48000, voice_target=-16.0, bgm_offset=14.0, duck_db=-10.0):
+def mix_audio(voice_path, bgm_path, work, mode, speech, sr=48000, voice_target=-16.0, bgm_offset=12.0, duck_db=-6.0):
     """声(カット済み)と BGM をミックスし、最終音声と評価用の素材(stem)を書き出す。
     戻り値: 設定と計測に必要なパス・値"""
     v = read_audio(voice_path, sr)
@@ -156,8 +156,13 @@ def mix_audio(voice_path, bgm_path, work, mode, speech, sr=48000, voice_target=-
     bgain = float(np.clip((voice_target - bgm_offset) - (bi if bi is not None else -30), -40, 20))
     info.update(voice_lufs_before=vi, voice_gain_db=round(vgain, 1), bgm_lufs_before=bi, bgm_gain_db=round(bgain, 1),
                 voice_target=voice_target, bgm_offset=bgm_offset, duck_db=duck_db)
-    # 声: 静的ゲイン → 軽いコンプ(ピークだけ抑える)。BGM: 静的ゲイン
+    # 声: 静的ゲイン → 軽いコンプ(ピークだけ抑える)。コンプで下がった分を測り直して静的に補正する(2段階)
     vchain = f"volume={vgain:.2f}dB,acompressor=threshold=-18dB:ratio=3:attack=10:release=200:makeup=1"
+    sh(["ffmpeg", "-y", "-i", p("voice_in.wav"), "-af", vchain, "-c:a", "pcm_f32le", p("voice_pass1.wav")])
+    v1, _ = integrated_lufs(p("voice_pass1.wav"))
+    corr = float(np.clip(voice_target - v1, -6, 12)) if v1 is not None else 0.0
+    vchain += f",volume={corr:.2f}dB"
+    info.update(voice_comp_correction_db=round(corr, 1))
     if mode == "duck_sc":
         g = (f"[0:a]{vchain},asplit=3[v1][key][vst];[1:a]volume={bgain:.2f}dB,asplit=2[b0][braw];"
              f"[b0][key]sidechaincompress=threshold=0.02:ratio=4:knee=6:attack=80:release=700,asplit=2[duck][bst];"
@@ -207,13 +212,15 @@ def mix_metrics(work, speech):
         d = mv[voiced] - mb[voiced]
         res.update(speech_windows=int(voiced.sum()), diff_median=round(float(np.median(d)), 1),
                    diff_p5=round(float(np.percentile(d, 5)), 1), diff_min=round(float(d.min()), 1),
-                   bgm_louder_than_voice_ratio=round(float((d < 0).mean()), 3),
+                   bgm_louder_than_voice_ratio=round(float((d < 0).mean()), 4),
+                   windows_bgm_louder=int((d < 0).sum()), windows_diff_under_10lu=int((d < 10).sum()),
+                   worst_time=round(float(t[voiced][int(np.argmin(d))]), 2),
                    duck_during_speech_median=round(float(np.median(duck[voiced])), 1),
                    duck_during_speech_std=round(float(np.std(duck[voiced])), 2),
                    duck_jumps_over_3db_per_100ms=int((np.abs(np.diff(duck))[voiced[1:] & voiced[:-1]] > 3).sum()))
     if outs.any():
         res.update(nonspeech_windows=int(outs.sum()), duck_nonspeech_median=round(float(np.median(duck[outs])), 1))
-    return {k: (round(v, 1) if isinstance(v, float) else v) for k, v in res.items()}
+    return {k: (round(v, 4) if isinstance(v, float) else v) for k, v in res.items()}
 
 
 # ---------------------------------------------------------------- 映像
