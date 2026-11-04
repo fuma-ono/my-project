@@ -448,8 +448,13 @@ final class ScreenshotTests: XCTestCase {
     /// このテストでは確かめられないこと: アプリを終了して起動し直したときのキャッシュの表示(UI テストではログインが
     /// 残らず、ログイン画面でキャッシュを消すため)、プランを確かめる前の非表示(ユニットテストで確認済み)。
     func testHomeShowsCacheWhileRefreshing() throws {
-        // 失敗・タイムアウトでも、後のテストに遅延を残さない。
-        addTeardownBlock { [weak self] in _ = self?.setMockHomeDelay(0) }
+        // 失敗・タイムアウトでも、後のテストに遅延と文字サイズ(「大」)を残さない。文字サイズは画面の操作ではなく
+        // モックの設定に直接「標準」を書く(失敗した時点の画面に左右されない。次のテストは起動し直してモックから読む)。
+        addTeardownBlock { [weak self] in
+            guard let self else { return }
+            XCTAssertTrue(self.setMockHomeDelay(0), "Teardown could not restore the mock /home delay")
+            XCTAssertTrue(self.setMockTextSizeStandard(), "Teardown could not restore the text size to STANDARD")
+        }
         XCTAssertTrue(setMockHomeDelay(0), "Could not reach the mock server")
 
         let emailField = app.textFields["メールアドレス"]
@@ -716,6 +721,28 @@ final class ScreenshotTests: XCTestCase {
         var succeeded = false
         URLSession.shared.dataTask(with: request) { _, response, _ in
             succeeded = (response as? HTTPURLResponse)?.statusCode == 200
+            done.signal()
+        }.resume()
+        _ = done.wait(timeout: .now() + 6)
+        return succeeded
+    }
+
+    /// モックの設定の文字サイズを「標準」にする(teardown 用)。モックが「標準」を返したらtrue。
+    private func setMockTextSizeStandard() -> Bool {
+        guard let url = URL(string: "http://127.0.0.1:8090/api/v1/settings") else { return false }
+        var request = URLRequest(url: url, timeoutInterval: 5)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data(#"{"display":{"text_size":"STANDARD"}}"#.utf8)
+        let done = DispatchSemaphore(value: 0)
+        var succeeded = false
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            if (response as? HTTPURLResponse)?.statusCode == 200,
+               let data,
+               let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let display = body["display"] as? [String: Any] {
+                succeeded = display["text_size"] as? String == "STANDARD"
+            }
             done.signal()
         }.resume()
         _ = done.wait(timeout: .now() + 6)
