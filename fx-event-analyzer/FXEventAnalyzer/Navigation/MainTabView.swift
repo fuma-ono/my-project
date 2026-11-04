@@ -16,6 +16,8 @@ import SwiftUI
 struct MainTabView: View {
     let apiClient: APIClient
     let authService: AuthServicing
+    /// 認証済みの今のユーザー(ホームのキャッシュを出すかどうかに使う、`AppState.currentUserID`)。
+    let userID: UUID?
     let onSignOut: () -> Void
 
     @State private var tabSelection = 0
@@ -102,7 +104,7 @@ struct MainTabView: View {
     @ViewBuilder
     private var tabContent: some View {
         ZStack {
-            HomeView(apiClient: apiClient, path: $homePath, tabSelection: $tabSelection)
+            HomeView(apiClient: apiClient, userID: userID, path: $homePath, tabSelection: $tabSelection)
                 .opacity(tabSelection == 0 ? 1 : 0)
                 .allowsHitTesting(tabSelection == 0)
                 .accessibilityHidden(tabSelection != 0)

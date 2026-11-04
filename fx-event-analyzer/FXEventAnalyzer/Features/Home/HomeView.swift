@@ -52,9 +52,9 @@ struct HomeView: View {
     @ObservedObject private var notifications = NotificationsStore.shared
     private let apiClient: APIClient
 
-    init(apiClient: APIClient, path: Binding<NavigationPath>, tabSelection: Binding<Int>) {
+    init(apiClient: APIClient, userID: UUID? = nil, path: Binding<NavigationPath>, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
-        _viewModel = StateObject(wrappedValue: HomeViewModel(apiClient: apiClient))
+        _viewModel = StateObject(wrappedValue: HomeViewModel(apiClient: apiClient, userID: userID))
         _path = path
         _tabSelection = tabSelection
     }
@@ -557,6 +557,11 @@ struct HomeView: View {
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: Self.sectionGap) {
+                    // HQ承認(2026-11-02)「ホーム画面のキャッシュ表示改善」: 前回の情報(キャッシュ)の表示中・
+                    // 更新の失敗のときだけ1行出す。最新のデータのときは何も足さない(今までのレイアウトのまま)。
+                    if let notice = viewModel.refreshNotice {
+                        refreshNoticeRow(notice)
+                    }
                     // HQ指示(2026-10-20)「今日の重要イベント」「お気に入り」は
                     // 0件でもセクション自体を隠さず空状態を案内する
                     // (`speechesCard`が元から常時表示+空状態表示だったのに
@@ -580,7 +585,38 @@ struct HomeView: View {
         // が画面上に現れた「表示イベント」。`.onAppear`は描画完了の保証では
         // ない(診断画面側の説明文でも明記する)。初回だけ記録する(内部で
         // ガード済み、再読み込みのたびには上書きしない)。
-        .onAppear { DiagnosticsStore.shared.recordHomeReadyToDisplay() }
+        // HQ承認(2026-11-02): キャッシュを先に出したときは、ここではなく最新のデータが届いたとき
+        // (`freshDataVersion`の変化)に記録する — 「ホームの表示」の意味を変えない。
+        .onAppear {
+            if !viewModel.isShowingCache { DiagnosticsStore.shared.recordHomeReadyToDisplay() }
+        }
+        .onChange(of: viewModel.freshDataVersion) { _, _ in
+            DiagnosticsStore.shared.recordHomeReadyToDisplay()
+        }
+    }
+
+    /// 前回の情報の表示中・更新の失敗の1行。失敗のときだけ「再試行」(表示を残したまま取り直す)。
+    @ViewBuilder private func refreshNoticeRow(_ notice: HomeRefreshNotice) -> some View {
+        let text = HomeRefreshNoticeText.make(notice) { date in
+            "\(AppPreferences.shared.shortDateString(date)) \(AppPreferences.shared.timeString(date))"
+        }
+        HStack(spacing: 4) {
+            V5JPFont.text(text, size: 7)
+                .foregroundStyle(V5P.muted)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Spacer(minLength: 0)
+            if case .refreshFailed = notice {
+                Button { viewModel.load() } label: {
+                    V5JPFont.text("再試行", size: 7).foregroundStyle(V5P.cyan)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("homeRefreshRetry")
+            }
+        }
+        .frame(width: Self.cardWidth, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("homeRefreshNotice")
     }
 
     /// カードの外枠(塗り・枠線・角丸)。高さは呼び出し側が明示的に固定値で

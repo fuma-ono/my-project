@@ -12,7 +12,7 @@ enum ReactionTimeframe {
     static let `default` = "5m"
 }
 
-enum Importance: String, Decodable, Equatable {
+enum Importance: String, Codable, Equatable {
     case low = "LOW"
     case medium = "MEDIUM"
     case high = "HIGH"
@@ -21,7 +21,7 @@ enum Importance: String, Decodable, Equatable {
 /// api-design.md §12: Home's `events` is day-scoped; the client splits it
 /// by `status` into "今日の注目イベント" (SCHEDULED) and "最近のイベント"
 /// (RELEASED) itself — there is no separate Backend field for this.
-enum EventStatus: String, Decodable, Equatable {
+enum EventStatus: String, Codable, Equatable {
     case scheduled = "SCHEDULED"
     case released = "RELEASED"
     case cancelled = "CANCELLED"
@@ -29,7 +29,7 @@ enum EventStatus: String, Decodable, Equatable {
 
 /// api-design.md §7: the API-level Data Quality state — always HTTP 200 +
 /// this field, never an HTTP error.
-enum DataQualityStatus: String, Decodable, Equatable {
+enum DataQualityStatus: String, Codable, Equatable {
     case ready = "READY"
     case dataPending = "DATA_PENDING"
     case dataUnavailable = "DATA_UNAVAILABLE"
@@ -63,7 +63,7 @@ enum ReactionState: String, Equatable {
 
 /// api-design.md §9: null (never 0) when Forecast or Actual is missing;
 /// NEUTRAL when surprise == 0.
-enum SurpriseDirection: String, Decodable, Equatable {
+enum SurpriseDirection: String, Codable, Equatable {
     case positive = "POSITIVE"
     case negative = "NEGATIVE"
     case neutral = "NEUTRAL"
@@ -74,7 +74,7 @@ enum SurpriseDirection: String, Decodable, Equatable {
 /// に付く。SPEECHの行・古いBackendでは項目自体が無い(nil)。
 /// ケース名はSwiftの`Optional<ResultType>.none`との混同を避けるため`noValue`にした
 /// (バックエンドのJSON値はそのまま`"NONE"`)。
-enum ResultType: String, Decodable, Equatable {
+enum ResultType: String, Codable, Equatable {
     /// 結果の値が出る指標(CPI・雇用統計など、FOMCの会合も含む)。
     case value = "VALUE"
     /// 結果の値が出ない予定(今はFOMC議事要旨だけ、`domain/resultType.ts`)。
@@ -99,7 +99,7 @@ enum ResultStatusDisplay {
 
 /// api-design.md §11.1: drives which timeframes are analyzable for an
 /// event, independent of stored reaction data_status.
-enum ReleaseDatetimePrecision: String, Decodable, Equatable {
+enum ReleaseDatetimePrecision: String, Codable, Equatable {
     case exact = "EXACT"
     case approximate = "APPROXIMATE"
     case dateOnly = "DATE_ONLY"
@@ -150,7 +150,7 @@ struct Attribution: Decodable, Equatable {
 /// an Indicator or Event, with priority determining display order (lower
 /// first) — the same shape appears on Home events, Event Detail, and
 /// Indicator Detail.
-struct RelatedFxPairSummary: Decodable, Identifiable, Equatable {
+struct RelatedFxPairSummary: Codable, Identifiable, Equatable {
     let fxPairId: String
     let symbol: String
     let priority: Int

@@ -5,11 +5,17 @@ import XCTest
 /// `runInitSequence()`の実行時間がその枠を超えた瞬間に(ログ出力の追加等、
 /// 本来の意図と無関係な理由でも)失敗する不安定なテストだった。
 /// `SettingsViewModelTests.swift`と同じ、状態が変わるまで短い間隔で
-/// ポーリングする方式に統一する(最大1秒、10ms間隔)。タイムアウトしても
+/// ポーリングする方式に統一する(10ms間隔)。タイムアウトしても
 /// ループはただ抜けるだけで、後続の`XCTAssertEqual`等が実際の値で
 /// 失敗する — 失敗を成功扱いにはしない。
-private func waitUntil(_ condition: @escaping () -> Bool) async {
-    for _ in 0..<100 {
+///
+/// HQ指示(2026-11-04): 上限を「100回」(名目1秒)から実時間10秒に広げた。CI(65247bbf、
+/// iOS Build & Test run 41751826193)で、混んだrunnerでは100回の待ちが実際には2.2秒かかり、
+/// そのうえモックのセッション取得自体が637msかかって、状態が変わる直後(約5ms後)に判定して落ちた。
+/// 条件が満たされればすぐ返るので、通常の実行時間は変わらない。
+private func waitUntil(timeout: TimeInterval = 10, _ condition: @escaping () -> Bool) async {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
         if condition() { return }
         try? await Task.sleep(nanoseconds: 10_000_000)
     }
@@ -67,13 +73,13 @@ final class SplashViewModelTests: XCTestCase {
 
     /// セッション取得の失敗は、成功時の最低表示時間(`minimumDisplayDuration`)を待たずに
     /// すぐエラーを出す(SplashViewModelのinitの説明どおり)。待機を状態の変化の待ちに
-    /// したことで、この仕様が弱まっていないことを確かめる: 最低表示時間を5秒にしても、
-    /// 1秒以内(waitUntilの上限)にエラーになり、起動診断にも失敗として残る。
+    /// したことで、この仕様が弱まっていないことを確かめる: 最低表示時間を60秒にしても、
+    /// waitUntilの上限(10秒)より前にエラーになり、起動診断にも失敗として残る。
     func testSessionCheckFailureDoesNotWaitForMinimumDisplayDuration() async {
         let auth = MockAuthService()
         auth.sessionResult = .failure(AuthServiceError.network("offline"))
 
-        let viewModel = SplashViewModel(authService: auth, minimumDisplayDuration: .seconds(5)) { _ in
+        let viewModel = SplashViewModel(authService: auth, minimumDisplayDuration: .seconds(60)) { _ in
             XCTFail("onFinished should not be called when the init sequence fails")
         }
         viewModel.start()

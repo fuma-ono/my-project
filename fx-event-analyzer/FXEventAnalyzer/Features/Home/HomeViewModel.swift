@@ -9,11 +9,20 @@ enum HomeState: Equatable {
     case error(String)
 }
 
+/// 表示中のデータが最新ではないことの案内(HQ承認 2026-11-02「ホーム画面のキャッシュ表示改善」)。
+/// nil = 最新のデータ(何も出さない)。
+enum HomeRefreshNotice: Equatable {
+    /// 前回の情報(`savedAt`時点、端末のキャッシュ)を出して、更新中。
+    case showingCache(savedAt: Date)
+    /// 更新に失敗した。出しているデータの時点(キャッシュの保存時刻、または前回取得できた時刻)。
+    case refreshFailed(savedAt: Date?)
+}
+
 /// HQ指示(2026-10-02)「お気に入り」セクション用の軽量表示モデル。指標と
 /// イベントは別々のAPIレスポンス形状を持つが、Homeのお気に入り行は両方とも
 /// 同じコンパクトな見た目(国旗/通貨/名称/重要度バッジ)で表示するため、
 /// 共通の最小限のフィールドだけを抜き出している。
-enum HomeFavoriteItem: Identifiable, Equatable {
+enum HomeFavoriteItem: Identifiable, Equatable, Codable {
     /// HQ指摘(2026-10-03、6回目、新しい参考画像)「お気に入り」の小カードは
     /// 日付も表示する(例:「10/13 21:30」)ため、`releaseDatetime`を追加した
     /// — `EventDetailResponse.event.releaseDatetime`で既に取得済みの値を
@@ -70,7 +79,7 @@ enum HomeFavoriteItem: Identifiable, Equatable {
 // HQ指示(2026-10-21)「要人発言一覧の初回表示改善」: `AppRoute.speechList`が
 // このプレビュー配列を関連値として持つため(`Navigation/AppRoute.swift`
 // 参照)、`AppRoute: Hashable`の自動合成に必要な分だけ`Hashable`を追加した。
-struct HomeSpeechSummary: Decodable, Identifiable, Equatable, Hashable {
+struct HomeSpeechSummary: Codable, Identifiable, Equatable, Hashable {
     let id: String
     let countryCode: String
     let speakerName: String
@@ -123,17 +132,59 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var recentSpeeches: [HomeSpeechSummary] = []
     /// GET /home `speeches_status`(v1.34)。古いサーバーでは nil。`recentSpeeches` が空のときの文言にだけ使う。
     @Published private(set) var speechesStatus: HomeSpeechesStatus?
+    /// キャッシュの表示中・更新の失敗の案内。nil = 最新のデータ。
+    @Published private(set) var refreshNotice: HomeRefreshNotice?
+    /// `GET /home`の最新のデータを反映するたびに増える(起動診断の「ホームの表示」を、キャッシュの
+    /// 表示ではなく最新のデータの表示で記録するため、`HomeView`が見る)。
+    @Published private(set) var freshDataVersion = 0
 
     private let apiClient: APIClient
     private let favoritesStore: FavoritesStore
+    /// 認証済みの今のユーザー。nilならキャッシュを読まず・保存しない。
+    private let userID: UUID?
+    private let cacheStore: HomeCacheStore
+    private let planStore: PlanStore
+    private let now: () -> Date
     private var cancellables = Set<AnyCancellable>()
+    /// 表示中のデータがキャッシュならその保存時刻。最新のデータならnil。
+    private var displayedCacheSavedAt: Date?
+    /// 最後に`GET /home`の最新のデータを反映した時刻。
+    private var lastFreshAt: Date?
+    /// お気に入りの中身をこの起動で取得できたか(取得できたらキャッシュのお気に入りで上書きしない)。
+    private var hasFreshFavorites = false
+    /// `GET /home`の取得中か(キャッシュを取り下げたとき、取得が終わっていれば取り直すため)。
+    private var isFetching = false
+    /// 最後の`GET /home`が失敗したか(プランを確かめた後にキャッシュを出すとき、案内を「更新できませんでした」にする)。
+    private var lastFetchFailed = false
 
-    init(apiClient: APIClient, favoritesStore: FavoritesStore = .shared) {
+    /// 表示中のデータが端末のキャッシュか。
+    var isShowingCache: Bool { displayedCacheSavedAt != nil }
+
+    init(
+        apiClient: APIClient,
+        favoritesStore: FavoritesStore = .shared,
+        userID: UUID? = nil,
+        cacheStore: HomeCacheStore = .shared,
+        planStore: PlanStore = .shared,
+        now: @escaping () -> Date = Date.init
+    ) {
         self.apiClient = apiClient
         self.favoritesStore = favoritesStore
+        self.userID = userID
+        self.cacheStore = cacheStore
+        self.planStore = planStore
+        self.now = now
         favoritesStore.$entries
             .sink { [weak self] entries in
                 Task { await self?.loadFavorites(entries) }
+            }
+            .store(in: &cancellables)
+        // プランが確かめられた・変わったら、キャッシュのプランと比べる(HQ指示 2026-11-02「プラン安全性修正」)。
+        // 一致すれば、まだ最新のデータが無いときにキャッシュを出す。違えば捨て、表示中なら取り下げる。
+        // (`@Published`は値が変わる前に流れるので、今の値はTaskの中で読む。)
+        planStore.$isConfirmed.combineLatest(planStore.$plan)
+            .sink { [weak self] _ in
+                Task { @MainActor in self?.planConfirmed() }
             }
             .store(in: &cancellables)
     }
@@ -148,13 +199,72 @@ final class HomeViewModel: ObservableObject {
         return events.filter { $0.status == .released }
     }
 
+    /// 表示中のデータがあれば消さずに更新する(通貨ペア編集から戻ったときなど)。無ければ、条件に合う
+    /// キャッシュを先に出し、それも無ければ読み込み中にする。プランをまだ確かめていなければキャッシュは
+    /// 出さず、確かめた時点(`planConfirmed`)で改めて出すかを決める。
     func load() {
-        state = .loading
+        if case .loaded = state {
+            // 表示を残したまま更新する。
+        } else if let snapshot = cacheStore.load(for: cacheContext()) {
+            applyCache(snapshot)
+        } else {
+            state = .loading
+        }
         Task { await fetch() }
     }
 
+    private func applyCache(_ snapshot: HomeCacheSnapshot, refreshFailed: Bool = false) {
+        let current = now()
+        state = .loaded(events: snapshot.displayEvents(now: current), majorFx: snapshot.displayMajorFx(now: current))
+        recentSpeeches = snapshot.speeches
+        speechesStatus = snapshot.speechesStatus
+        if !hasFreshFavorites {
+            favoriteItems = snapshot.displayFavorites(entries: favoritesStore.entries)
+        }
+        displayedCacheSavedAt = snapshot.savedAt
+        refreshNotice = refreshFailed ? .refreshFailed(savedAt: snapshot.savedAt) : .showingCache(savedAt: snapshot.savedAt)
+        // 起動診断: キャッシュの表示は、/homeの反映・ホームの表示の記録とは別に残す(既存の計測の意味を変えない)。
+        DiagnosticsStore.shared.recordHomeCacheShown()
+    }
+
+    private func planConfirmed() {
+        guard let userID, let plan = planStore.confirmedPlan else { return }
+        let discarded = cacheStore.discardIfPlanDiffers(confirmedPlan: plan, userID: userID)
+        if discarded {
+            guard isShowingCache else { return }
+            // 前のプランのときの内容は出さない。最新のデータが届くまで読み込み中にする
+            // (取得がもう終わっていれば、取り直す)。
+            displayedCacheSavedAt = nil
+            refreshNotice = nil
+            state = .loading
+            if !hasFreshFavorites { favoriteItems = [] }
+            if !isFetching { Task { await fetch() } }
+            return
+        }
+        // プランが一致した: まだ何も出せていない(読み込み中・取得の失敗)ときだけ、キャッシュを出す。
+        switch state {
+        case .loading, .error:
+            if let snapshot = cacheStore.load(for: cacheContext()) {
+                applyCache(snapshot, refreshFailed: lastFetchFailed && !isFetching)
+            }
+        case .loaded, .backendNotConfigured:
+            break
+        }
+    }
+
+    private func cacheContext() -> HomeCacheContext {
+        HomeCacheContext(
+            userID: userID,
+            date: Self.isoDateFormatter.string(from: now()),
+            timezone: TimeZone.current.identifier,
+            confirmedPlan: planStore.confirmedPlan
+        )
+    }
+
     private func fetch() async {
-        let today = Self.isoDateFormatter.string(from: Date())
+        isFetching = true
+        defer { isFetching = false }
+        let today = Self.isoDateFormatter.string(from: now())
         let timezone = TimeZone.current.identifier
         let endpoint = Endpoint(
             path: "home",
@@ -175,16 +285,42 @@ final class HomeViewModel: ObservableObject {
             DiagnosticsStore.shared.recordHomeStateApplied()
             recentSpeeches = response.speeches ?? []
             speechesStatus = response.speechesStatus
+            let fetchedAt = now()
+            lastFetchFailed = false
+            displayedCacheSavedAt = nil
+            lastFreshAt = fetchedAt
+            refreshNotice = nil
+            freshDataVersion += 1
+            if let userID {
+                cacheStore.save(
+                    response: response, date: today, timezone: timezone,
+                    userID: userID, plan: planStore.confirmedPlan, savedAt: fetchedAt
+                )
+            }
         } catch let error as APIError where error.isNotConfigured {
             state = .backendNotConfigured
+            displayedCacheSavedAt = nil
+            refreshNotice = nil
         } catch {
-            state = .error("イベント情報の取得に失敗しました。")
+            lastFetchFailed = true
+            if case .loaded = state {
+                // キャッシュ・前回のデータを出したまま、更新できなかったことだけ知らせる。
+                refreshNotice = .refreshFailed(savedAt: displayedCacheSavedAt ?? lastFreshAt)
+            } else {
+                state = .error("イベント情報の取得に失敗しました。")
+            }
         }
     }
 
     private func loadFavorites(_ entries: [FavoritesStore.Entry]) async {
         // ホームには先頭3件だけ。全件はお気に入り一覧(`FavoritesListView`)で出す。
-        favoriteItems = await FavoriteItemLoader(apiClient: apiClient).load(Array(entries.prefix(3)))
+        let items = await FavoriteItemLoader(apiClient: apiClient).load(Array(entries.prefix(3)))
+        // 取得に失敗した項目は静かに除外されるため、キャッシュを出している間に1件も取れなかったとき
+        // (休止からの復帰待ち・圏外など)は、キャッシュのお気に入りを消さない。
+        if items.isEmpty, !entries.isEmpty, isShowingCache { return }
+        favoriteItems = items
+        hasFreshFavorites = true
+        if let userID { cacheStore.saveFavorites(items, userID: userID) }
     }
 
     private static let isoDateFormatter: DateFormatter = {

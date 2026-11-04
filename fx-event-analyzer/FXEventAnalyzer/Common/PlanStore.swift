@@ -10,6 +10,9 @@ final class PlanStore: ObservableObject {
 
     @Published private(set) var plan: EntitlementsResponse.Plan = .free
     @Published private(set) var limits: PlanLimits = .free()
+    /// この起動(ログイン)で`GET /entitlements`からプランを確かめたか。起動直後・ログアウト後はfalse
+    /// (`plan`は仮の無料プラン)。ホームのキャッシュがプランの一致を確かめるのに使う(HQ承認 2026-11-02)。
+    @Published private(set) var isConfirmed = false
 
     var isPro: Bool { plan == .pro }
 
@@ -18,6 +21,7 @@ final class PlanStore: ObservableObject {
             let response = try await EntitlementsService(apiClient: apiClient).fetchEntitlements(timezone: TimeZone.current.identifier)
             plan = response.plan ?? .free
             limits = response.limits ?? (plan == .pro ? .pro() : .free())
+            isConfirmed = true
         } catch {
             // 取れないときは前回の値のまま(起動直後は無料プランの範囲)。
         }
@@ -27,13 +31,18 @@ final class PlanStore: ObservableObject {
     func reset() {
         plan = .free
         limits = .free()
+        isConfirmed = false
     }
 
     /// テスト用。
-    func set(plan: EntitlementsResponse.Plan, limits: PlanLimits) {
+    func set(plan: EntitlementsResponse.Plan, limits: PlanLimits, confirmed: Bool = true) {
         self.plan = plan
         self.limits = limits
+        isConfirmed = confirmed
     }
+
+    /// 確かめたプランの値(`EntitlementsResponse.Plan`の値)。まだ確かめていなければnil。
+    var confirmedPlan: String? { isConfirmed ? plan.rawValue : nil }
 }
 
 /// `GET /entitlements`の`limits`。古いBackend(項目なし)では端末で同じ規則を計算する。
