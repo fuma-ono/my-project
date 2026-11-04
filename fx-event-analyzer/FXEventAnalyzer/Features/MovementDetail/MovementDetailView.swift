@@ -365,6 +365,9 @@ struct MovementDetailView: View {
                         .background(RoundedRectangle(cornerRadius: 5).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
                     }
                 }
+                reactionAnalysisSection(
+                    reactions: reactions, result: result, hasGeneralView: summary.interpretation != nil
+                )
                 comparisonSection(reactions: reactions)
             }
             .padding(8)
@@ -378,6 +381,37 @@ struct MovementDetailView: View {
             // 失敗を分けて表示し、枠自体は常に出す。
             analysisUnavailableCard(reactions: reactions)
         }
+    }
+
+    /// HQ指示(2026-11-04)「相場反応詳細画面の分析が表示されない問題を修正」: 数値の行の下に、実際の値動きから
+    /// 決まった型で作った「相場反応の分析」の文を出す(`MovementAnalysisText.reactionAnalysis`)。1分・5分・15分の
+    /// 切り替えで、選んだ時間の値動きの特徴の文も切り替わる。作れなければ「分析データ不足」。値動きの理由の根拠
+    /// (指標の一般的な見方)が無いときは、理由を推測せず「値動きの理由: 分析データ不足」と出す。
+    private func reactionAnalysisSection(reactions: [ReactionTimeframeEntry], result: EventSnapshotDetail?, hasGeneralView: Bool) -> some View {
+        let analysis = MovementAnalysisText.reactionAnalysis(
+            reactions: reactions, selectedTimeframe: viewModel.selectedTimeframe, noun: noun,
+            actual: result?.actual, forecast: result?.forecast, previous: result?.previous, unit: result?.unit,
+            valueDecimals: viewModel.valueDecimals, hasGeneralView: hasGeneralView
+        )
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 2) {
+                Image(systemName: "text.alignleft")
+                    .font(.system(size: 7))
+                    .foregroundStyle(V5P.cyan)
+                NotoText.text("相場反応の分析", size: 7).foregroundStyle(V5P.cyan)
+            }
+            NotoText.text(analysis?.sentences.joined() ?? "分析データ不足", size: 6.5)
+                .foregroundStyle(.white.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("movementReactionAnalysis")
+            if analysis == nil || analysis?.reasonUnavailable == true {
+                NotoText.text("値動きの理由: 分析データ不足", size: 6)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+            }
+        }
+        .padding(5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 5).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
     }
 
     /// `analysisCard`がsummaryを作れないときの代わりの表示。1分→5分の順で

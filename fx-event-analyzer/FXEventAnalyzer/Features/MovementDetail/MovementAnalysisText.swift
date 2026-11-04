@@ -50,6 +50,10 @@ enum MovementAnalysisText {
             }
         }
         facts.append(.init(label: "初動（\(label(first.timeframe))）", value: signedPips(firstPips), sign: firstPips))
+        // HQ指示(2026-11-04): 5分後もあれば並べる(初動が5分のときは重ねない)。
+        if let middle = ready("5m"), middle.timeframe != first.timeframe, let middlePips = middle.pips {
+            facts.append(.init(label: "5分後", value: signedPips(middlePips), sign: middlePips))
+        }
         if let later = ready("15m"), later.timeframe != first.timeframe, let laterPips = later.pips {
             facts.append(.init(label: "15分後", value: signedPips(laterPips), sign: laterPips))
         }
@@ -107,6 +111,101 @@ enum MovementAnalysisText {
             sentences.append("\(lead)\(noun)後\(firstLabel)で\(pips(abs(firstPips)))\(direction(firstPips))した。")
         }
         return sentences.joined()
+    }
+
+    // MARK: - 相場反応の分析(HQ指示 2026-11-04「相場反応詳細画面の分析が表示されない問題を修正」)
+
+    /// 「相場反応の分析」の文。実際の値動き(各時間の pips・最大の上下の幅)と、指標なら発表の結果・予想・前回
+    /// だけから、決まった型で作る(AIは使わない)。今回の値動きの理由は断定しない。理由の根拠になるデータが無いときは
+    /// `reasonUnavailable`を true にする(画面は「値動きの理由: 分析データ不足」)。
+    struct ReactionAnalysis: Equatable {
+        let sentences: [String]
+        let reasonUnavailable: Bool
+    }
+
+    /// データが足りなければnil(画面は「分析データ不足」)。`selectedTimeframe`は画面で選んでいる時間
+    /// (1分・5分・15分)で、その時間の最大の上下の幅の文が切り替わる。
+    static func reactionAnalysis(
+        reactions: [ReactionTimeframeEntry],
+        selectedTimeframe: String,
+        noun: String,
+        actual: Double? = nil,
+        forecast: Double? = nil,
+        previous: Double? = nil,
+        unit: String? = nil,
+        valueDecimals: Int? = nil,
+        hasGeneralView: Bool = false
+    ) -> ReactionAnalysis? {
+        func ready(_ timeframe: String) -> ReactionTimeframeEntry? {
+            reactions.first { $0.timeframe == timeframe && $0.analysisStatus == .ready && $0.pips != nil }
+        }
+        var sentences: [String] = []
+
+        // 1. 初動とその後の動きの関係(継続・反転・縮小・戻り)。
+        if let first = ready("1m") ?? ready("5m"), let firstPips = first.pips,
+           let later = [ready("15m"), ready("5m")].compactMap({ $0 }).first(where: { $0.timeframe != first.timeframe }),
+           let laterPips = later.pips {
+            let laterLabel = "\(label(later.timeframe))後"
+            if firstPips == 0 {
+                sentences.append(laterPips == 0
+                    ? "初動・\(laterLabel)とも、ほぼ動かなかった。"
+                    : "初動はほぼ動かず、\(laterLabel)に\(pips(abs(laterPips)))\(direction(laterPips))した。")
+            } else if laterPips == 0 {
+                sentences.append("初動は\(direction(firstPips))したが、\(laterLabel)には\(noun)前の水準に戻った。")
+            } else if (laterPips > 0) != (firstPips > 0) {
+                sentences.append("初動は\(direction(firstPips))だったが、\(laterLabel)には\(direction(laterPips))に転じた。")
+            } else if abs(laterPips) >= abs(firstPips) * 1.5 {
+                let ratio = ValueFormat.number(abs(laterPips) / abs(firstPips), fractionDigits: 1)
+                sentences.append("初動の\(direction(firstPips))が続き、\(laterLabel)には初動の約\(ratio)倍の値幅になった。")
+            } else if abs(laterPips) < abs(firstPips) {
+                sentences.append("\(laterLabel)も初動と同じ\(direction(firstPips))だが、値幅は初動より小さくなった。")
+            } else {
+                sentences.append("初動の\(direction(firstPips))が\(laterLabel)まで続いた。")
+            }
+        }
+
+        // 2. 選んでいる時間の値動きの特徴(最大の上下の幅と、終わりの位置)。
+        if let entry = ready(selectedTimeframe), let close = entry.pips,
+           let up = entry.maxUpwardPips, let down = entry.maxDownwardPips {
+            let span = label(selectedTimeframe)
+            sentences.append("\(span)の間に、最大で上に\(pips(max(up, 0)))、下に\(pips(abs(min(down, 0))))動いた。")
+            if close < 0, down < 0, close <= down * 0.8 {
+                sentences.append("\(span)後の価格は、この間の安値の近くだった。")
+            } else if close > 0, up > 0, close >= up * 0.8 {
+                sentences.append("\(span)後の価格は、この間の高値の近くだった。")
+            }
+        }
+        guard !sentences.isEmpty else { return nil }
+
+        // 3. 指標の発表なら、結果と予想・前回の関係(事実だけ。値動きの理由とは結びつけない)。
+        if let actual {
+            let versusForecast = forecast.map { forecast -> (continuing: String, ending: String) in
+                let diff = ValueFormat.displayDifference(actual, forecast, decimals: valueDecimals)
+                if diff == 0 { return ("予想どおりで", "予想どおりだった") }
+                let amount = difference(abs(diff), unit: unit, decimals: valueDecimals)
+                return diff > 0 ? ("予想を\(amount)上回り", "予想を\(amount)上回った") : ("予想を\(amount)下回り", "予想を\(amount)下回った")
+            }
+            let versusPrevious = previous.map { previous -> String in
+                let diff = ValueFormat.displayDifference(actual, previous, decimals: valueDecimals)
+                if diff == 0 { return "前回と同じだった" }
+                return "前回より\(difference(abs(diff), unit: unit, decimals: valueDecimals))\(diff > 0 ? "高かった" : "低かった")"
+            }
+            switch (versusForecast, versusPrevious) {
+            case let (forecastPart?, previousPart?): sentences.insert("結果は\(forecastPart.continuing)、\(previousPart)。", at: 0)
+            case let (forecastPart?, nil): sentences.insert("結果は\(forecastPart.ending)。", at: 0)
+            case let (nil, previousPart?): sentences.insert("結果は\(previousPart)。", at: 0)
+            case (nil, nil): break
+            }
+        }
+
+        // 4. 値動きの理由: 指標ごとに人が書いた一般的な見方(「主な要因」)が無ければ、根拠が無いので示さない。
+        return ReactionAnalysis(sentences: sentences, reasonUnavailable: !hasGeneralView)
+    }
+
+    private static func difference(_ value: Double, unit: String?, decimals: Int?) -> String {
+        unit == "%"
+            ? "\(ValueFormat.indicatorNumber(value, decimals: decimals))ポイント"
+            : ValueFormat.withUnit(value, unit: unit, decimals: decimals)
     }
 
     static func label(_ timeframe: String) -> String {
