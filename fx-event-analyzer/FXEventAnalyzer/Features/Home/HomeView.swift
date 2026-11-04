@@ -807,24 +807,27 @@ struct HomeView: View {
             // だと行ごとに日付が違うのに区別がつかないため、日付を追加した
             // (過去イベント比較の表と同じ「日付(上)/時刻(下)」の縦積み、
             // `HistoricalComparisonView.tableRow`参照)。列幅は日付
-            // (「11/4」程度)が収まるよう26→30に広げた(後続の国旗+内容の
-            // グループが4pt右にずれるのみで、内部の間隔は変えていない)。
+            // (「11/04」程度)が収まるよう26→30→34と広げてきた(後続の
+            // 国旗+内容のグループが右にずれるのみで、内部の間隔は変えて
+            // いない)。
             VStack(spacing: 0) {
                 // HQ指摘(2026-11-04)「日付の部分を大きくして、時刻と同じ
-                // サイズで」: 7→7.5(時刻と同じサイズ)に拡大。
+                // サイズで」で7→7.5に拡大した後、再指摘「もう少し日時
+                // 大きくして」で日付・時刻とも7.5→8.5に拡大。列幅も
+                // (「11/04」が窮屈にならないよう)30→34に広げた。
                 Text(AppPreferences.shared.shortDateString(event.releaseDatetime))
-                    .font(.system(size: 7.5, weight: .semibold))
+                    .font(.system(size: 8.5, weight: .semibold))
                     .tracking(-0.2)
                     .foregroundStyle(.white)
                     .lineLimit(1)
                 Text(AppPreferences.shared.timeString(event.releaseDatetime))
-                    .font(.system(size: 7.5, weight: .bold))
+                    .font(.system(size: 8.5, weight: .bold))
                     .tracking(-0.2)
                     .foregroundStyle(Self.linkBlue)
                     .lineLimit(1)
             }
             .fixedSize(horizontal: true, vertical: false)
-            .frame(width: 30, alignment: .leading)
+            .frame(width: 34, alignment: .leading)
             .frame(height: Self.eventRowHeight, alignment: .center)
 
             // HQ指示(2026-10-05、23回目)「今日の重要指標の国旗の下にUSDや
