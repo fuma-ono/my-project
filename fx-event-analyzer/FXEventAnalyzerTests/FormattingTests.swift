@@ -177,6 +177,19 @@ final class IndicatorDisplayNameTests: XCTestCase {
         // 最終行が見切れていた)。
         XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: false), 24 + 11 + 7 * 22.5 + 6)
         XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: true), 24 + 11 + 7 * 22.5 + 6)
+        // ユーザー指摘(2026-11-04、実機TestFlight確認)「横画面の表の下行と
+        // 外枠に余白がありすぎる」: 横画面の表(`landscapeTable`)のScrollView
+        // は以前`.frame(maxHeight: 250)`のみで、行数に関わらず250まで
+        // 広がってしまい、無料プランの3件のような少ない行数では最終行の下に
+        // 大きな空白が残っていた。縦画面の`tableHeight(rows:...)`と同じく、
+        // 実際の行数から中身の高さを計算するよう修正した
+        // (`landscapeTableContentHeight`)。
+        XCTAssertEqual(HistoricalComparisonView.landscapeTableContentHeight(rows: 3), 3 * 44 + 2 * 0.5)
+        XCTAssertEqual(HistoricalComparisonView.landscapeTableContentHeight(rows: 1), 44)
+        // 行が無いときも最低1行分として扱う(呼び出し元の`landscapeTable`は
+        // 実際には0件のとき専用の空表示に分岐するため通常は起きないが、
+        // 負の高さにならないことを確認しておく)。
+        XCTAssertEqual(HistoricalComparisonView.landscapeTableContentHeight(rows: 0), 44)
         // HQ指摘(2026-10-28)「8/7の行が常時見切れている」: 最終行の実機はみ出しを
         // 防ぐ固定の余白(2026-10-30再指摘「3つ目が見切れる」で4→10、2026-10-31
         // 再指摘「余白が大きい」で10→6と調整し、根本原因修正後は両方とも
