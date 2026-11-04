@@ -8,7 +8,8 @@ import Foundation
 /// 未読数・通知の予約は保存しない(通知は今までどおり`LocalNotificationScheduler`の取得だけで決める)。
 struct HomeCacheSnapshot: Codable, Equatable {
     /// 保存の形式の版。項目の意味を変えたら上げる(古い版は読まずに捨てる)。
-    static let currentFormatVersion = 1
+    /// 2(HQ承認 2026-11-04「プラン確認前表示」): `planIndependent`を足した。
+    static let currentFormatVersion = 2
 
     var formatVersion: Int
     /// 保存したときのログイン中のユーザー。違うユーザーには決して出さない。
@@ -25,6 +26,30 @@ struct HomeCacheSnapshot: Codable, Equatable {
     var speechesStatus: HomeSpeechesStatus?
     /// ホームのお気に入り(先頭3件の中身)。お気に入りの登録そのものは`FavoritesStore`。
     var favorites: [HomeFavoriteItem]
+    /// プランで内容が変わらないキャッシュか(HQ承認 2026-11-04「プラン確認前表示」)。保存したときに決める
+    /// (`HomeCacheSnapshot.isPlanIndependent`)。trueで、イベントにロックが1件も無いときだけ、`/entitlements`で
+    /// プランを確かめる前にも出す。
+    var planIndependent: Bool
+
+    /// 保存したときの「プランで変わらない」の判定。
+    ///
+    /// `/home`で FREE と PRO が違うのは、過去の発表を隠す仕組み(Backend `domain/pastReleaseAccess.ts`)だけ:
+    /// 指標ごとに新しい順で`past_releases_max`件(FREE は3)を見せ、それより古い RELEASED を`locked`、
+    /// その件数目の「前回」を`previous_locked`にする。アプリが求めるのは今日のホームだけで、今日の RELEASED は
+    /// その指標の一番新しい発表(順番の0番目)なので、FREE の件数が2以上なら、どちらにも当たらない。
+    /// - イベントに`locked`・`previous_locked`が1件でもあれば false(プランで内容が違う)。
+    /// - 保存したときのプランが分からなければ false。
+    /// - FREE の件数(`freePastReleasesMax`)が分からない・2未満なら false(FREE で保存しても同じ確認をする)。
+    /// Backend の結合テスト(`home-plan-independence.test.ts`)が、今日の /home が FREE と PRO で同じことを見張る。
+    static func isPlanIndependent(events: [HomeEventSummary], plan: String?, freePastReleasesMax: Int?) -> Bool {
+        guard plan != nil, let freeMax = freePastReleasesMax, freeMax >= 2 else { return false }
+        return !events.contains { $0.isLocked || $0.isPreviousLocked }
+    }
+
+    /// プランを確かめる前に出してよいか: 保存したときの印があり、今もイベントにロックが1件も無い。
+    var canShowBeforePlanConfirmation: Bool {
+        planIndependent && !events.contains { $0.isLocked || $0.isPreviousLocked }
+    }
 }
 
 /// ホームのキャッシュを出してよいかを決める条件(呼び出し側が今の値を渡す)。
@@ -33,7 +58,7 @@ struct HomeCacheContext: Equatable {
     var userID: UUID?
     var date: String
     var timezone: String
-    /// 今のプラン。`PlanStore`がこの起動でまだ確かめていなければnil(未確定 → キャッシュを出さない)。
+    /// 今のプラン。`PlanStore`がこの起動でまだ確かめていなければnil(未確定 → プランで変わらないキャッシュだけ出す)。
     var confirmedPlan: String?
 }
 
@@ -58,6 +83,9 @@ final class HomeCacheStore {
     /// プランで変わるため、`/entitlements`で今のプランを確かめるまでは出さない(未確認ならnilを返すが、
     /// 確認を待つので捨てない)。確かめたプランが保存時のプランと違う・保存時のプランが分からない
     /// ときは捨てる。確認に失敗したまま(`confirmedPlan`がnilのまま)なら、出さないまま。
+    ///
+    /// ただし(HQ承認 2026-11-04「プラン確認前表示」)、プランで内容が変わらないキャッシュ
+    /// (`canShowBeforePlanConfirmation`)は、確かめる前にも出す。確かめた後は上と同じく比べ直す。
     func load(for context: HomeCacheContext) -> HomeCacheSnapshot? {
         guard let snapshot = stored() else { return nil }
         guard let userID = context.userID,
@@ -69,7 +97,9 @@ final class HomeCacheStore {
             clear()
             return nil
         }
-        guard let confirmedPlan = context.confirmedPlan else { return nil }
+        guard let confirmedPlan = context.confirmedPlan else {
+            return snapshot.canShowBeforePlanConfirmation ? snapshot : nil
+        }
         guard let savedPlan = snapshot.plan, savedPlan == confirmedPlan else {
             clear()
             return nil
@@ -78,8 +108,12 @@ final class HomeCacheStore {
     }
 
     /// `GET /home`の成功時。`date`・`timezone`は要求に使った値。同じユーザーのお気に入りの中身は
-    /// 引き継ぐ(お気に入りは別に取得するため)。
-    func save(response: HomeResponse, date: String, timezone: String, userID: UUID, plan: String?, savedAt: Date) {
+    /// 引き継ぐ(お気に入りは別に取得するため)。`freePastReleasesMax`は FREE の過去の発表の件数
+    /// (`planIndependent`の判定に使う。nilなら印を付けない)。
+    func save(
+        response: HomeResponse, date: String, timezone: String, userID: UUID, plan: String?, savedAt: Date,
+        freePastReleasesMax: Int? = nil
+    ) {
         let previous = stored()
         let favorites = previous?.userID == userID ? previous?.favorites ?? [] : []
         write(HomeCacheSnapshot(
@@ -93,7 +127,10 @@ final class HomeCacheStore {
             majorFx: response.majorFx,
             speeches: response.speeches ?? [],
             speechesStatus: response.speechesStatus,
-            favorites: favorites
+            favorites: favorites,
+            planIndependent: HomeCacheSnapshot.isPlanIndependent(
+                events: response.events, plan: plan, freePastReleasesMax: freePastReleasesMax
+            )
         ))
     }
 
@@ -106,8 +143,9 @@ final class HomeCacheStore {
 
     /// プランが確定したとき。保存時のプランが未確定なら確定した値を入れ、違えば捨てる。
     /// 捨てたらtrue(表示中のキャッシュも取り下げる)。
+    /// 保存したときのプランが未確定だったときは、ここで`planIndependent`も決める。
     @discardableResult
-    func discardIfPlanDiffers(confirmedPlan: String, userID: UUID?) -> Bool {
+    func discardIfPlanDiffers(confirmedPlan: String, userID: UUID?, freePastReleasesMax: Int? = nil) -> Bool {
         guard var snapshot = stored() else { return false }
         guard let userID, snapshot.userID == userID else {
             clear()
@@ -115,6 +153,9 @@ final class HomeCacheStore {
         }
         if snapshot.plan == nil {
             snapshot.plan = confirmedPlan
+            snapshot.planIndependent = HomeCacheSnapshot.isPlanIndependent(
+                events: snapshot.events, plan: confirmedPlan, freePastReleasesMax: freePastReleasesMax
+            )
             write(snapshot)
             return false
         }

@@ -441,6 +441,151 @@ final class HomeCacheTests: XCTestCase {
         XCTAssertEqual(appState.currentUserID, userB)
     }
 
+    // MARK: - プラン確認前表示(HQ承認 2026-11-04「Home Cache プラン確認前表示」)
+
+    /// プランで内容が変わらない印を付けて保存する(FREE の件数3 = Backend と同じ)。
+    private func savedMarkedCache(events: [HomeEventSummary]? = nil, plan: String = "PRO") -> HomeCacheStore {
+        let cache = HomeCacheStore(defaults: defaults)
+        cache.save(response: response(events: events), date: today, timezone: tz, userID: userA, plan: plan, savedAt: now, freePastReleasesMax: 3)
+        return cache
+    }
+
+    func testMarkIsGivenOnlyWhenTheFreeLimitIsAtLeastTwoAndNothingIsLocked() {
+        let open = [Self.event(id: "e1", status: .released, at: now.addingTimeInterval(-60))]
+        XCTAssertTrue(HomeCacheSnapshot.isPlanIndependent(events: open, plan: "FREE", freePastReleasesMax: 3), "FREE, limit 3")
+        XCTAssertTrue(HomeCacheSnapshot.isPlanIndependent(events: open, plan: "PRO", freePastReleasesMax: 3), "PRO, FREE limit 3")
+        XCTAssertTrue(HomeCacheSnapshot.isPlanIndependent(events: open, plan: "PRO", freePastReleasesMax: 2), "PRO, FREE limit 2")
+        XCTAssertFalse(HomeCacheSnapshot.isPlanIndependent(events: open, plan: "PRO", freePastReleasesMax: 1), "FREE limit 1 hides today's previous")
+        XCTAssertFalse(HomeCacheSnapshot.isPlanIndependent(events: open, plan: "FREE", freePastReleasesMax: 1), "FREE with limit 1 is checked too")
+        XCTAssertFalse(HomeCacheSnapshot.isPlanIndependent(events: open, plan: "PRO", freePastReleasesMax: nil), "unknown FREE limit")
+        XCTAssertFalse(HomeCacheSnapshot.isPlanIndependent(events: open, plan: nil, freePastReleasesMax: 3), "unknown plan at save time")
+        let locked = [Self.event(id: "e1", status: .released, at: now, locked: true)]
+        XCTAssertFalse(HomeCacheSnapshot.isPlanIndependent(events: locked, plan: "FREE", freePastReleasesMax: 3))
+        let previousLocked = [Self.event(id: "e1", status: .released, at: now, previousLocked: true)]
+        XCTAssertFalse(HomeCacheSnapshot.isPlanIndependent(events: previousLocked, plan: "FREE", freePastReleasesMax: 3))
+    }
+
+    func testMarkedUnlockedCacheIsShownBeforeThePlanIsConfirmed() throws {
+        let store = savedMarkedCache()
+        XCTAssertTrue(try XCTUnwrap(store.stored()).planIndependent)
+        XCTAssertNotNil(store.load(for: context(userA, plan: nil)))
+    }
+
+    func testCacheWithALockedEventIsNotShownBeforeConfirmation() {
+        let store = savedMarkedCache(events: [Self.event(id: "e1", status: .released, at: now, locked: true)])
+        XCTAssertNil(store.load(for: context(userA, plan: nil)))
+        XCTAssertNotNil(store.stored(), "kept for the confirmation")
+    }
+
+    func testCacheWithAPreviousLockedEventIsNotShownBeforeConfirmation() {
+        let store = savedMarkedCache(events: [Self.event(id: "e1", status: .released, at: now, previousLocked: true)])
+        XCTAssertNil(store.load(for: context(userA, plan: nil)))
+        XCTAssertNotNil(store.stored(), "kept for the confirmation")
+    }
+
+    func testUnmarkedCacheIsNotShownBeforeConfirmation() {
+        let store = HomeCacheStore(defaults: defaults)
+        store.save(response: response(), date: today, timezone: tz, userID: userA, plan: "PRO", savedAt: now) // 印なし
+        XCTAssertNil(store.load(for: context(userA, plan: nil)))
+    }
+
+    func testFormatVersionOneCacheIsNotUsed() throws {
+        let store = savedMarkedCache()
+        var snapshot = try XCTUnwrap(store.stored())
+        snapshot.formatVersion = 1
+        defaults.set(try JSONEncoder().encode(snapshot), forKey: "com.fumaono.fxeventanalyzer.homeCache")
+        XCTAssertNil(store.load(for: context(userA, plan: nil)))
+        XCTAssertNil(store.stored(), "a v1 cache is discarded")
+    }
+
+    func testMarkedCacheOfAnotherUserOrDayIsNotShownBeforeConfirmation() {
+        XCTAssertNil(savedMarkedCache().load(for: context(userB, plan: nil)), "another user")
+        XCTAssertNil(savedMarkedCache().load(for: context(nil, plan: nil)), "unknown user")
+        var otherDay = context(userA, plan: nil)
+        otherDay.date = "2026-11-03"
+        XCTAssertNil(savedMarkedCache().load(for: otherDay), "another day")
+        var otherZone = context(userA, plan: nil)
+        otherZone.timezone = "America/New_York"
+        XCTAssertNil(savedMarkedCache().load(for: otherZone), "another time zone")
+    }
+
+    func testViewModelShowsTheMarkedCacheBeforeConfirmationThenKeepsItWhenThePlanMatches() async {
+        let cache = savedMarkedCache()
+        let plan = PlanStore() // 未確認(起動直後)
+        let api = MockAPIClient()
+        api.results["home"] = .failure(APIError.transport("still waking up"))
+
+        let viewModel = makeViewModel(api: api, cache: cache, userID: userA, plan: plan)
+        viewModel.load()
+        XCTAssertTrue(viewModel.isShowingCache, "shown right away, before /entitlements")
+        XCTAssertEqual(viewModel.refreshNotice, .showingCache(savedAt: now))
+
+        plan.set(plan: .pro, limits: .pro()) // 同じプランを確かめた
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertTrue(viewModel.isShowingCache)
+        XCTAssertNotNil(cache.stored())
+    }
+
+    func testConfirmedDifferentPlanWithdrawsTheMarkedCache() async {
+        let cache = savedMarkedCache() // PRO で保存
+        let plan = PlanStore()
+        let api = MockAPIClient()
+        api.results["home"] = .failure(APIError.transport("still waking up"))
+
+        let viewModel = makeViewModel(api: api, cache: cache, userID: userA, plan: plan)
+        viewModel.load()
+        XCTAssertTrue(viewModel.isShowingCache)
+
+        plan.set(plan: .free, limits: .free()) // FREE だった
+        await waitUntil { !viewModel.isShowingCache }
+        XCTAssertFalse(viewModel.isShowingCache)
+        XCTAssertNil(cache.stored())
+    }
+
+    func testEntitlementsFailureKeepsTheMarkedCacheAndShowsRefreshFailed() async {
+        let cache = savedMarkedCache()
+        let plan = PlanStore()
+        let failing = MockAPIClient()
+        failing.result = .failure(APIError.transport("entitlements unavailable"))
+        await plan.load(apiClient: failing) // /entitlements の確認に失敗
+        XCTAssertFalse(plan.isConfirmed)
+        let api = MockAPIClient()
+        api.results["home"] = .failure(APIError.transport("offline"))
+
+        let viewModel = makeViewModel(api: api, cache: cache, userID: userA, plan: plan)
+        viewModel.load()
+        await waitUntil { viewModel.refreshNotice == .refreshFailed(savedAt: self.now) }
+        XCTAssertTrue(viewModel.isShowingCache)
+        XCTAssertEqual(viewModel.refreshNotice, .refreshFailed(savedAt: now))
+        XCTAssertNotNil(cache.stored())
+    }
+
+    func testViewModelSavesTheMarkFromTheFreeLimit() async throws {
+        let api = MockAPIClient()
+        api.results["home"] = .success(response(events: [Self.event(id: "e1", status: .released, at: now.addingTimeInterval(-60))]))
+        let cache = HomeCacheStore(defaults: defaults)
+        let viewModel = makeViewModel(api: api, cache: cache, userID: userA) // PRO を確かめ済み
+        viewModel.load()
+        await waitUntil { viewModel.freshDataVersion == 1 }
+        XCTAssertTrue(try XCTUnwrap(cache.stored()).planIndependent, "PRO, FREE limit 3 (PlanLimits.free())")
+
+        let lockedAPI = MockAPIClient()
+        lockedAPI.results["home"] = .success(response(events: [Self.event(id: "e1", status: .released, at: now, previousLocked: true)]))
+        let lockedCache = HomeCacheStore(defaults: defaults)
+        let lockedViewModel = makeViewModel(api: lockedAPI, cache: lockedCache, userID: userA)
+        lockedViewModel.load()
+        await waitUntil { lockedViewModel.freshDataVersion == 1 }
+        XCTAssertFalse(try XCTUnwrap(lockedCache.stored()).planIndependent)
+    }
+
+    func testMarkIsDecidedWhenThePlanIsFilledInAtConfirmation() throws {
+        let store = HomeCacheStore(defaults: defaults)
+        store.save(response: response(), date: today, timezone: tz, userID: userA, plan: nil, savedAt: now, freePastReleasesMax: 3)
+        XCTAssertFalse(try XCTUnwrap(store.stored()).planIndependent, "no mark while the plan is unknown")
+        XCTAssertFalse(store.discardIfPlanDiffers(confirmedPlan: "PRO", userID: userA, freePastReleasesMax: 3))
+        XCTAssertTrue(try XCTUnwrap(store.stored()).planIndependent)
+    }
+
     // MARK: - Helpers
 
     private var tz: String { TimeZone.current.identifier }
@@ -508,7 +653,8 @@ final class HomeCacheTests: XCTestCase {
     private func snapshot(events: [HomeEventSummary] = [], savedAt: Date) -> HomeCacheSnapshot {
         HomeCacheSnapshot(
             formatVersion: HomeCacheSnapshot.currentFormatVersion, userID: userA, date: today, timezone: tz, plan: "PRO",
-            savedAt: savedAt, events: events, majorFx: [Self.pair], speeches: [], speechesStatus: nil, favorites: []
+            savedAt: savedAt, events: events, majorFx: [Self.pair], speeches: [], speechesStatus: nil, favorites: [],
+            planIndependent: false
         )
     }
 

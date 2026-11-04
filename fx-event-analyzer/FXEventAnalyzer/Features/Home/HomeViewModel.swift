@@ -229,7 +229,9 @@ final class HomeViewModel: ObservableObject {
 
     private func planConfirmed() {
         guard let userID, let plan = planStore.confirmedPlan else { return }
-        let discarded = cacheStore.discardIfPlanDiffers(confirmedPlan: plan, userID: userID)
+        let discarded = cacheStore.discardIfPlanDiffers(
+            confirmedPlan: plan, userID: userID, freePastReleasesMax: freePastReleasesMax
+        )
         if discarded {
             guard isShowingCache else { return }
             // 前のプランのときの内容は出さない。最新のデータが届くまで読み込み中にする
@@ -250,6 +252,15 @@ final class HomeViewModel: ObservableObject {
         case .loaded, .backendNotConfigured:
             break
         }
+    }
+
+    /// FREE の過去の発表の件数(キャッシュの`planIndependent`の判定に使う)。FREE を確かめていれば
+    /// `/entitlements`の値、そうでなければ(PRO・未確認)端末の FREE の決まり(`PlanLimits.free()`、Backend と同じ3)。
+    private var freePastReleasesMax: Int? {
+        if planStore.confirmedPlan == EntitlementsResponse.Plan.free.rawValue {
+            return planStore.limits.pastReleasesMax
+        }
+        return PlanLimits.free().pastReleasesMax
     }
 
     private func cacheContext() -> HomeCacheContext {
@@ -294,7 +305,8 @@ final class HomeViewModel: ObservableObject {
             if let userID {
                 cacheStore.save(
                     response: response, date: today, timezone: timezone,
-                    userID: userID, plan: planStore.confirmedPlan, savedAt: fetchedAt
+                    userID: userID, plan: planStore.confirmedPlan, savedAt: fetchedAt,
+                    freePastReleasesMax: freePastReleasesMax
                 )
             }
         } catch let error as APIError where error.isNotConfigured {
