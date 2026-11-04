@@ -305,6 +305,8 @@ describe.skipIf(!integration)('Rate alerts / calendar updates / Home speeches', 
       expect(Object.keys(failed.body)).toEqual([
         'date',
         'timezone',
+        // v1.47(HQ判断「今週の重要イベント」)。`days`省略時のリクエストでも既定値1を返す。
+        'days',
         'events',
         // v1.33 無料プランの過去の発表の上限(T1)。統合(2026-10-26)で /home に両方の項目が並ぶ。
         'past_release_limit',
