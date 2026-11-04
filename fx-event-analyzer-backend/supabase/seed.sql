@@ -46,7 +46,14 @@ insert into economic_indicators (id, code, name, name_en, country_code, currency
     array['日本の金融政策の方向性がわかる', '円の金利水準を直接左右する', '総裁会見の発言で相場が動きやすい'],
     'IRREGULAR', '%', 'Bank of Japan', 'NEUTRAL',
     '日銀の政策金利が予想より高い水準に決まると、金融引き締めが進むとの見方が強まり、円が買われやすいとされる。',
-    '日銀の政策金利が予想より低い水準に決まると、金融緩和的な姿勢が続くとの見方が強まり、円が売られやすいとされる。');
+    '日銀の政策金利が予想より低い水準に決まると、金融緩和的な姿勢が続くとの見方が強まり、円が売られやすいとされる。')
+-- HQ承認(2026-11-04、指標マスター再現性確認・FOMC表示修正の続行、優先1):
+-- migration 20261104000001_core_indicators_reproducibility.sql が先に
+-- 同じ5指標(code基準)を on conflict (code) do nothing で挿入するため
+-- (supabase db reset は migrations → seed.sql の順で実行、`db-and-
+-- environment.md`参照)、ここでも on conflict (code) do nothing を付け、
+-- 2つの経路が共存できるようにする。他の挿入文・値は変更していない。
+on conflict (code) do nothing;
 
 -- display_name は一覧画面の表示名 (HQ指示 2026-10-13、表示名ルールは
 -- docs/projects/fx-event-analyzer/indicator-display-names.md)。
