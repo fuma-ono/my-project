@@ -364,4 +364,128 @@ final class Phase3ModelsDecodingTests: XCTestCase {
     // テスト対象の型ごと削除した。過去の発表回の値動き詳細はSCR-008
     // 相場反応詳細(`MovementDetailResponse`、別のテストで既にカバー済み)に
     // 集約されている。
+
+    // HQ指示(2026-11-04)「経済指標の対応状況確定・未対応解消」: US_PPI・
+    // US_CORE_PPI・US_JOLTS・EU_UNEMPLOYMENT_RATEはbackend側のingestion・DB保存は
+    // 実装済み(indicators.ts・各種migration)だが、このファイルにはこれらの
+    // indicator codeでのデコードテストが一つも無かった(調査で判明)。
+    // secondary_*(前月比・前年比、snapshot/EventSnapshotDetail)のデコード自体も
+    // どのテストからも一度も通っていなかった。実際のBackend応答形に沿った
+    // リテラルJSONで、デコード・ラベル対応付けの双方を確認する。
+    func testEventDetailResponseDecodesPpiSnapshotWithYoySecondary() throws {
+        let json = """
+        {
+          "event": {
+            "id": "30000000-0000-0000-0000-000000000010",
+            "indicator_id": "10000000-0000-0000-0000-000000000010",
+            "indicator_name": "US Producer Price Index (MoM)",
+            "country_code": "US",
+            "currency_code": "USD",
+            "release_datetime": "2026-10-14T12:30:00.000Z",
+            "release_datetime_precision": "EXACT",
+            "importance": "MEDIUM",
+            "status": "RELEASED",
+            "data_status": "READY",
+            "revision_status": "NONE"
+          },
+          "snapshot": {
+            "forecast": 0.2, "actual": 0.3, "previous": 0.1,
+            "unit": "%", "source": "U.S. Bureau of Labor Statistics", "source_url": null,
+            "secondary_value_kind": "YOY_PCT",
+            "secondary_forecast": null, "secondary_actual": 2.6, "secondary_previous": 2.4
+          },
+          "analysis": { "surprise": 0.1, "surprise_direction": "POSITIVE" },
+          "explanation": null,
+          "related_fx_pairs": [],
+          "available_timeframes": ["1m", "5m", "15m", "30m", "60m"]
+        }
+        """.data(using: .utf8)!
+
+        let response = try makeDecoder().decode(EventDetailResponse.self, from: json)
+
+        XCTAssertEqual(response.snapshot?.secondaryValueKind, "YOY_PCT")
+        XCTAssertEqual(response.snapshot?.secondaryActual, 2.6)
+        XCTAssertEqual(response.snapshot?.secondaryPrevious, 2.4)
+        XCTAssertNil(response.snapshot?.secondaryForecast)
+        // YOY_PCTが副指標なら、本来の値(MoM)が主ラベル・YoYが副ラベルになる。
+        XCTAssertEqual(EventDetailCards.primaryLabel(forSecondary: response.snapshot?.secondaryValueKind), "前月比")
+        XCTAssertEqual(EventDetailCards.secondaryLabel(response.snapshot?.secondaryValueKind), "前年比")
+    }
+
+    func testEventDetailResponseDecodesJoltsLevelSnapshotWithoutSecondary() throws {
+        let json = """
+        {
+          "event": {
+            "id": "30000000-0000-0000-0000-000000000011",
+            "indicator_id": "10000000-0000-0000-0000-000000000011",
+            "indicator_name": "US JOLTS Job Openings",
+            "country_code": "US",
+            "currency_code": "USD",
+            "release_datetime": "2026-11-03T15:00:00.000Z",
+            "release_datetime_precision": "EXACT",
+            "importance": "MEDIUM",
+            "status": "RELEASED",
+            "data_status": "READY",
+            "revision_status": "NONE"
+          },
+          "snapshot": {
+            "forecast": 7200, "actual": 7400, "previous": 7100,
+            "unit": "千人", "source": "U.S. Bureau of Labor Statistics", "source_url": null
+          },
+          "analysis": { "surprise": 200, "surprise_direction": "POSITIVE" },
+          "explanation": null,
+          "related_fx_pairs": [],
+          "available_timeframes": ["1m", "5m", "15m", "30m", "60m"]
+        }
+        """.data(using: .utf8)!
+
+        let response = try makeDecoder().decode(EventDetailResponse.self, from: json)
+
+        // US_JOLTSはindicators.tsにsecondaryが設定されていない(LEVEL値のみ)ので、
+        // secondary_*キー自体が応答に無くても正常にnilへデコードされる必要がある。
+        XCTAssertNil(response.snapshot?.secondaryValueKind)
+        XCTAssertEqual(response.snapshot?.actual, 7400)
+        XCTAssertEqual(response.snapshot?.unit, "千人")
+    }
+
+    /// HQ指示(2026-10-31)「出典表示」のattributionはEU_HICPのテストしか
+    /// 無かった(調査で判明)。同じEurostat経路のEU_UNEMPLOYMENT_RATEでも
+    /// 同様にevent.attributionが付くことを確認する。
+    func testEventDetailResponseDecodesEuUnemploymentRateAttribution() throws {
+        let json = """
+        {
+          "event": {
+            "id": "30000000-0000-0000-0000-000000000012",
+            "indicator_id": "10000000-0000-0000-0000-000000000012",
+            "indicator_name": "Euro Area Unemployment Rate",
+            "country_code": "EU",
+            "currency_code": "EUR",
+            "release_datetime": "2026-11-04T10:00:00.000Z",
+            "release_datetime_precision": "APPROXIMATE",
+            "importance": "MEDIUM",
+            "status": "RELEASED",
+            "data_status": "READY",
+            "revision_status": "NONE",
+            "attribution": {
+              "source": "Eurostat（欧州連合統計局）",
+              "source_url": "https://ec.europa.eu/eurostat",
+              "notice": "Eurostat の公表データをもとに作成しています。Eurostat は本アプリでの利用について責任を負いません。"
+            }
+          },
+          "snapshot": {
+            "forecast": 6.3, "actual": 6.3, "previous": 6.4,
+            "unit": "%", "source": "Eurostat", "source_url": null
+          },
+          "analysis": { "surprise": 0.0, "surprise_direction": "NEUTRAL" },
+          "explanation": null,
+          "related_fx_pairs": [],
+          "available_timeframes": ["1m", "5m", "15m", "30m", "60m"]
+        }
+        """.data(using: .utf8)!
+
+        let response = try makeDecoder().decode(EventDetailResponse.self, from: json)
+
+        XCTAssertEqual(response.event.attribution?.source, "Eurostat（欧州連合統計局）")
+        XCTAssertEqual(response.snapshot?.actual, 6.3)
+    }
 }
