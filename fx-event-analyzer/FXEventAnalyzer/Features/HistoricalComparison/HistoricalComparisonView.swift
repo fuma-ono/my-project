@@ -339,7 +339,7 @@ struct HistoricalComparisonView: View {
                     VStack(spacing: 0) {
                         ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
                             if index > 0 {
-                                Rectangle().fill(SettingsCardStyle.cardBorder.opacity(0.6)).frame(height: 0.5)
+                                Rectangle().fill(SettingsCardStyle.cardBorder.opacity(0.6)).frame(height: Self.landscapeRowDividerHeight)
                             }
                             NavigationLink(value: AppRoute.eventDetail(id: event.id)) {
                                 landscapeTableRow(event, unit: unit, showSecondary: showSecondary, columns: columns)
@@ -349,12 +349,39 @@ struct HistoricalComparisonView: View {
                         }
                     }
                 }
-                .frame(maxHeight: 250)
+                // ユーザー指摘(2026-11-04、実機TestFlight確認)「表の下行と外枠に
+                // こんな余白があるのはなぜ」: `.frame(maxHeight: 250)`だけでは
+                // 上限を250に抑えるだけで、実際の行数(無料プランは最大3件)に
+                // 関わらずScrollViewが周囲から提案された高さいっぱいまで
+                // 広がってしまい、行数が少ないときは最終行の下に大きな空白が
+                // 残っていた(縦画面の`table(_:)`は`tableHeight(rows:...)`で
+                // 行数に応じた高さを計算しているのに対し、横画面のこの表だけ
+                // 固定上限のみだったのが原因)。行数から実際のコンテンツ高さを
+                // 計算し、多くの行で画面に収まらない時だけ250で頭打ちして
+                // スクロールさせる(縦画面と同じ考え方)。
+                .frame(height: min(Self.landscapeTableContentHeight(rows: events.count), 250))
             }
         }
         .background(V5CardGradient.fill)
         .clipShape(shape)
         .overlay(shape.stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
+    }
+
+    /// `landscapeTableRow`の行の高さ・行間の区切り線の高さ。両方とも値は
+    /// 以前からの固定値(44・0.5)のままだが、`landscapeTableContentHeight`
+    /// でも同じ値を使うため名前付きの定数にまとめた(縦画面の`rowHeight`等と
+    /// 同じやり方)。
+    static let landscapeRowHeight: CGFloat = 44
+    static let landscapeRowDividerHeight: CGFloat = 0.5
+
+    /// 横画面の表のScrollViewの中身(行だけ)の実際の高さ。`rows`件の行と、
+    /// 行の間の区切り線(`rows - 1`本)の積算。`landscapeTable`はこの値を
+    /// 250で頭打ちして使う(行数が多いときだけスクロールさせる、縦画面の
+    /// `tableHeight(rows:...)`と同じ考え方)。`tableHeight`と同じく単体
+    /// テストから直接呼べるようアクセスレベルは絞らない。
+    static func landscapeTableContentHeight(rows: Int) -> CGFloat {
+        let rows = max(rows, 1)
+        return CGFloat(rows) * landscapeRowHeight + CGFloat(rows - 1) * landscapeRowDividerHeight
     }
 
     /// HQ指示(2026-10-25)「過去イベント比較は前年の結果予想前回、前月の
@@ -506,7 +533,7 @@ struct HistoricalComparisonView: View {
             landscapePipsCell(event.pipsByTimeframe?["5m"] ?? nil, width: columns.pips)
             landscapePipsCell(event.pipsByTimeframe?["15m"] ?? nil, width: columns.pips)
         }
-        .frame(height: 44)
+        .frame(height: Self.landscapeRowHeight)
         .contentShape(Rectangle())
     }
 
