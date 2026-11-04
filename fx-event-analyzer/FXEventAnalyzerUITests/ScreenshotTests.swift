@@ -147,7 +147,7 @@ final class ScreenshotTests: XCTestCase {
         // 前回」の3列カードのままで、noValueResults(「数値結果なし」)には
         // ならないことを確認する。
         XCTAssertTrue(waitForAnyElement(containing: "結果", timeout: 5), "US_CPI Event Detail lost its 結果/予想/前回 card after adding result_type")
-        XCTAssertFalse(app.otherElements["eventDetailNoValueResults"].exists, "US_CPI (result_type: VALUE) should not render the no-value-result view")
+        XCTAssertFalse(app.descendants(matching: .any)["eventDetailNoValueResults"].exists, "US_CPI (result_type: VALUE) should not render the no-value-result view")
         capture("07-EventDetail")
 
         // SCR-008 相場反応詳細。2026-10-09から、値動きの表のUSD/JPYの行から直接進む。
@@ -650,7 +650,7 @@ final class ScreenshotTests: XCTestCase {
         // 専用の「数値結果なし」表示になることを確認する(EventDetailCards.swift
         // の`noValueResults`、accessibilityIdentifier "eventDetailNoValueResults")。
         XCTAssertTrue(waitForAnyElement(containing: "数値結果なし", timeout: 5), "FOMC Minutes Event Detail did not show the dedicated no-value-result message")
-        XCTAssertTrue(app.otherElements["eventDetailNoValueResults"].exists, "noValueResults view not found by accessibility identifier")
+        XCTAssertTrue(app.descendants(matching: .any)["eventDetailNoValueResults"].exists, "noValueResults view not found by accessibility identifier")
         XCTAssertFalse(app.staticTexts["未発表"].exists, "FOMC Minutes should not show the VALUE-indicator 未発表 placeholder")
         capture("31-EventDetail-FomcMinutes")
     }

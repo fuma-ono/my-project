@@ -225,11 +225,12 @@ struct EventDetailCards: View {
         .frame(minHeight: Self.summaryCardMinHeight)
         .frame(width: 214)
         .background(GradientCardBackground())
-        // HQ指示(2026-11-04)の実装後、実CIで判明: プレーンなVStack+複数の
-        // Textの組み合わせは`.accessibilityIdentifier`だけでは単一要素として
-        // マッチせず(`app.otherElements[identifier]`が見つからなかった)、
-        // `.accessibilityElement(children: .combine)`で明示的に1つの要素に
-        // まとめる必要があった。`lockedResults`(Button、元々単一要素)との違い。
+        // 複数のTextをまとめた1つのアクセシビリティ要素として扱うため
+        // `.accessibilityElement(children: .combine)`を付ける。ただし実CIで
+        // 判明: この要素はXCUITest側で`app.otherElements[identifier]`には
+        // マッチしない(推定: Text由来でstaticText系の要素になるため)。
+        // テスト側は`app.descendants(matching: .any)[identifier]`(既存の
+        // "homeRefreshNotice"と同じパターン)で種別を問わず検索している。
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("eventDetailNoValueResults")
     }
