@@ -1,29 +1,40 @@
-"""使い捨て技術検証スクリプト(リポジトリ外)。
-入力動画 -> 文字起こし -> 無音/言い淀み検出 -> カット -> テロップ(ASS) -> BGM(ダッキング) -> 書き出し
+"""使い捨て技術検証スクリプト(第2フェーズ)。
+入力動画 -> 文字起こし -> 無音/言い淀み検出 -> カット -> テロップ(ASS) -> BGM(声基準のミックス) -> 書き出し
+
+使い方: python poc_pipeline.py <入力動画> <出力mp4> [small|medium]
+環境変数(既定値):
+  VEDIT_WORK=/tmp/vedit-poc/work      作業フォルダ
+  VEDIT_CUT_MODE=volume               volume(従来) / vad(Silero VAD。HQ暫定推奨)
+  VEDIT_VAD_THRESHOLD=0.5  VEDIT_MIN_SIL=0.5  VEDIT_PAD=0.12  VEDIT_NOISE_DB=-35
+  VEDIT_RENDER=select                 select(P12改善) / segments / legacy(第1〜3回の方式)
+  VEDIT_MIX=duck_vad                  duck_vad(P11改善) / duck_sc / legacy(第1〜3回の方式)
+  VEDIT_VOICE_LUFS=-16  VEDIT_BGM_OFFSET=14  VEDIT_DUCK_DB=-10
+テロップ(P8〜P10)と言い淀み(P13)は v2 のみ。第1〜3回の結果は git の履歴と保存済みの出力で比較する。
 """
 import json, math, os, re, resource, subprocess, sys, time
 
-from faster_whisper import WhisperModel
-import budoux
-BUDOUX = budoux.load_default_japanese_parser()
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import fillers, render, subtitles  # noqa: E402
 
-IN = sys.argv[1]
-OUT = sys.argv[2]
+IN, OUT = sys.argv[1], sys.argv[2]
 MODEL = sys.argv[3] if len(sys.argv) > 3 else "small"
 W = os.path.abspath(os.environ.get("VEDIT_WORK", "/tmp/vedit-poc/work"))
 os.makedirs(W, exist_ok=True)
+E = os.environ.get
+CUT_MODE, RENDER, MIX = E("VEDIT_CUT_MODE", "volume"), E("VEDIT_RENDER", "select"), E("VEDIT_MIX", "duck_vad")
+NOISE_DB, MIN_SIL, PAD = float(E("VEDIT_NOISE_DB", "-35")), float(E("VEDIT_MIN_SIL", "0.5")), float(E("VEDIT_PAD", "0.12"))
+VAD_THR = float(E("VEDIT_VAD_THRESHOLD", "0.5"))
 T = {}
+
 
 def run(cmd):
     return subprocess.run(cmd, check=True, capture_output=True, text=True)
 
+
 def dur(path):
     return float(run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path]).stdout)
 
-t = time.time()
-run(["ffmpeg", "-y", "-i", IN, "-ac", "1", "-ar", "16000", f"{W}/a16k.wav"])
-T["extract_audio"] = time.time() - t
-src_dur = dur(IN)
 
 def display_size(path):
     """回転メタデータ(スマホの縦撮り)を考慮した表示上の幅・高さ"""
@@ -33,65 +44,58 @@ def display_size(path):
     rot = next((abs(int(d.get("rotation", 0))) for d in info.get("side_data_list", []) if "rotation" in d), 0)
     return (h, w) if rot % 180 == 90 else (w, h)
 
+
+t = time.time()
+run(["ffmpeg", "-y", "-i", IN, "-ac", "1", "-ar", "16000", f"{W}/a16k.wav"])
+T["extract_audio"] = time.time() - t
+src = render.probe(IN)
+src_dur, FPS = src["duration"], src["fps"]
 VW, VH = display_size(IN)
 FS = round(min(VW, VH) * 0.075)          # 横720pで54px相当
 MARGIN_LR = round(VW * 0.03)
+OUTLINE = max(2, round(FS / 13))
 
 # 1. 文字起こし(ローカル, CPU, int8)
+from faster_whisper import WhisperModel  # noqa: E402
+import soundfile as sf  # noqa: E402
 t = time.time()
 model = WhisperModel(MODEL, device="cpu", compute_type="int8")
 T["model_load"] = time.time() - t
 t = time.time()
-import soundfile as sf
 audio16k, _ = sf.read(f"{W}/a16k.wav", dtype="float32")
 segs, info = model.transcribe(audio16k, language="ja", word_timestamps=True, beam_size=5)
 segs = list(segs)
 T["transcribe"] = time.time() - t
 words = [dict(s=w.start, e=w.end, w=w.word) for s in segs for w in s.words]
-json.dump(words, open(f"{W}/words.json", "w"), ensure_ascii=False, indent=1)  # 評価用: 単語ごとの時刻
 json.dump([dict(s=s.start, e=s.end, text=s.text) for s in segs], open(f"{W}/segments.json", "w"), ensure_ascii=False, indent=1)
 
-# 2. 無音検出(ffmpeg silencedetect)。設定値は環境変数で上書き可(既定は第1回検証と同じ)
-NOISE_DB = float(os.environ.get("VEDIT_NOISE_DB", "-35"))
-MIN_SIL = float(os.environ.get("VEDIT_MIN_SIL", "0.5"))
+# 2. 発話区間(VAD)は常に求める(カット方式が vad のときのカットと、BGM の下げ区間に使う)
 t = time.time()
-r = subprocess.run(["ffmpeg", "-i", f"{W}/a16k.wav", "-af", f"silencedetect=noise={NOISE_DB}dB:d={MIN_SIL}", "-f", "null", "-"],
-                   capture_output=True, text=True)
-ss = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", r.stderr)]
-se = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", r.stderr)]
-silences = list(zip(ss, se + [src_dur] * (len(ss) - len(se))))
-CUT_MODE = os.environ.get("VEDIT_CUT_MODE", "volume")  # volume(既定・従来どおり) / vad(実験: 背景音のある素材向け)
+from faster_whisper.vad import get_speech_timestamps, VadOptions  # noqa: E402
+vad_speech = [(x["start"] / 16000, x["end"] / 16000) for x in get_speech_timestamps(
+    audio16k, VadOptions(threshold=VAD_THR, min_silence_duration_ms=int(MIN_SIL * 1000), speech_pad_ms=0))]
 if CUT_MODE == "vad":
-    # Silero VAD(faster-whisper 同梱、無料・ローカル)で「声がない区間」を無音として扱う
-    from faster_whisper.vad import get_speech_timestamps, VadOptions
-    VAD_THR = float(os.environ.get("VEDIT_VAD_THRESHOLD", "0.5"))
-    sp = [(x["start"] / 16000, x["end"] / 16000) for x in get_speech_timestamps(
-        audio16k, VadOptions(threshold=VAD_THR, min_silence_duration_ms=int(MIN_SIL * 1000), speech_pad_ms=0))]
     silences, cur = [], 0.0
-    for a, b in sp:
+    for a, b in vad_speech:
         if a - cur >= MIN_SIL:
             silences.append((cur, a))
         cur = b
     if src_dur - cur >= MIN_SIL:
         silences.append((cur, src_dur))
+else:
+    r = subprocess.run(["ffmpeg", "-i", f"{W}/a16k.wav", "-af", f"silencedetect=noise={NOISE_DB}dB:d={MIN_SIL}", "-f", "null", "-"],
+                       capture_output=True, text=True)
+    ss = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", r.stderr)]
+    se = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", r.stderr)]
+    silences = list(zip(ss, se + [src_dur] * (len(ss) - len(se))))
 T["silencedetect"] = time.time() - t
 
-# 3. 残す区間 = 無音以外 から 言い淀み語を除外。前後に少し余白を付ける
-PAD, MIN_GAP = float(os.environ.get("VEDIT_PAD", "0.12")), 0.25
-FILLERS = {"えーと", "えっと", "えー", "あのー", "あの", "ええと", "うーん", "まあ"}
+# 3. 残す区間 = 無音以外 から 言い淀み(v2: 表記ゆれ・文脈で判定)を除く。前後に余白
+MIN_GAP = 0.25
 silence_cuts = [(a + PAD, b - PAD) for a, b in silences if b - a > 2 * PAD]
-cuts = list(silence_cuts)
-norm = lambda x: re.sub(r"[、。,.!?！？ー\s]", "", x)
-FN = {norm(f) for f in FILLERS}
-filler_idx = set()
-for i in range(len(words)):
-    for j in range(i, min(i + 3, len(words))):
-        joined = norm("".join(w["w"] for w in words[i:j + 1]))
-        # 次の語が句読点で終わる/区切りになっている場合のみ言い淀みとみなす(「あの人」等の誤検出を抑制)
-        if joined in FN and words[j]["w"].strip().endswith(("。", "、", "ー")):
-            filler_idx.update(range(i, j + 1))
-            cuts.append((words[i]["s"], words[j]["e"]))
-cuts.sort()
+filler_drop, filler_cands = fillers.detect(words)
+filler_cuts = [(c["s"], c["e"]) for c in filler_cands if c["decision"] == "削除"]
+cuts = sorted(silence_cuts + filler_cuts)
 keep, cur = [], 0.0
 for a, b in cuts:
     if a > cur:
@@ -101,11 +105,13 @@ if cur < src_dur:
     keep.append((cur, src_dur))
 dropped_short = [(a, b) for a, b in keep if b - a <= MIN_GAP]
 keep = [(a, b) for a, b in keep if b - a > MIN_GAP]
-# 評価用: 削除理由ごとの区間と、言い淀みと判定した単語の印を保存
-json.dump(dict(silence=silence_cuts,
-               filler=[(words[i]["s"], words[i]["e"]) for i in sorted(filler_idx)], dropped_short=dropped_short),
+# 映像のフレーム境界にそろえる(映像と音声を同じ位置で切り、ずれが積み重ならないように)
+frames = render.snap_keep(keep, FPS)
+keep = render.frames_to_sec(frames, FPS)
+json.dump(dict(silence=silence_cuts, filler=filler_cuts, dropped_short=dropped_short),
           open(f"{W}/cuts.json", "w"), indent=1)
-json.dump([dict(w, filler=i in filler_idx) for i, w in enumerate(words)], open(f"{W}/words.json", "w"), ensure_ascii=False, indent=1)
+json.dump([dict(w, filler=i in filler_drop) for i, w in enumerate(words)], open(f"{W}/words.json", "w"), ensure_ascii=False, indent=1)
+
 
 def remap_snap(x):
     off = 0.0
@@ -117,90 +123,58 @@ def remap_snap(x):
         off += b - a
     return off
 
-def remap(x):
-    """元動画の時刻 -> カット後の時刻。削除区間内なら None"""
-    off = 0.0
-    for a, b in keep:
-        if a <= x <= b:
-            return off + (x - a)
-        off += b - a
-    return None
 
-# 4. テロップ: 単語タイムスタンプを句読点/最大文字数で行にまとめる
-MAXC = min(18, int((VW - 2 * MARGIN_LR) / FS) - 1)  # 1行の最大文字数(縦動画では短くなる)
-lines, buf = [], []
-for w in words:
-    clean = re.sub(r"\s", "", w["w"])
-    if words.index(w) in filler_idx:
-        continue
-    buf.append(dict(w, w=clean))
-    text = "".join(x["w"] for x in buf)
-    if clean.endswith(("。", "？", "！")) or (clean.endswith("、") and len(text) >= 8) or len(text) >= MAXC * 2:
-        lines.append(buf); buf = []
-if buf:
-    lines.append(buf)
-
-def ts(x):
-    h, m = int(x // 3600), int(x % 3600 // 60)
-    return f"{h}:{m:02d}:{x % 60:05.2f}"
-
-ass = ["[Script Info]", "ScriptType: v4.00+", f"PlayResX: {VW}", f"PlayResY: {VH}", "",
-       "[V4+ Styles]",
-       "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-       f"Style: Default,IPAGothic,{FS},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,{max(2, round(FS / 13))},1,2,{MARGIN_LR},{MARGIN_LR},{round(VH * 0.07)},1",
-       "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
-sub_count = 0
-events = []
-for ln in lines:
-    s, e = remap_snap(ln[0]["s"]), remap_snap(ln[-1]["e"])
-    if e - s < 0.3:
-        e = s + 0.6  # 表示時間が短すぎる行は最低限読める長さにする
-    text = "".join(w["w"] for w in ln).rstrip("、。")
-    if len(text) > MAXC:  # 2段表示: BudouX の文節境界のうち、中央に最も近い位置で改行(読点直後を優先)
-        phrases, bounds, pos = BUDOUX.parse(text), [], 0
-        for ph in phrases[:-1]:
-            pos += len(ph)
-            bounds.append((pos, ph.endswith("、")))
-        best = min(bounds, key=lambda b: (not b[1] or abs(b[0] - len(text) / 2) > len(text) / 4, abs(b[0] - len(text) / 2)))[0]
-        text = text[:best] + "\\N" + text[best:]
-    events.append([s, e + 0.15, text])
-for k in range(len(events) - 1):
-    events[k][1] = min(events[k][1], events[k + 1][0] - 0.02)
-for s, e, text in events:
-    ass.append(f"Dialogue: 0,{ts(s)},{ts(e)},Default,,0,0,0,,{text}")
-    sub_count += 1
-open(f"{W}/subs.ass", "w").write("\n".join(ass) + "\n")
+# 4. テロップ v2
+events = subtitles.build_events([dict(w, drop=i in filler_drop) for i, w in enumerate(words)], remap_snap,
+                                VW, FS, OUTLINE, MARGIN_LR)
+open(f"{W}/subs.ass", "w").write(subtitles.to_ass(events, VW, VH, FS, OUTLINE, MARGIN_LR, round(VH * 0.07)))
+json.dump([dict(e, lines=e["lines"]) for e in events], open(f"{W}/subs.json", "w"), ensure_ascii=False, indent=1)
 out_dur = sum(b - a for a, b in keep)
 
-# 5. BGM: 既存 bgm-pipeline を読み取り専用で呼ぶ(自前生成 = ライセンス問題なし)
+# 5. BGM: 既存 bgm-pipeline を読み取り専用で呼ぶ(自前生成 = ライセンス問題なし。長さによる既知の不具合は30秒単位で回避)
 t = time.time()
 env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
 subprocess.run(
     [sys.executable, "-m", "bgm_pipeline.generate", "--preset", "study_lofi_chill", "--minutes", str(math.ceil((out_dur + 1) / 30) / 2),
-     "--out", f"{W}/bgm.wav", "--seed", "1"], check=True, capture_output=True, cwd=os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../../bgm-pipeline"), env=env)
+     "--out", f"{W}/bgm.wav", "--seed", "1"], check=True, capture_output=True,
+    cwd=os.path.join(HERE, "../../../../bgm-pipeline"), env=env)
 T["bgm_generate"] = time.time() - t
 
-# 6. カット + テロップ焼き込み + BGMダッキング + ラウドネス正規化 を1回のエンコードで
+# 6. 音声: フレーム境界で声をカット → 声基準でミックス → 声と BGM を個別に計測
 t = time.time()
-fc = []
-for i, (a, b) in enumerate(keep):
-    fc.append(f"[0:v]trim={a:.3f}:{b:.3f},setpts=PTS-STARTPTS[v{i}]")
-    fc.append(f"[0:a]atrim={a:.3f}:{b:.3f},asetpts=PTS-STARTPTS,afade=t=in:d=0.02,afade=t=out:st={max(b - a - 0.02, 0):.3f}:d=0.02[a{i}]")
-fc.append("".join(f"[v{i}][a{i}]" for i in range(len(keep))) + f"concat=n={len(keep)}:v=1:a=1[vc][ac]")
-fc.append(f"[vc]ass={W}/subs.ass[vout]")
-fc.append("[ac]asplit=2[voice][key]")
-fc.append(f"[1:a]volume=0.35,atrim=0:{out_dur:.3f},afade=t=in:d=1,afade=t=out:st={max(out_dur - 1.5, 0):.3f}:d=1.5[bgm]")
-fc.append("[bgm][key]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[duck]")
-fc.append("[voice][duck]amix=inputs=2:duration=first:normalize=0,loudnorm=I=-14:TP=-1.5:LRA=11[aout]")
-run(["ffmpeg", "-y", "-i", IN, "-i", f"{W}/bgm.wav", "-filter_complex", ";".join(fc), "-map", "[vout]", "-map", "[aout]",
-     "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", OUT])
-T["render"] = time.time() - t
+voice = render.cut_audio(render.read_audio(IN), 48000, frames, FPS)
+render.write_wav(f"{W}/voice_cut.wav", voice, 48000)
+speech_out = []                                      # 出力の時刻での発話区間(VAD)。0.4秒未満の切れ目はつなぐ
+for a, b in vad_speech:
+    for ka, kb in keep:
+        s, e = max(a, ka), min(b, kb)
+        if e > s:
+            s2, e2 = remap_snap(s), remap_snap(e)
+            if speech_out and s2 - speech_out[-1][1] < 0.4:
+                speech_out[-1] = (speech_out[-1][0], e2)
+            else:
+                speech_out.append((s2, e2))
+mix_info = render.mix_audio(f"{W}/voice_cut.wav", f"{W}/bgm.wav", W, MIX, speech_out,
+                            voice_target=float(E("VEDIT_VOICE_LUFS", "-16")), bgm_offset=float(E("VEDIT_BGM_OFFSET", "14")),
+                            duck_db=float(E("VEDIT_DUCK_DB", "-10")))
+T["audio_mix"] = time.time() - t
+mix_m = render.mix_metrics(W, speech_out)
+
+# 7. 書き出し(映像のカット + テロップ焼き込み + 用意した音声)
+render_info = render.render_video(IN, frames, FPS, f"{W}/mix.wav", OUT, W, method=RENDER, ass=f"{W}/subs.ass")
+T["render"] = render_info["seconds"]
 
 peak_mb = dict(python_whisper=round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024),
-               largest_child_ffmpeg=round(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1024))
-report = dict(model=MODEL, peak_memory_mb=peak_mb, video_size=[VW, VH], max_chars_per_line=MAXC, src_duration=round(src_dur, 2), out_duration=round(dur(OUT), 2), planned_out=round(out_dur, 2),
-              silences=[(round(a, 2), round(b, 2)) for a, b in silences], keep=[(round(a, 3), round(b, 3)) for a, b in keep], cut_mode=CUT_MODE, silence_threshold_db=NOISE_DB, silence_min_sec=MIN_SIL, pad_sec=PAD,
-              subtitle_lines=sub_count, transcript=[s.text for s in segs],
-              words_detected=[w["w"] for w in words], timings_sec={k: round(v, 2) for k, v in T.items()})
+               render_ffmpeg=render_info["ffmpeg_peak_mb"],
+               largest_child=round(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1024))
+out_probe = render.probe(OUT)
+report = dict(model=MODEL, peak_memory_mb=peak_mb, video_size=[VW, VH], src_fps=str(FPS), out_fps=str(out_probe["fps"]),
+              out_size=[out_probe["width"], out_probe["height"]], src_duration=round(src_dur, 2),
+              out_duration=round(out_probe["duration"], 3), planned_out=round(out_dur, 3),
+              silences=[(round(a, 2), round(b, 2)) for a, b in silences], keep=[(round(a, 4), round(b, 4)) for a, b in keep],
+              cut_mode=CUT_MODE, render_method=RENDER, mix_mode=MIX, silence_threshold_db=NOISE_DB, silence_min_sec=MIN_SIL,
+              pad_sec=PAD, vad_threshold=VAD_THR, mix=mix_info, mix_metrics=mix_m, speech_out=speech_out,
+              filler_candidates=filler_cands, subtitle_lines=len(events), transcript=[s.text for s in segs],
+              timings_sec={k: round(v, 2) for k, v in T.items()})
 json.dump(report, open(f"{W}/report_{MODEL}.json", "w"), ensure_ascii=False, indent=1)
-print(json.dumps(report, ensure_ascii=False, indent=1))
+print(json.dumps({k: report[k] for k in ("model", "out_duration", "peak_memory_mb", "mix_metrics", "timings_sec")}, ensure_ascii=False, indent=1))
