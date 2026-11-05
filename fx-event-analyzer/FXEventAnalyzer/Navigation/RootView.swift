@@ -22,7 +22,7 @@ struct RootView: View {
             switch appState.phase {
             case .launching:
                 SplashView(
-                    viewModel: SplashViewModel(authService: authService) { outcome in
+                    viewModel: SplashViewModel(authService: authService, apiClient: apiClient) { outcome in
                         appState.splashFinished(outcome: outcome)
                     }
                 )
@@ -76,7 +76,9 @@ struct RootView: View {
                     // SCR-018 / SCR-019の設定(表示形式など)を読み込む。
                     async let preferencesLoad: Void = AppPreferences.shared.load(apiClient: apiClient)
                     // 無料プラン・プレミアムプランの使える範囲(カレンダー・お気に入りなど)。
-                    async let planLoad: Void = PlanStore.shared.load(apiClient: apiClient)
+                    // HQ指示(2026-11-05)「Splash先行通信」: userIDを渡し、Splash中に
+                    // 先行取得済みの/entitlementsがあればそれを再利用する(二重取得にしない)。
+                    async let planLoad: Void = PlanStore.shared.load(apiClient: apiClient, userID: appState.currentUserID)
                     _ = await (preferencesLoad, planLoad)
                     // SCR-017: 自動更新・解約などの購読の変化をBackendへ送る。
                     // UIスクリーンショットCIではApp Store Connectのサンドボックス

@@ -113,6 +113,13 @@ struct LaunchDiagnosticsView: View {
     /// 項目12にあたる、/homeリクエスト固有の詳細(複数回走った場合の識別含む)。
     private func homeRequestCard(_ diagnostics: LaunchDiagnostics) -> some View {
         VStack(alignment: .leading, spacing: 6) {
+            // HQ指示(2026-11-05)「Splash先行通信・Home Cache起動高速化」:
+            // Splash中に/home・/entitlementsの先行取得を始めた時刻(区間の合計には含めない、参考値)。
+            row(
+                "Splash先行取得の開始",
+                diagnostics.prefetchStartedMs.map { "起動から\(LaunchDiagnostics.describe($0))" } ?? "なし",
+                identifier: "prefetchStartedValue"
+            )
             row(
                 "/home取得回数(今回の起動内)",
                 diagnostics.homeRequestCount == 0 ? "未実行" : "\(diagnostics.homeRequestCount)回",

@@ -35,6 +35,17 @@ struct LaunchDiagnostics: Codable, Equatable {
     var splashFinishedMs: Int64?
     var runInitSequenceOutcome: MeasurementOutcome = .notMeasured
 
+    // MARK: - H. Splash先行取得(HQ指示 2026-11-05「Splash先行通信・Home Cache起動高速化」)
+
+    /// `HomePrefetchCoordinator.start()`が`/home`・`/entitlements`の先行取得を
+    /// 始めた時点(通常`sessionCheckEndMs`のすぐ後)。先行取得を始めなかった
+    /// 起動(未ログイン・セッション切れ)では`nil`。既存の`spans`(隙間なく
+    /// 隣接する区間の合計)には含めない — この区間は`sessionCheckEndMs`〜
+    /// `splashFinishedMs`(「Splash最小表示時間待機など」区間)と重なる期間を
+    /// 指すための参考値で、`homeCacheShownMs`と同じ位置づけ(重複して
+    /// `sumOfMeasuredSpansMs`に加算してしまうと`unaccountedMs`が狂う)。
+    var prefetchStartedMs: Int64?
+
     // MARK: - F. Splash→ホームの画面遷移
 
     /// メイン画面(`MainTabView`)が最初に画面に現れた時点。SwiftUIの
@@ -292,6 +303,7 @@ extension LaunchDiagnostics {
         lines.append("Supabaseセッション取得: \(Self.describe(diff(sessionCheckStartMs, sessionCheckEndMs))) [状態: \(sessionCheckOutcome.rawValue)]")
         lines.append("/homeリクエスト全体の状態: \(homeRequestOutcome.rawValue)")
         lines.append("前回の情報(キャッシュ)の表示: \(homeCacheShownMs.map { "起動から\(Self.describe($0))" } ?? "なし")(ホーム表示の合計時間には含めない)")
+        lines.append("Splash先行取得(/home・/entitlements)の開始: \(prefetchStartedMs.map { "起動から\(Self.describe($0))" } ?? "なし")(区間の合計には含めない)")
         lines.append("/home HTTPステータスコード: \(homeHTTPStatusCode.map(String.init) ?? "未計測")")
         lines.append("")
         lines.append("[通信の内訳(起動後1回目の要求)]")
@@ -314,7 +326,12 @@ extension LaunchDiagnostics {
 
 extension LaunchDiagnostics {
     /// 通信の内訳を記録するAPI(`Endpoint.path`)。表示もこの順。
-    static let trackedAPIPaths = ["home", "calendar", "speeches"]
+    /// HQ指示(2026-11-05)「Splash先行通信・Home Cache起動高速化」で`entitlements`
+    /// (`PlanStore`が呼ぶ`/entitlements`)を追加 — Home Cacheの表示可否を
+    /// 事実上ブロックするのがこの通信だったため、往復時間を実機で確認できるように
+    /// する(`APIClient.send()`の記録はパスだけで分岐しており、この一覧に追加
+    /// するだけで自動的に対象になる)。
+    static let trackedAPIPaths = ["home", "calendar", "speeches", "entitlements"]
 
     /// 1つの区間の表示名と値(「N/A(理由)」を含む)。
     static func networkRows(_ request: APIRequestDiagnostics) -> [(String, String)] {
