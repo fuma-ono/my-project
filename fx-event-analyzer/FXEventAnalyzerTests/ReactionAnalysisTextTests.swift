@@ -101,4 +101,71 @@ final class ReactionAnalysisTextTests: XCTestCase {
         XCTAssertEqual(summary?.facts.map(\.label), ["初動（1分）", "5分後", "15分後"])
         XCTAssertEqual(summary?.facts.map(\.value), ["-0.6 pips", "-14.8 pips", "-35.4 pips"])
     }
+    // MARK: - レベル2: 過去との比較(HQ指示 2026-11-04「独自の相場分析」)
+
+    private func past(_ id: String, _ m1: Double?, _ m5: Double?, _ m15: Double?, surprise: Double? = nil) -> MovementAnalysisText.PastReaction {
+        var pips: [String: Double] = [:]
+        if let m1 { pips["1m"] = m1 }
+        if let m5 { pips["5m"] = m5 }
+        if let m15 { pips["15m"] = m15 }
+        return MovementAnalysisText.PastReaction(id: id, pips: pips, surprise: surprise)
+    }
+
+    func testPastComparisonCountsSizeDirectionReversalAndSurprise() {
+        let current = [entry("1m", -8.2), entry("5m", -24.5), entry("15m", -40)]
+        let history = [
+            past("a", -5, -10, -20, surprise: -0.1),
+            past("b", 4, 6, -10, surprise: -0.2),
+            past("c", -3, -8, -10, surprise: -0.1),
+            past("d", 2, 5, 10, surprise: 0.1),
+        ]
+        let lines = MovementAnalysisText.pastComparison(reactions: current, selectedTimeframe: "15m", past: history, currentSurprise: -0.1)
+        XCTAssertEqual(lines, [
+            "今回の15分後の値幅(40pips)は、過去4回の平均(12.5pips)と比べて大きい。",
+            "過去4回のうち、15分後に今回と同じく下落したのは3回だった。",
+            "過去4回のうち、初動と15分後の向きが逆になった(反転した)のは1回で、今回は反転しなかった。",
+            "過去に結果が予想を下回った3回のうち、15分後に下落したのは3回だった。",
+            "(過去の回数を数えた結果で、今回の値動きの理由を示すものではない。)",
+        ])
+    }
+
+    func testPastComparisonNeedsAtLeastThreeSamples() {
+        let current = [entry("1m", -8.2), entry("15m", -40)]
+        XCTAssertNil(MovementAnalysisText.pastComparison(
+            reactions: current, selectedTimeframe: "15m", past: [past("a", -5, nil, -20), past("b", 4, nil, -10)], currentSurprise: nil
+        ))
+        // サプライズが同じ向きの過去が3回未満なら、サプライズ別の文は出さない。
+        let lines = MovementAnalysisText.pastComparison(
+            reactions: current, selectedTimeframe: "15m",
+            past: [past("a", -5, nil, -20, surprise: -0.1), past("b", 4, nil, -10, surprise: 0.2), past("c", -3, nil, -10)],
+            currentSurprise: -0.1
+        )
+        XCTAssertFalse(lines?.contains { $0.contains("予想を") } ?? true)
+    }
+
+    func testPastComparisonFollowsTheSelectedTimeframe() {
+        let current = [entry("1m", -2), entry("5m", -6), entry("15m", -9)]
+        let history = [past("a", -1, -2, -3), past("b", -1, -2, -3), past("c", 1, 2, 3)]
+        let five = MovementAnalysisText.pastComparison(reactions: current, selectedTimeframe: "5m", past: history, currentSurprise: nil)
+        XCTAssertEqual(five?.first, "今回の5分後の値幅(6pips)は、過去3回の平均(2pips)と比べて大きい。")
+        // 30分・60分を選んでいれば、過去のデータがある15分で比べる。
+        let sixty = MovementAnalysisText.pastComparison(reactions: current, selectedTimeframe: "60m", past: history, currentSurprise: nil)
+        XCTAssertEqual(sixty?.first, "今回の15分後の値幅(9pips)は、過去3回の平均(3pips)と比べて大きい。")
+    }
+
+    func testReactionAnalysisCarriesTheComparisonAndTheStatementSummary() {
+        let long = String(repeating: "あ", count: 90)
+        let analysis = MovementAnalysisText.reactionAnalysis(
+            reactions: speechReactions, selectedTimeframe: "15m", noun: "発言",
+            past: [past("a", -1, -2, -3), past("b", -1, -2, -3), past("c", 1, 2, 3)], statementSummary: long
+        )
+        XCTAssertNotNil(analysis?.comparison)
+        XCTAssertEqual(analysis?.statementSummary, String(repeating: "あ", count: 80) + "…")
+        XCTAssertEqual(analysis?.reasonUnavailable, true, "a summary is not a basis for the reason")
+
+        let noHistory = MovementAnalysisText.reactionAnalysis(reactions: speechReactions, selectedTimeframe: "15m", noun: "発言", past: nil, statementSummary: "  ")
+        XCTAssertNil(noHistory?.comparison, "no past data → 分析データ不足")
+        XCTAssertNil(noHistory?.statementSummary)
+    }
 }
+

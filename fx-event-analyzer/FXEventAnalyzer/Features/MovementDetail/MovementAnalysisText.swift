@@ -119,9 +119,24 @@ enum MovementAnalysisText {
     /// だけから、決まった型で作る(AIは使わない)。今回の値動きの理由は断定しない。理由の根拠になるデータが無いときは
     /// `reasonUnavailable`を true にする(画面は「値動きの理由: 分析データ不足」)。
     struct ReactionAnalysis: Equatable {
+        /// レベル1(値動きの事実)と、指標なら結果・予想・前回の関係。
         let sentences: [String]
         let reasonUnavailable: Bool
+        /// レベル2: 過去の同じ発表・同じ要人の発言との比較。nilは比べられるデータが足りない(過去が3回未満など)。
+        var comparison: [String]? = nil
+        /// 要人発言の要約(発言の内容を知るため。値動きの原因とは結びつけない)。
+        var statementSummary: String? = nil
     }
+
+    /// 過去の同じ発表(または同じ要人の発言)の値動き。`surprise`は結果 − 予想(指標だけ。無ければnil)。
+    struct PastReaction: Equatable {
+        let id: String
+        let pips: [String: Double]
+        let surprise: Double?
+    }
+
+    /// 過去との比較に使う最小の回数。これより少なければ比較の文を出さない(HQ指示: 過去データが少ない場合は出さない)。
+    static let minimumPastSamples = 3
 
     /// データが足りなければnil(画面は「分析データ不足」)。`selectedTimeframe`は画面で選んでいる時間
     /// (1分・5分・15分)で、その時間の最大の上下の幅の文が切り替わる。
@@ -134,7 +149,9 @@ enum MovementAnalysisText {
         previous: Double? = nil,
         unit: String? = nil,
         valueDecimals: Int? = nil,
-        hasGeneralView: Bool = false
+        hasGeneralView: Bool = false,
+        past: [PastReaction]? = nil,
+        statementSummary: String? = nil
     ) -> ReactionAnalysis? {
         func ready(_ timeframe: String) -> ReactionTimeframeEntry? {
             reactions.first { $0.timeframe == timeframe && $0.analysisStatus == .ready && $0.pips != nil }
@@ -199,7 +216,78 @@ enum MovementAnalysisText {
         }
 
         // 4. 値動きの理由: 指標ごとに人が書いた一般的な見方(「主な要因」)が無ければ、根拠が無いので示さない。
-        return ReactionAnalysis(sentences: sentences, reasonUnavailable: !hasGeneralView)
+        let currentSurprise: Double? = {
+            guard let actual, let forecast else { return nil }
+            return ValueFormat.displayDifference(actual, forecast, decimals: valueDecimals)
+        }()
+        return ReactionAnalysis(
+            sentences: sentences,
+            reasonUnavailable: !hasGeneralView,
+            comparison: past.flatMap {
+                pastComparison(reactions: reactions, selectedTimeframe: selectedTimeframe, past: $0, currentSurprise: currentSurprise)
+            },
+            statementSummary: statementSummary.flatMap { summary in
+                let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return nil }
+                return trimmed.count > 80 ? String(trimmed.prefix(80)) + "…" : trimmed
+            }
+        )
+    }
+
+    /// レベル2: 過去の同じ発表・発言との比較(HQ指示 2026-11-04「独自の相場分析」)。比べる時間は、選んでいる
+    /// 1分・5分・15分(過去のデータがその3つだけのため。30分・60分を選んでいれば15分)。数えた回数だけを書き、
+    /// 「だから今回動いた」とは書かない(相関と因果を分ける)。過去が`minimumPastSamples`回より少なければnil。
+    static func pastComparison(
+        reactions: [ReactionTimeframeEntry],
+        selectedTimeframe: String,
+        past: [PastReaction],
+        currentSurprise: Double?
+    ) -> [String]? {
+        func ready(_ timeframe: String) -> Double? {
+            reactions.first { $0.timeframe == timeframe && $0.analysisStatus == .ready }?.pips ?? nil
+        }
+        let timeframe = ["1m", "5m", "15m"].contains(selectedTimeframe) ? selectedTimeframe : "15m"
+        guard let current = ready(timeframe) else { return nil }
+        let samples = past.compactMap { $0.pips[timeframe] }
+        guard samples.count >= minimumPastSamples else { return nil }
+        let span = "\(label(timeframe))後"
+        var lines: [String] = []
+
+        // 値幅の大きさ: 今回と過去の平均(向きは問わず、値幅の絶対値)。
+        let average = samples.map(abs).reduce(0, +) / Double(samples.count)
+        if average > 0, let size = magnitudeLabel(current: current, average: average) {
+            lines.append("今回の\(span)の値幅(\(pips(abs(current))))は、過去\(samples.count)回の平均(\(pips(average)))と比べて\(size)。")
+        }
+        // 向き: 過去に今回と同じ向きだった回数。
+        if current != 0 {
+            let same = samples.filter { $0 != 0 && ($0 > 0) == (current > 0) }.count
+            lines.append("過去\(samples.count)回のうち、\(span)に今回と同じく\(direction(current))したのは\(same)回だった。")
+        }
+        // 反転の傾向: 初動(1分)と15分後の向きが逆になった回数と、今回。
+        if let first = ready("1m"), let later = ready("15m"), first != 0, later != 0 {
+            let pairs = past.compactMap { reaction -> (Double, Double)? in
+                guard let a = reaction.pips["1m"], let b = reaction.pips["15m"], a != 0, b != 0 else { return nil }
+                return (a, b)
+            }
+            if pairs.count >= minimumPastSamples {
+                let reversed = pairs.filter { ($0.0 > 0) != ($0.1 > 0) }.count
+                let now = (first > 0) != (later > 0) ? "反転した" : "反転しなかった"
+                lines.append("過去\(pairs.count)回のうち、初動と15分後の向きが逆になった(反転した)のは\(reversed)回で、今回は\(now)。")
+            }
+        }
+        // サプライズ別: 今回と同じ向きのサプライズ(予想を上回った・下回った)だった過去の回の値動き。
+        if let surprise = currentSurprise, surprise != 0, current != 0 {
+            let group = past.filter { ($0.surprise ?? 0) != 0 && (($0.surprise ?? 0) > 0) == (surprise > 0) }
+                .compactMap { $0.pips[timeframe] }
+            if group.count >= minimumPastSamples {
+                let same = group.filter { $0 != 0 && ($0 > 0) == (current > 0) }.count
+                let side = surprise > 0 ? "上回った" : "下回った"
+                lines.append("過去に結果が予想を\(side)\(group.count)回のうち、\(span)に\(direction(current))したのは\(same)回だった。")
+            }
+        }
+        guard !lines.isEmpty else { return nil }
+        lines.append("(過去の回数を数えた結果で、今回の値動きの理由を示すものではない。)")
+        return lines
     }
 
     private static func difference(_ value: Double, unit: String?, decimals: Int?) -> String {

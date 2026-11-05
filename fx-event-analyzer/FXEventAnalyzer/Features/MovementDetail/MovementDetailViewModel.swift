@@ -48,6 +48,11 @@ final class MovementDetailViewModel: ObservableObject {
     @Published private(set) var comparisonStats: ComparisonStats?
     /// 平均の算出に使われた実際の件数(`analyzable_events`)。「過去◯回」の◯に使う。
     @Published private(set) var comparisonAnalyzableEvents: Int?
+    /// 「相場反応の分析」の過去との比較に使う、過去の同じ発表・同じ要人の発言の値動き(今回の分は除く。
+    /// HQ指示 2026-11-04)。取れなければnil(比較は「分析データ不足」)。
+    @Published private(set) var pastReactions: [MovementAnalysisText.PastReaction]?
+    /// 要人発言の要約(`GET /speeches/{id}`の`summary`)。指標の発表ではnil。
+    @Published private(set) var statementSummary: String?
 
     /// 発表直前の価格(チャートの基準線)。
     var preReleasePrice: Double? {
@@ -94,6 +99,8 @@ final class MovementDetailViewModel: ObservableObject {
                 await fetchEventSnapshot()
                 await fetchIndicator()
                 await fetchComparisonStats()
+            } else {
+                await fetchSpeechContext()
             }
             await fetchReactions()
             if case .loaded = state {
@@ -166,6 +173,30 @@ final class MovementDetailViewModel: ObservableObject {
         let response: ComparisonResponse? = try? await apiClient.send(endpoint)
         comparisonStats = response?.stats
         comparisonAnalyzableEvents = response?.analyzableEvents
+        pastReactions = response.map { response in
+            response.events.filter { $0.id != eventId && !$0.isLocked }.map { event in
+                MovementAnalysisText.PastReaction(
+                    id: event.id,
+                    pips: (event.pipsByTimeframe ?? [:]).compactMapValues { $0 },
+                    surprise: event.surprise
+                )
+            }
+        }
+    }
+
+    /// 要人発言: 発言の要約と、同じ要人の過去の発言の値動き(HQ指示 2026-11-04)。どちらも取れなくても画面は出す。
+    private func fetchSpeechContext() async {
+        let detail: SpeechDetailResponse? = try? await apiClient.send(Endpoint(path: "speeches/\(eventId)"))
+        statementSummary = detail?.summary
+        guard let speakerId = detail?.speaker.speakerId else { return }
+        let comparison: SpeakerComparisonResponse? = try? await apiClient.send(
+            Endpoint(path: "speakers/\(speakerId)/comparison", queryItems: [URLQueryItem(name: "fx_pair_id", value: fxPairId)])
+        )
+        pastReactions = comparison.map { response in
+            response.events.filter { $0.speechId != eventId }.map { event in
+                MovementAnalysisText.PastReaction(id: event.speechId, pips: event.pipsByTimeframe.compactMapValues { $0 }, surprise: nil)
+            }
+        }
     }
 
     private func loadChart() {

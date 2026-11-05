@@ -391,7 +391,8 @@ struct MovementDetailView: View {
         let analysis = MovementAnalysisText.reactionAnalysis(
             reactions: reactions, selectedTimeframe: viewModel.selectedTimeframe, noun: noun,
             actual: result?.actual, forecast: result?.forecast, previous: result?.previous, unit: result?.unit,
-            valueDecimals: viewModel.valueDecimals, hasGeneralView: hasGeneralView
+            valueDecimals: viewModel.valueDecimals, hasGeneralView: hasGeneralView,
+            past: viewModel.pastReactions, statementSummary: viewModel.statementSummary
         )
         return VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 2) {
@@ -404,6 +405,21 @@ struct MovementDetailView: View {
                 .foregroundStyle(.white.opacity(0.85))
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("movementReactionAnalysis")
+            // レベル2(HQ指示 2026-11-04): 過去の同じ発表・発言との比較。同じ枠の中に、事実の文と分けて出す。
+            if analysis != nil {
+                NotoText.text(
+                    analysis?.comparison.map { "過去との比較: " + $0.joined() } ?? "過去との比較: 分析データ不足",
+                    size: 6.5
+                )
+                .foregroundStyle(.white.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("movementReactionComparison")
+            }
+            if let summary = analysis?.statementSummary {
+                NotoText.text("発言の要約: \(summary)(値動きとの因果関係は判断していない)", size: 6)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if analysis == nil || analysis?.reasonUnavailable == true {
                 NotoText.text("値動きの理由: 分析データ不足", size: 6)
                     .foregroundStyle(SettingsCardStyle.subtitleColor)
