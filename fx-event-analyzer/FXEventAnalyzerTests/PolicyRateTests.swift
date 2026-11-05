@@ -11,7 +11,7 @@ final class PolicyRateTests: XCTestCase {
         return decoder
     }
 
-    private let event = #"{"id":"e1","indicator_id":"i1","indicator_name":"FOMC政策金利","country_code":"US","currency_code":"USD","release_datetime":"2026-09-16T18:00:00Z","release_datetime_precision":"EXACT","importance":"HIGH","status":"SCHEDULED","data_status":"PENDING","revision_status":null"#
+    private let event = #"{"id":"e1","indicator_id":"i1","indicator_name":"FOMC政策金利","country_code":"US","currency_code":"USD","release_datetime":"2026-09-16T18:00:00Z","release_datetime_precision":"EXACT","importance":"HIGH","status":"SCHEDULED","data_status":"DATA_PENDING","revision_status":null"#
 
     func testDecodesLowerAndUpperApart() throws {
         let json = event + #","policy_rate":{"target_range_lower":3.75,"target_range_upper":4,"announced_at":"2026-09-16T18:00:00+00:00","effective_date":"2026-09-17","source":"NY Fed","source_url":"https://markets.newyorkfed.org","fetched_at":"2026-11-05T15:00:00+00:00"}}"#
