@@ -89,15 +89,29 @@ insert into fx_pairs (id, symbol, base_currency, quote_currency, pip_size, price
 -- Indicator <-> FX pair relevance
 -- ---------------------------------------------------------------------
 
-insert into indicator_fx_pairs (indicator_id, fx_pair_id, priority) values
-  ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 1), -- US CPI x USDJPY
-  ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002', 2), -- US CPI x EURUSD
-  ('10000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000001', 1), -- US NFP x USDJPY
-  ('10000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002', 2), -- US NFP x EURUSD
-  ('10000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-000000000001', 1), -- FOMC x USDJPY
-  ('10000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-000000000001', 1), -- Japan CPI x USDJPY
-  ('10000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-000000000003', 2), -- Japan CPI x EURJPY
-  ('10000000-0000-0000-0000-000000000005', '20000000-0000-0000-0000-000000000001', 1); -- BOJ x USDJPY
+-- HQ承認(2026-11-04、指標マスター再現性確認・FOMC表示修正、seed.sql外部
+-- キー不整合の追加修正): 固定UUID('10000000-...')での直接参照をやめ、
+-- 下(102行目以降、US_CORE_CPI等)と同じcode/symbol基準のINSERT ... SELECT
+-- に変更した。migration 20261104000001はeconomic_indicators.idを
+-- 指定せずgen_random_uuid()に任せるため、この5指標のidはmigration経由
+-- (新規環境)かseed.sql経由(id列を指定するinsert、既存環境)かで異なり
+-- うる。固定UUIDでの直接参照だと、migration側が先に行を作った場合に
+-- 外部キー違反になっていた(indicator_fx_pairs_indicator_id_fkey、
+-- SQLSTATE 23503)。code/symbol基準なら実際に登録されているidを都度
+-- 解決するため、どちらの経路でも正しく動く(migrationの2つ目のinsert
+-- と全く同じパターン)。FXペア・優先度・対応関係の値は変更していない。
+insert into indicator_fx_pairs (indicator_id, fx_pair_id, priority)
+select i.id, p.id, v.priority
+from (values
+  ('US_CPI', 'USDJPY', 1), ('US_CPI', 'EURUSD', 2),
+  ('US_NFP', 'USDJPY', 1), ('US_NFP', 'EURUSD', 2),
+  ('US_FOMC', 'USDJPY', 1),
+  ('JP_CPI', 'USDJPY', 1), ('JP_CPI', 'EURJPY', 2),
+  ('BOJ_RATE', 'USDJPY', 1)
+) as v(code, symbol, priority)
+join economic_indicators i on i.code = v.code
+join fx_pairs p on p.symbol = v.symbol
+on conflict (indicator_id, fx_pair_id) do nothing;
 
 -- 米国コアCPI・失業率・平均時給 (migration 20261026000001 が指標の行を入れる)。migration は seed の
 -- 前に流れ、その時点では fx_pairs が空で関連の通貨ペアを入れられないため、ローカルではここで入れる
