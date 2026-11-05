@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FEATURE_CODES } from '../../src/authorization/entitlements.js';
-import { NY_FED_ATTRIBUTION } from '../../src/domain/attribution.js';
+import { NY_FED_SOURCE, nyFedAttribution } from '../../src/domain/attribution.js';
 import { parseNyFedTargetRanges } from '../../src/ingestion/adapters/nyFedRates.js';
 import { ingestFomcPolicyRates } from '../../src/ingestion/pipelines/fomcPolicyRates.js';
 import { FOMC_SCHEDULE_PROVIDER } from '../../src/ingestion/pipelines/fomcSchedule.js';
@@ -57,7 +57,7 @@ describe.skipIf(!integration)('FOMC policy decisions: table, ingestion and GET /
     target_range_upper: 1.75,
     announced_at: '2019-07-31T18:00:00Z',
     effective_date: '2019-08-01',
-    source: NY_FED_ATTRIBUTION.source,
+    source: NY_FED_SOURCE,
     source_url:
       'https://markets.newyorkfed.org/api/rates/unsecured/effr/search.json?startDate=2019-08-01&endDate=2019-08-02',
     fetched_at: '2019-08-02T15:00:00Z',
@@ -167,10 +167,10 @@ describe.skipIf(!integration)('FOMC policy decisions: table, ingestion and GET /
       target_range_lower: 1.5,
       target_range_upper: 1.75,
       effective_date: '2019-12-12',
-      source: NY_FED_ATTRIBUTION.source,
+      source: NY_FED_SOURCE,
     });
     expect(Date.parse(event.policy_rate.announced_at)).toBe(Date.parse('2019-12-11T19:00:00Z'));
-    expect(event.attribution).toEqual(NY_FED_ATTRIBUTION);
+    expect(event.attribution).toEqual(nyFedAttribution());
     expect(event.data_status).toBe('DATA_PENDING'); // 会合の行は変えていない(DB の PENDING は API で DATA_PENDING)
 
     const noDecisionId = randomUUID();

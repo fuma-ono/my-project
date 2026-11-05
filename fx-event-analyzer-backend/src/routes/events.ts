@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { attributionForIndicator, NY_FED_ATTRIBUTION } from '../domain/attribution.js';
+import { attributionForIndicator, nyFedAttribution } from '../domain/attribution.js';
 import { valueDecimalsForIndicator } from '../domain/valueDecimals.js';
 import { resolveReactionState } from '../domain/reactionState.js';
 import { chartWindow } from '../domain/chartWindow.js';
@@ -213,7 +213,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
         data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
         revision_status: resolveRevisionStatus(revisionCount),
         // v1.43: 出典と告知(Eurostat の指標だけ。domain/attribution.ts)。v1.47: 政策決定があれば NY連銀。
-        attribution: policyRate ? NY_FED_ATTRIBUTION : attributionForIndicator(event.indicator_code),
+        attribution: policyRate ? nyFedAttribution() : attributionForIndicator(event.indicator_code),
         // v1.46: 値を表示する小数の桁数(BLS の%の指標は 1、それ以外は null。domain/valueDecimals.ts)
         value_decimals: valueDecimalsForIndicator(event.indicator_code),
         // v1.47: FOMC の誘導目標レンジ(下限・上限は別々の値)。まだ記録が無い会合・ほかの指標は null。

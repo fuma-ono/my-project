@@ -156,7 +156,9 @@ enum AppInfo {
     /// 文言の根拠は docs/projects/fx-event-analyzer/data-sources.md 2章・11章。BLS の一文は利用条件の指定どおり英語のまま載せる。
     /// FRED は保存が規約で認められないため使っていない(11章)。使う許可を得たら FRED の指定の一文を足す。
     /// 取得元を契約・変更したら(経済カレンダー・為替)ここも直す。
-    static let dataSourcesDocument = LegalDocument(
+    /// HQ指示(2026-11-05「NY連銀の出典表示の軽微な修正」): NY連銀の著作権の表示の年は固定にせず、開いたときの年
+    /// (UTC。Backend の`nyFedAttribution`と同じ決め方)にするため、毎回作る。
+    static var dataSourcesDocument: LegalDocument { LegalDocument(
         id: "data-sources",
         screenTitle: "データの出典",
         title: "データの出典",
@@ -174,13 +176,35 @@ enum AppInfo {
                 "出典：Eurostat（欧州連合統計局）。ユーロ圏の消費者物価指数・失業率に使用しています。",
                 "Eurostat の公表データをもとに作成しています。Eurostat は本アプリでの利用について責任を負いません。",
             ]),
+            // HQ指示(2026-11-05「NY連銀の出典表示の軽微な修正」): FOMC政策金利(誘導目標レンジ、api-design v1.47)。
+            // 文言は Backend の domain/attribution.ts の nyFedAttribution と同じ(iOS側で独自の文言を作らない)。
+            .init(heading: "FOMC政策金利（誘導目標レンジ）", items: nyFedDataSourceItems(year: currentUTCYear)),
             .init(heading: "値動き・pipsについて", items: [
                 "値動き（pips・変化率）は、取得した為替レートをもとに本アプリが計算したものです。取得元が提供した値ではありません。",
                 "確認できないデータは表示せず、推測で補うこともしません。",
             ]),
         ],
         footer: []
-    )
+    ) }
+
+    /// 今の年(UTC)。
+    static var currentUTCYear: Int {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar.component(.year, from: Date())
+    }
+
+    /// 「データの出典」の NY連銀の項目。NY連銀の規約(newyorkfed.org/privacy/termsofuse)の一般の出典・参照金利の告知・
+    /// 免責文の英文は、[] を埋めてそのまま載せる。
+    static func nyFedDataSourceItems(year: Int) -> [String] {
+        [
+            "出典：ニューヨーク連邦準備銀行（Federal Reserve Bank of New York）。誘導目標レンジは FOMC（米連邦公開市場委員会）が決定するもので、ニューヨーク連邦準備銀行が実効フェデラルファンド金利（EFFR）と併せて公表しているデータから表示しています。EFFR（実際の取引の金利）の値は表示していません。",
+            "本アプリはニューヨーク連邦準備銀行と関係がなく、ニューヨーク連邦準備銀行は本アプリやそのサービスを承認・推奨していません。",
+            "© \(year) Federal Reserve Bank of New York. Content from the New York Fed subject to the Terms of Use at newyorkfed.org.",
+            "The federal funds target range data published with the Effective Federal Funds Rate (EFFR) is subject to the Terms of Use posted at newyorkfed.org. The New York Fed is not responsible for publication of the federal funds target range data by FX Event Analyzer, does not sanction or endorse any particular republication, and has no liability for your use.",
+            "FX Event Analyzer is not affiliated with the New York Fed. The New York Fed does not sanction, endorse, or recommend any products or services offered by FX Event Analyzer.",
+        ]
+    }
 
     static func licenseText(_ file: String) -> String {
         guard let url = Bundle.main.url(forResource: file, withExtension: "txt"),

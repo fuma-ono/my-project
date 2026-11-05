@@ -3,7 +3,7 @@
  * NY連銀の応答は偽物(下の record())。2026-09 の値は、2026-11-05 に実際の API で確かめた値と同じ形。
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { NY_FED_ATTRIBUTION } from '../../src/domain/attribution.js';
+import { NY_FED_SOURCE } from '../../src/domain/attribution.js';
 import { nyFedEffrSearchUrl, parseNyFedTargetRanges } from '../../src/ingestion/adapters/nyFedRates.js';
 import { ingestFomcPolicyRates } from '../../src/ingestion/pipelines/fomcPolicyRates.js';
 import { FOMC_SCHEDULE_PROVIDER } from '../../src/ingestion/pipelines/fomcSchedule.js';
@@ -130,7 +130,7 @@ describe('ingestFomcPolicyRates', () => {
         target_range_upper: 4.0,
         announced_at: '2026-09-16T18:00:00.000Z',
         effective_date: '2026-09-17',
-        source: NY_FED_ATTRIBUTION.source,
+        source: NY_FED_SOURCE,
         source_url: nyFedEffrSearchUrl('2026-09-17', '2026-11-05'),
         fetched_at: '2026-11-05T15:00:00.000Z',
       },

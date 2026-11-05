@@ -2768,7 +2768,7 @@ let mockHomeDelayMs = 0;
  * `/__mock/policy-rate?value=1` の間だけ、GET /events/{id} を「政策決定が記録された FOMC の会合」の形にする
  * (event.policy_rate と NY連銀の attribution を付け、結果の値は無し)。既定(false)は今までどおり。撮影はしない
  * (UIテストが表示を確かめるだけ。スクリーンショットの枚数は変えない)。告知の文言は src/domain/attribution.ts の
- * NY_FED_ATTRIBUTION と同じ。
+ * nyFedAttribution と同じ(著作権の表示の年は実行時の年、UTC)。
  */
 let mockPolicyRate = false;
 const MOCK_NY_FED_ATTRIBUTION = {
@@ -2776,7 +2776,7 @@ const MOCK_NY_FED_ATTRIBUTION = {
   source_url: 'https://www.newyorkfed.org/markets/reference-rates/effr',
   notice:
     '誘導目標レンジは FOMC（米連邦公開市場委員会）が決定するもので、ここではニューヨーク連邦準備銀行が実効フェデラルファンド金利（EFFR）と併せて公表しているデータから表示しています。EFFR（実際の取引の金利）の値は表示していません。本アプリはニューヨーク連邦準備銀行と関係がなく、ニューヨーク連邦準備銀行は本アプリやそのサービスを承認・推奨していません。' +
-    '© 2026 Federal Reserve Bank of New York. Content from the New York Fed subject to the Terms of Use at newyorkfed.org. ' +
+    `© ${new Date().getUTCFullYear()} Federal Reserve Bank of New York. Content from the New York Fed subject to the Terms of Use at newyorkfed.org. ` +
     'The federal funds target range data published with the Effective Federal Funds Rate (EFFR) is subject to the Terms of Use posted at newyorkfed.org. The New York Fed is not responsible for publication of the federal funds target range data by FX Event Analyzer, does not sanction or endorse any particular republication, and has no liability for your use. ' +
     'FX Event Analyzer is not affiliated with the New York Fed. The New York Fed does not sanction, endorse, or recommend any products or services offered by FX Event Analyzer.',
 };

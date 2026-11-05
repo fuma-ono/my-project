@@ -14,7 +14,7 @@
  *   誘導目標ではないので読まない。
  * - 公開: その日の値は翌営業日の 9:00 a.m.(ニューヨーク)ごろ。キー不要。
  * - 規約(newyorkfed.org/privacy/termsofuse): 業務での利用・自動取得・再配布は可。出典と告知・免責文を付ける
- *   (domain/attribution.ts の NY_FED_ATTRIBUTION)。
+ *   (domain/attribution.ts の nyFedAttribution)。
  *
  * 値が読めない記録(数値でない・欠けている・下限 ≥ 上限・負・25% 超・日付が不正)は `skipped` に入れ、値を補わない。
  */

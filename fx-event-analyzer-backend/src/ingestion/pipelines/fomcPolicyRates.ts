@@ -22,7 +22,7 @@
  * (OUTSIDE_LOOKBACK)。DB に会合の予定の行が無い会合は対象外。記録した値は NY連銀の後日の改定を反映しない。
  * 翌営業日の記録が API に無い(読めない記録でもない)ときは、上の条件の範囲でその次の記録を使う。
  */
-import { NY_FED_ATTRIBUTION } from '../../domain/attribution.js';
+import { NY_FED_SOURCE } from '../../domain/attribution.js';
 import { nyFedEffrSearchUrl, type NyFedTargetRangeResult } from '../adapters/nyFedRates.js';
 import type { JobCounters } from '../runner.js';
 import type { IngestionStore, ProviderEventRow } from '../store.js';
@@ -146,7 +146,7 @@ export async function ingestFomcPolicyRates(
         target_range_upper: first.upper,
         announced_at: row.release_datetime,
         effective_date: first.effectiveDate,
-        source: NY_FED_ATTRIBUTION.source,
+        source: NY_FED_SOURCE,
         source_url: sourceUrl,
         fetched_at: fetchedAt,
       });
