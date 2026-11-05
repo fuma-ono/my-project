@@ -2,7 +2,7 @@
 
 ## 変更履歴
 
-- **v1.8**(2026-11-05): 米国小売売上高(速報、`US_RETAIL_SALES`)の発表予定(HQ承認 2026-11-05「US_RETAIL_SALES 公式発表日程の自動取り込み実装」案A)。Census Bureauの公式ページ(`https://www.census.gov/retail/release_schedule.html`)を人が確認して書いた表から、`npm run ingest:retail-sales-schedule`が`economic_events`に入れる(17章)。FOMCの会合日程(15章)と同じ、ライブ取得を行わない表方式。指標マスタは migration `20261105000001_us_retail_sales_indicator.sql`。値(小売売上高の結果)は入れない — 照合元(Census APIの利用条件・鍵)は未確認のまま(13章)
+- **v1.8**(2026-11-05): 米国小売売上高(速報、`US_RETAIL_SALES`)の発表予定(HQ承認 2026-11-05「US_RETAIL_SALES 公式発表日程の自動取り込み実装」案A)。Census Bureauの公式ページ(`https://www.census.gov/retail/release_schedule.html`)を人が確認して書いた表から、`npm run ingest:retail-sales-schedule`が`economic_events`に入れる(17章)。FOMCの会合日程(15章)と同じ、ライブ取得を行わない表方式。指標マスタは migration `20261105000002_us_retail_sales_indicator.sql`。値(小売売上高の結果)は入れない — 照合元(Census APIの利用条件・鍵)は未確認のまま(13章)
 - **v1.7**(2026-11-02): US_CPI の前月比(副指標 `secondary_*`)を、季節調整なしの`CUUR0000SA0`から**季節調整済みの`CUSR0000SA0`**(CPI-U 全品目・米国都市平均・季節調整済み、1982-84=100)で計算するように直した(HQ指示 2026-11-02)。BLS の発表の前月比は季節調整済みの指数で計算されている。BLS v1 の今の値で 2025-12〜2026-09 の10か月を計算し、発表の前月比と10件とも一致した(季節調整なしでは1件)。前年比(本体)は`CUUR0000SA0`のまま。BLS の取得は1系列増えて12系列(1回の HTTP に収まる)。発表済みの RELEASE の行は変えない(今の US_CPI の行に前月比は入っていない)
 - **v1.6**(2026-10-26): 米国コアCPI・失業率・平均時給を BLS の独立経路(14章)に追加(HQ指示 2026-10-26)。指標ごとの系列・季節調整・単位・前月比/前年比の計算・発表日は16章。指標マスタは migration `20261026000001_us_bls_indicators.sql`。US_CPI・US_NFP の系列・予定・値は変えていない
 - **v1.5**(2026-10-26): BLS の独立経路(14章)の安全対策(HQ指示 2026-10-26「BLSの安全対策」)。2026-10-24 に統合された未来の予定行の作成をベースに、表のエントリの取りやめ(`cancelled`・`cancelledNote`。未発表の行を`CANCELLED`にし、`RELEASED`の行は変えない)、予定表から消えた未発表の行の記録、書き込む前の内訳(`details.plan`)、`--dry-run`を追加した。取りやめ・消えた行の点検は発表済みの値の取り込みの後に別の try/catch で行い、失敗しても過去の発表の取り込みは止まらない。DEV の手順は dev-environment.md 11章
@@ -743,7 +743,7 @@ Census Bureauは会合日程のような「暫定」の概念を公表してい�
 - 発表時刻を過ぎた回は作らない。既にある過去の行は変えない。`RELEASED`の行も変えない(過去日程を新規登録しないことは単体テスト・結合テストの両方で確認)
 - 表から消えた回(DBにあり、未来・`SCHEDULED`)は**ログに出すだけ**で、消さない
 - `ingestion_logs`(provider `census_retail_schedule`、job `ingest:retail-sales-schedule`、data_type `ECONOMIC_EVENT`)の`details`に`inserted`・`updated`・`unchanged`・`past`・`removed`を残す
-- 外部へのアクセスは無い(表を読むだけ)。**ライブのHTML取得・解析は行わない**(案B見送りの理由は17節冒頭)。**定期実行には登録していない**(GitHub Actionsのワークフローも変えていない)。表を更新したときに手動で動かす。前提: migration `20261105000001_us_retail_sales_indicator.sql`(economic_indicatorsにUS_RETAIL_SALESの行を追加)
+- 外部へのアクセスは無い(表を読むだけ)。**ライブのHTML取得・解析は行わない**(案B見送りの理由は17節冒頭)。**定期実行には登録していない**(GitHub Actionsのワークフローも変えていない)。表を更新したときに手動で動かす。前提: migration `20261105000002_us_retail_sales_indicator.sql`(economic_indicatorsにUS_RETAIL_SALESの行を追加)
 
 ### 17.5 表の更新手順(人が行う)
 

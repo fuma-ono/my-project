@@ -13,7 +13,7 @@ const integration = loadIntegrationEnv();
 
 /**
  * US_RETAIL_SALES schedule ingestion against real Postgres (HQ承認 2026-11-05「US_RETAIL_SALES
- * 公式発表日程の自動取り込み実装」案A)。migration 20261105000001 で入る本物のUS_RETAIL_SALES行
+ * 公式発表日程の自動取り込み実装」案A)。migration 20261105000002 で入る本物のUS_RETAIL_SALES行
  * ではなく、このテスト専用のLOW重要度の指標を使う(fomc-schedule.test.tsと同じ理由: トリガーが
  * 書くevent_schedule_changesの行を他のテストのユーザーに触れさせないため)。afterAllで削除する。
  */
