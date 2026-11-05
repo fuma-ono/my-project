@@ -1,7 +1,8 @@
-# FX Event Analyzer: データ取得元と正確さの仕組み v1.7
+# FX Event Analyzer: データ取得元と正確さの仕組み v1.8
 
 ## 変更履歴
 
+- **v1.8**(2026-11-05): 米国小売売上高(速報、`US_RETAIL_SALES`)の発表予定(HQ承認 2026-11-05「US_RETAIL_SALES 公式発表日程の自動取り込み実装」案A)。Census Bureauの公式ページ(`https://www.census.gov/retail/release_schedule.html`)を人が確認して書いた表から、`npm run ingest:retail-sales-schedule`が`economic_events`に入れる(17章)。FOMCの会合日程(15章)と同じ、ライブ取得を行わない表方式。指標マスタは migration `20261105000001_us_retail_sales_indicator.sql`。値(小売売上高の結果)は入れない — 照合元(Census APIの利用条件・鍵)は未確認のまま(13章)
 - **v1.7**(2026-11-02): US_CPI の前月比(副指標 `secondary_*`)を、季節調整なしの`CUUR0000SA0`から**季節調整済みの`CUSR0000SA0`**(CPI-U 全品目・米国都市平均・季節調整済み、1982-84=100)で計算するように直した(HQ指示 2026-11-02)。BLS の発表の前月比は季節調整済みの指数で計算されている。BLS v1 の今の値で 2025-12〜2026-09 の10か月を計算し、発表の前月比と10件とも一致した(季節調整なしでは1件)。前年比(本体)は`CUUR0000SA0`のまま。BLS の取得は1系列増えて12系列(1回の HTTP に収まる)。発表済みの RELEASE の行は変えない(今の US_CPI の行に前月比は入っていない)
 - **v1.6**(2026-10-26): 米国コアCPI・失業率・平均時給を BLS の独立経路(14章)に追加(HQ指示 2026-10-26)。指標ごとの系列・季節調整・単位・前月比/前年比の計算・発表日は16章。指標マスタは migration `20261026000001_us_bls_indicators.sql`。US_CPI・US_NFP の系列・予定・値は変えていない
 - **v1.5**(2026-10-26): BLS の独立経路(14章)の安全対策(HQ指示 2026-10-26「BLSの安全対策」)。2026-10-24 に統合された未来の予定行の作成をベースに、表のエントリの取りやめ(`cancelled`・`cancelledNote`。未発表の行を`CANCELLED`にし、`RELEASED`の行は変えない)、予定表から消えた未発表の行の記録、書き込む前の内訳(`details.plan`)、`--dry-run`を追加した。取りやめ・消えた行の点検は発表済みの値の取り込みの後に別の try/catch で行い、失敗しても過去の発表の取り込みは止まらない。DEV の手順は dev-environment.md 11章
@@ -698,3 +699,62 @@ bls.gov/opub/copyright-information.htm 等で確認(2026-10-17): BLSのデータ
 - **要確認**: 平均時給の前月比・前年比は、BLS が公表する**セント単位に丸めた水準**から計算する。BLS の発表文の%が丸める前の値から計算されている場合、月によって 0.1 違う可能性がある。実データで過去の発表文と比べて確かめる(DEV の取り込み後)
 - **要確認**: 予想値(forecast)は無い(BLS は予想を出さない)。サプライズ・「予想を上回ると」の表示は、予想値の取得元が決まるまで出ない(US_CPI・US_NFP と同じ)
 - **参考(既存の指摘、v1.7 で対応済み)**: US_CPI の前月比(副指標)は季節調整なしの`CUUR0000SA0`で計算していたが、BLS の発表の前月比は季節調整済み(`CUSR0000SA0`)。v1.7(2026-11-02)で`CUSR0000SA0`に直した。発表済みの行は変えない
+
+## 17. 米国小売売上高(速報)の発表日程(2026-11-05、HQ承認「US_RETAIL_SALES 公式発表日程の自動取り込み実装」)
+
+指標`US_RETAIL_SALES`(米国小売売上高・速報、`mappings/indicators.ts`に定義済み。13章のとおり、値の照合元が未確認のため`requireOfficialMatch: true`で公開されないまま)の発表**予定**を、Census Bureauの公式ページを人が書き写した表から`economic_events`に入れる。値(小売売上高の結果)は入れない。FOMCの会合日程(15章)と全く同じ、ライブ取得を行わない「人が確認した表」方式(**案A**。案B「ライブHTML取得+解析」は、この作業環境からの到達性が不安定だったこと・実際のHTML構造を検証できなかったことから見送った)。
+
+### 17.1 取得元(ログイン・キー不要、census.gov)
+
+| 取得元 | URL | 取得日時 | 読み取った内容 |
+|---|---|---|---|
+| 発表日程のページ | https://www.census.gov/retail/release_schedule.html | 2026-11-05(2回取得・内容が一致することを確認) | 「Advance Monthly Retail Trade Report」の表。発表時刻は毎回8:30 a.m. Eastern。2026年9月分〜2027年12月分を掲載。2027年12月分は "To be announced at a later date" |
+
+再確認(2026-11-05、2回目のGET)では、1回目と全ての日付・発表時刻・"To be announced"の注記が一致した。robots.txt(https://www.census.gov/robots.txt)にこのページへの`Disallow`は無い。利用条件(https://www.census.gov/data/developers/terms-of-service.html)は商用利用を明示的に禁止していない(Census Bureauの推奨であるかのような表示をしないこと等が条件)。
+
+**構造化フィード(JSON/iCalなど)は確認できなかった**(FRBの`calendar.json`やBLSのキーなしAPIに相当するものが無い)。Census Bureauの経済指標カレンダー(`economic-indicators/calendar-listview.html`)もHTML表のみで、配信リンクは見つからなかった。
+
+### 17.2 表(コードレビュー対象の設定ファイル)
+
+`fx-event-analyzer-backend/src/ingestion/mappings/retailSalesSchedule.ts`。1行 = 1回の発表で、次を持つ。
+
+- `referencePeriod`: 対象月(`'YYYY-MM'`。小売売上高の内容が示す月)
+- `releaseDate`: 公式ページに載っている発表日(`'YYYY-MM-DD'`、America/New_Yorkの日付)。**`referencePeriod`とは別のフィールド**として持つ(発表日と対象月を混同しないため)
+- `sources`・`checkedAt`(`'2026-11-05'`)
+
+表に載せる条件(両方を満たすものだけ):
+
+1. 公式ページに実際に発表日が記載されている("To be announced..." は載せない)
+2. 作成時点(2026-11-05)より後に発表される回だけ(既に過去の発表は新規に作らない)
+
+2026年9月分(発表日 2026-10-15、2026-11-05より前)は条件2に当たるため表から外した。表の最初の行は2026年10月分(発表日 2026-11-17)から、最後の行は2027年11月分(発表日 2027-12-15)まで。2027年12月分は条件1("To be announced")のため載せていない。全14行の内容はmappings/retailSalesSchedule.tsのファイル冒頭コメントに表で記録済み(本章17.1の取得元と1行ずつ対応)。
+
+Census Bureauは会合日程のような「暫定」の概念を公表していないため、FOMC表の`provisional`に相当するフィールドは持たない。
+
+### 17.3 時刻の変換
+
+`releaseDate`(America/New_Yorkの壁時計、08:30固定)を`src/ingestion/time.ts`の`zonedWallTimeToUtc`でUTCに直して`release_datetime`に入れる(夏時間を考慮。固定の時差は使わない)。標準時(EST, UTC-5)は13:30Z、夏時間(EDT, UTC-4)は12:30Zになる(単体テストで全14行を確認)。`release_datetime_precision`は`EXACT`。
+
+### 17.4 取り込み(`npm run ingest:retail-sales-schedule`、`src/jobs/ingestRetailSalesSchedule.ts` → `src/ingestion/pipelines/retailSalesSchedule.ts`)
+
+- 1回の発表につき1行: 指標`US_RETAIL_SALES`、provider `census_retail_schedule`、provider_event_id `census_retail_schedule:<referencePeriod>`、`status = SCHEDULED`、`data_status = PENDING`、重要度は指標の値。`RELEASED`の行・値(event_snapshots)は作らない
+- 何度動かしても同じ(同じ表なら何も変わらない。重複登録の防止は既存の`findEventByProviderId`による更新と同じ仕組み)
+- 表の日付が変わったら同じ行の`release_datetime`を更新する → DBのトリガーが`event_schedule_changes`に`RESCHEDULED`を記録する(15.5節と同じ仕組み)
+- 発表時刻を過ぎた回は作らない。既にある過去の行は変えない。`RELEASED`の行も変えない(過去日程を新規登録しないことは単体テスト・結合テストの両方で確認)
+- 表から消えた回(DBにあり、未来・`SCHEDULED`)は**ログに出すだけ**で、消さない
+- `ingestion_logs`(provider `census_retail_schedule`、job `ingest:retail-sales-schedule`、data_type `ECONOMIC_EVENT`)の`details`に`inserted`・`updated`・`unchanged`・`past`・`removed`を残す
+- 外部へのアクセスは無い(表を読むだけ)。**ライブのHTML取得・解析は行わない**(案B見送りの理由は17節冒頭)。**定期実行には登録していない**(GitHub Actionsのワークフローも変えていない)。表を更新したときに手動で動かす。前提: migration `20261105000001_us_retail_sales_indicator.sql`(economic_indicatorsにUS_RETAIL_SALESの行を追加)
+
+### 17.5 表の更新手順(人が行う)
+
+1. 17.1節のページを開き、「Advance Monthly Retail Trade Report」の表の発表日を確認する
+2. 新しく発表日が載った回(それまで"To be announced"だった回、または表に無かった先の月)を1行追記する
+3. 発表日が変わった回は同じ行の`releaseDate`を直す(同じ行が更新され、`RESCHEDULED`が記録される)
+4. `checkedAt`を確認した日に直し、`npm test`を通してからレビューに出す
+5. マージ後に`npm run ingest:retail-sales-schedule`を動かす
+
+### 17.6 既知の制約(2026-11-05)
+
+- Census Bureauは発表日程を事前に変更することがある(例: 2026年3月分の発表が2026-04-16予定から2026-04-21に変更された例を確認)。`blsSchedule.ts`と同じ制約(14.6節)で、表が古いままだと実際の変更に追随しない。対策は上の17.5節の更新手順のみ(自動検知の仕組みは無い)
+- 値(小売売上高の結果)の取り込みは対象外。Census Bureauの実際の値のAPI(`api.census.gov/data/timeseries/eits/marts`)はBLSと異なりAPIキーが必須(無料登録制)で、本作業では未確認・未使用。13章の「代わりが必要」は本章の対応では解消していない(発表予定の日程だけが分かるようになった)
+- 本作業を行った環境からcensus.govへの直接アクセスは不安定だった(複数回HTTP 500)。本番のCI実行環境での到達性は未確認だが、表方式(案A)は外部アクセスが無いため、この制約の影響を受けない

@@ -109,7 +109,9 @@ from (values
   ('US_FOMC_MINUTES', 'USDJPY', 1), ('US_FOMC_MINUTES', 'EURUSD', 2),
   -- ユーロ圏 HICP速報値・失業率(migration 20261030000001)
   ('EU_HICP', 'EURUSD', 1), ('EU_HICP', 'EURJPY', 2),
-  ('EU_UNEMPLOYMENT_RATE', 'EURUSD', 1), ('EU_UNEMPLOYMENT_RATE', 'EURJPY', 2)
+  ('EU_UNEMPLOYMENT_RATE', 'EURUSD', 1), ('EU_UNEMPLOYMENT_RATE', 'EURJPY', 2),
+  -- 米国小売売上高(速報、migration 20261105000001)
+  ('US_RETAIL_SALES', 'USDJPY', 1), ('US_RETAIL_SALES', 'EURUSD', 2)
 ) as v(code, symbol, priority)
 join economic_indicators i on i.code = v.code
 join fx_pairs p on p.symbol = v.symbol
