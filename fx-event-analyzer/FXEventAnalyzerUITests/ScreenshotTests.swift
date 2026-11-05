@@ -155,8 +155,15 @@ final class ScreenshotTests: XCTestCase {
             XCTAssertTrue(waitForAnyElement(containing: "フェデラルファンド金利の誘導目標レンジ", timeout: 10), "The policy-rate heading is not shown")
             XCTAssertTrue(app.staticTexts["3.75%〜4.00%"].exists, "The target range is not shown")
             XCTAssertTrue(app.staticTexts["適用日 2026/09/17"].exists, "The effective date is not shown")
-            let source = app.links.matching(NSPredicate(format: "label CONTAINS %@", "出典：ニューヨーク連邦準備銀行")).firstMatch
-            XCTAssertTrue(source.exists, "The NY Fed source link is not shown")
+            // SwiftUI の Link が UIテストでどの種類(link / button)に見えるかに頼らず、ラベルで探す。そのうえで、押せる種類
+            // (link か button)の要素があることを確かめる(子の文字の要素だけ、ではない)。
+            let sourceLabel = NSPredicate(format: "label CONTAINS %@", "出典：ニューヨーク連邦準備銀行")
+            XCTAssertTrue(app.descendants(matching: .any).matching(sourceLabel).firstMatch.exists, "The NY Fed source is not shown")
+            let tappable = NSPredicate(
+                format: "label CONTAINS %@ AND (elementType == %d OR elementType == %d)",
+                "出典：ニューヨーク連邦準備銀行", Int(XCUIElement.ElementType.link.rawValue), Int(XCUIElement.ElementType.button.rawValue)
+            )
+            XCTAssertTrue(app.descendants(matching: .any).matching(tappable).firstMatch.exists, "The NY Fed source is not a link")
             XCTAssertTrue(
                 app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "EFFR（実際の取引の金利）の値は表示していません")).firstMatch.exists,
                 "The notice that the EFFR itself is not shown is missing"
@@ -798,7 +805,7 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["予想"].firstMatch.exists, "The forecast column is not shown (\(when))")
         XCTAssertFalse(app.staticTexts["フェデラルファンド金利の誘導目標レンジ"].exists, "The policy-rate card is shown without data (\(when))")
         XCTAssertFalse(
-            app.links.matching(NSPredicate(format: "label CONTAINS %@", "ニューヨーク連邦準備銀行")).firstMatch.exists,
+            app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "ニューヨーク連邦準備銀行")).firstMatch.exists,
             "The NY Fed source is shown without data (\(when))"
         )
     }
