@@ -17,6 +17,22 @@
 -- と文字単位で同一(推測で作った値ではない)。db-design.md v4.10/v4.11/v4.12
 -- の変更履歴にも同じ5指標への適用が記録されている。
 --
+-- id固定値について(2026-11-05 HQ承認・修正): economic_indicators.id は
+-- gen_random_uuid()のデフォルトに任せず、seed.sqlが元々使っていた固定値
+-- (10000000-0000-0000-0000-000000000001〜5、US_CPI/US_NFP/US_FOMC/
+-- JP_CPI/BOJ_RATEの順)を明示的に指定する。理由: supabase/seed.sql・
+-- 統合テストスイート(tests/integration/配下の複数ファイル)の双方が、
+-- この5指標について当時からこの固定idを前提として組まれており
+-- (economic_events・indicator_fx_pairsのテストfixtureが直接この値を
+-- 参照する)、本migrationがgen_random_uuid()で別のidを生成すると、
+-- migration適用後にseed.sqlのon conflict do nothingで行が追加されず
+-- スキップされる一方、テストはこの固定idの存在を前提に動くため、
+-- 本migrationが先に行を作る経路(seed.sql無しでmigrationのみ適用)で
+-- 整合しなくなる。本migrationが本番等に先に適用された場合でも、
+-- 固定idはあくまで「application層からは不透明なサロゲートキー」
+-- であり、UUIDとして妥当な値なら何であっても他のロジックに影響しない
+-- ため、この固定値を採用することに追加のリスクはない。
+--
 -- 冪等性: economic_indicators は `on conflict (code) do nothing` —
 -- 既に行がある場合(seed.sql経由など)は一切触れない。既存の値を上書き
 -- しない。indicator_fx_pairs も `on conflict (indicator_id, fx_pair_id)
@@ -29,13 +45,10 @@
 --   `on conflict do nothing`によりeconomic_indicators・indicator_fx_pairs
 --   とも一切書き込まれない。既存の economic_events・event_snapshots 等の
 --   参照先(indicator_id)にも影響しない。
--- - 5指標が存在しない環境: 5行が新規作成される。economic_indicators.id
---   は `gen_random_uuid()` のデフォルトで生成される(seed.sql固定の
---   10000000-...-0001〜0005 は使わない — 他の環境のid値に依存させない
---   ための後発migrationの既存パターンに合わせた)。この場合、その環境に
---   米国CPI等のeconomic_eventsが既に存在する可能性は無い(指標マスタが
---   無ければ本番の取り込み処理はその指標をindicator_not_in_dbとして
---   飛ばしてeconomic_eventsを作らないため)。
+-- - 5指標が存在しない環境: 5行が、seed.sqlと同じ固定idで新規作成される。
+--   この場合、その環境に米国CPI等のeconomic_eventsが既に存在する可能性は
+--   無い(指標マスタが無ければ本番の取り込み処理はその指標を
+--   indicator_not_in_dbとして飛ばしてeconomic_eventsを作らないため)。
 --
 -- seed.sqlとの役割分担: seed.sql は今後も開発/CI専用(1〜107行目の
 -- 指標マスタ部分は本migrationと内容が重複するが、`on conflict do
@@ -49,32 +62,32 @@
 -- on delete restrictではなくcascadeの外部キー設定に従う。db-design.md
 -- 参照)。
 
-insert into economic_indicators (code, name, name_en, display_name, country_code, currency_code, importance, description, key_points, frequency, unit, source, favorable_direction, market_view_above, market_view_below) values
-  ('US_CPI', '米国CPI(消費者物価指数)', 'Consumer Price Index', '消費者物価指数（CPI）', 'US', 'USD', 'HIGH',
+insert into economic_indicators (id, code, name, name_en, display_name, country_code, currency_code, importance, description, key_points, frequency, unit, source, favorable_direction, market_view_above, market_view_below) values
+  ('10000000-0000-0000-0000-000000000001', 'US_CPI', '米国CPI(消費者物価指数)', 'Consumer Price Index', '消費者物価指数（CPI）', 'US', 'USD', 'HIGH',
     '消費者物価指数（CPI）は、消費者が購入するモノやサービスの価格の変動を測定する指標です。インフレの動向を示す重要な指標であり、金融政策の判断材料として注目されます。',
     array['インフレの動向を把握できる', '金融政策への影響が大きい', '為替や株式市場に大きな影響を与える'],
     'MONTHLY', '%', 'U.S. Bureau of Labor Statistics', 'HIGHER_IS_POSITIVE',
     '米国CPIが予想を上回ると、インフレの高止まりから利下げが遠のくとの見方が強まり、ドルが買われやすいとされる。',
     '米国CPIが予想を下回ると、インフレの落ち着きから利下げが意識され、ドルが売られやすいとされる。'),
-  ('US_NFP', '米国雇用統計(非農業部門雇用者数)', 'Nonfarm Payrolls', '非農業部門雇用者数（NFP）', 'US', 'USD', 'HIGH',
+  ('10000000-0000-0000-0000-000000000002', 'US_NFP', '米国雇用統計(非農業部門雇用者数)', 'Nonfarm Payrolls', '非農業部門雇用者数（NFP）', 'US', 'USD', 'HIGH',
     '非農業部門雇用者数（NFP）は、農業部門を除く米国の雇用者数が前月から何人増減したかを示す指標です。米国の景気や雇用の強さを測る代表的な指標として注目されます。',
     array['米国の景気の強さを把握できる', 'FRBの金融政策判断に影響する', '発表直後に為替が大きく動きやすい'],
     'MONTHLY', 'K', 'U.S. Bureau of Labor Statistics', 'HIGHER_IS_POSITIVE',
     '米国の非農業部門雇用者数が予想を上回ると、雇用の底堅さから利下げが遠のくとの見方が強まり、ドルが買われやすいとされる。',
     '米国の非農業部門雇用者数が予想を下回ると、雇用の減速から利下げが意識され、ドルが売られやすいとされる。'),
-  ('US_FOMC', 'FOMC政策金利', 'FOMC Interest Rate Decision', 'FOMC政策金利', 'US', 'USD', 'HIGH',
+  ('10000000-0000-0000-0000-000000000003', 'US_FOMC', 'FOMC政策金利', 'FOMC Interest Rate Decision', 'FOMC政策金利', 'US', 'USD', 'HIGH',
     'FOMC（連邦公開市場委員会）が決定する、米国の政策金利（フェデラル・ファンド金利の誘導目標）です。米国の金融政策の方向性を示し、世界の金融市場に大きな影響を与えます。',
     array['米国の金融政策の方向性がわかる', '米ドルの金利水準を直接左右する', '声明や会見で今後の見通しが示される', '世界の株式・債券市場にも影響する'],
     'IRREGULAR', '%', 'Federal Reserve', 'NEUTRAL',
     'FOMCの政策金利が予想より高い水準に決まると、米国の金利が高止まりするとの見方が強まり、ドルが買われやすいとされる。',
     'FOMCの政策金利が予想より低い水準に決まると、米国の金融緩和が進むとの見方が強まり、ドルが売られやすいとされる。'),
-  ('JP_CPI', '日本CPI(消費者物価指数)', 'Japan Consumer Price Index', '消費者物価指数（CPI）', 'JP', 'JPY', 'HIGH',
+  ('10000000-0000-0000-0000-000000000004', 'JP_CPI', '日本CPI(消費者物価指数)', 'Japan Consumer Price Index', '消費者物価指数（CPI）', 'JP', 'JPY', 'HIGH',
     '日本の消費者物価指数（CPI）は、国内の消費者が購入するモノやサービスの価格の変動を前年同月比で示す指標です。日本のインフレの動向を示し、日銀の金融政策の判断材料として注目されます。',
     array['日本のインフレの動向を把握できる', '日銀の金融政策の判断材料になる', '円相場の方向性に影響する'],
     'MONTHLY', '%', 'Statistics Bureau of Japan', 'HIGHER_IS_POSITIVE',
     '日本CPIが予想を上回ると、物価の上昇から日銀の利上げ観測が強まり、円が買われやすいとされる。',
     '日本CPIが予想を下回ると、物価の伸び悩みから日銀の利上げが遠のくとの見方が強まり、円が売られやすいとされる。'),
-  ('BOJ_RATE', '日銀政策金利', 'BOJ Interest Rate Decision', '日銀政策金利', 'JP', 'JPY', 'HIGH',
+  ('10000000-0000-0000-0000-000000000005', 'BOJ_RATE', '日銀政策金利', 'BOJ Interest Rate Decision', '日銀政策金利', 'JP', 'JPY', 'HIGH',
     '日本銀行が金融政策決定会合で決定する政策金利です。日本の金融政策の方向性を示し、円の金利水準や為替相場に大きな影響を与えます。',
     array['日本の金融政策の方向性がわかる', '円の金利水準を直接左右する', '総裁会見の発言で相場が動きやすい'],
     'IRREGULAR', '%', 'Bank of Japan', 'NEUTRAL',
