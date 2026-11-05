@@ -205,11 +205,11 @@ struct EventDetailCards: View {
     }
 
     /// FOMCの会合の政策決定(api-design v1.47、HQ承認 2026-11-05): 結果・予想・前回の代わりに、誘導目標レンジ
-    /// (下限〜上限)と適用日。カードの大きさ・背景は結果のカードと同じ。出典(NY連銀)と告知は一番下の
+    /// (下限〜上限)と適用日。EFFR(実際の取引の金利)の値は出さない(取り違えないよう、見出しは「誘導目標レンジ」)。カードの大きさ・背景は結果のカードと同じ。出典(NY連銀)と告知は一番下の
     /// `attributionNotice`に出る。
     private func policyRateResults(_ policyRate: PolicyRate) -> some View {
         VStack(spacing: 2) {
-            NotoText.text("政策金利の誘導目標（フェデラルファンド金利）", size: 7)
+            NotoText.text("フェデラルファンド金利の誘導目標レンジ", size: 7)
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)

@@ -171,7 +171,7 @@ describe.skipIf(!integration)('FOMC policy decisions: table, ingestion and GET /
     });
     expect(Date.parse(event.policy_rate.announced_at)).toBe(Date.parse('2019-12-11T19:00:00Z'));
     expect(event.attribution).toEqual(NY_FED_ATTRIBUTION);
-    expect(event.data_status).toBe('PENDING'); // 会合の行は変えていない
+    expect(event.data_status).toBe('DATA_PENDING'); // 会合の行は変えていない(DB の PENDING は API で DATA_PENDING)
 
     const noDecisionId = randomUUID();
     const { error } = await ctx.serviceClient

@@ -17,6 +17,10 @@
  * 書くのは fomc_policy_decisions だけ。economic_events・event_snapshots は変えない(data_status は PENDING のまま)。
  * 一度書いた行は変えない・消さない(DB のトリガー)。同じ会合は1行だけ(既にあれば読まずに飛ばす。DB の一意制約)。
  * API が取れなければ何も書かず、エラーとして記録する(次の実行で取り直す)。
+ *
+ * 制約(api-design v1.47 にも記載): 発表から MAX_LOOKBACK_DAYS(180日)を超えて記録の無い会合は処理しない
+ * (OUTSIDE_LOOKBACK)。DB に会合の予定の行が無い会合は対象外。記録した値は NY連銀の後日の改定を反映しない。
+ * 翌営業日の記録が API に無い(読めない記録でもない)ときは、上の条件の範囲でその次の記録を使う。
  */
 import { NY_FED_ATTRIBUTION } from '../../domain/attribution.js';
 import { nyFedEffrSearchUrl, type NyFedTargetRangeResult } from '../adapters/nyFedRates.js';
