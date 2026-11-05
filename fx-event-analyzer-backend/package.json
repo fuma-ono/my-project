@@ -22,6 +22,7 @@
     "ingest:official:eurostat-calendar": "tsx src/jobs/ingestEurostatCalendar.ts",
     "ingest:fomc-schedule": "tsx src/jobs/ingestFomcSchedule.ts",
     "ingest:fomc-policy-rate": "tsx src/jobs/ingestFomcPolicyRates.ts",
+    "ingest:retail-sales-schedule": "tsx src/jobs/ingestRetailSalesSchedule.ts",
     "ingest:speeches": "tsx src/jobs/ingestSpeeches.ts",
     "ingest:fx-prices": "tsx src/jobs/ingestFxPrices.ts",
     "ingest:event-reactions": "tsx src/jobs/ingestEventReactions.ts",
