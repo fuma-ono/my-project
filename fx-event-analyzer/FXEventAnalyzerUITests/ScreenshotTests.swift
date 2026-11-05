@@ -149,6 +149,30 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "値動きの分析", timeout: 15), "Movement Detail did not load")
         capture("08-MovementDetail")
 
+        // HQ承認(2026-11-05)「過去との比較の画面確認」: 「相場反応の分析」の枠の下にある「過去との比較」の行は、08 の
+        // 1画面に入らない。下へスクロールして、比較の文(モックは PRO で、同じ指標の過去の発表が3回以上)が出ていることを
+        // 確かめて撮る。撮ったら上へ戻す(次の手順の「戻る」は画面の上にある)。画面・分析は変えない。
+        if scrollUntilHittable(containing: "過去との比較") {
+            let comparison = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "過去との比較: ")).firstMatch
+            XCTAssertTrue(comparison.label.contains("回のうち"), "The comparison sentences are not shown: \(comparison.label)")
+            XCTAssertFalse(comparison.label.contains("分析データ不足"), "The comparison says there is not enough data")
+            // HQ指示(2026-11-05)「相場反応分析の比較基準統一」: 「過去の類似イベントとの比較」のカードも、文と同じ時間で比べる。
+            if let range = comparison.label.range(of: "今回の[0-9]+分後", options: .regularExpression) {
+                let span = String(comparison.label[range].dropFirst(3))
+                let average = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "回の平均値幅（")).firstMatch
+                XCTAssertTrue(average.exists, "The average row of the similar-events card is not shown")
+                XCTAssertTrue(average.label.contains("（\(span)・上下問わず）"), "The card average is not for \(span): \(average.label)")
+                let currentRow = app.staticTexts.matching(NSPredicate(format: "label == %@", "今回の変動（\(span)）")).firstMatch
+                XCTAssertTrue(currentRow.exists, "The card current row is not for \(span)")
+            } else {
+                XCTFail("The comparison does not name its timeframe: \(comparison.label)")
+            }
+            capture("08c-MovementDetail-Comparison")
+        } else {
+            XCTFail("Movement Detail did not scroll to 過去との比較")
+        }
+        for _ in 0..<4 { app.swipeDown(velocity: .slow) }
+
         // api-design v1.45(HQ指示 2026-11-02): 発表の時刻が概算(APPROXIMATE)のときの相場反応詳細。モックの応答にだけ
         // 精度を付けて同じ画面を開き直し、注記とチャートの「約」を撮る。撮ったら元に戻す(後の撮影は今までどおり)。
         if setMockReactionPrecision("APPROXIMATE") {

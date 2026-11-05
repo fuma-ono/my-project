@@ -365,6 +365,9 @@ struct MovementDetailView: View {
                         .background(RoundedRectangle(cornerRadius: 5).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
                     }
                 }
+                reactionAnalysisSection(
+                    reactions: reactions, result: result, hasGeneralView: summary.interpretation != nil
+                )
                 comparisonSection(reactions: reactions)
             }
             .padding(8)
@@ -378,6 +381,53 @@ struct MovementDetailView: View {
             // 失敗を分けて表示し、枠自体は常に出す。
             analysisUnavailableCard(reactions: reactions)
         }
+    }
+
+    /// HQ指示(2026-11-04)「相場反応詳細画面の分析が表示されない問題を修正」: 数値の行の下に、実際の値動きから
+    /// 決まった型で作った「相場反応の分析」の文を出す(`MovementAnalysisText.reactionAnalysis`)。1分・5分・15分の
+    /// 切り替えで、選んだ時間の値動きの特徴の文も切り替わる。作れなければ「分析データ不足」。値動きの理由の根拠
+    /// (指標の一般的な見方)が無いときは、理由を推測せず「値動きの理由: 分析データ不足」と出す。
+    private func reactionAnalysisSection(reactions: [ReactionTimeframeEntry], result: EventSnapshotDetail?, hasGeneralView: Bool) -> some View {
+        let analysis = MovementAnalysisText.reactionAnalysis(
+            reactions: reactions, selectedTimeframe: viewModel.selectedTimeframe, noun: noun,
+            actual: result?.actual, forecast: result?.forecast, previous: result?.previous, unit: result?.unit,
+            valueDecimals: viewModel.valueDecimals, hasGeneralView: hasGeneralView,
+            past: viewModel.pastReactions, statementSummary: viewModel.statementSummary
+        )
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 2) {
+                Image(systemName: "text.alignleft")
+                    .font(.system(size: 7))
+                    .foregroundStyle(V5P.cyan)
+                NotoText.text("相場反応の分析", size: 7).foregroundStyle(V5P.cyan)
+            }
+            NotoText.text(analysis?.sentences.joined() ?? "分析データ不足", size: 6.5)
+                .foregroundStyle(.white.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("movementReactionAnalysis")
+            // レベル2(HQ指示 2026-11-04): 過去の同じ発表・発言との比較。同じ枠の中に、事実の文と分けて出す。
+            if analysis != nil {
+                NotoText.text(
+                    analysis?.comparison.map { "過去との比較: " + $0.joined() } ?? "過去との比較: 分析データ不足",
+                    size: 6.5
+                )
+                .foregroundStyle(.white.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("movementReactionComparison")
+            }
+            if let summary = analysis?.statementSummary {
+                NotoText.text("発言の要約: \(summary)(値動きとの因果関係は判断していない)", size: 6)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if analysis == nil || analysis?.reasonUnavailable == true {
+                NotoText.text("値動きの理由: 分析データ不足", size: 6)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+            }
+        }
+        .padding(5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 5).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.6))
     }
 
     /// `analysisCard`がsummaryを作れないときの代わりの表示。1分→5分の順で
@@ -422,11 +472,17 @@ struct MovementDetailView: View {
     /// 過去イベント比較に動線を作成して」: 過去イベント比較(SCR-009)と同じBackend集計
     /// (`comparisonStats`)から、今回の15分後pipsと過去の平均pipsを並べる。平均が
     /// 取れていない(取得失敗・分析可能な過去イベントが無い)ときはこの区画ごと出さない。
+    /// HQ指示(2026-11-05)「相場反応分析の比較基準統一」: 「過去との比較」の文と同じ過去データ・同じ時間
+    /// (画面で選んでいる時間)・同じ計算(向きを問わない値幅の平均)にした。過去が3回より少なければ出さない。
     @ViewBuilder
     private func comparisonSection(reactions: [ReactionTimeframeEntry]) -> some View {
-        if let average = viewModel.comparisonStats?.averagePips,
-           let count = viewModel.comparisonAnalyzableEvents, count > 0,
-           let current = reactions.first(where: { $0.timeframe == "15m" && $0.analysisStatus == .ready })?.pips {
+        if let past = viewModel.pastReactions,
+           let stats = MovementAnalysisText.pastAverage(
+               reactions: reactions, selectedTimeframe: viewModel.selectedTimeframe, past: past
+           ) {
+            let span = MovementAnalysisText.label(stats.timeframe)
+            let average = stats.average
+            let current = stats.current
             // HQ指示(2026-10-14、7回目)「免責文を無くした空きぶん文字サイズをベストな
             // 調整」: このセクションの見出し行は引き上げたが、5回目のオーバーフロー
             // 回帰の直接の原因だった下の数値2行(平均変動・今回の変動)はサイズ据え置き。
@@ -463,19 +519,22 @@ struct MovementDetailView: View {
                 // 行で値の右端が揃うよう、バッジが無い行にも同じ幅の透明プレースホルダーを
                 // 置いて右端の位置を合わせた。
                 HStack {
-                    NotoText.text("過去\(count)回の平均変動（15分後）", size: 6.5)
+                    // 平均は向きを問わない値幅なので、符号と上昇・下落の色を付けない。
+                    NotoText.text("過去\(stats.count)回の平均値幅（\(span)後・上下問わず）", size: 6.5)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
+                        .accessibilityIdentifier("movementComparisonAverageLabel")
                     Spacer(minLength: 4)
-                    NotoText.text(Self.signedPipsText(average), size: 7.5)
-                        .foregroundStyle(average >= 0 ? V5P.green : V5P.red)
+                    NotoText.text("\(ValueFormat.number(average, fractionDigits: 1)) pips", size: 7.5)
+                        .foregroundStyle(.white)
                         .lineLimit(1)
                         .fixedSize()
                     Color.clear.frame(width: Self.magnitudeBadgeWidth, height: 1)
                 }
                 HStack {
-                    NotoText.text("今回の変動", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    NotoText.text("今回の変動（\(span)後）", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .accessibilityIdentifier("movementComparisonCurrentLabel")
                     Spacer(minLength: 4)
                     NotoText.text(Self.signedPipsText(current), size: 7.5)
                         .foregroundStyle(current >= 0 ? V5P.green : V5P.red)
