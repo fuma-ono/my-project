@@ -472,11 +472,17 @@ struct MovementDetailView: View {
     /// 過去イベント比較に動線を作成して」: 過去イベント比較(SCR-009)と同じBackend集計
     /// (`comparisonStats`)から、今回の15分後pipsと過去の平均pipsを並べる。平均が
     /// 取れていない(取得失敗・分析可能な過去イベントが無い)ときはこの区画ごと出さない。
+    /// HQ指示(2026-11-05)「相場反応分析の比較基準統一」: 「過去との比較」の文と同じ過去データ・同じ時間
+    /// (画面で選んでいる時間)・同じ計算(向きを問わない値幅の平均)にした。過去が3回より少なければ出さない。
     @ViewBuilder
     private func comparisonSection(reactions: [ReactionTimeframeEntry]) -> some View {
-        if let average = viewModel.comparisonStats?.averagePips,
-           let count = viewModel.comparisonAnalyzableEvents, count > 0,
-           let current = reactions.first(where: { $0.timeframe == "15m" && $0.analysisStatus == .ready })?.pips {
+        if let past = viewModel.pastReactions,
+           let stats = MovementAnalysisText.pastAverage(
+               reactions: reactions, selectedTimeframe: viewModel.selectedTimeframe, past: past
+           ) {
+            let span = MovementAnalysisText.label(stats.timeframe)
+            let average = stats.average
+            let current = stats.current
             // HQ指示(2026-10-14、7回目)「免責文を無くした空きぶん文字サイズをベストな
             // 調整」: このセクションの見出し行は引き上げたが、5回目のオーバーフロー
             // 回帰の直接の原因だった下の数値2行(平均変動・今回の変動)はサイズ据え置き。
@@ -513,19 +519,22 @@ struct MovementDetailView: View {
                 // 行で値の右端が揃うよう、バッジが無い行にも同じ幅の透明プレースホルダーを
                 // 置いて右端の位置を合わせた。
                 HStack {
-                    NotoText.text("過去\(count)回の平均変動（15分後）", size: 6.5)
+                    // 平均は向きを問わない値幅なので、符号と上昇・下落の色を付けない。
+                    NotoText.text("過去\(stats.count)回の平均値幅（\(span)後・上下問わず）", size: 6.5)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
+                        .accessibilityIdentifier("movementComparisonAverageLabel")
                     Spacer(minLength: 4)
-                    NotoText.text(Self.signedPipsText(average), size: 7.5)
-                        .foregroundStyle(average >= 0 ? V5P.green : V5P.red)
+                    NotoText.text("\(ValueFormat.number(average, fractionDigits: 1)) pips", size: 7.5)
+                        .foregroundStyle(.white)
                         .lineLimit(1)
                         .fixedSize()
                     Color.clear.frame(width: Self.magnitudeBadgeWidth, height: 1)
                 }
                 HStack {
-                    NotoText.text("今回の変動", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    NotoText.text("今回の変動（\(span)後）", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .accessibilityIdentifier("movementComparisonCurrentLabel")
                     Spacer(minLength: 4)
                     NotoText.text(Self.signedPipsText(current), size: 7.5)
                         .foregroundStyle(current >= 0 ? V5P.green : V5P.red)

@@ -234,9 +234,42 @@ enum MovementAnalysisText {
         )
     }
 
-    /// レベル2: 過去の同じ発表・発言との比較(HQ指示 2026-11-04「独自の相場分析」)。比べる時間は、選んでいる
-    /// 1分・5分・15分(過去のデータがその3つだけのため。30分・60分を選んでいれば15分)。数えた回数だけを書き、
-    /// 「だから今回動いた」とは書かない(相関と因果を分ける)。過去が`minimumPastSamples`回より少なければnil。
+    /// 過去との比較に使う時間。画面で選んでいる1分・5分・15分(過去のデータがその3つだけのため。
+    /// 30分・60分なら15分)。「過去との比較」の文と「過去の類似イベントとの比較」のカードで同じ時間を使う
+    /// (HQ指示 2026-11-05「相場反応分析の比較基準統一」)。
+    static func comparisonTimeframe(_ selectedTimeframe: String) -> String {
+        ["1m", "5m", "15m"].contains(selectedTimeframe) ? selectedTimeframe : "15m"
+    }
+
+    /// 過去の値幅(向きを問わない、pipsの絶対値)の平均と、今回のpips(向き付き)。
+    struct PastAverage: Equatable {
+        let timeframe: String
+        let count: Int
+        let average: Double
+        let current: Double
+    }
+
+    /// 選んでいる時間の、今回のpipsと過去の値幅の平均。文とカードの両方がこれを使い、時間・回数・平均をそろえる。
+    /// 今回がまだREADYでない、過去が`minimumPastSamples`回より少ない、平均が0ならnil。
+    static func pastAverage(
+        reactions: [ReactionTimeframeEntry],
+        selectedTimeframe: String,
+        past: [PastReaction]
+    ) -> PastAverage? {
+        let timeframe = comparisonTimeframe(selectedTimeframe)
+        guard let current = reactions.first(where: { $0.timeframe == timeframe && $0.analysisStatus == .ready })?.pips
+        else { return nil }
+        let samples = past.compactMap { $0.pips[timeframe] }
+        guard samples.count >= minimumPastSamples else { return nil }
+        let average = samples.map(abs).reduce(0, +) / Double(samples.count)
+        guard average > 0 else { return nil }
+        return PastAverage(timeframe: timeframe, count: samples.count, average: average, current: current)
+    }
+
+    /// レベル2: 過去の同じ発表・発言との比較(HQ指示 2026-11-04「独自の相場分析」)。比べる時間は
+    /// `comparisonTimeframe`。値幅は向きを問わない平均で、向き(上昇・下落・反転)は回数で比べ、どちらも同じ時間で
+    /// 数える(HQ指示 2026-11-05)。数えた回数だけを書き、「だから今回動いた」とは書かない(相関と因果を分ける)。
+    /// 過去が`minimumPastSamples`回より少なければnil。
     static func pastComparison(
         reactions: [ReactionTimeframeEntry],
         selectedTimeframe: String,
@@ -246,7 +279,7 @@ enum MovementAnalysisText {
         func ready(_ timeframe: String) -> Double? {
             reactions.first { $0.timeframe == timeframe && $0.analysisStatus == .ready }?.pips ?? nil
         }
-        let timeframe = ["1m", "5m", "15m"].contains(selectedTimeframe) ? selectedTimeframe : "15m"
+        let timeframe = comparisonTimeframe(selectedTimeframe)
         guard let current = ready(timeframe) else { return nil }
         let samples = past.compactMap { $0.pips[timeframe] }
         guard samples.count >= minimumPastSamples else { return nil }
@@ -254,25 +287,26 @@ enum MovementAnalysisText {
         var lines: [String] = []
 
         // 値幅の大きさ: 今回と過去の平均(向きは問わず、値幅の絶対値)。
-        let average = samples.map(abs).reduce(0, +) / Double(samples.count)
-        if average > 0, let size = magnitudeLabel(current: current, average: average) {
-            lines.append("今回の\(span)の値幅(\(pips(abs(current))))は、過去\(samples.count)回の平均(\(pips(average)))と比べて\(size)。")
+        if let stats = pastAverage(reactions: reactions, selectedTimeframe: selectedTimeframe, past: past),
+           let size = magnitudeLabel(current: stats.current, average: stats.average) {
+            lines.append("今回の\(span)の値幅(\(pips(abs(current))))は、過去\(stats.count)回の\(span)の値幅の平均(上下を問わない、\(pips(stats.average)))と比べて\(size)。")
         }
         // 向き: 過去に今回と同じ向きだった回数。
         if current != 0 {
             let same = samples.filter { $0 != 0 && ($0 > 0) == (current > 0) }.count
             lines.append("過去\(samples.count)回のうち、\(span)に今回と同じく\(direction(current))したのは\(same)回だった。")
         }
-        // 反転の傾向: 初動(1分)と15分後の向きが逆になった回数と、今回。
-        if let first = ready("1m"), let later = ready("15m"), first != 0, later != 0 {
+        // 反転の傾向: 初動(1分)と、選んでいる時間の向きが逆になった回数と、今回。1分を選んでいるときは、
+        // 初動と比べる後の時間が無いので出さない。
+        if timeframe != "1m", let first = ready("1m"), first != 0, current != 0 {
             let pairs = past.compactMap { reaction -> (Double, Double)? in
-                guard let a = reaction.pips["1m"], let b = reaction.pips["15m"], a != 0, b != 0 else { return nil }
+                guard let a = reaction.pips["1m"], let b = reaction.pips[timeframe], a != 0, b != 0 else { return nil }
                 return (a, b)
             }
             if pairs.count >= minimumPastSamples {
                 let reversed = pairs.filter { ($0.0 > 0) != ($0.1 > 0) }.count
-                let now = (first > 0) != (later > 0) ? "反転した" : "反転しなかった"
-                lines.append("過去\(pairs.count)回のうち、初動と15分後の向きが逆になった(反転した)のは\(reversed)回で、今回は\(now)。")
+                let now = (first > 0) != (current > 0) ? "反転した" : "反転しなかった"
+                lines.append("過去\(pairs.count)回のうち、初動と\(span)の向きが逆になった(反転した)のは\(reversed)回で、今回は\(now)。")
             }
         }
         // サプライズ別: 今回と同じ向きのサプライズ(予想を上回った・下回った)だった過去の回の値動き。

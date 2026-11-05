@@ -156,6 +156,17 @@ final class ScreenshotTests: XCTestCase {
             let comparison = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "過去との比較: ")).firstMatch
             XCTAssertTrue(comparison.label.contains("回のうち"), "The comparison sentences are not shown: \(comparison.label)")
             XCTAssertFalse(comparison.label.contains("分析データ不足"), "The comparison says there is not enough data")
+            // HQ指示(2026-11-05)「相場反応分析の比較基準統一」: 「過去の類似イベントとの比較」のカードも、文と同じ時間で比べる。
+            if let range = comparison.label.range(of: "今回の[0-9]+分後", options: .regularExpression) {
+                let span = String(comparison.label[range].dropFirst(2))
+                let average = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "回の平均値幅（")).firstMatch
+                XCTAssertTrue(average.exists, "The average row of the similar-events card is not shown")
+                XCTAssertTrue(average.label.contains("（\(span)・上下問わず）"), "The card average is not for \(span): \(average.label)")
+                let currentRow = app.staticTexts.matching(NSPredicate(format: "label == %@", "今回の変動（\(span)）")).firstMatch
+                XCTAssertTrue(currentRow.exists, "The card current row is not for \(span)")
+            } else {
+                XCTFail("The comparison does not name its timeframe: \(comparison.label)")
+            }
             capture("08c-MovementDetail-Comparison")
         } else {
             XCTFail("Movement Detail did not scroll to 過去との比較")

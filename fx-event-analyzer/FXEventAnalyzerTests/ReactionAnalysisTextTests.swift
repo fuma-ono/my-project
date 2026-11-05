@@ -121,7 +121,7 @@ final class ReactionAnalysisTextTests: XCTestCase {
         ]
         let lines = MovementAnalysisText.pastComparison(reactions: current, selectedTimeframe: "15m", past: history, currentSurprise: -0.1)
         XCTAssertEqual(lines, [
-            "今回の15分後の値幅(40pips)は、過去4回の平均(12.5pips)と比べて大きい。",
+            "今回の15分後の値幅(40pips)は、過去4回の15分後の値幅の平均(上下を問わない、12.5pips)と比べて大きい。",
             "過去4回のうち、15分後に今回と同じく下落したのは3回だった。",
             "過去4回のうち、初動と15分後の向きが逆になった(反転した)のは1回で、今回は反転しなかった。",
             "過去に結果が予想を下回った3回のうち、15分後に下落したのは3回だった。",
@@ -147,10 +147,41 @@ final class ReactionAnalysisTextTests: XCTestCase {
         let current = [entry("1m", -2), entry("5m", -6), entry("15m", -9)]
         let history = [past("a", -1, -2, -3), past("b", -1, -2, -3), past("c", 1, 2, 3)]
         let five = MovementAnalysisText.pastComparison(reactions: current, selectedTimeframe: "5m", past: history, currentSurprise: nil)
-        XCTAssertEqual(five?.first, "今回の5分後の値幅(6pips)は、過去3回の平均(2pips)と比べて大きい。")
+        XCTAssertEqual(five?.first, "今回の5分後の値幅(6pips)は、過去3回の5分後の値幅の平均(上下を問わない、2pips)と比べて大きい。")
         // 30分・60分を選んでいれば、過去のデータがある15分で比べる。
         let sixty = MovementAnalysisText.pastComparison(reactions: current, selectedTimeframe: "60m", past: history, currentSurprise: nil)
-        XCTAssertEqual(sixty?.first, "今回の15分後の値幅(9pips)は、過去3回の平均(3pips)と比べて大きい。")
+        XCTAssertEqual(sixty?.first, "今回の15分後の値幅(9pips)は、過去3回の15分後の値幅の平均(上下を問わない、3pips)と比べて大きい。")
+    }
+
+    /// HQ指示(2026-11-05)「相場反応分析の比較基準統一」: 反転の回数も選んでいる時間で数える。1分では出さない。
+    func testReversalUsesTheSelectedTimeframe() {
+        let current = [entry("1m", -2), entry("5m", 3), entry("15m", -9)]
+        let history = [past("a", -1, 2, -3), past("b", -1, -2, -3), past("c", 1, 2, 3)]
+        let five = MovementAnalysisText.pastComparison(reactions: current, selectedTimeframe: "5m", past: history, currentSurprise: nil)
+        XCTAssertTrue(five?.contains("過去3回のうち、初動と5分後の向きが逆になった(反転した)のは1回で、今回は反転した。") ?? false, "\(five ?? [])")
+        let fifteen = MovementAnalysisText.pastComparison(reactions: current, selectedTimeframe: "15m", past: history, currentSurprise: nil)
+        XCTAssertTrue(fifteen?.contains("過去3回のうち、初動と15分後の向きが逆になった(反転した)のは0回で、今回は反転しなかった。") ?? false, "\(fifteen ?? [])")
+        let one = MovementAnalysisText.pastComparison(reactions: current, selectedTimeframe: "1m", past: history, currentSurprise: nil)
+        XCTAssertFalse(one?.contains { $0.contains("反転") } ?? true, "no reversal line for 1m")
+    }
+
+    /// 「過去の類似イベントとの比較」のカードは、文と同じ時間・回数・向きを問わない平均を使う。
+    func testPastAverageMatchesTheComparisonSentence() {
+        let current = [entry("1m", -8.2), entry("5m", -24.5), entry("15m", -40)]
+        let history = [past("a", -5, -10, -20), past("b", 4, 6, -10), past("c", -3, -8, -10), past("d", 2, 5, 10)]
+        for (selected, timeframe) in [("1m", "1m"), ("5m", "5m"), ("15m", "15m"), ("60m", "15m")] {
+            let stats = MovementAnalysisText.pastAverage(reactions: current, selectedTimeframe: selected, past: history)
+            XCTAssertEqual(stats?.timeframe, timeframe)
+            XCTAssertEqual(stats?.count, 4)
+            let span = MovementAnalysisText.label(timeframe) + "後"
+            let first = MovementAnalysisText.pastComparison(reactions: current, selectedTimeframe: selected, past: history, currentSurprise: nil)?.first
+            XCTAssertTrue(first?.contains("過去4回の\(span)の値幅の平均") ?? false, "\(first ?? "")")
+        }
+        // 向きを問わない平均: 1分は(5+4+3+2)/4、向き付きなら-0.5になる。
+        XCTAssertEqual(MovementAnalysisText.pastAverage(reactions: current, selectedTimeframe: "1m", past: history)?.average, 3.5)
+        XCTAssertEqual(MovementAnalysisText.pastAverage(reactions: current, selectedTimeframe: "15m", past: history)?.current, -40)
+        // 過去が3回未満なら、カードも出さない(文の「分析データ不足」とそろえる)。
+        XCTAssertNil(MovementAnalysisText.pastAverage(reactions: current, selectedTimeframe: "15m", past: Array(history.prefix(2))))
     }
 
     func testReactionAnalysisCarriesTheComparisonAndTheStatementSummary() {
