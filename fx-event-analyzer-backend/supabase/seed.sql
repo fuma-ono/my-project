@@ -142,8 +142,13 @@ on conflict (indicator_id, fx_pair_id) do nothing;
 -- timeframes. Exercises the full "analyzable" path.
 -- ---------------------------------------------------------------------
 
+-- HQ追加承認(2026-11-04、economic_events の外部キー不整合修正): indicator_id
+-- を固定UUID直接参照から、economic_indicators.code('US_CPI')から実際の
+-- idを解決するサブクエリに変更した(indicator_fx_pairsの修正と同じ理由
+-- — migration側がgen_random_uuid()でidを生成する場合に備える)。イベントID
+-- (30000000-...)・件数・他の値は変更していない。
 insert into economic_events (id, indicator_id, provider, provider_event_id, release_datetime, release_datetime_precision, importance, status, data_status) values
-  ('30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'seed', 'seed-us-cpi-2026-09', '2026-09-10T12:30:00Z', 'EXACT', 'HIGH', 'RELEASED', 'AVAILABLE');
+  ('30000000-0000-0000-0000-000000000001', (select id from economic_indicators where code = 'US_CPI'), 'seed', 'seed-us-cpi-2026-09', '2026-09-10T12:30:00Z', 'EXACT', 'HIGH', 'RELEASED', 'AVAILABLE');
 
 insert into event_snapshots (event_id, snapshot_type, forecast, actual, previous, unit, source, captured_at, surprise, surprise_direction) values
   ('30000000-0000-0000-0000-000000000001', 'RELEASE', 3.1, 3.3, 3.0, '%', 'U.S. Bureau of Labor Statistics', '2026-09-10T12:30:00Z', 0.2, 'POSITIVE');
@@ -176,8 +181,9 @@ insert into fx_prices (fx_pair_id, "timestamp", timeframe, open, high, low, clos
 -- §5).
 -- ---------------------------------------------------------------------
 
+-- HQ追加承認(2026-11-04、同上): indicator_idをBOJ_RATEのcodeから解決。
 insert into economic_events (id, indicator_id, provider, provider_event_id, release_datetime, release_datetime_precision, importance, status, data_status) values
-  ('30000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000005', 'seed', 'seed-boj-2026-09', '2026-09-12T03:00:00Z', 'APPROXIMATE', 'HIGH', 'RELEASED', 'PARTIAL');
+  ('30000000-0000-0000-0000-000000000002', (select id from economic_indicators where code = 'BOJ_RATE'), 'seed', 'seed-boj-2026-09', '2026-09-12T03:00:00Z', 'APPROXIMATE', 'HIGH', 'RELEASED', 'PARTIAL');
 
 insert into event_snapshots (event_id, snapshot_type, forecast, actual, previous, unit, source, captured_at, surprise, surprise_direction) values
   ('30000000-0000-0000-0000-000000000002', 'RELEASE', null, -0.1, -0.1, '%', 'Bank of Japan', '2026-09-12T03:00:00Z', null, null);
@@ -187,8 +193,9 @@ insert into event_snapshots (event_id, snapshot_type, forecast, actual, previous
 -- SCHEDULED / PENDING "before release" state on Home/Event Detail.
 -- ---------------------------------------------------------------------
 
+-- HQ追加承認(2026-11-04、同上): indicator_idをUS_NFPのcodeから解決。
 insert into economic_events (id, indicator_id, provider, provider_event_id, release_datetime, release_datetime_precision, importance, status, data_status) values
-  ('30000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000002', 'seed', 'seed-us-nfp-2026-10', '2026-10-03T12:30:00Z', 'EXACT', 'HIGH', 'SCHEDULED', 'PENDING');
+  ('30000000-0000-0000-0000-000000000003', (select id from economic_indicators where code = 'US_NFP'), 'seed', 'seed-us-nfp-2026-10', '2026-10-03T12:30:00Z', 'EXACT', 'HIGH', 'SCHEDULED', 'PENDING');
 
 -- ---------------------------------------------------------------------
 -- 要人発言 (HQ指示 2026-10-05): speakers / speech_events. Past ones are
