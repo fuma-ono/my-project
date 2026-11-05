@@ -50,6 +50,19 @@ export interface ProviderEventRow extends StoredEvent {
   is_provisional: boolean;
 }
 
+/** fomc_policy_decisions の1行(HQ承認 2026-11-05、migration 20261105000001)。値は書いたら変えない。 */
+export interface NewFomcPolicyDecision {
+  event_id: string;
+  target_range_lower: number;
+  target_range_upper: number;
+  announced_at: string;
+  /** 'YYYY-MM-DD'(ニューヨークの日付)。 */
+  effective_date: string;
+  source: string;
+  source_url: string;
+  fetched_at: string;
+}
+
 export interface StoredSnapshot {
   forecast: number | null;
   actual: number | null;
@@ -283,6 +296,10 @@ export interface IngestionStore {
   updateEvent(eventId: string, patch: EventPatch): Promise<void>;
   getReleaseSnapshot(eventId: string): Promise<StoredSnapshot | null>;
   insertReleaseSnapshot(snapshot: NewReleaseSnapshot): Promise<void>;
+  /** fomc_policy_decisions の event_id(もう記録した会合)。 */
+  listFomcPolicyDecisionEventIds(): Promise<string[]>;
+  /** fomc_policy_decisions に1行入れる(同じ event_id が既にあれば DB の一意制約でエラー)。 */
+  insertFomcPolicyDecision(row: NewFomcPolicyDecision): Promise<void>;
   /** Latest revision value per field for the event (to skip re-recording the same revision). */
   latestRevisionValues(eventId: string): Promise<{ ACTUAL: number | null; PREVIOUS: number | null }>;
   insertRevision(revision: NewRevision): Promise<void>;

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { attributionForIndicator } from '../domain/attribution.js';
+import { attributionForIndicator, NY_FED_ATTRIBUTION } from '../domain/attribution.js';
 import { valueDecimalsForIndicator } from '../domain/valueDecimals.js';
 import { resolveReactionState } from '../domain/reactionState.js';
 import { chartWindow } from '../domain/chartWindow.js';
@@ -10,6 +10,7 @@ import {
   countRevisions,
   getEventById,
   getLatestExplanation,
+  getFomcPolicyDecision,
   getReleaseSnapshot,
   listRevisions,
   type EventRow,
@@ -72,6 +73,9 @@ function isValidTimeframe(value: unknown): value is ValidTimeframe {
  * indicator info, the snapshot's unit/source/captured_at and the pair lists
  * stay. Explanations, revisions and reactions are not even read.
  */
+/** v1.47: FOMC の会合(US_FOMC)の政策決定。fomc_policy_decisions に行がある会合だけ(ほかの指標は読まない)。 */
+const POLICY_RATE_INDICATOR_CODE = 'US_FOMC';
+
 async function lockedEventDetail(app: FastifyInstance, event: EventRow, precision: ReleaseDatetimePrecision) {
   const [snapshot, relatedFxPairs, activeFxPairs] = await Promise.all([
     getReleaseSnapshot(app.supabase, event.id),
@@ -100,6 +104,8 @@ async function lockedEventDetail(app: FastifyInstance, event: EventRow, precisio
       attribution: attributionForIndicator(event.indicator_code),
       // v1.46: 値を表示する小数の桁数(domain/valueDecimals.ts)。値ではないのでロックしても隠さない。
       value_decimals: valueDecimalsForIndicator(event.indicator_code),
+      // v1.47: 値なので、ロックしたら隠す(FOMC の会合は RELEASED にならないので、実際にはロックされない)。
+      policy_rate: null,
       ...LOCKED,
     },
     snapshot: snapshot ? nullFields(snapshot, RELEASE_VALUE_FIELDS) : null,
@@ -154,12 +160,15 @@ export function registerEventRoutes(app: FastifyInstance): void {
     // 発表)、その結果にあたる「前回」と、前回の改定・解説(前回を書いていることがある)を隠す。
     const previousLocked = previousLockedIds.has(event.id);
 
-    const [rawSnapshot, explanation, revisionCount, relatedFxPairs, activeFxPairs] = await Promise.all([
+    const [rawSnapshot, explanation, revisionCount, relatedFxPairs, activeFxPairs, policyRate] = await Promise.all([
       getReleaseSnapshot(app.supabase, eventId),
       previousLocked ? Promise.resolve(null) : getLatestExplanation(app.supabase, eventId),
       countRevisions(app.supabase, eventId, previousLocked ? { excludeField: PREVIOUS_REVISION_FIELD } : {}),
       listRelatedFxPairs(app.supabase, event.indicator_id),
       listActiveFxPairs(app.supabase),
+      event.indicator_code === POLICY_RATE_INDICATOR_CODE
+        ? getFomcPolicyDecision(app.supabase, eventId)
+        : Promise.resolve(null),
     ]);
 
     const snapshot = rawSnapshot && previousLocked ? nullFields(rawSnapshot, PREVIOUS_VALUE_FIELDS) : rawSnapshot;
@@ -203,10 +212,12 @@ export function registerEventRoutes(app: FastifyInstance): void {
         is_provisional: effectiveIsProvisional(event.is_provisional, event.release_datetime, new Date()),
         data_status: mapEventDataStatus(event.data_status as EconomicEventDbStatus),
         revision_status: resolveRevisionStatus(revisionCount),
-        // v1.43: 出典と告知(Eurostat の指標だけ。domain/attribution.ts)。
-        attribution: attributionForIndicator(event.indicator_code),
+        // v1.43: 出典と告知(Eurostat の指標だけ。domain/attribution.ts)。v1.47: 政策決定があれば NY連銀。
+        attribution: policyRate ? NY_FED_ATTRIBUTION : attributionForIndicator(event.indicator_code),
         // v1.46: 値を表示する小数の桁数(BLS の%の指標は 1、それ以外は null。domain/valueDecimals.ts)
         value_decimals: valueDecimalsForIndicator(event.indicator_code),
+        // v1.47: FOMC の誘導目標レンジ(下限・上限は別々の値)。まだ記録が無い会合・ほかの指標は null。
+        policy_rate: policyRate,
         ...accessFields(false, previousLocked),
       },
       snapshot: snapshot ?? null,

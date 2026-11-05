@@ -2763,6 +2763,52 @@ let mockHomeFail = false;
  * `/__mock/home-delay?ms=20000` の間だけ GET /home の応答をその時間だけ遅らせる。既定は0(遅らせない、今までと同じ)。
  */
 let mockHomeDelayMs = 0;
+/**
+ * FOMC政策金利の表示の確認用(HQ指示 2026-11-05「政策金利データありの iOS 表示確認」、api-design v1.47)。
+ * `/__mock/policy-rate?value=1` の間だけ、GET /events/{id} を「政策決定が記録された FOMC の会合」の形にする
+ * (event.policy_rate と NY連銀の attribution を付け、結果の値は無し)。既定(false)は今までどおり。撮影はしない
+ * (UIテストが表示を確かめるだけ。スクリーンショットの枚数は変えない)。告知の文言は src/domain/attribution.ts の
+ * NY_FED_ATTRIBUTION と同じ。
+ */
+let mockPolicyRate = false;
+const MOCK_NY_FED_ATTRIBUTION = {
+  source: 'ニューヨーク連邦準備銀行（Federal Reserve Bank of New York）',
+  source_url: 'https://www.newyorkfed.org/markets/reference-rates/effr',
+  notice:
+    '誘導目標レンジは FOMC（米連邦公開市場委員会）が決定するもので、ここではニューヨーク連邦準備銀行が実効フェデラルファンド金利（EFFR）と併せて公表しているデータから表示しています。EFFR（実際の取引の金利）の値は表示していません。本アプリはニューヨーク連邦準備銀行と関係がなく、ニューヨーク連邦準備銀行は本アプリやそのサービスを承認・推奨していません。' +
+    '© 2026 Federal Reserve Bank of New York. Content from the New York Fed subject to the Terms of Use at newyorkfed.org. ' +
+    'The federal funds target range data published with the Effective Federal Funds Rate (EFFR) is subject to the Terms of Use posted at newyorkfed.org. The New York Fed is not responsible for publication of the federal funds target range data by FX Event Analyzer, does not sanction or endorse any particular republication, and has no liability for your use. ' +
+    'FX Event Analyzer is not affiliated with the New York Fed. The New York Fed does not sanction, endorse, or recommend any products or services offered by FX Event Analyzer.',
+};
+function withPolicyRate(body) {
+  return {
+    ...body,
+    event: {
+      ...body.event,
+      indicator_id: INDICATOR_ID_FOMC,
+      indicator_name: 'FOMC政策金利',
+      display_name: 'FOMC政策金利',
+      release_datetime: '2026-09-16T18:00:00.000Z',
+      status: 'SCHEDULED',
+      data_status: 'DATA_PENDING',
+      attribution: MOCK_NY_FED_ATTRIBUTION,
+      policy_rate: {
+        target_range_lower: 3.75,
+        target_range_upper: 4,
+        announced_at: '2026-09-16T18:00:00+00:00',
+        effective_date: '2026-09-17',
+        source: MOCK_NY_FED_ATTRIBUTION.source,
+        source_url:
+          'https://markets.newyorkfed.org/api/rates/unsecured/effr/search.json?startDate=2026-09-17&endDate=2026-11-05',
+        fetched_at: '2026-11-05T15:00:00+00:00',
+      },
+    },
+    snapshot: null,
+    analysis: { surprise: null, surprise_direction: null },
+    explanation: null,
+  };
+}
+
 const withReactionPrecision = (body) =>
   mockReactionPrecision ? { ...body, release_datetime_precision: mockReactionPrecision } : body;
 
@@ -2909,7 +2955,8 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
 
   if (pathname === '/api/v1/home') {
     if (mockHomeDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, mockHomeDelayMs));
-    if (mockHomeFail) return json(res, 503, { error: { code: 'SERVICE_UNAVAILABLE', message: 'Mock: home unavailable.' } });
+    if (mockHomeFail)
+      return json(res, 503, { error: { code: 'SERVICE_UNAVAILABLE', message: 'Mock: home unavailable.' } });
     return json(res, 200, homeHandler());
   }
   if (pathname === '/api/v1/indicators') return json(res, 200, indicatorsListHandler(searchParams));
@@ -3023,7 +3070,11 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
     return json(res, 200, comparisonHandler(segments[1], timeframe));
   }
   if (segments[0] === 'events' && segments.length === 2) {
-    return json(res, 200, eventDetailHandler(segments[1]));
+    return json(
+      res,
+      200,
+      mockPolicyRate ? withPolicyRate(eventDetailHandler(segments[1])) : eventDetailHandler(segments[1]),
+    );
   }
   if (segments[0] === 'events' && segments[2] === 'history') {
     return json(res, 200, eventHistoryHandler(segments[1]));
@@ -3074,6 +3125,10 @@ const server = createServer(async (req, res) => {
   if (url.pathname === '/__mock/home-fail' && req.method === 'POST') {
     mockHomeFail = url.searchParams.get('value') === '1';
     return json(res, 200, { value: mockHomeFail });
+  }
+  if (url.pathname === '/__mock/policy-rate' && req.method === 'POST') {
+    mockPolicyRate = url.searchParams.get('value') === '1';
+    return json(res, 200, { value: mockPolicyRate });
   }
   if (url.pathname === '/__mock/reaction-precision' && req.method === 'POST') {
     const value = url.searchParams.get('value');

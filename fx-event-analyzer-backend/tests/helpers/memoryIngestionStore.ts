@@ -21,6 +21,7 @@ import type {
   StagedValue,
   StoredEvent,
   StoredSpeechRef,
+  NewFomcPolicyDecision,
 } from '../../src/ingestion/store.js';
 
 /**
@@ -43,6 +44,7 @@ export class MemoryIngestionStore implements IngestionStore {
   })[] = [];
   eventPriceReactions: EventPriceReactionRow[] = [];
   snapshots: NewReleaseSnapshot[] = [];
+  fomcPolicyDecisions: NewFomcPolicyDecision[] = [];
   revisions: (NewRevision & { created_at: string })[] = [];
   staged: (NewStagedValue & { id: string; resolved_at?: string | null })[] = [];
   observations: OfficialObservationRow[] = [];
@@ -119,6 +121,18 @@ export class MemoryIngestionStore implements IngestionStore {
   getReleaseSnapshot(eventId: string) {
     const s = this.snapshots.find((snapshot) => snapshot.event_id === eventId);
     return Promise.resolve(s ? { forecast: s.forecast, actual: s.actual, previous: s.previous } : null);
+  }
+
+  listFomcPolicyDecisionEventIds(): Promise<string[]> {
+    return Promise.resolve(this.fomcPolicyDecisions.map((row) => row.event_id));
+  }
+
+  insertFomcPolicyDecision(row: NewFomcPolicyDecision): Promise<void> {
+    if (this.fomcPolicyDecisions.some((r) => r.event_id === row.event_id)) {
+      return Promise.reject(new Error('duplicate key fomc_policy_decisions (event_id)'));
+    }
+    this.fomcPolicyDecisions.push(row);
+    return Promise.resolve();
   }
 
   insertReleaseSnapshot(snapshot: NewReleaseSnapshot): Promise<void> {

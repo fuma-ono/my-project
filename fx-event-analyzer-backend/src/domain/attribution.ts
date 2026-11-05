@@ -39,6 +39,30 @@ export const EUROSTAT_ATTRIBUTION: Attribution = {
   notice: 'Eurostat の公表データをもとに作成しています。Eurostat は本アプリでの利用について責任を負いません。',
 };
 
+/**
+ * NY連銀(newyorkfed.org/privacy/termsofuse、2026-11-05 確認): 業務での利用・再配布は可。告知は規約の英文の [] を埋めて
+ * そのまま載せる:
+ * - 一般の出典(規約に決まった書き方が無いときの形): 「© [year] Federal Reserve Bank of New York. Content from the
+ *   New York Fed subject to the Terms of Use at newyorkfed.org.」(year = 2026)
+ * - 参照金利のデータを配布するときの告知: 「The [NAME OF DATA] is subject to the Terms of Use posted at newyorkfed.org.
+ *   The New York Fed is not responsible for publication of the [DATA NAME] by [NAME OF PUBLISHER], does not
+ *   [sanction] or [endorse] any particular republication, and has no liability for your use.」
+ * - 参照金利を使う製品・サービスの免責文: 「[User] is not affiliated with the New York Fed. The New York Fed does not
+ *   sanction, endorse, or recommend any products or services offered by [user].」
+ * 日本語の説明を先に置く: 誘導目標レンジを決めるのは FOMC、NY連銀は EFFR と併せてそのデータを公表している、EFFR(実際の
+ * 取引の金利)の値は表示していない、NY連銀はアプリを承認・推奨していない。FOMC の誘導目標レンジ(fomc_policy_decisions、
+ * HQ承認 2026-11-05 案A)に付ける。
+ */
+export const NY_FED_ATTRIBUTION: Attribution = {
+  source: 'ニューヨーク連邦準備銀行（Federal Reserve Bank of New York）',
+  source_url: 'https://www.newyorkfed.org/markets/reference-rates/effr',
+  notice:
+    '誘導目標レンジは FOMC（米連邦公開市場委員会）が決定するもので、ここではニューヨーク連邦準備銀行が実効フェデラルファンド金利（EFFR）と併せて公表しているデータから表示しています。EFFR（実際の取引の金利）の値は表示していません。本アプリはニューヨーク連邦準備銀行と関係がなく、ニューヨーク連邦準備銀行は本アプリやそのサービスを承認・推奨していません。' +
+    '© 2026 Federal Reserve Bank of New York. Content from the New York Fed subject to the Terms of Use at newyorkfed.org. ' +
+    'The federal funds target range data published with the Effective Federal Funds Rate (EFFR) is subject to the Terms of Use posted at newyorkfed.org. The New York Fed is not responsible for publication of the federal funds target range data by FX Event Analyzer, does not sanction or endorse any particular republication, and has no liability for your use. ' +
+    'FX Event Analyzer is not affiliated with the New York Fed. The New York Fed does not sanction, endorse, or recommend any products or services offered by FX Event Analyzer.',
+};
+
 /** Eurostat の値から作る経済指標の code(ingestion の eurostat_schedule の指標と同じ)。 */
 const EUROSTAT_INDICATOR_CODES: ReadonlySet<string> = new Set(['EU_HICP', 'EU_UNEMPLOYMENT_RATE']);
 
