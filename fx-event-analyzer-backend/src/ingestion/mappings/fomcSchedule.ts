@@ -112,6 +112,9 @@ export const FOMC_SCHEDULE: readonly FomcScheduleEntry[] = [
  * (2026-11-18 2:00 p.m.・2026-12-30 2:00 p.m.)。会合日程のページの「minutes … are released three
  * weeks after the date of the policy decision」。**calendar.json に載った日だけを入れる**(2027年の
  * 議事要旨は calendar.json に無いので、規則から日付を作らない。載ったら足す)。
+ * 2026-11-05 再確認(HQ指示「経済指標スケジュール補完」): calendar.json の "FOMC Minutes" は 2026-12-30 が最後、
+ * 会合日程のページの2027年は会合の日付だけで、議事要旨の公表日は無い。2027年の議事要旨はまだ足さない
+ * (会合の3週間後という説明から日付を作らない)。
  * provisional は、その会合の日程が暫定なら true(12/9 の会合は10月の会合で確認されるまで暫定)。
  * 値は無い(議事要旨は文書)。予定の行だけを作る。
  */

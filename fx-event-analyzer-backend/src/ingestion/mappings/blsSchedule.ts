@@ -158,6 +158,9 @@ const ppi: readonly [string, string][] = [
 // JOLTS(HQ指示 2026-10-27)。出典: https://www.bls.gov/schedule/2026/home.htm ・
 // https://www.bls.gov/schedule/news_release/jolts.htm(2026-10-27 取得。すべて 10:00)。
 // 2027年の日程は BLS がまだ出していない(2027 の年間予定に JOLTS が無い)ので、公式に出たら足す。
+// 2026-11-05 再確認(HQ指示「経済指標スケジュール補完」): jolts.htm の予定は 2026-10 分(2026-12-01 10:00)だけ、
+// https://www.bls.gov/schedule/2027/home.htm ・ https://www.bls.gov/schedule/2027/01_sched.htm にも JOLTS は無い。
+// まだ足さない(月初の火曜日などの規則から日付を作らない)。
 const jolts: readonly [string, string][] = [
   ['2025-12', '2026-02-05'],
   ['2026-01', '2026-03-13'],

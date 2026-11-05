@@ -33,6 +33,20 @@ describe('FOMC_MINUTES_SCHEDULE (calendar.json "FOMC Minutes" only)', () => {
       expect(minutes.provisional).toBe(meeting.provisional);
     }
   });
+
+  // HQ指示(2026-11-05「経済指標スケジュール補完」): 議事要旨は会合の表のどれか1つに紐づき、二重に入れない。
+  // 2027年の会合(FOMC_SCHEDULE にはある)から、議事要旨の日付を作らない。
+  it('belongs to exactly one meeting each, without duplicates, and is not generated from the 2027 meetings', () => {
+    const ids = FOMC_MINUTES_SCHEDULE.map(fomcMinutesProviderEventId);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const minutes of FOMC_MINUTES_SCHEDULE) {
+      expect(
+        FOMC_SCHEDULE.filter((m) => m.meetingStart === minutes.meetingStart && m.meetingEnd === minutes.meetingEnd),
+      ).toHaveLength(1);
+    }
+    expect(FOMC_SCHEDULE.some((m) => m.meetingEnd.startsWith('2027-'))).toBe(true);
+    expect(FOMC_MINUTES_SCHEDULE.filter((m) => m.meetingEnd.startsWith('2027-'))).toEqual([]);
+  });
 });
 
 describe('ingestFomcSchedule with FOMC_MINUTES_TARGET', () => {

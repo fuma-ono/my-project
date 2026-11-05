@@ -88,6 +88,22 @@ describe('PPI / JOLTS mappings and schedule', () => {
     expect(jolts.find((e) => e.referencePeriod === '2026-09')?.releaseDate).toBe('2026-11-03');
     expect(jolts.every((e) => e.releaseDate < '2027-01-01')).toBe(true);
   });
+
+  // HQ指示(2026-11-05「経済指標スケジュール補完」): 予定を足すときに、同じ予定を二重に入れていないこと。
+  it("has no duplicate entry: one row per indicator and period, and each indicator's dates are unique and ascending", () => {
+    const keys = BLS_SCHEDULE.map((e) => `${e.indicatorCode}:${e.referencePeriod}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    for (const code of new Set(BLS_SCHEDULE.map((e) => e.indicatorCode))) {
+      const rows = BLS_SCHEDULE.filter((e) => e.indicatorCode === code);
+      const dates = rows.map((e) => e.releaseDate);
+      expect(new Set(dates).size, code).toBe(dates.length);
+      expect([...dates].sort(), code).toEqual(dates);
+      expect(rows.map((e) => e.referencePeriod).sort(), code).toEqual(rows.map((e) => e.referencePeriod));
+      // 発表は、その月が終わった後
+      for (const row of rows)
+        expect(row.releaseDate > `${row.referencePeriod}-31`, `${code} ${row.referencePeriod}`).toBe(true);
+    }
+  });
 });
 
 describe('createBlsBatchProvider', () => {
