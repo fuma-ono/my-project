@@ -90,6 +90,35 @@ export async function getReleaseSnapshot(supabase: SupabaseClient, eventId: stri
   return data;
 }
 
+/**
+ * FOMC の政策決定(fomc_policy_decisions、HQ承認 2026-11-05 案A、api-design v1.47 の `event.policy_rate`)。
+ * 誘導目標レンジの下限・上限は別々の値のまま返す。
+ */
+export interface PolicyRateRow {
+  target_range_lower: number;
+  target_range_upper: number;
+  announced_at: string;
+  effective_date: string;
+  source: string;
+  source_url: string;
+  fetched_at: string;
+}
+
+export async function getFomcPolicyDecision(supabase: SupabaseClient, eventId: string): Promise<PolicyRateRow | null> {
+  const { data, error } = await supabase
+    .from('fomc_policy_decisions')
+    .select('target_range_lower, target_range_upper, announced_at, effective_date, source, source_url, fetched_at')
+    .eq('event_id', eventId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    ...data,
+    target_range_lower: Number(data.target_range_lower),
+    target_range_upper: Number(data.target_range_upper),
+  };
+}
+
 export interface ExplanationRow {
   version: number;
   explanation_type: string;

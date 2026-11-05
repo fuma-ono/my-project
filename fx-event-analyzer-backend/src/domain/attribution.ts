@@ -39,6 +39,22 @@ export const EUROSTAT_ATTRIBUTION: Attribution = {
   notice: 'Eurostat の公表データをもとに作成しています。Eurostat は本アプリでの利用について責任を負いません。',
 };
 
+/**
+ * NY連銀(newyorkfed.org/privacy/termsofuse、2026-11-05 確認): 業務での利用・再配布は可。参照金利(EFFR)のデータを
+ * 配布するときは「The [データ名] is subject to the Terms of Use …」の告知、参照金利を使う製品・サービスは
+ * 「[利用者] is not affiliated with the New York Fed …」の免責文を付ける(どちらも規約の英文の [] を埋めたもの)。
+ * NY連銀がアプリを承認・推奨していると受け取られないよう、日本語の説明を先に置く。FOMC の誘導目標レンジ
+ * (fomc_policy_decisions、HQ承認 2026-11-05 案A)に付ける。文言は実装候補(規約の要件を満たすかは HQ の確認待ち)。
+ */
+export const NY_FED_ATTRIBUTION: Attribution = {
+  source: 'ニューヨーク連邦準備銀行（Federal Reserve Bank of New York）',
+  source_url: 'https://www.newyorkfed.org/markets/reference-rates/effr',
+  notice:
+    '誘導目標レンジは、ニューヨーク連邦準備銀行の公表データ（EFFR の記録）をもとに表示しています。本アプリはニューヨーク連邦準備銀行と関係がなく、ニューヨーク連邦準備銀行は本アプリやそのサービスを承認・推奨していません。' +
+    'The federal funds target range data is subject to the Terms of Use posted at newyorkfed.org. The New York Fed is not responsible for publication of the federal funds target range data by FX Event Analyzer, does not sanction or endorse any particular republication, and has no liability for your use. ' +
+    'FX Event Analyzer is not affiliated with the New York Fed. The New York Fed does not sanction, endorse, or recommend any products or services offered by FX Event Analyzer.',
+};
+
 /** Eurostat の値から作る経済指標の code(ingestion の eurostat_schedule の指標と同じ)。 */
 const EUROSTAT_INDICATOR_CODES: ReadonlySet<string> = new Set(['EU_HICP', 'EU_UNEMPLOYMENT_RATE']);
 
