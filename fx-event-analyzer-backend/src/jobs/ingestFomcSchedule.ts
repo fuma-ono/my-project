@@ -1,9 +1,10 @@
 import 'dotenv/config';
 import { loadEnv } from '../config/env.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
+import { fetchFrbFomcMinutes } from '../ingestion/adapters/frbCalendar.js';
 import {
-  FOMC_MINUTES_TARGET,
   FOMC_SCHEDULE_PROVIDER,
+  ingestFomcMinutesSchedule,
   ingestFomcSchedule,
 } from '../ingestion/pipelines/fomcSchedule.js';
 import { JobCounters, runIngestionJob } from '../ingestion/runner.js';
@@ -20,6 +21,12 @@ import { createIngestionRepository } from '../repositories/ingestionRepository.j
  * 指標 US_FOMC_MINUTES(provider 'fomc_minutes_schedule')として入れる。結果は details.minutes。
  * 議事要旨の指標の行(migration 20261027000004)が無い DB では、議事要旨だけエラーになる(会合は入る)。
  *
+ * HQ指示(2026-11-05「公式スケジュール自動更新」): 議事要旨は、実行のたびに FRB の公式カレンダー
+ * (https://www.federalreserve.gov/json/calendar.json、1回だけ取得)を読み、表に無い会合の議事要旨が
+ * 載っていればその日付で足す(会合の日から日付を作らない。表の行・既にある行の日時は変えない)。
+ * 取れなければ表だけで入れる。足した分・食い違い・取得元は details.minutes.official_feed。
+ * 会合(US_FOMC)の予定は、今までどおり表だけから入れる(外部へのアクセスは無い)。
+ *
  * 定期実行には登録していない(表を直したときに手動で動かす)。
  * 前提: migration 20261022000002(economic_events.is_provisional)が適用済み。
  * Exit 0 / 1。
@@ -33,11 +40,19 @@ async function main(): Promise<void> {
     async (counters) => {
       await ingestFomcSchedule({ store }, counters);
       const minutesCounters = new JobCounters();
-      const minutes = await ingestFomcSchedule({ store, target: FOMC_MINUTES_TARGET }, minutesCounters);
+      const minutes = await ingestFomcMinutesSchedule(
+        { store, fetchMinutes: () => fetchFrbFomcMinutes() },
+        minutesCounters,
+      );
       counters.fetched += minutesCounters.fetched;
       counters.success += minutesCounters.success;
       for (const message of minutesCounters.errorMessages) counters.error(`minutes: ${message}`);
-      counters.details.minutes = { ...minutes, skipped: minutesCounters.skipReasons };
+      counters.details.minutes = {
+        ...minutes,
+        skipped: minutesCounters.skipReasons,
+        official_feed: minutesCounters.details.official_feed,
+        official_feed_conflicts: minutesCounters.details.official_feed_conflicts ?? [],
+      };
     },
   );
   const d = result.counters.details;

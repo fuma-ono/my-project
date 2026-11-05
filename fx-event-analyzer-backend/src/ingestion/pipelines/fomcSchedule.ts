@@ -26,7 +26,17 @@
  * or cancelled — a removal is far more likely an editing mistake than a
  * cancellation, which has its own explicit field).
  */
-import { FOMC_MINUTES_SCHEDULE, FOMC_SCHEDULE, type FomcScheduleEntry } from '../mappings/fomcSchedule.js';
+import {
+  FRB_CALENDAR_URL,
+  type FrbFomcMinutesParseResult,
+  type FrbFomcMinutesRelease,
+} from '../adapters/frbCalendar.js';
+import {
+  FOMC_MINUTES_SCHEDULE,
+  FOMC_SCHEDULE,
+  FOMC_TIME_ZONE,
+  type FomcScheduleEntry,
+} from '../mappings/fomcSchedule.js';
 import type { JobCounters } from '../runner.js';
 import type { EventPatch, IngestionStore, ProviderEventRow } from '../store.js';
 import { zonedWallTimeToUtc } from '../time.js';
@@ -197,6 +207,26 @@ export async function ingestFomcSchedule(
       }
 
       const patch: EventPatch = {};
+      if (entry.officialFeed) {
+        // calendar.json から足した予定(HQ指示 2026-11-05): 既にある行の日時・状態は変えない。違えば記録だけ。
+        if (Date.parse(row.release_datetime) !== releaseAt.getTime()) {
+          counters.note('official_feed_conflicts', {
+            provider_event_id: providerEventId,
+            in_db: row.release_datetime,
+            in_feed: releaseAt.toISOString(),
+            source: entry.officialFeed.url,
+          });
+        }
+        if (row.is_provisional !== entry.provisional) patch.is_provisional = entry.provisional;
+        if (Object.keys(patch).length === 0) result.unchanged += 1;
+        else {
+          await deps.store.updateEvent(row.id, patch);
+          result.updated += 1;
+        }
+        counters.success += 1;
+        if (entry.provisional) result.provisional += 1;
+        continue;
+      }
       if (Date.parse(row.release_datetime) !== releaseAt.getTime()) patch.release_datetime = releaseAt.toISOString();
       if (row.release_datetime_precision !== 'EXACT') patch.release_datetime_precision = 'EXACT';
       if (row.is_provisional !== entry.provisional) patch.is_provisional = entry.provisional;
@@ -233,4 +263,152 @@ export async function ingestFomcSchedule(
   result.removed.sort();
   writeDetails();
   return result;
+}
+
+/**
+ * calendar.json の議事要旨を、会合の表(FOMC_SCHEDULE)のどの会合の分かに結びつけた結果
+ * (HQ指示 2026-11-05「公式スケジュール自動更新」)。
+ */
+export interface OfficialMinutesMerge {
+  /** 表の行 + calendar.json から足した行。 */
+  entries: FomcScheduleEntry[];
+  /** 表に無く、calendar.json から足した議事要旨(会合の2日目と公表日)。 */
+  added: { meetingEnd: string; date: string; time: string }[];
+  /** 表にある議事要旨で、calendar.json の日時と違うもの(表を優先。人が確認する)。 */
+  conflicts: { meetingEnd: string; table: string; feed: string }[];
+  /** どの会合の分か決められなかった、これからの議事要旨(足さない)。 */
+  unmatched: {
+    date: string;
+    time: string;
+    reason: 'NO_MEETING_BEFORE' | 'AFTER_NEXT_MEETING' | 'TOO_FAR_FROM_MEETING' | 'DUPLICATE_FOR_MEETING';
+  }[];
+  /** 公表がもう過ぎている calendar.json の議事要旨の数(何もしない)。 */
+  past: number;
+}
+
+/** 議事要旨は会合の約3週間後に出る。会合からこれより離れていたら、表に無い会合の分と見なして足さない。 */
+export const MINUTES_MAX_DAYS_AFTER_MEETING = 42;
+
+/**
+ * calendar.json に載った議事要旨のうち、表(`table`)に無い会合の分だけを足す。日付は calendar.json の
+ * ものだけを使い、会合の日から計算しない。会合は、公表日より前の一番新しい会合(中止を除く)で、
+ * 次の会合の初日より前・会合から MINUTES_MAX_DAYS_AFTER_MEETING 日以内のときだけ結びつける。
+ */
+export function mergeOfficialMinutes(
+  table: readonly FomcScheduleEntry[],
+  meetings: readonly FomcScheduleEntry[],
+  releases: readonly FrbFomcMinutesRelease[],
+  source: { url: string; fetchedAt: Date },
+): OfficialMinutesMerge {
+  const result: OfficialMinutesMerge = { entries: [...table], added: [], conflicts: [], unmatched: [], past: 0 };
+  const held = meetings.filter((m) => !m.cancelled).sort((a, b) => a.meetingEnd.localeCompare(b.meetingEnd));
+  const tableKeys = new Map(table.map((entry) => [entry.eventKey ?? entry.meetingEnd, entry]));
+  const linked = new Set<string>();
+  for (const release of releases) {
+    const announcement = { date: release.date, time: release.time, timeZone: FOMC_TIME_ZONE };
+    const [year, month, day] = release.date.split('-').map(Number) as [number, number, number];
+    const [hour, minute] = release.time.split(':').map(Number) as [number, number];
+    const at = zonedWallTimeToUtc(year, month, day, hour, minute, FOMC_TIME_ZONE);
+    if (!at || at.getTime() <= source.fetchedAt.getTime()) {
+      result.past += 1;
+      continue;
+    }
+    let index = -1;
+    held.forEach((m, i) => {
+      if (m.meetingEnd < release.date) index = i;
+    });
+    if (index < 0) {
+      result.unmatched.push({ ...release, reason: 'NO_MEETING_BEFORE' });
+      continue;
+    }
+    const meeting = held[index]!;
+    const next = held[index + 1];
+    if (next && next.meetingStart <= release.date) {
+      result.unmatched.push({ ...release, reason: 'AFTER_NEXT_MEETING' });
+      continue;
+    }
+    const days = (Date.parse(`${release.date}T00:00:00Z`) - Date.parse(`${meeting.meetingEnd}T00:00:00Z`)) / 86_400_000;
+    if (days > MINUTES_MAX_DAYS_AFTER_MEETING) {
+      result.unmatched.push({ ...release, reason: 'TOO_FAR_FROM_MEETING' });
+      continue;
+    }
+    const key = meeting.eventKey ?? meeting.meetingEnd;
+    const inTable = tableKeys.get(key);
+    if (inTable) {
+      if (inTable.announcement.date !== release.date || inTable.announcement.time !== release.time) {
+        result.conflicts.push({
+          meetingEnd: meeting.meetingEnd,
+          table: `${inTable.announcement.date} ${inTable.announcement.time}`,
+          feed: `${release.date} ${release.time}`,
+        });
+      }
+      continue;
+    }
+    if (linked.has(key)) {
+      // 同じ会合に議事要旨が2つ載っている — どちらが正しいか分からないので、後の方は足さない。
+      result.unmatched.push({ ...release, reason: 'DUPLICATE_FOR_MEETING' });
+      continue;
+    }
+    linked.add(key);
+    result.entries.push({
+      meetingStart: meeting.meetingStart,
+      meetingEnd: meeting.meetingEnd,
+      ...(meeting.eventKey ? { eventKey: meeting.eventKey } : {}),
+      announcement,
+      sep: false,
+      provisional: meeting.provisional,
+      sources: [source.url],
+      checkedAt: source.fetchedAt.toISOString().slice(0, 10),
+      officialFeed: { url: source.url, fetchedAt: source.fetchedAt.toISOString() },
+    });
+    result.added.push({ meetingEnd: meeting.meetingEnd, date: release.date, time: release.time });
+  }
+  return result;
+}
+
+/**
+ * FOMC 議事要旨の予定(HQ指示 2026-11-05「公式スケジュール自動更新」): 表(FOMC_MINUTES_SCHEDULE)に、
+ * calendar.json に新しく載った議事要旨を足してから ingestFomcSchedule(FOMC_MINUTES_TARGET)で入れる。
+ * calendar.json が取れないときは、表だけで今までどおり入れる(エラーにしない。details.official_feed に記録)。
+ * 結果・取得元・足した分・食い違いは counters.details.official_feed に残す。
+ */
+export async function ingestFomcMinutesSchedule(
+  deps: {
+    store: IngestionStore;
+    fetchMinutes: () => Promise<FrbFomcMinutesParseResult>;
+    table?: readonly FomcScheduleEntry[];
+    meetings?: readonly FomcScheduleEntry[];
+    now?: () => Date;
+    sourceUrl?: string;
+  },
+  counters: JobCounters,
+): Promise<FomcScheduleResult> {
+  const table = deps.table ?? FOMC_MINUTES_SCHEDULE;
+  const now = deps.now?.() ?? new Date();
+  const url = deps.sourceUrl ?? FRB_CALENDAR_URL;
+  let entries: readonly FomcScheduleEntry[] = table;
+  try {
+    const feed = await deps.fetchMinutes();
+    const merge = mergeOfficialMinutes(table, deps.meetings ?? FOMC_SCHEDULE, feed.releases, { url, fetchedAt: now });
+    entries = merge.entries;
+    counters.details.official_feed = {
+      status: 'OK',
+      url,
+      fetched_at: now.toISOString(),
+      minutes_in_feed: feed.releases.length,
+      past: merge.past,
+      added: merge.added,
+      conflicts: merge.conflicts,
+      unmatched: merge.unmatched,
+      unreadable: feed.skipped.length,
+    };
+  } catch (error) {
+    counters.details.official_feed = {
+      status: 'UNAVAILABLE',
+      url,
+      fetched_at: now.toISOString(),
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+  return ingestFomcSchedule({ store: deps.store, entries, now: () => now, target: FOMC_MINUTES_TARGET }, counters);
 }
