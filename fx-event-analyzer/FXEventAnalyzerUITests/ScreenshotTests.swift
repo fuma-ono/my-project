@@ -158,7 +158,7 @@ final class ScreenshotTests: XCTestCase {
             XCTAssertFalse(comparison.label.contains("分析データ不足"), "The comparison says there is not enough data")
             // HQ指示(2026-11-05)「相場反応分析の比較基準統一」: 「過去の類似イベントとの比較」のカードも、文と同じ時間で比べる。
             if let range = comparison.label.range(of: "今回の[0-9]+分後", options: .regularExpression) {
-                let span = String(comparison.label[range].dropFirst(2))
+                let span = String(comparison.label[range].dropFirst(3))
                 let average = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "回の平均値幅（")).firstMatch
                 XCTAssertTrue(average.exists, "The average row of the similar-events card is not shown")
                 XCTAssertTrue(average.label.contains("（\(span)・上下問わず）"), "The card average is not for \(span): \(average.label)")
