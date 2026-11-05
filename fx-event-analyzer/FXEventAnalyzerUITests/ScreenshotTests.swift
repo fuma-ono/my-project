@@ -144,6 +144,33 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 15), "Event Detail did not load")
         capture("07-EventDetail")
 
+        // HQ指示(2026-11-05)「政策金利データありの iOS 表示確認」(api-design v1.47): 撮影はしない(スクリーンショットの枚数は
+        // 変えない)。データが無い今の画面は従来の結果のカードのまま → モックを「政策決定が記録された FOMC の会合」にして
+        // 開き直し、誘導目標レンジ・適用日・NY連銀の出典のリンクが出て、結果のカードと EFFR の値が出ないこと → 戻すと
+        // 従来の表示に戻ること、を確かめる。
+        assertConventionalResults("before the policy-rate switch")
+        if setMockPolicyRate(true) {
+            addTeardownBlock { [weak self] in _ = self?.setMockPolicyRate(false) }
+            reopenEventDetail()
+            XCTAssertTrue(waitForAnyElement(containing: "フェデラルファンド金利の誘導目標レンジ", timeout: 10), "The policy-rate heading is not shown")
+            XCTAssertTrue(app.staticTexts["3.75%〜4.00%"].exists, "The target range is not shown")
+            XCTAssertTrue(app.staticTexts["適用日 2026/09/17"].exists, "The effective date is not shown")
+            let source = app.links.matching(NSPredicate(format: "label CONTAINS %@", "出典：ニューヨーク連邦準備銀行")).firstMatch
+            XCTAssertTrue(source.exists, "The NY Fed source link is not shown")
+            XCTAssertTrue(
+                app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "EFFR（実際の取引の金利）の値は表示していません")).firstMatch.exists,
+                "The notice that the EFFR itself is not shown is missing"
+            )
+            // 結果のカード(結果・予想・前回)も、EFFR の実績(モックの EFFR 3.88)も出さない
+            XCTAssertFalse(app.staticTexts["結果"].firstMatch.exists, "The results card is shown together with the policy rate")
+            XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "3.88")).firstMatch.exists, "An EFFR value is shown")
+            XCTAssertTrue(setMockPolicyRate(false), "Could not turn the policy-rate switch off")
+            reopenEventDetail()
+            assertConventionalResults("after the policy-rate switch")
+        } else {
+            XCTFail("Could not reach the mock server for the policy-rate switch")
+        }
+
         // SCR-008 相場反応詳細。2026-10-09から、値動きの表のUSD/JPYの行から直接進む。
         tap(containing: "USD/JPYの相場反応を見る")
         XCTAssertTrue(waitForAnyElement(containing: "値動きの分析", timeout: 15), "Movement Detail did not load")
@@ -740,6 +767,40 @@ final class ScreenshotTests: XCTestCase {
         }.resume()
         _ = done.wait(timeout: .now() + 6)
         return succeeded
+    }
+
+    /// モックの GET /events/{id} を「政策決定が記録された FOMC の会合」の形にする(false = 今までの応答)。届かなければfalse。
+    private func setMockPolicyRate(_ on: Bool) -> Bool {
+        guard let url = URL(string: "http://127.0.0.1:8090/__mock/policy-rate?value=\(on ? "1" : "0")") else { return false }
+        var request = URLRequest(url: url, timeoutInterval: 5)
+        request.httpMethod = "POST"
+        let done = DispatchSemaphore(value: 0)
+        var succeeded = false
+        URLSession.shared.dataTask(with: request) { _, response, _ in
+            succeeded = (response as? HTTPURLResponse)?.statusCode == 200
+            done.signal()
+        }.resume()
+        _ = done.wait(timeout: .now() + 6)
+        return succeeded
+    }
+
+    /// イベント詳細から指標詳細へ戻り、「次回発表予定」からもう一度イベント詳細を開く。
+    private func reopenEventDetail() {
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 10), "Did not go back to Indicator Detail")
+        tap(containing: "次回発表予定")
+        XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 15), "Event Detail did not load")
+    }
+
+    /// 政策金利のデータが無いイベント詳細: 従来の結果のカード(結果・予想・前回)で、政策金利の見出し・NY連銀の出典は無い。
+    private func assertConventionalResults(_ when: String) {
+        XCTAssertTrue(app.staticTexts["結果"].firstMatch.waitForExistence(timeout: 10), "The results card is not shown (\(when))")
+        XCTAssertTrue(app.staticTexts["予想"].firstMatch.exists, "The forecast column is not shown (\(when))")
+        XCTAssertFalse(app.staticTexts["フェデラルファンド金利の誘導目標レンジ"].exists, "The policy-rate card is shown without data (\(when))")
+        XCTAssertFalse(
+            app.links.matching(NSPredicate(format: "label CONTAINS %@", "ニューヨーク連邦準備銀行")).firstMatch.exists,
+            "The NY Fed source is shown without data (\(when))"
+        )
     }
 
     /// モックの GET /home をこの時間(ミリ秒)だけ遅らせる。0で戻す。届かなければfalse。
