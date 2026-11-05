@@ -72,6 +72,12 @@ export interface FomcScheduleEntry {
   sources: readonly string[];
   /** 'YYYY-MM-DD' a human last compared this entry with the sources. */
   checkedAt: string;
+  /**
+   * Set only on entries the job added from the official calendar.json at run time (not in this
+   * table — HQ指示 2026-11-05「公式スケジュール自動更新」). Such a row is never rescheduled by a
+   * later run: a different date in the feed is logged as a conflict for a human to review.
+   */
+  officialFeed?: { url: string; fetchedAt: string };
 }
 
 const SOURCES = [FOMC_MEETINGS_PAGE_URL, FRB_CALENDAR_JSON_URL] as const;
@@ -112,6 +118,10 @@ export const FOMC_SCHEDULE: readonly FomcScheduleEntry[] = [
  * (2026-11-18 2:00 p.m.・2026-12-30 2:00 p.m.)。会合日程のページの「minutes … are released three
  * weeks after the date of the policy decision」。**calendar.json に載った日だけを入れる**(2027年の
  * 議事要旨は calendar.json に無いので、規則から日付を作らない。載ったら足す)。
+ * HQ指示(2026-11-05「公式スケジュール自動更新」): `npm run ingest:fomc-schedule` は実行のたびに calendar.json を
+ * 読み、この表に無い会合の議事要旨が載っていれば、その日付で予定を足す(pipelines/fomcSchedule.ts の
+ * ingestFomcMinutesSchedule)。載っていない議事要旨は作らない。この表の行は、calendar.json と日付が違っても
+ * 変えない(食い違いはログに残す)。人が確認したら、ここに足して表の行にする。
  * provisional は、その会合の日程が暫定なら true(12/9 の会合は10月の会合で確認されるまで暫定)。
  * 値は無い(議事要旨は文書)。予定の行だけを作る。
  */

@@ -191,6 +191,57 @@ export function frbSkipLogEntries(skipped: FrbParseResult['skipped']): FrbParseR
   return skipped.filter((item) => item.reason !== 'OUTSIDE_WINDOW').slice(0, FRB_SKIP_LOG_LIMIT);
 }
 
+/**
+ * FOMC 議事要旨の公表予定(HQ指示 2026-11-05「公式スケジュール自動更新」)。calendar.json の title
+ * "FOMC Minutes"(前後の空白は無視)の項目から、ニューヨークの日付と時刻だけを読む。日付・時刻が読めない
+ * 項目(古い年の month が空の項目など)は `skipped` に入れ、日付を補わない。同じ日付は1件にまとめる。
+ * どの会合の議事要旨かは calendar.json に無いので、ここでは決めない(pipelines/fomcSchedule.ts で、
+ * コードレビュー済みの会合の表と照らし合わせる)。
+ */
+export interface FrbFomcMinutesRelease {
+  /** 'YYYY-MM-DD', America/New_York */
+  date: string;
+  /** 'HH:MM', America/New_York */
+  time: string;
+}
+
+export interface FrbFomcMinutesParseResult {
+  releases: FrbFomcMinutesRelease[];
+  skipped: { title: string; reason: 'DATE_UNREADABLE' | 'TIME_MISSING'; date?: string }[];
+}
+
+const FOMC_MINUTES_TITLE = /^FOMC Minutes$/i;
+
+export function parseFrbFomcMinutes(body: unknown): FrbFomcMinutesParseResult {
+  const parsed = calendarSchema.parse(body);
+  const byDate = new Map<string, FrbFomcMinutesRelease>();
+  const skipped: FrbFomcMinutesParseResult['skipped'] = [];
+  for (const event of parsed.events) {
+    const title = decodeEntities(event.title ?? '').trim();
+    if (!FOMC_MINUTES_TITLE.test(title)) continue;
+    const date = localDate(event.month, event.days);
+    if (!date) {
+      skipped.push({ title, reason: 'DATE_UNREADABLE' });
+      continue;
+    }
+    const time = parseFrbTime(event.time ?? '');
+    if (!time) {
+      skipped.push({ title, reason: 'TIME_MISSING', date });
+      continue;
+    }
+    const hhmm = `${String(time.hour).padStart(2, '0')}:${String(time.minute).padStart(2, '0')}`;
+    if (!byDate.has(date)) byDate.set(date, { date, time: hhmm });
+  }
+  const releases = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+  return { releases, skipped };
+}
+
+/** calendar.json を1回取り、FOMC 議事要旨の項目だけを返す(取れなければ HttpError などを投げる)。 */
+export async function fetchFrbFomcMinutes(deps: HttpClientDeps = {}): Promise<FrbFomcMinutesParseResult> {
+  const http = new HttpClient('frb', PROVIDER_HTTP_SETTINGS.frb, deps);
+  return parseFrbFomcMinutes(await http.getJson(FRB_CALENDAR_URL));
+}
+
 export class FrbCalendarAdapter implements SpeechScheduleProvider {
   readonly name = FRB_PROVIDER;
   private readonly http: HttpClient;
