@@ -44,6 +44,9 @@ struct EventDetailEvent: Decodable, Equatable {
     var attribution: Attribution? = nil
     /// 値を表示する小数の桁数(api-design v1.46、BLSの%の指標は1)。BLS以外の指標・古いBackendではnil(今までの表示)。
     var valueDecimals: Int? = nil
+    /// FOMCの会合の政策決定(api-design v1.47、HQ承認 2026-11-05)。誘導目標レンジの下限・上限と適用日。
+    /// 記録された会合だけ付く。ほかの指標・まだ記録が無い会合・古いBackendではnil(今までの表示)。
+    var policyRate: PolicyRate? = nil
     /// 無料プランで隠された過去の発表(api-design v1.33 §14.1)。古いBackendではnil(=隠していない)。
     var locked: Bool? = nil
     /// ロックを外すのに必要なプラン(`"PRO"`)。ロックしていなければnil。
@@ -66,6 +69,7 @@ struct EventDetailEvent: Decodable, Equatable {
         case displayName = "display_name"
         case attribution
         case valueDecimals = "value_decimals"
+        case policyRate = "policy_rate"
         case id
         case indicatorId = "indicator_id"
         case indicatorName = "indicator_name"
@@ -77,6 +81,35 @@ struct EventDetailEvent: Decodable, Equatable {
         case status
         case dataStatus = "data_status"
         case revisionStatus = "revision_status"
+    }
+}
+
+/// FOMCの政策決定(api-design v1.47の`event.policy_rate`)。値はNY連銀のデータの下限・上限をそのまま
+/// (1つの金利にまとめない)。出典と告知は`event.attribution`(NY連銀)に入る。
+struct PolicyRate: Decodable, Equatable {
+    /// 誘導目標レンジの下限(%)。
+    let targetRangeLower: Double
+    /// 誘導目標レンジの上限(%)。
+    let targetRangeUpper: Double
+    /// 新しいレンジが有効になった日(`YYYY-MM-DD`、ニューヨークの日付)。
+    let effectiveDate: String
+
+    enum CodingKeys: String, CodingKey {
+        case targetRangeLower = "target_range_lower"
+        case targetRangeUpper = "target_range_upper"
+        case effectiveDate = "effective_date"
+    }
+
+    /// 「3.75%〜4.00%」(小数2桁。NY連銀の公表は0.25刻み)。
+    var rangeText: String {
+        "\(ValueFormat.number(targetRangeLower, fractionDigits: 2, minimumFractionDigits: 2))%〜\(ValueFormat.number(targetRangeUpper, fractionDigits: 2, minimumFractionDigits: 2))%"
+    }
+
+    /// 「2026/09/17」。日付として読めなければそのまま。
+    var effectiveDateText: String {
+        effectiveDate.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil
+            ? effectiveDate.replacingOccurrences(of: "-", with: "/")
+            : effectiveDate
     }
 }
 

@@ -197,9 +197,35 @@ struct EventDetailCards: View {
     @ViewBuilder private var results: some View {
         if isLocked {
             lockedResults
+        } else if let policyRate = response.event.policyRate {
+            policyRateResults(policyRate)
         } else {
             unlockedResults
         }
+    }
+
+    /// FOMCの会合の政策決定(api-design v1.47、HQ承認 2026-11-05): 結果・予想・前回の代わりに、誘導目標レンジ
+    /// (下限〜上限)と適用日。EFFR(実際の取引の金利)の値は出さない(取り違えないよう、見出しは「誘導目標レンジ」)。カードの大きさ・背景は結果のカードと同じ。出典(NY連銀)と告知は一番下の
+    /// `attributionNotice`に出る。
+    private func policyRateResults(_ policyRate: PolicyRate) -> some View {
+        VStack(spacing: 2) {
+            NotoText.text("フェデラルファンド金利の誘導目標レンジ", size: 7)
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            NotoText.text(policyRate.rangeText, size: 12)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .accessibilityIdentifier("eventDetailPolicyRateRange")
+            NotoText.text("適用日 \(policyRate.effectiveDateText)", size: 7)
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 2)
+        .frame(minHeight: Self.summaryCardMinHeight)
+        .frame(width: 214)
+        .background(GradientCardBackground())
     }
 
     /// 隠された発表: 結果・予想・前回の代わりに鍵の印(押すとプランの案内)。カードの大きさは同じ。

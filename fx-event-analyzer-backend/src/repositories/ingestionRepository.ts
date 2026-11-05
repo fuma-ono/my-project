@@ -11,6 +11,7 @@ import type {
   IngestionLogRow,
   IngestionStore,
   NewEvent,
+  NewFomcPolicyDecision,
   NewReleaseSnapshot,
   NewRevision,
   NewStagedValue,
@@ -183,6 +184,22 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
       if (error) throw error;
       if (!data) return null;
       return { forecast: num(data.forecast), actual: num(data.actual), previous: num(data.previous) };
+    },
+
+    async listFomcPolicyDecisionEventIds(): Promise<string[]> {
+      const rows = await allPages<{ event_id: string }>((from, to) =>
+        supabase
+          .from('fomc_policy_decisions')
+          .select('event_id')
+          .order('event_id', { ascending: true })
+          .range(from, to),
+      );
+      return rows.map((row) => row.event_id);
+    },
+
+    async insertFomcPolicyDecision(row: NewFomcPolicyDecision): Promise<void> {
+      const { error } = await supabase.from('fomc_policy_decisions').insert(row);
+      if (error) throw error;
     },
 
     async insertReleaseSnapshot(snapshot: NewReleaseSnapshot): Promise<void> {
