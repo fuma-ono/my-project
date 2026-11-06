@@ -1779,3 +1779,25 @@ settings に入ったコードがそのまま配信される。`GET /events/{id}
 | 小売売上高の通知(`notification_inbox`) | `target_id` は文字列で外部キーが無い。予定を消すと、届いた通知を開いたときに 404 になる。 | 通知は戻らない(予定を消す前に、届いた通知が無いか確かめる) |
 | 小売売上高の指標マスタ | 予定を消した後に `indicator_fx_pairs` → `economic_indicators` の順に US_RETAIL_SALES の行を消す(どちらも `on delete restrict`)。 | 取り直せる(migration を流し直す) |
 | 議事要旨 | migration は無い。コードを戻すだけ。calendar.json から足した予定は DB に印が無いので、`provider_event_id` を表(`FOMC_MINUTES_SCHEDULE`)と見比べて見分ける。 | 取り直せる |
+
+### 15.4 政策金利の食い違い(conflicts)が記録されたとき(HQ指示 2026-11-06「NY連銀の規約対応」)
+
+NY連銀の規約は、利用者に取得元の訂正を見守る責任を求めている(「Users are responsible for monitoring the Website for any changes,
+updates, or corrections relevant to Content you choose to use.」)。`npm run ingest:fomc-policy-rate` は実行のたびに、記録済みの会合
+(発表から180日以内)を NY連銀の今の値と突き合わせ、違いを `ingestion_logs.details.conflicts` に残す。**記録した値も、会合への結びつけも
+自動では変えない**(`fomc_policy_decisions` の行はトリガーで変えられない)。
+
+| details の項目 | 意味 |
+|---|---|
+| `conflicts_checked` | `true` = 今回は突き合わせた。`false` = 突き合わせていない(取得の失敗、または比べる会合が無い)。取得の失敗は `source_status: 'UNAVAILABLE'` とエラーで分かる |
+| `conflicts[]` | `provider_event_id`・`differences`(`VALUE_DIFFERS` = 記録した適用日の下限・上限が違う、`EFFECTIVE_DATE_DIFFERS` = 今の決まりで選ぶと別の適用日になる)・`stored`(DB の値)・`source`(NY連銀の今の値)・`source_url` |
+| `unverified[]` | 記録した適用日の値が API に無い(`MISSING_IN_SOURCE`)・読めない(`UNREADABLE_IN_SOURCE`)ため比べられなかった会合 |
+| `verified` | 突き合わせた会合の数 |
+
+同じ違いは、1回の実行で1つの会合につき1件だけ出る(実行ごとに `ingestion_logs` の1行。件数は記録済みの会合の数を超えない)。
+
+conflicts が出たときの手順:
+1. `source_url` を開き、NY連銀の公表の値を人が確かめる(`stored` と `source` のどちらが正しいか)。
+2. NY連銀が訂正していた(`source` が正しい)ときだけ、DB を直すかを HQ が決める。直すときは、行を変えられないため
+   API が読まないようにしてから(15.1)行を消して取り直す、などの手順を別に決める(このジョブは自動では直さない)。
+3. 一時的な API の揺れだと考えられるときは、次の実行で消えるか確かめる。

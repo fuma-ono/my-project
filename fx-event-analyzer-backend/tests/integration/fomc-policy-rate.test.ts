@@ -172,6 +172,10 @@ describe.skipIf(!integration)('FOMC policy decisions: table, ingestion and GET /
     });
     expect(Date.parse(event.policy_rate.announced_at)).toBe(Date.parse('2019-12-11T19:00:00Z'));
     expect(event.attribution).toEqual(nyFedAttribution());
+    // HQ指示(2026-11-06「NY連銀の規約対応」修正案1): API の告知に、会合との対応付けは本アプリが行っていることが入る
+    expect(event.attribution.notice).toContain(
+      'FOMC会合との対応付け（発表日の翌営業日以降で最初に有効になったレンジ）は、本アプリが行っています。',
+    );
     expect(event.data_status).toBe('DATA_PENDING'); // 会合の行は変えていない(DB の PENDING は API で DATA_PENDING)
 
     const noDecisionId = randomUUID();

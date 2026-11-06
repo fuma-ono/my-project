@@ -70,6 +70,13 @@ describe('nyFedAttribution', () => {
     expect(attribution.source_url).toBe('https://www.newyorkfed.org/markets/reference-rates/effr');
     expect(attribution.notice).toContain('誘導目標レンジは FOMC（米連邦公開市場委員会）が決定するもので');
     expect(attribution.notice).toContain('EFFR（実際の取引の金利）の値は表示していません。');
+    // HQ指示(2026-11-06「NY連銀の規約対応」修正案1): FOMC 会合との対応付けは本アプリが行っていることを明示する
+    expect(attribution.notice).toContain(
+      'FOMC会合との対応付け（発表日の翌営業日以降で最初に有効になったレンジ）は、本アプリが行っています。',
+    );
+    expect(attribution.notice).toContain(
+      '© 2026 Federal Reserve Bank of New York. Content from the New York Fed subject to the Terms of Use at newyorkfed.org.',
+    );
     expect(attribution.notice).toContain(
       'The New York Fed is not responsible for publication of the federal funds target range data by FX Event Analyzer, does not sanction or endorse any particular republication, and has no liability for your use.',
     );

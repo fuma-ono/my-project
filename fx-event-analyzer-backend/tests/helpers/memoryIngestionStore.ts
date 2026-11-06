@@ -22,6 +22,7 @@ import type {
   StoredEvent,
   StoredSpeechRef,
   NewFomcPolicyDecision,
+  StoredFomcPolicyDecision,
 } from '../../src/ingestion/store.js';
 
 /**
@@ -123,8 +124,15 @@ export class MemoryIngestionStore implements IngestionStore {
     return Promise.resolve(s ? { forecast: s.forecast, actual: s.actual, previous: s.previous } : null);
   }
 
-  listFomcPolicyDecisionEventIds(): Promise<string[]> {
-    return Promise.resolve(this.fomcPolicyDecisions.map((row) => row.event_id));
+  listFomcPolicyDecisions(): Promise<StoredFomcPolicyDecision[]> {
+    return Promise.resolve(
+      this.fomcPolicyDecisions.map((row) => ({
+        event_id: row.event_id,
+        target_range_lower: row.target_range_lower,
+        target_range_upper: row.target_range_upper,
+        effective_date: row.effective_date,
+      })),
+    );
   }
 
   insertFomcPolicyDecision(row: NewFomcPolicyDecision): Promise<void> {

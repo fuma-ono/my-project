@@ -21,11 +21,21 @@
  * 制約(api-design v1.47 にも記載): 発表から MAX_LOOKBACK_DAYS(180日)を超えて記録の無い会合は処理しない
  * (OUTSIDE_LOOKBACK)。DB に会合の予定の行が無い会合は対象外。記録した値は NY連銀の後日の改定を反映しない。
  * 翌営業日の記録が API に無い(読めない記録でもない)ときは、上の条件の範囲でその次の記録を使う。
+ *
+ * 訂正の検知(HQ指示 2026-11-06「NY連銀の規約対応」。規約「Users are responsible for monitoring the Website for any
+ * changes, updates, or corrections relevant to Content you choose to use.」): 記録済みの会合(発表から MAX_LOOKBACK_DAYS
+ * 以内)も、同じ1回の取得で NY連銀の今の値と突き合わせる。違いは details.conflicts に記録するだけで、記録した値も
+ * 会合への結びつけも変えない(行は不変。人が確認して DB を直すか決める — dev-environment.md 15.4)。
+ * - VALUE_DIFFERS: 記録した effective_date の NY連銀の下限・上限が、記録と違う
+ * - EFFECTIVE_DATE_DIFFERS: 今の NY連銀の記録で同じ決まりを当てはめると、別の effective_date になる
+ * 記録した effective_date の値が API に無い・読めないときは比べられないので、conflicts ではなく details.unverified。
+ * 1回の実行で1つの会合は1件だけ(実行ごとに ingestion_logs の1行に、その時点の違いとして出る)。API が取れなければ
+ * 比べない(details.conflicts_checked = false。取得の失敗は従来どおりエラー)。
  */
 import { NY_FED_SOURCE } from '../../domain/attribution.js';
 import { nyFedEffrSearchUrl, type NyFedTargetRangeResult } from '../adapters/nyFedRates.js';
 import type { JobCounters } from '../runner.js';
-import type { IngestionStore, ProviderEventRow } from '../store.js';
+import type { IngestionStore, ProviderEventRow, StoredFomcPolicyDecision } from '../store.js';
 import { localDate } from '../time.js';
 import { FOMC_INDICATOR_CODE, FOMC_SCHEDULE_PROVIDER } from './fomcSchedule.js';
 
@@ -44,6 +54,42 @@ export interface FomcPolicyRateResult {
     reason: 'NO_RECORD_IN_WINDOW' | 'FIRST_RECORD_UNREADABLE' | 'OUTSIDE_LOOKBACK';
   }[];
   alreadyRecorded: number;
+  /** 記録済みの会合で、NY連銀の今の値と違うもの(記録は変えない)。 */
+  conflicts: FomcPolicyRateConflict[];
+  /** 記録済みの会合で、比べられなかったもの(記録した effective_date の値が API に無い・読めない)。 */
+  unverified: { provider_event_id: string; reason: 'MISSING_IN_SOURCE' | 'UNREADABLE_IN_SOURCE' }[];
+}
+
+export interface FomcPolicyRateConflict {
+  provider_event_id: string;
+  differences: ('VALUE_DIFFERS' | 'EFFECTIVE_DATE_DIFFERS')[];
+  /** DB の記録(変えていない)。 */
+  stored: { lower: number; upper: number; effective_date: string };
+  /** NY連銀の今の値。VALUE_DIFFERS は記録した effective_date の値、EFFECTIVE_DATE_DIFFERS は今の決まりで選んだ記録。 */
+  source: { lower: number; upper: number; effective_date: string };
+  source_url: string;
+}
+
+const sameRate = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+
+type Pick =
+  | { kind: 'range'; range: NyFedTargetRangeResult['ranges'][number] }
+  | { kind: 'awaiting' }
+  | { kind: 'unreadable' }
+  | { kind: 'outside' };
+
+/** 発表日(date)より後の最初の記録を、上の条件で選ぶ(新規の取り込みと訂正の検知で同じ決まりを使う)。 */
+function pickRange(feed: NyFedTargetRangeResult, date: string, nextDate: string | null): Pick {
+  const first = feed.ranges.find((range) => range.effectiveDate > date);
+  const unreadableBefore = feed.skipped.some(
+    (s) => s.effectiveDate !== null && s.effectiveDate > date && (!first || s.effectiveDate <= first.effectiveDate),
+  );
+  if (unreadableBefore) return { kind: 'unreadable' };
+  if (!first) return { kind: 'awaiting' };
+  const inWindow =
+    first.effectiveDate <= addDays(date, MAX_DAYS_AFTER_ANNOUNCEMENT) &&
+    (nextDate === null || first.effectiveDate < nextDate);
+  return inWindow ? { kind: 'range', range: first } : { kind: 'outside' };
 }
 
 function addDays(date: string, days: number): string {
@@ -60,51 +106,67 @@ export async function ingestFomcPolicyRates(
   counters: JobCounters,
 ): Promise<FomcPolicyRateResult> {
   const now = deps.now?.() ?? new Date();
-  const result: FomcPolicyRateResult = { recorded: [], awaiting: [], unmatched: [], alreadyRecorded: 0 };
+  const result: FomcPolicyRateResult = {
+    recorded: [],
+    awaiting: [],
+    unmatched: [],
+    alreadyRecorded: 0,
+    conflicts: [],
+    unverified: [],
+  };
   const writeDetails = (extra: Record<string, unknown> = {}) => {
     counters.details.recorded = result.recorded;
     counters.details.awaiting = result.awaiting;
     counters.details.unmatched = result.unmatched;
     counters.details.already_recorded = result.alreadyRecorded;
+    counters.details.conflicts = result.conflicts;
+    counters.details.unverified = result.unverified;
     Object.assign(counters.details, extra);
   };
 
   const indicator = (await deps.store.findIndicatorsByCode([FOMC_INDICATOR_CODE])).get(FOMC_INDICATOR_CODE);
   if (!indicator) {
     counters.error(`economic_indicators has no ${FOMC_INDICATOR_CODE} row`);
-    writeDetails();
+    writeDetails({ conflicts_checked: false });
     return result;
   }
 
   const meetings = (await deps.store.listEventsByProvider(FOMC_SCHEDULE_PROVIDER))
     .filter((row) => row.indicator_id === indicator.id && row.status !== 'CANCELLED')
     .sort((a, b) => Date.parse(a.release_datetime) - Date.parse(b.release_datetime));
-  const recordedIds = new Set(await deps.store.listFomcPolicyDecisionEventIds());
+  const recorded = new Map((await deps.store.listFomcPolicyDecisions()).map((d) => [d.event_id, d]));
   const today = localDate(now, NEW_YORK);
   const lookbackStart = addDays(today, -MAX_LOOKBACK_DAYS);
 
-  const pending: { row: ProviderEventRow; date: string; nextDate: string | null }[] = [];
+  type Target = { row: ProviderEventRow; date: string; nextDate: string | null };
+  const pending: Target[] = [];
+  const toVerify: (Target & { stored: StoredFomcPolicyDecision })[] = [];
   meetings.forEach((row, index) => {
     if (Date.parse(row.release_datetime) > now.getTime()) return;
-    if (recordedIds.has(row.id)) {
+    const date = localDate(new Date(row.release_datetime), NEW_YORK);
+    const next = meetings[index + 1];
+    const nextDate = next ? localDate(new Date(next.release_datetime), NEW_YORK) : null;
+    const stored = recorded.get(row.id);
+    if (stored) {
       result.alreadyRecorded += 1;
+      // 発表から MAX_LOOKBACK_DAYS を過ぎた記録は突き合わせない(取得の期間に入れない)。
+      if (date >= lookbackStart) toVerify.push({ row, date, nextDate, stored });
       return;
     }
-    const date = localDate(new Date(row.release_datetime), NEW_YORK);
     if (date < lookbackStart) {
       result.unmatched.push({ provider_event_id: row.provider_event_id, reason: 'OUTSIDE_LOOKBACK' });
       return;
     }
-    const next = meetings[index + 1];
-    pending.push({ row, date, nextDate: next ? localDate(new Date(next.release_datetime), NEW_YORK) : null });
+    pending.push({ row, date, nextDate });
   });
   counters.fetched += pending.length;
-  if (pending.length === 0) {
-    writeDetails();
+  if (pending.length === 0 && toVerify.length === 0) {
+    writeDetails({ conflicts_checked: false });
     return result;
   }
 
-  const startDate = addDays(pending[0]!.date, 1);
+  const earliest = [...pending, ...toVerify].map((t) => t.date).sort()[0]!;
+  const startDate = addDays(earliest, 1);
   const sourceUrl = nyFedEffrSearchUrl(startDate, today);
   let feed: NyFedTargetRangeResult;
   try {
@@ -113,32 +175,28 @@ export async function ingestFomcPolicyRates(
     // 推測の値は入れない。会合は data preparing のまま、次の実行で取り直す。
     counters.error(`NY Fed EFFR: ${error instanceof Error ? error.message : String(error)}`);
     result.awaiting.push(...pending.map((p) => p.row.provider_event_id));
-    writeDetails({ source_status: 'UNAVAILABLE', source_url: sourceUrl });
+    // 取れなかったときは比べない(訂正の検知と取得の失敗を混ぜない)。
+    writeDetails({ source_status: 'UNAVAILABLE', source_url: sourceUrl, conflicts_checked: false });
     return result;
   }
   const fetchedAt = now.toISOString();
 
   for (const { row, date, nextDate } of pending) {
-    const first = feed.ranges.find((range) => range.effectiveDate > date);
-    const unreadableBefore = feed.skipped.some(
-      (s) => s.effectiveDate !== null && s.effectiveDate > date && (!first || s.effectiveDate <= first.effectiveDate),
-    );
-    if (unreadableBefore) {
+    const pick = pickRange(feed, date, nextDate);
+    if (pick.kind === 'unreadable') {
       result.unmatched.push({ provider_event_id: row.provider_event_id, reason: 'FIRST_RECORD_UNREADABLE' });
       continue;
     }
-    if (!first) {
+    if (pick.kind === 'awaiting') {
       result.awaiting.push(row.provider_event_id);
       counters.skip('not_published_yet');
       continue;
     }
-    const inWindow =
-      first.effectiveDate <= addDays(date, MAX_DAYS_AFTER_ANNOUNCEMENT) &&
-      (nextDate === null || first.effectiveDate < nextDate);
-    if (!inWindow) {
+    if (pick.kind === 'outside') {
       result.unmatched.push({ provider_event_id: row.provider_event_id, reason: 'NO_RECORD_IN_WINDOW' });
       continue;
     }
+    const first = pick.range;
     try {
       await deps.store.insertFomcPolicyDecision({
         event_id: row.id,
@@ -161,11 +219,53 @@ export async function ingestFomcPolicyRates(
       counters.error(`${row.provider_event_id}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
+  // 訂正の検知: 記録済みの会合を、NY連銀の今の値と突き合わせる(記録は変えない)。
+  for (const { row, date, nextDate, stored } of toVerify) {
+    const differences: FomcPolicyRateConflict['differences'] = [];
+    let source: FomcPolicyRateConflict['source'] | null = null;
+    const atStored = feed.ranges.find((range) => range.effectiveDate === stored.effective_date);
+    if (atStored) {
+      if (
+        !sameRate(atStored.lower, stored.target_range_lower) ||
+        !sameRate(atStored.upper, stored.target_range_upper)
+      ) {
+        differences.push('VALUE_DIFFERS');
+        source = { lower: atStored.lower, upper: atStored.upper, effective_date: atStored.effectiveDate };
+      }
+    } else {
+      const unreadable = feed.skipped.some((skip) => skip.effectiveDate === stored.effective_date);
+      result.unverified.push({
+        provider_event_id: row.provider_event_id,
+        reason: unreadable ? 'UNREADABLE_IN_SOURCE' : 'MISSING_IN_SOURCE',
+      });
+    }
+    const pick = pickRange(feed, date, nextDate);
+    if (pick.kind === 'range' && pick.range.effectiveDate !== stored.effective_date) {
+      differences.push('EFFECTIVE_DATE_DIFFERS');
+      source = { lower: pick.range.lower, upper: pick.range.upper, effective_date: pick.range.effectiveDate };
+    }
+    if (differences.length > 0 && source) {
+      result.conflicts.push({
+        provider_event_id: row.provider_event_id,
+        differences,
+        stored: {
+          lower: stored.target_range_lower,
+          upper: stored.target_range_upper,
+          effective_date: stored.effective_date,
+        },
+        source,
+        source_url: sourceUrl,
+      });
+    }
+  }
+
   writeDetails({
     source_status: 'OK',
     source_url: sourceUrl,
     fetched_at: fetchedAt,
     unreadable_records: feed.skipped.length,
+    conflicts_checked: true,
+    verified: toVerify.length,
   });
   return result;
 }

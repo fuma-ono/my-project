@@ -168,6 +168,11 @@ final class ScreenshotTests: XCTestCase {
                 app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "EFFR（実際の取引の金利）の値は表示していません")).firstMatch.exists,
                 "The notice that the EFFR itself is not shown is missing"
             )
+            // HQ指示(2026-11-06「NY連銀の規約対応」修正案1): 会合との対応付けは本アプリが行っていることも出る
+            XCTAssertTrue(
+                app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "FOMC会合との対応付け（発表日の翌営業日以降で最初に有効になったレンジ）は、本アプリが行っています。")).firstMatch.exists,
+                "The notice that the app links the range to the FOMC meeting is missing"
+            )
             // 結果のカード(結果・予想・前回)も、EFFR の実績(モックの EFFR 3.88)も出さない
             XCTAssertFalse(app.staticTexts["結果"].firstMatch.exists, "The results card is shown together with the policy rate")
             XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "3.88")).firstMatch.exists, "An EFFR value is shown")

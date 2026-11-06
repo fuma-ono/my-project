@@ -198,7 +198,7 @@ enum AppInfo {
     /// 免責文の英文は、[] を埋めてそのまま載せる。
     static func nyFedDataSourceItems(year: Int) -> [String] {
         [
-            "出典：ニューヨーク連邦準備銀行（Federal Reserve Bank of New York）。誘導目標レンジは FOMC（米連邦公開市場委員会）が決定するもので、ニューヨーク連邦準備銀行が実効フェデラルファンド金利（EFFR）と併せて公表しているデータから表示しています。EFFR（実際の取引の金利）の値は表示していません。",
+            "出典：ニューヨーク連邦準備銀行（Federal Reserve Bank of New York）。誘導目標レンジは FOMC（米連邦公開市場委員会）が決定するもので、ニューヨーク連邦準備銀行が実効フェデラルファンド金利（EFFR）と併せて公表しているデータから表示しています。FOMC会合との対応付け（発表日の翌営業日以降で最初に有効になったレンジ）は、本アプリが行っています。EFFR（実際の取引の金利）の値は表示していません。",
             "本アプリはニューヨーク連邦準備銀行と関係がなく、ニューヨーク連邦準備銀行は本アプリやそのサービスを承認・推奨していません。",
             "© \(year) Federal Reserve Bank of New York. Content from the New York Fed subject to the Terms of Use at newyorkfed.org.",
             "The federal funds target range data published with the Effective Federal Funds Rate (EFFR) is subject to the Terms of Use posted at newyorkfed.org. The New York Fed is not responsible for publication of the federal funds target range data by FX Event Analyzer, does not sanction or endorse any particular republication, and has no liability for your use.",
