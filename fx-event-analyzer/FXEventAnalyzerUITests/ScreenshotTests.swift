@@ -652,6 +652,96 @@ final class ScreenshotTests: XCTestCase {
     /// これは不具合ではなく、OS回転に頼らない本方式の既知の見え方)。
     /// 本当に実機で正立して見えるかどうかは、このCIスクリーンショットでは
     /// 検証できないため、実機での目視確認が別途必要。
+    /// HQ指示(2026-11-06)「過去イベント比較画面の横画面レイアウトの追加確認」(A の修正 195b645c): 横画面の表の高さは
+    /// 行の数に合わせる(上限 250pt を超える行数のときだけスクロール)。無料プラン(比較は直近3件)では、最後の行と外枠の
+    /// 間に空白が残らない(修正前は 250pt まで広がり、3行(133pt)の下に約117ptの空白があった)。PRO(多数行)では上限
+    /// 250pt のまま。撮影はしない(スクリーンショットの枚数は変えない)。横画面は`.rotationEffect`で見かけ上回すため、
+    /// 行が並ぶ向き(画面の座標で縦か横か)は行の位置から判定し、画面の拡大率は1行の大きさ(44pt)から求める。
+    func testHistoricalComparisonLandscapeTableFitsItsRows() throws {
+        addTeardownBlock { [weak self] in _ = self?.setMockSubscriptionPlan("PRO") }
+        XCTAssertTrue(setMockSubscriptionPlan("FREE"), "Could not reach the mock server")
+        let emailField = app.textFields["メールアドレス"]
+        XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
+        type("ui-screenshot@example.com", into: emailField)
+        type("ui-screenshot-password", into: app.secureTextFields["パスワード"])
+        app.buttons["ログイン"].tap()
+        XCTAssertTrue(waitForAnyElement(containing: "通貨ペア", timeout: 25), "Home did not load")
+
+        // 無料プラン: 3件
+        openHistoricalComparisonInLandscape()
+        let free = measureLandscapeTable()
+        XCTAssertEqual(free.rows, 3, "The free plan should list 3 past releases")
+        XCTAssertEqual(free.bodyInDesignPoints, 3 * 44 + 2 * 0.5, accuracy: 4, "The table body should be exactly 3 rows high (free plan)")
+        XCTAssertLessThan(free.gapAfterLastRowInDesignPoints, 4, "Blank space below the last row (free plan)")
+        XCTAssertTrue(waitForAnyElement(containing: "無料プランは直近3回分です", timeout: 5), "The plan-limit note is not shown below the table")
+        leaveLandscapeComparison()
+
+        // PRO: 多数行(上限 250pt でスクロール)
+        XCTAssertTrue(setMockSubscriptionPlan("PRO"), "Could not switch the mock plan back to PRO")
+        openHistoricalComparisonInLandscape()
+        let pro = measureLandscapeTable()
+        XCTAssertGreaterThan(pro.rows, 6, "The PRO plan should list many past releases")
+        XCTAssertEqual(pro.bodyInDesignPoints, 250, accuracy: 4, "The table body should stay capped at 250pt with many rows (PRO)")
+        leaveLandscapeComparison()
+    }
+
+    private func openHistoricalComparisonInLandscape() {
+        tapIdentifier("v5Tab1")
+        XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicators list did not load")
+        tap(containing: "国・地域")
+        let usMenuItem = app.buttons["米国"]
+        if usMenuItem.waitForExistence(timeout: 5) { usMenuItem.tap() }
+        tap(containing: "米国CPI(消費者物価指数)")
+        XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 15), "Indicator Detail did not load")
+        tap(containing: "過去イベント比較")
+        XCTAssertTrue(waitForAnyElement(containing: "前回値", timeout: 15), "Historical Comparison did not load")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(
+            app.otherElements["historyLandscapeTopBar"].waitForExistence(timeout: 10),
+            "The screen did not switch to the landscape layout"
+        )
+        XCTAssertTrue(app.otherElements["historyLandscapeTable"].waitForExistence(timeout: 10), "The landscape table is not shown")
+        Thread.sleep(forTimeInterval: 1.0)
+    }
+
+    private func leaveLandscapeComparison() {
+        XCUIDevice.shared.orientation = .portrait
+        Thread.sleep(forTimeInterval: 1.0)
+        XCTAssertTrue(waitForAnyElement(containing: "前回値", timeout: 10), "Historical Comparison did not resume its portrait layout")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 10), "Did not return to Indicator Detail")
+        tapIdentifier("v5HeaderBack")
+    }
+
+    /// 横画面の表の大きさ。`bodyInDesignPoints` = 表の外枠から見出しを除いた、行の部分の長さ(デザイン上のpt)。
+    /// `gapAfterLastRowInDesignPoints` = 最後の行の端から外枠の端までの空白(見える範囲の行が外枠に収まらないときは0)。
+    private func measureLandscapeTable() -> (rows: Int, bodyInDesignPoints: Double, gapAfterLastRowInDesignPoints: Double) {
+        let table = app.otherElements["historyLandscapeTable"].frame
+        let rows = app.descendants(matching: .any).matching(identifier: "historyEventRow").allElementsBoundByIndex
+            .map(\.frame).filter { !$0.isEmpty }
+        guard rows.count >= 2 else {
+            XCTFail("Not enough rows to measure the landscape table (\(rows.count))")
+            return (rows.count, 0, 0)
+        }
+        // 行が並ぶ向き: 1行目と2行目の中心のずれが大きい方の軸。向き(+/-)も1行目→2行目で決める。
+        let dx = rows[1].midX - rows[0].midX
+        let dy = rows[1].midY - rows[0].midY
+        let vertical = abs(dy) >= abs(dx)
+        let forward = vertical ? dy > 0 : dx > 0
+        func start(_ r: CGRect) -> CGFloat { vertical ? (forward ? r.minY : r.maxY) : (forward ? r.minX : r.maxX) }
+        func end(_ r: CGRect) -> CGFloat { vertical ? (forward ? r.maxY : r.minY) : (forward ? r.maxX : r.minX) }
+        let rowExtent = vertical ? rows[0].height : rows[0].width
+        let scale = rowExtent / 44
+        let header = abs(start(rows[0]) - start(table))
+        let tableExtent = vertical ? table.height : table.width
+        let body = (tableExtent - header) / scale
+        // 見える範囲の最後の行(外枠の中で一番遠い行)
+        let inside = rows.filter { forward ? end($0) <= end(table) + 1 : end($0) >= end(table) - 1 }
+        let gap = inside.last.map { abs(end(table) - end($0)) / scale } ?? 0
+        print("[landscape table] rows=\(rows.count) vertical=\(vertical) scale=\(scale) header=\(header / scale) body=\(body) gap=\(gap)")
+        return (rows.count, Double(body), Double(gap))
+    }
+
     func testHistoricalComparisonAllowsLandscape() throws {
         let emailField = app.textFields["メールアドレス"]
         XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
