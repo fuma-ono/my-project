@@ -9,7 +9,10 @@ final class HomePrefetchCoordinatorTests: XCTestCase {
     private let userA = UUID()
     private let userB = UUID()
 
-    private func makeAPIClient(home: HomeResponse = Self.homeResponse, entitlements: EntitlementsResponse = Self.entitlementsResponse) -> MockAPIClient {
+    private func makeAPIClient(
+        home: HomeResponse = HomePrefetchCoordinatorTests.homeResponse,
+        entitlements: EntitlementsResponse = HomePrefetchCoordinatorTests.entitlementsResponse
+    ) -> MockAPIClient {
         let api = MockAPIClient()
         api.results["home"] = .success(home)
         api.results["entitlements"] = .success(entitlements)

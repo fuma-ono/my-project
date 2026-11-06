@@ -282,9 +282,10 @@ final class SplashViewModelTests: XCTestCase {
     // MARK: - Helper
 
     private func outcome(
-        for auth: MockAuthService, coordinator: HomePrefetchCoordinator = HomePrefetchCoordinator(), apiClient: APIClient = MockAPIClient()
+        for auth: MockAuthService, coordinator: HomePrefetchCoordinator? = nil, apiClient: APIClient = MockAPIClient()
     ) async -> SplashOutcome {
-        await withCheckedContinuation { continuation in
+        let coordinator = coordinator ?? HomePrefetchCoordinator()
+        return await withCheckedContinuation { continuation in
             let viewModel = SplashViewModel(
                 authService: auth, apiClient: apiClient, minimumDisplayDuration: .zero, prefetchCoordinator: coordinator
             ) { outcome in
