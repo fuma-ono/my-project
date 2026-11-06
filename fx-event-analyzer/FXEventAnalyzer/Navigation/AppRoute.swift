@@ -33,6 +33,8 @@ enum AppRoute: Hashable {
     case movementDetail(eventId: String, indicatorId: String, fxPairId: String, symbol: String, indicatorName: String, releaseDatetime: Date)
     /// SCR-009 過去イベント比較。
     case historicalComparison(indicatorId: String, indicatorName: String, fxPairId: String, fxPairSymbol: String)
+    /// Pro イベント別トレード戦略分析(HQ指示 2026-11-06、api-design v1.48)。イベント詳細から開く。
+    case eventStrategyAnalysis(eventId: String, indicatorName: String, fxPairId: String?)
 
     // MARK: - ui-screens.md v2.0 (2026-09-29 HQ承認, 2-b) 向けの新規ケース
     //

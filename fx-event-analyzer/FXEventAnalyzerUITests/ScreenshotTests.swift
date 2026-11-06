@@ -183,6 +183,33 @@ final class ScreenshotTests: XCTestCase {
             XCTFail("Could not reach the mock server for the policy-rate switch")
         }
 
+        // HQ指示(2026-11-06「Pro イベント別トレード戦略分析」、api-design v1.48): イベント詳細の「トレード戦略分析」から開く。
+        // PRO(モックの既定)は過去5回の発表の傾向の回数が出る → 撮る。FREE は開いた先がロック表示で、傾向は出ない(撮らない)。
+        tapIdentifier("eventDetailStrategyAnalysisLink")
+        XCTAssertTrue(waitForAnyElement(containing: "傾向（回数）", timeout: 15), "Strategy analysis did not load")
+        XCTAssertTrue(
+            waitForAnyElement(containing: "高値ブレイク 3回・安値ブレイク 2回（4回中）", timeout: 5),
+            "The counted 15-minute breaks are not shown"
+        )
+        XCTAssertTrue(waitForAnyElement(containing: "売買の推奨ではありません", timeout: 5), "The not-a-recommendation note is missing")
+        capture("07b-EventStrategyAnalysis")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 10), "Did not go back to Event Detail")
+        if setMockSubscriptionPlan("FREE") {
+            addTeardownBlock { [weak self] in _ = self?.setMockSubscriptionPlan("PRO") }
+            tapIdentifier("eventDetailStrategyAnalysisLink")
+            XCTAssertTrue(waitForAnyElement(containing: "プレミアムプランで解放", timeout: 15), "The locked state is not shown for FREE")
+            XCTAssertFalse(
+                app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "傾向（回数）")).firstMatch.exists,
+                "The analysis is shown to FREE"
+            )
+            XCTAssertTrue(setMockSubscriptionPlan("PRO"), "Could not switch the mock plan back to PRO")
+            tapIdentifier("v5HeaderBack")
+            XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 10), "Did not go back to Event Detail (free plan)")
+        } else {
+            XCTFail("Could not reach the mock server for the plan switch")
+        }
+
         // SCR-008 相場反応詳細。2026-10-09から、値動きの表のUSD/JPYの行から直接進む。
         tap(containing: "USD/JPYの相場反応を見る")
         XCTAssertTrue(waitForAnyElement(containing: "値動きの分析", timeout: 15), "Movement Detail did not load")

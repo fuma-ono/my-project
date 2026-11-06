@@ -138,3 +138,65 @@ export async function listAvailableReactionsForComparison(
   if (error) throw error;
   return data ?? [];
 }
+
+/**
+ * Pro イベント別トレード戦略分析(api-design v1.48): `beforeIso` より前の、同じ指標の RELEASED の発表(RELEASE スナップショット
+ * つき)を新しい順に `limit` 回まで。並びは listReleasedEventsForIndicator と同じ(release_datetime desc, id asc)。
+ */
+export async function listReleasedEventsBefore(
+  supabase: SupabaseClient,
+  indicatorId: string,
+  beforeIso: string,
+  limit: number,
+): Promise<HistoricalEventRow[]> {
+  const { data, error } = await supabase
+    .from('economic_events')
+    .select(`id, release_datetime, event_snapshots!inner(${SNAPSHOT_VALUE_COLUMNS}, snapshot_type)`)
+    .eq('indicator_id', indicatorId)
+    .eq('status', 'RELEASED')
+    .eq('event_snapshots.snapshot_type', 'RELEASE')
+    .lt('release_datetime', beforeIso)
+    .order('release_datetime', { ascending: false })
+    .order('id', { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    event_id: row.id,
+    release_datetime: row.release_datetime,
+    ...releaseSnapshotOf(row.event_snapshots),
+  }));
+}
+
+export interface StrategyReactionRow {
+  event_id: string;
+  timeframe: string;
+  pips: number | null;
+  max_upward: number | null;
+  max_downward: number | null;
+  data_status: string;
+}
+
+/** 戦略分析に使う値動き(1分・15分・60分)。data_status も返す(AVAILABLE でないものは分析で使わない)。 */
+export async function listStrategyReactions(
+  supabase: SupabaseClient,
+  eventIds: string[],
+  fxPairId: string,
+  timeframes: readonly string[],
+): Promise<StrategyReactionRow[]> {
+  if (eventIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('event_price_reactions')
+    .select('event_id, timeframe, pips, max_upward, max_downward, data_status')
+    .in('event_id', eventIds)
+    .eq('fx_pair_id', fxPairId)
+    .in('timeframe', [...timeframes]);
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    event_id: row.event_id,
+    timeframe: row.timeframe,
+    pips: row.pips === null ? null : Number(row.pips),
+    max_upward: row.max_upward === null ? null : Number(row.max_upward),
+    max_downward: row.max_downward === null ? null : Number(row.max_downward),
+    data_status: row.data_status,
+  }));
+}

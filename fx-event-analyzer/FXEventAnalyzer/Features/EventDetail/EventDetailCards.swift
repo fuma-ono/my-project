@@ -599,7 +599,41 @@ struct EventDetailCards: View {
                 linkCard(icon: "clock.arrow.circlepath", title: "過去イベント比較")
             }
             .buttonStyle(SettingsRowPressStyle())
+            // HQ指示(2026-11-06「Pro イベント別トレード戦略分析」): 過去5回の発表の値動きの傾向(Pro)。FREE は開いた先でロック表示。
+            // 既存の行(過去イベント比較)と同じカードの形で、高さだけ抑える(1画面に収める)。
+            NavigationLink(value: AppRoute.eventStrategyAnalysis(
+                eventId: response.event.id,
+                indicatorName: response.event.indicatorName,
+                fxPairId: pairId
+            )) {
+                strategyLinkCard
+            }
+            .buttonStyle(SettingsRowPressStyle())
+            .accessibilityIdentifier("eventDetailStrategyAnalysisLink")
         }
+    }
+
+    private var strategyLinkCard: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "chart.xyaxis.line")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(V5P.cyan)
+                .frame(width: 18)
+            NotoText.text("トレード戦略分析", size: 9).foregroundStyle(.white)
+            NotoText.text("Pro", size: 6.5)
+                .foregroundStyle(V5P.cyan)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .overlay(Capsule().stroke(V5P.cyan, lineWidth: 0.6))
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(V5P.cyan)
+        }
+        .padding(.horizontal, 10)
+        .frame(width: 214, height: 26)
+        .background(V5CardGradient.fill, in: RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
+        .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }
 
     @ViewBuilder private var nextReleaseFooter: some View {

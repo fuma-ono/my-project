@@ -1112,6 +1112,60 @@ function historicalIndicatorEventRow(id, index) {
   };
 }
 
+/**
+ * Pro イベント別トレード戦略分析(HQ指示 2026-11-06、api-design v1.48 GET /events/{id}/strategy-analysis)の撮影用。
+ * PRO は過去5回の発表(うち1回は値動き無し・予想無し)の分析、FREE は available: false(ロック)。`/__mock/subscription-plan` に従う。
+ * 値はモックの比較の表(COMPARISON_TABLE)の日付と同じ並びの、もっともらしい例(本物のデータではない)。
+ */
+function strategyAnalysisFixture(eventId) {
+  if (mockSubscriptionPlan === 'FREE') {
+    return { event_id: eventId, available: false, required_entitlement: 'VIEW_ADVANCED_STATS', fx_pair: null, analysis: null };
+  }
+  const row = (id, at, forecast, actual, direction, m1, m15, pattern, h15, l15, h60, l60, stf) => ({
+    event_id: id,
+    release_datetime: at,
+    forecast,
+    actual,
+    surprise: forecast === null ? null : Number((actual - forecast).toFixed(2)),
+    // 米国CPI は高いほど通貨に良い(HIGHER_IS_POSITIVE)。domain/surprise.ts と同じ決め方
+    surprise_direction: forecast === null ? null : actual > forecast ? 'POSITIVE' : actual < forecast ? 'NEGATIVE' : 'NEUTRAL',
+    direction_1m: direction,
+    pips_1m: m1,
+    pips_15m: m15,
+    pattern_15m: pattern,
+    high_break_15m: h15,
+    low_break_15m: l15,
+    high_break_60m: h60,
+    low_break_60m: l60,
+    sell_the_fact: stf,
+  });
+  return {
+    event_id: eventId,
+    available: true,
+    required_entitlement: null,
+    fx_pair: { fx_pair_id: FX_PAIR_ID, symbol: 'USDJPY' },
+    analysis: {
+      status: 'READY',
+      sample_window: 5,
+      minimum_samples: 3,
+      releases: [
+        row(HISTORICAL_EVENT_IDS[0], '2026-10-14T12:30:00.000Z', 3.3, 3.4, 'UP', 12.4, 21.7, 'CONTINUATION', true, false, true, true, false),
+        row(HISTORICAL_EVENT_IDS[1], '2026-09-11T12:30:00.000Z', 3.3, 3.2, 'DOWN', -8.6, 4.1, 'REVERSAL', true, true, true, true, null),
+        row(HISTORICAL_EVENT_IDS[2], '2026-08-12T12:30:00.000Z', 3.1, 3.0, 'DOWN', -15.2, -28.9, 'CONTINUATION', false, true, false, true, null),
+        row(HISTORICAL_EVENT_IDS[3], '2026-07-15T12:30:00.000Z', null, 3.1, 'UP', 6.3, 9.8, 'CONTINUATION', true, false, true, false, null),
+        row(HISTORICAL_EVENT_IDS[4], '2026-06-10T12:30:00.000Z', null, 3.0, null, null, null, null, null, null, null, null, null),
+      ],
+      summary: {
+        direction_1m: { up: 2, down: 2, flat: 0, samples: 4 },
+        breaks_15m: { high: 3, low: 2, both: 1, neither: 0, samples: 4 },
+        breaks_60m: { high: 3, low: 3, both: 2, neither: 0, samples: 4 },
+        pattern_15m: { continuation: 3, reversal: 1, samples: 4 },
+        sell_the_fact: null,
+      },
+    },
+  };
+}
+
 function eventDetailHandler(eventId) {
   const isUpcoming = eventId === EVENT_ID_UPCOMING;
   return {
@@ -3075,6 +3129,9 @@ async function handleApi(req, res, pathname, searchParams, rawBody) {
       200,
       mockPolicyRate ? withPolicyRate(eventDetailHandler(segments[1])) : eventDetailHandler(segments[1]),
     );
+  }
+  if (segments[0] === 'events' && segments[2] === 'strategy-analysis' && segments.length === 3) {
+    return json(res, 200, strategyAnalysisFixture(segments[1]));
   }
   if (segments[0] === 'events' && segments[2] === 'history') {
     return json(res, 200, eventHistoryHandler(segments[1]));
