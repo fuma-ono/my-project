@@ -355,6 +355,10 @@ struct HistoricalComparisonView: View {
         .background(V5CardGradient.fill)
         .clipShape(shape)
         .overlay(shape.stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
+        // HQ指示(2026-11-06)「横画面レイアウトの追加確認」: UIテストが表の外枠の大きさを測れるようにする識別子だけ
+        // (見た目は変えない)。中の行(`historyEventRow`)は個別に問い合わせられるまま(`historyLandscapeTopBar`と同じ)。
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("historyLandscapeTable")
     }
 
     /// HQ指示(2026-10-25)「過去イベント比較は前年の結果予想前回、前月の
