@@ -7,11 +7,13 @@
 # どの場面も BEGIN … ROLLBACK の中で行うので、終わった後の DB は db reset の直後と同じ(後の結合テストに影響しない)。
 #   1. 適用済みの DB にもう一度流す → 成功し、制約・トリガー・ポリシー・RLS の定義が変わらない
 #   2. 行がある状態でもう一度流す → 成功し、行が残る
-#   3. 一部だけ適用された状態(トリガー・ポリシー・CHECK 制約が無い、RLS が無効)で流す → 足りないものだけ戻る
+#   3. 一部だけ適用・前の版が適用された状態(トリガー・CHECK 制約が無い、RLS が無効、前の版の「認証済みなら SELECT 可」の
+#      ポリシーがある、authenticated に SELECT がある)で流す → 足りないものが戻り、ポリシーは消え、権限は外れる
 #   4. 列の形が違う表(source が NULL 可)に流す → 例外で止まる(列を変えない)
-#   5. 同じ名前で中身の違うポリシー(書き込みも許す)がある → 例外で止まる
+#   5. anon / authenticated / PUBLIC に権限が足されている → 外れる(HQ指示 2026-11-06「政策金利テーブルの権限問題」)
 #   6. 同じ名前で中身の違う CHECK 制約がある → 例外で止まる
-#   7. 期待していないポリシーが足されている → 例外で止まる
+#   7. 期待していないポリシーが足されている → 例外で止まる(黙って消さない)
+#   8. service_role の権限が外されている → SELECT・INSERT が戻る
 set -euo pipefail
 
 db="${1:?postgres connection string}"
@@ -40,6 +42,10 @@ select 'policy ' || policyname::text || ' ' || cmd || ' ' || roles::text || ' ' 
   where tablename = 'fomc_policy_decisions'
 union all
 select 'rls ' || relrowsecurity::text from pg_class where oid = 'public.fomc_policy_decisions'::regclass
+union all
+select 'privilege ' || r || ' ' || priv || ' ' || has_table_privilege(r, 'public.fomc_policy_decisions', priv)::text
+  from unnest(array['anon', 'authenticated', 'service_role']) as r,
+       unnest(array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']) as priv
 order by 1;
 SQL
     fail_with_output "reading the definitions"
@@ -98,17 +104,19 @@ end \$\$;
 rollback;"
 
 # 3. 一部だけ適用された状態 → 足りないものだけ戻る
-expect_ok "re-run restores missing trigger, policy, check and RLS" "begin;
+expect_ok "re-run restores the trigger, check and RLS, drops the old policy and revokes the old grant" "begin;
 drop trigger trg_prevent_fomc_policy_decision_mutation on fomc_policy_decisions;
-drop policy fomc_policy_decisions_select_authenticated on fomc_policy_decisions;
 alter table fomc_policy_decisions drop constraint fomc_policy_decisions_range_check;
 alter table fomc_policy_decisions disable row level security;
+create policy fomc_policy_decisions_select_authenticated on fomc_policy_decisions for select using (auth.role() = 'authenticated');
+grant select on fomc_policy_decisions to authenticated;
 \\i '$migration'
 do \$\$ begin
   if not exists (select 1 from pg_trigger where tgrelid = 'public.fomc_policy_decisions'::regclass and tgname = 'trg_prevent_fomc_policy_decision_mutation') then raise exception 'trigger not restored'; end if;
-  if not exists (select 1 from pg_policies where tablename = 'fomc_policy_decisions' and policyname = 'fomc_policy_decisions_select_authenticated') then raise exception 'policy not restored'; end if;
   if not exists (select 1 from pg_constraint where conrelid = 'public.fomc_policy_decisions'::regclass and conname = 'fomc_policy_decisions_range_check') then raise exception 'check not restored'; end if;
   if not (select relrowsecurity from pg_class where oid = 'public.fomc_policy_decisions'::regclass) then raise exception 'RLS not restored'; end if;
+  if exists (select 1 from pg_policies where tablename = 'fomc_policy_decisions') then raise exception 'the old policy is left'; end if;
+  if has_table_privilege('authenticated', 'public.fomc_policy_decisions', 'SELECT') then raise exception 'authenticated can still SELECT'; end if;
 end \$\$;
 rollback;"
 
@@ -118,10 +126,27 @@ alter table fomc_policy_decisions alter column source drop not null;
 \\i '$migration'
 rollback;"
 
-expect_fail "a different policy stops the migration" "policy fomc_policy_decisions_select_authenticated differs" "begin;
-drop policy fomc_policy_decisions_select_authenticated on fomc_policy_decisions;
-create policy fomc_policy_decisions_select_authenticated on fomc_policy_decisions for all using (true);
+expect_ok "re-run revokes grants given to anon, authenticated and PUBLIC" "begin;
+grant select on fomc_policy_decisions to anon;
+grant all on fomc_policy_decisions to authenticated;
+grant select on fomc_policy_decisions to public;
 \\i '$migration'
+do \$\$ declare r text; priv text; begin
+  foreach r in array array['anon', 'authenticated'] loop
+    foreach priv in array array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'] loop
+      if has_table_privilege(r, 'public.fomc_policy_decisions', priv) then raise exception '% still has %', r, priv; end if;
+    end loop;
+  end loop;
+end \$\$;
+rollback;"
+
+expect_ok "re-run gives service_role SELECT and INSERT back" "begin;
+revoke all on fomc_policy_decisions from service_role;
+\\i '$migration'
+do \$\$ begin
+  if not has_table_privilege('service_role', 'public.fomc_policy_decisions', 'SELECT') then raise exception 'service_role cannot SELECT'; end if;
+  if not has_table_privilege('service_role', 'public.fomc_policy_decisions', 'INSERT') then raise exception 'service_role cannot INSERT'; end if;
+end \$\$;
 rollback;"
 
 expect_fail "a different check constraint stops the migration" "constraint fomc_policy_decisions_range_check differs" "begin;

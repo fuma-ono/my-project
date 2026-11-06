@@ -16,7 +16,9 @@ max_rows = 1000
 
 [db]
 port = 54322
-major_version = 15
+# HQ指示(2026-11-06「政策金利テーブルの権限問題」): ローカル・CI の DB を DEV(PostgreSQL 17.11)と同じ 17 系にする
+# (以前は 15。migration の定義の表し方などを DEV と同じ版で確かめるため)。
+major_version = 17
 
 [studio]
 enabled = true

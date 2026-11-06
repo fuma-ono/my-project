@@ -1755,7 +1755,12 @@ settings に入ったコードがそのまま配信される。`GET /events/{id}
 ### 15.2 反映の順番
 
 1. migration `20261105000001_fomc_policy_decisions.sql` を SQL Editor で流す(全体を `begin;` … `commit;` で囲む。途中で止まったら `rollback;`)。
-   表と制約・トリガー・RLS・ポリシーを作るだけで、行は入れない。2回流しても同じ(形の違う表があれば手を入れずに止まる)。
+   表と制約・トリガーを作り、RLS を有効にするだけで、行は入れない。2回流しても同じ(形の違う表があれば手を入れずに止まる)。
+   **権限**(HQ指示 2026-11-06「DEV監査で見つかった政策金利テーブルの権限問題」): 値の表(`economic_events`・`event_snapshots` など、
+   13章・`20261022000001_past_release_access.sql`)と同じく、ポリシーは作らず、`anon`・`authenticated`・`PUBLIC` の権限をすべて取り消す
+   (アプリ利用者が Supabase に直接つないで読めない)。Backend は `service_role`(SELECT・INSERT を明示して与える)。前の版の migration が
+   作った「認証済みなら SELECT 可」のポリシーがあれば消す。それ以外のポリシーがあれば止まる。最後に各役割の権限を確かめる。
+   ローカル・CI の DB は DEV と同じ PostgreSQL 17 系(`supabase/config.toml` の `major_version = 17`)。
 2. migration `20261105000002_us_retail_sales_indicator.sql` を流す(指標マスタと通貨ペアの行。既にあれば変えない)。
 3. API を確かめる(FOMC の会合の詳細が 200、`policy_rate: null`)。
 4. 取り込み: `fomc-schedule`(会合・議事要旨) → `retail-sales-schedule`(14件) → `fomc-policy-rate`(記録済みの会合の分)。

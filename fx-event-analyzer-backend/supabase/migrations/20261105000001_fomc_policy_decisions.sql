@@ -20,12 +20,19 @@
 --   supabase の migration は1つのトランザクションで流れるので、途中で止まれば全部戻る。SQL Editor で手で流すときも、
 --   全体を BEGIN; … COMMIT; で囲んで流す(途中で止まったら ROLLBACK; で何も変わらない)。
 --   「同じ名前の表があるから OK」とはしない。
--- - 制約・トリガー・RLS・ポリシーは、名前で見て無いものだけ足す。同じ名前があって中身が違えば例外で止める
+-- - 制約・トリガーは、名前で見て無いものだけ足す。同じ名前があって中身が違えば例外で止める
 --   (勝手に作り直さない)。足すときに既存の行が制約に合わなければ、ADD CONSTRAINT 自体が失敗して止まる(行は消さない)。
 -- - 関数は CREATE OR REPLACE(中身は常に同じ)。COMMENT ON は何度でも同じ。
 -- - 最後に、全部がそろっていることを確かめる(そろわなければ例外)。
 -- 期待どおりかの比べ方: 同じ定義の一時表(pg_temp、このセッションだけ)を作り、列・制約の定義の文字列を突き合わせる
 -- (PostgreSQL が出す正規化された定義どうしを比べるので、空白・括弧・型の書き方の違いに左右されない)。
+--
+-- 直接の読み取りの禁止(HQ指示 2026-11-06「DEV監査で見つかった政策金利テーブルの権限問題」): 値の表
+-- (economic_events・event_snapshots など)と同じく(20261022000001_past_release_access.sql)、アプリ利用者が Supabase に
+-- 直接つないでこの表を読み書きできないようにする。RLS は有効のまま、ポリシーは作らず、anon / authenticated / PUBLIC の
+-- 権限をすべて取り消す(Supabase は public スキーマの新しい表に既定で ALL を与えるため)。Backend は service_role で
+-- 読み書きする(RLS を迂回する。SELECT・INSERT の権限は明示して与える)。前の版(2026-11-05)が作った「認証済みなら
+-- SELECT 可」のポリシーは消す。それ以外のポリシーがあれば止める。最後に、各役割の権限が期待どおりかを確かめる。
 --
 -- 戻し方(API のコードを先に戻すこと。戻さずにこの表を消すと、GET /events/{id} が FOMC の会合で 500 になる —
 -- routes/events.ts の getFomcPolicyDecision がこの表を読む): docs/projects/fx-event-analyzer/dev-environment.md
@@ -156,11 +163,11 @@ begin
 end;
 $$ language plpgsql;
 
--- トリガー・RLS・ポリシー: 無ければ足す。あって中身が違えば止める(消して作り直さない — その間に書き込めてしまうため)。
+-- トリガー: 無ければ足す。あって中身が違えば止める(消して作り直さない — その間に書き込めてしまうため)。
+-- RLS・ポリシー: RLS は有効にする。ポリシーは作らない(前の版のものは消す)。
 do $$
 declare
   t record;
-  p record;
 begin
   select tgenabled, tgtype, tgfoid::regprocedure::text as func into t
     from pg_trigger
@@ -177,26 +184,45 @@ begin
       t.tgtype, t.tgenabled, t.func;
   end if;
 
-  -- 共有の市場データと同じ(20260917000009_rls.sql): 認証済みなら SELECT 可、書き込みは service_role だけ。
   alter table public.fomc_policy_decisions enable row level security;
 
-  select cmd, permissive, roles::text as roles, qual, with_check into p
-    from pg_policies
-    where schemaname = 'public' and tablename = 'fomc_policy_decisions' and policyname = 'fomc_policy_decisions_select_authenticated';
-  if not found then
-    create policy fomc_policy_decisions_select_authenticated on fomc_policy_decisions
-      for select using (auth.role() = 'authenticated');
-    raise notice 'fomc_policy_decisions: added missing policy fomc_policy_decisions_select_authenticated';
-  elsif p.cmd <> 'SELECT' or p.permissive <> 'PERMISSIVE' or p.roles <> '{public}'
-        or p.qual <> '(auth.role() = ''authenticated''::text)' or p.with_check is not null then
-    raise exception 'fomc_policy_decisions: policy fomc_policy_decisions_select_authenticated differs (cmd %, roles %, qual %) — stopped',
-      p.cmd, p.roles, p.qual;
-  end if;
-
-  -- 期待していないポリシー(書き込みを許すものなど)があれば止める。
+  -- 前の版のポリシー以外があれば止める(誰かが足したものを、黙って消したり残したりしない)。
   if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'fomc_policy_decisions'
                and policyname <> 'fomc_policy_decisions_select_authenticated') then
     raise exception 'fomc_policy_decisions: unexpected policies exist (stopped)';
   end if;
+  -- 前の版(2026-11-05)の「認証済みなら SELECT 可」は消す(20261022000001 の値の表と同じ扱い)。
+  drop policy if exists fomc_policy_decisions_select_authenticated on public.fomc_policy_decisions;
+end;
+$$;
+
+-- 直接の読み書きの禁止(上のヘッダー参照)。service_role は Backend の読み書きに使う。
+revoke all on fomc_policy_decisions from public, anon, authenticated;
+grant select, insert on fomc_policy_decisions to service_role;
+
+-- 最後の確認: RLS が有効、ポリシーが無い、anon / authenticated は何もできない、service_role は SELECT・INSERT できる。
+do $$
+declare
+  r text;
+  priv text;
+begin
+  if not (select relrowsecurity from pg_class where oid = 'public.fomc_policy_decisions'::regclass) then
+    raise exception 'fomc_policy_decisions: RLS is not enabled (stopped)';
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'fomc_policy_decisions') then
+    raise exception 'fomc_policy_decisions: a policy is left (stopped)';
+  end if;
+  foreach r in array array['anon', 'authenticated'] loop
+    foreach priv in array array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'] loop
+      if has_table_privilege(r, 'public.fomc_policy_decisions', priv) then
+        raise exception 'fomc_policy_decisions: % still has % (stopped)', r, priv;
+      end if;
+    end loop;
+  end loop;
+  foreach priv in array array['SELECT', 'INSERT'] loop
+    if not has_table_privilege('service_role', 'public.fomc_policy_decisions', priv) then
+      raise exception 'fomc_policy_decisions: service_role cannot % (stopped)', priv;
+    end if;
+  end loop;
 end;
 $$;
