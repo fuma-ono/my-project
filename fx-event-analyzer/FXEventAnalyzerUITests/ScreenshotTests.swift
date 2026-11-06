@@ -667,21 +667,27 @@ final class ScreenshotTests: XCTestCase {
         app.buttons["ログイン"].tap()
         XCTAssertTrue(waitForAnyElement(containing: "通貨ペア", timeout: 25), "Home did not load")
 
-        // 無料プラン: 3件
+        // 無料プラン: 3件。表の外枠(カード)の大きさはアクセシビリティの枠では測れない(中の部品を囲むだけ)ため、
+        // カードのすぐ下に出る「無料プランは直近3回分です…」の注記までの距離で、カードの中の空白を測る
+        // (修正前はカードが 250pt まで伸び、注記が約117pt押し下げられていた)。
         openHistoricalComparisonInLandscape()
-        let free = measureLandscapeTable()
-        XCTAssertEqual(free.rows, 3, "The free plan should list 3 past releases")
-        XCTAssertEqual(free.bodyInDesignPoints, 3 * 44 + 2 * 0.5, accuracy: 4, "The table body should be exactly 3 rows high (free plan)")
-        XCTAssertLessThan(free.gapAfterLastRowInDesignPoints, 4, "Blank space below the last row (free plan)")
-        XCTAssertTrue(waitForAnyElement(containing: "無料プランは直近3回分です", timeout: 5), "The plan-limit note is not shown below the table")
+        let free = measureLandscapeTable(noteContaining: "無料プランは直近3回分です")
+        XCTAssertEqual(free.rows, 3, "The free plan should list 3 past releases. \(free.detail)")
+        if let gap = free.lastRowToNote {
+            XCTAssertLessThan(gap, 60, "Blank space between the last row and the plan note (free plan). \(free.detail)")
+        } else {
+            XCTFail("The plan-limit note is not shown below the table. \(free.detail)")
+        }
         leaveLandscapeComparison()
 
-        // PRO: 多数行(上限 250pt でスクロール)
+        // PRO: 7件(行の高さの合計 311pt > 上限 250pt なのでスクロール)。表の上側(見出しから最初の行まで)は無料プランと同じで、
+        // プランの注記は出ない。
         XCTAssertTrue(setMockSubscriptionPlan("PRO"), "Could not switch the mock plan back to PRO")
         openHistoricalComparisonInLandscape()
-        let pro = measureLandscapeTable()
-        XCTAssertGreaterThan(pro.rows, 6, "The PRO plan should list many past releases")
-        XCTAssertEqual(pro.bodyInDesignPoints, 250, accuracy: 4, "The table body should stay capped at 250pt with many rows (PRO)")
+        let pro = measureLandscapeTable(noteContaining: "無料プランは直近")
+        XCTAssertEqual(pro.rows, 7, "The PRO plan should list 7 past releases. \(pro.detail)")
+        XCTAssertNil(pro.lastRowToNote, "The plan-limit note should not be shown for PRO. \(pro.detail)")
+        XCTAssertEqual(pro.headerToFirstRow, free.headerToFirstRow, accuracy: 2, "The top of the table moved between FREE and PRO. \(pro.detail)")
         leaveLandscapeComparison()
     }
 
@@ -713,33 +719,37 @@ final class ScreenshotTests: XCTestCase {
         tapIdentifier("v5HeaderBack")
     }
 
-    /// 横画面の表の大きさ。`bodyInDesignPoints` = 表の外枠から見出しを除いた、行の部分の長さ(デザイン上のpt)。
-    /// `gapAfterLastRowInDesignPoints` = 最後の行の端から外枠の端までの空白(見える範囲の行が外枠に収まらないときは0)。
-    private func measureLandscapeTable() -> (rows: Int, bodyInDesignPoints: Double, gapAfterLastRowInDesignPoints: Double) {
-        let table = app.otherElements["historyLandscapeTable"].frame
-        let rows = app.descendants(matching: .any).matching(identifier: "historyEventRow").allElementsBoundByIndex
+    /// 横画面の表の測定(デザイン上のpt)。行が並ぶ向き(画面の座標で縦か横か、+か-か)は、見出し「日時」から行への向きで
+    /// 決め、行を見出しに近い順に並べる。拡大率は行の間隔(44pt + 区切り線0.5pt)から求める。
+    /// `headerToFirstRow` = 見出し「日時」の始まりから最初の行の始まりまで。`lastRowToNote` = 最後の行の終わりから
+    /// 注記の始まりまで(注記が無ければnil)。`detail` は失敗の時に出す測定値。
+    private func measureLandscapeTable(noteContaining note: String) -> (rows: Int, headerToFirstRow: Double, lastRowToNote: Double?, detail: String) {
+        let header = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "日時")).firstMatch.frame
+        var rows = app.descendants(matching: .any).matching(identifier: "historyEventRow").allElementsBoundByIndex
             .map(\.frame).filter { !$0.isEmpty }
-        guard rows.count >= 2 else {
-            XCTFail("Not enough rows to measure the landscape table (\(rows.count))")
-            return (rows.count, 0, 0)
+        guard rows.count >= 2, !header.isEmpty else {
+            return (rows.count, 0, nil, "rows=\(rows.count) header=\(header)")
         }
-        // 行が並ぶ向き: 1行目と2行目の中心のずれが大きい方の軸。向き(+/-)も1行目→2行目で決める。
-        let dx = rows[1].midX - rows[0].midX
-        let dy = rows[1].midY - rows[0].midY
-        let vertical = abs(dy) >= abs(dx)
-        let forward = vertical ? dy > 0 : dx > 0
+        let spreadX = (rows.map(\.midX).max() ?? 0) - (rows.map(\.midX).min() ?? 0)
+        let spreadY = (rows.map(\.midY).max() ?? 0) - (rows.map(\.midY).min() ?? 0)
+        let vertical = spreadY >= spreadX
+        func mid(_ r: CGRect) -> CGFloat { vertical ? r.midY : r.midX }
+        let forward = (rows.map(mid).reduce(0, +) / CGFloat(rows.count)) > mid(header)
         func start(_ r: CGRect) -> CGFloat { vertical ? (forward ? r.minY : r.maxY) : (forward ? r.minX : r.maxX) }
         func end(_ r: CGRect) -> CGFloat { vertical ? (forward ? r.maxY : r.minY) : (forward ? r.maxX : r.minX) }
-        let rowExtent = vertical ? rows[0].height : rows[0].width
-        let scale = rowExtent / 44
-        let header = abs(start(rows[0]) - start(table))
-        let tableExtent = vertical ? table.height : table.width
-        let body = (tableExtent - header) / scale
-        // 見える範囲の最後の行(外枠の中で一番遠い行)
-        let inside = rows.filter { forward ? end($0) <= end(table) + 1 : end($0) >= end(table) - 1 }
-        let gap = inside.last.map { abs(end(table) - end($0)) / scale } ?? 0
-        print("[landscape table] rows=\(rows.count) vertical=\(vertical) scale=\(scale) header=\(header / scale) body=\(body) gap=\(gap)")
-        return (rows.count, Double(body), Double(gap))
+        rows.sort { abs(start($0) - start(header)) < abs(start($1) - start(header)) }
+        let pitch = abs(start(rows[1]) - start(rows[0]))
+        let scale = pitch / 44.5
+        let headerToFirstRow = Double(abs(start(rows[0]) - start(header)) / scale)
+        let noteFrame = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", note)).firstMatch
+        let lastRowToNote: Double? = noteFrame.exists
+            ? Double((forward ? start(noteFrame.frame) - end(rows[rows.count - 1]) : end(rows[rows.count - 1]) - start(noteFrame.frame)) / scale)
+            : nil
+        let detail = "rows=\(rows.count) vertical=\(vertical) forward=\(forward) scale=\(scale) header=\(header) "
+            + "firstRow=\(rows[0]) lastRow=\(rows[rows.count - 1]) note=\(noteFrame.exists ? "\(noteFrame.frame)" : "none") "
+            + "headerToFirstRow=\(headerToFirstRow) lastRowToNote=\(lastRowToNote.map { "\($0)" } ?? "nil")"
+        print("[landscape table] \(detail)")
+        return (rows.count, headerToFirstRow, lastRowToNote, detail)
     }
 
     func testHistoricalComparisonAllowsLandscape() throws {
