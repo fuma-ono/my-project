@@ -138,6 +138,7 @@ jobs:
             -destination "platform=iOS Simulator,name=${{ steps.iphone.outputs.device_name }}" \
             -derivedDataPath DerivedData \
             CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
             SUPABASE_URL="$SUPABASE_URL" \
             SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
             API_BASE_URL="$API_BASE_URL"
@@ -262,26 +263,74 @@ jobs:
       # ordinary Git Contents API instead, which is not blocked — no human
       # download/upload round-trip needed to review a screen.
       #
-      # HQ指示(2026-11-04「UI Screenshots workflow の安全対策」): UIテストが取り消された run(30分の上限)で
-      # この処理だけが always() で走り、撮影結果が空のまま反映先を全部消して45枚を削除する commit(c7c0074c)が
-      # できた。commit するのは、ジョブがここまで成功していて(success() — 失敗・取り消し・タイムアウトでは偽)、
-      # iPhone の UI テストが成功し、iPad は飛ばしたか成功したときだけ。反映は
-      # .github/scripts/update-ci-screenshots.sh(撮影結果が空なら何もしない・一括削除しない・画面ごとに置き換える・
-      # 枚数が減ったら失敗)。
-      - name: Commit iPhone screenshots into the repo for direct review
+      # HQ指示(2026-11-06「UI Screenshots CI改善」): スクリーンショットの commit は、このジョブ(テストと同じ30分の枠)では
+      # しない。テストが通っても、30分の上限で commit の途中に取り消されることがあった(run 42154158203: UIテストは成功、
+      # commit の途中で上限)。ここでは commit 用の画像だけを成果物に残し、下の commit-screenshots ジョブ(別の枠)が commit する。
+      # 成果物を残すのは、このジョブがここまで成功していて(success())、iPhone の UI テストが成功し、iPad は飛ばしたか
+      # 成功したときだけ(以前の commit の条件と同じ)。
+      - name: Keep iPhone screenshots for the commit job
         if: >-
           success() && github.event_name == 'push'
           && steps.ui_iphone.outcome == 'success'
           && (steps.ui_ipad.outcome == 'success' || steps.ui_ipad.outcome == 'skipped')
+        uses: actions/upload-artifact@v4
+        with:
+          name: fx-event-analyzer-ui-screenshots-iphone-commit
+          path: fx-event-analyzer/Screenshots/iPhone/*.png
+          if-no-files-found: ignore
+          retention-days: 1
+
+      - name: Upload screenshots artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fx-event-analyzer-ui-screenshots
+          path: |
+            fx-event-analyzer/Screenshots/**
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload raw .xcresult bundles (fallback for manual inspection)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fx-event-analyzer-ui-screenshots-xcresult
+          path: |
+            fx-event-analyzer/DerivedData/iPhone.xcresult
+            fx-event-analyzer/DerivedData/iPad.xcresult
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # HQ指示(2026-11-06「UI Screenshots CI改善」): テストのジョブが成功したときだけ(needs.screenshots.result == 'success')、
+  # そのジョブが残した画像で ci-screenshots/iPhone を更新して commit する。テストとは別の時間の枠(10分)で動くので、
+  # テストの時間で commit が取り消されない。テストが失敗・取り消し・時間切れなら、このジョブは動かない(何も消さない)。
+  # 反映は .github/scripts/update-ci-screenshots.sh(撮影結果が空なら何もしない・一括削除しない・画面ごとに置き換える・
+  # 枚数が減ったら失敗。HQ指示 2026-11-04「UI Screenshots workflow の安全対策」)。
+  commit-screenshots:
+    needs: screenshots
+    if: needs.screenshots.result == 'success' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the iPhone screenshots of the test job
+        # 撮影結果が空なら成果物は作られない(if-no-files-found: ignore)。そのときは下の commit が「何もしない」で終わる。
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: fx-event-analyzer-ui-screenshots-iphone-commit
+          path: screenshots-iphone
+
+      - name: Commit iPhone screenshots into the repo for direct review
         run: |
-          shots="$PWD/Screenshots/iPhone"
+          shots="$PWD/screenshots-iphone"
           shopt -s nullglob
           exported=("$shots"/*.png)
           if [ "${#exported[@]}" -eq 0 ]; then
             echo "No exported screenshots; nothing to commit."
             exit 0
           fi
-          cd ..
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           # Concurrent runs (a manual re-run, or a push/pull_request pair)
@@ -311,24 +360,3 @@ jobs:
             git push origin "HEAD:${GITHUB_REF_NAME}" && break
             echo "Push attempt ${attempt} rejected, retrying."
           done
-
-      - name: Upload screenshots artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: fx-event-analyzer-ui-screenshots
-          path: |
-            fx-event-analyzer/Screenshots/**
-          if-no-files-found: warn
-          retention-days: 30
-
-      - name: Upload raw .xcresult bundles (fallback for manual inspection)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: fx-event-analyzer-ui-screenshots-xcresult
-          path: |
-            fx-event-analyzer/DerivedData/iPhone.xcresult
-            fx-event-analyzer/DerivedData/iPad.xcresult
-          if-no-files-found: ignore
-          retention-days: 30
