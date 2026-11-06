@@ -56,7 +56,7 @@ final class SplashViewModelTests: XCTestCase {
         let auth = MockAuthService()
         auth.sessionResult = .failure(AuthServiceError.network("offline"))
 
-        let viewModel = SplashViewModel(authService: auth, minimumDisplayDuration: .zero) { _ in
+        let viewModel = SplashViewModel(authService: auth, apiClient: MockAPIClient(), minimumDisplayDuration: .zero) { _ in
             XCTFail("onFinished should not be called when the init sequence fails")
         }
         viewModel.start()
@@ -79,7 +79,7 @@ final class SplashViewModelTests: XCTestCase {
         let auth = MockAuthService()
         auth.sessionResult = .failure(AuthServiceError.network("offline"))
 
-        let viewModel = SplashViewModel(authService: auth, minimumDisplayDuration: .seconds(60)) { _ in
+        let viewModel = SplashViewModel(authService: auth, apiClient: MockAPIClient(), minimumDisplayDuration: .seconds(60)) { _ in
             XCTFail("onFinished should not be called when the init sequence fails")
         }
         viewModel.start()
@@ -95,7 +95,7 @@ final class SplashViewModelTests: XCTestCase {
         auth.sessionResult = .failure(AuthServiceError.network("offline"))
 
         var finishedOutcome: SplashOutcome?
-        let viewModel = SplashViewModel(authService: auth, minimumDisplayDuration: .zero) { outcome in
+        let viewModel = SplashViewModel(authService: auth, apiClient: MockAPIClient(), minimumDisplayDuration: .zero) { outcome in
             finishedOutcome = outcome
         }
         viewModel.start()
@@ -110,11 +110,185 @@ final class SplashViewModelTests: XCTestCase {
         XCTAssertEqual(finishedOutcome, .unauthenticated)
     }
 
+    // MARK: - 先行取得(HQ指示 2026-11-05「Splash先行通信・Home Cache起動高速化」)
+
+    /// 認証復元前には`HomePrefetchCoordinator`に何も登録されない — セッション
+    /// 取得が完了するまで通信を始めないことの確認。
+    func testPrefetchDoesNotStartBeforeSessionCheckResolves() async {
+        let auth = MockAuthService()
+        auth.sessionResult = .success(nil) // 未ログイン
+        let coordinator = HomePrefetchCoordinator()
+        let userID = UUID()
+
+        _ = await outcome(for: auth, coordinator: coordinator)
+
+        XCTAssertNil(coordinator.consumeHome(for: userID), "unauthenticated launches must never start a prefetch")
+    }
+
+    /// セッション切れ(`.sessionExpired`)はログイン画面へ進むだけで、Home関連の
+    /// 通信は始めない(従来の動作を維持)。
+    func testPrefetchDoesNotStartForAnExpiredSession() async {
+        let auth = MockAuthService()
+        let expiredSession = UserSession(userID: UUID(), accessToken: "token", expiresAt: Date().addingTimeInterval(-60))
+        auth.sessionResult = .success(expiredSession)
+        let coordinator = HomePrefetchCoordinator()
+
+        _ = await outcome(for: auth, coordinator: coordinator)
+
+        XCTAssertNil(coordinator.consumeHome(for: expiredSession.userID))
+    }
+
+    /// 認証復元が成功した直後に、`HomePrefetchCoordinator`へ先行取得が登録され、
+    /// 消費できることを確認する(これが無ければ`HomeViewModel`は常に新規取得に
+    /// フォールバックしてしまう)。
+    func testPrefetchStartsRightAfterAuthenticatedSessionResolves() async {
+        let auth = MockAuthService()
+        let session = UserSession(userID: UUID(), accessToken: "token", expiresAt: Date().addingTimeInterval(3600))
+        auth.sessionResult = .success(session)
+        let coordinator = HomePrefetchCoordinator()
+        let api = MockAPIClient()
+        api.results["home"] = .success(HomeResponse(date: "2026-11-05", timezone: "UTC", events: [], majorFx: []))
+
+        _ = await outcome(for: auth, coordinator: coordinator, apiClient: api)
+
+        let prefetched = coordinator.consumeHome(for: session.userID)
+        XCTAssertNotNil(prefetched, "an authenticated launch must register a /home prefetch")
+        _ = try? await prefetched?.value
+        XCTAssertEqual(api.requestedPaths.filter { $0 == "home" }.count, 1)
+    }
+
+    /// Splashは下限(1.6秒等)未満では終わらない — 先行取得が即座に終わっても、
+    /// Loadingバーのアニメーションぶんは必ず表示する。
+    func testSplashNeverFinishesBeforeTheMinimumDisplayDuration() async {
+        let auth = MockAuthService()
+        let session = UserSession(userID: UUID(), accessToken: "token", expiresAt: Date().addingTimeInterval(3600))
+        auth.sessionResult = .success(session)
+        let coordinator = HomePrefetchCoordinator()
+        let api = MockAPIClient()
+        api.results["home"] = .success(HomeResponse(date: "2026-11-05", timezone: "UTC", events: [], majorFx: [])) // 即座に成功する
+
+        let startedAt = Date()
+        var finished = false
+        let viewModel = SplashViewModel(
+            authService: auth, apiClient: api, minimumDisplayDuration: .milliseconds(200),
+            maximumDisplayDuration: .seconds(4), prefetchCoordinator: coordinator
+        ) { _ in finished = true }
+        viewModel.start()
+        await waitUntil { finished }
+
+        XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(startedAt), 0.2, "must not finish before the minimum display duration")
+    }
+
+    /// `/home`の先行取得が下限より後・上限より前に完了したら、上限まで待たずに
+    /// 早期終了する。
+    func testSplashFinishesEarlyWhenHomePrefetchCompletesBeforeTheMaximum() async {
+        let auth = MockAuthService()
+        let session = UserSession(userID: UUID(), accessToken: "token", expiresAt: Date().addingTimeInterval(3600))
+        auth.sessionResult = .success(session)
+        let coordinator = HomePrefetchCoordinator()
+        let api = DelayedAPIClient(delay: .milliseconds(50))
+        api.results["home"] = .success(HomeResponse(date: "2026-11-05", timezone: "UTC", events: [], majorFx: []))
+
+        let startedAt = Date()
+        var finished = false
+        let viewModel = SplashViewModel(
+            authService: auth, apiClient: api, minimumDisplayDuration: .milliseconds(50),
+            maximumDisplayDuration: .seconds(3), prefetchCoordinator: coordinator
+        ) { _ in finished = true }
+        viewModel.start()
+        await waitUntil { finished }
+
+        let elapsed = Date().timeIntervalSince(startedAt)
+        XCTAssertLessThan(elapsed, 1.0, "the 50ms /home prefetch must let Splash finish well before the 3s maximum")
+    }
+
+    /// `/home`が上限(4秒相当)までに終わらなければ、Splashは上限で先に進む
+    /// (無期限には待たない)。`/home`のTask自体はキャンセルされず、後から
+    /// `HomeViewModel`が結果を受け取れる。
+    func testSplashFinishesAtTheMaximumWhenHomePrefetchNeverCompletesInTime() async {
+        let auth = MockAuthService()
+        let session = UserSession(userID: UUID(), accessToken: "token", expiresAt: Date().addingTimeInterval(3600))
+        auth.sessionResult = .success(session)
+        let coordinator = HomePrefetchCoordinator()
+        let api = DelayedAPIClient(delay: .seconds(10)) // 上限よりずっと遅い
+        api.results["home"] = .success(HomeResponse(date: "2026-11-05", timezone: "UTC", events: [], majorFx: []))
+
+        let startedAt = Date()
+        var finished = false
+        let viewModel = SplashViewModel(
+            authService: auth, apiClient: api, minimumDisplayDuration: .milliseconds(50),
+            maximumDisplayDuration: .milliseconds(300), prefetchCoordinator: coordinator
+        ) { _ in finished = true }
+        viewModel.start()
+        await waitUntil { finished }
+
+        let elapsed = Date().timeIntervalSince(startedAt)
+        XCTAssertLessThan(elapsed, 1.0, "must not wait past the maximum display duration")
+        XCTAssertGreaterThanOrEqual(elapsed, 0.3, "must still wait at least the maximum before giving up")
+        // 上限で先に進んでも、先行取得のTaskはキャンセルされず保持され続ける。
+        XCTAssertNotNil(coordinator.consumeHome(for: session.userID), "the prefetch task must survive past the Splash timeout")
+    }
+
+    /// `/entitlements`だけが先に完了しても早期終了条件にはしない(`/home`の完了
+    /// だけを見る)。
+    func testEntitlementsCompletingAloneDoesNotTriggerEarlyExit() async {
+        let auth = MockAuthService()
+        let session = UserSession(userID: UUID(), accessToken: "token", expiresAt: Date().addingTimeInterval(3600))
+        auth.sessionResult = .success(session)
+        let coordinator = HomePrefetchCoordinator()
+        // /entitlementsはすぐ成功するが、/homeは上限(200ms)より遅い(400ms)。
+        // /entitlementsの完了を早期終了条件にしてしまう実装なら、ここで
+        // 上限よりずっと早く(50〜100ms程度で)終わってしまうはず。
+        let api = DelayedAPIClient(delays: ["entitlements": .milliseconds(10), "home": .milliseconds(400)])
+        api.results["home"] = .success(HomeResponse(date: "2026-11-05", timezone: "UTC", events: [], majorFx: []))
+        api.results["entitlements"] = .success(EntitlementsResponse(features: [], plan: .free, limits: nil))
+
+        let startedAt = Date()
+        var finished = false
+        let viewModel = SplashViewModel(
+            authService: auth, apiClient: api, minimumDisplayDuration: .milliseconds(50),
+            maximumDisplayDuration: .milliseconds(200), prefetchCoordinator: coordinator
+        ) { _ in finished = true }
+        viewModel.start()
+        await waitUntil { finished }
+
+        let elapsed = Date().timeIntervalSince(startedAt)
+        XCTAssertGreaterThanOrEqual(elapsed, 0.2, "/entitlements finishing early must not trigger Splash's early exit")
+        XCTAssertLessThan(elapsed, 0.6, "must give up at the maximum, not wait for the slower /home")
+    }
+
+    /// 通信失敗(オフライン等)時も、先行取得自体はSplashを`.apiConnectionError`
+    /// にしない — 既存のエラー処理(Home側のリトライ導線)に委ねる。
+    func testPrefetchFailureDoesNotShowAnErrorScreen() async {
+        let auth = MockAuthService()
+        let session = UserSession(userID: UUID(), accessToken: "token", expiresAt: Date().addingTimeInterval(3600))
+        auth.sessionResult = .success(session)
+        let coordinator = HomePrefetchCoordinator()
+        let api = MockAPIClient()
+        api.results["home"] = .failure(APIError.transport("offline"))
+        api.results["entitlements"] = .failure(APIError.transport("offline"))
+
+        var finishedOutcome: SplashOutcome?
+        let viewModel = SplashViewModel(
+            authService: auth, apiClient: api, minimumDisplayDuration: .zero,
+            maximumDisplayDuration: .milliseconds(200), prefetchCoordinator: coordinator
+        ) { outcome in finishedOutcome = outcome }
+        viewModel.start()
+        await waitUntil { finishedOutcome != nil }
+
+        XCTAssertEqual(finishedOutcome, .authenticated(session), "a failed prefetch must still route to Home as usual")
+    }
+
     // MARK: - Helper
 
-    private func outcome(for auth: MockAuthService) async -> SplashOutcome {
-        await withCheckedContinuation { continuation in
-            let viewModel = SplashViewModel(authService: auth, minimumDisplayDuration: .zero) { outcome in
+    private func outcome(
+        for auth: MockAuthService, coordinator: HomePrefetchCoordinator? = nil, apiClient: APIClient = MockAPIClient()
+    ) async -> SplashOutcome {
+        let coordinator = coordinator ?? HomePrefetchCoordinator()
+        return await withCheckedContinuation { continuation in
+            let viewModel = SplashViewModel(
+                authService: auth, apiClient: apiClient, minimumDisplayDuration: .zero, prefetchCoordinator: coordinator
+            ) { outcome in
                 continuation.resume(returning: outcome)
             }
             viewModel.start()

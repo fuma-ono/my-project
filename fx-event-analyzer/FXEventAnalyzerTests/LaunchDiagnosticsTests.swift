@@ -177,6 +177,48 @@ final class LaunchDiagnosticsTests: XCTestCase {
         XCTAssertTrue(text.contains("前回の起動データ: なし"))
     }
 
+    // MARK: - Splash先行取得(HQ指示 2026-11-05「Splash先行通信・Home Cache起動高速化」)
+
+    func testEntitlementsIsTrackedAlongsideHomeCalendarAndSpeeches() {
+        XCTAssertTrue(LaunchDiagnostics.trackedAPIPaths.contains("entitlements"))
+        XCTAssertTrue(LaunchDiagnostics.trackedAPIPaths.contains("home"))
+    }
+
+    /// `prefetchStartedMs`は`homeCacheShownMs`と同じ位置づけの参考値で、`spans`
+    /// (隙間なく隣接する区間の合計)には含めない — 含めてしまうと既存の区間
+    /// (「Splash最小表示時間待機など」)と重なり、`unaccountedMs`が狂う。
+    func testPrefetchStartedMsDoesNotAffectTheMeasuredSpanTotal() {
+        var diagnostics = makeDiagnostics()
+        diagnostics.sessionCheckStartMs = 0
+        diagnostics.sessionCheckEndMs = 100
+        diagnostics.prefetchStartedMs = 105 // sessionCheckEndMsのすぐ後
+        diagnostics.splashFinishedMs = 200
+        diagnostics.mainScreenAppearedMs = 250
+        diagnostics.homeAuthTokenStartMs = 260
+        diagnostics.homeAuthTokenEndMs = 310
+        diagnostics.homeHTTPEndMs = 1310
+        diagnostics.homeDecodeStartMs = 1310
+        diagnostics.homeDecodeEndMs = 1340
+        diagnostics.homeStateAppliedMs = 1341
+        diagnostics.homeReadyToDisplayMs = 1400
+
+        XCTAssertEqual(diagnostics.sumOfMeasuredSpansMs, 1400)
+        XCTAssertEqual(diagnostics.unaccountedMs, 0, "prefetchStartedMs must not be double-counted against the adjacent spans")
+    }
+
+    func testReportTextIncludesThePrefetchStartedLine() {
+        var diagnostics = makeDiagnostics()
+        diagnostics.prefetchStartedMs = 120
+        let text = diagnostics.reportText(appVersion: "1.0", buildNumber: "1")
+        XCTAssertTrue(text.contains("Splash先行取得(/home・/entitlements)の開始: 起動から120ms"))
+    }
+
+    func testReportTextShowsNoPrefetchWhenNoneWasStarted() {
+        let diagnostics = makeDiagnostics()
+        let text = diagnostics.reportText(appVersion: "1.0", buildNumber: "1")
+        XCTAssertTrue(text.contains("Splash先行取得(/home・/entitlements)の開始: なし"))
+    }
+
     func testCodableRoundTrip() throws {
         var diagnostics = makeDiagnostics()
         diagnostics.sessionCheckStartMs = 12

@@ -144,6 +144,9 @@ final class HomeViewModel: ObservableObject {
     private let userID: UUID?
     private let cacheStore: HomeCacheStore
     private let planStore: PlanStore
+    /// HQ指示(2026-11-05)「Splash先行通信」: Splash中に開始済みの`/home`があれば、
+    /// ここから受け取って再利用する(二重取得にしない)。
+    private let prefetchCoordinator: HomePrefetchCoordinator
     private let now: () -> Date
     private var cancellables = Set<AnyCancellable>()
     /// 表示中のデータがキャッシュならその保存時刻。最新のデータならnil。
@@ -166,6 +169,7 @@ final class HomeViewModel: ObservableObject {
         userID: UUID? = nil,
         cacheStore: HomeCacheStore = .shared,
         planStore: PlanStore = .shared,
+        prefetchCoordinator: HomePrefetchCoordinator = .shared,
         now: @escaping () -> Date = Date.init
     ) {
         self.apiClient = apiClient
@@ -173,6 +177,7 @@ final class HomeViewModel: ObservableObject {
         self.userID = userID
         self.cacheStore = cacheStore
         self.planStore = planStore
+        self.prefetchCoordinator = prefetchCoordinator
         self.now = now
         favoritesStore.$entries
             .sink { [weak self] entries in
@@ -273,14 +278,25 @@ final class HomeViewModel: ObservableObject {
                 URLQueryItem(name: "timezone", value: timezone),
             ]
         )
-        // HQ指示(2026-10-20)「起動診断画面」: この/home取得が何回目かを
-        // `DiagnosticsStore`に伝える。APIClient.send()内の認証・通信・
-        // デコードの計測は、1回目の取得中かどうかを`DiagnosticsStore`自身が
-        // 判定して記録を受け付ける(2回目の修正、`DiagnosticsStore.swift`
-        // 冒頭のコメント参照)。
-        DiagnosticsStore.shared.beginHomeRequest()
         do {
-            let response: HomeResponse = try await apiClient.send(endpoint)
+            let response: HomeResponse
+            // HQ指示(2026-11-05)「Splash先行通信」: Splash中に開始済みの/homeが
+            // あれば、新規リクエストを送らずその結果を使う(二重取得にしない)。
+            // 起動診断の記録(beginHomeRequest等)は先行取得の開始時点
+            // (`HomePrefetchCoordinator`)で既に行われているため、ここでは呼ばない
+            // — 呼び直すとhomeRequestCountが2になり、「1回しか通信していない」
+            // ことの診断上の証拠が壊れる。
+            if let userID, let prefetched = prefetchCoordinator.consumeHome(for: userID) {
+                response = try await prefetched.value
+            } else {
+                // HQ指示(2026-10-20)「起動診断画面」: この/home取得が何回目かを
+                // `DiagnosticsStore`に伝える。APIClient.send()内の認証・通信・
+                // デコードの計測は、1回目の取得中かどうかを`DiagnosticsStore`自身が
+                // 判定して記録を受け付ける(2026-10-20、2回目の修正、
+                // `DiagnosticsStore.swift`冒頭のコメント参照)。
+                DiagnosticsStore.shared.beginHomeRequest()
+                response = try await apiClient.send(endpoint)
+            }
             state = .loaded(events: response.events, majorFx: response.majorFx)
             DiagnosticsStore.shared.recordHomeStateApplied()
             recentSpeeches = response.speeches ?? []
