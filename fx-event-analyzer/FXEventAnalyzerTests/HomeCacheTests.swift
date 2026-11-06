@@ -279,7 +279,7 @@ final class HomeCacheTests: XCTestCase {
         let api = MockAPIClient()
         let prefetchedEvent = Self.event(id: "prefetched", status: .scheduled, at: now.addingTimeInterval(3600))
         api.results["home"] = .success(response(events: [prefetchedEvent]))
-        coordinator.start(userID: userA, apiClient: api)
+        coordinator.start(userID: userA, apiClient: api, now: { self.now })
 
         let viewModel = makeViewModel(api: api, cache: HomeCacheStore(defaults: defaults), userID: userA, prefetch: coordinator)
         viewModel.load()
@@ -307,7 +307,7 @@ final class HomeCacheTests: XCTestCase {
         let coordinator = HomePrefetchCoordinator()
         let apiForA = MockAPIClient()
         apiForA.results["home"] = .success(response())
-        coordinator.start(userID: userA, apiClient: apiForA)
+        coordinator.start(userID: userA, apiClient: apiForA, now: { self.now })
 
         let apiForB = MockAPIClient()
         let bEvent = Self.event(id: "b-own", status: .scheduled, at: now.addingTimeInterval(3600))
@@ -328,7 +328,7 @@ final class HomeCacheTests: XCTestCase {
         let coordinator = HomePrefetchCoordinator()
         let api = MockAPIClient()
         api.results["home"] = .success(response())
-        coordinator.start(userID: userA, apiClient: api)
+        coordinator.start(userID: userA, apiClient: api, now: { self.now })
 
         let viewModel = makeViewModel(api: api, cache: HomeCacheStore(defaults: defaults), userID: userA, prefetch: coordinator)
         viewModel.load()
@@ -337,6 +337,33 @@ final class HomeCacheTests: XCTestCase {
         await waitUntil { viewModel.freshDataVersion == 2 }
 
         XCTAssertEqual(api.requestedPaths.filter { $0 == "home" }.count, 2, "the first load consumes the prefetch; the second must be a real request")
+    }
+
+    /// Splash中に日付が変わった・バックグラウンドから翌日に戻ったとき: 先行取得は前日の
+    /// `date`で取ったものなので使わず、今日の`date`で自分で取得する(前日の内容を今日の
+    /// 最新として出さない)。
+    func testFetchIgnoresAPrefetchForThePreviousDateAndRequestsToday() async throws {
+        let coordinator = HomePrefetchCoordinator()
+        let apiForPrefetch = MockAPIClient()
+        let staleEvent = Self.event(id: "previous-day", status: .scheduled, at: now.addingTimeInterval(3600))
+        apiForPrefetch.results["home"] = .success(response(events: [staleEvent]))
+        coordinator.start(userID: userA, apiClient: apiForPrefetch, now: { self.now.addingTimeInterval(-24 * 3600) })
+
+        let api = MockAPIClient()
+        let todayEvent = Self.event(id: "today", status: .scheduled, at: now.addingTimeInterval(3600))
+        api.results["home"] = .success(response(events: [todayEvent]))
+        let viewModel = makeViewModel(api: api, cache: HomeCacheStore(defaults: defaults), userID: userA, prefetch: coordinator)
+        viewModel.load()
+        await waitUntil { viewModel.freshDataVersion == 1 }
+
+        XCTAssertEqual(viewModel.state, .loaded(events: [todayEvent], majorFx: [Self.pair]))
+        XCTAssertEqual(api.requestedPaths.filter { $0 == "home" }.count, 1, "the view model must request today's /home itself")
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .current
+        let query = try XCTUnwrap(api.requestedEndpoints.first { $0.path == "home" }?.queryItems)
+        XCTAssertEqual(query.first { $0.name == "date" }?.value, formatter.string(from: now))
     }
 
     // MARK: - プランの確認(HQ指示 2026-11-02「ホームキャッシュのプラン安全性修正」)

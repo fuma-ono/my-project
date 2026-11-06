@@ -219,6 +219,50 @@ final class LaunchDiagnosticsTests: XCTestCase {
         XCTAssertTrue(text.contains("Splash先行取得(/home・/entitlements)の開始: なし"))
     }
 
+    /// 先行取得を使った実際の起動の並び: `/home`の認証・通信・デコードがSplash表示中
+    /// (「Splash最小表示時間待機など」の区間の中)に終わり、メイン画面の表示後に反映される。
+    /// 重なった区間を二重に数えず、`unaccountedMs`が負にならない。
+    func testOverlappingSpansFromAPrefetchedLaunchAreNotDoubleCounted() {
+        var diagnostics = makeDiagnostics()
+        diagnostics.sessionCheckStartMs = 0
+        diagnostics.sessionCheckEndMs = 100
+        diagnostics.prefetchStartedMs = 105
+        diagnostics.homeAuthTokenStartMs = 106
+        diagnostics.homeAuthTokenEndMs = 150
+        diagnostics.homeHTTPEndMs = 1150
+        diagnostics.homeDecodeStartMs = 1150
+        diagnostics.homeDecodeEndMs = 1180
+        diagnostics.splashFinishedMs = 1600
+        diagnostics.mainScreenAppearedMs = 1650
+        diagnostics.homeStateAppliedMs = 1660
+        diagnostics.homeReadyToDisplayMs = 1700
+
+        XCTAssertEqual(diagnostics.sumOfMeasuredSpansMs, 1700)
+        XCTAssertEqual(diagnostics.unaccountedMs, 0, "spans that overlap during Splash must be counted once")
+        // 各区間の表示値は今までどおり(重なりの扱いは合計だけ)。
+        XCTAssertEqual(diagnostics.spans.first { $0.label == "/home HTTP通信往復" }?.durationMs, 1000)
+        XCTAssertNil(diagnostics.spans.first { $0.label == "メイン画面表示→/home認証開始" }?.durationMs)
+    }
+
+    /// 重ならない区間の間に空白があれば、その空白は合計に入らず`unaccountedMs`に残る。
+    func testGapBetweenSpansIsStillReportedAsUnaccounted() {
+        var diagnostics = makeDiagnostics()
+        diagnostics.sessionCheckStartMs = 0
+        diagnostics.sessionCheckEndMs = 100
+        diagnostics.splashFinishedMs = 200
+        diagnostics.mainScreenAppearedMs = 250
+        diagnostics.homeAuthTokenStartMs = 260
+        diagnostics.homeAuthTokenEndMs = 310
+        diagnostics.homeHTTPEndMs = 1310
+        diagnostics.homeDecodeStartMs = 1400 // 受信完了からデコード開始まで90msの空白
+        diagnostics.homeDecodeEndMs = 1430
+        diagnostics.homeStateAppliedMs = 1431
+        diagnostics.homeReadyToDisplayMs = 1490
+
+        XCTAssertEqual(diagnostics.sumOfMeasuredSpansMs, 1400)
+        XCTAssertEqual(diagnostics.unaccountedMs, 90)
+    }
+
     func testCodableRoundTrip() throws {
         var diagnostics = makeDiagnostics()
         diagnostics.sessionCheckStartMs = 12

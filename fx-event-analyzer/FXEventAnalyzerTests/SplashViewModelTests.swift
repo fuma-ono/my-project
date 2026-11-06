@@ -122,7 +122,7 @@ final class SplashViewModelTests: XCTestCase {
 
         _ = await outcome(for: auth, coordinator: coordinator)
 
-        XCTAssertNil(coordinator.consumeHome(for: userID), "unauthenticated launches must never start a prefetch")
+        XCTAssertNil(coordinator.consumeHomeForToday(for: userID), "unauthenticated launches must never start a prefetch")
     }
 
     /// セッション切れ(`.sessionExpired`)はログイン画面へ進むだけで、Home関連の
@@ -135,7 +135,7 @@ final class SplashViewModelTests: XCTestCase {
 
         _ = await outcome(for: auth, coordinator: coordinator)
 
-        XCTAssertNil(coordinator.consumeHome(for: expiredSession.userID))
+        XCTAssertNil(coordinator.consumeHomeForToday(for: expiredSession.userID))
     }
 
     /// 認証復元が成功した直後に、`HomePrefetchCoordinator`へ先行取得が登録され、
@@ -151,7 +151,7 @@ final class SplashViewModelTests: XCTestCase {
 
         _ = await outcome(for: auth, coordinator: coordinator, apiClient: api)
 
-        let prefetched = coordinator.consumeHome(for: session.userID)
+        let prefetched = coordinator.consumeHomeForToday(for: session.userID)
         XCTAssertNotNil(prefetched, "an authenticated launch must register a /home prefetch")
         _ = try? await prefetched?.value
         XCTAssertEqual(api.requestedPaths.filter { $0 == "home" }.count, 1)
@@ -226,7 +226,7 @@ final class SplashViewModelTests: XCTestCase {
         XCTAssertLessThan(elapsed, 1.0, "must not wait past the maximum display duration")
         XCTAssertGreaterThanOrEqual(elapsed, 0.3, "must still wait at least the maximum before giving up")
         // 上限で先に進んでも、先行取得のTaskはキャンセルされず保持され続ける。
-        XCTAssertNotNil(coordinator.consumeHome(for: session.userID), "the prefetch task must survive past the Splash timeout")
+        XCTAssertNotNil(coordinator.consumeHomeForToday(for: session.userID), "the prefetch task must survive past the Splash timeout")
     }
 
     /// `/entitlements`だけが先に完了しても早期終了条件にはしない(`/home`の完了

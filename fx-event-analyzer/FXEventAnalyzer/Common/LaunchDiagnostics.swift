@@ -116,7 +116,14 @@ extension LaunchDiagnostics {
         let label: String
         let startDescription: String
         let endDescription: String
-        let durationMs: Int64?
+        /// 区間の両端(起動基準点からのms)。合計を重複なしで数えるために持つ。
+        let startMs: Int64?
+        let endMs: Int64?
+
+        var durationMs: Int64? {
+            guard let startMs, let endMs, endMs >= startMs else { return nil }
+            return endMs - startMs
+        }
 
         var isMeasured: Bool { durationMs != nil }
     }
@@ -129,55 +136,55 @@ extension LaunchDiagnostics {
                 label: "Supabaseセッション取得",
                 startDescription: "authService.currentSession() 呼び出し開始",
                 endDescription: "authService.currentSession() 完了(成功/失敗いずれも)",
-                durationMs: diff(sessionCheckStartMs, sessionCheckEndMs)
+                startMs: sessionCheckStartMs, endMs: sessionCheckEndMs
             ),
             Span(
                 label: "Splash最小表示時間待機など",
                 startDescription: "Supabaseセッション取得完了",
                 endDescription: "Splash完了コールバック(onFinished)",
-                durationMs: diff(sessionCheckEndMs, splashFinishedMs)
+                startMs: sessionCheckEndMs, endMs: splashFinishedMs
             ),
             Span(
                 label: "Splash→メイン画面遷移",
                 startDescription: "Splash完了コールバック(onFinished)",
                 endDescription: "メイン画面の表示イベント(MainTabView .onAppear)",
-                durationMs: diff(splashFinishedMs, mainScreenAppearedMs)
+                startMs: splashFinishedMs, endMs: mainScreenAppearedMs
             ),
             Span(
                 label: "メイン画面表示→/home認証開始",
                 startDescription: "メイン画面の表示イベント",
                 endDescription: "API認証トークン取得(/home)開始",
-                durationMs: diff(mainScreenAppearedMs, homeAuthTokenStartMs)
+                startMs: mainScreenAppearedMs, endMs: homeAuthTokenStartMs
             ),
             Span(
                 label: "API認証トークン取得(/home)",
                 startDescription: "authTokenProvider() 呼び出し開始",
                 endDescription: "authTokenProvider() 完了",
-                durationMs: diff(homeAuthTokenStartMs, homeAuthTokenEndMs)
+                startMs: homeAuthTokenStartMs, endMs: homeAuthTokenEndMs
             ),
             Span(
                 label: "/home HTTP通信往復",
                 startDescription: "HTTPリクエスト送信開始",
                 endDescription: "HTTPレスポンス受信完了(通信往復のみ、サーバー内部処理・Renderのコールドスタート待ちを含みうる)",
-                durationMs: diff(homeAuthTokenEndMs, homeHTTPEndMs)
+                startMs: homeAuthTokenEndMs, endMs: homeHTTPEndMs
             ),
             Span(
                 label: "/home JSONデコード",
                 startDescription: "レスポンス受信完了",
                 endDescription: "JSONデコード完了",
-                durationMs: diff(homeDecodeStartMs, homeDecodeEndMs)
+                startMs: homeDecodeStartMs, endMs: homeDecodeEndMs
             ),
             Span(
                 label: "ホームデータの状態反映",
                 startDescription: "JSONデコード完了",
                 endDescription: "state = .loaded(...) 反映完了",
-                durationMs: diff(homeDecodeEndMs, homeStateAppliedMs)
+                startMs: homeDecodeEndMs, endMs: homeStateAppliedMs
             ),
             Span(
                 label: "ホーム画面の表示イベントまで",
                 startDescription: "state = .loaded(...) 反映完了",
                 endDescription: "ホーム画面コンテンツの表示イベント(.onAppear、完全な描画完了の保証ではない)",
-                durationMs: diff(homeStateAppliedMs, homeReadyToDisplayMs)
+                startMs: homeStateAppliedMs, endMs: homeReadyToDisplayMs
             ),
         ]
     }
@@ -190,9 +197,31 @@ extension LaunchDiagnostics {
     /// これが実機で報告されている「約30秒」に対応する数値。
     var totalUntilHomeReadyMs: Int64? { homeReadyToDisplayMs }
 
-    /// 計測済み区間の合計(重複なし、`spans`はすべて隣接区間なので単純合計でよい)。
+    /// 計測済み区間の合計(重なった時間は1回だけ数える)。
+    ///
+    /// 先行取得なしの起動では`spans`はすべて隣接区間なので、単純合計と同じ値になる。
+    /// Splash先行取得(HQ指示 2026-11-05)を使った起動では、`/home`の認証・通信・デコードが
+    /// Splash表示中(「Splash最小表示時間待機など」の区間の中)に行われて区間同士が重なるため、
+    /// 単純合計では重なった分を二重に数え、`unaccountedMs`が負になる。
     var sumOfMeasuredSpansMs: Int64 {
-        spans.compactMap(\.durationMs).reduce(0, +)
+        let intervals = spans
+            .compactMap { span -> (start: Int64, end: Int64)? in
+                guard span.isMeasured, let start = span.startMs, let end = span.endMs else { return nil }
+                return (start, end)
+            }
+            .sorted { $0.start < $1.start }
+        var total: Int64 = 0
+        var covered: (start: Int64, end: Int64)?
+        for interval in intervals {
+            if let current = covered, interval.start <= current.end {
+                covered = (current.start, max(current.end, interval.end))
+            } else {
+                if let current = covered { total += current.end - current.start }
+                covered = interval
+            }
+        }
+        if let current = covered { total += current.end - current.start }
+        return total
     }
 
     /// 全体時間と、測れた区間の合計との差。基準点(アプリ内最初の計測点)

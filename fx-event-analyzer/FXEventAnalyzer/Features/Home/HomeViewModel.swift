@@ -285,8 +285,9 @@ final class HomeViewModel: ObservableObject {
             // 起動診断の記録(beginHomeRequest等)は先行取得の開始時点
             // (`HomePrefetchCoordinator`)で既に行われているため、ここでは呼ばない
             // — 呼び直すとhomeRequestCountが2になり、「1回しか通信していない」
-            // ことの診断上の証拠が壊れる。
-            if let userID, let prefetched = prefetchCoordinator.consumeHome(for: userID) {
+            // ことの診断上の証拠が壊れる。先行取得の`date`・`timezone`がここでの値と
+            // 違えば(日付またぎ等)使わず、下の新規取得に回る(`consumeHome`参照)。
+            if let userID, let prefetched = prefetchCoordinator.consumeHome(for: userID, date: today, timezone: timezone) {
                 response = try await prefetched.value
             } else {
                 // HQ指示(2026-10-20)「起動診断画面」: この/home取得が何回目かを
