@@ -30,16 +30,16 @@ fail_with_output() {
 
 state() {
   if ! psql_run -At >/tmp/rerun.state 2>/tmp/rerun.out <<'SQL'; then
-select 'constraint ' || conname || ' ' || pg_get_constraintdef(oid) from pg_constraint
+select 'constraint ' || conname::text || ' ' || pg_get_constraintdef(oid) from pg_constraint
   where conrelid = 'public.fomc_policy_decisions'::regclass
 union all
-select 'trigger ' || tgname || ' ' || tgtype || ' ' || tgenabled || ' ' || tgfoid::regprocedure::text from pg_trigger
+select 'trigger ' || tgname::text || ' ' || tgtype::text || ' ' || tgenabled::text || ' ' || tgfoid::regprocedure::text from pg_trigger
   where tgrelid = 'public.fomc_policy_decisions'::regclass and not tgisinternal
 union all
-select 'policy ' || policyname || ' ' || cmd || ' ' || roles::text || ' ' || coalesce(qual, '') from pg_policies
+select 'policy ' || policyname::text || ' ' || cmd || ' ' || roles::text || ' ' || coalesce(qual, '') from pg_policies
   where tablename = 'fomc_policy_decisions'
 union all
-select 'rls ' || relrowsecurity from pg_class where oid = 'public.fomc_policy_decisions'::regclass
+select 'rls ' || relrowsecurity::text from pg_class where oid = 'public.fomc_policy_decisions'::regclass
 order by 1;
 SQL
     fail_with_output "reading the definitions"
