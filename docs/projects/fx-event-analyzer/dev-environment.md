@@ -1742,3 +1742,35 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=<社内のプロキシ> NODE_OPTIONS=--use-syst
 - `log.jsonl` の形式不正・重複・順序の乱れ・未来の時刻、どの実行にも対応しない記録を出す。1つの記録は1つの実行にだけ対応させる
 - 保存ページを一時フォルダに取り出し、`tests/ingestion/ecbWeeklyReplay.test.ts`(ジョブと同じ設定)に古い順に流す。ページごとに発言・スキップ(理由)・解析エラー・範囲・区別できない日・中止/時刻の変更/保留/安全弁を出す。一時フォルダは最後に消す
 - レポートは標準出力だけ(ファイルに残さない)。ページの本文(題名・名前)・連絡先は写さない。書き込みは一切しない(ブランチ・ログ・ワークフローの有効/無効を変えない)。DB・API(DEV・本番)にはつながない
+
+## 15. FOMC政策金利・小売売上高の DEV への反映と戻し方(2026-11-06、HQ指示「DEV反映準備の修正候補」。**適用・実行はまだ。承認を得てから行う**)
+
+### 15.1 前提(API の自動配信)
+
+DEV の API(Render `fx-event-analyzer-api-dev`)は `render.yaml` の `branch: claude/fx-settings-screens`・`autoDeploy: true` で、
+settings に入ったコードがそのまま配信される。`GET /events/{id}` は FOMC の会合(US_FOMC)のとき `fomc_policy_decisions` を読む
+(`routes/events.ts`・`repositories/eventsRepository.ts` の `getFomcPolicyDecision`)。**この表が無い DB では、FOMC の会合の詳細が 500 になる**
+(ほかの指標・画面は影響しない)。そのため、表を作る・消す順番は「表は API より先に作る、API より後に消す」。
+
+### 15.2 反映の順番
+
+1. migration `20261105000001_fomc_policy_decisions.sql` を SQL Editor で流す(全体を `begin;` … `commit;` で囲む。途中で止まったら `rollback;`)。
+   表と制約・トリガー・RLS・ポリシーを作るだけで、行は入れない。2回流しても同じ(形の違う表があれば手を入れずに止まる)。
+2. migration `20261105000002_us_retail_sales_indicator.sql` を流す(指標マスタと通貨ペアの行。既にあれば変えない)。
+3. API を確かめる(FOMC の会合の詳細が 200、`policy_rate: null`)。
+4. 取り込み: `fomc-schedule`(会合・議事要旨) → `retail-sales-schedule`(14件) → `fomc-policy-rate`(記録済みの会合の分)。
+   main の取り込み workflow にこの2つの target が入るまでは、`retail-sales-schedule`・`fomc-policy-rate` は動かせない。
+
+### 15.3 戻し方
+
+戻せる範囲(データを失わない、または取り直せる)と、戻せない操作を分ける。
+
+| 対象 | 手順 | 戻せるか |
+|---|---|---|
+| 政策金利の値(`fomc_policy_decisions` の行) | 行は消せない(トリガー)。消すには表ごと消す(下)。 | 取り直せる(NY連銀の API に過去の記録がある。2019年の値も取れることを確認済み) |
+| 政策金利の表 | **先に API のコードを戻す**(`getFomcPolicyDecision` を呼ばない版を settings に入れ、Render の配信が終わったのを確かめる)。その後 `drop table fomc_policy_decisions;`・`drop function prevent_fomc_policy_decision_mutation();`。他の表からの参照は無い。 | 表を消すと行も消える(不可逆。ただし取り直せる)。API を戻さずに消すと FOMC の会合の詳細が 500 |
+| 小売売上高の予定(`economic_events` の `provider = 'census_retail_schedule'`) | `delete from economic_events where provider = 'census_retail_schedule';`。結果の値・値動きの行は作らないので、外部キー(`on delete restrict`)には当たらない(当たれば消えずに止まる)。 | 取り直せる(表から再実行) |
+| 小売売上高の予定の変更の記録(`event_schedule_changes`) | `target_id` に外部キーが無いので、予定を消しても止まらず、記録だけが残る。必要なら予定を消す前に `select` で控えてから `delete from event_schedule_changes where kind = 'INDICATOR' and target_id in (…);` | 記録は表から作り直せない(不可逆。控えを取ってから消す) |
+| 小売売上高の通知(`notification_inbox`) | `target_id` は文字列で外部キーが無い。予定を消すと、届いた通知を開いたときに 404 になる。 | 通知は戻らない(予定を消す前に、届いた通知が無いか確かめる) |
+| 小売売上高の指標マスタ | 予定を消した後に `indicator_fx_pairs` → `economic_indicators` の順に US_RETAIL_SALES の行を消す(どちらも `on delete restrict`)。 | 取り直せる(migration を流し直す) |
+| 議事要旨 | migration は無い。コードを戻すだけ。calendar.json から足した予定は DB に印が無いので、`provider_event_id` を表(`FOMC_MINUTES_SCHEDULE`)と見比べて見分ける。 | 取り直せる |
