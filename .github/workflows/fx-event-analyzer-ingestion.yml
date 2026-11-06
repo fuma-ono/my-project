@@ -14,7 +14,17 @@ name: FX Event Analyzer - Data ingestion (dev)
 #     成功するまで定期実行には入れない(HQ決定2026-10-18「定期実行への移行条件」)。
 #   - FOMCの会合日程(手動実行のみ、target=fomc-schedule): HQ承認2026-10-26。コードレビュー済みの
 #     表(ingestion/mappings/fomcSchedule.ts)から US_FOMC の発表予定を economic_events に入れる。
-#     外部APIは呼ばない。migration 20261022000002(is_provisional)が前提。定期実行には入れない
+#     migration 20261022000002(is_provisional)が前提。定期実行には入れない。HQ指示2026-11-05: 同じ実行で
+#     FOMC議事要旨(US_FOMC_MINUTES)も入れ、FRB の公式カレンダー(calendar.json、無料・キー不要、1回)を読んで
+#     表に無い会合の議事要旨だけを足す(取れなければ表だけ)。会合の予定は今までどおり表だけ
+#   - FOMCの政策金利(手動実行のみ、target=fomc-policy-rate): HQ承認2026-11-05 案A。NY連銀 Markets Data API
+#     (無料・キー不要、1回)の誘導目標レンジを fomc_policy_decisions に入れる。economic_events は変えない。
+#     migration 20261105000001(fomc_policy_decisions)が前提(無ければ表を読むところで止まり、政策金利は書かない。実行の記録は ingestion_logs に残る)。
+#     定期実行には入れていない
+#   - 米国小売売上高の発表予定(手動実行のみ、target=retail-sales-schedule): HQ承認2026-11-05。人が確認した表
+#     (ingestion/mappings/retailSalesSchedule.ts)から US_RETAIL_SALES の予定を economic_events に入れる。外部APIは
+#     呼ばない。値は入れない。migration 20261105000002(US_RETAIL_SALES の指標)が前提(無ければエラーにして予定は書かない。実行の記録は ingestion_logs に残る)。
+#     定期実行には入れていない
 #   - BLS公式統計の経済カレンダーの書き込みなしの事前実行(手動実行のみ、target=official-bls-dry-run):
 #     HQ承認2026-10-27(D-1)。`--dry-run` で DB には何も書かない(ingestion_logs にも書かない)。
 #     書き込む関数をすべて断るストアで、内訳(plan)と書くはずだった内容をログに出すだけ。
@@ -32,7 +42,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'fx-prices / speeches / both / report / official-bls / official-bls-dry-run / official-eurostat / official-eurostat-dry-run / event-reactions / fomc-schedule'
+        description: 'fx-prices / speeches / both / report / official-bls / official-bls-dry-run / official-eurostat / official-eurostat-dry-run / event-reactions / fomc-schedule / fomc-policy-rate / retail-sales-schedule'
         default: both
 
 permissions:
@@ -114,6 +124,12 @@ jobs:
       - name: FOMC schedule (manual only)
         if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'fomc-schedule'
         run: npm run -s ingest:fomc-schedule
+      - name: FOMC policy rate (NY Fed target range, manual only)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'fomc-policy-rate'
+        run: npm run -s ingest:fomc-policy-rate
+      - name: US retail sales schedule (manual only)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'retail-sales-schedule'
+        run: npm run -s ingest:retail-sales-schedule
       - name: Official stats (Eurostat calendar) dry run, no DB writes (manual only)
         if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'official-eurostat-dry-run'
         run: npm run -s ingest:official:eurostat-calendar -- --dry-run
