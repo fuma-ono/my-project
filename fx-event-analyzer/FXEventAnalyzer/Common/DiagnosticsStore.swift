@@ -92,6 +92,17 @@ final class DiagnosticsStore: ObservableObject {
         logger.log("[diagnostics] runInitSequence finished outcome=\(succeeded ? "success" : "failure", privacy: .public)")
     }
 
+    // MARK: - H. Splash先行取得(HQ指示 2026-11-05「Splash先行通信・Home Cache起動高速化」)
+
+    /// `HomePrefetchCoordinator.start()`が`/home`・`/entitlements`の先行取得を
+    /// 始めた時点。最初の1回だけ記録する(ログイン切り替え等で複数回始まっても
+    /// 上書きしない — あくまで「この起動で最初に先行取得を始めた時刻」)。
+    func recordPrefetchStarted() {
+        guard current.prefetchStartedMs == nil else { return }
+        current.prefetchStartedMs = elapsedMs()
+        persist()
+    }
+
     // MARK: - F. Splash→ホームの画面遷移
 
     /// 最初の1回だけ記録する(タブ切り替え等での再表示では上書きしない)。

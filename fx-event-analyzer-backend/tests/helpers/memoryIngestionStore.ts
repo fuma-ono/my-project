@@ -22,6 +22,7 @@ import type {
   StoredEvent,
   StoredSpeechRef,
   NewFomcPolicyDecision,
+  StoredFomcPolicyDecision,
 } from '../../src/ingestion/store.js';
 
 /**
@@ -123,8 +124,15 @@ export class MemoryIngestionStore implements IngestionStore {
     return Promise.resolve(s ? { forecast: s.forecast, actual: s.actual, previous: s.previous } : null);
   }
 
-  listFomcPolicyDecisionEventIds(): Promise<string[]> {
-    return Promise.resolve(this.fomcPolicyDecisions.map((row) => row.event_id));
+  listFomcPolicyDecisions(): Promise<StoredFomcPolicyDecision[]> {
+    return Promise.resolve(
+      this.fomcPolicyDecisions.map((row) => ({
+        event_id: row.event_id,
+        target_range_lower: row.target_range_lower,
+        target_range_upper: row.target_range_upper,
+        effective_date: row.effective_date,
+      })),
+    );
   }
 
   insertFomcPolicyDecision(row: NewFomcPolicyDecision): Promise<void> {
@@ -367,6 +375,19 @@ export class MemoryIngestionStore implements IngestionStore {
 
   todayApiCredits(provider: string): Promise<number> {
     return Promise.resolve(this.creditsToday(provider));
+  }
+
+  latestFomcPolicyRateOpenConflicts(): Promise<string[]> {
+    const latest = [...this.logs]
+      .reverse()
+      .find(
+        (log) =>
+          log.job === 'ingest:fomc-policy-rate' &&
+          log.provider === 'nyfed_effr' &&
+          log.details.conflicts_checked === true,
+      );
+    const open = latest?.details.open_conflicts;
+    return Promise.resolve(Array.isArray(open) ? (open as string[]) : []);
   }
 
   insertIngestionLog(row: IngestionLogRow): Promise<void> {

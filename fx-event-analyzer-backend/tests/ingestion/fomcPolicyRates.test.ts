@@ -5,9 +5,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { NY_FED_SOURCE } from '../../src/domain/attribution.js';
 import { nyFedEffrSearchUrl, parseNyFedTargetRanges } from '../../src/ingestion/adapters/nyFedRates.js';
-import { ingestFomcPolicyRates } from '../../src/ingestion/pipelines/fomcPolicyRates.js';
+import {
+  conflictKey,
+  FOMC_POLICY_RATE_JOB,
+  FOMC_POLICY_RATE_LOG_PROVIDER,
+  ingestFomcPolicyRates,
+} from '../../src/ingestion/pipelines/fomcPolicyRates.js';
 import { FOMC_SCHEDULE_PROVIDER } from '../../src/ingestion/pipelines/fomcSchedule.js';
-import { JobCounters } from '../../src/ingestion/runner.js';
+import { JobCounters, runIngestionJob } from '../../src/ingestion/runner.js';
 import { MemoryIngestionStore } from '../helpers/memoryIngestionStore.js';
 
 function record(effectiveDate: unknown, from: unknown, to: unknown, extra: Record<string, unknown> = {}) {
@@ -110,14 +115,23 @@ describe('ingestFomcPolicyRates', () => {
     ] as typeof store.events;
   });
 
-  const run = (body: unknown, now = NOW) => {
-    const counters = new JobCounters();
+  /** 本物のジョブと同じく runIngestionJob を通す(1回の実行で ingestion_logs に1行。前回の状態はそこから読む)。 */
+  const run = async (body: unknown, now = NOW) => {
     const calls: [string, string][] = [];
     const fetchRanges = (start: string, end: string) => {
       calls.push([start, end]);
-      return Promise.resolve(parseNyFedTargetRanges(body));
+      return body instanceof Error ? Promise.reject(body) : Promise.resolve(parseNyFedTargetRanges(body));
     };
-    return ingestFomcPolicyRates({ store, fetchRanges, now }, counters).then((result) => ({ result, counters, calls }));
+    let result: Awaited<ReturnType<typeof ingestFomcPolicyRates>> | undefined;
+    const job = await runIngestionJob(
+      store,
+      { provider: FOMC_POLICY_RATE_LOG_PROVIDER, dataType: 'ECONOMIC_EVENT', job: FOMC_POLICY_RATE_JOB },
+      async (counters) => {
+        result = await ingestFomcPolicyRates({ store, fetchRanges, now }, counters);
+      },
+      now,
+    );
+    return { result: result!, counters: job.counters, calls };
   };
 
   it('records the range in effect on the first day after each announcement, lower and upper apart', async () => {
@@ -146,11 +160,13 @@ describe('ingestFomcPolicyRates', () => {
     expect(counters.errorMessages).toEqual([]);
   });
 
-  it('does not record a meeting twice: a rerun reads nothing new and writes nothing', async () => {
+  it('does not record a meeting twice: a rerun only compares the records with the source and writes nothing', async () => {
     await run(SEPT_OCT);
     const again = await run(SEPT_OCT);
-    expect(again.calls).toEqual([]); // 記録の無い会合が無いので API も呼ばない
-    expect(again.result).toMatchObject({ recorded: [], alreadyRecorded: 2 });
+    // 記録済みの会合を NY連銀の今の値と突き合わせるため、同じ期間を1回だけ取る(HQ指示 2026-11-06「NY連銀の規約対応」)
+    expect(again.calls).toEqual([['2026-09-17', '2026-11-05']]);
+    expect(again.result).toMatchObject({ recorded: [], alreadyRecorded: 2, conflicts: [], unverified: [] });
+    expect(again.counters.details).toMatchObject({ source_status: 'OK', conflicts_checked: true, verified: 2 });
     expect(store.fomcPolicyDecisions).toHaveLength(2);
   });
 
@@ -171,7 +187,7 @@ describe('ingestFomcPolicyRates', () => {
     expect(store.fomcPolicyDecisions).toEqual([]);
     expect(result.awaiting).toEqual(['fomc_schedule:2026-09-16', 'fomc_schedule:2026-10-28']);
     expect(counters.errorMessages).toEqual(['NY Fed EFFR: HTTP 503 from markets.newyorkfed.org']);
-    expect(counters.details).toMatchObject({ source_status: 'UNAVAILABLE' });
+    expect(counters.details).toMatchObject({ source_status: 'UNAVAILABLE', conflicts_checked: false, conflicts: [] });
   });
 
   it('a broken response is treated like a failed fetch', async () => {
@@ -248,5 +264,213 @@ describe('ingestFomcPolicyRates', () => {
     expect(counters.errorMessages).toEqual([
       'fomc_schedule:2026-09-16: duplicate key fomc_policy_decisions (event_id)',
     ]);
+  });
+  // HQ指示(2026-11-06「NY連銀の規約対応」修正案2・「NY Fed 食い違いログの重複防止」): 記録済みの会合を NY連銀の今の値と
+  // 突き合わせる。違いは記録するだけ(記録した値・会合への結びつけは変えない)。実行をまたいで、新しく出た・解消した
+  // 食い違いだけを詳細つきで出し、続いているものは件数だけにする(前回の状態はこのジョブのログの open_conflicts)。
+  describe('detecting corrections in the source', () => {
+    const decisionsSnapshot = () => JSON.parse(JSON.stringify(store.fomcPolicyDecisions)) as unknown;
+    /** 9/17 の値を NY連銀が訂正した(3.75〜4.00 → 3.50〜3.75)。 */
+    const SEP_CORRECTED = {
+      refRates: SEPT_OCT.refRates.map((r) => (r.effectiveDate === '2026-09-17' ? record('2026-09-17', 3.5, 3.75) : r)),
+    };
+    /** 10/29 の記録が消え、10/28 の会合に同じ決まりを当てはめると 10/30 になる。 */
+    const OCT_SHIFTED = { refRates: SEPT_OCT.refRates.filter((r) => r.effectiveDate !== '2026-10-29') };
+    const SEP_KEY = conflictKey(
+      'fomc_schedule:2026-09-16',
+      'VALUE_DIFFERS',
+      { lower: 3.75, upper: 4, effective_date: '2026-09-17' },
+      { lower: 3.5, upper: 3.75, effective_date: '2026-09-17' },
+    );
+    const OCT_KEY = conflictKey(
+      'fomc_schedule:2026-10-28',
+      'EFFECTIVE_DATE_DIFFERS',
+      { lower: 3.75, upper: 4, effective_date: '2026-10-29' },
+      { lower: 3.75, upper: 4, effective_date: '2026-10-30' },
+    );
+    const policyLogs = () => store.logs.filter((log) => log.job === FOMC_POLICY_RATE_JOB);
+
+    it('reports no conflict when the records and the source agree', async () => {
+      await run(SEPT_OCT);
+      const { result, counters } = await run(SEPT_OCT);
+      expect(result.conflicts).toEqual([]);
+      expect(counters.details).toMatchObject({
+        conflicts: [],
+        continuing_conflicts: 0,
+        resolved_conflicts: [],
+        open_conflicts: [],
+        conflicts_checked: true,
+      });
+    });
+
+    it('reports VALUE_DIFFERS once with the details, and keeps the record', async () => {
+      await run(SEPT_OCT);
+      const before = decisionsSnapshot();
+      const { result, counters } = await run(SEP_CORRECTED);
+      expect(result.conflicts).toEqual([
+        {
+          key: SEP_KEY,
+          provider_event_id: 'fomc_schedule:2026-09-16',
+          difference: 'VALUE_DIFFERS',
+          stored: { lower: 3.75, upper: 4.0, effective_date: '2026-09-17' },
+          source: { lower: 3.5, upper: 3.75, effective_date: '2026-09-17' },
+          source_url: nyFedEffrSearchUrl('2026-09-17', '2026-11-05'),
+        },
+      ]);
+      expect(counters.details.open_conflicts).toEqual([SEP_KEY]);
+      expect(counters.errorMessages).toEqual([]); // 取得の失敗ではない
+      expect(decisionsSnapshot()).toEqual(before); // 記録は変えない
+    });
+
+    it('reports EFFECTIVE_DATE_DIFFERS without changing the meeting link', async () => {
+      await run(SEPT_OCT);
+      const before = decisionsSnapshot();
+      const { result } = await run(OCT_SHIFTED);
+      expect(result.conflicts).toEqual([
+        expect.objectContaining({
+          key: OCT_KEY,
+          difference: 'EFFECTIVE_DATE_DIFFERS',
+          stored: { lower: 3.75, upper: 4.0, effective_date: '2026-10-29' },
+          source: { lower: 3.75, upper: 4.0, effective_date: '2026-10-30' },
+        }),
+      ]);
+      // 記録した日の値が API に無いので、値は比べられない(conflicts とは別に記録)
+      expect(result.unverified).toEqual([
+        { provider_event_id: 'fomc_schedule:2026-10-28', reason: 'MISSING_IN_SOURCE' },
+      ]);
+      expect(decisionsSnapshot()).toEqual(before);
+    });
+
+    it('records a continuing conflict in detail only once over 4 runs, one log row per run', async () => {
+      await run(SEPT_OCT);
+      const before = decisionsSnapshot();
+      const runs = [];
+      for (let i = 0; i < 4; i += 1) runs.push(await run(SEP_CORRECTED));
+      expect(runs.map((r) => r.result.conflicts.map((c) => c.key))).toEqual([[SEP_KEY], [], [], []]);
+      expect(runs.map((r) => r.counters.details.continuing_conflicts)).toEqual([0, 1, 1, 1]);
+      expect(runs.map((r) => r.counters.details.open_conflicts)).toEqual([[SEP_KEY], [SEP_KEY], [SEP_KEY], [SEP_KEY]]);
+      // 詳細(stored・source)が出るのは、全部のログを通して1回だけ
+      const detailed = policyLogs().flatMap((log) => log.details.conflicts as unknown[]);
+      expect(detailed).toHaveLength(1);
+      expect(policyLogs()).toHaveLength(5); // 実行1回 = ログ1行のまま
+      expect(decisionsSnapshot()).toEqual(before);
+    });
+
+    it('records the resolution once, and a recurrence as a new occurrence', async () => {
+      await run(SEPT_OCT);
+      await run(SEP_CORRECTED);
+      await run(SEP_CORRECTED);
+      const resolved = await run(SEPT_OCT); // NY連銀の値が元に戻った
+      expect(resolved.result.resolvedConflicts).toEqual([
+        { key: SEP_KEY, provider_event_id: 'fomc_schedule:2026-09-16', difference: 'VALUE_DIFFERS' },
+      ]);
+      expect(resolved.counters.details.open_conflicts).toEqual([]);
+      const after = await run(SEPT_OCT);
+      expect(after.result.resolvedConflicts).toEqual([]); // 解消の記録は1回だけ
+      const again = await run(SEP_CORRECTED); // 再発
+      expect(again.result.conflicts.map((c) => c.key)).toEqual([SEP_KEY]);
+      expect(again.counters.details.continuing_conflicts).toBe(0);
+    });
+
+    it('keeps the open conflicts through a failed fetch (not resolved), and does not report them again afterwards', async () => {
+      await run(SEPT_OCT);
+      await run(SEP_CORRECTED);
+      const before = decisionsSnapshot();
+      const failed = await run(new Error('HTTP 503 from markets.newyorkfed.org'));
+      expect(failed.result).toMatchObject({ conflicts: [], resolvedConflicts: [], openConflicts: null });
+      expect(failed.counters.details).toMatchObject({
+        source_status: 'UNAVAILABLE',
+        conflicts_checked: false,
+        conflicts: [],
+      });
+      expect(failed.counters.details.open_conflicts).toBeUndefined(); // 前回の状態にならない
+      expect(failed.counters.errorMessages).toEqual(['NY Fed EFFR: HTTP 503 from markets.newyorkfed.org']);
+      const next = await run(SEP_CORRECTED);
+      expect(next.result.conflicts).toEqual([]); // 失敗の前から続いている(新しい発生ではない)
+      expect(next.result.resolvedConflicts).toEqual([]);
+      expect(next.counters.details).toMatchObject({ continuing_conflicts: 1, open_conflicts: [SEP_KEY] });
+      expect(decisionsSnapshot()).toEqual(before);
+    });
+
+    it('keeps an open conflict when that comparison could not be made this time (not resolved)', async () => {
+      await run(SEPT_OCT);
+      await run(SEP_CORRECTED);
+      // 9/17 の記録が API から消えた: 値は比べられない(unverified)。前回の VALUE_DIFFERS は解消としない
+      const missing = { refRates: SEPT_OCT.refRates.filter((r) => r.effectiveDate !== '2026-09-17') };
+      const { result, counters } = await run(missing);
+      expect(result.unverified).toContainEqual({
+        provider_event_id: 'fomc_schedule:2026-09-16',
+        reason: 'MISSING_IN_SOURCE',
+      });
+      expect(result.resolvedConflicts).toEqual([]);
+      expect(counters.details.open_conflicts).toContain(SEP_KEY);
+    });
+
+    it('identifies several meetings and differences separately', async () => {
+      await run(SEPT_OCT);
+      const both = { refRates: SEP_CORRECTED.refRates.filter((r) => r.effectiveDate !== '2026-10-29') };
+      const first = await run(both);
+      expect(first.result.conflicts.map((c) => c.key).sort()).toEqual([SEP_KEY, OCT_KEY].sort());
+      // 9/16 の会合の訂正だけが戻った: 9/16 は解消、10/28 は続いている
+      const sepFixed = await run(OCT_SHIFTED);
+      expect(sepFixed.result.conflicts).toEqual([]);
+      expect(sepFixed.result.resolvedConflicts.map((c) => c.key)).toEqual([SEP_KEY]);
+      expect(sepFixed.counters.details).toMatchObject({ continuing_conflicts: 1, open_conflicts: [OCT_KEY] });
+      // 同じ会合でも、NY連銀の値が別の値に訂正されたら別の食い違い(前のものは解消)
+      const corrected2 = {
+        refRates: SEPT_OCT.refRates.map((r) =>
+          r.effectiveDate === '2026-09-17' ? record('2026-09-17', 3.25, 3.5) : r,
+        ),
+      };
+      await run(SEP_CORRECTED);
+      const changed = await run(corrected2);
+      expect(changed.result.conflicts.map((c) => c.difference)).toEqual(['VALUE_DIFFERS']);
+      expect(changed.result.conflicts[0]!.source).toEqual({ lower: 3.25, upper: 3.5, effective_date: '2026-09-17' });
+      expect(changed.result.resolvedConflicts.map((c) => c.key)).toEqual([SEP_KEY]);
+    });
+
+    it('does not read the logs of other jobs (or other providers) as its previous state', async () => {
+      await run(SEPT_OCT);
+      const foreign = (job: string, provider: string) =>
+        store.logs.push({
+          provider,
+          data_type: 'ECONOMIC_EVENT',
+          job,
+          started_at: '2026-11-05T14:00:00.000Z',
+          completed_at: '2026-11-05T14:00:01.000Z',
+          status: 'SUCCESS',
+          fetched_count: 0,
+          success_count: 0,
+          error_count: 0,
+          skipped_count: 0,
+          review_count: 0,
+          error_message: null,
+          details: { conflicts_checked: true, open_conflicts: [SEP_KEY] },
+        });
+      foreign('ingest:fomc-schedule', FOMC_POLICY_RATE_LOG_PROVIDER);
+      foreign(FOMC_POLICY_RATE_JOB, 'fomc_schedule');
+      const { result } = await run(SEP_CORRECTED);
+      expect(result.conflicts.map((c) => c.key)).toEqual([SEP_KEY]); // 他のログの状態を使っていれば「続いている」になっていた
+    });
+
+    it('still records a new meeting normally while comparing the recorded ones', async () => {
+      await run({ refRates: SEPT_OCT.refRates.slice(0, 4) }, () => new Date('2026-10-01T15:00:00Z'));
+      expect(store.fomcPolicyDecisions.map((d) => d.event_id)).toEqual(['ev-sep']);
+      const { result, calls } = await run(SEPT_OCT);
+      expect(calls).toEqual([['2026-09-17', '2026-11-05']]);
+      expect(result.recorded.map((r) => r.provider_event_id)).toEqual(['fomc_schedule:2026-10-28']);
+      expect(result.conflicts).toEqual([]);
+      expect(store.fomcPolicyDecisions.map((d) => d.event_id)).toEqual(['ev-sep', 'ev-oct']);
+    });
+
+    it('does not compare records older than the lookback (they are not in the fetched period)', async () => {
+      await run(SEPT_OCT);
+      const later = () => new Date('2027-05-01T15:00:00Z'); // 9/16 と 10/28 の発表から 180 日より後
+      const { result, calls, counters } = await run(SEPT_OCT, later);
+      // 取得の期間は、まだ記録の無い 12/9 の会合の翌日から(記録済みの 9/16・10/28 は入れない)
+      expect(calls).toEqual([['2026-12-10', '2027-05-01']]);
+      expect(result).toMatchObject({ alreadyRecorded: 2, conflicts: [], unverified: [] });
+      expect(counters.details).toMatchObject({ verified: 0 });
+    });
   });
 });

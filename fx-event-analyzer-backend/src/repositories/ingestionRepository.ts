@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { FOMC_POLICY_RATE_JOB, FOMC_POLICY_RATE_LOG_PROVIDER } from '../ingestion/pipelines/fomcPolicyRates.js';
 import type {
   ApiCreditReservation,
   EventForReactionRef,
@@ -12,6 +13,7 @@ import type {
   IngestionStore,
   NewEvent,
   NewFomcPolicyDecision,
+  StoredFomcPolicyDecision,
   NewReleaseSnapshot,
   NewRevision,
   NewStagedValue,
@@ -186,15 +188,25 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
       return { forecast: num(data.forecast), actual: num(data.actual), previous: num(data.previous) };
     },
 
-    async listFomcPolicyDecisionEventIds(): Promise<string[]> {
-      const rows = await allPages<{ event_id: string }>((from, to) =>
+    async listFomcPolicyDecisions(): Promise<StoredFomcPolicyDecision[]> {
+      const rows = await allPages<{
+        event_id: string;
+        target_range_lower: number | string;
+        target_range_upper: number | string;
+        effective_date: string;
+      }>((from, to) =>
         supabase
           .from('fomc_policy_decisions')
-          .select('event_id')
+          .select('event_id, target_range_lower, target_range_upper, effective_date')
           .order('event_id', { ascending: true })
           .range(from, to),
       );
-      return rows.map((row) => row.event_id);
+      return rows.map((row) => ({
+        event_id: row.event_id,
+        target_range_lower: Number(row.target_range_lower),
+        target_range_upper: Number(row.target_range_upper),
+        effective_date: row.effective_date,
+      }));
     },
 
     async insertFomcPolicyDecision(row: NewFomcPolicyDecision): Promise<void> {
@@ -423,6 +435,23 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
       const { data, error } = await supabase.rpc('api_credits_used_today', { p_provider: provider });
       if (error) throw error;
       return Number(data ?? 0);
+    },
+
+    async latestFomcPolicyRateOpenConflicts(): Promise<string[]> {
+      // 前回の状態の1つの項目だけを読む(details 全体は読まない)。
+      const { data, error } = await supabase
+        .from('ingestion_logs')
+        .select('id, started_at, open_conflicts:details->open_conflicts')
+        .eq('job', FOMC_POLICY_RATE_JOB)
+        .eq('provider', FOMC_POLICY_RATE_LOG_PROVIDER)
+        .eq('details->>conflicts_checked', 'true')
+        .order('started_at', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      const open = (data as { open_conflicts?: unknown } | null)?.open_conflicts;
+      return Array.isArray(open) ? open.filter((key): key is string => typeof key === 'string') : [];
     },
 
     async insertIngestionLog(row: IngestionLogRow): Promise<void> {

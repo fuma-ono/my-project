@@ -168,6 +168,11 @@ final class ScreenshotTests: XCTestCase {
                 app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "EFFR（実際の取引の金利）の値は表示していません")).firstMatch.exists,
                 "The notice that the EFFR itself is not shown is missing"
             )
+            // HQ指示(2026-11-06「NY連銀の規約対応」修正案1): 会合との対応付けは本アプリが行っていることも出る
+            XCTAssertTrue(
+                app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "FOMC会合との対応付け（発表日の翌営業日以降で最初に有効になったレンジ）は、本アプリが行っています。")).firstMatch.exists,
+                "The notice that the app links the range to the FOMC meeting is missing"
+            )
             // 結果のカード(結果・予想・前回)も、EFFR の実績(モックの EFFR 3.88)も出さない
             XCTAssertFalse(app.staticTexts["結果"].firstMatch.exists, "The results card is shown together with the policy rate")
             XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "3.88")).firstMatch.exists, "An EFFR value is shown")
@@ -652,6 +657,39 @@ final class ScreenshotTests: XCTestCase {
     /// これは不具合ではなく、OS回転に頼らない本方式の既知の見え方)。
     /// 本当に実機で正立して見えるかどうかは、このCIスクリーンショットでは
     /// 検証できないため、実機での目視確認が別途必要。
+    /// 横画面の表の測定(デザイン上のpt)。行が並ぶ向き(画面の座標で縦か横か、+か-か)は、見出し「日時」から行への向きで
+    /// 決め、行を見出しに近い順に並べる。拡大率は行の間隔(44pt + 区切り線0.5pt)から求める。
+    /// `headerToFirstRow` = 見出し「日時」の始まりから最初の行の始まりまで。`lastRowToNote` = 最後の行の終わりから
+    /// 注記の始まりまで(注記が無ければnil)。`detail` は失敗の時に出す測定値。
+    private func measureLandscapeTable(noteContaining note: String) -> (rows: Int, headerToFirstRow: Double, lastRowToNote: Double?, detail: String) {
+        let header = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "日時")).firstMatch.frame
+        var rows = app.descendants(matching: .any).matching(identifier: "historyEventRow").allElementsBoundByIndex
+            .map(\.frame).filter { !$0.isEmpty }
+        guard rows.count >= 2, !header.isEmpty else {
+            return (rows.count, 0, nil, "rows=\(rows.count) header=\(header)")
+        }
+        let spreadX = (rows.map(\.midX).max() ?? 0) - (rows.map(\.midX).min() ?? 0)
+        let spreadY = (rows.map(\.midY).max() ?? 0) - (rows.map(\.midY).min() ?? 0)
+        let vertical = spreadY >= spreadX
+        func mid(_ r: CGRect) -> CGFloat { vertical ? r.midY : r.midX }
+        let forward = (rows.map(mid).reduce(0, +) / CGFloat(rows.count)) > mid(header)
+        func start(_ r: CGRect) -> CGFloat { vertical ? (forward ? r.minY : r.maxY) : (forward ? r.minX : r.maxX) }
+        func end(_ r: CGRect) -> CGFloat { vertical ? (forward ? r.maxY : r.minY) : (forward ? r.maxX : r.minX) }
+        rows.sort { abs(start($0) - start(header)) < abs(start($1) - start(header)) }
+        let pitch = abs(start(rows[1]) - start(rows[0]))
+        let scale = pitch / 44.5
+        let headerToFirstRow = Double(abs(start(rows[0]) - start(header)) / scale)
+        let noteFrame = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", note)).firstMatch
+        let lastRowToNote: Double? = noteFrame.exists
+            ? Double((forward ? start(noteFrame.frame) - end(rows[rows.count - 1]) : end(rows[rows.count - 1]) - start(noteFrame.frame)) / scale)
+            : nil
+        let detail = "rows=\(rows.count) vertical=\(vertical) forward=\(forward) scale=\(scale) header=\(header) "
+            + "firstRow=\(rows[0]) lastRow=\(rows[rows.count - 1]) note=\(noteFrame.exists ? "\(noteFrame.frame)" : "none") "
+            + "headerToFirstRow=\(headerToFirstRow) lastRowToNote=\(lastRowToNote.map { "\($0)" } ?? "nil")"
+        print("[landscape table] \(detail)")
+        return (rows.count, headerToFirstRow, lastRowToNote, detail)
+    }
+
     func testHistoricalComparisonAllowsLandscape() throws {
         let emailField = app.textFields["メールアドレス"]
         XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
@@ -709,6 +747,14 @@ final class ScreenshotTests: XCTestCase {
         // は、このファイル冒頭の本テストのコメントを参照。
         capture("09b-HistoricalComparison-Landscape", settle: 1.5)
 
+        // HQ指示(2026-11-06「過去イベント比較画面の横画面レイアウトの追加確認」、A の修正 195b645c): 横画面の表の高さは行の数に
+        // 合わせる(行の高さの合計が上限 250pt を超えるときだけスクロール)。撮影はしない(スクリーンショットの枚数は変えない)。
+        // PRO(7件、311pt > 250pt): 7行、無料プランの注記なし。
+        XCTAssertTrue(app.otherElements["historyLandscapeTable"].waitForExistence(timeout: 5), "The landscape table is not shown")
+        let pro = measureLandscapeTable(noteContaining: "無料プランは直近")
+        XCTAssertEqual(pro.rows, 7, "The PRO plan should list 7 past releases. \(pro.detail)")
+        XCTAssertNil(pro.lastRowToNote, "The plan-limit note should not be shown for PRO. \(pro.detail)")
+
         // 戻る: Portraitに戻すと、横画面専用の要素が消えて縦画面の見た目に戻る。
         XCUIDevice.shared.orientation = .portrait
         Thread.sleep(forTimeInterval: 1.0)
@@ -716,6 +762,31 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertFalse(app.otherElements["historyLandscapeTopBar"].exists, "Landscape-only top bar should disappear after rotating back to portrait")
         tapIdentifier("v5HeaderBack")
         XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 10), "Did not return to Indicator Detail after leaving Historical Comparison")
+
+        // 無料プラン(直近3件): 表の外枠(カード)の大きさはアクセシビリティの枠では測れない(中の部品を囲むだけ)ため、カードの
+        // すぐ下に出る「無料プランは直近3回分です…」の注記までの距離で、カードの中の空白を測る(修正前は 77pt で、注記が画面の
+        // 端まで押し出されていた。Run 42151149763)。表の上側(見出しから最初の行まで)は PRO と同じ。
+        addTeardownBlock { [weak self] in _ = self?.setMockSubscriptionPlan("PRO") }
+        XCTAssertTrue(setMockSubscriptionPlan("FREE"), "Could not switch the mock plan to FREE")
+        tap(containing: "過去イベント比較")
+        XCTAssertTrue(waitForAnyElement(containing: "前回値", timeout: 15), "Historical Comparison did not load (free plan)")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(app.otherElements["historyLandscapeTopBar"].waitForExistence(timeout: 10), "The screen did not switch to landscape (free plan)")
+        XCTAssertTrue(app.otherElements["historyLandscapeTable"].waitForExistence(timeout: 10), "The landscape table is not shown (free plan)")
+        Thread.sleep(forTimeInterval: 1.0)
+        let free = measureLandscapeTable(noteContaining: "無料プランは直近3回分です")
+        XCTAssertEqual(free.rows, 3, "The free plan should list 3 past releases. \(free.detail)")
+        if let gap = free.lastRowToNote {
+            XCTAssertLessThan(gap, 60, "Blank space between the last row and the plan note (free plan). \(free.detail)")
+        } else {
+            XCTFail("The plan-limit note is not shown below the table. \(free.detail)")
+        }
+        XCTAssertEqual(free.headerToFirstRow, pro.headerToFirstRow, accuracy: 2, "The top of the table moved between PRO and FREE. \(free.detail)")
+        XCUIDevice.shared.orientation = .portrait
+        Thread.sleep(forTimeInterval: 1.0)
+        XCTAssertTrue(waitForAnyElement(containing: "前回値", timeout: 10), "Historical Comparison did not resume its portrait layout (free plan)")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 10), "Did not return to Indicator Detail (free plan)")
     }
 
     /// Taps the row's center through SettingsView's fixed V5 layout (group 1

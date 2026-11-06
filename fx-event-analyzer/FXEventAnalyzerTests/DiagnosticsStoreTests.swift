@@ -70,6 +70,19 @@ final class DiagnosticsStoreTests: XCTestCase {
         XCTAssertEqual(store.current.homeReadyToDisplayMs, first)
     }
 
+    /// HQ指示(2026-11-05)「Splash先行通信・Home Cache起動高速化」:
+    /// `HomePrefetchCoordinator.start()`が先行取得を始めた時点。ログイン切り替え
+    /// 等で複数回始まっても、この起動で最初に始めた時刻のまま上書きしない。
+    func testPrefetchStartedIsOnlyRecordedOnce() {
+        let store = makeStore()
+        store.recordPrefetchStarted()
+        let first = store.current.prefetchStartedMs
+        XCTAssertNotNil(first)
+
+        store.recordPrefetchStarted()
+        XCTAssertEqual(store.current.prefetchStartedMs, first)
+    }
+
     /// 1回目だけが`current.homeRequestID`に反映される。2回目以降は回数
     /// (`homeRequestCount`)だけ増えるが、`beginHomeRequest()`の戻り値・
     /// `current.homeRequestID`は1回目のIDのままで動かない(起動時の値を

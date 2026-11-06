@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FEATURE_CODES } from '../../src/authorization/entitlements.js';
 import { NY_FED_SOURCE, nyFedAttribution } from '../../src/domain/attribution.js';
@@ -171,6 +172,10 @@ describe.skipIf(!integration)('FOMC policy decisions: table, ingestion and GET /
     });
     expect(Date.parse(event.policy_rate.announced_at)).toBe(Date.parse('2019-12-11T19:00:00Z'));
     expect(event.attribution).toEqual(nyFedAttribution());
+    // HQ指示(2026-11-06「NY連銀の規約対応」修正案1): API の告知に、会合との対応付けは本アプリが行っていることが入る
+    expect(event.attribution.notice).toContain(
+      'FOMC会合との対応付け（発表日の翌営業日以降で最初に有効になったレンジ）は、本アプリが行っています。',
+    );
     expect(event.data_status).toBe('DATA_PENDING'); // 会合の行は変えていない(DB の PENDING は API で DATA_PENDING)
 
     const noDecisionId = randomUUID();
@@ -181,5 +186,111 @@ describe.skipIf(!integration)('FOMC policy decisions: table, ingestion and GET /
     const without = await ctx.app.inject({ method: 'GET', url: `/api/v1/events/${noDecisionId}`, headers });
     expect(without.statusCode).toBe(200);
     expect(JSON.parse(without.body).event).toMatchObject({ policy_rate: null, attribution: null });
+  });
+  // HQ指示(2026-11-06「DEV監査で見つかった政策金利テーブルの権限問題」): 値の表(20261022000001_past_release_access.sql)と
+  // 同じく、アプリ利用者(anon / authenticated)は Supabase に直接つないでこの表を読み書きできない(権限が無い = 42501。
+  // RLS で「0 行」になるのではない)。Backend は service_role で読み書きし(上の2つのテスト)、API はその値を返す(上のテスト)。
+  it('anon / authenticated cannot read or write fomc_policy_decisions directly; service_role can read it', async () => {
+    const asUser = (token: string): SupabaseClient =>
+      createClient(ctx.supabaseUrl, ctx.anonKey, {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+    const roles: { label: string; client: SupabaseClient; deniedStatus: number }[] = [
+      {
+        label: 'anon',
+        client: createClient(ctx.supabaseUrl, ctx.anonKey, {
+          auth: { autoRefreshToken: false, persistSession: false },
+        }),
+        deniedStatus: 401,
+      },
+      { label: 'authenticated', client: asUser(user.accessToken), deniedStatus: 403 },
+    ];
+    type Result = { data: unknown; error: { code?: string; message: string } | null; status: number };
+    const expectDenied = (result: Result, label: string) => {
+      const detail = `${label}: ${JSON.stringify({ status: result.status, error: result.error, data: result.data })}`;
+      expect(result.error?.code, detail).toBe('42501');
+      expect(result.error?.message, detail).toBe('permission denied for table fomc_policy_decisions');
+      expect(result.data, detail).toBeNull();
+    };
+    const row = { ...validDecision(otherMeetingId), event_id: randomUUID() } as never;
+    for (const { label, client, deniedStatus } of roles) {
+      const select = await client.from('fomc_policy_decisions').select('*').limit(5);
+      expect(select.status, `${label} select`).toBe(deniedStatus);
+      expectDenied(select, `${label} select`);
+      const count = await client.from('fomc_policy_decisions').select('*', { count: 'exact', head: true });
+      expect(count.status, `${label} count`).toBe(deniedStatus);
+      expect(count.count, `${label} count`).toBeNull();
+      expectDenied(await client.from('fomc_policy_decisions').insert(row), `${label} insert`);
+      expectDenied(
+        await client
+          .from('fomc_policy_decisions')
+          .update({ target_range_upper: 9 } as never)
+          .eq('event_id', meetingId),
+        `${label} update`,
+      );
+      expectDenied(await client.from('fomc_policy_decisions').delete().eq('event_id', meetingId), `${label} delete`);
+    }
+    // service_role(Backend)は読める。直接の試みで何も変わっていない。
+    const { data, error } = await ctx.serviceClient
+      .from('fomc_policy_decisions')
+      .select('event_id, target_range_upper')
+      .eq('event_id', meetingId);
+    expect(error).toBeNull();
+    expect(data?.map((r) => Number(r.target_range_upper))).toEqual([1.75]);
+  });
+  // HQ指示(2026-11-06「NY Fed 食い違いログの重複防止」): 前回の状態は、このジョブ(job・provider)のログのうち、
+  // 突き合わせができた(conflicts_checked = true)直近の1行の open_conflicts だけから読む。
+  it('reads the previous conflict state only from the latest comparable log of this job', async () => {
+    const repository = createIngestionRepository(ctx.serviceClient);
+    const log = (job: string, provider: string, startedAt: string, details: Record<string, unknown>) => ({
+      provider,
+      data_type: 'ECONOMIC_EVENT' as const,
+      job,
+      started_at: startedAt,
+      completed_at: startedAt,
+      status: 'SUCCESS' as const,
+      fetched_count: 0,
+      success_count: 0,
+      error_count: 0,
+      skipped_count: 0,
+      review_count: 0,
+      error_message: null,
+      details,
+    });
+    const key = `it-${runId}`;
+    await repository.insertIngestionLog(
+      log('ingest:fomc-policy-rate', 'nyfed_effr', '2099-01-01T00:00:00Z', {
+        conflicts_checked: true,
+        open_conflicts: [`${key}-old`],
+      }),
+    );
+    await repository.insertIngestionLog(
+      log('ingest:fomc-policy-rate', 'nyfed_effr', '2099-01-02T00:00:00Z', {
+        conflicts_checked: true,
+        open_conflicts: [`${key}-latest`],
+      }),
+    );
+    // より新しいが、突き合わせなかった実行(取得の失敗)・他のジョブ・他の provider は前回の状態にならない
+    await repository.insertIngestionLog(
+      log('ingest:fomc-policy-rate', 'nyfed_effr', '2099-01-03T00:00:00Z', {
+        conflicts_checked: false,
+        source_status: 'UNAVAILABLE',
+      }),
+    );
+    await repository.insertIngestionLog(
+      log('ingest:fomc-schedule', 'nyfed_effr', '2099-01-04T00:00:00Z', {
+        conflicts_checked: true,
+        open_conflicts: [`${key}-other-job`],
+      }),
+    );
+    await repository.insertIngestionLog(
+      log('ingest:fomc-policy-rate', 'fomc_schedule', '2099-01-05T00:00:00Z', {
+        conflicts_checked: true,
+        open_conflicts: [`${key}-other-provider`],
+      }),
+    );
+    expect(await repository.latestFomcPolicyRateOpenConflicts()).toEqual([`${key}-latest`]);
+    await ctx.serviceClient.from('ingestion_logs').delete().gte('started_at', '2099-01-01T00:00:00Z');
   });
 });

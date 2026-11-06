@@ -19,18 +19,23 @@ final class AppState: ObservableObject {
 
     private let authService: AuthServicing
     private let homeCache: HomeCacheStore
+    private let prefetchCoordinator: HomePrefetchCoordinator
     private var observationTask: Task<Void, Never>?
 
-    init(authService: AuthServicing, homeCache: HomeCacheStore = .shared) {
+    init(authService: AuthServicing, homeCache: HomeCacheStore = .shared, prefetchCoordinator: HomePrefetchCoordinator = .shared) {
         self.authService = authService
         self.homeCache = homeCache
+        self.prefetchCoordinator = prefetchCoordinator
     }
 
     /// ログインしていない状態へ移るとき(ログアウト・アカウント削除・セッション切れ・ログイン画面)。
     /// 前のユーザーのホームのキャッシュを残さない。
+    /// HQ指示(2026-11-05)「Splash先行通信」: 先行取得の内容(前のユーザーの`/home`・
+    /// `/entitlements`)も同じタイミングで消す(次のログインで古い結果が紛れ込まないため)。
     private func leaveLoggedIn(sessionExpired: Bool) {
         currentUserID = nil
         homeCache.clear()
+        prefetchCoordinator.reset()
         phase = .loggedOut(sessionExpired: sessionExpired)
     }
 

@@ -50,7 +50,9 @@ export const EUROSTAT_ATTRIBUTION: Attribution = {
  *   [sanction] or [endorse] any particular republication, and has no liability for your use.」
  * - 参照金利を使う製品・サービスの免責文: 「[User] is not affiliated with the New York Fed. The New York Fed does not
  *   sanction, endorse, or recommend any products or services offered by [user].」
- * 日本語の説明を先に置く: 誘導目標レンジを決めるのは FOMC、NY連銀は EFFR と併せてそのデータを公表している、EFFR(実際の
+ * 日本語の説明を先に置く: 誘導目標レンジを決めるのは FOMC、NY連銀は EFFR と併せてそのデータを公表している、FOMC 会合との
+ * 対応付けは本アプリが行っている(規約「If you modify any of the Content, you must clearly label the modified Content」、
+ * HQ指示 2026-11-06「NY連銀の規約対応」修正案1)、EFFR(実際の
  * 取引の金利)の値は表示していない、NY連銀はアプリを承認・推奨していない。FOMC の誘導目標レンジ(fomc_policy_decisions、
  * HQ承認 2026-11-05 案A)に付ける。
  */
@@ -67,7 +69,7 @@ export function nyFedAttribution(now: Date = new Date()): Attribution {
 
 function nyFedNotice(year: number): string {
   return (
-    '誘導目標レンジは FOMC（米連邦公開市場委員会）が決定するもので、ここではニューヨーク連邦準備銀行が実効フェデラルファンド金利（EFFR）と併せて公表しているデータから表示しています。EFFR（実際の取引の金利）の値は表示していません。本アプリはニューヨーク連邦準備銀行と関係がなく、ニューヨーク連邦準備銀行は本アプリやそのサービスを承認・推奨していません。' +
+    '誘導目標レンジは FOMC（米連邦公開市場委員会）が決定するもので、ここではニューヨーク連邦準備銀行が実効フェデラルファンド金利（EFFR）と併せて公表しているデータから表示しています。FOMC会合との対応付け（発表日の翌営業日以降で最初に有効になったレンジ）は、本アプリが行っています。EFFR（実際の取引の金利）の値は表示していません。本アプリはニューヨーク連邦準備銀行と関係がなく、ニューヨーク連邦準備銀行は本アプリやそのサービスを承認・推奨していません。' +
     `© ${year} Federal Reserve Bank of New York. Content from the New York Fed subject to the Terms of Use at newyorkfed.org. ` +
     'The federal funds target range data published with the Effective Federal Funds Rate (EFFR) is subject to the Terms of Use posted at newyorkfed.org. The New York Fed is not responsible for publication of the federal funds target range data by FX Event Analyzer, does not sanction or endorse any particular republication, and has no liability for your use. ' +
     'FX Event Analyzer is not affiliated with the New York Fed. The New York Fed does not sanction, endorse, or recommend any products or services offered by FX Event Analyzer.'

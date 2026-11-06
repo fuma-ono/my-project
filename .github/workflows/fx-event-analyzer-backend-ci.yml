@@ -97,6 +97,25 @@ jobs:
         timeout-minutes: 5
         run: supabase db reset
 
+      # HQ指示(2026-11-06「統合前の最後の確認」): 実際に動いた DB の版を、ログと注記(公開の API で読める)に出す。
+      - name: Show the PostgreSQL version of the local DB
+        run: |
+          eval "$(supabase status -o env)"
+          version="$(psql "$DB_URL" -X -At -c 'select version();')"
+          server_version="$(psql "$DB_URL" -X -At -c 'show server_version;')"
+          echo "select version(): $version"
+          echo "show server_version: $server_version"
+          echo "::notice title=PostgreSQL version::select version() = $version / show server_version = $server_version"
+
+      # HQ指示(2026-11-06「DEV反映準備の修正候補」): DEV には SQL Editor で手で流すため、FOMC政策金利の migration を
+      # 何度流しても安全か(行を消さない・足りないものだけ足す・形の違う表には手を入れずに止まる)を確かめる。
+      # どの場面も BEGIN … ROLLBACK の中で行い、DB は db reset の直後のまま(下の結合テストに影響しない)。
+      - name: Check that migration 20261105000001 can be re-run safely
+        timeout-minutes: 2
+        run: |
+          eval "$(supabase status -o env)"
+          bash scripts/check-fomc-policy-migration-rerun.sh "$DB_URL"
+
       - name: Export local Supabase connection details for integration tests
         # No JWT secret needed — src/auth/jwt.ts verifies against the
         # project's own JWKS (SUPABASE_URL alone is enough).

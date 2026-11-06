@@ -16,9 +16,18 @@ final class PlanStore: ObservableObject {
 
     var isPro: Bool { plan == .pro }
 
-    func load(apiClient: APIClient) async {
+    /// HQ指示(2026-11-05)「Splash先行通信」: `userID`を渡すと、Splash中に開始済みの
+    /// `/entitlements`があればその結果を再利用する(二重取得にしない)。渡さない・
+    /// 先行取得が無い場合は従来どおり新規に取得する(他の呼び出し元・既存の挙動は
+    /// 変わらない)。
+    func load(apiClient: APIClient, userID: UUID? = nil, prefetchCoordinator: HomePrefetchCoordinator = .shared) async {
         do {
-            let response = try await EntitlementsService(apiClient: apiClient).fetchEntitlements(timezone: TimeZone.current.identifier)
+            let response: EntitlementsResponse
+            if let userID, let prefetched = prefetchCoordinator.consumeEntitlements(for: userID) {
+                response = try await prefetched.value
+            } else {
+                response = try await EntitlementsService(apiClient: apiClient).fetchEntitlements(timezone: TimeZone.current.identifier)
+            }
             plan = response.plan ?? .free
             limits = response.limits ?? (plan == .pro ? .pro() : .free())
             isConfirmed = true

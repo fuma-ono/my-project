@@ -270,6 +270,102 @@ final class HomeCacheTests: XCTestCase {
         XCTAssertNil(cache.stored())
     }
 
+    // MARK: - Splash先行取得の再利用(HQ指示 2026-11-05「Splash先行通信・Home Cache起動高速化」)
+
+    /// Splash中に開始済みの`/home`があれば、`load()`はそれを再利用し、新規に
+    /// `apiClient.send`を呼ばない(二重取得にしない)。
+    func testFetchReusesThePrefetchedHomeAndDoesNotRequestAgain() async {
+        let coordinator = HomePrefetchCoordinator()
+        let api = MockAPIClient()
+        let prefetchedEvent = Self.event(id: "prefetched", status: .scheduled, at: now.addingTimeInterval(3600))
+        api.results["home"] = .success(response(events: [prefetchedEvent]))
+        coordinator.start(userID: userA, apiClient: api, now: { self.now })
+
+        let viewModel = makeViewModel(api: api, cache: HomeCacheStore(defaults: defaults), userID: userA, prefetch: coordinator)
+        viewModel.load()
+        await waitUntil { viewModel.freshDataVersion == 1 }
+
+        XCTAssertEqual(viewModel.state, .loaded(events: [prefetchedEvent], majorFx: [Self.pair]))
+        XCTAssertEqual(api.requestedPaths.filter { $0 == "home" }.count, 1, "load() must reuse the prefetch instead of sending its own /home request")
+    }
+
+    /// 先行取得が無ければ、従来どおり新規に取得する(フォールバック)。
+    func testFetchWithoutAPrefetchFallsBackToANewRequest() async {
+        let coordinator = HomePrefetchCoordinator() // startを呼んでいない=先行取得なし
+        let api = MockAPIClient()
+        api.results["home"] = .success(response())
+
+        let viewModel = makeViewModel(api: api, cache: HomeCacheStore(defaults: defaults), userID: userA, prefetch: coordinator)
+        viewModel.load()
+        await waitUntil { viewModel.freshDataVersion == 1 }
+
+        XCTAssertEqual(api.requestedPaths.filter { $0 == "home" }.count, 1)
+    }
+
+    /// ユーザーBの`HomeViewModel`は、ユーザーAの先行取得を使わず自分で取得する。
+    func testFetchNeverUsesAnotherUsersPrefetch() async {
+        let coordinator = HomePrefetchCoordinator()
+        let apiForA = MockAPIClient()
+        apiForA.results["home"] = .success(response())
+        coordinator.start(userID: userA, apiClient: apiForA, now: { self.now })
+
+        let apiForB = MockAPIClient()
+        let bEvent = Self.event(id: "b-own", status: .scheduled, at: now.addingTimeInterval(3600))
+        apiForB.results["home"] = .success(response(events: [bEvent]))
+
+        let viewModel = makeViewModel(api: apiForB, cache: HomeCacheStore(defaults: defaults), userID: userB, prefetch: coordinator)
+        viewModel.load()
+        await waitUntil { viewModel.freshDataVersion == 1 }
+
+        XCTAssertEqual(viewModel.state, .loaded(events: [bEvent], majorFx: [Self.pair]))
+        XCTAssertEqual(apiForB.requestedPaths.filter { $0 == "home" }.count, 1)
+        XCTAssertEqual(apiForA.requestedPaths.filter { $0 == "home" }.count, 1, "user A's own prefetch request must still have happened exactly once, untouched")
+    }
+
+    /// 再読み込み(タブの出入り等)は、1回目の先行取得を消費した後の2回目なので、
+    /// 通常どおり新規に取得する(既存の「再取得は毎回走る」挙動を壊さない)。
+    func testReloadAfterConsumingThePrefetchStillRefetches() async {
+        let coordinator = HomePrefetchCoordinator()
+        let api = MockAPIClient()
+        api.results["home"] = .success(response())
+        coordinator.start(userID: userA, apiClient: api, now: { self.now })
+
+        let viewModel = makeViewModel(api: api, cache: HomeCacheStore(defaults: defaults), userID: userA, prefetch: coordinator)
+        viewModel.load()
+        await waitUntil { viewModel.freshDataVersion == 1 }
+        viewModel.load()
+        await waitUntil { viewModel.freshDataVersion == 2 }
+
+        XCTAssertEqual(api.requestedPaths.filter { $0 == "home" }.count, 2, "the first load consumes the prefetch; the second must be a real request")
+    }
+
+    /// Splash中に日付が変わった・バックグラウンドから翌日に戻ったとき: 先行取得は前日の
+    /// `date`で取ったものなので使わず、今日の`date`で自分で取得する(前日の内容を今日の
+    /// 最新として出さない)。
+    func testFetchIgnoresAPrefetchForThePreviousDateAndRequestsToday() async throws {
+        let coordinator = HomePrefetchCoordinator()
+        let apiForPrefetch = MockAPIClient()
+        let staleEvent = Self.event(id: "previous-day", status: .scheduled, at: now.addingTimeInterval(3600))
+        apiForPrefetch.results["home"] = .success(response(events: [staleEvent]))
+        coordinator.start(userID: userA, apiClient: apiForPrefetch, now: { self.now.addingTimeInterval(-24 * 3600) })
+
+        let api = MockAPIClient()
+        let todayEvent = Self.event(id: "today", status: .scheduled, at: now.addingTimeInterval(3600))
+        api.results["home"] = .success(response(events: [todayEvent]))
+        let viewModel = makeViewModel(api: api, cache: HomeCacheStore(defaults: defaults), userID: userA, prefetch: coordinator)
+        viewModel.load()
+        await waitUntil { viewModel.freshDataVersion == 1 }
+
+        XCTAssertEqual(viewModel.state, .loaded(events: [todayEvent], majorFx: [Self.pair]))
+        XCTAssertEqual(api.requestedPaths.filter { $0 == "home" }.count, 1, "the view model must request today's /home itself")
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .current
+        let query = try XCTUnwrap(api.requestedEndpoints.first { $0.path == "home" }?.queryItems)
+        XCTAssertEqual(query.first { $0.name == "date" }?.value, formatter.string(from: now))
+    }
+
     // MARK: - プランの確認(HQ指示 2026-11-02「ホームキャッシュのプラン安全性修正」)
 
     func testUnconfirmedPlanDoesNotShowTheCache() async {
@@ -449,7 +545,10 @@ final class HomeCacheTests: XCTestCase {
         HomeCacheContext(userID: user, date: today, timezone: tz, confirmedPlan: plan)
     }
 
-    private func makeViewModel(api: MockAPIClient, cache: HomeCacheStore, userID: UUID?, plan: PlanStore? = nil, favorites: FavoritesStore? = nil) -> HomeViewModel {
+    private func makeViewModel(
+        api: MockAPIClient, cache: HomeCacheStore, userID: UUID?, plan: PlanStore? = nil, favorites: FavoritesStore? = nil,
+        prefetch: HomePrefetchCoordinator? = nil
+    ) -> HomeViewModel {
         let planStore = plan ?? {
             let store = PlanStore()
             store.set(plan: .pro, limits: .pro())
@@ -462,6 +561,9 @@ final class HomeCacheTests: XCTestCase {
             userID: userID,
             cacheStore: cache,
             planStore: planStore,
+            // 個別のテストごとに独立したインスタンス(既定)にして、`.shared`を介した
+            // テスト間の汚染を避ける(HQ指示 2026-11-05「Splash先行通信」)。
+            prefetchCoordinator: prefetch ?? HomePrefetchCoordinator(),
             now: { fixed }
         )
     }

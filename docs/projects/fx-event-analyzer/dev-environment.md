@@ -1742,3 +1742,78 @@ NODE_USE_ENV_PROXY=1 HTTPS_PROXY=<社内のプロキシ> NODE_OPTIONS=--use-syst
 - `log.jsonl` の形式不正・重複・順序の乱れ・未来の時刻、どの実行にも対応しない記録を出す。1つの記録は1つの実行にだけ対応させる
 - 保存ページを一時フォルダに取り出し、`tests/ingestion/ecbWeeklyReplay.test.ts`(ジョブと同じ設定)に古い順に流す。ページごとに発言・スキップ(理由)・解析エラー・範囲・区別できない日・中止/時刻の変更/保留/安全弁を出す。一時フォルダは最後に消す
 - レポートは標準出力だけ(ファイルに残さない)。ページの本文(題名・名前)・連絡先は写さない。書き込みは一切しない(ブランチ・ログ・ワークフローの有効/無効を変えない)。DB・API(DEV・本番)にはつながない
+
+## 15. FOMC政策金利・小売売上高の DEV への反映と戻し方(2026-11-06、HQ指示「DEV反映準備の修正候補」。**適用・実行はまだ。承認を得てから行う**)
+
+### 15.1 前提(API の自動配信)
+
+DEV の API(Render `fx-event-analyzer-api-dev`)は `render.yaml` の `branch: claude/fx-settings-screens`・`autoDeploy: true` で、
+settings に入ったコードがそのまま配信される。`GET /events/{id}` は FOMC の会合(US_FOMC)のとき `fomc_policy_decisions` を読む
+(`routes/events.ts`・`repositories/eventsRepository.ts` の `getFomcPolicyDecision`)。**この表が無い DB では、FOMC の会合の詳細が 500 になる**
+(ほかの指標・画面は影響しない)。そのため、表を作る・消す順番は「表は API より先に作る、API より後に消す」。
+
+### 15.2 反映の順番
+
+1. migration `20261105000001_fomc_policy_decisions.sql` を SQL Editor で流す(全体を `begin;` … `commit;` で囲む。途中で止まったら `rollback;`)。
+   表と制約・トリガーを作り、RLS を有効にするだけで、行は入れない。2回流しても同じ(形の違う表があれば手を入れずに止まる)。
+   **権限**(HQ指示 2026-11-06「DEV監査で見つかった政策金利テーブルの権限問題」): 値の表(`economic_events`・`event_snapshots` など、
+   13章・`20261022000001_past_release_access.sql`)と同じく、ポリシーは作らず、`anon`・`authenticated`・`PUBLIC` の権限をすべて取り消す
+   (アプリ利用者が Supabase に直接つないで読めない)。Backend は `service_role`(SELECT・INSERT を明示して与える)。前の版の migration が
+   作った「認証済みなら SELECT 可」のポリシーがあれば消す。それ以外のポリシーがあれば止まる。最後に各役割の権限を確かめる。
+   ローカル・CI の DB は DEV と同じ PostgreSQL 17 系(`supabase/config.toml` の `major_version = 17`)。
+2. migration `20261105000002_us_retail_sales_indicator.sql` を流す(指標マスタと通貨ペアの行。既にあれば変えない)。
+3. API を確かめる(FOMC の会合の詳細が 200、`policy_rate: null`)。
+4. 取り込み: `fomc-schedule`(会合・議事要旨) → `retail-sales-schedule`(14件) → `fomc-policy-rate`(記録済みの会合の分)。
+   main の取り込み workflow にこの2つの target が入るまでは、`retail-sales-schedule`・`fomc-policy-rate` は動かせない。
+
+### 15.3 戻し方
+
+戻せる範囲(データを失わない、または取り直せる)と、戻せない操作を分ける。
+
+| 対象 | 手順 | 戻せるか |
+|---|---|---|
+| 政策金利の値(`fomc_policy_decisions` の行) | 行は消せない(トリガー)。消すには表ごと消す(下)。 | 取り直せる(NY連銀の API に過去の記録がある。2019年の値も取れることを確認済み) |
+| 政策金利の表 | **先に API のコードを戻す**(`getFomcPolicyDecision` を呼ばない版を settings に入れ、Render の配信が終わったのを確かめる)。その後 `drop table fomc_policy_decisions;`・`drop function prevent_fomc_policy_decision_mutation();`。他の表からの参照は無い。 | 表を消すと行も消える(不可逆。ただし取り直せる)。API を戻さずに消すと FOMC の会合の詳細が 500 |
+| 小売売上高の予定(`economic_events` の `provider = 'census_retail_schedule'`) | `delete from economic_events where provider = 'census_retail_schedule';`。結果の値・値動きの行は作らないので、外部キー(`on delete restrict`)には当たらない(当たれば消えずに止まる)。 | 取り直せる(表から再実行) |
+| 小売売上高の予定の変更の記録(`event_schedule_changes`) | `target_id` に外部キーが無いので、予定を消しても止まらず、記録だけが残る。必要なら予定を消す前に `select` で控えてから `delete from event_schedule_changes where kind = 'INDICATOR' and target_id in (…);` | 記録は表から作り直せない(不可逆。控えを取ってから消す) |
+| 小売売上高の通知(`notification_inbox`) | `target_id` は文字列で外部キーが無い。予定を消すと、届いた通知を開いたときに 404 になる。 | 通知は戻らない(予定を消す前に、届いた通知が無いか確かめる) |
+| 小売売上高の指標マスタ | 予定を消した後に `indicator_fx_pairs` → `economic_indicators` の順に US_RETAIL_SALES の行を消す(どちらも `on delete restrict`)。 | 取り直せる(migration を流し直す) |
+| 議事要旨 | migration は無い。コードを戻すだけ。calendar.json から足した予定は DB に印が無いので、`provider_event_id` を表(`FOMC_MINUTES_SCHEDULE`)と見比べて見分ける。 | 取り直せる |
+
+### 15.4 政策金利の食い違い(conflicts)が記録されたとき(HQ指示 2026-11-06「NY連銀の規約対応」)
+
+NY連銀の規約は、利用者に取得元の訂正を見守る責任を求めている(「Users are responsible for monitoring the Website for any changes,
+updates, or corrections relevant to Content you choose to use.」)。`npm run ingest:fomc-policy-rate` は実行のたびに、記録済みの会合
+(発表から180日以内)を NY連銀の今の値と突き合わせ、違いを `ingestion_logs.details.conflicts` に残す。**記録した値も、会合への結びつけも
+自動では変えない**(`fomc_policy_decisions` の行はトリガーで変えられない)。
+
+| details の項目 | 意味 |
+|---|---|
+| `conflicts_checked` | `true` = 今回は突き合わせた。`false` = 突き合わせていない(取得の失敗、または比べる会合が無い)。取得の失敗は `source_status: 'UNAVAILABLE'` とエラーで分かる |
+| `conflicts[]` | **今回新しく出た**食い違い(詳細つき)。`key`(識別子)・`provider_event_id`・`difference`(`VALUE_DIFFERS` = 記録した適用日の下限・上限が違う、`EFFECTIVE_DATE_DIFFERS` = 今の決まりで選ぶと別の適用日になる)・`stored`(DB の値)・`source`(NY連銀の今の値)・`source_url` |
+| `continuing_conflicts` | 前回から続いている食い違いの数(詳細は、最初に出た実行のログの `conflicts` にある) |
+| `resolved_conflicts[]` | 今回解消した食い違い(`key`・`provider_event_id`・`difference`)。解消は1回だけ出る |
+| `open_conflicts[]` | 今回の時点で続いている食い違いの `key` だけ(次の実行の「前回の状態」)。突き合わせた実行にだけある |
+| `unverified[]` | 記録した適用日の値が API に無い(`MISSING_IN_SOURCE`)・読めない(`UNREADABLE_IN_SOURCE`)ため比べられなかった会合 |
+| `verified` | 突き合わせた会合の数 |
+
+実行をまたいだ重複の防止(HQ指示 2026-11-06「NY Fed 食い違いログの重複防止」。新しい表は作らない): 次の実行は、このジョブ
+(`job = 'ingest:fomc-policy-rate'`・`provider = 'nyfed_effr'`)のログのうち `conflicts_checked = true` の直近の1行の `open_conflicts` を
+前回の状態として読む。食い違いの識別子は「会合・違いの種類・DB の値・NY連銀の値」(1つの会合に2種類あれば別のもの。NY連銀の値が
+別の値に変わったら、前のものは解消・新しいものが発生)。
+
+| 場面 | ログに出るもの |
+|---|---|
+| 初めて出た | `conflicts` に詳細を1回 |
+| 続いている(何回実行しても) | `continuing_conflicts` に件数だけ。`open_conflicts` に key |
+| 解消した(その比較が今回できて、違いが無かった) | `resolved_conflicts` に1回 |
+| 解消の後にまた出た | `conflicts` に新しい発生として詳細を1回 |
+| 取得に失敗した・比べられなかった | 解消としない(前回の状態を持ち越す)。取得の失敗の実行は前回の状態にならない |
+
+`ingestion_logs` は今までどおり実行1回につき1行。続いている食い違いは、実行ごとに key の文字列1つ分だけ増える(`open_conflicts`)。
+
+conflicts が出たときの手順:
+1. `source_url` を開き、NY連銀の公表の値を人が確かめる(`stored` と `source` のどちらが正しいか)。
+2. NY連銀が訂正していた(`source` が正しい)ときだけ、DB を直すかを HQ が決める。直すときは、行を変えられないため
+   API が読まないようにしてから(15.1)行を消して取り直す、などの手順を別に決める(このジョブは自動では直さない)。
+3. 一時的な API の揺れだと考えられるときは、次の実行で消えるか確かめる。
