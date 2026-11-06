@@ -25,8 +25,8 @@ final class HomePrefetchCoordinatorTests: XCTestCase {
         let coordinator = HomePrefetchCoordinator()
         coordinator.start(userID: userA, apiClient: makeAPIClient())
 
-        XCTAssertNotNil(coordinator.consumeHome(for: userA))
-        XCTAssertNil(coordinator.consumeHome(for: userA), "a second consume must return nil")
+        XCTAssertNotNil(coordinator.consumeHomeForToday(for: userA))
+        XCTAssertNil(coordinator.consumeHomeForToday(for: userA), "a second consume must return nil")
     }
 
     func testEntitlementsCanBeConsumedOnlyOnce() {
@@ -42,7 +42,7 @@ final class HomePrefetchCoordinatorTests: XCTestCase {
         let coordinator = HomePrefetchCoordinator()
         coordinator.start(userID: userA, apiClient: makeAPIClient())
 
-        XCTAssertNotNil(coordinator.consumeHome(for: userA))
+        XCTAssertNotNil(coordinator.consumeHomeForToday(for: userA))
         XCTAssertNotNil(coordinator.consumeEntitlements(for: userA), "consuming /home must not consume /entitlements")
     }
 
@@ -52,9 +52,9 @@ final class HomePrefetchCoordinatorTests: XCTestCase {
         let coordinator = HomePrefetchCoordinator()
         coordinator.start(userID: userA, apiClient: makeAPIClient())
 
-        XCTAssertNil(coordinator.consumeHome(for: userB), "user B must not receive user A's prefetch")
+        XCTAssertNil(coordinator.consumeHomeForToday(for: userB), "user B must not receive user A's prefetch")
         XCTAssertNil(coordinator.consumeEntitlements(for: userB))
-        XCTAssertNotNil(coordinator.consumeHome(for: userA), "user A's own prefetch must still be there")
+        XCTAssertNotNil(coordinator.consumeHomeForToday(for: userA), "user A's own prefetch must still be there")
     }
 
     /// ログイン切り替え(ユーザーAの先行取得中にユーザーBで`start`が呼ばれる)
@@ -64,8 +64,8 @@ final class HomePrefetchCoordinatorTests: XCTestCase {
         coordinator.start(userID: userA, apiClient: makeAPIClient(home: Self.homeResponse))
         coordinator.start(userID: userB, apiClient: makeAPIClient(home: Self.otherHomeResponse))
 
-        XCTAssertNil(coordinator.consumeHome(for: userA), "switching users must drop the previous user's prefetch")
-        let consumedForB = coordinator.consumeHome(for: userB)
+        XCTAssertNil(coordinator.consumeHomeForToday(for: userA), "switching users must drop the previous user's prefetch")
+        let consumedForB = coordinator.consumeHomeForToday(for: userB)
         XCTAssertNotNil(consumedForB)
     }
 
@@ -90,7 +90,7 @@ final class HomePrefetchCoordinatorTests: XCTestCase {
 
     func testConsumingWithoutAPriorStartReturnsNil() {
         let coordinator = HomePrefetchCoordinator()
-        XCTAssertNil(coordinator.consumeHome(for: userA))
+        XCTAssertNil(coordinator.consumeHomeForToday(for: userA))
         XCTAssertNil(coordinator.consumeEntitlements(for: userA))
     }
 
@@ -99,7 +99,7 @@ final class HomePrefetchCoordinatorTests: XCTestCase {
         coordinator.start(userID: userA, apiClient: makeAPIClient())
         coordinator.reset()
 
-        XCTAssertNil(coordinator.consumeHome(for: userA), "reset must clear the held prefetch")
+        XCTAssertNil(coordinator.consumeHomeForToday(for: userA), "reset must clear the held prefetch")
     }
 
     // MARK: - 実際にTaskが正しい結果を運ぶ
@@ -108,7 +108,7 @@ final class HomePrefetchCoordinatorTests: XCTestCase {
         let coordinator = HomePrefetchCoordinator()
         coordinator.start(userID: userA, apiClient: makeAPIClient(home: Self.homeResponse))
 
-        let task = try XCTUnwrap(coordinator.consumeHome(for: userA))
+        let task = try XCTUnwrap(coordinator.consumeHomeForToday(for: userA))
         let response = try await task.value
         XCTAssertEqual(response.date, Self.homeResponse.date)
     }
@@ -122,9 +122,76 @@ final class HomePrefetchCoordinatorTests: XCTestCase {
         XCTAssertEqual(response.plan, Self.entitlementsResponse.plan)
     }
 
+    // MARK: - 日付・タイムゾーンが違う先行取得は使わない
+
+    /// 先行取得の`/home`は、開始時の日付・タイムゾーンで取得する。
+    func testStartRequestsHomeForTheDateAndTimezoneAtStart() async throws {
+        let coordinator = HomePrefetchCoordinator()
+        let api = makeAPIClient()
+        let task = coordinator.start(userID: userA, apiClient: api, now: { Self.nov5Late })
+        _ = try await task.value
+
+        let query = try XCTUnwrap(api.requestedEndpoints.first { $0.path == "home" }?.queryItems)
+        XCTAssertEqual(query.first { $0.name == "date" }?.value, Self.dateString(Self.nov5Late))
+        XCTAssertEqual(query.first { $0.name == "timezone" }?.value, TimeZone.current.identifier)
+    }
+
+    /// Splash中に日付が変わった・バックグラウンドから翌日に戻ったときは、前日の`/home`を
+    /// 今日の分として渡さない(呼び出し元は自分で取得する)。一度断ったら消費済みにする。
+    func testHomeForAnotherDateIsNotHandedOutAndIsConsumed() {
+        let coordinator = HomePrefetchCoordinator()
+        coordinator.start(userID: userA, apiClient: makeAPIClient(), now: { Self.nov5Late })
+
+        let nextDay = Self.dateString(Self.nov5Late.addingTimeInterval(24 * 3600))
+        XCTAssertNil(coordinator.consumeHome(for: userA, date: nextDay, timezone: TimeZone.current.identifier),
+                     "a prefetch for the previous date must not be used as today's /home")
+        XCTAssertNil(coordinator.consumeHome(for: userA, date: Self.dateString(Self.nov5Late), timezone: TimeZone.current.identifier),
+                     "a refused prefetch must be marked as consumed")
+    }
+
+    func testHomeForAnotherTimezoneIsNotHandedOut() {
+        let coordinator = HomePrefetchCoordinator()
+        coordinator.start(userID: userA, apiClient: makeAPIClient(), now: { Self.nov5Late })
+
+        let otherTimezone = TimeZone.current.identifier == "Asia/Tokyo" ? "UTC" : "Asia/Tokyo"
+        XCTAssertNil(coordinator.consumeHome(for: userA, date: Self.dateString(Self.nov5Late), timezone: otherTimezone))
+    }
+
+    /// `/home`を断っても、`/entitlements`(日付に依らない)は引き続き使える。
+    func testRefusingHomeForAnotherDateDoesNotConsumeEntitlements() {
+        let coordinator = HomePrefetchCoordinator()
+        coordinator.start(userID: userA, apiClient: makeAPIClient(), now: { Self.nov5Late })
+
+        let nextDay = Self.dateString(Self.nov5Late.addingTimeInterval(24 * 3600))
+        _ = coordinator.consumeHome(for: userA, date: nextDay, timezone: TimeZone.current.identifier)
+        XCTAssertNotNil(coordinator.consumeEntitlements(for: userA))
+    }
+
     // MARK: - Fixtures
 
     private static let homeResponse = HomeResponse(date: "2026-11-05", timezone: "UTC", events: [], majorFx: [])
     private static let otherHomeResponse = HomeResponse(date: "2026-11-06", timezone: "UTC", events: [], majorFx: [])
     private static let entitlementsResponse = EntitlementsResponse(features: [], plan: .pro, limits: nil)
+    /// 端末のタイムゾーンで 2026-11-05 23:59:30(日付が変わる直前)。
+    private static let nov5Late: Date = {
+        var components = DateComponents(year: 2026, month: 11, day: 5, hour: 23, minute: 59, second: 30)
+        components.timeZone = .current
+        return Calendar(identifier: .gregorian).date(from: components)!
+    }()
+
+    fileprivate static func dateString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .current
+        return formatter.string(from: date)
+    }
+}
+
+extension HomePrefetchCoordinator {
+    /// テスト用: 今日(端末の日付・タイムゾーン)の値で`consumeHome`を呼ぶ。`start`を既定の
+    /// `now`(現在時刻)で呼んだテストが、日付の照合を意識せずに消費できるようにする。
+    func consumeHomeForToday(for userID: UUID) -> Task<HomeResponse, Error>? {
+        consumeHome(for: userID, date: HomePrefetchCoordinatorTests.dateString(Date()), timezone: TimeZone.current.identifier)
+    }
 }

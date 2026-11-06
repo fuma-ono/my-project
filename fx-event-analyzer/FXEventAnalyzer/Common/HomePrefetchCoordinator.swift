@@ -25,6 +25,9 @@ final class HomePrefetchCoordinator {
 
     private struct Prefetch {
         let userID: UUID
+        /// `/home`の先行取得に使った`date`・`timezone`(`consumeHome`で、受け取る側の値と比べる)。
+        let homeDate: String
+        let homeTimezone: String
         let homeTask: Task<HomeResponse, Error>
         let entitlementsTask: Task<EntitlementsResponse, Error>
         var homeConsumed = false
@@ -45,31 +48,43 @@ final class HomePrefetchCoordinator {
     /// Task・結果への参照は破棄して新しく始める — 前のユーザーの結果を新しい
     /// ユーザーに渡さない(古いTask自体はキャンセルしない。参照を手放すだけ)。
     @discardableResult
-    func start(userID: UUID, apiClient: APIClient) -> Task<HomeResponse, Error> {
+    func start(userID: UUID, apiClient: APIClient, now: () -> Date = Date.init) -> Task<HomeResponse, Error> {
         if let prefetch, prefetch.userID == userID {
             return prefetch.homeTask
         }
         DiagnosticsStore.shared.recordPrefetchStarted()
+        let homeDate = Self.isoDateFormatter.string(from: now())
+        let homeTimezone = TimeZone.current.identifier
+        let endpoint = Self.homeEndpoint(date: homeDate, timezone: homeTimezone)
         let homeTask = Task<HomeResponse, Error> {
             // `HomeViewModel.fetch()`と同じ起動診断フックを、実際に通信を始める
             // この時点で呼ぶ — `HomeViewModel`側が後から消費したときに呼び直すと、
             // 通信開始時刻がSplash中の実際の時点ではなく消費時点にずれてしまう。
             await DiagnosticsStore.shared.beginHomeRequest()
-            return try await apiClient.send(Self.homeEndpoint())
+            return try await apiClient.send(endpoint)
         }
         let entitlementsTask = Task<EntitlementsResponse, Error> {
             try await EntitlementsService(apiClient: apiClient).fetchEntitlements(timezone: TimeZone.current.identifier)
         }
-        prefetch = Prefetch(userID: userID, homeTask: homeTask, entitlementsTask: entitlementsTask)
+        prefetch = Prefetch(
+            userID: userID, homeDate: homeDate, homeTimezone: homeTimezone,
+            homeTask: homeTask, entitlementsTask: entitlementsTask
+        )
         return homeTask
     }
 
     /// `/home`の先行取得結果を一度だけ返す。2回目以降・別ユーザー・未開始なら`nil`
     /// (呼び出し元は従来どおり自分で取得する)。
-    func consumeHome(for userID: UUID) -> Task<HomeResponse, Error>? {
+    ///
+    /// `date`・`timezone`は、呼び出し元がこれから表示・保存に使う値。先行取得に使った値と
+    /// 違えば(Splash中に日付が変わった・バックグラウンドから翌日に戻った・端末のタイム
+    /// ゾーンが変わった)、別の日の`/home`を今日の最新として出さないよう`nil`を返し、
+    /// 先行取得は消費済みにする。
+    func consumeHome(for userID: UUID, date: String, timezone: String) -> Task<HomeResponse, Error>? {
         guard var current = prefetch, current.userID == userID, !current.homeConsumed else { return nil }
         current.homeConsumed = true
         prefetch = current
+        guard current.homeDate == date, current.homeTimezone == timezone else { return nil }
         return current.homeTask
     }
 
@@ -87,12 +102,12 @@ final class HomePrefetchCoordinator {
         prefetch = nil
     }
 
-    private static func homeEndpoint() -> Endpoint {
+    private static func homeEndpoint(date: String, timezone: String) -> Endpoint {
         Endpoint(
             path: "home",
             queryItems: [
-                URLQueryItem(name: "date", value: Self.isoDateFormatter.string(from: Date())),
-                URLQueryItem(name: "timezone", value: TimeZone.current.identifier),
+                URLQueryItem(name: "date", value: date),
+                URLQueryItem(name: "timezone", value: timezone),
             ]
         )
     }
