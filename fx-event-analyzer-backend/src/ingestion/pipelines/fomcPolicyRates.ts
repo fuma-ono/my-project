@@ -29,8 +29,17 @@
  * - VALUE_DIFFERS: 記録した effective_date の NY連銀の下限・上限が、記録と違う
  * - EFFECTIVE_DATE_DIFFERS: 今の NY連銀の記録で同じ決まりを当てはめると、別の effective_date になる
  * 記録した effective_date の値が API に無い・読めないときは比べられないので、conflicts ではなく details.unverified。
- * 1回の実行で1つの会合は1件だけ(実行ごとに ingestion_logs の1行に、その時点の違いとして出る)。API が取れなければ
- * 比べない(details.conflicts_checked = false。取得の失敗は従来どおりエラー)。
+ * API が取れなければ比べない(details.conflicts_checked = false。取得の失敗は従来どおりエラー)。
+ *
+ * 実行をまたいだ重複の防止(HQ指示 2026-11-06「NY Fed 食い違いログの重複防止」): 新しい表は作らず、このジョブの前回のログと比べる。
+ * - 食い違いは「会合・違いの種類・DB の値・NY連銀の値」で識別する(conflictKey)。1つの会合に2種類の違いがあれば別の食い違い。
+ * - 突き合わせができた実行(details.conflicts_checked = true)は、その時点で続いている食い違いの識別子だけを
+ *   details.open_conflicts に残す(詳細は残さない)。次の実行は、このジョブ(job・provider で絞る。他のジョブのログは見ない)の
+ *   conflicts_checked = true の直近の1行の open_conflicts を前回の状態として読む(取得に失敗した実行は前回の状態にならない)。
+ * - details.conflicts = 新しく出た食い違い(詳細つき、1回だけ)。続いているものは details.continuing_conflicts に件数だけ。
+ *   details.resolved_conflicts = 解消した食い違い(1回だけ)。解消の後にまた出たら、新しい発生として conflicts に出る。
+ * - 解消とみなすのは、その会合のその種類の比較が今回できて、違いが無かったときだけ。比べられなかった会合(API に値が無い・
+ *   読めない・発表から MAX_LOOKBACK_DAYS を過ぎた)の前回の食い違いは、解消とせずに open_conflicts に持ち越す。
  */
 import { NY_FED_SOURCE } from '../../domain/attribution.js';
 import { nyFedEffrSearchUrl, type NyFedTargetRangeResult } from '../adapters/nyFedRates.js';
@@ -54,15 +63,25 @@ export interface FomcPolicyRateResult {
     reason: 'NO_RECORD_IN_WINDOW' | 'FIRST_RECORD_UNREADABLE' | 'OUTSIDE_LOOKBACK';
   }[];
   alreadyRecorded: number;
-  /** 記録済みの会合で、NY連銀の今の値と違うもの(記録は変えない)。 */
+  /** 今回新しく出た食い違い(記録は変えない)。前回から続いているものは入れない。 */
   conflicts: FomcPolicyRateConflict[];
+  /** 前回から続いている食い違いの数。 */
+  continuingConflicts: number;
+  /** 今回解消した食い違い。 */
+  resolvedConflicts: { key: string; provider_event_id: string; difference: FomcPolicyRateDifference }[];
+  /** 今回の時点で続いている食い違いの識別子(次の実行の前回の状態)。突き合わせなかった実行では null。 */
+  openConflicts: string[] | null;
   /** 記録済みの会合で、比べられなかったもの(記録した effective_date の値が API に無い・読めない)。 */
   unverified: { provider_event_id: string; reason: 'MISSING_IN_SOURCE' | 'UNREADABLE_IN_SOURCE' }[];
 }
 
+export type FomcPolicyRateDifference = 'VALUE_DIFFERS' | 'EFFECTIVE_DATE_DIFFERS';
+
 export interface FomcPolicyRateConflict {
+  /** 食い違いの識別子(conflictKey)。実行をまたいで同じ食い違いを見分ける。 */
+  key: string;
   provider_event_id: string;
-  differences: ('VALUE_DIFFERS' | 'EFFECTIVE_DATE_DIFFERS')[];
+  difference: FomcPolicyRateDifference;
   /** DB の記録(変えていない)。 */
   stored: { lower: number; upper: number; effective_date: string };
   /** NY連銀の今の値。VALUE_DIFFERS は記録した effective_date の値、EFFECTIVE_DATE_DIFFERS は今の決まりで選んだ記録。 */
@@ -71,6 +90,22 @@ export interface FomcPolicyRateConflict {
 }
 
 const sameRate = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+
+/** 食い違いの識別子: 会合・違いの種類・DB の値・NY連銀の値(同じ食い違いなら実行をまたいで同じ文字列)。 */
+export function conflictKey(
+  providerEventId: string,
+  difference: FomcPolicyRateDifference,
+  stored: FomcPolicyRateConflict['stored'],
+  source: FomcPolicyRateConflict['source'],
+): string {
+  const part = (v: { lower: number; upper: number; effective_date: string }) =>
+    `${Number(v.lower)}/${Number(v.upper)}/${v.effective_date}`;
+  return `${providerEventId}|${difference}|${part(stored)}|${part(source)}`;
+}
+
+/** ingestion_logs の job・provider(このジョブのログだけを前回の状態として読む)。 */
+export const FOMC_POLICY_RATE_JOB = 'ingest:fomc-policy-rate';
+export const FOMC_POLICY_RATE_LOG_PROVIDER = 'nyfed_effr';
 
 type Pick =
   | { kind: 'range'; range: NyFedTargetRangeResult['ranges'][number] }
@@ -112,6 +147,9 @@ export async function ingestFomcPolicyRates(
     unmatched: [],
     alreadyRecorded: 0,
     conflicts: [],
+    continuingConflicts: 0,
+    resolvedConflicts: [],
+    openConflicts: null,
     unverified: [],
   };
   const writeDetails = (extra: Record<string, unknown> = {}) => {
@@ -120,7 +158,10 @@ export async function ingestFomcPolicyRates(
     counters.details.unmatched = result.unmatched;
     counters.details.already_recorded = result.alreadyRecorded;
     counters.details.conflicts = result.conflicts;
+    counters.details.continuing_conflicts = result.continuingConflicts;
+    counters.details.resolved_conflicts = result.resolvedConflicts;
     counters.details.unverified = result.unverified;
+    if (result.openConflicts !== null) counters.details.open_conflicts = result.openConflicts;
     Object.assign(counters.details, extra);
   };
 
@@ -165,6 +206,8 @@ export async function ingestFomcPolicyRates(
     return result;
   }
 
+  // 前回の状態(このジョブの、突き合わせができた直近の実行の open_conflicts。無ければ空)。
+  const previousOpen = new Set(await deps.store.latestFomcPolicyRateOpenConflicts());
   const earliest = [...pending, ...toVerify].map((t) => t.date).sort()[0]!;
   const startDate = addDays(earliest, 1);
   const sourceUrl = nyFedEffrSearchUrl(startDate, today);
@@ -220,17 +263,32 @@ export async function ingestFomcPolicyRates(
     }
   }
   // 訂正の検知: 記録済みの会合を、NY連銀の今の値と突き合わせる(記録は変えない)。
+  const detected: FomcPolicyRateConflict[] = [];
+  /** 今回比べられた「会合|違いの種類」(前回の食い違いを解消とみなしてよいもの)。 */
+  const checked = new Set<string>();
   for (const { row, date, nextDate, stored } of toVerify) {
-    const differences: FomcPolicyRateConflict['differences'] = [];
-    let source: FomcPolicyRateConflict['source'] | null = null;
+    const storedValue = {
+      lower: stored.target_range_lower,
+      upper: stored.target_range_upper,
+      effective_date: stored.effective_date,
+    };
+    const push = (difference: FomcPolicyRateDifference, source: FomcPolicyRateConflict['source']) =>
+      detected.push({
+        key: conflictKey(row.provider_event_id, difference, storedValue, source),
+        provider_event_id: row.provider_event_id,
+        difference,
+        stored: storedValue,
+        source,
+        source_url: sourceUrl,
+      });
     const atStored = feed.ranges.find((range) => range.effectiveDate === stored.effective_date);
     if (atStored) {
+      checked.add(`${row.provider_event_id}|VALUE_DIFFERS`);
       if (
         !sameRate(atStored.lower, stored.target_range_lower) ||
         !sameRate(atStored.upper, stored.target_range_upper)
       ) {
-        differences.push('VALUE_DIFFERS');
-        source = { lower: atStored.lower, upper: atStored.upper, effective_date: atStored.effectiveDate };
+        push('VALUE_DIFFERS', { lower: atStored.lower, upper: atStored.upper, effective_date: atStored.effectiveDate });
       }
     } else {
       const unreadable = feed.skipped.some((skip) => skip.effectiveDate === stored.effective_date);
@@ -240,24 +298,32 @@ export async function ingestFomcPolicyRates(
       });
     }
     const pick = pickRange(feed, date, nextDate);
-    if (pick.kind === 'range' && pick.range.effectiveDate !== stored.effective_date) {
-      differences.push('EFFECTIVE_DATE_DIFFERS');
-      source = { lower: pick.range.lower, upper: pick.range.upper, effective_date: pick.range.effectiveDate };
-    }
-    if (differences.length > 0 && source) {
-      result.conflicts.push({
-        provider_event_id: row.provider_event_id,
-        differences,
-        stored: {
-          lower: stored.target_range_lower,
-          upper: stored.target_range_upper,
-          effective_date: stored.effective_date,
-        },
-        source,
-        source_url: sourceUrl,
-      });
+    if (pick.kind === 'range') {
+      checked.add(`${row.provider_event_id}|EFFECTIVE_DATE_DIFFERS`);
+      if (pick.range.effectiveDate !== stored.effective_date) {
+        push('EFFECTIVE_DATE_DIFFERS', {
+          lower: pick.range.lower,
+          upper: pick.range.upper,
+          effective_date: pick.range.effectiveDate,
+        });
+      }
     }
   }
+  // 前回の状態と比べる: 新しく出たもの・続いているもの・解消したもの。比べられなかったものは持ち越す。
+  const detectedKeys = new Set(detected.map((c) => c.key));
+  result.conflicts = detected.filter((c) => !previousOpen.has(c.key));
+  result.continuingConflicts = detected.length - result.conflicts.length;
+  const open = new Set(detectedKeys);
+  for (const key of previousOpen) {
+    if (detectedKeys.has(key)) continue;
+    const [providerEventId, difference] = key.split('|') as [string, FomcPolicyRateDifference];
+    if (checked.has(`${providerEventId}|${difference}`)) {
+      result.resolvedConflicts.push({ key, provider_event_id: providerEventId, difference });
+    } else {
+      open.add(key);
+    }
+  }
+  result.openConflicts = [...open].sort();
 
   writeDetails({
     source_status: 'OK',

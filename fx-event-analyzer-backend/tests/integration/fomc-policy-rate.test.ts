@@ -239,4 +239,58 @@ describe.skipIf(!integration)('FOMC policy decisions: table, ingestion and GET /
     expect(error).toBeNull();
     expect(data?.map((r) => Number(r.target_range_upper))).toEqual([1.75]);
   });
+  // HQ指示(2026-11-06「NY Fed 食い違いログの重複防止」): 前回の状態は、このジョブ(job・provider)のログのうち、
+  // 突き合わせができた(conflicts_checked = true)直近の1行の open_conflicts だけから読む。
+  it('reads the previous conflict state only from the latest comparable log of this job', async () => {
+    const repository = createIngestionRepository(ctx.serviceClient);
+    const log = (job: string, provider: string, startedAt: string, details: Record<string, unknown>) => ({
+      provider,
+      data_type: 'ECONOMIC_EVENT' as const,
+      job,
+      started_at: startedAt,
+      completed_at: startedAt,
+      status: 'SUCCESS' as const,
+      fetched_count: 0,
+      success_count: 0,
+      error_count: 0,
+      skipped_count: 0,
+      review_count: 0,
+      error_message: null,
+      details,
+    });
+    const key = `it-${runId}`;
+    await repository.insertIngestionLog(
+      log('ingest:fomc-policy-rate', 'nyfed_effr', '2099-01-01T00:00:00Z', {
+        conflicts_checked: true,
+        open_conflicts: [`${key}-old`],
+      }),
+    );
+    await repository.insertIngestionLog(
+      log('ingest:fomc-policy-rate', 'nyfed_effr', '2099-01-02T00:00:00Z', {
+        conflicts_checked: true,
+        open_conflicts: [`${key}-latest`],
+      }),
+    );
+    // より新しいが、突き合わせなかった実行(取得の失敗)・他のジョブ・他の provider は前回の状態にならない
+    await repository.insertIngestionLog(
+      log('ingest:fomc-policy-rate', 'nyfed_effr', '2099-01-03T00:00:00Z', {
+        conflicts_checked: false,
+        source_status: 'UNAVAILABLE',
+      }),
+    );
+    await repository.insertIngestionLog(
+      log('ingest:fomc-schedule', 'nyfed_effr', '2099-01-04T00:00:00Z', {
+        conflicts_checked: true,
+        open_conflicts: [`${key}-other-job`],
+      }),
+    );
+    await repository.insertIngestionLog(
+      log('ingest:fomc-policy-rate', 'fomc_schedule', '2099-01-05T00:00:00Z', {
+        conflicts_checked: true,
+        open_conflicts: [`${key}-other-provider`],
+      }),
+    );
+    expect(await repository.latestFomcPolicyRateOpenConflicts()).toEqual([`${key}-latest`]);
+    await ctx.serviceClient.from('ingestion_logs').delete().gte('started_at', '2099-01-01T00:00:00Z');
+  });
 });

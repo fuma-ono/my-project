@@ -377,6 +377,19 @@ export class MemoryIngestionStore implements IngestionStore {
     return Promise.resolve(this.creditsToday(provider));
   }
 
+  latestFomcPolicyRateOpenConflicts(): Promise<string[]> {
+    const latest = [...this.logs]
+      .reverse()
+      .find(
+        (log) =>
+          log.job === 'ingest:fomc-policy-rate' &&
+          log.provider === 'nyfed_effr' &&
+          log.details.conflicts_checked === true,
+      );
+    const open = latest?.details.open_conflicts;
+    return Promise.resolve(Array.isArray(open) ? (open as string[]) : []);
+  }
+
   insertIngestionLog(row: IngestionLogRow): Promise<void> {
     this.logs.push(row);
     return Promise.resolve();

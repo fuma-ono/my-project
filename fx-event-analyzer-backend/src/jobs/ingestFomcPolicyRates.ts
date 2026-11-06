@@ -2,7 +2,11 @@ import 'dotenv/config';
 import { loadEnv } from '../config/env.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
 import { fetchNyFedTargetRanges } from '../ingestion/adapters/nyFedRates.js';
-import { ingestFomcPolicyRates } from '../ingestion/pipelines/fomcPolicyRates.js';
+import {
+  FOMC_POLICY_RATE_JOB,
+  FOMC_POLICY_RATE_LOG_PROVIDER,
+  ingestFomcPolicyRates,
+} from '../ingestion/pipelines/fomcPolicyRates.js';
 import { JobCounters, runIngestionJob } from '../ingestion/runner.js';
 import { createIngestionRepository } from '../repositories/ingestionRepository.js';
 
@@ -17,14 +21,14 @@ import { createIngestionRepository } from '../repositories/ingestionRepository.j
  * 前提: migration 20261105000001(fomc_policy_decisions)が適用済み(無ければ書き込みがエラーになる)。
  * Exit 0 / 1。
  */
-const JOB = 'ingest:fomc-policy-rate';
+const JOB = FOMC_POLICY_RATE_JOB;
 
 async function main(): Promise<void> {
   const env = loadEnv();
   const store = createIngestionRepository(createSupabaseClient(env));
   const result = await runIngestionJob(
     store,
-    { provider: 'nyfed_effr', dataType: 'ECONOMIC_EVENT', job: JOB },
+    { provider: FOMC_POLICY_RATE_LOG_PROVIDER, dataType: 'ECONOMIC_EVENT', job: JOB },
     async (counters: JobCounters) => {
       await ingestFomcPolicyRates({ store, fetchRanges: (start, end) => fetchNyFedTargetRanges(start, end) }, counters);
     },

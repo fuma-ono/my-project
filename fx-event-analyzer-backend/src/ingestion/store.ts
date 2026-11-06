@@ -310,6 +310,11 @@ export interface IngestionStore {
    * HQ指示 2026-11-06「NY連銀の規約対応」)に使う。
    */
   listFomcPolicyDecisions(): Promise<StoredFomcPolicyDecision[]>;
+  /**
+   * ingest:fomc-policy-rate(provider nyfed_effr)のログのうち、NY連銀と突き合わせができた(details.conflicts_checked = true)
+   * 直近の1行の details.open_conflicts(その時点で続いていた食い違いの識別子)。無ければ空。他のジョブのログは見ない。
+   */
+  latestFomcPolicyRateOpenConflicts(): Promise<string[]>;
   /** fomc_policy_decisions に1行入れる(同じ event_id が既にあれば DB の一意制約でエラー)。 */
   insertFomcPolicyDecision(row: NewFomcPolicyDecision): Promise<void>;
   /** Latest revision value per field for the event (to skip re-recording the same revision). */

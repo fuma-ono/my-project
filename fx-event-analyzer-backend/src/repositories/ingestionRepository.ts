@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { FOMC_POLICY_RATE_JOB, FOMC_POLICY_RATE_LOG_PROVIDER } from '../ingestion/pipelines/fomcPolicyRates.js';
 import type {
   ApiCreditReservation,
   EventForReactionRef,
@@ -434,6 +435,23 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
       const { data, error } = await supabase.rpc('api_credits_used_today', { p_provider: provider });
       if (error) throw error;
       return Number(data ?? 0);
+    },
+
+    async latestFomcPolicyRateOpenConflicts(): Promise<string[]> {
+      // 前回の状態の1つの項目だけを読む(details 全体は読まない)。
+      const { data, error } = await supabase
+        .from('ingestion_logs')
+        .select('id, started_at, open_conflicts:details->open_conflicts')
+        .eq('job', FOMC_POLICY_RATE_JOB)
+        .eq('provider', FOMC_POLICY_RATE_LOG_PROVIDER)
+        .eq('details->>conflicts_checked', 'true')
+        .order('started_at', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      const open = (data as { open_conflicts?: unknown } | null)?.open_conflicts;
+      return Array.isArray(open) ? open.filter((key): key is string => typeof key === 'string') : [];
     },
 
     async insertIngestionLog(row: IngestionLogRow): Promise<void> {

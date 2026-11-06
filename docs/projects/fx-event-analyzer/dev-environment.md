@@ -1790,11 +1790,27 @@ updates, or corrections relevant to Content you choose to use.」)。`npm run in
 | details の項目 | 意味 |
 |---|---|
 | `conflicts_checked` | `true` = 今回は突き合わせた。`false` = 突き合わせていない(取得の失敗、または比べる会合が無い)。取得の失敗は `source_status: 'UNAVAILABLE'` とエラーで分かる |
-| `conflicts[]` | `provider_event_id`・`differences`(`VALUE_DIFFERS` = 記録した適用日の下限・上限が違う、`EFFECTIVE_DATE_DIFFERS` = 今の決まりで選ぶと別の適用日になる)・`stored`(DB の値)・`source`(NY連銀の今の値)・`source_url` |
+| `conflicts[]` | **今回新しく出た**食い違い(詳細つき)。`key`(識別子)・`provider_event_id`・`difference`(`VALUE_DIFFERS` = 記録した適用日の下限・上限が違う、`EFFECTIVE_DATE_DIFFERS` = 今の決まりで選ぶと別の適用日になる)・`stored`(DB の値)・`source`(NY連銀の今の値)・`source_url` |
+| `continuing_conflicts` | 前回から続いている食い違いの数(詳細は、最初に出た実行のログの `conflicts` にある) |
+| `resolved_conflicts[]` | 今回解消した食い違い(`key`・`provider_event_id`・`difference`)。解消は1回だけ出る |
+| `open_conflicts[]` | 今回の時点で続いている食い違いの `key` だけ(次の実行の「前回の状態」)。突き合わせた実行にだけある |
 | `unverified[]` | 記録した適用日の値が API に無い(`MISSING_IN_SOURCE`)・読めない(`UNREADABLE_IN_SOURCE`)ため比べられなかった会合 |
 | `verified` | 突き合わせた会合の数 |
 
-同じ違いは、1回の実行で1つの会合につき1件だけ出る(実行ごとに `ingestion_logs` の1行。件数は記録済みの会合の数を超えない)。
+実行をまたいだ重複の防止(HQ指示 2026-11-06「NY Fed 食い違いログの重複防止」。新しい表は作らない): 次の実行は、このジョブ
+(`job = 'ingest:fomc-policy-rate'`・`provider = 'nyfed_effr'`)のログのうち `conflicts_checked = true` の直近の1行の `open_conflicts` を
+前回の状態として読む。食い違いの識別子は「会合・違いの種類・DB の値・NY連銀の値」(1つの会合に2種類あれば別のもの。NY連銀の値が
+別の値に変わったら、前のものは解消・新しいものが発生)。
+
+| 場面 | ログに出るもの |
+|---|---|
+| 初めて出た | `conflicts` に詳細を1回 |
+| 続いている(何回実行しても) | `continuing_conflicts` に件数だけ。`open_conflicts` に key |
+| 解消した(その比較が今回できて、違いが無かった) | `resolved_conflicts` に1回 |
+| 解消の後にまた出た | `conflicts` に新しい発生として詳細を1回 |
+| 取得に失敗した・比べられなかった | 解消としない(前回の状態を持ち越す)。取得の失敗の実行は前回の状態にならない |
+
+`ingestion_logs` は今までどおり実行1回につき1行。続いている食い違いは、実行ごとに key の文字列1つ分だけ増える(`open_conflicts`)。
 
 conflicts が出たときの手順:
 1. `source_url` を開き、NY連銀の公表の値を人が確かめる(`stored` と `source` のどちらが正しいか)。
