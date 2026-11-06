@@ -694,9 +694,15 @@ final class ScreenshotTests: XCTestCase {
     private func openHistoricalComparisonInLandscape() {
         tapIdentifier("v5Tab1")
         XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicators list did not load")
-        tap(containing: "国・地域")
-        let usMenuItem = app.buttons["米国"]
-        if usMenuItem.waitForExistence(timeout: 5) { usMenuItem.tap() }
+        // 2回目(PRO)は、1回目で選んだ「米国」の絞り込みが残っていて「国・地域」の表示が変わるため、米国CPIの行が
+        // もう押せるなら絞り込みは操作しない。
+        let cpiRow = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "米国CPI(消費者物価指数)")).firstMatch
+        if !(cpiRow.exists && cpiRow.isHittable) {
+            tap(containing: "国・地域")
+            let usMenuItem = app.buttons["米国"]
+            if usMenuItem.waitForExistence(timeout: 5) { usMenuItem.tap() }
+        }
         tap(containing: "米国CPI(消費者物価指数)")
         XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 15), "Indicator Detail did not load")
         tap(containing: "過去イベント比較")
