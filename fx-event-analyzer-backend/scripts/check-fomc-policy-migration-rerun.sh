@@ -21,8 +21,15 @@ us_fomc='10000000-0000-0000-0000-000000000003' # seed.sql の US_FOMC
 
 psql_run() { psql "$db" -v ON_ERROR_STOP=1 -X -q "$@"; }
 
+# psql が失敗したら、その出力を注記(::error::)に出す(CI のログ本文を読めなくても原因が分かるように)。
+fail_with_output() {
+  local name="$1"
+  while IFS= read -r line; do echo "::error title=$name::$line"; done < /tmp/rerun.out
+  exit 1
+}
+
 state() {
-  psql_run -At <<'SQL'
+  if ! psql_run -At >/tmp/rerun.state 2>/tmp/rerun.out <<'SQL'; then
 select 'constraint ' || conname || ' ' || pg_get_constraintdef(oid) from pg_constraint
   where conrelid = 'public.fomc_policy_decisions'::regclass
 union all
@@ -35,14 +42,15 @@ union all
 select 'rls ' || relrowsecurity from pg_class where oid = 'public.fomc_policy_decisions'::regclass
 order by 1;
 SQL
+    fail_with_output "reading the definitions"
+  fi
 }
 
 expect_ok() {
   local name="$1" sql="$2"
   if ! printf '%s\n' "$sql" | psql_run >/tmp/rerun.out 2>&1; then
-    cat /tmp/rerun.out
     echo "::error::$name: expected success"
-    exit 1
+    fail_with_output "$name"
   fi
   echo "ok: $name"
 }
@@ -50,31 +58,29 @@ expect_ok() {
 expect_fail() {
   local name="$1" message="$2" sql="$3"
   if printf '%s\n' "$sql" | psql_run >/tmp/rerun.out 2>&1; then
-    cat /tmp/rerun.out
     echo "::error::$name: expected the migration to stop"
-    exit 1
+    fail_with_output "$name"
   fi
   if ! grep -q "$message" /tmp/rerun.out; then
-    cat /tmp/rerun.out
     echo "::error::$name: stopped, but not with \"$message\""
-    exit 1
+    fail_with_output "$name"
   fi
   echo "ok: $name (stopped: $message)"
 }
 
-before="$(state)"
-[ -n "$before" ] || { echo "::error::fomc_policy_decisions is not there after db reset"; exit 1; }
+# state は $(…) の中で呼ばない(失敗の注記が変数に吸われて CI に出なくなるため)。結果は /tmp/rerun.state。
+state; cp /tmp/rerun.state /tmp/rerun.before
+[ -s /tmp/rerun.before ] || { echo "::error::fomc_policy_decisions is not there after db reset"; exit 1; }
 
 # 1. もう一度流す(2回)
 expect_ok "re-run on an applied DB" "begin;
 \\i '$migration'
 \\i '$migration'
 rollback;"
-after="$(state)"
-if [ "$before" != "$after" ]; then
-  diff <(echo "$before") <(echo "$after") || true
+state
+if ! diff /tmp/rerun.before /tmp/rerun.state > /tmp/rerun.out; then
   echo "::error::re-running changed the definitions"
-  exit 1
+  fail_with_output "definitions changed"
 fi
 
 # 2. 行がある状態でもう一度流す → 行が残る
@@ -129,6 +135,9 @@ create policy fomc_policy_decisions_write_all on fomc_policy_decisions for all u
 \\i '$migration'
 rollback;"
 
-final="$(state)"
-[ "$before" = "$final" ] || { echo "::error::the DB was left changed"; exit 1; }
+state
+if ! diff /tmp/rerun.before /tmp/rerun.state > /tmp/rerun.out; then
+  echo "::error::the DB was left changed"
+  fail_with_output "DB left changed"
+fi
 echo "fomc_policy_decisions migration: re-run checks passed"
