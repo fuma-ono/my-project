@@ -652,79 +652,6 @@ final class ScreenshotTests: XCTestCase {
     /// これは不具合ではなく、OS回転に頼らない本方式の既知の見え方)。
     /// 本当に実機で正立して見えるかどうかは、このCIスクリーンショットでは
     /// 検証できないため、実機での目視確認が別途必要。
-    /// HQ指示(2026-11-06)「過去イベント比較画面の横画面レイアウトの追加確認」(A の修正 195b645c): 横画面の表の高さは
-    /// 行の数に合わせる(上限 250pt を超える行数のときだけスクロール)。無料プラン(比較は直近3件)では、最後の行と外枠の
-    /// 間に空白が残らない(修正前は 250pt まで広がり、3行(133pt)の下に約117ptの空白があった)。PRO(多数行)では上限
-    /// 250pt のまま。撮影はしない(スクリーンショットの枚数は変えない)。横画面は`.rotationEffect`で見かけ上回すため、
-    /// 行が並ぶ向き(画面の座標で縦か横か)は行の位置から判定し、画面の拡大率は1行の大きさ(44pt)から求める。
-    func testHistoricalComparisonLandscapeTableFitsItsRows() throws {
-        addTeardownBlock { [weak self] in _ = self?.setMockSubscriptionPlan("PRO") }
-        XCTAssertTrue(setMockSubscriptionPlan("FREE"), "Could not reach the mock server")
-        let emailField = app.textFields["メールアドレス"]
-        XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
-        type("ui-screenshot@example.com", into: emailField)
-        type("ui-screenshot-password", into: app.secureTextFields["パスワード"])
-        app.buttons["ログイン"].tap()
-        XCTAssertTrue(waitForAnyElement(containing: "通貨ペア", timeout: 25), "Home did not load")
-
-        // 無料プラン: 3件。表の外枠(カード)の大きさはアクセシビリティの枠では測れない(中の部品を囲むだけ)ため、
-        // カードのすぐ下に出る「無料プランは直近3回分です…」の注記までの距離で、カードの中の空白を測る
-        // (修正前はカードが 250pt まで伸び、注記が約117pt押し下げられていた)。
-        openHistoricalComparisonInLandscape()
-        let free = measureLandscapeTable(noteContaining: "無料プランは直近3回分です")
-        XCTAssertEqual(free.rows, 3, "The free plan should list 3 past releases. \(free.detail)")
-        if let gap = free.lastRowToNote {
-            XCTAssertLessThan(gap, 60, "Blank space between the last row and the plan note (free plan). \(free.detail)")
-        } else {
-            XCTFail("The plan-limit note is not shown below the table. \(free.detail)")
-        }
-        leaveLandscapeComparison()
-
-        // PRO: 7件(行の高さの合計 311pt > 上限 250pt なのでスクロール)。表の上側(見出しから最初の行まで)は無料プランと同じで、
-        // プランの注記は出ない。
-        XCTAssertTrue(setMockSubscriptionPlan("PRO"), "Could not switch the mock plan back to PRO")
-        openHistoricalComparisonInLandscape()
-        let pro = measureLandscapeTable(noteContaining: "無料プランは直近")
-        XCTAssertEqual(pro.rows, 7, "The PRO plan should list 7 past releases. \(pro.detail)")
-        XCTAssertNil(pro.lastRowToNote, "The plan-limit note should not be shown for PRO. \(pro.detail)")
-        XCTAssertEqual(pro.headerToFirstRow, free.headerToFirstRow, accuracy: 2, "The top of the table moved between FREE and PRO. \(pro.detail)")
-        leaveLandscapeComparison()
-    }
-
-    private func openHistoricalComparisonInLandscape() {
-        tapIdentifier("v5Tab1")
-        XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicators list did not load")
-        // 2回目(PRO)は、1回目で選んだ「米国」の絞り込みが残っていて「国・地域」の表示が変わるため、米国CPIの行が
-        // もう押せるなら絞り込みは操作しない。
-        let cpiRow = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label CONTAINS %@", "米国CPI(消費者物価指数)")).firstMatch
-        if !(cpiRow.exists && cpiRow.isHittable) {
-            tap(containing: "国・地域")
-            let usMenuItem = app.buttons["米国"]
-            if usMenuItem.waitForExistence(timeout: 5) { usMenuItem.tap() }
-        }
-        tap(containing: "米国CPI(消費者物価指数)")
-        XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 15), "Indicator Detail did not load")
-        tap(containing: "過去イベント比較")
-        XCTAssertTrue(waitForAnyElement(containing: "前回値", timeout: 15), "Historical Comparison did not load")
-        XCUIDevice.shared.orientation = .landscapeLeft
-        XCTAssertTrue(
-            app.otherElements["historyLandscapeTopBar"].waitForExistence(timeout: 10),
-            "The screen did not switch to the landscape layout"
-        )
-        XCTAssertTrue(app.otherElements["historyLandscapeTable"].waitForExistence(timeout: 10), "The landscape table is not shown")
-        Thread.sleep(forTimeInterval: 1.0)
-    }
-
-    private func leaveLandscapeComparison() {
-        XCUIDevice.shared.orientation = .portrait
-        Thread.sleep(forTimeInterval: 1.0)
-        XCTAssertTrue(waitForAnyElement(containing: "前回値", timeout: 10), "Historical Comparison did not resume its portrait layout")
-        tapIdentifier("v5HeaderBack")
-        XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 10), "Did not return to Indicator Detail")
-        tapIdentifier("v5HeaderBack")
-    }
-
     /// 横画面の表の測定(デザイン上のpt)。行が並ぶ向き(画面の座標で縦か横か、+か-か)は、見出し「日時」から行への向きで
     /// 決め、行を見出しに近い順に並べる。拡大率は行の間隔(44pt + 区切り線0.5pt)から求める。
     /// `headerToFirstRow` = 見出し「日時」の始まりから最初の行の始まりまで。`lastRowToNote` = 最後の行の終わりから
@@ -815,6 +742,14 @@ final class ScreenshotTests: XCTestCase {
         // は、このファイル冒頭の本テストのコメントを参照。
         capture("09b-HistoricalComparison-Landscape", settle: 1.5)
 
+        // HQ指示(2026-11-06「過去イベント比較画面の横画面レイアウトの追加確認」、A の修正 195b645c): 横画面の表の高さは行の数に
+        // 合わせる(行の高さの合計が上限 250pt を超えるときだけスクロール)。撮影はしない(スクリーンショットの枚数は変えない)。
+        // PRO(7件、311pt > 250pt): 7行、無料プランの注記なし。
+        XCTAssertTrue(app.otherElements["historyLandscapeTable"].waitForExistence(timeout: 5), "The landscape table is not shown")
+        let pro = measureLandscapeTable(noteContaining: "無料プランは直近")
+        XCTAssertEqual(pro.rows, 7, "The PRO plan should list 7 past releases. \(pro.detail)")
+        XCTAssertNil(pro.lastRowToNote, "The plan-limit note should not be shown for PRO. \(pro.detail)")
+
         // 戻る: Portraitに戻すと、横画面専用の要素が消えて縦画面の見た目に戻る。
         XCUIDevice.shared.orientation = .portrait
         Thread.sleep(forTimeInterval: 1.0)
@@ -822,6 +757,31 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertFalse(app.otherElements["historyLandscapeTopBar"].exists, "Landscape-only top bar should disappear after rotating back to portrait")
         tapIdentifier("v5HeaderBack")
         XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 10), "Did not return to Indicator Detail after leaving Historical Comparison")
+
+        // 無料プラン(直近3件): 表の外枠(カード)の大きさはアクセシビリティの枠では測れない(中の部品を囲むだけ)ため、カードの
+        // すぐ下に出る「無料プランは直近3回分です…」の注記までの距離で、カードの中の空白を測る(修正前は 77pt で、注記が画面の
+        // 端まで押し出されていた。Run 42151149763)。表の上側(見出しから最初の行まで)は PRO と同じ。
+        addTeardownBlock { [weak self] in _ = self?.setMockSubscriptionPlan("PRO") }
+        XCTAssertTrue(setMockSubscriptionPlan("FREE"), "Could not switch the mock plan to FREE")
+        tap(containing: "過去イベント比較")
+        XCTAssertTrue(waitForAnyElement(containing: "前回値", timeout: 15), "Historical Comparison did not load (free plan)")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(app.otherElements["historyLandscapeTopBar"].waitForExistence(timeout: 10), "The screen did not switch to landscape (free plan)")
+        XCTAssertTrue(app.otherElements["historyLandscapeTable"].waitForExistence(timeout: 10), "The landscape table is not shown (free plan)")
+        Thread.sleep(forTimeInterval: 1.0)
+        let free = measureLandscapeTable(noteContaining: "無料プランは直近3回分です")
+        XCTAssertEqual(free.rows, 3, "The free plan should list 3 past releases. \(free.detail)")
+        if let gap = free.lastRowToNote {
+            XCTAssertLessThan(gap, 60, "Blank space between the last row and the plan note (free plan). \(free.detail)")
+        } else {
+            XCTFail("The plan-limit note is not shown below the table. \(free.detail)")
+        }
+        XCTAssertEqual(free.headerToFirstRow, pro.headerToFirstRow, accuracy: 2, "The top of the table moved between PRO and FREE. \(free.detail)")
+        XCUIDevice.shared.orientation = .portrait
+        Thread.sleep(forTimeInterval: 1.0)
+        XCTAssertTrue(waitForAnyElement(containing: "前回値", timeout: 10), "Historical Comparison did not resume its portrait layout (free plan)")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 10), "Did not return to Indicator Detail (free plan)")
     }
 
     /// Taps the row's center through SettingsView's fixed V5 layout (group 1
