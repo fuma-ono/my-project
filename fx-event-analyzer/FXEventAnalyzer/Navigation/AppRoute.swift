@@ -33,18 +33,20 @@ enum AppRoute: Hashable {
     case movementDetail(eventId: String, indicatorId: String, fxPairId: String, symbol: String, indicatorName: String, releaseDatetime: Date)
     /// SCR-009 過去イベント比較。
     case historicalComparison(indicatorId: String, indicatorName: String, fxPairId: String, fxPairSymbol: String)
+    /// Pro イベント別トレード戦略分析(HQ指示 2026-11-06、api-design v1.48)。イベント詳細から開く。
+    case eventStrategyAnalysis(eventId: String, indicatorName: String, fxPairId: String?)
 
     // MARK: - ui-screens.md v2.0 (2026-09-29 HQ承認, 2-b) 向けの新規ケース
     //
     // 新画面仕様のうち、実装本体がまだ存在しない画面への遷移先。すべて
     // `AppRouteDestinationView`で`PlaceholderScreenView`(仮画面)に解決される
-    // — デザインはまだ確定していないため、ここでは「遷移先と引き継ぐ
+    // — デザインはまだ確定していないため、ここでは「遷移先と引き継がす
     // パラメータ」だけを定義する。
 
-    /// SCR-010 経済カレンダー。HQ指示(2026-10-03)でメインタブ3番目
+    /// SCR-010 経済カレンダー。HQ指示(2026-10-03)でメイコタブ3番目
     /// (`CalendarTabView`)として新設。このcaseはタブ外(他画面からの
-    /// プッシュ遷移)から到達する場合のために残しているが、現時点では
-    /// 呼び出し元がない。
+    /// プレナーゲーショット遷移)から到達する場合のために残しているが、現時点では
+    // 呼び出し元が無い。
     case calendar
     /// SCR-012 要人発言一覧。`preview`はHQ指示(2026-10-21)「要人発言一覧の
     /// 初回表示改善」対応: ホームが既に取得済みの直近の要人発言
@@ -57,17 +59,17 @@ enum AppRoute: Hashable {
     /// 実装済み(`SpeechDetailView`)。
     case speechDetail(id: String)
     /// SCR-026 ホーム通貨ペア編集。HQ指示(2026-10-03)により「設定→
-    /// ホーム通貨ペア編集→表示する通貨ペアを選択→Homeの『通貨ペア』
-    /// セクションに反映」という導線で、Settingsから遷移する(通貨ペア
+    /// ホーム通貨ペア編集→表示する通貨ペアを選択→Homeの「通貨ペア」
+    /// セカションに反映」という導線で、Settingsから遷移する(通貨ペア
     /// そのものの詳細画面ではない)。お気に入り通貨ペアAPI未実装のため
     /// 仮画面のみ。
     case homeCurrencyPairEditor
     /// 通知一覧。ホームの通知ベルから開く(HQ指示 2026-10-05)。ui-screens.md
     /// に該当SCR番号が無い新規画面(バックエンドAPI未実装、仮画面のみ)。
     case notifications
-    /// HQ指示(2026-10-02)「お気に入りはホームで最大3件、『すべて見る』から
+    /// HQ指示(2026-10-02)「お気に入りはホームで最大3件、「すべて見る」から
     /// 全件を確認できる構成に」。ui-screens.mdに該当SCR番号が無い新規画面
-    /// (指標・イベント・通貨ペアのお気に入りを横断する一覧)。
+    /// (指標・イベント・通貨ペアを横断するお気に入り一覧)。
     case favoritesList
     /// SCR-002 新規会員登録(Loginから)。
     case signUp
