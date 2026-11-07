@@ -15,8 +15,11 @@ import { getEventById, getLatestExplanation, getReleaseSnapshot } from '../repos
 import { getIndicatorById, listRelatedFxPairs } from '../repositories/indicatorsRepository.js';
 import {
   listAvailableReactionsForComparison,
+  listMinuteCandleCompleteness,
   listRecentReleasedEventIds,
   listReleasedEventsForIndicator,
+  listReleasedEventsBefore,
+  listStrategyReactions,
 } from '../repositories/historicalRepository.js';
 import { listReactionsForPair } from '../repositories/reactionsRepository.js';
 import { computeAdvancedHistoricalStats, computeHistoricalStats } from '../domain/historicalStatistics.js';
@@ -25,6 +28,9 @@ import { resolveTimeframeAnalysisStatus, type ReleaseDatetimePrecision } from '.
 import { valueDecimalsForIndicator } from '../domain/valueDecimals.js';
 import { capRowRange, historyLimitFor, planFromFeatures, planLimitsFor } from '../domain/planLimits.js';
 import { comparisonQuerySchema } from '../schemas/historical.js';
+import { z } from 'zod';
+import { buildStrategyAnalysis, STRATEGY_SAMPLE_WINDOW, STRATEGY_TIMEFRAMES } from '../domain/eventStrategyAnalysis.js';
+import { getFxPairById } from '../repositories/reactionsRepository.js';
 import { buildMeta, parsePagination, rangeFor } from '../utils/pagination.js';
 
 const ALL_TIMEFRAMES = ['1m', '5m', '15m', '30m', '60m'] as const;
@@ -55,6 +61,8 @@ function toComparisonRows<T extends { event_id: string }>(
     return { ...redactRelease(event, locked, previousLockedIds.has(event.event_id)), pips_by_timeframe: pips };
   });
 }
+
+const strategyQuerySchema = z.object({ fx_pair_id: z.string().uuid().optional() });
 
 export function registerHistoricalRoutes(app: FastifyInstance): void {
   // GET /events/{event_id}/history — api-design.md §20.
@@ -126,6 +134,74 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
   // same visible_released_event_ids rule as the list/detail) are listed with
   // their values hidden, and every statistic / count is computed from the
   // unlocked rows only, so locked values cannot be derived from aggregates.
+  // Pro イベント別トレード戦略分析(HQ指示 2026-11-06、api-design v1.48): 同じ指標の、この発表より前の RELEASED の直近
+  // STRATEGY_SAMPLE_WINDOW 回の保存済みの値動き・スナップショットから傾向を数える(domain/eventStrategyAnalysis.ts)。
+  // Pro の機能(VIEW_ADVANCED_STATS)。持っていない利用者には 403 にせず available: false(高度な統計と同じ段階的な開示)。
+  app.get<{ Params: { event_id: string } }>('/events/:event_id/strategy-analysis', async (request) => {
+    const userId = request.user!.id;
+    const features = await listActiveFeatureCodes(app.supabase, userId);
+    assertEntitlement(features, FEATURE_CODES.VIEW_BASIC_EVENT);
+    const { event_id: eventId } = request.params;
+    const query = strategyQuerySchema.parse(request.query);
+    const event = await getEventById(app.supabase, eventId);
+    if (!event) {
+      throw new ApiError('EVENT_NOT_FOUND', 'Event not found.');
+    }
+    if (!features.includes(FEATURE_CODES.VIEW_ADVANCED_STATS)) {
+      return {
+        event_id: eventId,
+        available: false,
+        required_entitlement: 'VIEW_ADVANCED_STATS',
+        fx_pair: null,
+        analysis: null,
+      };
+    }
+    const related = await listRelatedFxPairs(app.supabase, event.indicator_id);
+    const fxPairId = query.fx_pair_id ?? related[0]?.fx_pair_id ?? null;
+    const pair = fxPairId ? await getFxPairById(app.supabase, fxPairId) : null;
+    if (!pair) {
+      // 比べる通貨ペアが無い指標(関連の通貨ペアが未設定)・存在しない通貨ペア: 何も推測しない。
+      if (query.fx_pair_id) throw new ApiError('FX_PAIR_NOT_FOUND', 'FX pair not found.');
+      return { event_id: eventId, available: true, required_entitlement: null, fx_pair: null, analysis: null };
+    }
+    const releases = await listReleasedEventsBefore(
+      app.supabase,
+      event.indicator_id,
+      event.release_datetime,
+      STRATEGY_SAMPLE_WINDOW,
+    );
+    const reactions = await listStrategyReactions(
+      app.supabase,
+      releases.map((r) => r.event_id),
+      pair.id,
+      STRATEGY_TIMEFRAMES,
+    );
+    // HQ指示(2026-11-07「1分足欠損への対応」): 15分・60分のブレイク判定だけに使う、1分足の欠損確認(1分・5分判定には使わない)。
+    const completeness = await listMinuteCandleCompleteness(app.supabase, releases, pair.id);
+    const analysis = buildStrategyAnalysis(
+      releases.map((release) => ({
+        event_id: release.event_id,
+        release_datetime: release.release_datetime,
+        forecast: release.forecast === null ? null : Number(release.forecast),
+        actual: release.actual === null ? null : Number(release.actual),
+        surprise: release.surprise === null ? null : Number(release.surprise),
+        surprise_direction: release.surprise_direction,
+        reactions: reactions.filter((r) => r.event_id === release.event_id),
+        minuteCompleteness15m: completeness.get(release.event_id)?.complete15m ?? false,
+        minuteCompleteness60m: completeness.get(release.event_id)?.complete60m ?? false,
+      })),
+      pair.symbol,
+      event.currency_code,
+    );
+    return {
+      event_id: eventId,
+      available: true,
+      required_entitlement: null,
+      fx_pair: { fx_pair_id: pair.id, symbol: pair.symbol },
+      analysis,
+    };
+  });
+
   app.get<{ Params: { indicator_id: string } }>('/indicators/:indicator_id/comparison', async (request) => {
     const userId = request.user!.id;
     // 機能の確認・高度な統計・プランを1回の読み込みで(このリクエストではもう読まない)。
