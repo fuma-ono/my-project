@@ -216,6 +216,19 @@ enum StrategyAnalysisText {
         }
     }
 
+    /// 件数の割合(例: "50.0%")。新しい画面デザイン(HQ指示 2026-11-07「画面デザインの変更」)の
+    /// 色分けした件数タイルに添える。`samples`が0のときは作らない("--")。
+    static func percentOfSamples(_ count: Int, _ samples: Int) -> String {
+        guard samples > 0 else { return "--" }
+        return ValueFormat.percent(Double(count) / Double(samples) * 100, fractionDigits: 1)
+    }
+
+    /// 発表ごとの実績の表で、高値・安値ブレイクを個別に出すためのセル文言("あり"/"なし"/"--")。
+    static func breakCell(_ value: Bool?) -> String {
+        guard let value else { return "--" }
+        return value ? "あり" : "なし"
+    }
+
     static let notes: [String] = [
         "過去の同じ指標の発表(この発表より前の直近5回)の値動きの回数を数えたもので、今後の値動きや売買の結果を示すものではありません。売買の推奨ではありません。",
         "高値・安値ブレイク: 発表後の最初の1分の高値・安値を、その後15分(60分)以内に上・下に抜けたかどうか。どちらが先に起きたかは判定していません。1分足が欠けている・検証できていない場合は判定していません(「--」)。",

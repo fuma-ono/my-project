@@ -4,7 +4,7 @@ import XCTest
 /// Pro イベント別トレード戦略分析(HQ指示 2026-11-06、api-design v1.48)。応答の読み込み、FREE のロック、データ準備中、
 /// 判定できない値を作らない表示を確かめる。
 /// HQ指示(2026-11-07「イベント別トレード戦略分析の完成・統合」): 高値・安値ブレイクの合計が発表数を超えうることの
-/// 注記(breakOverlapNote)と、403などの権限エレーを通信失敗と区別する表示(.notEntitled)も確かめる。
+/// 注記(breakOverlapNote)と、403などの権限エラーを通信失敗と区別する表示(.notEntitled)も確かめる。
 @MainActor
 final class StrategyAnalysisTests: XCTestCase {
     private func decoder() -> JSONDecoder {
@@ -137,13 +137,13 @@ final class StrategyAnalysisTests: XCTestCase {
         )
     }
 
-    /// HQ指示(2026-11-07)「403などの権限エレーを単なる通信失敗として扱わず、適切な表示にする」。
+    /// HQ指示(2026-11-07)「403などの権限エラーを単なる通信失敗として扱わず、適切な表示にする」。
     func testForbiddenAndRelatedErrorsAreNotEntitledNotAGenericFailure() {
         for code: APIErrorCode in [.featureNotEntitled, .subscriptionRequired, .forbidden, .unauthorized] {
             let error = APIError.server(code: code, message: "denied", httpStatus: 403)
             XCTAssertEqual(StrategyAnalysisViewModel.state(forError: error), .notEntitled, "\(code) should map to .notEntitled")
         }
-        // 他のサーバーエレー(例: INTERNAL_ERROR)は通信失敗のまま。
+        // 他のサーバーエラー(例: INTERNAL_ERROR)は通信失敗のまま。
         let serverError = APIError.server(code: .internalError, message: "boom", httpStatus: 500)
         guard case .error = StrategyAnalysisViewModel.state(forError: serverError) else {
             return XCTFail("expected a generic .error state for INTERNAL_ERROR")
@@ -151,5 +151,21 @@ final class StrategyAnalysisTests: XCTestCase {
         guard case .notFound = StrategyAnalysisViewModel.state(forError: .server(code: .eventNotFound, message: "", httpStatus: 404)) else {
             return XCTFail("expected .notFound for EVENT_NOT_FOUND")
         }
+    }
+
+    /// HQ指示(2026-11-07「画面デザインの変更」): 色分けした件数タイルに添えるパーセンテージ。
+    func testPercentOfSamples() {
+        XCTAssertEqual(StrategyAnalysisText.percentOfSamples(2, 4), "50.0%")
+        XCTAssertEqual(StrategyAnalysisText.percentOfSamples(1, 4), "25.0%")
+        XCTAssertEqual(StrategyAnalysisText.percentOfSamples(0, 4), "0.0%")
+        // samplesが0(作れない)なら値を作らない。
+        XCTAssertEqual(StrategyAnalysisText.percentOfSamples(0, 0), "--")
+    }
+
+    /// 発表ごとの実績の表で、高値・安値ブレイクを個別に出すセル文言。
+    func testBreakCell() {
+        XCTAssertEqual(StrategyAnalysisText.breakCell(true), "あり")
+        XCTAssertEqual(StrategyAnalysisText.breakCell(false), "なし")
+        XCTAssertEqual(StrategyAnalysisText.breakCell(nil), "--")
     }
 }

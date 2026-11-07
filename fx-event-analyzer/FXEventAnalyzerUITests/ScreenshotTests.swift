@@ -185,11 +185,13 @@ final class ScreenshotTests: XCTestCase {
 
         // HQ指示(2026-11-06「Pro イベント別トレード戦略分析」、api-design v1.48): イベント詳細の「トレード戦略分析」から開く。
         // PRO(モックの既定)は過去5回の発表の傾向の回数が出る → 撮る。FREE は開いた先がロック表示で、傾向は出ない(撮らない)。
+        // HQ指示(2026-11-07「画面デザインの変更」): カード単位の色分け表示に変更されたため、確認する文言も
+        // 新しいデザインで実際に見える文言(カードの見出し・内訳の件数・補足事項)に合わせている。
         tapIdentifier("eventDetailStrategyAnalysisLink")
-        XCTAssertTrue(waitForAnyElement(containing: "傾向（回数）", timeout: 15), "Strategy analysis did not load")
+        XCTAssertTrue(waitForAnyElement(containing: "過去5回の分析結果", timeout: 15), "Strategy analysis did not load")
         XCTAssertTrue(
-            waitForAnyElement(containing: "高値ブレイク 3回・安値ブレイク 2回（4回中）", timeout: 5),
-            "The counted 15-minute breaks are not shown"
+            waitForAnyElement(containing: "両方 1回", timeout: 5),
+            "The high/low break overlap breakdown is not shown"
         )
         XCTAssertTrue(waitForAnyElement(containing: "売買の推奨ではありません", timeout: 5), "The not-a-recommendation note is missing")
         capture("07b-EventStrategyAnalysis")
@@ -200,7 +202,7 @@ final class ScreenshotTests: XCTestCase {
             tapIdentifier("eventDetailStrategyAnalysisLink")
             XCTAssertTrue(waitForAnyElement(containing: "プレミアムプランで解放", timeout: 15), "The locked state is not shown for FREE")
             XCTAssertFalse(
-                app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "傾向（回数）")).firstMatch.exists,
+                app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "過去5回の分析結果")).firstMatch.exists,
                 "The analysis is shown to FREE"
             )
             XCTAssertTrue(setMockSubscriptionPlan("PRO"), "Could not switch the mock plan back to PRO")

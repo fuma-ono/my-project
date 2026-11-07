@@ -6,7 +6,7 @@ enum StrategyAnalysisState: Equatable {
     case backendNotConfigured
     /// Pro の機能を持っていない(api-design v1.48 の available: false)。
     case locked
-    /// HQ指示(2026-11-07「アキセス制御」): 403などの権限エレー(FEATURE_NOT_ENTITLED・SUBSCRIPTION_REQUIRED・
+    /// HQ指示(2026-11-07「アクセス制御」): 403などの権限エラー(FEATURE_NOT_ENTITLED・SUBSCRIPTION_REQUIRED・
     /// FORBIDDEN・UNAUTHORIZED)。`available: false`(ロック表示)とは別に扱う — こちらは本来この画面に来られない
     /// はずの状態(ログイン切れ等)で、単なる通信失敗(`.error`)として「読み込みに失敗しました」とは出さない。
     case notEntitled
@@ -53,9 +53,9 @@ final class StrategyAnalysisViewModel: ObservableObject {
         }
     }
 
-    /// HQ指示(2026-11-07)「403などの権限エレーを単なる通信失敗として扱わず、適切な表示にする」:
+    /// HQ指示(2026-11-07)「403などの権限エラーを単なる通信失敗として扱わず、適切な表示にする」:
     /// `HistoricalComparisonViewModel`と同じ区別(featureNotEntitled・subscriptionRequired)に加え、
-    /// この画面独自にforbidden・unauthorizedも権限エレーとして扱う(通信失敗の`.error`とは別の案内を出す)。
+    /// この画面独自にforbidden・unauthorizedも権限エラーとして扱う(通信失敗の`.error`とは別の案内を出す)。
     nonisolated static func state(forError error: APIError) -> StrategyAnalysisState {
         guard case .server(let code, _, _) = error else {
             return .error("トレード戦略分析の取得に失敗しました。")
