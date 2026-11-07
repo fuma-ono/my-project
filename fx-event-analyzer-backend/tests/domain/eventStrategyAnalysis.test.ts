@@ -118,7 +118,7 @@ describe('analyzeRelease', () => {
   });
 
   describe('1分足の欠損・UNVERIFIEDへの対応(HQ指示 2026-11-07)', () => {
-    const full = [reaction('1m', 8, 0.1, -0.02), reaction('15m', 20, 0.25, -0.05), reaction('60m', -5, 0.3, -0.3)];
+    const full = [reaction('1m', 8, 0.1, -0.02), reaction('15m', 20, 0.25, -0.02), reaction('60m', -5, 0.3, -0.3)];
 
     it('15分のブレイクはnull(欠損をブレイクなしにしない)だが、1分・5分判定(direction_1m・pattern_15m)には影響しない', () => {
       const row = analyzeRelease(release('e1', full, null, { complete15m: false }), 'BASE');
@@ -248,8 +248,8 @@ describe('buildStrategyAnalysis', () => {
       'USDJPY',
       'USD',
     );
-    // direction_1m・pattern_15m は1分足の欠損確認の対象外なので、3件とも判定できる
-    expect(analysis.summary.direction_1m).toEqual({ up: 1, down: 2, flat: 0, samples: 3 });
+    // direction_1m・pattern_15m は1分足の欠損確認の対象外なので、3件とも判定できる(e1:+5→UP, e2:-4→DOWN, e3:+3→UP)
+    expect(analysis.summary.direction_1m).toEqual({ up: 2, down: 1, flat: 0, samples: 3 });
     // breaks_15mはe1がnullになるため、判定できたのは2件 → 3件未満でDATA_PREPARING(null)
     expect(analysis.releases[0]!.high_break_15m).toBeNull();
     expect(analysis.summary.breaks_15m).toBeNull();
