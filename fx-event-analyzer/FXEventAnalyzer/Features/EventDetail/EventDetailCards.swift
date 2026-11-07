@@ -17,8 +17,8 @@ struct EventDetailCards: View {
     /// HQ指示(2026-10-09)の表: 発表前は結果「未発表」、値動き「発表後に表示」、分析「発表後に分析」。
     var isReleased: Bool { response.event.status == .released }
 
-    /// 無料プランで隠された過去の発表(HQ判断 2026-10-22)。値の代わりに鍵の印を出し、
-    /// 403になる相場反応詳細(`/reaction`)へは進まない。
+    /// 無料プランで隠された過去の発表(HQ判断 2026-10-22)。値の代わりに鍵の印を出し、403になる
+    /// 相場反応詳細(`/reaction`)へは進まない。
     var isLocked: Bool { response.event.isLocked }
 
     /// 相場反応詳細へ進めるか(発表後で、隠されていない発表だけ)。
@@ -28,21 +28,21 @@ struct EventDetailCards: View {
 
     var body: some View {
         // HQ指示(2026-10-12)「結果予想などをもう少し上に上げて」「各カードの
-        // 間隔が詰まりすぎ」: header→resultsだけ詰め、それ以降のカード間は
-        // 元の8に戻した(8→4の一律縮小だと他のカードまで詰まりすぎていた)。
-        // HQ再指摘(2026-10-12、2回目)「まだ上に上げて」でさらに0まで詰めた。
+        // 間隔が詳まりすぎ」: header→resultsだけ詳め、それ以降のカード間は
+        // 元の8に戻した(8→4の一律縮小だと他のカードまで詳まりすぎていた)。
+        // HQ再指摘(2026-10-12、2回目)「まだ上に上げて」でさらに0まで詳めた。
         // HQ再指摘(2026-10-12、6回目)「結果、予想、前回の枠を少し下げて」:
-        // 詰めすぎていたため0→4に戻した。
+        // 詳めすぎていたたため0→4に戻した。
         // HQ指示(2026-10-26)「次回発表予定が1画面に収まっていない」:
         // 前年比/前月比の2段構成でカード自体が伸びた分、ここのセクション間隔も
-        // 詰めて最後の次回発表予定まで1画面に収まるようにした(8→5)。
+        // 詳めて最後の次回発表予定まで1画面に収まるようにした(8→5)。
         // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」
-        // 「下が見切れています」→「出典を1番下にするのはダメなの？」:
-        // 出典をresultsの直後(中段)に挟むと、次回発表予定・過去イベント
+        // 「下が見切れています」→「出典を一番下にするのはダメなの？」:
+        // 出典をresultsの直後(中段)に挿むと、次回発表予定・過去イベント
         // 比較という既存の主要機能がこのScrollView(398pt固定、他の
-        // セクション間隔は上のコメントの経緯で既にぎりぎりまで詰められて
-        // いる)の外に押し出されてしまっていた。既存の主要機能を犠牲に
-        // するよりは、出典(補足情報)を一番下に置き、既存のセクション間隔・
+        // セスション間隔は上のコメントの経緯で既にぎりぎりまで詳められて
+        // いる)の外に押し出されてしまっていた。既存の主要機能を牺牲に
+        // するよりは、出典(補足情報)を一番下に置き、既存のセスション間隔・
         // 行の高さは一切変えないことにした。これで出典が無いイベントの
         // 表示は完全に元のまま、Eurostatの出典だけが一番下に追加される形
         // になる(出典自体がこの枠の外に出た場合も、既存の主要機能より
@@ -68,7 +68,7 @@ struct EventDetailCards: View {
     /// （）の途中が1行で入り切らない場合に（）を2行目にすること」:
     /// 名前と日付+バッジを同じ行で横に並べると、「消費者物価指数(CPI)」の
     /// ような長めの名前が確実に収まるだけの横幅を保証できない(要人発言の
-    /// 名前と同じ理由で3回試行錯誤した末の結論、`SpeechDetailCards.header`
+    /// 名前と同じ理由で3回試行错誤した末の結論、`SpeechDetailCards.header`
     /// 参照)。名前の行と日付+バッジの行を分け、名前側が1行全体の横幅を
     /// 使えるようにした。
     private var header: some View {
@@ -80,7 +80,7 @@ struct EventDetailCards: View {
         // (国名接頭辞を取り除く)に揃えた。
         let combinedName = CountryFlag.indicatorDisplayText(event.indicatorName, countryCode: event.countryCode, displayName: event.displayName)
         // HQ指示(2026-10-13、2回目)「米国|USDの位置が指標名の下になるように」:
-        // 国旗(34pt)と同じHStackの兄弟として2行目を置くと、国旗の高さ分
+        // 国旗(34pt)と同じHStackの兄弟として【】2行目を置くと、国旗の高さ分
         // 2行目の位置が名前の直下からずれる。国旗はカラムとして分離し、
         // 名前+2行目(国|通貨+日時)を1つのVStackにまとめることで、国旗の
         // 高さに関係なく2行目が常に名前テキストの直下に来るようにした
@@ -96,13 +96,13 @@ struct EventDetailCards: View {
                     // HQ指示(2026-10-26)「（CPI）を2行目にしないで1行に収めて」:
                     // `ViewThatFits`は1行版に`minimumScaleFactor`が無いと、
                     // そのままの文字サイズで収まるかどうかでしか判定せず、
-                    // わずかにはみ出ただけでも2行版にフォールバックしていた。
-                    // 1行版が縮小して収まれるようにし、2行への分割よりそちらを
-                    // 優先させた。
+                    // わずかにはみ出しただけで2行版にフォールバックしていた。
+                    // 1行版が縮小して収まれるようにし、
+                    // 2行への分割よりそちらを優先させた。
                     // HQ指示(2026-10-29)「指標名を押したら指標詳細画面に遷移
                     // するようにして」: この画面(SCR-007)はイベント(1回の
                     // 発表)の詳細で、指標そのものの説明・次回発表・過去比較は
-                    // SCR-006(指標詳細)にしかないため、名前をタップして
+                    // SCR-006(指標詳細)にしか無いため、名前をタプして
                     // そちらへ進めるようにした。
                     NavigationLink(value: AppRoute.indicatorDetail(id: event.indicatorId)) {
                         NotoText.text(combinedName, size: 11)
@@ -141,7 +141,7 @@ struct EventDetailCards: View {
         .padding(.leading, 10)
         .padding(.top, 10)
         // HQ指示(2026-10-12)「結果予想前回の枠をまだ上に上げて」:
-        // 下側のパディングを縮め、resultsカードとの間隔をさらに詰めた。
+        // 下側のパディングを縮め、resultsカードとの間隔をさらに詳めた。
         .padding(.bottom, 4)
         // HQ指示(2026-10-12)「HIGHと日時をもう少し右側に」: 右側だけ
         // パディングを縮め、カード右端に寄せた。
@@ -156,7 +156,7 @@ struct EventDetailCards: View {
     /// Eurostatの指標だけ付き、それ以外・古いBackendはnil(何も表示しない)。
     @ViewBuilder private var attributionNotice: some View {
         // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」
-        // 「下が見切れています」→「出典を1番下にするのはダメなの？」対応:
+        // 「下が見切れています」→「出典を一番下にするのはダメなの？」対応:
         // bodyの一番下(次回発表予定の後)に置くことにしたため、既存の
         // 主要機能(次回発表予定・過去イベント比較)の表示を圧迫しない。
         if let attribution = response.event.attribution {
@@ -187,12 +187,12 @@ struct EventDetailCards: View {
     /// HQ指示(2026-10-25)「前年比を記載してください。また前月比の枠の大きさは
     /// 前年比と同じ大きさにしてください。1画面で収まるようにしてください」:
     /// 当初は結果/予想/前回のカードと前月比のカードを別々の2枚で出していたが、
-    /// (1) 前年比側に見出しが無く2枚の見た目が揃わない、(2) カード2枚分の
+    /// (1) 前年比側に見出しが無い2枚の見た目が揃わない、(2) カード2枚分の
     /// 背景・余白が重なって縦に伸び、1画面に収まらなくなる、という指摘を
-    /// 受けた。1枚のカードの中に「前年比」「前月比」の2段(同じ3列構成)を
-    /// 持たせる形にまとめ、見た目を揃えつつ余白を抑えた。副指標(前月比)が
+    /// 受けた。1枚のカードの中に「前年比」「前月比」の2段(同じ、3列構成)を
+    /// 持たせる形にまとめ、見た目を揃えつつ余白を押えた。副指標(前月比)が
     /// 無い指標(米国CPI以外、2026-10-25時点で全て)は1段のみ、見出しも出さない
-    /// (従来1指標しか値が無い画面で「前年比」とだけ表示すると、YoY%が本来の
+    /// (従来、1指標しか値が無い画面で「前年比」とだけ表示すると、本来の
     /// 値ではない指標(NFP等)では誤った説明になるため)。
     @ViewBuilder private var results: some View {
         if isLocked {
@@ -209,7 +209,7 @@ struct EventDetailCards: View {
     /// `attributionNotice`に出る。
     private func policyRateResults(_ policyRate: PolicyRate) -> some View {
         VStack(spacing: 2) {
-            NotoText.text("フェデラルファンド金利の誘導目標レンジ", size: 7)
+            NotoText.text("フデレナーフッコ金利の誘導目標レンジ", size: 7)
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -283,18 +283,17 @@ struct EventDetailCards: View {
             }
         }
         // HQ指示(2026-10-12、4回目、参考画像)「結果予想の縦幅の違い」:
-        // 8→6に詰めてカードの高さを参考画像に合わせた。
+        // 8→6に詳めてカードの高さを参考画像に合わせた。
         // HQ指示(2026-10-13)「要人発言の発言枠が広すぎるから縦幅をもう
-        // 少し小さくして」: 6→4→2にさらに詰め、`summaryCardMinHeight`も
-        // 合わせて下げた(このカードの内容自体は新しいminHeightより
-        // わずかに低いだけなので、この縮小をしないと従来どおり
+        // 少し小さくして」: 6→4→2にさらに詳め、`summaryCardMinHeight`も
+        // 合わせて下げた(この縮小をしないと従来どおり
         // `results`側だけ元の高さのまま残り、`statementCard`との位置が
         // また揃わなくなる)。
         // HQ指示(2026-10-26)「前年比と前月比の枠をもう少し小さくして、
         // それに合わせて中の文字サイズも小さく。下が見切れている」:
         // 前年比/前月比の2段構成になって以来カードが縦に伸び、画面下部
         // (値動き表・次回発表予定)が1画面に収まらなくなっていた。行間・
-        // 文字サイズ(`resultsRow`・`resultColumn`)を全体的に少し詰めた。
+        // 文字サイズ(`resultsRow`・`resultColumn`)を全体的に少し詳めた。
         .padding(.vertical, 1)
         // HQ指示(2026-10-12、8回目)「要人発言の通貨ペアはイベント詳細と
         // 同じ位置にして」: 要人発言側の`statementCard`(発言内容)はこの
@@ -395,7 +394,7 @@ struct EventDetailCards: View {
     private func resultColumn(_ title: String, value: Double?, unit: String?, decimals: Int?, note: String?, placeholder: String = "--") -> some View {
         // HQ指示(2026-10-09)「結果、予想、前回と数字、前回比を大きく中央に」。
         // HQ指示(2026-10-26)「枠をもう少し小さくして、文字サイズも小さく」:
-        // 前年比/前月比の2段構成でカードが縦に伸びたため、9.5/17/8→8.5/15/7に詰めた。
+        // 前年比/前月比の2段構成でカードが縦に伸びたため、9.5/17/8→8.5/15/7に詳めた。
         VStack(alignment: .center, spacing: 2) {
             NotoText.text(title, size: 8.5).foregroundStyle(SettingsCardStyle.subtitleColor)
             Text(value.map { ValueFormat.withUnit($0, unit: unit, decimals: decimals) } ?? placeholder)
@@ -417,13 +416,13 @@ struct EventDetailCards: View {
     /// そのまま(`%`)表示するが、HQ指示(2026-11-01)で率の差分は「ポイント」と表示する
     /// (対象: US_CPI・US_CORE_CPI・US_PPI・US_CORE_PPI・US_AVG_HOURLY_EARNINGS・
     /// US_UNEMPLOYMENT_RATE・EU_HICP・EU_UNEMPLOYMENT_RATE。いずれもAPIの`unit`は`%`で
-    /// 共通のため、指標コードではなく`unit`文字列だけで判別できる)。NFP(`unit`は`千人`/`K`)は
+    /// 共通のため、指標コードではなく`unit`文字列だけで判別できる)。NFP(`unit`は千人/K)は
     /// `ValueFormat.withUnit`の既存の万人変換がそのまま使えるため対象外。
     private static func diffUnit(for unit: String?) -> String? {
         unit == "%" ? "ポイント" : unit
     }
 
-    /// 「(前回比 -0.2ポイント)」。結果と前回がそろっているときだけ。
+    /// 「（前回比 -0.2ポイント）」。結果と前回がそろっているときだけ。
     /// `decimals`(api-design v1.46)があれば、表示の桁に丸めた結果と前回どうしの差にする
     /// (結果3.74・前回3.36は、表示の3.7と3.4に合わせて「+0.3」。丸める前の差0.38から「+0.4」とはしない)。
     static func changeFromPrevious(actual: Double?, previous: Double?, unit: String?, decimals: Int? = nil) -> String? {
@@ -444,7 +443,7 @@ struct EventDetailCards: View {
     }
 
     /// HQ指示(2026-10-09)「縦線と横線を交わらせたきれいな表に」: どのマスも同じ幅・
-    /// 高さの枠で囲み、隣どうしの線を重ねて1本の罫線にする(経済カレンダーと同じ作り)。
+    /// 高さの枠で囲み、隣どうしの線を重ねて1本の線にする(経済カレンダーと同じ作り)。
     private var reactionTable: some View {
         // HQ指示(2026-10-12、7回目)「文字部分に背景色がある/枠があるので
         // 消して」: 見出しを表の枠(角丸カード)の外に出し、下線も外した
@@ -527,7 +526,7 @@ struct EventDetailCards: View {
         // HQ指示(2026-10-12、2回目)「主要通貨ペアの値動きの部分が色付け
         // されてる、そこを無くして」: 表全体のグラデーション塗り
         // (`bodyGradient`)を外し、カード背景にそのまま溶け込ませた
-        // (マス目の罫線・見出し行の色は残す)。
+        // (マス目の線。見出し行の色は残す)。
         // HQ指示(2026-10-12、6回目)「だから表の角を丸くしてと言っている」:
         // タイトル行には塗りが無いため、`.clipShape`だけでは切り取る対象が
         // 無く丸みが見えていなかった。他のカードと同じ中立なカード背景
@@ -599,7 +598,41 @@ struct EventDetailCards: View {
                 linkCard(icon: "clock.arrow.circlepath", title: "過去イベント比較")
             }
             .buttonStyle(SettingsRowPressStyle())
+            // HQ指示(2026-11-06「Pro イベント別トレード戦略分析」): 過去5回の発表の値動きの傾向(Pro)。FREE は開いた先でロック表示。
+            // 既存の行(過去イベント比較)と同じカードの形で、高さだけ押える(1画面に収める)。
+            NavigationLink(value: AppRoute.eventStrategyAnalysis(
+                eventId: response.event.id,
+                indicatorName: response.event.indicatorName,
+                fxPairId: pairId
+            )) {
+                strategyLinkCard
+            }
+            .buttonStyle(SettingsRowPressStyle())
+            .accessibilityIdentifier("eventDetailStrategyAnalysisLink")
         }
+    }
+
+    private var strategyLinkCard: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "chart.xyaxis.line")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(V5P.cyan)
+                .frame(width: 18)
+            NotoText.text("トレード戦略分析", size: 9).foregroundStyle(.white)
+            NotoText.text("Pro", size: 6.5)
+                .foregroundStyle(V5P.cyan)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .overlay(Capsule().stroke(V5P.cyan, lineWidth: 0.6))
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(V5P.cyan)
+        }
+        .padding(.horizontal, 10)
+        .frame(width: 214, height: 26)
+        .background(V5CardGradient.fill, in: RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
+        .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
     }
 
     @ViewBuilder private var nextReleaseFooter: some View {
@@ -611,7 +644,7 @@ struct EventDetailCards: View {
         case .loading:
             // HQ指摘(2026-10-28)「次回発表の表示にラグがある」対応: 日時が
             // 確定するまでの間も同じ高さのプレースホルダーを出し、取得完了時に
-            // カードが高さ0から突然現れてレイアウトがガタつくのを防ぐ。
+            // カードが高さを0から影然現れてレイアウトがガタつくのを防ぐ。
             nextReleaseFooterCard {
                 NotoText.text("確認中…", size: 8.5).foregroundStyle(SettingsCardStyle.subtitleColor)
             }
@@ -637,7 +670,7 @@ struct EventDetailCards: View {
     private static let pairColumnWidth: CGFloat = 80
     private static let valueColumnWidth: CGFloat = (214 - 80) / 3
     // HQ指示(2026-10-26)「次回発表予定が1画面に収まっていない」に合わせて
-    // 22/28→20/26に詰めた(4行分で8pt節約)。
+    // 22/28→20/26に詳めた(4行分で8pt節約)。
     private static let headerHeight: CGFloat = 20
     private static let rowHeight: CGFloat = 26
 
@@ -653,7 +686,7 @@ struct EventDetailCards: View {
     /// speechRow`の色分けに合わせた仮データ表)と同じ配色に揃えた。
     @ViewBuilder private func pipsText(_ reaction: EventReactionSummary?) -> some View {
         if let reaction, reaction.analysisStatus == .ready, let pips = reaction.pips {
-            // HQ指示(2026-10-13、2回目)「-5.2の文字間隔をもう少し詰めて」。
+            // HQ指示(2026-10-13、2回目)「-5.2の文字間隔をもう少し詳めて」。
             Text(ValueFormat.number(pips, fractionDigits: 1, signed: true))
                 .font(.system(size: 10, weight: .semibold))
                 .monospacedDigit()
