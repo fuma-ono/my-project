@@ -155,9 +155,10 @@ final class StrategyAnalysisTests: XCTestCase {
 
     /// HQ指示(2026-11-07「画面デザインの変更」): 色分けした件数タイルに添えるパーセンテージ。
     func testPercentOfSamples() {
-        XCTAssertEqual(StrategyAnalysisText.percentOfSamples(2, 4), "50.0%")
-        XCTAssertEqual(StrategyAnalysisText.percentOfSamples(1, 4), "25.0%")
-        XCTAssertEqual(StrategyAnalysisText.percentOfSamples(0, 4), "0.0%")
+        XCTAssertEqual(StrategyAnalysisText.percentOfSamples(2, 4), "50%")
+        XCTAssertEqual(StrategyAnalysisText.percentOfSamples(1, 4), "25%")
+        XCTAssertEqual(StrategyAnalysisText.percentOfSamples(0, 4), "0%")
+        XCTAssertEqual(StrategyAnalysisText.percentOfSamples(1, 3), "33.3%")
         // samplesが0(作れない)なら値を作らない。
         XCTAssertEqual(StrategyAnalysisText.percentOfSamples(0, 0), "--")
     }

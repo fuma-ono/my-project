@@ -216,7 +216,7 @@ enum StrategyAnalysisText {
         }
     }
 
-    /// 件数の割合(例: "50.0%")。新しい画面デザイン(HQ指示 2026-11-07「画面デザインの変更」)の
+    /// 件数の割合(例: "50%"、割り切れない場合は小数第1位まで "33.3%")。新しい画面デザイン(HQ指示 2026-11-07「画面デザインの変更」)の
     /// 色分けした件数タイルに添える。`samples`が0のときは作らない("--")。
     static func percentOfSamples(_ count: Int, _ samples: Int) -> String {
         guard samples > 0 else { return "--" }
