@@ -722,6 +722,10 @@ struct HistoricalComparisonView: View {
             tableBody
         }
         .frame(width: 214, height: height, alignment: .topLeading)
+        // HQ指摘(2026-11-09)「pipsが見えてない」確認用: UIテストがこの表を横にスクロールして
+        // pips列を画面に入れた状態を撮れるようにする(`ScreenshotTests.swift`参照)。表の内容
+        // そのものは変更していない。
+        .accessibilityIdentifier("historyPortraitTable")
     }
 
     /// 表の高さ。行が少なければ行の分だけ、多ければ画面に入る高さで止めて中をスクロールする。

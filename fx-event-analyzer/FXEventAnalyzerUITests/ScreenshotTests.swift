@@ -217,6 +217,9 @@ final class ScreenshotTests: XCTestCase {
                 waitForAnyElement(containing: "トレード戦略分析はPROプラン限定の機能です", timeout: 10),
                 "The upgrade confirmation did not appear for FREE"
             )
+            // HQ指摘(2026-11-09)「無料プランが押した後のポップが見えてない」: 挙動の確認(waitForAnyElement/
+            // XCTAssert)はあったが、画像としての証拠が無かったため追加。
+            capture("07c-StrategyAnalysisUpgradePrompt")
             XCTAssertFalse(
                 app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "過去5回の分析結果")).firstMatch.exists,
                 "FREE must not navigate to the analysis screen"
@@ -281,6 +284,22 @@ final class ScreenshotTests: XCTestCase {
         // 2026-10-14: 参考画像どおりの表に作り直したので、表の見出し「前回値」で待つ。
         XCTAssertTrue(waitForAnyElement(containing: "前回値", timeout: 15), "Historical Comparison did not load")
         capture("09-HistoricalComparison")
+
+        // HQ指摘(2026-11-09)「pipsが見えてない」: 前年比・前月比を両方持つ指標(CPI等)は表の実寸
+        // (299pt)が表示幅(214pt)を超え、初期表示ではpips(1分・5分・15分)が画面外になる(既存の
+        // 横スクロール設計、HQ指示 2026-10-25)。pips列の中央揃え修正(2026-11-09)を目視確認できる
+        // よう、表を横にスクロールしてpipsを表示させてから撮り、元の位置に戻す(以降のテストの
+        // 前提(表の左端から始まる状態)を崩さないため)。
+        let portraitTable = app.scrollViews["historyPortraitTable"]
+        if portraitTable.waitForExistence(timeout: 5) {
+            portraitTable.swipeLeft()
+            XCTAssertTrue(waitForAnyElement(containing: "(pips)", timeout: 5), "Did not scroll the portrait table to reveal the pips columns")
+            capture("09c-HistoricalComparison-Pips")
+            portraitTable.swipeRight()
+            XCTAssertTrue(waitForAnyElement(containing: "前回値", timeout: 5), "Did not scroll the portrait table back to its original position")
+        } else {
+            XCTFail("The portrait history table was not found")
+        }
 
         // HQ指示(2026-10-03、画面構成全面更新)「旧『過去イベント詳細』の
         // 独立画面は作成しない」により、過去の発表行は独立画面ではなく
