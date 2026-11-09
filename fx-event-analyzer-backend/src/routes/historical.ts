@@ -69,7 +69,9 @@ function toComparisonRows<T extends { event_id: string }>(
   });
 }
 
-const strategyQuerySchema = z.object({ fx_pair_id: z.string().uuid().optional() });
+// HQ指示(2026-11-09 P0): z.string().uuid()(zod v4 は RFC の版・variant まで確かめる)だと、seed・DEV の通貨ペアの id
+// (20000000-0000-0000-0000-000000000002 など)が 422 になっていた。ほかのルート(schemas/speeches.ts 等)と同じ z.guid()。
+const strategyQuerySchema = z.object({ fx_pair_id: z.guid().optional() });
 
 export function registerHistoricalRoutes(app: FastifyInstance): void {
   // GET /events/{event_id}/history — api-design.md §20.
