@@ -1,3 +1,4 @@
+import type { StrategyPairCandidate } from '../domain/eventStrategyAnalysis.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface HistoricalEventRow {
@@ -148,10 +149,12 @@ export async function listReleasedEventsBefore(
   indicatorId: string,
   beforeIso: string,
   limit: number,
-): Promise<HistoricalEventRow[]> {
+): Promise<(HistoricalEventRow & { release_datetime_precision: string })[]> {
   const { data, error } = await supabase
     .from('economic_events')
-    .select(`id, release_datetime, event_snapshots!inner(${SNAPSHOT_VALUE_COLUMNS}, snapshot_type)`)
+    .select(
+      `id, release_datetime, release_datetime_precision, event_snapshots!inner(${SNAPSHOT_VALUE_COLUMNS}, snapshot_type)`,
+    )
     .eq('indicator_id', indicatorId)
     .eq('status', 'RELEASED')
     .eq('event_snapshots.snapshot_type', 'RELEASE')
@@ -163,8 +166,63 @@ export async function listReleasedEventsBefore(
   return (data ?? []).map((row) => ({
     event_id: row.id,
     release_datetime: row.release_datetime,
+    release_datetime_precision: row.release_datetime_precision,
     ...releaseSnapshotOf(row.event_snapshots),
   }));
+}
+
+/**
+ * 戦略分析の通貨ペアの候補(HQ指示 2026-11-09 P0): 指標の関連の通貨ペア(indicator_fx_pairs が有効なもの)を、ペアの
+ * 有効・無効と通貨つきで返す。使えるかどうか・並び順は domain/eventStrategyAnalysis.ts の selectDefaultStrategyPair。
+ */
+export async function listStrategyPairCandidates(
+  supabase: SupabaseClient,
+  indicatorId: string,
+): Promise<StrategyPairCandidate[]> {
+  const { data, error } = await supabase
+    .from('indicator_fx_pairs')
+    .select('priority, fx_pairs!inner(id, symbol, base_currency, quote_currency, is_active)')
+    .eq('indicator_id', indicatorId)
+    .eq('is_active', true);
+  if (error) throw error;
+  return (data ?? []).map((row) => {
+    const pair = row.fx_pairs as unknown as {
+      id: string;
+      symbol: string;
+      base_currency: string;
+      quote_currency: string;
+      is_active: boolean;
+    };
+    return {
+      fx_pair_id: pair.id,
+      symbol: pair.symbol,
+      base_currency: pair.base_currency,
+      quote_currency: pair.quote_currency,
+      is_active: pair.is_active,
+      priority: Number(row.priority),
+    };
+  });
+}
+
+/** 指定された通貨ペア(?fx_pair_id)。有効・無効と通貨つき。無ければ null。 */
+export async function getStrategyPair(
+  supabase: SupabaseClient,
+  fxPairId: string,
+): Promise<Omit<StrategyPairCandidate, 'priority'> | null> {
+  const { data, error } = await supabase
+    .from('fx_pairs')
+    .select('id, symbol, base_currency, quote_currency, is_active')
+    .eq('id', fxPairId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    fx_pair_id: data.id,
+    symbol: data.symbol,
+    base_currency: data.base_currency,
+    quote_currency: data.quote_currency,
+    is_active: data.is_active,
+  };
 }
 
 export interface StrategyReactionRow {

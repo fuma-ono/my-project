@@ -18,7 +18,9 @@ import {
   listMinuteCandleCompleteness,
   listRecentReleasedEventIds,
   listReleasedEventsForIndicator,
+  getStrategyPair,
   listReleasedEventsBefore,
+  listStrategyPairCandidates,
   listStrategyReactions,
 } from '../repositories/historicalRepository.js';
 import { listReactionsForPair } from '../repositories/reactionsRepository.js';
@@ -29,8 +31,13 @@ import { valueDecimalsForIndicator } from '../domain/valueDecimals.js';
 import { capRowRange, historyLimitFor, planFromFeatures, planLimitsFor } from '../domain/planLimits.js';
 import { comparisonQuerySchema } from '../schemas/historical.js';
 import { z } from 'zod';
-import { buildStrategyAnalysis, STRATEGY_SAMPLE_WINDOW, STRATEGY_TIMEFRAMES } from '../domain/eventStrategyAnalysis.js';
-import { getFxPairById } from '../repositories/reactionsRepository.js';
+import {
+  buildStrategyAnalysis,
+  isUsableStrategyPair,
+  selectDefaultStrategyPair,
+  STRATEGY_SAMPLE_WINDOW,
+  STRATEGY_TIMEFRAMES,
+} from '../domain/eventStrategyAnalysis.js';
 import { buildMeta, parsePagination, rangeFor } from '../utils/pagination.js';
 
 const ALL_TIMEFRAMES = ['1m', '5m', '15m', '30m', '60m'] as const;
@@ -156,12 +163,24 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
         analysis: null,
       };
     }
-    const related = await listRelatedFxPairs(app.supabase, event.indicator_id);
-    const fxPairId = query.fx_pair_id ?? related[0]?.fx_pair_id ?? null;
-    const pair = fxPairId ? await getFxPairById(app.supabase, fxPairId) : null;
+    // HQ指示(2026-11-09 P0「通貨ペアの選択・並び順」): 使えるペアは、有効で指標の通貨を含むものだけ(値動きはそのペアに
+    // しか計算されない)。?fx_pair_id がそれ以外(存在しない・無効・指標の通貨を含まない)なら 404。指定が無ければ
+    // 関連の通貨ペアから selectDefaultStrategyPair(priority → 主要ペアの順 → symbol)。
+    let pair: { fx_pair_id: string; symbol: string } | null;
+    if (query.fx_pair_id) {
+      const requested = await getStrategyPair(app.supabase, query.fx_pair_id);
+      if (!requested || !isUsableStrategyPair(requested, event.currency_code)) {
+        throw new ApiError('FX_PAIR_NOT_FOUND', 'FX pair not found.');
+      }
+      pair = requested;
+    } else {
+      pair = selectDefaultStrategyPair(
+        await listStrategyPairCandidates(app.supabase, event.indicator_id),
+        event.currency_code,
+      );
+    }
     if (!pair) {
-      // 比べる通貨ペアが無い指標(関連の通貨ペアが未設定)・存在しない通貨ペア: 何も推測しない。
-      if (query.fx_pair_id) throw new ApiError('FX_PAIR_NOT_FOUND', 'FX pair not found.');
+      // 比べる通貨ペアが無い指標(使える関連の通貨ペアが無い): 何も推測しない。
       return { event_id: eventId, available: true, required_entitlement: null, fx_pair: null, analysis: null };
     }
     const releases = await listReleasedEventsBefore(
@@ -173,15 +192,16 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
     const reactions = await listStrategyReactions(
       app.supabase,
       releases.map((r) => r.event_id),
-      pair.id,
+      pair.fx_pair_id,
       STRATEGY_TIMEFRAMES,
     );
     // HQ指示(2026-11-07「1分足欠損への対応」): 15分・60分のブレイク判定だけに使う、1分足の欠損確認(1分・5分判定には使わない)。
-    const completeness = await listMinuteCandleCompleteness(app.supabase, releases, pair.id);
+    const completeness = await listMinuteCandleCompleteness(app.supabase, releases, pair.fx_pair_id);
     const analysis = buildStrategyAnalysis(
       releases.map((release) => ({
         event_id: release.event_id,
         release_datetime: release.release_datetime,
+        release_datetime_precision: release.release_datetime_precision,
         forecast: release.forecast === null ? null : Number(release.forecast),
         actual: release.actual === null ? null : Number(release.actual),
         surprise: release.surprise === null ? null : Number(release.surprise),
@@ -197,7 +217,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
       event_id: eventId,
       available: true,
       required_entitlement: null,
-      fx_pair: { fx_pair_id: pair.id, symbol: pair.symbol },
+      fx_pair: { fx_pair_id: pair.fx_pair_id, symbol: pair.symbol },
       analysis,
     };
   });

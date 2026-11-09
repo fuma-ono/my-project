@@ -229,6 +229,8 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
       pattern_15m: { continuation: 3, reversal: 1, samples: 4 },
       breaks_15m: { high: 2, low: 2, both: 0, neither: 0, samples: 4 },
       sell_the_fact: { occurred: 2, samples: 3 },
+      // HQ指示(2026-11-09 P0): 初動は USD 高 → 15分で USD 安 は 2回目(+4 → -9)だけ。1回目は続伸、3回目は初動が USD 安
+      sell_the_fact_after_initial_rise: { occurred: 1, samples: 3 },
     });
   });
 
@@ -243,6 +245,7 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
       breaks_60m: null,
       pattern_15m: null,
       sell_the_fact: null,
+      sell_the_fact_after_initial_rise: null,
     });
   });
 
@@ -250,6 +253,164 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
     const headers = await asUser('PRO');
     expect((await get(randomUUID(), headers)).status).toBe(404);
     expect((await get(targetId, headers, `?fx_pair_id=${randomUUID()}`)).status).toBe(404);
+  });
+
+  describe('通貨ペアの選択・並び順(HQ指示 2026-11-09 P0)', () => {
+    let eurusdId = '';
+    let eurjpyId = '';
+
+    beforeAll(async () => {
+      const { data, error } = await ctx.serviceClient
+        .from('fx_pairs')
+        .select('id, symbol')
+        .in('symbol', ['EURUSD', 'EURJPY']);
+      if (error) throw error;
+      eurusdId = data.find((p) => p.symbol === 'EURUSD')!.id;
+      eurjpyId = data.find((p) => p.symbol === 'EURJPY')!.id;
+      // USDJPY と同じ priority(1)で EURUSD も関連づける。並びは入れた順でなく、主要ペアの順(USDJPY が先)で決まる
+      const { error: linkError } = await ctx.serviceClient
+        .from('indicator_fx_pairs')
+        .insert({ indicator_id: indicatorId, fx_pair_id: eurusdId, priority: 1 });
+      if (linkError) throw linkError;
+    });
+
+    afterAll(async () => {
+      await ctx.serviceClient
+        .from('indicator_fx_pairs')
+        .delete()
+        .eq('indicator_id', indicatorId)
+        .eq('fx_pair_id', eurusdId);
+    });
+
+    it('同じ priority のペアがあっても、既定のペアは毎回 USDJPY(主要ペアの順)', async () => {
+      const headers = await asUser('PRO');
+      for (let i = 0; i < 3; i += 1) {
+        const { body } = await get(targetId, headers);
+        expect(body.fx_pair).toEqual({ fx_pair_id: usdjpyId, symbol: 'USDJPY' });
+      }
+    });
+
+    it('?fx_pair_id は、有効で指標の通貨(USD)を含むペアなら使う。含まないペア(EURJPY)は 404', async () => {
+      const headers = await asUser('PRO');
+      const eurusd = await get(targetId, headers, `?fx_pair_id=${eurusdId}`);
+      expect(eurusd.status).toBe(200);
+      expect(eurusd.body.fx_pair).toEqual({ fx_pair_id: eurusdId, symbol: 'EURUSD' });
+      // 修正前は EURJPY でも 200 で、値動きが計算されないペアの「全部 null」が返っていた
+      const eurjpy = await get(targetId, headers, `?fx_pair_id=${eurjpyId}`);
+      expect(eurjpy.status).toBe(404);
+    });
+  });
+
+  describe('EXACT でない発表は Sell the Fact に入れない(HQ指示 2026-11-09 P0)', () => {
+    let approxIndicatorId = '';
+    const approxTargetId = randomUUID();
+    const approxPast = [1, 2, 3].map((n) => ({ id: randomUUID(), at: `2091-0${n}-10T10:00:00.000Z` }));
+
+    beforeAll(async () => {
+      const { data, error } = await ctx.serviceClient
+        .from('economic_indicators')
+        .insert({
+          code: `IT_STRATEGY_APPROX_${runId}`,
+          name: `結合テスト用指標(戦略分析・時刻がおおよそ) ${runId}`,
+          country_code: 'US',
+          currency_code: 'USD',
+          importance: 'HIGH',
+          frequency: 'MONTHLY',
+          unit: '%',
+          favorable_direction: 'HIGHER_IS_POSITIVE',
+          is_active: true,
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      approxIndicatorId = data.id;
+      const { error: linkError } = await ctx.serviceClient
+        .from('indicator_fx_pairs')
+        .insert({ indicator_id: approxIndicatorId, fx_pair_id: usdjpyId, priority: 1 });
+      if (linkError) throw linkError;
+      const event = (id: string, at: string, status: 'RELEASED' | 'SCHEDULED') => ({
+        id,
+        indicator_id: approxIndicatorId,
+        provider: 'integration-test',
+        provider_event_id: `strategy-approx-${runId}-${id}`,
+        release_datetime: at,
+        release_datetime_precision: 'APPROXIMATE',
+        importance: 'HIGH',
+        status,
+        data_status: status === 'RELEASED' ? 'AVAILABLE' : 'PENDING',
+      });
+      const { error: eventError } = await ctx.serviceClient
+        .from('economic_events')
+        .insert([
+          ...approxPast.map((p) => event(p.id, p.at, 'RELEASED')),
+          event(approxTargetId, '2091-12-10T10:00:00.000Z', 'SCHEDULED'),
+        ]);
+      if (eventError) throw eventError;
+      // 3回とも結果が予想を上回った(USD にとって良い)
+      const { error: snapshotError } = await ctx.serviceClient.from('event_snapshots').insert(
+        approxPast.map((p) => ({
+          event_id: p.id,
+          snapshot_type: 'RELEASE',
+          forecast: 3.0,
+          actual: 3.2,
+          previous: 3.0,
+          unit: '%',
+          source: 'integration-test',
+          captured_at: '2091-01-01T00:00:00Z',
+          surprise: 0.2,
+          surprise_direction: 'POSITIVE',
+        })),
+      );
+      if (snapshotError) throw snapshotError;
+      // APPROXIMATE は1分の値動きが作られず(domain/dataQuality.ts)、15分だけがある。15分後は USD 安
+      const { error: reactionError } = await ctx.serviceClient.from('event_price_reactions').insert(
+        approxPast.map((p) => ({
+          event_id: p.id,
+          fx_pair_id: usdjpyId,
+          timeframe: '15m',
+          pips: -9,
+          max_upward: 0,
+          max_downward: -0.1,
+          data_status: 'AVAILABLE',
+        })),
+      );
+      if (reactionError) throw reactionError;
+    });
+
+    afterAll(async () => {
+      await ctx.serviceClient
+        .from('event_price_reactions')
+        .delete()
+        .in(
+          'event_id',
+          approxPast.map((p) => p.id),
+        );
+      await ctx.serviceClient.from('economic_events').delete().eq('id', approxTargetId);
+      if (approxIndicatorId !== '')
+        await ctx.serviceClient.from('economic_indicators').update({ is_active: false }).eq('id', approxIndicatorId);
+    });
+
+    it('15分の値動きと好結果があっても、発表ごと・要約とも Sell the Fact は null', async () => {
+      const { status, body } = await get(approxTargetId, await asUser('PRO'));
+      expect(status).toBe(200);
+      const analysis = body.analysis as {
+        status: string;
+        releases: Record<string, unknown>[];
+        summary: Record<string, unknown>;
+      };
+      expect(analysis.releases).toHaveLength(3);
+      for (const release of analysis.releases) {
+        expect(release).toMatchObject({
+          pips_15m: -9,
+          surprise_direction: 'POSITIVE',
+          sell_the_fact: null,
+          sell_the_fact_after_initial_rise: null,
+        });
+      }
+      // 修正前は「3回中3回」と出ていた
+      expect(analysis.summary).toMatchObject({ sell_the_fact: null, sell_the_fact_after_initial_rise: null });
+      expect(analysis.status).toBe('DATA_PREPARING');
+    });
   });
 
   describe('listMinuteCandleCompleteness (1分足の欠損・UNVERIFIEDの除外、HQ指示 2026-11-07)', () => {

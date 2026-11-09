@@ -9,7 +9,10 @@ import {
   analyzeRelease,
   buildStrategyAnalysis,
   currencySide,
+  isUsableStrategyPair,
+  selectDefaultStrategyPair,
   STRATEGY_MINIMUM_SAMPLES,
+  type StrategyPairCandidate,
   type StrategyReactionInput,
   type StrategyReleaseInput,
 } from '../../src/domain/eventStrategyAnalysis.js';
@@ -30,10 +33,12 @@ function release(
   reactions: StrategyReactionInput[],
   surpriseDirection: string | null = null,
   completeness: { complete15m?: boolean; complete60m?: boolean } = {},
+  precision = 'EXACT',
 ): StrategyReleaseInput {
   return {
     event_id: id,
     release_datetime: `2026-0${id.slice(-1)}-10T12:30:00.000Z`,
+    release_datetime_precision: precision,
     forecast: surpriseDirection ? 3.0 : null,
     actual: surpriseDirection ? 3.1 : null,
     surprise: surpriseDirection ? 0.1 : null,
@@ -115,6 +120,54 @@ describe('analyzeRelease', () => {
     expect(analyzeRelease(release('e1', sold, 'NEGATIVE'), 'BASE').sell_the_fact).toBeNull();
     expect(analyzeRelease(release('e1', sold, null), 'BASE').sell_the_fact).toBeNull();
     expect(analyzeRelease(release('e1', sold, 'POSITIVE'), null).sell_the_fact).toBeNull();
+  });
+
+  describe('HQ指示(2026-11-09 P0): Sell the Fact の精度・2つの定義', () => {
+    const sold = [reaction('1m', 3, 0.03, 0), reaction('15m', -12, 0.03, -0.12)];
+
+    it('発表時刻が EXACT でない発表は、どちらの Sell the Fact も判定しない(15分の値動きがあっても)', () => {
+      // APPROXIMATE は1分の値動きが作られず、15分だけがある(domain/dataQuality.ts)
+      const only15 = [reaction('15m', -12, 0.03, -0.12)];
+      for (const precision of ['APPROXIMATE', 'DATE_ONLY', 'UNKNOWN']) {
+        const row = analyzeRelease(release('e1', only15, 'POSITIVE', {}, precision), 'BASE');
+        expect(row.sell_the_fact, precision).toBeNull();
+        expect(row.sell_the_fact_after_initial_rise, precision).toBeNull();
+      }
+      // 同じ値動きでも EXACT なら判定する
+      expect(analyzeRelease(release('e1', only15, 'POSITIVE'), 'BASE').sell_the_fact).toBe(true);
+    });
+
+    it('「好結果で初動は通貨高、その後15分で通貨安」: 通貨ペアのどちら側かを見る', () => {
+      // USDJPY(USD = BASE): 1分 +3(USD 高)→ 15分 -12(USD 安)
+      expect(analyzeRelease(release('e1', sold, 'POSITIVE'), 'BASE').sell_the_fact_after_initial_rise).toBe(true);
+      // EURUSD(USD = QUOTE): 同じ動きは 1分 USD 安 → 15分 USD 高
+      expect(analyzeRelease(release('e1', sold, 'POSITIVE'), 'QUOTE').sell_the_fact_after_initial_rise).toBe(false);
+      // QUOTE で 1分 -3(USD 高)→ 15分 +12(USD 安)
+      const quoteSold = [reaction('1m', -3, 0, -0.0003), reaction('15m', 12, 0.0012, -0.0003)];
+      expect(analyzeRelease(release('e1', quoteSold, 'POSITIVE'), 'QUOTE').sell_the_fact_after_initial_rise).toBe(true);
+    });
+
+    it('初動が通貨安・横ばいなら「初動は通貨高」の方は false(好結果なのに15分後に通貨安の方は true)', () => {
+      const weakFirst = analyzeRelease(
+        release('e1', [reaction('1m', -2, 0, -0.02), reaction('15m', -12, 0, -0.12)], 'POSITIVE'),
+        'BASE',
+      );
+      expect(weakFirst.sell_the_fact).toBe(true);
+      expect(weakFirst.sell_the_fact_after_initial_rise).toBe(false);
+      const flatFirst = analyzeRelease(
+        release('e1', [reaction('1m', 0, 0, 0), reaction('15m', -12, 0, -0.12)], 'POSITIVE'),
+        'BASE',
+      );
+      expect(flatFirst.sell_the_fact_after_initial_rise).toBe(false);
+    });
+
+    it('1分後の値が無ければ「初動は通貨高」の方は判定しない(15分だけの判定は残る)', () => {
+      const row = analyzeRelease(release('e1', [reaction('15m', -12, 0, -0.12)], 'POSITIVE'), 'BASE');
+      expect(row.sell_the_fact).toBe(true);
+      expect(row.sell_the_fact_after_initial_rise).toBeNull();
+      expect(analyzeRelease(release('e1', sold, 'NEGATIVE'), 'BASE').sell_the_fact_after_initial_rise).toBeNull();
+      expect(analyzeRelease(release('e1', sold, 'POSITIVE'), null).sell_the_fact_after_initial_rise).toBeNull();
+    });
   });
 
   describe('1分足の欠損・UNVERIFIEDへの対応(HQ指示 2026-11-07)', () => {
@@ -200,6 +253,22 @@ describe('buildStrategyAnalysis', () => {
     expect(analysis.summary.breaks_15m).toEqual({ high: 3, low: 2, both: 0, neither: 0, samples: 5 });
     // POSITIVE は e1(15分 +10 = USD 高)・e2(-9 = USD 安)・e3(-2 = USD 安) → 3回のうち2回
     expect(analysis.summary.sell_the_fact).toEqual({ occurred: 2, samples: 3 });
+    // 初動は通貨高 → 15分で通貨安: e1(+5→+10 いいえ)・e2(-4 初動が通貨安 いいえ)・e3(+3→-2 はい) → 3回のうち1回
+    expect(analysis.summary.sell_the_fact_after_initial_rise).toEqual({ occurred: 1, samples: 3 });
+  });
+
+  it('EXACT でない発表は Sell the Fact の分母に入らない(HQ指示 2026-11-09 P0)', () => {
+    const approx = (id: string) =>
+      release(id, [reaction('15m', -9, 0, -0.1), reaction('60m', -9, 0, -0.1)], 'POSITIVE', {}, 'APPROXIMATE');
+    const analysis = buildStrategyAnalysis(
+      [full('e1', 5, 10, 0.05, 0.12, -0.01, -0.01, 'POSITIVE'), approx('e2'), approx('e3'), approx('e4')],
+      'USDJPY',
+      'USD',
+    );
+    // 修正前は APPROXIMATE の3回が15分だけで判定され、「4回中3回」と出ていた
+    expect(analysis.releases.slice(1).every((r) => r.sell_the_fact === null)).toBe(true);
+    expect(analysis.summary.sell_the_fact).toBeNull();
+    expect(analysis.summary.sell_the_fact_after_initial_rise).toBeNull();
   });
 
   it(`is DATA_PREPARING with no tendency when fewer than ${STRATEGY_MINIMUM_SAMPLES} releases can be compared`, () => {
@@ -216,6 +285,7 @@ describe('buildStrategyAnalysis', () => {
       breaks_60m: null,
       pattern_15m: null,
       sell_the_fact: null,
+      sell_the_fact_after_initial_rise: null,
     });
   });
 
@@ -253,5 +323,47 @@ describe('buildStrategyAnalysis', () => {
     // breaks_15mはe1がnullになるため、判定できたのは2件 → 3件未満でDATA_PREPARING(null)
     expect(analysis.releases[0]!.high_break_15m).toBeNull();
     expect(analysis.summary.breaks_15m).toBeNull();
+  });
+});
+
+describe('通貨ペアの選択・並び順(HQ指示 2026-11-09 P0)', () => {
+  const pair = (
+    symbol: string,
+    priority: number,
+    overrides: Partial<StrategyPairCandidate> = {},
+  ): StrategyPairCandidate => ({
+    fx_pair_id: `id-${symbol}`,
+    symbol,
+    base_currency: symbol.slice(0, 3),
+    quote_currency: symbol.slice(3, 6),
+    is_active: true,
+    priority,
+    ...overrides,
+  });
+
+  it('使えるのは、有効で指標の通貨を含むペアだけ', () => {
+    expect(isUsableStrategyPair(pair('USDJPY', 1), 'USD')).toBe(true);
+    expect(isUsableStrategyPair(pair('EURUSD', 1), 'USD')).toBe(true);
+    expect(isUsableStrategyPair(pair('EURJPY', 1), 'USD')).toBe(false); // USD を含まない(値動きが計算されない)
+    expect(isUsableStrategyPair(pair('USDJPY', 1, { is_active: false }), 'USD')).toBe(false);
+    expect(isUsableStrategyPair(pair('USDJPY', 1), null)).toBe(false);
+  });
+
+  it('既定のペア: 使えないペアを飛ばし、priority → 主要ペアの順 → symbol で決まる(入力の順によらない)', () => {
+    expect(selectDefaultStrategyPair([pair('USDJPY', 1, { is_active: false }), pair('EURUSD', 2)], 'USD')?.symbol).toBe(
+      'EURUSD',
+    );
+    expect(selectDefaultStrategyPair([pair('EURJPY', 1), pair('GBPUSD', 5)], 'USD')?.symbol).toBe('GBPUSD');
+    // 同じ priority: 主要ペアの順(USDJPY → EURUSD → GBPUSD …)。入力の順を入れ替えても同じ
+    const tie = [pair('GBPUSD', 1), pair('EURUSD', 1), pair('USDJPY', 1)];
+    expect(selectDefaultStrategyPair(tie, 'USD')?.symbol).toBe('USDJPY');
+    expect(selectDefaultStrategyPair([...tie].reverse(), 'USD')?.symbol).toBe('USDJPY');
+    // priority が小さい方が先(主要ペアの順より優先)
+    expect(selectDefaultStrategyPair([pair('USDJPY', 2), pair('GBPUSD', 1)], 'USD')?.symbol).toBe('GBPUSD');
+    // 主要ペアの順に無いもの同士は symbol 順
+    expect(selectDefaultStrategyPair([pair('USDSGD', 1), pair('USDHKD', 1)], 'USD')?.symbol).toBe('USDHKD');
+    // 使えるペアが無い
+    expect(selectDefaultStrategyPair([pair('EURJPY', 1)], 'USD')).toBeNull();
+    expect(selectDefaultStrategyPair([], 'USD')).toBeNull();
   });
 });

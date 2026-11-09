@@ -1,3 +1,5 @@
+import { MAJOR_FX_PAIR_ORDER } from './majorFxReactions.js';
+
 /**
  * Pro イベント別トレード戦略分析(HQ指示 2026-11-06「Pro イベント別トレード戦略分析」、api-design v1.48)。
  *
@@ -22,6 +24,12 @@
  * - sell_the_fact: 結果がその通貨にとって良かった(surprise_direction = POSITIVE)のに、15分後にその通貨が売られた方向に
  *   動いた(通貨が通貨ペアの前なら pips < 0、後なら pips > 0)。POSITIVE でない発表・指標の通貨が通貨ペアに無い・
  *   15分後の値が無い場合は null(判定しない)。
+ *   HQ指示(2026-11-09 P0): 発表時刻が EXACT でない発表(APPROXIMATE・DATE_ONLY・UNKNOWN)は判定しない(null)。1分の値動きは
+ *   精度の決まり(domain/dataQuality.ts)で作られないのに、15分の値動きだけで判定されて件数に入っていたため。
+ *   この項目は「好結果なのに15分後に通貨安」(初動は問わない)。
+ * - sell_the_fact_after_initial_rise(HQ指示 2026-11-09 P0): 「好結果で、初動(1分後)は通貨高、その後15分後には通貨安」。
+ *   条件は sell_the_fact と同じ(POSITIVE・EXACT・指標の通貨が通貨ペアにある)に加えて、1分後と15分後の値の両方が要る。
+ *   1分後が通貨高でなかった(横ばいを含む)発表は false(判定はした)。分母は sell_the_fact と同じく「結果が良かった発表」。
  * 傾向の要約(summary)は、その項目を判定できた発表が STRATEGY_MINIMUM_SAMPLES 回以上あるときだけ数える(少なければ null =
  * 「分析データ準備中」。傾向を断定しない)。
  */
@@ -45,6 +53,8 @@ export interface StrategyReleaseInput {
   actual: number | null;
   surprise: number | null;
   surprise_direction: string | null;
+  /** economic_events.release_datetime_precision。EXACT 以外は Sell the Fact を判定しない(HQ指示 2026-11-09 P0)。 */
+  release_datetime_precision: string;
   reactions: readonly StrategyReactionInput[];
   /** HQ指示(2026-11-07): 発表から15分・60分の窓に1分足が欠けなく(15本・60本)あり、どれもUNVERIFIEDでないか。 */
   minuteCompleteness15m: boolean;
@@ -70,6 +80,7 @@ export interface StrategyReleaseRow {
   high_break_60m: boolean | null;
   low_break_60m: boolean | null;
   sell_the_fact: boolean | null;
+  sell_the_fact_after_initial_rise: boolean | null;
 }
 
 export interface BreakSummary {
@@ -86,6 +97,7 @@ export interface StrategySummary {
   breaks_60m: BreakSummary | null;
   pattern_15m: { continuation: number; reversal: number; samples: number } | null;
   sell_the_fact: { occurred: number; samples: number } | null;
+  sell_the_fact_after_initial_rise: { occurred: number; samples: number } | null;
 }
 
 export interface StrategyAnalysis {
@@ -132,6 +144,50 @@ export function currencySide(symbol: string, currency: string | null): 'BASE' | 
   return null;
 }
 
+export interface StrategyPairCandidate {
+  fx_pair_id: string;
+  symbol: string;
+  base_currency: string;
+  quote_currency: string;
+  is_active: boolean;
+  /** indicator_fx_pairs.priority(関連の通貨ペアのとき)。 */
+  priority: number;
+}
+
+/**
+ * HQ指示(2026-11-09 P0「通貨ペアの選択・並び順」): 分析に使える通貨ペアか。有効(fx_pairs.is_active)で、指標の通貨を
+ * 含むペアだけ(値動き event_price_reactions はこのペアにしか計算されない、ingestion/pipelines/eventReactions.ts)。
+ */
+export function isUsableStrategyPair(
+  pair: Pick<StrategyPairCandidate, 'base_currency' | 'quote_currency' | 'is_active'>,
+  currency: string | null,
+): boolean {
+  return pair.is_active && currency !== null && (pair.base_currency === currency || pair.quote_currency === currency);
+}
+
+/**
+ * 既定の通貨ペア: 指標の関連の通貨ペア(indicator_fx_pairs が有効なもの)のうち、使えるペアを priority の小さい順、
+ * 同じ priority なら主要ペアの順(MAJOR_FX_PAIR_ORDER)、最後に symbol 順で並べた先頭。使えるペアが無ければ null。
+ */
+export function selectDefaultStrategyPair(
+  related: readonly StrategyPairCandidate[],
+  currency: string | null,
+): StrategyPairCandidate | null {
+  const rank = (symbol: string) => {
+    const index = (MAJOR_FX_PAIR_ORDER as readonly string[]).indexOf(symbol);
+    return index === -1 ? MAJOR_FX_PAIR_ORDER.length : index;
+  };
+  const usable = related
+    .filter((pair) => isUsableStrategyPair(pair, currency))
+    .sort(
+      (a, b) =>
+        a.priority - b.priority ||
+        rank(a.symbol) - rank(b.symbol) ||
+        (a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : 0),
+    );
+  return usable[0] ?? null;
+}
+
 export function analyzeRelease(release: StrategyReleaseInput, side: 'BASE' | 'QUOTE' | null): StrategyReleaseRow {
   const m1 = available(release.reactions, '1m');
   const m15 = available(release.reactions, '15m');
@@ -148,9 +204,18 @@ export function analyzeRelease(release: StrategyReleaseInput, side: 'BASE' | 'QU
   const b15 = breaks(m1, m15, release.minuteCompleteness15m);
   const b60 = breaks(m1, m60, release.minuteCompleteness60m);
   let sellTheFact: boolean | null = null;
-  if (release.surprise_direction === 'POSITIVE' && side !== null && pips15 !== null) {
+  let afterInitialRise: boolean | null = null;
+  if (
+    release.surprise_direction === 'POSITIVE' &&
+    release.release_datetime_precision === 'EXACT' &&
+    side !== null &&
+    pips15 !== null
+  ) {
     // その通貨が売られた方向: 通貨が前(BASE)なら通貨ペアが下がる、後(QUOTE)なら上がる。
-    sellTheFact = side === 'BASE' ? pips15 < 0 : pips15 > 0;
+    const currencyWeak = (pips: number) => (side === 'BASE' ? pips < 0 : pips > 0);
+    const currencyStrong = (pips: number) => (side === 'BASE' ? pips > 0 : pips < 0);
+    sellTheFact = currencyWeak(pips15);
+    if (pips1 !== null) afterInitialRise = currencyStrong(pips1) && currencyWeak(pips15);
   }
   return {
     event_id: release.event_id,
@@ -168,6 +233,7 @@ export function analyzeRelease(release: StrategyReleaseInput, side: 'BASE' | 'QU
     high_break_60m: b60.high,
     low_break_60m: b60.low,
     sell_the_fact: sellTheFact,
+    sell_the_fact_after_initial_rise: afterInitialRise,
   };
 }
 
@@ -193,6 +259,7 @@ export function buildStrategyAnalysis(
   const directions = rows.filter((r) => r.direction_1m !== null);
   const patterns = rows.filter((r) => r.pattern_15m !== null);
   const sellJudged = rows.filter((r) => r.sell_the_fact !== null);
+  const riseJudged = rows.filter((r) => r.sell_the_fact_after_initial_rise !== null);
   const summary: StrategySummary = {
     direction_1m:
       directions.length >= STRATEGY_MINIMUM_SAMPLES
@@ -216,6 +283,13 @@ export function buildStrategyAnalysis(
     sell_the_fact:
       sellJudged.length >= STRATEGY_MINIMUM_SAMPLES
         ? { occurred: sellJudged.filter((r) => r.sell_the_fact === true).length, samples: sellJudged.length }
+        : null,
+    sell_the_fact_after_initial_rise:
+      riseJudged.length >= STRATEGY_MINIMUM_SAMPLES
+        ? {
+            occurred: riseJudged.filter((r) => r.sell_the_fact_after_initial_rise === true).length,
+            samples: riseJudged.length,
+          }
         : null,
   };
   return {
