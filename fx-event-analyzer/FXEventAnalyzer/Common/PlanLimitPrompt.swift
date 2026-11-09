@@ -5,20 +5,27 @@ import SwiftUI
 /// 有料機能からSCR-017への導線(2026-10-06の積み残し)もこれで兼ねる。
 ///
 /// 使う側は`message`に理由を入れるだけ。NavigationStackの中で使う。
+///
+/// HQ指示(2026-11-09「StrategyAnalysisのFREE/PROアクセス制御」): タイトル・ボタンの文言を
+/// 呼び出し側で変えられるようにした(既定値は従来どおり)。アップグレード導線(「プランを見る」
+/// 相当のボタン)は常にこの同じ`SubscriptionManagementView`へつなぐ — 新しい課金処理は作らない。
 struct PlanLimitPrompt: ViewModifier {
     @Binding var message: String?
     let apiClient: APIClient
     @Binding var tabSelection: Int
+    var title: String = "プレミアムプランの機能です"
+    var confirmButtonTitle: String = "プランを見る"
+    var cancelButtonTitle: String = "閉じる"
     @State private var showsPlans = false
 
     func body(content: Content) -> some View {
         content
             .alert(
-                "プレミアムプランの機能です",
+                title,
                 isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })
             ) {
-                Button("プランを見る") { showsPlans = true }
-                Button("閉じる", role: .cancel) {}
+                Button(confirmButtonTitle) { showsPlans = true }
+                Button(cancelButtonTitle, role: .cancel) {}
             } message: {
                 Text(message ?? "")
             }
@@ -29,8 +36,14 @@ struct PlanLimitPrompt: ViewModifier {
 }
 
 extension View {
-    func planLimitPrompt(_ message: Binding<String?>, apiClient: APIClient, tabSelection: Binding<Int>) -> some View {
-        modifier(PlanLimitPrompt(message: message, apiClient: apiClient, tabSelection: tabSelection))
+    func planLimitPrompt(
+        _ message: Binding<String?>, apiClient: APIClient, tabSelection: Binding<Int>,
+        title: String = "プレミアムプランの機能です", confirmButtonTitle: String = "プランを見る", cancelButtonTitle: String = "閉じる"
+    ) -> some View {
+        modifier(PlanLimitPrompt(
+            message: message, apiClient: apiClient, tabSelection: tabSelection,
+            title: title, confirmButtonTitle: confirmButtonTitle, cancelButtonTitle: cancelButtonTitle
+        ))
     }
 }
 

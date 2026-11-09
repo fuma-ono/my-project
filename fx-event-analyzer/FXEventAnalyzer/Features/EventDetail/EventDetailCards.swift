@@ -14,6 +14,15 @@ struct EventDetailCards: View {
     /// 無料プランで隠された発表(api-design v1.33)の鍵の印を押したとき(プランの案内を出す)。
     var onLockedTap: () -> Void = {}
 
+    /// HQ指示(2026-11-09「StrategyAnalysisのFREE/PROアクセス制御」): 「トレード戦略分析」へ
+    /// 遷移してよいか(確定済みのプランがPROのときだけtrue)。呼び出し側(`EventDetailView`)が
+    /// `PlanStore`を見て渡す — 未確定(`isConfirmed == false`)のときは安全側としてfalseのまま
+    /// (既定値もfalse)。
+    var canOpenStrategyAnalysis: Bool = false
+    /// `canOpenStrategyAnalysis`がfalseのときにタップされた(FREE・未確定): 遷移せず、
+    /// アップグレードの確認ポップアップを出す。
+    var onStrategyAnalysisBlockedTap: () -> Void = {}
+
     /// HQ指示(2026-10-09)の表: 発表前は結果「未発表」、値動き「発表後に表示」、分析「発表後に分析」。
     var isReleased: Bool { response.event.status == .released }
 
@@ -599,17 +608,30 @@ struct EventDetailCards: View {
                 linkCard(icon: "clock.arrow.circlepath", title: "過去イベント比較")
             }
             .buttonStyle(SettingsRowPressStyle())
-            // HQ指示(2026-11-06「Pro イベント別トレード戦略分析」): 過去5回の発表の値動きの傾向(Pro)。FREE は開いた先でロック表示。
+            // HQ指示(2026-11-06「Pro イベント別トレード戦略分析」): 過去5回の発表の値動きの傾向(Pro)。
             // 既存の行(過去イベント比較)と同じカードの形で、高さだけ抑える(1画面に収める)。
-            NavigationLink(value: AppRoute.eventStrategyAnalysis(
-                eventId: response.event.id,
-                indicatorName: response.event.indicatorName,
-                fxPairId: pairId
-            )) {
-                strategyLinkCard
+            //
+            // HQ指示(2026-11-09「StrategyAnalysisのFREE/PROアクセス制御」): FREE(`canOpenStrategyAnalysis
+            // == false`、未確定時もこちら)はタップしても分析画面へ遷移させない — ボタン自体は同じ見た目で
+            // 出したまま、`onStrategyAnalysisBlockedTap`でアップグレードの確認ポップアップを出す側(`EventDetailView`)
+            // に伝える。PRO確定時だけ従来どおり`NavigationLink`で遷移する。
+            if canOpenStrategyAnalysis {
+                NavigationLink(value: AppRoute.eventStrategyAnalysis(
+                    eventId: response.event.id,
+                    indicatorName: response.event.indicatorName,
+                    fxPairId: pairId
+                )) {
+                    strategyLinkCard
+                }
+                .buttonStyle(SettingsRowPressStyle())
+                .accessibilityIdentifier("eventDetailStrategyAnalysisLink")
+            } else {
+                Button(action: onStrategyAnalysisBlockedTap) {
+                    strategyLinkCard
+                }
+                .buttonStyle(SettingsRowPressStyle())
+                .accessibilityIdentifier("eventDetailStrategyAnalysisLink")
             }
-            .buttonStyle(SettingsRowPressStyle())
-            .accessibilityIdentifier("eventDetailStrategyAnalysisLink")
         }
     }
 
