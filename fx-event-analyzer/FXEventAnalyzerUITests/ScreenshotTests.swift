@@ -528,6 +528,62 @@ final class ScreenshotTests: XCTestCase {
         capture("26a-HomeCurrencyPairPicker")
     }
 
+    /// HQ指示(2026-11-09「StrategyAnalysis画面07bの個別スクリーンショット取得・視覚確認」):
+    /// `testCaptureAllScreens()`は、この画面より前にある既存のFOMC関連アサーション
+    /// (「policy-rate heading is not shown」)がCIで不安定に失敗することがあり、その
+    /// 失敗自体には`continueAfterFailure = true`のため07bの撮影まで到達できているが、
+    /// 確実な検証経路として、この画面だけ・独立して撮れるテストを別途用意する。
+    /// 導線(経済指標詳細 → イベント詳細 → トレード戦略分析)自体も
+    /// `testCaptureAllScreens()`と同じ実際の画面遷移を踏むため、ここでその遷移の健全性も
+    /// 確かめられる。FOMC・政策金利関連のモック切り替えは一切行わない(無関係な画面には
+    /// 触れない)。
+    ///
+    /// `testCaptureAllScreens()`と違い、スクロールしないと見えないカード(発表直後の傾向・
+    /// 15分後までの反応・Sell the Fact分析・発表ごとの実績・補足事項)も実際に画面内に
+    /// 入れてから撮り、新デザイン全体を目視確認できるようにする。
+    func testCaptureEventStrategyAnalysisScreenStandalone() throws {
+        let emailField = app.textFields["メールアドレス"]
+        XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
+        type("ui-screenshot@example.com", into: emailField)
+        type("ui-screenshot-password", into: app.secureTextFields["パスワード"])
+        app.buttons["ログイン"].tap()
+
+        XCTAssertTrue(waitForAnyElement(containing: "ホーム", timeout: 20), "Home tab did not appear after login")
+        XCTAssertTrue(
+            waitForAnyElement(containing: "通貨ペア", timeout: 25),
+            "Home did not load major FX data from the mock Backend"
+        )
+
+        tapIdentifier("v5Tab1")
+        XCTAssertTrue(waitForAnyElement(containing: "米国CPI", timeout: 15), "Indicators list did not load")
+
+        tap(containing: "国・地域")
+        let usMenuItem = app.buttons["米国"]
+        if usMenuItem.waitForExistence(timeout: 5) { usMenuItem.tap() }
+        tap(containing: "米国CPI(消費者物価指数)")
+        XCTAssertTrue(waitForAnyElement(containing: "過去イベント比較", timeout: 15), "Indicator Detail did not load")
+
+        tap(containing: "次回発表予定")
+        XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 15), "Event Detail did not load")
+
+        tapIdentifier("eventDetailStrategyAnalysisLink")
+        XCTAssertTrue(waitForAnyElement(containing: "過去5回の分析結果", timeout: 15), "Strategy analysis did not load")
+        XCTAssertTrue(
+            waitForAnyElement(containing: "両方 1回", timeout: 5),
+            "The high/low break overlap breakdown is not shown"
+        )
+        capture("07b-EventStrategyAnalysis-Standalone-Top")
+
+        XCTAssertTrue(
+            scrollUntilHittable(containing: "Sell the Fact 分析"),
+            "Did not scroll to the Sell the Fact card"
+        )
+        capture("07b-EventStrategyAnalysis-Standalone-Middle")
+
+        XCTAssertTrue(scrollUntilHittable(containing: "補足事項"), "Did not scroll to the notes card")
+        capture("07b-EventStrategyAnalysis-Standalone-Bottom")
+    }
+
     /// HQ承認(2026-11-04「Home Cache更新中表示のUIテスト追加」、案A): ログインしたまま設定で文字サイズを変えると
     /// RootView の `.id(textSize)` で全画面が作り直され、新しい HomeViewModel ができる。その間だけモックの /home を
     /// 遅らせ、前回のデータ(キャッシュ)を出したまま「前回の情報を表示しています・更新中…」が出ること、応答の後に
