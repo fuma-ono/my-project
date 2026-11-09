@@ -31,7 +31,12 @@ struct StrategyAnalysisView: View {
 
     var body: some View {
         V5Viewport {
-            V5Header(title: "イベント別トレード戦略分析", back: true, onBack: { dismiss() })
+            // HQ指示(2026-11-09)「タイトルは短縮案でOK」: 「イベント別トレード戦略分析」(13文字)は
+            // V5Headerの戻るボタンと視覚的に重なっていた(V5Headerはback==trueのとき、タイトルを
+            // 戻るボタンと別レイヤーでヘッダー全幅中央に配置するため、長いタイトルだと重なる —
+            // V5Header自体(共通コンポーネント)は変更しない)。ロック表示カードの見出しと同じ
+            // 「トレード戦略分析」(8文字)に短縮した。
+            V5Header(title: "トレード戦略分析", back: true, onBack: { dismiss() })
             content
             V5BottomBar(selected: $tabSelection)
         }
