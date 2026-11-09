@@ -410,6 +410,22 @@ export class MemoryIngestionStore implements IngestionStore {
     );
   }
 
+  listPolicyRateEventsForReactions(sinceIso: string): Promise<EventForReactionRef[]> {
+    const since = Date.parse(sinceIso);
+    const recorded = new Set(this.fomcPolicyDecisions.map((row) => row.event_id));
+    return Promise.resolve(
+      this.events
+        .filter((e) => e.status !== 'CANCELLED' && recorded.has(e.id) && Date.parse(e.release_datetime) >= since)
+        .sort((a, b) => Date.parse(a.release_datetime) - Date.parse(b.release_datetime))
+        .map((e) => ({
+          id: e.id,
+          release_datetime: e.release_datetime,
+          release_datetime_precision: e.release_datetime_precision,
+          currency_code: e.currency_code ?? '',
+        })),
+    );
+  }
+
   private eventReactionKey(row: Pick<EventPriceReactionRow, 'event_id' | 'fx_pair_id' | 'timeframe'>): string {
     return `${row.event_id}|${row.fx_pair_id}|${row.timeframe}`;
   }

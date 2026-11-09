@@ -355,6 +355,11 @@ export interface IngestionStore {
   insertIngestionLog(row: IngestionLogRow): Promise<void>;
   /** RELEASED events with release_datetime >= sinceIso (bounds the scan to the repair horizon). */
   listReleasedEventsForReactions(sinceIso: string): Promise<EventForReactionRef[]>;
+  /**
+   * HQ指示(2026-11-10「FOMC 案3」): 政策金利(fomc_policy_decisions)が記録済みの、中止でない会合
+   * (release_datetime >= sinceIso)。会合の行は SCHEDULED・PENDING のまま(v1.47)なので、RELEASED の一覧には入らない。
+   */
+  listPolicyRateEventsForReactions(sinceIso: string): Promise<EventForReactionRef[]>;
   /** Upsert by (event_id, fx_pair_id, timeframe) — re-running never duplicates a row. */
   upsertEventPriceReactions(rows: readonly EventPriceReactionRow[]): Promise<number>;
   /** Stored reaction rows of these events (read only; compared before writing — HQ指示 2026-10-27). */

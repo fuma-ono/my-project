@@ -14,6 +14,7 @@ import { createIngestionRepository } from '../repositories/ingestionRepository.j
  *
  *   npm run ingest:event-reactions
  *   npm run ingest:event-reactions -- --from 2026-01-01T00:00:00Z --to 2026-10-16T00:00:00Z   # 期間を指定して計算し直す
+ *   npm run ingest:event-reactions -- --event-id <uuid>   # その1件だけ(HQ指示 2026-11-10。政策金利が記録済みの FOMC も可)
  *
  * HQ指示(2026-10-27): --from / --to を付けると、直近7日の代わりにその期間の RELEASED の発表を計算し直す
  * (過去の発表のバックフィル。外部 API は呼ばない)。どちらの場合も、値も状態も同じ行は書かず、値のある行
@@ -38,6 +39,11 @@ async function main(): Promise<void> {
     throw new Error('--from and --to must be given together as ISO 8601 datetimes');
   }
   if (from && Date.parse(from) >= Date.parse(to!)) throw new Error('--from must be before --to');
+  const eventId = arg('event-id');
+  if (eventId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(eventId)) {
+    throw new Error('--event-id must be a UUID');
+  }
+  if (eventId && from) throw new Error('--event-id cannot be combined with --from / --to');
   const range = from && to ? { fromIso: new Date(from).toISOString(), toIso: new Date(to).toISOString() } : undefined;
   const store = createIngestionRepository(createSupabaseClient(env));
 
@@ -47,7 +53,11 @@ async function main(): Promise<void> {
     async (counters) => {
       await ingestEventPriceReactions(
         store,
-        { horizonDays: FX_FETCH_SETTINGS.repairHorizonDays, ...(range ? { range } : {}) },
+        {
+          horizonDays: FX_FETCH_SETTINGS.repairHorizonDays,
+          ...(range ? { range } : {}),
+          ...(eventId ? { eventId: eventId.toLowerCase() } : {}),
+        },
         new Date(),
         counters,
       );
@@ -57,6 +67,7 @@ async function main(): Promise<void> {
     JSON.stringify({
       job: 'ingest:event-reactions',
       range: range ?? null,
+      event_id: eventId ?? null,
       status: result.status,
       fetched: result.counters.fetched,
       success: result.counters.success,

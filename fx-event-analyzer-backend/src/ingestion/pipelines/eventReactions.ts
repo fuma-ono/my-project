@@ -19,6 +19,10 @@
  * - HQ指示(2026-10-27): 書く前に保存済みの行と比べ、値も状態も同じ行は書かない(calculated_at だけを
  *   書き換えない)。値のある行(AVAILABLE)を値の無い行(UNAVAILABLE)で上書きしない(1分足が後から
  *   欠けても値を失わない)。settings.range を渡すと、直近の代わりにその期間の発表を計算し直す。
+ * - HQ指示(2026-11-10「FOMC 案3」): 政策金利(fomc_policy_decisions)が記録済みの FOMC の会合も対象にする。
+ *   会合の行は SCHEDULED・PENDING のまま(api-design v1.47。状態は変えない)。RELEASED の発表の扱いは変えない
+ *   (一覧を足すだけ。同じ id は1回だけ)。settings.eventId を渡すと、期間に関係なくその1件だけを計算する
+ *   (RELEASED か、政策金利が記録済みの会合のどちらでもなければ、何も書かずにエラー)。
  */
 import { availableTimeframes } from '../../domain/dataQuality.js';
 import { computeEventPairReactionRows, EVENT_REACTION_TIMEFRAMES } from '../../domain/economicEventReactions.js';
@@ -38,6 +42,8 @@ export interface EventReactionSettings {
    * [from, to) の RELEASED の発表を計算し直す(過去の発表のバックフィル。為替の1分足が無ければ UNAVAILABLE のまま)。
    */
   range?: { fromIso: string; toIso: string };
+  /** HQ指示(2026-11-10): この1件だけを計算する(期間・horizonDays は使わない。range とは一緒に使わない)。 */
+  eventId?: string;
 }
 
 /** Same numbers and status → nothing to write (calculated_at alone does not count). */
@@ -70,11 +76,29 @@ export async function ingestEventPriceReactions(
   const sinceIso =
     settings.range?.fromIso ?? new Date(now.getTime() - settings.horizonDays * 24 * 60 * MINUTE_MS).toISOString();
   const untilMs = settings.range ? Date.parse(settings.range.toIso) : Number.POSITIVE_INFINITY;
-  const [listed, activePairs] = await Promise.all([
-    store.listReleasedEventsForReactions(sinceIso),
+  // eventId のときは期間で絞らない(古い会合も指定できるように)。
+  const listSince = settings.eventId ? new Date(0).toISOString() : sinceIso;
+  const [released, policyRate, activePairs] = await Promise.all([
+    store.listReleasedEventsForReactions(listSince),
+    store.listPolicyRateEventsForReactions(listSince),
     store.listFxPairs(),
   ]);
-  const events = listed.filter((event) => Date.parse(event.release_datetime) < untilMs);
+  // RELEASED の発表に、政策金利が記録済みの会合を足す(同じ id は1回だけ。並びは発表時刻 → id)。
+  const byId = new Map(released.map((event) => [event.id, event]));
+  for (const event of policyRate) if (!byId.has(event.id)) byId.set(event.id, event);
+  const listed = [...byId.values()].sort(
+    (a, b) =>
+      Date.parse(a.release_datetime) - Date.parse(b.release_datetime) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
+  if (settings.eventId && !byId.has(settings.eventId)) {
+    counters.error(
+      `event ${settings.eventId} is neither RELEASED nor a FOMC meeting with a recorded policy rate — nothing written`,
+    );
+    return;
+  }
+  const events = settings.eventId
+    ? listed.filter((event) => event.id === settings.eventId)
+    : listed.filter((event) => Date.parse(event.release_datetime) < untilMs);
   // 書く前に、保存済みの行と比べる(HQ指示 2026-10-27):
   // - 値も状態も同じ行は書かない(calculated_at だけを書き換えない)
   // - 値のある行(AVAILABLE)を、値の無い行(UNAVAILABLE)で上書きしない(為替の1分足が後から欠けても値を失わない)
