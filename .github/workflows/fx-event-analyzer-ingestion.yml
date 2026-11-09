@@ -2,6 +2,11 @@ name: FX Event Analyzer - Data ingestion (dev)
 
 # 社内確認用DB へ本番データを取り込み、品質レポートを作る(docs/projects/fx-event-analyzer/dev-environment.md)。
 #   - 為替: 20分ごと。Twelve Data の1分足 → fx_prices(5分〜60分足も組み立て)
+#     HQ承認 2026-11-10 案A: GitHub の定時は間引かれる(実績 1日5〜10回)ので、毎時13分の起動1回の中で
+#     20分ごとに ingest:fx-prices を繰り返す(1回の実行は最長約5時間35分、ジョブの上限 6時間の内側)。
+#     実行中に来た起動は為替専用のグループ(fx-prices-loop)で1件だけ待ち、終わればすぐ次が始まる(2件目以降の
+#     待ちは GitHub が取り消す)。クレジットは今までどおり DB の台帳(定時 700/日・手動込み 800/日)が守る。
+#     1回の取り込みが失敗しても繰り返しは続け(次の回が直近7日の抜けを取り直す)、終わりに失敗があれば実行を失敗にする。
 #   - 要人発言: 3時間ごと(毎時 41 分、UTC 0・3・6・…・21 時)。FRB カレンダー・ECB RSS → speech_events
 #     (HQ判断 2026-10-29 C: GitHub の定時の遅れ・間引きがあっても反映を早める。毎正時と為替の :07/:27/:47 を外す)
 #   - 品質レポート: 毎日 09:00 JST、直近1日分。DB を読むだけ。結果は実行の Summary に出る
@@ -36,7 +41,7 @@ name: FX Event Analyzer - Data ingestion (dev)
 # Twelve Data の無料キーは社内確認専用(要件定義書6.4)。
 on:
   schedule:
-    - cron: '7,27,47 * * * *'
+    - cron: '13 * * * *'
     - cron: '41 */3 * * *'
     - cron: '0 0 * * *'
   workflow_dispatch:
@@ -54,13 +59,16 @@ permissions:
 # HQ承認 2026-10-30: Eurostat の手動の実行(target=official-eurostat / official-eurostat-dry-run)は専用のグループにして、
 # 為替などの実行・待ちを取り消さない(待ちに押し出されもしない)。要人発言・それ以外の振り分けは今までどおり。
 concurrency:
-  group: ${{ (github.event.schedule == '41 */3 * * *' || (github.event_name == 'workflow_dispatch' && inputs.target == 'speeches')) && 'fx-ingestion-speeches' || ((github.event_name == 'workflow_dispatch' && (inputs.target == 'official-eurostat' || inputs.target == 'official-eurostat-dry-run')) && 'fx-ingestion-eurostat' || 'fx-ingestion') }}
+  # HQ承認 2026-11-10 案A: 為替の繰り返し(毎時13分の起動)は専用のグループ。最長約5時間半占有するので、
+  # fx-ingestion(BLS・反応・FOMC・手動の為替など)と分け、手動の実行を待たせない。
+  group: ${{ github.event.schedule == '13 * * * *' && 'fx-prices-loop' || ((github.event.schedule == '41 */3 * * *' || (github.event_name == 'workflow_dispatch' && inputs.target == 'speeches')) && 'fx-ingestion-speeches' || ((github.event_name == 'workflow_dispatch' && (inputs.target == 'official-eurostat' || inputs.target == 'official-eurostat-dry-run')) && 'fx-ingestion-eurostat' || 'fx-ingestion')) }}
   cancel-in-progress: false
 
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 為替の繰り返しは 355 分(GitHub のジョブの上限 360 分の内側)。それ以外は今までどおり 10 分。
+    timeout-minutes: ${{ github.event.schedule == '13 * * * *' && 355 || 10 }}
     defaults:
       run:
         working-directory: fx-event-analyzer-backend
@@ -103,9 +111,32 @@ jobs:
           cache-dependency-path: fx-event-analyzer-backend/package-lock.json
       - run: npm ci --no-audit --no-fund
         if: steps.check.outputs.ready == 'true'
+      - name: FX prices (loop, every 20 minutes within one run)
+        if: steps.check.outputs.ready == 'true' && github.event.schedule == '13 * * * *'
+        # 定時(AUTOMATIC、台帳の 700/日)。--manual は付けない。1回の取り込みは 10 分で打ち切る。
+        # 次の回は「前の回の開始 + 20 分」に始める。次の回の開始が締め切り(開始から 335 分)を過ぎるなら終える。
+        run: |
+          deadline=$(( $(date +%s) + 335 * 60 ))
+          runs=0
+          failures=0
+          while :; do
+            runs=$((runs + 1))
+            started=$(date +%s)
+            if ! timeout 10m npm run -s ingest:fx-prices; then
+              failures=$((failures + 1))
+              echo "::warning::FX prices: run ${runs} failed (the next run re-fetches missing minutes of the last 7 days)"
+            fi
+            next=$(( started + 20 * 60 ))
+            if [ "$next" -ge "$deadline" ]; then break; fi
+            pause=$(( next - $(date +%s) ))
+            if [ "$pause" -gt 0 ]; then sleep "$pause"; fi
+          done
+          echo "FX prices loop: runs=${runs} failures=${failures}"
+          echo "FX prices loop: runs=${runs} failures=${failures}" >> "$GITHUB_STEP_SUMMARY"
+          [ "$failures" -eq 0 ]
       - name: FX prices
-        if: steps.check.outputs.ready == 'true' && (github.event.schedule == '7,27,47 * * * *' || (github.event_name == 'workflow_dispatch' && (inputs.target == 'fx-prices' || inputs.target == 'both')))
-        run: npm run -s ingest:fx-prices -- ${{ github.event_name == 'workflow_dispatch' && '--manual' || '' }}
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && (inputs.target == 'fx-prices' || inputs.target == 'both')
+        run: npm run -s ingest:fx-prices -- --manual
       - name: Event reactions (経済指標の価格反応、手動実行のみ・HQ承認待ちで定期実行には入れない)
         if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'event-reactions'
         run: npm run -s ingest:event-reactions
