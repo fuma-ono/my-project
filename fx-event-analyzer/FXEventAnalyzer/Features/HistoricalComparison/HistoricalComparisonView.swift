@@ -947,6 +947,10 @@ struct HistoricalComparisonView: View {
             .frame(width: Column.value)
     }
 
+    /// HQ指摘(2026-11-09)「過去イベント比較の表のpips部分の数字が中央ぞろえになっておらず
+    /// バランスがおかしい」: 縦画面の表(この関数)だけ右揃え+右パディング2のままで、横画面の
+    /// 表(`landscapePipsCell`)は結果/予想/前回と同じ中央揃えに揃えた後(HQ指摘 2026-10-29)も
+    /// 取り残されていた。`valueCell`と同じ中央揃え(既定のフレーム配置)に統一した。
     private func pipsCell(_ pips: Double?) -> some View {
         Text(Self.pipsText(pips))
             .font(.system(size: 7, weight: .medium))
@@ -954,8 +958,7 @@ struct HistoricalComparisonView: View {
             .foregroundStyle(pips.map { $0 >= 0 ? Self.plusColor : Self.minusColor } ?? SettingsCardStyle.subtitleColor)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
-            .padding(.trailing, 2)
-            .frame(width: Column.pips, alignment: .trailing)
+            .frame(width: Column.pips)
     }
 
     private func planLimitRow(_ limit: ComparisonResponse.HistoryLimit) -> some View {

@@ -635,17 +635,16 @@ struct EventDetailCards: View {
         }
     }
 
-    /// HQ指示(2026-11-09「Build 25実機確認後の修正」で枠を金色に変更したが、続く実機確認で
-    /// 「トレード戦略分析の枠は過去イベント比較と同じ色で」と指示を受け、`linkCard`と全く同じ
-    /// シアン→ブルーのグラデーション枠線に戻した(幅214pt・角丸・余白・高さ26ptは変更していない)。
-    /// 「Pro」バッジは同指示「proの文字と枠は中を金色にして」により、枠線だけの金色(0.6pt stroke)
-    /// から、`ProBadge`(`Common/PlanLimitPrompt.swift`)と同じ「塗りの中に白文字」の形に変更し、
-    /// 塗りの色を金色(`SubscriptionPalette.gold`)にした。
+    /// HQ指示(2026-11-09): 枠を過去イベント比較と同じシアン→ブルーに戻したが、続く確認で
+    /// 「やはり金色に」「左側のアイコンと＞も金色に」と再度指示を受け、枠線・アイコン・chevron
+    /// をすべて`SubscriptionPalette.gold`(設定画面のPROプランと同じ金色)に変更した。幅214pt・
+    /// 角丸・余白・高さ26ptは変更していない。「Pro」バッジ(塗りの中に白文字、塗りは金色)も
+    /// そのまま維持。
     private var strategyLinkCard: some View {
         HStack(spacing: 8) {
             Image(systemName: "chart.xyaxis.line")
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(V5P.cyan)
+                .foregroundStyle(SubscriptionPalette.gold)
                 .frame(width: 18)
             NotoText.text("トレード戦略分析", size: 9).foregroundStyle(.white)
             NotoText.text("Pro", size: 6.5)
@@ -656,15 +655,12 @@ struct EventDetailCards: View {
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.system(size: 9.5, weight: .semibold))
-                .foregroundStyle(V5P.cyan)
+                .foregroundStyle(SubscriptionPalette.gold)
         }
         .padding(.horizontal, 10)
         .frame(width: 214, height: 26)
         .background(V5CardGradient.fill, in: RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
-                .stroke(LinearGradient(colors: [V5P.cyan, V5P.blue.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.9)
-        )
+        .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SubscriptionPalette.gold, lineWidth: 0.9))
     }
 
     @ViewBuilder private var nextReleaseFooter: some View {
