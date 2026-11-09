@@ -183,7 +183,10 @@ struct SplashView: View {
             // gap between the bar and "Loading..." in the Reference than
             // this rendered.
             VStack(spacing: DesignTokens.Spacing.md) {
-                SplashLoadingBar()
+                SplashLoadingBar(
+                    minimumDisplayDuration: viewModel.minimumDisplayDuration,
+                    maximumDisplayDuration: viewModel.maximumDisplayDuration
+                )
                 Text("Loading...")
                     .font(DesignTokens.Typography.footnote)
                     .foregroundStyle(DesignTokens.Colors.textSecondary)

@@ -44,8 +44,11 @@ final class SplashViewModel: ObservableObject {
     private let authService: AuthServicing
     private let apiClient: APIClient
     private let onFinished: (SplashOutcome) -> Void
-    private let minimumDisplayDuration: Duration
-    private let maximumDisplayDuration: Duration
+    /// `private`ではない — `SplashView`が`SplashLoadingBar`に同じ値を渡し、バーの
+    /// アニメーション時間を実際の待機時間と揃えるため(HQ指摘2026-11-09フォローアップ
+    /// 「loadingバーは右端に達しているのに次に遷移されない」、`SplashLoadingBar.swift`参照)。
+    let minimumDisplayDuration: Duration
+    let maximumDisplayDuration: Duration
     private let prefetchCoordinator: HomePrefetchCoordinator
     private var hasStarted = false
 

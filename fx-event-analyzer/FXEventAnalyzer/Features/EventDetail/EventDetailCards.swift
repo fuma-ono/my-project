@@ -613,12 +613,12 @@ struct EventDetailCards: View {
         }
     }
 
-    /// HQ指示(2026-11-09「Build 25実機確認後の修正」): 実機確認で、`linkCard`(過去イベント比較、水色の
-    /// グラデーション枠)に対してこのカードの枠(従来`SettingsCardStyle.cardBorder`、地味なグレー・0.7pt)が
-    /// ほとんど見えず、「枠の幅が違って見える」という指摘になっていた。幅自体は元から214ptで同じだったため、
-    /// 枠線を`SubscriptionPalette.gold`(設定画面のPROプランと同じ金色)・`linkCard`と同じ0.9ptに変更し、
-    /// 存在感を揃えた。角丸・余白・情報配置・カードの高さ(26pt)は変更していない。「Pro」文字・バッジの枠も
-    /// 同じ金色にして統一した(HQ指示「PRO表記」)。
+    /// HQ指示(2026-11-09「Build 25実機確認後の修正」で枠を金色に変更したが、続く実機確認で
+    /// 「トレード戦略分析の枠は過去イベント比較と同じ色で」と指示を受け、`linkCard`と全く同じ
+    /// シアン→ブルーのグラデーション枠線に戻した(幅214pt・角丸・余白・高さ26ptは変更していない)。
+    /// 「Pro」バッジは同指示「proの文字と枠は中を金色にして」により、枠線だけの金色(0.6pt stroke)
+    /// から、`ProBadge`(`Common/PlanLimitPrompt.swift`)と同じ「塗りの中に白文字」の形に変更し、
+    /// 塗りの色を金色(`SubscriptionPalette.gold`)にした。
     private var strategyLinkCard: some View {
         HStack(spacing: 8) {
             Image(systemName: "chart.xyaxis.line")
@@ -627,10 +627,10 @@ struct EventDetailCards: View {
                 .frame(width: 18)
             NotoText.text("トレード戦略分析", size: 9).foregroundStyle(.white)
             NotoText.text("Pro", size: 6.5)
-                .foregroundStyle(SubscriptionPalette.gold)
+                .foregroundStyle(.white)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 1)
-                .overlay(Capsule().stroke(SubscriptionPalette.gold, lineWidth: 0.6))
+                .background(Capsule().fill(SubscriptionPalette.gold))
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.system(size: 9.5, weight: .semibold))
@@ -639,7 +639,10 @@ struct EventDetailCards: View {
         .padding(.horizontal, 10)
         .frame(width: 214, height: 26)
         .background(V5CardGradient.fill, in: RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius))
-        .overlay(RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius).stroke(SubscriptionPalette.gold, lineWidth: 0.9))
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsCardStyle.cornerRadius)
+                .stroke(LinearGradient(colors: [V5P.cyan, V5P.blue.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.9)
+        )
     }
 
     @ViewBuilder private var nextReleaseFooter: some View {
