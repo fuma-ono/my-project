@@ -24,6 +24,12 @@ name: FX Event Analyzer UI Screenshots
 # No app UI code, DB, API, or existing test/workflow is touched by this
 # workflow — see docs/projects/fx-event-analyzer/README.md and this
 # workflow's own commit message for the full "何を変えていないか" list.
+#
+# HQ指示(2026-11-09「PNG Artifact化」): 以前はこのジョブの成果物を別ジョブ(commit-screenshots)が
+# リポジトリに直接commitしていた(Artifact(Azure Blob Storage配信)にレビュー側のネットワークから
+# 到達できなかったため)。現在はArtifactを直接取得できるようになったため、そのcommitジョブを削除し、
+# PNGはこのワークフローのArtifact(下の`Upload screenshots artifact`等)経由でのみ提供する — 新規の
+# PNGはGit管理に追加しない(過去にcommitされた分の履歴は書き換えていない)。
 
 on:
   push:
@@ -31,17 +37,17 @@ on:
       - "fx-event-analyzer/**"
       - "fx-event-analyzer-backend/scripts/ui-screenshot-mock-server.mjs"
       - ".github/workflows/fx-event-analyzer-ui-screenshots.yml"
-      - ".github/scripts/update-ci-screenshots.sh"
   pull_request:
     paths:
       - "fx-event-analyzer/**"
       - "fx-event-analyzer-backend/scripts/ui-screenshot-mock-server.mjs"
       - ".github/workflows/fx-event-analyzer-ui-screenshots.yml"
-      - ".github/scripts/update-ci-screenshots.sh"
   workflow_dispatch: {}
 
+# HQ指示(2026-11-09「PNG Artifact化」): このワークフローはもうリポジトリにcommit・pushしないため、
+# `contents: write`から`contents: read`に縮小した(最小権限)。
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   screenshots:
@@ -252,33 +258,12 @@ jobs:
                   print(f"{src} -> {dest}")
           PY
 
-      # GitHub Actions Artifacts are served through the Actions API's
-      # redirect to Azure Blob Storage; Claude's sandboxed review session
-      # cannot reach that host through its network policy, so it can never
-      # download the artifact above itself — every prior round required a
-      # human to download and re-upload the zip by hand. Committing just
-      # the iPhone PNGs into the repo (outside fx-event-analyzer/**, so
-      # this push doesn't retrigger this or any other path-filtered
-      # workflow; [skip ci] as a second guard) makes them reachable via the
-      # ordinary Git Contents API instead, which is not blocked — no human
-      # download/upload round-trip needed to review a screen.
-      #
-      # HQ指示(2026-11-06「UI Screenshots CI改善」): スクリーンショットの commit は、このジョブ(テストと同じ30分の枠)では
-      # しない。テストが通っても、30分の上限で commit の途中に取り消されることがあった(run 42154158203: UIテストは成功、
-      # commit の途中で上限)。ここでは commit 用の画像だけを成果物に残し、下の commit-screenshots ジョブ(別の枠)が commit する。
-      # 成果物を残すのは、このジョブがここまで成功していて(success())、iPhone の UI テストが成功し、iPad は飛ばしたか
-      # 成功したときだけ(以前の commit の条件と同じ)。
-      - name: Keep iPhone screenshots for the commit job
-        if: >-
-          success() && github.event_name == 'push'
-          && steps.ui_iphone.outcome == 'success'
-          && (steps.ui_ipad.outcome == 'success' || steps.ui_ipad.outcome == 'skipped')
-        uses: actions/upload-artifact@v4
-        with:
-          name: fx-event-analyzer-ui-screenshots-iphone-commit
-          path: fx-event-analyzer/Screenshots/iPhone/*.png
-          if-no-files-found: ignore
-          retention-days: 1
+      # HQ指示(2026-11-09「PNG Artifact化」): 以前はここで「commit用」の縮小Artifact
+      # (fx-event-analyzer-ui-screenshots-iphone-commit)を別途作り、下流のcommit-screenshots
+      # ジョブがそれをリポジトリにcommitしていた。ArtifactをCI外から直接取得できるように
+      # なったため、そのジョブ自体を削除し、このステップ(commit専用のArtifactを残す処理)も
+      # 不要になった — 以降は下の`Upload screenshots artifact`(iPhone・iPadの全撮影結果)が
+      # 唯一の取得経路になる。
 
       - name: Upload screenshots artifact
         if: always()
@@ -300,63 +285,3 @@ jobs:
             fx-event-analyzer/DerivedData/iPad.xcresult
           if-no-files-found: ignore
           retention-days: 30
-
-  # HQ指示(2026-11-06「UI Screenshots CI改善」): テストのジョブが成功したときだけ(needs.screenshots.result == 'success')、
-  # そのジョブが残した画像で ci-screenshots/iPhone を更新して commit する。テストとは別の時間の枠(10分)で動くので、
-  # テストの時間で commit が取り消されない。テストが失敗・取り消し・時間切れなら、このジョブは動かない(何も消さない)。
-  # 反映は .github/scripts/update-ci-screenshots.sh(撮影結果が空なら何もしない・一括削除しない・画面ごとに置き換える・
-  # 枚数が減ったら失敗。HQ指示 2026-11-04「UI Screenshots workflow の安全対策」)。
-  commit-screenshots:
-    needs: screenshots
-    if: needs.screenshots.result == 'success' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download the iPhone screenshots of the test job
-        # 撮影結果が空なら成果物は作られない(if-no-files-found: ignore)。そのときは下の commit が「何もしない」で終わる。
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: fx-event-analyzer-ui-screenshots-iphone-commit
-          path: screenshots-iphone
-
-      - name: Commit iPhone screenshots into the repo for direct review
-        run: |
-          shots="$PWD/screenshots-iphone"
-          shopt -s nullglob
-          exported=("$shots"/*.png)
-          if [ "${#exported[@]}" -eq 0 ]; then
-            echo "No exported screenshots; nothing to commit."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          # Concurrent runs (a manual re-run, or a push/pull_request pair)
-          # can advance origin's branch at any point — confirmed via two
-          # real CI failures: a plain "fetch first" rejection, and later a
-          # rebase CONFLICT (rename/delete) once two runs' commits each
-          # replaced every file in this directory with freshly-named PNGs
-          # at the same time, which git's rename detection couldn't
-          # reconcile. Reset onto the latest tip and rebuild the commit
-          # fresh each attempt instead of rebasing an existing commit onto
-          # it — nothing about a prior attempt's commit needs preserving,
-          # only the final directory content (this run's own screenshots)
-          # does.
-          for attempt in 1 2 3; do
-            git fetch origin "${GITHUB_REF_NAME}"
-            git reset --mixed "origin/${GITHUB_REF_NAME}"
-            # 反映は最新の先頭の ci-screenshots を土台にする(checkout した commit の分ではなく)。
-            rm -rf ci-screenshots/iPhone
-            git checkout "origin/${GITHUB_REF_NAME}" -- ci-screenshots 2>/dev/null || mkdir -p ci-screenshots/iPhone
-            bash .github/scripts/update-ci-screenshots.sh "$shots" ci-screenshots/iPhone
-            git add ci-screenshots/iPhone
-            if git diff --cached --quiet; then
-              echo "No screenshot changes to commit."
-              break
-            fi
-            git commit -m "ci: update iPhone UI screenshots [skip ci]"
-            git push origin "HEAD:${GITHUB_REF_NAME}" && break
-            echo "Push attempt ${attempt} rejected, retrying."
-          done
