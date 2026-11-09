@@ -54,10 +54,16 @@ final class HomeCacheStore {
     /// 条件に合うキャッシュだけを返す。合わないもの(ユーザー不明・不一致、日付・タイムゾーン・
     /// 形式の版の不一致、読めない)は捨てる。
     ///
-    /// プラン(HQ指示 2026-11-02「ホームキャッシュのプラン安全性修正」): ホームのイベントの値・ロックは
-    /// プランで変わるため、`/entitlements`で今のプランを確かめるまでは出さない(未確認ならnilを返すが、
-    /// 確認を待つので捨てない)。確かめたプランが保存時のプランと違う・保存時のプランが分からない
-    /// ときは捨てる。確認に失敗したまま(`confirmedPlan`がnilのまま)なら、出さないまま。
+    /// プラン(HQ指示 2026-11-02「ホームキャッシュのプラン安全性修正」、2026-11-09実機診断
+    /// フォローアップで以下に変更): ホームのイベントの値・ロックはプランで変わるため、保存時の
+    /// プランが分からない(`snapshot.plan == nil`)ときは決して出さない。保存時のプランが分かって
+    /// いれば、`/entitlements`で今のプランをまだ確かめていなくても(`context.confirmedPlan == nil`)
+    /// 保存時のプランを信用して先に出す — Renderのコールドスタート時は`/entitlements`自体も
+    /// `/home`と同程度に遅れることが実機診断で確認でき、確認待ちにするとキャッシュが「無いのと
+    /// ほぼ同じタイミングでしか出ない」(実機で実データ到着の1.4秒前)という本来の狙いに反する
+    /// 結果になっていた。確認が済んだ時点で保存時のプランと違えば`discardIfPlanDiffers`が即座に
+    /// 捨て、`HomeViewModel.planConfirmed()`が表示中のキャッシュを取り下げる(安全網は変更なし) —
+    /// 違えば出し続けない、を保証したまま、分かっているプランまで待たせないようにした。
     func load(for context: HomeCacheContext) -> HomeCacheSnapshot? {
         guard let snapshot = stored() else { return nil }
         guard let userID = context.userID,
@@ -69,8 +75,14 @@ final class HomeCacheStore {
             clear()
             return nil
         }
-        guard let confirmedPlan = context.confirmedPlan else { return nil }
-        guard let savedPlan = snapshot.plan, savedPlan == confirmedPlan else {
+        guard let savedPlan = snapshot.plan else {
+            // 保存時のプランが分からない(`/entitlements`が一度も確定する前に`/home`が成功して
+            // 保存された場合)。今のプランが分かっているなら比べようがないので捨てる。未確認
+            // ならこのまま保持し、`discardIfPlanDiffers`が確定時に埋めるか捨てるかを決める。
+            if context.confirmedPlan != nil { clear() }
+            return nil
+        }
+        if let confirmedPlan = context.confirmedPlan, savedPlan != confirmedPlan {
             clear()
             return nil
         }

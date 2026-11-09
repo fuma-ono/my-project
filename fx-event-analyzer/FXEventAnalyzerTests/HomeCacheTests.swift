@@ -81,14 +81,19 @@ final class HomeCacheTests: XCTestCase {
         }
     }
 
-    func testUnconfirmedPlanNeverShowsTheCacheButKeepsItForTheConfirmation() {
+    /// HQ指示(2026-11-09「Build 25実機確認フォローアップ、実機診断」): 2026-11-02時点では
+    /// `/entitlements`確定前は一切出さなかったが、実機診断でRenderのコールドスタート時は
+    /// `/entitlements`自体も`/home`と同程度に遅れることが分かり、「キャッシュがあればすぐ出す」
+    /// という狙いが果たせていなかった。保存時のプランが分かっているなら、それを信用して確認前
+    /// でも先に出す — 違えば`discardIfPlanDiffers`が確定後に捨てる(安全網は維持)。
+    func testUnconfirmedPlanShowsTheCacheOptimisticallyAndCorrectsOnConfirmation() {
         let store = HomeCacheStore(defaults: defaults)
         store.save(response: response(), date: today, timezone: tz, userID: userA, plan: "PRO", savedAt: now)
 
-        // HQ指示(2026-11-02「プラン安全性修正」): 起動直後(/entitlements の前)はプランが未確認なので出さない。
-        XCTAssertNil(store.load(for: context(userA, plan: nil)))
-        XCTAssertNotNil(store.stored(), "an unconfirmed plan waits for the confirmation; the cache is kept")
-        // 確かめたら: 同じなら出す。違えば捨てる。
+        // 起動直後(/entitlements の前)でも、保存時のプラン(PRO)を信用して出す。
+        XCTAssertNotNil(store.load(for: context(userA, plan: nil)))
+        XCTAssertNotNil(store.stored(), "an unconfirmed plan must not discard the cache")
+        // 確かめたら: 同じなら出し続ける。違えば捨てる。
         XCTAssertNotNil(store.load(for: context(userA, plan: "PRO")))
         XCTAssertFalse(store.discardIfPlanDiffers(confirmedPlan: "PRO", userID: userA))
         XCTAssertTrue(store.discardIfPlanDiffers(confirmedPlan: "FREE", userID: userA))
@@ -368,24 +373,27 @@ final class HomeCacheTests: XCTestCase {
 
     // MARK: - プランの確認(HQ指示 2026-11-02「ホームキャッシュのプラン安全性修正」)
 
-    func testUnconfirmedPlanDoesNotShowTheCache() async {
+    /// HQ指示(2026-11-09「Build 25実機確認フォローアップ、実機診断」): 保存時のプラン(PRO)を
+    /// 信用して、`/entitlements`確認前でも`load()`の中で即座に出す(以前は確認後まで一切出さな
+    /// かった)。
+    func testUnconfirmedPlanShowsTheCacheOptimisticallyThenMarksRefreshFailed() async {
         let cache = savedCache() // PRO で保存
         let api = MockAPIClient()
         api.results["home"] = .failure(APIError.transport("still waking up"))
 
         let viewModel = makeViewModel(api: api, cache: cache, userID: userA, plan: PlanStore())
         viewModel.load()
-        XCTAssertEqual(viewModel.state, .loading)
-        XCTAssertFalse(viewModel.isShowingCache)
-        XCTAssertTrue(viewModel.favoriteItems.isEmpty)
+        XCTAssertTrue(viewModel.isShowingCache, "the saved plan must be trusted before /entitlements confirms")
+        guard case .loaded = viewModel.state else { return XCTFail("expected the cached data, got \(viewModel.state)") }
 
-        await waitUntil { viewModel.state != .loading }
-        guard case .error = viewModel.state else { return XCTFail("expected .error, got \(viewModel.state)") }
-        XCTAssertFalse(viewModel.isShowingCache)
+        await waitUntil { viewModel.refreshNotice == .refreshFailed(savedAt: now) }
+        XCTAssertTrue(viewModel.isShowingCache, "a failed /home refresh must keep showing the optimistic cache")
         XCTAssertNotNil(cache.stored(), "kept until the plan is confirmed")
     }
 
-    func testSamePlanConfirmedLaterShowsTheCache() async {
+    /// 保存時と同じプランが後から確認されても、表示中の(楽観的に出していた)キャッシュは変わらず
+    /// 出続ける(`discardIfPlanDiffers`が一致なので捨てない)。
+    func testSamePlanConfirmedLaterKeepsShowingTheCache() async {
         let cache = savedCache() // PRO で保存
         let plan = PlanStore()
         let api = MockAPIClient()
@@ -393,16 +401,16 @@ final class HomeCacheTests: XCTestCase {
 
         let viewModel = makeViewModel(api: api, cache: cache, userID: userA, plan: plan)
         viewModel.load()
-        await waitUntil { viewModel.state != .loading }
-        XCTAssertFalse(viewModel.isShowingCache)
+        XCTAssertTrue(viewModel.isShowingCache, "the cache must show immediately, trusting its saved plan")
 
-        plan.set(plan: .pro, limits: .pro()) // /entitlements で PRO を確かめた
-        await waitUntil { viewModel.isShowingCache }
-        XCTAssertTrue(viewModel.isShowingCache)
-        XCTAssertEqual(viewModel.refreshNotice, .refreshFailed(savedAt: now), "the /home fetch had already failed")
+        plan.set(plan: .pro, limits: .pro()) // /entitlements で PRO を確かめた(保存時と一致)
+        await waitUntil { viewModel.refreshNotice == .refreshFailed(savedAt: now) }
+        XCTAssertTrue(viewModel.isShowingCache, "a matching confirmation must not withdraw the cache")
         guard case .loaded = viewModel.state else { return XCTFail("expected the cached data, got \(viewModel.state)") }
     }
 
+    /// 保存時と違うプランが後から確認されたら、楽観的に出していたキャッシュを取り下げる — これが
+    /// 「信用して先に出す」ことの安全網(`discardIfPlanDiffers`、変更していない)。
     func testMismatchedPlanConfirmedLaterIsNotShownAndDiscarded() async {
         let cache = savedCache() // PRO で保存
         let plan = PlanStore()
@@ -411,16 +419,19 @@ final class HomeCacheTests: XCTestCase {
 
         let viewModel = makeViewModel(api: api, cache: cache, userID: userA, plan: plan)
         viewModel.load()
-        await waitUntil { viewModel.state != .loading }
+        XCTAssertTrue(viewModel.isShowingCache, "shown optimistically until the plan is confirmed")
 
-        plan.set(plan: .free, limits: .free()) // FREE だった
+        plan.set(plan: .free, limits: .free()) // FREE だった(保存時のPROと食い違う)
         await waitUntil { cache.stored() == nil }
         XCTAssertNil(cache.stored())
-        XCTAssertFalse(viewModel.isShowingCache)
+        XCTAssertFalse(viewModel.isShowingCache, "a mismatched confirmation must withdraw the optimistically-shown cache")
         guard case .error = viewModel.state else { return XCTFail("the old plan's data must not appear, got \(viewModel.state)") }
     }
 
-    func testPlanConfirmationFailureDoesNotShowTheOldPlansData() async {
+    /// `/entitlements`の確認自体が失敗しても(確定済みの値が手に入らない)、保存時のプランを
+    /// 信用した表示は取り下げない — 「確認できない」ことと「違うプランだった」ことは別で、
+    /// 違うと分かった時だけ`discardIfPlanDiffers`が捨てる。
+    func testPlanConfirmationFailureKeepsShowingTheOptimisticCache() async {
         let cache = savedCache() // PRO で保存
         let plan = PlanStore()
         let failing = MockAPIClient()
@@ -432,11 +443,11 @@ final class HomeCacheTests: XCTestCase {
 
         let viewModel = makeViewModel(api: api, cache: cache, userID: userA, plan: plan)
         viewModel.load()
-        await waitUntil { viewModel.state != .loading }
+        XCTAssertTrue(viewModel.isShowingCache)
 
-        XCTAssertFalse(viewModel.isShowingCache)
-        XCTAssertNil(viewModel.refreshNotice)
-        guard case .error = viewModel.state else { return XCTFail("expected .error, got \(viewModel.state)") }
+        await waitUntil { viewModel.refreshNotice == .refreshFailed(savedAt: now) }
+        XCTAssertTrue(viewModel.isShowingCache)
+        guard case .loaded = viewModel.state else { return XCTFail("expected the cached data, got \(viewModel.state)") }
     }
 
     func testCachedFavoritesAreShownUntilTheFreshOnesArrive() async {
