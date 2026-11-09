@@ -44,6 +44,10 @@ on:
       target:
         description: 'fx-prices / speeches / both / report / official-bls / official-bls-dry-run / official-eurostat / official-eurostat-dry-run / event-reactions / fomc-schedule / fomc-policy-rate / retail-sales-schedule'
         default: both
+      event_id:
+        description: 'target=event-reactions のときだけ: この1件だけを計算する(UUID。空なら直近7日の発表。HQ指示 2026-11-10。政策金利が記録済みの FOMC も可)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -108,7 +112,20 @@ jobs:
         run: npm run -s ingest:fx-prices -- ${{ github.event_name == 'workflow_dispatch' && '--manual' || '' }}
       - name: Event reactions (経済指標の価格反応、手動実行のみ・HQ承認待ちで定期実行には入れない)
         if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'event-reactions'
-        run: npm run -s ingest:event-reactions
+        # HQ指示(2026-11-10「FOMC 案3」): event_id を入れたときだけ --event-id で1件だけを計算する。値は環境変数で渡し、
+        # UUID の形でなければ何もせずに止める(コマンドに直接埋め込まない)。--event-id を知らない古い Backend では
+        # 1件に絞られないので、Backend(claude/fx-fomc-reactions)が settings に入るまで event_id は使わない。
+        env:
+          EVENT_ID: ${{ inputs.event_id }}
+        run: |
+          if [ -z "$EVENT_ID" ]; then
+            npm run -s ingest:event-reactions
+          elif printf '%s' "$EVENT_ID" | grep -Eqx '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'; then
+            npm run -s ingest:event-reactions -- --event-id "$EVENT_ID"
+          else
+            echo "event_id は UUID の形で入れてください(何もせずに止めます)"
+            exit 1
+          fi
       - name: Speeches
         if: steps.check.outputs.ready == 'true' && (github.event.schedule == '41 */3 * * *' || (github.event_name == 'workflow_dispatch' && (inputs.target == 'speeches' || inputs.target == 'both')))
         run: npm run -s ingest:speeches
