@@ -386,7 +386,7 @@ final class HomeCacheTests: XCTestCase {
         XCTAssertTrue(viewModel.isShowingCache, "the saved plan must be trusted before /entitlements confirms")
         guard case .loaded = viewModel.state else { return XCTFail("expected the cached data, got \(viewModel.state)") }
 
-        await waitUntil { viewModel.refreshNotice == .refreshFailed(savedAt: now) }
+        await waitUntil { viewModel.refreshNotice == .refreshFailed(savedAt: self.now) }
         XCTAssertTrue(viewModel.isShowingCache, "a failed /home refresh must keep showing the optimistic cache")
         XCTAssertNotNil(cache.stored(), "kept until the plan is confirmed")
     }
@@ -404,7 +404,7 @@ final class HomeCacheTests: XCTestCase {
         XCTAssertTrue(viewModel.isShowingCache, "the cache must show immediately, trusting its saved plan")
 
         plan.set(plan: .pro, limits: .pro()) // /entitlements で PRO を確かめた(保存時と一致)
-        await waitUntil { viewModel.refreshNotice == .refreshFailed(savedAt: now) }
+        await waitUntil { viewModel.refreshNotice == .refreshFailed(savedAt: self.now) }
         XCTAssertTrue(viewModel.isShowingCache, "a matching confirmation must not withdraw the cache")
         guard case .loaded = viewModel.state else { return XCTFail("expected the cached data, got \(viewModel.state)") }
     }
@@ -445,7 +445,7 @@ final class HomeCacheTests: XCTestCase {
         viewModel.load()
         XCTAssertTrue(viewModel.isShowingCache)
 
-        await waitUntil { viewModel.refreshNotice == .refreshFailed(savedAt: now) }
+        await waitUntil { viewModel.refreshNotice == .refreshFailed(savedAt: self.now) }
         XCTAssertTrue(viewModel.isShowingCache)
         guard case .loaded = viewModel.state else { return XCTFail("expected the cached data, got \(viewModel.state)") }
     }
