@@ -1,0 +1,22 @@
+{
+  "id": "bgm-scene01-insomnia-pulse",
+  "business_id": "bgm",
+  "hypothesis": "『深夜に眠れず焦っている人』という具体的なシーンに向けた訴求(既存sleep_deep_droneの一般的な睡眠訴求より踏み込んだ共感型)は、既存の睡眠系動画より強い市場シグナルを得られる",
+  "target": "寝つけない夜に不安を感じる20〜40代",
+  "action": "既存sleep_deep_droneへの最小差分としてsleep_insomnia_pulseを実装(和音・ノイズベッドは流用、安静時心拍テンポの静かなパルスのみ新規追加)、YouTube長尺として公開",
+  "video_id": "qkpqzOM5zLM",
+  "video_url": "https://youtube.com/watch?v=qkpqzOM5zLM",
+  "published_at": "2026-08-12T03:42:29Z",
+  "period": {"start": "2026-08-12", "end": "2026-08-26"},
+  "cost_jpy": 0,
+  "kpi_target": {
+    "note": "単一指標のランキングではなく複合評価(docs/ai-company-os/2026-08-12-bgm-production-standard.md)",
+    "metrics_to_track": ["再生数", "インプレッション", "CTR", "平均視聴時間", "平均再生率(尺に対する割合)", "視聴維持率", "リピーター", "登録者増加", "コメント", "収益化への貢献"],
+    "reference_only_view_target": "2週間で500再生・平均再生率が既存sleep_deep_droneを上回る(絶対値でなく相対比較の目安)"
+  },
+  "result": null,
+  "learning": null,
+  "next_action": null,
+  "verdict": "pending",
+  "status": "running"
+}

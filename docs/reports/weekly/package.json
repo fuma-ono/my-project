@@ -1,0 +1,12 @@
+{
+  "name": "quiet-hours-weekly-reports",
+  "private": true,
+  "description": "Generator scripts for the weekly activity report slide decks (docs/reports/weekly/YYYY-MM-DD.js). Not part of any product's runtime.",
+  "dependencies": {
+    "pptxgenjs": "^4.0.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-icons": "^5.7.0",
+    "sharp": "^0.35.3"
+  }
+}

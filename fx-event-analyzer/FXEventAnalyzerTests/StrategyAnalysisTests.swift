@@ -1,0 +1,172 @@
+import XCTest
+@testable import FXEventAnalyzer
+
+/// Pro イベント別トレード戦略分析(HQ指示 2026-11-06、api-design v1.48)。応答の読み込み、FREE のロック、データ準備中、
+/// 判定できない値を作らない表示を確かめる。
+/// HQ指示(2026-11-07「イベント別トレード戦略分析の完成・統合」): 高値・安値ブレイクの合計が発表数を超えうることの
+/// 注記(breakOverlapNote)と、403などの権限エラーを通信失敗と区別する表示(.notEntitled)も確かめる。
+@MainActor
+final class StrategyAnalysisTests: XCTestCase {
+    private func decoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }
+
+    private let readyJSON = #"""
+    {"event_id":"e0","available":true,"required_entitlement":null,
+     "fx_pair":{"fx_pair_id":"p1","symbol":"USDJPY"},
+     "analysis":{"status":"READY","sample_window":5,"minimum_samples":3,
+      "releases":[
+        {"event_id":"e1","release_datetime":"2026-10-14T12:30:00Z","forecast":3.0,"actual":3.2,"surprise":0.2,"surprise_direction":"POSITIVE",
+         "direction_1m":"UP","pips_1m":5,"pips_15m":-9,"pattern_15m":"REVERSAL",
+         "high_break_15m":false,"low_break_15m":true,"high_break_60m":false,"low_break_60m":true,"sell_the_fact":true},
+        {"event_id":"e2","release_datetime":"2026-09-11T12:30:00Z","forecast":null,"actual":2.9,"surprise":null,"surprise_direction":null,
+         "direction_1m":null,"pips_1m":null,"pips_15m":null,"pattern_15m":null,
+         "high_break_15m":null,"low_break_15m":null,"high_break_60m":null,"low_break_60m":null,"sell_the_fact":null}
+      ],
+      "summary":{"direction_1m":{"up":3,"down":1,"flat":0,"samples":4},
+                 "breaks_15m":{"high":2,"low":2,"both":0,"neither":0,"samples":4},
+                 "breaks_60m":null,
+                 "pattern_15m":{"continuation":3,"reversal":1,"samples":4},
+                 "sell_the_fact":null}}}
+    """#
+
+    func testDecodesTheProAnalysis() throws {
+        let response = try decoder().decode(StrategyAnalysisResponse.self, from: Data(readyJSON.utf8))
+        guard case .loaded(let pair, let analysis) = StrategyAnalysisViewModel.state(for: response) else {
+            return XCTFail("expected loaded")
+        }
+        XCTAssertEqual(pair.symbol, "USDJPY")
+        XCTAssertTrue(analysis.isReady)
+        XCTAssertEqual(analysis.releases.map(\.id), ["e1", "e2"])
+        XCTAssertEqual(analysis.releases[0].sellTheFact, true)
+        XCTAssertNil(analysis.summary.breaks60m)
+    }
+
+    func testFreeIsLocked() throws {
+        let json = #"{"event_id":"e0","available":false,"required_entitlement":"VIEW_ADVANCED_STATS","fx_pair":null,"analysis":null}"#
+        let response = try decoder().decode(StrategyAnalysisResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(StrategyAnalysisViewModel.state(for: response), .locked)
+    }
+
+    func testNoPairAndDataPreparing() throws {
+        let noPair = #"{"event_id":"e0","available":true,"required_entitlement":null,"fx_pair":null,"analysis":null}"#
+        XCTAssertEqual(StrategyAnalysisViewModel.state(for: try decoder().decode(StrategyAnalysisResponse.self, from: Data(noPair.utf8))), .noPair)
+
+        let preparing = #"""
+        {"event_id":"e0","available":true,"required_entitlement":null,"fx_pair":{"fx_pair_id":"p1","symbol":"USDJPY"},
+         "analysis":{"status":"DATA_PREPARING","sample_window":5,"minimum_samples":3,"releases":[],
+          "summary":{"direction_1m":null,"breaks_15m":null,"breaks_60m":null,"pattern_15m":null,"sell_the_fact":null}}}
+        """#
+        let response = try decoder().decode(StrategyAnalysisResponse.self, from: Data(preparing.utf8))
+        guard case .loaded(_, let analysis) = StrategyAnalysisViewModel.state(for: response) else { return XCTFail("expected loaded") }
+        XCTAssertFalse(analysis.isReady)
+        // 足りない項目は傾向を書かず「分析データ準備中」
+        XCTAssertEqual(StrategyAnalysisText.directionLine(analysis.summary.direction1m), "分析データ準備中")
+        XCTAssertEqual(StrategyAnalysisText.breakLine(analysis.summary.breaks15m), "分析データ準備中")
+        XCTAssertEqual(StrategyAnalysisText.patternLine(analysis.summary.pattern15m), "分析データ準備中")
+        XCTAssertTrue(StrategyAnalysisText.sellTheFactLine(analysis.summary.sellTheFact).hasPrefix("分析データ準備中"))
+    }
+
+    func testSummaryLinesOnlyCountWhatWasStored() throws {
+        let response = try decoder().decode(StrategyAnalysisResponse.self, from: Data(readyJSON.utf8))
+        let summary = try XCTUnwrap(response.analysis?.summary)
+        XCTAssertEqual(StrategyAnalysisText.directionLine(summary.direction1m), "上昇 3回・下落 1回（4回中）")
+        XCTAssertEqual(StrategyAnalysisText.breakLine(summary.breaks15m), "高値ブレイク 2回・安値ブレイク 2回（4回中）")
+        XCTAssertEqual(StrategyAnalysisText.patternLine(summary.pattern15m), "続いた 3回・反転 1回（4回中）")
+        XCTAssertEqual(
+            StrategyAnalysisText.sellTheFactLine(StrategySellTheFactSummary(occurred: 2, samples: 3)),
+            "2回（結果が良かった3回中）"
+        )
+    }
+
+    /// HQ指示(2026-11-07)「件数の合計が対象イベント数を超える場合があることをUI上で誤解させない」。
+    func testBreakOverlapNoteOnlyWhenBothCanOverlap() throws {
+        // both = 0: 高値・安値の合計(2+2=4)がsamples(4)を超えないため、誤解の余地が無く注記しない。
+        XCTAssertNil(StrategyAnalysisText.breakOverlapNote(StrategyBreakSummary(high: 2, low: 2, both: 0, neither: 0, samples: 4)))
+        // both = 1: 高値・安値の合計(3+2=5)がsamples(4)を超えるため注記する。
+        let note = StrategyAnalysisText.breakOverlapNote(StrategyBreakSummary(high: 3, low: 2, both: 1, neither: 0, samples: 4))
+        XCTAssertEqual(note, "うち両方抜けた回 1回・どちらも抜けていない回 0回（高値・安値ブレイクの回数の合計が発表数を超えることがあります）")
+        XCTAssertNil(StrategyAnalysisText.breakOverlapNote(nil))
+    }
+
+    func testReleaseRowsDoNotMakeUpMissingValues() throws {
+        let response = try decoder().decode(StrategyAnalysisResponse.self, from: Data(readyJSON.utf8))
+        let releases = try XCTUnwrap(response.analysis?.releases)
+        let judged = releases[0]
+        XCTAssertEqual(StrategyAnalysisText.direction(judged), "↑ +5.0")
+        XCTAssertEqual(StrategyAnalysisText.breaks(high: judged.highBreak15m, low: judged.lowBreak15m), "安値")
+        XCTAssertEqual(StrategyAnalysisText.pattern(judged), "反転")
+        XCTAssertEqual(StrategyAnalysisText.surprise(judged), "予想比 +0.2")
+        XCTAssertEqual(StrategyAnalysisText.sellTheFact(judged), "該当")
+
+        let missing = releases[1]
+        XCTAssertEqual(StrategyAnalysisText.direction(missing), "--")
+        XCTAssertEqual(StrategyAnalysisText.breaks(high: missing.highBreak15m, low: missing.lowBreak15m), "--")
+        XCTAssertEqual(StrategyAnalysisText.pattern(missing), "--")
+        XCTAssertEqual(StrategyAnalysisText.surprise(missing), "予想なし")
+        XCTAssertEqual(StrategyAnalysisText.sellTheFact(missing), "--")
+    }
+
+    /// 高値のみ・安値のみ・両方・どちらもなし・判定不能の5分類(HQ指示 2026-11-07)。
+    func testBreaksClassifiesIntoFiveCategories() {
+        XCTAssertEqual(StrategyAnalysisText.breaks(high: true, low: false), "高値")
+        XCTAssertEqual(StrategyAnalysisText.breaks(high: false, low: true), "安値")
+        XCTAssertEqual(StrategyAnalysisText.breaks(high: true, low: true), "高値・安値")
+        XCTAssertEqual(StrategyAnalysisText.breaks(high: false, low: false), "なし")
+        XCTAssertEqual(StrategyAnalysisText.breaks(high: nil, low: nil), "--")
+        XCTAssertEqual(StrategyAnalysisText.breaks(high: true, low: nil), "--")
+    }
+
+    func testNotesDoNotRecommendTrades() {
+        let notes = StrategyAnalysisText.notes.joined()
+        XCTAssertTrue(notes.contains("売買の推奨ではありません"))
+        XCTAssertTrue(notes.contains("どちらが先に起きたかは判定していません"))
+        for word in ["勝率", "利益", "買い推奨", "売り推奨"] {
+            XCTAssertFalse(notes.contains(word), word)
+        }
+    }
+
+    /// HQ指示(2026-11-07)「画面上部に注意書きを表示する」: 既存の詳しい注意事項(notes)とは別に、
+    /// 指定の文言をそのまま持つこと。
+    func testTopDisclaimerMatchesTheRequiredWording() {
+        XCTAssertEqual(
+            StrategyAnalysisText.topDisclaimer,
+            "過去の値動きの統計です。1分足の欠損などにより判定できない場合があります。売買推奨ではありません。"
+        )
+    }
+
+    /// HQ指示(2026-11-07)「403などの権限エラーを単なる通信失敗として扱わず、適切な表示にする」。
+    func testForbiddenAndRelatedErrorsAreNotEntitledNotAGenericFailure() {
+        for code: APIErrorCode in [.featureNotEntitled, .subscriptionRequired, .forbidden, .unauthorized] {
+            let error = APIError.server(code: code, message: "denied", httpStatus: 403)
+            XCTAssertEqual(StrategyAnalysisViewModel.state(forError: error), .notEntitled, "\(code) should map to .notEntitled")
+        }
+        // 他のサーバーエラー(例: INTERNAL_ERROR)は通信失敗のまま。
+        let serverError = APIError.server(code: .internalError, message: "boom", httpStatus: 500)
+        guard case .error = StrategyAnalysisViewModel.state(forError: serverError) else {
+            return XCTFail("expected a generic .error state for INTERNAL_ERROR")
+        }
+        guard case .notFound = StrategyAnalysisViewModel.state(forError: .server(code: .eventNotFound, message: "", httpStatus: 404)) else {
+            return XCTFail("expected .notFound for EVENT_NOT_FOUND")
+        }
+    }
+
+    /// HQ指示(2026-11-07「画面デザインの変更」): 色分けした件数タイルに添えるパーセンテージ。
+    func testPercentOfSamples() {
+        XCTAssertEqual(StrategyAnalysisText.percentOfSamples(2, 4), "50%")
+        XCTAssertEqual(StrategyAnalysisText.percentOfSamples(1, 4), "25%")
+        XCTAssertEqual(StrategyAnalysisText.percentOfSamples(0, 4), "0%")
+        XCTAssertEqual(StrategyAnalysisText.percentOfSamples(1, 3), "33.3%")
+        // samplesが0(作れない)なら値を作らない。
+        XCTAssertEqual(StrategyAnalysisText.percentOfSamples(0, 0), "--")
+    }
+
+    /// 発表ごとの実績の表で、高値・安値ブレイクを個別に出すセル文言。
+    func testBreakCell() {
+        XCTAssertEqual(StrategyAnalysisText.breakCell(true), "あり")
+        XCTAssertEqual(StrategyAnalysisText.breakCell(false), "なし")
+        XCTAssertEqual(StrategyAnalysisText.breakCell(nil), "--")
+    }
+}

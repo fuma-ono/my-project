@@ -1,0 +1,36 @@
+{
+  "id": "note-12-family-noise-wfh",
+  "business_id": "note",
+  "article_number": "12",
+  "title": "家族の生活音が気になって在宅ワークに集中できない、を解決した話",
+  "theme_backlog_id": 16,
+  "pillar": "A",
+  "hypothesis": "この記事テーマは読者の実際の悩み・検索意図に一致し、閲覧・スキ・フォロワー増につながる需要がある",
+  "generated_at": "2026-08-12",
+  "published_at": null,
+  "status": "published",
+  "note_url": "https://note.com/unique_condor276",
+  "metrics": {
+    "views": null,
+    "likes": null,
+    "comments": null,
+    "followers_gained": null,
+    "support_jpy": null,
+    "recorded_at": null,
+    "data_source_note": "note.com公式APIが存在しないため、このサンドボックスからは取得不可。オーナーがnote.comダッシュボードで確認し次第、note-articles/README.mdの計測欄経由で共有・反映する"
+  },
+  "result": null,
+  "learning": null,
+  "next_action": null,
+  "verdict": "pending",
+  "quality_self_check": {
+    "japanese_natural": true,
+    "no_ai_cliche": true,
+    "concrete_content": true,
+    "clickable_title": true,
+    "clear_reader_value": true,
+    "no_duplication_with_existing": true,
+    "note": "2026-08-12の週3本運用化にあたり新設したチェックリスト。既存記事(01〜10)とテーマ・切り口の重複がないことを確認済み"
+  },
+  "publish_confirmation_note": "2026-08-17、オーナーより投稿済みと確認。正確な公開日時はnote.com側のみ把握のためAI側では未取得。"
+}

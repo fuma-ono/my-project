@@ -1,0 +1,23 @@
+{
+  "business_id": "note",
+  "period": "2026-W33",
+  "collected_at": "2026-08-13",
+  "source": "オーナーがnote.comダッシュボード(全期間集計、最新集計時刻2026-08-13T09:48)のスクリーンショットを共有。note.com公式APIが存在しないため、この方法以外に取得手段がない",
+  "note": "公開7本(01〜07)の全体合算値。個別内訳は上位4本のみダッシュボード表示で確認できた(スキ表示順)",
+  "aggregate_published_01_to_07": {"views": 61, "comments": 0, "likes": 11},
+  "articles": [
+    {"article_number": "06", "title": "AIで作った音楽に著作権はあるのか、個人開発者が実際に調べてみた話", "views": 13, "comments": 0, "likes": 3},
+    {"article_number": "04", "title": "「集中できない」がただの気合い不足じゃなかった話", "views": 12, "comments": 0, "likes": 1},
+    {"article_number": "01", "title": "眠れない夜、AIに「無限に続く雨音」を作ってもらった話", "views": 8, "comments": 0, "likes": 2},
+    {"article_number": "07", "title": "みんなが本当に困っている「作業用BGM選び」の悩みを50件くらい読んでみた", "views": 8, "comments": 0, "likes": 1}
+  ],
+  "not_yet_broken_out": {
+    "article_numbers": ["02", "03", "05"],
+    "aggregate_views": 20,
+    "aggregate_likes": 4,
+    "aggregate_comments": 0,
+    "note": "ダッシュボードの「もっとみる」より下が未確認のため、この3本は合算(全体合算 − 上位4本の差分)のみ判明。個別値は推測していない"
+  },
+  "observation": "初回実測データ。著作権記事(06)が最多ビュー・最多スキ。7本合計でもコメントは0件のまま。フォロワー数・サポート額は未取得(ダッシュボードの別タブ「バッジ」「売上管理」等で確認できる可能性があるが今回のスクリーンショットには含まれず)",
+  "not_yet_measured": ["フォロワー増加数", "サポート(投げ銭)額", "08〜10のこの期間内の実績", "02・03・05の個別内訳"]
+}

@@ -1,0 +1,83 @@
+# bgm-pipeline
+bgm-pipeline/.venv/
+bgm-pipeline/output/
+bgm-pipeline/__pycache__/
+bgm-pipeline/**/__pycache__/
+
+# note-articles/note_publish
+note-articles/note_publish/.venv/
+note-articles/note_publish/__pycache__/
+note-articles/note_publish/credentials/
+
+# any Python cache anywhere in the repo (love-note/, threads-affiliate/, etc.)
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# secrets / credentials (API keys for YouTube Data API, Meta Graph API, EAS, RevenueCat, AdMob, etc.)
+.env
+.env.*
+!.env.example
+*credentials*.json
+*token*.json
+# token-health.jsonは秘密情報を含まない(生存確認結果のbool/日時/usernameのみ)。
+# 上記の広いパターン(*token*.json)に誤って引っかかるため明示的に除外する
+# (2026-09-11、実際にGitHub Actionsでコミット失敗するのを確認して発覚)。
+!threads-affiliate/token-health.json
+client_secret*.json
+meta_app.json
+bgm-pipeline/credentials/
+moyasuka/credentials/
+*.pem
+*.p12
+*.key
+
+# deep-research skill: Claude の調査用の中間ノート・レポート下書き
+# (FX Event Analyzerの取得元調査など)。プロジェクトの成果物ではなく、
+# 報告のために一時的に作業ディレクトリに置くだけなのでコミットしない。
+/research_notes/
+/reports/
+
+# app (Expo/React Native) has its own .gitignore
+
+# dashboard / guide build output (regenerate with each dir's build.py)
+docs/dashboard/dashboard.html
+docs/dashboard/fonts.py
+docs/ai-company-os/hub/hub.html
+docs/marketing/bgm-content-audit/audit.html
+docs/setup-guide/setup-guide.html
+docs/setup-guide/fonts.py
+note-articles/queue-page/note-queue.html
+note-articles/queue-page/fonts.py
+note-articles/sns-queue/sns-queue.html
+note-articles/sns-queue/fonts.py
+
+# weekly report slide decks (regenerate with docs/reports/weekly/YYYY-MM-DD.js)
+docs/reports/weekly/*.pptx
+docs/reports/weekly/node_modules/
+docs/reports/weekly/package-lock.json
+
+# x-account/x_publish
+x-account/x_publish/.venv/
+x-account/x_publish/__pycache__/
+x-account/x_publish/credentials/
+
+# moyasuka
+moyasuka/__pycache__/
+moyasuka/.venv/
+moyasuka/channel_art/output/
+moyasuka/output/
+moyasuka/assets/background_video_clips/
+
+# love-note: browser session state (equivalent to being logged in, never commit)
+love-note/storage-state.json
+
+# threads-affiliate: API access token + app secret, never commit
+threads-affiliate/access-token.json
+threads-affiliate/rakuten-config.json
+
+# 2026-09-11: replies-pending.json/reply-decisions.jsonは、当初「1回の実行内
+# だけで使う中間生成物」としてgitignore対象にしていたが、実際にはGitHub Actions
+# (Threads APIへの接続担当)とClaude Code Remoteのセッション(判断担当、
+# graph.threads.netへの接続がブロックされている)の間でファイル経由の受け渡しが
+# 必要と判明したため、コミット対象に戻した(threads-affiliate/README.md参照)。

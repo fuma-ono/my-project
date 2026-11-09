@@ -1,0 +1,527 @@
+<title>BGMコンテンツ監査</title>
+<style>
+  @font-face {
+    font-family: "Gloock";
+    src: url(data:font/ttf;base64,__GLOOCK__) format("truetype");
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "Work Sans";
+    src: url(data:font/ttf;base64,__WORKSANS_REG__) format("truetype");
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "Work Sans";
+    src: url(data:font/ttf;base64,__WORKSANS_BOLD__) format("truetype");
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "IBM Plex Mono";
+    src: url(data:font/ttf;base64,__PLEXMONO_REG__) format("truetype");
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "IBM Plex Mono";
+    src: url(data:font/ttf;base64,__PLEXMONO_BOLD__) format("truetype");
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+
+  :root {
+    --bg: #eef0f6; --surface: #ffffff; --surface-2: #f6f7fb; --border: #d9dcec;
+    --text: #171a2b; --text-dim: #5b6082; --text-faint: #8489a8;
+    --accent: #d9682f; --accent-soft: #f3ded0;
+    --good: #2f9e63; --good-soft: #dcf1e5;
+    --warn: #a5760a; --warn-soft: #f6ecd2;
+    --critical: #c73d4c; --critical-soft: #f8dde0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0e1a; --surface: #141a30; --surface-2: #101528; --border: #2a3157;
+      --text: #eef0fa; --text-dim: #9aa0c3; --text-faint: #6e739a;
+      --accent: #f0955c; --accent-soft: #3a2a20;
+      --good: #57cf8f; --good-soft: #17301f;
+      --warn: #e8c34b; --warn-soft: #332b12;
+      --critical: #f0707c; --critical-soft: #331a1e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0e1a; --surface: #141a30; --surface-2: #101528; --border: #2a3157;
+    --text: #eef0fa; --text-dim: #9aa0c3; --text-faint: #6e739a;
+    --accent: #f0955c; --accent-soft: #3a2a20;
+    --good: #57cf8f; --good-soft: #17301f;
+    --warn: #e8c34b; --warn-soft: #332b12;
+    --critical: #f0707c; --critical-soft: #331a1e;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Work Sans", sans-serif; font-size: 16px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 28px 18px 90px; }
+  a { color: var(--accent); }
+
+  header.top { padding-bottom: 20px; margin-bottom: 26px; border-bottom: 1px solid var(--border); }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent); font-weight: 700;
+  }
+  h1 { font-family: "Gloock", serif; font-weight: 400; font-size: clamp(28px, 7vw, 36px); margin: 3px 0 6px; text-wrap: balance; }
+  .sub { color: var(--text-dim); font-size: 14.5px; }
+  .updated { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--text-faint); margin-top: 8px; }
+
+  .verdict-box {
+    background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: 10px; padding: 16px 18px; margin-bottom: 34px;
+  }
+  .verdict-box .label {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px;
+  }
+  .verdict-box p { margin: 0 0 8px; font-size: 14.5px; }
+  .verdict-box p:last-child { margin-bottom: 0; }
+
+  section { margin-bottom: 38px; }
+  .section-head { margin-bottom: 14px; }
+  h2 { font-family: "Gloock", serif; font-weight: 400; font-size: 21px; margin: 0 0 4px; }
+  .section-lede { font-size: 13.5px; color: var(--text-dim); }
+  p { margin: 0 0 12px; font-size: 15px; }
+
+  /* inventory table */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 12.5px; background: var(--surface); }
+  th, td { text-align: left; padding: 9px 11px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--text-faint); background: var(--surface-2); font-weight: 700;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pill { display: inline-block; font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 2px 8px; }
+  .pill.yes { background: var(--good-soft); color: var(--good); }
+  .pill.no { background: var(--warn-soft); color: var(--warn); }
+
+  /* similarity matrix */
+  .sim-grid { display: flex; flex-direction: column; gap: 8px; }
+  .sim-row { display: flex; align-items: center; gap: 10px; }
+  .sim-label { font-size: 12.5px; color: var(--text-dim); width: 230px; flex: none; }
+  .sim-bar-track { flex: 1; height: 8px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
+  .sim-bar-fill { height: 100%; background: var(--accent); border-radius: 999px; }
+  .sim-val { font-family: "IBM Plex Mono", monospace; font-size: 12px; width: 42px; flex: none; text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* root-cause callout */
+  .callout {
+    background: var(--critical-soft); border-radius: 10px; padding: 14px 16px; font-size: 14px;
+  }
+  .callout b { color: var(--critical); }
+  code { font-family: "IBM Plex Mono", monospace; font-size: 0.92em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+
+  /* tag overlap */
+  .tag-overlap { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  .tag-row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .tag-row .tagname { font-family: "IBM Plex Mono", monospace; font-size: 12px; width: 120px; flex: none; }
+  .tag-dots { display: flex; gap: 5px; }
+  .tag-dot { width: 13px; height: 13px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border); }
+  .tag-dot.on { background: var(--accent); border-color: var(--accent); }
+  .tag-count { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-faint); }
+
+  /* JP naturalness review */
+  .jp-item { border: 1px solid var(--border); background: var(--surface); border-radius: 10px; padding: 13px 15px; margin-bottom: 10px; }
+  .jp-quote { font-size: 14px; }
+  .jp-verdict { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12.5px; }
+  .jp-tag { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 2px 9px; }
+  .jp-tag.ok { background: var(--good-soft); color: var(--good); }
+  .jp-tag.watch { background: var(--warn-soft); color: var(--warn); }
+  .jp-note { color: var(--text-dim); }
+
+  /* proposals */
+  .proposal { border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 16px 18px; margin-bottom: 12px; }
+  .proposal-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .proposal-name { font-weight: 700; font-size: 15.5px; }
+  .proposal-n { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-faint); }
+  .scene-def { font-size: 13px; color: var(--text-dim); margin-top: 6px; }
+  .scene-def b { color: var(--text); }
+  .proposal-title { font-size: 13.5px; margin-top: 10px; padding: 8px 10px; background: var(--surface-2); border-radius: 7px; }
+  .axes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 14px; margin-top: 10px; font-size: 12.5px; }
+  .axis .k { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.04em; }
+  .axis .v { color: var(--text-dim); }
+  .score { font-weight: 700; }
+  .score.high { color: var(--good); }
+  .score.mid { color: var(--warn); }
+
+  /* ranking + selection */
+  .rank-table .table-scroll { margin-bottom: 26px; }
+  .rank-pill { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+  .rank-pill.pick { background: var(--good-soft); color: var(--good); }
+  .rank-pill.hold { background: var(--surface-2); color: var(--text-faint); border: 1px solid var(--border); }
+  .rank-pill.risk { background: var(--warn-soft); color: var(--warn); }
+
+  .pick-card { border: 1px solid var(--accent); background: var(--surface); border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; }
+  .pick-top { display: flex; align-items: center; gap: 10px; }
+  .pick-rank {
+    font-family: "Gloock", serif; font-size: 26px; color: var(--accent); line-height: 1;
+  }
+  .pick-name { font-weight: 700; font-size: 16.5px; }
+  .pick-fields { display: flex; flex-direction: column; gap: 9px; margin-top: 12px; }
+  .pick-field { display: flex; gap: 10px; font-size: 13.5px; }
+  .pick-field .k {
+    flex: none; width: 92px; font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.03em; padding-top: 2px;
+  }
+  .pick-field .v { color: var(--text-dim); }
+  .pick-field .v b { color: var(--text); }
+  .success-line {
+    margin-top: 12px; padding: 9px 12px; background: var(--good-soft); color: var(--good);
+    border-radius: 8px; font-size: 13px; font-weight: 700;
+  }
+
+  ul.principles { padding-left: 0; list-style: none; margin: 0; }
+  ul.principles li { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14.5px; }
+  ul.principles li:last-child { border-bottom: none; }
+  ul.principles .mk { flex: none; color: var(--accent); font-weight: 700; }
+
+  footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-faint); }
+
+  @media (max-width: 480px) {
+    .sim-label { width: 150px; font-size: 11.5px; }
+    .axes { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="top">
+    <span class="eyebrow">Marketing · BGM事業</span>
+    <h1>BGMコンテンツ監査</h1>
+    <p class="sub">オーナー指摘(2026-08-11)「タイトルだけ違って中身が実質同じ動画があるのでは」を受けた棚卸しと今後10本の企画評価。<b>この分析の間、BGM生成ロジックへの変更は行っていない。</b></p>
+    <div class="updated">2026-08-11 作成・2026-08-12更新(方針承認・優先順位確定) · 標準フローは docs/ai-company-os/2026-08-12-bgm-production-standard.md</div>
+  </header>
+
+  <div class="verdict-box">
+    <div class="label">結論</div>
+    <p><b>音源そのものが「実質同一」と判定できるペアは無い</b>(後述の類似度分析で裏付け)。ただし、その一段深いところに<b>実在する問題</b>を見つけた: 4本の動画のうち<b>全て</b>に「作業用bgm」タグが付いている。睡眠専用に作った低音ドローンにまで「作業用」を付けている。</p>
+    <p>原因はタイトルではなくコード。現在の4プリセットは、和音進行が<code>PADS_SLEEP</code>と<code>PADS_STUDY</code>の2種類しか無く、新プリセットは既存の和音材料に別のフィルター・別のノイズ層をかけているだけ。ジャンル名を変えて量産する構造が、生成コードの側にすでに存在している。</p>
+  </div>
+
+  <section id="inventory">
+    <div class="section-head">
+      <h2>公開動画の棚卸し</h2>
+      <p class="section-lede">YouTube Data APIから実測(2026-08-11時点、views以外は固定値)</p>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th>音源</th><th>形式</th><th>タイトル</th><th>サムネ</th><th>想定シーン(現状)</th><th>尺</th><th>公開日</th><th>再生</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td>sleep_rain_focus</td><td class="num">長尺</td>
+            <td>雨音とやわらかなパッドで眠れる 1時間</td><td><span class="pill yes">あり</span></td>
+            <td>睡眠 <i>+</i> 作業(2つ同時)</td><td class="num">1:00:01</td><td class="num">08-05</td><td class="num">18</td>
+          </tr>
+          <tr>
+            <td>sleep_rain_focus</td><td class="num">Shorts</td>
+            <td>(同上)#Shorts</td><td><span class="pill no">無し</span></td>
+            <td>長尺への誘導(意図的なティザー)</td><td class="num">0:46</td><td class="num">08-06</td><td class="num">269</td>
+          </tr>
+          <tr>
+            <td>study_focus_binaural</td><td class="num">長尺</td>
+            <td>アルファ波バイノーラルビートで集中力アップ</td><td><span class="pill yes">あり</span></td>
+            <td>勉強・集中</td><td class="num">1:00:01</td><td class="num">08-05</td><td class="num">14</td>
+          </tr>
+          <tr>
+            <td>study_lofi_chill</td><td class="num">長尺</td>
+            <td>カフェ気分のLo-Fiチルビート｜勉強・仕事がはかどる</td><td><span class="pill yes">あり</span></td>
+            <td>作業・勉強(binauralと重複)</td><td class="num">1:00:01</td><td class="num">08-11</td><td class="num">5</td>
+          </tr>
+          <tr>
+            <td>study_focus_binaural</td><td class="num">Shorts</td>
+            <td>(長尺と同一タイトル)#Shorts</td><td><span class="pill no">無し</span></td>
+            <td>長尺への誘導(意図的なティザー)</td><td class="num">0:46</td><td class="num">08-11</td><td class="num">158</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:10px; font-size:13px; color:var(--text-dim);">
+      Shorts2本は「実質同一コンテンツ」ではなく、対応する長尺への意図的なティザー(概要欄に<code>Full length version</code>リンク付き)。この設計自体は問題ない — ただし元の長尺2本の想定シーンが重複しているため、ティザーも重複して見える。
+    </p>
+  </section>
+
+  <section id="similarity">
+    <div class="section-head">
+      <h2>音源そのものの類似度</h2>
+      <p class="section-lede">平均スペクトル(4秒窓・8kHzまで)のコサイン類似度。1.0=完全一致、0=無相関</p>
+    </div>
+    <div class="sim-grid">
+      <div class="sim-row"><span class="sim-label">study_lofi_chill × study_focus_binaural</span><div class="sim-bar-track"><div class="sim-bar-fill" style="width:52%"></div></div><span class="sim-val">0.52</span></div>
+      <div class="sim-row"><span class="sim-label">sleep_rain_focus × study_lofi_chill</span><div class="sim-bar-track"><div class="sim-bar-fill" style="width:36%"></div></div><span class="sim-val">0.36</span></div>
+      <div class="sim-row"><span class="sim-label">sleep_rain_focus × study_focus_binaural</span><div class="sim-bar-track"><div class="sim-bar-fill" style="width:21%"></div></div><span class="sim-val">0.21</span></div>
+      <div class="sim-row"><span class="sim-label">sleep_deep_drone × sleep_rain_focus</span><div class="sim-bar-track"><div class="sim-bar-fill" style="width:12%"></div></div><span class="sim-val">0.12</span></div>
+      <div class="sim-row"><span class="sim-label">sleep_deep_drone × study_lofi_chill</span><div class="sim-bar-track"><div class="sim-bar-fill" style="width:7%"></div></div><span class="sim-val">0.07</span></div>
+      <div class="sim-row"><span class="sim-label">sleep_deep_drone × study_focus_binaural</span><div class="sim-bar-track"><div class="sim-bar-fill" style="width:4%"></div></div><span class="sim-val">0.04</span></div>
+    </div>
+    <p style="margin-top:14px; font-size:13.5px;">
+      最大値は<code>study_lofi_chill</code>と<code>study_focus_binaural</code>の0.52。「実質同一」と呼べる水準(目安0.8以上)には届かないが、4本中もっとも近い。コードを読むと理由がわかる — 両方とも<code>PADS_STUDY</code>という同じ和音進行を土台にしている(前者はビート+ヴァイナルノイズ、後者はバイノーラルビートを重ねているだけ)。<code>sleep_deep_drone</code>が全ペアで最も遠いのは、唯一「静寂寄り」に振り切った設計だから — これが本来あるべき差別化の姿。
+    </p>
+  </section>
+
+  <section id="tags">
+    <div class="section-head">
+      <h2>タグ・想定用途の重複</h2>
+      <p class="section-lede">音源は違っても、メタデータ(タグ・use_cases)で同じ客層に同時に呼びかけている</p>
+    </div>
+    <div class="tag-overlap">
+      <div class="tag-row"><span class="tagname">作業用bgm</span><div class="tag-dots"><div class="tag-dot on"></div><div class="tag-dot on"></div><div class="tag-dot on"></div><div class="tag-dot on"></div></div><span class="tag-count">4 / 4本 —全動画に付与</span></div>
+      <div class="tag-row"><span class="tagname">睡眠用bgm</span><div class="tag-dots"><div class="tag-dot on"></div><div class="tag-dot on"></div><div class="tag-dot"></div><div class="tag-dot"></div></div><span class="tag-count">2 / 4本</span></div>
+      <div class="tag-row"><span class="tagname">勉強用bgm</span><div class="tag-dots"><div class="tag-dot"></div><div class="tag-dot"></div><div class="tag-dot on"></div><div class="tag-dot on"></div></div><span class="tag-count">2 / 4本</span></div>
+      <div class="tag-row"><span class="tagname">集中(用bgm)</span><div class="tag-dots"><div class="tag-dot"></div><div class="tag-dot on"></div><div class="tag-dot on"></div><div class="tag-dot on"></div></div><span class="tag-count">3 / 4本</span></div>
+    </div>
+    <p style="margin-top:14px;" class="callout">
+      <b>睡眠専用に設計した<code>sleep_deep_drone</code>にまで「作業用bgm」タグが付いている。</b>use_casesの文章でも「隣人・交通音マスキング」「昼寝」と明記していながら、タグでは作業用途も主張している。検索エンジン・視聴者のどちらから見ても、「結局どれが自分向けか分からない」状態を自ら作っている。
+    </p>
+  </section>
+
+  <section id="japanese">
+    <div class="section-head">
+      <h2>日本語の自然さチェック</h2>
+      <p class="section-lede">既存タイトル・説明文を実際にレビュー。ご指摘の3例(「雨音で眠る」「集中を高めるBGM」「深い睡眠のための音楽」)そのものは見当たらなかったが、同種の問題を発見</p>
+    </div>
+
+    <div class="jp-item">
+      <div class="jp-quote">「雨音とやわらかな<b>パッド</b>で眠れる」</div>
+      <div class="jp-verdict"><span class="jp-tag watch">要改善</span><span class="jp-note">「パッド」はシンセ制作者の業界用語。一般視聴者が検索にも会話にも使わない言葉で、翻訳臭さの正体はここ</span></div>
+    </div>
+    <div class="jp-item">
+      <div class="jp-quote">「ヴァイナルの質感を<b>まとわせた</b>力の抜けるビート」</div>
+      <div class="jp-verdict"><span class="jp-tag watch">要改善</span><span class="jp-note">「まとわせた」「力の抜けるビート」は文学的だが不自然な組み合わせ。ネイティブなら「レコードのノイズ感がある、肩の力が抜けるビート」のように言う</span></div>
+    </div>
+    <div class="jp-item">
+      <div class="jp-quote">「勉強・仕事が<b>はかどる</b>」/「呼吸を合わせるように、深い眠りへ誘います」</div>
+      <div class="jp-verdict"><span class="jp-tag ok">自然</span><span class="jp-note">動詞選びが的確で競合チャンネルの言い回しに近い。今後のタイトル生成はこちらを模範にする</span></div>
+    </div>
+
+    <p style="margin-top:6px; font-size:13.5px; color:var(--text-dim);">
+      全体として「壊れた日本語」は無い。ただし説明文が「講義・解説」寄りの語り口になりがちで、この分野で伸びている競合(カジュアル・親しみやすい語り口)とは温度差がある。
+    </p>
+  </section>
+
+  <section id="proposals">
+    <div class="section-head">
+      <h2>今後10本の企画案(シーン起点)</h2>
+      <p class="section-lede">「誰が・いつ・どんな状況で・何のために」を先に定義してから音を設計する方針で作成。既存4本との差別化・検索意図・日本語自然度を評価</p>
+    </div>
+
+    <div class="proposal">
+      <div class="proposal-top"><span class="proposal-name">01. 深夜の不眠向け・静寂ドローン</span></div>
+      <div class="scene-def"><b>誰が:</b> 寝つけず時計を気にしてしまう人 / <b>いつ:</b> 深夜2〜3時 / <b>状況:</b> 焦りで余計に眠れない / <b>目的:</b> 心拍を落ち着けたい</div>
+      <div class="proposal-title">案: 「考えすぎて眠れない夜に、心拍がゆっくりになる音」</div>
+      <div class="axes">
+        <div class="axis"><div class="k">既存との差別化</div><div class="v score high">高</div></div>
+        <div class="axis"><div class="k">検索意図</div><div class="v">「眠れない 夜 音楽」系ロングテール</div></div>
+        <div class="axis"><div class="k">和音材料</div><div class="v">新規(超低域中心、コードほぼ無し)</div></div>
+        <div class="axis"><div class="k">日本語</div><div class="v">自然、悩み共感型で強い</div></div>
+      </div>
+    </div>
+
+    <div class="proposal">
+      <div class="proposal-top"><span class="proposal-name">02. 雨の日の読書向け</span></div>
+      <div class="scene-def"><b>誰が:</b> 家で本を読む人 / <b>いつ:</b> 休日の午後 / <b>状況:</b> 作業ではなく娯楽としての読書 / <b>目的:</b> ページをめくる手を止めない没入感</div>
+      <div class="proposal-title">案: 「雨の日、部屋にこもって本を読むときの音」</div>
+      <div class="axes">
+        <div class="axis"><div class="k">既存との差別化</div><div class="v score mid">中(rain_focusと音色近似の恐れ)</div></div>
+        <div class="axis"><div class="k">検索意図</div><div class="v">「読書 BGM 雨」</div></div>
+        <div class="axis"><div class="k">和音材料</div><div class="v">既存rain_focusから「作業」文脈を明確に外す。単音ピアノを薄く追加し差別化必須</div></div>
+        <div class="axis"><div class="k">日本語</div><div class="v">自然</div></div>
+      </div>
+    </div>
+
+    <div class="proposal">
+      <div class="proposal-top"><span class="proposal-name">03. 深夜の在宅PC作業向け(極小音量設計)</span></div>
+      <div class="scene-def"><b>誰が:</b> 家族が寝た後に作業する在宅ワーカー / <b>いつ:</b> 23時〜2時 / <b>状況:</b> 物音を立てられない / <b>目的:</b> 無音の気まずさを埋める最小限の存在感</div>
+      <div class="proposal-title">案: 「家族が寝たあと、静かに作業するときの音」</div>
+      <div class="axes">
+        <div class="axis"><div class="k">既存との差別化</div><div class="v score high">高(lofi_chillの「カフェの賑わい」と真逆)</div></div>
+        <div class="axis"><div class="k">検索意図</div><div class="v">「深夜 作業 静か BGM」</div></div>
+        <div class="axis"><div class="k">和音材料</div><div class="v">新規、リズム無し・極小ダイナミクス</div></div>
+        <div class="axis"><div class="k">日本語</div><div class="v">自然</div></div>
+      </div>
+    </div>
+
+    <div class="proposal">
+      <div class="proposal-top"><span class="proposal-name">04. 試験直前の短時間集中スパート</span></div>
+      <div class="scene-def"><b>誰が:</b> 試験直前で緊張している学生 / <b>いつ:</b> 試験当日・締切直前 / <b>状況:</b> 長時間ではなく25分だけ集中したい / <b>目的:</b> ポモドーロ的な短期集中</div>
+      <div class="proposal-title">案: 「試験前25分、一気に集中するための音」</div>
+      <div class="axes">
+        <div class="axis"><div class="k">既存との差別化</div><div class="v score high">高(尺の構造が既存の「1時間耐久」と根本的に違う)</div></div>
+        <div class="axis"><div class="k">検索意図</div><div class="v">「ポモドーロ BGM」「集中 25分」</div></div>
+        <div class="axis"><div class="k">和音材料</div><div class="v">binauralの発展系、終盤にわずかな高揚を追加</div></div>
+        <div class="axis"><div class="k">日本語</div><div class="v">自然</div></div>
+      </div>
+    </div>
+
+    <div class="proposal">
+      <div class="proposal-top"><span class="proposal-name">05. 20分パワーナップ専用</span></div>
+      <div class="scene-def"><b>誰が:</b> 昼休みに仮眠したい人 / <b>いつ:</b> 昼12〜15時 / <b>状況:</b> 深く眠りすぎず20分で起きたい / <b>目的:</b> 急速弛緩→穏やかな目覚め</div>
+      <div class="proposal-title">案: 「20分だけ眠る、昼休みの仮眠用音楽」</div>
+      <div class="axes">
+        <div class="axis"><div class="k">既存との差別化</div><div class="v score high">高(尺固定・終盤フェードアウトという構造が新規)</div></div>
+        <div class="axis"><div class="k">検索意図</div><div class="v">「パワーナップ 音楽」「昼寝 20分」</div></div>
+        <div class="axis"><div class="k">和音材料</div><div class="v">drone系だが尺構造は完全新規</div></div>
+        <div class="axis"><div class="k">日本語</div><div class="v">自然</div></div>
+      </div>
+    </div>
+
+    <div class="proposal">
+      <div class="proposal-top"><span class="proposal-name">06. カフェの環境音入り作業用</span></div>
+      <div class="scene-def"><b>誰が:</b> 一人だと集中できず適度な雑音が欲しい人 / <b>いつ:</b> 日中 / <b>状況:</b> 自宅・オフィスでカフェの賑わいを疑似体験したい / <b>目的:</b> ソーシャルフィリング(適度な人の気配)</div>
+      <div class="proposal-title">案: 「本物のカフェにいるみたいな作業用サウンド」</div>
+      <div class="axes">
+        <div class="axis"><div class="k">既存との差別化</div><div class="v score high">高(lofi_chillは音楽のみ、これは環境音レイヤーが主役)</div></div>
+        <div class="axis"><div class="k">検索意図</div><div class="v">「カフェ 環境音」「coffee shop ambience」</div></div>
+        <div class="axis"><div class="k">和音材料</div><div class="v">食器・ざわめきの環境音を新規合成、音楽は控えめ</div></div>
+        <div class="axis"><div class="k">日本語</div><div class="v">自然</div></div>
+      </div>
+    </div>
+
+    <div class="proposal">
+      <div class="proposal-top"><span class="proposal-name">07. 運転・移動中の覚醒維持</span></div>
+      <div class="scene-def"><b>誰が:</b> 長距離を運転する人 / <b>いつ:</b> ドライブ中 / <b>状況:</b> 単調な運転で眠くなるのを避けたい / <b>目的:</b> リラックスしすぎず適度な覚醒</div>
+      <div class="proposal-title">案: 「長距離運転で眠くならない、ほどよい緊張感の音」</div>
+      <div class="axes">
+        <div class="axis"><div class="k">既存との差別化</div><div class="v score high">高(既存4本にない「覚醒維持」目的)</div></div>
+        <div class="axis"><div class="k">検索意図</div><div class="v">「ドライブ BGM 眠気」</div></div>
+        <div class="axis"><div class="k">和音材料</div><div class="v">新規、テンポとダイナミクスにやや動きを持たせる</div></div>
+        <div class="axis"><div class="k">日本語</div><div class="v">自然</div></div>
+      </div>
+    </div>
+
+    <div class="proposal">
+      <div class="proposal-top"><span class="proposal-name">08. 赤ちゃんの寝かしつけホワイトノイズ</span></div>
+      <div class="scene-def"><b>誰が:</b> 子育て中の親 / <b>いつ:</b> 寝かしつけの時間 / <b>状況:</b> 落ち着いた睡眠環境を用意したい / <b>目的:</b> 子宮内音に近い単調な音のある環境を作る</div>
+      <div class="proposal-title">案(2026-08-12修正: 効果を断定しない): 「赤ちゃんの睡眠環境づくりに使えるホワイトノイズ」</div>
+      <div class="axes">
+        <div class="axis"><div class="k">既存との差別化</div><div class="v score high">高(ターゲット層が完全に別)</div></div>
+        <div class="axis"><div class="k">検索意図</div><div class="v">「赤ちゃん 寝かしつけ 音楽」大型ロングテール</div></div>
+        <div class="axis"><div class="k">和音材料</div><div class="v">新規、和音なし・純粋ノイズ+心拍リズム</div></div>
+        <div class="axis"><div class="k">日本語</div><div class="v">自然、育児層に刺さる直接表現</div></div>
+      </div>
+    </div>
+
+    <div class="proposal">
+      <div class="proposal-top"><span class="proposal-name">09. 瞑想・呼吸法ガイド音</span></div>
+      <div class="scene-def"><b>誰が:</b> ヨガ・マインドフルネス実践者 / <b>いつ:</b> 朝または就寝前 / <b>状況:</b> 呼吸のペースを整えたい / <b>目的:</b> 能動的な瞑想のサポート(BGMではなくガイド)</div>
+      <div class="proposal-title">案: 「呼吸に合わせて響く、瞑想のための音」</div>
+      <div class="axes">
+        <div class="axis"><div class="k">既存との差別化</div><div class="v score high">高(受動的BGMでなく能動的ガイドという新カテゴリ)</div></div>
+        <div class="axis"><div class="k">検索意図</div><div class="v">「瞑想 音楽」「breathing exercise music」</div></div>
+        <div class="axis"><div class="k">和音材料</div><div class="v">新規、倍音豊かな単音+呼吸ペースのLFO</div></div>
+        <div class="axis"><div class="k">日本語</div><div class="v">自然</div></div>
+      </div>
+    </div>
+
+    <div class="proposal">
+      <div class="proposal-top"><span class="proposal-name">10. 配信・実況の背景素材用</span></div>
+      <div class="scene-def"><b>誰が:</b> ゲーム実況・雑談配信者 / <b>いつ:</b> 配信中 / <b>状況:</b> 著作権フリーが必須条件 / <b>目的:</b> BGMそのものを聴くのではなく「素材」として使う</div>
+      <div class="proposal-title">案: 「配信で使える、著作権フリーの作業用BGM集」</div>
+      <div class="axes">
+        <div class="axis"><div class="k">既存との差別化</div><div class="v score mid">中(視聴目的でなく利用目的が違うだけ、音自体は既存に近くて良い)</div></div>
+        <div class="axis"><div class="k">検索意図</div><div class="v">「配信 BGM フリー」「著作権フリー 作業用」</div></div>
+        <div class="axis"><div class="k">和音材料</div><div class="v">既存流用可(訴求軸がライセンスなので新規音源は必須でない)</div></div>
+        <div class="axis"><div class="k">日本語</div><div class="v">自然</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="ranking">
+    <div class="section-head">
+      <h2>優先順位付け</h2>
+      <p class="section-lede">オーナー承認(2026-08-12)。市場規模・実装リスク・客層の多様性で評価し、最初の3企画を選定</p>
+    </div>
+    <div class="table-scroll rank-table">
+      <table>
+        <thead><tr><th>企画</th><th>判定</th><th>理由</th></tr></thead>
+        <tbody>
+          <tr><td>01 深夜の不眠向け</td><td><span class="rank-pill pick">選定</span></td><td>「眠れない」検索需要が大きく、既存droneの発展で実装リスクが低い</td></tr>
+          <tr><td>08 赤ちゃん寝かしつけ</td><td><span class="rank-pill pick">選定</span></td><td>育児カテゴリの需要が非常に大きく、既存4本と客層が完全に別。brown_noise系コードを流用できる</td></tr>
+          <tr><td>09 瞑想呼吸ガイド</td><td><span class="rank-pill pick">選定</span></td><td>能動的ガイドという新カテゴリ。既存の呼吸LFOコードを流用・発展でき実装コストが低い</td></tr>
+          <tr><td>03 深夜PC作業</td><td><span class="rank-pill hold">次点</span></td><td>差別化は高いが01・08・09の3客層で仮説検証してから追加判断</td></tr>
+          <tr><td>05 20分パワーナップ</td><td><span class="rank-pill hold">次点</span></td><td>構造的に新規性が高いが、まず定番シーンでの反応を見てから</td></tr>
+          <tr><td>04 試験前25分スパート</td><td><span class="rank-pill hold">次点</span></td><td>季節性(受験期)があるため急がない</td></tr>
+          <tr><td>02 雨の日読書</td><td><span class="rank-pill hold">保留</span></td><td>既存sleep_rain_focusと音色が近く、差別化の実装難度が高い(評価「中」)</td></tr>
+          <tr><td>10 配信素材用</td><td><span class="rank-pill hold">保留</span></td><td>視聴目的でなく利用目的の違いのみ。B2B寄りで0→1フェーズの優先度は低い</td></tr>
+          <tr><td>06 カフェ環境音</td><td><span class="rank-pill risk">保留(リスク)</span></td><td>会話・食器音の自前合成は不自然になりやすく、自社の完全自前合成方針と実現難度が衝突</td></tr>
+          <tr><td>07 運転中の覚醒維持</td><td><span class="rank-pill risk">保留(リスク)</span></td><td>需要はあるが「運転中にYouTubeを開いて探す」動線が弱く、発見されにくい</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="section-lede" style="margin-bottom:14px;">最初に市場投入する3企画</p>
+
+    <div class="pick-card">
+      <div class="pick-top"><span class="pick-rank">01</span><span class="pick-name">深夜の不眠向け・静寂ドローン</span><span class="rank-pill pick">公開済み(08-12)</span></div>
+      <p style="font-size:12.5px; margin:6px 0 0;"><a href="https://youtube.com/watch?v=qkpqzOM5zLM">sleep_insomnia_pulse を見る</a> · データ取得期間 08-12〜08-26 · Experiment: <code>bgm-scene01-insomnia-pulse</code></p>
+      <div class="pick-fields">
+        <div class="pick-field"><span class="k">想定ユーザー</span><span class="v">寝つきに悩む20〜40代</span></div>
+        <div class="pick-field"><span class="k">利用シーン</span><span class="v">深夜2〜3時、時計を気にして焦るほど眠れなくなる状態</span></div>
+        <div class="pick-field"><span class="k">需要仮説</span><span class="v">「眠れない」は検索ボリュームが大きい悩み系クエリ。既存<code>sleep_deep_drone</code>より踏み込んだ共感型の訴求で伸びる</span></div>
+        <div class="pick-field"><span class="k">差別化</span><span class="v"><b>高</b> — 既存droneの発展形、心拍に寄せた微細なパルスを追加</span></div>
+        <div class="pick-field"><span class="k">音響設計</span><span class="v">超低域中心・和音ほぼ無し、既存のブラウンノイズ+呼吸LFOを土台に、心拍寄りのゆるいパルスを追加</span></div>
+        <div class="pick-field"><span class="k">検証KPI</span><span class="v">2週間の再生数・平均視聴時間</span></div>
+      </div>
+      <div class="success-line">目安: 2週間で500再生・平均再生率(尺に対する視聴割合)が既存sleep_deep_droneを上回る(単独の絶対値でなく複合評価)</div>
+    </div>
+
+    <div class="pick-card">
+      <div class="pick-top"><span class="pick-rank">08</span><span class="pick-name">赤ちゃんの睡眠環境づくり用ホワイトノイズ</span><span class="rank-pill pick">公開済み(08-12)</span></div>
+      <p style="font-size:12.5px; margin:6px 0 0;"><a href="https://youtube.com/watch?v=QkeAOj3VN_E">baby_sleep_noise を見る</a> · データ取得期間 08-12〜08-26 · Experiment: <code>bgm-scene02-baby-sleep-noise</code></p>
+      <div class="pick-fields">
+        <div class="pick-field"><span class="k">想定ユーザー</span><span class="v">0〜2歳児の親(寝かしつけ・夜泣き対応・お昼寝時)</span></div>
+        <div class="pick-field"><span class="k">利用シーン</span><span class="v">寝かしつけの時間、落ち着いた睡眠環境を用意したい(<b>「必ず眠る」等の効果断定は禁止、「利用できる」という位置付けに限定</b>)</span></div>
+        <div class="pick-field"><span class="k">需要仮説</span><span class="v">育児カテゴリのBGM検索需要は非常に大きく、既存4本と客層が全く重ならないため純粋な新規リーチが見込める</span></div>
+        <div class="pick-field"><span class="k">差別化</span><span class="v"><b>高</b> — 客層そのものが既存動画と別。かつ音響設計自体が他の全プリセットと異なる(唯一、和音を一切使わない)</span></div>
+        <div class="pick-field"><span class="k">音響設計</span><span class="v">実装確定: 既存<code>brown_noise</code>80%+<code>pink_noise</code>20%のみ。和音・メロディ・呼吸LFOの揺らぎは全て不使用(一定音が望ましいという設計判断)。左右の広がりも他プリセットよりかなり狭く(near-mono)。医学的断定・過度な安全保証はタイトル・説明文とも行わず、明示的な否定文を概要欄に記載</span></div>
+        <div class="pick-field"><span class="k">検証KPI</span><span class="v">再生数・インプレッション・CTR・平均視聴時間・平均再生率(尺に対する割合)・視聴維持率・登録者増・コメント</span></div>
+      </div>
+      <div class="success-line">目安: 2週間で500再生・平均再生率が既存プリセット平均を上回る(単独の絶対値でなく複合評価。シーン01とは「どちらの需要仮説がより強いシグナルを得たか」で比較)</div>
+    </div>
+
+    <div class="pick-card">
+      <div class="pick-top"><span class="pick-rank">09</span><span class="pick-name">呼吸法ガイド音</span><span class="rank-pill pick">公開済み(08-12)</span></div>
+      <p style="font-size:12.5px; margin:6px 0 0;"><a href="https://youtube.com/watch?v=kO5dfoyCloE">breath_guide_coherent を見る</a> · データ取得期間 08-12〜08-26 · Experiment: <code>bgm-scene03-breath-guide</code></p>
+      <div class="pick-fields">
+        <div class="pick-field"><span class="k">想定ユーザー</span><span class="v">短時間で心を落ち着けたい人(仕事の合間・就寝前・緊張する場面の前など)。声によるガイド音声を求めていない人</span></div>
+        <div class="pick-field"><span class="k">利用シーン</span><span class="v">仕事・勉強の合間の小休憩、就寝前のリラックスタイム、緊張する場面の前。60分の受動的BGMとは異なる15分の能動的セッション</span></div>
+        <div class="pick-field"><span class="k">需要仮説</span><span class="v">受動的に聴くBGMではなく「呼吸を導く」能動的ガイドという新カテゴリで既存プリセットと差別化できる。実装確定: 実際には市場調査の結果、JP市場では「4-7-8呼吸法」等の療法名コンテンツが医学・治療文脈と強く結びつく一方、非言語の持続音ガイドという形式自体は未確立(ブルーオーシャン)と判明</span></div>
+        <div class="pick-field"><span class="k">差別化</span><span class="v"><b>高</b> — 受動的BGMでなく能動的ガイドという新カテゴリ。既存プリセット全てが使う和音進行を単一和音に留め、意識的に追従できる非対称エンベロープ(吸う4秒・吐く6秒)を新設</span></div>
+        <div class="pick-field"><span class="k">音響設計</span><span class="v">実装確定: PADS_SLEEPの単一和音(進行なし)+ブラウンノイズに、新規<code>_breath_envelope</code>で振幅変調。療法名は名乗らず「吸って4秒・吐いて6秒」という機能説明にとどめる</span></div>
+        <div class="pick-field"><span class="k">検証KPI</span><span class="v">再生数・インプレッション・CTR・平均視聴時間・平均再生率(特に15分を最後まで聴くかを重視)・視聴維持率・登録者増・コメント</span></div>
+      </div>
+      <div class="success-line">目安: 2週間で500再生・平均再生率が既存プリセット平均を上回る(単独の絶対値でなく複合評価。Scene 01・02とは「どの需要仮説が最も強いシグナルを得たか」で比較)</div>
+    </div>
+
+    <p style="font-size:13px; color:var(--text-dim); margin-top:4px;">
+      3案とも既存コード資産(ブラウンノイズ・呼吸LFO)を流用でき実装コストを抑えられる一方、想定客層(不眠に悩む層/育児層/マインドフルネス層)は互いに重ならない。1回の投入で3つの異なる需要仮説を並行検証できる組み合わせとして選定した。
+    </p>
+    <p class="callout" style="margin-top:14px;">
+      <b>2026-08-12追加(オーナー承認)</b>: 3企画は同時に大規模開発しない。企画→最小実装→QA→1本公開→データ取得を1本ずつ進める。比較評価は再生数の単純ランキングではなく「どの需要仮説に最も強い市場シグナルが出たか」を、再生数・インプレッション・CTR・平均視聴時間・平均再生率・視聴維持率・リピーター・登録者増・コメント・収益貢献の複合で判断する。
+    </p>
+  </section>
+
+  <section id="recommendations">
+    <div class="section-head"><h2>標準フロー(2026-08-12承認・コード変更は次のステップ)</h2></div>
+    <p style="font-size:13.5px; color:var(--text-dim); margin-bottom:14px;">Scene Definition → Demand Hypothesis → Audio Design → BGM Generation → Japanese QA → Metadata QA → Publish → Measure → Learn → Next Scene。この順序を守ることをBGM事業の標準運用とする。</p>
+    <ul class="principles">
+      <li><span class="mk">→</span>新プリセットは<b>シーン定義(誰が・いつ・どんな状況で・何のために)を先に書いてから</b>音を設計する。逆順(音を作ってからタグで用途を後付け)を禁止する</li>
+      <li><span class="mk">→</span><b>use_cases・tagsは実際に想定したシーンだけに絞る。</b>「他の用途にも使えそう」という理由での用途追加をやめる(「作業用bgm」4/4本問題の再発防止)</li>
+      <li><span class="mk">→</span>シーンが求める場合は<b>新しい和音進行を追加する。</b><code>PADS_SLEEP</code>/<code>PADS_STUDY</code>の使い回しだけで新プリセットを作らない</li>
+      <li><span class="mk">→</span>タイトル・説明文の生成時に「パッド」等の制作者ジャーゴンを避け、<b>視聴者が実際に検索・口にする言葉</b>を使う</li>
+      <li><span class="mk">→</span>上記10案から、既存との差別化が「高」評価のもの(01・03・04・05・06・07・08・09)を優先候補とする</li>
+    </ul>
+  </section>
+
+  <footer>
+    社長(Claude)発 · 音源類似度はscipyによるFFTスペクトル解析(実測)、和音進行の重複は<code>bgm_pipeline/presets.py</code>のコードレビューで確認 · AI経営パートナーへの正式協議はオーナー判断後に必要な場合実施
+  </footer>
+
+</div>

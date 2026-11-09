@@ -1,0 +1,5 @@
+[
+  {"date":"2026-10-14 12:30:00","country":"US","event":"CPI YoY","currency":"USD","previous":3.4,"estimate":3.6,"actual":3.8,"change":0.4,"impact":"High","changePercentage":11.765,"unit":"%"},
+  {"date":"2026-10-14 12:30:00","country":"US","event":"Core CPI YoY","currency":"USD","previous":2.4,"estimate":null,"actual":2.6,"change":0.2,"impact":"High","changePercentage":8.333,"unit":"%"},
+  {"date":"2026-10-02 12:31:00","country":"US","event":"Unemployment Rate","currency":"USD","previous":4.1,"estimate":4.1,"actual":4.2,"change":0.1,"impact":"High","changePercentage":2.439,"unit":"%"}
+]

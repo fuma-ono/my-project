@@ -1,0 +1,238 @@
+<title>note投稿キュー</title>
+<style>
+  @font-face { font-family: "Gloock"; src: url(data:font/ttf;base64,__GLOOCK__) format("truetype"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "Work Sans"; src: url(data:font/ttf;base64,__WORKSANS_REG__) format("truetype"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "Work Sans"; src: url(data:font/ttf;base64,__WORKSANS_BOLD__) format("truetype"); font-weight: 700; font-display: swap; }
+  @font-face { font-family: "IBM Plex Mono"; src: url(data:font/ttf;base64,__PLEXMONO_REG__) format("truetype"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "IBM Plex Mono"; src: url(data:font/ttf;base64,__PLEXMONO_BOLD__) format("truetype"); font-weight: 700; font-display: swap; }
+
+  :root {
+    --bg: #eef0f6; --surface: #ffffff; --surface-2: #f6f7fb; --border: #d9dcec;
+    --text: #171a2b; --text-dim: #5b6082; --text-faint: #8489a8;
+    --accent: #d9682f; --accent-soft: #f3ded0;
+    --accent2: #b0467a; --accent2-soft: #f6ddea;
+    --good: #2f9e63; --good-soft: #dcf1e5;
+    --shadow: 0 1px 2px rgba(23,26,43,0.06), 0 8px 24px rgba(23,26,43,0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0e1a; --surface: #141a30; --surface-2: #1b2340; --border: #2a3157;
+      --text: #eef0fa; --text-dim: #9aa0c3; --text-faint: #6e739a;
+      --accent: #f0955c; --accent-soft: #3a2a20;
+      --accent2: #ea7fb4; --accent2-soft: #3a2030;
+      --good: #57cf8f; --good-soft: #17301f;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #eef0f6; --surface: #ffffff; --surface-2: #f6f7fb; --border: #d9dcec;
+    --text: #171a2b; --text-dim: #5b6082; --text-faint: #8489a8;
+    --accent: #d9682f; --accent-soft: #f3ded0;
+    --accent2: #b0467a; --accent2-soft: #f6ddea;
+    --good: #2f9e63; --good-soft: #dcf1e5;
+    --shadow: 0 1px 2px rgba(23,26,43,0.06), 0 8px 24px rgba(23,26,43,0.05);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0e1a; --surface: #141a30; --surface-2: #1b2340; --border: #2a3157;
+    --text: #eef0fa; --text-dim: #9aa0c3; --text-faint: #6e739a;
+    --accent: #f0955c; --accent-soft: #3a2a20;
+    --accent2: #ea7fb4; --accent2-soft: #3a2030;
+    --good: #57cf8f; --good-soft: #17301f;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.35);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: "Work Sans", sans-serif; -webkit-font-smoothing: antialiased; }
+  body { padding: 0 0 72px; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 40px 24px 0; }
+
+  header.top { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 20px; }
+  .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); margin: 0 0 8px; }
+  h1.brand { font-family: "Gloock", serif; font-weight: 400; font-size: clamp(26px, 4vw, 34px); margin: 0 0 10px; text-wrap: balance; }
+  .lede { font-size: 14.5px; color: var(--text-dim); line-height: 1.8; max-width: 560px; }
+  .lede b { color: var(--text); }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 28px; border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    appearance: none; border: none; background: none; cursor: pointer;
+    font-family: "Work Sans", sans-serif; font-size: 14.5px; font-weight: 700; color: var(--text-faint);
+    padding: 10px 4px 12px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab-btn .count { font-family: "IBM Plex Mono", monospace; font-weight: 400; font-size: 12px; margin-left: 4px; }
+  .tab-btn.active.genre-a { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-btn.active.genre-b { color: var(--accent2); border-bottom-color: var(--accent2); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .empty-state {
+    background: var(--surface); border: 1px dashed var(--border); border-radius: 16px;
+    padding: 32px 26px; text-align: center; color: var(--text-dim); font-size: 13.5px; line-height: 1.8;
+  }
+  .empty-state b { color: var(--text); }
+
+  .article {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    box-shadow: var(--shadow); padding: 26px 26px 24px; margin-bottom: 26px;
+  }
+  .article-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
+  .order-badge {
+    flex: none; width: 30px; height: 30px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent); font-family: "IBM Plex Mono", monospace;
+    font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center;
+  }
+  .genre-b .order-badge { background: var(--accent2-soft); color: var(--accent2); }
+  .article-meta { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-faint); margin-top: 3px; }
+  .article-title-label { font-weight: 700; font-size: 16px; margin-top: 2px; }
+
+  .copy-label { font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin: 14px 0 4px; }
+  .copybox {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; font-family: "IBM Plex Mono", monospace; font-size: 12.5px;
+    color: var(--text); white-space: pre-wrap; word-break: break-word; position: relative; cursor: pointer;
+    line-height: 1.7;
+  }
+  .copybox.title-box { font-family: "Work Sans", sans-serif; font-size: 15px; font-weight: 700; }
+  .copybox .copy-hint { position: absolute; top: 10px; right: 12px; font-size: 10px; color: var(--text-faint); font-family: "Work Sans", sans-serif; }
+  .copybox.copied { border-color: var(--good); }
+
+  .mark-done {
+    margin-top: 16px; display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12.5px; color: var(--text-dim); cursor: pointer; user-select: none;
+  }
+  .mark-done input { accent-color: var(--good); width: 15px; height: 15px; }
+
+  .cadence-note {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); padding: 16px 20px; margin-bottom: 32px; font-size: 13px; color: var(--text-dim); line-height: 1.7;
+  }
+  .cadence-note b { color: var(--text); font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; display: block; margin-bottom: 8px; }
+
+  footer { max-width: 720px; margin: 0 auto; padding: 0 24px; font-size: 11.5px; color: var(--text-faint); font-family: "IBM Plex Mono", monospace; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">note 投稿キュー · 28本公開済み(非表示)・1本待ち・週3本投稿中</p>
+    <h1 class="brand">note投稿キュー</h1>
+    <p class="lede">01〜25は投稿済みのため、このページから削除済みです。26〜29が次の投稿分。タブで「Focus &amp; Sleep」と「恋愛ジャンル」を切り替えられます。上から順にnote.comの新規投稿画面へコピペしてください。投稿したら下の「投稿した」チェックを入れておくと、自分用の目印としてこのページ上でそのカードが消えます(ブラウザ内だけの見た目上の記録です)。<b>投稿ステータスは6時間おきに自動チェックされ、note.com上でタイトルが一致する記事が見つかり次第、システム側にも自動で反映されます。</b>チャットで報告する必要はありません。反映まで最大6時間ほどかかることがあります。</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active genre-a" data-tab="genre-a">Focus &amp; Sleep <span class="count">(4)</span></button>
+    <button class="tab-btn genre-b" data-tab="genre-b">恋愛ジャンル <span class="count">(0)</span></button>
+  </div>
+
+  <div class="cadence-note">
+    <b>28本公開済み。2026-08-12〜週3本投稿で運用中。</b>下書き在庫が6本を下回ると自動補充されます(週2回生成)。まとめて一気に投稿すると不自然なので、実際の公開ペースは週3本を目安にしてください。詳細は <code>note-articles/README.md</code> の「note運用ポリシー」を参照してください。
+  </div>
+
+  <div class="tab-panel active" id="panel-genre-a">
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <div class="article" id="art-29">
+    <div class="article-head">
+      <div class="order-badge">29</div>
+      <div>
+        <div class="article-title-label">作業中ずっと聴くより、始める前の3分だけ聴く方が効いた、という話</div>
+        <div class="article-meta">柱A・体験談型</div>
+      </div>
+    </div>
+
+    <div class="copy-label">タイトル</div>
+    <div class="copybox title-box" data-copy="作業中ずっと聴くより、始める前の3分だけ聴く方が効いた、という話">作業中ずっと聴くより、始める前の3分だけ聴く方が効いた、という話<span class="copy-hint">クリックでコピー</span></div>
+
+    <div class="copy-label">本文</div>
+    <div class="copybox"><span class="body-text">作業用BGMというと「作業中にずっと流しておくもの」だと思い込んでいた。実際、このnoteでもそういう前提で何本も書いてきた。でも最近、ある偶然のきっかけから、それとは別の使い方の方が自分には効くと気づいたので、今回はその話を書く。
+
+## きっかけは、うっかり止め忘れていたタイマー
+
+ある日、作業を始める前に「とりあえず気分を切り替えよう」と思って3分だけBGMを流し、そのまま止め忘れて別のことをしていた。数分後に気づいて止めたのだが、そこから改めて作業に取りかかったら、いつもよりすんなり手が動いた。最初は偶然だと思っていたが、何日か同じことを試してみたら、毎回同じような感覚になった。
+
+## 「ずっと流す」と「始める前だけ流す」は、効いている理由が違う気がする
+
+これまでの自分の感覚では、BGMは作業中の雑音対策・集中維持のためのものだった。つまり「途切れさせないこと」が大事だと思っていた。でも始める前の数分だけ流すやり方は、たぶん役割が違う。作業に入る前の「よし、始めるぞ」という区切りを、音で作っているだけなのだと思う。実際、作業が始まってしまえば無音でもそこまで気にならない。むしろ、作業中もずっと流していた頃より、途中で気が散る回数が減った気さえする。
+
+## だらだら先延ばしにしていた自分には、地味に合っていた
+
+自分はどちらかというと、机には座ったのになかなか作業に入れず、スマホを触ったり関係ないタブを開いたりして数分〜十数分を溶かすタイプだった。この「始める前の3分」を儀式的に挟むようになってから、その助走時間が明らかに短くなった気がする。理屈で説明しにくいのだが、「これを聴き終わったら始める」という終わりが決まっている音があることで、次の行動に移りやすくなるのかもしれない。
+
+## とはいえ、これも人によるとは思う
+
+もちろん、これは自分一人の体感の話で、全員に効く方法だとは思っていない。作業中に流すスタイルが合っている人はそのままでいいはずだ。ただ、「作業中ずっと流しているのに、なぜか始めるまでに時間がかかる」というタイプの人には、試してみる価値はあるかもしれない。
+
+自分は今、作業用BGMを自前で作って公開しているのだが、この「始める前だけ」の使い方をしてから、1曲(1時間の音源)を最初の数分だけ聴いて、あとは無音で作業する日も増えた。皮肉なことに、自分で作った長尺BGMの一番良い使い方を、作った後になって発見した形になる。</span><span class="copy-hint">クリックでコピー</span></div>
+
+    <label class="mark-done"><input type="checkbox" data-target="art-29"> 投稿した</label>
+  </div>
+
+  </div>
+
+  <div class="tab-panel" id="panel-genre-b">
+    <div class="empty-state">
+      <b>恋愛ジャンル、準備中</b><br>
+      アカウント作成(<code>note.com/tabun_onaji</code>)・ブランド設計(<code>love-note/brand.md</code>)は完了済み。投稿は<code>love-note/</code>の自動化基盤(週次生成)で行うため、このページでの手動コピペキューは使わない想定。オーナーのPC側セットアップ(<code>love-note/auth_setup.py</code>)待ち。
+    </div>
+  </div>
+
+</div>
+
+<footer>社長発 · note投稿キュー · 新しい下書きができ次第このページに追加</footer>
+
+<script>
+  document.querySelectorAll(".copybox").forEach(function (box) {
+    box.addEventListener("click", function () {
+      var bodyEl = box.querySelector(".body-text");
+      var text = bodyEl ? bodyEl.textContent : box.getAttribute("data-copy");
+      var done = function () {
+        box.classList.add("copied");
+        var hint = box.querySelector(".copy-hint");
+        if (hint) { var prev = hint.textContent; hint.textContent = "コピーしました"; setTimeout(function () { hint.textContent = prev; box.classList.remove("copied"); }, 1400); }
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function () {});
+      }
+    });
+  });
+  var STORAGE_KEY = "note-queue-posted-v1";
+  function loadPosted() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); } catch (e) { return []; }
+  }
+  function savePosted(ids) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(ids)); } catch (e) {}
+  }
+  function removeCard(id) {
+    var target = document.getElementById(id);
+    if (target) target.remove();
+  }
+
+  var posted = loadPosted();
+  posted.forEach(removeCard);
+
+  document.querySelectorAll(".mark-done input").forEach(function (cb) {
+    cb.addEventListener("change", function () {
+      if (!cb.checked) return;
+      var id = cb.getAttribute("data-target");
+      var ids = loadPosted();
+      if (ids.indexOf(id) === -1) { ids.push(id); savePosted(ids); }
+      removeCard(id);
+    });
+  });
+  document.querySelectorAll(".tab-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var tab = btn.getAttribute("data-tab");
+      document.querySelectorAll(".tab-btn").forEach(function (b) { b.classList.toggle("active", b === btn); });
+      document.querySelectorAll(".tab-panel").forEach(function (p) { p.classList.toggle("active", p.id === "panel-" + tab); });
+    });
+  });
+</script>

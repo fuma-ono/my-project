@@ -1,0 +1,575 @@
+<title>アカウント作成ガイド</title>
+<style>
+  @font-face { font-family: "Gloock"; src: url(data:font/ttf;base64,__GLOOCK__) format("truetype"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "Work Sans"; src: url(data:font/ttf;base64,__WORKSANS_REG__) format("truetype"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "Work Sans"; src: url(data:font/ttf;base64,__WORKSANS_BOLD__) format("truetype"); font-weight: 700; font-display: swap; }
+  @font-face { font-family: "IBM Plex Mono"; src: url(data:font/ttf;base64,__PLEXMONO_REG__) format("truetype"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "IBM Plex Mono"; src: url(data:font/ttf;base64,__PLEXMONO_BOLD__) format("truetype"); font-weight: 700; font-display: swap; }
+
+  :root {
+    --bg: #eef0f6; --surface: #ffffff; --surface-2: #f6f7fb; --border: #d9dcec;
+    --text: #171a2b; --text-dim: #5b6082; --text-faint: #8489a8;
+    --accent: #d9682f; --accent-soft: #f3ded0;
+    --good: #2f9e63; --good-soft: #dcf1e5;
+    --shadow: 0 1px 2px rgba(23,26,43,0.06), 0 8px 24px rgba(23,26,43,0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0e1a; --surface: #141a30; --surface-2: #1b2340; --border: #2a3157;
+      --text: #eef0fa; --text-dim: #9aa0c3; --text-faint: #6e739a;
+      --accent: #f0955c; --accent-soft: #3a2a20;
+      --good: #57cf8f; --good-soft: #17301f;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #eef0f6; --surface: #ffffff; --surface-2: #f6f7fb; --border: #d9dcec;
+    --text: #171a2b; --text-dim: #5b6082; --text-faint: #8489a8;
+    --accent: #d9682f; --accent-soft: #f3ded0;
+    --good: #2f9e63; --good-soft: #dcf1e5;
+    --shadow: 0 1px 2px rgba(23,26,43,0.06), 0 8px 24px rgba(23,26,43,0.05);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0e1a; --surface: #141a30; --surface-2: #1b2340; --border: #2a3157;
+    --text: #eef0fa; --text-dim: #9aa0c3; --text-faint: #6e739a;
+    --accent: #f0955c; --accent-soft: #3a2a20;
+    --good: #57cf8f; --good-soft: #17301f;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.35);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: "Work Sans", sans-serif; -webkit-font-smoothing: antialiased; }
+  body { padding: 0 0 72px; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 40px 24px 0; }
+
+  header.top { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 28px; }
+  .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); margin: 0 0 8px; }
+  h1.brand { font-family: "Gloock", serif; font-weight: 400; font-size: clamp(26px, 4vw, 34px); margin: 0 0 10px; text-wrap: balance; }
+  .lede { font-size: 14.5px; color: var(--text-dim); line-height: 1.8; max-width: 560px; }
+  .lede b { color: var(--text); }
+
+  .progress-bar { display: flex; gap: 4px; margin-top: 20px; }
+  .progress-seg { height: 4px; flex: 1; border-radius: 2px; background: var(--border); transition: background 0.2s; }
+  .progress-seg.filled { background: var(--good); }
+  .progress-label { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-faint); margin-top: 8px; }
+
+  .prereq {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); padding: 16px 20px; margin-bottom: 36px; font-size: 13px; color: var(--text-dim);
+  }
+  .prereq b { color: var(--text); font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; display: block; margin-bottom: 8px; }
+  .prereq ul { margin: 0; padding-left: 18px; line-height: 1.8; }
+
+  .platform {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    box-shadow: var(--shadow); padding: 26px 26px 22px; margin-bottom: 22px; scroll-margin-top: 20px;
+    transition: opacity 0.2s;
+  }
+  .platform.done { opacity: 0.55; }
+  .platform-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
+  .platform-num {
+    flex: none; width: 30px; height: 30px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent); font-family: "IBM Plex Mono", monospace;
+    font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center;
+  }
+  .platform-title { font-weight: 700; font-size: 17px; }
+  .platform-meta { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-faint); margin-top: 3px; }
+  .platform-check { margin-left: auto; flex: none; }
+  .platform-check label {
+    display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-dim);
+    cursor: pointer; user-select: none; white-space: nowrap;
+  }
+  .platform-check input { accent-color: var(--good); width: 16px; height: 16px; }
+  .platform.done .platform-check label { color: var(--good); font-weight: 700; }
+
+  .steps-list { margin: 0 0 14px; padding-left: 0; list-style: none; }
+  .steps-list li {
+    position: relative; padding: 8px 0 8px 28px; font-size: 13.5px; line-height: 1.7; color: var(--text-dim);
+    border-bottom: 1px dashed var(--border);
+  }
+  .steps-list li:last-child { border-bottom: none; }
+  .steps-list li::before {
+    content: attr(data-n); position: absolute; left: 0; top: 8px;
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-faint);
+  }
+  .steps-list li b { color: var(--text); }
+
+  .copybox {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; margin: 4px 0 2px; font-family: "IBM Plex Mono", monospace; font-size: 12px;
+    color: var(--text); white-space: pre-wrap; word-break: break-word; position: relative; cursor: pointer;
+  }
+  .copybox .copy-hint { position: absolute; top: 8px; right: 10px; font-size: 10px; color: var(--text-faint); font-family: "Work Sans", sans-serif; }
+  .copybox.copied { border-color: var(--good); }
+  .copy-label { font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin: 12px 0 4px; }
+
+  .after {
+    margin-top: 14px; font-size: 12.5px; background: var(--good-soft); color: var(--good);
+    border-radius: 8px; padding: 9px 12px;
+  }
+  .after b { font-weight: 700; }
+
+  .decision-box {
+    margin-top: 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; font-size: 13px; color: var(--text-dim); line-height: 1.7;
+  }
+  .decision-box b { color: var(--text); }
+  .decision-box .opt-label { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.04em; }
+
+  .security-note {
+    background: var(--surface); border: 1px solid var(--accent); border-radius: 12px;
+    box-shadow: var(--shadow); padding: 16px 20px; margin-bottom: 36px; font-size: 13px; color: var(--text-dim);
+  }
+  .security-note b { color: var(--accent); font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; display: block; margin-bottom: 8px; }
+  .security-note ul { margin: 0; padding-left: 18px; line-height: 1.8; }
+
+  footer { max-width: 760px; margin: 0 auto; padding: 0 24px; font-size: 11.5px; color: var(--text-faint); font-family: "IBM Plex Mono", monospace; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">Setup Guide · 11 items</p>
+    <h1 class="brand">アカウント作成ガイド</h1>
+    <p class="lede">上から順番にやればOKです。名前・説明文などは<b>そのままコピペで使える文面</b>を用意しました。各項目右上に<b>チェックボックス</b>があります。完了したらチェックしてください — <b>ブラウザに自動保存される</b>ので、閉じてもタブを変えても消えません(この端末のこのブラウザだけに保存されます)。</p>
+    <div class="progress-bar" id="progress-bar"></div>
+    <div class="progress-label" id="progress-label"></div>
+  </header>
+
+  <div class="prereq">
+    <b>始める前に用意するもの</b>
+    <ul>
+      <li>事業用に使うメールアドレス(まとめて管理したいなら新しいGmailを1つ作るのがおすすめ)</li>
+      <li>SMS認証を受けられる電話番号</li>
+      <li>クレジットカード(Apple Developer $99/年、Google Play Console $25の支払いに必要)</li>
+      <li>本人確認書類(運転免許証・マイナンバーカードなど。Apple/Googleの登録で求められる場合があります)</li>
+    </ul>
+  </div>
+
+  <div class="security-note">
+    <b>🔒 各アカウント、作った直後にこれだけやってください</b>
+    <ul>
+      <li><b>二段階認証(2FA)をその場で有効化</b>する(あとで、にすると忘れます)</li>
+      <li>使い回しのパスワードを使わない。パスワードマネージャーで生成した固有のものを設定する</li>
+      <li>復旧用のメールアドレス・電話番号を最新の状態にしておく(乗っ取り対策)</li>
+      <li>特にApple Developer / Google Play Consoleはアカウント停止が即事業停止につながるので、ここだけは念入りに</li>
+    </ul>
+  </div>
+
+  <div class="platform" id="plat-google">
+    <div class="platform-head">
+      <div class="platform-num">1</div>
+      <div>
+        <div class="platform-title">Google アカウント(YouTube・Google Playで共用)</div>
+        <div class="platform-meta">所要時間: 約5分</div>
+      </div>
+      <div class="platform-check"><label><input type="checkbox" data-key="google" checked> 完了</label></div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1"><a href="https://accounts.google.com/signup" target="_blank" rel="noopener">accounts.google.com/signup</a> を開く</li>
+      <li data-n="2">「自分用」ではなく「<b>ビジネスの管理</b>」を選び、下のメールアドレス候補(空いている最初のもの)で登録</li>
+      <li data-n="3">氏名は本名を入力(将来AdSense/Play Consoleの支払い設定で本人確認が必要になるため、後で変えずに済みます)</li>
+      <li data-n="4">復旧用のメールアドレス・電話番号は、<b>普段使っている個人のもの</b>を設定する(ここを新しいアドレス自身にしない。ロックアウト対策)</li>
+      <li data-n="5">SMSで届く確認コードを入力して完了</li>
+    </ol>
+    <div class="copy-label">メールアドレス候補(上から順に空いているものを)</div>
+    <div class="copybox" data-copy="focusandsleepsounds@gmail.com">focusandsleepsounds@gmail.com<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copybox" data-copy="focus.sleep.sounds@gmail.com">focus.sleep.sounds@gmail.com<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copybox" data-copy="fss.official@gmail.com">fss.official@gmail.com<span class="copy-hint">クリックでコピー</span></div>
+    <div class="after"><b>完了済み。</b>このGoogleアカウントで次のYouTube・Google Play Consoleにログインします。</div>
+  </div>
+
+  <div class="platform" id="plat-youtube">
+    <div class="platform-head">
+      <div class="platform-num">2</div>
+      <div>
+        <div class="platform-title">YouTube チャンネル作成</div>
+        <div class="platform-meta">所要時間: 約5分</div>
+      </div>
+      <div class="platform-check"><label><input type="checkbox" data-key="youtube" checked> 完了</label></div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1">手順1のGoogleアカウントで <a href="https://youtube.com" target="_blank" rel="noopener">youtube.com</a> にログイン</li>
+      <li data-n="2">右上のプロフィールアイコン →「チャンネルを作成」</li>
+      <li data-n="3">「個人名」ではなく「<b>カスタム名を使用</b>」を選び、下のチャンネル名を入力(ブランドアカウントとして分離されます)</li>
+      <li data-n="4">作成後、YouTube Studio →「設定」→「チャンネル」→「基本情報」の概要欄に下の説明文を貼り付け</li>
+    </ol>
+    <div class="copy-label">チャンネル名</div>
+    <div class="copybox" data-copy="Focus &amp; Sleep Sounds">Focus &amp; Sleep Sounds<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copy-label">概要欄</div>
+    <div class="copybox" data-copy="AIが生成した、著作権フリーのオリジナル睡眠用BGM・作業用Lo-Fi・集中用バイノーラルビートを配信しています。眠れない夜に、集中したい作業中に。毎週新しいトラックを追加予定です。">AIが生成した、著作権フリーのオリジナル睡眠用BGM・作業用Lo-Fi・集中用バイノーラルビートを配信しています。眠れない夜に、集中したい作業中に。毎週新しいトラックを追加予定です。<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copy-label">カテゴリ</div>
+    <div class="copybox" data-copy="音楽">音楽<span class="copy-hint">クリックでコピー</span></div>
+    <div class="after"><b>完了済み。</b>動画本体(MP4)は生成・検証済みです。</div>
+  </div>
+
+  <div class="platform" id="plat-youtube-resetup">
+    <div class="platform-head">
+      <div class="platform-num">2b</div>
+      <div>
+        <div class="platform-title">YouTube 再設定(別アカウント)+ OAuth連携</div>
+        <div class="platform-meta">所要時間: 約15分・専用アカウントが停止中のため必要</div>
+      </div>
+      <div class="platform-check"><label><input type="checkbox" data-key="youtube-resetup" checked> 完了</label></div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1">手順1で作った専用アカウントは利用規約違反で停止中(再審請求は提出済み)。復旧を待たず、<b>普段お使いの別のGoogleアカウント</b>でチャンネルを作り直す(手順2と同じ要領。チャンネル名・概要欄は上のコピーボックスを流用可)</li>
+      <li data-n="2"><a href="https://console.cloud.google.com/" target="_blank" rel="noopener">console.cloud.google.com</a> を開き、同じGoogleアカウントで新規プロジェクトを作成(名前は任意、例: <code>Focus Sleep Sounds</code>)</li>
+      <li data-n="3">「APIとサービス」→「ライブラリ」で <b>YouTube Data API v3</b> を検索して有効化</li>
+      <li data-n="4">「APIとサービス」→「OAuth同意画面」で「<b>外部</b>」を選び、アプリ名・自分のメールアドレスを入力。「テストユーザー」に<b>手順1でチャンネルを作ったのと同じGoogleアカウントのメールアドレスを一字一句正確に</b>追加(「テスト」モードのままでOK、Googleの審査は不要)。<b>ここがずれていると、あとの承認画面で「Googleの審査プロセスが完了していません」から一切先に進めなくなります</b>(実際に一度ハマったポイントです)</li>
+      <li data-n="5">「APIとサービス」→「認証情報」→「認証情報を作成」→「OAuthクライアントID」。アプリケーションの種類は必ず「<b>テレビと限定入力デバイス</b>」を選択(これ以外を選ぶとこの連携方式が使えません)</li>
+      <li data-n="6">作成されたJSONをダウンロードし、内容をこのチャットに貼り付けてください。こちらで <code>bgm-pipeline/credentials/client_secret.json</code> として保存し、ログインコードの発行まで進めます</li>
+      <li data-n="7">表示されたURL(google.com/device)を開いてコードを入力すると、「Googleはこのアプリを確認していません」という警告が出ます(未審査アプリなので想定通り)。手順4のテストユーザー登録が正しければ、下に「<b>詳細</b>」というリンクが出るので押し、「<b>(プロジェクト名)に移動(安全ではありません)</b>」を選べば承認できます</li>
+    </ol>
+    <div class="decision-box"><span class="opt-label">既知の制限</span> テストモードのままだと、リフレッシュトークンが<b>約7日で失効する</b>可能性があります。1週間ほどしてアップロードが失敗するようになったら、再度ログインをやり直すだけで復旧します(パスワードの再入力は不要)。将来的に自動更新を安定させたい場合は、Googleの審査を受けて「本番環境」に切り替える選択肢もありますが、まずは動かすことを優先しています。</div>
+    <div class="after"><b>OAuth連携自体は完了。</b>ただし下の2cも必須です(そちらをやらないと長尺動画がアップロードできません)。</div>
+  </div>
+
+  <div class="platform" id="plat-youtube-verify">
+    <div class="platform-head">
+      <div class="platform-num">2c</div>
+      <div>
+        <div class="platform-title">YouTube 電話番号確認(長尺動画に必須)</div>
+        <div class="platform-meta">所要時間: 約2分・無料</div>
+      </div>
+      <div class="platform-check"><label><input type="checkbox" data-key="youtube-verify" checked> 完了</label></div>
+    </div>
+    <p style="font-size: 13.5px; color: var(--text-dim); line-height: 1.75; margin: 0 0 4px;">YouTubeは電話番号未確認のチャンネルだと、<b>動画の長さが15分までに制限されます</b>。実際に60分の動画をアップロードしたところ「処理を中止しました・動画が長すぎます」で弾かれたのを確認済みです。このアプリの睡眠用BGM(数十分〜数時間)は長尺が前提なので、これをやらないと事業として成立しません。</p>
+    <ol class="steps-list">
+      <li data-n="1"><a href="https://www.youtube.com/verify" target="_blank" rel="noopener">youtube.com/verify</a> を開く(またはYouTube Studio →「設定」→「チャンネル」→「機能の利用資格」)</li>
+      <li data-n="2"><b>普段使っている実際の携帯電話番号</b>を入力(仮想番号・IP電話は最近弾かれやすいそうです)</li>
+      <li data-n="3">SMSで届く確認コードを入力</li>
+    </ol>
+    <div class="decision-box"><span class="opt-label">注意</span> 同じ電話番号でのチャンネル確認は年2回までという制限があるようです。以前の(停止中の)専用アカウントで既にこの電話番号を使っていた場合、うまくいかない可能性があります。その場合は教えてください。</div>
+    <div class="after">確認できたら教えてください。今止まっている動画を削除して、あらためて公開し直します。</div>
+  </div>
+
+  <div class="platform" id="plat-play-console">
+    <div class="platform-head">
+      <div class="platform-num">3</div>
+      <div>
+        <div class="platform-title">Google Play Console(アプリ公開用)</div>
+        <div class="platform-meta">所要時間: 約15分 + 本人確認待ち(最大48時間)・$25</div>
+      </div>
+      <div class="platform-check"><label><input type="checkbox" data-key="play-console"> 完了</label></div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1"><a href="https://play.google.com/console/signup" target="_blank" rel="noopener">play.google.com/console/signup</a> を開く(手順1のGoogleアカウントでログイン)</li>
+      <li data-n="2">アカウントの種類は「<b>個人</b>」を選択(法人化していないため。組織より審査が速い)</li>
+      <li data-n="3">氏名・住所・電話番号を入力し、本人確認書類をアップロード</li>
+      <li data-n="4">登録料 $25 をクレジットカードで支払う(一度きり)</li>
+    </ol>
+    <div class="copy-label">アプリ名(登録時に使用)</div>
+    <div class="copybox" data-copy="Focus &amp; Sleep Sounds">Focus &amp; Sleep Sounds<span class="copy-hint">クリックでコピー</span></div>
+    <div class="after"><b>これで完了。</b>審査完了の連絡が来たら教えてください。アプリのビルド・ストア掲載情報の入力を進めます。</div>
+  </div>
+
+  <div class="platform" id="plat-apple">
+    <div class="platform-head">
+      <div class="platform-num">4</div>
+      <div>
+        <div class="platform-title">Apple Developer Program</div>
+        <div class="platform-meta">所要時間: 約20分 + 審査待ち(数時間〜48時間)・$99/年</div>
+      </div>
+      <div class="platform-check"><label><input type="checkbox" data-key="apple"> 完了</label></div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1">Apple IDを持っていなければ <a href="https://appleid.apple.com" target="_blank" rel="noopener">appleid.apple.com</a> で作成</li>
+      <li data-n="2"><a href="https://developer.apple.com/programs/enroll/" target="_blank" rel="noopener">developer.apple.com/programs/enroll</a> を開く</li>
+      <li data-n="3">「<b>個人(Individual)</b>」で登録(組織登録はD-U-N-S番号が必要で時間がかかるため)</li>
+      <li data-n="4">本人確認 → 年会費 $99 を支払う</li>
+    </ol>
+    <div class="after"><b>Macは不要です。</b>Expo(このアプリの開発基盤)のクラウドビルド(EAS Build)を使うので、Xcodeやmacがなくてもこちらでビルド・提出できます。承認されたら教えてください。</div>
+  </div>
+
+  <div class="platform" id="plat-expo">
+    <div class="platform-head">
+      <div class="platform-num">4b</div>
+      <div>
+        <div class="platform-title">Expo(EAS Build)アカウント</div>
+        <div class="platform-meta">所要時間: 約2分・無料</div>
+      </div>
+      <div class="platform-check"><label><input type="checkbox" data-key="expo"> 完了</label></div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1"><a href="https://expo.dev/signup" target="_blank" rel="noopener">expo.dev/signup</a> でアカウント作成(メールアドレスでOK)</li>
+      <li data-n="2">ビルド設定(<code>app/eas.json</code>)は準備済み。アカウントができたと教えてもらえれば、こちらで <code>eas build</code> を実行してビルドまで進めます</li>
+    </ol>
+    <div class="after"><b>これで完了。</b>Apple Developer / Google Play Consoleの審査が下りていれば、そのままストア提出まで進められます。</div>
+  </div>
+
+  <div class="platform" id="plat-instagram">
+    <div class="platform-head">
+      <div class="platform-num">5</div>
+      <div>
+        <div class="platform-title">Instagram</div>
+        <div class="platform-meta">所要時間: 約5分</div>
+      </div>
+      <div class="platform-check"><label><input type="checkbox" data-key="instagram" checked> 完了</label></div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1"><a href="https://instagram.com" target="_blank" rel="noopener">instagram.com</a> で新規アカウント作成</li>
+      <li data-n="2">ユーザーネームを下の候補で設定(空いていなければ近い名前で)</li>
+      <li data-n="3">設定 →「アカウントの種類とツール」→「<b>プロアカウントに切り替える</b>」→ 種類は必ず「<b>ビジネス</b>」を選択(「クリエイター」だと自動投稿APIが使えません)→ カテゴリは「音楽」または「アプリ」を選択</li>
+    </ol>
+    <div class="copy-label">ユーザーネーム候補</div>
+    <div class="copybox" data-copy="focusandsleepsounds">focusandsleepsounds<span class="copy-hint">クリックでコピー</span></div>
+    <div class="after"><b>完了済み。</b>プロアカウントの種類(ビジネス)だけ念のため確認してください。</div>
+  </div>
+
+  <div class="platform" id="plat-meta">
+    <div class="platform-head">
+      <div class="platform-num">5b</div>
+      <div>
+        <div class="platform-title">Instagram 自動投稿の設定(Meta Graph API)</div>
+        <div class="platform-meta">所要時間: 約20分 + Appレビュー待ち2〜4週間・無料</div>
+      </div>
+      <div class="platform-check"><label><input type="checkbox" data-key="meta"> 完了</label></div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1">Instagramのビジネスアカウントを、<a href="https://business.facebook.com" target="_blank" rel="noopener">Meta Business Suite</a>で自分のFacebookページに連携する(ページがなければ作成)</li>
+      <li data-n="2"><a href="https://developers.facebook.com/apps" target="_blank" rel="noopener">developers.facebook.com/apps</a> で新規アプリを作成(種類: 「Business」)。初回はメール認証・電話番号認証を求められる場合があります</li>
+      <li data-n="3">アプリの管理画面 →「アプリの設定」→「基本設定」で「アプリID」と「app secret」(「表示」をクリックしてパスワード確認)を確認し、内容をこのチャットに貼り付けてください(こちらで <code>bgm-pipeline/credentials/meta_app.json</code> として保存します)</li>
+      <li data-n="4"><a href="https://developers.facebook.com/tools/explorer" target="_blank" rel="noopener">Graph API Explorer</a> を開き、右上の「Meta App」で作成したアプリを選択。「Permissions」欄で <code>instagram_business_basic</code>・<code>instagram_business_content_publish</code>・<code>pages_show_list</code> の3つだけを検索して追加し、「Generate Access Token」を押してFacebookログイン確認を許可する</li>
+      <li data-n="5">表示されたトークン(文字列)をこのチャットに貼り付けてください。長期トークンへの変換・保存はこちらで行います(<code>instagram_auth.py import --token</code>)</li>
+      <li data-n="6">アプリの「App Review」画面から、上記2つのInstagram権限のレビューを申請する(用途説明と簡単な操作動画が必要になるので、こちらで説明文案を用意します)</li>
+      <li data-n="7">YouTube用に作成したGoogle Cloudプロジェクトで、<a href="https://console.cloud.google.com/storage" target="_blank" rel="noopener">Cloud Storage</a> → 「バケットを作成」。アクセス制御は「<b>限定公開(均一)</b>」ではなく「<b>きめ細かい管理</b>」を選択(これを間違えると動画を一時公開できません)。バケット名をこちらに教えてください</li>
+    </ol>
+    <div class="after"><b>Appレビューが通るまでの間は手動投稿になります。</b>審査が通り次第、YouTubeと同じように生成→自動投稿に切り替わります。</div>
+  </div>
+
+  <div class="platform" id="plat-tiktok">
+    <div class="platform-head">
+      <div class="platform-num">6</div>
+      <div>
+        <div class="platform-title">TikTok</div>
+        <div class="platform-meta">所要時間: 約5分</div>
+      </div>
+      <div class="platform-check"><label><input type="checkbox" data-key="tiktok"> 完了</label></div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1"><a href="https://www.tiktok.com/signup" target="_blank" rel="noopener">tiktok.com/signup</a> で新規アカウント作成</li>
+      <li data-n="2">ユーザーネームを下の候補で設定</li>
+      <li data-n="3">設定 →「アカウント管理」→「<b>ビジネスアカウントに切り替える</b>」</li>
+    </ol>
+    <div class="copy-label">ユーザーネーム候補</div>
+    <div class="copybox" data-copy="focusandsleepsounds">focusandsleepsounds<span class="copy-hint">クリックでコピー</span></div>
+    <div class="after">TikTok公式の投稿APIはまだ連携していないため、当面は生成済みのShorts用動画(9:16)を手動でアップロードする運用になります。</div>
+  </div>
+
+  <div class="platform" id="plat-note">
+    <div class="platform-head">
+      <div class="platform-num">7</div>
+      <div>
+        <div class="platform-title">note.com</div>
+        <div class="platform-meta">所要時間: 約3分・無料</div>
+      </div>
+      <div class="platform-check"><label><input type="checkbox" data-key="note" checked> 完了</label></div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1"><a href="https://note.com/signup" target="_blank" rel="noopener">note.com/signup</a> をメールアドレスで登録(支払い情報は不要)</li>
+      <li data-n="2">プロフィール名・アカウント名を下の候補で設定</li>
+    </ol>
+    <div class="copy-label">アカウント名候補</div>
+    <div class="copybox" data-copy="Focus &amp; Sleep Sounds">Focus &amp; Sleep Sounds<span class="copy-hint">クリックでコピー</span></div>
+    <div class="after"><b>完了済み。</b>4本公開済み、2本が<a href="https://claude.ai/code/artifact/4463f3ba-3008-4e37-bbff-c9b338cbcb87" target="_blank" rel="noopener">投稿キュー</a>で投稿待ちです。</div>
+  </div>
+
+  <div class="platform" id="plat-note-auto">
+    <div class="platform-head">
+      <div class="platform-num">7b</div>
+      <div>
+        <div class="platform-title">note 自動投稿の初回ログイン</div>
+        <div class="platform-meta">所要時間: 約5分・<b>必ずオーナー自身のPCで実行</b>(このガイドを開いているブラウザではなく、ターミナルでの作業です)</div>
+      </div>
+      <div class="platform-check"><label><input type="checkbox" data-key="note-auto"> 完了</label></div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1">note.comには公式の投稿APIがないため、実際にログインしたブラウザセッションを自動投稿に使う方式にしています(詳細は<code>docs/security/checklist.md</code>のnote.comセクション)。以下は<b>Claude Codeのクラウドセッションではなく、お使いのPCのターミナル</b>で実行してください(このコンテナはnote.comへの接続がネットワークポリシーでブロックされているため、そもそも動きません)</li>
+      <li data-n="2">リポジトリをローカルにclone(または既にcloneしてあるフォルダ)で、<code>note-articles/note_publish/</code> に移動</li>
+      <li data-n="3">下のコマンドを順番に実行(初回のみ):</li>
+    </ol>
+    <div class="copybox" data-copy="cd note-articles/note_publish
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/playwright install chromium
+.venv/bin/python note_auth.py login">cd note-articles/note_publish
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/playwright install chromium
+.venv/bin/python note_auth.py login<span class="copy-hint">クリックでコピー</span></div>
+    <ol class="steps-list" style="margin-top: 8px;">
+      <li data-n="4">最後のコマンドでブラウザが自動で開き、note.comのログイン画面が表示されます。<b>いつも通りログインするだけ</b>です(パスワードはこのツールを一切経由しません。note.com自身のページに直接入力しています)</li>
+      <li data-n="5">ログインして自分のnoteホーム画面が表示されたら、開いたままのターミナルに戻ってEnterキーを押す。セッションが保存され、セットアップ完了です</li>
+    </ol>
+    <div class="decision-box"><span class="opt-label">未検証の注意</span> このクラウドセッションからはnote.comに接続できないため、投稿時のボタン名などの自動化コード(<code>publish.py</code>)は実地で確認できていません。初回投稿は <code>.venv/bin/python publish.py --debug</code> でブラウザを表示させながら試し、うまくいかない箇所があれば教えてください(その場で修正します)。</div>
+    <div class="after"><b>これが終われば、note記事もキュー画面からのコピペではなく自動投稿できるようになります。</b></div>
+  </div>
+
+  <div class="platform" id="plat-love-note">
+    <div class="platform-head">
+      <div class="platform-num">8</div>
+      <div>
+        <div class="platform-title">note.com(恋愛ジャンル専用アカウント)</div>
+        <div class="platform-meta">所要時間: 約3分・無料・Focus &amp; Sleepとは別アカウント</div>
+      </div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1"><a href="https://note.com/signup" target="_blank" rel="noopener">note.com/signup</a> を別のメールアドレスで登録(Focus &amp; Sleepと同じメールは使えません)</li>
+      <li data-n="2">表示名・note ID・プロフィール文を下の候補で設定</li>
+      <li data-n="3">作成後、`love-note/auth_setup.py` の手順(`love-note/README.md`)で自動投稿用のログインセッションを保存してください</li>
+    </ol>
+    <div class="copy-label">表示名候補</div>
+    <div class="copybox" data-copy="たぶん、誰かも同じ。">たぶん、誰かも同じ。<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copy-label">note ID候補</div>
+    <div class="copybox" data-copy="tabun_onaji">tabun_onaji<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copy-label">プロフィール文候補</div>
+    <div class="copybox" data-copy="人には言えない恋の話を、ここでは言葉にしてみる。&#10;片思い・失恋・同棲・別れ ── 月ごとのテーマで、感情の正体と付き合い方を綴っています。&#10;更新は週1回。「わかる」と思ったら、そっと❤を。">人には言えない恋の話を、ここでは言葉にしてみる。
+片思い・失恋・同棲・別れ ── 月ごとのテーマで、感情の正体と付き合い方を綴っています。
+更新は週1回。「わかる」と思ったら、そっと❤を。<span class="copy-hint">クリックでコピー</span></div>
+    <div class="after"><b>作成後は</b> `love-note/README.md` のセットアップ手順に進んでください。デザインコンセプト・固定記事案は `love-note/brand.md` 参照。以降は月テーマの確認以外、基本的にお任せいただけます。</div>
+  </div>
+
+  <div class="platform" id="plat-x">
+    <div class="platform-head">
+      <div class="platform-num">9</div>
+      <div>
+        <div class="platform-title">X(旧Twitter)</div>
+        <div class="platform-meta">所要時間: 約3分・無料・note記事の告知用</div>
+      </div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1"><a href="https://x.com/i/flow/signup" target="_blank" rel="noopener">x.com/i/flow/signup</a> で新規アカウント作成(電話番号かメールアドレスでOK)</li>
+      <li data-n="2">表示名・ユーザー名を下の候補で設定</li>
+      <li data-n="3">プロフィール文も下の候補をそのまま使えます</li>
+    </ol>
+    <div class="copy-label">表示名候補</div>
+    <div class="copybox" data-copy="Focus &amp; Sleep Sounds">Focus &amp; Sleep Sounds<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copy-label">ユーザーネーム候補</div>
+    <div class="copybox" data-copy="focusandsleepsounds">focusandsleepsounds<span class="copy-hint">クリックでコピー</span></div>
+    <div class="copy-label">プロフィール文候補</div>
+    <div class="copybox" data-copy="AIで作る睡眠・集中サウンドと、個人開発の記録。noteで週1更新しています。">AIで作る睡眠・集中サウンドと、個人開発の記録。noteで週1更新しています。<span class="copy-hint">クリックでコピー</span></div>
+    <div class="after"><b>これで完了。</b>note記事を公開したら、SNS投稿キューの文面をこのアカウントでコピペ投稿してください。</div>
+  </div>
+
+  <div class="platform" id="plat-billing">
+    <div class="platform-head">
+      <div class="platform-num">10</div>
+      <div>
+        <div class="platform-title">課金/広告SDKの方針決定</div>
+        <div class="platform-meta">所要時間: 決めるだけなら5分(実装はこちらで着手可能)</div>
+      </div>
+      <div class="platform-check"><label><input type="checkbox" data-key="billing"> 決定した</label></div>
+    </div>
+    <p style="font-size: 13.5px; color: var(--text-dim); line-height: 1.75; margin: 0 0 4px;">アプリの課金画面(<code>PaywallScreen.tsx</code>)は現在モックです。実際に課金を有効にするには、以下のどれにするかだけ決めてもらえれば、その方式で実装します(アカウント作成は不要、コードだけの作業です)。</p>
+    <div class="decision-box">
+      <span class="opt-label">選択肢A(推奨)</span> <b>RevenueCat</b> を使う。App Store/Google Play双方のサブスク課金を1つのSDKで統一的に扱えるので実装が単純。無料枠(月間売上$2,500まで手数料ゼロ)があり、今の規模ならコストはかからない。RevenueCatの無料アカウント作成(<a href="https://app.revenuecat.com/signup" target="_blank" rel="noopener">app.revenuecat.com/signup</a>)だけ必要
+    </div>
+    <div class="decision-box">
+      <span class="opt-label">選択肢B</span> <b>expo-in-app-purchases</b> でApple/Googleの課金APIに直接つなぐ。外部サービス依存が減るが、ストアごとに実装・テストが二重になり手間が増える
+    </div>
+    <div class="decision-box">
+      <span class="opt-label">広告(任意)</span> 無料ユーザー向けに広告を出す場合は<b>AdMob</b>が一般的。ただし睡眠・集中用アプリなので、広告で体験を損なうと本末転倒になりやすい。まずはサブスクのみで様子を見て、後から検討することを提案します
+    </div>
+    <div class="after">選択肢を教えてもらえれば、そのまま実装に着手します(ストア申請にはApple Developer / Google Play Consoleの登録が別途必要です)。</div>
+  </div>
+
+  <div class="platform" id="plat-legal">
+    <div class="platform-head">
+      <div class="platform-num">11</div>
+      <div>
+        <div class="platform-title">プライバシーポリシー・利用規約の記入</div>
+        <div class="platform-meta">所要時間: 約5分</div>
+      </div>
+      <div class="platform-check"><label><input type="checkbox" data-key="legal"> 完了</label></div>
+    </div>
+    <ol class="steps-list">
+      <li data-n="1"><code>docs/legal/privacy-policy.md</code> を開き、末尾の「お問い合わせ先」欄に連絡先メールアドレスを記入</li>
+      <li data-n="2"><code>docs/legal/terms-of-service.md</code> を開き、「事業者名」「お問い合わせ先」「準拠法・管轄」の3箇所(<code>&lt;オーナーが記入&gt;</code>となっている部分)を記入</li>
+      <li data-n="3">内容自体の法的な最終確認(気になる点があれば教えてください。心配であれば専門家レビューも検討事項として記録しておきます)</li>
+      <li data-n="4">記入が終わったら「終わった」とだけ教えてください。App Store Connect / Google Play Consoleの該当欄に登録できる形で案内します</li>
+    </ol>
+    <div class="after">アプリのストア申請に必須の書類です。ドラフト自体は現状のアプリの実装(個人情報を収集しない)に基づいて作成済みです。</div>
+  </div>
+
+  <div class="prereq" style="margin-top: 8px;">
+    <b>作り終わったら</b>
+    <ul>
+      <li>パスワードや秘密情報は共有不要です。「◯◯できた」とだけ教えてください</li>
+      <li>1つずつでも、まとめてでもOK。できたところから次の作業(アップロード・ストア申請)に進めます</li>
+      <li>チェックはこのブラウザに自動保存されますが、別の端末・別のブラウザでは共有されません。念のため完了したことは一言チャットで教えてください</li>
+    </ul>
+  </div>
+</div>
+
+<footer>社長発 · アカウント作成ガイド</footer>
+
+<script>
+  document.querySelectorAll(".copybox").forEach(function (box) {
+    box.addEventListener("click", function () {
+      var text = box.getAttribute("data-copy");
+      var done = function () {
+        box.classList.add("copied");
+        var hint = box.querySelector(".copy-hint");
+        if (hint) { var prev = hint.textContent; hint.textContent = "コピーしました"; setTimeout(function () { hint.textContent = prev; box.classList.remove("copied"); }, 1400); }
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function () {});
+      }
+    });
+  });
+
+  var STORAGE_KEY = "setup-guide-progress-v1";
+  var checkboxes = Array.prototype.slice.call(document.querySelectorAll(".platform-check input[data-key]"));
+
+  function loadState() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    } catch (e) { return {}; }
+  }
+  function saveState(state) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+  }
+  function applyDoneClass(cb) {
+    var platform = cb.closest(".platform");
+    if (platform) platform.classList.toggle("done", cb.checked);
+  }
+  function updateProgress() {
+    var total = checkboxes.length;
+    var done = checkboxes.filter(function (cb) { return cb.checked; }).length;
+    var bar = document.getElementById("progress-bar");
+    var label = document.getElementById("progress-label");
+    bar.innerHTML = "";
+    for (var i = 0; i < total; i++) {
+      var seg = document.createElement("div");
+      seg.className = "progress-seg" + (i < done ? " filled" : "");
+      bar.appendChild(seg);
+    }
+    label.textContent = done + " / " + total + " 完了";
+  }
+
+  var state = loadState();
+  var stateChanged = false;
+  checkboxes.forEach(function (cb) {
+    var key = cb.getAttribute("data-key");
+    if (Object.prototype.hasOwnProperty.call(state, key)) {
+      cb.checked = state[key];
+    } else {
+      state[key] = cb.checked;
+      stateChanged = true;
+    }
+    applyDoneClass(cb);
+  });
+  if (stateChanged) saveState(state);
+  updateProgress();
+
+  checkboxes.forEach(function (cb) {
+    cb.addEventListener("change", function () {
+      var key = cb.getAttribute("data-key");
+      var s = loadState();
+      s[key] = cb.checked;
+      saveState(s);
+      applyDoneClass(cb);
+      updateProgress();
+    });
+  });
+</script>

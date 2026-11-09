@@ -1,0 +1,224 @@
+<title>SNS投稿キュー</title>
+<style>
+  @font-face { font-family: "Gloock"; src: url(data:font/ttf;base64,__GLOOCK__) format("truetype"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "Work Sans"; src: url(data:font/ttf;base64,__WORKSANS_REG__) format("truetype"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "Work Sans"; src: url(data:font/ttf;base64,__WORKSANS_BOLD__) format("truetype"); font-weight: 700; font-display: swap; }
+  @font-face { font-family: "IBM Plex Mono"; src: url(data:font/ttf;base64,__PLEXMONO_REG__) format("truetype"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "IBM Plex Mono"; src: url(data:font/ttf;base64,__PLEXMONO_BOLD__) format("truetype"); font-weight: 700; font-display: swap; }
+
+  :root {
+    --bg: #eef0f6; --surface: #ffffff; --surface-2: #f6f7fb; --border: #d9dcec;
+    --text: #171a2b; --text-dim: #5b6082; --text-faint: #8489a8;
+    --accent: #2f6fd9; --accent-soft: #dbe6f8;
+    --good: #2f9e63; --good-soft: #dcf1e5;
+    --shadow: 0 1px 2px rgba(23,26,43,0.06), 0 8px 24px rgba(23,26,43,0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0e1a; --surface: #141a30; --surface-2: #1b2340; --border: #2a3157;
+      --text: #eef0fa; --text-dim: #9aa0c3; --text-faint: #6e739a;
+      --accent: #6fa3f0; --accent-soft: #1c2c47;
+      --good: #57cf8f; --good-soft: #17301f;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #eef0f6; --surface: #ffffff; --surface-2: #f6f7fb; --border: #d9dcec;
+    --text: #171a2b; --text-dim: #5b6082; --text-faint: #8489a8;
+    --accent: #2f6fd9; --accent-soft: #dbe6f8;
+    --good: #2f9e63; --good-soft: #dcf1e5;
+    --shadow: 0 1px 2px rgba(23,26,43,0.06), 0 8px 24px rgba(23,26,43,0.05);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0e1a; --surface: #141a30; --surface-2: #1b2340; --border: #2a3157;
+    --text: #eef0fa; --text-dim: #9aa0c3; --text-faint: #6e739a;
+    --accent: #6fa3f0; --accent-soft: #1c2c47;
+    --good: #57cf8f; --good-soft: #17301f;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.35);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: "Work Sans", sans-serif; -webkit-font-smoothing: antialiased; }
+  body { padding: 0 0 72px; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 40px 24px 0; }
+
+  header.top { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 28px; }
+  .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); margin: 0 0 8px; }
+  h1.brand { font-family: "Gloock", serif; font-weight: 400; font-size: clamp(26px, 4vw, 34px); margin: 0 0 10px; text-wrap: balance; }
+  .lede { font-size: 14.5px; color: var(--text-dim); line-height: 1.8; max-width: 560px; }
+  .lede b { color: var(--text); }
+
+  .article {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    box-shadow: var(--shadow); padding: 26px 26px 24px; margin-bottom: 26px;
+  }
+  .article.done { opacity: 0.55; }
+  .article-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
+  .order-badge {
+    flex: none; width: 30px; height: 30px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent); font-family: "IBM Plex Mono", monospace;
+    font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center;
+  }
+  .article-meta { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-faint); margin-top: 3px; }
+  .article-title-label { font-weight: 700; font-size: 16px; margin-top: 2px; }
+
+  .copy-label { font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin: 14px 0 4px; }
+  .copybox {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; font-family: "IBM Plex Mono", monospace; font-size: 12.5px;
+    color: var(--text); white-space: pre-wrap; word-break: break-word; position: relative; cursor: pointer;
+    line-height: 1.7;
+  }
+  .copybox .copy-hint { position: absolute; top: 10px; right: 12px; font-size: 10px; color: var(--text-faint); font-family: "Work Sans", sans-serif; }
+  .copybox.copied { border-color: var(--good); }
+  .url-hint { font-size: 11.5px; color: var(--text-faint); margin-top: 8px; }
+  .url-hint code { background: var(--surface-2); border-radius: 4px; padding: 1px 5px; }
+
+  .mark-done {
+    margin-top: 16px; display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12.5px; color: var(--text-dim); cursor: pointer; user-select: none;
+  }
+  .mark-done input { accent-color: var(--good); width: 15px; height: 15px; }
+  .article.done .mark-done { color: var(--good); font-weight: 700; }
+
+  .cadence-note {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); padding: 16px 20px; margin-bottom: 32px; font-size: 13px; color: var(--text-dim); line-height: 1.7;
+  }
+  .cadence-note b { color: var(--text); font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; display: block; margin-bottom: 8px; }
+
+  footer { max-width: 720px; margin: 0 auto; padding: 0 24px; font-size: 11.5px; color: var(--text-faint); font-family: "IBM Plex Mono", monospace; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">X(旧Twitter) 投稿キュー · 5本</p>
+    <h1 class="brand">SNS投稿キュー</h1>
+    <p class="lede">note記事を投稿したら、対応する投稿文の <code>{NOTE_URL}</code> を実際のnote記事URLに置き換えてからXに投稿してください。クリックでコピーできます。<b>投稿したらチェックを入れると、そのカードが薄くなります</b>(このページ内だけの表示で、再読み込みでリセットされます)。</p>
+  </header>
+
+  <div class="cadence-note">
+    <b>運用について</b>
+    note記事の公開直後(同日〜翌日)に対応する投稿を出すのが基本。まとめて投稿し過ぎると宣伝色が強くなるので、1回のnote公開につき1〜2投稿を目安にしてください。
+  </div>
+
+  <div class="article" id="sns-01">
+    <div class="article-head">
+      <div class="order-badge">1</div>
+      <div>
+        <div class="article-title-label">01 - 雨音を作ってみた話(公開済み記事の再告知用)</div>
+        <div class="article-meta">柱A</div>
+      </div>
+    </div>
+    <div class="copy-label">投稿文</div>
+    <div class="copybox" data-copy="眠れない夜、AIに「無限に続く雨音」を延々と作ってもらった話を書きました。&#10;&#10;寝る用の音って結局どれくらい&quot;眠れる音&quot;なのか、実際に試した話です。&#10;&#10;{NOTE_URL}&#10;&#10;#note #AI #睡眠">眠れない夜、AIに「無限に続く雨音」を延々と作ってもらった話を書きました。
+
+寝る用の音って結局どれくらい"眠れる音"なのか、実際に試した話です。
+
+{NOTE_URL}
+
+#note #AI #睡眠<span class="copy-hint">クリックでコピー</span></div>
+    <div class="url-hint">投稿済みの記事URLに置き換えてください</div>
+    <label class="mark-done"><input type="checkbox" data-target="sns-01"> 投稿した</label>
+  </div>
+
+  <div class="article" id="sns-03">
+    <div class="article-head">
+      <div class="order-badge">2</div>
+      <div>
+        <div class="article-title-label">03 - 1/fゆらぎの話</div>
+        <div class="article-meta">柱A</div>
+      </div>
+    </div>
+    <div class="copy-label">投稿文</div>
+    <div class="copybox" data-copy="雨の音を聞くと眠くなるのはなぜか、調べたら&quot;1/fゆらぎ&quot;と&quot;θ波&quot;というキーワードに行き着きました。&#10;&#10;{NOTE_URL}&#10;&#10;#note #睡眠">雨の音を聞くと眠くなるのはなぜか、調べたら"1/fゆらぎ"と"θ波"というキーワードに行き着きました。
+
+{NOTE_URL}
+
+#note #睡眠<span class="copy-hint">クリックでコピー</span></div>
+    <div class="url-hint">note投稿後にURLを置き換えてください</div>
+    <label class="mark-done"><input type="checkbox" data-target="sns-03"> 投稿した</label>
+  </div>
+
+  <div class="article" id="sns-02">
+    <div class="article-head">
+      <div class="order-badge">3</div>
+      <div>
+        <div class="article-title-label">02 - 作業用BGMの選び方</div>
+        <div class="article-meta">柱A</div>
+      </div>
+    </div>
+    <div class="copy-label">投稿文</div>
+    <div class="copybox" data-copy="作業に集中したい日、とりあえずLo-Fiを流してませんか。&#10;&#10;気分によって向いてるBGMが違うことに気づいた話を書きました。&#10;&#10;{NOTE_URL}&#10;&#10;#note #作業用BGM">作業に集中したい日、とりあえずLo-Fiを流してませんか。
+
+気分によって向いてるBGMが違うことに気づいた話を書きました。
+
+{NOTE_URL}
+
+#note #作業用BGM<span class="copy-hint">クリックでコピー</span></div>
+    <div class="url-hint">note投稿後にURLを置き換えてください</div>
+    <label class="mark-done"><input type="checkbox" data-target="sns-02"> 投稿した</label>
+  </div>
+
+  <div class="article" id="sns-04">
+    <div class="article-head">
+      <div class="order-badge">4</div>
+      <div>
+        <div class="article-title-label">04 - 気合い不足じゃなかった話</div>
+        <div class="article-meta">柱A・当事者体験談型</div>
+      </div>
+    </div>
+    <div class="copy-label">投稿文</div>
+    <div class="copybox" data-copy="&quot;集中できないのは甘え&quot;とずっと自分を責めていたけど、原因は音環境だったかもしれない、という話です。&#10;&#10;{NOTE_URL}&#10;&#10;#note #ADHD #集中">"集中できないのは甘え"とずっと自分を責めていたけど、原因は音環境だったかもしれない、という話です。
+
+{NOTE_URL}
+
+#note #ADHD #集中<span class="copy-hint">クリックでコピー</span></div>
+    <div class="url-hint">note投稿後にURLを置き換えてください</div>
+    <label class="mark-done"><input type="checkbox" data-target="sns-04"> 投稿した</label>
+  </div>
+
+  <div class="article" id="sns-05">
+    <div class="article-head">
+      <div class="order-badge">5</div>
+      <div>
+        <div class="article-title-label">05 - AIに経営を任せてみた話</div>
+        <div class="article-meta">柱B第1弾・全事業への導線</div>
+      </div>
+    </div>
+    <div class="copy-label">投稿文</div>
+    <div class="copybox" data-copy="AIに&quot;経営、決めていいよ&quot;と言ったら、1週間で会社が4つになりました。&#10;&#10;頼んでもいない部署を9つ勝手に作られた話や、経費管理アプリを急に作ってきた話をnoteに書きました。&#10;&#10;{NOTE_URL}&#10;&#10;#note #AI #個人開発">AIに"経営、決めていいよ"と言ったら、1週間で会社が4つになりました。
+
+頼んでもいない部署を9つ勝手に作られた話や、経費管理アプリを急に作ってきた話をnoteに書きました。
+
+{NOTE_URL}
+
+#note #AI #個人開発<span class="copy-hint">クリックでコピー</span></div>
+    <div class="url-hint">note投稿後にURLを置き換えてください</div>
+    <label class="mark-done"><input type="checkbox" data-target="sns-05"> 投稿した</label>
+  </div>
+</div>
+
+<footer>社長発 · SNS投稿キュー · 新しい下書きができ次第このページに追加</footer>
+
+<script>
+  document.querySelectorAll(".copybox").forEach(function (box) {
+    box.addEventListener("click", function () {
+      var text = box.getAttribute("data-copy");
+      var done = function () {
+        box.classList.add("copied");
+        var hint = box.querySelector(".copy-hint");
+        if (hint) { var prev = hint.textContent; hint.textContent = "コピーしました"; setTimeout(function () { hint.textContent = prev; box.classList.remove("copied"); }, 1400); }
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function () {});
+      }
+    });
+  });
+  document.querySelectorAll(".mark-done input").forEach(function (cb) {
+    cb.addEventListener("change", function () {
+      var target = document.getElementById(cb.getAttribute("data-target"));
+      if (target) target.classList.toggle("done", cb.checked);
+    });
+  });
+</script>

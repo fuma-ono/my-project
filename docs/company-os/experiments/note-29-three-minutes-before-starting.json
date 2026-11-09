@@ -1,0 +1,35 @@
+{
+  "id": "note-29-three-minutes-before-starting",
+  "business_id": "note",
+  "article_number": "29",
+  "title": "作業中ずっと聴くより、始める前の3分だけ聴く方が効いた、という話",
+  "theme_backlog_id": 34,
+  "pillar": "A",
+  "hypothesis": "既存の柱Aは「作業中に流す」前提の記事が中心。開始前の儀式として数分だけ使うという時間軸の違いに絞ることで、「作業 スイッチ 入れ方」等のルーティン系検索から新しい読者層を狙う",
+  "generated_at": "2026-09-07",
+  "published_at": null,
+  "status": "draft",
+  "note_url": "https://note.com/unique_condor276",
+  "metrics": {
+    "views": null,
+    "likes": null,
+    "comments": null,
+    "followers_gained": null,
+    "support_jpy": null,
+    "recorded_at": null,
+    "data_source_note": "note.com公式APIが存在しないため、このサンドボックスからは取得不可。オーナーがnote.comダッシュボードで確認し次第、note-articles/README.mdの計測欄経由で共有・反映する"
+  },
+  "result": null,
+  "learning": null,
+  "next_action": null,
+  "verdict": "pending",
+  "quality_self_check": {
+    "japanese_natural": true,
+    "no_ai_cliche": true,
+    "concrete_content": true,
+    "clickable_title": true,
+    "clear_reader_value": true,
+    "no_duplication_with_existing": true,
+    "note": "2026-09-07、週2回運用Routineでの新規生成。在庫が5本(#23公開済みに伴い減少)だったため1本補充し6本に復元。柱A在庫を優先消化(docs/marketing/2026-08-content-topics.mdの優先順#34〜38)し#34を採用"
+  }
+}
