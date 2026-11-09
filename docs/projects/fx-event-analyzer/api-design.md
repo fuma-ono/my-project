@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.49
+# FX Event Analyzer: API詳細設計書 v1.50
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -96,6 +96,7 @@
 - **v1.47**(2026-11-05、HQ承認「FOMC政策金利の実データ取り込み」案A。`claude/fx-fomc-policy-rate` で追加): `GET /events/{id}` の `event` に、任意の項目 **`policy_rate`**(オブジェクトまたは `null`)を追加(項目の追加だけ)。FOMC の会合(指標 `US_FOMC`)で、政策決定が記録されたときだけ値が入る: `target_range_lower`・`target_range_upper`(フェデラルファンド金利の**誘導目標レンジの下限・上限**、%。1つの金利に変換しない)、`announced_at`(政策の発表日時、ISO 8601)、`effective_date`(新しいレンジが有効になった日、`YYYY-MM-DD`、ニューヨークの日付)、`source`(取得元の名前)、`source_url`(取得した API の URL)、`fetched_at`(取得日時)。値は NY連銀 Markets Data API の EFFR の記録の `targetRateFrom`・`targetRateTo`・`effectiveDate`(EFFR の実績 `percentRate` は入れない)。保存先は専用の表 `fomc_policy_decisions`(migration 20261105000001。`event_snapshots` には入れない)。記録が無い会合・ほかの指標は `null`。ロックした発表では `null`(FOMC の会合は RELEASED にならないので、実際にはロックされない)。`policy_rate` があるときは、`event.attribution` に NY連銀の出典と告知(規約が求める告知・免責文。`domain/attribution.ts` の `NY_FED_ATTRIBUTION`)が入る。`event.status`・`data_status` は変えない(会合の行は今までどおり `SCHEDULED`・`PENDING`)。iOS は `policy_rate` があれば、結果のカードに「フェデラルファンド金利の誘導目標レンジ」と適用日を出す(EFFR の実績の値は出さない)。古いBackend(項目が無い)では今までどおり。**取り込み(`npm run ingest:fomc-policy-rate`、手動のみ)の制約**: (1) 発表から **180日** を超えて記録の無い会合は処理しない(ログの `unmatched` に `OUTSIDE_LOOKBACK` として残すだけ)。(2) DB に会合の予定の行(US_FOMC、provider `fomc_schedule`)が無い会合は対象にならない(予定の取り込みは過ぎた会合を作らない)。(3) 一度記録した値は、NY連銀が後から改定しても自動では変えない(行は不変。`revisionIndicator` は見ない)。(4) 会合への結びつけは「発表日(ニューヨーク)より後の最初の `effectiveDate` の記録」。それが発表から **7日以内** で、次の会合の発表日より前のときだけ使う。発表日とその記録の間に値の読めない記録があれば使わない(`FIRST_RECORD_UNREADABLE`)。翌営業日の記録が API に無い(読めない記録でもない)ときは、7日以内のその次の記録を使う。取得元は `GET /api/rates/unsecured/effr/search.json?startDate=…&endDate=…`(記録の無い一番古い会合の翌日〜今日を1回で取る)
 - **v1.49**(2026-11-09、HQ指示「P0：既存計算の修正」。`claude/strategy-analysis-p0-fixes` で追加): `GET /api/v1/events/{event_id}/strategy-analysis` の修正。既存の項目の名前・型は変えない(追加だけ)。(1) `sell_the_fact` は発表時刻が `EXACT` の発表だけで判定する(`APPROXIMATE`・`DATE_ONLY`・`UNKNOWN` は `null`。1分の値動きが作られないのに15分だけで判定されて件数に入っていたため)。意味は「好結果なのに15分後に通貨安」(初動は問わない)。(2) `releases[].sell_the_fact_after_initial_rise` と `summary.sell_the_fact_after_initial_rise`(`{ occurred, samples }` または `null`)を追加: 「好結果で初動(1分後)は通貨高、その後15分後には通貨安」。条件は `sell_the_fact` と同じに加えて1分後の値が要る。初動が通貨高でなかった(横ばいを含む)発表は `false`。分母は結果が良かった発表。(3) 通貨ペア: 使えるのは有効(`fx_pairs.is_active`)で指標の通貨を含むペアだけ(値動きはそのペアにしか計算されない)。`fx_pair_id` がそれ以外(存在しない・無効・指標の通貨を含まない)なら 404 `FX_PAIR_NOT_FOUND`(以前は通貨を含まないペアでも 200 で全部 `null`)。省略時は指標の関連の通貨ペアのうち使えるものを、`priority` → 主要ペアの順(`MAJOR_FX_PAIR_ORDER`)→ `symbol` で並べた先頭(以前は同じ `priority` の並びが決まっていなかった)。使えるペアが無ければ `fx_pair: null, analysis: null`。(4) `fx_pair_id` の形式チェックをほかのルートと同じ `z.guid()` にした(以前の `z.string().uuid()` は RFC の版まで確かめるため、seed の通貨ペアの id が 422 になっていた)。DB の変更は無し
 - **v1.48**(2026-11-06、HQ指示「Pro イベント別トレード戦略分析」。`claude/pro-event-strategy-analysis` で追加): **`GET /api/v1/events/{event_id}/strategy-analysis`**(任意の `fx_pair_id`。省略時は指標の関連の通貨ペアの優先度1)を追加。機能 `VIEW_BASIC_EVENT` が必要。分析は Pro の機能(`VIEW_ADVANCED_STATS`)で、持っていなければ 403 にせず `{ available: false, required_entitlement: "VIEW_ADVANCED_STATS", fx_pair: null, analysis: null }`(高度な統計と同じ段階的な開示)。持っていれば `{ available: true, fx_pair: { fx_pair_id, symbol }, analysis }`。`analysis` は同じ指標の、この発表より前の RELEASED の直近5回(新しい順)の保存済みの値動き(`event_price_reactions` の 1m・15m・60m、`data_status = AVAILABLE` だけ)と RELEASE スナップショットから数える(`domain/eventStrategyAnalysis.ts`): `status`(`READY` = 1分後の値動きを比べられた発表が3回以上、足りなければ `DATA_PREPARING`)、`releases[]`(`event_id`・`release_datetime`・`forecast`・`actual`・`surprise`・`surprise_direction`・`direction_1m`(`UP`/`DOWN`/`FLAT`)・`pips_1m`・`pips_15m`・`pattern_15m`(`CONTINUATION`/`REVERSAL`)・`high_break_15m`/`low_break_15m`/`high_break_60m`/`low_break_60m`(2分目以降に最初の1分の高値・安値を抜けたか。どちらが先かは出さない)・`sell_the_fact`(結果がその通貨にとって良かった(`surprise_direction = POSITIVE`)のに、15分後にその通貨が売られた方向に動いた))、`summary`(項目ごとに、判定できた発表が3回以上あるときだけ件数。足りなければ `null`)。判定できない項目は `null`(値を作らない)。関連の通貨ペアが無い指標は `analysis: null`。売買の推奨・利益・勝率は返さない。DB の変更は無し
+- **v1.50**(2026-11-04、HQ判断「ホームの『今日の重要イベント』→『今週の重要イベント』」。`claude/fx-home-weekly-events` で追加。HQ指示(2026-11-09「Build 25実機確認後の修正」)で本線へ統合、`v1.47`は別系統の「FOMC政策金利の実データ取り込み」が既に使用していたため番号を繰り下げた): `GET /home`に任意のQuery **`days`**(整数1〜7、既定1=従来どおり1日分)を追加(12章)。`date`から数えて`days`日分(ローリング、カレンダー上の週ではない)の`events`を返す(`days`省略時の挙動は変えない。`major_fx`・`speeches`・`speeches_status`は従来どおり`date`に関係しない)。Responseの最上位に`days`(リクエストの値、省略時は`1`)を追加(項目の追加だけ)。H-2(v1.3)の「`events`は`date`でスコープされた当日分の一覧」という前提は、`days`が1より大きいとき「`date`から`days`日分の一覧」に拡張される(「最近のイベント」の定義=当日中に`RELEASED`になったイベント、は変えない。未来の日の行はほぼ`SCHEDULED`のままのため実質的な影響はない)。目的: 月1回ペースの指標が中心のため「今日」だけだと空欄になりがちだった問題の解消(iOS「今週の重要イベント」カード、日付が近い順に最大3件)
 
 ---
 
@@ -445,6 +446,7 @@ Query：
 
 - `date`(必須)
 - `timezone`(必須。v1.1で必須化、A-4。IANA timezone名、例: `Asia/Tokyo`)
+- `days`(任意、整数1〜7、既定1。v1.50で追加): `date`から数えてローリングで何日分の`events`を返すか。省略時は従来どおり1日分
 
 Response：
 
@@ -527,7 +529,7 @@ major_fxにはHomeで表示する主要FX Pairの最新情報を含める。想�
 
 アプリ(SCR-004)の「直近の要人発言」が0件のときの表示：`stale = false` →「直近7日間の要人発言はありません」と小さく「最終更新 M/d HH:mm」(`last_success_at`があるときだけ)、`stale = true` →「要人発言の情報を更新できていません（最終更新 M/d HH:mm）」(`last_success_at`が`null`なら括弧なし)、`speeches_status`が無い →「直近7日間の要人発言はありません」のみ。日時はホームの他の日時と同じ表示設定(タイムゾーン・形式)。1件以上あるときの表示は変えない。
 
-**「今日の注目イベント」と「最近のイベント」の扱い(v1.3で確定、H-2)**: `events`は`date`でスコープされた当日分の一覧であり、「最近のイベント」は**当日中に`status = RELEASED`になったイベント**を指す(複数日にまたがる履歴ではない)。専用APIや`recent_events`フィールドは追加せず、Clientが`events`配列を`status`(`SCHEDULED`/`RELEASED`/`CANCELLED`)で「今日の注目イベント」(主にSCHEDULED)と「最近のイベント」(RELEASED)に表示分けする。
+**「今週の注目イベント」と「最近のイベント」の扱い(v1.3で確定、H-2。v1.50で`days`を反映)**: `events`は`date`から`days`日分(既定1=従来どおり当日分のみ)でスコープされた一覧であり、「最近のイベント」は**この範囲内で`status = RELEASED`になったイベント**を指す(`days`が1より大きくても、未来の日の行はほぼ`SCHEDULED`のままのため実質的には従来どおり「当日中にRELEASEDになったイベント」を指す)。専用APIや`recent_events`フィールドは追加せず、Clientが`events`配列を`status`(`SCHEDULED`/`RELEASED`/`CANCELLED`)で「今週の注目イベント」(主にSCHEDULED、iOSは日付が近い順に最大3件)と「最近のイベント」(RELEASED)に表示分けする。
 
 ---
 

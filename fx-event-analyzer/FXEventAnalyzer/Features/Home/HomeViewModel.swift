@@ -266,6 +266,18 @@ final class HomeViewModel: ObservableObject {
         )
     }
 
+    /// HQ判断(2026-11-04、ホームの「今日の重要イベント」→「今週の重要
+    /// イベント」): `today`から数えて何日分を`GET /home`に要求するか
+    /// (api-design.md v1.50の`days`)。カレンダー上の週(月〜日)ではなく、
+    /// 今日を起点にしたローリング7日間 — 月1回ペースの指標が中心なので、
+    /// 「今日」だけだとほぼ毎回空になってしまう問題を解消するため、週の
+    /// 曜日に関わらず常に同じ幅で埋まりやすくする狙い。
+    /// HQ指示(2026-11-09「Build 25実機確認後の修正」)で`claude/fx-home-
+    /// weekly-events`(884b4fe4ほか)から取り込み。`HomePrefetchCoordinator`
+    /// 側の`/home`リクエストにも同じ`days`を渡す必要があるため、そちらにも
+    /// 同じ値を反映している(`HomePrefetchCoordinator.swift`参照)。
+    static let weeklyEventsWindowDays = 7
+
     private func fetch() async {
         isFetching = true
         defer { isFetching = false }
@@ -276,6 +288,7 @@ final class HomeViewModel: ObservableObject {
             queryItems: [
                 URLQueryItem(name: "date", value: today),
                 URLQueryItem(name: "timezone", value: timezone),
+                URLQueryItem(name: "days", value: String(Self.weeklyEventsWindowDays)),
             ]
         )
         do {

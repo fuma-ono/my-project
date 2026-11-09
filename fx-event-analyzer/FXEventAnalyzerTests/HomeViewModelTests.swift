@@ -25,6 +25,20 @@ final class HomeViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.recentEvents, [released])
     }
 
+    /// HQ判断(2026-11-04)「今日の重要イベント」→「今週の重要イベント」:
+    /// `GET /home`に`days`(api-design.md v1.50)を付けて、今日からローリング
+    /// 7日間の範囲を要求する(カレンダー上の週ではなく、`date`のみの従来の
+    /// 挙動は変えず範囲だけ広げる)。
+    func testLoadRequestsASevenDayWindow() async {
+        let apiClient = MockAPIClient()
+        apiClient.result = .success(HomeResponse(date: "2026-09-17", timezone: "UTC", events: [], majorFx: []))
+
+        _ = await load(with: apiClient)
+
+        let days = apiClient.lastEndpoint?.queryItems.first(where: { $0.name == "days" })?.value
+        XCTAssertEqual(days, "7")
+    }
+
     func testLoadOtherFailureShowsGenericError() async {
         let apiClient = MockAPIClient()
         apiClient.result = .failure(APIError.transport("connection reset"))

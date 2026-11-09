@@ -102,12 +102,17 @@ final class HomePrefetchCoordinator {
         prefetch = nil
     }
 
+    /// HQ指示(2026-11-09「Build 25実機確認後の修正」): `HomeViewModel.fetch()`と同じ`days`
+    /// (`HomeViewModel.weeklyEventsWindowDays`)を付ける。ここで付け忘れると、先行取得が
+    /// 消費されたとき(通常経路)だけ「今日の重要イベント」相当の1日分が返り、Splashを経由しない
+    /// 再取得時だけ週7日分になる、という経路依存の不整合が起きるため。
     private static func homeEndpoint(date: String, timezone: String) -> Endpoint {
         Endpoint(
             path: "home",
             queryItems: [
                 URLQueryItem(name: "date", value: date),
                 URLQueryItem(name: "timezone", value: timezone),
+                URLQueryItem(name: "days", value: String(HomeViewModel.weeklyEventsWindowDays)),
             ]
         )
     }

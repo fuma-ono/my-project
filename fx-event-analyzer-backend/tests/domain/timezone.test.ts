@@ -36,6 +36,27 @@ describe('resolveDayRangeUtc', () => {
     const { startUtc, endUtc } = resolveDayRangeUtc('2026-03-08', 'America/New_York');
     expect(new Date(endUtc).getTime() - new Date(startUtc).getTime()).toBe(24 * 60 * 60 * 1000);
   });
+
+  // api-design.md v1.50(HQ判断「ホームの『今日の重要イベント』→『今週の
+  // 重要イベント』」): `days`(既定1)で`date`から数えた日数分の範囲に
+  // 広げられる。
+  it('defaults to a single day when days is omitted (backward compatible)', () => {
+    expect(resolveDayRangeUtc('2026-09-17', 'UTC')).toEqual(resolveDayRangeUtc('2026-09-17', 'UTC', 1));
+  });
+
+  it('extends endUtc by `days` days, startUtc unchanged', () => {
+    expect(resolveDayRangeUtc('2026-09-17', 'UTC', 7)).toEqual({
+      startUtc: '2026-09-17T00:00:00.000Z',
+      endUtc: '2026-09-24T00:00:00.000Z',
+    });
+  });
+
+  it('applies the same timezone offset to a multi-day range', () => {
+    expect(resolveDayRangeUtc('2026-09-17', 'Asia/Tokyo', 7)).toEqual({
+      startUtc: '2026-09-16T15:00:00.000Z',
+      endUtc: '2026-09-23T15:00:00.000Z',
+    });
+  });
 });
 
 describe('startOfLocalDayUtc', () => {
