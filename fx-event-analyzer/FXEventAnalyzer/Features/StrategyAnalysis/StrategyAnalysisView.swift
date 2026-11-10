@@ -268,7 +268,7 @@ struct StrategyAnalysisView: View {
     private func sellTheFactCard(_ summary: StrategySellTheFactSummary?, releases: [StrategyRelease]) -> some View {
         // HQ指示(2026-11-10 STEP5): 「件数不足」と「この指標はそもそも予想値が無い」を区別する。
         let hasAnyForecast = releases.contains { $0.forecast != nil }
-        plainCard {
+        return plainCard {
             HStack(spacing: 5) {
                 Image(systemName: "bolt.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(V5P.yellow)
                 NotoText.text("Sell the Fact 分析", size: 7.5).foregroundStyle(.white)

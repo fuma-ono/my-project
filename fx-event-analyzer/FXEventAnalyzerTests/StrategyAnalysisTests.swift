@@ -197,7 +197,7 @@ final class StrategyAnalysisTests: XCTestCase {
     func testSellTheFactLineDistinguishesNoForecastFromInsufficientSamples() throws {
         func releases(forecasts: [Double?]) throws -> [StrategyRelease] {
             let items = forecasts.enumerated().map { index, forecast in
-                let forecastJSON = forecast.map(String.init) ?? "null"
+                let forecastJSON = forecast.map { "\($0)" } ?? "null"
                 return #"""
                 {"event_id":"e\#(index)","release_datetime":"2026-01-0\#(index + 1)T00:00:00Z",
                  "forecast":\#(forecastJSON),"actual":1.0,"surprise":null,"surprise_direction":null,
