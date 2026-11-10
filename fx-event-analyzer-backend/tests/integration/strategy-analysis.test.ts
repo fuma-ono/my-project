@@ -313,11 +313,94 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
       expect(body.co_released_indicators).toEqual([
         { indicator_id: siblingIndicatorId, indicator_code: siblingIndicatorCode },
       ]);
+      // HQ指示(2026-11-10「実動作検証」STEP2「最重要」): summarizeMarketEventCoverageが実際の応答に反映され、
+      // 「指標は2つ(自分＋同時発表の相手)だが、独立した市場イベントとしては1つ」であることを示す。
+      expect(body.market_event_coverage).toEqual({ independent_market_events: 1, indicator_count: 2 });
     });
 
-    it('同時発表が無い発表(sparseTargetId)は空配列', async () => {
+    it('同時発表が無い発表(sparseTargetId)は空配列・indicator_countは1', async () => {
       const { body } = await get(sparseTargetId, await asUser('PRO'));
       expect(body.co_released_indicators).toEqual([]);
+      expect(body.market_event_coverage).toEqual({ independent_market_events: 1, indicator_count: 1 });
+    });
+  });
+
+  describe('release_datetime_precision が EXACT でない発表は同時発表と誤判定しない(HQ指示 2026-11-10「実動作検証」で発見・修正)', () => {
+    // mappings/eurostatSchedule.ts の実例(EU_HICP・EU_UNEMPLOYMENT_RATE、どちらもAPPROXIMATE・11:00
+    // Europe/Luxembourgで、発表日が偶然重なる行が実在する)を再現する。同じ provider・release_datetime でも、
+    // 時刻が確認できない(EXACTでない)場合は別々の市場イベントとして扱わなければならない。
+    let approxIndicatorId = '';
+    let approxOtherIndicatorId = '';
+    const approxTargetId = randomUUID();
+    const approxOtherId = randomUUID();
+
+    beforeAll(async () => {
+      const makeIndicator = async (code: string, name: string) => {
+        const { data, error } = await ctx.serviceClient
+          .from('economic_indicators')
+          .insert({
+            code,
+            name,
+            country_code: 'EU',
+            currency_code: 'EUR',
+            importance: 'HIGH',
+            frequency: 'MONTHLY',
+            unit: '%',
+            favorable_direction: 'HIGHER_IS_POSITIVE',
+            is_active: true,
+          })
+          .select('id')
+          .single();
+        if (error) throw error;
+        return data.id as string;
+      };
+      approxIndicatorId = await makeIndicator(
+        `IT_STRATEGY_APPROX_COINCIDE_A_${runId}`,
+        `結合テスト用指標(APPROXIMATEの偶然の一致A) ${runId}`,
+      );
+      approxOtherIndicatorId = await makeIndicator(
+        `IT_STRATEGY_APPROX_COINCIDE_B_${runId}`,
+        `結合テスト用指標(APPROXIMATEの偶然の一致B) ${runId}`,
+      );
+      const { error: eventError } = await ctx.serviceClient.from('economic_events').insert([
+        {
+          id: approxTargetId,
+          indicator_id: approxIndicatorId,
+          provider: 'integration-test-eurostat',
+          provider_event_id: `strategy-approx-coincide-a-${runId}`,
+          release_datetime: '2099-02-10T11:00:00.000Z',
+          release_datetime_precision: 'APPROXIMATE',
+          importance: 'HIGH',
+          status: 'SCHEDULED',
+          data_status: 'PENDING',
+        },
+        {
+          id: approxOtherId,
+          indicator_id: approxOtherIndicatorId,
+          provider: 'integration-test-eurostat',
+          provider_event_id: `strategy-approx-coincide-b-${runId}`,
+          release_datetime: '2099-02-10T11:00:00.000Z', // approxTargetIdと全く同じ(偶然の一致)。別指標・別発表。
+          release_datetime_precision: 'APPROXIMATE',
+          importance: 'HIGH',
+          status: 'SCHEDULED',
+          data_status: 'PENDING',
+        },
+      ]);
+      if (eventError) throw eventError;
+    });
+
+    afterAll(async () => {
+      await ctx.serviceClient.from('economic_events').delete().in('id', [approxTargetId, approxOtherId]);
+      for (const id of [approxIndicatorId, approxOtherIndicatorId]) {
+        if (id !== '') await ctx.serviceClient.from('economic_indicators').update({ is_active: false }).eq('id', id);
+      }
+    });
+
+    it('provider・release_datetimeが完全一致していても、precisionがAPPROXIMATEなら同時発表に含めない', async () => {
+      const { status, body } = await get(approxTargetId, await asUser('PRO'));
+      expect(status).toBe(200);
+      expect(body.co_released_indicators).toEqual([]);
+      expect(body.market_event_coverage).toEqual({ independent_market_events: 1, indicator_count: 1 });
     });
   });
 
