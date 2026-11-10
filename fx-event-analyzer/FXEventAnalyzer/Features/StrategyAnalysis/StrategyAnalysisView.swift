@@ -68,7 +68,7 @@ struct StrategyAnalysisView: View {
             .accessibilityIdentifier("strategyAnalysisNotEntitled")
         case .error(let message):
             centered { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { Task { await viewModel.load() } }) }
-        case .loaded(let pair, let analysis):
+        case .loaded(let pair, let analysis, let coReleasedIndicators):
             column {
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 7) {
@@ -77,6 +77,16 @@ struct StrategyAnalysisView: View {
                         if !analysis.isReady {
                             V5Badge(text: "\(StrategyAnalysisText.preparing)（比べられる発表が\(analysis.minimumSamples)回未満）", color: V5P.cyan)
                                 .accessibilityIdentifier("strategyAnalysisPreparing")
+                        }
+                        // HQ指示(2026-11-10「重複排除・集計改善・AI分析基盤の整備」STEP1):
+                        // この発表が他の指標と同時発表(例: 米雇用統計のNFP・失業率・平均時給)なら明示し、
+                        // 複数の指標を別々の発表として数えてしまう誤解を防ぐ。
+                        if !coReleasedIndicators.isEmpty {
+                            V5Badge(
+                                text: "同時発表: \(coReleasedIndicators.map(\.indicatorCode).joined(separator: "・"))",
+                                color: V5P.cyan
+                            )
+                            .accessibilityIdentifier("strategyAnalysisCoReleased")
                         }
                         breaksCard(
                             title: "過去5回の分析結果（15分以内）",
@@ -90,7 +100,7 @@ struct StrategyAnalysisView: View {
                         )
                         directionStatsCard(analysis.summary.direction1m, sampleWindow: analysis.sampleWindow)
                         patternStatsCard(analysis.summary.pattern15m, sampleWindow: analysis.sampleWindow)
-                        sellTheFactCard(analysis.summary.sellTheFact)
+                        sellTheFactCard(analysis.summary.sellTheFact, releases: analysis.releases)
                         releasesCard(analysis)
                         notesCard
                     }
@@ -255,7 +265,9 @@ struct StrategyAnalysisView: View {
 
     // MARK: - Sell the Fact
 
-    private func sellTheFactCard(_ summary: StrategySellTheFactSummary?) -> some View {
+    private func sellTheFactCard(_ summary: StrategySellTheFactSummary?, releases: [StrategyRelease]) -> some View {
+        // HQ指示(2026-11-10 STEP5): 「件数不足」と「この指標はそもそも予想値が無い」を区別する。
+        let hasAnyForecast = releases.contains { $0.forecast != nil }
         plainCard {
             HStack(spacing: 5) {
                 Image(systemName: "bolt.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(V5P.yellow)
@@ -264,7 +276,7 @@ struct StrategyAnalysisView: View {
                 if let summary {
                     V5Badge(text: "\(summary.samples)回中", color: V5P.cyan)
                 } else {
-                    V5Badge(text: "データ不足", color: SettingsCardStyle.subtitleColor)
+                    V5Badge(text: hasAnyForecast ? "データ不足" : "予想値なし", color: SettingsCardStyle.subtitleColor)
                 }
             }
             Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
@@ -280,16 +292,21 @@ struct StrategyAnalysisView: View {
             } else {
                 VStack(spacing: 4) {
                     NotoText.text("— —", size: 14).foregroundStyle(SettingsCardStyle.subtitleColor)
-                    NotoText.text("過去のデータが不足しているため分析できません", size: 6.5)
-                        .foregroundStyle(SettingsCardStyle.subtitleColor)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity)
+                    NotoText.text(
+                        hasAnyForecast
+                            ? "過去のデータが不足しているため分析できません"
+                            : "この指標は予想値が無いため判定できません",
+                        size: 6.5
+                    )
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
                 }
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Sell the Fact分析。\(StrategyAnalysisText.sellTheFactLine(summary))")
+        .accessibilityLabel("Sell the Fact分析。\(StrategyAnalysisText.sellTheFactLine(summary, releases: releases))")
     }
 
     // MARK: - 発表ごとの実績

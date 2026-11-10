@@ -13,7 +13,8 @@ enum StrategyAnalysisState: Equatable {
     /// 比べる通貨ペアが無い指標。
     case noPair
     case notFound
-    case loaded(StrategyFxPair, StrategyAnalysis)
+    /// HQ指示(2026-11-10「重複排除・集計改善・AI分析基盤の整備」STEP1): 同時発表の他の指標(無ければ空配列)。
+    case loaded(StrategyFxPair, StrategyAnalysis, [StrategyCoReleasedIndicator])
     case error(String)
 }
 
@@ -73,6 +74,6 @@ final class StrategyAnalysisViewModel: ObservableObject {
     nonisolated static func state(for response: StrategyAnalysisResponse) -> StrategyAnalysisState {
         guard response.available else { return .locked }
         guard let pair = response.fxPair, let analysis = response.analysis else { return .noPair }
-        return .loaded(pair, analysis)
+        return .loaded(pair, analysis, response.coReleasedIndicators ?? [])
     }
 }

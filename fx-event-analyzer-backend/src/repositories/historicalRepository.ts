@@ -149,11 +149,11 @@ export async function listReleasedEventsBefore(
   indicatorId: string,
   beforeIso: string,
   limit: number,
-): Promise<(HistoricalEventRow & { release_datetime_precision: string })[]> {
+): Promise<(HistoricalEventRow & { release_datetime_precision: string; provider: string | null })[]> {
   const { data, error } = await supabase
     .from('economic_events')
     .select(
-      `id, release_datetime, release_datetime_precision, event_snapshots!inner(${SNAPSHOT_VALUE_COLUMNS}, snapshot_type)`,
+      `id, release_datetime, release_datetime_precision, provider, event_snapshots!inner(${SNAPSHOT_VALUE_COLUMNS}, snapshot_type)`,
     )
     .eq('indicator_id', indicatorId)
     .eq('status', 'RELEASED')
@@ -167,7 +167,46 @@ export async function listReleasedEventsBefore(
     event_id: row.id,
     release_datetime: row.release_datetime,
     release_datetime_precision: row.release_datetime_precision,
+    provider: row.provider,
     ...releaseSnapshotOf(row.event_snapshots),
+  }));
+}
+
+/** 同時発表イベントのグループ化に使う最小限の行(domain/marketEventGrouping.ts)。 */
+export interface MarketEventSourceRow {
+  event_id: string;
+  indicator_id: string;
+  indicator_code: string;
+  provider: string | null;
+  release_datetime: string;
+}
+
+/**
+ * HQ指示(2026-11-10「重複排除・集計改善・AI分析基盤の整備」STEP1): 与えられた発表(対象イベント＋過去の履歴)と
+ * 同じ provider・release_datetime を持つ、他の指標の経済イベントを取得する(同時発表の検出)。
+ * 既存の economic_events.provider・release_datetime だけを使う(新しいテーブル・列は増やさない)。
+ * provider が無い行は呼び出し側で合わせない(domain/marketEventGrouping.ts groupByMarketEvent)ので、ここでは
+ * provider が無い入力行は無視する。
+ */
+export async function listCoReleasedEvents(
+  supabase: SupabaseClient,
+  releases: readonly { provider: string | null; release_datetime: string }[],
+): Promise<MarketEventSourceRow[]> {
+  const providers = [...new Set(releases.map((r) => r.provider).filter((p): p is string => p !== null))];
+  if (providers.length === 0) return [];
+  const timestamps = [...new Set(releases.map((r) => r.release_datetime))];
+  const { data, error } = await supabase
+    .from('economic_events')
+    .select('id, indicator_id, provider, release_datetime, economic_indicators!inner(code)')
+    .in('provider', providers)
+    .in('release_datetime', timestamps);
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    event_id: row.id,
+    indicator_id: row.indicator_id,
+    indicator_code: (row.economic_indicators as unknown as { code: string }).code,
+    provider: row.provider,
+    release_datetime: row.release_datetime,
   }));
 }
 

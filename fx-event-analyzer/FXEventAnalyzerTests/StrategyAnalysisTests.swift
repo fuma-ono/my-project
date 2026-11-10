@@ -16,11 +16,13 @@ final class StrategyAnalysisTests: XCTestCase {
     private let readyJSON = #"""
     {"event_id":"e0","available":true,"required_entitlement":null,
      "fx_pair":{"fx_pair_id":"p1","symbol":"USDJPY"},
+     "co_released_indicators":[{"indicator_id":"ind-unrate","indicator_code":"US_UNEMPLOYMENT_RATE"}],
      "analysis":{"status":"READY","sample_window":5,"minimum_samples":3,
       "releases":[
         {"event_id":"e1","release_datetime":"2026-10-14T12:30:00Z","forecast":3.0,"actual":3.2,"surprise":0.2,"surprise_direction":"POSITIVE",
-         "direction_1m":"UP","pips_1m":5,"pips_15m":-9,"pattern_15m":"REVERSAL",
-         "high_break_15m":false,"low_break_15m":true,"high_break_60m":false,"low_break_60m":true,"sell_the_fact":true},
+         "direction_1m":"UP","pips_1m":5,"pips_5m":7,"pips_15m":-9,"pips_30m":-10,"pips_60m":-11,"pattern_15m":"REVERSAL",
+         "high_break_15m":false,"low_break_15m":true,"high_break_60m":false,"low_break_60m":true,
+         "round_trip_15m":false,"round_trip_60m":false,"sell_the_fact":true},
         {"event_id":"e2","release_datetime":"2026-09-11T12:30:00Z","forecast":null,"actual":2.9,"surprise":null,"surprise_direction":null,
          "direction_1m":null,"pips_1m":null,"pips_15m":null,"pattern_15m":null,
          "high_break_15m":null,"low_break_15m":null,"high_break_60m":null,"low_break_60m":null,"sell_the_fact":null}
@@ -34,7 +36,7 @@ final class StrategyAnalysisTests: XCTestCase {
 
     func testDecodesTheProAnalysis() throws {
         let response = try decoder().decode(StrategyAnalysisResponse.self, from: Data(readyJSON.utf8))
-        guard case .loaded(let pair, let analysis) = StrategyAnalysisViewModel.state(for: response) else {
+        guard case .loaded(let pair, let analysis, let coReleasedIndicators) = StrategyAnalysisViewModel.state(for: response) else {
             return XCTFail("expected loaded")
         }
         XCTAssertEqual(pair.symbol, "USDJPY")
@@ -42,6 +44,30 @@ final class StrategyAnalysisTests: XCTestCase {
         XCTAssertEqual(analysis.releases.map(\.id), ["e1", "e2"])
         XCTAssertEqual(analysis.releases[0].sellTheFact, true)
         XCTAssertNil(analysis.summary.breaks60m)
+        XCTAssertEqual(coReleasedIndicators, [StrategyCoReleasedIndicator(indicatorId: "ind-unrate", indicatorCode: "US_UNEMPLOYMENT_RATE")])
+    }
+
+    /// HQ指示(2026-11-10「重複排除・集計改善・AI分析基盤の整備」STEP1・STEP3): 同時発表の他の指標、5分・30分・60分の
+    /// 値動き、往復(round_trip)を読み込めること。
+    func testDecodesCoReleasedIndicatorsAndRiskCharacteristics() throws {
+        let response = try decoder().decode(StrategyAnalysisResponse.self, from: Data(readyJSON.utf8))
+        XCTAssertEqual(
+            response.coReleasedIndicators,
+            [StrategyCoReleasedIndicator(indicatorId: "ind-unrate", indicatorCode: "US_UNEMPLOYMENT_RATE")]
+        )
+        let judged = try XCTUnwrap(response.analysis?.releases.first)
+        XCTAssertEqual(judged.pips5m, 7)
+        XCTAssertEqual(judged.pips30m, -10)
+        XCTAssertEqual(judged.pips60m, -11)
+        XCTAssertEqual(judged.roundTrip15m, false)
+        XCTAssertEqual(judged.roundTrip60m, false)
+    }
+
+    /// available が false のとき、co_released_indicators はキーごと省略される(nil)。
+    func testCoReleasedIndicatorsIsNilWhenLocked() throws {
+        let json = #"{"event_id":"e0","available":false,"required_entitlement":"VIEW_ADVANCED_STATS","fx_pair":null,"analysis":null}"#
+        let response = try decoder().decode(StrategyAnalysisResponse.self, from: Data(json.utf8))
+        XCTAssertNil(response.coReleasedIndicators)
     }
 
     func testFreeIsLocked() throws {
@@ -60,7 +86,10 @@ final class StrategyAnalysisTests: XCTestCase {
           "summary":{"direction_1m":null,"breaks_15m":null,"breaks_60m":null,"pattern_15m":null,"sell_the_fact":null}}}
         """#
         let response = try decoder().decode(StrategyAnalysisResponse.self, from: Data(preparing.utf8))
-        guard case .loaded(_, let analysis) = StrategyAnalysisViewModel.state(for: response) else { return XCTFail("expected loaded") }
+        guard case .loaded(_, let analysis, let coReleasedIndicators) = StrategyAnalysisViewModel.state(for: response) else {
+            return XCTFail("expected loaded")
+        }
+        XCTAssertEqual(coReleasedIndicators, []) // co_released_indicatorsが応答に無ければ空配列(nilではない)
         XCTAssertFalse(analysis.isReady)
         // 足りない項目は傾向を書かず「分析データ準備中」
         XCTAssertEqual(StrategyAnalysisText.directionLine(analysis.summary.direction1m), "分析データ準備中")
@@ -161,6 +190,35 @@ final class StrategyAnalysisTests: XCTestCase {
         XCTAssertEqual(StrategyAnalysisText.percentOfSamples(1, 3), "33.3%")
         // samplesが0(作れない)なら値を作らない。
         XCTAssertEqual(StrategyAnalysisText.percentOfSamples(0, 0), "--")
+    }
+
+    /// HQ指示(2026-11-10 STEP5): 「件数が足りない」と「この指標はそもそも予想値が無い」を区別する。
+    /// 構造的に判定できない(予想が無い)指標は、件数が増えても「分析データ準備中」のままにならないことを示す文言にする。
+    func testSellTheFactLineDistinguishesNoForecastFromInsufficientSamples() throws {
+        func releases(forecasts: [Double?]) throws -> [StrategyRelease] {
+            let items = forecasts.enumerated().map { index, forecast in
+                let forecastJSON = forecast.map(String.init) ?? "null"
+                return #"""
+                {"event_id":"e\#(index)","release_datetime":"2026-01-0\#(index + 1)T00:00:00Z",
+                 "forecast":\#(forecastJSON),"actual":1.0,"surprise":null,"surprise_direction":null,
+                 "direction_1m":null,"pips_1m":null,"pips_15m":null,"pattern_15m":null,
+                 "high_break_15m":null,"low_break_15m":null,"high_break_60m":null,"low_break_60m":null,"sell_the_fact":null}
+                """#
+            }
+            let json = "[\(items.joined(separator: ","))]"
+            return try decoder().decode([StrategyRelease].self, from: Data(json.utf8))
+        }
+
+        XCTAssertEqual(
+            StrategyAnalysisText.sellTheFactLine(nil, releases: try releases(forecasts: [3.0, nil, 2.9])),
+            "分析データ準備中（予想と結果がそろった発表が足りません）"
+        )
+        XCTAssertEqual(
+            StrategyAnalysisText.sellTheFactLine(nil, releases: try releases(forecasts: [nil, nil, nil])),
+            "分析データ準備中（この指標は予想値が無く、判定できません）"
+        )
+        // releasesを渡さない既存の呼び出しは、互換のため「件数不足」側の文言のまま。
+        XCTAssertTrue(StrategyAnalysisText.sellTheFactLine(nil).hasPrefix("分析データ準備中"))
     }
 
     /// 発表ごとの実績の表で、高値・安値ブレイクを個別に出すセル文言。
