@@ -71,7 +71,8 @@ describe.skipIf(!integration)('indicator_forecasts: append-only forecast history
       source: 'IT Bank',
       forecast_value: 3.0,
     });
-    expect((await repo.listForecasts(eventId)).map((r) => r.forecast_value)).toEqual([3.4, 3.6, 3]);
+    const all = (await repo.listForecasts(eventId)).map((r) => r.forecast_value);
+    expect(all.sort((a, b) => a - b)).toEqual([3, 3.4, 3.6]); // 同じ fetched_at の行の順は決まらない
     const finals = await repo.listFinalForecasts(eventId);
     expect(finals.map((f) => [f.forecast_kind, f.forecast_value]).sort()).toEqual([
       ['MARKET_CONSENSUS', 3.6],
@@ -110,7 +111,7 @@ describe.skipIf(!integration)('indicator_forecasts: append-only forecast history
     const values = (await createForecastRepository(ctx.serviceClient).listForecasts(eventId)).map(
       (r) => r.forecast_value,
     );
-    expect(values).toEqual([3.4, 3.6, 3]); // 何も変わっていない
+    expect(values.sort((a, b) => a - b)).toEqual([3, 3.4, 3.6]); // 何も変わっていない
   });
 
   it('the pipeline against the real table: re-run adds nothing, changed value adds a row', async () => {
