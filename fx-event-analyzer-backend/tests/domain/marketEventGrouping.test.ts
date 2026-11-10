@@ -67,6 +67,36 @@ describe('groupByMarketEvent', () => {
     expect(groupByMarketEvent([])).toEqual([]);
   });
 
+  describe('同じ event_id の行が複数回渡されても1件として数える(2026-11-10「実動作検証」で発見)', () => {
+    // historical.ts は「対象イベント自身の行」と「DB検索(listCoReleasedEvents)で見つかった行」を両方渡す。
+    // 対象イベント自身のprovider・release_datetimeは当然DB検索にも一致するため、対象イベント自身が
+    // 検索結果にも含まれ、同じevent_idが2回入ってくる(自分＋同時発表の相手1件のはずがindicator_countが
+    // 3になってしまっていた実際のCI失敗を再現する)。
+    it('対象イベント自身が重複して渡っても、indicator_countは実際の指標数のまま', () => {
+      const selfRow = row('nfp-event', 'US_NFP', 'bls_schedule', '2026-11-06T13:30:00.000Z');
+      const siblingRow = row('unrate-event', 'US_UNEMPLOYMENT_RATE', 'bls_schedule', '2026-11-06T13:30:00.000Z');
+      // [自分自身(呼び出し側で構築), 自分自身(DB検索結果に含まれる), 同時発表の相手] の順で渡る想定
+      const groups = groupByMarketEvent([selfRow, selfRow, siblingRow]);
+      expect(groups).toHaveLength(1);
+      expect(groups[0]!.events.map((e) => e.event_id)).toEqual(['nfp-event', 'unrate-event']);
+      expect(summarizeMarketEventCoverage(groups)).toEqual({ independentMarketEvents: 1, indicatorEventCount: 2 });
+    });
+
+    it('同時発表の相手が無い(自分だけ)場合も、自分自身の重複でindicator_countが2にならない', () => {
+      const selfRow = row('solo-event', 'US_JOLTS', 'bls_schedule', '2026-11-03T15:00:00.000Z');
+      const groups = groupByMarketEvent([selfRow, selfRow]);
+      expect(groups).toHaveLength(1);
+      expect(summarizeMarketEventCoverage(groups)).toEqual({ independentMarketEvents: 1, indicatorEventCount: 1 });
+    });
+
+    it('precisionがAPPROXIMATEな行が重複しても、1件として数える(別々のungrouped扱いにしない)', () => {
+      const selfRow = row('eu-event', 'EU_HICP', 'eurostat_schedule', '2027-06-01T09:00:00.000Z', 'APPROXIMATE');
+      const groups = groupByMarketEvent([selfRow, selfRow]);
+      expect(groups).toHaveLength(1);
+      expect(summarizeMarketEventCoverage(groups)).toEqual({ independentMarketEvents: 1, indicatorEventCount: 1 });
+    });
+  });
+
   describe('release_datetime_precision が EXACT でない行は合わせない(2026-11-10「実動作検証」で発見)', () => {
     it('実例: Eurostat由来のEU_HICP・EU_UNEMPLOYMENT_RATEは、日付が偶然重なってもグループ化しない', () => {
       // mappings/eurostatSchedule.ts の実際の日程表どおり(2027-06-01、どちらもAPPROXIMATE・11:00 Luxembourg)。

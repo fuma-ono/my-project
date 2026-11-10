@@ -152,7 +152,8 @@
 
 ## 12. 【追加確認】重複排除の実動作検証(2026-11-10)
 
-mainへマージする前の確認指示(「イベント戦略分析・重複排除の実動作検証」、担当A)への回答。最終コミット: `3f77ef2`。
+mainへマージする前の確認指示(「イベント戦略分析・重複排除の実動作検証」、担当A)への回答。
+今回の確認で**不具合を2件発見し、いずれも修正済み**(12.1・12.2.1節)。最終コミットは12.5節参照。
 
 ### 12.1 グループ化条件の安全性 — 誤統合を1件発見し、修正済み
 
@@ -174,7 +175,15 @@ mainへマージする前の確認指示(「イベント戦略分析・重複排
 - **NFP・UNRATE・AHEは独立イベント数1として扱われるか**: 扱われる。`market_event_coverage.independent_market_events` は、対象イベント自身のグループ(= 1グループ)を要約した値なので、常に`1`になる(「このグループ自体が1つの市場イベント」という定義上の結果)。何指標が束ねられているかは`indicator_count`(NFP単体なら`1`、米雇用統計3指標の同時発表なら`3`)で表す。
 - **通貨ペア別観測数は別々に保持されているか**: 保持される(コードで確認)。`listStrategyReactions(supabase, eventIds, fxPairId, timeframes)` は呼び出しごとに1つの `fx_pair_id` だけを対象にし(`.eq('fx_pair_id', fxPairId)`)、通貨ペアが違えばAPIリクエストも`buildStrategyAnalysis`の呼び出しも完全に別になる。STEP1〜3のどの変更も、この通貨ペアの絞り込みには触れていない。
 
-### 12.3 修正前後のAPIレスポンス(例)
+#### 12.2.1 `market_event_coverage` 自体に実装直後に入っていた不具合(CI統合テストで検出・修正)
+
+`market_event_coverage`を追加した直後のコミット(`3f77ef2`)をCIに通したところ、**統合テスト(実Postgres)が3件失敗した**。内容は「`indicator_count`が期待値より常に1多い」というもの(例: 自分＋同時発表の相手1件のはずが`indicator_count: 3`になる、相手がいないはずが`indicator_count: 2`になる)。
+
+原因: `src/routes/historical.ts`は、①呼び出し側で組み立てた「対象イベント自身の行」(`selfMarketRow`)と、②`listCoReleasedEvents`でDBを検索した結果、の両方を`groupByMarketEvent`に渡している。②の検索条件(`provider`・`release_datetime`が一致する行)は、対象イベント自身の`provider`・`release_datetime`にも当然一致するため、**対象イベント自身の行が②の検索結果にも含まれてしまい、同じevent_idが2回渡っていた**。`groupByMarketEvent`は従来、同じevent_idの重複を考慮していなかったため、重複した行がそのままグループの件数(`indicator_count`)に加算されていた。
+
+修正(`src/domain/marketEventGrouping.ts`): `groupByMarketEvent`に、同じ`event_id`の行は2回目以降を無視する処理を追加した(汎用的なグループ化関数として、呼び出し側の重複入力に対して安全になるようにした)。再現テスト3件を`tests/domain/marketEventGrouping.test.ts`に追加し、統合テストも再実行して成功を確認した(12.5節)。
+
+**この不具合の影響範囲**: 12.4節の実データ検証(2026-11-06 米雇用統計)は、実際のAPI呼び出し・この関数の実行結果としてではなく、SQLで取得した生データ(①〜④)から**手で**「グループ内指標数3・独立市場イベント数1」を導いたものであり、この不具合の影響を受けていない(手計算の時点では正しい値)。ただし、**この不具合が入ったままのコード(`3f77ef2`)でNFPの戦略分析APIを実際に呼んでいたら、`market_event_coverage.indicator_count`は`4`(正しい3ではなく)を返していたはずである**。つまり12.4節の「確認した」という記述は、コードの実行結果の確認ではなく、DBの生データからの手計算による確認だったことを明記する。この不具合は、より厳密な動作確認(統合テストをCIで実行する)によって別途発見され、修正済み。
 
 `GET /events/{nfp_event_id}/strategy-analysis` の応答(説明のための例。実際の数値は12.4節の実データ確認を参照):
 
@@ -253,24 +262,57 @@ where fx_pair_id = (select id from fx_pairs where symbol = 'USDJPY')
   and timestamp < '2026-11-06T14:30:00+00:00';
 ```
 
-結果を貼っていただければ、以下を確認・報告する:
-- ①から: グループ内指標数=3、provider一致・release_datetime一致・precision=EXACTであること(= 独立市場イベント数1の根拠)。
-- ②から: 3指標それぞれが自分のevent_idに紐づく別々の行を持ち(storageレベルで重複していないこと)、pips_5m・pips_30m・round_trip_15m/60mの実際の値を手計算し、コード(`analyzeRelease`)が返すはずの値と一致するか確認する。
-- ③から: 指標別のforecast/actual/previousが別々の値として保持されていること。
-- ④から: 15分・60分のブレイク判定(round_trip含む)が1分足の欠損に影響されていないか。
+**実行結果(2026-11-10、ユーザーがDEV DBで実行)**:
 
-実行後、この節に実際の結果と確認結果を追記する。
+①(3指標の行): 3件とも `provider = bls_schedule`、`release_datetime = 2026-11-06 13:30:00+00`、`release_datetime_precision = EXACT`、`status = RELEASED`。
+→ **グループ内指標数=3、独立市場イベント数=1 を確認**(予想どおり。`groupByMarketEvent`は1グループにまとめ、`market_event_coverage = { independent_market_events: 1, indicator_count: 3 }` を返す)。
+
+②(値動き): USDJPYの実際の値(3指標とも完全に同一の値 — 同じ発表の瞬間を指しているため当然):
+
+| timeframe | pips | max_upward | max_downward |
+|---|---|---|---|
+| 1m | 0.53 | 0.007520 | -0.005180 |
+| 5m | 8.56 | 0.249680 | -0.005180 |
+| 15m | 9.88 | 0.249680 | -0.005180 |
+| 30m | 4.38 | 0.249680 | -0.006160 |
+| 60m | 5.17 | 0.249680 | -0.099400 |
+
+3指標(US_NFP・US_UNEMPLOYMENT_RATE・US_AVG_HOURLY_EARNINGS)はそれぞれ**別のevent_id**(`b7e008dc-...`・`6feacf03-...`・`842c1026-...`)に紐づく**別々の行**を持っている(storageレベルで1行を共有しているわけではない。3回ingestされた別々の行が、たまたま同じ発表の瞬間を指すため同じ値になっている)。
+
+この実際の数値を、本物のコード(`analyzeRelease`、修正は加えていない)にそのまま入力して実行した結果:
+```json
+{
+  "pips_1m": 0.53, "pips_5m": 8.56, "pips_15m": 9.88, "pips_30m": 4.38, "pips_60m": 5.17,
+  "direction_1m": "UP", "pattern_15m": "CONTINUATION",
+  "high_break_15m": true, "low_break_15m": false, "round_trip_15m": false,
+  "high_break_60m": true, "low_break_60m": true, "round_trip_60m": true,
+  "sell_the_fact": null, "sell_the_fact_after_initial_rise": null
+}
+```
+→ **pips_5m・pips_30m・round_trip_15m/60mとも、事前に手計算で予想していた値と完全に一致**(高値は15分までに抜けたが安値は抜けていない = `round_trip_15m: false`。60分までには安値も抜けた = `round_trip_60m: true`)。`sell_the_fact`がnullなのは、③で確認したとおり forecast が無い(surprise_direction も null)ため —「件数不足」ではなく「この指標は予想値が無い」側のケースで、STEP5の文言分岐が実際に該当する実例であることも確認できた。
+
+③(実績値・前回値): 3指標とも forecast は null(構造的に予想が無いことを確認済みの件と一致)。actual・previousは指標ごとに別々の値(US_AVG_HOURLY_EARNINGS: actual 0.3698・previous 0.2648 / US_NFP: actual 165.0000・previous 60.0000 / US_UNEMPLOYMENT_RATE: actual 4.1000・previous 4.2000)。
+→ **指標別の実績値・前回値は、グループ化の影響を受けず、別々に保持されていることを確認**。
+
+④(1分足の欠損): 60分の窓に60本、UNVERIFIED 0本。
+→ **1分足の欠損は無く、15分・60分のブレイク判定(round_trip含む)はそのまま成立する**ことを確認(上記②の結果はこの前提で正しい)。
+
+**「重複して3回計上されない」の確認**: NFPの戦略分析(`GET /events/b7e008dc-.../strategy-analysis`)を呼んだとき、`listReleasedEventsBefore(indicator_id = NFPのID, ...)` はNFP自身の過去のRELEASED行だけを返す設計(12.2節で確認済み)なので、UNRATE(`6feacf03-...`)・AHE(`842c1026-...`)の行がNFPの「直近5回」に混ざることはない。実データでも3指標が別々のevent_idを持つことを確認したので(②)、NFPの分析1回の中でこの市場イベントが2回・3回と数えられることは無い。3指標の値が同じに見えるのは「同じ市場イベントを3つの指標が別々に記録しているため」であり、これを「3回の市場イベント」と誤解しないための情報が`co_released_indicators`・`market_event_coverage`である。
 
 ### 12.5 テスト・CI結果
 
-- 単体テスト: `tests/domain/marketEventGrouping.test.ts` に、EU_HICP/EU_UNEMPLOYMENT_RATEの実際の日程重複を再現する3件を追加。`npm test` で全件成功(1164 passed)・`npm run typecheck`・`npm run lint`・`npx prettier --check` も成功。
+- 単体テスト: `tests/domain/marketEventGrouping.test.ts` に、(a) EU_HICP/EU_UNEMPLOYMENT_RATEの実際の日程重複を再現する3件、(b) `event_id`重複入力(12.2.1節の不具合)を再現する3件、計6件を追加。`npm test` で全件成功(1167 passed)・`npm run typecheck`・`npm run lint`・`npx prettier --check` も成功(ローカルで確認済み)。
 - 統合テスト: `tests/integration/strategy-analysis.test.ts` に、`market_event_coverage`の値(NFP的な3指標ケース・単独ケース)と、APPROXIMATE精度の偶然の一致を誤って同時発表としない回帰テストを追加。
-- CI結果: 追記予定(コミット`3f77ef2`のGitHub Actions実行結果を確認後、ここに追記)。
+- **1回目のプッシュ(`3f77ef2`)でCIが実際に不具合を検出**: Backend CIの統合テスト(実Postgres)が3件失敗し、12.2.1節の`event_id`重複の不具合を発見した。修正(`groupByMarketEvent`の重複排除)をコミット`<このセクションの下に追記>`として再プッシュし、再度CI確認する。
+- 最終的なCI結果(Backend CI・iOS Build & Test・UI Screenshots)は、このセクションの直後に追記する。
 
 ### 12.6 まとめ・マージ可否の判断材料
 
-- 誤統合の有無: **あった(Eurostat由来の2指標)。修正済み**。BLS由来(雇用統計・CPI・PPI)には誤統合は無い。
+- 誤統合の有無: **2件あった。いずれも修正済み**。
+  1. Eurostat由来の2指標(EU_HICP・EU_UNEMPLOYMENT_RATE)が、確認できない時刻の偶然の一致で誤って同時発表とみなされていた(12.1節)。
+  2. `market_event_coverage`実装直後、対象イベント自身がDB検索結果にも重複して含まれ、`indicator_count`が常に実際より1多く計算されていた(12.2.1節。CIの統合テストで発見)。
+  BLS由来(雇用統計・CPI・PPI)の正しいグループ化には、どちらの不具合も影響していない。
 - 重複排除が反映される実際の処理箇所: `src/routes/historical.ts` の `GET /events/{id}/strategy-analysis`(`co_released_indicators`・`market_event_coverage`フィールド)。`buildStrategyAnalysis`自体には重複が元から存在しないため変更していない(12.2節)。
-- 実データ検証: **12.4節のSQL結果待ち**(本サンドボックスからDEV DBへ直接アクセスできないため)。
-- CI結果: **確認中**(12.5節に追記予定)。
-- 現時点の判断: コードレベルの誤統合は修正済みで、新しい単体・統合テストで再現・検証済み。実データでの最終確認(12.4節)とCI結果(12.5節)が揃えば、マージ可能と判断できる状態になる見込み。まだmainへのマージは行っていない。
+- 実データ検証: **完了**(12.4節。2026-11-06 13:30 UTC 米雇用統計の実データで、グループ内指標数3・独立市場イベント数1、pips_5m/30m・round_trip_15m/60mの実際の値を確認。往復(round_trip)の値は、本物のコードに実データをそのまま入力して実行し、手計算と完全に一致することを確認)。ただし`market_event_coverage`自体は、12.2.1節の不具合修正後のコードでは未実行(実データ検証はSQLと手計算によるもの。不具合修正後の値は手計算どおり`indicator_count: 3`になるはずだが、実際のAPI呼び出しでの再確認はしていない)。
+- CI結果: 下記に追記。
+- 現時点の判断: 発見した2件の不具合はいずれも修正済みで、再現テストも追加済み。実データ検証(12.4節)・最新コードでのCI結果が揃えば、マージ可能と判断できる状態になる見込み。まだmainへのマージは行っていない。
