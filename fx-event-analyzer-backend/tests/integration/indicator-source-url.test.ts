@@ -16,11 +16,15 @@ describe.skipIf(!integration)('economic_indicators.source_url backfill (migratio
     empty: `IT_SRCURL_EMPTY_${runId}`,
     blank: `IT_SRCURL_BLANK_${runId}`,
     race: `IT_SRCURL_RACE_${runId}`,
+    dlBackfillFirst: `IT_SRCURL_DL1_${runId}`,
+    dlRollbackFirst: `IT_SRCURL_DL2_${runId}`,
     filled: `IT_SRCURL_FILLED_${runId}`,
     touched: `IT_SRCURL_TOUCH_${runId}`,
   };
   const batch = `it-${runId}`;
   const raceBatch = `it-race-${runId}`;
+  const dlBatch1 = `it-dl1-${runId}`;
+  const dlBatch2 = `it-dl2-${runId}`;
 
   const indicator = (code: string, source_url: string | null) => ({
     code,
@@ -50,6 +54,8 @@ describe.skipIf(!integration)('economic_indicators.source_url backfill (migratio
       indicator(codes.empty, null),
       indicator(codes.blank, '   '), // 空白だけの文字列(null ではない)
       indicator(codes.race, null), // 同時更新のテスト用(別の batch)
+      indicator(codes.dlBackfillFirst, null), // バックフィルとロールバックの同時実行(バックフィルが先)
+      indicator(codes.dlRollbackFirst, null), // 同(ロールバックが先)
       indicator(codes.filled, 'https://example.org/manual'),
       indicator(codes.touched, null),
     ]);
@@ -58,7 +64,10 @@ describe.skipIf(!integration)('economic_indicators.source_url backfill (migratio
 
   afterAll(async () => {
     if (!ctx) return;
-    await ctx.serviceClient.from('indicator_source_url_backfills').delete().in('batch', [batch, raceBatch]);
+    await ctx.serviceClient
+      .from('indicator_source_url_backfills')
+      .delete()
+      .in('batch', [batch, raceBatch, dlBatch1, dlBatch2]);
     await ctx.serviceClient.from('economic_indicators').delete().in('code', Object.values(codes));
     await ctx.app.close();
   });
@@ -203,7 +212,110 @@ describe.skipIf(!integration)('economic_indicators.source_url backfill (migratio
       p_hold_seconds: 6,
     });
     expect(r.error?.code).toBe('22023');
+    const b = await ctx.serviceClient.rpc('backfill_indicator_source_urls', {
+      p_batch: raceBatch,
+      p_urls: [],
+      p_hold_seconds: -1,
+    });
+    expect(b.error?.code).toBe('22023');
   });
+
+  /** 指標の行と、その batch の記録を読む(整合の確認用)。 */
+  const stateOf = async (code: string, b: string) => {
+    const row = await ctx.serviceClient
+      .from('economic_indicators')
+      .select('source_url, updated_at')
+      .eq('code', code)
+      .single();
+    if (row.error) throw row.error;
+    const log = await ctx.serviceClient
+      .from('indicator_source_url_backfills')
+      .select('previous_source_url, applied_source_url, applied_updated_at, rolled_back_at')
+      .eq('batch', b)
+      .eq('code', code)
+      .single();
+    if (log.error) throw log.error;
+    return { row: row.data, log: log.data };
+  };
+  const sameInstant = (a: string, b: string) => Date.parse(a) === Date.parse(b);
+
+  it('backfill first, rollback concurrently (the order that could deadlock): no deadlock, consistent result', async () => {
+    const code = codes.dlBackfillFirst;
+    // 記録が残ったまま、人が source_url を空に戻した状態を作る(バックフィルがもう一度この行を埋め、記録を更新する)
+    const first = await ctx.serviceClient.rpc('backfill_indicator_source_urls', {
+      p_batch: dlBatch1,
+      p_urls: [{ code, source_url: 'https://example.org/dl1-first' }],
+    });
+    if (first.error) throw first.error;
+    const cleared = await ctx.serviceClient.from('economic_indicators').update({ source_url: null }).eq('code', code);
+    if (cleared.error) throw cleared.error;
+
+    // バックフィル: 指標の行をロックして変えた後、記録の前に2秒待つ。その間にロールバックを始める。
+    // アドバイザリーロックが無ければ、ロールバックが記録の行をロックして指標の行を待ち、バックフィルが記録の行を待って
+    // デッドロック(40P01)になる順。
+    const backfill = ctx.serviceClient
+      .rpc('backfill_indicator_source_urls', {
+        p_batch: dlBatch1,
+        p_urls: [{ code, source_url: 'https://example.org/dl1-second' }],
+        p_hold_seconds: 2,
+      })
+      .then((response) => response);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const startedAt = Date.now();
+    const rollback = await ctx.serviceClient.rpc('rollback_indicator_source_url_backfill', { p_batch: dlBatch1 });
+    const rollbackWaitedMs = Date.now() - startedAt;
+    const backfillResult = await backfill;
+
+    expect(backfillResult.error).toBeNull(); // デッドロックで打ち切られていない
+    expect(rollback.error).toBeNull();
+    expect(backfillResult.data).toBe(1);
+    expect(rollbackWaitedMs).toBeGreaterThanOrEqual(1_000); // ロールバックはバックフィルが終わるまで待った
+    // ロールバックはバックフィルの後に動き、バックフィルが入れた値のまま(updated_at も同じ)なので戻した
+    expect(rollback.data).toEqual([{ code, reverted: true, reason: null }]);
+
+    const { row, log } = await stateOf(code, dlBatch1);
+    expect(row.source_url).toBeNull(); // バックフィルの前の値(null)に戻った
+    expect(log).toMatchObject({ previous_source_url: null, applied_source_url: 'https://example.org/dl1-second' });
+    expect(log.rolled_back_at).not.toBeNull();
+  }, 20_000);
+
+  it('rollback first, backfill concurrently: no deadlock, consistent result', async () => {
+    const code = codes.dlRollbackFirst;
+    const first = await ctx.serviceClient.rpc('backfill_indicator_source_urls', {
+      p_batch: dlBatch2,
+      p_urls: [{ code, source_url: 'https://example.org/dl2-first' }],
+    });
+    if (first.error) throw first.error;
+
+    // ロールバック: 記録と指標の行をロックした後、比べる前に2秒待つ。その間にバックフィルを始める。
+    const rollback = ctx.serviceClient
+      .rpc('rollback_indicator_source_url_backfill', { p_batch: dlBatch2, p_hold_seconds: 2 })
+      .then((response) => response);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const startedAt = Date.now();
+    const backfill = await ctx.serviceClient.rpc('backfill_indicator_source_urls', {
+      p_batch: dlBatch2,
+      p_urls: [{ code, source_url: 'https://example.org/dl2-second' }],
+    });
+    const backfillWaitedMs = Date.now() - startedAt;
+    const rollbackResult = await rollback;
+
+    expect(rollbackResult.error).toBeNull();
+    expect(backfill.error).toBeNull();
+    expect(backfillWaitedMs).toBeGreaterThanOrEqual(1_000); // バックフィルはロールバックが終わるまで待った
+    expect(rollbackResult.data).toEqual([{ code, reverted: true, reason: null }]); // 先にロールバック(null に戻す)
+    expect(backfill.data).toBe(1); // その後、空になった行を埋めた
+
+    const { row, log } = await stateOf(code, dlBatch2);
+    expect(row.source_url).toBe('https://example.org/dl2-second');
+    // 記録は最後のバックフィルのもの: 変更前 null、入れた値・updated_at が今の行と一致、ロールバック済みの印は消えている
+    expect(log).toMatchObject({
+      previous_source_url: null,
+      applied_source_url: 'https://example.org/dl2-second',
+      rolled_back_at: null,
+    });
+    expect(sameInstant(log.applied_updated_at, row.updated_at)).toBe(true);
+  }, 20_000);
 
   it('anon / authenticated cannot read the backfill log or call the functions', async () => {
     const anon = createClient(integration!.env.SUPABASE_URL, integration!.anonKey, { auth: { persistSession: false } });

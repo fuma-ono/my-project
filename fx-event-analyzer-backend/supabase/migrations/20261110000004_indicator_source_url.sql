@@ -24,7 +24,7 @@
 -- 戻す手順(DEV で、service_role で):
 --   select * from rollback_indicator_source_url_backfill('20261110000004');   -- 戻した行・戻さなかった行(理由つき)
 --   -- 戻さなかった行が無いことを確かめてから(あれば人が判断):
---   drop function backfill_indicator_source_urls(text, jsonb);
+--   drop function backfill_indicator_source_urls(text, jsonb, numeric);
 --   drop function rollback_indicator_source_url_backfill(text, numeric);
 --   drop table indicator_source_url_backfills;
 
@@ -42,8 +42,18 @@ create table indicator_source_url_backfills (
 alter table indicator_source_url_backfills enable row level security;
 revoke all on table indicator_source_url_backfills from public, anon, authenticated;
 
+-- HQ レビュー(2026-11-10 4回目): バックフィルとロールバックの同時実行によるデッドロックを防ぐ。
+-- ロックの順は backfill が economic_indicators → indicator_source_url_backfills、rollback がその逆なので、同じ指標・同じ batch を
+-- 同時に処理すると(例: 記録が残ったまま人が source_url を空に戻した行)、互いに相手の行を待ってデッドロックになりうる。
+-- そこで両方の関数の最初に、同じキーの transaction 単位のアドバイザリーロック(pg_advisory_xact_lock)を取り、この2つの関数を
+-- 1つずつしか動かないようにする(後から来た方は、先の transaction が終わるまで待つ)。ほかの処理(人の更新・取り込み)は
+-- indicator_source_url_backfills に触れないので、このロックの対象にしなくてもロックの順の逆転は起きない。
+-- キー: hashtext('indicator_source_url_backfills')(1つの値。batch をまたいでも直列にする — 管理用の、まれな操作のため)。
+
 -- p_urls: [{"code": "...", "source_url": "https://..."}]。空の行だけを埋め、変えた行を記録する。戻り値 = 変えた行の数。
-create or replace function backfill_indicator_source_urls(p_batch text, p_urls jsonb)
+-- p_hold_seconds: 検証用(結合テストで同時実行を確実に起こすため)。最初の行をロックして変えた後、記録する前に待つ秒数。
+-- 既定 0、上限 5。
+create or replace function backfill_indicator_source_urls(p_batch text, p_urls jsonb, p_hold_seconds numeric default 0)
 returns integer
 language plpgsql
 as $$
@@ -52,6 +62,10 @@ declare
   r record;
   applied_at timestamptz;
 begin
+  if p_hold_seconds is null or p_hold_seconds < 0 or p_hold_seconds > 5 then
+    raise exception 'p_hold_seconds must be between 0 and 5' using errcode = '22023';
+  end if;
+  perform pg_advisory_xact_lock(hashtext('indicator_source_url_backfills'));
   -- 変える前の値(null か、空白だけの文字列)をそのまま読む。行は for update で押さえ、読んでから変えるまでの間に
   -- ほかの更新が入らないようにする。
   for r in
@@ -67,6 +81,9 @@ begin
     set source_url = r.applied_source_url
     where i.id = r.id
     returning i.updated_at into applied_at;
+    if changed = 0 and p_hold_seconds > 0 then
+      perform pg_sleep(p_hold_seconds);
+    end if;
 
     insert into indicator_source_url_backfills (batch, code, previous_source_url, applied_source_url, applied_updated_at)
     values (p_batch, r.code, r.previous_source_url, r.applied_source_url, applied_at)
@@ -99,6 +116,7 @@ begin
   if p_hold_seconds is null or p_hold_seconds < 0 or p_hold_seconds > 5 then
     raise exception 'p_hold_seconds must be between 0 and 5' using errcode = '22023';
   end if;
+  perform pg_advisory_xact_lock(hashtext('indicator_source_url_backfills')); -- backfill と同じキー(上の説明)
   for r in
     select b.code, b.previous_source_url, b.applied_source_url, b.applied_updated_at
     from indicator_source_url_backfills b
@@ -127,8 +145,8 @@ begin
 end;
 $$;
 
-revoke all on function backfill_indicator_source_urls(text, jsonb) from public, anon, authenticated;
-grant execute on function backfill_indicator_source_urls(text, jsonb) to service_role;
+revoke all on function backfill_indicator_source_urls(text, jsonb, numeric) from public, anon, authenticated;
+grant execute on function backfill_indicator_source_urls(text, jsonb, numeric) to service_role;
 revoke all on function rollback_indicator_source_url_backfill(text, numeric) from public, anon, authenticated;
 grant execute on function rollback_indicator_source_url_backfill(text, numeric) to service_role;
 
