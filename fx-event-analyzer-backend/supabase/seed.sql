@@ -60,6 +60,18 @@ from (values
 ) as v(code, display_name)
 where economic_indicators.code = v.code;
 
+-- source_url は migration 20261110000004 と同じ(ローカル・CI では migration がこの5行より先に流れるため)。
+update economic_indicators set source_url = v.source_url
+from (values
+  ('US_CPI', 'https://www.bls.gov/cpi/'),
+  ('US_NFP', 'https://www.bls.gov/ces/'),
+  ('US_FOMC', 'https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm'),
+  ('JP_CPI', 'https://www.stat.go.jp/data/cpi/'),
+  ('BOJ_RATE', 'https://www.boj.or.jp/mopo/mpmdeci/index.htm')
+) as v(code, source_url)
+where economic_indicators.code = v.code
+  and (economic_indicators.source_url is null or btrim(economic_indicators.source_url) = '');
+
 -- ---------------------------------------------------------------------
 -- FX pairs
 -- ---------------------------------------------------------------------
