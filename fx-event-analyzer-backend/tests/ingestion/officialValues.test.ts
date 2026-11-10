@@ -143,7 +143,8 @@ describe('ingestOfficialValues', () => {
     expect(result.pending).toBeGreaterThanOrEqual(1);
     expect(store.snapshots).toEqual([]);
     expect(cpiEvent()).toMatchObject({ status: 'SCHEDULED', data_status: 'PENDING' });
-    expect(counters.skipReasons.NOT_RELEASED_OR_DATE_MISMATCH).toBe(1);
+    // GB_CPI と、同じ実行で見る GB_UNEMPLOYMENT_RATE(応答が空)の2件
+    expect(counters.skipReasons.NOT_RELEASED_OR_DATE_MISMATCH).toBe(2);
   });
 
   it('period mismatch (released today, but for another month): nothing saved', async () => {
@@ -154,7 +155,7 @@ describe('ingestOfficialValues', () => {
     expect(counters.skipReasons.PERIOD_MISMATCH).toBe(1);
   });
 
-  it('an event without an official reference period (UK labour market) is never published', async () => {
+  it('UK labour market: without an official label period and unit in the API, nothing is published', async () => {
     fetcher.responses.set(ONS_CPI_URL, onsCpi([['2026 OCT', '3.7', '2026-11-18']], '2026-11-18'));
     fetcher.responses.set(
       'https://www.ons.gov.uk/employmentandlabourmarket/peoplenotinwork/unemployment/timeseries/mgsx/lms/data',
@@ -166,7 +167,7 @@ describe('ingestOfficialValues', () => {
     const { counters } = await run();
     expect(store.snapshots.map((s) => s.event_id)).toEqual([CPI_ID]);
     expect(store.events.find((e) => e.id === 'ev-u')!.status).toBe('SCHEDULED');
-    expect(counters.skipReasons.NO_REFERENCE_PERIOD).toBe(1);
+    expect(counters.skipReasons.NOT_RELEASED_OR_DATE_MISMATCH).toBe(1); // 単位・ラベルの無い応答
   });
 
   it('a re-run does not register twice and never overwrites the RELEASED first value', async () => {

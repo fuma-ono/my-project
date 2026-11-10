@@ -6,7 +6,8 @@
  *   1. 公式機関のデータ(下の OFFICIAL_VALUE_SOURCES の系列だけ。利用条件は migration 20261110000002 の説明で確認済み)
  *   2. 発表日が一致する(API が示す公表日 = その回の公表日。adapters/gbCaOfficialValues.ts の parse*ForRelease。ABS は
  *      updatedAfter で公表日に更新された観測だけを見る — adapters/absOfficialValues.ts)
- *   3. 対象期間が一致する(API の値の対象月 = 公表予定の表の referencePeriod。表に referencePeriod が無い回は保存しない)
+ *   3. 対象期間が一致する(API の値の対象月 = 公表予定の表の referencePeriod。表に referencePeriod が無い回は保存しない。
+ *      例外は periodFromOfficialLabel の取得元(GB_UNEMPLOYMENT_RATE)だけ: 公表日に更新された行の公式 API のラベルを使う)
  *   4. 数値・単位が明確(数として読める値、単位はこの表で決めた '%')
  *   5. 出典(source・source_url)がある
  *
@@ -30,7 +31,9 @@ import {
 import {
   ONS_SERIES,
   onsSeriesUrl,
+  onsRollingValueForPeriod,
   onsValueForPeriod,
+  parseOnsRollingValueForRelease,
   parseOnsValueForRelease,
   parseStatcanValueForRelease,
   STATCAN_SERIES,
@@ -58,6 +61,11 @@ export interface OfficialValueSource {
    * HTTP 404 は「まだ更新されていない」(何も書かない)。null = URL を作れない(保存しない)。
    */
   releaseRequest?: (entry: OfficialScheduleEntry) => { url: string; headers?: Record<string, string> } | null;
+  /**
+   * true = 公表予定の表に対象期間が無い回でも、公表日に更新された行の公式 API のラベルを対象期間とする(HQ判断 2026-11-10、
+   * GB_UNEMPLOYMENT_RATE だけ)。表に referencePeriod がある回は、これまでどおり表と照合する。
+   */
+  periodFromOfficialLabel?: boolean;
   /** 初回値として保存してよいのは、公表からこの日数の間だけ(次の回の公表の後に、改定された値を初回値としない)。 */
   maxDaysAfterRelease?: number;
   /** fullBody = request の応答(releaseRequest のある取得元で、単位・桁を読む)。 */
@@ -76,6 +84,17 @@ const ons = (indicatorCode: string): OfficialValueSource => {
     request: { url: onsSeriesUrl(series) },
     parseForRelease: (body, releaseDate) => parseOnsValueForRelease(series, body, releaseDate),
     valueForPeriod: (body, period) => onsValueForPeriod(series, body, period),
+  };
+};
+
+/** 3か月の期間の系列(GB_UNEMPLOYMENT_RATE / MGSX)。対象期間は公表日に更新された行の API のラベル。 */
+const onsRolling = (indicatorCode: string): OfficialValueSource => {
+  const series = ONS_SERIES.find((s) => s.indicatorCode === indicatorCode)!;
+  return {
+    ...ons(indicatorCode),
+    periodFromOfficialLabel: true,
+    parseForRelease: (body, releaseDate) => parseOnsRollingValueForRelease(series, body, releaseDate),
+    valueForPeriod: (body, period) => onsRollingValueForPeriod(series, body, period),
   };
 };
 
@@ -114,13 +133,14 @@ const abs = (indicatorCode: string): OfficialValueSource => {
 };
 
 /**
- * 実績値を取る指標(HQ決定の優先順)。GB_UNEMPLOYMENT_RATE は系列(MGSX)は読めるが、公表予定の表に公式の対象期間が無いので
- * 保存しない(下の referencePeriod の確認で止まる)。CA_CPI は公式の前年比の系列が無い(指数から計算しない)ため入れない。
+ * 実績値を取る指標(HQ決定の優先順)。GB_UNEMPLOYMENT_RATE は公表予定の表に公式の対象期間が無いので、HQ判断(2026-11-10)
+ * により、公表日に更新された行の ONS の API のラベルを対象期間とする(onsRolling)。CA_CPI は公式の前年比の系列が無い
+ * (指数から前年比を計算しない — HQ判断 2026-11-10)ため、公式の系列が確認できるまで入れない。
  */
 export const OFFICIAL_VALUE_SOURCES: readonly OfficialValueSource[] = [
   ons('GB_CPI'),
   ons('GB_CORE_CPI'),
-  ons('GB_UNEMPLOYMENT_RATE'),
+  onsRolling('GB_UNEMPLOYMENT_RATE'),
   statcan('CA_UNEMPLOYMENT_RATE'),
   abs('AU_CPI'),
   abs('AU_UNEMPLOYMENT_RATE'),
@@ -203,7 +223,7 @@ export async function ingestOfficialValues(
 
     for (const event of events) {
       const entry = entryById.get(event.provider_event_id)!;
-      if (!entry.referencePeriod) {
+      if (!entry.referencePeriod && !source.periodFromOfficialLabel) {
         counters.skip('NO_REFERENCE_PERIOD'); // 対象期間を照合できない回は保存しない
         if (event.status !== 'RELEASED') result.pending += 1;
         continue;
@@ -212,7 +232,10 @@ export async function ingestOfficialValues(
       if (event.status === 'RELEASED' || snapshot) {
         // 改定の確認だけ(初回値は変えない)
         if (!snapshot || snapshot.actual === null) continue;
-        const current = source.valueForPeriod(body, entry.referencePeriod);
+        // 初回値の期間: 表の referencePeriod、無ければ初回値を保存したときの verification_source('<系列>@<期間>')
+        const revisionPeriod = entry.referencePeriod ?? snapshot.verification_source?.split('@')[1] ?? null;
+        if (!revisionPeriod) continue;
+        const current = source.valueForPeriod(body, revisionPeriod);
         if (current === null) continue;
         const latest = (await deps.store.latestRevisionValues(event.id)).ACTUAL ?? Number(snapshot.actual);
         if (current === latest) {
@@ -228,7 +251,7 @@ export async function ingestOfficialValues(
           source: source.sourceName,
         });
         result.revisions += 1;
-        counters.note('revised', { event_id: event.id, period: entry.referencePeriod, from: latest, to: current });
+        counters.note('revised', { event_id: event.id, period: revisionPeriod, from: latest, to: current });
         continue;
       }
 
@@ -270,7 +293,7 @@ export async function ingestOfficialValues(
         result.pending += 1;
         continue;
       }
-      if (value.period !== entry.referencePeriod) {
+      if (entry.referencePeriod !== undefined && value.period !== entry.referencePeriod) {
         counters.skip('PERIOD_MISMATCH');
         counters.note('period_mismatch', { event_id: event.id, expected: entry.referencePeriod, got: value.period });
         result.pending += 1;

@@ -121,7 +121,16 @@ export class MemoryIngestionStore implements IngestionStore {
 
   getReleaseSnapshot(eventId: string) {
     const s = this.snapshots.find((snapshot) => snapshot.event_id === eventId);
-    return Promise.resolve(s ? { forecast: s.forecast, actual: s.actual, previous: s.previous } : null);
+    return Promise.resolve(
+      s
+        ? {
+            forecast: s.forecast,
+            actual: s.actual,
+            previous: s.previous,
+            verification_source: s.verification_source ?? null,
+          }
+        : null,
+    );
   }
 
   listFomcPolicyDecisions(): Promise<StoredFomcPolicyDecision[]> {

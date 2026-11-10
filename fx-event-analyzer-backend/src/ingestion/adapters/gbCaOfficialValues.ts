@@ -173,3 +173,79 @@ export function statcanValueForPeriod(series: StatcanSeries, body: unknown, peri
   const point = item.object?.vectorDataPoint?.find((p) => p.refPer === `${period}-01`);
   return typeof point?.value === 'number' && Number.isFinite(point.value) ? point.value : null;
 }
+
+/**
+ * HQ判断(2026-11-10「GB_UNEMPLOYMENT_RATE は提案方式を条件付きで採用」): 英国の失業率(3か月の平均)は、公表の前の公式の
+ * ページに対象の3か月が書かれていない。そのため、**公表日に更新された行の、ONS の API のラベル**(例 '2026 JUN-AUG')を
+ * 対象期間とする。ラベルの年は始まりの月の年('2024 DEC-FEB' = 2024-12〜2025-02。2026-11-10 に API で確認)。
+ * 対象期間は 'YYYY-MM/YYYY-MM'(始まり/終わり)。公表文の HTML は読まない。
+ */
+export function onsRollingPeriodFromLabel(label: string | undefined): string | null {
+  const match = /^(\d{4}) ([A-Z]{3})-([A-Z]{3})$/.exec(label?.trim().toUpperCase() ?? '');
+  if (!match || !MONTHS[match[2]!] || !MONTHS[match[3]!]) return null;
+  const startYear = Number(match[1]);
+  const startMonth = Number(MONTHS[match[2]!]);
+  const endMonth = Number(MONTHS[match[3]!]);
+  if ((endMonth - startMonth + 12) % 12 !== 2) return null; // 3か月の期間だけ
+  const endYear = endMonth < startMonth ? startYear + 1 : startYear;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${startYear}-${pad(startMonth)}/${endYear}-${pad(endMonth)}`;
+}
+
+interface OnsRollingRow {
+  date?: string;
+  label?: string;
+  value?: string;
+  updateDate?: string;
+}
+
+/**
+ * 3か月の期間の系列(MGSX)の、その公表日の値。次のどれかなら null(保存しない):
+ * 系列が違う・単位が '%' でない・API の公表日(description.releaseDate)が公表日と違う・最後の行の updateDate が公表日と違う・
+ * ラベルが3か月の期間として読めない・ラベルの真ん中の月が行の date と違う・値が数でない。
+ */
+export function parseOnsRollingValueForRelease(
+  series: OnsSeries,
+  body: unknown,
+  releaseDate: string,
+): OfficialValue | null {
+  const json = body as {
+    description?: { cdid?: string; unit?: string; releaseDate?: string };
+    months?: OnsRollingRow[];
+  };
+  if (json?.description?.cdid?.toUpperCase() !== series.cdid) return null;
+  if (json.description.unit?.trim() !== '%') return null;
+  const releasedAt = json.description.releaseDate ? new Date(json.description.releaseDate) : null;
+  if (!releasedAt || Number.isNaN(releasedAt.getTime())) return null;
+  const releasedOn = localDate(releasedAt, 'Europe/London');
+  if (releasedOn !== releaseDate) return null;
+  const last = json.months?.at(-1);
+  if (!last?.updateDate || Number.isNaN(new Date(last.updateDate).getTime())) return null;
+  if (localDate(new Date(last.updateDate), 'Europe/London') !== releaseDate) return null;
+  const period = onsRollingPeriodFromLabel(last.label);
+  const mid = /^(\d{4}) ([A-Z]{3})$/.exec(last.date?.trim().toUpperCase() ?? '');
+  if (!period || !mid || !MONTHS[mid[2]!]) return null;
+  const [startYear, startMonth] = period.slice(0, 7).split('-').map(Number);
+  // 行の date は3か月の真ん中の月(例 '2026 JUL' = '2026 JUN-AUG')
+  if (Number(mid[1]) * 12 + Number(MONTHS[mid[2]!]) !== startYear! * 12 + startMonth! + 1) return null;
+  const value = Number(last.value);
+  if (last.value === undefined || last.value.trim() === '' || !Number.isFinite(value)) return null;
+  return {
+    indicatorCode: series.indicatorCode,
+    seriesId: series.cdid,
+    period,
+    value,
+    releasedOn,
+    sourceUrl: onsSeriesUrl(series),
+  };
+}
+
+/** 改定の確認用: その3か月の期間('YYYY-MM/YYYY-MM')の今の値(ラベルで探す)。無ければ null。 */
+export function onsRollingValueForPeriod(series: OnsSeries, body: unknown, period: string): number | null {
+  const json = body as { description?: { cdid?: string; unit?: string }; months?: OnsRollingRow[] };
+  if (json?.description?.cdid?.toUpperCase() !== series.cdid || json.description.unit?.trim() !== '%') return null;
+  const row = json.months?.find((m) => onsRollingPeriodFromLabel(m.label) === period);
+  if (!row?.value || row.value.trim() === '') return null;
+  const value = Number(row.value);
+  return Number.isFinite(value) ? value : null;
+}
