@@ -20,6 +20,11 @@ export const ja = {
     title: '設定エラー',
     message: 'アプリの起動に必要な設定(接続情報)が見つかりませんでした。開発者への確認をお願いします。',
   },
+  networkError: {
+    title: '接続できません',
+    message: 'サーバーに接続できませんでした。電波状況をご確認の上、もう一度お試しください。',
+    retryButton: '再試行',
+  },
   onboarding: {
     tagline: '友達との貸し借りを、お金も頼みごとも一緒に記録する',
     signInFailedTitle: 'エラーが発生しました',
@@ -461,6 +466,11 @@ export const en: Strings = {
   configError: {
     title: 'Configuration Error',
     message: 'The app is missing required configuration to start. Please contact the developer.',
+  },
+  networkError: {
+    title: "Can't connect",
+    message: 'We couldn\'t reach the server. Please check your connection and try again.',
+    retryButton: 'Try again',
   },
   onboarding: {
     tagline: 'Track money and favors you owe friends, all in one place',

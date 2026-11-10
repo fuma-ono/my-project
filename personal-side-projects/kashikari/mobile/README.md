@@ -8,7 +8,7 @@ Web版プロトタイプ(`../app/index.html`、Claude Artifacts)は「1URL=1つ�
 
 次のビルド・提出に含める必要がある、まだストアに反映されていない変更。反映したら各項目を消すこと。
 
-(現在なし。112・113回目は1.2.1として提出済み)
+- 115回目: バックエンド無応答時にスプラッシュで無限に固まらないようにするタイムアウト・エラー画面(NetworkErrorScreen)を追加
 
 ## セットアップ(オーナー向け、初回のみ)
 
@@ -2230,3 +2230,21 @@ AdMobのapp-ads.txt確認・アプリレベル審査が完了してから数日�
 **オーナー側の対応が必要**: Appleの処理完了(アップロード後5〜10分程度)を待ってから、App Store Connect(https://appstoreconnect.apple.com/apps/6808062809/testflight/ios )で新しいバージョン(1.2.1)を作成し、このビルド(202609080026)を紐付けて審査へ提出してほしい。審査が通ったら、①1.1以前のバージョンを開いてアップデート促進アラートが出ること、②広告(バナー・精算完了時のインタースティシャル)が実際に表示されることの両方を実機で確認してほしい。
 
 **追記**: オーナーが審査へ提出した。結果待ち。
+
+## バックエンド無応答時に無限にスプラッシュで固まる不具合を修正(115回目)
+
+オーナーから「貸し借りアプリがおかしい。スプラッシュ画面から遷移するのも遅いし、ログインができない」と報告があった。
+
+**調査**: `App.tsx`は`useAuth`の`loading`(セッション確認中かどうか)がtrueの間、上限なくスプラッシュ画面を表示し続ける作りになっていた。`useAuth.ts`の`supabase.auth.getSession()`は、保存済みセッションが期限切れでトークンのリフレッシュが必要な場合にネットワーク通信が発生するため、**バックエンド(Supabase)が応答しない状況では、この通信が完了しないままスプラッシュ画面から永久に遷移できなくなる**(=「遷移が遅い」)。ログイン(メールOTP/Google/Apple/LINEいずれも)も同じSupabaseの`/auth/v1`エンドポイントを使うため、同様に失敗する(=「ログインができない」)。
+
+実際に本番の`EXPO_PUBLIC_SUPABASE_URL`(`ixtxrwlqrqyvlpvzroaq.supabase.co`)への到達性を確認したところ、調査時点では一貫して502(到達不能)が返ってきていた。Supabase Management API(`GET /v1/projects/{ref}`)で確認すると`status`は`ACTIVE_HEALTHY`(一時停止ではない)で、翌日には同じエンドポイントが正常応答するようになっていた。一時停止だったのか、Supabase側の一時的な障害だったのかは特定できなかったが、**バックエンドが一時的に落ちること自体は今後も起こりうる**ため、アプリ側がそれに巻き込まれて無期限に固まらないよう対応した。
+
+**対応**:
+- `src/hooks/useAuth.ts`: セッション確認をやり直すための`retry()`を追加してフックの戻り値に含めた
+- `App.tsx`: `authLoading`が`AUTH_TIMEOUT_MS`(10秒)を超えて続いた場合、スプラッシュ画面の代わりに`NetworkErrorScreen`(新規)を表示するようにした。「再試行」ボタンで`useAuth`の`retry()`を呼び直し、タイムアウトタイマーも再始動する
+- `src/screens/NetworkErrorScreen.tsx`(新規): 「接続できません」の案内と再試行ボタンを表示する画面。`ConfigErrorScreen`(Supabase未設定時の画面)と同じ構成にした
+- `src/i18n/strings.ts`: `networkError`(title/message/retryButton)をja/en両方に追加
+
+`npx tsc --noEmit`はクリーン。Web版(`EXPO_PUBLIC_DEMO_MODE`なし、`EXPO_PUBLIC_SUPABASE_URL`を到達不能なダミーURLに設定)で、`authLoading`を強制的にtrueのまま固定しAUTH_TIMEOUT_MSを一時的に2秒に短縮した状態でPlaywright確認した。スプラッシュ→(タイムアウト後)NetworkErrorScreen→「再試行」タップでスプラッシュに戻る、の一連の流れと、コンソールエラーが出ないことを確認している(検証用の変更はすべて元に戻し、本来の10秒に戻した状態でコミットしている)。デモモード(`EXPO_PUBLIC_DEMO_MODE=1`)でも引き続き正常動作することを確認した。
+
+この修正自体はJSコードのみの変更(スキーマ変更なし)。次のビルド・提出で反映される。

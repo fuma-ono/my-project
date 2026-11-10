@@ -57,6 +57,16 @@ export function useAuth() {
     [loadProfile]
   );
 
+  // バックエンド(Supabase)が一時的に応答しない場合に再試行するための口。
+  // getSession()自体はローカルのストレージ読み込みで即解決することが
+  // 多いが、セッションが期限切れでリフレッシュが必要な場合はネットワーク
+  // 通信になるため、ここが固まって`loading`がtrueのまま戻ってこない
+  // ことがある(App.tsx側のタイムアウト処理と対になっている)。
+  const retry = useCallback(() => {
+    setState((s) => ({ ...s, loading: true, error: null }));
+    supabase.auth.getSession().then(({ data }) => bootstrap(data.session));
+  }, [bootstrap]);
+
   useEffect(() => {
     let mounted = true;
     supabase.auth.getSession().then(({ data }) => {
@@ -155,5 +165,5 @@ export function useAuth() {
     await supabase.from('profiles').update({ notifications_seen_at: now }).eq('id', state.userId);
   }, [state.userId]);
 
-  return { ...state, setDisplayName, updateAvatar, updateAvatarPhoto, signOut, markNotificationsSeen };
+  return { ...state, retry, setDisplayName, updateAvatar, updateAvatarPhoto, signOut, markNotificationsSeen };
 }

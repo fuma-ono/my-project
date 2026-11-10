@@ -17,6 +17,7 @@ import ErrorFallbackScreen from './src/screens/ErrorFallbackScreen';
 import GroupScreen from './src/screens/GroupScreen';
 import GroupSettingsScreen from './src/screens/GroupSettingsScreen';
 import GroupsScreen from './src/screens/GroupsScreen';
+import NetworkErrorScreen from './src/screens/NetworkErrorScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import PremiumScreen from './src/screens/PremiumScreen';
@@ -47,6 +48,14 @@ import markAsset from './assets/mark.png';
 // 起動直後、読み込みが一瞬で終わってもロゴが一瞬フラッシュするだけにならない
 // よう、最低でもこれだけはブランド画面を見せる(体感の「間」を作るため)。
 const MIN_SPLASH_MS = 900;
+
+// サインイン確認(useAuthのgetSession)がこの時間を超えて終わらない場合、
+// バックエンド(Supabase)が応答していないと判断してNetworkErrorScreenに
+// 切り替える。以前はここに上限が無く、バックエンドが落ちていると
+// スプラッシュ画面から永久に遷移できず、ログインもできなくなっていた
+// (2026-11、オーナー報告)。モバイル回線の遅さも考慮し、誤検知しにくい
+// 長さにしている。
+const AUTH_TIMEOUT_MS = 10000;
 
 // settings/premiumは複数の入り口(グループ一覧・グループ詳細)から開けるため、
 // 「戻る」で正しい画面に戻れるよう、開いた時点の画面をreturnToとして
@@ -90,6 +99,7 @@ function AppInner() {
     userId,
     profile,
     error: authError,
+    retry: retryAuth,
     setDisplayName,
     updateAvatar,
     updateAvatarPhoto,
@@ -176,6 +186,28 @@ function AppInner() {
     const t = setTimeout(() => setMinSplashDone(true), MIN_SPLASH_MS);
     return () => clearTimeout(t);
   }, []);
+
+  // AUTH_TIMEOUT_MSの説明の通り、authLoadingが続きすぎた場合にスプラッシュ
+  // 画面からNetworkErrorScreenへ切り替える。authRetryTickは「再試行」
+  // ボタンを押した時にタイマーを張り直すためだけの値(authLoading自体は
+  // 再試行中もtrueのまま変わらないため、それだけではタイマーが再始動
+  // しない)。
+  const [authTimedOut, setAuthTimedOut] = useState(false);
+  const [authRetryTick, setAuthRetryTick] = useState(0);
+  useEffect(() => {
+    if (DEMO_MODE || !authLoading) {
+      setAuthTimedOut(false);
+      return;
+    }
+    const t = setTimeout(() => setAuthTimedOut(true), AUTH_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, [authLoading, authRetryTick]);
+
+  const handleAuthRetry = () => {
+    setAuthTimedOut(false);
+    setAuthRetryTick((n) => n + 1);
+    retryAuth();
+  };
 
   // 「グループ一覧ヘッダーの手のアイコン(Mark)が一瞬グラデーションだけの
   // 空箱で表示され、少し遅れて絵柄が出る」というラグへの対応(101回目)。
@@ -287,6 +319,15 @@ function AppInner() {
       if (group) setScreen({ name: 'group', group });
     }
   };
+
+  if (!DEMO_MODE && authTimedOut) {
+    return (
+      <>
+        <NetworkErrorScreen onRetry={handleAuthRetry} />
+        <StatusBar style="dark" />
+      </>
+    );
+  }
 
   if (!fontsLoaded || !minSplashDone || !markLoaded || (!DEMO_MODE && authLoading)) {
     return <SplashScreen fontsReady={fontsSettled} />;
