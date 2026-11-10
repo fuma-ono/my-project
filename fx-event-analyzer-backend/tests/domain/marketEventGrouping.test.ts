@@ -11,7 +11,12 @@ import {
   type MarketEventRow,
 } from '../../src/domain/marketEventGrouping.js';
 
-const row = (event_id: string, indicator_id: string, provider: string | null, release_datetime: string): MarketEventRow => ({
+const row = (
+  event_id: string,
+  indicator_id: string,
+  provider: string | null,
+  release_datetime: string,
+): MarketEventRow => ({
   event_id,
   indicator_id,
   provider,
