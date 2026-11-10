@@ -170,10 +170,10 @@ describe.skipIf(!integration)('economic_indicators.source_url backfill (migratio
     expect(backfill.data).toBe(1);
 
     // ロールバックは行をロックした後、比べる前に2秒待つ(検証用の p_hold_seconds)。その間に別の接続から同じ行を変える。
-    const rollback = ctx.serviceClient.rpc('rollback_indicator_source_url_backfill', {
-      p_batch: raceBatch,
-      p_hold_seconds: 2,
-    });
+    // supabase-js の問い合わせは then されるまで送られないので、.then() で今すぐ送る
+    const rollback = ctx.serviceClient
+      .rpc('rollback_indicator_source_url_backfill', { p_batch: raceBatch, p_hold_seconds: 2 })
+      .then((response) => response);
     await new Promise((resolve) => setTimeout(resolve, 500));
     const startedAt = Date.now();
     const concurrent = await ctx.serviceClient
