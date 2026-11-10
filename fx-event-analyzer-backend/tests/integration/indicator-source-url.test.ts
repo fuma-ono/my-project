@@ -15,10 +15,12 @@ describe.skipIf(!integration)('economic_indicators.source_url backfill (migratio
   const codes = {
     empty: `IT_SRCURL_EMPTY_${runId}`,
     blank: `IT_SRCURL_BLANK_${runId}`,
+    race: `IT_SRCURL_RACE_${runId}`,
     filled: `IT_SRCURL_FILLED_${runId}`,
     touched: `IT_SRCURL_TOUCH_${runId}`,
   };
   const batch = `it-${runId}`;
+  const raceBatch = `it-race-${runId}`;
 
   const indicator = (code: string, source_url: string | null) => ({
     code,
@@ -47,6 +49,7 @@ describe.skipIf(!integration)('economic_indicators.source_url backfill (migratio
     const { error } = await ctx.serviceClient.from('economic_indicators').insert([
       indicator(codes.empty, null),
       indicator(codes.blank, '   '), // 空白だけの文字列(null ではない)
+      indicator(codes.race, null), // 同時更新のテスト用(別の batch)
       indicator(codes.filled, 'https://example.org/manual'),
       indicator(codes.touched, null),
     ]);
@@ -55,7 +58,7 @@ describe.skipIf(!integration)('economic_indicators.source_url backfill (migratio
 
   afterAll(async () => {
     if (!ctx) return;
-    await ctx.serviceClient.from('indicator_source_url_backfills').delete().eq('batch', batch);
+    await ctx.serviceClient.from('indicator_source_url_backfills').delete().in('batch', [batch, raceBatch]);
     await ctx.serviceClient.from('economic_indicators').delete().in('code', Object.values(codes));
     await ctx.app.close();
   });
@@ -156,6 +159,50 @@ describe.skipIf(!integration)('economic_indicators.source_url backfill (migratio
     expect(await urlOf(codes.blank)).toBe('   '); // 変更前(空白の文字列)に、そのまま戻った
     expect(await urlOf(codes.touched)).toBe('https://example.org/touched'); // 人が触った行は残す
     expect(await urlOf(codes.filled)).toBe('https://example.org/manual');
+  });
+
+  it('rollback locks the row (FOR UPDATE): a concurrent update waits for it and is not lost', async () => {
+    const backfill = await ctx.serviceClient.rpc('backfill_indicator_source_urls', {
+      p_batch: raceBatch,
+      p_urls: [{ code: codes.race, source_url: 'https://example.org/race' }],
+    });
+    if (backfill.error) throw backfill.error;
+    expect(backfill.data).toBe(1);
+
+    // ロールバックは行をロックした後、比べる前に2秒待つ(検証用の p_hold_seconds)。その間に別の接続から同じ行を変える。
+    const rollback = ctx.serviceClient.rpc('rollback_indicator_source_url_backfill', {
+      p_batch: raceBatch,
+      p_hold_seconds: 2,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const startedAt = Date.now();
+    const concurrent = await ctx.serviceClient
+      .from('economic_indicators')
+      .update({ source_url: 'https://example.org/concurrent' })
+      .eq('code', codes.race);
+    const waitedMs = Date.now() - startedAt;
+    if (concurrent.error) throw concurrent.error;
+    const result = await rollback;
+    if (result.error) throw result.error;
+
+    // ロールバックは、ロックを取った時点の値(backfill のまま)を比べて戻した
+    expect(result.data).toEqual([{ code: codes.race, reverted: true, reason: null }]);
+    // 同時の更新はロックが外れるまで待たされ、その後に適用された — 復元で上書きされて消えていない
+    expect(waitedMs).toBeGreaterThanOrEqual(1_000);
+    expect(await urlOf(codes.race)).toBe('https://example.org/concurrent');
+
+    // 2回目のロールバックは、もう戻した行を対象にしない
+    const again = await ctx.serviceClient.rpc('rollback_indicator_source_url_backfill', { p_batch: raceBatch });
+    if (again.error) throw again.error;
+    expect(again.data).toEqual([]);
+  }, 20_000);
+
+  it('p_hold_seconds outside 0..5 is rejected', async () => {
+    const r = await ctx.serviceClient.rpc('rollback_indicator_source_url_backfill', {
+      p_batch: raceBatch,
+      p_hold_seconds: 6,
+    });
+    expect(r.error?.code).toBe('22023');
   });
 
   it('anon / authenticated cannot read the backfill log or call the functions', async () => {

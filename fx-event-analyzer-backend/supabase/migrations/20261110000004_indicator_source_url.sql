@@ -25,7 +25,7 @@
 --   select * from rollback_indicator_source_url_backfill('20261110000004');   -- 戻した行・戻さなかった行(理由つき)
 --   -- 戻さなかった行が無いことを確かめてから(あれば人が判断):
 --   drop function backfill_indicator_source_urls(text, jsonb);
---   drop function rollback_indicator_source_url_backfill(text);
+--   drop function rollback_indicator_source_url_backfill(text, numeric);
 --   drop table indicator_source_url_backfills;
 
 create table indicator_source_url_backfills (
@@ -83,22 +83,35 @@ end;
 $$;
 
 -- migration が入れた値だけを戻す。戻り値: 対象の行ごとに reverted(true/false)と、戻さなかった理由。
-create or replace function rollback_indicator_source_url_backfill(p_batch text)
+-- HQ レビュー(2026-11-10 3回目): 比較から復元までの間に別の処理が同じ行を変えないよう、economic_indicators の行を
+-- FOR UPDATE でロックしてから source_url・updated_at を比べる(ロックはこの関数の transaction が終わるまで続く。
+-- 同時の更新はロックが外れるまで待ち、その後に適用される — 復元で上書きされて消えることはない)。
+-- p_hold_seconds: 検証用(結合テストで同時の更新を確実に起こすため)。ロックを取った後、比べる前に待つ秒数。既定 0、上限 5。
+create or replace function rollback_indicator_source_url_backfill(p_batch text, p_hold_seconds numeric default 0)
 returns table (code text, reverted boolean, reason text)
 language plpgsql
 as $$
 declare
   r record;
   cur record;
+  row_found boolean;
 begin
+  if p_hold_seconds is null or p_hold_seconds < 0 or p_hold_seconds > 5 then
+    raise exception 'p_hold_seconds must be between 0 and 5' using errcode = '22023';
+  end if;
   for r in
     select b.code, b.previous_source_url, b.applied_source_url, b.applied_updated_at
     from indicator_source_url_backfills b
     where b.batch = p_batch and b.rolled_back_at is null
     order by b.code
+    for update of b
   loop
-    select i.source_url, i.updated_at into cur from economic_indicators i where i.code = r.code;
-    if not found then
+    select i.source_url, i.updated_at into cur from economic_indicators i where i.code = r.code for update of i;
+    row_found := found;
+    if row_found and p_hold_seconds > 0 then
+      perform pg_sleep(p_hold_seconds);
+    end if;
+    if not row_found then
       code := r.code; reverted := false; reason := 'INDICATOR_NOT_FOUND';
     elsif cur.source_url is distinct from r.applied_source_url then
       code := r.code; reverted := false; reason := 'SOURCE_URL_CHANGED_AFTER_BACKFILL';
@@ -116,8 +129,8 @@ $$;
 
 revoke all on function backfill_indicator_source_urls(text, jsonb) from public, anon, authenticated;
 grant execute on function backfill_indicator_source_urls(text, jsonb) to service_role;
-revoke all on function rollback_indicator_source_url_backfill(text) from public, anon, authenticated;
-grant execute on function rollback_indicator_source_url_backfill(text) to service_role;
+revoke all on function rollback_indicator_source_url_backfill(text, numeric) from public, anon, authenticated;
+grant execute on function rollback_indicator_source_url_backfill(text, numeric) to service_role;
 
 select backfill_indicator_source_urls('20261110000004', '[
   {"code": "US_CPI", "source_url": "https://www.bls.gov/cpi/"},
