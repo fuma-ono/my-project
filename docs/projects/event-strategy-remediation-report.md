@@ -143,7 +143,134 @@
 
 ## 11. 次に必要な作業
 
-- 今回の実装・テスト・CI確認(Backend CI・iOS Build & Test・UI Screenshots全て成功)はここまでで完了。追加の作業は無い。
 - (今回見送った拡張、必要なら将来対応)
   - 「直近5回の履歴」の各発表についても同時発表の有無を示す(今回は対象イベントのみに絞った)。
   - `summarizeMarketEventCoverage` を使った、複数指標をまとめて見る新しいダッシュボード/APIの検討(今回は「不要な仕組みを増やさない」方針により見送り)。
+- 追加作業: 12章「【追加確認】実動作検証」を参照(2026-11-10 追加指示)。
+
+---
+
+## 12. 【追加確認】重複排除の実動作検証(2026-11-10)
+
+mainへマージする前の確認指示(「イベント戦略分析・重複排除の実動作検証」、担当A)への回答。最終コミット: `3f77ef2`。
+
+### 12.1 グループ化条件の安全性 — 誤統合を1件発見し、修正済み
+
+結論: **現在の実装(修正前のコミット`55e1def`時点)には、実際に誤統合が起こる条件が存在した。** 修正済み(`3f77ef2`)。
+
+- **米雇用統計(NFP・失業率・平均時給)は正しく1グループになる**: `mappings/blsSchedule.ts` を確認し、3指標が同じ `nfp` 日程表(同日・同時刻 08:30 America/New_York、`release_datetime_precision: 'EXACT'`)を共有するよう明示的に設計されていることを確認した。また `cpi`・`nfp`・`ppi`・`jolts` の4つの日程表同士で、2025-12〜2027-11の全期間にわたって発表日が1件も重ならないことをプログラムで確認した(BLSの運用上、各発表は意図的にずらされている)。→ **誤統合なし**。
+- **別の発表機関・別の市場イベントは正しく分離される**: `fomc_schedule` と `fomc_minutes_schedule` は別のprovider文字列を使う。`census_retail_schedule`・`nyfed_effr` はそれぞれ1指標・ログ専用(economic_events.providerには書かれない)で、複数指標が衝突する余地がない。→ **誤統合なし**。
+- **既存データに誤統合されるケースがあった(発見した不具合)**: `mappings/eurostatSchedule.ts` を確認したところ、`EU_HICP`(HICP速報値)と `EU_UNEMPLOYMENT_RATE`(失業率)は、どちらも `release_datetime_precision: 'APPROXIMATE'`(発表時刻がEurostatの公式文書で確認できておらず、「11:00 Europe/Luxembourg」という仮の値を使っている、mappings/indicators.ts `EUROSTAT_RELEASE_1100` のコメント参照)かつ **同じprovider** (`eurostat_schedule`)。日程表には、HICPの参照期間2027-05分(発表日 2027-06-01)とUnemploymentの参照期間2027-04分(発表日 2027-06-01)のように、**発表日が偶然重なる行が既に2件(2027-06-01・2027-07-01)実在する**。修正前の実装(provider・release_datetimeの完全一致だけで判定)では、この2つの無関係な指標(インフレ指標と失業率指標)を誤って「同時発表」としてグループ化してしまっていた。
+  - **修正内容**(既存設計を維持した必要最小限の修正): `release_datetime_precision` が `EXACT` でない行(`APPROXIMATE`・`DATE_ONLY`・`UNKNOWN`)は、providerがnullの行と同じく、他のどの行とも合わせない(常に自分だけのグループ)。理由: 時刻そのものが確認できていない値どうしの一致は、「本当に同じ発表の瞬間」であることの根拠にならない。BLS由来の指標(雇用統計・CPI・PPI等)は全て`EXACT`なので、既存の正しいグループ化には影響しない。
+  - 対象ファイル: `src/domain/marketEventGrouping.ts`(`groupKey`)、`src/repositories/historicalRepository.ts`(`MarketEventSourceRow`・`listCoReleasedEvents`に`release_datetime_precision`を追加)、`src/routes/historical.ts`(`selfMarketRow`に`release_datetime_precision`を追加)。
+  - 再現テスト: `tests/domain/marketEventGrouping.test.ts`(EU_HICP/EU_UNEMPLOYMENT_RATEの実際の日程重複を再現する単体テスト)・`tests/integration/strategy-analysis.test.ts`(同じシナリオの統合テスト、実Postgresで確認済み)。
+- **残る理論上のリスク**(今回は対応不要と判断): `economicCalendar.ts`(有料カレンダー経路、`CalendarProviderId`)は、DEV環境のデータでは現在使われていない(`ingestion_logs`に実行履歴が無いことを過去のタスクで確認済み)。将来この経路が使われる場合、1つのproviderに多数の国・指標が混在し、偶然同じ瞬間に重なる組み合わせが増える可能性があるため、有効化前に`release_datetime_precision`の設定方針を再確認すること。
+
+### 12.2 実際の戦略分析への反映確認(最重要)
+
+- **`summarizeMarketEventCoverage` は、修正前(`55e1def`)は実際のサンプル集計に利用されていなかった**(テスト済みの独立関数として用意されていただけ)。修正後(`3f77ef2`)、`GET /events/{id}/strategy-analysis` の応答に新フィールド `market_event_coverage: { independent_market_events, indicator_count }` を追加し、実際に使うようにした(12.3節に例を示す)。
+- **サンプル数・DATA_PREPARING判定への影響(コードで確認)**: `buildStrategyAnalysis` の入力(`releases`)は `listReleasedEventsBefore(indicator_id, ...)` で取得され、**`indicator_id` で絞り込まれている**(`src/repositories/historicalRepository.ts`)。そのため、NFPの戦略分析を呼んだときの「直近5回」は常にNFP自身の過去のRELEASED行だけであり、UNRATE・AHEの行が混ざることは構造上あり得ない(provider_event_idのユニーク制約により、同じ指標・同じ参照期間の行が重複して作られることも無い)。したがって、**NFP・UNRATE・AHEが「3重に数えられる」問題は、1つの指標の戦略分析(`analysis.releases`・`analysis.summary`)の中では最初から発生しない**。実際に重複が起こりうるのは、3つの指標を別々にAPI呼び出しして人間が「3件の市場イベントを見た」と数えてしまう、**解釈・集計の段階**だけである。この段階の重複を防ぐのが `co_released_indicators`・`market_event_coverage`(12.3節)。
+  - 結論: `buildStrategyAnalysis`・`STRATEGY_SAMPLE_WINDOW`・`STRATEGY_MINIMUM_SAMPLES`・DATA_PREPARING判定のロジックは、今回のSTEP1〜3のどのコミットでも変更していない(`STRATEGY_TIMEFRAMES`に5m/30mを追加したのみで、サンプル数・ステータス判定に使う`pips_1m`/`pips_15m`の扱いは不変)。既存の単体テスト・統合テストは全て変更なしで成功しており、意図しない影響は無い。
+- **NFP・UNRATE・AHEは独立イベント数1として扱われるか**: 扱われる。`market_event_coverage.independent_market_events` は、対象イベント自身のグループ(= 1グループ)を要約した値なので、常に`1`になる(「このグループ自体が1つの市場イベント」という定義上の結果)。何指標が束ねられているかは`indicator_count`(NFP単体なら`1`、米雇用統計3指標の同時発表なら`3`)で表す。
+- **通貨ペア別観測数は別々に保持されているか**: 保持される(コードで確認)。`listStrategyReactions(supabase, eventIds, fxPairId, timeframes)` は呼び出しごとに1つの `fx_pair_id` だけを対象にし(`.eq('fx_pair_id', fxPairId)`)、通貨ペアが違えばAPIリクエストも`buildStrategyAnalysis`の呼び出しも完全に別になる。STEP1〜3のどの変更も、この通貨ペアの絞り込みには触れていない。
+
+### 12.3 修正前後のAPIレスポンス(例)
+
+`GET /events/{nfp_event_id}/strategy-analysis` の応答(説明のための例。実際の数値は12.4節の実データ確認を参照):
+
+**修正前(`55e1def`以前。co_released_indicators・market_event_coverageが無い)**:
+```json
+{
+  "event_id": "<nfp_event_id>",
+  "available": true,
+  "required_entitlement": null,
+  "fx_pair": { "fx_pair_id": "<usdjpy>", "symbol": "USDJPY" },
+  "analysis": { "status": "READY", "releases": [ /* ... */ ], "summary": { /* ... */ } }
+}
+```
+→ この応答だけでは、NFPが単独の発表なのか、他の指標との同時発表なのか分からない。
+
+**修正後(`3f77ef2`)**:
+```json
+{
+  "event_id": "<nfp_event_id>",
+  "available": true,
+  "required_entitlement": null,
+  "fx_pair": { "fx_pair_id": "<usdjpy>", "symbol": "USDJPY" },
+  "co_released_indicators": [
+    { "indicator_id": "<unrate_id>", "indicator_code": "US_UNEMPLOYMENT_RATE" },
+    { "indicator_id": "<ahe_id>", "indicator_code": "US_AVG_HOURLY_EARNINGS" }
+  ],
+  "market_event_coverage": { "independent_market_events": 1, "indicator_count": 3 },
+  "analysis": { "status": "READY", "releases": [ /* ... */ ], "summary": { /* ... */ } }
+}
+```
+→ `co_released_indicators`で「他にどの指標が同時発表か」、`market_event_coverage`で「3指標だが市場イベントとしては1件」であることが明示される。`analysis`の中身(releases・summary)自体は、12.2節で説明したとおり修正前から変わらない(1指標の過去5回の集計はそもそも重複していないため)。
+
+### 12.4 実データによる検証(2026-11-06 13:30 UTC 米雇用統計)
+
+この節は**DEV DBの実データでの確認が必須**だが、本サンドボックスにはDEV DBの認証情報が無く(過去のタスクから継続する、確認済みの制約)、直接確認できない。安全性を確保するため、以下のSELECT専用SQLをユーザーに実行してもらい、結果を貼ってもらう必要がある。コード側の論理(12.1・12.2節、単体テスト・統合テストで確認済み)と組み合わせることで、実際のAPI応答を導出できる。
+
+```sql
+-- ①3指標の行・provider・release_datetime・precisionを確認(グループ内指標数・独立市場イベント数の根拠)
+select ee.id as event_id, ei.code as indicator_code, ee.provider, ee.release_datetime,
+       ee.release_datetime_precision, ee.status
+from economic_events ee
+join economic_indicators ei on ei.id = ee.indicator_id
+where ei.code in ('US_NFP','US_UNEMPLOYMENT_RATE','US_AVG_HOURLY_EARNINGS')
+  and ee.release_datetime = '2026-11-06T13:30:00+00:00'
+order by ei.code;
+
+-- ②各指標・各通貨ペアの値動き(1m/5m/15m/30m/60m)を確認(重複計上の有無・5分30分往復情報の根拠)
+select ei.code as indicator_code, fp.symbol, epr.timeframe, epr.pips, epr.max_upward, epr.max_downward,
+       epr.data_status, epr.event_id
+from event_price_reactions epr
+join economic_events ee on ee.id = epr.event_id
+join economic_indicators ei on ei.id = ee.indicator_id
+join fx_pairs fp on fp.id = epr.fx_pair_id
+where ei.code in ('US_NFP','US_UNEMPLOYMENT_RATE','US_AVG_HOURLY_EARNINGS')
+  and ee.release_datetime = '2026-11-06T13:30:00+00:00'
+order by ei.code, fp.symbol, epr.timeframe;
+
+-- ③各指標の実績値・前回値・予想値(RELEASEスナップショット)を確認(指標別の値が保持されているかの根拠)
+select ei.code as indicator_code, es.event_id, es.forecast, es.actual, es.previous,
+       es.surprise, es.surprise_direction
+from event_snapshots es
+join economic_events ee on ee.id = es.event_id
+join economic_indicators ei on ei.id = ee.indicator_id
+where ei.code in ('US_NFP','US_UNEMPLOYMENT_RATE','US_AVG_HOURLY_EARNINGS')
+  and ee.release_datetime = '2026-11-06T13:30:00+00:00'
+  and es.snapshot_type = 'RELEASE'
+order by ei.code;
+
+-- ④(参考)1分足の欠損確認用。USDJPYの発表後60分の1分足の本数とverification_statusを確認
+select count(*) as candle_count,
+       count(*) filter (where verification_status = 'UNVERIFIED') as unverified_count
+from fx_prices
+where fx_pair_id = (select id from fx_pairs where symbol = 'USDJPY')
+  and timeframe = '1m'
+  and timestamp >= '2026-11-06T13:30:00+00:00'
+  and timestamp < '2026-11-06T14:30:00+00:00';
+```
+
+結果を貼っていただければ、以下を確認・報告する:
+- ①から: グループ内指標数=3、provider一致・release_datetime一致・precision=EXACTであること(= 独立市場イベント数1の根拠)。
+- ②から: 3指標それぞれが自分のevent_idに紐づく別々の行を持ち(storageレベルで重複していないこと)、pips_5m・pips_30m・round_trip_15m/60mの実際の値を手計算し、コード(`analyzeRelease`)が返すはずの値と一致するか確認する。
+- ③から: 指標別のforecast/actual/previousが別々の値として保持されていること。
+- ④から: 15分・60分のブレイク判定(round_trip含む)が1分足の欠損に影響されていないか。
+
+実行後、この節に実際の結果と確認結果を追記する。
+
+### 12.5 テスト・CI結果
+
+- 単体テスト: `tests/domain/marketEventGrouping.test.ts` に、EU_HICP/EU_UNEMPLOYMENT_RATEの実際の日程重複を再現する3件を追加。`npm test` で全件成功(1164 passed)・`npm run typecheck`・`npm run lint`・`npx prettier --check` も成功。
+- 統合テスト: `tests/integration/strategy-analysis.test.ts` に、`market_event_coverage`の値(NFP的な3指標ケース・単独ケース)と、APPROXIMATE精度の偶然の一致を誤って同時発表としない回帰テストを追加。
+- CI結果: 追記予定(コミット`3f77ef2`のGitHub Actions実行結果を確認後、ここに追記)。
+
+### 12.6 まとめ・マージ可否の判断材料
+
+- 誤統合の有無: **あった(Eurostat由来の2指標)。修正済み**。BLS由来(雇用統計・CPI・PPI)には誤統合は無い。
+- 重複排除が反映される実際の処理箇所: `src/routes/historical.ts` の `GET /events/{id}/strategy-analysis`(`co_released_indicators`・`market_event_coverage`フィールド)。`buildStrategyAnalysis`自体には重複が元から存在しないため変更していない(12.2節)。
+- 実データ検証: **12.4節のSQL結果待ち**(本サンドボックスからDEV DBへ直接アクセスできないため)。
+- CI結果: **確認中**(12.5節に追記予定)。
+- 現時点の判断: コードレベルの誤統合は修正済みで、新しい単体・統合テストで再現・検証済み。実データでの最終確認(12.4節)とCI結果(12.5節)が揃えば、マージ可能と判断できる状態になる見込み。まだmainへのマージは行っていない。
