@@ -580,6 +580,8 @@ describe.skipIf(!integration)('Past release limit (FREE: 3 most recent releases 
     const [B7, B6, B5, B4, B3] = B_MOST_RECENT_FIRST;
     const ROW_KEYS = [
       'actual',
+      // HQ決定(2026-11-10「取得日の表示 案a」): 値を取得した日時(ロックした行でも隠さない)
+      'captured_at',
       'event_id',
       'forecast',
       'locked',

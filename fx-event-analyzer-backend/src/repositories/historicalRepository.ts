@@ -59,15 +59,16 @@ function releaseSnapshotOf(embedded: unknown): SnapshotValues {
  */
 
 /** RELEASED events for an indicator, most recent first, each paired with
- * its RELEASE snapshot. */
+ * its RELEASE snapshot. HQ決定(2026-11-10「取得日の表示 案a」): 各行に、その値を取得した日時(RELEASE スナップショットの
+ * captured_at)も付ける。取得日は値ではないので、FREE でロックした行でも隠さない(RELEASE_VALUE_FIELDS に入っていない)。 */
 export async function listReleasedEventsForIndicator(
   supabase: SupabaseClient,
   indicatorId: string,
   range: { from: number; to: number },
-): Promise<{ rows: HistoricalEventRow[]; total: number }> {
+): Promise<{ rows: (HistoricalEventRow & { captured_at: string | null })[]; total: number }> {
   const { data, error, count } = await supabase
     .from('economic_events')
-    .select(`id, release_datetime, event_snapshots!inner(${SNAPSHOT_VALUE_COLUMNS}, snapshot_type)`, {
+    .select(`id, release_datetime, event_snapshots!inner(${SNAPSHOT_VALUE_COLUMNS}, captured_at, snapshot_type)`, {
       count: 'exact',
     })
     .eq('indicator_id', indicatorId)
@@ -78,11 +79,16 @@ export async function listReleasedEventsForIndicator(
     .range(range.from, range.to);
   if (error) throw error;
 
-  const rows: HistoricalEventRow[] = (data ?? []).map((row) => ({
-    event_id: row.id,
-    release_datetime: row.release_datetime,
-    ...releaseSnapshotOf(row.event_snapshots),
-  }));
+  const rows = (data ?? []).map((row) => {
+    const embedded = row.event_snapshots as unknown;
+    const snapshot = (Array.isArray(embedded) ? embedded[0] : embedded) as { captured_at?: string | null } | undefined;
+    return {
+      event_id: row.id,
+      release_datetime: row.release_datetime,
+      ...releaseSnapshotOf(row.event_snapshots),
+      captured_at: snapshot?.captured_at ?? null,
+    };
+  });
 
   return { rows, total: count ?? 0 };
 }

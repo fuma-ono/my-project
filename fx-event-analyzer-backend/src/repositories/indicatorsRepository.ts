@@ -203,6 +203,8 @@ export interface IndicatorEventRow {
   previous: number | null;
   surprise: number | null;
   surprise_direction: string | null;
+  /** 値を取得した日時(RELEASE スナップショットの captured_at)。スナップショットの無い予定は null。 */
+  captured_at: string | null;
 }
 
 export interface ListIndicatorEventsFilters {
@@ -231,7 +233,7 @@ export async function listEventsForIndicator(
   let query = supabase
     .from('economic_events')
     .select(
-      'id, release_datetime, release_datetime_precision, importance, status, data_status, event_snapshots(forecast, actual, previous, surprise, surprise_direction, snapshot_type)',
+      'id, release_datetime, release_datetime_precision, importance, status, data_status, event_snapshots(forecast, actual, previous, surprise, surprise_direction, captured_at, snapshot_type)',
       { count: 'exact' },
     )
     .eq('indicator_id', indicatorId);
@@ -252,6 +254,7 @@ export async function listEventsForIndicator(
       previous: number | null;
       surprise: number | null;
       surprise_direction: string | null;
+      captured_at: string | null;
       snapshot_type: string;
     }>;
     const snapshot = snapshots?.find((entry) => entry.snapshot_type === 'RELEASE') ?? null;
@@ -267,6 +270,9 @@ export async function listEventsForIndicator(
       previous: snapshot?.previous ?? null,
       surprise: snapshot?.surprise ?? null,
       surprise_direction: snapshot?.surprise_direction ?? null,
+      // HQ決定(2026-11-10「取得日の表示 案a」): 値を取得した日時(RELEASE スナップショットが無い予定は null)。
+      // 値ではないので、FREE でロックした行でも隠さない。
+      captured_at: snapshot?.captured_at ?? null,
     };
   });
 
