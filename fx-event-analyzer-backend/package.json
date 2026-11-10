@@ -25,6 +25,7 @@
     "ingest:retail-sales-schedule": "tsx src/jobs/ingestRetailSalesSchedule.ts",
     "ingest:jp-cpi-schedule": "tsx src/jobs/ingestJpCpiSchedule.ts",
     "ingest:gb-au-ca-schedules": "tsx src/jobs/ingestGbAuCaSchedules.ts",
+    "ingest:official-values": "tsx src/jobs/ingestOfficialValues.ts",
     "ingest:speeches": "tsx src/jobs/ingestSpeeches.ts",
     "ingest:fx-prices": "tsx src/jobs/ingestFxPrices.ts",
     "ingest:event-reactions": "tsx src/jobs/ingestEventReactions.ts",

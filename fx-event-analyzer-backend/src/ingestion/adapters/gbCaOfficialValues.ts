@@ -142,3 +142,34 @@ export function parseStatcanValueForRelease(
     sourceUrl: STATCAN_WDS_URL,
   };
 }
+
+const MONTH_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(MONTHS).map(([label, mm]) => [mm, label]),
+);
+
+/**
+ * 改定の確認用(HQ指示 2026-11-10「改定値は別履歴」): ONS の JSON の、その対象月('YYYY-MM')の今の値。系列が違う・行が
+ * 無い・値が数でなければ null。公表日とは照合しない(初回の値は parseOnsValueForRelease だけが決める)。
+ */
+export function onsValueForPeriod(series: OnsSeries, body: unknown, period: string): number | null {
+  const json = body as { description?: { cdid?: string }; months?: { date?: string; value?: string }[] };
+  if (json?.description?.cdid?.toUpperCase() !== series.cdid) return null;
+  const match = /^(\d{4})-(\d{2})$/.exec(period);
+  if (!match || !MONTH_LABEL[match[2]!]) return null;
+  const label = `${match[1]} ${MONTH_LABEL[match[2]!]}`;
+  const row = json.months?.find((m) => m.date?.trim().toUpperCase() === label);
+  if (!row?.value || row.value.trim() === '') return null;
+  const value = Number(row.value);
+  return Number.isFinite(value) ? value : null;
+}
+
+/** 改定の確認用: Statistics Canada の応答の、その対象月('YYYY-MM')の今の値。無ければ null。 */
+export function statcanValueForPeriod(series: StatcanSeries, body: unknown, period: string): number | null {
+  const items = Array.isArray(body) ? (body as unknown[]) : [];
+  const item = items.find(
+    (entry) => (entry as { object?: { vectorId?: number } })?.object?.vectorId === series.vectorId,
+  ) as { status?: string; object?: { vectorDataPoint?: { refPer?: string; value?: number | null }[] } } | undefined;
+  if (!item || item.status !== 'SUCCESS') return null;
+  const point = item.object?.vectorDataPoint?.find((p) => p.refPer === `${period}-01`);
+  return typeof point?.value === 'number' && Number.isFinite(point.value) ? point.value : null;
+}

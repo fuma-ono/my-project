@@ -26,6 +26,13 @@ export interface OfficialScheduleEntry {
   indicatorCode: string;
   /** provider_event_id の後ろの部分。公式ページに対象月があればそれ('YYYY-MM')、無ければ公表日('YYYY-MM-DD')。 */
   key: string;
+  /**
+   * HQ指示(2026-11-10「実績値の取得・保存」): その回の値の対象期間('YYYY-MM')。**公式ページに対象月が書かれている回だけ**
+   * (ONS の CPI「Consumer price inflation, UK: October 2026」、StatCan の JSON の description)。英国の労働市場(題名の月は
+   * 公表の月で、失業率の対象の3か月は公式ページで確認できていない)と ABS(対象月を読み取れなかった)は undefined。
+   * undefined の回は、実績値を保存しない(対象期間を照合できないため)。
+   */
+  referencePeriod?: string;
   /** 'YYYY-MM-DD' — 公式ページの公表日(timeZone の壁時計の日付)。 */
   releaseDate: string;
   /** 'HH:MM' — 公式ページの公表時刻。 */
@@ -53,6 +60,8 @@ function rows(
   timeZone: string,
   source: string,
   pairs: readonly (readonly [key: string, releaseDate: string])[],
+  /** true = key は公式ページに書かれた対象月(referencePeriod にも入れる)。 */
+  keyIsReferencePeriod = false,
 ): OfficialScheduleEntry[] {
   return pairs.map(([key, releaseDate]) => ({
     indicatorCode,
@@ -62,6 +71,7 @@ function rows(
     timeZone,
     sources: [source],
     checkedAt: CHECKED_AT,
+    ...(keyIsReferencePeriod ? { referencePeriod: key } : {}),
   }));
 }
 
@@ -76,8 +86,8 @@ const ONS_LABOUR_MARKET: readonly (readonly [string, string])[] = [
 export const ONS_SCHEDULE: OfficialScheduleTable = {
   provider: 'ons_release_calendar',
   entries: [
-    ...rows('GB_CPI', '07:00', 'Europe/London', ONS_RELEASE_CALENDAR_URL, ONS_CPI),
-    ...rows('GB_CORE_CPI', '07:00', 'Europe/London', ONS_RELEASE_CALENDAR_URL, ONS_CPI),
+    ...rows('GB_CPI', '07:00', 'Europe/London', ONS_RELEASE_CALENDAR_URL, ONS_CPI, true),
+    ...rows('GB_CORE_CPI', '07:00', 'Europe/London', ONS_RELEASE_CALENDAR_URL, ONS_CPI, true),
     ...rows('GB_UNEMPLOYMENT_RATE', '07:00', 'Europe/London', ONS_RELEASE_CALENDAR_URL, ONS_LABOUR_MARKET),
   ],
 };
@@ -107,19 +117,33 @@ export const ABS_SCHEDULE: OfficialScheduleTable = {
 export const STATCAN_SCHEDULE: OfficialScheduleTable = {
   provider: 'statcan_release_schedule',
   entries: [
-    ...rows('CA_CPI', '08:30', 'America/Toronto', STATCAN_SCHEDULE_URL, [
-      ['2026-10', '2026-11-16'],
-      ['2026-11', '2026-12-14'],
-      ['2026-12', '2027-01-18'],
-      ['2027-01', '2027-02-16'],
-      ['2027-02', '2027-03-15'],
-    ]),
-    ...rows('CA_UNEMPLOYMENT_RATE', '08:30', 'America/Toronto', STATCAN_SCHEDULE_URL, [
-      ['2026-11', '2026-12-04'],
-      ['2026-12', '2027-01-08'],
-      ['2027-01', '2027-02-05'],
-      ['2027-02', '2027-03-12'],
-    ]),
+    ...rows(
+      'CA_CPI',
+      '08:30',
+      'America/Toronto',
+      STATCAN_SCHEDULE_URL,
+      [
+        ['2026-10', '2026-11-16'],
+        ['2026-11', '2026-12-14'],
+        ['2026-12', '2027-01-18'],
+        ['2027-01', '2027-02-16'],
+        ['2027-02', '2027-03-15'],
+      ],
+      true,
+    ),
+    ...rows(
+      'CA_UNEMPLOYMENT_RATE',
+      '08:30',
+      'America/Toronto',
+      STATCAN_SCHEDULE_URL,
+      [
+        ['2026-11', '2026-12-04'],
+        ['2026-12', '2027-01-08'],
+        ['2027-01', '2027-02-05'],
+        ['2027-02', '2027-03-12'],
+      ],
+      true,
+    ),
   ],
 };
 
