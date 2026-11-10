@@ -216,6 +216,54 @@ final class SpeechAttributionTests: XCTestCase {
     }
 }
 
+// MARK: - 要約の状態(summary_status、HQ決定2026-11-10「要人発言の要約機能改善」)
+
+final class SpeechSummaryStatusTests: XCTestCase {
+    private func response(summary: String?, summaryStatus: String?) -> SpeechDetailResponse {
+        let summaryField = summary.map { "\"\($0)\"" } ?? "null"
+        let statusField = summaryStatus.map { #","summary_status":"\#($0)""# } ?? ""
+        let json = """
+        {"speech_id":"s1","speaker":{"speaker_id":"sp1","name":"パウエル議長","title":"議長","organization":"FRB","country_code":"US","currency_code":"USD"},
+         "title":"講演","summary":\(summaryField),"statement_datetime":"2026-10-16T14:00:00Z","importance":"HIGH","status":"DELIVERED"\(statusField)}
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try! decoder.decode(SpeechDetailResponse.self, from: Data(json.utf8))
+    }
+
+    /// `summary_status`が無い応答(現行Backend)は`nil`にデコードされる。
+    func testMissingSummaryStatusDecodesToNil() {
+        XCTAssertNil(response(summary: nil, summaryStatus: nil).summaryStatus)
+    }
+
+    func testDecodesEachSummaryStatus() {
+        XCTAssertEqual(response(summary: nil, summaryStatus: "NOT_AVAILABLE").summaryStatus, .notAvailable)
+        XCTAssertEqual(response(summary: nil, summaryStatus: "GENERATING").summaryStatus, .generating)
+        XCTAssertEqual(response(summary: "要約文", summaryStatus: "READY").summaryStatus, .ready)
+        XCTAssertEqual(response(summary: nil, summaryStatus: "FAILED").summaryStatus, .failed)
+    }
+
+    /// HQ指示(2026-11-10)「要約未作成時の文言を『この発言の要約データはありません』に変更する」。
+    /// `summary_status`が無い応答(現行Backend)は、従来どおり`summary`の有無だけで判定する。
+    func testLegacyResponseWithoutSummaryStatusFallsBackToSummaryPresence() {
+        XCTAssertEqual(SpeechDetailCards.summaryDisplay(response(summary: "発言の要約", summaryStatus: nil)), .text("発言の要約"))
+        XCTAssertEqual(SpeechDetailCards.summaryDisplay(response(summary: nil, summaryStatus: nil)), .message("この発言の要約データはありません。"))
+    }
+
+    /// `summary_status`に応じて表示を分ける。「要約未作成」「作成中」「作成失敗」を区別できることを確かめる。
+    func testSummaryDisplayBranchesOnSummaryStatus() {
+        XCTAssertEqual(SpeechDetailCards.summaryDisplay(response(summary: "発言の要約", summaryStatus: "READY")), .text("発言の要約"))
+        XCTAssertEqual(SpeechDetailCards.summaryDisplay(response(summary: nil, summaryStatus: "NOT_AVAILABLE")), .message("この発言の要約データはありません。"))
+        XCTAssertEqual(SpeechDetailCards.summaryDisplay(response(summary: nil, summaryStatus: "GENERATING")), .message("要約を作成しています。"))
+        XCTAssertEqual(SpeechDetailCards.summaryDisplay(response(summary: nil, summaryStatus: "FAILED")), .message("要約の作成に失敗しました。"))
+    }
+
+    /// `READY`なのに`summary`が無い(Backend側の不整合)場合も、推測せず状態文にする。
+    func testReadyWithoutSummaryFallsBackToMessageRatherThanGuessing() {
+        XCTAssertEqual(SpeechDetailCards.summaryDisplay(response(summary: nil, summaryStatus: "READY")), .message("この発言の要約データはありません。"))
+    }
+}
+
 // MARK: - ポッドキャスト(statement_time_precision、api-design v1.41)
 
 final class SpeechDetailPrecisionTests: XCTestCase {

@@ -135,12 +135,15 @@ struct SpeechDetailCards: View {
                 NotoText.text("この発言はまだ行われていません。", size: 10.5).foregroundStyle(SettingsCardStyle.subtitleColor)
             } else if response.status == .cancelled {
                 NotoText.text("この発言は中止されました。", size: 10.5).foregroundStyle(SettingsCardStyle.subtitleColor)
-            } else if let summary = response.summary {
-                // HQ指示(2026-10-13、2回目)「発言の文字サイズは通貨ペアの
-                // 値動き表記(pipsText、10)より0.5大きくして」: 10→10.5。
-                NotoText.text("「\(summary)」", size: 10.5).foregroundStyle(.white)
             } else {
-                NotoText.text("要約はまだ用意されていません。", size: 10.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                switch Self.summaryDisplay(response) {
+                case .text(let summary):
+                    // HQ指示(2026-10-13、2回目)「発言の文字サイズは通貨ペアの
+                    // 値動き表記(pipsText、10)より0.5大きくして」: 10→10.5。
+                    NotoText.text("「\(summary)」", size: 10.5).foregroundStyle(.white)
+                case .message(let message):
+                    NotoText.text(message, size: 10.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                }
             }
         }
         // HQ指示(2026-10-12、7回目)「発言の枠をもう少し大きくして」:
@@ -166,20 +169,67 @@ struct SpeechDetailCards: View {
         .background(GradientCardBackground())
     }
 
-    /// HQ指示(2026-10-29)「出典・告知の表示」: APIのattributionを利用して
-    /// 出典を表示する。告知文(`notice`)が存在する場合のみ適切な場所に表示
-    /// する。ECBは取得元の規約で「利用のたびに」告知が必要(domain/
-    /// attribution.ts)なため、要約の直下に小さく添える。FRB(`notice`が
-    /// nil)や出典情報自体が無い要人は何も表示せず、既存の表示を変えない。
+    /// 要約欄に出す内容。HQ決定(2026-11-10「要人発言の要約機能改善」)の
+    /// `summary_status`(B担当が設計中、`SpeechDetailModels.swift`参照)に応じて
+    /// 表示を分ける。無い応答(現行Backend)は、従来どおり`summary`の有無だけで
+    /// 判定する。テストから直接確かめられるようstaticにした。
+    ///
+    /// HQ指示(2026-11-10)「要約未作成時の文言を『この発言の要約データはありません』に
+    /// 変更する」: 旧文言「要約はまだ用意されていません。」から変更。
+    enum SummaryDisplay: Equatable {
+        /// 「」で囲んで表示する実際の要約。
+        case text(String)
+        /// 状態を伝える文言(白ではなくグレーの状態文)。
+        case message(String)
+    }
+
+    static func summaryDisplay(_ response: SpeechDetailResponse) -> SummaryDisplay {
+        let notAvailableMessage = "この発言の要約データはありません。"
+        switch response.summaryStatus {
+        case .ready:
+            // API契約上はsummaryも入るはずだが、万一無くても推測せず状態文にする。
+            return response.summary.map(SummaryDisplay.text) ?? .message(notAvailableMessage)
+        case .generating:
+            return .message("要約を作成しています。")
+        case .failed:
+            return .message("要約の作成に失敗しました。")
+        case .notAvailable:
+            return .message(notAvailableMessage)
+        case nil:
+            // summary_statusが無い応答(現行Backend): 従来どおりsummaryの有無だけで判定。
+            return response.summary.map(SummaryDisplay.text) ?? .message(notAvailableMessage)
+        }
+    }
+
+    /// HQ指示(2026-10-29)「出典・告知の表示」、HQ決定(2026-11-10「要人発言の要約機能
+    /// 改善」)で拡張: APIのattributionを利用して出典を表示する。以前は告知文
+    /// (`notice`)だけを表示していたが、公式出典URL(`sourceUrl`)がある場合は
+    /// `EventDetailCards`/`IndicatorDetailCard`と同じく出典名をタップで公式ページを
+    /// 開けるようにした。ECBは取得元の規約で「利用のたびに」告知が必要(domain/
+    /// attribution.ts)なため、告知文も続けて小さく添える。FRB(`notice`がnil)は
+    /// 出典のみ表示。出典情報自体が無い要人は何も表示せず、既存の表示を変えない。
     @ViewBuilder private var attributionNotice: some View {
-        if let notice = response.attribution?.notice {
-            NotoText.text(notice, size: 6.5)
-                .foregroundStyle(SettingsCardStyle.subtitleColor)
-                .lineSpacing(1)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 10)
-                .padding(.top, 4)
-                .frame(width: 214, alignment: .leading)
+        if let attribution = response.attribution {
+            VStack(alignment: .leading, spacing: 2) {
+                if let url = URL(string: attribution.sourceUrl) {
+                    Link(destination: url) {
+                        NotoText.text("出典：\(attribution.source)", size: 6.5)
+                            .foregroundStyle(V5P.cyan)
+                    }
+                } else {
+                    NotoText.text("出典：\(attribution.source)", size: 6.5)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                }
+                if let notice = attribution.notice {
+                    NotoText.text(notice, size: 6.5)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .lineSpacing(1)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 4)
+            .frame(width: 214, alignment: .leading)
         }
     }
 

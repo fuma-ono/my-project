@@ -23,6 +23,12 @@ struct SpeechDetailResponse: Decodable, Equatable {
     /// 実際の発言時刻そのものではないため、画面はそれを発言時刻として断定表示しない。
     /// 古いBackendでは項目自体が無いので`.exact`として扱う。
     var statementTimePrecision: StatementTimePrecision = .exact
+    /// HQ決定(2026-11-10「要人発言の要約機能改善」)でB担当が設計する`summary_status`。
+    /// 未作成(`summary`がnull)が「要約が無い」のか「作成中」「作成に失敗」なのか
+    /// 区別できなかった問題への対応。B側はまだ設計中のため、項目自体が無い応答
+    /// (現行Backend)では`nil`のまま(`SpeechDetailCards.summaryDisplay`が、
+    /// 無いときは従来どおり`summary`の有無だけで判定する)。
+    var summaryStatus: SpeechSummaryStatus? = nil
 
     enum CodingKeys: String, CodingKey {
         case reactions
@@ -35,6 +41,7 @@ struct SpeechDetailResponse: Decodable, Equatable {
         case status
         case attribution
         case statementTimePrecision = "statement_time_precision"
+        case summaryStatus = "summary_status"
     }
 
     // 合成される`init(from:)`は非Optionalの`statementTimePrecision`について、デフォルト値
@@ -52,7 +59,19 @@ struct SpeechDetailResponse: Decodable, Equatable {
         reactions = try container.decodeIfPresent([SpeechReaction].self, forKey: .reactions)
         attribution = try container.decodeIfPresent(SpeechAttribution.self, forKey: .attribution)
         statementTimePrecision = try container.decodeIfPresent(StatementTimePrecision.self, forKey: .statementTimePrecision) ?? .exact
+        summaryStatus = try container.decodeIfPresent(SpeechSummaryStatus.self, forKey: .summaryStatus)
     }
+}
+
+/// HQ決定(2026-11-10「要人発言の要約機能改善」)。B担当が設計するAPIの`summary_status`。
+/// 「要約が無い」を、未発言等の正当な状態(`NOT_AVAILABLE`)と、作成中(`GENERATING`)・
+/// 作成に失敗(`FAILED`)とで区別できるようにする(現行は`summary: null`の1通りしかなく、
+/// この3つが見分けられなかった)。`READY`は`summary`に実際の要約文字列が入る状態。
+enum SpeechSummaryStatus: String, Decodable, Equatable {
+    case notAvailable = "NOT_AVAILABLE"
+    case generating = "GENERATING"
+    case ready = "READY"
+    case failed = "FAILED"
 }
 
 /// api-design v1.38(`domain/attribution.ts`のAttribution)。
