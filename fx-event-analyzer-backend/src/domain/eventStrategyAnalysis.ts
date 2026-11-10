@@ -32,11 +32,18 @@ import { MAJOR_FX_PAIR_ORDER } from './majorFxReactions.js';
  *   1分後が通貨高でなかった(横ばいを含む)発表は false(判定はした)。分母は sell_the_fact と同じく「結果が良かった発表」。
  * 傾向の要約(summary)は、その項目を判定できた発表が STRATEGY_MINIMUM_SAMPLES 回以上あるときだけ数える(少なければ null =
  * 「分析データ準備中」。傾向を断定しない)。
+ *
+ * HQ指示(2026-11-10「重複排除・集計改善・AI分析基盤の整備」STEP3「リスク特性の追加」):
+ * - pips_5m・pips_30m: event_price_reactions に既に保存されている5分・30分の値動き(新しい Twelve Data 取得は増やさない)。
+ *   1分・15分・60分と同じく、値が無ければ null(作らない)。
+ * - round_trip_15m・round_trip_60m: 1分の高値・安値を、その後その窓の中で両方とも抜けた(high_break と low_break が
+ *   両方 true)かどうか。既存の breaks の判定(1分足の欠損確認を含む)をそのまま使うので、どちらかが null なら null。
+ *   実データ(2026-11-06 USDJPY)で高値だけ抜けて15分では安値を抜けず、60分までには安値も抜けた「往復」を確認済み。
  */
 
 export const STRATEGY_SAMPLE_WINDOW = 5;
 export const STRATEGY_MINIMUM_SAMPLES = 3;
-export const STRATEGY_TIMEFRAMES = ['1m', '15m', '60m'] as const;
+export const STRATEGY_TIMEFRAMES = ['1m', '5m', '15m', '30m', '60m'] as const;
 
 export interface StrategyReactionInput {
   timeframe: string;
@@ -73,12 +80,19 @@ export interface StrategyReleaseRow {
   surprise_direction: string | null;
   direction_1m: Direction | null;
   pips_1m: number | null;
+  pips_5m: number | null;
   pips_15m: number | null;
+  pips_30m: number | null;
+  pips_60m: number | null;
   pattern_15m: Pattern | null;
   high_break_15m: boolean | null;
   low_break_15m: boolean | null;
   high_break_60m: boolean | null;
   low_break_60m: boolean | null;
+  /** 1分の高値・安値を、15分以内にその両方とも抜けた(high_break_15m と low_break_15m が両方 true)。 */
+  round_trip_15m: boolean | null;
+  /** 1分の高値・安値を、60分以内にその両方とも抜けた。 */
+  round_trip_60m: boolean | null;
   sell_the_fact: boolean | null;
   sell_the_fact_after_initial_rise: boolean | null;
 }
@@ -188,12 +202,21 @@ export function selectDefaultStrategyPair(
   return usable[0] ?? null;
 }
 
+/** `reactions` から該当 timeframe の pips(無ければ null。値を作らない)。 */
+function pipsOf(reactions: readonly StrategyReactionInput[], timeframe: string): number | null {
+  const reaction = available(reactions, timeframe);
+  return reaction?.pips === null || reaction?.pips === undefined ? null : Number(reaction.pips);
+}
+
 export function analyzeRelease(release: StrategyReleaseInput, side: 'BASE' | 'QUOTE' | null): StrategyReleaseRow {
   const m1 = available(release.reactions, '1m');
   const m15 = available(release.reactions, '15m');
   const m60 = available(release.reactions, '60m');
-  const pips1 = m1?.pips === null || m1?.pips === undefined ? null : Number(m1.pips);
-  const pips15 = m15?.pips === null || m15?.pips === undefined ? null : Number(m15.pips);
+  const pips1 = pipsOf(release.reactions, '1m');
+  const pips5 = pipsOf(release.reactions, '5m');
+  const pips15 = pipsOf(release.reactions, '15m');
+  const pips30 = pipsOf(release.reactions, '30m');
+  const pips60 = pipsOf(release.reactions, '60m');
   const direction = pips1 === null ? null : pips1 > 0 ? 'UP' : pips1 < 0 ? 'DOWN' : 'FLAT';
   const pattern =
     pips1 === null || pips15 === null || sign(pips1) === 0 || sign(pips15) === 0
@@ -203,6 +226,8 @@ export function analyzeRelease(release: StrategyReleaseInput, side: 'BASE' | 'QU
         : 'REVERSAL';
   const b15 = breaks(m1, m15, release.minuteCompleteness15m);
   const b60 = breaks(m1, m60, release.minuteCompleteness60m);
+  const roundTrip = (b: { high: boolean | null; low: boolean | null }) =>
+    b.high === null || b.low === null ? null : b.high && b.low;
   let sellTheFact: boolean | null = null;
   let afterInitialRise: boolean | null = null;
   if (
@@ -226,12 +251,17 @@ export function analyzeRelease(release: StrategyReleaseInput, side: 'BASE' | 'QU
     surprise_direction: release.surprise_direction,
     direction_1m: direction,
     pips_1m: pips1,
+    pips_5m: pips5,
     pips_15m: pips15,
+    pips_30m: pips30,
+    pips_60m: pips60,
     pattern_15m: pattern,
     high_break_15m: b15.high,
     low_break_15m: b15.low,
     high_break_60m: b60.high,
     low_break_60m: b60.low,
+    round_trip_15m: roundTrip(b15),
+    round_trip_60m: roundTrip(b60),
     sell_the_fact: sellTheFact,
     sell_the_fact_after_initial_rise: afterInitialRise,
   };
