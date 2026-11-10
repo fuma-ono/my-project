@@ -179,6 +179,7 @@ export interface MarketEventSourceRow {
   indicator_code: string;
   provider: string | null;
   release_datetime: string;
+  release_datetime_precision: string;
 }
 
 /**
@@ -187,6 +188,8 @@ export interface MarketEventSourceRow {
  * 既存の economic_events.provider・release_datetime だけを使う(新しいテーブル・列は増やさない)。
  * provider が無い行は呼び出し側で合わせない(domain/marketEventGrouping.ts groupByMarketEvent)ので、ここでは
  * provider が無い入力行は無視する。
+ * release_datetime_precision も返す(呼び出し側で EXACT 以外を合わせないため。HQ指示 2026-11-10「実動作検証」:
+ * Eurostat由来の指標(APPROXIMATE)が、確認できない時刻の偶然の一致で誤って同一視されないようにする)。
  */
 export async function listCoReleasedEvents(
   supabase: SupabaseClient,
@@ -197,7 +200,7 @@ export async function listCoReleasedEvents(
   const timestamps = [...new Set(releases.map((r) => r.release_datetime))];
   const { data, error } = await supabase
     .from('economic_events')
-    .select('id, indicator_id, provider, release_datetime, economic_indicators!inner(code)')
+    .select('id, indicator_id, provider, release_datetime, release_datetime_precision, economic_indicators!inner(code)')
     .in('provider', providers)
     .in('release_datetime', timestamps);
   if (error) throw error;
@@ -207,6 +210,7 @@ export async function listCoReleasedEvents(
     indicator_code: (row.economic_indicators as unknown as { code: string }).code,
     provider: row.provider,
     release_datetime: row.release_datetime,
+    release_datetime_precision: row.release_datetime_precision,
   }));
 }
 

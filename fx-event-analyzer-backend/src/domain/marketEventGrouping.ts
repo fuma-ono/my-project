@@ -8,8 +8,17 @@
  * provider が null の行(発表元が分からない)は、誤って同一視するおそれがあるため、他のどの行とも合わせない
  * (常に自分だけのグループになる)。
  *
- * 新しいテーブル・マイグレーションは使わず、既存の economic_events.provider・release_datetime だけで
- * その場で計算する(DB変更なし)。
+ * HQ指示(2026-11-10「実動作検証」): release_datetime_precision が EXACT でない行(APPROXIMATE・
+ * DATE_ONLY・UNKNOWN)も、他のどの行とも合わせない。理由: Eurostat由来の EU_HICP・EU_UNEMPLOYMENT_RATE は
+ * どちらも時刻が確認できない(APPROXIMATE、mappings/indicators.ts EUROSTAT_RELEASE_1100)ため、同じ
+ * 「11:00」という仮の時刻を使っているだけで、同じ発表であることを意味しない。実際に
+ * mappings/eurostatSchedule.ts の日程表には、2027-06-01・2027-07-01 のように、EU_HICP と
+ * EU_UNEMPLOYMENT_RATE の発表日が偶然重なる行が既に存在し、時刻判定なしで同一視すると誤って
+ * グループ化されていた(2026-11-10 実動作検証で発見)。EXACT(BLSの雇用統計・CPI・PPI等、1分単位まで
+ * 確認済み)だけを同一視の根拠にする。
+ *
+ * 新しいテーブル・マイグレーションは使わず、既存の economic_events.provider・release_datetime・
+ * release_datetime_precision だけでその場で計算する(DB変更なし)。
  */
 
 export interface MarketEventRow {
@@ -17,6 +26,8 @@ export interface MarketEventRow {
   indicator_id: string;
   provider: string | null;
   release_datetime: string;
+  /** economic_events.release_datetime_precision。EXACT 以外は他の行と合わせない(上記参照)。 */
+  release_datetime_precision: string;
 }
 
 export interface MarketEventGroup<T extends MarketEventRow = MarketEventRow> {
@@ -27,8 +38,11 @@ export interface MarketEventGroup<T extends MarketEventRow = MarketEventRow> {
   events: T[];
 }
 
-function groupKey(row: Pick<MarketEventRow, 'event_id' | 'provider' | 'release_datetime'>): string {
-  return row.provider === null ? `__ungrouped__:${row.event_id}` : `${row.provider}|${row.release_datetime}`;
+function groupKey(row: MarketEventRow): string {
+  if (row.provider === null || row.release_datetime_precision !== 'EXACT') {
+    return `__ungrouped__:${row.event_id}`;
+  }
+  return `${row.provider}|${row.release_datetime}`;
 }
 
 /** 行を同時発表(同じ provider・release_datetime)でグループ化する。入力の順を保つ(最初に現れた行の順)。 */
