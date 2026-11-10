@@ -83,15 +83,39 @@
   - `tests/domain/marketEventGrouping.test.ts`(新規、9件): グループ化・同時発表の抽出・集計のロジックを確認。
   - `tests/domain/eventStrategyAnalysis.test.ts`(既存+追加3件): pips_5m/30m・往復(round_trip)の判定、1分足欠損時にroundTripもnullになることを確認。
   - バックエンド全体: `npm test` → **1161 passed, 268 skipped(DB接続が必要な統合テストのみskip)**、`npm run typecheck`・`npm run lint` → エラーなし。
-- 統合テスト(実データベース Postgres が必要。本サンドボックスにはDEV DBの認証情報が無く、過去のタスクで確認済みのとおり**今回も実行できていない**):
-  - `tests/integration/strategy-analysis.test.ts` に、同時発表(`co_released_indicators`)のケースと、既存フィクスチャから導出できる `round_trip_15m`・`pips_5m` の期待値を追加した。コード・アサーションはレビュー可能な状態で用意したが、ローカル・本サンドボックスでは実行できていない。**CIの `Backend CI`(Postgresを使う統合テスト込み)で実行・結果を確認する**(6章参照)。
-- iOSテスト(Xcode/Swiftツールチェーンがこのサンドボックスに無いため、ローカルでは実行できず、**CIの `iOS Build & Test` で実行・結果を確認する**):
+- 統合テスト(実データベース Postgres が必要。本サンドボックスにはDEV DBの認証情報が無いため、ローカルでは実行できていないが、**CIの `Backend CI`(実際のローカルSupabaseスタック)で実行・成功を確認済み**、6章参照):
+  - `tests/integration/strategy-analysis.test.ts` に、同時発表(`co_released_indicators`)のケースと、既存フィクスチャから導出できる `round_trip_15m`・`pips_5m` の期待値を追加した。
+- iOSテスト(Xcode/Swiftツールチェーンが本サンドボックスに無いため、ローカルでは実行できていないが、**CIの `iOS Build & Test` で実行・成功を確認済み**、6章参照):
   - `FXEventAnalyzerTests/StrategyAnalysisTests.swift` に、`co_released_indicators`のデコード、pips_5m/30m/60m・round_tripのデコード、Sell the Factの文言分岐(予想値が全く無い場合と、単に件数が足りない場合を区別)のテストを追加した。
 
 ## 6. CI結果
 
-- プッシュ後、GitHub Actionsの `iOS Build & Test` と `Backend CI`(統合テスト込み)の結果をこの節に追記する。
-- コミットハッシュ: このセクションの直後に追記する。
+- 最終コミット: `bdb721c`(1回目の `f9b33e0` でCIが失敗し、2つの不具合を修正して再プッシュした。詳細は下記)。
+- `Backend CI`(lint・Prettier整形・typecheck・単体テスト・実Postgresでの統合テスト): **成功**
+  - 統合テスト(`db-and-integration`ジョブ)は実際のローカルSupabaseスタックに対して実行され、今回追加した
+    `co_released_indicators`・`round_trip_15m`・`pips_5m`等のテストも含めて成功した(本サンドボックスでは
+    実行できなかった統合テストが、CI上では実際に実行・確認できた)。
+- `iOS Build & Test`: **成功**
+- `UI Screenshots`: **成功**
+- 実行URL: https://github.com/fuma-ono/my-project/actions/runs/42798011334 (Backend CI) ・
+  https://github.com/fuma-ono/my-project/actions/runs/42798010921 (iOS Build & Test) ・
+  https://github.com/fuma-ono/my-project/actions/runs/42798011234 (UI Screenshots)
+
+### 1回目のプッシュ(`f9b33e0`)で見つかり、修正した不具合(`bdb721c`で修正)
+
+1. **Prettier整形忘れ**: 新規追加した `tests/domain/marketEventGrouping.test.ts` が、プロジェクトの
+   Prettier整形ルールに沿っていなかった(Backend CIの `Format check` ステップが失敗)。`npx prettier --write`
+   で整形して解決。ロジック自体は無関係で、単体テスト・統合テスト・typecheckはこの時点で全て成功していた。
+2. **SwiftUIのopaque return type推論エラー**: `StrategyAnalysisView.sellTheFactCard` に
+   `let hasAnyForecast = ...` という文を関数本文の最初に追加したところ、`some View` の型を
+   暗黙的な単一戻り値から推論できなくなり、iOS Build & Test・UI Screenshotsの両方でビルド自体が失敗した。
+   `plainCard { ... }` の呼び出しに明示的な `return` を付けて解決。
+   (本サンドボックスにはXcode/Swiftツールチェーンが無く、ローカルでは検出できなかった不具合。CIで初めて発覚した。)
+3. (予防的な修正)テストヘルパー内の `forecast.map(String.init)` を `forecast.map { "\($0)" }` に変更
+   (`String.init`を関数参照として渡すとオーバーロードの曖昧さで失敗する可能性があったため)。
+
+これらはいずれもロジックの不具合ではなく、整形・Swiftの言語仕様に関するもので、STEP1〜5の実装内容(2章)自体に
+変更はない。
 
 ## 7. DB変更の有無と内容
 
@@ -114,13 +138,12 @@
 
 - `listCoReleasedEvents` は、対象イベントの `provider`・`release_datetime` に完全一致する行を取得するため、同じ `provider` の別の無関係なタイムスタンプとは混同しない設計だが、**同じ瞬間に同じ発表元から全く無関係な2つの指標が偶然公開される**(極めて稀だが理論上あり得る)場合は「同時発表」と誤って判定する可能性がある。現時点でこの誤判定が実際に起きた例は確認していない。
 - `round_trip_15m/60m` は既存の `high_break`・`low_break` の単純な論理積であり、どちらが先に起きたか(往復の順序)は依然判定していない(既存の制約を継承。`StrategyAnalysisText.notes` に明記済み)。
-- 統合テスト(`tests/integration/strategy-analysis.test.ts`)は、DEV DBの認証情報がこのサンドボックスに無いため**未実行**。CIの `Backend CI` で実行結果を確認する必要がある(6章に結果を追記予定)。もし失敗した場合は、このブランチで追加修正が必要。
+- 統合テスト(`tests/integration/strategy-analysis.test.ts`)は、本サンドボックスではDEV DBの認証情報が無く実行できなかったが、CIの `Backend CI`(実際のローカルSupabaseスタック)では実行され、成功を確認済み(6章参照)。
 - `co_released_indicators` は今回、対象イベント(target)についてのみ計算しており、「直近5回の履歴」の各発表について同時発表かどうかは計算していない(スコープを絞った意図的な判断。10章「次に必要な作業」参照)。
 
 ## 11. 次に必要な作業
 
-- CIの実行結果(iOS Build & Test・Backend CI)をこのレポートの6章に追記し、ユーザーへ報告する。
+- 今回の実装・テスト・CI確認(Backend CI・iOS Build & Test・UI Screenshots全て成功)はここまでで完了。追加の作業は無い。
 - (今回見送った拡張、必要なら将来対応)
   - 「直近5回の履歴」の各発表についても同時発表の有無を示す(今回は対象イベントのみに絞った)。
   - `summarizeMarketEventCoverage` を使った、複数指標をまとめて見る新しいダッシュボード/APIの検討(今回は「不要な仕組みを増やさない」方針により見送り)。
-  - 統合テストのCI実行結果を確認し、必要なら修正。
