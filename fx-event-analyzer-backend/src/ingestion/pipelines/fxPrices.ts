@@ -494,6 +494,12 @@ export const AGGREGATED_TIMEFRAMES = [
  * a partial bucket would show a wrong high/low/close, so it is left out
  * (a later run that completes the bucket writes it). Status: VERIFIED only
  * when every minute is VERIFIED, otherwise SINGLE_SOURCE.
+ *
+ * HQ指示(2026-11-10「価格反応データ C」): 分が全部そろっていても、1分でも UNVERIFIED があれば、その足は
+ * UNVERIFIED として書く(値は UNVERIFIED の分を除いた残りの分ではなく、作らずに元の分のまま)。前に正しく組み立てた
+ * 足が、後から中の1分が UNVERIFIED になったときに古い値のまま残らないようにするため(Read API は UNVERIFIED の足を
+ * 使わない)。行は消さないので、中の1分が元に戻れば、次に組み立てたときに通常の足で上書きされる。
+ * 1分足は消されないので、組み立て済みの足の中の分が「無くなる」ことは無い(欠けた足は今までどおり作らない)。
  */
 export function aggregateMinuteRows(
   rows: readonly FxPriceRow[],
@@ -510,10 +516,11 @@ export function aggregateMinuteRows(
     const parts: FxPriceRow[] = [];
     for (let ms = start; ms < start + bucketMs; ms += MINUTE_MS) {
       const row = byMinute.get(ms);
-      if (!row || row.verification_status === 'UNVERIFIED') break;
+      if (!row) break;
       parts.push(row);
     }
     if (parts.length !== minutes) continue;
+    const anyUnverified = parts.some((p) => p.verification_status === 'UNVERIFIED');
     const first = parts[0]!;
     const last = parts[parts.length - 1]!;
     const volumes = parts.map((p) => p.volume);
@@ -527,7 +534,11 @@ export function aggregateMinuteRows(
       close: last.close,
       volume: volumes.every((v) => v !== null) ? volumes.reduce<number>((sum, v) => sum + (v ?? 0), 0) : null,
       source: first.source,
-      verification_status: parts.every((p) => p.verification_status === 'VERIFIED') ? 'VERIFIED' : 'SINGLE_SOURCE',
+      verification_status: anyUnverified
+        ? 'UNVERIFIED'
+        : parts.every((p) => p.verification_status === 'VERIFIED')
+          ? 'VERIFIED'
+          : 'SINGLE_SOURCE',
       cross_check_source: null,
       cross_check_close: null,
       cross_check_diff_pips: null,

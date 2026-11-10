@@ -19,6 +19,12 @@
  * - HQ指示(2026-10-27): 書く前に保存済みの行と比べ、値も状態も同じ行は書かない(calculated_at だけを
  *   書き換えない)。値のある行(AVAILABLE)を値の無い行(UNAVAILABLE)で上書きしない(1分足が後から
  *   欠けても値を失わない)。settings.range を渡すと、直近の代わりにその期間の発表を計算し直す。
+ * - HQ指示(2026-11-10「価格反応データ A〜D」):
+ *   B: 窓の1分足が後から UNVERIFIED になった・そろわなくなった(読めた足が1本以上あり、計算し直すと UNAVAILABLE)
+ *      ときは、保存済みの AVAILABLE を UNAVAILABLE で上書きする(値を残さない)。足が1本も読めなかったとき
+ *      (DB の読み取りの失敗が疑われる)だけは、今までどおり AVAILABLE を残す(KEEP_AVAILABLE)。
+ *   D: 窓の終わりから REACTION_FINALITY_MINUTES(FORWARD の取り直しの長さ + 定時の間隔)が過ぎるまでは書かない。
+ *      為替の取り込みは直近 FORWARD 分を毎回取り直すので、それより前の足は値が変わらない(確定)。
  * - HQ指示(2026-11-10「FOMC 案3」): 政策金利(fomc_policy_decisions)が記録済みの FOMC の会合も対象にする。
  *   会合の行は SCHEDULED・PENDING のまま(api-design v1.47。状態は変えない)。RELEASED の発表の扱いは変えない
  *   (一覧を足すだけ。同じ id は1回だけ)。settings.eventId を渡すと、期間に関係なくその1件だけを計算する
@@ -27,11 +33,19 @@
 import { availableTimeframes } from '../../domain/dataQuality.js';
 import { computeEventPairReactionRows, EVENT_REACTION_TIMEFRAMES } from '../../domain/economicEventReactions.js';
 import { PRE_STATEMENT_LOOKBACK_MINUTES, TIMEFRAME_MINUTES, type PriceCandle } from '../../domain/speechReactions.js';
+import { FX_FETCH_SETTINGS } from '../config.js';
 import type { JobCounters } from '../runner.js';
 import { usableForReactions } from '../validation/fxCandles.js';
 import type { EventPriceReactionRow, IngestionStore } from '../store.js';
 
 const MINUTE_MS = 60_000;
+
+/**
+ * HQ指示(2026-11-10 D): 1分足が確定したとみなすまでの分数(窓の終わりから)。為替の取り込みは毎回、直近
+ * FX_FETCH_SETTINGS.forwardMinutes(120)分を取り直すので、それより前の足は変わらない。+20 は取り込みの間隔(20分)。
+ * 60分の時間枠なら発表から 60 + 140 = 200 分(約3時間20分)後、1分なら 141 分後から計算する。
+ */
+export const REACTION_FINALITY_MINUTES = FX_FETCH_SETTINGS.forwardMinutes + 20;
 const MAX_TIMEFRAME_MINUTES = Math.max(...EVENT_REACTION_TIMEFRAMES.map((tf) => TIMEFRAME_MINUTES[tf]));
 
 export interface EventReactionSettings {
@@ -42,6 +56,8 @@ export interface EventReactionSettings {
    * [from, to) の RELEASED の発表を計算し直す(過去の発表のバックフィル。為替の1分足が無ければ UNAVAILABLE のまま)。
    */
   range?: { fromIso: string; toIso: string };
+  /** HQ指示(2026-11-10 D): 確定を待つ分数(既定 REACTION_FINALITY_MINUTES)。テスト用に上書きできる。 */
+  finalityMinutes?: number;
   /** HQ指示(2026-11-10): この1件だけを計算する(期間・horizonDays は使わない。range とは一緒に使わない)。 */
   eventId?: string;
 }
@@ -139,7 +155,8 @@ export async function ingestEventPriceReactions(
     for (const pair of candidatePairs) {
       // HQ指示(2026-10-30 P0-1): 照合で食い違った足(UNVERIFIED)は「足が無い」として扱う(data-sources.md §6.4、
       // Read API の値動き・チャートと同じ)。SINGLE_SOURCE・VERIFIED はそのまま使う。補間はしない。
-      const rows = usableForReactions(await store.listFxMinuteRows(pair.id, fromIso, toIso));
+      const rawRows = await store.listFxMinuteRows(pair.id, fromIso, toIso);
+      const rows = usableForReactions(rawRows);
       const candles: PriceCandle[] = rows.map((row) => ({
         timestamp: row.timestamp,
         high: Number(row.high),
@@ -152,6 +169,7 @@ export async function ingestEventPriceReactions(
         symbol: pair.symbol,
         candles,
         now,
+        finalityMinutes: settings.finalityMinutes ?? REACTION_FINALITY_MINUTES,
       });
       if (computed.length > 0) computedAny = true;
       for (const row of computed) {
@@ -175,8 +193,13 @@ export async function ingestEventPriceReactions(
         };
         const existing = stored.get(`${event.id}|${pair.id}|${row.timeframe}`);
         if (existing && existing.data_status === 'AVAILABLE' && candidate.data_status === 'UNAVAILABLE') {
-          counters.skip('KEEP_AVAILABLE');
-          continue;
+          // B: 足が読めていて(UNVERIFIED を含めて1本以上)、それでもそろわない・UNVERIFIED がある → 値を残さない。
+          // 足が1本も読めなかったときだけ(読み取りの失敗が疑われる)、今までどおり AVAILABLE を残す。
+          if (rawRows.length === 0) {
+            counters.skip('KEEP_AVAILABLE');
+            continue;
+          }
+          counters.note('downgraded', { event_id: event.id, fx_pair_id: pair.id, timeframe: row.timeframe });
         }
         if (existing && sameReaction(existing, candidate)) {
           counters.skip('UNCHANGED');
