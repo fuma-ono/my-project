@@ -1,10 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireEntitlement, FEATURE_CODES } from '../authorization/entitlements.js';
-import { resolvePlan } from '../authorization/plan.js';
 import { ApiError } from '../errors/ApiError.js';
-import { applyNotificationPlanLimits, planLimitsFor, type Plan } from '../domain/planLimits.js';
-import { toSettingsResponse } from '../domain/userSettings.js';
+import { planLimitsFor } from '../domain/planLimits.js';
+import { loadNotificationPreferences } from '../notifications/preferences.js';
 import {
   buildUpcomingNotifications,
   formatIsoSeconds,
@@ -37,52 +36,11 @@ import {
   markAllInboxNotificationsRead,
   markInboxNotificationRead,
 } from '../repositories/notificationInboxRepository.js';
-import { getOrCreateUserSettings } from '../repositories/userSettingsRepository.js';
 import {
   inboxNotificationParamsSchema,
   listInboxNotificationsQuerySchema,
   upcomingNotificationsQuerySchema,
 } from '../schemas/notifications.js';
-
-/**
- * The caller's saved SCR-016 通知設定 as NotificationPreferences, with the
- * plan's limits (§28.1) applied to importances / fx_pairs at evaluation
- * time — shared by /notifications/upcoming and the inbox so both notify
- * exactly the same things. `settingsUpdatedAt` bounds inbox materialization
- * (src/domain/notificationInbox.ts resolveInboxMaterializationWindow).
- */
-async function loadNotificationPreferences(
-  supabase: SupabaseClient,
-  userId: string,
-): Promise<{ prefs: NotificationPreferences; settingsUpdatedAt: string; plan: Plan | null }> {
-  const row = await getOrCreateUserSettings(supabase, userId);
-  const { notifications, display } = toSettingsResponse(row);
-  const plan = notifications.push ? await resolvePlan(supabase, userId) : null;
-  const limited = plan
-    ? applyNotificationPlanLimits(plan, {
-        importances: notifications.importances,
-        fxPairSymbols: notifications.fx_pairs,
-      })
-    : { importances: notifications.importances, fxPairSymbols: notifications.fx_pairs };
-  return {
-    plan,
-    prefs: {
-      push: notifications.push,
-      indicators: notifications.indicators,
-      speeches: notifications.speeches,
-      fxPairSymbols: limited.fxPairSymbols,
-      importances: limited.importances,
-      leadMinutes: notifications.lead_minutes,
-      quietHours: {
-        enabled: notifications.quiet_hours_enabled,
-        start: notifications.quiet_start,
-        end: notifications.quiet_end,
-      },
-      timeZone: display.timezone,
-    },
-    settingsUpdatedAt: row.updated_at,
-  };
-}
 
 /**
  * CALENDAR_UPDATE (src/domain/calendarUpdates.ts): the last 7 days of

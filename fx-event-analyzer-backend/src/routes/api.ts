@@ -15,6 +15,7 @@ import { registerFxPairRoutes } from './fxPairs.js';
 import { registerNotificationRoutes } from './notifications.js';
 import { registerSupportRoutes } from './support.js';
 import { registerRateAlertRoutes } from './rateAlerts.js';
+import { registerPushNotificationRoutes } from './pushNotifications.js';
 
 /**
  * Everything under /api/v1 requires a valid Supabase Auth JWT — Home /
@@ -40,4 +41,5 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   await app.register(registerNotificationRoutes);
   await app.register(registerSupportRoutes);
   await app.register(registerRateAlertRoutes);
+  await app.register(registerPushNotificationRoutes);
 }
