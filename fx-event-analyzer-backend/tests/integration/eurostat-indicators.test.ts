@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { EUROSTAT_ATTRIBUTION } from '../../src/domain/attribution.js';
+import { BLS_ATTRIBUTION, EUROSTAT_ATTRIBUTION } from '../../src/domain/attribution.js';
 import {
   buildIntegrationContext,
   createTestUser,
@@ -78,6 +78,7 @@ describe.skipIf(!integration)('Euro-area indicators (Eurostat): master rows and 
       url: `/api/v1/indicators/${US_CPI_INDICATOR_ID}`,
       headers: authHeader,
     });
-    expect(JSON.parse(us.body).attribution).toBeNull();
+    // HQ指示(2026-11-10「指標の全量表示」): 米国 CPI は BLS の出典と免責文(以前は null)
+    expect(JSON.parse(us.body).attribution).toEqual(BLS_ATTRIBUTION);
   });
 });

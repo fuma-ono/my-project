@@ -76,12 +76,52 @@ function nyFedNotice(year: number): string {
   );
 }
 
+/**
+ * BLS(米国労働統計局)の値から作る経済指標(HQ指示 2026-11-10「指標の全量表示」、data-sources.md 11章の BLS の行)。
+ * 規約: 公表物はパブリックドメインで、出典として BLS を示すよう求めている(bls.gov/opub/copyright-information.htm)。
+ * データを取得して作った値には「BLS.gov cannot vouch for the data or analyses derived from these data after the data
+ * have been retrieved from BLS.gov.」を示す(bls.gov/developers/termsOfService.htm、data-sources.md の [B2])。
+ * 規約が求める「取得日の記載」は、この項目には入れていない(値の取得日時は発表の値の側にある。表示は未対応 — 報告済み)。
+ */
+export const BLS_ATTRIBUTION: Attribution = {
+  source: '米国労働統計局（BLS）',
+  source_url: 'https://www.bls.gov',
+  notice:
+    '米国労働統計局（BLS）の公表データをもとに作成しています。BLS.gov cannot vouch for the data or analyses derived from these data after the data have been retrieved from BLS.gov.',
+};
+
 /** Eurostat の値から作る経済指標の code(ingestion の eurostat_schedule の指標と同じ)。 */
 const EUROSTAT_INDICATOR_CODES: ReadonlySet<string> = new Set(['EU_HICP', 'EU_UNEMPLOYMENT_RATE']);
 
-/** economic_indicators.code(経済指標)から。Eurostat の指標だけ。それ以外は null(api-design v1.43)。 */
+/** BLS の値から作る経済指標の code(ingestion/mappings/blsSchedule.ts の *_RELEASE_INDICATORS と同じ。テストで確かめる)。 */
+export const BLS_INDICATOR_CODES: ReadonlySet<string> = new Set([
+  'US_CPI',
+  'US_CORE_CPI',
+  'US_NFP',
+  'US_UNEMPLOYMENT_RATE',
+  'US_AVG_HOURLY_EARNINGS',
+  'US_PPI',
+  'US_CORE_PPI',
+  'US_JOLTS',
+]);
+
+/**
+ * FRB の公式の予定から作る指標(FOMC の会合・議事要旨。federalreserve.gov の calendar)。FRB はパブリックドメインで
+ * 出典の表示だけ(要人発言と同じ FRB_ATTRIBUTION)。会合に政策金利が記録されているときは、events.ts が NY連銀の出典に
+ * 置き換える(今までどおり)。
+ */
+const FRB_INDICATOR_CODES: ReadonlySet<string> = new Set(['US_FOMC', 'US_FOMC_MINUTES']);
+
+/**
+ * economic_indicators.code(経済指標)から。Eurostat・BLS・FRB の指標に付ける。利用条件を確かめていない取得元
+ * (Census の US_RETAIL_SALES、日本・BOJ の指標など)は null(推測で出典を書かない)。api-design v1.43 → v1.50。
+ */
 export function attributionForIndicator(code: string | null | undefined): Attribution | null {
-  return code != null && EUROSTAT_INDICATOR_CODES.has(code) ? EUROSTAT_ATTRIBUTION : null;
+  if (code == null) return null;
+  if (EUROSTAT_INDICATOR_CODES.has(code)) return EUROSTAT_ATTRIBUTION;
+  if (BLS_INDICATOR_CODES.has(code)) return BLS_ATTRIBUTION;
+  if (FRB_INDICATOR_CODES.has(code)) return FRB_ATTRIBUTION;
+  return null;
 }
 
 /**

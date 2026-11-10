@@ -4,7 +4,7 @@
  * 重複の無いこと・BLS の経路への影響が無いこと・出典(attribution)を確かめる。
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { attributionForIndicator, EUROSTAT_ATTRIBUTION } from '../../src/domain/attribution.js';
+import { attributionForIndicator, BLS_ATTRIBUTION, EUROSTAT_ATTRIBUTION } from '../../src/domain/attribution.js';
 import { buildCalendarItems } from '../../src/domain/calendar.js';
 import { availableTimeframes } from '../../src/domain/dataQuality.js';
 import { eurostatUrl, parseEurostatResponse, parseEurostatSeriesId } from '../../src/ingestion/adapters/eurostat.js';
@@ -425,11 +425,13 @@ describe('出典(attribution, api-design v1.43)', () => {
       source_url: 'https://ec.europa.eu/eurostat',
       notice: 'Eurostat の公表データをもとに作成しています。Eurostat は本アプリでの利用について責任を負いません。',
     });
-    expect(attributionForIndicator('US_CPI')).toBeNull();
+    // HQ指示(2026-11-10「指標の全量表示」): 米国 CPI は BLS の出典(以前は null)。利用条件を確かめていない取得元は null のまま
+    expect(attributionForIndicator('US_CPI')).toEqual(BLS_ATTRIBUTION);
+    expect(attributionForIndicator('US_RETAIL_SALES')).toBeNull();
     expect(attributionForIndicator(undefined)).toBeNull();
   });
 
-  it('GET /calendar: an EU indicator item has the Eurostat attribution, a US one null', () => {
+  it('GET /calendar: an EU indicator item has the Eurostat attribution, a US (BLS) one the BLS attribution', () => {
     const base = {
       indicator_id: 'i',
       indicator_name: 'n',
@@ -446,6 +448,6 @@ describe('出典(attribution, api-design v1.43)', () => {
       [],
     );
     expect(items.find((i) => i.id === 'eu')?.attribution).toEqual(EUROSTAT_ATTRIBUTION);
-    expect(items.find((i) => i.id === 'us')?.attribution).toBeNull();
+    expect(items.find((i) => i.id === 'us')?.attribution).toEqual(BLS_ATTRIBUTION);
   });
 });

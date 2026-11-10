@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FEATURE_CODES } from '../../src/authorization/entitlements.js';
-import { NY_FED_SOURCE, nyFedAttribution } from '../../src/domain/attribution.js';
+import { FRB_ATTRIBUTION, NY_FED_SOURCE, nyFedAttribution } from '../../src/domain/attribution.js';
 import { parseNyFedTargetRanges } from '../../src/ingestion/adapters/nyFedRates.js';
 import { ingestFomcPolicyRates } from '../../src/ingestion/pipelines/fomcPolicyRates.js';
 import { FOMC_SCHEDULE_PROVIDER } from '../../src/ingestion/pipelines/fomcSchedule.js';
@@ -185,7 +185,8 @@ describe.skipIf(!integration)('FOMC policy decisions: table, ingestion and GET /
     if (error) throw error;
     const without = await ctx.app.inject({ method: 'GET', url: `/api/v1/events/${noDecisionId}`, headers });
     expect(without.statusCode).toBe(200);
-    expect(JSON.parse(without.body).event).toMatchObject({ policy_rate: null, attribution: null });
+    // HQ指示(2026-11-10「指標の全量表示」): 政策金利の無い会合は FRB の出典(以前は null)
+    expect(JSON.parse(without.body).event).toMatchObject({ policy_rate: null, attribution: FRB_ATTRIBUTION });
   });
   // HQ指示(2026-11-06「DEV監査で見つかった政策金利テーブルの権限問題」): 値の表(20261022000001_past_release_access.sql)と
   // 同じく、アプリ利用者(anon / authenticated)は Supabase に直接つないでこの表を読み書きできない(権限が無い = 42501。
