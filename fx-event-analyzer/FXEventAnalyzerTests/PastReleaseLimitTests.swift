@@ -72,6 +72,41 @@ final class PastReleaseLimitTests: XCTestCase {
         XCTAssertEqual(response.pastReleaseLimit, PastReleaseLimit(applied: true, maxForPlan: 3, proMax: nil))
     }
 
+    /// HQ決定(2026-11-10「取得日の表示方法と出典対応」案a)「過去イベント比較と指標詳細一覧の
+    /// 各発表行にcaptured_atを追加する」。付いている行はそのまま読み、付いていない行
+    /// (Backendがまだ対応していない・取得元未記録)はnilのまま(推測した日付を作らない)。
+    func testIndicatorEventsDecodeCapturedAt() throws {
+        let json = """
+        {
+          "data": [
+            {
+              "event_id": "evt_with_captured_at",
+              "release_datetime": "2026-09-10T12:30:00Z",
+              "status": "RELEASED",
+              "data_status": "READY",
+              "forecast": 3.1, "actual": 3.3, "previous": 3.0,
+              "surprise": 0.2, "surprise_direction": "POSITIVE",
+              "captured_at": "2026-09-10T12:30:05Z"
+            },
+            {
+              "event_id": "evt_without_captured_at",
+              "release_datetime": "2026-08-10T12:30:00Z",
+              "status": "RELEASED",
+              "data_status": "READY",
+              "forecast": 3.0, "actual": 3.1, "previous": 2.9,
+              "surprise": 0.1, "surprise_direction": "POSITIVE"
+            }
+          ],
+          "meta": { "page": 1, "limit": 20, "total": 2, "has_next": false }
+        }
+        """.data(using: .utf8)!
+
+        let response = try makeDecoder().decode(IndicatorEventsListResponse.self, from: json)
+
+        XCTAssertEqual(response.data[0].capturedAt, ISO8601DateFormatter().date(from: "2026-09-10T12:30:05Z"))
+        XCTAssertNil(response.data[1].capturedAt, "must not guess a captured date when the Backend doesn't send one")
+    }
+
     func testIndicatorEventsFromOlderBackendDecodeAsUnlocked() throws {
         let json = """
         {
@@ -235,6 +270,10 @@ final class PastReleaseLimitTests: XCTestCase {
         XCTAssertNil(response.event.revisionStatus)
         XCTAssertNil(response.snapshot?.actual)
         XCTAssertEqual(response.snapshot?.unit, "%")
+        // HQ決定(2026-11-10「取得日の表示方法と出典対応」案a)「FREEで値がロックされた発表に
+        // ついても出典・取得日・免責文を取得できることを維持する」: ロックされた発表でも
+        // captured_atは隠さず返る(events.ts: nullFieldsはRELEASE_VALUE_FIELDSだけnullにする)。
+        XCTAssertEqual(response.snapshot?.capturedAt, ISO8601DateFormatter().date(from: "2026-05-10T12:30:05Z"))
         XCTAssertNil(response.analysis.surprise)
         XCTAssertNil(response.explanation)
         XCTAssertNil(response.relatedFxPairs.first?.reaction.analysisStatus)
@@ -302,6 +341,9 @@ final class PastReleaseLimitTests: XCTestCase {
         XCTAssertEqual(response.event.requiredPlan, "PRO")
         XCTAssertNil(response.snapshot?.actual)
         XCTAssertNil(response.relatedFxPairs.first?.reaction.pips)
+        // HQ決定(2026-11-10)「FREEで値がロックされた発表についても出典・取得日・免責文を
+        // 取得できることを維持する」: ロックされていてもcaptured_atは隠さない。
+        XCTAssertEqual(response.snapshot?.capturedAt, ISO8601DateFormatter().date(from: "2026-05-10T12:30:05Z"))
         let cards = EventDetailCards(response: response)
         XCTAssertTrue(cards.isLocked)
         XCTAssertFalse(cards.canOpenReactions)
@@ -450,6 +492,24 @@ final class PastReleaseLimitTests: XCTestCase {
         XCTAssertNil(response.events[0].requiredPlan)
         XCTAssertNil(response.pastReleaseLimit)
         XCTAssertEqual(response.events[0].actual, 3.2)
+    }
+
+    /// HQ決定(2026-11-10「取得日の表示方法と出典対応」案a)「過去イベント比較と指標詳細一覧の
+    /// 各発表行にcaptured_atを追加する」。付いている行はそのまま読み、付いていない行は
+    /// nilのまま(推測した日付を作らない)。
+    func testComparisonDecodesCapturedAt() throws {
+        let json = Self.comparisonJSON(events: """
+            { "event_id": "evt_with_captured_at", "release_datetime": "2026-09-10T12:30:00Z",
+              "forecast": 3.0, "actual": 3.2, "previous": 3.1, "surprise": 0.2, "surprise_direction": "POSITIVE",
+              "captured_at": "2026-09-10T12:30:05Z" },
+            { "event_id": "evt_without_captured_at", "release_datetime": "2026-08-10T12:30:00Z",
+              "forecast": 3.0, "actual": 3.1, "previous": 2.9, "surprise": 0.1, "surprise_direction": "POSITIVE" }
+            """)
+
+        let response = try makeDecoder().decode(ComparisonResponse.self, from: json)
+
+        XCTAssertEqual(response.events[0].capturedAt, ISO8601DateFormatter().date(from: "2026-09-10T12:30:05Z"))
+        XCTAssertNil(response.events[1].capturedAt, "must not guess a captured date when the Backend doesn't send one")
     }
 
     // MARK: - 「前回」だけを隠した発表(previous_locked、api-design v1.33 §28.2)

@@ -164,15 +164,21 @@ final class ScreenshotTests: XCTestCase {
                 "出典：ニューヨーク連邦準備銀行", Int(XCUIElement.ElementType.link.rawValue), Int(XCUIElement.ElementType.button.rawValue)
             )
             XCTAssertTrue(app.descendants(matching: .any).matching(tappable).firstMatch.exists, "The NY Fed source is not a link")
+            // HQ決定(2026-11-10「取得日の表示方法と出典対応」案a): 出典は1行+タップで免責文の
+            // 全文を見るシートに変わったため、タップして開いたシートの中で確かめる。
+            tap(containing: "出典：ニューヨーク連邦準備銀行")
+            XCTAssertTrue(waitForAnyElement(containing: "出典について", timeout: 10), "The attribution detail sheet did not open")
             XCTAssertTrue(
-                app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "EFFR（実際の取引の金利）の値は表示していません")).firstMatch.exists,
+                waitForAnyElement(containing: "EFFR（実際の取引の金利）の値は表示していません", timeout: 5),
                 "The notice that the EFFR itself is not shown is missing"
             )
             // HQ指示(2026-11-06「NY連銀の規約対応」修正案1): 会合との対応付けは本アプリが行っていることも出る
             XCTAssertTrue(
-                app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "FOMC会合との対応付け（発表日の翌営業日以降で最初に有効になったレンジ）は、本アプリが行っています。")).firstMatch.exists,
+                waitForAnyElement(containing: "FOMC会合との対応付け（発表日の翌営業日以降で最初に有効になったレンジ）は、本アプリが行っています。", timeout: 5),
                 "The notice that the app links the range to the FOMC meeting is missing"
             )
+            tap(containing: "閉じる")
+            XCTAssertTrue(waitForAnyElement(containing: "フェデラルファンド金利の誘導目標レンジ", timeout: 10), "Did not return to Event Detail after closing the attribution sheet")
             // 結果のカード(結果・予想・前回)も、EFFR の実績(モックの EFFR 3.88)も出さない
             XCTAssertFalse(app.staticTexts["結果"].firstMatch.exists, "The results card is shown together with the policy rate")
             XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "3.88")).firstMatch.exists, "An EFFR value is shown")
@@ -762,7 +768,11 @@ final class ScreenshotTests: XCTestCase {
         func end(_ r: CGRect) -> CGFloat { vertical ? (forward ? r.maxY : r.minY) : (forward ? r.maxX : r.minX) }
         rows.sort { abs(start($0) - start(header)) < abs(start($1) - start(header)) }
         let pitch = abs(start(rows[1]) - start(rows[0]))
-        let scale = pitch / 44.5
+        // HQ決定(2026-11-10「取得日の表示方法と出典対応」案a)で`landscapeRowHeight`を
+        // 44→54に上げた(行高54+区切り線0.5)。UIテスト対象はApp側の型を見られない
+        // (`@testable import`なし)ため、ここは`HistoricalComparisonView`の定数ではなく
+        // 固定値54.5を直接書く。
+        let scale = pitch / 54.5
         let headerToFirstRow = Double(abs(start(rows[0]) - start(header)) / scale)
         let noteFrame = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", note)).firstMatch
         let lastRowToNote: Double? = noteFrame.exists

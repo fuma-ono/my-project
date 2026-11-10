@@ -175,8 +175,18 @@ final class IndicatorDisplayNameTests: XCTestCase {
         // showSecondary: falseのときだけこの11ptを計上し忘れており、実際の
         // 描画より式の見積もりが11pt小さく、その分だけ下の余白が目減りして
         // 最終行が見切れていた)。
-        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: false), 24 + 11 + 7 * 22.5 + 6)
-        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: true), 24 + 11 + 7 * 22.5 + 6)
+        // `rowHeight`(既定22)は`SpeakerComparisonView`(要人発言の比較表)も同じ
+        // `tableHeight(rows:...)`で再利用しているため変えていない。固定値ではなく
+        // `HistoricalComparisonView.rowHeight`を参照し、以後の変更にも追随するようにした。
+        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: false), 24 + 11 + 7 * (HistoricalComparisonView.rowHeight + 0.5) + 6)
+        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: true), 24 + 11 + 7 * (HistoricalComparisonView.rowHeight + 0.5) + 6)
+        // HQ決定(2026-11-10「取得日の表示方法と出典対応」案a)で過去イベント比較自身の行
+        // (`table(_:)`)は日時セルに取得日の3行目を追加したため、`rowHeight`引数に
+        // `rowHeightWithCapturedDate`(28)を明示して呼ぶ(実際の呼び出し方と同じ)。
+        XCTAssertEqual(
+            HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: false, rowHeight: HistoricalComparisonView.rowHeightWithCapturedDate),
+            24 + 11 + 7 * (HistoricalComparisonView.rowHeightWithCapturedDate + 0.5) + 6
+        )
         // ユーザー指摘(2026-11-04、実機TestFlight確認)「横画面の表の下行と
         // 外枠に余白がありすぎる」: 横画面の表(`landscapeTable`)のScrollView
         // は以前`.frame(maxHeight: 250)`のみで、行数に関わらず250まで
@@ -184,12 +194,14 @@ final class IndicatorDisplayNameTests: XCTestCase {
         // 大きな空白が残っていた。縦画面の`tableHeight(rows:...)`と同じく、
         // 実際の行数から中身の高さを計算するよう修正した
         // (`landscapeTableContentHeight`)。
-        XCTAssertEqual(HistoricalComparisonView.landscapeTableContentHeight(rows: 3), 3 * 44 + 2 * 0.5)
-        XCTAssertEqual(HistoricalComparisonView.landscapeTableContentHeight(rows: 1), 44)
+        // HQ決定(2026-11-10「取得日の表示方法と出典対応」案a)で`landscapeRowHeight`を
+        // 44→54に上げたため、こちらも固定値ではなく`HistoricalComparisonView.landscapeRowHeight`を参照する。
+        XCTAssertEqual(HistoricalComparisonView.landscapeTableContentHeight(rows: 3), 3 * HistoricalComparisonView.landscapeRowHeight + 2 * 0.5)
+        XCTAssertEqual(HistoricalComparisonView.landscapeTableContentHeight(rows: 1), HistoricalComparisonView.landscapeRowHeight)
         // 行が無いときも最低1行分として扱う(呼び出し元の`landscapeTable`は
         // 実際には0件のとき専用の空表示に分岐するため通常は起きないが、
         // 負の高さにならないことを確認しておく)。
-        XCTAssertEqual(HistoricalComparisonView.landscapeTableContentHeight(rows: 0), 44)
+        XCTAssertEqual(HistoricalComparisonView.landscapeTableContentHeight(rows: 0), HistoricalComparisonView.landscapeRowHeight)
         // HQ指摘(2026-10-28)「8/7の行が常時見切れている」: 最終行の実機はみ出しを
         // 防ぐ固定の余白(2026-10-30再指摘「3つ目が見切れる」で4→10、2026-10-31
         // 再指摘「余白が大きい」で10→6と調整し、根本原因修正後は両方とも

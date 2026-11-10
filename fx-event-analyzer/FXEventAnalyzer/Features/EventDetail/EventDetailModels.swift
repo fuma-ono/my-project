@@ -129,6 +129,11 @@ struct EventSnapshotDetail: Decodable, Equatable {
     var secondaryForecast: Double? = nil
     var secondaryActual: Double? = nil
     var secondaryPrevious: Double? = nil
+    /// HQ決定(2026-11-10「取得日の表示方法と出典対応」案a): 値を取得した日時。Backendでは
+    /// 既に保存・返却されていた項目(`eventsRepository.ts`の`captured_at`)だが、アプリ側で
+    /// 読んでいなかったため追加した。無い場合(古いBackend・取得元が未記録)はnilのままとし、
+    /// 推測した日付は表示しない。
+    var capturedAt: Date? = nil
 
     enum CodingKeys: String, CodingKey {
         case forecast
@@ -141,6 +146,7 @@ struct EventSnapshotDetail: Decodable, Equatable {
         case secondaryForecast = "secondary_forecast"
         case secondaryActual = "secondary_actual"
         case secondaryPrevious = "secondary_previous"
+        case capturedAt = "captured_at"
     }
 }
 

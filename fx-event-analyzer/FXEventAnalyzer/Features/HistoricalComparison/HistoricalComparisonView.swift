@@ -375,7 +375,9 @@ struct HistoricalComparisonView: View {
     /// 以前からの固定値(44・0.5)のままだが、`landscapeTableContentHeight`
     /// でも同じ値を使うため名前付きの定数にまとめた(縦画面の`rowHeight`等と
     /// 同じやり方)。
-    static let landscapeRowHeight: CGFloat = 44
+    /// HQ決定(2026-11-10「取得日の表示方法と出典対応」案a)で日時セルに取得日の3行目を
+    /// 追加したため、縦画面の`rowHeight`と同様に44→54(+10)。
+    static let landscapeRowHeight: CGFloat = 54
     static let landscapeRowDividerHeight: CGFloat = 0.5
 
     /// 横画面の表のScrollViewの中身(行だけ)の実際の高さ。`rows`件の行と、
@@ -519,6 +521,14 @@ struct HistoricalComparisonView: View {
                 Text(Self.timeString(event.releaseDatetime))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(Self.timeColor)
+                // HQ決定(2026-11-10「取得日の表示方法と出典対応」案a): 縦画面(`tableRow`)と同じく取得日を添える。
+                if let capturedAt = event.capturedAt {
+                    Text("取得日 \(Self.dateString(capturedAt))")
+                        .font(.system(size: 8, weight: .regular))
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
             }
             .monospacedDigit()
             .frame(width: columns.date, alignment: .center)
@@ -675,7 +685,8 @@ struct HistoricalComparisonView: View {
         let height = Self.tableHeight(
             rows: events.count,
             limited: response.historyLimit?.isLimited == true,
-            showSecondary: showSecondary
+            showSecondary: showSecondary,
+            rowHeight: Self.rowHeightWithCapturedDate
         )
         let tableBody = VStack(spacing: 0) {
             tableHeader(showSecondary: showSecondary)
@@ -768,7 +779,11 @@ struct HistoricalComparisonView: View {
     /// 不足していたわけではなかった。6ptは2026-10-31〜2026-11-02まで
     /// 実機・CIとも問題の報告なく使われていた値のため、10ptから6ptに
     /// 戻す。
-    static func tableHeight(rows: Int, limited: Bool, showSecondary: Bool) -> CGFloat {
+    /// `rowHeight`: 既定は共有定数`Self.rowHeight`(22、`SpeakerComparisonView`もこの既定で
+    /// 呼ぶ)。過去イベント比較自身は取得日の3行目を追加した`rowHeightWithCapturedDate`(28)を
+    /// 明示的に渡す(`table(_:)`参照) — 既存の呼び出し元を変えずに、この画面だけ行の高さを
+    /// 上げられるようにした(HQ決定 2026-11-10「取得日の表示方法と出典対応」案a)。
+    static func tableHeight(rows: Int, limited: Bool, showSecondary: Bool, rowHeight: CGFloat = Self.rowHeight) -> CGFloat {
         let header = headerHeight + groupHeaderHeight
         let content = header + CGFloat(max(rows, 1)) * (rowHeight + 0.5) + bottomSafetyMargin
         return min(content, limited ? 312 : 334)
@@ -780,7 +795,16 @@ struct HistoricalComparisonView: View {
     /// 見出し20→26・行18→24、文字は表の見出し6.5→8.5・数字6.5→8.5・時刻5→6.5に上げた。
     /// 2026-10-14(2回目)の指定: 見出し・日付・数値・pips 7、見出しの下の小さな字 5、見出しの帯24・行22。
     static let headerHeight: CGFloat = 24
+    /// `SpeakerComparisonView`(要人発言の比較表)もこの定数と`tableHeight(rows:...)`を
+    /// そのまま再利用しているため、過去イベント比較だけの変更で22から直接書き換えない
+    /// (下の`rowHeightWithCapturedDate`参照)。
     static let rowHeight: CGFloat = 22
+    /// HQ決定(2026-11-10「取得日の表示方法と出典対応」案a)「過去イベント比較...では、各発表
+    /// 行に取得日を表示する」で日時セルに3行目を追加したため、過去イベント比較自身の行の
+    /// 高さだけ22→28(+6)に上げる。`rowHeight`は`SpeakerComparisonView`と共有の定数の
+    /// ため変更せず、影響をこの画面の行(`tableRow`)・表の高さ計算(`tableHeight`の
+    /// `rowHeight`引数)だけに絞るため別定数にした。
+    static let rowHeightWithCapturedDate: CGFloat = 28
     /// HQ指示(2026-10-25)「前年の結果予想前回、前月の結果予想前回が必要」:
     /// 2つの結果/予想/前回を区別するグループ見出し行(「前年」「前月」)の高さ。
     static let groupHeaderHeight: CGFloat = 11
@@ -884,6 +908,18 @@ struct HistoricalComparisonView: View {
                 Text(Self.timeString(event.releaseDatetime))
                     .font(.system(size: 5.5, weight: .medium))
                     .foregroundStyle(Self.timeColor)
+                // HQ決定(2026-11-10「取得日の表示方法と出典対応」案a)「過去イベント比較...では、
+                // 各発表行に取得日を表示する」。Backendがまだ付けていない行(`capturedAt`がnil)は
+                // 従来どおり2行のまま(推測した日付は表示しない)。既存の列幅(`Column.date`)は
+                // 変えず、`lineLimit`+`minimumScaleFactor`(この表で他のセルにも使っている
+                // 安全策)で収める。
+                if let capturedAt = event.capturedAt {
+                    Text("取得日 \(Self.dateString(capturedAt))")
+                        .font(.system(size: 4.5, weight: .regular))
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                }
             }
             .monospacedDigit()
             .padding(.leading, 5)
@@ -916,12 +952,14 @@ struct HistoricalComparisonView: View {
                 pipsCell(event.pipsByTimeframe?["15m"] ?? nil)
             }
         }
-        .frame(height: Self.rowHeight)
+        .frame(height: Self.rowHeightWithCapturedDate)
         .contentShape(Rectangle())
     }
 
     private var rowDivider: some View {
-        Rectangle().fill(SettingsCardStyle.cardBorder.opacity(0.5)).frame(width: 0.5, height: Self.rowHeight)
+        // `tableRow`自身の行の高さ(`rowHeightWithCapturedDate`)に合わせる(`SpeakerComparisonView`は
+        // この区切り線を使っていないため、共有の`rowHeight`ではなくこちらを使ってよい)。
+        Rectangle().fill(SettingsCardStyle.cardBorder.opacity(0.5)).frame(width: 0.5, height: Self.rowHeightWithCapturedDate)
     }
 
     /// 前回の列。ひとつ前の発表が無料プランでロックされているとき(`previous_locked`)は鍵の印(HQ指示 2026-10-22)。

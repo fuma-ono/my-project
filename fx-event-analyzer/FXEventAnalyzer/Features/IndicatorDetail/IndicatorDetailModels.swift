@@ -42,6 +42,9 @@ struct IndicatorEventSummary: Decodable, Identifiable, Equatable {
     var previousLocked: Bool? = nil
     /// 値を表示する小数の桁数(api-design v1.46、BLSの%の指標は1)。BLS以外の指標・古いBackendではnil(今までの表示)。
     var valueDecimals: Int? = nil
+    /// HQ決定(2026-11-10「取得日の表示方法と出典対応」案a): 値を取得した日時。Backendが
+    /// 各発表行に付けるまではnil(推測した日付は表示しない、`IndicatorReleasesView`参照)。
+    var capturedAt: Date? = nil
 
     /// 「前回」を隠した発表か。`true`のとき前回は「--」ではなく鍵の印で出す。
     var isPreviousLocked: Bool { previousLocked ?? false }
@@ -51,6 +54,7 @@ struct IndicatorEventSummary: Decodable, Identifiable, Equatable {
         case previousLocked = "previous_locked"
         case requiredPlan = "required_plan"
         case valueDecimals = "value_decimals"
+        case capturedAt = "captured_at"
         case id = "event_id"
         case releaseDatetime = "release_datetime"
         case status

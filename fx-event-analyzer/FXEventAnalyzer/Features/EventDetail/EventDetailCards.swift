@@ -149,36 +149,20 @@ struct EventDetailCards: View {
         .frame(width: 214, alignment: .leading)
     }
 
-    /// HQ指示(2026-10-31)「出典表示」: APIのattributionを使って出典を表示
-    /// する。要人発言(`SpeechDetailCards.attributionNotice`)と違い、この
-    /// 画面には他に出典の手がかりが無いため、告知文(`notice`)だけでなく
-    /// 出典名(`source`)・出典元のURL(`sourceUrl`、タップで開く)も示す。
-    /// Eurostatの指標だけ付き、それ以外・古いBackendはnil(何も表示しない)。
+    /// HQ決定(2026-11-10「取得日の表示方法と出典対応」案a): 出典名・告知文(免責文)を
+    /// 常時表示していた従来の形から、「出典：{出典}・取得日 {日付}」の短い1行+タップで
+    /// 免責文の全文(`AttributionLine`、`Common/AttributionView.swift`)に変更。取得日は
+    /// `snapshot.captured_at`(Backendでは元から返っていたが、アプリ側で未使用だった項目)。
+    /// Eurostat・BLS・FRB等の指標だけ付き、それ以外・古いBackendはnil(何も表示しない)。
     @ViewBuilder private var attributionNotice: some View {
         // HQ指摘(2026-10-31)「出典記載する場合は1画面に収まるように」
         // 「下が見切れています」→「出典を1番下にするのはダメなの？」対応:
         // bodyの一番下(次回発表予定の後)に置くことにしたため、既存の
         // 主要機能(次回発表予定・過去イベント比較)の表示を圧迫しない。
         if let attribution = response.event.attribution {
-            VStack(alignment: .leading, spacing: 2) {
-                if let url = URL(string: attribution.sourceUrl) {
-                    Link(destination: url) {
-                        NotoText.text("出典：\(attribution.source)", size: 6.5)
-                            .foregroundStyle(V5P.cyan)
-                    }
-                } else {
-                    NotoText.text("出典：\(attribution.source)", size: 6.5)
-                        .foregroundStyle(SettingsCardStyle.subtitleColor)
-                }
-                if let notice = attribution.notice {
-                    NotoText.text(notice, size: 6.5)
-                        .foregroundStyle(SettingsCardStyle.subtitleColor)
-                        .lineSpacing(1)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .padding(.horizontal, 10)
-            .frame(width: 214, alignment: .leading)
+            AttributionLine(attribution: attribution, capturedAt: response.snapshot?.capturedAt)
+                .padding(.horizontal, 10)
+                .frame(width: 214, alignment: .leading)
         }
     }
 

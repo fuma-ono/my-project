@@ -90,7 +90,7 @@ struct IndicatorReleasesView: View {
                                 .frame(width: 12, alignment: .trailing)
                         }
                         .padding(.horizontal, 9)
-                        .frame(height: 28)
+                        .frame(minHeight: 28)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(SettingsRowPressStyle())
@@ -107,7 +107,7 @@ struct IndicatorReleasesView: View {
                             Color.clear.frame(width: 12)
                         }
                         .padding(.horizontal, 9)
-                        .frame(height: 28)
+                        .frame(minHeight: 28)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(SettingsRowPressStyle())
@@ -123,10 +123,20 @@ struct IndicatorReleasesView: View {
         NotoText.text(text, size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
     }
 
+    /// HQ決定(2026-11-10「取得日の表示方法と出典対応」案a)「過去イベント比較・指標詳細一覧
+    /// では、各発表行に取得日を表示する」: 発表日時の下に、値を取得した日(`capturedAt`)を
+    /// 小さく添える。Backendがまだ付けていない行(`capturedAt`がnil)は従来どおり発表日時の
+    /// 1行のみ(推測した日付は表示しない)。
     private func dateText(_ event: IndicatorEventSummary) -> some View {
-        NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 7.5)
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 1) {
+            NotoText.text("\(AppPreferences.shared.dateString(event.releaseDatetime)) \(AppPreferences.shared.timeString(event.releaseDatetime))", size: 7.5)
+                .foregroundStyle(.white)
+            if let capturedAt = event.capturedAt {
+                NotoText.text("取得日 \(AppPreferences.shared.shortDateString(capturedAt))", size: 5.5)
+                    .foregroundStyle(SettingsCardStyle.subtitleColor)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var previousLockIcon: some View {

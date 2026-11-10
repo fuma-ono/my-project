@@ -134,6 +134,9 @@ struct ComparisonEventSummary: Decodable, Identifiable, Equatable {
     var secondaryForecast: Double? = nil
     var secondaryActual: Double? = nil
     var secondaryPrevious: Double? = nil
+    /// HQ決定(2026-11-10「取得日の表示方法と出典対応」案a): 値を取得した日時。Backendが
+    /// 各発表行に付けるまではnil(推測した日付は表示しない、`HistoricalComparisonView`参照)。
+    var capturedAt: Date? = nil
 
     /// 無料プランで隠された過去の発表(api-design v1.33 §21)。値とpipsは`null`。古いBackendではnil(=隠していない)。
     var locked: Bool? = nil
@@ -165,5 +168,6 @@ struct ComparisonEventSummary: Decodable, Identifiable, Equatable {
         case secondaryForecast = "secondary_forecast"
         case secondaryActual = "secondary_actual"
         case secondaryPrevious = "secondary_previous"
+        case capturedAt = "captured_at"
     }
 }
