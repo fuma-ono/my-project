@@ -45,11 +45,20 @@ function groupKey(row: MarketEventRow): string {
   return `${row.provider}|${row.release_datetime}`;
 }
 
-/** 行を同時発表(同じ provider・release_datetime)でグループ化する。入力の順を保つ(最初に現れた行の順)。 */
+/**
+ * 行を同時発表(同じ provider・release_datetime)でグループ化する。入力の順を保つ(最初に現れた行の順)。
+ * HQ指示(2026-11-10「実動作検証」で発見): 呼び出し側(historical.ts)が「対象イベント自身の行」と
+ * 「DBへの検索で見つかった行」を両方渡すと、対象イベント自身がDB検索結果にも含まれ(自分のprovider・
+ * release_datetimeは当然自分自身にも一致するため)、同じ event_id が2回入ってくることがある。
+ * event_id が重複する行は最初の1つだけを使う(indicator_countが実際より多く数えられる不具合を防ぐ)。
+ */
 export function groupByMarketEvent<T extends MarketEventRow>(rows: readonly T[]): MarketEventGroup<T>[] {
   const groups = new Map<string, MarketEventGroup<T>>();
   const order: string[] = [];
+  const seenEventIds = new Set<string>();
   for (const row of rows) {
+    if (seenEventIds.has(row.event_id)) continue;
+    seenEventIds.add(row.event_id);
     const key = groupKey(row);
     let group = groups.get(key);
     if (!group) {
