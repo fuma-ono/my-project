@@ -38,7 +38,7 @@ describe.skipIf(!integration)('economic_indicators.source_url backfill (migratio
       .eq('code', code)
       .single();
     if (error) throw error;
-    return (data).source_url;
+    return data.source_url;
   };
 
   beforeAll(async () => {
