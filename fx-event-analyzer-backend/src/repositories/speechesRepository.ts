@@ -47,10 +47,17 @@ export interface SpeechSummary {
    * 相場反応・過去比較・発言前の通知の対象外(api-design v1.41、HQ判断 2026-10-28)。
    */
   statement_time_precision: string;
+  /** 公式の発言ページの URL(v1.52。FRB・ECB の https だけ。分からなければ null)。 */
+  source_url: string | null;
+  /**
+   * 本文の取り込みの状態(v1.52): PENDING / FETCHED / FAILED / NOT_APPLICABLE。本文そのものはまだ返さない
+   * (再掲の権利が未確認)。
+   */
+  body_status: string;
 }
 
 const SPEECH_COLUMNS =
-  'id, title, summary, statement_datetime, importance, status, time_precision, speakers!inner(id, name, title, organization, country_code, currency_code, photo_url)';
+  'id, title, summary, statement_datetime, importance, status, time_precision, source_url, body_status, speakers!inner(id, name, title, organization, country_code, currency_code, photo_url)';
 
 interface SpeechDbRow {
   id: string;
@@ -60,6 +67,8 @@ interface SpeechDbRow {
   importance: string;
   status: string;
   time_precision: string;
+  source_url: string | null;
+  body_status: string | null;
   speakers: unknown;
 }
 
@@ -92,6 +101,8 @@ function toSpeechSummary(row: SpeechDbRow): SpeechSummary {
     status: row.status,
     attribution: attributionForOrganization(speaker.organization),
     statement_time_precision: row.time_precision,
+    source_url: row.source_url ?? null,
+    body_status: row.body_status ?? 'PENDING',
   };
 }
 

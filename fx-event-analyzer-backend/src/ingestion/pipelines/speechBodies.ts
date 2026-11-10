@@ -1,0 +1,164 @@
+/**
+ * 要人発言の公式ページの URL と本文を取り込む(HQ指示 2026-11-10「要人発言本文の取得・保存機能」)。
+ *
+ * 対象: 発言済み(DELIVERED)で、本文がまだ無い(body_status が PENDING / FAILED)、直近 pastDays 日の FRB・ECB の発言。
+ * 1. URL: ECB は取り込みの時に press の RSS の link を source_url に入れてある。FRB は公式の講演の RSS を1回読み、
+ *    姓と日付が1件だけ一致するときに結ぶ(speechBody.ts の matchFrbSpeechUrls)。結べなければ PENDING のまま(講演の RSS に
+ *    まだ載っていない・直近15件から外れた、など。推測で結ばない)。
+ * 2. 本文: 公式の URL(https・決まった場所)だけを読み、取り出す。取れれば FETCHED(本文・取得日時)、取れなければ FAILED
+ *    (理由を body_error に)。本文を推測で補わない。1回の実行で読むページは maxFetches 件まで(公式サイトに負荷をかけない。
+ *    HttpClient が取得元ごとに2秒あける)。
+ * 外部の有料 API は使わない(公式サイトの公開ページだけ)。発言の行の発言者・日時・題名は変えない。
+ */
+import { SPEAKER_ALIASES } from '../mappings/speakers.js';
+import type { JobCounters } from '../runner.js';
+import { wallClockParts } from '../time.js';
+import {
+  extractSpeechBody,
+  frbSpeechRssItems,
+  isOfficialSpeechUrl,
+  matchFrbSpeechUrls,
+  type FrbSpeechRowForMatch,
+} from '../speechBody.js';
+
+export const FRB_SPEECHES_RSS_URL = 'https://www.federalreserve.gov/feeds/speeches.xml';
+const BODY_PROVIDERS = ['frb_calendar', 'ecb_press_rss'] as const;
+
+export interface SpeechForBody {
+  id: string;
+  provider: string;
+  provider_event_id: string;
+  title: string;
+  statement_datetime: string;
+  status: string;
+  source_url: string | null;
+  body_status: string;
+  /** speakers.name(日本語)。 */
+  speaker_name: string;
+  speaker_organization: string;
+}
+
+export interface SpeechBodyPatch {
+  source_url?: string;
+  speech_body?: string | null;
+  body_fetched_at?: string | null;
+  body_status: 'PENDING' | 'FETCHED' | 'FAILED' | 'NOT_APPLICABLE';
+  body_error?: string | null;
+}
+
+export interface SpeechBodyStore {
+  /** DELIVERED で body_status が PENDING / FAILED の、providers の発言(statement_datetime >= sinceIso、古い順)。 */
+  listSpeechesNeedingBody(providers: readonly string[], sinceIso: string): Promise<SpeechForBody[]>;
+  updateSpeechBody(id: string, patch: SpeechBodyPatch): Promise<void>;
+}
+
+export interface SpeechBodyFetcher {
+  /** 公式ページの HTML(本文)。HTTP の失敗は例外(メッセージに状態コード)。 */
+  getText(url: string): Promise<string>;
+}
+
+export interface SpeechBodySettings {
+  pastDays: number;
+  /** 1回の実行で本文のページを読む上限。 */
+  maxFetches: number;
+}
+
+export const SPEECH_BODY_SETTINGS: SpeechBodySettings = { pastDays: 30, maxFetches: 20 };
+
+/** 日本語の名前(speakers.name)→ 取り込みの対応表の英語の名前(最初の書き方)。無ければ null。 */
+/** YYYY-MM-DD of `iso` in `timeZone`. */
+function localDay(iso: string, timeZone: string): string {
+  const wall = wallClockParts(new Date(iso), timeZone);
+  return `${wall.year}-${String(wall.month).padStart(2, '0')}-${String(wall.day).padStart(2, '0')}`;
+}
+
+function englishNameOf(organization: string, nameJa: string): string | null {
+  return SPEAKER_ALIASES.find((a) => a.organization === organization && a.nameJa === nameJa)?.aliases[0] ?? null;
+}
+
+function errorCode(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const status = /\b([45]\d\d)\b/.exec(message)?.[1];
+  return status ? `HTTP_${status}` : `FETCH_ERROR: ${message.slice(0, 200)}`;
+}
+
+export async function ingestSpeechBodies(
+  store: SpeechBodyStore,
+  fetchers: { frb: SpeechBodyFetcher; ecb: SpeechBodyFetcher },
+  settings: SpeechBodySettings,
+  now: Date,
+  counters: JobCounters,
+): Promise<void> {
+  const sinceIso = new Date(now.getTime() - settings.pastDays * 86_400_000).toISOString();
+  const speeches = await store.listSpeechesNeedingBody(BODY_PROVIDERS, sinceIso);
+  counters.fetched += speeches.length;
+
+  // 1. FRB の URL(まだ無い行だけ)。講演の RSS は、必要なときに1回だけ読む。
+  const frbWithoutUrl = speeches.filter((s) => s.provider === 'frb_calendar' && !s.source_url);
+  const urlById = new Map<string, string>();
+  if (frbWithoutUrl.length > 0) {
+    try {
+      const xml = await fetchers.frb.getText(FRB_SPEECHES_RSS_URL);
+      const links = [...xml.matchAll(/<link>\s*(?:<!\[CDATA\[)?\s*([^<\]\s]+)\s*(?:\]\]>)?\s*<\/link>/g)].map(
+        (m) => m[1]!,
+      );
+      const rows: FrbSpeechRowForMatch[] = frbWithoutUrl.map((s) => ({
+        id: s.id,
+        speakerNameEn: englishNameOf(s.speaker_organization, s.speaker_name),
+        date: localDay(s.statement_datetime, 'America/New_York'),
+      }));
+      for (const [id, url] of matchFrbSpeechUrls(rows, frbSpeechRssItems(links))) urlById.set(id, url);
+    } catch (error) {
+      counters.error(`frb speeches rss: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // 2. 本文
+  let fetches = 0;
+  for (const speech of speeches) {
+    const url = speech.source_url ?? urlById.get(speech.id) ?? null;
+    if (!url) {
+      counters.skip('NO_SOURCE_URL'); // PENDING のまま(次の実行でまた探す)
+      continue;
+    }
+    if (!isOfficialSpeechUrl(speech.provider, url)) {
+      counters.skip('NOT_OFFICIAL_URL');
+      await store.updateSpeechBody(speech.id, { body_status: 'FAILED', body_error: 'NOT_OFFICIAL_URL' });
+      continue;
+    }
+    if (fetches >= settings.maxFetches) {
+      counters.skip('RUN_CAP'); // 次の実行で読む
+      if (!speech.source_url) await store.updateSpeechBody(speech.id, { source_url: url, body_status: 'PENDING' });
+      continue;
+    }
+    fetches += 1;
+    const fetcher = speech.provider === 'frb_calendar' ? fetchers.frb : fetchers.ecb;
+    try {
+      const html = await fetcher.getText(url);
+      const body = extractSpeechBody(speech.provider, html);
+      if (!body) {
+        counters.skip('NO_BODY_FOUND');
+        await store.updateSpeechBody(speech.id, {
+          source_url: url,
+          body_status: 'FAILED',
+          body_error: 'NO_BODY_FOUND',
+        });
+        continue;
+      }
+      await store.updateSpeechBody(speech.id, {
+        source_url: url,
+        speech_body: body,
+        body_fetched_at: now.toISOString(),
+        body_status: 'FETCHED',
+        body_error: null,
+      });
+      counters.success += 1;
+      counters.note('fetched', { speech_id: speech.id, provider: speech.provider, url, characters: body.length });
+    } catch (error) {
+      const code = errorCode(error);
+      counters.skip('FETCH_FAILED');
+      counters.note('failed', { speech_id: speech.id, url, error: code });
+      await store.updateSpeechBody(speech.id, { source_url: url, body_status: 'FAILED', body_error: code });
+    }
+  }
+}
