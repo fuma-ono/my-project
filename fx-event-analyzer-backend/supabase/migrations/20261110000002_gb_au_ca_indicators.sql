@@ -15,6 +15,8 @@
 -- 国のコードは iOS に合わせて GB・AU・CA(Formatting.swift の国旗・国名)。表示名は indicator-display-names.md の決まり
 -- (消費者物価指数（CPI）・コアCPI・失業率)。関連の通貨ペアは、指標の通貨を含む今あるペア(CAD は CADJPY だけ)。
 -- 何度流しても同じ結果(on conflict do nothing)。既存の指標・イベントには触れない。
+-- 関連の通貨ペア: DEV では fx_pairs が既にあり、この migration が入れる。ローカル・CI では migration が seed の前に流れ、
+-- その時点では fx_pairs が空なので、seed.sql でも同じ行を入れる(20261026000001 などと同じ。どちらも何度流しても同じ)。
 -- 戻す手順: delete from indicator_fx_pairs where indicator_id in (select id from economic_indicators where code in (…7件…));
 --          delete from economic_indicators where code in (…7件…);(イベントが無いうちだけ)
 
