@@ -96,7 +96,7 @@ describe('the tables read from the official pages on 2026-11-10', () => {
       expect(new Set(ids).size).toBe(ids.length);
       for (const e of table.entries) {
         expect(officialScheduleUtc(e)!.getTime()).toBeGreaterThan(NOW.getTime());
-        expect(e.sources.length).toBe(1);
+        expect(e.sources.length).toBeGreaterThanOrEqual(1); // ABS の対象月のある回は latest-release ページも
         expect(e.checkedAt).toBe('2026-11-10');
       }
     }

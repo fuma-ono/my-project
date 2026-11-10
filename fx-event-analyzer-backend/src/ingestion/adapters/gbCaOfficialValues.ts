@@ -13,7 +13,7 @@
  *   点の `releaseTime`(東部時間の壁時計 'YYYY-MM-DDTHH:MM')の日付で比べる。系列(2026-11-10 に getSeriesInfoFromVector で
  *   確認): CA_UNEMPLOYMENT_RATE = v2062815「Canada;Unemployment rate;Total - Gender;15 years and over;Estimate;Seasonally
  *   adjusted」(%)。CA_CPI は公式 API に前年比の系列が見つからず(指数 v41690973 だけ)、前年比を計算で作らないため対象外。
- * - 豪州 ABS の値は、データの API(SDMX)の系列をまだ確かめていないため対象外。
+ * - 豪州 ABS の値は adapters/absOfficialValues.ts(SDMX)。
  */
 
 export interface OfficialValue {

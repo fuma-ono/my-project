@@ -8,7 +8,7 @@ import { runIngestionJob } from '../ingestion/runner.js';
 import { createIngestionRepository } from '../repositories/ingestionRepository.js';
 
 /**
- * 公式機関の発表値(英国 ONS・カナダ Statistics Canada)を RELEASE として保存する(HQ決定 2026-11-10「公式経済指標の
+ * 公式機関の発表値(英国 ONS・カナダ Statistics Canada・豪州 ABS)を RELEASE として保存する(HQ決定 2026-11-10「公式経済指標の
  * 実績値取得・保存処理」)。条件・保存のしかたは ingestion/pipelines/officialValues.ts。キー・契約・有料 API なし。
  *
  *   npm run ingest:official-values

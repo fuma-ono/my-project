@@ -11,7 +11,9 @@
  * 豪州 ABS(https://www.abs.gov.au/release-calendar/future-releases/<YYYYMM>/all、11:30am AEDT/AEST = Australia/Sydney):
  *   - 「Consumer Price Index, Australia」2026-11-25・2027-01-06・01-27・02-24・03-24・04-28
  *   - 「Labour Force, Australia」2026-11-19・12-17・2027-01-21・02-18・03-25・04-15
- *   ページから各回の対象月をはっきり読み取れなかったので、キーには公表日を使う(対象月を推測しない)。
+ *   公表予定のページから各回の対象月をはっきり読み取れなかったので、キーには公表日を使う(対象月を推測しない)。
+ *   対象月(referencePeriod)は、2026-11-10 に各指標の latest-release ページ(下の ABS_LATEST_RELEASE_URLS)の
+ *   「Next Release <日付> <題名>, <月> <年>」に書かれていた3回だけに入れる(それより先の回は書かれていない → 保存しない)。
  * カナダ Statistics Canada(主要指標の公表予定 JSON
  *   https://www150.statcan.gc.ca/n1/dai-quo/ssi/homepage/schedule-key_indicators-eng.json の title・description・date。
  *   時刻は「The Daily is released Monday to Friday at 8:30 a.m. Eastern time」https://www150.statcan.gc.ca/n1/dai-quo/index-eng.htm):
@@ -28,8 +30,9 @@ export interface OfficialScheduleEntry {
   key: string;
   /**
    * HQ指示(2026-11-10「実績値の取得・保存」): その回の値の対象期間('YYYY-MM')。**公式ページに対象月が書かれている回だけ**
-   * (ONS の CPI「Consumer price inflation, UK: October 2026」、StatCan の JSON の description)。英国の労働市場(題名の月は
-   * 公表の月で、失業率の対象の3か月は公式ページで確認できていない)と ABS(対象月を読み取れなかった)は undefined。
+   * (ONS の CPI「Consumer price inflation, UK: October 2026」、StatCan の JSON の description、ABS の latest-release ページの
+   * 「Next Release」)。英国の労働市場(題名の月は公表の月で、失業率の対象の3か月は公表の前の公式ページに書かれていない)と、
+   * ABS の「Next Release」に載っていない先の回は undefined。
    * undefined の回は、実績値を保存しない(対象期間を照合できないため)。
    */
   referencePeriod?: string;
@@ -94,9 +97,36 @@ export const ONS_SCHEDULE: OfficialScheduleTable = {
 
 const byDate = (dates: readonly string[]) => dates.map((date) => [date, date] as const);
 
+export const ABS_LATEST_RELEASE_URLS = {
+  AU_CPI:
+    'https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/consumer-price-index-australia/latest-release',
+  AU_UNEMPLOYMENT_RATE:
+    'https://www.abs.gov.au/statistics/labour/employment-and-unemployment/labour-force-australia/latest-release',
+} as const;
+
+/** 公表日 → 対象月(latest-release ページの「Next Release」の題名の月。2026-11-10 確認)。 */
+const ABS_REFERENCE_PERIODS: Record<string, Record<string, string>> = {
+  // 「Consumer Price Index, Australia, October 2026」25/11/2026 ・ November 2026 6/01/2027 ・ December 2026 27/01/2027
+  AU_CPI: { '2026-11-25': '2026-10', '2027-01-06': '2026-11', '2027-01-27': '2026-12' },
+  // 「Labour Force, Australia, October 2026」19/11/2026 ・ November 2026 17/12/2026 ・ December 2026 21/01/2027
+  AU_UNEMPLOYMENT_RATE: { '2026-11-19': '2026-10', '2026-12-17': '2026-11', '2027-01-21': '2026-12' },
+};
+
+const withAbsPeriods = (entries: OfficialScheduleEntry[]): OfficialScheduleEntry[] =>
+  entries.map((e) => {
+    const period = ABS_REFERENCE_PERIODS[e.indicatorCode]?.[e.releaseDate];
+    return period
+      ? {
+          ...e,
+          referencePeriod: period,
+          sources: [...e.sources, ABS_LATEST_RELEASE_URLS[e.indicatorCode as keyof typeof ABS_LATEST_RELEASE_URLS]],
+        }
+      : e;
+  });
+
 export const ABS_SCHEDULE: OfficialScheduleTable = {
   provider: 'abs_release_calendar',
-  entries: [
+  entries: withAbsPeriods([
     ...rows(
       'AU_CPI',
       '11:30',
@@ -111,7 +141,7 @@ export const ABS_SCHEDULE: OfficialScheduleTable = {
       ABS_RELEASE_CALENDAR_URL,
       byDate(['2026-11-19', '2026-12-17', '2027-01-21', '2027-02-18', '2027-03-25', '2027-04-15']),
     ),
-  ],
+  ]),
 };
 
 export const STATCAN_SCHEDULE: OfficialScheduleTable = {

@@ -4,7 +4,8 @@
  * 公式機関が発表した**初回公表値**を保存する。次の条件をすべて満たすときだけ RELEASED にする(1つでも欠ければ何も書かず、
  * イベントは SCHEDULED・PENDING(API では DATA_PENDING)のまま。推測・前回値の流用はしない):
  *   1. 公式機関のデータ(下の OFFICIAL_VALUE_SOURCES の系列だけ。利用条件は migration 20261110000002 の説明で確認済み)
- *   2. 発表日が一致する(API が示す公表日 = その回の公表日。adapters/gbCaOfficialValues.ts の parse*ForRelease)
+ *   2. 発表日が一致する(API が示す公表日 = その回の公表日。adapters/gbCaOfficialValues.ts の parse*ForRelease。ABS は
+ *      updatedAfter で公表日に更新された観測だけを見る — adapters/absOfficialValues.ts)
  *   3. 対象期間が一致する(API の値の対象月 = 公表予定の表の referencePeriod。表に referencePeriod が無い回は保存しない)
  *   4. 数値・単位が明確(数として読める値、単位はこの表で決めた '%')
  *   5. 出典(source・source_url)がある
@@ -19,6 +20,14 @@
  */
 import { calculateSurprise } from '../../domain/surprise.js';
 import {
+  ABS_SDMX_ACCEPT,
+  ABS_SERIES,
+  absReleaseUrl,
+  absSeriesUrl,
+  absValueForPeriod,
+  parseAbsValueForRelease,
+} from '../adapters/absOfficialValues.js';
+import {
   ONS_SERIES,
   onsSeriesUrl,
   onsValueForPeriod,
@@ -30,6 +39,7 @@ import {
   type OfficialValue,
 } from '../adapters/gbCaOfficialValues.js';
 import type { OfficialScheduleEntry, OfficialScheduleTable } from '../mappings/gbAuCaSchedule.js';
+import { HttpError } from '../http.js';
 import type { JobCounters } from '../runner.js';
 import type { IngestionStore } from '../store.js';
 import { officialScheduleProviderEventId } from './officialScheduleTable.js';
@@ -41,9 +51,17 @@ export interface OfficialValueSource {
   unit: string;
   sourceName: string;
   sourceUrl: string;
-  /** 取得の URL と本文(GET なら body なし)。 */
-  request: { url: string; body?: unknown };
-  parseForRelease(body: unknown, releaseDate: string): OfficialValue | null;
+  /** 取得の URL と本文(GET なら body なし)。改定の確認と、releaseRequest が無い取得元の発表値の読み取りに使う。 */
+  request: { url: string; body?: unknown; headers?: Record<string, string> };
+  /**
+   * 公表日の照合に回ごとの問い合わせが要る取得元(ABS: updatedAfter)。返った本文を parseForRelease に渡す。
+   * HTTP 404 は「まだ更新されていない」(何も書かない)。null = URL を作れない(保存しない)。
+   */
+  releaseRequest?: (entry: OfficialScheduleEntry) => { url: string; headers?: Record<string, string> } | null;
+  /** 初回値として保存してよいのは、公表からこの日数の間だけ(次の回の公表の後に、改定された値を初回値としない)。 */
+  maxDaysAfterRelease?: number;
+  /** fullBody = request の応答(releaseRequest のある取得元で、単位・桁を読む)。 */
+  parseForRelease(body: unknown, releaseDate: string, fullBody?: unknown): OfficialValue | null;
   valueForPeriod(body: unknown, period: string): number | null;
 }
 
@@ -75,15 +93,37 @@ const statcan = (indicatorCode: string): OfficialValueSource => {
   };
 };
 
+const abs = (indicatorCode: string): OfficialValueSource => {
+  const series = ABS_SERIES.find((s) => s.indicatorCode === indicatorCode)!;
+  const headers = { accept: ABS_SDMX_ACCEPT };
+  return {
+    indicatorCode,
+    scheduleProvider: 'abs_release_calendar',
+    unit: '%',
+    sourceName: 'Australian Bureau of Statistics',
+    sourceUrl: absSeriesUrl(series),
+    request: { url: absSeriesUrl(series), headers },
+    releaseRequest: (entry) => {
+      const url = absReleaseUrl(series, entry.releaseDate);
+      return url ? { url, headers } : null;
+    },
+    maxDaysAfterRelease: 7, // ABS の同じ指標の公表の間隔は3週間以上
+    parseForRelease: (body, releaseDate, fullBody) => parseAbsValueForRelease(series, body, releaseDate, fullBody),
+    valueForPeriod: (body, period) => absValueForPeriod(series, body, period),
+  };
+};
+
 /**
  * 実績値を取る指標(HQ決定の優先順)。GB_UNEMPLOYMENT_RATE は系列(MGSX)は読めるが、公表予定の表に公式の対象期間が無いので
- * 保存しない(下の referencePeriod の確認で止まる)。ABS の2指標と CA_CPI は系列が未確認・前年比の系列が無いため入れない。
+ * 保存しない(下の referencePeriod の確認で止まる)。CA_CPI は公式の前年比の系列が無い(指数から計算しない)ため入れない。
  */
 export const OFFICIAL_VALUE_SOURCES: readonly OfficialValueSource[] = [
   ons('GB_CPI'),
   ons('GB_CORE_CPI'),
   ons('GB_UNEMPLOYMENT_RATE'),
   statcan('CA_UNEMPLOYMENT_RATE'),
+  abs('AU_CPI'),
+  abs('AU_UNEMPLOYMENT_RATE'),
 ];
 
 export interface OfficialValueFetcher {
@@ -142,10 +182,12 @@ export async function ingestOfficialValues(
       body = await deps.fetcher.getJson(
         source.request.url,
         source.request.body === undefined
-          ? {}
+          ? source.request.headers
+            ? { headers: source.request.headers }
+            : {}
           : {
               method: 'POST',
-              headers: { 'content-type': 'application/json' },
+              headers: { 'content-type': 'application/json', ...source.request.headers },
               body: JSON.stringify(source.request.body),
             },
       );
@@ -190,7 +232,39 @@ export async function ingestOfficialValues(
         continue;
       }
 
-      const value = source.parseForRelease(body, entry.releaseDate);
+      if (
+        source.maxDaysAfterRelease !== undefined &&
+        now.getTime() - Date.parse(event.release_datetime) > source.maxDaysAfterRelease * 86_400_000
+      ) {
+        counters.skip('TOO_LATE_FOR_FIRST_RELEASE'); // 改定後の値を初回値として保存しない
+        result.pending += 1;
+        continue;
+      }
+      let releaseBody: unknown = body;
+      if (source.releaseRequest) {
+        const req = source.releaseRequest(entry);
+        if (!req) {
+          counters.skip('NOT_RELEASED_OR_DATE_MISMATCH');
+          result.pending += 1;
+          continue;
+        }
+        try {
+          releaseBody = await deps.fetcher.getJson(req.url, req.headers ? { headers: req.headers } : {});
+        } catch (error) {
+          if (error instanceof HttpError && error.status === 404) {
+            counters.skip('NOT_RELEASED_OR_DATE_MISMATCH'); // 公表日より後の更新が無い
+          } else {
+            counters.skip('FETCH_FAILED');
+            counters.note('fetch_failed', {
+              indicator: source.indicatorCode,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+          result.pending += 1;
+          continue;
+        }
+      }
+      const value = source.parseForRelease(releaseBody, entry.releaseDate, body);
       if (!value) {
         counters.skip('NOT_RELEASED_OR_DATE_MISMATCH'); // 公表日が一致しない(前の回の値を使わない)
         result.pending += 1;
