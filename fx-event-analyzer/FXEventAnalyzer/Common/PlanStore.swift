@@ -82,7 +82,8 @@ struct PlanLimits: Decodable, Equatable {
         case pastReleasesMax = "past_releases_max"
     }
 
-    /// 無料プラン: カレンダーは先月の1日から、お気に入り3件、通知はHIGHと通貨ペア1つ、比較は5回、
+    /// 無料プラン: カレンダーは先月の1日から、お気に入り3件、通知はHIGHと通貨ペア1つ、比較は3回
+    /// (HQ指摘 2026-11-10: このコメント自体がv1.37のFREE 5→3変更に追従していなかった)、
     /// 過去の発表は指標ごとに直近3回。
     static func free(now: Date = Date(), calendar: Calendar = .current) -> PlanLimits {
         PlanLimits(
