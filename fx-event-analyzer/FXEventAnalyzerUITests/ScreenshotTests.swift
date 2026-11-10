@@ -522,6 +522,14 @@ final class ScreenshotTests: XCTestCase {
             capture("16b-NotificationQuietHours")
         }
         captureSettingsSubScreen(row: "プラン・購読管理", rowIndex: 2, waitFor: "特典内容の確認", name: "17-Subscription")
+        // HQ指摘(2026-11-10)「無料プランが直近5回となっている」の修正確認用:
+        // 「17-Subscription」は「特典内容の確認」の行があるだけで、タップして開くシート
+        // (実際に文言を直した場所)自体は撮っていなかった。シートを開いて撮り、閉じてから続ける。
+        tap(containing: "特典内容の確認")
+        XCTAssertTrue(waitForAnyElement(containing: "無料プランは直近3回分です", timeout: 10), "The corrected FREE-plan copy is not shown")
+        capture("17c-SubscriptionBenefits")
+        tap(containing: "完了")
+        XCTAssertTrue(waitForAnyElement(containing: "特典内容の確認", timeout: 10), "Did not return to the Subscription screen after closing the benefits sheet")
         // 無料プランの表示(HQ指示 2026-10-06)。モックの購読をFREEに切り替えてから撮る。
         if setMockSubscriptionPlan("FREE") {
             captureSettingsSubScreen(row: "プラン・購読管理", rowIndex: 2, waitFor: "プランを確認する", name: "17b-SubscriptionFree")
