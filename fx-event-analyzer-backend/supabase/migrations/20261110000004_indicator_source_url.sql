@@ -12,7 +12,8 @@
 -- 既に US_CORE_CPI などで使っている)。BOJ_RATE の URL を入れることと、BOJ のデータの商用利用の許可は別の問題(未解決のまま)。
 --
 -- HQ レビュー(2026-11-10)の指摘への対応:
---   - 変更前の値を残す: indicator_source_url_backfills に、変えた行だけ「変更前の値・入れた値・そのときの updated_at」を記録する。
+--   - 変更前の値を残す: indicator_source_url_backfills に、変えた行だけ「変更前の値(null か空白の文字列をそのまま)・入れた値・
+--     そのときの updated_at」を記録する(HQ レビュー 2026-11-10 2回目: 空白の文字列も実値で残し、そのまま戻す)。
 --   - 既存の値を上書きしない: source_url が空(null か空白だけ)の行だけを変える。2回目以降の実行では何も変えない。
 --   - 戻すときは migration が入れた値だけ: source_url が入れた値のまま **かつ** updated_at が記録と同じ行だけを戻す
 --     (economic_indicators の updated_at はどの列の更新でもトリガーで変わる。後から人が同じ URL を入れ直した・ほかの列を
@@ -47,30 +48,36 @@ returns integer
 language plpgsql
 as $$
 declare
-  changed integer;
+  changed integer := 0;
+  r record;
+  applied_at timestamptz;
 begin
-  with targets as (
-    select v.code, v.source_url
-    from jsonb_to_recordset(p_urls) as v(code text, source_url text)
-  ),
-  updated as (
-    update economic_indicators i
-    set source_url = t.source_url
-    from targets t
-    where i.code = t.code
-      and (i.source_url is null or btrim(i.source_url) = '')
+  -- 変える前の値(null か、空白だけの文字列)をそのまま読む。行は for update で押さえ、読んでから変えるまでの間に
+  -- ほかの更新が入らないようにする。
+  for r in
+    select i.id, i.code, i.source_url as previous_source_url, t.source_url as applied_source_url
+    from economic_indicators i
+    join jsonb_to_recordset(p_urls) as t(code text, source_url text) on t.code = i.code
+    where (i.source_url is null or btrim(i.source_url) = '')
       and t.source_url ~ '^https://'
-    returning i.code, i.source_url, i.updated_at
-  ),
-  recorded as (
+    order by i.code
+    for update of i
+  loop
+    update economic_indicators i
+    set source_url = r.applied_source_url
+    where i.id = r.id
+    returning i.updated_at into applied_at;
+
     insert into indicator_source_url_backfills (batch, code, previous_source_url, applied_source_url, applied_updated_at)
-    -- 変える前は空(null か空白)だけ。空白だけの値も null として記録する(元の空白は表示に意味がない)
-    select p_batch, u.code, null, u.source_url, u.updated_at
-    from updated u
-    on conflict (batch, code) do nothing
-    returning 1
-  )
-  select count(*) into changed from recorded;
+    values (p_batch, r.code, r.previous_source_url, r.applied_source_url, applied_at)
+    -- 同じ batch で、戻した後(または人が空に戻した後)に流し直したときは、その回の値で記録を置き換える
+    on conflict (batch, code) do update
+      set previous_source_url = excluded.previous_source_url,
+          applied_source_url = excluded.applied_source_url,
+          applied_updated_at = excluded.applied_updated_at,
+          rolled_back_at = null;
+    changed := changed + 1;
+  end loop;
   return changed;
 end;
 $$;

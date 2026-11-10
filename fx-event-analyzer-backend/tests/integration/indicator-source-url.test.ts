@@ -14,6 +14,7 @@ describe.skipIf(!integration)('economic_indicators.source_url backfill (migratio
   const runId = `${Date.now()}`;
   const codes = {
     empty: `IT_SRCURL_EMPTY_${runId}`,
+    blank: `IT_SRCURL_BLANK_${runId}`,
     filled: `IT_SRCURL_FILLED_${runId}`,
     touched: `IT_SRCURL_TOUCH_${runId}`,
   };
@@ -43,13 +44,12 @@ describe.skipIf(!integration)('economic_indicators.source_url backfill (migratio
 
   beforeAll(async () => {
     ctx = buildIntegrationContext(integration!);
-    const { error } = await ctx.serviceClient
-      .from('economic_indicators')
-      .insert([
-        indicator(codes.empty, null),
-        indicator(codes.filled, 'https://example.org/manual'),
-        indicator(codes.touched, null),
-      ]);
+    const { error } = await ctx.serviceClient.from('economic_indicators').insert([
+      indicator(codes.empty, null),
+      indicator(codes.blank, '   '), // 空白だけの文字列(null ではない)
+      indicator(codes.filled, 'https://example.org/manual'),
+      indicator(codes.touched, null),
+    ]);
     if (error) throw error;
   });
 
@@ -101,17 +101,19 @@ describe.skipIf(!integration)('economic_indicators.source_url backfill (migratio
     expect(missing).toEqual([]);
   });
 
-  it('never overwrites an existing value, records only what it changed, and a re-run changes nothing', async () => {
+  it('fills NULL and blank values, never overwrites an existing URL, records the real previous value, re-run is a no-op', async () => {
     const urls = [
       { code: codes.empty, source_url: 'https://example.org/empty' },
+      { code: codes.blank, source_url: 'https://example.org/blank' },
       { code: codes.filled, source_url: 'https://example.org/should-not-apply' },
       { code: codes.touched, source_url: 'https://example.org/touched' },
     ];
     const first = await ctx.serviceClient.rpc('backfill_indicator_source_urls', { p_batch: batch, p_urls: urls });
     if (first.error) throw first.error;
-    expect(first.data).toBe(2); // empty と touched だけ
+    expect(first.data).toBe(3); // empty・blank・touched(filled は既存の URL)
     expect(await urlOf(codes.filled)).toBe('https://example.org/manual'); // 既存の値はそのまま
     expect(await urlOf(codes.empty)).toBe('https://example.org/empty');
+    expect(await urlOf(codes.blank)).toBe('https://example.org/blank');
 
     const again = await ctx.serviceClient.rpc('backfill_indicator_source_urls', { p_batch: batch, p_urls: urls });
     if (again.error) throw again.error;
@@ -126,6 +128,7 @@ describe.skipIf(!integration)('economic_indicators.source_url backfill (migratio
     expect(log.data).toEqual(
       [
         { code: codes.empty, previous_source_url: null, applied_source_url: 'https://example.org/empty' },
+        { code: codes.blank, previous_source_url: '   ', applied_source_url: 'https://example.org/blank' }, // 実値のまま
         { code: codes.touched, previous_source_url: null, applied_source_url: 'https://example.org/touched' },
       ].sort((a, b) => a.code.localeCompare(b.code)),
     );
@@ -145,10 +148,12 @@ describe.skipIf(!integration)('economic_indicators.source_url backfill (migratio
       (rollback.data as { code: string; reverted: boolean; reason: string | null }[]).map((r) => [r.code, r]),
     );
     expect(byCode[codes.empty]).toMatchObject({ reverted: true, reason: null });
+    expect(byCode[codes.blank]).toMatchObject({ reverted: true, reason: null });
     expect(byCode[codes.touched]).toMatchObject({ reverted: false, reason: 'ROW_UPDATED_AFTER_BACKFILL' });
     expect(byCode[codes.filled]).toBeUndefined(); // migration が変えていない行は対象外
 
     expect(await urlOf(codes.empty)).toBeNull(); // 変更前(null)に戻った
+    expect(await urlOf(codes.blank)).toBe('   '); // 変更前(空白の文字列)に、そのまま戻った
     expect(await urlOf(codes.touched)).toBe('https://example.org/touched'); // 人が触った行は残す
     expect(await urlOf(codes.filled)).toBe('https://example.org/manual');
   });
