@@ -15,12 +15,28 @@ export interface SpeakerSummary {
   photo_url: string | null;
 }
 
+/**
+ * 要約の状態(HQ決定 2026-11-10「要人発言の要約機能改善」、api-design v1.51)。
+ * - READY: summary がある
+ * - NOT_AVAILABLE: summary が無い(要約を作る仕組みはまだ無い。発言前・中止も、要約は無いのでこれ)
+ * - GENERATING / FAILED: 要約を作る仕組みを入れたときのための値(今は返さない。DB に状態の列も無い)
+ * summary の中身は変えない(null のまま)。iOS は status(発言前・中止)と summary_status で表示を分ける。
+ */
+export const SPEECH_SUMMARY_STATUSES = ['NOT_AVAILABLE', 'GENERATING', 'READY', 'FAILED'] as const;
+export type SpeechSummaryStatus = (typeof SPEECH_SUMMARY_STATUSES)[number];
+
+export function speechSummaryStatus(summary: string | null | undefined): SpeechSummaryStatus {
+  return summary != null && summary.trim() !== '' ? 'READY' : 'NOT_AVAILABLE';
+}
+
 /** GET /speeches item (api-design.md §14.4). */
 export interface SpeechSummary {
   speech_id: string;
   speaker: SpeakerSummary;
   title: string;
   summary: string | null;
+  /** 要約の状態(v1.51)。summary があれば READY、無ければ NOT_AVAILABLE。 */
+  summary_status: SpeechSummaryStatus;
   statement_datetime: string;
   importance: string;
   status: string;
@@ -70,6 +86,7 @@ function toSpeechSummary(row: SpeechDbRow): SpeechSummary {
     },
     title: row.title,
     summary: row.summary,
+    summary_status: speechSummaryStatus(row.summary),
     statement_datetime: row.statement_datetime,
     importance: row.importance,
     status: row.status,

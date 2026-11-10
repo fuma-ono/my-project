@@ -241,7 +241,14 @@ describe.skipIf(!integration)('ECB weekly schedule: reconcile against the real D
       [speech!.id]: 'EXACT',
     });
     const detail = await get(`/speeches/${delivered!.id}`);
-    expect(detail).toMatchObject({ status: 'DELIVERED', statement_time_precision: 'PUBLICATION_TIME', reactions: [] });
+    // HQ決定(2026-11-10「要人発言の要約」): 要約の無い発言済みの発言は summary: null・summary_status: NOT_AVAILABLE
+    expect(detail).toMatchObject({
+      status: 'DELIVERED',
+      statement_time_precision: 'PUBLICATION_TIME',
+      reactions: [],
+      summary: null,
+      summary_status: 'NOT_AVAILABLE',
+    });
     const calendar = await get(`/calendar?${WEEK2}`);
     expect((calendar.items as { id: string }[]).map((item) => item.id)).toEqual(
       expect.arrayContaining([delivered!.id, upcomingPodcast!.id, speech!.id]),
