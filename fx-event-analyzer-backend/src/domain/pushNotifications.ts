@@ -339,7 +339,12 @@ export function decidePushSend(
   return { action: 'SEND' };
 }
 
-export type DeliveryOutcome = 'SUCCESS' | 'RETRYABLE_ERROR' | 'PERMANENT_ERROR' | 'INVALID_TOKEN';
+/**
+ * 端末1台への送信の結果。CONFIG_ERROR(APNs の鍵・設定の問題)は通知の失敗として数えず、送信のジョブがその回の送信を止める
+ * (push/pushJobs.ts)。DB の記録にはこのほか IN_FLIGHT(送信中)・UNKNOWN(送信中に止まった — 届いたか分からない)がある。
+ */
+export type DeliveryOutcome = 'SUCCESS' | 'RETRYABLE_ERROR' | 'PERMANENT_ERROR' | 'INVALID_TOKEN' | 'CONFIG_ERROR';
+export type RecordedOutcome = DeliveryOutcome | 'IN_FLIGHT' | 'UNKNOWN';
 
 export interface DeliveryResult {
   status: 'SENT' | 'PENDING' | 'FAILED' | 'SKIPPED';

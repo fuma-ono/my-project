@@ -95,19 +95,74 @@ PUT { "currency_codes": ["JPY", "USD"] }
 
 ## 5. 送信(`npm run jobs:send-push`)
 
-1. `claim_due_push_notifications(limit, lease)` で、送る時刻を過ぎた `PENDING`(と、持ち時間を過ぎた `SENDING`)を `SENDING` にして取り出す
-   (`for update skip locked`。同時に動いた送信のジョブが同じ行を取らない)。
-2. **送る直前の確かめ**(今のイベントと今の設定で): 中止 → `CANCELLED TARGET_CANCELLED`、時刻が変わった → `CANCELLED RESCHEDULED`、
+HQ指示 2026-11-10「障害復旧・信頼性強化」で、途中で止まっても詰まらない形にした。
+
+### 5.1 1回の実行の流れ
+
+1. **期限切れの整理**: `expire_push_notifications()` — 期限を過ぎた `PENDING` を `SKIPPED EXPIRED` にする(APNs が未設定でも行う)。
+2. APNs が未設定なら、ここで `APNS_NOT_CONFIGURED` を出して終わる(何も取り出さない・送らない。行は `PENDING` のまま期限で 1. に)。
+3. **取り出し**: `claim_due_push_notifications(limit, lease, max_recoveries)` — `for update skip locked` で、
+   - 送る時刻を過ぎ、期限前の `PENDING`
+   - 持ち時間(`lease_until`)を過ぎた `SENDING`(前の送信が途中で止まった — **取り直し**。`recovery_count` を1増やし、その行の
+     `IN_FLIGHT` の記録を `UNKNOWN` にする。取り直しが3回を超えたら取り出さずに `FAILED STUCK_IN_SENDING`)
+   を `SENDING` にし、**新しい `claim_token`** を付ける。持ち時間の中の `SENDING`(正常に送信中)は取らない。同時に動いた別の送信の
+   ジョブとは同じ行を取らない。
+4. **送る直前の確かめ**(今のイベントと今の設定で): 中止 → `CANCELLED TARGET_CANCELLED`、時刻が変わった → `CANCELLED RESCHEDULED`、
    もう発表済み → `ALREADY_RELEASED`、暫定に戻った → `PROVISIONAL`、設定を変えた(OFF・重要度・通貨・お気に入り)→ `SETTINGS_CHANGED`、
    期限切れ(発表前の通知は発表の2分後、公表の通知は6時間後)→ `SKIPPED EXPIRED`、今が通知しない時間帯 → `SKIPPED QUIET_HOURS`。
-3. 有効な端末ごとに APNs に送り、`push_delivery_attempts` に試行を記録する(結果・HTTP の状態・apns-id・理由)。
-4. 1台でも届いたら `SENT`。APNs が無効と返した端末(410・BadDeviceToken・DeviceTokenNotForTopic)は外す。
-5. **再試行**: 429・5xx・通信の失敗・403(認証)は、1分・2分・5分・10分の後に再試行(最大5回、期限まで)。超えたら `FAILED`。
-6. APNs の認証情報が無ければ、何も取り出さずに `APNS_NOT_CONFIGURED` を出して終わる(行は `PENDING` のまま、期限で `SKIPPED`)。
+5. 端末ごとに: **持ち時間の延長**(`renew_push_notification_lease`。印が合わなければ = 別のジョブが取り直した → この行には何も書かずに次へ)
+   → **`IN_FLIGHT` の記録を作る** → APNs に送る → 記録に結果を入れる。
+   - 取り直した行では、記録が `SUCCESS` の端末(既に届いた)と、`PERMANENT_ERROR`・`INVALID_TOKEN`(送ってもむだ)の端末には送らない。
+     `UNKNOWN`・`RETRYABLE_ERROR` の端末には送り直す。
+6. **行の状態を書く**(`claim_token` が一致する `SENDING` の行だけ): 1台でも届いた → `SENT`。再試行できる失敗だけ → `PENDING RETRY`
+   (1分・2分・5分・10分の後、最大5回、期限まで)。上限 → `FAILED MAX_ATTEMPTS`。無効なトークンだけ → `FAILED ALL_TOKENS_INVALID`。
+   端末が無い → `SKIPPED NO_DEVICE`。
+
+### 5.2 保証の範囲 — **At Least Once(期限まで)**。Exactly Once ではない
+
+| 止まった・失敗した時点 | 状態 | 次の実行 | 結果 |
+|---|---|---|---|
+| 取り出した直後(まだ送っていない) | `SENDING`、記録なし | 持ち時間の後に取り直す | 1回届く |
+| `IN_FLIGHT` を作った後・APNs の応答の前(タイムアウトを含む) | 記録 `IN_FLIGHT` | 取り直しで `UNKNOWN` → 送り直す | **二重に届くことがある** |
+| APNs が受け取った後・記録に結果を入れる前 | 記録 `IN_FLIGHT` | 同上 | **二重に届くことがある** |
+| 記録に `SUCCESS` を入れた後・行を `SENT` にする前 | 記録 `SUCCESS`、行 `SENDING` | 取り直し → 送らずに `SENT` | 1回届く |
+| 遅い worker が持ち時間を過ぎた(別の worker が取り直した) | 印が古い | 古い worker は延長・書き込みに失敗し、それ以上送らない | 送信中の1台だけ二重になりうる |
+
+- 二重に届いても、`apns-collapse-id` = 通知の id なので、通知センターでは1件にまとまる(バナーはもう一度出る)。
+- APNs に「同じ通知を二度送らない」の仕組みは無いので、これより強い保証(Exactly Once)はできない。結果の分からない送信は
+  記録で `UNKNOWN` として区別できる。
+- 取り逃しは、期限・試行の上限・取り直しの上限で止まったとき(`SKIPPED EXPIRED`・`FAILED …`)だけで、どれも記録に残る。
+
+### 5.3 応答の分類
+
+| APNs の応答 | 分類 | 扱い |
+|---|---|---|
+| 200 | `SUCCESS` | |
+| 410・400 BadDeviceToken / DeviceTokenNotForTopic | `INVALID_TOKEN` | 端末を外す。再試行しない |
+| 429(TooManyRequests ほか)・500・503・通信の失敗・タイムアウト(`TIMEOUT`) | `RETRYABLE_ERROR` | 待ってから再試行 |
+| 403 ExpiredProviderToken | — | JWT を作り直して**その場で1回だけ**送り直す(2回目も 403 なら `CONFIG_ERROR`) |
+| 403 のほか(InvalidProviderToken・MissingProviderToken・BadCertificate など) | `CONFIG_ERROR` | 鍵・設定の問題。**その回の送信をやめ**、取り出した行を `PENDING CONFIG_ERROR` に差し戻す(5分後、試行の回数は増やさない) |
+| ほかの 4xx(BadPath・PayloadTooLarge・BadTopic など) | `PERMANENT_ERROR` | 再試行しない |
+
+### 5.4 運用(`npm run jobs:push-maintenance`)
+
+1. 期限切れの整理(5.1 の 1.)
+2. 古い行を消す `cleanup_push_notifications(30, 90)`: `SENT`・`CANCELLED`・`SKIPPED` は30日、`FAILED` は90日残す(失敗の履歴は長め)。
+   送信の記録は一緒に消える。`PENDING`・`SENDING` は消さない。
+3. 集計 `push_queue_stats(since)`(直近24時間): `pending`・`pending_due`(送る時刻を過ぎて待っている = 滞留)・`pending_retrying`・
+   `oldest_due_seconds`・`sending`・`sending_lease_expired`(止まった送信)・`by_status_since`・`attempts_since`(結果ごとの件数)・
+   `retried_notifications_since`・`success_rate_since`。
+
+### 5.5 API への影響
+
+- **API の形は変わらない**(iOS の作業は要らない)。`GET /notifications/push/history` の `status_reason` に、`STUCK_IN_SENDING`・
+  `MAX_ATTEMPTS`・`CONFIG_ERROR`・`RETRY` などが出ることがある(調査用の値)。
+- 同じ通知が二重に届くことがある(5.2)。iOS は `fx.notification_id` が同じなら同じ通知として扱える。
 
 ## 6. DB(migration `20261110000005_push_notifications.sql`)
 
-`push_devices`・`push_favorite_currencies`・`push_notifications`・`push_delivery_attempts`、関数 `claim_due_push_notifications`。
+`push_devices`・`push_favorite_currencies`・`push_notifications`・`push_delivery_attempts`、関数 `claim_due_push_notifications`・
+`renew_push_notification_lease`・`expire_push_notifications`・`cleanup_push_notifications`・`push_queue_stats`。
 RLS: 利用者は自分の端末・お気に入り・通知の行を読むだけ(書き込みは Backend の service_role)。送信の記録と取り出しの関数はアプリから使えない。
 戻す手順は migration の冒頭。
 

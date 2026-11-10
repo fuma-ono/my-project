@@ -1,23 +1,14 @@
 /**
  * プッシュ通知の予約と送信(DB はメモリ、APNs は偽物)。HQ指示 2026-11-10 のテスト項目:
  * 抽出・重複防止・延期/中止の除外・送信失敗と再試行・設定の反映・無効な端末。
+ * 障害復旧(HQ指示 2026-11-10「障害復旧・信頼性強化」): 途中で止まった送信の取り直し・結果の分からない端末・
+ * APNs 成功後の DB の失敗・CONFIG_ERROR・取り出しを失った worker。DB の関数そのものは tests/integration/push-notifications.test.ts。
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import type {
-  IndicatorNotificationCandidate,
-  NotificationCandidate,
-  NotificationPreferences,
-} from '../../src/domain/notifications.js';
-import type { PushNotificationRow, PushPlanItem, PushUserContext } from '../../src/domain/pushNotifications.js';
+import type { IndicatorNotificationCandidate, NotificationPreferences } from '../../src/domain/notifications.js';
 import type { PushDevice, PushMessage, PushSender, SendResult } from '../../src/push/apnsSender.js';
-import {
-  enqueuePushNotifications,
-  sendDuePushNotifications,
-  type DeliveryAttempt,
-  type PushDeviceRow,
-  type PushRowUpdate,
-  type PushStore,
-} from '../../src/push/pushJobs.js';
+import { enqueuePushNotifications, sendDuePushNotifications } from '../../src/push/pushJobs.js';
+import { MemoryPushStore } from '../helpers/memoryPushStore.js';
 
 const prefs: NotificationPreferences = {
   push: true,
@@ -44,90 +35,6 @@ const cpi = (over: Partial<IndicatorNotificationCandidate> = {}): IndicatorNotif
   related_fx_pairs: ['USDJPY'],
   ...over,
 });
-
-class MemoryPushStore implements PushStore {
-  users = new Map<string, PushUserContext>();
-  candidates: NotificationCandidate[] = [];
-  devices: (PushDeviceRow & { is_active: boolean; disabled_reason?: string })[] = [];
-  rows: (PushNotificationRow & {
-    status_reason?: string | null;
-    last_error?: string | null;
-    sent_at?: string | null;
-  })[] = [];
-  attempts: DeliveryAttempt[] = [];
-  private seq = 0;
-
-  listPushUserIds() {
-    return Promise.resolve(
-      [...this.users.keys()].filter(
-        (id) => this.users.get(id)!.prefs.push && this.devices.some((d) => d.user_id === id && d.is_active),
-      ),
-    );
-  }
-  loadUserContext(userId: string) {
-    return Promise.resolve(this.users.get(userId) ?? null);
-  }
-  listCandidates(fromIso: string, toIso: string, _kinds: unknown, includePast: boolean) {
-    return Promise.resolve(
-      this.candidates.filter(
-        (c) => (includePast || c.status === 'SCHEDULED') && c.scheduled_at >= fromIso && c.scheduled_at <= toIso,
-      ),
-    );
-  }
-  listCandidatesByIds(ids: { indicators: readonly string[]; speeches: readonly string[] }) {
-    return Promise.resolve(this.candidates.filter((c) => [...ids.indicators, ...ids.speeches].includes(c.id)));
-  }
-  enqueue(items: readonly PushPlanItem[]) {
-    let inserted = 0;
-    for (const i of items) {
-      const dup = this.rows.some(
-        (r) =>
-          r.user_id === i.user_id &&
-          r.push_type === i.push_type &&
-          r.target_kind === i.target_kind &&
-          r.target_id === i.target_id &&
-          r.event_scheduled_at === i.event_scheduled_at,
-      );
-      if (dup) continue;
-      this.rows.push({
-        ...i,
-        id: `n-${++this.seq}`,
-        status: 'PENDING',
-        attempts: 0,
-        next_attempt_at: i.scheduled_send_at,
-      });
-      inserted += 1;
-    }
-    return Promise.resolve(inserted);
-  }
-  claimNow = new Date();
-  claimDue(limit: number) {
-    const due = this.rows
-      .filter((r) => r.status === 'PENDING' && Date.parse(r.next_attempt_at) <= this.claimNow.getTime())
-      .slice(0, limit);
-    for (const r of due) r.status = 'SENDING';
-    return Promise.resolve(due.map((r) => ({ ...r })));
-  }
-  listActiveDevices(userId: string) {
-    return Promise.resolve(this.devices.filter((d) => d.user_id === userId && d.is_active));
-  }
-  recordAttempt(a: DeliveryAttempt) {
-    this.attempts.push(a);
-    return Promise.resolve();
-  }
-  deactivateDevice(id: string, reason: string) {
-    const d = this.devices.find((x) => x.id === id)!;
-    d.is_active = false;
-    d.disabled_reason = reason;
-    return Promise.resolve();
-  }
-  finish(id: string, update: PushRowUpdate) {
-    const r = this.rows.find((x) => x.id === id)!;
-    if (r.status !== 'SENDING') return Promise.resolve();
-    Object.assign(r, update);
-    return Promise.resolve();
-  }
-}
 
 class FakeSender implements PushSender {
   sent: { device: PushDevice; message: PushMessage }[] = [];
@@ -158,7 +65,7 @@ describe('push jobs', () => {
   });
   const enqueue = (now = ENQUEUE_AT) => enqueuePushNotifications({ store, now: () => now });
   const send = (sender: PushSender | null, now = SEND_AT) => {
-    store.claimNow = now;
+    store.clock = now;
     return sendDuePushNotifications({ store, sender, now: () => now });
   };
 
@@ -278,11 +185,155 @@ describe('push jobs', () => {
     expect(store.rows[0]!.status).toBe('PENDING');
   });
 
-  it('a pre-release push picked up after the release (+2 min) is skipped as expired', async () => {
+  it('a pre-release push not sent by the release (+2 min) is swept as expired and never sent', async () => {
     await enqueue();
     const sender = new FakeSender();
-    expect(await send(sender, new Date('2026-11-12T13:33:00Z'))).toMatchObject({ skipped: 1 });
+    expect(await send(sender, new Date('2026-11-12T13:33:00Z'))).toMatchObject({ expired: 1, claimed: 0 });
     expect(store.rows[0]).toMatchObject({ status: 'SKIPPED', status_reason: 'EXPIRED' });
     expect(sender.sent).toEqual([]);
+  });
+  describe('failure recovery', () => {
+    const dev2 = () =>
+      store.devices.push({
+        id: 'd2',
+        user_id: 'u1',
+        device_token: 'dd'.repeat(32),
+        environment: 'SANDBOX',
+        is_active: true,
+      });
+
+    it('a worker that stopped after claiming: taken again after the lease, not before; IN_FLIGHT becomes UNKNOWN and is re-sent (at least once)', async () => {
+      await enqueue();
+      store.clock = SEND_AT;
+      const [claimed] = await store.claimDue(10, 120, 3); // worker 1 が取り出して…
+      await store.startAttempt({
+        notification_id: claimed!.id,
+        device_id: 'd1',
+        attempt: 1,
+        claim_token: claimed!.claim_token,
+      });
+      // …APNs に送った直後に止まった(記録は IN_FLIGHT のまま、行は SENDING のまま)
+      const sender = new FakeSender();
+      expect(await send(sender, new Date(SEND_AT.getTime() + 60_000))).toMatchObject({ claimed: 0 }); // 持ち時間の中は取らない
+      const result = await send(sender, new Date(SEND_AT.getTime() + 121_000));
+      expect(result).toMatchObject({ claimed: 1, recovered: 1, resent_unknown: 1, sent: 1 });
+      expect(store.attempts.map((a) => a.outcome)).toEqual(['UNKNOWN', 'SUCCESS']);
+      expect(store.rows[0]).toMatchObject({ status: 'SENT', recovery_count: 1 });
+      expect(sender.sent).toHaveLength(1);
+    });
+
+    it('APNs succeeded but marking SENT failed: the retry does not send again to devices that already succeeded', async () => {
+      dev2();
+      await enqueue();
+      store.failNextFinish = true;
+      const sender = new FakeSender();
+      const first = await send(sender);
+      expect(first.errors).toHaveLength(1); // 行は SENDING のまま
+      expect(store.rows[0]!.status).toBe('SENDING');
+      expect(store.attempts.map((a) => [a.device_id, a.outcome])).toEqual([
+        ['d1', 'SUCCESS'],
+        ['d2', 'SUCCESS'],
+      ]);
+      const second = await send(sender, new Date(SEND_AT.getTime() + 121_000));
+      expect(second).toMatchObject({ recovered: 1, sent: 1, resent_unknown: 0 });
+      expect(sender.sent).toHaveLength(2); // 送り直していない
+      expect(store.rows[0]).toMatchObject({ status: 'SENT' });
+    });
+
+    it('APNs succeeded but recording the attempt failed: the device is UNKNOWN and gets it again (the documented duplicate case)', async () => {
+      await enqueue();
+      store.failNextComplete = true;
+      const sender = new FakeSender();
+      await send(sender);
+      expect(store.attempts.map((a) => a.outcome)).toEqual(['IN_FLIGHT']);
+      const second = await send(sender, new Date(SEND_AT.getTime() + 121_000));
+      expect(second).toMatchObject({ recovered: 1, resent_unknown: 1, sent: 1 });
+      expect(sender.sent).toHaveLength(2); // At Least Once: 2回届くことがある(collapse-id は同じ)
+      expect(sender.sent.map((s) => s.message.notificationId)).toEqual(['n-1', 'n-1']);
+    });
+
+    it('a row that keeps stopping is failed after 3 recoveries (STUCK_IN_SENDING) instead of blocking the queue', async () => {
+      await enqueue();
+      let t = SEND_AT.getTime();
+      for (let i = 0; i < 4; i += 1) {
+        store.clock = new Date(t);
+        await store.claimDue(10, 60, 3); // 取り出して止まる、を繰り返す
+        t += 61_000;
+      }
+      store.clock = new Date(t);
+      expect(await store.claimDue(10, 60, 3)).toEqual([]);
+      expect(store.rows[0]).toMatchObject({ status: 'FAILED', status_reason: 'STUCK_IN_SENDING', recovery_count: 4 });
+    });
+
+    it('a slow worker that lost its claim (another worker took the row after the lease) writes nothing', async () => {
+      await enqueue();
+      store.clock = SEND_AT;
+      const [old] = await store.claimDue(10, 60, 3);
+      store.clock = new Date(SEND_AT.getTime() + 61_000);
+      const [fresh] = await store.claimDue(10, 60, 3); // worker 2 が取り直した
+      expect(fresh!.claim_token).not.toBe(old!.claim_token);
+      expect(await store.renewLease(old!.id, old!.claim_token, 60)).toBe(false);
+      expect(await store.finish(old!.id, old!.claim_token, { status: 'FAILED', status_reason: 'X' })).toBe(false);
+      expect(store.rows[0]).toMatchObject({ status: 'SENDING', claim_token: fresh!.claim_token });
+    });
+
+    it('a timeout is retried (APNs may or may not have it), and counts toward the attempt limit', async () => {
+      await enqueue();
+      const sender = new FakeSender({
+        d1: [{ outcome: 'RETRYABLE_ERROR', httpStatus: null, apnsId: null, reason: 'TIMEOUT' }],
+      });
+      expect(await send(sender)).toMatchObject({ retried: 1 });
+      expect(store.rows[0]).toMatchObject({ status: 'PENDING', attempts: 1, last_error: 'ERR TIMEOUT' });
+    });
+
+    it('permanent errors are not retried, and a later retry skips the device whose failure is final', async () => {
+      dev2();
+      await enqueue();
+      const sender = new FakeSender({
+        d1: [{ outcome: 'PERMANENT_ERROR', httpStatus: 400, apnsId: null, reason: 'PayloadTooLarge' }],
+        d2: [{ outcome: 'RETRYABLE_ERROR', httpStatus: 500, apnsId: null, reason: 'InternalServerError' }],
+      });
+      expect(await send(sender)).toMatchObject({ retried: 1 });
+      await send(sender, new Date(SEND_AT.getTime() + 61_000));
+      expect(sender.sent.map((s) => s.device.id)).toEqual(['d1', 'd2', 'd2']); // d1 には送り直さない
+      expect(store.rows[0]).toMatchObject({ status: 'SENT', attempts: 2 });
+    });
+
+    it('max attempts: failing 5 times gives FAILED MAX_ATTEMPTS, and the row is not claimed again', async () => {
+      await enqueue();
+      store.rows[0]!.expires_at = '2026-11-12T14:30:00.000Z';
+      const fail = { outcome: 'RETRYABLE_ERROR' as const, httpStatus: 503, apnsId: null, reason: 'ServiceUnavailable' };
+      const sender = new FakeSender({ d1: [fail, fail, fail, fail, fail] });
+      let t = SEND_AT.getTime();
+      for (let i = 0; i < 5; i += 1) {
+        await send(sender, new Date(t));
+        t += 11 * 60_000;
+      }
+      expect(store.rows[0]).toMatchObject({ status: 'FAILED', status_reason: 'MAX_ATTEMPTS', attempts: 5 });
+      expect(await send(sender, new Date(t))).toMatchObject({ claimed: 0 });
+    });
+
+    it('CONFIG_ERROR (APNs key/config): this run stops, claimed rows go back to PENDING without using an attempt', async () => {
+      store.candidates.push(cpi({ id: 'ev-2' }));
+      await enqueue();
+      const sender = new FakeSender({
+        d1: [{ outcome: 'CONFIG_ERROR', httpStatus: 403, apnsId: null, reason: 'InvalidProviderToken' }],
+      });
+      const result = await send(sender);
+      expect(result).toMatchObject({ config_error: true, released_config_error: 2, sent: 0 });
+      expect(result.errors).toEqual(['APNS_CONFIG_ERROR: 403 InvalidProviderToken']);
+      expect(sender.sent).toHaveLength(1); // 2件目は送っていない
+      expect(store.rows.map((r) => [r.status, r.status_reason, r.attempts, r.next_attempt_at])).toEqual([
+        ['PENDING', 'CONFIG_ERROR', 0, '2026-11-12T13:30:05.000Z'],
+        ['PENDING', 'CONFIG_ERROR', 0, '2026-11-12T13:30:05.000Z'],
+      ]);
+    });
+
+    it('expired PENDING rows are swept even without APNs credentials, and are never claimed', async () => {
+      await enqueue();
+      const result = await send(null, new Date('2026-11-12T13:40:00Z'));
+      expect(result).toMatchObject({ expired: 1, claimed: 0, errors: ['APNS_NOT_CONFIGURED'] });
+      expect(store.rows[0]).toMatchObject({ status: 'SKIPPED', status_reason: 'EXPIRED' });
+    });
   });
 });

@@ -5,6 +5,7 @@ import { generateKeyPairSync, verify } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   ApnsSender,
+  ApnsTimeoutError,
   apnsBody,
   classifyApnsResponse,
   createApnsJwt,
@@ -79,25 +80,51 @@ describe('ApnsSender', () => {
     expect(prod.requests[0]!.origin).toBe('https://api.push.apple.com');
   });
 
-  it('reuses the provider token, and makes a new one after a 403 or 50 minutes', async () => {
+  it('reuses the provider token; 403 ExpiredProviderToken makes a new one and re-sends once at once; 50 minutes also renew', async () => {
     let now = new Date('2026-11-12T13:00:00Z');
     const transport = new FakeTransport([
       { status: 200, headers: {}, body: '' },
       { status: 403, headers: {}, body: '{"reason":"ExpiredProviderToken"}' },
-      { status: 200, headers: {}, body: '' },
+      { status: 200, headers: { 'apns-id': 'after-renew' }, body: '' },
       { status: 200, headers: {}, body: '' },
     ]);
     const sender = new ApnsSender(config, transport, () => now);
     await sender.send(device, message);
     now = new Date('2026-11-12T13:00:01Z');
-    expect((await sender.send(device, message)).outcome).toBe('RETRYABLE_ERROR'); // 403
-    await sender.send(device, message);
+    // 403 ExpiredProviderToken → その場で作り直して送り直し、成功
+    expect(await sender.send(device, message)).toMatchObject({ outcome: 'SUCCESS', apnsId: 'after-renew' });
     const auth = transport.requests.map((r) => r.headers.authorization);
     expect(auth[1]).toBe(auth[0]); // 使い回し
     expect(auth[2]).not.toBe(auth[1]); // 403 の後は作り直す
     now = new Date('2026-11-12T13:51:00Z');
     await sender.send(device, message);
     expect(transport.requests[3]!.headers.authorization).not.toBe(auth[2]); // 50分で作り直す
+  });
+
+  it('a second ExpiredProviderToken, or any other 403, is CONFIG_ERROR (not retried per notification)', async () => {
+    const twice = new FakeTransport([
+      { status: 403, headers: {}, body: '{"reason":"ExpiredProviderToken"}' },
+      { status: 403, headers: {}, body: '{"reason":"ExpiredProviderToken"}' },
+    ]);
+    expect(await new ApnsSender(config, twice).send(device, message)).toMatchObject({
+      outcome: 'CONFIG_ERROR',
+      httpStatus: 403,
+      reason: 'ExpiredProviderToken',
+    });
+    expect(twice.requests).toHaveLength(2); // 送り直しは1回だけ
+    const invalid = new FakeTransport([{ status: 403, headers: {}, body: '{"reason":"InvalidProviderToken"}' }]);
+    expect((await new ApnsSender(config, invalid).send(device, message)).outcome).toBe('CONFIG_ERROR');
+    expect(invalid.requests).toHaveLength(1);
+  });
+
+  it('a timeout is RETRYABLE_ERROR with reason TIMEOUT', async () => {
+    const sender = new ApnsSender(config, new FakeTransport([new ApnsTimeoutError(10_000)]));
+    expect(await sender.send(device, message)).toEqual({
+      outcome: 'RETRYABLE_ERROR',
+      httpStatus: null,
+      apnsId: null,
+      reason: 'TIMEOUT',
+    });
   });
 
   it('classifies APNs responses and network failures', async () => {
@@ -108,7 +135,12 @@ describe('ApnsSender', () => {
     expect(classifyApnsResponse(400, 'PayloadTooLarge')).toBe('PERMANENT_ERROR');
     expect(classifyApnsResponse(429, 'TooManyRequests')).toBe('RETRYABLE_ERROR');
     expect(classifyApnsResponse(503, 'ServiceUnavailable')).toBe('RETRYABLE_ERROR');
-    expect(classifyApnsResponse(403, 'InvalidProviderToken')).toBe('RETRYABLE_ERROR');
+    expect(classifyApnsResponse(403, 'InvalidProviderToken')).toBe('CONFIG_ERROR');
+    expect(classifyApnsResponse(403, 'BadCertificateEnvironment')).toBe('CONFIG_ERROR');
+    expect(classifyApnsResponse(429, 'TooManyProviderTokenUpdates')).toBe('RETRYABLE_ERROR');
+    expect(classifyApnsResponse(500, 'InternalServerError')).toBe('RETRYABLE_ERROR');
+    expect(classifyApnsResponse(413, 'PayloadTooLarge')).toBe('PERMANENT_ERROR');
+    expect(classifyApnsResponse(400, 'BadTopic')).toBe('PERMANENT_ERROR');
     const sender = new ApnsSender(
       config,
       new FakeTransport([new Error('ECONNRESET'), { status: 410, headers: {}, body: '{"reason":"Unregistered"}' }]),

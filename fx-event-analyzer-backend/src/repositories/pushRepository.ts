@@ -1,8 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { planLimitsFor } from '../domain/planLimits.js';
-import type { PushNotificationRow } from '../domain/pushNotifications.js';
+import type { RecordedOutcome } from '../domain/pushNotifications.js';
 import { loadNotificationPreferences } from '../notifications/preferences.js';
-import type { PushDeviceRow, PushStore } from '../push/pushJobs.js';
+import type { ClaimedPushNotification, PushDeviceRow, PushStore } from '../push/pushJobs.js';
 import { listNotificationCandidates, listNotificationCandidatesByIds } from './notificationsRepository.js';
 import { listPushDisabledUserIds } from './userSettingsRepository.js';
 
@@ -184,10 +184,12 @@ export async function listPushHistory(
   }));
 }
 
-function toNotificationRow(row: Record<string, unknown>): PushNotificationRow {
+function toNotificationRow(row: Record<string, unknown>): ClaimedPushNotification {
   const isoOf = (v: unknown) => new Date(String(v)).toISOString();
   return {
-    ...(row as unknown as PushNotificationRow),
+    ...(row as unknown as ClaimedPushNotification),
+    claim_token: String(row.claim_token),
+    recovery_count: Number(row.recovery_count ?? 0),
     event_scheduled_at: isoOf(row.event_scheduled_at),
     scheduled_send_at: isoOf(row.scheduled_send_at),
     expires_at: isoOf(row.expires_at),
@@ -243,13 +245,66 @@ export function createPushStore(supabase: SupabaseClient): PushStore {
       return (data ?? []).length;
     },
 
-    async claimDue(limit, leaseSeconds) {
+    async expireOverdue() {
+      const { data, error } = await supabase.rpc('expire_push_notifications');
+      if (error) throw error;
+      return Number(data ?? 0);
+    },
+
+    async claimDue(limit, leaseSeconds, maxRecoveries) {
       const { data, error } = await supabase.rpc('claim_due_push_notifications', {
         p_limit: limit,
         p_lease_seconds: leaseSeconds,
+        p_max_recoveries: maxRecoveries,
       });
       if (error) throw error;
       return ((data ?? []) as Record<string, unknown>[]).map(toNotificationRow);
+    },
+
+    async renewLease(notificationId, claimToken, leaseSeconds) {
+      const { data, error } = await supabase.rpc('renew_push_notification_lease', {
+        p_id: notificationId,
+        p_claim_token: claimToken,
+        p_lease_seconds: leaseSeconds,
+      });
+      if (error) throw error;
+      return data === true;
+    },
+
+    async listLatestOutcomes(notificationId) {
+      const { data, error } = await supabase
+        .from('push_delivery_attempts')
+        .select('device_id, outcome, attempted_at')
+        .eq('notification_id', notificationId)
+        .order('attempted_at', { ascending: true });
+      if (error) throw error;
+      const latest = new Map<string, RecordedOutcome>();
+      for (const r of (data ?? []) as { device_id: string | null; outcome: RecordedOutcome }[]) {
+        if (!r.device_id) continue;
+        // SUCCESS は後の記録で上書きしない(一度届いた端末には送り直さない)
+        if (latest.get(r.device_id) === 'SUCCESS') continue;
+        latest.set(r.device_id, r.outcome);
+      }
+      return latest;
+    },
+
+    async startAttempt(attempt) {
+      const { data, error } = await supabase
+        .from('push_delivery_attempts')
+        .insert({ ...attempt, outcome: 'IN_FLIGHT' })
+        .select('id')
+        .single();
+      if (error) throw error;
+      return String(data.id);
+    },
+
+    async completeAttempt(attemptId, result) {
+      const { error } = await supabase
+        .from('push_delivery_attempts')
+        .update({ ...result, finished_at: new Date().toISOString() })
+        .eq('id', attemptId)
+        .eq('outcome', 'IN_FLIGHT');
+      if (error) throw error;
     },
 
     async listActiveDevices(userId): Promise<PushDeviceRow[]> {
@@ -262,11 +317,6 @@ export function createPushStore(supabase: SupabaseClient): PushStore {
       return data ?? [];
     },
 
-    async recordAttempt(attempt) {
-      const { error } = await supabase.from('push_delivery_attempts').insert(attempt);
-      if (error) throw error;
-    },
-
     async deactivateDevice(deviceId, reason) {
       const { error } = await supabase
         .from('push_devices')
@@ -275,13 +325,37 @@ export function createPushStore(supabase: SupabaseClient): PushStore {
       if (error) throw error;
     },
 
-    async finish(notificationId, update) {
-      const { error } = await supabase
+    async finish(notificationId, claimToken, update) {
+      const { data, error } = await supabase
         .from('push_notifications')
-        .update({ ...update, lease_until: null })
+        .update({ ...update, lease_until: null, claim_token: null })
         .eq('id', notificationId)
-        .eq('status', 'SENDING');
+        .eq('claim_token', claimToken)
+        .eq('status', 'SENDING')
+        .select('id');
       if (error) throw error;
+      return (data ?? []).length === 1;
     },
   };
+}
+
+/** 運用の集計(migration の push_queue_stats)。 */
+export async function getPushQueueStats(supabase: SupabaseClient, sinceIso: string): Promise<Record<string, unknown>> {
+  const { data, error } = await supabase.rpc('push_queue_stats', { p_since: sinceIso });
+  if (error) throw error;
+  return (data ?? {}) as Record<string, unknown>;
+}
+
+/** 古い行の整理(migration の cleanup_push_notifications)。戻り値 = 消した件数。 */
+export async function cleanupPushNotifications(
+  supabase: SupabaseClient,
+  keepDays = 30,
+  keepFailedDays = 90,
+): Promise<number> {
+  const { data, error } = await supabase.rpc('cleanup_push_notifications', {
+    p_keep_days: keepDays,
+    p_keep_failed_days: keepFailedDays,
+  });
+  if (error) throw error;
+  return Number(data ?? 0);
 }

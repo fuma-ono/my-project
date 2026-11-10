@@ -19,6 +19,7 @@
     "jobs:evaluate-rate-alerts": "tsx src/jobs/evaluateRateAlerts.ts",
     "jobs:enqueue-push": "tsx src/jobs/enqueuePushNotifications.ts",
     "jobs:send-push": "tsx src/jobs/sendPushNotifications.ts",
+    "jobs:push-maintenance": "tsx src/jobs/pushMaintenance.ts",
     "ingest:official": "tsx src/jobs/ingestOfficial.ts",
     "ingest:official:bls-calendar": "tsx src/jobs/ingestBlsCalendar.ts",
     "ingest:official:eurostat-calendar": "tsx src/jobs/ingestEurostatCalendar.ts",

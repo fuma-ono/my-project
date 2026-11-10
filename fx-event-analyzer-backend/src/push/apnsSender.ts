@@ -9,10 +9,12 @@
  * 応答の分類(Apple の「Handling notification responses from APNs」):
  *   200 → SUCCESS(apns-id)
  *   410(Unregistered)・400 の BadDeviceToken / DeviceTokenNotForTopic → INVALID_TOKEN(端末を無効にする)
- *   429・500・503・通信の失敗 → RETRYABLE_ERROR
- *   403(ExpiredProviderToken・InvalidProviderToken など、鍵・設定の問題)→ RETRYABLE_ERROR(JWT を作り直して再試行。
- *     直らなければ試行の上限で FAILED)
- *   それ以外の 4xx → PERMANENT_ERROR
+ *   429(TooManyRequests・TooManyProviderTokenUpdates)・500・503・通信の失敗・タイムアウト → RETRYABLE_ERROR
+ *     (タイムアウトは、APNs が受け取った後かもしれない — 結果は不明。再試行するので二重に届くことがある。push-notifications-spec.md §5.2)
+ *   403 ExpiredProviderToken → JWT を作り直して、その場で1回だけ送り直す(それでも 403 なら CONFIG_ERROR)
+ *   403 のほか(InvalidProviderToken・MissingProviderToken・BadCertificate など)→ CONFIG_ERROR(鍵・設定の問題。
+ *     通知ごとに再試行しても直らないので、送信のジョブはその回の送信を止め、取り出した行を差し戻す)
+ *   それ以外の 4xx(BadPath・PayloadTooLarge・BadTopic など)→ PERMANENT_ERROR(再試行しない)
  */
 import { connect, constants, type ClientHttp2Session } from 'node:http2';
 import { createPrivateKey, sign, type KeyObject } from 'node:crypto';
@@ -94,8 +96,17 @@ export function classifyApnsResponse(status: number, reason: string | null): Del
   if (status === 200) return 'SUCCESS';
   if (status === 410) return 'INVALID_TOKEN';
   if (status === 400 && (reason === 'BadDeviceToken' || reason === 'DeviceTokenNotForTopic')) return 'INVALID_TOKEN';
-  if (status === 429 || status >= 500 || status === 403) return 'RETRYABLE_ERROR';
+  if (status === 403) return 'CONFIG_ERROR';
+  if (status === 429 || status >= 500) return 'RETRYABLE_ERROR';
   return 'PERMANENT_ERROR';
+}
+
+/** 送信のタイムアウト(Http2ApnsTransport の reject の印)。 */
+export class ApnsTimeoutError extends Error {
+  constructor(ms: number) {
+    super(`APNs did not respond within ${ms} ms`);
+    this.name = 'ApnsTimeoutError';
+  }
 }
 
 /** APNs の本文(aps.alert と、アプリが画面を開くための fx)。 */
@@ -127,6 +138,16 @@ export class ApnsSender implements PushSender {
   }
 
   async send(device: PushDevice, message: PushMessage): Promise<SendResult> {
+    const first = await this.sendOnce(device, message);
+    if (first.httpStatus === 403 && first.reason === 'ExpiredProviderToken') {
+      // JWT を作り直して1回だけ送り直す(ExpiredProviderToken は通知の失敗ではない)
+      this.token = null;
+      return this.sendOnce(device, message);
+    }
+    return first;
+  }
+
+  private async sendOnce(device: PushDevice, message: PushMessage): Promise<SendResult> {
     const expiration = Math.floor(Date.parse(message.expiresAt) / 1000);
     const request: ApnsRequest = {
       origin: APNS_ORIGINS[device.environment],
@@ -150,7 +171,10 @@ export class ApnsSender implements PushSender {
         outcome: 'RETRYABLE_ERROR',
         httpStatus: null,
         apnsId: null,
-        reason: `NETWORK: ${error instanceof Error ? error.message : String(error)}`,
+        reason:
+          error instanceof ApnsTimeoutError
+            ? 'TIMEOUT'
+            : `NETWORK: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
     let reason: string | null = null;
@@ -198,8 +222,13 @@ export class Http2ApnsTransport implements ApnsTransport {
         [constants.HTTP2_HEADER_PATH]: request.path,
         ...request.headers,
       });
-      stream.setTimeout(this.timeoutMs, () => stream.close(constants.NGHTTP2_CANCEL));
       let status = 0;
+      let timedOut = false;
+      stream.setTimeout(this.timeoutMs, () => {
+        timedOut = true;
+        stream.close(constants.NGHTTP2_CANCEL);
+        reject(new ApnsTimeoutError(this.timeoutMs));
+      });
       const headers: Record<string, string | undefined> = {};
       const chunks: Buffer[] = [];
       stream.on('response', (h) => {
@@ -211,7 +240,7 @@ export class Http2ApnsTransport implements ApnsTransport {
       stream.on('end', () => resolve({ status, headers, body: Buffer.concat(chunks).toString('utf8') }));
       stream.on('error', reject);
       stream.on('close', () => {
-        if (status === 0) reject(new Error('APNs stream closed without a response'));
+        if (status === 0 && !timedOut) reject(new Error('APNs stream closed without a response'));
       });
       stream.end(request.body);
     });
