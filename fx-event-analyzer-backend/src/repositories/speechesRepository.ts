@@ -18,15 +18,20 @@ export interface SpeakerSummary {
 /**
  * 要約の状態(HQ決定 2026-11-10「要人発言の要約機能改善」、api-design v1.51)。
  * - READY: summary がある
- * - NOT_AVAILABLE: summary が無い(要約を作る仕組みはまだ無い。発言前・中止も、要約は無いのでこれ)
- * - GENERATING / FAILED: 要約を作る仕組みを入れたときのための値(今は返さない。DB に状態の列も無い)
+ * - FAILED: 要約の工程(ingest:speech-summaries、HQ指示 2026-11-11)が本文から要約を作れなかった(summary_error がある)
+ * - NOT_AVAILABLE: summary が無い(本文がまだ無い・権利が未確認で本文を持たない発言元・発言前・中止もこれ)
+ * - GENERATING: 要約を作っている途中を表すための値(今は返さない。工程は1件ずつ書き込み、途中の状態を残さない)
  * summary の中身は変えない(null のまま)。iOS は status(発言前・中止)と summary_status で表示を分ける。
  */
 export const SPEECH_SUMMARY_STATUSES = ['NOT_AVAILABLE', 'GENERATING', 'READY', 'FAILED'] as const;
 export type SpeechSummaryStatus = (typeof SPEECH_SUMMARY_STATUSES)[number];
 
-export function speechSummaryStatus(summary: string | null | undefined): SpeechSummaryStatus {
-  return summary != null && summary.trim() !== '' ? 'READY' : 'NOT_AVAILABLE';
+export function speechSummaryStatus(
+  summary: string | null | undefined,
+  summaryError?: string | null,
+): SpeechSummaryStatus {
+  if (summary != null && summary.trim() !== '') return 'READY';
+  return summaryError != null && summaryError.trim() !== '' ? 'FAILED' : 'NOT_AVAILABLE';
 }
 
 /** GET /speeches item (api-design.md §14.4). */
@@ -35,8 +40,13 @@ export interface SpeechSummary {
   speaker: SpeakerSummary;
   title: string;
   summary: string | null;
-  /** 要約の状態(v1.51)。summary があれば READY、無ければ NOT_AVAILABLE。 */
+  /** 要約の状態(v1.51)。summary があれば READY、作れなかったら FAILED、無ければ NOT_AVAILABLE。 */
   summary_status: SpeechSummaryStatus;
+  /**
+   * 要約の作り方(v1.53)。EXTRACTIVE_EN = 公式の本文(英語)から文をそのまま抜き出したもの(訳・言い換えなし)。
+   * null = 工程で作った要約ではない(要約が無い、または人が書いた要約)。
+   */
+  summary_method: string | null;
   statement_datetime: string;
   importance: string;
   status: string;
@@ -57,7 +67,7 @@ export interface SpeechSummary {
 }
 
 const SPEECH_COLUMNS =
-  'id, title, summary, statement_datetime, importance, status, time_precision, source_url, body_status, speakers!inner(id, name, title, organization, country_code, currency_code, photo_url)';
+  'id, title, summary, statement_datetime, importance, status, time_precision, source_url, body_status, summary_method, summary_error, speakers!inner(id, name, title, organization, country_code, currency_code, photo_url)';
 
 interface SpeechDbRow {
   id: string;
@@ -69,6 +79,8 @@ interface SpeechDbRow {
   time_precision: string;
   source_url: string | null;
   body_status: string | null;
+  summary_method?: string | null;
+  summary_error?: string | null;
   speakers: unknown;
 }
 
@@ -95,7 +107,8 @@ function toSpeechSummary(row: SpeechDbRow): SpeechSummary {
     },
     title: row.title,
     summary: row.summary,
-    summary_status: speechSummaryStatus(row.summary),
+    summary_status: speechSummaryStatus(row.summary, row.summary_error),
+    summary_method: row.summary ? (row.summary_method ?? null) : null,
     statement_datetime: row.statement_datetime,
     importance: row.importance,
     status: row.status,

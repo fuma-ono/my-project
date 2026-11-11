@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   FRB_SPEECHES_RSS_URL,
+  STORE_BODY_FOR,
   ingestSpeechBodies,
   type SpeechBodyPatch,
   type SpeechBodyStore,
@@ -74,9 +75,12 @@ describe('ingestSpeechBodies', () => {
   let store: FakeStore;
   let frb: FakeFetcher;
   let ecb: FakeFetcher;
-  const run = (maxFetches = 20) => {
+  // 取り出しの処理そのものを確かめるため、ここでは ECB も保存してよいとして動かす(既定の ECB の扱いは下の別のテスト)
+  const run = (maxFetches = 20, storeBodyFor: readonly string[] = ['frb_calendar', 'ecb_press_rss']) => {
     const counters = new JobCounters();
-    return ingestSpeechBodies(store, { frb, ecb }, { pastDays: 30, maxFetches }, NOW, counters).then(() => counters);
+    return ingestSpeechBodies(store, { frb, ecb }, { pastDays: 30, maxFetches, storeBodyFor }, NOW, counters).then(
+      () => counters,
+    );
   };
   const patchOf = (id: string) => store.updates.filter((u) => u.id === id).at(-1)?.patch;
 
@@ -109,6 +113,32 @@ describe('ingestSpeechBodies', () => {
     await run();
     expect(patchOf('e')).toMatchObject({ body_status: 'FETCHED', speech_body: 'My aim today.' });
     expect(frb.requested).toEqual([]);
+  });
+
+  it('by default (HQ 2026-11-11) the ECB body is not fetched or stored: URL kept, NOT_APPLICABLE / RIGHTS_UNCONFIRMED; FRB still stored', async () => {
+    const url = 'https://www.ecb.europa.eu/press/key/date/2026/html/ecb.sp261030~08d9d540f0.en.html';
+    const frbUrl = 'https://www.federalreserve.gov/newsevents/speech/bowman20261014a.htm';
+    store.rows = [
+      row({ id: 'e', provider: 'ecb_press_rss', source_url: url, speaker_organization: 'ECB' }),
+      row({ id: 'f', source_url: frbUrl }),
+    ];
+    ecb.pages.set(url, ecbPage('My aim today.'));
+    frb.pages.set(
+      frbUrl,
+      '<html><body><div id="article"><p>Thank you for the invitation to speak.</p></div></body></html>',
+    );
+    const counters = await run(20, STORE_BODY_FOR);
+    expect(STORE_BODY_FOR).toEqual(['frb_calendar']);
+    expect(patchOf('e')).toEqual({
+      source_url: url,
+      speech_body: null,
+      body_fetched_at: null,
+      body_status: 'NOT_APPLICABLE',
+      body_error: 'RIGHTS_UNCONFIRMED',
+    });
+    expect(ecb.requested).toEqual([]); // ECB のページは読まない
+    expect(counters.skipReasons.RIGHTS_UNCONFIRMED).toBe(1);
+    expect(patchOf('f')?.body_status).not.toBe('NOT_APPLICABLE');
   });
 
   it('no matching speech page → stays PENDING (nothing guessed, nothing written)', async () => {

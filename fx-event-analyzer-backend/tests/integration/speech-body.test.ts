@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FEATURE_CODES } from '../../src/authorization/entitlements.js';
 import { createSpeechBodyStore } from '../../src/repositories/speechBodyRepository.js';
+import { createSpeechSummaryStore } from '../../src/repositories/speechSummaryRepository.js';
 import {
   buildIntegrationContext,
   createTestUser,
@@ -132,5 +133,51 @@ describe.skipIf(!integration)('speech bodies: migration, store and GET /speeches
     expect(body).toMatchObject({ source_url: URL_OK, body_status: 'FETCHED' });
     expect(JSON.stringify(body)).not.toContain('Thank you for having me.'); // 本文はまだ返さない(権利が未確認)
     expect(body).not.toHaveProperty('speech_body');
+  });
+
+  // HQ指示(2026-11-11「本文取得と要約生成を別々の工程として扱う」): migration 20261111000001 と要約のストア・API
+  it('summary columns: the DB refuses a method without a summary and an error together with a summary', async () => {
+    const update = (patch: Record<string, unknown>) =>
+      ctx.serviceClient.from('speech_events').update(patch).eq('id', speechId);
+    expect((await update({ summary_method: 'LLM_JA' })).error?.message).toMatch(/summary_method_check/);
+    expect((await update({ summary_method: 'EXTRACTIVE_EN' })).error?.message).toMatch(/summary_generated_check/);
+    expect((await update({ summary: 'x', summary_error: 'BODY_TOO_SHORT' })).error?.message).toMatch(
+      /summary_generated_check/,
+    );
+  });
+
+  it('the summary store lists the FETCHED speech; FAILED then READY show up in the API with summary_method', async () => {
+    const store = createSpeechSummaryStore(ctx.serviceClient);
+    const listed = await store.listSpeechesNeedingSummary('2026-11-01T00:00:00Z', 500);
+    expect(listed.find((r) => r.id === speechId)).toMatchObject({
+      provider: 'frb_calendar',
+      speech_body: 'Thank you for having me.',
+    });
+
+    await store.updateSpeechSummary(speechId, {
+      summary: null,
+      summary_method: null,
+      summary_generated_at: null,
+      summary_error: 'BODY_TOO_SHORT',
+    });
+    // 理由が残った行は、もう候補に入らない(同じ本文で何度も作り直さない)
+    expect((await store.listSpeechesNeedingSummary(null, 500)).some((r) => r.id === speechId)).toBe(false);
+    let got = await getSpeech();
+    expect(got.body).toMatchObject({ summary: null, summary_status: 'FAILED', summary_method: null });
+    expect(got.body).not.toHaveProperty('summary_error');
+
+    await store.updateSpeechSummary(speechId, {
+      summary: 'Inflation remains above our 2 percent objective.',
+      summary_method: 'EXTRACTIVE_EN',
+      summary_generated_at: '2026-11-11T06:00:00Z',
+      summary_error: null,
+    });
+    got = await getSpeech();
+    expect(got.body).toMatchObject({
+      summary: 'Inflation remains above our 2 percent objective.',
+      summary_status: 'READY',
+      summary_method: 'EXTRACTIVE_EN',
+    });
+    expect((await store.listSpeechesNeedingSummary(null, 500)).some((r) => r.id === speechId)).toBe(false);
   });
 });

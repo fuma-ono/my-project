@@ -9,6 +9,16 @@
  *    (理由を body_error に)。本文を推測で補わない。1回の実行で読むページは maxFetches 件まで(公式サイトに負荷をかけない。
  *    HttpClient が取得元ごとに2秒あける)。
  * 外部の有料 API は使わない(公式サイトの公開ページだけ)。発言の行の発言者・日時・題名は変えない。
+ *
+ * 本文を保存してよい発言元(HQ指示 2026-11-11「公式データの権利が確認できない場合は保存・表示しない」):
+ *   - FRB: 保存する。https://www.federalreserve.gov/disclaimer.htm「Unless otherwise indicated, information on Board's
+ *     website is in the public domain and may be copied and distributed without permission.」「Please cite to the Board
+ *     as the source of the information.」(2026-11-11 確認)
+ *   - ECB: **保存しない**(source_url だけ残し、body_status = NOT_APPLICABLE、body_error = RIGHTS_UNCONFIRMED)。
+ *     https://www.ecb.europa.eu/services/disclaimer/html/index.en.html は出典を示せば自由に使えるとする一方、「Any
+ *     reproduction, publication or reprint, in whole or in part, of documents that bear the name of their authors …
+ *     requires explicit prior written authorisation of the ECB or the authors」とあり、発言(発言者の名前の付いた文書)が
+ *     この例外に当たるかを確認できていないため。ECB が認めたら storeBodyFor に足す。
  */
 import { SPEAKER_ALIASES } from '../mappings/speakers.js';
 import type { JobCounters } from '../runner.js';
@@ -61,7 +71,12 @@ export interface SpeechBodySettings {
   pastDays: number;
   /** 1回の実行で本文のページを読む上限。 */
   maxFetches: number;
+  /** 本文を保存してよい provider(省略時は STORE_BODY_FOR)。ほかは URL だけ残して本文を取らない。 */
+  storeBodyFor?: readonly string[];
 }
+
+/** 本文の再掲の権利を確認できた発言元(上の説明)。今は FRB だけ。 */
+export const STORE_BODY_FOR: readonly string[] = ['frb_calendar'];
 
 export const SPEECH_BODY_SETTINGS: SpeechBodySettings = { pastDays: 30, maxFetches: 20 };
 
@@ -124,6 +139,18 @@ export async function ingestSpeechBodies(
     if (!isOfficialSpeechUrl(speech.provider, url)) {
       counters.skip('NOT_OFFICIAL_URL');
       await store.updateSpeechBody(speech.id, { body_status: 'FAILED', body_error: 'NOT_OFFICIAL_URL' });
+      continue;
+    }
+    if (!(settings.storeBodyFor ?? STORE_BODY_FOR).includes(speech.provider)) {
+      // 再掲の権利を確認できていない発言元: 公式ページの URL(リンク)だけ残し、本文は取らない・保存しない
+      counters.skip('RIGHTS_UNCONFIRMED');
+      await store.updateSpeechBody(speech.id, {
+        source_url: url,
+        speech_body: null,
+        body_fetched_at: null,
+        body_status: 'NOT_APPLICABLE',
+        body_error: 'RIGHTS_UNCONFIRMED',
+      });
       continue;
     }
     if (fetches >= settings.maxFetches) {

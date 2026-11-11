@@ -26,6 +26,7 @@
     "ingest:retail-sales-schedule": "tsx src/jobs/ingestRetailSalesSchedule.ts",
     "ingest:speeches": "tsx src/jobs/ingestSpeeches.ts",
     "ingest:speech-bodies": "tsx src/jobs/ingestSpeechBodies.ts",
+    "ingest:speech-summaries": "tsx src/jobs/ingestSpeechSummaries.ts",
     "ingest:fx-prices": "tsx src/jobs/ingestFxPrices.ts",
     "ingest:event-reactions": "tsx src/jobs/ingestEventReactions.ts",
     "probe:fx-history": "tsx src/jobs/probeFxHistory.ts",

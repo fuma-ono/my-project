@@ -13,7 +13,15 @@ describe('speechSummaryStatus', () => {
     }
   });
 
-  it('the API values are exactly NOT_AVAILABLE / GENERATING / READY / FAILED (the last two are reserved)', () => {
+  it('FAILED when the summary step left a reason and there is no summary; a summary still wins (READY)', () => {
+    expect(speechSummaryStatus(null, 'BODY_TOO_SHORT')).toBe('FAILED');
+    expect(speechSummaryStatus('', 'NO_SENTENCES')).toBe('FAILED');
+    expect(speechSummaryStatus(null, null)).toBe('NOT_AVAILABLE');
+    expect(speechSummaryStatus(null, '  ')).toBe('NOT_AVAILABLE');
+    expect(speechSummaryStatus('Inflation remains elevated.', 'BODY_TOO_SHORT')).toBe('READY');
+  });
+
+  it('the API values are exactly NOT_AVAILABLE / GENERATING / READY / FAILED (GENERATING is still reserved)', () => {
     expect([...SPEECH_SUMMARY_STATUSES]).toEqual(['NOT_AVAILABLE', 'GENERATING', 'READY', 'FAILED']);
   });
 });
