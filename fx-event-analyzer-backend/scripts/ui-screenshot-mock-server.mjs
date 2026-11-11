@@ -1782,6 +1782,34 @@ function speechesFixture() {
       importance: 'HIGH',
       status: 'DELIVERED',
     },
+    // HQ指示(2026-11-11「要人発言 実機スクリーンショット検証」): 発言済みなのに要約が
+    // まだ無い状態(「要約はまだ用意されていません。」、SpeechDetailCards.statementCard)は、
+    // このフィクスチャに1件も無く、UIスクリーンショットで一度も確認されていなかった。
+    // FRB(パウエル)の発言で追加する。
+    {
+      speech_id: '77777777-7777-7777-7777-777777777777',
+      speaker: SPEAKERS.powell,
+      title: '地区連銀総裁との意見交換会',
+      summary: null,
+      statement_datetime: isoSecondsPlusMinutes(-3 * 24 * 60),
+      importance: 'MEDIUM',
+      status: 'DELIVERED',
+    },
+    // 長い要約でもカードのレイアウトが崩れないこと(HQ指示)の確認用。FRB(パウエル)。
+    {
+      speech_id: '77777777-7777-7777-7777-777777777778',
+      speaker: SPEAKERS.powell,
+      title: '上下両院合同経済委員会での半期議会証言',
+      summary:
+        '労働市場は引き続き底堅いものの、過去数カ月で求人数・採用数の伸びが鈍化しており、' +
+        '労働需給の緩やかな均衡化が進んでいると説明した。インフレ率は低下傾向にあるが、' +
+        '目標の2%に持続的に達したと確信するにはなお時間を要するとの認識を示し、' +
+        '今後の金融政策の判断は今後発表される雇用統計・物価統計を含む経済指標全体の' +
+        '累積的な動向次第であり、特定の会合での利下げ・利上げについて予め約束するものではないと強調した。',
+      statement_datetime: isoSecondsPlusMinutes(-14 * 24 * 60),
+      importance: 'HIGH',
+      status: 'DELIVERED',
+    },
   ].sort((a, b) => b.statement_datetime.localeCompare(a.statement_datetime));
 }
 

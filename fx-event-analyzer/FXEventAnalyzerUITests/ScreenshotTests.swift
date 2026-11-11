@@ -606,6 +606,63 @@ final class ScreenshotTests: XCTestCase {
         capture("07b-EventStrategyAnalysis-Standalone-Bottom")
     }
 
+    /// HQ指示(2026-11-11「要人発言 実機スクリーンショット検証」): 要人発言詳細(SCR-013)が、
+    /// 本文・要約が取得できた発言(FRB)・原稿のない発言(FRB)・発言前の発言のそれぞれで正しく
+    /// 表示されること、長い要約でもレイアウトが崩れないこと、FREE/PROで表示内容が一致すること
+    /// を確かめる。フィクスチャ(`ui-screenshot-mock-server.mjs`の`speechesFixture`)に、この
+    /// 検証のため「発言済みだが要約が無い」FRBの発言(従来0件だった状態)と、長い要約のFRBの
+    /// 発言を追加した。
+    func testCaptureSpeechDetailDisplayStates() throws {
+        let emailField = app.textFields["メールアドレス"]
+        XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
+        type("ui-screenshot@example.com", into: emailField)
+        type("ui-screenshot-password", into: app.secureTextFields["パスワード"])
+        app.buttons["ログイン"].tap()
+
+        XCTAssertTrue(waitForAnyElement(containing: "ホーム", timeout: 20), "Home tab did not appear after login")
+        XCTAssertTrue(waitForAnyElement(containing: "通貨ペア", timeout: 25), "Home did not load major FX data from the mock Backend")
+
+        tapIdentifier("homeSpeechesSeeAll")
+        XCTAssertTrue(waitForAnyElement(containing: "金融経済懇談会での講演", timeout: 15), "Speech list did not load")
+        capture("12b-SpeechList-Standalone")
+
+        // ① FRBの本文・要約が取得できた発言(短い要約)。
+        tap(containing: "FOMC後の記者会見")
+        XCTAssertTrue(waitForAnyElement(containing: "政策金利の据え置きを説明し", timeout: 15), "FRB speech with a summary did not render the summary text")
+        capture("13d-SpeechDetail-FRB-SummaryPresent")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "これからの発言", timeout: 10), "Did not return to Speech list from FRB summary speech")
+
+        // ② FRBの本文・要約が取得できた発言(長い要約) — レイアウトが崩れないことの確認。
+        tap(containing: "上下両院合同経済委員会での半期議会証言")
+        XCTAssertTrue(waitForAnyElement(containing: "労働市場は引き続き底堅い", timeout: 15), "FRB speech with a long summary did not render")
+        capture("13e-SpeechDetail-FRB-SummaryLong")
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "これからの発言", timeout: 10), "Did not return to Speech list from the long-summary FRB speech")
+
+        // ③ FRBの発言済みだが原稿(要約)のない発言 — 「要約はまだ用意されていません。」。
+        tap(containing: "地区連銀総裁との意見交換会")
+        XCTAssertTrue(waitForAnyElement(containing: "要約はまだ用意されていません", timeout: 15), "FRB speech without a summary did not show the no-summary message")
+        capture("13f-SpeechDetail-FRB-NoSummary")
+
+        // ③': 同じ画面をFREEプランでも確認する(要人発言はプラン制限の対象ではないため、
+        // 表示内容が一致するはず — HQ指示「FREE/PROで表示内容が一致すること」)。
+        XCTAssertTrue(setMockSubscriptionPlan("FREE"), "Could not switch the mock Backend to the FREE plan")
+        resumeAppToRefreshPlanStore()
+        XCTAssertTrue(waitForAnyElement(containing: "要約はまだ用意されていません", timeout: 15), "FRB no-summary speech did not render identically on the FREE plan")
+        capture("13f-SpeechDetail-FRB-NoSummary-FREE")
+        XCTAssertTrue(setMockSubscriptionPlan("PRO"), "Could not restore the mock Backend to the PRO plan")
+        resumeAppToRefreshPlanStore()
+
+        tapIdentifier("v5HeaderBack")
+        XCTAssertTrue(waitForAnyElement(containing: "これからの発言", timeout: 10), "Did not return to Speech list from the no-summary FRB speech")
+
+        // ④ 発言前(まだ行われていない)FRBの発言。
+        tap(containing: "経済見通しに関する講演")
+        XCTAssertTrue(waitForAnyElement(containing: "この発言はまだ行われていません", timeout: 15), "Upcoming FRB speech did not show the not-yet-delivered message")
+        capture("13g-SpeechDetail-FRB-BeforeStatement")
+    }
+
     /// HQ承認(2026-11-04「Home Cache更新中表示のUIテスト追加」、案A): ログインしたまま設定で文字サイズを変えると
     /// RootView の `.id(textSize)` で全画面が作り直され、新しい HomeViewModel ができる。その間だけモックの /home を
     /// 遅らせ、前回のデータ(キャッシュ)を出したまま「前回の情報を表示しています・更新中…」が出ること、応答の後に
