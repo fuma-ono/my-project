@@ -48,56 +48,68 @@ struct StrategyTrendChart: View {
     var calloutFormatter: ((Double) -> String)? = nil
     var height: CGFloat = 90
 
+    /// `GeometryReader`の`@ViewBuilder`クロージャ内にネストした関数を置くと、結果ビルダーの型推論が
+    /// 壊れ「generic parameter 'Content' could not be inferred」になることがCIで確認されたため、
+    /// 座標計算は(Viewを一切組み立てない)プレーンな関数としてクロージャの外に出す。
+    private func plottedPoints(_ points: [(label: String, value: Double)], in size: CGSize) -> [CGPoint] {
+        let values = points.map(\.value)
+        let minV = min(0, values.min() ?? 0)
+        let maxV = max(values.max() ?? 1, minV + 0.001)
+        let stepX = points.count > 1 ? size.width / CGFloat(points.count - 1) : 0
+        return points.enumerated().map { index, point in
+            let ratio = (point.value - minV) / (maxV - minV)
+            return CGPoint(x: CGFloat(index) * stepX, y: size.height * (1 - ratio))
+        }
+    }
+
+    private func zeroLineY(_ points: [(label: String, value: Double)], in size: CGSize) -> CGFloat {
+        let values = points.map(\.value)
+        let minV = min(0, values.min() ?? 0)
+        let maxV = max(values.max() ?? 1, minV + 0.001)
+        let ratio = (0 - minV) / (maxV - minV)
+        return size.height * (1 - ratio)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             if let points, points.count >= 2 {
                 GeometryReader { geo in
-                    let values = points.map(\.value)
-                    let minV = min(0, values.min() ?? 0)
-                    let maxV = max(values.max() ?? 1, minV + 0.001)
-                    let stepX = geo.size.width / CGFloat(points.count - 1)
-                    func y(_ v: Double) -> CGFloat {
-                        let ratio = (v - minV) / (maxV - minV)
-                        return geo.size.height * (1 - ratio)
-                    }
+                    let plotted = plottedPoints(points, in: geo.size)
+                    let zeroY = zeroLineY(points, in: geo.size)
                     ZStack(alignment: .topLeading) {
                         // 0ラインの点線(参考画像の横軸)。
                         Path { path in
-                            path.move(to: CGPoint(x: 0, y: y(0)))
-                            path.addLine(to: CGPoint(x: geo.size.width, y: y(0)))
+                            path.move(to: CGPoint(x: 0, y: zeroY))
+                            path.addLine(to: CGPoint(x: geo.size.width, y: zeroY))
                         }
                         .stroke(SettingsCardStyle.cardBorder, style: StrokeStyle(lineWidth: 0.5, dash: [2, 2]))
 
                         if let fillColor {
                             Path { path in
-                                path.move(to: CGPoint(x: 0, y: y(0)))
-                                for (i, p) in points.enumerated() {
-                                    path.addLine(to: CGPoint(x: CGFloat(i) * stepX, y: y(p.value)))
-                                }
-                                path.addLine(to: CGPoint(x: geo.size.width, y: y(0)))
+                                path.move(to: CGPoint(x: 0, y: zeroY))
+                                for point in plotted { path.addLine(to: point) }
+                                path.addLine(to: CGPoint(x: geo.size.width, y: zeroY))
                                 path.closeSubpath()
                             }
                             .fill(fillColor.opacity(0.18))
                         }
 
                         Path { path in
-                            for (i, p) in points.enumerated() {
-                                let point = CGPoint(x: CGFloat(i) * stepX, y: y(p.value))
-                                if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
+                            for (index, point) in plotted.enumerated() {
+                                if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
                             }
                         }
                         .stroke(lineColor, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
 
-                        if let last = points.last {
-                            let point = CGPoint(x: geo.size.width, y: y(last.value))
-                            Circle().fill(lineColor).frame(width: 5, height: 5).position(point)
+                        if let lastPoint = plotted.last, let lastValue = points.last?.value {
+                            Circle().fill(lineColor).frame(width: 5, height: 5).position(lastPoint)
                             if let calloutFormatter {
-                                NotoText.text(calloutFormatter(last.value), size: 6)
+                                NotoText.text(calloutFormatter(lastValue), size: 6)
                                     .foregroundStyle(.black)
                                     .padding(.horizontal, 4)
                                     .padding(.vertical, 2)
                                     .background(Capsule().fill(Color.white.opacity(0.92)))
-                                    .position(x: max(20, point.x - 18), y: max(8, point.y - 11))
+                                    .position(x: max(20, lastPoint.x - 18), y: max(8, lastPoint.y - 11))
                             }
                         }
                     }
