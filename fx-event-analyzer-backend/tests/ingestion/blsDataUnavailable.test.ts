@@ -196,33 +196,40 @@ describe('applyBlsDataUnavailable', () => {
     expect(store.explanations).toEqual([]);
   });
 
-  it('8-9. price reactions are computed without an actual value, and the event stays RELEASED / UNAVAILABLE with no snapshot', async () => {
+  it('8-9. reactions for all 5 USD pairs x 5 timeframes are computed without an actual value (CPI and core CPI); the events stay RELEASED / UNAVAILABLE', async () => {
     await run();
     const T = Date.parse(RELEASE);
+    const pair = (symbol: string, base: string, quote: string, pip: number, precision: number) => ({
+      id: `p-${symbol.toLowerCase()}`,
+      symbol,
+      pip_size: pip,
+      price_precision: precision,
+      base_currency: base,
+      quote_currency: quote,
+    });
+    // 本番の対象: USD を含む有効なペア(AUDUSD・EURUSD・GBPUSD・USDCHF・USDJPY)。EURJPY は USD を含まないので対象外
     store.fxPairs = [
-      {
-        id: 'p-usdjpy',
-        symbol: 'USDJPY',
-        pip_size: 0.01,
-        price_precision: 3,
-        base_currency: 'USD',
-        quote_currency: 'JPY',
-      },
-      {
-        id: 'p-eurusd',
-        symbol: 'EURUSD',
-        pip_size: 0.0001,
-        price_precision: 5,
-        base_currency: 'EUR',
-        quote_currency: 'USD',
-      },
+      pair('AUDUSD', 'AUD', 'USD', 0.0001, 5),
+      pair('EURUSD', 'EUR', 'USD', 0.0001, 5),
+      pair('GBPUSD', 'GBP', 'USD', 0.0001, 5),
+      pair('USDCHF', 'USD', 'CHF', 0.0001, 5),
+      pair('USDJPY', 'USD', 'JPY', 0.01, 3),
+      pair('EURJPY', 'EUR', 'JPY', 0.01, 3),
     ];
+    const basePrice: Record<string, number> = {
+      AUDUSD: 0.65,
+      EURUSD: 1.08,
+      GBPUSD: 1.27,
+      USDCHF: 0.88,
+      USDJPY: 154,
+      EURJPY: 166,
+    };
     store.fxPrices = store.fxPairs.flatMap((p) =>
       Array.from({ length: 76 }, (_, i) => {
-        const close = p.symbol === 'USDJPY' ? 154 + i * 0.01 : 1.08 + i * 0.0001;
+        const close = basePrice[p.symbol]! + i * p.pip_size;
         return {
           fx_pair_id: p.id,
-          timestamp: new Date(T + (i - 15) * 60_000).toISOString(), // 13:15 〜 14:30
+          timestamp: new Date(T + (i - 15) * 60_000).toISOString(), // 13:15 〜 14:30(DEV で確かめた 76 本と同じ範囲)
           timeframe: '1m' as const,
           open: close,
           high: close,
@@ -237,23 +244,24 @@ describe('applyBlsDataUnavailable', () => {
         };
       }),
     );
-    const counters = new JobCounters();
-    await ingestEventPriceReactions(
-      store,
-      { horizonDays: 7, eventId: 'ev-cpi' },
-      new Date('2026-11-11T03:00:00Z'),
-      counters,
-    );
-    const rows = store.eventPriceReactions.filter((r) => r.event_id === 'ev-cpi');
-    expect(rows.map((r) => [r.fx_pair_id, r.timeframe, r.data_status]).sort()).toEqual(
-      ['p-eurusd', 'p-usdjpy']
-        .flatMap((p) => ['1m', '5m', '15m', '30m', '60m'].map((tf) => [p, tf, 'AVAILABLE']))
-        .sort(),
-    );
-    expect(store.events.find((e) => e.id === 'ev-cpi')).toMatchObject({
-      status: 'RELEASED',
-      data_status: 'UNAVAILABLE',
-    });
+    const targets = ['p-audusd', 'p-eurusd', 'p-gbpusd', 'p-usdchf', 'p-usdjpy'];
+    const expected = targets.flatMap((p) => ['1m', '5m', '15m', '30m', '60m'].map((tf) => [p, tf, 'AVAILABLE'])).sort();
+    for (const eventId of ['ev-cpi', 'ev-core']) {
+      const counters = new JobCounters();
+      await ingestEventPriceReactions(store, { horizonDays: 7, eventId }, new Date('2026-11-11T03:00:00Z'), counters);
+      const rows = store.eventPriceReactions.filter((r) => r.event_id === eventId);
+      expect(rows).toHaveLength(25); // 5 ペア × 5 時間足
+      expect(rows.map((r) => [r.fx_pair_id, r.timeframe, r.data_status]).sort()).toEqual(expected);
+      expect(rows.some((r) => r.fx_pair_id === 'p-eurjpy')).toBe(false);
+      expect(rows.every((r) => r.pre_release_price !== null && r.pips !== null)).toBe(true);
+      expect(store.events.find((e) => e.id === eventId)).toMatchObject({
+        status: 'RELEASED',
+        data_status: 'UNAVAILABLE',
+      });
+    }
+    // 同じペア・時間足・イベントで重複しない
+    const keys = store.eventPriceReactions.map((r) => `${r.event_id}:${r.fx_pair_id}:${r.timeframe}`);
+    expect(new Set(keys).size).toBe(keys.length);
     expect(store.snapshots).toEqual([]);
   });
 });
