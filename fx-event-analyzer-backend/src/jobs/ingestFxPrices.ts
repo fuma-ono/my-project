@@ -80,12 +80,19 @@ async function main(): Promise<void> {
   const result = await runIngestionJob(
     store,
     { provider: primary.name, dataType: 'FX_PRICE', job: 'ingest:fx-prices' },
-    (counters) =>
-      ingestFxWithGapRepair(
+    (counters) => {
+      // 監視(HQ指示 2026-11-11「FX価格定時取得の実績検証・運用監視準備」): どの GitHub Actions の実行の、何回目の取り込みかを
+      // ログに残す(17回のループが途中で止まったかを ingestion_logs だけで数えられるように)。api_credit_usage.run_id と同じ値も入れる。
+      counters.details.github_run_id = process.env.GITHUB_RUN_ID ?? null;
+      counters.details.github_run_attempt = process.env.GITHUB_RUN_ATTEMPT ?? null;
+      counters.details.credit_run_id = runId;
+      counters.details.trigger = process.env.GITHUB_EVENT_NAME ?? 'local';
+      return ingestFxWithGapRepair(
         { store, primary, ...(secondary ? { secondary } : {}), now: () => now, gate, mode },
         { symbols, ...(forwardMinutes !== undefined ? { forwardMinutes } : {}) },
         counters,
-      ),
+      );
+    },
   );
   const details = result.counters.details;
   console.log(

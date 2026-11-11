@@ -29,6 +29,7 @@
     "probe:fx-history": "tsx src/jobs/probeFxHistory.ts",
     "eval:providers": "tsx src/jobs/evalProviders.ts",
     "report:data-quality": "tsx src/jobs/reportDataQuality.ts",
+    "report:fx-health": "tsx src/jobs/reportFxHealth.ts",
     "check:ecb-observation": "tsx src/jobs/checkEcbObservation.ts"
   },
   "keywords": [],
