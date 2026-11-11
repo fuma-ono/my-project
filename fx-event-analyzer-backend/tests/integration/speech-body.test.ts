@@ -139,7 +139,10 @@ describe.skipIf(!integration)('speech bodies: migration, store and GET /speeches
   it('summary columns: the DB refuses a method without a summary and an error together with a summary', async () => {
     const update = (patch: Record<string, unknown>) =>
       ctx.serviceClient.from('speech_events').update(patch).eq('id', speechId);
-    expect((await update({ summary_method: 'LLM_JA' })).error?.message).toMatch(/summary_method_check/);
+    expect(
+      (await update({ summary: 'x', summary_generated_at: '2026-11-11T06:00:00Z', summary_method: 'LLM_JA' })).error
+        ?.message,
+    ).toMatch(/summary_method_check/);
     expect((await update({ summary_method: 'EXTRACTIVE_EN' })).error?.message).toMatch(/summary_generated_check/);
     expect((await update({ summary: 'x', summary_error: 'BODY_TOO_SHORT' })).error?.message).toMatch(
       /summary_generated_check/,
