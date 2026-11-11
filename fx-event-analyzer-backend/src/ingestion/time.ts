@@ -37,6 +37,35 @@ export function zonedWallTimeToUtc(
   return null;
 }
 
+/**
+ * Like zonedWallTimeToUtc, but only when the wall time maps to exactly one instant: null for a time skipped by the
+ * spring-forward jump and for a time that occurs twice at the fall-back (e.g. 01:30 on the first Sunday of November
+ * in America/New_York). Used where a match must be exact (HQ 2026-11-11, FRB speech times) — never pick one of two.
+ */
+export function zonedWallTimeToUtcUnique(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  second: number,
+  timeZone: string,
+): Date | null {
+  const wallMs = Date.UTC(year, month - 1, day, hour, minute, second);
+  const instants = new Set<number>();
+  for (const probe of [
+    wallMs - 36 * 3_600_000,
+    wallMs - 12 * 3_600_000,
+    wallMs,
+    wallMs + 12 * 3_600_000,
+    wallMs + 36 * 3_600_000,
+  ]) {
+    const candidate = wallMs - offsetMinutesAt(probe, timeZone) * 60_000;
+    if (candidate + offsetMinutesAt(candidate, timeZone) * 60_000 === wallMs) instants.add(candidate);
+  }
+  return instants.size === 1 ? new Date([...instants][0]!) : null;
+}
+
 /** Wall-clock parts of `instant` as seen in `timeZone`. */
 export function wallClockParts(
   instant: Date,
