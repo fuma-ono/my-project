@@ -119,6 +119,7 @@ async function main(): Promise<void> {
       const built = await buildBlsScheduleReleases({ official, officialSecondary });
       counters.details.not_yet_available = built.notYetAvailable.length;
       counters.details.overdue = built.overdue.map((e) => `${e.indicatorCode}:${e.referencePeriod}`);
+      counters.details.data_unavailable = built.dataUnavailable.map((e) => `${e.indicatorCode}:${e.referencePeriod}`);
       counters.details.unmapped = built.unmapped.length;
       counters.details.cancelled_entries = built.cancelled.length;
       counters.details.plan = await planBlsScheduleWrites(store, built.releases, counters);
@@ -147,6 +148,7 @@ async function main(): Promise<void> {
       skipped: result.counters.skipReasons,
       not_yet_available: result.counters.details.not_yet_available,
       overdue: result.counters.details.overdue,
+      data_unavailable: result.counters.details.data_unavailable,
       unmapped: result.counters.details.unmapped,
       plan: result.counters.details.plan,
       cancelled_entries: result.counters.details.cancelled_entries,
@@ -188,6 +190,7 @@ async function dryRun(
       releases_built: built.releases.length,
       not_yet_available: built.notYetAvailable.length,
       overdue: built.overdue.map((e) => `${e.indicatorCode}:${e.referencePeriod}`),
+      data_unavailable: built.dataUnavailable.map((e) => `${e.indicatorCode}:${e.referencePeriod}`),
       unmapped: built.unmapped.length,
       cancelled_entries: built.cancelled.length,
       plan,
