@@ -64,6 +64,9 @@ struct StrategyAnalysisTabBar: View {
                                 }
                             }
                         )
+                        // UIテストで断続的に「ボタンが見つからない/タップできない」が発生したため、
+                        // 条件分岐の背景(Group)に依存せず、フレーム全体を明示的にタップ可能にする。
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("strategyAnalysisTab_\(tab.title)")

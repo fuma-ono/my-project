@@ -73,19 +73,25 @@ struct StrategyAnalysisView: View {
             centered { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { Task { await viewModel.load() } }) }
         case .loaded(let pair, let analysis, let coReleasedIndicators):
             column {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        StrategyAnalysisProBadge()
-                        Spacer()
-                    }
-                    .frame(width: 214, alignment: .leading)
-                    StrategyAnalysisTabBar(selection: $selectedTab)
-                    ScrollView(showsIndicators: false) {
+                // HQ指示(2026-11-11「StrategyAnalysis 4タブUI実装」)。「PRO」バッジ・4タブの
+                // セグメントも、既存の安定した構成(column { ScrollView { VStack {...} } }、他の
+                // 全カードと同じ)にそのまま乗せる(ScrollViewの外に出してVStackと並べる構成は、
+                // 高さの伝播がうまくいかずタブがタップできなくなる不具合が実機CIで確認されたため
+                // 採用していない)。タブ切り替え時、バッジ・タブバー自体もスクロールで隠れる形になるが、
+                // 既存のカード群と同じ挙動・安全性を優先する。
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            StrategyAnalysisProBadge()
+                            Spacer()
+                        }
+                        .frame(width: 214, alignment: .leading)
+                        StrategyAnalysisTabBar(selection: $selectedTab)
                         tabContent(pair: pair, analysis: analysis, coReleasedIndicators: coReleasedIndicators)
-                            .padding(.bottom, 8)
                     }
-                    .accessibilityIdentifier("strategyAnalysisContent")
+                    .padding(.bottom, 8)
                 }
+                .accessibilityIdentifier("strategyAnalysisContent")
             }
         }
     }
