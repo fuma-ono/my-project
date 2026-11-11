@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { IndicatorNotificationCandidate } from '../../src/domain/notifications.js';
 import type { PushPlanItem, PushUserContext } from '../../src/domain/pushNotifications.js';
 import type { PushDevice, PushMessage, PushSender, SendResult } from '../../src/push/apnsSender.js';
-import { sendDuePushNotifications, type PushStore } from '../../src/push/pushJobs.js';
+import { enqueuePushNotifications, sendDuePushNotifications, type PushStore } from '../../src/push/pushJobs.js';
 import { cleanupPushNotifications, createPushStore, getPushQueueStats } from '../../src/repositories/pushRepository.js';
 import {
   buildIntegrationContext,
@@ -289,20 +289,26 @@ describe.skipIf(!integration)('Push notifications: devices, favorites, history, 
           }
           return real.finish(id, token, update);
         },
-        completeAttempt: (id, result) => {
+        completeAttempt: (id, result, max) => {
           if (fail.complete) {
             fail.complete = false;
             return Promise.reject(new Error('DB down after APNs success'));
           }
-          return real.completeAttempt(id, result);
+          return real.completeAttempt(id, result, max);
         },
       };
     };
     class Sender implements PushSender {
       sent: { device: PushDevice; message: PushMessage }[] = [];
-      constructor(private readonly byNotification: Record<string, SendResult> = {}) {}
+      constructor(
+        private readonly byNotification: Record<string, SendResult> = {},
+        /** 端末ごとの結果(順に使う。無くなったら byNotification・SUCCESS) */
+        private readonly byDevice: Record<string, SendResult[]> = {},
+      ) {}
       send(device: PushDevice, message: PushMessage): Promise<SendResult> {
         this.sent.push({ device, message });
+        const queued = this.byDevice[device.id]?.shift();
+        if (queued) return Promise.resolve(queued);
         return Promise.resolve(
           this.byNotification[message.notificationId] ?? {
             outcome: 'SUCCESS',
@@ -402,7 +408,7 @@ describe.skipIf(!integration)('Push notifications: devices, favorites, history, 
       await sleep(1_300);
       const sender = new Sender();
       const result = await sendDuePushNotifications({ store, sender, leaseSeconds: 30 });
-      expect(result).toMatchObject({ claimed: 1, recovered: 1, resent_unknown: 1, sent: 1 });
+      expect(result).toMatchObject({ claimed: 1, recovered: 1, resent_unknown: 2, sent: 1 }); // 取り直した行で2台に送った
       expect(await rowOf(id)).toMatchObject({
         status: 'SENT',
         recovery_count: 1,
@@ -469,7 +475,7 @@ describe.skipIf(!integration)('Push notifications: devices, favorites, history, 
       expect(inFlight).toMatchObject({ outcome: 'IN_FLIGHT' });
       await sleep(1_300);
       const second = await sendDuePushNotifications({ store: dbStore(), sender, leaseSeconds: 30 });
-      expect(second).toMatchObject({ recovered: 1, resent_unknown: 1, sent: 1 });
+      expect(second).toMatchObject({ recovered: 1, resent_unknown: 2, sent: 1 }); // 2台とも未完了だった
       expect((await attemptsOf(id)).map((a) => a.outcome)).toEqual(['UNKNOWN', 'SUCCESS', 'SUCCESS']);
       expect(sender.sent.filter((s) => s.device.id === inFlight!.device_id)).toHaveLength(2); // 二重になりうる端末
     });
@@ -539,6 +545,10 @@ describe.skipIf(!integration)('Push notifications: devices, favorites, history, 
       await resetQueue();
       const id = await due();
       await ctx.serviceClient.from('push_notifications').update({ attempts: 4 }).eq('id', id);
+      // 2台とも、結果の出た試行が4回(あと1回で上限)
+      await ctx.serviceClient
+        .from('push_notification_targets')
+        .insert(deviceIds.map((device_id) => ({ notification_id: id, device_id, status: 'RETRY', attempts: 4 })));
       const sender = new Sender({
         [id]: { outcome: 'RETRYABLE_ERROR', httpStatus: 503, apnsId: null, reason: 'ServiceUnavailable' },
       });
@@ -603,6 +613,8 @@ describe.skipIf(!integration)('Push notifications: devices, favorites, history, 
         [
           'attempts_since',
           'by_status_since',
+          'targets_by_status_since',
+          'targets_open',
           'oldest_due_seconds',
           'pending',
           'pending_due',
@@ -619,6 +631,220 @@ describe.skipIf(!integration)('Push notifications: devices, favorites, history, 
       const bad = await ctx.serviceClient.rpc('cleanup_push_notifications', { p_keep_days: 30, p_keep_failed_days: 1 });
       expect(bad.error?.code).toBe('22023');
       await resetQueue();
+    });
+
+    /**
+     * 複数端末・部分失敗(HQ指示 2026-11-10「複数端末配信・部分失敗対応」)。端末は deviceIds の2台(d0・d1)。
+     * 次の回を待たずに試すときは next_attempt_at を今にする(待ちの長さは domain のテストで確かめている)。
+     */
+    describe('multi-device delivery and partial failure', () => {
+      const e503: SendResult = {
+        outcome: 'RETRYABLE_ERROR',
+        httpStatus: 503,
+        apnsId: null,
+        reason: 'ServiceUnavailable',
+      };
+      const timeout: SendResult = { outcome: 'RETRYABLE_ERROR', httpStatus: null, apnsId: null, reason: 'TIMEOUT' };
+      const perm: SendResult = { outcome: 'PERMANENT_ERROR', httpStatus: 400, apnsId: null, reason: 'PayloadTooLarge' };
+      const d0 = () => deviceIds[0]!;
+      const d1 = () => deviceIds[1]!;
+      const targetsOf = async (id: string) => {
+        const { data, error } = await ctx.serviceClient
+          .from('push_notification_targets')
+          .select('device_id, status, status_reason, attempts, last_error')
+          .eq('notification_id', id);
+        if (error) throw error;
+        return Object.fromEntries(
+          (
+            (data ?? []) as {
+              device_id: string;
+              status: string;
+              status_reason: string | null;
+              attempts: number;
+              last_error: string | null;
+            }[]
+          ).map((t) => [t.device_id, t]),
+        );
+      };
+      const dueNow = (id: string) =>
+        ctx.serviceClient.from('push_notifications').update({ next_attempt_at: new Date().toISOString() }).eq('id', id);
+      const run = (sender: Sender) => sendDuePushNotifications({ store: dbStore(), sender });
+      const sentTo = (sender: Sender, id: string) =>
+        sender.sent.filter((x) => x.message.notificationId === id).map((x) => x.device.id);
+
+      it('MD1. both devices succeed → SENT; history shows 2 of 2 delivered', async () => {
+        await resetQueue();
+        const id = await due();
+        const sender = new Sender();
+        expect(await run(sender)).toMatchObject({ sent: 1 });
+        expect(await rowOf(id)).toMatchObject({ status: 'SENT', attempts: 1 });
+        const t = await targetsOf(id);
+        expect([t[d0()]!.status, t[d1()]!.status]).toEqual(['SUCCESS', 'SUCCESS']);
+        const hist = await ctx.app.inject({
+          method: 'GET',
+          url: '/api/v1/notifications/push/history',
+          headers: auth(c),
+        });
+        const mine = hist.json().items.find((i: { id: string }) => i.id === id);
+        expect(mine).toMatchObject({
+          status: 'SENT',
+          devices: { total: 2, success: 2, failed: 0, pending: 0, cancelled: 0 },
+        });
+      });
+
+      it('MD2-5. one succeeds, one gets 503 / timeout → PENDING; the retry goes only to the failed device and never to the succeeded one', async () => {
+        await resetQueue();
+        const a503 = await due();
+        const aTimeout = await due();
+        const sender = new Sender({}, { [d1()]: [e503, timeout] });
+        expect(await run(sender)).toMatchObject({ retried: 2, sent: 0 }); // 1台の成功で SENT にしない
+        for (const [id, error] of [
+          [a503, '503 ServiceUnavailable'],
+          [aTimeout, 'TIMEOUT'],
+        ] as const) {
+          expect(await rowOf(id)).toMatchObject({ status: 'PENDING', status_reason: 'RETRY', attempts: 1 });
+          const t = await targetsOf(id);
+          expect(t[d0()]).toMatchObject({ status: 'SUCCESS', attempts: 1 });
+          expect(t[d1()]).toMatchObject({ status: 'RETRY', attempts: 1, last_error: error });
+        }
+        await dueNow(a503);
+        await dueNow(aTimeout);
+        const retry = new Sender();
+        expect(await run(retry)).toMatchObject({ sent: 2 });
+        expect(sentTo(retry, a503)).toEqual([d1()]); // 失敗した端末だけ
+        expect(sentTo(retry, aTimeout)).toEqual([d1()]);
+        for (const id of [a503, aTimeout]) {
+          expect(await rowOf(id)).toMatchObject({ status: 'SENT', attempts: 2 });
+          const t = await targetsOf(id);
+          expect(t[d0()]).toMatchObject({ status: 'SUCCESS', attempts: 1 }); // 再送していない
+          expect(t[d1()]).toMatchObject({ status: 'SUCCESS', attempts: 2 });
+        }
+      });
+
+      it('MD6. both permanent errors → FAILED at once, no retry', async () => {
+        await resetQueue();
+        const id = await due();
+        const sender = new Sender({ [id]: perm });
+        expect(await run(sender)).toMatchObject({ failed: 1 });
+        expect(await rowOf(id)).toMatchObject({ status: 'FAILED', status_reason: 'PERMANENT_ERROR', attempts: 1 });
+        expect(Object.values(await targetsOf(id)).map((t) => t.status)).toEqual(['FAILED', 'FAILED']);
+        await dueNow(id);
+        expect(await run(new Sender())).toMatchObject({ claimed: 0 });
+      });
+
+      it('MD7. retry limit: the failing device is retried 5 times, then FAILED MAX_ATTEMPTS; the notification ends PARTIAL_FAILURE', async () => {
+        await resetQueue();
+        const id = await due();
+        const sender = new Sender({}, { [d1()]: [e503, e503, e503, e503, e503] });
+        for (let round = 1; round <= 5; round += 1) {
+          await run(sender);
+          if (round < 5) {
+            expect(await rowOf(id)).toMatchObject({ status: 'PENDING', attempts: round });
+            await dueNow(id);
+          }
+        }
+        expect(await rowOf(id)).toMatchObject({
+          status: 'PARTIAL_FAILURE',
+          status_reason: 'MAX_ATTEMPTS',
+          attempts: 5,
+        });
+        const t = await targetsOf(id);
+        expect(t[d0()]).toMatchObject({ status: 'SUCCESS', attempts: 1 });
+        expect(t[d1()]).toMatchObject({ status: 'FAILED', status_reason: 'MAX_ATTEMPTS', attempts: 5 });
+        expect(sentTo(sender, id).filter((d) => d === d0())).toHaveLength(1);
+        expect(sentTo(sender, id).filter((d) => d === d1())).toHaveLength(5);
+      });
+
+      it('MD8. a device removed during the retry is CANCELLED (not sent, not a failure) → SENT', async () => {
+        await resetQueue();
+        const id = await due();
+        await run(new Sender({}, { [d1()]: [e503] }));
+        await ctx.serviceClient
+          .from('push_devices')
+          .update({ is_active: false, disabled_reason: 'USER_UNREGISTERED', disabled_at: new Date().toISOString() })
+          .eq('id', d1());
+        await dueNow(id);
+        const retry = new Sender();
+        expect(await run(retry)).toMatchObject({ sent: 1, cancelled_devices: 1 });
+        expect(sentTo(retry, id)).toEqual([]);
+        expect(await rowOf(id)).toMatchObject({ status: 'SENT' });
+        expect((await targetsOf(id))[d1()]).toMatchObject({ status: 'CANCELLED', status_reason: 'DEVICE_REMOVED' });
+        await ctx.serviceClient
+          .from('push_devices')
+          .update({ is_active: true, disabled_reason: null, disabled_at: null })
+          .eq('id', d1());
+      });
+
+      it('MD9. a device added during the retry is not a target of that notification', async () => {
+        await resetQueue();
+        const id = await due();
+        await run(new Sender({}, { [d1()]: [e503] }));
+        const { data: added, error } = await ctx.serviceClient
+          .from('push_devices')
+          .insert({ user_id: c.id, device_token: 'e3'.repeat(32), environment: 'SANDBOX' })
+          .select('id')
+          .single();
+        if (error) throw error;
+        await dueNow(id);
+        const retry = new Sender();
+        expect(await run(retry)).toMatchObject({ sent: 1 });
+        expect(sentTo(retry, id)).toEqual([d1()]); // 新しい端末には送らない
+        expect(Object.keys(await targetsOf(id)).sort()).toEqual([d0(), d1()].sort());
+        await ctx.serviceClient.from('push_devices').delete().eq('id', added.id);
+      });
+
+      it('MD10. two workers at the same time: every notification goes to each device exactly once', async () => {
+        await resetQueue();
+        const ids = [await due(), await due(), await due()];
+        const sender = new Sender();
+        const [w1, w2] = await Promise.all([run(sender), run(sender)]);
+        expect(w1.claimed + w2.claimed).toBe(3);
+        expect(w1.sent + w2.sent).toBe(3);
+        const pairs = sender.sent.map((x) => `${x.message.notificationId}:${x.device.id}`);
+        expect(pairs).toHaveLength(6);
+        expect(new Set(pairs).size).toBe(6);
+        for (const id of ids) expect(await rowOf(id)).toMatchObject({ status: 'SENT' });
+      });
+
+      it('APNs not configured: no new rows are enqueued, so the queue does not grow', async () => {
+        await resetQueue();
+        const count = async () =>
+          (await ctx.serviceClient.from('push_notifications').select('id', { count: 'exact', head: true })).count;
+        const before = await count();
+        const result = await enqueuePushNotifications({ store: dbStore(), apnsConfigured: false });
+        expect(result).toMatchObject({ skipped_not_configured: true, inserted: 0 });
+        expect(await count()).toBe(before);
+      });
+
+      it('APNs down after a partial send: the expired retry ends PARTIAL_FAILURE (not sent later), and nothing is deleted', async () => {
+        await resetQueue();
+        const partial = await due();
+        await run(new Sender({}, { [d1()]: [e503] }));
+        const valid = await due();
+        // 期限切れにする(APNs が使えない間に過ぎた)
+        await ctx.serviceClient
+          .from('push_notifications')
+          .update({ expires_at: new Date(Date.now() - 1_000).toISOString(), next_attempt_at: new Date().toISOString() })
+          .eq('id', partial);
+        const down = await sendDuePushNotifications({ store: dbStore(), sender: null });
+        expect(down).toMatchObject({ expired: 1, claimed: 0, errors: ['APNS_NOT_CONFIGURED'] });
+        expect(await rowOf(partial)).toMatchObject({
+          status: 'PARTIAL_FAILURE',
+          status_reason: 'EXPIRED_BEFORE_RETRY',
+        });
+        expect((await targetsOf(partial))[d1()]).toMatchObject({ status: 'FAILED', status_reason: 'EXPIRED' });
+        expect(await rowOf(valid)).toMatchObject({ status: 'PENDING' }); // 期限内の行は消さず・送らず残る
+        // 設定が直った: 期限内の行だけ送り、期限切れの行は送らない
+        const restored = new Sender();
+        expect(await run(restored)).toMatchObject({ claimed: 1, sent: 1 });
+        expect(sentTo(restored, partial)).toEqual([]);
+        expect(sentTo(restored, valid).sort()).toEqual([d0(), d1()].sort());
+        const { count } = await ctx.serviceClient
+          .from('push_notifications')
+          .select('id', { count: 'exact', head: true })
+          .in('id', [partial, valid]);
+        expect(count).toBe(2); // どちらの行も消していない
+      });
     });
   });
 });

@@ -1,9 +1,12 @@
 import type { NotificationCandidate } from '../../src/domain/notifications.js';
-import type {
-  PushNotificationRow,
-  PushPlanItem,
-  PushUserContext,
-  RecordedOutcome,
+import {
+  isOpenTarget,
+  nextTargetState,
+  type PushNotificationRow,
+  type PushPlanItem,
+  type PushTarget,
+  type PushUserContext,
+  type RecordedOutcome,
 } from '../../src/domain/pushNotifications.js';
 import type {
   AttemptResult,
@@ -37,6 +40,8 @@ export class MemoryPushStore implements PushStore {
   devices: (PushDeviceRow & { is_active: boolean; disabled_reason?: string })[] = [];
   rows: MemoryRow[] = [];
   attempts: MemoryAttempt[] = [];
+  /** notification id → 端末ごとの状態 */
+  targets = new Map<string, PushTarget[]>();
   clock = new Date();
   private seq = 0;
 
@@ -90,8 +95,14 @@ export class MemoryPushStore implements PushStore {
     let n = 0;
     for (const r of this.rows) {
       if (r.status === 'PENDING' && Date.parse(r.expires_at) <= this.clock.getTime()) {
-        r.status = 'SKIPPED';
-        r.status_reason = 'EXPIRED';
+        const targets = this.targets.get(r.id) ?? [];
+        const anySuccess = targets.some((t) => t.status === 'SUCCESS');
+        r.status = anySuccess ? 'PARTIAL_FAILURE' : r.attempts > 0 ? 'FAILED' : 'SKIPPED';
+        r.status_reason = anySuccess || r.attempts > 0 ? 'EXPIRED_BEFORE_RETRY' : 'EXPIRED';
+        this.targets.set(
+          r.id,
+          targets.map((t) => (isOpenTarget(t) ? { ...t, status: 'FAILED', status_reason: 'EXPIRED' } : t)),
+        );
         n += 1;
       }
     }
@@ -140,13 +151,38 @@ export class MemoryPushStore implements PushStore {
   listActiveDevices(userId: string) {
     return Promise.resolve(this.devices.filter((d) => d.user_id === userId && d.is_active));
   }
-  listLatestOutcomes(notificationId: string) {
-    const latest = new Map<string, RecordedOutcome>();
-    for (const a of this.attempts.filter((x) => x.notification_id === notificationId)) {
-      if (latest.get(a.device_id) === 'SUCCESS') continue;
-      latest.set(a.device_id, a.outcome);
-    }
-    return Promise.resolve(latest);
+  ensureTargets(notificationId: string, deviceIds: readonly string[]) {
+    const existing = this.targets.get(notificationId);
+    if (existing && existing.length > 0) return Promise.resolve(existing.map((t) => ({ ...t })));
+    const created = deviceIds.map((device_id) => ({
+      device_id,
+      status: 'PENDING' as const,
+      status_reason: null,
+      attempts: 0,
+    }));
+    if (created.length > 0) this.targets.set(notificationId, created);
+    return Promise.resolve(created.map((t) => ({ ...t })));
+  }
+  cancelTargets(notificationId: string, deviceIds: readonly string[], reason: string) {
+    this.targets.set(
+      notificationId,
+      (this.targets.get(notificationId) ?? []).map((t) =>
+        deviceIds.includes(t.device_id) && isOpenTarget(t) ? { ...t, status: 'CANCELLED', status_reason: reason } : t,
+      ),
+    );
+    return Promise.resolve();
+  }
+  expireOpenTargets(notificationId: string) {
+    this.targets.set(
+      notificationId,
+      (this.targets.get(notificationId) ?? []).map((t) =>
+        isOpenTarget(t) ? { ...t, status: 'FAILED', status_reason: 'EXPIRED' } : t,
+      ),
+    );
+    return Promise.resolve();
+  }
+  targetsOf(notificationId: string) {
+    return (this.targets.get(notificationId) ?? []).map((t) => [t.device_id, t.status, t.status_reason, t.attempts]);
   }
   failNextComplete = false;
   startAttempt(a: AttemptStart) {
@@ -154,14 +190,22 @@ export class MemoryPushStore implements PushStore {
     this.attempts.push({ ...a, id, outcome: 'IN_FLIGHT' });
     return Promise.resolve(id);
   }
-  completeAttempt(id: string, result: AttemptResult) {
+  completeAttempt(id: string, result: AttemptResult, maxAttempts: number) {
     if (this.failNextComplete) {
       this.failNextComplete = false;
       return Promise.reject(new Error('DB down after APNs success'));
     }
     const a = this.attempts.find((x) => x.id === id)!;
-    if (a.outcome === 'IN_FLIGHT') Object.assign(a, result);
-    return Promise.resolve();
+    if (a.outcome !== 'IN_FLIGHT') return Promise.reject(new Error('not IN_FLIGHT'));
+    Object.assign(a, result);
+    const list = this.targets.get(a.notification_id) ?? [];
+    const current = list.find((t) => t.device_id === a.device_id)!;
+    const next = nextTargetState(current, result.outcome, maxAttempts);
+    this.targets.set(
+      a.notification_id,
+      list.map((t) => (t.device_id === a.device_id ? next : t)),
+    );
+    return Promise.resolve({ ...next });
   }
   deactivateDevice(id: string, reason: string) {
     const d = this.devices.find((x) => x.id === id)!;

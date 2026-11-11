@@ -296,7 +296,12 @@ describe('push jobs', () => {
       expect(await send(sender)).toMatchObject({ retried: 1 });
       await send(sender, new Date(SEND_AT.getTime() + 61_000));
       expect(sender.sent.map((s) => s.device.id)).toEqual(['d1', 'd2', 'd2']); // d1 には送り直さない
-      expect(store.rows[0]).toMatchObject({ status: 'SENT', attempts: 2 });
+      // d1 は最終の失敗、d2 は届いた → 部分失敗(1台の成功で全体を SENT にしない)
+      expect(store.rows[0]).toMatchObject({ status: 'PARTIAL_FAILURE', status_reason: 'PERMANENT_ERROR', attempts: 2 });
+      expect(store.targetsOf('n-1')).toEqual([
+        ['d1', 'FAILED', 'PERMANENT_ERROR', 1],
+        ['d2', 'SUCCESS', null, 2],
+      ]);
     });
 
     it('max attempts: failing 5 times gives FAILED MAX_ATTEMPTS, and the row is not claimed again', async () => {

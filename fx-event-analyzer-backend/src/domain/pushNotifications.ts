@@ -8,7 +8,7 @@
  *     (通知の ON/OFF、指標・発言の別、重要度、通貨ペア、通知のタイミング、通知しない時間帯、プランの上限は呼び出し側で
  *     prefs に反映済み、暫定の予定と時刻の決まっていない発表・発言は除く)。
  *   - 送る直前の確かめ(decidePushSend): 中止・延期・設定の変更・期限切れなら送らない。
- *   - 送った結果と再試行(resolveDeliveryResult)。
+ *   - 端末ごとの状態と、通知全体の状態・再試行(nextTargetState / resolveNotificationState)。
  */
 import {
   buildUpcomingNotifications,
@@ -22,7 +22,7 @@ import {
 export const PUSH_TYPES = ['PRE_RELEASE', 'RELEASED', 'SPEECH_DELIVERED'] as const;
 export type PushType = (typeof PUSH_TYPES)[number];
 export type PushReason = 'SETTINGS' | 'FAVORITE_CURRENCY';
-export type PushStatus = 'PENDING' | 'SENDING' | 'SENT' | 'FAILED' | 'CANCELLED' | 'SKIPPED';
+export type PushStatus = 'PENDING' | 'SENDING' | 'SENT' | 'PARTIAL_FAILURE' | 'FAILED' | 'CANCELLED' | 'SKIPPED';
 
 const MINUTE_MS = 60_000;
 
@@ -346,39 +346,92 @@ export function decidePushSend(
 export type DeliveryOutcome = 'SUCCESS' | 'RETRYABLE_ERROR' | 'PERMANENT_ERROR' | 'INVALID_TOKEN' | 'CONFIG_ERROR';
 export type RecordedOutcome = DeliveryOutcome | 'IN_FLIGHT' | 'UNKNOWN';
 
-export interface DeliveryResult {
-  status: 'SENT' | 'PENDING' | 'FAILED' | 'SKIPPED';
+export type TargetStatus = 'PENDING' | 'RETRY' | 'SUCCESS' | 'FAILED' | 'CANCELLED';
+
+/** 通知ごと・端末ごとの送信の状態(push_notification_targets)。 */
+export interface PushTarget {
+  device_id: string;
+  status: TargetStatus;
+  status_reason: string | null;
+  /** 結果の出た試行の回数(CONFIG_ERROR・UNKNOWN は数えない) */
+  attempts: number;
+}
+
+/** まだ送る端末(PENDING・RETRY)。 */
+export const isOpenTarget = (t: Pick<PushTarget, 'status'>) => t.status === 'PENDING' || t.status === 'RETRY';
+
+/**
+ * 1回の結果で端末の状態を進める(DB では complete_push_delivery_attempt が同じ規則で行う)。
+ * 一度 SUCCESS になった端末は戻さない。CONFIG_ERROR は端末の状態を変えない。
+ */
+export function nextTargetState(
+  target: PushTarget,
+  outcome: DeliveryOutcome,
+  maxAttempts = MAX_DELIVERY_ATTEMPTS,
+): PushTarget {
+  if (outcome === 'CONFIG_ERROR') return target;
+  const attempts = target.attempts + 1;
+  if (target.status === 'SUCCESS' || outcome === 'SUCCESS') {
+    return { ...target, attempts, status: 'SUCCESS', status_reason: null };
+  }
+  if (outcome === 'PERMANENT_ERROR' || outcome === 'INVALID_TOKEN') {
+    return { ...target, attempts, status: 'FAILED', status_reason: outcome };
+  }
+  if (attempts >= maxAttempts) return { ...target, attempts, status: 'FAILED', status_reason: 'MAX_ATTEMPTS' };
+  return { ...target, attempts, status: 'RETRY', status_reason: 'RETRY' };
+}
+
+export interface NotificationResolution {
+  status: 'SENT' | 'PARTIAL_FAILURE' | 'FAILED' | 'PENDING' | 'SKIPPED';
   status_reason: string | null;
   next_attempt_at: string | null;
+  /** 期限までに再試行できないので FAILED EXPIRED にする端末(PENDING・RETRY) */
+  expire_open_targets: boolean;
 }
 
 /**
- * 端末ごとの結果から、通知の行の次の状態を決める。attempts = 今回を含めた試行の回数。
- * - 1台でも届いた → SENT(残りの端末の失敗は記録だけ)
- * - 端末が無い → SKIPPED NO_DEVICE
- * - 再試行できる失敗があり、回数が上限未満で、次の試行が期限より前 → PENDING(待ってから再試行)
- * - それ以外 → FAILED(理由: 最後の失敗の種類)
+ * 端末ごとの状態から、通知全体の状態を決める(HQ指示 2026-11-10「複数端末配信・部分失敗対応」)。round = 今回を含めた
+ * 送信の回(通知の attempts)。対象の端末は、最初に送ったときの有効な端末(後から登録した端末は入らない)。
+ * - まだ送る端末(RETRY)がある → 次の回の時刻(1・2・5・10分の後)が期限より前なら PENDING RETRY。期限に間に合わなければ、
+ *   その端末を FAILED EXPIRED にして、下の最終の状態にする(EXPIRED_BEFORE_RETRY)。1台の成功で、ほかの端末の再試行は止めない。
+ * - 最終(すべての端末が SUCCESS / FAILED / CANCELLED):
+ *     SUCCESS だけ(CANCELLED を含んでもよい)→ SENT
+ *     SUCCESS と FAILED がある → PARTIAL_FAILURE(理由: 届かなかった理由)
+ *     FAILED だけ(CANCELLED を含んでもよい)→ FAILED(ALL_TOKENS_INVALID / MAX_ATTEMPTS / PERMANENT_ERROR / EXPIRED_BEFORE_RETRY)
+ *     CANCELLED だけ(端末がすべて外れた)・端末なし → SKIPPED ALL_DEVICES_REMOVED / NO_DEVICE
  */
-export function resolveDeliveryResult(
-  outcomes: readonly DeliveryOutcome[],
-  attempts: number,
+export function resolveNotificationState(
+  targets: readonly PushTarget[],
+  round: number,
   now: Date,
   expiresAt: string,
-): DeliveryResult {
-  if (outcomes.length === 0) return { status: 'SKIPPED', status_reason: 'NO_DEVICE', next_attempt_at: null };
-  if (outcomes.includes('SUCCESS')) return { status: 'SENT', status_reason: null, next_attempt_at: null };
-  if (outcomes.includes('RETRYABLE_ERROR') && attempts < MAX_DELIVERY_ATTEMPTS) {
-    const delay = RETRY_DELAYS_MS[Math.min(attempts - 1, RETRY_DELAYS_MS.length - 1)]!;
+): NotificationResolution {
+  if (targets.length === 0) {
+    return { status: 'SKIPPED', status_reason: 'NO_DEVICE', next_attempt_at: null, expire_open_targets: false };
+  }
+  let effective = [...targets];
+  let expiredBeforeRetry = false;
+  if (effective.some(isOpenTarget)) {
+    const delay = RETRY_DELAYS_MS[Math.min(Math.max(round, 1) - 1, RETRY_DELAYS_MS.length - 1)]!;
     const next = now.getTime() + delay;
     if (next < Date.parse(expiresAt)) {
-      return { status: 'PENDING', status_reason: 'RETRY', next_attempt_at: iso(next) };
+      return { status: 'PENDING', status_reason: 'RETRY', next_attempt_at: iso(next), expire_open_targets: false };
     }
-    return { status: 'FAILED', status_reason: 'EXPIRED_BEFORE_RETRY', next_attempt_at: null };
+    expiredBeforeRetry = true;
+    effective = effective.map((t) => (isOpenTarget(t) ? { ...t, status: 'FAILED', status_reason: 'EXPIRED' } : t));
   }
-  const reason = outcomes.includes('RETRYABLE_ERROR')
-    ? 'MAX_ATTEMPTS'
-    : outcomes.every((o) => o === 'INVALID_TOKEN')
+  const success = effective.filter((t) => t.status === 'SUCCESS').length;
+  const failed = effective.filter((t) => t.status === 'FAILED');
+  const base = { next_attempt_at: null, expire_open_targets: expiredBeforeRetry };
+  if (success === 0 && failed.length === 0) return { ...base, status: 'SKIPPED', status_reason: 'ALL_DEVICES_REMOVED' };
+  const failReason = expiredBeforeRetry
+    ? 'EXPIRED_BEFORE_RETRY'
+    : failed.every((t) => t.status_reason === 'INVALID_TOKEN')
       ? 'ALL_TOKENS_INVALID'
-      : 'PERMANENT_ERROR';
-  return { status: 'FAILED', status_reason: reason, next_attempt_at: null };
+      : failed.some((t) => t.status_reason === 'MAX_ATTEMPTS')
+        ? 'MAX_ATTEMPTS'
+        : 'PERMANENT_ERROR';
+  if (failed.length === 0) return { ...base, status: 'SENT', status_reason: null };
+  if (success > 0) return { ...base, status: 'PARTIAL_FAILURE', status_reason: failReason };
+  return { ...base, status: 'FAILED', status_reason: failReason };
 }

@@ -8,6 +8,7 @@
 --   push_devices              端末(APNs のデバイストークン)。1つのトークンは最後に登録した利用者のもの
 --   push_favorite_currencies  お気に入り通貨(サーバーで判定するため。端末内のお気に入りとは別に、iOS が登録する)
 --   push_notifications        送信の予定と状態(キュー)。同じ利用者・同じ対象・同じ種類・同じ予定時刻は1件だけ
+--   push_notification_targets 通知ごと・端末ごとの送信の状態(HQ指示 2026-11-10「複数端末配信・部分失敗対応」)
 --   push_delivery_attempts    送信の試行ごとの記録(端末ごと。結果・HTTP の状態・APNs の理由)
 --
 -- 利用者が読めるのは自分の行だけ(push_devices・push_favorite_currencies・push_notifications の select)。書き込みは
@@ -16,6 +17,8 @@
 --   drop function push_queue_stats(timestamptz); drop function cleanup_push_notifications(integer, integer);
 --   drop function expire_push_notifications(); drop function renew_push_notification_lease(uuid, uuid, integer);
 --   drop function claim_due_push_notifications(integer, integer, integer);
+--   drop function complete_push_delivery_attempt(uuid, text, integer, text, text, integer);
+--   drop table push_notification_targets;
 --   drop table push_delivery_attempts; drop table push_notifications; drop table push_favorite_currencies; drop table push_devices;
 
 create table push_devices (
@@ -68,8 +71,12 @@ create table push_notifications (
   title text not null,
   body text not null,
   payload jsonb not null default '{}'::jsonb,
+  -- 通知全体の状態(端末ごとの状態は push_notification_targets):
+  --   PENDING(送る前・再試行待ち)/ SENDING(送信中)/ SENT(対象の端末すべてに届いた)/
+  --   PARTIAL_FAILURE(届いた端末と、最終的に届かなかった端末がある)/ FAILED(どの端末にも届かなかった)/
+  --   CANCELLED(送る前に取り消した)/ SKIPPED(送らなかった: 期限切れ・通知しない時間帯・端末なし)
   status text not null default 'PENDING'
-    check (status in ('PENDING', 'SENDING', 'SENT', 'FAILED', 'CANCELLED', 'SKIPPED')),
+    check (status in ('PENDING', 'SENDING', 'SENT', 'PARTIAL_FAILURE', 'FAILED', 'CANCELLED', 'SKIPPED')),
   -- CANCELLED / SKIPPED / FAILED の理由(TARGET_CANCELLED・RESCHEDULED・SETTINGS_CHANGED・EXPIRED・NO_DEVICE・QUIET_HOURS・
   -- MAX_ATTEMPTS・STUCK_IN_SENDING など)。PENDING で再試行待ちなら RETRY・CONFIG_ERROR
   status_reason text,
@@ -122,6 +129,31 @@ create table push_delivery_attempts (
 
 create index idx_push_delivery_attempts_notification on push_delivery_attempts(notification_id, device_id);
 create index idx_push_delivery_attempts_finished on push_delivery_attempts(finished_at);
+
+-- 通知ごと・端末ごとの送信の状態(HQ指示 2026-11-10「複数端末配信・部分失敗対応」)。最初に送るときに、その時点の有効な端末で
+-- 作る(対象の端末はそこで決まる。後から登録した端末には、その通知を送らない)。
+--   PENDING(まだ送っていない)/ RETRY(一時的な失敗。再試行する)/ SUCCESS(届いた。二度と送らない)/
+--   FAILED(最終的に届かなかった: PERMANENT_ERROR・INVALID_TOKEN・MAX_ATTEMPTS・EXPIRED)/
+--   CANCELLED(届く前に端末が外れた: DEVICE_REMOVED)
+create table push_notification_targets (
+  notification_id uuid not null references push_notifications(id) on delete cascade,
+  device_id uuid not null references push_devices(id) on delete cascade,
+  status text not null default 'PENDING' check (status in ('PENDING', 'RETRY', 'SUCCESS', 'FAILED', 'CANCELLED')),
+  status_reason text,
+  -- 結果の出た試行の回数(CONFIG_ERROR・UNKNOWN は数えない)
+  attempts integer not null default 0 check (attempts >= 0),
+  last_outcome text,
+  last_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (notification_id, device_id)
+);
+
+create index idx_push_notification_targets_open on push_notification_targets(notification_id) where status in ('PENDING', 'RETRY');
+
+create trigger trg_push_notification_targets_set_updated_at
+  before update on push_notification_targets
+  for each row execute function set_updated_at();
 
 -- 送る時刻になった行を取り出して SENDING にする(新しい claim_token)。for update skip locked で、同時に動いた送信ジョブが
 -- 同じ行を取らない。対象:
@@ -183,6 +215,57 @@ begin
 end;
 $$;
 
+-- 送信の記録を終え、同じ transaction で端末の状態を進める(記録と状態がずれない)。IN_FLIGHT の記録だけ。戻り値 = 端末の状態の行。
+--   SUCCESS → SUCCESS / PERMANENT_ERROR → FAILED PERMANENT_ERROR / INVALID_TOKEN → FAILED INVALID_TOKEN /
+--   RETRYABLE_ERROR → RETRY(結果の出た試行が p_max_attempts に達したら FAILED MAX_ATTEMPTS)/
+--   CONFIG_ERROR → 端末の状態は変えない(APNs の鍵・設定の問題で、端末の失敗ではない)
+-- 一度 SUCCESS になった端末は、ほかの結果で戻さない。
+create or replace function complete_push_delivery_attempt(
+  p_attempt_id uuid, p_outcome text, p_http_status integer, p_apns_id text, p_reason text, p_max_attempts integer)
+returns setof push_notification_targets
+language plpgsql
+as $$
+declare
+  v_notification uuid;
+  v_device uuid;
+begin
+  if p_outcome is null or p_outcome not in ('SUCCESS', 'RETRYABLE_ERROR', 'PERMANENT_ERROR', 'INVALID_TOKEN', 'CONFIG_ERROR') then
+    raise exception 'p_outcome % is not a final outcome', p_outcome using errcode = '22023';
+  end if;
+  if p_max_attempts is null or p_max_attempts < 1 or p_max_attempts > 20 then
+    raise exception 'p_max_attempts must be between 1 and 20' using errcode = '22023';
+  end if;
+  update push_delivery_attempts
+  set outcome = p_outcome, http_status = p_http_status, apns_id = p_apns_id, reason = p_reason, finished_at = now()
+  where id = p_attempt_id and outcome = 'IN_FLIGHT'
+  returning notification_id, device_id into v_notification, v_device;
+  if not found then
+    raise exception 'attempt % is not IN_FLIGHT', p_attempt_id using errcode = '55000';
+  end if;
+  if p_outcome = 'CONFIG_ERROR' then
+    return query select * from push_notification_targets t where t.notification_id = v_notification and t.device_id = v_device;
+    return;
+  end if;
+  return query
+  update push_notification_targets t
+  set attempts = t.attempts + 1,
+      last_outcome = p_outcome,
+      last_error = case when p_outcome = 'SUCCESS' then t.last_error else concat_ws(' ', p_http_status::text, p_reason) end,
+      status = case
+        when t.status = 'SUCCESS' or p_outcome = 'SUCCESS' then 'SUCCESS'
+        when p_outcome in ('PERMANENT_ERROR', 'INVALID_TOKEN') then 'FAILED'
+        when t.attempts + 1 >= p_max_attempts then 'FAILED'
+        else 'RETRY' end,
+      status_reason = case
+        when t.status = 'SUCCESS' or p_outcome = 'SUCCESS' then null
+        when p_outcome in ('PERMANENT_ERROR', 'INVALID_TOKEN') then p_outcome
+        when t.attempts + 1 >= p_max_attempts then 'MAX_ATTEMPTS'
+        else 'RETRY' end
+  where t.notification_id = v_notification and t.device_id = v_device
+  returning t.*;
+end;
+$$;
+
 -- 持ち時間の延長(端末に送る前ごとに呼ぶ)。印が一致して SENDING のときだけ。false = 取り出しを失った(送らない)。
 create or replace function renew_push_notification_lease(p_id uuid, p_claim_token uuid, p_lease_seconds integer)
 returns boolean
@@ -202,23 +285,48 @@ begin
 end;
 $$;
 
--- 期限を過ぎた PENDING を SKIPPED EXPIRED にする(APNs が未設定のときも動かす。キューに古い行が残り続けない)。戻り値 = 件数。
+-- 期限を過ぎた PENDING を終わらせる(APNs が未設定のときも動かす。期限を過ぎた通知は、設定が直っても送らない)。戻り値 = 件数。
+--   まだ1回も送っていない → SKIPPED EXPIRED
+--   再試行待ちで、届いた端末がある → PARTIAL_FAILURE EXPIRED_BEFORE_RETRY / 届いた端末が無い → FAILED EXPIRED_BEFORE_RETRY
+--   再試行待ちの端末(PENDING・RETRY)は FAILED EXPIRED
+-- 行は消さない(古い行の整理は cleanup_push_notifications)。
 create or replace function expire_push_notifications()
 returns integer
 language plpgsql
 as $$
 declare
-  v_count integer;
+  v_ids uuid[];
 begin
-  update push_notifications
-  set status = 'SKIPPED', status_reason = 'EXPIRED', claim_token = null, lease_until = null
-  where status = 'PENDING' and expires_at <= now();
-  get diagnostics v_count = row_count;
-  return v_count;
+  select coalesce(array_agg(e.id), '{}') into v_ids
+  from (
+    select n.id from push_notifications n
+    where n.status = 'PENDING' and n.expires_at <= now()
+    for update skip locked
+  ) e;
+  if cardinality(v_ids) = 0 then
+    return 0;
+  end if;
+  update push_notifications n
+  set status = case
+        when exists (select 1 from push_notification_targets x where x.notification_id = n.id and x.status = 'SUCCESS')
+          then 'PARTIAL_FAILURE'
+        when n.attempts > 0 then 'FAILED'
+        else 'SKIPPED' end,
+      status_reason = case
+        when n.attempts > 0
+          or exists (select 1 from push_notification_targets x where x.notification_id = n.id and x.status = 'SUCCESS')
+          then 'EXPIRED_BEFORE_RETRY'
+        else 'EXPIRED' end,
+      claim_token = null, lease_until = null
+  where n.id = any(v_ids);
+  update push_notification_targets t
+  set status = 'FAILED', status_reason = 'EXPIRED'
+  where t.notification_id = any(v_ids) and t.status in ('PENDING', 'RETRY');
+  return cardinality(v_ids);
 end;
 $$;
 
--- 古い行の整理。終わった行(SENT・CANCELLED・SKIPPED)は p_keep_days 日、FAILED は p_keep_failed_days 日残す
+-- 古い行の整理。終わった行(SENT・CANCELLED・SKIPPED)は p_keep_days 日、FAILED・PARTIAL_FAILURE は p_keep_failed_days 日残す
 -- (失敗の履歴は長めに残す)。送信の記録は cascade で消える。PENDING・SENDING は消さない。戻り値 = 消した件数。
 create or replace function cleanup_push_notifications(p_keep_days integer default 30, p_keep_failed_days integer default 90)
 returns integer
@@ -232,7 +340,7 @@ begin
   end if;
   delete from push_notifications
   where (status in ('SENT', 'CANCELLED', 'SKIPPED') and updated_at < now() - make_interval(days => p_keep_days))
-     or (status = 'FAILED' and updated_at < now() - make_interval(days => p_keep_failed_days));
+     or (status in ('FAILED', 'PARTIAL_FAILURE') and updated_at < now() - make_interval(days => p_keep_failed_days));
   get diagnostics v_count = row_count;
   return v_count;
 end;
@@ -257,6 +365,10 @@ as $$
     'by_status_since', (select coalesce(jsonb_object_agg(status, n), '{}'::jsonb)
                         from (select status, count(*) as n from push_notifications
                               where updated_at >= p_since group by status) s),
+    'targets_open', (select count(*) from push_notification_targets where status in ('PENDING', 'RETRY')),
+    'targets_by_status_since', (select coalesce(jsonb_object_agg(status, n), '{}'::jsonb)
+                                from (select status, count(*) as n from push_notification_targets
+                                      where updated_at >= p_since group by status) t),
     'attempts_since', (select coalesce(jsonb_object_agg(outcome, n), '{}'::jsonb)
                        from (select outcome, count(*) as n from push_delivery_attempts
                              where attempted_at >= p_since group by outcome) a),
@@ -271,12 +383,14 @@ alter table push_devices enable row level security;
 alter table push_favorite_currencies enable row level security;
 alter table push_notifications enable row level security;
 alter table push_delivery_attempts enable row level security;
+alter table push_notification_targets enable row level security;
 
 -- 同じ形(db-design.md §6): 自分の行を読むだけ。書き込みは service_role(Backend)だけ
 create policy push_devices_select_own on push_devices for select using (user_id = auth.uid());
 create policy push_favorite_currencies_select_own on push_favorite_currencies for select using (user_id = auth.uid());
 create policy push_notifications_select_own on push_notifications for select using (user_id = auth.uid());
 revoke all on table push_delivery_attempts from public, anon, authenticated;
+revoke all on table push_notification_targets from public, anon, authenticated;
 
 revoke all on function claim_due_push_notifications(integer, integer, integer) from public, anon, authenticated;
 grant execute on function claim_due_push_notifications(integer, integer, integer) to service_role;
@@ -288,3 +402,5 @@ revoke all on function cleanup_push_notifications(integer, integer) from public,
 grant execute on function cleanup_push_notifications(integer, integer) to service_role;
 revoke all on function push_queue_stats(timestamptz) from public, anon, authenticated;
 grant execute on function push_queue_stats(timestamptz) to service_role;
+revoke all on function complete_push_delivery_attempt(uuid, text, integer, text, text, integer) from public, anon, authenticated;
+grant execute on function complete_push_delivery_attempt(uuid, text, integer, text, text, integer) to service_role;

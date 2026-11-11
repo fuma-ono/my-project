@@ -68,7 +68,9 @@ PUT { "currency_codes": ["JPY", "USD"] }
 
 ### 3.5 `GET /api/v1/notifications/push/history?limit=50`
 
-直近7日の自分の通知の予定と結果(新しい順、最大100件)。`status`: `PENDING` / `SENDING` / `SENT` / `FAILED` / `CANCELLED` / `SKIPPED`、
+直近7日の自分の通知の予定と結果(新しい順、最大100件)。`status`: `PENDING` / `SENDING` / `SENT` / `PARTIAL_FAILURE` / `FAILED` /
+`CANCELLED` / `SKIPPED`(`PARTIAL_FAILURE` は 2026-11-10 の「複数端末配信」で追加)、
+`devices`: `{ total, success, failed, pending, cancelled }`(端末ごとの内訳。追加の項目)、
 `status_reason`(例 `RESCHEDULED`・`SETTINGS_CHANGED`・`EXPIRED`・`QUIET_HOURS`・`NO_DEVICE`)。確認・問い合わせの調査用。
 
 ### 3.6 `GET /api/v1/notifications/push/status`
@@ -155,13 +157,36 @@ HQ指示 2026-11-10「障害復旧・信頼性強化」で、途中で止まっ�
 
 ### 5.5 API への影響
 
-- **API の形は変わらない**(iOS の作業は要らない)。`GET /notifications/push/history` の `status_reason` に、`STUCK_IN_SENDING`・
+- **API の形は変わらない**(iOS の作業は要らない)。2026-11-10「複数端末配信」で `history` に `status: PARTIAL_FAILURE` と
+  `devices`(内訳)を足した — **値・項目を足しただけ**。`status` を列挙型で厳密に読んでいる場合は、知らない値を許す必要がある。`GET /notifications/push/history` の `status_reason` に、`STUCK_IN_SENDING`・
   `MAX_ATTEMPTS`・`CONFIG_ERROR`・`RETRY` などが出ることがある(調査用の値)。
 - 同じ通知が二重に届くことがある(5.2)。iOS は `fx.notification_id` が同じなら同じ通知として扱える。
 
+### 5.6 複数の端末・部分失敗(HQ指示 2026-11-10「複数端末配信・部分失敗対応」)
+
+- 端末ごとの状態は `push_notification_targets`(通知 × 端末): `PENDING` / `RETRY` / `SUCCESS` / `FAILED`(`PERMANENT_ERROR`・
+  `INVALID_TOKEN`・`MAX_ATTEMPTS`・`EXPIRED`)/ `CANCELLED`(`DEVICE_REMOVED`)。送信の記録を終えるのと同じ transaction で進める
+  (`complete_push_delivery_attempt`)。一度 `SUCCESS` になった端末は戻さない・二度と送らない。
+- 対象の端末は**最初に送るときの有効な端末**で決まる。**再試行の間に登録した端末には、その通知は送らない**(次の通知から対象)。
+  **再試行の間に外れた端末**(ログアウト・無効)は `CANCELLED DEVICE_REMOVED` にして送らない(失敗に数えない)。
+- 送るのは `PENDING`・`RETRY` の端末だけ。**1台が届いても、ほかの端末の再試行は止めない**。再試行の回数は端末ごと(上限5回)。
+- 通知全体は、すべての端末が `SUCCESS` / `FAILED` / `CANCELLED` になったときに最終にする:
+  すべて届いた → `SENT`、届いた端末と届かなかった端末がある → `PARTIAL_FAILURE`、どれも届かなかった → `FAILED`、
+  端末がすべて外れた → `SKIPPED ALL_DEVICES_REMOVED`。まだ再試行する端末があれば `PENDING RETRY`(次の回が期限に間に合わなければ、
+  その端末を `FAILED EXPIRED` にして最終にする)。
+
+### 5.7 APNs が未設定の間
+
+- 予約(`jobs:enqueue-push`)は**予定を作らない**(送れない予定でキューを増やさない)。設定が直った後は、その時点からの予定だけを作る。
+- 送信(`jobs:send-push`)は期限切れの整理だけを行う: 期限を過ぎた `PENDING` は、1回も送っていなければ `SKIPPED EXPIRED`、
+  届いた端末があれば `PARTIAL_FAILURE`、送ったが届いていなければ `FAILED`(どちらも `EXPIRED_BEFORE_RETRY`)。**期限を過ぎた通知は、
+  設定が直っても送らない**。期限内の `PENDING` はそのまま残り、設定が直ったら送る。
+- 行は消さない(整理は `cleanup_push_notifications` の保存期間だけ)。
+
 ## 6. DB(migration `20261110000005_push_notifications.sql`)
 
-`push_devices`・`push_favorite_currencies`・`push_notifications`・`push_delivery_attempts`、関数 `claim_due_push_notifications`・
+`push_devices`・`push_favorite_currencies`・`push_notifications`・`push_notification_targets`・`push_delivery_attempts`、
+関数 `claim_due_push_notifications`・`complete_push_delivery_attempt`・
 `renew_push_notification_lease`・`expire_push_notifications`・`cleanup_push_notifications`・`push_queue_stats`。
 RLS: 利用者は自分の端末・お気に入り・通知の行を読むだけ(書き込みは Backend の service_role)。送信の記録と取り出しの関数はアプリから使えない。
 戻す手順は migration の冒頭。

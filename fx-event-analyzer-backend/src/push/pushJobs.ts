@@ -7,6 +7,9 @@
  * 保証の範囲(push-notifications-spec.md §5.2): **At Least Once**(期限まで)。APNs に送った後、記録の前に止まると、その端末の
  * 結果は分からない(UNKNOWN)ので、取り直したときにもう一度送る — 二重に届くことがある(apns-collapse-id = 通知の id なので、
  * 通知センターでは1件にまとまる)。結果が記録できた端末(SUCCESS・送っても無駄な失敗)には二度送らない。
+ * 端末ごとの状態(push_notification_targets、HQ指示 2026-11-10「複数端末配信・部分失敗対応」): 対象の端末は最初に送るときの
+ * 有効な端末。1台の成功でほかの端末の再試行は止めない。すべての端末が SUCCESS / FAILED / CANCELLED になったら通知を最終の
+ * 状態(SENT / PARTIAL_FAILURE / FAILED / SKIPPED)にする(domain の resolveNotificationState)。
  */
 import {
   decidePushSend,
@@ -14,12 +17,14 @@ import {
   planReleasedPushes,
   PRE_RELEASE_HORIZON_MINUTES,
   RELEASED_MAX_AGE_MINUTES,
-  resolveDeliveryResult,
+  isOpenTarget,
+  MAX_DELIVERY_ATTEMPTS,
+  resolveNotificationState,
   type DeliveryOutcome,
   type PushNotificationRow,
   type PushPlanItem,
+  type PushTarget,
   type PushUserContext,
-  type RecordedOutcome,
 } from '../domain/pushNotifications.js';
 import type { NotificationCandidate } from '../domain/notifications.js';
 import type { PushDevice, PushSender } from './apnsSender.js';
@@ -56,7 +61,7 @@ export interface AttemptResult {
 }
 
 export interface PushRowUpdate {
-  status: 'PENDING' | 'SENT' | 'FAILED' | 'CANCELLED' | 'SKIPPED';
+  status: 'PENDING' | 'SENT' | 'PARTIAL_FAILURE' | 'FAILED' | 'CANCELLED' | 'SKIPPED';
   status_reason: string | null;
   attempts?: number;
   next_attempt_at?: string;
@@ -91,12 +96,18 @@ export interface PushStore {
   /** 持ち時間を延ばす。false = 取り出しを失った(別のジョブが取り直した・もう終わった)。 */
   renewLease(notificationId: string, claimToken: string, leaseSeconds: number): Promise<boolean>;
   listActiveDevices(userId: string): Promise<PushDeviceRow[]>;
-  /** この通知の、端末ごとの最後の記録(取り直しのとき、どの端末に送り直すかを決める)。 */
-  listLatestOutcomes(notificationId: string): Promise<Map<string, RecordedOutcome>>;
+  /**
+   * この通知の端末ごとの状態。まだ無ければ deviceIds(今の有効な端末)で作る(対象の端末はここで決まり、後から増えない)。
+   */
+  ensureTargets(notificationId: string, deviceIds: readonly string[]): Promise<PushTarget[]>;
+  /** まだ送る端末(PENDING・RETRY)を CANCELLED にする(端末が外れた)。 */
+  cancelTargets(notificationId: string, deviceIds: readonly string[], reason: 'DEVICE_REMOVED'): Promise<void>;
+  /** まだ送る端末を FAILED EXPIRED にする(期限までに再試行できない)。 */
+  expireOpenTargets(notificationId: string): Promise<void>;
   /** 送る前に IN_FLIGHT の記録を作る。戻り値 = 記録の id。 */
   startAttempt(attempt: AttemptStart): Promise<string>;
-  /** APNs の応答で記録を終える(IN_FLIGHT の記録だけ)。 */
-  completeAttempt(attemptId: string, result: AttemptResult): Promise<void>;
+  /** APNs の応答で記録を終え、同じ transaction で端末の状態を進める。戻り値 = 端末の新しい状態。 */
+  completeAttempt(attemptId: string, result: AttemptResult, maxAttempts: number): Promise<PushTarget>;
   deactivateDevice(deviceId: string, reason: 'APNS_INVALID_TOKEN'): Promise<void>;
   /** 行の状態を書く。claim_token が一致し SENDING のときだけ(false = 取り出しを失っていた)。 */
   finish(notificationId: string, claimToken: string, update: PushRowUpdate): Promise<boolean>;
@@ -106,13 +117,27 @@ export interface EnqueueResult {
   users: number;
   planned: number;
   inserted: number;
+  /** APNs が未設定で、予定を作らなかった(キューを増やさない) */
+  skipped_not_configured: boolean;
   errors: string[];
 }
 
-/** 全員分の予定を作る。1人の失敗で全体を止めない(errors に入れて次の人へ)。 */
-export async function enqueuePushNotifications(deps: { store: PushStore; now?: () => Date }): Promise<EnqueueResult> {
+/**
+ * 全員分の予定を作る。1人の失敗で全体を止めない(errors に入れて次の人へ)。
+ * apnsConfigured = false(APNs が未設定)なら何も作らない: 送れない予定でキューを増やさない(HQ指示 2026-11-10「APNs 未設定時の
+ * 滞留対策」)。設定が直った後は、その時点からの予定だけを作る(過ぎた通知は作らない・送らない)。
+ */
+export async function enqueuePushNotifications(deps: {
+  store: PushStore;
+  now?: () => Date;
+  apnsConfigured?: boolean;
+}): Promise<EnqueueResult> {
   const now = deps.now?.() ?? new Date();
-  const result: EnqueueResult = { users: 0, planned: 0, inserted: 0, errors: [] };
+  const result: EnqueueResult = { users: 0, planned: 0, inserted: 0, skipped_not_configured: false, errors: [] };
+  if (deps.apnsConfigured === false) {
+    result.skipped_not_configured = true;
+    return result;
+  }
   const userIds = await deps.store.listPushUserIds();
   if (userIds.length === 0) return result;
 
@@ -149,13 +174,17 @@ export interface SendResultSummary {
   /** claimed のうち、前の送信が途中で止まって取り直した行 */
   recovered: number;
   sent: number;
+  /** 届いた端末と、最終的に届かなかった端末がある */
+  partial_failure: number;
   retried: number;
   failed: number;
   cancelled: number;
   skipped: number;
   invalidated_devices: number;
-  /** 結果の分からない(UNKNOWN)端末に送り直した回数(At Least Once の二重の可能性) */
+  /** 取り直した行で、まだ届いていない端末に送り直した回数(At Least Once の二重の可能性) */
   resent_unknown: number;
+  /** 再試行の間に外れた端末(CANCELLED DEVICE_REMOVED) */
+  cancelled_devices: number;
   /** 送信の途中で取り出しを失った(持ち時間切れで別のジョブが取った)行 */
   lost_claims: number;
   /** CONFIG_ERROR で止め、差し戻した行 */
@@ -164,15 +193,13 @@ export interface SendResultSummary {
   errors: string[];
 }
 
-/** 送ってもむだな端末(結果が記録済みで、送り直さない)。UNKNOWN・RETRYABLE_ERROR・IN_FLIGHT は送り直す。 */
-const TERMINAL_FOR_DEVICE: readonly RecordedOutcome[] = ['SUCCESS', 'PERMANENT_ERROR', 'INVALID_TOKEN'];
-
 /**
  * 送る時刻になった行を送る。
  * - APNs が未設定(sender = null): 期限切れの整理だけして、取り出さない(キューは壊れない。期限で SKIPPED になる)。
  * - 1件ごとに: 今の候補と設定で確かめる(decidePushSend)→ 端末ごとに [持ち時間の延長 → IN_FLIGHT の記録 → 送信 → 記録を終える]
  *   → 無効な端末を外す → 行の状態を決める(claim_token が一致するときだけ書く)。
- * - 取り直した行: 記録が SUCCESS / 送ってもむだな失敗の端末には送らない。UNKNOWN の端末には送り直す(At Least Once)。
+ * - 端末ごと: SUCCESS・FAILED・CANCELLED の端末には送らない。PENDING・RETRY の端末だけに送る(取り直した行の UNKNOWN の
+ *   端末も、状態は PENDING / RETRY のままなので送り直す — At Least Once)。
  * - CONFIG_ERROR(APNs の鍵・設定): その行と、まだ送っていない取り出し済みの行を PENDING に差し戻し(試行の回数は増やさない)、
  *   この回の送信をやめる。
  */
@@ -190,12 +217,14 @@ export async function sendDuePushNotifications(deps: {
     claimed: 0,
     recovered: 0,
     sent: 0,
+    partial_failure: 0,
     retried: 0,
     failed: 0,
     cancelled: 0,
     skipped: 0,
     invalidated_devices: 0,
     resent_unknown: 0,
+    cancelled_devices: 0,
     lost_claims: 0,
     released_config_error: 0,
     config_error: false,
@@ -252,61 +281,62 @@ export async function sendDuePushNotifications(deps: {
         continue;
       }
 
-      const previous =
-        row.recovery_count > 0 || row.attempts > 0 ? await deps.store.listLatestOutcomes(row.id) : new Map();
-      const alreadyDelivered = [...previous.values()].includes('SUCCESS');
-      const devices = (await deps.store.listActiveDevices(row.user_id)).filter(
-        (d) => !TERMINAL_FOR_DEVICE.includes(previous.get(d.id) as RecordedOutcome),
+      const active = await deps.store.listActiveDevices(row.user_id);
+      const activeById = new Map(active.map((d) => [d.id, d]));
+      let targets = await deps.store.ensureTargets(
+        row.id,
+        active.map((d) => d.id),
       );
-      const attempt = row.attempts + 1;
-      // 前の試行で結果の決まった失敗(送り直さない端末)も、今回の判定に入れる
-      const carried = [...previous.values()].filter(
-        (o): o is DeliveryOutcome => o === 'PERMANENT_ERROR' || o === 'INVALID_TOKEN',
-      );
-      const outcomes: DeliveryOutcome[] = alreadyDelivered ? ['SUCCESS'] : [...carried];
+      // 再試行の間に外れた端末は送らない(CANCELLED)。後から登録した端末は対象にしない(ensureTargets は最初の1回だけ作る)
+      const removed = targets.filter((t) => isOpenTarget(t) && !activeById.has(t.device_id)).map((t) => t.device_id);
+      if (removed.length > 0) {
+        await deps.store.cancelTargets(row.id, removed, 'DEVICE_REMOVED');
+        targets = targets.map((t) =>
+          removed.includes(t.device_id) ? { ...t, status: 'CANCELLED', status_reason: 'DEVICE_REMOVED' } : t,
+        );
+        summary.cancelled_devices += removed.length;
+      }
+      const round = row.attempts + 1;
       let sentThisRun = 0;
       let lastError: string | null = null;
       let lost = false;
       let configError: string | null = null;
 
-      if (!alreadyDelivered) {
-        for (const device of devices) {
-          if (!(await deps.store.renewLease(row.id, row.claim_token, leaseSeconds))) {
-            lost = true; // 別のジョブが取り直した — この行には何も書かない
-            break;
-          }
-          if (previous.get(device.id) === 'UNKNOWN' || previous.get(device.id) === 'IN_FLIGHT')
-            summary.resent_unknown += 1;
-          const attemptId = await deps.store.startAttempt({
-            notification_id: row.id,
-            device_id: device.id,
-            attempt,
-            claim_token: row.claim_token,
-          });
-          const sent = await deps.sender.send(device, {
-            notificationId: row.id,
-            title: row.title,
-            body: row.body,
-            payload: row.payload,
-            expiresAt: row.expires_at,
-          });
-          await deps.store.completeAttempt(attemptId, {
-            outcome: sent.outcome,
-            http_status: sent.httpStatus,
-            apns_id: sent.apnsId,
-            reason: sent.reason,
-          });
-          if (sent.outcome === 'CONFIG_ERROR') {
-            configError = `${sent.httpStatus ?? 'ERR'} ${sent.reason ?? ''}`.trim();
-            break;
-          }
-          outcomes.push(sent.outcome);
-          sentThisRun += 1;
-          if (sent.outcome !== 'SUCCESS') lastError = `${sent.httpStatus ?? 'ERR'} ${sent.reason ?? ''}`.trim();
-          if (sent.outcome === 'INVALID_TOKEN') {
-            await deps.store.deactivateDevice(device.id, 'APNS_INVALID_TOKEN');
-            summary.invalidated_devices += 1;
-          }
+      for (const target of targets.filter(isOpenTarget)) {
+        const device = activeById.get(target.device_id)!;
+        if (!(await deps.store.renewLease(row.id, row.claim_token, leaseSeconds))) {
+          lost = true; // 別のジョブが取り直した — この行には何も書かない
+          break;
+        }
+        if (row.recovery_count > 0) summary.resent_unknown += 1;
+        const attemptId = await deps.store.startAttempt({
+          notification_id: row.id,
+          device_id: device.id,
+          attempt: round,
+          claim_token: row.claim_token,
+        });
+        const sent = await deps.sender.send(device, {
+          notificationId: row.id,
+          title: row.title,
+          body: row.body,
+          payload: row.payload,
+          expiresAt: row.expires_at,
+        });
+        const updated = await deps.store.completeAttempt(
+          attemptId,
+          { outcome: sent.outcome, http_status: sent.httpStatus, apns_id: sent.apnsId, reason: sent.reason },
+          MAX_DELIVERY_ATTEMPTS,
+        );
+        if (sent.outcome === 'CONFIG_ERROR') {
+          configError = `${sent.httpStatus ?? 'ERR'} ${sent.reason ?? ''}`.trim();
+          break;
+        }
+        sentThisRun += 1;
+        targets = targets.map((t) => (t.device_id === updated.device_id ? updated : t));
+        if (sent.outcome !== 'SUCCESS') lastError = `${sent.httpStatus ?? 'ERR'} ${sent.reason ?? ''}`.trim();
+        if (sent.outcome === 'INVALID_TOKEN') {
+          await deps.store.deactivateDevice(device.id, 'APNS_INVALID_TOKEN');
+          summary.invalidated_devices += 1;
         }
       }
 
@@ -320,17 +350,21 @@ export async function sendDuePushNotifications(deps: {
         await release(row, configError);
         continue;
       }
-      const result = resolveDeliveryResult(outcomes, attempt, now(), row.expires_at);
+      const attempts = sentThisRun > 0 ? round : row.attempts;
+      const result = resolveNotificationState(targets, attempts, now(), row.expires_at);
+      if (result.expire_open_targets) await deps.store.expireOpenTargets(row.id);
+      const delivered = result.status === 'SENT' || result.status === 'PARTIAL_FAILURE';
       const ok = await deps.store.finish(row.id, row.claim_token, {
         status: result.status,
         status_reason: result.status_reason,
-        attempts: sentThisRun > 0 ? attempt : row.attempts,
+        attempts,
         ...(result.next_attempt_at ? { next_attempt_at: result.next_attempt_at } : {}),
         last_error: lastError,
-        sent_at: result.status === 'SENT' ? now().toISOString() : null,
+        sent_at: delivered ? now().toISOString() : null,
       });
       if (!ok) summary.lost_claims += 1;
       else if (result.status === 'SENT') summary.sent += 1;
+      else if (result.status === 'PARTIAL_FAILURE') summary.partial_failure += 1;
       else if (result.status === 'PENDING') summary.retried += 1;
       else if (result.status === 'FAILED') summary.failed += 1;
       else summary.skipped += 1;

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { planLimitsFor } from '../domain/planLimits.js';
-import type { RecordedOutcome } from '../domain/pushNotifications.js';
+import type { PushTarget } from '../domain/pushNotifications.js';
 import { loadNotificationPreferences } from '../notifications/preferences.js';
 import type { ClaimedPushNotification, PushDeviceRow, PushStore } from '../push/pushJobs.js';
 import { listNotificationCandidates, listNotificationCandidatesByIds } from './notificationsRepository.js';
@@ -159,6 +159,11 @@ export interface PushHistoryItem {
   scheduled_send_at: string;
   sent_at: string | null;
   attempts: number;
+  /**
+   * 端末ごとの内訳(HQ指示 2026-11-10「複数端末配信・部分失敗対応」で追加。項目を足しただけで、既存の項目は変えていない)。
+   * まだ1回も送っていない通知は total 0。
+   */
+  devices: { total: number; success: number; failed: number; pending: number; cancelled: number };
 }
 
 export async function listPushHistory(
@@ -170,18 +175,30 @@ export async function listPushHistory(
   const { data, error } = await supabase
     .from('push_notifications')
     .select(
-      'id, push_type, target_kind, target_id, reason, title, body, status, status_reason, scheduled_send_at, sent_at, attempts',
+      'id, push_type, target_kind, target_id, reason, title, body, status, status_reason, scheduled_send_at, sent_at, attempts, push_notification_targets(status)',
     )
     .eq('user_id', userId)
     .gte('created_at', sinceIso)
     .order('scheduled_send_at', { ascending: false })
     .limit(limit);
   if (error) throw error;
-  return ((data ?? []) as PushHistoryItem[]).map((r) => ({
-    ...r,
-    scheduled_send_at: new Date(r.scheduled_send_at).toISOString(),
-    sent_at: r.sent_at ? new Date(r.sent_at).toISOString() : null,
-  }));
+  type Row = Omit<PushHistoryItem, 'devices'> & { push_notification_targets: { status: string }[] | null };
+  return ((data ?? []) as unknown as Row[]).map(({ push_notification_targets: targets, ...r }) => {
+    const list = targets ?? [];
+    const count = (...statuses: string[]) => list.filter((t) => statuses.includes(t.status)).length;
+    return {
+      ...r,
+      scheduled_send_at: new Date(r.scheduled_send_at).toISOString(),
+      sent_at: r.sent_at ? new Date(r.sent_at).toISOString() : null,
+      devices: {
+        total: list.length,
+        success: count('SUCCESS'),
+        failed: count('FAILED'),
+        pending: count('PENDING', 'RETRY'),
+        cancelled: count('CANCELLED'),
+      },
+    };
+  });
 }
 
 function toNotificationRow(row: Record<string, unknown>): ClaimedPushNotification {
@@ -271,21 +288,45 @@ export function createPushStore(supabase: SupabaseClient): PushStore {
       return data === true;
     },
 
-    async listLatestOutcomes(notificationId) {
-      const { data, error } = await supabase
-        .from('push_delivery_attempts')
-        .select('device_id, outcome, attempted_at')
-        .eq('notification_id', notificationId)
-        .order('attempted_at', { ascending: true });
+    async ensureTargets(notificationId, deviceIds) {
+      const read = async () => {
+        const { data, error } = await supabase
+          .from('push_notification_targets')
+          .select('device_id, status, status_reason, attempts')
+          .eq('notification_id', notificationId)
+          .order('device_id');
+        if (error) throw error;
+        return (data ?? []) as PushTarget[];
+      };
+      const existing = await read();
+      if (existing.length > 0 || deviceIds.length === 0) return existing;
+      // 最初に送るとき: 今の有効な端末を対象にする(この行を取り出している worker だけがここに来る)
+      const { error } = await supabase.from('push_notification_targets').upsert(
+        deviceIds.map((device_id) => ({ notification_id: notificationId, device_id })),
+        { onConflict: 'notification_id,device_id', ignoreDuplicates: true },
+      );
       if (error) throw error;
-      const latest = new Map<string, RecordedOutcome>();
-      for (const r of (data ?? []) as { device_id: string | null; outcome: RecordedOutcome }[]) {
-        if (!r.device_id) continue;
-        // SUCCESS は後の記録で上書きしない(一度届いた端末には送り直さない)
-        if (latest.get(r.device_id) === 'SUCCESS') continue;
-        latest.set(r.device_id, r.outcome);
-      }
-      return latest;
+      return read();
+    },
+
+    async cancelTargets(notificationId, deviceIds, reason) {
+      if (deviceIds.length === 0) return;
+      const { error } = await supabase
+        .from('push_notification_targets')
+        .update({ status: 'CANCELLED', status_reason: reason })
+        .eq('notification_id', notificationId)
+        .in('device_id', [...deviceIds])
+        .in('status', ['PENDING', 'RETRY']);
+      if (error) throw error;
+    },
+
+    async expireOpenTargets(notificationId) {
+      const { error } = await supabase
+        .from('push_notification_targets')
+        .update({ status: 'FAILED', status_reason: 'EXPIRED' })
+        .eq('notification_id', notificationId)
+        .in('status', ['PENDING', 'RETRY']);
+      if (error) throw error;
     },
 
     async startAttempt(attempt) {
@@ -298,13 +339,24 @@ export function createPushStore(supabase: SupabaseClient): PushStore {
       return String(data.id);
     },
 
-    async completeAttempt(attemptId, result) {
-      const { error } = await supabase
-        .from('push_delivery_attempts')
-        .update({ ...result, finished_at: new Date().toISOString() })
-        .eq('id', attemptId)
-        .eq('outcome', 'IN_FLIGHT');
+    async completeAttempt(attemptId, result, maxAttempts) {
+      const { data, error } = await supabase.rpc('complete_push_delivery_attempt', {
+        p_attempt_id: attemptId,
+        p_outcome: result.outcome,
+        p_http_status: result.http_status,
+        p_apns_id: result.apns_id,
+        p_reason: result.reason,
+        p_max_attempts: maxAttempts,
+      });
       if (error) throw error;
+      const [row] = (data ?? []) as PushTarget[];
+      if (!row) throw new Error(`no push target for attempt ${attemptId}`);
+      return {
+        device_id: row.device_id,
+        status: row.status,
+        status_reason: row.status_reason,
+        attempts: row.attempts,
+      };
     },
 
     async listActiveDevices(userId): Promise<PushDeviceRow[]> {

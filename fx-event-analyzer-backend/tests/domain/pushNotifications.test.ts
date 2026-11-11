@@ -14,7 +14,9 @@ import {
   matchesFavoriteCurrency,
   planPreReleasePushes,
   planReleasedPushes,
-  resolveDeliveryResult,
+  nextTargetState,
+  resolveNotificationState,
+  type PushTarget,
   type PushNotificationRow,
   type PushUserContext,
 } from '../../src/domain/pushNotifications.js';
@@ -294,39 +296,114 @@ describe('decidePushSend — the check right before sending', () => {
   });
 });
 
-describe('resolveDeliveryResult — retry policy', () => {
+describe('per-device state and the notification state (multi-device, partial failure)', () => {
   const expires = '2026-11-12T14:00:00.000Z';
   const t = new Date('2026-11-12T13:00:00Z');
-  it('any success → SENT; no device → SKIPPED NO_DEVICE', () => {
-    expect(resolveDeliveryResult(['RETRYABLE_ERROR', 'SUCCESS'], 1, t, expires).status).toBe('SENT');
-    expect(resolveDeliveryResult([], 1, t, expires)).toEqual({
-      status: 'SKIPPED',
-      status_reason: 'NO_DEVICE',
-      next_attempt_at: null,
-    });
+  const target = (device_id: string, over: Partial<PushTarget> = {}): PushTarget => ({
+    device_id,
+    status: 'PENDING',
+    status_reason: null,
+    attempts: 0,
+    ...over,
   });
-  it('retryable failures back off 1, 2, 5, 10 minutes, then FAILED at the attempt limit', () => {
-    expect(resolveDeliveryResult(['RETRYABLE_ERROR'], 1, t, expires).next_attempt_at).toBe('2026-11-12T13:01:00.000Z');
-    expect(resolveDeliveryResult(['RETRYABLE_ERROR'], 2, t, expires).next_attempt_at).toBe('2026-11-12T13:02:00.000Z');
-    expect(resolveDeliveryResult(['RETRYABLE_ERROR'], 3, t, expires).next_attempt_at).toBe('2026-11-12T13:05:00.000Z');
-    expect(resolveDeliveryResult(['RETRYABLE_ERROR'], 4, t, expires).next_attempt_at).toBe('2026-11-12T13:10:00.000Z');
-    expect(resolveDeliveryResult(['RETRYABLE_ERROR'], MAX_DELIVERY_ATTEMPTS, t, expires)).toMatchObject({
+
+  it('nextTargetState: success sticks, permanent / invalid are final, retryable retries until the limit, CONFIG_ERROR changes nothing', () => {
+    expect(nextTargetState(target('a'), 'SUCCESS')).toMatchObject({ status: 'SUCCESS', attempts: 1 });
+    expect(nextTargetState(target('a', { status: 'SUCCESS', attempts: 1 }), 'RETRYABLE_ERROR')).toMatchObject({
+      status: 'SUCCESS',
+    });
+    expect(nextTargetState(target('a'), 'PERMANENT_ERROR')).toMatchObject({
+      status: 'FAILED',
+      status_reason: 'PERMANENT_ERROR',
+    });
+    expect(nextTargetState(target('a'), 'INVALID_TOKEN')).toMatchObject({
+      status: 'FAILED',
+      status_reason: 'INVALID_TOKEN',
+    });
+    expect(nextTargetState(target('a', { attempts: 3 }), 'RETRYABLE_ERROR')).toMatchObject({
+      status: 'RETRY',
+      attempts: 4,
+    });
+    expect(nextTargetState(target('a', { attempts: MAX_DELIVERY_ATTEMPTS - 1 }), 'RETRYABLE_ERROR')).toMatchObject({
       status: 'FAILED',
       status_reason: 'MAX_ATTEMPTS',
+      attempts: MAX_DELIVERY_ATTEMPTS,
     });
+    expect(nextTargetState(target('a', { status: 'RETRY', attempts: 2 }), 'CONFIG_ERROR')).toEqual(
+      target('a', { status: 'RETRY', attempts: 2 }),
+    );
   });
-  it('no retry past the expiry; invalid tokens / permanent errors fail at once', () => {
-    expect(resolveDeliveryResult(['RETRYABLE_ERROR'], 1, t, '2026-11-12T13:00:30.000Z')).toMatchObject({
-      status: 'FAILED',
-      status_reason: 'EXPIRED_BEFORE_RETRY',
+
+  it('all success → SENT; success + retry → PENDING (one success does not stop the other device); success + final failure → PARTIAL_FAILURE', () => {
+    expect(
+      resolveNotificationState([target('a', { status: 'SUCCESS' }), target('b', { status: 'SUCCESS' })], 1, t, expires),
+    ).toMatchObject({
+      status: 'SENT',
     });
-    expect(resolveDeliveryResult(['INVALID_TOKEN'], 1, t, expires)).toMatchObject({
+    expect(
+      resolveNotificationState([target('a', { status: 'SUCCESS' }), target('b', { status: 'RETRY' })], 1, t, expires),
+    ).toEqual({
+      status: 'PENDING',
+      status_reason: 'RETRY',
+      next_attempt_at: '2026-11-12T13:01:00.000Z',
+      expire_open_targets: false,
+    });
+    expect(
+      resolveNotificationState(
+        [target('a', { status: 'SUCCESS' }), target('b', { status: 'FAILED', status_reason: 'PERMANENT_ERROR' })],
+        1,
+        t,
+        expires,
+      ),
+    ).toMatchObject({ status: 'PARTIAL_FAILURE', status_reason: 'PERMANENT_ERROR' });
+  });
+
+  it('all failed → FAILED with the reason; removed devices do not count as failures; nothing left → SKIPPED', () => {
+    const invalid = { status: 'FAILED' as const, status_reason: 'INVALID_TOKEN' };
+    expect(resolveNotificationState([target('a', invalid), target('b', invalid)], 1, t, expires)).toMatchObject({
       status: 'FAILED',
       status_reason: 'ALL_TOKENS_INVALID',
     });
-    expect(resolveDeliveryResult(['PERMANENT_ERROR', 'INVALID_TOKEN'], 1, t, expires)).toMatchObject({
+    expect(
+      resolveNotificationState(
+        [target('a', { status: 'FAILED', status_reason: 'MAX_ATTEMPTS' }), target('b', invalid)],
+        5,
+        t,
+        expires,
+      ),
+    ).toMatchObject({ status: 'FAILED', status_reason: 'MAX_ATTEMPTS' });
+    const removed = { status: 'CANCELLED' as const, status_reason: 'DEVICE_REMOVED' };
+    expect(
+      resolveNotificationState([target('a', { status: 'SUCCESS' }), target('b', removed)], 2, t, expires),
+    ).toMatchObject({
+      status: 'SENT',
+    });
+    expect(resolveNotificationState([target('a', removed)], 2, t, expires)).toMatchObject({
+      status: 'SKIPPED',
+      status_reason: 'ALL_DEVICES_REMOVED',
+    });
+    expect(resolveNotificationState([], 1, t, expires)).toMatchObject({
+      status: 'SKIPPED',
+      status_reason: 'NO_DEVICE',
+    });
+  });
+
+  it('back-off 1, 2, 5, 10 minutes by round; if the next round would pass the expiry the open devices expire and the state is final', () => {
+    const open = [target('a', { status: 'RETRY' })];
+    expect(resolveNotificationState(open, 2, t, expires).next_attempt_at).toBe('2026-11-12T13:02:00.000Z');
+    expect(resolveNotificationState(open, 3, t, expires).next_attempt_at).toBe('2026-11-12T13:05:00.000Z');
+    expect(resolveNotificationState(open, 4, t, expires).next_attempt_at).toBe('2026-11-12T13:10:00.000Z');
+    const soon = '2026-11-12T13:00:30.000Z';
+    expect(resolveNotificationState(open, 1, t, soon)).toEqual({
       status: 'FAILED',
-      status_reason: 'PERMANENT_ERROR',
+      status_reason: 'EXPIRED_BEFORE_RETRY',
+      next_attempt_at: null,
+      expire_open_targets: true,
+    });
+    expect(resolveNotificationState([target('s', { status: 'SUCCESS' }), ...open], 1, t, soon)).toMatchObject({
+      status: 'PARTIAL_FAILURE',
+      status_reason: 'EXPIRED_BEFORE_RETRY',
+      expire_open_targets: true,
     });
   });
 });
