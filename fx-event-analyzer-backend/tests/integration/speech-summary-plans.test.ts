@@ -45,7 +45,8 @@ describe.skipIf(!integration)('speech summary status for FREE and PRO (GET /spee
       importance: 'MEDIUM',
       status: 'DELIVERED',
     };
-    const { error } = await ctx.serviceClient.from('speech_events').insert([
+    // 1行ずつ入れる(まとめて入れると、行ごとに無い列が既定値ではなく null になる — body_status は null 不可)
+    const rows = [
       {
         ...base,
         id: ids.ready,
@@ -76,8 +77,11 @@ describe.skipIf(!integration)('speech summary status for FREE and PRO (GET /spee
         provider_event_id: `plan-none-${runId}`,
         statement_datetime: '2026-11-03T17:00:00Z',
       },
-    ]);
-    if (error) throw error;
+    ];
+    for (const row of rows) {
+      const { error } = await ctx.serviceClient.from('speech_events').insert(row);
+      if (error) throw error;
+    }
   });
 
   afterAll(async () => {
