@@ -25,6 +25,10 @@ describe('attributionForIndicator: official statistics outside the US', () => {
       expect(attributionForIndicator(code), code).toEqual(ABS_ATTRIBUTION);
     expect(ABS_ATTRIBUTION.notice).toContain('© Commonwealth of Australia');
     expect(ABS_ATTRIBUTION.notice).toContain('CC BY 4.0');
+    expect(ABS_ATTRIBUTION.notice).toContain('https://creativecommons.org/licenses/by/4.0/');
+    expect(ABS_ATTRIBUTION.notice).toContain(
+      'Disclaimer: https://www.abs.gov.au/website-privacy-copyright-and-disclaimer',
+    );
   });
 
   it('Statistics Canada: the unemployment rate names its table; CPI (schedule only) the agency; both carry the "as is" sentence', () => {
