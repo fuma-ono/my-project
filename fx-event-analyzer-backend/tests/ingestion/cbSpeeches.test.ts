@@ -101,4 +101,36 @@ describe('ECB Executive Board speakers', () => {
     expect(store.speeches).toEqual([]);
     expect(Object.keys(counters.skipReasons)).toEqual(['TIME_NOT_EXACT']);
   });
+
+  // HQ指示(2026-11-10「ECB の0件」): ingest:speeches は ECB の press の RSS の講演を PUBLICATION_TIME として入れ、公式ページの URL も入れる。
+  it('with publicationTimeKinds [SPEECH] + storeSourceUrl: ECB speeches are stored as PUBLICATION_TIME with the official page URL; interviews are not', async () => {
+    const store = new MemoryIngestionStore();
+    store.speakers = [
+      { id: 'sp-elderson', name: 'フランク・エルダーソン', organization: 'ECB' },
+      { id: 'sp-lane', name: 'フィリップ・レーン', organization: 'ECB' },
+      { id: 'sp-cipollone', name: 'ピエロ・チポローネ', organization: 'ECB' },
+    ];
+    const speeches = parseEcbPressRss(await fixture('ecb-press-rss.xml'));
+    const counters = new JobCounters();
+    await ingestSpeeches(
+      'ecb_press_rss',
+      speeches,
+      {
+        store,
+        now: () => new Date('2026-10-15T12:00:00Z'),
+        pastDays: 3650,
+        publicationTimeKinds: ['SPEECH'],
+        storeSourceUrl: true,
+      },
+      counters,
+    );
+    expect(store.speeches.length).toBeGreaterThanOrEqual(3);
+    for (const row of store.speeches) {
+      expect(row.time_precision).toBe('PUBLICATION_TIME');
+      expect(row.source_url).toMatch(/^https:\/\/www\.ecb\.europa\.eu\/press\/key\//); // 二重スラッシュは直してある
+      expect(row.source_url).toContain(`${row.provider_event_id}.en.html`); // その講演のページ(別の講演と取り違えない)
+    }
+    expect(store.speeches.some((row) => row.source_url?.includes('/press/inter/'))).toBe(false); // インタビューは入れない
+    expect(counters.skipReasons.TIME_NOT_EXACT).toBeGreaterThanOrEqual(1); // インタビューは今までどおり飛ばす
+  });
 });

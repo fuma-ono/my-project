@@ -165,7 +165,11 @@ export interface SpeechEventRow {
   importance: 'LOW' | 'MEDIUM' | 'HIGH';
   status: 'SCHEDULED' | 'DELIVERED';
   /** speech_events.time_precision (migration 20261028000001). */
-  time_precision: 'EXACT' | 'PUBLICATION_TIME';
+  time_precision: 'EXACT' | 'PUBLICATION_TIME'; /**
+   * 公式の発言ページの URL(migration 20261110000001)。ECB の press の RSS だけが入れる(FRB の行には入れない —
+   * 入れると、本文のジョブが後から結んだ URL を、次の取り込みで null に戻してしまうため)。
+   */
+  source_url?: string | null;
 }
 
 export type SpeechStatus = 'SCHEDULED' | 'DELIVERED' | 'CANCELLED';
