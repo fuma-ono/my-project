@@ -1,4 +1,4 @@
-# FX Event Analyzer: API詳細設計書 v1.49
+# FX Event Analyzer: API詳細設計書 v1.51
 
 **出典**: HQより2026-09-16共有(v1.0、本文)。同日、APIレビュー(Claude Code実施)でのAランク8件・Bランク7件の指摘に対するHQ方針確定を受けv1.1を作成。続けて同日、残課題6件(B-1/B-6/B-7/A-1/B-5/A-6/timezone)への最終回答を受け、v1.2として更新した。
 
@@ -7,6 +7,7 @@
 ## 変更履歴
 
 - **v1.0**: HQ作成・共有(本書のベース)
+- **v1.51**(2026-11-10、HQ決定「要人発言の要約機能改善」。`claude/fx-speech-summary-status` で追加): 要人発言(SpeechSummary。`GET /speeches`・`GET /speeches/{id}` ほか、SpeechSummary を返すところ全部)に **`summary_status`** を追加(項目の追加だけ。`summary` は今までどおり)。値は `NOT_AVAILABLE`(要約が無い。要約を作る仕組みはまだ無いので、`summary` が null・空のときはこれ。発言前・中止も)・`READY`(`summary` がある)・`GENERATING`・`FAILED`(要約を作る仕組みを入れたときのための値。**今は返さない**。DB に状態の列は無い)。iOS は `status`(発言前・中止)と `summary_status` で表示を分ける(`NOT_AVAILABLE` は「この発言の要約データはありません」)。要約の中身は作らない(推測で埋めない)。DB の変更は無し
 - **v1.1**(今回): APIレビューのAランク8件・Bランク7件に対するHQ方針確定(2026-09-16)を反映
   - A-1: `GET /events/{event_id}/revisions`を新設(16.1節)。Event Detail APIに改定有無を判定できる情報を追加(14章)
   - A-2: Event Detailの`related_fx_pairs`に軽量なMarket Reaction Summary(5m基準)を追加(14章)
