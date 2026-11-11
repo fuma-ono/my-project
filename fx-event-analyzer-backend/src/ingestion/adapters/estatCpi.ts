@@ -22,6 +22,8 @@
 
 export const ESTAT_API_BASE = 'https://api.e-stat.go.jp/rest/3.0/app/json';
 export const ESTAT_CPI_2025_STATS_DATA_ID = '0004052037';
+/** 出典の URL(appId を含まない、e-Stat の表の画面)。 */
+export const ESTAT_CPI_DBVIEW_URL = 'https://www.e-stat.go.jp/dbview?sid=0004052037';
 export const ESTAT_API_CREDIT =
   'このサービスは、政府統計総合窓口(e-Stat)のAPI機能を使用していますが、サービスの内容は国によって保証されたものではありません。';
 
@@ -105,24 +107,32 @@ export function resolveJpCpiDimensions(meta: unknown): EstatDimensions | null {
   };
 }
 
-/** その月の値だけを絞り込んで読む URL(1回の呼び出しで1つの値)。 */
+/** 対象月(1つ以上)の値だけを絞り込んで読む URL(1回の呼び出し)。月の形が正しくなければ null。 */
 export function statsDataUrl(
   appId: string,
   dims: EstatDimensions,
-  period: string,
+  periods: string | readonly string[],
   statsDataId = ESTAT_CPI_2025_STATS_DATA_ID,
 ): string | null {
-  const time = estatMonthCode(period);
-  if (!time) return null;
+  const list = typeof periods === 'string' ? [periods] : [...periods];
+  const times = list.map(estatMonthCode);
+  if (times.length === 0 || times.some((t) => t === null)) return null;
   const q = new URLSearchParams({
     appId,
     statsDataId,
     [dims.tab.param]: dims.tab.code,
     [dims.area.param]: dims.area.code,
     [dims.item.param]: dims.item.code,
-    [dims.time.param]: time,
+    [dims.time.param]: times.join(','),
   });
   return `${ESTAT_API_BASE}/getStatsData?${q.toString()}`;
+}
+
+/** getStatsData の応答の統計表の更新日('YYYY-MM-DD')。無ければ null。 */
+export function tableUpdatedDate(body: unknown): string | null {
+  const value = (body as { GET_STATS_DATA?: { STATISTICAL_DATA?: { TABLE_INF?: { UPDATED_DATE?: unknown } } } })
+    ?.GET_STATS_DATA?.STATISTICAL_DATA?.TABLE_INF?.UPDATED_DATE;
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
 }
 
 interface ValueObj {
