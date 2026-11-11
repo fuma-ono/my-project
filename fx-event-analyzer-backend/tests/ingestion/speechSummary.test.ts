@@ -90,7 +90,7 @@ function fakeStore(rows: SpeechForSummary[]) {
     },
     updateSpeechSummary(id, patch) {
       updates.push({ id, patch });
-      return Promise.resolve();
+      return Promise.resolve(true);
     },
   };
   return { store, updates, calls };

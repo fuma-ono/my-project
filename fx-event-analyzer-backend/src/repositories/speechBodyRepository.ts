@@ -2,20 +2,24 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SpeechBodyPatch, SpeechBodyStore, SpeechForBody } from '../ingestion/pipelines/speechBodies.js';
 
 /**
- * 要人発言の本文の取り込みの読み書き(HQ指示 2026-11-10、migration 20261110000001)。service_role で使う
- * (取り込みのジョブだけ)。発言者・日時・題名は読むだけで、書くのは source_url・本文・取得日時・状態・理由だけ。
+ * 要人発言の本文の取り込みの読み書き(HQ指示 2026-11-10、migration 20261110000001・20261112000001)。service_role で使う
+ * (取り込みのジョブだけ)。発言者・日時・題名は読むだけで、書くのは source_url・本文・取得日時・状態・理由・試行回数だけ。
+ *
+ * 二重の実行を防ぐ(HQ承認 2026-11-11「状態条件と楽観的条件」): どの書き込みも「状態が PENDING / FAILED」の行だけに効き、
+ * 回数を指定したときは「回数がその値のまま」の行だけに効く。条件に合わなければ何も変えず false を返す(FETCHED の本文と
+ * URL を上書きしない・同じ試行を二重に数えない)。
  */
 export function createSpeechBodyStore(supabase: SupabaseClient): SpeechBodyStore {
   return {
-    async listSpeechesNeedingBody(providers: readonly string[], sinceIso: string): Promise<SpeechForBody[]> {
+    async listSpeechesNeedingBody(providers, sinceIso, maxAttempts): Promise<SpeechForBody[]> {
       const { data, error } = await supabase
         .from('speech_events')
         .select(
-          'id, provider, provider_event_id, title, statement_datetime, status, source_url, body_status, speakers!inner(name, organization)',
+          'id, provider, provider_event_id, title, statement_datetime, status, source_url, body_status, body_attempts, speakers!inner(name, organization)',
         )
         .in('provider', [...providers])
         .eq('status', 'DELIVERED')
-        .in('body_status', ['PENDING', 'FAILED'])
+        .or(`body_status.eq.PENDING,and(body_status.eq.FAILED,body_attempts.lt.${Math.trunc(maxAttempts)})`)
         .gte('statement_datetime', sinceIso)
         .order('statement_datetime', { ascending: true })
         .order('id', { ascending: true });
@@ -31,15 +35,35 @@ export function createSpeechBodyStore(supabase: SupabaseClient): SpeechBodyStore
           status: row.status,
           source_url: row.source_url,
           body_status: row.body_status,
+          body_attempts: Number(row.body_attempts ?? 0),
           speaker_name: speaker.name,
           speaker_organization: speaker.organization,
         };
       });
     },
 
-    async updateSpeechBody(id: string, patch: SpeechBodyPatch): Promise<void> {
-      const { error } = await supabase.from('speech_events').update(patch).eq('id', id);
+    async claimBodyAttempt(id, expectedAttempts, attemptedAtIso): Promise<boolean> {
+      const { data, error } = await supabase
+        .from('speech_events')
+        .update({ body_attempts: expectedAttempts + 1, body_last_attempt_at: attemptedAtIso })
+        .eq('id', id)
+        .in('body_status', ['PENDING', 'FAILED'])
+        .eq('body_attempts', expectedAttempts)
+        .select('id');
       if (error) throw error;
+      return (data ?? []).length === 1;
+    },
+
+    async updateSpeechBody(id: string, patch: SpeechBodyPatch, expectedAttempts: number): Promise<boolean> {
+      const { data, error } = await supabase
+        .from('speech_events')
+        .update(patch)
+        .eq('id', id)
+        .in('body_status', ['PENDING', 'FAILED'])
+        .eq('body_attempts', expectedAttempts)
+        .select('id');
+      if (error) throw error;
+      return (data ?? []).length === 1;
     },
   };
 }

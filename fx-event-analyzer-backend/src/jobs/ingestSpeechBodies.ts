@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { loadEnv } from '../config/env.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
 import { PROVIDER_HTTP_SETTINGS } from '../ingestion/config.js';
+import { assertDevTarget } from '../ingestion/devTarget.js';
 import { HttpClient } from '../ingestion/http.js';
 import {
   FRB_SPEECHES_JSON_URL,
@@ -12,6 +13,7 @@ import {
   type SpeechBodyStore,
 } from '../ingestion/pipelines/speechBodies.js';
 import { JobCounters, runIngestionJob } from '../ingestion/runner.js';
+import { parseSpeechJobOptions } from '../ingestion/speechJobOptions.js';
 import { createIngestionRepository } from '../repositories/ingestionRepository.js';
 import { createSpeechBodyStore } from '../repositories/speechBodyRepository.js';
 
@@ -22,6 +24,9 @@ import { createSpeechBodyStore } from '../repositories/speechBodyRepository.js';
  *   npm run ingest:speech-bodies                        # 直近30日の発言
  *   npm run ingest:speech-bodies -- --all               # 過去のすべての発言(1回に読むページは maxFetches 件まで。残りは次の実行で)
  *   npm run ingest:speech-bodies -- --all --dry-run     # 書かない・本文のページを読まない。対象と、各発言で何をするかだけ出す
+ *   npm run ingest:speech-bodies -- --scheduled         # 定期実行: 発言日時が直近14日(FAILED は1行3回まで)
+ *
+ * 始める前に、接続先が DEV であることを確かめる(ingestion/devTarget.ts。DEV でなければ何も読まず・書かずに止まる)。
  *
  * --dry-run(HQ指示 2026-11-11「実行前に対象件数を確認」): DB に書かない(ingestion_logs にも書かない)。書き込みの関数は
  * 呼ばれたら失敗するストアを使い、読むのは FRB の講演の RSS と一覧の JSON だけ(それ以外の URL は失敗させる)。
@@ -31,7 +36,9 @@ import { createSpeechBodyStore } from '../repositories/speechBodyRepository.js';
  */
 function readOnlyBodyStore(store: SpeechBodyStore): SpeechBodyStore {
   return {
-    listSpeechesNeedingBody: (providers, sinceIso) => store.listSpeechesNeedingBody(providers, sinceIso),
+    listSpeechesNeedingBody: (providers, sinceIso, maxAttempts) =>
+      store.listSpeechesNeedingBody(providers, sinceIso, maxAttempts),
+    claimBodyAttempt: () => Promise.reject(new Error('dry-run: claimBodyAttempt is not allowed')),
     updateSpeechBody: () => Promise.reject(new Error('dry-run: updateSpeechBody is not allowed')),
   };
 }
@@ -45,12 +52,14 @@ function listOnlyFetcher(fetcher: SpeechBodyFetcher): SpeechBodyFetcher {
 }
 
 async function main(): Promise<void> {
+  assertDevTarget(process.env);
+  const options = parseSpeechJobOptions(process.argv);
   const env = loadEnv();
   const supabase = createSupabaseClient(env);
   const bodyStore = createSpeechBodyStore(supabase);
-  const all = process.argv.includes('--all');
-  const dryRun = process.argv.includes('--dry-run');
-  const settings = { ...SPEECH_BODY_SETTINGS, ...(all ? { pastDays: null } : {}), dryRun };
+  const all = options.mode === 'all';
+  const dryRun = options.dryRun;
+  const settings = { ...SPEECH_BODY_SETTINGS, pastDays: options.pastDays, dryRun };
   const fetchers = {
     frb: new HttpClient('frb', PROVIDER_HTTP_SETTINGS.frb),
     ecb: new HttpClient('ecb', PROVIDER_HTTP_SETTINGS.ecb),
@@ -71,6 +80,7 @@ async function main(): Promise<void> {
       JSON.stringify({
         job: 'ingest:speech-bodies',
         dry_run: true,
+        mode: options.mode,
         all,
         max_fetches_per_run: settings.maxFetches,
         candidates: counters.fetched,
@@ -95,6 +105,7 @@ async function main(): Promise<void> {
   console.log(
     JSON.stringify({
       job: 'ingest:speech-bodies',
+      mode: options.mode,
       all,
       status: result.status,
       candidates: result.counters.fetched,
