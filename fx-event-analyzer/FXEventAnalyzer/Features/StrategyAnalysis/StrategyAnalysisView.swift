@@ -122,8 +122,6 @@ struct StrategyAnalysisView: View {
                     )
                     .accessibilityIdentifier("strategyAnalysisCoReleased")
                 }
-                initialMoveCard(analysis)
-                continuationReversalCard(analysis)
                 breaksCard(
                     title: "過去5回の分析結果（15分以内）",
                     summary: analysis.summary.breaks15m,
@@ -137,6 +135,15 @@ struct StrategyAnalysisView: View {
                 directionStatsCard(analysis.summary.direction1m, sampleWindow: analysis.sampleWindow)
                 patternStatsCard(analysis.summary.pattern15m, sampleWindow: analysis.sampleWindow)
                 sellTheFactCard(analysis.summary.sellTheFact, releases: analysis.releases)
+                // HQ指示(2026-11-11「ピクセル単位の再現」フィードバック対応)で追加した3カード。
+                // 既存のbreaksCard等より前に置くと、既存カードのLazyVGrid(「内訳」の凡例)が
+                // 初期表示のビューポート外に押し出され、CIの実機スクリーンショットで
+                // 「両方 1回」が5秒以内に見つからず失敗した(ScrollView自体は中身を即座に
+                // 全部レンダリングするが、入れ子のLazyVGridはそれとは別に、実際に表示範囲へ
+                // 入るまでセルの描画を遅延させるため)。既存カードの並び・初期表示位置を
+                // 変えないよう、新しい3カードは既存カードの後ろに置く。
+                initialMoveCard(analysis)
+                continuationReversalCard(analysis)
                 riskAnalysisCard(analysis)
                 releasesCard(analysis)
                 notesCard
