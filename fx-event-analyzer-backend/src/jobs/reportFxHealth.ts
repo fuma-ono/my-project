@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { appendFileSync } from 'node:fs';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadEnv } from '../config/env.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
@@ -8,6 +9,12 @@ import {
   type FxHealthReport,
   type HealthLevel,
 } from '../ingestion/quality/fxHealth.js';
+import {
+  fxHealthAnnotations,
+  fxHealthFailureAnnotation,
+  fxHealthQueries,
+  renderFxHealthMarkdown,
+} from '../ingestion/quality/fxHealthOutput.js';
 
 /**
  * 為替の定時取得の健全性(HQ指示 2026-11-11「FX価格定時取得の実績検証・運用監視準備」)。**読むだけ**(DB に書かない・外部 API を
@@ -16,7 +23,8 @@ import {
  *   npm run report:fx-health                       # 直近 24 時間。結果を JSON で出す(Exit 0)
  *   npm run report:fx-health -- --hours 30 --fail-on alert   # ALERT なら Exit 1(warn にすると WARN でも Exit 1)
  *
- * 定期実行には登録していない(workflow の変更は HQ の承認の後)。
+ * GitHub Actions では、判定ごとに注釈(WARN = ::warning、ALERT = ::error)を出し、ステップのサマリーに判定・理由・集計・
+ * 読んだ記録を書く(HQ承認 2026-11-11)。Workflow の日次レポートの後に `--fail-on alert` で動かす(ALERT のときだけ失敗)。
  */
 export async function loadFxHealthInput(supabase: SupabaseClient, now: Date, hours: number): Promise<FxHealthInput> {
   const since = new Date(now.getTime() - hours * 3_600_000).toISOString();
@@ -85,15 +93,37 @@ async function main(): Promise<void> {
   const failOnArg = arg('fail-on');
   const failOn = failOnArg === 'warn' ? 'WARN' : failOnArg === 'alert' ? 'ALERT' : null;
   const now = new Date();
+  const since = new Date(now.getTime() - hours * 3_600_000).toISOString();
+  const queries = fxHealthQueries(since, now.toISOString(), now.toISOString().slice(0, 10));
   const input = await loadFxHealthInput(createSupabaseClient(loadEnv()), now, hours);
   const report = evaluateFxHealth(input, now);
+
+  // ログ: 読んだ記録・集計の入力(件数)・判定と理由
+  console.log(`report:fx-health ${report.level} (直近 ${hours} 時間、--fail-on ${failOnArg ?? 'なし'})`);
+  for (const q of queries) console.log(`query: ${q}`);
+  console.log(
+    `input: runs=${input.runs.length} credits=${JSON.stringify(input.credits)} caps=${JSON.stringify(input.caps)} unverified=${input.unverifiedCandles}`,
+  );
   console.log(JSON.stringify({ job: 'report:fx-health', hours, at: now.toISOString(), ...report }));
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    for (const line of fxHealthAnnotations(report)) console.log(line);
+    const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+    if (summaryPath) {
+      appendFileSync(
+        summaryPath,
+        renderFxHealthMarkdown(report, input, { at: now.toISOString(), hours, failOn: failOn, queries }),
+      );
+    }
+  }
   process.exitCode = exitCodeFor(report, failOn);
+  if (process.exitCode === 1) console.log(`report:fx-health: ${report.level} のため Exit 1(Workflow を失敗にする)`);
 }
 
 if (process.argv[1]?.endsWith('reportFxHealth.ts')) {
   main().catch((error: unknown) => {
+    // 監視の処理そのものの失敗(DB に読めない・設定が無い など)。原因をログと注釈に残して Exit 1
     console.error(error);
+    if (process.env.GITHUB_ACTIONS === 'true') console.log(fxHealthFailureAnnotation(error));
     process.exitCode = 1;
   });
 }
