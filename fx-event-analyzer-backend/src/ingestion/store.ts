@@ -76,6 +76,8 @@ export interface StoredSnapshot {
   forecast: number | null;
   actual: number | null;
   previous: number | null;
+  /** '<系列>@<対象期間>'(公式機関の実績値の初回値。改定の確認で、どの期間の値かを読む)。 */
+  verification_source?: string | null;
 }
 
 export interface NewReleaseSnapshot {

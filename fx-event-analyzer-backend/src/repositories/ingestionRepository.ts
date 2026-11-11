@@ -179,13 +179,18 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
     async getReleaseSnapshot(eventId: string): Promise<StoredSnapshot | null> {
       const { data, error } = await supabase
         .from('event_snapshots')
-        .select('forecast, actual, previous')
+        .select('forecast, actual, previous, verification_source')
         .eq('event_id', eventId)
         .eq('snapshot_type', 'RELEASE')
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;
-      return { forecast: num(data.forecast), actual: num(data.actual), previous: num(data.previous) };
+      return {
+        forecast: num(data.forecast),
+        actual: num(data.actual),
+        previous: num(data.previous),
+        verification_source: (data.verification_source as string | null) ?? null,
+      };
     },
 
     async listFomcPolicyDecisions(): Promise<StoredFomcPolicyDecision[]> {

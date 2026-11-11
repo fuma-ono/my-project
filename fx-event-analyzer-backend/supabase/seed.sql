@@ -111,7 +111,15 @@ from (values
   ('EU_HICP', 'EURUSD', 1), ('EU_HICP', 'EURJPY', 2),
   ('EU_UNEMPLOYMENT_RATE', 'EURUSD', 1), ('EU_UNEMPLOYMENT_RATE', 'EURJPY', 2),
   -- 米国小売売上高(速報、migration 20261105000002)
-  ('US_RETAIL_SALES', 'USDJPY', 1), ('US_RETAIL_SALES', 'EURUSD', 2)
+  ('US_RETAIL_SALES', 'USDJPY', 1), ('US_RETAIL_SALES', 'EURUSD', 2),
+  -- 英国・豪州・カナダ(migration 20261110000002、HQ指示 2026-11-10「6地域の経済指標拡張」)
+  ('GB_CPI', 'GBPUSD', 1), ('GB_CPI', 'GBPJPY', 2),
+  ('GB_CORE_CPI', 'GBPUSD', 1), ('GB_CORE_CPI', 'GBPJPY', 2),
+  ('GB_UNEMPLOYMENT_RATE', 'GBPUSD', 1), ('GB_UNEMPLOYMENT_RATE', 'GBPJPY', 2),
+  ('AU_CPI', 'AUDUSD', 1), ('AU_CPI', 'AUDJPY', 2),
+  ('AU_UNEMPLOYMENT_RATE', 'AUDUSD', 1), ('AU_UNEMPLOYMENT_RATE', 'AUDJPY', 2),
+  ('CA_CPI', 'CADJPY', 1),
+  ('CA_UNEMPLOYMENT_RATE', 'CADJPY', 1)
 ) as v(code, symbol, priority)
 join economic_indicators i on i.code = v.code
 join fx_pairs p on p.symbol = v.symbol
