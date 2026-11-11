@@ -197,17 +197,39 @@ final class ScreenshotTests: XCTestCase {
         capture("07b-EventStrategyAnalysis")
         tapIdentifier("v5HeaderBack")
         XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 10), "Did not go back to Event Detail")
+        // HQ指示(2026-11-09「StrategyAnalysisのFREE/PROアクセス制御」): 遷移してよいかは
+        // クライアント側のPlanStore(起動時・フォアグラウンド復帰時に`/entitlements`を確かめる、
+        // `RootView.swift`参照)で判断するよう変更した。サーバー側のモックを切り替えるだけでは
+        // クライアントにまだ反映されないため、フォアグラウンド復帰を一度経由させる。
         if setMockSubscriptionPlan("FREE") {
             addTeardownBlock { [weak self] in _ = self?.setMockSubscriptionPlan("PRO") }
+            resumeAppToRefreshPlanStore()
+            XCTAssertTrue(
+                waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 10),
+                "Event Detail did not remain visible after resuming"
+            )
+
+            // FREE: ボタンは出たままタップできるが、分析画面には遷移せず、アップグレードの
+            // 確認ポップアップが出る(分析画面側の「開いた先でロック表示」はこの経路からは
+            // 到達しなくなったが、他の経路向けの安全網として残している)。
             tapIdentifier("eventDetailStrategyAnalysisLink")
-            XCTAssertTrue(waitForAnyElement(containing: "プレミアムプランで解放", timeout: 15), "The locked state is not shown for FREE")
+            XCTAssertTrue(
+                waitForAnyElement(containing: "トレード戦略分析はPROプラン限定の機能です", timeout: 10),
+                "The upgrade confirmation did not appear for FREE"
+            )
+            // HQ指摘(2026-11-09)「無料プランが押した後のポップが見えてない」: 挙動の確認(waitForAnyElement/
+            // XCTAssert)はあったが、画像としての証拠が無かったため追加。
+            capture("07c-StrategyAnalysisUpgradePrompt")
             XCTAssertFalse(
                 app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "過去5回の分析結果")).firstMatch.exists,
-                "The analysis is shown to FREE"
+                "FREE must not navigate to the analysis screen"
+            )
+            tap(containing: "今はしない")
+            XCTAssertTrue(
+                waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 10),
+                "Dismissing the upgrade prompt must leave Event Detail on screen"
             )
             XCTAssertTrue(setMockSubscriptionPlan("PRO"), "Could not switch the mock plan back to PRO")
-            tapIdentifier("v5HeaderBack")
-            XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 10), "Did not go back to Event Detail (free plan)")
         } else {
             XCTFail("Could not reach the mock server for the plan switch")
         }
@@ -1055,6 +1077,17 @@ final class ScreenshotTests: XCTestCase {
         }.resume()
         _ = done.wait(timeout: .now() + 6)
         return succeeded
+    }
+
+    /// HQ指示(2026-11-09「StrategyAnalysisのFREE/PROアクセス制御」): アプリをバックグラウンド→
+    /// フォアグラウンドへ戻し、`RootView`の`scenePhase`監視が`PlanStore.shared.load()`
+    /// (`/entitlements`)を再実行するのを待つ(`RootView.swift`参照)。`setMockSubscriptionPlan`は
+    /// サーバー側のモックしか変えないため、クライアント側のPlanStoreに反映させるにはこれが必要。
+    private func resumeAppToRefreshPlanStore() {
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 0.5)
+        app.activate()
+        Thread.sleep(forTimeInterval: 1.0)
     }
 
     private func tapV5(x: CGFloat, y: CGFloat) {
