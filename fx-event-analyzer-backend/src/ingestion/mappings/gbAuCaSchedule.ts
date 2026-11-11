@@ -1,6 +1,6 @@
 /**
  * 英国・豪州・カナダの主要経済指標の公表予定 — HQ指示 2026-11-10「6地域の経済指標拡張・実装準備」。
- * CODE-REVIEWED CONFIG(mappings/retailSalesSchedule.ts・mappings/jpCpiSchedule.ts と同じ): 人が公式ページを読んで書く表で、
+ * CODE-REVIEWED CONFIG(mappings/retailSalesSchedule.ts と同じ): 人が公式ページを読んで書く表で、
  * 規則から推測して日付を作らない。ライブのページの取得・解析はしない。2026-11-10 に公式ページで確認した回だけを載せる。
  *
  * 英国 ONS(https://www.ons.gov.uk/releasecalendar、公表予定の各回の data-gtm-release-date / release-time):

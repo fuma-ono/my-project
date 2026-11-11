@@ -122,7 +122,7 @@ export class CreditGate {
   };
 }
 
-const SECRET_QUERY_PARAMS = new Set(['api_key', 'apikey', 'apiKey', 'appId', 'token', 'c', 'registrationkey', 'key']);
+const SECRET_QUERY_PARAMS = new Set(['api_key', 'apikey', 'apiKey', 'token', 'c', 'registrationkey', 'key']);
 
 /** Replaces the value of any credential-looking query parameter with "***". */
 export function redactUrl(url: string): string {
@@ -133,7 +133,7 @@ export function redactUrl(url: string): string {
     }
     return parsed.toString();
   } catch {
-    return url.replace(/([?&](?:api_key|apikey|apiKey|appId|token|c|registrationkey|key)=)[^&]*/g, '$1***');
+    return url.replace(/([?&](?:api_key|apikey|apiKey|token|c|registrationkey|key)=)[^&]*/g, '$1***');
   }
 }
 
