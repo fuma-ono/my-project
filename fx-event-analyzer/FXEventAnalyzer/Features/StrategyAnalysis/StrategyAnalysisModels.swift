@@ -1,5 +1,23 @@
 import Foundation
 
+/// HQ指示(2026-11-11「ピクセル単位の再現」フィードバック対応): タブ①「イベント戦略」のゲージ・
+/// 折れ線グラフ用に、既にBackendから取得済みの`StrategyRelease`配列から単純平均するだけの
+/// 補助(新しいAPI呼び出し・新しい値の作成は一切しない — 実データが無い項目はnilのまま)。
+extension Array where Element == StrategyRelease {
+    func averagePips(_ keyPath: KeyPath<StrategyRelease, Double?>) -> Double? {
+        let values = compactMap { $0[keyPath: keyPath] }
+        guard !values.isEmpty else { return nil }
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    /// `roundTrip15m`/`roundTrip60m`が判定できた発表のうち、実際に往復した割合(%)。
+    func roundTripRate(_ keyPath: KeyPath<StrategyRelease, Bool?>) -> Double? {
+        let values = compactMap { $0[keyPath: keyPath] }
+        guard !values.isEmpty else { return nil }
+        return Double(values.filter { $0 }.count) / Double(values.count) * 100
+    }
+}
+
 /// Pro イベント別トレード戦略分析(api-design v1.48 `GET /events/{id}/strategy-analysis`、HQ指示 2026-11-06)。
 /// 値はすべて Backend が保存済みの値動き・スナップショットから数えたもの。判定できない項目は nil(端末で作らない)。
 struct StrategyAnalysisResponse: Decodable, Equatable {
@@ -263,6 +281,13 @@ enum StrategyAnalysisText {
     static func breakCell(_ value: Bool?) -> String {
         guard let value else { return "--" }
         return value ? "あり" : "なし"
+    }
+
+    static func riskLevel(reversalPercent: Double?) -> String {
+        guard let reversalPercent else { return "データ不足" }
+        if reversalPercent >= 50 { return "高" }
+        if reversalPercent >= 25 { return "中" }
+        return "低"
     }
 
     static let notes: [String] = [

@@ -122,6 +122,8 @@ struct StrategyAnalysisView: View {
                     )
                     .accessibilityIdentifier("strategyAnalysisCoReleased")
                 }
+                initialMoveCard(analysis)
+                continuationReversalCard(analysis)
                 breaksCard(
                     title: "過去5回の分析結果（15分以内）",
                     summary: analysis.summary.breaks15m,
@@ -135,16 +137,119 @@ struct StrategyAnalysisView: View {
                 directionStatsCard(analysis.summary.direction1m, sampleWindow: analysis.sampleWindow)
                 patternStatsCard(analysis.summary.pattern15m, sampleWindow: analysis.sampleWindow)
                 sellTheFactCard(analysis.summary.sellTheFact, releases: analysis.releases)
+                riskAnalysisCard(analysis)
                 releasesCard(analysis)
                 notesCard
             }
         case .currencyAnalysis:
-            CurrencyAnalysisTabView(pair: pair)
+            CurrencyAnalysisTabView(pair: pair, analysis: analysis)
         case .priceRangeAnalysis:
             PriceRangeAnalysisTabView()
         case .aiAnalysis:
             AIAnalysisTabView()
         }
+    }
+
+    // MARK: - 初動分析(発表後1分〜60分の値動き、既存の実データの平均 — HQ指示「ピクセル単位の再現」)
+
+    /// 円形ゲージ(上昇確率)+ 折れ線グラフ(平均pips推移)。参考画像の「初動分析」カードの構成を、
+    /// 既にBackendから取得済みの`StrategyRelease`配列の単純平均だけで再現する(新しい取得はしない)。
+    private func initialMoveCard(_ analysis: StrategyAnalysis) -> some View {
+        let direction = analysis.summary.direction1m
+        let upPercent: Double? = {
+            guard let direction, direction.up + direction.down > 0 else { return nil }
+            return Double(direction.up) / Double(direction.up + direction.down) * 100
+        }()
+        let points: [(label: String, value: Double)] = [
+            ("1分", analysis.releases.averagePips(\.pips1m)),
+            ("5分", analysis.releases.averagePips(\.pips5m)),
+            ("15分", analysis.releases.averagePips(\.pips15m)),
+            ("30分", analysis.releases.averagePips(\.pips30m)),
+            ("60分", analysis.releases.averagePips(\.pips60m))
+        ].compactMap { label, value in value.map { (label: label, value: $0) } }
+
+        return plainCard {
+            HStack(spacing: 5) {
+                Image(systemName: "bolt.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(V5P.cyan)
+                NotoText.text("初動分析", size: 7.5).foregroundStyle(.white)
+                Spacer(minLength: 4)
+                analysisCountBadge(samples: direction?.samples, sampleWindow: analysis.sampleWindow)
+            }
+            Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
+            HStack(alignment: .top, spacing: 10) {
+                StrategyCircularGauge(
+                    percent: upPercent,
+                    centerText: upPercent.map { ValueFormat.percent($0, fractionDigits: 0) } ?? "--",
+                    centerSubtext: "上昇確率",
+                    color: V5P.cyan,
+                    diameter: 52
+                )
+                VStack(alignment: .leading, spacing: 2) {
+                    NotoText.text("発表後の平均pips推移", size: 6).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    StrategyTrendChart(
+                        points: points.count >= 2 ? points : nil,
+                        lineColor: V5P.cyan,
+                        fillColor: V5P.cyan,
+                        calloutFormatter: { ValueFormat.number($0, fractionDigits: 1, signed: true) },
+                        height: 52
+                    )
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("初動分析。\(StrategyAnalysisText.directionLine(direction))")
+    }
+
+    // MARK: - 継続・反転分析(15分後までの反応、既存の実データ — HQ指示「ピクセル単位の再現」)
+
+    private func continuationReversalCard(_ analysis: StrategyAnalysis) -> some View {
+        let pattern = analysis.summary.pattern15m
+        let continuationPercent = pattern.map { Double($0.continuation) / Double($0.samples) * 100 }
+        let reversalPercent = pattern.map { Double($0.reversal) / Double($0.samples) * 100 }
+        return plainCard {
+            HStack(spacing: 5) {
+                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 9, weight: .bold)).foregroundStyle(V5P.cyan)
+                NotoText.text("継続・反転分析", size: 7.5).foregroundStyle(.white)
+                Spacer(minLength: 4)
+                analysisCountBadge(samples: pattern?.samples, sampleWindow: analysis.sampleWindow)
+            }
+            Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
+            VStack(spacing: 5) {
+                StrategyProgressRow(label: "継続", percent: continuationPercent, color: V5P.cyan)
+                StrategyProgressRow(label: "反転", percent: reversalPercent, color: V5P.yellow)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("継続・反転分析。\(StrategyAnalysisText.patternLine(pattern))")
+    }
+
+    // MARK: - リスク分析(15分以内の反転率から算出 — HQ指示「ピクセル単位の再現」)
+
+    private func riskAnalysisCard(_ analysis: StrategyAnalysis) -> some View {
+        let pattern = analysis.summary.pattern15m
+        let reversalPercent = pattern.map { Double($0.reversal) / Double($0.samples) * 100 }
+        let level = StrategyAnalysisText.riskLevel(reversalPercent: reversalPercent)
+        return plainCard {
+            HStack(spacing: 5) {
+                Image(systemName: "exclamationmark.shield.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(V5P.red)
+                NotoText.text("リスク分析", size: 7.5).foregroundStyle(.white)
+                Spacer(minLength: 4)
+                V5Badge(text: "リスクレベル: \(level)", color: reversalPercent != nil ? V5P.red : SettingsCardStyle.subtitleColor)
+            }
+            Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
+            if let reversalPercent {
+                NotoText.text(
+                    "過去の類似イベントでは、約\(ValueFormat.percent(reversalPercent, fractionDigits: 0))の確率で15分以内に反転が発生しています。",
+                    size: 6.5
+                )
+                .foregroundStyle(SettingsCardStyle.subtitleColor)
+                .fixedSize(horizontal: false, vertical: true)
+            } else {
+                NotoText.text(StrategyAnalysisText.preparing, size: 7).foregroundStyle(SettingsCardStyle.subtitleColor)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("リスク分析。リスクレベル\(level)。\(StrategyAnalysisText.patternLine(pattern))")
     }
 
     private func column(@ViewBuilder _ content: () -> some View) -> some View {

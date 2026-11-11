@@ -196,19 +196,23 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "売買の推奨ではありません", timeout: 5), "The not-a-recommendation note is missing")
         capture("07b-EventStrategyAnalysis")
 
-        // HQ指示(2026-11-11「StrategyAnalysis 4タブUI実装」): 通貨分析・価格帯分析・AI分析の
-        // 3タブは、まだBackendに対応するデータが無いため「データ不足」のプレースホルダーを表示する。
-        // 架空の数値を表示していないことをスクリーンショットで確認する。
+        // HQ指示(2026-11-11「ピクセル単位の再現」フィードバック対応): 通貨分析・価格帯分析・AI分析の
+        // 3タブは、参考画像どおりのカード構成(ゲージ・グラフ・進捗バー・ローソク足の枠)を再現しつつ、
+        // Backendにまだ対応するデータが無い具体的な項目だけを「データ不足」と表示する(単一の
+        // プレースホルダーカードではないことをスクリーンショットで確認する)。
         tapIdentifier("strategyAnalysisTab_currencyAnalysis")
-        XCTAssertTrue(waitForAnyElement(containing: "分析対象外（データ不足）", timeout: 5), "Currency analysis tab did not show the not-yet-available placeholder")
+        XCTAssertTrue(waitForAnyElement(containing: "通貨分析", timeout: 5), "Currency analysis tab did not render its section header")
+        XCTAssertTrue(waitForAnyElement(containing: "データ不足", timeout: 5), "Currency analysis tab did not mark unavailable fields as データ不足")
         capture("07d-StrategyAnalysis-CurrencyAnalysis")
 
         tapIdentifier("strategyAnalysisTab_priceRangeAnalysis")
-        XCTAssertTrue(waitForAnyElement(containing: "分析対象外（データ不足）", timeout: 5), "Price range analysis tab did not show the not-yet-available placeholder")
+        XCTAssertTrue(waitForAnyElement(containing: "価格帯分析", timeout: 5), "Price range analysis tab did not render its section header")
+        XCTAssertTrue(waitForAnyElement(containing: "データ不足", timeout: 5), "Price range analysis tab did not mark unavailable fields as データ不足")
         capture("07e-StrategyAnalysis-PriceRangeAnalysis")
 
         tapIdentifier("strategyAnalysisTab_aiAnalysis")
-        XCTAssertTrue(waitForAnyElement(containing: "分析対象外（データ不足）", timeout: 5), "AI analysis tab did not show the not-yet-available placeholder")
+        XCTAssertTrue(waitForAnyElement(containing: "AI分析", timeout: 5), "AI analysis tab did not render its section header")
+        XCTAssertTrue(waitForAnyElement(containing: "データ不足", timeout: 5), "AI analysis tab did not mark unavailable fields as データ不足")
         capture("07f-StrategyAnalysis-AIAnalysis")
 
         tapIdentifier("strategyAnalysisTab_eventStrategy")
