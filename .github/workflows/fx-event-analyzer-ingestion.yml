@@ -41,6 +41,10 @@ name: FX Event Analyzer - Data ingestion (dev)
 #   - Eurostat の経済カレンダー(手動実行のみ、target=official-eurostat / official-eurostat-dry-run): HQ指示2026-10-30
 #     「ユーロ圏経済指標」。Eurostat の公表日程と値(無料・キー不要、1回の実行で3回)から EU_HICP・EU_UNEMPLOYMENT_RATE。
 #     dry-run は DB に書かない(ingestion_logs にも書かない)。定期実行には入れていない
+#   - 要人発言の本文と要約(手動実行のみ、target=speech-bodies-dry-run / speech-bodies / speech-summaries-dry-run /
+#     speech-summaries): HQ承認 2026-11-11。どれも過去のすべての発言(--all)。本文は FRB だけ保存(ECB は権利が未確認の
+#     ため URL だけ)。要約は原文の抜粋(EXTRACTIVE_EN、外部 API なし)。dry-run は DB に書かない(ingestion_logs にも書かない)。
+#     本文の dry-run は本文のページを読まない。migration 20261110000001・20261111000001 が前提。定期実行には入れていない
 # 接続先が社内確認用のDBでなければ止まる(本番DBに書き込まない)。
 # Twelve Data の無料キーは社内確認専用(要件定義書6.4)。
 on:
@@ -51,7 +55,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'fx-prices / speeches / both / report / official-bls / official-bls-dry-run / official-eurostat / official-eurostat-dry-run / event-reactions / fomc-schedule / fomc-policy-rate / retail-sales-schedule / official-bls-data-unavailable / official-bls-data-unavailable-dry-run'
+        description: 'fx-prices / speeches / both / report / official-bls / official-bls-dry-run / official-eurostat / official-eurostat-dry-run / event-reactions / fomc-schedule / fomc-policy-rate / retail-sales-schedule / official-bls-data-unavailable / official-bls-data-unavailable-dry-run / speech-bodies-dry-run / speech-bodies / speech-summaries-dry-run / speech-summaries'
         default: both
       event_id:
         description: 'target=event-reactions のときだけ: この1件だけを計算する(UUID。空なら直近7日の発表。HQ指示 2026-11-10。政策金利が記録済みの FOMC も可)'
@@ -69,7 +73,7 @@ permissions:
 concurrency:
   # HQ承認 2026-11-10 案A: 為替の繰り返し(毎時13分の起動)は専用のグループ。最長約5時間半占有するので、
   # fx-ingestion(BLS・反応・FOMC・手動の為替など)と分け、手動の実行を待たせない。
-  group: ${{ github.event.schedule == '13 * * * *' && 'fx-prices-loop' || ((github.event.schedule == '41 */3 * * *' || (github.event_name == 'workflow_dispatch' && inputs.target == 'speeches')) && 'fx-ingestion-speeches' || ((github.event_name == 'workflow_dispatch' && (inputs.target == 'official-eurostat' || inputs.target == 'official-eurostat-dry-run')) && 'fx-ingestion-eurostat' || 'fx-ingestion')) }}
+  group: ${{ github.event.schedule == '13 * * * *' && 'fx-prices-loop' || ((github.event.schedule == '41 */3 * * *' || (github.event_name == 'workflow_dispatch' && (inputs.target == 'speeches' || startsWith(inputs.target, 'speech-')))) && 'fx-ingestion-speeches' || ((github.event_name == 'workflow_dispatch' && (inputs.target == 'official-eurostat' || inputs.target == 'official-eurostat-dry-run')) && 'fx-ingestion-eurostat' || 'fx-ingestion')) }}
   cancel-in-progress: false
 
 jobs:
@@ -194,3 +198,15 @@ jobs:
       - name: Official stats (Eurostat calendar, manual only)
         if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'official-eurostat'
         run: npm run -s ingest:official:eurostat-calendar
+      - name: Speech bodies (all past speeches) dry run, no DB writes, no body pages (manual only)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'speech-bodies-dry-run'
+        run: npm run -s ingest:speech-bodies -- --all --dry-run
+      - name: Speech bodies (all past speeches, FRB bodies only; manual only)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'speech-bodies'
+        run: npm run -s ingest:speech-bodies -- --all
+      - name: Speech summaries (extractive, all past speeches) dry run, no DB writes (manual only)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'speech-summaries-dry-run'
+        run: npm run -s ingest:speech-summaries -- --all --dry-run
+      - name: Speech summaries (extractive, all past speeches; manual only)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'speech-summaries'
+        run: npm run -s ingest:speech-summaries -- --all
