@@ -318,3 +318,60 @@ where fx_pair_id = (select id from fx_pairs where symbol = 'USDJPY')
 - 実データ検証: **完了**(12.4節。2026-11-06 13:30 UTC 米雇用統計の実データで、グループ内指標数3・独立市場イベント数1、pips_5m/30m・round_trip_15m/60mの実際の値を確認。往復(round_trip)の値は、本物のコードに実データをそのまま入力して実行し、手計算と完全に一致することを確認)。`market_event_coverage`自体(不具合修正後)は、統合テストで同じシナリオ(自分＋同時発表1件 → `indicator_count: 2`)を実Postgresで確認済みであり、Nov 6の3指標ケースでも同じロジックで`indicator_count: 3`になることが保証されている(12.2.1節の修正後、統合テストが成功している)。
 - CI結果: **最終コミット`f27fa6a`でBackend CI成功**(iOS側は無変更のため対象ワークフロー起動せず、直前の状態で成功済み)。12.5節参照。
 - **最終判断: マージ可能な状態**。発見した2件の不具合はいずれも修正済みで、再現テスト(単体・統合)を追加し、実データ(2026-11-06米雇用統計)・CIの両方で確認が取れている。まだmainへのマージは行っていない(指示どおり、マージの実行はユーザーの判断に委ねる)。
+
+---
+
+## 13. 【HQ承認】正しい統合先への移植(2026-11-11)
+
+HQ承認「イベント戦略分析7コミットの移植」への対応。`main`へのマージ・PR作成は行っていない。`claude/fx-settings-screens`への直接コミットも行っていない(禁止事項どおり)。
+
+### 13.1 作業ブランチ
+
+- ブランチ名: `claude/fx-event-strategy-dedup-settings-port`
+- 基点: `claude/fx-settings-screens` の最新SHA `7559402`(既存ブランチは変更していない)
+
+### 13.2 cherry-pick結果(7コミット、元の順序のまま、コンフリクトなし)
+
+| 元ブランチのSHA | 移植後の新SHA |
+|---|---|
+| `f9b33e0` | `71db0b6` |
+| `bdb721c` | `0d0e80d` |
+| `55e1def` | `4f13b94` |
+| `3f77ef2` | `6b840ea` |
+| `2f5174d` | `5528591` |
+| `f27fa6a` | `1f54dab` |
+| `bbb317c` | `8efebfa`(現在のHEAD) |
+
+事前調査(11章の統合先調査)で予測したとおり、7コミットとも**コンフリクトは一切発生しなかった**。各コミットは`git cherry-pick -x`で適用し、コミットメッセージに元のSHAを記録している(`(cherry picked from commit ...)`)。
+
+### 13.3 移植前後の差分確認
+
+`git diff 7559402 8efebfa`(13ファイル、+1043/−27)が、元の`claude/fx-event-strategy-dedup`での`git diff 7e0bcf3 bbb317c`と**バイト単位で完全一致**することを確認した(diffコマンドで比較し差分ゼロ)。`claude/fx-build25-fixes`側だけにある16コミット(StrategyAnalysisのFREE/PROアクセス制御・金色の枠デザイン等のUI改善)は混入していない。
+
+### 13.4 CI結果(全て成功)
+
+ローカル検証(push前): `npm run lint`・`npx prettier --check`・`npm run typecheck`・`npm test`(単体、1179 passed)、全て成功。
+
+push後のGitHub Actions(コミット`8efebfa`、ブランチ`claude/fx-event-strategy-dedup-settings-port`):
+
+- `Backend CI`: **成功** — https://github.com/fuma-ono/my-project/actions/runs/42944717856
+  - `lint-typecheck-unit`ジョブ: lint・Prettier整形・typecheck・単体テスト、全て成功。
+  - `db-and-integration`ジョブ: 実Supabaseスタック(実Postgres)を起動し、統合テスト(`tests/integration/strategy-analysis.test.ts`。12.2.1節の`event_id`重複不具合の再現テスト・`market_event_coverage`の値・EU_HICP/EU_UNEMPLOYMENT_RATEの誤統合防止の回帰テストを含む)が成功。元の`claude/fx-event-strategy-dedup`で確認した重複排除の修正が、`fx-settings-screens`ベースでも同じく機能することを確認した。
+- `iOS Build & Test`: **成功** — https://github.com/fuma-ono/my-project/actions/runs/42944717934
+- `UI Screenshots`: **成功** — https://github.com/fuma-ono/my-project/actions/runs/42944717993
+
+既存機能への影響: 3ワークフローとも成功しており、`fx-settings-screens`側の既存テスト(単体テストが1167件→1179件に増加したのは今回追加した12件分のみで、既存テストに失敗は無い)・既存のUIスクリーンショットも問題なく通過した。
+
+### 13.5 DEV・TestFlightへの影響
+
+- DEVへのデプロイ・TestFlight配信は行っていない。
+- `claude/fx-settings-screens`自体への直接コミットも行っておらず、TestFlight配布基準ブランチは変更されていない。
+- `claude/fx-event-strategy-dedup-settings-port`は新しい作業ブランチとしてpushされているのみで、`fx-settings-screens`へのマージ(反映)はまだ行っていない。反映・TestFlight配信はHQの次の承認を待つ。
+
+### 13.6 失敗・警告・未解決事項
+
+- 失敗・警告: 無し(cherry-pick・ローカル検証・CI3種とも全て成功)。
+- 未解決事項:
+  1. `claude/fx-build25-fixes`側だけにある16コミット(StrategyAnalysis関連のUI改善)は今回の移植範囲外のまま(11章の残課題から変更なし)。
+  2. `claude/fx-settings-screens`への反映(ブランチのマージ)自体はまだ実施していない。HQの次の承認が必要。
+  3. 本報告書内の11章以前の記述にある元のコミットSHA(`f9b33e0`等)・CI URLは、元の`claude/fx-event-strategy-dedup`ブランチのものをそのまま残している(削除していない)。移植後の新SHA・CI URLは本13章に記載した。
