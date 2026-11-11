@@ -44,6 +44,9 @@ describe('attributionForIndicator: official statistics outside the US', () => {
 
   it('JP_CPI carries the e-Stat source; Eurostat unchanged; US indicators none', () => {
     expect(attributionForIndicator('JP_CPI')).toEqual(ESTAT_ATTRIBUTION);
+    expect(ESTAT_ATTRIBUTION.notice).toContain(
+      'このサービスは、政府統計総合窓口(e-Stat)のAPI機能を使用していますが、サービスの内容は国によって保証されたものではありません。',
+    );
     expect(attributionForIndicator('EU_HICP')).toEqual(EUROSTAT_ATTRIBUTION);
     for (const code of ['US_CPI', 'US_NFP', 'UNKNOWN', '']) expect(attributionForIndicator(code), code).toBeNull();
     expect(attributionForIndicator(null)).toBeNull();

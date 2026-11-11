@@ -96,7 +96,8 @@ const EUROSTAT_INDICATOR_CODES: ReadonlySet<string> = new Set(['EU_HICP', 'EU_UN
  *   getCubeMetadata、2026-11-11 確認)。reference date は各値の対象月(アプリは値と一緒に対象月を出す)。CA_CPI は
  *   公表予定だけ(値は出さない)なので、表の名前を付けない。
  * - e-Stat(JP_CPI の公表予定。https://www.e-stat.go.jp/terms-of-use): 出典の記載(「出典：政府統計の総合窓口(e-Stat)」)。
- *   値を e-Stat の API で取り込むときは、API のクレジット(https://www.e-stat.go.jp/api/api-info/credit)も足す。
+ *   値は e-Stat の API で取り込む(ingest:official:jp-cpi-values)ので、API のクレジット
+ *   (https://www.e-stat.go.jp/api/api-info/credit の文言そのまま)も付ける。
  */
 export const ONS_ATTRIBUTION: Attribution = {
   source: '英国国家統計局（ONS）',
@@ -128,7 +129,8 @@ export const STATCAN_LFS_ATTRIBUTION: Attribution = {
 export const ESTAT_ATTRIBUTION: Attribution = {
   source: '政府統計の総合窓口（e-Stat）',
   source_url: 'https://www.e-stat.go.jp',
-  notice: '出典：政府統計の総合窓口(e-Stat)',
+  notice:
+    '出典：政府統計の総合窓口(e-Stat)。このサービスは、政府統計総合窓口(e-Stat)のAPI機能を使用していますが、サービスの内容は国によって保証されたものではありません。',
 };
 
 const INDICATOR_ATTRIBUTIONS: Readonly<Record<string, Attribution>> = {
