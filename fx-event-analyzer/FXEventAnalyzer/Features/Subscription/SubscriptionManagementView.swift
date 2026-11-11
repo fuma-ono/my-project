@@ -327,7 +327,9 @@ struct SubscriptionManagementView: View {
 
 // MARK: - 部品
 
-private enum SubscriptionPalette {
+/// HQ指示(2026-11-09「Build 25実機確認後の修正」): イベント詳細の「トレード分析」枠・「PRO」文字色でも
+/// この金色を再利用するため、`private`を外した(値は変更していない)。
+enum SubscriptionPalette {
     /// 参考画像の王冠・プラン名の金色。
     static let gold = Color(red: 1.0, green: 0.80, blue: 0.36)
     /// 参考画像の見出し「プレミアムプランでできること」の水色。

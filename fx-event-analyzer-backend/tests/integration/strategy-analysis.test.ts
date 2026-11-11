@@ -217,11 +217,19 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
     // 新しい順(2090-05 → 2090-01)
     expect(analysis.releases.map((r) => r.event_id)).toEqual([...past].reverse().map((p) => p.id));
     const newest = analysis.releases[0]!; // 5回目: 値動き無し
-    expect(newest).toMatchObject({ direction_1m: null, pattern_15m: null, high_break_15m: null, sell_the_fact: null });
+    expect(newest).toMatchObject({
+      direction_1m: null,
+      pattern_15m: null,
+      high_break_15m: null,
+      round_trip_15m: null, // HQ指示2026-11-10 STEP3: 高値・安値のどちらかが判定できなければ往復もnull
+      sell_the_fact: null,
+      pips_5m: null, // 5分の値動きは今回のテストデータに無い(保存が無ければnull。作らない)
+    });
     expect(analysis.releases[1]).toMatchObject({
       direction_1m: 'UP',
       high_break_15m: true,
       low_break_15m: false,
+      round_trip_15m: false, // HQ指示2026-11-10 STEP3: 高値だけ抜けた(安値は抜いていない)ので往復ではない
       sell_the_fact: null,
     });
     expect(analysis.summary).toMatchObject({
@@ -253,6 +261,147 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
     const headers = await asUser('PRO');
     expect((await get(randomUUID(), headers)).status).toBe(404);
     expect((await get(targetId, headers, `?fx_pair_id=${randomUUID()}`)).status).toBe(404);
+  });
+
+  describe('同時発表イベントのグループ化(HQ指示 2026-11-10「重複排除・集計改善・AI分析基盤の整備」STEP1)', () => {
+    let siblingIndicatorId = '';
+    const siblingIndicatorCode = `IT_STRATEGY_SIBLING_${runId}`;
+    const siblingEventId = randomUUID();
+
+    beforeAll(async () => {
+      const { data, error } = await ctx.serviceClient
+        .from('economic_indicators')
+        .insert({
+          code: siblingIndicatorCode,
+          name: `結合テスト用指標(同時発表の相手) ${runId}`,
+          country_code: 'US',
+          currency_code: 'USD',
+          importance: 'HIGH',
+          frequency: 'MONTHLY',
+          unit: '%',
+          favorable_direction: 'HIGHER_IS_POSITIVE',
+          is_active: true,
+        })
+        .select('id')
+        .single();
+      if (error) throw error;
+      siblingIndicatorId = data.id;
+      // targetId と同じ provider・release_datetime(同時発表)。指標は別(重複排除・グループ化の対象)。
+      const { error: eventError } = await ctx.serviceClient.from('economic_events').insert({
+        id: siblingEventId,
+        indicator_id: siblingIndicatorId,
+        provider: 'integration-test',
+        provider_event_id: `strategy-sibling-${runId}`,
+        release_datetime: '2099-01-10T13:30:00.000Z', // targetId と同じ瞬間
+        release_datetime_precision: 'EXACT',
+        importance: 'HIGH',
+        status: 'SCHEDULED',
+        data_status: 'PENDING',
+      });
+      if (eventError) throw eventError;
+    });
+
+    afterAll(async () => {
+      await ctx.serviceClient.from('economic_events').delete().eq('id', siblingEventId);
+      if (siblingIndicatorId !== '')
+        await ctx.serviceClient.from('economic_indicators').update({ is_active: false }).eq('id', siblingIndicatorId);
+    });
+
+    it('同じ provider・release_datetime の他の指標を co_released_indicators に返す(重複を見分けられるようにする)', async () => {
+      const { status, body } = await get(targetId, await asUser('PRO'));
+      expect(status).toBe(200);
+      expect(body.co_released_indicators).toEqual([
+        { indicator_id: siblingIndicatorId, indicator_code: siblingIndicatorCode },
+      ]);
+      // HQ指示(2026-11-10「実動作検証」STEP2「最重要」): summarizeMarketEventCoverageが実際の応答に反映され、
+      // 「指標は2つ(自分＋同時発表の相手)だが、独立した市場イベントとしては1つ」であることを示す。
+      expect(body.market_event_coverage).toEqual({ independent_market_events: 1, indicator_count: 2 });
+    });
+
+    it('同時発表が無い発表(sparseTargetId)は空配列・indicator_countは1', async () => {
+      const { body } = await get(sparseTargetId, await asUser('PRO'));
+      expect(body.co_released_indicators).toEqual([]);
+      expect(body.market_event_coverage).toEqual({ independent_market_events: 1, indicator_count: 1 });
+    });
+  });
+
+  describe('release_datetime_precision が EXACT でない発表は同時発表と誤判定しない(HQ指示 2026-11-10「実動作検証」で発見・修正)', () => {
+    // mappings/eurostatSchedule.ts の実例(EU_HICP・EU_UNEMPLOYMENT_RATE、どちらもAPPROXIMATE・11:00
+    // Europe/Luxembourgで、発表日が偶然重なる行が実在する)を再現する。同じ provider・release_datetime でも、
+    // 時刻が確認できない(EXACTでない)場合は別々の市場イベントとして扱わなければならない。
+    let approxIndicatorId = '';
+    let approxOtherIndicatorId = '';
+    const approxTargetId = randomUUID();
+    const approxOtherId = randomUUID();
+
+    beforeAll(async () => {
+      const makeIndicator = async (code: string, name: string) => {
+        const { data, error } = await ctx.serviceClient
+          .from('economic_indicators')
+          .insert({
+            code,
+            name,
+            country_code: 'EU',
+            currency_code: 'EUR',
+            importance: 'HIGH',
+            frequency: 'MONTHLY',
+            unit: '%',
+            favorable_direction: 'HIGHER_IS_POSITIVE',
+            is_active: true,
+          })
+          .select('id')
+          .single();
+        if (error) throw error;
+        return data.id as string;
+      };
+      approxIndicatorId = await makeIndicator(
+        `IT_STRATEGY_APPROX_COINCIDE_A_${runId}`,
+        `結合テスト用指標(APPROXIMATEの偶然の一致A) ${runId}`,
+      );
+      approxOtherIndicatorId = await makeIndicator(
+        `IT_STRATEGY_APPROX_COINCIDE_B_${runId}`,
+        `結合テスト用指標(APPROXIMATEの偶然の一致B) ${runId}`,
+      );
+      const { error: eventError } = await ctx.serviceClient.from('economic_events').insert([
+        {
+          id: approxTargetId,
+          indicator_id: approxIndicatorId,
+          provider: 'integration-test-eurostat',
+          provider_event_id: `strategy-approx-coincide-a-${runId}`,
+          release_datetime: '2099-02-10T11:00:00.000Z',
+          release_datetime_precision: 'APPROXIMATE',
+          importance: 'HIGH',
+          status: 'SCHEDULED',
+          data_status: 'PENDING',
+        },
+        {
+          id: approxOtherId,
+          indicator_id: approxOtherIndicatorId,
+          provider: 'integration-test-eurostat',
+          provider_event_id: `strategy-approx-coincide-b-${runId}`,
+          release_datetime: '2099-02-10T11:00:00.000Z', // approxTargetIdと全く同じ(偶然の一致)。別指標・別発表。
+          release_datetime_precision: 'APPROXIMATE',
+          importance: 'HIGH',
+          status: 'SCHEDULED',
+          data_status: 'PENDING',
+        },
+      ]);
+      if (eventError) throw eventError;
+    });
+
+    afterAll(async () => {
+      await ctx.serviceClient.from('economic_events').delete().in('id', [approxTargetId, approxOtherId]);
+      for (const id of [approxIndicatorId, approxOtherIndicatorId]) {
+        if (id !== '') await ctx.serviceClient.from('economic_indicators').update({ is_active: false }).eq('id', id);
+      }
+    });
+
+    it('provider・release_datetimeが完全一致していても、precisionがAPPROXIMATEなら同時発表に含めない', async () => {
+      const { status, body } = await get(approxTargetId, await asUser('PRO'));
+      expect(status).toBe(200);
+      expect(body.co_released_indicators).toEqual([]);
+      expect(body.market_event_coverage).toEqual({ independent_market_events: 1, indicator_count: 1 });
+    });
   });
 
   describe('通貨ペアの選択・並び順(HQ指示 2026-11-09 P0)', () => {

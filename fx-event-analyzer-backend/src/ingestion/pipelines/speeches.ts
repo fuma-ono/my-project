@@ -17,6 +17,7 @@
 import { findSpeakerAlias, SPEAKER_ALIASES, SPEECH_KIND_LABEL_JA, type SpeakerAlias } from '../mappings/speakers.js';
 import type { JobCounters } from '../runner.js';
 import type { IngestionStore, SpeechEventRow, StoredSpeechRef } from '../store.js';
+import { isOfficialSpeechUrl } from '../speechBody.js';
 import { wallClockParts } from '../time.js';
 import type { NormalizedSpeech, SpeechKind } from '../types.js';
 
@@ -31,6 +32,11 @@ export interface SpeechPipelineOptions {
    * time_precision = PUBLICATION_TIME: shown in the list / detail, but no reactions, comparison or notifications.
    */
   publicationTimeKinds?: readonly SpeechKind[];
+  /**
+   * 発言の公式ページの URL(NormalizedSpeech.url)を source_url に入れる(HQ指示 2026-11-10。ECB の press の RSS だけ)。
+   * 入れるのは、その取得元の公式の講演ページの URL のときだけ(isOfficialSpeechUrl)。
+   */
+  storeSourceUrl?: boolean;
   /**
    * Ignore speeches that started more than this many days ago (the FRB
    * calendar JSON carries years of history; backfilling it is a separate,
@@ -139,6 +145,7 @@ export async function ingestSpeeches(
       importance: alias.importance,
       status: Date.parse(speech.startsAt) <= now.getTime() ? 'DELIVERED' : 'SCHEDULED',
       time_precision: speech.timePrecision,
+      ...(options.storeSourceUrl ? { source_url: isOfficialSpeechUrl(provider, speech.url) ? speech.url : null } : {}),
     });
   }
 

@@ -6,7 +6,8 @@ import { MemoryIngestionStore } from '../helpers/memoryIngestionStore.js';
 const RELEASE = '2026-10-18T12:30:00Z';
 const T = Date.parse(RELEASE);
 const MIN = 60_000;
-const NOW = new Date('2026-10-18T14:00:00Z'); // 90 minutes after release
+// 4 hours after release: every timeframe has closed AND passed REACTION_FINALITY_MINUTES (HQ指示 2026-11-10 D).
+const NOW = new Date('2026-10-18T16:30:00Z');
 
 function fxCandle(
   fxPairId: string,
@@ -281,26 +282,28 @@ describe('ingestEventPriceReactions: UNVERIFIED minutes are treated as missing',
   const row = (timeframe: string) =>
     store.eventPriceReactions.find((r) => r.fx_pair_id === 'pair-usdjpy' && r.timeframe === timeframe);
 
-  it('an UNVERIFIED pre-release minute is skipped: pre falls back to the last usable minute in the lookback', async () => {
+  it('an UNVERIFIED pre-release minute makes every timeframe UNAVAILABLE: no fallback to an older minute (HQ 2026-11-10 A)', async () => {
     store.fxPrices = [
-      fxCandle('pair-usdjpy', -2, 150.0),
-      fxCandle('pair-usdjpy', -1, 149.0, 'UNVERIFIED'), // would be "pre" if used
+      fxCandle('pair-usdjpy', -2, 150.0), // 以前は「発表直前の価格」の代わりに使っていた
+      fxCandle('pair-usdjpy', -1, 149.0, 'UNVERIFIED'),
       fxCandle('pair-usdjpy', 0, 150.5),
     ];
     await ingestEventPriceReactions(store, { horizonDays: 7 }, NOW, new JobCounters());
-    expect(row('1m')).toMatchObject({ data_status: 'AVAILABLE', pre_release_price: 150.0, post_release_price: 150.5 });
-    expect(row('1m')?.pips).toBe(50);
+    expect(row('1m')).toMatchObject({ data_status: 'UNAVAILABLE', pre_release_price: null, pips: null });
   });
 
-  it('an UNVERIFIED post-release minute makes that timeframe UNAVAILABLE (never interpolated); other timeframes are unaffected', async () => {
+  it('an UNVERIFIED post-release minute makes every timeframe whose window contains it UNAVAILABLE (never interpolated)', async () => {
     store.fxPrices = [
       fxCandle('pair-usdjpy', -1, 150.0),
-      fxCandle('pair-usdjpy', 0, 151.0, 'UNVERIFIED'), // the 1m post candle
-      fxCandle('pair-usdjpy', 4, 150.3), // the 5m post candle
+      fxCandle('pair-usdjpy', 0, 151.0, 'UNVERIFIED'), // the 1m post candle — also inside the 5m window
+      fxCandle('pair-usdjpy', 1, 150.1),
+      fxCandle('pair-usdjpy', 2, 150.2),
+      fxCandle('pair-usdjpy', 3, 150.2),
+      fxCandle('pair-usdjpy', 4, 150.3),
     ];
     await ingestEventPriceReactions(store, { horizonDays: 7 }, NOW, new JobCounters());
     expect(row('1m')).toMatchObject({ data_status: 'UNAVAILABLE', post_release_price: null, pips: null });
-    expect(row('5m')).toMatchObject({ data_status: 'AVAILABLE', pre_release_price: 150.0, post_release_price: 150.3 });
+    expect(row('5m')).toMatchObject({ data_status: 'UNAVAILABLE', pips: null, max_upward: null });
   });
 
   it('an UNVERIFIED spike inside the window does not set the max excursion', async () => {
@@ -313,8 +316,9 @@ describe('ingestEventPriceReactions: UNVERIFIED minutes are treated as missing',
       fxCandle('pair-usdjpy', 4, 150.3),
     ];
     await ingestEventPriceReactions(store, { horizonDays: 7 }, NOW, new JobCounters());
-    expect(row('5m')?.data_status).toBe('AVAILABLE');
-    expect(row('5m')?.max_upward_pips).toBe(30); // 150.3 − 150.0, not the 155.0 spike
+    // HQ指示(2026-11-10 A): 以前は UNVERIFIED の分を除いた残りで最大上昇(30 pips)を出していた。窓がそろわないので出さない。
+    expect(row('5m')).toMatchObject({ data_status: 'UNAVAILABLE', max_upward_pips: null });
+    expect(row('1m')?.data_status).toBe('AVAILABLE'); // 1分の窓(T+1m の足)はそろっている
   });
 
   it('SINGLE_SOURCE minutes (no second source, the normal DEV state) are still used — not excluded', async () => {

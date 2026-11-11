@@ -76,6 +76,8 @@ export interface StoredSnapshot {
   forecast: number | null;
   actual: number | null;
   previous: number | null;
+  /** '<系列>@<対象期間>'(公式機関の実績値の初回値。改定の確認で、どの期間の値かを読む)。 */
+  verification_source?: string | null;
 }
 
 export interface NewReleaseSnapshot {
@@ -165,7 +167,11 @@ export interface SpeechEventRow {
   importance: 'LOW' | 'MEDIUM' | 'HIGH';
   status: 'SCHEDULED' | 'DELIVERED';
   /** speech_events.time_precision (migration 20261028000001). */
-  time_precision: 'EXACT' | 'PUBLICATION_TIME';
+  time_precision: 'EXACT' | 'PUBLICATION_TIME'; /**
+   * 公式の発言ページの URL(migration 20261110000001)。ECB の press の RSS だけが入れる(FRB の行には入れない —
+   * 入れると、本文のジョブが後から結んだ URL を、次の取り込みで null に戻してしまうため)。
+   */
+  source_url?: string | null;
 }
 
 export type SpeechStatus = 'SCHEDULED' | 'DELIVERED' | 'CANCELLED';
@@ -355,6 +361,11 @@ export interface IngestionStore {
   insertIngestionLog(row: IngestionLogRow): Promise<void>;
   /** RELEASED events with release_datetime >= sinceIso (bounds the scan to the repair horizon). */
   listReleasedEventsForReactions(sinceIso: string): Promise<EventForReactionRef[]>;
+  /**
+   * HQ指示(2026-11-10「FOMC 案3」): 政策金利(fomc_policy_decisions)が記録済みの、中止でない会合
+   * (release_datetime >= sinceIso)。会合の行は SCHEDULED・PENDING のまま(v1.47)なので、RELEASED の一覧には入らない。
+   */
+  listPolicyRateEventsForReactions(sinceIso: string): Promise<EventForReactionRef[]>;
   /** Upsert by (event_id, fx_pair_id, timeframe) — re-running never duplicates a row. */
   upsertEventPriceReactions(rows: readonly EventPriceReactionRow[]): Promise<number>;
   /** Stored reaction rows of these events (read only; compared before writing — HQ指示 2026-10-27). */

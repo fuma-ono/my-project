@@ -305,6 +305,9 @@ final class PastReleaseLimitTests: XCTestCase {
         let cards = EventDetailCards(response: response)
         XCTAssertTrue(cards.isLocked)
         XCTAssertFalse(cards.canOpenReactions)
+        // HQ指示(2026-11-09「StrategyAnalysisのFREE/PROアクセス制御」): 呼び出し側が渡し忘れても
+        // 安全側(遷移させない)になる既定値であることを確かめる。
+        XCTAssertFalse(cards.canOpenStrategyAnalysis, "canOpenStrategyAnalysis must default to false")
     }
 
     /// 古いアプリ(ビルド17/18、489da7c7)の`EventDetailEvent.revisionStatus`・

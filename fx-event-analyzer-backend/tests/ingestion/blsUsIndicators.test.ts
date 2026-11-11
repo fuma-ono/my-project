@@ -130,8 +130,8 @@ describe('BLS_SCHEDULE for the added indicators', () => {
   it('gives each indicator the dates of its own release (CPI / Employment Situation)', () => {
     for (const code of CPI_RELEASE_INDICATORS) expect(datesOf(code)).toEqual(datesOf('US_CPI'));
     for (const code of EMPSIT_RELEASE_INDICATORS) expect(datesOf(code)).toEqual(datesOf('US_NFP'));
-    // 24か月 × 5指標(CPI 系・雇用統計系) + PPI 24か月 × 2 + JOLTS 11か月(2027年は BLS がまだ出していない)
-    expect(BLS_SCHEDULE).toHaveLength(24 * 5 + 24 * 2 + 11);
+    // 24か月 × 5指標(CPI 系・雇用統計系) + PPI 24か月 × 2 + JOLTS 23か月(2027-10 分まで。BLS の予定表 2026-11-11)
+    expect(BLS_SCHEDULE).toHaveLength(24 * 5 + 24 * 2 + 23);
   });
 
   it('has one unique event id per indicator and period', () => {

@@ -357,12 +357,19 @@ describe('FX aggregation (5m–60m from 1m)', () => {
     expect(aggregateMinuteRows(rows, '5m', 5, new Date('2026-10-15T08:33:00Z'))).toEqual([]);
   });
 
-  it('leaves out a bucket with a missing or UNVERIFIED minute, and marks SINGLE_SOURCE ones', () => {
+  it('leaves out a bucket with a missing minute, marks one with an UNVERIFIED minute UNVERIFIED, and marks SINGLE_SOURCE ones', () => {
     const missing = fiveMinutes(30, [150.1, 150.3, 149.9, 150.0, 150.2]).filter((_, i) => i !== 2);
     expect(aggregateMinuteRows(missing, '5m', 5, now)).toEqual([]);
+    // HQ指示(2026-11-10 C): 前に組み立てた足が古い値のまま残らないよう、UNVERIFIED として書き直す(Read API は使わない)
     const bad = fiveMinutes(30, [150.1, 150.3, 149.9, 150.0, 150.2]);
     bad[1] = { ...bad[1]!, verification_status: 'UNVERIFIED' };
-    expect(aggregateMinuteRows(bad, '5m', 5, now)).toEqual([]);
+    const badBars = aggregateMinuteRows(bad, '5m', 5, now);
+    expect(badBars).toHaveLength(1);
+    expect(badBars[0]).toMatchObject({ timestamp: '2026-10-15T08:30:00.000Z', verification_status: 'UNVERIFIED' });
+    // 中の1分が元に戻れば、通常の足に戻る
+    expect(
+      aggregateMinuteRows(fiveMinutes(30, [150.1, 150.3, 149.9, 150.0, 150.2]), '5m', 5, now)[0]?.verification_status,
+    ).toBe('VERIFIED');
     const single = fiveMinutes(30, [150.1, 150.3, 149.9, 150.0, 150.2]);
     single[4] = { ...single[4]!, verification_status: 'SINGLE_SOURCE' };
     expect(aggregateMinuteRows(single, '5m', 5, now)[0]?.verification_status).toBe('SINGLE_SOURCE');

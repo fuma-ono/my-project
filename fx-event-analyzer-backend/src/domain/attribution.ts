@@ -79,9 +79,68 @@ function nyFedNotice(year: number): string {
 /** Eurostat の値から作る経済指標の code(ingestion の eurostat_schedule の指標と同じ)。 */
 const EUROSTAT_INDICATOR_CODES: ReadonlySet<string> = new Set(['EU_HICP', 'EU_UNEMPLOYMENT_RATE']);
 
-/** economic_indicators.code(経済指標)から。Eurostat の指標だけ。それ以外は null(api-design v1.43)。 */
+/*
+ * 英国・豪州・カナダの公式統計(HQ指示 2026-11-11「GB/AU/CA: 公式ソース・利用条件を再確認」。2026-11-11 確認)。
+ * どれも商用利用は可で、出典の表示が条件。取得元が承認・推奨しているように見せることは禁止(アプリの表示で
+ * 「公式」「承認」と書かない)。
+ * - ONS(https://www.ons.gov.uk/help/termsandconditions、Open Government Licence v3.0): ONS の求める書き方
+ *   「Source: Office for National Statistics licensed under the Open Government Licence v.3.0」をそのまま載せる。
+ * - ABS(https://www.abs.gov.au/website-privacy-copyright-and-disclaimer、CC BY 4.0): 「Material obtained from this
+ *   website is to be attributed to this department.」、著作権の表示「© Commonwealth of Australia」。決まった出典の
+ *   書き方はページに無い(案内の https://www.abs.gov.au/how-cite-abs-sources は引用の書き方の例だけ)→ CC BY 4.0 の
+ *   3(a)(1)(作者・著作権の表示・ライセンスへの言及とリンク・免責への言及・元の資料へのリンク)を満たす文を置く。
+ *   元の資料へのリンクは source_url(abs.gov.au)。値を加工して出す画面(変化幅など)は、その旨を iOS が出す(3(a)(1)(B))。
+ * - Statistics Canada(https://www.statcan.gc.ca/en/terms-conditions/open-licence): 「Source: Statistics Canada, name of
+ *   product, reference date. Reproduced and distributed on an "as is" basis with the permission of Statistics Canada.」
+ *   CA_UNEMPLOYMENT_RATE の値は v2062815 = Table 14-10-0287-01(getSeriesInfoFromVector の productId 14100287、題名は
+ *   getCubeMetadata、2026-11-11 確認)。reference date は各値の対象月(アプリは値と一緒に対象月を出す)。CA_CPI は
+ *   公表予定だけ(値は出さない)なので、表の名前を付けない。
+ */
+export const ONS_ATTRIBUTION: Attribution = {
+  source: '英国国家統計局（ONS）',
+  source_url: 'https://www.ons.gov.uk',
+  notice: 'Source: Office for National Statistics licensed under the Open Government Licence v.3.0',
+};
+
+export const ABS_ATTRIBUTION: Attribution = {
+  source: 'オーストラリア統計局（ABS）',
+  source_url: 'https://www.abs.gov.au',
+  notice:
+    'Source: Australian Bureau of Statistics. © Commonwealth of Australia. Licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Disclaimer: https://www.abs.gov.au/website-privacy-copyright-and-disclaimer',
+};
+
+const STATCAN_AS_IS = 'Reproduced and distributed on an "as is" basis with the permission of Statistics Canada.';
+
+export const STATCAN_ATTRIBUTION: Attribution = {
+  source: 'カナダ統計局（Statistics Canada）',
+  source_url: 'https://www.statcan.gc.ca',
+  notice: `Source: Statistics Canada. ${STATCAN_AS_IS}`,
+};
+
+export const STATCAN_LFS_ATTRIBUTION: Attribution = {
+  ...STATCAN_ATTRIBUTION,
+  source_url: 'https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1410028701',
+  notice: `Source: Statistics Canada, Table 14-10-0287-01 Labour force characteristics, monthly, seasonally adjusted and trend-cycle. ${STATCAN_AS_IS}`,
+};
+
+const INDICATOR_ATTRIBUTIONS: Readonly<Record<string, Attribution>> = {
+  GB_CPI: ONS_ATTRIBUTION,
+  GB_CORE_CPI: ONS_ATTRIBUTION,
+  GB_UNEMPLOYMENT_RATE: ONS_ATTRIBUTION,
+  AU_CPI: ABS_ATTRIBUTION,
+  AU_UNEMPLOYMENT_RATE: ABS_ATTRIBUTION,
+  CA_CPI: STATCAN_ATTRIBUTION,
+  CA_UNEMPLOYMENT_RATE: STATCAN_LFS_ATTRIBUTION,
+};
+
+/**
+ * economic_indicators.code(経済指標)から。Eurostat の指標(api-design v1.43)と、英国・豪州・カナダの公式統計の指標
+ * (上の説明)。それ以外(米国の BLS・FRB の指標など、出典の表示の義務が無いもの)は null。
+ */
 export function attributionForIndicator(code: string | null | undefined): Attribution | null {
-  return code != null && EUROSTAT_INDICATOR_CODES.has(code) ? EUROSTAT_ATTRIBUTION : null;
+  if (code == null) return null;
+  if (EUROSTAT_INDICATOR_CODES.has(code)) return EUROSTAT_ATTRIBUTION;
+  return INDICATOR_ATTRIBUTIONS[code] ?? null;
 }
 
 /**

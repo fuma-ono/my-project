@@ -121,7 +121,16 @@ export class MemoryIngestionStore implements IngestionStore {
 
   getReleaseSnapshot(eventId: string) {
     const s = this.snapshots.find((snapshot) => snapshot.event_id === eventId);
-    return Promise.resolve(s ? { forecast: s.forecast, actual: s.actual, previous: s.previous } : null);
+    return Promise.resolve(
+      s
+        ? {
+            forecast: s.forecast,
+            actual: s.actual,
+            previous: s.previous,
+            verification_source: s.verification_source ?? null,
+          }
+        : null,
+    );
   }
 
   listFomcPolicyDecisions(): Promise<StoredFomcPolicyDecision[]> {
@@ -400,6 +409,22 @@ export class MemoryIngestionStore implements IngestionStore {
     return Promise.resolve(
       this.events
         .filter((e) => e.status === 'RELEASED' && Date.parse(e.release_datetime) >= since)
+        .sort((a, b) => Date.parse(a.release_datetime) - Date.parse(b.release_datetime))
+        .map((e) => ({
+          id: e.id,
+          release_datetime: e.release_datetime,
+          release_datetime_precision: e.release_datetime_precision,
+          currency_code: e.currency_code ?? '',
+        })),
+    );
+  }
+
+  listPolicyRateEventsForReactions(sinceIso: string): Promise<EventForReactionRef[]> {
+    const since = Date.parse(sinceIso);
+    const recorded = new Set(this.fomcPolicyDecisions.map((row) => row.event_id));
+    return Promise.resolve(
+      this.events
+        .filter((e) => e.status !== 'CANCELLED' && recorded.has(e.id) && Date.parse(e.release_datetime) >= since)
         .sort((a, b) => Date.parse(a.release_datetime) - Date.parse(b.release_datetime))
         .map((e) => ({
           id: e.id,

@@ -30,6 +30,13 @@ struct EventDetailView: View {
     private let apiClient: APIClient
     @ObservedObject private var plan = PlanStore.shared
     @State private var planPrompt: String?
+    /// HQ指示(2026-11-09「StrategyAnalysisのFREE/PROアクセス制御」)。
+    @State private var strategyUpgradePrompt: String?
+
+    /// PROプランが確定しているときだけ「トレード戦略分析」へ遷移できる。未確定(`isConfirmed
+    /// == false`、`/entitlements`取得前・失敗時)はFREEと同じ扱いにし、誤って遷移させない。
+    /// `private`ではない(テストから直接確認する、`EventDetailViewTests.swift`参照)。
+    var canOpenStrategyAnalysis: Bool { plan.isConfirmed && plan.isPro }
 
     init(apiClient: APIClient, eventId: String, tabSelection: Binding<Int>) {
         self.apiClient = apiClient
@@ -43,6 +50,12 @@ struct EventDetailView: View {
             .toolbar(.hidden, for: .navigationBar)
             .task { viewModel.load() }
             .planLimitPrompt($planPrompt, apiClient: apiClient, tabSelection: $tabSelection)
+            .planLimitPrompt(
+                $strategyUpgradePrompt, apiClient: apiClient, tabSelection: $tabSelection,
+                title: "PROプランにアップグレードしますか？",
+                confirmButtonTitle: "PROプランにアップグレード",
+                cancelButtonTitle: "今はしない"
+            )
     }
 
     @ViewBuilder
@@ -63,9 +76,16 @@ struct EventDetailView: View {
 
                 // HQ指示(2026-10-09)の参考画像で作り直した本体(EventDetailCards)。
                 ScrollView(showsIndicators: false) {
-                    EventDetailCards(response: response, nextReleaseState: viewModel.nextReleaseState, onLockedTap: {
-                        planPrompt = PastReleaseLock.promptMessage(maxForPlan: plan.limits.pastReleasesMax)
-                    })
+                    EventDetailCards(
+                        response: response, nextReleaseState: viewModel.nextReleaseState,
+                        onLockedTap: {
+                            planPrompt = PastReleaseLock.promptMessage(maxForPlan: plan.limits.pastReleasesMax)
+                        },
+                        canOpenStrategyAnalysis: canOpenStrategyAnalysis,
+                        onStrategyAnalysisBlockedTap: {
+                            strategyUpgradePrompt = "トレード戦略分析はPROプラン限定の機能です。"
+                        }
+                    )
                         .padding(.vertical, 6)
                         .frame(width: V5P.W)
                 }

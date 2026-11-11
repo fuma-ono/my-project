@@ -75,7 +75,7 @@ describe('PPI / JOLTS mappings and schedule', () => {
     expect(m.release.localTimes).toEqual(['10:00']);
   });
 
-  it('PPI has the 24 official dates; JOLTS only the 11 BLS has published (no 2027 guess)', () => {
+  it('PPI has the 24 official dates; JOLTS the 23 BLS has published (2026-11-11 table, nothing past 2027-10)', () => {
     for (const code of PPI_RELEASE_INDICATORS) {
       const rows = BLS_SCHEDULE.filter((e) => e.indicatorCode === code);
       expect(rows).toHaveLength(24);
@@ -84,9 +84,40 @@ describe('PPI / JOLTS mappings and schedule', () => {
       expect(rows[23]).toMatchObject({ referencePeriod: '2027-11', releaseDate: '2027-12-15' });
     }
     const jolts = BLS_SCHEDULE.filter((e) => e.indicatorCode === JOLTS_RELEASE_INDICATORS[0]);
-    expect(jolts).toHaveLength(11);
+    expect(jolts).toHaveLength(23);
     expect(jolts.find((e) => e.referencePeriod === '2026-09')?.releaseDate).toBe('2026-11-03');
-    expect(jolts.every((e) => e.releaseDate < '2027-01-01')).toBe(true);
+    // 2026-11-11 に BLS の JOLTS の予定表から写した回(表と同じ日付)
+    expect(jolts.filter((e) => e.referencePeriod >= '2026-11').map((e) => [e.referencePeriod, e.releaseDate])).toEqual([
+      ['2026-11', '2027-01-05'],
+      ['2026-12', '2027-02-02'],
+      ['2027-01', '2027-03-09'],
+      ['2027-02', '2027-03-30'],
+      ['2027-03', '2027-05-04'],
+      ['2027-04', '2027-06-02'],
+      ['2027-05', '2027-06-29'],
+      ['2027-06', '2027-08-03'],
+      ['2027-07', '2027-08-31'],
+      ['2027-08', '2027-10-05'],
+      ['2027-09', '2027-11-02'],
+      ['2027-10', '2027-12-01'],
+    ]);
+    expect(jolts.every((e) => e.referencePeriod <= '2027-10')).toBe(true); // 表に無い先は入れない
+  });
+
+  // 予定を足したときに二重に入れていないこと(claude/fx-schedule-jolts-minutes-2027 cc6250ed のテストを移植)
+  it("has no duplicate entry: one row per indicator and period, and each indicator's dates are unique and ascending", () => {
+    const keys = BLS_SCHEDULE.map((e) => `${e.indicatorCode}:${e.referencePeriod}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    for (const code of new Set(BLS_SCHEDULE.map((e) => e.indicatorCode))) {
+      const rows = BLS_SCHEDULE.filter((e) => e.indicatorCode === code);
+      const dates = rows.map((e) => e.releaseDate);
+      expect(new Set(dates).size, code).toBe(dates.length);
+      expect([...dates].sort(), code).toEqual(dates);
+      expect(rows.map((e) => e.referencePeriod).sort(), code).toEqual(rows.map((e) => e.referencePeriod));
+      // 発表は、その月が終わった後
+      for (const row of rows)
+        expect(row.releaseDate > `${row.referencePeriod}-31`, `${code} ${row.referencePeriod}`).toBe(true);
+    }
   });
 });
 

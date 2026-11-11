@@ -15,6 +15,7 @@ import { getEventById, getLatestExplanation, getReleaseSnapshot } from '../repos
 import { getIndicatorById, listRelatedFxPairs } from '../repositories/indicatorsRepository.js';
 import {
   listAvailableReactionsForComparison,
+  listCoReleasedEvents,
   listMinuteCandleCompleteness,
   listRecentReleasedEventIds,
   listReleasedEventsForIndicator,
@@ -23,6 +24,7 @@ import {
   listStrategyPairCandidates,
   listStrategyReactions,
 } from '../repositories/historicalRepository.js';
+import { groupByMarketEvent, coReleasedRows, summarizeMarketEventCoverage } from '../domain/marketEventGrouping.js';
 import { listReactionsForPair } from '../repositories/reactionsRepository.js';
 import { computeAdvancedHistoricalStats, computeHistoricalStats } from '../domain/historicalStatistics.js';
 import { gateAdvancedStatistics } from '../domain/advancedStatistics.js';
@@ -165,6 +167,35 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
         analysis: null,
       };
     }
+    // HQ指示(2026-11-10「重複排除・集計改善・AI分析基盤の整備」STEP1): この発表が、他の指標と同時発表(同じ provider・
+    // release_datetime)かどうか(例: 米雇用統計の NFP・失業率・平均時給は同じ1回の発表)。既存の列だけで計算する
+    // (DB変更なし)。provider が無い発表・release_datetime_precision が EXACT でない発表は判定しない(誤って
+    // 同一視しない、domain/marketEventGrouping.ts。HQ指示 2026-11-10「実動作検証」で発見: Eurostat由来の
+    // EU_HICP・EU_UNEMPLOYMENT_RATE はどちらも時刻が APPROXIMATE で、確認できない時刻の偶然の一致が実在した)。
+    const selfMarketRow = {
+      event_id: event.id,
+      indicator_id: event.indicator_id,
+      indicator_code: event.indicator_code,
+      provider: event.provider,
+      release_datetime: event.release_datetime,
+      release_datetime_precision: event.release_datetime_precision,
+    };
+    const coReleasedSource = await listCoReleasedEvents(app.supabase, [selfMarketRow]);
+    const coReleasedGroups = groupByMarketEvent([selfMarketRow, ...coReleasedSource]);
+    const coReleasedIndicators = coReleasedRows(coReleasedGroups, event.id).map((r) => ({
+      indicator_id: r.indicator_id,
+      indicator_code: r.indicator_code,
+    }));
+    // HQ指示(2026-11-10「実動作検証」STEP2「最重要」): summarizeMarketEventCoverageを実際の応答に反映する。
+    // この発表自身のグループ(自分＋同時発表の指標)だけを渡すので、independent_market_eventsは常に1
+    // (このグループ自体が1つの市場イベントであることの表現)、indicator_countが「何指標が束ねられているか」
+    // (例: 米雇用統計のNFP単体なら1、NFP・失業率・平均時給が同時発表なら3)。
+    const ownGroup = coReleasedGroups.find((g) => g.events.some((e) => e.event_id === event.id))!;
+    const coverage = summarizeMarketEventCoverage([ownGroup]);
+    const marketEventCoverage = {
+      independent_market_events: coverage.independentMarketEvents,
+      indicator_count: coverage.indicatorEventCount,
+    };
     // HQ指示(2026-11-09 P0「通貨ペアの選択・並び順」): 使えるペアは、有効で指標の通貨を含むものだけ(値動きはそのペアに
     // しか計算されない)。?fx_pair_id がそれ以外(存在しない・無効・指標の通貨を含まない)なら 404。指定が無ければ
     // 関連の通貨ペアから selectDefaultStrategyPair(priority → 主要ペアの順 → symbol)。
@@ -183,7 +214,15 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
     }
     if (!pair) {
       // 比べる通貨ペアが無い指標(使える関連の通貨ペアが無い): 何も推測しない。
-      return { event_id: eventId, available: true, required_entitlement: null, fx_pair: null, analysis: null };
+      return {
+        event_id: eventId,
+        available: true,
+        required_entitlement: null,
+        fx_pair: null,
+        co_released_indicators: coReleasedIndicators,
+        market_event_coverage: marketEventCoverage,
+        analysis: null,
+      };
     }
     const releases = await listReleasedEventsBefore(
       app.supabase,
@@ -220,6 +259,8 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
       available: true,
       required_entitlement: null,
       fx_pair: { fx_pair_id: pair.fx_pair_id, symbol: pair.symbol },
+      co_released_indicators: coReleasedIndicators,
+      market_event_coverage: marketEventCoverage,
       analysis,
     };
   });

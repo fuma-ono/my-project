@@ -179,13 +179,18 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
     async getReleaseSnapshot(eventId: string): Promise<StoredSnapshot | null> {
       const { data, error } = await supabase
         .from('event_snapshots')
-        .select('forecast, actual, previous')
+        .select('forecast, actual, previous, verification_source')
         .eq('event_id', eventId)
         .eq('snapshot_type', 'RELEASE')
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;
-      return { forecast: num(data.forecast), actual: num(data.actual), previous: num(data.previous) };
+      return {
+        forecast: num(data.forecast),
+        actual: num(data.actual),
+        previous: num(data.previous),
+        verification_source: (data.verification_source as string | null) ?? null,
+      };
     },
 
     async listFomcPolicyDecisions(): Promise<StoredFomcPolicyDecision[]> {
@@ -457,6 +462,33 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
     async insertIngestionLog(row: IngestionLogRow): Promise<void> {
       const { error } = await supabase.from('ingestion_logs').insert(row);
       if (error) throw error;
+    },
+
+    async listPolicyRateEventsForReactions(sinceIso: string): Promise<EventForReactionRef[]> {
+      // fomc_policy_decisions.event_id → economic_events.id(一意)を内部結合で埋め込み、記録のある会合だけにする。
+      const rows = await allPages<{
+        id: string;
+        release_datetime: string;
+        release_datetime_precision: string;
+        economic_indicators: { currency_code: string } | null;
+      }>((from, to) =>
+        supabase
+          .from('economic_events')
+          .select(
+            'id, release_datetime, release_datetime_precision, economic_indicators!inner(currency_code), fomc_policy_decisions!inner(event_id)',
+          )
+          .neq('status', 'CANCELLED')
+          .gte('release_datetime', sinceIso)
+          .order('release_datetime', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
+      return rows.map((row) => ({
+        id: row.id,
+        release_datetime: row.release_datetime,
+        release_datetime_precision: row.release_datetime_precision as EventForReactionRef['release_datetime_precision'],
+        currency_code: row.economic_indicators?.currency_code ?? '',
+      }));
     },
 
     async listReleasedEventsForReactions(sinceIso: string): Promise<EventForReactionRef[]> {

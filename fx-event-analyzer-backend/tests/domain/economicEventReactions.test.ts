@@ -17,7 +17,7 @@ const candle = (offset: number, close: number, high = close, low = close): Price
 
 describe('computeEventPairReactionRows', () => {
   it('computes pips (JPY ×100), movement, change_percent and max excursion for every closed timeframe', () => {
-    const candles = [
+    const specified = [
       candle(-1, 150.0), // pre-release close
       candle(0, 150.2, 150.3, 149.95), // closes at T+1m
       candle(1, 150.1), // closes at T+2m
@@ -29,6 +29,10 @@ describe('computeEventPairReactionRows', () => {
       candle(29, 150.7, 150.8, 149.9), // closes at T+30m
       candle(59, 150.8, 150.85, 149.85), // closes at T+60m
     ];
+    // HQ指示(2026-11-10 A): 窓の1分足は全部そろっている必要がある。間の分は 150.0 の平らな足で埋める
+    // (高値・安値は上の足の範囲の内側なので、下の最大上昇・最大下降の期待値は変わらない)。
+    const byOffset = new Map(specified.map((c) => [Math.round((Date.parse(c.timestamp) - T) / MIN), c]));
+    const candles = Array.from({ length: 61 }, (_, i) => i - 1).map((m) => byOffset.get(m) ?? candle(m, 150.0));
 
     const rows = computeEventPairReactionRows({
       releaseDatetime: RELEASE,
@@ -230,5 +234,57 @@ describe('computeEventPairReactionRows', () => {
       data_status: 'AVAILABLE',
       post_release_price: 150.2,
     });
+  });
+
+  // HQ指示(2026-11-10「価格反応データ A・D」)
+  const fullHour = () => Array.from({ length: 61 }, (_, i) => candle(i - 1, 150 + i * 0.01));
+
+  it('A: a window with one missing minute (both ends present) is UNAVAILABLE; shorter complete windows stay AVAILABLE', () => {
+    const rows = computeEventPairReactionRows({
+      releaseDatetime: RELEASE,
+      precision: 'EXACT',
+      symbol: 'USDJPY',
+      candles: fullHour().filter((c) => c.timestamp !== new Date(T + 20 * MIN).toISOString()), // T+21m に終わる足が無い
+      now: NOW,
+    });
+    const status = Object.fromEntries(rows.map((r) => [r.timeframe, r.data_status]));
+    expect(status).toEqual({
+      '1m': 'AVAILABLE',
+      '5m': 'AVAILABLE',
+      '15m': 'AVAILABLE',
+      '30m': 'UNAVAILABLE',
+      '60m': 'UNAVAILABLE',
+    });
+    expect(rows.find((r) => r.timeframe === '30m')).toMatchObject({
+      pips: null,
+      max_upward: null,
+      post_release_price: null,
+    });
+  });
+
+  it('A: an older minute is never used in place of the missing pre-release minute', () => {
+    const rows = computeEventPairReactionRows({
+      releaseDatetime: RELEASE,
+      precision: 'EXACT',
+      symbol: 'USDJPY',
+      candles: [candle(-5, 149.0), ...fullHour().slice(1)], // T−1 の足(発表の時刻に終わる足)が無い
+      now: NOW,
+    });
+    expect(rows.every((r) => r.data_status === 'UNAVAILABLE' && r.pre_release_price === null)).toBe(true);
+  });
+
+  it('D: with finalityMinutes, a closed window is written only after it has become final', () => {
+    const at = (minutesAfter: number) =>
+      computeEventPairReactionRows({
+        releaseDatetime: RELEASE,
+        precision: 'EXACT',
+        symbol: 'USDJPY',
+        candles: fullHour(),
+        now: new Date(T + minutesAfter * MIN),
+        finalityMinutes: 140,
+      }).map((r) => r.timeframe);
+    expect(at(140)).toEqual([]);
+    expect(at(141)).toEqual(['1m']);
+    expect(at(200)).toEqual(['1m', '5m', '15m', '30m', '60m']);
   });
 });
