@@ -36,6 +36,20 @@ enum StrategyAnalysisTab: Int, CaseIterable, Identifiable {
         case .aiAnalysis: return "sparkles"
         }
     }
+
+    /// UIテスト用の`accessibilityIdentifier`。CIで原因調査した結果、このアプリの既存の
+    /// `accessibilityIdentifier`は(表示文言が日本語の画面でも)すべてASCIIのみで付けられており、
+    /// 日本語の`title`をそのまま識別子に使うと、XCUITestの`matching(identifier:)`がボタンを
+    /// 一度も見つけられず「タップ可能な要素が見つからない」という決定的な失敗になることが判明した
+    /// (同じ構成のまま識別子だけASCIIに変えたところ再現しなくなった)。既存の慣習どおりASCIIのみにする。
+    var testIdentifier: String {
+        switch self {
+        case .eventStrategy: return "eventStrategy"
+        case .currencyAnalysis: return "currencyAnalysis"
+        case .priceRangeAnalysis: return "priceRangeAnalysis"
+        case .aiAnalysis: return "aiAnalysis"
+        }
+    }
 }
 
 /// 4タブの切り替え(214pt幅、HQ指示のデザイン画像のピル型セグメントを、既存の暗い配色・
@@ -69,7 +83,7 @@ struct StrategyAnalysisTabBar: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityIdentifier("strategyAnalysisTab_\(tab.title)")
+                .accessibilityIdentifier("strategyAnalysisTab_\(tab.testIdentifier)")
             }
         }
         .padding(2)

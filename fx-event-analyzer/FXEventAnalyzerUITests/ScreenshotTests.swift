@@ -199,19 +199,19 @@ final class ScreenshotTests: XCTestCase {
         // HQ指示(2026-11-11「StrategyAnalysis 4タブUI実装」): 通貨分析・価格帯分析・AI分析の
         // 3タブは、まだBackendに対応するデータが無いため「データ不足」のプレースホルダーを表示する。
         // 架空の数値を表示していないことをスクリーンショットで確認する。
-        tapIdentifier("strategyAnalysisTab_通貨分析")
+        tapIdentifier("strategyAnalysisTab_currencyAnalysis")
         XCTAssertTrue(waitForAnyElement(containing: "分析対象外（データ不足）", timeout: 5), "Currency analysis tab did not show the not-yet-available placeholder")
         capture("07d-StrategyAnalysis-CurrencyAnalysis")
 
-        tapIdentifier("strategyAnalysisTab_価格帯分析")
+        tapIdentifier("strategyAnalysisTab_priceRangeAnalysis")
         XCTAssertTrue(waitForAnyElement(containing: "分析対象外（データ不足）", timeout: 5), "Price range analysis tab did not show the not-yet-available placeholder")
         capture("07e-StrategyAnalysis-PriceRangeAnalysis")
 
-        tapIdentifier("strategyAnalysisTab_AI分析")
+        tapIdentifier("strategyAnalysisTab_aiAnalysis")
         XCTAssertTrue(waitForAnyElement(containing: "分析対象外（データ不足）", timeout: 5), "AI analysis tab did not show the not-yet-available placeholder")
         capture("07f-StrategyAnalysis-AIAnalysis")
 
-        tapIdentifier("strategyAnalysisTab_イベント戦略")
+        tapIdentifier("strategyAnalysisTab_eventStrategy")
         XCTAssertTrue(waitForAnyElement(containing: "過去5回の分析結果", timeout: 5), "Did not return to the event strategy tab")
 
         tapIdentifier("v5HeaderBack")

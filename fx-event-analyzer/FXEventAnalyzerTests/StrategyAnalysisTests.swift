@@ -236,4 +236,13 @@ final class StrategyAnalysisTests: XCTestCase {
             ["イベント戦略", "通貨分析", "価格帯分析", "AI分析"]
         )
     }
+
+    /// CIで原因調査した不具合(日本語のaccessibilityIdentifierはXCUITestのmatching(identifier:)で
+    /// 一度も見つからず、タブがタップできなくなっていた)の再発防止。このアプリの既存の
+    /// accessibilityIdentifierは全てASCIIのみのため、testIdentifierも同じ慣習を守る。
+    func testStrategyAnalysisTabTestIdentifiersAreASCIIAndUnique() {
+        let identifiers = StrategyAnalysisTab.allCases.map(\.testIdentifier)
+        XCTAssertTrue(identifiers.allSatisfy { $0.allSatisfy(\.isASCII) }, "testIdentifier must be ASCII-only")
+        XCTAssertEqual(Set(identifiers).count, identifiers.count, "testIdentifier must be unique per tab")
+    }
 }
