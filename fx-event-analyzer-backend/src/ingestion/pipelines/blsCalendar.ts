@@ -45,6 +45,7 @@
 
 /** `notYetAvailable` entries whose scheduled date is this many days or more in the past with still no BLS value — probably means BLS rescheduled and the static table is stale, not a normal wait. */
 export const OVERDUE_AFTER_DAYS = 45;
+import { isBlsDataUnavailable } from '../mappings/blsDataUnavailable.js';
 import type { OfficialStatsProvider } from '../providers.js';
 import { findMappingByCode, INDICATOR_MAPPINGS, type IndicatorMapping } from '../mappings/indicators.js';
 import { BLS_SCHEDULE, type BlsScheduleEntry } from '../mappings/blsSchedule.js';
@@ -177,6 +178,13 @@ export interface BlsScheduleReleaseResult {
    * to check BLS's current schedule and correct the table if so.
    */
   overdue: BlsScheduleEntry[];
+  /**
+   * HQ指示(2026-11-11「CPI 2026-11-10 DATA_UNAVAILABLE 対応(案A)」): 発表時刻を過ぎても値を作れない回のうち、
+   * mappings/blsDataUnavailable.ts の表に載っている回(BLS が前年比の元の月を公表していない)。notYetAvailable にも
+   * overdue にも入れない(期限超過の警告を出さない)。この回の状態は ingest:official:bls-data-unavailable が書く。
+   * ここでは何も書かない(今までどおり、値の無い過去の回は releases に入らない)。
+   */
+  dataUnavailable: BlsScheduleEntry[];
   /** Schedule entries for an indicator with no economic_indicators row / no bls_schedule mapping key. */
   unmapped: BlsScheduleEntry[];
   /**
@@ -215,6 +223,7 @@ export async function buildBlsScheduleReleases(deps: {
   const overdue: BlsScheduleEntry[] = [];
   const unmapped: BlsScheduleEntry[] = [];
   const cancelled: BlsScheduleEntry[] = [];
+  const dataUnavailable: BlsScheduleEntry[] = [];
 
   for (const entry of entries) {
     if (entry.cancelled) {
@@ -271,6 +280,10 @@ export async function buildBlsScheduleReleases(deps: {
     const asOfDate = localDate(releaseAt, mapping.release.timeZone);
     const actual = await deps.official.resolve(mapping, entry.referencePeriod, asOfDate);
     if (!actual) {
+      if (isBlsDataUnavailable(entry)) {
+        dataUnavailable.push(entry);
+        continue;
+      }
       notYetAvailable.push(entry);
       const daysPast = (now.getTime() - releaseAt.getTime()) / 86_400_000;
       if (daysPast >= OVERDUE_AFTER_DAYS) overdue.push(entry);
@@ -310,7 +323,7 @@ export async function buildBlsScheduleReleases(deps: {
       secondaryPrevious: secondaryPrevious ? secondaryPrevious.value : null,
     });
   }
-  return { releases, notYetAvailable, overdue, unmapped, cancelled };
+  return { releases, notYetAvailable, overdue, dataUnavailable, unmapped, cancelled };
 }
 
 /** The economic_events id of a schedule entry — the same one buildBlsScheduleReleases uses. */
