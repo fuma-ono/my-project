@@ -77,6 +77,16 @@ describe('extractFrbSpeechBody', () => {
     );
   });
 
+  it('puts a sub-heading at the start of a paragraph (<em>…</em><br />) into its own paragraph, without dropping it', () => {
+    const page = FRB_PAGE.replace(
+      '<p>As you know,',
+      '<p><em>Labor Market Conditions</em><br />\nLabor market conditions improved.</p>\n    <p>As you know,',
+    );
+    expect(extractFrbSpeechBody(page)).toContain(
+      'Labor Market Conditions\n\nLabor market conditions improved.\n\nAs you know,',
+    );
+  });
+
   it('returns null when the page does not have the expected structure (never a guessed body)', () => {
     expect(extractFrbSpeechBody('<html><body><p>Page not found</p></body></html>')).toBeNull();
     expect(

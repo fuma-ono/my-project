@@ -76,8 +76,20 @@ function paragraphText(html: string): string {
     .trim();
 }
 
+/**
+ * 段落の頭の小見出し(FRB は `<p><em>Labor Market Conditions</em><br />本文…</p>`)を、別の段落に分ける
+ * (本文の文にくっつかないように)。小見出しの文字は消さない。
+ */
+function splitLeadingHeading(html: string): string[] {
+  const m = /^\s*<(em|strong|b|i)>([^<]{1,120})<\/\1>\s*<br\s*\/?>([\s\S]*)$/i.exec(html);
+  return m ? [m[2]!, m[3]!] : [html];
+}
+
 function joinParagraphs(paragraphs: string[]): string | null {
-  const texts = paragraphs.map(paragraphText).filter((text) => text !== '');
+  const texts = paragraphs
+    .flatMap(splitLeadingHeading)
+    .map(paragraphText)
+    .filter((text) => text !== '');
   return texts.length > 0 ? texts.join('\n\n') : null;
 }
 

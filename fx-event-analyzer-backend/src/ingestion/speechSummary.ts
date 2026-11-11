@@ -74,7 +74,13 @@ export function summarizeExtractive(body: string): SummaryResult {
   const sentences = splitSentences(body);
   const candidates = sentences
     .map((text, index) => ({ text, index }))
-    .filter((s) => s.text.length >= 40 && s.text.length <= 400 && !BOILERPLATE.some((re) => re.test(s.text)));
+    .filter(
+      (s) =>
+        s.text.length >= 40 &&
+        s.text.length <= 400 &&
+        /[.!?]["”’)]?$/.test(s.text) && // 文末記号の無いもの(見出し・箇条の断片)は選ばない
+        !BOILERPLATE.some((re) => re.test(s.text)),
+    );
   if (candidates.length === 0) return { ok: false, reason: 'NO_SENTENCES' };
 
   const freq = new Map<string, number>();

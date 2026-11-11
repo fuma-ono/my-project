@@ -50,6 +50,12 @@ describe('summarizeExtractive', () => {
     expect(result.summary).toMatch(/inflation/i);
   });
 
+  it('does not pick headings (no sentence-ending punctuation)', () => {
+    const body = `Labor Market Conditions And The Outlook For Inflation In The Months Ahead\n\n${BODY}`;
+    const result = summarizeExtractive(body);
+    expect(result.ok && result.summary).not.toMatch(/Labor Market Conditions/);
+  });
+
   it('is deterministic', () => {
     expect(summarizeExtractive(BODY)).toEqual(summarizeExtractive(BODY));
   });
