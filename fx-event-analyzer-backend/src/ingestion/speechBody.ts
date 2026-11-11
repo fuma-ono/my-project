@@ -153,6 +153,29 @@ export function frbSpeechRssItems(links: readonly (string | null)[]): FrbSpeechR
   return items;
 }
 
+/**
+ * FRB の講演の一覧の JSON(https://www.federalreserve.gov/json/ne-speeches.json。公式サイトの講演の一覧ページが読むもの。
+ * 2017年以降の講演の、題名・発言者・講演ページの場所)→ 講演ページの URL(重複を除く)。形が違う・読めないときは空。
+ * 同じ原稿を同じ日に2回話した講演は、同じページが2回入っているので1件にする。
+ */
+export function frbSpeechJsonLinks(text: string): string[] {
+  let data: unknown;
+  try {
+    data = JSON.parse(text.replace(/^\uFEFF/, ''));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(data)) return [];
+  const links = new Set<string>();
+  for (const item of data as unknown[]) {
+    if (!item || typeof item !== 'object') continue;
+    const { l, stub } = item as { l?: unknown; stub?: unknown };
+    const path = [l, stub].find((v): v is string => typeof v === 'string' && v.startsWith('/newsevents/speech/'));
+    if (path) links.add(`https://www.federalreserve.gov${path}`);
+  }
+  return [...links];
+}
+
 /** 発言者の英語名(例 "Christopher J. Waller"、"Michelle W. Bowman")→ URL に使われる姓(小文字・英字だけ)。 */
 export function frbSurnameKey(englishName: string): string | null {
   const parts = englishName

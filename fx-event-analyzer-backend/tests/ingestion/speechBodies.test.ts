@@ -4,6 +4,7 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  FRB_SPEECHES_JSON_URL,
   FRB_SPEECHES_RSS_URL,
   STORE_BODY_FOR,
   ingestSpeechBodies,
@@ -12,6 +13,7 @@ import {
   type SpeechForBody,
 } from '../../src/ingestion/pipelines/speechBodies.js';
 import { JobCounters } from '../../src/ingestion/runner.js';
+import { frbSpeechJsonLinks } from '../../src/ingestion/speechBody.js';
 
 const NOW = new Date('2026-11-10T06:00:00Z');
 
@@ -204,5 +206,102 @@ describe('ingestSpeechBodies', () => {
     expect(counters.fetched).toBe(0);
     expect(frb.requested).toEqual([]);
     expect(ecb.requested).toEqual([]);
+  });
+});
+
+// HQ指示(2026-11-11「過去発言にも適用可能か確認」): RSS は直近の講演だけなので、古い発言は講演の一覧の JSON で URL を探す。
+describe('ingestSpeechBodies: past speeches (--all) and the FRB speeches JSON', () => {
+  const OLD = 'https://www.federalreserve.gov/newsevents/speech/waller20250117a.htm';
+  const json = (...items: { l?: string; stub?: string }[]) =>
+    `\uFEFF${JSON.stringify([...items.map((i) => ({ d: 'x', t: 't', s: 's', ...i })), { updateDate: 'Last update' }])}`;
+
+  it('links an old speech the RSS no longer has from the JSON, only with pastDays = null', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    const ecb = new FakeFetcher();
+    store.rows = [row({ id: 'old', statement_datetime: '2025-01-17T15:00:00Z' })];
+    frb.pages.set(FRB_SPEECHES_RSS_URL, rss('https://www.federalreserve.gov/newsevents/speech/bowman20261110a.htm'));
+    frb.pages.set(FRB_SPEECHES_JSON_URL, json({ l: '/newsevents/speech/waller20250117a.htm' }));
+    frb.pages.set(OLD, frbPage('Inflation has eased.'));
+
+    // 既定(直近30日)では対象に入らない
+    await ingestSpeechBodies(store, { frb, ecb }, { pastDays: 30, maxFetches: 20 }, NOW, new JobCounters());
+    expect(store.updates).toEqual([]);
+
+    const counters = new JobCounters();
+    await ingestSpeechBodies(store, { frb, ecb }, { pastDays: null, maxFetches: 20 }, NOW, counters);
+    expect(store.updates.at(-1)).toEqual({
+      id: 'old',
+      patch: {
+        source_url: OLD,
+        speech_body: 'Inflation has eased.',
+        body_fetched_at: NOW.toISOString(),
+        body_status: 'FETCHED',
+        body_error: null,
+      },
+    });
+    expect(frb.requested).toEqual([FRB_SPEECHES_RSS_URL, FRB_SPEECHES_JSON_URL, OLD]);
+    expect(counters.errorMessages).toEqual([]);
+  });
+
+  it('the same page listed twice (identical remarks given twice) is one item; two rows that day are not linked', async () => {
+    const page = '/newsevents/speech/waller20250117a.htm';
+    const one = new FakeStore();
+    const frb = new FakeFetcher();
+    one.rows = [row({ id: 'a', statement_datetime: '2025-01-17T15:00:00Z' })];
+    frb.pages.set(FRB_SPEECHES_RSS_URL, rss());
+    frb.pages.set(FRB_SPEECHES_JSON_URL, json({ l: page }, { l: '', stub: page }));
+    frb.pages.set(OLD, frbPage('Inflation has eased.'));
+    await ingestSpeechBodies(
+      one,
+      { frb, ecb: new FakeFetcher() },
+      { pastDays: null, maxFetches: 20 },
+      NOW,
+      new JobCounters(),
+    );
+    expect(one.updates.at(-1)?.patch.body_status).toBe('FETCHED');
+
+    const two = new FakeStore();
+    two.rows = [
+      row({ id: 'a', statement_datetime: '2025-01-17T15:00:00Z' }),
+      row({ id: 'b', provider_event_id: 'p2', statement_datetime: '2025-01-17T20:00:00Z' }),
+    ];
+    await ingestSpeechBodies(
+      two,
+      { frb, ecb: new FakeFetcher() },
+      { pastDays: null, maxFetches: 20 },
+      NOW,
+      new JobCounters(),
+    );
+    expect(two.updates).toEqual([]); // 推測で結ばない(PENDING のまま)
+  });
+
+  it('does not read the JSON when the RSS linked every speech', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    const url = 'https://www.federalreserve.gov/newsevents/speech/waller20261105a.htm';
+    store.rows = [row({ id: 'w' })];
+    frb.pages.set(FRB_SPEECHES_RSS_URL, rss(url));
+    frb.pages.set(url, frbPage('Thank you.'));
+    await ingestSpeechBodies(
+      store,
+      { frb, ecb: new FakeFetcher() },
+      { pastDays: 30, maxFetches: 20 },
+      NOW,
+      new JobCounters(),
+    );
+    expect(frb.requested).not.toContain(FRB_SPEECHES_JSON_URL);
+  });
+});
+
+describe('frbSpeechJsonLinks', () => {
+  it('reads l / stub as official URLs, drops duplicates and non-speech paths, and is empty for bad JSON', () => {
+    expect(
+      frbSpeechJsonLinks(
+        '\uFEFF[{"l":"/newsevents/speech/powell20170107a.htm"},{"l":"","stub":"/newsevents/speech/powell20170107a.htm"},{"l":"/newsevents/testimony/x.htm"},{"updateDate":"u"}]',
+      ),
+    ).toEqual(['https://www.federalreserve.gov/newsevents/speech/powell20170107a.htm']);
+    expect(frbSpeechJsonLinks('<html>')).toEqual([]);
+    expect(frbSpeechJsonLinks('{"a":1}')).toEqual([]);
   });
 });

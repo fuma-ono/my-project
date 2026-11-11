@@ -25,6 +25,7 @@ import type { JobCounters } from '../runner.js';
 import { wallClockParts } from '../time.js';
 import {
   extractSpeechBody,
+  frbSpeechJsonLinks,
   frbSpeechRssItems,
   isOfficialSpeechUrl,
   matchFrbSpeechUrls,
@@ -32,6 +33,8 @@ import {
 } from '../speechBody.js';
 
 export const FRB_SPEECHES_RSS_URL = 'https://www.federalreserve.gov/feeds/speeches.xml';
+/** 講演の一覧(2017年以降のすべて)。RSS(直近の分だけ)で結べなかった、古い発言の URL を探すときだけ読む。 */
+export const FRB_SPEECHES_JSON_URL = 'https://www.federalreserve.gov/json/ne-speeches.json';
 const BODY_PROVIDERS = ['frb_calendar', 'ecb_press_rss'] as const;
 
 export interface SpeechForBody {
@@ -68,7 +71,8 @@ export interface SpeechBodyFetcher {
 }
 
 export interface SpeechBodySettings {
-  pastDays: number;
+  /** null = 過去のすべての発言(過去の発言への適用、--all) */
+  pastDays: number | null;
   /** 1回の実行で本文のページを読む上限。 */
   maxFetches: number;
   /** 本文を保存してよい provider(省略時は STORE_BODY_FOR)。ほかは URL だけ残して本文を取らない。 */
@@ -104,7 +108,10 @@ export async function ingestSpeechBodies(
   now: Date,
   counters: JobCounters,
 ): Promise<void> {
-  const sinceIso = new Date(now.getTime() - settings.pastDays * 86_400_000).toISOString();
+  const sinceIso =
+    settings.pastDays === null
+      ? '1970-01-01T00:00:00.000Z'
+      : new Date(now.getTime() - settings.pastDays * 86_400_000).toISOString();
   const speeches = await store.listSpeechesNeedingBody(BODY_PROVIDERS, sinceIso);
   counters.fetched += speeches.length;
 
@@ -112,19 +119,30 @@ export async function ingestSpeechBodies(
   const frbWithoutUrl = speeches.filter((s) => s.provider === 'frb_calendar' && !s.source_url);
   const urlById = new Map<string, string>();
   if (frbWithoutUrl.length > 0) {
+    const rows: FrbSpeechRowForMatch[] = frbWithoutUrl.map((s) => ({
+      id: s.id,
+      speakerNameEn: englishNameOf(s.speaker_organization, s.speaker_name),
+      date: localDay(s.statement_datetime, 'America/New_York'),
+    }));
     try {
       const xml = await fetchers.frb.getText(FRB_SPEECHES_RSS_URL);
       const links = [...xml.matchAll(/<link>\s*(?:<!\[CDATA\[)?\s*([^<\]\s]+)\s*(?:\]\]>)?\s*<\/link>/g)].map(
         (m) => m[1]!,
       );
-      const rows: FrbSpeechRowForMatch[] = frbWithoutUrl.map((s) => ({
-        id: s.id,
-        speakerNameEn: englishNameOf(s.speaker_organization, s.speaker_name),
-        date: localDay(s.statement_datetime, 'America/New_York'),
-      }));
       for (const [id, url] of matchFrbSpeechUrls(rows, frbSpeechRssItems(links))) urlById.set(id, url);
     } catch (error) {
       counters.error(`frb speeches rss: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    // RSS は直近の講演だけなので、結べなかった行(古い発言など)は講演の一覧の JSON で探す(同じ決まり: 姓と日付がちょうど1件)。
+    const stillMissing = rows.filter((r) => !urlById.has(r.id));
+    if (stillMissing.length > 0) {
+      try {
+        const text = await fetchers.frb.getText(FRB_SPEECHES_JSON_URL);
+        const items = frbSpeechRssItems(frbSpeechJsonLinks(text));
+        for (const [id, url] of matchFrbSpeechUrls(stillMissing, items)) urlById.set(id, url);
+      } catch (error) {
+        counters.error(`frb speeches json: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
   }
 
