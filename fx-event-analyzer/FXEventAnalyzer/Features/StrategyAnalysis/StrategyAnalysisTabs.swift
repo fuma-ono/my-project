@@ -90,7 +90,6 @@ struct StrategyAnalysisTabBar: View {
         .frame(width: 214)
         .background(RoundedRectangle(cornerRadius: 11).fill(SettingsCardStyle.cardFill))
         .overlay(RoundedRectangle(cornerRadius: 11).stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7))
-        .accessibilityIdentifier("strategyAnalysisTabBar")
     }
 }
 
