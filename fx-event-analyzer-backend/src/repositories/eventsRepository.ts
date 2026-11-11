@@ -18,13 +18,15 @@ export interface EventRow {
   country_code: string;
   currency_code: string;
   favorable_direction: string;
+  /** 取り込みジョブ(発表元)。同時発表イベントのグループ化(domain/marketEventGrouping.ts)に使う。無ければ null。 */
+  provider: string | null;
 }
 
 export async function getEventById(supabase: SupabaseClient, eventId: string): Promise<EventRow | null> {
   const { data, error } = await supabase
     .from('economic_events')
     .select(
-      'id, indicator_id, release_datetime, release_datetime_precision, importance, status, data_status, is_provisional, economic_indicators!inner(code, name, display_name, country_code, currency_code, favorable_direction)',
+      'id, indicator_id, release_datetime, release_datetime_precision, importance, status, data_status, is_provisional, provider, economic_indicators!inner(code, name, display_name, country_code, currency_code, favorable_direction)',
     )
     .eq('id', eventId)
     .maybeSingle();
@@ -55,6 +57,7 @@ export async function getEventById(supabase: SupabaseClient, eventId: string): P
     country_code: indicator.country_code,
     currency_code: indicator.currency_code,
     favorable_direction: indicator.favorable_direction,
+    provider: data.provider,
   };
 }
 

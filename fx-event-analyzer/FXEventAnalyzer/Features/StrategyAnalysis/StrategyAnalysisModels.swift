@@ -10,6 +10,9 @@ struct StrategyAnalysisResponse: Decodable, Equatable {
     let fxPair: StrategyFxPair?
     /// nil = 比べる通貨ペアが無い(available が true のとき)。
     let analysis: StrategyAnalysis?
+    /// 同時発表の他の指標(HQ指示 2026-11-10「重複排除・集計改善」STEP1。例: 米雇用統計の NFP・失業率・平均時給は
+    /// 同じ1回の発表)。available が false のときは無い(キーごと省略される。その場合は nil)。
+    let coReleasedIndicators: [StrategyCoReleasedIndicator]?
 
     enum CodingKeys: String, CodingKey {
         case eventId = "event_id"
@@ -17,6 +20,18 @@ struct StrategyAnalysisResponse: Decodable, Equatable {
         case requiredEntitlement = "required_entitlement"
         case fxPair = "fx_pair"
         case analysis
+        case coReleasedIndicators = "co_released_indicators"
+    }
+}
+
+/// 同時発表(同じ provider・release_datetime)の他の指標。
+struct StrategyCoReleasedIndicator: Decodable, Equatable {
+    let indicatorId: String
+    let indicatorCode: String
+
+    enum CodingKeys: String, CodingKey {
+        case indicatorId = "indicator_id"
+        case indicatorCode = "indicator_code"
     }
 }
 
@@ -59,13 +74,21 @@ struct StrategyRelease: Decodable, Equatable, Identifiable {
     /// "UP" / "DOWN" / "FLAT"(1分後の pips の符号)。
     let direction1m: String?
     let pips1m: Double?
+    /// HQ指示(2026-11-10「重複排除・集計改善・AI分析基盤の整備」STEP3「リスク特性の追加」): 既に保存されている
+    /// 5分・30分の値動き(新しい取得は増やさない)。無ければ nil(作らない)。
+    let pips5m: Double?
     let pips15m: Double?
+    let pips30m: Double?
+    let pips60m: Double?
     /// "CONTINUATION" / "REVERSAL"。
     let pattern15m: String?
     let highBreak15m: Bool?
     let lowBreak15m: Bool?
     let highBreak60m: Bool?
     let lowBreak60m: Bool?
+    /// 1分の高値・安値を、その窓の中で両方とも抜けた(「往復」)。どちらかが判定できなければ nil。
+    let roundTrip15m: Bool?
+    let roundTrip60m: Bool?
     let sellTheFact: Bool?
 
     var id: String { eventId }
@@ -79,12 +102,17 @@ struct StrategyRelease: Decodable, Equatable, Identifiable {
         case surpriseDirection = "surprise_direction"
         case direction1m = "direction_1m"
         case pips1m = "pips_1m"
+        case pips5m = "pips_5m"
         case pips15m = "pips_15m"
+        case pips30m = "pips_30m"
+        case pips60m = "pips_60m"
         case pattern15m = "pattern_15m"
         case highBreak15m = "high_break_15m"
         case lowBreak15m = "low_break_15m"
         case highBreak60m = "high_break_60m"
         case lowBreak60m = "low_break_60m"
+        case roundTrip15m = "round_trip_15m"
+        case roundTrip60m = "round_trip_60m"
         case sellTheFact = "sell_the_fact"
     }
 }
@@ -170,8 +198,16 @@ enum StrategyAnalysisText {
         return "続いた \(summary.continuation)回・反転 \(summary.reversal)回（\(summary.samples)回中）"
     }
 
-    static func sellTheFactLine(_ summary: StrategySellTheFactSummary?) -> String {
-        guard let summary else { return "\(preparing)（予想と結果がそろった発表が足りません）" }
+    /// HQ指示(2026-11-10「重複排除・集計改善・AI分析基盤の整備」STEP5): 「件数が足りない」と「この指標はそもそも
+    /// 予想値が無い(構造的に判定できない)」を区別する。`releases`(直近の発表)のどれにも forecast が無ければ、
+    /// 回数が増えても判定できないことが分かる文言にする(件数不足と誤解させない)。
+    static func sellTheFactLine(_ summary: StrategySellTheFactSummary?, releases: [StrategyRelease] = []) -> String {
+        guard let summary else {
+            guard releases.contains(where: { $0.forecast != nil }) else {
+                return "\(preparing)（この指標は予想値が無く、判定できません）"
+            }
+            return "\(preparing)（予想と結果がそろった発表が足りません）"
+        }
         return "\(summary.occurred)回（結果が良かった\(summary.samples)回中）"
     }
 

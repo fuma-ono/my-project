@@ -202,6 +202,54 @@ describe('analyzeRelease', () => {
       expect(row.low_break_60m).toBe(true);
     });
   });
+
+  describe('リスク特性の追加(HQ指示 2026-11-10 STEP3): pips_5m・pips_30m・往復(round_trip)', () => {
+    it('5分・30分の値動きは、保存されていれば pips として返す(無ければ null)', () => {
+      const row = analyzeRelease(
+        release('e1', [
+          reaction('1m', 8, 0.1, -0.02),
+          reaction('5m', 15, 0.18, -0.02),
+          reaction('15m', 20, 0.25, -0.02),
+          reaction('30m', null, null, null, 'UNAVAILABLE'),
+          reaction('60m', -5, 0.25, -0.3),
+        ]),
+        'BASE',
+      );
+      expect(row).toMatchObject({ pips_5m: 15, pips_30m: null, pips_60m: -5 });
+    });
+
+    it('往復(round_trip): 1分の高値・安値を、その窓の中で両方とも抜けた(高値だけ・安値だけでは false)', () => {
+      // 実データ調査(docs/projects/event-strategy-trading-utility-report.md、USDJPY 2026-11-06)で確認した型:
+      // 15分までには高値だけ抜け、安値は60分まで抜けなかった(= 15分では往復していないが、60分では往復した)。
+      const row = analyzeRelease(
+        release('e1', [
+          reaction('1m', 10, 0.1, -0.02),
+          reaction('15m', 20, 0.3, -0.02), // 高値を抜いた(0.3 > 0.1)が、安値は抜いていない(-0.02 = -0.02)
+          reaction('60m', -5, 0.3, -0.25), // 安値も抜いた(-0.25 < -0.02)
+        ]),
+        'BASE',
+      );
+      expect(row).toMatchObject({
+        high_break_15m: true,
+        low_break_15m: false,
+        round_trip_15m: false,
+        high_break_60m: true,
+        low_break_60m: true,
+        round_trip_60m: true,
+      });
+    });
+
+    it('高値・安値どちらかの判定ができない(1分足の欠損・データなし)ときは round_trip も null', () => {
+      const row = analyzeRelease(
+        release('e1', [reaction('1m', 8, 0.1, -0.02), reaction('15m', 20, 0.25, -0.02)], null, {
+          complete15m: false,
+        }),
+        'BASE',
+      );
+      expect(row.high_break_15m).toBeNull();
+      expect(row.round_trip_15m).toBeNull();
+    });
+  });
 });
 
 describe('currencySide', () => {
