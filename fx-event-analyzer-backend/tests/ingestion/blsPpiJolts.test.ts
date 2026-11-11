@@ -75,7 +75,7 @@ describe('PPI / JOLTS mappings and schedule', () => {
     expect(m.release.localTimes).toEqual(['10:00']);
   });
 
-  it('PPI has the 24 official dates; JOLTS only the 11 BLS has published (no 2027 guess)', () => {
+  it('PPI has the 24 official dates; JOLTS the 23 BLS has published (2026-11-11 table, nothing past 2027-10)', () => {
     for (const code of PPI_RELEASE_INDICATORS) {
       const rows = BLS_SCHEDULE.filter((e) => e.indicatorCode === code);
       expect(rows).toHaveLength(24);
@@ -84,9 +84,24 @@ describe('PPI / JOLTS mappings and schedule', () => {
       expect(rows[23]).toMatchObject({ referencePeriod: '2027-11', releaseDate: '2027-12-15' });
     }
     const jolts = BLS_SCHEDULE.filter((e) => e.indicatorCode === JOLTS_RELEASE_INDICATORS[0]);
-    expect(jolts).toHaveLength(11);
+    expect(jolts).toHaveLength(23);
     expect(jolts.find((e) => e.referencePeriod === '2026-09')?.releaseDate).toBe('2026-11-03');
-    expect(jolts.every((e) => e.releaseDate < '2027-01-01')).toBe(true);
+    // 2026-11-11 に BLS の JOLTS の予定表から写した回(表と同じ日付)
+    expect(jolts.filter((e) => e.referencePeriod >= '2026-11').map((e) => [e.referencePeriod, e.releaseDate])).toEqual([
+      ['2026-11', '2027-01-05'],
+      ['2026-12', '2027-02-02'],
+      ['2027-01', '2027-03-09'],
+      ['2027-02', '2027-03-30'],
+      ['2027-03', '2027-05-04'],
+      ['2027-04', '2027-06-02'],
+      ['2027-05', '2027-06-29'],
+      ['2027-06', '2027-08-03'],
+      ['2027-07', '2027-08-31'],
+      ['2027-08', '2027-10-05'],
+      ['2027-09', '2027-11-02'],
+      ['2027-10', '2027-12-01'],
+    ]);
+    expect(jolts.every((e) => e.referencePeriod <= '2027-10')).toBe(true); // 表に無い先は入れない
   });
 });
 
