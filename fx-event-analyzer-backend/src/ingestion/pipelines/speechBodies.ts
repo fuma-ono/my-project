@@ -26,9 +26,11 @@ import { wallClockParts } from '../time.js';
 import {
   extractSpeechBody,
   frbSpeechJsonLinks,
+  frbSpeechJsonTimedItems,
   frbSpeechRssItems,
   isOfficialSpeechUrl,
   matchFrbSpeechUrls,
+  matchFrbSpeechUrlsByTime,
   type FrbSpeechRowForMatch,
 } from '../speechBody.js';
 
@@ -99,7 +101,7 @@ export interface SpeechBodyPlanItem {
   action: SpeechBodyAction;
   source_url: string | null;
   /** URL をどこから得たか(stored = 既に DB にある)。 */
-  url_from: 'stored' | 'rss' | 'json' | null;
+  url_from: 'stored' | 'rss' | 'json' | 'json_time' | null;
 }
 
 /** 本文の再掲の権利を確認できた発言元(上の説明)。今は FRB だけ。 */
@@ -132,7 +134,7 @@ export async function ingestSpeechBodies(
   counters: JobCounters,
 ): Promise<{ plan: SpeechBodyPlanItem[] }> {
   const plan: SpeechBodyPlanItem[] = [];
-  const urlFrom = new Map<string, 'rss' | 'json'>();
+  const urlFrom = new Map<string, 'rss' | 'json' | 'json_time'>();
   const sinceIso =
     settings.pastDays === null
       ? '1970-01-01T00:00:00.000Z'
@@ -170,6 +172,21 @@ export async function ingestSpeechBodies(
         for (const [id, url] of matchFrbSpeechUrls(stillMissing, items)) {
           urlById.set(id, url);
           urlFrom.set(id, 'json');
+        }
+        // 姓と日付で一意に決まらなかった行だけ: 一覧の時刻(東部時間 → UTC)と発言の時刻が完全に一致する講演が
+        // ちょうど1件なら結ぶ(HQ承認 2026-11-11。許容幅なし・推測なし。既に結んだ行は変えない)
+        const timeRows = frbWithoutUrl
+          .filter((s) => !urlById.has(s.id))
+          .map((s) => ({
+            id: s.id,
+            speakerNameEn: englishNameOf(s.speaker_organization, s.speaker_name),
+            statementIso: s.statement_datetime,
+          }));
+        if (timeRows.length > 0) {
+          for (const [id, url] of matchFrbSpeechUrlsByTime(timeRows, frbSpeechJsonTimedItems(text))) {
+            urlById.set(id, url);
+            urlFrom.set(id, 'json_time');
+          }
         }
       } catch (error) {
         counters.error(`frb speeches json: ${error instanceof Error ? error.message : String(error)}`);
