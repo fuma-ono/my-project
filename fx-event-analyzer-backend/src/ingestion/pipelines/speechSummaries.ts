@@ -37,6 +37,18 @@ export interface SpeechSummarySettings {
   pastDays: number | null;
   /** 1回の実行で要約を作る上限 */
   maxSpeeches: number;
+  /** true = dry-run: 要約を作ってみるが DB に書かない(対象の件数と、READY / FAILED になるはずの内訳を返す)。 */
+  dryRun?: boolean;
+}
+
+export interface SpeechSummaryPlanItem {
+  speech_id: string;
+  statement_datetime: string;
+  result: 'READY' | 'FAILED';
+  /** FAILED の理由 */
+  reason: string | null;
+  /** 要約の文字数(本文は出さない) */
+  summary_characters: number | null;
 }
 
 export const SPEECH_SUMMARY_SETTINGS: SpeechSummarySettings = { pastDays: 30, maxSpeeches: 200 };
@@ -46,7 +58,8 @@ export async function ingestSpeechSummaries(
   settings: SpeechSummarySettings,
   now: Date,
   counters: JobCounters,
-): Promise<{ ready: number; failed: number }> {
+): Promise<{ ready: number; failed: number; plan: SpeechSummaryPlanItem[] }> {
+  const plan: SpeechSummaryPlanItem[] = [];
   const sinceIso =
     settings.pastDays === null ? null : new Date(now.getTime() - settings.pastDays * 86_400_000).toISOString();
   const speeches = await store.listSpeechesNeedingSummary(sinceIso, settings.maxSpeeches);
@@ -55,6 +68,18 @@ export async function ingestSpeechSummaries(
   let failed = 0;
   for (const speech of speeches) {
     const result = summarizeExtractive(speech.speech_body);
+    plan.push({
+      speech_id: speech.id,
+      statement_datetime: speech.statement_datetime,
+      result: result.ok ? 'READY' : 'FAILED',
+      reason: result.ok ? null : result.reason,
+      summary_characters: result.ok ? result.summary.length : null,
+    });
+    if (settings.dryRun) {
+      if (result.ok) ready += 1;
+      else failed += 1;
+      continue;
+    }
     if (result.ok) {
       await store.updateSpeechSummary(speech.id, {
         summary: result.summary,
@@ -77,5 +102,5 @@ export async function ingestSpeechSummaries(
   }
   counters.details.ready = ready;
   counters.details.failed = failed;
-  return { ready, failed };
+  return { ready, failed, plan };
 }

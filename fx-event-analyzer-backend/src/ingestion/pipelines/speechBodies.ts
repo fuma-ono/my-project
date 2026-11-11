@@ -77,6 +77,29 @@ export interface SpeechBodySettings {
   maxFetches: number;
   /** 本文を保存してよい provider(省略時は STORE_BODY_FOR)。ほかは URL だけ残して本文を取らない。 */
   storeBodyFor?: readonly string[];
+  /**
+   * true = dry-run(HQ指示 2026-11-11「実行前に対象件数を確認」): DB に書かない・本文のページを読まない。URL を探すための
+   * FRB の講演の RSS・一覧の JSON(公開のページ)だけ読み、各発言で何をするはずかを返す。
+   */
+  dryRun?: boolean;
+}
+
+/** 1件ごとに、この実行で何をするか(dry-run の出力。本番の実行でも同じ判定)。処理の順は statement_datetime の古い順。 */
+export type SpeechBodyAction =
+  | 'FETCH' // 本文のページを読む(結果は FETCHED か FAILED)
+  | 'NO_SOURCE_URL' // URL が見つからない → PENDING のまま
+  | 'NOT_OFFICIAL_URL' // 公式サイトの URL でない → FAILED
+  | 'RIGHTS_UNCONFIRMED' // 権利が未確認の発言元(ECB) → URL だけ残して NOT_APPLICABLE
+  | 'RUN_CAP'; // この実行の上限(maxFetches)を超えた → 次の実行で読む
+
+export interface SpeechBodyPlanItem {
+  speech_id: string;
+  provider: string;
+  statement_datetime: string;
+  action: SpeechBodyAction;
+  source_url: string | null;
+  /** URL をどこから得たか(stored = 既に DB にある)。 */
+  url_from: 'stored' | 'rss' | 'json' | null;
 }
 
 /** 本文の再掲の権利を確認できた発言元(上の説明)。今は FRB だけ。 */
@@ -107,7 +130,9 @@ export async function ingestSpeechBodies(
   settings: SpeechBodySettings,
   now: Date,
   counters: JobCounters,
-): Promise<void> {
+): Promise<{ plan: SpeechBodyPlanItem[] }> {
+  const plan: SpeechBodyPlanItem[] = [];
+  const urlFrom = new Map<string, 'rss' | 'json'>();
   const sinceIso =
     settings.pastDays === null
       ? '1970-01-01T00:00:00.000Z'
@@ -129,7 +154,10 @@ export async function ingestSpeechBodies(
       const links = [...xml.matchAll(/<link>\s*(?:<!\[CDATA\[)?\s*([^<\]\s]+)\s*(?:\]\]>)?\s*<\/link>/g)].map(
         (m) => m[1]!,
       );
-      for (const [id, url] of matchFrbSpeechUrls(rows, frbSpeechRssItems(links))) urlById.set(id, url);
+      for (const [id, url] of matchFrbSpeechUrls(rows, frbSpeechRssItems(links))) {
+        urlById.set(id, url);
+        urlFrom.set(id, 'rss');
+      }
     } catch (error) {
       counters.error(`frb speeches rss: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -139,7 +167,10 @@ export async function ingestSpeechBodies(
       try {
         const text = await fetchers.frb.getText(FRB_SPEECHES_JSON_URL);
         const items = frbSpeechRssItems(frbSpeechJsonLinks(text));
-        for (const [id, url] of matchFrbSpeechUrls(stillMissing, items)) urlById.set(id, url);
+        for (const [id, url] of matchFrbSpeechUrls(stillMissing, items)) {
+          urlById.set(id, url);
+          urlFrom.set(id, 'json');
+        }
       } catch (error) {
         counters.error(`frb speeches json: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -150,18 +181,32 @@ export async function ingestSpeechBodies(
   let fetches = 0;
   for (const speech of speeches) {
     const url = speech.source_url ?? urlById.get(speech.id) ?? null;
+    const record = (action: SpeechBodyAction) =>
+      plan.push({
+        speech_id: speech.id,
+        provider: speech.provider,
+        statement_datetime: speech.statement_datetime,
+        action,
+        source_url: url,
+        url_from: speech.source_url ? 'stored' : (urlFrom.get(speech.id) ?? null),
+      });
     if (!url) {
       counters.skip('NO_SOURCE_URL'); // PENDING のまま(次の実行でまた探す)
+      record('NO_SOURCE_URL');
       continue;
     }
     if (!isOfficialSpeechUrl(speech.provider, url)) {
       counters.skip('NOT_OFFICIAL_URL');
+      record('NOT_OFFICIAL_URL');
+      if (settings.dryRun) continue;
       await store.updateSpeechBody(speech.id, { body_status: 'FAILED', body_error: 'NOT_OFFICIAL_URL' });
       continue;
     }
     if (!(settings.storeBodyFor ?? STORE_BODY_FOR).includes(speech.provider)) {
       // 再掲の権利を確認できていない発言元: 公式ページの URL(リンク)だけ残し、本文は取らない・保存しない
       counters.skip('RIGHTS_UNCONFIRMED');
+      record('RIGHTS_UNCONFIRMED');
+      if (settings.dryRun) continue;
       await store.updateSpeechBody(speech.id, {
         source_url: url,
         speech_body: null,
@@ -173,10 +218,14 @@ export async function ingestSpeechBodies(
     }
     if (fetches >= settings.maxFetches) {
       counters.skip('RUN_CAP'); // 次の実行で読む
+      record('RUN_CAP');
+      if (settings.dryRun) continue;
       if (!speech.source_url) await store.updateSpeechBody(speech.id, { source_url: url, body_status: 'PENDING' });
       continue;
     }
     fetches += 1;
+    record('FETCH');
+    if (settings.dryRun) continue;
     const fetcher = speech.provider === 'frb_calendar' ? fetchers.frb : fetchers.ecb;
     try {
       const html = await fetcher.getText(url);
@@ -206,4 +255,5 @@ export async function ingestSpeechBodies(
       await store.updateSpeechBody(speech.id, { source_url: url, body_status: 'FAILED', body_error: code });
     }
   }
+  return { plan };
 }

@@ -109,7 +109,7 @@ describe('ingestSpeechSummaries', () => {
     const { store, updates } = fakeStore([row('a', BODY), row('b', 'Thank you for having me.')]);
     const counters = new JobCounters();
     const result = await ingestSpeechSummaries(store, { pastDays: 30, maxSpeeches: 200 }, now, counters);
-    expect(result).toEqual({ ready: 1, failed: 1 });
+    expect(result).toMatchObject({ ready: 1, failed: 1 });
     expect(updates[0]!.id).toBe('a');
     expect(updates[0]!.patch).toMatchObject({
       summary_method: 'EXTRACTIVE_EN',
@@ -131,5 +131,29 @@ describe('ingestSpeechSummaries', () => {
     const b = fakeStore([]);
     await ingestSpeechSummaries(b.store, { pastDays: null, maxSpeeches: 50 }, now, new JobCounters());
     expect(b.calls).toEqual([{ sinceIso: null, limit: 50 }]);
+  });
+});
+
+describe('ingestSpeechSummaries: dry-run', () => {
+  it('reports READY / FAILED with character counts only, and writes nothing', async () => {
+    const { store, updates } = fakeStore([
+      { id: 'a', provider: 'frb_calendar', statement_datetime: '2025-01-17T15:00:00Z', speech_body: BODY },
+      { id: 'b', provider: 'frb_calendar', statement_datetime: '2026-11-05T15:00:00Z', speech_body: 'Thank you.' },
+    ]);
+    const result = await ingestSpeechSummaries(
+      store,
+      { pastDays: null, maxSpeeches: 200, dryRun: true },
+      new Date('2026-11-11T06:00:00Z'),
+      new JobCounters(),
+    );
+    expect(updates).toEqual([]);
+    expect(result.ready).toBe(1);
+    expect(result.failed).toBe(1);
+    expect(result.plan.map((p) => [p.speech_id, p.result, p.reason])).toEqual([
+      ['a', 'READY', null],
+      ['b', 'FAILED', 'BODY_TOO_SHORT'],
+    ]);
+    expect(result.plan[0]!.summary_characters).toBeGreaterThan(0);
+    expect(JSON.stringify(result.plan)).not.toContain('Inflation');
   });
 });

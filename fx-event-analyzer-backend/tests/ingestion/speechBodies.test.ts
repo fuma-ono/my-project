@@ -305,3 +305,45 @@ describe('frbSpeechJsonLinks', () => {
     expect(frbSpeechJsonLinks('{"a":1}')).toEqual([]);
   });
 });
+
+// HQ指示(2026-11-11「実行前に対象件数を確認できるように」): dry-run は書かない・本文のページを読まない。各発言で何をするかを返す。
+describe('ingestSpeechBodies: dry-run', () => {
+  it('returns the plan in date order, reads only the RSS and the JSON, and writes nothing', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    const ecb = new FakeFetcher();
+    const rssUrl = 'https://www.federalreserve.gov/newsevents/speech/waller20261105a.htm';
+    const ecbUrl = 'https://www.ecb.europa.eu/press/key/date/2026/html/ecb.sp261030~08d9d540f0.en.html';
+    store.rows = [
+      row({ id: 'new', statement_datetime: '2026-11-05T12:30:00Z' }),
+      row({ id: 'old', statement_datetime: '2025-01-17T15:00:00Z' }),
+      row({ id: 'nourl', speaker_name: 'ミシェル・ボウマン', statement_datetime: '2025-02-01T15:00:00Z' }),
+      row({
+        id: 'ecb',
+        provider: 'ecb_press_rss',
+        source_url: ecbUrl,
+        speaker_organization: 'ECB',
+        statement_datetime: '2026-10-30T09:00:00Z',
+      }),
+    ].sort((a, b) => a.statement_datetime.localeCompare(b.statement_datetime));
+    frb.pages.set(FRB_SPEECHES_RSS_URL, rss(rssUrl));
+    frb.pages.set(FRB_SPEECHES_JSON_URL, `[{"l":"/newsevents/speech/waller20250117a.htm"}]`);
+    const counters = new JobCounters();
+    const { plan } = await ingestSpeechBodies(
+      store,
+      { frb, ecb },
+      { pastDays: null, maxFetches: 1, dryRun: true },
+      NOW,
+      counters,
+    );
+    expect(plan.map((p) => [p.speech_id, p.action, p.url_from])).toEqual([
+      ['old', 'FETCH', 'json'],
+      ['nourl', 'NO_SOURCE_URL', null],
+      ['ecb', 'RIGHTS_UNCONFIRMED', 'stored'],
+      ['new', 'RUN_CAP', 'rss'], // 1回の上限(maxFetches = 1)を超えた分は次の実行
+    ]);
+    expect(store.updates).toEqual([]);
+    expect(frb.requested).toEqual([FRB_SPEECHES_RSS_URL, FRB_SPEECHES_JSON_URL]);
+    expect(ecb.requested).toEqual([]);
+  });
+});
