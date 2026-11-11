@@ -195,6 +195,25 @@ final class ScreenshotTests: XCTestCase {
         )
         XCTAssertTrue(waitForAnyElement(containing: "売買の推奨ではありません", timeout: 5), "The not-a-recommendation note is missing")
         capture("07b-EventStrategyAnalysis")
+
+        // HQ指示(2026-11-11「StrategyAnalysis 4タブUI実装」): 通貨分析・価格帯分析・AI分析の
+        // 3タブは、まだBackendに対応するデータが無いため「データ不足」のプレースホルダーを表示する。
+        // 架空の数値を表示していないことをスクリーンショットで確認する。
+        tapIdentifier("strategyAnalysisTab_通貨分析")
+        XCTAssertTrue(waitForAnyElement(containing: "分析対象外（データ不足）", timeout: 5), "Currency analysis tab did not show the not-yet-available placeholder")
+        capture("07d-StrategyAnalysis-CurrencyAnalysis")
+
+        tapIdentifier("strategyAnalysisTab_価格帯分析")
+        XCTAssertTrue(waitForAnyElement(containing: "分析対象外（データ不足）", timeout: 5), "Price range analysis tab did not show the not-yet-available placeholder")
+        capture("07e-StrategyAnalysis-PriceRangeAnalysis")
+
+        tapIdentifier("strategyAnalysisTab_AI分析")
+        XCTAssertTrue(waitForAnyElement(containing: "分析対象外（データ不足）", timeout: 5), "AI analysis tab did not show the not-yet-available placeholder")
+        capture("07f-StrategyAnalysis-AIAnalysis")
+
+        tapIdentifier("strategyAnalysisTab_イベント戦略")
+        XCTAssertTrue(waitForAnyElement(containing: "過去5回の分析結果", timeout: 5), "Did not return to the event strategy tab")
+
         tapIdentifier("v5HeaderBack")
         XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 10), "Did not go back to Event Detail")
         // HQ指示(2026-11-09「StrategyAnalysisのFREE/PROアクセス制御」): 遷移してよいかは

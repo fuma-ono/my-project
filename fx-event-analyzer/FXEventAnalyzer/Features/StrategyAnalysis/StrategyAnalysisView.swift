@@ -14,6 +14,9 @@ struct StrategyAnalysisView: View {
     @StateObject private var viewModel: StrategyAnalysisViewModel
     @Binding var tabSelection: Int
     @State private var planPrompt: String?
+    /// HQ指示(2026-11-11「StrategyAnalysis 4タブUI実装」): イベント戦略・通貨分析・価格帯分析・
+    /// AI分析の4タブ(デザイン画像準拠)。既定はイベント戦略(従来どおりの内容)。
+    @State private var selectedTab: StrategyAnalysisTab = .eventStrategy
     @Environment(\.dismiss) private var dismiss
     private let apiClient: APIClient
 
@@ -70,44 +73,71 @@ struct StrategyAnalysisView: View {
             centered { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { Task { await viewModel.load() } }) }
         case .loaded(let pair, let analysis, let coReleasedIndicators):
             column {
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 7) {
-                        topDisclaimerBanner
-                        currencyIndicatorCard(pair: pair)
-                        if !analysis.isReady {
-                            V5Badge(text: "\(StrategyAnalysisText.preparing)（比べられる発表が\(analysis.minimumSamples)回未満）", color: V5P.cyan)
-                                .accessibilityIdentifier("strategyAnalysisPreparing")
-                        }
-                        // HQ指示(2026-11-10「重複排除・集計改善・AI分析基盤の整備」STEP1):
-                        // この発表が他の指標と同時発表(例: 米雇用統計のNFP・失業率・平均時給)なら明示し、
-                        // 複数の指標を別々の発表として数えてしまう誤解を防ぐ。
-                        if !coReleasedIndicators.isEmpty {
-                            V5Badge(
-                                text: "同時発表: \(coReleasedIndicators.map(\.indicatorCode).joined(separator: "・"))",
-                                color: V5P.cyan
-                            )
-                            .accessibilityIdentifier("strategyAnalysisCoReleased")
-                        }
-                        breaksCard(
-                            title: "過去5回の分析結果（15分以内）",
-                            summary: analysis.summary.breaks15m,
-                            sampleWindow: analysis.sampleWindow
-                        )
-                        breaksCard(
-                            title: "過去5回の分析結果（60分以内）",
-                            summary: analysis.summary.breaks60m,
-                            sampleWindow: analysis.sampleWindow
-                        )
-                        directionStatsCard(analysis.summary.direction1m, sampleWindow: analysis.sampleWindow)
-                        patternStatsCard(analysis.summary.pattern15m, sampleWindow: analysis.sampleWindow)
-                        sellTheFactCard(analysis.summary.sellTheFact, releases: analysis.releases)
-                        releasesCard(analysis)
-                        notesCard
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        StrategyAnalysisProBadge()
+                        Spacer()
                     }
-                    .padding(.bottom, 8)
+                    .frame(width: 214, alignment: .leading)
+                    StrategyAnalysisTabBar(selection: $selectedTab)
+                    ScrollView(showsIndicators: false) {
+                        tabContent(pair: pair, analysis: analysis, coReleasedIndicators: coReleasedIndicators)
+                            .padding(.bottom, 8)
+                    }
+                    .accessibilityIdentifier("strategyAnalysisContent")
                 }
-                .accessibilityIdentifier("strategyAnalysisContent")
             }
+        }
+    }
+
+    /// HQ指示(2026-11-11「StrategyAnalysis 4タブUI実装」): 選択中のタブに応じて中身を切り替える。
+    /// ①イベント戦略は従来の内容そのまま。②③④はバックエンドにまだ対応するデータが無いため、
+    /// 架空の数値を出さない「データ不足」のプレースホルダー(`StrategyAnalysisTabs.swift`参照)。
+    @ViewBuilder
+    private func tabContent(
+        pair: StrategyFxPair, analysis: StrategyAnalysis, coReleasedIndicators: [StrategyCoReleasedIndicator]
+    ) -> some View {
+        switch selectedTab {
+        case .eventStrategy:
+            VStack(alignment: .leading, spacing: 7) {
+                topDisclaimerBanner
+                currencyIndicatorCard(pair: pair)
+                if !analysis.isReady {
+                    V5Badge(text: "\(StrategyAnalysisText.preparing)（比べられる発表が\(analysis.minimumSamples)回未満）", color: V5P.cyan)
+                        .accessibilityIdentifier("strategyAnalysisPreparing")
+                }
+                // HQ指示(2026-11-10「重複排除・集計改善・AI分析基盤の整備」STEP1):
+                // この発表が他の指標と同時発表(例: 米雇用統計のNFP・失業率・平均時給)なら明示し、
+                // 複数の指標を別々の発表として数えてしまう誤解を防ぐ。
+                if !coReleasedIndicators.isEmpty {
+                    V5Badge(
+                        text: "同時発表: \(coReleasedIndicators.map(\.indicatorCode).joined(separator: "・"))",
+                        color: V5P.cyan
+                    )
+                    .accessibilityIdentifier("strategyAnalysisCoReleased")
+                }
+                breaksCard(
+                    title: "過去5回の分析結果（15分以内）",
+                    summary: analysis.summary.breaks15m,
+                    sampleWindow: analysis.sampleWindow
+                )
+                breaksCard(
+                    title: "過去5回の分析結果（60分以内）",
+                    summary: analysis.summary.breaks60m,
+                    sampleWindow: analysis.sampleWindow
+                )
+                directionStatsCard(analysis.summary.direction1m, sampleWindow: analysis.sampleWindow)
+                patternStatsCard(analysis.summary.pattern15m, sampleWindow: analysis.sampleWindow)
+                sellTheFactCard(analysis.summary.sellTheFact, releases: analysis.releases)
+                releasesCard(analysis)
+                notesCard
+            }
+        case .currencyAnalysis:
+            CurrencyAnalysisTabView(pair: pair)
+        case .priceRangeAnalysis:
+            PriceRangeAnalysisTabView()
+        case .aiAnalysis:
+            AIAnalysisTabView()
         }
     }
 
