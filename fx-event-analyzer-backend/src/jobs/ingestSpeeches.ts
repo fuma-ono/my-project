@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { loadEnv } from '../config/env.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
-import { EcbPressAdapter } from '../ingestion/adapters/ecbPress.js';
+import { ECB_PROVIDER, EcbPressAdapter } from '../ingestion/adapters/ecbPress.js';
 import { ECB_PUBLICATION_TIME_KINDS, EcbWeeklyScheduleAdapter } from '../ingestion/adapters/ecbWeeklySchedule.js';
 import { FrbCalendarAdapter, frbSkipLogEntries } from '../ingestion/adapters/frbCalendar.js';
 import { ingestSpeeches } from '../ingestion/pipelines/speeches.js';
@@ -56,6 +56,12 @@ async function main(): Promise<void> {
           {
             store,
             ...(reconcile ? { reconcile, publicationTimeKinds: ECB_PUBLICATION_TIME_KINDS } : {}),
+            // HQ指示(2026-11-10「ECB の0件」): ECB の press の RSS の講演は、公開の時刻しか分からない(PUBLICATION_TIME)ので
+            // 今まで全部 TIME_NOT_EXACT で飛ばしていた。PUBLICATION_TIME として入れる(一覧・詳細には出る。相場反応・過去比較・
+            // 発言前の通知の対象外 — v1.41 のポッドキャストと同じ扱い)。インタビューは今までどおり入れない。公式ページの URL も入れる。
+            ...(source.name === ECB_PROVIDER
+              ? { publicationTimeKinds: ['SPEECH'] as const, storeSourceUrl: true }
+              : {}),
           },
           counters,
         );

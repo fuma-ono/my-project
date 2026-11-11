@@ -1,0 +1,349 @@
+/**
+ * HQ指示(2026-11-10「要人発言本文の取得・保存機能」): 本文の取り込みのジョブ。公式ページだけを読み、取れれば FETCHED、
+ * 取れなければ FAILED(理由つき)。本文を推測で補わない。発言者・日時・題名は変えない。
+ */
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  FRB_SPEECHES_JSON_URL,
+  FRB_SPEECHES_RSS_URL,
+  STORE_BODY_FOR,
+  ingestSpeechBodies,
+  type SpeechBodyPatch,
+  type SpeechBodyStore,
+  type SpeechForBody,
+} from '../../src/ingestion/pipelines/speechBodies.js';
+import { JobCounters } from '../../src/ingestion/runner.js';
+import { frbSpeechJsonLinks } from '../../src/ingestion/speechBody.js';
+
+const NOW = new Date('2026-11-10T06:00:00Z');
+
+const frbPage = (text: string) =>
+  `<div id="article"><div class="heading col-xs-12 col-sm-8 col-md-8"><p>h</p></div><div class="col-xs-12 col-sm-8 col-md-8"><p>${text}</p><hr/><p>1. footnote</p></div></div><div id="lastUpdate"></div>`;
+const ecbPage = (text: string) =>
+  `<main><div class="section"><p>${text}</p><div class="footnotes"><p>fn</p></div></div></main>`;
+const rss = (...links: string[]) =>
+  `<rss><channel>${links.map((l) => `<item><title>t</title><link><![CDATA[${l}]]></link></item>`).join('')}</channel></rss>`;
+
+class FakeStore implements SpeechBodyStore {
+  rows: SpeechForBody[] = [];
+  updates: { id: string; patch: SpeechBodyPatch }[] = [];
+  listSpeechesNeedingBody(providers: readonly string[], sinceIso: string): Promise<SpeechForBody[]> {
+    return Promise.resolve(
+      this.rows.filter(
+        (r) =>
+          providers.includes(r.provider) &&
+          r.status === 'DELIVERED' &&
+          ['PENDING', 'FAILED'].includes(r.body_status) &&
+          r.statement_datetime >= sinceIso,
+      ),
+    );
+  }
+  updateSpeechBody(id: string, patch: SpeechBodyPatch): Promise<void> {
+    this.updates.push({ id, patch });
+    const row = this.rows.find((r) => r.id === id)!;
+    Object.assign(row, {
+      body_status: patch.body_status,
+      ...(patch.source_url ? { source_url: patch.source_url } : {}),
+    });
+    return Promise.resolve();
+  }
+}
+
+class FakeFetcher {
+  pages = new Map<string, string>();
+  requested: string[] = [];
+  getText(url: string): Promise<string> {
+    this.requested.push(url);
+    const page = this.pages.get(url);
+    return page === undefined ? Promise.reject(new Error(`HTTP 404 for ${url}`)) : Promise.resolve(page);
+  }
+}
+
+const row = (overrides: Partial<SpeechForBody>): SpeechForBody => ({
+  id: 'id',
+  provider: 'frb_calendar',
+  provider_event_id: 'p',
+  title: 't',
+  statement_datetime: '2026-11-05T12:30:00Z', // 直近30日の内側(NOW は 11/10)
+  status: 'DELIVERED',
+  source_url: null,
+  body_status: 'PENDING',
+  speaker_name: 'クリストファー・ウォラー',
+  speaker_organization: 'FRB',
+  ...overrides,
+});
+
+describe('ingestSpeechBodies', () => {
+  let store: FakeStore;
+  let frb: FakeFetcher;
+  let ecb: FakeFetcher;
+  // 取り出しの処理そのものを確かめるため、ここでは ECB も保存してよいとして動かす(既定の ECB の扱いは下の別のテスト)
+  const run = (maxFetches = 20, storeBodyFor: readonly string[] = ['frb_calendar', 'ecb_press_rss']) => {
+    const counters = new JobCounters();
+    return ingestSpeechBodies(store, { frb, ecb }, { pastDays: 30, maxFetches, storeBodyFor }, NOW, counters).then(
+      () => counters,
+    );
+  };
+  const patchOf = (id: string) => store.updates.filter((u) => u.id === id).at(-1)?.patch;
+
+  beforeEach(() => {
+    store = new FakeStore();
+    frb = new FakeFetcher();
+    ecb = new FakeFetcher();
+  });
+
+  it('FRB: links the speech page from the speeches RSS (surname + New York date) and stores the body', async () => {
+    const url = 'https://www.federalreserve.gov/newsevents/speech/waller20261105a.htm';
+    store.rows = [row({ id: 'w' })];
+    frb.pages.set(FRB_SPEECHES_RSS_URL, rss(url));
+    frb.pages.set(url, frbPage('Thank you.'));
+    const counters = await run();
+    expect(patchOf('w')).toEqual({
+      source_url: url,
+      speech_body: 'Thank you.',
+      body_fetched_at: NOW.toISOString(),
+      body_status: 'FETCHED',
+      body_error: null,
+    });
+    expect(counters.success).toBe(1);
+  });
+
+  it('ECB: uses the stored source_url and stores the body (the speeches RSS of the FRB is not read)', async () => {
+    const url = 'https://www.ecb.europa.eu/press/key/date/2026/html/ecb.sp261030~08d9d540f0.en.html';
+    store.rows = [row({ id: 'e', provider: 'ecb_press_rss', source_url: url, speaker_organization: 'ECB' })];
+    ecb.pages.set(url, ecbPage('My aim today.'));
+    await run();
+    expect(patchOf('e')).toMatchObject({ body_status: 'FETCHED', speech_body: 'My aim today.' });
+    expect(frb.requested).toEqual([]);
+  });
+
+  it('by default (HQ 2026-11-11) the ECB body is not fetched or stored: URL kept, NOT_APPLICABLE / RIGHTS_UNCONFIRMED; FRB still stored', async () => {
+    const url = 'https://www.ecb.europa.eu/press/key/date/2026/html/ecb.sp261030~08d9d540f0.en.html';
+    const frbUrl = 'https://www.federalreserve.gov/newsevents/speech/bowman20261014a.htm';
+    store.rows = [
+      row({ id: 'e', provider: 'ecb_press_rss', source_url: url, speaker_organization: 'ECB' }),
+      row({ id: 'f', source_url: frbUrl }),
+    ];
+    ecb.pages.set(url, ecbPage('My aim today.'));
+    frb.pages.set(
+      frbUrl,
+      '<html><body><div id="article"><p>Thank you for the invitation to speak.</p></div></body></html>',
+    );
+    const counters = await run(20, STORE_BODY_FOR);
+    expect(STORE_BODY_FOR).toEqual(['frb_calendar']);
+    expect(patchOf('e')).toEqual({
+      source_url: url,
+      speech_body: null,
+      body_fetched_at: null,
+      body_status: 'NOT_APPLICABLE',
+      body_error: 'RIGHTS_UNCONFIRMED',
+    });
+    expect(ecb.requested).toEqual([]); // ECB のページは読まない
+    expect(counters.skipReasons.RIGHTS_UNCONFIRMED).toBe(1);
+    expect(patchOf('f')?.body_status).not.toBe('NOT_APPLICABLE');
+  });
+
+  it('no matching speech page → stays PENDING (nothing guessed, nothing written)', async () => {
+    store.rows = [row({ id: 'w' })];
+    frb.pages.set(FRB_SPEECHES_RSS_URL, rss('https://www.federalreserve.gov/newsevents/speech/bowman20261014a.htm'));
+    const counters = await run();
+    expect(store.updates).toEqual([]);
+    expect(counters.skipReasons.NO_SOURCE_URL).toBe(1);
+  });
+
+  it('HTTP failure → FAILED with the status code; a page without the body → FAILED NO_BODY_FOUND (no made-up body)', async () => {
+    const a = 'https://www.ecb.europa.eu/press/key/a.en.html';
+    const b = 'https://www.ecb.europa.eu/press/key/b.en.html';
+    store.rows = [
+      row({ id: 'a', provider: 'ecb_press_rss', source_url: a }),
+      row({ id: 'b', provider: 'ecb_press_rss', source_url: b }),
+    ];
+    ecb.pages.set(b, '<html><body><p>Page moved</p></body></html>');
+    await run();
+    expect(patchOf('a')).toEqual({ source_url: a, body_status: 'FAILED', body_error: 'HTTP_404' });
+    expect(patchOf('b')).toEqual({ source_url: b, body_status: 'FAILED', body_error: 'NO_BODY_FOUND' });
+    expect(store.updates.some((u) => u.patch.speech_body)).toBe(false);
+  });
+
+  it('a stored non-official URL is never fetched (FAILED NOT_OFFICIAL_URL)', async () => {
+    store.rows = [row({ id: 'x', provider: 'ecb_press_rss', source_url: 'https://example.com/press/key/x.html' })];
+    await run();
+    expect(ecb.requested).toEqual([]);
+    expect(patchOf('x')).toEqual({ body_status: 'FAILED', body_error: 'NOT_OFFICIAL_URL' });
+  });
+
+  it('reads at most maxFetches pages per run; the rest keep their URL and stay PENDING for the next run', async () => {
+    const urls = [1, 2, 3].map((n) => `https://www.ecb.europa.eu/press/key/${n}.en.html`);
+    store.rows = urls.map((url, i) => row({ id: `e${i}`, provider: 'ecb_press_rss', source_url: url }));
+    for (const url of urls) ecb.pages.set(url, ecbPage(`body ${url}`));
+    const counters = await run(2);
+    expect(ecb.requested).toEqual(urls.slice(0, 2));
+    expect(counters.skipReasons.RUN_CAP).toBe(1);
+    expect(patchOf('e2')).toBeUndefined(); // URL は元からあるので書かない
+  });
+
+  it('each body goes to its own speech (no mix-up between rows)', async () => {
+    const urls = ['https://www.ecb.europa.eu/press/key/a.en.html', 'https://www.ecb.europa.eu/press/key/b.en.html'];
+    store.rows = urls.map((url, i) => row({ id: `r${i}`, provider: 'ecb_press_rss', source_url: url }));
+    ecb.pages.set(urls[0]!, ecbPage('Speech A'));
+    ecb.pages.set(urls[1]!, ecbPage('Speech B'));
+    await run();
+    expect(patchOf('r0')?.speech_body).toBe('Speech A');
+    expect(patchOf('r1')?.speech_body).toBe('Speech B');
+  });
+
+  it('only DELIVERED speeches whose body is missing are candidates (FETCHED / SCHEDULED are not re-read)', async () => {
+    store.rows = [
+      row({
+        id: 'done',
+        provider: 'ecb_press_rss',
+        source_url: 'https://www.ecb.europa.eu/press/key/d.en.html',
+        body_status: 'FETCHED',
+      }),
+      row({ id: 'later', status: 'SCHEDULED' }),
+    ];
+    const counters = await run();
+    expect(counters.fetched).toBe(0);
+    expect(frb.requested).toEqual([]);
+    expect(ecb.requested).toEqual([]);
+  });
+});
+
+// HQ指示(2026-11-11「過去発言にも適用可能か確認」): RSS は直近の講演だけなので、古い発言は講演の一覧の JSON で URL を探す。
+describe('ingestSpeechBodies: past speeches (--all) and the FRB speeches JSON', () => {
+  const OLD = 'https://www.federalreserve.gov/newsevents/speech/waller20250117a.htm';
+  const json = (...items: { l?: string; stub?: string }[]) =>
+    `\uFEFF${JSON.stringify([...items.map((i) => ({ d: 'x', t: 't', s: 's', ...i })), { updateDate: 'Last update' }])}`;
+
+  it('links an old speech the RSS no longer has from the JSON, only with pastDays = null', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    const ecb = new FakeFetcher();
+    store.rows = [row({ id: 'old', statement_datetime: '2025-01-17T15:00:00Z' })];
+    frb.pages.set(FRB_SPEECHES_RSS_URL, rss('https://www.federalreserve.gov/newsevents/speech/bowman20261110a.htm'));
+    frb.pages.set(FRB_SPEECHES_JSON_URL, json({ l: '/newsevents/speech/waller20250117a.htm' }));
+    frb.pages.set(OLD, frbPage('Inflation has eased.'));
+
+    // 既定(直近30日)では対象に入らない
+    await ingestSpeechBodies(store, { frb, ecb }, { pastDays: 30, maxFetches: 20 }, NOW, new JobCounters());
+    expect(store.updates).toEqual([]);
+
+    const counters = new JobCounters();
+    await ingestSpeechBodies(store, { frb, ecb }, { pastDays: null, maxFetches: 20 }, NOW, counters);
+    expect(store.updates.at(-1)).toEqual({
+      id: 'old',
+      patch: {
+        source_url: OLD,
+        speech_body: 'Inflation has eased.',
+        body_fetched_at: NOW.toISOString(),
+        body_status: 'FETCHED',
+        body_error: null,
+      },
+    });
+    expect(frb.requested).toEqual([FRB_SPEECHES_RSS_URL, FRB_SPEECHES_JSON_URL, OLD]);
+    expect(counters.errorMessages).toEqual([]);
+  });
+
+  it('the same page listed twice (identical remarks given twice) is one item; two rows that day are not linked', async () => {
+    const page = '/newsevents/speech/waller20250117a.htm';
+    const one = new FakeStore();
+    const frb = new FakeFetcher();
+    one.rows = [row({ id: 'a', statement_datetime: '2025-01-17T15:00:00Z' })];
+    frb.pages.set(FRB_SPEECHES_RSS_URL, rss());
+    frb.pages.set(FRB_SPEECHES_JSON_URL, json({ l: page }, { l: '', stub: page }));
+    frb.pages.set(OLD, frbPage('Inflation has eased.'));
+    await ingestSpeechBodies(
+      one,
+      { frb, ecb: new FakeFetcher() },
+      { pastDays: null, maxFetches: 20 },
+      NOW,
+      new JobCounters(),
+    );
+    expect(one.updates.at(-1)?.patch.body_status).toBe('FETCHED');
+
+    const two = new FakeStore();
+    two.rows = [
+      row({ id: 'a', statement_datetime: '2025-01-17T15:00:00Z' }),
+      row({ id: 'b', provider_event_id: 'p2', statement_datetime: '2025-01-17T20:00:00Z' }),
+    ];
+    await ingestSpeechBodies(
+      two,
+      { frb, ecb: new FakeFetcher() },
+      { pastDays: null, maxFetches: 20 },
+      NOW,
+      new JobCounters(),
+    );
+    expect(two.updates).toEqual([]); // 推測で結ばない(PENDING のまま)
+  });
+
+  it('does not read the JSON when the RSS linked every speech', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    const url = 'https://www.federalreserve.gov/newsevents/speech/waller20261105a.htm';
+    store.rows = [row({ id: 'w' })];
+    frb.pages.set(FRB_SPEECHES_RSS_URL, rss(url));
+    frb.pages.set(url, frbPage('Thank you.'));
+    await ingestSpeechBodies(
+      store,
+      { frb, ecb: new FakeFetcher() },
+      { pastDays: 30, maxFetches: 20 },
+      NOW,
+      new JobCounters(),
+    );
+    expect(frb.requested).not.toContain(FRB_SPEECHES_JSON_URL);
+  });
+});
+
+describe('frbSpeechJsonLinks', () => {
+  it('reads l / stub as official URLs, drops duplicates and non-speech paths, and is empty for bad JSON', () => {
+    expect(
+      frbSpeechJsonLinks(
+        '\uFEFF[{"l":"/newsevents/speech/powell20170107a.htm"},{"l":"","stub":"/newsevents/speech/powell20170107a.htm"},{"l":"/newsevents/testimony/x.htm"},{"updateDate":"u"}]',
+      ),
+    ).toEqual(['https://www.federalreserve.gov/newsevents/speech/powell20170107a.htm']);
+    expect(frbSpeechJsonLinks('<html>')).toEqual([]);
+    expect(frbSpeechJsonLinks('{"a":1}')).toEqual([]);
+  });
+});
+
+// HQ指示(2026-11-11「実行前に対象件数を確認できるように」): dry-run は書かない・本文のページを読まない。各発言で何をするかを返す。
+describe('ingestSpeechBodies: dry-run', () => {
+  it('returns the plan in date order, reads only the RSS and the JSON, and writes nothing', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    const ecb = new FakeFetcher();
+    const rssUrl = 'https://www.federalreserve.gov/newsevents/speech/waller20261105a.htm';
+    const ecbUrl = 'https://www.ecb.europa.eu/press/key/date/2026/html/ecb.sp261030~08d9d540f0.en.html';
+    store.rows = [
+      row({ id: 'new', statement_datetime: '2026-11-05T12:30:00Z' }),
+      row({ id: 'old', statement_datetime: '2025-01-17T15:00:00Z' }),
+      row({ id: 'nourl', speaker_name: 'ミシェル・ボウマン', statement_datetime: '2025-02-01T15:00:00Z' }),
+      row({
+        id: 'ecb',
+        provider: 'ecb_press_rss',
+        source_url: ecbUrl,
+        speaker_organization: 'ECB',
+        statement_datetime: '2026-10-30T09:00:00Z',
+      }),
+    ].sort((a, b) => a.statement_datetime.localeCompare(b.statement_datetime));
+    frb.pages.set(FRB_SPEECHES_RSS_URL, rss(rssUrl));
+    frb.pages.set(FRB_SPEECHES_JSON_URL, `[{"l":"/newsevents/speech/waller20250117a.htm"}]`);
+    const counters = new JobCounters();
+    const { plan } = await ingestSpeechBodies(
+      store,
+      { frb, ecb },
+      { pastDays: null, maxFetches: 1, dryRun: true },
+      NOW,
+      counters,
+    );
+    expect(plan.map((p) => [p.speech_id, p.action, p.url_from])).toEqual([
+      ['old', 'FETCH', 'json'],
+      ['nourl', 'NO_SOURCE_URL', null],
+      ['ecb', 'RIGHTS_UNCONFIRMED', 'stored'],
+      ['new', 'RUN_CAP', 'rss'], // 1回の上限(maxFetches = 1)を超えた分は次の実行
+    ]);
+    expect(store.updates).toEqual([]);
+    expect(frb.requested).toEqual([FRB_SPEECHES_RSS_URL, FRB_SPEECHES_JSON_URL]);
+    expect(ecb.requested).toEqual([]);
+  });
+});
