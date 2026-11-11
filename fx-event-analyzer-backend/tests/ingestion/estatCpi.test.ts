@@ -31,8 +31,8 @@ const META = {
             '@id': 'cat01',
             '@name': '品目',
             CLASS: [
-              { '@code': '0001', '@name': '総合' },
-              { '@code': '0161', '@name': '生鮮食品を除く総合' },
+              { '@code': '0001', '@name': '0001 総合', '@level': '1' },
+              { '@code': '0161', '@name': '0161 生鮮食品を除く総合', '@level': '1' },
             ],
           },
           {
@@ -61,7 +61,7 @@ const v = (overrides: Record<string, string>) => ({
   '@area': '00000',
   '@time': '2026001010',
   '@unit': '%',
-  $: '2.9',
+  $: '2.1',
   ...overrides,
 });
 
@@ -106,7 +106,7 @@ describe('e-Stat CPI (2025 base)', () => {
       v({ '@area': '13100', $: '2.5' }),
       v({ '@tab': '1', $: '101.2' }),
     ]);
-    expect(parseJpCpiYoY(body, dims, '2026-10')).toBe(2.9);
+    expect(parseJpCpiYoY(body, dims, '2026-10')).toBe(2.1);
     expect(parseJpCpiYoY(body, dims, '2026-09')).toBeNull();
   });
 

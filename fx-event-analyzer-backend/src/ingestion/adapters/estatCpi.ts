@@ -2,14 +2,16 @@
  * 日本の消費者物価指数(全国、総合、前年同月比)を e-Stat の API(3.0)から読む部品 — HQ指示 2026-11-11「JP_CPI: 2025年基準の
  * 正しい統計表IDと取得項目を特定し、appId 登録後すぐ接続できる状態にする」。まだジョブにはつないでいない(appId が無い)。
  *
- * 統計表(2026-11-11 に e-Stat の画面で確認):
+ * 統計表(2026-11-11 に e-Stat の画面と、本物の API(getMetaInfo・getStatsData)で確認):
  * - statsDataId 0004052037「消費者物価指数(2025年基準)」(政府統計コード 00200573、2025年基準の表はこれ1つ。
  *   https://www.e-stat.go.jp/dbview?sid=0004052037)。2020年基準の 0003427113 は 2026年9月分で更新が止まる見込み(統計局は
  *   2026年10月23日の公表から2025年基準)。
  * - 表章項目: 1 = 指数、2 = 前月比・前年比・前年度比、3 = 前年同月比【%】 → 3 を使う
  * - 地域: 00000 = 全国 / 品目: 0001 = 総合(0161 = 生鮮食品を除く総合。JP_CPI は総合。コアを足すなら別の指標)
  * - 時間軸: 'YYYY00MMMM'(例 2026年10月 = 2026001010)
- * どの項目が API の cdCat01 / cdArea / cdTab に当たるかは画面からは分からないので、決め打ちしない: まずメタ情報
+ * 本物の getMetaInfo では 表章項目 = tab、品目 = cat01(名前は「0001 総合」の形)、地域 = area、時間軸 = time
+ * (1970年からの遡及を含む)。getStatsData の 2026年9月分 = 総合 2.1・生鮮食品を除く総合 2.1(統計局の公表と一致)。
+ * それでも分類の名前は変わりうるので決め打ちしない: まずメタ情報
  * (getMetaInfo)を読み、上の code と名前の両方が合う分類を探す。合わなければ値を取らない(推測しない)。
  *
  * 利用条件(https://www.e-stat.go.jp/api/agreement/、api-dev/faq、api-info/credit。2026-11-11 確認): 商用利用可、
@@ -67,6 +69,15 @@ function paramOf(objId: string): string {
   return `cd${objId.charAt(0).toUpperCase()}${objId.slice(1)}`;
 }
 
+/**
+ * 分類の名前が合うか。品目は「0001 総合」のように code が前に付いて返る(2026-11-11 に本物の getMetaInfo で確認)ので、
+ * 「名前そのもの」か「code + 半角空白 + 名前」のどちらかなら合うとする。
+ */
+function sameName(actual: string | undefined, want: { code: string; name: string }): boolean {
+  const name = (actual ?? '').trim();
+  return name === want.name || name === `${want.code} ${want.name}`;
+}
+
 /** getMetaInfo の応答 → JP_CPI に使う分類。code と名前の両方が合う分類がちょうど1つでなければ null。 */
 export function resolveJpCpiDimensions(meta: unknown): EstatDimensions | null {
   const objs = asArray(
@@ -77,7 +88,7 @@ export function resolveJpCpiDimensions(meta: unknown): EstatDimensions | null {
     const hits = objs.filter(
       (o) =>
         typeof o['@id'] === 'string' &&
-        asArray(o.CLASS).some((c) => c['@code'] === want.code && (c['@name'] ?? '').trim() === want.name),
+        asArray(o.CLASS).some((c) => c['@code'] === want.code && sameName(c['@name'], want)),
     );
     return hits.length === 1 ? hits[0]!['@id']! : null;
   };
