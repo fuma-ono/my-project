@@ -19,13 +19,21 @@ struct StrategyAnalysisView: View {
     @State private var selectedTab: StrategyAnalysisTab = .eventStrategy
     @Environment(\.dismiss) private var dismiss
     private let apiClient: APIClient
+    /// HQ指示(2026-11-12「ピクセル単位の再現」): 「次回イベント」カードに表示する、
+    /// 今見ているイベントそのものの日時(過去の発表ではない)。`AppRoute.eventStrategyAnalysis`
+    /// 経由でイベント詳細から渡される実データ。
+    private let releaseDatetime: Date
 
     /// 「両方ブレイク」専用の色(既存のV5P.blue/green/red/cyan/yellowとは別の3色目が要るため、
     /// この画面だけで使うトークンとして追加)。
     private static let overlapPurple = Color(red: 0.62, green: 0.46, blue: 0.98)
 
-    init(apiClient: APIClient, eventId: String, indicatorName: String, fxPairId: String?, tabSelection: Binding<Int>) {
+    init(
+        apiClient: APIClient, eventId: String, indicatorName: String, fxPairId: String?,
+        releaseDatetime: Date, tabSelection: Binding<Int>
+    ) {
         self.apiClient = apiClient
+        self.releaseDatetime = releaseDatetime
         _viewModel = StateObject(wrappedValue: StrategyAnalysisViewModel(
             apiClient: apiClient, eventId: eventId, indicatorName: indicatorName, fxPairId: fxPairId
         ))
@@ -107,7 +115,14 @@ struct StrategyAnalysisView: View {
         case .eventStrategy:
             VStack(alignment: .leading, spacing: 7) {
                 topDisclaimerBanner
-                currencyIndicatorCard(pair: pair)
+                // HQ指示(2026-11-12「ピクセル単位の再現」、参考画像2枚目): ②③④タブと同じ
+                // 見出しカード(アイコン+タイトル+サブタイトル)を①にも置く。
+                StrategySectionHeaderCard(
+                    icon: "bolt.fill",
+                    title: "イベント戦略",
+                    subtitle: "イベント発表後の値動きと過去事例を分析"
+                )
+                nextEventCard
                 if !analysis.isReady {
                     V5Badge(text: "\(StrategyAnalysisText.preparing)（比べられる発表が\(analysis.minimumSamples)回未満）", color: V5P.cyan)
                         .accessibilityIdentifier("strategyAnalysisPreparing")
@@ -122,6 +137,15 @@ struct StrategyAnalysisView: View {
                     )
                     .accessibilityIdentifier("strategyAnalysisCoReleased")
                 }
+                // HQ指示(2026-11-12「ピクセル単位の再現」、参考画像2枚目)で並び替え:
+                // 初動分析→継続・反転分析→過去事例比較→リスク分析の4枚を、参考画像どおり
+                // ヘッダー・次回イベントの直後に置く。
+                initialMoveCard(analysis)
+                continuationReversalCard(analysis)
+                pastCaseComparisonCard(analysis)
+                riskAnalysisCard(analysis)
+                // 参考画像には出てこないが、既存の詳しい内訳(高値・安値ブレイク等)は
+                // 情報として削らず、スクロール下の補足として残す。
                 breaksCard(
                     title: "過去5回の分析結果（15分以内）",
                     summary: analysis.summary.breaks15m,
@@ -135,16 +159,6 @@ struct StrategyAnalysisView: View {
                 directionStatsCard(analysis.summary.direction1m, sampleWindow: analysis.sampleWindow)
                 patternStatsCard(analysis.summary.pattern15m, sampleWindow: analysis.sampleWindow)
                 sellTheFactCard(analysis.summary.sellTheFact, releases: analysis.releases)
-                // HQ指示(2026-11-11「ピクセル単位の再現」フィードバック対応)で追加した3カード。
-                // 既存のbreaksCard等より前に置くと、既存カードのLazyVGrid(「内訳」の凡例)が
-                // 初期表示のビューポート外に押し出され、CIの実機スクリーンショットで
-                // 「両方 1回」が5秒以内に見つからず失敗した(ScrollView自体は中身を即座に
-                // 全部レンダリングするが、入れ子のLazyVGridはそれとは別に、実際に表示範囲へ
-                // 入るまでセルの描画を遅延させるため)。既存カードの並び・初期表示位置を
-                // 変えないよう、新しい3カードは既存カードの後ろに置く。
-                initialMoveCard(analysis)
-                continuationReversalCard(analysis)
-                riskAnalysisCard(analysis)
                 releasesCard(analysis)
                 notesCard
             }
@@ -159,14 +173,18 @@ struct StrategyAnalysisView: View {
 
     // MARK: - 初動分析(発表後1分〜60分の値動き、既存の実データの平均 — HQ指示「ピクセル単位の再現」)
 
-    /// 円形ゲージ(上昇確率)+ 折れ線グラフ(平均pips推移)。参考画像の「初動分析」カードの構成を、
-    /// 既にBackendから取得済みの`StrategyRelease`配列の単純平均だけで再現する(新しい取得はしない)。
+    /// HQ指示(2026-11-12「ピクセル単位の再現」、参考画像2枚目)の構成: 上段=「↑ +18.5 pips
+    /// （15分後）」のような大きな数値(左)と「上昇確率 68%」+円形ゲージ(右)、下段=折れ線
+    /// グラフ。既にBackendから取得済みの`StrategyRelease`配列の単純平均だけで再現する
+    /// (新しい取得はしない)。
     private func initialMoveCard(_ analysis: StrategyAnalysis) -> some View {
         let direction = analysis.summary.direction1m
         let upPercent: Double? = {
             guard let direction, direction.up + direction.down > 0 else { return nil }
             return Double(direction.up) / Double(direction.up + direction.down) * 100
         }()
+        let avgPips15m = analysis.releases.averagePips(\.pips15m)
+        let pipsColor = avgPips15m.map { $0 >= 0 ? V5P.green : V5P.red } ?? SettingsCardStyle.subtitleColor
         let points: [(label: String, value: Double)] = [
             ("1分", analysis.releases.averagePips(\.pips1m)),
             ("5分", analysis.releases.averagePips(\.pips5m)),
@@ -179,29 +197,42 @@ struct StrategyAnalysisView: View {
             HStack(spacing: 5) {
                 Image(systemName: "bolt.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(V5P.cyan)
                 NotoText.text("初動分析", size: 7.5).foregroundStyle(.white)
+                Image(systemName: "info.circle").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
                 Spacer(minLength: 4)
                 analysisCountBadge(samples: direction?.samples, sampleWindow: analysis.sampleWindow)
             }
             Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
-            HStack(alignment: .top, spacing: 10) {
-                StrategyCircularGauge(
-                    percent: upPercent,
-                    centerText: upPercent.map { ValueFormat.percent($0, fractionDigits: 0) } ?? "--",
-                    centerSubtext: "上昇確率",
-                    color: V5P.cyan,
-                    diameter: 52
-                )
+            HStack(alignment: .top, spacing: 4) {
                 VStack(alignment: .leading, spacing: 2) {
-                    NotoText.text("発表後の平均pips推移", size: 6).foregroundStyle(SettingsCardStyle.subtitleColor)
-                    StrategyTrendChart(
-                        points: points.count >= 2 ? points : nil,
-                        lineColor: V5P.cyan,
-                        fillColor: V5P.cyan,
-                        calloutFormatter: { ValueFormat.number($0, fractionDigits: 1, signed: true) },
-                        height: 52
-                    )
+                    HStack(spacing: 3) {
+                        Image(systemName: (avgPips15m ?? 0) >= 0 ? "arrow.up" : "arrow.down")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(pipsColor)
+                        HStack(alignment: .firstTextBaseline, spacing: 1) {
+                            NotoText.text(avgPips15m.map { ValueFormat.number($0, fractionDigits: 1, signed: true) } ?? "--", size: 16)
+                                .foregroundStyle(pipsColor)
+                            NotoText.text("pips", size: 8).foregroundStyle(SettingsCardStyle.subtitleColor)
+                        }
+                    }
+                    NotoText.text("（15分後）", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                }
+                Spacer(minLength: 4)
+                VStack(alignment: .trailing, spacing: 2) {
+                    NotoText.text("上昇確率", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    HStack(spacing: 4) {
+                        NotoText.text(upPercent.map { ValueFormat.percent($0, fractionDigits: 0) } ?? "--", size: 15)
+                            .foregroundStyle(upPercent != nil ? V5P.green : SettingsCardStyle.subtitleColor)
+                        StrategyCircularGauge(percent: upPercent, centerText: "", centerSubtext: nil, color: V5P.green, diameter: 28)
+                    }
                 }
             }
+            StrategyTrendChart(
+                points: points.count >= 2 ? points : nil,
+                lineColor: V5P.blue,
+                fillColor: V5P.blue,
+                calloutFormatter: { ValueFormat.number($0, fractionDigits: 1, signed: true) },
+                height: 70
+            )
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("初動分析。\(StrategyAnalysisText.directionLine(direction))")
@@ -217,17 +248,52 @@ struct StrategyAnalysisView: View {
             HStack(spacing: 5) {
                 Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 9, weight: .bold)).foregroundStyle(V5P.cyan)
                 NotoText.text("継続・反転分析", size: 7.5).foregroundStyle(.white)
+                Image(systemName: "info.circle").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
                 Spacer(minLength: 4)
                 analysisCountBadge(samples: pattern?.samples, sampleWindow: analysis.sampleWindow)
             }
             Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
             VStack(spacing: 5) {
-                StrategyProgressRow(label: "継続", percent: continuationPercent, color: V5P.cyan)
-                StrategyProgressRow(label: "反転", percent: reversalPercent, color: V5P.yellow)
+                StrategyProgressRow(label: "継続確率", percent: continuationPercent, color: V5P.cyan)
+                StrategyProgressRow(label: "反転確率", percent: reversalPercent, color: V5P.cyan)
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("継続・反転分析。\(StrategyAnalysisText.patternLine(pattern))")
+    }
+
+    // MARK: - 過去事例比較(同じ指標の過去の発表数・平均変動、既存の実データ — HQ指示「ピクセル単位の再現」)
+
+    /// HQ指示(2026-11-12「ピクセル単位の再現」、参考画像2枚目): 「類似イベント数」(比べられる
+    /// 過去の発表の件数)と「平均変動」(60分後の平均pips — 初動分析の15分後の値とは異なる、
+    /// 発表を跨いだより長い時間軸の実データ)を2行で見せる。
+    private func pastCaseComparisonCard(_ analysis: StrategyAnalysis) -> some View {
+        let avgPips60m = analysis.releases.averagePips(\.pips60m)
+        return plainCard {
+            HStack(spacing: 5) {
+                Image(systemName: "clock.arrow.circlepath").font(.system(size: 9, weight: .bold)).foregroundStyle(V5P.blue)
+                NotoText.text("過去事例比較", size: 7.5).foregroundStyle(.white)
+                Image(systemName: "info.circle").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
+                Spacer(minLength: 4)
+            }
+            Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
+            comparisonRow(label: "類似イベント数", value: "\(analysis.releases.count)件", valueColor: .white)
+            comparisonRow(
+                label: "平均変動",
+                value: avgPips60m.map { "\(ValueFormat.number($0, fractionDigits: 1, signed: true)) pips" } ?? "--",
+                valueColor: avgPips60m.map { $0 >= 0 ? V5P.green : V5P.red } ?? SettingsCardStyle.subtitleColor
+            )
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("過去事例比較。類似イベント数\(analysis.releases.count)件。平均変動\(avgPips60m.map { ValueFormat.number($0, fractionDigits: 1, signed: true) } ?? "データ不足")pips。")
+    }
+
+    private func comparisonRow(label: String, value: String, valueColor: Color) -> some View {
+        HStack {
+            NotoText.text(label, size: 7).foregroundStyle(SettingsCardStyle.subtitleColor)
+            Spacer(minLength: 4)
+            NotoText.text(value, size: 8.5).foregroundStyle(valueColor)
+        }
     }
 
     // MARK: - リスク分析(15分以内の反転率から算出 — HQ指示「ピクセル単位の再現」)
@@ -240,6 +306,7 @@ struct StrategyAnalysisView: View {
             HStack(spacing: 5) {
                 Image(systemName: "exclamationmark.shield.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(V5P.red)
                 NotoText.text("リスク分析", size: 7.5).foregroundStyle(.white)
+                Image(systemName: "info.circle").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
                 Spacer(minLength: 4)
                 V5Badge(text: "リスクレベル: \(level)", color: reversalPercent != nil ? V5P.red : SettingsCardStyle.subtitleColor)
             }
@@ -298,31 +365,43 @@ struct StrategyAnalysisView: View {
         )
     }
 
-    // MARK: - 通貨ペア・指標名
+    // MARK: - 次回イベント
 
-    /// 通貨は国旗2つを隣接させて表示(HQ指示「通貨の部分はホーム画面と同じで丸国旗を2つ並べて」。
-    /// `HomeView.pairRow`と同じ並べ方 — `OverlappingPairFlags`のように重ねない)。
-    private func currencyIndicatorCard(pair: StrategyFxPair) -> some View {
+    /// HQ指示(2026-11-12「ピクセル単位の再現」、参考画像2枚目): カレンダーアイコン+
+    /// 指標名+この発表自体の日時(`releaseDatetime`、過去の発表ではなく今見ているイベント
+    /// そのものの日時 — `AppRoute.eventStrategyAnalysis`経由でイベント詳細から渡される実データ)。
+    private var nextEventCard: some View {
         plainCard {
             HStack(spacing: 8) {
-                VStack(spacing: 3) {
-                    HStack(spacing: 2) {
-                        CountryFlagView(currencyCode: String(pair.symbol.prefix(3)), diameter: 20)
-                        CountryFlagView(currencyCode: String(pair.symbol.suffix(3)), diameter: 20)
-                    }
-                    NotoText.text(HistoricalComparisonView.pairLabel(pair.symbol), size: 7).foregroundStyle(V5P.cyan)
-                }
-                Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 0.5, height: 30)
-                HStack(spacing: 5) {
-                    Image(systemName: "calendar").font(.system(size: 10, weight: .semibold)).foregroundStyle(V5P.cyan)
-                    NotoText.text(viewModel.indicatorName, size: 8.5)
+                Image(systemName: "calendar").font(.system(size: 14, weight: .semibold)).foregroundStyle(V5P.cyan)
+                VStack(alignment: .leading, spacing: 2) {
+                    NotoText.text("\(viewModel.indicatorName)発表", size: 9.5)
                         .foregroundStyle(.white)
                         .lineLimit(2)
+                        .minimumScaleFactor(0.8)
+                    NotoText.text(Self.eventDateTimeLabel(releaseDatetime), size: 7)
+                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                        .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
                 Spacer(minLength: 0)
             }
         }
+    }
+
+    /// 「2026年11月06日（金）22:00（JST）」。表示設定のタイムゾーンに合わせる
+    /// (`AppPreferences.timeZones`と同じ7件だけ短い略称にする。それ以外は都市名のまま)。
+    private static let timeZoneAbbreviations: [String: String] = [
+        "Asia/Tokyo": "JST", "Asia/Singapore": "SGT", "Australia/Sydney": "AEDT",
+        "Europe/London": "GMT", "Europe/Berlin": "CET", "America/New_York": "ET", "UTC": "UTC",
+    ]
+
+    private static func eventDateTimeLabel(_ date: Date) -> String {
+        let prefs = AppPreferences.shared
+        let dateWithWeekday = AppPreferences.format(date, pattern: "yyyy年M月d日（E）", timeZone: prefs.timeZone)
+        let time = prefs.timeString(date)
+        let zone = timeZoneAbbreviations[prefs.timeZone.identifier] ?? prefs.timeZone.identifier
+        return "\(dateWithWeekday) \(time)（\(zone)）"
     }
 
     // MARK: - 高値・安値ブレイク(15分・60分それぞれ)

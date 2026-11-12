@@ -188,13 +188,15 @@ final class ScreenshotTests: XCTestCase {
         // HQ指示(2026-11-07「画面デザインの変更」): カード単位の色分け表示に変更されたため、確認する文言も
         // 新しいデザインで実際に見える文言(カードの見出し・内訳の件数・補足事項)に合わせている。
         tapIdentifier("eventDetailStrategyAnalysisLink")
-        XCTAssertTrue(waitForAnyElement(containing: "過去5回の分析結果", timeout: 15), "Strategy analysis did not load")
-        XCTAssertTrue(
-            waitForAnyElement(containing: "両方 1回", timeout: 5),
-            "The high/low break overlap breakdown is not shown"
-        )
-        XCTAssertTrue(waitForAnyElement(containing: "売買の推奨ではありません", timeout: 5), "The not-a-recommendation note is missing")
+        XCTAssertTrue(waitForAnyElement(containing: "イベント発表後の値動きと過去事例を分析", timeout: 15), "Strategy analysis did not load")
         capture("07b-EventStrategyAnalysis")
+        // HQ指示(2026-11-12「ピクセル単位の再現」)で初動分析・継続反転分析・過去事例比較・
+        // リスク分析の4カードを既存カードより前に置いたため、内訳(LazyVGrid)を含む
+        // 「過去5回の分析結果」カードは画面下方にスクロールしないと現れない
+        // (`scrollUntilHittable`を使う既存の「Sell the Fact 分析」等と同じ理由)。
+        XCTAssertTrue(scrollUntilHittable(containing: "両方 1回"), "The high/low break overlap breakdown is not shown")
+        XCTAssertTrue(waitForAnyElement(containing: "売買の推奨ではありません", timeout: 5), "The not-a-recommendation note is missing")
+        capture("07b-EventStrategyAnalysis-Detail")
 
         // HQ指示(2026-11-11「ピクセル単位の再現」フィードバック対応): 通貨分析・価格帯分析・AI分析の
         // 3タブは、参考画像どおりのカード構成(ゲージ・グラフ・進捗バー・ローソク足の枠)を再現しつつ、
@@ -612,17 +614,18 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 15), "Event Detail did not load")
 
         tapIdentifier("eventDetailStrategyAnalysisLink")
-        XCTAssertTrue(waitForAnyElement(containing: "過去5回の分析結果", timeout: 15), "Strategy analysis did not load")
-        XCTAssertTrue(
-            waitForAnyElement(containing: "両方 1回", timeout: 5),
-            "The high/low break overlap breakdown is not shown"
-        )
+        // HQ指示(2026-11-12「ピクセル単位の再現」、参考画像2枚目): ヘッダーカード・次回イベント・
+        // 初動分析・継続反転分析・過去事例比較・リスク分析の順で、スクロールなしで上から見える。
+        XCTAssertTrue(waitForAnyElement(containing: "イベント発表後の値動きと過去事例を分析", timeout: 15), "Strategy analysis did not load")
+        XCTAssertTrue(waitForAnyElement(containing: "上昇確率", timeout: 5), "初動分析 did not render")
+        XCTAssertTrue(waitForAnyElement(containing: "継続確率", timeout: 5), "継続・反転分析 did not render")
+        XCTAssertTrue(waitForAnyElement(containing: "類似イベント数", timeout: 5), "過去事例比較 did not render")
+        XCTAssertTrue(waitForAnyElement(containing: "リスクレベル", timeout: 5), "リスク分析 did not render")
         capture("07b-EventStrategyAnalysis-Standalone-Top")
 
-        XCTAssertTrue(
-            scrollUntilHittable(containing: "Sell the Fact 分析"),
-            "Did not scroll to the Sell the Fact card"
-        )
+        // 既存の詳しい内訳(高値・安値ブレイク等)は、新しい4カードの後ろにスクロールして
+        // 残したまま撮る(`scrollUntilHittable`を使う理由は上のtestCaptureAllScreens参照)。
+        XCTAssertTrue(scrollUntilHittable(containing: "両方 1回"), "The high/low break overlap breakdown is not shown")
         capture("07b-EventStrategyAnalysis-Standalone-Middle")
 
         XCTAssertTrue(scrollUntilHittable(containing: "補足事項"), "Did not scroll to the notes card")
