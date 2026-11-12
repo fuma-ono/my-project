@@ -1,0 +1,47 @@
+# 取り込みのワークフローの検証(HQレビュー 2026-11-12「main workflow を GitHub Actions で YAML 構文・条件式を検証」)。
+# - actionlint(rhysd/actionlint、版を固定・公式のチェックサムで確認): YAML の構文、式(${{ }})、条件、イベントの名前などを
+#   調べる。シェルの細かな書き方(shellcheck)・Python(pyflakes)は対象外にする(既存のステップの書き方で落とさないため)。
+# - .github/scripts/check_speech_schedule_steps.py: 要人発言の定期のステップの条件(順番・!cancelled()・DEV の確認・
+#   schedule・グループ)を確かめる。
+# DB・Secret は使わない。取り込みのワークフローを動かすことはない(ファイルを読むだけ)。
+name: FX Event Analyzer - Workflow lint
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fx-event-analyzer-ingestion.yml'
+      - '.github/workflows/fx-event-analyzer-workflow-lint.yml'
+      - '.github/scripts/check_speech_schedule_steps.py'
+  pull_request:
+    paths:
+      - '.github/workflows/fx-event-analyzer-ingestion.yml'
+      - '.github/workflows/fx-event-analyzer-workflow-lint.yml'
+      - '.github/scripts/check_speech_schedule_steps.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ACTIONLINT_VERSION: '1.7.7'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install actionlint (pinned version, checksum verified)
+        run: |
+          TARBALL="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          BASE="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
+          curl -sSfL -o "${TARBALL}" "${BASE}/${TARBALL}"
+          curl -sSfL -o checksums.txt "${BASE}/actionlint_${ACTIONLINT_VERSION}_checksums.txt"
+          grep -F "  ${TARBALL}" checksums.txt | sha256sum -c -
+          tar -xzf "${TARBALL}" actionlint
+          ./actionlint -version
+      - name: actionlint (ingestion and this workflow)
+        run: ./actionlint -shellcheck= -pyflakes= .github/workflows/fx-event-analyzer-ingestion.yml .github/workflows/fx-event-analyzer-workflow-lint.yml
+      - name: Speech schedule step conditions
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 .github/scripts/check_speech_schedule_steps.py .github/workflows/fx-event-analyzer-ingestion.yml
