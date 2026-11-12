@@ -38,6 +38,7 @@ function readOnlyBodyStore(store: SpeechBodyStore): SpeechBodyStore {
   return {
     listSpeechesNeedingBody: (providers, sinceIso, maxAttempts) =>
       store.listSpeechesNeedingBody(providers, sinceIso, maxAttempts),
+    listFrbRowsForMatching: () => store.listFrbRowsForMatching(),
     claimBodyAttempt: () => Promise.reject(new Error('dry-run: claimBodyAttempt is not allowed')),
     updateSpeechBody: () => Promise.reject(new Error('dry-run: updateSpeechBody is not allowed')),
   };

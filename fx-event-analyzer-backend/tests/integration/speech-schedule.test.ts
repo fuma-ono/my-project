@@ -177,6 +177,16 @@ describe.skipIf(!integration)('speech bodies: attempts and guarded writes (migra
     });
   });
 
+  // HQ承認(2026-11-12「誤紐付けの修正」): 照らし合わせの母集団は、本文の有無・状態に関係なく FRB のすべての行
+  it('listFrbRowsForMatching returns every FRB row, including FETCHED, FAILED and SCHEDULED ones, with their URLs', async () => {
+    const store = createSpeechBodyStore(ctx.serviceClient);
+    const rows = new Map((await store.listFrbRowsForMatching()).map((r) => [r.id, r]));
+    for (const id of Object.values(ids)) expect(rows.has(id), id).toBe(true);
+    expect(rows.get(ids.pending)).toMatchObject({ source_url: URL_OK, speaker_organization: 'FRB' }); // 前のテストで FETCHED
+    expect(rows.get(ids.failed3)?.source_url).toBe(URL_OK);
+    expect(rows.get(ids.scheduled)?.source_url).toBeNull();
+  });
+
   it('the quality reader reads the chapter 11 counts (the capped FAILED row is counted)', async () => {
     const status = await createQualityReader(ctx.serviceClient).speechPipelineStatus(new Date().toISOString());
     expect(status).not.toBeNull();

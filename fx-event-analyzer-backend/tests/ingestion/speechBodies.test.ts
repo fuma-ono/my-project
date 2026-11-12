@@ -8,6 +8,7 @@ import {
   FRB_SPEECHES_RSS_URL,
   STORE_BODY_FOR,
   ingestSpeechBodies,
+  type FrbRowForMatching,
   type SpeechBodyPatch,
   type SpeechBodyStore,
   type SpeechForBody,
@@ -33,6 +34,20 @@ class FakeStore implements SpeechBodyStore {
   rows: SpeechForBody[] = [];
   updates: { id: string; patch: SpeechBodyPatch }[] = [];
   claims: { id: string; from: number }[] = [];
+  /** 本物の DB と同じ: FRB のすべての行(状態・本文の有無に関係なく) */
+  listFrbRowsForMatching(): Promise<FrbRowForMatching[]> {
+    return Promise.resolve(
+      this.rows
+        .filter((r) => r.provider === 'frb_calendar')
+        .map((r) => ({
+          id: r.id,
+          statement_datetime: r.statement_datetime,
+          source_url: r.source_url,
+          speaker_name: r.speaker_name,
+          speaker_organization: r.speaker_organization,
+        })),
+    );
+  }
   /** 本物の DB と同じ条件(発言済み・期間・PENDING または FAILED で回数が上限未満) */
   listSpeechesNeedingBody(
     providers: readonly string[],
@@ -571,6 +586,7 @@ describe('ingestSpeechBodies: attempts, the 14-day window and concurrent runs', 
 
     // ストアが条件を落として返しても、発言前・期間外・上限に達した FAILED は対象にしない
     const loose: SpeechBodyStore = {
+      listFrbRowsForMatching: () => Promise.resolve([]),
       listSpeechesNeedingBody: () =>
         Promise.resolve([
           row({ id: 'sched', status: 'SCHEDULED', statement_datetime: '2026-11-19T06:00:00Z', source_url: URL_A }),
@@ -716,6 +732,7 @@ describe('ingestSpeechBodies: the attempt cap applies to PENDING too', () => {
 
   it('the same when the store returns every row (the pipeline itself filters attempts >= 3)', async () => {
     const loose: SpeechBodyStore = {
+      listFrbRowsForMatching: () => Promise.resolve([]),
       listSpeechesNeedingBody: () => Promise.resolve(matrix.map((r) => ({ ...r }))),
       claimBodyAttempt: () => Promise.resolve(true),
       updateSpeechBody: () => Promise.resolve(true),
@@ -763,5 +780,192 @@ describe('ingestSpeechBodies: the attempt cap applies to PENDING too', () => {
     expect(frb.requested.filter((u) => u === URL_A)).toHaveLength(pagesBefore);
     expect(store.claims).toHaveLength(3);
     expect(store.rows[0]).toMatchObject({ body_status: 'PENDING', body_attempts: 3 });
+  });
+});
+
+// HQ承認(2026-11-12「誤紐付けの修正」): 日付の照らし合わせは FRB のすべての行で数え、別の行が使っている URL は再利用しない。
+describe('ingestSpeechBodies: no wrong link when another row of the same day already has the page', () => {
+  const NOW_M = new Date('2026-11-12T03:00:00Z');
+  const bowman = 'ミシェル・ボウマン';
+  const P1014 = 'https://www.federalreserve.gov/newsevents/speech/bowman20261014a.htm';
+  const P1110 = 'https://www.federalreserve.gov/newsevents/speech/bowman20261110a.htm';
+  const all = { pastDays: null, maxFetches: 20 };
+  const json1014 = JSON.stringify([{ d: '10/14/2026 10:55:00 PM', l: '/newsevents/speech/bowman20261014a.htm' }]);
+  const discussion = () => row({ id: 'disc', speaker_name: bowman, statement_datetime: '2026-10-14T09:40:00+00:00' });
+  const speech = () => row({ id: 'speech', speaker_name: bowman, statement_datetime: '2026-10-15T02:55:00+00:00' });
+  const actions = (plan: { speech_id: string; action: string; url_from: string | null; source_url: string | null }[]) =>
+    Object.fromEntries(plan.map((p) => [p.speech_id, [p.action, p.url_from, p.source_url]]));
+
+  it('10/14: with both the discussion and the speech pending, only the speech is linked (by its exact time)', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    store.rows = [discussion(), speech()];
+    frb.pages.set(FRB_SPEECHES_RSS_URL, rss(P1014));
+    frb.pages.set(FRB_SPEECHES_JSON_URL, json1014);
+    const { plan } = await ingestSpeechBodies(
+      store,
+      { frb, ecb: new FakeFetcher() },
+      { ...all, dryRun: true },
+      NOW_M,
+      new JobCounters(),
+    );
+    expect(actions(plan)).toEqual({
+      disc: ['NO_SOURCE_URL', null, null],
+      speech: ['FETCH', 'json_time', P1014],
+    });
+  });
+
+  it('10/14 after the speech body was FETCHED: the discussion does not get the same URL (dry-run and a real run)', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    store.rows = [discussion(), { ...speech(), body_status: 'FETCHED', source_url: P1014 }];
+    frb.pages.set(FRB_SPEECHES_RSS_URL, rss(P1014));
+    frb.pages.set(FRB_SPEECHES_JSON_URL, json1014);
+    frb.pages.set(P1014, frbPage('Supervisory modernization.'));
+    const dry = await ingestSpeechBodies(
+      store,
+      { frb, ecb: new FakeFetcher() },
+      { ...all, dryRun: true },
+      NOW_M,
+      new JobCounters(),
+    );
+    expect(actions(dry.plan)).toEqual({ disc: ['NO_SOURCE_URL', null, null] });
+    // 本番の実行でも、討論の行は数えず・書かず、講演の行(本文・URL)には触れない
+    await ingestSpeechBodies(store, { frb, ecb: new FakeFetcher() }, all, NOW_M, new JobCounters());
+    expect(store.claims).toEqual([]);
+    expect(store.updates).toEqual([]);
+    expect(frb.requested).not.toContain(P1014);
+    expect(store.rows.find((r) => r.id === 'speech')).toMatchObject({ body_status: 'FETCHED', source_url: P1014 });
+    expect(store.rows.find((r) => r.id === 'disc')).toMatchObject({
+      body_status: 'PENDING',
+      source_url: null,
+      body_attempts: 0,
+    });
+  });
+
+  it('two rows of the same speaker on the same day: never linked by the date alone', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    store.rows = [
+      row({ id: 'am', speaker_name: bowman, statement_datetime: '2026-11-05T14:00:00Z' }),
+      row({ id: 'pm', speaker_name: bowman, statement_datetime: '2026-11-05T20:00:00Z' }),
+    ];
+    frb.pages.set(FRB_SPEECHES_RSS_URL, rss('https://www.federalreserve.gov/newsevents/speech/bowman20261105a.htm'));
+    frb.pages.set(FRB_SPEECHES_JSON_URL, '[]'); // 時刻の手がかりなし
+    const { plan } = await ingestSpeechBodies(
+      store,
+      { frb, ecb: new FakeFetcher() },
+      { ...all, dryRun: true },
+      NOW_M,
+      new JobCounters(),
+    );
+    expect(actions(plan)).toEqual({ am: ['NO_SOURCE_URL', null, null], pm: ['NO_SOURCE_URL', null, null] });
+  });
+
+  it('a URL another row already uses is not reused by the date match', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    const U = 'https://www.federalreserve.gov/newsevents/speech/waller20261105a.htm';
+    store.rows = [
+      row({ id: 'cand', statement_datetime: '2026-11-05T15:00:00Z' }), // ウォラー、日付では一意
+      row({ id: 'holder', statement_datetime: '2026-11-07T15:00:00Z', body_status: 'FETCHED', source_url: U }),
+    ];
+    frb.pages.set(FRB_SPEECHES_RSS_URL, rss(U));
+    frb.pages.set(FRB_SPEECHES_JSON_URL, '[]');
+    const counters = new JobCounters();
+    const { plan } = await ingestSpeechBodies(
+      store,
+      { frb, ecb: new FakeFetcher() },
+      { ...all, dryRun: true },
+      NOW_M,
+      counters,
+    );
+    expect(actions(plan)).toEqual({ cand: ['NO_SOURCE_URL', null, null] });
+    expect(counters.skipReasons).toMatchObject({ URL_IN_USE: 1 });
+  });
+
+  it('11/10: the exact-time match still links both rows to the same page (also when one of them is already FETCHED)', async () => {
+    const jsonTimes = JSON.stringify([
+      { d: '11/10/2026 3:30:00 PM', l: '/newsevents/speech/bowman20261110a.htm' },
+      { d: '11/10/2026 6:30:00 PM', l: '', stub: '/newsevents/speech/bowman20261110a.htm' },
+    ]);
+    const a = () => row({ id: 'b1530', speaker_name: bowman, statement_datetime: '2026-11-10T20:30:00+00:00' });
+    const b = () => row({ id: 'b1830', speaker_name: bowman, statement_datetime: '2026-11-10T23:30:00+00:00' });
+    for (const rows of [
+      [a(), b()],
+      [{ ...a(), body_status: 'FETCHED', source_url: P1110 }, b()],
+    ]) {
+      const store = new FakeStore();
+      const frb = new FakeFetcher();
+      store.rows = rows;
+      frb.pages.set(FRB_SPEECHES_RSS_URL, rss(P1110));
+      frb.pages.set(FRB_SPEECHES_JSON_URL, jsonTimes);
+      const { plan } = await ingestSpeechBodies(
+        store,
+        { frb, ecb: new FakeFetcher() },
+        { ...all, dryRun: true },
+        NOW_M,
+        new JobCounters(),
+      );
+      for (const p of plan)
+        expect([p.action, p.url_from, p.source_url], p.speech_id).toEqual(['FETCH', 'json_time', P1110]);
+      expect(plan.map((p) => p.speech_id)).toEqual(rows.filter((r) => r.body_status === 'PENDING').map((r) => r.id));
+    }
+  });
+
+  it('exact time but the page is used by a row that does not match it exactly (URL conflict): not linked', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    store.rows = [
+      row({ id: 'cand', speaker_name: bowman, statement_datetime: '2026-11-10T20:30:00+00:00' }),
+      row({
+        id: 'odd',
+        speaker_name: bowman,
+        statement_datetime: '2026-11-09T12:00:00+00:00',
+        body_status: 'FETCHED',
+        source_url: P1110,
+      }),
+      row({ id: 'odd2', speaker_name: bowman, statement_datetime: '2026-11-10T12:00:00+00:00' }), // 同じ日の別の行(日付は一意にならない)
+    ];
+    frb.pages.set(FRB_SPEECHES_RSS_URL, rss());
+    frb.pages.set(
+      FRB_SPEECHES_JSON_URL,
+      JSON.stringify([{ d: '11/10/2026 3:30:00 PM', l: '/newsevents/speech/bowman20261110a.htm' }]),
+    );
+    const counters = new JobCounters();
+    const { plan } = await ingestSpeechBodies(
+      store,
+      { frb, ecb: new FakeFetcher() },
+      { ...all, dryRun: true },
+      NOW_M,
+      counters,
+    );
+    expect(actions(plan)).toEqual({ cand: ['NO_SOURCE_URL', null, null], odd2: ['NO_SOURCE_URL', null, null] });
+    expect(counters.skipReasons).toMatchObject({ URL_CONFLICT: 1 });
+  });
+
+  it('several exact-time candidates or a time mismatch: never FETCH', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    store.rows = [
+      row({ id: 'two', speaker_name: bowman, statement_datetime: '2026-11-10T20:30:00+00:00' }),
+      row({ id: 'off', speaker_name: bowman, statement_datetime: '2026-11-10T20:31:00+00:00' }),
+    ];
+    frb.pages.set(FRB_SPEECHES_RSS_URL, rss());
+    frb.pages.set(
+      FRB_SPEECHES_JSON_URL,
+      JSON.stringify([
+        { d: '11/10/2026 3:30:00 PM', l: '/newsevents/speech/bowman20261110a.htm' },
+        { d: '11/10/2026 3:30:00 PM', l: '/newsevents/speech/bowman20261110b.htm' },
+      ]),
+    );
+    const { plan } = await ingestSpeechBodies(
+      store,
+      { frb, ecb: new FakeFetcher() },
+      { ...all, dryRun: true },
+      NOW_M,
+      new JobCounters(),
+    );
+    expect(actions(plan)).toEqual({ two: ['NO_SOURCE_URL', null, null], off: ['NO_SOURCE_URL', null, null] });
   });
 });
