@@ -11,11 +11,13 @@ on:
     paths:
       - '.github/workflows/fx-event-analyzer-ingestion.yml'
       - '.github/workflows/fx-event-analyzer-workflow-lint.yml'
+      - '.github/workflows/fx-event-analyzer-dev-verify.yml'
       - '.github/scripts/check_speech_schedule_steps.py'
   pull_request:
     paths:
       - '.github/workflows/fx-event-analyzer-ingestion.yml'
       - '.github/workflows/fx-event-analyzer-workflow-lint.yml'
+      - '.github/workflows/fx-event-analyzer-dev-verify.yml'
       - '.github/scripts/check_speech_schedule_steps.py'
   workflow_dispatch:
 
@@ -39,8 +41,8 @@ jobs:
           grep -F "  ${TARBALL}" checksums.txt | sha256sum -c -
           tar -xzf "${TARBALL}" actionlint
           ./actionlint -version
-      - name: actionlint (ingestion and this workflow)
-        run: ./actionlint -shellcheck= -pyflakes= .github/workflows/fx-event-analyzer-ingestion.yml .github/workflows/fx-event-analyzer-workflow-lint.yml
+      - name: actionlint (ingestion, dev verify and this workflow)
+        run: ./actionlint -shellcheck= -pyflakes= .github/workflows/fx-event-analyzer-ingestion.yml .github/workflows/fx-event-analyzer-dev-verify.yml .github/workflows/fx-event-analyzer-workflow-lint.yml
       - name: Speech schedule step conditions
         run: |
           python3 -m pip install --quiet pyyaml
