@@ -1,0 +1,90 @@
+name: Threads automation heartbeat (no AI)
+
+# 目的(2026-09-15、AI利用量監査への対応): threads-*.ymlの`schedule:`
+# トリガー自体がこのリポジトリでは信頼できず(過去の実行履歴上、2時間おきの
+# 想定に対し実際は4〜8時間おきにしか発火しない=想定の6〜7割が欠落)、
+# その保険としてClaude Code Remoteの定期Routineが1日十数回起動して
+# `workflow_dispatch`するだけの役目を担っていた。これは判断が一切ない
+# 単純な「時間切れなら起動し直す」作業であり、フルのAIエージェント
+# セッションを起動する必要が無い(監査結果: docs/ai-company-os/参照)。
+#
+# この1本のワークフローで、6つのThreads関連ワークフローぶんの「確実起動」
+# 役をすべて代替する。15分おきという高頻度で動かすことで、たとえこの
+# ワークフロー自身の`schedule:`も同じ理由で6〜7割落ちたとしても、残りの
+# 3〜4割だけで元のワークフローの許容間隔(2時間・4時間・1日・1週間)を
+# 十分カバーできる(低頻度ターゲットほど、取りこぼし1回あたりの影響が
+# 小さくなるため)。
+#
+# 個々のワークフローの`schedule:`トリガー自体は残す(バックアップとして
+# 無害。二重発火してもconcurrency設定・スクリプト側の冪等性で安全)。
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: threads-heartbeat
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  ensure-fresh:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Dispatch any overdue Threads workflow
+        run: |
+          set -euo pipefail
+
+          # workflowファイル名 => 許容間隔(分)。各ワークフロー本来の
+          # schedule間隔に、ヒートビート自体の取りこぼしを見込んだ余裕を
+          # 乗せた値(本来2時間おきのものは2.5時間、4時間おきは4.5時間、
+          # 毎日は26時間、毎週は8日)。
+          declare -A THRESHOLD_MIN=(
+            [threads-fetch-replies.yml]=150
+            [threads-send-replies.yml]=150
+            [threads-token-health-check.yml]=270
+            [threads-publish.yml]=1560
+            [threads-research.yml]=11520
+            [threads-insights.yml]=11520
+          )
+
+          now_epoch=$(date -u +%s)
+          any_failed=0
+
+          for wf in "${!THRESHOLD_MIN[@]}"; do
+            threshold_min="${THRESHOLD_MIN[$wf]}"
+            threshold_sec=$(( threshold_min * 60 ))
+
+            if ! last_run_time=$(gh run list --repo "${{ github.repository }}" --workflow "$wf" --limit 1 --json createdAt --jq '.[0].createdAt // empty' 2>&1); then
+              echo "::warning::$wf の実行履歴取得に失敗しました: $last_run_time"
+              any_failed=1
+              continue
+            fi
+
+            if [ -z "$last_run_time" ]; then
+              echo "$wf: 実行履歴が1件も無いため起動します"
+              gh workflow run "$wf" --repo "${{ github.repository }}" --ref main
+              continue
+            fi
+
+            last_epoch=$(date -u -d "$last_run_time" +%s)
+            elapsed=$(( now_epoch - last_epoch ))
+            elapsed_min=$(( elapsed / 60 ))
+
+            if [ "$elapsed" -gt "$threshold_sec" ]; then
+              echo "$wf: 前回実行から${elapsed_min}分経過(許容${threshold_min}分)のため起動します"
+              gh workflow run "$wf" --repo "${{ github.repository }}" --ref main
+            else
+              echo "$wf: 前回実行から${elapsed_min}分経過(許容${threshold_min}分)、正常範囲内"
+            fi
+          done
+
+          if [ "$any_failed" -ne 0 ]; then
+            echo "::error::一部ワークフローの実行履歴取得に失敗しました(上記warning参照)"
+            exit 1
+          fi
