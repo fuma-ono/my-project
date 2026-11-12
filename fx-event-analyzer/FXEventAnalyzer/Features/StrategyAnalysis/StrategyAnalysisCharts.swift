@@ -47,14 +47,28 @@ struct StrategyTrendChart: View {
     /// 直近の値に添える吹き出し(参考画像の「+18.5 pips」)。
     var calloutFormatter: ((Double) -> String)? = nil
     var height: CGFloat = 90
+    /// ユーザー指摘(2026-11-12)「チャートは幅いっぱいではなく縦と横に+30,+15,0,-15 0分,5分,15分,30分として」:
+    /// 参考画像どおり、縦軸に固定目盛りのラベル列を表示する(データの値域に関わらず常にこの目盛り)。
+    /// 空配列(既定)なら、この列自体を描かない(従来どおりデータ駆動のスケール)。大きい順に渡す。
+    var yAxisTicks: [Double] = []
+
+    private let yAxisLabelWidth: CGFloat = 16
 
     /// `GeometryReader`の`@ViewBuilder`クロージャ内にネストした関数を置くと、結果ビルダーの型推論が
     /// 壊れ「generic parameter 'Content' could not be inferred」になることがCIで確認されたため、
     /// 座標計算は(Viewを一切組み立てない)プレーンな関数としてクロージャの外に出す。
-    private func plottedPoints(_ points: [(label: String, value: Double)], in size: CGSize) -> [CGPoint] {
+    private func valueRange(_ points: [(label: String, value: Double)]) -> (min: Double, max: Double) {
+        if let tickMin = yAxisTicks.min(), let tickMax = yAxisTicks.max() {
+            return (tickMin, tickMax)
+        }
         let values = points.map(\.value)
         let minV = min(0, values.min() ?? 0)
         let maxV = max(values.max() ?? 1, minV + 0.001)
+        return (minV, maxV)
+    }
+
+    private func plottedPoints(_ points: [(label: String, value: Double)], in size: CGSize) -> [CGPoint] {
+        let (minV, maxV) = valueRange(points)
         let stepX = points.count > 1 ? size.width / CGFloat(points.count - 1) : 0
         return points.enumerated().map { index, point in
             let ratio = (point.value - minV) / (maxV - minV)
@@ -63,59 +77,91 @@ struct StrategyTrendChart: View {
     }
 
     private func zeroLineY(_ points: [(label: String, value: Double)], in size: CGSize) -> CGFloat {
-        let values = points.map(\.value)
-        let minV = min(0, values.min() ?? 0)
-        let maxV = max(values.max() ?? 1, minV + 0.001)
+        let (minV, maxV) = valueRange(points)
         let ratio = (0 - minV) / (maxV - minV)
+        return size.height * (1 - ratio)
+    }
+
+    private func tickY(_ tick: Double, _ points: [(label: String, value: Double)], in size: CGSize) -> CGFloat {
+        let (minV, maxV) = valueRange(points)
+        let ratio = (tick - minV) / (maxV - minV)
         return size.height * (1 - ratio)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             if let points, points.count >= 2 {
-                GeometryReader { geo in
-                    let plotted = plottedPoints(points, in: geo.size)
-                    let zeroY = zeroLineY(points, in: geo.size)
-                    ZStack(alignment: .topLeading) {
-                        // 0ラインの点線(参考画像の横軸)。
-                        Path { path in
-                            path.move(to: CGPoint(x: 0, y: zeroY))
-                            path.addLine(to: CGPoint(x: geo.size.width, y: zeroY))
+                HStack(alignment: .top, spacing: 4) {
+                    if !yAxisTicks.isEmpty {
+                        GeometryReader { geo in
+                            ZStack(alignment: .topLeading) {
+                                ForEach(yAxisTicks, id: \.self) { tick in
+                                    NotoText.text(tick > 0 ? "+\(Int(tick))" : "\(Int(tick))", size: 5.5)
+                                        .foregroundStyle(SettingsCardStyle.subtitleColor)
+                                        .position(x: geo.size.width / 2, y: tickY(tick, points, in: CGSize(width: geo.size.width, height: height)))
+                                }
+                            }
                         }
-                        .stroke(SettingsCardStyle.cardBorder, style: StrokeStyle(lineWidth: 0.5, dash: [2, 2]))
+                        .frame(width: yAxisLabelWidth, height: height)
+                    }
+                    GeometryReader { geo in
+                        let plotted = plottedPoints(points, in: geo.size)
+                        let zeroY = zeroLineY(points, in: geo.size)
+                        ZStack(alignment: .topLeading) {
+                            // 固定目盛りの横罫線(参考画像の+30/+15/0/-15のグリッド線)。
+                            ForEach(yAxisTicks, id: \.self) { tick in
+                                Path { path in
+                                    let y = tickY(tick, points, in: geo.size)
+                                    path.move(to: CGPoint(x: 0, y: y))
+                                    path.addLine(to: CGPoint(x: geo.size.width, y: y))
+                                }
+                                .stroke(SettingsCardStyle.cardBorder.opacity(tick == 0 ? 0.9 : 0.35), style: StrokeStyle(lineWidth: 0.5, dash: tick == 0 ? [2, 2] : []))
+                            }
+                            // 目盛りを渡していないとき(他の呼び出し元)は、従来どおり0ラインの点線だけ描く。
+                            if yAxisTicks.isEmpty {
+                                Path { path in
+                                    path.move(to: CGPoint(x: 0, y: zeroY))
+                                    path.addLine(to: CGPoint(x: geo.size.width, y: zeroY))
+                                }
+                                .stroke(SettingsCardStyle.cardBorder, style: StrokeStyle(lineWidth: 0.5, dash: [2, 2]))
+                            }
 
-                        if let fillColor {
+                            if let fillColor {
+                                Path { path in
+                                    path.move(to: CGPoint(x: 0, y: zeroY))
+                                    for point in plotted { path.addLine(to: point) }
+                                    path.addLine(to: CGPoint(x: geo.size.width, y: zeroY))
+                                    path.closeSubpath()
+                                }
+                                .fill(fillColor.opacity(0.18))
+                            }
+
                             Path { path in
-                                path.move(to: CGPoint(x: 0, y: zeroY))
-                                for point in plotted { path.addLine(to: point) }
-                                path.addLine(to: CGPoint(x: geo.size.width, y: zeroY))
-                                path.closeSubpath()
+                                for (index, point) in plotted.enumerated() {
+                                    if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+                                }
                             }
-                            .fill(fillColor.opacity(0.18))
-                        }
+                            .stroke(lineColor, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
 
-                        Path { path in
-                            for (index, point) in plotted.enumerated() {
-                                if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
-                            }
-                        }
-                        .stroke(lineColor, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
-
-                        if let lastPoint = plotted.last, let lastValue = points.last?.value {
-                            Circle().fill(lineColor).frame(width: 5, height: 5).position(lastPoint)
-                            if let calloutFormatter {
-                                NotoText.text(calloutFormatter(lastValue), size: 6)
-                                    .foregroundStyle(.black)
-                                    .padding(.horizontal, 4)
-                                    .padding(.vertical, 2)
-                                    .background(Capsule().fill(Color.white.opacity(0.92)))
-                                    .position(x: max(20, lastPoint.x - 18), y: max(8, lastPoint.y - 11))
+                            if let lastPoint = plotted.last, let lastValue = points.last?.value {
+                                Circle().fill(lineColor).frame(width: 5, height: 5).position(lastPoint)
+                                if let calloutFormatter {
+                                    NotoText.text(calloutFormatter(lastValue), size: 6)
+                                        .foregroundStyle(.black)
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 2)
+                                        .background(Capsule().fill(Color.white.opacity(0.92)))
+                                        .position(x: max(20, lastPoint.x - 18), y: max(8, lastPoint.y - 11))
+                                }
                             }
                         }
                     }
+                    .frame(height: height)
                 }
-                .frame(height: height)
                 HStack {
+                    if !yAxisTicks.isEmpty {
+                        Color.clear.frame(width: yAxisLabelWidth)
+                    }
                     ForEach(points, id: \.label) { p in
                         NotoText.text(p.label, size: 5.5).foregroundStyle(SettingsCardStyle.subtitleColor)
                         if p.label != points.last?.label { Spacer() }
@@ -143,8 +189,9 @@ struct StrategyProgressRow: View {
     var color: Color = V5P.blue
 
     var body: some View {
+        // ユーザー指摘(2026-11-12)「継続確率、反転確率：13pt」。
         HStack(spacing: 6) {
-            NotoText.text(label, size: 6.5).foregroundStyle(.white).frame(width: 56, alignment: .leading)
+            NotoText.text(label, size: 7.57).foregroundStyle(.white).frame(width: 56, alignment: .leading)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(SettingsCardStyle.cardBorder.opacity(0.4))

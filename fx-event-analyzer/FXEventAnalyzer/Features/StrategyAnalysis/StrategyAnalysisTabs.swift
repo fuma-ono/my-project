@@ -97,9 +97,10 @@ struct StrategyAnalysisTabBar: View {
 /// 全画面で使われる)は変更せず、この画面のコンテンツ側に小さく添える。
 struct StrategyAnalysisProBadge: View {
     var body: some View {
+        // ユーザー指摘(2026-11-12)「PROの文字：13pt」。
         HStack(spacing: 2) {
-            Image(systemName: "crown.fill").font(.system(size: 6.5, weight: .bold))
-            NotoText.text("PRO", size: 6).fontWeight(.bold)
+            Image(systemName: "crown.fill").font(.system(size: 7.57, weight: .bold))
+            NotoText.text("PRO", size: 7.57).fontWeight(.bold)
         }
         .foregroundStyle(.black)
         .padding(.horizontal, 4)
@@ -118,9 +119,10 @@ struct StrategySectionHeaderCard: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: icon).font(.system(size: 16, weight: .semibold)).foregroundStyle(iconColor)
+            // ユーザー指摘(2026-11-12)「イベント戦略：22pt」「...分析：13pt」。
             VStack(alignment: .leading, spacing: 1) {
-                NotoText.text(title, size: 11).foregroundStyle(.white)
-                NotoText.text(subtitle, size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                NotoText.text(title, size: 12.81).foregroundStyle(.white)
+                NotoText.text(subtitle, size: 7.57).foregroundStyle(SettingsCardStyle.subtitleColor)
             }
             Spacer(minLength: 0)
         }

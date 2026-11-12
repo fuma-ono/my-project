@@ -211,51 +211,59 @@ struct StrategyAnalysisView: View {
         }()
         let avgPips15m = analysis.releases.averagePips(\.pips15m)
         let pipsColor = avgPips15m.map { $0 >= 0 ? V5P.green : V5P.red } ?? SettingsCardStyle.subtitleColor
+        // ユーザー指摘(2026-11-12)「チャートは0分,5分,15分,30分として」: 0分は発表の瞬間(定義上0pips、
+        // 架空の値ではない)。60分は参考画像の縦軸範囲外のためこのチャートからは外す(他のカード
+        // (過去事例比較の平均変動等)では引き続き60分の実データを使っている)。
         let points: [(label: String, value: Double)] = [
-            ("1分", analysis.releases.averagePips(\.pips1m)),
+            ("0分", 0),
             ("5分", analysis.releases.averagePips(\.pips5m)),
             ("15分", analysis.releases.averagePips(\.pips15m)),
-            ("30分", analysis.releases.averagePips(\.pips30m)),
-            ("60分", analysis.releases.averagePips(\.pips60m))
+            ("30分", analysis.releases.averagePips(\.pips30m))
         ].compactMap { label, value in value.map { (label: label, value: $0) } }
 
         return plainCard {
             HStack(spacing: 4) {
-                NotoText.text("初動分析", size: 9).foregroundStyle(.white)
+                // ユーザー指摘(2026-11-12)「見出し：20pt」。
+                NotoText.text("初動分析", size: 11.64).foregroundStyle(.white)
                 Image(systemName: "info.circle").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
                 Spacer(minLength: 4)
             }
             Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
-            HStack(alignment: .top, spacing: 4) {
+            // ユーザー指摘(2026-11-12)「初動分析の構成が全く違う。初動分析のすぐ下に大きな上↑と数字
+            // その右に上昇確率その右に円グラフ」: 1行で「↑pips数値」→「上昇確率」ラベル→円グラフ
+            // (%の数値はゲージの中)の順に並べる(以前の「左に数値、右にラベル+数値+ゲージ」の
+            // 2カラム構成から変更)。
+            HStack(alignment: .center, spacing: 6) {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 2) {
                         Image(systemName: (avgPips15m ?? 0) >= 0 ? "arrow.up" : "arrow.down")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(pipsColor)
                         HStack(alignment: .firstTextBaseline, spacing: 1) {
-                            NotoText.text(avgPips15m.map { ValueFormat.number($0, fractionDigits: 1, signed: true) } ?? "--", size: 13)
+                            NotoText.text(avgPips15m.map { ValueFormat.number($0, fractionDigits: 1, signed: true) } ?? "--", size: 15)
                                 .foregroundStyle(pipsColor)
-                            NotoText.text("pips", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                            NotoText.text("pips", size: 7).foregroundStyle(SettingsCardStyle.subtitleColor)
                         }
                     }
-                    NotoText.text("（15分後）", size: 6).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    NotoText.text("（15分後）", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
                 }
-                Spacer(minLength: 4)
-                VStack(alignment: .trailing, spacing: 1) {
-                    NotoText.text("上昇確率", size: 6).foregroundStyle(SettingsCardStyle.subtitleColor)
-                    HStack(spacing: 4) {
-                        NotoText.text(upPercent.map { ValueFormat.percent($0, fractionDigits: 0) } ?? "--", size: 12)
-                            .foregroundStyle(upPercent != nil ? V5P.green : SettingsCardStyle.subtitleColor)
-                        StrategyCircularGauge(percent: upPercent, centerText: "", centerSubtext: nil, color: V5P.green, diameter: 22)
-                    }
-                }
+                Spacer(minLength: 2)
+                NotoText.text("上昇確率", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                StrategyCircularGauge(
+                    percent: upPercent,
+                    centerText: upPercent.map { ValueFormat.percent($0, fractionDigits: 0) } ?? "--",
+                    centerSubtext: nil,
+                    color: V5P.green,
+                    diameter: 34
+                )
             }
             StrategyTrendChart(
                 points: points.count >= 2 ? points : nil,
                 lineColor: V5P.blue,
                 fillColor: V5P.blue,
                 calloutFormatter: { ValueFormat.number($0, fractionDigits: 1, signed: true) },
-                height: 46
+                height: 50,
+                yAxisTicks: [30, 15, 0, -15]
             )
         }
         .accessibilityElement(children: .ignore)
@@ -270,7 +278,7 @@ struct StrategyAnalysisView: View {
         let reversalPercent = pattern.map { Double($0.reversal) / Double($0.samples) * 100 }
         return plainCard {
             HStack(spacing: 4) {
-                NotoText.text("継続・反転分析", size: 9).foregroundStyle(.white)
+                NotoText.text("継続・反転分析", size: 11.64).foregroundStyle(.white)
                 Image(systemName: "info.circle").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
                 Spacer(minLength: 4)
             }
@@ -293,7 +301,7 @@ struct StrategyAnalysisView: View {
         let avgPips60m = analysis.releases.averagePips(\.pips60m)
         return plainCard {
             HStack(spacing: 4) {
-                NotoText.text("過去事例比較", size: 9).foregroundStyle(.white)
+                NotoText.text("過去事例比較", size: 11.64).foregroundStyle(.white)
                 Image(systemName: "info.circle").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
                 Spacer(minLength: 4)
             }
@@ -310,10 +318,11 @@ struct StrategyAnalysisView: View {
     }
 
     private func comparisonRow(label: String, value: String, valueColor: Color) -> some View {
+        // ユーザー指摘(2026-11-12)「類似イベント数、平均変動：15pt」。
         HStack {
-            NotoText.text(label, size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+            NotoText.text(label, size: 8.73).foregroundStyle(SettingsCardStyle.subtitleColor)
             Spacer(minLength: 4)
-            NotoText.text(value, size: 7.5).foregroundStyle(valueColor)
+            NotoText.text(value, size: 8.73).foregroundStyle(valueColor)
         }
     }
 
@@ -325,7 +334,7 @@ struct StrategyAnalysisView: View {
         let level = StrategyAnalysisText.riskLevel(reversalPercent: reversalPercent)
         return plainCard {
             HStack(spacing: 4) {
-                NotoText.text("リスク分析", size: 9).foregroundStyle(.white)
+                NotoText.text("リスク分析", size: 11.64).foregroundStyle(.white)
                 Image(systemName: "info.circle").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
                 Spacer(minLength: 4)
             }
@@ -400,15 +409,16 @@ struct StrategyAnalysisView: View {
     /// 指標名+この発表自体の日時(`releaseDatetime`、過去の発表ではなく今見ているイベント
     /// そのものの日時 — `AppRoute.eventStrategyAnalysis`経由でイベント詳細から渡される実データ)。
     private var nextEventCard: some View {
+        // ユーザー指摘(2026-11-12)「米国CPI：15pt、日付と時刻：13pt」。
         plainCard {
             HStack(spacing: 8) {
                 Image(systemName: "calendar").font(.system(size: 16, weight: .semibold)).foregroundStyle(V5P.cyan)
                 VStack(alignment: .leading, spacing: 1) {
-                    NotoText.text("\(viewModel.indicatorName)発表", size: 10)
+                    NotoText.text("\(viewModel.indicatorName)発表", size: 8.73)
                         .foregroundStyle(.white)
                         .lineLimit(2)
                         .minimumScaleFactor(0.8)
-                    NotoText.text(Self.eventDateTimeLabel(releaseDatetime), size: 6.5)
+                    NotoText.text(Self.eventDateTimeLabel(releaseDatetime), size: 7.57)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
