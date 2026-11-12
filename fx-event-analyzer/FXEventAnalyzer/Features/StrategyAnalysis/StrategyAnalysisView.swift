@@ -50,12 +50,28 @@ struct StrategyAnalysisView: View {
             //
             // HQ指示(2026-11-12「ピクセル単位の再現」ユーザー指摘「PROの文字位置が違う。
             // ヘッダーの右位置に」): 参考画像ではPROバッジがヘッダー行の右端・タイトルと同じ
-            // 高さにある。V5Header自体は変更せず(共通コンポーネント)、その上に`.overlay`で
-            // 重ねるだけで実現する(V5Headerはbackground/foregroundを持たない透明なヘッダーの
-            // ため、overlayでも見た目に影響しない)。以前はcontent側の別行(スクロールで隠れる)
-            // に置いていたが、参考画像どおりヘッダーに固定して常時表示する形に変更した。
-            V5Header(title: "トレード戦略分析", back: true, onBack: { dismiss() })
-                .overlay(alignment: .trailing) { StrategyAnalysisProBadge() }
+            // 高さにある。V5Header自体は変更しない(共通コンポーネント)。
+            //
+            // 最初`.overlay(alignment: .trailing)`をV5Headerに直接チェーンしたが、実機CIで
+            // バッジが画面右端で見切れ、縦位置もヘッダーから大きくずれて描画された
+            // (「初動分析」カードの高さ付近)。原因: V5Headerの内部実装は
+            // `.frame(width:height:).position(x:y:)`で終わっており、`.position()`は
+            // 「親が提案するだけのスペースを使う」ようにそのビューの外側へのサイズ報告を
+            // 変えてしまうため、外側から`.overlay`を足すとV5Viewportの全体領域基準で
+            // 整列されてしまう(ヘッダー自身の実際の描画矩形を基準にしない)。
+            // そのため、V5Headerと同じ絶対座標の仕組み(`V5P.ptToV5`で換算したマージン・
+            // 高さ、`position(x: V5P.W/2, y:)`)をこちらでも使い、ZStackの兄弟要素として
+            // 独立に配置する(V5Headerの中身は一切変更しない)。`34.9`はV5Header内部の
+            // `headerCenterY`と同じ値(privateのため直接参照できず、ここで複製している)。
+            ZStack {
+                V5Header(title: "トレード戦略分析", back: true, onBack: { dismiss() })
+                HStack {
+                    Spacer(minLength: 0)
+                    StrategyAnalysisProBadge()
+                }
+                .frame(width: V5P.W - V5P.ptToV5(16) * 2, height: V5P.ptToV5(44))
+                .position(x: V5P.W / 2, y: 34.9)
+            }
             content
             V5BottomBar(selected: $tabSelection)
         }
