@@ -1777,7 +1777,11 @@ function speechesFixture() {
       speech_id: '77777777-7777-7777-7777-777777777775',
       speaker: SPEAKERS.powell,
       title: 'FOMC後の記者会見',
-      summary: '政策金利の据え置きを説明し、今後の判断はデータ次第との認識を示した。',
+      // HQレビュー結果(2026-11-12「要人発言詳細 追加改善」): DEVの実データでは
+      // FRB等の英語ソースの`summary`はEXTRACTIVE_EN(英語の原文をそのまま抜粋)
+      // であることが多いため、このフィクスチャも日本語ではなく英語にした
+      // (「原文抜粋」ラベルが実際のデータ形と合うことを確認するため)。
+      summary: 'The Committee decided to keep the target range for the federal funds rate unchanged at this meeting.',
       statement_datetime: isoSecondsPlusMinutes(-9 * 24 * 60),
       importance: 'HIGH',
       status: 'DELIVERED',
@@ -1795,17 +1799,19 @@ function speechesFixture() {
       importance: 'MEDIUM',
       status: 'DELIVERED',
     },
-    // 長い要約でもカードのレイアウトが崩れないこと(HQ指示)の確認用。FRB(パウエル)。
+    // 長い原文抜粋でもカードのレイアウトが崩れないこと・折りたたみ表示(HQレビュー結果
+    // 2026-11-12)の確認用。FRB(パウエル)、英語の原文抜粋(EXTRACTIVE_EN相当)。
     {
       speech_id: '77777777-7777-7777-7777-777777777778',
       speaker: SPEAKERS.powell,
       title: '上下両院合同経済委員会での半期議会証言',
       summary:
-        '労働市場は引き続き底堅いものの、過去数カ月で求人数・採用数の伸びが鈍化しており、' +
-        '労働需給の緩やかな均衡化が進んでいると説明した。インフレ率は低下傾向にあるが、' +
-        '目標の2%に持続的に達したと確信するにはなお時間を要するとの認識を示し、' +
-        '今後の金融政策の判断は今後発表される雇用統計・物価統計を含む経済指標全体の' +
-        '累積的な動向次第であり、特定の会合での利下げ・利上げについて予め約束するものではないと強調した。',
+        'The labor market remains resilient, though job gains and hiring have slowed somewhat over the past ' +
+        'several months, consistent with a gradual rebalancing of labor supply and demand. Inflation has eased ' +
+        'from its peak but the Committee does not yet have the confidence that it is moving sustainably toward ' +
+        'the two percent objective. Future policy decisions will depend on the cumulative assessment of incoming ' +
+        'data, including upcoming employment and price reports, across every meeting, and the Committee is not ' +
+        'on a preset course with respect to the timing or size of any future rate adjustments.',
       statement_datetime: isoSecondsPlusMinutes(-14 * 24 * 60),
       importance: 'HIGH',
       status: 'DELIVERED',

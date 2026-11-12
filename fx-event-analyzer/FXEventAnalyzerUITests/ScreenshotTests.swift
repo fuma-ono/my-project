@@ -606,12 +606,13 @@ final class ScreenshotTests: XCTestCase {
         capture("07b-EventStrategyAnalysis-Standalone-Bottom")
     }
 
-    /// HQ指示(2026-11-11「要人発言 実機スクリーンショット検証」): 要人発言詳細(SCR-013)が、
-    /// 本文・要約が取得できた発言(FRB)・原稿のない発言(FRB)・発言前の発言のそれぞれで正しく
-    /// 表示されること、長い要約でもレイアウトが崩れないこと、FREE/PROで表示内容が一致すること
-    /// を確かめる。フィクスチャ(`ui-screenshot-mock-server.mjs`の`speechesFixture`)に、この
-    /// 検証のため「発言済みだが要約が無い」FRBの発言(従来0件だった状態)と、長い要約のFRBの
-    /// 発言を追加した。
+    /// HQ指示(2026-11-11「要人発言 実機スクリーンショット検証」、2026-11-12「追加改善」承認分):
+    /// 要人発言詳細(SCR-013)が、本文・要約が取得できた発言(FRB)・原稿のない発言(FRB)・発言前の
+    /// 発言のそれぞれで正しく表示されること、長い原文抜粋でもレイアウトが崩れないこと(折りたたみ/
+    /// 展開を含む)、FREE/PROで表示内容が一致することを確かめる。フィクスチャ
+    /// (`ui-screenshot-mock-server.mjs`の`speechesFixture`)に、この検証のため「発言済みだが
+    /// 要約が無い」FRBの発言(従来0件だった状態)と、長い原文抜粋のFRBの発言を追加した。
+    /// DEVの実データ(EXTRACTIVE_EN)に合わせ、FRBの原文抜粋は英語にしてある(HQ指示)。
     func testCaptureSpeechDetailDisplayStates() throws {
         let emailField = app.textFields["メールアドレス"]
         XCTAssertTrue(emailField.waitForExistence(timeout: 35), "Login screen did not appear")
@@ -626,17 +627,39 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "金融経済懇談会での講演", timeout: 15), "Speech list did not load")
         capture("12b-SpeechList-Standalone")
 
-        // ① FRBの本文・要約が取得できた発言(短い要約)。
+        // ① FRBの本文・要約が取得できた発言(短い英語の原文抜粋) — 折りたたみボタンは出ない。
         tap(containing: "FOMC後の記者会見")
-        XCTAssertTrue(waitForAnyElement(containing: "政策金利の据え置きを説明し", timeout: 15), "FRB speech with a summary did not render the summary text")
+        XCTAssertTrue(waitForAnyElement(containing: "原文抜粋", timeout: 15), "The original-excerpt caption did not render")
+        XCTAssertTrue(
+            waitForAnyElement(containing: "The Committee decided to keep the target range", timeout: 5),
+            "FRB speech with a short summary did not render the English excerpt"
+        )
+        XCTAssertFalse(
+            app.buttons.matching(identifier: "speechDetailExcerptToggle").firstMatch.exists,
+            "A short excerpt must not show the 続きを読む／閉じる toggle"
+        )
         capture("13d-SpeechDetail-FRB-SummaryPresent")
         tapIdentifier("v5HeaderBack")
         XCTAssertTrue(waitForAnyElement(containing: "これからの発言", timeout: 10), "Did not return to Speech list from FRB summary speech")
 
-        // ② FRBの本文・要約が取得できた発言(長い要約) — レイアウトが崩れないことの確認。
+        // ② FRBの本文・要約が取得できた発言(長い英語の原文抜粋) — 初期状態で折りたたみ、
+        // 「続きを読む」で展開・「閉じる」で再び折りたたみできることを確かめる。
         tap(containing: "上下両院合同経済委員会での半期議会証言")
-        XCTAssertTrue(waitForAnyElement(containing: "労働市場は引き続き底堅い", timeout: 15), "FRB speech with a long summary did not render")
-        capture("13e-SpeechDetail-FRB-SummaryLong")
+        XCTAssertTrue(waitForAnyElement(containing: "labor market remains resilient", timeout: 15), "FRB speech with a long summary did not render")
+        let excerptToggle = app.buttons.matching(identifier: "speechDetailExcerptToggle").firstMatch
+        XCTAssertTrue(excerptToggle.waitForExistence(timeout: 5), "A long excerpt must show the 続きを読む toggle")
+        XCTAssertTrue(excerptToggle.label.contains("続きを読む"), "The toggle must start collapsed (続きを読む)")
+        capture("13e-SpeechDetail-FRB-SummaryLong-Collapsed")
+        excerptToggle.tap()
+        // 注: SwiftUIの`Text`は`lineLimit`で折りたたんでいても、accessibilityの文字列自体は
+        // 常に全文のまま(ScrollViewの中身が`.exists`なのと同じ理由)なので、ここで確かめられる
+        // のは「ボタンの状態(続きを読む⇄閉じる)が実際に切り替わること」まで。見た目の行数が
+        // 変わったこと自体はXCUITestの文字列一致では確認できないため、スクリーンショットで
+        // 目視確認する。
+        XCTAssertTrue(waitForAnyElement(containing: "閉じる", timeout: 5), "Tapping 続きを読む did not switch the toggle to 閉じる")
+        capture("13e-SpeechDetail-FRB-SummaryLong-Expanded")
+        excerptToggle.tap()
+        XCTAssertTrue(waitForAnyElement(containing: "続きを読む", timeout: 5), "Tapping 閉じる did not switch the toggle back to 続きを読む")
         tapIdentifier("v5HeaderBack")
         XCTAssertTrue(waitForAnyElement(containing: "これからの発言", timeout: 10), "Did not return to Speech list from the long-summary FRB speech")
 
