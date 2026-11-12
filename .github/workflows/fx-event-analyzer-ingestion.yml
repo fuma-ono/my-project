@@ -163,7 +163,7 @@ jobs:
       # 要人発言の本文と要約(HQ承認 2026-11-11「要人発言の定期実行」): 3時間ごとの定期の回だけ、発言の取り込みの後に
       # 別のステップとして順に動かす。!cancelled(): 前のステップ(発言の取り込み・本文)が失敗しても動く(失敗は
       # ジョブの失敗として残り、通知される。continue-on-error は使わない)。対象は発言日時が直近14日、本文は FRB だけ、
-      # FAILED は1行3回まで。DEV の確認(steps.check)に加えて、ジョブの中でも接続先が DEV であることを確かめる。
+      # PENDING・FAILED とも1行3回まで。DEV の確認(steps.check)に加えて、ジョブの中でも接続先が DEV であることを確かめる。
       - name: Speech bodies (scheduled, last 14 days, FRB only)
         if: ${{ !cancelled() && steps.check.outputs.ready == 'true' && github.event_name == 'schedule' && github.event.schedule == '41 */3 * * *' }}
         run: npm run -s ingest:speech-bodies -- --scheduled
