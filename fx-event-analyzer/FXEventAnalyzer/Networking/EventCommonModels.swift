@@ -1,0 +1,165 @@
+import Foundation
+
+/// Shared enums mirrored from db-design.md / api-design.md that recur
+/// across Home / Indicators / Event Detail / Historical Event Detail DTOs.
+/// Kept together rather than duplicated per-screen-model file.
+
+/// api-design.md §11: the fixed MVP timeframe set. BEFORE is never a
+/// timeframe — pre-release price is tracked separately as
+/// `pre_release_price`.
+enum ReactionTimeframe {
+    static let all = ["1m", "5m", "15m", "30m", "60m"]
+    static let `default` = "5m"
+}
+
+enum Importance: String, Codable, Equatable {
+    case low = "LOW"
+    case medium = "MEDIUM"
+    case high = "HIGH"
+}
+
+/// api-design.md §12: Home's `events` is day-scoped; the client splits it
+/// by `status` into "今日の注目イベント" (SCHEDULED) and "最近のイベント"
+/// (RELEASED) itself — there is no separate Backend field for this.
+enum EventStatus: String, Codable, Equatable {
+    case scheduled = "SCHEDULED"
+    case released = "RELEASED"
+    case cancelled = "CANCELLED"
+}
+
+/// api-design.md §7: the API-level Data Quality state — always HTTP 200 +
+/// this field, never an HTTP error.
+enum DataQualityStatus: String, Codable, Equatable {
+    case ready = "READY"
+    case dataPending = "DATA_PENDING"
+    case dataUnavailable = "DATA_UNAVAILABLE"
+    case notAnalyzable = "NOT_ANALYZABLE"
+}
+
+/// api-design v1.44(HQ判断 2026-10-30 P1-1 段階1): 相場反応の行が計算されたか。`analysis_status`とは別の任意項目で、
+/// 古いBackendでは無い(nil)。知らない値もnil(画面は今までどおり)にし、応答の読み込みを失敗させない。
+/// 表示: `notDue`「発表後に表示」、`notCalculated`「未計算」、`calculated`は`analysis_status`のとおり。
+/// `retry_scheduled`は「取得中」の根拠に使わない(HQ判断)ので、端末では読まない。
+enum ReactionState: String, Equatable {
+    case calculated = "CALCULATED"
+    case notDue = "NOT_DUE"
+    case notCalculated = "NOT_CALCULATED"
+
+    /// `reaction_state`を読む。無い・null・知らない値はnil。
+    static func decode<K: CodingKey>(from container: KeyedDecodingContainer<K>, forKey key: K) -> ReactionState? {
+        guard let raw = try? container.decodeIfPresent(String.self, forKey: key) else { return nil }
+        return ReactionState(rawValue: raw)
+    }
+
+    /// 表の小さな欄に出す短い文言(値が無いとき)。nil = 今までどおり「--」。
+    var shortLabel: String? {
+        switch self {
+        case .notDue: return "発表後に表示"
+        case .notCalculated: return "未計算"
+        case .calculated: return nil
+        }
+    }
+}
+
+/// api-design.md §9: null (never 0) when Forecast or Actual is missing;
+/// NEUTRAL when surprise == 0.
+enum SurpriseDirection: String, Codable, Equatable {
+    case positive = "POSITIVE"
+    case negative = "NEGATIVE"
+    case neutral = "NEUTRAL"
+}
+
+/// api-design v1.42(HQ指示2026-10-27「経済指標・要人発言の表示不足を解消する」)。
+/// `GET /calendar`(INDICATOR行)・`GET /home`の`events`・`GET /notifications/upcoming`
+/// に付く。SPEECHの行・古いBackendでは項目自体が無い(nil)。
+/// ケース名はSwiftの`Optional<ResultType>.none`との混同を避けるため`noValue`にした
+/// (バックエンドのJSON値はそのまま`"NONE"`)。
+enum ResultType: String, Codable, Equatable {
+    /// 結果の値が出る指標(CPI・雇用統計など、FOMCの会合も含む)。
+    case value = "VALUE"
+    /// 結果の値が出ない予定(今はFOMC議事要旨だけ、`domain/resultType.ts`)。
+    case noValue = "NONE"
+}
+
+/// `ResultType`・`DataQualityStatus`から、指標の状態表示の文言を決める
+/// (api-design v1.42の「表示の目安」どおり)。
+enum ResultStatusDisplay {
+    /// VALUEで発表時刻を過ぎてDATA_PENDINGなら「結果待ち」(値を推測で埋めない)。
+    /// NONEで発表時刻を過ぎたら「公表済み」(結果の欄は出さない)。それ以外
+    /// (発表前・READY・古いBackendでresult_typeが無い等)は何も表示しない。
+    static func label(resultType: ResultType?, dataStatus: DataQualityStatus?, releaseDatetime: Date, now: Date = Date()) -> String? {
+        guard releaseDatetime <= now else { return nil }
+        switch resultType {
+        case .noValue: return "公表済み"
+        case .value: return dataStatus == .dataPending ? "結果待ち" : nil
+        case nil: return nil
+        }
+    }
+}
+
+/// api-design.md §11.1: drives which timeframes are analyzable for an
+/// event, independent of stored reaction data_status.
+enum ReleaseDatetimePrecision: String, Codable, Equatable {
+    case exact = "EXACT"
+    case approximate = "APPROXIMATE"
+    case dateOnly = "DATE_ONLY"
+    case unknown = "UNKNOWN"
+
+    /// 任意の項目として読む(api-design v1.45 の反応・チャートの応答)。無い・null・知らない値はnilにし、応答の読み込みを失敗させない。
+    static func lenient<K: CodingKey>(from container: KeyedDecodingContainer<K>, forKey key: K) -> ReleaseDatetimePrecision? {
+        guard let raw = try? container.decodeIfPresent(String.self, forKey: key) else { return nil }
+        return ReleaseDatetimePrecision(rawValue: raw)
+    }
+}
+
+/// api-design.md §14.3: Backend-computed (not a stored column) — NONE vs
+/// REVISED based on whether any EventRevision rows exist for the event.
+enum RevisionStatus: String, Decodable, Equatable {
+    case none = "NONE"
+    case revised = "REVISED"
+}
+
+/// db-design.md line 158: drives Surprise's POSITIVE/NEGATIVE/NEUTRAL sign
+/// interpretation (api-design.md §9) — never inferred from sign alone.
+enum FavorableDirection: String, Decodable, Equatable {
+    case higherIsPositive = "HIGHER_IS_POSITIVE"
+    case lowerIsPositive = "LOWER_IS_POSITIVE"
+    case neutral = "NEUTRAL"
+}
+
+/// api-design v1.43(`domain/attribution.ts`のAttribution)。要人発言の
+/// `SpeechAttribution`(`SpeechDetailModels.swift`)と同じ形だが、イベント
+/// 詳細・指標詳細はどちらも要人発言ほど出典の手がかりが画面内に無いため、
+/// `notice`だけでなく`source`・`sourceUrl`も表示する(HQ指示 2026-10-31
+/// 「出典表示」)。Eurostatの指標(EU_HICP・EU_UNEMPLOYMENT_RATE)だけ付き、
+/// それ以外・古いBackendはnil。
+struct Attribution: Decodable, Equatable {
+    let source: String
+    let sourceUrl: String
+    /// 取得元の規約が求める告知文。nil = 告知の義務なし(出典の表示だけ)。
+    let notice: String?
+
+    enum CodingKeys: String, CodingKey {
+        case source
+        case sourceUrl = "source_url"
+        case notice
+    }
+}
+
+/// api-design.md §14.2 / §12: a lightweight FX pair reference attached to
+/// an Indicator or Event, with priority determining display order (lower
+/// first) — the same shape appears on Home events, Event Detail, and
+/// Indicator Detail.
+struct RelatedFxPairSummary: Codable, Identifiable, Equatable {
+    let fxPairId: String
+    let symbol: String
+    let priority: Int
+
+    var id: String { fxPairId }
+
+    enum CodingKeys: String, CodingKey {
+        case fxPairId = "fx_pair_id"
+        case symbol
+        case priority
+    }
+}

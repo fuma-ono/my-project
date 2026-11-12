@@ -32,6 +32,12 @@ moyasuka/credentials/
 *.p12
 *.key
 
+# deep-research skill: Claude の調査用の中間ノート・レポート下書き
+# (FX Event Analyzerの取得元調査など)。プロジェクトの成果物ではなく、
+# 報告のために一時的に作業ディレクトリに置くだけなのでコミットしない。
+/research_notes/
+/reports/
+
 # app (Expo/React Native) has its own .gitignore
 
 # dashboard / guide build output (regenerate with each dir's build.py)

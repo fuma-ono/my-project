@@ -1,0 +1,122 @@
+import Foundation
+
+/// 無料プラン・プレミアムプランの使える範囲(HQ指示 2026-10-08)。`GET /entitlements`の
+/// `plan`・`limits`(api-design v1.15)を起動時・フォアグラウンド復帰時・購入後に
+/// 読み込み、各画面はここを見て上限を出す。上限はBackendでも確かめる(§28)ので、
+/// ここは「押す前に分かるようにする」ためのもの。
+@MainActor
+final class PlanStore: ObservableObject {
+    static let shared = PlanStore()
+
+    @Published private(set) var plan: EntitlementsResponse.Plan = .free
+    @Published private(set) var limits: PlanLimits = .free()
+    /// この起動(ログイン)で`GET /entitlements`からプランを確かめたか。起動直後・ログアウト後はfalse
+    /// (`plan`は仮の無料プラン)。ホームのキャッシュがプランの一致を確かめるのに使う(HQ承認 2026-11-02)。
+    @Published private(set) var isConfirmed = false
+
+    var isPro: Bool { plan == .pro }
+
+    /// HQ指示(2026-11-05)「Splash先行通信」: `userID`を渡すと、Splash中に開始済みの
+    /// `/entitlements`があればその結果を再利用する(二重取得にしない)。渡さない・
+    /// 先行取得が無い場合は従来どおり新規に取得する(他の呼び出し元・既存の挙動は
+    /// 変わらない)。
+    func load(apiClient: APIClient, userID: UUID? = nil, prefetchCoordinator: HomePrefetchCoordinator = .shared) async {
+        do {
+            let response: EntitlementsResponse
+            if let userID, let prefetched = prefetchCoordinator.consumeEntitlements(for: userID) {
+                response = try await prefetched.value
+            } else {
+                response = try await EntitlementsService(apiClient: apiClient).fetchEntitlements(timezone: TimeZone.current.identifier)
+            }
+            plan = response.plan ?? .free
+            limits = response.limits ?? (plan == .pro ? .pro() : .free())
+            isConfirmed = true
+        } catch {
+            // 取れないときは前回の値のまま(起動直後は無料プランの範囲)。
+        }
+    }
+
+    /// ログアウト・セッション切れ: 前のユーザーのプランを残さず、無料プランの範囲に戻す。
+    func reset() {
+        plan = .free
+        limits = .free()
+        isConfirmed = false
+    }
+
+    /// テスト用。
+    func set(plan: EntitlementsResponse.Plan, limits: PlanLimits, confirmed: Bool = true) {
+        self.plan = plan
+        self.limits = limits
+        isConfirmed = confirmed
+    }
+
+    /// 確かめたプランの値(`EntitlementsResponse.Plan`の値)。まだ確かめていなければnil。
+    var confirmedPlan: String? { isConfirmed ? plan.rawValue : nil }
+}
+
+/// `GET /entitlements`の`limits`。古いBackend(項目なし)では端末で同じ規則を計算する。
+struct PlanLimits: Decodable, Equatable {
+    /// 経済カレンダーでさかのぼれる最初の日時(含む)。
+    let calendarEarliestFrom: Date
+    /// 経済カレンダーで見られる最後の日時(含まない)。
+    let calendarLatestTo: Date
+    /// お気に入りの上限。nilは無制限。
+    let favoritesMax: Int?
+    /// 通知で選べる重要度。
+    let notificationImportances: [String]
+    /// 通知の対象通貨ペアの上限。nilは無制限。
+    let notificationFxPairsMax: Int?
+    /// 過去イベント比較に使う回数。
+    let historyEventsMax: Int
+    /// 指標ごとに値を見られる過去の発表の回数(api-design v1.33 §28.2)。nilは上限なし。
+    /// 古いBackend(項目なし)ではnil。どの発表を隠すかは各Responseの`locked`で判断する。
+    var pastReleasesMax: Int? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case calendarEarliestFrom = "calendar_earliest_from"
+        case calendarLatestTo = "calendar_latest_to"
+        case favoritesMax = "favorites_max"
+        case notificationImportances = "notification_importances"
+        case notificationFxPairsMax = "notification_fx_pairs_max"
+        case historyEventsMax = "history_events_max"
+        case pastReleasesMax = "past_releases_max"
+    }
+
+    /// 無料プラン: カレンダーは先月の1日から、お気に入り3件、通知はHIGHと通貨ペア1つ、比較は3回
+    /// (HQ指摘 2026-11-10: このコメント自体がv1.37のFREE 5→3変更に追従していなかった)、
+    /// 過去の発表は指標ごとに直近3回。
+    static func free(now: Date = Date(), calendar: Calendar = .current) -> PlanLimits {
+        PlanLimits(
+            calendarEarliestFrom: monthStart(offset: -1, from: now, calendar: calendar),
+            calendarLatestTo: yearStart(offset: 2, from: now, calendar: calendar),
+            favoritesMax: 3,
+            notificationImportances: ["HIGH"],
+            notificationFxPairsMax: 1,
+            historyEventsMax: 3, // v1.37: FREE 5 → 3(Backend の planLimits.ts と同じ)
+            pastReleasesMax: 3
+        )
+    }
+
+    /// プレミアムプラン: カレンダーは5年前の1月から、ほかは無制限(過去の発表も)、比較は20回。
+    static func pro(now: Date = Date(), calendar: Calendar = .current) -> PlanLimits {
+        PlanLimits(
+            calendarEarliestFrom: yearStart(offset: -5, from: now, calendar: calendar),
+            calendarLatestTo: yearStart(offset: 2, from: now, calendar: calendar),
+            favoritesMax: nil,
+            notificationImportances: ["HIGH", "MEDIUM", "LOW"],
+            notificationFxPairsMax: nil,
+            historyEventsMax: 20,
+            pastReleasesMax: nil
+        )
+    }
+
+    private static func monthStart(offset: Int, from now: Date, calendar: Calendar) -> Date {
+        let start = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
+        return calendar.date(byAdding: .month, value: offset, to: start) ?? start
+    }
+
+    private static func yearStart(offset: Int, from now: Date, calendar: Calendar) -> Date {
+        let start = calendar.date(from: calendar.dateComponents([.year], from: now)) ?? now
+        return calendar.date(byAdding: .year, value: offset, to: start) ?? start
+    }
+}

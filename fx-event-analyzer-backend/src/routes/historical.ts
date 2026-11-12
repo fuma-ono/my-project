@@ -1,0 +1,392 @@
+import type { FastifyInstance } from 'fastify';
+import { ApiError } from '../errors/ApiError.js';
+import { assertEntitlement, FEATURE_CODES, listActiveFeatureCodes } from '../authorization/entitlements.js';
+import { requireUnlockedEventForPlan, resolvePastReleaseAccessForPlan } from '../authorization/pastReleaseAccess.js';
+import {
+  accessFields,
+  nullFields,
+  pastReleaseLimitFor,
+  pastReleasesMaxFor,
+  PREVIOUS_VALUE_FIELDS,
+  redactRelease,
+} from '../domain/pastReleaseAccess.js';
+import { requireEntitlementAndResolvePlan } from '../authorization/plan.js';
+import { getEventById, getLatestExplanation, getReleaseSnapshot } from '../repositories/eventsRepository.js';
+import { getIndicatorById, listRelatedFxPairs } from '../repositories/indicatorsRepository.js';
+import {
+  listAvailableReactionsForComparison,
+  listCoReleasedEvents,
+  listMinuteCandleCompleteness,
+  listRecentReleasedEventIds,
+  listReleasedEventsForIndicator,
+  getStrategyPair,
+  listReleasedEventsBefore,
+  listStrategyPairCandidates,
+  listStrategyReactions,
+} from '../repositories/historicalRepository.js';
+import { groupByMarketEvent, coReleasedRows, summarizeMarketEventCoverage } from '../domain/marketEventGrouping.js';
+import { listReactionsForPair } from '../repositories/reactionsRepository.js';
+import { computeAdvancedHistoricalStats, computeHistoricalStats } from '../domain/historicalStatistics.js';
+import { gateAdvancedStatistics } from '../domain/advancedStatistics.js';
+import { resolveTimeframeAnalysisStatus, type ReleaseDatetimePrecision } from '../domain/dataQuality.js';
+import { valueDecimalsForIndicator } from '../domain/valueDecimals.js';
+import { capRowRange, historyLimitFor, planFromFeatures, planLimitsFor } from '../domain/planLimits.js';
+import { comparisonQuerySchema } from '../schemas/historical.js';
+import { z } from 'zod';
+import {
+  buildStrategyAnalysis,
+  isUsableStrategyPair,
+  selectDefaultStrategyPair,
+  STRATEGY_SAMPLE_WINDOW,
+  STRATEGY_TIMEFRAMES,
+} from '../domain/eventStrategyAnalysis.js';
+import { buildMeta, parsePagination, rangeFor } from '../utils/pagination.js';
+
+const ALL_TIMEFRAMES = ['1m', '5m', '15m', '30m', '60m'] as const;
+/** 過去イベント比較の表の列(HQ指示 2026-10-14、api-design v1.26)。各発表の1分・5分・15分のpips。 */
+const TABLE_TIMEFRAMES = ['1m', '5m', '15m'] as const;
+
+/**
+ * 各発表に、表の列の時間足ごとのpips(無ければ null)を付ける。無料プランで
+ * ロックされた発表(HQ指示 2026-10-22、api-design.md 21章)は、一覧(13.3節)と
+ * 同じく forecast/actual/previous/surprise/surprise_direction を null にし、
+ * pips もすべて null(キーは残す)にして `locked: true`・`required_plan: "PRO"` を付ける。
+ */
+function toComparisonRows<T extends { event_id: string }>(
+  events: T[],
+  reactionRows: { event_id: string; timeframe: string; pips: number | null }[],
+  lockedIds: ReadonlySet<string>,
+  previousLockedIds: ReadonlySet<string>,
+) {
+  return events.map((event) => {
+    const locked = lockedIds.has(event.event_id);
+    const pips: Record<string, number | null> = {};
+    for (const timeframe of TABLE_TIMEFRAMES) {
+      const row = locked
+        ? undefined
+        : reactionRows.find((r) => r.event_id === event.event_id && r.timeframe === timeframe);
+      pips[timeframe] = row?.pips ?? null;
+    }
+    return { ...redactRelease(event, locked, previousLockedIds.has(event.event_id)), pips_by_timeframe: pips };
+  });
+}
+
+// HQ指示(2026-11-09 P0): z.string().uuid()(zod v4 は RFC の版・variant まで確かめる)だと、seed・DEV の通貨ペアの id
+// (20000000-0000-0000-0000-000000000002 など)が 422 になっていた。ほかのルート(schemas/speeches.ts 等)と同じ z.guid()。
+const strategyQuerySchema = z.object({ fx_pair_id: z.guid().optional() });
+
+export function registerHistoricalRoutes(app: FastifyInstance): void {
+  // GET /events/{event_id}/history — api-design.md §20.
+  app.get<{ Params: { event_id: string } }>('/events/:event_id/history', async (request) => {
+    const userId = request.user!.id;
+    const plan = await requireEntitlementAndResolvePlan(app.supabase, userId, FEATURE_CODES.VIEW_HISTORICAL);
+
+    const { event_id: eventId } = request.params;
+    const event = await getEventById(app.supabase, eventId);
+    if (!event) {
+      throw new ApiError('EVENT_NOT_FOUND', 'Event not found.');
+    }
+    // HQ判断 2026-10-22: 親の発表がロックされていれば 403 PLAN_LIMIT_EXCEEDED。
+    // ひとつ前の発表がロックされていれば、「前回」と解説を隠す(GET /events/{id} と同じ)。
+    const { previousLocked } = await requireUnlockedEventForPlan(app.supabase, plan, event);
+
+    const [rawSnapshot, explanation, relatedFxPairs] = await Promise.all([
+      getReleaseSnapshot(app.supabase, eventId),
+      previousLocked ? Promise.resolve(null) : getLatestExplanation(app.supabase, eventId),
+      listRelatedFxPairs(app.supabase, event.indicator_id),
+    ]);
+
+    const snapshot = rawSnapshot && previousLocked ? nullFields(rawSnapshot, PREVIOUS_VALUE_FIELDS) : rawSnapshot;
+    const precision = event.release_datetime_precision as ReleaseDatetimePrecision;
+
+    const reactionsByPair = await Promise.all(
+      relatedFxPairs.map(async (pair) => {
+        const reactions = await listReactionsForPair(app.supabase, eventId, pair.fx_pair_id);
+        return {
+          fx_pair_id: pair.fx_pair_id,
+          symbol: pair.symbol,
+          // api-design.md §7.1: never leak the raw DB data_status value —
+          // always the API-contract analysis_status (READY/DATA_PENDING/
+          // DATA_UNAVAILABLE/NOT_ANALYZABLE).
+          reactions: reactions.map(({ data_status: dataStatus, ...rest }) => ({
+            ...rest,
+            analysis_status: resolveTimeframeAnalysisStatus(
+              rest.timeframe as '1m' | '5m' | '15m' | '30m' | '60m',
+              precision,
+              dataStatus as 'PENDING' | 'AVAILABLE' | 'UNAVAILABLE',
+            ),
+          })),
+        };
+      }),
+    );
+
+    return {
+      indicator_id: event.indicator_id,
+      event: {
+        id: event.id,
+        indicator_name: event.indicator_name,
+        display_name: event.indicator_display_name,
+        release_datetime: event.release_datetime,
+        importance: event.importance,
+        // v1.46: 値を表示する小数の桁数(domain/valueDecimals.ts)
+        value_decimals: valueDecimalsForIndicator(event.indicator_code),
+        ...accessFields(false, previousLocked),
+      },
+      snapshot: snapshot ?? null,
+      explanation: explanation ?? null,
+      related_fx_pairs: reactionsByPair,
+    };
+  });
+
+  // GET /indicators/{indicator_id}/comparison — api-design.md §21. Only the
+  // plan's history_events_max most recent releases are listed — for stats and
+  // for the paginated `events` alike (§28.1); `history_limit` reports the cap.
+  // FREE (HQ指示 2026-10-22): rows locked by the past-release limit (§28.2,
+  // same visible_released_event_ids rule as the list/detail) are listed with
+  // their values hidden, and every statistic / count is computed from the
+  // unlocked rows only, so locked values cannot be derived from aggregates.
+  // Pro イベント別トレード戦略分析(HQ指示 2026-11-06、api-design v1.48): 同じ指標の、この発表より前の RELEASED の直近
+  // STRATEGY_SAMPLE_WINDOW 回の保存済みの値動き・スナップショットから傾向を数える(domain/eventStrategyAnalysis.ts)。
+  // Pro の機能(VIEW_ADVANCED_STATS)。持っていない利用者には 403 にせず available: false(高度な統計と同じ段階的な開示)。
+  app.get<{ Params: { event_id: string } }>('/events/:event_id/strategy-analysis', async (request) => {
+    const userId = request.user!.id;
+    const features = await listActiveFeatureCodes(app.supabase, userId);
+    assertEntitlement(features, FEATURE_CODES.VIEW_BASIC_EVENT);
+    const { event_id: eventId } = request.params;
+    const query = strategyQuerySchema.parse(request.query);
+    const event = await getEventById(app.supabase, eventId);
+    if (!event) {
+      throw new ApiError('EVENT_NOT_FOUND', 'Event not found.');
+    }
+    if (!features.includes(FEATURE_CODES.VIEW_ADVANCED_STATS)) {
+      return {
+        event_id: eventId,
+        available: false,
+        required_entitlement: 'VIEW_ADVANCED_STATS',
+        fx_pair: null,
+        analysis: null,
+      };
+    }
+    // HQ指示(2026-11-10「重複排除・集計改善・AI分析基盤の整備」STEP1): この発表が、他の指標と同時発表(同じ provider・
+    // release_datetime)かどうか(例: 米雇用統計の NFP・失業率・平均時給は同じ1回の発表)。既存の列だけで計算する
+    // (DB変更なし)。provider が無い発表・release_datetime_precision が EXACT でない発表は判定しない(誤って
+    // 同一視しない、domain/marketEventGrouping.ts。HQ指示 2026-11-10「実動作検証」で発見: Eurostat由来の
+    // EU_HICP・EU_UNEMPLOYMENT_RATE はどちらも時刻が APPROXIMATE で、確認できない時刻の偶然の一致が実在した)。
+    const selfMarketRow = {
+      event_id: event.id,
+      indicator_id: event.indicator_id,
+      indicator_code: event.indicator_code,
+      provider: event.provider,
+      release_datetime: event.release_datetime,
+      release_datetime_precision: event.release_datetime_precision,
+    };
+    const coReleasedSource = await listCoReleasedEvents(app.supabase, [selfMarketRow]);
+    const coReleasedGroups = groupByMarketEvent([selfMarketRow, ...coReleasedSource]);
+    const coReleasedIndicators = coReleasedRows(coReleasedGroups, event.id).map((r) => ({
+      indicator_id: r.indicator_id,
+      indicator_code: r.indicator_code,
+    }));
+    // HQ指示(2026-11-10「実動作検証」STEP2「最重要」): summarizeMarketEventCoverageを実際の応答に反映する。
+    // この発表自身のグループ(自分＋同時発表の指標)だけを渡すので、independent_market_eventsは常に1
+    // (このグループ自体が1つの市場イベントであることの表現)、indicator_countが「何指標が束ねられているか」
+    // (例: 米雇用統計のNFP単体なら1、NFP・失業率・平均時給が同時発表なら3)。
+    const ownGroup = coReleasedGroups.find((g) => g.events.some((e) => e.event_id === event.id))!;
+    const coverage = summarizeMarketEventCoverage([ownGroup]);
+    const marketEventCoverage = {
+      independent_market_events: coverage.independentMarketEvents,
+      indicator_count: coverage.indicatorEventCount,
+    };
+    // HQ指示(2026-11-09 P0「通貨ペアの選択・並び順」): 使えるペアは、有効で指標の通貨を含むものだけ(値動きはそのペアに
+    // しか計算されない)。?fx_pair_id がそれ以外(存在しない・無効・指標の通貨を含まない)なら 404。指定が無ければ
+    // 関連の通貨ペアから selectDefaultStrategyPair(priority → 主要ペアの順 → symbol)。
+    let pair: { fx_pair_id: string; symbol: string } | null;
+    if (query.fx_pair_id) {
+      const requested = await getStrategyPair(app.supabase, query.fx_pair_id);
+      if (!requested || !isUsableStrategyPair(requested, event.currency_code)) {
+        throw new ApiError('FX_PAIR_NOT_FOUND', 'FX pair not found.');
+      }
+      pair = requested;
+    } else {
+      pair = selectDefaultStrategyPair(
+        await listStrategyPairCandidates(app.supabase, event.indicator_id),
+        event.currency_code,
+      );
+    }
+    if (!pair) {
+      // 比べる通貨ペアが無い指標(使える関連の通貨ペアが無い): 何も推測しない。
+      return {
+        event_id: eventId,
+        available: true,
+        required_entitlement: null,
+        fx_pair: null,
+        co_released_indicators: coReleasedIndicators,
+        market_event_coverage: marketEventCoverage,
+        analysis: null,
+      };
+    }
+    const releases = await listReleasedEventsBefore(
+      app.supabase,
+      event.indicator_id,
+      event.release_datetime,
+      STRATEGY_SAMPLE_WINDOW,
+    );
+    const reactions = await listStrategyReactions(
+      app.supabase,
+      releases.map((r) => r.event_id),
+      pair.fx_pair_id,
+      STRATEGY_TIMEFRAMES,
+    );
+    // HQ指示(2026-11-07「1分足欠損への対応」): 15分・60分のブレイク判定だけに使う、1分足の欠損確認(1分・5分判定には使わない)。
+    const completeness = await listMinuteCandleCompleteness(app.supabase, releases, pair.fx_pair_id);
+    const analysis = buildStrategyAnalysis(
+      releases.map((release) => ({
+        event_id: release.event_id,
+        release_datetime: release.release_datetime,
+        release_datetime_precision: release.release_datetime_precision,
+        forecast: release.forecast === null ? null : Number(release.forecast),
+        actual: release.actual === null ? null : Number(release.actual),
+        surprise: release.surprise === null ? null : Number(release.surprise),
+        surprise_direction: release.surprise_direction,
+        reactions: reactions.filter((r) => r.event_id === release.event_id),
+        minuteCompleteness15m: completeness.get(release.event_id)?.complete15m ?? false,
+        minuteCompleteness60m: completeness.get(release.event_id)?.complete60m ?? false,
+      })),
+      pair.symbol,
+      event.currency_code,
+    );
+    return {
+      event_id: eventId,
+      available: true,
+      required_entitlement: null,
+      fx_pair: { fx_pair_id: pair.fx_pair_id, symbol: pair.symbol },
+      co_released_indicators: coReleasedIndicators,
+      market_event_coverage: marketEventCoverage,
+      analysis,
+    };
+  });
+
+  app.get<{ Params: { indicator_id: string } }>('/indicators/:indicator_id/comparison', async (request) => {
+    const userId = request.user!.id;
+    // 機能の確認・高度な統計・プランを1回の読み込みで(このリクエストではもう読まない)。
+    const features = await listActiveFeatureCodes(app.supabase, userId);
+    assertEntitlement(features, FEATURE_CODES.VIEW_HISTORICAL);
+
+    const { indicator_id: indicatorId } = request.params;
+    const indicator = await getIndicatorById(app.supabase, indicatorId);
+    if (!indicator) {
+      throw new ApiError('INDICATOR_NOT_FOUND', 'Indicator not found.');
+    }
+
+    const query = comparisonQuerySchema.parse(request.query);
+    const pagination = parsePagination(query);
+    const hasAdvanced = features.includes(FEATURE_CODES.VIEW_ADVANCED_STATS);
+    const plan = planFromFeatures(features);
+    const historyMax = planLimitsFor(plan).history_events_max;
+
+    const allEventIds = await listRecentReleasedEventIds(app.supabase, indicatorId, historyMax);
+    const pageRange = capRowRange(rangeFor(pagination.page, pagination.limit), historyMax);
+    const { rows: events, total: releasedTotal } = pageRange
+      ? await listReleasedEventsForIndicator(app.supabase, indicatorId, pageRange)
+      : { rows: [], total: allEventIds.length };
+    const total = Math.min(releasedTotal, historyMax);
+    const historyLimit = historyLimitFor(plan, allEventIds.length);
+    const { lockedIds, previousLockedIds } = await resolvePastReleaseAccessForPlan(
+      app.supabase,
+      plan,
+      allEventIds.map((id) => ({ id, indicator_id: indicatorId, status: 'RELEASED' })),
+    );
+    // 統計・件数に使う発表(ロックされた発表の値は読まない)。
+    const statsEventIds = allEventIds.filter((id) => !lockedIds.has(id));
+    // FREE: 統計に使う発表以外はすべてロック(2つの読み込みの間に新しい発表が
+    // 入って一覧の行がずれても、値を見せる行は statsEventIds の中だけ)。
+    const unlockedIds = new Set(statsEventIds);
+    const rowLockedIds =
+      pastReleasesMaxFor(plan) === null
+        ? new Set<string>()
+        : new Set(events.map((event) => event.event_id).filter((id) => !unlockedIds.has(id)));
+
+    const timeframes = query.timeframe === 'all' ? [...ALL_TIMEFRAMES] : [query.timeframe];
+    // 統計は選んだ時間足だけ。表の1分・5分・15分のために、その3つも一緒に読む。
+    const fetchTimeframes = [...new Set<string>([...timeframes, ...TABLE_TIMEFRAMES])];
+    const fetchedRows = await listAvailableReactionsForComparison(
+      app.supabase,
+      statsEventIds,
+      query.fx_pair_id,
+      fetchTimeframes,
+    );
+    const reactionRows = fetchedRows.filter((row) => (timeframes as string[]).includes(row.timeframe));
+    const analyzableEventIds = new Set(reactionRows.map((row) => row.event_id));
+    const eventsWithPips = toComparisonRows(events, fetchedRows, rowLockedIds, previousLockedIds);
+
+    if (query.timeframe !== 'all') {
+      const rowsForStats = reactionRows.map((row) => ({ movement: row.movement ?? 0, pips: row.pips ?? 0 }));
+      const stats = computeHistoricalStats(rowsForStats);
+      const advanced = computeAdvancedHistoricalStats(rowsForStats);
+
+      return {
+        indicator: {
+          id: indicator.id,
+          code: indicator.code,
+          name: indicator.name,
+          display_name: indicator.display_name,
+          country_code: indicator.country_code,
+          currency_code: indicator.currency_code,
+          unit: indicator.unit,
+          // v1.46: events の値を表示する小数の桁数(domain/valueDecimals.ts)
+          value_decimals: valueDecimalsForIndicator(indicator.code),
+        },
+        fx_pair_id: query.fx_pair_id,
+        timeframe: query.timeframe,
+        total_events: statsEventIds.length,
+        analyzable_events: analyzableEventIds.size,
+        stats: stats ?? {
+          average_movement: null,
+          average_pips: null,
+          max_movement: null,
+          min_movement: null,
+          upward_count: 0,
+          downward_count: 0,
+          no_change_count: 0,
+        },
+        advanced_statistics: gateAdvancedStatistics(hasAdvanced, advanced),
+        events: eventsWithPips,
+        meta: buildMeta(pagination.page, pagination.limit, total),
+        history_limit: historyLimit,
+        past_release_limit: pastReleaseLimitFor(plan),
+      };
+    }
+
+    const statsByTimeframe = ALL_TIMEFRAMES.map((timeframe) => {
+      const rowsForTimeframe = reactionRows
+        .filter((row) => row.timeframe === timeframe)
+        .map((row) => ({ movement: row.movement ?? 0, pips: row.pips ?? 0 }));
+      return {
+        timeframe,
+        stats: computeHistoricalStats(rowsForTimeframe),
+        advanced_statistics: gateAdvancedStatistics(hasAdvanced, computeAdvancedHistoricalStats(rowsForTimeframe)),
+      };
+    });
+
+    return {
+      indicator: {
+        id: indicator.id,
+        code: indicator.code,
+        name: indicator.name,
+        display_name: indicator.display_name,
+        country_code: indicator.country_code,
+        currency_code: indicator.currency_code,
+        unit: indicator.unit,
+        // v1.46: events の値を表示する小数の桁数(domain/valueDecimals.ts)
+        value_decimals: valueDecimalsForIndicator(indicator.code),
+      },
+      fx_pair_id: query.fx_pair_id,
+      total_events: statsEventIds.length,
+      analyzable_events: analyzableEventIds.size,
+      stats_by_timeframe: statsByTimeframe,
+      events: eventsWithPips,
+      meta: buildMeta(pagination.page, pagination.limit, total),
+      history_limit: historyLimit,
+      past_release_limit: pastReleaseLimitFor(plan),
+    };
+  });
+}

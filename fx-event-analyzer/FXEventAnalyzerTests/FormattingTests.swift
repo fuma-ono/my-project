@@ -1,0 +1,256 @@
+import SwiftUI
+import XCTest
+@testable import FXEventAnalyzer
+
+final class ValueFormatTests: XCTestCase {
+    func testNumberFormatsNilAsPlaceholder() {
+        XCTAssertEqual(ValueFormat.number(nil), "--")
+    }
+
+    func testNumberFormatsPositiveValueWithoutSignByDefault() {
+        XCTAssertEqual(ValueFormat.number(3.2), "3.2")
+    }
+
+    func testNumberFormatsSignedPositiveValueWithPlusPrefix() {
+        XCTAssertEqual(ValueFormat.number(0.2, signed: true), "+0.2")
+    }
+
+    func testNumberFormatsSignedNegativeValueWithMinus() {
+        XCTAssertEqual(ValueFormat.number(-0.2, signed: true), "-0.2")
+    }
+
+    func testPercentFormatsNilAsPlaceholder() {
+        XCTAssertEqual(ValueFormat.percent(nil), "--")
+    }
+
+    func testPercentAppendsPercentSign() {
+        XCTAssertEqual(ValueFormat.percent(0.19, signed: true), "+0.19%")
+    }
+
+    func testPipsFormatsNilAsPlaceholder() {
+        XCTAssertEqual(ValueFormat.pips(nil), "--")
+    }
+
+    func testPipsAppendsUnitSuffix() {
+        XCTAssertEqual(ValueFormat.pips(28.0), "+28 pips")
+    }
+
+    func testCountdownReturnsNilForAPastDate() {
+        let past = Date().addingTimeInterval(-60)
+        XCTAssertNil(ValueFormat.countdown(to: past))
+    }
+
+    func testCountdownReturnsMinutesForANearFutureDate() {
+        let now = Date()
+        let future = now.addingTimeInterval(30 * 60)
+        XCTAssertEqual(ValueFormat.countdown(to: future, from: now), "30分後")
+    }
+
+    func testCountdownReturnsHoursAndMinutesForALaterFutureDate() {
+        let now = Date()
+        let future = now.addingTimeInterval(90 * 60)
+        XCTAssertEqual(ValueFormat.countdown(to: future, from: now), "1時間30分後")
+    }
+
+    // MARK: - surpriseComparisonLabel (Phase 5 §8 UX audit follow-up)
+
+    func testSurpriseComparisonLabelReturnsNilForNoSurprise() {
+        XCTAssertNil(ValueFormat.surpriseComparisonLabel(nil))
+    }
+
+    func testSurpriseComparisonLabelForAPositiveSurprise() {
+        XCTAssertEqual(ValueFormat.surpriseComparisonLabel(0.2), "予想を上回る結果")
+    }
+
+    func testSurpriseComparisonLabelForANegativeSurprise() {
+        XCTAssertEqual(ValueFormat.surpriseComparisonLabel(-0.2), "予想を下回る結果")
+    }
+
+    func testSurpriseComparisonLabelForAZeroSurprise() {
+        XCTAssertEqual(ValueFormat.surpriseComparisonLabel(0), "予想通りの結果")
+    }
+}
+
+final class CountryFlagTests: XCTestCase {
+    func testEmojiConvertsAValidTwoLetterCode() {
+        XCTAssertEqual(CountryFlag.emoji(for: "US"), "\u{1F1FA}\u{1F1F8}")
+        XCTAssertEqual(CountryFlag.emoji(for: "jp"), "\u{1F1EF}\u{1F1F5}")
+    }
+
+    func testEmojiFallsBackToRawCodeForUnexpectedInput() {
+        XCTAssertEqual(CountryFlag.emoji(for: "EUR"), "EUR")
+    }
+}
+
+final class ValueFormatUnitTests: XCTestCase {
+    func testWithUnit() {
+        XCTAssertEqual(ValueFormat.withUnit(2.9, unit: "%"), "2.9%")
+        XCTAssertEqual(ValueFormat.withUnit(180, unit: "千人"), "18.0万人")
+        XCTAssertEqual(ValueFormat.withUnit(175, unit: "K"), "17.5万人")
+        XCTAssertEqual(ValueFormat.withUnit(4.5, unit: nil), "4.5")
+    }
+
+    func testHomeEventWithoutUnitDecodesToNil() throws {
+        let json = Data(#"{"event_id":"e","indicator_id":"i","indicator_name":"n","country_code":"US","currency_code":"USD","importance":"HIGH","release_datetime":"2026-10-08T00:00:00Z","release_datetime_precision":"EXACT","status":"SCHEDULED","data_status":"DATA_PENDING","forecast":null,"actual":null,"previous":null,"surprise":null,"surprise_direction":null,"related_fx_pairs":[]}"#.utf8)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom(BackendDate.decode)
+        XCTAssertNil(try decoder.decode(HomeEventSummary.self, from: json).unit)
+    }
+}
+
+final class MovementAnalysisTextTests: XCTestCase {
+    private func entry(_ timeframe: String, _ pips: Double?, status: DataQualityStatus = .ready) -> ReactionTimeframeEntry {
+        ReactionTimeframeEntry(timeframe: timeframe, postReleasePrice: nil, movement: nil, pips: pips, changePercent: nil,
+                               maxUpward: nil, maxDownward: nil, maxUpwardPips: nil, maxDownwardPips: nil, analysisStatus: status)
+    }
+
+    func testShortTextWithTheGeneralView() {
+        let text = MovementAnalysisText.build(
+            reactions: [entry("1m", -8.2), entry("5m", -24.5), entry("15m", -41.3), entry("60m", -38.9)],
+            actual: 3.1, forecast: 3.2, unit: "%",
+            marketViewAbove: "上回るとドルが買われやすいとされる。", marketViewBelow: "下回るとドルが売られやすいとされる。"
+        )
+        XCTAssertEqual(text, "結果は予想を0.1%下回った。下回るとドルが売られやすいとされる。発表後1分で8.2pips、15分で41.3pips下落した。")
+    }
+
+    func testSummarySeparatesFactsAndInterpretation() {
+        let summary = MovementAnalysisText.summary(
+            reactions: [entry("1m", -8.2), entry("15m", -41.3)], actual: 3.1, forecast: 3.2, unit: "%",
+            marketViewAbove: "上", marketViewBelow: "下回るとドルが売られやすいとされる。"
+        )
+        XCTAssertEqual(summary?.facts.map(\.label), ["発表結果", "初動（1分）", "15分後"])
+        XCTAssertEqual(summary?.facts.map(\.value), ["予想を0.1ポイント下回る", "-8.2 pips", "-41.3 pips"])
+        XCTAssertEqual(summary?.interpretation, "下回るとドルが売られやすいとされる。")
+    }
+
+    func testReversalAndMissingData() {
+        let text = MovementAnalysisText.build(reactions: [entry("1m", 5), entry("15m", -3)], actual: nil, forecast: nil, unit: nil)
+        XCTAssertEqual(text, "発表後1分で5pips上昇したが、15分後には3pips下落した。")
+        XCTAssertNil(MovementAnalysisText.build(reactions: [entry("1m", nil, status: .dataPending)], actual: 1, forecast: 1, unit: nil))
+    }
+}
+
+/// `IndicatorDetailCard`は以前、独自の`splitName`(国名接頭辞を残したまま
+/// 括弧で割るだけ)を使っていたため指標名が「米国CPI」のまま表示される
+/// 不具合があった(HQ指示 2026-10-13)。Home/検索/イベント詳細と同じ
+/// `CountryFlag.indicatorDisplayName`(国名接頭辞を取り除く)に揃えたため、
+/// このテストもそちらを検証する。
+final class IndicatorDisplayNameTests: XCTestCase {
+    func testStripsCountryPrefixAndSplitsAbbreviation() {
+        let display = CountryFlag.indicatorDisplayName("米国CPI(消費者物価指数)", countryCode: "US")
+        XCTAssertEqual(display.main, "消費者物価指数")
+        XCTAssertEqual(display.abbreviation, "CPI")
+    }
+
+    func testNoAbbreviationWhenThereIsNoParenthesis() {
+        XCTAssertNil(CountryFlag.indicatorDisplayName("FOMC政策金利", countryCode: "US").abbreviation)
+        // 要人の頭文字: 「・」区切りは姓の1文字目、それ以外は1文字目。
+        XCTAssertEqual(SpeakerAvatar.initial(of: "クリストファー・ウォラー"), "ウ")
+        XCTAssertEqual(SpeakerAvatar.initial(of: "植田和男"), "植")
+        XCTAssertEqual(SpeakerAvatar.initial(of: "パウエルFRB理事"), "パ")
+        // 写真のURLが無い・正しくないときは頭文字。
+        XCTAssertEqual(SpeakerAvatar.content(photoURL: nil, phase: nil), .initials)
+        XCTAssertEqual(SpeakerAvatar.content(photoURL: "", phase: nil), .initials)
+        XCTAssertEqual(SpeakerAvatar.content(photoURL: "speaker-photos/powell.jpg", phase: nil), .initials)
+        // 読み込み中・読み込み失敗も頭文字、読み込めたときだけ写真。
+        let url = "https://example.com/api/v1/speaker-photos/powell.jpg"
+        XCTAssertEqual(SpeakerAvatar.content(photoURL: url, phase: .empty), .initials)
+        XCTAssertEqual(SpeakerAvatar.content(photoURL: url, phase: .failure(URLError(.notConnectedToInternet))), .initials)
+        XCTAssertEqual(SpeakerAvatar.content(photoURL: url, phase: .success(Image(systemName: "person"))), .photo)
+        // 小さい表示(ホームの要人発言 16pt)では国旗の印を付けない。
+        XCTAssertFalse(SpeakerAvatar.showsFlagBadge(size: 16))
+        XCTAssertTrue(SpeakerAvatar.showsFlagBadge(size: 34))
+        // 過去イベント比較の表の書式(参考画像「3.1%」「-8.2」「+2.1」)。
+        XCTAssertEqual(HistoricalComparisonView.valueText(3.1, unit: "%"), "3.1%")
+        XCTAssertEqual(HistoricalComparisonView.valueText(3.25, unit: "%"), "3.25%")
+        XCTAssertEqual(HistoricalComparisonView.valueText(250, unit: "千人"), "250.0")
+        XCTAssertEqual(HistoricalComparisonView.valueText(nil, unit: "%"), "--")
+        XCTAssertEqual(HistoricalComparisonView.pipsText(-8.2), "-8.2")
+        XCTAssertEqual(HistoricalComparisonView.pipsText(2.1), "+2.1")
+        XCTAssertEqual(HistoricalComparisonView.pairLabel("USDJPY"), "USD/JPY")
+        XCTAssertEqual(HistoricalComparisonView.pairLabel("EUR/USD"), "EUR/USD")
+        // groupHeaderRow(「前年」ラベル行)はshowSecondaryに関わらず常に描画
+        // されるため、表の高さも常にgroupHeaderHeightを含む(HQ指摘2026-11-02
+        // 「前年前月ありの方が余白が広く見える」で発覚した根本原因: 以前は
+        // showSecondary: falseのときだけこの11ptを計上し忘れており、実際の
+        // 描画より式の見積もりが11pt小さく、その分だけ下の余白が目減りして
+        // 最終行が見切れていた)。
+        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: false), 24 + 11 + 7 * 22.5 + 6)
+        XCTAssertEqual(HistoricalComparisonView.tableHeight(rows: 7, limited: false, showSecondary: true), 24 + 11 + 7 * 22.5 + 6)
+        // ユーザー指摘(2026-11-04、実機TestFlight確認)「横画面の表の下行と
+        // 外枠に余白がありすぎる」: 横画面の表(`landscapeTable`)のScrollView
+        // は以前`.frame(maxHeight: 250)`のみで、行数に関わらず250まで
+        // 広がってしまい、無料プランの3件のような少ない行数では最終行の下に
+        // 大きな空白が残っていた。縦画面の`tableHeight(rows:...)`と同じく、
+        // 実際の行数から中身の高さを計算するよう修正した
+        // (`landscapeTableContentHeight`)。
+        XCTAssertEqual(HistoricalComparisonView.landscapeTableContentHeight(rows: 3), 3 * 44 + 2 * 0.5)
+        XCTAssertEqual(HistoricalComparisonView.landscapeTableContentHeight(rows: 1), 44)
+        // 行が無いときも最低1行分として扱う(呼び出し元の`landscapeTable`は
+        // 実際には0件のとき専用の空表示に分岐するため通常は起きないが、
+        // 負の高さにならないことを確認しておく)。
+        XCTAssertEqual(HistoricalComparisonView.landscapeTableContentHeight(rows: 0), 44)
+        // HQ指摘(2026-10-28)「8/7の行が常時見切れている」: 最終行の実機はみ出しを
+        // 防ぐ固定の余白(2026-10-30再指摘「3つ目が見切れる」で4→10、2026-10-31
+        // 再指摘「余白が大きい」で10→6と調整し、根本原因修正後は両方とも
+        // 安全確認済みの10ptで統一、HQ再指摘(2026-11-04)でさらに10→6に
+        // 戻した)が、行数・前年/前月の有無に関わらず常に足されている。
+        // HQ指摘(2026-10-29、7回目)「横画面が直っていない」: OSのインター
+        // フェース回転をやめ、`UIDevice.orientation`を見た見かけ上の
+        // `.rotationEffect`に切り替えた。回転方向(Appleの定義: landscapeLeft
+        // =ホームボタンが右に来る向き=端末を反時計回りに回した状態なので、
+        // 中身は時計回りに+90°で正立)を単体テストで固定する。
+        XCTAssertEqual(HistoricalComparisonView.rotationAngle(for: .landscapeLeft), .degrees(90))
+        XCTAssertEqual(HistoricalComparisonView.rotationAngle(for: .landscapeRight), .degrees(-90))
+        XCTAssertEqual(HistoricalComparisonView.rotationAngle(for: .portrait), .degrees(0))
+        XCTAssertEqual(HistoricalComparisonView.rotationAngle(for: .faceUp), .degrees(0))
+        // イベント詳細の結果/予想/前回カード(api-design v1.35、HQ指示2026-10-25「前年比を記載」)。
+        XCTAssertEqual(EventDetailCards.secondaryLabel("MOM_PCT"), "前月比")
+        XCTAssertEqual(EventDetailCards.secondaryLabel("YOY_PCT"), "前年比")
+        XCTAssertNil(EventDetailCards.secondaryLabel(nil))
+        XCTAssertEqual(EventDetailCards.primaryLabel(forSecondary: "MOM_PCT"), "前年比")
+        XCTAssertEqual(EventDetailCards.primaryLabel(forSecondary: "YOY_PCT"), "前月比")
+        XCTAssertNil(EventDetailCards.primaryLabel(forSecondary: nil))
+        // 前回比の単位(HQ指示2026-11-01): 値そのもの(%)とは別に、率の差分は「ポイント」。
+        // 対象8指標(CPI・Core CPI・PPI・Core PPI・平均時給・失業率・EU HICP・EU失業率)はunitが
+        // すべて"%"で共通のため、unit文字列だけで判定できる。
+        XCTAssertEqual(EventDetailCards.changeFromPrevious(actual: 3.1, previous: 3.3, unit: "%"), "(前回比 -0.2ポイント)")
+        XCTAssertEqual(EventDetailCards.changeFromPrevious(actual: 3.3, previous: 3.1, unit: "%"), "(前回比 +0.2ポイント)")
+        XCTAssertEqual(EventDetailCards.changeFromPrevious(actual: 3.1, previous: 3.1, unit: "%"), "(前回比 ±0ポイント)")
+        // NFP(unit: "千人"/"K")は既存の万人変換のまま、ポイント表記にはしない。
+        XCTAssertEqual(EventDetailCards.changeFromPrevious(actual: 254, previous: 200, unit: "千人"), "(前回比 +5.4万人)")
+        XCTAssertEqual(EventDetailCards.changeFromPrevious(actual: 254, previous: 200, unit: "K"), "(前回比 +5.4万人)")
+        // 単位が無い指標は従来どおり(変更なし)。
+        XCTAssertEqual(EventDetailCards.changeFromPrevious(actual: 5, previous: 3, unit: nil), "(前回比 +2)")
+        // 欠損値はnil(ロック表示・欠損表示に影響しない)。
+        XCTAssertNil(EventDetailCards.changeFromPrevious(actual: nil, previous: 3, unit: "%"))
+        XCTAssertNil(EventDetailCards.changeFromPrevious(actual: 5, previous: nil, unit: "%"))
+        // 表示名(DBのdisplay_name)があればそれを優先する。
+        XCTAssertEqual(CountryFlag.indicatorDisplayText("米国雇用統計(非農業部門雇用者数)", countryCode: "US", displayName: "非農業部門雇用者数（NFP）"), "非農業部門雇用者数（NFP）")
+        XCTAssertEqual(CountryFlag.indicatorDisplayName("x", countryCode: "US", displayName: "非農業部門雇用者数（NFP）").abbreviation, "NFP")
+        XCTAssertEqual(CountryFlag.indicatorDisplayText("米国CPI(消費者物価指数)", countryCode: "US", displayName: nil), "消費者物価指数（CPI）")
+    }
+}
+
+final class HomeShortIndicatorNameTests: XCTestCase {
+    func testDropsTheParenthetical() {
+        XCTAssertEqual(HomeView.shortIndicatorName("米国雇用統計(非農業部門雇用者数)"), "米国雇用統計")
+        XCTAssertEqual(HomeView.shortIndicatorName("日本CPI（消費者物価指数）"), "日本CPI")
+        XCTAssertEqual(HomeView.shortIndicatorName("FOMC政策金利"), "FOMC政策金利")
+    }
+}
+
+final class EventCommonModelsDisplayTests: XCTestCase {
+    func testImportanceStarDisplayReflectsLevel() {
+        XCTAssertEqual(Importance.high.starDisplay, "★★★")
+        XCTAssertEqual(Importance.medium.starDisplay, "★★☆")
+        XCTAssertEqual(Importance.low.starDisplay, "★☆☆")
+    }
+
+    func testDataQualityStatusLabelsAreDistinct() {
+        let labels = Set([
+            DataQualityStatus.ready, .dataPending, .dataUnavailable, .notAnalyzable,
+        ].map(\.label))
+        XCTAssertEqual(labels.count, 4)
+    }
+}

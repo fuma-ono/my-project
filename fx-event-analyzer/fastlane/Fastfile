@@ -1,0 +1,71 @@
+# FX Event Analyzer: TestFlightへの署名済みビルドアップロード専用レーン。
+# .github/workflows/fx-event-analyzer-ios-testflight.yml (workflow_dispatch
+# 限定)からのみ呼び出される。既存のSimulator専用CI
+# (fx-event-analyzer-ios-build.yml)はこのFastfileを参照しない。
+#
+# 認証はApp Store Connect APIキー(.p8)のみ。Apple ID/パスワードは使わない
+# (2段階認証の影響を受けず、CI向けにApple公式が推奨する方式)。
+#
+# Apple Team ID・証明書パスワード・プロビジョニングプロファイル名などの
+# 値はすべて環境変数(呼び出し元のワークフローがGitHub Secretsから渡す)
+# 経由で読み込む。この行に実値を書かない。
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Archive FXEventAnalyzer and upload the build to TestFlight"
+  lane :testflight do
+    app_store_connect_api_key(
+      key_id: ENV.fetch("FX_ASC_KEY_ID"),
+      issuer_id: ENV.fetch("FX_ASC_ISSUER_ID"),
+      # 以前はPEM形式のまま(is_key_content_base64: false)渡していたが、
+      # 複数回の実行で"invalid curve name"エラーが続いたため、改行の
+      # 保持がより確実なBase64方式に変更した(HQ承認、2026-10-19)。
+      key_content: ENV.fetch("FX_ASC_KEY_P8_BASE64"),
+      is_key_content_base64: true,
+      in_house: false
+    )
+
+    build_app(
+      project: "FXEventAnalyzer.xcodeproj",
+      scheme: "FXEventAnalyzer",
+      configuration: "Release",
+      # ワークフロー側の「Resolve Swift Package dependencies」ステップが
+      # 解決・キャッシュするDerivedDataパスと合わせる(B修正: 合わせないと
+      # gymがデフォルトの別パスを使い、キャッシュが再利用されない)。
+      derived_data_path: "DerivedData",
+      export_options: ENV.fetch("FX_EXPORT_OPTIONS_PLIST_PATH"),
+      output_directory: ENV.fetch("FX_IPA_OUTPUT_DIR", "build"),
+      output_name: "FXEventAnalyzer.ipa",
+      # CODE_SIGN_STYLE/PROVISIONING_PROFILE_SPECIFIER等を直接ここで
+      # 上書きしない(HQ承認、2026-10-19)。xcodebuildのコマンドライン上書きは
+      # 全ターゲット(Swift Packageの疑似ターゲット含む)に一律適用され、
+      # swift-crypto_Crypto等が「プロビジョニングプロファイルに対応しない」
+      # エラーでアーカイブ失敗する原因になっていた。署名設定自体は
+      # project.ymlのFXEventAnalyzerターゲット(Releaseのみ)に移し、
+      # ここでは別名の変数として値を渡すだけにする。
+      # SUPABASE_URL/SUPABASE_ANON_KEY/API_BASE_URLはproject.ymlでは空文字が
+      # デフォルトのまま(fx-event-analyzer-ios-build.ymlと同じ値を、同じ
+      # Secrets経由でここでも渡す必要がある)。渡し忘れていたため、初回の
+      # TestFlightビルドはSupabase未設定のまま出荷され、起動時に必ず
+      # AuthServiceError.notConfiguredで「アプリの初期化に失敗しました」と
+      # なっていた(HQ報告・実機確認、2026-10-19)。
+      xcargs: [
+        "FX_SIGNING_TEAM_ID=#{ENV.fetch('FX_APPLE_TEAM_ID')}",
+        "FX_SIGNING_PROFILE_NAME=\"#{ENV.fetch('FX_IOS_PROVISIONING_PROFILE_NAME')}\"",
+        "CURRENT_PROJECT_VERSION=#{ENV.fetch('FX_BUILD_NUMBER')}",
+        "SUPABASE_URL=#{ENV.fetch('FX_SUPABASE_URL', '')}",
+        "SUPABASE_ANON_KEY=#{ENV.fetch('FX_SUPABASE_ANON_KEY', '')}",
+        "API_BASE_URL=#{ENV.fetch('FX_API_BASE_URL', '')}",
+        # HQ指示(2026-10-20)「サインインは両方実装しよう」。SUPABASE_URL等と
+        # 同じく空文字デフォルト(未設定でもビルド自体は成功する)。
+        "GOOGLE_SIGNIN_CLIENT_ID=#{ENV.fetch('FX_GOOGLE_SIGNIN_CLIENT_ID', '')}",
+        "GOOGLE_SIGNIN_REVERSED_CLIENT_ID=#{ENV.fetch('FX_GOOGLE_SIGNIN_REVERSED_CLIENT_ID', '')}"
+      ].join(" ")
+    )
+
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true
+    )
+  end
+end
