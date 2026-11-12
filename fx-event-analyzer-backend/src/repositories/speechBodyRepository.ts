@@ -1,5 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { SpeechBodyPatch, SpeechBodyStore, SpeechForBody } from '../ingestion/pipelines/speechBodies.js';
+import type {
+  FrbRowForMatching,
+  SpeechBodyPatch,
+  SpeechBodyStore,
+  SpeechForBody,
+} from '../ingestion/pipelines/speechBodies.js';
 
 /**
  * 要人発言の本文の取り込みの読み書き(HQ指示 2026-11-10、migration 20261110000001・20261112000001)。service_role で使う
@@ -41,6 +46,32 @@ export function createSpeechBodyStore(supabase: SupabaseClient): SpeechBodyStore
           speaker_organization: speaker.organization,
         };
       });
+    },
+
+    async listFrbRowsForMatching(): Promise<FrbRowForMatching[]> {
+      const out: FrbRowForMatching[] = [];
+      const PAGE = 1000;
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from('speech_events')
+          .select('id, statement_datetime, source_url, speakers!inner(name, organization)')
+          .eq('provider', 'frb_calendar')
+          .order('statement_datetime', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        for (const row of data ?? []) {
+          const speaker = row.speakers as unknown as { name: string; organization: string };
+          out.push({
+            id: row.id,
+            statement_datetime: row.statement_datetime,
+            source_url: row.source_url,
+            speaker_name: speaker.name,
+            speaker_organization: speaker.organization,
+          });
+        }
+        if ((data ?? []).length < PAGE) return out;
+      }
     },
 
     async claimBodyAttempt(id, expectedAttempts, attemptedAtIso, maxAttempts): Promise<boolean> {

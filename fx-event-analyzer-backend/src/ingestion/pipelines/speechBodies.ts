@@ -28,6 +28,7 @@ import {
   frbSpeechJsonLinks,
   frbSpeechJsonTimedItems,
   frbSpeechRssItems,
+  frbSurnameKey,
   isOfficialSpeechUrl,
   matchFrbSpeechUrls,
   matchFrbSpeechUrlsByTime,
@@ -63,7 +64,21 @@ export interface SpeechBodyPatch {
   body_error?: string | null;
 }
 
+/** URL の照らし合わせに使う FRB の行(本文の有無・状態に関係なく、すべて)。 */
+export interface FrbRowForMatching {
+  id: string;
+  statement_datetime: string;
+  source_url: string | null;
+  speaker_name: string;
+  speaker_organization: string;
+}
+
 export interface SpeechBodyStore {
+  /**
+   * provider = frb_calendar のすべての行(状態・本文の有無に関係なく)。URL の照らし合わせの「その日のその発言者の行が
+   * ちょうど1件か」と「その URL を別の行が使っていないか」に使う(HQ承認 2026-11-12「誤紐付けの修正」)。読むだけ。
+   */
+  listFrbRowsForMatching(): Promise<FrbRowForMatching[]>;
   /**
    * providers の発言済み(DELIVERED。発言前の SCHEDULED は入れない)で、statement_datetime >= sinceIso の行のうち、
    * body_status が PENDING または FAILED で、body_attempts < maxAttempts のもの(古い順)。PENDING も回数で止める
@@ -175,33 +190,51 @@ export async function ingestSpeechBodies(
   const frbWithoutUrl = speeches.filter((s) => s.provider === 'frb_calendar' && !s.source_url);
   const urlById = new Map<string, string>();
   if (frbWithoutUrl.length > 0) {
-    const rows: FrbSpeechRowForMatch[] = frbWithoutUrl.map((s) => ({
+    // 照らし合わせの母集団: 本文の有無・状態に関係なく、FRB のすべての行(HQ承認 2026-11-12)。本文を取った行が候補から
+    // 外れても、同じ日の同じ発言者の別の行を「ちょうど1件」と見誤らない(10/14 のボウマンの「討論」と「講演」)。
+    const allFrb = new Map<string, FrbRowForMatching>();
+    for (const r of await store.listFrbRowsForMatching()) allFrb.set(r.id, r);
+    for (const s of frbWithoutUrl) if (!allFrb.has(s.id)) allFrb.set(s.id, { ...s });
+    const rows: FrbSpeechRowForMatch[] = [...allFrb.values()].map((s) => ({
       id: s.id,
       speakerNameEn: englishNameOf(s.speaker_organization, s.speaker_name),
       date: localDay(s.statement_datetime, 'America/New_York'),
     }));
+    const candidateIds = new Set(frbWithoutUrl.map((s) => s.id));
+    /** URL → その URL を source_url に持つ行(この実行で結んだ行も足していく) */
+    const usersOf = new Map<string, Set<string>>();
+    const addUser = (url: string, id: string) => usersOf.set(url, new Set([...(usersOf.get(url) ?? []), id]));
+    for (const r of allFrb.values()) if (r.source_url) addUser(r.source_url, r.id);
+    const otherUsers = (url: string, id: string) => [...(usersOf.get(url) ?? [])].filter((u) => u !== id);
+    /** 日付で結べた候補の行: 別の行が使っている URL は再利用しない */
+    const acceptByDate = (matches: Map<string, string>, from: 'rss' | 'json') => {
+      for (const [id, url] of matches) {
+        if (!candidateIds.has(id) || urlById.has(id)) continue;
+        if (otherUsers(url, id).length > 0) {
+          counters.skip('URL_IN_USE');
+          continue;
+        }
+        urlById.set(id, url);
+        urlFrom.set(id, from);
+        addUser(url, id);
+      }
+    };
     try {
       const xml = await fetchers.frb.getText(FRB_SPEECHES_RSS_URL);
       const links = [...xml.matchAll(/<link>\s*(?:<!\[CDATA\[)?\s*([^<\]\s]+)\s*(?:\]\]>)?\s*<\/link>/g)].map(
         (m) => m[1]!,
       );
-      for (const [id, url] of matchFrbSpeechUrls(rows, frbSpeechRssItems(links))) {
-        urlById.set(id, url);
-        urlFrom.set(id, 'rss');
-      }
+      acceptByDate(matchFrbSpeechUrls(rows, frbSpeechRssItems(links)), 'rss');
     } catch (error) {
       counters.error(`frb speeches rss: ${error instanceof Error ? error.message : String(error)}`);
     }
     // RSS は直近の講演だけなので、結べなかった行(古い発言など)は講演の一覧の JSON で探す(同じ決まり: 姓と日付がちょうど1件)。
-    const stillMissing = rows.filter((r) => !urlById.has(r.id));
+    const stillMissing = frbWithoutUrl.filter((s) => !urlById.has(s.id));
     if (stillMissing.length > 0) {
       try {
         const text = await fetchers.frb.getText(FRB_SPEECHES_JSON_URL);
         const items = frbSpeechRssItems(frbSpeechJsonLinks(text));
-        for (const [id, url] of matchFrbSpeechUrls(stillMissing, items)) {
-          urlById.set(id, url);
-          urlFrom.set(id, 'json');
-        }
+        acceptByDate(matchFrbSpeechUrls(rows, items), 'json');
         // 姓と日付で一意に決まらなかった行だけ: 一覧の時刻(東部時間 → UTC)と発言の時刻が完全に一致する講演が
         // ちょうど1件なら結ぶ(HQ承認 2026-11-11。許容幅なし・推測なし。既に結んだ行は変えない)
         const timeRows = frbWithoutUrl
@@ -212,9 +245,25 @@ export async function ingestSpeechBodies(
             statementIso: s.statement_datetime,
           }));
         if (timeRows.length > 0) {
-          for (const [id, url] of matchFrbSpeechUrlsByTime(timeRows, frbSpeechJsonTimedItems(text))) {
+          const timed = frbSpeechJsonTimedItems(text);
+          /** その行の時刻と完全に一致する、同じページの講演が一覧にあるか(同じ原稿を2回話した講演なら、どちらの行も一致する) */
+          const exactFor = (rowId: string, url: string): boolean => {
+            const r = allFrb.get(rowId);
+            if (!r) return false;
+            const name = englishNameOf(r.speaker_organization, r.speaker_name);
+            const surname = name ? frbSurnameKey(name) : null;
+            const at = Date.parse(r.statement_datetime);
+            return surname !== null && timed.some((i) => i.url === url && i.surname === surname && i.instantMs === at);
+          };
+          for (const [id, url] of matchFrbSpeechUrlsByTime(timeRows, timed)) {
+            // URL の競合: 別の行がこの URL を使っていて、その行が時刻の完全一致で説明できなければ、安全側で結ばない
+            if (otherUsers(url, id).some((u) => !exactFor(u, url))) {
+              counters.skip('URL_CONFLICT');
+              continue;
+            }
             urlById.set(id, url);
             urlFrom.set(id, 'json_time');
+            addUser(url, id);
           }
         }
       } catch (error) {
