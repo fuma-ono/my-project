@@ -116,15 +116,15 @@ struct StrategySectionHeaderCard: View {
     var iconColor: Color = V5P.cyan
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon).font(.system(size: 14, weight: .semibold)).foregroundStyle(iconColor)
+        HStack(spacing: 7) {
+            Image(systemName: icon).font(.system(size: 12, weight: .semibold)).foregroundStyle(iconColor)
             VStack(alignment: .leading, spacing: 1) {
-                NotoText.text(title, size: 10).foregroundStyle(.white)
-                NotoText.text(subtitle, size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                NotoText.text(title, size: 9).foregroundStyle(.white)
+                NotoText.text(subtitle, size: 6).foregroundStyle(SettingsCardStyle.subtitleColor)
             }
             Spacer(minLength: 0)
         }
-        .padding(9)
+        .padding(8)
         .frame(width: 214, alignment: .leading)
         .background(GradientCardBackground())
     }

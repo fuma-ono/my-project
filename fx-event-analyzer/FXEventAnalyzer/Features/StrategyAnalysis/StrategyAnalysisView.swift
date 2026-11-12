@@ -47,7 +47,15 @@ struct StrategyAnalysisView: View {
             // 戻るボタンと別レイヤーでヘッダー全幅中央に配置するため、長いタイトルだと重なる —
             // V5Header自体(共通コンポーネント)は変更しない)。ロック表示カードの見出しと同じ
             // 「トレード戦略分析」(8文字)に短縮した。
+            //
+            // HQ指示(2026-11-12「ピクセル単位の再現」ユーザー指摘「PROの文字位置が違う。
+            // ヘッダーの右位置に」): 参考画像ではPROバッジがヘッダー行の右端・タイトルと同じ
+            // 高さにある。V5Header自体は変更せず(共通コンポーネント)、その上に`.overlay`で
+            // 重ねるだけで実現する(V5Headerはbackground/foregroundを持たない透明なヘッダーの
+            // ため、overlayでも見た目に影響しない)。以前はcontent側の別行(スクロールで隠れる)
+            // に置いていたが、参考画像どおりヘッダーに固定して常時表示する形に変更した。
             V5Header(title: "トレード戦略分析", back: true, onBack: { dismiss() })
+                .overlay(alignment: .trailing) { StrategyAnalysisProBadge() }
             content
             V5BottomBar(selected: $tabSelection)
         }
@@ -81,19 +89,15 @@ struct StrategyAnalysisView: View {
             centered { ErrorView(title: "読み込みに失敗しました", message: message, onRetry: { Task { await viewModel.load() } }) }
         case .loaded(let pair, let analysis, let coReleasedIndicators):
             column {
-                // HQ指示(2026-11-11「StrategyAnalysis 4タブUI実装」)。「PRO」バッジ・4タブの
-                // セグメントも、既存の安定した構成(column { ScrollView { VStack {...} } }、他の
-                // 全カードと同じ)にそのまま乗せる(ScrollViewの外に出してVStackと並べる構成は、
-                // 高さの伝播がうまくいかずタブがタップできなくなる不具合が実機CIで確認されたため
-                // 採用していない)。タブ切り替え時、バッジ・タブバー自体もスクロールで隠れる形になるが、
-                // 既存のカード群と同じ挙動・安全性を優先する。
+                // HQ指示(2026-11-11「StrategyAnalysis 4タブUI実装」)。4タブのセグメントも、
+                // 既存の安定した構成(column { ScrollView { VStack {...} } }、他の全カードと
+                // 同じ)にそのまま乗せる(ScrollViewの外に出してVStackと並べる構成は、高さの
+                // 伝播がうまくいかずタブがタップできなくなる不具合が実機CIで確認されたため
+                // 採用していない)。タブ切り替え時、タブバー自体もスクロールで隠れる形になるが、
+                // 既存のカード群と同じ挙動・安全性を優先する。「PRO」バッジは参考画像どおり
+                // ヘッダー右端に固定するため、ここではなく`body`のV5Header側に移した。
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            StrategyAnalysisProBadge()
-                            Spacer()
-                        }
-                        .frame(width: 214, alignment: .leading)
                         StrategyAnalysisTabBar(selection: $selectedTab)
                         tabContent(pair: pair, analysis: analysis, coReleasedIndicators: coReleasedIndicators)
                     }
@@ -113,7 +117,7 @@ struct StrategyAnalysisView: View {
     ) -> some View {
         switch selectedTab {
         case .eventStrategy:
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: 6) {
                 topDisclaimerBanner
                 // HQ指示(2026-11-12「ピクセル単位の再現」、参考画像2枚目): ②③④タブと同じ
                 // 見出しカード(アイコン+タイトル+サブタイトル)を①にも置く。
@@ -194,35 +198,35 @@ struct StrategyAnalysisView: View {
         ].compactMap { label, value in value.map { (label: label, value: $0) } }
 
         return plainCard {
-            HStack(spacing: 5) {
-                Image(systemName: "bolt.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(V5P.cyan)
-                NotoText.text("初動分析", size: 7.5).foregroundStyle(.white)
-                Image(systemName: "info.circle").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
+            HStack(spacing: 4) {
+                Image(systemName: "bolt.fill").font(.system(size: 8, weight: .bold)).foregroundStyle(V5P.cyan)
+                NotoText.text("初動分析", size: 7).foregroundStyle(.white)
+                Image(systemName: "info.circle").font(.system(size: 6)).foregroundStyle(SettingsCardStyle.subtitleColor)
                 Spacer(minLength: 4)
                 analysisCountBadge(samples: direction?.samples, sampleWindow: analysis.sampleWindow)
             }
             Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
             HStack(alignment: .top, spacing: 4) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 3) {
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 2) {
                         Image(systemName: (avgPips15m ?? 0) >= 0 ? "arrow.up" : "arrow.down")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(pipsColor)
                         HStack(alignment: .firstTextBaseline, spacing: 1) {
-                            NotoText.text(avgPips15m.map { ValueFormat.number($0, fractionDigits: 1, signed: true) } ?? "--", size: 16)
+                            NotoText.text(avgPips15m.map { ValueFormat.number($0, fractionDigits: 1, signed: true) } ?? "--", size: 13)
                                 .foregroundStyle(pipsColor)
-                            NotoText.text("pips", size: 8).foregroundStyle(SettingsCardStyle.subtitleColor)
+                            NotoText.text("pips", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
                         }
                     }
-                    NotoText.text("（15分後）", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    NotoText.text("（15分後）", size: 6).foregroundStyle(SettingsCardStyle.subtitleColor)
                 }
                 Spacer(minLength: 4)
-                VStack(alignment: .trailing, spacing: 2) {
-                    NotoText.text("上昇確率", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                VStack(alignment: .trailing, spacing: 1) {
+                    NotoText.text("上昇確率", size: 6).foregroundStyle(SettingsCardStyle.subtitleColor)
                     HStack(spacing: 4) {
-                        NotoText.text(upPercent.map { ValueFormat.percent($0, fractionDigits: 0) } ?? "--", size: 15)
+                        NotoText.text(upPercent.map { ValueFormat.percent($0, fractionDigits: 0) } ?? "--", size: 12)
                             .foregroundStyle(upPercent != nil ? V5P.green : SettingsCardStyle.subtitleColor)
-                        StrategyCircularGauge(percent: upPercent, centerText: "", centerSubtext: nil, color: V5P.green, diameter: 28)
+                        StrategyCircularGauge(percent: upPercent, centerText: "", centerSubtext: nil, color: V5P.green, diameter: 22)
                     }
                 }
             }
@@ -231,7 +235,7 @@ struct StrategyAnalysisView: View {
                 lineColor: V5P.blue,
                 fillColor: V5P.blue,
                 calloutFormatter: { ValueFormat.number($0, fractionDigits: 1, signed: true) },
-                height: 70
+                height: 46
             )
         }
         .accessibilityElement(children: .ignore)
@@ -245,15 +249,15 @@ struct StrategyAnalysisView: View {
         let continuationPercent = pattern.map { Double($0.continuation) / Double($0.samples) * 100 }
         let reversalPercent = pattern.map { Double($0.reversal) / Double($0.samples) * 100 }
         return plainCard {
-            HStack(spacing: 5) {
-                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 9, weight: .bold)).foregroundStyle(V5P.cyan)
-                NotoText.text("継続・反転分析", size: 7.5).foregroundStyle(.white)
-                Image(systemName: "info.circle").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 8, weight: .bold)).foregroundStyle(V5P.cyan)
+                NotoText.text("継続・反転分析", size: 7).foregroundStyle(.white)
+                Image(systemName: "info.circle").font(.system(size: 6)).foregroundStyle(SettingsCardStyle.subtitleColor)
                 Spacer(minLength: 4)
                 analysisCountBadge(samples: pattern?.samples, sampleWindow: analysis.sampleWindow)
             }
             Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
-            VStack(spacing: 5) {
+            VStack(spacing: 4) {
                 StrategyProgressRow(label: "継続確率", percent: continuationPercent, color: V5P.cyan)
                 StrategyProgressRow(label: "反転確率", percent: reversalPercent, color: V5P.cyan)
             }
@@ -270,10 +274,10 @@ struct StrategyAnalysisView: View {
     private func pastCaseComparisonCard(_ analysis: StrategyAnalysis) -> some View {
         let avgPips60m = analysis.releases.averagePips(\.pips60m)
         return plainCard {
-            HStack(spacing: 5) {
-                Image(systemName: "clock.arrow.circlepath").font(.system(size: 9, weight: .bold)).foregroundStyle(V5P.blue)
-                NotoText.text("過去事例比較", size: 7.5).foregroundStyle(.white)
-                Image(systemName: "info.circle").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
+            HStack(spacing: 4) {
+                Image(systemName: "clock.arrow.circlepath").font(.system(size: 8, weight: .bold)).foregroundStyle(V5P.blue)
+                NotoText.text("過去事例比較", size: 7).foregroundStyle(.white)
+                Image(systemName: "info.circle").font(.system(size: 6)).foregroundStyle(SettingsCardStyle.subtitleColor)
                 Spacer(minLength: 4)
             }
             Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
@@ -290,9 +294,9 @@ struct StrategyAnalysisView: View {
 
     private func comparisonRow(label: String, value: String, valueColor: Color) -> some View {
         HStack {
-            NotoText.text(label, size: 7).foregroundStyle(SettingsCardStyle.subtitleColor)
+            NotoText.text(label, size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
             Spacer(minLength: 4)
-            NotoText.text(value, size: 8.5).foregroundStyle(valueColor)
+            NotoText.text(value, size: 7.5).foregroundStyle(valueColor)
         }
     }
 
@@ -303,10 +307,10 @@ struct StrategyAnalysisView: View {
         let reversalPercent = pattern.map { Double($0.reversal) / Double($0.samples) * 100 }
         let level = StrategyAnalysisText.riskLevel(reversalPercent: reversalPercent)
         return plainCard {
-            HStack(spacing: 5) {
-                Image(systemName: "exclamationmark.shield.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(V5P.red)
-                NotoText.text("リスク分析", size: 7.5).foregroundStyle(.white)
-                Image(systemName: "info.circle").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
+            HStack(spacing: 4) {
+                Image(systemName: "exclamationmark.shield.fill").font(.system(size: 8, weight: .bold)).foregroundStyle(V5P.red)
+                NotoText.text("リスク分析", size: 7).foregroundStyle(.white)
+                Image(systemName: "info.circle").font(.system(size: 6)).foregroundStyle(SettingsCardStyle.subtitleColor)
                 Spacer(minLength: 4)
                 V5Badge(text: "リスクレベル: \(level)", color: reversalPercent != nil ? V5P.red : SettingsCardStyle.subtitleColor)
             }
@@ -314,12 +318,12 @@ struct StrategyAnalysisView: View {
             if let reversalPercent {
                 NotoText.text(
                     "過去の類似イベントでは、約\(ValueFormat.percent(reversalPercent, fractionDigits: 0))の確率で15分以内に反転が発生しています。",
-                    size: 6.5
+                    size: 6
                 )
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
                 .fixedSize(horizontal: false, vertical: true)
             } else {
-                NotoText.text(StrategyAnalysisText.preparing, size: 7).foregroundStyle(SettingsCardStyle.subtitleColor)
+                NotoText.text(StrategyAnalysisText.preparing, size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
             }
         }
         .accessibilityElement(children: .ignore)
@@ -372,14 +376,14 @@ struct StrategyAnalysisView: View {
     /// そのものの日時 — `AppRoute.eventStrategyAnalysis`経由でイベント詳細から渡される実データ)。
     private var nextEventCard: some View {
         plainCard {
-            HStack(spacing: 8) {
-                Image(systemName: "calendar").font(.system(size: 14, weight: .semibold)).foregroundStyle(V5P.cyan)
-                VStack(alignment: .leading, spacing: 2) {
-                    NotoText.text("\(viewModel.indicatorName)発表", size: 9.5)
+            HStack(spacing: 7) {
+                Image(systemName: "calendar").font(.system(size: 12, weight: .semibold)).foregroundStyle(V5P.cyan)
+                VStack(alignment: .leading, spacing: 1) {
+                    NotoText.text("\(viewModel.indicatorName)発表", size: 8)
                         .foregroundStyle(.white)
                         .lineLimit(2)
                         .minimumScaleFactor(0.8)
-                    NotoText.text(Self.eventDateTimeLabel(releaseDatetime), size: 7)
+                    NotoText.text(Self.eventDateTimeLabel(releaseDatetime), size: 6)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -678,10 +682,10 @@ struct StrategyAnalysisView: View {
     /// `card(title:)`のタイトルなし版 — 新しいカード群はタイトル行にアイコン・バッジを個別に組むため、
     /// 枠(GradientCardBackground)と余白だけを共通化する。
     private func plainCard(@ViewBuilder _ content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 4) {
             content()
         }
-        .padding(9)
+        .padding(7)
         .frame(width: 214, alignment: .leading)
         .background(GradientCardBackground())
     }
