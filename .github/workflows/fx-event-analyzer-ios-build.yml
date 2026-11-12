@@ -1,0 +1,115 @@
+name: FX Event Analyzer iOS Build & Test
+
+# FX Event Analyzer is SwiftUI-native and has no local build/test tooling
+# (the development environment for this project is Linux — see
+# docs/projects/fx-event-analyzer/README.md Phase 0 audit). This workflow is
+# the only place that can actually build and run its test suite.
+#
+# No Apple Developer Team / certificate / provisioning profile exists yet,
+# so code signing is disabled (CODE_SIGNING_ALLOWED=NO) — this workflow
+# builds and runs unit tests on the Simulator only, no TestFlight
+# submission. See fx-event-analyzer/README.md.
+#
+# SUPABASE_URL / SUPABASE_ANON_KEY / API_BASE_URL are read from repo
+# secrets (FX_SUPABASE_URL / FX_SUPABASE_ANON_KEY / FX_API_BASE_URL). Until
+# a real Supabase project and a deployed Backend exist these are simply
+# unset, which GitHub Actions resolves to an empty string — the app is
+# built to handle that without crashing (see
+# FXEventAnalyzer/Auth/SupabaseConfig.swift and
+# Networking/APIClient.swift's defaultBaseURLProvider), so an unconfigured
+# build is expected to succeed, not fail.
+#
+# This project is entirely independent of personal-side-projects/kashikari/
+# (separate Bundle ID, separate Supabase project, no shared secrets) — see
+# fx-event-analyzer/README.md "What this is not".
+
+on:
+  push:
+    paths:
+      - "fx-event-analyzer/**"
+      - ".github/workflows/fx-event-analyzer-ios-build.yml"
+  pull_request:
+    paths:
+      - "fx-event-analyzer/**"
+      - ".github/workflows/fx-event-analyzer-ios-build.yml"
+  workflow_dispatch: {}
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: fx-event-analyzer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project from project.yml
+        run: xcodegen generate
+
+      - name: Cache Swift Package Manager artifacts
+        uses: actions/cache@v4
+        with:
+          path: fx-event-analyzer/DerivedData/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('fx-event-analyzer/project.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Resolve Swift Package dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project FXEventAnalyzer.xcodeproj \
+            -scheme FXEventAnalyzer \
+            -derivedDataPath DerivedData
+
+      - name: Select an available iPhone Simulator
+        id: simulator
+        run: |
+          DEVICE_NAME=$(xcrun simctl list devices available -j \
+            | jq -r '.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name | startswith("iPhone")) | .name' \
+            | head -n1)
+          if [ -z "$DEVICE_NAME" ]; then
+            echo "No available iPhone simulator found on this runner image." >&2
+            exit 1
+          fi
+          echo "Using simulator: $DEVICE_NAME"
+          echo "device_name=$DEVICE_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        env:
+          SUPABASE_URL: ${{ secrets.FX_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.FX_SUPABASE_ANON_KEY }}
+          API_BASE_URL: ${{ secrets.FX_API_BASE_URL }}
+        run: |
+          xcodebuild build \
+            -project FXEventAnalyzer.xcodeproj \
+            -scheme FXEventAnalyzer \
+            -destination "platform=iOS Simulator,name=${{ steps.simulator.outputs.device_name }}" \
+            -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            SUPABASE_URL="$SUPABASE_URL" \
+            SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            API_BASE_URL="$API_BASE_URL"
+
+      - name: Test
+        env:
+          SUPABASE_URL: ${{ secrets.FX_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.FX_SUPABASE_ANON_KEY }}
+          API_BASE_URL: ${{ secrets.FX_API_BASE_URL }}
+        run: |
+          xcodebuild test \
+            -project FXEventAnalyzer.xcodeproj \
+            -scheme FXEventAnalyzer \
+            -destination "platform=iOS Simulator,name=${{ steps.simulator.outputs.device_name }}" \
+            -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            SUPABASE_URL="$SUPABASE_URL" \
+            SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            API_BASE_URL="$API_BASE_URL"

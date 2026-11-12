@@ -1,0 +1,674 @@
+# FX Event Analyzer: DB詳細設計 v4.14
+
+**出典**: HQより2026-09-16「DB設計確定事項」指示。v3.0で報告したHQ確認事項17件すべてに対し、HQが最終判断を確定した内容を反映した。
+
+**位置づけ**: 本書はDB設計ドキュメントであり、コード変更・Migration実行・Table作成・API実装・Swift実装・Supabase変更などの**実装ではない**(HQ指示「実装は一切行わない」)。本書をもってDB詳細設計の正式版とする。
+
+## 変更履歴
+
+- **v1.0**: 初版。Claude Code独自のたたき台
+- **v2.0**: HQ提示の第1回Entity定義に基づき全面改訂。不整合6件・確認事項19件を報告
+- **v3.0**: HQ確定(第2回)を反映。EconomicEvent/EventSnapshot分離、EventExplanation復活等。残存確認事項17件を整理
+- **v4.0**(今回): HQ確定(第3回、2026-09-16)により17件すべてに最終判断
+  - EventSnapshotの不変性をDBレベル(トリガー)で担保する方針を明記
+  - EventExplanationは履歴保持に変更(`UQ(event_id)`→`UQ(event_id, version)`)。AI拡張カラムはMVPで追加せず、将来Migrationで追加する方針に変更
+  - `Entitlement.feature_code`を機能単位のコード体系(VIEW_BASIC_EVENT等)に具体化。FREE/PRO名称は埋め込まない
+  - `IngestionLog.data_type`をECONOMIC_EVENT/FX_PRICE/EVENT_REACTION/OTHERに確定
+  - Surpriseが0の場合はsurprise_direction=NEUTRAL、NULLとは明確に区別
+  - Numeric精度をカラム用途ごとに個別設定(一律numeric(18,6)を廃止)
+  - `EconomicEvent`の重複防止をprovider_event_id優先に変更。indicator_id+release_datetimeは補助的なIndexに格下げ(UNIQUE制約は付けない)
+  - `EventPriceReaction.max_upward`/`max_downward`の定義を「pre_release_price基準・期間内の最大上昇幅/下降幅」に確定
+  - RLS論理方針・Delete/Cascade方針(RESTRICT中心)・FxPriceのデータ保持範囲(イベント時間窓中心)を最終確定
+  - 概要設計書・要件定義書に残る「EconomicEvent = EventSnapshot」等の旧仕様表現は、既にv1.4で修正済みであることを再確認(11章参照)
+- **v4.1**: API詳細設計レビュー(B-5)での確定事項を反映。Partial Match Search(部分一致検索)の性能を担保するため、`pg_trgm` + GIN Indexの追加方針を12章に明記(HQ確定、2026-09-16)。DB Migrationは実施していない(ドキュメント追記のみ)
+- **v4.2**(今回): 全設計横断監査(M-3)での確定事項を反映。`EventPriceReaction.max_upward_pips`/`max_downward_pips`をDBカラムとして追加し保存する方針に変更(旧: API応答時に都度計算する方針だったが、通常の`pips`列との保存方針の非対称性を解消するためDB保存に統一、HQ確定、2026-09-16)
+- **v4.3**(今回): 設定サブ画面SCR-018〜026の正式仕様(HQ確定、2026-10-02)を反映。Migration `20261002000001_user_settings.sql` / `20261002000002_subscriptions_app_store.sql`
+  - アカウント削除を**物理削除**に変更(旧: `Profile.deleted_at`によるソフトデリート)。3.1節・7章
+  - `Subscription`にApp Store検証用カラム(`product_id`/`provider_environment`/`last_transaction_id`/`auto_renew`/`revoked_at`/`last_verified_at`)と`UQ(provider, provider_subscription_id)`を追加。保存用関数`apply_app_store_subscription`を追加(3.2節)
+  - `UserSettings`を新設(3.14節)
+- **v4.4**(2026-10-05): SCR-016 通知設定の作り直しと要人発言(HQ指示 2026-10-05)。Migration `20261005000002_notification_settings_v2.sql` / `20261005000003_speeches.sql`
+  - `UserSettings`の通知カラムを新形状に変更(3.14節)
+  - `Speaker` / `SpeechEvent`を新設(3.15節・3.16節)。旧版でP2・対象外としていた`Person` / `SpeechEvent`を前倒し
+- **v4.5**(2026-10-06): SCR-016 通知設定に「通知しない時間帯」を追加。`UserSettings`に`notify_quiet_hours_enabled` / `notify_quiet_start` / `notify_quiet_end`を追加(3.14節)。Migration `20261006000001_notification_quiet_hours.sql`
+- **v4.6**(2026-10-06): SCR-018 表示・地域設定 / SCR-019 チャート設定の項目を追加。`UserSettings`に`display_theme` / `display_text_size` / `display_date_format` / `display_time_format` / `display_currency` / `display_week_start`、`chart_type` / `chart_show_indicators` / `chart_indicator_ma` / `chart_indicator_bollinger` / `chart_indicator_macd` / `chart_indicator_rsi` / `chart_indicator_stochastic` / `chart_crosshair` / `chart_price_line`を追加(3.14節)。Migration `20261006000002_display_chart_settings_v2.sql`
+- **v4.7**(2026-10-06): SCR-020 ヘルプ・お問い合わせ(画面番号はui-screens.md)。お問い合わせ・フィードバックの保存先`SupportRequest`(`support_requests`)を新設(3.17節)。自動返信の判定結果・返信文・不具合として登録したGitHub Issueを記録する。Migration `20261006000003_support_requests.sql`
+- **v4.8**(2026-10-07): レビュー指摘の修正。`SupportRequest`の送信回数の上限を、件数の確認と保存を1つのDB関数`insert_support_request`で行う方式に変更(同時送信で上限を超えない)。`SupportRequest`のクライアント向けSELECTポリシーを削除し、anon / authenticatedの権限を取り消した(`classification` / `github_issue_*`をクライアントから読めないようにする。参照はBackend経由のみ)(3.17節・6章)。`apply_app_store_subscription`の戻り値に`product_id`を追加(3.2節)。Migration `20261007000001_support_requests_rate_limit.sql`・`20261007000002_apply_app_store_subscription_product_id.sql`
+- **v4.9**(2026-10-07): SCR-026 ホーム通貨ペア編集。`UserSettings`に`home_fx_pairs`(ホームに表示する通貨ペア、1〜3件・配列の順 = 表示順、NULL = 既定)を追加(3.14節)。Migration `20261007000003_home_fx_pairs.sql`。開発用seed(`supabase/seed.sql`)の`FxPair`に`GBPJPY` / `AUDUSD` / `GBPUSD` / `USDCHF` / `AUDJPY` / `CADJPY`を追加(価格データなし)
+- **v4.10**(2026-10-09): SCR-006 指標詳細の再デザイン。`EconomicIndicator`に`name_en`(英語名)と`key_points`(注目される理由の短文の配列、0〜6件・NULL要素と空文字は不可)を追加し、`description`は「概要」として日本語1〜2文で持つと明記した(3.4節)。Migration `20261009000001_economic_indicators_name_en_key_points.sql`。開発用seed(`supabase/seed.sql`)の5指標に`name_en`・`key_points`と日本語の`description`を入れた。API(api-design.md v1.16)では`key_points`のNULLを`[]`として返す
+- **v4.11**(2026-10-09): SCR-008 相場反応詳細の「一般的な見方」。`EconomicIndicator`に`market_view_above`(結果が予想を上回ったときの一般的な見方)・`market_view_below`(下回ったとき)を追加(3.4節)。人が書いた日本語1文(200文字以内・空白だけは不可)、NULL = 未登録。Migration `20261009000002_economic_indicators_market_views.sql`。開発用seedの5指標に両方を入れた。API(api-design.md v1.18)ではNULLを`null`のまま返す
+- **v4.12**(2026-10-13): 指標の一覧画面の表示名(HQ指示 2026-10-13)。`EconomicIndicator`に`display_name`(一覧画面の表示名。HQの表示名ルール indicator-display-names.md に従う。40文字以内・空白だけは不可)を追加(3.4節)。NULL = 未登録。Migration `20261013000001_economic_indicators_display_name.sql`。開発用seedの5指標に入れた(`US_CPI` 消費者物価指数（CPI）・`US_NFP` 非農業部門雇用者数（NFP）・`US_FOMC` FOMC政策金利・`JP_CPI` 消費者物価指数（CPI）・`BOJ_RATE` 日銀政策金利)。API(api-design.md v1.21)ではNULLを`null`のまま返す
+- **v4.13**(2026-10-13): 要人の公式写真(HQ指示 2026-10-13「FRBは公式写真で、そのほかは頭文字と機関の色で」)。`Speaker`に`photo_url`(nullable)を追加(3.15節。Migration `20261013000003_speakers_photo_url.sql`)。値は`null` / 絶対URL / Backendが配信するファイルのkey `speaker-photos/<file>`で、APIが絶対URLに直して返す(api-design.md v1.25、14.7節)。FRBのサイトの写真はパブリックドメインだがフレーム内表示は不可のため、直リンクせず複製を`assets/speaker-photos/`に置いて自前で配信する(出典「米国連邦準備制度理事会(FRB)」、出典・取得日は同じ場所の`SOURCES.md`)。Migration `20261013000004_frb_speakers_self_hosted_photos.sql`でFRB理事会の現メンバーに合わせ、パウエル氏の役職を「FRB理事」に直し、ケビン・ウォーシュ(FRB議長)・フィリップ・ジェファーソン(FRB副議長)・ミシェル・ボウマン(FRB副議長（金融監督担当）)・マイケル・バー・リサ・クック(FRB理事)を追加(同じ名前・機関の要人がいれば追加しない)し、FRBの要人の`photo_url`をkeyにした。ほかの機関の要人は`null`。開発用seedのパウエル氏も「FRB理事」・`speaker-photos/powell.jpg`にした(5人の追加はseedより先に流れるMigrationで行う)
+
+- **v4.14**(2026-10-15): レートアラートとカレンダー更新の通知(notification-inbox-spec.md 7章・8章、api-design.md v1.27)。`RateAlert`(`rate_alerts`、3.18節。Migration `20261015000001_rate_alerts.sql`)と`EventScheduleChange`(`event_schedule_changes`、3.19節。Migration `20261015000002_event_schedule_changes.sql`)を追加。`EventScheduleChange`は`economic_events` / `speech_events`のトリガーが書く。通知一覧のテーブル`notification_inbox`はapi-design.md 24.9節(v1.23)
+
+---
+
+## 1. Entity一覧
+
+| Entity | 概要 |
+|---|---|
+| `Profile` | アプリ固有のユーザー情報(認証情報自体は認証基盤=Supabase Authが保持) |
+| `Subscription` | ユーザーのプラン契約状態 |
+| `Entitlement` | 機能単位のアクセス権フラグ |
+| `EconomicIndicator` | 経済指標マスタ |
+| `EconomicEvent` | 特定日時に発表される1回のイベント(メタデータ) |
+| `EventSnapshot` | 発表時点でユーザーに提供されていた値。immutable(DBレベルで担保) |
+| `EventRevision` | 後日判明した改定情報(参考情報、分析には使わない) |
+| `EventExplanation` | 乖離理由(MVP: 出典付き事実要約。履歴保持) |
+| `IndicatorFxPair` | Indicator↔FxPairの多対多関連 |
+| `FxPair` | 通貨ペアマスタ |
+| `FxPrice` | FX価格ローソク足(イベント時間窓中心の保持) |
+| `EventPriceReaction` | イベント×通貨ペア×時間軸ごとの価格反応 |
+| `IngestionLog` | 外部データ取得・取り込みの運用ログ(FEAT-150) |
+| `UserSettings` | ユーザーごとの通知対象・表示・チャート設定(v4.3で追加) |
+| `Speaker` | 要人(発言者)マスタ(v4.4で追加) |
+| `SpeechEvent` | 要人発言(v4.4で追加) |
+| `SupportRequest` | お問い合わせ・フィードバックと自動返信(v4.7で追加) |
+| `RateAlert` | ユーザーのレートアラート(通貨ペアの価格の上抜け・下抜け。v4.14で追加) |
+| `EventScheduleChange` | 予定の指標・要人発言の日時の変更・中止の記録(v4.14で追加) |
+
+将来拡張(P2、今回はテーブル設計対象外): `favorite_indicators` / `favorite_pairs` / `alert_settings` / `SpeechPriceReaction` / Community関連。(`Person` / `SpeechEvent`はHQ指示 2026-10-05により`Speaker` / `SpeechEvent`としてv4.4で追加。`alert_settings`のうちレートアラートはv4.14で`RateAlert`として追加)
+
+---
+
+## 2. ER関係
+
+```
+Profile
+   │
+   ├── Subscription[]
+   ├── Entitlement[]
+   ├── UserSettings(0..1)
+   ├── SupportRequest[](v4.7)
+   └── RateAlert[](v4.14) ── FxPair
+
+EconomicIndicator
+   │
+   ├── IndicatorFxPair ── FxPair ── FxPrice
+   │
+   └── EconomicEvent(メタデータ + provider/provider_event_id)
+          │
+          ├── EventSnapshot[]       … 発表時点の値。immutable(DBトリガーで保護)。MVPはsnapshot_type=RELEASEのみ
+          ├── EventRevision[]       … 改定履歴(追記のみ)
+          ├── EventExplanation[]    … 乖離理由(履歴保持、複数version)
+          └── EventPriceReaction
+                 │
+                 └── (参照)FxPair・FxPrice
+
+IngestionLog(他Entityへの直接参照なし。provider/data_typeで対象を記録)
+
+EventScheduleChange(v4.14。kind + target_idでEconomicEvent / SpeechEventを指す。FKなし)
+```
+
+---
+
+## 3. Table定義
+
+`PK`=主キー、`FK`=外部キー、`UQ`=UNIQUE制約、`IDX`=インデックス、`NN`=NOT NULL、`DEF`=DEFAULT、`CHK`=CHECK制約。Timestamp系カラムはすべて`timestamptz`(UTC保存、9章参照)。Enum値はUPPER_SNAKE_CASEで統一する。
+
+### 3.1 Profile
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK | 認証基盤(Supabase `auth.users.id`)と同値 |
+| display_name | text | nullable | SCR-015で編集(API v1.5) |
+| birth_date | date | nullable, CHK >= 1900-01-01 | SCR-015の生年月日(2026-10-05追加、Migration `20261005000001_profiles_birth_date.sql`)。暦日のためタイムゾーンを持たない`date`型 |
+| deleted_at | timestamptz | nullable | v4.3で未使用化(アカウント削除は物理削除に変更、下記)。カラムは既存Migrationとの互換のため残す |
+| created_at | timestamptz | NN, DEF now() | |
+| updated_at | timestamptz | NN, DEF now() | |
+
+**RLS**: `id = auth.uid()`の本人のみSELECT/UPDATE可。INSERT/DELETEはservice_roleのみ(6章)。
+
+**アカウント削除(v4.3でHQ確定、2026-10-02)**: Apple 5.1.1(v)対応のアカウント削除(SCR-026、`DELETE /api/v1/account`)は**物理削除**とする。Backendが`auth.users`の行をSupabase Admin APIで削除し、`Profile`以下はFKのCASCADEで削除される(7章)。
+
+### 3.2 Subscription(確定)
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK | |
+| user_id | uuid | FK→Profile.id, NN | |
+| plan | text | NN, DEF `FREE`, CHK: `plan IN ('FREE','PRO')` | |
+| status | text | NN, CHK: `status IN ('ACTIVE','CANCELED','EXPIRED','TRIAL')` | **HQ確定**。4状態に固定 |
+| provider | text | NN, DEF `APP_STORE` | |
+| provider_customer_id | text | nullable | |
+| provider_subscription_id | text | nullable | App Storeでは`originalTransactionId`(更新しても変わらない購読の識別子) |
+| product_id | text | nullable | v4.3追加。App StoreのProduct ID(月額/年額) |
+| provider_environment | text | nullable, CHK: `IN ('Production','Sandbox')` | v4.3追加 |
+| last_transaction_id | text | nullable | v4.3追加。最後に検証したTransactionの`transactionId` |
+| auto_renew | boolean | nullable | v4.3追加。RenewalInfoの自動更新状態。未受領ならnull |
+| revoked_at | timestamptz | nullable | v4.3追加。返金等による取消日時 |
+| last_verified_at | timestamptz | nullable | v4.3追加。Backendが最後に署名検証した時刻 |
+| started_at | timestamptz | NN | |
+| expires_at | timestamptz | nullable | |
+| created_at | timestamptz | NN, DEF now() | |
+| updated_at | timestamptz | NN, DEF now() | |
+
+IDX(user_id)
+UQ: `status = 'ACTIVE'`の行はuser_idにつき1件まで(部分UNIQUE index)。履歴として過去の契約行は複数残る。
+UQ(provider, provider_subscription_id) WHERE provider_subscription_id IS NOT NULL(v4.3追加)。1つのApp Store購読は1ユーザーにのみ紐付く。
+
+**RLS**: `user_id = auth.uid()`の本人のみSELECT可。書き込みはservice_role(決済処理)のみ。
+
+**保存処理(v4.3)**: `POST /api/v1/subscription/verify`(api-design.md §25.1)で検証済みの購読は、関数`apply_app_store_subscription(...)`(security definer、service_roleのみ実行可)で1トランザクションとして保存する: 他ユーザー所有なら例外(SQLSTATE `P0409`→409)、新しい購読がACTIVEなら同ユーザーの他のACTIVE行をEXPIREDにする、行をinsert/update、PRO用`Entitlement`(`VIEW_ADVANCED_STATS`)の`enabled`/`expires_at`を同期。将来のApp Store Server Notifications(更新・解約・更新失敗・返金)も同関数を再利用する想定。戻り値はplan / status / started_at / expires_at / product_id(v4.8で`product_id`を追加。`GET /subscription`と同じ形)。
+
+### 3.3 Entitlement(確定: feature_codeを機能単位のコード体系に具体化)
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK | |
+| user_id | uuid | FK→Profile.id, NN | |
+| feature_code | text | NN | 値セットは下記参照。FREE/PRO名称は埋め込まない(HQ確定) |
+| enabled | boolean | NN, DEF false | |
+| expires_at | timestamptz | nullable | |
+| created_at | timestamptz | NN, DEF now() | |
+| updated_at | timestamptz | NN, DEF now() | |
+
+UQ(user_id, feature_code)
+IDX(user_id)
+
+**`feature_code`の値セット(MVP)**:
+
+| コード | 意味 |
+|---|---|
+| `VIEW_BASIC_EVENT` | 基本的なイベント情報の閲覧 |
+| `VIEW_HISTORICAL` | 過去イベント比較の閲覧 |
+| `VIEW_MARKET_REACTION` | 市場反応(EventPriceReaction)の閲覧 |
+| `VIEW_ADVANCED_STATS` | 高度な統計の閲覧 |
+
+**将来追加予定(値のみ確保、CHECK制約はかけずtext型で拡張性を確保)**: `AI_ANALYSIS` / `SPEECH_ANALYSIS` / `ALERT`
+
+実際のFree/Proへの機能割り当ては`Subscription`/`Entitlement`の運用ロジック側で管理し、`feature_code`自体にFREE/PROという名称は含めない(HQ確定)。CHECK制約は付けず、値の追加を将来のMigrationのみで行えるようにする。
+
+**RLS**: `user_id = auth.uid()`の本人のみSELECT可。書き込みはservice_roleのみ。
+
+### 3.4 EconomicIndicator(確定: importance値セット)
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK | |
+| code | text | UQ, NN | 内部コード(Provider非依存) |
+| name | text | NN | |
+| display_name | text | nullable, CHK: `display_name IS NULL OR (btrim(display_name) <> '' AND char_length(display_name) <= 40)` | v4.12。一覧画面の表示名(例: `消費者物価指数（CPI）`・`FOMC政策金利`)。HQの表示名ルール(indicator-display-names.md)に従って人が登録する。SCR-005・SCR-010・ホームで表示。NULL = 未登録(画面側は`name`を表示) |
+| name_en | text | nullable | v4.10。英語名(例: `Consumer Price Index`)。SCR-006で表示。NULL = 未登録 |
+| country_code | text | NN | ISO 3166-1 alpha-2を想定 |
+| currency_code | text | NN | ISO 4217を想定(参照テーブルなし) |
+| importance | text | NN, CHK: `importance IN ('LOW','MEDIUM','HIGH')` | **HQ確定**。3段階 |
+| description | text | nullable | SCR-006の「概要」。日本語1〜2文(v4.10で明記) |
+| key_points | text[] | nullable, CHK: `key_points IS NULL OR (cardinality(key_points) <= 6 AND array_position(key_points, NULL) IS NULL AND '' <> ALL (key_points))` | v4.10。SCR-006の「注目される理由」(日本語の短文、配列順 = 表示順、2〜4件程度)。NULL = 未登録(APIでは`[]`) |
+| frequency | text | NN, CHK: `frequency IN ('MONTHLY','QUARTERLY','IRREGULAR')` | |
+| unit | text | nullable | |
+| source | text | nullable | |
+| source_url | text | nullable | |
+| favorable_direction | text | NN, CHK: `favorable_direction IN ('HIGHER_IS_POSITIVE','LOWER_IS_POSITIVE','NEUTRAL')` | Surpriseの符号・方向性判定(9章) |
+| market_view_above | text | nullable, CHK: `market_view_above IS NULL OR (btrim(market_view_above) <> '' AND char_length(market_view_above) <= 200)` | v4.11。SCR-008「一般的な見方」(結果が予想を上回ったとき)。人が書いた日本語1文。実際の値動きの原因とは断定しない。NULL = 未登録 |
+| market_view_below | text | nullable, CHK: `market_view_below IS NULL OR (btrim(market_view_below) <> '' AND char_length(market_view_below) <= 200)` | v4.11。同上(結果が予想を下回ったとき) |
+| is_active | boolean | NN, DEF true | 論理削除相当 |
+| created_at | timestamptz | NN, DEF now() | |
+| updated_at | timestamptz | NN, DEF now() | |
+
+### 3.5 EconomicEvent(確定: 重複防止をprovider_event_id優先に変更)
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK | |
+| indicator_id | uuid | FK→EconomicIndicator.id, NN | |
+| provider | text | nullable | データ取得元のProvider識別子(Provider選定前はnull) |
+| provider_event_id | text | nullable | Providerが提供する一意イベントID(存在しない場合はnull) |
+| release_datetime | timestamptz | NN | |
+| release_datetime_precision | text | NN, CHK: `release_datetime_precision IN ('EXACT','DATE_ONLY','APPROXIMATE','UNKNOWN')` | |
+| importance | text | NN, CHK: `importance IN ('LOW','MEDIUM','HIGH')` | イベント単位でも保持(既存設計踏襲) |
+| status | text | NN, DEF `SCHEDULED`, CHK: `status IN ('SCHEDULED','RELEASED','CANCELLED')` | |
+| data_status | text | NN, DEF `PENDING`, CHK: `data_status IN ('PENDING','AVAILABLE','PARTIAL','UNAVAILABLE')` | |
+| created_at | timestamptz | NN, DEF now() | |
+| updated_at | timestamptz | NN, DEF now() | |
+
+**重複防止(HQ確定)**: `provider`が付与できるイベントは`UQ(provider, provider_event_id) WHERE provider_event_id IS NOT NULL`(部分UNIQUE index)を一意性の主たる担保とする。`provider_event_id`が存在しないケースを考慮し、`indicator_id + release_datetime`はUNIQUE制約とはせず、**補助的な重複検知用の通常Index**として保持する(IDXのみ、絶対的な一意性ルールにはしない)。同一指標を将来複数Providerから取得する構造を妨げない。
+
+IDX(indicator_id)
+IDX(indicator_id, release_datetime) — 補助的な重複検知・過去N件クエリ用
+IDX(release_datetime)
+IDX(status)
+
+### 3.6 EventSnapshot(確定: DBレベルで不変性を担保)
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK | |
+| event_id | uuid | FK→EconomicEvent.id, NN | |
+| snapshot_type | text | NN, DEF `RELEASE` | MVPは`RELEASE`のみ使用 |
+| forecast | numeric(18,4) | nullable | 存在しない場合null(0にしない) |
+| actual | numeric(18,4) | nullable | 発表前はnull |
+| previous | numeric(18,4) | nullable | |
+| unit | text | nullable | |
+| source | text | nullable | |
+| source_url | text | nullable | |
+| captured_at | timestamptz | NN | Snapshotを取得・確定した時刻 |
+| surprise | numeric(18,4) | nullable | `actual - forecast`。いずれかがnullならnull。0ちょうどはnullにしない(5章) |
+| surprise_direction | text | nullable, CHK: `surprise_direction IN ('POSITIVE','NEGATIVE','NEUTRAL')` | 5章の判定ロジック参照。surpriseがnullならnull、0なら`NEUTRAL` |
+| created_at | timestamptz | NN, DEF now() | |
+
+UQ(event_id, snapshot_type)
+IDX(event_id)
+
+**不変性のDBレベル担保(HQ確定)**: `RELEASE`のSnapshotは、作成後のUPDATE/DELETEをDBレベルで防止する。実装方式の第一候補は、`BEFORE UPDATE OR DELETE`トリガーで`OLD.snapshot_type = 'RELEASE'`の場合に例外を発生させる方式(代案: アプリケーションroleへのUPDATE/DELETE権限を`REVOKE`し、訂正が必要な場合は`EventRevision`経由のみで表現する権限設計)。具体的なSQL(トリガー関数・権限設定)は実装フェーズで確定するが、**「DB側で不変性を担保する」ことは設計方針として確定**する。
+
+### 3.7 EventRevision
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK | |
+| event_id | uuid | FK→EconomicEvent.id, NN | |
+| field_name | text | NN, CHK: `field_name IN ('ACTUAL','PREVIOUS')` | |
+| old_value | numeric(18,4) | NN | |
+| new_value | numeric(18,4) | NN | |
+| effective_at | timestamptz | NN | 改定が判明した日時 |
+| source | text | nullable | |
+| created_at | timestamptz | NN, DEF now() | レコード登録時刻(effective_atとは別) |
+
+IDX(event_id)
+
+**追記専用(append-only)**: UPDATE/DELETEは想定しない。UI表示時は「改定後」ラベルで`EventSnapshot`の値と区別する。
+
+### 3.8 EventExplanation(確定: 履歴保持に変更)
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK | |
+| event_id | uuid | FK→EconomicEvent.id, NN | |
+| version | integer | NN, DEF 1 | 同一eventに対する新旧を判別するための連番。新しい生成ほど大きい値 |
+| explanation_type | text | NN, DEF `FACT_SUMMARY`, CHK: `explanation_type IN ('FACT_SUMMARY','AI_ANALYSIS','AI_SPECULATION')` | MVPは`FACT_SUMMARY`固定 |
+| summary | text | nullable | 出典が無い場合はnull(「情報なし」表示) |
+| source | text | nullable | |
+| source_url | text | nullable | |
+| published_at | timestamptz | nullable | 出典元の公開日時 |
+| created_at | timestamptz | NN, DEF now() | |
+
+UQ(event_id, version) — **上書きせず履歴保持(HQ確定)**。同一eventについて複数のExplanationが存在可能
+IDX(event_id)
+
+**最新版の判定**: `event_id`ごとに`version`の最大値(または`created_at`の最大値、両者は単調増加で一致する設計とする)を「現在表示すべき版」として扱う。Read APIは原則として最新版のみを返し、履歴一覧が必要な画面では全版を返す(API詳細設計で確定)。
+
+**将来のAI拡張(HQ確定: MVPでは追加しない)**: `generated_by`/`model`/`prompt_version`/`confidence`等のAI向けカラムは、**MVPでは追加しない**。AI分析機能を実装するタイミングで、Migrationにより追加できる構造とする(`explanation_type`に`AI_ANALYSIS`/`AI_SPECULATION`という値をあらかじめ用意しているため、型追加なしでもtype区分自体は将来使える)。
+
+### 3.9 IndicatorFxPair
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK | |
+| indicator_id | uuid | FK→EconomicIndicator.id, NN | |
+| fx_pair_id | uuid | FK→FxPair.id, NN | |
+| priority | smallint | NN, DEF 100 | 数値が小さいほど優先(主要ペア) |
+| is_active | boolean | NN, DEF true | |
+| created_at | timestamptz | NN, DEF now() | |
+| updated_at | timestamptz | NN, DEF now() | |
+
+UQ(indicator_id, fx_pair_id)
+IDX(indicator_id)
+IDX(fx_pair_id)
+
+### 3.10 FxPair
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK | |
+| symbol | text | UQ, NN | 例: `USDJPY` |
+| base_currency | text | NN | ISO 4217コード |
+| quote_currency | text | NN | |
+| pip_size | numeric(10,6) | NN | 固有の定数(例: 0.01、0.0001) |
+| price_precision | smallint | NN | 通貨ペアごとの小数桁数(JPYペア: 3、それ以外: 5が一般的) |
+| is_active | boolean | NN, DEF true | |
+| created_at | timestamptz | NN, DEF now() | |
+| updated_at | timestamptz | NN, DEF now() | |
+
+### 3.11 FxPrice(確定: id型・Numeric精度・保持範囲)
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | bigint (bigserial / `GENERATED BY DEFAULT AS IDENTITY`) | PK | **HQ確定**。時系列データのため整数系を採用。実装時はPostgreSQLのIDENTITY構文を優先してよい |
+| fx_pair_id | uuid | FK→FxPair.id, NN | |
+| timestamp | timestamptz | NN | open time基準 |
+| timeframe | text | NN, CHK: `timeframe IN ('1m','5m','15m','30m','60m')` | |
+| open | numeric(12,6) | NN | |
+| high | numeric(12,6) | NN | |
+| low | numeric(12,6) | NN | |
+| close | numeric(12,6) | NN | |
+| volume | numeric | nullable | 提供元により意味が異なるため必須にしない |
+| source | text | nullable | |
+| created_at | timestamptz | NN, DEF now() | |
+
+UQ(fx_pair_id, timeframe, timestamp)
+IDX(fx_pair_id, timestamp)
+IDX(fx_pair_id, timeframe, timestamp)
+
+**データ保持範囲(HQ確定)**: MVPでは連続した全期間の価格データを永続保存する方式にはしない。経済イベント分析に必要な**イベント周辺の時間窓**(発表前〜+60分の1m/5m/15m/30m/60m算出に必要な範囲)を中心に保持する。将来Web分析ダッシュボードや通常のFXチャート機能を追加する場合、連続価格データ保存へ拡張可能な設計とする(テーブル構造自体はどちらの運用にも対応できるため、保持範囲は運用(Ingestion Workerの取得・保持ポリシー)側の設定で制御する)。
+
+### 3.12 EventPriceReaction(確定: max_upward/max_downwardの定義、timeframeからBEFOREを除外、Numeric精度、max_upward_pips/max_downward_pipsをDB保存に統一)
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK | |
+| event_id | uuid | FK→EconomicEvent.id, NN | |
+| fx_pair_id | uuid | FK→FxPair.id, NN | |
+| timeframe | text | NN, CHK: `timeframe IN ('1m','5m','15m','30m','60m')` | **HQ確定**。`BEFORE`は含めない。発表前価格は`pre_release_price`で保持し役割を分離 |
+| pre_release_price | numeric(12,6) | nullable | 発表直前価格。全timeframe行で共通値 |
+| post_release_price | numeric(12,6) | nullable | 該当timeframe時点の価格 |
+| movement | numeric(12,6) | nullable | 絶対変化(post_release_price - pre_release_price) |
+| pips | numeric(10,2) | nullable | Backendが正 |
+| change_percent | numeric(10,4) | nullable | |
+| max_upward | numeric(12,6) | nullable | **HQ確定の定義**: `pre_release_price`を基準とした、発表後その時間軸までの期間内の最大上昇幅(= 期間内の最高値 − pre_release_price)。累積変動量ではない |
+| max_downward | numeric(12,6) | nullable | 同様に、期間内の最大下降幅(= 期間内の最安値 − pre_release_price、負の値) |
+| max_upward_pips | numeric(10,2) | nullable | **v4.2で追加(HQ確定)**: `max_upward / FxPair.pip_size`。通常の`pips`と同様にBackend算出時にDB保存する(API応答時の都度計算は行わない) |
+| max_downward_pips | numeric(10,2) | nullable | 同様に`max_downward / FxPair.pip_size` |
+| data_status | text | NN, DEF `PENDING`, CHK: `data_status IN ('PENDING','AVAILABLE','UNAVAILABLE')` | 価格データ不足時に0を保存せず「分析対象外/Data Pending」を表現 |
+| calculated_at | timestamptz | nullable | data_status=AVAILABLEになった時点の計算時刻 |
+| created_at | timestamptz | NN, DEF now() | |
+
+UQ(event_id, fx_pair_id, timeframe)
+IDX(event_id)
+IDX(fx_pair_id)
+IDX(event_id, fx_pair_id, timeframe)
+
+**max_upward/max_downwardの計算例(HQ提示)**: `pre_release_price = 150.00`で、期間中に150.20まで上昇・149.70まで下落した場合、`max_upward = +0.20`・`max_downward = -0.30`。
+
+**pips換算値の保存方針(v4.2でHQ確定)**: `max_upward_pips`/`max_downward_pips`は、通常の`pips`列と同じ方針で、Ingestion Worker側の算出時にDBへ保存する。API応答時に`FxPair.pip_size`を用いて都度計算する設計は採用しない(pips系カラムの保存方針を統一するため)。
+
+**段階的生成**: イベント発表後、該当timeframeの`FxPrice`が確定した時点で、その都度該当timeframeの行を生成・upsertする。行が存在しない、または`data_status = PENDING`は「まだ計算されていない」ことを表す。価格データが取得できなかった場合は`data_status = UNAVAILABLE`とし、数値列は`0`ではなく`null`のまま保持する。
+
+### 3.13 IngestionLog(確定: data_type値セット)
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK | |
+| provider | text | NN | 例: `trading_economics`、`eodhd`等(Provider選定後に値確定) |
+| data_type | text | NN, CHK: `data_type IN ('ECONOMIC_EVENT','FX_PRICE','EVENT_REACTION','OTHER')` | **HQ確定**。`OTHER`を将来拡張の受け皿として用意 |
+| started_at | timestamptz | NN | |
+| completed_at | timestamptz | nullable | |
+| status | text | NN, CHK: `status IN ('SUCCESS','FAILURE','PARTIAL')` | |
+| fetched_count | integer | nullable | 取得試行件数 |
+| success_count | integer | nullable | |
+| error_count | integer | nullable | |
+| error_message | text | nullable | |
+| created_at | timestamptz | NN, DEF now() | |
+
+IDX(data_type, started_at DESC)
+IDX(status)
+
+### 3.14 UserSettings(v4.3で追加、HQ確定 2026-10-02)
+
+SCR-016 通知設定 / SCR-018 表示・地域設定 / SCR-019 チャート設定(api-design.md 30章では旧番号SCR-020 / SCR-021) / SCR-026 ホーム通貨ペア編集の保存先(api-design.md §24.4/§24.5)。行は初回の`GET /settings`でDB既定値により作成する。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| user_id | uuid | PK, FK→Profile.id ON DELETE CASCADE | ユーザーにつき1行 |
+| notify_push | boolean | NN, DEF true | プッシュ通知(全体のON/OFF)(v4.4) |
+| notify_indicators | boolean | NN, DEF true | 重要な経済指標の通知(v4.4) |
+| notify_speeches | boolean | NN, DEF true | 要人発言の通知(v4.4) |
+| notify_fx_pair_symbols | text[] | nullable, CHK: NULLまたは1件以上 | 対象通貨ペア(`FxPair.symbol`)。NULL = すべて。配列のためFKなし、存在確認はBackend(v4.4) |
+| notify_importances | text[] | NN, DEF `{HIGH,MEDIUM}`, CHK: 1件以上かつ`<@ {LOW,MEDIUM,HIGH}` | 通知する重要度(v4.4) |
+| notify_lead_minutes | smallint | NN, DEF 5, CHK: `IN (0,5,10,15,30,60)` | 発表の何分前に通知するか。0 = 発表時(v4.4) |
+| notify_quiet_hours_enabled | boolean | NN, DEF false | 通知しない時間帯を使うか(v4.5) |
+| notify_quiet_start | time | NN, DEF `23:00`, CHK: 秒 = 0 | 通知しない時間帯の開始(含む)。`display_timezone`の現地時刻(v4.5) |
+| notify_quiet_end | time | NN, DEF `07:00`, CHK: 秒 = 0 | 通知しない時間帯の終了(含まない)。開始より前なら日付をまたぐ、開始と同じなら抑止なし(v4.5) |
+| display_language | text | NN, DEF `ja`, CHK: `IN ('ja','en')` | |
+| display_region | text | NN, DEF `JP`, CHK: `~ '^[A-Z]{2}$'` | ISO 3166-1 alpha-2 |
+| display_timezone | text | NN, DEF `Asia/Tokyo` | IANA timezone名(妥当性はBackendで検証) |
+| display_theme | text | NN, DEF `SYSTEM`, CHK: `IN ('SYSTEM','DARK','LIGHT')` | テーマ。SYSTEM = 端末の設定に従う(v4.6) |
+| display_text_size | text | NN, DEF `STANDARD`, CHK: `IN ('SMALL','STANDARD','LARGE')` | 文字サイズ(v4.6) |
+| display_date_format | text | NN, DEF `YYYY/MM/DD`, CHK: `IN ('YYYY/MM/DD','YYYY-MM-DD','MM/DD/YYYY','YYYY年M月D日')` | 日付の表示形式(v4.6) |
+| display_time_format | text | NN, DEF `24H`, CHK: `IN ('24H','12H')` | 時刻の表示形式(v4.6) |
+| display_currency | text | NN, DEF `JPY`, CHK: `IN ('JPY','USD','EUR','GBP','AUD','CAD','CHF','NZD')` | 表示通貨(v4.6) |
+| display_week_start | text | NN, DEF `MONDAY`, CHK: `IN ('SUNDAY','MONDAY')` | 週の始まり(v4.6) |
+| chart_default_fx_pair_symbol | text | nullable, FK→FxPair.symbol ON UPDATE CASCADE ON DELETE SET NULL | |
+| chart_default_timeframe | text | NN, DEF `5m`, CHK: `IN ('1m','5m','15m','30m','60m')` | |
+| chart_type | text | NN, DEF `CANDLE`, CHK: `IN ('CANDLE','LINE','BAR')` | チャートの種類(v4.6)。APIは`chart.chart_type` |
+| chart_show_indicators | boolean | NN, DEF true | テクニカル指標の表示(全体のON/OFF)。falseなら`chart_indicator_*`に関わらず表示しない(v4.6) |
+| chart_indicator_ma | boolean | NN, DEF true | 移動平均線(v4.6) |
+| chart_indicator_bollinger | boolean | NN, DEF false | ボリンジャーバンド(v4.6) |
+| chart_indicator_macd | boolean | NN, DEF true | MACD(v4.6) |
+| chart_indicator_rsi | boolean | NN, DEF false | RSI(v4.6) |
+| chart_indicator_stochastic | boolean | NN, DEF false | ストキャスティクス(v4.6) |
+| chart_crosshair | boolean | NN, DEF true | クロスヘア(十字カーソル)の表示(v4.6) |
+| chart_price_line | boolean | NN, DEF true | 現在値ラインの表示(v4.6) |
+| home_fx_pairs | text[] | nullable, CHK: NULLまたは1〜3件 | ホームに表示する通貨ペア(`FxPair.symbol`)。配列の順 = 表示順。NULL = 既定(USDJPY・EURUSD・EURJPY)。配列のためFKなし、存在確認・重複の確認はBackend(v4.9) |
+| created_at | timestamptz | NN, DEF now() | |
+| updated_at | timestamptz | NN, DEF now() | |
+
+**通知について(v4.4で変更、HQ指示 2026-10-05)**: 旧方針「MVPはPush通知を送信しない・保存のみ」(HQ確定 2026-10-02)を置き換え、iOSが`GET /notifications/upcoming`(api-design.md §24.6)の結果から端末内のローカル通知を予約する。Backendからのリモートpush・デバイストークン用テーブルは引き続き不要。
+
+**通知しない時間帯(v4.5、Migration `20261006000001_notification_quiet_hours.sql`)**: `notify_quiet_*`はAPIでは`"HH:MM"`として受け渡しし、Postgresの`time`値(`"23:00:00"`)との変換はBackend(`src/repositories/userSettingsRepository.ts`)で行う。`notify_quiet_hours_enabled = true`のとき、`GET /notifications/upcoming`は`notify_at`を`display_timezone`(解決できない場合は`Asia/Tokyo`)の現地時刻に直して判定し、該当する項目を除外する(api-design.md §24.6)。既存行は列既定値(OFF)で埋まるためデータ移行は不要。
+
+**表示・チャート設定の追加(v4.6、Migration `20261006000002_display_chart_settings_v2.sql`)**: APIのフィールド名は列名から`display_` / `chart_`を除いたもの(例: `display_text_size` ⇔ `display.text_size`、`chart_indicator_ma` ⇔ `chart.indicator_ma`)。`chart_type`のみ`chart_chart_type`とせず、列名のまま`chart.chart_type`に対応させる。列挙の妥当性はBackend(`src/schemas/settings.ts`、違反は`422`)とCHECKの両方で担保する。既存行は列既定値で埋まるためデータ移行は不要。
+
+**ホーム通貨ペア(v4.9、Migration `20261007000003_home_fx_pairs.sql`)**: APIの`home.fx_pairs`に対応する(api-design.md §24.4/§24.5)。要素が有効な`FxPair.symbol`か・重複がないかは`notify_fx_pair_symbols`と同じくBackendが確認する(違反は`422`)。`GET /home`の`major_fx`はこの列の通貨ペアをその順で返し、NULL(または行がない)ときは既定の3件を返す(api-design.md 12章)。`GET /home`は設定の行を作らず読むだけ。既存行はNULL(= 既定)のためデータ移行は不要。
+
+**旧カラムの移行(Migration `20261005000002_notification_settings_v2.sql`)**: `notify_pre_release` / `notify_result` / `notify_favorites` / `notify_min_importance`は削除。既存行は`notify_indicators = notify_pre_release OR notify_result`、`notify_importances` = 旧`notify_min_importance`以上の★を持つ重要度(暫定マッピング LOW→★1 / MEDIUM→★3 / HIGH→★5、`src/domain/importance.ts`。例: ★3→`{HIGH,MEDIUM}`、★4→`{HIGH}`)で移行した。移行時は`updated_at`を更新しない。
+
+**RLS**: `user_id = auth.uid()`の本人のみSELECT可。書き込みはservice_roleのみ(Backend経由)。
+
+### 3.15 Speaker(v4.4で追加、HQ指示 2026-10-05)
+
+要人(発言者)マスタ。旧版でP2・設計対象外としていた`Person`を、要人発言の通知・一覧のために前倒しで追加(Migration `20261005000003_speeches.sql`)。テーブル名は`speakers`。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK, DEF gen_random_uuid() | |
+| name | text | NN | 例: ジェローム・パウエル |
+| title | text | NN | 役職。例: FRB議長 |
+| organization | text | NN | 例: FRB |
+| country_code | text | NN | `EconomicIndicator`と同じ形式。ユーロ圏は`EU` |
+| currency_code | text | NN | `EconomicIndicator`と同じ形式。関連通貨ペアの判定に使う |
+| photo_url | text | nullable | v4.13。要人の公式写真。`null` / 絶対URL(`https://…`) / Backendが配信するファイルのkey `speaker-photos/<file>`(`<file>`は英小文字・数字・`-`と拡張子`.jpg`/`.png`だけ、ファイルは`assets/speaker-photos/`)のいずれか。APIは常に絶対URLか`null`で返す(api-design.md 14.7節)。入れてよいのは自由に使える公式写真だけ: FRBの要人の写真(federalreserve.gov、パブリックドメイン。出典「米国連邦準備制度理事会(FRB)」を示す。フレーム内表示は不可のため直リンクせず自前で配信)。ほかの機関は利用条件が未確認のため`null`(アプリは頭文字と機関の色で表示) |
+| created_at / updated_at | timestamptz | NN, DEF now() | |
+
+IDX(currency_code)
+
+### 3.16 SpeechEvent(v4.4で追加、HQ指示 2026-10-05)
+
+要人発言1件。テーブル名は`speech_events`。`SpeechPriceReaction`は引き続き対象外(テーブルは作らない)。要人発言の値動きは api-design.md v1.28(14.11節)で、`fx_prices`の1分足から API 応答時に計算する方針とした(保存しない)。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK, DEF gen_random_uuid() | |
+| speaker_id | uuid | NN, FK→Speaker.id ON DELETE CASCADE | |
+| provider | text | NN | |
+| provider_event_id | text | NN | |
+| title | text | NN | |
+| summary | text | nullable | 出典に基づく事実の要約 |
+| statement_datetime | timestamptz | NN | 発言(予定)日時 |
+| importance | text | NN, CHK: `IN ('LOW','MEDIUM','HIGH')` | |
+| status | text | NN, DEF `SCHEDULED`, CHK: `IN ('SCHEDULED','DELIVERED','CANCELLED')` | |
+| created_at / updated_at | timestamptz | NN, DEF now() | |
+
+UQ(provider, provider_event_id)、IDX(statement_datetime)、IDX(speaker_id)
+
+関連通貨ペアは保存せず、`Speaker.currency_code`をbaseまたはquoteに含む`FxPair`をBackendが導出する(api-design.md §24.6)。
+
+**RLS**: `EconomicIndicator` / `EconomicEvent`と同じ共有データ扱い(全認証ユーザーSELECT可、書き込みはservice_roleのみ)。
+
+### 3.17 SupportRequest(v4.7で追加)
+
+SCR-020 ヘルプ・お問い合わせから送られたお問い合わせ・フィードバック(api-design.md §24.7/§24.8)。テーブル名は`support_requests`。Migration `20261006000003_support_requests.sql`。返信はルールとテンプレートでBackendが決める(LLMは使わない。`src/domain/support.ts`)。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK, DEF gen_random_uuid() | 受付ID。GitHub Issueにも記載する |
+| user_id | uuid | NN, FK→Profile.id ON DELETE CASCADE | 送信者。GitHub Issueには含めない |
+| kind | text | NN, CHK: `IN ('INQUIRY','FEEDBACK')` | お問い合わせ / ご意見・ご要望 |
+| category | text | NN, CHK: `IN ('ACCOUNT','BILLING','NOTIFICATION','CHART','DATA','BUG','OTHER')` | |
+| body | text | NN, CHK: 1〜2000文字 | 前後の空白を除いて保存 |
+| app_version | text | nullable, CHK: 100文字以内 | 不具合調査用の端末情報(任意) |
+| os_version | text | nullable, CHK: 100文字以内 | 同上 |
+| device_model | text | nullable, CHK: 100文字以内 | 同上 |
+| classification | text | NN, CHK: `IN ('VALID','BUG','NONSENSE','SPAM')` | 自動判定の結果。APIでは返さない |
+| status | text | NN, CHK: `IN ('REPLIED','IGNORED','ESCALATED')` | VALID→REPLIED、BUG→ESCALATED、NONSENSE / SPAM→IGNORED |
+| reply_body | text | nullable | 自動返信の本文。IGNOREDはNULL |
+| replied_at | timestamptz | nullable | 返信日時。IGNOREDはNULL |
+| github_issue_number | int | nullable | BUGで作成したGitHub Issueの番号。未設定・作成失敗はNULL。APIでは返さない |
+| github_issue_url | text | nullable | 同IssueのURL。APIでは返さない |
+| created_at | timestamptz | NN, DEF now() | |
+
+CHK: `(status = 'IGNORED') = (reply_body IS NULL)`、`(reply_body IS NULL) = (replied_at IS NULL)`。IDX(user_id, created_at DESC)(履歴の取得と送信回数の上限判定)。
+
+**送信回数の上限**: 1ユーザーにつき直近1時間で5件まで。この行数で判定するため、IGNOREDの行も削除しない(api-design.md §24.7、超過時`429 RATE_LIMITED`)。v4.8: 保存は関数`insert_support_request(...)`(security definer、`search_path`固定、service_roleのみ実行可)で行う。関数はユーザーごとのadvisory lock(`pg_advisory_xact_lock(hashtext(user_id::text))`)を取ってから直近1時間の件数を数え、上限に達していればSQLSTATE `P0429`(Backendが`429`に変換。保存しない)、そうでなければinsertして行を返す。同じユーザーの同時送信は順番に処理されるため上限を超えない。
+
+**GitHub Issue**: BUGの行は、Backend環境変数`GITHUB_ISSUES_TOKEN` / `GITHUB_ISSUES_REPO`が設定されていればGitHub Issueを作成し、番号とURLを記録する。Issueに送るのは受付ID・種別・カテゴリ・端末情報と、メールアドレス・電話番号・カード番号・7桁以上の数字列を除いた本文のみ(v4.8でカード番号・7桁に変更)(`user_id`・メールアドレスは送らない)。トークンはBackend(サーバー)だけに置き、iOSアプリやDBには保存しない。
+
+**RLS**: RLSは有効だがポリシーなし(v4.8)。anon / authenticatedの権限も取り消しており、クライアントからは読み書きできない。参照・書き込みはservice_role(Backendの`GET` / `POST /support/requests`)のみ。v4.7の「本人のみSELECT可」のポリシーでは`classification` / `github_issue_*`がクライアントから読めたため削除した。
+
+### 3.18 RateAlert(v4.14で追加)
+
+レートアラート(api-design.md §24.12〜§24.14、notification-inbox-spec.md 7章)。テーブル名は`rate_alerts`。Migration `20261015000001_rate_alerts.sql`。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK, DEF gen_random_uuid() | 通知一覧の`RATE_ALERT`の行の`target_id` |
+| user_id | uuid | NN, FK→Profile.id ON DELETE CASCADE | |
+| fx_pair_id | uuid | NN, FK→FxPair.id ON DELETE CASCADE | |
+| direction | text | NN, CHK: `IN ('ABOVE','BELOW')` | ABOVE: 価格 >= target_price で通知、BELOW: 価格 <= target_price で通知 |
+| target_price | numeric(12, 6) | NN, CHK: `> 0` | `FxPrice`と同じ精度 |
+| is_active | boolean | NN, DEF true | 通知すると false |
+| triggered_at | timestamptz | nullable | 通知した時刻 |
+| created_at / updated_at | timestamptz | NN, DEF now() | updated_atはトリガー`set_updated_at` |
+
+CHK: `triggered_at IS NULL OR NOT is_active`(通知済みは有効に戻らない)。IDX(user_id, created_at)、部分IDX(fx_pair_id) WHERE is_active(全員分を判定するジョブ用)。
+
+**有効なアラートの上限**: FREE 1件・PRO 10件。DBではなくBackend(`src/domain/planLimits.ts`の`rate_alerts_max`)で確認する。
+
+**判定**: 価格は`FxPrice`の最新の行(`timestamp`が最も新しい行)の`close`。Backendが`GET /notifications`(本人の分)と`npm run jobs:evaluate-rate-alerts`(全員分)で判定し、通知したら`notification_inbox`に行を入れて`is_active = false`・`triggered_at = now()`にする。
+
+**RLS**: `UserSettings`と同じ(本人のみSELECT可、書き込みはservice_roleのみ)。
+
+### 3.19 EventScheduleChange(v4.14で追加)
+
+予定(`status = SCHEDULED`)の経済指標イベント・要人発言の、日時の変更と中止の記録(notification-inbox-spec.md 8章)。テーブル名は`event_schedule_changes`。Migration `20261015000002_event_schedule_changes.sql`。
+
+| カラム | 型 | 制約 | 備考 |
+|---|---|---|---|
+| id | uuid | PK, DEF gen_random_uuid() | 通知一覧の`CALENDAR_UPDATE`の行の`target_id` |
+| kind | text | NN, CHK: `IN ('INDICATOR','SPEECH')` | |
+| target_id | uuid | NN | INDICATORは`EconomicEvent.id`、SPEECHは`SpeechEvent.id`。2つの表を指すためFKなし(消えたイベントの行は使われない) |
+| change_type | text | NN, CHK: `IN ('RESCHEDULED','CANCELLED')` | |
+| old_datetime | timestamptz | NN | 変更前の日時 |
+| new_datetime | timestamptz | nullable | 変更後の日時。CHK: `(change_type = 'CANCELLED') = (new_datetime IS NULL)` |
+| changed_at | timestamptz | NN, DEF now() | |
+
+IDX(changed_at)、IDX(kind, target_id)。
+
+**記録するトリガー**: `economic_events`の`AFTER UPDATE OF release_datetime, status`(関数`record_economic_event_schedule_change()`)と、`speech_events`の`AFTER UPDATE OF statement_datetime, status`(関数`record_speech_event_schedule_change()`)。変更前が`SCHEDULED`の行だけ記録する。`status`が`CANCELLED`になったら`CANCELLED`、それ以外で日時が変わったら`RESCHEDULED`。発表済み・発言済みのイベントの時刻の訂正は記録しない。
+
+**保持**: 通知一覧の`CALENDAR_UPDATE`の保存期間(7日)を過ぎた行は日次ジョブ`npm run jobs:cleanup-notifications`が消す。
+
+**RLS**: `EconomicEvent`と同じ共有データ(全認証ユーザーSELECT可)。書き込みはトリガーのみ(Backendは書かない)。
+
+---
+
+## 4. Snapshot不変性・Revision管理(確定)
+
+- `EventSnapshot`(`snapshot_type = RELEASE`)は発表確定時に1回生成し、以後**DBレベルのトリガー/権限制御で**書き換え・削除を防止する(3.6節)。
+- `EventRevision`は改定が判明するたびに追記のみ行う(UPDATE/DELETEなし、アプリケーション層の規律で運用)。
+- 分析(Surprise計算・pips計算・統計)は常に`EventSnapshot`(RELEASE)の値を用い、`EventRevision`の値では再計算しない。
+- `EventExplanation`との責務分離: `EventExplanation`は`EventRevision`とは独立したEntityであり、改定(数値の訂正)ではなく「乖離理由の説明」を保持する。`EventRevision`が発生しても`EventExplanation`を自動更新することはしない(必要な場合は新しい`version`の`EventExplanation`を別途生成する運用とする)。
+
+## 5. Surprise計算方式(確定)
+
+`EventSnapshot`の`surprise`(raw、`actual - forecast`)・`surprise_direction`(`favorable_direction`に基づく方向性)の2列で管理する(保存方式)。
+
+**判定ロジック(HQ確定)**:
+
+- `forecast`または`actual`がnullの場合 → `surprise` = null、`surprise_direction` = null(**「計算できない」を意味する**)
+- `surprise = 0`(ForecastとActualが完全一致) → `surprise_direction = NEUTRAL`。**NULLとは明確に区別する**(0は「計算できたが差がなかった」ことを意味する)
+- `surprise ≠ 0`の場合:
+  - `favorable_direction = HIGHER_IS_POSITIVE`かつ`surprise > 0` → `POSITIVE`、`surprise < 0` → `NEGATIVE`
+  - `favorable_direction = LOWER_IS_POSITIVE`かつ`surprise < 0` → `POSITIVE`、`surprise > 0` → `NEGATIVE`
+  - `favorable_direction = NEUTRAL` → 常に`NEUTRAL`(符号のみでは判定しない)
+- 保存タイミング: `EventSnapshot`のactualが確定した時点(Ingestion Workerの処理内)で算出・保存する。
+
+## 6. RLS方針(確定)
+
+Supabase RLSを実装前提の設計条件として採用する。論理方針は本書で確定し、具体的なポリシー文(SQL)は実装フェーズで確定する。
+
+| 区分 | 対象テーブル | 方針 |
+|---|---|---|
+| ユーザー固有 | `Profile` / `Subscription` / `Entitlement` / `UserSettings` / `RateAlert`(v4.14) | `auth.uid()`等を利用した本人のみSELECT可。INSERT/UPDATE/DELETEはservice_roleのみ |
+| ユーザー固有(Backend経由のみ、v4.8) | `SupportRequest`(v4.7) | クライアントからは読み書き不可(ポリシーなし、anon / authenticatedの権限なし)。内部情報の列(`classification` / `github_issue_*`)を含むため、参照もservice_role(Backend)経由のみ |
+| 共有データ | `EconomicIndicator` / `EconomicEvent` / `Speaker` / `SpeechEvent`(v4.4) / `EventScheduleChange`(v4.14、書き込みはトリガーのみ) / `EventSnapshot` / `EventRevision` / `EventExplanation` / `IndicatorFxPair` / `FxPair` / `FxPrice` / `EventPriceReaction` | ユーザー単位のRLSを前提とせず、原則として全認証ユーザーからSELECT可能。INSERT/UPDATE/DELETEはservice_role(Ingestion Worker・管理者機能)のみ |
+| 運用ログ | `IngestionLog` | 一般ユーザーからは非公開。管理者機能・service_roleのみアクセス可 |
+
+## 7. Delete / Cascade方針(確定)
+
+基本方針は**RESTRICT中心**。特に分析履歴の正確性を損なう可能性がある`EconomicEvent`/`EventSnapshot`/`EventPriceReaction`等について、安易なCASCADE DELETEは採用しない(親Entity削除時に履歴データが意図せず消えることを防ぐ)。
+
+- 歴史的record(`EconomicEvent`/`EventSnapshot`/`EventRevision`/`EventExplanation`/`EventPriceReaction`/`FxPrice`): 子から親への外部キーは`ON DELETE RESTRICT`。
+- マスタ系(`EconomicIndicator`/`FxPair`): `is_active`による論理無効化を優先し、物理削除は想定しない(`ON DELETE RESTRICT`)。
+- ユーザー系(v4.3で変更): アカウント削除は物理削除。`auth.users`削除→`Profile`(`auth.users`への`ON DELETE CASCADE`)→`Subscription`/`Entitlement`/`UserSettings`/`SupportRequest`(v4.7)(`Profile`への`ON DELETE CASCADE`)の順に連鎖して削除される。旧方針の`Profile`ソフトデリート(`deleted_at`)は使用しない。
+- 関連テーブル(`IndicatorFxPair`): 親(`EconomicIndicator`/`FxPair`)は物理削除を想定しないため、実質的にCASCADEが発火する場面はない。
+
+不要になったデータは削除ではなく`is_active`/`status`等による論理的な無効化を優先する。
+
+## 8. Numeric精度(確定: 用途ごとに個別設定)
+
+一律`numeric(18,6)`は適用せず、カラムの用途ごとに精度を設定する。
+
+| 用途 | 型 | 対象カラム |
+|---|---|---|
+| 経済指標値(指標により単位・桁数が大きく異なる) | `numeric(18,4)` | `EventSnapshot.forecast`/`actual`/`previous`/`surprise`、`EventRevision.old_value`/`new_value` |
+| FX価格(レート) | `numeric(12,6)` | `FxPrice.open`/`high`/`low`/`close`、`EventPriceReaction.pre_release_price`/`post_release_price`/`movement`/`max_upward`/`max_downward` |
+| pips | `numeric(10,2)` | `EventPriceReaction.pips`/`max_upward_pips`/`max_downward_pips` |
+| 変化率(%) | `numeric(10,4)` | `EventPriceReaction.change_percent` |
+| pip_size(通貨ペア固有の定数) | `numeric(10,6)` | `FxPair.pip_size` |
+
+FX価格の実際の小数桁数は`FxPair.price_precision`(通貨ペアごと)で規定し、上記`numeric`型はそれを余裕を持って収められるよう設定した。
+
+## 9. UTC/Timezone方針
+
+全テーブルの時刻系カラムは`timestamptz`(内部はUTC)で統一する。ユーザー表示時にクライアント側でローカルタイムゾーンへ変換する(概要設計書v1.6 8.1節・要件定義書v1.5 9.1節で確定済みの方針を踏襲)。
+
+## 10. データ品質ルール
+
+`EconomicEvent.data_status`(PENDING/AVAILABLE/PARTIAL/UNAVAILABLE)と`EventPriceReaction.data_status`(PENDING/AVAILABLE/UNAVAILABLE)により、以下を担保する:
+
+- 取得できていないデータを0として扱わない
+- Forecastがない場合、Surpriseを0にしない(0とnullを明確に区別する、5章)
+- Release時点の情報と、後から改定された情報を区別する(4章)
+- 統計対象外イベントを分析件数に無条件で含めない(母数を明示、概要設計書v1.6 10.2節)
+- 外部APIのデータをそのままUIへ流さず、Backendで正規化してから利用する
+- データ取得失敗・欠損・遅延を状態(data_status)として管理する
+
+## 11. 他ドキュメントとの整合性(再確認)
+
+概要設計書・要件定義書は、前ラウンド(db-design.md v3.0作成時)で「EconomicEvent = EventSnapshot」という旧来の同一視表現を、Entity分離方針に合わせて既に修正済みである(概要設計書5章・要件定義書5.1節/27章)。
+
+本ラウンドの確定事項のうち、`EventExplanation`の履歴保持化は概要設計書5.6節にも反映済み(v1.4→**v1.5**、「上書きせず履歴保持とする」を明記)。
+
+以下は、概要設計書v1.6・要件定義書v1.5に**明記がなく、今回DB詳細設計のみで確定した実装レベルの設計判断**であるため、ドキュメント本文の修正は不要と判断したが、12章「他ドキュメントの更新対象」で確認のため報告する:
+
+- `Entitlement.feature_code`の具体化(概要設計書25章・要件定義書38〜55章はEntitlementの「存在」を要件化しているのみで、feature_codeの命名規則までは踏み込んでいない。矛盾はないため本文修正は不要と判断)
+- `EconomicEvent`への`provider`/`provider_event_id`追加(概要設計書のEconomicEvent管理情報の記述と矛盾しない、追加情報のため本文修正は不要と判断)
+
+---
+
+## 12. Search機能に必要なIndex(API詳細設計で確定、v4.1)
+
+Search機能(FEAT-110〜115)は、API詳細設計(api-design.md v1.3)でPartial Match Search(部分一致検索、`ILIKE '%…%'`)を採用することが確定した。標準のB-tree Indexは部分一致検索を効率的に処理できないため、以下のカラムに**`pg_trgm`拡張によるGIN Index**を追加する方針を確定する(HQ確定、2026-09-16)。
+
+| テーブル.カラム | Index種別 | 目的 |
+|---|---|---|
+| `economic_indicators.name` | GIN(`pg_trgm`) | Indicator検索(部分一致) |
+| `economic_indicators.code` | GIN(`pg_trgm`) | Indicator検索(部分一致) |
+| `fx_pairs.symbol` | GIN(`pg_trgm`) | FX Pair検索(部分一致) |
+
+**Event検索**: `economic_events`に独立した`event_name`カラムは存在しないため(API詳細設計A-6でIndicator基準の検索に変更確定)、`economic_indicators.name`/`code`のGIN Indexを経由する。`EconomicEvent`側への追加Index(部分一致用)は不要。
+
+**Currency検索**: `currency_code`は静的なCode→Nameマッピング(アプリケーション側、DBクエリを介さない)で対応するため、Index対象外(API詳細設計A-5)。
+
+**country_code / importance等の絞り込み検索**: 完全一致(`=`)のフィルタであり、標準のB-tree Index(3.4節`economic_indicators`テーブルへの追加を推奨)で十分。GIN Indexは不要。
+
+DB Migration(`CREATE EXTENSION pg_trgm`・`CREATE INDEX ... USING GIN (... gin_trgm_ops)`)は今回実施していない。実装フェーズでの対応事項とする。
+
+具体的なIndex構成(pg_trgm等の全文検索Indexの要否含む)は、API詳細設計で検索対象・検索条件が確定してから決定する。
+
+---
+
+## 13. 次のフェーズ
+
+本書をもってDB詳細設計を完成版とする。HQレビューの後、API詳細設計(Endpoint・Request/Response・Error Code)へ進む。今回もDB設計の実装(migration実行・Table作成・API実装・Swift実装・Supabase変更)は行わない。
