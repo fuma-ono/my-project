@@ -6,7 +6,9 @@ import {
   SPEECH_SUMMARY_SETTINGS,
   type SpeechSummaryStore,
 } from '../ingestion/pipelines/speechSummaries.js';
+import { assertDevTarget } from '../ingestion/devTarget.js';
 import { JobCounters, runIngestionJob } from '../ingestion/runner.js';
+import { parseSpeechJobOptions } from '../ingestion/speechJobOptions.js';
 import { createIngestionRepository } from '../repositories/ingestionRepository.js';
 import { createSpeechSummaryStore } from '../repositories/speechSummaryRepository.js';
 
@@ -16,6 +18,9 @@ import { createSpeechSummaryStore } from '../repositories/speechSummaryRepositor
  *   npm run ingest:speech-summaries                      # 直近30日の、本文が取れて要約がまだ無い発言
  *   npm run ingest:speech-summaries -- --all             # 過去のすべての発言に適用する
  *   npm run ingest:speech-summaries -- --all --dry-run   # 書かない。対象と、READY / FAILED になるはずの内訳だけ出す
+ *   npm run ingest:speech-summaries -- --scheduled       # 定期実行: 発言日時が直近14日。FAILED は自動で取り直さない
+ *
+ * 始める前に、接続先が DEV であることを確かめる(ingestion/devTarget.ts)。
  *
  * --dry-run: DB に書かない(ingestion_logs にも書かない。書き込みの関数は呼ばれたら失敗する)。要約の本文は出さない
  * (文字数だけ)。出力に認証情報は出さない。
@@ -29,10 +34,12 @@ function readOnlySummaryStore(store: SpeechSummaryStore): SpeechSummaryStore {
 }
 
 async function main(): Promise<void> {
+  assertDevTarget(process.env);
+  const options = parseSpeechJobOptions(process.argv);
   const supabase = createSupabaseClient(loadEnv());
-  const all = process.argv.includes('--all');
-  const dryRun = process.argv.includes('--dry-run');
-  const settings = { ...SPEECH_SUMMARY_SETTINGS, ...(all ? { pastDays: null } : {}), dryRun };
+  const all = options.mode === 'all';
+  const dryRun = options.dryRun;
+  const settings = { ...SPEECH_SUMMARY_SETTINGS, pastDays: options.pastDays, dryRun };
   const store = createSpeechSummaryStore(supabase);
 
   if (dryRun) {
@@ -47,6 +54,7 @@ async function main(): Promise<void> {
       JSON.stringify({
         job: 'ingest:speech-summaries',
         dry_run: true,
+        mode: options.mode,
         all,
         max_per_run: settings.maxSpeeches,
         candidates: counters.fetched,
@@ -70,6 +78,7 @@ async function main(): Promise<void> {
   console.log(
     JSON.stringify({
       job: 'ingest:speech-summaries',
+      mode: options.mode,
       all,
       status: result.status,
       details: result.counters.details,

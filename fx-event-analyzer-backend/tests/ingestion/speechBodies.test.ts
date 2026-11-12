@@ -32,25 +32,46 @@ const rss = (...links: string[]) =>
 class FakeStore implements SpeechBodyStore {
   rows: SpeechForBody[] = [];
   updates: { id: string; patch: SpeechBodyPatch }[] = [];
-  listSpeechesNeedingBody(providers: readonly string[], sinceIso: string): Promise<SpeechForBody[]> {
+  claims: { id: string; from: number }[] = [];
+  /** 本物の DB と同じ条件(発言済み・期間・PENDING または FAILED で回数が上限未満) */
+  listSpeechesNeedingBody(
+    providers: readonly string[],
+    sinceIso: string,
+    maxAttempts: number,
+  ): Promise<SpeechForBody[]> {
     return Promise.resolve(
-      this.rows.filter(
-        (r) =>
-          providers.includes(r.provider) &&
-          r.status === 'DELIVERED' &&
-          ['PENDING', 'FAILED'].includes(r.body_status) &&
-          r.statement_datetime >= sinceIso,
-      ),
+      this.rows
+        .filter(
+          (r) =>
+            providers.includes(r.provider) &&
+            r.status === 'DELIVERED' &&
+            (r.body_status === 'PENDING' || r.body_status === 'FAILED') &&
+            r.body_attempts < maxAttempts &&
+            Date.parse(r.statement_datetime) >= Date.parse(sinceIso),
+        )
+        .map((r) => ({ ...r })),
     );
   }
-  updateSpeechBody(id: string, patch: SpeechBodyPatch): Promise<void> {
-    this.updates.push({ id, patch });
+  private guard(id: string, expectedAttempts: number) {
     const row = this.rows.find((r) => r.id === id)!;
+    return ['PENDING', 'FAILED'].includes(row.body_status) && row.body_attempts === expectedAttempts ? row : null;
+  }
+  claimBodyAttempt(id: string, expectedAttempts: number, _at: string, maxAttempts: number): Promise<boolean> {
+    const row = this.guard(id, expectedAttempts);
+    if (!row || row.body_attempts >= maxAttempts) return Promise.resolve(false);
+    this.claims.push({ id, from: expectedAttempts });
+    row.body_attempts = expectedAttempts + 1;
+    return Promise.resolve(true);
+  }
+  updateSpeechBody(id: string, patch: SpeechBodyPatch, expectedAttempts: number): Promise<boolean> {
+    const row = this.guard(id, expectedAttempts);
+    if (!row) return Promise.resolve(false);
+    this.updates.push({ id, patch });
     Object.assign(row, {
       body_status: patch.body_status,
       ...(patch.source_url ? { source_url: patch.source_url } : {}),
     });
-    return Promise.resolve();
+    return Promise.resolve(true);
   }
 }
 
@@ -73,6 +94,7 @@ const row = (overrides: Partial<SpeechForBody>): SpeechForBody => ({
   status: 'DELIVERED',
   source_url: null,
   body_status: 'PENDING',
+  body_attempts: 0,
   speaker_name: 'クリストファー・ウォラー',
   speaker_organization: 'FRB',
   ...overrides,
@@ -499,5 +521,247 @@ describe('ingestSpeechBodies: the four DEV cases (2026-11-11) with the official 
     expect(byId.get('b1110b')).toEqual(['FETCH', 'json_time', 'bowman20261110a.htm']);
     expect(byId.get('stored')).toEqual(['FETCH', 'stored', 'bowman20261110b.htm']); // 既にある URL は変えない
     expect(store.updates).toEqual([]);
+  });
+});
+
+// HQ承認(2026-11-11「要人発言の定期実行」1日目): 試行回数・直近14日・二重の実行の防止。
+describe('ingestSpeechBodies: attempts, the 14-day window and concurrent runs', () => {
+  const NOW_S = new Date('2026-11-20T06:00:00Z');
+  const URL_A = 'https://www.federalreserve.gov/newsevents/speech/waller20261115a.htm';
+  const settings14 = { pastDays: 14, maxFetches: 20 };
+  const withRss = (frb: FakeFetcher, ...urls: string[]) => frb.pages.set(FRB_SPEECHES_RSS_URL, rss(...urls));
+
+  it('counts one attempt per speech row, just before reading its page (not per page, not for rows without a URL)', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    store.rows = [
+      row({ id: 'a', statement_datetime: '2026-11-15T15:00:00Z', source_url: URL_A }),
+      row({ id: 'b', statement_datetime: '2026-11-16T15:00:00Z', source_url: URL_A }), // 同じページ、別の行
+      row({ id: 'nourl', speaker_name: 'ミシェル・ボウマン', statement_datetime: '2026-11-17T15:00:00Z' }),
+    ];
+    withRss(frb);
+    frb.pages.set(FRB_SPEECHES_JSON_URL, '[]');
+    frb.pages.set(URL_A, frbPage('Inflation has eased.'));
+    await ingestSpeechBodies(store, { frb, ecb: new FakeFetcher() }, settings14, NOW_S, new JobCounters());
+    expect(store.claims).toEqual([
+      { id: 'a', from: 0 },
+      { id: 'b', from: 0 },
+    ]);
+    expect(store.rows.find((r) => r.id === 'a')!.body_attempts).toBe(1);
+    expect(store.rows.find((r) => r.id === 'nourl')!.body_attempts).toBe(0);
+  });
+
+  it('only DELIVERED rows whose statement time is within the last 14 days; SCHEDULED never', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    store.rows = [
+      row({ id: 'in13', statement_datetime: '2026-11-07T06:00:00Z', source_url: URL_A }),
+      row({ id: 'out15', statement_datetime: '2026-11-05T06:00:00Z', source_url: URL_A }),
+      row({ id: 'sched', status: 'SCHEDULED', statement_datetime: '2026-11-19T06:00:00Z', source_url: URL_A }),
+    ];
+    frb.pages.set(URL_A, frbPage('Inflation has eased.'));
+    const { plan } = await ingestSpeechBodies(
+      store,
+      { frb, ecb: new FakeFetcher() },
+      settings14,
+      NOW_S,
+      new JobCounters(),
+    );
+    expect(plan.map((p) => p.speech_id)).toEqual(['in13']);
+
+    // ストアが条件を落として返しても、発言前・期間外・上限に達した FAILED は対象にしない
+    const loose: SpeechBodyStore = {
+      listSpeechesNeedingBody: () =>
+        Promise.resolve([
+          row({ id: 'sched', status: 'SCHEDULED', statement_datetime: '2026-11-19T06:00:00Z', source_url: URL_A }),
+          row({ id: 'old', statement_datetime: '2026-10-01T06:00:00Z', source_url: URL_A }),
+          row({
+            id: 'cap',
+            body_status: 'FAILED',
+            body_attempts: 3,
+            statement_datetime: '2026-11-19T06:00:00Z',
+            source_url: URL_A,
+          }),
+        ]),
+      claimBodyAttempt: () => Promise.reject(new Error('must not be called')),
+      updateSpeechBody: () => Promise.reject(new Error('must not be called')),
+    };
+    const r = await ingestSpeechBodies(loose, { frb, ecb: new FakeFetcher() }, settings14, NOW_S, new JobCounters());
+    expect(r.plan).toEqual([]);
+  });
+
+  it('FAILED is retried up to 3 attempts per row, then left alone', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher(); // ページが無い → 404 → FAILED
+    store.rows = [
+      row({
+        id: 'f2',
+        body_status: 'FAILED',
+        body_attempts: 2,
+        statement_datetime: '2026-11-15T15:00:00Z',
+        source_url: URL_A,
+      }),
+      row({
+        id: 'f3',
+        body_status: 'FAILED',
+        body_attempts: 3,
+        statement_datetime: '2026-11-15T16:00:00Z',
+        source_url: URL_A,
+      }),
+    ];
+    const counters = new JobCounters();
+    await ingestSpeechBodies(store, { frb, ecb: new FakeFetcher() }, settings14, NOW_S, counters);
+    expect(store.claims).toEqual([{ id: 'f2', from: 2 }]);
+    expect(store.rows.find((r) => r.id === 'f2')).toMatchObject({ body_status: 'FAILED', body_attempts: 3 });
+    expect(store.updates.at(-1)).toMatchObject({ id: 'f2', patch: { body_status: 'FAILED', body_error: 'HTTP_404' } });
+    // 次の実行では、上限に達したので対象にならない
+    store.claims = [];
+    await ingestSpeechBodies(store, { frb, ecb: new FakeFetcher() }, settings14, NOW_S, new JobCounters());
+    expect(store.claims).toEqual([]);
+    expect(frb.requested.filter((u) => u === URL_A)).toHaveLength(1);
+  });
+
+  it('dry-run: no attempt is counted and nothing is written', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    store.rows = [row({ id: 'a', statement_datetime: '2026-11-15T15:00:00Z', source_url: URL_A })];
+    const { plan } = await ingestSpeechBodies(
+      store,
+      { frb, ecb: new FakeFetcher() },
+      { ...settings14, dryRun: true },
+      NOW_S,
+      new JobCounters(),
+    );
+    expect(plan.map((p) => p.action)).toEqual(['FETCH']);
+    expect(store.claims).toEqual([]);
+    expect(store.updates).toEqual([]);
+    expect(store.rows[0]!.body_attempts).toBe(0);
+    expect(frb.requested).toEqual([]);
+  });
+
+  it('a row another run already FETCHED is not read again or overwritten (state condition)', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    store.rows = [row({ id: 'a', statement_datetime: '2026-11-15T15:00:00Z', source_url: URL_A })];
+    frb.pages.set(URL_A, frbPage('Inflation has eased.'));
+    const original = store.listSpeechesNeedingBody.bind(store);
+    store.listSpeechesNeedingBody = async (...args) => {
+      const listed = await original(...args);
+      Object.assign(store.rows[0]!, { body_status: 'FETCHED' }); // 読んだ直後に、ほかの実行が FETCHED にした
+      return listed;
+    };
+    const counters = new JobCounters();
+    await ingestSpeechBodies(store, { frb, ecb: new FakeFetcher() }, settings14, NOW_S, counters);
+    expect(frb.requested).toEqual([]);
+    expect(store.updates).toEqual([]);
+    expect(counters.skipReasons).toMatchObject({ CONCURRENT_UPDATE: 1 });
+    expect(counters.success).toBe(0);
+  });
+
+  it('if another run bumped the attempt count meanwhile, the result is not written (optimistic condition)', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    store.rows = [row({ id: 'a', statement_datetime: '2026-11-15T15:00:00Z', source_url: URL_A })];
+    frb.pages.set(URL_A, frbPage('Inflation has eased.'));
+    const getText = frb.getText.bind(frb);
+    frb.getText = async (url: string) => {
+      const page = await getText(url);
+      store.rows[0]!.body_attempts += 1; // 本文を読んでいる間に、ほかの実行が同じ行を数えた
+      return page;
+    };
+    const counters = new JobCounters();
+    await ingestSpeechBodies(store, { frb, ecb: new FakeFetcher() }, settings14, NOW_S, counters);
+    expect(store.updates).toEqual([]);
+    expect(counters.success).toBe(0);
+    expect(counters.skipReasons).toMatchObject({ CONCURRENT_UPDATE: 1 });
+  });
+});
+
+// HQレビュー(2026-11-12): PENDING も回数で止める。
+describe('ingestSpeechBodies: the attempt cap applies to PENDING too', () => {
+  const NOW_S = new Date('2026-11-20T06:00:00Z');
+  const URL_A = 'https://www.federalreserve.gov/newsevents/speech/waller20261115a.htm';
+  const settings14 = { pastDays: 14, maxFetches: 20 };
+  const matrix = (['PENDING', 'FAILED'] as const).flatMap((status) =>
+    [0, 1, 2, 3].map((attempts, i) =>
+      row({
+        id: `${status}-${attempts}`,
+        provider_event_id: `${status}-${attempts}`,
+        body_status: status,
+        body_attempts: attempts,
+        statement_datetime: `2026-11-1${i}T15:00:00Z`,
+        source_url: URL_A,
+      }),
+    ),
+  );
+
+  it('PENDING and FAILED × attempts 0–3: 0, 1, 2 are tried (one count each), 3 is not', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    store.rows = matrix.map((r) => ({ ...r }));
+    frb.pages.set(URL_A, frbPage('Inflation has eased.'));
+    const { plan } = await ingestSpeechBodies(
+      store,
+      { frb, ecb: new FakeFetcher() },
+      settings14,
+      NOW_S,
+      new JobCounters(),
+    );
+    const tried = new Set(plan.map((p) => p.speech_id));
+    for (const r of matrix) expect(tried.has(r.id), r.id).toBe(r.body_attempts < 3);
+    expect(store.claims.map((c) => c.id).sort()).toEqual(
+      ['FAILED-0', 'FAILED-1', 'FAILED-2', 'PENDING-0', 'PENDING-1', 'PENDING-2'].sort(),
+    );
+  });
+
+  it('the same when the store returns every row (the pipeline itself filters attempts >= 3)', async () => {
+    const loose: SpeechBodyStore = {
+      listSpeechesNeedingBody: () => Promise.resolve(matrix.map((r) => ({ ...r }))),
+      claimBodyAttempt: () => Promise.resolve(true),
+      updateSpeechBody: () => Promise.resolve(true),
+    };
+    const frb = new FakeFetcher();
+    frb.pages.set(URL_A, frbPage('Inflation has eased.'));
+    const { plan } = await ingestSpeechBodies(
+      loose,
+      { frb, ecb: new FakeFetcher() },
+      settings14,
+      NOW_S,
+      new JobCounters(),
+    );
+    expect(plan.map((p) => p.speech_id).sort()).toEqual(
+      ['FAILED-0', 'FAILED-1', 'FAILED-2', 'PENDING-0', 'PENDING-1', 'PENDING-2'].sort(),
+    );
+  });
+
+  it('abnormal end after counting (the result is never written, the row stays PENDING): stops after 3 runs', async () => {
+    class CrashingStore extends FakeStore {
+      override updateSpeechBody(): Promise<boolean> {
+        return Promise.reject(new Error('connection lost')); // 回数を数えた後、結果を書く前に落ちる
+      }
+    }
+    const store = new CrashingStore();
+    const frb = new FakeFetcher();
+    store.rows = [row({ id: 'p', statement_datetime: '2026-11-15T15:00:00Z', source_url: URL_A })];
+    frb.pages.set(URL_A, frbPage('Inflation has eased.'));
+    for (let run = 1; run <= 3; run += 1) {
+      await expect(
+        ingestSpeechBodies(store, { frb, ecb: new FakeFetcher() }, settings14, NOW_S, new JobCounters()),
+      ).rejects.toThrow('connection lost');
+      expect(store.rows[0]).toMatchObject({ body_status: 'PENDING', body_attempts: run });
+    }
+    // 4回目の実行: もう対象にならず、ページも読まない
+    const pagesBefore = frb.requested.filter((u) => u === URL_A).length;
+    const { plan } = await ingestSpeechBodies(
+      store,
+      { frb, ecb: new FakeFetcher() },
+      settings14,
+      NOW_S,
+      new JobCounters(),
+    );
+    expect(plan).toEqual([]);
+    expect(frb.requested.filter((u) => u === URL_A)).toHaveLength(pagesBefore);
+    expect(store.claims).toHaveLength(3);
+    expect(store.rows[0]).toMatchObject({ body_status: 'PENDING', body_attempts: 3 });
   });
 });

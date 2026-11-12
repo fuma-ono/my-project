@@ -48,6 +48,8 @@ export interface SpeechForBody {
   status: string;
   source_url: string | null;
   body_status: string;
+  /** 本文の取得を試みた回数(migration 20261112000001。発言の行ごと)。 */
+  body_attempts: number;
   /** speakers.name(日本語)。 */
   speaker_name: string;
   speaker_organization: string;
@@ -62,9 +64,23 @@ export interface SpeechBodyPatch {
 }
 
 export interface SpeechBodyStore {
-  /** DELIVERED で body_status が PENDING / FAILED の、providers の発言(statement_datetime >= sinceIso、古い順)。 */
-  listSpeechesNeedingBody(providers: readonly string[], sinceIso: string): Promise<SpeechForBody[]>;
-  updateSpeechBody(id: string, patch: SpeechBodyPatch): Promise<void>;
+  /**
+   * providers の発言済み(DELIVERED。発言前の SCHEDULED は入れない)で、statement_datetime >= sinceIso の行のうち、
+   * body_status が PENDING または FAILED で、body_attempts < maxAttempts のもの(古い順)。PENDING も回数で止める
+   * (HQレビュー 2026-11-12: 回数を増やした後に異常終了して PENDING のまま残った行を、無限に取り直さない)。
+   */
+  listSpeechesNeedingBody(
+    providers: readonly string[],
+    sinceIso: string,
+    maxAttempts: number,
+  ): Promise<SpeechForBody[]>;
+  /**
+   * 本文のページを読む直前に、試行回数を1つ増やす(状態が PENDING / FAILED で、回数が expectedAttempts のままで、
+   * かつ maxAttempts 未満の行だけ)。増やせなかった(ほかの実行が先に扱った・状態が変わった・上限)ら false。
+   */
+  claimBodyAttempt(id: string, expectedAttempts: number, attemptedAtIso: string, maxAttempts: number): Promise<boolean>;
+  /** 状態が PENDING / FAILED で、回数が expectedAttempts のままの行だけを書き換える。書き換えなかったら false。 */
+  updateSpeechBody(id: string, patch: SpeechBodyPatch, expectedAttempts: number): Promise<boolean>;
 }
 
 export interface SpeechBodyFetcher {
@@ -84,7 +100,12 @@ export interface SpeechBodySettings {
    * FRB の講演の RSS・一覧の JSON(公開のページ)だけ読み、各発言で何をするはずかを返す。
    */
   dryRun?: boolean;
+  /** FAILED の行を自動で取り直す上限(発言の行ごとの試行回数。省略時は MAX_BODY_ATTEMPTS)。 */
+  maxAttempts?: number;
 }
+
+/** FAILED の本文を自動で取り直すのは、発言の行ごとに3回まで(HQ承認 2026-11-11)。 */
+export const MAX_BODY_ATTEMPTS = 3;
 
 /** 1件ごとに、この実行で何をするか(dry-run の出力。本番の実行でも同じ判定)。処理の順は statement_datetime の古い順。 */
 export type SpeechBodyAction =
@@ -139,7 +160,15 @@ export async function ingestSpeechBodies(
     settings.pastDays === null
       ? '1970-01-01T00:00:00.000Z'
       : new Date(now.getTime() - settings.pastDays * 86_400_000).toISOString();
-  const speeches = await store.listSpeechesNeedingBody(BODY_PROVIDERS, sinceIso);
+  const maxAttempts = settings.maxAttempts ?? MAX_BODY_ATTEMPTS;
+  // ストアの条件に加えて、ここでも発言前・期間外・上限に達した行(PENDING も FAILED も)を外す(ストアが条件を落としても対象にしない)
+  const speeches = (await store.listSpeechesNeedingBody(BODY_PROVIDERS, sinceIso, maxAttempts)).filter(
+    (s) =>
+      s.status === 'DELIVERED' &&
+      Date.parse(s.statement_datetime) >= Date.parse(sinceIso) &&
+      (s.body_status === 'PENDING' || s.body_status === 'FAILED') &&
+      s.body_attempts < maxAttempts,
+  );
   counters.fetched += speeches.length;
 
   // 1. FRB の URL(まだ無い行だけ)。講演の RSS は、必要なときに1回だけ読む。
@@ -198,6 +227,12 @@ export async function ingestSpeechBodies(
   let fetches = 0;
   for (const speech of speeches) {
     const url = speech.source_url ?? urlById.get(speech.id) ?? null;
+    /** 状態と回数の条件つきで書く。書けなかった(ほかの実行が先に書いた)ら数えるだけで、上書きしない。 */
+    const write = async (expectedAttempts: number, patch: SpeechBodyPatch): Promise<boolean> => {
+      const ok = await store.updateSpeechBody(speech.id, patch, expectedAttempts);
+      if (!ok) counters.skip('CONCURRENT_UPDATE');
+      return ok;
+    };
     const record = (action: SpeechBodyAction) =>
       plan.push({
         speech_id: speech.id,
@@ -216,7 +251,7 @@ export async function ingestSpeechBodies(
       counters.skip('NOT_OFFICIAL_URL');
       record('NOT_OFFICIAL_URL');
       if (settings.dryRun) continue;
-      await store.updateSpeechBody(speech.id, { body_status: 'FAILED', body_error: 'NOT_OFFICIAL_URL' });
+      await write(speech.body_attempts, { body_status: 'FAILED', body_error: 'NOT_OFFICIAL_URL' });
       continue;
     }
     if (!(settings.storeBodyFor ?? STORE_BODY_FOR).includes(speech.provider)) {
@@ -224,7 +259,7 @@ export async function ingestSpeechBodies(
       counters.skip('RIGHTS_UNCONFIRMED');
       record('RIGHTS_UNCONFIRMED');
       if (settings.dryRun) continue;
-      await store.updateSpeechBody(speech.id, {
+      await write(speech.body_attempts, {
         source_url: url,
         speech_body: null,
         body_fetched_at: null,
@@ -237,39 +272,45 @@ export async function ingestSpeechBodies(
       counters.skip('RUN_CAP'); // 次の実行で読む
       record('RUN_CAP');
       if (settings.dryRun) continue;
-      if (!speech.source_url) await store.updateSpeechBody(speech.id, { source_url: url, body_status: 'PENDING' });
+      if (!speech.source_url)
+        await write(speech.body_attempts, { source_url: url, body_status: speech.body_status as 'PENDING' | 'FAILED' });
       continue;
     }
     fetches += 1;
     record('FETCH');
-    if (settings.dryRun) continue;
+    if (settings.dryRun) continue; // dry-run は回数も含めて何も書かない
+    // 本文のページを読む直前に、この発言の行の試行回数を1回だけ増やす(楽観的な条件。増やせなければ、ほかの実行が扱った)
+    if (!(await store.claimBodyAttempt(speech.id, speech.body_attempts, now.toISOString(), maxAttempts))) {
+      counters.skip('CONCURRENT_UPDATE');
+      continue;
+    }
+    const attempts = speech.body_attempts + 1;
     const fetcher = speech.provider === 'frb_calendar' ? fetchers.frb : fetchers.ecb;
     try {
       const html = await fetcher.getText(url);
       const body = extractSpeechBody(speech.provider, html);
       if (!body) {
         counters.skip('NO_BODY_FOUND');
-        await store.updateSpeechBody(speech.id, {
-          source_url: url,
-          body_status: 'FAILED',
-          body_error: 'NO_BODY_FOUND',
-        });
+        await write(attempts, { source_url: url, body_status: 'FAILED', body_error: 'NO_BODY_FOUND' });
         continue;
       }
-      await store.updateSpeechBody(speech.id, {
-        source_url: url,
-        speech_body: body,
-        body_fetched_at: now.toISOString(),
-        body_status: 'FETCHED',
-        body_error: null,
-      });
-      counters.success += 1;
-      counters.note('fetched', { speech_id: speech.id, provider: speech.provider, url, characters: body.length });
+      if (
+        await write(attempts, {
+          source_url: url,
+          speech_body: body,
+          body_fetched_at: now.toISOString(),
+          body_status: 'FETCHED',
+          body_error: null,
+        })
+      ) {
+        counters.success += 1;
+        counters.note('fetched', { speech_id: speech.id, provider: speech.provider, url, characters: body.length });
+      }
     } catch (error) {
       const code = errorCode(error);
       counters.skip('FETCH_FAILED');
-      counters.note('failed', { speech_id: speech.id, url, error: code });
-      await store.updateSpeechBody(speech.id, { source_url: url, body_status: 'FAILED', body_error: code });
+      counters.note('failed', { speech_id: speech.id, url, error: code, attempts });
+      await write(attempts, { source_url: url, body_status: 'FAILED', body_error: code });
     }
   }
   return { plan };
