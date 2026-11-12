@@ -1,0 +1,68 @@
+# e-Stat の接続と Secret ESTAT_APP_ID の確認(HQ指示 2026-11-12「JP_CPI の事前準備」)。
+# - 動くのは、ブランチ verify/fx-estat-check への push と、手動の実行だけ(定期実行なし)。
+# - DB には接続しない。Supabase の Secret も使わない。e-Stat の公開 API を2回呼ぶだけ(メタ情報と、公表済みの月の値)。
+# - 出力は、Secret が登録されているか(真偽と長さの区分だけ。値は出さない)・API の状態コード・統計表の更新日・公表済みの月の
+#   全国・総合の前年同月比だけ。appId はログ・注記に出さない。
+name: FX Event Analyzer - e-Stat connection check
+
+on:
+  push:
+    branches:
+      - 'verify/fx-estat-check'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ESTAT_APP_ID: ${{ secrets.ESTAT_APP_ID }}
+    steps:
+      - name: Check ESTAT_APP_ID and e-Stat API (no appId in output)
+        run: |
+          python3 - <<'PY'
+          import json, os, re, urllib.request, urllib.parse
+
+          def out(title, value):
+              body = json.dumps(value, ensure_ascii=False).replace('%', '%25').replace('\n', '%0A')
+              print(f'::notice title={title}::{body}')
+
+          app_id = os.environ.get('ESTAT_APP_ID', '').strip()
+          if not app_id:
+              out('estat 1 secret', {'registered': False})
+              raise SystemExit(0)
+          out('estat 1 secret', {'registered': True, 'length_class': 'ok' if 20 <= len(app_id) <= 60 else 'unexpected'})
+
+          def get(path, **params):
+              q = urllib.parse.urlencode({'appId': app_id, 'statsDataId': '0004052037', **params})
+              with urllib.request.urlopen(f'https://api.e-stat.go.jp/rest/3.0/app/json/{path}?{q}', timeout=60) as r:
+                  return r.status, json.load(r)
+
+          status, meta = get('getMetaInfo')
+          info = meta['GET_META_INFO']
+          table = info['METADATA_INF']['TABLE_INF']
+          objs = {o['@id']: o for o in info['METADATA_INF']['CLASS_INF']['CLASS_OBJ']}
+          def has(obj, code, name):
+              classes = objs[obj]['CLASS']
+              classes = classes if isinstance(classes, list) else [classes]
+              return any(c['@code'] == code and c['@name'].strip() in (name, f'{code} {name}') for c in classes)
+          out('estat 2 meta', {
+              'http': status,
+              'api_status': info['RESULT']['STATUS'],
+              'table_updated': table.get('UPDATED_DATE'),
+              'classes_ok': {'tab 前年同月比': has('tab', '3', '前年同月比'), 'area 全国': has('area', '00000', '全国'), 'cat01 総合': has('cat01', '0001', '総合')},
+          })
+
+          status, data = get('getStatsData', cdTab='3', cdArea='00000', cdCat01='0001', cdTime='2026000909,2026001010')
+          values = data['GET_STATS_DATA']['STATISTICAL_DATA']['DATA_INF']['VALUE']
+          values = values if isinstance(values, list) else [values]
+          out('estat 3 values', {
+              'http': status,
+              'api_status': data['GET_STATS_DATA']['RESULT']['STATUS'],
+              'national_all_items_yoy': {v['@time']: v['$'] for v in values},
+              'note': '2026000909 = 2026年9月(公表済み)。2026001010 = 2026年10月(11/20 公表の前は値なし)',
+          })
+          PY
