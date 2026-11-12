@@ -66,3 +66,6 @@ jobs:
       - name: Read-only verify (speeches, DEV)
         if: steps.check.outputs.ready == 'true'
         run: npm run -s verify:speeches-dev
+      - name: Read-only verify (economic indicators, DEV)
+        if: ${{ !cancelled() && steps.check.outputs.ready == 'true' }}
+        run: npm run -s verify:indicators-dev

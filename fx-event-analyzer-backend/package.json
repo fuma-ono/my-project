@@ -35,6 +35,7 @@
     "eval:providers": "tsx src/jobs/evalProviders.ts",
     "report:data-quality": "tsx src/jobs/reportDataQuality.ts",
     "verify:speeches-dev": "tsx src/jobs/verifySpeechesDev.ts",
+    "verify:indicators-dev": "tsx src/jobs/verifyIndicatorsDev.ts",
     "check:ecb-observation": "tsx src/jobs/checkEcbObservation.ts"
   },
   "keywords": [],

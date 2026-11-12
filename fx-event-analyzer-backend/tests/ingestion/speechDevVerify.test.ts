@@ -247,7 +247,12 @@ describe('workflow fx-event-analyzer-dev-verify.yml', () => {
     expect(yml).toContain('DEV_PROJECT_REF: pbemckwnqmeaoveelihd');
     expect(yml).toContain('secrets.FX_DEV_SUPABASE_SERVICE_ROLE_KEY');
     const runs = [...yml.matchAll(/^\s+(?:- )?run: (.+)$/gm)].map((m) => m[1]!);
-    expect(runs).toEqual(['|', 'npm ci --no-audit --no-fund', 'npm run -s verify:speeches-dev']);
+    expect(runs).toEqual([
+      '|',
+      'npm ci --no-audit --no-fund',
+      'npm run -s verify:speeches-dev',
+      'npm run -s verify:indicators-dev',
+    ]);
     expect(yml).not.toMatch(/ingest:|migration|supabase db|psql/);
   });
 });
