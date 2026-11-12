@@ -307,7 +307,7 @@ export function createQualityReader(supabase: SupabaseClient): QualityReader {
             .not('source_url', 'is', null)
             .lt('statement_datetime', staleBeforeIso),
           delivered().eq('body_status', 'FAILED').lt('body_attempts', 3),
-          delivered().eq('body_status', 'FAILED').gte('body_attempts', 3),
+          delivered().in('body_status', ['PENDING', 'FAILED']).gte('body_attempts', 3),
           delivered().not('summary_error', 'is', null),
           delivered().eq('body_status', 'FETCHED').is('summary', null).is('summary_error', null),
         ]);
@@ -317,7 +317,7 @@ export function createQualityReader(supabase: SupabaseClient): QualityReader {
           lastRuns,
           pendingWithUrlStale: stale!,
           bodyFailedRetrying: retrying!,
-          bodyFailedAtCap: atCap!,
+          bodyAtCap: atCap!,
           summaryFailed: summaryFailed!,
           fetchedWithoutSummary: withoutSummary!,
         };

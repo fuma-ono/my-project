@@ -24,7 +24,7 @@ import { createSpeechBodyStore } from '../repositories/speechBodyRepository.js';
  *   npm run ingest:speech-bodies                        # 直近30日の発言
  *   npm run ingest:speech-bodies -- --all               # 過去のすべての発言(1回に読むページは maxFetches 件まで。残りは次の実行で)
  *   npm run ingest:speech-bodies -- --all --dry-run     # 書かない・本文のページを読まない。対象と、各発言で何をするかだけ出す
- *   npm run ingest:speech-bodies -- --scheduled         # 定期実行: 発言日時が直近14日(FAILED は1行3回まで)
+ *   npm run ingest:speech-bodies -- --scheduled         # 定期実行: 発言日時が直近14日(PENDING・FAILED とも1行3回まで)
  *
  * 始める前に、接続先が DEV であることを確かめる(ingestion/devTarget.ts。DEV でなければ何も読まず・書かずに止まる)。
  *

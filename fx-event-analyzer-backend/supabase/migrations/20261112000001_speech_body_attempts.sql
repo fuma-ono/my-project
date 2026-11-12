@@ -2,8 +2,9 @@
 --
 -- speech_events に2列を足す(既存の行は壊さない。列を足すだけ):
 --   body_attempts        その発言の行で、本文のページの取得を試みた回数(発言の行ごと。ページごとではない)。
---                        実際に本文のページを読む直前に1回だけ増やす(dry-run では増やさない)。FAILED の行は、この回数が
---                        上限(3回)に達したら自動の対象から外す。人が原因を確かめた後に 0 に戻すと、また対象になる。
+--                        実際に本文のページを読む直前に1回だけ増やす(dry-run では増やさない)。PENDING・FAILED とも、
+--                        この回数が上限(3回)に達したら自動の対象から外す(増やした後に異常終了して PENDING のまま残った
+--                        行も止まる — HQレビュー 2026-11-12)。人が原因を確かめた後に 0 に戻すと、また対象になる。
 --   body_last_attempt_at 最後に試みた日時。
 -- 回数の加算は「状態が PENDING / FAILED で、回数が読んだときのまま」の行だけに対して行う(楽観的な条件。二重の実行で
 -- 二重に数えない・FETCHED の本文と URL を上書きしない — repositories/speechBodyRepository.ts)。
@@ -26,5 +27,5 @@ begin
   end if;
 end $$;
 
-comment on column speech_events.body_attempts is '本文のページの取得を試みた回数(発言の行ごと)。FAILED は3回で自動の対象から外す。';
+comment on column speech_events.body_attempts is '本文のページの取得を試みた回数(発言の行ごと)。PENDING・FAILED とも3回で自動の対象から外す。';
 comment on column speech_events.body_last_attempt_at is '本文の取得を最後に試みた日時。';

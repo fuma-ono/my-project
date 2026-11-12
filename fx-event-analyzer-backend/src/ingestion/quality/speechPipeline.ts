@@ -7,7 +7,8 @@
  *   (定期は3時間ごとなので、2回続けて抜けたら注意)。最後の実行が SUCCESS でなければ注意
  * - PENDING の滞留: URL があるのに、発言から PENDING_STALE_HOURS 時間を過ぎても PENDING の行(URL の無い行 = 原稿の無い
  *   討論・記者会見などは数えない)
- * - 本文の FAILED: まだ自動で取り直す行(回数 < 3)と、上限に達した行(人の確認が要る)
+ * - 本文の FAILED: まだ自動で取り直す行(回数 < 3)。上限(3回)に達した行は PENDING・FAILED とも(取得の途中の異常終了で
+ *   PENDING のまま残った行も)人の確認が要る
  * - 要約の FAILED と、本文があるのに要約がまだ無い行
  */
 
@@ -21,7 +22,7 @@ export interface SpeechPipelineStatus {
   lastRuns: { job: SpeechPipelineJob; startedAt: string | null; status: string | null }[];
   pendingWithUrlStale: number;
   bodyFailedRetrying: number;
-  bodyFailedAtCap: number;
+  bodyAtCap: number;
   summaryFailed: number;
   fetchedWithoutSummary: number;
 }
@@ -79,10 +80,10 @@ export function judgeSpeechPipeline(status: SpeechPipelineStatus, now: Date): Sp
       `URL があるのに、発言から ${PENDING_STALE_HOURS} 時間を過ぎても本文が無い`,
     ),
     counted(
-      status.bodyFailedAtCap,
+      status.bodyAtCap,
       'WARN',
-      '本文の FAILED(上限)',
-      '3回失敗して自動の対象から外れた。原因を確かめる(手順書 7.3)',
+      '本文の取得の上限(3回)',
+      'PENDING・FAILED のまま3回試して自動の対象から外れた。原因を確かめる(手順書 7.3)',
     ),
     counted(status.bodyFailedRetrying, 'INFO', '本文の FAILED(取り直し中)', '次の定期の回で取り直す'),
     counted(status.summaryFailed, 'INFO', '要約の FAILED', '自動では取り直さない(同じ本文からは同じ結果)'),

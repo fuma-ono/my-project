@@ -119,7 +119,7 @@ describe('quality report 第11章 (speech bodies and summaries)', () => {
     ],
     pendingWithUrlStale: 0,
     bodyFailedRetrying: 0,
-    bodyFailedAtCap: 0,
+    bodyAtCap: 0,
     summaryFailed: 0,
     fetchedWithoutSummary: 0,
   };
@@ -145,12 +145,12 @@ describe('quality report 第11章 (speech bodies and summaries)', () => {
 
   it('PENDING 滞留 and FAILED at the cap are 注意; retrying and summary FAILED are 情報', () => {
     const md = renderSpeechPipelineMarkdown(
-      { ...base, pendingWithUrlStale: 2, bodyFailedAtCap: 1, bodyFailedRetrying: 3, summaryFailed: 1 },
+      { ...base, pendingWithUrlStale: 2, bodyAtCap: 1, bodyFailedRetrying: 3, summaryFailed: 1 },
       now,
     );
     expect(md).toContain('判定: 注意');
     expect(md).toContain('| 注意 | PENDING の滞留 | 2 件。');
-    expect(md).toContain('| 注意 | 本文の FAILED(上限) | 1 件。');
+    expect(md).toContain('| 注意 | 本文の取得の上限(3回) | 1 件。');
     expect(md).toContain('| 情報 | 本文の FAILED(取り直し中) | 3 件。');
     expect(md).toContain('| 情報 | 要約の FAILED | 1 件。');
     expect(renderSpeechPipelineMarkdown({ ...base, summaryFailed: 1 }, now)).toContain('判定: 情報');

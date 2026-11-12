@@ -19,7 +19,8 @@ export function createSpeechBodyStore(supabase: SupabaseClient): SpeechBodyStore
         )
         .in('provider', [...providers])
         .eq('status', 'DELIVERED')
-        .or(`body_status.eq.PENDING,and(body_status.eq.FAILED,body_attempts.lt.${Math.trunc(maxAttempts)})`)
+        .in('body_status', ['PENDING', 'FAILED'])
+        .lt('body_attempts', Math.trunc(maxAttempts))
         .gte('statement_datetime', sinceIso)
         .order('statement_datetime', { ascending: true })
         .order('id', { ascending: true });
@@ -42,13 +43,14 @@ export function createSpeechBodyStore(supabase: SupabaseClient): SpeechBodyStore
       });
     },
 
-    async claimBodyAttempt(id, expectedAttempts, attemptedAtIso): Promise<boolean> {
+    async claimBodyAttempt(id, expectedAttempts, attemptedAtIso, maxAttempts): Promise<boolean> {
       const { data, error } = await supabase
         .from('speech_events')
         .update({ body_attempts: expectedAttempts + 1, body_last_attempt_at: attemptedAtIso })
         .eq('id', id)
         .in('body_status', ['PENDING', 'FAILED'])
         .eq('body_attempts', expectedAttempts)
+        .lt('body_attempts', Math.trunc(maxAttempts)) // 上限に達した行は数えない(DB の条件でも止める)
         .select('id');
       if (error) throw error;
       return (data ?? []).length === 1;

@@ -66,7 +66,8 @@ export interface SpeechBodyPatch {
 export interface SpeechBodyStore {
   /**
    * providers の発言済み(DELIVERED。発言前の SCHEDULED は入れない)で、statement_datetime >= sinceIso の行のうち、
-   * body_status が PENDING、または FAILED で body_attempts < maxAttempts のもの(古い順)。
+   * body_status が PENDING または FAILED で、body_attempts < maxAttempts のもの(古い順)。PENDING も回数で止める
+   * (HQレビュー 2026-11-12: 回数を増やした後に異常終了して PENDING のまま残った行を、無限に取り直さない)。
    */
   listSpeechesNeedingBody(
     providers: readonly string[],
@@ -74,10 +75,10 @@ export interface SpeechBodyStore {
     maxAttempts: number,
   ): Promise<SpeechForBody[]>;
   /**
-   * 本文のページを読む直前に、試行回数を1つ増やす(状態が PENDING / FAILED で、回数が expectedAttempts のままの行だけ)。
-   * 増やせなかった(ほかの実行が先に扱った・状態が変わった)ら false。
+   * 本文のページを読む直前に、試行回数を1つ増やす(状態が PENDING / FAILED で、回数が expectedAttempts のままで、
+   * かつ maxAttempts 未満の行だけ)。増やせなかった(ほかの実行が先に扱った・状態が変わった・上限)ら false。
    */
-  claimBodyAttempt(id: string, expectedAttempts: number, attemptedAtIso: string): Promise<boolean>;
+  claimBodyAttempt(id: string, expectedAttempts: number, attemptedAtIso: string, maxAttempts: number): Promise<boolean>;
   /** 状態が PENDING / FAILED で、回数が expectedAttempts のままの行だけを書き換える。書き換えなかったら false。 */
   updateSpeechBody(id: string, patch: SpeechBodyPatch, expectedAttempts: number): Promise<boolean>;
 }
@@ -160,12 +161,13 @@ export async function ingestSpeechBodies(
       ? '1970-01-01T00:00:00.000Z'
       : new Date(now.getTime() - settings.pastDays * 86_400_000).toISOString();
   const maxAttempts = settings.maxAttempts ?? MAX_BODY_ATTEMPTS;
-  // ストアの条件に加えて、ここでも発言前・上限に達した FAILED を外す(ストアが条件を落としても対象にしない)
+  // ストアの条件に加えて、ここでも発言前・期間外・上限に達した行(PENDING も FAILED も)を外す(ストアが条件を落としても対象にしない)
   const speeches = (await store.listSpeechesNeedingBody(BODY_PROVIDERS, sinceIso, maxAttempts)).filter(
     (s) =>
       s.status === 'DELIVERED' &&
       Date.parse(s.statement_datetime) >= Date.parse(sinceIso) &&
-      (s.body_status === 'PENDING' || (s.body_status === 'FAILED' && s.body_attempts < maxAttempts)),
+      (s.body_status === 'PENDING' || s.body_status === 'FAILED') &&
+      s.body_attempts < maxAttempts,
   );
   counters.fetched += speeches.length;
 
@@ -278,7 +280,7 @@ export async function ingestSpeechBodies(
     record('FETCH');
     if (settings.dryRun) continue; // dry-run は回数も含めて何も書かない
     // 本文のページを読む直前に、この発言の行の試行回数を1回だけ増やす(楽観的な条件。増やせなければ、ほかの実行が扱った)
-    if (!(await store.claimBodyAttempt(speech.id, speech.body_attempts, now.toISOString()))) {
+    if (!(await store.claimBodyAttempt(speech.id, speech.body_attempts, now.toISOString(), maxAttempts))) {
       counters.skip('CONCURRENT_UPDATE');
       continue;
     }

@@ -135,8 +135,8 @@ describe.skipIf(!integration)('speech bodies: attempts and guarded writes (migra
 
   it('claims an attempt once (optimistic: the same expected count twice → false)', async () => {
     const store = createSpeechBodyStore(ctx.serviceClient);
-    expect(await store.claimBodyAttempt(ids.pending, 0, new Date().toISOString())).toBe(true);
-    expect(await store.claimBodyAttempt(ids.pending, 0, new Date().toISOString())).toBe(false);
+    expect(await store.claimBodyAttempt(ids.pending, 0, new Date().toISOString(), 3)).toBe(true);
+    expect(await store.claimBodyAttempt(ids.pending, 0, new Date().toISOString(), 3)).toBe(false);
     const row = await read(ids.pending);
     expect(row.body_attempts).toBe(1);
     expect(row.body_last_attempt_at).not.toBeNull();
@@ -154,7 +154,7 @@ describe.skipIf(!integration)('speech bodies: attempts and guarded writes (migra
     expect(await store.updateSpeechBody(ids.pending, fetched, 0)).toBe(false); // 古い回数
     expect(await store.updateSpeechBody(ids.pending, fetched, 1)).toBe(true);
     // FETCHED の後は、数えることも、FAILED や別の本文で上書きすることもできない
-    expect(await store.claimBodyAttempt(ids.pending, 1, new Date().toISOString())).toBe(false);
+    expect(await store.claimBodyAttempt(ids.pending, 1, new Date().toISOString(), 3)).toBe(false);
     expect(
       await store.updateSpeechBody(
         ids.pending,
@@ -180,8 +180,99 @@ describe.skipIf(!integration)('speech bodies: attempts and guarded writes (migra
   it('the quality reader reads the chapter 11 counts (the capped FAILED row is counted)', async () => {
     const status = await createQualityReader(ctx.serviceClient).speechPipelineStatus(new Date().toISOString());
     expect(status).not.toBeNull();
-    expect(status!.bodyFailedAtCap).toBeGreaterThanOrEqual(1);
+    expect(status!.bodyAtCap).toBeGreaterThanOrEqual(1);
     expect(status!.bodyFailedRetrying).toBeGreaterThanOrEqual(1);
     expect(status!.lastRuns.map((r) => r.job)).toEqual(['ingest:speech-bodies', 'ingest:speech-summaries']);
+  });
+});
+
+// HQレビュー(2026-11-12): PENDING も回数で止める。PENDING・FAILED × 回数 0〜3 の対象判定と、異常終了のケース。
+describe.skipIf(!integration)('speech bodies: the attempt cap for PENDING and FAILED (real Postgres)', () => {
+  let ctx: IntegrationContext;
+  const runId = `${Date.now()}m`;
+  const speakerId = randomUUID();
+  const matrix: { id: string; status: 'PENDING' | 'FAILED'; attempts: number }[] = [];
+  for (const status of ['PENDING', 'FAILED'] as const) {
+    for (const attempts of [0, 1, 2, 3]) matrix.push({ id: randomUUID(), status, attempts });
+  }
+  const crashId = randomUUID();
+  const at = (i: number) => new Date(Date.now() - (2 * 86_400_000 + i * 60_000)).toISOString();
+
+  beforeAll(async () => {
+    ctx = buildIntegrationContext(integration!);
+    const speaker = await ctx.serviceClient.from('speakers').insert({
+      id: speakerId,
+      name: `上限テスト ${runId}`,
+      title: 'FRB理事',
+      organization: 'FRB',
+      country_code: 'US',
+      currency_code: 'USD',
+    });
+    if (speaker.error) throw speaker.error;
+    const base = {
+      speaker_id: speakerId,
+      provider: 'frb_calendar',
+      title: '講演: Cap test',
+      importance: 'MEDIUM',
+      status: 'DELIVERED',
+    };
+    const rows: Record<string, unknown>[] = [
+      ...matrix.map((m, i) => ({
+        ...base,
+        id: m.id,
+        provider_event_id: `cap-${runId}-${i}`,
+        statement_datetime: at(i),
+        body_status: m.status,
+        body_error: m.status === 'FAILED' ? 'HTTP_404' : null,
+        body_attempts: m.attempts,
+      })),
+      { ...base, id: crashId, provider_event_id: `cap-${runId}-crash`, statement_datetime: at(20), body_attempts: 2 },
+    ];
+    for (const row of rows) {
+      const { error } = await ctx.serviceClient.from('speech_events').insert(row);
+      if (error) throw error;
+    }
+  });
+
+  afterAll(async () => {
+    if (!ctx) return;
+    await ctx.serviceClient
+      .from('speech_events')
+      .delete()
+      .in('id', [...matrix.map((m) => m.id), crashId]);
+    await ctx.serviceClient.from('speakers').delete().eq('id', speakerId);
+    await ctx.app.close();
+  });
+
+  it('PENDING and FAILED with attempts 0, 1, 2 are listed; 3 is not (both states)', async () => {
+    const store = createSpeechBodyStore(ctx.serviceClient);
+    const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
+    const listed = new Set((await store.listSpeechesNeedingBody(['frb_calendar'], since, 3)).map((r) => r.id));
+    for (const m of matrix) expect(listed.has(m.id), `${m.status} attempts=${m.attempts}`).toBe(m.attempts < 3);
+  });
+
+  it('the DB refuses to count past the cap, for PENDING and FAILED alike', async () => {
+    const store = createSpeechBodyStore(ctx.serviceClient);
+    for (const m of matrix.filter((x) => x.attempts === 3)) {
+      expect(await store.claimBodyAttempt(m.id, 3, new Date().toISOString(), 3), m.status).toBe(false);
+    }
+  });
+
+  it('abnormal end after counting (left PENDING): the third attempt is the last, then the row is no longer listed', async () => {
+    const store = createSpeechBodyStore(ctx.serviceClient);
+    const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
+    expect((await store.listSpeechesNeedingBody(['frb_calendar'], since, 3)).some((r) => r.id === crashId)).toBe(true);
+    // 3回目を数えた直後に異常終了した(結果を書かないまま) → PENDING・回数3のまま残る
+    expect(await store.claimBodyAttempt(crashId, 2, new Date().toISOString(), 3)).toBe(true);
+    const { data, error } = await ctx.serviceClient
+      .from('speech_events')
+      .select('body_status, body_attempts')
+      .eq('id', crashId)
+      .single();
+    if (error) throw error;
+    expect(data).toEqual({ body_status: 'PENDING', body_attempts: 3 });
+    // もう自動の対象にならず、数えることもできない
+    expect((await store.listSpeechesNeedingBody(['frb_calendar'], since, 3)).some((r) => r.id === crashId)).toBe(false);
+    expect(await store.claimBodyAttempt(crashId, 3, new Date().toISOString(), 3)).toBe(false);
   });
 });

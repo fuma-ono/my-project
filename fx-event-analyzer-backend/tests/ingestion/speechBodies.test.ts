@@ -45,7 +45,8 @@ class FakeStore implements SpeechBodyStore {
           (r) =>
             providers.includes(r.provider) &&
             r.status === 'DELIVERED' &&
-            (r.body_status === 'PENDING' || (r.body_status === 'FAILED' && r.body_attempts < maxAttempts)) &&
+            (r.body_status === 'PENDING' || r.body_status === 'FAILED') &&
+            r.body_attempts < maxAttempts &&
             Date.parse(r.statement_datetime) >= Date.parse(sinceIso),
         )
         .map((r) => ({ ...r })),
@@ -55,9 +56,9 @@ class FakeStore implements SpeechBodyStore {
     const row = this.rows.find((r) => r.id === id)!;
     return ['PENDING', 'FAILED'].includes(row.body_status) && row.body_attempts === expectedAttempts ? row : null;
   }
-  claimBodyAttempt(id: string, expectedAttempts: number): Promise<boolean> {
+  claimBodyAttempt(id: string, expectedAttempts: number, _at: string, maxAttempts: number): Promise<boolean> {
     const row = this.guard(id, expectedAttempts);
-    if (!row) return Promise.resolve(false);
+    if (!row || row.body_attempts >= maxAttempts) return Promise.resolve(false);
     this.claims.push({ id, from: expectedAttempts });
     row.body_attempts = expectedAttempts + 1;
     return Promise.resolve(true);
@@ -673,5 +674,94 @@ describe('ingestSpeechBodies: attempts, the 14-day window and concurrent runs', 
     expect(store.updates).toEqual([]);
     expect(counters.success).toBe(0);
     expect(counters.skipReasons).toMatchObject({ CONCURRENT_UPDATE: 1 });
+  });
+});
+
+// HQレビュー(2026-11-12): PENDING も回数で止める。
+describe('ingestSpeechBodies: the attempt cap applies to PENDING too', () => {
+  const NOW_S = new Date('2026-11-20T06:00:00Z');
+  const URL_A = 'https://www.federalreserve.gov/newsevents/speech/waller20261115a.htm';
+  const settings14 = { pastDays: 14, maxFetches: 20 };
+  const matrix = (['PENDING', 'FAILED'] as const).flatMap((status) =>
+    [0, 1, 2, 3].map((attempts, i) =>
+      row({
+        id: `${status}-${attempts}`,
+        provider_event_id: `${status}-${attempts}`,
+        body_status: status,
+        body_attempts: attempts,
+        statement_datetime: `2026-11-1${i}T15:00:00Z`,
+        source_url: URL_A,
+      }),
+    ),
+  );
+
+  it('PENDING and FAILED × attempts 0–3: 0, 1, 2 are tried (one count each), 3 is not', async () => {
+    const store = new FakeStore();
+    const frb = new FakeFetcher();
+    store.rows = matrix.map((r) => ({ ...r }));
+    frb.pages.set(URL_A, frbPage('Inflation has eased.'));
+    const { plan } = await ingestSpeechBodies(
+      store,
+      { frb, ecb: new FakeFetcher() },
+      settings14,
+      NOW_S,
+      new JobCounters(),
+    );
+    const tried = new Set(plan.map((p) => p.speech_id));
+    for (const r of matrix) expect(tried.has(r.id), r.id).toBe(r.body_attempts < 3);
+    expect(store.claims.map((c) => c.id).sort()).toEqual(
+      ['FAILED-0', 'FAILED-1', 'FAILED-2', 'PENDING-0', 'PENDING-1', 'PENDING-2'].sort(),
+    );
+  });
+
+  it('the same when the store returns every row (the pipeline itself filters attempts >= 3)', async () => {
+    const loose: SpeechBodyStore = {
+      listSpeechesNeedingBody: () => Promise.resolve(matrix.map((r) => ({ ...r }))),
+      claimBodyAttempt: () => Promise.resolve(true),
+      updateSpeechBody: () => Promise.resolve(true),
+    };
+    const frb = new FakeFetcher();
+    frb.pages.set(URL_A, frbPage('Inflation has eased.'));
+    const { plan } = await ingestSpeechBodies(
+      loose,
+      { frb, ecb: new FakeFetcher() },
+      settings14,
+      NOW_S,
+      new JobCounters(),
+    );
+    expect(plan.map((p) => p.speech_id).sort()).toEqual(
+      ['FAILED-0', 'FAILED-1', 'FAILED-2', 'PENDING-0', 'PENDING-1', 'PENDING-2'].sort(),
+    );
+  });
+
+  it('abnormal end after counting (the result is never written, the row stays PENDING): stops after 3 runs', async () => {
+    class CrashingStore extends FakeStore {
+      override updateSpeechBody(): Promise<boolean> {
+        return Promise.reject(new Error('connection lost')); // 回数を数えた後、結果を書く前に落ちる
+      }
+    }
+    const store = new CrashingStore();
+    const frb = new FakeFetcher();
+    store.rows = [row({ id: 'p', statement_datetime: '2026-11-15T15:00:00Z', source_url: URL_A })];
+    frb.pages.set(URL_A, frbPage('Inflation has eased.'));
+    for (let run = 1; run <= 3; run += 1) {
+      await expect(
+        ingestSpeechBodies(store, { frb, ecb: new FakeFetcher() }, settings14, NOW_S, new JobCounters()),
+      ).rejects.toThrow('connection lost');
+      expect(store.rows[0]).toMatchObject({ body_status: 'PENDING', body_attempts: run });
+    }
+    // 4回目の実行: もう対象にならず、ページも読まない
+    const pagesBefore = frb.requested.filter((u) => u === URL_A).length;
+    const { plan } = await ingestSpeechBodies(
+      store,
+      { frb, ecb: new FakeFetcher() },
+      settings14,
+      NOW_S,
+      new JobCounters(),
+    );
+    expect(plan).toEqual([]);
+    expect(frb.requested.filter((u) => u === URL_A)).toHaveLength(pagesBefore);
+    expect(store.claims).toHaveLength(3);
+    expect(store.rows[0]).toMatchObject({ body_status: 'PENDING', body_attempts: 3 });
   });
 });
