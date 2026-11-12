@@ -67,7 +67,13 @@ struct StrategyAnalysisView: View {
                 V5Header(title: "トレード戦略分析", back: true, onBack: { dismiss() })
                 HStack {
                     Spacer(minLength: 0)
+                    // ユーザー指摘(2026-11-12)「PROの文字の位置...中心線より上に位置している」:
+                    // HStackの垂直中央寄せだけではV5Headerのタイトル文字の見た目のインク中心と
+                    // 数pxずれる(V5Header自身もchevron/starで同種の補正を行っている、
+                    // `chevronVerticalCorrection`/`starVerticalCorrection`参照)。CI実機で
+                    // 確認しながら微調整する前提の初期値として少し下にずらす。
                     StrategyAnalysisProBadge()
+                        .offset(y: 1.5)
                 }
                 .frame(width: V5P.W - V5P.ptToV5(16) * 2, height: V5P.ptToV5(44))
                 .position(x: V5P.W / 2, y: 34.9)
@@ -215,11 +221,9 @@ struct StrategyAnalysisView: View {
 
         return plainCard {
             HStack(spacing: 4) {
-                Image(systemName: "bolt.fill").font(.system(size: 8, weight: .bold)).foregroundStyle(V5P.cyan)
-                NotoText.text("初動分析", size: 7).foregroundStyle(.white)
-                Image(systemName: "info.circle").font(.system(size: 6)).foregroundStyle(SettingsCardStyle.subtitleColor)
+                NotoText.text("初動分析", size: 9).foregroundStyle(.white)
+                Image(systemName: "info.circle").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
                 Spacer(minLength: 4)
-                analysisCountBadge(samples: direction?.samples, sampleWindow: analysis.sampleWindow)
             }
             Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
             HStack(alignment: .top, spacing: 4) {
@@ -266,11 +270,9 @@ struct StrategyAnalysisView: View {
         let reversalPercent = pattern.map { Double($0.reversal) / Double($0.samples) * 100 }
         return plainCard {
             HStack(spacing: 4) {
-                Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 8, weight: .bold)).foregroundStyle(V5P.cyan)
-                NotoText.text("継続・反転分析", size: 7).foregroundStyle(.white)
-                Image(systemName: "info.circle").font(.system(size: 6)).foregroundStyle(SettingsCardStyle.subtitleColor)
+                NotoText.text("継続・反転分析", size: 9).foregroundStyle(.white)
+                Image(systemName: "info.circle").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
                 Spacer(minLength: 4)
-                analysisCountBadge(samples: pattern?.samples, sampleWindow: analysis.sampleWindow)
             }
             Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
             VStack(spacing: 4) {
@@ -291,9 +293,8 @@ struct StrategyAnalysisView: View {
         let avgPips60m = analysis.releases.averagePips(\.pips60m)
         return plainCard {
             HStack(spacing: 4) {
-                Image(systemName: "clock.arrow.circlepath").font(.system(size: 8, weight: .bold)).foregroundStyle(V5P.blue)
-                NotoText.text("過去事例比較", size: 7).foregroundStyle(.white)
-                Image(systemName: "info.circle").font(.system(size: 6)).foregroundStyle(SettingsCardStyle.subtitleColor)
+                NotoText.text("過去事例比較", size: 9).foregroundStyle(.white)
+                Image(systemName: "info.circle").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
                 Spacer(minLength: 4)
             }
             Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
@@ -324,17 +325,25 @@ struct StrategyAnalysisView: View {
         let level = StrategyAnalysisText.riskLevel(reversalPercent: reversalPercent)
         return plainCard {
             HStack(spacing: 4) {
-                Image(systemName: "exclamationmark.shield.fill").font(.system(size: 8, weight: .bold)).foregroundStyle(V5P.red)
-                NotoText.text("リスク分析", size: 7).foregroundStyle(.white)
-                Image(systemName: "info.circle").font(.system(size: 6)).foregroundStyle(SettingsCardStyle.subtitleColor)
+                NotoText.text("リスク分析", size: 9).foregroundStyle(.white)
+                Image(systemName: "info.circle").font(.system(size: 7)).foregroundStyle(SettingsCardStyle.subtitleColor)
                 Spacer(minLength: 4)
-                V5Badge(text: "リスクレベル: \(level)", color: reversalPercent != nil ? V5P.red : SettingsCardStyle.subtitleColor)
             }
             Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
+            // HQ指示(2026-11-12「ピクセル単位の再現」ユーザー指摘): 参考画像(実機スクリーンショット)
+            // では「リスクレベル」はタイトル行のバッジではなく、区切り線の下に⚠️アイコン付きの
+            // 地の文として表示される。
+            HStack(spacing: 4) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 7, weight: .bold))
+                    .foregroundStyle(reversalPercent != nil ? V5P.yellow : SettingsCardStyle.subtitleColor)
+                NotoText.text("リスクレベル：\(level)", size: 7)
+                    .foregroundStyle(reversalPercent != nil ? V5P.yellow : SettingsCardStyle.subtitleColor)
+            }
             if let reversalPercent {
                 NotoText.text(
                     "過去の類似イベントでは、約\(ValueFormat.percent(reversalPercent, fractionDigits: 0))の確率で15分以内に反転が発生しています。",
-                    size: 6
+                    size: 6.5
                 )
                 .foregroundStyle(SettingsCardStyle.subtitleColor)
                 .fixedSize(horizontal: false, vertical: true)
@@ -392,14 +401,14 @@ struct StrategyAnalysisView: View {
     /// そのものの日時 — `AppRoute.eventStrategyAnalysis`経由でイベント詳細から渡される実データ)。
     private var nextEventCard: some View {
         plainCard {
-            HStack(spacing: 7) {
-                Image(systemName: "calendar").font(.system(size: 12, weight: .semibold)).foregroundStyle(V5P.cyan)
+            HStack(spacing: 8) {
+                Image(systemName: "calendar").font(.system(size: 16, weight: .semibold)).foregroundStyle(V5P.cyan)
                 VStack(alignment: .leading, spacing: 1) {
-                    NotoText.text("\(viewModel.indicatorName)発表", size: 8)
+                    NotoText.text("\(viewModel.indicatorName)発表", size: 10)
                         .foregroundStyle(.white)
                         .lineLimit(2)
                         .minimumScaleFactor(0.8)
-                    NotoText.text(Self.eventDateTimeLabel(releaseDatetime), size: 6)
+                    NotoText.text(Self.eventDateTimeLabel(releaseDatetime), size: 6.5)
                         .foregroundStyle(SettingsCardStyle.subtitleColor)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)

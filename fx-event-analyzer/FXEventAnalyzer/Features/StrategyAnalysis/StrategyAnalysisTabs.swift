@@ -63,7 +63,7 @@ struct StrategyAnalysisTabBar: View {
                 Button {
                     selection = tab
                 } label: {
-                    NotoText.text(tab.title, size: 6)
+                    NotoText.text(tab.title, size: 8)
                         .foregroundStyle(selection == tab ? .white : SettingsCardStyle.subtitleColor)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -97,12 +97,12 @@ struct StrategyAnalysisTabBar: View {
 /// 全画面で使われる)は変更せず、この画面のコンテンツ側に小さく添える。
 struct StrategyAnalysisProBadge: View {
     var body: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "crown.fill").font(.system(size: 7, weight: .bold))
-            NotoText.text("PRO", size: 6.5).fontWeight(.bold)
+        HStack(spacing: 2) {
+            Image(systemName: "crown.fill").font(.system(size: 6.5, weight: .bold))
+            NotoText.text("PRO", size: 6).fontWeight(.bold)
         }
         .foregroundStyle(.black)
-        .padding(.horizontal, 6)
+        .padding(.horizontal, 4)
         .padding(.vertical, 2)
         .background(Capsule().fill(SubscriptionPalette.gold))
     }
@@ -116,15 +116,15 @@ struct StrategySectionHeaderCard: View {
     var iconColor: Color = V5P.cyan
 
     var body: some View {
-        HStack(spacing: 7) {
-            Image(systemName: icon).font(.system(size: 12, weight: .semibold)).foregroundStyle(iconColor)
+        HStack(spacing: 8) {
+            Image(systemName: icon).font(.system(size: 16, weight: .semibold)).foregroundStyle(iconColor)
             VStack(alignment: .leading, spacing: 1) {
-                NotoText.text(title, size: 9).foregroundStyle(.white)
-                NotoText.text(subtitle, size: 6).foregroundStyle(SettingsCardStyle.subtitleColor)
+                NotoText.text(title, size: 11).foregroundStyle(.white)
+                NotoText.text(subtitle, size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
             }
             Spacer(minLength: 0)
         }
-        .padding(8)
+        .padding(9)
         .frame(width: 214, alignment: .leading)
         .background(GradientCardBackground())
     }
