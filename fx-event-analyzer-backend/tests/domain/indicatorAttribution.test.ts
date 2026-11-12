@@ -1,8 +1,9 @@
-/** HQ指示(2026-11-11「GB/AU/CA: 公式ソース・利用条件を再確認」): 英国・豪州・カナダの公式統計の出典。 */
+/** HQ指示(2026-11-11「GB/AU/CA: 公式ソース・利用条件を再確認」): 英国・豪州・カナダ・日本の公式統計の出典。 */
 import { describe, expect, it } from 'vitest';
 import {
   ABS_ATTRIBUTION,
   attributionForIndicator,
+  ESTAT_ATTRIBUTION,
   EUROSTAT_ATTRIBUTION,
   ONS_ATTRIBUTION,
   STATCAN_ATTRIBUTION,
@@ -41,15 +42,24 @@ describe('attributionForIndicator: official statistics outside the US', () => {
     }
   });
 
-  it('Eurostat unchanged; JP_CPI and US indicators none', () => {
-    expect(attributionForIndicator('JP_CPI')).toBeNull(); // JP_CPI は別の案件(この統合には入れない)
+  it('JP_CPI carries the e-Stat source; Eurostat unchanged; US indicators none', () => {
+    expect(attributionForIndicator('JP_CPI')).toEqual(ESTAT_ATTRIBUTION);
+    expect(ESTAT_ATTRIBUTION.notice).toContain(
+      'このサービスは、政府統計総合窓口(e-Stat)のAPI機能を使用していますが、サービスの内容は国によって保証されたものではありません。',
+    );
     expect(attributionForIndicator('EU_HICP')).toEqual(EUROSTAT_ATTRIBUTION);
     for (const code of ['US_CPI', 'US_NFP', 'UNKNOWN', '']) expect(attributionForIndicator(code), code).toBeNull();
     expect(attributionForIndicator(null)).toBeNull();
   });
 
   it('never claims endorsement or official approval in the notices', () => {
-    for (const a of [ONS_ATTRIBUTION, ABS_ATTRIBUTION, STATCAN_ATTRIBUTION, STATCAN_LFS_ATTRIBUTION]) {
+    for (const a of [
+      ONS_ATTRIBUTION,
+      ABS_ATTRIBUTION,
+      STATCAN_ATTRIBUTION,
+      STATCAN_LFS_ATTRIBUTION,
+      ESTAT_ATTRIBUTION,
+    ]) {
       expect(a.notice ?? '', a.source).not.toMatch(/endorse|承認|公認|推奨/i);
     }
   });

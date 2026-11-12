@@ -80,7 +80,7 @@ function nyFedNotice(year: number): string {
 const EUROSTAT_INDICATOR_CODES: ReadonlySet<string> = new Set(['EU_HICP', 'EU_UNEMPLOYMENT_RATE']);
 
 /*
- * 英国・豪州・カナダの公式統計(HQ指示 2026-11-11「GB/AU/CA: 公式ソース・利用条件を再確認」。2026-11-11 確認)。
+ * 英国・豪州・カナダ・日本の公式統計(HQ指示 2026-11-11「GB/AU/CA: 公式ソース・利用条件を再確認」。2026-11-11 確認)。
  * どれも商用利用は可で、出典の表示が条件。取得元が承認・推奨しているように見せることは禁止(アプリの表示で
  * 「公式」「承認」と書かない)。
  * - ONS(https://www.ons.gov.uk/help/termsandconditions、Open Government Licence v3.0): ONS の求める書き方
@@ -95,6 +95,9 @@ const EUROSTAT_INDICATOR_CODES: ReadonlySet<string> = new Set(['EU_HICP', 'EU_UN
  *   CA_UNEMPLOYMENT_RATE の値は v2062815 = Table 14-10-0287-01(getSeriesInfoFromVector の productId 14100287、題名は
  *   getCubeMetadata、2026-11-11 確認)。reference date は各値の対象月(アプリは値と一緒に対象月を出す)。CA_CPI は
  *   公表予定だけ(値は出さない)なので、表の名前を付けない。
+ * - e-Stat(JP_CPI の公表予定。https://www.e-stat.go.jp/terms-of-use): 出典の記載(「出典：政府統計の総合窓口(e-Stat)」)。
+ *   値は e-Stat の API で取り込む(ingest:official:jp-cpi-values)ので、API のクレジット
+ *   (https://www.e-stat.go.jp/api/api-info/credit の文言そのまま)も付ける。
  */
 export const ONS_ATTRIBUTION: Attribution = {
   source: '英国国家統計局（ONS）',
@@ -123,6 +126,13 @@ export const STATCAN_LFS_ATTRIBUTION: Attribution = {
   notice: `Source: Statistics Canada, Table 14-10-0287-01 Labour force characteristics, monthly, seasonally adjusted and trend-cycle. ${STATCAN_AS_IS}`,
 };
 
+export const ESTAT_ATTRIBUTION: Attribution = {
+  source: '政府統計の総合窓口（e-Stat）',
+  source_url: 'https://www.e-stat.go.jp',
+  notice:
+    '出典：政府統計の総合窓口(e-Stat)。このサービスは、政府統計総合窓口(e-Stat)のAPI機能を使用していますが、サービスの内容は国によって保証されたものではありません。',
+};
+
 const INDICATOR_ATTRIBUTIONS: Readonly<Record<string, Attribution>> = {
   GB_CPI: ONS_ATTRIBUTION,
   GB_CORE_CPI: ONS_ATTRIBUTION,
@@ -131,10 +141,11 @@ const INDICATOR_ATTRIBUTIONS: Readonly<Record<string, Attribution>> = {
   AU_UNEMPLOYMENT_RATE: ABS_ATTRIBUTION,
   CA_CPI: STATCAN_ATTRIBUTION,
   CA_UNEMPLOYMENT_RATE: STATCAN_LFS_ATTRIBUTION,
+  JP_CPI: ESTAT_ATTRIBUTION,
 };
 
 /**
- * economic_indicators.code(経済指標)から。Eurostat の指標(api-design v1.43)と、英国・豪州・カナダの公式統計の指標
+ * economic_indicators.code(経済指標)から。Eurostat の指標(api-design v1.43)と、英国・豪州・カナダ・日本の公式統計の指標
  * (上の説明)。それ以外(米国の BLS・FRB の指標など、出典の表示の義務が無いもの)は null。
  */
 export function attributionForIndicator(code: string | null | undefined): Attribution | null {
