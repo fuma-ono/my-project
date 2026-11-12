@@ -229,10 +229,9 @@ struct StrategyAnalysisView: View {
                 Spacer(minLength: 4)
             }
             Rectangle().fill(SettingsCardStyle.cardBorder).frame(height: 0.5)
-            // ユーザー指摘(2026-11-12)「初動分析の構成が全く違う。初動分析のすぐ下に大きな上↑と数字
-            // その右に上昇確率その右に円グラフ」: 1行で「↑pips数値」→「上昇確率」ラベル→円グラフ
-            // (%の数値はゲージの中)の順に並べる(以前の「左に数値、右にラベル+数値+ゲージ」の
-            // 2カラム構成から変更)。
+            // ユーザー添付の実機参考画像(2d65f185, 852×1846px)をピクセル単位で実測して確認:
+            // 「68%」はゲージの中ではなく、「上昇確率」ラベルの下に独立した太字として表示され、
+            // ゲージ自体は%数値の入らない空のリングとして右に独立して並ぶ(以前のcenterText方式は誤り)。
             HStack(alignment: .center, spacing: 6) {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 2) {
@@ -248,10 +247,14 @@ struct StrategyAnalysisView: View {
                     NotoText.text("（15分後）", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
                 }
                 Spacer(minLength: 2)
-                NotoText.text("上昇確率", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                VStack(alignment: .trailing, spacing: 1) {
+                    NotoText.text("上昇確率", size: 6.5).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    NotoText.text(upPercent.map { ValueFormat.percent($0, fractionDigits: 0) } ?? "--", size: 12)
+                        .foregroundStyle(upPercent != nil ? V5P.green : SettingsCardStyle.subtitleColor)
+                }
                 StrategyCircularGauge(
                     percent: upPercent,
-                    centerText: upPercent.map { ValueFormat.percent($0, fractionDigits: 0) } ?? "--",
+                    centerText: "",
                     centerSubtext: nil,
                     color: V5P.green,
                     diameter: 34
@@ -317,12 +320,18 @@ struct StrategyAnalysisView: View {
         .accessibilityLabel("過去事例比較。類似イベント数\(analysis.releases.count)件。平均変動\(avgPips60m.map { ValueFormat.number($0, fractionDigits: 1, signed: true) } ?? "データ不足")pips。")
     }
 
+    /// 参考画像(2d65f185)実測: 値は行の右端フラッシュではなく、ラベル列の直後の縦線区切りから
+    /// 固定位置で左揃え表示されている(2行とも区切り線の位置が揃う)。
+    private let comparisonLabelWidth: CGFloat = 100
+
     private func comparisonRow(label: String, value: String, valueColor: Color) -> some View {
         // ユーザー指摘(2026-11-12)「類似イベント数、平均変動：15pt」。
-        HStack {
+        HStack(spacing: 8) {
             NotoText.text(label, size: 8.73).foregroundStyle(SettingsCardStyle.subtitleColor)
-            Spacer(minLength: 4)
+                .frame(width: comparisonLabelWidth, alignment: .leading)
+            Rectangle().fill(SettingsCardStyle.cardBorder).frame(width: 0.5, height: 16)
             NotoText.text(value, size: 8.73).foregroundStyle(valueColor)
+            Spacer(minLength: 0)
         }
     }
 

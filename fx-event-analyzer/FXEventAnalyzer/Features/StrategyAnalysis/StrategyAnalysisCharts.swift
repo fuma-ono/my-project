@@ -201,9 +201,11 @@ struct StrategyProgressRow: View {
                 }
             }
             .frame(height: 5)
-            NotoText.text(percent.map { ValueFormat.percent($0, fractionDigits: 0) } ?? "--", size: 6.5)
+            // 参考画像(2d65f185)実測: 値の「72%」はラベルの「継続確率」とほぼ同じ高さ(27px/25px)で
+            // 表示されている。ラベルと同じ13pt相当に合わせる(以前の11pt相当は小さすぎた)。
+            NotoText.text(percent.map { ValueFormat.percent($0, fractionDigits: 0) } ?? "--", size: 7.57)
                 .foregroundStyle(percent != nil ? .white : SettingsCardStyle.subtitleColor)
-                .frame(width: 26, alignment: .trailing)
+                .frame(width: 30, alignment: .trailing)
         }
     }
 }
