@@ -220,3 +220,12 @@ jobs:
       - name: Speech summaries (extractive, all past speeches; manual only)
         if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'speech-summaries'
         run: npm run -s ingest:speech-summaries -- --all
+      # HQ指示(2026-11-12「要人発言 定期実行・DEV反映」手順5): 定期実行(--scheduled、直近14日・FRBのみ)と
+      # 完全に同じ対象判定を、本番の3時間ごとの回を待たずに手動で確認するためのdry-run(DBに書かない)。
+      # 定期実行(schedule)自体はまだ有効化していない(このtargetは検証専用、手動実行のみ)。
+      - name: Speech bodies (scheduled window, last 14 days, FRB only) dry run, no DB writes, no body pages (manual only, verification)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'speech-schedule-dry-run'
+        run: npm run -s ingest:speech-bodies -- --scheduled --dry-run
+      - name: Speech summaries (scheduled window, last 14 days, extractive) dry run, no DB writes (manual only, verification)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'speech-schedule-dry-run'
+        run: npm run -s ingest:speech-summaries -- --scheduled --dry-run
