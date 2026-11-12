@@ -198,6 +198,14 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "売買の推奨ではありません", timeout: 5), "The not-a-recommendation note is missing")
         capture("07b-EventStrategyAnalysis-Detail")
 
+        // タブバー(StrategyAnalysisTabBar)はカードと同じScrollViewの中にあり、直前の
+        // scrollUntilHittableで画面上部から外れている。tapFirstHittableの自動スクロール
+        // 復帰は12回のスワイプ・10秒の期限内に収まらないことがあり、「タップ可能な要素が
+        // 見つからない」で失敗する(CI 43135123567で確認)。既存の「過去との比較」カード後の
+        // 復帰(line 289付近のfor _ in 0..<4)と同じ考え方で、タブをタップする前に明示的に
+        // 画面上部まで戻す。
+        for _ in 0..<10 { app.swipeDown(velocity: .slow) }
+
         // HQ指示(2026-11-11「ピクセル単位の再現」フィードバック対応): 通貨分析・価格帯分析・AI分析の
         // 3タブは、参考画像どおりのカード構成(ゲージ・グラフ・進捗バー・ローソク足の枠)を再現しつつ、
         // Backendにまだ対応するデータが無い具体的な項目だけを「データ不足」と表示する(単一の
