@@ -184,3 +184,97 @@ ABS の公表カレンダー(月別ページ `https://www.abs.gov.au/release-cal
 - 表 18-10-0259-01 から過去の初回値を取れるか(未調査)。
 - CA_CPI_TRIM と CA_CPI_MEDIAN の重要度(HIGH/MEDIUM)、イベント名の表記、通貨ペアの紐付け。
 - BoC の政策判断での trim と median の相対的な重み(公式文書には序列なし。公式文書は3つとも "preferred")。
+
+---
+
+# 第4回: 設計の詳細(HQ指示 2026-11-13 第3弾への回答)。**設計のみ。指標追加・マイグレーション・実装・DEV反映はしていない**
+
+## G. ヘッドライン CA_CPI の設計の詳細
+
+### G.1 既存の `CA_CPI` のイベント定義との整合性(確認済み)
+- 指標マスター(migration `20261110000002`): 「カナダ消費者物価指数(CPI、前年比)」、`Canada Consumer Price Index (CPI), 12-month change`、国 CA、通貨 CAD、重要度 HIGH、MONTHLY、単位 `%`、出典 Statistics Canada、`HIGHER_IS_POSITIVE`、通貨ペア CADJPY。
+- **前年比(12-month change)・単位 %** と定義されており、指数から計算する前年同月比(%)と**整合する**。マスターの変更は要らない。
+- 公表予定は StatCan の schedule JSON(`CA_CPI` 5件、DEV に反映済み)。キーは対象月(`2026-10` など)で、`referencePeriod` も同じ。
+- **注意(不整合ではないが要確認)**: `HIGHER_IS_POSITIVE` の「良い/悪い」の向きは、既存のまま。
+
+### G.2 初回値を保存するタイミングと、取得失敗時の再試行
+- 保存のタイミング: 公表の 8:30 ET の後(予定の表の `releaseDate`)。取得は WDS `getDataFromVectorsAndLatestNPeriods`(`latestN` を **13以上**にして、対象月と12か月前の指数を同じ応答から取る。1回の呼び出し)。
+- 現行の `official-values` は**手動の実行だけ**(定期の実行には入っていない。`workflow_dispatch` の target のみ)。したがって、再試行は「公表後に手動で実行し直す」になる。取得に失敗しても何も書かないので、**何度実行し直しても安全**(書き込みは初回値1回だけ、`event_snapshots` は不変)。
+- 定期の実行に入れるかは別の判断(定期実行の追加は承認まで禁止)。入れる場合も、GitHub の定期の到達率が低い(約36%)ことを前提に、「公表後の一定時間、取得できるまで実行し直す」設計は到達率に依存する点を明記する。
+- 再試行の期限: 初回値を受け付けるのは、公表日から14日以内(JP_CPI と同じ考え方。既存の `official-values` の期限の有無は実装時に確認する — **未確認**)。
+
+### G.3 `event_snapshots` と `event_revisions` の保存条件
+| 保存先 | 条件 | 内容 |
+|---|---|---|
+| `event_snapshots`(RELEASE。不変) | 下の G.4 の照合がすべて通り、そのイベントにまだ RELEASE のスナップショットがない | actual = 計算した前年同月比(小数第1位)、単位 `%`、`verification_status = VERIFIED`、`verification_source = 'v41690973@YYYY-MM'`。forecast・previous・surprise は入れない |
+| `economic_events` | 同上 | RELEASED・AVAILABLE |
+| `event_revisions`(ACTUAL) | RELEASED の回で、**同じ対象月**の今の計算結果が、直近の値(最後の改定、無ければ初回値)と違う | old_value・new_value・`source`(Statistics Canada)。同じ改定を二度足さない |
+- 1つでも欠ければ何も書かず、SCHEDULED・PENDING(API では DATA_PENDING)のまま。
+
+### G.4 公表日・対象月の照合方法
+1. 公表日: WDS の対象月の点の `releaseTime` の日付(例 `2026-10-19T08:30` → `2026-10-19`)が、公表予定の表の `releaseDate` と一致する(既存の `parseStatcanValueForRelease` と同じ方式)。
+2. 対象月: `refPer`(`2026-09-01`)を `YYYY-MM` に直し、表の `referencePeriod` と一致する。**最新の点が対象月でなければ保存しない**(次の月の点が先に来る等の取り違えを防ぐ)。
+3. 12か月前の点: `refPer` が対象月の**ちょうど12か月前**(`YYYY-1`・同じ月)であることを確かめる。「13番目の点」を位置で取らない(欠けた月があると位置がずれるため)。
+4. 両方の点で `value` が有限の数、`statusCode` と `symbolCode` が 0。
+5. 計算: `round((index_t / index_{t-12} − 1) × 100, 1)`。浮動小数点の誤差を避けるため、**小数第1位に丸めた値を文字列/整数(×10)で比べる**。
+
+### G.5 改定検知と誤検知の防止
+- 比較は「丸めた値(小数第1位)どうし」。丸める前の浮動小数点の値を比べない(`2.0176…` と `2.0` のような差を改定と誤認しない)。
+- 比べる対象は、**初回値と同じ対象月**の、今の計算結果。12か月前の指数が変わった場合も値が変わるので、改定として検知される(原因は記録: `from/to` と元の指数)。
+- 改定の根拠が取得失敗(null)のときは、改定として扱わない(既存の挙動: `current === null` は何もしない)。
+- 誤検知の確認: 初回値の保存の直後に、同じ実行の中で改定検知が走っても、同じ値なので UNCHANGED になること(テストで確かめる)。
+- 公表直後(同日)の WDS の値が、まだ暫定の場合に備え、**公表日と同じ日の改定は報告するだけ**にする案(自動の書き込みはしない)も選択肢。判断はHQ。
+
+### G.6 マイグレーション
+不要な見込み(指標マスター・通貨ペア・出典は既存)。**実装は未着手。**
+
+---
+
+## H. コア CPI(`CA_CPI_TRIM` / `CA_CPI_MEDIAN`)の設計案
+
+### H.1 方針(HQ決定の反映)
+- `CA_CPI_TRIM`・`CA_CPI_MEDIAN` を**別指標**として追加する方向で設計。`CA_CORE_CPI` の単一コードにはまとめない。
+- CPI-common は**初期対象から外す**。理由は、**公式の重要度順位ではなく**(Bank of Canada は3つとも "preferred" で順位をつけていない)、次の3点: (1) 改定頻度(216個の比較で common 19・median 7・trim 4)、(2) 運用コスト(全履歴の再推定で過去が動く → 改定の検知範囲と記録が大きくなる)、(3) 利用者への説明可能性(因子モデル)。
+
+### H.2 表18-10-0259-01から、過去の初回公表値を取得できるか(**確認済み: 取得できる。ただし更新が遅れている**)
+- 表の題名: 「Historical (real-time) releases of … measures of core inflation」。次元: Geography × Alternative measures(common・median・trim の前年同月比(%)、median・trim の指数) × **Release**(公表日ごと)。脚注: 「designed to track changes in the estimates since their initial release」。
+- 検証: Release が 2025-11-17〜2026-04-20 の6回について、**各回の初回公表値(その回の最新月)を取得し、The Daily 表4の最終列と比べた。3指標×6回 = 18個 すべて一致**。つまり、この表で過去の初回値を復元でき、The Daily とも整合する。
+- 取得方法: `getDataFromCubePidCoordAndLatestNPeriods`(productId 18100259、coordinate `1.<measure>.<release>.0.0.0.0.0.0.0`、`latestN` を12以上にして、対象月の点を `refPer` で選ぶ)。`latestN` が小さいと、新しい対象月の点(古い回では null)だけが返るので注意。
+- **制約(未解決)**: この表の最終日は **2026-03**(最新の Release は 2026-04-20)。2026-05〜10 の6回は、**2026-11-13 時点でまだ載っていない**。公式は「毎月更新」と書いているが、更新に遅れがある。→ 新しい回の初回値の取得には使えない。過去の初回値の復元(バックフィル)と、公表後の検算にだけ使う。
+- 新しい回の初回値は、公表当日に 18-10-0256-01 から取って保存し、The Daily の表4(`.../<日付>/t004a-eng.htm`)の最終列と照合する。
+
+### H.3 The Daily 表4 と過去の公表値の照合(確認済み)
+- 表4の取得元: `https://www150.statcan.gc.ca/n1/daily-quotidien/<YYMMDD>/t004a-eng.htm`(本文の表4はスクリプトで表示されるため、記事本体の HTML には無い。`t004a` を取る)。
+- 12回(2025-11-17〜2026-10-19)× 3指標 × 6か月 = 216個を、現在の 18-10-0256-01 と比較(§F.2): 30個が改定。
+- 初回公表値の照合: 上の H.2 の18個(18-10-0259-01 と The Daily)は全件一致。
+
+### H.4 Bank of Canada データの利用条件(確認済み。取得元は StatCan の表なので、BoC のデータ自体は使わない)
+- https://www.bankofcanada.ca/terms/ : 「the Bank permits you to freely use, copy, distribute and transmit its website content」。条件は (1.1) **出典として Bank of Canada を明記**し、変更があれば示す(推奨していると示唆しない)、(1.2) 正確さへの注意、(1.3) **有料サービスで提供する場合は、購入者に、内容がこのサイトから無料で入手できることを事前に伝える**。例外: 紙幣画像・ロゴ。
+- コアCPI の数字は StatCan の表(Open Licence)から取る。指標の説明文で BoC の定義(trim・median)を引用する場合は、(1.1) の出典表記が要る。有料プランの機能として出す場合は (1.3) の通知が要る(**アプリの有料機能に当たるかはHQの判断**)。
+
+### H.5 直近6か月の改定を検知する具体的な設計
+- 範囲: 公表のたびに、18-10-0256-01 から**直近7点**(対象月と、その前の6か月)を取る(`latestN: 7`)。
+- 比較: 各対象月ごとに、DB の「その月の最後の値」(`event_revisions` の最新、無ければ初回値)と、今の値を、小数第1位の値どうしで比べる。違えば、**その月のイベント**の `event_revisions`(ACTUAL)に足す。
+- その月のイベントが存在し、RELEASED で、スナップショットがある場合だけ(無い月は何もしない)。バックフィルしていない過去の月は対象外。
+- 誤検知の防止: (1) 丸めた値で比べる、(2) 同じ改定を二度足さない(最後の値と比べる)、(3) 取得失敗は改定扱いにしない、(4) 6か月より前の月は見ない(CPI-common を除くと、観測した改定はすべて直近6か月以内 — **trim・median の6か月より前の改定は、12回の比較では未観測**だが、「公表のたびに6か月分が改定される」ことは表4が6か月を載せることと整合)。
+- 現行の `official-values` は対象月1つだけを見る。直近6点を見る拡張は新しい実装になる(承認後)。
+
+### H.6 指標ごとのイベント名・重要度・通貨ペア紐付け案
+| 項目 | `CA_CPI_TRIM` | `CA_CPI_MEDIAN` |
+|---|---|---|
+| 名前(日本語) | カナダ CPI-trim(トリム平均、前年比) | カナダ CPI-median(中央値、前年比) |
+| 名前(英語) | Canada CPI-trim, 12-month change | Canada CPI-median, 12-month change |
+| 短い名前 | CPI-trim | CPI-median |
+| 国・通貨 | CA・CAD | CA・CAD |
+| 重要度 | **MEDIUM**(案): 同じ時刻に出る `CA_CPI`(HIGH)の補助的な指標。ヘッドラインと同じ HIGH にするとカレンダーが同じ時刻に3件 HIGH になる | MEDIUM(案) |
+| 通貨ペア | CADJPY(`CA_CPI` と同じ) | CADJPY |
+| 単位・頻度 | %・MONTHLY | %・MONTHLY |
+| 良し悪し | HIGHER_IS_POSITIVE(`CA_CPI` と同じ) | 同じ |
+| 出典 | Statistics Canada(表 18-10-0256-01)。定義の説明は Bank of Canada の定義と明記 | 同じ |
+| 系列 | vector 108785715 | vector 108785714 |
+| 公表日・時刻 | `CA_CPI` と同じ(8:30 ET)。**公表予定は CA_CPI の5件と同じ日付を使う**(別の予定表は作らない) | 同じ |
+| 改定の注意 | 表示に「改定される場合がある」旨を入れる | 同じ |
+- 重要度・名前は**案**。HQの最終判断が要る。
+
+### H.7 追加に必要なもの(承認の後。**いずれも未着手**)
+マイグレーション(指標マスター2件・出典・通貨ペア・公表予定の 5×2 件の取り込み)、アダプター(18-10-0256-01 の読み取りと、6点の改定検知)、テスト、`official-values` への系列追加。

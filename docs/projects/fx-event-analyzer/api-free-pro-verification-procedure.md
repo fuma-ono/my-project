@@ -43,12 +43,15 @@ DEV の API で、FREE と PRO の応答の違いを、読み取りだけで確�
 
 #### 2.2.3 DEV プロジェクトであることの確認
 - ダッシュボードの URL が `https://supabase.com/dashboard/project/pbemckwnqmeaoveelihd/...` であること(DEV の ref)。
-- SQL Editor で、最初にこの1行を流し、**期待どおりの結果**が出てから次へ進む(PROD にも `auth.users` はあるので、これだけでは判別できない。ref は URL で確かめる):
+- SQL Editor で、最初にこの1本を流し、**期待どおりの結果**が出てから次へ進む。**テーブル名は `economic_events`**(以前の版の `events` は誤り。そのようなテーブルは無い。2026-11-13 訂正):
   ```sql
-  select current_database() as db, (select count(*) from events) as events_count;
+  select provider, count(*) as n from economic_events group by provider order by provider;
   ```
-  期待: `events_count` が **276**(2026-11-13 の DEV 反映後の件数。変わっていたら、その時点の DEV の件数をHQに確認してから進める)。
-- PROD の件数と見分けるため、PROD の events 件数は書かない(PROD は一切触らない)。
+  期待(2026-11-13 の DEV。読み取り専用の確認 Run 43368250315 の `events_by_provider` と同じ。合計 **276**):
+  `abs_release_calendar` 12 / `bls_schedule` 191 / `census_retail_schedule` 14 / `estat_cpi_schedule` 5 / `eurostat_schedule` 27 / `fomc_minutes_schedule` 2 / `fomc_schedule` 10 / `ons_release_calendar` 6 / `statcan_release_schedule` 9。
+  件数だけでなく、プロバイダー別の内訳まで一致することで、DEV であることの裏づけにする(PROD は触れていないので、この内訳は DEV 固有)。
+- 件数が変わっている場合は、その時点の DEV の件数をHQに確認してから進める(PROD の件数は書かない。PROD は一切触らない)。
+- **ref の証明**は SQL ではできない(SQL からプロジェクトの ref は引けない)。ダッシュボードの URL の `project/pbemckwnqmeaoveelihd` が見える画面(メール等は写さない)と、上のSQLの結果を、同じ画面・同じタブで取る。
 
 #### 2.2.4 実行予定の SQL 全文(1回の取引。何度流しても同じ結果になる)
 ```sql
@@ -87,6 +90,13 @@ commit;
 - `profiles` は `on conflict (id) do nothing`、`entitlements` は `unique (user_id, feature_code)` の `on conflict do nothing`。2回流しても行は増えない。
 - 手順 1 の確認で、ユーザーが2人そろっていなければ例外で止まり、何も書かれない(`begin … commit` の中なので、途中で失敗しても元に戻る)。
 - 既存の `entitlements` の行は上書きしない(`do nothing`)。もし PRO の行が `enabled=false` で既にあれば、書き換えずに検証の SQL で見つかる(その場合は報告して判断を仰ぐ)。
+
+#### 2.2.4b `example.com` でパスワードログインできるか(2026-11-13 確認)
+- ダッシュボードの Add user → Create new user → **Auto Confirm User** で作ったユーザーは、メール確認済み(confirmed)の状態で作られ、メールは送られない。確認メールの受信は不要で、`POST /auth/v1/token?grant_type=password` でログインできる(Supabase Auth の仕様。**この環境からは未実証** — DEV の anon キーが無く、`/auth/v1/settings` は 401)。
+- ログインできる条件: 「Authentication → Sign In / Providers → Email」が有効であること(大野さんがダッシュボードで確認)。無効なら、パスワードログインはできない。
+- 作成後に、ダッシュボードのユーザー一覧で、2人の状態が「Confirmed(Email confirmed at が入っている)」であることを確認する。入っていなければ、作り直す。
+- `example.com` が拒否される場合(メール形式の検査や、ドメイン制限がある場合)の代替: 大野さんが実際に受信・管理できる専用のメールを使う。個人のアドレスは使わず、会社のメールのプラスアドレスやエイリアス(例 `<管理しているアドレス>+fx-dev-free@…`)のように、受信を自分で管理できて、後で削除できるもの。その場合は、SQL の `email` の2か所と、Secret の値だけが変わる(SQL の他の部分は同じ)。
+- 実際にログインできるかの最終確認は、Secret の登録後に検証のワークフローが行う(ログインに失敗したら、状態コードだけを報告して止まる)。
 
 #### 2.2.5b 対象の2アカウントの識別と、実行前の確認(HQ追加指示 2026-11-13)
 - 識別の方法: **メールアドレスだけ**(`fx-dev-test-free@example.com` / `fx-dev-test-pro@example.com`。`example.com` は予約済みの宛先で、実在の人のものではない)。ID(UUID)は SQL の中で引く。報告には**ID・メールを書かず**、「FREE用」「PRO用」と件数だけを書く(書く必要がある場合は、先頭4文字+`…`のようにマスクする)。
