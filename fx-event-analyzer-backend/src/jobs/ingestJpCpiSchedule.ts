@@ -2,7 +2,8 @@ import 'dotenv/config';
 import { loadEnv } from '../config/env.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
 import { JP_CPI_SCHEDULE_PROVIDER, ingestJpCpiSchedule } from '../ingestion/pipelines/jpCpiSchedule.js';
-import { runIngestionJob } from '../ingestion/runner.js';
+import { readOnlyIngestionStore } from '../ingestion/pipelines/blsCalendar.js';
+import { JobCounters, runIngestionJob } from '../ingestion/runner.js';
 import { createIngestionRepository } from '../repositories/ingestionRepository.js';
 
 /**
@@ -11,6 +12,7 @@ import { createIngestionRepository } from '../repositories/ingestionRepository.j
  * (表を読むだけ)。値は入れない。
  *
  *   npm run ingest:jp-cpi-schedule
+ *   npm run ingest:jp-cpi-schedule -- --dry-run   # 書かない(ingestion_logs にも)。各エントリで何をするかだけ出す(HQ指示 2026-11-13)
  *
  * 定期実行には登録していない(表を更新したときに手動で動かす)。前提: economic_indicators に JP_CPI の行があること
  * (seed.sql。DEV にはある — 11/10 の SQL で確認)。Exit 0 / 1。
@@ -18,6 +20,26 @@ import { createIngestionRepository } from '../repositories/ingestionRepository.j
 async function main(): Promise<void> {
   const env = loadEnv();
   const store = createIngestionRepository(createSupabaseClient(env));
+  if (process.argv.includes('--dry-run')) {
+    const counters = new JobCounters();
+    const planned = await ingestJpCpiSchedule({ store: readOnlyIngestionStore(store), dryRun: true }, counters);
+    console.log(
+      JSON.stringify({
+        job: 'ingest:jp-cpi-schedule',
+        dry_run: true,
+        would_insert: planned.inserted,
+        would_update: planned.updated,
+        unchanged: planned.unchanged,
+        past: planned.past,
+        removed: planned.removed,
+        plan: planned.plan,
+        errors: counters.errorMessages,
+        at: new Date().toISOString(),
+      }),
+    );
+    process.exitCode = counters.errors > 0 ? 1 : 0;
+    return;
+  }
   const result = await runIngestionJob(
     store,
     { provider: JP_CPI_SCHEDULE_PROVIDER, dataType: 'ECONOMIC_EVENT', job: 'ingest:jp-cpi-schedule' },

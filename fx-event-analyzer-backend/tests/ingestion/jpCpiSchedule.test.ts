@@ -122,3 +122,40 @@ describe('ingestJpCpiSchedule', () => {
     expect(store.events).toHaveLength(1);
   });
 });
+
+// HQ指示(2026-11-13): dry-run は DB に書かない。plan で、各エントリに何をするはずかを返す
+describe('ingestJpCpiSchedule dry run', () => {
+  it('lists the 5 INSERTs (08:30 JST = 23:30 UTC the day before) and writes no event; the real run then inserts exactly those', async () => {
+    const counters = new JobCounters();
+    const planned = await ingestJpCpiSchedule({ store, now, dryRun: true }, counters);
+    expect(planned).toMatchObject({ inserted: 5, updated: 0, unchanged: 0 });
+    expect(planned.plan.map((p) => [p.provider_event_id, p.action, p.release_datetime])).toEqual([
+      ['estat_cpi_schedule:2026-10', 'INSERT', '2026-11-19T23:30:00.000Z'],
+      ['estat_cpi_schedule:2026-11', 'INSERT', '2026-12-17T23:30:00.000Z'],
+      ['estat_cpi_schedule:2026-12', 'INSERT', '2027-01-21T23:30:00.000Z'],
+      ['estat_cpi_schedule:2027-01', 'INSERT', '2027-02-18T23:30:00.000Z'],
+      ['estat_cpi_schedule:2027-02', 'INSERT', '2027-03-18T23:30:00.000Z'],
+    ]);
+    expect(store.events).toEqual([]);
+    const { result } = await run(JP_CPI_SCHEDULE);
+    expect(store.events.map((e) => e.provider_event_id).sort()).toEqual(
+      planned.plan.map((p) => p.provider_event_id).sort(),
+    );
+    expect(result.inserted).toBe(5);
+  });
+
+  it('after a real run: UNCHANGED; a moved date is an UPDATE in the plan only', async () => {
+    await run(JP_CPI_SCHEDULE);
+    const same = await ingestJpCpiSchedule({ store, now, dryRun: true }, new JobCounters());
+    expect(same.plan.every((p) => p.action === 'UNCHANGED')).toBe(true);
+    const before = JSON.stringify(store.events);
+    const moved = JP_CPI_SCHEDULE.map((e, i) => (i === 0 ? { ...e, releaseDate: '2026-11-21' } : e));
+    const planned = await ingestJpCpiSchedule({ store, entries: moved, now, dryRun: true }, new JobCounters());
+    expect(planned.plan[0]).toMatchObject({
+      action: 'UPDATE',
+      release_datetime: '2026-11-20T23:30:00.000Z',
+      from: '2026-11-19T23:30:00.000Z',
+    });
+    expect(JSON.stringify(store.events)).toBe(before);
+  });
+});

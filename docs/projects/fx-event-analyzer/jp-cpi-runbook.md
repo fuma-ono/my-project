@@ -12,7 +12,8 @@ HQ指示 2026-11-12「JP_CPI の事前準備」。**この文書の手順は、H
 | DEV の指標 | `JP_CPI` は DEV にある(ペア2、イベント0。2026-11-12 の読み取り専用の確認) |
 | DEV のイベント | まだ無い(公表予定を入れる target が settings に無い) |
 | 接続の確認 | `.github/workflows/fx-event-analyzer-estat-check.yml`(DB・Supabase の Secret を使わない。e-Stat を2回呼ぶだけ) |
-| 手動の target(このブランチにだけ) | `jp-cpi-schedule`・`jp-cpi-values-dry-run`・`jp-cpi-values`。定期実行には入れない |
+| 手動の target(このブランチにだけ) | `jp-cpi-schedule-dry-run`・`jp-cpi-schedule`・`jp-cpi-values-dry-run`・`jp-cpi-values`。定期実行には入れない。公表予定のジョブにも `--dry-run` を足した(11/13) |
+| 予行演習 | 接続の確認のワークフローが、本物の e-Stat の API と取り込みのコード(dry-run)を、メモリ上の疑似のイベントで動かす(`npm run rehearse:jp-cpi`)。A: 公表済みの2026年9月分 → PUBLISH 2.1 / B: 10月分(公表前)→ NOT_YET_AVAILABLE。**11/20 以降に B を流して PUBLISH になれば、本番の取り込みを流してよい** |
 
 ## 2. 11/20 の公表に向けた時系列
 
@@ -33,7 +34,8 @@ HQ指示 2026-11-12「JP_CPI の事前準備」。**この文書の手順は、H
 - 影響: API の JP_CPI の項目に、e-Stat の出典(`attribution`)が付く。Render への反映は不要(API の項目の追加ではなく、値の追加だけ)。
 - 失敗したとき: 統合のコミットを `git revert -m 1 <統合の SHA>` で取り消す。
 
-### 工程 2: 公表予定を入れる(`target = jp-cpi-schedule`)
+### 工程 2: 公表予定を入れる(先に `target = jp-cpi-schedule-dry-run`、次に `target = jp-cpi-schedule`)
+- dry-run の期待: 5件の INSERT(08:30 JST = 前日 23:30 UTC。下の表)、更新 0・過去 0。
 - DEV の `economic_events` に、provider `estat_cpi_schedule` のイベントが 5件入る(SCHEDULED・PENDING)。
 - 確認(読み取り専用の確認の target を使う): JP_CPI のイベントが5件、公表日時が上の表のとおり(08:30 JST = 前日 23:30 UTC)。
 - 失敗したとき / 取り消し:

@@ -28,6 +28,7 @@
     "ingest:gb-au-ca-schedules": "tsx src/jobs/ingestGbAuCaSchedules.ts",
     "ingest:official-values": "tsx src/jobs/ingestOfficialValues.ts",
     "ingest:official:jp-cpi-values": "tsx src/jobs/ingestJpCpiValues.ts",
+    "rehearse:jp-cpi": "tsx src/jobs/rehearseJpCpiValues.ts",
     "ingest:speeches": "tsx src/jobs/ingestSpeeches.ts",
     "ingest:speech-bodies": "tsx src/jobs/ingestSpeechBodies.ts",
     "ingest:speech-summaries": "tsx src/jobs/ingestSpeechSummaries.ts",

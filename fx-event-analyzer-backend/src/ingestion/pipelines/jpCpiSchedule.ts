@@ -47,6 +47,13 @@ export interface JpCpiScheduleResult {
   past: number;
   /** provider_event_ids in the DB (future, not cancelled) that the table no longer has — logged only. */
   removed: string[];
+  /** 各エントリで何をする(した)か。dry-run では、これだけを返して何も書かない */
+  plan: {
+    provider_event_id: string;
+    action: 'INSERT' | 'UPDATE' | 'UNCHANGED';
+    release_datetime: string;
+    from?: string;
+  }[];
 }
 
 /**
@@ -59,12 +66,14 @@ export async function ingestJpCpiSchedule(
     store: IngestionStore;
     entries?: readonly JpCpiScheduleEntry[];
     now?: () => Date;
+    /** true = dry-run(HQ指示 2026-11-13): DB に書かない。件数と plan だけ返す */
+    dryRun?: boolean;
   },
   counters: JobCounters,
 ): Promise<JpCpiScheduleResult> {
   const entries = deps.entries ?? JP_CPI_SCHEDULE;
   const now = (deps.now?.() ?? new Date()).getTime();
-  const result: JpCpiScheduleResult = { inserted: 0, updated: 0, unchanged: 0, past: 0, removed: [] };
+  const result: JpCpiScheduleResult = { inserted: 0, updated: 0, unchanged: 0, past: 0, removed: [], plan: [] };
   const writeDetails = () => {
     counters.details.inserted = result.inserted;
     counters.details.updated = result.updated;
@@ -113,16 +122,23 @@ export async function ingestJpCpiSchedule(
 
     try {
       if (!row) {
-        await deps.store.insertEvent({
-          indicator_id: indicator.id,
-          provider: JP_CPI_SCHEDULE_PROVIDER,
+        result.plan.push({
           provider_event_id: providerEventId,
+          action: 'INSERT',
           release_datetime: releaseAt.toISOString(),
-          release_datetime_precision: 'EXACT',
-          importance: indicator.importance,
-          status: 'SCHEDULED',
-          data_status: 'PENDING',
         });
+        if (!deps.dryRun) {
+          await deps.store.insertEvent({
+            indicator_id: indicator.id,
+            provider: JP_CPI_SCHEDULE_PROVIDER,
+            provider_event_id: providerEventId,
+            release_datetime: releaseAt.toISOString(),
+            release_datetime_precision: 'EXACT',
+            importance: indicator.importance,
+            status: 'SCHEDULED',
+            data_status: 'PENDING',
+          });
+        }
         result.inserted += 1;
         counters.success += 1;
         continue;
@@ -134,8 +150,19 @@ export async function ingestJpCpiSchedule(
       if (row.status === 'CANCELLED') patch.status = 'SCHEDULED';
       if (Object.keys(patch).length === 0) {
         result.unchanged += 1;
+        result.plan.push({
+          provider_event_id: providerEventId,
+          action: 'UNCHANGED',
+          release_datetime: row.release_datetime,
+        });
       } else {
-        await deps.store.updateEvent(row.id, patch);
+        result.plan.push({
+          provider_event_id: providerEventId,
+          action: 'UPDATE',
+          release_datetime: releaseAt.toISOString(),
+          from: row.release_datetime,
+        });
+        if (!deps.dryRun) await deps.store.updateEvent(row.id, patch);
         result.updated += 1;
         if (patch.release_datetime) {
           counters.note('rescheduled', {

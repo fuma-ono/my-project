@@ -1,6 +1,7 @@
 # e-Stat の接続と Secret ESTAT_APP_ID の確認(HQ指示 2026-11-12「JP_CPI の事前準備」)。
 # - 動くのは、ブランチ verify/fx-estat-check への push と、手動の実行だけ(定期実行なし)。
-# - DB には接続しない。Supabase の Secret も使わない。e-Stat の公開 API を2回呼ぶだけ(メタ情報と、公表済みの月の値)。
+# - DB には接続しない。Supabase の Secret も使わない。e-Stat の公開 API を呼ぶだけ(メタ情報と、公表済みの月の値)。
+#   その後、取り込みの本物のコードを dry-run で、メモリ上の疑似のイベントに対して動かす予行演習(HQ指示 2026-11-13)。
 # - 出力は、Secret が登録されているか(真偽と長さの区分だけ。値は出さない)・API の状態コード・統計表の更新日・公表済みの月の
 #   全国・総合の前年同月比だけ。appId はログ・注記に出さない。
 name: FX Event Analyzer - e-Stat connection check
@@ -66,3 +67,18 @@ jobs:
               'note': '2026000909 = 2026年9月(公表済み)。2026001010 = 2026年10月(11/20 公表の前は値なし)',
           })
           PY
+      - uses: actions/checkout@v4
+        if: ${{ !cancelled() && env.ESTAT_APP_ID != '' }}
+      - uses: actions/setup-node@v4
+        if: ${{ !cancelled() && env.ESTAT_APP_ID != '' }}
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: fx-event-analyzer-backend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        if: ${{ !cancelled() && env.ESTAT_APP_ID != '' }}
+        working-directory: fx-event-analyzer-backend
+      - name: Rehearsal of the JP CPI ingestion (real e-Stat API, in-memory events, no DB, dry run)
+        if: ${{ !cancelled() && env.ESTAT_APP_ID != '' }}
+        working-directory: fx-event-analyzer-backend
+        run: npm run -s rehearse:jp-cpi
