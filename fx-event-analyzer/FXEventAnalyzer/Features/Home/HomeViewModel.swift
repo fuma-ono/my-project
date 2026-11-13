@@ -261,14 +261,6 @@ final class HomeViewModel: ObservableObject {
         )
     }
 
-    /// HQ判断(2026-11-04、ホームの「今日の重要イベント」→「今週の重要
-    /// イベント」): `today`から数えて何日分を`GET /home`に要求するか
-    /// (api-design.md v1.47の`days`)。カレンダー上の週(月〜日)ではなく、
-    /// 今日を起点にしたローリング7日間 — 月1回ペースの指標が中心なので、
-    /// 「今日」だけだとほぼ毎回空になってしまう問題を解消するため、週の
-    /// 曜日に関わらず常に同じ幅で埋まりやすくする狙い。
-    private static let weeklyEventsWindowDays = 7
-
     private func fetch() async {
         isFetching = true
         defer { isFetching = false }
@@ -279,7 +271,6 @@ final class HomeViewModel: ObservableObject {
             queryItems: [
                 URLQueryItem(name: "date", value: today),
                 URLQueryItem(name: "timezone", value: timezone),
-                URLQueryItem(name: "days", value: String(Self.weeklyEventsWindowDays)),
             ]
         )
         // HQ指示(2026-10-20)「起動診断画面」: この/home取得が何回目かを
