@@ -1,5 +1,6 @@
 import { ESTAT_CPI_2025_STATS_DATA_ID, redactAppId } from '../ingestion/adapters/estatCpi.js';
 import { HttpClient } from '../ingestion/http.js';
+import type { JpCpiScheduleEntry } from '../ingestion/mappings/jpCpiSchedule.js';
 import { ingestJpCpiValues } from '../ingestion/pipelines/jpCpiValues.js';
 import { JobCounters } from '../ingestion/runner.js';
 import type { IngestionStore } from '../ingestion/store.js';
@@ -58,7 +59,15 @@ function fakeStore(providerEventId: string, releaseIso: string): IngestionStore 
   } as unknown as IngestionStore;
 }
 
-async function scenario(label: string, period: string, releaseIso: string, nowIso: string): Promise<void> {
+/** 期待した結果にならなければ、演習を失敗にする(plan が空のまま「成功」に見えないように)。 */
+async function scenario(
+  label: string,
+  period: string,
+  releaseIso: string,
+  nowIso: string,
+  expect: { action: string; value?: number },
+  schedule?: readonly JpCpiScheduleEntry[],
+): Promise<void> {
   const fetcher = new HttpClient('estat', { minIntervalMs: 2_000, timeoutMs: 20_000, maxRetries: 2, backoffMs: 2_000 });
   const counters = new JobCounters();
   const result = await ingestJpCpiValues(
@@ -68,6 +77,7 @@ async function scenario(label: string, period: string, releaseIso: string, nowIs
       appId: appId!,
       now: () => new Date(nowIso),
       dryRun: true,
+      ...(schedule ? { schedule } : {}),
     },
     counters,
   );
@@ -79,15 +89,34 @@ async function scenario(label: string, period: string, releaseIso: string, nowIs
     skipped: counters.skipReasons,
     errors: counters.errorMessages,
   });
+  const item = result.plan[0];
+  const ok =
+    result.plan.length === 1 &&
+    item?.action === expect.action &&
+    (expect.value === undefined || item.value === expect.value) &&
+    counters.errors === 0;
+  note(`jpcpi rehearsal ${label} verdict`, { expected: expect, ok });
+  if (!ok) process.exitCode = 1;
 }
 
 async function main(): Promise<void> {
-  await scenario('A published month', '2026-09', '2026-10-22T23:30:00.000Z', '2026-10-31T00:00:00.000Z');
+  // A: 公表済みの2026年9月分(表には「これから公表される回」だけなので、9月分の行をここで渡す)。e-Stat の表の更新は 10/30
+  await scenario(
+    'A published month',
+    '2026-09',
+    '2026-10-22T23:30:00.000Z',
+    '2026-10-31T00:00:00.000Z',
+    { action: 'PUBLISH', value: 2.1 },
+    [{ referencePeriod: '2026-09', releaseDate: '2026-10-23', sources: [], checkedAt: '2026-11-13' }],
+  );
+  // B: 2026年10月分(公表日の朝)。11/20 の前は値が無い。11/20 以降に e-Stat に値が出れば PUBLISH(その時は本番の取り込みを流してよい)
+  const afterRelease = new Date().toISOString() > '2026-11-19T23:30:00.000Z';
   await scenario(
     'B release morning',
     '2026-10',
     '2026-11-19T23:30:00.000Z',
-    new Date().toISOString() > '2026-11-19T23:30:00.000Z' ? new Date().toISOString() : '2026-11-20T03:00:00.000Z',
+    afterRelease ? new Date().toISOString() : '2026-11-20T03:00:00.000Z',
+    afterRelease ? { action: 'PUBLISH' } : { action: 'NOT_YET_AVAILABLE' },
   );
 }
 
