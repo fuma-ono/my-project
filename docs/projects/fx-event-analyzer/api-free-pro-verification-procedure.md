@@ -88,6 +88,24 @@ commit;
 - 手順 1 の確認で、ユーザーが2人そろっていなければ例外で止まり、何も書かれない(`begin … commit` の中なので、途中で失敗しても元に戻る)。
 - 既存の `entitlements` の行は上書きしない(`do nothing`)。もし PRO の行が `enabled=false` で既にあれば、書き換えずに検証の SQL で見つかる(その場合は報告して判断を仰ぐ)。
 
+#### 2.2.5b 対象の2アカウントの識別と、実行前の確認(HQ追加指示 2026-11-13)
+- 識別の方法: **メールアドレスだけ**(`fx-dev-test-free@example.com` / `fx-dev-test-pro@example.com`。`example.com` は予約済みの宛先で、実在の人のものではない)。ID(UUID)は SQL の中で引く。報告には**ID・メールを書かず**、「FREE用」「PRO用」と件数だけを書く(書く必要がある場合は、先頭4文字+`…`のようにマスクする)。
+- 実行前の確認(読み取りだけ。結果を控えて、実行後と比べる):
+  ```sql
+  -- E0: 2人のユーザーが作られていて、まだ権限の行がない。期待: users=2 | profiles=0(API未使用なら) | entitlements=0
+  select
+    (select count(*) from auth.users where email in ('fx-dev-test-free@example.com','fx-dev-test-pro@example.com')) as users,
+    (select count(*) from profiles p join auth.users u on u.id=p.id where u.email in ('fx-dev-test-free@example.com','fx-dev-test-pro@example.com')) as profiles_rows,
+    (select count(*) from entitlements e join auth.users u on u.id=e.user_id where u.email in ('fx-dev-test-free@example.com','fx-dev-test-pro@example.com')) as entitlements_rows;
+  -- E1: 既存ユーザーの基準(実行後に同じ値であること)。期待: 数を控える(値そのものは問わない)
+  select
+    (select count(*) from auth.users) as all_users,
+    (select count(*) from profiles) as all_profiles,
+    (select count(*) from entitlements) as all_entitlements,
+    (select md5(string_agg(user_id::text||feature_code||enabled::text||coalesce(expires_at::text,''), ',' order by user_id, feature_code)) from entitlements e join auth.users u on u.id=e.user_id where u.email not in ('fx-dev-test-free@example.com','fx-dev-test-pro@example.com')) as other_entitlements_fingerprint;
+  ```
+- 実行後の確認(同じ E1 を流す): `all_users` は変わらない(ダッシュボードで作った分は実行の前に入っている)、`all_profiles` は **+2 以下**、`all_entitlements` は **+1**、`other_entitlements_fingerprint` は**実行前と完全に同じ**。これで、既存ユーザーの権限(行の中身・有効/無効・期限)が一切変わっていないことを確かめる。
+
 #### 2.2.6 作成後の検証 SQL(読み取りだけ)
 ```sql
 -- (a) 件数: profiles 2、PRO の権限 1、FREE の個別の権限 0 が期待
