@@ -31,6 +31,8 @@ jobs:
       DEV_PROJECT_REF: pbemckwnqmeaoveelihd
       DEV_PROJECT_URL: https://pbemckwnqmeaoveelihd.supabase.co
       DEV_API_BASE_URL: https://fx-event-analyzer-api-dev.onrender.com
+      # 既存のイベントの指紋: この時刻より前に作られたイベント(実行の前後で同じになるはず)。実行の前に決めて固定する
+      VERIFY_EVENT_CUTOFF: '2026-11-13T03:00:00Z'
       SUPABASE_URL: ${{ secrets.FX_DEV_SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.FX_DEV_SUPABASE_SERVICE_ROLE_KEY }}
     steps:

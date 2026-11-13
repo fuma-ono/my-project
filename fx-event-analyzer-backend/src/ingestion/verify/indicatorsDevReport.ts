@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 /**
  * DEV の経済指標の読み取り専用の確認(HQ指示 2026-11-12「GB/AU 経済指標の DEV 検証」)。集計と出力の形だけ
  * (DB は読まない — 読むのは jobs/verifyIndicatorsDev.ts)。
@@ -28,9 +30,11 @@ export interface VerifyEventRow {
   id: string;
   indicator_id: string;
   provider: string | null;
+  provider_event_id?: string | null;
   status: string;
   data_status: string;
   release_datetime: string;
+  created_at?: string;
 }
 
 export interface VerifySnapshotRow {
@@ -124,6 +128,65 @@ export function buildIndicatorsDevReport(
     eventsByProvider,
     snapshotsTotal: snapshots.length,
   };
+}
+
+/**
+ * cutoff より前に作られたイベントの指紋(実行の前後で、既存のイベントが変わっていないことの確認)。
+ * md5(id|indicator_id|provider|provider_event_id|status|data_status|release_datetime を id 順に連結)。
+ */
+export function existingEventsFingerprint(
+  events: readonly VerifyEventRow[],
+  cutoffIso: string,
+): { n: number; fingerprint: string } {
+  const mine = events
+    .filter((e) => (e.created_at ?? '') < cutoffIso)
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const text = mine
+    .map((e) =>
+      [
+        e.id,
+        e.indicator_id,
+        e.provider ?? '',
+        e.provider_event_id ?? '',
+        e.status,
+        e.data_status,
+        e.release_datetime,
+      ].join('|'),
+    )
+    .join(',');
+  return { n: mine.length, fingerprint: createHash('md5').update(text, 'utf8').digest('hex') };
+}
+
+/** 重複: 同じ (provider, provider_event_id)、または同じ (指標, 公表日時) のイベント。 */
+export function duplicateEvents(events: readonly VerifyEventRow[]): {
+  byProviderEventId: string[];
+  byIndicatorAndTime: string[];
+} {
+  const count = (keyOf: (e: VerifyEventRow) => string | null) => {
+    const m = new Map<string, number>();
+    for (const e of events) {
+      const k = keyOf(e);
+      if (k !== null) m.set(k, (m.get(k) ?? 0) + 1);
+    }
+    return [...m].filter(([, n]) => n > 1).map(([k, n]) => `${k} x${n}`);
+  };
+  return {
+    byProviderEventId: count((e) =>
+      e.provider && e.provider_event_id ? `${e.provider}:${e.provider_event_id}` : null,
+    ),
+    byIndicatorAndTime: count((e) => `${e.indicator_id}@${e.release_datetime}`),
+  };
+}
+
+export interface VerifyCreditRow {
+  provider: string;
+  usage_date: string;
+  job: string;
+  run_id: string;
+  mode: string;
+  credits: number;
+  cap: number;
+  reserved_at: string;
 }
 
 /** 検証の対象(GB/AU/CA)の、イベントごとの値(件数が少ないときだけ。値と公表日時のみ)。 */

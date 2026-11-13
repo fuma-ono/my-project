@@ -4,8 +4,11 @@ import { createSupabaseClient } from '../db/supabaseClient.js';
 import { assertDevTarget } from '../ingestion/devTarget.js';
 import {
   buildIndicatorsDevReport,
+  duplicateEvents,
   eventValues,
+  existingEventsFingerprint,
   GB_AU_CA_CODES,
+  type VerifyCreditRow,
   type VerifyEventRow,
   type VerifyIndicatorRow,
   type VerifyPairRow,
@@ -45,7 +48,7 @@ async function main(): Promise<void> {
     'economic_events',
     db
       .from('economic_events')
-      .select('id, indicator_id, provider, status, data_status, release_datetime')
+      .select('id, indicator_id, provider, provider_event_id, status, data_status, release_datetime, created_at')
       .order('release_datetime', { ascending: true })
       .range(0, 4999),
   );
@@ -57,7 +60,18 @@ async function main(): Promise<void> {
       .eq('snapshot_type', 'RELEASE')
       .range(0, 4999),
   );
+  const credits = await read<VerifyCreditRow>(
+    'api_credit_usage',
+    db
+      .from('api_credit_usage')
+      .select('provider, usage_date, job, run_id, mode, credits, cap, reserved_at')
+      .eq('provider', 'bls')
+      .order('reserved_at', { ascending: false })
+      .range(0, 19),
+  );
   const now = new Date();
+  // 既存のイベントの指紋: この時刻より前に作られたイベント(実行の前後で同じになるはず。ワークフローの env で指定)
+  const cutoff = process.env.VERIFY_EVENT_CUTOFF ?? now.toISOString();
   const report = buildIndicatorsDevReport(indicators, pairs, events, snapshots, now);
   const codes = [...GB_AU_CA_CODES];
   const lines = [
@@ -96,7 +110,26 @@ async function main(): Promise<void> {
         .map((i) => [i.code, i.country, i.importance, i.pairs.length, i.events_total, i.snapshots_with_actual]),
     ),
     annotation('ind 4 gb au ca events', eventValues(indicators, events, snapshots, codes, 40)),
+    annotation('ind 5 existing events fingerprint', { cutoff, ...existingEventsFingerprint(events, cutoff) }),
+    annotation('ind 6 duplicates', duplicateEvents(events)),
+    annotation(
+      'ind 7 bls credit ledger',
+      credits.map((c) => [c.usage_date, c.job, c.run_id, c.mode, c.credits, c.cap, c.reserved_at]),
+    ),
   ];
+  // JOLTS と JP_CPI のイベント(日時と状態)。長いので、12件ずつに分ける
+  const focus = ['US_JOLTS', 'JP_CPI'];
+  const focusRows = eventValues(indicators, events, snapshots, focus, 80).map((r) => [r[0], r[1], r[2], r[3], r[4]]);
+  for (let i = 0; i < focusRows.length; i += 12) {
+    lines.push(annotation(`ind 8 jolts jpcpi events ${i / 12 + 1}`, focusRows.slice(i, i + 12)));
+  }
+  // 公表予定の取り込みの provider ごとの件数(GB/AU/CA と JP_CPI)
+  const byProvider: Record<string, number> = {};
+  for (const e of events) {
+    const key = e.provider ?? '(none)';
+    byProvider[key] = (byProvider[key] ?? 0) + 1;
+  }
+  lines.push(annotation('ind 9 events by provider', byProvider));
   for (const line of lines) console.log(line);
 }
 

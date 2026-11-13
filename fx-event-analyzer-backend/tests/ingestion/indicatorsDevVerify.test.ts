@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { READ_ONLY_TABLES } from '../../src/ingestion/verify/readOnlyDb.js';
 import {
   buildIndicatorsDevReport,
+  duplicateEvents,
   eventValues,
+  existingEventsFingerprint,
   GB_AU_CA_CODES,
   type VerifyEventRow,
   type VerifyIndicatorRow,
@@ -101,6 +103,47 @@ describe('read-only tables', () => {
       'indicator_fx_pairs',
       'economic_events',
       'event_snapshots',
+      'api_credit_usage',
     ]);
+  });
+});
+
+describe('existingEventsFingerprint and duplicateEvents', () => {
+  const ev = (id: string, createdAt: string, extra: Partial<VerifyEventRow> = {}): VerifyEventRow => ({
+    id,
+    indicator_id: 'i1',
+    provider: 'bls_schedule',
+    provider_event_id: `bls_schedule:${id}`,
+    status: 'SCHEDULED',
+    data_status: 'PENDING',
+    release_datetime: `2026-12-0${id}T13:30:00Z`,
+    created_at: createdAt,
+    ...extra,
+  });
+  const before = [ev('1', '2026-11-01T00:00:00Z'), ev('2', '2026-11-02T00:00:00Z')];
+  const CUT = '2026-11-13T03:00:00Z';
+
+  it('is the same after new rows are added (created after the cutoff), different if an existing row changes', () => {
+    const a = existingEventsFingerprint(before, CUT);
+    const withNew = [...before, ev('3', '2026-11-13T05:00:00Z')];
+    expect(existingEventsFingerprint(withNew, CUT)).toEqual(a);
+    expect(a.n).toBe(2);
+    const changed = [ev('1', '2026-11-01T00:00:00Z', { status: 'RELEASED' }), before[1]!];
+    expect(existingEventsFingerprint(changed, CUT).fingerprint).not.toBe(a.fingerprint);
+    expect(existingEventsFingerprint([before[1]!, before[0]!], CUT)).toEqual(a); // 並びに依らない
+  });
+
+  it('finds duplicates by provider_event_id and by indicator + time', () => {
+    expect(duplicateEvents(before)).toEqual({ byProviderEventId: [], byIndicatorAndTime: [] });
+    const dup = [
+      ...before,
+      ev('9', '2026-11-13T05:00:00Z', {
+        provider_event_id: 'bls_schedule:1',
+        release_datetime: '2026-12-01T13:30:00Z',
+      }),
+    ];
+    const found = duplicateEvents(dup);
+    expect(found.byProviderEventId).toEqual(['bls_schedule:bls_schedule:1 x2']);
+    expect(found.byIndicatorAndTime).toEqual(['i1@2026-12-01T13:30:00Z x2']);
   });
 });

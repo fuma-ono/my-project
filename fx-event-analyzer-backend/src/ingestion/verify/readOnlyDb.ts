@@ -11,6 +11,7 @@ export const READ_ONLY_TABLES = [
   'indicator_fx_pairs',
   'economic_events',
   'event_snapshots',
+  'api_credit_usage',
 ] as const;
 export type ReadOnlyTable = (typeof READ_ONLY_TABLES)[number];
 
