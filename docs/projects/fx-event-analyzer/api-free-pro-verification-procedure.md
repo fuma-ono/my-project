@@ -25,25 +25,104 @@ DEV の API で、FREE と PRO の応答の違いを、読み取りだけで確�
 - 専用なら: そのまま使ってよい(パスワードは変えて、下の Secret に登録する)。
 - 個人のアカウントなら: 使わない。下の 2.2 で新しく作る。
 
-### 2.2 新しく作る場合(大野さんが DEV の Supabase の画面で)
-1. Supabase の DEV プロジェクト(`pbemckwnqmeaoveelihd`)→ Authentication → Users → Add user → Create new user
-2. メールは、受信できない専用の宛先にする(例: `fx-dev-test-free@example.com`、`fx-dev-test-pro@example.com`)。「Auto Confirm User」にチェック。
-3. パスワードは、パスワードマネージャーなどで長いランダムなものを作る(**チャットには貼らない**)。
-4. 作ったユーザーの `id`(UUID)を控える(これは機密ではない)。
-5. 下の SQL を、DEV の SQL Editor で流す。**書き込みなので、HQ の承認の後。** `<FREE_ID>`・`<PRO_ID>` を差し替える。
-   ```sql
-   -- profiles の行は自動では作られない(テストの共通部品と同じ)
-   insert into profiles (id) values ('<FREE_ID>'), ('<PRO_ID>') on conflict (id) do nothing;
-   -- PRO だけ、有料の権限を足す(FREE には何も足さない)
-   insert into entitlements (user_id, feature_code, enabled, expires_at)
-   values ('<PRO_ID>', 'VIEW_ADVANCED_STATS', true, null);
-   ```
-6. 確認(読み取りだけ):
-   ```sql
-   select user_id, feature_code, enabled from entitlements where user_id in ('<FREE_ID>', '<PRO_ID>');
-   ```
-   期待: PRO の1行だけ。
-- 不要になったら、Authentication の画面でユーザーを削除する(`profiles`・`entitlements` は連動して消える)。
+### 2.2 新しく作る場合(HQ回答 2026-11-13: 専用アカウントを新規に用意する。**作成・SQL実行は、HQの別途承認の後**)
+
+#### 2.2.1 テーブルの構造と依存関係(マイグレーションから確認済み)
+- `auth.users`(Supabase の認証): ダッシュボードの Authentication → Users → Add user で作る。SQL では作らない(パスワードのハッシュ処理を Supabase に任せるため)。
+- `profiles`(`20260917000002`): `id uuid primary key references auth.users(id) on delete cascade`、`display_name`、`deleted_at`、`created_at`、`updated_at`。**ユーザーを作ると自動で行ができる仕組みは、マイグレーションに無い**(「初回アクセス時に作る」とコードの注記にある)。ただし、先に行を入れておいても害はない。
+- `entitlements`(同上): `id`、`user_id references profiles(id) on delete cascade`、`feature_code`、`enabled default false`、`expires_at`、`unique(user_id, feature_code)`。
+- `default_entitlements`(`20261016000002`): 全員に既定で付く機能(`VIEW_BASIC_EVENT`・`VIEW_HISTORICAL`・`VIEW_MARKET_REACTION`)。FREE のアカウントには、`entitlements` の行を足さない。
+- `subscriptions`: PRO の判定は `entitlements` で行うので、この検証では行を作らない(アプリ内課金の検証用で、API の権限判定には使わない — 未確認の点は下に書く)。
+- 削除: `auth.users` を消すと、`profiles` → `entitlements` が `on delete cascade` で連動して消える。
+
+#### 2.2.2 手順(承認の後)
+1. 【大野さん・ダッシュボード】DEV プロジェクトであることを確認(2.2.3)。Authentication → Users → Add user → Create new user で2人作る。
+   メールは `fx-dev-test-free@example.com`・`fx-dev-test-pro@example.com`(受信しない宛先)。「Auto Confirm User」にチェック。パスワードは、パスワードマネージャーで作った長いランダムなもの(**チャットに貼らない**)。
+2. 【大野さん・SQL Editor】下の 2.2.4 の SQL を、DEV で1回流す。**Service Role Key は使わない**(ダッシュボードの SQL Editor は、ログイン中の大野さんの権限で動く)。
+3. 検証用の SQL(2.2.6)を流して、結果の件数だけを報告してもらう(メール・ID・パスワードは書かない)。
+
+#### 2.2.3 DEV プロジェクトであることの確認
+- ダッシュボードの URL が `https://supabase.com/dashboard/project/pbemckwnqmeaoveelihd/...` であること(DEV の ref)。
+- SQL Editor で、最初にこの1行を流し、**期待どおりの結果**が出てから次へ進む(PROD にも `auth.users` はあるので、これだけでは判別できない。ref は URL で確かめる):
+  ```sql
+  select current_database() as db, (select count(*) from events) as events_count;
+  ```
+  期待: `events_count` が **276**(2026-11-13 の DEV 反映後の件数。変わっていたら、その時点の DEV の件数をHQに確認してから進める)。
+- PROD の件数と見分けるため、PROD の events 件数は書かない(PROD は一切触らない)。
+
+#### 2.2.4 実行予定の SQL 全文(1回の取引。何度流しても同じ結果になる)
+```sql
+begin;
+
+-- 1. 前提の確認: 2人のユーザーがダッシュボードで作られていること。足りなければ止める。
+do $$
+declare n int;
+begin
+  select count(*) into n from auth.users
+   where email in ('fx-dev-test-free@example.com', 'fx-dev-test-pro@example.com');
+  if n <> 2 then
+    raise exception 'テスト用ユーザーが2人そろっていません(found=%)', n;
+  end if;
+end $$;
+
+-- 2. profiles(すでにあれば何もしない)
+insert into profiles (id)
+select id from auth.users
+ where email in ('fx-dev-test-free@example.com', 'fx-dev-test-pro@example.com')
+on conflict (id) do nothing;
+
+-- 3. PRO にだけ有料の権限を足す(FREE には何も足さない)。すでにあれば何もしない(unique(user_id, feature_code))
+insert into entitlements (user_id, feature_code, enabled, expires_at)
+select id, 'VIEW_ADVANCED_STATS', true, null
+  from auth.users
+ where email = 'fx-dev-test-pro@example.com'
+on conflict (user_id, feature_code) do nothing;
+
+commit;
+```
+- ID の貼り替えが要らない(メールで引く)ので、貼り間違いが起きない。
+- 変更するのは `profiles` 2行と `entitlements` 1行だけ。他のテーブル・既存のユーザーには触れない(where がテスト用のメール2つに限られる)。
+
+#### 2.2.5 二重実行の防止
+- `profiles` は `on conflict (id) do nothing`、`entitlements` は `unique (user_id, feature_code)` の `on conflict do nothing`。2回流しても行は増えない。
+- 手順 1 の確認で、ユーザーが2人そろっていなければ例外で止まり、何も書かれない(`begin … commit` の中なので、途中で失敗しても元に戻る)。
+- 既存の `entitlements` の行は上書きしない(`do nothing`)。もし PRO の行が `enabled=false` で既にあれば、書き換えずに検証の SQL で見つかる(その場合は報告して判断を仰ぐ)。
+
+#### 2.2.6 作成後の検証 SQL(読み取りだけ)
+```sql
+-- (a) 件数: profiles 2、PRO の権限 1、FREE の個別の権限 0 が期待
+select
+  (select count(*) from profiles p join auth.users u on u.id = p.id
+    where u.email in ('fx-dev-test-free@example.com','fx-dev-test-pro@example.com')) as profiles_rows,
+  (select count(*) from entitlements e join auth.users u on u.id = e.user_id
+    where u.email = 'fx-dev-test-pro@example.com' and e.feature_code = 'VIEW_ADVANCED_STATS' and e.enabled and e.expires_at is null) as pro_advanced,
+  (select count(*) from entitlements e join auth.users u on u.id = e.user_id
+    where u.email = 'fx-dev-test-free@example.com') as free_individual_entitlements;
+-- 期待: 2 | 1 | 0
+
+-- (b) 既存ユーザーに影響がないこと: テスト用以外の entitlements が増減していない(実行の前後で同じ数)
+select count(*) as other_entitlements from entitlements e join auth.users u on u.id = e.user_id
+ where u.email not in ('fx-dev-test-free@example.com','fx-dev-test-pro@example.com');
+
+-- (c) 既定の権限が変わっていないこと
+select feature_code from default_entitlements order by 1;
+-- 期待: VIEW_BASIC_EVENT / VIEW_HISTORICAL / VIEW_MARKET_REACTION
+```
+- (b) は、**実行の前にも流して数を控える**(前後で同じであることを確かめる)。
+
+#### 2.2.7 ロールバック(元に戻す)
+- 権限だけ戻す(ユーザーは残す):
+  ```sql
+  delete from entitlements
+   where feature_code = 'VIEW_ADVANCED_STATS'
+     and user_id = (select id from auth.users where email = 'fx-dev-test-pro@example.com');
+  ```
+- 全部戻す: Authentication → Users から2人を削除する。`profiles`・`entitlements` は連動して消える(`on delete cascade`)。SQL の `delete from auth.users` は使わない。
+- どちらも、テスト用のメールに限られる。他のユーザーには影響しない。
+
+#### 2.2.8 コードで確認した点(2026-11-13)
+- `src/authorization/` は `subscriptions` を参照しない(権限は `entitlements`・`default_entitlements` だけで決まる)。PRO の判定に `subscriptions` の行は要らない。
+- `profiles` は、API へのアクセス時に `ensureProfile`(`src/repositories/profilesRepository.ts`、`upsert … ignoreDuplicates`)で作られる。SQL で先に入れる 2. は必須ではないが、`entitlements` の外部キー(`profiles(id)`)のために、PRO の行を足す前に `profiles` が要る。そのため残す。
 
 ## 3. GitHub Secrets への登録(大野さんが画面で。チャットに値を貼らない)
 
