@@ -1,0 +1,124 @@
+# DEV への反映(HQ指示 2026-11-13: US_JOLTS 12件、GB/AU/CA の公表予定 27件、JP_CPI の公表予定 5件)。
+# - 動くのは、ブランチ apply/fx-dev-* への push と、手動の実行だけ(定期実行なし)。このファイルは settings には入れない。
+# - 書き込む前に、同じ実行の中で dry-run を流し、承認した内容(件数)とぴったり一致したときだけ書く
+#   (.github/scripts/guarded_apply.py。一致しなければ書かず、ステップは失敗。すでに反映済みなら何も書かない)。
+# - 実行するコマンドは、承認された既存のもの(ingest:official:bls-calendar、ingest:gb-au-ca-schedules、ingest:jp-cpi-schedule)と、
+#   その dry-run、JP_CPI の値の dry-run(書かない)だけ。値の取り込み(official-values・jp-cpi-values)は動かさない(テストで確かめる)。
+# - 接続先が DEV でなければ止まる。PROD には触れない。
+name: FX Event Analyzer - DEV apply (guarded)
+
+on:
+  push:
+    branches:
+      - 'apply/fx-dev-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fx-ingestion
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: fx-event-analyzer-backend
+    env:
+      DEV_PROJECT_REF: pbemckwnqmeaoveelihd
+      DEV_PROJECT_URL: https://pbemckwnqmeaoveelihd.supabase.co
+      SUPABASE_URL: ${{ secrets.FX_DEV_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.FX_DEV_SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Check secrets and target (DEV only)
+        id: check
+        working-directory: .
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "Secrets が未登録のため何もしません"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${SUPABASE_URL%/}" != "$DEV_PROJECT_URL" ]; then
+            echo "接続先が社内確認用のDBではありません。止めます"
+            exit 1
+          fi
+          KEY_REF=$(python3 -c 'import os,base64,json; p=os.environ["SUPABASE_SERVICE_ROLE_KEY"].split("."); print(json.loads(base64.urlsafe_b64decode(p[1]+"="*(-len(p[1])%4))).get("ref","") if len(p)==3 else "")' 2>/dev/null || true)
+          if [ "$KEY_REF" != "$DEV_PROJECT_REF" ]; then
+            echo "鍵が社内確認用のプロジェクトのものではありません。止めます"
+            exit 1
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: fx-event-analyzer-backend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        if: steps.check.outputs.ready == 'true'
+
+      # ---- 1. US_JOLTS(予定 12件: 2026-11〜2027-10 分)。BLS の手動の実行(MANUAL)と同じ ----
+      - name: JOLTS - dry run and decide
+        id: jolts
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          set +e
+          npm run -s ingest:official:bls-calendar -- --dry-run > "$RUNNER_TEMP/jolts-dry.json" 2> "$RUNNER_TEMP/jolts-dry.err"
+          python3 ../.github/scripts/guarded_apply.py decide jolts "$RUNNER_TEMP/jolts-dry.json" '{"apply":{"plan.scheduled_insert":12,"plan.scheduled_reschedule":0,"plan.released_insert":0,"plan.released_update":0,"plan.row_cancelled":0},"noop":{"plan.scheduled_insert":0,"plan.released_insert":0,"plan.released_update":0},"empty":["errors","resolver_errors"],"null":["credit_refusal"]}'
+      - name: JOLTS - apply (official-bls, manual mode)
+        if: ${{ !cancelled() && steps.jolts.outputs.decision == 'apply' }}
+        run: |
+          set +e
+          npm run -s ingest:official:bls-calendar > "$RUNNER_TEMP/jolts-real.json" 2> "$RUNNER_TEMP/jolts-real.err"
+          echo "exit=$?" > "$RUNNER_TEMP/jolts-real.exit"
+          python3 ../.github/scripts/guarded_apply.py report jolts "$RUNNER_TEMP/jolts-real.json" "$RUNNER_TEMP/jolts-real.exit"
+          grep -q "exit=0" "$RUNNER_TEMP/jolts-real.exit"
+
+      # ---- 2. 英国・豪州・カナダの公表予定(27件)。公式値の取り込み(official-values)は動かさない ----
+      - name: GB/AU/CA schedules - dry run and decide
+        id: gbauca
+        if: ${{ !cancelled() && steps.check.outputs.ready == 'true' }}
+        run: |
+          set +e
+          npm run -s ingest:gb-au-ca-schedules -- --dry-run > "$RUNNER_TEMP/gbauca-dry.json" 2> "$RUNNER_TEMP/gbauca-dry.err"
+          python3 ../.github/scripts/guarded_apply.py decide gbauca "$RUNNER_TEMP/gbauca-dry.json" '{"apply":{"would_insert":27,"would_update":0,"past":0},"noop":{"would_insert":0,"would_update":0},"empty":["errors","removed"],"null":[]}'
+      - name: GB/AU/CA schedules - apply
+        if: ${{ !cancelled() && steps.gbauca.outputs.decision == 'apply' }}
+        run: |
+          set +e
+          npm run -s ingest:gb-au-ca-schedules > "$RUNNER_TEMP/gbauca-real.json" 2> "$RUNNER_TEMP/gbauca-real.err"
+          echo "exit=$?" > "$RUNNER_TEMP/gbauca-real.exit"
+          python3 ../.github/scripts/guarded_apply.py report gbauca "$RUNNER_TEMP/gbauca-real.json" "$RUNNER_TEMP/gbauca-real.exit"
+          grep -q "exit=0" "$RUNNER_TEMP/gbauca-real.exit"
+
+      # ---- 3. JP_CPI の公表予定(5件)。値の取り込み(jp-cpi-values)は動かさない(dry-run だけ) ----
+      - name: JP CPI schedule - dry run and decide
+        id: jpcpi
+        if: ${{ !cancelled() && steps.check.outputs.ready == 'true' }}
+        run: |
+          set +e
+          npm run -s ingest:jp-cpi-schedule -- --dry-run > "$RUNNER_TEMP/jpcpi-dry.json" 2> "$RUNNER_TEMP/jpcpi-dry.err"
+          python3 ../.github/scripts/guarded_apply.py decide jpcpi "$RUNNER_TEMP/jpcpi-dry.json" '{"apply":{"would_insert":5,"would_update":0,"past":0},"noop":{"would_insert":0,"would_update":0},"empty":["errors","removed"],"null":[]}'
+      - name: JP CPI schedule - apply
+        if: ${{ !cancelled() && steps.jpcpi.outputs.decision == 'apply' }}
+        run: |
+          set +e
+          npm run -s ingest:jp-cpi-schedule > "$RUNNER_TEMP/jpcpi-real.json" 2> "$RUNNER_TEMP/jpcpi-real.err"
+          echo "exit=$?" > "$RUNNER_TEMP/jpcpi-real.exit"
+          python3 ../.github/scripts/guarded_apply.py report jpcpi "$RUNNER_TEMP/jpcpi-real.json" "$RUNNER_TEMP/jpcpi-real.exit"
+          grep -q "exit=0" "$RUNNER_TEMP/jpcpi-real.exit"
+      - name: JP CPI values - dry run only (shows the pipeline is runnable with the Secret; writes nothing)
+        if: ${{ !cancelled() && steps.check.outputs.ready == 'true' }}
+        env:
+          ESTAT_APP_ID: ${{ secrets.ESTAT_APP_ID }}
+        run: |
+          set +e
+          npm run -s ingest:official:jp-cpi-values -- --dry-run > "$RUNNER_TEMP/jpcpi-values.json" 2> "$RUNNER_TEMP/jpcpi-values.err"
+          echo "exit=$?" > "$RUNNER_TEMP/jpcpi-values.exit"
+          python3 ../.github/scripts/guarded_apply.py report jpcpi-values "$RUNNER_TEMP/jpcpi-values.json" "$RUNNER_TEMP/jpcpi-values.exit"
