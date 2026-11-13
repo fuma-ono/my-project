@@ -153,7 +153,10 @@ jobs:
           done
 
       - name: Integration tests (real Fastify app + real local Supabase stack)
-        run: npx vitest run tests/integration
+        # 1テストの制限時間を 5秒(既定)から 30秒に、前後の準備を 60秒にする(HQ指示 2026-11-13「5秒のタイムアウトの原因を特定して修正」)。
+        # 結合テストはテストの中でユーザーを作り(ローカルの認証)API を呼ぶため、CI の機械の揺れで 5秒を超えることがある
+        # (同じコミットで成功と失敗が出た: past-release-limit・rate-alerts)。本当に止まっている処理は、30秒でも見つかる。
+        run: npx vitest run tests/integration --testTimeout=30000 --hookTimeout=60000
 
       - name: Stop Supabase stack
         if: always()
