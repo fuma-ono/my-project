@@ -129,21 +129,21 @@ describe('ABS SDMX adapter', () => {
     expect(absReleaseUrl(LF, '2027-04-15')).toContain('updatedAfter=2027-04-14T14:00:00Z'); // AEST(4月)
   });
 
-  it('the schedule has a reference period only for the releases the latest-release pages name', () => {
+  it('every ABS release has a reference period (3 from the latest-release pages, 3 from the release calendar), and the key stays the release date', () => {
     const periods = ABS_SCHEDULE.entries.map((e) => [e.indicatorCode, e.releaseDate, e.referencePeriod ?? null]);
     expect(periods).toEqual([
       ['AU_CPI', '2026-11-25', '2026-10'],
       ['AU_CPI', '2027-01-06', '2026-11'],
       ['AU_CPI', '2027-01-27', '2026-12'],
-      ['AU_CPI', '2027-02-24', null],
-      ['AU_CPI', '2027-03-24', null],
-      ['AU_CPI', '2027-04-28', null],
+      ['AU_CPI', '2027-02-24', '2027-01'],
+      ['AU_CPI', '2027-03-24', '2027-02'],
+      ['AU_CPI', '2027-04-28', '2027-03'],
       ['AU_UNEMPLOYMENT_RATE', '2026-11-19', '2026-10'],
       ['AU_UNEMPLOYMENT_RATE', '2026-12-17', '2026-11'],
       ['AU_UNEMPLOYMENT_RATE', '2027-01-21', '2026-12'],
-      ['AU_UNEMPLOYMENT_RATE', '2027-02-18', null],
-      ['AU_UNEMPLOYMENT_RATE', '2027-03-25', null],
-      ['AU_UNEMPLOYMENT_RATE', '2027-04-15', null],
+      ['AU_UNEMPLOYMENT_RATE', '2027-02-18', '2027-01'],
+      ['AU_UNEMPLOYMENT_RATE', '2027-03-25', '2027-02'],
+      ['AU_UNEMPLOYMENT_RATE', '2027-04-15', '2027-03'],
     ]);
     for (const e of ABS_SCHEDULE.entries) expect(e.key).toBe(e.releaseDate); // provider_event_id は変えない
   });

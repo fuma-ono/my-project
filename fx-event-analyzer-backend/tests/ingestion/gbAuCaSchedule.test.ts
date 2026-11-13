@@ -97,7 +97,8 @@ describe('the tables read from the official pages on 2026-11-10', () => {
       for (const e of table.entries) {
         expect(officialScheduleUtc(e)!.getTime()).toBeGreaterThan(NOW.getTime());
         expect(e.sources.length).toBeGreaterThanOrEqual(1); // ABS の対象月のある回は latest-release ページも
-        expect(e.checkedAt).toBe('2026-11-10');
+        // 2026-11-13 に公表カレンダーで対象月を確かめた ABS の6件(2027-02〜04)だけ確認日が新しい
+        expect(['2026-11-10', '2026-11-13']).toContain(e.checkedAt);
       }
     }
   });

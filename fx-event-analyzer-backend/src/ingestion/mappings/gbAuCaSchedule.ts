@@ -13,7 +13,8 @@
  *   - 「Labour Force, Australia」2026-11-19・12-17・2027-01-21・02-18・03-25・04-15
  *   公表予定のページから各回の対象月をはっきり読み取れなかったので、キーには公表日を使う(対象月を推測しない)。
  *   対象月(referencePeriod)は、2026-11-10 に各指標の latest-release ページ(下の ABS_LATEST_RELEASE_URLS)の
- *   「Next Release <日付> <題名>, <月> <年>」に書かれていた3回だけに入れる(それより先の回は書かれていない → 保存しない)。
+ *   「Next Release <日付> <題名>, <月> <年>」に書かれていた3回と、2026-11-13 に公表カレンダーの月別ページの
+ *   「Reference period」から読んだ2027-02〜04の3回(absCalendarReferencePeriods.ts の規則)に入れる。
  * カナダ Statistics Canada(主要指標の公表予定 JSON
  *   https://www150.statcan.gc.ca/n1/dai-quo/ssi/homepage/schedule-key_indicators-eng.json の title・description・date。
  *   時刻は「The Daily is released Monday to Friday at 8:30 a.m. Eastern time」https://www150.statcan.gc.ca/n1/dai-quo/index-eng.htm):
@@ -112,14 +113,36 @@ const ABS_REFERENCE_PERIODS: Record<string, Record<string, string>> = {
   AU_UNEMPLOYMENT_RATE: { '2026-11-19': '2026-10', '2026-12-17': '2026-11', '2027-01-21': '2026-12' },
 };
 
+/**
+ * 公表日 → 対象月(ABS の公表カレンダーの月別ページ「Reference period」。2026-11-13 確認、HQ承認)。
+ * 読み取りの規則は absCalendarReferencePeriods.ts。登録済みの6回(上の latest-release 由来)も、同じ規則で全件一致することをテストで確かめる。
+ * provider_event_id の key は公表日のまま(対象月は referencePeriod に入れるだけで、既存のイベントの識別子は変わらない)。
+ */
+const ABS_CALENDAR_REFERENCE_PERIODS: Record<string, Record<string, string>> = {
+  AU_CPI: { '2027-02-24': '2027-01', '2027-03-24': '2027-02', '2027-04-28': '2027-03' },
+  AU_UNEMPLOYMENT_RATE: { '2027-02-18': '2027-01', '2027-03-25': '2027-02', '2027-04-15': '2027-03' },
+};
+
+export const absCalendarMonthUrl = (releaseDate: string): string =>
+  `${ABS_RELEASE_CALENDAR_URL}/${releaseDate.slice(0, 4)}${releaseDate.slice(5, 7)}/all`;
+
 const withAbsPeriods = (entries: OfficialScheduleEntry[]): OfficialScheduleEntry[] =>
   entries.map((e) => {
-    const period = ABS_REFERENCE_PERIODS[e.indicatorCode]?.[e.releaseDate];
-    return period
+    const latest = ABS_REFERENCE_PERIODS[e.indicatorCode]?.[e.releaseDate];
+    if (latest) {
+      return {
+        ...e,
+        referencePeriod: latest,
+        sources: [...e.sources, ABS_LATEST_RELEASE_URLS[e.indicatorCode as keyof typeof ABS_LATEST_RELEASE_URLS]],
+      };
+    }
+    const calendar = ABS_CALENDAR_REFERENCE_PERIODS[e.indicatorCode]?.[e.releaseDate];
+    return calendar
       ? {
           ...e,
-          referencePeriod: period,
-          sources: [...e.sources, ABS_LATEST_RELEASE_URLS[e.indicatorCode as keyof typeof ABS_LATEST_RELEASE_URLS]],
+          referencePeriod: calendar,
+          sources: [...e.sources, absCalendarMonthUrl(e.releaseDate)],
+          checkedAt: '2026-11-13',
         }
       : e;
   });
