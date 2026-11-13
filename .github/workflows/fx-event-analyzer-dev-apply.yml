@@ -5,6 +5,11 @@
 # - 実行するコマンドは、承認された既存のもの(ingest:official:bls-calendar、ingest:gb-au-ca-schedules、ingest:jp-cpi-schedule)と、
 #   その dry-run、JP_CPI の値の dry-run(書かない)だけ。値の取り込み(official-values・jp-cpi-values)は動かさない(テストで確かめる)。
 # - 接続先が DEV でなければ止まる。PROD には触れない。
+# 運用の条件(HQ 承認 2026-11-13。恒久的な書き込み経路として扱わない):
+#   1. DEV 以外への書き込みは禁止。 2. 実行の前に dry-run。 3. dry-run の件数・対象が承認内容と完全に一致したときだけ書く。
+#   4. 未承認のコマンドは動かさない(コマンドを足すときは、HQ の承認と、テストの更新が先)。 5. 再実行で二重に登録しない。
+#   6. 実行の後に、読み取り専用の確認で前後を比べる。 7. 実行ごとに、HQ の事前の承認を取る。
+#   使い終わった apply/* ブランチは削除する(push で再び動くのを防ぐ)。
 name: FX Event Analyzer - DEV apply (guarded)
 
 on:
