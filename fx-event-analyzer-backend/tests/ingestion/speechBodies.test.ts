@@ -969,3 +969,76 @@ describe('ingestSpeechBodies: no wrong link when another row of the same day alr
     expect(actions(plan)).toEqual({ two: ['NO_SOURCE_URL', null, null], off: ['NO_SOURCE_URL', null, null] });
   });
 });
+
+describe('ingestSpeechBodies: rows with no transcript page by kind (discussion / press conference)', () => {
+  let store: FakeStore;
+  let frb: FakeFetcher;
+  const run = (dryRun = false) => {
+    const counters = new JobCounters();
+    const plan: { speech_id: string; action: string }[] = [];
+    return ingestSpeechBodies(
+      store,
+      { frb, ecb: new FakeFetcher() },
+      { pastDays: 30, maxFetches: 20, storeBodyFor: ['frb_calendar'], dryRun },
+      NOW,
+      counters,
+    ).then((result) => {
+      plan.push(...result.plan);
+      return { counters, plan };
+    });
+  };
+
+  beforeEach(() => {
+    store = new FakeStore();
+    frb = new FakeFetcher();
+    frb.pages.set(FRB_SPEECHES_RSS_URL, rss('https://www.federalreserve.gov/newsevents/speech/bowman20261014a.htm'));
+  });
+
+  it.each([
+    ['討論: AI', 'NO_TRANSCRIPT_EXPECTED'],
+    ['記者会見: FOMC', 'NO_TRANSCRIPT_EXPECTED'],
+    ['討論： 全角のコロン', 'NO_TRANSCRIPT_EXPECTED'],
+    ['講演: Economic Outlook', 'NO_SOURCE_URL'], // 講演で URL が無い = 取得漏れの可能性。数え分ける
+    ['インタビュー: x', 'NO_SOURCE_URL'], // 観測していない種類は推測で増やさない
+    ['議会証言: x', 'NO_SOURCE_URL'],
+    ['t', 'NO_SOURCE_URL'],
+  ])('title %s without a URL → %s (nothing written, state unchanged)', async (title, expected) => {
+    store.rows = [row({ id: 'k', title })];
+    const { counters, plan } = await run();
+    expect(plan.map((p) => p.action)).toEqual([expected]);
+    expect(counters.skipReasons[expected]).toBe(1);
+    expect(store.updates).toEqual([]);
+    expect(store.claims).toEqual([]);
+    expect(store.rows[0]).toMatchObject({ body_status: 'PENDING', source_url: null, body_attempts: 0 });
+  });
+
+  it('the kind never blocks a fetch: a discussion whose page IS found is still read', async () => {
+    store.rows = [
+      row({
+        id: 'd',
+        title: '討論: AI',
+        source_url: 'https://www.federalreserve.gov/newsevents/speech/x20261014a.htm',
+      }),
+    ];
+    frb.pages.set(
+      'https://www.federalreserve.gov/newsevents/speech/x20261014a.htm',
+      frbPage('Text of the discussion.'),
+    );
+    const { plan } = await run();
+    expect(plan.map((p) => p.action)).toEqual(['FETCH']);
+  });
+
+  it('dry run and a real run classify the same way; a speech without a URL is still counted as NO_SOURCE_URL', async () => {
+    store.rows = [
+      row({ id: 'a', title: '討論: AI', statement_datetime: '2026-11-05T12:30:00Z' }),
+      row({ id: 'b', title: '講演: Outlook', statement_datetime: '2026-11-06T12:30:00Z' }),
+    ];
+    const dry = await run(true);
+    const real = await run(false);
+    const byId = (p: { speech_id: string; action: string }[]) =>
+      Object.fromEntries(p.map((x) => [x.speech_id, x.action]));
+    expect(byId(dry.plan)).toEqual({ a: 'NO_TRANSCRIPT_EXPECTED', b: 'NO_SOURCE_URL' });
+    expect(byId(real.plan)).toEqual(byId(dry.plan));
+    expect(real.counters.skipReasons).toMatchObject({ NO_TRANSCRIPT_EXPECTED: 1, NO_SOURCE_URL: 1 });
+  });
+});

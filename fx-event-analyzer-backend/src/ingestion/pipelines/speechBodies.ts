@@ -20,7 +20,7 @@
  *     requires explicit prior written authorisation of the ECB or the authors」とあり、発言(発言者の名前の付いた文書)が
  *     この例外に当たるかを確認できていないため。ECB が認めたら storeBodyFor に足す。
  */
-import { SPEAKER_ALIASES } from '../mappings/speakers.js';
+import { SPEAKER_ALIASES, SPEECH_KIND_LABEL_JA } from '../mappings/speakers.js';
 import type { JobCounters } from '../runner.js';
 import { wallClockParts } from '../time.js';
 import {
@@ -39,6 +39,18 @@ export const FRB_SPEECHES_RSS_URL = 'https://www.federalreserve.gov/feeds/speech
 /** 講演の一覧(2017年以降のすべて)。RSS(直近の分だけ)で結べなかった、古い発言の URL を探すときだけ読む。 */
 export const FRB_SPEECHES_JSON_URL = 'https://www.federalreserve.gov/json/ne-speeches.json';
 const BODY_PROVIDERS = ['frb_calendar', 'ecb_press_rss'] as const;
+
+/**
+ * 発言の題名(speech_events.title = '<種類の日本語>: <題>')の種類が、FRB の講演の一覧に原稿が載らないものか。
+ * 観測で確かめた種類だけ(2026-11-13 の DEV: URL が無く PENDING のまま残る行はすべて「討論」「記者会見」)。推測で増やさない。
+ */
+const TRANSCRIPT_UNEXPECTED_KINDS: readonly string[] = [
+  SPEECH_KIND_LABEL_JA.DISCUSSION,
+  SPEECH_KIND_LABEL_JA.PRESS_CONFERENCE,
+];
+export function isTranscriptUnexpectedKind(title: string): boolean {
+  return TRANSCRIPT_UNEXPECTED_KINDS.some((label) => title.startsWith(`${label}:`) || title.startsWith(`${label}：`));
+}
 
 export interface SpeechForBody {
   id: string;
@@ -126,6 +138,7 @@ export const MAX_BODY_ATTEMPTS = 3;
 export type SpeechBodyAction =
   | 'FETCH' // 本文のページを読む(結果は FETCHED か FAILED)
   | 'NO_SOURCE_URL' // URL が見つからない → PENDING のまま
+  | 'NO_TRANSCRIPT_EXPECTED' // URL が見つからず、公式の講演の一覧に載らない種類(討論・記者会見) → PENDING のまま(書かない)
   | 'NOT_OFFICIAL_URL' // 公式サイトの URL でない → FAILED
   | 'RIGHTS_UNCONFIRMED' // 権利が未確認の発言元(ECB) → URL だけ残して NOT_APPLICABLE
   | 'RUN_CAP'; // この実行の上限(maxFetches)を超えた → 次の実行で読む
@@ -292,6 +305,13 @@ export async function ingestSpeechBodies(
         url_from: speech.source_url ? 'stored' : (urlFrom.get(speech.id) ?? null),
       });
     if (!url) {
+      if (isTranscriptUnexpectedKind(speech.title)) {
+        // 2026-11-13 の DEV の確認: URL が無いまま PENDING の行は、すべて「討論」「記者会見」だった(FRB の講演の一覧に原稿が載らない種類)。
+        // 取得の不具合ではないので、講演の行の取得漏れ(NO_SOURCE_URL)と数え分ける。状態は変えない・書かない(次の実行でまた探す)。
+        counters.skip('NO_TRANSCRIPT_EXPECTED');
+        record('NO_TRANSCRIPT_EXPECTED');
+        continue;
+      }
       counters.skip('NO_SOURCE_URL'); // PENDING のまま(次の実行でまた探す)
       record('NO_SOURCE_URL');
       continue;
