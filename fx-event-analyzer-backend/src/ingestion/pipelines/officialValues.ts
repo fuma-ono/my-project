@@ -150,10 +150,25 @@ export interface OfficialValueFetcher {
   getJson(url: string, init?: RequestInit): Promise<unknown>;
 }
 
+export type OfficialValuesPlanAction = 'PUBLISH' | 'REVISE' | 'UNCHANGED' | 'PENDING';
+
+export interface OfficialValuesPlanItem {
+  provider_event_id: string;
+  indicator: string;
+  action: OfficialValuesPlanAction;
+  /** 取れた値(PUBLISH / REVISE のとき)。本文ではなく数値だけ */
+  period?: string;
+  value?: number;
+  /** PENDING の理由(コードの skip と同じ名前) */
+  reason?: string;
+}
+
 export interface OfficialValuesResult {
   published: number;
   revisions: number;
   pending: number;
+  /** 各イベントで何をする(した)か。dry-run では、これだけを返して何も書かない */
+  plan: OfficialValuesPlanItem[];
 }
 
 export async function ingestOfficialValues(
@@ -165,12 +180,15 @@ export async function ingestOfficialValues(
     now?: () => Date;
     /** 発表からこの日数までの回を見る(改定の確認も含む)。 */
     lookbackDays?: number;
+    /** true = dry-run(HQ指示 2026-11-13): 公式の API は読むが、DB に書かない。plan と件数だけ返す */
+    dryRun?: boolean;
   },
   counters: JobCounters,
 ): Promise<OfficialValuesResult> {
   const now = deps.now?.() ?? new Date();
   const lookbackMs = (deps.lookbackDays ?? 45) * 86_400_000;
-  const result: OfficialValuesResult = { published: 0, revisions: 0, pending: 0 };
+  const result: OfficialValuesResult = { published: 0, revisions: 0, pending: 0, plan: [] };
+  const dryRun = deps.dryRun === true;
   const sources = deps.sources ?? OFFICIAL_VALUE_SOURCES;
 
   const indicators = await deps.store.findIndicatorsByCode(sources.map((s) => s.indicatorCode));
@@ -218,6 +236,14 @@ export async function ingestOfficialValues(
         error: error instanceof Error ? error.message : String(error),
       });
       result.pending += events.filter((e) => e.status !== 'RELEASED').length;
+      for (const e of events.filter((x) => x.status !== 'RELEASED')) {
+        result.plan.push({
+          provider_event_id: e.provider_event_id,
+          indicator: source.indicatorCode,
+          action: 'PENDING',
+          reason: 'FETCH_FAILED',
+        });
+      }
       continue;
     }
 
@@ -226,6 +252,12 @@ export async function ingestOfficialValues(
       if (!entry.referencePeriod && !source.periodFromOfficialLabel) {
         counters.skip('NO_REFERENCE_PERIOD'); // 対象期間を照合できない回は保存しない
         if (event.status !== 'RELEASED') result.pending += 1;
+        result.plan.push({
+          provider_event_id: event.provider_event_id,
+          indicator: source.indicatorCode,
+          action: 'PENDING',
+          reason: 'NO_REFERENCE_PERIOD',
+        });
         continue;
       }
       const snapshot = await deps.store.getReleaseSnapshot(event.id);
@@ -240,16 +272,32 @@ export async function ingestOfficialValues(
         const latest = (await deps.store.latestRevisionValues(event.id)).ACTUAL ?? Number(snapshot.actual);
         if (current === latest) {
           counters.skip('UNCHANGED');
+          result.plan.push({
+            provider_event_id: event.provider_event_id,
+            indicator: source.indicatorCode,
+            action: 'UNCHANGED',
+            period: revisionPeriod,
+            value: current,
+          });
           continue;
         }
-        await deps.store.insertRevision({
-          event_id: event.id,
-          field_name: 'ACTUAL',
-          old_value: latest,
-          new_value: current,
-          effective_at: now.toISOString(),
-          source: source.sourceName,
+        result.plan.push({
+          provider_event_id: event.provider_event_id,
+          indicator: source.indicatorCode,
+          action: 'REVISE',
+          period: revisionPeriod,
+          value: current,
         });
+        if (!dryRun) {
+          await deps.store.insertRevision({
+            event_id: event.id,
+            field_name: 'ACTUAL',
+            old_value: latest,
+            new_value: current,
+            effective_at: now.toISOString(),
+            source: source.sourceName,
+          });
+        }
         result.revisions += 1;
         counters.note('revised', { event_id: event.id, period: revisionPeriod, from: latest, to: current });
         continue;
@@ -261,6 +309,12 @@ export async function ingestOfficialValues(
       ) {
         counters.skip('TOO_LATE_FOR_FIRST_RELEASE'); // 改定後の値を初回値として保存しない
         result.pending += 1;
+        result.plan.push({
+          provider_event_id: event.provider_event_id,
+          indicator: source.indicatorCode,
+          action: 'PENDING',
+          reason: 'TOO_LATE_FOR_FIRST_RELEASE',
+        });
         continue;
       }
       let releaseBody: unknown = body;
@@ -269,6 +323,12 @@ export async function ingestOfficialValues(
         if (!req) {
           counters.skip('NOT_RELEASED_OR_DATE_MISMATCH');
           result.pending += 1;
+          result.plan.push({
+            provider_event_id: event.provider_event_id,
+            indicator: source.indicatorCode,
+            action: 'PENDING',
+            reason: 'NOT_RELEASED_OR_DATE_MISMATCH',
+          });
           continue;
         }
         try {
@@ -284,6 +344,12 @@ export async function ingestOfficialValues(
             });
           }
           result.pending += 1;
+          result.plan.push({
+            provider_event_id: event.provider_event_id,
+            indicator: source.indicatorCode,
+            action: 'PENDING',
+            reason: 'FETCH_FAILED_OR_NOT_UPDATED',
+          });
           continue;
         }
       }
@@ -291,12 +357,35 @@ export async function ingestOfficialValues(
       if (!value) {
         counters.skip('NOT_RELEASED_OR_DATE_MISMATCH'); // 公表日が一致しない(前の回の値を使わない)
         result.pending += 1;
+        result.plan.push({
+          provider_event_id: event.provider_event_id,
+          indicator: source.indicatorCode,
+          action: 'PENDING',
+          reason: 'NOT_RELEASED_OR_DATE_MISMATCH',
+        });
         continue;
       }
       if (entry.referencePeriod !== undefined && value.period !== entry.referencePeriod) {
         counters.skip('PERIOD_MISMATCH');
         counters.note('period_mismatch', { event_id: event.id, expected: entry.referencePeriod, got: value.period });
         result.pending += 1;
+        result.plan.push({
+          provider_event_id: event.provider_event_id,
+          indicator: source.indicatorCode,
+          action: 'PENDING',
+          reason: 'PERIOD_MISMATCH',
+        });
+        continue;
+      }
+      result.plan.push({
+        provider_event_id: event.provider_event_id,
+        indicator: source.indicatorCode,
+        action: 'PUBLISH',
+        period: value.period,
+        value: value.value,
+      });
+      if (dryRun) {
+        result.published += 1;
         continue;
       }
       const surprise = calculateSurprise(null, value.value, indicator.favorable_direction);

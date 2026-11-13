@@ -3,8 +3,9 @@ import { loadEnv } from '../config/env.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
 import { HttpClient } from '../ingestion/http.js';
 import { GB_AU_CA_SCHEDULES } from '../ingestion/mappings/gbAuCaSchedule.js';
+import { readOnlyIngestionStore } from '../ingestion/pipelines/blsCalendar.js';
 import { ingestOfficialValues } from '../ingestion/pipelines/officialValues.js';
-import { runIngestionJob } from '../ingestion/runner.js';
+import { JobCounters, runIngestionJob } from '../ingestion/runner.js';
 import { createIngestionRepository } from '../repositories/ingestionRepository.js';
 
 /**
@@ -12,6 +13,7 @@ import { createIngestionRepository } from '../repositories/ingestionRepository.j
  * 実績値取得・保存処理」)。条件・保存のしかたは ingestion/pipelines/officialValues.ts。キー・契約・有料 API なし。
  *
  *   npm run ingest:official-values
+ *   npm run ingest:official-values -- --dry-run   # 公式の API は読むが、DB には書かない(ingestion_logs にも)。plan と値だけ出す(HQ指示 2026-11-13)
  *
  * 定期実行には登録していない(HQ の承認の後)。前提: migration 20261110000002 と、ingest:gb-au-ca-schedules で公表予定が
  * 入っていること。Exit 0 / 1。
@@ -25,6 +27,29 @@ async function main(): Promise<void> {
     maxRetries: 2,
     backoffMs: 2_000,
   });
+  if (process.argv.includes('--dry-run')) {
+    const counters = new JobCounters();
+    const planned = await ingestOfficialValues(
+      { store: readOnlyIngestionStore(store), fetcher, tables: GB_AU_CA_SCHEDULES, dryRun: true },
+      counters,
+    );
+    console.log(
+      JSON.stringify({
+        job: 'ingest:official-values',
+        dry_run: true,
+        would_publish: planned.published,
+        would_revise: planned.revisions,
+        pending: planned.pending,
+        skipped: counters.skipReasons,
+        plan: planned.plan,
+        notes: counters.details,
+        errors: counters.errorMessages,
+        at: new Date().toISOString(),
+      }),
+    );
+    process.exitCode = counters.errors > 0 ? 1 : 0;
+    return;
+  }
   const result = await runIngestionJob(
     store,
     { provider: 'official_values', dataType: 'ECONOMIC_EVENT', job: 'ingest:official-values' },

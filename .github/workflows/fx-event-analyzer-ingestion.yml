@@ -45,6 +45,10 @@ name: FX Event Analyzer - Data ingestion (dev)
 #     speech-summaries): HQ承認 2026-11-11。どれも過去のすべての発言(--all)。本文は FRB だけ保存(ECB は権利が未確認の
 #     ため URL だけ)。要約は原文の抜粋(EXTRACTIVE_EN、外部 API なし)。dry-run は DB に書かない(ingestion_logs にも書かない)。
 #     本文の dry-run は本文のページを読まない。migration 20261110000001・20261111000001 が前提。定期実行には入れていない
+#   - 英国・豪州・カナダの経済指標(手動実行のみ、target=gb-au-ca-schedules-dry-run / gb-au-ca-schedules /
+#     official-values-dry-run / official-values): HQ指示 2026-11-13。公表予定(コードの表。外部アクセスなし)と、公式の
+#     API(ONS・ABS・StatCan)の初回値。dry-run は DB に書かない(ingestion_logs にも書かない)。migration 20261110000002 が前提。
+#     定期実行には入れていない
 # 接続先が社内確認用のDBでなければ止まる(本番DBに書き込まない)。
 # Twelve Data の無料キーは社内確認専用(要件定義書6.4)。
 on:
@@ -55,7 +59,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: 'fx-prices / speeches / both / report / official-bls / official-bls-dry-run / official-eurostat / official-eurostat-dry-run / event-reactions / fomc-schedule / fomc-policy-rate / retail-sales-schedule / official-bls-data-unavailable / official-bls-data-unavailable-dry-run / speech-bodies-dry-run / speech-bodies / speech-summaries-dry-run / speech-summaries'
+        description: 'fx-prices / speeches / both / report / official-bls / official-bls-dry-run / official-eurostat / official-eurostat-dry-run / event-reactions / fomc-schedule / fomc-policy-rate / retail-sales-schedule / official-bls-data-unavailable / official-bls-data-unavailable-dry-run / speech-bodies-dry-run / speech-bodies / speech-summaries-dry-run / speech-summaries / gb-au-ca-schedules-dry-run / gb-au-ca-schedules / official-values-dry-run / official-values'
         default: both
       event_id:
         description: 'target=event-reactions のときだけ: この1件だけを計算する(UUID。空なら直近7日の発表。HQ指示 2026-11-10。政策金利が記録済みの FOMC も可)'
@@ -220,3 +224,15 @@ jobs:
       - name: Speech summaries (extractive, all past speeches; manual only)
         if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'speech-summaries'
         run: npm run -s ingest:speech-summaries -- --all
+      - name: GB/AU/CA release schedules dry run, no DB writes (manual only)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'gb-au-ca-schedules-dry-run'
+        run: npm run -s ingest:gb-au-ca-schedules -- --dry-run
+      - name: GB/AU/CA release schedules (manual only)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'gb-au-ca-schedules'
+        run: npm run -s ingest:gb-au-ca-schedules
+      - name: GB/AU/CA official values dry run, no DB writes (manual only)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'official-values-dry-run'
+        run: npm run -s ingest:official-values -- --dry-run
+      - name: GB/AU/CA official values (manual only)
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'workflow_dispatch' && inputs.target == 'official-values'
+        run: npm run -s ingest:official-values

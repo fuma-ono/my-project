@@ -136,6 +136,66 @@ describe('ingestOfficialValues', () => {
     expect(cpiEvent()).toMatchObject({ status: 'RELEASED', data_status: 'AVAILABLE' });
   });
 
+  // HQ指示(2026-11-13): dry-run は公式の API は読むが、DB には何も書かない。plan で、何をするはずかを返す
+  describe('dry run', () => {
+    const dry = (now = AFTER) => {
+      const counters = new JobCounters();
+      return ingestOfficialValues(
+        { store, fetcher, sources, tables: [TABLE], now: () => now, dryRun: true },
+        counters,
+      ).then((result) => ({ result, counters }));
+    };
+
+    it('returns what it would publish, and writes nothing (no snapshot, no event change, no revision)', async () => {
+      fetcher.responses.set(ONS_CPI_URL, onsCpi([['2026 OCT', '3.7', '2026-11-18']], '2026-11-18'));
+      const eventsBefore = JSON.stringify(store.events);
+      const { result } = await dry();
+      expect(result.published).toBe(1);
+      expect(result.plan).toContainEqual({
+        provider_event_id: 'ons_release_calendar:GB_CPI:2026-10',
+        indicator: 'GB_CPI',
+        action: 'PUBLISH',
+        period: '2026-10',
+        value: 3.7,
+      });
+      expect(store.snapshots).toEqual([]);
+      expect(store.revisions).toEqual([]);
+      expect(JSON.stringify(store.events)).toBe(eventsBefore);
+      expect(cpiEvent()).toMatchObject({ status: 'SCHEDULED', data_status: 'PENDING' });
+    });
+
+    it('the same data, run for real afterwards, publishes exactly what the dry run announced', async () => {
+      fetcher.responses.set(ONS_CPI_URL, onsCpi([['2026 OCT', '3.7', '2026-11-18']], '2026-11-18'));
+      const { result: planned } = await dry();
+      const { result } = await run();
+      const item = planned.plan.find((p) => p.action === 'PUBLISH')!;
+      expect(store.snapshots[0]).toMatchObject({ actual: item.value, verification_source: `D7G7@${item.period}` });
+      expect(result.published).toBe(planned.published);
+    });
+
+    it('a release that is not out yet is PENDING in the plan (and still nothing is written)', async () => {
+      fetcher.responses.set(ONS_CPI_URL, onsCpi([['2026 SEP', '3.5', '2026-10-21']], '2026-10-21'));
+      const { result } = await dry();
+      expect(result.published).toBe(0);
+      expect(result.plan.find((p) => p.indicator === 'GB_CPI')).toMatchObject({
+        action: 'PENDING',
+        reason: 'NOT_RELEASED_OR_DATE_MISMATCH',
+      });
+      expect(store.snapshots).toEqual([]);
+    });
+
+    it('a revision of a RELEASED value is announced as REVISE (counted as would-revise) but not recorded', async () => {
+      fetcher.responses.set(ONS_CPI_URL, onsCpi([['2026 OCT', '3.7', '2026-11-18']], '2026-11-18'));
+      await run();
+      fetcher.responses.set(ONS_CPI_URL, onsCpi([['2026 OCT', '3.8', '2026-11-19']], '2026-11-18'));
+      const { result } = await dry(new Date('2026-11-19T09:00:00Z'));
+      expect(result.plan.find((p) => p.indicator === 'GB_CPI')).toMatchObject({ action: 'REVISE', value: 3.8 });
+      expect(result.revisions).toBe(1); // 改定する「はずの」件数
+      expect(store.revisions).toEqual([]); // 実際の記録は0件
+      expect(store.snapshots).toHaveLength(1);
+    });
+  });
+
   it('release date mismatch (the API still shows the previous release): nothing saved — the previous value is never reused', async () => {
     fetcher.responses.set(ONS_CPI_URL, onsCpi([['2026 SEP', '3.5', '2026-10-21']], '2026-10-21'));
     const { result, counters } = await run();
