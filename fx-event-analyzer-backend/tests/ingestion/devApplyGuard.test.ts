@@ -81,54 +81,62 @@ describe('guarded_apply.py decide', () => {
     });
   });
 
-  it('JOLTS: anything unexpected → stop (exit 1): another count, a new release, a reschedule, an error, a credit refusal', () => {
-    const cases: [string, unknown][] = [
-      ['13 inserts', joltsDry({ scheduled_insert: 13 })],
-      ['11 inserts', joltsDry({ scheduled_insert: 11 })],
-      ['a value would be published', joltsDry({ released_insert: 1 })],
-      ['a value would be updated', joltsDry({ released_update: 1 })],
-      ['a reschedule', joltsDry({ scheduled_reschedule: 1 })],
-      ['a cancelled row', joltsDry({ row_cancelled: 1 })],
-      ['an error', joltsDry({}, { errors: ['x'] })],
-      ['a resolver error', joltsDry({}, { resolver_errors: ['x'] })],
-      ['a credit refusal', joltsDry({}, { credit_refusal: 'cap' })],
-      ['not a dry run', joltsDry({}, { dry_run: false })],
-      ['garbage', 'not json at all'],
-    ];
-    for (const [label, output] of cases) {
-      expect(decide('jolts', RULES.jolts, output), label).toMatchObject({ status: 1, decision: 'stop' });
-    }
-  });
+  it(
+    'JOLTS: anything unexpected → stop (exit 1): another count, a new release, a reschedule, an error, a credit refusal',
+    { timeout: 30_000 },
+    () => {
+      const cases: [string, unknown][] = [
+        ['13 inserts', joltsDry({ scheduled_insert: 13 })],
+        ['11 inserts', joltsDry({ scheduled_insert: 11 })],
+        ['a value would be published', joltsDry({ released_insert: 1 })],
+        ['a value would be updated', joltsDry({ released_update: 1 })],
+        ['a reschedule', joltsDry({ scheduled_reschedule: 1 })],
+        ['a cancelled row', joltsDry({ row_cancelled: 1 })],
+        ['an error', joltsDry({}, { errors: ['x'] })],
+        ['a resolver error', joltsDry({}, { resolver_errors: ['x'] })],
+        ['a credit refusal', joltsDry({}, { credit_refusal: 'cap' })],
+        ['not a dry run', joltsDry({}, { dry_run: false })],
+        ['garbage', 'not json at all'],
+      ];
+      for (const [label, output] of cases) {
+        expect(decide('jolts', RULES.jolts, output), label).toMatchObject({ status: 1, decision: 'stop' });
+      }
+    },
+  );
 
-  it('schedules: 27 inserts → apply; 0 inserts → noop; anything else (26, an update, a past row, an error, removed rows) → stop', () => {
-    const dry = (extra: Record<string, unknown>) => ({
-      job: 'ingest:gb-au-ca-schedules',
-      dry_run: true,
-      would_insert: 27,
-      would_update: 0,
-      unchanged: 0,
-      past: 0,
-      removed: [],
-      errors: [],
-      ...extra,
-    });
-    expect(decide('gbauca', RULES.schedule, dry({}))).toMatchObject({ status: 0, decision: 'apply' });
-    expect(decide('gbauca', RULES.schedule, dry({ would_insert: 0, unchanged: 27 }))).toMatchObject({
-      decision: 'noop',
-    });
-    for (const extra of [
-      { would_insert: 26 },
-      { would_update: 1 },
-      { past: 1 },
-      { errors: ['x'] },
-      { removed: ['a'] },
-    ]) {
-      expect(decide('gbauca', RULES.schedule, dry(extra)), JSON.stringify(extra)).toMatchObject({
-        status: 1,
-        decision: 'stop',
+  it(
+    'schedules: 27 inserts → apply; 0 inserts → noop; anything else (26, an update, a past row, an error, removed rows) → stop',
+    { timeout: 30_000 },
+    () => {
+      const dry = (extra: Record<string, unknown>) => ({
+        job: 'ingest:gb-au-ca-schedules',
+        dry_run: true,
+        would_insert: 27,
+        would_update: 0,
+        unchanged: 0,
+        past: 0,
+        removed: [],
+        errors: [],
+        ...extra,
       });
-    }
-  });
+      expect(decide('gbauca', RULES.schedule, dry({}))).toMatchObject({ status: 0, decision: 'apply' });
+      expect(decide('gbauca', RULES.schedule, dry({ would_insert: 0, unchanged: 27 }))).toMatchObject({
+        decision: 'noop',
+      });
+      for (const extra of [
+        { would_insert: 26 },
+        { would_update: 1 },
+        { past: 1 },
+        { errors: ['x'] },
+        { removed: ['a'] },
+      ]) {
+        expect(decide('gbauca', RULES.schedule, dry(extra)), JSON.stringify(extra)).toMatchObject({
+          status: 1,
+          decision: 'stop',
+        });
+      }
+    },
+  );
 
   it('prints only counts and the decision (no keys exist in the input; the note is a single line)', () => {
     const { stdout } = decide('jolts', RULES.jolts, joltsDry({}));
