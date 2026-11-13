@@ -1,4 +1,6 @@
-# カナダ CPI(ヘッドライン CA_CPI と コア CA_CPI_TRIM / CA_CPI_MEDIAN)詳細設計書
+# カナダ CPI(ヘッドライン CA_CPI と コア CA_CPI_TRIM / CA_CPI_MEDIAN)詳細設計書(最終版 2026-11-13)
+
+**版の扱い**: §0〜§13 が基本設計、§14 が実装前の最終確認への回答、**§15 が最終版で確定した事項(§14 の「期限」の定義を含め、§15 が優先)**。§14 と §15 に食い違いがあれば §15 が正。
 
 HQ指示 2026-11-13「CA_CPIについて、上記方針に沿った詳細設計書を完成させてください」。
 **この文書は設計書。コード変更・マイグレーション・CI・DEV反映・DB書き込みは、していない(HQが設計書を確認した後に別途判断)。**
@@ -333,7 +335,7 @@ WDS 通信失敗 / HTTP エラー / `status` ≠ SUCCESS / 対象月未反映 / 
 - 期限を過ぎた回は**エラーにならず、PENDING のまま残る**。自動では取り戻さない。取り戻すには、別の承認によるバックフィル(§12)が要る。
 - 期限後に「次の月の値」を前の回の初回値として取り違えることはない(③と、対象月の照合 `PERIOD_MISMATCH`)。
 - **重要な違い(CA_CPI の設計に影響)**: 既存の StatCan 系列は「最新の1点」だけを見るため、③によって実質の受付期間が「次の公表の前日まで」(約4週間)になる。ヘッドラインの CA_CPI は**特定の2点(対象月と12か月前)を `refPer` で選ぶ**ため、③の「最新の点が次の月に変わる」では自然に止まらない。→ 受付期間を**明示的に設定する必要がある**。
-- **CA_CPI・CA_CPI_TRIM・CA_CPI_MEDIAN に設定する値(案)**: `maxDaysAfterRelease = 7`(ABS と同じ。StatCan の CPI の公表間隔は4週間以上で、次の公表による改定の前に初回値を確定できる。コア指標は翌月の公表で過去の値が改定されるため、翌月の公表より前でなければならない)。期限を過ぎたら `TOO_LATE_FOR_FIRST_RELEASE`、書かずに PENDING のまま。
+- **CA_CPI・CA_CPI_TRIM・CA_CPI_MEDIAN に設定する値(案。判定の単位は §15.2 で「Toronto の暦日」に確定)**: `maxDaysAfterRelease = 7`(ABS と同じ。StatCan の CPI の公表間隔は4週間以上で、次の公表による改定の前に初回値を確定できる。コア指標は翌月の公表で過去の値が改定されるため、翌月の公表より前でなければならない)。期限を過ぎたら `TOO_LATE_FOR_FIRST_RELEASE`、書かずに PENDING のまま。
 - **改定検知の窓との関係**: ①の45日のうち「対象のイベントの選別」は、RELEASED の回の改定確認にも使われる(現行は `lookbackDays` 以内のイベントだけ改定を確認する)。**コア指標の「直近6か月」(約180日)は45日の窓に収まらない**。したがって、コア指標の改定検知は、現行の `lookbackDays` に頼らず、**専用の窓(対象月 + 前の6か月 = 約200日)を別に持つ**必要がある(新しい実装。§6.1 のとおり)。ヘッドラインの改定確認は現行どおり(45日以内の1点)。
 - 未確認だったことの解決: §5.6 の「初回値の受付期間」は、上の表のとおり。
 
@@ -494,3 +496,246 @@ WDS 通信失敗 / HTTP エラー / `status` ≠ SUCCESS / 対象月未反映 / 
 | 8 | 表示名・重要度の最終の文言 | HQ判断 |
 | 9 | 改定の停止の閾値 | **確定案**(5点以下は処理、6点以上は全件停止。§14.5) |
 | 10 | 公表の初日の WDS の反映タイミング | 公表日に観測して初めて分かる |
+
+
+---
+
+## 15. 最終版で確定した事項(HQ指示 2026-11-13「最終設計書の提出」)
+
+**提出する範囲は設計書まで。実装・マイグレーション・CI・DEV反映・DB書き込み・main統合・PROD変更は、していない。**
+下のコード・SQL・JSON は「案(実装時に作る形)」で、どこにも実行・反映していない。
+
+### 15.0 A(iOS影響確認)の結果の扱い
+- 指示文には「AのiOS影響確認が完了」とあるが、**Aの確認結果の本文は、B(私)には届いていない**。したがって、この設計書は A の指摘内容を**反映できていない**。
+- 反映の置き場所: 下の §15.9「Aの確認結果との突き合わせ」の表(空欄)。Aの結果を受け取ったら、そこに追記する。それまで、A に確認が必要な項目(`value_decimals` の null→1、`attribution` 文言の変更、`display_name`、ロック中の出典、別行の表示)は、**未確認として扱う**。
+- 本文に A の結果に依存する箇所は、「(A確認待ち)」と明記した。
+
+### 15.1 45日窓と約200日の改定検知窓の分離(確定)
+
+現行の `officialValues.ts` は、1つの窓(`lookbackDays`、既定 **45日**)で「どのイベントを見るか」を決め、**初回値の保存と、RELEASED の回の改定確認の両方**に使っている。コア指標の「直近6か月」の改定検知は、この窓に収まらない(約180日)。両者を**別の窓**にする。
+
+| 窓 | 用途 | 長さ | 適用先 | 設定の持ち方(案) |
+|---|---|---|---|---|
+| **初回値の窓** | まだ RELEASED になっていない回を探す | **45日**(現行のまま) | 3指標 | 既存の `lookbackDays`(変更しない) |
+| **ヘッドラインの改定確認の窓** | RELEASED の回の改定確認(対象月の1点) | **45日**(現行のまま) | `CA_CPI` | 既存の `lookbackDays` |
+| **コアの改定検知の窓** | 直近7点(対象月 + 前の6か月)の改定検知 | **約200日**(`revisionLookbackDays = 200`) | `CA_CPI_TRIM`・`CA_CPI_MEDIAN` のみ | 新しい定数 `CORE_REVISION_LOOKBACK_DAYS`。`lookbackDays` とは独立 |
+
+- **分離の要点**: コアの改定検知は `lookbackDays` を**参照しない**。45日窓を200日に延ばすと、初回値の保存とヘッドラインの改定確認の挙動まで変わってしまう(既存の `GB_*`・`AU_*`・`CA_UNEMPLOYMENT_RATE` も同じ窓を使う)ため、**共通の窓は変更しない**。
+- 200日の根拠: 直近7点 = 対象月 + 6か月前まで = 最大 約 6か月 + 公表の間隔(約1か月)= 約 7か月(≒ 210日)。公表日の時刻のずれを見込み、**RELEASED の回の `release_datetime` が「今から過去200日」以内**のイベントを、コアの改定検知の対象にする。窓から外れた月は、点が直近7点に入っていても、改定の確認をしない(エラーにしない。ログに `OUT_OF_REVISION_WINDOW`)。
+- 実装の形(案): コア指標用の別関数(例 `detectCoreRevisions`)にして、既存のループ(`officialValues.ts` の `for (const event of events)`)に混ぜない。ヘッドライン・既存系列のコードパスは、挙動を変えない。
+- **テスト**:
+  - W1: 公表日が46日前の RELEASED の `CA_CPI` は、改定確認の対象にならない(現行の挙動の固定)。
+  - W2: 公表日が46日前のコアの RELEASED の回は、**改定検知の対象になる**(200日以内)。
+  - W3: 公表日が200日前のコアの回は対象、201日前は対象外(`OUT_OF_REVISION_WINDOW`)。境界の両側。
+  - W4: `lookbackDays` を変えても、コアの改定検知の対象は変わらない(独立性)。逆に `CORE_REVISION_LOOKBACK_DAYS` を変えても、初回値の保存の対象は変わらない。
+  - W5: コアの窓を使っても、既存の系列(`GB_*`・`AU_*`・`CA_UNEMPLOYMENT_RATE`)の plan が変わらない(回帰)。
+
+### 15.2 初回値の公表後7日制限(Toronto の現地日付で確定)
+
+§14.1 の `maxDaysAfterRelease = 7`(現行は「経過ミリ秒 > 7×86,400,000」)を、**`America/Toronto` の暦日の差**に確定する。
+
+**規則**
+- `releaseLocal` = イベントの `release_datetime` を `America/Toronto` の暦日(`YYYY-MM-DD`)にしたもの。
+- `todayLocal` = 実行時刻(`now`)を `America/Toronto` の暦日にしたもの。
+- `daysAfter = todayLocal − releaseLocal`(**暦日の差**。時刻・夏時間の影響を受けない)。
+- 初回値を保存できる: `0 ≤ daysAfter ≤ 7`。
+  - 公表日の当日(0日)から、**公表日の7日後の Toronto の 23:59:59 まで**受け付ける。7日後の翌日の 00:00(Toronto)から、受け付けない。
+- 超過(`daysAfter ≥ 8`): `TOO_LATE_FOR_FIRST_RELEASE`。書かず、PENDING のまま(plan に `PENDING` / 理由つき)。
+- `daysAfter < 0`(まだ公表前): 既存の「`release_datetime ≤ now`」の選別で、そもそも対象外。
+
+**現行の方式との違い(なぜ暦日にするか)**
+- 現行 ABS の方式は、経過時間(ミリ秒)で 7日を測る。夏時間の切り替え日をまたぐと、**±1時間**ずれて、境界の判定が曖昧になる。
+- `CA_CPI` の公表は 8:30 ET(Toronto)。「公表日 + 7日」の翌朝の再実行が 7日を過ぎるかどうかを、**人が読んで同じに判定できる**ようにするため、暦日で測る。
+- 判定に使う時刻は、すべて `America/Toronto`。UTC の日付は使わない(UTC の日付では、Toronto の夕方〜夜の実行が翌日扱いになるため)。
+
+**実装の形(案)**: `Intl.DateTimeFormat('en-CA', { timeZone: 'America/Toronto', year: 'numeric', month: '2-digit', day: '2-digit' })` で暦日の文字列を作り、`Date.UTC(y, m-1, d)` どうしの差を `86_400_000` で割る(暦日の差なので割り切れる)。`maxDaysAfterRelease` は、既存の ABS(7日)の挙動を**変えない**ため、新しい任意項目 `maxLocalDaysAfterRelease`(+ `localTimeZone`)として足す案。
+
+**テスト**(公表日 D = 2026-11-16 08:30 ET = 13:30Z の想定)
+| # | 実行時刻(Toronto) | 期待 |
+|---|---|---|
+| L1 | D 08:31 | 受け付ける(daysAfter 0) |
+| L2 | D+7 23:59:59(11/23) | **受け付ける**(daysAfter 7) |
+| L3 | D+8 00:00:00(11/24) | **受け付けない**(daysAfter 8)。`TOO_LATE_FOR_FIRST_RELEASE` |
+| L4 | UTC では D+8 だが Toronto では D+7(例: 11/23 20:00 Toronto = 11/24 01:00Z) | **受け付ける**(Toronto の暦日が基準) |
+| L5 | Toronto 11/24 00:30(= 11/24 05:30Z) | 受け付けない(Toronto で D+8。UTC でも D+8 で一致) |
+| L6 | 夏時間をまたぐ(例: 公表日 2027-03-10、夏時間開始 2027-03-14 をまたぎ、D+7 = 3/17 の 23:59) | 受け付ける。**ミリ秒で測る方式なら 1 時間ずれて判定が変わる入力**で、暦日方式は変わらないことを示す |
+| L7 | 夏時間の終了(2026-11-01)をまたぐ入力 | 暦日の差が崩れない |
+| L8 | 期限後の再実行 | 何も書かない。PENDING のまま。plan の理由が `TOO_LATE_FOR_FIRST_RELEASE` |
+| L9 | 期限後でも、すでに RELEASED の回の**改定検知**は別(§15.1 の窓。初回値の期限の対象ではない) | 改定検知は動く |
+
+### 15.3 same_day_diff のログ仕様(確定)
+
+§14.6 の判定(`captured_at` と同じ Toronto の暦日で値が違えば、書かずに報告)で出す記録の仕様。
+
+- 記録先: 取り込みジョブの結果の `counters.note('same_day_diff', {...})`(= `ingestion_logs` の details、および dry-run / 実行の出力 JSON)。**新しいテーブル・列は作らない。**
+- 1件 = 1つの対象月のイベント。**値の差があったときだけ**出す(差がなければ出さない)。
+- フィールド(案):
+
+| フィールド | 内容 | 例 |
+|---|---|---|
+| `event` | 固定文字列 `same_day_diff` | |
+| `indicator` | 指標コード | `CA_CPI_TRIM` |
+| `provider_event_id` | イベントの識別子 | `statcan_release_schedule:CA_CPI_TRIM:2026-10` |
+| `event_id` | イベントの ID(内部) | uuid |
+| `period` | 対象月 | `2026-10` |
+| `series` | 系列(vectorId。取り違え確認用) | `v108785715` |
+| `snapshot_actual` | 保存済みの初回値 | `1.8` |
+| `observed` | 今回取得した値 | `1.9` |
+| `snapshot_captured_at` | 初回値を保存した時刻(UTC、ISO) | `2026-11-16T13:31:12.000Z` |
+| `observed_at` | 今回の取得時刻(UTC、ISO) | `2026-11-16T20:00:03.000Z` |
+| `local_date` | 判定に使った Toronto の暦日 | `2026-11-16` |
+| `action` | 常に `NONE`(DB は変えていない) | `NONE` |
+
+- 集計: `counters` に `same_day_diff` の件数を足す。実行の要約に `same_day_diff: N` を出す。**エラー・失敗にはしない**(終了コード 0)。ただし、N ≥ 1 のとき、実行の注記(`::notice`)で目立たせて報告に載せる。
+- 守ること: **メールアドレス・トークン・接続情報は出力しない**(値と識別子だけ)。
+- 翌日以降の扱い: この記録は DB に残さない(§14.6)。翌日以降は、DB の値(スナップショット・直近の revision)との比較だけで改定が決まる。したがって、ログが消えても判定は変わらない。
+- **テスト**:
+  - S1: 同日に値が違う → `same_day_diff` が1件出て、全フィールドが入る。`event_revisions` は0行、スナップショットは不変。
+  - S2: 同日に値が同じ → 出ない。
+  - S3: 出力に、接続情報・キー・メールアドレスの文字列が含まれない。
+  - S4: dry-run でも同じ記録が出る(plan に `SAME_DAY_DIFF` / 書き込みなし)。
+  - S5: `observed` が null(取得失敗)→ `same_day_diff` を出さず、`FETCH_FAILED` / `NOT_UPDATED` として別に記録する(取得失敗を差として扱わない)。
+
+### 15.4 改定検知の5件・6件の境界処理(確定)
+
+§14.5 を確定。**N ≤ 5: すべて処理、N ≥ 6: その系列は1件も書かない。**
+- N の定義: 直近7点のうち、**比較できる点**(その月のイベントが RELEASED でスナップショットがある)で、「直近の値」と今の値が(小数第1位で)違い、かつ**同日の差ではない**点の数。
+- 判定の順序(実装): ① 7点を取得し、系列・公表日・対象月・単位・数値を照合(失敗した点は除外) → ② 各点を分類(`UNCHANGED` / `SAME_DAY_DIFF` / `REVISION_CANDIDATE` / `NO_EVENT` / `INVALID`) → ③ `REVISION_CANDIDATE` の数 N を数える → ④ N ≤ 5 なら N件を書く / N ≥ 6 なら書かず `REVISION_BURST_STOP`。**書き込みは③の後にまとめて**行う(途中まで書いて停止、にならない)。
+- 定数: `REVISION_BURST_LIMIT = 5`(5以下は処理)。境界の両側(5 と 6)のテストを必須にする。
+- `REVISION_BURST_STOP` の出力(案): `{ event: 'REVISION_BURST_STOP', indicator, n, limit: 5, points: [{period, from, to}...] }`。終了コードは**失敗(非0)ではなく、警告として報告**(次の実行でも再現されるため、人が確認するまで繰り返し報告される)。HQ判断: 非0にするか。
+- テストケース T1〜T15 は §14.5 のとおり(N=0,1,3,**5(処理)**,**6(停止)**,**7(停止)**、同日の差を除いた N、取得失敗の混在、再実行の冪等、系列ごとの独立、dry-run、浮動小数点の誤差)。
+
+### 15.5 StatCan 出典表記(確定。原文の区別)
+
+§14.7 のとおり。確定する文言(**実装時に、定数としてコードに置く案**):
+
+| 指標 | 形 | 文言 |
+|---|---|---|
+| `CA_CPI`(指数から計算) | **Adapted from**(コロンなし) | `Adapted from Statistics Canada, Table 18-10-0004-01 Consumer Price Index, monthly, not seasonally adjusted, <対象月>. This does not constitute an endorsement by Statistics Canada of this product.` |
+| `CA_CPI_TRIM`・`CA_CPI_MEDIAN`(公表値そのまま) | **Source:**(コロンあり) | `Source: Statistics Canada, Table 18-10-0256-01 Consumer Price Index (CPI) statistics, measures of core inflation and other related statistics - Bank of Canada definitions, <対象月>. Reproduced and distributed on an "as is" basis with the permission of Statistics Canada.` |
+| `CA_UNEMPLOYMENT_RATE`(既存) | Source: | 変更しない |
+
+- `<対象月>` は、現行の `attribution` が指標ごとの固定文字列で、対象月を持たない。**対象月の扱いは A の確認待ち**(§15.0)。案: `notice` は対象月を含めず、アプリが値と一緒に対象月(`reference_period`)を表示する。原文の "reference date" の要件を満たすかは、StatCan に確認していない(未確認)。
+- テスト: §14.7 の4種(`CA_CPI` は `Adapted from` で始まり `Source:` を含まない・`as is` を含まない / コアは `Source:` で始まり `Adapted from` を含まず `as is` を含む / `CA_UNEMPLOYMENT_RATE` は不変 / `source_url` が各表)。
+- 追加: StatCan の名称・ロゴ・ドメイン名を、宣伝・推奨を示唆する形で使わない(出典の表記にだけ使う)。アプリのストア説明・広告に StatCan を載せない。
+- BoC: 説明文は StatCan の表4の注記(Table note 6・7)の意味だけで書く(§14.4)。BoC のページにしかない情報は入れない。
+
+### 15.6 マイグレーション: 指標2行・通貨ペア2行(確定。案の SQL)
+
+**どこにも実行していない。** ファイル名(案): `supabase/migrations/<日付>_ca_core_cpi_indicators.sql`。
+
+```sql
+-- カナダのコア CPI(CPI-trim・CPI-median)。HQ指示 2026-11-13。何度流しても同じ結果(on conflict do nothing)。
+-- 取得元: Statistics Canada の表 18-10-0256-01。定義の説明は StatCan の表4の注記(Table note 6・7)の意味だけで書く。
+-- 既存の指標・イベント・通貨ペアには触れない。
+insert into economic_indicators (code, name, name_en, display_name, country_code, currency_code, importance, description, key_points, frequency, unit, source, source_url, favorable_direction, market_view_above, market_view_below) values
+  ('CA_CPI_TRIM', 'カナダ CPI-trim(トリム平均、前年比)', 'Canada CPI-trim (trimmed mean), 12-month change', 'コアCPI（CPI-trim）', 'CA', 'CAD', 'MEDIUM',
+    '<StatCan の表4の注記に基づく説明(§2.2)>',
+    array['<…>', '<…>', '毎月 Statistics Canada が公表する'],
+    'MONTHLY', '%', 'Statistics Canada', 'https://www.statcan.gc.ca', 'HIGHER_IS_POSITIVE',
+    '<…>', '<…>'),
+  ('CA_CPI_MEDIAN', 'カナダ CPI-median(中央値、前年比)', 'Canada CPI-median (weighted median), 12-month change', 'コアCPI（CPI-median）', 'CA', 'CAD', 'MEDIUM',
+    '<…>', array['<…>', '<…>', '毎月 Statistics Canada が公表する'],
+    'MONTHLY', '%', 'Statistics Canada', 'https://www.statcan.gc.ca', 'HIGHER_IS_POSITIVE',
+    '<…>', '<…>')
+on conflict (code) do nothing;
+
+insert into indicator_fx_pairs (indicator_id, fx_pair_id, priority)
+select i.id, p.id, v.priority
+from (values
+  ('CA_CPI_TRIM', 'CADJPY', 1),
+  ('CA_CPI_MEDIAN', 'CADJPY', 1)
+) as v(code, symbol, priority)
+join economic_indicators i on i.code = v.code
+join fx_pairs p on p.symbol = v.symbol
+on conflict (indicator_id, fx_pair_id) do nothing;
+```
+- 日本語の説明・key_points・market_view の文言(`<…>`)は、実装時に §2.2 の方針(StatCan の注記の意味だけ)で書き、HQ確認を受ける。
+- 検証(実装後、読み取り専用): `economic_indicators` が **22 → 24**、`indicator_fx_pairs` の CADJPY の紐付けが **2 → 4**(`CA_CPI`・`CA_UNEMPLOYMENT_RATE` + 新しい2行)、`fx_pairs` の件数は不変、既存22行の内容は不変。
+- 戻す手順(案。イベントが無いうちだけ): `delete from indicator_fx_pairs where indicator_id in (select id from economic_indicators where code in ('CA_CPI_TRIM','CA_CPI_MEDIAN')); delete from economic_indicators where code in ('CA_CPI_TRIM','CA_CPI_MEDIAN');`
+- 同じ変更で更新するもの: `supabase/seed.sql`(同じ2行)、`tests/integration/gb-au-ca-indicators.test.ts`(指標の件数・通貨ペアの期待)。
+- イベントの追加はマイグレーションでなく `ingest:gb-au-ca-schedules`(StatCan の表に5×2 = 10件を足す。dry-run → 承認 → 実行)。
+
+### 15.7 API レスポンスと FREE/PRO の整合性(確定)
+
+新しいエンドポイント・新しい権限コードは作らない(§7・§8)。レスポンスの形(**例。値は仮**)。
+
+**`GET /events/{id}`(FREE、見られる範囲の発表。`CA_CPI_TRIM`)**
+```json
+{
+  "event": {
+    "indicator_name": "カナダ CPI-trim(トリム平均、前年比)",
+    "display_name": "コアCPI（CPI-trim）",
+    "country_code": "CA", "currency_code": "CAD",
+    "importance": "MEDIUM", "status": "RELEASED", "data_status": "AVAILABLE",
+    "revision_status": "NONE",
+    "attribution": { "source": "カナダ統計局（Statistics Canada）", "source_url": "...", "notice": "Source: Statistics Canada, Table 18-10-0256-01 ... as is ..." },
+    "value_decimals": 1,
+    "locked": false, "required_plan": null
+  },
+  "snapshot": { "actual": 1.8, "forecast": null, "previous": null, "surprise": null, "unit": "%", "source": "Statistics Canada" }
+}
+```
+**ロック中(FREE が見られない過去の発表)**: `snapshot.actual` / `previous` / `surprise` 等は null、`locked: true`・`required_plan: "PRO"`。`revision_status` は固定値(`LOCKED_REVISION_STATUS`)。**`attribution` と `value_decimals` と `display_name` は隠さない**(既存の仕様どおり。出典はロック中も出る)。
+**予定のみ(値なし)**: `status: SCHEDULED`、`data_status: DATA_PENDING`、`snapshot` の値は null。`attribution` は出る。
+**改定あり**: `revision_status: REVISED`。`GET /events/{id}/revisions` が `ACTUAL` の `old_value`・`new_value`・`effective_at`・`source` を返す(FREE のロック中は 403 `PLAN_LIMIT_EXCEEDED`、既存の挙動)。
+**ヘッドライン `CA_CPI`**: 同じ形。`attribution.notice` が `Adapted from …`。`value_decimals` は 1(null から変わる — A確認待ち)。
+
+**FREE/PRO**
+- 3指標とも既存の `VIEW_BASIC_EVENT`・`VIEW_HISTORICAL`(FREE にも既定で付く)の範囲。PRO 専用の項目は作らない。
+- 過去の発表の制限(FREE は指標ごとに RELEASED の直近 N 回だけ値を見られる)は、**指標ごとに独立**に数える。3指標は別々に数える(コアの2つは新しい指標なので、最初は RELEASED が少なく、ロックにかかりにくい)。
+- `/calendar`・`/indicators` に3指標が別の行として現れる(コアは `display_name` に trim / median)。
+- **テスト**: ① 3指標が別行で現れる ② コアの `display_name` に trim / median ③ ロック中も `attribution`・`value_decimals` が残る ④ ロック中は値・前回・改定が null / 403 ⑤ FREE の過去発表の数え方が指標ごと(コア2つとヘッドラインで混ざらない) ⑥ 予定のみの応答 ⑦ 改定ありの応答 ⑧ PRO はロックされない。
+- 実機の表示(1行表示の文字数、「コアCPI（CPI-median）」が収まるか、ロック表示中の出典)は **A確認待ち**。
+
+### 15.8 テストケースと異常系(最終の一覧)
+
+| 区分 | 項目 | 該当 |
+|---|---|---|
+| 窓 | W1〜W5(45日と約200日の分離、境界、独立性、回帰) | §15.1 |
+| 受付期間 | L1〜L9(Toronto 暦日で7日、夏時間、期限後、改定検知は別) | §15.2 |
+| 同日差 | S1〜S5 + T-D1〜T-D7(ログのフィールド、翌日の登録フロー、暦日の境界) | §15.3・§14.6 |
+| 改定の境界 | T1〜T15(N=5 処理、N=6・7 停止、同日差・取得失敗の除外、冪等、系列独立、dry-run、誤差) | §14.5・§15.4 |
+| 計算 | 24か月の指数から公表値と一致、丸め境界(整数演算)、12か月前の欠落、null、statusCode ≠ 0 | §9.1 |
+| 照合 | `releaseTime` 不一致、最新の点が対象月でない、vectorId 取り違え(trim⇔median、コア⇔ヘッドライン)、3指標が別イベントに保存 | §9.2 |
+| 保存 | スナップショット(`forecast`・`previous` = null)、冪等、DB のトリガーによる更新拒否、dry-run | §9.3 |
+| 出典 | `Adapted from` / `Source:` の区別、`as is` の有無、`CA_UNEMPLOYMENT_RATE` 不変、`source_url` | §15.5 |
+| API/権限 | 別行、display_name、ロック中の出典、FREE/PRO、予定のみ、改定あり | §15.7 |
+| マイグレーション | 22→24、CADJPY の紐付け 2→4、再実行で増えない、既存の行が不変 | §15.6 |
+
+**異常系(すべて「書かない・理由を記録・報告」)**: WDS の通信失敗 / HTTP エラー / `status` ≠ SUCCESS / 対象月の未反映 / 値が null・非数 / `statusCode`・`symbolCode` ≠ 0 / 12か月前の欠落 / vectorId の取り違え / `releaseTime` の不一致 / 未来日の `releaseTime` / 7日(Toronto 暦日)超過 / 同日の差 / 改定が6点以上 / 約200日の窓の外 / DEV 以外への接続(既存の保護) / 同時実行(`concurrency: fx-ingestion` で直列化)。
+
+### 15.9 Aの確認結果との突き合わせ(**空欄。Aの結果を受け取ったら追記**)
+
+| 確認項目(HQ指示) | Aの結果 | Bの対応 |
+|---|---|---|
+| `value_decimals` が null から 1 になった場合の既存画面への影響 | 未受領 | `CA_CPI` のみ現行維持(null)にして、コア2指標だけ 1 にする案も用意(影響が出る場合) |
+| `attribution` の文言変更・追加で既存UIが崩れないか | 未受領 | `CA_CPI` を `Adapted from` に変える場合の長さ・折り返し |
+| `display_name` による既存イベント表示・過去イベント比較への影響 | 未受領 | 表示名の文字数(40字制約、1行表示) |
+| ロック表示中にも出典が表示される仕様 | 未受領 | 既存の仕様のまま |
+| 新しいコア2指標が別行として表示できるか | 未受領 | 別コード・別 `display_name` で別行になる(API は確認済み。画面は A) |
+
+### 15.10 実装時の変更一覧(最終)
+
+1. `src/ingestion/pipelines/officialValues.ts`: 3系列の追加、`maxLocalDaysAfterRelease`(Toronto 暦日7日)、コア専用の改定検知(約200日の窓、直近7点、`REVISION_BURST_LIMIT`)、`same_day_diff` の記録。
+2. `src/ingestion/adapters/gbCaOfficialValues.ts`: `CA_CPI`(指数→前年同月比、`refPer` で選ぶ、整数演算)と、コア2系列(公表値)のアダプター。
+3. `src/ingestion/mappings/gbAuCaSchedule.ts`: `STATCAN_SCHEDULE` にコア2指標の行(5×2 = 10件、`CA_CPI` と同じ日付)。
+4. `src/domain/attribution.ts`: 3指標の出典(§15.5)。
+5. `src/domain/valueDecimals.ts`: 公式統計の指標の一覧(§14.2)。
+6. マイグレーション(§15.6)、`seed.sql`、`tests/integration/gb-au-ca-indicators.test.ts`。
+7. テスト(§15.8)。
+8. **しないこと**: `findMappingByCode` への登録、`event_snapshots`・`event_revisions` の列や制約の追加、定期実行の追加・変更、`lookbackDays` の変更。
+
+### 15.11 未確認・未解決(最終)
+1. **Aの確認結果(本文が未受領)**: §15.9 の全項目。
+2. ヘッドライン CPI が改定されないという公式の文言(未確認のまま)。
+3. 6か月より前の改定が trim・median で起きるか(12回の比較では未観測)。
+4. 表 18-10-0259-01 の更新遅れ(バックフィル時に再確認)。
+5. 公表の初日(2026-11-16 8:30 ET)に、WDS の値が公表と同時に更新されるタイミング(観測して初めて分かる)。
+6. BoC 条件の法的な最終判断(説明文を StatCan の注記だけで書く方針で回避する案を既定)。
+7. 原文の "reference date" の要件と、対象月を `attribution` に含めるか(Aの確認と StatCan への確認が必要)。
+8. 計算値が Value-added Product にあたるかの StatCan への確認(保守的に `Adapted from` を採用)。
+9. HQ判断: 表示名「コアCPI（CPI-trim）」「コアCPI（CPI-median）」と重要度 MEDIUM、`REVISION_BURST_STOP` の終了コード(警告 or 非0)、バックフィルの有無。
+
+### 15.12 提出
+- この設計書をもって、B担当の設計は完了。**次の判断はHQ**: 実装範囲と開始(コード・マイグレーション・CI・DEV反映は、別途の承認が出るまで一切行わない)。
