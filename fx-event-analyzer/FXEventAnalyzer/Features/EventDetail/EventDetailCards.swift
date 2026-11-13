@@ -619,7 +619,8 @@ struct EventDetailCards: View {
                 NavigationLink(value: AppRoute.eventStrategyAnalysis(
                     eventId: response.event.id,
                     indicatorName: response.event.indicatorName,
-                    fxPairId: pairId
+                    fxPairId: pairId,
+                    releaseDatetime: response.event.releaseDatetime
                 )) {
                     strategyLinkCard
                 }

@@ -227,4 +227,52 @@ final class StrategyAnalysisTests: XCTestCase {
         XCTAssertEqual(StrategyAnalysisText.breakCell(false), "なし")
         XCTAssertEqual(StrategyAnalysisText.breakCell(nil), "--")
     }
+
+    /// HQ指示(2026-11-11「StrategyAnalysis 4タブUI実装」): 4タブが指示どおりの順序・名前で
+    /// 揃っていることを確かめる(イベント戦略・通貨分析・価格帯分析・AI分析)。
+    func testStrategyAnalysisTabsOrderAndTitles() {
+        XCTAssertEqual(
+            StrategyAnalysisTab.allCases.map(\.title),
+            ["イベント戦略", "通貨分析", "価格帯分析", "AI分析"]
+        )
+    }
+
+    /// CIで原因調査した不具合(日本語のaccessibilityIdentifierはXCUITestのmatching(identifier:)で
+    /// 一度も見つからず、タブがタップできなくなっていた)の再発防止。このアプリの既存の
+    /// accessibilityIdentifierは全てASCIIのみのため、testIdentifierも同じ慣習を守る。
+    func testStrategyAnalysisTabTestIdentifiersAreASCIIAndUnique() {
+        let identifiers = StrategyAnalysisTab.allCases.map(\.testIdentifier)
+        XCTAssertTrue(identifiers.allSatisfy { $0.allSatisfy(\.isASCII) }, "testIdentifier must be ASCII-only")
+        XCTAssertEqual(Set(identifiers).count, identifiers.count, "testIdentifier must be unique per tab")
+    }
+
+    /// HQ指示(2026-11-11「ピクセル単位の再現」フィードバック対応): ①イベント戦略タブの新しい
+    /// ゲージ・折れ線グラフ用に追加した、既存の実データ(StrategyRelease)を単純平均するだけの
+    /// 補助。新しい値を作らず、値が無ければnilのままであることを確かめる。
+    func testAveragePipsOnlyUsesStoredValues() throws {
+        let response = try decoder().decode(StrategyAnalysisResponse.self, from: Data(readyJSON.utf8))
+        let releases = try XCTUnwrap(response.analysis?.releases)
+        // e1はpips1m=5のみ、e2は全てnil → 平均は5(nilの発表は数に入れない)。
+        XCTAssertEqual(releases.averagePips(\.pips1m), 5)
+        XCTAssertEqual(releases.averagePips(\.pips5m), 7)
+        // 誰もpips判定できない項目はnilのまま(0や作った値を入れない)。
+        XCTAssertNil([StrategyRelease]().averagePips(\.pips1m))
+    }
+
+    func testRoundTripRateOnlyCountsJudgedReleases() throws {
+        let response = try decoder().decode(StrategyAnalysisResponse.self, from: Data(readyJSON.utf8))
+        let releases = try XCTUnwrap(response.analysis?.releases)
+        // e1はroundTrip15m=false、e2はnil(キーなし) → 判定できた1件のうち0件が往復 = 0%。
+        XCTAssertEqual(releases.roundTripRate(\.roundTrip15m), 0)
+        XCTAssertNil([StrategyRelease]().roundTripRate(\.roundTrip15m))
+    }
+
+    /// HQ指示(2026-11-11): リスクレベルは反転率から導く。データが無ければ「データ不足」のまま
+    /// (架空のレベルを作らない)。
+    func testRiskLevelThresholds() {
+        XCTAssertEqual(StrategyAnalysisText.riskLevel(reversalPercent: nil), "データ不足")
+        XCTAssertEqual(StrategyAnalysisText.riskLevel(reversalPercent: 10), "低")
+        XCTAssertEqual(StrategyAnalysisText.riskLevel(reversalPercent: 25), "中")
+        XCTAssertEqual(StrategyAnalysisText.riskLevel(reversalPercent: 50), "高")
+    }
 }

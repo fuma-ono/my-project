@@ -304,7 +304,10 @@ struct SubscriptionManagementView: View {
             VStack(alignment: .leading, spacing: 14) {
                 benefit("chart.xyaxis.line", "高度な統計", "過去の同じ指標の発表時に、為替がどう動いたかの詳しい統計を見られます。")
                 // HQ指示(2026-10-08)の無料プランの制限と対になる特典。
-                benefit("clock.arrow.circlepath", "過去20回分のイベント比較", "無料プランは直近5回分です。プレミアムプランなら約5年分(20回)と比べられます。")
+                // HQ指摘(2026-11-11)「FREEプランの表示バグ」: v1.37でFREEのhistoryEventsMaxが
+                // 5→3に変更された(PlanStore.swift参照)際、この文言が追従していなかった。
+                // 実際の値(PlanLimits.free().historyEventsMax = 3)に合わせた。制限値自体は変更しない。
+                benefit("clock.arrow.circlepath", "過去20回分のイベント比較", "無料プランは直近3回分です。プレミアムプランなら約5年分(20回)と比べられます。")
                 benefit("calendar", "5年前までの経済カレンダー", "無料プランは先月の1日からです。プレミアムプランなら5年前までさかのぼれます。")
                 benefit("bell.badge", "通知の条件を自由に", "無料プランは重要度「高」・通貨ペア1つです。重要度「中」「低」や、複数の通貨ペアも選べます。")
                 benefit("star", "お気に入りは無制限", "無料プランは3件までです。")
