@@ -1,0 +1,96 @@
+# US_JOLTS の予定(2026-11〜2027-10 分、12回)の dry-run(HQ指示 2026-11-13「既存 target official-bls-dry-run を実行」)。
+# - 動くのは、ブランチ verify/fx-jolts-dryrun への push と、手動の実行だけ(定期実行なし)。
+# - 実行するコマンドは、既存の target official-bls-dry-run と同じ `ingest:official:bls-calendar -- --dry-run` で、dry-run に固定
+#   (本番の `ingest:official:bls-calendar` は、このファイルでは動かさない — テストで確かめる)。
+# - dry-run は、イベント・値・ingestion_logs に書かない。ただし BLS の API を呼ぶたびに、クレジット台帳(api_credit_ledger)に
+#   予約を書く(手動の枠 1日24回まで)。これは手動の dry-run と同じ動き。
+# - 接続先が DEV でなければ止まる。出力は件数・内訳(plan)・書くはずだった内容の要約・エラーだけ(鍵は出さない)。
+name: FX Event Analyzer - JOLTS dry run (DEV)
+
+on:
+  push:
+    branches:
+      - 'verify/fx-jolts-dryrun'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fx-ingestion
+  cancel-in-progress: false
+
+jobs:
+  dryrun:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: fx-event-analyzer-backend
+    env:
+      DEV_PROJECT_REF: pbemckwnqmeaoveelihd
+      DEV_PROJECT_URL: https://pbemckwnqmeaoveelihd.supabase.co
+      SUPABASE_URL: ${{ secrets.FX_DEV_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.FX_DEV_SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Check secrets and target (DEV only)
+        id: check
+        working-directory: .
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "Secrets が未登録のため何もしません"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${SUPABASE_URL%/}" != "$DEV_PROJECT_URL" ]; then
+            echo "接続先が社内確認用のDBではありません。止めます"
+            exit 1
+          fi
+          KEY_REF=$(python3 -c 'import os,base64,json; p=os.environ["SUPABASE_SERVICE_ROLE_KEY"].split("."); print(json.loads(base64.urlsafe_b64decode(p[1]+"="*(-len(p[1])%4))).get("ref","") if len(p)==3 else "")' 2>/dev/null || true)
+          if [ "$KEY_REF" != "$DEV_PROJECT_REF" ]; then
+            echo "鍵が社内確認用のプロジェクトのものではありません。止めます"
+            exit 1
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: fx-event-analyzer-backend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        if: steps.check.outputs.ready == 'true'
+      - name: BLS calendar dry run (same command as target official-bls-dry-run)
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          set +e
+          npm run -s ingest:official:bls-calendar -- --dry-run > "$RUNNER_TEMP/bls-dryrun.json" 2> "$RUNNER_TEMP/bls-dryrun.err"
+          echo "exit=$?" > "$RUNNER_TEMP/bls-dryrun.exit"
+          python3 - <<'PY'
+          import json, os
+
+          tmp = os.environ['RUNNER_TEMP']
+
+          def out(title, value):
+              body = json.dumps(value, ensure_ascii=False).replace('%', '%25').replace('\r', '').replace('\n', '%0A')
+              print(f'::notice title={title}::{body[:3800]}')
+
+          out('jolts exit', open(f'{tmp}/bls-dryrun.exit').read().strip())
+          err = open(f'{tmp}/bls-dryrun.err', errors='replace').read().strip()
+          if err:
+              out('jolts stderr', err[:1500])
+          text = open(f'{tmp}/bls-dryrun.json', errors='replace').read().strip()
+          try:
+              data = json.loads(text.splitlines()[-1])
+          except Exception:
+              out('jolts raw', text[:1500])
+              raise SystemExit(0)
+          writes = data.pop('dry_run_writes', [])
+          out('jolts summary', {k: v for k, v in data.items() if k != 'plan'})
+          out('jolts plan', data.get('plan'))
+          out('jolts writes count', {'n': len(writes)})
+          for i in range(0, min(len(writes), 60), 15):
+              out(f'jolts writes {i // 15 + 1}', writes[i:i + 15])
+          PY
