@@ -31,6 +31,8 @@ export interface VerifySpeechRow {
   statement_datetime: string;
   speech_body: string | null;
   summary: string | null;
+  /** 発言の題名(公開情報)。本文が公式の一覧に無い行の見分けに使う(2026-11-13 追加)。 */
+  title?: string | null;
 }
 
 export interface VerifyRunRow {
@@ -154,7 +156,7 @@ export function buildSpeechDevReport(rows: readonly VerifySpeechRow[], now: Date
       })),
     },
     // [id の先頭8文字, 発言日時, status, body_status, 回数, URL の末尾, 本文の md5 の先頭8文字, 要約の md5 の先頭8文字,
-    //  取得日時, 要約の作り方, 要約の理由, 本文の理由]
+    //  取得日時, 要約の作り方, 要約の理由, 本文の理由, 題名(60字まで)]
     frbRows: frb.map((r) => [
       r.id.slice(0, 8),
       r.statement_datetime,
@@ -168,6 +170,7 @@ export function buildSpeechDevReport(rows: readonly VerifySpeechRow[], now: Date
       r.summary_method,
       r.summary_error,
       r.body_error,
+      r.title ? r.title.slice(0, 60) : null,
     ]),
   };
 }

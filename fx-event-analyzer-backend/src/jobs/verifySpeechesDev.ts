@@ -22,7 +22,7 @@ import {
  *   GitHub Actions の注記(::notice)として出すので、公開リポジトリの check-run の注記で読める。
  */
 const SPEECH_COLUMNS =
-  'id, provider, status, body_status, body_error, source_url, body_attempts, body_last_attempt_at, body_fetched_at, summary_method, summary_error, summary_generated_at, statement_datetime, speech_body, summary';
+  'id, provider, status, body_status, body_error, source_url, body_attempts, body_last_attempt_at, body_fetched_at, summary_method, summary_error, summary_generated_at, statement_datetime, speech_body, summary, title';
 
 async function readSpeeches(db: ReadOnlyDb): Promise<VerifySpeechRow[]> {
   const { data, error } = await db
