@@ -12,12 +12,14 @@ on:
       - '.github/workflows/fx-event-analyzer-ingestion.yml'
       - '.github/workflows/fx-event-analyzer-workflow-lint.yml'
       - '.github/workflows/fx-event-analyzer-gbauca-dryrun.yml'
+      - '.github/workflows/fx-event-analyzer-estat-check.yml'
       - '.github/scripts/check_speech_schedule_steps.py'
   pull_request:
     paths:
       - '.github/workflows/fx-event-analyzer-ingestion.yml'
       - '.github/workflows/fx-event-analyzer-workflow-lint.yml'
       - '.github/workflows/fx-event-analyzer-gbauca-dryrun.yml'
+      - '.github/workflows/fx-event-analyzer-estat-check.yml'
       - '.github/scripts/check_speech_schedule_steps.py'
   workflow_dispatch:
 
@@ -42,7 +44,7 @@ jobs:
           tar -xzf "${TARBALL}" actionlint
           ./actionlint -version
       - name: actionlint (ingestion and this workflow)
-        run: ./actionlint -shellcheck= -pyflakes= .github/workflows/fx-event-analyzer-ingestion.yml .github/workflows/fx-event-analyzer-gbauca-dryrun.yml .github/workflows/fx-event-analyzer-workflow-lint.yml
+        run: ./actionlint -shellcheck= -pyflakes= .github/workflows/fx-event-analyzer-ingestion.yml .github/workflows/fx-event-analyzer-gbauca-dryrun.yml .github/workflows/fx-event-analyzer-estat-check.yml .github/workflows/fx-event-analyzer-workflow-lint.yml
       - name: Speech schedule step conditions
         run: |
           python3 -m pip install --quiet pyyaml
