@@ -164,6 +164,50 @@ describe('ingestOfficialScheduleTables', () => {
     expect(store.events.filter((e) => e.provider === 'ons_release_calendar')).toHaveLength(6);
   });
 
+  // HQ指示(2026-11-13): dry-run は DB に書かない。plan で、各エントリに何をするはずかを返す
+  it('dry run: lists 27 INSERTs and writes no event at all; the real run then inserts exactly those', async () => {
+    const counters = new JobCounters();
+    const planned = await ingestOfficialScheduleTables(
+      { store, tables: GB_AU_CA_SCHEDULES, now: () => NOW, dryRun: true },
+      counters,
+    );
+    expect(planned).toMatchObject({ inserted: 27, updated: 0, unchanged: 0 });
+    expect(planned.plan).toHaveLength(27);
+    expect(planned.plan.every((p) => p.action === 'INSERT')).toBe(true);
+    expect(store.events).toEqual([]);
+    const { result } = await run();
+    expect(result.inserted).toBe(27);
+    expect(store.events.map((e) => e.provider_event_id).sort()).toEqual(
+      planned.plan.map((p) => p.provider_event_id).sort(),
+    );
+  });
+
+  it('dry run after a real run: everything UNCHANGED; a changed date is an UPDATE in the plan only', async () => {
+    await run();
+    const same = await ingestOfficialScheduleTables(
+      { store, tables: GB_AU_CA_SCHEDULES, now: () => NOW, dryRun: true },
+      new JobCounters(),
+    );
+    expect(same.plan.every((p) => p.action === 'UNCHANGED')).toBe(true);
+    const moved: OfficialScheduleTable[] = [
+      {
+        ...ONS_SCHEDULE,
+        entries: ONS_SCHEDULE.entries.map((e, i) => (i === 0 ? { ...e, releaseDate: '2026-11-19' } : e)),
+      },
+    ];
+    const before = JSON.stringify(store.events);
+    const planned = await ingestOfficialScheduleTables(
+      { store, tables: moved, now: () => NOW, dryRun: true },
+      new JobCounters(),
+    );
+    expect(planned.plan.find((p) => p.action === 'UPDATE')).toMatchObject({
+      indicator: 'GB_CPI',
+      release_datetime: '2026-11-19T07:00:00.000Z',
+      from: '2026-11-18T07:00:00.000Z',
+    });
+    expect(JSON.stringify(store.events)).toBe(before);
+  });
+
   it('is idempotent (no duplicate rows on a re-run)', async () => {
     await run();
     const { result } = await run();
