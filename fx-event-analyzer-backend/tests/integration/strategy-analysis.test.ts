@@ -15,9 +15,22 @@ import {
 const integration = loadIntegrationEnv();
 
 /**
+ * テスト用の1分足を消すときの上限(発表の時刻の翌日)。USDJPY の seed の足・ほかのテストの足を巻き込まないよう、
+ * 消す範囲は必ず [発表の時刻, 翌日) に限る(日付を過去に置いたので、上限が無いと seed の足まで消える)。
+ */
+const dayAfter = (iso: string) => new Date(Date.parse(iso) + 86_400_000).toISOString();
+
+/**
  * GET /events/{id}/strategy-analysis(Pro イベント別トレード戦略分析、HQ指示 2026-11-06、api-design v1.48)を本物の Postgres で
  * 確かめる。自分の指標(実行ごとに別の code、通貨 USD、関連の通貨ペア USDJPY)に、過去の RELEASED を4回(値動きつき)と、
- * 値動きの無い RELEASED を1回、これからの予定を1回入れる。日付は 2090 年代(ほかのテストの期間に入らない)。
+ * 値動きの無い RELEASED を1回、これからの予定を1回入れる。日付は 2020 年代前半(ほかのテストの期間に入らない)。
+ *
+ * **共有の DB の「USDJPY の最新の価格」を変えない(HQ指示 2026-11-17。CI の run 44027208248 の失敗への対応)**:
+ * レート通知(rate-alerts-calendar-updates.test.ts)は、USDJPY の1分足のうち**時刻が最も新しいもの**を「最新の価格」として読む
+ * (repositories/fxPairsRepository.ts の listLatestFxPrices)。ほかのテストファイルが同じ DB で並行して動くので、このファイルが
+ * USDJPY に**未来の日付(2090 年代など)の1分足**を入れて消すと、その間は終値 150 が「最新」になり、消えると seed の値
+ * (2026-09-10T12:31Z の 147.52)に戻る。通知のテストが「150 を読んで目標値を決めたのに、評価の時点では 147.52」になって失敗した。
+ * このファイルが USDJPY に入れる1分足は、すべて **seed の最新の足より前の日付**にする(最新の価格になりえない)。
  * RELEASE の snapshot は消せないので、終わったら値動きを消し、指標を無効にする(CI は毎回 DB を作り直す)。
  * HQ指示(2026-11-07「1分足欠損への対応」): 値動きつきの4回には、15分・60分のブレイク判定が揚がるよ1分足を
  * 60本(VERIFIED)ずつ入れておく(揃っていなければ全部nullになり、既存のbreaks_15m/60mの件数の想定が崩れるため)。
@@ -30,7 +43,7 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
   let usdjpyId = '';
   const targetId = randomUUID();
   const sparseTargetId = randomUUID();
-  const past = [1, 2, 3, 4, 5].map((n) => ({ id: randomUUID(), at: `2090-0${n}-10T12:30:00.000Z` }));
+  const past = [1, 2, 3, 4, 5].map((n) => ({ id: randomUUID(), at: `2020-0${n}-10T12:30:00.000Z` }));
 
   /** `count`本の1分足(VERIFIED、releaseAtの直後から1分ごと)。価格はダミー(ブレイク判定はevent_price_reactionsの
    * max_upward/max_downwardで決まり、ここでは窓の本数とverification_statusだけが意味を持つ)。 */
@@ -112,7 +125,7 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
     const { error: eventError } = await ctx.serviceClient.from('economic_events').insert([
       ...past.map((p) => event(p.id, p.at, 'RELEASED')),
       event(targetId, '2099-01-10T13:30:00.000Z', 'SCHEDULED'),
-      event(sparseTargetId, '2090-03-01T00:00:00.000Z', 'SCHEDULED'), // この前の発表は2回だけ
+      event(sparseTargetId, '2020-03-01T00:00:00.000Z', 'SCHEDULED'), // この前の発表は2回だけ
     ]);
     if (eventError) throw eventError;
     // 1・2・3回目は結果が予想を上回った(USD にとって良い)。4回目は予想なし。5回目は予想を下回った。
@@ -124,7 +137,7 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
       previous: actual,
       unit: '%',
       source: 'integration-test',
-      captured_at: '2090-01-01T00:00:00Z',
+      captured_at: '2020-01-01T00:00:00Z',
       surprise: forecast === null ? null : actual - forecast,
       surprise_direction: direction,
     });
@@ -177,7 +190,7 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
       .from('fx_prices')
       .delete()
       .eq('fx_pair_id', usdjpyId)
-      .gte('timestamp', '2090-01-01T00:00:00.000Z')
+      .gte('timestamp', '2020-01-01T00:00:00.000Z')
       .lt('timestamp', '2091-01-01T00:00:00.000Z');
     await ctx.serviceClient
       .from('event_price_reactions')
@@ -190,6 +203,13 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
     if (indicatorId !== '')
       await ctx.serviceClient.from('economic_indicators').update({ is_active: false }).eq('id', indicatorId);
     await ctx.app.close();
+  });
+
+  it('テスト用の1分足は、seed の USDJPY の最新の足(2026-09-10T12:31Z)より前の日付(最新の価格になりえない)', () => {
+    const SEED_LATEST_USDJPY_1M = '2026-09-10T12:31:00.000Z';
+    for (const p of past) expect(Date.parse(p.at) + 60 * 60_000).toBeLessThan(Date.parse(SEED_LATEST_USDJPY_1M));
+    // 後ろの describe の発表時刻(最大の 2020-07-10 の1時間後まで)も同じ
+    expect(Date.parse('2020-07-10T13:30:00.000Z')).toBeLessThan(Date.parse(SEED_LATEST_USDJPY_1M));
   });
 
   it('FREE: a locked response (available: false), no analysis', async () => {
@@ -214,7 +234,7 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
       summary: Record<string, unknown>;
     };
     expect(analysis.status).toBe('READY');
-    // 新しい順(2090-05 → 2090-01)
+    // 新しい順(2020-05 → 2020-01)
     expect(analysis.releases.map((r) => r.event_id)).toEqual([...past].reverse().map((p) => p.id));
     const newest = analysis.releases[0]!; // 5回目: 値動き無し
     expect(newest).toMatchObject({
@@ -584,7 +604,7 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
 
   describe('listMinuteCandleCompleteness (1分足の欠損・UNVERIFIEDの除外、HQ指示 2026-11-07)', () => {
     // past配列・既存の件数想定とは独立した、専用の発表時刻で確かめる(他のテストに影響しない)。
-    const releaseAt = '2090-06-10T12:30:00.000Z';
+    const releaseAt = '2020-06-10T12:30:00.000Z';
     const fakeEventId = randomUUID(); // listMinuteCandleCompletenessはevent_idをキーにするだけで、他の表は読まない。
 
     afterAll(async () => {
@@ -593,7 +613,7 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
         .delete()
         .eq('fx_pair_id', usdjpyId)
         .gte('timestamp', releaseAt)
-        .lt('timestamp', '2090-07-01T00:00:00.000Z');
+        .lt('timestamp', '2020-07-01T00:00:00.000Z');
     });
 
     it('15本・60本すべて揃い、UNVERIFIEDが無ければ両方true', async () => {
@@ -604,7 +624,12 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
         usdjpyId,
       );
       expect(result.get(fakeEventId)).toEqual({ complete15m: true, complete60m: true });
-      await ctx.serviceClient.from('fx_prices').delete().eq('fx_pair_id', usdjpyId).gte('timestamp', releaseAt);
+      await ctx.serviceClient
+        .from('fx_prices')
+        .delete()
+        .eq('fx_pair_id', usdjpyId)
+        .gte('timestamp', releaseAt)
+        .lt('timestamp', dayAfter(releaseAt));
     });
 
     it('15分の窓に1分足が1本でも欠けていればcomplete15mはfalse(60分は揃っていればtrueのまま)', async () => {
@@ -617,7 +642,12 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
         usdjpyId,
       );
       expect(result.get(fakeEventId)).toEqual({ complete15m: false, complete60m: false });
-      await ctx.serviceClient.from('fx_prices').delete().eq('fx_pair_id', usdjpyId).gte('timestamp', releaseAt);
+      await ctx.serviceClient
+        .from('fx_prices')
+        .delete()
+        .eq('fx_pair_id', usdjpyId)
+        .gte('timestamp', releaseAt)
+        .lt('timestamp', dayAfter(releaseAt));
     });
 
     it('15分の窓は揃っていて60分の窓だけ欠けていれば、15分はtrue、60分はfalse', async () => {
@@ -630,7 +660,12 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
         usdjpyId,
       );
       expect(result.get(fakeEventId)).toEqual({ complete15m: true, complete60m: false });
-      await ctx.serviceClient.from('fx_prices').delete().eq('fx_pair_id', usdjpyId).gte('timestamp', releaseAt);
+      await ctx.serviceClient
+        .from('fx_prices')
+        .delete()
+        .eq('fx_pair_id', usdjpyId)
+        .gte('timestamp', releaseAt)
+        .lt('timestamp', dayAfter(releaseAt));
     });
 
     it('本数は揃っていても、15分の窓の中に1本でもUNVERIFIEDがあればcomplete15m・complete60mともfalse', async () => {
@@ -644,7 +679,12 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
         usdjpyId,
       );
       expect(result.get(fakeEventId)).toEqual({ complete15m: false, complete60m: false });
-      await ctx.serviceClient.from('fx_prices').delete().eq('fx_pair_id', usdjpyId).gte('timestamp', releaseAt);
+      await ctx.serviceClient
+        .from('fx_prices')
+        .delete()
+        .eq('fx_pair_id', usdjpyId)
+        .gte('timestamp', releaseAt)
+        .lt('timestamp', dayAfter(releaseAt));
     });
 
     it('UNVERIFIEDが15分の窓の外(60分の窓の中)だけにあれば、15分はtrue、60分はfalse', async () => {
@@ -658,7 +698,12 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
         usdjpyId,
       );
       expect(result.get(fakeEventId)).toEqual({ complete15m: true, complete60m: false });
-      await ctx.serviceClient.from('fx_prices').delete().eq('fx_pair_id', usdjpyId).gte('timestamp', releaseAt);
+      await ctx.serviceClient
+        .from('fx_prices')
+        .delete()
+        .eq('fx_pair_id', usdjpyId)
+        .gte('timestamp', releaseAt)
+        .lt('timestamp', dayAfter(releaseAt));
     });
 
     it('1分足が1本も無ければ両方false(欠損をfalseで返す。例外を投げない)', async () => {
@@ -673,7 +718,7 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
   // 値動きの分類の crossed_pre_price_after_initial は、1分足の系列から直接判定する(HQ指示 2026-11-17「Cレビュー反映」)。
   // その入力になる listMinuteCandleSeries: 発表の瞬間から60分の窓(半開区間)の1分足を、時刻順・高値/安値つきで返す。
   describe('listMinuteCandleSeries (2分目以降の足から crossed を判定するための1分足の系列)', () => {
-    const releaseAt = '2090-07-10T12:30:00.000Z';
+    const releaseAt = '2020-07-10T12:30:00.000Z';
     const fakeEventId = randomUUID();
 
     afterAll(async () => {
@@ -682,7 +727,7 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
         .delete()
         .eq('fx_pair_id', usdjpyId)
         .gte('timestamp', releaseAt)
-        .lt('timestamp', '2090-08-01T00:00:00.000Z');
+        .lt('timestamp', '2020-08-01T00:00:00.000Z');
     });
 
     it('窓の60本を時刻順で返す。窓の外(発表の1分前・60分後ちょうど)は含めない。UNVERIFIED は印をつけて返す', async () => {
@@ -690,8 +735,8 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
       // 3本目: 高値・安値を変える / 10本目: UNVERIFIED
       inWindow[2] = { ...inWindow[2]!, high: 150.25, low: 149.8 };
       inWindow[9] = { ...inWindow[9]!, verification_status: 'UNVERIFIED' };
-      const before = { ...minuteCandles(usdjpyId, releaseAt, 1)[0]!, timestamp: '2090-07-10T12:29:00.000Z' };
-      const atEnd = { ...minuteCandles(usdjpyId, releaseAt, 1)[0]!, timestamp: '2090-07-10T13:30:00.000Z' };
+      const before = { ...minuteCandles(usdjpyId, releaseAt, 1)[0]!, timestamp: '2020-07-10T12:29:00.000Z' };
+      const atEnd = { ...minuteCandles(usdjpyId, releaseAt, 1)[0]!, timestamp: '2020-07-10T13:30:00.000Z' };
       const { error } = await ctx.serviceClient
         .from('fx_prices')
         .insert([atEnd, ...inWindow.slice().reverse(), before]);
@@ -714,13 +759,14 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
         .from('fx_prices')
         .delete()
         .eq('fx_pair_id', usdjpyId)
-        .gte('timestamp', '2090-07-10T00:00:00.000Z');
+        .gte('timestamp', '2020-07-10T00:00:00.000Z')
+        .lt('timestamp', '2020-07-11T00:00:00.000Z');
     });
 
     it('足が無い発表は空の配列(キーは必ずある)', async () => {
       const result = await listMinuteCandleSeries(
         ctx.serviceClient,
-        [{ event_id: fakeEventId, release_datetime: '2090-07-20T12:30:00.000Z' }],
+        [{ event_id: fakeEventId, release_datetime: '2020-07-20T12:30:00.000Z' }],
         usdjpyId,
       );
       expect(result.get(fakeEventId)).toEqual([]);
