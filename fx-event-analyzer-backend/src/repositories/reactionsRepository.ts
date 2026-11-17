@@ -118,8 +118,9 @@ export async function listChartPrices(
   timeframe: string,
   fromIso: string,
   toIso: string,
+  limit?: number,
 ): Promise<FxPriceRow[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from('fx_prices')
     .select('timestamp, open, high, low, close, volume')
     .eq('fx_pair_id', fxPairId)
@@ -131,6 +132,38 @@ export async function listChartPrices(
     .gte('timestamp', fromIso)
     .lte('timestamp', toIso)
     .order('timestamp', { ascending: true });
+  // 返す本数の安全弁(chart の before_minutes / after_minutes の拡張。domain/chartWindow.ts の CHART_MAX_CANDLES)。
+  if (limit !== undefined) query = query.limit(limit);
+  const { data, error } = await query;
   if (error) throw error;
   return data ?? [];
+}
+
+export interface PreReleasePrice {
+  /** 発表直前の価格(event_price_reactions.pre_release_price。どの時間枠も同じ値)。無ければ null。 */
+  price: number | null;
+  status: 'AVAILABLE' | 'UNAVAILABLE';
+}
+
+/**
+ * 発表直前の価格(event_price_reactions に保存済みの値。計算し直さない)。時間枠の行のうち、pre_release_price が
+ * ある行(どの時間枠も同じ値)を使う。1行も無い・全部 null なら UNAVAILABLE(値を作らない)。
+ */
+export async function getPreReleasePrice(
+  supabase: SupabaseClient,
+  eventId: string,
+  fxPairId: string,
+): Promise<PreReleasePrice> {
+  const { data, error } = await supabase
+    .from('event_price_reactions')
+    .select('timeframe, pre_release_price')
+    .eq('event_id', eventId)
+    .eq('fx_pair_id', fxPairId)
+    .not('pre_release_price', 'is', null)
+    .order('timeframe', { ascending: true })
+    .limit(1);
+  if (error) throw error;
+  const row = data?.[0];
+  if (!row || row.pre_release_price === null) return { price: null, status: 'UNAVAILABLE' };
+  return { price: Number(row.pre_release_price), status: 'AVAILABLE' };
 }

@@ -274,6 +274,8 @@ export interface StrategyReactionRow {
   pips: number | null;
   max_upward: number | null;
   max_downward: number | null;
+  max_upward_pips: number | null;
+  max_downward_pips: number | null;
   data_status: string;
 }
 
@@ -287,7 +289,7 @@ export async function listStrategyReactions(
   if (eventIds.length === 0) return [];
   const { data, error } = await supabase
     .from('event_price_reactions')
-    .select('event_id, timeframe, pips, max_upward, max_downward, data_status')
+    .select('event_id, timeframe, pips, max_upward, max_downward, max_upward_pips, max_downward_pips, data_status')
     .in('event_id', eventIds)
     .eq('fx_pair_id', fxPairId)
     .in('timeframe', [...timeframes]);
@@ -298,6 +300,8 @@ export async function listStrategyReactions(
     pips: row.pips === null ? null : Number(row.pips),
     max_upward: row.max_upward === null ? null : Number(row.max_upward),
     max_downward: row.max_downward === null ? null : Number(row.max_downward),
+    max_upward_pips: row.max_upward_pips === null ? null : Number(row.max_upward_pips),
+    max_downward_pips: row.max_downward_pips === null ? null : Number(row.max_downward_pips),
     data_status: row.data_status,
   }));
 }

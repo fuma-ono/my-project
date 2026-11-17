@@ -242,6 +242,26 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
     });
   });
 
+  // 第1段階の拡張(HQ指示 2026-11-17): 値動きの分類(movement_15m・movement_60m、analysis.movement)。既存の summary は変えない。
+  // 閾値(pullback_min_ratio)は未設定のため、CONTINUATION・PULLBACK は出ない。分類の中身は単体テスト(strategyMovement.test.ts)で見る。
+  it('PRO: movement classification is present; thresholds are NOT_SET so no CONTINUATION / PULLBACK', async () => {
+    const { body } = await get(targetId, await asUser('PRO'));
+    const analysis = body.analysis as {
+      releases: { movement_15m: { class: string; reason: string | null }; movement_60m: { class: string } }[];
+      movement: { thresholds: unknown; window_15m: { judged: number; minimum_samples: number; ready: boolean } };
+    };
+    expect(analysis.movement.thresholds).toEqual({ pullback_min_ratio: null, status: 'NOT_SET' });
+    expect(analysis.movement.window_15m.minimum_samples).toBe(3);
+    const classes = ['CONTINUATION', 'PULLBACK', 'FULL_RETRACEMENT', 'REVERSAL', 'UNDETERMINED'];
+    for (const release of analysis.releases) {
+      expect(classes).toContain(release.movement_15m.class);
+      expect(classes).toContain(release.movement_60m.class);
+      expect(['CONTINUATION', 'PULLBACK']).not.toContain(release.movement_15m.class);
+    }
+    // 値動きの無い発表(新しい順の先頭)は判定不可
+    expect(analysis.releases[0]!.movement_15m.class).toBe('UNDETERMINED');
+  });
+
   it('PRO: DATA_PREPARING with no tendency when fewer than 3 previous releases can be compared', async () => {
     const { body } = await get(sparseTargetId, await asUser('PRO'));
     const analysis = body.analysis as { status: string; releases: unknown[]; summary: Record<string, unknown> };

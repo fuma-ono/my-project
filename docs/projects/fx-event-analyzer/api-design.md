@@ -7,6 +7,7 @@
 ## 変更履歴
 
 - **v1.0**: HQ作成・共有(本書のベース)
+- **v1.54**(2026-11-17、HQ指示「Strategy Analysis バックエンド実装 第1段階」。`claude/fx-strategy-analysis-v2` で追加。**DB・migration の変更なし**。**追加のみで、既存の項目の意味・形は変えない**): (1) `GET /events/{event_id}/strategy-analysis` の各発表の行に **`movement_15m`・`movement_60m`**(値動きの分類。`class` = `CONTINUATION` / `PULLBACK` / `FULL_RETRACEMENT` / `REVERSAL` / `UNDETERMINED`、`reason`、`initial_direction`、`favorable_peak_pips`、`final_pips_in_initial_direction`、`retrace_ratio`、`crossed_pre_price_after_initial`、`final_side`)と、`analysis` に **`movement`**(`thresholds`・`window_15m`・`window_60m` の件数)を追加(19.1節)。**`CONTINUATION` と `PULLBACK` の境目の閾値(`pullback_min_ratio`)は未設定(`null`)で、DEV の通貨ペアごとの実データの分布を確認して HQ が決める。未設定の間、その境目に当たる発表は `UNDETERMINED`(`reason` = `THRESHOLD_NOT_SET`)で、`retrace_ratio` は返す**。`summary` の形は変えない。(2) `GET /events/{event_id}/reaction/chart` に Query **`before_minutes`・`after_minutes`**(0〜180 の整数。無ければ時間足ごとの既定の範囲のまま)と、応答に **`window`・`limits`・`data_status`・`expected_candles`・`returned_candles`・`missing_candles`・`truncated`・`pre_release_price`・`pre_release_price_status`** を追加(19.1節)。1分足で発表前から発表後2時間まで取得できる。範囲が不正なら `422 VALIDATION_ERROR`。`GET /speeches/{id}/reaction/chart` は変えない。
 - **v1.53**(2026-11-11、HQ指示「要人発言: 本文取得と要約生成を別々の工程として扱う」。`claude/fx-speech-pipeline` で追加。migration 20261111000001): 要人発言(SpeechSummary)に **`summary_method`** を追加(項目の追加だけ)。`EXTRACTIVE_EN` = 公式の本文(英語)から文をそのまま抜き出した要約(最大3文・700字。訳さない・言い換えない・言語モデルや有料 API は使わない)。null = 工程で作った要約ではない。**`summary_status` が `FAILED` を返すようになった**(要約の工程 `npm run ingest:speech-summaries` が本文から要約を作れなかったとき。理由は DB の `summary_error` に残し、API には出さない)。`GENERATING` は今も返さない。本文の保存は、権利を確認できた発言元だけ(今は FRB。Board のサイトは public domain・出典の明記)。ECB は「著者名の付いた文書の再掲には事前の書面の許可が要る」ため本文を保存せず、`body_status` = `NOT_APPLICABLE`(URL は残す)、要約も作らない(`summary_status` は `NOT_AVAILABLE`)。**日本語の要約はまだ無い**(言語モデルが要り、有料 API の承認が要る)。**DB の列の追加が必要**(DEV への適用は承認の後)
 - **v1.52**(2026-11-10、HQ指示「要人発言本文の取得・保存機能」。`claude/fx-speech-body` で追加。migration 20261110000001): 要人発言(SpeechSummary)に **`source_url`**(公式の発言ページの URL。FRB は federalreserve.gov/newsevents/speech/…、ECB は ecb.europa.eu/press/key/… の https だけ。分からなければ null)と **`body_status`**(本文の取り込みの状態: `PENDING` / `FETCHED` / `FAILED` / `NOT_APPLICABLE`)を追加(項目の追加だけ)。**本文そのものは返さない**(ECB の講演が「著者名の付いた文書」の例外に当たるかなど、再掲の権利が未確認)。本文は `npm run ingest:speech-bodies` が公式ページから取り出して `speech_events.speech_body` に保存する(推測で補わない)。あわせて、ECB の press の RSS の講演を `PUBLICATION_TIME`(v1.41。一覧・詳細に出る、相場反応・過去比較・発言前の通知の対象外)として取り込み、公式ページの URL を入れる(今までは全部 TIME_NOT_EXACT で飛ばしていたため、DEV の ECB の発言が0件だった)。インタビューは今までどおり入れない。**DB の列の追加が必要**(DEV への適用は承認の後。Backend を Render に出すのは、マイグレーションの後でないと発言の API が失敗する)
 - **v1.51**(2026-11-10、HQ決定「要人発言の要約機能改善」。`claude/fx-speech-summary-status` で追加): 要人発言(SpeechSummary。`GET /speeches`・`GET /speeches/{id}` ほか、SpeechSummary を返すところ全部)に **`summary_status`** を追加(項目の追加だけ。`summary` は今までどおり)。値は `NOT_AVAILABLE`(要約が無い。要約を作る仕組みはまだ無いので、`summary` が null・空のときはこれ。発言前・中止も)・`READY`(`summary` がある)・`GENERATING`・`FAILED`(要約を作る仕組みを入れたときのための値。**今は返さない**。DB に状態の列は無い)。iOS は `status`(発言前・中止)と `summary_status` で表示を分ける(`NOT_AVAILABLE` は「この発言の要約データはありません」)。要約の中身は作らない(推測で埋めない)。DB の変更は無し
@@ -1118,6 +1119,51 @@ Chart Window(v1.19で時間足ごとに変更、HQ指示 2026-10-09)：発表時
 ResponseにはChart描画に必要なOHLCデータを含める。想定項目：timestamp / open / high / low / close / volume。
 
 Release時刻をChart上のEvent Markerとして表示できるデータ構造とする。Chart APIはEventPriceReactionそのものではなく、チャート描画に必要なFxPriceデータを返す。
+### 19.1 表示範囲の指定と欠損の状態(v1.54、HQ指示 2026-11-17)
+
+Query(追加。どちらも任意): **`before_minutes`**(発表の何分前から)・**`after_minutes`**(発表の何分後まで)。**0〜180の整数**(上限は既存の最大の表示範囲 = 15分足の前後3時間に合わせた)。範囲外・負数・小数・数字以外は `422 VALIDATION_ERROR`。指定が無い項目は、その時間足の既定の範囲(上記)のまま。**1分足で `before_minutes=30&after_minutes=120` とすれば、発表の30分前から発表後2時間まで取得できる**(日足・週足は対象外)。
+
+Response(追加。既存の項目は変えない):
+
+| 項目 | 内容 |
+|---|---|
+| `window` | `{ before_minutes, after_minutes, source }`。`source` = `DEFAULT`(指定なし)/ `REQUESTED` |
+| `limits` | `{ max_before_minutes: 180, max_after_minutes: 180, max_candles: 1000 }` |
+| `expected_candles` | 表示範囲 `[window_from, window_to)` に、市場が開いている間にあるはずの足の数(週末・12/25・1/1は数えない。5〜60分足は、中の1分がすべて市場の開いている分の足だけ) |
+| `returned_candles` | 表示範囲に入っている、返した足の数(`UNVERIFIED` の足は返さない) |
+| `missing_candles` | `max(expected_candles − returned_candles, 0)`。**欠けた足は補わない** |
+| `data_status` | `READY`(欠損なし。市場の休みで期待が0本の窓も READY)/ `PARTIAL`(一部だけ)/ `DATA_UNAVAILABLE`(期待があるのに1本も無い) |
+| `truncated` | 返す本数の上限(`max_candles`)に達したか |
+| `pre_release_price` | 発表直前の価格(`event_price_reactions.pre_release_price` の保存値。どの時間枠も同じ値)。無ければ `null` |
+| `pre_release_price_status` | `AVAILABLE` / `UNAVAILABLE`(`null` のとき。値を作らない) |
+
+発表の時刻は既存の `release_datetime`、その精度は `release_datetime_precision`。`GET /speeches/{id}/reaction/chart`(14.9節)は変えない(同じ形ではなくなる点に注意。追加項目は経済指標のチャートだけ)。
+
+### 19.2 イベント戦略: 値動きの分類(v1.54、HQ指示 2026-11-17)
+
+`GET /events/{event_id}/strategy-analysis`(Pro)の `analysis.releases[]` の各行に、`movement_15m`(15分の窓)・`movement_60m`(60分の窓)を追加する。**値は `event_price_reactions` の保存済みの値だけから決める。追加の取得・バックフィルはしない。**
+
+| 項目 | 内容 |
+|---|---|
+| `initial_direction` | 初動の方向(1分後の `pips` の符号。`UP` / `DOWN`)。0 なら判定不可(`INITIAL_FLAT`) |
+| `favorable_peak_pips` | 窓の中で、初動の方向に最も伸びた幅(発表直前の価格から。上なら `max_upward_pips`、下なら `-max_downward_pips`) |
+| `final_pips_in_initial_direction` | 窓の終わりの価格位置(初動の方向を正とした pips) |
+| `retrace_ratio` | `(favorable_peak_pips − final_pips_in_initial_direction) / favorable_peak_pips`。0 = 戻していない、1 = 発表直前の価格まで、1 超 = 逆側へ超えた |
+| `crossed_pre_price_after_initial` | 1分の窓より**後**に、発表直前の価格を逆側へ超えたか(最初の1分足の中だけの逆側への振れは数えない) |
+| `final_side` | 窓の終わりの価格の、発表直前の価格に対する側: `SAME`(初動と同じ側)/ `OPPOSITE`(逆側)/ `AT_PRE`(同じ) |
+| `class` | 下の規則 |
+| `reason` | `UNDETERMINED` のときだけ: `NOT_EXACT_RELEASE_TIME`(発表時刻が `EXACT` でない)/ `DATA_MISSING`(必要な値が無い・`AVAILABLE` でない)/ `MINUTE_CANDLES_INCOMPLETE`(窓の1分足が揃っていない)/ `INITIAL_FLAT` / `DATA_INCONSISTENT`(保存値の矛盾)/ `THRESHOLD_NOT_SET` |
+
+分類の規則(上から順):
+
+1. 判定に必要な値が無い・時刻が `EXACT` でない・1分足が欠けている・初動が0・値が矛盾 → `UNDETERMINED`
+2. `final_side` = `OPPOSITE` → `REVERSAL`(**最終的に反転**)
+3. `final_side` = `AT_PRE`、または `crossed_pre_price_after_initial` = true → `FULL_RETRACEMENT`(発表直前の価格まで戻したが、最終的には初動と同じ側 = **一時的に割っただけ**。反転とは区別する)
+4. それ以外(最終的に初動と同じ側で、発表直前の価格は超えていない): `retrace_ratio` が `pullback_min_ratio` 未満 → `CONTINUATION`、以上 → `PULLBACK`。**`pullback_min_ratio` は未設定(`null`)**で、未設定の間は `UNDETERMINED`(`reason` = `THRESHOLD_NOT_SET`)とし、`retrace_ratio` は返す
+
+`analysis.movement`: `thresholds`(`{ pullback_min_ratio, status: NOT_SET | SET }`)・`window_15m`・`window_60m`(`continuation` / `pullback` / `full_retracement` / `reversal` / `undetermined` の件数、`judged`(`UNDETERMINED` を除く件数)、`minimum_samples`(3)、`ready`(`judged` ≥ 3))。直近5回・最低3件の既存条件は変えない。`summary` の形も変えない。
+
+**閾値について**: `pullback_min_ratio` は、DEV の通貨ペアごとの実データの分布(戻し率の分布)を確認し、サンプル数が十分なことを確かめてから HQ が決める。確認の手順は `strategy-analysis-dev-data-check.sql`(読み取り専用。未実行)。
 
 ---
 

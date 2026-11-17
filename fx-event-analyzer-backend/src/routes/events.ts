@@ -2,7 +2,14 @@ import type { FastifyInstance } from 'fastify';
 import { attributionForIndicator, nyFedAttribution } from '../domain/attribution.js';
 import { valueDecimalsForIndicator } from '../domain/valueDecimals.js';
 import { resolveReactionState } from '../domain/reactionState.js';
-import { chartWindow } from '../domain/chartWindow.js';
+import {
+  CHART_MAX_AFTER_MINUTES,
+  CHART_MAX_BEFORE_MINUTES,
+  CHART_MAX_CANDLES,
+  chartCandleCoverage,
+  parseChartMinutes,
+  resolveChartWindow,
+} from '../domain/chartWindow.js';
 import { ApiError } from '../errors/ApiError.js';
 import { FEATURE_CODES } from '../authorization/entitlements.js';
 import { requireEntitlementAndResolvePlan } from '../authorization/plan.js';
@@ -35,6 +42,7 @@ import { listActiveFxPairs } from '../repositories/fxPairsRepository.js';
 import {
   getFxPairById,
   getReaction,
+  getPreReleasePrice,
   listChartPrices,
   listReactionsForPair,
   listReactionsForPairsAndTimeframes,
@@ -382,41 +390,79 @@ export function registerEventRoutes(app: FastifyInstance): void {
     },
   );
 
-  app.get<{ Params: { event_id: string }; Querystring: { fx_pair_id?: string; timeframe?: string } }>(
-    '/events/:event_id/reaction/chart',
-    async (request) => {
-      const userId = request.user!.id;
-      const plan = await requireEntitlementAndResolvePlan(app.supabase, userId, FEATURE_CODES.VIEW_MARKET_REACTION);
+  app.get<{
+    Params: { event_id: string };
+    Querystring: { fx_pair_id?: string; timeframe?: string; before_minutes?: string; after_minutes?: string };
+  }>('/events/:event_id/reaction/chart', async (request) => {
+    const userId = request.user!.id;
+    const plan = await requireEntitlementAndResolvePlan(app.supabase, userId, FEATURE_CODES.VIEW_MARKET_REACTION);
 
-      const { event_id: eventId } = request.params;
-      const { fx_pair_id: fxPairId, timeframe } = request.query;
-      if (!fxPairId || !isValidTimeframe(timeframe)) {
-        throw ApiError.validation('fx_pair_id and a valid timeframe are required.');
-      }
+    const { event_id: eventId } = request.params;
+    const { fx_pair_id: fxPairId, timeframe } = request.query;
+    if (!fxPairId || !isValidTimeframe(timeframe)) {
+      throw ApiError.validation('fx_pair_id and a valid timeframe are required.');
+    }
+    // 第1段階の拡張: 表示範囲の指定(任意。無ければ時間足ごとの既定の範囲のまま)。
+    const beforeMinutes = parseChartMinutes(request.query.before_minutes, CHART_MAX_BEFORE_MINUTES);
+    const afterMinutes = parseChartMinutes(request.query.after_minutes, CHART_MAX_AFTER_MINUTES);
+    if (beforeMinutes === null) {
+      throw ApiError.validation(`before_minutes must be an integer from 0 to ${CHART_MAX_BEFORE_MINUTES}.`);
+    }
+    if (afterMinutes === null) {
+      throw ApiError.validation(`after_minutes must be an integer from 0 to ${CHART_MAX_AFTER_MINUTES}.`);
+    }
 
-      const event = await getEventById(app.supabase, eventId);
-      if (!event) {
-        throw new ApiError('EVENT_NOT_FOUND', 'Event not found.');
-      }
-      await requireUnlockedEventForPlan(app.supabase, plan, event);
+    const event = await getEventById(app.supabase, eventId);
+    if (!event) {
+      throw new ApiError('EVENT_NOT_FOUND', 'Event not found.');
+    }
+    await requireUnlockedEventForPlan(app.supabase, plan, event);
 
-      // MVP Chart Window: release -30min to +60min (api-design.md §19).
-      // 時間足ごとに、発表時刻を基準にした表示範囲(domain/chartWindow.ts)。
-      const { from, to } = chartWindow(event.release_datetime, timeframe);
+    // MVP Chart Window: release -30min to +60min (api-design.md §19).
+    // 時間足ごとに、発表時刻を基準にした表示範囲(domain/chartWindow.ts)。before_minutes / after_minutes で指定もできる。
+    const window = resolveChartWindow(event.release_datetime, timeframe, {
+      beforeMinutes,
+      afterMinutes,
+    });
+    const { from, to } = window;
 
-      const prices = await listChartPrices(app.supabase, fxPairId, timeframe, from, to);
+    const prices = await listChartPrices(app.supabase, fxPairId, timeframe, from, to, CHART_MAX_CANDLES);
+    const coverage = chartCandleCoverage(
+      from,
+      to,
+      timeframe,
+      prices.map((price) => price.timestamp),
+    );
+    const preReleasePrice = await getPreReleasePrice(app.supabase, eventId, fxPairId);
 
-      return {
-        event_id: eventId,
-        fx_pair_id: fxPairId,
-        timeframe,
-        release_datetime: event.release_datetime,
-        // v1.45: release_datetime の精度。APPROXIMATE なら発表の印は概算の時刻(端末は「約」を付ける)。
-        release_datetime_precision: event.release_datetime_precision,
-        window_from: from,
-        window_to: to,
-        prices,
-      };
-    },
-  );
+    return {
+      event_id: eventId,
+      fx_pair_id: fxPairId,
+      timeframe,
+      release_datetime: event.release_datetime,
+      // v1.45: release_datetime の精度。APPROXIMATE なら発表の印は概算の時刻(端末は「約」を付ける)。
+      release_datetime_precision: event.release_datetime_precision,
+      window_from: from,
+      window_to: to,
+      // 第1段階の拡張(追加のみ): 表示範囲・上限・欠損の状態・発表直前の価格。足は補わない。
+      window: {
+        before_minutes: window.before_minutes,
+        after_minutes: window.after_minutes,
+        source: window.source,
+      },
+      limits: {
+        max_before_minutes: CHART_MAX_BEFORE_MINUTES,
+        max_after_minutes: CHART_MAX_AFTER_MINUTES,
+        max_candles: CHART_MAX_CANDLES,
+      },
+      data_status: coverage.data_status,
+      expected_candles: coverage.expected_candles,
+      returned_candles: coverage.returned_candles,
+      missing_candles: coverage.missing_candles,
+      truncated: prices.length >= CHART_MAX_CANDLES,
+      pre_release_price: preReleasePrice.price,
+      pre_release_price_status: preReleasePrice.status,
+      prices,
+    };
+  });
 }
