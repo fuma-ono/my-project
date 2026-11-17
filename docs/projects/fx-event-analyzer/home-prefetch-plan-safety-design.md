@@ -4,7 +4,14 @@
 **作業制限**: 本資料はドキュメントのみ。Swiftコード・テストコードへの反映、コミット・push・merge・TestFlight配布は未実施。
 
 **改訂履歴**:
-- **(今回)** §4.2.1: `scheduleWaitForPlanConfirmation()`に、認証ユーザーと対象userIDの一致確認・`confirmedContext.userID`と対象userIDの一致確認を追加。`confirmedContext != nil`だけで「確定済み」と判定しないよう修正。不一致時の動作(待機解除のみ・診断記録)を整理し、`fetch()`側の既存guardとの整合性・通常のログイン/ログアウト/アカウント切替での無害性を確認。テスト29の前提条件を明記し、テスト30/31を追加。
+- **(今回・P3-1〜P3-5の明示的解消確認)** P3-1: `.userChanged`診断が記録されるのは§4.2`fetch()`do節内の受信後判定1か所のみであることを明記し、2つの送信前guard(fetch()冒頭・handlePlanStateChanged冒頭)は診断を記録しないことを確定(§4.3)。P3-2: この2つのguard・`retryNow()`のguardが不一致時に`cancelPlanConfirmationWait()`を呼ぶよう修正(古いインスタンスの待機・タイムアウトTask残存を防止)。残存するタイムアウト診断1回分の可能性は実害無しとして許容(§4.3)。P3-3: `retryNow()`の安全性が「自身のguard」+「PlanStore.load()自身の送受信時guard」の2層で成立することを整理(§4.2.1)。P3-4: `HomeCacheStore.swift`実コードと照合し、`save()`は検証しないが`saveFavorites()`・`discardIfPlanDiffers()`は既存の`userID`一致確認を持つことを確認し§5の記載を訂正。P3-5: `fetch()`の既存副作用(`.backendNotConfigured`・`beginHomeRequest`・`recordHomeStateApplied`・`recentSpeeches`等・キャッシュ処理)が維持されていることを再確認(前回までの修正で対応済み)。追加確認: `DiagnosticsStore.swift`実コードを読み、新規提案メソッドに対応する専用フィールドを追加すればテスト用の新規APIなしで検証できることを確定(§7)。`Task.isCancelled`確認から状態変更までの間に`await`が無く、MainActor上で1つの同期ブロックとして実行されるため競合が生じないことを明記(§4.2.1)。
+- **(今回・C独立レビューCONDITIONAL PASS(P0=0, P1=1, P2=4, P3=5)対応)** P1-1(7点): §1.2の`PlanStore.State`を`.unconfirmed(lastKnown: PlanContext?)`に再設計(前回の2ケースenumは既存の「未確定でも前回値を保持する」挙動からの退行だったため修正)。`confirmedPlan`・`set(plan:limits:confirmed:userID:)`を復元・再設計。§4.2.3(新設)で、既存の`$isConfirmed.combineLatest($plan)`購読を`$state`購読へ移行する方法(`planConfirmed()`を削除せず`handlePlanStateChanged()`と co-trigger する)、`load()`・`planConfirmed()`の直接Fetch呼び出しを`startFetchIfNeeded()`へ統一する方法、Combine初回通知と`.task{load()}`の競合が`isFetching`ガード1つに帰着することの説明、既存利用箇所・テストの移行表を追加。
+- **(今回)** P2-1: `scheduleWaitForPlanConfirmation()`の呼び出し箇所が`fetch()`内の1か所のみであることと、到達する2条件を§4.2.1冒頭に明記。
+- **(今回)** P2-2: テスト29〜31を再設計(§8)。private状態(`isWaitingForPlanConfirmation`等)を直接読む案(internal観測口)を明示的に不採用とし、`sleep`のDI(P2-3の副産物)+診断記録の呼び出し回数という外部観測可能な副作用のみで間接検証する方針を採用。`DiagnosticsStore`側の読み取り手段の有無は未検証として§11に明記。
+- **(今回)** P2-3: `scheduleWaitForPlanConfirmation()`のタイムアウトTaskに`guard !Task.isCancelled`を追加(`try?`がキャンセルのエラーを握り潰すため、明示確認が無いと古いTaskが新しい待機の状態を誤って変更しうる)。トークン方式ではなく`Task.isCancelled`確認を採用した理由(MainActor直列実行下で十分)を明記。検証用テスト32を追加。
+- **(今回)** P2-4: `userID == nil`の仕様を「プラン確定状態の検証を一切行わず、既存の挙動(通常Fetch・キャッシュ省略)をそのまま維持する」と決定(§4.2)。影響する既存テスト(`HomeViewModelTests`・`HomeSpeechesStatusTests`・`CalendarViewModelTests`・`EventDetailViewTests`・`PlanStoreTests`・`HomeCacheTests`)を洗い出し、§11に移行表を追加(`HomeCacheTests.swift`の`makeViewModel`ヘルパーのみ実際の変更が必要と判明)。
+- **(今回)** P3: §4.2の`fetch()`コード例が既存コード(`HomeViewModel.swift`269-330行目)の副作用(`.backendNotConfigured`分岐・`recentSpeeches`等の全量更新)を省略していたため全文を復元(`applyFetchSuccess`/`applyFetchFailure`に切り出し)。`retryNow()`に`self.userID`とのライブ一致確認を追加(§4.2.1)。C独立レビューのP3-1〜P3-5の原文は今回の指示文に含まれておらず、一致確認ができていないことを§11に明記。
+- (前回) §4.2.1: `scheduleWaitForPlanConfirmation()`に、認証ユーザーと対象userIDの一致確認・`confirmedContext.userID`と対象userIDの一致確認を追加。`confirmedContext != nil`だけで「確定済み」と判定しないよう修正。不一致時の動作(待機解除のみ・診断記録)を整理し、`fetch()`側の既存guardとの整合性・通常のログイン/ログアウト/アカウント切替での無害性を確認。テスト29の前提条件を明記し、テスト30/31を追加。
 - **(今回)** §11「実装時の確認事項」が空欄でないことを確認(既存7項目を維持)し、今回の§4.2.1修正に対応する項目を追加。
 - (前回) §8テスト28: 「通信待ち状態を確実に(タイミング依存のない形で)作ってから`.unconfirmed`を検証する」設計に再具体化(`CheckedContinuation`等でモック応答を明示的に保留する手順を明記)。
 - (前回) §10: `AuthenticatedUserProviding`の`@MainActor`に関する記載を「推奨」から§1.2と同じ「必須条件」に統一。古い「推奨」の記載を削除。
@@ -69,8 +76,14 @@ enum LoadResult: Equatable {
 
 @MainActor
 final class PlanStore: ObservableObject {
+    // (今回・P1-1対応) `.unconfirmed`にlastKnownを追加した。実際のPlanStore(現行コード)は
+    // plan/limitsを独立したストアドプロパティとして持ち、isConfirmedがfalseになっても値を
+    // 保持する(`PlanStoreTests.swift`79-85行目・`EventDetailViewTests.swift`39行目が
+    // この「未確定でも前回値を保持する」挙動に依存している)。単一stateのenumに
+    // 統合する際、`.unconfirmed`に値を持たせないとこの既存挙動が失われる(前回提示した
+    // 2ケースのenumは、この点で既存挙動からの退行だった)。
     enum State: Equatable {
-        case unconfirmed
+        case unconfirmed(lastKnown: PlanContext?)
         case confirmed(PlanContext)
     }
     struct PlanContext: Equatable {
@@ -80,20 +93,49 @@ final class PlanStore: ObservableObject {
         let generation: Int
     }
 
-    @Published private(set) var state: State = .unconfirmed
+    @Published private(set) var state: State = .unconfirmed(lastKnown: nil)
     private var generation = 0            // 内部カウンタ。外部にはPlanContext経由でのみ公開
     private var entitlementsRequestSequence = 0   // Home用generationとは別管理。load()呼び出しの新旧判定専用
 
-    // 後方互換の計算プロパティ(既存のCalendarViewModel等はそのまま動作する)
+    // (今回・P1-1対応) 安全性が必要な判定(ユーザー整合性・generation比較等)には、必ず
+    // 以下の「strict」な3つ(isConfirmed/confirmedUserID/confirmedContext/confirmedPlan)を
+    // 使うこと。`.confirmed`のときのみ値を返し、`.unconfirmed`(lastKnownの有無に関わらず)は
+    // 常にnil/false。
     var isConfirmed: Bool { if case .confirmed = state { true } else { false } }
     var confirmedUserID: UUID? { if case .confirmed(let c) = state { c.userID } else { nil } }
     var confirmedContext: PlanContext? { if case .confirmed(let c) = state { c } else { nil } }
+    /// `HomeViewModel.planConfirmed()`・`cacheContext()`・`HomeCacheContext.confirmedPlan`が
+    /// 使う、確定済みプランのString表現。`.unconfirmed`の間は常にnil(lastKnownの有無に関わらず)。
+    var confirmedPlan: String? { confirmedContext?.plan }
+
+    /// 表示用のベストエフォート値(strictではない)。未確定でも、分かっている直近の値を
+    /// 返す(既存の`CalendarViewModel`等がプラン確定前にも制限値を表示できる、既存挙動の維持)。
+    /// 安全性が必要な判定には使わないこと。
+    private var context: PlanContext? {
+        switch state {
+        case .unconfirmed(let lastKnown): return lastKnown
+        case .confirmed(let c): return c
+        }
+    }
     var plan: EntitlementsResponse.Plan {
-        if case .confirmed(let c) = state, let p = EntitlementsResponse.Plan(rawValue: c.plan) { return p }
+        if let p = context.flatMap({ EntitlementsResponse.Plan(rawValue: $0.plan) }) { return p }
         return .free
     }
-    var limits: PlanLimits { if case .confirmed(let c) = state { c.limits } else { .free() } }
+    var limits: PlanLimits { context?.limits ?? .free() }
     var isPro: Bool { plan == .pro }
+
+    /// テスト・プレビュー専用のヘルパー(本番の確定経路は`load()`のみ)。既存の
+    /// `PlanStoreTests`・`CalendarViewModelTests`・`HomeCacheTests`・`EventDetailViewTests`が
+    /// `userID`を渡さずに呼ぶケースが多数ある(§11「実装時の確認事項」のテスト移行表参照)。
+    /// `userID`省略時は、呼び出し側がuserID整合性を検証する意図がそもそも無いテストでのみ
+    /// 安全に使えるよう、ダミーの乱数UUIDを補う(どの実在userIDとも一致しない)。
+    /// `confirmed: true`で呼び、かつ呼び出し先が実在の`userID`を持つ`HomeViewModel`と
+    /// 組み合わせる場合は、必ず`userID`を明示的に渡すこと(省略するとfetch()のuserID一致
+    /// guardが失敗し、Fetchが実行されなくなる)。
+    func set(plan: EntitlementsResponse.Plan, limits: PlanLimits, confirmed: Bool = true, userID: UUID? = nil) {
+        let context = PlanContext(userID: userID ?? UUID(), plan: plan.rawValue, limits: limits, generation: generation)
+        state = confirmed ? .confirmed(context) : .unconfirmed(lastKnown: context)
+    }
 
     @discardableResult
     func load(
@@ -123,7 +165,10 @@ final class PlanStore: ObservableObject {
         // state を .unconfirmed に戻す。generation自体はここでは進めず、commit()の規則1
         // (state==.unconfirmedからの確定は常にbump)に一元化する — 二重に加算しない。
         if let currentConfirmedUserID = confirmedUserID, currentConfirmedUserID != requestUserID {
-            state = .unconfirmed
+            // (今回・P1-1対応) lastKnownはnilにする(別ユーザーへの切り替わりのため、
+            // 切り替え前のユーザーのplan/limitsをベストエフォート表示にも残さない。
+            // 他ユーザーのプラン情報を一瞬でも表示し続けることを避ける)。
+            state = .unconfirmed(lastKnown: nil)
         }
 
         do {
@@ -181,12 +226,16 @@ final class PlanStore: ObservableObject {
     }
 
     func reset() {
-        state = .unconfirmed
+        // (今回・P1-1対応) ログアウトでもlastKnownはnilにする(次にログインする別ユーザーに
+        // 前のユーザーのplan/limitsをベストエフォート表示として見せないため)。
+        state = .unconfirmed(lastKnown: nil)
         entitlementsRequestSequence += 1   // 進行中の取得を無効化する
         generation += 1                     // 規則5: ログアウトも文脈の変化として扱う
     }
 }
 ```
+
+**lastKnownの取り扱い方針のまとめ(P1-1対応)**: `lastKnown`に値が入るのは`set(confirmed: false)`のみであり、`load()`・`reset()`はいずれも`.unconfirmed`に遷移する際に`lastKnown: nil`を使う。これにより、`load()`経由の通常フロー(本番の確定経路)では`lastKnown`に実際の値が入ることは無く、`plan`/`limits`/`isPro`のベストエフォート表示は**テスト・プレビューでの明示的な`set(confirmed: false)`呼び出し時のみ**意味を持つ。本番の通常フロー(ユーザー切替・ログアウト)でこれらのベストエフォート値を見せる設計にはなっていないが、これは既存コードの挙動(別ユーザーへの切り替え中は`plan`/`limits`自体を更新しない)と同じ安全側の挙動であり、退行ではない。
 
 ### 1.2.1 generationの更新規則(明文化)
 
@@ -335,6 +384,8 @@ func consumeHome(for userID: UUID, date: String, timezone: String) -> (task: Tas
 
 ### 4.2 `HomeViewModel.fetch()`のgeneration管理
 
+**今回(P1-1・P2-4・P3)の位置づけ**: 以下のコードは、現行の実コード(`HomeViewModel.swift`269-330行目、2026-11-16確認)の既存の副作用(診断記録・`recentSpeeches`/`speechesStatus`/`freshDataVersion`/`lastFreshAt`/`displayedCacheSavedAt`/`refreshNotice`/`lastFetchFailed`の更新、`.backendNotConfigured`分岐、`userID`不明時のプリフェッチ・キャッシュ省略)を**すべて引き継いだうえで**、新しいgeneration安全性機構を追加したものである。前回提示したコード例は要点のみの省略形で、これらの既存副作用を明示していなかった(§4.2.2で指摘されたP3の正確性確認により判明)。今回は省略せず全文を示す。
+
 ```swift
 private var pendingGeneration: Int?
 private var lastFetchedGeneration: Int?
@@ -343,12 +394,54 @@ private var isFetching = false
 
 private func fetch() async {
     var shouldChainNext = false
+    // (今回修正) isFetchingの更新はstartFetchIfNeeded()に一元化した(§4.2.1・P1-1対応)。
+    // fetch()自身はisFetchingをセットしない。resetとチェイン起動のみここで行う。
     defer {
         isFetching = false
         if shouldChainNext { startFetchIfNeeded() }   // isFetching=falseの直後、同じdeferの中で呼ぶ
     }
-    guard authenticatedUserProvider.currentUserID == userID else { return }   // 4.5 ケースC-1相当の早期判定
-    guard let userID, let context = planStore.confirmedContext, context.userID == userID else {
+    let today = Self.isoDateFormatter.string(from: now())
+    let timezone = TimeZone.current.identifier
+    let endpoint = Endpoint(
+        path: "home",
+        queryItems: [URLQueryItem(name: "date", value: today), URLQueryItem(name: "timezone", value: timezone)]
+    )
+
+    // (今回・P2-4対応) userIDが不明(匿名/テスト用途)の場合は、プラン確定状態の検証を
+    // 一切行わず、既存コードの挙動(通常のHome取得のみ実行し、キャッシュ保存・先行取得の
+    // 利用は行わない)をそのまま維持する。詳細な理由と既存テストへの影響は
+    // §4.2.3「userID==nilの仕様(P2-4)」を参照。
+    guard let userID else {
+        do {
+            DiagnosticsStore.shared.beginHomeRequest()
+            let response = try await apiClient.send(endpoint)
+            applyFetchSuccess(response, today: today, timezone: timezone, userID: nil, plan: nil, fetchedAt: now())
+        } catch let error as APIError where error.isNotConfigured {
+            state = .backendNotConfigured
+            displayedCacheSavedAt = nil
+            refreshNotice = nil
+        } catch {
+            if Task.isCancelled { return }   // §6参照
+            applyFetchFailure()
+        }
+        return
+    }
+
+    // 以降はuserIDが判明している通常経路。
+    // (今回・P2-4対応) authenticatedUserProviderがnilの場合(本番では常に非nilを渡す設計。
+    // §9参照)、このインスタンス単位のライブ一致確認は行わず常に通過させる
+    // (既存テストの大半がauthenticatedUserProviderを渡していないため。§11のテスト移行表参照)。
+    // authenticatedUserProviderを明示的に渡した場合のみ、実際のライブ比較を行う。
+    // (今回・P3-1/P3-2対応) このguardはリクエスト送信前の判定であり、まだ何も取得していないため
+    // 「破棄した」と言えるレスポンス自体が存在しない。したがってここでは診断を記録しない
+    // (`.userChanged`診断は、送信後に受信時点で判明した場合のみ記録する。下のdo節、§4.5のC-1
+    // 参照)。一方、このインスタンスがここで既に無関係と判明した以上、残っている待機・
+    // タイムアウトTaskは片付ける(古いインスタンスのタイムアウトが後から診断に混入することを防ぐ)。
+    guard (authenticatedUserProvider.map { $0.currentUserID == userID } ?? true) else {
+        cancelPlanConfirmationWait()
+        return
+    }   // 4.5 ケースC-1相当
+    guard let context = planStore.confirmedContext, context.userID == userID else {
         scheduleWaitForPlanConfirmation(); return
     }
     let requestSnapshot = (userID: userID, generation: context.generation)
@@ -366,10 +459,13 @@ private func fetch() async {
            dispatchContext.generation == requestSnapshot.generation {
             response = try await prefetched.task.value
         } else {
+            // 既存コードの診断記録(homeRequestCount)を維持する。先行取得を使った場合は
+            // 呼ばない(既存コードのコメント参照: 呼び直すとカウントが二重になる)。
+            DiagnosticsStore.shared.beginHomeRequest()
             response = try await apiClient.send(endpoint)
         }
 
-        let liveUserID = authenticatedUserProvider.currentUserID
+        let liveUserID = authenticatedUserProvider.map { $0.currentUserID } ?? requestSnapshot.userID
         let liveContext = planStore.confirmedContext
 
         if liveUserID != requestSnapshot.userID {
@@ -382,11 +478,9 @@ private func fetch() async {
             // ③confirmedContext自体のuserID不一致(想定外・防御的分岐)
             DiagnosticsStore.shared.recordHomeFetchDiscarded(reason: .unexpectedState)
         } else if liveContext!.generation == requestSnapshot.generation {
-            // ケースA: 採用
+            // ケースA: 採用。既存コードの副作用をすべて反映する(applyFetchSuccess参照)。
+            applyFetchSuccess(response, today: today, timezone: timezone, userID: requestSnapshot.userID, plan: liveContext!.plan, fetchedAt: now())
             lastFetchedGeneration = liveContext!.generation
-            state = .loaded(...)
-            cacheStore.save(response: response, date: today, timezone: timezone,
-                             userID: requestSnapshot.userID, plan: liveContext!.plan, savedAt: now())
             if let pending = pendingGeneration, pending > (lastFetchedGeneration ?? Int.min) {
                 shouldChainNext = true
             }
@@ -401,20 +495,54 @@ private func fetch() async {
             // ケースBとはせず、.unexpectedStateとして破棄・診断記録のみ。自動連鎖しない。
             DiagnosticsStore.shared.recordHomeFetchDiscarded(reason: .unexpectedState)
         }
+    } catch let error as APIError where error.isNotConfigured {
+        // (今回・P3対応) 既存コードにあるbackendNotConfigured分岐がこの経路の省略形コードに
+        // 欠けていたため復元した。通常の失敗(lastFetchFailed/refreshNotice更新)とは
+        // 区別し、Backend未設定の専用stateにする(既存コードと同じ扱い)。
+        state = .backendNotConfigured
+        displayedCacheSavedAt = nil
+        refreshNotice = nil
     } catch {
         if Task.isCancelled { return }   // §6参照
-        lastFetchFailed = true
-        if case .loaded = state {
-            refreshNotice = .refreshFailed(savedAt: displayedCacheSavedAt ?? lastFreshAt)
-        } else {
-            state = .error("イベント情報の取得に失敗しました。")
-        }
+        applyFetchFailure()
         // shouldChainNextはfalseのまま → 自動再試行しない
+    }
+}
+
+/// (今回・P3対応) 既存コード(269-330行目)の成功時の副作用を、userID不明/判明の2経路で
+/// 共通化したもの。state更新・診断記録・recentSpeeches/speechesStatus・キャッシュ関連の
+/// 全フィールド更新・freshDataVersionのインクリメント・キャッシュ保存(userIDが有る場合のみ)を、
+/// 既存コードと同じ順序・同じ条件で行う。既存コードからの変更点は無い(関数として
+/// 切り出しただけ)。
+private func applyFetchSuccess(_ response: HomeResponse, today: String, timezone: String, userID: UUID?, plan: String?, fetchedAt: Date) {
+    state = .loaded(events: response.events, majorFx: response.majorFx)
+    DiagnosticsStore.shared.recordHomeStateApplied()
+    recentSpeeches = response.speeches ?? []
+    speechesStatus = response.speechesStatus
+    lastFetchFailed = false
+    displayedCacheSavedAt = nil
+    lastFreshAt = fetchedAt
+    refreshNotice = nil
+    freshDataVersion += 1
+    if let userID {
+        cacheStore.save(response: response, date: today, timezone: timezone, userID: userID, plan: plan, savedAt: fetchedAt)
+    }
+}
+
+/// (今回・P3対応) 既存コード(321-329行目)の失敗時の副作用をそのまま切り出したもの。変更点は無い。
+private func applyFetchFailure() {
+    lastFetchFailed = true
+    if case .loaded = state {
+        refreshNotice = .refreshFailed(savedAt: displayedCacheSavedAt ?? lastFreshAt)
+    } else {
+        state = .error("イベント情報の取得に失敗しました。")
     }
 }
 ```
 
 ### 4.2.1 `scheduleWaitForPlanConfirmation()` / `retryNow()`の定義
+
+**scheduleWaitForPlanConfirmation()の呼び出し箇所について(P2-1対応)**: 現行のこの設計書の範囲では、`scheduleWaitForPlanConfirmation()`を呼ぶ箇所は**§4.2の`fetch()`内、`guard let context = planStore.confirmedContext, context.userID == userID else { scheduleWaitForPlanConfirmation(); return }`の1か所のみ**である。このguardに到達するのは、`userID`が判明しており(`guard let userID`を通過済み)、かつ`authenticatedUserProvider`のライブ一致確認(省略設定時は常に通過)も通過した後である。そのため、このguardが失敗する(=`scheduleWaitForPlanConfirmation()`が呼ばれる)のは次の2つの場合のみに限定される: (i) `planStore.confirmedContext`そのものがnil(本当に未確定)、(ii) `confirmedContext`は存在するが、そのuserIDが対象userIDと食い違う(想定外・防御的、§4.5のC-3と同種で具体的な再現シナリオは無い)。先行取得が単に利用できない場合(`contextAtDispatch`がnil・不一致)は、P1-1の対応により**このguardに到達する前に**解決しており、呼び出し箇所には含まれない。以前の設計案で検討していた「プリフェッチ判定内から呼ぶ」経路は採用されておらず、呼び出し箇所は増えていない。
 
 ```swift
 private var isWaitingForPlanConfirmation = false
@@ -422,7 +550,7 @@ private var planConfirmationTimeoutTask: Task<Void, Never>?
 private var isRefreshingEntitlements = false   // §4.2.2参照
 
 /// fetch()が「プラン文脈が未確定、または対象ユーザーが不明」と判定した場合にのみ呼ぶ
-/// (§4.2の該当guard参照。先行取得が単に使えないだけの場合はP1-1の対応により、
+/// (P2-1対応、上記参照。先行取得が単に使えないだけの場合はP1-1の対応により、
 /// ここは呼ばれず通常Fetchへフォールバックする)。
 ///
 /// P1-1対応・今回修正: 「確定済みなら即Fetch」という説明と実装の順序を一致させる。
@@ -434,7 +562,9 @@ private func scheduleWaitForPlanConfirmation() {
     // ①(今回追加)認証ユーザーとこのインスタンスの対象userIDが一致するかを最初に確認する。
     //   一致しなければこのインスタンス自体が既に古い(fetch()冒頭のケースC-1と同じ考え方)。
     //   待機中であれば片付け、新たな待機・取得も起動しない。
-    guard authenticatedUserProvider.currentUserID == userID else {
+    //   (P2-4対応・§4.2と同じ理由) authenticatedUserProviderがnilの場合はこの確認を
+    //   省略し常に通過させる(既存テストの大半が渡していないため)。
+    guard (authenticatedUserProvider.map { $0.currentUserID == userID } ?? true) else {
         cancelPlanConfirmationWait()
         return
     }
@@ -462,7 +592,21 @@ private func scheduleWaitForPlanConfirmation() {
     isWaitingForPlanConfirmation = true
     DiagnosticsStore.shared.recordPlanConfirmationWaitStarted()
     planConfirmationTimeoutTask = Task { @MainActor [weak self] in
-        try? await Task.sleep(for: .seconds(10))
+        try? await self?.sleep(.seconds(10))
+        // (今回・P2-3対応) try?は`sleep`が投げるCancellationError(キャンセルされた場合)を
+        // 握り潰すため、ここで明示的にTask.isCancelledを確認する。これが無いと、
+        // このTaskが`cancelPlanConfirmationWait()`でキャンセルされた直後に新しい待機
+        // (別のTask)が開始された場合でも、この古いTaskの実行自体は(エラーが握り潰されて)
+        // 継続してしまい、下の`isWaitingForPlanConfirmation`の確認時点では既に新しい待機の
+        // ものに変わっているため、古いTaskが新しい待機の状態を誤って解除してしまう
+        // (詳細はP2-3の選択比較を参照)。
+        // (今回・追加確認2) guard !Task.isCancelledから下の3行(self.isWaitingForPlanConfirmation
+        // の読み取り・2つのプロパティへの代入・診断記録)までの間には`await`が1つも無い。
+        // @MainActor上のTaskは次の`await`(サスペンションポイント)まで中断されずに動くため、
+        // この一連の処理は他のTask(新しい待機を開始する別のscheduleWaitForPlanConfirmation()
+        // 呼び出し等)から割り込まれることなく1つの同期ブロックとして実行される。したがって
+        // 「isCancelledの確認」と「状態変更」の間に別のTaskが状態を書き換える競合は生じない。
+        guard !Task.isCancelled else { return }
         guard let self, self.isWaitingForPlanConfirmation else { return }
         self.isWaitingForPlanConfirmation = false
         self.planConfirmationTimeoutTask = nil
@@ -482,7 +626,18 @@ private func cancelPlanConfirmationWait() {
 /// Entitlementsを再取得し、確定した場合だけHomeを1回取得する。
 func retryNow() {
     guard !isFetching, !isRefreshingEntitlements else { return }
-    guard let userID = authenticatedUserProvider.currentUserID else { return }
+    guard let userID else { return }
+    // (今回・P3対応) 以前は`authenticatedUserProvider.currentUserID`を直接`userID`として
+    // 使っており、`self.userID`(このインスタンス自身の対象ユーザー)との一致確認が無かった。
+    // ログアウト・アカウント切替後に取り残された古いインスタンスの「再試行」ボタンが
+    // 誤って別ユーザーのEntitlementsを取得してしまう経路を閉じるため、fetch()・
+    // scheduleWaitForPlanConfirmation()と同じ一致確認を追加した。
+    // (今回・P3-2/P3-3対応) fetch()・handlePlanStateChanged()と同じ理由で、このインスタンスが
+    // 既に無関係と判明した場合は残存する待機・タイムアウトTaskを片付ける(対称性のため)。
+    guard (authenticatedUserProvider.map { $0.currentUserID == userID } ?? true) else {
+        cancelPlanConfirmationWait()
+        return
+    }
     cancelPlanConfirmationWait()
     isRefreshingEntitlements = true
     Task {
@@ -499,20 +654,52 @@ func retryNow() {
 }
 ```
 
+**(今回・P3-3対応)`retryNow()`が別ユーザーのEntitlementsを読み込まないことの全経路整理**: 安全性は**2層**で保証される。
+
+1. **`retryNow()`自身のguard(上記コード)**: 呼び出し時点で`self.userID`と`authenticatedUserProvider`のライブな値が不一致なら、`planStore.load()`自体を呼ばずに早期returnする(`authenticatedUserProvider`が`nil`の場合はこの層を素通りする。P2-4対応の既定、本番では必ず実在のproviderが渡る)。
+2. **`PlanStore.load()`自身の内部guard(§1.2)**: `retryNow()`のguardを通過した後、`load()`の送信時点(`guard let requestUserID = userID, requestUserID == authenticatedUserProvider.currentUserID else { return .userMismatchOrUnknown }`)・受信時点(`guard requestUserID == authenticatedUserProvider.currentUserID else { return .userMismatchOrUnknown }`)の両方で再検証する。`retryNow()`の呼び出し**後**、`load()`の通信が完了するまでの間にユーザーが変わった場合でも、この層が`.userMismatchOrUnknown`を返し、`commit()`に到達しない(§1.2.3の副作用整理表のとおり、`PlanContext`・`generation`のいずれも変化しない)。
+
+したがって、`retryNow()`単体のguardが素通りされる設定(`authenticatedUserProvider == nil`、テスト環境の既定)であっても、`PlanStore.load()`自身の検証(`authenticatedUserProvider`が`nil`の場合は`.authenticationUnverifiable`を即時返す、§1.2.2)により、誤ったEntitlementsの確定には至らない。**全経路で機能することを確認済み。**
+
+**`authenticatedUserProvider`・`sleep`の型と既定値(P1-1・P2-2・P2-3・P2-4対応)**: `HomeViewModel`の既存コンストラクタ(`HomeViewModel.swift:166-195`)には現状これらのパラメータは存在せず、今回新設する。
+
+```swift
+private let authenticatedUserProvider: AuthenticatedUserProviding?
+/// (今回・P2-2/P2-3対応) タイムアウト待機のテスト容易性のため、既存の`now: () -> Date`と
+/// 同じDIパターンを`Task.sleep`にも適用する。既定値は実際のTask.sleepと同じ挙動。
+private let sleep: (Duration) async throws -> Void
+
+init(
+    apiClient: APIClient,
+    favoritesStore: FavoritesStore = .shared,
+    userID: UUID? = nil,
+    cacheStore: HomeCacheStore = .shared,
+    planStore: PlanStore = .shared,
+    prefetchCoordinator: HomePrefetchCoordinator = .shared,
+    authenticatedUserProvider: AuthenticatedUserProviding? = nil,
+    sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+    now: @escaping () -> Date = Date.init
+) {
+    // ...既存の代入に加え、authenticatedUserProvider・sleepも保持する。
+}
+```
+
+**`authenticatedUserProvider`を`Optional`にし、nilの場合はライブ一致確認を省略する理由(P2-4対応)**: 本番コード(§9参照)では`MainTabView`→`HomeView`経由で必ず実在の`AppState`(`AuthenticatedUserProviding`)が渡される設計のため、`nil`は実質的に**テスト・プレビュー専用の設定**である。既存の`HomeViewModelTests`・`HomeSpeechesStatusTests`・`HomeCacheTests`はいずれもこのパラメータを渡していない(§11のテスト移行表参照)。`nil`の場合に「常にtrueとして扱う(=このインスタンス単位のライブ一致確認を無効化する)」という既定の挙動にすることで、これらの既存テストに**追加の変更を要求しない**。本番コードは必ず実在のproviderを渡すため、この既定値による安全性の緩和は本番には影響しない。一方、`planStore.confirmedContext`とのuserID一致確認(§4.2のもう一方のguard)はこの既定とは独立しており、`PlanStore`側のuserIDが対象userIDと一致しない限り先には進まない(これは安全性の中核であり、既定で無効化しない)。
+
 **ユーザー整合性の確認(今回追加)**: `planStore.confirmedContext != nil`だけでは「確定済み」の判定として不十分である。`confirmedContext`が存在していても、そのユーザーが現在の認証ユーザー・このインスタンスの対象userIDと一致しているとは限らないため、以下の2点を追加で確認する。
 
-1. **認証ユーザーと対象userIDの一致確認**(①): `authenticatedUserProvider.currentUserID == userID`。不一致なら、このインスタンス自体が既に古い(ログアウト・アカウント切替後に取り残された、§10で既知のTask生存期間の論点と同じ状況)。待機・取得のいずれも起動しない。
+1. **認証ユーザーと対象userIDの一致確認**(①): `authenticatedUserProvider.map { $0.currentUserID == userID } ?? true`(P2-4対応により、`authenticatedUserProvider`が`nil`の場合は常に通過させる。本番では必ず実在のproviderが渡されるため、この既定は本番の安全性に影響しない。§4.2.1末尾の説明を参照)。不一致なら、このインスタンス自体が既に古い(ログアウト・アカウント切替後に取り残された、§10で既知のTask生存期間の論点と同じ状況)。待機・取得のいずれも起動しない。
 2. **confirmedContext.userIDと対象userIDの一致確認**(②③の分岐): `context.userID == userID`。一致しなければ、PlanStoreの確定内容自体が対象userIDのものではない(通常は①を通過していれば起こらないはずの、§4.5のC-3と同種の防御的ケース)。待機を維持せず、新たな待機も開始しない。
 
 **不一致時の動作の整理**:
 
 | 状況 | 動作 | 診断 |
 |---|---|---|
-| 認証ユーザーと対象userIDが不一致(①) | 待機があれば解除。待機・取得のいずれも新設しない | 記録なし(このインスタンスは既に無関係と判断するため、§4.5のC-1同様、`.userChanged`としての記録はfetch()側に委ねる) |
+| 認証ユーザーと対象userIDが不一致(①) | 待機があれば解除。待機・取得のいずれも新設しない | **記録なし**(今回訂正・P3-1対応: `scheduleWaitForPlanConfirmation()`はここでは何も「破棄」していない(送信すら行っていない)ため、ここで`.userChanged`は記録しない。`.userChanged`が記録されるのは§4.2の`fetch()`do節内の受信後判定1か所のみ。§4.3「P3-1対応」の説明を参照) |
 | confirmedContext.userIDと対象userIDが不一致(②③) | 待機があれば解除。待機・取得のいずれも新設しない | `recordHomeFetchDiscarded(reason: .unexpectedState)` |
 | confirmedContextがnil(本当に未確定) | 重複待機防止のうえ、新規に待機を開始 | `recordPlanConfirmationWaitStarted()` |
 
-**fetch()側の既存guardとの整合性**: `fetch()`冒頭の2段のguard(`authenticatedUserProvider.currentUserID == userID`、続いて`context.userID == userID`)と、今回`scheduleWaitForPlanConfirmation()`に追加した2段の判定は**同じ2条件**を見ている。現在`scheduleWaitForPlanConfirmation()`は`fetch()`からのみ呼ばれるため、呼び出し時点では`fetch()`側の対応するguardを通過済みであり、今回追加した判定は**その時点では必ず真になる**(動作の変化は無い)。それでも追加する理由は、`scheduleWaitForPlanConfirmation()`を将来`fetch()`以外から呼ぶ場合や、`fetch()`自身のguard順序が将来変わった場合に備えて、この関数単体でも安全性が成立するようにするためである(§4.5のC-3同様、具体的な現行の再現シナリオは無い防御的な強化)。
+**fetch()側の既存guardとの整合性**: `fetch()`冒頭の2段のguard(`authenticatedUserProvider.map { $0.currentUserID == userID } ?? true`、続いて`context.userID == userID`)と、今回`scheduleWaitForPlanConfirmation()`に追加した2段の判定は**同じ2条件(同じnil許容の既定も含む)**を見ている。現在`scheduleWaitForPlanConfirmation()`は`fetch()`からのみ呼ばれるため、呼び出し時点では`fetch()`側の対応するguardを通過済みであり、今回追加した判定は**その時点では必ず真になる**(動作の変化は無い)。それでも追加する理由は、`scheduleWaitForPlanConfirmation()`を将来`fetch()`以外から呼ぶ場合や、`fetch()`自身のguard順序が将来変わった場合に備えて、この関数単体でも安全性が成立するようにするためである(§4.5のC-3同様、具体的な現行の再現シナリオは無い防御的な強化)。
 
 **通常のログイン・ログアウト・アカウント切替での確認**:
 - **通常ログイン**: `self.userID`は構築時に現在の認証ユーザーと一致している。`confirmedContext`が未確定の間は④⑤の通常の待機経路に入り、確定後は`handlePlanStateChanged`(§4.3、独立した経路)が検知してFetchを開始する。今回の追加判定はこの経路に影響しない。
@@ -536,11 +723,109 @@ func retryNow() {
 
 **競合時の動作**: `retryNow()`実行中(`isRefreshingEntitlements == true`)に再度呼ばれた場合は、黒子的に何もせず即座に返る(`isFetching`中の`startFetchIfNeeded()`と同じ振る舞い)。`fetch()`自身の多重実行防止(`isFetching`)とは別の変数で管理するのは、`retryNow()`がEntitlements通信という`fetch()`とは異なる種類の処理を行うためである。
 
+### 4.2.3 既存API・Combine購読・Fetch起動経路との統合(P1-1対応)
+
+本節は、P1-1で指摘された7点すべてに個別に回答する。`HomeViewModel.swift`(166-330行目、2026-11-16確認)の既存コードを前提とする。
+
+**1. 既存の`$isConfirmed`・`$plan`購読の扱い**: 既存コード(`HomeViewModel.swift:190-194`)は次の形。
+
+```swift
+planStore.$isConfirmed.combineLatest(planStore.$plan)
+    .sink { [weak self] _ in Task { @MainActor in self?.planConfirmed() } }
+    .store(in: &cancellables)
+```
+
+`isConfirmed`・`plan`は本設計で**計算プロパティ**になる(§1.2)。計算プロパティは`@Published`の`$`投影を持てない(Combineの前提上、`$`はストアドの`@Published`にのみ生成される)ため、この購読は**そのままでは成立しない**。移行先は、唯一残るストアドの`@Published`である`$state`を購読することである。
+
+```swift
+planStore.$state
+    .sink { [weak self] state in
+        Task { @MainActor in
+            self?.planConfirmed()
+            self?.handlePlanStateChanged(state)
+        }
+    }
+    .store(in: &cancellables)
+```
+
+**2. `planConfirmed()`と`handlePlanStateChanged`のどちらを残すか**: **両方残す**。削除はしない。2つは異なる責務を持つ別個のロジックである。
+- `planConfirmed()`(既存、§4.2.3末尾のコード参照): キャッシュの安全性(`cacheStore.discardIfPlanDiffers`)と、`.loading`/`.error`状態からのキャッシュ再表示を担う。generationを一切見ない。
+- `handlePlanStateChanged()`(新設、§4.3): generationに基づくHome再取得のトリガーを担う。キャッシュには一切触れない。
+
+既存コードは`$isConfirmed.combineLatest($plan)`という**1つの購読**から`planConfirmed()`だけを呼んでいた。今回`$state`という**1つの購読**に置き換え、そこから**両方**を呼ぶ(上記コード参照)。呼び出し順序は`planConfirmed()`→`handlePlanStateChanged()`で固定し、互いの戻り値・副作用に依存しない独立した処理として扱う(どちらを先に呼んでも結果は変わらないことを実装時に確認すること。§11に追加)。
+
+**3. `load()`・`planConfirmed()`・その他すべてのFetch起動箇所の統一**: 既存コードには2か所のFetch起動がある。
+
+- `load()`(既存210-219行目): `Task { await fetch() }` を**無条件**に実行(`isFetching`を見ない)。
+- `planConfirmed()`(既存235-258行目): `if !isFetching { Task { await fetch() } }`。
+
+いずれも`startFetchIfNeeded()`(§4.3新設)に置き換える。
+
+```swift
+func load() {
+    if case .loaded = state {
+        // 表示を残したまま更新する。
+    } else if let snapshot = cacheStore.load(for: cacheContext()) {
+        applyCache(snapshot)
+    } else {
+        state = .loading
+    }
+    startFetchIfNeeded()   // (変更) Task { await fetch() } の直接呼び出しを廃止
+}
+
+private func planConfirmed() {
+    guard let userID, let plan = planStore.confirmedPlan else { return }
+    let discarded = cacheStore.discardIfPlanDiffers(confirmedPlan: plan, userID: userID)
+    if discarded {
+        guard isShowingCache else { return }
+        displayedCacheSavedAt = nil
+        refreshNotice = nil
+        state = .loading
+        if !hasFreshFavorites { favoriteItems = [] }
+        startFetchIfNeeded()   // (変更) if !isFetching { Task { await fetch() } } を廃止。
+                                //        startFetchIfNeeded()自身がisFetchingを見るため、
+                                //        外側のif !isFetchingは不要になった。
+        return
+    }
+    switch state {
+    case .loading, .error:
+        if let snapshot = cacheStore.load(for: cacheContext()) {
+            applyCache(snapshot, refreshFailed: lastFetchFailed && !isFetching)
+        }
+    case .loaded, .backendNotConfigured: break
+    }
+}
+```
+
+これにより、Fetchを起動する箇所は`load()`・`planConfirmed()`(上記)・`handlePlanStateChanged()`(§4.3)・`scheduleWaitForPlanConfirmation()`(§4.2.1、確定済みの場合)の4か所すべてが`startFetchIfNeeded()`を経由することになり、`isFetching`のガードが一元化される。
+
+**4. `startFetchIfNeeded()`と`fetch()`の責務の明確化**: §4.3で新設する`startFetchIfNeeded()`が`isFetching`の**設定**(`Task`生成**前**に同期的に`true`にする)を担い、`fetch()`の`defer`が**解除**(`false`に戻す)と`shouldChainNext`によるチェイン起動を担う。`fetch()`自身は`isFetching`を**セットしない**(既存コード269-271行目の`isFetching = true` / `defer { isFetching = false }`はこの設計変更により`startFetchIfNeeded()`側に移動する)。この分離により、「誰が`true`にして誰が`false`に戻すか」が1か所の関数ペアに限定され、二重Fetch・誤解除のいずれも構造的に防止される(`fetch()`を直接呼ぶ経路が無くなるため)。
+
+**5. Combine初回通知による`init`直後のFetchと、`load()`による重複Fetchの防止**: `@Published`の`$`投影は購読開始時点の**現在値を即座に1回emitする**。`init`内で`planStore.$state`を購読した瞬間、仮に`planStore`が既に`.confirmed`であれば、`planConfirmed()`・`handlePlanStateChanged()`が`init`の直後(購読設定時点)に1回実行される可能性がある。これと、`HomeView.swift:70`の`.task { viewModel.load() }`によるFetch起動が競合しないことを以下のとおり説明する。
+
+- `handlePlanStateChanged()`が`startFetchIfNeeded()`を呼んだ場合: `isFetching`が同期的に`true`になる。その直後(または直前)に`load()`から`startFetchIfNeeded()`が呼ばれても、`isFetching == true`のguardで即座に無視される。どちらが先でも、実際に走るFetchは最大1回。
+- `planConfirmed()`が(`discarded`経由で)`startFetchIfNeeded()`を呼んだ場合も同様。
+- `load()`が先に`startFetchIfNeeded()`を呼んだ場合も、後から来るCombine初回通知の`startFetchIfNeeded()`呼び出しは同じ`isFetching`ガードで無視される。
+
+`startFetchIfNeeded()`の`isFetching`ガードが**唯一の排他制御**であり、呼び出し順序(`init`の購読設定とSwiftUIの`.task`起動のどちらが先か)に依存しない。
+
+**6. `confirmedPlan`と`set(plan:limits:confirmed:)`の既存API互換性**: §1.2で`confirmedPlan`(strict、`.confirmed`のときのみ非nil)と`set(plan:limits:confirmed:userID:)`(テスト・プレビュー専用ヘルパー、既存のシグネチャに`userID`パラメータを追加しただけで既存の呼び出し(`userID`省略)もそのままコンパイルが通る)を再設計・復元済み。`HomeViewModel.planConfirmed()`・`cacheContext()`・`HomeCacheStore`(`HomeCacheContext.confirmedPlan`・`discardIfPlanDiffers(confirmedPlan:)`)はいずれも変更なしでそのまま動作する。
+
+**7. 既存の利用箇所とテストの移行対象の一覧化**: §11「実装時の確認事項」に移行表を追加した(P2-4の調査結果と合わせて1つの表にまとめた)。
+
 ### 4.3 遅延した古い通知Taskへの対策(★HQ指定の明記事項①)
 
 ```swift
 private func handlePlanStateChanged(_ state: PlanStore.State) {
-    guard authenticatedUserProvider.currentUserID == userID else { return }
+    // (今回・P2-4対応) §4.2・§4.2.1と同じ既定(authenticatedUserProviderがnilなら常に通過)。
+    // (今回・P3-2対応) このguardもfetch()冒頭と同じ理由で診断は記録しない(PlanStoreの状態変化
+    // 通知を受け取っただけで、何かを破棄したわけではない)。ただしこのインスタンスが既に無関係と
+    // 判明した場合は、残っている待機・タイムアウトTaskを片付ける(古いインスタンスが
+    // 後からタイムアウト診断を出すことを防ぐ)。
+    guard (authenticatedUserProvider.map { $0.currentUserID == userID } ?? true) else {
+        cancelPlanConfirmationWait()
+        return
+    }
     guard case .confirmed(let context) = state, context.userID == userID else { return }
     guard context.generation > (lastFetchedGeneration ?? Int.min) else { return }
     pendingGeneration = max(pendingGeneration ?? Int.min, context.generation)   // 後退させない
@@ -558,6 +843,10 @@ private func startFetchIfNeeded() {
 **明記事項①**: `handlePlanStateChanged`の引数`state`は、`pendingGeneration`を更新するかどうかの判断にのみ使用し、**`fetch()`に渡すことは一切しない**。`startFetchIfNeeded()`は引数を取らず、単なる起動トリガーである。`fetch()`は常に**実行時点でライブに`planStore.confirmedContext`を読み直す**ため、どの通知Task(新しいgenerationのものでも古いgenerationのものでも)が実際に`startFetchIfNeeded()`を呼び出すに至っても、実際にネットワーク取得に使われる文脈は常に最新のものになる。この構造により、Combineの`.sink`→`Task { @MainActor in }`という既存パターン(`HomeViewModel.swift:190-194`)が持つ配信順序の不確実性(gen6とgen7の通知Taskが逆順に実行される可能性)があっても、古いgenerationでfetchが実際に開始される経路は構造的に存在しない。
 
 `pendingGeneration`の更新を`max()`で後退させないようにしているのは、gen7の通知Task→gen6の通知Taskという逆順実行があった場合に、`pendingGeneration`がgen7からgen6へ後退し、`lastFetchedGeneration`が最終的にgen7になった後も`pendingGeneration(6)`が永久に古いまま残って不要な再取得を無限に繰り返す、という不具合を防ぐためである。
+
+**(今回・P3-1対応)`.userChanged`診断が記録される経路の正確な整理**: `.userChanged`(§4.5のC-1)が記録されるのは、**§4.2の`fetch()`のdo節内、レスポンス受信後の判定(`if liveUserID != requestSnapshot.userID { DiagnosticsStore.shared.recordHomeFetchDiscarded(reason: .userChanged) }`)1か所のみ**である。これより前にある2つの送信前guard — `fetch()`冒頭の`authenticatedUserProvider`一致確認、`handlePlanStateChanged()`冒頭の同じ確認 — のいずれも、診断を記録せずに`return`する(各ガードのコード中コメント参照)。これらは「取得済みのレスポンスを破棄した」イベントではなく「そもそも取得を試みなかった/通知を処理しなかった」イベントであるため、`.userChanged`という「破棄」を意味する診断と意味合いが異なり、意図的に記録していない。以前の記載(§4.2.1「不一致時の動作の整理」表の脚注)にあった「`.userChanged`としての記録はfetch()側に委ねる」という表現は、どちらの経路を指すか曖昧だったため、上記のとおり1か所に限定して明確化した。
+
+**(今回・P3-2対応)残存する待機・タイムアウトTaskの整理**: `fetch()`冒頭・`handlePlanStateChanged()`冒頭のいずれの一致確認guardも、不一致の場合に`cancelPlanConfirmationWait()`を呼ぶように修正した(§4.2・本節のコード参照。修正前はいずれも単に`return`するだけで、待機状態を片付けていなかった)。これにより、ユーザー切替・ログアウト後に取り残された古いインスタンスに待機中のタイムアウトTaskが残っていた場合でも、これらのguardのいずれかを一度でも通過すれば片付く。**残存リスクとして明記する点**: 古いインスタンスがこれらのguardを一度も通過しないまま放置される経路(例: Combine購読が解放され`handlePlanStateChanged`が一切呼ばれなくなり、かつ`fetch()`も二度と呼ばれない場合)では、タイムアウトTask自体は`Task.sleep`の経過後に自然に完了し`recordPlanConfirmationTimedOut()`を1回記録して終わるため、**無限に残り続けることは無い**(タイムアウトTaskは`self`を弱参照で捕捉しているため、インスタンス自体の解放も妨げない)。この1回分の「古いインスタンスによるタイムアウト診断」が診断ログに混入する可能性は残るが、実害(誤ったデータの採用・無限リソース保持)は無いため、これ以上の対策(例: `deinit`での明示的キャンセル)は本設計の範囲では追加しない(§11に残存事項として記載)。
 
 ### 4.4 generation逆行時の`.unexpectedState`処理(★HQ指定の明記事項②)
 
@@ -592,10 +881,13 @@ private func startFetchIfNeeded() {
 ## §5 HomeCacheStoreの保存・破棄条件
 
 - 単一UserDefaultsキー(`HomeCacheStore.swift:48`)に1件だけ保存。ユーザーごとに別キーを持つ設計ではない。
-- `load(for:)`は`snapshot.userID == context.userID`等を確認し、不一致・形式不一致なら`clear()`して`nil`を返す(61-78行目)。
-- `save()`/`saveFavorites()`/`discardIfPlanDiffers()`は呼び出し時の`userID`を**検証しない**。安全性は呼び出し元(`fetch()`のケースA限定での呼び出し)のみに依存する。
+- `load(for:)`(61-78行目)は`context.userID`がnilなら即`nil`を返し(キャッシュを出さない)、非nilの場合は`snapshot.userID == userID`・`formatVersion`・`date`・`timezone`の一致を確認、不一致なら`clear()`して`nil`を返す。さらに`context.confirmedPlan`がnilなら(未確認)出さずに`nil`を返し(`clear()`はしない)、プランが一致しなければ`clear()`して`nil`を返す。
+- **(今回・P3-4対応、実コードとの照合により訂正)** `save()`/`saveFavorites()`/`discardIfPlanDiffers()`は**それぞれ異なる**userID検証を行う。一律に「検証しない」とした以前の記載は不正確だったため訂正する。
+  - **`save()`(82-98行目)**: 呼び出し時の`userID`引数を**検証せず、そのまま信じて書き込む**(渡された値が本当に現在のユーザーのものかは確認しない)。既存の`previous?.userID == userID`比較は、お気に入りを引き継ぐかどうかの判定にのみ使われ、安全性の検証ではない。安全性は、呼び出し元(`fetch()`のケースA限定、§4.2)が正しい`userID`を渡すことに完全に依存する。
+  - **`saveFavorites()`(101-105行目)**: `guard var snapshot = stored(), snapshot.userID == userID else { return }` — **保存済みスナップショットのuserIDと引数のuserIDが一致する場合のみ**更新する。不一致なら何もしない(他ユーザーのキャッシュを上書きしない、という検証が既にある)。
+  - **`discardIfPlanDiffers()`(109-126行目)**: `guard let userID, snapshot.userID == userID else { clear(); return true }` — **userIDがnil、またはスナップショットのuserIDと不一致なら、キャッシュ全体を`clear()`する**(破棄したことを示す`true`を返す)。これも既存の検証である。
 - `AppState.leaveLoggedIn()`が`homeCache.clear()`を同期的に呼ぶため、ログアウトの瞬間にキャッシュは確実に消去される(35-40行目)。
-- **残存リスク**: `HomeCacheStore`自身に検証を追加しない方針(§10参照)。`fetch()`側のケース判定にバグが入ると、`HomeCacheStore`はそれを検知できない。
+- **残存リスク(訂正版)**: `save()`のみ、呼び出し時の`userID`引数自体の正しさを検証しない。`fetch()`側のケース判定(§4.2)にバグが入り、誤った`userID`を`save()`に渡してしまうと、`HomeCacheStore`側ではそれを検知できない。一方`saveFavorites()`・`discardIfPlanDiffers()`は既存のガードにより、他ユーザーのキャッシュを誤って書き換える・古いプランのキャッシュを誤って残す、という事態はある程度自己防御されている。
 
 ---
 
@@ -616,6 +908,8 @@ private func startFetchIfNeeded() {
 | `recordHomeFetchDiscarded(reason:)` | `HomeViewModel.fetch()`が`.userChanged`/`.planUnconfirmed`/`.unexpectedState`のいずれかで破棄した時 |
 | `recordPlanConfirmationWaitStarted()` / `recordPlanConfirmationTimedOut()` | 待機(10秒タイムアウト)の開始・タイムアウト時 |
 | `recordRetryEntitlementsNotConfirmed(result:)` | `retryNow()`のEntitlements取得が`.confirmed`以外で終わった時 |
+
+**(今回・追加確認1対応)実装方法とテスト読み取り手段について**: `DiagnosticsStore.swift`(2026-11-16確認)を実際に読んだ結果、現行の`DiagnosticsStore`には上記の新規メソッドに対応する汎用カウンタ機構は**存在しない**(`LaunchDiagnostics`は起動シーケンス計測専用の個別フィールドのみを持ち、`beginHomeRequest()`等の既存メソッドもすべて専用フィールドへの個別代入である)。したがって上記4メソッドを実装する際は、既存パターンと同じ要領で**`LaunchDiagnostics`に対応する専用フィールド(カウンタ)を追加し、各メソッド内でそのフィールドを更新する**こと。`current`プロパティは`@Published private(set)`として既に外部から読み取り可能(起動診断画面が読むため)なので、テストは`DiagnosticsStore.shared.current.<新設フィールド>`を直接読むだけで検証でき、**テストのためだけの新規APIを追加する必要は無い**(§8テスト29〜32の間接検証はこの前提で成立する)。新設フィールドの命名・型は実装時に`LaunchDiagnostics`の既存命名規則に合わせて決定すること。
 
 ---
 
@@ -654,9 +948,31 @@ private func startFetchIfNeeded() {
 26. **(今回・generation初回更新)** 初回起動(`confirmedUserID == nil`からの初回確定)で、`load()`呼び出し**前**の`generation`の値を記録し、`load()`成功後の`generation`がその値から**ちょうど1増えている**ことを検証する(修正前は2増えていた)。
 27. **(今回・generation初回更新、具体化)** 次の3時点で`generation`の値を記録し、比較する: (a) ユーザーAとして確定済みの状態での`generation`の値、(b) `reset()`呼び出し**直後**(ログアウト、`state`が`.unconfirmed`になった時点)の`generation`の値、(c) 再ログイン後の`load()`成功(再確定)時点の`generation`の値。期待する関係: `(b) == (a) + 1`(`reset()`自身の規則5による1回の加算)、`(c) == (b) + 1`(再確定の`commit()`規則1による1回の加算)。すなわち合計では(a)から(c)まで2回進むが、**それぞれ別の操作(`reset()`と再確定)による、それぞれ1回ずつの加算**であり、どちらか一方の操作だけで2回進むことはないことを検証する。
 28. **(今回・再具体化)** ユーザーAとして確定済みの状態から`reset()`を呼ばずに直接ユーザーBの`userID`で`load()`を呼ぶ。「通信完了前にstateが`.unconfirmed`になっている」ことを**確実に(タイミング依存のない形で)**検証するため、次の手順で通信待ち状態を明示的に作る: (i) `EntitlementsService`/`APIClient`のモックを、応答を即座に返さず`CheckedContinuation`(または同等の、テストコードが明示的に`resume`するまで`await`が完了しない仕組み)で保留する実装にする、(ii) `load()`をTaskとして開始する(`await`しない)、(iii) モックが実際に呼ばれ`await`で保留された時点(継続が保持されたことをテスト側で確認できた時点)で、`planStore.state`が`.unconfirmed`であることを検証する — この時点では通信はまだ完了していないことが、モックの継続が未解決であることによって**構造的に保証**されている(実行タイミングの偶然に依存しない)、(iv) `load()`呼び出し**前**に記録しておいた`generation`の値を保持しておく、(v) 継続を`resume`してモック応答を返し、`load()`の完了を`await`する、(vi) 完了後の`generation`が(iv)の値から**ちょうど1増えている**ことを検証する(修正前は2増えていた)。
-29. **(今回、具体化・前提条件を明記)** 次の前提状態を用意する: `isWaitingForPlanConfirmation == true`(既に待機中)かつ`planConfirmationTimeoutTask`が非nil(タイムアウトTaskが動いている)、かつ`authenticatedUserProvider.currentUserID == userID`(対象ユーザーと認証ユーザーが一致)、かつ`planStore.confirmedContext`が**既に確定済み(非nil)でそのuserIDも`userID`と一致**。この状態で`scheduleWaitForPlanConfirmation()`を呼び、次を検証する: (a) `isWaitingForPlanConfirmation`が`false`に戻る、(b) `planConfirmationTimeoutTask`が`nil`に戻り、元のタイムアウトTaskがキャンセルされる、(c) `startFetchIfNeeded()`が呼ばれ、`isFetching`が`true`になる(Fetchが開始される)。修正前の実装では、待機中チェックが確定状態の確認より先にあったため、(a)(b)(c)のいずれも発生しなかった(呼び出しが即座に無視されていた)。
-30. **(今回追加)** テスト29と同じ待機中の前提に加え、`authenticatedUserProvider.currentUserID`が`userID`と**一致しない**状態(例: ログアウト・アカウント切替後に取り残されたインスタンス)を用意する。この状態で`scheduleWaitForPlanConfirmation()`を呼び、次を検証する: (a) `isWaitingForPlanConfirmation`が`false`に戻る、(b) タイムアウトTaskがキャンセルされる、(c) `startFetchIfNeeded()`は呼ばれず、`isFetching`は`false`のままである(誤ったFetchが開始されない)。
-31. **(今回追加)** `authenticatedUserProvider.currentUserID == userID`だが、`planStore.confirmedContext`が非nilでそのuserIDが`userID`と**一致しない**状態を用意する(通常は起こらない防御的ケース)。この状態で`scheduleWaitForPlanConfirmation()`を呼び、次を検証する: (a) `DiagnosticsStore.recordHomeFetchDiscarded(reason: .unexpectedState)`が記録される、(b) 待機があれば解除される、(c) `startFetchIfNeeded()`は呼ばれず、新たな待機も開始されない。
+29〜31(P2-2・P2-3対応により全面再設計)。
+
+**private状態の検証方法の選択(P2-2対応)**: `isWaitingForPlanConfirmation`・`planConfirmationTimeoutTask`はいずれも`private`であり、`commit()`の規則6(§1.2.1)と同じ理由で、`@testable import`でも外部から直接読めない。3つの方法を比較する。
+
+| 方法 | 内容 | 採否 | 理由 |
+|---|---|---|---|
+| (a) internal観測口 | `private`を`private(set)`付きの`internal`等に緩和し、テストから直接読む | **不採用** | HQ指示「テストのためだけに不必要な本番APIを公開しない」に反する。これら2つのプロパティを外部に見せる実用上の理由(本番コードの他の場所からの参照)が無い |
+| (b) テスト用依存注入 | 待機・タイムアウトの仕組みそのものを差し替え可能にする | **部分的に採用** | §4.2.1で追加した`sleep: (Duration) async throws -> Void`の注入(P2-3のタイムアウト競合対策のために必要となったDI)を、ここでも**決定性の確保のためだけに**流用する。新たな抽象(待機機構そのものの差し替え)を追加するのは過剰(不要な設計変更)と判断し、既存のDIパターン(`now: () -> Date`と同列)の自然な拡張にとどめる |
+| (c) モックによる間接検証 | `private`な内部状態を一切読まず、外部から観測可能な副作用(`startFetchIfNeeded()`が実際にFetchを起動したかどうか=`APIClient`モックへの呼び出し回数、および診断記録)だけで判定する | **主採用** | 本番APIを一切追加・緩和しない。「待機が既にあるかどうか」は`recordPlanConfirmationWaitStarted()`の呼び出し回数(1回のまま増えない=重複防止が効いている)、「Fetchが開始されたか」は`APIClient`モックの呼び出し回数、で代替できる |
+
+**前提として確認が必要な事項(未検証、§11に追加)**: 上記(c)が成立するには、`DiagnosticsStore`側がテストから呼び出し回数を検証できる手段(内部カウンタの直接参照、またはテスト用のリセット・読み取りメソッド)を既に持っているか、少なくとも`internal`アクセスレベルで公開されている必要がある。本資料の範囲では`DiagnosticsStore.swift`の該当箇所を未読のため、これを前提として断定することはできない。**実装時に`DiagnosticsStore`の既存の読み取り手段を確認し、無ければ「このテストのためだけの新規API」を追加するのではなく、既存の診断カウンタ公開方針(起動診断画面が読む仕組みと同じもの)に沿って対応すること。**
+
+以上の方針に基づき、テスト29〜31を次のように再設計する。
+
+29. **(今回・再設計)** 前提: `planStore.confirmedContext`が未確定(nil)の状態から`scheduleWaitForPlanConfirmation()`を1回呼ぶ(待機開始)。続けて、まだ確定しないまま`scheduleWaitForPlanConfirmation()`を**再度**呼ぶ(重複呼び出し)。検証: `recordPlanConfirmationWaitStarted()`の呼び出し回数が**1回のまま**であること(2回目の呼び出しで新たな待機が作られていないことを、呼び出し回数という外部から観測可能な副作用で確認する。§4.2.1④のguardが正しく機能していることの間接証拠)。
+30. **(今回・再設計、旧テスト29相当)** 前提: `scheduleWaitForPlanConfirmation()`を呼んで待機を開始させた後、`planStore.set(plan:, limits:, confirmed: true, userID: userID)`で確定させる(`PlanStore.confirmedContext`が対象`userID`と一致する状態になる)。この状態で`scheduleWaitForPlanConfirmation()`を再度呼ぶ。検証: (a) `recordPlanConfirmationTimedOut()`が記録**されない**こと(= 元のタイムアウトTaskが正しくキャンセルされ、無駄なタイムアウト処理が走らなかったことの間接証拠。検証のため、注入した`sleep`は実時間より十分長く設定し、テスト自体はタイムアウトを待たずに完了させる)、(b) `APIClient`モック(または`HomePrefetchCoordinator`経由)への`/home`相当の呼び出しが1回発生すること(`startFetchIfNeeded()`が呼ばれ、実際にFetchが開始されたことの間接証拠)。
+31. **(今回・再設計、旧テスト30+31相当)** 前提: `scheduleWaitForPlanConfirmation()`を呼んで待機を開始させた状態で、(i) 対象ユーザーが変わった場合(`authenticatedUserProvider`に対象と異なる`currentUserID`を返すモックを明示的に渡す)、(ii) `planStore.confirmedContext`のuserIDが対象userIDと食い違う場合、の2パターンそれぞれで`scheduleWaitForPlanConfirmation()`を再度呼ぶ。検証: いずれのパターンでも、(a) `APIClient`モックへの呼び出しが発生しない(誤ったFetchが開始されない)こと、(b) (ii)のパターンでは`recordHomeFetchDiscarded(reason: .unexpectedState)`が記録されること。
+
+**P2-3対応・タイムアウトTaskのキャンセル競合テスト(新規、32番として追加)**:
+
+32. **(今回・P2-3対応、新規)** 注入した`sleep`を、テストコードが明示的に`resume`するまで完了しない`CheckedContinuation`で実装し(テスト28と同じ手法)、次の手順でキャンセル競合を再現する: (i) 1回目の`scheduleWaitForPlanConfirmation()`を呼ぶ(待機#1開始、タイムアウトTask#1がsleep#1で保留される)、(ii) `planStore`を対象userIDで確定させ、`scheduleWaitForPlanConfirmation()`を再度呼ぶ(§4.2.1②の経路、`cancelPlanConfirmationWait()`によりTask#1に`.cancel()`が呼ばれるが、`try?`がこれを握り潰すため、sleep#1が**まだresumeされていない**時点ではTask#1はまだ`guard !Task.isCancelled`の行に到達していない)、(iii) `startFetchIfNeeded()`経由のFetchが1回開始されたことを確認後、ただちにもう一度未確定状態に戻し`scheduleWaitForPlanConfirmation()`を呼ぶ(待機#2開始、タイムアウトTask#2がsleep#2で保留される)、(iv) ここでsleep#1を`resume`する(Task#1の`try? await self?.sleep(...)`が完了し、`guard !Task.isCancelled`の行に到達する)。検証: Task#1は`.cancel()`されているため`Task.isCancelled`が`true`になっており、`guard !Task.isCancelled else { return }`で**即座にreturnし、待機#2の状態(`isWaitingForPlanConfirmation`・`planConfirmationTimeoutTask`)を一切変更しない**ことを、`recordPlanConfirmationTimedOut()`が**記録されない**こと(Task#1は`isWaitingForPlanConfirmation = false`等の副作用に到達しないため)、かつ(v) その後sleep#2も`resume`し、待機#2のタイムアウト処理が正常に完了し`recordPlanConfirmationTimedOut()`が記録されることを確認し、待機#2自体は正しく機能していることを示す。
+
+**P2-4対応・`userID == nil`のテスト(新規、33番として追加)**:
+
+33. **(今回・P2-4対応、新規)** `HomeViewModel(apiClient:)`(`userID`省略、既存の`HomeViewModelTests`・`HomeSpeechesStatusTests`と同じ構成)で`load()`を呼ぶ。検証: (a) `planStore`の確定状態に関わらず(未確定のままでも)`fetch()`が`scheduleWaitForPlanConfirmation()`を呼ばずに直ちに`apiClient.send(endpoint)`を実行し、`state`が`.loaded(...)`になること(既存コードと同じ挙動が維持されていることの確認。§4.2.3参照)、(b) `cacheStore.save()`が呼ばれない(`userID`が無いため)こと、(c) 既存の`HomeViewModelTests`・`HomeSpeechesStatusTests`がこの変更後も無修正で成立すること(§11のテスト移行表参照)。
 
 ---
 
@@ -664,17 +980,19 @@ private func startFetchIfNeeded() {
 
 | ファイル | 変更内容 |
 |---|---|
-| `PlanStore.swift` | `State`/`PlanContext`/`LoadResult`の追加、`load()`/`reset()`の刷新、`AuthenticatedUserProviding`の定義 |
+| `PlanStore.swift` | `State`(`.unconfirmed(lastKnown:)`への変更、P1-1対応)/`PlanContext`/`LoadResult`の追加、`load()`/`reset()`/`set()`/`confirmedPlan`の刷新、`AuthenticatedUserProviding`の定義 |
 | `HomePrefetchCoordinator.swift` | `Prefetch.contextAtDispatch`への変更、`start()`/`consumeHome()`のシグネチャ更新 |
-| `HomeViewModel.swift` | `pendingGeneration`/`lastFetchedGeneration`/`isRefreshingEntitlements`の追加、`fetch()`/`handlePlanStateChanged()`/`startFetchIfNeeded()`/`retryNow()`/`scheduleWaitForPlanConfirmation()`の刷新 |
+| `HomeViewModel.swift` | `authenticatedUserProvider`(Optional)/`sleep`(P2-2・P2-3対応のDI)/`pendingGeneration`/`lastFetchedGeneration`/`isRefreshingEntitlements`の追加、`init`内のCombine購読を`$isConfirmed.combineLatest($plan)`から`$state`へ変更(P1-1対応・§4.2.3)、`fetch()`(`applyFetchSuccess`/`applyFetchFailure`への分割含む)/`load()`/`planConfirmed()`/`handlePlanStateChanged()`/`startFetchIfNeeded()`/`retryNow()`/`scheduleWaitForPlanConfirmation()`の刷新 |
 | `SubscriptionManagementViewModel.swift` | `authenticatedUserProvider`の受け取り、`sync()`内のuserID取得・診断分離(`try?`での握り潰しを廃止) |
 | `AppState.swift` | `extension AppState: AuthenticatedUserProviding {}`の追加のみ |
 | `RootView.swift` | `PlanStore.shared.load(...)`・`MainTabView`生成に`authenticatedUserProvider: appState`を追加 |
 | `MainTabView.swift`・`HomeView.swift` | `authenticatedUserProvider`の配線(`HomeViewModel`まで伝搬) |
 | `PlaceholderScreenView.swift`・`PlanLimitPrompt.swift`・`SubscriptionManagementView.swift` | `authenticatedUserProvider`配線(`SubscriptionManagementView`の生成箇所2か所) |
-| `DiagnosticsStore.swift` | §7の記録メソッド追加 |
-| `PlanStoreTests.swift` | `testLoadWithoutAUserIDBehavesAsBefore()`の期待値反転(`.userMismatchOrUnknown`を返し確定しない。§8テスト19の副作用検証を追加)。`limits: nil`を使う既存モック4件(前回確認済み)の見直し。§1.2.3の副作用テスト(§8テスト19/19-2/19-3)の新規追加 |
-| `HomeCacheTests.swift` | `authenticatedUserProvider`パラメータへの対応 |
+| `DiagnosticsStore.swift` | §7の記録メソッド追加。P2-2対応のテスト用カウンタ読み取り手段の有無を実装時に確認(無ければ既存方針に沿って追加、§11参照) |
+| `PlanStoreTests.swift` | `testLoadWithoutAUserIDBehavesAsBefore()`の期待値反転(`.userMismatchOrUnknown`を返し確定しない。§8テスト19の副作用検証を追加)。`limits: nil`を使う既存モック4件(前回確認済み)の見直し。§1.2.3の副作用テスト(§8テスト19/19-2/19-3)の新規追加。79-85行目の`set(plan:, limits:, confirmed: false)`呼び出しは`State.unconfirmed(lastKnown:)`化後もシグネチャ変更無しでそのまま動作することを確認(§1.2・P2-4対応) |
+| `HomeCacheTests.swift` | `makeViewModel`ヘルパー(549-558行目)が`plan`省略時に生成する`PlanStore()`への`set(plan:, limits:)`呼び出しに、ヘルパー自身の`userID`パラメータをそのまま渡すよう変更(P1-1・P2-4対応、§11のテスト移行表参照。現状は`userID`を渡していないため、本設計の`fetch()`の新しいuserID一致guardにより`.confirmed`と判定されず、既存テストが新たに失敗する) |
+| `HomeViewModelTests.swift`・`HomeSpeechesStatusTests.swift` | （P2-4対応）`userID`を渡さない既存の構成(`HomeViewModel(apiClient:)`)は、§4.2.3の`userID == nil`早期分岐によりコード変更不要で成立する見込み。テスト33(§8)で回帰を確認すること |
+| `CalendarViewModelTests.swift`・`EventDetailViewTests.swift` | (P2-4調査・変更不要の見込み)`PlanStore()`/`PlanStore.shared`を`HomeViewModel`と組み合わせずに直接読む構成のため、`set()`のシグネチャ・既定値変更の影響を受けない(§11のテスト移行表参照) |
 
 ---
 
@@ -690,6 +1008,10 @@ private func startFetchIfNeeded() {
 - `retryNow()`が`entitlementsRequestSequence`の競合で敗れた場合、ユーザーの明示操作の直接的な結果としては何も起きないことがある(勝った側の確定を`handlePlanStateChanged`が検知してHome取得につながるため、データの正しさは保たれるが、即時性に非対称なタイミングが生じうる)。
 - (§1.3)同一ユーザーのEntitlements再確認(特に購入・復元直後)が進行中にHome取得が完了すると、再確認完了までの短い時間窓で古いプランの内容が一瞬表示・キャッシュされる可能性がある(選択肢I採用時の既知の残存特性。選択肢IIを採用する場合はこのリスクは軽減されるが、新たな競合状態の検証コストが増える)。
 - (§4.6)案2(Prefetch開始タイミング変更)・案3(Backend側の計算文脈エコー)はいずれも、本資料の範囲では具体的な実測・Backend設計を行っていない。採用判断後、別途の実測・設計作業が必要になる。
+- **(今回・P3対応)** §4.2の`fetch()`は、既存コード(`HomeViewModel.swift`269-330行目)の副作用(診断記録・`recentSpeeches`/`speechesStatus`/`freshDataVersion`/`lastFreshAt`/`displayedCacheSavedAt`/`refreshNotice`/`lastFetchFailed`の更新、`.backendNotConfigured`分岐)を**すべて引き継いでいる**ことを§4.2で確認済み(`applyFetchSuccess`/`applyFetchFailure`への切り出しとして明示)。実装時は、この資料のコード例ではなく実際の`HomeViewModel.swift`の該当範囲を直接見比べ、見落としが無いことを再確認すること。
+- **(今回・P3対応)** `retryNow()`に、このインスタンス自身の`userID`と`authenticatedUserProvider`のライブな値との一致確認を追加した(§4.2.1)。修正前は`authenticatedUserProvider.currentUserID`を直接使っており、取り残された古いインスタンスの「再試行」が別ユーザーのEntitlementsを取得しうる経路があった。
+- **(今回・P1-1対応)** `init`内のCombine購読を`$isConfirmed.combineLatest($plan)`から`$state`に変更し、`planConfirmed()`・`handlePlanStateChanged()`を同じ購読から呼ぶ(§4.2.3)。この2つの呼び出し順序(`planConfirmed()`→`handlePlanStateChanged()`)に実際の依存関係が無いことは設計上の意図だが、実装時に単体テストで両方の呼び出し順を入れ替えても結果が変わらないことを明示的に確認すること(§11に追加)。
+- **(今回・P2-2/P2-3対応)** `sleep: (Duration) async throws -> Void`のDIを追加した。本番の既定値(`{ try await Task.sleep(for: $0) }`)がキャンセル伝播を含めて実際の`Task.sleep`と同じ挙動であることを実装時に確認すること。
 
 ---
 
@@ -714,6 +1036,7 @@ private func startFetchIfNeeded() {
 | `AuthenticatedUserProviding`を`@MainActor protocol`として宣言すること自体は設計上の必須条件として確定したが、実際にSwift 5モード(`project.yml`の`SWIFT_VERSION: "5.0"`)でコンパイルが通ることの実証確認は未検証 | §1.2 |
 | 案2(Prefetch開始タイミング変更)採用時の、Splash起動シーケンス全体・既存の起動診断(`DiagnosticsStore`)への具体的な影響 | §4.6 |
 | `/entitlements`・`/home`それぞれの実測時間、および両者を並行させられる余地 | §4.6 |
+| **(今回・P3対応)** HQから伝えられたC独立レビューのP3-1〜P3-5の具体的な指摘文は、今回の指示文には含まれていなかった(「起動診断、エラー分岐、キャッシュ処理、`retryNow()`のユーザー整合性も確認してください」という一般的な領域の指定のみ)。今回はこの4領域を本資料の既存コード突き合わせにより見直し、判明した差分(`.backendNotConfigured`分岐の復元・既存副作用の全量反映・`retryNow()`のユーザー整合性追加)をP3対応として§4.2・§4.2.1・§10に反映した。**C-1〜C-5の原文と一致するかどうかは確認できていない。** 原文がこの4領域以外の指摘を含む場合、今回の修正はそれを反映していない可能性がある。原文の共有、または一致確認をHQに依頼する。 | §4.2・§4.2.1・§10 |
 
 ### 実装時の確認事項
 
@@ -727,3 +1050,17 @@ private func startFetchIfNeeded() {
 | `@MainActor protocol AuthenticatedUserProviding`が実際にSwift 5モードでコンパイルされることを、実装着手時に最初に確認すること(通らない場合は設計の見直しが必要) | §1.2 |
 | `commit()`の規則6は`private`のため`PlanStore.swift`外部から単体テストで直接検証する手段が無く(`@testable import`でも`private`は緩和されない)、かつ`load()`経由では到達しない。今回はこれを認識した上で、アクセスレベル変更等の設計変更は行わず、コードレビューによる目視確認に依存する限界として受け入れる(§1.2.1参照) | §1.2.1 |
 | `scheduleWaitForPlanConfirmation()`に追加したユーザー整合性チェック(§4.2.1)は、現状`fetch()`からのみ呼ばれるため動作上の変化は無いが、実装時に`fetch()`側のguard順序を変更する場合は、この関数側の判定もあわせて見直すこと | §4.2.1 |
+| **(今回・P1-1対応)** `init`内の`$state`購読から呼ぶ`planConfirmed()`・`handlePlanStateChanged()`の呼び出し順序を入れ替えても結果が変わらないことを、実装時に単体テストで確認すること | §4.2.3・§10 |
+| **(今回・P1-1/P2-4対応、テスト移行の一覧)** 既存の利用箇所・テストのうち、本設計の変更により**実際に手を入れる必要があるもの**を一覧化する。詳細は各セルの参照先。 | 下表 |
+
+**テスト・利用箇所の移行対象一覧(P1-1 7.・P2-4対応)**
+
+| ファイル・箇所 | 現状の呼び出し | 本設計での影響 | 必要な変更 |
+|---|---|---|---|
+| `HomeViewModelTests.swift:67` | `HomeViewModel(apiClient: apiClient)`(`userID`省略) | §4.2.3の`userID == nil`早期分岐により、プラン確定状態を見ずに既存同様Fetchする | **変更不要の見込み**(テスト33で回帰確認) |
+| `HomeSpeechesStatusTests.swift:97` | 同上 | 同上 | **変更不要の見込み** |
+| `CalendarViewModelTests.swift`(12-14, 76-77, 86-87, 95-96行目) | `PlanStore()` + `.set(plan:, limits:)`(`userID`省略、`HomeViewModel`と組み合わせない) | `set()`のシグネチャに`userID: UUID? = nil`を追加しただけで、既存の呼び出し(位置引数・省略)はそのままコンパイルが通る。`CalendarViewModel`は`.limits`/`.isPro`等のベストエフォート値のみを読むため、ダミーUUIDの影響を受けない | **変更不要の見込み** |
+| `EventDetailViewTests.swift`(setUp・6, 11-13, 21-22, 27, 32, 39行目) | `PlanStore.shared.reset()` / `.set(plan:, limits:, confirmed: false)`(`userID`省略) | `EventDetailView`は`confirmedUserID`を見ないため、ダミーUUIDの影響を受けない。`reset()`の`lastKnown: nil`化もこのテストの想定(未確定化)と整合する | **変更不要の見込み** |
+| `PlanStoreTests.swift`(79-85行目) | `PlanStore()` + `.set(plan: .pro, limits: .pro(), confirmed: false)` → `load()`失敗 → `isConfirmed == false`・`isPro == true`を検証 | この「未確定でも前回値を保持する」挙動こそが`lastKnown`導入の動機そのものであり、`load()`の失敗パスが`state`に触れない(§1.2)ため、`set()`で設定した`lastKnown`がそのまま保持される | **変更不要の見込み**(むしろ本設計により正しさが裏付けられる) |
+| `HomeCacheTests.swift`の`makeViewModel`ヘルパー(549-558行目) | `plan`省略時、`PlanStore()` + `.set(plan: .pro, limits: .pro())`(`userID`省略、`confirmed`既定true)を生成し、同じヘルパーの`userID`引数を**別に**`HomeViewModel`へ渡す | `set()`が`userID`省略時にダミーのランダムUUIDを使うため、`PlanStore.confirmedContext.userID`(ダミー)と`HomeViewModel.userID`(ヘルパー引数の実値)が一致せず、§4.2の`guard let context = planStore.confirmedContext, context.userID == userID`に失敗し、**`fetch()`が待機状態に入ってしまう(既存テストが新たに失敗する)** | **変更必要**: ヘルパー内の`set(plan: .pro, limits: .pro())`呼び出しに`userID: userID`(ヘルパー自身の引数)を明示的に渡すよう修正すること |
+| `HomeCacheTests.swift`(65, 84-102, 247, 257-267, 371-429行目) | `PlanStore()`/`.set()`/`.confirmedPlan`/`.isConfirmed`個別呼び出し | 上記ヘルパー経由でない直接呼び出しは、各テストの意図(`userID`を実際に検証する意図があるか)に応じて個別確認が必要 | **実装時に個別確認**(ヘルパー以外の直接呼び出し箇所ごとに、`userID`が検証対象かどうかを確認すること) |
