@@ -1,9 +1,10 @@
 # Home Prefetch / PlanStore 権限整合性 最終設計資料
 
-**状態**: HQレビュー結果「条件付き保留」に基づく改訂版。§3・§1.3・§4.6はHQにより決定済み(§3: 案B採用/§1.3: 案I採用/§4.6: 案3を目標方針として採用、ただし§4.6は実装許可前に前提条件の確定が必要)。残るHQ判断待ちは§5・§10の2項目のみ(§11参照)。それ以外の設計方針はHQレビュー済み。
+**状態**: HQレビュー結果「条件付き保留」に基づく改訂版。§3・§1.3・§4.6・§5・§10はいずれもHQにより決定済み(§3: 案B採用/§1.3: 案I採用/§4.6: 案3を目標方針として採用、ただし§4.6は実装許可前に前提条件の確定が必要/§5: `save()`のユーザー整合性検証は追加しない現状維持/§10: `retryNow()`競合敗北時の非対称性を許容)。現時点でHQ判断待ちの項目は無い(§11参照)。それ以外の設計方針もHQレビュー済み。
 **作業制限**: 本資料はドキュメントのみ。Swiftコード・テストコードへの反映、コミット・push・merge・TestFlight配布は未実施。
 
 **改訂履歴**:
+- **(今回・第7次改訂、基準673cd982)** A. 必須修正(P2): P2-1(Test40・41)変更直後の同期確認を`waitUntil`による通知後確認へ変更し、Test41(iv)は1回目の`load()`の完了(`loadInProgressCount`の実際の減少)を確認してから状態を見る形に訂正、Bool管理の誤実装でも偶然テストが通ってしまう問題を排除。P2-2(Test44(c))「通知順序の入れ替わり耐性を証明するテスト」ではなく「連続したPublisher更新後の最終状態を確認するスモークテスト」に位置づけを訂正し、旧実装でも通る可能性があることを明記、大規模な純粋関数化等は今回必須としない。B. HQ判断の反映: §5(`HomeCacheStore.save()`)→現状維持(ユーザー検証を追加しない)で決定、`fetch()`→`save()`の同期的連続性を固定するテストの特定を実装時の確認事項に追加。§10(`retryNow()`)→現在の競合制御(`supersededByNewerRequest`の許容、追い越し側完了まで非活性、失敗時も既存の「時間がかかっています」表示を維持し明示的な失敗表示はできないことを仕様として明記)を許容する形で決定。§11のHQ判断待ちテーブルから両項目を削除し決定事項として記録。冒頭「状態」を更新。C. P3の文書整理: `isRetryAvailable`初期値の同期計算は全保存プロパティ初期化後に実施することを明記、§11・retryNow()コメントに残っていた古いHQ判断待ち表記(`.pendingPolicyDecision`時代の「HQ判断待ちで保留」)を訂正、C指摘(要約のみ、原文未確認)のP3-1・P3-2(`@Published`化による再描画コスト)を実装時の注意事項として残し`@Published`通知範囲の最小化を実装時の確認事項に追加、P3-3(計算プロパティ化)は今回は見送り現在の設計を維持する理由と再検討条件を記載、P3-8(コンパイル・Swift 6未確認)をそのまま明記。
 - **(今回・HQ最終修正指示対応、基準1d0a198d)** §4.2.1「isRetryAvailableのObservable化」のCombineパイプラインに2つの問題が残っていた。(1)構築時点で既に`planStore.loadInProgressCount > 0`の場合、`Task { @MainActor in }`経由の非同期適用のため`init()`が返った直後は既定値`true`のまま一時的に誤表示されうる。(2)`.sink`が通知時点のスナップショット値(`isAvailable`)をそのまま代入していたため、複数の通知に対応するTaskの実行順序が入れ替わると、古い値が最新の状態を上書きするおそれがあった。修正: `init()`内で構築時点の3値から同期的に初期値を直接計算して代入(問題1の解消)、`.sink`内の代入を通知時点のスナップショットではなく実行時点に`self`からライブに再取得して再計算する形へ変更(問題2の解消、冪等な再計算のため実行順序に依存しない)。§8に新規テスト44(初期値・復帰・通知順序耐性の3部構成)を追加。§9の`HomeViewModel.swift`行を更新。
 - **(今回・HQ再レビュー対応、基準fa5d6d11)** P2-1〜3・P3-1〜6はHQ確認上解消と判断されたが、P2-4に「UI状態のObservable通知」の問題が残っていた: `isPlanConfirmationSlow`・`lastErrorRequiresPlanRetry`・`isRetryAvailable`(および`isRetryAvailable`が参照する`PlanStore.loadInProgressCount`・`HomeViewModel.isFetching`・`isRefreshingEntitlements`)が通常の`private(set) var`/計算プロパティのままで、SwiftUIへの変更通知(`@Published`/`objectWillChange`)が成立していなかった。修正: `isFetching`・`isRefreshingEntitlements`・`lastErrorRequiresPlanRetry`・`isPlanConfirmationSlow`・`PlanStore.loadInProgressCount`をいずれも`@Published`化し、`isRetryAvailable`を計算プロパティからストアドの`@Published private(set) var`へ変更、`init()`内に`Publishers.CombineLatest3($isFetching, $isRefreshingEntitlements, planStore.$loadInProgressCount)`の購読を追加して3つの入力の変化に確実に追従させた(§1.2・§4.2・§4.2.1)。`isPlanConfirmationSlow`・`lastErrorRequiresPlanRetry`は同一インスタンスの`@Published`化のみで`HomeView`(`@StateObject`で監視、`HomeView.swift:49`)への再描画が保証されることを説明した(HQ指摘4・5)。§8にObservable通知自体を検証する新規テスト39〜43を追加。§9の`HomeViewModel.swift`・`PlanStore.swift`行を更新。
 - **(今回・C最終独立レビュー対応、基準5877f31f)** P2-1(Test31): §4.2.1の③分岐が実際には`cancelPlanConfirmationWait()`を呼ぶという実コードとの不一致を訂正し、Task#1のキャンセル・resume後に`recordPlanConfirmationTimedOut()`が記録されないことを検証する手順に修正(§8)。P2-2(HomePrefetchCoordinator移行漏れ): `start()`の`contextAtDispatch`に既定値`nil`を追加し、実呼び出し元5ファイル(`SplashViewModel.swift`・`HomePrefetchCoordinatorTests.swift`・`HomeCacheTests.swift`・`SplashViewModelTests.swift`・`PlanStoreTests.swift`)の移行表を§4.1に新設。先行取得再利用テスト2件が`contextAtDispatch`の既定nilで意図通りに検証されなくなる問題と、その修正手順を明記。P2-3(Test20・21): 案Iのgeneration収束を具体的な`CheckedContinuation`手順で検証する2ケース(Home応答保留中にentitlements再確認が完了するケース/内容が変わらない再確認のケース)に全面改稿し、generation・最終plan・表示データ・キャッシュの状態をそれぞれ明記(§8)。P2-4(再試行ボタン): `PlanStore.isLoadInProgress`をBool直接代入からカウンタ(`loadInProgressCount`)管理に変更し複数load重複完了時の誤解除を解消(§1.2)、`isRetryAvailable`を新設してUI側がボタンを非活性にできるようにし、ガード失敗時は`recordRetryIgnoredWhileEntitlementsInProgress()`で診断を残す(§4.2.1・§7)。P3-1: `PlanStore.reset()`の呼び出し元を誤って`AppState.leaveLoggedIn()`としていた記載を、実際の呼び出し元`RootView.swift:41,54`に訂正(§0・§4.2.3)。P3-2: 冒頭「状態」の表示をHQ決定済みの内容(§3案B・§1.3案I・§4.6案3)に合わせて更新。P3-3: §11「HQ決定事項の記録」冒頭の表現を実際の改訂履歴と一致させる形に修正。P3-4: `retryNow()`の失敗時に既存の`.loaded`表示を`.error`で消さないよう、`applyFetchFailure()`と同じ保護を追加(§4.2.1)。P3-5: `isPlanConfirmationSlow`の解除条件(成功・再試行失敗・ユーザー切替・reset)を`cancelPlanConfirmationWait()`への集約(成功・ユーザー切替・reset)と`retryNow()`失敗分岐内での明示的解除(再試行失敗)に整理し、§4.3.2に4条件の対応表を新設。P3-6: テスト24の「十分な時間を置いても2回目が発生しないこと」という任意の待ち時間に依存した検証を、`needsRefetch`が本テストの手順では構造的に`true`にならないことに基づく、時間経過の仮定を伴わない検証(`state == .loaded`の成立後に即時カウントを確認)へ変更(§8)。
@@ -807,6 +808,16 @@ private func cancelPlanConfirmationWait() {
 
 ```swift
 // init()内、既存のplanStore.$stateの購読(§4.2.3)と同じ場所に追加する。
+//
+// (今回・第7次改訂・C指摘P3対応)この同期的な初期計算は、initが受け取る全てのストアド
+// プロパティ(apiClient・favoritesStore・userID・cacheStore・planStore・
+// prefetchCoordinator・authenticatedUserProvider・sleep・isFetching・
+// isRefreshingEntitlements等)への代入が完了した**後**に実行すること。Swiftの2段階初期化
+// (すべてのストアドプロパティが初期化されるまでself経由のメソッド・プロパティ読み取りが
+// できない)により、これはコンパイラが強制する順序でもあるが、init()の本文を将来書き換える
+// 際に「どこに置けば安全か」を明示するため、ここに明記する。既存のplanStore.$state購読
+// (§4.2.3)より後、かつinit()の末尾付近に置くのが安全(そこまでに全プロパティの代入が
+// 完了していることが構造上保証されているため)。
 
 // (今回・HQ指摘対応・問題1の修正) Combineの購読が実際に最初の値を適用するのは
 // init()が返った後になる(Task{@MainActor in}を経由するため)。この隙間を無くすため、
@@ -845,6 +856,13 @@ Publishers.CombineLatest3($isFetching, $isRefreshingEntitlements, planStore.$loa
 **HQ指摘4(`isPlanConfirmationSlow`が`false`→`true`になったときの再描画保証)への回答**: `isPlanConfirmationSlow`自身を`@Published`にしたことで(本節冒頭参照)、`self.isPlanConfirmationSlow = true`という代入(§4.2.1「scheduleWaitForPlanConfirmation()」のタイムアウトTask内、既存コードのまま変更なし)が`HomeViewModel`の`objectWillChange`を発行し、`HomeView`(`@StateObject`で監視)が次の描画サイクルで`body`を再評価する。これは`Combine`/`SwiftUI`の標準的な仕組み(`ObservableObject`の`@Published`プロパティへの代入は常に`objectWillChange`を発行する)であり、追加の橋渡しコードは不要である(`isFetching`等とは異なり、同一インスタンス内の値であるため)。
 
 **HQ指摘5(`.loaded`を維持した再試行失敗でも`lastErrorRequiresPlanRetry`の変更がUIに反映される保証)への回答**: 同様に`lastErrorRequiresPlanRetry`を`@Published`にしたことで十分である。`retryNow()`の失敗分岐(§4.2.1のコード、`lastErrorRequiresPlanRetry = true`への代入)は`state`を変更しない経路(`.loaded`維持、P3-4対応)でも必ず実行されるため、`state`が変化しない場合でも`lastErrorRequiresPlanRetry`への代入自体が独立して`objectWillChange`を発行し、`HomeView`を再描画させる。`HomeView`側(§9、未実施のコード変更)は、`.loaded`表示に重ねて`lastErrorRequiresPlanRetry`を見た案内(小さな失敗通知等)を出す設計にすることで、この再描画を実際の表示更新に結び付ける。
+
+**C指摘(P3)への対応(今回・第7次改訂)**: HQから伝えられたCの指摘は、具体的な指摘文そのものではなく要約(「再描画コスト」「計算プロパティ化」「コンパイル・Swift 6未確認」)として渡されており、原文との一致確認はできていない(§11「未検証」に同種の制約を既に記載している前例に合わせ、ここでも明記する)。渡された要約に基づき、以下のとおり対応する。
+
+- **P3-1・P3-2(再描画コスト)**: `isFetching`・`isRefreshingEntitlements`・`lastErrorRequiresPlanRetry`・`isPlanConfirmationSlow`・`PlanStore.loadInProgressCount`を`@Published`化したことで、これらの値が変化するたびに(たとえ`HomeView`がその値を直接表示に使っていない場合でも)`objectWillChange`が発行され、`HomeView.body`全体が再評価される。`@Published`は値単位ではなくオブジェクト単位の粗い通知であるため、例えば`isFetching`が`fetch()`の開始・終了ごとに`true`/`false`を切り替えるだけで、`HomeView`全体の再描画が毎回発生する。これは今回の修正で新たに増えたコストであり(修正前はこれらが`private`な非`@Published`var・計算プロパティだったため、この種の再描画は発生しなかった)、今回は設計変更を行わず**実装時の注意事項として残す**。実装時にInstrumentsの「SwiftUI」テンプレート等で実際の再描画頻度を確認し、ユーザー体感上の問題(カクつき等)が見られる場合に対策(後述の通知範囲の最小化、または`HomeState`の構造見直し)を検討すること。
+- **@Publishedの通知範囲の最小化(実装時の確認事項)**: 上記の再描画コストを抑えるため、実装時に次の点を確認すること: (a) `isFetching`・`isRefreshingEntitlements`は内部の進行管理にのみ使われ、`HomeView`が直接読むのは`isRetryAvailable`・`isPlanConfirmationSlow`・`lastErrorRequiresPlanRetry`の3つのみであるため、将来的に`HomeView`が参照する`@Published`プロパティと内部管理用の`@Published`プロパティを分離する(例: 内部用は`@Published`を外し、別の軽量な変更通知機構に置き換える)余地があるかどうか。(b) SwiftUIが`@Published`の変更を検知して実際に再描画が必要と判断するのは`body`が依存する値が変わった場合のみであり、`body`の構造自体が`isFetching`等を直接参照していなければ、再描画自体は発生しても見た目の差分は無い(実害が無い)ことが多い。過度な最適化(各プロパティを個別の`ObservableObject`に分離する等)は今回は行わない。
+- **P3-3(計算プロパティ化は今回は必須にしない)**: `isRetryAvailable`を計算プロパティに戻す(例: `var isRetryAvailable: Bool { !isFetching && !isRefreshingEntitlements && !planStore.isLoadInProgress }`としたうえで、`HomeView`側で`onReceive`等により手動で再描画をトリガーする設計)という選択肢も検討したが、**今回は採用せず、ストアドの`@Published private(set) var`という現在の設計を維持する**。維持する理由: (1)計算プロパティ化すると、3つの入力の変化を`HomeView`に伝える手段を別途用意する必要があり(計算プロパティ自身は`@Published`の`$`投影を持てないため)、結局本節の`Publishers.CombineLatest3`相当の橋渡しが必要になり、複雑さが変わらない。(2)現在の設計はテスト39〜44で既に検証済みであり、再設計すると再検証が必要になる。**実装時に再検討する条件**: 実際にInstrumentsで計測した結果、`isFetching`・`isRefreshingEntitlements`の切り替わり頻度(例: Home取得が数秒おきに発生する画面等)が原因で視認できる再描画コストが生じると判明した場合、そのときに計算プロパティ化(またはプロパティレベルの通知機構)への切り替えを再検討すること。
+- **P3-8(コンパイル・Swift 6未確認)**: 本節のコード例(`Publishers.CombineLatest3`・`.removeDuplicates()`・`Task { @MainActor in }`を含む`.sink`)が、実際のSwiftコンパイラ、特にSwift 6の厳格な並行性チェック(`StrictConcurrency`)のもとでエラー・警告無くコンパイルされることは**未確認のまま明記する**(§11「未検証」に既存の`P3-7対応`と同様の形で追加。`@MainActor`クラスの`@Published`プロパティをCombineの`.sink`クロージャ内で読み書きする際のactor-isolation検査が、使用するSwiftツールチェーンのバージョンによって挙動が異なる可能性があるため)。実装着手時に、対象プロジェクトの実際のSwiftバージョン・並行性チェックモードで最初に確認すること。
 
 /// Home画面の「再試行」操作から呼ぶ。待機中(プラン確定待ち)なら待機を解除して直ちに
 /// Entitlementsを再取得し、確定した場合だけHomeを1回取得する。
@@ -893,7 +911,9 @@ func retryNow() {
             // Entitlements自体が取得できないと確定したわけではない。.errorへは遷移しない。
             DiagnosticsStore.shared.recordRetryEntitlementsNotConfirmed(result: result)
         case .malformedResponse, .requestFailed:
-            // (今回・P2-2対応) 実際に確認が失敗した(通信失敗・応答不正・HQ判断待ちで保留)。
+            // (今回・P2-2対応、今回・第7次改訂で訂正) 実際に確認が失敗した(通信失敗・応答不正)。
+            // §3のHQ決定(案B採用)により、plan/limits両方欠落のケースもこの.malformedResponseに
+            // 統合済みであり、もはや「HQ判断待ちで保留」ではない。
             // (今回・P3-4対応、HQ指摘により追加) 既に.loadedで何らかの表示(キャッシュまたは
             // 直近の正常取得)がある場合は、それを.errorで消してしまわない。applyFetchFailure()
             // と同じ「既存の.loaded表示は保護する」方針をここでも適用する。
@@ -1307,6 +1327,12 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 - `AppState.leaveLoggedIn()`が`homeCache.clear()`を同期的に呼ぶため、ログアウトの瞬間にキャッシュは確実に消去される(35-40行目)。
 - **残存リスク(訂正版)**: `save()`のみ、呼び出し時の`userID`引数自体の正しさを検証しない。`fetch()`側のケース判定(§4.2)にバグが入り、誤った`userID`を`save()`に渡してしまうと、`HomeCacheStore`側ではそれを検知できない。一方`saveFavorites()`・`discardIfPlanDiffers()`は既存のガードにより、他ユーザーのキャッシュを誤って書き換える・古いプランのキャッシュを誤って残す、という事態はある程度自己防御されている。
 
+**(★HQ決定・第7次改訂対応)`save()`自体にユーザー整合性検証を追加するかどうか → 現状維持(検証を追加しない)**
+- `save()`に新たなユーザー検証コードは追加しない。安全性は、呼び出し元である`fetch()`(§4.2・`applyFetchSuccess()`)が、`confirmedPlan(for: userID)`等で既に検証済みの`userID`を渡すことに完全に依存する、という既存の責任分担を維持する。
+- 根拠: `fetch()`が`confirmedPlan(for:)`で検証してから`cacheStore.save(...)`を呼ぶまでの間に`await`を一切挟まない(`applyFetchSuccess()`、§4.2のコード参照)。この同期的な連続性が保たれている限り、呼び出し時点の`userID`の正しさは`fetch()`側で既に保証されており、`save()`側で改めて検証する実益が薄い。
+- **固定すること**: この「確認してから同期的に保存する」責任分担が将来の変更で崩れないよう、`fetch()`の確認(`confirmedPlan(for:)`等)と`cacheStore.save()`の呼び出しが連続して(間に`await`を挟まず)実行されることを検証するテストを固定する。本資料の範囲では、これに相当する既存テストを`HomeCacheTests.swift`の実コードで直接確認できていないため、実装時に該当テストを特定し(無ければ追加し)、この同期的連続性が今後の変更で崩れないことを明示的に固定すること(§11「実装時の確認事項」に追加)。
+- **将来の再検討条件**: `fetch()`から`save()`呼び出しまでの間に将来何らかの非同期処理(`await`)が挟まる変更が入る場合、この責任分担の前提(同期的な連続性)が崩れるため、その時点で`save()`側のユーザー整合性検証の追加を再検討すること。
+
 ---
 
 ## §6 通信失敗・キャンセル時の扱い
@@ -1451,18 +1477,20 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 **P2-4対応・UI状態のObservable通知テスト(今回・HQ指摘「必須修正：UI状態のObservable通知」対応、新規、39〜43番)**: 以下のテストは、テスト37等が確認する「最終的な値が正しいこと」とは別に、**その値の変化が実際にCombineの`@Published`経由で発行されること**自体を検証する(39番は仮に`isPlanConfirmationSlow`が将来`@Published`でない`private(set) var`に戻された場合、`$isPlanConfirmationSlow`という参照自体がコンパイルエラーになるため、この回帰を構造的に検出できる)。
 
 39. **(今回・新規)** タイムアウト後に遅延案内が表示されること。`userID = A`、未確定状態で`load()`を呼び待機を開始させる。`viewModel.$isPlanConfirmationSlow`を(`cancellables`等に)購読し、発行された値を記録する配列を用意しておく。注入した`sleep`の`CheckedContinuation`を`resume`してタイムアウトTaskの本体を完了させる。検証: (a) 記録した配列に`true`が実際に発行されていること(`await waitUntil { recorded.contains(true) }`、初期値`false`は購読開始時点で1回emitされるため、2回目以降の値を見る)。これは「最終的に`viewModel.isPlanConfirmationSlow == true`である」という値の確認(テスト37(A)で既に実施済み)とは別の観点であり、`@Published`の発行が実際に起きていることそのものを証明する。**証明すること**: `isPlanConfirmationSlow`への代入が`$isPlanConfirmationSlow`経由で実際に観測可能なイベントとして発行されること。**証明しないこと**: `HomeView`側の実際の案内UI(未実装、§9参照)。
-40. **(今回・新規)** Entitlements取得中は再試行ボタンが非活性になること。`userID = A`、確定済み。Entitlements用モックを`CheckedContinuation`で保留する実装にし、`viewModel.retryNow()`を呼ぶ(`isRefreshingEntitlements`が`true`になり、Entitlements用モックの応答はまだ保留中)。検証: (a) `viewModel.isRetryAvailable == false`であること、(b) `viewModel.$isRetryAvailable`を購読していた場合、`retryNow()`呼び出し後に`false`が発行されていること(§4.2.1「isRetryAvailableのObservable化」の`Publishers.CombineLatest3`が`isRefreshingEntitlements`の変化に実際に追従していることの確認)。**証明すること**: `isRefreshingEntitlements`の変化が`isRetryAvailable`の再計算・再発行に正しく反映されること。**証明しないこと**: `HomeView`側の実際のボタンの非活性化描画(未実装、§9参照)。
-41. **(今回・新規)** 複数の`load()`が重なっても、最後の`load()`が終わるまで非活性が維持されること(`PlanStore.loadInProgressCount`のカウンタ化、P2-4対応の中核をObservable通知の観点で検証)。`userID = A`。`PlanStore`の`EntitlementsService`呼び出し先を、呼び出しごとに**別々の**`CheckedContinuation`で保留できるモックにする(2本の継続を保持できるようにする)。(i) `planStore.load(...)`を1回目として開始(`await`しないTaskとして、継続#1を保留)、(ii) 継続#1が保留されたことを確認した時点で`viewModel.isRetryAvailable == false`であることを確認、(iii) `planStore.load(...)`を2回目として開始(継続#2を保留。この時点で`loadInProgressCount == 2`)、(iv) 継続#1を`resume`する(1回目が完了し`loadInProgressCount`が2→1になるが、まだ0ではない)。検証: この時点でも`viewModel.isRetryAvailable == false`のままであること(1回目の完了だけでは再試行可能にならないこと)。**証明すること**: `loadInProgressCount`が`Bool`ではなくカウンタであることの効果が、`isRetryAvailable`の再計算にも正しく反映されること(P2-4のHQ指摘「複数loadの完了順により、実際の進行状態とUI表示が食い違わないようにする」への直接対応)。**証明しないこと**: `isRetryAvailable == true`への復帰自体(テスト42の対象)。
+40. **(今回・新規、今回・第7次改訂・P2-1対応で訂正)** Entitlements取得中は再試行ボタンが非活性になること。`userID = A`、確定済み。Entitlements用モックを`CheckedContinuation`で保留する実装にし、`viewModel.retryNow()`を呼ぶ(`isRefreshingEntitlements`が`true`になり、Entitlements用モックの応答はまだ保留中)。検証: (a) **(今回・P2-1対応、訂正)** `retryNow()`呼び出し直後に`viewModel.isRetryAvailable`を同期的に読むのではなく、`await waitUntil { viewModel.isRetryAvailable == false }`で確認する。`isRetryAvailable`はストアドの`@Published`であり、その更新は`retryNow()`呼び出しと同じ同期的なコールスタック内では完結せず、Combineの`.sink`→別の`Task { @MainActor in }`での再計算という、必ず1回以上の非同期の切れ目を挟む(§4.2.1「isRetryAvailableのObservable化」参照)。変更直後に同期的に読むと、実装が正しくても一時的に古い値(`true`)のままになるタイミングがあり得るため、本来成立するはずの検証が偶然失敗する(flaky)おそれがある。`waitUntil`によるポーリングに変えることで、タイミングに依存しない確実な検証にする。(b) `viewModel.$isRetryAvailable`を購読していた場合、`retryNow()`呼び出し後に`false`が実際に発行されていること(§4.2.1「isRetryAvailableのObservable化」の`Publishers.CombineLatest3`が`isRefreshingEntitlements`の変化に実際に追従していることの確認)。**証明すること**: `isRefreshingEntitlements`の変化が`isRetryAvailable`の再計算・再発行に正しく反映されること。**証明しないこと**: `HomeView`側の実際のボタンの非活性化描画(未実装、§9参照)。
+41. **(今回・新規、今回・第7次改訂・P2-1対応で訂正)** 複数の`load()`が重なっても、最後の`load()`が終わるまで非活性が維持されること(`PlanStore.loadInProgressCount`のカウンタ化、P2-4対応の中核をObservable通知の観点で検証)。`userID = A`。`PlanStore`の`EntitlementsService`呼び出し先を、呼び出しごとに**別々の**`CheckedContinuation`で保留できるモックにする(2本の継続を保持できるようにする)。(i) `planStore.load(...)`を1回目として開始(`await`しないTaskとして、継続#1を保留)、(ii) 継続#1が保留されたことを確認した時点で、**(今回・P2-1対応、訂正)** `await waitUntil { viewModel.isRetryAvailable == false }`で確認する(直前のTest40と同じ理由により、同期的な直読みは使わない)、(iii) `planStore.load(...)`を2回目として開始(継続#2を保留。この時点で`loadInProgressCount == 2`)、(iv) **(今回・P2-1対応、訂正)** 継続#1を`resume`するだけでなく、1回目の`planStore.load(...)`呼び出しに対応する`Task`(またはその戻り値)自体の完了を明示的に`await`する(例: 1回目を開始したときに保持しておいた`Task`を`await task1.value`で完了まで待つ、あるいは`await waitUntil { planStore.loadInProgressCount == 1 }`で、カウンタが実際に2→1へ下がったことを直接確認する)。継続を`resume`しただけでは、`load()`本体の残りの処理(`defer { loadInProgressCount -= 1 }`を含む)が実際に完了したとは限らないため、ここを素通りしない。検証: その後`await waitUntil { viewModel.isRetryAvailable == false }`で、依然として非活性のままであることを確認する(1回目の完了だけでは再試行可能にならないこと)。**証明すること**: `loadInProgressCount`が2→1(まだ0ではない)の、1回目完了直後かつ2回目が進行中という具体的な過渡状態において、`isRetryAvailable`が正しく`false`のままであること。これは「どちらか一方の`load()`が完了すると`isLoadInProgress`が(誤って)`false`に戻ってしまう」という回帰(P2-4で修正したBoolベースの誤実装)を直接検出できる、最も厳格な検証ポイントである。`loadInProgressCount`自体が具体的に`1`になったことを`waitUntil`で確認してから`isRetryAvailable`を見ることで、単に`Task.yield()`を数回呼んで「もう十分だろう」と仮定するような、タイミングに依存した不確実な検証を避け、Bool管理の誤実装でも偶然テストが通ってしまう問題を構造的に排除する。**証明しないこと**: `isRetryAvailable == true`への復帰自体(テスト42の対象)。
 42. **(今回・新規)** すべての`load()`が終了したら再試行可能になること。テスト41の続き(継続#2も保留中、`loadInProgressCount == 1`)から、(v) 継続#2を`resume`する(`loadInProgressCount`が1→0になる)。検証: (a) `await waitUntil { viewModel.isRetryAvailable == true }`が成立すること、(b) `viewModel.$isRetryAvailable`を購読していた場合、`false`から`true`への変化が実際に発行されていること(39番と同じ観点)。**証明すること**: `loadInProgressCount`が0に戻った時点で`isRetryAvailable`が確実に`true`へ復帰し、かつその変化が`HomeView`から観測可能な形で発行されること。**証明しないこと**: `isFetching`・`isRefreshingEntitlements`経由での復帰(別の入力であり、この2テストの対象外)。
 43. **(今回・新規)** `.loaded`を維持した再試行失敗でも、失敗案内が更新されること(P3-4とP2-4のObservable化を組み合わせた検証)。`userID = A`、`state`が既に`.loaded(...)`である状態を作る(例: 通常の`load()`を1回成功させる)。`viewModel.$lastErrorRequiresPlanRetry`を購読し、発行された値を記録する。Entitlements用モックを**失敗する**よう設定したうえで`viewModel.retryNow()`を呼ぶ。検証: (a) `state`は`.loaded(...)`のまま変化しないこと(P3-4対応、既存表示を保護)、(b) `lastErrorRequiresPlanRetry`が最終的に`true`になること、(c) 記録した配列に`true`が実際に発行されていること(`state`が変化しない経路でも、`lastErrorRequiresPlanRetry`への代入自体が独立して`objectWillChange`を発行することの確認)。**証明すること**: `state`を経由しない(`HomeState`にケースを増やさない)設計(§4.3.2参照)でも、`.loaded`を維持したままの失敗案内の更新が確実にUIへ伝わること。**証明しないこと**: `HomeView`側の実際の失敗案内の描画内容(未実装、§9参照)。
 
-**P2-4対応・isRetryAvailableの初期値・通知順序耐性テスト(今回・HQ再指摘「isRetryAvailableのObservable化」対応、新規、44番)**:
+**P2-4対応・isRetryAvailableの初期値・最終状態確認テスト(今回・HQ再指摘「isRetryAvailableのObservable化」対応、新規、44番。今回・第7次改訂・P2-2対応で(c)の位置づけを訂正)**:
 
-44. **(今回・新規)** `isRetryAvailable`の初期値のずれ・通知順序の入れ替わりに対する耐性を検証する。3つの部分からなる。
+44. **(今回・新規)** `isRetryAvailable`の初期値のずれへの対応、および連続した変化の後の最終状態を検証する。3つの部分からなる((c)は「通知順序の入れ替わり耐性の証明」ではなく「スモークテスト」という位置づけであることに注意。詳細は(c)内の説明を参照)。
 
     **(a) 構築時点の初期値**: `userID = A`の`PlanStore`に対し、`EntitlementsService`呼び出しを`CheckedContinuation`で保留するモックを使って`planStore.load(apiClient:, userID: A, authenticatedUserProvider:)`を**先に**(`await`せずTaskとして)開始する(継続#1が保留されたことを確認した時点で`planStore.loadInProgressCount == 1`)。この**既に`load()`が進行中のPlanStoreインスタンス**を渡して、新たに`HomeViewModel`を構築する。検証: 構築直後(`init()`の呼び出しから返った直後、追加の`await`やTaskの実行を待たずに)`viewModel.isRetryAvailable == false`であること。**証明すること**: 構築時点で既に`planStore.loadInProgressCount > 0`の場合、Combineの初回通知が非同期(`Task { @MainActor in }`経由)で適用されるのを待たず、`init()`内の同期的な初期計算により、`isRetryAvailable`が既定値`true`のまま一時的に誤表示される隙間が無いこと。
     **(b) load()完了後の復帰**: (a)の続きから、継続#1を`resume`し`planStore.load(...)`を完了させる(`loadInProgressCount`が1→0)。検証: `await waitUntil { viewModel.isRetryAvailable == true }`が成立すること。**証明すること**: 初期値の補正が、その後の正常な復帰を妨げないこと。
-    **(c) 通知順序の入れ替わりへの耐性**: `userID = A`、確定済みの`HomeViewModel`。次の3つの変化を短時間に連続して起こす: (i) Entitlements用モックを`CheckedContinuation`で保留し`viewModel.retryNow()`を呼ぶ(`isRefreshingEntitlements`が`true`になる)、(ii) 直後に、別途保留していた`planStore`の他の`load()`呼び出し(`retryNow()`とは別経路、例えばSplashの先行取得を模したもの)の継続を`resume`する(`loadInProgressCount`が変化する)、(iii) さらに直後に(i)のEntitlements用モックの継続も`resume`する(`isRefreshingEntitlements`が`false`に戻る)。これらを`await`を挟まず連続して呼ぶことで、対応する複数の`Task { @MainActor in }`が短時間にまとめて生成される状況を作る。検証: 十分な時間(`await waitUntil`等)を置いた後、`viewModel.isRetryAvailable`の値が、**その時点の`viewModel`の実際の`isFetching`・`isRefreshingEntitlements`・`planStore.isLoadInProgress`から直接計算した期待値と一致する**こと。**証明すること**: 複数の通知に対応するTaskの実行順序が入れ替わっても(入れ替わり自体を強制的に再現することはテストコードからはできないため、連続した変化を経ても最終結果が常にライブな3値と一致する、という形で間接的に確認する)、古い通知値によって最新の状態が上書きされないこと(§4.2.1「isRetryAvailableのObservable化」の「修正方針」で述べた、実行時点での再計算による冪等性の確認)。
+    **(c) 連続したPublisher更新後の最終状態確認(今回・第7次改訂・P2-2対応で位置づけを変更)** `userID = A`、確定済みの`HomeViewModel`。次の3つの変化を短時間に連続して起こす: (i) Entitlements用モックを`CheckedContinuation`で保留し`viewModel.retryNow()`を呼ぶ(`isRefreshingEntitlements`が`true`になる)、(ii) 直後に、別途保留していた`planStore`の他の`load()`呼び出し(`retryNow()`とは別経路、例えばSplashの先行取得を模したもの)の継続を`resume`する(`loadInProgressCount`が変化する)、(iii) さらに直後に(i)のEntitlements用モックの継続も`resume`する(`isRefreshingEntitlements`が`false`に戻る)。これらを`await`を挟まず連続して呼ぶことで、対応する複数の`Task { @MainActor in }`が短時間にまとめて生成される状況を作る。検証: 十分な時間(`await waitUntil`等)を置いた後、`viewModel.isRetryAvailable`の値が、**その時点の`viewModel`の実際の`isFetching`・`isRefreshingEntitlements`・`planStore.isLoadInProgress`から直接計算した期待値と一致する**こと。
+
+    **(今回・HQ指摘(P2-2)により位置づけを訂正)** 本テスト(c)は、**「連続したPublisher更新後の最終状態を確認するスモークテスト」**として位置づける。前回の記載は「通知順序の入れ替わり耐性を証明するテスト」としていたが、これは正確ではなかったため訂正する。理由: テストコードから複数のTaskの実行順序を強制的に入れ替えることはできない(「証明しないこと」として前回も明記していたとおり)。したがって、本テストが実際に検証しているのは「3つの変化を連続して起こした後、`waitUntil`で十分な時間を置いた最終状態が、その時点のライブな3入力と一致する」という**結果の一致**のみであり、実行順序が実際に入れ替わったことそのものを再現・観測してはいない。**この旧実装(通知時点のスナップショット値をそのまま代入する実装)でも、本テストは通る可能性がある**: 3つの変化がこの程度の間隔で連続する場合、生成される複数のTaskが偶然ほぼ意図した順序で実行されれば、スナップショット方式でも最終的に正しい値へ収束することがあるため、本テストの合否だけでは旧実装の再計算方式(スナップショット代入 vs ライブ再計算)の違いを判別できない。したがって本テストは「Taskの実行順序が入れ替わっても古い値による上書きが起きない」という設計上の保証(§4.2.1「isRetryAvailableのObservable化」の「修正方針」で論理的に説明している内容)を直接証明するものではなく、**基本的な動作が壊れていないことを確認する最低限のスモークテスト**という位置づけにする。**この区別のために、`isRetryAvailable`を純粋関数として切り出す・実行順序を人為的に固定するテストフックを追加する、といった大規模な設計変更は今回は必須としない**(§11「実装時の確認事項」参照。将来、実際に順序入れ替わりによる不整合が疑われる不具合報告があった場合に再検討する)。**証明すること**: 3つの変化を連続して起こした後の最終状態が、通知の経由方法に関わらずライブな3入力と一致すること(基本的な結果の正しさ)。**証明しないこと**: Taskの実行順序が実際に入れ替わること自体、および旧実装(スナップショット代入方式)との判別。
 
     **証明しないこと**: `HomeView`側の実際のボタンの非活性化描画(未実装、§9参照)。Swift Concurrencyのタスクスケジューラが実際にどの順序でTaskを実行するかそのもの(これはランタイムの実装詳細であり、テストから直接制御・観測できない。本テストは「順序に依存しない」という設計の結果を検証するものであり、順序の入れ替わり自体を強制的に発生させるものではない)。
 
@@ -1502,6 +1530,12 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 - `Task { await fetch() }`は`self`を強参照で捕捉するため、View階層破棄後も進行中のTaskが完了するまで古い`HomeViewModel`インスタンスはメモリ上に残る。データの安全性には影響しないが、`[weak self]`化による早期解放の余地は残る。
 - `.task { viewModel.load() }`(`HomeView.swift:70`)は`await`を伴わない同期呼び出しであり、SwiftUIの`.task`の自動キャンセルは`fetch()`の実際のTaskには及ばない(§0・§6参照)。
 - `retryNow()`が`entitlementsRequestSequence`の競合で敗れた場合、ユーザーの明示操作の直接的な結果としては何も起きないことがある(勝った側の確定を`handlePlanStateChanged`が検知してHome取得につながるため、データの正しさは保たれるが、即時性に非対称なタイミングが生じうる)。
+
+**(★HQ決定・第7次改訂対応)`retryNow()`競合敗北時の即時性の非対称性を許容するか → 現在の競合制御を許容する(仕様として受け入れる)**
+- `.supersededByNewerRequest`を許容する。`retryNow()`自身が発行した`planStore.load()`が、他の正当な`load()`呼び出し(より新しい`entitlementsRequestSequence`を持つもの)に追い越された場合、`retryNow()`はそれを「確認が失敗した」とは扱わない(§4.2.1「retryNow()」の`.supersededByNewerRequest`分岐、既存のまま変更なし)。
+- 追い越した側(より新しい`load()`)の完了までは、`isRetryAvailable`(§4.2.1「isRetryAvailableのObservable化」、`planStore.isLoadInProgress`が`true`の間)により再試行ボタンは非活性のままにする。これは既存の設計(§1.2「isLoadInProgress」、P2-4対応)がそのまま満たしている要件であり、追加の実装は不要。
+- 追い越した側(より新しい`load()`)が失敗した場合でも、既存の「時間がかかっています」の案内(`isPlanConfirmationSlow`)、または単に`.loading`が維持されている表示を変えない。**これにより、この特定の競合敗北の経路では、ユーザーに失敗を明示的に表示できない**ことを仕様として明記する(`retryNow()`自身が`.supersededByNewerRequest`を受け取った時点では、追い越した側の結果はまだ分からないため)。
+- `isLoadInProgress`が解消され再試行ボタンが再び有効になった時点で、ユーザーは改めて`retryNow()`を押して再試行できる。この「明示的な失敗表示が出ないまま、ボタンが再度押せるようになる」という体験は、HQが許容する仕様上の既知の挙動である。
 - (§1.3)同一ユーザーのEntitlements再確認(特に購入・復元直後)が進行中にHome取得が完了すると、再確認完了までの短い時間窓で古いプランの内容が一瞬表示・キャッシュされる可能性がある(選択肢I採用時の既知の残存特性。選択肢IIを採用する場合はこのリスクは軽減されるが、新たな競合状態の検証コストが増える)。
 - (§4.6)案2(Prefetch開始タイミング変更)・案3(Backend側の計算文脈エコー)はいずれも、本資料の範囲では具体的な実測・Backend設計を行っていない。採用判断後、別途の実測・設計作業が必要になる。
 - **(今回・P3対応)** §4.2の`fetch()`は、既存コード(`HomeViewModel.swift`269-330行目)の副作用(診断記録・`recentSpeeches`/`speechesStatus`/`freshDataVersion`/`lastFreshAt`/`displayedCacheSavedAt`/`refreshNotice`/`lastFetchFailed`の更新、`.backendNotConfigured`分岐)を**すべて引き継いでいる**ことを§4.2で確認済み(`applyFetchSuccess`/`applyFetchFailure`への切り出しとして明示)。実装時は、この資料のコード例ではなく実際の`HomeViewModel.swift`の該当範囲を直接見比べ、見落としが無いことを再確認すること。
@@ -1523,10 +1557,7 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 
 ### HQ判断待ち(A独自に確定しない)
 
-| 項目 | 参照 |
-|---|---|
-| `HomeCacheStore.save()`自体にユーザー整合性検証を追加するかどうか | §5・§10 |
-| `retryNow()`競合敗北時の即時性の非対称性を許容するか | §10 |
+**(★HQ決定・第7次改訂対応)** 本資料に残っていたHQ判断待ち2項目(`save()`のユーザー整合性検証・`retryNow()`競合敗北時の非対称性)は、いずれもHQにより決定済みとなった(§5・§10参照)。本資料の範囲では、現時点で未決定の項目は**無い**。
 
 **(HQ決定事項の記録、今回・P3-3対応で冒頭の「状態」と記載を統一)** §3・§1.3・§4.6の3項目は、本資料の改訂履歴(冒頭参照)にあるとおりHQにより決定済みである。「HQ判断待ち」ではなく、以下の決定事項として記録する。
 
@@ -1545,6 +1576,16 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 - 前提条件: Backend API設計・旧バージョン互換性・フォールバック仕様の確定。
 - **Backend側の設計が確定するまで、案3の実装は許可しない**(現時点では未確定のため着手不可)。
 - 案1(現行方式維持)は恒久的な解決策としては扱わない、案3の前提が整うまでの暫定措置として位置づける。
+
+**§5: `HomeCacheStore.save()`自体にユーザー整合性検証を追加するかどうか → ★現状維持(検証を追加しない)を採用(決定済み)**
+- `save()`に新たなユーザー検証コードは追加しない。`fetch()`で確認してから同期的に保存するという既存の責任分担を維持する。
+- 必須条件: `fetch()`の確認から`save()`呼び出しまでが同期的に連続していることを固定するテストを実装時に特定・維持すること(§5参照)。
+- 将来の再検討条件: `fetch()`から`save()`呼び出しまでの間に非同期処理が挟まる変更が入る場合、この判断を再検討すること。
+
+**§10: `retryNow()`競合敗北時の即時性の非対称性を許容するか → ★現在の競合制御を許容する(決定済み)**
+- `.supersededByNewerRequest`を許容し、追い越した側の`load()`完了まで再試行ボタンを非活性にする(既存の`isRetryAvailable`の仕組みがそのまま満たす)。
+- 追い越した側が失敗した場合、既存の「時間がかかっています」の案内を維持し、この経路では失敗を明示的に表示できないことを仕様として明記する(§10参照)。
+- 再試行ボタンが再び有効になれば、ユーザーは改めて`retryNow()`で再試行できる。
 
 ### 未検証(実コードでの確認・実測がまだできていない事項)
 
@@ -1574,6 +1615,10 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 | **(今回・P3-3対応)** `let sleepFn = self?.sleep; try? await sleepFn?(...)`という分離パターンが、実際に`self`を強参照しないことをSwiftコンパイラ・実機で確認すること(未検証のまま残す) | §4.2.1・§10 |
 | **(今回・P3-7対応)** `Duration`型のimport元(`Foundation`か`Swift`標準ライブラリか)、`authenticatedUserProvider.map { ... } ?? true`のクロージャ内型推論、`EntitlementsResponse.Plan(rawValue:)`への`.flatMap`適用、のいずれも実際のSwiftコンパイラでの確認を行っていない | §4.2・§4.2.1・§1.2 |
 | **(今回・P1-1対応)** `init`内の`$state`購読から呼ぶ`planConfirmed()`・`handlePlanStateChanged()`の呼び出し順序を入れ替えても結果が変わらないことを、実装時に単体テストで確認すること | §4.2.3・§10 |
+| **(★HQ決定・第7次改訂対応)** `fetch()`の確認(`confirmedPlan(for:)`)から`cacheStore.save()`呼び出しまでが同期的に連続している(間に`await`を挟まない)ことを固定するテストを、`HomeCacheTests.swift`の既存テストから特定する。無ければ追加する(§5参照) | §5・§4.2 |
+| **(今回・C指摘P3-1・P3-2対応)** `@Published`化(`isFetching`・`isRefreshingEntitlements`・`PlanStore.loadInProgressCount`等)による`HomeView`の再描画頻度の増加を、Instrumentsの「SwiftUI」テンプレート等で実測し、視認できるカクつき等が無いことを確認すること。問題が見られた場合は、`@Published`の通知範囲の最小化(内部管理用プロパティと`HomeView`が直接参照するプロパティの分離)を検討すること(§4.2.1「isRetryAvailableのObservable化」のC指摘P3対応参照) | §4.2・§4.2.1 |
+| **(今回・C指摘P3-3対応)** `isRetryAvailable`を現在のストアド`@Published private(set) var`から計算プロパティへ戻すかどうかは今回は見送った。実測で再描画コストが問題になった場合にのみ再検討すること(§4.2.1参照) | §4.2.1 |
+| **(今回・C指摘P3-8対応)** §4.2.1「isRetryAvailableのObservable化」の`Publishers.CombineLatest3`・`.sink`・`Task { @MainActor in }`を含むコード例が、実際のSwiftコンパイラ(特にSwift 6の厳格な並行性チェック)でエラー・警告無くコンパイルされることは未検証のまま残す。実装着手時に最初に確認すること | §4.2.1 |
 | **(今回・P1-1/P2-4対応、テスト移行の一覧)** 既存の利用箇所・テストのうち、本設計の変更により**実際に手を入れる必要があるもの**を一覧化する。詳細は各セルの参照先。 | 下表 |
 
 **テスト・利用箇所の移行対象一覧(P1-1 7.・P2-4対応)**
