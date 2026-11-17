@@ -691,6 +691,63 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
         (await get(`/events/${BOJ_EVENT_ID}/reaction/chart?${pair}&timeframe=5m`)).release_datetime_precision,
       ).toBe('APPROXIMATE');
     });
+
+    // 第1段階の拡張(HQ指示 2026-11-17): before_minutes / after_minutes、期待本数・欠損の状態、発表直前の価格。
+    // 既存の項目(window_from・window_to・prices ほか)は変えない。本数・価格は seed の中身に依存するので、形と整合だけを見る。
+    it('chart: before_minutes / after_minutes, candle coverage, pre-release price (additive fields)', async () => {
+      const url = (query: string) =>
+        `/api/v1/events/${US_CPI_EVENT_ID}/reaction/chart?fx_pair_id=${USDJPY_FX_PAIR_ID}&${query}`;
+      const call = (query: string) => ctx.app.inject({ method: 'GET', url: url(query), headers: authHeader });
+
+      const requested = await call('timeframe=1m&before_minutes=30&after_minutes=120');
+      expect(requested.statusCode).toBe(200);
+      const body = JSON.parse(requested.body);
+      expect(body.window).toEqual({ before_minutes: 30, after_minutes: 120, source: 'REQUESTED' });
+      expect(Date.parse(body.window_to) - Date.parse(body.window_from)).toBe(150 * 60_000);
+      expect(Date.parse(body.release_datetime) - Date.parse(body.window_from)).toBe(30 * 60_000);
+      expect(body.limits).toEqual({ max_before_minutes: 180, max_after_minutes: 180 });
+      expect(['READY', 'DATA_PENDING', 'DATA_UNAVAILABLE']).toContain(body.data_status);
+      expect(body).not.toHaveProperty('truncated');
+      expect(body).not.toHaveProperty('unexpected_candles');
+      expect(body.returned_candles).toBe(body.prices.length); // 取得の境界([from, to))と集計の境界が同じ
+      expect(body.missing_candles).toBeLessThanOrEqual(body.expected_candles);
+      // 窓が未完了なら DATA_PENDING。完了していれば READY(完全性は has_gaps で表す)。期待する足があるのに1本も返っていなければ DATA_UNAVAILABLE
+      expect(typeof body.window_complete).toBe('boolean');
+      expect(body.has_gaps).toBe(body.missing_candles > 0);
+      if (!body.window_complete) expect(body.data_status).toBe('DATA_PENDING');
+      else if (body.expected_candles > 0 && body.missing_candles === body.expected_candles) {
+        expect(body.data_status).toBe('DATA_UNAVAILABLE');
+      } else expect(body.data_status).toBe('READY');
+      for (const price of body.prices) {
+        expect(Date.parse(price.timestamp)).toBeGreaterThanOrEqual(Date.parse(body.window_from));
+        expect(Date.parse(price.timestamp)).toBeLessThan(Date.parse(body.window_to)); // 半開区間
+      }
+      expect(['AVAILABLE', 'UNAVAILABLE']).toContain(body.pre_release_price_status);
+      expect(body.pre_release_price === null).toBe(body.pre_release_price_status === 'UNAVAILABLE');
+      expect(Array.isArray(body.prices)).toBe(true);
+
+      // 指定なし: 既存の既定の範囲(1分足は前後15分)のまま
+      const defaults = JSON.parse((await call('timeframe=1m')).body);
+      expect(defaults.window).toEqual({ before_minutes: 15, after_minutes: 15, source: 'DEFAULT' });
+      expect(Date.parse(defaults.window_to) - Date.parse(defaults.window_from)).toBe(30 * 60_000);
+
+      // 片方だけ指定: もう片方はその時間足の既定
+      const afterOnly = JSON.parse((await call('timeframe=1m&after_minutes=120')).body);
+      expect(afterOnly.window).toEqual({ before_minutes: 15, after_minutes: 120, source: 'REQUESTED' });
+
+      // 検証エラー(上限超え・負数・小数・数字以外)
+      for (const bad of [
+        'before_minutes=181',
+        'after_minutes=181',
+        'before_minutes=-1',
+        'after_minutes=1.5',
+        'before_minutes=abc',
+      ]) {
+        const response = await call(`timeframe=1m&${bad}`);
+        expect(response.statusCode, bad).toBe(422);
+        expect(JSON.parse(response.body).error.code, bad).toBe('VALIDATION_ERROR');
+      }
+    });
   });
 
   describe('Search (api-design.md §23, partial match)', () => {

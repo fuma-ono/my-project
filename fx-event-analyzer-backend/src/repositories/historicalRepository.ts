@@ -274,6 +274,9 @@ export interface StrategyReactionRow {
   pips: number | null;
   max_upward: number | null;
   max_downward: number | null;
+  max_upward_pips: number | null;
+  max_downward_pips: number | null;
+  pre_release_price: number | null;
   data_status: string;
 }
 
@@ -287,7 +290,9 @@ export async function listStrategyReactions(
   if (eventIds.length === 0) return [];
   const { data, error } = await supabase
     .from('event_price_reactions')
-    .select('event_id, timeframe, pips, max_upward, max_downward, data_status')
+    .select(
+      'event_id, timeframe, pips, max_upward, max_downward, max_upward_pips, max_downward_pips, pre_release_price, data_status',
+    )
     .in('event_id', eventIds)
     .eq('fx_pair_id', fxPairId)
     .in('timeframe', [...timeframes]);
@@ -298,6 +303,9 @@ export async function listStrategyReactions(
     pips: row.pips === null ? null : Number(row.pips),
     max_upward: row.max_upward === null ? null : Number(row.max_upward),
     max_downward: row.max_downward === null ? null : Number(row.max_downward),
+    max_upward_pips: row.max_upward_pips === null ? null : Number(row.max_upward_pips),
+    max_downward_pips: row.max_downward_pips === null ? null : Number(row.max_downward_pips),
+    pre_release_price: row.pre_release_price === null ? null : Number(row.pre_release_price),
     data_status: row.data_status,
   }));
 }
@@ -315,6 +323,59 @@ export interface MinuteCandleCompleteness {
  * 窓の途中の1分足の欠損までは検出できないため、fx_prices を直接数えて確かめる。1分・5分判定(既存)には使わない。
  * 戻り値は event_id をキーにした Map(各 release について必ず1件、取得できなければ complete* は false)。
  */
+export interface MinuteCandleRow {
+  timestamp: string;
+  high: number;
+  low: number;
+  close: number;
+  unverified: boolean;
+}
+
+/**
+ * 各発表について、発表の瞬間から60分の窓の1分足(fx_prices の timeframe = 1m。UNVERIFIED も印をつけて返す)。
+ * 値動きの分類の crossed_pre_price_after_initial(2分目以降の足の系列から直接判定)に使う。取得できなければ空の配列。
+ */
+export async function listMinuteCandleSeries(
+  supabase: SupabaseClient,
+  releases: readonly { event_id: string; release_datetime: string }[],
+  fxPairId: string,
+): Promise<Map<string, MinuteCandleRow[]>> {
+  const result = new Map<string, MinuteCandleRow[]>();
+  await Promise.all(
+    releases.map(async (release) => {
+      const startMs = Date.parse(release.release_datetime);
+      const endMs = startMs + 60 * 60_000;
+      const { data, error } = await supabase
+        .from('fx_prices')
+        .select('timestamp, high, low, close, verification_status')
+        .eq('fx_pair_id', fxPairId)
+        .eq('timeframe', '1m')
+        .gte('timestamp', new Date(startMs).toISOString())
+        .lt('timestamp', new Date(endMs).toISOString())
+        .order('timestamp', { ascending: true });
+      if (error) throw error;
+      const rows = (data ?? []) as {
+        timestamp: string;
+        high: number | string;
+        low: number | string;
+        close: number | string;
+        verification_status: string;
+      }[];
+      result.set(
+        release.event_id,
+        rows.map((row) => ({
+          timestamp: row.timestamp,
+          high: Number(row.high),
+          low: Number(row.low),
+          close: Number(row.close),
+          unverified: row.verification_status === 'UNVERIFIED',
+        })),
+      );
+    }),
+  );
+  return result;
+}
+
 export async function listMinuteCandleCompleteness(
   supabase: SupabaseClient,
   releases: readonly { event_id: string; release_datetime: string }[],

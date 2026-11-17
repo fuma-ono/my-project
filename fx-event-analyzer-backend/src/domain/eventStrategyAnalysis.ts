@@ -1,4 +1,5 @@
 import { MAJOR_FX_PAIR_ORDER } from './majorFxReactions.js';
+import { pipSizeForSymbol } from './speechReactions.js';
 
 /**
  * Pro イベント別トレード戦略分析(HQ指示 2026-11-06「Pro イベント別トレード戦略分析」、api-design v1.48)。
@@ -30,6 +31,34 @@ import { MAJOR_FX_PAIR_ORDER } from './majorFxReactions.js';
  * - sell_the_fact_after_initial_rise(HQ指示 2026-11-09 P0): 「好結果で、初動(1分後)は通貨高、その後15分後には通貨安」。
  *   条件は sell_the_fact と同じ(POSITIVE・EXACT・指標の通貨が通貨ペアにある)に加えて、1分後と15分後の値の両方が要る。
  *   1分後が通貨高でなかった(横ばいを含む)発表は false(判定はした)。分母は sell_the_fact と同じく「結果が良かった発表」。
+ * 値動きの分類(movement_15m・movement_60m。第1段階の拡張。assessMovement): 初動の方向(1分後の pips の符号)・初動後の戻し率・
+ *   最終的な価格位置を分けて数え、CONTINUATION(継続)/ PULLBACK(押し戻し)/ FULL_RETRACEMENT(全戻し)/ REVERSAL(反転)/
+ *   UNDETERMINED(判定不可)のどれかにする。どれも event_price_reactions の保存済みの値だけで決まる(追加の取得・バックフィルなし)。
+ *   - favorable_peak_pips: 窓の中で初動の方向に最も伸びた幅(上なら max_upward_pips、下なら -max_downward_pips。発表直前の価格から)。
+ *   - final_pips_in_initial_direction: 窓の終わりの価格位置(初動の方向を正とした pips = 初動の符号 × pips)。
+ *   - retrace_ratio: (peak − final) / peak。窓の終わりまでに、最も伸びた幅のうちどれだけ戻したか(0 = 戻していない、1 = 発表直前の価格まで、
+ *     1 を超える = 発表直前の価格を逆側に超えた)。
+ *   - crossed_pre_price_after_initial: **2分目以降の1分足の系列から直接判定する**(HQ指示 2026-11-17「Cレビュー反映」)。最初の1分足
+ *     (発表の瞬間に始まる足)を除いた、2分目から窓の終わりまでの1分足について、初動が上なら「安値が発表直前の価格以下になった足が
+ *     あるか」、下なら「高値が発表直前の価格以上になった足があるか」を見る。1分足の時刻で並べるので、「初動の1分より後」であることは
+ *     時間順序として確かめられる(極値の比較では証明できなかった)。
+ *     true = 2分目以降のどれかの足で、発表直前の価格に逆側から届いた。
+ *     false = 窓の1分足(N本)がすべて揃っていて、UNVERIFIED でもなく、2分目以降のどの足も届かなかった(否定の根拠は、揃った足の系列)。
+ *     null = 判定していない(1分足が揃わない・値が無い・保存値の矛盾などで UNDETERMINED のとき)。
+ *   - 保存値の矛盾(DATA_INCONSISTENT): 保存された値(発表直前の価格・1分と窓の最大上昇・最大下落・pips)を、1分足の系列から計算し直した値と
+ *     突き合わせる。極値は許容誤差 1e-6(価格)で**一致**を求める(保存値が系列より大きくても小さくても不一致)。pips は、系列の
+ *     終値(1分 = 1本目、窓 = N 本目)から (終値 − 発表直前の価格) / 1pip で計算し直し、丸め(0.005 pips)の範囲で一致を求める。
+ *   - final_side: 窓の終わりの価格が、発表直前の価格に対して初動と同じ側(SAME)・逆側(OPPOSITE)・同じ(AT_PRE)。
+ *   分類の規則(上から順に。数値の閾値を使うのは PULLBACK と CONTINUATION の境目だけ):
+ *     ① 発表時刻が EXACT でない・必要な値が無い・1分足が欠けている・初動が 0・値の矛盾 → UNDETERMINED(reason に理由)。
+ *     ② final_side = OPPOSITE → REVERSAL(最終的に発表直前の価格を逆側に超えた。一時的に割っただけの発表とは区別する)。
+ *     ③ final_side = AT_PRE、または crossed_pre_price_after_initial = true → FULL_RETRACEMENT(発表直前の価格まで戻したが、最終的な位置は
+ *        初動と同じ側か同じ。= 一時的に割っただけ)。
+ *     ④ それ以外(最終的な位置が初動と同じ側で、発表直前の価格は超えていない): retrace_ratio が pullbackMinRatio 未満 → CONTINUATION、
+ *        以上 → PULLBACK。**pullbackMinRatio は未設定(null)のままにしてある**: 閾値は DEV の通貨ペアごとの実データの分布を確認してから
+ *        HQ が決める(サンプルが少ないうちは確定しない)。未設定の間は UNDETERMINED(reason = THRESHOLD_NOT_SET)とし、retrace_ratio は返す。
+ *   窓は 15m・60m の2つ。15分・60分の1分足が全部揃っていること(minuteCompleteness15m/60m)を、ブレイク判定と同じく条件にする。
+ *
  * 傾向の要約(summary)は、その項目を判定できた発表が STRATEGY_MINIMUM_SAMPLES 回以上あるときだけ数える(少なければ null =
  * 「分析データ準備中」。傾向を断定しない)。
  *
@@ -50,7 +79,22 @@ export interface StrategyReactionInput {
   pips: number | null;
   max_upward: number | null;
   max_downward: number | null;
+  /** 値動きの分類(assessMovement)で使う、窓の中の最大・最小の pips(event_price_reactions.max_upward_pips / max_downward_pips)。 */
+  max_upward_pips?: number | null;
+  max_downward_pips?: number | null;
+  /** 発表直前の価格(event_price_reactions.pre_release_price。どの時間枠も同じ値のはず)。 */
+  pre_release_price?: number | null;
   data_status: string;
+}
+
+/** 発表から窓の終わりまでの1分足(fx_prices の timeframe = 1m)。timestamp は足の開始時刻。 */
+export interface MinuteCandleInput {
+  timestamp: string;
+  high: number;
+  low: number;
+  /** 終値。最終の pips(発表の N 分後の価格 = N 本目の足の終値)を、保存値と突き合わせるために使う。 */
+  close: number;
+  unverified: boolean;
 }
 
 export interface StrategyReleaseInput {
@@ -66,10 +110,49 @@ export interface StrategyReleaseInput {
   /** HQ指示(2026-11-07): 発表から15分・60分の窓に1分足が欠けなく(15本・60本)あり、どれもUNVERIFIEDでないか。 */
   minuteCompleteness15m: boolean;
   minuteCompleteness60m: boolean;
+  /**
+   * 発表の瞬間から60分の窓の1分足(新しい順でなくてよい。UNVERIFIED も含めて渡す)。crossed_pre_price_after_initial の判定と、
+   * 保存値との突き合わせに使う。渡さない(undefined)場合、値動きの分類は判定不可(DATA_MISSING)。
+   */
+  minuteCandles?: readonly MinuteCandleInput[];
+  /** 通貨ペアの1 pip の大きさ(JPY を含むペアは 0.01、それ以外は 0.0001)。保存された pips を終値から再計算するために使う。buildStrategyAnalysis が通貨ペアから補う。 */
+  pip_size?: number;
 }
 
 export type Direction = 'UP' | 'DOWN' | 'FLAT';
 export type Pattern = 'CONTINUATION' | 'REVERSAL';
+
+export type MovementClass = 'CONTINUATION' | 'PULLBACK' | 'FULL_RETRACEMENT' | 'REVERSAL' | 'UNDETERMINED';
+export type MovementUndeterminedReason =
+  | 'NOT_EXACT_RELEASE_TIME'
+  | 'DATA_MISSING'
+  | 'MINUTE_CANDLES_INCOMPLETE'
+  | 'INITIAL_FLAT'
+  | 'DATA_INCONSISTENT'
+  | 'THRESHOLD_NOT_SET';
+export type MovementFinalSide = 'SAME' | 'OPPOSITE' | 'AT_PRE';
+
+/**
+ * 値動きの分類の閾値。数値は独断で決めない(HQ指示)。pullbackMinRatio = null は「未設定」で、PULLBACK と CONTINUATION は
+ * 判定せず UNDETERMINED(THRESHOLD_NOT_SET)にする。DEV の実データの分布の確認後に HQ が決める。
+ */
+export interface StrategyClassificationConfig {
+  pullbackMinRatio: number | null;
+}
+
+export const DEFAULT_STRATEGY_CLASSIFICATION: StrategyClassificationConfig = { pullbackMinRatio: null };
+
+export interface MovementAssessment {
+  class: MovementClass;
+  /** UNDETERMINED のときだけ理由。それ以外は null。 */
+  reason: MovementUndeterminedReason | null;
+  initial_direction: 'UP' | 'DOWN' | null;
+  favorable_peak_pips: number | null;
+  final_pips_in_initial_direction: number | null;
+  retrace_ratio: number | null;
+  crossed_pre_price_after_initial: boolean | null;
+  final_side: MovementFinalSide | null;
+}
 
 export interface StrategyReleaseRow {
   event_id: string;
@@ -95,6 +178,29 @@ export interface StrategyReleaseRow {
   round_trip_60m: boolean | null;
   sell_the_fact: boolean | null;
   sell_the_fact_after_initial_rise: boolean | null;
+  /** 15分の窓での値動きの分類(assessMovement)。 */
+  movement_15m: MovementAssessment;
+  /** 60分の窓での値動きの分類。 */
+  movement_60m: MovementAssessment;
+}
+
+export interface MovementClassSummary {
+  continuation: number;
+  pullback: number;
+  full_retracement: number;
+  reversal: number;
+  undetermined: number;
+  /** 判定できた発表の数(UNDETERMINED を除く)。 */
+  judged: number;
+  minimum_samples: number;
+  /** judged が minimum_samples 以上。足りなければ、件数は参考で、傾向を断定しない。 */
+  ready: boolean;
+}
+
+export interface StrategyMovementSummary {
+  thresholds: { pullback_min_ratio: number | null; status: 'NOT_SET' | 'SET' };
+  window_15m: MovementClassSummary;
+  window_60m: MovementClassSummary;
 }
 
 export interface BreakSummary {
@@ -121,6 +227,8 @@ export interface StrategyAnalysis {
   minimum_samples: number;
   releases: StrategyReleaseRow[];
   summary: StrategySummary;
+  /** 値動きの分類の閾値の状態と、窓ごとの分類の件数(summary とは別。summary の形は変えない)。 */
+  movement: StrategyMovementSummary;
 }
 
 function available(reactions: readonly StrategyReactionInput[], timeframe: string): StrategyReactionInput | null {
@@ -208,7 +316,175 @@ function pipsOf(reactions: readonly StrategyReactionInput[], timeframe: string):
   return reaction?.pips === null || reaction?.pips === undefined ? null : Number(reaction.pips);
 }
 
-export function analyzeRelease(release: StrategyReleaseInput, side: 'BASE' | 'QUOTE' | null): StrategyReleaseRow {
+const round4 = (value: number) => Math.round(value * 10_000) / 10_000;
+
+/** 価格(numeric(12,6))どうしの比較の許容(浮動小数点の誤差)。 */
+const PRICE_TOLERANCE = 1e-6;
+/** pips(numeric(10,2))の丸めの誤差(0.005 pips)に、浮動小数点の誤差を足した許容。 */
+const PIPS_ROUNDING_TOLERANCE = 0.005 + 1e-6;
+const MINUTE_MS = 60_000;
+
+/**
+ * 窓(15m・60m)の1分足が、発表の瞬間から1分ごとに N 本そろっていて、UNVERIFIED が無いか。揃っていれば時刻順の配列を返す。
+ * 時刻が1分の区切りでない・重複・抜け・窓の外は、揃っていないものとして null。
+ */
+function completeSeries(release: StrategyReleaseInput, minutes: number): MinuteCandleInput[] | null {
+  const startMs = Date.parse(release.release_datetime);
+  const inWindow = (release.minuteCandles ?? [])
+    .filter((c) => {
+      const ms = Date.parse(c.timestamp);
+      return ms >= startMs && ms < startMs + minutes * MINUTE_MS;
+    })
+    .sort((x, y) => Date.parse(x.timestamp) - Date.parse(y.timestamp));
+  if (inWindow.length !== minutes) return null;
+  for (let i = 0; i < minutes; i += 1) {
+    const candle = inWindow[i]!;
+    if (Date.parse(candle.timestamp) !== startMs + i * MINUTE_MS || candle.unverified) return null;
+  }
+  return inWindow;
+}
+
+/**
+ * 値動きの分類(上の説明の規則①〜④)。`window` は '15m' か '60m'。保存済みの値と、窓の1分足の系列だけを使い、無い値は作らない。
+ */
+export function assessMovement(
+  release: StrategyReleaseInput,
+  window: '15m' | '60m',
+  config: StrategyClassificationConfig = DEFAULT_STRATEGY_CLASSIFICATION,
+): MovementAssessment {
+  const undetermined = (
+    reason: MovementUndeterminedReason,
+    extra: Partial<MovementAssessment> = {},
+  ): MovementAssessment => ({
+    class: 'UNDETERMINED',
+    reason,
+    initial_direction: null,
+    favorable_peak_pips: null,
+    final_pips_in_initial_direction: null,
+    retrace_ratio: null,
+    crossed_pre_price_after_initial: null,
+    final_side: null,
+    ...extra,
+  });
+
+  if (release.release_datetime_precision !== 'EXACT') return undetermined('NOT_EXACT_RELEASE_TIME');
+  const first = available(release.reactions, '1m');
+  const win = available(release.reactions, window);
+  if (
+    !first ||
+    !win ||
+    first.pips === null ||
+    win.pips === null ||
+    first.max_upward === null ||
+    first.max_downward === null ||
+    win.max_upward === null ||
+    win.max_downward === null ||
+    first.max_upward_pips === null ||
+    first.max_upward_pips === undefined ||
+    first.max_downward_pips === null ||
+    first.max_downward_pips === undefined ||
+    win.max_upward_pips === null ||
+    win.max_upward_pips === undefined ||
+    win.max_downward_pips === null ||
+    win.max_downward_pips === undefined ||
+    first.pre_release_price === null ||
+    first.pre_release_price === undefined ||
+    win.pre_release_price === null ||
+    win.pre_release_price === undefined ||
+    release.minuteCandles === undefined
+  ) {
+    return undetermined('DATA_MISSING');
+  }
+  const minutes = window === '15m' ? 15 : 60;
+  const complete = window === '15m' ? release.minuteCompleteness15m : release.minuteCompleteness60m;
+  const series = complete ? completeSeries(release, minutes) : null;
+  if (series === null) return undetermined('MINUTE_CANDLES_INCOMPLETE');
+
+  const d = sign(Number(first.pips));
+  if (d === 0) return undetermined('INITIAL_FLAT');
+
+  // 保存値の矛盾(1分足の行と長い窓の行は別々に更新されうる)。矛盾があれば、crossed などを判定しない。
+  // 保存値は event_price_reactions(取り込みが、1分足から計算して書いた値)なので、同じ1分足の系列から計算し直した値と、
+  // 許容誤差の中で**一致**するはず。保存値が系列より大きくても小さくても、不一致として扱う(HQ指示 2026-11-17 第2回レビュー)。
+  const pipSize = release.pip_size;
+  if (pipSize === undefined || !(pipSize > 0)) return undetermined('DATA_MISSING');
+  const pre = Number(first.pre_release_price);
+  const near = (a: number, b: number) => Math.abs(a - b) <= PRICE_TOLERANCE;
+  // pips は numeric(10,2) に丸めて保存される(丸めの誤差は 0.005 pips 以下)。
+  const nearPips = (stored: number, recomputed: number) => Math.abs(stored - recomputed) <= PIPS_ROUNDING_TOLERANCE;
+  const head = series[0]!;
+  const last = series[series.length - 1]!;
+  const winHigh = Math.max(...series.map((c) => c.high)) - pre;
+  const winLow = Math.min(...series.map((c) => c.low)) - pre;
+  const consistent =
+    // 発表直前の価格が、1分と窓の行で同じ
+    near(pre, Number(win.pre_release_price)) &&
+    // 1分の行: 最初の1分足の高値・安値(発表直前の価格からの差)と、終値から計算した pips
+    near(Number(first.max_upward), head.high - pre) &&
+    near(Number(first.max_downward), head.low - pre) &&
+    nearPips(Number(first.pips), (head.close - pre) / pipSize) &&
+    // 窓の行: 窓の1分足の最高値・最安値と、N 本目の足の終値から計算した pips
+    near(Number(win.max_upward), winHigh) &&
+    near(Number(win.max_downward), winLow) &&
+    nearPips(Number(win.pips), (last.close - pre) / pipSize) &&
+    // 極値の pips の列が、価格の列と整合(丸めの範囲)
+    nearPips(Number(first.max_upward_pips), Number(first.max_upward) / pipSize) &&
+    nearPips(Number(first.max_downward_pips), Number(first.max_downward) / pipSize) &&
+    nearPips(Number(win.max_upward_pips), Number(win.max_upward) / pipSize) &&
+    nearPips(Number(win.max_downward_pips), Number(win.max_downward) / pipSize) &&
+    // 窓は1分の窓を含む: 最大上昇は1分以上、最大下落(負の方向)は1分以下
+    Number(win.max_upward) >= Number(first.max_upward) - PRICE_TOLERANCE &&
+    Number(win.max_downward) <= Number(first.max_downward) + PRICE_TOLERANCE &&
+    // 最終の位置は、窓の中の最大・最小の間(1分の行も窓の行も)
+    Number(first.max_downward_pips) <= Number(first.pips) &&
+    Number(first.pips) <= Number(first.max_upward_pips) &&
+    Number(win.max_downward_pips) <= Number(win.pips) &&
+    Number(win.pips) <= Number(win.max_upward_pips);
+  if (!consistent) return undetermined('DATA_INCONSISTENT');
+
+  // 2分目以降(最初の1分足を除く)の足で、発表直前の価格に逆側から届いたか。
+  const later = series.slice(1);
+  const crossed =
+    d > 0 ? later.some((c) => c.low <= pre + PRICE_TOLERANCE) : later.some((c) => c.high >= pre - PRICE_TOLERANCE);
+
+  const peak = d > 0 ? Number(win.max_upward_pips) : -Number(win.max_downward_pips);
+  const final = d * Number(win.pips);
+  const finalSide: MovementFinalSide = final > 0 ? 'SAME' : final < 0 ? 'OPPOSITE' : 'AT_PRE';
+  const initialDirection: 'UP' | 'DOWN' = d > 0 ? 'UP' : 'DOWN';
+  const measured = {
+    initial_direction: initialDirection,
+    favorable_peak_pips: peak,
+    final_pips_in_initial_direction: final,
+    crossed_pre_price_after_initial: crossed,
+    final_side: finalSide,
+  };
+  // 最も伸びた幅が 0 以下、または最終の位置より小さいのは、保存値の矛盾(丸めでも起きない)。判定しない。
+  if (peak <= 0 || peak < final) {
+    return undetermined('DATA_INCONSISTENT', {
+      initial_direction: initialDirection,
+      favorable_peak_pips: peak,
+      final_pips_in_initial_direction: final,
+      final_side: finalSide,
+    });
+  }
+  const retrace = round4((peak - final) / peak);
+  const withRatio = { ...measured, retrace_ratio: retrace };
+
+  if (final < 0) return { class: 'REVERSAL', reason: null, ...withRatio };
+  if (final === 0 || crossed) return { class: 'FULL_RETRACEMENT', reason: null, ...withRatio };
+  if (config.pullbackMinRatio === null) return undetermined('THRESHOLD_NOT_SET', withRatio);
+  return {
+    class: retrace < config.pullbackMinRatio ? 'CONTINUATION' : 'PULLBACK',
+    reason: null,
+    ...withRatio,
+  };
+}
+
+export function analyzeRelease(
+  release: StrategyReleaseInput,
+  side: 'BASE' | 'QUOTE' | null,
+  config: StrategyClassificationConfig = DEFAULT_STRATEGY_CLASSIFICATION,
+): StrategyReleaseRow {
   const m1 = available(release.reactions, '1m');
   const m15 = available(release.reactions, '15m');
   const m60 = available(release.reactions, '60m');
@@ -264,6 +540,23 @@ export function analyzeRelease(release: StrategyReleaseInput, side: 'BASE' | 'QU
     round_trip_60m: roundTrip(b60),
     sell_the_fact: sellTheFact,
     sell_the_fact_after_initial_rise: afterInitialRise,
+    movement_15m: assessMovement(release, '15m', config),
+    movement_60m: assessMovement(release, '60m', config),
+  };
+}
+
+function movementClassSummary(assessments: readonly MovementAssessment[]): MovementClassSummary {
+  const count = (cls: MovementClass) => assessments.filter((a) => a.class === cls).length;
+  const judged = assessments.filter((a) => a.class !== 'UNDETERMINED').length;
+  return {
+    continuation: count('CONTINUATION'),
+    pullback: count('PULLBACK'),
+    full_retracement: count('FULL_RETRACEMENT'),
+    reversal: count('REVERSAL'),
+    undetermined: count('UNDETERMINED'),
+    judged,
+    minimum_samples: STRATEGY_MINIMUM_SAMPLES,
+    ready: judged >= STRATEGY_MINIMUM_SAMPLES,
   };
 }
 
@@ -282,9 +575,13 @@ export function buildStrategyAnalysis(
   releases: readonly StrategyReleaseInput[],
   symbol: string,
   currency: string | null,
+  config: StrategyClassificationConfig = DEFAULT_STRATEGY_CLASSIFICATION,
 ): StrategyAnalysis {
   const side = currencySide(symbol, currency);
-  const rows = releases.slice(0, STRATEGY_SAMPLE_WINDOW).map((release) => analyzeRelease(release, side));
+  const pipSize = pipSizeForSymbol(symbol);
+  const rows = releases
+    .slice(0, STRATEGY_SAMPLE_WINDOW)
+    .map((release) => analyzeRelease({ ...release, pip_size: release.pip_size ?? pipSize }, side, config));
 
   const directions = rows.filter((r) => r.direction_1m !== null);
   const patterns = rows.filter((r) => r.pattern_15m !== null);
@@ -328,5 +625,13 @@ export function buildStrategyAnalysis(
     minimum_samples: STRATEGY_MINIMUM_SAMPLES,
     releases: rows,
     summary,
+    movement: {
+      thresholds: {
+        pullback_min_ratio: config.pullbackMinRatio,
+        status: config.pullbackMinRatio === null ? 'NOT_SET' : 'SET',
+      },
+      window_15m: movementClassSummary(rows.map((r) => r.movement_15m)),
+      window_60m: movementClassSummary(rows.map((r) => r.movement_60m)),
+    },
   };
 }
