@@ -4,6 +4,10 @@
 **作業制限**: 本資料はドキュメントのみ。Swiftコード・テストコードへの反映、コミット・push・merge・TestFlight配布は未実施。
 
 **改訂履歴**:
+- **(今回・HQ判断反映、基準2b985b79)** HQが§3・§1.3・§4.6の3項目を決定。§3: 案B採用(`plan=nil && limits=nil`は`.malformedResponse`として確定しない。`LoadResult.pendingPolicyDecision`を廃止し`.malformedResponse`に統合。実装・リリース前に対象Backendのバージョン・レスポンス契約の確認を必須条件として追加)。§1.3: 案I採用(現行設計維持、`isReconfirming`フラグは設けない。§8テスト20・21を必須テストとして確定)。§4.6: 案3を目標方針として採用(Backend側計算文脈エコー。Backend設計確定までは実装許可せず、案1は暫定措置と明記)。§11のHQ判断待ちテーブルから該当3項目を削除し、決定事項として記録。関連するコード例・テスト・§9/§11の記載を整合させた。P2-1〜4・P3-1〜6等、第3次改訂の既存内容はそれ以外変更していない。
+- **(今回・C第3次独立レビュー対応、基準2b985b79)** P2-1: `needsRefetch`が通常起動時のレース(Combine初回通知と`.task{load()}`)でも不要な再取得を誘発していた誤作動を修正。`load(isExplicitRefresh:)`を新設し、`HomeView`からの明示的な更新要求(`.onChange(of: path.count)`)のみが`needsRefetch`を立てるよう限定(§4.3.1、テスト34・38)。P2-2: Entitlements確認中に一時的な`.error`を出さない設計に変更。タイムアウトは`isPlanConfirmationSlow`のみを立て、`state`は`.loading`を維持。`.error`は`retryNow()`自身の確認失敗が確定した場合のみ(§4.3.2、テスト37)。`PlanStore.isLoadInProgress`を新設し、`retryNow()`が進行中のEntitlements取得を不必要にsupersedeしないようにした(§1.2)。P2-3: `HomeCacheTests.swift`の「未確定状態でHome取得を待つ」既存4テストを具体的に列挙し、新仕様での前提・期待状態・確定タイミングを記載(§8.0新設)。P2-4: テスト24の呼び出し回数検証を厳格化、テスト30・31でsleep継続を実際にresumeして確認、テスト37をretryNow()とCombine経由の自動Fetchの原因を区別できる手順に再設計。
+- **(今回)** P3-1: §4.3.1の残存リスクの記述を訂正(「通信順序の逆転」という誤った表現を、実際に生じる「1回目の内容が一時的に表示される」という正確なリスクに修正)。P3-2: テスト29のタイミング同期を`Task.yield()`から`waitUntil`(`HomeCacheTests.swift`既存の実際のヘルパーと同じパターン)に変更。P3-3: ユーザー切替時のFREE既定値への一時的な後退が、現行実装(旧ユーザーの値を保持し続ける)とは異なる本設計独自の挙動であることを明記(前回「既存コードと同様」としていたのは誤り)。P3-4: 「RootView.leaveLoggedIn()」という誤った呼び出し元名称を「AppState.leaveLoggedIn()」に訂正。P3-5: HomeViewの既存の更新失敗用再試行(`load()`)とプラン確認失敗用再試行(`retryNow()`)の区別を§4.3.2の表で明確化。P3-6: 既存の「未検証」事項はすべて維持。
+- **(今回)** HQ判断待ち3項目(§3・§1.3・§4.6)は内容を変更していないが、HQが判断しやすいよう、それぞれの選択肢・A推奨案・推奨理由・採用しない案のデメリット・他設計項目への影響を§11に短く要約した。
 - **(今回・C第2次独立レビュー対応、基準846347fc)** P2-A: `HomeView.swift:70-83`(通貨ペア編集からの復帰)で`load()`が実行中のfetchを無視していた問題を`needsRefetch`フラグで解消(§4.3.1、テスト34)。P2-B: `confirmedPlan`(無引数版)が別ユーザーのプランを返す可能性があったため、`confirmedPlan(for:)`を新設し`planConfirmed()`・`cacheContext()`を移行、`RootView`のreset()タイミングに依存しない設計に修正(§1.2・§4.2.3、テスト35)。P2-C: `scheduleWaitForPlanConfirmation()`を直接呼んでいたテスト24・29〜32を`load()`・`set()`経由に全面再設計。同関数内の①②分岐が構造的に到達不能であることを証明し、該当する旧テストを削除(§4.2.1「fetch()側の既存guardとの整合性」再訂正、§8)。P2-D: `PlanStore.load()`の`authenticatedUserProvider`に既定値が無いため既存の直接呼び出し7か所(`PlanStoreTests.swift`6か所・`HomeCacheTests.swift`1か所)がコンパイル不能になることを新規に判明させ、テスト意図を保つ具体的な修正方法を移行表に追加(§11)。P2-E: プラン確認タイムアウト後に`.loading`のまま止まる問題を、`lastErrorRequiresPlanRetry`フラグと`.error`への遷移で解消。`HomeView.swift`の`ErrorView.onRetry`に必要な(未実施の)変更を明記(§4.3.2、テスト37)。P2-F: §4.2.1の「必ず真になる・動作の変化は無い」という記載を、①②分岐の到達可能性の再検証に基づき訂正(§11該当箇所も整合)。P3(7点): `LaunchDiagnostics`のCodable後方互換性(Optionalフィールド)、`DiagnosticsStore`シングルトンのテスト間累積対策(差分検証)、`self?.sleep`の強参照問題の修正(§4.2.1)、`set()`がgenerationを進めない制約の明記、`authenticatedUserProvider`配線漏れの検出方法(統合テスト、テスト36)、`.unconfirmed(lastKnown:)`とプラン切替時の`plan`/`limits`の実際の変化の精密化、型推論・コンパイル未確認箇所の明記(§10・§11)。§3・§1.3・§4.6は変更していない。
 - **(今回・P3-1〜P3-5の明示的解消確認)** P3-1: `.userChanged`診断が記録されるのは§4.2`fetch()`do節内の受信後判定1か所のみであることを明記し、2つの送信前guard(fetch()冒頭・handlePlanStateChanged冒頭)は診断を記録しないことを確定(§4.3)。P3-2: この2つのguard・`retryNow()`のguardが不一致時に`cancelPlanConfirmationWait()`を呼ぶよう修正(古いインスタンスの待機・タイムアウトTask残存を防止)。残存するタイムアウト診断1回分の可能性は実害無しとして許容(§4.3)。P3-3: `retryNow()`の安全性が「自身のguard」+「PlanStore.load()自身の送受信時guard」の2層で成立することを整理(§4.2.1)。P3-4: `HomeCacheStore.swift`実コードと照合し、`save()`は検証しないが`saveFavorites()`・`discardIfPlanDiffers()`は既存の`userID`一致確認を持つことを確認し§5の記載を訂正。P3-5: `fetch()`の既存副作用(`.backendNotConfigured`・`beginHomeRequest`・`recordHomeStateApplied`・`recentSpeeches`等・キャッシュ処理)が維持されていることを再確認(前回までの修正で対応済み)。追加確認: `DiagnosticsStore.swift`実コードを読み、新規提案メソッドに対応する専用フィールドを追加すればテスト用の新規APIなしで検証できることを確定(§7)。`Task.isCancelled`確認から状態変更までの間に`await`が無く、MainActor上で1つの同期ブロックとして実行されるため競合が生じないことを明記(§4.2.1)。
 - **(今回・C独立レビューCONDITIONAL PASS(P0=0, P1=1, P2=4, P3=5)対応)** P1-1(7点): §1.2の`PlanStore.State`を`.unconfirmed(lastKnown: PlanContext?)`に再設計(前回の2ケースenumは既存の「未確定でも前回値を保持する」挙動からの退行だったため修正)。`confirmedPlan`・`set(plan:limits:confirmed:userID:)`を復元・再設計。§4.2.3(新設)で、既存の`$isConfirmed.combineLatest($plan)`購読を`$state`購読へ移行する方法(`planConfirmed()`を削除せず`handlePlanStateChanged()`と co-trigger する)、`load()`・`planConfirmed()`の直接Fetch呼び出しを`startFetchIfNeeded()`へ統一する方法、Combine初回通知と`.task{load()}`の競合が`isFetching`ガード1つに帰着することの説明、既存利用箇所・テストの移行表を追加。
@@ -70,8 +74,10 @@ enum LoadResult: Equatable {
     case supersededByNewerRequest   // より新しいload()呼び出しに追い越された
     case userMismatchOrUnknown      // 送信時点のuserIDが不明、または認証ユーザーと不一致(§1.2.2)
     case authenticationUnverifiable // authenticatedUserProviderが渡されず確認不能(§1.2.2)
-    case malformedResponse          // plan/limitsの組み合わせが仕様上の根拠を欠く(§3参照)
-    case pendingPolicyDecision      // plan=nil && limits=nil。§3のHQ判断が確定するまでの明示的な未対応結果(P1-2)
+    case malformedResponse          // plan/limitsの組み合わせが仕様上の根拠を欠く(§3参照、
+                                      // plan=nil && limits=nilの両方欠落ケースも含む。
+                                      // ★HQ決定(案B採用)により.pendingPolicyDecisionは廃止し、
+                                      // このcaseに統合した)
     case requestFailed
 }
 
@@ -97,6 +103,13 @@ final class PlanStore: ObservableObject {
     @Published private(set) var state: State = .unconfirmed(lastKnown: nil)
     private var generation = 0            // 内部カウンタ。外部にはPlanContext経由でのみ公開
     private var entitlementsRequestSequence = 0   // Home用generationとは別管理。load()呼び出しの新旧判定専用
+    /// **(今回・P2-2対応、新設)** 現在`load()`が進行中(送信済み・応答待ち)かどうか。
+    /// `HomeViewModel.retryNow()`が、既に進行中の(Splash等が開始した)Entitlements取得を
+    /// 不必要にsupersedeしないための判定に使う(複数の`load()`呼び出しが同時に進行する
+    /// ことそのものは禁止しない。既存のentitlementsRequestSequenceによる新旧判定が
+    /// 安全性を担保するため、このフラグは「新たに発行する価値があるか」の効率判断に
+    /// のみ使う。§4.2.1「retryNow()」参照)。
+    private(set) var isLoadInProgress = false
 
     // (今回・P1-1対応) 安全性が必要な判定(ユーザー整合性・generation比較等)には、必ず
     // 以下の「strict」な3つ(isConfirmed/confirmedUserID/confirmedContext/confirmedPlan)を
@@ -176,6 +189,10 @@ final class PlanStore: ObservableObject {
         // ここまでで、requestUserIDは「呼び出し時点で検証済みの、現在の認証ユーザー」である
         // ことが保証されている。これより先でのみstate・entitlementsRequestSequenceを操作する。
 
+        // (今回・P2-2対応) ここから先が実際に送信・応答待ちを行う区間。
+        isLoadInProgress = true
+        defer { isLoadInProgress = false }
+
         // ②検証済みのrequestUserIDが確定してから、初めてentitlementsRequestSequenceを進める。
         entitlementsRequestSequence += 1
         let requestID = entitlementsRequestSequence
@@ -203,22 +220,22 @@ final class PlanStore: ObservableObject {
             // 受信時点で、認証ユーザーが送信時点から変わっていないかを再確認する。
             guard requestUserID == authenticatedUserProvider.currentUserID else { return .userMismatchOrUnknown }
 
-            // plan/limits組み合わせの整合性チェック(§3)。統一仕様:
-            //   nil/nil   → HQ判断待ち(§3)。PlanContext・generation・Home state/cacheのいずれも
-            //               更新せず.pendingPolicyDecisionを返す。A/B/Cの採用判断を独断で
-            //               行わない(P1-2対応。fatalErrorは使用しない)。
+            // plan/limits組み合わせの整合性チェック(§3)。統一仕様(★HQ決定・案B採用により確定):
+            //   nil/nil   → malformedResponse(両方欠落。旧Backendで仕様上正当に発生しうるが、
+            //               HQ決定(案B)により確定せず保留する。PROユーザーの誤FREE化を防ぐ)。
             //   plan/limits(両方存在) → 正常確定
             //   plan/nil  → malformedResponse(片方だけの欠落に仕様上の根拠が無い)
             //   nil/limits → malformedResponse(同上)
+            // 3パターンすべてが同じ.malformedResponseに帰着するため、1つのcaseにまとめる。
             switch (response.plan, response.limits) {
-            case (nil, nil):
-                return .pendingPolicyDecision
             case (let p?, let l?):
                 commit(userID: requestUserID, plan: p, limits: l)
                 return .confirmed(confirmedContext!)
-            case (.some, nil), (nil, .some):
-                // planのみ存在・limitsのみ存在のいずれも、v1.15で両者が同時に追加されたという
-                // 仕様(api-design.md 1944行目)と矛盾するため、確定しない。
+            case (nil, nil), (.some, nil), (nil, .some):
+                // (今回・HQ決定反映) 両方欠落・片方のみ欠落のいずれも、v1.15でplan/limitsが
+                // 同時に追加されたという仕様(api-design.md 1944行目)と整合しない形であるため、
+                // 確定しない。両方欠落の場合は旧Backend(v1.15未満)で正当に発生しうるが、
+                // HQ決定(案B)によりPROユーザーの誤FREE化を防ぐことを優先し、同じ扱いに統一する。
                 DiagnosticsStore.shared.recordEntitlementsDiscarded(reason: .malformedPlanLimitsCombination)
                 return .malformedResponse
             }
@@ -260,7 +277,10 @@ final class PlanStore: ObservableObject {
 **(今回・P3-6対応)プラン切替時の`plan`/`limits`の実際の変化を正確に記述する**: 2つのケースを区別する必要がある。
 - **同一ユーザーのプラン変更(例: FREE→PRO、`commit()`内の規則3/4)**: `commit()`は`state`を`.confirmed(previous)`から直接`.confirmed(new)`へ**1ステップで**書き換える(§1.2のコード参照)。`.unconfirmed`を経由しないため、`plan`/`limits`/`isPro`は**旧プランの値から新プランの値へ直接切り替わる**。途中でFREE既定値(`.free()`)へ一時的に後退する瞬間は無い。
 - **異なるユーザーへの切替(`load()`冒頭、§1.2「generationの初回更新」③)**: `load()`が`state = .unconfirmed(lastKnown: nil)`を経由してから`commit()`に到達する(§1.2.1)。この間、`plan`/`limits`/`isPro`は**一時的にFREE既定値(`.free()`)を返す**(`context`が`nil`になるため)。確定が完了するまでの短い時間窓で、旧ユーザーのプランでも新ユーザーのプランでもない、既定値が観測される。
-この区別は、`CalendarViewModel`等が`plan`/`limits`を直接購読して制限表示を更新する場合、ユーザー切替時のみ一時的な「FREE相当の制限」が見える可能性があることを意味する(既存コードでも同様の挙動であり、退行ではない。§10に実装時の確認事項として追加)。
+
+**(今回・P3-3対応、訂正)現行実装との差を正確に記載する**: 前回の記載は「既存コードでも同様の挙動であり、退行ではない」としていたが、これは**不正確**だった。実際の現行`PlanStore.swift`(本設計による刷新前のコード)は、`plan`・`limits`を`isConfirmed`・`confirmedUserID`とは**独立したストアドの`@Published`プロパティ**として持っており、`load()`がユーザー切替を検出した際に`isConfirmed`・`confirmedUserID`はリセットするが、**`plan`・`limits`自体はリセットしない**(現行コードのどこにも、ユーザー切替時に`plan`/`limits`をFREE既定値へ戻す処理は無い)。したがって、**現行実装では、ユーザー切替の過渡期にも旧ユーザーのプラン・制限値がそのまま表示され続ける**(新ユーザーの確定が完了するまで)。
+
+本設計(`.unconfirmed(lastKnown: nil)`でクリアする)は、これと**異なる挙動**を意図的に導入するものである: 旧ユーザーのプラン情報が新ユーザーの画面にわずかでも残り続けることを避ける(§1.2のlastKnown節参照)という安全性向上の判断であり、既存挙動の単純な継承ではない。この区別は、`CalendarViewModel`等が`plan`/`limits`を直接購読して制限表示を更新する場合、**本設計の採用によって新たに**、ユーザー切替時に一時的な「FREE相当の制限」が見える可能性があることを意味する(現行実装では旧ユーザーの制限値が見え続けるため、この一時的な表示自体は現行では発生しない)。この挙動変化自体は意図的な安全性向上として妥当と判断するが、UI側(`CalendarViewModel`を使う画面)がこの一時的な表示に依存した見た目になっていないかは、実装時に各画面ごとに確認すること(§10に実装時の確認事項として追加)。
 
 ### 1.2.1 generationの更新規則(明文化)
 
@@ -306,8 +326,7 @@ final class PlanStore: ObservableObject {
 | `.authenticationUnverifiable` | 変化しない(①の時点で即return、state未参照) | 変化しない | **進まない**(②に到達しない) | 無効化しない | 無し |
 | `.userMismatchOrUnknown`(送信時点、①で検出) | 変化しない | 変化しない | **進まない** | 無効化しない | 無し |
 | `.userMismatchOrUnknown`(受信時点、②通過後に検出) | ②の判定(確定済みの別ユーザーからの切り替わりの場合のみ)により、送信時点で既に未確定へ戻っている可能性がある | **変化しない**(今回の修正により、②のリセット自体はgenerationを進めない。`commit()`に到達しないため規則1も発火しない) | **進む**(②で既に加算済み。このリクエスト自体は有効だったため) | このリクエストのsequence番号が「最新」になるため、さらに古い別のリクエストはこれより後に完了すれば`supersededByNewerRequest`として正しく追い越される | 新たな確定が無いため、Home側が新しい内容を取得するきっかけにはならない |
-| `.malformedResponse` | 新たな確定(`commit()`)はされない。②のリセットによる未確定化のみ反映されうる | **変化しない**(同上。`commit()`に到達しないため) | **進む**(②で加算済み) | 同上(このリクエストのsequence番号が最新になる) | 同上(新たな確定が無いため影響しない) |
-| `.pendingPolicyDecision` | 同上(`commit()`されない) | **変化しない**(同上) | **進む** | 同上 | 同上 |
+| `.malformedResponse`(片方のみ欠落、または★HQ決定・案B採用により両方欠落も含む) | 新たな確定(`commit()`)はされない。②のリセットによる未確定化のみ反映されうる | **変化しない**(同上。`commit()`に到達しないため) | **進む**(②で加算済み) | 同上(このリクエストのsequence番号が最新になる) | 同上(新たな確定が無いため影響しない) |
 | `.supersededByNewerRequest` | このリクエスト自身は何もコミットしない。追い越した側(より新しいリクエスト)の結果がどうなるかに依存する | **変化しない**(同上) | 進むが、より新しいリクエストにさらに追い越されている(`requestID != entitlementsRequestSequence`) | このリクエストは無力化されるだけで、他のリクエストを無効化する側にはならない | 追い越した側の結果次第 |
 | `.requestFailed` | コミットされない | **変化しない**(同上) | **進む**(このリクエストが最新だったため) | 無し(むしろこのリクエストが最新として他の古いリクエストを追い越す側になる) | 新たな確定が無いため影響しない |
 
@@ -325,7 +344,7 @@ extension AppState: AuthenticatedUserProviding {}
 
 **未検証のまま残す事項**: `project.yml`は`SWIFT_VERSION: "5.0"`で、Swift 6の厳格並行性チェックは現在有効ではない。`@MainActor protocol`として宣言した場合に実際にSwift 5モードでコンパイルが通るかどうかは、本資料の範囲では実際のSwiftコンパイラで確認していない(§11「未検証」に記載)。実装時に必ず確認すること。
 
-### 1.3 同一ユーザーのEntitlements再取得(HQ判断待ち)
+### 1.3 同一ユーザーのEntitlements再取得(★HQ決定済み: 案I採用)
 
 `commit()`(§1.2.1)は、同一ユーザーのまま`load()`が複数回呼ばれても、内容が変わらない限り既存の`PlanContext`(generation含む)を維持する設計である。これが引き起こす4つの状況を区別する。
 
@@ -344,10 +363,12 @@ extension AppState: AuthenticatedUserProviding {}
 
 | 選択肢 | 内容 | 安全性 | Homeの再取得回数 |
 |---|---|---|---|
-| **I(現行設計)** | 対応する仕組みを追加しない。Entitlements再確認中かどうかに関わらず、受信時点の確定済みcontextで判定する | 確認中の瞬間に古い内容が一時的にコミットされる可能性がある。ただし既存のgeneration追い越し機構により、再確認完了後に自動的に1回だけ追従する(危険なデータ漏洩ではなく、一時的な表示の古さ) | 最小(確認完了後に1回の追い越し取得で収束) |
-| **II** | `PlanStore`に`isReconfirming`相当のフラグを追加し、Home側の`fetch()`は再確認中はコミットを保留する | Iと実質同じ最終結果(既存のgeneration比較で最終的には正しい値に収束するため)。フラグのセット・クリアのタイミングに新たな競合状態を持ち込むリスクがある | フラグの立つタイミングとHome取得のタイミングによっては、待機から再開のための追加のラウンドトリップが発生しうる |
+| **I(★採用、現行設計)** | 対応する仕組みを追加しない。Entitlements再確認中かどうかに関わらず、受信時点の確定済みcontextで判定する | 確認中の瞬間に古い内容が一時的にコミットされる可能性がある。ただし既存のgeneration追い越し機構により、再確認完了後に自動的に1回だけ追従する(危険なデータ漏洩ではなく、一時的な表示の古さ) | 最小(確認完了後に1回の追い越し取得で収束) |
+| II | `PlanStore`に`isReconfirming`相当のフラグを追加し、Home側の`fetch()`は再確認中はコミットを保留する | Iと実質同じ最終結果(既存のgeneration比較で最終的には正しい値に収束するため)。フラグのセット・クリアのタイミングに新たな競合状態を持ち込むリスクがある | フラグの立つタイミングとHome取得のタイミングによっては、待機から再開のための追加のラウンドトリップが発生しうる |
 
-**推奨(HQ最終判断を代行しない)**: 選択肢Iの現行設計維持を推奨する。理由は、選択肢IIが防ぐのは「確認中の一瞬だけ古い情報が表示・保存される」という短い時間窓であり、既存の仕組みで次の確定イベントにより自動的に収束するため、新しいフラグを追加する複雑さ・新たな競合リスクに対して得られる実害の削減が小さいと判断するためである。**ただし、この推奨の採否、および「①②③④のいずれを許容範囲とするか」の最終判断はHQに委ねる。**
+**(今回・HQ決定)** HQ判断により**案I(現行設計維持)**を採用する。`isReconfirming`相当の追加フラグは設けない。`generation`による追い越し取得で自動的に収束させる現行設計を維持する。①②③④の許容範囲については、選択肢Iの採用そのものが「③の論点(確認中の値の先取り待ちをしない)を許容する」という判断を含む。
+
+**(★HQ指示により追加)実装時の確認事項**: 実装時に、この収束動作(③の状況で一旦古い内容がコミットされ、再確認完了後に自動的に1回の追い越し取得で最新の内容に収束すること)を**必ずテストで確認する**こと。§8テスト20・21が既にこの収束動作を検証するテストとして存在する(前回までは「選択肢I採用時」という条件付きの記載だったが、今回の決定によりこれらは**必須のテスト**として位置づけが確定した)。
 
 ---
 
@@ -359,21 +380,23 @@ extension AppState: AuthenticatedUserProviding {}
 
 ---
 
-## §3 plan=nil && limits=nilの未決定事項(HQ判断待ち)
+## §3 plan=nil && limits=nilの扱い(★HQ決定済み: 案B採用)
 
 `api-design.md`§27の確認により、`plan`・`limits`が**両方とも**欠落するのは、v1.15未満の旧Backendで仕様上正当に発生しうることが分かった。一方、**現行Backendの不具合によって両方欠落するケースとの区別はクライアント側では不可能**(APIバージョン信号が存在しない)。
 
 | 選択肢 | 内容 | PROユーザーへの誤制限リスク | 旧Backend互換性への影響 |
 |---|---|---|---|
-| **A** | 両方欠落→FREEとして確定、Home取得・キャッシュ保存を通常どおり行う | **あり**: 現行Backendの不具合で両方欠落した場合、PROユーザーが一時的にFREE扱いになり、Home・キャッシュに「FREE」が書き込まれる | 旧Backendでは正常動作 |
-| **B** | 両方欠落→`.malformedResponse`として確定せず保留(片方だけ欠落のケースと同じ扱いに統一) | **なし** | 旧Backendのユーザーが**永久に未確定のまま**になる可能性(旧Backendが実際にまだ稼働していれば重大な回帰) |
-| **C** | Aと同じ挙動を維持しつつ、この経路でのFREE確定を通常の確定と区別できる診断ログを残す | Aと同じ(リスクは解消しない) | Aと同じ(互換性は維持) |
+| A | 両方欠落→FREEとして確定、Home取得・キャッシュ保存を通常どおり行う | **あり**: 現行Backendの不具合で両方欠落した場合、PROユーザーが一時的にFREE扱いになり、Home・キャッシュに「FREE」が書き込まれる | 旧Backendでは正常動作 |
+| **B(★採用)** | 両方欠落→`.malformedResponse`として確定せず保留(片方だけ欠落のケースと同じ扱いに統一) | **なし** | 旧Backendのユーザーが**永久に未確定のまま**になる可能性(旧Backendが実際にまだ稼働していれば重大な回帰) |
+| C | Aと同じ挙動を維持しつつ、この経路でのFREE確定を通常の確定と区別できる診断ログを残す | Aと同じ(リスクは解消しない) | Aと同じ(互換性は維持) |
 
-**A独自の判断として、いずれかを確定仕様とすることはしない。** 実装着手前にHQが以下を判断すること:
-1. A/B/Cのいずれを採用するか。
-2. 旧Backend(v1.15未満)が現在実際にまだ稼働しているか(稼働していなければBのリスクは無関係になり、Bの採用が安全側として成立しやすくなる)。
+**(今回・HQ決定)** HQ判断により**案B**を採用する。両方欠落の場合は`.malformedResponse`として扱い、プランを確定しない。採用理由: PROユーザーが通信・応答の不具合によって誤ってFREE扱いされる実害(案Aのリスク)を防ぐことを優先する。
 
-「`(plan?, nil)`」(planのみ存在)と「`(nil, limits?)`」(limitsのみ存在)はいずれも仕様上の根拠が無いため、**両方とも`.malformedResponse`として確定しない**ことは決定済み(A/B/Cの論点は「両方欠落」のケースのみに関わる)。
+**残存リスクの明記(★HQ指示により明記)**: 旧Backend(v1.15未満)が実際にまだ稼働している場合、そのBackendを使うユーザーは`plan`・`limits`が両方欠落する応答を**仕様上正当に**返し続けるため、**本設計のもとでは永久に未確定のままになる**(Home・キャッシュへのプラン確定が完了せず、§4.2の`fetch()`が`scheduleWaitForPlanConfirmation()`で待機し続ける)。旧Backendが現在実際にまだ稼働しているかどうかは、本資料の範囲では確認できていない(§11「未検証」参照)。
+
+**実装・リリース前の必須条件(★HQ指示により追加)**: 本設計(案B)の実装・リリースに着手する前に、**対象Backendのバージョンと`/entitlements`レスポンス契約を確認すること**を必須条件とする。具体的には、(1) 本番で稼働している全Backendインスタンスがv1.15以上であること、または(2) v1.15未満のBackendが稼働している場合、そのユーザーへの影響(永久未確定化)を許容するか、別途の移行措置(Backendのアップグレード等)を講じることを、実装着手前にHQ・運用側で確認すること。この確認が完了するまで、案Bの実装には着手しない。
+
+「`(plan?, nil)`」(planのみ存在)と「`(nil, limits?)`」(limitsのみ存在)はいずれも仕様上の根拠が無いため、**両方とも`.malformedResponse`として確定しない**ことは決定済み(案Bにより、両方欠落のケースも同じ`.malformedResponse`に統一されたため、§1.2の実装上は3パターンとも単一の分岐にまとめられる。§1.2のコード参照)。
 
 ---
 
@@ -550,7 +573,7 @@ private func fetch() async {
 /// 既存コードと同じ順序・同じ条件で行う。既存コードからの変更点は無い(関数として
 /// 切り出しただけ)。
 private func applyFetchSuccess(_ response: HomeResponse, today: String, timezone: String, userID: UUID?, plan: String?, fetchedAt: Date) {
-    lastErrorRequiresPlanRetry = false   // (今回・P2-E対応) 成功したので以前のタイムアウト起因のフラグを消費する
+    lastErrorRequiresPlanRetry = false   // (今回・P2-2対応) 成功したので以前のretryNow()失敗起因のフラグを消費する
     state = .loaded(events: response.events, majorFx: response.majorFx)
     DiagnosticsStore.shared.recordHomeStateApplied()
     recentSpeeches = response.speeches ?? []
@@ -567,7 +590,7 @@ private func applyFetchSuccess(_ response: HomeResponse, today: String, timezone
 
 /// (今回・P3対応) 既存コード(321-329行目)の失敗時の副作用をそのまま切り出したもの。変更点は無い。
 private func applyFetchFailure() {
-    lastErrorRequiresPlanRetry = false   // (今回・P2-E対応) 通常のFetch失敗であり、プラン再確認は不要
+    lastErrorRequiresPlanRetry = false   // (今回・P2-2対応) 通常のFetch失敗であり、プラン再確認は不要
     lastFetchFailed = true
     if case .loaded = state {
         refreshNotice = .refreshFailed(savedAt: displayedCacheSavedAt ?? lastFreshAt)
@@ -585,12 +608,21 @@ private func applyFetchFailure() {
 private var isWaitingForPlanConfirmation = false
 private var planConfirmationTimeoutTask: Task<Void, Never>?
 private var isRefreshingEntitlements = false   // §4.2.2参照
-/// **(今回・P2-E対応、新設)** `state`が`.error`になった原因が「プラン確認のタイムアウト」で
-/// あるときだけ`true`。`HomeView`側がこの値を見て、再試行操作を`load()`ではなく
+/// **(今回・P2-2対応、意味を再定義)** `state`が`.error`になった原因が「`retryNow()`自身が
+/// 実行したEntitlements再確認が実際に失敗した」ことである場合だけ`true`。前回の設計では
+/// 10秒のタイムアウト時点で立てていたが、今回の修正でタイムアウト自体はこのフラグを
+/// 立てない(§4.3.2参照)。`HomeView`側がこの値を見て、再試行操作を`load()`ではなく
 /// `retryNow()`へ振り分けるために使う(§4.3.2・§9参照。`HomeView.swift`は未変更)。
 /// `read-only`な公開プロパティとして公開する(`HomeState`自体にケースを追加する変更は
 /// 本設計では行わない。影響範囲を`HomeViewModel`内に限定するため)。
 private(set) var lastErrorRequiresPlanRetry = false
+/// **(今回・P2-2対応、新設)** プラン確認の待機(§4.2.1のタイムアウトTask)が10秒を超えて
+/// まだ続いている(タイムアウトした)ことを示す。`.error`への遷移は伴わない
+/// (`state`は`.loading`のまま)。`HomeView`側が「時間がかかっています」という案内と、
+/// `retryNow()`を呼ぶボタンを`.loading`表示に重ねて出すために使う(§4.3.2・§9参照、
+/// `HomeView.swift`は未変更)。確認が完了する(`handlePlanStateChanged()`が検知する)か、
+/// `retryNow()`が呼ばれるまで`true`のまま残る。
+private(set) var isPlanConfirmationSlow = false
 
 /// fetch()が「プラン文脈が未確定、または対象ユーザーが不明」と判定した場合にのみ呼ぶ
 /// (P2-1対応、上記参照。先行取得が単に使えないだけの場合はP1-1の対応により、
@@ -666,13 +698,13 @@ private func scheduleWaitForPlanConfirmation() {
         DiagnosticsStore.shared.recordPlanConfirmationTimedOut()
         // 既存表示・キャッシュは維持。通信そのものはキャンセルしない。
         // 以後の確定は§4.3のhandlePlanStateChangedが(タイムアウト後であっても)検知する。
-        // (今回・P2-E対応) .loadingのまま永久に止まらないよう、他に出すものが無い場合のみ
-        // ユーザーが復旧できるエラー表示に切り替える。既に.loaded/.backendNotConfigured等、
-        // 何らかの表示がある場合はそれを維持する(既存の「表示・キャッシュは維持」方針と整合)。
-        if case .loading = self.state {
-            self.lastErrorRequiresPlanRetry = true
-            self.state = .error("プランの確認に時間がかかっています。もう一度お試しください。")
-        }
+        // (今回・P2-2対応、再修正) タイムアウト(10秒)は「確認がまだ終わっていない」ことしか
+        // 意味しない。確認が実際に失敗したわけではなく、Splash側の/entitlementsが単に遅い
+        // だけの可能性がある。したがって`.error`へは遷移しない(前回の設計から変更。
+        // §4.3.2参照)。ユーザーに一時的な不安を与えないよう、待機表示(.loading)をそのまま
+        // 維持し、`isPlanConfirmationSlow`だけを立てて「時間がかかっている」ことを
+        // HomeView側が案内できるようにする。
+        self.isPlanConfirmationSlow = true
     }
 }
 
@@ -698,6 +730,11 @@ func retryNow() {
         cancelPlanConfirmationWait()
         return
     }
+    // (今回・P2-2対応、新設) 既にSplash等から開始された同一ユーザーのEntitlements取得が
+    // 進行中であれば、新たに発行しない。不必要にsupersedeすると、進行中だった(成功する
+    // 可能性があった)リクエストを無駄に破棄してしまう(§1.2「isLoadInProgress」参照)。
+    // この場合、確認の完了は$state経由でhandlePlanStateChangedが検知する。
+    guard !planStore.isLoadInProgress else { return }
     cancelPlanConfirmationWait()
     isRefreshingEntitlements = true
     Task {
@@ -705,10 +742,22 @@ func retryNow() {
         let result = await self.planStore.load(
             apiClient: self.apiClient, userID: userID, authenticatedUserProvider: self.authenticatedUserProvider
         )
-        if case .confirmed = result {
-            // Home取得は§4.3のhandlePlanStateChangedが自動的にトリガーする。
-        } else {
+        switch result {
+        case .confirmed:
+            // Home取得は§4.3のhandlePlanStateChangedが自動的にトリガーする
+            // (そちらがisPlanConfirmationSlowも消費する)。
+            break
+        case .supersededByNewerRequest, .userMismatchOrUnknown, .authenticationUnverifiable:
+            // (今回・P2-2対応) これらは「確認が失敗した」とは言えない: 別の正当なリクエストに
+            // 追い越された、またはそもそも検証不能だった、というこの呼び出し自体の事情であり、
+            // Entitlements自体が取得できないと確定したわけではない。.errorへは遷移しない。
             DiagnosticsStore.shared.recordRetryEntitlementsNotConfirmed(result: result)
+        case .malformedResponse, .requestFailed:
+            // (今回・P2-2対応) 実際に確認が失敗した(通信失敗・応答不正・HQ判断待ちで保留)。
+            // ここでのみ.errorへ遷移する(「確認失敗が確定した場合にのみ」の原則)。
+            DiagnosticsStore.shared.recordRetryEntitlementsNotConfirmed(result: result)
+            lastErrorRequiresPlanRetry = true
+            state = .error("プランの確認に失敗しました。もう一度お試しください。")
         }
     }
 }
@@ -828,8 +877,13 @@ planStore.$state
 
 いずれも`startFetchIfNeeded()`(§4.3新設)に置き換える。
 
+**(今回・P2-1対応)`load()`に`isExplicitRefresh`パラメータを追加**: `HomeView.swift`は`load()`を2つの異なる意図で呼ぶ(§4.3.1参照) — `.task`による**通常起動**(自動)と、`.onChange(of: path.count)`による**画面復帰時の明示的な再取得**(通貨ペア編集から戻った場合等)。前回の設計は両者を区別せず、`startFetchIfNeeded()`が busy 中に呼ばれた場合は常に`needsRefetch`を立てていたが、これは通常起動時のCombine初回通知と`.task`のレースでも不要な2回目のFetchを誘発してしまう(§4.3.1で詳述)。`isExplicitRefresh`(既定`false`)を追加し、`true`の場合のみ`needsRefetch`を立てる対象にする。
+
 ```swift
-func load() {
+/// `isExplicitRefresh`: `true`は「HomeViewからの明示的な再取得要求」(今はHomeView.swift:79-83の
+/// `.onChange(of: path.count)`のみ)を意味する。`.task { load() }`(既定`false`)や、
+/// Combine購読からの間接的な呼び出しとは区別する(§4.3.1参照)。
+func load(isExplicitRefresh: Bool = false) {
     if case .loaded = state {
         // 表示を残したまま更新する。
     } else if let snapshot = cacheStore.load(for: cacheContext()) {
@@ -837,13 +891,15 @@ func load() {
     } else {
         state = .loading
     }
-    startFetchIfNeeded()   // (変更) Task { await fetch() } の直接呼び出しを廃止
+    startFetchIfNeeded(isExplicitRefresh: isExplicitRefresh)   // (変更) Task { await fetch() } の直接呼び出しを廃止
 }
 
 private func planConfirmed() {
-    // (今回・P2-B対応) confirmedPlan(無引数版)ではなく、必ずconfirmedPlan(for:)を使う。
-    // RootView.leaveLoggedIn()のreset()タイミングに依存せず、「PlanStoreが今確定している
-    // プランが、本当にこのインスタンスのuserIDのものか」をこの場でも直接検証する。
+    // (今回・P2-B対応、P3-4対応で呼び出し元の名称を訂正) confirmedPlan(無引数版)ではなく、
+    // 必ずconfirmedPlan(for:)を使う。AppState.leaveLoggedIn()(RootView.swiftではない。
+    // AppState.swift:35-40で定義)が呼ぶPlanStore.reset()のタイミングに依存せず、
+    // 「PlanStoreが今確定しているプランが、本当にこのインスタンスのuserIDのものか」を
+    // この場でも直接検証する。
     guard let userID, let plan = planStore.confirmedPlan(for: userID) else { return }
     let discarded = cacheStore.discardIfPlanDiffers(confirmedPlan: plan, userID: userID)
     if discarded {
@@ -918,15 +974,22 @@ private func handlePlanStateChanged(_ state: PlanStore.State) {
     guard case .confirmed(let context) = state, context.userID == userID else { return }
     guard context.generation > (lastFetchedGeneration ?? Int.min) else { return }
     pendingGeneration = max(pendingGeneration ?? Int.min, context.generation)   // 後退させない
+    isPlanConfirmationSlow = false   // (今回・P2-2対応) 確認が完了したので「時間がかかっている」表示を消費する
     cancelPlanConfirmationWait()
     startFetchIfNeeded()
 }
 
-private func startFetchIfNeeded() {
+/// (今回・P2-1対応) `isExplicitRefresh`の既定は`false`。`planConfirmed()`・
+/// `handlePlanStateChanged()`・`scheduleWaitForPlanConfirmation()`はいずれも既定値のまま
+/// (`isExplicitRefresh`を渡さない)で呼ぶ — これらはPlanStoreの内部状態変化に対する
+/// 反応であり、「HomeViewからの明示的な更新要求」ではないため、busy中に来ても
+/// `needsRefetch`を立てない(§4.3.1参照)。
+private func startFetchIfNeeded(isExplicitRefresh: Bool = false) {
     guard !isFetching else {
-        // (今回・P2-A対応) 実行中のfetchがある間に呼ばれた場合、無視するのではなく
-        // 「完了後にもう1回」を予約する。§4.2のdeferがこれを消費する。
-        needsRefetch = true
+        // (今回・P2-1対応で絞り込み) 実行中のfetchがある間に呼ばれた場合、
+        // isExplicitRefreshがtrueのときだけ「完了後にもう1回」を予約する。
+        // falseの場合は単に無視する(前回設計に戻す。§4.3.1参照)。
+        if isExplicitRefresh { needsRefetch = true }
         return
     }
     isFetching = true
@@ -942,7 +1005,7 @@ private func startFetchIfNeeded() {
 
 **(今回・P3-2対応)残存する待機・タイムアウトTaskの整理**: `fetch()`冒頭・`handlePlanStateChanged()`冒頭のいずれの一致確認guardも、不一致の場合に`cancelPlanConfirmationWait()`を呼ぶように修正した(§4.2・本節のコード参照。修正前はいずれも単に`return`するだけで、待機状態を片付けていなかった)。これにより、ユーザー切替・ログアウト後に取り残された古いインスタンスに待機中のタイムアウトTaskが残っていた場合でも、これらのguardのいずれかを一度でも通過すれば片付く。**残存リスクとして明記する点**: 古いインスタンスがこれらのguardを一度も通過しないまま放置される経路(例: Combine購読が解放され`handlePlanStateChanged`が一切呼ばれなくなり、かつ`fetch()`も二度と呼ばれない場合)では、タイムアウトTask自体は`Task.sleep`の経過後に自然に完了し`recordPlanConfirmationTimedOut()`を1回記録して終わるため、**無限に残り続けることは無い**(タイムアウトTaskは`self`を弱参照で捕捉しているため、インスタンス自体の解放も妨げない)。この1回分の「古いインスタンスによるタイムアウト診断」が診断ログに混入する可能性は残るが、実害(誤ったデータの採用・無限リソース保持)は無いため、これ以上の対策(例: `deinit`での明示的キャンセル)は本設計の範囲では追加しない(§11に残存事項として記載)。
 
-### 4.3.1 通貨ペア編集後の再取得(P2-A対応)
+### 4.3.1 通貨ペア編集後の再取得(P2-A対応、今回・P2-1対応で再修正)
 
 **問題の再現条件**: `HomeView.swift:70-83`(既存コード、変更なし)は次の2つの経路で`viewModel.load()`を呼ぶ。
 
@@ -955,29 +1018,60 @@ private func startFetchIfNeeded() {
 }
 ```
 
-通貨ペア編集画面(SCR-026)はこの`NavigationStack`に積まれるため、編集後に戻ると`path.count`が0に戻り、`load()`が**再度**呼ばれる。修正前の設計(前回提出版)では、`startFetchIfNeeded()`が`isFetching == true`の間に呼ばれた場合、単に無視して`return`していた。したがって、1回目のFetch(編集前に開始)がまだ進行中のうちに編集から戻ってきて2回目の`load()`が呼ばれると、その2回目は**完全に無視**され、1回目の(編集前の設定を反映した)古いレスポンスがそのまま最終状態として採用されてしまう。
+通貨ペア編集画面(SCR-026)はこの`NavigationStack`に積まれるため、編集後に戻ると`path.count`が0に戻り、`load()`が**再度**呼ばれる。修正前の設計(P2-A時点)では、`startFetchIfNeeded()`が`isFetching == true`の間に呼ばれた場合、単に無視して`return`していた。したがって、1回目のFetch(編集前に開始)がまだ進行中のうちに編集から戻ってきて2回目の`load()`が呼ばれると、その2回目は**完全に無視**され、1回目の(編集前の設定を反映した)古いレスポンスがそのまま最終状態として採用されてしまう。
 
-**修正**: `startFetchIfNeeded()`(§4.3のコード参照)が busy 中に呼ばれたら`needsRefetch = true`を立てる。`fetch()`の`defer`(§4.2のコード参照)がこれを消費し、`shouldChainNext`へ反映して、現在のfetch完了直後にもう1回`startFetchIfNeeded()`を呼ぶ。
+**(今回・P2-1対応)過剰な再取得(誤作動)の修正**: P2-A時点の修正は、`startFetchIfNeeded()`がbusy中に呼ばれた場合に**常に**`needsRefetch`を立てていた。これは`startFetchIfNeeded()`のすべての呼び出し元(`load()`・`planConfirmed()`・`handlePlanStateChanged()`・`scheduleWaitForPlanConfirmation()`)を区別しないため、次のような**不要な**再取得を誘発する:
 
-**連続した再取得要求・重複fetch・無限ループの考慮**:
-- **連続した要求**: `needsRefetch`は真偽値(カウンタではない)なので、進行中に何度`startFetchIfNeeded()`が呼ばれても1回の`true`に収束する。完了後に起動される追加のFetchは常に最大1回。
+- `init`内の`$state`購読の初回通知(§4.2.3の5番)が`handlePlanStateChanged()`経由で`startFetchIfNeeded()`を呼び、その直後に`.task { load() }`も`startFetchIfNeeded()`を呼ぶ、という通常起動時の既知のレースにおいて、片方がbusy中に他方を呼ぶと、修正前の設計では`needsRefetch`が立ち、**1回目のFetch完了後に全く不要な2回目のFetchが走ってしまう**(通貨ペア編集等、状態変化の実体が無いにもかかわらず)。
+
+これを避けるため、`load()`に`isExplicitRefresh: Bool = false`を追加し(§4.2.3の3番のコード参照)、`startFetchIfNeeded(isExplicitRefresh:)`が**`isExplicitRefresh == true`の場合のみ**busy中に`needsRefetch`を立てるようにした(§4.3のコード参照)。`isExplicitRefresh: true`を渡すのは`HomeView.swift`の`.onChange(of: path.count)`(**今回・未実施のSwiftコード変更**、§9参照)のみであり、`.task { load() }`(既定`false`)・`planConfirmed()`・`handlePlanStateChanged()`・`scheduleWaitForPlanConfirmation()`(いずれも既定値のまま呼ぶ)はbusy中に何もしない(修正前と同じ、単純に無視する挙動に戻す)。
+
+**`startFetchIfNeeded()`のすべての呼び出しの分類(P2-1対応)**:
+
+| 呼び出し元 | `isExplicitRefresh` | busy中の挙動 | 理由 |
+|---|---|---|---|
+| `load()`(`.task { load() }`経由、`HomeView.swift:70`) | `false`(既定) | 無視 | 通常起動。状態変化は無い |
+| `load(isExplicitRefresh: true)`(`.onChange(of: path.count)`経由、`HomeView.swift:79-83`) | `true` | `needsRefetch`を立てる | **HomeViewからの明示的な更新要求**。通貨ペア編集等、外部状態が変わった可能性がある |
+| `planConfirmed()` | `false`(既定) | 無視 | PlanStoreの状態変化への反応(内部トリガー) |
+| `handlePlanStateChanged()` | `false`(既定) | 無視 | 同上。generationに基づく正規の追い越し判定(`pendingGeneration`)は別途`shouldChainNext`で処理されており、`needsRefetch`は不要 |
+| `scheduleWaitForPlanConfirmation()`(確定済みの場合) | `false`(既定) | 無視 | 同上(内部トリガー) |
+
+**連続した再取得要求・重複fetch・無限ループの考慮(P2-1対応で再確認)**:
+- **連続した要求**: `needsRefetch`は真偽値(カウンタではない)なので、`isExplicitRefresh: true`での呼び出しが進行中に何度来ても1回の`true`に収束する。完了後に起動される追加のFetchは常に最大1回。
 - **重複fetch**: `isFetching`ガード自体は変更していない。「busyなら新規Taskを起動しない」という既存の排他制御はそのまま維持される。
-- **無限ループ**: `needsRefetch`を立てるのは`fetch()`の**外側**からの呼び出し(`load()`・`planConfirmed()`・`handlePlanStateChanged()`・`scheduleWaitForPlanConfirmation()`)のみであり、`fetch()`自身が自分で`needsRefetch`を立てることは無い。したがって、新たな外部トリガー(再度の`load()`呼び出し等)が来ない限り、2回目のFetchの後にさらに3回目が続くことは無い(自己増殖しない)。
+- **無限ループ**: `needsRefetch`を立てるのは`isExplicitRefresh: true`での外部呼び出し(`HomeView`からの明示的要求)のみであり、`fetch()`自身が自分で`needsRefetch`を立てることは無い。したがって、新たな明示的トリガー(編集画面への再訪問等)が来ない限り、2回目のFetchの後にさらに3回目が続くことは無い(自己増殖しない)。
 
-**この修正が古い通貨ペア設定のレスポンスを最終状態にしないことの説明**: 2回目のFetch(`load()`の再呼び出し後に起動される)は、起動時点で`endpoint`・`today`・`timezone`等を**その時点の状態から再構築**する(§4.2のコード冒頭)。通貨ペア編集はサーバー側の設定を変更するものであり、2回目のFetchが実際にサーバーへ送信される時点では、既に編集後の設定が反映されている(編集画面からの復帰後に送信されるため)。2回目のFetchが1回目より後に完了する限り(通常そうなる)、ケースA(generation一致)の判定を経て、2回目の応答が`state`/キャッシュに上書き反映され、1回目の(編集前の)応答が最終状態として残ることはない。なお、2回目のFetchが1回目より**先に**完了する競合(通信順序の逆転)は、既存のgeneration機構の対象外(通貨ペア設定はPlanStoreのgenerationに含まれない)であり、本設計の範囲では対応しない残存リスクとして§10に明記する。
+**fetchが最大1回である条件(今回・明確化)**: 任意の時点で実際に実行中のFetch(`fetch()`のTask)は`isFetching`により常に**最大1つ**。これに加えて、「`isExplicitRefresh: true`での呼び出しが実行中のFetchの間に来た回数」は、実際に追加されるFetchの回数には変換されず、**完了後に最大1回だけ**追従する(集約されるため)。したがって、同時に走るFetchは常に1つ、かつ1回の実行中Fetchに対して明示的要求が何回来ても追従するFetchは1回を超えない。
 
-### 4.3.2 タイムアウト後の復旧(P2-E対応)
+**この修正が古い通貨ペア設定のレスポンスを最終状態にしないことの説明**: 2回目のFetch(`isExplicitRefresh: true`での`load()`呼び出し後に起動される)は、起動時点で`endpoint`・`today`・`timezone`等を**その時点の状態から再構築**する(§4.2のコード冒頭)。通貨ペア編集はサーバー側の設定を変更するものであり、2回目のFetchが実際にサーバーへ送信される時点では、既に編集後の設定が反映されている(編集画面からの復帰後に送信されるため)。
 
-**問題**: §4.2.1のタイムアウトTask(10秒)は、修正前は`isWaitingForPlanConfirmation = false`・診断記録のみを行い、`state`に一切触れなかった。`load()`が`.loading`に設定した後、プラン確定が10秒以内に来ないままタイムアウトすると、`state`は**永久に`.loading`のまま**になり、ユーザーには読み込み中の表示が残り続け、復旧する手段が無い。
+**(今回・P3-1対応、訂正)1回目(編集前)の応答が一時的に反映されるリスクの正確な記述**: 前回の記載は「2回目のFetchが1回目より先に完了する競合」という表現を使っていたが、これは不正確だった。`needsRefetch`による2回目のFetchは、1回目のFetchの`Task`が**完全に完了してから**(`fetch()`の`defer`内で`startFetchIfNeeded()`を呼ぶため)起動される、**厳密に直列(シリアライズ)**な処理であり、1回目と2回目が同時に実行されて順序が入れ替わる、という意味での「競合」は構造的に発生しない。正確なリスクは次のとおりである: 1回目のFetch(編集前の設定を反映した応答)は、2回目が始まる**前に**必ず一度`state`/キャッシュへ適用される(ケースAとして確定済みgenerationと一致するため)。したがって、編集画面から戻った直後、2回目のFetchが完了するまでの**短い時間窓**では、**編集前の(古い)内容が画面に一度表示される**ことが構造的に確実に起こる。これは競合ではなく、`needsRefetch`の設計上必然的に生じる、一瞬だけ古い内容が見える既知の特性であり、2回目のFetchの完了により正しい内容に更新される。実害(誤ったデータの永続的な採用)は無いが、UXとして「一瞬ちらつく」可能性がある残存特性として記載する(§10参照)。
 
-**修正**: タイムアウトTask(§4.2.1のコード末尾)に、`self.state`が`.loading`のままであれば`.error(...)`へ遷移させる処理を追加し、`lastErrorRequiresPlanRetry = true`をセットする(§4.2.1冒頭のプロパティ宣言参照)。`.loaded`/`.backendNotConfigured`等、既に何らかの表示がある場合は変更しない(既存の「表示・キャッシュは維持」方針どおり)。
+### 4.3.2 タイムアウト時のUXと復旧経路(P2-E対応、今回・P2-2対応で再設計)
 
-**ユーザーが復旧できる経路**: `HomeView.swift`の`content`(既存コード、91-98行目付近)は`.error(let message)`の場合に`ErrorView(..., onRetry: { viewModel.load() })`を表示する。この`onRetry`は**常に`load()`を呼ぶ**ため、プラン確認がタイムアウトしたことが原因の`.error`では、再試行しても`load()`が`scheduleWaitForPlanConfirmation()`を再度呼ぶだけで、実際にはEntitlementsの再確認(`retryNow()`が行う`planStore.load()`呼び出し)が一度も発生しない。**`load()`だけでは、プラン未確定が真の原因である`.error`から実際には回復できない**(§10に残存課題として明記)。
+**前回(P2-E)の設計とその問題点**: 前回は、10秒のタイムアウトで`state`が`.loading`のままであれば自動的に`.error(...)`へ遷移させていた。これは「C第3回レビューP2-2」で問題視された: **タイムアウトは「確認がまだ終わっていない」ことしか意味せず、「確認が失敗した」ことを意味しない**。Splash側の`/entitlements`が単に遅いだけ(低速回線・Render Freeのコールドスタート等)で、10秒経過後も普通に成功するケースは十分にありうる。このようなケースでも機械的に`.error`を出すと、実際には何も失敗していないのに失敗したかのような画面を一時的に見せてしまう。
 
-**`retryNow()`の実際のUI呼び出し経路(今回明記)**: 現時点の`HomeView.swift`には`retryNow()`を呼ぶ箇所が**存在しない**(新設した関数のため)。本設計が要求する最小限の変更は、`HomeView.swift`の`ErrorView`生成箇所の`onRetry`クロージャを次のように変更することである(**Swiftコード変更は今回実施しない。実装時に反映すること**)。
+**今回の修正方針**: 「タイムアウトと実際の通信失敗を区別する。タイムアウト時は待機表示を維持し、確認失敗が確定した場合にのみエラー表示へ遷移する」という方針を採用する。
+
+1. **タイムアウト(10秒)時**: `state`は変更しない(`.loading`のまま)。代わりに`isPlanConfirmationSlow = true`をセットする(§4.2.1のコード末尾)。これは「エラーではないが、時間がかかっている」という情報であり、`.error`への遷移を伴わない。
+2. **確認が実際に完了した場合**: `handlePlanStateChanged()`が検知し、`isPlanConfirmationSlow = false`にリセットしてFetchを開始する(§4.3のコード参照)。何も特別なことは起きない(通常の確定フローに合流する)。
+3. **確認が実際に失敗したと確定する場合**: これは「`retryNow()`自身がEntitlements再確認を試み、その結果が`.confirmed`以外の実際の失敗系`LoadResult`(`.malformedResponse`/`.requestFailed`。★HQ決定(案B採用)により`.pendingPolicyDecision`は廃止され`.malformedResponse`に統合された)だった」場合のみに限定する(§4.2.1「retryNow()」参照)。この場合のみ`lastErrorRequiresPlanRetry = true`をセットし、`state = .error(...)`へ遷移する。`.supersededByNewerRequest`・`.userMismatchOrUnknown`・`.authenticationUnverifiable`は「このリクエスト自体の事情」であり「確認が失敗した」とは言えないため、`.error`にはしない(§4.2.1参照)。
+
+**HomeViewの状態表示と再試行経路(今回・P3-5対応で明確化)**: `HomeView`には**2種類の異なる再試行**が必要になる。既存の`.error`(Home取得自体が失敗した、プランとは無関係な通常の更新失敗)と、今回新設する「プラン確認失敗」の`.error`を区別する。
+
+| 状況 | `state` | `isPlanConfirmationSlow` | `lastErrorRequiresPlanRetry` | 適切な再試行 |
+|---|---|---|---|---|
+| 通常のHome取得失敗(既存、プランは無関係) | `.error` | `false` | `false` | `load()`(既存のまま) |
+| プラン確認がタイムアウトしただけ(まだ失敗確定ではない) | `.loading` | `true` | `false` | `retryNow()`(待機表示に重ねて出す案内・ボタンから) |
+| プラン確認が実際に失敗した(`retryNow()`自身の結果) | `.error` | `false`(前の`retryNow()`呼び出しで消費済み) | `true` | `retryNow()` |
+
+**HomeViewの変更範囲(§9・§10に転記、今回・未実施のSwiftコード変更)**:
 
 ```swift
 // (将来の実装、§9参照。今回はコード変更しない)
+// 1. .loading表示に、isPlanConfirmationSlowがtrueの間だけ「時間がかかっています」の
+//    案内とretryNow()を呼ぶボタンを重ねる(既存のLoadingViewへの追加)。
+// 2. .error表示のonRetryを、lastErrorRequiresPlanRetryに応じて振り分ける。
 ErrorView(title: "読み込みに失敗しました", message: message, onRetry: {
     if viewModel.lastErrorRequiresPlanRetry {
         viewModel.retryNow()
@@ -987,9 +1081,9 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 })
 ```
 
-`lastErrorRequiresPlanRetry`(§4.2.1で新設、`private(set)`で公開)を`HomeViewModel`側に置くことで、`HomeState.error(String)`自体のケース追加(既存の`switch viewModel.state`への影響が大きい変更)を避け、影響範囲を`HomeView.swift`の1箇所の`onRetry`クロージャに限定できる。
+`lastErrorRequiresPlanRetry`・`isPlanConfirmationSlow`(いずれも§4.2.1で新設、`private(set)`で公開)を`HomeViewModel`側に置くことで、`HomeState`自体のケース追加(既存の`switch viewModel.state`への影響が大きい変更)を避け、影響範囲を`HomeView.swift`の2箇所(`.loading`表示・`ErrorView`の`onRetry`)に限定できる。
 
-**`HomeViewの変更範囲`(§9・§10に転記)**: `HomeView.swift`の`ErrorView`生成1箇所の`onRetry`クロージャのみ。他のレイアウト・分岐は変更しない。
+**§4.6のタイムアウト判断との整合性(今回・P2-2対応で確認)**: §4.6はHome Prefetchの開始タイミング(案1/2/3)に関する議論であり、本節の10秒タイムアウトとは別の仕組み(Entitlements確認自体の遅延許容)を扱っている。§4.6のいずれの案を採用しても、本節の「タイムアウトでは`.error`にしない」という方針とは矛盾しない(§4.6案2・案3はPrefetch開始タイミングを変えるだけで、確認が遅れた場合の`HomeViewModel`側の待機・UX方針には影響しない)。
 
 ### 4.4 generation逆行時の`.unexpectedState`処理(★HQ指定の明記事項②)
 
@@ -1007,17 +1101,26 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 
 `.userChanged`はC-1のみに使用し、C-2・C-3には使用しない。
 
-### 4.6 Home Prefetchの実効性の再検討(HQ判断待ち)
+### 4.6 Home Prefetchの実効性の再検討(★HQ決定済み: 案3を目標方針として採用)
 
 典型的なコールドスタートでは`contextAtDispatch`がほぼ常にnilとなり(§4.1)、先行取得した`/home`レスポンスがほとんど再利用されないという構造的な制約がある。これを踏まえ、3つの方向性を比較する。**いずれの案でも、安全性を犠牲にして先行取得を再利用する設計(未確定時点のcontextAtDispatchを無条件に信頼する等)は採用しない。**
 
 | 案 | 内容 | 安全性 | 通信回数 | 起動時間への影響 |
 |---|---|---|---|---|
-| **1. 現行方式を維持** | `HomePrefetchCoordinator.start()`を認証復元直後(PlanStore確定前)に呼ぶまま | 高い(未確定時点のcontextAtDispatch=nilは既存の仕組みで常に破棄される) | 無駄になる先行取得の通信が1回発生する(破棄されても通信自体は行われる) | 典型的なコールドスタートでは実質的な高速化効果が無い(PlanStore確定後に通常のHome取得が改めて走り、Render Freeのコールドスタート待ち(実測約20秒)を再び待つ) |
-| **2. Prefetchの開始タイミングをPlanStore確定後に変更** | `HomePrefetchCoordinator.start()`の呼び出し位置を、`PlanStore.load()`の完了後に移す | 送信時点で既にPlanStoreが確定済みのため、「未確定のまま送信される」という現在の主要な破棄理由自体が構造的に発生しなくなる | 無駄な先行取得が無くなる分、減る可能性がある。Splashの起動シーケンス全体の見直し(既存の`DiagnosticsStore`計測ポイントへの影響含む)が必要 | PlanStore確定(`/entitlements`の通信時間)だけHome取得の開始が遅れ、「先行」取得としての本来の目的(Render Freeのコールドスタート待ちを他の処理と並行させる)を一部損なう可能性がある。`/entitlements`・`/home`それぞれの実測時間は本資料作成時点で未測定(§11「未検証」参照) |
-| **3. Home Prefetch自体を見直す(Backend側に計算文脈を返させる)** | `/home`レスポンス自体に計算文脈(例: `computed_for_plan`)を含めるようBackend側APIを変更し、送信タイミングに関わらず受信後にその場で検証する | 最も高い(受信後に実際の計算文脈を直接確認できるため、タイミングに依存しない) | 先行取得の恩恵を活かしつつ安全性も確保できる可能性が高い | 案1の「遅い」という欠点を解消できる唯一の案。ただしBackend側のAPI変更が必要(今回のスコープ外、別途の設計・承認が必要) |
+| 1. 現行方式を維持 | `HomePrefetchCoordinator.start()`を認証復元直後(PlanStore確定前)に呼ぶまま | 高い(未確定時点のcontextAtDispatch=nilは既存の仕組みで常に破棄される) | 無駄になる先行取得の通信が1回発生する(破棄されても通信自体は行われる) | 典型的なコールドスタートでは実質的な高速化効果が無い(PlanStore確定後に通常のHome取得が改めて走り、Render Freeのコールドスタート待ち(実測約20秒)を再び待つ) |
+| 2. Prefetchの開始タイミングをPlanStore確定後に変更 | `HomePrefetchCoordinator.start()`の呼び出し位置を、`PlanStore.load()`の完了後に移す | 送信時点で既にPlanStoreが確定済みのため、「未確定のまま送信される」という現在の主要な破棄理由自体が構造的に発生しなくなる | 無駄な先行取得が無くなる分、減る可能性がある。Splashの起動シーケンス全体の見直し(既存の`DiagnosticsStore`計測ポイントへの影響含む)が必要 | PlanStore確定(`/entitlements`の通信時間)だけHome取得の開始が遅れ、「先行」取得としての本来の目的(Render Freeのコールドスタート待ちを他の処理と並行させる)を一部損なう可能性がある。`/entitlements`・`/home`それぞれの実測時間は本資料作成時点で未測定(§11「未検証」参照) |
+| **3. Home Prefetch自体を見直す(★採用、Backend側に計算文脈を返させる)** | `/home`レスポンス自体に計算文脈(例: `computed_for_plan`)を含めるようBackend側APIを変更し、送信タイミングに関わらず受信後にその場で検証する | 最も高い(受信後に実際の計算文脈を直接確認できるため、タイミングに依存しない) | 先行取得の恩恵を活かしつつ安全性も確保できる可能性が高い | 案1の「遅い」という欠点を解消できる唯一の案。ただしBackend側のAPI変更が必要(今回のスコープ外、別途の設計・承認が必要) |
 
-**最終判断はHQに委ねる。** 独自に1案を確定仕様とすることはしない。
+**(今回・HQ決定)** HQ判断により**案3**を目標方針として採用する。Backendから`computed_for_plan`等の計算文脈を返す方式を目指す。
+
+**実装の前提条件(★HQ指示により追加、必須)**: 案3の実装には、以下がすべて確定していることを前提条件とする。
+1. Backend API設計(`/home`レスポンスに計算文脈を含める具体的なフィールド名・型・意味)。
+2. 旧バージョン(計算文脈を返さないBackend)との互換性方針。
+3. 計算文脈が無い場合のクライアント側フォールバック仕様。
+
+**実装許可の制限(★HQ指示により追加)**: **Backend側の設計が確定するまで、案3の実装は許可しない。** 本設計書の範囲では、Backend API設計・旧バージョン互換性・フォールバック仕様のいずれも未確定である(§11「未検証」参照)。これらが確定し、別途の設計・承認プロセスを経るまで、`HomeViewModel`・`HomePrefetchCoordinator`側の実装(§9)には着手しないこと。
+
+**案1の位置づけ(★HQ指示により明記)**: **案1(現行方式維持)は恒久的な解決策として扱わない。** 案3の前提条件が整うまでの**暫定的な現状維持**としてのみ位置づける。案1の構造的な制約(典型的なコールドスタートで実質的な高速化効果が無いこと)は、案3が実装されるまで解消されない残存課題として認識すること。
 
 ---
 
@@ -1058,6 +1161,25 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 
 ## §8 テストケース一覧
 
+### 8.0 `HomeCacheTests.swift`の既存「未確定状態でHome取得を待つ」テストの新仕様への移行(P2-3対応)
+
+**(今回・P2-3対応)** 「実装時に個別確認」では済ませず、該当する既存テストを具体的に列挙し、新しい仕様(§4.2の`fetch()`がPlanStore未確定の間は`apiClient.send`自体を呼ばない設計)のもとでの前提・期待状態・プラン確定タイミングを記載する。
+
+**背景(今回判明した設計上の緊張関係)**: 実コード(`HomeViewModel.swift`269-330行目、2026-11-16確認済み)の`fetch()`は、プランの確定状態に関わらず`/home`を無条件に送信する(プラン確定はキャッシュの表示可否にのみ関わる、`HomeCacheStore.load()`・`discardIfPlanDiffers()`参照)。一方、本設計の`fetch()`(§4.2)は、`generation`に基づく安全な先行取得の再利用を実現するために、`planStore.confirmedContext`が確定するまで`scheduleWaitForPlanConfirmation()`で**待機し、`apiClient.send`自体を呼ばない**よう変更した。この変更により、「PlanStoreが未確定のまま`viewModel.load()`を呼び、Home取得自体(とその成功・失敗)を前提とする」既存テストが、新しい設計のもとでは**Home取得が一切発生しないまま待機し続ける**という、異なる挙動になる。
+
+**該当する既存テスト(`HomeCacheTests.swift`369-440行目、「プランの確認」グループ)**:
+
+| テスト名 | 現状の前提(行) | 現状の期待結果 | 新仕様での前提・期待状態・確定タイミング |
+|---|---|---|---|
+| `testUnconfirmedPlanDoesNotShowTheCache`(371-386) | `plan: PlanStore()`(未確定のまま、以後も確定させない)。`/home`は失敗するようモック | `state`が最終的に`.error`になる(`/home`送信→失敗) | **変更**: `/home`は送信されない(`scheduleWaitForPlanConfirmation()`で待機するのみ)。`state`は`.loading`のまま変化しない(本設計のP2-2方針どおり、タイムアウトでも`.error`にはしない)。検証は「`state == .loading`のまま」「`isShowingCache == false`」「`cache.stored()`が消えずに残る(未確認のため)」に変更する。`waitUntil { state != .loading }`は**使えない**(永久に真にならない)ため削除し、`waitUntil { recordPlanConfirmationWaitStarted()相当の呼び出しが発生した }`等、待機開始を直接確認する形に変更する |
+| `testSamePlanConfirmedLaterShowsTheCache`(388-404) | 同上(未確定)。中盤で`await waitUntil { state != .loading }`を挟んでから`plan.set(plan: .pro, ...)`で確定 | `/home`が先に失敗→後から確定でキャッシュが`.refreshFailed`付きで表示される | **変更**: 中盤の`await waitUntil { state != .loading }`を削除する(`/home`がまだ送信されていないため成立しない)。`plan.set(plan: .pro, limits: .pro(), userID: userA)`(**`userID`を明示的に渡す**、§11のテスト移行表参照)を呼ぶと、`$state`経由で`planConfirmed()`(キャッシュ一致→`.loading`/`.error`中ならキャッシュ表示)と`handlePlanStateChanged()`(`startFetchIfNeeded()`でFetch開始)が**ほぼ同時に**走る。`planConfirmed()`は`state`がまだ`.loading`かつ`lastFetchFailed == false`であることから、まず`.showingCache`としてキャッシュを楽観的に表示し、その後`handlePlanStateChanged()`が開始したFetchが(モック設定どおり)失敗して`refreshNotice = .refreshFailed(savedAt: now)`が追加で付く。**最終的な観測結果(`isShowingCache == true`・`state == .loaded`・`refreshNotice == .refreshFailed(savedAt: now)`)は現状の期待値と一致する**が、到達する内部経路(キャッシュが先に表示され、Fetch失敗が後から追記される)が異なるため、中間アサーションを削除し、最終状態への`waitUntil`のみに変更する |
+| `testMismatchedPlanConfirmedLaterIsNotShownAndDiscarded`(406-421) | 同上。中盤で`await waitUntil { state != .loading }`を挟んでから`plan.set(plan: .free, ...)`(カメに保存済みのPROと不一致) | `/home`が先に失敗→後から不一致確定でキャッシュ破棄、`.error`のまま | **変更**: 同様に中盤の`waitUntil`を削除。`plan.set(plan: .free, limits: .free(), userID: userA)`を呼ぶと、`planConfirmed()`が`discardIfPlanDiffers`で不一致を検知しキャッシュを`clear()`するが、`isShowingCache`はまだ`false`(表示前)のため`planConfirmed()`自身はそれ以上何もしない。`handlePlanStateChanged()`が別途Fetchを開始し、(モック設定どおり)失敗して`state = .error(...)`になる。**最終的な観測結果(`cache.stored() == nil`・`isShowingCache == false`・`state == .error`)は現状の期待値と一致する**が、中間の`waitUntil { state != .loading }`は削除すること |
+| `testPlanConfirmationFailureDoesNotShowTheOldPlansData`(423-440) | `plan.load(apiClient: failing)`で**確認そのものを失敗させ**(以後確定しない)、`viewModel.load()`→`waitUntil { state != .loading }`→`.error`を期待 | `/home`が(プラン未確定のまま)失敗して`.error` | **変更が必要(確認が永久に失敗したまま、という前提自体の扱い)**: 本設計では、確認が実際に失敗したことを`HomeViewModel`自身が知る唯一の経路は`retryNow()`である(§4.3.2「今回・P2-2対応」参照)。このテストはPlanStoreの`load()`を直接呼んで失敗させているだけで、`HomeViewModel`はまだ何も知らない(`scheduleWaitForPlanConfirmation()`で待機するのみ、`state`は`.loading`のまま)。テストの意図(「確認が失敗した場合に古いプランのキャッシュを見せない」)を保ったまま新仕様で検証するには、`viewModel.load()`の後に明示的に`viewModel.retryNow()`を呼び(`retryNow()`は`planStore.isLoadInProgress`が`false`であることを確認した上で新たな`planStore.load()`を実行し、`failing`モックによりまた失敗する)、その結果として`lastErrorRequiresPlanRetry == true`・`state == .error`になることを検証する形に**テストの手順自体を変更する**必要がある |
+
+**全体の方針**: 4テストすべてにおいて、「`/home`がプラン未確定のまま送信され、後から確定・不一致・失敗が判明する」という**旧来の前提そのもの**が、本設計では成立しない(Home取得は確定後にしか送信されないため)。各テストの**最終的に検証したい安全性(未確定中はキャッシュを見せない・プラン不一致ならキャッシュを破棄する・確認失敗時は古いプランのデータを見せない)は本設計でも成立する**が、その経路と中間アサーションの組み立て直しが必要である。これは「個別確認」で済ませられる軽微な差分ではなく、各テストの本文(特に中間の`waitUntil`呼び出しと、最後のテストでは`retryNow()`呼び出しの追加)を実装時に書き直す必要がある、という結論を明記する。
+
+---
+
 **正常系**
 1. 通常Fetch(先行取得未使用)が成功し、state/cacheが更新される。
 2. 先行取得が送信・利用・受信の全時点で同一generationのまま一致し、採用される。
@@ -1075,18 +1197,18 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 12. `liveContext.generation < requestSnapshot.generation`(前提違反)→`.unexpectedState`で破棄、自動連鎖しない。
 13. `plan=非nil, limits=nil`(planのみ存在)→`.malformedResponse`、確定しない。
 14. `plan=nil, limits=非nil`(limitsのみ存在)→`.malformedResponse`、確定しない。
-15. `plan=nil, limits=nil`(両方欠落)→`.pendingPolicyDecision`を返し、PlanContext・generation・Home state/cacheのいずれも変更しない。§3のA/B/Cいずれを採用するかHQ判断が確定するまで、実際の確定処理は実装しない。
+15. **(★HQ決定・案B採用を反映)** `plan=nil, limits=nil`(両方欠落)→`.malformedResponse`を返し、PlanContext・generation・Home state/cacheのいずれも変更しない。片方のみ欠落のケース(テスト13・14)と同じ扱いに統一されたことを確認する。
 16. `retryNow()`実行中に通常loadが先に確定→Home取得は1回だけ発生し、`retryNow()`側は重複して取得しない。
 17. 同一ユーザーの古いEntitlementsレスポンスが新しいレスポンスより後に到着→`entitlementsRequestSequence`により古い方が破棄される。
 18. ログアウト・アカウント切替によって進行中の`load()`/`fetch()`が無効化される。
 19. **(P0-2対応・副作用も検証)** `userID=nil`で`load()`が呼ばれる→戻り値が`.userMismatchOrUnknown`であることに加え、次の副作用が**すべて発生しないこと**を検証する: (a) 呼び出し前に既存の確定済み`PlanContext`があった場合、それが`.unconfirmed`に変化しない、(b) `generation`が変化しない、(c) `entitlementsRequestSequence`が増加しない、(d) この呼び出しと同時に進行中の別の正当な`load()`呼び出し(有効なuserIDを持つもの)が、この呼び出しによって`supersededByNewerRequest`として無効化されない。
 19-2. **(P0-2対応・追加)** `authenticatedUserProvider=nil`で`load()`が呼ばれる→戻り値が`.authenticationUnverifiable`であることに加え、テスト19と同じ(a)〜(d)の副作用が発生しないことを検証する。
 19-3. **(P0-2対応・追加)** 有効な`userID`・`authenticatedUserProvider`を指定したが、`userID`が`authenticatedUserProvider.currentUserID`と一致しない→`.userMismatchOrUnknown`を返し、同様に(a)〜(d)の副作用が発生しないことを検証する。
-20. (§1.3関連・選択肢I採用時)同一ユーザーのEntitlements再確認(購入後)が進行中にHome通信が先に完了→一旦古い内容でコミットされるが、再確認完了後に自動的に1回の追い越し取得で最新に収束する。
-21. (§1.3関連)通常のEntitlements再確認(内容変化なし)が、進行中のHome取得と重なっても、generationが進まないため余分なHome取得は発生しない。
+20. **(★HQ決定・案I採用により必須テストに確定)** 同一ユーザーのEntitlements再確認(購入後)が進行中にHome通信が先に完了→一旦古い内容でコミットされるが、再確認完了後に自動的に1回の追い越し取得で最新に収束する。
+21. **(★HQ決定・案I採用により必須テストに確定)** 通常のEntitlements再確認(内容変化なし)が、進行中のHome取得と重なっても、generationが進まないため余分なHome取得は発生しない。
 22. (§4.6関連・案2採用時)Prefetch開始タイミングをPlanStore確定後に変更した場合、`contextAtDispatch`が常に非nilになり、先行取得が正しく再利用される。
 23. **(P1-1対応)** コールドスタートを模した典型的なケース(`contextAtDispatch == nil`、ただし`fetch()`実行時点では`planStore.confirmedContext`は既に確定済み)で、`fetch()`が待機状態に入らず、直ちに通常Fetch(`apiClient.send(endpoint)`)へフォールバックし、Home取得が停止しないことを検証する。
-24. **(P1-1対応、今回・P2-C対応により`load()`経由に修正)** `planStore.set(plan:, limits:, confirmed: true, userID: userID)`で事前に確定させてから(`scheduleWaitForPlanConfirmation()`を直接呼ばず)、`viewModel.load()`を呼ぶ。検証: `fetch()`が冒頭の2段のguardを両方通過し、`scheduleWaitForPlanConfirmation()`に到達しない(=`recordPlanConfirmationWaitStarted()`が記録されない)こと、かつ`APIClient`モックへの呼び出しが1回発生すること(直ちに通常Fetchが実行されたことの間接証拠)。**証明しないこと**: `scheduleWaitForPlanConfirmation()`内部の①②の分岐自体(これは`private`であり直接呼べないため、このテストは`fetch()`側のguardが先に通過することの検証にとどまる)。
+24. **(P1-1対応、P2-C対応で`load()`経由に修正、今回・P2-4対応で検証を厳格化)** `planStore.set(plan:, limits:, confirmed: true, userID: userID)`で事前に確定させてから(`scheduleWaitForPlanConfirmation()`を直接呼ばず)、`viewModel.load()`を呼ぶ。検証: `fetch()`が冒頭の2段のguardを両方通過し、`scheduleWaitForPlanConfirmation()`に到達しない(=`recordPlanConfirmationWaitStarted()`が記録されない)こと、かつ`APIClient`モックへの呼び出しが**ちょうど1回**発生すること(`await waitUntil { api.requestedPaths.filter { $0 == "home" }.count >= 1 }`で待ってから、**その後十分な時間を置いても2回目が発生しないこと**も確認する。P2-1対応により`startFetchIfNeeded()`の`isExplicitRefresh`既定が`false`になったため、この`load()`呼び出し自体が追加のFetchを連鎖させないことも合わせて確認する)。**証明しないこと**: `scheduleWaitForPlanConfirmation()`内部の①②の分岐自体(これは`private`であり直接呼べないため、このテストは`fetch()`側のguardが先に通過することの検証にとどまる)。
 25. **(P1-3対応)** `retryNow()`を短時間に連打した場合、`isRefreshingEntitlements`により2回目以降は無視され、Entitlements通信は1回だけ発行されることを検証する。
 26. **(今回・generation初回更新)** 初回起動(`confirmedUserID == nil`からの初回確定)で、`load()`呼び出し**前**の`generation`の値を記録し、`load()`成功後の`generation`がその値から**ちょうど1増えている**ことを検証する(修正前は2増えていた)。
 27. **(今回・generation初回更新、具体化)** 次の3時点で`generation`の値を記録し、比較する: (a) ユーザーAとして確定済みの状態での`generation`の値、(b) `reset()`呼び出し**直後**(ログアウト、`state`が`.unconfirmed`になった時点)の`generation`の値、(c) 再ログイン後の`load()`成功(再確定)時点の`generation`の値。期待する関係: `(b) == (a) + 1`(`reset()`自身の規則5による1回の加算)、`(c) == (b) + 1`(再確定の`commit()`規則1による1回の加算)。すなわち合計では(a)から(c)まで2回進むが、**それぞれ別の操作(`reset()`と再確定)による、それぞれ1回ずつの加算**であり、どちらか一方の操作だけで2回進むことはないことを検証する。
@@ -1107,9 +1229,9 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 
 以上の方針に基づき、テスト29〜33を次のように再設計する(各テストの末尾に「証明する/証明しない」を明記する)。
 
-29. **(今回・再設計)** 前提: `userID = A`の`HomeViewModel`、`PlanStore`は未確定。`viewModel.load()`を呼び、`await Task.yield()`で1回目の`fetch()`(未確定分岐、即return)が完了するのを待つ。続けてまだ未確定のまま`viewModel.load()`をもう一度呼ぶ(2回目の`fetch()`も未確定分岐に入り、`scheduleWaitForPlanConfirmation()`を再度呼ぶ)。検証: `recordPlanConfirmationWaitStarted()`の呼び出し回数が、2回の`load()`を経ても**1回のまま**であること。**証明すること**: §4.2.1④の重複待機防止guardが、`fetch()`からの間接的な再呼び出しに対して機能すること。**証明しないこと**: `scheduleWaitForPlanConfirmation()`の①②の分岐(到達不能なため対象外)。
-30. **(今回・再設計、`handlePlanStateChanged()`経由に修正)** 前提: `userID = A`、未確定状態で`load()`を呼び待機を開始させる(`await Task.yield()`で待機開始を確定させる)。この状態で`planStore.set(plan: .pro, limits: .pro(), confirmed: true, userID: A)`を呼ぶ(`$state`のCombine発火により`handlePlanStateChanged()`が走り、`cancelPlanConfirmationWait()` + `startFetchIfNeeded()`が実行される、§4.3参照)。検証: (a) 十分な時間(注入した`sleep`を実時間より長く設定、または`sleep`が呼ばれる前に`.cancel()`されたことを後述の`Task.isCancelled`で確認できる設計のため、実時間を待たなくてよい)が経過しても`recordPlanConfirmationTimedOut()`が記録されないこと(元のタイムアウトTaskが`cancelPlanConfirmationWait()`によりキャンセル済みであることの間接証拠)、(b) `APIClient`モックへの呼び出しが1回発生すること(`startFetchIfNeeded()`が実際にFetchを起動したことの間接証拠)。**証明すること**: `handlePlanStateChanged()`が確定を検知して待機を解除しFetchを開始する、到達可能な経路。**証明しないこと**: `scheduleWaitForPlanConfirmation()`自身の②分岐(到達不能、上記のとおり対象外)。
-31. **(今回・再設計、到達可能な③分岐のみを対象に限定)** 前提: `userID = A`、未確定状態で`load()`を呼び待機を開始させる。続けて`planStore.set(plan: .pro, limits: .pro(), confirmed: true, userID: B)`(**Aとは異なるB**)を呼ぶ。`handlePlanStateChanged()`は`context.userID == userID`のguardで何もしない(Bであり、Aではないため)。その後、まだ未確定(Aにとって)のまま`viewModel.load()`をもう一度呼ぶ。検証: (a) `fetch()`が`guard let context = ..., context.userID == userID`に失敗し`scheduleWaitForPlanConfirmation()`を呼び、その内部で③分岐(`confirmedContext`はBで存在するがuserIDがAと不一致)に到達すること、(b) `recordHomeFetchDiscarded(reason: .unexpectedState)`が記録されること、(c) `APIClient`モックへの呼び出しが発生しない(誤ったFetchが開始されない)こと。**証明すること**: ③分岐(到達可能)が正しく機能すること。**証明しないこと**: ①②分岐(到達不能、対象外)。
+29. **(今回・再設計、P3-2対応で`Task.yield()`を`waitUntil`に変更)** 前提: `userID = A`の`HomeViewModel`、`PlanStore`は未確定。`viewModel.load()`を呼び、`await waitUntil { <診断カウンタ>recordPlanConfirmationWaitStartedの呼び出し回数 == 1 }`で1回目の`fetch()`(未確定分岐)が実際に待機を開始するまで待つ(`Task.yield()`は1回のスケジューリングのみを保証し、`fetch()`の完了そのものを保証しないため、`HomeCacheTests.swift`に既存の`waitUntil`ヘルパーと同じ「条件が満たされるまでポーリングする」パターンに統一する。以下のテストも同様)。続けてまだ未確定のまま`viewModel.load()`をもう一度呼ぶ(2回目の`fetch()`も未確定分岐に入り、`scheduleWaitForPlanConfirmation()`を再度呼ぶ)。検証: `recordPlanConfirmationWaitStarted()`の呼び出し回数が、2回の`load()`を経ても**1回のまま**であること。**証明すること**: §4.2.1④の重複待機防止guardが、`fetch()`からの間接的な再呼び出しに対して機能すること。**証明しないこと**: `scheduleWaitForPlanConfirmation()`の①②の分岐(到達不能なため対象外)。
+30. **(今回・再設計、`handlePlanStateChanged()`経由に修正、P2-4対応でsleep継続を実際にresumeして確認、P3-2対応で`waitUntil`化)** 前提: `userID = A`、未確定状態で`load()`を呼び待機を開始させる(`await waitUntil { 待機開始の診断カウンタ == 1 }`で確定させる。この時点でタイムアウトTaskは、テストコードが明示的に`resume`するまで完了しない`CheckedContinuation`で実装した`sleep`により保留されている)。この状態で`planStore.set(plan: .pro, limits: .pro(), confirmed: true, userID: A)`を呼ぶ(`$state`のCombine発火により`handlePlanStateChanged()`が走り、`cancelPlanConfirmationWait()`(タイムアウトTaskに`.cancel()`)+ `startFetchIfNeeded()`が実行される、§4.3参照)。検証の手順: (a) `APIClient`モックへの呼び出しが1回発生すること(`await waitUntil { ... }`で確認、`startFetchIfNeeded()`が実際にFetchを起動したことの間接証拠)、(b) **その後、保留していたタイムアウトTaskのsleep継続を実際に`resume`する**(P2-4対応: 前回はこのresumeを実際には行わず「十分な時間が経過しても」という曖昧な表現に留めていた)。`resume`後、`guard !Task.isCancelled else { return }`(Task#1は`cancelPlanConfirmationWait()`で`.cancel()`済み)で即座にreturnすることを、`recordPlanConfirmationTimedOut()`が**記録されないこと**で確認する。**証明すること**: `handlePlanStateChanged()`が確定を検知して待機を解除しFetchを開始すること、かつキャンセル済みのタイムアウトTaskが実際にresumeされても何もしないこと。**証明しないこと**: `scheduleWaitForPlanConfirmation()`自身の②分岐(到達不能、上記のとおり対象外)。
+31. **(今回・再設計、到達可能な③分岐のみを対象に限定、今回・P2-4対応でsleep継続を実際にresumeして確認、P3-2対応で`waitUntil`化)** 前提: `userID = A`、未確定状態で`load()`を呼び待機を開始させる(`await waitUntil { 待機開始の診断カウンタ == 1 }`で確定させ、この時点でタイムアウトTask#1がsleepで保留されていることを確認する)。続けて`planStore.set(plan: .pro, limits: .pro(), confirmed: true, userID: B)`(**Aとは異なるB**)を呼ぶ。`handlePlanStateChanged()`は`context.userID == userID`のguardで何もしない(Bであり、Aではないため、Task#1はキャンセルされない)。その後、まだ未確定(Aにとって)のまま`viewModel.load()`をもう一度呼ぶ(2回目の`fetch()`が`guard let context = ..., context.userID == userID`に失敗し`scheduleWaitForPlanConfirmation()`を呼び、その内部で③分岐(`confirmedContext`はBで存在するがuserIDがAと不一致)に到達する)。検証: (a) `recordHomeFetchDiscarded(reason: .unexpectedState)`が記録されること、(b) `APIClient`モックへの呼び出しが発生しない(誤ったFetchが開始されない)こと、(c) **Task#1のsleep継続を実際に`resume`し**、Task#1自身が(Bの確定ではキャンセルされていないため)`guard !Task.isCancelled`を通過し、`guard let self, self.isWaitingForPlanConfirmation`で判定する時点の`isWaitingForPlanConfirmation`の状態に応じた挙動(待機中なら`recordPlanConfirmationTimedOut()`が記録される)を確認する(P2-4対応: 前回はこのresumeを実施していなかった)。**証明すること**: ③分岐(到達可能)が正しく機能すること、かつタイムアウトTask#1自体は別ユーザー(B)の確定によって(③分岐はキャンセルを伴わないため)影響を受けず独立して動作すること。**証明しないこと**: ①②分岐(到達不能、対象外)。
 
 **P2-3対応・タイムアウトTaskのキャンセル競合テスト(32番、`load()`経由に修正)**:
 
@@ -1121,7 +1243,11 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 
 **P2-A対応・通貨ペア編集後の再取得テスト(新規、34番)**:
 
-34. **(今回・P2-A対応、新規)** `userID = A`、確定済み。`apiClient`モックを、1回目の`/home`応答は`CheckedContinuation`で保留する実装にする。(i) `viewModel.load()`を呼ぶ(fetch A開始、応答保留中、`isFetching == true`)、(ii) まだ保留中のうちに`viewModel.load()`をもう一度呼ぶ(`startFetchIfNeeded()`が`needsRefetch = true`を立てるのみで新規Taskは起動しない。この時点でAPIClientモックへの呼び出しはまだ1回のまま)、(iii) fetch Aの継続を、1回目の(古い)通貨ペア設定を反映した応答で`resume`し、fetch Aの完了を待つ。検証: (a) fetch A完了直後に`needsRefetch`が消費され、`APIClient`モックへの呼び出しが**2回目**発生すること(fetch Bが自動的に開始されたことの間接証拠)、(b) fetch Bの応答(2回目の、新しい通貨ペア設定を反映した応答)を`resume`して完了させた後、`viewModel.state`の`majorFx`がfetch Bの内容と一致し、fetch Aの(古い)内容が最終状態として残っていないこと、(c) 複数回(ii)を連続して呼んでも、fetch A完了後に開始される追加のFetchは1回だけであること(`needsRefetch`が真偽値であることの間接証拠)。**証明すること**: 実行中の`load()`再呼び出しが無視されず、完了後に1回だけ反映されること。**証明しないこと**: fetch Bがfetch Aより先に完了する場合の挙動(§4.3.1に残存リスクとして明記、対象外)。
+34. **(今回・P2-A対応、今回・P2-1対応で`isExplicitRefresh: true`を使用するよう修正)** `userID = A`、確定済み。`apiClient`モックを、1回目の`/home`応答は`CheckedContinuation`で保留する実装にする。(i) `viewModel.load()`(**既定`isExplicitRefresh: false`**、`.task`相当)を呼ぶ(fetch A開始、応答保留中、`isFetching == true`)、(ii) まだ保留中のうちに`viewModel.load(isExplicitRefresh: true)`(**`.onChange(of: path.count)`相当**)を呼ぶ(`startFetchIfNeeded(isExplicitRefresh: true)`が`needsRefetch = true`を立てるのみで新規Taskは起動しない。この時点でAPIClientモックへの呼び出しはまだ1回のまま)、(iii) fetch Aの継続を、1回目の(古い)通貨ペア設定を反映した応答で`resume`し、fetch Aの完了を待つ。検証: (a) fetch A完了直後に`needsRefetch`が消費され、`APIClient`モックへの呼び出しが**2回目**発生すること(fetch Bが自動的に開始されたことの間接証拠)、(b) fetch Bの応答(2回目の、新しい通貨ペア設定を反映した応答)を`resume`して完了させた後、`viewModel.state`の`majorFx`がfetch Bの内容と一致し、fetch Aの(古い)内容が最終状態として残っていないこと、(c) 複数回(ii)を連続して呼んでも、fetch A完了後に開始される追加のFetchは1回だけであること(`needsRefetch`が真偽値であることの間接証拠)。**証明すること**: `isExplicitRefresh: true`での実行中の再呼び出しが無視されず、完了後に1回だけ反映されること。**証明しないこと**: fetch Bがfetch Aより先に完了する場合の挙動(§4.3.1に残存リスクとして明記、対象外。P3-1対応によりこの表現自体を訂正済み)。
+
+**P2-1対応・`isExplicitRefresh: false`の呼び出しが不要な再取得を発生させないことの回帰テスト(新規、38番)**:
+
+38. **(今回・P2-1対応、新規)** テスト34と同じ`CheckedContinuation`保留の設定。(i) `viewModel.load()`(既定`false`)を呼ぶ(fetch A開始、応答保留中)、(ii) まだ保留中のうちに、`.task { load() }`や`init`のCombine初回通知を模して`viewModel.load()`(既定`false`)を**複数回**呼ぶ、(iii) fetch Aの継続を`resume`し、完了を待つ。検証: fetch A完了後、`APIClient`モックへの呼び出しが**増えない**(2回目が発生しない)こと。**証明すること**: `isExplicitRefresh`が既定(`false`)の呼び出しは、busy中に来ても`needsRefetch`を立てず、不要な再取得を発生させないこと(P2-1の核心、テスト34との対比)。**証明しないこと**: `isExplicitRefresh: true`での挙動(テスト34の対象)。
 
 **P2-B対応・confirmedPlanのユーザー整合性テスト(新規、35番)**:
 
@@ -1133,7 +1259,13 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 
 **P2-E対応・タイムアウト後の復旧テスト(新規、37番)**:
 
-37. **(今回・P2-E対応、新規)** `userID = A`、未確定状態で`load()`を呼び待機を開始させる(`state`は`.loading`)。注入した`sleep`をテストが制御できる形にし、タイムアウトTaskの本体(10秒待機相当)を実行させる。検証: (a) `state`が`.error(...)`に変化すること、(b) `viewModel.lastErrorRequiresPlanRetry == true`になること。続けて、`planStore.set(plan:, limits:, confirmed: true, userID: A)`を呼び、`viewModel.retryNow()`を呼ぶ(§4.3.2で示した将来の`HomeView`実装を模した手順)。検証: (c) `state`が最終的に`.loaded(...)`に復旧すること、(d) `lastErrorRequiresPlanRetry`が`false`に戻ること(`applyFetchSuccess`での消費)。**証明すること**: タイムアウト後も`.loading`に永久に留まらず、`retryNow()`経由で復旧できること。**証明しないこと**: `HomeView.swift`の実際の`onRetry`分岐自体(Swiftコード変更を伴うため、本資料の範囲では未実装。§4.3.2・§9参照)。
+37. **(今回・P2-2対応で全面再設計、P2-4対応で`retryNow()`とCombine経由の自動Fetchの原因を区別できる手順に修正)** 本テストを2部に分ける。両方とも`planStore`の`EntitlementsService`呼び出し先は`PlanStoreTests`等と同じ形の専用モック(`apiClient`とは別、Entitlements用)とし、`HomeViewModel`が使う`apiClient`(Home用)と混同しないようにする。
+
+    **(A) タイムアウトは`.error`にせず、`retryNow()`自身の失敗だけが`.error`にすること**: `userID = A`、未確定状態で`load()`を呼び待機を開始させる(`state`は`.loading`)。注入した`sleep`をテストが制御できる`CheckedContinuation`にし、`resume`してタイムアウトTaskの本体を完了させる。検証: (a) `state`は`.loading`のまま変化しないこと(**今回・P2-2対応による変更点**。前回は`.error`になることを期待していた)、(b) `viewModel.isPlanConfirmationSlow == true`になること、(c) `viewModel.lastErrorRequiresPlanRetry`は`false`のままであること(まだ`retryNow()`を呼んでいないため)。続けて、Entitlements用モックを**失敗する**よう設定したうえで`viewModel.retryNow()`を呼ぶ。検証: (d) `state`が`.error(...)`に変化すること、(e) `lastErrorRequiresPlanRetry == true`になること。この(d)(e)は`retryNow()`自身が呼んだ`planStore.load()`の失敗のみが原因であり、`planStore.set()`のような他の経路は一度も使っていないため、原因は一意に特定できる。
+
+    **(B) `retryNow()`経由の確定成功による復旧**: (A)とは別のテストケースとして、Entitlements用モックを**成功する**よう設定したうえで、同じ未確定→タイムアウト→`isPlanConfirmationSlow == true`の状態から`viewModel.retryNow()`を呼ぶ。検証: (f) `retryNow()`自身が呼んだ`planStore.load()`が`.confirmed`を返すこと、(g) それを`handlePlanStateChanged()`(`$state`経由、Combine)が検知して`startFetchIfNeeded()`を呼び、`state`が最終的に`.loaded(...)`に復旧すること、(h) `isPlanConfirmationSlow`が`false`に戻ること(`handlePlanStateChanged()`での消費)。この(f)〜(h)の流れでは`planStore.set()`を一度も呼んでおらず、`retryNow()`自身の`planStore.load()`呼び出しが確定の唯一の原因であるため、「`retryNow()`とは独立した`set()`が偶然同時に確定させた」という原因の混在が排除されている。
+
+    **証明すること**: タイムアウト自体は`.error`を引き起こさないこと(A)、`retryNow()`自身の失敗/成功が、他の経路と混ざらずに`.error`/復旧を引き起こすこと(A・B)。**証明しないこと**: `HomeView.swift`の実際の`.loading`表示への案内・`onRetry`分岐自体(Swiftコード変更を伴うため、本資料の範囲では未実装。§4.3.2・§9参照)。
 
 ---
 
@@ -1141,10 +1273,10 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 
 | ファイル | 変更内容 |
 |---|---|
-| `PlanStore.swift` | `State`(`.unconfirmed(lastKnown:)`への変更、P1-1対応)/`PlanContext`/`LoadResult`の追加、`load()`/`reset()`/`set()`/`confirmedPlan`/`confirmedPlan(for:)`(P2-B新設)の刷新、`AuthenticatedUserProviding`の定義 |
+| `PlanStore.swift` | `State`(`.unconfirmed(lastKnown:)`への変更、P1-1対応)/`PlanContext`/`LoadResult`の追加、`load()`/`reset()`/`set()`/`confirmedPlan`/`confirmedPlan(for:)`(P2-B新設)/`isLoadInProgress`(P2-2新設)の刷新、`AuthenticatedUserProviding`の定義 |
 | `HomePrefetchCoordinator.swift` | `Prefetch.contextAtDispatch`への変更、`start()`/`consumeHome()`のシグネチャ更新 |
-| `HomeViewModel.swift` | `authenticatedUserProvider`(Optional)/`sleep`(P2-2・P2-3対応のDI)/`pendingGeneration`/`lastFetchedGeneration`/`isRefreshingEntitlements`/`needsRefetch`(P2-A新設)/`lastErrorRequiresPlanRetry`(P2-E新設)の追加、`init`内のCombine購読を`$isConfirmed.combineLatest($plan)`から`$state`へ変更(P1-1対応・§4.2.3)、`fetch()`(`applyFetchSuccess`/`applyFetchFailure`への分割含む)/`load()`/`planConfirmed()`(`confirmedPlan(for:)`へ変更、P2-B対応)/`cacheContext()`(同)/`handlePlanStateChanged()`/`startFetchIfNeeded()`(P2-A対応)/`retryNow()`/`scheduleWaitForPlanConfirmation()`(P3-3対応、`sleep`読み取りの分離)の刷新 |
-| `HomeView.swift` | **(今回・P2-E対応、新規)** `ErrorView`生成箇所の`onRetry`クロージャを、`viewModel.lastErrorRequiresPlanRetry`に応じて`retryNow()`/`load()`を振り分けるよう変更(§4.3.2参照。他の変更は無い) |
+| `HomeViewModel.swift` | `authenticatedUserProvider`(Optional)/`sleep`(P2-2・P2-3対応のDI)/`pendingGeneration`/`lastFetchedGeneration`/`isRefreshingEntitlements`/`needsRefetch`(P2-A新設、P2-1対応で`isExplicitRefresh`限定に変更)/`lastErrorRequiresPlanRetry`(今回・P2-2対応で意味を再定義)/`isPlanConfirmationSlow`(今回・P2-2新設)の追加、`init`内のCombine購読を`$isConfirmed.combineLatest($plan)`から`$state`へ変更(P1-1対応・§4.2.3)、`fetch()`(`applyFetchSuccess`/`applyFetchFailure`への分割含む)/`load(isExplicitRefresh:)`(P2-1対応でパラメータ追加)/`planConfirmed()`(`confirmedPlan(for:)`へ変更、P2-B対応)/`cacheContext()`(同)/`handlePlanStateChanged()`/`startFetchIfNeeded(isExplicitRefresh:)`(P2-1対応)/`retryNow()`(今回・P2-2対応で`isLoadInProgress`チェック・`LoadResult`別の分岐を追加)/`scheduleWaitForPlanConfirmation()`(P3-3対応、`sleep`読み取りの分離)の刷新 |
+| `HomeView.swift` | **(今回・P2-1/P2-2対応、更新)** 2箇所の変更: (1) `.onChange(of: path.count)`から呼ぶ`viewModel.load()`を`viewModel.load(isExplicitRefresh: true)`に変更(§4.3.1)。(2) `.loading`表示に、`viewModel.isPlanConfirmationSlow`がtrueの間だけ案内+`retryNow()`ボタンを重ねる。(3) `ErrorView`生成箇所の`onRetry`クロージャを、`viewModel.lastErrorRequiresPlanRetry`に応じて`retryNow()`/`load()`を振り分けるよう変更(§4.3.2参照) |
 | `SubscriptionManagementViewModel.swift` | `authenticatedUserProvider`の受け取り、`sync()`内のuserID取得・診断分離(`try?`での握り潰しを廃止) |
 | `AppState.swift` | `extension AppState: AuthenticatedUserProviding {}`の追加のみ |
 | `RootView.swift` | `PlanStore.shared.load(...)`・`MainTabView`生成に`authenticatedUserProvider: appState`を追加 |
@@ -1160,7 +1292,8 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 
 ## §10 実装時の注意点・残存リスク
 
-- **§3(plan/limits両方欠落時の扱い)はHQ判断が確定するまで実装に着手しないこと。**
+- **(★HQ決定・案B採用により更新)** §3(plan/limits両方欠落時の扱い)はHQにより案Bの採用が決定された。ただし、**対象Backendのバージョンと`/entitlements`レスポンス契約の確認が完了するまでは実装に着手しないこと**(§3「実装・リリース前の必須条件」参照)。
+- **(今回・§4.6対応)** §4.6(Home Prefetchの方向性)はHQにより案3が目標方針として決定されたが、Backend API設計・旧バージョン互換性・フォールバック仕様が確定するまで、`HomeViewModel`・`HomePrefetchCoordinator`側の実装には着手しないこと(§4.6参照)。
 - `AuthenticatedUserProviding`プロトコルに`@MainActor`を付与することは、本設計の**必須条件**である(§1.2参照。推奨ではない)。実装時は必ずこの宣言で行うこと。
 - `authenticatedUserProvider`の配線は、`MainTabView`→`HomeView`/`PlaceholderScreenView`/`PlanLimitPrompt`→`SubscriptionManagementView`という複数ファイルにわたる変更であり、各ファイルの既存init構造(メンバーワイズ初期化か明示initか)を実装時に個別に確認すること。
 - `HomeCacheStore.save()`自体にユーザー整合性検証を追加しない方針とした(§5)。`fetch()`側のケース判定ロジックに将来バグが入った場合、`HomeCacheStore`はそれを検知できないという残存リスクを明記する。
@@ -1174,12 +1307,12 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 - **(今回・P3対応)** `retryNow()`に、このインスタンス自身の`userID`と`authenticatedUserProvider`のライブな値との一致確認を追加した(§4.2.1)。修正前は`authenticatedUserProvider.currentUserID`を直接使っており、取り残された古いインスタンスの「再試行」が別ユーザーのEntitlementsを取得しうる経路があった。
 - **(今回・P1-1対応)** `init`内のCombine購読を`$isConfirmed.combineLatest($plan)`から`$state`に変更し、`planConfirmed()`・`handlePlanStateChanged()`を同じ購読から呼ぶ(§4.2.3)。この2つの呼び出し順序(`planConfirmed()`→`handlePlanStateChanged()`)に実際の依存関係が無いことは設計上の意図だが、実装時に単体テストで両方の呼び出し順を入れ替えても結果が変わらないことを明示的に確認すること(§11に追加)。
 - **(今回・P2-2/P2-3対応)** `sleep: (Duration) async throws -> Void`のDIを追加した。本番の既定値(`{ try await Task.sleep(for: $0) }`)がキャンセル伝播を含めて実際の`Task.sleep`と同じ挙動であることを実装時に確認すること。
-- **(今回・P2-A対応)** §4.3.1の`needsRefetch`は、2回目のFetchが1回目より**先に**完了する通信順序の逆転には対応しない(通貨ペア設定自体はPlanStoreのgenerationに含まれないため、既存のgeneration機構で保護されない)。実運用でこの逆転が実際に起こりうるか(通信時間のばらつき次第)は本資料の範囲では検証していない。
+- **(今回・P2-1/P3-1対応、訂正)** §4.3.1の`needsRefetch`による2回目のFetchは、1回目のFetchの完了後に厳密に直列実行される(競合・順序逆転は構造的に発生しない)。残存リスクは「1回目(編集前)の内容が、2回目の完了までの短い時間窓で一度画面に表示される」という、ちらつきの可能性のみである(§4.3.1末尾の訂正済み説明参照)。
 - **(今回・P3-1対応)** `LaunchDiagnostics`のCodable後方互換性: §7で新設する診断カウンタ用フィールドは、`LaunchDiagnostics`が`UserDefaults`にJSON形式で永続化され(`DiagnosticsStore.persist()`/`init()`)、次回起動時にデコードされる(`DiagnosticsStore.swift:43-48`)。新フィールドを**Optional型(既定`nil`)で追加する**こと。Swiftの`Codable`自動合成はOptionalプロパティを`decodeIfPresent`相当で扱うため、新フィールドを追加する前に保存された旧JSON(そのキーを含まない)もエラーなくデコードできる。非Optional・デフォルト値無しで追加すると、旧データのデコードに失敗し、前回の起動診断全体が失われる(`previous`が`nil`になる)。
 - **(今回・P3-2対応)** `DiagnosticsStore`のシングルトンとテスト間のカウンタ累積: `DiagnosticsStore.shared`は単一インスタンスであり、`HomeViewModel`側にDIも無い(既存コードの一貫したパターンのまま、本設計では変更しない)。同一テスト実行内で複数のテストが同じカウンタを読む場合、**前のテストの値が累積して残る**ため、絶対値ではなく**差分(アクション前後のカウンタの差)**で検証すること。§8の各テスト(29〜37)はいずれも「呼び出し回数が増えるか否か」という相対的な検証として記載しており、絶対値を前提にしていない(実装時にこの方針を徹底すること)。
 - **(今回・P3-3対応)** §4.2.1のタイムアウトTaskで、`self?.sleep`の読み取りを`await`を含む式から分離した(`let sleepFn = self?.sleep`を別文にする)。この分離が無い場合、`[weak self]`の意図(早期解放可能にすること)に反して、`self`が10秒間強参照されたままになる可能性がある。実装時に、この分離パターンが実際にSwiftコンパイラ・実行時挙動として意図通りに`self`を保持しないことを確認すること(§11「未検証」に追加)。
 - **(今回・P3-4対応)** `PlanStore.set()`はgenerationを進めない(§1.2参照)。複数の異なるgenerationを必要とするテストでは`set()`を使わず、実際の`load()`(モックのEntitlementsServiceで異なる応答を返す)を使うこと。
-- **(今回・P3-6対応)** 同一ユーザーのプラン変更は`plan`/`limits`が直接新値に切り替わり、ユーザー切替は一時的にFREE既定値を経由する(§1.2「lastKnownの取り扱い方針のまとめ」末尾参照)。`CalendarViewModel`等、`plan`/`limits`を直接購読するコードがこの一時的な既定値をどう扱うかは、実装時に各画面ごとに確認すること(新たな確認事項として追加)。
+- **(今回・P3-3/P3-6対応、訂正)** 同一ユーザーのプラン変更は`plan`/`limits`が直接新値に切り替わり、ユーザー切替は一時的にFREE既定値を経由する(§1.2「lastKnownの取り扱い方針のまとめ」末尾参照)。**この「ユーザー切替時に一時的にFREE既定値を経由する」挙動は、現行実装(旧ユーザーのプラン・制限値をそのまま表示し続ける)とは異なる、本設計で新たに導入する挙動である**(前回「既存コードと同様」としていたのは誤りだったため訂正)。`CalendarViewModel`等、`plan`/`limits`を直接購読するコードがこの一時的な既定値をどう扱うかは、実装時に各画面ごとに確認すること。
 - **(今回・P3-5対応)** `authenticatedUserProvider`はOptionalで既定値`nil`のため、本番の配線漏れはコンパイルエラーにならず、安全性チェックが静かに無効化される形で現れる。§8テスト36のような、実際の配線経路に近い統合テストで検出することを推奨する。`authenticatedUserProvider`の既定値を削除して必須パラメータにする案(全呼び出し元へのコンパイル時強制)も検討したが、既存テストへの移行コストが更に増える(§9・§11参照)ため、今回は採用を見送り、既定値ありの設計を維持する。この判断の見直しが必要であればHQに相談すること。
 - **(今回・追加確認(P3)7番対応)** 本資料のコード例には、型推論・コンパイルを実際のSwiftコンパイラで確認していない箇所が複数ある: `authenticatedUserProvider.map { $0.currentUserID == userID } ?? true`のクロージャ内型推論、`Duration`型(`sleep`のパラメータ)の実際のimport・利用可否、`let sleepFn = self?.sleep`の型(オプショナル関数値)の扱い、`.flatMap`を使った`EntitlementsResponse.Plan(rawValue:)`の呼び出し。いずれも実装時に最初に確認すること(§11に追加)。
 
@@ -1191,12 +1324,26 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 
 | 項目 | 参照 |
 |---|---|
-| plan=nil && limits=nilの確定方針(選択肢A/B/C) | §3 |
-| 旧Backend(v1.15未満)が現在も稼働しているか | §3 |
-| 同一ユーザーのEntitlements再確認とHome取得の競合への対応(選択肢I/II)、および①②③④のどこまでを許容範囲とするか | §1.3 |
-| Home Prefetchの方向性(案1/2/3のいずれを採用するか) | §4.6 |
 | `HomeCacheStore.save()`自体にユーザー整合性検証を追加するかどうか | §5・§10 |
 | `retryNow()`競合敗北時の即時性の非対称性を許容するか | §10 |
+
+**(今回・HQ決定事項の記録)** 前回提示した3項目(§3・§1.3・§4.6)は、今回HQにより決定された。以降は「HQ判断待ち」ではなく、以下の決定事項として記録する。
+
+**§3: `plan=nil && limits=nil`の確定方針 → ★案Bを採用(決定済み)**
+- 両方欠落の場合は`.malformedResponse`として扱い、プランを確定しない(片方のみ欠落のケースと統一)。
+- 決定理由: PROユーザーが誤ってFREE扱いされる実害(案Aのリスク)を防ぐことを優先。
+- 残存リスク: 旧Backend(v1.15未満)が稼働している場合、そのユーザーは永久に未確定のままになる(§3に明記済み)。
+- 必須条件: 実装・リリース前に対象Backendのバージョンと`/entitlements`レスポンス契約を確認すること(§3・下表参照)。
+
+**§1.3: 同一ユーザーのEntitlements再確認 → ★案Iを採用(決定済み)**
+- 現行設計(generationによる追い越し取得で収束)を維持。`isReconfirming`相当の追加フラグは設けない。
+- 必須条件: 実装時に収束動作(§8テスト20・21)を必ずテストで確認すること。
+
+**§4.6: Home Prefetchの方向性 → ★案3を目標方針として採用(決定済み、実装は未許可)**
+- Backendから`computed_for_plan`等の計算文脈を返す方式を目指す。
+- 前提条件: Backend API設計・旧バージョン互換性・フォールバック仕様の確定。
+- **Backend側の設計が確定するまで、案3の実装は許可しない**(現時点では未確定のため着手不可)。
+- 案1(現行方式維持)は恒久的な解決策としては扱わない、案3の前提が整うまでの暫定措置として位置づける。
 
 ### 未検証(実コードでの確認・実測がまだできていない事項)
 
@@ -1206,6 +1353,8 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 | `AuthenticatedUserProviding`を`@MainActor protocol`として宣言すること自体は設計上の必須条件として確定したが、実際にSwift 5モード(`project.yml`の`SWIFT_VERSION: "5.0"`)でコンパイルが通ることの実証確認は未検証 | §1.2 |
 | 案2(Prefetch開始タイミング変更)採用時の、Splash起動シーケンス全体・既存の起動診断(`DiagnosticsStore`)への具体的な影響 | §4.6 |
 | `/entitlements`・`/home`それぞれの実測時間、および両者を並行させられる余地 | §4.6 |
+| **(★HQ決定・案B採用に伴う必須確認事項)** 旧Backend(v1.15未満)が現在実際にまだ稼働しているか。案Bの実装・リリース前に確認が必須(§3参照) | §3 |
+| **(★HQ決定・案3目標方針に伴う未確定事項)** Backend API設計(`computed_for_plan`等のフィールド名・型・意味)・旧バージョン互換性方針・フォールバック仕様のいずれも未確定。これらが確定するまで案3の実装は許可されない(§4.6参照) | §4.6 |
 | **(今回・P3対応)** HQから伝えられたC独立レビューのP3-1〜P3-5の具体的な指摘文は、今回の指示文には含まれていなかった(「起動診断、エラー分岐、キャッシュ処理、`retryNow()`のユーザー整合性も確認してください」という一般的な領域の指定のみ)。今回はこの4領域を本資料の既存コード突き合わせにより見直し、判明した差分(`.backendNotConfigured`分岐の復元・既存副作用の全量反映・`retryNow()`のユーザー整合性追加)をP3対応として§4.2・§4.2.1・§10に反映した。**C-1〜C-5の原文と一致するかどうかは確認できていない。** 原文がこの4領域以外の指摘を含む場合、今回の修正はそれを反映していない可能性がある。原文の共有、または一致確認をHQに依頼する。 | §4.2・§4.2.1・§10 |
 
 ### 実装時の確認事項
@@ -1215,7 +1364,7 @@ ErrorView(title: "読み込みに失敗しました", message: message, onRetry:
 | `MainTabView`→`HomeView`/`PlaceholderScreenView`/`PlanLimitPrompt`→`SubscriptionManagementView`への`authenticatedUserProvider`配線の、各ファイルの既存init構造(メンバーワイズ初期化か明示initか) | §9・§10 |
 | `PlanStoreTests.swift`の既存4テスト(`limits: nil`を使うモック)の期待値見直し。特に今回の修正(planのみ存在する場合も`malformedResponse`になったこと)に伴う追加の期待値変更 | §8・§9 |
 | `HomeCacheTests.swift`の`authenticatedUserProvider`パラメータへの対応 | §9 |
-| §1.2の`load()`内`case (nil, nil): return .pendingPolicyDecision`は、§3のHQ判断が確定した時点で、選択された選択肢(A/B/C)の実装に置き換えること。確定前に本番コードへマージしないこと(P1-2対応により`fatalError`は使用しない) | §1.2・§3 |
+| **(★HQ決定・案B採用により更新)** §1.2の`load()`内`case (nil, nil)`は`.malformedResponse`に統合済み。実装・リリース前に、対象Backendのバージョンと`/entitlements`レスポンス契約を確認することが必須条件(§3参照)。この確認が完了するまで本番コードへマージしないこと | §1.2・§3 |
 | §4.6の案2・案3を採用する場合、`isRefreshingEntitlements`(§4.2.2)・`scheduleWaitForPlanConfirmation()`の確定済み即時フォールバック(§4.2.1)が、変更後のPrefetch開始タイミングとも整合することを再確認すること | §4.2.1・§4.2.2・§4.6 |
 | `@MainActor protocol AuthenticatedUserProviding`が実際にSwift 5モードでコンパイルされることを、実装着手時に最初に確認すること(通らない場合は設計の見直しが必要) | §1.2 |
 | `commit()`の規則6は`private`のため`PlanStore.swift`外部から単体テストで直接検証する手段が無く(`@testable import`でも`private`は緩和されない)、かつ`load()`経由では到達しない。今回はこれを認識した上で、アクセスレベル変更等の設計変更は行わず、コードレビューによる目視確認に依存する限界として受け入れる(§1.2.1参照) | §1.2.1 |
