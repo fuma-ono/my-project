@@ -460,7 +460,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       expected_candles: coverage.expected_candles,
       returned_candles: coverage.returned_candles,
       missing_candles: coverage.missing_candles,
-      unexpected_candles: coverage.unexpected_candles,
+      has_gaps: coverage.has_gaps,
       pre_release_price: preReleasePrice.price,
       pre_release_price_status: preReleasePrice.status,
       prices,

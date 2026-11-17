@@ -115,11 +115,28 @@ export function expectedChartTimestamps(fromIso: string, toIso: string, timefram
 }
 
 /**
- * データの状態(既存の ApiDataStatus と同じ語彙。新しい PARTIAL は作らない)。
- * - READY: 窓の全体が確定していて(window_complete)、到来した対象の足がすべて揃っている(市場の休みで期待が0本の窓も READY)。
- * - DATA_PENDING: 窓の終わりがまだ来ていない・確定していない(未来の時間帯が残っている)。足が揃っているかは問わない。
- * - DATA_UNAVAILABLE: 窓の全体が確定しているのに、足が欠けている(1本でも欠ければ。欠けた数は missing_candles、一部は
- *   returned_candles で分かる)。足は補わない。
+ * 窓の終わりの時刻(ミリ秒)。窓 [from, to) に入る最後の足(エポックの N 分の倍数の区切り)の終わり。`to` が足幅の倍数でないとき、
+ * 最後の足は `to` を超えて終わる(例: to = 13:12 の5分足なら、最後の足は 13:10〜13:15 で、終わりは 13:15)。その足が確定するまで、
+ * 窓は完了していない。窓に足の区切りが1つも入らないときは `to` を使う。
+ */
+export function chartWindowEndMs(fromIso: string, toIso: string, timeframe: string): number {
+  const fromMs = new Date(fromIso).getTime();
+  const toMs = new Date(toIso).getTime();
+  const minutes = MINUTES_OF_TIMEFRAME[timeframe];
+  if (minutes === undefined) return toMs;
+  const bucketMs = minutes * MINUTE_MS;
+  const firstStart = Math.ceil(fromMs / bucketMs) * bucketMs;
+  if (firstStart >= toMs) return toMs;
+  const lastStart = Math.ceil(toMs / bucketMs) * bucketMs - bucketMs;
+  return lastStart + bucketMs;
+}
+
+/**
+ * データの状態(既存の ApiDataStatus と同じ語彙。新しい PARTIAL は作らない。HQ判断 2026-11-17 で確定):
+ * - DATA_PENDING: 窓が未完了(未来の時間帯が残っている・まだ確定していない足がある)。足が揃っているかは問わない。
+ * - READY: 窓が完了していて、チャートに使える足が返っている。**完全性は保証しない**(別項目 has_gaps で表す)。
+ *   期待する足が0本の窓(市場の休み)も READY(expected_candles = 0、has_gaps = false)。
+ * - DATA_UNAVAILABLE: 窓が完了していて、期待する足があるのに、1本も返っていない。
  */
 export type ChartDataStatus = 'READY' | 'DATA_PENDING' | 'DATA_UNAVAILABLE';
 
@@ -130,9 +147,9 @@ export interface ChartCandleCoverage {
   returned_candles: number;
   /** 期待する足のうち、返した足に無い数(期待のタイムスタンプの集合と返した集合の差。休場時間などの余分な足は差し引かない)。 */
   missing_candles: number;
-  /** 返した足のうち、確定した範囲にあるのに期待に入らない足の数(例: 市場が休みの時間の足)。欠損を隠さないための参考値。 */
-  unexpected_candles: number;
-  /** 窓の終わりまでがすべて確定している(未来の時間帯が残っていない)か。 */
+  /** 期待する足が一部欠けている(missing_candles > 0)。READY のときも、欠けた足があれば true。 */
+  has_gaps: boolean;
+  /** 窓の終わり(最後の足の終わり)までがすべて確定している(未来の時間帯が残っていない)か。 */
   window_complete: boolean;
   data_status: ChartDataStatus;
 }
@@ -149,18 +166,20 @@ export function chartCandleCoverage(
   nowMs: number,
 ): ChartCandleCoverage {
   const expected = expectedChartTimestamps(fromIso, toIso, timeframe, nowMs);
-  const expectedSet = new Set(expected.map((t) => new Date(t).getTime()));
   const returnedSet = new Set(timestamps.map((t) => new Date(t).getTime()));
-  const boundary = chartFinalityBoundaryMs(nowMs);
   const missing = expected.filter((t) => !returnedSet.has(new Date(t).getTime())).length;
-  const unexpected = [...returnedSet].filter((ms) => !expectedSet.has(ms) && ms < boundary).length;
-  const windowComplete = new Date(toIso).getTime() <= boundary;
-  const status: ChartDataStatus = !windowComplete ? 'DATA_PENDING' : missing > 0 ? 'DATA_UNAVAILABLE' : 'READY';
+  const matched = expected.length - missing;
+  const windowComplete = chartWindowEndMs(fromIso, toIso, timeframe) <= chartFinalityBoundaryMs(nowMs);
+  const status: ChartDataStatus = !windowComplete
+    ? 'DATA_PENDING'
+    : expected.length > 0 && matched === 0
+      ? 'DATA_UNAVAILABLE'
+      : 'READY';
   return {
     expected_candles: expected.length,
     returned_candles: timestamps.length,
     missing_candles: missing,
-    unexpected_candles: unexpected,
+    has_gaps: missing > 0,
     window_complete: windowComplete,
     data_status: status,
   };

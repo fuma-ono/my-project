@@ -1,4 +1,5 @@
 import { MAJOR_FX_PAIR_ORDER } from './majorFxReactions.js';
+import { pipSizeForSymbol } from './speechReactions.js';
 
 /**
  * Pro イベント別トレード戦略分析(HQ指示 2026-11-06「Pro イベント別トレード戦略分析」、api-design v1.48)。
@@ -44,6 +45,9 @@ import { MAJOR_FX_PAIR_ORDER } from './majorFxReactions.js';
  *     true = 2分目以降のどれかの足で、発表直前の価格に逆側から届いた。
  *     false = 窓の1分足(N本)がすべて揃っていて、UNVERIFIED でもなく、2分目以降のどの足も届かなかった(否定の根拠は、揃った足の系列)。
  *     null = 判定していない(1分足が揃わない・値が無い・保存値の矛盾などで UNDETERMINED のとき)。
+ *   - 保存値の矛盾(DATA_INCONSISTENT): 保存された値(発表直前の価格・1分と窓の最大上昇・最大下落・pips)を、1分足の系列から計算し直した値と
+ *     突き合わせる。極値は許容誤差 1e-6(価格)で**一致**を求める(保存値が系列より大きくても小さくても不一致)。pips は、系列の
+ *     終値(1分 = 1本目、窓 = N 本目)から (終値 − 発表直前の価格) / 1pip で計算し直し、丸め(0.005 pips)の範囲で一致を求める。
  *   - final_side: 窓の終わりの価格が、発表直前の価格に対して初動と同じ側(SAME)・逆側(OPPOSITE)・同じ(AT_PRE)。
  *   分類の規則(上から順に。数値の閾値を使うのは PULLBACK と CONTINUATION の境目だけ):
  *     ① 発表時刻が EXACT でない・必要な値が無い・1分足が欠けている・初動が 0・値の矛盾 → UNDETERMINED(reason に理由)。
@@ -88,6 +92,8 @@ export interface MinuteCandleInput {
   timestamp: string;
   high: number;
   low: number;
+  /** 終値。最終の pips(発表の N 分後の価格 = N 本目の足の終値)を、保存値と突き合わせるために使う。 */
+  close: number;
   unverified: boolean;
 }
 
@@ -109,6 +115,8 @@ export interface StrategyReleaseInput {
    * 保存値との突き合わせに使う。渡さない(undefined)場合、値動きの分類は判定不可(DATA_MISSING)。
    */
   minuteCandles?: readonly MinuteCandleInput[];
+  /** 通貨ペアの1 pip の大きさ(JPY を含むペアは 0.01、それ以外は 0.0001)。保存された pips を終値から再計算するために使う。buildStrategyAnalysis が通貨ペアから補う。 */
+  pip_size?: number;
 }
 
 export type Direction = 'UP' | 'DOWN' | 'FLAT';
@@ -312,6 +320,8 @@ const round4 = (value: number) => Math.round(value * 10_000) / 10_000;
 
 /** 価格(numeric(12,6))どうしの比較の許容(浮動小数点の誤差)。 */
 const PRICE_TOLERANCE = 1e-6;
+/** pips(numeric(10,2))の丸めの誤差(0.005 pips)に、浮動小数点の誤差を足した許容。 */
+const PIPS_ROUNDING_TOLERANCE = 0.005 + 1e-6;
 const MINUTE_MS = 60_000;
 
 /**
@@ -394,12 +404,34 @@ export function assessMovement(
   if (d === 0) return undetermined('INITIAL_FLAT');
 
   // 保存値の矛盾(1分足の行と長い窓の行は別々に更新されうる)。矛盾があれば、crossed などを判定しない。
+  // 保存値は event_price_reactions(取り込みが、1分足から計算して書いた値)なので、同じ1分足の系列から計算し直した値と、
+  // 許容誤差の中で**一致**するはず。保存値が系列より大きくても小さくても、不一致として扱う(HQ指示 2026-11-17 第2回レビュー)。
+  const pipSize = release.pip_size;
+  if (pipSize === undefined || !(pipSize > 0)) return undetermined('DATA_MISSING');
   const pre = Number(first.pre_release_price);
-  const seriesHigh = Math.max(...series.map((c) => c.high)) - pre;
-  const seriesLow = Math.min(...series.map((c) => c.low)) - pre;
+  const near = (a: number, b: number) => Math.abs(a - b) <= PRICE_TOLERANCE;
+  // pips は numeric(10,2) に丸めて保存される(丸めの誤差は 0.005 pips 以下)。
+  const nearPips = (stored: number, recomputed: number) => Math.abs(stored - recomputed) <= PIPS_ROUNDING_TOLERANCE;
+  const head = series[0]!;
+  const last = series[series.length - 1]!;
+  const winHigh = Math.max(...series.map((c) => c.high)) - pre;
+  const winLow = Math.min(...series.map((c) => c.low)) - pre;
   const consistent =
     // 発表直前の価格が、1分と窓の行で同じ
-    Math.abs(pre - Number(win.pre_release_price)) <= PRICE_TOLERANCE &&
+    near(pre, Number(win.pre_release_price)) &&
+    // 1分の行: 最初の1分足の高値・安値(発表直前の価格からの差)と、終値から計算した pips
+    near(Number(first.max_upward), head.high - pre) &&
+    near(Number(first.max_downward), head.low - pre) &&
+    nearPips(Number(first.pips), (head.close - pre) / pipSize) &&
+    // 窓の行: 窓の1分足の最高値・最安値と、N 本目の足の終値から計算した pips
+    near(Number(win.max_upward), winHigh) &&
+    near(Number(win.max_downward), winLow) &&
+    nearPips(Number(win.pips), (last.close - pre) / pipSize) &&
+    // 極値の pips の列が、価格の列と整合(丸めの範囲)
+    nearPips(Number(first.max_upward_pips), Number(first.max_upward) / pipSize) &&
+    nearPips(Number(first.max_downward_pips), Number(first.max_downward) / pipSize) &&
+    nearPips(Number(win.max_upward_pips), Number(win.max_upward) / pipSize) &&
+    nearPips(Number(win.max_downward_pips), Number(win.max_downward) / pipSize) &&
     // 窓は1分の窓を含む: 最大上昇は1分以上、最大下落(負の方向)は1分以下
     Number(win.max_upward) >= Number(first.max_upward) - PRICE_TOLERANCE &&
     Number(win.max_downward) <= Number(first.max_downward) + PRICE_TOLERANCE &&
@@ -407,10 +439,7 @@ export function assessMovement(
     Number(first.max_downward_pips) <= Number(first.pips) &&
     Number(first.pips) <= Number(first.max_upward_pips) &&
     Number(win.max_downward_pips) <= Number(win.pips) &&
-    Number(win.pips) <= Number(win.max_upward_pips) &&
-    // 1分足の系列の極値が、保存された最大・最小を超えていない(保存値が古い・別の窓の値ではない)
-    Number(win.max_upward) >= seriesHigh - PRICE_TOLERANCE &&
-    Number(win.max_downward) <= seriesLow + PRICE_TOLERANCE;
+    Number(win.pips) <= Number(win.max_upward_pips);
   if (!consistent) return undetermined('DATA_INCONSISTENT');
 
   // 2分目以降(最初の1分足を除く)の足で、発表直前の価格に逆側から届いたか。
@@ -549,7 +578,10 @@ export function buildStrategyAnalysis(
   config: StrategyClassificationConfig = DEFAULT_STRATEGY_CLASSIFICATION,
 ): StrategyAnalysis {
   const side = currencySide(symbol, currency);
-  const rows = releases.slice(0, STRATEGY_SAMPLE_WINDOW).map((release) => analyzeRelease(release, side, config));
+  const pipSize = pipSizeForSymbol(symbol);
+  const rows = releases
+    .slice(0, STRATEGY_SAMPLE_WINDOW)
+    .map((release) => analyzeRelease({ ...release, pip_size: release.pip_size ?? pipSize }, side, config));
 
   const directions = rows.filter((r) => r.direction_1m !== null);
   const patterns = rows.filter((r) => r.pattern_15m !== null);

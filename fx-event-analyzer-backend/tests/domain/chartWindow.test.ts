@@ -27,6 +27,7 @@ import {
   CHART_MAX_BEFORE_MINUTES,
   chartCandleCoverage,
   chartFinalityBoundaryMs,
+  chartWindowEndMs,
   defaultChartMinutes,
   expectedChartTimestamps,
   parseChartMinutes,
@@ -185,62 +186,127 @@ describe('expectedChartTimestamps — 到来した、市場が開いている間
   });
 });
 
-describe('chartCandleCoverage — 欠損の状態(足は補わない。未来の時間帯は欠損に数えない)', () => {
+describe('chartWindowEndMs — 窓の終わり(最後の足の終わり)', () => {
+  it('to が足幅の倍数なら to', () => {
+    expect(chartWindowEndMs('2026-11-10T13:00:00.000Z', '2026-11-10T13:10:00.000Z', '5m')).toBe(
+      at('2026-11-10T13:10:00.000Z'),
+    );
+    expect(chartWindowEndMs('2026-11-10T13:00:00.000Z', '2026-11-10T13:10:00.000Z', '1m')).toBe(
+      at('2026-11-10T13:10:00.000Z'),
+    );
+  });
+
+  it('to が足幅の倍数でなければ、最後の足は to を超えて終わる(5分足: 13:12 → 13:15)', () => {
+    expect(chartWindowEndMs('2026-11-10T13:00:00.000Z', '2026-11-10T13:12:00.000Z', '5m')).toBe(
+      at('2026-11-10T13:15:00.000Z'),
+    );
+    expect(chartWindowEndMs('2026-11-10T13:00:00.000Z', '2026-11-10T13:12:00.000Z', '60m')).toBe(
+      at('2026-11-10T14:00:00.000Z'),
+    );
+  });
+
+  it('足の区切りが窓に1つも入らないときは to', () => {
+    expect(chartWindowEndMs('2026-11-10T13:01:00.000Z', '2026-11-10T13:04:00.000Z', '5m')).toBe(
+      at('2026-11-10T13:04:00.000Z'),
+    );
+  });
+
+  it('知らない時間足は to', () => {
+    expect(chartWindowEndMs('2026-11-10T13:00:00.000Z', '2026-11-10T13:12:00.000Z', '2h')).toBe(
+      at('2026-11-10T13:12:00.000Z'),
+    );
+  });
+});
+
+describe('chartCandleCoverage — 状態(HQ判断 2026-11-17): DATA_PENDING / READY(+ has_gaps)/ DATA_UNAVAILABLE', () => {
   const from = '2026-11-10T13:00:00.000Z';
   const to = '2026-11-10T13:10:00.000Z'; // 1分足 10本が期待
   const minutes = (count: number, startOffset = 0) =>
     Array.from({ length: count }, (_, i) => new Date(Date.parse(from) + (startOffset + i) * 60_000).toISOString());
   const afterWindow = at('2026-11-10T13:30:00.000Z');
 
-  it('窓が確定していて全部ある: READY', () => {
+  it('窓が完了して全部ある: READY、has_gaps = false', () => {
     expect(chartCandleCoverage(from, to, '1m', minutes(10), afterWindow)).toEqual({
       expected_candles: 10,
       returned_candles: 10,
       missing_candles: 0,
-      unexpected_candles: 0,
+      has_gaps: false,
       window_complete: true,
       data_status: 'READY',
     });
   });
 
-  it('窓が確定していて一部が欠けている: DATA_UNAVAILABLE(欠けた数と返した数で程度が分かる)', () => {
-    expect(chartCandleCoverage(from, to, '1m', minutes(7), afterWindow)).toMatchObject({
+  it('窓が完了して一部が欠けている: READY、has_gaps = true(欠けた数は missing_candles と一致)', () => {
+    const result = chartCandleCoverage(from, to, '1m', minutes(7), afterWindow);
+    expect(result).toEqual({
       expected_candles: 10,
       returned_candles: 7,
       missing_candles: 3,
+      has_gaps: true,
+      window_complete: true,
+      data_status: 'READY',
+    });
+    expect(result.has_gaps).toBe(result.missing_candles > 0);
+  });
+
+  it('窓が完了して、期待する足が1本も返っていない: DATA_UNAVAILABLE', () => {
+    expect(chartCandleCoverage(from, to, '1m', [], afterWindow)).toEqual({
+      expected_candles: 10,
+      returned_candles: 0,
+      missing_candles: 10,
+      has_gaps: true,
       window_complete: true,
       data_status: 'DATA_UNAVAILABLE',
     });
   });
 
-  it('窓が確定していて1本も無い: DATA_UNAVAILABLE', () => {
-    expect(chartCandleCoverage(from, to, '1m', [], afterWindow)).toMatchObject({
-      expected_candles: 10,
-      returned_candles: 0,
-      missing_candles: 10,
+  it('期待に入らない足(休場時間の足)だけが返っていても、期待する足が1本も無ければ DATA_UNAVAILABLE', () => {
+    const closed = ['2026-11-13T22:00:00.000Z', '2026-11-13T22:01:00.000Z'];
+    expect(
+      chartCandleCoverage(
+        '2026-11-13T21:30:00.000Z',
+        '2026-11-13T23:00:00.000Z',
+        '1m',
+        closed,
+        at('2026-11-14T12:00:00.000Z'),
+      ),
+    ).toMatchObject({
+      expected_candles: 30,
+      returned_candles: 2,
+      missing_candles: 30,
       data_status: 'DATA_UNAVAILABLE',
     });
   });
 
-  it('進行中(窓の終わりが未来): 到来した分が全部あっても DATA_PENDING。READY にしない', () => {
+  it('進行中(窓の終わりが未来): 到来した分が全部あっても DATA_PENDING。完全性は has_gaps で表す', () => {
     // 境目 13:05(now 13:07:30)→ 13:00〜13:04 の5本が期待
     const now = at('2026-11-10T13:07:30.000Z');
     expect(chartCandleCoverage(from, to, '1m', minutes(5), now)).toEqual({
       expected_candles: 5,
       returned_candles: 5,
       missing_candles: 0,
-      unexpected_candles: 0,
+      has_gaps: false,
       window_complete: false,
       data_status: 'DATA_PENDING',
     });
   });
 
-  it('進行中: 未来の時間帯を欠損に数えない。到来した分の欠けだけを数える(状態は DATA_PENDING)', () => {
+  it('進行中: 未来の時間帯を欠損に数えない。到来した分の欠けだけを数える(状態は DATA_PENDING、has_gaps = true)', () => {
     const now = at('2026-11-10T13:07:30.000Z'); // 期待 5本(13:00〜13:04)
     expect(chartCandleCoverage(from, to, '1m', minutes(3), now)).toMatchObject({
       expected_candles: 5,
       returned_candles: 3,
       missing_candles: 2,
+      has_gaps: true,
+      window_complete: false,
+      data_status: 'DATA_PENDING',
+    });
+  });
+
+  it('進行中で1本も無くても DATA_PENDING(DATA_UNAVAILABLE は窓が完了してから)', () => {
+    expect(chartCandleCoverage(from, to, '1m', [], at('2026-11-10T13:07:30.000Z'))).toMatchObject({
+      expected_candles: 5,
+      missing_candles: 5,
       window_complete: false,
       data_status: 'DATA_PENDING',
     });
@@ -255,21 +321,40 @@ describe('chartCandleCoverage — 欠損の状態(足は補わない。未来の
     expect(chartCandleCoverage(from, to, '1m', minutes(10), at('2026-11-10T13:12:00.000Z'))).toMatchObject({
       window_complete: true,
       data_status: 'READY',
+      has_gaps: false,
     });
   });
 
-  it('窓が全部未来(発表の前): 期待 0 本・DATA_PENDING', () => {
+  it('to が足幅の倍数でない5分足: 最後の足(13:10〜13:15)が確定するまで完了しない', () => {
+    const f = '2026-11-10T13:00:00.000Z';
+    const t = '2026-11-10T13:12:00.000Z'; // 最後の足は 13:10 開始、終わりは 13:15
+    const starts = ['13:00', '13:05', '13:10'].map((x) => `2026-11-10T${x}:00.000Z`);
+    // now 13:14 → 境目 13:12(to には届くが、最後の足の終わり 13:15 には届かない)→ 未完了
+    expect(chartCandleCoverage(f, t, '5m', starts.slice(0, 2), at('2026-11-10T13:14:00.000Z'))).toMatchObject({
+      window_complete: false,
+      data_status: 'DATA_PENDING',
+    });
+    // now 13:17 → 境目 13:15 → 完了。3本とも揃って READY
+    expect(chartCandleCoverage(f, t, '5m', starts, at('2026-11-10T13:17:00.000Z'))).toMatchObject({
+      expected_candles: 3,
+      window_complete: true,
+      data_status: 'READY',
+      has_gaps: false,
+    });
+  });
+
+  it('窓が全部未来(発表の前): 期待 0 本・DATA_PENDING・has_gaps = false', () => {
     expect(chartCandleCoverage(from, to, '1m', [], at('2026-11-10T12:00:00.000Z'))).toEqual({
       expected_candles: 0,
       returned_candles: 0,
       missing_candles: 0,
-      unexpected_candles: 0,
+      has_gaps: false,
       window_complete: false,
       data_status: 'DATA_PENDING',
     });
   });
 
-  it('市場の休みで期待が0本、窓が確定していれば READY(欠損なし)', () => {
+  it('市場の休みで期待が0本、窓が完了していれば READY・expected_candles = 0・has_gaps = false', () => {
     expect(
       chartCandleCoverage(
         '2026-11-14T12:00:00.000Z',
@@ -278,15 +363,17 @@ describe('chartCandleCoverage — 欠損の状態(足は補わない。未来の
         [],
         at('2026-11-18T00:00:00.000Z'),
       ),
-    ).toMatchObject({
+    ).toEqual({
       expected_candles: 0,
+      returned_candles: 0,
       missing_candles: 0,
+      has_gaps: false,
       window_complete: true,
       data_status: 'READY',
     });
   });
 
-  it('休場時間の余分な足が、欠損を隠さない(本数は足りていても、欠けた足は欠損)', () => {
+  it('休場時間の余分な足が、欠損を隠さない(本数は足りていても、欠けた足は欠損 = has_gaps)', () => {
     // 金曜 21:30〜23:00Z。開いているのは 21:30〜21:59 の30分。そのうち29本 + 休場の 22:00〜22:04 の5本 = 34本を返した。
     const fridayFrom = '2026-11-13T21:30:00.000Z';
     const fridayTo = '2026-11-13T23:00:00.000Z';
@@ -295,14 +382,13 @@ describe('chartCandleCoverage — 欠損の状態(足は補わない。未来の
       new Date(Date.parse('2026-11-13T22:00:00.000Z') + i * 60_000).toISOString(),
     );
     const returned = [...open.slice(0, 29), ...closed]; // 21:59 が無い
-    const result = chartCandleCoverage(fridayFrom, fridayTo, '1m', returned, at('2026-11-14T12:00:00.000Z'));
-    expect(result).toMatchObject({
+    expect(chartCandleCoverage(fridayFrom, fridayTo, '1m', returned, at('2026-11-14T12:00:00.000Z'))).toEqual({
       expected_candles: 30,
       returned_candles: 34, // 本数だけなら期待(30)を超える
       missing_candles: 1, // それでも 21:59 の欠けは欠損
-      unexpected_candles: 5,
+      has_gaps: true,
       window_complete: true,
-      data_status: 'DATA_UNAVAILABLE',
+      data_status: 'READY',
     });
   });
 
@@ -312,7 +398,8 @@ describe('chartCandleCoverage — 欠損の状態(足は補わない。未来の
       expected_candles: 10,
       returned_candles: 10,
       missing_candles: 2,
-      data_status: 'DATA_UNAVAILABLE',
+      has_gaps: true,
+      data_status: 'READY',
     });
   });
 
@@ -322,7 +409,8 @@ describe('chartCandleCoverage — 欠損の状態(足は補わない。未来の
     expect(chartCandleCoverage(w.from, w.to, '5m', starts.slice(0, 3), afterWindow + 3_600_000)).toMatchObject({
       expected_candles: 4,
       missing_candles: 1,
-      data_status: 'DATA_UNAVAILABLE',
+      has_gaps: true,
+      data_status: 'READY',
     });
   });
 });

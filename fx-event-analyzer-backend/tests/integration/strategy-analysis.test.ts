@@ -707,7 +707,7 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
       expect(Date.parse(series[0]!.timestamp)).toBe(Date.parse(releaseAt));
       const times = series.map((c) => Date.parse(c.timestamp));
       expect([...times].sort((a, b) => a - b)).toEqual(times);
-      expect(series[2]).toMatchObject({ high: 150.25, low: 149.8, unverified: false });
+      expect(series[2]).toMatchObject({ high: 150.25, low: 149.8, close: 150, unverified: false });
       expect(series[9]).toMatchObject({ unverified: true });
       expect(series.filter((c) => c.unverified)).toHaveLength(1);
       await ctx.serviceClient

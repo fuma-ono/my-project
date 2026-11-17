@@ -51,6 +51,7 @@ function candleInputs(candles: readonly Candle[], unverifiedAt: readonly number[
     timestamp: new Date(Date.parse(RELEASE_AT) + index * 60_000).toISOString(),
     high: price(candle.h),
     low: price(candle.l),
+    close: price(candle.c),
     unverified: unverifiedAt.includes(index + 1),
   }));
 }
@@ -85,6 +86,7 @@ function release(candles: readonly Candle[], overrides: Partial<StrategyReleaseI
     minuteCompleteness60m: true,
     reactions: [reactionRow('1m', candles, 1), reactionRow('15m', candles, 15), reactionRow('60m', candles, 60)],
     minuteCandles: candleInputs(candles),
+    pip_size: PIP,
     ...overrides,
   };
 }
@@ -369,11 +371,90 @@ describe('assessMovement — 判定不可(推測で埋めない)', () => {
       expect(assessMovement(staleUp, '15m')).toMatchObject(noMeasures);
     });
 
+    it('保存された窓の最大上昇が、系列の最高値より大きい(一致が必要。大きくても不一致)', () => {
+      // 系列の窓の最高値は 12 pips。保存値を 15 pips にする(窓の行だけ)
+      const r = withReaction(consistentUp, '15m', { max_upward: 0.15, max_upward_pips: 15 });
+      expect(assessMovement(r, '15m')).toMatchObject(noMeasures);
+    });
+
+    it('保存された窓の最大下落が、系列の最安値より深い(一致が必要。小さい側にずれても不一致)', () => {
+      // 系列の窓の最安値は 2 pips。保存値を -3 pips(より深い)にする
+      const r = withReaction(consistentUp, '15m', { max_downward: -0.03, max_downward_pips: -3 });
+      expect(assessMovement(r, '15m')).toMatchObject(noMeasures);
+    });
+
+    it('保存された窓の最大上昇が、系列の最高値より小さい', () => {
+      const r = withReaction(consistentUp, '15m', { max_upward: 0.11, max_upward_pips: 11 });
+      expect(assessMovement(r, '15m')).toMatchObject(noMeasures);
+    });
+
+    it('1分の行の最大上昇・最大下落が、最初の1分足の高値・安値と違う', () => {
+      // 最初の1分足の高値は 12 pips、安値は 2 pips
+      const high = withReaction(consistentUp, '1m', { max_upward: 0.14, max_upward_pips: 14 });
+      expect(assessMovement(high, '15m')).toMatchObject(noMeasures);
+      const low = withReaction(consistentUp, '1m', { max_downward: 0.01, max_downward_pips: 1 });
+      expect(assessMovement(low, '15m')).toMatchObject(noMeasures);
+    });
+
+    it('極値は許容誤差(1e-6)の中なら一致とみなす', () => {
+      const r = withReaction(consistentUp, '15m', { max_upward: 0.12 + 5e-7 });
+      expect(assessMovement(r, '15m').reason).toBe('THRESHOLD_NOT_SET');
+      const over = withReaction(consistentUp, '15m', { max_upward: 0.12 + 2e-6 });
+      expect(assessMovement(over, '15m').reason).toBe('DATA_INCONSISTENT');
+    });
+
+    it('窓の最終 pips が、N 本目の足の終値から計算した値と違う(15分: 15本目、60分: 60本目)', () => {
+      // 15本目の終値だけ 1 pip 高くする(保存値は元のまま)。60本目の終値は変えないので、60分の窓は整合したまま。
+      const closes = candleInputs(series({ h: 12, l: 2, c: 10 }, { 2: { h: 12, l: 4, c: 9 } }));
+      closes[14] = { ...closes[14]!, close: round6(closes[14]!.close + PIP) };
+      const r = { ...consistentUp, minuteCandles: closes };
+      expect(assessMovement(r, '15m')).toMatchObject(noMeasures);
+      expect(assessMovement(r, '60m').reason).toBe('THRESHOLD_NOT_SET');
+      // 60本目の終値を変えれば、60分の窓だけが矛盾
+      const closes60 = candleInputs(series({ h: 12, l: 2, c: 10 }, { 2: { h: 12, l: 4, c: 9 } }));
+      closes60[59] = { ...closes60[59]!, close: round6(closes60[59]!.close + PIP) };
+      const r60 = { ...consistentUp, minuteCandles: closes60 };
+      expect(assessMovement(r60, '60m')).toMatchObject(noMeasures);
+      expect(assessMovement(r60, '15m').reason).toBe('THRESHOLD_NOT_SET');
+    });
+
+    it('1分の最終 pips が、1本目の足の終値から計算した値と違う(両方の窓が矛盾)', () => {
+      const closes = candleInputs(series({ h: 12, l: 2, c: 10 }, { 2: { h: 12, l: 4, c: 9 } }));
+      closes[0] = { ...closes[0]!, close: round6(closes[0]!.close + 2 * PIP) };
+      const r = { ...consistentUp, minuteCandles: closes };
+      expect(assessMovement(r, '15m')).toMatchObject(noMeasures);
+      expect(assessMovement(r, '60m')).toMatchObject(noMeasures);
+    });
+
+    it('pips は丸め(numeric(10,2) の 0.005 pips)の範囲なら一致とみなし、それを超えたら不一致', () => {
+      // 15本目の終値 9 pips。保存の pips 9.004 は丸めの範囲(差 0.004)で一致、9.006 は範囲外(差 0.006)
+      const ok = withReaction(consistentUp, '15m', { pips: 9.004, max_downward_pips: 2, max_upward_pips: 12 });
+      expect(assessMovement(ok, '15m').reason).toBe('THRESHOLD_NOT_SET');
+      const ng = withReaction(consistentUp, '15m', { pips: 9.006 });
+      expect(assessMovement(ng, '15m')).toMatchObject(noMeasures);
+    });
+
+    it('極値の pips の列が、価格の列と合わない(最大上昇の pips だけ違う)', () => {
+      const r = withReaction(consistentUp, '15m', { max_upward_pips: 13 });
+      expect(assessMovement(r, '15m')).toMatchObject(noMeasures);
+    });
+
+    it('通貨ペアの pip の大きさが分からなければ判定しない(pips の再計算ができない)', () => {
+      const { pip_size: _omit, ...rest } = consistentUp;
+      expect(assessMovement(rest, '15m')).toMatchObject({ class: 'UNDETERMINED', reason: 'DATA_MISSING' });
+    });
+
+    it('buildStrategyAnalysis は通貨ペアから pip の大きさを補う(JPY を含むペアは 0.01)', () => {
+      const { pip_size: _omit, ...rest } = consistentUp;
+      const analysis = buildStrategyAnalysis([rest], 'USDJPY', 'USD');
+      expect(analysis.releases[0]?.movement_15m.reason).toBe('THRESHOLD_NOT_SET');
+    });
+
     it('境界: 最も伸びた幅と最終の位置が等しい(戻し率 0)は矛盾ではない', () => {
-      // 窓の pips を極値の上限ちょうどより大きくはできないので、極値側を下げて作る(1分と窓で同じに揃える)
-      const r = withReaction(withReaction(consistentUp, '15m', { pips: 12 }), '15m', {});
-      // 整合する範囲(peak = 12、final = 12)は矛盾ではない。戻し率 0
-      expect(assessMovement(r, '15m').retrace_ratio).toBe(0);
+      const r = release(series({ h: 12, l: 2, c: 10 }, { 2: { h: 12, l: 10, c: 12 } }));
+      const a = assessMovement(r, '15m');
+      expect(a).toMatchObject({ favorable_peak_pips: 12, final_pips_in_initial_direction: 12, retrace_ratio: 0 });
+      expect(assessMovement(r, '15m', TEST_CONFIG).class).toBe('CONTINUATION');
     });
 
     it('15分の行の矛盾は、ほかの窓(60分)の判定に影響しない。1分の行が原因なら両方の窓に及ぶ', () => {

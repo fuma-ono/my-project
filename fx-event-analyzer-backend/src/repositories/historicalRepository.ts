@@ -327,6 +327,7 @@ export interface MinuteCandleRow {
   timestamp: string;
   high: number;
   low: number;
+  close: number;
   unverified: boolean;
 }
 
@@ -346,7 +347,7 @@ export async function listMinuteCandleSeries(
       const endMs = startMs + 60 * 60_000;
       const { data, error } = await supabase
         .from('fx_prices')
-        .select('timestamp, high, low, verification_status')
+        .select('timestamp, high, low, close, verification_status')
         .eq('fx_pair_id', fxPairId)
         .eq('timeframe', '1m')
         .gte('timestamp', new Date(startMs).toISOString())
@@ -357,6 +358,7 @@ export async function listMinuteCandleSeries(
         timestamp: string;
         high: number | string;
         low: number | string;
+        close: number | string;
         verification_status: string;
       }[];
       result.set(
@@ -365,6 +367,7 @@ export async function listMinuteCandleSeries(
           timestamp: row.timestamp,
           high: Number(row.high),
           low: Number(row.low),
+          close: Number(row.close),
           unverified: row.verification_status === 'UNVERIFIED',
         })),
       );

@@ -18,7 +18,11 @@
 --    (3c)・(4) は、(市場イベント, 通貨ペア) ごとに1件にして数える(同じ値動きを、指標の数だけ重ねて数えない)。
 --    (3b) は指標ごとの件数(戦略分析は指標ごとに過去5回を使うため)で、重複排除しない。
 --  * 1分足の完全性: (3b)・(3c)・(4) は、コードと同じく、窓の1分足が全部(15本・60本)あり、UNVERIFIED が無い発表だけを数える。
---    (3b) の exact_released(完全性を見ない件数)と analyzable_* の差が、1分足の欠けによる除外。
+--    (3b) の exact_released と analyzable_* の差は、1分足の欠け・UNVERIFIED だけで生じるわけではない。次の理由もすべて含む:
+--    ① 窓の値動き(event_price_reactions)が AVAILABLE でない(行が無い・UNAVAILABLE・まだ計算されていない)
+--    ② 窓の1分足が15本・60本揃っていない・UNVERIFIED がある
+--    ③ 15分・60分で除外の理由が違う(analyzable_15m と analyzable_60m が別々に数える)
+--    差の内訳(①と②)は、この集計からは分からない。内訳が要るときは、別の集計を足す。
 --  * それでも、SQL の件数は、コード上の「分析可能なサンプル数」と一致しない可能性がある。コードはさらに、保存値の矛盾
 --    (極値と pips の整合、1分足の系列との整合。DATA_INCONSISTENT)で判定不可にするが、SQL ではその矛盾を見ていない。
 --    SQL の件数は、コードの件数以上になる(コードの方が少なくなりうる)。
@@ -55,6 +59,8 @@ order by i.code;
 -- (3b) 指標 × 通貨ペアごとの分析可能な発表の数(重複排除しない。1分足の完全性つき)。
 --      exact_released = 発表時刻が EXACT の RELEASED。analyzable_15m / analyzable_60m = さらに、1分・窓の値動きが AVAILABLE で、
 --      窓の1分足が全部あり UNVERIFIED が無いもの。
+--      exact_released はその通貨ペアの値動きの行が(状態を問わず)1行でもある発表。exact_released − analyzable_* の差は、値動きが AVAILABLE でない・
+--      1分足の欠け・UNVERIFIED の合計で、内訳は分からない(上の注意を参照)。
 select i.code, p.symbol,
        count(*) as exact_released,
        count(*) filter (where x.n15 = 15 and x.u15 = 0 and x.r1 and x.r15) as analyzable_15m,
