@@ -191,7 +191,7 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
       .delete()
       .eq('fx_pair_id', usdjpyId)
       .gte('timestamp', '2020-01-01T00:00:00.000Z')
-      .lt('timestamp', '2091-01-01T00:00:00.000Z');
+      .lt('timestamp', '2021-01-01T00:00:00.000Z');
     await ctx.serviceClient
       .from('event_price_reactions')
       .delete()
