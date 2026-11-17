@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FEATURE_CODES } from '../../src/authorization/entitlements.js';
-import { listMinuteCandleCompleteness } from '../../src/repositories/historicalRepository.js';
+import { listMinuteCandleCompleteness, listMinuteCandleSeries } from '../../src/repositories/historicalRepository.js';
 import {
   buildIntegrationContext,
   createTestUser,
@@ -668,6 +668,62 @@ describe.skipIf(!integration)('GET /events/{id}/strategy-analysis', () => {
         usdjpyId,
       );
       expect(result.get(fakeEventId)).toEqual({ complete15m: false, complete60m: false });
+    });
+  });
+  // 値動きの分類の crossed_pre_price_after_initial は、1分足の系列から直接判定する(HQ指示 2026-11-17「Cレビュー反映」)。
+  // その入力になる listMinuteCandleSeries: 発表の瞬間から60分の窓(半開区間)の1分足を、時刻順・高値/安値つきで返す。
+  describe('listMinuteCandleSeries (2分目以降の足から crossed を判定するための1分足の系列)', () => {
+    const releaseAt = '2090-07-10T12:30:00.000Z';
+    const fakeEventId = randomUUID();
+
+    afterAll(async () => {
+      await ctx.serviceClient
+        .from('fx_prices')
+        .delete()
+        .eq('fx_pair_id', usdjpyId)
+        .gte('timestamp', releaseAt)
+        .lt('timestamp', '2090-08-01T00:00:00.000Z');
+    });
+
+    it('窓の60本を時刻順で返す。窓の外(発表の1分前・60分後ちょうど)は含めない。UNVERIFIED は印をつけて返す', async () => {
+      const inWindow = minuteCandles(usdjpyId, releaseAt, 60);
+      // 3本目: 高値・安値を変える / 10本目: UNVERIFIED
+      inWindow[2] = { ...inWindow[2]!, high: 150.25, low: 149.8 };
+      inWindow[9] = { ...inWindow[9]!, verification_status: 'UNVERIFIED' };
+      const before = { ...minuteCandles(usdjpyId, releaseAt, 1)[0]!, timestamp: '2090-07-10T12:29:00.000Z' };
+      const atEnd = { ...minuteCandles(usdjpyId, releaseAt, 1)[0]!, timestamp: '2090-07-10T13:30:00.000Z' };
+      const { error } = await ctx.serviceClient
+        .from('fx_prices')
+        .insert([atEnd, ...inWindow.slice().reverse(), before]);
+      expect(error).toBeNull();
+
+      const result = await listMinuteCandleSeries(
+        ctx.serviceClient,
+        [{ event_id: fakeEventId, release_datetime: releaseAt }],
+        usdjpyId,
+      );
+      const series = result.get(fakeEventId)!;
+      expect(series).toHaveLength(60);
+      expect(Date.parse(series[0]!.timestamp)).toBe(Date.parse(releaseAt));
+      const times = series.map((c) => Date.parse(c.timestamp));
+      expect([...times].sort((a, b) => a - b)).toEqual(times);
+      expect(series[2]).toMatchObject({ high: 150.25, low: 149.8, unverified: false });
+      expect(series[9]).toMatchObject({ unverified: true });
+      expect(series.filter((c) => c.unverified)).toHaveLength(1);
+      await ctx.serviceClient
+        .from('fx_prices')
+        .delete()
+        .eq('fx_pair_id', usdjpyId)
+        .gte('timestamp', '2090-07-10T00:00:00.000Z');
+    });
+
+    it('足が無い発表は空の配列(キーは必ずある)', async () => {
+      const result = await listMinuteCandleSeries(
+        ctx.serviceClient,
+        [{ event_id: fakeEventId, release_datetime: '2090-07-20T12:30:00.000Z' }],
+        usdjpyId,
+      );
+      expect(result.get(fakeEventId)).toEqual([]);
     });
   });
 });

@@ -118,7 +118,8 @@ export async function listChartPrices(
   timeframe: string,
   fromIso: string,
   toIso: string,
-  limit?: number,
+  /** true なら表示範囲を半開区間 [from, to) にする(経済指標のチャート)。既定は両端を含む [from, to](要人発言のチャートなど、既存の動作)。 */
+  options: { toExclusive?: boolean } = {},
 ): Promise<FxPriceRow[]> {
   let query = supabase
     .from('fx_prices')
@@ -130,10 +131,8 @@ export async function listChartPrices(
     // one becomes DATA_UNAVAILABLE. Nothing is interpolated.
     .neq('verification_status', 'UNVERIFIED')
     .gte('timestamp', fromIso)
-    .lte('timestamp', toIso)
     .order('timestamp', { ascending: true });
-  // 返す本数の安全弁(chart の before_minutes / after_minutes の拡張。domain/chartWindow.ts の CHART_MAX_CANDLES)。
-  if (limit !== undefined) query = query.limit(limit);
+  query = options.toExclusive ? query.lt('timestamp', toIso) : query.lte('timestamp', toIso);
   const { data, error } = await query;
   if (error) throw error;
   return data ?? [];

@@ -705,10 +705,19 @@ describe.skipIf(!integration)('Backend API — Phase 2 endpoints against real se
       expect(body.window).toEqual({ before_minutes: 30, after_minutes: 120, source: 'REQUESTED' });
       expect(Date.parse(body.window_to) - Date.parse(body.window_from)).toBe(150 * 60_000);
       expect(Date.parse(body.release_datetime) - Date.parse(body.window_from)).toBe(30 * 60_000);
-      expect(body.limits).toEqual({ max_before_minutes: 180, max_after_minutes: 180, max_candles: 1000 });
-      expect(['READY', 'PARTIAL', 'DATA_UNAVAILABLE']).toContain(body.data_status);
-      expect(body.missing_candles).toBe(Math.max(body.expected_candles - body.returned_candles, 0));
-      expect(body.truncated).toBe(false);
+      expect(body.limits).toEqual({ max_before_minutes: 180, max_after_minutes: 180 });
+      expect(['READY', 'DATA_PENDING', 'DATA_UNAVAILABLE']).toContain(body.data_status);
+      expect(body).not.toHaveProperty('truncated');
+      expect(body.returned_candles).toBe(body.prices.length); // 取得の境界([from, to))と集計の境界が同じ
+      expect(body.missing_candles).toBeLessThanOrEqual(body.expected_candles);
+      // 窓が未完了(未来の時間帯が残っている)なら DATA_PENDING、完了していれば READY か DATA_UNAVAILABLE(欠損の有無で決まる)
+      expect(typeof body.window_complete).toBe('boolean');
+      if (!body.window_complete) expect(body.data_status).toBe('DATA_PENDING');
+      else expect(body.data_status).toBe(body.missing_candles === 0 ? 'READY' : 'DATA_UNAVAILABLE');
+      for (const price of body.prices) {
+        expect(Date.parse(price.timestamp)).toBeGreaterThanOrEqual(Date.parse(body.window_from));
+        expect(Date.parse(price.timestamp)).toBeLessThan(Date.parse(body.window_to)); // 半開区間
+      }
       expect(['AVAILABLE', 'UNAVAILABLE']).toContain(body.pre_release_price_status);
       expect(body.pre_release_price === null).toBe(body.pre_release_price_status === 'UNAVAILABLE');
       expect(Array.isArray(body.prices)).toBe(true);

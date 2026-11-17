@@ -17,6 +17,7 @@ import {
   listAvailableReactionsForComparison,
   listCoReleasedEvents,
   listMinuteCandleCompleteness,
+  listMinuteCandleSeries,
   listRecentReleasedEventIds,
   listReleasedEventsForIndicator,
   getStrategyPair,
@@ -238,6 +239,8 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
     );
     // HQ指示(2026-11-07「1分足欠損への対応」): 15分・60分のブレイク判定だけに使う、1分足の欠損確認(1分・5分判定には使わない)。
     const completeness = await listMinuteCandleCompleteness(app.supabase, releases, pair.fx_pair_id);
+    // 値動きの分類(crossed_pre_price_after_initial)は、2分目以降の1分足の系列から直接判定する(domain/eventStrategyAnalysis.ts)。
+    const minuteSeries = await listMinuteCandleSeries(app.supabase, releases, pair.fx_pair_id);
     const analysis = buildStrategyAnalysis(
       releases.map((release) => ({
         event_id: release.event_id,
@@ -250,6 +253,7 @@ export function registerHistoricalRoutes(app: FastifyInstance): void {
         reactions: reactions.filter((r) => r.event_id === release.event_id),
         minuteCompleteness15m: completeness.get(release.event_id)?.complete15m ?? false,
         minuteCompleteness60m: completeness.get(release.event_id)?.complete60m ?? false,
+        minuteCandles: minuteSeries.get(release.event_id) ?? [],
       })),
       pair.symbol,
       event.currency_code,

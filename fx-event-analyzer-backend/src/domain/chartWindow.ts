@@ -1,4 +1,5 @@
-import { isFxMarketOpen, MINUTE_MS } from '../ingestion/marketHours.js';
+import { FX_FETCH_SETTINGS } from '../ingestion/config.js';
+import { floorMinute, isFxMarketOpen, MINUTE_MS } from '../ingestion/marketHours.js';
 
 // SCR-008 相場反応詳細のチャートの表示範囲(HQ指示 2026-10-09)。発表時刻を基準に、
 // 時間足ごとに範囲を変える。1分足は初動(前後15分)、5分足は短期の流れ(前後60分)、
@@ -25,11 +26,11 @@ export function chartWindow(releaseDatetime: string, timeframe: string): { from:
 // 指定が無いときは、上の時間足ごとの既定の範囲のまま(既存の動作を変えない)。
 //
 // 上限(最大取得範囲)の根拠: 既存の最大の表示範囲が 15分足の前後3時間(180分)であること、要件が「発表前から発表後2時間」
-// であること。前後とも180分まで(合計360分)とし、1分足でも返す足は最大 360 本になる。返す本数の安全弁として
-// CHART_MAX_CANDLES を別に置く(DB の取得に limit を付ける)。
+// であること。前後とも180分まで(合計360分)とし、表示範囲は半開区間 [from, to) なので、1分足でも返す足は最大 360 本
+// (360分 ÷ 1分)で、5分足以上はそれより少ない。PostgREST の1回の取得の上限(既定1000行)に届かないので、本数の上限や
+// 切り詰めの処理は置かない(HQ指示 2026-11-17「Cレビュー反映」: 上限が実際に届かないなら簡素化する)。
 export const CHART_MAX_BEFORE_MINUTES = 180;
 export const CHART_MAX_AFTER_MINUTES = 180;
-export const CHART_MAX_CANDLES = 1000;
 
 export type ChartWindowSource = 'DEFAULT' | 'REQUESTED';
 
@@ -78,19 +79,29 @@ export function resolveChartWindow(
 const MINUTES_OF_TIMEFRAME: Record<string, number> = { '1m': 1, '5m': 5, '15m': 15, '30m': 30, '60m': 60 };
 
 /**
- * 表示範囲 [from, to) に、市場が開いている間に存在するはずの足の数(期待本数)。
- * 1分足 = 市場が開いている分の数。5〜60分足 = 取り込みが1分足から組み立てる足(エポックの N 分の倍数の区切り。中の N 分がすべて
- * 市場の開いている分のときだけできる、ingestion/pipelines/fxPrices.ts の aggregateMinuteRows)のうち、開始が範囲に入るもの。
- * 市場の休み(週末・12/25・1/1)の足は数えない。
+ * 「もう確定していてよい」時刻の境目(ミリ秒)。取り込みは、now − finalityLagMinutes より新しい分は、まだ取り込みの途中の
+ * 可能性があるため、欠けているとは扱わない(ingestion/pipelines/fxGapRepair.ts)。ここもそれに揃える。
+ * 5〜60分足は、中の N 分がすべて確定してから組み立てられる(aggregateMinuteRows)ので、足の終わりがこの境目以前のものだけが対象。
  */
-export function expectedChartCandles(fromIso: string, toIso: string, timeframe: string): number {
+export function chartFinalityBoundaryMs(nowMs: number): number {
+  return floorMinute(nowMs - FX_FETCH_SETTINGS.finalityLagMinutes * MINUTE_MS);
+}
+
+/**
+ * 表示範囲 [from, to) のうち、境目(finality)までに到来した、市場が開いている間にあるはずの足の開始時刻(ISO)。
+ * 1分足 = 開いている分。5〜60分足 = エポックの N 分の倍数の区切りで、中の N 分がすべて市場の開いている分で、かつ足の終わりが
+ * 境目以前のもの(未来の足・まだ確定していない足は含めない)。市場の休み(週末・12/25・1/1)の足は含めない。
+ */
+export function expectedChartTimestamps(fromIso: string, toIso: string, timeframe: string, nowMs: number): string[] {
   const minutes = MINUTES_OF_TIMEFRAME[timeframe];
-  if (minutes === undefined) return 0;
+  if (minutes === undefined) return [];
   const bucketMs = minutes * MINUTE_MS;
   const fromMs = new Date(fromIso).getTime();
   const toMs = new Date(toIso).getTime();
-  let count = 0;
+  const boundary = chartFinalityBoundaryMs(nowMs);
+  const result: string[] = [];
   for (let start = Math.ceil(fromMs / bucketMs) * bucketMs; start < toMs; start += bucketMs) {
+    if (start + bucketMs > boundary) break;
     let open = true;
     for (let ms = start; ms < start + bucketMs; ms += MINUTE_MS) {
       if (!isFxMarketOpen(ms)) {
@@ -98,40 +109,59 @@ export function expectedChartCandles(fromIso: string, toIso: string, timeframe: 
         break;
       }
     }
-    if (open) count += 1;
+    if (open) result.push(new Date(start).toISOString());
   }
-  return count;
+  return result;
 }
 
-export type ChartDataStatus = 'READY' | 'PARTIAL' | 'DATA_UNAVAILABLE';
+/**
+ * データの状態(既存の ApiDataStatus と同じ語彙。新しい PARTIAL は作らない)。
+ * - READY: 窓の全体が確定していて(window_complete)、到来した対象の足がすべて揃っている(市場の休みで期待が0本の窓も READY)。
+ * - DATA_PENDING: 窓の終わりがまだ来ていない・確定していない(未来の時間帯が残っている)。足が揃っているかは問わない。
+ * - DATA_UNAVAILABLE: 窓の全体が確定しているのに、足が欠けている(1本でも欠ければ。欠けた数は missing_candles、一部は
+ *   returned_candles で分かる)。足は補わない。
+ */
+export type ChartDataStatus = 'READY' | 'DATA_PENDING' | 'DATA_UNAVAILABLE';
 
 export interface ChartCandleCoverage {
+  /** 到来した(確定している)対象の足の数。未来の時間帯は含めない。 */
   expected_candles: number;
-  /** 表示範囲 [from, to) の中にある足の数(返した足のうち、範囲に入るもの)。 */
+  /** 返した足の数(= prices の本数。期待に入らない足、例えば休場時間の足も数える)。 */
   returned_candles: number;
+  /** 期待する足のうち、返した足に無い数(期待のタイムスタンプの集合と返した集合の差。休場時間などの余分な足は差し引かない)。 */
   missing_candles: number;
+  /** 返した足のうち、確定した範囲にあるのに期待に入らない足の数(例: 市場が休みの時間の足)。欠損を隠さないための参考値。 */
+  unexpected_candles: number;
+  /** 窓の終わりまでがすべて確定している(未来の時間帯が残っていない)か。 */
+  window_complete: boolean;
   data_status: ChartDataStatus;
 }
 
 /**
- * 期待本数と実際の本数から、欠損の状態を決める。READY = 期待どおり全部ある(期待が0本で返却も0本の、市場が休みの窓も
- * 欠損なしの READY)。PARTIAL = 一部だけある。DATA_UNAVAILABLE = 期待があるのに1本も無い。足は補わない。
+ * 期待するタイムスタンプの集合と、返した足のタイムスタンプの集合を比べて、欠損の状態を決める。
+ * `timestamps` は、取得した足の開始時刻(窓は半開区間 [from, to) で取得している前提)。`nowMs` は現在時刻(ミリ秒)。
  */
 export function chartCandleCoverage(
   fromIso: string,
   toIso: string,
   timeframe: string,
   timestamps: readonly string[],
+  nowMs: number,
 ): ChartCandleCoverage {
-  const fromMs = new Date(fromIso).getTime();
-  const toMs = new Date(toIso).getTime();
-  const expected = expectedChartCandles(fromIso, toIso, timeframe);
-  const inWindow = timestamps.filter((t) => {
-    const ms = new Date(t).getTime();
-    return ms >= fromMs && ms < toMs;
-  }).length;
-  const missing = Math.max(expected - inWindow, 0);
-  const status: ChartDataStatus =
-    expected === 0 || missing === 0 ? 'READY' : inWindow === 0 ? 'DATA_UNAVAILABLE' : 'PARTIAL';
-  return { expected_candles: expected, returned_candles: inWindow, missing_candles: missing, data_status: status };
+  const expected = expectedChartTimestamps(fromIso, toIso, timeframe, nowMs);
+  const expectedSet = new Set(expected.map((t) => new Date(t).getTime()));
+  const returnedSet = new Set(timestamps.map((t) => new Date(t).getTime()));
+  const boundary = chartFinalityBoundaryMs(nowMs);
+  const missing = expected.filter((t) => !returnedSet.has(new Date(t).getTime())).length;
+  const unexpected = [...returnedSet].filter((ms) => !expectedSet.has(ms) && ms < boundary).length;
+  const windowComplete = new Date(toIso).getTime() <= boundary;
+  const status: ChartDataStatus = !windowComplete ? 'DATA_PENDING' : missing > 0 ? 'DATA_UNAVAILABLE' : 'READY';
+  return {
+    expected_candles: expected.length,
+    returned_candles: timestamps.length,
+    missing_candles: missing,
+    unexpected_candles: unexpected,
+    window_complete: windowComplete,
+    data_status: status,
+  };
 }

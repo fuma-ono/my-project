@@ -3,47 +3,79 @@ import {
   assessMovement,
   buildStrategyAnalysis,
   DEFAULT_STRATEGY_CLASSIFICATION,
+  type MinuteCandleInput,
   type StrategyReactionInput,
   type StrategyReleaseInput,
 } from '../../src/domain/eventStrategyAnalysis.js';
 
 /**
- * 値動きの分類(assessMovement。HQ指示 2026-11-17「Strategy Analysis バックエンド実装 第1段階」)。
+ * 値動きの分類(assessMovement。HQ指示 2026-11-17「Strategy Analysis バックエンド実装 第1段階」と「Cレビュー反映」)。
  * 閾値(pullbackMinRatio)は本番では未設定(null)。ここで使う 0.5 は「閾値を渡したときの分岐を確かめる」ための
  * テスト用の値で、運用の閾値ではない。
+ *
+ * 1分足の系列を先に決め、保存値(event_price_reactions の行)はその系列から計算して作る(= 保存値と系列が整合した状態)。
+ * 矛盾のテストは、その整合した状態の一部を壊して作る。価格は発表直前を 150、1 pip = 0.01。
  */
 
 const TEST_CONFIG = { pullbackMinRatio: 0.5 } as const;
+const PRE = 150;
+const PIP = 0.01;
+const RELEASE_AT = '2026-11-10T13:30:00.000Z';
 
-function reaction(
-  timeframe: string,
-  pips: number | null,
-  maxUpward: number | null,
-  maxDownward: number | null,
-  maxUpwardPips: number | null,
-  maxDownwardPips: number | null,
-  dataStatus = 'AVAILABLE',
-): StrategyReactionInput {
+/** 発表直前の価格からの pips で表した足(高値・安値・終値)。 */
+interface Candle {
+  h: number;
+  l: number;
+  c: number;
+}
+
+const round6 = (value: number) => Math.round(value * 1_000_000) / 1_000_000;
+const round2 = (value: number) => Math.round(value * 100) / 100;
+const price = (offsetPips: number) => round6(PRE + offsetPips * PIP);
+
+/**
+ * 60本の1分足(1本目 = 発表の瞬間に始まる足)。`first` が1本目、`at` が n 本目(1始まり)の上書き。
+ * それ以外の足は、前の足の終値のまま動かない(高値 = 安値 = 終値)。
+ */
+function series(first: Candle, at: Record<number, Candle> = {}): Candle[] {
+  const result: Candle[] = [];
+  for (let n = 1; n <= 60; n += 1) {
+    const prev = result[n - 2];
+    result.push(n === 1 ? first : (at[n] ?? { h: prev!.c, l: prev!.c, c: prev!.c }));
+  }
+  return result;
+}
+
+function candleInputs(candles: readonly Candle[], unverifiedAt: readonly number[] = []): MinuteCandleInput[] {
+  return candles.map((candle, index) => ({
+    timestamp: new Date(Date.parse(RELEASE_AT) + index * 60_000).toISOString(),
+    high: price(candle.h),
+    low: price(candle.l),
+    unverified: unverifiedAt.includes(index + 1),
+  }));
+}
+
+/** 先頭 minutes 本の足から、event_price_reactions の行(保存値)を計算する。 */
+function reactionRow(timeframe: string, candles: readonly Candle[], minutes: number): StrategyReactionInput {
+  const window = candles.slice(0, minutes);
+  const maxUp = Math.max(...window.map((c) => c.h));
+  const maxDown = Math.min(...window.map((c) => c.l));
   return {
     timeframe,
-    pips,
-    max_upward: maxUpward,
-    max_downward: maxDownward,
-    max_upward_pips: maxUpwardPips,
-    max_downward_pips: maxDownwardPips,
-    data_status: dataStatus,
+    pips: round2(window[minutes - 1]!.c),
+    max_upward: round6(maxUp * PIP),
+    max_downward: round6(maxDown * PIP),
+    max_upward_pips: round2(maxUp),
+    max_downward_pips: round2(maxDown),
+    pre_release_price: PRE,
+    data_status: 'AVAILABLE',
   };
 }
 
-/** 価格は pips × 0.01(USDJPY 相当)。1分の値と15分の値だけを渡す。 */
-function release(
-  first: { pips: number; up: number; down: number },
-  window: { pips: number; up: number; down: number },
-  overrides: Partial<StrategyReleaseInput> = {},
-): StrategyReleaseInput {
+function release(candles: readonly Candle[], overrides: Partial<StrategyReleaseInput> = {}): StrategyReleaseInput {
   return {
     event_id: 'e1',
-    release_datetime: '2026-11-10T13:30:00.000Z',
+    release_datetime: RELEASE_AT,
     forecast: null,
     actual: null,
     surprise: null,
@@ -51,18 +83,24 @@ function release(
     release_datetime_precision: 'EXACT',
     minuteCompleteness15m: true,
     minuteCompleteness60m: true,
-    reactions: [
-      reaction('1m', first.pips, first.up * 0.01, first.down * 0.01, first.up, first.down),
-      reaction('15m', window.pips, window.up * 0.01, window.down * 0.01, window.up, window.down),
-      reaction('60m', window.pips, window.up * 0.01, window.down * 0.01, window.up, window.down),
-    ],
+    reactions: [reactionRow('1m', candles, 1), reactionRow('15m', candles, 15), reactionRow('60m', candles, 60)],
+    minuteCandles: candleInputs(candles),
     ...overrides,
   };
 }
 
+/** 反応の行の一部を差し替える。 */
+function withReaction(
+  base: StrategyReleaseInput,
+  timeframe: string,
+  patch: Partial<StrategyReactionInput>,
+): StrategyReleaseInput {
+  return { ...base, reactions: base.reactions.map((r) => (r.timeframe === timeframe ? { ...r, ...patch } : r)) };
+}
+
 describe('assessMovement — 反転・全戻し(閾値を使わない分類)', () => {
   it('REVERSAL: 初動は上、15分後は発表直前の価格より下(最終的に逆側)', () => {
-    const r = release({ pips: 10, up: 12, down: -1 }, { pips: -8, up: 12, down: -20 });
+    const r = release(series({ h: 12, l: -1, c: 10 }, { 2: { h: 10, l: -20, c: -8 } }));
     const a = assessMovement(r, '15m');
     expect(a).toMatchObject({
       class: 'REVERSAL',
@@ -77,18 +115,19 @@ describe('assessMovement — 反転・全戻し(閾値を使わない分類)', (
   });
 
   it('REVERSAL: 初動は下、最終的に上(対称)', () => {
-    const r = release({ pips: -10, up: 1, down: -12 }, { pips: 6, up: 14, down: -12 });
+    const r = release(series({ h: 1, l: -12, c: -10 }, { 2: { h: 14, l: -12, c: 6 } }));
     expect(assessMovement(r, '15m')).toMatchObject({
       class: 'REVERSAL',
       initial_direction: 'DOWN',
       favorable_peak_pips: 12,
       final_pips_in_initial_direction: -6,
       final_side: 'OPPOSITE',
+      crossed_pre_price_after_initial: true,
     });
   });
 
-  it('FULL_RETRACEMENT: 一時的に発表直前の価格を割ったが、最終的には初動と同じ側(反転とは区別する)', () => {
-    const r = release({ pips: 10, up: 12, down: -1 }, { pips: 7, up: 14, down: -5 });
+  it('FULL_RETRACEMENT: 2分目以降に発表直前の価格を割ったが、最終的には初動と同じ側(反転とは区別する)', () => {
+    const r = release(series({ h: 12, l: -1, c: 10 }, { 2: { h: 14, l: -5, c: 7 } }));
     expect(assessMovement(r, '15m')).toMatchObject({
       class: 'FULL_RETRACEMENT',
       reason: null,
@@ -99,28 +138,34 @@ describe('assessMovement — 反転・全戻し(閾値を使わない分類)', (
   });
 
   it('FULL_RETRACEMENT: 窓の終わりが発表直前の価格と同じ(AT_PRE)', () => {
-    const r = release({ pips: 10, up: 12, down: 0 }, { pips: 0, up: 12, down: 0 });
+    const r = release(series({ h: 12, l: 1, c: 10 }, { 2: { h: 12, l: 0, c: 0 } }));
     expect(assessMovement(r, '15m')).toMatchObject({ class: 'FULL_RETRACEMENT', final_side: 'AT_PRE' });
   });
 
-  it('1分の窓の中だけの逆側への振れ(最初の1分足の安値)は「後」に数えない', () => {
-    // 15分の最安値(-3)は1分の最安値(-3)と同じ = 2分目以降に新しく割ってはいない。
-    const r = release({ pips: 10, up: 12, down: -3 }, { pips: 9, up: 12, down: -3 });
-    const a = assessMovement(r, '15m');
-    expect(a.crossed_pre_price_after_initial).toBe(false);
-    expect(a.class).not.toBe('FULL_RETRACEMENT');
+  it('2分目以降の足の安値が、発表直前の価格ちょうど(以下)なら「超えた」', () => {
+    const r = release(series({ h: 12, l: 1, c: 10 }, { 5: { h: 11, l: 0, c: 9 } }));
+    expect(assessMovement(r, '15m').crossed_pre_price_after_initial).toBe(true);
   });
 
-  it('1分の安値より低く、かつ発表直前の価格より下まで割ったら「後に超えた」', () => {
-    const r = release({ pips: 10, up: 12, down: -3 }, { pips: 9, up: 12, down: -4 });
+  it('最初の1分足の中だけの逆側への振れ(1本目の安値が発表直前の価格を割る)は「後」に数えない', () => {
+    // 1本目の安値は -3(発表直前の価格より下)。2本目以降の安値は 2 より下がらない。
+    const r = release(series({ h: 12, l: -3, c: 10 }, { 2: { h: 12, l: 2, c: 9 } }));
+    const a = assessMovement(r, '15m');
+    expect(a.crossed_pre_price_after_initial).toBe(false);
+    expect(a.class).toBe('UNDETERMINED'); // 閾値が未設定
+    expect(assessMovement(r, '15m', TEST_CONFIG).class).toBe('CONTINUATION');
+  });
+
+  it('crossed = false は、窓の1分足が揃っていて、2分目以降のどの足も届かなかったときだけ', () => {
+    const r = release(series({ h: 20, l: 2, c: 10 }, { 2: { h: 20, l: 4, c: 14 } }));
     expect(assessMovement(r, '15m')).toMatchObject({
-      crossed_pre_price_after_initial: true,
-      class: 'FULL_RETRACEMENT',
+      reason: 'THRESHOLD_NOT_SET',
+      crossed_pre_price_after_initial: false,
     });
   });
 
-  it('初動が下のとき、発表直前の価格を上に超えたら全戻し(対称)', () => {
-    const r = release({ pips: -10, up: 0.5, down: -12 }, { pips: -6, up: 3, down: -12 });
+  it('初動が下のとき、2分目以降に発表直前の価格を上に超えたら全戻し(対称)', () => {
+    const r = release(series({ h: -0.5, l: -12, c: -10 }, { 3: { h: 3, l: -12, c: -6 } }));
     expect(assessMovement(r, '15m')).toMatchObject({
       class: 'FULL_RETRACEMENT',
       initial_direction: 'DOWN',
@@ -129,21 +174,29 @@ describe('assessMovement — 反転・全戻し(閾値を使わない分類)', (
     });
   });
 
-  it('1分の安値より低くても、発表直前の価格(0)より上なら超えていない', () => {
-    // 1分の安値 +2、15分の安値 +1(1分の安値より低いが、発表直前の価格より上)。
-    const r = release({ pips: 10, up: 12, down: 2 }, { pips: 9, up: 12, down: 1 });
+  it('初動が下で、2分目以降の高値が発表直前の価格に届かなければ crossed = false', () => {
+    const r = release(series({ h: -0.5, l: -12, c: -10 }, { 2: { h: -2, l: -14, c: -12 } }));
     expect(assessMovement(r, '15m').crossed_pre_price_after_initial).toBe(false);
+  });
+
+  it('60分の窓は、16本目以降の足も見る(15分の窓では届かず、60分の窓では届く)', () => {
+    const r = release(series({ h: 12, l: 2, c: 10 }, { 40: { h: 10, l: -2, c: 5 } }));
+    expect(assessMovement(r, '15m')).toMatchObject({ crossed_pre_price_after_initial: false });
+    expect(assessMovement(r, '60m')).toMatchObject({
+      class: 'FULL_RETRACEMENT',
+      crossed_pre_price_after_initial: true,
+    });
   });
 });
 
 describe('assessMovement — 継続・押し戻し(閾値が要る分類)', () => {
-  // 最終的に初動と同じ側で、発表直前の価格は超えていない。戻し率 = (peak − final) / peak。
-  const holdsAbove = release({ pips: 10, up: 20, down: 2 }, { pips: 14, up: 20, down: 2 });
-  const deepPullback = release({ pips: 10, up: 20, down: 2 }, { pips: 6, up: 20, down: 2 });
+  // 最終的に初動と同じ側で、2分目以降に発表直前の価格へは届いていない。戻し率 = (peak − final) / peak。
+  const holds = release(series({ h: 20, l: 2, c: 10 }, { 2: { h: 20, l: 8, c: 14 } }));
+  const deepPullback = release(series({ h: 20, l: 2, c: 10 }, { 2: { h: 20, l: 6, c: 6 } }));
 
   it('閾値が未設定(null)の間は UNDETERMINED(THRESHOLD_NOT_SET)。戻し率などの測定値は返す', () => {
     expect(DEFAULT_STRATEGY_CLASSIFICATION.pullbackMinRatio).toBeNull();
-    const a = assessMovement(holdsAbove, '15m');
+    const a = assessMovement(holds, '15m');
     expect(a).toMatchObject({
       class: 'UNDETERMINED',
       reason: 'THRESHOLD_NOT_SET',
@@ -157,18 +210,19 @@ describe('assessMovement — 継続・押し戻し(閾値が要る分類)', () =
   });
 
   it('閾値を渡すと、戻し率が閾値未満なら CONTINUATION、以上なら PULLBACK(テスト用の値 0.5)', () => {
-    expect(assessMovement(holdsAbove, '15m', TEST_CONFIG)).toMatchObject({ class: 'CONTINUATION', reason: null });
+    expect(assessMovement(holds, '15m', TEST_CONFIG)).toMatchObject({ class: 'CONTINUATION', reason: null });
     expect(assessMovement(deepPullback, '15m', TEST_CONFIG)).toMatchObject({ class: 'PULLBACK', reason: null });
   });
 
   it('戻し率がちょうど閾値なら PULLBACK(以上)', () => {
-    const exactly = release({ pips: 10, up: 20, down: 2 }, { pips: 10, up: 20, down: 2 });
-    expect(assessMovement(exactly, '15m', TEST_CONFIG).retrace_ratio).toBeCloseTo(0.5, 4);
-    expect(assessMovement(exactly, '15m', TEST_CONFIG).class).toBe('PULLBACK');
+    const exactly = release(series({ h: 20, l: 2, c: 10 }, { 2: { h: 20, l: 10, c: 10 } }));
+    const a = assessMovement(exactly, '15m', TEST_CONFIG);
+    expect(a.retrace_ratio).toBeCloseTo(0.5, 4);
+    expect(a.class).toBe('PULLBACK');
   });
 
   it('初動が下でも同じ(対称)', () => {
-    const down = release({ pips: -10, up: -2, down: -20 }, { pips: -14, up: -2, down: -20 });
+    const down = release(series({ h: -2, l: -20, c: -10 }, { 2: { h: -8, l: -20, c: -14 } }));
     expect(assessMovement(down, '15m', TEST_CONFIG)).toMatchObject({
       class: 'CONTINUATION',
       initial_direction: 'DOWN',
@@ -178,13 +232,12 @@ describe('assessMovement — 継続・押し戻し(閾値が要る分類)', () =
   });
 
   it('60分の窓も同じ規則で、別に判定する', () => {
-    const r = release({ pips: 10, up: 20, down: 2 }, { pips: 14, up: 20, down: 2 });
-    expect(assessMovement(r, '60m', TEST_CONFIG).class).toBe('CONTINUATION');
+    expect(assessMovement(holds, '60m', TEST_CONFIG).class).toBe('CONTINUATION');
   });
 });
 
 describe('assessMovement — 判定不可(推測で埋めない)', () => {
-  const base = release({ pips: 10, up: 12, down: -1 }, { pips: -8, up: 12, down: -20 });
+  const base = release(series({ h: 12, l: -1, c: 10 }, { 2: { h: 10, l: -20, c: -8 } }));
 
   it('発表時刻が EXACT でない', () => {
     for (const precision of ['APPROXIMATE', 'DATE_ONLY', 'UNKNOWN']) {
@@ -192,63 +245,144 @@ describe('assessMovement — 判定不可(推測で埋めない)', () => {
         class: 'UNDETERMINED',
         reason: 'NOT_EXACT_RELEASE_TIME',
         final_side: null,
+        crossed_pre_price_after_initial: null,
       });
     }
   });
 
   it('1分または窓の値動きが無い・AVAILABLE でない', () => {
     expect(
-      assessMovement({ ...base, reactions: base.reactions.filter((r) => r.timeframe !== '15m') }, '15m'),
-    ).toMatchObject({
-      class: 'UNDETERMINED',
-      reason: 'DATA_MISSING',
-    });
+      assessMovement({ ...base, reactions: base.reactions.filter((r) => r.timeframe !== '15m') }, '15m').reason,
+    ).toBe('DATA_MISSING');
     expect(
-      assessMovement({ ...base, reactions: base.reactions.filter((r) => r.timeframe !== '1m') }, '15m'),
-    ).toMatchObject({
-      reason: 'DATA_MISSING',
-    });
-    const unavailable = base.reactions.map((r) => (r.timeframe === '15m' ? { ...r, data_status: 'UNAVAILABLE' } : r));
-    expect(assessMovement({ ...base, reactions: unavailable }, '15m').reason).toBe('DATA_MISSING');
+      assessMovement({ ...base, reactions: base.reactions.filter((r) => r.timeframe !== '1m') }, '15m').reason,
+    ).toBe('DATA_MISSING');
+    expect(assessMovement(withReaction(base, '15m', { data_status: 'UNAVAILABLE' }), '15m').reason).toBe(
+      'DATA_MISSING',
+    );
   });
 
-  it('必要な値(max_upward_pips など)が null', () => {
-    for (const field of ['max_upward', 'max_downward', 'max_upward_pips', 'max_downward_pips', 'pips'] as const) {
-      const reactions = base.reactions.map((r) => (r.timeframe === '15m' ? { ...r, [field]: null } : r));
-      expect(assessMovement({ ...base, reactions }, '15m').reason, field).toBe('DATA_MISSING');
+  it('必要な値(極値・pips・発表直前の価格)が null / 無い', () => {
+    for (const timeframe of ['1m', '15m']) {
+      for (const field of [
+        'max_upward',
+        'max_downward',
+        'max_upward_pips',
+        'max_downward_pips',
+        'pips',
+        'pre_release_price',
+      ] as const) {
+        expect(
+          assessMovement(withReaction(base, timeframe, { [field]: null }), '15m').reason,
+          `${timeframe}.${field}`,
+        ).toBe('DATA_MISSING');
+      }
     }
-    const noFirstPips = base.reactions.map((r) => (r.timeframe === '1m' ? { ...r, pips: null } : r));
-    expect(assessMovement({ ...base, reactions: noFirstPips }, '15m').reason).toBe('DATA_MISSING');
   });
 
-  it('max_upward_pips が項目ごと無い(古い入力)も判定不可', () => {
-    const reactions = base.reactions.map((r) => {
-      const { max_upward_pips: _omit, ...rest } = r;
-      return r.timeframe === '15m' ? rest : r;
-    });
-    expect(assessMovement({ ...base, reactions }, '15m').reason).toBe('DATA_MISSING');
+  it('1分足の系列が渡されていない(undefined)なら判定不可(crossed を極値の比較で代用しない)', () => {
+    const { minuteCandles: _omit, ...rest } = base;
+    expect(assessMovement(rest, '15m')).toMatchObject({ class: 'UNDETERMINED', reason: 'DATA_MISSING' });
   });
 
-  it('1分足が欠けている(窓ごと)', () => {
+  it('1分足が揃っていない(完全性の確認が false)', () => {
     expect(assessMovement({ ...base, minuteCompleteness15m: false }, '15m').reason).toBe('MINUTE_CANDLES_INCOMPLETE');
-    // 15分は揃っていても、60分が欠けていれば60分だけ判定不可
+    // 15分は揃っていても、60分が揃っていなければ60分だけ判定不可
     const partial = { ...base, minuteCompleteness60m: false };
     expect(assessMovement(partial, '15m').class).toBe('REVERSAL');
     expect(assessMovement(partial, '60m').reason).toBe('MINUTE_CANDLES_INCOMPLETE');
   });
 
+  it('完全性の確認が true でも、系列に欠け・重複・UNVERIFIED があれば判定不可(系列そのものを確かめる)', () => {
+    const candles = series({ h: 12, l: -1, c: 10 }, { 2: { h: 10, l: -20, c: -8 } });
+    const missing = candleInputs(candles).filter((_, index) => index !== 5); // 6本目が無い
+    expect(assessMovement({ ...base, minuteCandles: missing }, '15m').reason).toBe('MINUTE_CANDLES_INCOMPLETE');
+    const duplicated = candleInputs(candles);
+    duplicated[7] = duplicated[6]!; // 同じ時刻が2本、8本目の時刻が無い
+    expect(assessMovement({ ...base, minuteCandles: duplicated }, '15m').reason).toBe('MINUTE_CANDLES_INCOMPLETE');
+    const unverified = candleInputs(candles, [9]);
+    expect(assessMovement({ ...base, minuteCandles: unverified }, '15m').reason).toBe('MINUTE_CANDLES_INCOMPLETE');
+    // 16本目以降の欠けは、15分の窓には影響しない
+    const lateGap = candleInputs(candles).filter((_, index) => index !== 20);
+    expect(assessMovement({ ...base, minuteCandles: lateGap }, '15m').class).toBe('REVERSAL');
+    expect(assessMovement({ ...base, minuteCandles: lateGap }, '60m').reason).toBe('MINUTE_CANDLES_INCOMPLETE');
+  });
+
   it('初動が 0(横ばい)', () => {
-    const flat = release({ pips: 0, up: 3, down: -3 }, { pips: 5, up: 8, down: -3 });
+    const flat = release(series({ h: 3, l: -3, c: 0 }, { 2: { h: 8, l: -3, c: 5 } }));
     expect(assessMovement(flat, '15m')).toMatchObject({ class: 'UNDETERMINED', reason: 'INITIAL_FLAT' });
   });
 
-  it('保存値の矛盾(最も伸びた幅が最終の位置より小さい)', () => {
-    const inconsistent = release({ pips: 10, up: 12, down: -1 }, { pips: 15, up: 12, down: -1 });
-    expect(assessMovement(inconsistent, '15m')).toMatchObject({
+  describe('保存値の矛盾(1分足の行と長い窓の行は別々に更新されうる)。矛盾があれば crossed などを判定しない', () => {
+    const consistentUp = release(series({ h: 12, l: 2, c: 10 }, { 2: { h: 12, l: 4, c: 9 } }));
+    const noMeasures = {
       class: 'UNDETERMINED',
       reason: 'DATA_INCONSISTENT',
-      favorable_peak_pips: 12,
-      final_pips_in_initial_direction: 15,
+      crossed_pre_price_after_initial: null,
+      retrace_ratio: null,
+      final_side: null,
+    };
+
+    it('前提: 整合した状態は矛盾にならない', () => {
+      expect(assessMovement(consistentUp, '15m').reason).toBe('THRESHOLD_NOT_SET');
+      expect(assessMovement(consistentUp, '60m').reason).toBe('THRESHOLD_NOT_SET');
+    });
+
+    it('15分・60分の最大上昇が、1分の最大上昇より小さい', () => {
+      const r = withReaction(consistentUp, '15m', { max_upward: 0.05, max_upward_pips: 5 });
+      expect(assessMovement(r, '15m')).toMatchObject(noMeasures);
+    });
+
+    it('15分・60分の最大下落(負の方向)が、1分の最大下落より小さく(浅く)なっている', () => {
+      // 1分の安値 -1(= 最大下落 -0.01)なのに、15分の最大下落が 0(最大下落の方が大きいはずが、浅い)
+      const base2 = release(series({ h: 12, l: -1, c: 10 }, { 2: { h: 12, l: 3, c: 9 } }));
+      const r = withReaction(base2, '15m', { max_downward: 0, max_downward_pips: 0 });
+      expect(assessMovement(r, '15m')).toMatchObject(noMeasures);
+    });
+
+    it('1分の pips が、1分の極値の外(符号と極値の不整合)', () => {
+      // 1分の最大上昇 12 pips に対し、1分の pips が 15
+      const r = withReaction(consistentUp, '1m', { pips: 15 });
+      expect(assessMovement(r, '15m')).toMatchObject(noMeasures);
+      // 1分の pips が最大下落(2 pips)より下 = 符号が逆(-5)で極値が上側にしかない
+      const r2 = withReaction(consistentUp, '1m', { pips: -5 });
+      expect(assessMovement(r2, '15m')).toMatchObject(noMeasures);
+    });
+
+    it('窓の pips が、窓の極値の外', () => {
+      const r = withReaction(consistentUp, '15m', { pips: 30 });
+      expect(assessMovement(r, '15m')).toMatchObject(noMeasures);
+    });
+
+    it('発表直前の価格が、1分の行と窓の行で違う', () => {
+      const r = withReaction(consistentUp, '15m', { pre_release_price: PRE + 0.5 });
+      expect(assessMovement(r, '15m')).toMatchObject(noMeasures);
+    });
+
+    it('保存された窓の最大・最小が、1分足の系列の極値を超えていない(保存値が古い・別の窓の値)', () => {
+      // 系列には 2本目に安値 -20 があるのに、保存された窓の最大下落が -5 pips しかない
+      const r = release(series({ h: 12, l: 2, c: 10 }, { 2: { h: 12, l: -20, c: 9 } }));
+      const stale = withReaction(r, '15m', { max_downward: -0.05, max_downward_pips: -5 });
+      expect(assessMovement(stale, '15m')).toMatchObject(noMeasures);
+      // 系列の高値が保存された最大上昇を超えている場合も同じ
+      const staleUp = withReaction(consistentUp, '15m', { max_upward: 0.1, max_upward_pips: 10 });
+      expect(assessMovement(staleUp, '15m')).toMatchObject(noMeasures);
+    });
+
+    it('境界: 最も伸びた幅と最終の位置が等しい(戻し率 0)は矛盾ではない', () => {
+      // 窓の pips を極値の上限ちょうどより大きくはできないので、極値側を下げて作る(1分と窓で同じに揃える)
+      const r = withReaction(withReaction(consistentUp, '15m', { pips: 12 }), '15m', {});
+      // 整合する範囲(peak = 12、final = 12)は矛盾ではない。戻し率 0
+      expect(assessMovement(r, '15m').retrace_ratio).toBe(0);
+    });
+
+    it('15分の行の矛盾は、ほかの窓(60分)の判定に影響しない。1分の行が原因なら両方の窓に及ぶ', () => {
+      const r = withReaction(consistentUp, '15m', { pre_release_price: PRE + 0.5 });
+      expect(assessMovement(r, '15m').reason).toBe('DATA_INCONSISTENT');
+      expect(assessMovement(r, '60m').reason).toBe('THRESHOLD_NOT_SET'); // 60分の行は整合している
+      const firstBroken = withReaction(consistentUp, '1m', { pre_release_price: PRE + 0.5 });
+      expect(assessMovement(firstBroken, '15m').reason).toBe('DATA_INCONSISTENT');
+      expect(assessMovement(firstBroken, '60m').reason).toBe('DATA_INCONSISTENT');
     });
   });
 
@@ -268,14 +402,14 @@ describe('assessMovement — 判定不可(推測で埋めない)', () => {
 });
 
 describe('buildStrategyAnalysis — movement の要約と閾値の状態', () => {
-  const rel = (id: string, overrides: Partial<StrategyReleaseInput> = {}) => ({
-    ...release({ pips: 10, up: 12, down: -1 }, { pips: -8, up: 12, down: -20 }),
+  const reversal = (id: string, overrides: Partial<StrategyReleaseInput> = {}) => ({
+    ...release(series({ h: 12, l: -1, c: 10 }, { 2: { h: 10, l: -20, c: -8 } })),
     event_id: id,
     ...overrides,
   });
 
   it('閾値が未設定のとき thresholds.status = NOT_SET。件数を窓ごとに数え、3件未満は ready = false', () => {
-    const analysis = buildStrategyAnalysis([rel('a'), rel('b')], 'USDJPY', 'USD');
+    const analysis = buildStrategyAnalysis([reversal('a'), reversal('b')], 'USDJPY', 'USD');
     expect(analysis.movement.thresholds).toEqual({ pullback_min_ratio: null, status: 'NOT_SET' });
     expect(analysis.movement.window_15m).toEqual({
       continuation: 0,
@@ -292,7 +426,7 @@ describe('buildStrategyAnalysis — movement の要約と閾値の状態', () =>
 
   it('3件以上判定できれば ready = true。判定不可は undetermined に数え、judged に入れない', () => {
     const analysis = buildStrategyAnalysis(
-      [rel('a'), rel('b'), rel('c'), rel('d', { release_datetime_precision: 'APPROXIMATE' })],
+      [reversal('a'), reversal('b'), reversal('c'), reversal('d', { release_datetime_precision: 'APPROXIMATE' })],
       'USDJPY',
       'USD',
     );
@@ -300,7 +434,7 @@ describe('buildStrategyAnalysis — movement の要約と閾値の状態', () =>
   });
 
   it('閾値を渡すと thresholds.status = SET で、継続・押し戻しも数える', () => {
-    const holds = release({ pips: 10, up: 20, down: 2 }, { pips: 14, up: 20, down: 2 });
+    const holds = release(series({ h: 20, l: 2, c: 10 }, { 2: { h: 20, l: 8, c: 14 } }));
     const analysis = buildStrategyAnalysis(
       [
         { ...holds, event_id: 'a' },

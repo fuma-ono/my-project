@@ -37,9 +37,13 @@ import { MAJOR_FX_PAIR_ORDER } from './majorFxReactions.js';
  *   - final_pips_in_initial_direction: 窓の終わりの価格位置(初動の方向を正とした pips = 初動の符号 × pips)。
  *   - retrace_ratio: (peak − final) / peak。窓の終わりまでに、最も伸びた幅のうちどれだけ戻したか(0 = 戻していない、1 = 発表直前の価格まで、
  *     1 を超える = 発表直前の価格を逆側に超えた)。
- *   - crossed_pre_price_after_initial: 1分の窓より後に、発表直前の価格を逆側へ超えた(初動の方向が上なら、窓の最安値が発表直前の価格以下で、
- *     かつ1分の窓の最安値より低い。下なら逆)。1分の窓の中の行って来い(最初の1分足の中だけでの逆側への振れ)は「後」に数えない。
- *     どちらが先に起きたかは保存値からは分からないので、1分の窓の極値を超えたかどうかで「1分より後」を判定する(ブレイクの判定と同じ考え方)。
+ *   - crossed_pre_price_after_initial: **2分目以降の1分足の系列から直接判定する**(HQ指示 2026-11-17「Cレビュー反映」)。最初の1分足
+ *     (発表の瞬間に始まる足)を除いた、2分目から窓の終わりまでの1分足について、初動が上なら「安値が発表直前の価格以下になった足が
+ *     あるか」、下なら「高値が発表直前の価格以上になった足があるか」を見る。1分足の時刻で並べるので、「初動の1分より後」であることは
+ *     時間順序として確かめられる(極値の比較では証明できなかった)。
+ *     true = 2分目以降のどれかの足で、発表直前の価格に逆側から届いた。
+ *     false = 窓の1分足(N本)がすべて揃っていて、UNVERIFIED でもなく、2分目以降のどの足も届かなかった(否定の根拠は、揃った足の系列)。
+ *     null = 判定していない(1分足が揃わない・値が無い・保存値の矛盾などで UNDETERMINED のとき)。
  *   - final_side: 窓の終わりの価格が、発表直前の価格に対して初動と同じ側(SAME)・逆側(OPPOSITE)・同じ(AT_PRE)。
  *   分類の規則(上から順に。数値の閾値を使うのは PULLBACK と CONTINUATION の境目だけ):
  *     ① 発表時刻が EXACT でない・必要な値が無い・1分足が欠けている・初動が 0・値の矛盾 → UNDETERMINED(reason に理由)。
@@ -74,7 +78,17 @@ export interface StrategyReactionInput {
   /** 値動きの分類(assessMovement)で使う、窓の中の最大・最小の pips(event_price_reactions.max_upward_pips / max_downward_pips)。 */
   max_upward_pips?: number | null;
   max_downward_pips?: number | null;
+  /** 発表直前の価格(event_price_reactions.pre_release_price。どの時間枠も同じ値のはず)。 */
+  pre_release_price?: number | null;
   data_status: string;
+}
+
+/** 発表から窓の終わりまでの1分足(fx_prices の timeframe = 1m)。timestamp は足の開始時刻。 */
+export interface MinuteCandleInput {
+  timestamp: string;
+  high: number;
+  low: number;
+  unverified: boolean;
 }
 
 export interface StrategyReleaseInput {
@@ -90,6 +104,11 @@ export interface StrategyReleaseInput {
   /** HQ指示(2026-11-07): 発表から15分・60分の窓に1分足が欠けなく(15本・60本)あり、どれもUNVERIFIEDでないか。 */
   minuteCompleteness15m: boolean;
   minuteCompleteness60m: boolean;
+  /**
+   * 発表の瞬間から60分の窓の1分足(新しい順でなくてよい。UNVERIFIED も含めて渡す)。crossed_pre_price_after_initial の判定と、
+   * 保存値との突き合わせに使う。渡さない(undefined)場合、値動きの分類は判定不可(DATA_MISSING)。
+   */
+  minuteCandles?: readonly MinuteCandleInput[];
 }
 
 export type Direction = 'UP' | 'DOWN' | 'FLAT';
@@ -291,8 +310,32 @@ function pipsOf(reactions: readonly StrategyReactionInput[], timeframe: string):
 
 const round4 = (value: number) => Math.round(value * 10_000) / 10_000;
 
+/** 価格(numeric(12,6))どうしの比較の許容(浮動小数点の誤差)。 */
+const PRICE_TOLERANCE = 1e-6;
+const MINUTE_MS = 60_000;
+
 /**
- * 値動きの分類(上の説明の規則①〜④)。`window` は '15m' か '60m'。保存済みの値だけを使い、無い値は作らない。
+ * 窓(15m・60m)の1分足が、発表の瞬間から1分ごとに N 本そろっていて、UNVERIFIED が無いか。揃っていれば時刻順の配列を返す。
+ * 時刻が1分の区切りでない・重複・抜け・窓の外は、揃っていないものとして null。
+ */
+function completeSeries(release: StrategyReleaseInput, minutes: number): MinuteCandleInput[] | null {
+  const startMs = Date.parse(release.release_datetime);
+  const inWindow = (release.minuteCandles ?? [])
+    .filter((c) => {
+      const ms = Date.parse(c.timestamp);
+      return ms >= startMs && ms < startMs + minutes * MINUTE_MS;
+    })
+    .sort((x, y) => Date.parse(x.timestamp) - Date.parse(y.timestamp));
+  if (inWindow.length !== minutes) return null;
+  for (let i = 0; i < minutes; i += 1) {
+    const candle = inWindow[i]!;
+    if (Date.parse(candle.timestamp) !== startMs + i * MINUTE_MS || candle.unverified) return null;
+  }
+  return inWindow;
+}
+
+/**
+ * 値動きの分類(上の説明の規則①〜④)。`window` は '15m' か '60m'。保存済みの値と、窓の1分足の系列だけを使い、無い値は作らない。
  */
 export function assessMovement(
   release: StrategyReleaseInput,
@@ -326,26 +369,58 @@ export function assessMovement(
     first.max_downward === null ||
     win.max_upward === null ||
     win.max_downward === null ||
+    first.max_upward_pips === null ||
+    first.max_upward_pips === undefined ||
+    first.max_downward_pips === null ||
+    first.max_downward_pips === undefined ||
     win.max_upward_pips === null ||
     win.max_upward_pips === undefined ||
     win.max_downward_pips === null ||
-    win.max_downward_pips === undefined
+    win.max_downward_pips === undefined ||
+    first.pre_release_price === null ||
+    first.pre_release_price === undefined ||
+    win.pre_release_price === null ||
+    win.pre_release_price === undefined ||
+    release.minuteCandles === undefined
   ) {
     return undetermined('DATA_MISSING');
   }
+  const minutes = window === '15m' ? 15 : 60;
   const complete = window === '15m' ? release.minuteCompleteness15m : release.minuteCompleteness60m;
-  if (!complete) return undetermined('MINUTE_CANDLES_INCOMPLETE');
+  const series = complete ? completeSeries(release, minutes) : null;
+  if (series === null) return undetermined('MINUTE_CANDLES_INCOMPLETE');
 
   const d = sign(Number(first.pips));
   if (d === 0) return undetermined('INITIAL_FLAT');
 
+  // 保存値の矛盾(1分足の行と長い窓の行は別々に更新されうる)。矛盾があれば、crossed などを判定しない。
+  const pre = Number(first.pre_release_price);
+  const seriesHigh = Math.max(...series.map((c) => c.high)) - pre;
+  const seriesLow = Math.min(...series.map((c) => c.low)) - pre;
+  const consistent =
+    // 発表直前の価格が、1分と窓の行で同じ
+    Math.abs(pre - Number(win.pre_release_price)) <= PRICE_TOLERANCE &&
+    // 窓は1分の窓を含む: 最大上昇は1分以上、最大下落(負の方向)は1分以下
+    Number(win.max_upward) >= Number(first.max_upward) - PRICE_TOLERANCE &&
+    Number(win.max_downward) <= Number(first.max_downward) + PRICE_TOLERANCE &&
+    // 最終の位置は、窓の中の最大・最小の間(1分の行も窓の行も)
+    Number(first.max_downward_pips) <= Number(first.pips) &&
+    Number(first.pips) <= Number(first.max_upward_pips) &&
+    Number(win.max_downward_pips) <= Number(win.pips) &&
+    Number(win.pips) <= Number(win.max_upward_pips) &&
+    // 1分足の系列の極値が、保存された最大・最小を超えていない(保存値が古い・別の窓の値ではない)
+    Number(win.max_upward) >= seriesHigh - PRICE_TOLERANCE &&
+    Number(win.max_downward) <= seriesLow + PRICE_TOLERANCE;
+  if (!consistent) return undetermined('DATA_INCONSISTENT');
+
+  // 2分目以降(最初の1分足を除く)の足で、発表直前の価格に逆側から届いたか。
+  const later = series.slice(1);
+  const crossed =
+    d > 0 ? later.some((c) => c.low <= pre + PRICE_TOLERANCE) : later.some((c) => c.high >= pre - PRICE_TOLERANCE);
+
   const peak = d > 0 ? Number(win.max_upward_pips) : -Number(win.max_downward_pips);
   const final = d * Number(win.pips);
   const finalSide: MovementFinalSide = final > 0 ? 'SAME' : final < 0 ? 'OPPOSITE' : 'AT_PRE';
-  const crossed =
-    d > 0
-      ? Number(win.max_downward) <= 0 && Number(win.max_downward) < Number(first.max_downward)
-      : Number(win.max_upward) >= 0 && Number(win.max_upward) > Number(first.max_upward);
   const initialDirection: 'UP' | 'DOWN' = d > 0 ? 'UP' : 'DOWN';
   const measured = {
     initial_direction: initialDirection,
@@ -355,7 +430,14 @@ export function assessMovement(
     final_side: finalSide,
   };
   // 最も伸びた幅が 0 以下、または最終の位置より小さいのは、保存値の矛盾(丸めでも起きない)。判定しない。
-  if (peak <= 0 || peak < final) return undetermined('DATA_INCONSISTENT', measured);
+  if (peak <= 0 || peak < final) {
+    return undetermined('DATA_INCONSISTENT', {
+      initial_direction: initialDirection,
+      favorable_peak_pips: peak,
+      final_pips_in_initial_direction: final,
+      final_side: finalSide,
+    });
+  }
   const retrace = round4((peak - final) / peak);
   const withRatio = { ...measured, retrace_ratio: retrace };
 

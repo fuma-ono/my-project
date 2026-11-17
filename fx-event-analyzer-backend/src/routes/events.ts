@@ -5,7 +5,6 @@ import { resolveReactionState } from '../domain/reactionState.js';
 import {
   CHART_MAX_AFTER_MINUTES,
   CHART_MAX_BEFORE_MINUTES,
-  CHART_MAX_CANDLES,
   chartCandleCoverage,
   parseChartMinutes,
   resolveChartWindow,
@@ -426,12 +425,14 @@ export function registerEventRoutes(app: FastifyInstance): void {
     });
     const { from, to } = window;
 
-    const prices = await listChartPrices(app.supabase, fxPairId, timeframe, from, to, CHART_MAX_CANDLES);
+    // 表示範囲は半開区間 [from, to)。取得の境界と欠損の集計の境界を同じにする(returned_candles = prices.length)。
+    const prices = await listChartPrices(app.supabase, fxPairId, timeframe, from, to, { toExclusive: true });
     const coverage = chartCandleCoverage(
       from,
       to,
       timeframe,
       prices.map((price) => price.timestamp),
+      Date.now(),
     );
     const preReleasePrice = await getPreReleasePrice(app.supabase, eventId, fxPairId);
 
@@ -453,13 +454,13 @@ export function registerEventRoutes(app: FastifyInstance): void {
       limits: {
         max_before_minutes: CHART_MAX_BEFORE_MINUTES,
         max_after_minutes: CHART_MAX_AFTER_MINUTES,
-        max_candles: CHART_MAX_CANDLES,
       },
+      window_complete: coverage.window_complete,
       data_status: coverage.data_status,
       expected_candles: coverage.expected_candles,
       returned_candles: coverage.returned_candles,
       missing_candles: coverage.missing_candles,
-      truncated: prices.length >= CHART_MAX_CANDLES,
+      unexpected_candles: coverage.unexpected_candles,
       pre_release_price: preReleasePrice.price,
       pre_release_price_status: preReleasePrice.status,
       prices,
