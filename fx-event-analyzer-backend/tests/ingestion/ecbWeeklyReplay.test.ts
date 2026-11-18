@@ -31,7 +31,7 @@ describe.skipIf(!dir)('ECB weekly schedule: replay saved pages (real data, no DB
     const store = new MemoryIngestionStore();
     store.speakers = SPEAKER_ALIASES.filter((alias) => alias.organization === 'ECB').map((alias, index) => ({
       id: `ecb-${index}`,
-      name: alias.nameJa,
+      name: alias.name,
       organization: 'ECB',
     }));
     const speakerName = new Map(store.speakers.map((speaker) => [speaker.id, speaker.name]));

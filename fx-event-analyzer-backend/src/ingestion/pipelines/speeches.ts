@@ -138,11 +138,11 @@ export async function ingestSpeeches(
       counters.note('unknown_speakers', `${speech.organization}: ${speech.speakerName}`);
       continue;
     }
-    const speakerId = speakerIdByKey.get(`${alias.organization}|${alias.nameJa}`);
+    const speakerId = speakerIdByKey.get(`${alias.organization}|${alias.name}`);
     if (!speakerId) {
       counters.skip('SPEAKER_NOT_IN_DB');
       unread(speech);
-      counters.note('speakers_not_in_db', `${alias.organization}: ${alias.nameJa}`);
+      counters.note('speakers_not_in_db', `${alias.organization}: ${alias.name}`);
       continue;
     }
     rows.set(speech.providerEventId, {

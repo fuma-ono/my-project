@@ -73,8 +73,8 @@ describe('FX pair mapping table', () => {
 describe('speaker aliases', () => {
   it('strips roles and matches name variants within the organization only', () => {
     expect(stripRole('Vice Chair for Supervision Michelle W. Bowman ')).toBe('Michelle W. Bowman');
-    expect(findSpeakerAlias('FRB', 'Chairman Kevin Warsh')?.nameJa).toBe('ケビン・ウォーシュ');
-    expect(findSpeakerAlias('FRB', 'Governor Lisa D. Cook  ')?.nameJa).toBe('リサ・クック');
+    expect(findSpeakerAlias('FRB', 'Chairman Kevin Warsh')?.name).toBe('ケビン・ウォーシュ');
+    expect(findSpeakerAlias('FRB', 'Governor Lisa D. Cook  ')?.name).toBe('リサ・クック');
     expect(findSpeakerAlias('ECB', 'Kevin Warsh')).toBeUndefined();
     expect(findSpeakerAlias('FRB', 'Governor Stephen I. Miran')).toBeUndefined();
   });
@@ -84,8 +84,8 @@ describe('speaker aliases', () => {
     for (const alias of SPEAKER_ALIASES) {
       for (const form of alias.aliases) {
         const key = `${alias.organization}|${form.toLowerCase()}`;
-        expect(seen.get(key) ?? alias.nameJa).toBe(alias.nameJa);
-        seen.set(key, alias.nameJa);
+        expect(seen.get(key) ?? alias.name).toBe(alias.name);
+        seen.set(key, alias.name);
       }
     }
   });

@@ -218,8 +218,8 @@ describe('pipeline (in-memory store): dedup, correction, link-only, unknown spea
   it('with speaker rows: stored once as PUBLICATION_TIME with the official URL; a rerun does not duplicate; upcoming → SCHEDULED', async () => {
     const store = new MemoryIngestionStore();
     store.speakers = [
-      { id: 'sp-macklem', name: 'ティフ・マックレム', organization: 'BoC' },
-      { id: 'sp-rogers', name: 'キャロリン・ロジャーズ', organization: 'BoC' },
+      { id: 'sp-macklem', name: 'Tiff Macklem', organization: 'BoC' },
+      { id: 'sp-rogers', name: 'Carolyn Rogers', organization: 'BoC' },
     ];
     const speeches = parseBocSpeechesFeed(await fixture('boc-speeches-rss.xml'));
     const options = { store, now, pastDays: 90, ...BOC_OPTIONS };
@@ -239,7 +239,7 @@ describe('pipeline (in-memory store): dedup, correction, link-only, unknown spea
 
   it('a correction at the source (same page, new title / time) updates the same row instead of adding one', async () => {
     const store = new MemoryIngestionStore();
-    store.speakers = [{ id: 'sp-rogers', name: 'キャロリン・ロジャーズ', organization: 'BoC' }];
+    store.speakers = [{ id: 'sp-rogers', name: 'Carolyn Rogers', organization: 'BoC' }];
     const base = parseBocSpeechesFeed(await fixture('boc-speeches-rss.xml')).find(
       (s) => s.topic === 'The complexity of housing affordability',
     )!;
@@ -258,7 +258,7 @@ describe('pipeline (in-memory store): dedup, correction, link-only, unknown spea
 
   it('RBA: the same pipeline stores the speech (link only, PUBLICATION_TIME) and skips it as TIME_NOT_EXACT if the kind is not allowed', async () => {
     const store = new MemoryIngestionStore();
-    store.speakers = [{ id: 'sp-hunter', name: 'サラ・ハンター', organization: 'RBA' }];
+    store.speakers = [{ id: 'sp-hunter', name: 'Sarah Hunter', organization: 'RBA' }];
     const speeches = parseRbaSpeechesFeed(await fixture('rba-speeches-rss.xml'), NOW);
     const counters = new JobCounters();
     await ingestSpeeches(RBA_PROVIDER, speeches, { store, now, pastDays: 90 }, counters);
@@ -344,7 +344,7 @@ describe('same-event merge (webcast page + text page) — conservative rules', (
 
   it('a webcast-only row stored earlier is updated (same id) when the text page appears — no duplicate row', async () => {
     const store = new MemoryIngestionStore();
-    store.speakers = [{ id: 'sp-gravelle', name: 'トニ・グラベル', organization: 'BoC' }];
+    store.speakers = [{ id: 'sp-gravelle', name: 'Toni Gravelle', organization: 'BoC' }];
     const now = () => new Date('2026-11-10T20:00:00Z');
     const opts = { store, now, pastDays: 30, ...BOC_OPTIONS };
     await ingestSpeeches(BOC_PROVIDER, parseBocSpeechesFeed(rss(web())), opts, new JobCounters());
@@ -377,9 +377,9 @@ describe('speaker table / migration / attribution stay consistent', () => {
     const rows = SPEAKER_ALIASES.filter((a) => a.organization === 'BoC' || a.organization === 'RBA');
     expect(rows).toHaveLength(9);
     for (const a of rows) {
-      expect(sql).toContain(`'${a.nameJa}'`);
+      expect(sql).toContain(`'${a.name}'`);
       expect(sql).toContain(`'${a.organization}'`);
-      expect(findSpeakerAlias(a.organization, a.aliases[0]!, SPEAKER_ALIASES)?.nameJa).toBe(a.nameJa);
+      expect(findSpeakerAlias(a.organization, a.aliases[0]!, SPEAKER_ALIASES)?.name).toBe(a.name);
     }
   });
 
@@ -409,7 +409,7 @@ describe('PUBLICATION_TIME alone never makes a row DELIVERED (P2-1)', () => {
 
   it('with requireDeliveryEvidence, an item without evidence is skipped even though its time is in the past', async () => {
     const store = new MemoryIngestionStore();
-    store.speakers = [{ id: 'sp-macklem', name: 'ティフ・マックレム', organization: 'BoC' }];
+    store.speakers = [{ id: 'sp-macklem', name: 'Tiff Macklem', organization: 'BoC' }];
     const counters = new JobCounters();
     await ingestSpeeches(BOC_PROVIDER, [base], { store, now, pastDays: 30, ...BOC_OPTIONS }, counters);
     expect(store.speeches).toEqual([]);
@@ -418,7 +418,7 @@ describe('PUBLICATION_TIME alone never makes a row DELIVERED (P2-1)', () => {
 
   it('with evidence, the row is DELIVERED even if the stored time is later than now (the number is not trusted)', async () => {
     const store = new MemoryIngestionStore();
-    store.speakers = [{ id: 'sp-macklem', name: 'ティフ・マックレム', organization: 'BoC' }];
+    store.speakers = [{ id: 'sp-macklem', name: 'Tiff Macklem', organization: 'BoC' }];
     const future = { ...base, startsAt: '2026-11-19T10:00:00.000Z', deliveryEvidence: 'TEXT_PAGE' as const };
     await ingestSpeeches(BOC_PROVIDER, [future], { store, now, pastDays: 30, ...BOC_OPTIONS }, new JobCounters());
     expect(store.speeches.map((r) => r.status)).toEqual(['DELIVERED']);
@@ -426,7 +426,7 @@ describe('PUBLICATION_TIME alone never makes a row DELIVERED (P2-1)', () => {
 
   it('other sources (no requireDeliveryEvidence, no evidence field) keep their time-based status (FRB / ECB unchanged)', async () => {
     const store = new MemoryIngestionStore();
-    store.speakers = [{ id: 'sp-macklem', name: 'ティフ・マックレム', organization: 'BoC' }];
+    store.speakers = [{ id: 'sp-macklem', name: 'Tiff Macklem', organization: 'BoC' }];
     const past = { ...base };
     const futureOne = { ...base, providerEventId: 'x/2', startsAt: '2026-11-19T10:00:00.000Z' };
     await ingestSpeeches(
@@ -448,7 +448,7 @@ describe('PUBLICATION_TIME alone never makes a row DELIVERED (P2-1)', () => {
     expect(future[0]!.deliveryEvidence).toBeUndefined();
     expect(past[0]!.deliveryEvidence).toBe('EVENT_TIME_PASSED');
     const store = new MemoryIngestionStore();
-    store.speakers = [{ id: 'sp-hunter', name: 'サラ・ハンター', organization: 'RBA' }];
+    store.speakers = [{ id: 'sp-hunter', name: 'Sarah Hunter', organization: 'RBA' }];
     const counters = new JobCounters();
     await ingestSpeeches(RBA_PROVIDER, future, { store, now, pastDays: 30, ...BOC_OPTIONS }, counters);
     expect(store.speeches).toEqual([]);
@@ -533,7 +533,7 @@ describe('webcast-only BoC items are never stored (A案: no date-based DELIVERED
 
   it('through the pipeline: the webcast-only item is skipped (NO_DELIVERY_EVIDENCE) and no row is written', async () => {
     const store = new MemoryIngestionStore();
-    store.speakers = [{ id: 'sp-gravelle', name: 'トニ・グラベル', organization: 'BoC' }];
+    store.speakers = [{ id: 'sp-gravelle', name: 'Toni Gravelle', organization: 'BoC' }];
     const counters = new JobCounters();
     const speeches = parseBocSpeechesFeed(
       rss(webcastOnly('multimedia/speech-old', '2026-10-19', '2026-10-19T15:00:00+00:00')),
@@ -545,7 +545,7 @@ describe('webcast-only BoC items are never stored (A案: no date-based DELIVERED
 
   it('a text page (TEXT_PAGE) is still stored as DELIVERED', async () => {
     const store = new MemoryIngestionStore();
-    store.speakers = [{ id: 'sp-gravelle', name: 'トニ・グラベル', organization: 'BoC' }];
+    store.speakers = [{ id: 'sp-gravelle', name: 'Toni Gravelle', organization: 'BoC' }];
     const speeches = parseBocSpeechesFeed(rss(text('2026/11/real', '2026-11-17', '2026-11-17T15:00:00+00:00')));
     expect(speeches[0]!.deliveryEvidence).toBe('TEXT_PAGE');
     await ingestSpeeches(
@@ -559,7 +559,7 @@ describe('webcast-only BoC items are never stored (A案: no date-based DELIVERED
 
   it('webcast + text of the same event (safe pair) is stored via the text page', async () => {
     const store = new MemoryIngestionStore();
-    store.speakers = [{ id: 'sp-gravelle', name: 'トニ・グラベル', organization: 'BoC' }];
+    store.speakers = [{ id: 'sp-gravelle', name: 'Toni Gravelle', organization: 'BoC' }];
     const speeches = parseBocSpeechesFeed(
       rss(
         webcastOnly('multimedia/speech-a', '2026-11-10', '2026-11-10T15:00:00+00:00') +

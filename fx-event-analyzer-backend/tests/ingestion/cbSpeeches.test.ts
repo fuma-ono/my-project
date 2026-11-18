@@ -57,7 +57,7 @@ describe('FOMC press conference (calendar.json type "FOMC")', () => {
       timePrecision: 'EXACT',
     });
     expect(speechTitle(press)).toBe('記者会見: FOMC');
-    expect(findSpeakerAlias('FRB', press.speakerName, SPEAKER_ALIASES)?.nameJa).toBe('ケビン・ウォーシュ');
+    expect(findSpeakerAlias('FRB', press.speakerName, SPEAKER_ALIASES)?.name).toBe('ケビン・ウォーシュ');
   });
 
   it('ingests it as the chair speech (HIGH) once, and a rerun does not duplicate it', async () => {
@@ -82,10 +82,10 @@ describe('ECB Executive Board speakers', () => {
     ['Piero Cipollone', 'ピエロ・チポローネ'],
     ['Frank Elderson', 'フランク・エルダーソン'],
     ['Christine Lagarde', 'クリスティーヌ・ラガルド'],
-  ])('resolves "%s" to %s (MEDIUM except Lagarde)', (name, nameJa) => {
+  ])('resolves "%s" to %s (MEDIUM except Lagarde)', (name, expectedName) => {
     const alias = findSpeakerAlias('ECB', name, SPEAKER_ALIASES);
-    expect(alias?.nameJa).toBe(nameJa);
-    expect(alias?.importance).toBe(nameJa === 'クリスティーヌ・ラガルド' ? 'HIGH' : 'MEDIUM');
+    expect(alias?.name).toBe(expectedName);
+    expect(alias?.importance).toBe(expectedName === 'クリスティーヌ・ラガルド' ? 'HIGH' : 'MEDIUM');
   });
 
   it('still skips ECB RSS items as TIME_NOT_EXACT (publication time is never used as the speech time)', async () => {

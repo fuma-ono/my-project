@@ -15,17 +15,31 @@ export const HOME_SPEECHES_WINDOW_DAYS = 7;
 
 const DAY_MS = 86_400_000;
 
+/** ラテン文字(アクセント付きを含む)・空白・ピリオド・アポストロフィ・ハイフンだけで、文字を1つ以上含む名前 = 英語名。 */
+function isLatinName(name: string): boolean {
+  return /^[\p{Script=Latin}\s.'’-]+$/u.test(name) && /\p{Script=Latin}/u.test(name);
+}
+const LATIN_NAME_SUFFIX = /^(?:jr|sr|ii|iii|iv)\.?$/i;
+
 /**
  * 「パウエルFRB理事」: the family name + the title, as the Home card and the
  * mock show it. Foreign names are stored as 「ジェローム・パウエル」 (given・
  * family), so the part after the last 「・」 is used; a name without one
  * (「植田和男」) is used whole → 「植田和男日本銀行総裁」.
  */
-export function speakerDisplayName(name: string, title: string): string {
-  const trimmed = name.trim();
+export function speakerDisplayName(name: string | null | undefined, title: string | null | undefined): string {
+  const trimmed = (name ?? '').trim();
+  const trimmedTitle = (title ?? '').trim();
+  if (isLatinName(trimmed)) {
+    // 英語名(BoC・RBA。HQ決定 2026-11-18): 最後の語を姓として「姓 + 半角スペース + 役職」(例: Macklem BoC総裁)。
+    // 姓の後ろの Jr. / Sr. / II などは姓に数えない。ハイフン付きの名(Marc-André)・姓(Smith-Jones)は1語として扱う。
+    const words = trimmed.split(/\s+/).filter((word) => word !== '');
+    while (words.length > 1 && LATIN_NAME_SUFFIX.test(words[words.length - 1]!)) words.pop();
+    return `${words[words.length - 1]!} ${trimmedTitle}`.trim();
+  }
   const separator = Math.max(trimmed.lastIndexOf('・'), trimmed.lastIndexOf('･'));
   const familyName = separator >= 0 && separator < trimmed.length - 1 ? trimmed.slice(separator + 1) : trimmed;
-  return `${familyName}${title.trim()}`;
+  return `${familyName}${trimmedTitle}`;
 }
 
 /** [now − 7 days, now]: statement_datetime must fall in this range. */

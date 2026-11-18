@@ -9,7 +9,9 @@
 --   RBA 金融政策会合 https://www.rba.gov.au/about-rba/boards/monetary-policy-board/ ・各人のページ /about-rba/people/…
 --     Michele Bullock(Governor。議長)・Andrew Hauser(Deputy Governor。副議長)・Sarah Hunter(Assistant Governor (Economic)。
 --     Chief Economist。RBA の発言の RSS に実際に出ていた)。他の総裁補佐・非常勤メンバーは氏名を確認していないので入れない。
--- 日本語の表記は暫定(公式の日本語表記はない。src/ingestion/mappings/speakers.ts の nameJa と同じ。HQ・大野さんの確認が要る)。
+-- 名前(speakers.name)は**公式の英語表記**(BoC・RBA に公式の日本語表記はない。HQ決定 2026-11-18)。役職(title)は日本語のまま。
+-- src/ingestion/mappings/speakers.ts の name と同じ(テストで一致を確認)。表示は src/domain/homeSpeeches.ts の speakerDisplayName が
+-- 「姓 + 半角スペース + 役職」(例: Macklem BoC総裁)にする。FRB・ECB の既存の行(日本語名)は変更しない。
 -- organization は 'BoC'・'RBA'(既存の 'FRB'・'ECB' と同じ英字の略称。src/domain/attribution.ts の出典・告知がこの値で決まる)。
 --
 -- 既存のルールどおり、同じ機関・同じ名前の行があれば入れない(2回流しても同じ)。id は既定の gen_random_uuid()。
@@ -19,14 +21,14 @@
 insert into speakers (name, title, organization, country_code, currency_code, photo_url)
 select v.name, v.title, v.organization, v.country_code, v.currency_code, null
 from (values
-  ('ティフ・マックレム', 'BoC総裁', 'BoC', 'CA', 'CAD'),
-  ('キャロリン・ロジャーズ', 'BoC上級副総裁', 'BoC', 'CA', 'CAD'),
-  ('トニ・グラベル', 'BoC副総裁', 'BoC', 'CA', 'CAD'),
-  ('マルク＝アンドレ・ゴスラン', 'BoC副総裁', 'BoC', 'CA', 'CAD'),
-  ('ニコラ・ヴァンサン', 'BoC副総裁', 'BoC', 'CA', 'CAD'),
-  ('ミシェル・アレクソポロス', 'BoC外部副総裁', 'BoC', 'CA', 'CAD'),
-  ('ミシェル・ブロック', 'RBA総裁', 'RBA', 'AU', 'AUD'),
-  ('アンドリュー・ハウザー', 'RBA副総裁', 'RBA', 'AU', 'AUD'),
-  ('サラ・ハンター', 'RBA総裁補佐（経済担当・チーフエコノミスト）', 'RBA', 'AU', 'AUD')
+  ('Tiff Macklem', 'BoC総裁', 'BoC', 'CA', 'CAD'),
+  ('Carolyn Rogers', 'BoC上級副総裁', 'BoC', 'CA', 'CAD'),
+  ('Toni Gravelle', 'BoC副総裁', 'BoC', 'CA', 'CAD'),
+  ('Marc-André Gosselin', 'BoC副総裁', 'BoC', 'CA', 'CAD'),
+  ('Nicolas Vincent', 'BoC副総裁', 'BoC', 'CA', 'CAD'),
+  ('Michelle Alexopoulos', 'BoC外部副総裁', 'BoC', 'CA', 'CAD'),
+  ('Michele Bullock', 'RBA総裁', 'RBA', 'AU', 'AUD'),
+  ('Andrew Hauser', 'RBA副総裁', 'RBA', 'AU', 'AUD'),
+  ('Sarah Hunter', 'RBA総裁補佐（経済担当・チーフエコノミスト）', 'RBA', 'AU', 'AUD')
 ) as v(name, title, organization, country_code, currency_code)
 where not exists (select 1 from speakers s where s.organization = v.organization and s.name = v.name);

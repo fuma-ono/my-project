@@ -63,7 +63,7 @@ export interface SpeechForBody {
   body_status: string;
   /** 本文の取得を試みた回数(migration 20261112000001。発言の行ごと)。 */
   body_attempts: number;
-  /** speakers.name(日本語)。 */
+  /** speakers.name(FRB・ECB は日本語。BoC・RBA は公式の英語名)。 */
   speaker_name: string;
   speaker_organization: string;
 }
@@ -165,8 +165,8 @@ function localDay(iso: string, timeZone: string): string {
   return `${wall.year}-${String(wall.month).padStart(2, '0')}-${String(wall.day).padStart(2, '0')}`;
 }
 
-function englishNameOf(organization: string, nameJa: string): string | null {
-  return SPEAKER_ALIASES.find((a) => a.organization === organization && a.nameJa === nameJa)?.aliases[0] ?? null;
+function englishNameOf(organization: string, name: string): string | null {
+  return SPEAKER_ALIASES.find((a) => a.organization === organization && a.name === name)?.aliases[0] ?? null;
 }
 
 function errorCode(error: unknown): string {
