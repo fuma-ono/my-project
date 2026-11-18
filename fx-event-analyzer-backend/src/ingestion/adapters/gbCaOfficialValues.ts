@@ -85,6 +85,15 @@ export const ONS_SERIES: readonly OnsSeries[] = [
     path: 'economy/grossdomesticproductgdp/timeseries/ecyx/mgdp',
     titleIncludes: 'period on period growth',
   },
+  // 小売売上高(数量、季節調整済み、燃料を含む全小売)の前月比(2026-11-18 に API で確認): J5EC(データセット DRSI)
+  // 「RSI:Month on prev month % change:All Business All retail inc fuel VOL SA」(%)。2026 SEP = -0.4(2026-10-23 公表)。
+  // 前年比 J5EB・非店舗小売など別の系列と取り違えないよう title でも照合する。
+  {
+    indicatorCode: 'GB_RETAIL_SALES_MOM',
+    cdid: 'J5EC',
+    path: 'businessindustryandtrade/retailindustry/timeseries/j5ec/drsi',
+    titleIncludes: 'Month on prev month % change:All Business All retail inc fuel VOL SA',
+  },
 ];
 
 export const onsSeriesUrl = (series: OnsSeries) => `https://www.ons.gov.uk/${series.path}/data`;

@@ -12,7 +12,7 @@ import {
 
 describe('attributionForIndicator: official statistics outside the US', () => {
   it('ONS indicators carry the wording ONS asks for (OGL v3.0)', () => {
-    for (const code of ['GB_CPI', 'GB_CORE_CPI', 'GB_UNEMPLOYMENT_RATE', 'GB_GDP_MOM']) {
+    for (const code of ['GB_CPI', 'GB_CORE_CPI', 'GB_UNEMPLOYMENT_RATE', 'GB_GDP_MOM', 'GB_RETAIL_SALES_MOM']) {
       expect(attributionForIndicator(code), code).toEqual(ONS_ATTRIBUTION);
     }
     expect(ONS_ATTRIBUTION.notice).toBe(

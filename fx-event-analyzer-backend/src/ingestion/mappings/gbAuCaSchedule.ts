@@ -100,6 +100,20 @@ const ONS_GDP_MONTHLY: readonly (readonly [string, string])[] = [
   ['2027-02', '2027-04-14'],
 ];
 
+/**
+ * 「Retail sales, Great Britain: <月> <年>」(2026-11-18 に各回の公式ページ https://www.ons.gov.uk/releases/retailsalesgreatbritain<月><年>
+ * の「Release date」で確認。どれも 7:00am)。題名の月が値の対象月(2026-10-23 公表分は September 2026)。
+ * 2026-10 の回は系列 J5EC の API の nextRelease「20 November 2026」とも一致。
+ */
+const ONS_RETAIL_SALES: readonly (readonly [string, string])[] = [
+  ['2026-10', '2026-11-20'],
+  ['2026-11', '2026-12-18'],
+  ['2026-12', '2027-01-22'],
+  ['2027-01', '2027-02-19'],
+  ['2027-02', '2027-03-25'],
+  ['2027-03', '2027-04-23'],
+];
+
 export const ONS_SCHEDULE: OfficialScheduleTable = {
   provider: 'ons_release_calendar',
   entries: [
@@ -112,6 +126,15 @@ export const ONS_SCHEDULE: OfficialScheduleTable = {
       'Europe/London',
       'https://www.ons.gov.uk/releases/gdpmonthlyestimateuk',
       ONS_GDP_MONTHLY,
+      true,
+      '2026-11-18',
+    ),
+    ...rows(
+      'GB_RETAIL_SALES_MOM',
+      '07:00',
+      'Europe/London',
+      'https://www.ons.gov.uk/releases/retailsalesgreatbritain',
+      ONS_RETAIL_SALES,
       true,
       '2026-11-18',
     ),
