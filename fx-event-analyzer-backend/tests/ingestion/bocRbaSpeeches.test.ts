@@ -370,7 +370,7 @@ describe('speaker table / migration / attribution stay consistent', () => {
   it('every BoC / RBA alias is in the (unapplied) migration with the same Japanese name, and resolves', async () => {
     const { readFile } = await import('node:fs/promises');
     const sql = await readFile(
-      new URL('../../supabase/migrations/20261118000003_boc_rba_speakers.sql', import.meta.url),
+      new URL('../../supabase/migrations/20261118000004_boc_rba_speakers.sql', import.meta.url),
       'utf8',
     );
     const rows = SPEAKER_ALIASES.filter((a) => a.organization === 'BoC' || a.organization === 'RBA');
