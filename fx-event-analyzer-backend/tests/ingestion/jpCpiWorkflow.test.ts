@@ -36,7 +36,8 @@ describe('JP_CPI targets in the ingestion workflow', () => {
   it('the secret is not in the job-level env (it never reaches steps that do not need it)', () => {
     const jobEnv = ingestion.slice(ingestion.indexOf('    env:\n'), ingestion.indexOf('    steps:\n'));
     expect(jobEnv).not.toContain('ESTAT_APP_ID');
-    expect([...ingestion.matchAll(/secrets\.ESTAT_APP_ID/g)]).toHaveLength(2);
+    // 手動の2つ(dry-run・本番)と、定時の1つ(cron は無効。officialScheduleWorkflow.test.ts)だけ
+    expect([...ingestion.matchAll(/secrets\.ESTAT_APP_ID/g)]).toHaveLength(3);
   });
 });
 

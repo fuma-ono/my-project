@@ -20,8 +20,10 @@ describe('GB/AU/CA manual targets in the ingestion workflow', () => {
   it.each(cases)(
     'target %s: manual only (workflow_dispatch + the exact target), after the DEV check',
     (target, command) => {
-      const matching = steps.filter((s) => s.includes(`run: ${command}\n`) || s.endsWith(`run: ${command}`));
+      // 手動の step だけを数える(定時の step は、同じコマンドを別の step として持つ。officialScheduleWorkflow.test.ts)
+      const matching = steps.filter((s) => s.includes(`inputs.target == '${target}'`));
       expect(matching, command).toHaveLength(1);
+      expect(matching[0]!.includes(`run: ${command}\n`) || matching[0]!.endsWith(`run: ${command}`)).toBe(true);
       const step = matching[0]!;
       expect(step).toContain("steps.check.outputs.ready == 'true'");
       expect(step).toContain("github.event_name == 'workflow_dispatch'");
@@ -36,9 +38,11 @@ describe('GB/AU/CA manual targets in the ingestion workflow', () => {
     }
   });
 
-  it('none of the four jobs runs on a schedule', () => {
+  it('the manual steps never run on a schedule (only the separate scheduled official-values step does, HQ指示 2026-11-18)', () => {
     for (const s of steps) {
-      if (/ingest:(gb-au-ca-schedules|official-values)/.test(s)) expect(s).not.toContain('github.event.schedule');
+      if (!/ingest:(gb-au-ca-schedules|official-values)/.test(s)) continue;
+      if (s.startsWith('GB/AU/CA official values (scheduled)')) continue;
+      expect(s).not.toContain('github.event.schedule');
     }
     expect(yml).toContain(
       'gb-au-ca-schedules-dry-run / gb-au-ca-schedules / official-values-dry-run / official-values',
