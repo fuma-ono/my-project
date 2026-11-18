@@ -73,7 +73,7 @@ describe('RSS-CB parser', () => {
 
 describe('BoC speeches feed', () => {
   it('takes only items whose speaker is unambiguous (10 items → 8: the outside lecturer and the two-speaker press-conference webcast are dropped)', async () => {
-    const speeches = parseBocSpeechesFeed(await fixture('boc-speeches-rss.xml'), NOW);
+    const speeches = parseBocSpeechesFeed(await fixture('boc-speeches-rss.xml'));
     expect(speeches).toHaveLength(8);
     expect(speeches.some((s) => s.topic?.includes('Kuszczak'))).toBe(false);
     expect(new Set(speeches.map((s) => s.speakerName))).toEqual(
@@ -87,7 +87,7 @@ describe('BoC speeches feed', () => {
   });
 
   it('classifies kinds and keeps the official page URL / stable id per page', async () => {
-    const speeches = parseBocSpeechesFeed(await fixture('boc-speeches-rss.xml'), NOW);
+    const speeches = parseBocSpeechesFeed(await fixture('boc-speeches-rss.xml'));
     const byTopic = (start: string) => speeches.find((s) => s.topic?.startsWith(start))!;
     expect(byTopic('Opening Statement to the Standing Senate').kind).toBe('TESTIMONY');
     // 記者会見の動画ページの説明には総裁と上級副総裁の2人が書かれており、発言者を1人に決められないので取り込まない(安全側)。
@@ -105,8 +105,9 @@ describe('BoC speeches feed', () => {
     expect(edmonton.startsAt).toBe('2026-11-18T12:45:14.000Z');
     expect(edmonton.deliveryEvidence).toBeUndefined();
     expect(byTopic('Opening Statement to the Standing Senate').deliveryEvidence).toBe('TEXT_PAGE');
-    // 動画ページだけでも、公式の発言日が2日以上前なら EVENT_DATE_PASSED(時刻の推測なし)
-    expect(byTopic('Speech: Greater Victoria').deliveryEvidence).toBe('EVENT_DATE_PASSED');
+    // 動画ページだけの項目は、発言日が過去でも証拠なし(A案。日付の経過では DELIVERED にしない)
+    expect(byTopic('Speech: Greater Victoria').deliveryEvidence).toBeUndefined();
+    expect(byTopic('Speech: Edmonton').deliveryEvidence).toBeUndefined();
     expect(new Set(speeches.map((s) => s.providerEventId)).size).toBe(speeches.length);
   });
 
@@ -204,14 +205,14 @@ describe('pipeline (in-memory store): dedup, correction, link-only, unknown spea
     const counters = new JobCounters();
     await ingestSpeeches(
       BOC_PROVIDER,
-      parseBocSpeechesFeed(await fixture('boc-speeches-rss.xml'), NOW),
+      parseBocSpeechesFeed(await fixture('boc-speeches-rss.xml')),
       { store, now, pastDays: 90, ...BOC_OPTIONS },
       counters,
     );
     expect(store.speeches).toEqual([]);
-    // 話者の表には載せたが、DB の行(migration は未適用)が無い。予定の段階の1件(Edmonton)は、証拠が無いのでその前に飛ばされる
-    expect(counters.skipReasons.SPEAKER_NOT_IN_DB).toBe(7);
-    expect(counters.skipReasons.NO_DELIVERY_EVIDENCE).toBe(1);
+    // 動画ページだけの2件(Edmonton・Greater Victoria)は証拠が無く、その前に飛ばされる。残り6件は DB の話者の行(migration は未適用)が無い
+    expect(counters.skipReasons.SPEAKER_NOT_IN_DB).toBe(6);
+    expect(counters.skipReasons.NO_DELIVERY_EVIDENCE).toBe(2);
   });
 
   it('with speaker rows: stored once as PUBLICATION_TIME with the official URL; a rerun does not duplicate; upcoming → SCHEDULED', async () => {
@@ -220,7 +221,7 @@ describe('pipeline (in-memory store): dedup, correction, link-only, unknown spea
       { id: 'sp-macklem', name: 'ティフ・マックレム', organization: 'BoC' },
       { id: 'sp-rogers', name: 'キャロリン・ロジャーズ', organization: 'BoC' },
     ];
-    const speeches = parseBocSpeechesFeed(await fixture('boc-speeches-rss.xml'), NOW);
+    const speeches = parseBocSpeechesFeed(await fixture('boc-speeches-rss.xml'));
     const options = { store, now, pastDays: 90, ...BOC_OPTIONS };
     await ingestSpeeches(BOC_PROVIDER, speeches, options, new JobCounters());
     const first = store.speeches.length;
@@ -239,7 +240,7 @@ describe('pipeline (in-memory store): dedup, correction, link-only, unknown spea
   it('a correction at the source (same page, new title / time) updates the same row instead of adding one', async () => {
     const store = new MemoryIngestionStore();
     store.speakers = [{ id: 'sp-rogers', name: 'キャロリン・ロジャーズ', organization: 'BoC' }];
-    const base = parseBocSpeechesFeed(await fixture('boc-speeches-rss.xml'), NOW).find(
+    const base = parseBocSpeechesFeed(await fixture('boc-speeches-rss.xml')).find(
       (s) => s.topic === 'The complexity of housing affordability',
     )!;
     const options = { store, now, pastDays: 90, ...BOC_OPTIONS };
@@ -510,5 +511,92 @@ describe('feed structure validation (P2-2): both feeds', () => {
     // rdf:RDF の名前空間宣言に dc を足していないが、名前空間は検証しない(タグの文字で読む)
     const out = await make(s.fetch).fetchSpeeches();
     expect(out.length).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('webcast-only BoC items are never stored (A案: no date-based DELIVERED)', () => {
+  const rss = (items: string) => `<rdf:RDF xmlns:rdf="r" xmlns:dc="d" xmlns:cb="c"><channel/>${items}</rdf:RDF>`;
+  const webcastOnly = (path: string, occ: string, date: string) =>
+    `<item rdf:about="https://www.bankofcanada.ca/${path}/"><title>Speech: Somewhere</title><link>https://www.bankofcanada.ca/${path}/</link>` +
+    `<description>Deputy Governor Toni Gravelle speaks</description><dc:date>${date}</dc:date>` +
+    `<cb:news><cb:occurrenceDate>${occ}</cb:occurrenceDate></cb:news></item>`;
+  const text = (path: string, occ: string, date: string) =>
+    `<item rdf:about="https://www.bankofcanada.ca/${path}/"><title>Real</title><link>https://www.bankofcanada.ca/${path}/</link>` +
+    `<dc:date>${date}</dc:date><cb:speech><cb:occurrenceDate>${occ}</cb:occurrenceDate><cb:person><cb:nameAsWritten>Toni Gravelle</cb:nameAsWritten></cb:person></cb:speech></item>`;
+
+  it('a webcast page alone has no delivery evidence, however old the official date is (30 days)', () => {
+    const [speech] = parseBocSpeechesFeed(
+      rss(webcastOnly('multimedia/speech-old', '2026-10-19', '2026-10-19T15:00:00+00:00')),
+    );
+    expect(speech!.deliveryEvidence).toBeUndefined();
+  });
+
+  it('through the pipeline: the webcast-only item is skipped (NO_DELIVERY_EVIDENCE) and no row is written', async () => {
+    const store = new MemoryIngestionStore();
+    store.speakers = [{ id: 'sp-gravelle', name: 'トニ・グラベル', organization: 'BoC' }];
+    const counters = new JobCounters();
+    const speeches = parseBocSpeechesFeed(
+      rss(webcastOnly('multimedia/speech-old', '2026-10-19', '2026-10-19T15:00:00+00:00')),
+    );
+    await ingestSpeeches(BOC_PROVIDER, speeches, { store, now: () => NOW, pastDays: 60, ...BOC_OPTIONS }, counters);
+    expect(store.speeches).toEqual([]);
+    expect(counters.skipReasons.NO_DELIVERY_EVIDENCE).toBe(1);
+  });
+
+  it('a text page (TEXT_PAGE) is still stored as DELIVERED', async () => {
+    const store = new MemoryIngestionStore();
+    store.speakers = [{ id: 'sp-gravelle', name: 'トニ・グラベル', organization: 'BoC' }];
+    const speeches = parseBocSpeechesFeed(rss(text('2026/11/real', '2026-11-17', '2026-11-17T15:00:00+00:00')));
+    expect(speeches[0]!.deliveryEvidence).toBe('TEXT_PAGE');
+    await ingestSpeeches(
+      BOC_PROVIDER,
+      speeches,
+      { store, now: () => NOW, pastDays: 60, ...BOC_OPTIONS },
+      new JobCounters(),
+    );
+    expect(store.speeches.map((r) => r.status)).toEqual(['DELIVERED']);
+  });
+
+  it('webcast + text of the same event (safe pair) is stored via the text page', async () => {
+    const store = new MemoryIngestionStore();
+    store.speakers = [{ id: 'sp-gravelle', name: 'トニ・グラベル', organization: 'BoC' }];
+    const speeches = parseBocSpeechesFeed(
+      rss(
+        webcastOnly('multimedia/speech-a', '2026-11-10', '2026-11-10T15:00:00+00:00') +
+          text('2026/11/real', '2026-11-10', '2026-11-10T16:00:00+00:00'),
+      ),
+    );
+    expect(speeches).toHaveLength(1);
+    expect(speeches[0]!.deliveryEvidence).toBe('TEXT_PAGE');
+    await ingestSpeeches(
+      BOC_PROVIDER,
+      speeches,
+      { store, now: () => NOW, pastDays: 60, ...BOC_OPTIONS },
+      new JobCounters(),
+    );
+    expect(store.speeches).toHaveLength(1);
+  });
+
+  it('FRB / ECB are unaffected: no evidence field and no requireDeliveryEvidence keeps the time-based status', async () => {
+    const store = new MemoryIngestionStore();
+    store.speakers = [{ id: 'sp-lagarde', name: 'クリスティーヌ・ラガルド', organization: 'ECB' }];
+    const mk = (id: string, startsAt: string) => ({
+      provider: 'ecb_press_rss',
+      providerEventId: id,
+      speakerName: 'Christine Lagarde',
+      organization: 'ECB',
+      kind: 'SPEECH' as const,
+      topic: 'T',
+      startsAt,
+      timePrecision: 'PUBLICATION_TIME' as const,
+      url: 'https://www.ecb.europa.eu/press/key/date/2026/html/ecb.sp261117~x.en.html',
+    });
+    await ingestSpeeches(
+      'ecb_press_rss',
+      [mk('a', '2026-11-17T10:00:00.000Z'), mk('b', '2026-11-19T10:00:00.000Z')],
+      { store, now: () => NOW, pastDays: 30, publicationTimeKinds: ['SPEECH'], storeSourceUrl: true },
+      new JobCounters(),
+    );
+    expect(store.speeches.map((r) => r.status).sort()).toEqual(['DELIVERED', 'SCHEDULED']);
   });
 });

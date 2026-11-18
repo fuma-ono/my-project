@@ -13,8 +13,9 @@
  * 時刻(例 "12:45 (ET) approx.")が、`dc:date` では UTC の表記のままの数字(12:45+00:00)になっていた**(2026-11-18 の実フィードで、
  * 同様の例が記者会見の項目にもあり、他の項目も同じ疑いがある。BoC に未確認)。**ET から UTC への変換の推測はしない**。
  * そのため、すべて PUBLICATION_TIME(反応の計算の起点にしない。ECB の RSS と同じ扱い)で、**時刻の数字だけでは「行われた」と
- * しない**: 取り込むのは、原稿のページがある(`cb:speech`)か、公式の発言日(日付)が2日以上前の項目だけ(`deliveryEvidence`)。
- * 予定の段階の項目(動画ページだけで、まだ原稿が無い・日付が近い)は取り込まない。したがって BoC の予定時刻は画面に出ない。
+ * しない**: 取り込むのは、原稿のページがある(`cb:speech`。`deliveryEvidence: TEXT_PAGE`)項目だけ(HQ判断 2026-11-18 A案)。
+ * 動画ページだけで原稿が無い項目は、発言日(日付)が過去でも取り込まない(中止・延期でページと日付が残る場合に、行われていない
+ * 発言を DELIVERED にしないため)。したがって BoC の予定時刻は画面に出ない。
  *
  * 発言者: `cb:person` の名前(発言の項目)、無ければ説明の「<役職> <名前>」の形から読む。読めない項目(外部の講演者など
  * 当行の役職者でない人の項目)は取り込まない(出典・発言者を確認できない発言は登録しない)。
@@ -76,20 +77,12 @@ interface Candidate {
   speech: NormalizedSpeech;
 }
 
-const DAY_MS = 86_400_000;
-
 /**
- * 「行われた」と言える証拠(時刻の推測なし)。原稿のページ(`cb:speech`)があれば TEXT_PAGE。無ければ、公式の発言日(`cb:occurrenceDate`、
- * 日付だけ)が、今日(UTC の日付)より2日以上前なら EVENT_DATE_PASSED(どのタイムゾーンでも終わっている)。それ以外は証拠なし。
+ * 「行われた」と言える証拠(時刻の推測なし)。**原稿のページ(`cb:speech`)があるときだけ** TEXT_PAGE。動画ページだけの項目(`cb:news`)は
+ * 証拠なし(発言日が過去でも、中止・延期の可能性を排除できないため。HQ判断 2026-11-18 A案で、日付の経過による判定を削除)。
  */
-export function deliveryEvidenceFor(item: CbRdfItem, now: Date): NormalizedSpeech['deliveryEvidence'] {
-  if (item.cbKind === 'speech') return 'TEXT_PAGE';
-  const day =
-    item.occurrenceDate && /^\d{4}-\d{2}-\d{2}$/.test(item.occurrenceDate)
-      ? Date.parse(`${item.occurrenceDate}T00:00:00Z`)
-      : Number.NaN;
-  const today = Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00Z`);
-  return Number.isFinite(day) && today - day >= 2 * DAY_MS ? 'EVENT_DATE_PASSED' : undefined;
+export function deliveryEvidenceFor(item: CbRdfItem): NormalizedSpeech['deliveryEvidence'] {
+  return item.cbKind === 'speech' ? 'TEXT_PAGE' : undefined;
 }
 
 const MAX_PAIR_GAP_MS = 3 * 86_400_000;
@@ -138,7 +131,7 @@ export function mergeWebcastAndText(candidates: readonly Candidate[]): Normalize
   return candidates.filter((c) => !dropped.has(c)).map((c) => replaced.get(c) ?? c.speech);
 }
 
-export function parseBocSpeechesFeed(xml: string, now: Date = new Date()): NormalizedSpeech[] {
+export function parseBocSpeechesFeed(xml: string): NormalizedSpeech[] {
   const candidates: Candidate[] = [];
   for (const item of parseCbRdfItems(xml)) {
     const id = bocEventId(item.link);
@@ -157,7 +150,7 @@ export function parseBocSpeechesFeed(xml: string, now: Date = new Date()): Norma
         startsAt,
         timePrecision: 'PUBLICATION_TIME',
         url: item.link,
-        ...(deliveryEvidenceFor(item, now) ? { deliveryEvidence: deliveryEvidenceFor(item, now)! } : {}),
+        ...(deliveryEvidenceFor(item) ? { deliveryEvidence: deliveryEvidenceFor(item)! } : {}),
       },
     });
   }
@@ -167,17 +160,15 @@ export function parseBocSpeechesFeed(xml: string, now: Date = new Date()): Norma
 export class BocSpeechesAdapter implements SpeechScheduleProvider {
   readonly name = BOC_PROVIDER;
   private readonly http: HttpClient;
-  private readonly clock: () => number;
 
   constructor(deps: HttpClientDeps = {}) {
     this.http = new HttpClient('boc', PROVIDER_HTTP_SETTINGS.boc, deps);
-    this.clock = deps.now ?? Date.now;
   }
 
   async fetchSpeeches(): Promise<NormalizedSpeech[]> {
     const xml = await withAccessDeniedMapping(BOC_PROVIDER, () => this.http.getText(BOC_SPEECHES_RSS_URL));
     // 構造を確かめる(HTML の 200・空の本文・途中で切れた/壊れた XML・形の変更はエラー。正常な空のフィードは通す)。
     assertValidCbFeed(BOC_PROVIDER, xml);
-    return parseBocSpeechesFeed(xml, new Date(this.clock()));
+    return parseBocSpeechesFeed(xml);
   }
 }

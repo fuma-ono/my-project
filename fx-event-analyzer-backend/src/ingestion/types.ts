@@ -126,11 +126,10 @@ export interface NormalizedSpeech {
    * 発言が行われた(DELIVERED)と言える**証拠**(HQ指示 2026-11-18 P2-1)。公開の時刻(PUBLICATION_TIME)の数字だけでは、行われたとは
    * 言えない(BoC の `dc:date` は予定の項目で現地の時刻の数字が UTC 表記になっていた)ため、取得元ごとに明示する。
    *  - TEXT_PAGE: 原稿のページが公開されている(発言の項目 `cb:speech`)
-   *  - EVENT_DATE_PASSED: 公式の発言日(日付だけ)から、時刻・タイムゾーンの推測なしで終わっていると言える(2日以上前)
    *  - EVENT_TIME_PASSED: 取得元が**オフセット付きで**示した時刻が、すでに過去
    * 未指定(FRB・ECB の既存の取得元)は今までどおり、時刻の前後で SCHEDULED / DELIVERED を決める。
    */
-  deliveryEvidence?: 'TEXT_PAGE' | 'EVENT_DATE_PASSED' | 'EVENT_TIME_PASSED';
+  deliveryEvidence?: 'TEXT_PAGE' | 'EVENT_TIME_PASSED';
 }
 
 export interface DateRange {
