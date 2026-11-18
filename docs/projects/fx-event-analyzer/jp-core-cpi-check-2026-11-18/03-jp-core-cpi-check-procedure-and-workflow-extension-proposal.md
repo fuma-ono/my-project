@@ -1,4 +1,6 @@
-# 日本コア CPI: 確認手順と、ワークフロー拡張案(提案のみ。実装・push・実行はしない)
+# 日本コア CPI: 確認手順と、ワークフロー拡張案(第 2 版。提案のみ。実装・push・実行はしない)
+
+**第 2 版の変更**(HQ 方針 2026-11-18): ① 案 B(別ワークフロー・別スクリプト)を**推奨案として維持**。② **設計書の修正と静的検査項目の整理までとし**、YAML・Python の**ファイルは追加しない**(第 1 版にあった YAML・Python の全文は、**設計の仕様(表)に置き換え**、コードを載せない)。③ **未確認事項を明記**: `tab=2`・前月比・**季節調整済みの前月比**・「生鮮食品を除く総合」の定義(§7)。④ **総合とコアが同時に e-Stat に反映されることは仮定しない**(§4・§5.9)。
 
 担当 D。2026-11-18。**文書だけ**(コード・ワークフロー・Secrets・DB・migration・DEV・TEST・PROD の変更なし。**ワークフローの変更・実行は、HQ の個別承認が出るまで行わない**)。指標追加の最終決定は保留(HQ の判断)。
 前提: 本書の確認は、**今日(2026-11-18)の公開ページの取得**と**既存コードの記録(2026-11-11、実 API)**に基づく。e-Stat API の実行は、この環境からはできない(appId を持たず、Actions も起動できない)。**確認できなかった項目は、推測せず「未確認」とする**。
@@ -9,7 +11,9 @@
 | 品目一覧の取得手順 | **手順は確定**(§2.1)。**実行は未実施**(承認待ち) | 本書 §2 |
 | `cat01=0001` と `0161` の値の比較 | 2026-09 分は**統計局の公表値で一致**(総合 2.1・コア 2.1)。API での比較は**未実施** | 統計局のページ(2026-11-18 取得)、既存コードの記録 |
 | `tab=3` の意味(前年比であること) | **前年同月比【%】**(既存コードの記録、2026-11-11)。**今日の API での再確認は未実施** | `estatCpi.ts` の冒頭コメント |
+| `tab=2` の意味 | **未確認**(既存の記録は項目名「前月比・前年比・前年度比」のみ。値が何を指すか不明) | §2.4 |
 | 前月比データの取得可否 | **未確認**(§2.4) | `tab=2` の中身を確認していない |
+| **季節調整済み前月比** | **未確認**(別の統計表にある可能性。`0004052037` に含まれるか不明) | §2.4 |
 | 生鮮食品を除く総合の定義 | **未確認**(§2.5) | 今日取得した統計局のページ(解説・FAQ)で、定義の文面を見つけられなかった |
 | e-Stat 利用規約の該当箇所 | **確認済み**(§3。原文を今日取得) | e-Stat の規約ページ |
 | 既存 JP_CPI との重複・公表日・更新タイミング | **比較済み**(§4) | 既存コード・日程表 |
@@ -67,10 +71,11 @@
 | 地域・表章項目 | `area=00000`(全国)・`tab=3`(前年同月比) | **同じ** |
 | 品目(`cat01`) | `0001`(総合) | **`0161`(生鮮食品を除く総合)** |
 | 公表日 | 統計局の公表(例 2026-11-20 08:30 JST)。日程表: 2026-10→11-20、2026-11→12-18、2026-12→2027-01-22、2027-01→02-19、2027-02→03-19 | **同じ公表で、同時に出る**(日程表も同じ行) |
-| e-Stat への反映の遅れ | 公表から数日(2026-09 分: 10/23 公表 → `table_updated` 10/30、7 日) | **同じ統計表なので同じ**(総合・コアは同時に更新される想定。**同時であることは未確認**) |
+| e-Stat への反映の遅れ | 公表から数日(2026-09 分: 10/23 公表 → `table_updated` 10/30、7 日) | **同じ統計表だが、総合とコアが同時に反映されることは仮定しない**(同時かは未確認)。反映は**品目ごとに独立して判定**する(§5.9) |
 | 取得の呼び出し | 1 回(`cdCat01=0001`) | 同じ呼び出しに `cdCat01=0001,0161` と書けば、**追加の API 呼び出しは不要**(2 品目を 1 回で取る) |
 | データの重複 | — | **値は 2026-09 分で同じ(2.1)**。月によっては違う(食料の変動が大きい月)。**同じ値に見える月がある**(同日・同時刻の 2 イベント) |
 | 初回値の期限 | 14 日(`JP_CPI_MAX_DAYS_AFTER_RELEASE`) | 同じ |
+- **総合(`0001`)が反映済みで、コア(`0161`)が未反映(またはその逆)でも、誤った値を出さない**: `table_updated` は統計表の単位の日付で、品目ごとの反映は示さない。取り込みは、**品目ごとに、その品目の値が対象期間で取れ、`table_updated ≥ 公表日` のときだけ初回値にする**(片方が NOT_YET_AVAILABLE でも、もう片方は影響を受けない)。
 - 既存コードの変更点(実装時): `estatCpi.ts` の `JP_CPI_CLASSES.item` を、指標ごとの品目(0001・0161)に一般化。日程表・初回値・改定の仕組みは共通。
 - 英国の `GB_CPI`/`GB_CORE_CPI` と同じ構成(同じ公表で 2 つの指標)。
 
@@ -80,89 +85,22 @@
 |---|---|---|
 | **A: 既存の `fx-event-analyzer-estat-check.yml` に step を追加** | 既存のファイルに、独立した step を 1 つ足す | **11/20 の初回取得確認(同じワークフロー)の実行に、追加の step が混ざる**(実行時間が約 10 秒増える。失敗すれば run 全体が失敗に見える)。`continue-on-error: true` で、失敗の影響は避けられる |
 | **B(推奨): 別のワークフローファイル**(例 `fx-event-analyzer-estat-core-check.yml`) | 専用ブランチ `verify/fx-estat-core-check` への push と手動実行だけで動く、独立したファイル | **既存のワークフローに一切触れない**(11/20 の確認と干渉しない)。ただし、**ワークフローの追加**であり、HQ の承認が要る |
-- 本書では **B を推奨**。差分は B の形で書く(A にする場合は、同じ step を既存ファイルに足す)。
+- 本書では **B を推奨**。仕様は B の形で書く(A にする場合は、同じ step を既存ファイルに足す)。YAML・Python の全文は載せず、仕様の表だけにした(承認後に実装)。
 
-### 5.2 追加する処理の具体的な差分(案 B、新規ファイル。**まだ作成・push していない**)
-`.github/workflows/fx-event-analyzer-estat-core-check.yml`(新規):
-```yaml
-# 日本コア CPI の分類・値の確認(読み取り専用。HQ 承認後に使う)
-# - 動くのは、ブランチ verify/fx-estat-core-check への push と、手動の実行だけ(定期実行なし)。
-# - DB・Supabase の Secret は使わない。e-Stat の公開 API(getMetaInfo・getStatsData)を数回呼ぶだけ。
-# - 出力は注記(::notice)だけ。appId は出さない(マスクし、エラーにも URL を出さない)。
-name: FX Event Analyzer - e-Stat core CPI check (read-only)
+### 5.2 追加する処理の仕様(案 B。**ファイルは作成していない。YAML・Python はまだ書かない**)
+**追加するもの(2 ファイル。承認後に作成)**
+| ファイル(案) | 内容 |
+|---|---|
+| `.github/workflows/fx-event-analyzer-estat-core-check.yml`(新規) | 名前 `FX Event Analyzer - e-Stat core CPI check (read-only)`。**トリガー**: ブランチ `verify/fx-estat-core-check` への `push` と `workflow_dispatch` だけ(`schedule` なし)。**権限**: `contents: read` だけ。**concurrency**: グループ `fx-estat-core-check`(他のワークフローと独立。`cancel-in-progress: false`)。**ジョブ**: 1 つ(`ubuntu-latest`、`timeout-minutes: 5`)、環境変数は `ESTAT_APP_ID`(`secrets.ESTAT_APP_ID`)だけ。**step**: `actions/checkout` と、スクリプトの実行の 2 つだけ |
+| `.github/scripts/estat_core_check.py`(新規) | Python の標準ライブラリだけ(他のパッケージ・npm・リポジトリのコードを使わない)。下の処理を行い、注記(`::notice`)を出す |
 
-on:
-  push:
-    branches:
-      - 'verify/fx-estat-core-check'
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-concurrency:
-  group: fx-estat-core-check
-  cancel-in-progress: false
-
-jobs:
-  check:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    env:
-      ESTAT_APP_ID: ${{ secrets.ESTAT_APP_ID }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Core CPI classification and values (no appId in output)
-        run: python3 .github/scripts/estat_core_check.py
-```
-`.github/scripts/estat_core_check.py`(新規。標準ライブラリだけ。他のパッケージ・npm・リポジトリのコードを実行しない):
-```python
-import json, os, sys, urllib.error, urllib.parse, urllib.request
-
-BASE = 'https://api.e-stat.go.jp/rest/3.0/app/json'
-STATS = '0004052037'
-EXPECT = {'0001': '2.1', '0161': '2.1'}  # 2026-09 分(統計局の公表値、2026-10-23 公表)
-
-def out(title, value):
-    body = json.dumps(value, ensure_ascii=False).replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-    print(f'::notice title={title}::{body}')
-
-app_id = os.environ.get('ESTAT_APP_ID', '').strip()
-if not app_id:
-    out('core 0 secret', {'registered': False})
-    sys.exit(0)
-print(f'::add-mask::{app_id}')
-
-def get(path, **params):
-    q = urllib.parse.urlencode({'appId': app_id, 'statsDataId': STATS, **params})
-    try:
-        with urllib.request.urlopen(f'{BASE}/{path}?{q}', timeout=60) as r:
-            return json.load(r)
-    except urllib.error.HTTPError as e:
-        sys.exit(f'HTTP {e.code} on {path}')          # URL(appId を含む)は出さない
-    except Exception as e:
-        sys.exit(f'{type(e).__name__} on {path}')
-
-def as_list(x):
-    return x if isinstance(x, list) else [x]
-
-meta = get('getMetaInfo')['GET_META_INFO']
-objs = {o['@id']: o for o in as_list(meta['METADATA_INF']['CLASS_INF']['CLASS_OBJ'])}
-keep = lambda c: c['@code'] in ('0001', '0161') or '生鮮' in c['@name'] or 'エネルギー' in c['@name']
-cat01 = [c for c in as_list(objs['cat01']['CLASS']) if keep(c)]
-out('core 1 cat01', {'items': cat01, 'table_updated': meta['METADATA_INF']['TABLE_INF'].get('UPDATED_DATE')})
-out('core 2 tab', {'items': as_list(objs['tab']['CLASS'])})
-
-values = {}
-for tab in ('3', '2', '1'):
-    data = get('getStatsData', cdTab=tab, cdArea='00000', cdCat01='0001,0161', cdTime='2026000909')
-    rows = as_list(data['GET_STATS_DATA']['STATISTICAL_DATA']['DATA_INF'].get('VALUE', []))
-    values[tab] = [{'cat01': v['@cat01'], 'time': v['@time'], 'unit': v.get('@unit'), 'value': v['$']} for v in rows]
-out('core 3 values', values)
-got = {v['cat01']: v['value'] for v in values['3']}
-out('core 4 verdict', {'tab3_matches_bureau': all(got.get(k) == v for k, v in EXPECT.items()), 'got': got, 'expected': EXPECT})
-```
-(上のスクリプトは**提案**で、まだ作成・実行していない。実装時に、`cat01` の名前の確認(§2.1 の 5)の判定も出力に加える。)
+**スクリプトの処理(仕様)**
+1. `ESTAT_APP_ID` が無ければ、注記 `registered: false` を出して終了(エラーにしない)。あれば、**先頭で値をマスク**する(GitHub のログのマスク指定)。
+2. API を呼ぶ関数は、**例外のとき、URL(appId を含む)を出さず**、HTTP のコードまたは例外の種類と、API の path だけを出して終了する。
+3. `getMetaInfo` → `cat01` の絞り込み・`tab` の全分類・`table_updated`(§5.3)。
+4. `getStatsData` を `tab` = 3・2・1 で 3 回(§5.3)。
+5. 注記を 4 件出す(§5.4)。**値の判定は、「統計局の公表値と一致するか」の真偽と、取れた値・期待値だけ**を出す。
+6. **統計局の公表値(期待値)は、スクリプトに書き込まず、実行時の入力(環境変数または手動実行の入力)で渡す案**(月が進んでも、スクリプトの変更が要らない。第 1 版の「2026-09 の値を直接書く」案は、メンテナンスが悪いので改める)。
 
 ### 5.3 API リクエストの内容と取得する項目
 | # | リクエスト | 取る項目 |
@@ -199,14 +137,39 @@ out('core 4 verdict', {'tab3_matches_bureau': all(got.get(k) == v for k, v in EX
 3. **スクリプトの単体テスト**(ローカル、通信なし): `get` を差し替え、`getMetaInfo`・`getStatsData` の応答の写し(既存のテストの fixture と同じ形)で、**分類の抽出・値の整形・判定**を検証。**appId(テスト用の偽の値)が、出力・エラーのどこにも出ない**ことを確かめる(例外の経路を含む)。
 4. **実行の確認**(承認後、1 回): `verify/fx-estat-core-check` へ push して実行し、4 件の注記が出ること・appId が出ていないことを確認する。**11/20 の初回取得確認とは別の日・別のブランチ**で行う(干渉しない)。
 
+### 5.9 静的検査項目の整理(承認後の実装時に、テストで固定する)
+**ワークフロー(YAML)の検査**
+| # | 検査 | 理由 |
+|---|---|---|
+| W1 | `actionlint` が成功(式・文法・Secret の参照) | 文法の誤りの検出 |
+| W2 | `on` に `schedule` が無い | 定時実行を持たせない |
+| W3 | `on.push.branches` が `verify/fx-estat-core-check` だけ(他のブランチ・タグ・PR・`pull_request_target` が無い) | 意図しない起動の防止 |
+| W4 | `permissions` が `contents: read` だけ | 書き込み権限の遮断 |
+| W5 | `secrets.` の参照が `ESTAT_APP_ID` だけ(`SUPABASE`・`GITHUB_TOKEN` 以外の書き込み系を含まない) | DB・他の秘密情報の遮断 |
+| W6 | `SUPABASE`・`supabase`・`npm`・`node`・`psql`・`curl ... -X POST` の文字列が無い | DB の接続・リポジトリのコードの実行の遮断 |
+| W7 | `concurrency.group` が `fx-estat-core-check` で、既存のどのワークフローのグループとも重ならない | FX 価格・要人発言・公式統計の取り込みを妨げない |
+| W8 | 既存のワークフロー(`fx-event-analyzer-estat-check.yml` を含む)のファイルが**変更されていない**(差分が 0) | 案 B の「既存に触れない」の保証 |
+**スクリプトの検査**
+| # | 検査 | 理由 |
+|---|---|---|
+| S1 | `import` が標準ライブラリだけ | 外部パッケージ・リポジトリのコードを使わない |
+| S2 | 通信先のホストが `api.e-stat.go.jp` だけ | 他への通信の遮断 |
+| S3 | 呼ぶ API が `getMetaInfo`・`getStatsData` だけ(書き込み系の語・HTTP メソッドが無い) | 読み取り専用 |
+| S4 | 偽の appId(テスト用)で、**正常系・HTTP エラー・例外・タイムアウト**のどの経路でも、出力に appId が現れない | 秘密情報の漏えい防止 |
+| S5 | `cat01` の絞り込み・`tab` の整形・値の判定が、応答の写し(1 件のとき配列でなくオブジェクトになる形を含む)で正しい | 応答の形の揺れへの対応 |
+| S6 | **品目ごとの独立**: `0001` の値があり `0161` が無い(または逆)の応答でも、判定がそれぞれ別に出る(片方だけ未反映を誤って一致としない) | 同時反映を仮定しない |
+| S7 | 期待値が未指定のとき、一致の判定を出さず「未指定」と出す | 誤った一致の防止 |
+
 ## 6. 承認が必要な事項(HQ)
 1. 案 B(新しい確認用ワークフローとスクリプトの追加)の承認(または案 A)。
 2. 実行(`verify/fx-estat-core-check` への push と、1 回の確認)の承認。
 3. 結果を受けての、`JP_CORE_CPI` の指標追加の判断(最終決定は HQ。本書は決定しない)。
 
-## 7. 未確認事項(まとめ)
+## 7. 未確認事項(まとめ。推測で埋めていない)
 1. 品目一覧・`0161` の名前・`0001`/`0161` の値・`tab` の分類の、**今日の API での確認**(承認後の実行が要る)。
-2. **前月比**(`tab=2` の中身、季節調整済みの前月比の所在)。
-3. **「生鮮食品を除く総合」の定義**(生鮮食品の範囲)。
-4. 総合とコアが e-Stat に**同時に反映される**こと。
-5. e-Stat の `table_updated` の**時刻**(日付まで)。
+2. **`tab=2` の意味**: 「前月比・前年比・前年度比」という名前だけが記録されており、値が何を指すか(時間軸との関係を含む)は未確認。
+3. **前月比**: 取得できるか、何の前月比か(原数値か)は未確認。**取得できない・意味が特定できないときは、載せない**(指数から自前で計算しない)。
+4. **季節調整済み前月比**: `0004052037` に含まれるか未確認。別の統計表(季節調整値)にある可能性。
+5. **「生鮮食品を除く総合」の定義**(生鮮食品の品目の範囲)。公表ページで「生鮮食品を除く総合指数」と呼ばれる分類であることまでは確認済み。
+6. **総合とコアの同時反映**: **仮定しない**。品目ごとに独立して判定する設計とする(§4・§5.9 の S6)。確認は、11/20 の初回取得確認で、`0001` と `0161` の反映の時刻の差を観察できるか、による(`table_updated` は日付までで、品目ごとの反映は分からない)。
+7. e-Stat の `table_updated` の**時刻**(日付まで)。
