@@ -12,7 +12,7 @@ import type { StoredEvent } from '../store.js';
 
 export function needsReleasedStateRepair(
   event: Pick<StoredEvent, 'status' | 'data_status'>,
-  snapshot: unknown | null,
+  snapshot: unknown,
 ): boolean {
   if (!snapshot) return false;
   return event.status === 'SCHEDULED' || (event.status === 'RELEASED' && event.data_status === 'PENDING');

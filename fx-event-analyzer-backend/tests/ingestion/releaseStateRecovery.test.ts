@@ -385,7 +385,7 @@ describe('QA-1: the economic calendar pipeline recovers an event whose state upd
     await run(await teReleases());
     const id = cpiEvent().id;
     official.values.set('US_CPI|2026-09', 3.7376847);
-    store.snapshots.push({ ...store.snapshots[0]!, event_id: id, actual: 9.9 } as (typeof store.snapshots)[number]);
+    store.snapshots.push({ ...store.snapshots[0]!, event_id: id, actual: 9.9 });
     await reverifyAwaitingOfficial({ store, official, now: NOW }, new JobCounters());
     expect(cpiEvent().data_status).toBe('PENDING');
     expect(store.staged.find((s) => s.event_id === id)).toMatchObject({ verification_status: 'PENDING_REVIEW' });
