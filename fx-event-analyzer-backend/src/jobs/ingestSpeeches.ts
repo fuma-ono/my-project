@@ -9,6 +9,7 @@ import { RBA_PROVIDER, RbaSpeechesAdapter } from '../ingestion/adapters/rbaSpeec
 import { ingestSpeeches } from '../ingestion/pipelines/speeches.js';
 import type { SpeechScheduleProvider } from '../ingestion/providers.js';
 import { runIngestionJob } from '../ingestion/runner.js';
+import { SourceAccessDeniedError } from '../ingestion/sourceAccess.js';
 import { createIngestionRepository } from '../repositories/ingestionRepository.js';
 
 /**
@@ -49,7 +50,17 @@ async function main(): Promise<void> {
       store,
       { provider: source.name, dataType: 'OTHER', job: 'ingest:speeches' },
       async (counters) => {
-        const speeches = await source.fetchSpeeches();
+        let speeches;
+        try {
+          speeches = await source.fetchSpeeches();
+        } catch (error) {
+          // 配信元が自動の取得を拒否(403)した。回避はしない。記録して知らせ、実行は失敗にしない(他の取得元を妨げない)。
+          // 見つけ方: ingestion_logs.details の skip_reasons.SOURCE_ACCESS_DENIED と source_access_denied。
+          if (!(error instanceof SourceAccessDeniedError)) throw error;
+          counters.skip('SOURCE_ACCESS_DENIED');
+          counters.note('source_access_denied', { provider: error.provider, status: error.status });
+          return;
+        }
         if (source === frb && frb.lastSkipped.length > 0) {
           for (const skipped of frb.lastSkipped) counters.skip(`FEED_${skipped.reason}`);
           // R-1(HQ判断 2026-10-29): 読めない項目の題名・理由・日付を最大20件(期間の外は残さない)

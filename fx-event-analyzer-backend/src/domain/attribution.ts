@@ -32,6 +32,28 @@ export const FRB_ATTRIBUTION: Attribution = {
   notice: null,
 };
 
+/**
+ * カナダ銀行(bankofcanada.ca/terms/、2026-11-18 確認): 出典としてカナダ銀行を示し、変更を示す。**有料のサービスで提供する場合は、
+ * 買い手に、内容が同サイトで無料で入手できることを事前に伝える**(ECB と同じ型の告知)。文言は実装候補(HQ の確認前)。
+ */
+export const BOC_ATTRIBUTION: Attribution = {
+  source: 'カナダ銀行（Bank of Canada）',
+  source_url: 'https://www.bankofcanada.ca',
+  notice: 'この情報はカナダ銀行のウェブサイト（www.bankofcanada.ca）で無料で入手できます。',
+};
+
+/**
+ * 豪州準備銀行(rba.gov.au/copyright/、2026-11-18 確認): Creative Commons Attribution 4.0。出典は「Source: Reserve Bank of Australia
+ * [年]」または「Source: RBA [年]」。RBA が推奨していると示唆してはならない。無料で公表していることを伝えずに課金することは禁止。
+ * 文言は実装候補(年の表記を含め、HQ の確認前)。
+ */
+export const RBA_ATTRIBUTION: Attribution = {
+  source: '豪州準備銀行（Reserve Bank of Australia）',
+  source_url: 'https://www.rba.gov.au',
+  notice:
+    'この情報は RBA のウェブサイト（www.rba.gov.au）で無料で入手できます。RBA が本アプリを推奨・承認するものではありません。',
+};
+
 /** Eurostat の値から作る経済指標(HQ承認 2026-10-30「ユーロ圏経済指標 第1弾」)。文言は実装候補(HQ判断 2026-10-30 3)。 */
 export const EUROSTAT_ATTRIBUTION: Attribution = {
   source: 'Eurostat（欧州連合統計局）',
@@ -166,5 +188,7 @@ export function inboxSourceNote(attribution: Attribution | null | undefined): st
 export function attributionForOrganization(organization: string | null | undefined): Attribution | null {
   if (organization === 'ECB') return ECB_ATTRIBUTION;
   if (organization === 'FRB') return FRB_ATTRIBUTION;
+  if (organization === 'BoC') return BOC_ATTRIBUTION;
+  if (organization === 'RBA') return RBA_ATTRIBUTION;
   return null;
 }

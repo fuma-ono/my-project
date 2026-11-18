@@ -20,6 +20,7 @@
 | 7 | 欧州中央銀行(ECB) | ウェブサイトの問い合わせフォーム | 時刻の決まり・無料入手の案内の出し方 | — | — | 未送信 |
 | 8 | 日本銀行 情報サービス局 | post.prd8@boj.or.jp | 金融政策決定会合の結果(政策金利)の商用アプリでの利用(BOJ_RATE、HQ指示 2026-11-11) | — | — | 未送信 |
 | 9 | 欧州中央銀行(ECB) | Information Request Form(https://form.ecb.europa.eu/services/rest/publicinformationrequest/?lang=en) | 講演の本文・抜粋の掲載の許可(HQ指示 2026-11-11) | — | — | 未送信 |
+| 10 | 豪州準備銀行(RBA) | rbainfo@rba.gov.au(RBA の RSS の案内 https://www.rba.gov.au/qa/rss.html が、RSS の問題の連絡先として示している) | 発言の RSS(rss-cb-speeches.xml)の自動取得の可否・条件(HQ指示 2026-11-18。**案のみ・未送信**) | — | — | 未送信(HQ の承認待ち) |
 
 ## 2. 結果の記録(返事が来たら埋める)
 
@@ -241,6 +242,23 @@ Your disclaimer says that reproducing documents that bear the name of their auth
 1. Whether speeches by Executive Board members fall under this rule;
 2. Whether you can authorise (a), (b) and (c), and under what conditions;
 3. How you would like the source and the free-availability notice to be shown.
+
+Best regards,
+[Name] / [Company] / [Email]
+```
+
+### 3.10 RBA(発言の RSS の自動取得。HQ指示 2026-11-18。**案のみ・送信していない**)
+根拠(2026-11-18 確認): https://www.rba.gov.au/qa/rss.html に「The RSS feeds are protected by Web Application Firewall (WAF) controls」とあり、問題は rbainfo@rba.gov.au へ。当方の環境から https://www.rba.gov.au/rss/rss-cb-speeches.xml への GET が 403(Access Denied)だった。**アクセス制限の回避・ブラウザの偽装はしていない**。
+```
+Subject: Automated access to the speeches RSS feed (rss-cb-speeches.xml)
+
+Dear RBA team,
+
+We are building a service that lists central-bank speeches (speaker, title, date and a link to the official RBA page) and we would like to read the official speeches RSS feed (https://www.rba.gov.au/rss/rss-cb-speeches.xml) automatically, about once every three hours (one request per run). Our request currently receives HTTP 403 (Access Denied).
+
+1. Is automated retrieval of this feed permitted, and if so, how should a client identify itself or be allow-listed?
+2. Is the dc:date / cb:occurrenceDate of a speech item the start time of the speech or the publication time?
+3. We will credit the source as "Source: Reserve Bank of Australia [year]" and will not imply endorsement, and we will say that the information is available free of charge on the RBA site. Is there anything else you require?
 
 Best regards,
 [Name] / [Company] / [Email]

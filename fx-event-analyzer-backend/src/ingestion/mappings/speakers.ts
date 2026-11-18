@@ -78,6 +78,26 @@ export const SPEAKER_ALIASES: readonly SpeakerAlias[] = [
     aliases: ['Frank Elderson'],
     importance: 'MEDIUM',
   },
+  // カナダ銀行(BoC)の総裁会議(Governing Council)。公式ページ https://www.bankofcanada.ca/about/governing-council/(2026-11-18 確認。
+  // 掲載は 2026-10-12 時点)の6人。総裁 Macklem は 2027-06 に退任の発表(2026-11-16)があるが、現職。日本語の表記は暫定
+  // (公式の日本語表記はない。HQ・大野さんの確認が要る)。speakers の行は migration 20261118000001(**未適用**・HQ の承認待ち)。
+  { organization: 'BoC', nameJa: 'ティフ・マックレム', aliases: ['Tiff Macklem'], importance: 'HIGH' },
+  { organization: 'BoC', nameJa: 'キャロリン・ロジャーズ', aliases: ['Carolyn Rogers'], importance: 'MEDIUM' },
+  { organization: 'BoC', nameJa: 'トニ・グラベル', aliases: ['Toni Gravelle'], importance: 'MEDIUM' },
+  {
+    organization: 'BoC',
+    nameJa: 'マルク＝アンドレ・ゴスラン',
+    aliases: ['Marc-André Gosselin', 'Marc-Andre Gosselin'],
+    importance: 'MEDIUM',
+  },
+  { organization: 'BoC', nameJa: 'ニコラ・ヴァンサン', aliases: ['Nicolas Vincent'], importance: 'MEDIUM' },
+  { organization: 'BoC', nameJa: 'ミシェル・アレクソポロス', aliases: ['Michelle Alexopoulos'], importance: 'MEDIUM' },
+  // 豪州準備銀行(RBA)。公式ページ(https://www.rba.gov.au/about-rba/boards/monetary-policy-board/ ・/about-rba/people/…、2026-11-18 確認)で
+  // 確認できた3人: 総裁・副総裁(金融政策会合の議長・副議長)・総裁補佐(経済担当。チーフエコノミスト。RSS に実際に出ていた)。
+  // 他の総裁補佐・金融政策会合の非常勤メンバーは、氏名を公式ページで確認していないので入れない。
+  { organization: 'RBA', nameJa: 'ミシェル・ブロック', aliases: ['Michele Bullock'], importance: 'HIGH' },
+  { organization: 'RBA', nameJa: 'アンドリュー・ハウザー', aliases: ['Andrew Hauser'], importance: 'MEDIUM' },
+  { organization: 'RBA', nameJa: 'サラ・ハンター', aliases: ['Sarah Hunter'], importance: 'MEDIUM' },
 ];
 
 /** Lower-case, accents removed, punctuation/whitespace collapsed. */

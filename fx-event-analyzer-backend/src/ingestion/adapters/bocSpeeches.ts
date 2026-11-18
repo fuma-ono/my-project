@@ -18,7 +18,9 @@
  */
 import { PROVIDER_HTTP_SETTINGS } from '../config.js';
 import { HttpClient, type HttpClientDeps } from '../http.js';
+import { normalizeSpeakerName } from '../mappings/speakers.js';
 import type { SpeechScheduleProvider } from '../providers.js';
+import { withAccessDeniedMapping } from '../sourceAccess.js';
 import { parseCbRdfItems, parseIsoInstant, type CbRdfItem } from '../rssCb.js';
 import type { NormalizedSpeech, SpeechKind } from '../types.js';
 
@@ -56,26 +58,80 @@ export function bocEventId(link: string): string | null {
   }
 }
 
+interface Candidate {
+  item: CbRdfItem;
+  speech: NormalizedSpeech;
+}
+
+const MAX_PAIR_GAP_MS = 3 * 86_400_000;
+
+/**
+ * 同じ発言の「動画ページ」と「テキストページ」を、**安全な条件がすべてそろったときだけ**1件にまとめる(HQ指示 2026-11-18)。
+ * BoC は同じ講演・記者会見について、`multimedia/…`(動画。お知らせの項目 `cb:news`。予定の段階から出る)と、`YYYY/MM/…`
+ * (原稿のテキスト。発言の項目 `cb:speech`)を別々のページで出す。**題名の一致だけでは統合しない**(題名は両者で違う)。
+ *
+ * まとめる条件(すべて):
+ *  ① 動画ページ(`multimedia/` の `cb:news`)がちょうど1件、テキストページ(`cb:speech`)がちょうど1件 —
+ *     **同じキー(発言者 + `cb:occurrenceDate` の日付)の中で**。2件以上あれば、どれがどれか決められないので統合しない
+ *  ② 種別が一致し、講演(SPEECH)か記者会見(PRESS_CONFERENCE)のどちらか(議会の冒頭陳述・その他は統合しない)
+ *  ③ 公開の時刻の差が3日以内
+ * まとめたときの形: providerEventId は**動画ページの ID**(予定の段階から出ており、行の ID が後から変わらない)、
+ * 題名・URL・時刻は**テキストページ**のもの(実際の発言の題名・原稿・公開時刻)。条件を満たさなければ、別々の発言として両方残す
+ * (同じ日の別の発言を誤って統合するより、重複が残るほうを選ぶ)。
+ * 限界: フィードは新しい10件程度しか載せない。片方がフィードから消えた後は、まとめられず別の行になる(取り込みの対象は
+ * 直近14日で、通常は両方がフィードにある間に収まる)。まとめる前に動画ページだけで保存された行は、ID が同じなので更新される。
+ */
+export function mergeWebcastAndText(candidates: readonly Candidate[]): NormalizedSpeech[] {
+  const groups = new Map<string, Candidate[]>();
+  for (const c of candidates) {
+    const day = c.item.occurrenceDate;
+    if (!day) continue;
+    const key = `${normalizeSpeakerName(c.speech.speakerName)}|${day}`;
+    groups.set(key, [...(groups.get(key) ?? []), c]);
+  }
+  const replaced = new Map<Candidate, NormalizedSpeech>();
+  const dropped = new Set<Candidate>();
+  for (const group of groups.values()) {
+    const webcasts = group.filter(
+      (c) => c.item.cbKind === 'news' && c.speech.providerEventId.startsWith('multimedia/'),
+    );
+    const texts = group.filter((c) => c.item.cbKind === 'speech');
+    if (webcasts.length !== 1 || texts.length !== 1) continue;
+    const web = webcasts[0]!;
+    const text = texts[0]!;
+    const sameKind = web.speech.kind === text.speech.kind;
+    const mergeable = web.speech.kind === 'SPEECH' || web.speech.kind === 'PRESS_CONFERENCE';
+    const gap = Math.abs(Date.parse(web.speech.startsAt) - Date.parse(text.speech.startsAt));
+    if (!sameKind || !mergeable || !(gap <= MAX_PAIR_GAP_MS)) continue;
+    replaced.set(web, { ...text.speech, providerEventId: web.speech.providerEventId });
+    dropped.add(text);
+  }
+  return candidates.filter((c) => !dropped.has(c)).map((c) => replaced.get(c) ?? c.speech);
+}
+
 export function parseBocSpeechesFeed(xml: string): NormalizedSpeech[] {
-  const speeches: NormalizedSpeech[] = [];
+  const candidates: Candidate[] = [];
   for (const item of parseCbRdfItems(xml)) {
     const id = bocEventId(item.link);
     const startsAt = parseIsoInstant(item.date);
     const speakerName = item.speakerName ?? speakerFromDescription(item.description);
     if (!id || !startsAt || !speakerName) continue;
-    speeches.push({
-      provider: BOC_PROVIDER,
-      providerEventId: id,
-      speakerName,
-      organization: BOC_ORGANIZATION,
-      kind: kindOf(item),
-      topic: item.title,
-      startsAt,
-      timePrecision: 'PUBLICATION_TIME',
-      url: item.link,
+    candidates.push({
+      item,
+      speech: {
+        provider: BOC_PROVIDER,
+        providerEventId: id,
+        speakerName,
+        organization: BOC_ORGANIZATION,
+        kind: kindOf(item),
+        topic: item.title,
+        startsAt,
+        timePrecision: 'PUBLICATION_TIME',
+        url: item.link,
+      },
     });
   }
-  return speeches;
+  return mergeWebcastAndText(candidates);
 }
 
 export class BocSpeechesAdapter implements SpeechScheduleProvider {
@@ -87,7 +143,7 @@ export class BocSpeechesAdapter implements SpeechScheduleProvider {
   }
 
   async fetchSpeeches(): Promise<NormalizedSpeech[]> {
-    const xml = await this.http.getText(BOC_SPEECHES_RSS_URL);
+    const xml = await withAccessDeniedMapping(BOC_PROVIDER, () => this.http.getText(BOC_SPEECHES_RSS_URL));
     // 形が変わって何も読めなくなったときに、静かに0件にしない(項目の `<item` はあるのに1件も読めない)。
     const speeches = parseBocSpeechesFeed(xml);
     if (speeches.length === 0 && /<item[\s>]/i.test(xml) && !/<cb:/i.test(xml)) {

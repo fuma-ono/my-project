@@ -10,6 +10,8 @@
  * いることを客に伝えずに課金する)」は禁止。ロゴ・紙幣の画像・動画や音声等のマルチメディア・サイトのスクリプト等は対象外
  * (再利用しない)。第三者の内容(ABS のデータなど)は、その権利者の同意が要る。
  *
+ * **RBA の公式の案内(https://www.rba.gov.au/qa/rss.html)**: RSS は WAF で保護され、自動の取得は拒否されうる。問題は rbainfo@rba.gov.au へ。
+ * 代わりの公式の配信経路は、メール・SMS の通知(/updates/email-and-sms-service.html)と SNS で、機械が読める API ではない。
  * **未確認(ブロッカー)**: この環境から実フィードへの GET が 403(Access Denied。配信元のボット対策)で、実際の XML は取得できて
  * いない。形式は公式ページの内容の確認に基づく(`cb:speech`・`cb:person`・`cb:occurrenceDate`・`cb:institutionAbbrev`)。GitHub Actions の
  * 実行環境から取得できるかは未確認。**ブラウザを装う等の回避はしない**(アクセスの可否・条件は RBA に問い合わせる案を HQ に提示)。
@@ -20,6 +22,7 @@
 import { PROVIDER_HTTP_SETTINGS } from '../config.js';
 import { HttpClient, type HttpClientDeps } from '../http.js';
 import type { SpeechScheduleProvider } from '../providers.js';
+import { withAccessDeniedMapping } from '../sourceAccess.js';
 import { parseCbRdfItems, parseIsoInstant } from '../rssCb.js';
 import type { NormalizedSpeech } from '../types.js';
 
@@ -74,7 +77,7 @@ export class RbaSpeechesAdapter implements SpeechScheduleProvider {
   }
 
   async fetchSpeeches(): Promise<NormalizedSpeech[]> {
-    const xml = await this.http.getText(RBA_SPEECHES_RSS_URL);
+    const xml = await withAccessDeniedMapping(RBA_PROVIDER, () => this.http.getText(RBA_SPEECHES_RSS_URL));
     const speeches = parseRbaSpeechesFeed(xml);
     if (speeches.length === 0 && /<item[\s>]/i.test(xml) && !/<cb:/i.test(xml)) {
       throw new Error('RBA speeches feed: items found but the RSS-CB elements are missing (feed format changed?)');
