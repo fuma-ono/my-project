@@ -768,3 +768,53 @@ export function renderProvisionalEventsMarkdown(
   }
   return `${lines.join('\n')}\n`;
 }
+
+/** 第12章: 発表の時刻から、この時間(時間)を過ぎても SCHEDULED のままなら「取り込みの漏れ」とみなす(取り込みの遅れの余裕)。 */
+export const OVERDUE_GRACE_HOURS = 3;
+/** 第12章: さかのぼって見る日数。 */
+export const OVERDUE_LOOKBACK_DAYS = 14;
+
+/**
+ * 取り込みの手動実行の target の目安(指標コードから。.github/workflows/fx-event-analyzer-ingestion.yml の target)。
+ * 定期実行には入っていない target が多く、手動で実行しないと値は入らない(定期実行に入れるかは HQ の判断)。
+ * 分からない指標は「—」(推測で書かない)。
+ */
+export function manualTargetHint(code: string): string {
+  if (/^US_(CPI|CORE_CPI|NFP|UNEMPLOYMENT_RATE|AVG_HOURLY_EARNINGS|PPI|CORE_PPI|JOLTS)$/.test(code))
+    return 'official-bls';
+  if (/^(GB|AU|CA)_/.test(code)) return 'official-values';
+  if (code === 'JP_CPI') return 'jp-cpi-values';
+  if (/^EU_/.test(code)) return 'official-eurostat';
+  return '—';
+}
+
+export function renderOverdueEventsMarkdown(
+  events: readonly { indicator_code: string; release_datetime: string }[],
+  now: Date,
+): string {
+  const lines: string[] = [];
+  lines.push('## 12. 発表の時刻を過ぎても SCHEDULED のままの発表(取り込みの漏れ)');
+  lines.push('');
+  lines.push(
+    `発表の時刻から ${OVERDUE_GRACE_HOURS} 時間以上たち、直近 ${OVERDUE_LOOKBACK_DAYS} 日以内の発表で、まだ実績が入っていない(SCHEDULED のまま)もの。` +
+      '公式の統計の取り込みは、定期実行に入っていないものが多く、手動の実行(Workflow の target)が要る。「手動の target」は目安。',
+  );
+  lines.push('');
+  lines.push(`判定: ${events.length > 0 ? `注意(${events.length} 件が未処理)` : '正常(未処理なし)'}`);
+  lines.push('');
+  if (events.length > 0) {
+    lines.push(
+      ...table(
+        ['発表(UTC)', '指標', '経過(時間)', '手動の target(目安)'],
+        events.map((e) => [
+          time(e.release_datetime),
+          e.indicator_code,
+          String(Math.floor((now.getTime() - Date.parse(e.release_datetime)) / 3_600_000)),
+          manualTargetHint(e.indicator_code),
+        ]),
+      ),
+    );
+    lines.push('');
+  }
+  return `${lines.join('\n')}\n`;
+}

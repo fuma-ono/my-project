@@ -74,6 +74,17 @@ export interface QualityReader {
    * 読めなければ(列が無い = migration 20261112000001 の前など)null。
    */
   speechPipelineStatus(nowIso: string): Promise<SpeechPipelineStatus | null>;
+  /**
+   * 第12章(HQ指示 2026-11-18「取り込み品質の確認」): 発表の時刻が [from, to) で、まだ SCHEDULED のままの economic_events
+   * (= 発表の時刻を過ぎたのに、実績の取り込みがまだ。取消し・発表済みは含まない)。READ-ONLY。
+   */
+  listOverdueScheduledEvents(fromIso: string, toIso: string): Promise<OverdueEventSample[]>;
+}
+
+/** 第12章: 発表の時刻を過ぎても SCHEDULED のままの発表。 */
+export interface OverdueEventSample {
+  indicator_code: string;
+  release_datetime: string;
 }
 
 /** 第10章(HQ判断 2026-10-27 案B): 暫定の予定は通知しないため、確定の作業の漏れを見つける。 */
@@ -349,6 +360,27 @@ export function createQualityReader(supabase: SupabaseClient): QualityReader {
       );
       return rows.map((row) => ({
         provider_event_id: row.provider_event_id,
+        indicator_code: row.economic_indicators?.code ?? '(指標不明)',
+        release_datetime: row.release_datetime,
+      }));
+    },
+
+    async listOverdueScheduledEvents(fromIso, toIso) {
+      const rows = await fetchAllPages<{
+        release_datetime: string;
+        economic_indicators: { code: string } | null;
+      }>((from, to) =>
+        supabase
+          .from('economic_events')
+          .select('id, release_datetime, economic_indicators(code)')
+          .eq('status', 'SCHEDULED')
+          .gte('release_datetime', fromIso)
+          .lt('release_datetime', toIso)
+          .order('release_datetime', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to),
+      );
+      return rows.map((row) => ({
         indicator_code: row.economic_indicators?.code ?? '(指標不明)',
         release_datetime: row.release_datetime,
       }));

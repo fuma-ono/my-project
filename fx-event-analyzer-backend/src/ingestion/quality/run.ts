@@ -15,8 +15,11 @@ import {
 import type { QualityReader } from './reader.js';
 import { renderSpeechPipelineMarkdown } from './speechPipeline.js';
 import {
+  OVERDUE_GRACE_HOURS,
+  OVERDUE_LOOKBACK_DAYS,
   PROVISIONAL_LIST_DAYS,
   renderDataQualityMarkdown,
+  renderOverdueEventsMarkdown,
   renderProvisionalEventsMarkdown,
   renderSpeechFreshnessMarkdown,
 } from './report.js';
@@ -102,5 +105,9 @@ export async function buildQualityReportMarkdown(
   markdown += `\n${renderProvisionalEventsMarkdown(await reader.listProvisionalEvents(nowIso, provisionalUntil), now)}`;
   // 第11章(HQ承認 2026-11-11): 要人発言の本文と要約。これも末尾に足すだけ。
   markdown += `\n${renderSpeechPipelineMarkdown(await reader.speechPipelineStatus(nowIso), now)}`;
+  // 第12章(HQ指示 2026-11-18): 発表の時刻を過ぎても SCHEDULED のままの発表。これも末尾に足すだけ。
+  const overdueTo = new Date(now.getTime() - OVERDUE_GRACE_HOURS * 3_600_000).toISOString();
+  const overdueFrom = new Date(now.getTime() - OVERDUE_LOOKBACK_DAYS * 86_400_000).toISOString();
+  markdown += `\n${renderOverdueEventsMarkdown(await reader.listOverdueScheduledEvents(overdueFrom, overdueTo), now)}`;
   return markdown;
 }

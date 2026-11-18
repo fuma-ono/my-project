@@ -11,6 +11,7 @@ import {
 } from '../../src/ingestion/quality/metrics.js';
 import type { QualityReader } from '../../src/ingestion/quality/reader.js';
 import {
+  renderOverdueEventsMarkdown,
   renderDataQualityMarkdown,
   renderProvisionalEventsMarkdown,
   renderSpeechFreshnessMarkdown,
@@ -272,6 +273,7 @@ describe('buildQualityReportMarkdown + 第9章', () => {
     },
     speechDbStatus: (provider) => Promise.resolve(provider === 'frb_calendar' ? DB_UP_TO_DATE : DB_EMPTY),
     listProvisionalEvents: () => Promise.resolve([]),
+    listOverdueScheduledEvents: () => Promise.resolve([]),
     speechPipelineStatus: () => Promise.resolve(null),
   };
 
@@ -299,7 +301,8 @@ describe('buildQualityReportMarkdown + 第9章', () => {
         judgeSpeechFreshness('ecb_press_rss', [], DB_EMPTY, NOW),
       ])}
 ${renderProvisionalEventsMarkdown([], NOW)}
-${renderSpeechPipelineMarkdown(null, NOW)}`, // 第10章・第11章も末尾に足すだけ
+${renderSpeechPipelineMarkdown(null, NOW)}
+${renderOverdueEventsMarkdown([], NOW)}`, // 第10章〜第12章も末尾に足すだけ
     );
     // ECB の週間予定は INGEST_ECB_WEEKLY=1 のときだけ動く。実行記録が無ければ表に出さない(HQ判断 2026-10-28 R5)
     expect(calls).toEqual(['frb_calendar', 'ecb_press_rss', 'ecb_weekly_schedule']);
