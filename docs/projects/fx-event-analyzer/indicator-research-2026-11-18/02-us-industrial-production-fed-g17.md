@@ -75,7 +75,7 @@ Fed の Data Download Program(DDP)は縮小中で、**取得経路の選び方�
 | **B. FRED の API**(St. Louis 連銀) | 系列 ID で指定でき、全期間を JSON で取れる | **API キーが要る(無料)**。**FRED のデータの保存・再配布は FRED の規約で制限される**(先の調査 indicator-coverage-survey-2026-11-12.md で「保存が規約に反する」と判断済み)。**採用不可**の可能性が高い |
 
 ### 8.3 副次的な発見(取得経路 A の利点)
-- zip の `Last-Modified` は **2026-11-17 14:15:07 GMT**。ニューヨークの標準時(UTC−5)の **09:15** にあたり、**G.17 の公表時刻 09:15 ET と一致**する(第 1 版の「未確認」を、間接的に裏づけ)。
+- zip の `Last-Modified` は **2026-11-17 14:15:07 GMT**(ニューヨークの標準時で 09:15)。先の調査の「09:15 ET」と**符合する**が、配信ファイルの更新時刻で、**公表時刻を保証する Fed の文書ではない**ので、**公表時刻 09:15 ET は未確認として扱う**(C の指摘)。
 - この `Last-Modified` は、**公表日の照合に使える更新日の代わり**になりうる(DDP の CSV には無かった)。ただし、**ヘッダーの値を保証する Fed の文書は確認していない**ので、補助の根拠にとどめる。
 
 ### 8.4 残る制約と、設計への影響
@@ -85,6 +85,10 @@ Fed の Data Download Program(DDP)は縮小中で、**取得経路の選び方�
 4. 取得の頻度を、**公表日(月 1 回)と、公表の翌日の再確認**だけに限定し、サイズの負荷を抑える。
 5. **利用条件(自動取得の可否・出典の表示)の原文を、実装の前に確認する**(未確認のまま)。
 6. IP の前月比(公式の % 系列なし)の結論は変わらない。
+
+## 8.5 追記: Fed の利用条件(原文、2026-11-18)
+- https://www.federalreserve.gov/disclaimer.htm の「Copyright/trademark」: 「Unless otherwise indicated, information on Board's website is in the public domain and may be copied and distributed without permission. Please cite to the Board as the source of the information.」(パブリックドメイン・出典として Board を明記)。Board の印章・ロゴは使えない(連邦法)。
+- 設備稼働率の取得経路・フォールバック・年次改定の記録の設計は、`claude/fx-indicator-research-d2` の `02-us-capacity-utilization-fed-g17.md`(第 2 版)に集約した。
 
 ## 9. 第 1 版の記述の訂正
 - 第 3 節「取得は系列・期間の指定(`series=<ハッシュ>&lastobs=…`)でも、zip 全体でも可能」: **系列の指定は、ハッシュを使う既存のプリセットだけ**。かつ 2027-03-31 まで。
