@@ -25,6 +25,7 @@ const CODES = [
   'GB_CPI',
   'GB_CORE_CPI',
   'GB_UNEMPLOYMENT_RATE',
+  'GB_GDP_MOM',
   'AU_CPI',
   'AU_UNEMPLOYMENT_RATE',
   'CA_CPI',
@@ -51,6 +52,11 @@ describe('the tables read from the official pages on 2026-11-10', () => {
       'GB_UNEMPLOYMENT_RATE 2026-12-15 07:00 Europe/London',
       'GB_UNEMPLOYMENT_RATE 2027-01-19 07:00 Europe/London',
       'GB_UNEMPLOYMENT_RATE 2027-02-16 07:00 Europe/London',
+      'GB_GDP_MOM 2026-12-11 07:00 Europe/London',
+      'GB_GDP_MOM 2027-01-15 07:00 Europe/London',
+      'GB_GDP_MOM 2027-02-12 07:00 Europe/London',
+      'GB_GDP_MOM 2027-03-11 07:00 Europe/London',
+      'GB_GDP_MOM 2027-04-14 07:00 Europe/London',
     ]);
   });
 
@@ -97,7 +103,7 @@ describe('the tables read from the official pages on 2026-11-10', () => {
       for (const e of table.entries) {
         expect(officialScheduleUtc(e)!.getTime()).toBeGreaterThan(NOW.getTime());
         expect(e.sources.length).toBeGreaterThanOrEqual(1); // ABS の対象月のある回は latest-release ページも
-        expect(e.checkedAt).toBe('2026-11-10');
+        expect(e.checkedAt).toBe(e.indicatorCode === 'GB_GDP_MOM' ? '2026-11-18' : '2026-11-10');
       }
     }
   });
@@ -150,33 +156,33 @@ describe('ingestOfficialScheduleTables', () => {
     }));
   };
 
-  it('creates one SCHEDULED, EXACT, value-less row per entry (27 rows) with each indicator', async () => {
+  it('creates one SCHEDULED, EXACT, value-less row per entry (32 rows) with each indicator', async () => {
     const { result, counters } = await run();
-    expect(result).toMatchObject({ inserted: 27, updated: 0, unchanged: 0, past: 0 });
+    expect(result).toMatchObject({ inserted: 32, updated: 0, unchanged: 0, past: 0 });
     expect(counters.errors).toBe(0);
-    expect(store.events).toHaveLength(27);
+    expect(store.events).toHaveLength(32);
     expect(
       store.events.every(
         (e) => e.status === 'SCHEDULED' && e.data_status === 'PENDING' && e.release_datetime_precision === 'EXACT',
       ),
     ).toBe(true);
     expect(store.snapshots).toEqual([]);
-    expect(store.events.filter((e) => e.provider === 'ons_release_calendar')).toHaveLength(6);
+    expect(store.events.filter((e) => e.provider === 'ons_release_calendar')).toHaveLength(11);
   });
 
   // HQ指示(2026-11-13): dry-run は DB に書かない。plan で、各エントリに何をするはずかを返す
-  it('dry run: lists 27 INSERTs and writes no event at all; the real run then inserts exactly those', async () => {
+  it('dry run: lists 32 INSERTs and writes no event at all; the real run then inserts exactly those', async () => {
     const counters = new JobCounters();
     const planned = await ingestOfficialScheduleTables(
       { store, tables: GB_AU_CA_SCHEDULES, now: () => NOW, dryRun: true },
       counters,
     );
-    expect(planned).toMatchObject({ inserted: 27, updated: 0, unchanged: 0 });
-    expect(planned.plan).toHaveLength(27);
+    expect(planned).toMatchObject({ inserted: 32, updated: 0, unchanged: 0 });
+    expect(planned.plan).toHaveLength(32);
     expect(planned.plan.every((p) => p.action === 'INSERT')).toBe(true);
     expect(store.events).toEqual([]);
     const { result } = await run();
-    expect(result.inserted).toBe(27);
+    expect(result.inserted).toBe(32);
     expect(store.events.map((e) => e.provider_event_id).sort()).toEqual(
       planned.plan.map((p) => p.provider_event_id).sort(),
     );
@@ -211,8 +217,8 @@ describe('ingestOfficialScheduleTables', () => {
   it('is idempotent (no duplicate rows on a re-run)', async () => {
     await run();
     const { result } = await run();
-    expect(result).toMatchObject({ inserted: 0, unchanged: 27 });
-    expect(store.events).toHaveLength(27);
+    expect(result).toMatchObject({ inserted: 0, unchanged: 32 });
+    expect(store.events).toHaveLength(32);
   });
 
   it('a changed official date updates the same row (no duplicate); a past or RELEASED row is never changed', async () => {
@@ -253,7 +259,7 @@ describe('ingestOfficialScheduleTables', () => {
     const { counters } = await run();
     expect(counters.errors).toBe(1);
     expect(store.events.some((e) => e.provider === 'abs_release_calendar')).toBe(false);
-    expect(store.events).toHaveLength(27 - 12);
+    expect(store.events).toHaveLength(32 - 12);
   });
 
   it('an entry removed from the table is only logged, never deleted', async () => {

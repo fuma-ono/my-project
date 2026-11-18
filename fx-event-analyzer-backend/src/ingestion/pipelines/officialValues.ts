@@ -141,6 +141,7 @@ export const OFFICIAL_VALUE_SOURCES: readonly OfficialValueSource[] = [
   ons('GB_CPI'),
   ons('GB_CORE_CPI'),
   onsRolling('GB_UNEMPLOYMENT_RATE'),
+  ons('GB_GDP_MOM'),
   statcan('CA_UNEMPLOYMENT_RATE'),
   abs('AU_CPI'),
   abs('AU_UNEMPLOYMENT_RATE'),

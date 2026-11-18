@@ -57,6 +57,16 @@ export interface OnsSeries {
   indicatorCode: string;
   cdid: string;
   path: string;
+  /**
+   * 系列の description.title に含まれるべき文字列(大文字小文字を区別しない)。単位(description.unit)が空の系列で、
+   * CDID の取り違え(指数と前月比など)を防ぐために使う。省略 = CDID だけで照合(これまでの系列)。
+   */
+  titleIncludes?: string;
+}
+
+function onsTitleMatches(series: OnsSeries, description: { title?: string } | undefined): boolean {
+  if (!series.titleIncludes) return true;
+  return (description?.title ?? '').toLowerCase().includes(series.titleIncludes.toLowerCase());
 }
 
 export const ONS_SERIES: readonly OnsSeries[] = [
@@ -66,6 +76,14 @@ export const ONS_SERIES: readonly OnsSeries[] = [
     indicatorCode: 'GB_UNEMPLOYMENT_RATE',
     cdid: 'MGSX',
     path: 'employmentandlabourmarket/peoplenotinwork/unemployment/timeseries/mgsx/lms',
+  },
+  // 月次 GDP の前月比(2026-11-18 に API で確認): ECYX「Gross Value Added - Monthly (period on period growth) :CVM SA」、
+  // 2026 SEP = 0.2・2026 AUG = 0.0(2026-11-12 公表)。unit が空なので、title でも照合する(指数 ECY2 との取り違え防止)。
+  {
+    indicatorCode: 'GB_GDP_MOM',
+    cdid: 'ECYX',
+    path: 'economy/grossdomesticproductgdp/timeseries/ecyx/mgdp',
+    titleIncludes: 'period on period growth',
   },
 ];
 
@@ -77,10 +95,11 @@ export const onsSeriesUrl = (series: OnsSeries) => `https://www.ons.gov.uk/${ser
  */
 export function parseOnsValueForRelease(series: OnsSeries, body: unknown, releaseDate: string): OfficialValue | null {
   const json = body as {
-    description?: { cdid?: string; releaseDate?: string };
+    description?: { cdid?: string; title?: string; releaseDate?: string };
     months?: { date?: string; value?: string; updateDate?: string }[];
   };
   if (json?.description?.cdid?.toUpperCase() !== series.cdid) return null;
+  if (!onsTitleMatches(series, json.description)) return null;
   const releasedAt = json.description.releaseDate ? new Date(json.description.releaseDate) : null;
   if (!releasedAt || Number.isNaN(releasedAt.getTime())) return null;
   const releasedOn = localDate(releasedAt, 'Europe/London');
@@ -152,8 +171,12 @@ const MONTH_LABEL: Record<string, string> = Object.fromEntries(
  * 無い・値が数でなければ null。公表日とは照合しない(初回の値は parseOnsValueForRelease だけが決める)。
  */
 export function onsValueForPeriod(series: OnsSeries, body: unknown, period: string): number | null {
-  const json = body as { description?: { cdid?: string }; months?: { date?: string; value?: string }[] };
+  const json = body as {
+    description?: { cdid?: string; title?: string };
+    months?: { date?: string; value?: string }[];
+  };
   if (json?.description?.cdid?.toUpperCase() !== series.cdid) return null;
+  if (!onsTitleMatches(series, json.description)) return null;
   const match = /^(\d{4})-(\d{2})$/.exec(period);
   if (!match || !MONTH_LABEL[match[2]!]) return null;
   const label = `${match[1]} ${MONTH_LABEL[match[2]!]}`;
