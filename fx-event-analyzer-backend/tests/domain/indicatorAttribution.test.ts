@@ -21,7 +21,7 @@ describe('attributionForIndicator: official statistics outside the US', () => {
   });
 
   it('ABS indicators name the ABS, the copyright statement and CC BY 4.0', () => {
-    for (const code of ['AU_CPI', 'AU_UNEMPLOYMENT_RATE'])
+    for (const code of ['AU_CPI', 'AU_UNEMPLOYMENT_RATE', 'AU_WPI_QOQ'])
       expect(attributionForIndicator(code), code).toEqual(ABS_ATTRIBUTION);
     expect(ABS_ATTRIBUTION.notice).toContain('© Commonwealth of Australia');
     expect(ABS_ATTRIBUTION.notice).toContain('CC BY 4.0');

@@ -144,6 +144,9 @@ describe('ABS SDMX adapter', () => {
       ['AU_UNEMPLOYMENT_RATE', '2027-02-18', null],
       ['AU_UNEMPLOYMENT_RATE', '2027-03-25', null],
       ['AU_UNEMPLOYMENT_RATE', '2027-04-15', null],
+      ['AU_WPI_QOQ', '2027-02-23', '2026-Q4'],
+      ['AU_WPI_QOQ', '2027-05-19', '2027-Q1'],
+      ['AU_WPI_QOQ', '2027-08-18', '2027-Q2'],
     ]);
     for (const e of ABS_SCHEDULE.entries) expect(e.key).toBe(e.releaseDate); // provider_event_id は変えない
   });

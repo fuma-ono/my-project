@@ -148,6 +148,8 @@ export const ABS_LATEST_RELEASE_URLS = {
     'https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/consumer-price-index-australia/latest-release',
   AU_UNEMPLOYMENT_RATE:
     'https://www.abs.gov.au/statistics/labour/employment-and-unemployment/labour-force-australia/latest-release',
+  AU_WPI_QOQ:
+    'https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/wage-price-index-australia/latest-release',
 } as const;
 
 /** 公表日 → 対象月(latest-release ページの「Next Release」の題名の月。2026-11-10 確認)。 */
@@ -156,6 +158,9 @@ const ABS_REFERENCE_PERIODS: Record<string, Record<string, string>> = {
   AU_CPI: { '2026-11-25': '2026-10', '2027-01-06': '2026-11', '2027-01-27': '2026-12' },
   // 「Labour Force, Australia, October 2026」19/11/2026 ・ November 2026 17/12/2026 ・ December 2026 21/01/2027
   AU_UNEMPLOYMENT_RATE: { '2026-11-19': '2026-10', '2026-12-17': '2026-11', '2027-01-21': '2026-12' },
+  // 「Wage Price Index, Australia, December 2026」23/02/2027 ・ March 2027 19/05/2027 ・ June 2027 18/08/2027
+  // (2026-11-18 の latest-release ページ。四半期なので対象期間は 'YYYY-Qn': December = 2026-Q4, March = 2027-Q1, June = 2027-Q2)
+  AU_WPI_QOQ: { '2027-02-23': '2026-Q4', '2027-05-19': '2027-Q1', '2027-08-18': '2027-Q2' },
 };
 
 const withAbsPeriods = (entries: OfficialScheduleEntry[]): OfficialScheduleEntry[] =>
@@ -186,6 +191,17 @@ export const ABS_SCHEDULE: OfficialScheduleTable = {
       'Australia/Sydney',
       ABS_RELEASE_CALENDAR_URL,
       byDate(['2026-11-19', '2026-12-17', '2027-01-21', '2027-02-18', '2027-03-25', '2027-04-15']),
+    ),
+    // WPI: 2026-11-18 の latest-release ページ「Release date and time 18/11/2026 11:30am AEDT」と「Next Release」の3回。
+    // 先の回の時刻は「Next Release」に書かれていないので、同じ ABS の時刻(11:30、シドニー)を使う。
+    ...rows(
+      'AU_WPI_QOQ',
+      '11:30',
+      'Australia/Sydney',
+      ABS_RELEASE_CALENDAR_URL,
+      byDate(['2027-02-23', '2027-05-19', '2027-08-18']),
+      false,
+      '2026-11-18',
     ),
   ]),
 };

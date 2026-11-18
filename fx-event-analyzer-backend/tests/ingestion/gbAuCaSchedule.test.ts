@@ -29,6 +29,7 @@ const CODES = [
   'GB_RETAIL_SALES_MOM',
   'AU_CPI',
   'AU_UNEMPLOYMENT_RATE',
+  'AU_WPI_QOQ',
   'CA_CPI',
   'CA_UNEMPLOYMENT_RATE',
 ];
@@ -111,7 +112,7 @@ describe('the tables read from the official pages on 2026-11-10', () => {
         expect(officialScheduleUtc(e)!.getTime()).toBeGreaterThan(NOW.getTime());
         expect(e.sources.length).toBeGreaterThanOrEqual(1); // ABS の対象月のある回は latest-release ページも
         expect(e.checkedAt).toBe(
-          e.indicatorCode === 'GB_GDP_MOM' || e.indicatorCode === 'GB_RETAIL_SALES_MOM' ? '2026-11-18' : '2026-11-10',
+          ['GB_GDP_MOM', 'GB_RETAIL_SALES_MOM', 'AU_WPI_QOQ'].includes(e.indicatorCode) ? '2026-11-18' : '2026-11-10',
         );
       }
     }
@@ -165,11 +166,11 @@ describe('ingestOfficialScheduleTables', () => {
     }));
   };
 
-  it('creates one SCHEDULED, EXACT, value-less row per entry (38 rows) with each indicator', async () => {
+  it('creates one SCHEDULED, EXACT, value-less row per entry (41 rows) with each indicator', async () => {
     const { result, counters } = await run();
-    expect(result).toMatchObject({ inserted: 38, updated: 0, unchanged: 0, past: 0 });
+    expect(result).toMatchObject({ inserted: 41, updated: 0, unchanged: 0, past: 0 });
     expect(counters.errors).toBe(0);
-    expect(store.events).toHaveLength(38);
+    expect(store.events).toHaveLength(41);
     expect(
       store.events.every(
         (e) => e.status === 'SCHEDULED' && e.data_status === 'PENDING' && e.release_datetime_precision === 'EXACT',
@@ -180,18 +181,18 @@ describe('ingestOfficialScheduleTables', () => {
   });
 
   // HQ指示(2026-11-13): dry-run は DB に書かない。plan で、各エントリに何をするはずかを返す
-  it('dry run: lists 38 INSERTs and writes no event at all; the real run then inserts exactly those', async () => {
+  it('dry run: lists 41 INSERTs and writes no event at all; the real run then inserts exactly those', async () => {
     const counters = new JobCounters();
     const planned = await ingestOfficialScheduleTables(
       { store, tables: GB_AU_CA_SCHEDULES, now: () => NOW, dryRun: true },
       counters,
     );
-    expect(planned).toMatchObject({ inserted: 38, updated: 0, unchanged: 0 });
-    expect(planned.plan).toHaveLength(38);
+    expect(planned).toMatchObject({ inserted: 41, updated: 0, unchanged: 0 });
+    expect(planned.plan).toHaveLength(41);
     expect(planned.plan.every((p) => p.action === 'INSERT')).toBe(true);
     expect(store.events).toEqual([]);
     const { result } = await run();
-    expect(result.inserted).toBe(38);
+    expect(result.inserted).toBe(41);
     expect(store.events.map((e) => e.provider_event_id).sort()).toEqual(
       planned.plan.map((p) => p.provider_event_id).sort(),
     );
@@ -226,8 +227,8 @@ describe('ingestOfficialScheduleTables', () => {
   it('is idempotent (no duplicate rows on a re-run)', async () => {
     await run();
     const { result } = await run();
-    expect(result).toMatchObject({ inserted: 0, unchanged: 38 });
-    expect(store.events).toHaveLength(38);
+    expect(result).toMatchObject({ inserted: 0, unchanged: 41 });
+    expect(store.events).toHaveLength(41);
   });
 
   it('a changed official date updates the same row (no duplicate); a past or RELEASED row is never changed', async () => {
@@ -268,7 +269,7 @@ describe('ingestOfficialScheduleTables', () => {
     const { counters } = await run();
     expect(counters.errors).toBe(1);
     expect(store.events.some((e) => e.provider === 'abs_release_calendar')).toBe(false);
-    expect(store.events).toHaveLength(38 - 12);
+    expect(store.events).toHaveLength(41 - 15);
   });
 
   it('an entry removed from the table is only logged, never deleted', async () => {

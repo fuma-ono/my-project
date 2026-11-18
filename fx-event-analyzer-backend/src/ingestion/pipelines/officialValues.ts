@@ -146,6 +146,7 @@ export const OFFICIAL_VALUE_SOURCES: readonly OfficialValueSource[] = [
   statcan('CA_UNEMPLOYMENT_RATE'),
   abs('AU_CPI'),
   abs('AU_UNEMPLOYMENT_RATE'),
+  abs('AU_WPI_QOQ'),
 ];
 
 export interface OfficialValueFetcher {
