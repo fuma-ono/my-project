@@ -301,8 +301,15 @@ describe('buildQualityReportMarkdown + 第9章', () => {
 ${renderProvisionalEventsMarkdown([], NOW)}
 ${renderSpeechPipelineMarkdown(null, NOW)}`, // 第10章・第11章も末尾に足すだけ
     );
-    // ECB の週間予定は INGEST_ECB_WEEKLY=1 のときだけ動く。実行記録が無ければ表に出さない(HQ判断 2026-10-28 R5)
-    expect(calls).toEqual(['frb_calendar', 'ecb_press_rss', 'ecb_weekly_schedule']);
+    // ECB の週間予定・BoC・RBA は、環境変数で有効にしたときだけ動く。実行記録が無ければ表に出さない(HQ判断 2026-10-28 R5。BoC・RBA は
+    // HQ指示 2026-11-18 P3 で同じ扱いにした)
+    expect(calls).toEqual([
+      'frb_calendar',
+      'ecb_press_rss',
+      'ecb_weekly_schedule',
+      'boc_speeches_rss',
+      'rba_speeches_rss',
+    ]);
   });
 
   it('shows the ECB weekly schedule once it has run (R5)', async () => {

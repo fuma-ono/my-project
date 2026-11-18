@@ -16,14 +16,16 @@
  * いない。形式は公式ページの内容の確認に基づく(`cb:speech`・`cb:person`・`cb:occurrenceDate`・`cb:institutionAbbrev`)。GitHub Actions の
  * 実行環境から取得できるかは未確認。**ブラウザを装う等の回避はしない**(アクセスの可否・条件は RBA に問い合わせる案を HQ に提示)。
  *
- * 時刻: `cb:occurrenceDate`(例 2026-11-09T09:30+11:00)・`dc:date` は、講演の開始時刻か公開の時刻かを公式の記載で確認できて
- * いない。そのため PUBLICATION_TIME とする(反応の計算の起点にしない)。
+ * 時刻(HQ指示 2026-11-18 P2-1。RBA にも BoC と同じ問題がないか確認した結果): `cb:occurrenceDate`(例 2026-11-09T09:30+11:00)・`dc:date` は、
+ * **オフセットが明示されている**ので BoC のようなタイムゾーンの推測は要らない。ただし、講演の開始時刻か公開の時刻かは公式の記載で
+ * 確認できていない。そのため PUBLICATION_TIME とし(反応の計算の起点にしない)、**その時刻がすでに過去のときだけ「行われた」**
+ * (`deliveryEvidence: EVENT_TIME_PASSED`)とする。未来の時刻の項目は取り込まない(予定時刻として画面に出さない)。
  */
 import { PROVIDER_HTTP_SETTINGS } from '../config.js';
 import { HttpClient, type HttpClientDeps } from '../http.js';
 import type { SpeechScheduleProvider } from '../providers.js';
 import { withAccessDeniedMapping } from '../sourceAccess.js';
-import { parseCbRdfItems, parseIsoInstant } from '../rssCb.js';
+import { assertValidCbFeed, parseCbRdfItems, parseIsoInstant } from '../rssCb.js';
 import type { NormalizedSpeech } from '../types.js';
 
 export const RBA_SPEECHES_RSS_URL = 'https://www.rba.gov.au/rss/rss-cb-speeches.xml';
@@ -47,7 +49,7 @@ export function rbaEventId(link: string): string | null {
   }
 }
 
-export function parseRbaSpeechesFeed(xml: string): NormalizedSpeech[] {
+export function parseRbaSpeechesFeed(xml: string, now: Date = new Date()): NormalizedSpeech[] {
   const speeches: NormalizedSpeech[] = [];
   for (const item of parseCbRdfItems(xml)) {
     const id = rbaEventId(item.link);
@@ -63,6 +65,7 @@ export function parseRbaSpeechesFeed(xml: string): NormalizedSpeech[] {
       startsAt,
       timePrecision: 'PUBLICATION_TIME',
       url: item.link,
+      ...(Date.parse(startsAt) <= now.getTime() ? { deliveryEvidence: 'EVENT_TIME_PASSED' as const } : {}),
     });
   }
   return speeches;
@@ -71,17 +74,16 @@ export function parseRbaSpeechesFeed(xml: string): NormalizedSpeech[] {
 export class RbaSpeechesAdapter implements SpeechScheduleProvider {
   readonly name = RBA_PROVIDER;
   private readonly http: HttpClient;
+  private readonly clock: () => number;
 
   constructor(deps: HttpClientDeps = {}) {
     this.http = new HttpClient('rba', PROVIDER_HTTP_SETTINGS.rba, deps);
+    this.clock = deps.now ?? Date.now;
   }
 
   async fetchSpeeches(): Promise<NormalizedSpeech[]> {
     const xml = await withAccessDeniedMapping(RBA_PROVIDER, () => this.http.getText(RBA_SPEECHES_RSS_URL));
-    const speeches = parseRbaSpeechesFeed(xml);
-    if (speeches.length === 0 && /<item[\s>]/i.test(xml) && !/<cb:/i.test(xml)) {
-      throw new Error('RBA speeches feed: items found but the RSS-CB elements are missing (feed format changed?)');
-    }
-    return speeches;
+    assertValidCbFeed(RBA_PROVIDER, xml);
+    return parseRbaSpeechesFeed(xml, new Date(this.clock()));
   }
 }

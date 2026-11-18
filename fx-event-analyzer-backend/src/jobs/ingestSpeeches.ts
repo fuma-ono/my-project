@@ -88,7 +88,12 @@ async function main(): Promise<void> {
               : {}),
             // BoC・RBA の RSS も公開の時刻だけ(PUBLICATION_TIME)。一覧・詳細には出すが、相場反応・過去比較・発言前の通知の対象外。
             ...(source.name === BOC_PROVIDER || source.name === RBA_PROVIDER
-              ? { publicationTimeKinds: ['SPEECH', 'TESTIMONY', 'PRESS_CONFERENCE'] as const, storeSourceUrl: true }
+              ? {
+                  publicationTimeKinds: ['SPEECH', 'TESTIMONY', 'PRESS_CONFERENCE'] as const,
+                  storeSourceUrl: true,
+                  // 公開の時刻の数字だけでは DELIVERED にしない(HQ指示 2026-11-18 P2-1)。証拠の無い項目は取り込まない。
+                  requireDeliveryEvidence: true,
+                }
               : {}),
           },
           counters,

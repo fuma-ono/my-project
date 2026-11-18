@@ -38,6 +38,11 @@ export interface SpeechPipelineOptions {
    */
   storeSourceUrl?: boolean;
   /**
+   * true のとき、`deliveryEvidence` が無い発言は取り込まない(NO_DELIVERY_EVIDENCE)。公開の時刻の数字だけで DELIVERED にしない
+   * (HQ指示 2026-11-18 P2-1。BoC・RBA)。取り込む行は、証拠があるので DELIVERED になる。
+   */
+  requireDeliveryEvidence?: boolean;
+  /**
    * Ignore speeches that started more than this many days ago (the FRB
    * calendar JSON carries years of history; backfilling it is a separate,
    * deliberate decision). Default 14.
@@ -122,6 +127,10 @@ export async function ingestSpeeches(
       counters.skip('TIME_NOT_EXACT');
       continue;
     }
+    if (options.requireDeliveryEvidence && !speech.deliveryEvidence) {
+      counters.skip('NO_DELIVERY_EVIDENCE');
+      continue;
+    }
     const alias = findSpeakerAlias(speech.organization, speech.speakerName, aliases);
     if (!alias) {
       counters.skip('SPEAKER_UNKNOWN');
@@ -143,7 +152,7 @@ export async function ingestSpeeches(
       title: speechTitle(speech),
       statement_datetime: speech.startsAt,
       importance: alias.importance,
-      status: Date.parse(speech.startsAt) <= now.getTime() ? 'DELIVERED' : 'SCHEDULED',
+      status: speech.deliveryEvidence || Date.parse(speech.startsAt) <= now.getTime() ? 'DELIVERED' : 'SCHEDULED',
       time_precision: speech.timePrecision,
       ...(options.storeSourceUrl ? { source_url: isOfficialSpeechUrl(provider, speech.url) ? speech.url : null } : {}),
     });

@@ -679,12 +679,22 @@ export function countSpeechTimeNotExact(logs: readonly IngestionLogSample[]): nu
 
 export const SPEECH_JOB = 'ingest:speeches';
 /** ingest:speeches の取得元(src/jobs/ingestSpeeches.ts の adapter name)。レポートは記録が無くても表示する(下の任意の取得元を除く)。 */
-export const SPEECH_PROVIDERS = ['frb_calendar', 'ecb_press_rss', 'ecb_weekly_schedule'] as const;
+export const SPEECH_PROVIDERS = [
+  'frb_calendar',
+  'ecb_press_rss',
+  'ecb_weekly_schedule',
+  'boc_speeches_rss',
+  'rba_speeches_rss',
+] as const;
 /**
  * 環境変数で有効にしたときだけ動く取得元(ECB の週間予定は INGEST_ECB_WEEKLY=1 のときだけ)。実行記録が1件も無ければ
  * レポートに出さない(動かしていないのを「取得の失敗」と出さないため。HQ判断 2026-10-28 R5)。
  */
-export const SPEECH_OPTIONAL_PROVIDERS: readonly string[] = ['ecb_weekly_schedule'];
+export const SPEECH_OPTIONAL_PROVIDERS: readonly string[] = [
+  'ecb_weekly_schedule',
+  'boc_speeches_rss',
+  'rba_speeches_rss',
+];
 /**
  * 開始から SPEECH_OVERDUE_HOURS 時間を過ぎても SCHEDULED の行を「終わった予定が SCHEDULED のまま(注意)」と判定する取得元
  * (HQ判断 2026-10-28 R4)。ECB の週間予定は約1週間分しか載らないので、開始の後に取り直す前にページから外れると

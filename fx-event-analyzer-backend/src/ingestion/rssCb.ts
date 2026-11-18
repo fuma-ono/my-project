@@ -58,13 +58,73 @@ export function parseCbRdfItems(xml: string): CbRdfItem[] {
   return items;
 }
 
-/** 日時の文字列(オフセット付き ISO 8601)を UTC の ISO に。読めなければ null。日付だけ(YYYY-MM-DD)は読まない(時刻が無い)。 */
+/**
+ * 日時の文字列を UTC の ISO に。**タイムゾーン(Z か ±hh:mm)が無いもの・存在しない日付や時刻は null**(推測で補わない)。
+ * 秒は省略できる(`2026-11-09T09:30+11:00`)。日付だけ(YYYY-MM-DD)は時刻が無いので null。
+ */
 export function parseIsoInstant(value: string | null): string | null {
-  if (!value || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return null;
-  // `2026-11-09T09:30+11:00`(秒なし)は Date.parse が環境によって読めないので、秒を補う。
-  const normalized = /T\d{2}:\d{2}(?=[+-]\d{2}:\d{2}|Z|$)/.test(value)
-    ? value.replace(/T(\d{2}:\d{2})/, 'T$1:00')
-    : value;
-  const ms = Date.parse(normalized);
+  if (!value) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.exec(value.trim());
+  if (!m) return null;
+  const [year, month, day, hour, minute] = [m[1], m[2], m[3], m[4], m[5]].map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  const second = m[6] === undefined ? 0 : Number(m[6]);
+  if (month < 1 || month > 12 || hour > 23 || minute > 59 || second > 59) return null;
+  const calendarDay = new Date(Date.UTC(year, month - 1, day));
+  if (calendarDay.getUTCMonth() !== month - 1 || calendarDay.getUTCDate() !== day) return null; // 2026-02-31 など
+  let offsetMs = 0;
+  if (m[7] !== 'Z') {
+    const sign = m[7]!.startsWith('-') ? -1 : 1;
+    const [oh, om] = m[7]!.slice(1).split(':').map(Number) as [number, number];
+    if (oh > 23 || om > 59) return null;
+    offsetMs = sign * (oh * 60 + om) * 60_000;
+  }
+  const ms = Date.UTC(year, month - 1, day, hour, minute, second) - offsetMs;
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
+export class FeedFormatError extends Error {
+  constructor(provider: string, reason: string) {
+    super(`${provider}: invalid feed (${reason})`);
+    this.name = 'FeedFormatError';
+  }
+}
+
+function count(text: string, pattern: RegExp): number {
+  return [...text.matchAll(pattern)].length;
+}
+
+/**
+ * フィードが、RSS-CB(RDF)または RSS の**正当なチャンネルの構造**であることを確かめる(HQ指示 2026-11-18 P2-2)。
+ * 失敗(FeedFormatError): 空の本文・HTML(200 でエラーページなど)・ルートが RDF/RSS でない・ルートが閉じていない(途中で切れた)・
+ * channel が無い/閉じていない・item や主要な要素の開きと閉じの数が合わない(壊れた XML)・item があるのに RSS-CB の要素が無い(形の変更)。
+ * **正常な空のフィード(channel があり item が0件)は許容する**。XML パーサーは使わない(rss.ts と同じ方針)ので、完全な整形式の検証ではなく、
+ * 上の構造の検査である。
+ */
+export function assertValidCbFeed(provider: string, xml: string): void {
+  const body = xml.replace(/^\uFEFF/, '').trim();
+  if (body === '') throw new FeedFormatError(provider, 'empty body');
+  const head = body.replace(/^<\?xml[^>]*\?>\s*/i, '').replace(/^(?:<!--[\s\S]*?-->\s*)+/, '');
+  if (/^<!doctype\s+html|^<html[\s>]/i.test(head)) throw new FeedFormatError(provider, 'HTML page, not a feed');
+  const root = /^<(rdf:RDF|rss)[\s>]/i.exec(head)?.[1]?.toLowerCase();
+  if (!root) throw new FeedFormatError(provider, 'root element is not rdf:RDF or rss');
+  if (!new RegExp(`</${root}>\\s*$`, 'i').test(head))
+    throw new FeedFormatError(provider, 'root element is not closed (truncated?)');
+  const hasChannelOpen = /<channel[\s>/]/i.test(head);
+  if (!hasChannelOpen) throw new FeedFormatError(provider, 'no channel');
+  const selfClosedChannel = /<channel(\s[^>]*)?\/>/i.test(head);
+  if (!selfClosedChannel && !/<\/channel>/i.test(head)) throw new FeedFormatError(provider, 'channel is not closed');
+  for (const tag of ['item', 'title', 'link', 'cb:speech', 'cb:news', 'cb:person']) {
+    const opens = count(head, new RegExp(`<${tag}(?=[\\s>])`, 'gi'));
+    const closes = count(head, new RegExp(`</${tag}>`, 'gi'));
+    if (opens !== closes) throw new FeedFormatError(provider, `unbalanced <${tag}> (${opens} open / ${closes} close)`);
+  }
+  if (count(head, /<item[\s>]/gi) > 0 && !/<cb:/i.test(head)) {
+    throw new FeedFormatError(provider, 'items found but the RSS-CB elements are missing (feed format changed?)');
+  }
 }

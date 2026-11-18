@@ -9,9 +9,12 @@
  * ⑤ Valet API 等のリクエストの制限・頻度の制限を回避しない・サイトに過大な負荷をかけない。
  * RSS・発言について個別の定めはなく、上の一般の許可の範囲(項目ごとに、第三者の内容の記載がないか確認が要る)。
  *
- * 時刻: `dc:date` は「公開の時刻」。**予定の項目では、説明に書かれた現地の時刻(例 "12:45 (ET) approx.")が、`dc:date` では
- * UTC の表記のままの数字(12:45+00:00)になっていることがある**(2026-11-18 の実フィードの1件で確認)。発言の開始時刻としては
- * 使えないので、すべて PUBLICATION_TIME(発言の開始時刻とは扱わず、反応の計算の起点にしない。ECB の RSS と同じ扱い)。
+ * 時刻(HQ指示 2026-11-18 P2-1): `dc:date` は「ページの日時」で、**発言の予定時刻としては扱わない**。**予定の項目では、説明に書かれた現地の
+ * 時刻(例 "12:45 (ET) approx.")が、`dc:date` では UTC の表記のままの数字(12:45+00:00)になっていた**(2026-11-18 の実フィードで、
+ * 同様の例が記者会見の項目にもあり、他の項目も同じ疑いがある。BoC に未確認)。**ET から UTC への変換の推測はしない**。
+ * そのため、すべて PUBLICATION_TIME(反応の計算の起点にしない。ECB の RSS と同じ扱い)で、**時刻の数字だけでは「行われた」と
+ * しない**: 取り込むのは、原稿のページがある(`cb:speech`)か、公式の発言日(日付)が2日以上前の項目だけ(`deliveryEvidence`)。
+ * 予定の段階の項目(動画ページだけで、まだ原稿が無い・日付が近い)は取り込まない。したがって BoC の予定時刻は画面に出ない。
  *
  * 発言者: `cb:person` の名前(発言の項目)、無ければ説明の「<役職> <名前>」の形から読む。読めない項目(外部の講演者など
  * 当行の役職者でない人の項目)は取り込まない(出典・発言者を確認できない発言は登録しない)。
@@ -21,7 +24,7 @@ import { HttpClient, type HttpClientDeps } from '../http.js';
 import { normalizeSpeakerName } from '../mappings/speakers.js';
 import type { SpeechScheduleProvider } from '../providers.js';
 import { withAccessDeniedMapping } from '../sourceAccess.js';
-import { parseCbRdfItems, parseIsoInstant, type CbRdfItem } from '../rssCb.js';
+import { assertValidCbFeed, parseCbRdfItems, parseIsoInstant, type CbRdfItem } from '../rssCb.js';
 import type { NormalizedSpeech, SpeechKind } from '../types.js';
 
 export const BOC_SPEECHES_RSS_URL = 'https://www.bankofcanada.ca/content_type/speeches/feed/';
@@ -35,7 +38,17 @@ const ROLE_NAME =
 /** 説明の「Deputy Governor Toni Gravelle speaks …」から発言者の名前だけを読む(役職は付けない)。 */
 export function speakerFromDescription(description: string | null): string | null {
   if (!description) return null;
-  return ROLE_NAME.exec(description)?.[1]?.trim() ?? null;
+  // 安全側(HQ指示 2026-11-18 P3): 「<役職> <名前>」の候補が**ちょうど1人**のときだけ読む。複数人(記者会見に総裁と副総裁など)・
+  // 0人は null(誰の発言か決められない項目は取り込まない)。
+  const names = new Set(
+    [...description.matchAll(new RegExp(ROLE_NAME.source, 'gu'))].map((m) =>
+      m[1]!
+        .trim()
+        .replace(/\s+/g, ' ')
+        .replace(/[.'’-]+$/u, ''),
+    ),
+  );
+  return names.size === 1 ? [...names][0]! : null;
 }
 
 function kindOf(item: CbRdfItem): SpeechKind {
@@ -61,6 +74,22 @@ export function bocEventId(link: string): string | null {
 interface Candidate {
   item: CbRdfItem;
   speech: NormalizedSpeech;
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * 「行われた」と言える証拠(時刻の推測なし)。原稿のページ(`cb:speech`)があれば TEXT_PAGE。無ければ、公式の発言日(`cb:occurrenceDate`、
+ * 日付だけ)が、今日(UTC の日付)より2日以上前なら EVENT_DATE_PASSED(どのタイムゾーンでも終わっている)。それ以外は証拠なし。
+ */
+export function deliveryEvidenceFor(item: CbRdfItem, now: Date): NormalizedSpeech['deliveryEvidence'] {
+  if (item.cbKind === 'speech') return 'TEXT_PAGE';
+  const day =
+    item.occurrenceDate && /^\d{4}-\d{2}-\d{2}$/.test(item.occurrenceDate)
+      ? Date.parse(`${item.occurrenceDate}T00:00:00Z`)
+      : Number.NaN;
+  const today = Date.parse(`${now.toISOString().slice(0, 10)}T00:00:00Z`);
+  return Number.isFinite(day) && today - day >= 2 * DAY_MS ? 'EVENT_DATE_PASSED' : undefined;
 }
 
 const MAX_PAIR_GAP_MS = 3 * 86_400_000;
@@ -103,13 +132,13 @@ export function mergeWebcastAndText(candidates: readonly Candidate[]): Normalize
     const mergeable = web.speech.kind === 'SPEECH' || web.speech.kind === 'PRESS_CONFERENCE';
     const gap = Math.abs(Date.parse(web.speech.startsAt) - Date.parse(text.speech.startsAt));
     if (!sameKind || !mergeable || !(gap <= MAX_PAIR_GAP_MS)) continue;
-    replaced.set(web, { ...text.speech, providerEventId: web.speech.providerEventId });
+    replaced.set(web, { ...text.speech, providerEventId: web.speech.providerEventId, deliveryEvidence: 'TEXT_PAGE' });
     dropped.add(text);
   }
   return candidates.filter((c) => !dropped.has(c)).map((c) => replaced.get(c) ?? c.speech);
 }
 
-export function parseBocSpeechesFeed(xml: string): NormalizedSpeech[] {
+export function parseBocSpeechesFeed(xml: string, now: Date = new Date()): NormalizedSpeech[] {
   const candidates: Candidate[] = [];
   for (const item of parseCbRdfItems(xml)) {
     const id = bocEventId(item.link);
@@ -128,6 +157,7 @@ export function parseBocSpeechesFeed(xml: string): NormalizedSpeech[] {
         startsAt,
         timePrecision: 'PUBLICATION_TIME',
         url: item.link,
+        ...(deliveryEvidenceFor(item, now) ? { deliveryEvidence: deliveryEvidenceFor(item, now)! } : {}),
       },
     });
   }
@@ -137,18 +167,17 @@ export function parseBocSpeechesFeed(xml: string): NormalizedSpeech[] {
 export class BocSpeechesAdapter implements SpeechScheduleProvider {
   readonly name = BOC_PROVIDER;
   private readonly http: HttpClient;
+  private readonly clock: () => number;
 
   constructor(deps: HttpClientDeps = {}) {
     this.http = new HttpClient('boc', PROVIDER_HTTP_SETTINGS.boc, deps);
+    this.clock = deps.now ?? Date.now;
   }
 
   async fetchSpeeches(): Promise<NormalizedSpeech[]> {
     const xml = await withAccessDeniedMapping(BOC_PROVIDER, () => this.http.getText(BOC_SPEECHES_RSS_URL));
-    // 形が変わって何も読めなくなったときに、静かに0件にしない(項目の `<item` はあるのに1件も読めない)。
-    const speeches = parseBocSpeechesFeed(xml);
-    if (speeches.length === 0 && /<item[\s>]/i.test(xml) && !/<cb:/i.test(xml)) {
-      throw new Error('BoC speeches feed: items found but the RSS-CB elements are missing (feed format changed?)');
-    }
-    return speeches;
+    // 構造を確かめる(HTML の 200・空の本文・途中で切れた/壊れた XML・形の変更はエラー。正常な空のフィードは通す)。
+    assertValidCbFeed(BOC_PROVIDER, xml);
+    return parseBocSpeechesFeed(xml, new Date(this.clock()));
   }
 }

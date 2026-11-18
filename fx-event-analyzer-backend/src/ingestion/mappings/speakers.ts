@@ -80,7 +80,7 @@ export const SPEAKER_ALIASES: readonly SpeakerAlias[] = [
   },
   // カナダ銀行(BoC)の総裁会議(Governing Council)。公式ページ https://www.bankofcanada.ca/about/governing-council/(2026-11-18 確認。
   // 掲載は 2026-10-12 時点)の6人。総裁 Macklem は 2027-06 に退任の発表(2026-11-16)があるが、現職。日本語の表記は暫定
-  // (公式の日本語表記はない。HQ・大野さんの確認が要る)。speakers の行は migration 20261118000001(**未適用**・HQ の承認待ち)。
+  // (公式の日本語表記はない。HQ・大野さんの確認が要る)。speakers の行は migration 20261118000003(**未適用**・HQ の承認待ち)。
   { organization: 'BoC', nameJa: 'ティフ・マックレム', aliases: ['Tiff Macklem'], importance: 'HIGH' },
   { organization: 'BoC', nameJa: 'キャロリン・ロジャーズ', aliases: ['Carolyn Rogers'], importance: 'MEDIUM' },
   { organization: 'BoC', nameJa: 'トニ・グラベル', aliases: ['Toni Gravelle'], importance: 'MEDIUM' },
