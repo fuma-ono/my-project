@@ -40,7 +40,7 @@ class FlakyStore extends MemoryIngestionStore {
 
 describe('needsReleasedStateRepair', () => {
   const snap = { actual: 1 };
-  it('repairs only SCHEDULED, or RELEASED with PENDING data, and only when a snapshot exists', () => {
+  it('repairs only SCHEDULED/PENDING and RELEASED/PENDING, and only when a snapshot exists', () => {
     expect(needsReleasedStateRepair({ status: 'SCHEDULED', data_status: 'PENDING' }, snap)).toBe(true);
     expect(needsReleasedStateRepair({ status: 'RELEASED', data_status: 'PENDING' }, snap)).toBe(true);
     expect(needsReleasedStateRepair({ status: 'SCHEDULED', data_status: 'PENDING' }, null)).toBe(false);
@@ -48,6 +48,21 @@ describe('needsReleasedStateRepair', () => {
     expect(needsReleasedStateRepair({ status: 'RELEASED', data_status: 'UNAVAILABLE' }, snap)).toBe(false);
     expect(needsReleasedStateRepair({ status: 'CANCELLED', data_status: 'PENDING' }, snap)).toBe(false);
     expect(needsReleasedStateRepair({ status: 'CANCELLED', data_status: 'UNAVAILABLE' }, snap)).toBe(false);
+  });
+
+  it('leaves every other status/data_status combination alone (C review condition 1)', () => {
+    const statuses = ['SCHEDULED', 'RELEASED', 'CANCELLED'] as const;
+    const dataStatuses = ['PENDING', 'AVAILABLE', 'PARTIAL', 'UNAVAILABLE'] as const;
+    for (const status of statuses) {
+      for (const data_status of dataStatuses) {
+        const target = (status === 'SCHEDULED' || status === 'RELEASED') && data_status === 'PENDING';
+        expect(needsReleasedStateRepair({ status, data_status }, snap), `${status}/${data_status}`).toBe(target);
+        expect(
+          needsReleasedStateRepair({ status, data_status }, null),
+          `${status}/${data_status} without snapshot`,
+        ).toBe(false);
+      }
+    }
   });
 });
 
@@ -170,6 +185,41 @@ describe('QA-1: official-values recovers an event whose state update failed afte
     await run();
     expect(event()).toMatchObject({ status: 'RELEASED', data_status: 'UNAVAILABLE' });
     expect(store.updateAttempts).toBe(0);
+  });
+
+  it.each([
+    ['SCHEDULED', 'AVAILABLE'],
+    ['SCHEDULED', 'PARTIAL'],
+    ['SCHEDULED', 'UNAVAILABLE'],
+    ['RELEASED', 'PARTIAL'],
+  ] as const)('does not write to a %s/%s event that has a snapshot', async (status, data_status) => {
+    await run(); // 初回値を保存する(正常に RELEASED・AVAILABLE になる)
+    Object.assign(event(), { status, data_status });
+    store.updateAttempts = 0;
+    const r = await run();
+    expect(r.result.plan.map((p) => p.action)).not.toContain('REPAIR');
+    expect(store.updateAttempts).toBe(0);
+    expect(event()).toMatchObject({ status, data_status });
+    expect(store.snapshots).toHaveLength(1);
+  });
+
+  it('a stuck row older than lookbackDays (default 45) is not repaired automatically; a longer lookbackDays repairs it', async () => {
+    store.failUpdates = 1;
+    await run();
+    expect(event()).toMatchObject({ status: 'SCHEDULED', data_status: 'PENDING' });
+    const later = new Date(AFTER.getTime() + 60 * 86_400_000); // 公表の 60 日後
+    store.updateAttempts = 0;
+    await run({ now: later });
+    expect(store.updateAttempts).toBe(0); // 既定の 45 日の外: 人手の対応が要る
+    expect(event()).toMatchObject({ status: 'SCHEDULED', data_status: 'PENDING' });
+    const counters = new JobCounters();
+    await ingestOfficialValues(
+      { store, fetcher, sources, tables: [TABLE], now: () => later, lookbackDays: 120 },
+      counters,
+    );
+    expect(event()).toMatchObject({ status: 'RELEASED', data_status: 'AVAILABLE' });
+    expect(store.snapshots).toHaveLength(1);
+    expect(store.revisions).toEqual([]);
   });
 
   it('dry-run reports REPAIR but writes nothing', async () => {

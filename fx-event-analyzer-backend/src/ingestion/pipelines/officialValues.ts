@@ -180,7 +180,10 @@ export async function ingestOfficialValues(
     sources?: readonly OfficialValueSource[];
     tables: readonly OfficialScheduleTable[];
     now?: () => Date;
-    /** 発表からこの日数までの回を見る(改定の確認も含む)。 */
+    /**
+     * 発表からこの日数までの回を見る(改定の確認・QA-1 の状態の修復も含む)。既定 45 日。これより古い回は、初回値の取り込みも
+     * 改定の確認も状態の修復もしない(古い stuck 行は人手の対応。pipelines/releaseRecovery.ts)。
+     */
     lookbackDays?: number;
     /** true = dry-run(HQ指示 2026-11-13): 公式の API は読むが、DB に書かない。plan と件数だけ返す */
     dryRun?: boolean;
@@ -188,6 +191,8 @@ export async function ingestOfficialValues(
   counters: JobCounters,
 ): Promise<OfficialValuesResult> {
   const now = deps.now?.() ?? new Date();
+  // 見る範囲は公表から lookbackDays(既定 45 日)まで。これより古い stuck 行(QA-1)は自動では回復しない(人手の対応。
+  // 一度だけ lookbackDays を長くして実行する方法は pipelines/releaseRecovery.ts を参照)。
   const lookbackMs = (deps.lookbackDays ?? 45) * 86_400_000;
   const result: OfficialValuesResult = { published: 0, revisions: 0, pending: 0, plan: [] };
   const dryRun = deps.dryRun === true;
