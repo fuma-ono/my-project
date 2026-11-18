@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 構造の確認用に作った入力。形式は RBA の公式 RSS(https://www.rba.gov.au/rss/rss-cb-speeches.xml)について 2026-11-18 に
+     公式ページの内容で確認した要素(cb:speech・cb:person・cb:occurrenceDate・cb:institutionAbbrev・cb:locationAsWritten)に合わせる。
+     実フィードは取得環境から 403 で取得できていない(実物のバイト列ではない)。 -->
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns="http://purl.org/rss/1.0/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cb="http://www.cbwiki.net/wiki/index.php/Specification_1.2/">
+<channel rdf:about="https://www.rba.gov.au/rss/rss-cb-speeches.xml">
+  <title>Reserve Bank of Australia | Speeches</title>
+  <link>https://www.rba.gov.au/speeches/</link>
+</channel>
+<item rdf:about="https://www.rba.gov.au/speeches/2026/sp-sp-ag-2026-11-09.html">
+  <title>What Happens to the Economy as &#8216;Intelligence&#8217; Gets Cheaper?</title>
+  <link>https://www.rba.gov.au/speeches/2026/sp-sp-ag-2026-11-09.html</link>
+  <description>Speech by Sarah Hunter, Assistant Governor (Economic), at the UBS Australasia Conference, Sydney.</description>
+  <dc:date>2026-11-09T09:30+11:00</dc:date>
+  <cb:speech rdf:parseType="Resource">
+    <cb:simpleTitle>What Happens to the Economy as &#8216;Intelligence&#8217; Gets Cheaper?</cb:simpleTitle>
+    <cb:occurrenceDate>2026-11-09T09:30+11:00</cb:occurrenceDate>
+    <cb:institutionAbbrev>RBA</cb:institutionAbbrev>
+    <cb:person rdf:parseType="Resource">
+      <cb:nameAsWritten>Sarah Hunter</cb:nameAsWritten>
+      <cb:role rdf:parseType="Resource"><cb:jobTitle>Assistant Governor (Economic)</cb:jobTitle><cb:affiliation>Reserve Bank of Australia</cb:affiliation></cb:role>
+    </cb:person>
+    <cb:locationAsWritten>Sydney</cb:locationAsWritten>
+  </cb:speech>
+</item>
+<item rdf:about="https://www.rba.gov.au/speeches/2026/sp-gov-2026-10-20.html">
+  <title>A Speech Without A Named Speaker</title>
+  <link>https://www.rba.gov.au/speeches/2026/sp-gov-2026-10-20.html</link>
+  <dc:date>2026-10-20T12:00+11:00</dc:date>
+  <cb:speech rdf:parseType="Resource"><cb:simpleTitle>A Speech Without A Named Speaker</cb:simpleTitle></cb:speech>
+</item>
+<item rdf:about="https://example.com/speeches/2026/sp-fake.html">
+  <title>Not an official RBA page</title>
+  <link>https://example.com/speeches/2026/sp-fake.html</link>
+  <dc:date>2026-10-21T12:00+11:00</dc:date>
+  <cb:speech rdf:parseType="Resource"><cb:person rdf:parseType="Resource"><cb:nameAsWritten>Someone Else</cb:nameAsWritten></cb:person></cb:speech>
+</item>
+</rdf:RDF>

@@ -12,7 +12,7 @@ export interface RssItem {
   description: string | null;
 }
 
-function decode(text: string): string {
+export function decodeXmlText(text: string): string {
   return text
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
     .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
@@ -27,7 +27,13 @@ function decode(text: string): string {
 
 function tag(block: string, name: string): string | null {
   const match = new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, 'i').exec(block);
-  return match ? decode(match[1]!) : null;
+  return match ? decodeXmlText(match[1]!) : null;
+}
+
+/** Text of the first <name>…</name> in `block` (namespaced names such as `dc:date` allowed), entities decoded; null if absent. */
+export function xmlTagText(block: string, name: string): string | null {
+  // name は固定の識別子(`title`・`dc:date` など)だけを渡す。正規表現の特殊文字を含む名前は渡さない。
+  return tag(block, name);
 }
 
 export function parseRssItems(xml: string): RssItem[] {

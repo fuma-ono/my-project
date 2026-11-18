@@ -1,9 +1,11 @@
 import 'dotenv/config';
 import { loadEnv } from '../config/env.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
+import { BOC_PROVIDER, BocSpeechesAdapter } from '../ingestion/adapters/bocSpeeches.js';
 import { ECB_PROVIDER, EcbPressAdapter } from '../ingestion/adapters/ecbPress.js';
 import { ECB_PUBLICATION_TIME_KINDS, EcbWeeklyScheduleAdapter } from '../ingestion/adapters/ecbWeeklySchedule.js';
 import { FrbCalendarAdapter, frbSkipLogEntries } from '../ingestion/adapters/frbCalendar.js';
+import { RBA_PROVIDER, RbaSpeechesAdapter } from '../ingestion/adapters/rbaSpeeches.js';
 import { ingestSpeeches } from '../ingestion/pipelines/speeches.js';
 import type { SpeechScheduleProvider } from '../ingestion/providers.js';
 import { runIngestionJob } from '../ingestion/runner.js';
@@ -29,7 +31,18 @@ async function main(): Promise<void> {
   // HQ判断 2026-10-27(案A): ECB の週間予定は、告知の方針が決まるまで公開に使わないため、
   // 環境変数 INGEST_ECB_WEEKLY=1 のときだけ取得する(既定では取得しない)。
   const ecbWeekly = process.env.INGEST_ECB_WEEKLY === '1' ? new EcbWeeklyScheduleAdapter() : null;
-  const sources: SpeechScheduleProvider[] = [frb, new EcbPressAdapter(), ...(ecbWeekly ? [ecbWeekly] : [])];
+  // HQ指示 2026-11-18(要人発言 Backend): カナダ銀行(BoC)・豪州準備銀行(RBA)の公式の発言の RSS。どちらも既定では取得しない
+  // (環境変数 INGEST_BOC_SPEECHES=1・INGEST_RBA_SPEECHES=1 のときだけ)。話者の行(speakers)が DB に無い間は、取得しても
+  // SPEAKER_NOT_IN_DB / SPEAKER_UNKNOWN で飛ばされ、何も書かれない(話者を作る migration は HQ の承認待ち)。
+  const boc = process.env.INGEST_BOC_SPEECHES === '1' ? new BocSpeechesAdapter() : null;
+  const rba = process.env.INGEST_RBA_SPEECHES === '1' ? new RbaSpeechesAdapter() : null;
+  const sources: SpeechScheduleProvider[] = [
+    frb,
+    new EcbPressAdapter(),
+    ...(ecbWeekly ? [ecbWeekly] : []),
+    ...(boc ? [boc] : []),
+    ...(rba ? [rba] : []),
+  ];
   let failed = false;
   for (const source of sources) {
     const result = await runIngestionJob(
@@ -61,6 +74,10 @@ async function main(): Promise<void> {
             // 発言前の通知の対象外 — v1.41 のポッドキャストと同じ扱い)。インタビューは今までどおり入れない。公式ページの URL も入れる。
             ...(source.name === ECB_PROVIDER
               ? { publicationTimeKinds: ['SPEECH'] as const, storeSourceUrl: true }
+              : {}),
+            // BoC・RBA の RSS も公開の時刻だけ(PUBLICATION_TIME)。一覧・詳細には出すが、相場反応・過去比較・発言前の通知の対象外。
+            ...(source.name === BOC_PROVIDER || source.name === RBA_PROVIDER
+              ? { publicationTimeKinds: ['SPEECH', 'TESTIMONY', 'PRESS_CONFERENCE'] as const, storeSourceUrl: true }
               : {}),
           },
           counters,

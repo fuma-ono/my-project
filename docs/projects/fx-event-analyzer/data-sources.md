@@ -41,6 +41,8 @@
 | ECB 公式サイト(`/rss/press.html`) | ④ | 確認済み(https://www.ecb.europa.eu/services/disclaimer/html/index.en.html):自由に使えるが、正確に再現し出典として ECB を示す。**有料の商品に組み込む場合は、購入前と利用のたびに「この情報は ECB のサイトで無料で入手できる」と利用者に知らせる**。加工した場合(季節調整・伸び率の計算等)はその旨を明示 | 出典「欧州中央銀行(ECB)」+ 上記の無料入手の案内(有料プランで見せるため) | 無料 |
 | 日本銀行 公式サイト | ④(未実装) | 確認済み(https://www.boj.or.jp/about/copyright.htm):出所を明記すれば転載・複製できるが、**商用目的の場合は事前に情報サービス局(post.prd8@boj.or.jp)へ相談**。無断改変不可 | — | 無料(要相談) |
 | イングランド銀行(BOE) 公式サイト | ④(未実装) | 確認済み(https://www.bankofengland.co.uk/legal):サイトの内容は個人利用・組織内の非商用利用のみ。それ以外は許可の申請が必要(Database の統計は Open Government Licence) | — | 要申請 |
+| カナダ銀行(BoC) 公式サイト(発言の RSS) | ④(実装済み・既定は無効) | 確認済み(https://www.bankofcanada.ca/terms/ — 2026-11-18):内容は自由に使用・複製・配布・送信できる。**条件**: 出典としてカナダ銀行を示し変更を示す / 正確さに注意 / **有料サービスで提供する場合は、買い手に事前に「同サイトで無料で入手できる」と伝える** / ロゴ・紙幣の画像・第三者の内容は対象外 / API・サイトのリクエスト制限を回避しない。RSS・発言の個別の定めはなく、この一般の許可の範囲 | — | 無料(出典の明示・有料時の告知が条件) |
+| 豪州準備銀行(RBA) 公式サイト(発言の RSS) | ④(実装済み・既定は無効。**実フィードは未取得**) | 確認済み(https://www.rba.gov.au/copyright/ — 2026-11-18):多くの内容が Creative Commons Attribution 4.0。出典は「Source: Reserve Bank of Australia [年]」または「Source: RBA [年]」。RBA の推奨を示唆しない。**不適切な商用利用(欺く・出所の偽り・無料で公表していることを伝えずに課金)は禁止**。ロゴ・紙幣の画像・マルチメディア・サイトのスクリプト・第三者の内容は対象外。**この環境からの RSS の GET は 403(配信元のボット対策)**。問い合わせ先 rbainfo@rba.gov.au | — | 無料(CC BY 4.0。出典の明示) |
 | Trading Economics | ① 候補(第一候補、design.md 6.2節) | ゲストアカウント(guest:guest)は廃止済み(2026-10-15 に HTTP 410 を確認)。商用表示・保存・派生値の権利は契約時に確認(design.md 6.2節の確認事項) | 要確認 | 要確認(https://tradingeconomics.com/api/pricing.aspx) |
 | Finnhub | ① 候補 | 経済指標カレンダーは有料プランの機能(要確認)。再配布条件 要確認 | 要確認 | 要確認 |
 | Financial Modeling Prep | ① 候補 | 再配布・商用表示の条件 要確認 | 要確認 | 要確認 |
@@ -96,6 +98,8 @@
 | ECB | `https://www.ecb.europa.eu/rss/press.html` | **原稿の公開時刻**しかない(例: 午前2時(中央ヨーロッパ夏時間)の公開)。発言の開始時刻ではない | 読み取るが、既定では取り込まない(`TIME_NOT_EXACT` としてログに残す)。値動きは発言時刻から1分単位で計算するため、ずれた時刻は使えない |
 | 日銀 | 新着RSS(`/rss/whatsnew.xml`、「【挨拶】」等) | 公開時刻のみ | 未実装。商用利用は事前相談が必要(2章) |
 | BOE | `/rss/speeches` | 公開時刻のみ | 未実装。商用利用は許可が必要(2章) |
+| BoC | `https://www.bankofcanada.ca/content_type/speeches/feed/`(RSS-CB 1.2 の RDF。2026-11-18 に実フィードを確認) | `dc:date`(公開の時刻)のみ。**予定の項目では現地の時刻の数字が UTC 表記になっていた例あり**。`cb:person`(発言者)は発言の項目にあり、お知らせの項目は説明の「Deputy Governor ○○」から読む | 実装済み(`adapters/bocSpeeches.ts`。`INGEST_BOC_SPEECHES=1` のときだけ。PUBLICATION_TIME。話者の行が DB に無い間は書かれない) |
+| RBA | `https://www.rba.gov.au/rss/rss-cb-speeches.xml`(RSS-CB 1.2。公式ページの内容で確認) | `cb:occurrenceDate`・`dc:date`(オフセット付き)。開始時刻か公開時刻かは公式の記載で未確認 | 実装済み(`adapters/rbaSpeeches.ts`。`INGEST_RBA_SPEECHES=1` のときだけ。PUBLICATION_TIME。**実フィードは 403 で未取得**) |
 
 - **要人の照合**: 取得元の英語名から役職(Chairman / Vice Chair for Supervision / Governor など)を除き、`speakers.ts` の別名表で `speakers` の行(機関+日本語名)に結び付ける。**表に無い人・DB に行が無い人はスキップしてログに残し、自動で作らない**(別人に発言と値動きを結び付ける危険があるため)。2026-10-15 時点では、ウォラー理事(別名はあるが DB に行が無い)とミラン理事(別名なし)がスキップされる。追加するときは migration で `speakers` に行を入れてから別名を足す
 - **ID**: FRB のカレンダーには ID が無いため「日付・時刻・要人・種類」から作る。時刻が変わると別の発言として入り、元の予定は「取得元から消えた予定」としてログに残す(中止か変更かは取得元から分からないので、自動で中止にはしない)

@@ -15,16 +15,20 @@
 import { zonedWallTimeToUtcUnique } from './time.js';
 
 export type SpeechBodyProvider = 'frb_calendar' | 'ecb_press_rss';
+export type SpeechLinkOnlyProvider = 'boc_speeches_rss' | 'rba_speeches_rss';
 
-const OFFICIAL_PREFIX: Record<SpeechBodyProvider, string> = {
+const OFFICIAL_PREFIX: Record<SpeechBodyProvider | SpeechLinkOnlyProvider, string> = {
   frb_calendar: 'https://www.federalreserve.gov/newsevents/speech/',
   ecb_press_rss: 'https://www.ecb.europa.eu/press/key/',
+  // 公式ページの URL(リンク)だけを残す取得元。本文の取得・保存の対象ではない(BODY_PROVIDERS に入っていない)。
+  boc_speeches_rss: 'https://www.bankofcanada.ca/',
+  rba_speeches_rss: 'https://www.rba.gov.au/speeches/',
 };
 
 /** その取得元の公式の講演ページの URL か(https・決まった場所だけ)。 */
 export function isOfficialSpeechUrl(provider: string, url: string | null | undefined): boolean {
   if (!url) return false;
-  const prefix = OFFICIAL_PREFIX[provider as SpeechBodyProvider];
+  const prefix = OFFICIAL_PREFIX[provider as SpeechBodyProvider | SpeechLinkOnlyProvider];
   if (!prefix) return false;
   try {
     const parsed = new URL(url);
