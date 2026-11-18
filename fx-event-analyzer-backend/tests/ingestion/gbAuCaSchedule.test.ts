@@ -110,7 +110,9 @@ describe('the tables read from the official pages on 2026-11-10', () => {
       for (const e of table.entries) {
         expect(officialScheduleUtc(e)!.getTime()).toBeGreaterThan(NOW.getTime());
         expect(e.sources.length).toBeGreaterThanOrEqual(1); // ABS の対象月のある回は latest-release ページも
-        expect(e.checkedAt).toBe(e.indicatorCode === 'GB_GDP_MOM' || e.indicatorCode === 'GB_RETAIL_SALES_MOM' ? '2026-11-18' : '2026-11-10');
+        expect(e.checkedAt).toBe(
+          e.indicatorCode === 'GB_GDP_MOM' || e.indicatorCode === 'GB_RETAIL_SALES_MOM' ? '2026-11-18' : '2026-11-10',
+        );
       }
     }
   });
