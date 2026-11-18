@@ -7,6 +7,15 @@
  * "no data" / "the check never ran" are shown as states (HQ 2026-10-16).
  */
 import {
+  CPI_RELEASE_INDICATORS,
+  EMPSIT_RELEASE_INDICATORS,
+  JOLTS_RELEASE_INDICATORS,
+  PPI_RELEASE_INDICATORS,
+} from '../mappings/blsSchedule.js';
+import { EUROSTAT_SCHEDULE_INDICATORS } from '../mappings/eurostatSchedule.js';
+import { JP_CPI_INDICATOR_CODE } from '../pipelines/jpCpiSchedule.js';
+import { OFFICIAL_VALUE_SOURCES } from '../pipelines/officialValues.js';
+import {
   CREDIT_CAPS,
   FX_INGEST_WINDOW_MINUTES,
   MAX_MISMATCH_DETAILS,
@@ -769,39 +778,71 @@ export function renderProvisionalEventsMarkdown(
   return `${lines.join('\n')}\n`;
 }
 
-/** 第12章: 発表の時刻から、この時間(時間)を過ぎても SCHEDULED のままなら「取り込みの漏れ」とみなす(取り込みの遅れの余裕)。 */
+/** 第12章: 発表の時刻から、この時間(時間)を**超えて**経過しても SCHEDULED のままなら「取り込みの漏れ」とみなす(取り込みの遅れの余裕)。 */
 export const OVERDUE_GRACE_HOURS = 3;
-/** 第12章: さかのぼって見る日数。 */
+/** 第12章: さかのぼって見る日数(発表の時刻がちょうど 14 日前のものまで含む)。 */
 export const OVERDUE_LOOKBACK_DAYS = 14;
 
 /**
- * 取り込みの手動実行の target の目安(指標コードから。.github/workflows/fx-event-analyzer-ingestion.yml の target)。
- * 定期実行には入っていない target が多く、手動で実行しないと値は入らない(定期実行に入れるかは HQ の判断)。
- * 分からない指標は「—」(推測で書かない)。
+ * 第12章の対象の窓 [from, to): `release_datetime >= now − 14 日` かつ `release_datetime < now − 3 時間`。
+ * 下限(14 日前ちょうど)は含み、上限(3 時間前ちょうど)は含まない = 「3 時間を**超えて**経過」。
+ */
+export function overdueWindow(now: Date): { fromIso: string; toIso: string } {
+  return {
+    fromIso: new Date(now.getTime() - OVERDUE_LOOKBACK_DAYS * 86_400_000).toISOString(),
+    toIso: new Date(now.getTime() - OVERDUE_GRACE_HOURS * 3_600_000).toISOString(),
+  };
+}
+
+const BLS_CODES: ReadonlySet<string> = new Set([
+  ...CPI_RELEASE_INDICATORS,
+  ...EMPSIT_RELEASE_INDICATORS,
+  ...PPI_RELEASE_INDICATORS,
+  ...JOLTS_RELEASE_INDICATORS,
+]);
+const OFFICIAL_VALUES_CODES: ReadonlySet<string> = new Set(
+  OFFICIAL_VALUE_SOURCES.map((source) => source.indicatorCode),
+);
+const EUROSTAT_CODES: ReadonlySet<string> = new Set(EUROSTAT_SCHEDULE_INDICATORS);
+
+/** 取り込みの手段(workflow の target)が無い指標に出す表示。 */
+export const NO_INGEST_TARGET = '手段なし';
+
+/**
+ * 発表の値を取り込む手動の target の目安(.github/workflows/fx-event-analyzer-ingestion.yml の target)。
+ * **実際に値を取り込む処理が持つ指標コードの一覧**で決める(接頭辞では決めない。CA_CPI のように、同じ国でも取り込み手段が無い
+ * 指標があるため)。
+ *   - official-bls: BLS の日程表の指標(CPI・コア CPI・雇用統計の3指標・PPI・コア PPI・JOLTS)
+ *   - official-values: OFFICIAL_VALUE_SOURCES の指標(英国 ONS・カナダ失業率・豪州 ABS)
+ *   - jp-cpi-values: JP_CPI(e-Stat)
+ *   - official-eurostat: Eurostat の日程表の指標(EU_HICP・EU_UNEMPLOYMENT_RATE)
+ * 上のどれにも無い指標(CA_CPI・US_RETAIL_SALES・FOMC など)は「手段なし」。推測で target を案内しない。
+ * 定期実行に入っていない target が多い(official-values は定時実行。JP CPI は cron が無効。他は手動のみ)。
  */
 export function manualTargetHint(code: string): string {
-  if (/^US_(CPI|CORE_CPI|NFP|UNEMPLOYMENT_RATE|AVG_HOURLY_EARNINGS|PPI|CORE_PPI|JOLTS)$/.test(code))
-    return 'official-bls';
-  if (/^(GB|AU|CA)_/.test(code)) return 'official-values';
-  if (code === 'JP_CPI') return 'jp-cpi-values';
-  if (/^EU_/.test(code)) return 'official-eurostat';
-  return '—';
+  if (BLS_CODES.has(code)) return 'official-bls';
+  if (OFFICIAL_VALUES_CODES.has(code)) return 'official-values';
+  if (code === JP_CPI_INDICATOR_CODE) return 'jp-cpi-values';
+  if (EUROSTAT_CODES.has(code)) return 'official-eurostat';
+  return NO_INGEST_TARGET;
 }
+
+const OVERDUE_TITLE = '## 12. 発表の時刻を過ぎても SCHEDULED のままの発表(実績の登録の漏れ・状態の未更新)';
+
+const OVERDUE_NOTES = [
+  `対象: 発表の時刻から ${OVERDUE_GRACE_HOURS} 時間を**超えて**経過し、直近 ${OVERDUE_LOOKBACK_DAYS} 日以内で、状態(status)がまだ SCHEDULED のままの発表。`,
+  '「実績の登録が済んでいない、または状態が未更新」を表す(スナップショットがすでにあっても、状態が SCHEDULED のままなら対象になる)。',
+  '公式統計の取り込みは、定期実行に入っていないものが多く、手動の実行(Workflow の target)が要る。「手動の target(目安)」は、実際に値を取り込む処理を持つ指標だけに出し、持たない指標は「手段なし」。',
+  '限界: ① 発表の時刻の精度が EXACT でない発表(日付だけなど)は、保存されている時刻が目安で、実際の発表より早い・遅いことがある。② 状態が RELEASED・値が PENDING のまま止まった行(stuck 行)は、この章では検知しない。③ 対象は直近 14 日だけ。',
+];
 
 export function renderOverdueEventsMarkdown(
   events: readonly { indicator_code: string; release_datetime: string }[],
   now: Date,
 ): string {
-  const lines: string[] = [];
-  lines.push('## 12. 発表の時刻を過ぎても SCHEDULED のままの発表(取り込みの漏れ)');
-  lines.push('');
-  lines.push(
-    `発表の時刻から ${OVERDUE_GRACE_HOURS} 時間以上たち、直近 ${OVERDUE_LOOKBACK_DAYS} 日以内の発表で、まだ実績が入っていない(SCHEDULED のまま)もの。` +
-      '公式の統計の取り込みは、定期実行に入っていないものが多く、手動の実行(Workflow の target)が要る。「手動の target」は目安。',
-  );
-  lines.push('');
-  lines.push(`判定: ${events.length > 0 ? `注意(${events.length} 件が未処理)` : '正常(未処理なし)'}`);
-  lines.push('');
+  const lines: string[] = [OVERDUE_TITLE, ''];
+  for (const note of OVERDUE_NOTES) lines.push(note, '');
+  lines.push(`判定: ${events.length > 0 ? `注意(${events.length} 件が未処理)` : '正常(未処理なし)'}`, '');
   if (events.length > 0) {
     lines.push(
       ...table(
@@ -816,5 +857,16 @@ export function renderOverdueEventsMarkdown(
     );
     lines.push('');
   }
+  return `${lines.join('\n')}\n`;
+}
+
+/**
+ * 第12章を取得できなかったとき(読み取りの失敗・件数の不一致)。**「未処理なし」と誤認させない**: 判定は「取得不能」で、
+ * この章は確認できていない。第1〜11章はそのまま出力する。
+ */
+export function renderOverdueEventsUnavailableMarkdown(reason: string): string {
+  const lines: string[] = [OVERDUE_TITLE, ''];
+  lines.push('判定: **取得不能**(この章は確認できていない。『未処理なし』ではない)', '');
+  lines.push(`理由: ${reason}`, '');
   return `${lines.join('\n')}\n`;
 }

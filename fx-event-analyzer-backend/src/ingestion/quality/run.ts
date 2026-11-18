@@ -15,11 +15,11 @@ import {
 import type { QualityReader } from './reader.js';
 import { renderSpeechPipelineMarkdown } from './speechPipeline.js';
 import {
-  OVERDUE_GRACE_HOURS,
-  OVERDUE_LOOKBACK_DAYS,
+  overdueWindow,
   PROVISIONAL_LIST_DAYS,
   renderDataQualityMarkdown,
   renderOverdueEventsMarkdown,
+  renderOverdueEventsUnavailableMarkdown,
   renderProvisionalEventsMarkdown,
   renderSpeechFreshnessMarkdown,
 } from './report.js';
@@ -106,8 +106,12 @@ export async function buildQualityReportMarkdown(
   // 第11章(HQ承認 2026-11-11): 要人発言の本文と要約。これも末尾に足すだけ。
   markdown += `\n${renderSpeechPipelineMarkdown(await reader.speechPipelineStatus(nowIso), now)}`;
   // 第12章(HQ指示 2026-11-18): 発表の時刻を過ぎても SCHEDULED のままの発表。これも末尾に足すだけ。
-  const overdueTo = new Date(now.getTime() - OVERDUE_GRACE_HOURS * 3_600_000).toISOString();
-  const overdueFrom = new Date(now.getTime() - OVERDUE_LOOKBACK_DAYS * 86_400_000).toISOString();
-  markdown += `\n${renderOverdueEventsMarkdown(await reader.listOverdueScheduledEvents(overdueFrom, overdueTo), now)}`;
+  // 取得できなくても、第1〜11章は出力する。第12章は「取得不能」と明示する(未処理なしとは表示しない)。
+  const { fromIso: overdueFrom, toIso: overdueTo } = overdueWindow(now);
+  try {
+    markdown += `\n${renderOverdueEventsMarkdown(await reader.listOverdueScheduledEvents(overdueFrom, overdueTo), now)}`;
+  } catch (error) {
+    markdown += `\n${renderOverdueEventsUnavailableMarkdown(error instanceof Error ? error.message : String(error))}`;
+  }
   return markdown;
 }

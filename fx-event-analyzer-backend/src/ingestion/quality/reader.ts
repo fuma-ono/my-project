@@ -366,20 +366,34 @@ export function createQualityReader(supabase: SupabaseClient): QualityReader {
     },
 
     async listOverdueScheduledEvents(fromIso, toIso) {
-      const rows = await fetchAllPages<{
-        release_datetime: string;
-        economic_indicators: { code: string } | null;
-      }>((from, to) =>
-        supabase
+      // 件数(count: 'exact')を一緒に読み、集めた行数と一致しなければ失敗にする(サーバー側の max_rows による打ち切りで、
+      // 一部の行が黙って欠けることを防ぐ)。次のページの位置は、PAGE_SIZE ではなく、実際に返った行数で進める
+      // (max_rows が PAGE_SIZE より小さくても、飛ばさない)。
+      type Row = { release_datetime: string; economic_indicators: { code: string } | null };
+      const rows: Row[] = [];
+      let expected: number;
+      for (;;) {
+        const { data, error, count } = await supabase
           .from('economic_events')
-          .select('id, release_datetime, economic_indicators(code)')
+          .select('id, release_datetime, economic_indicators(code)', { count: 'exact' })
           .eq('status', 'SCHEDULED')
           .gte('release_datetime', fromIso)
           .lt('release_datetime', toIso)
           .order('release_datetime', { ascending: true })
           .order('id', { ascending: true })
-          .range(from, to),
-      );
+          .range(rows.length, rows.length + PAGE_SIZE - 1);
+        if (error) throw error;
+        if (typeof count !== 'number') throw new Error('overdue events: the row count was not returned');
+        expected = count;
+        const chunk = (data ?? []) as unknown as Row[];
+        rows.push(...chunk);
+        if (rows.length >= expected || chunk.length === 0) break;
+      }
+      if (rows.length !== expected) {
+        throw new Error(
+          `overdue events: read ${rows.length} rows but the server counted ${expected} (truncated by max_rows?)`,
+        );
+      }
       return rows.map((row) => ({
         indicator_code: row.economic_indicators?.code ?? '(指標不明)',
         release_datetime: row.release_datetime,
