@@ -28,6 +28,7 @@ import {
 import { JP_CPI_SCHEDULE, type JpCpiScheduleEntry } from '../mappings/jpCpiSchedule.js';
 import type { JobCounters } from '../runner.js';
 import type { IngestionStore } from '../store.js';
+import { needsReleasedStateRepair } from './releaseRecovery.js';
 import {
   jpCpiAnnouncementUtc,
   jpCpiProviderEventId,
@@ -43,7 +44,9 @@ export interface JpCpiFetcher {
   getJson(url: string): Promise<unknown>;
 }
 
-export type JpCpiAction = 'PUBLISH' | 'REVISE' | 'UNCHANGED' | 'NOT_YET_AVAILABLE' | 'TOO_LATE_FOR_FIRST_RELEASE';
+/** REPAIR = 初回値は保存済みだがイベントの状態が RELEASED・AVAILABLE でない回の、状態だけの修復(QA-1) */
+export type JpCpiAction =
+  'REPAIR' | 'PUBLISH' | 'REVISE' | 'UNCHANGED' | 'NOT_YET_AVAILABLE' | 'TOO_LATE_FOR_FIRST_RELEASE';
 
 export interface JpCpiPlanItem {
   event_id: string;
@@ -127,6 +130,13 @@ export async function ingestJpCpiValues(
       });
     const snapshot = await deps.store.getReleaseSnapshot(event.id);
 
+    if (needsReleasedStateRepair(event, snapshot)) {
+      plan('REPAIR');
+      if (!deps.dryRun) {
+        await deps.store.updateEvent(event.id, { status: 'RELEASED', data_status: 'AVAILABLE' });
+        counters.note('repaired', { event_id: event.id, period: entry.referencePeriod });
+      }
+    }
     if (event.status === 'RELEASED' || snapshot) {
       if (!snapshot || snapshot.actual === null || value === null) continue;
       const latest = (await deps.store.latestRevisionValues(event.id)).ACTUAL ?? Number(snapshot.actual);

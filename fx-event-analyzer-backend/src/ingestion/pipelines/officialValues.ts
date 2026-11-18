@@ -46,6 +46,7 @@ import { HttpError } from '../http.js';
 import type { JobCounters } from '../runner.js';
 import type { IngestionStore } from '../store.js';
 import { officialScheduleProviderEventId } from './officialScheduleTable.js';
+import { needsReleasedStateRepair } from './releaseRecovery.js';
 
 export interface OfficialValueSource {
   indicatorCode: string;
@@ -150,7 +151,8 @@ export interface OfficialValueFetcher {
   getJson(url: string, init?: RequestInit): Promise<unknown>;
 }
 
-export type OfficialValuesPlanAction = 'PUBLISH' | 'REVISE' | 'UNCHANGED' | 'PENDING';
+/** REPAIR = 初回値は保存済みだがイベントの状態が RELEASED・AVAILABLE になっていない回の、状態だけの修復(QA-1) */
+export type OfficialValuesPlanAction = 'PUBLISH' | 'REVISE' | 'UNCHANGED' | 'PENDING' | 'REPAIR';
 
 export interface OfficialValuesPlanItem {
   provider_event_id: string;
@@ -249,6 +251,25 @@ export async function ingestOfficialValues(
 
     for (const event of events) {
       const entry = entryById.get(event.provider_event_id)!;
+      const snapshot = await deps.store.getReleaseSnapshot(event.id);
+      // QA-1: 初回値は保存済みなのに、前回の実行でイベントの状態更新が失敗していた回は、状態だけを直す(スナップショット・
+      // 改定の履歴には触れない)。この後は、これまでどおり改定の確認に進む。
+      if (needsReleasedStateRepair(event, snapshot)) {
+        result.plan.push({
+          provider_event_id: event.provider_event_id,
+          indicator: source.indicatorCode,
+          action: 'REPAIR',
+        });
+        if (!dryRun) {
+          try {
+            await deps.store.updateEvent(event.id, { status: 'RELEASED', data_status: 'AVAILABLE' });
+            counters.note('repaired', { event_id: event.id, indicator: source.indicatorCode });
+          } catch (error) {
+            counters.error(`${event.provider_event_id}: ${error instanceof Error ? error.message : String(error)}`);
+            continue; // 直せなかった回は、次の実行でもう一度
+          }
+        }
+      }
       if (!entry.referencePeriod && !source.periodFromOfficialLabel) {
         counters.skip('NO_REFERENCE_PERIOD'); // 対象期間を照合できない回は保存しない
         if (event.status !== 'RELEASED') result.pending += 1;
@@ -260,7 +281,6 @@ export async function ingestOfficialValues(
         });
         continue;
       }
-      const snapshot = await deps.store.getReleaseSnapshot(event.id);
       if (event.status === 'RELEASED' || snapshot) {
         // 改定の確認だけ(初回値は変えない)
         if (!snapshot || snapshot.actual === null) continue;
