@@ -88,9 +88,11 @@ struct CommunityMarketPollCard: View {
     }
 
     var body: some View {
-        // ユーザー指摘(2026-11-19、2回目)「市場予測アンケートも余白が広いからもう少し
-        // 狭めてください」: カード内の余白・行間を詰める。
-        VStack(alignment: .leading, spacing: 5) {
+        // ユーザー指摘(2026-11-19、3回目)「市場予測アンケートのタイトルをもう少し上に
+        // それに合わせて、次回FOMCはどうなるも上に/利下げとかはもう少し右に配置して」:
+        // 上の余白をさらに詰めてタイトル・質問文を上に寄せ、凡例はドーナツに貼り付けず
+        // 少し右(総投票数側)に寄せる。
+        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
                 Image(systemName: "chart.pie.fill").font(.system(size: 10)).foregroundStyle(V5P.blue)
                 NotoText.text("市場予想アンケート", size: 7.6).foregroundStyle(.white)
@@ -101,10 +103,9 @@ struct CommunityMarketPollCard: View {
                 }
             }
             NotoText.text("次回FOMCはどうなる?", size: 8.7).foregroundStyle(.white)
-            HStack(alignment: .center, spacing: 6) {
+            HStack(alignment: .center, spacing: 0) {
                 donutChart
-                // ユーザー指摘(2026-11-19、2回目)「利下げとかをもう少し中心に」:
-                // ラベルと%を離して両端に寄せず、1行にまとめて中央寄りに詰める。
+                Spacer(minLength: 10)
                 VStack(alignment: .leading, spacing: 3) {
                     ForEach(options, id: \.label) { option in
                         HStack(spacing: 4) {
@@ -114,7 +115,7 @@ struct CommunityMarketPollCard: View {
                         }
                     }
                 }
-                Spacer(minLength: 0)
+                Spacer(minLength: 6)
                 VStack(spacing: 2) {
                     NotoText.text("総投票数", size: 5.4).foregroundStyle(SettingsCardStyle.subtitleColor)
                     NotoText.text(ValueFormat.number(totalVotes, fractionDigits: 0), size: 8).foregroundStyle(.white)
@@ -124,7 +125,9 @@ struct CommunityMarketPollCard: View {
                 .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.05)))
             }
         }
-        .padding(7)
+        .padding(.horizontal, 7)
+        .padding(.top, 5)
+        .padding(.bottom, 7)
         .frame(width: 214, alignment: .leading)
         .background(GradientCardBackground())
         .accessibilityIdentifier("communityMarketPollCard")
@@ -245,10 +248,18 @@ private let communityDummyPosts: [CommunityPost] = [
 ]
 
 struct CommunityPostListCard: View {
+    private static let dividerColor = Color(red: 0.35, green: 0.62, blue: 0.92).opacity(0.3)
+
+    // ユーザー指摘(2026-11-19、3回目)「投稿は大きな人枠で下線で他の投稿カードと
+    // 並べてください」: 投稿カードどうしの間に区切り線を引いて並べる。
     var body: some View {
-        VStack(spacing: 6) {
-            ForEach(communityDummyPosts) { post in
+        VStack(spacing: 0) {
+            ForEach(Array(communityDummyPosts.enumerated()), id: \.element.id) { index, post in
                 CommunityPostCard(post: post)
+                if index < communityDummyPosts.count - 1 {
+                    Rectangle().fill(Self.dividerColor).frame(height: 0.6)
+                        .padding(.vertical, 6)
+                }
             }
         }
     }
@@ -257,29 +268,28 @@ struct CommunityPostListCard: View {
 private struct CommunityPostCard: View {
     let post: CommunityPost
 
-    // ユーザー指摘(2026-11-19、2回目)「投稿カードの枠が縦に長すぎます/投稿カード内の
-    // 配置も違うので修正してください」: 行間・余白を詰め、サムネイルを縮小して
-    // 縦に間延びしないようにする。
+    // ユーザー指摘(2026-11-19、3回目)「USD/JPY上昇予想はFXトレーダーの下にして、
+    // アイコンに対して2行で/投稿は大きな人枠で」: アバターを大きくし、その右に
+    // ユーザー名+時刻(1行目)・通貨ペア+予想方向(2行目)の2行をまとめる。タイトルは
+    // その下に別行で全幅表示。
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 5) {
+            HStack(alignment: .top, spacing: 6) {
                 ZStack {
                     Circle().fill(post.avatarColor)
-                    Image(systemName: post.avatarSymbol).font(.system(size: 8)).foregroundStyle(.white.opacity(0.85))
+                    Image(systemName: post.avatarSymbol).font(.system(size: 11)).foregroundStyle(.white.opacity(0.85))
                 }
-                .frame(width: 20, height: 20)
-                HStack(spacing: 2) {
-                    NotoText.text(post.username, size: 7).foregroundStyle(.white)
-                    if post.verified {
-                        Image(systemName: "checkmark.seal.fill").font(.system(size: 6.5)).foregroundStyle(V5P.blue)
-                    }
-                }
-                NotoText.text(post.timeAgo, size: 5.8).foregroundStyle(SettingsCardStyle.subtitleColor)
-                Spacer(minLength: 0)
-            }
+                .frame(width: 28, height: 28)
 
-            HStack(alignment: .center, spacing: 6) {
                 VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 2) {
+                        NotoText.text(post.username, size: 7).foregroundStyle(.white)
+                        if post.verified {
+                            Image(systemName: "checkmark.seal.fill").font(.system(size: 6.5)).foregroundStyle(V5P.blue)
+                        }
+                        Spacer(minLength: 4)
+                        NotoText.text(post.timeAgo, size: 5.8).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    }
                     HStack(spacing: 5) {
                         NotoText.text(post.pair, size: 6)
                             .foregroundStyle(.white)
@@ -294,14 +304,16 @@ private struct CommunityPostCard: View {
                         }
                         .foregroundStyle(post.direction.color)
                     }
-                    NotoText.text(post.title, size: 7.3)
-                        .foregroundStyle(.white)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
+
                 Spacer(minLength: 4)
                 CommunityCandleThumbnail(trend: post.candleTrend, isBullish: post.isBullishChart)
                     .frame(width: 34, height: 30)
             }
+
+            NotoText.text(post.title, size: 7.3)
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
 
             (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
                 + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
