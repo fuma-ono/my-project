@@ -88,7 +88,9 @@ struct CommunityMarketPollCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        // ユーザー指摘(2026-11-19、2回目)「市場予測アンケートも余白が広いからもう少し
+        // 狭めてください」: カード内の余白・行間を詰める。
+        VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 4) {
                 Image(systemName: "chart.pie.fill").font(.system(size: 10)).foregroundStyle(V5P.blue)
                 NotoText.text("市場予想アンケート", size: 7.6).foregroundStyle(.white)
@@ -99,39 +101,43 @@ struct CommunityMarketPollCard: View {
                 }
             }
             NotoText.text("次回FOMCはどうなる?", size: 8.7).foregroundStyle(.white)
-            HStack(alignment: .center, spacing: 8) {
+            HStack(alignment: .center, spacing: 6) {
                 donutChart
-                VStack(alignment: .leading, spacing: 4) {
+                // ユーザー指摘(2026-11-19、2回目)「利下げとかをもう少し中心に」:
+                // ラベルと%を離して両端に寄せず、1行にまとめて中央寄りに詰める。
+                VStack(alignment: .leading, spacing: 3) {
                     ForEach(options, id: \.label) { option in
                         HStack(spacing: 4) {
                             Circle().fill(option.color).frame(width: 6, height: 6)
                             NotoText.text(option.label, size: 6.3).foregroundStyle(.white)
-                            Spacer(minLength: 6)
                             NotoText.text(ValueFormat.percent(option.percent, fractionDigits: 0), size: 6.3).foregroundStyle(.white)
                         }
                     }
                 }
+                Spacer(minLength: 0)
                 VStack(spacing: 2) {
                     NotoText.text("総投票数", size: 5.4).foregroundStyle(SettingsCardStyle.subtitleColor)
                     NotoText.text(ValueFormat.number(totalVotes, fractionDigits: 0), size: 8).foregroundStyle(.white)
                 }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 7)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 5)
                 .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.05)))
             }
         }
-        .padding(9)
+        .padding(7)
         .frame(width: 214, alignment: .leading)
         .background(GradientCardBackground())
         .accessibilityIdentifier("communityMarketPollCard")
     }
 
     private var donutChart: some View {
+        // ユーザー指摘(2026-11-19、2回目)「円グラフですがもう少し参考画像のように
+        // 太くしてください」: 輪の太さを7→11に。
         ZStack {
             ForEach(donutSegments, id: \.id) { segment in
                 Circle()
                     .trim(from: segment.start, to: segment.end)
-                    .stroke(segment.color, style: StrokeStyle(lineWidth: 7, lineCap: .butt))
+                    .stroke(segment.color, style: StrokeStyle(lineWidth: 11, lineCap: .butt))
                     .rotationEffect(.degrees(-90))
             }
             NotoText.text(ValueFormat.percent(options[0].percent, fractionDigits: 0), size: 8.7).foregroundStyle(.white)
@@ -240,7 +246,7 @@ private let communityDummyPosts: [CommunityPost] = [
 
 struct CommunityPostListCard: View {
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             ForEach(communityDummyPosts) { post in
                 CommunityPostCard(post: post)
             }
@@ -251,14 +257,17 @@ struct CommunityPostListCard: View {
 private struct CommunityPostCard: View {
     let post: CommunityPost
 
+    // ユーザー指摘(2026-11-19、2回目)「投稿カードの枠が縦に長すぎます/投稿カード内の
+    // 配置も違うので修正してください」: 行間・余白を詰め、サムネイルを縮小して
+    // 縦に間延びしないようにする。
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 5) {
                 ZStack {
                     Circle().fill(post.avatarColor)
-                    Image(systemName: post.avatarSymbol).font(.system(size: 9)).foregroundStyle(.white.opacity(0.85))
+                    Image(systemName: post.avatarSymbol).font(.system(size: 8)).foregroundStyle(.white.opacity(0.85))
                 }
-                .frame(width: 22, height: 22)
+                .frame(width: 20, height: 20)
                 HStack(spacing: 2) {
                     NotoText.text(post.username, size: 7).foregroundStyle(.white)
                     if post.verified {
@@ -269,8 +278,8 @@ private struct CommunityPostCard: View {
                 Spacer(minLength: 0)
             }
 
-            HStack(alignment: .top, spacing: 6) {
-                VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .center, spacing: 6) {
+                VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 5) {
                         NotoText.text(post.pair, size: 6)
                             .foregroundStyle(.white)
@@ -291,14 +300,14 @@ private struct CommunityPostCard: View {
                 }
                 Spacer(minLength: 4)
                 CommunityCandleThumbnail(trend: post.candleTrend, isBullish: post.isBullishChart)
-                    .frame(width: 46, height: 46)
+                    .frame(width: 34, height: 30)
             }
 
             (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
                 + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
                 .lineLimit(2)
 
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 footerItem(icon: "heart.fill", value: "\(post.likeCount)", color: Color(red: 0.95, green: 0.32, blue: 0.52))
                 footerItem(icon: "bubble.left", value: "\(post.commentCount)", color: SettingsCardStyle.subtitleColor)
                 footerItem(icon: "bookmark", value: "保存", color: SettingsCardStyle.subtitleColor)
@@ -310,7 +319,7 @@ private struct CommunityPostCard: View {
                     .overlay(Capsule().stroke(V5P.blue, lineWidth: 0.7))
             }
         }
-        .padding(9)
+        .padding(7)
         .frame(width: 214, alignment: .leading)
         .background(GradientCardBackground())
         .accessibilityIdentifier("communityPostCard_\(post.id)")

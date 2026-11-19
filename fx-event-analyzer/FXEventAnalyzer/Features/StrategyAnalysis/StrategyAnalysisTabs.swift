@@ -51,10 +51,10 @@ enum StrategyAnalysisTab: Int, CaseIterable, Identifiable {
 }
 
 /// 4タブの切り替え(ユーザー提示の参考画像どおり: アイコン+ラベルの等幅4列、列の間に
-/// 縦の区切り線、タブ行全体の上下に1本ずつの横線。選択中の列はアイコン・ラベルが
-/// 青(`V5P.blue`)になり、列全体を青い四角(角丸の枠線)で囲う(ユーザー指摘
-/// 2026-11-19「タブの下に1本の線を引いてほしい/タブを選択すると四角で囲うように
-/// してほしい」: 下線インジケーターから、下端の1本線+選択中セルの枠線囲みに変更)。
+/// 縦の区切り線、タブ行全体の上下に1本ずつの横線。アイコン・ラベルは常に白、選択中の
+/// 列だけ背景を青(`V5P.blue`)で塗りつぶす(ユーザー指摘2026-11-19「タブの下に1本の
+/// 線を引いてほしい/タブを選択すると四角で囲うようにしてほしい」、2回目「四角で囲む
+/// のは中を塗りつぶして、文字とアイコンではない」: 下線→枠線→塗りつぶしの順に変更)。
 /// 既存の214pt列の中に収める(V5BottomBarの全幅チャンネルとは異なり、このタブバーは
 /// 他のカードと同じScrollView内で一緒にスクロールする構成を維持する — ScrollViewの
 /// 外に出す構成は過去のCIで高さの伝播不良によるタップ不能を起こしたため)。
@@ -62,9 +62,6 @@ struct StrategyAnalysisTabBar: View {
     @Binding var selection: StrategyAnalysisTab
 
     private static let selectedColor = V5P.blue
-    /// V5BottomBarの非選択色(淡いラベンダー寄りの水色)をこのタブバーにも流用し、
-    /// アプリ全体のナビゲーション要素の配色を揃える。
-    private static let unselectedColor = Color(red: 128.0 / 255, green: 174.0 / 255, blue: 228.0 / 255)
     private static let dividerColor = Color(red: 0.35, green: 0.62, blue: 0.92).opacity(0.3)
 
     var body: some View {
@@ -87,24 +84,24 @@ struct StrategyAnalysisTabBar: View {
 
     private func tabCell(_ tab: StrategyAnalysisTab) -> some View {
         let isSelected = tab == selection
-        let color = isSelected ? Self.selectedColor : Self.unselectedColor
         return VStack(spacing: 3) {
-            Image(systemName: tab.icon).font(.system(size: 13, weight: .semibold)).foregroundStyle(color)
+            Image(systemName: tab.icon).font(.system(size: 13, weight: .semibold))
             NotoText.text(tab.title, size: 6.3)
-                .foregroundStyle(color)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
         }
+        // ユーザー指摘(2026-11-19、2回目)「タブの四角で囲むのは中を塗りつぶして、文字と
+        // アイコンではない」: 選択状態を示すのは枠線でも文字・アイコンの色でもなく、
+        // セルの背景の塗りつぶしのみ。アイコン・ラベルは選択有無に関わらず同じ色(白)。
+        .foregroundStyle(.white)
         .padding(.vertical, 5)
         .padding(.horizontal, 4)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 2)
         .padding(.horizontal, 2)
-        // ユーザー指摘(2026-11-19)「タブを選択すると四角で囲うようにしてほしい」:
-        // 下線インジケーターの代わりに、選択中のセル全体を角丸の青い枠線で囲む。
-        .overlay(
+        .background(
             RoundedRectangle(cornerRadius: 4)
-                .stroke(isSelected ? Self.selectedColor : .clear, lineWidth: 1)
+                .fill(isSelected ? Self.selectedColor : .clear)
         )
         .contentShape(Rectangle())
         // V5BottomBarと同じ理由(`Button`+`.buttonStyle(.plain)`でも実機でシステム既定の
