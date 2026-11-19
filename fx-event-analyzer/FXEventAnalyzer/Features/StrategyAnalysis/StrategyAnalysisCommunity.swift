@@ -88,11 +88,10 @@ struct CommunityMarketPollCard: View {
     }
 
     var body: some View {
-        // ユーザー指摘(2026-11-19、3回目)「市場予測アンケートのタイトルをもう少し上に
-        // それに合わせて、次回FOMCはどうなるも上に/利下げとかはもう少し右に配置して」:
-        // 上の余白をさらに詰めてタイトル・質問文を上に寄せ、凡例はドーナツに貼り付けず
-        // 少し右(総投票数側)に寄せる。
-        VStack(alignment: .leading, spacing: 4) {
+        // ユーザー指摘(2026-11-19、4回目)「円グラフをもう少し右に/次回FOMCはどうなる？を
+        // もう少し上に/68%や24%、8%をもう少し右にして右揃えにして/総投票数、12,345の
+        // 文字を2pt大きくして」。
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
                 Image(systemName: "chart.pie.fill").font(.system(size: 10)).foregroundStyle(V5P.blue)
                 NotoText.text("市場予想アンケート", size: 7.6).foregroundStyle(.white)
@@ -102,23 +101,28 @@ struct CommunityMarketPollCard: View {
                     Image(systemName: "chevron.right").font(.system(size: 5.5, weight: .bold)).foregroundStyle(V5P.blue)
                 }
             }
+            .padding(.bottom, 2)
             NotoText.text("次回FOMCはどうなる?", size: 8.7).foregroundStyle(.white)
+                .padding(.bottom, 4)
             HStack(alignment: .center, spacing: 0) {
+                Spacer(minLength: 6)
                 donutChart
                 Spacer(minLength: 10)
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .trailing, spacing: 3) {
                     ForEach(options, id: \.label) { option in
                         HStack(spacing: 4) {
                             Circle().fill(option.color).frame(width: 6, height: 6)
                             NotoText.text(option.label, size: 6.3).foregroundStyle(.white)
+                            Spacer(minLength: 4)
                             NotoText.text(ValueFormat.percent(option.percent, fractionDigits: 0), size: 6.3).foregroundStyle(.white)
                         }
+                        .frame(width: 70)
                     }
                 }
                 Spacer(minLength: 6)
                 VStack(spacing: 2) {
-                    NotoText.text("総投票数", size: 5.4).foregroundStyle(SettingsCardStyle.subtitleColor)
-                    NotoText.text(ValueFormat.number(totalVotes, fractionDigits: 0), size: 8).foregroundStyle(.white)
+                    NotoText.text("総投票数", size: 7.4).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    NotoText.text(ValueFormat.number(totalVotes, fractionDigits: 0), size: 10).foregroundStyle(.white)
                 }
                 .padding(.horizontal, 5)
                 .padding(.vertical, 5)
@@ -191,6 +195,10 @@ private struct CommunityPost: Identifiable {
     /// ダミー描画で、実際の値動きではない。
     let candleTrend: [CGFloat]
     let isBullishChart: Bool
+    /// ユーザー指摘(2026-11-19、4回目)「投稿カードのグラフはそれぞれユーザーのチャートの
+    /// 抵抗帯を表示させて」: サムネイル内の抵抗帯(レジスタンスゾーン)の相対位置(0...1)。
+    /// 装飾のみのダミー値で、実際の価格水準ではない。
+    let resistanceLevel: CGFloat
 }
 
 private let communityDummyPosts: [CommunityPost] = [
@@ -209,7 +217,8 @@ private let communityDummyPosts: [CommunityPost] = [
         commentCount: 48,
         isFollowing: true,
         candleTrend: [0.3, 0.34, 0.4, 0.48, 0.55, 0.6, 0.68, 0.76, 0.84, 0.9],
-        isBullishChart: true
+        isBullishChart: true,
+        resistanceLevel: 0.93
     ),
     CommunityPost(
         id: "p2",
@@ -226,7 +235,8 @@ private let communityDummyPosts: [CommunityPost] = [
         commentCount: 32,
         isFollowing: false,
         candleTrend: [0.9, 0.82, 0.75, 0.68, 0.6, 0.5, 0.42, 0.35, 0.3, 0.25],
-        isBullishChart: false
+        isBullishChart: false,
+        resistanceLevel: 0.85
     ),
     CommunityPost(
         id: "p3",
@@ -243,25 +253,30 @@ private let communityDummyPosts: [CommunityPost] = [
         commentCount: 21,
         isFollowing: false,
         candleTrend: [0.5, 0.58, 0.48, 0.6, 0.45, 0.55, 0.5, 0.62, 0.47, 0.53],
-        isBullishChart: true
+        isBullishChart: true,
+        resistanceLevel: 0.68
     )
 ]
 
 struct CommunityPostListCard: View {
     private static let dividerColor = Color(red: 0.35, green: 0.62, blue: 0.92).opacity(0.3)
 
-    // ユーザー指摘(2026-11-19、3回目)「投稿は大きな人枠で下線で他の投稿カードと
-    // 並べてください」: 投稿カードどうしの間に区切り線を引いて並べる。
+    // ユーザー指摘(2026-11-19、4回目)「投稿カードは各カードで枠を囲むのではなく線で
+    // 区切るようにしてください」: 個別のカード枠をやめ、1つの枠の中で投稿どうしを
+    // 区切り線だけで並べる。
     var body: some View {
         VStack(spacing: 0) {
             ForEach(Array(communityDummyPosts.enumerated()), id: \.element.id) { index, post in
                 CommunityPostCard(post: post)
                 if index < communityDummyPosts.count - 1 {
                     Rectangle().fill(Self.dividerColor).frame(height: 0.6)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, 7)
                 }
             }
         }
+        .padding(.vertical, 7)
+        .frame(width: 214, alignment: .leading)
+        .background(GradientCardBackground())
     }
 }
 
@@ -269,17 +284,18 @@ private struct CommunityPostCard: View {
     let post: CommunityPost
 
     // ユーザー指摘(2026-11-19、3回目)「USD/JPY上昇予想はFXトレーダーの下にして、
-    // アイコンに対して2行で/投稿は大きな人枠で」: アバターを大きくし、その右に
-    // ユーザー名+時刻(1行目)・通貨ペア+予想方向(2行目)の2行をまとめる。タイトルは
-    // その下に別行で全幅表示。
+    // アイコンに対して2行で」: その右にユーザー名+時刻(1行目)・通貨ペア+予想方向
+    // (2行目)の2行をまとめる。タイトルはその下に別行で全幅表示。
+    // ユーザー指摘(2026-11-19、4回目)「投稿カードのアイコンを勝手に大きくしないで
+    // ください。戻して」: アバターのサイズは元の20に戻す。
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .top, spacing: 6) {
                 ZStack {
                     Circle().fill(post.avatarColor)
-                    Image(systemName: post.avatarSymbol).font(.system(size: 11)).foregroundStyle(.white.opacity(0.85))
+                    Image(systemName: post.avatarSymbol).font(.system(size: 8)).foregroundStyle(.white.opacity(0.85))
                 }
-                .frame(width: 28, height: 28)
+                .frame(width: 20, height: 20)
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 2) {
@@ -307,8 +323,10 @@ private struct CommunityPostCard: View {
                 }
 
                 Spacer(minLength: 4)
-                CommunityCandleThumbnail(trend: post.candleTrend, isBullish: post.isBullishChart)
-                    .frame(width: 34, height: 30)
+                CommunityCandleThumbnail(
+                    trend: post.candleTrend, isBullish: post.isBullishChart, resistanceLevel: post.resistanceLevel
+                )
+                .frame(width: 34, height: 30)
             }
 
             NotoText.text(post.title, size: 7.3)
@@ -331,9 +349,9 @@ private struct CommunityPostCard: View {
                     .overlay(Capsule().stroke(V5P.blue, lineWidth: 0.7))
             }
         }
-        .padding(7)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 7)
         .frame(width: 214, alignment: .leading)
-        .background(GradientCardBackground())
         .accessibilityIdentifier("communityPostCard_\(post.id)")
     }
 
@@ -346,23 +364,33 @@ private struct CommunityPostCard: View {
 }
 
 /// 投稿カード右上のローソク足風サムネイル(装飾のみ、実際の値動きではない)。
+/// ユーザー指摘(2026-11-19、4回目)「投稿カードのグラフはそれぞれユーザーのチャートの
+/// 抵抗帯を表示させて」: `resistanceLevel`の高さに抵抗帯(レジスタンスゾーン)の線を重ねる。
 private struct CommunityCandleThumbnail: View {
     let trend: [CGFloat]
     let isBullish: Bool
+    let resistanceLevel: CGFloat
 
     var body: some View {
         GeometryReader { geo in
-            HStack(alignment: .bottom, spacing: 1) {
-                ForEach(trend.indices, id: \.self) { index in
-                    Capsule()
-                        .fill(isBullish ? V5P.green : V5P.red)
-                        .frame(
-                            width: max(1.5, (geo.size.width - CGFloat(trend.count - 1)) / CGFloat(trend.count)),
-                            height: max(2, trend[index] * geo.size.height)
-                        )
+            ZStack(alignment: .bottom) {
+                HStack(alignment: .bottom, spacing: 1) {
+                    ForEach(trend.indices, id: \.self) { index in
+                        Capsule()
+                            .fill(isBullish ? V5P.green : V5P.red)
+                            .frame(
+                                width: max(1.5, (geo.size.width - CGFloat(trend.count - 1)) / CGFloat(trend.count)),
+                                height: max(2, trend[index] * geo.size.height)
+                            )
+                    }
                 }
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
+
+                Rectangle()
+                    .fill(V5P.yellow.opacity(0.85))
+                    .frame(width: geo.size.width, height: 1)
+                    .position(x: geo.size.width / 2, y: geo.size.height * (1 - resistanceLevel))
             }
-            .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
         }
     }
 }
