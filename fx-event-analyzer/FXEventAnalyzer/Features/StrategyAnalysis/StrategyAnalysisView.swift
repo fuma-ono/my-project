@@ -14,9 +14,9 @@ struct StrategyAnalysisView: View {
     @StateObject private var viewModel: StrategyAnalysisViewModel
     @Binding var tabSelection: Int
     @State private var planPrompt: String?
-    /// HQ指示(2026-11-11「StrategyAnalysis 4タブUI実装」): イベント戦略・通貨分析・価格帯分析・
-    /// AI分析の4タブ(デザイン画像準拠)。既定はイベント戦略(従来どおりの内容)。
-    @State private var selectedTab: StrategyAnalysisTab = .eventStrategy
+    /// HQ指示(2026-11-19「トレード戦略分析画面の作り直し」): イベント分析・市場分析・価格帯分析・
+    /// みんなの分析の4タブ(参考画像準拠)。既定はイベント分析(従来どおりの内容)。
+    @State private var selectedTab: StrategyAnalysisTab = .eventAnalysis
     @Environment(\.dismiss) private var dismiss
     private let apiClient: APIClient
     /// HQ指示(2026-11-12「ピクセル単位の再現」): 「次回イベント」カードに表示する、
@@ -130,22 +130,22 @@ struct StrategyAnalysisView: View {
         }
     }
 
-    /// HQ指示(2026-11-11「StrategyAnalysis 4タブUI実装」): 選択中のタブに応じて中身を切り替える。
-    /// ①イベント戦略は従来の内容そのまま。②③④はバックエンドにまだ対応するデータが無いため、
-    /// 架空の数値を出さない「データ不足」のプレースホルダー(`StrategyAnalysisTabs.swift`参照)。
+    /// HQ指示(2026-11-19「トレード戦略分析画面の作り直し」): 選択中のタブに応じて中身を切り替える。
+    /// ①イベント分析(旧イベント戦略)は従来の内容そのまま。②③④はまだ中身の設計が無いため、
+    /// 架空の数値を出さない「準備中」のプレースホルダー(`StrategyAnalysisTabs.swift`参照)。
     @ViewBuilder
     private func tabContent(
         pair: StrategyFxPair, analysis: StrategyAnalysis, coReleasedIndicators: [StrategyCoReleasedIndicator]
     ) -> some View {
         switch selectedTab {
-        case .eventStrategy:
+        case .eventAnalysis:
             VStack(alignment: .leading, spacing: 6) {
                 topDisclaimerBanner
                 // HQ指示(2026-11-12「ピクセル単位の再現」、参考画像2枚目): ②③④タブと同じ
                 // 見出しカード(アイコン+タイトル+サブタイトル)を①にも置く。
                 StrategySectionHeaderCard(
-                    icon: "bolt.fill",
-                    title: "イベント戦略",
+                    icon: "chart.line.uptrend.xyaxis",
+                    title: "イベント分析",
                     subtitle: "イベント発表後の値動きと過去事例を分析"
                 )
                 nextEventCard
@@ -188,12 +188,36 @@ struct StrategyAnalysisView: View {
                 releasesCard(analysis)
                 notesCard
             }
-        case .currencyAnalysis:
-            CurrencyAnalysisTabView(pair: pair, analysis: analysis)
+        case .marketAnalysis:
+            VStack(alignment: .leading, spacing: 6) {
+                StrategySectionHeaderCard(
+                    icon: "chart.bar.fill",
+                    title: "市場分析",
+                    subtitle: "通貨ペア・相場全体の動向を分析"
+                )
+                StrategyAnalysisComingSoonCard(message: StrategyAnalysisText.preparing)
+            }
+            .accessibilityIdentifier("strategyAnalysisMarketTab")
         case .priceRangeAnalysis:
-            PriceRangeAnalysisTabView()
-        case .aiAnalysis:
-            AIAnalysisTabView()
+            VStack(alignment: .leading, spacing: 6) {
+                StrategySectionHeaderCard(
+                    icon: "slider.vertical.3",
+                    title: "価格帯分析",
+                    subtitle: "重要な価格帯とサポート・レジスタンス"
+                )
+                StrategyAnalysisComingSoonCard(message: StrategyAnalysisText.preparing)
+            }
+            .accessibilityIdentifier("strategyAnalysisPriceRangeTab")
+        case .communityAnalysis:
+            VStack(alignment: .leading, spacing: 6) {
+                StrategySectionHeaderCard(
+                    icon: "person.2.fill",
+                    title: "みんなの分析",
+                    subtitle: "他のユーザーの予想・投票・ランキング"
+                )
+                StrategyAnalysisComingSoonCard(message: "この機能は準備中です")
+            }
+            .accessibilityIdentifier("strategyAnalysisCommunityTab")
         }
     }
 

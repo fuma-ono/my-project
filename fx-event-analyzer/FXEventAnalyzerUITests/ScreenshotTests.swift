@@ -206,27 +206,26 @@ final class ScreenshotTests: XCTestCase {
         // 画面上部まで戻す。
         for _ in 0..<10 { app.swipeDown(velocity: .slow) }
 
-        // HQ指示(2026-11-11「ピクセル単位の再現」フィードバック対応): 通貨分析・価格帯分析・AI分析の
-        // 3タブは、参考画像どおりのカード構成(ゲージ・グラフ・進捗バー・ローソク足の枠)を再現しつつ、
-        // Backendにまだ対応するデータが無い具体的な項目だけを「データ不足」と表示する(単一の
-        // プレースホルダーカードではないことをスクリーンショットで確認する)。
-        tapIdentifier("strategyAnalysisTab_currencyAnalysis")
-        XCTAssertTrue(waitForAnyElement(containing: "通貨分析", timeout: 5), "Currency analysis tab did not render its section header")
-        XCTAssertTrue(waitForAnyElement(containing: "データ不足", timeout: 5), "Currency analysis tab did not mark unavailable fields as データ不足")
-        capture("07d-StrategyAnalysis-CurrencyAnalysis")
+        // HQ指示(2026-11-19「トレード戦略分析画面の作り直し」): 市場分析・価格帯分析・みんなの分析の
+        // 3タブは、タブバー自体の見た目(アイコン+ラベル+下線)を先に作り直した段階であり、中身は
+        // まだ「準備中」のプレースホルダー(架空の値は出さない)。
+        tapIdentifier("strategyAnalysisTab_marketAnalysis")
+        XCTAssertTrue(waitForAnyElement(containing: "市場分析", timeout: 5), "Market analysis tab did not render its section header")
+        XCTAssertTrue(waitForAnyElement(containing: "準備中", timeout: 5), "Market analysis tab did not mark its content as still in preparation")
+        capture("07d-StrategyAnalysis-MarketAnalysis")
 
         tapIdentifier("strategyAnalysisTab_priceRangeAnalysis")
         XCTAssertTrue(waitForAnyElement(containing: "価格帯分析", timeout: 5), "Price range analysis tab did not render its section header")
-        XCTAssertTrue(waitForAnyElement(containing: "データ不足", timeout: 5), "Price range analysis tab did not mark unavailable fields as データ不足")
+        XCTAssertTrue(waitForAnyElement(containing: "準備中", timeout: 5), "Price range analysis tab did not mark its content as still in preparation")
         capture("07e-StrategyAnalysis-PriceRangeAnalysis")
 
-        tapIdentifier("strategyAnalysisTab_aiAnalysis")
-        XCTAssertTrue(waitForAnyElement(containing: "AI分析", timeout: 5), "AI analysis tab did not render its section header")
-        XCTAssertTrue(waitForAnyElement(containing: "データ不足", timeout: 5), "AI analysis tab did not mark unavailable fields as データ不足")
-        capture("07f-StrategyAnalysis-AIAnalysis")
+        tapIdentifier("strategyAnalysisTab_communityAnalysis")
+        XCTAssertTrue(waitForAnyElement(containing: "みんなの分析", timeout: 5), "Community analysis tab did not render its section header")
+        XCTAssertTrue(waitForAnyElement(containing: "準備中", timeout: 5), "Community analysis tab did not mark its content as still in preparation")
+        capture("07f-StrategyAnalysis-CommunityAnalysis")
 
-        tapIdentifier("strategyAnalysisTab_eventStrategy")
-        XCTAssertTrue(waitForAnyElement(containing: "過去5回の分析結果", timeout: 5), "Did not return to the event strategy tab")
+        tapIdentifier("strategyAnalysisTab_eventAnalysis")
+        XCTAssertTrue(waitForAnyElement(containing: "過去5回の分析結果", timeout: 5), "Did not return to the event analysis tab")
 
         tapIdentifier("v5HeaderBack")
         XCTAssertTrue(waitForAnyElement(containing: "主要通貨ペアの値動き", timeout: 10), "Did not go back to Event Detail")

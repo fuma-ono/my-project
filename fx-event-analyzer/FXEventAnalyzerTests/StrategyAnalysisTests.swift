@@ -228,12 +228,12 @@ final class StrategyAnalysisTests: XCTestCase {
         XCTAssertEqual(StrategyAnalysisText.breakCell(nil), "--")
     }
 
-    /// HQ指示(2026-11-11「StrategyAnalysis 4タブUI実装」): 4タブが指示どおりの順序・名前で
-    /// 揃っていることを確かめる(イベント戦略・通貨分析・価格帯分析・AI分析)。
+    /// HQ指示(2026-11-19「トレード戦略分析画面の作り直し」): 4タブが指示どおりの順序・名前で
+    /// 揃っていることを確かめる(イベント分析・市場分析・価格帯分析・みんなの分析)。
     func testStrategyAnalysisTabsOrderAndTitles() {
         XCTAssertEqual(
             StrategyAnalysisTab.allCases.map(\.title),
-            ["イベント戦略", "通貨分析", "価格帯分析", "AI分析"]
+            ["イベント分析", "市場分析", "価格帯分析", "みんなの分析"]
         )
     }
 
