@@ -74,6 +74,17 @@ export interface QualityReader {
    * 読めなければ(列が無い = migration 20261112000001 の前など)null。
    */
   speechPipelineStatus(nowIso: string): Promise<SpeechPipelineStatus | null>;
+  /**
+   * 第12章(HQ指示 2026-11-18「取り込み品質の確認」): 発表の時刻が [from, to) で、まだ SCHEDULED のままの economic_events
+   * (= 発表の時刻を過ぎたのに、実績の取り込みがまだ。取消し・発表済みは含まない)。READ-ONLY。
+   */
+  listOverdueScheduledEvents(fromIso: string, toIso: string): Promise<OverdueEventSample[]>;
+}
+
+/** 第12章: 発表の時刻を過ぎても SCHEDULED のままの発表。 */
+export interface OverdueEventSample {
+  indicator_code: string;
+  release_datetime: string;
 }
 
 /** 第10章(HQ判断 2026-10-27 案B): 暫定の予定は通知しないため、確定の作業の漏れを見つける。 */
@@ -349,6 +360,41 @@ export function createQualityReader(supabase: SupabaseClient): QualityReader {
       );
       return rows.map((row) => ({
         provider_event_id: row.provider_event_id,
+        indicator_code: row.economic_indicators?.code ?? '(指標不明)',
+        release_datetime: row.release_datetime,
+      }));
+    },
+
+    async listOverdueScheduledEvents(fromIso, toIso) {
+      // 件数(count: 'exact')を一緒に読み、集めた行数と一致しなければ失敗にする(サーバー側の max_rows による打ち切りで、
+      // 一部の行が黙って欠けることを防ぐ)。次のページの位置は、PAGE_SIZE ではなく、実際に返った行数で進める
+      // (max_rows が PAGE_SIZE より小さくても、飛ばさない)。
+      type Row = { release_datetime: string; economic_indicators: { code: string } | null };
+      const rows: Row[] = [];
+      let expected: number;
+      for (;;) {
+        const { data, error, count } = await supabase
+          .from('economic_events')
+          .select('id, release_datetime, economic_indicators(code)', { count: 'exact' })
+          .eq('status', 'SCHEDULED')
+          .gte('release_datetime', fromIso)
+          .lt('release_datetime', toIso)
+          .order('release_datetime', { ascending: true })
+          .order('id', { ascending: true })
+          .range(rows.length, rows.length + PAGE_SIZE - 1);
+        if (error) throw error;
+        if (typeof count !== 'number') throw new Error('overdue events: the row count was not returned');
+        expected = count;
+        const chunk = (data ?? []) as unknown as Row[];
+        rows.push(...chunk);
+        if (rows.length >= expected || chunk.length === 0) break;
+      }
+      if (rows.length !== expected) {
+        throw new Error(
+          `overdue events: read ${rows.length} rows but the server counted ${expected} (truncated by max_rows?)`,
+        );
+      }
+      return rows.map((row) => ({
         indicator_code: row.economic_indicators?.code ?? '(指標不明)',
         release_datetime: row.release_datetime,
       }));
