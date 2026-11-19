@@ -24,37 +24,16 @@ enum StrategyAnalysisTab: Int, CaseIterable, Identifiable {
         }
     }
 
-    /// 参考画像のアイコンに合わせたSF Symbol(2026-11-19、5回目のカード型タブ参考画像:
-    /// イベント分析=折れ線+棒、市場分析=地球儀、価格帯分析=ローソク足風の縦棒、
-    /// みんなの分析=2人のシルエット)。
+    /// 参考画像のアイコンに合わせたSF Symbol(市場分析=高さの異なる3本の棒グラフ、
+    /// 価格帯分析=3本の縦スライダー、みんなの分析=2人のシルエット)。
     var icon: String {
         switch self {
         case .eventAnalysis: return "chart.line.uptrend.xyaxis"
-        case .marketAnalysis: return "globe"
-        case .priceRangeAnalysis: return "chart.bar.fill"
+        case .marketAnalysis: return "chart.bar.fill"
+        case .priceRangeAnalysis: return "slider.vertical.3"
         case .communityAnalysis: return "person.2.fill"
         }
     }
-
-    /// 価格帯分析だけ参考画像どおりアイコンが緑(ローソク足を連想させる配色)。他は白。
-    var iconTint: Color {
-        switch self {
-        case .priceRangeAnalysis: return V5P.green
-        default: return .white
-        }
-    }
-
-    /// カード型タブの2行ラベル(参考画像どおり「①イベント/分析」のように番号+1行目/2行目に分割)。
-    var displayFirstLine: String {
-        switch self {
-        case .eventAnalysis: return "①イベント"
-        case .marketAnalysis: return "②市場"
-        case .priceRangeAnalysis: return "③価格帯"
-        case .communityAnalysis: return "④みんなの"
-        }
-    }
-
-    var displaySecondLine: String { "分析" }
 
     /// UIテスト用の`accessibilityIdentifier`。CIで原因調査した結果、このアプリの既存の
     /// `accessibilityIdentifier`は(表示文言が日本語の画面でも)すべてASCIIのみで付けられており、
@@ -71,62 +50,66 @@ enum StrategyAnalysisTab: Int, CaseIterable, Identifiable {
     }
 }
 
-/// 4タブの切り替え。ユーザー提示の参考画像(2026-11-19、5回目「タブは画像のような
-/// グラデーションにして」)どおり、4枚の独立した角丸カードを並べ、選択中のカードだけ
-/// 背景を上が明るい青・下が濃い紺のグラデーションにして縁取りも明るい青にする。
-/// 未選択のカードは暗い塗り+薄いグレーの縁取り。既存の214pt列の中に収める
-/// (V5BottomBarの全幅チャンネルとは異なり、このタブバーは他のカードと同じScrollView内
-/// で一緒にスクロールする構成を維持する — ScrollViewの外に出す構成は過去のCIで高さの
-/// 伝播不良によるタップ不能を起こしたため)。
+/// 4タブの切り替え(ユーザー提示の参考画像どおり: アイコン+ラベルの等幅4列、列の間に
+/// 縦の区切り線、タブ行全体の上下に1本ずつの横線。アイコン・ラベルは常に白、選択中の
+/// 列だけ背景をグラデーションで塗りつぶす(ユーザー指摘2026-11-19「タブの下に1本の
+/// 線を引いてほしい/タブを選択すると四角で囲うようにしてほしい」、2回目「四角で囲む
+/// のは中を塗りつぶして、文字とアイコンではない」、5回目「丸数字はいらない/タブの
+/// デザインが変だよ、元に戻して/四角で囲むのをグラデーションにすればいい」: カード型の
+/// 配置・丸数字・アイコン変更は取り消し、単色の塗りつぶしをグラデーションに変更)。
+/// 既存の214pt列の中に収める(V5BottomBarの全幅チャンネルとは異なり、このタブバーは
+/// 他のカードと同じScrollView内で一緒にスクロールする構成を維持する — ScrollViewの
+/// 外に出す構成は過去のCIで高さの伝播不良によるタップ不能を起こしたため)。
 struct StrategyAnalysisTabBar: View {
     @Binding var selection: StrategyAnalysisTab
 
-    private static let cardSpacing: CGFloat = 4
-    private static let cornerRadius: CGFloat = 10
-    private static let unselectedFill = Color(red: 0.06, green: 0.09, blue: 0.16)
-    private static let unselectedBorder = Color(red: 0.28, green: 0.33, blue: 0.44)
-    private static let selectedBorder = Color(red: 0.42, green: 0.78, blue: 1.0)
+    private static let dividerColor = Color(red: 0.35, green: 0.62, blue: 0.92).opacity(0.3)
     private static let selectedGradient = LinearGradient(
         gradient: Gradient(stops: [
             .init(color: Color(red: 0.30, green: 0.62, blue: 1.0), location: 0.0),
-            .init(color: Color(red: 0.08, green: 0.22, blue: 0.55), location: 1.0),
+            .init(color: Color(red: 0.02, green: 0.30, blue: 0.75), location: 1.0),
         ]),
         startPoint: .top, endPoint: .bottom
     )
 
     var body: some View {
-        HStack(spacing: Self.cardSpacing) {
-            ForEach(StrategyAnalysisTab.allCases) { tab in
-                tabCell(tab)
+        VStack(spacing: 0) {
+            Rectangle().fill(Self.dividerColor).frame(height: 0.6)
+            HStack(spacing: 0) {
+                ForEach(Array(StrategyAnalysisTab.allCases.enumerated()), id: \.element) { index, tab in
+                    tabCell(tab)
+                    if index < StrategyAnalysisTab.allCases.count - 1 {
+                        Rectangle().fill(Self.dividerColor).frame(width: 0.6, height: 24)
+                    }
+                }
             }
+            // ユーザー指摘(2026-11-19)「タブの下に1本の線を引いてほしい」: タブ行の
+            // 下端にも上端と同じ横線を1本引く。
+            Rectangle().fill(Self.dividerColor).frame(height: 0.6)
         }
         .frame(width: 214)
     }
 
     private func tabCell(_ tab: StrategyAnalysisTab) -> some View {
         let isSelected = tab == selection
-        return VStack(spacing: 4) {
-            Image(systemName: tab.icon)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(tab.iconTint)
-            VStack(spacing: 0) {
-                NotoText.text(tab.displayFirstLine, size: 5.8)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                NotoText.text(tab.displaySecondLine, size: 5.8)
-                    .lineLimit(1)
-            }
-            .foregroundStyle(.white)
+        return VStack(spacing: 3) {
+            Image(systemName: tab.icon).font(.system(size: 13, weight: .semibold))
+            NotoText.text(tab.title, size: 6.3)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
         }
-        .padding(.vertical, 7)
+        // ユーザー指摘(2026-11-19、2回目)「タブの四角で囲むのは中を塗りつぶして、文字と
+        // アイコンではない」: 選択状態を示すのは枠線でも文字・アイコンの色でもなく、
+        // セルの背景の塗りつぶしのみ。アイコン・ラベルは選択有無に関わらず同じ色(白)。
+        .foregroundStyle(.white)
+        .padding(.vertical, 5)
+        .padding(.horizontal, 4)
         .frame(maxWidth: .infinity)
+        .padding(.vertical, 2)
+        .padding(.horizontal, 2)
         .background(
-            RoundedRectangle(cornerRadius: Self.cornerRadius)
-                .fill(isSelected ? AnyShapeStyle(Self.selectedGradient) : AnyShapeStyle(Self.unselectedFill))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Self.cornerRadius)
-                .stroke(isSelected ? Self.selectedBorder : Self.unselectedBorder, lineWidth: isSelected ? 1 : 0.7)
+            RoundedRectangle(cornerRadius: 4)
+                .fill(isSelected ? AnyShapeStyle(Self.selectedGradient) : AnyShapeStyle(Color.clear))
         )
         .contentShape(Rectangle())
         // V5BottomBarと同じ理由(`Button`+`.buttonStyle(.plain)`でも実機でシステム既定の
