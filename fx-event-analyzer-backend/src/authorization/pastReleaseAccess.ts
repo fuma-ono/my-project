@@ -8,6 +8,7 @@ import {
   pastReleasesMaxFor,
 } from '../domain/pastReleaseAccess.js';
 import { listVisibleReleasedEventIds } from '../repositories/pastReleaseRepository.js';
+import { assertEventIndicatorCode, isPolicyRateLockedForPlan } from './policyRateAccess.js';
 import { resolvePlan } from './plan.js';
 
 export interface PastReleaseLocks {
@@ -62,6 +63,18 @@ export async function resolvePastReleaseAccess(
 }
 
 /**
+ * 子リソースのロックを判定される発表。**`indicator_code` は必須**(HQ 指示 2026-11-19、C のレビュー)。
+ * 以前は省略できたので、将来の呼び出しが `indicator_code` を渡し忘れても、FOMC の政策金利のロックが**黙って素通り**した。
+ * 必須にして、渡し忘れをコンパイルエラーにする(`getEventById` の結果(EventRow)は、すべて持っている)。
+ */
+export interface UnlockableEvent {
+  id: string;
+  indicator_id: string;
+  status: string;
+  indicator_code: string;
+}
+
+/**
  * Child resources of an event (revisions, history, reactions, chart): 403
  * PLAN_LIMIT_EXCEEDED with required_plan "PRO" when the parent event is
  * locked for the user. Call before the main query. Returns whether the
@@ -70,7 +83,7 @@ export async function resolvePastReleaseAccess(
 export async function requireUnlockedEvent(
   supabase: SupabaseClient,
   userId: string,
-  event: { id: string; indicator_id: string; status: string },
+  event: UnlockableEvent,
 ): Promise<{ previousLocked: boolean }> {
   return requireUnlockedEventForPlan(supabase, await resolvePlan(supabase, userId), event);
 }
@@ -80,10 +93,25 @@ export async function requireUnlockedEvent(
 export async function requireUnlockedEventForPlan(
   supabase: SupabaseClient,
   plan: Plan,
-  event: { id: string; indicator_id: string; status: string },
+  event: UnlockableEvent,
 ): Promise<{ previousLocked: boolean }> {
+  // 型を迂回した呼び出し(any・JS)でも、判定を素通りさせない: indicator_code が無ければ、FOMC かどうかを判定できないので、
+  // ロックを黙って省略せず、エラーにする(プログラムの誤り。500)。PRO でも同じ(判定の前に確かめる)。
+  assertEventIndicatorCode(event.indicator_code);
   const { lockedIds, previousLockedIds } = await resolvePastReleaseAccessForPlan(supabase, plan, [event]);
   if (lockedIds.has(event.id)) {
+    throw ApiError.planLimitExceeded(lockedReleaseMessage(plan), PAST_RELEASE_REQUIRED_PLAN);
+  }
+  // HQ 指示 2026-11-19: FOMC の会合は RELEASED にならないので、上のロックの対象外。過去の会合の政策金利を FREE には直近 3 回だけ見せる規則を、
+  // 子リソース(revisions・reaction・reaction/chart・history)にも当てはめる(政策金利の本体と同じ判定: policyRateAccess.ts)。
+  // US_FOMC 以外の指標は影響を受けない(isPolicyRateLockedForPlan が、DB を読まずに false)。同じ PLAN_LIMIT_EXCEEDED(required_plan PRO)で返す。
+  if (
+    await isPolicyRateLockedForPlan(supabase, plan, {
+      id: event.id,
+      indicator_id: event.indicator_id,
+      indicator_code: event.indicator_code,
+    })
+  ) {
     throw ApiError.planLimitExceeded(lockedReleaseMessage(plan), PAST_RELEASE_REQUIRED_PLAN);
   }
   return { previousLocked: previousLockedIds.has(event.id) };
