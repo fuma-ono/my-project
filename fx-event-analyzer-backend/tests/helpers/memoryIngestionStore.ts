@@ -6,6 +6,7 @@ import type {
   FxPairRef,
   FxPriceRow,
   IndicatorRef,
+  IngestionLogHistoryRow,
   IngestionLogRow,
   IngestionStore,
   NewReleaseSnapshot,
@@ -402,6 +403,17 @@ export class MemoryIngestionStore implements IngestionStore {
   insertIngestionLog(row: IngestionLogRow): Promise<void> {
     this.logs.push(row);
     return Promise.resolve();
+  }
+
+  /** 履歴の読み取り(オプショナルなメソッド)。tests では、失敗させる・未実装にする場合も試すので、差し替えられる。 */
+  listRecentIngestionLogs(job: string, limit: number): Promise<IngestionLogHistoryRow[]> {
+    return Promise.resolve(
+      this.logs
+        .filter((l) => l.job === job)
+        .sort((a, b) => b.started_at.localeCompare(a.started_at))
+        .slice(0, limit)
+        .map((l) => ({ started_at: l.started_at, status: l.status, details: l.details })),
+    );
   }
 
   listReleasedEventsForReactions(sinceIso: string): Promise<EventForReactionRef[]> {

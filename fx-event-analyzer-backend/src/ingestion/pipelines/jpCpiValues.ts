@@ -74,6 +74,12 @@ export async function ingestJpCpiValues(
     lookbackDays?: number;
     /** true = 書かない(何をするはずかだけ返す) */
     dryRun?: boolean;
+    /**
+     * true = e-Stat の取得(メタ情報・統計データ)の失敗を、実行の失敗(終了コード 1)にする。**定時実行(--scheduled)だけが true**。
+     * 手動の dry-run・手動の書き込みは false(既定)で、取得に失敗しても従来どおり(スキップを記録するだけ。終了コードは 0)。
+     * (HQ 判断 2026-11-19: 手動実行の既存動作は変えない)
+     */
+    failOnFetchError?: boolean;
   },
   counters: JobCounters,
 ): Promise<JpCpiValuesResult> {
@@ -100,6 +106,7 @@ export async function ingestJpCpiValues(
   let body: unknown;
   const periods = [...new Set(events.map((e) => entryById.get(e.provider_event_id)!.referencePeriod))];
   try {
+    counters.fetchAttempted += 1;
     dims = resolveJpCpiDimensions(await deps.fetcher.getJson(metaInfoUrl(deps.appId)));
     if (!dims) {
       counters.error('e-Stat: the classes (前年同月比 / 全国 / 総合) were not found in the metadata');
@@ -107,9 +114,14 @@ export async function ingestJpCpiValues(
     }
     const url = statsDataUrl(deps.appId, dims, periods);
     if (!url) throw new Error('bad reference period');
+    counters.fetchAttempted += 1;
     body = await deps.fetcher.getJson(url);
   } catch (error) {
-    counters.skip('FETCH_FAILED'); // 何も書かない(PENDING のまま。次の実行で取り直す)
+    // メタ情報も統計データも、どちらも値を取るのに必須。**どちらか一方の取得の失敗でも、定時実行(failOnFetchError)では実行を失敗(赤)にする**(HQ指示 2026-11-19。手動実行は従来どおり失敗にしない)。
+    // 何も書かない(PENDING のまま。次の実行で取り直す)。e-Stat にまだ反映されていない場合(NOT_YET_AVAILABLE)は、別で正常な待ち。
+    counters.fetchFailed += 1;
+    counters.skip('FETCH_FAILED');
+    if (deps.failOnFetchError) counters.error('e-Stat: fetch failed (the metadata or the statistics data)');
     counters.note('fetch_failed', { error: redactAppId(error instanceof Error ? error.message : String(error)) });
     result.pending += events.filter((e) => e.status !== 'RELEASED').length;
     return result;

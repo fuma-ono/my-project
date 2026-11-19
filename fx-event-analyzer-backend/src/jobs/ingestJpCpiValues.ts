@@ -13,6 +13,7 @@ import { createIngestionRepository } from '../repositories/ingestionRepository.j
  * 条件・保存のしかたは ingestion/pipelines/jpCpiValues.ts。
  *
  *   npm run ingest:official:jp-cpi-values              # 書く
+ *   npm run ingest:official:jp-cpi-values -- --scheduled # 定時実行用: e-Stat の取得の失敗を終了コード 1 にする(手動は付けない)
  *   npm run ingest:official:jp-cpi-values -- --dry-run # 書かない(ingestion_logs にも書かない)。各回で何をするかだけ出す
  *
  * 必要な環境変数: SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY、ESTAT_APP_ID(GitHub Actions の Secret。出力・ログには出さない)。
@@ -29,6 +30,8 @@ async function main(): Promise<void> {
   const store = createIngestionRepository(createSupabaseClient(env));
   const fetcher = new HttpClient('estat', { minIntervalMs: 2_000, timeoutMs: 20_000, maxRetries: 2, backoffMs: 2_000 });
   const dryRun = process.argv.includes('--dry-run');
+  // 定時実行の step だけが --scheduled を付ける。取得の失敗を実行の失敗(終了コード 1)にするのは、定時実行だけ(手動は従来どおり)
+  const scheduled = process.argv.includes('--scheduled') && !dryRun;
 
   if (dryRun) {
     const counters = new JobCounters();
@@ -55,7 +58,7 @@ async function main(): Promise<void> {
     store,
     { provider: 'estat_cpi', dataType: 'ECONOMIC_EVENT', job: 'ingest:official:jp-cpi-values' },
     async (counters) => {
-      await ingestJpCpiValues({ store, fetcher, appId }, counters);
+      await ingestJpCpiValues({ store, fetcher, appId, failOnFetchError: scheduled }, counters);
     },
   );
   console.log(

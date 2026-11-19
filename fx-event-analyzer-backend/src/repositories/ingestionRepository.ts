@@ -9,6 +9,7 @@ import type {
   FxPairRef,
   FxPriceRow,
   IndicatorRef,
+  IngestionLogHistoryRow,
   IngestionLogRow,
   IngestionStore,
   NewEvent,
@@ -422,6 +423,23 @@ export function createIngestionRepository(supabase: SupabaseClient): IngestionSt
         started_at: new Date(row.started_at).toISOString(),
         details: { no_data_unconfirmed: row.no_data_unconfirmed ?? undefined },
       }));
+    },
+
+    async listRecentIngestionLogs(job: string, limit: number): Promise<IngestionLogHistoryRow[]> {
+      const { data, error } = await supabase
+        .from('ingestion_logs')
+        .select('started_at, status, details')
+        .eq('job', job)
+        .order('started_at', { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return ((data ?? []) as { started_at: string; status: IngestionLogHistoryRow['status']; details: unknown }[]).map(
+        (row) => ({
+          started_at: new Date(row.started_at).toISOString(),
+          status: row.status,
+          details: (row.details ?? {}) as Record<string, unknown>,
+        }),
+      );
     },
 
     async reserveApiCredits(reservation: ApiCreditReservation): Promise<boolean> {

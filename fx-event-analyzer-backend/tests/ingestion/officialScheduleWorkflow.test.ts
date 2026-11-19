@@ -21,7 +21,7 @@ const stepNamed = (prefix: string) => {
   return found[0]!;
 };
 
-const OFFICIAL_CRON = '23 1,8,14,21 * * *';
+const OFFICIAL_CRON = '23 2,8,14,21 * * *';
 const JP_CRON = '53 0,3,6 * * *';
 
 describe('cron entries', () => {
@@ -37,20 +37,46 @@ describe('cron entries', () => {
     expect(onBlock).toMatch(new RegExp(`^ {4}# - cron: '${JP_CRON.replace(/\*/g, '\\*')}'`, 'm'));
   });
 
-  it('official-values slots are 01:23 / 08:23 / 14:23 / 21:23 UTC — after each release, away from :00 / :13 / :41', () => {
+  it('official-values slots are 02:23 / 08:23 / 14:23 / 21:23 UTC — away from :00 / :13 / :41', () => {
     const [minute, hours] = OFFICIAL_CRON.split(' ');
     expect(minute).toBe('23');
-    const slots = hours!.split(',').map(Number);
-    expect(slots).toEqual([1, 8, 14, 21]);
-    // 発表(UTC): 豪州 ABS 00:30(AEDT 11:30)・英国 ONS 07:00(冬時間。夏時間は 06:00)・カナダ 13:30(冬時間。夏時間は 12:30)
-    const after = (release: number) => slots.find((h) => h * 60 + 23 >= release + 30);
-    expect(after(0 * 60 + 30)).toBe(1);
-    expect(after(7 * 60)).toBe(8);
-    expect(after(13 * 60 + 30)).toBe(14);
+    expect(hours!.split(',').map(Number)).toEqual([2, 8, 14, 21]);
     // 他の cron の起動の分(毎時 13・3 時間ごとの 41・00:00)と同じ分にならない
     expect(Number(minute)).not.toBe(13);
     expect(Number(minute)).not.toBe(41);
     expect(Number(minute)).not.toBe(0);
+  });
+
+  describe('every slot comes after each release, in both daylight-saving and standard time (HQ指示 2026-11-19 A1)', () => {
+    const slots = OFFICIAL_CRON.split(' ')[1]!.split(',').map(Number);
+    const minuteOfDay = (hour: number) => hour * 60 + 23;
+    /** 発表(UTC の分)より後になる、最初の回の時刻(分)と、発表からの余裕(分)。 */
+    const firstSlotAfter = (releaseMinute: number) => {
+      const hour = slots.find((h) => minuteOfDay(h) > releaseMinute);
+      return hour === undefined ? null : { hour, margin: minuteOfDay(hour) - releaseMinute };
+    };
+
+    it('ABS 11:30 Sydney: AEDT (Oct–Apr) = 00:30Z and AEST (Apr–Oct) = 01:30Z — the first slot is after both', () => {
+      expect(firstSlotAfter(0 * 60 + 30)).toEqual({ hour: 2, margin: 113 });
+      expect(firstSlotAfter(1 * 60 + 30)).toEqual({ hour: 2, margin: 53 });
+    });
+
+    it('the previous 01:23 slot started 7 minutes BEFORE the AEST release — it must not come back', () => {
+      expect(1 * 60 + 23).toBeLessThan(1 * 60 + 30);
+      expect(slots).not.toContain(1);
+      for (const releaseMinute of [0 * 60 + 30, 1 * 60 + 30])
+        expect(firstSlotAfter(releaseMinute)!.margin).toBeGreaterThanOrEqual(30);
+    });
+
+    it('ONS 07:00 UK: BST = 06:00Z, GMT = 07:00Z; Statistics Canada 08:30 ET: EDT = 12:30Z, EST = 13:30Z — unaffected', () => {
+      expect(firstSlotAfter(6 * 60)?.hour).toBe(8);
+      expect(firstSlotAfter(7 * 60)?.hour).toBe(8);
+      expect(firstSlotAfter(12 * 60 + 30)?.hour).toBe(14);
+      expect(firstSlotAfter(13 * 60 + 30)?.hour).toBe(14);
+      for (const releaseMinute of [6 * 60, 7 * 60, 12 * 60 + 30, 13 * 60 + 30]) {
+        expect(firstSlotAfter(releaseMinute)!.margin).toBeGreaterThanOrEqual(50);
+      }
+    });
   });
 
   it('JP CPI slots (00:53 / 03:53 / 06:53 UTC) come at least 80 minutes after the 08:30 JST (= 23:30 UTC) release', () => {
@@ -157,8 +183,19 @@ describe('concurrency group', () => {
 
   it('official-values and JP CPI are independent groups, and the JP schedule target is not in the values group', () => {
     expect(dispatch('official-values')).not.toBe(dispatch('jp-cpi-values'));
-    expect(dispatch('jp-cpi-schedule')).toBe('fx-ingestion');
-    expect(dispatch('jp-cpi-schedule-dry-run')).toBe('fx-ingestion');
+    expect(dispatch('official-values')).toBe('fx-ingestion-official-values');
+    expect(dispatch('jp-cpi-values')).toBe('fx-ingestion-jp-cpi-values');
+  });
+
+  it('creating a release table and fetching its values are serialized per indicator group (HQ指示 2026-11-19 A4)', () => {
+    // GB/AU/CA の公表予定の作成は、official-values と同じ group(日程表の作成中に値の取得が走らない)
+    expect(dispatch('gb-au-ca-schedules')).toBe('fx-ingestion-official-values');
+    expect(dispatch('gb-au-ca-schedules-dry-run')).toBe('fx-ingestion-official-values');
+    expect(dispatch('gb-au-ca-schedules')).toBe(groupOf({ event: 'schedule', schedule: OFFICIAL_CRON }));
+    // JP の公表予定の作成は、JP CPI の値と同じ group
+    expect(dispatch('jp-cpi-schedule')).toBe('fx-ingestion-jp-cpi-values');
+    expect(dispatch('jp-cpi-schedule-dry-run')).toBe('fx-ingestion-jp-cpi-values');
+    expect(dispatch('jp-cpi-schedule')).toBe(groupOf({ event: 'schedule', schedule: JP_CRON }));
   });
 
   it('every other manual target keeps its previous group (FX / BLS / reactions / Eurostat / speeches unaffected)', () => {
@@ -196,7 +233,11 @@ describe('steps', () => {
     expect(s).not.toContain('workflow_dispatch');
     expect(s).not.toContain('--dry-run');
     expect(s).not.toContain('ESTAT_APP_ID');
-    expect(s.trimEnd().endsWith('run: npm run -s ingest:official-values')).toBe(true);
+    // 定時実行の step だけが --scheduled を付ける(取得が全件失敗なら終了コード 1。手動の step は付けない: HQ 判断 2026-11-19)
+    expect(s.trimEnd().endsWith('run: npm run -s ingest:official-values -- --scheduled')).toBe(true);
+    expect(steps.filter((x) => x.includes('ingest:official-values -- --scheduled'))).toHaveLength(1);
+    for (const manual of steps.filter((x) => x.includes("inputs.target == 'official-values")))
+      expect(manual).not.toContain('--scheduled');
   });
 
   it('the scheduled JP CPI step is bound to the (disabled) JP cron and is the only one reading ESTAT_APP_ID there', () => {
@@ -206,7 +247,11 @@ describe('steps', () => {
     expect(s).toContain(`github.event.schedule == '${JP_CRON}'`);
     expect(s).not.toContain('--dry-run');
     expect(s).toContain('ESTAT_APP_ID: ${{ secrets.ESTAT_APP_ID }}');
-    expect(s.trimEnd().endsWith('run: npm run -s ingest:official:jp-cpi-values')).toBe(true);
+    // 定時実行の step だけが --scheduled を付ける(取得の失敗を終了コード 1 にする。手動の step は付けない: HQ 判断 2026-11-19)
+    expect(s.trimEnd().endsWith('run: npm run -s ingest:official:jp-cpi-values -- --scheduled')).toBe(true);
+    for (const manual of steps.filter((x) => x.includes("inputs.target == 'jp-cpi-values")))
+      expect(manual).not.toContain('--scheduled');
+    expect(steps.filter((x) => x.includes('ingest:official:jp-cpi-values -- --scheduled'))).toHaveLength(1);
     // 無効の cron なので、この step は定時では動かない(cron が有効になるまで)
     const onBlock = yml.slice(yml.indexOf('\non:\n'), yml.indexOf('\n  workflow_dispatch:'));
     expect(onBlock).not.toMatch(new RegExp(`^ {4}- cron: '${JP_CRON.replace(/\*/g, '\\*')}'`, 'm'));
@@ -252,5 +297,30 @@ describe('steps', () => {
   it('the DEV check stays: a key that is not for the DEV project stops the job', () => {
     expect(yml).toContain('"$KEY_REF" != "$DEV_PROJECT_REF"');
     expect(yml).toContain('DEV_PROJECT_REF: pbemckwnqmeaoveelihd');
+  });
+});
+
+describe('missing Supabase secrets: a failure only for the two scheduled official runs (HQ指示 2026-11-19 A2)', () => {
+  const check = stepNamed('Check secrets and target');
+  const missing = check.slice(check.indexOf('if [ -z "$SUPABASE_URL"'), check.indexOf('if [ "${SUPABASE_URL%/}"'));
+
+  it('the step knows the schedule through an env var, not by interpolating it into the script', () => {
+    expect(check).toContain('SCHEDULE: ${{ github.event.schedule }}');
+    expect(missing).not.toContain('${{');
+  });
+
+  it('only the official-values and JP CPI crons exit 1 when the secrets are missing; everything else still exits 0', () => {
+    expect(missing).toContain(`[ "$SCHEDULE" = "${OFFICIAL_CRON}" ] || [ "$SCHEDULE" = "${JP_CRON}" ]`);
+    const failBranch = missing.slice(missing.indexOf('if [ "$SCHEDULE"'), missing.indexOf('echo "Secrets が未登録'));
+    expect(failBranch).toContain('::error');
+    expect(failBranch).toContain('exit 1');
+    expect(failBranch).toContain('ready=false');
+    // 既存の動作(手動・為替・要人発言・日次レポート): 何もせず終える
+    expect(missing.slice(missing.indexOf('echo "Secrets が未登録'))).toContain('exit 0');
+  });
+
+  it('the DEV project / key checks after it are unchanged', () => {
+    expect(check).toContain('接続先が社内確認用のDBではありません');
+    expect(check).toContain('"$KEY_REF" != "$DEV_PROJECT_REF"');
   });
 });

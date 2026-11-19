@@ -227,6 +227,7 @@ export async function ingestOfficialValues(
 
     let body: unknown;
     try {
+      counters.fetchAttempted += 1;
       body = await deps.fetcher.getJson(
         source.request.url,
         source.request.body === undefined
@@ -240,6 +241,7 @@ export async function ingestOfficialValues(
             },
       );
     } catch (error) {
+      counters.fetchFailed += 1;
       counters.skip('FETCH_FAILED'); // 何も書かない(DATA_PENDING のまま)
       counters.note('fetch_failed', {
         indicator: source.indicatorCode,
@@ -359,12 +361,27 @@ export async function ingestOfficialValues(
           });
           continue;
         }
+        // 取得の数え方(HQ指示 2026-11-19 のレビュー対応。挙動は変えず、前提を明記する):
+        //  - 呼び出しの順序: 同じ指標でも、まず系列の取得(上の request。失敗なら continue でここへ来ない)、成功したときだけ、この発表日の
+        //    取得(releaseRequest)に進む。つまり、この取得を試みたときは、同じ指標の系列の取得は必ず成功している。
+        //  - 404 は「試行」には数えるが「失敗」には数えない(正常な待ち)。分母(試行)に入るので、全件 404 は失敗にならない。
+        //  - 実害がない前提: 404 を分母に入れても、全件失敗の判定は『試行 = 失敗』のときだけなので、404 が混ざると全件失敗には**ならない**
+        //    (= 失敗側に倒れない。正常な待ちを失敗にしない)。
+        //  - 注意(限界): この取得が 404 以外で失敗しても、同じ指標の系列の取得が成功していれば、試行が失敗より多いので、実行は
+        //    『一部失敗(警告)』になり、全件失敗(赤)にはならない。この取得だけが止まり続ける障害は、警告として出る(赤にならない)。
         try {
+          counters.fetchAttempted += 1;
           releaseBody = await deps.fetcher.getJson(req.url, req.headers ? { headers: req.headers } : {});
+          counters.releaseFetchResult(source.indicatorCode, 'ok');
         } catch (error) {
           if (error instanceof HttpError && error.status === 404) {
+            counters.releaseFetchResult(source.indicatorCode, 'not_found');
+            // 404 = まだ更新されていない(正常な待ち)。取得の失敗には数えない
+            counters.fetchNotFound += 1; // 件数は記録する(全件 404 でも正常終了)
             counters.skip('NOT_RELEASED_OR_DATE_MISMATCH'); // 公表日より後の更新が無い
           } else {
+            counters.releaseFetchResult(source.indicatorCode, 'failed');
+            counters.fetchFailed += 1;
             counters.skip('FETCH_FAILED');
             counters.note('fetch_failed', {
               indicator: source.indicatorCode,

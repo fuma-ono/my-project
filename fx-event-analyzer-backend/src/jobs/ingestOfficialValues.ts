@@ -4,6 +4,7 @@ import { createSupabaseClient } from '../db/supabaseClient.js';
 import { HttpClient } from '../ingestion/http.js';
 import { GB_AU_CA_SCHEDULES } from '../ingestion/mappings/gbAuCaSchedule.js';
 import { readOnlyIngestionStore } from '../ingestion/pipelines/blsCalendar.js';
+import { runOfficialValues } from '../ingestion/officialValuesRun.js';
 import { ingestOfficialValues } from '../ingestion/pipelines/officialValues.js';
 import { JobCounters, runIngestionJob } from '../ingestion/runner.js';
 import { createIngestionRepository } from '../repositories/ingestionRepository.js';
@@ -13,7 +14,12 @@ import { createIngestionRepository } from '../repositories/ingestionRepository.j
  * 実績値取得・保存処理」)。条件・保存のしかたは ingestion/pipelines/officialValues.ts。キー・契約・有料 API なし。
  *
  *   npm run ingest:official-values
+ *   npm run ingest:official-values -- --scheduled # 定時実行用: 取得が全件失敗なら終了コード 1(手動は付けない)
  *   npm run ingest:official-values -- --dry-run   # 公式の API は読むが、DB には書かない(ingestion_logs にも)。plan と値だけ出す(HQ指示 2026-11-13)
+ *
+ * 継続障害の検知(定時実行だけ。--scheduled): 同じ指標で、ABS の発表日の取得が 3 回連続して失敗なら、実行を失敗にする。
+ * **対象は ABS の発表日の取得だけ**(ABS の系列の取得・ONS・Statistics Canada は対象外。ログに release_fetch が無いことは、
+ * 正常取得の証拠ではない)。対象の拡大は HQ の別判断。詳細は ingestion/officialValuesRun.ts・ingestion/releaseFetchStreak.ts。
  *
  * 定期実行には登録していない(HQ の承認の後)。前提: migration 20261110000002 と、ingest:gb-au-ca-schedules で公表予定が
  * 入っていること。Exit 0 / 1。
@@ -27,6 +33,8 @@ async function main(): Promise<void> {
     maxRetries: 2,
     backoffMs: 2_000,
   });
+  // 定時実行の step だけが --scheduled を付ける。取得が全件失敗のときに実行を失敗(終了コード 1)にするのは、定時実行だけ(手動・dry-run は従来どおり)
+  const scheduled = process.argv.includes('--scheduled') && !process.argv.includes('--dry-run');
   if (process.argv.includes('--dry-run')) {
     const counters = new JobCounters();
     const planned = await ingestOfficialValues(
@@ -54,7 +62,16 @@ async function main(): Promise<void> {
     store,
     { provider: 'official_values', dataType: 'ECONOMIC_EVENT', job: 'ingest:official-values' },
     async (counters) => {
-      await ingestOfficialValues({ store, fetcher, tables: GB_AU_CA_SCHEDULES }, counters);
+      const { fetchWarning, historyWarning } = await runOfficialValues(counters, {
+        store,
+        fetcher,
+        tables: GB_AU_CA_SCHEDULES,
+        scheduled,
+      });
+      if (process.env.GITHUB_ACTIONS === 'true') {
+        if (fetchWarning) console.log(`::warning title=official-values partial fetch failure::${fetchWarning}`);
+        if (historyWarning) console.log(`::warning title=official-values history unavailable::${historyWarning}`);
+      }
     },
   );
   console.log(

@@ -1,8 +1,10 @@
 /** HQ指示(2026-11-11「JP_CPI: ESTAT_APP_ID を利用する取得処理」): e-Stat の値 → 初回の公表値。 */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { redactUrl } from '../../src/ingestion/http.js';
 import { ingestJpCpiValues, JP_CPI_SOURCE_NAME } from '../../src/ingestion/pipelines/jpCpiValues.js';
-import { JobCounters } from '../../src/ingestion/runner.js';
+import { JobCounters, resolveJobStatus } from '../../src/ingestion/runner.js';
 import type { IngestionStore, NewReleaseSnapshot, NewRevision } from '../../src/ingestion/store.js';
 import type { JpCpiScheduleEntry } from '../../src/ingestion/mappings/jpCpiSchedule.js';
 
@@ -215,19 +217,126 @@ describe('ingestJpCpiValues', () => {
     expect(updates).toEqual([]);
   });
 
-  it('a fetch error writes nothing and never shows the appId', async () => {
+  // 実行の種別と終了コード(HQ 判断 2026-11-19: JP CPI は選択肢 2)。ジョブ(src/jobs/ingestJpCpiValues.ts)と同じ判定:
+  //   dry-run  : counters.errors > 0 → 終了コード 1
+  //   書き込み : runIngestionJob の status が SUCCESS 以外 → 終了コード 1
+  const dryRunExit = (c: JobCounters) => (c.errors > 0 ? 1 : 0);
+  const writeExit = (c: JobCounters) => (resolveJobStatus(c, false) === 'SUCCESS' ? 0 : 1);
+  const failingFetcher = {
+    getJson: (url: string) => Promise.reject(new Error(`estat: request failed (${url})`)),
+  };
+  const run = async (opts: {
+    dryRun?: boolean;
+    failOnFetchError?: boolean;
+    fetcher?: { getJson: (u: string) => Promise<unknown> };
+  }) => {
     const { store, snapshots } = setup();
     const counters = new JobCounters();
-    const failing = {
-      getJson: (url: string) => Promise.reject(new Error(`estat: request failed (${url})`)),
-    };
     await ingestJpCpiValues(
-      { store, fetcher: failing, appId: APP_ID, schedule: SCHEDULE, now: at('2026-11-20T03:00:00Z') },
+      {
+        store,
+        fetcher: opts.fetcher ?? failingFetcher,
+        appId: APP_ID,
+        schedule: SCHEDULE,
+        now: at('2026-11-20T03:00:00Z'),
+        ...(opts.dryRun ? { dryRun: true } : {}),
+        ...(opts.failOnFetchError ? { failOnFetchError: true } : {}),
+      },
       counters,
     );
-    expect(snapshots).toEqual([]);
-    expect(JSON.stringify(counters.details)).not.toContain(APP_ID);
-    expect(counters.skipReasons).toMatchObject({ FETCH_FAILED: 1 });
+    return { counters, snapshots };
+  };
+
+  describe('exit code on a fetch failure depends on the run type (scheduled = 1; manual dry-run / manual write = unchanged)', () => {
+    it('1. scheduled run (--scheduled): a fetch failure is a failure — exit code 1; nothing is written; appId never shown', async () => {
+      const { counters, snapshots } = await run({ failOnFetchError: true });
+      expect(snapshots).toEqual([]);
+      expect(JSON.stringify(counters.details)).not.toContain(APP_ID);
+      expect(counters.errors).toBe(1);
+      expect(writeExit(counters)).toBe(1);
+      expect(counters.fetchAttempted).toBe(1);
+      expect(counters.fetchFailed).toBe(1);
+    });
+
+    it('1b. scheduled run: a failure of the statistics data alone (metadata fetched) is also a failure; both fetches are counted', async () => {
+      let calls = 0;
+      const ok = fetcher(statsData('2.3'));
+      const metaThenFail = {
+        getJson: (url: string) =>
+          ++calls === 1 ? ok.getJson(url) : Promise.reject(new Error('estat: request failed')),
+      };
+      const { counters, snapshots } = await run({ failOnFetchError: true, fetcher: metaThenFail });
+      expect(snapshots).toEqual([]);
+      expect(writeExit(counters)).toBe(1);
+      expect(counters.fetchAttempted).toBe(2);
+      expect(counters.fetchFailed).toBe(1);
+    });
+
+    it('2. manual dry-run: a fetch failure keeps the previous behaviour — exit code 0 (only the skip is recorded)', async () => {
+      const { counters, snapshots } = await run({ dryRun: true });
+      expect(snapshots).toEqual([]);
+      expect(counters.skipReasons).toMatchObject({ FETCH_FAILED: 1 });
+      expect(counters.errors).toBe(0);
+      expect(dryRunExit(counters)).toBe(0);
+    });
+
+    it('3. manual write: a fetch failure keeps the previous behaviour — status SUCCESS, exit code 0; nothing is written', async () => {
+      const { counters, snapshots } = await run({});
+      expect(snapshots).toEqual([]);
+      expect(counters.skipReasons).toMatchObject({ FETCH_FAILED: 1 });
+      expect(counters.errors).toBe(0);
+      expect(resolveJobStatus(counters, false)).toBe('SUCCESS');
+      expect(writeExit(counters)).toBe(0);
+      expect(JSON.stringify(counters.details)).not.toContain(APP_ID);
+    });
+
+    it('4. a successful fetch is unchanged by the flag: same published value, no error, exit code 0 (scheduled and manual alike)', async () => {
+      const okFetcher = fetcher(statsData('2.3'));
+      const manual = await run({ fetcher: okFetcher });
+      const scheduled = await run({ fetcher: okFetcher, failOnFetchError: true });
+      for (const r of [manual, scheduled]) {
+        expect(r.counters.errors).toBe(0);
+        expect(writeExit(r.counters)).toBe(0);
+      }
+      expect(scheduled.snapshots).toEqual(manual.snapshots);
+      expect(manual.snapshots).toHaveLength(1);
+    });
+
+    it('other failures that are not a fetch failure (e.g. the metadata classes not found) still fail in manual runs, as before', async () => {
+      const noClasses = {
+        getJson: () => Promise.resolve({ GET_META_INFO: { METADATA_INF: { CLASS_INF: { CLASS_OBJ: [] } } } }),
+      };
+      const { counters } = await run({ fetcher: noClasses });
+      expect(counters.errors).toBe(1);
+      expect(writeExit(counters)).toBe(1);
+    });
+  });
+
+  describe('the job wires the flag to --scheduled only (never to a manual run)', () => {
+    const jobSource = readFileSync(join(__dirname, '../../src/jobs/ingestJpCpiValues.ts'), 'utf8');
+
+    it('`scheduled` needs the --scheduled argument and is never true for a dry run; only the write path passes it', () => {
+      expect(jobSource).toContain("const scheduled = process.argv.includes('--scheduled') && !dryRun;");
+      expect(jobSource).toContain('failOnFetchError: scheduled');
+      // dry-run の呼び出しは、failOnFetchError を渡さない(従来どおり)
+      const dryCall = jobSource.slice(
+        jobSource.indexOf('if (dryRun) {'),
+        jobSource.indexOf('const result = await runIngestionJob'),
+      );
+      expect(dryCall).not.toContain('failOnFetchError');
+    });
+  });
+
+  it('nothing due (before the release): no fetch, no error — a normal no-op', async () => {
+    const { store } = setup();
+    const counters = new JobCounters();
+    const never = { getJson: () => Promise.reject(new Error('must not be called')) };
+    await ingestJpCpiValues(
+      { store, fetcher: never, appId: APP_ID, schedule: SCHEDULE, now: at('2026-11-19T12:00:00Z') },
+      counters,
+    );
+    expect(counters.errors).toBe(0);
+    expect(counters.fetchAttempted).toBe(0);
   });
 
   it('the HTTP client redacts appId in URLs it puts in error messages', () => {

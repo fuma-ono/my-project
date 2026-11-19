@@ -54,12 +54,15 @@ name: FX Event Analyzer - Data ingestion (dev)
 #     Secret ESTAT_APP_ID。出力・ログには出さない)。dry-run は DB に書かない。スケジュールの取り込みは手動のまま。
 #     値(jp-cpi-values)の定時実行は、cron を無効の状態で用意した(下の「公式統計の定時実行」。初回の確認と HQ の承認の後に有効にする)
 #   - 公式統計の定時実行(HQ指示 2026-11-18「公式統計の定時実行化」。運用評価は完了):
-#       * official-values(英国 ONS・カナダ Statistics Canada・豪州 ABS の発表値): 毎日 4 回(UTC 23 1,8,14,21 * * *。01:23・08:23・14:23・21:23)。
-#         豪州(00:30Z)・英国(07:00Z)・カナダ(13:30Z)の各発表の後と、取り直しの回。毎時 0 分・13 分・41 分(為替・要人発言・日次レポート)を避けた。
+#       * official-values(英国 ONS・カナダ Statistics Canada・豪州 ABS の発表値): 毎日 4 回(UTC 23 2,8,14,21 * * *。02:23・08:23・14:23・21:23)。
+#         豪州 ABS(11:30 シドニー時間。夏時間 AEDT は 00:30Z・冬時間 AEST は 01:30Z)・英国 ONS(07:00。冬 07:00Z・夏 06:00Z)・
+#         カナダ(08:30 ET。冬 13:30Z・夏 12:30Z)の各発表の、どの時期でも後になる時刻(AEST でも 02:23 は 01:30Z の 53 分後)と、取り直しの回。毎時 0 分・13 分・41 分(為替・要人発言・日次レポート)を避けた。
 #         公式 API は無料・キー不要。1 回の実行は約 9〜12 リクエスト。値が入っている発表は書かず、改定は値が変わったときだけ足すので、重複しない。
 #       * JP CPI の値(e-Stat): **cron は無効**(下の on: にコメントで置いてある UTC 53 0,3,6 * * *)。2026-11-20 の初回の公表の後に、
 #         dry-run で e-Stat の更新の時刻と値を確認し、HQ の承認を得てから、そのコメントを外して有効にする。有効になるまで、この step は動かない。
-#       * どちらも、同じ target の実行が重ならないよう、専用の concurrency group(fx-ingestion-official-values・fx-ingestion-jp-cpi-values)に入れる。
+#       * どちらも、同じ指標の実行が重ならないよう、専用の concurrency group(fx-ingestion-official-values・fx-ingestion-jp-cpi-values)に入れる。
+#         公表予定の作成(gb-au-ca-schedules・jp-cpi-schedule と各 dry-run)も、同じ指標の値の取得と同じ group で直列にする(日程表の作成中に値の取得が走らない)。
+#         official-values と JP CPI は別の group(指標が別で、同時でも安全)。
 #         手動の target(official-values・official-values-dry-run・jp-cpi-values・jp-cpi-values-dry-run)も同じ group で、手動実行は今までどおり使える。
 #       * 定時の起動は、デフォルトブランチ(main)の workflow だけが対象(GitHub の仕様)。コードは、今までどおり下の checkout の ref を使う。
 # 接続先が社内確認用のDBでなければ止まる(本番DBに書き込まない)。
@@ -69,7 +72,7 @@ on:
     - cron: '13 * * * *'
     - cron: '41 */3 * * *'
     - cron: '0 0 * * *'
-    - cron: '23 1,8,14,21 * * *' # official-values(HQ指示 2026-11-18)
+    - cron: '23 2,8,14,21 * * *' # official-values(HQ指示 2026-11-18)
     # - cron: '53 0,3,6 * * *' # JP CPI の値: **無効**。2026-11-20 の初回の確認と HQ の承認の後に、この行のコメントを外す
   workflow_dispatch:
     inputs:
@@ -92,7 +95,7 @@ permissions:
 concurrency:
   # HQ承認 2026-11-10 案A: 為替の繰り返し(毎時13分の起動)は専用のグループ。最長約5時間半占有するので、
   # fx-ingestion(BLS・反応・FOMC・手動の為替など)と分け、手動の実行を待たせない。
-  group: ${{ github.event.schedule == '13 * * * *' && 'fx-prices-loop' || ((github.event.schedule == '23 1,8,14,21 * * *' || (github.event_name == 'workflow_dispatch' && startsWith(inputs.target, 'official-values'))) && 'fx-ingestion-official-values' || ((github.event.schedule == '53 0,3,6 * * *' || (github.event_name == 'workflow_dispatch' && startsWith(inputs.target, 'jp-cpi-values'))) && 'fx-ingestion-jp-cpi-values' || ((github.event.schedule == '41 */3 * * *' || (github.event_name == 'workflow_dispatch' && (inputs.target == 'speeches' || startsWith(inputs.target, 'speech-')))) && 'fx-ingestion-speeches' || ((github.event_name == 'workflow_dispatch' && (inputs.target == 'official-eurostat' || inputs.target == 'official-eurostat-dry-run')) && 'fx-ingestion-eurostat' || 'fx-ingestion')))) }}
+  group: ${{ github.event.schedule == '13 * * * *' && 'fx-prices-loop' || ((github.event.schedule == '23 2,8,14,21 * * *' || (github.event_name == 'workflow_dispatch' && (startsWith(inputs.target, 'official-values') || startsWith(inputs.target, 'gb-au-ca-schedules')))) && 'fx-ingestion-official-values' || ((github.event.schedule == '53 0,3,6 * * *' || (github.event_name == 'workflow_dispatch' && startsWith(inputs.target, 'jp-cpi-'))) && 'fx-ingestion-jp-cpi-values' || ((github.event.schedule == '41 */3 * * *' || (github.event_name == 'workflow_dispatch' && (inputs.target == 'speeches' || startsWith(inputs.target, 'speech-')))) && 'fx-ingestion-speeches' || ((github.event_name == 'workflow_dispatch' && (inputs.target == 'official-eurostat' || inputs.target == 'official-eurostat-dry-run')) && 'fx-ingestion-eurostat' || 'fx-ingestion')))) }}
   cancel-in-progress: false
 
 jobs:
@@ -113,8 +116,17 @@ jobs:
       - name: Check secrets and target
         id: check
         working-directory: .
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
         run: |
           if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            # 公式統計の定時実行(HQ指示 2026-11-19)では、Secret の未登録を失敗(赤)にする。何も実行されないまま緑にならないようにする。
+            # 手動の実行と、他の定時実行(為替・要人発言・日次レポート)は、今までどおり何もせず終える。
+            if [ "$SCHEDULE" = "23 2,8,14,21 * * *" ] || [ "$SCHEDULE" = "53 0,3,6 * * *" ]; then
+              echo "::error title=Secrets missing::公式統計の定時実行で、Supabase の Secret が未登録です。何も実行されません"
+              echo "ready=false" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
             echo "Secrets が未登録のため何もしません"
             echo "ready=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -269,10 +281,10 @@ jobs:
         run: npm run -s ingest:official:jp-cpi-values
       # 定時の step(HQ指示 2026-11-18)。起動の cron の文字列と完全に一致するときだけ動く。DEV の確認(steps.check)の後。
       - name: GB/AU/CA official values (scheduled)
-        if: steps.check.outputs.ready == 'true' && github.event_name == 'schedule' && github.event.schedule == '23 1,8,14,21 * * *'
-        run: npm run -s ingest:official-values
+        if: steps.check.outputs.ready == 'true' && github.event_name == 'schedule' && github.event.schedule == '23 2,8,14,21 * * *'
+        run: npm run -s ingest:official-values -- --scheduled
       - name: JP CPI values (scheduled; the cron is disabled until the first release is verified)
         if: steps.check.outputs.ready == 'true' && github.event_name == 'schedule' && github.event.schedule == '53 0,3,6 * * *'
         env:
           ESTAT_APP_ID: ${{ secrets.ESTAT_APP_ID }}
-        run: npm run -s ingest:official:jp-cpi-values
+        run: npm run -s ingest:official:jp-cpi-values -- --scheduled

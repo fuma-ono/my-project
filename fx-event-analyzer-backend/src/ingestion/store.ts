@@ -236,6 +236,13 @@ export interface IngestionLogRow {
   details: Record<string, unknown>;
 }
 
+/** ingestion_logs の 1 行(継続障害の判定が読む部分だけ)。 */
+export interface IngestionLogHistoryRow {
+  started_at: string;
+  status: IngestionLogRow['status'];
+  details: Record<string, unknown>;
+}
+
 /** ingestion_logs row of ingest:fx-prices, reduced to what the gap repair reads back. */
 export interface FxIngestionLogSample {
   started_at: string;
@@ -359,6 +366,11 @@ export interface IngestionStore {
   /** Credits reserved today (UTC) for the provider, all jobs. */
   todayApiCredits(provider: string): Promise<number>;
   insertIngestionLog(row: IngestionLogRow): Promise<void>;
+  /**
+   * 指定のジョブの直近の ingestion_logs(新しい順、最大 limit 件)。読み取り専用。
+   * **オプショナル**: 実装しない store(既存のもの)では、履歴を使う判定(releaseFetchStreak)をしない(HQ 承認 2026-11-19)。
+   */
+  listRecentIngestionLogs?(job: string, limit: number): Promise<IngestionLogHistoryRow[]>;
   /** RELEASED events with release_datetime >= sinceIso (bounds the scan to the repair horizon). */
   listReleasedEventsForReactions(sinceIso: string): Promise<EventForReactionRef[]>;
   /**
