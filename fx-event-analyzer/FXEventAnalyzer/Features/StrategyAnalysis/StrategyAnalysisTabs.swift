@@ -51,10 +51,13 @@ enum StrategyAnalysisTab: Int, CaseIterable, Identifiable {
 }
 
 /// 4タブの切り替え(ユーザー提示の参考画像どおり: アイコン+ラベルの等幅4列、列の間に
-/// 縦の区切り線、選択中の列だけアイコン・ラベルが青(`V5P.blue`)になり列の下端に青い
-/// 下線が付く。既存の214pt列の中に収める(V5BottomBarの全幅チャンネルとは異なり、
-/// このタブバーは他のカードと同じScrollView内で一緒にスクロールする構成を維持する —
-/// ScrollViewの外に出す構成は過去のCIで高さの伝播不良によるタップ不能を起こしたため)。
+/// 縦の区切り線、タブ行全体の上下に1本ずつの横線。選択中の列はアイコン・ラベルが
+/// 青(`V5P.blue`)になり、列全体を青い四角(角丸の枠線)で囲う(ユーザー指摘
+/// 2026-11-19「タブの下に1本の線を引いてほしい/タブを選択すると四角で囲うように
+/// してほしい」: 下線インジケーターから、下端の1本線+選択中セルの枠線囲みに変更)。
+/// 既存の214pt列の中に収める(V5BottomBarの全幅チャンネルとは異なり、このタブバーは
+/// 他のカードと同じScrollView内で一緒にスクロールする構成を維持する — ScrollViewの
+/// 外に出す構成は過去のCIで高さの伝播不良によるタップ不能を起こしたため)。
 struct StrategyAnalysisTabBar: View {
     @Binding var selection: StrategyAnalysisTab
 
@@ -75,6 +78,9 @@ struct StrategyAnalysisTabBar: View {
                     }
                 }
             }
+            // ユーザー指摘(2026-11-19)「タブの下に1本の線を引いてほしい」: タブ行の
+            // 下端にも上端と同じ横線を1本引く。
+            Rectangle().fill(Self.dividerColor).frame(height: 0.6)
         }
         .frame(width: 214)
     }
@@ -88,14 +94,18 @@ struct StrategyAnalysisTabBar: View {
                 .foregroundStyle(color)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            RoundedRectangle(cornerRadius: 1)
-                .fill(isSelected ? Self.selectedColor : .clear)
-                .frame(height: 1.6)
-                .padding(.horizontal, 3)
         }
-        .padding(.top, 6)
-        .padding(.bottom, 5)
+        .padding(.vertical, 5)
+        .padding(.horizontal, 4)
         .frame(maxWidth: .infinity)
+        .padding(.vertical, 2)
+        .padding(.horizontal, 2)
+        // ユーザー指摘(2026-11-19)「タブを選択すると四角で囲うようにしてほしい」:
+        // 下線インジケーターの代わりに、選択中のセル全体を角丸の青い枠線で囲む。
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(isSelected ? Self.selectedColor : .clear, lineWidth: 1)
+        )
         .contentShape(Rectangle())
         // V5BottomBarと同じ理由(`Button`+`.buttonStyle(.plain)`でも実機でシステム既定の
         // ハイライトカプセルが写り込んだ)で`onTapGesture`を使う。
