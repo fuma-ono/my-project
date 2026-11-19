@@ -15,6 +15,8 @@ import type {
   SpeechRunSample,
   StagedSample,
 } from './metrics.js';
+import { UNKNOWN_INDICATOR_CODE } from './metrics.js';
+import { FOMC_POLICY_RATE_JOB } from '../pipelines/fomcPolicyRates.js';
 import { getSpeechProviderDbStatus, listSpeechIngestionRuns } from '../../repositories/speechesRepository.js';
 import {
   PENDING_STALE_HOURS,
@@ -79,12 +81,32 @@ export interface QualityReader {
    * (= 発表の時刻を過ぎたのに、実績の取り込みがまだ。取消し・発表済みは含まない)。READ-ONLY。
    */
   listOverdueScheduledEvents(fromIso: string, toIso: string): Promise<OverdueEventSample[]>;
+  /**
+   * 第12章: 最後の `ingest:fomc-policy-rate` の実行(ingestion_logs)。実行記録が無ければ null。READ-ONLY。
+   * details の awaiting・unmatched は、取り込み処理自身が書いたもの(読み取るだけ)。
+   */
+  latestFomcPolicyRateRun(): Promise<FomcRunSample | null>;
+}
+
+/** 第12章: 最後の FOMC 政策金利の取り込みの実行。 */
+export interface FomcRunSample {
+  started_at: string;
+  status: string;
+  awaiting: string[];
+  /** 取り込み処理が書く実際の形: { provider_event_id, reason }(reason は NO_RECORD_IN_WINDOW など)。 */
+  unmatched: { provider_event_id: string; reason: string }[];
+  /** 形式が合わず読み捨てた要素の数(awaiting・unmatched)。 */
+  discarded: { awaiting: number; unmatched: number };
 }
 
 /** 第12章: 発表の時刻を過ぎても SCHEDULED のままの発表。 */
 export interface OverdueEventSample {
   indicator_code: string;
   release_datetime: string;
+  /** FOMC の会合(US_FOMC)だけ: 取り込みの実行記録(awaiting・unmatched)との突き合わせ用。 */
+  provider_event_id?: string | null | undefined;
+  /** FOMC の会合(US_FOMC)だけ: 政策金利の表(fomc_policy_decisions)に行があるか。それ以外は undefined。 */
+  policy_recorded?: boolean | undefined;
 }
 
 /** 第10章(HQ判断 2026-10-27 案B): 暫定の予定は通知しないため、確定の作業の漏れを見つける。 */
@@ -206,7 +228,7 @@ export function createQualityReader(supabase: SupabaseClient): QualityReader {
         ...events.map((e): ReleaseInstant => ({
           kind: 'ECONOMIC',
           at: e.release_datetime,
-          label: e.economic_indicators?.code ?? '(指標不明)',
+          label: e.economic_indicators?.code ?? UNKNOWN_INDICATOR_CODE,
         })),
         ...speeches.map((s): ReleaseInstant => ({ kind: 'SPEECH', at: s.statement_datetime, label: s.title })),
       ];
@@ -360,7 +382,7 @@ export function createQualityReader(supabase: SupabaseClient): QualityReader {
       );
       return rows.map((row) => ({
         provider_event_id: row.provider_event_id,
-        indicator_code: row.economic_indicators?.code ?? '(指標不明)',
+        indicator_code: row.economic_indicators?.code ?? UNKNOWN_INDICATOR_CODE,
         release_datetime: row.release_datetime,
       }));
     },
@@ -369,13 +391,23 @@ export function createQualityReader(supabase: SupabaseClient): QualityReader {
       // 件数(count: 'exact')を一緒に読み、集めた行数と一致しなければ失敗にする(サーバー側の max_rows による打ち切りで、
       // 一部の行が黙って欠けることを防ぐ)。次のページの位置は、PAGE_SIZE ではなく、実際に返った行数で進める
       // (max_rows が PAGE_SIZE より小さくても、飛ばさない)。
-      type Row = { release_datetime: string; economic_indicators: { code: string } | null };
+      type Row = {
+        release_datetime: string;
+        provider_event_id?: string | null;
+        economic_indicators: { code: string } | null;
+        fomc_policy_decisions?: { event_id: string } | { event_id: string }[] | null;
+      };
       const rows: Row[] = [];
       let expected: number;
       for (;;) {
         const { data, error, count } = await supabase
           .from('economic_events')
-          .select('id, release_datetime, economic_indicators(code)', { count: 'exact' })
+          .select(
+            'id, release_datetime, provider_event_id, economic_indicators(code), fomc_policy_decisions(event_id)',
+            {
+              count: 'exact',
+            },
+          )
           .eq('status', 'SCHEDULED')
           .gte('release_datetime', fromIso)
           .lt('release_datetime', toIso)
@@ -394,10 +426,59 @@ export function createQualityReader(supabase: SupabaseClient): QualityReader {
           `overdue events: read ${rows.length} rows but the server counted ${expected} (truncated by max_rows?)`,
         );
       }
-      return rows.map((row) => ({
-        indicator_code: row.economic_indicators?.code ?? '(指標不明)',
-        release_datetime: row.release_datetime,
-      }));
+      return rows.map((row) => {
+        const code = row.economic_indicators?.code ?? UNKNOWN_INDICATOR_CODE;
+        const decision = row.fomc_policy_decisions;
+        const recorded = Array.isArray(decision) ? decision.length > 0 : decision != null;
+        return {
+          indicator_code: code,
+          release_datetime: row.release_datetime,
+          ...(code === 'US_FOMC'
+            ? { policy_recorded: recorded, provider_event_id: row.provider_event_id ?? null }
+            : {}),
+        };
+      });
+    },
+
+    async latestFomcPolicyRateRun() {
+      const { data, error } = await supabase
+        .from('ingestion_logs')
+        .select('started_at, status, details')
+        .eq('job', FOMC_POLICY_RATE_JOB)
+        .order('started_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      const row = (data ?? [])[0] as { started_at: string; status: string; details: unknown } | undefined;
+      if (!row) return null;
+      const details = (row.details ?? {}) as Record<string, unknown>;
+      // 取り込み処理が書く形(awaiting = 文字列の配列、unmatched = {provider_event_id, reason} の配列)に合わない要素は読み捨てるが、
+      // 黙って捨てない: 捨てた数を返し、レポートに出す(形式の変更・欠落に気づけるように)。配列でない値も 1 件の読み捨てとして数える。
+      const asArray = (value: unknown): unknown[] | null => (Array.isArray(value) ? (value as unknown[]) : null);
+      const rawAwaiting = asArray(details.awaiting);
+      const rawUnmatched = asArray(details.unmatched);
+      const awaiting = (rawAwaiting ?? []).filter((v): v is string => typeof v === 'string');
+      const unmatched: { provider_event_id: string; reason: string }[] = [];
+      for (const item of rawUnmatched ?? []) {
+        const o = (item ?? {}) as Record<string, unknown>;
+        if (typeof o.provider_event_id === 'string')
+          unmatched.push({
+            provider_event_id: o.provider_event_id,
+            reason: typeof o.reason === 'string' ? o.reason : 'UNKNOWN',
+          });
+      }
+      const malformedContainer = (raw: unknown, parsed: unknown[] | null) =>
+        parsed === null && raw !== undefined && raw !== null ? 1 : 0;
+      return {
+        started_at: new Date(row.started_at).toISOString(),
+        status: row.status,
+        awaiting,
+        unmatched,
+        discarded: {
+          awaiting: (rawAwaiting?.length ?? 0) - awaiting.length + malformedContainer(details.awaiting, rawAwaiting),
+          unmatched:
+            (rawUnmatched?.length ?? 0) - unmatched.length + malformedContainer(details.unmatched, rawUnmatched),
+        },
+      };
     },
   };
 }

@@ -20,6 +20,7 @@ const EMPTY_READER: QualityReader = {
   speechDbStatus: () => Promise.resolve({ latestAt: null, futureScheduled: 0, overdueScheduled: 0 }),
   listProvisionalEvents: () => Promise.resolve([]),
   listOverdueScheduledEvents: () => Promise.resolve([]),
+  latestFomcPolicyRateRun: () => Promise.resolve(null),
   speechPipelineStatus: () => Promise.resolve(null),
 };
 

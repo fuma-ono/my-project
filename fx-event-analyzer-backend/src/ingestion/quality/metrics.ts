@@ -20,6 +20,12 @@ import { floorMinute, isFxMarketOpen, marketMinutes, missingMarketIntervals, MIN
 import type { MinuteInterval } from '../marketHours.js';
 import type { FxPriceRow, IngestionLogRow, StagedVerificationStatus } from '../store.js';
 
+/**
+ * 指標の表(economic_indicators)を結合できず、指標を特定できなかった行の表示名。
+ * 下位の層(metrics)に置き、reader と report の両方がここから import する(依存の向き: report → metrics ← reader。reader は report に依存しない)。
+ */
+export const UNKNOWN_INDICATOR_CODE = '(指標不明)';
+
 /** Minutes around a release that reactions need: open times [T − 5 min, T + 60 min). */
 export const RELEASE_WINDOW_MINUTES = { before: 5, after: 60 } as const;
 
@@ -1361,7 +1367,7 @@ export function summarizeEconomicValues(
   }
   const awaitingOfficial = staged.filter((s) => s.verification_status === 'AWAITING_OFFICIAL').length;
   const mismatches: MismatchDetail[] = mismatched.slice(0, MAX_MISMATCH_DETAILS).map((s) => ({
-    indicatorCode: s.indicator_code ?? '(指標不明)',
+    indicatorCode: s.indicator_code ?? UNKNOWN_INDICATOR_CODE,
     referencePeriod: s.reference_period ?? null,
     provider: s.provider ?? '(取得元不明)',
     actual: s.actual ?? s.new_value ?? null,

@@ -274,6 +274,7 @@ describe('buildQualityReportMarkdown + 第9章', () => {
     speechDbStatus: (provider) => Promise.resolve(provider === 'frb_calendar' ? DB_UP_TO_DATE : DB_EMPTY),
     listProvisionalEvents: () => Promise.resolve([]),
     listOverdueScheduledEvents: () => Promise.resolve([]),
+    latestFomcPolicyRateRun: () => Promise.resolve(null),
     speechPipelineStatus: () => Promise.resolve(null),
   };
 
@@ -302,7 +303,9 @@ describe('buildQualityReportMarkdown + 第9章', () => {
       ])}
 ${renderProvisionalEventsMarkdown([], NOW)}
 ${renderSpeechPipelineMarkdown(null, NOW)}
-${renderOverdueEventsMarkdown([], NOW)}`, // 第10章〜第12章も末尾に足すだけ
+${renderOverdueEventsMarkdown([], NOW)}
+report_status: COMPLETE
+`, // 第10章〜第12章と、状態の1行も末尾に足すだけ
     );
     // ECB の週間予定は INGEST_ECB_WEEKLY=1 のときだけ動く。実行記録が無ければ表に出さない(HQ判断 2026-10-28 R5)
     expect(calls).toEqual(['frb_calendar', 'ecb_press_rss', 'ecb_weekly_schedule']);

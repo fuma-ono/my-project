@@ -15,11 +15,15 @@ import {
 import type { QualityReader } from './reader.js';
 import { renderSpeechPipelineMarkdown } from './speechPipeline.js';
 import {
+  classifyOverdue,
   overdueWindow,
   PROVISIONAL_LIST_DAYS,
   renderDataQualityMarkdown,
   renderOverdueEventsMarkdown,
   renderOverdueEventsUnavailableMarkdown,
+  renderUnavailableBanner,
+  reportStatusLine,
+  type ReportStatus,
   renderProvisionalEventsMarkdown,
   renderSpeechFreshnessMarkdown,
 } from './report.js';
@@ -57,10 +61,26 @@ export async function buildSpeechFreshness(reader: QualityReader, now: Date): Pr
   return result;
 }
 
+export interface QualityReportResult {
+  markdown: string;
+  /** COMPLETE = すべての章を取得できた。PARTIAL = 一部の章を取得できなかった(出力は成功。データの取得は不完全)。 */
+  status: ReportStatus;
+  chaptersUnavailable: number[];
+  unavailableReasons: string[];
+}
+
+/** Markdown だけが要る呼び出し(HTTP 版・既存のテスト)用。状態は Markdown の冒頭の警告と末尾の report_status に出る。 */
 export async function buildQualityReportMarkdown(
   reader: QualityReader,
   options: QualityReportOptions,
 ): Promise<string> {
+  return (await buildQualityReport(reader, options)).markdown;
+}
+
+export async function buildQualityReport(
+  reader: QualityReader,
+  options: QualityReportOptions,
+): Promise<QualityReportResult> {
   const { days, now } = options;
   const symbols = options.symbols ?? null;
   validateReportDays(days);
@@ -106,12 +126,43 @@ export async function buildQualityReportMarkdown(
   // 第11章(HQ承認 2026-11-11): 要人発言の本文と要約。これも末尾に足すだけ。
   markdown += `\n${renderSpeechPipelineMarkdown(await reader.speechPipelineStatus(nowIso), now)}`;
   // 第12章(HQ指示 2026-11-18): 発表の時刻を過ぎても SCHEDULED のままの発表。これも末尾に足すだけ。
-  // 取得できなくても、第1〜11章は出力する。第12章は「取得不能」と明示する(未処理なしとは表示しない)。
+  // 取得できなくても、第1〜11章は出力する。第12章は「取得不能」と明示し、レポートの冒頭に警告を出す(未処理なしとは表示しない)。
+  const chaptersUnavailable: number[] = [];
+  const unavailableReasons: string[] = [];
   const { fromIso: overdueFrom, toIso: overdueTo } = overdueWindow(now);
   try {
-    markdown += `\n${renderOverdueEventsMarkdown(await reader.listOverdueScheduledEvents(overdueFrom, overdueTo), now)}`;
+    const overdueEvents = await reader.listOverdueScheduledEvents(overdueFrom, overdueTo);
+    // FOMC の会合があるときだけ、最後の取り込みの実行記録を読む(取り込み処理が自分で記録した「待ち」「結びつけ不能」を示すため)
+    const fomcRun = overdueEvents.some((e) => classifyOverdue(e.indicator_code) === 'FOMC')
+      ? await reader.latestFomcPolicyRateRun()
+      : null;
+    markdown += `\n${renderOverdueEventsMarkdown(overdueEvents, now, fomcRun)}`;
   } catch (error) {
-    markdown += `\n${renderOverdueEventsUnavailableMarkdown(error instanceof Error ? error.message : String(error))}`;
+    const reason = error instanceof Error ? error.message : String(error);
+    chaptersUnavailable.push(12);
+    unavailableReasons.push(`第12章: ${reason}`);
+    markdown += `\n${renderOverdueEventsUnavailableMarkdown(reason)}`;
   }
-  return markdown;
+  if (chaptersUnavailable.length > 0)
+    markdown = renderUnavailableBanner(chaptersUnavailable, unavailableReasons) + markdown;
+  markdown += `\n${reportStatusLine(chaptersUnavailable)}\n`;
+  return {
+    markdown,
+    status: chaptersUnavailable.length === 0 ? 'COMPLETE' : 'PARTIAL',
+    chaptersUnavailable,
+    unavailableReasons,
+  };
+}
+
+/**
+ * GitHub Actions のワークフローコマンド(::warning::)の本文のエスケープ(公式の escapeData と同じ: % → %25、CR → %0D、LF → %0A)。
+ * 先に % を処理する(後に処理すると、追加した % まで変換される)。
+ */
+export function escapeWorkflowCommandData(text: string): string {
+  return text.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+}
+
+/** `--fail-on-unavailable` が付いていて、レポートが PARTIAL のときだけ、終了コードを 1 にする(日次の workflow には付けない)。 */
+export function shouldFailOnUnavailable(status: ReportStatus, flag: boolean): boolean {
+  return flag && status === 'PARTIAL';
 }

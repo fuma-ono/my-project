@@ -25,6 +25,7 @@ import {
   SPEECH_OVERDUE_HOURS,
   SPEECH_SOURCE_STALE_DAYS,
   SPEECH_SUCCESS_MAX_AGE_HOURS,
+  UNKNOWN_INDICATOR_CODE,
   type AggregateCoverage,
   type DataQualityReport,
   type FxCompleteness,
@@ -817,7 +818,8 @@ export const NO_INGEST_TARGET = '手段なし';
  *   - jp-cpi-values: JP_CPI(e-Stat)
  *   - official-eurostat: Eurostat の日程表の指標(EU_HICP・EU_UNEMPLOYMENT_RATE)
  * 上のどれにも無い指標(CA_CPI・US_RETAIL_SALES・FOMC など)は「手段なし」。推測で target を案内しない。
- * 定期実行に入っていない target が多い(official-values は定時実行。JP CPI は cron が無効。他は手動のみ)。
+ * 定期実行について: official-values の定時実行は、その workflow が main に統合された後に、はじめて有効になる条件付きで、
+ * **main 統合前の現在は定時実行されていない**(すべて手動)。JP CPI は cron が無効。他も手動のみ。
  */
 export function manualTargetHint(code: string): string {
   if (BLS_CODES.has(code)) return 'official-bls';
@@ -829,30 +831,163 @@ export function manualTargetHint(code: string): string {
 
 const OVERDUE_TITLE = '## 12. 発表の時刻を過ぎても SCHEDULED のままの発表(実績の登録の漏れ・状態の未更新)';
 
+/** FOMC の会合(US_FOMC)。値は政策金利の専用の表(fomc_policy_decisions)に入るので、通常の「SCHEDULED のまま」の判定から外す。 */
+export const FOMC_MEETING_CODE = 'US_FOMC';
+/** FOMC 議事要旨(US_FOMC_MINUTES)。RELEASED にならない仕様で、値を取り込む処理も無いので、通常の判定から外す。 */
+export const FOMC_MINUTES_CODE = 'US_FOMC_MINUTES';
+
+export type OverdueCategory = 'ACTIONABLE' | 'UNKNOWN_INDICATOR' | 'NO_TARGET' | 'FOMC_MINUTES' | 'FOMC';
+
+export interface OverdueEventView {
+  indicator_code: string;
+  release_datetime: string;
+  /** FOMC の会合だけ: 取り込みの実行記録の突き合わせに使う ID(provider_event_id)。 */
+  provider_event_id?: string | null | undefined;
+  /** FOMC の会合だけ: fomc_policy_decisions に行があるか(US_FOMC 以外は undefined)。 */
+  policy_recorded?: boolean | undefined;
+}
+
+/** 最後の `ingest:fomc-policy-rate` の実行(ingestion_logs。details の awaiting・unmatched は、取り込み処理自身が書いたもの)。 */
+export interface FomcRunView {
+  started_at: string;
+  status: string;
+  /** 取り込み処理が「まだ NY連銀の記録が公開されていない」と判断して待った会合の provider_event_id。 */
+  awaiting: readonly string[];
+  /** 結びつけられなかった会合(期間の外・最初の記録が読めない など)。 */
+  unmatched: readonly { provider_event_id: string; reason: string }[];
+  /** 実行記録の awaiting・unmatched の中で、形式が合わず読み捨てた要素の数(0 なら全部読めた)。 */
+  discarded?: { awaiting: number; unmatched: number } | undefined;
+}
+
+/**
+ * 区分(HQ指示 2026-11-19):
+ *  - ACTIONABLE: 値を取り込む処理がある指標(manualTargetHint が target を返す)。SCHEDULED のままなら**取り込みの漏れ**(注意)
+ *  - UNKNOWN_INDICATOR: 指標を特定できない行(指標の表を結合できない)。取り込み手段の有無を判断できないので、**注意**として数える
+ *  - NO_TARGET: 取り込む処理が無い指標(CA_CPI・US_RETAIL_SALES など)。値は入らないので、漏れとは数えない(情報)
+ *  - FOMC_MINUTES: FOMC 議事要旨。別枠(RELEASED にならない仕様・値の取り込み手段なし)。通常の判定に含めない
+ *  - FOMC: US_FOMC の会合。通常の判定から外し、政策金利の記録の有無を別に出す
+ */
+export function classifyOverdue(code: string): OverdueCategory {
+  if (code === UNKNOWN_INDICATOR_CODE) return 'UNKNOWN_INDICATOR';
+  if (code === FOMC_MEETING_CODE) return 'FOMC';
+  if (code === FOMC_MINUTES_CODE) return 'FOMC_MINUTES';
+  return manualTargetHint(code) === NO_INGEST_TARGET ? 'NO_TARGET' : 'ACTIONABLE';
+}
+
 const OVERDUE_NOTES = [
   `対象: 発表の時刻から ${OVERDUE_GRACE_HOURS} 時間を**超えて**経過し、直近 ${OVERDUE_LOOKBACK_DAYS} 日以内で、状態(status)がまだ SCHEDULED のままの発表。`,
   '「実績の登録が済んでいない、または状態が未更新」を表す(スナップショットがすでにあっても、状態が SCHEDULED のままなら対象になる)。',
-  '公式統計の取り込みは、定期実行に入っていないものが多く、手動の実行(Workflow の target)が要る。「手動の target(目安)」は、実際に値を取り込む処理を持つ指標だけに出し、持たない指標は「手段なし」。',
+  '区分: ① **取り込み手段あり**の指標と、**指標を特定できない行**(指標の表を結合できない。取り込み手段の有無を判断できない)を、注意として数える。② **取り込み手段なし**の指標(CA_CPI・US_RETAIL_SALES など)は、値が入らないため「情報」の表に分け、判定の件数に含めない。③ **FOMC 議事要旨**(US_FOMC_MINUTES)は、RELEASED にならない仕様で値の取り込み手段もないので、別枠(情報)。④ **FOMC の会合**(US_FOMC)は、通常の判定から外し、政策金利の記録の有無を別の表で示す。',
+  '定時実行: 公式統計の定時実行(official-values)は、その workflow が **main に統合された後に、はじめて有効になる条件付き**で、統合されるまで**動いていない**(現在の取り込みは、すべて手動の実行)。JP CPI の値の cron は、初回の公表の確認と HQ の承認まで無効のままで、main に統合されても動かない。「手動の target(目安)」は、実際に値を取り込む処理を持つ指標だけに出す。',
   '限界: ① 発表の時刻の精度が EXACT でない発表(日付だけなど)は、保存されている時刻が目安で、実際の発表より早い・遅いことがある。② 状態が RELEASED・値が PENDING のまま止まった行(stuck 行)は、この章では検知しない。③ 対象は直近 14 日だけ。',
 ];
 
+const FOMC_NOTES = [
+  'FOMC の会合の行は、**SCHEDULED のままになる**(設計: 政策金利は専用の表 fomc_policy_decisions に入り、会合の行の状態は変えない)。そのため、通常の判定から除外している。',
+  '政策金利が未記録のときの警告は、発表の時刻からの経過では決めない(NY連銀の公開の時刻を、この章の中で仮定しない)。**取り込み処理自身が、実行のたびに記録した判断**(待ち・結びつけられなかった)を、そのまま示す。',
+];
+
+/** 実行記録の形式が合わず読み捨てた要素があれば、その数を示す(黙って捨てない)。 */
+function discardedNote(run: FomcRunView): string {
+  const d = run.discarded;
+  if (!d || d.awaiting + d.unmatched === 0) return '';
+  return `。**実行記録の形式が合わず読み捨てた要素 ${d.awaiting + d.unmatched} 件**(待ち ${d.awaiting}・結びつけ不能 ${d.unmatched}。取り込み処理の記録の形式を確認)`;
+}
+
+function fomcStatus(e: OverdueEventView, run: FomcRunView | null): string {
+  if (e.policy_recorded === true) return '記録済み';
+  const id = e.provider_event_id ?? null;
+  if (run === null) return '未記録(fomc-policy-rate の実行記録がない)';
+  if (id !== null && run.awaiting.includes(id))
+    return '未記録(取り込み処理が待ち中: NY連銀の記録がまだ公開されていない)';
+  const unmatched = id === null ? undefined : run.unmatched.find((u) => u.provider_event_id === id);
+  if (unmatched) return `未記録(取り込み処理が結びつけられなかった: ${unmatched.reason})`;
+  return '未記録(最後の実行の「待ち」「結びつけ不能」のどちらにもない。最後の実行より後の会合か、実行が必要)';
+}
+
 export function renderOverdueEventsMarkdown(
-  events: readonly { indicator_code: string; release_datetime: string }[],
+  events: readonly OverdueEventView[],
   now: Date,
+  fomcRun: FomcRunView | null = null,
 ): string {
+  const by = (category: OverdueCategory) => events.filter((e) => classifyOverdue(e.indicator_code) === category);
+  const actionable = by('ACTIONABLE');
+  const unknown = by('UNKNOWN_INDICATOR');
+  const noTarget = by('NO_TARGET');
+  const minutes = by('FOMC_MINUTES');
+  const fomc = by('FOMC');
+  const elapsed = (e: OverdueEventView) =>
+    String(Math.floor((now.getTime() - Date.parse(e.release_datetime)) / 3_600_000));
+
   const lines: string[] = [OVERDUE_TITLE, ''];
   for (const note of OVERDUE_NOTES) lines.push(note, '');
-  lines.push(`判定: ${events.length > 0 ? `注意(${events.length} 件が未処理)` : '正常(未処理なし)'}`, '');
-  if (events.length > 0) {
+  lines.push(
+    `判定: ${
+      actionable.length + unknown.length > 0
+        ? `注意(取り込み手段あり ${actionable.length} 件${unknown.length > 0 ? `・指標を特定できない ${unknown.length} 件` : ''})`
+        : '正常(未処理なし)'
+    }`,
+    `情報(判定に含めない): 取り込み手段なし ${noTarget.length} 件・FOMC 議事要旨 ${minutes.length} 件・FOMC の会合 ${fomc.length} 件`,
+    '',
+  );
+  if (actionable.length > 0) {
+    lines.push('### 取り込み手段のある指標(取り込みの漏れ)', '');
     lines.push(
       ...table(
         ['発表(UTC)', '指標', '経過(時間)', '手動の target(目安)'],
-        events.map((e) => [
+        actionable.map((e) => [
           time(e.release_datetime),
           e.indicator_code,
-          String(Math.floor((now.getTime() - Date.parse(e.release_datetime)) / 3_600_000)),
+          elapsed(e),
           manualTargetHint(e.indicator_code),
         ]),
+      ),
+    );
+    lines.push('');
+  }
+  if (unknown.length > 0) {
+    lines.push('### 指標を特定できない行(注意。指標の表を結合できず、取り込み手段の有無を判断できない)', '');
+    lines.push(
+      ...table(
+        ['発表(UTC)', '指標', '経過(時間)'],
+        unknown.map((e) => [time(e.release_datetime), e.indicator_code, elapsed(e)]),
+      ),
+    );
+    lines.push('');
+  }
+  if (noTarget.length > 0) {
+    lines.push('### 取り込み手段のない指標(情報。値は入らない。取り込みの追加は別の判断)', '');
+    lines.push(
+      ...table(
+        ['発表(UTC)', '指標', '経過(時間)'],
+        noTarget.map((e) => [time(e.release_datetime), e.indicator_code, elapsed(e)]),
+      ),
+    );
+    lines.push('');
+  }
+  if (minutes.length > 0) {
+    lines.push('### FOMC 議事要旨(RELEASED にならない仕様・値の取り込み手段なし。情報)', '');
+    lines.push(
+      ...table(
+        ['発表(UTC)', '指標', '経過(時間)'],
+        minutes.map((e) => [time(e.release_datetime), e.indicator_code, elapsed(e)]),
+      ),
+    );
+    lines.push('');
+  }
+  if (fomc.length > 0) {
+    lines.push('### FOMC の会合(政策金利の記録状況。通常の判定から除外)', '');
+    for (const note of FOMC_NOTES) lines.push(note, '');
+    lines.push(
+      fomcRun === null
+        ? '最後の fomc-policy-rate の実行: 実行記録なし'
+        : `最後の fomc-policy-rate の実行: ${time(fomcRun.started_at)}(${fomcRun.status})。待ち ${fomcRun.awaiting.length} 件・結びつけ不能 ${fomcRun.unmatched.length} 件${discardedNote(fomcRun)}`,
+    );
+    lines.push('');
+    lines.push(
+      ...table(
+        ['会合(UTC)', '経過(時間)', '政策金利の記録'],
+        fomc.map((e) => [time(e.release_datetime), elapsed(e), fomcStatus(e, fomcRun)]),
       ),
     );
     lines.push('');
@@ -869,4 +1004,22 @@ export function renderOverdueEventsUnavailableMarkdown(reason: string): string {
   lines.push('判定: **取得不能**(この章は確認できていない。『未処理なし』ではない)', '');
   lines.push(`理由: ${reason}`, '');
   return `${lines.join('\n')}\n`;
+}
+
+/** レポートの冒頭の警告(一部の章を取得できなかったとき)。出力の成功と、データの取得の成功は別。 */
+export function renderUnavailableBanner(chapters: readonly number[], reasons: readonly string[]): string {
+  const names = chapters.map((c) => `第${c}章`).join('・');
+  return (
+    `> ⚠ **このレポートは不完全です**: ${names}を取得できませんでした。取得できていない章は、『問題なし』ではありません。\n` +
+    `> 理由: ${reasons.join(' / ')}\n\n`
+  );
+}
+
+export type ReportStatus = 'COMPLETE' | 'PARTIAL';
+
+/** 末尾の機械可読な状態の 1 行(例: `report_status: PARTIAL chapters_unavailable=12`)。 */
+export function reportStatusLine(chaptersUnavailable: readonly number[]): string {
+  return chaptersUnavailable.length === 0
+    ? 'report_status: COMPLETE'
+    : `report_status: PARTIAL chapters_unavailable=${chaptersUnavailable.join(',')}`;
 }

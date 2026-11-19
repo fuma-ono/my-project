@@ -3,7 +3,12 @@ import { appendFileSync } from 'node:fs';
 import { loadEnv } from '../config/env.js';
 import { createSupabaseClient } from '../db/supabaseClient.js';
 import { createQualityReader } from '../ingestion/quality/reader.js';
-import { buildQualityReportMarkdown, MAX_REPORT_DAYS } from '../ingestion/quality/run.js';
+import {
+  buildQualityReport,
+  escapeWorkflowCommandData,
+  MAX_REPORT_DAYS,
+  shouldFailOnUnavailable,
+} from '../ingestion/quality/run.js';
 
 /**
  * データ品質レポート (HQ判断 2026-10-16、data-sources.md §12): 取得率・欠損率・
@@ -20,6 +25,9 @@ import { buildQualityReportMarkdown, MAX_REPORT_DAYS } from '../ingestion/qualit
  * Markdown を stdout に出し、GITHUB_STEP_SUMMARY があればそのファイルにも追記する
  * (GitHub Actions の実行画面に出る)。品質が悪くても exit 0(レポートなので)。
  * 落ちたときだけ exit 1。キーや URL は出さない。
+ *
+ * 一部の章を取得できなかったとき(report_status: PARTIAL): レポートの冒頭の警告と、GitHub の警告の注釈(::warning::)を出す。
+ * 既定は exit 0(出力は成功)。`--fail-on-unavailable` を付けると、このときだけ exit 1(日次の workflow には付けていない)。
  */
 function arg(name: string): string | undefined {
   const index = process.argv.indexOf(`--${name}`);
@@ -40,10 +48,18 @@ async function main(): Promise<void> {
     : null;
 
   const reader = createQualityReader(createSupabaseClient(loadEnv()));
-  const markdown = await buildQualityReportMarkdown(reader, { days, symbols, now: new Date() });
-  process.stdout.write(markdown);
+  const report = await buildQualityReport(reader, { days, symbols, now: new Date() });
+  process.stdout.write(report.markdown);
   const summaryPath = process.env.GITHUB_STEP_SUMMARY;
-  if (summaryPath) appendFileSync(summaryPath, `${markdown}\n`, 'utf8');
+  if (summaryPath) appendFileSync(summaryPath, `${report.markdown}\n`, 'utf8');
+  if (report.status === 'PARTIAL') {
+    // 出力の成功と、データの取得の成功は別。取得できなかった章があることを、ログの注釈にも出す。
+    const message = `Quality report is incomplete (chapters unavailable: ${report.chaptersUnavailable.join(',')}): ${report.unavailableReasons.join(' / ')}`;
+    if (process.env.GITHUB_ACTIONS === 'true')
+      console.log(`::warning title=Quality report incomplete::${escapeWorkflowCommandData(message)}`);
+    else console.error(message);
+    if (shouldFailOnUnavailable(report.status, process.argv.includes('--fail-on-unavailable'))) process.exitCode = 1;
+  }
 }
 
 main().catch((error: unknown) => {
