@@ -206,9 +206,9 @@ final class ScreenshotTests: XCTestCase {
         // 画面上部まで戻す。
         for _ in 0..<10 { app.swipeDown(velocity: .slow) }
 
-        // HQ指示(2026-11-19「トレード戦略分析画面の作り直し」): 市場分析・価格帯分析・みんなの分析の
-        // 3タブは、タブバー自体の見た目(アイコン+ラベル+下線)を先に作り直した段階であり、中身は
-        // まだ「準備中」のプレースホルダー(架空の値は出さない)。
+        // HQ指示(2026-11-19「トレード戦略分析画面の作り直し」): 市場分析・価格帯分析の2タブは、
+        // タブバー自体の見た目(アイコン+ラベル+下線)を先に作り直した段階であり、中身はまだ
+        // 「準備中」のプレースホルダー(架空の値は出さない)。
         tapIdentifier("strategyAnalysisTab_marketAnalysis")
         XCTAssertTrue(waitForAnyElement(containing: "市場分析", timeout: 5), "Market analysis tab did not render its section header")
         XCTAssertTrue(waitForAnyElement(containing: "準備中", timeout: 5), "Market analysis tab did not mark its content as still in preparation")
@@ -219,9 +219,13 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(waitForAnyElement(containing: "準備中", timeout: 5), "Price range analysis tab did not mark its content as still in preparation")
         capture("07e-StrategyAnalysis-PriceRangeAnalysis")
 
+        // HQ指示(2026-11-19「みんなの分析画面を実装」、参考画像つき): フィルターピル・市場予想
+        // アンケート・投稿一覧を実装(ユーザー判断によりダミーデータ、api-design.md未対応のBackend
+        // コミュニティ機能の代わり)。
         tapIdentifier("strategyAnalysisTab_communityAnalysis")
-        XCTAssertTrue(waitForAnyElement(containing: "みんなの分析", timeout: 5), "Community analysis tab did not render its section header")
-        XCTAssertTrue(waitForAnyElement(containing: "準備中", timeout: 5), "Community analysis tab did not mark its content as still in preparation")
+        XCTAssertTrue(waitForAnyElement(containing: "おすすめ", timeout: 5), "Community analysis tab did not render its filter pills")
+        XCTAssertTrue(waitForAnyElement(containing: "市場予想アンケート", timeout: 5), "Community analysis tab did not render its market poll card")
+        XCTAssertTrue(waitForAnyElement(containing: "FXトレーダーK", timeout: 5), "Community analysis tab did not render its post list")
         capture("07f-StrategyAnalysis-CommunityAnalysis")
 
         tapIdentifier("strategyAnalysisTab_eventAnalysis")

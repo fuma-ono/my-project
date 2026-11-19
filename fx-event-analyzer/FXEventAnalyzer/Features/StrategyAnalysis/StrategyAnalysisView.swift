@@ -17,6 +17,9 @@ struct StrategyAnalysisView: View {
     /// HQ指示(2026-11-19「トレード戦略分析画面の作り直し」): イベント分析・市場分析・価格帯分析・
     /// みんなの分析の4タブ(参考画像準拠)。既定はイベント分析(従来どおりの内容)。
     @State private var selectedTab: StrategyAnalysisTab = .eventAnalysis
+    /// HQ指示(2026-11-19「みんなの分析画面を実装」)で追加した、みんなの分析タブ内の
+    /// フィルターピル(おすすめ/通貨ペア別/イベント別/予想・投票/ランキング)の選択状態。
+    @State private var communityFilter: CommunityFilter = .recommended
     @Environment(\.dismiss) private var dismiss
     private let apiClient: APIClient
     /// HQ指示(2026-11-12「ピクセル単位の再現」): 「次回イベント」カードに表示する、
@@ -209,13 +212,10 @@ struct StrategyAnalysisView: View {
             }
             .accessibilityIdentifier("strategyAnalysisPriceRangeTab")
         case .communityAnalysis:
-            VStack(alignment: .leading, spacing: 6) {
-                StrategySectionHeaderCard(
-                    icon: "person.2.fill",
-                    title: "みんなの分析",
-                    subtitle: "他のユーザーの予想・投票・ランキング"
-                )
-                StrategyAnalysisComingSoonCard(message: "この機能は準備中です")
+            VStack(alignment: .leading, spacing: 8) {
+                CommunityFilterPillRow(selection: $communityFilter)
+                CommunityMarketPollCard()
+                CommunityPostListCard()
             }
             .accessibilityIdentifier("strategyAnalysisCommunityTab")
         }
