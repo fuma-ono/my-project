@@ -335,17 +335,16 @@ private struct CommunityPostCard: View {
                         }
                         .foregroundStyle(post.direction.color)
                     }
-                    // ユーザー指摘(2026-11-19、10回目)「アイコンの下にしてと言いました。
-                    // もう少し右に詰めてください」: 位置(アイコンの下の列)はそのまま、
-                    // 通貨ペア行よりわずかに右へ寄せる。
+                    // ユーザー指摘(2026-11-19、11回目)「わずかではなく、右端に寄せて
+                    // ください」: 4ptの微調整では弱かったため、はっきり右へ寄せる。
                     NotoText.text(post.title, size: 7.3)
                         .foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.leading, 4)
+                        .padding(.leading, 24)
                     (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
                         + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
                         .lineLimit(2)
-                        .padding(.leading, 4)
+                        .padding(.leading, 24)
                 }
 
                 Spacer(minLength: 4)
