@@ -64,15 +64,12 @@ struct StrategyAnalysisTabBar: View {
     @Binding var selection: StrategyAnalysisTab
 
     private static let dividerColor = Color(red: 0.35, green: 0.62, blue: 0.92).opacity(0.3)
-    // ユーザー指摘(2026-11-19、6回目)「４つのタブは選択した四角をグラデーションっぽく
-    // して」: 上下の色の差をはっきりさせて、グラデーションだと分かるようにする。
-    private static let selectedGradient = LinearGradient(
-        gradient: Gradient(stops: [
-            .init(color: Color(red: 0.55, green: 0.80, blue: 1.0), location: 0.0),
-            .init(color: Color(red: 0.0, green: 0.12, blue: 0.42), location: 1.0),
-        ]),
-        startPoint: .top, endPoint: .bottom
-    )
+    /// ユーザー指摘(2026-11-19、7回目)「選択中の塗りは元に戻して」: グラデーションを
+    /// やめ、単色の塗りつぶしに戻す。
+    private static let selectedColor = V5P.blue
+    /// ユーザー指摘(2026-11-19、7回目)「４つのタブのアイコンと文字の色を白ではなく
+    /// グレーにして」。
+    private static let labelColor = Color(white: 0.72)
 
     var body: some View {
         VStack(spacing: 0) {
@@ -102,8 +99,9 @@ struct StrategyAnalysisTabBar: View {
         }
         // ユーザー指摘(2026-11-19、2回目)「タブの四角で囲むのは中を塗りつぶして、文字と
         // アイコンではない」: 選択状態を示すのは枠線でも文字・アイコンの色でもなく、
-        // セルの背景の塗りつぶしのみ。アイコン・ラベルは選択有無に関わらず同じ色(白)。
-        .foregroundStyle(.white)
+        // セルの背景の塗りつぶしのみ。アイコン・ラベルは選択有無に関わらず同じ色
+        // (ユーザー指摘2026-11-19、7回目によりグレーに変更)。
+        .foregroundStyle(Self.labelColor)
         .padding(.vertical, 5)
         .padding(.horizontal, 4)
         .frame(maxWidth: .infinity)
@@ -111,7 +109,7 @@ struct StrategyAnalysisTabBar: View {
         .padding(.horizontal, 2)
         .background(
             RoundedRectangle(cornerRadius: 4)
-                .fill(isSelected ? AnyShapeStyle(Self.selectedGradient) : AnyShapeStyle(Color.clear))
+                .fill(isSelected ? Self.selectedColor : Color.clear)
         )
         .contentShape(Rectangle())
         // V5BottomBarと同じ理由(`Button`+`.buttonStyle(.plain)`でも実機でシステム既定の

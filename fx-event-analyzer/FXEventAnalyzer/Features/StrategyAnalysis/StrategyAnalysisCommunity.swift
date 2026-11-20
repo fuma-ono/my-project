@@ -93,7 +93,10 @@ struct CommunityMarketPollCard: View {
         // 文字を2pt大きくして」。
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
-                Image(systemName: "chart.pie.fill").font(.system(size: 10)).foregroundStyle(V5P.blue)
+                // ユーザー指摘(2026-11-19、7回目)「市場予測アンケートのアイコンの円が
+                // 2つに分裂してるから一つにして」: 小さいサイズで円が割れて見える
+                // `chart.pie.fill`をやめ、単一の円アイコンにする。
+                Image(systemName: "circle.fill").font(.system(size: 9)).foregroundStyle(V5P.blue)
                 NotoText.text("市場予想アンケート", size: 7.6).foregroundStyle(.white)
                 Spacer(minLength: 4)
                 HStack(spacing: 1) {
@@ -277,17 +280,19 @@ private struct CommunityPostCard: View {
 
     // ユーザー指摘(2026-11-19、3回目)「USD/JPY上昇予想はFXトレーダーの下にして、
     // アイコンに対して2行で」: その右にユーザー名+時刻(1行目)・通貨ペア+予想方向
-    // (2行目)の2行をまとめる。タイトルはその下に別行で全幅表示。
-    // ユーザー指摘(2026-11-19、4回目)「投稿カードのアイコンを勝手に大きくしないで
-    // ください。戻して」: アバターのサイズは元の20に戻す。
+    // (2行目)の2行をまとめる。
+    // ユーザー指摘(2026-11-19、7回目)「投稿カードのアイコンの大きさを少し大きくして/
+    // 米CPIの結果を受けて…をUSD・JPYの下にし、折り返しにして」: アバターを20→24に、
+    // タイトルは全幅の別行ではなく通貨ペア行の下に戻し、チャート枠の分だけ幅が
+    // 狭くなるぶん折り返させる。
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .top, spacing: 6) {
                 ZStack {
                     Circle().fill(post.avatarColor)
-                    Image(systemName: post.avatarSymbol).font(.system(size: 8)).foregroundStyle(.white.opacity(0.85))
+                    Image(systemName: post.avatarSymbol).font(.system(size: 9.5)).foregroundStyle(.white.opacity(0.85))
                 }
-                .frame(width: 20, height: 20)
+                .frame(width: 24, height: 24)
 
                 VStack(alignment: .leading, spacing: 3) {
                     // ユーザー指摘(2026-11-19、5回目)「2時間前の位置はユーザー名の横に
@@ -313,16 +318,15 @@ private struct CommunityPostCard: View {
                         }
                         .foregroundStyle(post.direction.color)
                     }
+                    NotoText.text(post.title, size: 7.3)
+                        .foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 4)
                 CommunityChartPlaceholder()
                     .frame(width: 46, height: 46)
             }
-
-            NotoText.text(post.title, size: 7.3)
-                .foregroundStyle(.white)
-                .fixedSize(horizontal: false, vertical: true)
 
             (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
                 + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
