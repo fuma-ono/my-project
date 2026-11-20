@@ -94,21 +94,17 @@ struct CommunityMarketPollCard: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 4) {
                 // ユーザー指摘(2026-11-19、10回目)「市場予想アンケートの見出しアイコンの
-                // 円グラフのデザインを変えてください。添付画像のようにしてください」:
-                // 添付画像(暗い角丸タイルの中に青〜紫のグラデーションの円グラフ)に
-                // 合わせる。
-                ZStack {
-                    RoundedRectangle(cornerRadius: 5).fill(Color(red: 0.06, green: 0.09, blue: 0.18))
-                    Image(systemName: "chart.pie.fill")
-                        .font(.system(size: 11))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [V5P.blue, Color(red: 0.62, green: 0.42, blue: 0.95)],
-                                startPoint: .topLeading, endPoint: .bottomTrailing
-                            )
+                // 円グラフのデザインを変えてください」で青〜紫グラデーションの円グラフに
+                // 変更。ユーザー指摘(2026-11-19、12回目)「アイコンの黒背景入らない」:
+                // 背後の暗い角丸タイルは外し、グラデーションの円グラフだけにする。
+                Image(systemName: "chart.pie.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [V5P.blue, Color(red: 0.62, green: 0.42, blue: 0.95)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
                         )
-                }
-                .frame(width: 18, height: 18)
+                    )
                 NotoText.text("市場予想アンケート", size: 7.6).foregroundStyle(.white)
                 Spacer(minLength: 4)
                 HStack(spacing: 1) {
@@ -335,16 +331,15 @@ private struct CommunityPostCard: View {
                         }
                         .foregroundStyle(post.direction.color)
                     }
-                    // ユーザー指摘(2026-11-19、11回目)「わずかではなく、右端に寄せて
-                    // ください」: 4ptの微調整では弱かったため、はっきり右へ寄せる。
+                    // ユーザー指摘(2026-11-19、12回目)「タイトル・本文は左寄せだった」:
+                    // 11回目の指摘で追加した右インデントを取り消し、通貨ペア行と同じ
+                    // 左端にそろえる。
                     NotoText.text(post.title, size: 7.3)
                         .foregroundStyle(.white)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.leading, 24)
                     (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
                         + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
                         .lineLimit(2)
-                        .padding(.leading, 24)
                 }
 
                 Spacer(minLength: 4)
