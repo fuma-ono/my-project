@@ -64,10 +64,12 @@ struct StrategyAnalysisTabBar: View {
     @Binding var selection: StrategyAnalysisTab
 
     private static let dividerColor = Color(red: 0.35, green: 0.62, blue: 0.92).opacity(0.3)
+    // ユーザー指摘(2026-11-19、6回目)「４つのタブは選択した四角をグラデーションっぽく
+    // して」: 上下の色の差をはっきりさせて、グラデーションだと分かるようにする。
     private static let selectedGradient = LinearGradient(
         gradient: Gradient(stops: [
-            .init(color: Color(red: 0.30, green: 0.62, blue: 1.0), location: 0.0),
-            .init(color: Color(red: 0.02, green: 0.30, blue: 0.75), location: 1.0),
+            .init(color: Color(red: 0.55, green: 0.80, blue: 1.0), location: 0.0),
+            .init(color: Color(red: 0.0, green: 0.12, blue: 0.42), location: 1.0),
         ]),
         startPoint: .top, endPoint: .bottom
     )

@@ -104,6 +104,9 @@ struct CommunityMarketPollCard: View {
             .padding(.bottom, 2)
             NotoText.text("次回FOMCはどうなる?", size: 8.7).foregroundStyle(.white)
                 .padding(.bottom, 4)
+            // ユーザー指摘(2026-11-19、5回目)「市場分析アンケートの枠を少し縦を伸ばして、
+            // それに合わせて円グラフを少し下に」: 下の行に上の余白を足して、縦に伸ばした
+            // 枠の中で下寄りに配置する。
             HStack(alignment: .center, spacing: 0) {
                 Spacer(minLength: 6)
                 donutChart
@@ -121,17 +124,20 @@ struct CommunityMarketPollCard: View {
                 }
                 Spacer(minLength: 6)
                 VStack(spacing: 2) {
-                    NotoText.text("総投票数", size: 7.4).foregroundStyle(SettingsCardStyle.subtitleColor)
+                    // ユーザー指摘(2026-11-19、5回目)「総投票数だけ文字サイズを1pt小さく
+                    // して、12345はそのまま」。
+                    NotoText.text("総投票数", size: 6.4).foregroundStyle(SettingsCardStyle.subtitleColor)
                     NotoText.text(ValueFormat.number(totalVotes, fractionDigits: 0), size: 10).foregroundStyle(.white)
                 }
                 .padding(.horizontal, 5)
                 .padding(.vertical, 5)
                 .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.05)))
             }
+            .padding(.top, 6)
         }
         .padding(.horizontal, 7)
         .padding(.top, 5)
-        .padding(.bottom, 7)
+        .padding(.bottom, 12)
         .frame(width: 214, alignment: .leading)
         .background(GradientCardBackground())
         .accessibilityIdentifier("communityMarketPollCard")
@@ -191,14 +197,6 @@ private struct CommunityPost: Identifiable {
     let likeCount: Int
     let commentCount: Int
     let isFollowing: Bool
-    /// サムネイルのローソク足の相対高さ(0...1)。見た目の傾向(上昇/下降)を示すだけの
-    /// ダミー描画で、実際の値動きではない。
-    let candleTrend: [CGFloat]
-    let isBullishChart: Bool
-    /// ユーザー指摘(2026-11-19、4回目)「投稿カードのグラフはそれぞれユーザーのチャートの
-    /// 抵抗帯を表示させて」: サムネイル内の抵抗帯(レジスタンスゾーン)の相対位置(0...1)。
-    /// 装飾のみのダミー値で、実際の価格水準ではない。
-    let resistanceLevel: CGFloat
 }
 
 private let communityDummyPosts: [CommunityPost] = [
@@ -215,10 +213,7 @@ private let communityDummyPosts: [CommunityPost] = [
         body: "インフレの粘着性が確認され、FRBの利下げは年内1回にとどまる可能性が高いです。",
         likeCount: 342,
         commentCount: 48,
-        isFollowing: true,
-        candleTrend: [0.3, 0.34, 0.4, 0.48, 0.55, 0.6, 0.68, 0.76, 0.84, 0.9],
-        isBullishChart: true,
-        resistanceLevel: 0.93
+        isFollowing: true
     ),
     CommunityPost(
         id: "p2",
@@ -233,10 +228,7 @@ private let communityDummyPosts: [CommunityPost] = [
         body: "ドイツの製造業PMIが予想を下回り、ユーロ売り圧力が強まっています。",
         likeCount: 188,
         commentCount: 32,
-        isFollowing: false,
-        candleTrend: [0.9, 0.82, 0.75, 0.68, 0.6, 0.5, 0.42, 0.35, 0.3, 0.25],
-        isBullishChart: false,
-        resistanceLevel: 0.85
+        isFollowing: false
     ),
     CommunityPost(
         id: "p3",
@@ -251,10 +243,7 @@ private let communityDummyPosts: [CommunityPost] = [
         body: "英国の金利見通しが不透明で、方向感に欠ける展開が続くと考えています。",
         likeCount: 125,
         commentCount: 21,
-        isFollowing: false,
-        candleTrend: [0.5, 0.58, 0.48, 0.6, 0.45, 0.55, 0.5, 0.62, 0.47, 0.53],
-        isBullishChart: true,
-        resistanceLevel: 0.68
+        isFollowing: false
     )
 ]
 
@@ -264,6 +253,8 @@ struct CommunityPostListCard: View {
     // ユーザー指摘(2026-11-19、4回目)「投稿カードは各カードで枠を囲むのではなく線で
     // 区切るようにしてください」: 個別のカード枠をやめ、1つの枠の中で投稿どうしを
     // 区切り線だけで並べる。
+    // ユーザー指摘(2026-11-19、5回目)「FXトレーダーKとアイコンをもう少し投稿カードの
+    // 上枠に近づけて」: 枠の上の余白だけ詰める(下・左右の余白は変えない)。
     var body: some View {
         VStack(spacing: 0) {
             ForEach(Array(communityDummyPosts.enumerated()), id: \.element.id) { index, post in
@@ -274,7 +265,8 @@ struct CommunityPostListCard: View {
                 }
             }
         }
-        .padding(.vertical, 7)
+        .padding(.top, 3)
+        .padding(.bottom, 7)
         .frame(width: 214, alignment: .leading)
         .background(GradientCardBackground())
     }
@@ -298,12 +290,13 @@ private struct CommunityPostCard: View {
                 .frame(width: 20, height: 20)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 2) {
+                    // ユーザー指摘(2026-11-19、5回目)「2時間前の位置はユーザー名の横に
+                    // して」: 右端に離さず、ユーザー名のすぐ隣に置く。
+                    HStack(spacing: 4) {
                         NotoText.text(post.username, size: 7).foregroundStyle(.white)
                         if post.verified {
                             Image(systemName: "checkmark.seal.fill").font(.system(size: 6.5)).foregroundStyle(V5P.blue)
                         }
-                        Spacer(minLength: 4)
                         NotoText.text(post.timeAgo, size: 5.8).foregroundStyle(SettingsCardStyle.subtitleColor)
                     }
                     HStack(spacing: 5) {
@@ -323,10 +316,8 @@ private struct CommunityPostCard: View {
                 }
 
                 Spacer(minLength: 4)
-                CommunityCandleThumbnail(
-                    trend: post.candleTrend, isBullish: post.isBullishChart, resistanceLevel: post.resistanceLevel
-                )
-                .frame(width: 34, height: 30)
+                CommunityChartPlaceholder()
+                    .frame(width: 46, height: 46)
             }
 
             NotoText.text(post.title, size: 7.3)
@@ -363,34 +354,14 @@ private struct CommunityPostCard: View {
     }
 }
 
-/// 投稿カード右上のローソク足風サムネイル(装飾のみ、実際の値動きではない)。
-/// ユーザー指摘(2026-11-19、4回目)「投稿カードのグラフはそれぞれユーザーのチャートの
-/// 抵抗帯を表示させて」: `resistanceLevel`の高さに抵抗帯(レジスタンスゾーン)の線を重ねる。
-private struct CommunityCandleThumbnail: View {
-    let trend: [CGFloat]
-    let isBullish: Bool
-    let resistanceLevel: CGFloat
-
+/// 投稿カード右上のチャート枠(2026-11-19、5回目「チャートはユーザーがチャート画面を
+/// 載せるので今はデータがなくていい。ただ、もう少し大きくして四角で囲むようにして」:
+/// 架空のローソク足・抵抗帯の描画はやめ、ユーザーが将来チャート画像を貼る場所を示す
+/// 空の角丸の枠だけにする)。
+private struct CommunityChartPlaceholder: View {
     var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .bottom) {
-                HStack(alignment: .bottom, spacing: 1) {
-                    ForEach(trend.indices, id: \.self) { index in
-                        Capsule()
-                            .fill(isBullish ? V5P.green : V5P.red)
-                            .frame(
-                                width: max(1.5, (geo.size.width - CGFloat(trend.count - 1)) / CGFloat(trend.count)),
-                                height: max(2, trend[index] * geo.size.height)
-                            )
-                    }
-                }
-                .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
-
-                Rectangle()
-                    .fill(V5P.yellow.opacity(0.85))
-                    .frame(width: geo.size.width, height: 1)
-                    .position(x: geo.size.width / 2, y: geo.size.height * (1 - resistanceLevel))
-            }
-        }
+        RoundedRectangle(cornerRadius: 5)
+            .stroke(SettingsCardStyle.cardBorder, lineWidth: 0.7)
+            .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.03)))
     }
 }
