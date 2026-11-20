@@ -156,7 +156,8 @@ struct CommunityMarketPollCard: View {
                     .stroke(segment.color, style: StrokeStyle(lineWidth: 11, lineCap: .butt))
                     .rotationEffect(.degrees(-90))
             }
-            NotoText.text(ValueFormat.percent(options[0].percent, fractionDigits: 0), size: 8.7).foregroundStyle(.white)
+            // ユーザー指摘(2026-11-19、8回目)「68%の数字を0.5pt大きくして」。
+            NotoText.text(ValueFormat.percent(options[0].percent, fractionDigits: 0), size: 9.2).foregroundStyle(.white)
         }
         .frame(width: 42, height: 42)
     }
@@ -281,10 +282,12 @@ private struct CommunityPostCard: View {
     // ユーザー指摘(2026-11-19、3回目)「USD/JPY上昇予想はFXトレーダーの下にして、
     // アイコンに対して2行で」: その右にユーザー名+時刻(1行目)・通貨ペア+予想方向
     // (2行目)の2行をまとめる。
-    // ユーザー指摘(2026-11-19、7回目)「投稿カードのアイコンの大きさを少し大きくして/
-    // 米CPIの結果を受けて…をUSD・JPYの下にし、折り返しにして」: アバターを20→24に、
-    // タイトルは全幅の別行ではなく通貨ペア行の下に戻し、チャート枠の分だけ幅が
-    // 狭くなるぶん折り返させる。
+    // ユーザー指摘(2026-11-19、7回目)「投稿カードのアイコンの大きさを少し大きくして」:
+    // アバターを20→24に。
+    // ユーザー指摘(2026-11-19、8回目)「米CPIの結果を受けては、アイコンの下に位置して/
+    // 投稿カードの右端の四角はもう少し大きくして/ハート、342、48保存の文字をもう少し
+    // 大きく」: タイトルは通貨ペア行の下ではなく、アバター(アイコン)と同じ左端に
+    // そろえた別行に戻し、チャート枠を拡大、footerの文字も拡大。
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .top, spacing: 6) {
@@ -318,15 +321,16 @@ private struct CommunityPostCard: View {
                         }
                         .foregroundStyle(post.direction.color)
                     }
-                    NotoText.text(post.title, size: 7.3)
-                        .foregroundStyle(.white)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 4)
                 CommunityChartPlaceholder()
-                    .frame(width: 46, height: 46)
+                    .frame(width: 56, height: 56)
             }
+
+            NotoText.text(post.title, size: 7.3)
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
 
             (NotoText.text(post.body, size: 6.3).foregroundColor(SettingsCardStyle.subtitleColor)
                 + Text(" もっと見る").font(.system(size: 6.3)).foregroundColor(V5P.blue))
@@ -350,10 +354,11 @@ private struct CommunityPostCard: View {
         .accessibilityIdentifier("communityPostCard_\(post.id)")
     }
 
+    // ユーザー指摘(2026-11-19、8回目)「ハート、342、48保存の文字をもう少し大きく」。
     private func footerItem(icon: String, value: String, color: Color) -> some View {
         HStack(spacing: 2) {
-            Image(systemName: icon).font(.system(size: 6.5)).foregroundStyle(color)
-            NotoText.text(value, size: 6).foregroundStyle(color)
+            Image(systemName: icon).font(.system(size: 7.5)).foregroundStyle(color)
+            NotoText.text(value, size: 7).foregroundStyle(color)
         }
     }
 }

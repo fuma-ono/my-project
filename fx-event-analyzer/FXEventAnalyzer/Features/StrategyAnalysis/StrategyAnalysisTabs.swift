@@ -64,9 +64,15 @@ struct StrategyAnalysisTabBar: View {
     @Binding var selection: StrategyAnalysisTab
 
     private static let dividerColor = Color(red: 0.35, green: 0.62, blue: 0.92).opacity(0.3)
-    /// ユーザー指摘(2026-11-19、7回目)「選択中の塗りは元に戻して」: グラデーションを
-    /// やめ、単色の塗りつぶしに戻す。
-    private static let selectedColor = V5P.blue
+    /// ユーザー指摘(2026-11-19、8回目)「タブは単色ではなくグラデーションにして」:
+    /// 単色に戻した直後だが、改めてグラデーションに戻す。
+    private static let selectedGradient = LinearGradient(
+        gradient: Gradient(stops: [
+            .init(color: Color(red: 0.55, green: 0.80, blue: 1.0), location: 0.0),
+            .init(color: Color(red: 0.0, green: 0.12, blue: 0.42), location: 1.0),
+        ]),
+        startPoint: .top, endPoint: .bottom
+    )
     /// ユーザー指摘(2026-11-19、7回目)「４つのタブのアイコンと文字の色を白ではなく
     /// グレーにして」。
     private static let labelColor = Color(white: 0.72)
@@ -109,7 +115,7 @@ struct StrategyAnalysisTabBar: View {
         .padding(.horizontal, 2)
         .background(
             RoundedRectangle(cornerRadius: 4)
-                .fill(isSelected ? Self.selectedColor : Color.clear)
+                .fill(isSelected ? AnyShapeStyle(Self.selectedGradient) : AnyShapeStyle(Color.clear))
         )
         .contentShape(Rectangle())
         // V5BottomBarと同じ理由(`Button`+`.buttonStyle(.plain)`でも実機でシステム既定の
